@@ -1,6 +1,7 @@
 # The garden's things in the style of Shikashi's icons (32x32, dark outline, a light edge on top, shade below):
 # spade, can of water, seed bags in the colour of their sort, three flowers, a cabbage and a carrot; and the hare that
-# comes from the fog for them (wild.ts).
+# comes from the fog for them (wild.ts). The field crops (field.ts): three ears of grain, a potato, a beet and a bundle
+# of flax.
 # Usage: python3 garden.py <items dir>
 import sys
 from PIL import Image
@@ -174,6 +175,55 @@ def hare():
     return outline(img)
 
 
+def ears(colour, awns=False, loose=False):
+    img = new(); px = img.load()
+    c = rgb(colour); cd, cl = shade(c, 0.65), shade(c, 1.2)
+    for (bx, by, tx, ty) in ((10, 30, 9, 9), (16, 30, 16, 6), (22, 30, 23, 9)):  # three stalks, a little apart at the top
+        line(px, bx, by, tx, ty + 8, cd)
+        for i in range(7):                  # the ear: grains in pairs up the stalk (oats hang loose)
+            gy = ty + i * 1.6
+            dx = (2.5 if i % 2 else -2.5) if loose else 1.3
+            disc(px, tx - dx + 0.5, gy + 0.5, 1.4, c, light=False)
+            disc(px, tx + dx + 0.5, gy + 0.5, 1.4, cl if i < 2 else c, light=False)
+        if awns:                            # barley's long bristles
+            for i in range(4): line(px, tx + (i % 2) * 2 - 1, ty + i * 2, tx + (i % 2) * 6 - 3, ty + i * 2 - 6, cl)
+    return outline(img)
+
+
+def potato():
+    img = new(); px = img.load()
+    P, PD = rgb("#b08a5a"), rgb("#6e5434")
+    disc(px, 14, 17, 8, P)
+    disc(px, 19, 16, 7, P)
+    for (x, y) in ((12, 14), (19, 19), (21, 12), (15, 20)):  # eyes
+        px[x, y] = PD; px[x + 1, y] = PD
+    return outline(img)
+
+
+def beet():
+    img = new(); px = img.load()
+    R, RD = rgb("#9a3a5a"), rgb("#5a1a34")
+    disc(px, 16, 19, 8, R)
+    for i in range(6):                      # the root tip
+        disc(px, 16 + i * 0.3, 27 + i * 0.6, max(0.6, 1.6 - i * 0.25), RD, light=False)
+    STEM, STEMD = rgb("#6fb04a"), rgb("#2f5a2a")
+    for (x1, y1, col) in ((10, 3, STEM), (16, 1, STEMD), (22, 3, STEM)):  # leaves with red stems
+        line(px, 16, 11, x1, y1, col, 2)
+        line(px, 16, 11, (16 + x1) // 2, (11 + y1) // 2, R)
+    return outline(img)
+
+
+def flax():
+    img = new(); px = img.load()
+    S, SD = rgb("#c9b88a"), rgb("#8a7a52")
+    for i, x in enumerate(range(10, 23, 2)):   # a bundle of long stalks, tied in the middle
+        line(px, x, 4 + (i % 2), 16 + (x - 16) // 2, 29, S if i % 2 else SD)
+    line(px, 11, 18, 21, 18, ROPE, 2)
+    for (x, y) in ((10, 3), (14, 2), (18, 3), (22, 4)):  # a few blue flowers left at the top
+        disc(px, x + 0.5, y + 0.5, 1.5, rgb("#6a8fd0"), light=False)
+    return outline(img)
+
+
 out = sys.argv[1]
 things = {
     "spaten": spade(), "wasserkanne": can(),
@@ -181,6 +231,8 @@ things = {
     "samen-strandkohl": seeds("#7fae6a"), "samen-moehre": seeds("#e8902c"),
     "strandnelke": flower("#e88fb0", 6), "duenenrose": flower("#d9476b", 5), "nebelblume": flower("#9fb6e8", 4),
     "kohl": cabbage(), "moehre": carrot(), "hase": hare(),
+    "weizen": ears("#d9b44a"), "gerste": ears("#c8b06a", awns=True), "hafer": ears("#cdbf8a", loose=True),
+    "kartoffel": potato(), "ruebe": beet(), "samen-ruebe": seeds("#9a3a5a"), "flachs": flax(), "leinsamen": seeds("#6a8fd0"),
 }
 for key, img in things.items():
     img.save(f"{out}/{key}.png")

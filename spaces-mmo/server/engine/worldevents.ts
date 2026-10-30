@@ -29,7 +29,7 @@ export function tickJobs(w: { fog: { stepMs: number }; flood: { everyMs: number 
 		{ job: "fire", everyMs: 15_000 }, { job: "fog", everyMs: w.fog.stepMs }, { job: "flood", everyMs: w.flood.everyMs },
 		{ job: "sweep", everyMs: 10_000 }, { job: "orders", everyMs: w.orders.everyMs }, { job: "market", everyMs: 60_000 },
 		...(w.storm ? [{ job: "storm", everyMs: w.storm.everyMs }] : []),
-		// the beds whose date has come (engine/commands/garden.ts)
+		// the beds and fields whose date has come (engine/commands/garden.ts, field.ts)
 		...(w.garden ? [{ job: "garden", everyMs: 60_000 }] : []),
 		// the hares from the fog at the beds (engine/commands/wild.ts)
 		...(w.garden && w.wild ? [{ job: "wild", everyMs: w.wild.checkWorldMs }] : []),

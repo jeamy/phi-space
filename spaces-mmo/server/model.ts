@@ -136,6 +136,15 @@ export type BedPlant = { x: number; y: number; sort: string; stage: 0 | 1 | 2 | 
  *  `fenced`: a fence keeps the hares out (engine/commands/wild.ts). */
 export type BedFields = { kind?: "zier" | "gemein"; fenced?: boolean; bedId: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number;
 	sponsors: Array<{ charId: string; name: string }>; plants: BedPlant[]; wateredWorldMs: number; weedy: boolean; dueWorldMs: number; untilWorldMs: number; at: number };
+/** A field (docs/siedeln.md "Äcker und Getreide", engine/commands/field.ts): one entry over its cells (Plot entries like a
+ *  building's), one crop at a time. `stage`: fallow, being sown (seed and work delivered so far), growing, ripe, late
+ *  (the window passed: each share loses part). `dueWorldMs`: the next stage the field tick writes (ripe, late, lost);
+ *  `yields`: what the whole harvest gives (fixed when the sowing is done), handed out in shares per work point;
+ *  `lastGroup`/`tired`: the crop group harvested last and how often in a row (the soil's counter); `open`: everyone may
+ *  sow and harvest, not only the owner. `human`/`other`: work points by people and by NPCs or automata. */
+export type FieldFields = { fieldId: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number; open?: boolean;
+	stage: "brach" | "saat" | "waechst" | "reif" | "spaet"; crop: string | null; seeds: number; seedNeed: number; work: number; workNeed: number; yields: Array<{ proto: string; count: number }>; soil: number;
+	by: Record<string, number>; human: number; other: number; lastGroup: string | null; tired: number; lastHarvestWorldMs: number; dueWorldMs: number; untilWorldMs: number; at: number };
 /** A hare from the fog at a bed (engine/commands/wild.ts): it eats at `eatsAtWorldMs` unless someone scares it off
  *  before (a take of this entry: whoever comes first saves the bed). */
 export type AnimalFields = { animalId: string; kind: "hase"; name: string; room: string; x: number; y: number; bedId: string; eatsAtWorldMs: number; at: number };

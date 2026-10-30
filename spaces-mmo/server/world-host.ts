@@ -27,6 +27,7 @@ import { fireTick, floodTick, fogTick, stormTick } from "./engine/fire.ts";
 import { sweepTick } from "./engine/sweep.ts";
 import { gardenTick, stormFillsBarrels } from "./engine/commands/garden.ts";
 import { wildTick } from "./engine/commands/wild.ts";
+import { fieldTick } from "./engine/commands/field.ts";
 import { ensureTokens, loadIntoSpace } from "./engine/loader.ts";
 import { ClockGuard, runSchedules } from "./engine/schedule.ts";
 import { sweepSpots } from "./engine/occupancy.ts";
@@ -58,7 +59,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		orders: () => ordersTick(space, w),
 		market: () => marketTick(space),
 		storm: async () => { await stormFillsBarrels(space, w, await stormTick(space, w, msgLeaseMs)); },
-		garden: async () => { await gardenTick(space, w); },
+		garden: async () => { await gardenTick(space, w); await fieldTick(space, w, msgLeaseMs); },
 		wild: async () => { await wildTick(space, w, msgLeaseMs); },
 	};
 	const handlers = { ...SCHEDULE_HANDLERS, tick: tickHandler(runs) };

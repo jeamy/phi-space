@@ -27,6 +27,7 @@ import { CommandError, inventory, itemsNamed, msg, NotUnderstood, roomOf, type C
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { fogOf } from "../fire.ts";
 import type { GardenDef, SortDef, WorldDef } from "../world.ts";
+import { harvestField } from "./field.ts";
 import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, plural, putBack, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
 
 const STAGES = ["Saat", "Keim", "reif", "welk"] as const;
@@ -291,10 +292,12 @@ async function giveOwn(c: CommandCtx, what: Array<{ proto: string; count: number
 
 const ernte: Command = {
 	key: "ernte", aliases: ["ernten", "pflücke", "pfluecke", "harvest"],
-	help: "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins oder als Pate); dazu gibt es Samen",
+	help: "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins oder als Pate; dazu gibt es Samen); an einer reifen Flur ein Arbeitspunkt der Ernte und dein Anteil",
 	async func(c) {
 		const g = garden(c);
-		const b = await bedHere(c);
+		// no bed near, but a field: its harvest (field.ts)
+		const b = await bedHere(c).catch(async (e) => { if (e instanceof NotUnderstood && (await harvestField(c))) return null; throw e; });
+		if (!b) return;
 		if (!mayTend(c, b)) throw new CommandError(`Das ist das ${bedName(b)}; ernten dürfen der Besitzer und seine Paten.`);
 		const ripe = b.plants.filter((p) => p.stage === 2);
 		if (!ripe.length) throw new CommandError("Im Beet ist noch nichts reif.");
@@ -361,8 +364,9 @@ const sammle: Command = {
 		if (until > now) throw new CommandError(`Du hast hier eben erst gesucht; in etwa ${hours(until - now)} wieder.`);
 		const room = c.world.rooms.find((r) => r.roomId === c.actor.room);
 		const decor = new Set((room?.decor ?? []).join(""));
-		const grows = (s: SortDef) => !!s.wild && g.decor[s.wild.decor].some((k) => decor.has(k)) && (!s.wild.islands || s.wild.islands.includes(room?.island ?? ""));
-		const wild = g.sorts.filter(grows);
+		const grows = (s: Pick<SortDef, "wild">) => !!s.wild && g.decor[s.wild.decor].some((k) => decor.has(k)) && (!s.wild.islands || s.wild.islands.includes(room?.island ?? ""));
+		// the wild flora gives seeds of garden sorts and of field crops (wild barley, flax, beet)
+		const wild = [...g.sorts, ...(c.world.fields?.crops ?? [])].filter(grows);
 		if (!wild.length) throw new CommandError("Hier wächst nichts Wildes, das Samen trägt.");
 		if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
 		await c.space.write({ type: "SeedRest", fields: { charId: c.actor.charId, untilWorldMs: now + g.seedRestWorldMs } satisfies SeedRestFields as never }, c.txn, FOREVER);
@@ -395,7 +399,7 @@ const schoepfe: Command = {
 async function nameRefused(c: CommandCtx, name: string): Promise<string | null> {
 	if (name.length < 3 || name.length > 24 || !/^\p{L}[\p{L}' -]*\p{L}$/u.test(name)) return "Ein Sortenname hat 3 bis 24 Buchstaben (Leerzeichen und Bindestrich dazwischen gehen).";
 	const n = name.toLowerCase(), g = garden(c);
-	const taken = [...c.world.prototypes.flatMap((p) => [p.key, p.name, ...p.aliases]), ...g.sorts.flatMap((s) => [s.key, s.name, ...s.aliases]), "kreuzung", "kreuzungssamen", "samen"];
+	const taken = [...c.world.prototypes.flatMap((p) => [p.key, p.name, ...p.aliases]), ...g.sorts.flatMap((s) => [s.key, s.name, ...s.aliases]), ...(c.world.fields?.crops ?? []).flatMap((s) => [s.key, s.name, ...s.aliases]), "kreuzung", "kreuzungssamen", "samen"];
 	if (taken.some((t) => t.toLowerCase() === n)) return `„${name}“ heißt schon etwas in dieser Welt; wähle einen eigenen Namen.`;
 	const { commandsOf } = await import("../commands.ts");
 	if ((await commandsOf(c)).has(n) || (await commandsOf(c)).has(n.split(/\s+/)[0]!)) return `„${name}“ ist ein Befehl; wähle einen anderen Namen.`;

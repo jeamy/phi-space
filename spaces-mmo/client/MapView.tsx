@@ -341,6 +341,26 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
 			s.objs.addChild(g, label);
 			continue;
 		}
+		if (o.kind === "field") {
+			// a field: soil in rows; fallow light with a few tufts, being sown the furrows so far, growing green shoots,
+			// ripe the crop's colour (late a little faded)
+			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts, stage = o.fieldStage ?? "brach";
+			const g = new p.Graphics().rect(x + 1, y + 1, w - 2, h - 2).fill({ color: stage === "brach" ? "#8a6e48" : "#5e4028" }).stroke({ width: 2, color: "#3e2a18" });
+			const rows = Math.max(2, Math.floor(h / 8));
+			for (let r = 0; r < rows; r++) {
+				const ry = y + 4 + (r + 0.5) * ((h - 8) / rows);
+				if (stage === "brach") { if (r % 2) for (let tx = x + 6 + (r % 3) * 5; tx < x + w - 4; tx += 17) g.rect(tx, ry - 2, 2, 3).fill({ color: "#6f8a3a" }); continue; }
+				if (stage === "saat") { if (r / rows < (o.progress ?? 0)) g.rect(x + 4, ry, w - 8, 2).fill({ color: "#3e2a18" }); continue; }
+				g.rect(x + 4, ry, w - 8, 2).fill({ color: "#3e2a18" });
+				const color = stage === "waechst" ? "#6fb04a" : o.color ?? "#d9b44a", tall = stage === "waechst" ? 3 : 6;
+				for (let tx = x + 5; tx < x + w - 4; tx += 4) g.rect(tx, ry - tall, 2, tall).fill({ color, alpha: stage === "spaet" ? 0.6 : 1 });
+			}
+			const label = new p.Text({ text: `${o.name} von ${o.owner ?? ""}`, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
+			label.anchor.set(0.5, 0);
+			label.position.set(x + w / 2, y + h);
+			s.objs.addChild(g, label);
+			continue;
+		}
 		if (o.kind === "ruin") {
 			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts;
 			const g = new p.Graphics().rect(x + 3, y + h * 0.45, w - 6, h * 0.55 - 3).fill({ color: "#6b6f73", alpha: 0.8 }).stroke({ width: 2, color: "#2b2f33" });

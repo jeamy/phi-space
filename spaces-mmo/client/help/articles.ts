@@ -318,11 +318,13 @@ Ausführlich unter [Gärten](help.game.garden).
 | \`schöpfe\` | \`fill\` | An der Regentonne eine Kanne Wasser füllen |
 | \`gieße\` | \`water\` | Ein Beet gießen (deins oder als Pate) |
 | \`jäte\` | \`weed\` | Unkraut und Welkes herausziehen |
-| \`ernte\` | \`harvest\`, \`pflücke\` | Reifes ernten, mit Samen |
+| \`ernte\` | \`harvest\`, \`pflücke\` | Reifes ernten, mit Samen; an einer reifen Flur ein Arbeitspunkt und dein Anteil |
 | \`pate <name>\` | \`sponsor\` | Jemanden dein Beet pflegen lassen; \`pate weg <name>\` beendet es |
 | \`benenne <name>\` | \`taufe\` | Deiner Kreuzung einen Namen geben (\`benenne 2 <name>\`, wenn du mehrere trägst) |
 | \`scheuche hase\` | \`scare\` | Einen Hasen bis drei Schritte von dir in den Nebel zurückjagen |
 | \`zäune\` | \`fence\` | Einen Zaun um ein Beet neben dir setzen (2 Treibholz, 1 Tangseil) |
+| \`flur anlegen [x y]\` | \`acker anlegen\` | Mit einem Spaten im Licht eine Flur umbrechen (4×4); \`flur\` zeigt die Fluren hier, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
+| \`bestelle [frucht]\` | \`pflüge\`, \`plough\` | Die Flur bestellen: Frucht wählen, Saatgut und einen Arbeitspunkt bringen |
 
 ## Handel und Ruf {#tradecmds}
 
@@ -341,7 +343,7 @@ Ausführlich unter [Handel und Handwerk](help.game.trade).
 
 | Befehl | Wirkung |
 | --- | --- |
-| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help chat\` |
+| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help chat\` |
 
 ## Für Builder {#builder}
 
@@ -410,11 +412,13 @@ In detail under [Gardens](help.game.garden).
 | \`schöpfe\` | \`fill\` | Fill a can of water at the rain barrel |
 | \`gieße\` | \`water\` | Water a bed (yours or as a sponsor) |
 | \`jäte\` | \`weed\` | Pull weeds and what has wilted |
-| \`ernte\` | \`harvest\`, \`pflücke\` | Harvest what is ripe, with seeds |
+| \`ernte\` | \`harvest\`, \`pflücke\` | Harvest what is ripe, with seeds; at a ripe field a work point and your share |
 | \`pate <name>\` | \`sponsor\` | Let someone tend your bed; \`pate weg <name>\` ends it |
 | \`benenne <name>\` | \`taufe\` | Give your crossing a name (\`benenne 2 <name>\` when you carry several) |
 | \`scheuche hase\` | \`scare\` | Chase a hare up to three cells from you back into the fog |
 | \`zäune\` | \`fence\` | Put a fence round a bed beside you (2 driftwood, 1 kelp rope) |
+| \`flur anlegen [x y]\` | \`acker anlegen\`, \`field\` | Break a field (4×4) with a spade in the light; \`flur\` shows the fields here, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
+| \`bestelle [crop]\` | \`pflüge\`, \`plough\` | Sow the field: choose the crop, bring seed and a work point |
 
 ## Trade and reputation {#tradecmds}
 
@@ -433,7 +437,7 @@ In detail under [Trade and crafting](help.game.trade).
 
 | Command | Effect |
 | --- | --- |
-| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help chat\` |
+| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help chat\` |
 
 ## For builders {#builder}
 
@@ -696,7 +700,28 @@ Wo das Feuer nicht brennt, kommen aus dem Nebel **Hasen** an die Beete: je dicht
 
 \`pate <name>\` lässt jemanden dein Beet gießen, jäten und ernten, ohne dass es ihm gehört; auch einen Gast. So bleibt es gepflegt, wenn du ein paar Tage nicht spielst. \`pate weg <name>\` beendet es, \`pate\` allein zeigt die Paten.
 
-Gießen, jäten, ernten und pflanzen gehen aus bis zu **zwei Feldern** Abstand. Die rechte Maustaste auf einem Beet bietet an, was du dort tun kannst.`,
+Gießen, jäten, ernten und pflanzen gehen aus bis zu **zwei Feldern** Abstand. Die rechte Maustaste auf einem Beet bietet an, was du dort tun kannst.
+
+## Äcker {#fields}
+
+Größer als ein Beet ist die **Flur**: 4×4 Felder, eine je Konto, im Licht eines Feuers (zwei Lichtpunkte). Mit einem Spaten bricht \`flur anlegen\` sie neben dir um, \`flur anlegen <x> <y>\` an einer bestimmten Stelle. Eine Flur trägt **eine** Frucht, braucht kaum tägliche Pflege, aber zwei Stöße Arbeit.
+
+**Bestellen:** Wer die Flur anlegte, wählt die Frucht mit \`bestelle gerste\`. Dann braucht sie **4 Saatgut und 2 Arbeit**: Jedes \`bestelle\` bringt, was du an Saatgut trägst, und einen Arbeitspunkt; danach ruhst du eine Weltstunde, wie an der Baustelle.
+
+| Frucht | Saatgut | Woher | Art | Ertrag |
+| --- | --- | --- | --- | --- |
+| Weizen | Weizen | Gesa | Getreide | 16 Weizen |
+| Gerste | Gerste | wild, wo Kräuter wachsen | Getreide | 16 Gerste |
+| Hafer | Hafer | wild: Graue Insel, Nebelholm, Schären | Getreide | 16 Hafer |
+| Kartoffeln | Kartoffel | Gesa | Hackfrucht | 24 Kartoffeln |
+| Rüben | Rübensamen | wild: Graue Insel, Kupferhafen, Krabbensand | Rüben | 16 Rüben, 8 Rübensamen |
+| Flachs | Leinsamen | wild, wo Blumen blühen | Flachs | 16 Flachs, 8 Leinsamen |
+
+**Ernteeinsatz:** Nach zwei bis drei Tagen ist die Flur reif und bleibt es zwei Tage. Jedes \`ernte\` an ihr ist ein Arbeitspunkt (8 für eine Flur) und gibt dir deinen Anteil sofort in die Tasche. Allein dauert das acht Stunden; acht Hände bringen sie in einer ein, und jedes Korn bekommt genau einer. Danach ist die Flur **überreif**, jeder Anteil nur noch halb so groß, und noch zwei Tage später ist die Frucht verdorben.
+
+\`flur offen\` lässt jeden mitsäen und miternten, auch Gäste, und jeder behält seinen Anteil; \`flur zu\` schließt sie wieder.
+
+**Fruchtfolge:** Dieselbe Art zweimal hintereinander macht den Boden müde, er gibt nur noch 60 %, beim dritten Mal 35 %. Eine andere Art oder drei Tage Brache heilen ihn: Getreide, dann Kartoffeln, dann Rüben oder Ruhe. \`flur\` zeigt den Boden. Eine Flur, an der zwei Wochen niemand arbeitet, verwildert.`,
 			en: `Gardens count as much as buildings. Like a hut, a bed needs a **beacon's light** and takes one of the fire's light points. Digging one needs an account; as a **sponsor** guests may water and harvest too.
 
 ## Spade and bed {#bed}
@@ -755,7 +780,28 @@ Where the fire does not burn, **hares** come out of the fog to the beds: the thi
 
 \`pate <name>\` (\`sponsor\`) lets someone water, weed and harvest your bed without it being theirs, a guest too. That keeps it tended while you do not play for a few days. \`pate weg <name>\` ends it, \`pate\` alone shows the sponsors.
 
-Watering, weeding, harvesting and planting work from up to **two cells** away. The right-click menu on a bed offers what you can do there.`,
+Watering, weeding, harvesting and planting work from up to **two cells** away. The right-click menu on a bed offers what you can do there.
+
+## Fields {#fields}
+
+Bigger than a bed is the **field**: 4×4 cells, one per account, in a fire's light (two light points). With a spade \`flur anlegen\` breaks one beside you, \`flur anlegen <x> <y>\` at a given spot. A field carries **one** crop, needs little daily care but two bursts of work.
+
+**Sowing:** whoever made the field chooses the crop with \`bestelle gerste\` (\`plough\`). Then it needs **4 seed and 2 work**: every \`bestelle\` brings what seed you carry and one work point; then you rest a world hour, as at a building site.
+
+| Crop | Seed | From | Kind | Yield |
+| --- | --- | --- | --- | --- |
+| Wheat | wheat | Gesa | grain | 16 wheat |
+| Barley | barley | wild, where herbs grow | grain | 16 barley |
+| Oats | oats | wild: Grey Island, Nebelholm, Skerries | grain | 16 oats |
+| Potatoes | potato | Gesa | root crop | 24 potatoes |
+| Beets | beet seed | wild: Grey Island, Kupferhafen, Krabbensand | beets | 16 beets, 8 beet seed |
+| Flax | linseed | wild, where flowers bloom | flax | 16 flax, 8 linseed |
+
+**Harvest gang:** after two to three days the field is ripe and stays so for two days. Every \`ernte\` at it is a work point (8 for a field) and puts your share in your pack at once. Alone it takes eight hours; eight hands bring it in in one, and every grain goes to exactly one. After that the field is **overripe**, each share only half, and two days later the crop is lost.
+
+\`flur offen\` lets anyone sow and harvest along, guests too, and each keeps their share; \`flur zu\` closes it again.
+
+**Rotation:** the same kind twice in a row tires the soil, it gives only 60 %, the third time 35 %. Another kind or three days of rest heal it: grain, then potatoes, then beets or rest. \`flur\` shows the soil. A field nobody works for two weeks runs wild.`,
 		},
 	},
 	{

@@ -74,6 +74,8 @@ export type WorldDef = {
 	/** Gardens (docs/siedeln.md "Gärten"): beds, what grows in them and how. Without it nothing is planted. */
 	garden?: GardenDef;
 	wild?: WildDef;
+	/** Fields (docs/siedeln.md "Äcker und Getreide"): one crop on a larger area, sown and brought in by many hands. */
+	fields?: FieldDef;
 	/** How the world splits into region spaces when SPACES_MMO_REGIONS names them (engine/regions.ts); without it the
 	 *  whole world is one space. */
 	regions?: RegionDef[];
@@ -109,6 +111,17 @@ export type GardenDef = { bed: { w: number; h: number; points: number; keepWorld
  *  loses nothing. */
 export type WildDef = { checkWorldMs: number; chance: [number, number, number, number]; nightFactor: number; maxPerRoom: number; eatAfterWorldMs: number; scareReach: number;
 	hare: { name: string; icon: string }; fence: Array<{ proto: string; count: number }>; scarecrow: string; scarecrowReach: number };
+/** A crop of a field: its seed (a prototype, for grain the grain itself), the `group` it rotates in (the same group
+ *  twice in a row tires the soil), how long it grows once sown, what each cell gives (some of it the next seed), its
+ *  colour when ripe, and where its seed is found in the wild flora (like a garden sort's). */
+export type CropDef = { key: string; name: string; aliases: string[]; group: string; seed: string; growWorldMs: number; yields: Array<{ proto: string; perCell: number }>; color: string; wild?: SortDef["wild"] };
+/** A field of `w`×`h` cells takes `points` of a fire's light, at most `maxFields` per account, and goes back to grass
+ *  after `keepWorldMs` without work. Sowing takes a seed per `seedPerCells` cells and a work point per `sowPerCells`,
+ *  the harvest a work point per `harvestPerCells` (the same rest as on a site). It is ripe for `windowWorldMs`; after
+ *  that each share loses `lateLoss` to the field for another window, then the crop is lost. `tired`: the yield's
+ *  factor by how often its crop's group came before it in a row (rest for `fallowWorldMs` heals the soil). */
+export type FieldDef = { w: number; h: number; points: number; maxFields: number; keepWorldMs: number; seedPerCells: number; sowPerCells: number; harvestPerCells: number;
+	windowWorldMs: number; lateLoss: number; tired: number[]; fallowWorldMs: number; crops: CropDef[] };
 export type BuildingDef = { plans: PlanDef[]; lightPoints: number; siteWorldMs: number; restWorldMs: number; maxSites: number; maxBuildings: number; ruinWorldMs: number; estateWorldMs: number };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;

@@ -18,7 +18,7 @@ type T = typeof import("three");
 type O3 = import("three").Object3D;
 type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; kind?: string; progress?: number; sig?: string };
 /** What a bed shows: rebuilt when its plants or weeds change. */
-const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : undefined);
+const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.color ?? ""}` : undefined);
 type Scene3D = {
 	t: T;
 	renderer: import("three").WebGLRenderer;
@@ -278,7 +278,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 	}
 	// nothing grows where something is built or dug
 	const covered = new Set<string>();
-	for (const o of objs.values()) if (o.location === s.room.roomId && (o.kind === "building" || o.kind === "site" || o.kind === "ruin" || o.kind === "bed"))
+	for (const o of objs.values()) if (o.location === s.room.roomId && (o.kind === "building" || o.kind === "site" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field"))
 		for (let y = o.y; y < o.y + (o.h ?? 1); y++) for (let x = o.x; x < o.x + (o.w ?? 1); x++) covered.add(`${x},${y}`);
 	const key = [...covered].sort().join(";");
 	if (key !== s.plantsFor) {
@@ -296,7 +296,7 @@ function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
 
 function object(t: T, obj: ObjView): Entry {
 	const group = new t.Group(); group.userData.owned = true;
-	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" ? { sig: bedSig(obj) } : {}) };
+	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" || obj.kind === "field" ? { sig: bedSig(obj) } : {}) };
 	if (obj.kind === "bed") {
 		// dug soil a little above the grass; each plant at its cell by its stage
 		const w = obj.w ?? 1, d = obj.h ?? 1;
@@ -311,6 +311,24 @@ function object(t: T, obj: ObjView): Entry {
 			if (p.stage === 2) { const head = new t.Mesh(new t.SphereGeometry(0.17, 10, 8), new t.MeshStandardMaterial({ color: Number.parseInt(p.color.slice(1), 16), roughness: 0.7 })); head.position.set(px, 0.08 + tall + 0.08, pz); group.add(head); }
 		}
 		if (obj.weedy) for (const [wx, wz] of [[-0.3, 0.25], [0.3, -0.3], [0.1, 0.35]] as const) { const weed = new t.Mesh(new t.ConeGeometry(0.04, 0.14, 4), stem); weed.position.set(wx * w, 0.15, wz * d); group.add(weed); }
+		return e;
+	}
+	if (obj.kind === "field") {
+		// ploughed soil in rows along x; on it by the stage short green shoots, or tall stalks in the crop's colour
+		const w = obj.w ?? 1, d = obj.h ?? 1, stage = obj.fieldStage ?? "brach";
+		const soil = new t.Mesh(new t.BoxGeometry(w * 0.96, 0.06, d * 0.96), new t.MeshStandardMaterial({ color: stage === "brach" ? 0x7a6040 : 0x5e4028, roughness: 1 })); soil.position.y = 0.03; group.add(soil);
+		if (stage === "brach") return e;
+		const ridge = new t.MeshStandardMaterial({ color: 0x4e3420, roughness: 1 });
+		const crop = new t.MeshStandardMaterial({ color: stage === "reif" || stage === "spaet" ? Number.parseInt((obj.color ?? "#d9b44a").slice(1), 16) : 0x5f9a3a, roughness: 0.9 });
+		if (stage === "spaet") crop.color.multiplyScalar(0.7);
+		const rows = Math.max(2, d * 2), tall = stage === "saat" ? 0 : stage === "waechst" ? 0.18 : 0.42;
+		for (let r = 0; r < rows; r++) {
+			const z = -d / 2 + (r + 0.5) * (d / rows);
+			const bank = new t.Mesh(new t.BoxGeometry(w * 0.9, 0.05, 0.12), ridge); bank.position.set(0, 0.08, z); group.add(bank);
+			// a sowing in progress: the furrows so far, no plants yet
+			if (!tall) { if (r / rows >= (obj.progress ?? 0)) bank.visible = false; continue; }
+			const row = new t.Mesh(new t.BoxGeometry(w * 0.88, tall, 0.14), crop); row.position.set(0, 0.1 + tall / 2, z); group.add(row);
+		}
 		return e;
 	}
 	// houses, sites, ruins, the fire and exits are models (props3d.ts), a variant per thing (its id)

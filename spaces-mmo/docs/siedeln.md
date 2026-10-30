@@ -765,6 +765,45 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
    **Rehe** an den Fluren, **Füchse** am Hühnerstall, **Mäuse** im Speicher, Hund und Katze als Schutz.
    Abnahme: zehn Figuren im
    Ernteeinsatz bringen eine Flur genau einmal ein; müder Boden gibt weniger.
+   - **Teil 1, gebaut 2026-10-30** (`server/engine/commands/field.ts`, Test `tests/field.test.ts`, Weltversion 20):
+     die **Fluren**.
+     - **Anlegen:** `flur anlegen [x y]` bricht mit einem Spaten neben sich eine Flur von 4×4 um. Sie liegt im Licht
+       eines Feuers, belegt zwei Lichtpunkte, und jedes Konto hat höchstens eine. Die Flur ist **ein**
+       `Field`-Entry über ihre Zellen; die Zellen sind `Plot`-Entries mit `unique` wie bei Bauten und Beeten.
+     - **Früchte:** Weizen, Gerste, Hafer (Getreide), Kartoffeln (Hackfrucht), Rüben und Flachs. Korn ist sein eigenes
+       Saatgut; Rüben geben Rübensamen, Flachs gibt Leinsamen zurück. Gerste, Hafer, Rüben- und Leinsamen findet
+       `sammle samen` in der wilden Flora. Weizen und Kartoffeln trägt Gesa beim Anlegen der Welt (je 8), sie kauft und
+       verkauft alles davon.
+     - **Bestellen** (`bestelle <frucht>`): Wer die Flur anlegte, wählt die Frucht. Dann braucht sie 4 Saatgut und 2
+       Arbeit. Jedes `bestelle` bringt das Saatgut, das man trägt, und einen Arbeitspunkt mit derselben Ruhe
+       (`WorkRest`) wie an der Baustelle. Die Wachszeit (zwei bis drei Tage) streckt der Nebel wie im Beet.
+     - **Ernteeinsatz:** Reif bleibt die Flur zwei Tage. Jedes `ernte` an ihr ist ein Arbeitspunkt (8 je Flur) und
+       gibt sofort einen Anteil am Ertrag, der beim Bestellen festgelegt wurde. Die Anteile ergeben genau den Ertrag,
+       der letzte Punkt macht die Flur wieder brach. Danach ist sie zwei Tage überreif (jeder Anteil halb), dann ist
+       die Frucht verdorben. NPCs und Automaten geben wie an der Baustelle höchstens die Hälfte der Punkte.
+     - **Fruchtfolge:** Die Flur zählt, wie oft dieselbe Art (Getreide, Hackfrucht, Rüben, Flachs) hintereinander kam:
+       beim zweiten Mal 60 % Ertrag, beim dritten 35 %. Eine andere Art oder drei Tage Brache heilen den Boden.
+     - **Schreibvorgänge:** Der Fluren-Ticker läuft im Garten-Job und schreibt eine Flur nur an ihren Terminen (reif,
+       überreif, verdorben, verwildert nach zwei Wochen ohne Arbeit).
+     - **Karte und Hilfe:** Die Karte zeigt Furchen, Keime und die reife Frucht in ihrer Farbe in 2D und 3D. Das
+       Zellmenü bietet Anlegen, Bestellen, Ernten und Öffnen an. Hilfe: Abschnitt „Äcker“ im Artikel „Gärten“, Thema
+       `help ackerbau`.
+
+     Abnahme (`tests/field.test.ts`):
+     - Zehn Figuren ernten zugleich: acht Arbeitspunkte, alle 16 Gerste in genau acht Taschen, die Flur ist danach
+       brach, und wer später kommt, hört „liegt brach“.
+     - Gerste nach Gerste, und auch Hafer nach Gerste, gibt 60 %. Kartoffeln nach Getreide oder drei Tage Brache geben
+       wieder alles.
+
+     Abweichungen vom Entwurf:
+     - Die Flur hat eine feste Größe von 4×4 statt 4×4 bis 8×8, denn größere Flächen passen in Räume von 24×16
+       kaum, ohne Wege zu schließen.
+     - Ernten dürfen der Besitzer und, auf einer offenen Flur (`flur offen`), alle, auch Gäste. Jeder behält seinen
+       Anteil; eine Scheune gibt es noch nicht.
+     - Das Erntefenster öffnet eine feste Frist nach dem Bestellen; es gibt noch keine Jahreszeiten.
+
+     Noch nicht: Windmühle, Backhaus und die Ketten Korn → Mehl → Brot und Flachs → Leinen (Teil 2), Tiere (Teil 3),
+     Rehe, Füchse, Mäuse, Hund und Katze (Teil 4).
 4. **Epochen und Siedlung**: Punkte je Bau und Garten, der Zähl-Ticker, `Epoch` je Insel, Schwellen in den
    `Setting`-Entries, Rückfall; die Siedlung aus Hütten in einem Raum (Name, Rechte-Stufen Fremder, Helfer, Siedler).
    Abnahme: eine Insel erreicht das Dorf aus Beeten allein; verfällt genug, fällt sie zurück, ihre Bauten arbeiten weiter,
