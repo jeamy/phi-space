@@ -7,10 +7,12 @@ pub mod host;
 pub mod ledger;
 pub mod ops;
 pub mod parts;
+pub mod store;
 pub mod writer;
 
 pub use files::{open_files, StoreError, FORMAT_VERSION};
-pub use host::{Committed, Ledger, SpaceHost, Watch, SPACE_VERSION};
+pub use host::{Committed, Ledger, SharedLedger, SpaceHost, Watch, SPACE_VERSION};
+pub use store::{random_uuid, Store, DEFAULT_ALIAS};
 pub use ledger::{backup, whole_ops, MemoryLedger, SqliteLedger, StoredDoc};
 pub use ops::WriteOp;
 pub use parts::{PartDef, PartKind, SPACE_PARTS};

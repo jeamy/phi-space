@@ -10,6 +10,8 @@ use phi_core::space::{Changes, CoreError, Random, Space};
 use phi_core::state::{EntryUndo, SpaceState};
 use phi_core::{ClaimSource, Claims, DiskClaims};
 use std::collections::VecDeque;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 fn claim_source(l: &SqliteLedger, kind: &str, key: Option<&str>) -> Result<Arc<dyn ClaimSource>> {
@@ -26,8 +28,11 @@ pub enum Ledger {
 	Memory(MemoryLedger),
 }
 
+/// A ledger the documents of one store share; all of them live on the store's owner thread.
+pub type SharedLedger = Rc<RefCell<Ledger>>;
+
 pub struct SpaceHost {
-	ledger: Ledger,
+	ledger: SharedLedger,
 	kind: String,
 	key: Option<String>,
 	pub space: Space,
@@ -46,6 +51,8 @@ pub struct SpaceHost {
 	/// Commits on their way to the disk, oldest first.
 	unsettled: VecDeque<(u64, Durable)>,
 	watches: Vec<Arc<Mutex<WatchSlot>>>,
+	/// Rows of another document that belong to the next commit of this one (the registry).
+	pub also: Vec<WriteOp>,
 }
 
 /// A commit run but perhaps not durable yet: the next commit builds on it at once; an acknowledgement waits for
@@ -77,8 +84,12 @@ fn claim_index(v: &Json) -> (Option<f64>, Option<String>, Option<i64>) {
 impl SpaceHost {
 	/// The host over `ledger` for the Space document `kind`/`key`: read from the store, or a new one.
 	pub fn sqlite(l: SqliteLedger) -> Ledger { Ledger::Sqlite(Box::new(l)) }
-	pub fn open(mut ledger: Ledger, kind: &str, key: Option<&str>, random: Random) -> Result<SpaceHost> {
-		let stored = match &mut ledger {
+	pub fn open(ledger: Ledger, kind: &str, key: Option<&str>, random: Random) -> Result<SpaceHost> { SpaceHost::open_shared(Rc::new(RefCell::new(ledger)), kind, key, random) }
+	/// The same over a ledger other documents use too.
+	pub fn open_shared(shared: SharedLedger, kind: &str, key: Option<&str>, random: Random) -> Result<SpaceHost> {
+		let mut guard = shared.borrow_mut();
+		let ledger = &mut *guard;
+		let stored = match &mut *ledger {
 			Ledger::Sqlite(l) => l.load(kind, key, SPACE_PARTS)?,
 			Ledger::Memory(l) => l.load(kind, key),
 		};
@@ -101,7 +112,8 @@ impl SpaceHost {
 				(state, true, Some(head))
 			}
 		};
-		Ok(SpaceHost { ledger, kind: kind.to_owned(), key: key.map(str::to_owned), space: Space::new(state, random), exists, head_text, max_ord: HashMap::new(), failure: None, handed: 0, durable: 0, unsettled: VecDeque::new(), watches: vec![] })
+		drop(guard);
+		Ok(SpaceHost { ledger: shared, kind: kind.to_owned(), key: key.map(str::to_owned), space: Space::new(state, random), exists, head_text, max_ord: HashMap::new(), failure: None, handed: 0, durable: 0, unsettled: VecDeque::new(), watches: vec![], also: vec![] })
 	}
 
 	/// Runs `op` as one commit and waits until it is durable: its result, or its error with nothing of it kept. A store
@@ -131,6 +143,7 @@ impl SpaceHost {
 		match op(&mut self.space) {
 			Err(e) => {
 				self.space.rollback();
+				self.also.clear();
 				Ok(Err(e))
 			}
 			Ok(value) => {
@@ -221,14 +234,17 @@ impl SpaceHost {
 		if let Some(f) = &self.failure {
 			return Err(StoreError::Failed(f.clone()));
 		}
-		match &self.ledger {
+		match &*self.ledger.borrow() {
 			Ledger::Sqlite(l) => l.compact().map(Some),
 			Ledger::Memory(_) => Ok(None),
 		}
 	}
 
 	fn write(&mut self, c: Changes) -> Result<()> {
-		let Ledger::Sqlite(ledger) = &mut self.ledger else {
+		let shared = self.ledger.clone();
+		let mut guard = shared.borrow_mut();
+		let Ledger::Sqlite(ledger) = &mut *guard else {
+			self.also.clear();
 			self.exists = true;
 			self.handed += 1;
 			self.durable = self.handed; // memory: the host holds the only copy
@@ -321,7 +337,7 @@ impl SpaceHost {
 			}
 		}
 		let head = state.to_json_head().to_json_text();
-		if self.exists && parts.is_empty() && self.head_text.as_deref() == Some(head.as_str()) {
+		if self.exists && parts.is_empty() && self.also.is_empty() && self.head_text.as_deref() == Some(head.as_str()) {
 			return Ok(()); // nothing changed: nothing is written
 		}
 		for (part, id, o) in new_ords {
@@ -333,6 +349,7 @@ impl SpaceHost {
 			}
 		}
 		let mut ops = vec![WriteOp::Doc { kind: kind.clone(), key, version: SPACE_VERSION, value: head.clone() }];
+		ops.append(&mut self.also);
 		ops.extend(parts);
 		let durable = ledger.persist(ops);
 		self.handed += 1;
@@ -356,7 +373,8 @@ impl SpaceHost {
 		for w in &self.watches {
 			w.lock().unwrap().closed = true;
 		}
-		if let Ledger::Sqlite(l) = self.ledger {
+		// the last document of the store closes it
+		if let Ok(Ledger::Sqlite(l)) = Rc::try_unwrap(self.ledger).map(RefCell::into_inner) {
 			(*l).close();
 		}
 	}
@@ -364,9 +382,9 @@ impl SpaceHost {
 	pub fn drain(&mut self) -> Result<()> { self.durable(self.handed) }
 	pub fn parts() -> &'static [PartDef] { SPACE_PARTS }
 	#[doc(hidden)]
-	pub fn ords_of(&mut self) -> Option<&mut Ords> {
-		match &mut self.ledger {
-			Ledger::Sqlite(l) => Some(l.ords(&self.kind, self.key.as_deref())),
+	pub fn ords_of(&mut self) -> Option<Ords> {
+		match &mut *self.ledger.borrow_mut() {
+			Ledger::Sqlite(l) => Some(l.ords(&self.kind, self.key.as_deref()).clone()),
 			Ledger::Memory(_) => None,
 		}
 	}

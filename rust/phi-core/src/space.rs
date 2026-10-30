@@ -41,7 +41,7 @@ impl std::fmt::Display for CoreError {
 }
 impl std::error::Error for CoreError {}
 
-pub(crate) fn error(class: &'static str, message: impl Into<String>) -> CoreError { CoreError { class, message: message.into() } }
+pub fn error(class: &'static str, message: impl Into<String>) -> CoreError { CoreError { class, message: message.into() } }
 fn limit(m: impl Into<String>) -> CoreError { error("LimitError", m) }
 fn exhausted(m: impl Into<String>) -> CoreError { error("ResourceExhausted", m) }
 fn illegal(m: impl Into<String>) -> CoreError { error("IllegalArgumentError", m) }
@@ -557,7 +557,7 @@ impl Space {
 		Ok(())
 	}
 
-	pub(crate) fn touch(&mut self, now: f64) {
+	pub fn touch(&mut self, now: f64) {
 		let max = self.limits().max_log_bytes;
 		let dropped = stream::touch(&mut self.state.stream, &mut self.open, now, max);
 		self.dropped(dropped);

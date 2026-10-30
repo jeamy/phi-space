@@ -744,13 +744,19 @@ Ein Testschalter darf nicht unbemerkt den alten TS-Host statt des Rust-Servers s
 | Scheibe | Inhalt | Stand |
 |---|---|---|
 | 0 | Kernlücken über den Treiber: `needsMaintenance`, `pendingClaims` (gezielte Abfrage, keine Aufzählung), `resolveAdmission`, `readChain` | erledigt |
-| 1 | Store-Host mit mehreren Dokumenten in einem Commit: Registry (mit `hostKey`), Standard-Space, benannte Spaces | offen |
+| 1 | Store-Host mit mehreren Dokumenten in einem Commit: Registry (mit `hostKey`), Standard-Space, benannte Spaces | erledigt |
 | 2 | `phi-service` synchron: `handle_text` mit eingespeister Uhr und Zufall, `wire.json` exakt, gesäter Gang gegen einen TS-Treiber um `handleText`, Antwort byte-genau | offen |
 | 3 | Hintergrund: Reaper, Outbox-Entscheidungstabelle aus `deliverEvents`, Mailbox- und Claim-Wartung | offen |
 | 4 | `phi-wire`, `phi-space-server`: ein Besitzer-Thread je Store, Antworten erst nach `durable`, Long Polls, CLI und Ready-Zeile wie `standalone.ts` | offen |
 | 5 | Gruppe A und B3 gegen den Rust-Server, `--test-hooks`, Fallmatrix | offen |
 | 6 | Startprofile, `SPACES_MMO_SPACE_SERVER`, `CODEMODE_SPACE_SERVER`; ein fehlendes Binary bricht ab und fällt nie auf TS zurück | offen |
 | 7 | TS→Rust→TS mit offener Arbeit, Messung nach R-D2/R-D11 | offen |
+
+**Festlegungen aus den Scheiben:**
+
+- **Unterstützte Dokumente:** Registry Version 1, Space und benannter Space Version 5, Teile als Zeilen. `migrate` und Inline-Teile werden nicht portiert: Die Stores auf diesem Rechner und alle Vektoren sind so, ein anderer Stand wird beim Öffnen abgelehnt. R4 prüft das auf big und nano vor dem Umstieg.
+- **Speicherbudget:** entfällt. Der TS-Host wirft nur Dokumente aus dem Speicher, die niemand überwacht; `startService` überwacht jeden Space. Der Rust-Dienst hält deshalb jeden Space im Speicher, die Claims bleiben auf der Platte.
+- **Benannte Spaces:** Sie entstehen nur durch Host-Code, nie durch einen Aufruf. Der Rust-Dienst bedient die, die in der Datei stehen.
 
 **Abnahme:**
 

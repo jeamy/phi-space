@@ -170,6 +170,18 @@ impl SqliteLedger {
 		Ok(())
 	}
 
+	/// A document without parts as it is stored.
+	pub fn document(&self, kind: &str, key: Option<&str>) -> Result<Option<StoredDoc>> {
+		let row: Option<(i64, String)> = match self.files.read.query_row("SELECT version, value FROM documents WHERE kind = ? AND key = ?", params![kind, doc_key(key)], |r| Ok((r.get(0)?, r.get(1)?))) {
+			Ok(r) => Some(r),
+			Err(rusqlite::Error::QueryReturnedNoRows) => None,
+			Err(e) => return Err(e.into()),
+		};
+		let Some((version, text)) = row else { return Ok(None) };
+		let value = parse(&text).map_err(|e| StoreError::Unavailable(format!("document {kind}: {e}")))?;
+		Ok(Some(StoredDoc { kind: kind.to_owned(), key: key.map(str::to_owned), version, value }))
+	}
+
 	/// The kinds and keys of every stored document.
 	/// The store file.
 	pub fn path(&self) -> &Path { &self.files.path }
