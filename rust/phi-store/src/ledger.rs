@@ -2,7 +2,7 @@
 use crate::files::{open_files, Result, StoreError, StoreFiles};
 use crate::ops::WriteOp;
 use crate::parts::{head_of, id_of, join_parts, part_at, PartDef, PartKind, PartRow};
-use crate::writer::{Durable, Synchronous, Writer, WriterOptions};
+use crate::writer::{Compaction, Durable, Synchronous, Writer, WriterOptions};
 use phi_json::{parse, Json};
 use rusqlite::params;
 use std::collections::HashMap;
@@ -78,6 +78,15 @@ pub fn whole_ops(doc: &StoredDoc, parts: &[PartDef], ords: &mut Ords) -> Vec<Wri
 	ops
 }
 
+/// A backup of the store at `path`, taken while it writes (`VACUUM INTO`, on a read-only connection of its own): one
+/// consistent state of its commits. Restored by copying it to where a store is opened.
+pub fn backup(path: &Path, to: &Path) -> Result<()> {
+	let db = rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+	db.busy_timeout(std::time::Duration::from_secs(10))?;
+	db.execute("VACUUM INTO ?", [to.to_string_lossy()])?;
+	Ok(())
+}
+
 /// The SQLite ledger: the read connection, the owner lock and the writer thread.
 pub struct SqliteLedger {
 	files: StoreFiles,
@@ -127,6 +136,18 @@ impl SqliteLedger {
 			for p in parts.iter().filter(|p| p.disk.is_some() && p.kind == PartKind::Map) {
 				self.index(kind, doc_key(key), p)?;
 			}
+			// a part kept inline in the head (written before its definition had parts): the TypeScript store moves it to rows
+			// with its next commit; not ported, and a head written without it would lose it
+			for p in parts {
+				let inline = match part_at(&value, p.path) {
+					Some(Json::Array(a)) => !a.is_empty(),
+					Some(Json::Object(o)) => !o.is_empty(),
+					_ => false,
+				};
+				if inline {
+					return Err(StoreError::Unavailable(format!("the document {kind} keeps {} inline in its head; the Rust store reads parts as rows only", p.name())));
+				}
+			}
 			join_parts(&mut value, parts, &rows);
 			self.ords.insert(doc_id(kind, key), ords);
 		}
@@ -164,6 +185,20 @@ impl SqliteLedger {
 		Ok(out.into_iter().map(|(k, key)| (k, Some(key).filter(|s| !s.is_empty()))).collect())
 	}
 
+	/// Whether a stored claim is of a kind not ported (a negative claim, a claim from a restore).
+	pub fn unported_claims(&self, kind: &str, key: Option<&str>) -> Result<bool> {
+		let sql = "SELECT 1 FROM parts WHERE kind = ? AND key = ? AND ((part = 'rpc.claims' AND json_extract(value, '$.notCommitted') IS NOT NULL) OR part = 'restoredClaims') LIMIT 1";
+		match self.files.read.query_row(sql, params![kind, doc_key(key)], |_| Ok(())) {
+			Ok(()) => Ok(true),
+			Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),
+			Err(e) => Err(e.into()),
+		}
+	}
+	/// Gives the file's free pages back, in the writer's order between two batches.
+	pub fn compact(&self) -> Result<Compaction> {
+		let rx = self.writer.as_ref().expect("open").compact().ok_or_else(|| StoreError::Failed("the writer is gone".into()))?;
+		rx.recv().map_err(|_| StoreError::Failed("the writer is gone".into()))
+	}
 	/// Hands a commit's rows to the writer; the receiver settles when they are durable.
 	pub fn persist(&mut self, ops: Vec<WriteOp>) -> Durable { self.writer.as_ref().expect("open").write(ops) }
 

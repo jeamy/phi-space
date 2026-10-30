@@ -4,11 +4,13 @@
 use crate::files::{Result, StoreError};
 use crate::ledger::{MemoryLedger, Ords, SqliteLedger, StoredDoc};
 use crate::ops::WriteOp;
+use crate::writer::{Compaction, Durable};
 use crate::parts::{id_of, PartDef, SPACE_PARTS};
 use phi_core::space::{Changes, CoreError, Random, Space};
 use phi_core::state::{EntryUndo, SpaceState};
 use phi_core::{ClaimSource, Claims, DiskClaims};
-use std::sync::Arc;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 fn claim_source(l: &SqliteLedger, kind: &str, key: Option<&str>) -> Result<Arc<dyn ClaimSource>> {
 	Ok(Arc::new(crate::disk::SqliteClaims::open(l.path(), kind, key.unwrap_or(""), "rpc.claims")?))
@@ -38,6 +40,34 @@ pub struct SpaceHost {
 	max_ord: HashMap<String, i64>,
 	/// A write failed: the host takes no more work (its memory may hold what never reached the disk; reopen it).
 	failure: Option<String>,
+	/// Commits handed to the store, and those durable (their numbers: `Committed::seq`).
+	handed: u64,
+	durable: u64,
+	/// Commits on their way to the disk, oldest first.
+	unsettled: VecDeque<(u64, Durable)>,
+	watches: Vec<Arc<Mutex<WatchSlot>>>,
+}
+
+/// A commit run but perhaps not durable yet: the next commit builds on it at once; an acknowledgement waits for
+/// `SpaceHost::durable(seq)`.
+pub struct Committed<T> {
+	pub value: T,
+	pub seq: u64,
+}
+
+#[derive(Default)]
+struct WatchSlot {
+	pending: Option<u64>,
+	closed: bool,
+}
+/// A watch of the document: it hears of durable commits only, and what comes while nobody looks is merged into one
+/// (the latest commit number). The value is read through `SpaceHost::committed`.
+pub struct Watch(Arc<Mutex<WatchSlot>>);
+impl Watch {
+	/// The newest durable commit since the last look.
+	pub fn poll(&self) -> Option<u64> { self.0.lock().unwrap().pending.take() }
+	/// The host was closed.
+	pub fn closed(&self) -> bool { self.0.lock().unwrap().closed }
 }
 
 fn claim_index(v: &Json) -> (Option<f64>, Option<String>, Option<i64>) {
@@ -63,19 +93,39 @@ impl SpaceHost {
 				let head = state.to_json_head().to_json_text();
 				// the claims stay on the disk: a map over their rows takes their place
 				if let (Ledger::Sqlite(l), Some(r)) = (&ledger, state.rpc.as_mut()) {
+					if l.unported_claims(kind, key)? {
+						return Err(StoreError::Unavailable(format!("the document {kind} holds claims of a kind the Rust store does not read yet")));
+					}
 					r.claims = Claims::Disk(DiskClaims::new(claim_source(l, kind, key)?));
 				}
 				(state, true, Some(head))
 			}
 		};
-		Ok(SpaceHost { ledger, kind: kind.to_owned(), key: key.map(str::to_owned), space: Space::new(state, random), exists, head_text, max_ord: HashMap::new(), failure: None })
+		Ok(SpaceHost { ledger, kind: kind.to_owned(), key: key.map(str::to_owned), space: Space::new(state, random), exists, head_text, max_ord: HashMap::new(), failure: None, handed: 0, durable: 0, unsettled: VecDeque::new(), watches: vec![] })
 	}
 
-	/// Runs `op` as one commit: its result, or its error with nothing of it kept. A store that fails to write fails this
-	/// commit and takes no more.
+	/// Runs `op` as one commit and waits until it is durable: its result, or its error with nothing of it kept. A store
+	/// that fails to write fails this commit and takes no more.
 	pub fn commit<T>(&mut self, op: impl FnOnce(&mut Space) -> std::result::Result<T, CoreError>) -> Result<std::result::Result<T, CoreError>> {
-		if let Some(f) = &self.failure {
-			return Err(StoreError::Failed(f.clone()));
+		match self.start_commit(op)? {
+			Err(e) => {
+				self.durable(self.handed)?; // it may have read what is not durable yet
+				Ok(Err(e))
+			}
+			Ok(c) => {
+				self.durable(c.seq)?;
+				Ok(Ok(c.value))
+			}
+		}
+	}
+
+	/// Runs `op` as one commit and hands its rows to the store without waiting: the next commit sees it at once
+	/// (`Space::state` is ahead of the disk until then); `durable`, `committed` and watches see it once it is written.
+	pub fn start_commit<T>(&mut self, op: impl FnOnce(&mut Space) -> std::result::Result<T, CoreError>) -> Result<std::result::Result<Committed<T>, CoreError>> {
+		self.pump()?;
+		let stamp = self.handed + 1;
+		if let Some(Claims::Disk(d)) = self.space.state.rpc.as_mut().map(|r| &mut r.claims) {
+			d.stamp = stamp;
 		}
 		self.space.begin_tracked_commit();
 		match op(&mut self.space) {
@@ -83,25 +133,109 @@ impl SpaceHost {
 				self.space.rollback();
 				Ok(Err(e))
 			}
-			Ok(v) => {
+			Ok(value) => {
 				let changes = self.space.end_commit();
 				self.space.seal();
 				if let Err(e) = self.write(changes) {
-					self.failure = Some(match &e {
-						StoreError::Failed(m) => m.clone(),
-						other => other.to_string(),
-					});
+					self.fail(&e);
 					return Err(e);
 				}
-				Ok(Ok(v))
+				self.pump()?;
+				Ok(Ok(Committed { value, seq: self.handed }))
 			}
+		}
+	}
+
+	fn fail(&mut self, e: &StoreError) {
+		self.failure.get_or_insert_with(|| match e {
+			StoreError::Failed(m) => m.clone(),
+			other => other.to_string(),
+		});
+	}
+
+	/// Takes in what the store has made durable: claims it wrote are read from the disk from now on, watches hear of it.
+	pub fn pump(&mut self) -> Result<()> { self.settle(0) }
+
+	/// Waits until commit `seq` is durable.
+	pub fn durable(&mut self, seq: u64) -> Result<()> { self.settle(seq) }
+
+	fn settle(&mut self, until: u64) -> Result<()> {
+		if let Some(f) = &self.failure {
+			return Err(StoreError::Failed(f.clone()));
+		}
+		let before = self.durable;
+		let mut failed = None;
+		while let Some((seq, rx)) = self.unsettled.front() {
+			let seq = *seq;
+			let r = if seq <= until {
+				rx.recv().map_err(|_| "the writer is gone".to_owned())
+			} else {
+				match rx.try_recv() {
+					Ok(r) => Ok(r),
+					Err(std::sync::mpsc::TryRecvError::Empty) => break,
+					Err(std::sync::mpsc::TryRecvError::Disconnected) => Err("the writer is gone".to_owned()),
+				}
+			};
+			match r.and_then(|r| r) {
+				Ok(()) => {
+					self.unsettled.pop_front();
+					self.durable = seq;
+				}
+				Err(m) => {
+					failed = Some(m);
+					break;
+				}
+			}
+		}
+		if self.durable != before {
+			if let Some(Claims::Disk(d)) = self.space.state.rpc.as_mut().map(|r| &mut r.claims) {
+				d.settle(self.durable);
+			}
+			for w in &self.watches {
+				w.lock().unwrap().pending = Some(self.durable);
+			}
+		}
+		if let Some(m) = failed {
+			let e = StoreError::Failed(m);
+			self.fail(&e);
+			return Err(e);
+		}
+		Ok(())
+	}
+
+	/// The committed state as a reader outside a commit sees it: waits for what is on its way to the disk.
+	pub fn committed(&mut self) -> Result<&SpaceState> {
+		self.durable(self.handed)?;
+		Ok(&self.space.state)
+	}
+
+	/// A watch from now on.
+	pub fn watch(&mut self) -> Watch {
+		let slot = Arc::new(Mutex::new(WatchSlot::default()));
+		self.watches.push(slot.clone());
+		Watch(slot)
+	}
+
+	/// Gives the file's free pages back between two batches; the commits that come meanwhile wait for it.
+	pub fn compact(&mut self) -> Result<Option<Compaction>> {
+		if let Some(f) = &self.failure {
+			return Err(StoreError::Failed(f.clone()));
+		}
+		match &self.ledger {
+			Ledger::Sqlite(l) => l.compact().map(Some),
+			Ledger::Memory(_) => Ok(None),
 		}
 	}
 
 	fn write(&mut self, c: Changes) -> Result<()> {
 		let Ledger::Sqlite(ledger) = &mut self.ledger else {
 			self.exists = true;
-			return Ok(()); // memory: the host holds the only copy
+			self.handed += 1;
+			self.durable = self.handed; // memory: the host holds the only copy
+			for w in &self.watches {
+				w.lock().unwrap().pending = Some(self.durable);
+			}
+			return Ok(());
 		};
 		let kind = self.kind.clone();
 		let key = self.key.clone().unwrap_or_default();
@@ -200,21 +334,15 @@ impl SpaceHost {
 		}
 		let mut ops = vec![WriteOp::Doc { kind: kind.clone(), key, version: SPACE_VERSION, value: head.clone() }];
 		ops.extend(parts);
-		ledger.persist(ops).recv().map_err(|_| StoreError::Failed("the writer is gone".into()))?.map_err(StoreError::Failed)?;
+		let durable = ledger.persist(ops);
+		self.handed += 1;
+		self.unsettled.push_back((self.handed, durable));
 		self.head_text = Some(head);
 		self.exists = true;
-		// durable: the claims are read from the disk from now on (a map still in memory goes there, as DiskMap.adopt)
-		let source = match self.space.state.rpc.as_ref().map(|r| r.claims.on_disk()) {
-			Some(false) => Some(claim_source(ledger, &kind, self.key.as_deref())?),
-			_ => None,
-		};
-		if let Some(r) = self.space.state.rpc.as_mut() {
-			if let (Claims::Memory(m), Some(src)) = (&mut r.claims, source) {
-				r.claims = Claims::Disk(DiskClaims::adopt(src, std::mem::take(m)));
-			}
-			if let Claims::Disk(d) = &mut r.claims {
-				d.settle();
-			}
+		// a map still in memory goes on the disk from now on (DiskMap.adopt): held until this commit is durable
+		if let Some(Claims::Memory(m)) = self.space.state.rpc.as_ref().map(|r| &r.claims) {
+			let adopted = DiskClaims::adopt(claim_source(ledger, &kind, self.key.as_deref())?, m, self.handed);
+			self.space.state.rpc.as_mut().expect("just seen").claims = Claims::Disk(adopted);
 		}
 		Ok(())
 	}
@@ -222,12 +350,18 @@ impl SpaceHost {
 	/// The committed document, as a store reads it back.
 	pub fn stored(&self) -> StoredDoc { StoredDoc { kind: self.kind.clone(), key: self.key.clone(), version: SPACE_VERSION, value: self.space.state.to_json() } }
 
-	/// Writes what is pending and closes the store.
+	/// Writes what is pending and closes the store: commits still on their way are written first (`drain` says whether
+	/// they were), watches end.
 	pub fn close(self) {
+		for w in &self.watches {
+			w.lock().unwrap().closed = true;
+		}
 		if let Ledger::Sqlite(l) = self.ledger {
 			(*l).close();
 		}
 	}
+	/// Waits for everything handed over; the store's failure, if it failed.
+	pub fn drain(&mut self) -> Result<()> { self.durable(self.handed) }
 	pub fn parts() -> &'static [PartDef] { SPACE_PARTS }
 	#[doc(hidden)]
 	pub fn ords_of(&mut self) -> Option<&mut Ords> {

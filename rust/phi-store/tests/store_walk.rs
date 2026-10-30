@@ -32,6 +32,8 @@ struct RustSide {
 	host: SpaceHost,
 	snapshots: Snapshots,
 	clock: f64,
+	/// Commits do not wait for the disk: the next one builds on one still being written (odd seeds).
+	overlap: bool,
 }
 impl RustSide {
 	fn open(path: &Path, init: &Json) -> RustSide {
@@ -54,7 +56,7 @@ impl RustSide {
 		})
 		.unwrap()
 		.unwrap();
-		RustSide { host, snapshots: Snapshots::new(), clock }
+		RustSide { host, snapshots: Snapshots::new(), clock, overlap: false }
 	}
 	fn step(&mut self, l: &Json) -> Result<Json, phi_core::CoreError> {
 		if let Some(now) = l.get("now").and_then(Json::as_f64) {
@@ -62,11 +64,15 @@ impl RustSide {
 		}
 		let now = self.clock;
 		let snapshots = &mut self.snapshots;
-		self.host.commit(|s| {
+		let op = |s: &mut phi_core::Space| {
 			s.clock = now;
 			apply_line(s, snapshots, now, l)
-		})
-		.expect("the Rust store writes")
+		};
+		if self.overlap {
+			self.host.start_commit(op).expect("the Rust store writes").map(|c| c.value)
+		} else {
+			self.host.commit(op).expect("the Rust store writes")
+		}
 	}
 	fn hash(&self) -> String { digest_json(&self.host.space.state.to_json()).unwrap() }
 }
@@ -106,6 +112,7 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 	let mut w = Walk::new(seed);
 	let init = w.init();
 	let mut rust = RustSide::open(&rust_file, &init);
+	rust.overlap = seed % 2 == 1;
 	let mut ts_init = init.clone();
 	if let Json::Object(o) = &mut ts_init {
 		o.insert("file", ts_file.to_str().unwrap().into());
@@ -146,6 +153,7 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 		let mut ts = TsDriver::script("test/support/store-driver.ts");
 		let dump = ts.run(&replay).pop().and_then(|r| r.get("dump").cloned()).unwrap_or(Json::Null);
 		let mut again = RustSide::open(&pm.join("rust.sqlite"), &lines[0]);
+		again.overlap = seed % 2 == 1;
 		for l in &lines[1..=i] {
 			let _ = again.step(l);
 		}

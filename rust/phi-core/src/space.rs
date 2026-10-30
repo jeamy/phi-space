@@ -355,6 +355,8 @@ pub struct Space {
 	/// The smallest `expires` of the entries that stayed at the last full sweep (core.ts `expiryWatermarks`); can only
 	/// be stale low. `None`: not swept yet. Infinity is a value of its own (nothing stayed).
 	watermark: Option<f64>,
+	/// The document came with claims of a kind not ported (looked for once: a space holds a day of claims).
+	unported_claims: bool,
 	/// What the running commit changed, while a host tracks it.
 	pub(crate) tracking: Option<Tracking>,
 }
@@ -389,7 +391,10 @@ pub struct Changes {
 }
 
 impl Space {
-	pub fn new(state: SpaceState, random: Random) -> Space { Space { state, clock: 0.0, random, open: None, budget: None, watermark: None, tracking: None } }
+	pub fn new(state: SpaceState, random: Random) -> Space {
+		let unported_claims = state.rpc.as_ref().and_then(|r| r.claims.memory()).is_some_and(|m| m.iter().any(|(_, c)| c.get("notCommitted").is_some() || c.as_object().is_none()));
+		Space { unported_claims, state, clock: 0.0, random, open: None, budget: None, watermark: None, tracking: None }
+	}
 
 	/// A commit as the TypeScript host runs one: on a fresh draft (the watermark, the budget and the open batch start
 	/// anew), and with what it changes in the parts recorded (`end_commit`) so that
@@ -530,7 +535,7 @@ impl Space {
 			}
 		}
 		if let Some(r) = &self.state.rpc {
-			if r.rest.keys().any(|k| k != "sweepCursor") || r.claims.memory().is_some_and(|m| m.iter().any(|(_, c)| c.get("notCommitted").is_some() || c.as_object().is_none())) {
+			if r.rest.keys().any(|k| k != "sweepCursor") || self.unported_claims {
 				return Err(not_ported("claims of a kind not ported yet (negative claims)"));
 			}
 		}

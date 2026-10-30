@@ -446,11 +446,53 @@ pub trait ClaimSource: Send + Sync {
 /// branches core.ts takes for each (`diskMapOf`).
 #[derive(Clone, Debug)]
 pub enum Claims {
-	Memory(Object),
+	Memory(MemoryClaims),
 	Disk(DiskClaims),
 }
+
+/// Claims in memory: by key in O(1) however many a day brings (an `Object` is a list), in the order of a JavaScript
+/// object (assigning keeps a key's place, a deleted key that comes back goes last).
+#[derive(Clone, Debug, Default)]
+pub struct MemoryClaims {
+	map: std::collections::HashMap<String, (u64, Json)>,
+	order: std::collections::BTreeMap<u64, String>,
+	next: u64,
+}
+impl MemoryClaims {
+	pub fn get(&self, k: &str) -> Option<&Json> { self.map.get(k).map(|(_, v)| v) }
+	pub fn insert(&mut self, k: String, v: Json) {
+		if let Some(slot) = self.map.get_mut(&k) {
+			slot.1 = v;
+			return;
+		}
+		self.next += 1;
+		self.order.insert(self.next, k.clone());
+		self.map.insert(k, (self.next, v));
+	}
+	pub fn remove(&mut self, k: &str) {
+		if let Some((at, _)) = self.map.remove(k) {
+			self.order.remove(&at);
+		}
+	}
+	pub fn len(&self) -> usize { self.map.len() }
+	pub fn is_empty(&self) -> bool { self.map.is_empty() }
+	pub fn iter(&self) -> impl Iterator<Item = (&str, &Json)> { self.order.values().map(|k| (k.as_str(), &self.map[k].1)) }
+	pub fn to_object(&self) -> Object { self.iter().map(|(k, v)| (k, v.clone())).collect() }
+}
+impl From<Object> for MemoryClaims {
+	fn from(o: Object) -> Self {
+		let mut m = MemoryClaims::default();
+		for (k, v) in o.iter() {
+			m.insert(k.to_owned(), v.clone());
+		}
+		m
+	}
+}
+impl PartialEq for MemoryClaims {
+	fn eq(&self, other: &Self) -> bool { self.len() == other.len() && self.iter().zip(other.iter()).all(|(a, b)| a == b) }
+}
 impl Default for Claims {
-	fn default() -> Self { Claims::Memory(Object::new()) }
+	fn default() -> Self { Claims::Memory(MemoryClaims::default()) }
 }
 impl PartialEq for Claims {
 	fn eq(&self, other: &Claims) -> bool {
@@ -462,12 +504,15 @@ impl PartialEq for Claims {
 	}
 }
 
-/// A map part on the disk: memory holds what commits wrote that is not durable yet (`None`: deleted) and the records
-/// without `at` (open requests); everything else is read from the store when asked for.
+/// A map part on the disk: memory holds what commits wrote that is not durable yet (`None`: deleted), with the number of
+/// the commit that wrote it, and the records without `at` (open requests); everything else is read from the store when
+/// asked for.
 #[derive(Clone)]
 pub struct DiskClaims {
 	source: std::sync::Arc<dyn ClaimSource>,
-	held: Vec<(String, Option<Json>)>,
+	held: Vec<(String, Option<Json>, u64)>,
+	/// The number of the commit that writes now (a host sets it; several commits may be on their way to the disk).
+	pub stamp: u64,
 	/// How often the whole map was read (`entries`): code that scans a day of claims shows here.
 	pub enumerations: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
@@ -498,18 +543,20 @@ fn js_order(a: &str, b: &str) -> std::cmp::Ordering { a.encode_utf16().cmp(b.enc
 impl DiskClaims {
 	/// Over the rows of `source`: the open requests are held from the start.
 	pub fn new(source: std::sync::Arc<dyn ClaimSource>) -> DiskClaims {
-		let held = source.unindexed().into_iter().map(|(k, v)| (k, Some(v))).collect();
-		DiskClaims { source, held, enumerations: Default::default() }
+		let held = source.unindexed().into_iter().map(|(k, v)| (k, Some(v), 0)).collect();
+		DiskClaims { source, held, stamp: 0, enumerations: Default::default() }
 	}
-	/// From a map in memory that its commit is writing to the disk now (`DiskMap.adopt`): every record held until then.
-	pub fn adopt(source: std::sync::Arc<dyn ClaimSource>, from: Object) -> DiskClaims {
+	/// From a map in memory that commit `written` is writing to the disk now (`DiskMap.adopt`): every record held until
+	/// that commit is durable.
+	pub fn adopt(source: std::sync::Arc<dyn ClaimSource>, from: &MemoryClaims, written: u64) -> DiskClaims {
 		let mut d = DiskClaims::new(source);
+		d.stamp = written;
 		for (k, v) in from.iter() {
 			d.write(k, Some(v.clone()));
 		}
 		d
 	}
-	fn held_at(&self, k: &str) -> Option<&Option<Json>> { self.held.iter().find(|(x, _)| x == k).map(|(_, v)| v) }
+	fn held_at(&self, k: &str) -> Option<&Option<Json>> { self.held.iter().find(|(x, _, _)| x == k).map(|(_, v, _)| v) }
 	pub fn get(&self, k: &str) -> Option<Json> {
 		match self.held_at(k) {
 			Some(v) => v.clone(),
@@ -517,13 +564,17 @@ impl DiskClaims {
 		}
 	}
 	pub fn write(&mut self, k: &str, v: Option<Json>) {
-		match self.held.iter_mut().find(|(x, _)| x == k) {
-			Some(slot) => slot.1 = v,
-			None => self.held.push((k.to_owned(), v)),
+		let stamp = self.stamp;
+		match self.held.iter_mut().find(|(x, _, _)| x == k) {
+			Some(slot) => {
+				slot.1 = v;
+				slot.2 = stamp;
+			}
+			None => self.held.push((k.to_owned(), v, stamp)),
 		}
 	}
-	/// The commits so far are durable: what they wrote is read from the store from now on (open requests stay held).
-	pub fn settle(&mut self) { self.held.retain(|(_, v)| v.as_ref().is_some_and(|v| claim_at(v).is_none())); }
+	/// The commits up to `durable` are on the disk: what they wrote is read from there from now on (open requests stay held).
+	pub fn settle(&mut self, durable: u64) { self.held.retain(|(_, v, stamp)| *stamp > durable || v.as_ref().is_some_and(|v| claim_at(v).is_none())); }
 	/// How many records memory holds.
 	pub fn held(&self) -> usize { self.held.len() }
 	/// Every record: reads the whole map (counted in `enumerations`).
@@ -537,7 +588,7 @@ impl DiskClaims {
 				}
 			}
 		}
-		for (k, v) in &self.held {
+		for (k, v, _) in &self.held {
 			if let Some(v) = v {
 				out.insert(k.clone(), v.clone());
 			}
@@ -553,7 +604,7 @@ impl DiskClaims {
 				out.push(k);
 			}
 		}
-		for (k, v) in &self.held {
+		for (k, v, _) in &self.held {
 			let Some(v) = v else { continue };
 			let Some(at) = claim_at(v) else { continue };
 			if at > t {
@@ -574,7 +625,7 @@ impl DiskClaims {
 	/// `nextAt`: the smallest `at` above `t` among records without flag.
 	pub fn next_at(&self, t: f64) -> Option<f64> {
 		let mut min = self.source.next_at(t);
-		for v in self.held.iter().filter_map(|(_, v)| v.as_ref()) {
+		for v in self.held.iter().filter_map(|(_, v, _)| v.as_ref()) {
 			if claim_flag(v) {
 				continue;
 			}
@@ -588,7 +639,7 @@ impl DiskClaims {
 	}
 	/// `hasGroup`: whether a record of generation `g` exists.
 	pub fn has_group(&self, g: &str) -> bool {
-		if self.held.iter().any(|(_, v)| v.as_ref().is_some_and(|v| v.get("generation").and_then(Json::as_str) == Some(g))) {
+		if self.held.iter().any(|(_, v, _)| v.as_ref().is_some_and(|v| v.get("generation").and_then(Json::as_str) == Some(g))) {
 			return true;
 		}
 		self.source.group(g, self.held.len() + 1).iter().any(|k| self.held_at(k).is_none())
@@ -606,9 +657,7 @@ impl Claims {
 	pub fn put(&mut self, k: &str, v: Option<Json>) {
 		match (self, v) {
 			(Claims::Memory(o), Some(v)) => o.insert(k.to_owned(), v),
-			(Claims::Memory(o), None) => {
-				o.remove(k);
-			}
+			(Claims::Memory(o), None) => o.remove(k),
 			(Claims::Disk(d), v) => d.write(k, v),
 		}
 	}
@@ -616,12 +665,12 @@ impl Claims {
 	/// Every record (a map on the disk is read whole: only for what asks for all of it).
 	pub fn entries(&self) -> Object {
 		match self {
-			Claims::Memory(o) => o.clone(),
+			Claims::Memory(o) => o.to_object(),
 			Claims::Disk(d) => d.entries(),
 		}
 	}
 	/// The map in memory, for the branches that scan it (none for one on the disk).
-	pub fn memory(&self) -> Option<&Object> {
+	pub fn memory(&self) -> Option<&MemoryClaims> {
 		match self {
 			Claims::Memory(o) => Some(o),
 			Claims::Disk(_) => None,
@@ -652,7 +701,7 @@ impl RpcState {
 		let mut f = Fields::of(v, w)?;
 		Ok(RpcState {
 			generations: f.object("generations", w)?,
-			claims: Claims::Memory(f.object("claims", w)?),
+			claims: Claims::Memory(f.object("claims", w)?.into()),
 			bytes: f.opt_number("bytes", w)?,
 			reserved_bytes: f.opt_number("reservedBytes", w)?,
 			signing_key: f.opt_string("signingKey", w)?,

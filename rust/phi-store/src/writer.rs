@@ -13,7 +13,17 @@ pub type Durable = Receiver<std::result::Result<(), String>>;
 
 enum Msg {
 	Write(Vec<WriteOp>, Sender<std::result::Result<(), String>>),
+	Compact(Sender<Compaction>),
 	Close(Sender<()>),
+}
+
+/// What a compaction did: the free pages given back to the file system, and whether the file was first switched to
+/// incremental auto-vacuum (one full VACUUM). A failed compaction changes nothing and the store goes on (`error`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Compaction {
+	pub freed_pages: i64,
+	pub converted: bool,
+	pub error: Option<String>,
 }
 
 /// `synchronous`: FULL (default) acknowledges a commit once it is on the disk; NORMAL may lose the last commits when the
@@ -33,6 +43,8 @@ pub enum Fault {
 	LoseAnswer,
 	/// The writer thread ends without answering (it died).
 	WriterGone,
+	/// The batch takes this long to write (what arrives meanwhile goes together into the next one).
+	Slow(Duration),
 }
 
 /// How the writer opens its connection.
@@ -41,7 +53,7 @@ pub struct WriterOptions {
 	pub synchronous: Synchronous,
 	/// Tests: the file may not grow beyond this many pages, as on a full disk (SQLITE_FULL).
 	pub max_pages: Option<u64>,
-	/// Tests: what happens at this batch.
+	/// Tests: what happens at this batch (0: at every batch).
 	pub fault: Option<(u64, Fault)>,
 }
 impl Default for WriterOptions {
@@ -88,6 +100,13 @@ impl Writer {
 		}
 		rx
 	}
+	/// Gives the file's free pages back, between two batches: what was handed over before it is written first, what comes
+	/// after it waits.
+	pub fn compact(&self) -> Option<Receiver<Compaction>> {
+		let (done, rx) = channel();
+		self.tx.send(Msg::Compact(done)).ok()?;
+		Some(rx)
+	}
 	/// Writes what was handed over, then closes the connection.
 	pub fn close(mut self) {
 		let (done, rx) = channel();
@@ -114,26 +133,30 @@ fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>) {
 	};
 	let mut batch = 0u64;
 	let mut failed: Option<String> = None;
-	while let Ok(first) = rx.recv() {
-		// the batch: this commit and whatever else is waiting
+	loop {
+		let Ok(first) = rx.recv() else { return };
+		// the batch: this commit and whatever else is waiting, up to a compaction or the close
 		let mut commits = vec![];
-		let mut close = None;
-		let mut next = Some(first);
-		while let Some(m) = next {
-			match m {
+		let mut other = None;
+		let mut m = Some(first);
+		while let Some(msg) = m {
+			match msg {
 				Msg::Write(ops, done) => commits.push((ops, done)),
-				Msg::Close(done) => {
-					close = Some(done);
+				stop => {
+					other = Some(stop);
 					break;
 				}
 			}
-			next = rx.try_recv().ok();
+			m = rx.try_recv().ok();
 		}
 		if !commits.is_empty() {
 			batch += 1;
-			let fault = fault.filter(|(b, _)| *b == batch).map(|(_, f)| f);
+			let fault = fault.filter(|(b, _)| *b == batch || *b == 0).map(|(_, f)| f);
 			if fault == Some(Fault::WriterGone) {
 				return; // the commits' answers are dropped with the thread
+			}
+			if let Some(Fault::Slow(d)) = fault {
+				std::thread::sleep(d);
 			}
 			let result = match (&failed, fault) {
 				(Some(e), _) => Err(e.clone()),
@@ -170,10 +193,35 @@ fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>) {
 				let _ = done.send(result.clone());
 			}
 		}
-		if let Some(done) = close {
-			drop(db);
-			let _ = done.send(());
-			return;
+		match other {
+			Some(Msg::Compact(done)) => {
+				let _ = done.send(compact(&db));
+			}
+			Some(Msg::Close(done)) => {
+				drop(db);
+				let _ = done.send(());
+				return;
+			}
+			_ => {}
 		}
 	}
+}
+
+/// The pages that expired claims and removed entries left free go back to the file system. The first time the file is
+/// switched to incremental auto-vacuum (a VACUUM rewrites it once); from then on only the free pages are cut off.
+fn compact(db: &Connection) -> Compaction {
+	let run = || -> rusqlite::Result<Compaction> {
+		let freed_pages: i64 = db.query_row("PRAGMA freelist_count", [], |r| r.get(0))?;
+		let mode: i64 = db.query_row("PRAGMA auto_vacuum", [], |r| r.get(0))?;
+		let converted = mode != 2;
+		if converted {
+			db.execute_batch("PRAGMA auto_vacuum = INCREMENTAL; VACUUM;")?;
+		} else {
+			db.execute_batch("PRAGMA incremental_vacuum;")?;
+		}
+		// a reader holding the WAL: the next checkpoint
+		let _ = db.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()));
+		Ok(Compaction { freed_pages, converted, error: None })
+	};
+	run().unwrap_or_else(|e| Compaction { error: Some(e.to_string()), ..Default::default() })
 }

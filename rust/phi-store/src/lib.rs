@@ -10,8 +10,8 @@ pub mod parts;
 pub mod writer;
 
 pub use files::{open_files, StoreError, FORMAT_VERSION};
-pub use host::{Ledger, SpaceHost, SPACE_VERSION};
-pub use ledger::{whole_ops, MemoryLedger, SqliteLedger, StoredDoc};
+pub use host::{Committed, Ledger, SpaceHost, Watch, SPACE_VERSION};
+pub use ledger::{backup, whole_ops, MemoryLedger, SqliteLedger, StoredDoc};
 pub use ops::WriteOp;
 pub use parts::{PartDef, PartKind, SPACE_PARTS};
-pub use writer::{Fault, Synchronous, WriterOptions};
+pub use writer::{Compaction, Fault, Synchronous, WriterOptions};

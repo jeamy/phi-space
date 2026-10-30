@@ -536,9 +536,9 @@ die Uhr selbst, statt `now` zu übernehmen. Der Rust-Kern nimmt `now` als Parame
 |---|---|---|
 | 0 | Crate `phi-store`: Datei öffnen (Owner-Lock wie TS, WAL, Schema, Format 1→2), Dokument aus Kopf und Teil-Zeilen laden, Zeilen-Ops, Schreib-Thread mit Batches, Speicher-Ledger | erledigt |
 | 1 | Host: ein Commit je Operation mit Rücknahme, Teil-Änderungen mit `ord`; der Rust-Kern im Host-Modus (Wasserstand, Budget und offener Batch je Commit neu; Claims als `DISK_MAP` mit den Plattenzweigen des TS-Kerns); TS-Store-Treiber und Zufallsgang gegen ihn | erledigt |
-| 2 | Absturz und Wiederöffnen an den Commit-Grenzen; Schreibfehler, voller Datenträger, Writer-Ausfall und gesperrter Host nach Persistierungsfehler | erledigt (ohne überlappende Commits, Watches und Schließen mit wartenden Commits: die brauchen den asynchronen Host, siehe unten) |
+| 2 | Absturz und Wiederöffnen an den Commit-Grenzen; Schreibfehler, voller Datenträger, Writer-Ausfall und gesperrter Host nach Persistierungsfehler | erledigt |
 | 3 | Claims wirklich auf der Platte (gezielt gelesen statt im Speicher), Speicherbudget des Hosts | erledigt bis auf das Speicherbudget (kommt mit dem Host für mehrere Spaces, R3) |
-| 4 | Backup/Restore unter Last, Kompaktierung und Shutdown; wachsender Claim-Bestand in SQLite und `memory` | offen |
+| 4 | Backup/Restore unter Last, Kompaktierung und Shutdown; wachsender Claim-Bestand in SQLite und `memory` | erledigt |
 
 **Befunde vor Scheibe 1:**
 
@@ -617,9 +617,7 @@ Claims und der Zähler je Batch (`commit_seq`) sind eigens geprüft.
   danach am Ende der Map statt an seinem Platz. Spätere Sweeps gehen nach dieser Reihenfolge, wenn das Budget nur für
   einen Teil reicht. Der Rust-Host nimmt Map-Teile jetzt genauso zurück. Danach war ein Store-Gang mit
   20 000 Schritten (`--release`, 1 304 s) abweichungsfrei in Antworten, Zuständen und den Zeilen beider Dateien.
-- **Offen für den asynchronen Host** (mit tokio, vor oder mit R3): Commits, die einander überlappen (der nächste sieht
-  den vorigen vor dessen Persistierung), Watches nur auf dauerhaften Zustand, Batching mehrerer offener Commits und
-  Schließen mit wartenden Commits. Der Host von Scheibe 1 wartet jeden Commit ab, bevor er den nächsten annimmt.
+- **Überlappende Commits** kamen mit Scheibe 4 (siehe dort).
 
 **Stand Scheibe 3 (2026-10-30):**
 
@@ -644,14 +642,37 @@ Claims und der Zähler je Batch (`commit_seq`) sind eigens geprüft.
   hängt es also davon ab, ob der TS-Host das Dokument zwischendurch verdrängt hat. Der Rust-Host muss beim
   Verdrängen dieselbe Abfrage nehmen, dann gilt dasselbe für ihn.
 
-**Stand Scheibe 4 (2026-10-30): offen, nur die Ursachenprüfung begonnen.**
+**Stand Scheibe 4 (2026-10-30):**
 
-- `server-probe --store memory --clients 8 --ops 1000 --rate 300` (24 000 Aufrufe): 84 Aufrufe/s, 12,0 ms Server-CPU je
-  Aufruf, RSS bis 457 MB. Der Befund aus R0 besteht also fort.
-- Die Ursache ist nicht nachgewiesen. Der Speicher-Ledger selbst tut nichts (`host.ts` `memoryLedger`). Ein CPU-Profil
-  liegt nicht vor, weil die Probe den Server beendet, bevor `--cpu-prof` schreibt.
-- Backup/Restore unter Last, Kompaktierung, Schließen und der wachsende Claim-Bestand in `memory` fehlen noch.
-  Der lange Store-Gang nach dieser Scheibe ist noch nicht ausgewertet.
+- **Ursache der Verlangsamung von `memory` (Befund 1 aus R0):** Die Vermutung traf nur teilweise zu. Ein Profil im
+  verlangsamten Abschnitt zeigt 68 % in `pendingClaims` (`client.ts` `beginOperation` durchsucht je Anfrage alle Claims),
+  12 % in `finalize` (`draft.ts` läuft über den Stream-Log) und 11 % in `#weigh` (`host.ts` zählt die Map-Schlüssel je
+  Commit). Es sind also O(Claims)-Schleifen je Aufruf, nicht die Größe des Dokuments. Mit SQLite greifen sie nicht,
+  weil dort nur die offenen Claims im Speicher liegen. Der TS-Code ist unverändert, der Befund gilt dort weiter.
+- **Der Rust-Store erbt das nicht:** Claims im Speicher sind `MemoryClaims` (Zugriff O(1) statt der Liste in `Object`,
+  Reihenfolge wie ein JavaScript-Objekt). `assert_ported` prüft sie nur beim Laden. `pendingClaims` selbst kommt mit R3.
+- **Messung (`tests/operations.rs`):** 200 Anfragen, Release-Build. SQLite im tmpfs: 28 ms bei 1 000 Claims, 38 ms bei
+  22 200; ein Lauf bis 40 000 Claims blieb bei 0,15 ms je Anfrage. Der Speicher-Host bleibt ebenso flach (Debug-Build:
+  25 ms bei 100, 27 ms bei 3 300). Auf `/dev/md0` kosten dieselben Anfragen 3,9 bis 5,8 ms: Das ist die Platte
+  (Checkpoints), nicht der Code. `PHI_STORE_GROW_DIR` wählt das Verzeichnis, `PHI_STORE_CLAIMS` den Bestand.
+- **Überlappende Commits:** `SpaceHost::start_commit` übergibt die Zeilen, ohne zu warten; der nächste Commit baut sofort
+  darauf auf. `durable(seq)`, `committed()` und Watches sehen nur Dauerhaftes, `pump` nimmt Bestätigtes auf. Der Host
+  bleibt synchron, Tokio ist noch nicht nötig; R3 muss `pump` antreiben. Plattenteile tragen dafür je Eintrag die Nummer
+  ihres Commits (`stamp`), wie `DiskMap`. Ein gescheiterter Batch lässt alle überlappenden Commits scheitern, auch Leser.
+- **Watches** melden nur dauerhafte Commits, gebündelt auf die neueste Nummer. Den Wert liest man über `committed()`.
+- **Bündeln und Schließen:** Was während eines Batches ankommt, geht in den nächsten (19 Commits in einem Batch). `close`
+  schreibt alles noch Unterwegsene; danach ist die WAL aufgelöst und die Sperre frei.
+- **Backup/Restore:** `backup` (`VACUUM INTO`) neben laufenden Writes ergibt einen Präfix der Commits, die Integrität
+  stimmt, und der kopierte Stand schreibt weiter, ohne das Original zu berühren. Rust- und TS-Store lesen ihn gleich.
+- **Kompaktierung** läuft wie im TS-Schreiber zwischen zwei Batches: beim ersten Mal `VACUUM`, danach
+  `incremental_vacuum`. Zeilen bleiben gleich, die Datei schrumpft auf weniger als die Hälfte.
+- **Prüfungen beim Öffnen:** Format 1→2 samt Füllen der Index-Spalten, ältere Dokumentversion, Teile inline im Kopf und
+  negative oder restaurierte Claims. Die letzten drei verweigert der Rust-Store, statt das Dokument zu beschädigen; ein
+  Kopf mit Inline-Teilen hätte bis dahin Daten verloren.
+- **Store-Gang:** Bei ungerader Saat laufen die Commits überlappend, die Zeilen beider Dateien müssen trotzdem gleich sein.
+- **Gegenprobe:** Ohne Stempel, mit Watch ohne Meldung, ohne Bündeln und ohne Inline-Prüfung schlägt je ein Test fehl.
+- **Nach Scheibe 3** war der Store-Gang mit 20 000 Schritten abweichungsfrei.
+- **Bleibt für R3:** Speicherbudget und mehrere Spaces, `pendingClaims`, `migrate` älterer Dokumente, Inline-Teile.
 
 ### R3: `phi-service`, `phi-wire`, `phi-space-server`
 
