@@ -122,6 +122,9 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		let dug = "";
 		for (let i = 0; i < 5 && !dug.includes("gräbt"); i++) { await clear(s, [[16, 12], [17, 12], [16, 13], [17, 13]]); dug = await does(anna.p, "umgraben 16 12", /gräbt ein Beet|passt kein Beet/); }
 		assert.match(dug, /Gärtnerin gräbt ein Beet um \(2×2\)/);
+		// fenced: a hare from the fog would eat a seedling, and the counts below know only harvests (tests/wild.test.ts tests hares)
+		const fresh = (await s.take({ type: "Bed" }, 5_000))!;
+		await s.write({ type: "Bed", fields: { ...fresh.fields, fenced: true } as never }, null, FOREVER);
 		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => String(e.fields.of).startsWith("bed-")).length, 4);
 		// the page sees it
 		await anna.p.until((f) => f.t === "obj" && f.o.kind === "bed" && f.o.w === 2, 10_000);
