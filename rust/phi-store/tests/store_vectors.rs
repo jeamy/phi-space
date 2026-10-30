@@ -1,8 +1,12 @@
 // R2, slice 0 (docs/rust-portierung.md): the store file of test/vectors (store.sql, written by the TypeScript store) is
 // opened and read by the Rust store, every document written into a new file by it, and the two files hold the same
 // rows; the TypeScript store then opens the Rust file and its read-only session answers exactly as store.expected.json.
-use phi_json::{parse, Json};
-use phi_store::{whole_ops, PartDef, SqliteLedger, StoreError, Synchronous, SPACE_PARTS};
+#[path = "../../phi-core/tests/common/mod.rs"]
+mod common;
+use phi_core::driver::{apply_line, seeded};
+use phi_core::snapshot::Snapshots;
+use phi_json::{digest_json, obj, parse, Json};
+use phi_store::{whole_ops, PartDef, SpaceHost, SqliteLedger, StoreError, Synchronous, SPACE_PARTS};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -153,4 +157,58 @@ fn claims_fill_the_index_columns_and_each_batch_counts_once() {
 	assert_eq!(generations, None, "a part in memory has no index columns");
 	let seq: String = db.query_row("SELECT value FROM store_meta WHERE key = 'commit_seq'", [], |r| r.get(0)).unwrap();
 	assert_eq!(seq, "3", "three commits, each waited for: three batches");
+}
+
+#[test]
+fn a_typescript_document_with_profiles_and_limits_goes_on_in_rust() {
+	// written by the TypeScript store: limits, a profile, a task taken under an open transaction, a request cancelled
+	let d = dir("store-completion");
+	let file = d.join("ts.sqlite");
+	let mut ts = common::TsDriver::script("test/support/store-driver.ts");
+	let now = 1000.0;
+	let request = obj! { "principal" => obj! { "peerId" => "p1" }, "generation" => "$", "requestId" => "r1" };
+	let init = obj! { "op" => "init", "seed" => "s", "now" => now, "spaceId" => "sp-1", "incarnation" => "0a0b0c0d", "file" => file.to_str().unwrap() };
+	assert_eq!(ts.step(&init).get("ok"), Some(&Json::Bool(true)));
+	let profile = obj! { "taskType" => "Task", "resultTypes" => vec![Json::from("Result")], "equalFields" => vec![Json::from("n")], "maxResultCount" => 1.0, "maxLeaseMs" => 60_000.0 };
+	let steps = [
+		obj! { "op" => "setLimits", "limits" => obj! { "maxTxnsPerOwner" => 1000.0, "claimResultMs" => 600_000.0, "maxClaimBytes" => 536870912.0 } },
+		obj! { "op" => "setCompletionProfiles", "profiles" => vec![profile] },
+		obj! { "op" => "write", "entry" => obj! { "type" => "Task", "fields" => obj! { "n" => 1.0 } }, "lease" => 90_000.0 },
+		obj! { "op" => "createTxn", "lease" => 80_000.0 },
+		obj! { "op" => "probe", "tmpl" => obj! { "type" => "Task" }, "take" => true, "txn" => "t0a0b0c0d-2" },
+	];
+	for l in &steps {
+		assert_eq!(ts.step(l).get("ok"), Some(&Json::Bool(true)), "{}", l.to_json_text());
+	}
+	let generation = ts.step(&obj! { "op" => "issueGeneration", "principal" => obj! { "peerId" => "p1" } });
+	let Json::Object(mut request) = request else { unreachable!() };
+	request.insert("generation", generation.get("result").and_then(|r| r.get("generation")).unwrap().clone());
+	let request = Json::Object(request);
+	let admitted = ts.step(&obj! { "op" => "admit", "request" => request.clone(), "method" => "take", "args" => obj! {} });
+	let parked = ts.step(&obj! { "op" => "park", "key" => admitted.get("result").and_then(|r| r.get("key")).unwrap().clone(), "tmpl" => obj! { "type" => "Nothing" }, "take" => true, "deadline" => 50_000.0 });
+	assert_eq!(parked.get("ok"), Some(&Json::Bool(true)));
+	let counted = ts.step(&obj! { "op" => "count" });
+	let hash = counted.get("state").and_then(Json::as_str).unwrap().to_owned();
+	ts.step(&obj! { "op" => "close" });
+
+	let ledger = SpaceHost::sqlite(SqliteLedger::open(&file, Synchronous::Full).unwrap());
+	let mut host = SpaceHost::open(ledger, "phi-spaces.named-space", Some("sp-walk"), seeded("s")).unwrap();
+	let mut whole = host.stored().value;
+	let claims = host.space.state.rpc.as_ref().unwrap().claims.get(admitted.get("result").unwrap().get("key").and_then(Json::as_str).unwrap()).expect("the request came along");
+	let Some(Json::Object(rpc)) = whole.as_object_mut().and_then(|o| o.get_mut("rpc")) else { panic!("rpc") };
+	let key = admitted.get("result").unwrap().get("key").and_then(Json::as_str).unwrap();
+	rpc.insert("claims", obj! { key => claims });
+	assert_eq!(digest_json(&whole).unwrap(), hash, "Rust reads the document the TypeScript store wrote");
+	let snapshots = &mut Snapshots::new();
+	let mut line = |host: &mut SpaceHost, l: Json| host.commit(|s| { s.clock = now; apply_line(s, snapshots, now, &l) }).unwrap();
+	let txn = "t0a0b0c0d-2";
+	let refused = line(&mut host, obj! { "op" => "commitTxn", "id" => txn }).unwrap_err();
+	assert_eq!(refused.class, "CompletionViolation", "the taken task came along: {refused}");
+	assert_eq!(line(&mut host, obj! { "op" => "renew", "id" => txn, "ms" => 70_000.0 }).unwrap_err().class, "CompletionViolation", "and its boundary");
+	let view = line(&mut host, obj! { "op" => "cancelRequest", "target" => request }).unwrap();
+	assert_eq!(view.get("state").and_then(Json::as_str), Some("cancelled"));
+	line(&mut host, obj! { "op" => "write", "entry" => obj! { "type" => "Result", "fields" => obj! { "n" => 1.0 } }, "txn" => txn }).unwrap();
+	line(&mut host, obj! { "op" => "commitTxn", "id" => txn }).unwrap();
+	assert_eq!(host.space.limits().max_txns_per_owner, 1000.0);
+	host.close();
 }

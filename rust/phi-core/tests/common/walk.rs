@@ -41,6 +41,8 @@ pub struct Walk {
 	page_next: Option<Json>,
 	/// The newest snapshot cursor and token an answer named.
 	snapshot: Option<(String, String)>,
+	/// Tasks have a completion profile.
+	profiled: bool,
 }
 
 const TYPES: [&str; 3] = ["Task", "Job", "Note"];
@@ -124,6 +126,18 @@ impl Walk {
 		}
 		if r.chance(0.5) {
 			o.insert("incarnation", "f00d".into());
+		}
+		if r.chance(0.4) {
+			self.profiled = true;
+			let mut p = obj! { "taskType" => "Task", "resultTypes" => vec![Json::from("Result")], "equalFields" => vec![Json::from("n")], "maxResultCount" => (1 + r.below(2)) as f64 };
+			let Json::Object(po) = &mut p else { unreachable!() };
+			if r.chance(0.5) {
+				po.insert("maxLeaseMs", Json::Number(100.0 * (1 + r.below(30)) as f64));
+			}
+			if r.chance(0.4) {
+				po.insert("maxResultBytes", Json::Number(30.0 + r.below(100) as f64));
+			}
+			self.episode.push_back(obj! { "op" => "setCompletionProfiles", "profiles" => vec![p] });
 		}
 		line
 	}
@@ -372,15 +386,39 @@ impl Walk {
 			lines.push(obj! { "op" => "write", "entry" => obj! { "type" => "Task", "fields" => obj! { "n" => 1.0 } }, "lease" => 5000.0 });
 		}
 		lines.push(obj! { "op" => "lookup", "request" => request.clone() });
+		if r.chance(0.4) {
+			lines.push(obj! { "op" => "cancelRequest", "target" => request.clone() });
+		}
 		lines.push(admit(if r.chance(0.8) { 1.0 } else { 2.0 }));
 		lines.push(obj! { "op" => "settle" });
 		lines.push(obj! { "op" => "lookup", "request" => request.clone() });
 		lines.push(admit(1.0));
 		self.episode.extend(lines);
 	}
-	/// Fills in `$gen` and `$key` from what the walk has seen.
+	/// A task taken under a transaction, its result written, the transaction committed.
+	fn completion(&mut self) {
+		let r = &mut self.rng;
+		let n = r.below(3) as f64;
+		let task = obj! { "op" => "write", "entry" => obj! { "type" => "Task", "fields" => obj! { "n" => n } }, "lease" => 50_000.0 };
+		let take = obj! { "op" => "probe", "tmpl" => obj! { "type" => "Task" }, "take" => true, "txn" => "$txn" };
+		let result = |n: f64| obj! { "op" => "write", "entry" => obj! { "type" => "Result", "fields" => obj! { "n" => n } }, "txn" => "$txn" };
+		let mut lines = vec![task, obj! { "op" => "createTxn", "lease" => 40_000.0 }, take];
+		match r.below(5) {
+			0 => {}
+			1 => lines.push(result(n + 7.0)),
+			2 => lines.extend([result(n), result(n)]),
+			_ => lines.push(result(n)),
+		}
+		if r.chance(0.3) {
+			lines.push(obj! { "op" => "renew", "id" => "$txn", "ms" => r.pick(&[10.0, 100_000.0]) });
+		}
+		lines.push(obj! { "op" => "commitTxn", "id" => "$txn" });
+		self.episode.extend(lines);
+	}
+	/// Fills in `$gen`, `$key` and `$txn` from what the walk has seen.
 	fn fill(&self, v: &Json) -> Json {
 		match v {
+			Json::String(s) if s == "$txn" => self.txns.last().map_or("t-bogus".into(), |t| t.as_str().into()),
 			Json::String(s) if s == "$gen" => self.generations.last().map_or("gnone.0".into(), |g| g.0.as_str().into()),
 			Json::String(s) if s == "$key" => self.keys.last().map_or("[]".into(), |k| k.as_str().into()),
 			Json::String(s) if s == "$next" => self.snapshot.as_ref().map_or("ssnone.0".into(), |n| n.0.as_str().into()),
@@ -396,6 +434,10 @@ impl Walk {
 			let Json::Object(mut o) = self.fill(&l) else { unreachable!() };
 			o.insert("now", Json::Number(self.now));
 			return Json::Object(o);
+		}
+		if self.profiled && self.rng.chance(0.03) {
+			self.completion();
+			return self.line(rev);
 		}
 		if self.rng.chance(0.02) {
 			self.episode();
@@ -420,7 +462,37 @@ impl Walk {
 				o.insert(k, v);
 			}
 		};
-		let op = match self.rng.below(194) {
+		let op = match self.rng.below(204) {
+			194..=196 => {
+				set("target", Some(self.request()));
+				"cancelRequest"
+			}
+			197..=199 => {
+				set("id", Some(self.txn_id()));
+				"releaseTxn"
+			}
+			200..=202 => {
+				let r = &mut self.rng;
+				let limits = match r.below(10) {
+					0 => obj! { "maxCommitBytes" => 500.0 + r.below(3000) as f64 },
+					1 => obj! { "maxEventBytes" => 200.0 + r.below(800) as f64 },
+					2 => obj! { "maxJobBytes" => r.below(1000) as f64 },
+					3 => obj! { "claimResultMs" => 100.0 * (1 + r.below(40)) as f64 },
+					4 => obj! { "mailboxTtlMs" => 700_000_000.0 },
+					5 => obj! { "maxNothing" => 1.0 },
+					6 => obj! { "maxEntries" => 0.0 },
+					7 => obj! { "notifyIntervalMs" => 0.0, "maxTxnsPerOwner" => 1000.0, "maxWaitersPerOwner" => 1000.0, "maxRegsPerOwner" => 1000.0 },
+					8 => obj! { "maxFrameBytes" => 1000.0 + r.below(3000) as f64 },
+					_ => obj! { "maxLogBytes" => 300.0 + r.below(3000) as f64, "generationAdmitMs" => 100.0 * (1 + r.below(40)) as f64 },
+				};
+				set("limits", Some(limits));
+				"setLimits"
+			}
+			203 => {
+				// late, and so usually refused: transactions are open
+				set("profiles", Some(Json::Array(vec![obj! { "taskType" => "Job", "resultTypes" => Vec::<Json>::new(), "equalFields" => Vec::<Json>::new(), "maxResultCount" => 1.0 }])));
+				"setCompletionProfiles"
+			}
 			0..=29 => {
 				set("entry", Some(self.entry()));
 				set("lease", self.lease());
@@ -778,6 +850,18 @@ pub fn observe(w: &mut Walk, line: &Json, r: &Result<Json, phi_core::CoreError>,
 						w.keys.push(k.to_owned());
 					}
 					note(Box::leak(format!("admit {}", v.get("kind").and_then(Json::as_str).unwrap_or("?")).into_boxed_str()), seen);
+				}
+				if op == "cancelRequest" {
+					note(Box::leak(format!("cancelRequest {}", v.get("state").and_then(Json::as_str).unwrap_or("?")).into_boxed_str()), seen);
+				}
+				if op == "releaseTxn" {
+					note(if v == &Json::Bool(true) { "released a transaction" } else { "releaseTxn found nothing" }, seen);
+				}
+				if op == "setLimits" {
+					note("setLimits ok", seen);
+				}
+				if op == "commitTxn" && w.profiled {
+					note("a task committed", seen);
 				}
 				if op == "lookup" {
 					note(Box::leak(format!("lookup {}", v.get("state").and_then(Json::as_str).unwrap_or("?")).into_boxed_str()), seen);

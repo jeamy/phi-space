@@ -23,6 +23,8 @@ pub const ANY: f64 = -1.0;
 pub const DEFAULT_LEASE_MS: f64 = 3_600_000.0;
 /// Kind, ids, sequence, target, count of an event.
 const EVENT_OVERHEAD: f64 = 256.0;
+/// The envelope of a change page: stream id, revisions, flags.
+const CHANGES_OVERHEAD: f64 = 160.0;
 /// Claim and result, batch envelope, bookkeeping of one commit.
 const COMMIT_FIXED: f64 = 1024.0;
 /// What expiring one entry may write.
@@ -44,6 +46,7 @@ fn limit(m: impl Into<String>) -> CoreError { error("LimitError", m) }
 fn exhausted(m: impl Into<String>) -> CoreError { error("ResourceExhausted", m) }
 fn illegal(m: impl Into<String>) -> CoreError { error("IllegalArgumentError", m) }
 fn permission(m: impl Into<String>) -> CoreError { error("PermissionError", m) }
+fn violation(m: impl Into<String>) -> CoreError { error("CompletionViolation", m) }
 fn too_small(required: f64) -> CoreError { error("ResponseBudgetTooSmall", format!("the next element needs {} bytes of budget", n(required))) }
 /// The space or an argument is outside what the Rust core does so far.
 pub fn not_ported(m: impl Into<String>) -> CoreError { error("NotPorted", m) }
@@ -90,7 +93,14 @@ macro_rules! limits {
 		#[derive(Clone, Debug, PartialEq)]
 		pub struct Limits { $(pub $field: f64),* }
 		pub const DEFAULT_LIMITS: Limits = Limits { $($field: $default),* };
+		const LIMIT_KEYS: &[&str] = &[$($key),*];
 		impl Limits {
+			/// `limitsOf`: the defaults in their order, then what the space sets.
+			fn to_json(&self) -> Json {
+				let mut o = Object::new();
+				$(o.insert($key, Json::Number(self.$field));)*
+				Json::Object(o)
+			}
 			pub fn of(own: Option<&Object>) -> Limits {
 				let mut l = DEFAULT_LIMITS;
 				if let Some(o) = own { $(if let Some(Json::Number(x)) = o.get($key) { l.$field = *x; })* }
@@ -514,6 +524,8 @@ impl Space {
 				"jobs" => v.as_array().is_some_and(|jobs| jobs.iter().all(|j| j.get("events").and_then(Json::as_array).is_some())),
 				"releaseQueue" => v.as_array().is_some_and(|q| q.iter().all(|x| x.as_str().is_some())),
 				"maintenance" => v.get("at").and_then(Json::as_f64).is_some(),
+				// a gate field needs the run gates (R5b)
+				"completionProfiles" => v.as_array().is_some_and(|ps| ps.iter().all(|p| p.get("gateField").is_none())),
 				_ => false,
 			};
 			if !fine {
@@ -525,7 +537,7 @@ impl Space {
 				return Err(not_ported(format!("registration {}", r.id)));
 			}
 		}
-		if let Some(t) = self.state.txns.iter().find(|t| t.rest.keys().any(|k| k != "originRequestKey")) {
+		if let Some(t) = self.state.txns.iter().find(|t| t.rest.keys().any(|k| !["originRequestKey", "completionDeadline", "takenTasks"].contains(&k))) {
 			let keys: Vec<&str> = t.rest.keys().collect();
 			return Err(not_ported(format!("transaction {} carries {}", t.id, keys.join(", "))));
 		}
@@ -1006,6 +1018,13 @@ impl Space {
 							self.drop_waiter(&id);
 							continue;
 						}
+						if w.take && txn.is_none() && !self.profiles_of(&e.types).is_empty() {
+							let err = obj! { "code" => "CompletionViolation", "message" => "profiled tasks require a transaction" };
+							self.decide_done(now, key, Json::Null, false, Some(err))?;
+							self.drop_waiter(&id);
+							continue;
+						}
+						let e = &self.state.entries[i];
 						let cost = bytes(&view(e, self.state.space_id.as_deref())) + 256.0;
 						if !self.can_charge(cost) {
 							self.defer_maintenance(now, &id);
@@ -1023,7 +1042,7 @@ impl Space {
 							}
 						}
 						self.charge(cost)?;
-						let copy = self.apply(now, i, txn.as_deref(), w.take);
+						let copy = self.apply(now, i, txn.as_deref(), w.take)?;
 						let result = view(&copy, self.state.space_id.as_deref());
 						self.decide_done(now, key, result, false, None)?;
 					}
@@ -1089,7 +1108,7 @@ impl Space {
 			}
 			self.charge(cost)?;
 			self.drop_waiter(&id);
-			let copy = self.apply(now, i, Some(&txn), true);
+			let copy = self.apply(now, i, Some(&txn), true)?;
 			let Json::Object(mut o) = event else { unreachable!() };
 			o.insert("entry", view(&copy, self.state.space_id.as_deref()));
 			o.insert("txn", txn.as_str().into());
@@ -1740,12 +1759,15 @@ impl Space {
 				if as_.is_some() && directory_rec(&self.state.entries[i]) && (take || txn.is_some()) {
 					return Err(permission("directory entries cannot be consumed or locked"));
 				}
+				if take && txn.is_none() && !self.profiles_of(&self.state.entries[i].types).is_empty() {
+					return Err(violation("profiled tasks must be taken under a transaction"));
+				}
 				if take && txn.is_some() && self.state.entries[i].written_under.as_deref() != txn {
 					let cost = self.publish_cost(&self.state.entries[i], Extra::None); // an abort puts it back
 					let lim = self.limits();
 					self.reserve(at, cost, &lim)?;
 				}
-				let copy = self.apply(now, i, txn, take);
+				let copy = self.apply(now, i, txn, take)?;
 				let space_id = self.state.space_id.clone();
 				Ok(obj! { "status" => "found", "entry" => view(&copy, space_id.as_deref()) })
 			}
@@ -1760,7 +1782,7 @@ impl Space {
 			if !tmpl.matches(e) || (e.restored_unverified && (take || txn.is_some())) {
 				continue;
 			}
-			// run gates: no completion profiles in this slice
+			// run gates: a gated profile is refused (assert_ported)
 			let mine = txn.is_some() && e.written_under.as_deref() == txn;
 			if e.written_under.is_some() && !mine {
 				continue; // not yet committed elsewhere: invisible, not a conflict
@@ -1780,10 +1802,36 @@ impl Space {
 		if locked { Found::Locked } else { Found::None }
 	}
 
-	fn apply(&mut self, now: f64, i: usize, txn: Option<&str>, take: bool) -> EntryRec {
+	fn apply(&mut self, now: f64, i: usize, txn: Option<&str>, take: bool) -> Result<EntryRec> {
 		let copy = self.state.entries[i].clone();
 		if take {
-			// completion profiles: none in this slice
+			let profiles = self.profiles_of(&copy.types);
+			if !profiles.is_empty() {
+				let Some(txn) = txn else { return Err(violation("profiled tasks must be taken under a transaction")) };
+				let mut fields = Object::new();
+				for p in &profiles {
+					for name in p.get("equalFields").and_then(Json::as_array).into_iter().flatten().filter_map(Json::as_str) {
+						if let Some(v) = copy.fields.get(name) {
+							fields.insert(name, v.clone());
+						}
+					}
+				}
+				let types: Vec<Json> = copy.types.iter().map(|t| t.as_str().into()).collect();
+				let capture = obj! { "id" => copy.id.as_str(), "types" => types, "fields" => fields };
+				let deadline = profiles.iter().map(|p| p.get("maxLeaseMs").and_then(Json::as_f64).map_or(FOREVER, |ms| now + ms)).fold(f64::INFINITY, f64::min);
+				let at = self.txn_at(txn).expect("taken under an open transaction");
+				let t = &mut self.state.txns[at];
+				let boundary = t.rest.get("completionDeadline").and_then(Json::as_f64).unwrap_or(FOREVER).min(deadline);
+				t.rest.insert("completionDeadline", Json::Number(boundary));
+				t.expires = t.expires.min(boundary);
+				let lim = self.limits();
+				self.reserve(Some(at), bytes(&capture) + 64.0, &lim)?;
+				let t = &mut self.state.txns[at];
+				match t.rest.get_mut("takenTasks") {
+					Some(Json::Array(tasks)) => tasks.push(capture),
+					_ => t.rest.insert("takenTasks", Json::Array(vec![capture])),
+				}
+			}
 			if copy.written_under.is_none() {
 				self.log_del(now, &copy.id); // it stops being visible (taken, or locked by a transaction)
 			}
@@ -1799,7 +1847,171 @@ impl Space {
 				self.touch(now);
 			}
 		}
-		copy
+		Ok(copy)
+	}
+
+	/// The completion profiles of an entry of these types.
+	fn profiles_of(&self, types: &[String]) -> Vec<Json> {
+		let Some(ps) = self.state.rest.get("completionProfiles").and_then(Json::as_array) else { return vec![] };
+		ps.iter().filter(|p| p.get("taskType").and_then(Json::as_str).is_some_and(|t| types.iter().any(|x| x == t))).cloned().collect()
+	}
+
+	/// Host code: the completion rules of task types. Before any transaction opens; a gated profile needs the run gates.
+	pub fn set_completion_profiles(&mut self, now: f64, profiles: Option<&Json>) -> Result<Json> {
+		self.assert_ported()?;
+		let Some(profiles) = profiles.and_then(Json::as_array) else { return Err(not_ported("completion profiles that are not an array")) };
+		if !self.state.txns.is_empty() {
+			return Err(error("TransactionError", "configure completion profiles before opening transactions"));
+		}
+		let invalid = || illegal("invalid completion profile");
+		let strings = |v: Option<&Json>, some: bool| v.and_then(Json::as_array).is_some_and(|a| (!some || !a.is_empty()) && a.iter().all(|x| x.as_str().is_some_and(|t| !t.is_empty())));
+		let positive = |v: &Json| is_integer(Some(v)).is_some_and(|x| x.abs() <= FOREVER && x >= 1.0);
+		let mut seen: Vec<&str> = vec![];
+		for p in profiles {
+			let task = p.get("taskType").and_then(Json::as_str).filter(|t| !t.is_empty() && !seen.contains(t)).ok_or_else(invalid)?;
+			if !strings(p.get("resultTypes"), true) || !strings(p.get("equalFields"), false) || !p.get("maxResultCount").is_some_and(positive) {
+				return Err(invalid());
+			}
+			if let Some(g) = p.get("gateField") {
+				let equal = p.get("equalFields").and_then(Json::as_array).is_some_and(|a| a.contains(g));
+				if !g.as_str().is_some_and(|f| !f.is_empty()) || !equal || p.get("maxLeaseMs").is_none() {
+					return Err(illegal("a gate field must be one of the equal fields, with a finite maxLeaseMs"));
+				}
+			}
+			if p.get("maxResultBytes").is_some_and(|v| !positive(v)) || p.get("maxLeaseMs").is_some_and(|v| !positive(v)) {
+				return Err(illegal("invalid completion budget"));
+			}
+			seen.push(task);
+		}
+		if profiles.iter().any(|p| p.get("gateField").is_some()) {
+			return Err(not_ported("a gated completion profile (run gates: R5b)"));
+		}
+		self.state.rest.insert("completionProfiles", Json::Array(profiles.clone()));
+		self.touch(now);
+		Ok(Json::Null)
+	}
+
+	fn check_completion(&self, id: &str) -> Result<()> {
+		let Some(profiles) = self.state.rest.get("completionProfiles").and_then(Json::as_array) else { return Ok(()) };
+		let at = self.txn_at(id).expect("required");
+		let names = |v: Option<&Json>| v.and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect::<Vec<_>>());
+		for p in profiles {
+			let task_type = p.get("taskType").and_then(Json::as_str).unwrap_or("");
+			let (result_types, equal) = (names(p.get("resultTypes")), names(p.get("equalFields")));
+			let max_count = p.get("maxResultCount").and_then(Json::as_f64).unwrap_or(0.0);
+			let is_result = |e: &EntryRec| e.written_under.as_deref() == Some(id) && e.taken_by.is_none() && e.types.iter().any(|t| result_types.contains(t));
+			// what the transaction took: captured when it was taken, or, in a state from before that, the entries themselves
+			let tasks: Vec<(String, Object)> = match self.state.txns[at].rest.get("takenTasks").and_then(Json::as_array) {
+				Some(taken) => taken
+					.iter()
+					.filter(|t| t.get("types").and_then(Json::as_array).is_some_and(|ts| ts.iter().any(|x| x.as_str() == Some(task_type))))
+					.map(|t| (t.get("id").and_then(Json::as_str).unwrap_or("").to_owned(), t.get("fields").and_then(Json::as_object).cloned().unwrap_or_default()))
+					.collect(),
+				None => self.state.entries.iter().filter(|e| e.taken_by.as_deref() == Some(id) && e.types.iter().any(|t| t == task_type)).map(|e| (e.id.clone(), e.fields.clone())).collect(),
+			};
+			let mut assigned: Vec<&str> = vec![];
+			for (task, fields) in &tasks {
+				let same = |e: &EntryRec, f: &String| match (fields.get(f), e.fields.get(f)) {
+					(Some(a), Some(b)) => a.canonical().ok() == b.canonical().ok(),
+					_ => false,
+				};
+				let results: Vec<&EntryRec> = self.state.entries.iter().filter(|e| is_result(e) && !assigned.contains(&e.id.as_str()) && equal.iter().all(|f| same(e, f))).collect();
+				if results.is_empty() || results.len() as f64 > max_count {
+					return Err(violation(format!("task {task} needs 1..{} matching results in transaction {id}", n(max_count))));
+				}
+				if let Some(max) = p.get("maxResultBytes").and_then(Json::as_f64) {
+					let total: f64 = results.iter().map(|r| bytes(&obj! { "type" => r.type_.as_str(), "types" => r.types.iter().map(|t| Json::from(t.as_str())).collect::<Vec<_>>(), "fields" => r.fields.clone() })).sum();
+					if total > max {
+						return Err(violation("completion results exceed maxResultBytes"));
+					}
+				}
+				assigned.extend(results.iter().map(|r| r.id.as_str()));
+			}
+			if !tasks.is_empty() && self.state.entries.iter().any(|e| is_result(e) && !assigned.contains(&e.id.as_str())) {
+				return Err(violation("unmatched completion result"));
+			}
+		}
+		Ok(())
+	}
+
+	/// Host code: quotas of this space. Values are positive integers; what is not named keeps its value.
+	pub fn set_limits(&mut self, now: f64, l: &Json) -> Result<Json> {
+		self.assert_ported()?;
+		let Some(l) = l.as_object() else { return Err(not_ported("limits that are not an object")) };
+		for (k, v) in l.iter() {
+			let least = if k == "notifyIntervalMs" { 0.0 } else { 1.0 };
+			if !LIMIT_KEYS.contains(&k) || !is_integer(Some(v)).is_some_and(|x| x >= least) {
+				return Err(illegal(format!("bad limit {k}")));
+			}
+		}
+		let before = self.limits();
+		let mut own = self.state.limits.clone().unwrap_or_default();
+		for (k, v) in l.iter() {
+			own.insert(k, v.clone());
+		}
+		let merged = Limits::of(Some(&own));
+		if merged.mailbox_ttl_ms > 7.0 * 24.0 * HOUR {
+			return Err(illegal("mailbox TTL cannot exceed seven days"));
+		}
+		if merged.max_commit_bytes + CHANGES_OVERHEAD > merged.max_frame_bytes {
+			return Err(illegal(format!("maxCommitBytes {} plus the envelope must fit maxFrameBytes {}", n(merged.max_commit_bytes), n(merged.max_frame_bytes))));
+		}
+		if self.state.txns.iter().any(|t| t.reserved.unwrap_or(0.0) + COMMIT_FIXED > merged.max_commit_bytes) {
+			return Err(exhausted("the new limit would invalidate an existing transaction's completion reservation"));
+		}
+		if merged.max_commit_bytes < COMMIT_FIXED + 128.0 {
+			return Err(illegal("maxCommitBytes must allow the commit envelope and one maintenance item"));
+		}
+		let jobs = self.state.rest.get("jobs").map_or(2.0, bytes);
+		if jobs + self.state.txns.iter().map(|t| t.reserved.unwrap_or(0.0)).sum::<f64>() > merged.max_job_bytes {
+			return Err(exhausted("the new job budget would invalidate completion storage reservations"));
+		}
+		// completion events must not fail later: a lower limit has to fit every event existing subscriptions can still produce
+		if merged.max_event_bytes < before.max_event_bytes {
+			let watched = self.state.regs.iter().map(|r| (&r.template, &r.handback)).chain(self.state.waiters.iter().map(|w| (&w.template, &w.handback)));
+			for (template, handback) in watched {
+				let meta = bytes(handback) + EVENT_OVERHEAD;
+				let t = Template::from_json(Some(template))?;
+				if meta > merged.max_event_bytes || self.state.entries.iter().any(|e| t.matches(e) && bytes(&view(e, self.state.space_id.as_deref())) + meta > merged.max_event_bytes) {
+					return Err(exhausted("the new event limit would make an existing subscription's or wait's events fail"));
+				}
+			}
+		}
+		self.state.limits = Some(own);
+		// another retention moves every claim's due time: the next sweep scans them all
+		if l.get("claimResultMs").is_some() {
+			if let Some(r) = self.state.rpc.as_mut() {
+				r.sweep_at = None;
+			}
+		}
+		self.touch(now);
+		Ok(self.limits().to_json())
+	}
+
+	/// Aborts `id` if it is still active (host side: the holder of a served take can no longer be reached).
+	pub fn release_txn(&mut self, now: f64, id: Option<&Json>) -> Result<bool> {
+		self.assert_ported()?;
+		self.settle(now)?;
+		let Some(id) = id.and_then(Json::as_str) else { return Ok(false) };
+		let Some(t) = self.txn_at(id) else { return Ok(false) };
+		let reserved = self.state.txns[t].reserved.unwrap_or(0.0);
+		if !self.can_charge(reserved) {
+			match self.state.rest.get_mut("releaseQueue") {
+				Some(Json::Array(q)) => {
+					if !q.iter().any(|x| x.as_str() == Some(id)) {
+						q.push(id.into());
+					}
+				}
+				_ => self.state.rest.insert("releaseQueue", Json::Array(vec![id.into()])),
+			}
+			self.defer_maintenance(now, id);
+			self.touch(now);
+			return Ok(true);
+		}
+		self.charge(reserved)?;
+		self.finish(id, false, now)?;
+		self.serve(now)?;
+		Ok(true)
 	}
 
 	fn standing(&self, e: &EntryRec, now: f64) -> Standing {
@@ -1946,7 +2158,11 @@ impl Space {
 		self.settle(now)?;
 		let l = self.leased(id, as_)?;
 		let v = grant(ms, now)?;
-		// completion deadlines and run fences: none yet
+		// run fences: none yet
+		let boundary = id.and_then(Json::as_str).and_then(|id| self.txn_at(id)).and_then(|t| self.state.txns[t].rest.get("completionDeadline")).and_then(Json::as_f64);
+		if boundary.is_some_and(|b| v > b) {
+			return Err(violation("lease exceeds task completion boundary"));
+		}
 		self.set_lease(l, v);
 		self.touch(now);
 		if let Leased::Entry(i) = l {
@@ -2004,8 +2220,10 @@ impl Space {
 		self.assert_ported()?;
 		self.settle(now)?;
 		let t = self.require_txn(id.unwrap_or(&Json::Null), as_)?;
-		// completion profiles and run bindings: none yet
 		let (reserved, id) = (self.state.txns[t].reserved.unwrap_or(0.0), self.state.txns[t].id.clone());
+		if commit {
+			self.check_completion(&id)?; // run bindings: none yet
+		}
 		self.charge(reserved)?;
 		self.finish(&id, commit, now)?;
 		self.serve(now)?;

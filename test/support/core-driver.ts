@@ -69,6 +69,9 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 		case "createTxn": return core.createTxn(s, now, opt(l.lease, core.ANY), l.as);
 		case "commitTxn": core.commitTxn(s, now, l.id, l.as); return null;
 		case "abortTxn": core.abortTxn(s, now, l.id, l.as); return null;
+		case "releaseTxn": return core.releaseTxn(s, now, l.id);
+		case "setLimits": return core.setLimits(s, l.limits, now);
+		case "setCompletionProfiles": core.setCompletionProfiles(s, l.profiles, now); return null;
 		// ---- waiters, subscriptions
 		case "addWaiter": return core.addWaiter(s, now, l.w);
 		case "cancelWaiter": return core.cancelWaiter(s, l.id, now);
@@ -82,6 +85,7 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 		case "admit": return claims.admit(s, now, l.request, l.method, l.args, opt(l.deadline, core.FOREVER), opt(l.resultBound, 1024));
 		case "decide": claims.decide(s, now, l.key, l.outcome); return null;
 		case "lookup": return claims.lookup(s, l.request, now);
+		case "cancelRequest": return claims.cancelRequest(s, now, l.target);
 		// ---- mailboxes
 		case "events": return mailbox.mailboxPage(s, l.principal, now, l.o ?? {});
 		case "appendMail": mailbox.appendMail(s, l.principal, l.event, now); return null;

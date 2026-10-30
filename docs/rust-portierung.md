@@ -359,7 +359,7 @@ Vergleichstests gegen den TS-Treiber grün sind.
 | 3 | Wartende, geparkte Operationen, Claims und Generationen; ihre Ereignisse in der Outbox und Fanout-Jobs ohne Consumer | erledigt |
 | 4 | Notify und Mailboxen: Abonnements mit Drosselung und Bündeln, Consumer für Abonnements und Wartende, Fanout-Jobs mit Consumer, Freigabe abgelaufener Takes | erledigt |
 | 5 | Snapshots (`snapshot.ts`) mit Seiten-Token; Stream und Seiten unter Txns kamen schon mit Scheibe 2 | erledigt |
-| 6 | Vertragslücken vor R3: JS-Strings (R-D10), `cancelRequest`, `releaseTxn`, `setLimits` und Abschlussprofile; Differenz- und Negativtests einschließlich bestehender TS-Dokumente | offen |
+| 6 | Vertragslücken vor R3: `cancelRequest`, `releaseTxn`, `setLimits`, Abschlussprofile (erledigt, Stand unten); JS-Strings (R-D10) | offen: nur noch R-D10 |
 
 **Bewusst zurückgestellt:** Restore, Wechsel der Autorität, Member-Admission, Löschung, Admin-Wartung, `purgeTasks`,
 RunGate und negative Claims. Member-Admission und RunGate sind Pflicht für R5b, die übrigen Erweiterungen gehören
@@ -370,6 +370,33 @@ Features verweigert der Rust-Server schon bei der Übernahme.
 verwendet `releaseTxn` bei nicht zustellbaren Take-Ereignissen. Die Projekt-Hosts brauchen `setLimits` für ihren
 Bootstrap. Abschlussprofile gehören zur TS-`hello`-Capability und zur Übernahme entsprechend konfigurierter
 Standalone-Stores. Diese Pfade werden in Scheibe 6 ergänzt, nicht durch `NotPorted` als abgenommen behandelt.
+
+**Stand Scheibe 6 (2026-10-30):** `cancelRequest`, `releaseTxn`, `setLimits` und `setCompletionProfiles` sind im
+Kern, im Treiber und im Zufallsgang; offen bleibt nur R-D10.
+
+- **Abschlussprofile:** Eine genommene Aufgabe wird unter ihrer Transaktion festgehalten (`takenTasks`), ihre Frist
+  begrenzt die Lease (`completionDeadline`), der Commit prüft die Ergebnisse. Auch wartende Requests ohne Transaktion
+  scheitern mit `CompletionViolation`.
+- **Gesperrt bis R5b:** Ein Profil mit `gateField` braucht RunGates. `setCompletionProfiles` weist es mit `NotPorted`
+  ab, und ein bestehendes Dokument mit einem solchen Profil wird nicht bedient.
+- **`setLimits`:** Alle Prüfungen gegen den Bestand sind da. Die Werte beider Projekt-Hosts laufen als fester Test.
+  Eine Abweichung bleibt: JavaScripts `k in DEFAULT_LIMITS` nimmt auch geerbte Namen wie `toString`, Rust nicht. Das
+  ist Host-Code und betrifft keinen Aufrufer.
+- **Tests:** Ein Gang mit 60 000 Schritten durch den Kern und einer mit 4 000 durch beide Stores fanden keine
+  Abweichung. Ein Dokument, das der TS-Store mit Profil, Limits, offener Aufgabe und wartendem Request schrieb, liest
+  der Rust-Store mit gleichem Hash und arbeitet es zu Ende ab.
+- **Gegenprobe:** 14 eingebaute Fehler fallen in `tests/boundaries.rs` auf. Zwei überlebten zuerst und bekamen eigene
+  Fälle: eine Freigabe, die in die Warteschlange muss, und das Bedienen danach. Die Kante von `maxResultBytes` bekam
+  ebenfalls einen eigenen Fall.
+
+**Belege zu R-D10 (2026-10-30):**
+
+- **Der Fall ist erreichbar:** `spaces-mmo/server/chat.ts` (`#report`, `text.slice(0, 1000)`) und `npc/minds.ts`
+  (`remember`, `note.trim().slice(0, 300)`) kürzen nach UTF-16-Einheiten und schreiben das Ergebnis in Entries. Ein
+  Emoji an der Schnittstelle hinterlässt ein einzelnes Surrogat.
+- **Folge heute:** Der TS-Server nimmt so einen Text an. Der Rust-Server antwortet auf den Write `BadRequest`, und eine
+  Datei, die so einen Wert enthält, öffnet er nicht.
+- **Bestand:** Vier lokale Store-Dateien (3 119 Zeilen) enthalten keinen solchen Wert. big und nano sind nicht geprüft.
 
 **Treiber und Zustand:**
 

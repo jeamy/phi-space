@@ -161,6 +161,18 @@ fn random_walks_agree_with_the_typescript_core() {
 		"lookup RequestExpired",
 		"lookup pending",
 		"lookup done",
+		"cancelRequest RequestExpired",
+		"cancelRequest done",
+		"cancelRequest cancelled",
+		"released a transaction",
+		"releaseTxn found nothing",
+		"setLimits IllegalArgumentError",
+		"setLimits ok",
+		"setCompletionProfiles TransactionError",
+		"commitTxn CompletionViolation",
+		"renew CompletionViolation",
+		"probe CompletionViolation",
+		"a task committed",
 	]
 	.into_iter()
 	.filter(|k| !seen.contains_key(k))

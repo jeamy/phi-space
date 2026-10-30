@@ -306,6 +306,21 @@ impl Space {
 		Ok(Json::Object(o))
 	}
 
+	/// Cancels a pending request. A decided one stays as it is; the view says which.
+	pub fn cancel_request(&mut self, now: f64, target: Option<&Json>) -> Result<Json> {
+		self.assert_ported()?;
+		self.sweep(now);
+		let r = RequestRef::of(target);
+		let key = self.key_of(&r);
+		let Some(c) = self.rpc_mut().claims.get(&key) else {
+			return Err(error("RequestExpired", format!("request {} is unknown", r.request_id())));
+		};
+		if str_of(&c, "state") == Some("pending") {
+			self.decide(now, &key, &"cancelled".into(), None, false, None)?;
+		}
+		self.lookup(now, target)
+	}
+
 	/// Retention: a decided result is kept `claimResultMs`, then only its hash, until its generation stops admitting;
 	/// then the claim goes, and an unused closed generation with it. Bounded per commit. Claims on the disk are asked
 	/// through their indexes (`due`, `nextAt`, `hasGroup`), never scanned.

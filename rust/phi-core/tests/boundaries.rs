@@ -10,7 +10,8 @@ use phi_json::{digest_json, obj, Json};
 fn signature(lines: &[Json]) -> (Vec<String>, String) {
 	let mut d = Driver::new();
 	// answers by their shape (strings, which carry the padding, and messages, which carry the limits, left out)
-	let answers = lines.iter().map(|l| match d.step(l) { Ok(v) => shape(&v).canonical().unwrap(), Err(e) => e.class.to_owned() }).collect();
+	// (setLimits answers with the limits, which move with the parameter)
+	let answers = lines.iter().map(|l| match d.step(l) { Ok(_) if l.get("op").and_then(Json::as_str) == Some("setLimits") => "ok".to_owned(), Ok(v) => shape(&v).canonical().unwrap(), Err(e) => e.class.to_owned() }).collect();
 	let s = &d.space.state;
 	// discrete outcomes only: the byte tally moves with every byte of padding
 	let stream = s.stream.as_ref().map_or(String::new(), |st| format!("floor {} log {}", st.floor, st.log.len()));
@@ -515,4 +516,152 @@ fn assert_paged(lines: &[Json]) {
 	let mut d = Driver::new();
 	let paged = lines.iter().any(|l| d.step(l).is_ok_and(|v| v.get("next").and_then(Json::as_str).is_some_and(|n| n.starts_with("ss"))));
 	assert!(paged, "the case never pages through a snapshot");
+}
+
+const MIB: f64 = 1024.0 * 1024.0;
+fn profile(max_count: f64) -> Json { obj! { "taskType" => "Task", "resultTypes" => vec![Json::from("Result")], "equalFields" => vec![Json::from("n")], "maxResultCount" => max_count } }
+fn set_profile(max_count: f64) -> Json { obj! { "op" => "setCompletionProfiles", "now" => 1000.0, "profiles" => vec![profile(max_count)] } }
+fn task(n: f64, pad: usize) -> Json { obj! { "op" => "write", "now" => 1000.0, "entry" => obj! { "type" => "Task", "fields" => obj! { "n" => n, "pad" => "x".repeat(pad) } }, "lease" => 90_000.0 } }
+fn begin() -> Json { obj! { "op" => "createTxn", "now" => 1000.0, "lease" => 60_000.0 } }
+const TXN: &str = "t0a0b0c0d-2"; // the task took the first id
+fn take_under(txn: &str) -> Json { obj! { "op" => "probe", "now" => 1000.0, "tmpl" => obj! { "type" => "Task" }, "take" => true, "txn" => txn } }
+fn result(n: f64, txn: &str) -> Json { obj! { "op" => "write", "now" => 1000.0, "entry" => obj! { "type" => "Result", "fields" => obj! { "n" => n } }, "lease" => 90_000.0, "txn" => txn } }
+fn commit(txn: &str) -> Json { obj! { "op" => "commitTxn", "now" => 1000.0, "id" => txn } }
+
+#[test]
+fn the_limits_of_the_project_hosts() {
+	// spaces-mmo/server/space-host.ts and codemode-chat/server/space-host.ts, on a new space and over limits already set
+	let owner = obj! { "maxTxnsPerOwner" => 1000.0, "maxWaitersPerOwner" => 1000.0, "maxRegsPerOwner" => 1000.0, "maxClaimBytes" => 512.0 * MIB, "maxDocBytes" => 640.0 * MIB };
+	let Json::Object(mut mmo) = owner.clone() else { unreachable!() };
+	for (k, v) in [("claimResultMs", 600_000.0), ("generationAdmitMs", 600_000.0), ("maxLogBytes", 512.0 * 1024.0)] {
+		mmo.insert(k, Json::Number(v));
+	}
+	for limits in [owner, Json::Object(mmo)] {
+		let line = obj! { "op" => "setLimits", "now" => 1000.0, "limits" => limits };
+		compare(&[init(obj! {}), line.clone(), task(1.0, 0), line.clone()], "a project's limits");
+		compare(&[init(obj! { "maxEntries" => 5.0 }), obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => obj! { "peerId" => "p1" } }, line], "over limits and claims");
+	}
+}
+
+#[test]
+fn set_limits_at_what_already_stands() {
+	let set = |limits: Json| obj! { "op" => "setLimits", "now" => 1000.0, "limits" => limits };
+	let mine = obj! { "op" => "createTxn", "now" => 1000.0, "lease" => 60_000.0, "as" => "a" };
+	edge("a commit limit under a reservation", 1200, 4000, |max| vec![init(obj! {}), mine.clone(), txn_write(600, 5000.0, 1000.0, "t0a0b0c0d-1"), set(obj! { "maxCommitBytes" => max as f64 })]);
+	edge("a job limit under a reservation", 100, 4000, |max| vec![init(obj! {}), mine.clone(), txn_write(600, 5000.0, 1000.0, "t0a0b0c0d-1"), set(obj! { "maxJobBytes" => max as f64 })]);
+	edge("an event limit under a subscription", 100, 3000, |max| {
+		let wait = obj! { "op" => "addWaiter", "now" => 1000.0, "w" => obj! { "template" => obj! { "type" => "Task" }, "take" => false, "target" => "a", "timeout" => 100_000.0, "handback" => obj! { "h" => 1.0 } } };
+		vec![init(obj! {}), obj! { "op" => "probe", "now" => 1000.0, "tmpl" => obj! { "type" => "None" } }, wait, set(obj! { "maxEventBytes" => max as f64 })]
+	});
+	compare(&[init(obj! {}), set(obj! { "maxFrameBytes" => 1000.0, "maxCommitBytes" => 900.0 }), set(obj! { "maxCommitBytes" => 1100.0, "maxFrameBytes" => 1200.0 }), set(obj! { "mailboxTtlMs" => 604_800_001.0 }), set(obj! { "maxEntries" => 1.5 })], "refused limits");
+}
+
+#[test]
+fn a_task_and_its_results() {
+	let flow = |results: Vec<Json>, max: f64| {
+		let mut l = vec![init(obj! {}), set_profile(max), task(1.0, 0), begin(), take_under(TXN)];
+		l.extend(results);
+		l.push(commit(TXN));
+		l.push(obj! { "op" => "commitTxn", "now" => 1000.0, "id" => TXN });
+		l
+	};
+	compare(&flow(vec![result(1.0, TXN)], 1.0), "one result");
+	compare(&flow(vec![], 1.0), "no result");
+	compare(&flow(vec![result(2.0, TXN)], 1.0), "the wrong result");
+	compare(&flow(vec![result(1.0, TXN), result(1.0, TXN)], 1.0), "too many");
+	compare(&flow(vec![result(1.0, TXN), result(1.0, TXN)], 2.0), "two allowed");
+	compare(&flow(vec![result(1.0, TXN), result(2.0, TXN)], 2.0), "one unmatched");
+	compare(&[init(obj! {}), set_profile(1.0), task(1.0, 0), take_under("t-none"), obj! { "op" => "probe", "now" => 1000.0, "tmpl" => obj! { "type" => "Task" }, "take" => true }], "a take without a transaction");
+	compare(&[init(obj! {}), begin(), set_profile(1.0)], "profiles after a transaction opened");
+	let gated_elsewhere = obj! { "op" => "setCompletionProfiles", "now" => 1000.0, "profiles" => vec![obj! { "taskType" => "", "resultTypes" => Vec::<Json>::new(), "equalFields" => Vec::<Json>::new(), "maxResultCount" => 1.0 }] };
+	compare(&[init(obj! {}), gated_elsewhere], "an invalid profile");
+	// the deadline a task sets binds the lease of its transaction
+	let bound = obj! { "op" => "setCompletionProfiles", "now" => 1000.0, "profiles" => vec![obj! { "taskType" => "Task", "resultTypes" => vec![Json::from("Result")], "equalFields" => vec![Json::from("n")], "maxResultCount" => 1.0, "maxLeaseMs" => 500.0, "maxResultBytes" => 40.0 }] };
+	compare(&[init(obj! {}), bound.clone(), task(1.0, 0), begin(), take_under(TXN), obj! { "op" => "renew", "now" => 1000.0, "id" => TXN, "ms" => 501.0 }, obj! { "op" => "renew", "now" => 1000.0, "id" => TXN, "ms" => 500.0 }, result(1.0, TXN), commit(TXN)], "a lease at the boundary");
+	compare(&[init(obj! {}), bound, task(1.0, 0), begin(), take_under(TXN), obj! { "op" => "settle", "now" => 1500.0 }, obj! { "op" => "count", "now" => 1500.0 }], "the boundary ends the transaction");
+	// the results of a task at maxResultBytes
+	edge("maxResultBytes", 20, 120, |max| {
+		let p = obj! { "taskType" => "Task", "resultTypes" => vec![Json::from("Result")], "equalFields" => vec![Json::from("n")], "maxResultCount" => 1.0, "maxResultBytes" => max as f64 };
+		vec![init(obj! {}), obj! { "op" => "setCompletionProfiles", "now" => 1000.0, "profiles" => vec![p] }, task(1.0, 0), begin(), take_under(TXN), result(1.0, TXN), commit(TXN)]
+	});
+	// a captured task needs room in the commit budget
+	edge("the capture of a task", 1200, 6000, |max| vec![init(obj! { "maxCommitBytes" => max as f64 }), set_profile(1.0), task(1.0, 900), begin(), take_under(TXN), result(1.0, TXN), commit(TXN)]);
+}
+
+#[test]
+fn waits_on_profiled_tasks() {
+	let wait = |id: &str| obj! { "op" => "park", "now" => 1000.0, "key" => id, "tmpl" => obj! { "type" => "Task" }, "take" => true, "deadline" => 50_000.0 };
+	let lines = vec![
+		init(obj! {}),
+		set_profile(1.0),
+		obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => obj! { "peerId" => "p1" } },
+		obj! { "op" => "admit", "now" => 1000.0, "request" => request("r1"), "method" => "take", "args" => obj! {} },
+		wait("$key"),
+		task(1.0, 0),
+		obj! { "op" => "lookup", "now" => 1000.0, "request" => request("r1") },
+		obj! { "op" => "count", "now" => 1000.0, "tmpl" => obj! { "type" => "Task" } },
+	];
+	compare(&resolve(&lines), "a request without a transaction");
+	// a wait takes under a fresh transaction, which then owes the result
+	let waiter = obj! { "op" => "addWaiter", "now" => 1000.0, "w" => obj! { "template" => obj! { "type" => "Task" }, "take" => true, "target" => "a", "timeout" => 100_000.0, "txnLeaseMs" => 30_000.0 } };
+	compare(&[init(obj! {}), set_profile(1.0), waiter, task(1.0, 0), commit("t0a0b0c0d-3"), result(1.0, "t0a0b0c0d-3"), commit("t0a0b0c0d-3")], "a served wait");
+}
+
+#[test]
+fn cancelling_a_request() {
+	let cancel = |id: &str| obj! { "op" => "cancelRequest", "now" => 1000.0, "target" => request(id) };
+	let lines = vec![
+		init(obj! {}),
+		obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => obj! { "peerId" => "p1" } },
+		cancel("r0"),
+		obj! { "op" => "admit", "now" => 1000.0, "request" => request("r1"), "method" => "take", "args" => obj! {} },
+		obj! { "op" => "park", "now" => 1000.0, "key" => "$key", "tmpl" => obj! { "type" => "Task" }, "take" => true, "deadline" => 50_000.0 },
+		cancel("r1"),
+		cancel("r1"),
+		task(1.0, 0),
+		obj! { "op" => "count", "now" => 1000.0, "tmpl" => obj! { "type" => "Task" } },
+		obj! { "op" => "admit", "now" => 1000.0, "request" => request("r2"), "method" => "take", "args" => obj! {} },
+		obj! { "op" => "decide", "now" => 1000.0, "key" => "$key", "outcome" => obj! { "state" => "done", "result" => 7.0 } },
+		cancel("r2"),
+	];
+	compare(&resolve(&lines), "a cancelled request");
+}
+
+#[test]
+fn releasing_a_transaction() {
+	let release = |id: &str, now: f64| obj! { "op" => "releaseTxn", "now" => now, "id" => id };
+	compare(&[init(obj! {}), release("t-none", 1000.0), begin(), task(1.0, 0), take_under("t0a0b0c0d-1"), release("t0a0b0c0d-1", 1000.0), release("t0a0b0c0d-1", 1000.0), obj! { "op" => "count", "now" => 1000.0, "tmpl" => obj! { "type" => "Task" } }], "a release");
+	// the entry goes back and serves who waits for it
+	let waiting = vec![
+		init(obj! {}),
+		begin(),
+		task(1.0, 0),
+		take_under("t0a0b0c0d-1"),
+		obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => obj! { "peerId" => "p1" } },
+		obj! { "op" => "admit", "now" => 1000.0, "request" => request("r1"), "method" => "take", "args" => obj! {} },
+		obj! { "op" => "park", "now" => 1000.0, "key" => "$key", "tmpl" => obj! { "type" => "Task" }, "take" => true, "deadline" => 50_000.0 },
+		release("t0a0b0c0d-1", 1000.0),
+		obj! { "op" => "lookup", "now" => 1000.0, "request" => request("r1") },
+	];
+	compare(&resolve(&waiting), "a release serves a wait");
+	// a transaction whose reservation just fits, and one expiry before it in the same commit: it waits in the queue
+	let queued = |max: f64| {
+		let mut l = vec![init(obj! { "maxCommitBytes" => max }), obj! { "op" => "createTxn", "now" => 1000.0, "lease" => 90_000.0, "as" => "a" }, txn_write(300, 90_000.0, 1000.0, "t0a0b0c0d-1")];
+		l.extend((0..6).map(|_| write(0, 100.0, 1000.0)));
+		l.extend([release("t0a0b0c0d-1", 2000.0), obj! { "op" => "nextExpiry", "now" => 2000.0 }, obj! { "op" => "settle", "now" => 2000.0 }, obj! { "op" => "settle", "now" => 2000.0 }]);
+		l
+	};
+	let in_queue = |max: f64| {
+		let mut d = Driver::new();
+		queued(max).iter().any(|l| { let _ = d.step(l); d.space.state.rest.get("releaseQueue").and_then(Json::as_array).is_some_and(|q| !q.is_empty()) })
+	};
+	let max = (1300..4000).map(f64::from).find(|m| in_queue(*m)).expect("some budget queues the release");
+	compare(&queued(max), "a queued release");
+	// entries lapsing in the same commit leave too little: the release is queued for later
+	edge("a release under the commit budget", 1300, 4000, |max| {
+		let mut l = vec![init(obj! { "maxCommitBytes" => max as f64 }), begin(), txn_write(300, 90_000.0, 1000.0, "t0a0b0c0d-1")];
+		l.extend((0..6).map(|_| write(0, 100.0, 1000.0)));
+		l.extend([release("t0a0b0c0d-1", 2000.0), obj! { "op" => "stats", "now" => 2000.0 }, obj! { "op" => "settle", "now" => 2000.0 }, obj! { "op" => "nextExpiry", "now" => 2000.0 }, obj! { "op" => "settle", "now" => 2000.0 }]);
+		l
+	});
 }

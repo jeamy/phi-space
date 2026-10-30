@@ -130,6 +130,10 @@ pub fn apply_line(s: &mut Space, snapshots: &mut crate::snapshot::Snapshots, now
 			}
 			"decide" => s.decide_line(now, l.get("key"), l.get("outcome")),
 			"lookup" => s.lookup(now, l.get("request")),
+			"cancelRequest" => s.cancel_request(now, l.get("target")),
+			"releaseTxn" => s.release_txn(now, l.get("id")).map(Json::Bool),
+			"setLimits" => s.set_limits(now, l.get("limits").unwrap_or(&Json::Null)),
+			"setCompletionProfiles" => s.set_completion_profiles(now, l.get("profiles")),
 			"notify" => {
 				let or_null = |k: &str| l.get(k).unwrap_or(&Json::Null);
 				s.notify(now, or_null("tmpl"), txn, l.get("lease").unwrap_or(&Json::Number(ANY)), or_null("handback"), or_null("target"), as_, l.get("consumer"))
