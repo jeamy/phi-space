@@ -665,3 +665,37 @@ fn releasing_a_transaction() {
 		l
 	});
 }
+
+#[test]
+fn a_chain_at_its_budget() {
+	let link = |next: Json| obj! { "op" => "write", "now" => 1000.0, "entry" => obj! { "type" => "Link", "fields" => obj! { "next" => next, "pad" => "x".repeat(40) } }, "lease" => 5000.0 };
+	let chain = |o: Json| {
+		let (mut lines, mut tail) = (vec![init(obj! {})], Json::from(""));
+		// ids are predictable here: a counter behind the incarnation
+		for i in 1..=4 {
+			lines.push(link(tail));
+			tail = format!("e0a0b0c0d-{i}").into();
+		}
+		lines.push(obj! { "op" => "write", "now" => 1000.0, "entry" => obj! { "type" => "Head", "fields" => obj! { "next" => tail } } });
+		lines.push(obj! { "op" => "readChain", "now" => 1000.0, "tmpl" => obj! { "type" => "Link" }, "o" => o });
+		lines
+	};
+	edge("maxBytes of a chain", 50, 2500, |max| chain(obj! { "head" => obj! { "type" => "Head" }, "maxBytes" => max as f64 }));
+}
+
+#[test]
+fn a_chain_that_runs_in_a_circle() {
+	let one = |id: &str, next: &str| obj! { "op" => "write", "now" => 1000.0, "entry" => obj! { "type" => "Link", "fields" => obj! { "next" => next, "at" => id } } };
+	let lines = vec![
+		init(obj! {}),
+		one("a", "e0a0b0c0d-2"),
+		one("b", "e0a0b0c0d-1"),
+		obj! { "op" => "list", "now" => 1000.0, "tmpl" => obj! { "type" => "Link" } },
+		obj! { "op" => "readChain", "now" => 1000.0, "tmpl" => Json::Null, "o" => obj! { "cursor" => "e0a0b0c0d-1" } },
+		obj! { "op" => "readChain", "now" => 1000.0, "tmpl" => Json::Null, "o" => obj! { "cursor" => "e0a0b0c0d-2", "limit" => 1.0 } },
+	];
+	compare(&lines, "a cycle of two links");
+	let mut d = Driver::new();
+	let last = lines.iter().take(5).map(|l| d.step(l)).last().unwrap();
+	assert_eq!(last.unwrap_err().message, "cyclic entry chain");
+}

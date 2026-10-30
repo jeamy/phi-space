@@ -575,6 +575,8 @@ impl DiskClaims {
 	}
 	/// The commits up to `durable` are on the disk: what they wrote is read from there from now on (open requests stay held).
 	pub fn settle(&mut self, durable: u64) { self.held.retain(|(_, v, stamp)| *stamp > durable || v.as_ref().is_some_and(|v| claim_at(v).is_none())); }
+	/// `unindexed`: the records memory holds without a decision time, which are the open requests.
+	pub fn unindexed(&self) -> Vec<(String, Json)> { self.held.iter().filter_map(|(k, v, _)| v.as_ref().filter(|v| claim_at(v).is_none()).map(|v| (k.clone(), v.clone()))).collect() }
 	/// How many records memory holds.
 	pub fn held(&self) -> usize { self.held.len() }
 	/// Every record: reads the whole map (counted in `enumerations`).

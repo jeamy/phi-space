@@ -20,6 +20,7 @@ import * as core from "../../src/core.ts";
 import * as claims from "../../src/claims.ts";
 import * as mailbox from "../../src/mailbox.ts";
 import { snapshotPage } from "../../src/snapshot.ts";
+import { readChain } from "../../src/read-chain.ts";
 import { digestJson } from "../../src/canonical.ts";
 import type { Json } from "../../src/core.ts";
 
@@ -86,6 +87,10 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 		case "decide": claims.decide(s, now, l.key, l.outcome); return null;
 		case "lookup": return claims.lookup(s, l.request, now);
 		case "cancelRequest": return claims.cancelRequest(s, now, l.target);
+		case "pendingClaims": return claims.pendingClaims(s);
+		case "resolveAdmission": return claims.resolveAdmission(s, now, l.request, l.method, l.argumentHash, l.primaryEpoch);
+		case "needsMaintenance": return core.needsMaintenance(s, now);
+		case "readChain": return readChain(s, now, opt(l.tmpl, null), l.o ?? {}, l.as);
 		// ---- mailboxes
 		case "events": return mailbox.mailboxPage(s, l.principal, now, l.o ?? {});
 		case "appendMail": mailbox.appendMail(s, l.principal, l.event, now); return null;

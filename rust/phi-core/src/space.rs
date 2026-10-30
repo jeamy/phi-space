@@ -1510,6 +1510,7 @@ impl Space {
 	}
 
 	/// Earliest time something can change without a commit. Initialises the watermark when there is none.
+	pub fn needs_maintenance(&mut self, now: f64) -> Result<bool> { Ok(self.next_expiry()? <= now) }
 	pub fn next_expiry(&mut self) -> Result<f64> {
 		self.assert_ported()?;
 		let mut min = match self.watermark {
@@ -2073,6 +2074,85 @@ impl Space {
 			}
 		}
 		Ok(Json::Array(out))
+	}
+
+	/// `readChain` (src/read-chain.ts): a bounded walk along entries that name the next one, from one snapshot. `o`: head,
+	/// cursor, nextField, limit, maxBytes.
+	pub fn read_chain(&self, now: f64, tmpl: &Json, o: &Json, owner: Option<&Json>) -> Result<Json> {
+		self.assert_ported()?;
+		let safe = |v: Option<&Json>| is_integer(v).filter(|x| x.abs() <= 9_007_199_254_740_991.0);
+		let frame = self.limits().max_frame_bytes;
+		let limit = match o.get("limit").filter(|v| !v.is_null()) {
+			None => Some(100.0),
+			l => safe(l),
+		};
+		let limit = limit.filter(|l| (1.0..=512.0).contains(l)).ok_or_else(|| illegal("chain limit must be between 1 and 512"))?;
+		let cap = match o.get("maxBytes").filter(|v| !v.is_null()) {
+			None => Some(frame),
+			c => safe(c).map(|c| c.min(frame)),
+		};
+		let field = o.get("nextField").filter(|v| !v.is_null()).map_or(Some("next"), Json::as_str).filter(|f| !f.is_empty() && js_len(f) <= 128.0);
+		let (Some(cap), Some(field)) = (cap.filter(|c| *c >= 1.0), field) else { return Err(illegal("invalid chain budget or pointer field")) };
+		let cursor = match o.get("cursor") {
+			None => None,
+			Some(Json::String(c)) => Some(c.clone()),
+			Some(_) => return Err(illegal("invalid chain cursor")),
+		};
+		let head = o.get("head").filter(|h| !h.is_null());
+		if cursor.is_none() && head.is_none() {
+			return Err(illegal("a chain needs a head or cursor"));
+		}
+		let pointer = |e: &Json| match e.get("fields").and_then(|f| f.get(field)) {
+			Some(Json::String(s)) => Ok(s.clone()),
+			_ => Err(illegal("chain pointer must be a string")),
+		};
+		let mut next = cursor.clone().unwrap_or_default();
+		let mut ready = true;
+		if cursor.is_none() {
+			let first = self.list(now, &Template::from_json(head)?, None, Some(&Json::Number(1.0)), owner)?;
+			let Some(first) = first.as_array().and_then(|a| a.first()) else { return Err(illegal("chain head unavailable")) };
+			ready = first.get("fields").and_then(|f| f.get("ready")) != Some(&Json::Bool(false));
+			next = pointer(first)?;
+		}
+		let (rev, stream_id) = (self.revision()?, self.stream_id());
+		let page = |items: &[Json], next: &str| obj! { "items" => Json::Array(items.to_vec()), "next" => next, "ready" => ready, "rev" => rev.clone(), "streamId" => stream_id.as_str() };
+		let (type_, fields) = match Template::from_json(Some(tmpl))? {
+			Template::Any => (None, vec![]),
+			Template::Of { type_, fields, .. } => (type_, fields),
+		};
+		let mut index = std::collections::HashMap::new();
+		for e in &self.state.entries {
+			index.insert(e.id.as_str(), e);
+		}
+		let mut seen = std::collections::HashSet::new();
+		let mut items: Vec<Json> = vec![];
+		while !next.is_empty() && (items.len() as f64) < limit && ready {
+			let id = next.clone();
+			if !seen.insert(id.clone()) {
+				return Err(illegal("cyclic entry chain"));
+			}
+			let node = Template::Of { id: Some(Json::String(id.clone())), type_: type_.clone(), fields: fields.clone() };
+			// the normal read visibility, expiry, lock and template rules
+			let raw = index.get(id.as_str()).filter(|e| self.readable(e, now, None, false) && node.matches(e));
+			let Some(raw) = raw else { return Err(illegal("chain node unavailable")) };
+			let entry = view(raw, self.state.space_id.as_deref());
+			let after = pointer(&entry)?;
+			items.push(entry);
+			let used = bytes(&page(&items, &after));
+			if used > cap {
+				items.pop();
+				if items.is_empty() {
+					return Err(too_small(used));
+				}
+				break; // the cursor still points at the node not taken
+			}
+			next = after;
+		}
+		let out = page(&items, &next);
+		if bytes(&out) > cap {
+			return Err(too_small(bytes(&out)));
+		}
+		Ok(out)
 	}
 
 	/// One page of what `list` returns, limited by encoded bytes; `after` is the `next` of the page before.

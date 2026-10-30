@@ -192,13 +192,13 @@ impl Space {
 
 	/// `validateGeneration`: the generation is known, bound to this space and incarnation, signed, the requester's, and
 	/// still admits.
-	fn validate_generation(&self, now: f64, r: &RequestRef) -> Result<()> {
+	fn validate_generation(&self, now: f64, r: &RequestRef) -> Result<&Json> {
 		check_principal(r.principal)?;
-		let expired = |m: String| Err(error("RequestExpired", m));
-		let Some(st) = &self.state.rpc else { return expired("generation is unknown".into()) };
+		let expired = |m: String| error("RequestExpired", m);
+		let Some(st) = &self.state.rpc else { return Err(expired("generation is unknown".into())) };
 		let gen_text = r.generation.map_or_else(|| "undefined".into(), crate::space::js_string);
 		let Some(g) = r.generation.and_then(Json::as_str).and_then(|id| st.generations.get(id)) else {
-			return expired(format!("generation {gen_text} is unknown or expired"));
+			return Err(expired(format!("generation {gen_text} is unknown or expired")));
 		};
 		let inc = self.state.incarnation.as_deref().map_or(Json::Null, Json::from);
 		if g.get("incarnation") != Some(&inc) {
@@ -209,16 +209,16 @@ impl Space {
 		let nonce = generation.split('.').next().unwrap_or("");
 		let signed = st.signing_key.as_deref().zip(g.as_object()).is_some_and(|(key, rec)| generation == sign(key, nonce, rec));
 		if g.get("spaceId") != Some(&space) || str_of(g, "authorityId") != st.authority_id.as_deref() || !signed {
-			return expired("the generation signature or binding is invalid".into());
+			return Err(expired("the generation signature or binding is invalid".into()));
 		}
 		let same = g.get("principal").map(|p| p.canonical().ok()) == r.principal.map(|p| p.canonical().ok());
 		if !same {
-			return expired(format!("generation {gen_text} was issued to another principal"));
+			return Err(expired(format!("generation {gen_text} was issued to another principal")));
 		}
 		if num_of(g, "admitUntil").is_none_or(|u| now > u) {
-			return expired(format!("generation {gen_text} no longer admits new requests"));
+			return Err(expired(format!("generation {gen_text} no longer admits new requests")));
 		}
-		Ok(())
+		Ok(g)
 	}
 
 	/// Record the outcome in the commit that decides it. `result` absent: a done claim without a result field.
@@ -304,6 +304,52 @@ impl Space {
 			}
 		}
 		Ok(Json::Object(o))
+	}
+
+	/// `pendingClaims`: the open requests. Asked of the map on the disk, never enumerated: it holds them in memory.
+	pub fn pending_claims(&self) -> Vec<(String, Json)> {
+		let Some(st) = &self.state.rpc else { return vec![] };
+		let held = match &st.claims {
+			crate::state::Claims::Disk(d) => d.unindexed(),
+			crate::state::Claims::Memory(m) => m.iter().map(|(k, v)| (k.to_owned(), v.clone())).collect(),
+		};
+		held.into_iter().filter(|(_, c)| str_of(c, "state") == Some("pending")).collect()
+	}
+
+	/// `resolveAdmission`: what became of a request that may never have arrived. A known one answers as `lookup` does; a
+	/// miss says only that this identity may be retried in this epoch.
+	pub fn resolve_admission(&self, now: f64, request: Option<&Json>, method: &Json, hash: &Json, epoch: &Json) -> Result<Json> {
+		self.assert_ported()?;
+		let r = RequestRef::of(request);
+		let hex64 = hash.as_str().is_some_and(|h| h.len() == 64 && h.bytes().all(|b| matches!(b, b'a'..=b'f' | b'0'..=b'9')));
+		let fine_epoch = epoch.as_f64().is_some_and(|e| (0.0..=9_007_199_254_740_991.0).contains(&e) && e.trunc() == e);
+		let named = r.request_id.and_then(Json::as_str).is_some_and(|s| !s.is_empty()) && method.as_str().is_some_and(|m| !m.is_empty());
+		if !named || !hex64 || !fine_epoch {
+			return Err(type_error("invalid admission resolution binding"));
+		}
+		let key = self.key_of(&r);
+		if let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)) {
+			if c.get("method") != Some(method) || c.get("argHash") != Some(hash) {
+				return Err(error("RequestConflict", "resolution changed original method/arguments"));
+			}
+			return self.lookup(now, request);
+		}
+		let generation = self.validate_generation(now, &r)?;
+		if generation.get("primaryEpoch") != Some(epoch) {
+			return Err(error("IncarnationChanged", "missing request cannot be resolved across epochs or legacy generations"));
+		}
+		let of = |v: Option<&str>| v.map_or(Json::Null, Json::from);
+		Ok(obj! {
+			"state" => "notAdmitted",
+			"spaceId" => of(self.state.space_id.as_deref()),
+			"authorityId" => of(self.state.rpc.as_ref().and_then(|st| st.authority_id.as_deref())),
+			"incarnation" => of(self.state.incarnation.as_deref()),
+			"primaryEpoch" => epoch.clone(),
+			"generation" => r.generation.cloned().unwrap_or(Json::Null),
+			"requestId" => r.request_id.cloned().unwrap_or(Json::Null),
+			"method" => method.clone(),
+			"argumentHash" => hash.clone(),
+		})
 	}
 
 	/// Cancels a pending request. A decided one stays as it is; the view says which.

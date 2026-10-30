@@ -732,12 +732,25 @@ Claims und der Zähler je Batch (`commit_seq`) sind eigens geprüft.
 | Peer-ID | `peer-mmo-world` bzw. `peer-mmo-web` | `peer-codemode` |
 | Dienstquoten | 50.000 Aufrufe/Fenster, 4096 Pending je Prinzipal/Peer, 1024 Inflight/Verbindung, `wakeOnCommit` | 50.000 Aufrufe/Fenster, 4096 Pending je Prinzipal/Peer; übrige Werte wie im bisherigen Host |
 | Space-Limits | Owner-Limits je 1000; Claim-Retention und Generation-Zulassung standardmäßig 10 min, Log 512 KiB, jeweilige ENV-Overrides | Owner-Limits je 1000; sonstige Retention-/Log-Standards wie bisher |
-| SQLite-Limits | `maxClaimBytes` 512 MiB, `maxDocBytes` 640 MiB | `maxClaimBytes` 512 MiB, `maxDocBytes` 640 MiB |
+| SQLite-Limits | `maxClaimBytes` 512 MiB, `maxDocBytes` 640 MiB | `maxClaimBytes` 1024 MiB, `maxDocBytes` 1280 MiB; `CODEMODE_MAX_CLAIM_MIB`/`CODEMODE_MAX_DOC_MIB` überschreiben sie, ungültige Werte und Dokument ≤ Claims brechen den Start ab |
 | Bootstrap/Betrieb | `NAMES_LOCK`, `WORLD_LOCK`, `NPC_LOCK` ohne Duplikate; Prozesspräsenz; Kompaktierung mit `SPACES_MMO_COMPACT_MS`; Wartungs-Debounce wie bisher | Prozesspräsenz, Wartungs-Debounce wie bisher |
 | Starter-Vertrag | bisherige ENV-Auswahl, Ready-/Fehler-/Shutdown-Verhalten und Metriken bleiben für Launcher und Tests nutzbar | ebenso für den codemode-Launcher und seine Tests |
 
 Bestehende Dateien behalten Store-/Host-/Space-Ids, Inkarnation, Signierschlüssel und Peer-/Owner-Bindungen.
 Ein Testschalter darf nicht unbemerkt den alten TS-Host statt des Rust-Servers starten.
+
+**Scheiben:**
+
+| Scheibe | Inhalt | Stand |
+|---|---|---|
+| 0 | Kernlücken über den Treiber: `needsMaintenance`, `pendingClaims` (gezielte Abfrage, keine Aufzählung), `resolveAdmission`, `readChain` | erledigt |
+| 1 | Store-Host mit mehreren Dokumenten in einem Commit: Registry (mit `hostKey`), Standard-Space, benannte Spaces | offen |
+| 2 | `phi-service` synchron: `handle_text` mit eingespeister Uhr und Zufall, `wire.json` exakt, gesäter Gang gegen einen TS-Treiber um `handleText`, Antwort byte-genau | offen |
+| 3 | Hintergrund: Reaper, Outbox-Entscheidungstabelle aus `deliverEvents`, Mailbox- und Claim-Wartung | offen |
+| 4 | `phi-wire`, `phi-space-server`: ein Besitzer-Thread je Store, Antworten erst nach `durable`, Long Polls, CLI und Ready-Zeile wie `standalone.ts` | offen |
+| 5 | Gruppe A und B3 gegen den Rust-Server, `--test-hooks`, Fallmatrix | offen |
+| 6 | Startprofile, `SPACES_MMO_SPACE_SERVER`, `CODEMODE_SPACE_SERVER`; ein fehlendes Binary bricht ab und fällt nie auf TS zurück | offen |
+| 7 | TS→Rust→TS mit offener Arbeit, Messung nach R-D2/R-D11 | offen |
 
 **Abnahme:**
 

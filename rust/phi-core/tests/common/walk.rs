@@ -2,7 +2,7 @@
 // from the answers, and how two answers and two states are compared. Shared by phi-core's tests against the core driver
 // and phi-store's against the store driver.
 #![allow(dead_code)]
-use phi_json::{obj, Json, Object, FOREVER};
+use phi_json::{digest_json, obj, Json, Object, FOREVER};
 use std::collections::BTreeMap;
 
 /// splitmix64: a reproducible stream from the walk's seed.
@@ -386,6 +386,12 @@ impl Walk {
 			lines.push(obj! { "op" => "write", "entry" => obj! { "type" => "Task", "fields" => obj! { "n" => 1.0 } }, "lease" => 5000.0 });
 		}
 		lines.push(obj! { "op" => "lookup", "request" => request.clone() });
+		lines.push(obj! { "op" => "pendingClaims" });
+		let hash = |a: f64| digest_json(&obj! { "method" => method, "args" => obj! { "a" => a } }).unwrap();
+		let resolve = |r: &mut Rng, request: &Json, hash: String| obj! { "op" => "resolveAdmission", "request" => request.clone(), "method" => method, "argumentHash" => hash, "primaryEpoch" => r.pick(&[1.0, 1.0, 1.0, 0.0]) };
+		lines.push(resolve(r, &request, hash(1.0)));
+		lines.push(resolve(r, &request, hash(2.0)));
+		lines.push(resolve(r, &obj! { "principal" => request.get("principal").unwrap().clone(), "generation" => "$gen", "requestId" => "never" }, hash(1.0)));
 		if r.chance(0.4) {
 			lines.push(obj! { "op" => "cancelRequest", "target" => request.clone() });
 		}
@@ -393,6 +399,41 @@ impl Walk {
 		lines.push(obj! { "op" => "settle" });
 		lines.push(obj! { "op" => "lookup", "request" => request.clone() });
 		lines.push(admit(1.0));
+		self.episode.extend(lines);
+	}
+	/// A short chain of entries, read from its head or from the middle.
+	fn chain(&mut self) {
+		let r = &mut self.rng;
+		let node = |next: Json, ready: Option<bool>, pad: usize| {
+			let mut f = obj! { "next" => next, "pad" => "x".repeat(pad) };
+			if let (Json::Object(o), Some(v)) = (&mut f, ready) {
+				o.insert("ready", Json::Bool(v));
+			}
+			obj! { "op" => "write", "entry" => obj! { "type" => "Link", "fields" => f }, "lease" => 8000.0 }
+		};
+		let mut lines = vec![node("".into(), None, r.below(20)), node("$id".into(), None, r.below(20))];
+		if r.chance(0.7) {
+			lines.push(node("$id".into(), None, r.below(20)));
+		}
+		// the chain's own mark: the oldest Link in the space may have lapsed long ago
+		let mark = r.below(1 << 30) as f64;
+		let Json::Object(mut head) = node("$id".into(), if r.chance(0.2) { Some(false) } else { None }, 0) else { unreachable!() };
+		if let Some(Json::Object(f)) = head.get_mut("entry").and_then(|e| e.as_object_mut()).and_then(|e| e.get_mut("fields")) {
+			f.insert("mark", Json::Number(mark));
+		}
+		lines.push(Json::Object(head));
+		let mut o = if r.chance(0.8) { obj! { "head" => obj! { "type" => "Link", "fields" => obj! { "mark" => mark } } } } else { obj! { "cursor" => "$id" } };
+		if let Json::Object(m) = &mut o {
+			match r.below(7) {
+				0 => m.insert("limit", Json::Number(1.0 + r.below(3) as f64)),
+				1 | 4 => m.insert("maxBytes", Json::Number(50.0 + r.below(900) as f64)),
+				2 => m.insert("nextField", r.pick(&["next", "pad", "nothing"]).into()),
+				3 => m.insert("limit", r.pick(&[Json::Number(0.0), Json::Number(513.0), Json::Number(1.5), "x".into()])),
+				_ => (),
+			};
+		}
+		let tmpl = if r.chance(0.8) { obj! { "type" => "Link" } } else { obj! { "type" => "Task" } };
+		lines.push(obj! { "op" => "readChain", "tmpl" => tmpl, "o" => o });
 		self.episode.extend(lines);
 	}
 	/// A task taken under a transaction, its result written, the transaction committed.
@@ -420,6 +461,7 @@ impl Walk {
 		match v {
 			Json::String(s) if s == "$txn" => self.txns.last().map_or("t-bogus".into(), |t| t.as_str().into()),
 			Json::String(s) if s == "$gen" => self.generations.last().map_or("gnone.0".into(), |g| g.0.as_str().into()),
+			Json::String(s) if s == "$id" => self.ids.last().map_or("n-bogus".into(), |i| i.as_str().into()),
 			Json::String(s) if s == "$key" => self.keys.last().map_or("[]".into(), |k| k.as_str().into()),
 			Json::String(s) if s == "$next" => self.snapshot.as_ref().map_or("ssnone.0".into(), |n| n.0.as_str().into()),
 			Json::Array(a) => Json::Array(a.iter().map(|x| self.fill(x)).collect()),
@@ -462,7 +504,13 @@ impl Walk {
 				o.insert(k, v);
 			}
 		};
-		let op = match self.rng.below(204) {
+		let op = match self.rng.below(214) {
+			204..=209 => {
+				self.chain();
+				return self.line(rev);
+			}
+			210..=211 => "needsMaintenance",
+			212..=213 => "pendingClaims",
 			194..=196 => {
 				set("target", Some(self.request()));
 				"cancelRequest"
@@ -862,6 +910,16 @@ pub fn observe(w: &mut Walk, line: &Json, r: &Result<Json, phi_core::CoreError>,
 				}
 				if op == "commitTxn" && w.profiled {
 					note("a task committed", seen);
+				}
+				if op == "readChain" {
+					let n = v.get("items").and_then(Json::as_array).map_or(0, Vec::len);
+					note(if n > 1 { "readChain a chain" } else if n == 1 { "readChain one link" } else { "readChain nothing" }, seen);
+					if v.get("ready") == Some(&Json::Bool(false)) { note("readChain not ready", seen); }
+				}
+				if op == "needsMaintenance" && v == &Json::Bool(true) { note("maintenance due", seen); }
+				if op == "pendingClaims" && v.as_array().is_some_and(|a| !a.is_empty()) { note("pendingClaims found", seen); }
+				if op == "resolveAdmission" {
+					note(Box::leak(format!("resolveAdmission {}", v.get("state").and_then(Json::as_str).unwrap_or("?")).into_boxed_str()), seen);
 				}
 				if op == "lookup" {
 					note(Box::leak(format!("lookup {}", v.get("state").and_then(Json::as_str).unwrap_or("?")).into_boxed_str()), seen);
