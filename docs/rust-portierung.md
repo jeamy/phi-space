@@ -615,7 +615,8 @@ Claims und der Zähler je Batch (`commit_seq`) sind eigens geprüft.
 - **Befund aus dem langen Store-Gang:** Der TS-Entwurf ändert Map-Teile (Claims, Generationen) an Ort und Stelle und
   nimmt einen gescheiterten Commit durch Zuweisung zurück (`draft.ts`). Ein Schlüssel, den der Commit löschte, steht
   danach am Ende der Map statt an seinem Platz. Spätere Sweeps gehen nach dieser Reihenfolge, wenn das Budget nur für
-  einen Teil reicht. Der Rust-Host nimmt Map-Teile jetzt genauso zurück.
+  einen Teil reicht. Der Rust-Host nimmt Map-Teile jetzt genauso zurück. Danach war ein Store-Gang mit
+  20 000 Schritten (`--release`, 1 304 s) abweichungsfrei in Antworten, Zuständen und den Zeilen beider Dateien.
 - **Offen für den asynchronen Host** (mit tokio, vor oder mit R3): Commits, die einander überlappen (der nächste sieht
   den vorigen vor dessen Persistierung), Watches nur auf dauerhaften Zustand, Batching mehrerer offener Commits und
   Schließen mit wartenden Commits. Der Host von Scheibe 1 wartet jeden Commit ab, bevor er den nächsten annimmt.
