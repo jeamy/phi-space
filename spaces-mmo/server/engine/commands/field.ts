@@ -89,7 +89,8 @@ const describe = (d: FieldDef, f: FieldFields, now: number) => {
 		: f.stage === "saat" ? `wird mit ${crop?.name ?? f.crop} bestellt: ${f.seeds}/${f.seedNeed} Saatgut, ${f.work}/${f.workNeed} Arbeit`
 		: f.stage === "waechst" ? `${crop?.name ?? f.crop} wächst, reif in etwa ${hours(f.dueWorldMs - now)}`
 		: `${crop?.name ?? f.crop} ist ${STAGE[f.stage]}: Ernte ${f.work}/${f.workNeed}${f.stage === "spaet" ? ", jeder Anteil verliert schon" : `, noch etwa ${hours(f.dueWorldMs - now)}`}`;
-	return `${fieldName(f)} (${f.w}×${f.h}${f.open ? ", offen für alle" : ""}): ${what}${soil}.`;
+	const grazed = f.grazed && f.stage !== "brach" ? `; Rehe haben daran gefressen (${f.grazed}×)` : "";
+	return `${fieldName(f)} (${f.w}×${f.h}${f.open ? ", offen für alle" : ""}${f.fenced ? ", eingezäunt" : ""}): ${what}${soil}${grazed}.`;
 };
 
 /** `[x y]`: a field beside the actor (or at x y), on Plot cells in the light of a fire. */
@@ -185,7 +186,7 @@ const bestelle: Command = {
 		if (done) {
 			const soil = soilFor(d, f, crop, now);
 			const helpers = Object.entries(f.by).sort((a, b) => b[1] - a[1]).map(([n, k]) => `${n} (${k})`).join(", ");
-			Object.assign(f, { ...fresh(f), stage: "waechst", soil: soil.factor, tired: soil.tired, yields: harvestOf(crop, f.w * f.h, soil.factor), dueWorldMs: now + crop.growWorldMs * growFactor(await fogOf(c.space, f.room), false) });
+			Object.assign(f, { ...fresh(f), stage: "waechst", grazed: 0, soil: soil.factor, tired: soil.tired, yields: harvestOf(crop, f.w * f.h, soil.factor), dueWorldMs: now + crop.growWorldMs * growFactor(await fogOf(c.space, f.room), false) });
 			await writeField(c, f);
 			return msg(c, "*", "world", `Die ${fieldName(f)} ist mit ${crop.name} bestellt (${helpers}). Reif in etwa ${hours(f.dueWorldMs - now)}${soil.tired ? `; der Boden ist müde und gibt weniger` : ""}.`);
 		}

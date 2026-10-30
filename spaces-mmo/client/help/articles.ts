@@ -321,15 +321,16 @@ Ausführlich unter [Gärten](help.game.garden).
 | \`ernte\` | \`harvest\`, \`pflücke\` | Reifes ernten, mit Samen; an einer reifen Flur ein Arbeitspunkt und dein Anteil |
 | \`pate <name>\` | \`sponsor\` | Jemanden dein Beet pflegen lassen; \`pate weg <name>\` beendet es |
 | \`benenne <name>\` | \`taufe\` | Deiner Kreuzung einen Namen geben (\`benenne 2 <name>\`, wenn du mehrere trägst) |
-| \`scheuche hase\` | \`scare\` | Einen Hasen bis drei Schritte von dir in den Nebel zurückjagen |
-| \`zäune\` | \`fence\` | Einen Zaun um ein Beet neben dir setzen (2 Treibholz, 1 Tangseil) |
+| \`scheuche hase\` | \`scare\` | Einen Hasen (auch \`reh\`, \`fuchs\`, \`maus\`) bis drei Schritte von dir in den Nebel zurückjagen |
+| \`zäune\` | \`fence\` | Einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), deine Flur (6 Treibholz, 2 Tangseil) oder deinen Hühnerstall (3 Treibholz, 1 Tangseil) neben dir setzen |
+| \`wache\` | \`guards\` | Wer im Raum vor dem Wild wacht (Hund, Katze, Gänse) und ob sie satt sind |
 | \`flur anlegen [x y]\` | \`acker anlegen\` | Mit einem Spaten im Licht eine Flur umbrechen (4×4); \`flur\` zeigt die Fluren hier, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
 | \`bestelle [frucht]\` | \`pflüge\`, \`plough\` | Die Flur bestellen: Frucht wählen, Saatgut und einen Arbeitspunkt bringen |
 | \`mahle [n oder alle] <korn>\` | \`mühle\`, \`grind\` | An einer Windmühle neben dir Korn zu Mehl mahlen lassen; \`mahle\` allein: wie lange sie noch mahlt |
 | \`abholen\` | \`pickup\` | Dein fertiges Mehl an der Mühle abholen |
 | \`backe [brot]\` | \`bake\` | Am Backhaus neben dir Brot backen (2 Mehl, 1 Kanne Wasser, 1 Treibholz) |
 | \`stall\` | \`coop\`, \`pen\` | Wie es den Tieren im Hühnerstall oder Gehege neben dir geht |
-| \`einstallen <tier>\` | \`stalle\` | Ein Huhn, Schaf oder eine Ziege in deinen Stall bringen; \`ausstallen\` holt eins heraus |
+| \`einstallen <tier>\` | \`stalle\` | Ein Huhn, Schaf oder eine Ziege in deinen Stall bringen, einen Hund oder eine Katze an einem deiner Bauten wachen lassen; \`ausstallen\` holt eins heraus |
 | \`füttere [futter]\` | \`futter\` | Die Tiere neben dir füttern (jeder darf; ein Futter macht ein Tier einen Tag satt) |
 | \`einsammeln\` | \`sammle eier\`, \`melke\`, \`schere\` | Eier, Milch oder Wolle deiner Tiere einsammeln |
 
@@ -350,7 +351,7 @@ Ausführlich unter [Handel und Handwerk](help.game.trade).
 
 | Befehl | Wirkung |
 | --- | --- |
-| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help chat\` |
+| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help chat\` |
 
 ## Für Builder {#builder}
 
@@ -422,15 +423,16 @@ In detail under [Gardens](help.game.garden).
 | \`ernte\` | \`harvest\`, \`pflücke\` | Harvest what is ripe, with seeds; at a ripe field a work point and your share |
 | \`pate <name>\` | \`sponsor\` | Let someone tend your bed; \`pate weg <name>\` ends it |
 | \`benenne <name>\` | \`taufe\` | Give your crossing a name (\`benenne 2 <name>\` when you carry several) |
-| \`scheuche hase\` | \`scare\` | Chase a hare up to three cells from you back into the fog |
-| \`zäune\` | \`fence\` | Put a fence round a bed beside you (2 driftwood, 1 kelp rope) |
+| \`scheuche hase\` | \`scare\` | Chase a hare (also \`reh\`, \`fuchs\`, \`maus\`) up to three cells from you back into the fog |
+| \`zäune\` | \`fence\` | Put a fence round a bed (2 driftwood, 1 kelp rope), your field (6 driftwood, 2 kelp rope) or your coop (3 driftwood, 1 kelp rope) beside you |
+| \`wache\` | \`guards\` | Who keeps watch against the wild in this room (dog, cat, geese) and whether they are fed |
 | \`flur anlegen [x y]\` | \`acker anlegen\`, \`field\` | Break a field (4×4) with a spade in the light; \`flur\` shows the fields here, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
 | \`bestelle [crop]\` | \`pflüge\`, \`plough\` | Sow the field: choose the crop, bring seed and a work point |
 | \`mahle [n or alle] <grain>\` | \`mühle\`, \`grind\` | Have grain ground to flour at a windmill beside you; \`mahle\` alone: how long it still grinds |
 | \`abholen\` | \`pickup\` | Fetch your flour at the mill |
 | \`backe [brot]\` | \`bake\` | Bake bread at a bakery beside you (2 flour, 1 can of water, 1 driftwood) |
 | \`stall\` | \`coop\`, \`pen\` | How the animals in the coop or pen beside you are |
-| \`einstallen <animal>\` | \`stalle\` | Put a hen, sheep or goat into your coop or pen; \`ausstallen\` takes one out |
+| \`einstallen <animal>\` | \`stalle\` | Put a hen, sheep or goat into your coop or pen, leave a dog or cat on guard at a building of yours; \`ausstallen\` takes one out |
 | \`füttere [feed]\` | \`futter\` | Feed the animals beside you (anyone may; one feed keeps one animal fed a day) |
 | \`einsammeln\` | \`sammle eier\`, \`melke\`, \`schere\` | Collect your animals' eggs, milk or wool |
 
@@ -451,7 +453,7 @@ In detail under [Trade and crafting](help.game.trade).
 
 | Command | Effect |
 | --- | --- |
-| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help chat\` |
+| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help chat\` |
 
 ## For builders {#builder}
 
@@ -551,6 +553,7 @@ An der Grauen Bucht gibt es ein Marktbrett, Preise in **Münzen**:
 | Tuch | 3 Wolle und eine Spindel, nur am Webstuhl | Ein Stück Wolltuch ([Tiere](help.game.garden#animals)) |
 | Daunendecke | 2 Tuch, 3 Daunen, nur am Webstuhl | Eine Decke |
 | Käse | 3 Milch, 1 Treibholz, nur an einer Hütte | Ein Käse |
+| Mausefalle | 1 Treibholz, 2 Muscheln, 1 Tangseil | In der Truhe fängt sie die Mäuse ([Wild](help.game.garden#wild)) |
 
 ## Auftragstafel {#orders}
 
@@ -584,6 +587,7 @@ The Grey Bay has a market board, prices in **coins**:
 | Cloth | 3 wool and a spindle, only at a loom | A piece of woollen cloth ([animals](help.game.garden#animals)) |
 | Down blanket | 2 cloth, 3 down, only at a loom | A blanket |
 | Cheese | 3 milk, 1 driftwood, only at a hut | A cheese |
+| Mousetrap | 1 driftwood, 2 shells, 1 kelp rope | In a chest it catches the mice ([wild](help.game.garden#wild)) |
 
 ## Job board {#orders}
 
@@ -777,11 +781,27 @@ Tiere verkauft Gesa am Markt von Kupferhafen. \`einstallen huhn\` bringt eines, 
 | Ente | Tang, Kohl, Weizen, Gerste, Hafer | ein Ei am Tag |
 | Gans | Gerste, Hafer, Kohl, Rüben, Tang | Daunen alle drei Tage |
 
-Satte **Gänse** halten Wache: In ihrem Raum kommt kein Hase an die Beete, sie schnattern ihn fort.
+Satte **Gänse** halten Wache: In ihrem Raum kommt kein Hase an die Beete und kein Fuchs in den Stall, sie schnattern ihn fort.
 
 Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nichts. Bis zu drei je Tier warten im Stall; \`einsammeln\` (auch \`sammle eier\`, \`melke\`, \`schere\`) holt sie, nur der Besitzer. Zwei satte Tiere einer Art bekommen ab und zu ein Junges, bis der Stall voll ist. Reißt du den Stall ab, kommen die Tiere in deine Tasche zurück; verfällt er, warten sie im Nachlass.
 
-**Was daraus wird:** Am **Webstuhl** (\`bau webstuhl\`: 2×1 Felder, 6 Treibholz, 2 Tangseil, 8 Arbeit) webt \`craft tuch\` aus 3 Wolle mit einer Spindel ein Tuch, und \`craft decke\` näht aus 2 Tuch und 3 Daunen eine Daunendecke. Am Herd einer **Hütte** macht \`craft käse\` aus 3 Milch und einem Scheit Treibholz einen Käse. Gesa kauft Eier, Wolle, Milch und Daunen, Marta Tuch, Decken und Käse.`,
+**Was daraus wird:** Am **Webstuhl** (\`bau webstuhl\`: 2×1 Felder, 6 Treibholz, 2 Tangseil, 8 Arbeit) webt \`craft tuch\` aus 3 Wolle mit einer Spindel ein Tuch, und \`craft decke\` näht aus 2 Tuch und 3 Daunen eine Daunendecke. Am Herd einer **Hütte** macht \`craft käse\` aus 3 Milch und einem Scheit Treibholz einen Käse. Gesa kauft Eier, Wolle, Milch und Daunen, Marta Tuch, Decken und Käse.
+
+## Rehe, Füchse, Mäuse; Hund und Katze {#wild}
+
+Nicht nur Hasen kommen aus dem Nebel, wo kein Feuer brennt: **Rehe** fressen sich an einer wachsenden Flur satt (jeder Besuch kostet einen Teil der Ernte, aber sie gibt immer gut die Hälfte), **Füchse** holen fast nur nachts ein Tier aus dem Hühnerstall (nie das letzte), **Mäuse** nagen an Korn, Mehl, Brot und Käse in der Truhe einer Hütte (nie am letzten Stück). Wie die Hasen fressen sie erst nach einer Weile; \`scheuche reh\`, \`scheuche fuchs\` oder \`scheuche maus\` aus bis zu drei Schritten jagt sie fort.
+
+| Schutz | wogegen |
+| --- | --- |
+| Zaun um die Flur (\`zäune\`: 6 Treibholz, 2 Tangseil) | Rehe |
+| Zaun mit Tür um den Hühnerstall (\`zäune\`: 3 Treibholz, 1 Tangseil) | Füchse |
+| Vogelscheuche (Beete und Fluren in drei Feldern) | Hasen, Rehe |
+| Mausefalle in der Truhe (\`craft mausefalle\`) | Mäuse |
+| satte Gänse im Raum | Hasen, Füchse |
+| ein satter Hund im Raum | Hasen, Rehe, Füchse |
+| eine satte Katze im Raum | Mäuse |
+
+**Hund und Katze** verkauft Gesa. \`einstallen hund\` lässt ihn an einem deiner Bauten wachen (einer je Bau), \`ausstallen hund\` nimmt ihn wieder mit. Satt hält er sein Wild aus dem ganzen Raum fern, also auch von den Beeten und Fluren der Nachbarn. \`füttere hund\` (jeder darf) macht ihn mit einem Ei, Brot, Käse oder Milch einen Tag satt, bis zu drei Tage im Voraus; eine Katze frisst Milch, Eier und Käse. \`wache\` zeigt, wer im Raum wacht.`,
 			en: `Gardens count as much as buildings. Like a hut, a bed needs a **beacon's light** and takes one of the fire's light points. Digging one needs an account; as a **sponsor** guests may water and harvest too.
 
 ## Spade and bed {#bed}
@@ -891,11 +911,27 @@ Anyone may **feed**: \`füttere\` gives feed from your pack; one feed keeps one 
 | Duck | kelp, cabbage, wheat, barley, oats | an egg a day |
 | Goose | barley, oats, cabbage, beets, kelp | down every three days |
 
-Fed **geese** keep watch: in their room no hare gets to the beds, they cackle it away.
+Fed **geese** keep watch: in their room no hare gets to the beds and no fox into the coop, they cackle it away.
 
 Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`einsammeln\` (also \`sammle eier\`, \`melke\`, \`schere\`) fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate.
 
-**What becomes of it:** at the **loom** (\`bau webstuhl\`: 2×1 cells, 6 driftwood, 2 kelp rope, 8 work) \`craft tuch\` weaves cloth from 3 wool with a spindle, and \`craft decke\` sews a down blanket from 2 cloth and 3 down. At a **hut's** hearth \`craft käse\` makes a cheese from 3 milk and a log of driftwood. Gesa buys eggs, wool, milk and down, Marta cloth, blankets and cheese.`,
+**What becomes of it:** at the **loom** (\`bau webstuhl\`: 2×1 cells, 6 driftwood, 2 kelp rope, 8 work) \`craft tuch\` weaves cloth from 3 wool with a spindle, and \`craft decke\` sews a down blanket from 2 cloth and 3 down. At a **hut's** hearth \`craft käse\` makes a cheese from 3 milk and a log of driftwood. Gesa buys eggs, wool, milk and down, Marta cloth, blankets and cheese.
+
+## Deer, foxes, mice; dog and cat {#wild}
+
+Hares are not the only thing that comes from the fog where no fire burns: **deer** graze a growing field (each visit costs part of the harvest, but it always gives a good half), **foxes** take an animal from a coop, almost only at night (never the last), **mice** gnaw at grain, flour, bread and cheese in a hut's chest (never the last piece). Like the hares they eat only after a while; \`scheuche reh\`, \`scheuche fuchs\` or \`scheuche maus\` from up to three cells chases them off.
+
+| Shelter | against |
+| --- | --- |
+| A fence round the field (\`zäune\`: 6 driftwood, 2 kelp rope) | deer |
+| A fence with a door round the coop (\`zäune\`: 3 driftwood, 1 kelp rope) | foxes |
+| A scarecrow (beds and fields within three cells) | hares, deer |
+| A mousetrap in the chest (\`craft mausefalle\`) | mice |
+| Fed geese in the room | hares, foxes |
+| A fed dog in the room | hares, deer, foxes |
+| A fed cat in the room | mice |
+
+Gesa sells **dogs and cats**. \`einstallen hund\` leaves one on guard at a building of yours (one per building), \`ausstallen hund\` takes it along again. Fed, it keeps its wild from the whole room, the neighbours' beds and fields too. \`füttere hund\` (anyone may) feeds it for a day with an egg, bread, cheese or milk, up to three days ahead; a cat eats milk, eggs and cheese. \`wache\` shows who keeps watch in the room.`,
 		},
 	},
 	{

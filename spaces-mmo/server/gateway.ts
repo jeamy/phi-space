@@ -14,6 +14,7 @@ import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/wor
 import { asFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WorldClockFields } from "./model.ts";
 import { bedPlantsView } from "./engine/commands/garden.ts";
 import { fieldView } from "./engine/commands/field.ts";
+import { wildKinds } from "./engine/commands/wild.ts";
 import { envMs } from "./space.ts";
 import { RegionSpaces } from "./region-spaces.ts";
 import { setting } from "./settings.ts";
@@ -28,7 +29,7 @@ export type PlanView = { key: string; name: string; w: number; h: number; needs:
 /** A site or building (docs/siedeln.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
 export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed" | "field" | "animal"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
-	w?: number; h?: number; owner?: string; progress?: number; missing?: string; color?: string; /** the plan of a site, building or ruin (the 3D map draws each its own) */ plan?: string; /** the kind of animal a coop or pen houses */ herd?: string;
+	w?: number; h?: number; owner?: string; progress?: number; missing?: string; color?: string; /** the plan of a site, building or ruin (the 3D map draws each its own) */ plan?: string; /** the kind of animal a coop or pen houses */ herd?: string; /** a building's dog or cat on guard */ keeper?: string; /** an animal from the fog: hase, reh, fuchs, maus */ animal?: string;
 	/** A bed: its plants at their cells (relative to the bed), when it was watered and how long its plants go without
 	 *  water, whether weeds grow in it, and who may tend it besides the owner; `bedKind`: a flower bed or a community bed; `fenced`: hares keep out. An animal: the bed it came to (`target`). */
 	bedKind?: "zier" | "gemein"; fenced?: boolean; plants?: Array<{ x: number; y: number; stage: number; color: string }>; wateredWorldMs?: number; thirstMs?: number; weedy?: boolean; sponsors?: string[]; target?: string;
@@ -477,11 +478,12 @@ export class Gateway {
 		}
 		else if (type === "Field") {
 			const f = fields as unknown as FieldFields, v = fieldView(this.w, f);
-			this.#setObj(id, { id: f.fieldId, kind: "field", name: v.crop ? `Flur (${v.crop})` : "Flur", location: f.room, x: f.x, y: f.y, w: f.w, h: f.h, owner: f.ownerName, fieldStage: v.stage, progress: v.progress, ...(v.color ? { color: v.color } : {}), ...(f.open ? { open: true } : {}) });
+			this.#setObj(id, { id: f.fieldId, kind: "field", name: v.crop ? `Flur (${v.crop})` : "Flur", location: f.room, x: f.x, y: f.y, w: f.w, h: f.h, owner: f.ownerName, fieldStage: v.stage, progress: v.progress, ...(v.color ? { color: v.color } : {}), ...(f.open ? { open: true } : {}), ...(f.fenced ? { fenced: true } : {}) });
 		}
 		else if (type === "Animal") {
 			const a = fields as unknown as AnimalFields;
-			this.#setObj(id, { id: a.animalId, kind: "animal", name: a.name, location: a.room, x: a.x, y: a.y, target: a.bedId, glyph: { shape: "circle", color: "#a08a6a" }, ...(this.w.wild ? { icon: `/assets/${this.w.id}/${this.w.wild.hare.icon}` } : {}) });
+			const k = this.w.wild ? wildKinds(this.w.wild).find((x) => x.key === (a.kind ?? "hase")) : undefined;
+			this.#setObj(id, { id: a.animalId, kind: "animal", animal: a.kind ?? "hase", name: a.name, location: a.room, x: a.x, y: a.y, target: a.bedId ?? a.target, glyph: { shape: "circle", color: "#a08a6a" }, ...(k ? { icon: `/assets/${this.w.id}/${k.icon}` } : {}) });
 		}
 		else if (type === "Site" || type === "Building") {
 			const b = fields as unknown as SiteFields & BuildingFields;
@@ -489,7 +491,7 @@ export class Gateway {
 			const total = site ? b.needs.reduce((a, n) => a + n.count, 0) + b.workNeed : 0, have = site ? b.needs.reduce((a, n) => a + Math.min(n.have, n.count), 0) + b.work : 0;
 			const missing = site ? [...b.needs.filter((n) => n.have < n.count).map((n) => `${n.count - n.have} ${n.name}`), ...(b.work < b.workNeed ? [`${b.workNeed - b.work} Arbeit`] : [])].join(", ") : undefined;
 			const color = this.w.building?.plans.find((p) => p.key === b.plan)?.color;
-			this.#setObj(id, { id: b.buildId, kind: site ? "site" : "building", name: b.name, location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: b.ownerName, plan: b.plan, ...(site ? { progress: total ? have / total : 0, missing } : {}), ...(color ? { color } : {}), ...(!site && b.herd ? { herd: b.herd.kind } : {}) });
+			this.#setObj(id, { id: b.buildId, kind: site ? "site" : "building", name: b.name, location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: b.ownerName, plan: b.plan, ...(site ? { progress: total ? have / total : 0, missing } : {}), ...(color ? { color } : {}), ...(!site && b.herd ? { herd: b.herd.kind } : {}), ...(!site && b.keeper ? { keeper: b.keeper.kind } : {}), ...(!site && b.fenced ? { fenced: true } : {}) });
 		}
 		else if (type === "Flame") { const f = fields as unknown as FlameFields; this.#flames.set(f.beaconId, f.until); this.#flameOf.set(id, f.beaconId); }
 		else if (type === "Fog") { const f = fields as unknown as FogFields; this.#fog.set(f.room, f.level); }

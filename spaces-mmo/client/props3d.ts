@@ -328,6 +328,94 @@ export function hareGeometry(t: T, variant: number): Geo {
 	});
 }
 
+/** A deer, slender on four long legs, facing +z: body, neck and head, big ears, a white scut. */
+function deerGeometry(t: T, variant: number): Geo {
+	return cached(`deer:${variant}`, () => {
+		const fur = [0xa0703e, 0x946638, 0xa87a48][variant % 3]!, dark = 0x4a3220;
+		const parts: Part[] = [
+			{ g: new t.IcosahedronGeometry(0.18, 0), c: fur, p: [0, 0.48, 0], s: [0.85, 0.85, 1.6] },
+			{ g: new t.BoxGeometry(0.08, 0.26, 0.08), c: fur, p: [0, 0.66, 0.24], r: [0.45, 0, 0] },
+			{ g: new t.IcosahedronGeometry(0.08, 0), c: fur, p: [0, 0.8, 0.32], s: [0.9, 0.9, 1.4] },
+			{ g: new t.ConeGeometry(0.035, 0.12, 4), c: fur, p: [0.06, 0.9, 0.3], r: [0, 0, -0.5] },
+			{ g: new t.ConeGeometry(0.035, 0.12, 4), c: fur, p: [-0.06, 0.9, 0.3], r: [0, 0, 0.5] },
+			{ g: new t.IcosahedronGeometry(0.02, 0), c: 0x1a1410, p: [0, 0.79, 0.43] },
+			{ g: new t.IcosahedronGeometry(0.045, 0), c: 0xf2efe8, p: [0, 0.52, -0.28] },
+		];
+		for (const [dx, dz] of [[-0.07, -0.18], [0.07, -0.18], [-0.07, 0.18], [0.07, 0.18]] as const) parts.push({ g: new t.BoxGeometry(0.035, 0.4, 0.035), c: dark, p: [dx, 0.2, dz] });
+		return merge(t, parts, `deer:${variant}`);
+	});
+}
+
+/** A fox, low and long, facing +z: rust body with a white chest, black socks, pointed ears, a bushy tail with a white tip. */
+function foxGeometry(t: T, variant: number): Geo {
+	return cached(`fox:${variant}`, () => {
+		const fur = [0xc8642a, 0xb85a24, 0xd0703a][variant % 3]!;
+		const parts: Part[] = [
+			{ g: new t.IcosahedronGeometry(0.13, 0), c: fur, p: [0, 0.22, 0], s: [0.9, 0.85, 1.6] },
+			{ g: new t.IcosahedronGeometry(0.07, 0), c: 0xf2efe8, p: [0, 0.2, 0.15] },
+			{ g: new t.IcosahedronGeometry(0.08, 0), c: fur, p: [0, 0.3, 0.24] },
+			{ g: new t.ConeGeometry(0.045, 0.12, 4), c: fur, p: [0, 0.27, 0.34], r: [Math.PI / 2, 0, 0] },
+			{ g: new t.IcosahedronGeometry(0.015, 0), c: 0x111111, p: [0, 0.27, 0.4] },
+			{ g: new t.ConeGeometry(0.03, 0.08, 4), c: 0x3a2418, p: [0.045, 0.39, 0.22] },
+			{ g: new t.ConeGeometry(0.03, 0.08, 4), c: 0x3a2418, p: [-0.045, 0.39, 0.22] },
+			{ g: new t.IcosahedronGeometry(0.07, 0), c: fur, p: [0, 0.22, -0.28], s: [0.9, 0.9, 2] },
+			{ g: new t.IcosahedronGeometry(0.04, 0), c: 0xf2efe8, p: [0, 0.2, -0.42] },
+		];
+		for (const [dx, dz] of [[-0.06, -0.12], [0.06, -0.12], [-0.06, 0.12], [0.06, 0.12]] as const) parts.push({ g: new t.BoxGeometry(0.035, 0.16, 0.035), c: 0x2a1a12, p: [dx, 0.08, dz] });
+		return merge(t, parts, `fox:${variant}`);
+	});
+}
+
+/** A mouse, tiny, facing +z: a grey body, round ears, a long thin tail. */
+function mouseGeometry(t: T, variant: number): Geo {
+	return cached(`mouse:${variant}`, () => {
+		const fur = [0x8a8278, 0x7a6e62, 0x9a9088][variant % 3]!;
+		return merge(t, [
+			{ g: new t.IcosahedronGeometry(0.06, 0), c: fur, p: [0, 0.05, 0], s: [0.9, 0.8, 1.4] },
+			{ g: new t.IcosahedronGeometry(0.035, 0), c: fur, p: [0, 0.06, 0.08] },
+			{ g: new t.CylinderGeometry(0.025, 0.025, 0.01, 6), c: 0xd8a0a0, p: [0.025, 0.1, 0.07], r: [Math.PI / 2, 0, 0] },
+			{ g: new t.CylinderGeometry(0.025, 0.025, 0.01, 6), c: 0xd8a0a0, p: [-0.025, 0.1, 0.07], r: [Math.PI / 2, 0, 0] },
+			{ g: new t.IcosahedronGeometry(0.008, 0), c: 0x111111, p: [0, 0.06, 0.12] },
+			{ g: new t.BoxGeometry(0.008, 0.008, 0.16), c: 0xc8a0a0, p: [0, 0.03, -0.15], r: [0.2, 0, 0] },
+		], `mouse:${variant}`);
+	});
+}
+
+/** An animal from the fog by its kind (wild.ts): hare, deer, fox or mouse. */
+export function wildGeometry(t: T, kind: string | undefined, variant: number): Geo {
+	return kind === "reh" ? deerGeometry(t, variant) : kind === "fuchs" ? foxGeometry(t, variant) : kind === "maus" ? mouseGeometry(t, variant) : hareGeometry(t, variant);
+}
+
+/** A dog or a cat on guard at a building (animals.ts), facing +z: the dog stands with its tail up, the cat sits. */
+export function keeperGeometry(t: T, kind: string, variant: number): Geo {
+	return cached(`keeper:${kind}:${variant}`, () => {
+		if (kind === "katze") {
+			const fur = [0xc8904a, 0x6a6460, 0x2a2420][variant % 3]!;
+			return merge(t, [
+				{ g: new t.IcosahedronGeometry(0.1, 0), c: fur, p: [0, 0.12, 0], s: [1, 1.2, 1] },
+				{ g: new t.IcosahedronGeometry(0.07, 0), c: fur, p: [0, 0.27, 0.03] },
+				{ g: new t.ConeGeometry(0.025, 0.06, 4), c: fur, p: [0.035, 0.34, 0.03] },
+				{ g: new t.ConeGeometry(0.025, 0.06, 4), c: fur, p: [-0.035, 0.34, 0.03] },
+				{ g: new t.IcosahedronGeometry(0.012, 0), c: 0x6aa04a, p: [0.025, 0.28, 0.09] },
+				{ g: new t.IcosahedronGeometry(0.012, 0), c: 0x6aa04a, p: [-0.025, 0.28, 0.09] },
+				{ g: new t.BoxGeometry(0.025, 0.025, 0.2), c: fur, p: [0.06, 0.03, -0.06], r: [0, 0.7, 0] },
+			], `keeper:${kind}`);
+		}
+		const fur = [0x8a6a4a, 0x4a3a2a, 0xc8b08a][variant % 3]!;
+		const parts: Part[] = [
+			{ g: new t.IcosahedronGeometry(0.13, 0), c: fur, p: [0, 0.25, 0], s: [0.9, 0.85, 1.5] },
+			{ g: new t.IcosahedronGeometry(0.085, 0), c: fur, p: [0, 0.38, 0.2] },
+			{ g: new t.BoxGeometry(0.06, 0.05, 0.08), c: fur, p: [0, 0.35, 0.3] },
+			{ g: new t.IcosahedronGeometry(0.015, 0), c: 0x111111, p: [0, 0.37, 0.34] },
+			{ g: new t.BoxGeometry(0.03, 0.08, 0.05), c: 0x3a2a1a, p: [0.07, 0.38, 0.18], r: [0, 0, -0.3] },
+			{ g: new t.BoxGeometry(0.03, 0.08, 0.05), c: 0x3a2a1a, p: [-0.07, 0.38, 0.18], r: [0, 0, 0.3] },
+			{ g: new t.BoxGeometry(0.03, 0.03, 0.14), c: fur, p: [0, 0.34, -0.22], r: [-0.8, 0, 0] },
+		];
+		for (const [dx, dz] of [[-0.06, -0.1], [0.06, -0.1], [-0.06, 0.1], [0.06, 0.1]] as const) parts.push({ g: new t.BoxGeometry(0.04, 0.18, 0.04), c: fur, p: [dx, 0.09, dz] });
+		return merge(t, parts, `keeper:${kind}`);
+	});
+}
+
 /** A fence round a bed w×d: driftwood posts of uneven height at the corners and between the cells, two rails on each
  *  side, a little gate in the front rail. */
 export function fenceGeometry(t: T, w: number, d: number): Geo {

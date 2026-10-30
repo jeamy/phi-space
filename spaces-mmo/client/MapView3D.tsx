@@ -10,7 +10,7 @@ import type { CharView, ObjView } from "../server/gateway.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
-import { buildingGeometry, fenceGeometry, fireGeometry, hareGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, type PlantModel } from "./props3d.ts";
+import { buildingGeometry, fenceGeometry, fireGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
 import { tile3d } from "./terrain3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
@@ -18,7 +18,7 @@ type T = typeof import("three");
 type O3 = import("three").Object3D;
 type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; kind?: string; progress?: number; sig?: string };
 /** What a bed shows: rebuilt when its plants or weeds change. */
-const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.color ?? ""}` : o.kind === "building" && o.herd ? o.herd : undefined);
+const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
 type Scene3D = {
 	t: T;
 	renderer: import("three").WebGLRenderer;
@@ -243,7 +243,7 @@ function step(s: Scene3D, dt: number, time: number, me: string): void {
 	}
 	for (const e of s.objs.values()) {
 		if (e.kind === "animal") {
-			// a hare hops towards its cell and turns to where it goes
+			// an animal from the fog hops towards its cell and turns to where it goes
 			const body = e.obj.getObjectByName("body"), dx = e.target.x - e.obj.position.x, dz = e.target.z - e.obj.position.z, far = Math.hypot(dx, dz);
 			if (body && far > 0.05) { body.rotation.y = Math.atan2(dx, dz); body.position.y = Math.abs(Math.sin(time * 14)) * 0.12; }
 			else if (body) body.position.y = 0;
@@ -317,6 +317,7 @@ function object(t: T, obj: ObjView): Entry {
 		// ploughed soil in rows along x; on it by the stage short green shoots, or tall stalks in the crop's colour
 		const w = obj.w ?? 1, d = obj.h ?? 1, stage = obj.fieldStage ?? "brach";
 		const soil = new t.Mesh(new t.BoxGeometry(w * 0.96, 0.06, d * 0.96), new t.MeshStandardMaterial({ color: stage === "brach" ? 0x7a6040 : 0x5e4028, roughness: 1 })); soil.position.y = 0.03; group.add(soil);
+		if (obj.fenced) group.add(propMesh(t, fenceGeometry(t, w, d))); // deer keep out (wild.ts)
 		if (stage === "brach") return e;
 		const ridge = new t.MeshStandardMaterial({ color: 0x4e3420, roughness: 1 });
 		const crop = new t.MeshStandardMaterial({ color: stage === "reif" || stage === "spaet" ? Number.parseInt((obj.color ?? "#d9b44a").slice(1), 16) : 0x5f9a3a, roughness: 0.9 });
@@ -341,12 +342,16 @@ function object(t: T, obj: ObjView): Entry {
 		const color = Number.parseInt((obj.color ?? "#8a6a44").slice(1), 16);
 		group.add(propShadow(t, w * 1.15, d * 1.15));
 		group.add(propMesh(t, obj.kind === "building" ? buildingGeometry(t, obj.plan, w, d, color, variant, obj.herd) : siteGeometry(t, obj.plan, w, d, color, obj.progress ?? 0)));
+		// a coop with a fence round it (foxes keep out), a dog or cat on guard at its front corner (wild.ts, animals.ts)
+		if (obj.kind === "building" && obj.fenced) group.add(propMesh(t, fenceGeometry(t, w + 0.5, d + 0.5)));
+		if (obj.kind === "building" && obj.keeper) { const k = propMesh(t, keeperGeometry(t, obj.keeper, variant)); k.position.set(w / 2 + 0.05, 0, d / 2 + 0.05); k.rotation.y = 0.6; group.add(k); }
 		return e;
 	}
 	if (obj.kind === "animal") {
-		// a hare (wild.ts): it hops and looks where it goes (step)
-		const hare = propMesh(t, hareGeometry(t, variant)); hare.rotation.y = (variant / 3) * Math.PI * 2; hare.name = "body";
-		group.add(propShadow(t, 0.5, 0.5), hare);
+		// a hare, deer, fox or mouse (wild.ts): it hops or trots and looks where it goes (step)
+		const body = propMesh(t, wildGeometry(t, obj.animal, variant)); body.rotation.y = (variant / 3) * Math.PI * 2; body.name = "body";
+		const size = obj.animal === "reh" ? 0.8 : obj.animal === "maus" ? 0.2 : 0.5;
+		group.add(propShadow(t, size, size), body);
 		return e;
 	}
 	if (obj.kind === "beacon") {

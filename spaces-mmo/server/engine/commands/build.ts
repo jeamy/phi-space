@@ -300,6 +300,11 @@ const amount = (arg: string): { n: number | null; name: string } => {
 };
 export const days = (ms: number) => { const d = Math.round(ms / (24 * 3600_000)); return d >= 1 ? `etwa ${d} ${d === 1 ? "Tag" : "Tage"}` : `etwa ${Math.max(1, Math.round(ms / 3600_000))} Stunden`; };
 
+/** A dog or cat left at a building lies in it like the chest's content, but is not part of it (animals.ts). */
+const keeperProto = (c: CommandCtx, proto: unknown) => !!c.world.wild?.keepers?.some((k) => k.proto === proto);
+/** What lies in a building's chest (its things, without a dog or cat on guard). */
+const chestOf = async (c: CommandCtx, buildId: string) => (await c.space.readAll({ type: "Item", fields: { location: buildId } })).filter((e) => !keeperProto(c, e.fields.proto));
+
 const truhe: Command = {
 	key: "truhe", aliases: ["kiste", "chest"],
 	help: "truhe – was in der Truhe deines Baus neben dir liegt (verstaue <ding>, entnimm <ding>)",
@@ -308,7 +313,7 @@ const truhe: Command = {
 		await putBack(c, b);
 		const cap = planOf(c.world, b.plan)?.chest ?? 0;
 		if (!cap) throw new CommandError(`Die ${b.name} hat keine Truhe.`);
-		const items = (await c.space.readAll({ type: "Item", fields: { location: b.buildId } })).map((e) => fieldsOf<ItemFields>(e).name);
+		const items = (await chestOf(c, b.buildId)).map((e) => fieldsOf<ItemFields>(e).name);
 		const count = new Map<string, number>(); for (const n of items) count.set(n, (count.get(n) ?? 0) + 1);
 		await msg(c, c.actor.charId, "look", items.length ? `In der Truhe (${items.length}/${cap}): ${[...count].map(([n, k]) => `${k} ${n}`).join(", ")}.` : `Die Truhe ist leer (Platz für ${cap}).`);
 	},
@@ -323,7 +328,7 @@ const verstaue: Command = {
 		const b = await buildingHere(c, "", { own: true });
 		const cap = planOf(c.world, b.plan)?.chest ?? 0;
 		if (!cap) throw new CommandError(`Die ${b.name} hat keine Truhe.`);
-		const room = cap - (await c.space.count({ type: "Item", fields: { location: b.buildId } }));
+		const room = cap - (await chestOf(c, b.buildId)).length;
 		if (room <= 0) throw new CommandError(`Die Truhe ist voll (${cap}).`);
 		const proto = hits[0]!.f.proto, all = (await inventory(c)).filter((i) => i.f.proto === proto);
 		const k = Math.min(n ?? all.length, all.length, room);
@@ -339,7 +344,7 @@ const entnimm: Command = {
 	async func(c, arg) {
 		const { n, name } = amount(arg);
 		const b = await buildingHere(c, "", { own: true });
-		const inside = (await c.space.readAll({ type: "Item", fields: { location: b.buildId } })).map((e) => ({ e, f: fieldsOf<ItemFields>(e) }));
+		const inside = (await chestOf(c, b.buildId)).map((e) => ({ e, f: fieldsOf<ItemFields>(e) }));
 		const hits = itemsNamed(c.world, inside, name);
 		if (!hits.length) throw new NotUnderstood(`In der Truhe ist nichts, was „${name.slice(0, 30)}“ heißt.`);
 		const proto = hits[0]!.f.proto, all = inside.filter((i) => i.f.proto === proto);

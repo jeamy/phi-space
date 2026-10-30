@@ -9,14 +9,14 @@
 // - Fed animals give their yield (an egg a day, wool every other day, milk a day), up to a few per animal waiting; hungry
 //   ones give nothing until fed again, and lose nothing. Two fed ones of a kind now and then get a young one, until the
 //   house is full. Anyone may feed (`füttere`), only the owner puts in, takes out and collects.
-import { FOREVER, NO_WAIT } from "phi-spaces";
+import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type HerdFields, type ItemFields } from "../../model.ts";
 import { worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, NotUnderstood, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
-import type { AnimalKindDef, AnimalsDef } from "../world.ts";
-import { ARTICLE, giveBack, planOf, putBack, takeNear } from "./build.ts";
+import type { AnimalKindDef, AnimalsDef, KeeperDef, WorldDef } from "../world.ts";
+import { ARTICLE, distTo, giveBack, planOf, putBack, takeNear } from "./build.ts";
 import { protoName } from "./garden.ts";
 
 const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : `${Math.max(1, Math.round(ms / 60_000))} Minuten`; };
@@ -40,24 +40,30 @@ export function herdNow(k: AnimalKindDef, d: AnimalsDef, h: HerdFields, n: numbe
 }
 
 type House = { b: BuildingFields; k: AnimalKindDef | undefined; n: number; max: number; now: number };
+/** A coop or pen `b` (taken in `txn`) with its herd brought up to `now`: young born meanwhile are put in it. Shared by
+ *  the commands and by the fox (wild.ts), which must settle what the herd gave before it takes one. */
+export async function settleHerd(space: SpaceLike, txn: string, w: WorldDef, b: BuildingFields, now: number): Promise<House & { born: number }> {
+	const d = w.animals!, max = d.houses[b.plan] ?? 0;
+	const inside = (await space.readAll({ type: "Item", fields: { location: b.buildId } })).map((e) => fieldsOf<ItemFields>(e));
+	const k = d.kinds.find((x) => x.key === b.herd?.kind) ?? d.kinds.find((x) => inside.some((i) => i.proto === x.proto));
+	const n = k ? inside.filter((i) => i.proto === k.proto).length : 0;
+	if (!k || !b.herd) return { b, k, n, max, now, born: 0 };
+	const h = herdNow(k, d, b.herd, n, max, now);
+	if (h.born) {
+		const p = await resolvePrototype(space, k.proto);
+		if (p) for (let i = 0; i < h.born; i++) await spawn(space, txn, w, p, { location: b.buildId, x: -1, y: -1 });
+	}
+	const { born, ...herd } = h;
+	return { b: { ...b, herd }, k, n: n + born, max, now, born };
+}
 /** The coop or pen beside the actor, taken in the transaction (one another command holds is waited for through its
- *  cells) and its herd brought up to now; young born meanwhile are put in it. */
+ *  cells) and its herd brought up to now. */
 async function houseHere(c: CommandCtx, d: AnimalsDef): Promise<House> {
 	const r = await takeNear<BuildingFields>(c, "Building", "buildId", 1, (b) => !!d.houses[b.plan]);
 	if (!("f" in r)) throw new NotUnderstood(`Geh direkt neben einen Stall (${houseNames(c, d)}).`);
-	const b = r.f, now = await worldNowOf(c.space, c.txn), max = d.houses[b.plan]!;
-	const inside = (await c.space.readAll({ type: "Item", fields: { location: b.buildId } })).map((e) => fieldsOf<ItemFields>(e));
-	const k = d.kinds.find((x) => x.key === b.herd?.kind) ?? d.kinds.find((x) => inside.some((i) => i.proto === x.proto));
-	const n = k ? inside.filter((i) => i.proto === k.proto).length : 0;
-	if (!k || !b.herd) return { b, k, n, max, now };
-	const h = herdNow(k, d, b.herd, n, max, now);
-	if (h.born) {
-		const p = await resolvePrototype(c.space, k.proto);
-		if (p) for (let i = 0; i < h.born; i++) await spawn(c.space, c.txn, c.world, p, { location: b.buildId, x: -1, y: -1 });
-	}
-	const { born, ...herd } = h;
-	if (born) await msg(c, "*", "emote", `Im Stall von ${b.ownerName} ${born === 1 ? `ist ein junges ${k.name}` : `sind ${born} junge ${k.plural}`} dazugekommen.`);
-	return { b: { ...b, herd }, k, n: n + born, max, now };
+	const { born, ...h } = await settleHerd(c.space, c.txn, c.world, r.f, await worldNowOf(c.space, c.txn));
+	if (born && h.k) await msg(c, "*", "emote", `Im Stall von ${h.b.ownerName} ${born === 1 ? `ist ein junges ${h.k.name}` : `sind ${born} junge ${h.k.plural}`} dazugekommen.`);
+	return h;
 }
 const mine = (c: CommandCtx, b: BuildingFields) => b.accountId === c.account?.accountId;
 const fedText = (h: HerdFields | undefined, now: number) => !h || h.fedUntilWorldMs <= now ? "hungrig („füttere“)" : `satt noch ${hours(h.fedUntilWorldMs - now)}`;
@@ -77,13 +83,15 @@ const stall: Command = {
 
 const einstallen: Command = {
 	key: "einstallen", aliases: ["stalle", "einstellen"],
-	help: "einstallen <tier> – ein Tier, das du trägst, in deinen Hühnerstall oder dein Gehege neben dir bringen",
+	help: "einstallen <tier> – ein Tier, das du trägst, in deinen Hühnerstall oder dein Gehege neben dir bringen; einen Hund oder eine Katze an einen deiner Bauten, wo sie wachen",
 	async func(c, arg) {
 		const d = animalsOf(c);
-		const carried = (await inventory(c)).filter((i) => d.kinds.some((k) => k.proto === i.f.proto));
+		const carried = (await inventory(c)).filter((i) => d.kinds.some((k) => k.proto === i.f.proto) || keepers(c).some((k) => k.proto === i.f.proto));
 		const hits = arg.trim() ? itemsNamed(c.world, carried, arg.replace(ARTICLE, "")) : carried;
-		if (!hits.length) throw new NotUnderstood(carried.length ? `Du trägst kein Tier, das „${arg.slice(0, 30)}“ heißt.` : "Du trägst kein Tier. Hühner, Schafe und Ziegen verkauft Gesa am Markt von Kupferhafen.");
-		const it = hits[0]!.f, k = d.kinds.find((x) => x.proto === it.proto)!;
+		if (!hits.length) throw new NotUnderstood(carried.length ? `Du trägst kein Tier, das „${arg.slice(0, 30)}“ heißt.` : "Du trägst kein Tier. Hühner, Schafe, Ziegen, Hunde und Katzen verkauft Gesa am Markt von Kupferhafen.");
+		const it = hits[0]!.f, kp = keepers(c).find((x) => x.proto === it.proto);
+		if (kp) return keepAt(c, it, kp);
+		const k = d.kinds.find((x) => x.proto === it.proto)!;
 		const { b, k: has, n, max, now } = await houseHere(c, d);
 		if (!mine(c, b)) throw new CommandError(`Der Stall gehört ${b.ownerName}; einstallen darf nur der Besitzer.`);
 		if (b.plan !== k.plan) throw new CommandError(`${k.plural} wohnen im ${planOf(c.world, k.plan)?.name ?? k.plan}, nicht im ${b.name}.`);
@@ -101,9 +109,11 @@ const einstallen: Command = {
 
 const ausstallen: Command = {
 	key: "ausstallen", aliases: ["ausstellen"],
-	help: "ausstallen [tier] – ein Tier aus deinem Hühnerstall oder Gehege neben dir nehmen",
-	async func(c) {
+	help: "ausstallen [tier] – ein Tier aus deinem Hühnerstall oder Gehege neben dir nehmen (auch: ausstallen hund)",
+	async func(c, arg) {
 		const d = animalsOf(c);
+		const kn = keeperNamed(c, arg);
+		if (kn) return keeperOut(c, kn.kp);
 		const { b, k, n } = await houseHere(c, d);
 		if (!mine(c, b)) throw new CommandError(`Der Stall gehört ${b.ownerName}.`);
 		if (!k || !n) throw new CommandError("Im Stall ist kein Tier.");
@@ -120,9 +130,14 @@ const ausstallen: Command = {
 
 const fuettere: Command = {
 	key: "füttere", aliases: ["fuettere", "füttern", "fuettern", "futter"],
-	help: "füttere [n] [futter] – die Tiere im Stall oder Gehege neben dir füttern (jeder darf; ein Futter macht ein Tier einen Tag satt)",
+	help: "füttere [n] [futter] – die Tiere im Stall oder Gehege neben dir füttern (jeder darf; ein Futter macht ein Tier einen Tag satt); füttere hund [futter], füttere katze [futter]",
 	async func(c, arg) {
 		const d = animalsOf(c);
+		const kn = keeperNamed(c, arg);
+		if (kn) return feedKeeper(c, kn.kp, kn.rest);
+		// no coop or pen beside, but a dog or cat on guard: it is the one to feed
+		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
+		if (!near.some((b) => d.houses[b.plan]) && near.some((b) => b.keeper)) return feedKeeper(c, null, arg);
 		const m = /^(?:(\d+|alle?)\s+)?(.*)$/i.exec(arg.trim().replace(/^(?:die|den)\s+(?:tiere|hühner|huehner|schafe|ziegen)(?:\s+mit)?\s*/i, "").replace(/^mit\s+/i, ""))!;
 		const { b, k, n, now } = await houseHere(c, d);
 		if (!k || !n || !b.herd) throw new CommandError("Im Stall ist kein Tier zu füttern.");
@@ -145,6 +160,89 @@ const fuettere: Command = {
 		const until = from + count * per;
 		await putBack(c, { ...b, herd: { ...b.herd, fedUntilWorldMs: until } });
 		await msg(c, "*", "emote", `${c.actor.name} füttert die ${k.plural} von ${b.ownerName} mit ${[...used].map(([nm, x]) => `${x} ${nm}`).join(" und ")}; satt für etwa ${hours(until - now)}.`);
+	},
+};
+
+// The guards (docs/siedeln.md "Wild im Nebel", step 3 part 4): a dog or a cat left at a building of one's own lies in it
+// as a thing, like a herd (abriss gives it back, a ruin keeps it for the estate); the building carries its kind and how
+// long it is fed. Fed, it keeps its kinds of wild from the whole room (wild.ts guardsIn).
+const keepers = (c: CommandCtx): KeeperDef[] => c.world.wild?.keepers ?? [];
+const cap = (t: string) => t[0]!.toUpperCase() + t.slice(1);
+/** The dog or cat an argument begins with ("hund", "den hund mit ei", "katze 2 milch") and the rest of it. */
+function keeperNamed(c: CommandCtx, arg: string): { kp: KeeperDef; rest: string } | null {
+	const m = /^(\S+)\s*(.*)$/.exec(arg.trim().replace(ARTICLE, ""));
+	if (!m) return null;
+	const word = m[1]!.toLowerCase();
+	for (const kp of keepers(c)) {
+		const p = c.world.prototypes.find((x) => x.key === kp.proto);
+		if ([kp.key, kp.name, ...(p?.aliases ?? [])].some((a) => a.toLowerCase() === word)) return { kp, rest: m[2]!.replace(/^mit\s+/i, "") };
+	}
+	return null;
+}
+const keeperOf = (c: CommandCtx, b: BuildingFields) => keepers(c).find((k) => k.key === b.keeper?.kind);
+
+async function keepAt(c: CommandCtx, it: ItemFields, kp: KeeperDef): Promise<void> {
+	const r = await takeNear<BuildingFields>(c, "Building", "buildId", 1, (b) => mine(c, b) && !b.keeper);
+	if (!("f" in r)) throw new NotUnderstood(`Geh direkt neben einen Bau von dir, an dem noch niemand wacht; dort bleibt ${kp.acc}.`);
+	const b = r.f, now = await worldNowOf(c.space, c.txn);
+	const e = await c.space.takeIfExists({ type: "Item", fields: { itemId: it.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn });
+	if (!e) throw new CommandError(`${it.name} ist gerade nicht greifbar; bitte noch einmal.`);
+	await c.space.write({ type: e.type, types: e.types.slice(1), fields: { ...e.fields, location: b.buildId, x: -1, y: -1 } as never }, c.txn, FOREVER);
+	await putBack(c, { ...b, keeper: { kind: kp.key, fedUntilWorldMs: now } });
+	await msg(c, "*", "emote", `${c.actor.name} lässt ${kp.acc} am Bau (${b.name}) wachen.`);
+	await msg(c, c.actor.charId, "info", `Hungrig wacht ${kp.the} nicht: „füttere ${kp.key}“ mit ${kp.feed.map((p) => protoName(c, p)).join(", ")}.`);
+}
+
+async function keeperOut(c: CommandCtx, kp: KeeperDef): Promise<void> {
+	const r = await takeNear<BuildingFields>(c, "Building", "buildId", 1, (b) => mine(c, b) && b.keeper?.kind === kp.key);
+	if (!("f" in r)) throw new CommandError(`Neben dir wacht ${kp.none} von dir.`);
+	const b = r.f;
+	const one = (await c.space.readAll({ type: "Item", fields: { location: b.buildId, proto: kp.proto } }))[0];
+	const e = one && (await c.space.takeIfExists({ id: one.id }, NO_WAIT, { txn: c.txn }));
+	if (!e) throw new CommandError("Das Tier ist gerade nicht greifbar; bitte noch einmal.");
+	await c.space.write({ type: e.type, types: e.types.slice(1), fields: { ...e.fields, location: c.actor.charId, x: -1, y: -1 } as never }, c.txn, FOREVER);
+	const { keeper: _, ...rest } = b;
+	await putBack(c, rest);
+	await msg(c, "*", "emote", `${c.actor.name} nimmt ${kp.acc} wieder mit.`);
+}
+
+async function feedKeeper(c: CommandCtx, kp: KeeperDef | null, arg: string): Promise<void> {
+	const d = animalsOf(c);
+	const r = await takeNear<BuildingFields>(c, "Building", "buildId", 1, (b) => !!b.keeper && (!kp || b.keeper.kind === kp.key));
+	if (!("f" in r)) throw new NotUnderstood(kp ? `Neben dir wacht ${kp.none}.` : "Neben dir ist kein Tier zu füttern.");
+	const b = r.f, k = keeperOf(c, b), now = await worldNowOf(c.space, c.txn);
+	if (!k || !b.keeper) throw new CommandError("Neben dir ist kein Tier zu füttern.");
+	const m = /^(?:(\d+|alle?)\s+)?(.*)$/i.exec(arg.trim().replace(/^mit\s+/i, ""))!;
+	const inv = await inventory(c);
+	const named = m[2] ? itemsNamed(c.world, inv, m[2].replace(ARTICLE, "")) : inv.filter((i) => k.feed.includes(i.f.proto));
+	if (m[2] && named.length && !k.feed.includes(named[0]!.f.proto)) throw new CommandError(`${cap(k.the)} mag ${named[0]!.f.name} nicht; ${k.the.startsWith("die ") ? "sie" : "er"} frisst ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);
+	const offer = m[2] ? named.filter((i) => i.f.proto === named[0]!.f.proto) : named;
+	if (!offer.length) throw new CommandError(`Du hast kein Futter für ${k.acc}: ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);
+	const from = Math.max(now, b.keeper.fedUntilWorldMs), room = now + d.fedMaxWorldMs - from;
+	if (room < d.feedWorldMs) throw new CommandError(`${cap(k.the)} ist satt (noch ${hours(from - now)}).`);
+	const want = Math.min(Math.floor(room / d.feedWorldMs), offer.length, m[1] && /^\d+$/.test(m[1]) ? Number(m[1]) : Infinity);
+	let count = 0;
+	for (const it of offer.slice(0, want)) if (await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn })) count++;
+	if (!count) throw new CommandError("Das Futter ist gerade nicht greifbar; bitte noch einmal.");
+	const until = from + count * d.feedWorldMs;
+	await putBack(c, { ...b, keeper: { ...b.keeper, fedUntilWorldMs: until } });
+	await msg(c, "*", "emote", `${c.actor.name} füttert ${k.acc} von ${b.ownerName} mit ${count} ${offer[0]!.f.name}; satt für etwa ${hours(until - now)}.`);
+}
+
+const wache: Command = {
+	key: "wache", aliases: ["wachen", "wächter", "waechter", "guards"],
+	help: "wache – wer in diesem Raum Hof und Felder vor dem Wild bewacht (Hund, Katze, Gänse) und ob sie satt sind",
+	async func(c) {
+		const wd = c.world.wild, now = await worldNowOf(c.space, c.txn);
+		const all = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e));
+		const out: string[] = [];
+		for (const b of all) {
+			const kp = keeperOf(c, b);
+			if (kp && b.keeper) out.push(`${kp.the} von ${b.ownerName} am Bau (${b.name}), ${b.keeper.fedUntilWorldMs > now ? `satt noch ${hours(b.keeper.fedUntilWorldMs - now)}` : "hungrig"}`);
+			const g = wd?.guards?.find((x) => x.by === b.herd?.kind), k = c.world.animals?.kinds.find((x) => x.key === g?.by);
+			if (g && k && b.herd) out.push(`die ${k.plural} von ${b.ownerName}, ${b.herd.fedUntilWorldMs > now ? `satt noch ${hours(b.herd.fedUntilWorldMs - now)}` : "hungrig"}`);
+		}
+		await msg(c, c.actor.charId, "info", out.length ? `Hier wachen: ${out.join("; ")}. Nur satt halten sie das Wild fern.` : "Hier wacht niemand. Hunde und Katzen verkauft Gesa am Markt von Kupferhafen („einstallen hund“ an einem deiner Bauten).");
 	},
 };
 
@@ -176,4 +274,4 @@ export const meansYield = (c: CommandCtx, arg: string) => {
 	return !!n && (c.world.animals?.kinds ?? []).some((k) => { const p = c.world.prototypes.find((x) => x.key === k.yields); return !!p && [p.key, p.name, ...p.aliases].some((a) => a.toLowerCase() === n); });
 };
 
-export const ANIMAL_COMMANDS: Command[] = [stall, einstallen, ausstallen, fuettere, einsammeln];
+export const ANIMAL_COMMANDS: Command[] = [stall, einstallen, ausstallen, fuettere, einsammeln, wache];

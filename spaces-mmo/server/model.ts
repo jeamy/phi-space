@@ -131,7 +131,10 @@ export type BuildingFields = { buildId: string; plan: string; name: string; room
 	/** A coop's or pen's herd (engine/commands/animals.ts): the animals lie in it as things (location: the buildId); here
 	 *  their kind, how long they are fed, and since `atWorldMs` what they gave (`goods`) and how near a young one is
 	 *  (`bred`), both counted on when the herd is next touched. */
-	herd?: HerdFields };
+	herd?: HerdFields;
+	/** A dog or cat left here as a guard (engine/commands/animals.ts; it lies in it as a thing, like a herd): its kind and
+	 *  how long it is fed. `fenced`: a coop with a fence round it (the foxes do not get in). */
+	keeper?: { kind: string; fedUntilWorldMs: number }; fenced?: boolean };
 export type HerdFields = { kind: string; fedUntilWorldMs: number; atWorldMs: number; goods: number; bred: number };
 /** A load of grain at a mill (`buildId`, its place kept so it is found when the mill is gone): `count` of `from`, ground
  *  to `to` at `readyWorldMs` for the figure that brought it. A load whose mill fell before it was ground gives its grain
@@ -155,10 +158,14 @@ export type BedFields = { kind?: "zier" | "gemein"; fenced?: boolean; bedId: str
  *  sow and harvest, not only the owner. `human`/`other`: work points by people and by NPCs or automata. */
 export type FieldFields = { fieldId: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number; open?: boolean;
 	stage: "brach" | "saat" | "waechst" | "reif" | "spaet"; crop: string | null; seeds: number; seedNeed: number; work: number; workNeed: number; yields: Array<{ proto: string; count: number }>; soil: number;
-	by: Record<string, number>; human: number; other: number; lastGroup: string | null; tired: number; lastHarvestWorldMs: number; dueWorldMs: number; untilWorldMs: number; at: number };
-/** A hare from the fog at a bed (engine/commands/wild.ts): it eats at `eatsAtWorldMs` unless someone scares it off
+	by: Record<string, number>; human: number; other: number; lastGroup: string | null; tired: number; lastHarvestWorldMs: number; dueWorldMs: number; untilWorldMs: number; at: number;
+	/** A fence round the field (the deer stay out); how often deer grazed the crop growing now (each bite costs yield). */
+	fenced?: boolean; grazed?: number };
+/** Wild from the fog at a bed, a field, a coop or a chest (engine/commands/wild.ts): it eats at `eatsAtWorldMs` unless someone scares it off
  *  before (a take of this entry: whoever comes first saves the bed). */
-export type AnimalFields = { animalId: string; kind: "hase"; name: string; room: string; x: number; y: number; bedId: string; eatsAtWorldMs: number; at: number };
+export type AnimalFields = { animalId: string; kind: "hase" | "reh" | "fuchs" | "maus"; name: string; room: string; x: number; y: number; bedId?: string; eatsAtWorldMs: number; at: number;
+	/** What the other kinds came for: a field (reh), a coop (fuchs), a building with a chest (maus). */
+	target?: string };
 /** How long a figure waits before it looks for wild seeds again (the sweep removes it). */
 export type SeedRestFields = { charId: string; untilWorldMs: number };
 /** What is left of a building that was not kept: it still covers its cells until `untilWorldMs` (the sweep removes it). */

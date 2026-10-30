@@ -115,9 +115,24 @@ export type GardenDef = { bed: { w: number; h: number; points: number; keepWorld
  *  `maxPerRoom` at once. A hare eats `eatAfterWorldMs` after it came unless someone within `scareReach` scared it off;
  *  a bed with a fence (it costs `fence`) or within `scarecrowReach` of a scarecrow (the building plan `scarecrow`)
  *  loses nothing. */
-/** `guard`: an animal kind (the geese) whose fed herd keeps the hares from every bed of its room. */
-export type WildDef = { guard?: string; checkWorldMs: number; chance: [number, number, number, number]; nightFactor: number; maxPerRoom: number; eatAfterWorldMs: number; scareReach: number;
-	hare: { name: string; icon: string }; fence: Array<{ proto: string; count: number }>; scarecrow: string; scarecrowReach: number };
+/** `prey`: the other kinds (step 3 part 4), each with its own chances and wording. `guards`: what keeps a kind from every
+ *  target in a room while fed (a herd kind, the geese, or a keeper, the dog and the cat); `keepers`: the animals one
+ *  leaves at a building of one's own as a guard, fed like a herd. `fieldFence`/`coopFence`: what a fence round a field or
+ *  a coop costs. */
+export type WildDef = { checkWorldMs: number; chance: [number, number, number, number]; nightFactor: number; maxPerRoom: number; eatAfterWorldMs: number; scareReach: number;
+	hare: { name: string; icon: string }; fence: Array<{ proto: string; count: number }>; scarecrow: string; scarecrowReach: number;
+	prey?: PreyDef[]; guards?: GuardDef[]; keepers?: KeeperDef[]; fieldFence?: Array<{ proto: string; count: number }>; coopFence?: Array<{ proto: string; count: number }> };
+/** A kind of wild beside the hare: `reh` grazes a growing field (each bite costs `bite` of its yield, never below `keep`),
+ *  `fuchs` takes an animal from a house of `houses` (never the last), `maus` eats up to `take` of `eats` from a chest
+ *  (never the last; a `trap` in the chest catches it). `nom`/`the`/`acc`/`none`: "ein Reh", "das Reh", "das Reh", "kein
+ *  Reh"; `goes`: how it moves ("zieht"); `to`: where it goes, `{owner}` for the target's owner. `dayFactor`: its chance by day (the fox comes almost only at night). */
+export type PreyDef = { key: "reh" | "fuchs" | "maus"; name: string; aliases: string[]; nom: string; the: string; acc: string; none: string; goes: string; to: string; icon: string;
+	chance: [number, number, number, number]; nightFactor: number; dayFactor?: number; eatAfterWorldMs: number;
+	bite?: number; keep?: number; houses?: string[]; eats?: string[]; take?: number; trap?: string };
+/** `by`: a herd kind or a keeper kind; fed, it keeps `kinds` from its room, and says `says` when one comes. */
+export type GuardDef = { by: string; kinds: string[]; says: string };
+/** A dog or cat: the prototype it is as a thing, what it eats (one thing keeps it fed `AnimalsDef.feedWorldMs`). */
+export type KeeperDef = { key: string; proto: string; name: string; the: string; acc: string; none: string; feed: string[] };
 /** A crop of a field: its seed (a prototype, for grain the grain itself), the `group` it rotates in (the same group
  *  twice in a row tires the soil), how long it grows once sown, what each cell gives (some of it the next seed), its
  *  colour when ripe, and where its seed is found in the wild flora (like a garden sort's). */
@@ -228,6 +243,16 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 	if (w.mill) {
 		if (!w.building?.plans.some((p) => p.key === w.mill!.plan)) throw new Error(`mill: unknown plan ${w.mill.plan}`);
 		for (const g of w.mill.grinds) { proto(g.from, "mill"); proto(g.to, "mill"); }
+	}
+	if (w.wild) {
+		const wd = w.wild;
+		for (const n of [...wd.fence, ...(wd.fieldFence ?? []), ...(wd.coopFence ?? [])]) proto(n.proto, "fence");
+		for (const p of wd.prey ?? []) {
+			[...(p.eats ?? []), ...(p.trap ? [p.trap] : [])].forEach((x) => proto(x, `wild ${p.key}`));
+			for (const h of p.houses ?? []) if (!w.animals?.houses[h]) throw new Error(`wild ${p.key}: no animal house ${h}`);
+		}
+		for (const k of wd.keepers ?? []) [k.proto, ...k.feed].forEach((x) => proto(x, `keeper ${k.key}`));
+		for (const g of wd.guards ?? []) if (!w.animals?.kinds.some((k) => k.key === g.by) && !wd.keepers?.some((k) => k.key === g.by)) throw new Error(`wild guard: unknown animal ${g.by}`);
 	}
 	for (const k of w.animals?.kinds ?? []) {
 		[k.proto, k.yields, ...k.feed].forEach((p) => proto(p, `animal ${k.key}`));

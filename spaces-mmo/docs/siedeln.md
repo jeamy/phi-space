@@ -879,7 +879,7 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      - **Enten und Gänse** im Gehege (eine Art je Gehege): Enten legen ein Ei am Tag, Gänse geben alle drei Tage
        Daunen. Gesa verkauft sie (anfangs 3 Enten, 2 Gänse) und kauft Daunen.
      - **Gänse halten Wache:** Satte Gänse halten die Hasen von allen Beeten ihres Raums fern; der Hase flieht, wenn
-       die Gänse schnattern (`wild.guard`, `guardedRooms` in `wild.ts`).
+       die Gänse schnattern (seit Teil 4 `wild.guards`, `guardsIn` in `wild.ts`).
      - **Webstuhl** (Bauplan 2×1: 6 Treibholz, 2 Tangseil, 8 Arbeit): `craft tuch` webt aus 3 Wolle mit einer Spindel
        ein Tuch, `craft decke` näht aus 2 Tuch und 3 Daunen eine Daunendecke.
      - **Käse:** `craft käse` macht am Herd einer Hütte aus 3 Milch und einem Treibholz einen Käse. Rezepte an einem Bau
@@ -895,7 +895,47 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      Abweichungen vom Entwurf: Der Webstuhl ist ein eigener kleiner Bau statt eines Teils der Werkstatt (Schritt 5);
      Leinen spinnt man weiter ohne Webstuhl.
 
-     Noch nicht: Rehe, Füchse, Mäuse, Hund und Katze (Teil 4).
+   - **Teil 4, gebaut 2026-10-30** (`server/engine/commands/wild.ts`, `animals.ts`, Test `tests/prey.test.ts`,
+     Weltversion 24): das übrige **Wild** und seine **Wächter**. Der Wild-Ticker kennt jetzt vier Arten; jede würfelt je
+     Raum für sich (Stufe 0 nie, höchstens zwei je Art und Raum) und kommt nur, wo sie etwas holen kann.
+     - **Rehe** kommen an eine wachsende Flur (3, 8 oder 16 Prozent nach Nebelstufe, nachts doppelt) und fressen nach
+       einer Dreiviertelstunde: jeder Biss kostet 15 Prozent der ganzen Ernte, höchstens dreimal, sodass immer 55 Prozent
+       bleiben. Der Ertrag wird aus Frucht, Fläche und Boden neu berechnet und in der Flur gespeichert, bevor die Ernte
+       beginnt; eine reife Flur rührt kein Reh an, damit die Anteile der Erntehelfer aufgehen. `flur` zeigt die Bisse.
+     - **Füchse** kommen fast nur nachts (am Tag ein Zehntel) an einen Hühnerstall mit mindestens zwei Tieren. Bevor
+       einer ein Huhn holt, wird die Herde bis jetzt abgerechnet (`settleHerd`, mit den Jungen), sodass nichts verloren
+       geht, was die Hühner schon gegeben haben. Das letzte Huhn bleibt.
+     - **Mäuse** kommen an die Truhe einer Hütte mit mindestens zwei Stück Korn, Mehl, Brot oder Käse und fressen bis zu
+       zwei davon, nie das letzte. Was in der Truhe liegt, liest der Ticker erst, wenn der Wurf getroffen hat.
+     - **Schutz:** `zäune` setzt einen Zaun um ein Beet wie bisher, um die eigene (oder offene) Flur (6 Treibholz, 2
+       Tangseil; hält Rehe fern) oder um den eigenen Hühnerstall (3 Treibholz, 1 Tangseil; hält Füchse fern). Die
+       Vogelscheuche schützt jetzt auch Fluren in drei Feldern. Eine **Mausefalle** (Rezept: 1 Treibholz, 2 Muscheln,
+       1 Tangseil) in der Truhe fängt die Maus.
+     - **Wächter** (`wild.guards`): satte Gänse halten Hasen und Füchse fern, ein satter **Hund** Hasen, Rehe und
+       Füchse, eine satte **Katze** die Mäuse, jeweils im ganzen Raum. Hund und Katze verkauft Gesa (anfangs je zwei).
+       `einstallen hund` lässt ihn an einem eigenen Bau wachen (einer je Bau; er liegt dort als Ding wie eine Herde, gehört
+       aber nicht zur Truhe), `füttere hund` (jeder darf; Eier, Brot, Käse, Milch, die Katze Milch, Eier, Käse) macht
+       ihn einen Tag satt, bis drei Tage voraus, `ausstallen hund` nimmt ihn mit. `wache` zeigt, wer im Raum wacht.
+     - `scheuche reh|fuchs|maus` wie beim Hasen; das Tier ist ein `Animal`-Entry mit `kind` und `target` (Hasen behalten
+       `bedId`, damit Einträge von vor dem Ausrollen weiterlaufen).
+     - Karte: Reh, Fuchs und Maus in 2D (Icons) und 3D, der Zaun um Flur und Stall, Hund oder Katze an der Ecke ihres
+       Baus; das Zellmenü bietet Verscheuchen, Zaunsetzen, Wachenlassen, Füttern und Mitnehmen an.
+
+     Abnahme (`tests/prey.test.ts`):
+     - Nachts kommt je ein Reh, ein Fuchs und eine Maus an die offenen Ziele, keiner an das letzte Huhn oder das letzte
+       Korn, keiner, wo das Feuer brennt.
+     - Nur die offene Flur verliert (genau einen Biss), nur der offene Stall ein Huhn (die Herde vorher abgerechnet), nur
+       die offene Truhe zwei Weizen. Die umzäunte Flur, die Flur beim satten Hund, der umzäunte Stall, die Truhe mit
+       Falle und die bei der satten Katze verlieren nichts.
+     - Ein Spieler lässt den Hund an seiner Hütte wachen; er liegt nicht in der Truhe, frisst nur sein Futter und nur, was
+       hineinpasst. `scheuche reh` und der Zaun um die eigene Flur wirken wie getippt.
+
+     Abweichungen vom Entwurf:
+     - Hund und Katze folgen keiner Figur; sie wachen an einem Bau über den ganzen Raum, wie die Gänse.
+     - Der Zaun um die Flur ist keine Zellenreihe mit Pforte, sondern gehört zur Flur, wie der Zaun ums Beet.
+     - Junge Bäume und die Obstwiese gibt es noch nicht, also auch keinen Verbiss; ein Speicher aus Stein kommt mit dem
+       Lagerhaus (Schritt 5). Die Möwen an Räucherei und Steg fehlen, weil es beides noch nicht gibt.
+     - Das Tier erscheint gleich am Ziel, statt vom Rand des Raums zu laufen (wie der Hase).
 4. **Epochen und Siedlung**: Punkte je Bau und Garten, der Zähl-Ticker, `Epoch` je Insel, Schwellen in den
    `Setting`-Entries, Rückfall; die Siedlung aus Hütten in einem Raum (Name, Rechte-Stufen Fremder, Helfer, Siedler).
    Abnahme: eine Insel erreicht das Dorf aus Beeten allein; verfällt genug, fällt sie zurück, ihre Bauten arbeiten weiter,

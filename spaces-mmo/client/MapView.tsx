@@ -292,6 +292,13 @@ function drawFog(s: Scene, roomId: string, objs: Map<string, ObjView>, own: Sp |
 
 /** Exits as marked cells with their name, things lying in the room as their pictures (or glyphs where a thing has
  *  none), a beacon as a fire in a ring (its flames flicker in `frame`) or a cold ring. */
+/** A fence round a bed, field or coop of w×h cells: a light rail with posts at the corners and between the cells. */
+function fence2d(g: InstanceType<Px["Graphics"]>, x: number, y: number, w: number, h: number, ts: number): void {
+	g.rect(x + 0.5, y + 0.5, w * ts - 1, h * ts - 1).stroke({ width: 1.5, color: "#c9a46a" });
+	for (let fx = 0; fx <= w; fx++) for (const fy of [0, h]) g.rect(x + fx * ts - 1.5, y + fy * ts - 1.5, 3, 3).fill({ color: "#8a6a3a" });
+	for (let fy = 1; fy < h; fy++) for (const fx of [0, w]) g.rect(x + fx * ts - 1.5, y + fy * ts - 1.5, 3, 3).fill({ color: "#8a6a3a" });
+}
+
 function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
 	const ts = s.ts, p = s.pixi;
 	for (const child of s.objs.removeChildren()) child.destroy({ children: true });
@@ -321,11 +328,7 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
 			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts;
 			const g = new p.Graphics().rect(x + 2, y + 2, w - 4, h - 4).fill({ color: "#6b4a2e" }).stroke({ width: 2, color: "#3e2a18" });
 			// a fence: a light rail around it with posts at the corners and between the cells
-			if (o.fenced) {
-				g.rect(x + 0.5, y + 0.5, w - 1, h - 1).stroke({ width: 1.5, color: "#c9a46a" });
-				for (let fx = 0; fx <= (o.w ?? 1); fx++) for (const fy of [0, o.h ?? 1]) g.rect(x + fx * ts - 1.5, y + fy * ts - 1.5, 3, 3).fill({ color: "#8a6a3a" });
-				for (let fy = 1; fy < (o.h ?? 1); fy++) for (const fx of [0, o.w ?? 1]) g.rect(x + fx * ts - 1.5, y + fy * ts - 1.5, 3, 3).fill({ color: "#8a6a3a" });
-			}
+			if (o.fenced) fence2d(g, x, y, o.w ?? 1, o.h ?? 1, ts);
 			for (let fy = y + 6; fy < y + h - 4; fy += 6) g.rect(x + 4, fy, w - 8, 1).fill({ color: "#4e3520" });
 			if (o.weedy) for (const [wx, wy] of [[0.2, 0.3], [0.7, 0.2], [0.45, 0.75], [0.85, 0.8]] as const) g.rect(x + w * wx, y + h * wy, 2, 3).fill({ color: "#5f8a3a" });
 			for (const pl of o.plants ?? []) {
@@ -355,6 +358,7 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
 				const color = stage === "waechst" ? "#6fb04a" : o.color ?? "#d9b44a", tall = stage === "waechst" ? 3 : 6;
 				for (let tx = x + 5; tx < x + w - 4; tx += 4) g.rect(tx, ry - tall, 2, tall).fill({ color, alpha: stage === "spaet" ? 0.6 : 1 });
 			}
+			if (o.fenced) fence2d(g, x, y, o.w ?? 1, o.h ?? 1, ts);
 			const label = new p.Text({ text: `${o.name} von ${o.owner ?? ""}`, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
 			label.anchor.set(0.5, 0);
 			label.position.set(x + w / 2, y + h);
@@ -380,6 +384,7 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
 				g.rect(x + 3, y + h * 0.35, w - 6, h * 0.65 - 3).fill({ color }).stroke({ width: 2, color: "#2a1d10" });
 				g.poly([x, y + h * 0.4, x + w / 2, y + 2, x + w, y + h * 0.4]).fill({ color: "#5b3a22" }).stroke({ width: 2, color: "#2a1d10" });
 				g.rect(x + w / 2 - ts * 0.2, y + h - ts * 0.55, ts * 0.4, ts * 0.55 - 3).fill({ color: "#2a1d10" });
+				if (o.fenced) fence2d(g, x, y, o.w ?? 1, o.h ?? 1, ts);
 			} else {
 				g.rect(x + 2, y + 2, w - 4, h - 4).fill({ color: "#c9a26b", alpha: 0.35 }).stroke({ width: 2, color: "#7a5a36", alpha: 0.9 });
 				for (const [px, py] of [[x + 3, y + 3], [x + w - 7, y + 3], [x + 3, y + h - 7], [x + w - 7, y + h - 7]] as const) g.rect(px, py, 4, 4).fill({ color: "#5b3a22" });

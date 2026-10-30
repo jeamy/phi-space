@@ -4,6 +4,7 @@
 # of flax. What the mill and the bakery make of them (mill.ts): a sack of flour and a loaf; and the spindle and the
 # linen spun from the flax. The farm's animals (animals.ts): a hen, a sheep and a goat, and what they give: an egg, a
 # ball of wool and a jug of milk; a duck, a goose and its down; cloth woven of the wool, a down blanket and a cheese.
+# The other wild from the fog (wild.ts): a deer, a fox and a mouse; and the guards against it: a dog, a cat, a mousetrap.
 # Usage: python3 garden.py <items dir>
 import sys
 from PIL import Image
@@ -427,6 +428,100 @@ def cheese():
     for (x, y) in ((10, 14), (14, 21), (22, 21), (9, 20)): disc(px, x + 0.5, y + 0.5, 1, YD, light=False)  # holes
     return outline(img)
 
+def deer():
+    img = new(); px = img.load()
+    F, FD, FL = rgb("#a0703e"), rgb("#5a3a20"), rgb("#f2efe8")
+    disc(px, 13, 17, 6.5, F)                # the body
+    line(px, 18, 14, 22, 8, F, 3)           # the neck
+    disc(px, 24, 8, 3.4, F)                 # the head
+    disc(px, 21.5, 4, 1.4, F, light=False)  # the ears
+    disc(px, 25.5, 3.5, 1.4, F, light=False)
+    px[25, 7] = OUT                         # the eye
+    px[27, 9] = OUT                         # the nose
+    disc(px, 7, 15, 1.8, FL, light=False)   # the white scut
+    for x in (9, 12, 15, 18):               # four long, thin legs
+        line(px, x, 22, x, 30, FD)
+    return outline(img)
+
+
+def fox():
+    img = new(); px = img.load()
+    F, FD, FL = rgb("#c8642a"), rgb("#2a1a12"), rgb("#f2efe8")
+    disc(px, 15, 19, 6, F)                  # the body, low
+    for i in range(7):                      # the bushy tail, down and out, with a white tip
+        disc(px, 8 - i * 0.7, 20 + i * 0.9, 2.8 - i * 0.12, F if i < 5 else FL, light=False)
+    disc(px, 22, 14, 4, F)                  # the head
+    line(px, 25, 15, 28, 16, F, 2)          # the pointed muzzle
+    px[29, 16] = OUT
+    disc(px, 23, 17, 2, FL, light=False)    # the white cheek
+    line(px, 20, 11, 20, 7, FD, 2)          # the ears, black-tipped
+    line(px, 23, 11, 24, 7, FD, 2)
+    px[23, 13] = OUT                        # the eye
+    for x in (12, 15, 18):                  # the black socks
+        line(px, x, 24, x, 29, FD)
+    return outline(img)
+
+
+def mouse():
+    img = new(); px = img.load()
+    F, FL, P = rgb("#8a8278"), rgb("#b8b0a6"), rgb("#d8a0a0")
+    disc(px, 15, 20, 6, F)                  # the round body
+    disc(px, 14, 21, 2.5, FL, light=False)  # the light belly
+    disc(px, 21, 18, 3.5, F)                # the head
+    line(px, 23, 19, 26, 20, F, 2)          # the snout
+    px[27, 20] = P
+    disc(px, 19.5, 13.5, 2.6, F, light=False)  # the big round ears, pink inside
+    disc(px, 19.5, 13.5, 1.4, P, light=False)
+    px[22, 17] = OUT                        # the eye
+    for i in range(14):                     # the long thin tail, curling down
+        px[int(9 - i * 0.5), int(23 + i * 0.45)] = P
+    return outline(img)
+
+
+def dog():
+    img = new(); px = img.load()
+    F, FD = rgb("#8a6a4a"), rgb("#3a2a1a")
+    disc(px, 14, 18, 6.5, F)                # the body
+    disc(px, 22, 11, 4.3, F)                # the head
+    rect(px, 24, 11, 28, 13, F)             # the muzzle
+    px[28, 11] = OUT                        # the nose
+    disc(px, 20, 9, 2, FD, light=False)     # a floppy ear
+    px[23, 9] = OUT                         # the eye
+    line(px, 7, 15, 4, 9, F, 2)             # the tail up
+    for x in (9, 12, 16, 19):
+        line(px, x, 23, x, 29, F, 2)
+    line(px, 18, 15, 25, 16, rgb("#c83a2a"))  # a red collar
+    return outline(img)
+
+
+def cat():
+    img = new(); px = img.load()
+    F, FD = rgb("#c8904a"), rgb("#8a5a2a")
+    disc(px, 15, 21, 7, F)                  # sitting: the body
+    for y in (17, 20, 23):                  # its stripes
+        line(px, 10, y, 14, y + 1, FD)
+    disc(px, 17, 11, 5, F)                  # the head
+    line(px, 13, 8, 13, 4, F, 2)            # pointed ears
+    line(px, 20, 8, 20, 4, F, 2)
+    px[15, 10] = rgb("#6aa04a"); px[19, 10] = rgb("#6aa04a")  # green eyes
+    px[17, 12] = rgb("#d8a0a0")             # the nose
+    for i in range(8):                      # the tail, curled round the front
+        px[int(22 + i * 0.6), int(27 - i * 0.5)] = FD
+    return outline(img)
+
+
+def trap():
+    img = new(); px = img.load()
+    B, BD, M = rgb("#a08060"), rgb("#6a5040"), rgb("#d8d0c0")
+    for y in range(17, 25):                 # the little board, seen at a slant
+        rect(px, 4 + (24 - y) // 2, y, 24 + (24 - y) // 2, y, B if y < 23 else BD)
+    line(px, 8, 18, 22, 18, M, 2)           # the shell bow, sprung open
+    line(px, 8, 18, 9, 12, M)
+    line(px, 22, 18, 21, 12, M)
+    line(px, 9, 12, 21, 12, M)
+    disc(px, 17, 21, 2, rgb("#e8c870"), light=False)  # a crumb of cheese as bait
+    return outline(img)
+
 
 out = sys.argv[1]
 things = {
@@ -441,6 +536,7 @@ things = {
     "huhn": hen(), "schaf": sheep("#e8e4d8", "#3a3430"), "ziege": goat(), "ei": egg(), "wolle": wool(), "milch": jug(),
     "ente": bird("#8a7a5a", "#2f6a4a", "#e8b030", ring="#f0ece0"), "gans": bird("#f0ece0", "#f0ece0", "#e8902c", neck=3), "daunen": down(),
     "tuch": cloth("#8a6a9a"), "decke": blanket(), "kaese": cheese(),
+    "reh": deer(), "fuchs": fox(), "maus": mouse(), "hund": dog(), "katze": cat(), "mausefalle": trap(),
 }
 for key, img in things.items():
     img.save(f"{out}/{key}.png")

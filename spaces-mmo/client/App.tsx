@@ -204,6 +204,7 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 				if (o.fieldStage === "reif" || o.fieldStage === "spaet") entries.push({ label: "Ernten", line: "ernte flur" });
 			}
 			if (nearSite && mine) entries.push(o.open ? { label: "Flur für Fremde schließen", line: "flur zu" } : { label: "Flur für alle öffnen", line: "flur offen" });
+			if (beside && may && !o.fenced) entries.push({ label: "Zaun um die Flur ziehen (6 Treibholz, 2 Tangseil)", line: "zäune" });
 			continue;
 		}
 		entries.push({ label: o.kind === "site" ? `Baustelle ${o.name}: was fehlt?` : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: "baustelle" });
@@ -227,7 +228,15 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 					const fits = o.plan === "huehnerstall" ? ["Huhn"] : ["Schaf", "Ziege", "Ente", "Gans"];
 					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && fits.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} einstallen`, line: `einstallen ${n}` });
 					entries.push({ label: "Ein Tier herausnehmen", line: "ausstallen" });
+					if (o.plan === "huehnerstall" && !o.fenced) entries.push({ label: "Zaun mit Tür setzen (3 Treibholz, 1 Tangseil)", line: "zäune" });
 				}
+			}
+			// a dog or cat on guard: anyone feeds it; at an own building one leaves one or takes it along (server: animals.ts)
+			const keeperName: Record<string, string> = { hund: "Hund", katze: "Katze" };
+			if (o.keeper) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} füttern`, line: `füttere ${o.keeper}` }, { label: "Wer wacht hier?", line: "wache" });
+			if (o.owner === self?.name) {
+				if (o.keeper) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} mitnehmen`, line: `ausstallen ${o.keeper}` });
+				else for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && ["Hund", "Katze"].includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} hier wachen lassen`, line: `einstallen ${n}` });
 			}
 			entries.push({ label: "Ausbessern", line: "repariere" });
 			if (o.owner === self?.name) entries.push({ label: "Truhe ansehen", line: "truhe" });
@@ -248,8 +257,8 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 		if (o.kind === "item") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach) entries.push({ label: `${o.name} aufheben`, line: `get ${o.name}` }); }
 		if (o.kind === "beacon") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach && fuel) entries.push({ label: "Treibholz nachlegen", line: `put ${fuel.name} in ${o.name}` }); }
 		if (o.kind === "exit") entries.push({ label: `Nach ${o.name} gehen`, line: `go ${o.name}` });
-		// a hare at a bed: anyone scares it off from three cells (server: wild.ts)
-		if (o.kind === "animal") entries.push({ label: `${o.name}n verscheuchen`, line: "scheuche hase" });
+		// a hare, deer, fox or mouse from the fog: anyone scares it off from three cells (server: wild.ts)
+		if (o.kind === "animal") entries.push({ label: `${o.animal === "hase" || !o.animal ? `${o.name}n` : o.name} verscheuchen`, line: `scheuche ${o.animal ?? "hase"}` });
 	}
 	if (!(self && self.x === at.x && self.y === at.y)) entries.push({ label: "Hierhin gehen", line: `move ${at.x} ${at.y}` });
 	// a cell nothing covers: build here (the plan's top left corner; the server says why not when it does not fit)
