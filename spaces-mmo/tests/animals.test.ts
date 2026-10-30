@@ -6,10 +6,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER, type SpaceLike } from "phi-spaces";
 import { herdNow } from "../server/engine/commands/animals.ts";
+import { guardedRooms, sheltered } from "../server/engine/commands/wild.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld, walkable } from "../server/engine/world.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
-import type { BuildingFields, HerdFields } from "../server/model.ts";
+import type { BedFields, BuildingFields, HerdFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, Player, startServer } from "./stack.ts";
 
@@ -29,6 +30,15 @@ test("a herd brought up to now: fed time gives the yield (up to the nest's limit
 	assert.equal(herdNow(hen, d, h(), 6, 6, hen.breedWorldMs).born, 0, "a full house: none");
 	assert.equal(herdNow(hen, d, h({ fedUntilWorldMs: 0 }), 3, 6, hen.breedWorldMs).born, 0, "hungry ones: none");
 	assert.equal(herdNow(hen, d, h(), 5, 6, 3 * hen.breedWorldMs).born, 1, "never beyond the house");
+});
+
+test("fed geese keep the hares from every bed of their room; hungry ones or other animals do not", () => {
+	const wd = w.wild!, house = (room: string, kind: string, fed: number) => ({ room, herd: { kind, fedUntilWorldMs: fed, atWorldMs: 0, goods: 0, bred: 0 } }) as BuildingFields;
+	const g = guardedRooms(wd, [house("a", "gans", 10), house("b", "gans", 1), house("c", "huhn", 10)], 5);
+	assert.deepEqual([...g], ["a"]);
+	const bed = (room: string) => ({ room, x: 0, y: 0, w: 2, h: 2, fenced: false }) as BedFields;
+	assert.equal(sheltered(wd, bed("a"), [], g), true);
+	assert.equal(sheltered(wd, bed("b"), [], g), false);
 });
 
 type P = { p: Player; me: string; name: string };
@@ -127,5 +137,32 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		await give(s, anna.me, "ziege", 1);
 		await does(anna.p, "einstallen schaf", "(1 Schaf)");
 		assert.match(await does(anna.p, "einstallen ziege", "schon"), /Hier stehen schon Schafe; eine Art je Stall/);
+		// the last sheep out, the pen is empty again: geese come in, and the page sees them
+		await does(anna.p, "ausstallen", "nimmt ein Schaf");
+		assert.equal((await s.readAll({ type: "Building", fields: { buildId: pen.buildId } }))[0]!.fields.herd, undefined);
+		await give(s, anna.me, "gans", 2);
+		for (let i = 0; i < 2; i++) await does(anna.p, "einstallen gans", "in den Stall");
+		await anna.p.until((f) => f.t === "obj" && f.o.kind === "building" && f.o.plan === "gehege" && f.o.herd === "gans", 10_000);
+		await give(s, anna.me, "gerste", 2);
+		assert.match(await does(anna.p, "füttere", "satt für"), /füttert die Gänse von Bäuerin mit 2 Gerste/);
+
+		// what the farm gives, made on: cloth and a blanket at a loom, cheese at a hut's hearth
+		const me = (await s.readAll({ type: "Character", fields: { charId: anna.me } }))[0]!.fields as unknown as { x: number; y: number };
+		await give(s, anna.me, "wolle", 3);
+		await give(s, anna.me, "spindel", 1);
+		assert.match(await does(anna.p, "craft tuch", "nur direkt"), /Tuch macht man nur direkt neben einem Webstuhl/);
+		await building(s, { buildId: "webstuhl-1", plan: "webstuhl", name: "Webstuhl", x: me.x + 1, y: me.y, w: 2, h: 1 });
+		await does(anna.p, "craft tuch", "Tuch her");
+		await give(s, anna.me, "tuch", 1);
+		await give(s, anna.me, "daunen", 3);
+		await does(anna.p, "craft decke", "Daunendecke her");
+		assert.equal(await pack(s, anna.me, "decke"), 1);
+		assert.equal(await pack(s, anna.me, "tuch"), 0);
+		await give(s, anna.me, "milch", 3);
+		await give(s, anna.me, "treibholz", 1);
+		assert.match(await does(anna.p, "craft käse", "nur direkt"), /Käse macht man nur direkt neben einer Hütte/);
+		await building(s, { buildId: "huette-1", plan: "huette", name: "Hütte", x: me.x - 2, y: me.y - 1, w: 2, h: 2 });
+		await does(anna.p, "craft käse", "Käse her");
+		assert.equal(await pack(s, anna.me, "kaese"), 1);
 	} finally { await srv.close(); }
 });

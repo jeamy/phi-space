@@ -111,7 +111,9 @@ const ausstallen: Command = {
 		const e = one && (await c.space.takeIfExists({ id: one.id }, NO_WAIT, { txn: c.txn }));
 		if (!e) throw new CommandError("Das Tier ist gerade nicht greifbar; bitte noch einmal.");
 		await c.space.write({ type: e.type, types: e.types.slice(1), fields: { ...e.fields, location: c.actor.charId, x: -1, y: -1 } as never }, c.txn, FOREVER);
-		await putBack(c, b);
+		// the last one out: the house is empty again (the map shows no animals, another kind may come in)
+		if (n === 1) { const { herd: _, ...empty } = b; await putBack(c, empty); }
+		else await putBack(c, b);
 		await msg(c, "*", "emote", `${c.actor.name} nimmt ein ${k.name} aus dem Stall.`);
 	},
 };

@@ -874,8 +874,26 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
 
      Abweichungen vom Entwurf:
      - Statt einer Futter-Lease je Tier trägt der Stall eine Frist für die ganze Herde.
-     - Enten, Gänse, Wolle → Tuch und Milch → Käse fehlen noch, denn Webstuhl und Werkstatt kommen erst mit Schritt 5.
      - Die Ställe sind nicht an Epochen gebunden.
+   - **Teil 3b, gebaut 2026-10-30** (dieselben Dateien, Weltversion 23): **Enten, Gänse** und was aus dem Hof wird.
+     - **Enten und Gänse** im Gehege (eine Art je Gehege): Enten legen ein Ei am Tag, Gänse geben alle drei Tage
+       Daunen. Gesa verkauft sie (anfangs 3 Enten, 2 Gänse) und kauft Daunen.
+     - **Gänse halten Wache:** Satte Gänse halten die Hasen von allen Beeten ihres Raums fern; der Hase flieht, wenn
+       die Gänse schnattern (`wild.guard`, `guardedRooms` in `wild.ts`).
+     - **Webstuhl** (Bauplan 2×1: 6 Treibholz, 2 Tangseil, 8 Arbeit): `craft tuch` webt aus 3 Wolle mit einer Spindel
+       ein Tuch, `craft decke` näht aus 2 Tuch und 3 Daunen eine Daunendecke.
+     - **Käse:** `craft käse` macht am Herd einer Hütte aus 3 Milch und einem Treibholz einen Käse. Rezepte an einem Bau
+       gab es seit Teil 2; ein Bauplan kann jetzt seinen Dativ tragen („neben einer Hütte“).
+     - Marta kauft Tuch, Decken und Käse; drei neue Aufträge (Schneider, Aussteuer, Käse für die Riffischer).
+     - Karte: das Gehege zeigt seine Tiere (Schaf, Ziege, Enten an einer Pfütze, Gänse); der Gateway gibt dafür die Art
+       der Herde mit. Der Webstuhl ist ein offener Unterstand mit Webrahmen. Wer das letzte Tier herausnimmt, leert den
+       Stall, und eine andere Art darf hinein.
+
+     Abnahme (`tests/animals.test.ts`): satte Gänse schützen die Beete ihres Raums, hungrige nicht; nach dem letzten
+     Schaf ziehen Gänse ins Gehege und die Seite sieht sie; Tuch nur neben einem Webstuhl, Käse nur neben einer Hütte.
+
+     Abweichungen vom Entwurf: Der Webstuhl ist ein eigener kleiner Bau statt eines Teils der Werkstatt (Schritt 5);
+     Leinen spinnt man weiter ohne Webstuhl.
 
      Noch nicht: Rehe, Füchse, Mäuse, Hund und Katze (Teil 4).
 4. **Epochen und Siedlung**: Punkte je Bau und Garten, der Zähl-Ticker, `Epoch` je Insel, Schwellen in den

@@ -209,7 +209,7 @@ export const craft: Command = {
 		if (!r) throw new NotUnderstood(`Ein Rezept „${arg.slice(0, 30)}“ gibt es nicht. „craft“ zeigt die Rezepte.`);
 		// a recipe of a building (the bakery's oven) is made beside one of its plan, anyone's
 		if (r.at && !(await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: r.at } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1))
-			throw new CommandError(`${r.name} macht man nur direkt neben einem ${planOf(c.world, r.at)?.name ?? r.at}.`);
+			throw new CommandError(`${r.name} macht man nur direkt neben ${planOf(c.world, r.at)?.dative ?? `einem ${planOf(c.world, r.at)?.name ?? r.at}`}.`);
 		const inv = await inventory(c);
 		const used = new Set<string>(), inputs: Inv = [];
 		for (const n of r.needs) {

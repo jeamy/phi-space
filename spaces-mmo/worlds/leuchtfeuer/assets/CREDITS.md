@@ -69,6 +69,7 @@ The garden's things (`items/spaten.png`, `items/wasserkanne.png`, the five `item
 (`items/weizen.png`, `items/gerste.png`, `items/hafer.png`, `items/kartoffel.png`, `items/ruebe.png`,
 `items/samen-ruebe.png`, `items/flachs.png`, `items/leinsamen.png`) and what mill, bakery and spindle make of them
 (`items/mehl.png`, `items/brot.png`, `items/spindel.png`, `items/leinen.png`), the farm's animals and what they give
-(`items/huhn.png`, `items/schaf.png`, `items/ziege.png`, `items/ei.png`, `items/wolle.png`, `items/milch.png`) were drawn for this world in the
+(`items/huhn.png`, `items/schaf.png`, `items/ziege.png`, `items/ei.png`, `items/wolle.png`, `items/milch.png`, `items/ente.png`, `items/gans.png`, `items/daunen.png`), and what is made of
+it (`items/tuch.png`, `items/decke.png`, `items/kaese.png`) were drawn for this world in the
 same way, by the script `items-src/garden.py` (same license as this project).
 

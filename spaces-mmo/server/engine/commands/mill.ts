@@ -103,7 +103,10 @@ const backe: Command = {
 	key: "backe", aliases: ["backen", "bake"],
 	help: "backe [brot] – am Backhaus neben dir backen (ein Rezept am Bau, „craft“ zeigt, was es braucht)",
 	async func(c, arg) {
-		const ovens = c.world.recipes.filter((r) => r.at);
+		// what an oven makes: recipes at a building that give food, those beside the actor first (not the loom's cloth)
+		const food = c.world.recipes.filter((r) => r.at && c.world.prototypes.find((p) => p.key === r.makes)?.typeclass === "Produce");
+		const beside = new Set((await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1).map((b) => b.plan));
+		const ovens = [...food.filter((r) => beside.has(r.at!)), ...food.filter((r) => !beside.has(r.at!))];
 		const n = arg.trim().toLowerCase().replace(ARTICLE, "");
 		const r = n ? ovens.find((x) => x.key === n || x.name.toLowerCase() === n || c.world.prototypes.find((p) => p.key === x.makes)?.aliases.includes(n)) : ovens[0];
 		if (!r) throw new NotUnderstood(ovens.length ? `Backen kann man hier: ${ovens.map((x) => x.name).join(", ")}.` : "In dieser Welt bäckt niemand.");

@@ -216,12 +216,15 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 				for (const n of grain) entries.push({ label: `${n} mahlen`, line: `mahle alle ${n}` });
 			}
 			if (o.plan === "backhaus") entries.push({ label: "Brot backen (2 Mehl, 1 Kanne Wasser, 1 Treibholz)", line: "backe brot" });
+			if (o.plan === "webstuhl") entries.push({ label: "Tuch weben (3 Wolle, Spindel)", line: "craft tuch" }, { label: "Daunendecke nähen (2 Tuch, 3 Daunen)", line: "craft decke" });
+			if (o.plan === "huette") entries.push({ label: "Käse machen (3 Milch, 1 Treibholz)", line: "craft käse" });
 			// a coop or pen: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
 			if (o.plan === "huehnerstall" || o.plan === "gehege") {
 				entries.push({ label: "Tiere ansehen", line: "stall" }, { label: "Füttern", line: "füttere" });
 				if (o.owner === self?.name) {
-					entries.push({ label: o.plan === "huehnerstall" ? "Eier einsammeln" : "Wolle oder Milch einsammeln", line: "einsammeln" });
-					const fits = o.plan === "huehnerstall" ? ["Huhn"] : ["Schaf", "Ziege"];
+					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", gans: "Daunen" };
+					if (o.herd) entries.push({ label: `${yields[o.herd] ?? "Ertrag"} einsammeln`, line: "einsammeln" });
+					const fits = o.plan === "huehnerstall" ? ["Huhn"] : ["Schaf", "Ziege", "Ente", "Gans"];
 					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && fits.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} einstallen`, line: `einstallen ${n}` });
 					entries.push({ label: "Ein Tier herausnehmen", line: "ausstallen" });
 				}

@@ -548,6 +548,9 @@ An der Grauen Bucht gibt es ein Marktbrett, Preise in **Münzen**:
 | Spindel | 1 Treibholz, 1 Muschel | Werkzeug zum Spinnen, nutzt sich ab |
 | Leinen | 3 Flachs und eine Spindel | Ein Ballen Leinen ([Äcker](help.game.garden#mill)) |
 | Brot | 2 Mehl, 1 Kanne Wasser, 1 Treibholz, nur am Backhaus | 3 Brote |
+| Tuch | 3 Wolle und eine Spindel, nur am Webstuhl | Ein Stück Wolltuch ([Tiere](help.game.garden#animals)) |
+| Daunendecke | 2 Tuch, 3 Daunen, nur am Webstuhl | Eine Decke |
+| Käse | 3 Milch, 1 Treibholz, nur an einer Hütte | Ein Käse |
 
 ## Auftragstafel {#orders}
 
@@ -578,6 +581,9 @@ The Grey Bay has a market board, prices in **coins**:
 | Spindle | 1 driftwood, 1 shell | A tool for spinning; it wears |
 | Linen | 3 flax and a spindle | A bolt of linen ([fields](help.game.garden#mill)) |
 | Bread | 2 flour, 1 can of water, 1 driftwood, only at a bakery | 3 loaves |
+| Cloth | 3 wool and a spindle, only at a loom | A piece of woollen cloth ([animals](help.game.garden#animals)) |
+| Down blanket | 2 cloth, 3 down, only at a loom | A blanket |
+| Cheese | 3 milk, 1 driftwood, only at a hut | A cheese |
 
 ## Job board {#orders}
 
@@ -597,7 +603,7 @@ The Grey Bay has a market board, prices in **coins**:
 
 ## Baustelle abstecken {#stake}
 
-\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Eine Hütte braucht 2×2 Felder, **6 Treibholz, 2 Tangseil und 20 Arbeit**. Die **Regentonne** (1 Feld, 3 Treibholz, 1 Tangseil, 4 Arbeit) gibt Wasser für die [Gärten](help.game.garden), die **Vogelscheuche** (1 Feld, 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von ihnen fern. **Windmühle** und **Backhaus** machen aus Korn Mehl und Brot ([Mühle und Backhaus](help.game.garden#mill)), **Hühnerstall** und **Gehege** halten [Tiere](help.game.garden#animals).
+\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Eine Hütte braucht 2×2 Felder, **6 Treibholz, 2 Tangseil und 20 Arbeit**. Die **Regentonne** (1 Feld, 3 Treibholz, 1 Tangseil, 4 Arbeit) gibt Wasser für die [Gärten](help.game.garden), die **Vogelscheuche** (1 Feld, 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von ihnen fern. **Windmühle** und **Backhaus** machen aus Korn Mehl und Brot ([Mühle und Backhaus](help.game.garden#mill)), **Hühnerstall** und **Gehege** halten [Tiere](help.game.garden#animals), am **Webstuhl** wird aus Wolle Tuch.
 
 Nicht gebaut wird auf Ausgängen und Türen, direkt am Feuer, auf Dingen oder Personen. Wege bleiben frei: Ausgänge, der Startplatz und eine Seite jedes Feuers bleiben erreichbar. In einen Bau läuft niemand hinein.
 
@@ -626,7 +632,7 @@ Ein Bau hält **eine Woche**. \`repariere\` (1 Treibholz, jeder darf helfen) set
 
 ## Staking out a site {#stake}
 
-\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. A hut takes 2×2 cells, **6 driftwood, 2 kelp rope and 20 work**. The **rain barrel** (1 cell, 3 driftwood, 1 kelp rope, 4 work) gives water for the [gardens](help.game.garden), the **scarecrow** (1 cell, 2 driftwood, 1 kelp rope, 3 work) keeps the hares from them. The **windmill** and the **bakery** turn grain into flour and bread ([Mill and bakery](help.game.garden#mill)), the **hen house** and the **pen** keep [animals](help.game.garden#animals).
+\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. A hut takes 2×2 cells, **6 driftwood, 2 kelp rope and 20 work**. The **rain barrel** (1 cell, 3 driftwood, 1 kelp rope, 4 work) gives water for the [gardens](help.game.garden), the **scarecrow** (1 cell, 2 driftwood, 1 kelp rope, 3 work) keeps the hares from them. The **windmill** and the **bakery** turn grain into flour and bread ([Mill and bakery](help.game.garden#mill)), the **hen house** and the **pen** keep [animals](help.game.garden#animals), the **loom** turns wool into cloth.
 
 Nothing is built on exits and doors, right at a fire, on things or people. Ways stay open: exits, the starting place and one side of every fire stay reachable. Nobody walks into a building.
 
@@ -757,7 +763,7 @@ Brot, Mehl und Leinen kauft Marta am Markt von Kupferhafen, und die Auftragstafe
 
 ## Tiere {#animals}
 
-Die Fluren füttern auch den Hof. **Hühner** wohnen im **Hühnerstall** (\`bau hühnerstall\`: 2×1 Felder, 4 Treibholz, 1 Tangseil, 6 Arbeit, bis 6 Hühner), **Schafe** oder **Ziegen** im **Gehege** (\`bau gehege\`: 3×3 Felder, 8 Treibholz, 4 Tangseil, 8 Arbeit, bis 4 Tiere einer Art).
+Die Fluren füttern auch den Hof. **Hühner** wohnen im **Hühnerstall** (\`bau hühnerstall\`: 2×1 Felder, 4 Treibholz, 1 Tangseil, 6 Arbeit, bis 6 Hühner), **Schafe**, **Ziegen**, **Enten** oder **Gänse** im **Gehege** (\`bau gehege\`: 3×3 Felder, 8 Treibholz, 4 Tangseil, 8 Arbeit, bis 4 Tiere einer Art).
 
 Tiere verkauft Gesa am Markt von Kupferhafen. \`einstallen huhn\` bringt eines, das du trägst, in deinen Stall, \`ausstallen\` nimmt eins heraus. \`stall\` zeigt, wie es ihnen geht.
 
@@ -768,8 +774,14 @@ Tiere verkauft Gesa am Markt von Kupferhafen. \`einstallen huhn\` bringt eines, 
 | Huhn | Tang, Kohl, Möhren, Weizen, Gerste, Hafer | ein Ei am Tag |
 | Schaf | Rüben, Hafer, Gerste, Kohl, Tang | Wolle alle zwei Tage |
 | Ziege | Rüben, Hafer, Gerste, Kohl, Möhren, Tang | Milch am Tag |
+| Ente | Tang, Kohl, Weizen, Gerste, Hafer | ein Ei am Tag |
+| Gans | Gerste, Hafer, Kohl, Rüben, Tang | Daunen alle drei Tage |
 
-Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nichts. Bis zu drei je Tier warten im Stall; \`einsammeln\` (auch \`sammle eier\`, \`melke\`, \`schere\`) holt sie, nur der Besitzer. Zwei satte Tiere einer Art bekommen ab und zu ein Junges, bis der Stall voll ist. Reißt du den Stall ab, kommen die Tiere in deine Tasche zurück; verfällt er, warten sie im Nachlass.`,
+Satte **Gänse** halten Wache: In ihrem Raum kommt kein Hase an die Beete, sie schnattern ihn fort.
+
+Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nichts. Bis zu drei je Tier warten im Stall; \`einsammeln\` (auch \`sammle eier\`, \`melke\`, \`schere\`) holt sie, nur der Besitzer. Zwei satte Tiere einer Art bekommen ab und zu ein Junges, bis der Stall voll ist. Reißt du den Stall ab, kommen die Tiere in deine Tasche zurück; verfällt er, warten sie im Nachlass.
+
+**Was daraus wird:** Am **Webstuhl** (\`bau webstuhl\`: 2×1 Felder, 6 Treibholz, 2 Tangseil, 8 Arbeit) webt \`craft tuch\` aus 3 Wolle mit einer Spindel ein Tuch, und \`craft decke\` näht aus 2 Tuch und 3 Daunen eine Daunendecke. Am Herd einer **Hütte** macht \`craft käse\` aus 3 Milch und einem Scheit Treibholz einen Käse. Gesa kauft Eier, Wolle, Milch und Daunen, Marta Tuch, Decken und Käse.`,
 			en: `Gardens count as much as buildings. Like a hut, a bed needs a **beacon's light** and takes one of the fire's light points. Digging one needs an account; as a **sponsor** guests may water and harvest too.
 
 ## Spade and bed {#bed}
@@ -865,7 +877,7 @@ Marta at the Kupferhafen market buys and sells bread, flour and linen, and the j
 
 ## Animals {#animals}
 
-The fields feed the farm too. **Hens** live in the **hen house** (\`bau hühnerstall\`: 2×1 cells, 4 driftwood, 1 kelp rope, 6 work, up to 6 hens), **sheep** or **goats** in the **pen** (\`bau gehege\`: 3×3 cells, 8 driftwood, 4 kelp rope, 8 work, up to 4 of one kind).
+The fields feed the farm too. **Hens** live in the **hen house** (\`bau hühnerstall\`: 2×1 cells, 4 driftwood, 1 kelp rope, 6 work, up to 6 hens), **sheep**, **goats**, **ducks** or **geese** in the **pen** (\`bau gehege\`: 3×3 cells, 8 driftwood, 4 kelp rope, 8 work, up to 4 of one kind).
 
 Gesa at the Kupferhafen market sells animals. \`einstallen huhn\` puts one you carry into your house, \`ausstallen\` takes one out. \`stall\` shows how they are.
 
@@ -876,8 +888,14 @@ Anyone may **feed**: \`füttere\` gives feed from your pack; one feed keeps one 
 | Hen | kelp, cabbage, carrots, wheat, barley, oats | an egg a day |
 | Sheep | beets, oats, barley, cabbage, kelp | wool every other day |
 | Goat | beets, oats, barley, cabbage, carrots, kelp | milk a day |
+| Duck | kelp, cabbage, wheat, barley, oats | an egg a day |
+| Goose | barley, oats, cabbage, beets, kelp | down every three days |
 
-Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`einsammeln\` (also \`sammle eier\`, \`melke\`, \`schere\`) fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate.`,
+Fed **geese** keep watch: in their room no hare gets to the beds, they cackle it away.
+
+Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`einsammeln\` (also \`sammle eier\`, \`melke\`, \`schere\`) fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate.
+
+**What becomes of it:** at the **loom** (\`bau webstuhl\`: 2×1 cells, 6 driftwood, 2 kelp rope, 8 work) \`craft tuch\` weaves cloth from 3 wool with a spindle, and \`craft decke\` sews a down blanket from 2 cloth and 3 down. At a **hut's** hearth \`craft käse\` makes a cheese from 3 milk and a log of driftwood. Gesa buys eggs, wool, milk and down, Marta cloth, blankets and cheese.`,
 		},
 	},
 	{

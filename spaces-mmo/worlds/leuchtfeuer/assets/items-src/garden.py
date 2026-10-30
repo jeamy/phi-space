@@ -3,7 +3,7 @@
 # comes from the fog for them (wild.ts). The field crops (field.ts): three ears of grain, a potato, a beet and a bundle
 # of flax. What the mill and the bakery make of them (mill.ts): a sack of flour and a loaf; and the spindle and the
 # linen spun from the flax. The farm's animals (animals.ts): a hen, a sheep and a goat, and what they give: an egg, a
-# ball of wool and a jug of milk.
+# ball of wool and a jug of milk; a duck, a goose and its down; cloth woven of the wool, a down blanket and a cheese.
 # Usage: python3 garden.py <items dir>
 import sys
 from PIL import Image
@@ -366,6 +366,68 @@ def jug():
     return outline(img)
 
 
+def bird(body, head, beak, neck=0, ring=None):
+    img = new(); px = img.load()
+    B, H = rgb(body), rgb(head)
+    disc(px, 14, 21, 8, B)                  # the body, low and long
+    disc(px, 8, 18, 4, B)                   # the tail end
+    for i in range(neck + 1):               # the neck (long for the goose)
+        disc(px, 20 + i * 0.3, 16 - i * 1.6, 3, B if i < neck else H, light=False)
+    hx, hy = 21 + neck * 0.3, 13 - neck * 1.6
+    disc(px, hx, hy, 3.8, H)                # the head
+    line(px, round(hx + 3), round(hy + 1), round(hx + 6), round(hy + 1), rgb(beak), 2)  # the beak
+    px[round(hx + 1), round(hy - 1)] = OUT  # the eye
+    if ring: line(px, round(hx - 2), round(hy + 3), round(hx + 2), round(hy + 3), rgb(ring))
+    line(px, 11, 19, 18, 22, shade(B, 0.7))  # the wing
+    rect(px, 12, 29, 15, 29, rgb(beak)); rect(px, 16, 29, 19, 29, rgb(beak))  # feet
+    return outline(img)
+
+
+def down():
+    img = new(); px = img.load()
+    D, DD = rgb("#f4f1e8"), rgb("#c8c0b0")
+    for (x, y, r) in ((11, 18, 5), (17, 14, 5.5), (21, 20, 5), (15, 22, 4.5)):  # soft tufts
+        disc(px, x, y, r, D)
+    for (x0, y0, x1, y1) in ((8, 16, 13, 20), (15, 11, 19, 16), (19, 18, 24, 22)):
+        line(px, x0, y0, x1, y1, DD)       # the quills
+    return outline(img)
+
+
+def cloth(colour):
+    img = new(); px = img.load()
+    C = rgb(colour); CD, CL = shade(C, 0.7), shade(C, 1.25)
+    for y in range(8, 26):                  # a folded stack of cloth
+        for x in range(5, 28):
+            px[x, y] = shade(C, 1.15 if y < 11 else 0.8 if y > 22 else 1.0)
+    for y in (13, 18, 23): line(px, 5, y, 27, y, CD)  # the folds
+    for x in range(7, 27, 4): line(px, x, 9, x, 11, CL)  # the weave at the top
+    return outline(img)
+
+
+def blanket():
+    img = new(); px = img.load()
+    C = rgb("#c8b0d8"); CD = shade(C, 0.7)
+    for y in range(7, 27):                  # a puffy quilt, stitched in squares
+        for x in range(4, 29):
+            px[x, y] = shade(C, 1.2 if (x - 4) % 8 < 3 and (y - 7) % 7 < 3 else 0.85 if y > 23 else 1.0)
+    for x in (12, 20): line(px, x, 7, x, 26, CD)
+    for y in (14, 21): line(px, 4, y, 28, y, CD)
+    return outline(img)
+
+
+def cheese():
+    img = new(); px = img.load()
+    Y, YD, R = rgb("#e8c870"), rgb("#b8984a"), rgb("#c89040")
+    for y in range(10, 26):                 # a round wheel with a wedge cut out
+        for x in range(4, 28):
+            if ((x + 0.5 - 16) / 12) ** 2 + ((y + 0.5 - 18) / 8) ** 2 > 1: continue
+            if x > 18 and y < 18 and (x - 18) > (18 - y) * 0.6: continue
+            px[x, y] = shade(Y, 1.15 if y < 14 else 0.75 if y > 22 else 1.0)
+    line(px, 4, 18, 27, 18, R)              # the rind round the middle
+    for (x, y) in ((10, 14), (14, 21), (22, 21), (9, 20)): disc(px, x + 0.5, y + 0.5, 1, YD, light=False)  # holes
+    return outline(img)
+
+
 out = sys.argv[1]
 things = {
     "spaten": spade(), "wasserkanne": can(),
@@ -377,6 +439,8 @@ things = {
     "kartoffel": potato(), "ruebe": beet(), "samen-ruebe": seeds("#9a3a5a"), "flachs": flax(), "leinsamen": seeds("#6a8fd0"),
     "mehl": sack(), "brot": loaf(), "leinen": linen(), "spindel": spindle(),
     "huhn": hen(), "schaf": sheep("#e8e4d8", "#3a3430"), "ziege": goat(), "ei": egg(), "wolle": wool(), "milch": jug(),
+    "ente": bird("#8a7a5a", "#2f6a4a", "#e8b030", ring="#f0ece0"), "gans": bird("#f0ece0", "#f0ece0", "#e8902c", neck=3), "daunen": down(),
+    "tuch": cloth("#8a6a9a"), "decke": blanket(), "kaese": cheese(),
 }
 for key, img in things.items():
     img.save(f"{out}/{key}.png")

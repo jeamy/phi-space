@@ -23,8 +23,12 @@ const night = (worldMs: number) => { const h = calendar(worldMs).hour; return h 
 const gap = (a: { x: number; y: number; w?: number; h?: number }, b: { x: number; y: number; w?: number; h?: number }) =>
 	Math.max(0, b.x - (a.x + (a.w ?? 1) - 1), a.x - (b.x + (b.w ?? 1) - 1), b.y - (a.y + (a.h ?? 1) - 1), a.y - (b.y + (b.h ?? 1) - 1));
 
-/** A bed the hares cannot harm: fenced, or a scarecrow close by. */
-export const sheltered = (wd: WildDef, b: BedFields, scarecrows: BuildingFields[]) => !!b.fenced || scarecrows.some((s) => s.room === b.room && gap(b, s) <= wd.scarecrowReach);
+/** A bed the hares cannot harm: fenced, a scarecrow close by, or in a room where fed geese keep watch (`guarded`). */
+export const sheltered = (wd: WildDef, b: BedFields, scarecrows: BuildingFields[], guarded: ReadonlySet<string> = new Set()) => !!b.fenced || guarded.has(b.room) || scarecrows.some((s) => s.room === b.room && gap(b, s) <= wd.scarecrowReach);
+/** The rooms where fed animals of the guard kind (the geese, `wd.guard`) keep watch: they cackle at whatever comes. */
+export function guardedRooms(wd: WildDef, houses: BuildingFields[], now: number): Set<string> {
+	return new Set(houses.filter((h) => !!wd.guard && h.herd?.kind === wd.guard && h.herd.fedUntilWorldMs > now).map((h) => h.room));
+}
 
 /** A hare's bite: one living plant falls back a stage, a seedling is gone; the bed's last living plant it leaves.
  *  Returns the plant it ate at (null: nothing). */
@@ -68,6 +72,7 @@ export async function wildTick(space: SpaceLike, w: WorldDef, leaseMs: number, r
 	const animals = (await space.readAll({ type: "Animal" })).map((e) => fieldsOf<AnimalFields>(e));
 	const beds = (await space.readAll({ type: "Bed" })).map((e) => fieldsOf<BedFields>(e));
 	const scarecrows = (await space.readAll({ type: "Building", fields: { plan: wd.scarecrow } })).map((e) => fieldsOf<BuildingFields>(e));
+	const guarded = wd.guard ? guardedRooms(wd, (await space.readAll({ type: "Building" })).map((e) => fieldsOf<BuildingFields>(e)), now) : new Set<string>();
 	let came = 0, ate = 0;
 	for (const a of animals.filter((x) => x.eatsAtWorldMs <= now)) {
 		const bed = beds.find((b) => b.bedId === a.bedId);
@@ -76,14 +81,14 @@ export async function wildTick(space: SpaceLike, w: WorldDef, leaseMs: number, r
 			// scared off meanwhile: nothing to do
 			if (!(await space.takeIfExists({ type: "Animal", fields: { animalId: a.animalId } }, NO_WAIT, { txn }))) { await space.abort(txn); continue; }
 			let text = `${a.name} hoppelt in den Nebel zurück.`;
-			if (bed && sheltered(wd, bed, scarecrows)) text = `${a.name} schnuppert ${bed.fenced ? "am Zaun um das" : "an der Vogelscheuche beim"} ${bedName(bed)} und hoppelt in den Nebel zurück.`;
+			if (bed && sheltered(wd, bed, scarecrows, guarded)) text = bed.fenced || !guarded.has(bed.room) ? `${a.name} schnuppert ${bed.fenced ? "am Zaun um das" : "an der Vogelscheuche beim"} ${bedName(bed)} und hoppelt in den Nebel zurück.` : `Die Gänse schnattern los; ${a.name} flieht in den Nebel.`;
 			else if (bed && bed.plants.filter((p) => p.stage < 3).length >= 2) {
 				const t = await space.takeIfExists({ type: "Bed", fields: { bedId: bed.bedId } }, NO_WAIT, { txn });
 				// a bed a command holds right now: the hare waits for the next round (a bed gone for long: it leaves)
 				if (!t) { if (now - a.eatsAtWorldMs < wd.eatAfterWorldMs) { await space.abort(txn); continue; } }
 				else {
 					const b = fieldsOf<BedFields>(t);
-					const p = sheltered(wd, b, scarecrows) ? null : bite(g, b, now, await fogOf(space, b.room), rnd);
+					const p = sheltered(wd, b, scarecrows, guarded) ? null : bite(g, b, now, await fogOf(space, b.room), rnd);
 					await space.write({ type: "Bed", fields: b as never }, txn, FOREVER);
 					if (p) { ate++; text = `${a.name} knabbert im ${bedName(b)} an ${sortOf(g, p.sort)?.name ?? "einer Pflanze"} und hoppelt in den Nebel zurück.`; }
 				}

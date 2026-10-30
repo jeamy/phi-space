@@ -18,7 +18,7 @@ type T = typeof import("three");
 type O3 = import("three").Object3D;
 type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; kind?: string; progress?: number; sig?: string };
 /** What a bed shows: rebuilt when its plants or weeds change. */
-const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.color ?? ""}` : undefined);
+const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.color ?? ""}` : o.kind === "building" && o.herd ? o.herd : undefined);
 type Scene3D = {
 	t: T;
 	renderer: import("three").WebGLRenderer;
@@ -296,7 +296,7 @@ function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
 
 function object(t: T, obj: ObjView): Entry {
 	const group = new t.Group(); group.userData.owned = true;
-	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" || obj.kind === "field" ? { sig: bedSig(obj) } : {}) };
+	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" || obj.kind === "field" || obj.kind === "building" ? { sig: bedSig(obj) } : {}) };
 	if (obj.kind === "bed") {
 		// dug soil a little above the grass; each plant at its cell by its stage
 		const w = obj.w ?? 1, d = obj.h ?? 1;
@@ -340,7 +340,7 @@ function object(t: T, obj: ObjView): Entry {
 	if (obj.kind === "building" || obj.kind === "site") {
 		const color = Number.parseInt((obj.color ?? "#8a6a44").slice(1), 16);
 		group.add(propShadow(t, w * 1.15, d * 1.15));
-		group.add(propMesh(t, obj.kind === "building" ? buildingGeometry(t, obj.plan, w, d, color, variant) : siteGeometry(t, obj.plan, w, d, color, obj.progress ?? 0)));
+		group.add(propMesh(t, obj.kind === "building" ? buildingGeometry(t, obj.plan, w, d, color, variant, obj.herd) : siteGeometry(t, obj.plan, w, d, color, obj.progress ?? 0)));
 		return e;
 	}
 	if (obj.kind === "animal") {

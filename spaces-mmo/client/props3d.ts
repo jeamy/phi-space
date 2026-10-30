@@ -1,4 +1,4 @@
-// Models for the 3D map: trees and bushes, the hut, the rain barrel, the windmill, the bakery, the coop and the pen, a site that grows with its progress, a ruin, the
+// Models for the 3D map: trees and bushes, the hut, the rain barrel, the windmill, the bakery, the coop, the pen and the loom, a site that grows with its progress, a ruin, the
 // fire's stone ring, a signpost at an exit. Built from primitives in a chunky low-poly style (faceted faces, a few warm
 // colours, every face a shade lighter or darker), so they need no model file. Each model is one merged geometry with
 // vertex colours, made once per kind and variant and shared (userData.shared: the map's dispose keeps it); where it
@@ -241,9 +241,10 @@ function coop(t: T, w: number, variant: number): Geo {
 	});
 }
 
-/** The pen w×d: a driftwood fence of posts and two rails, a trough, a little shelter in a corner, a sheep inside. */
-function pen(t: T, w: number, d: number, variant: number): Geo {
-	return cached(`pen:${w}x${d}:${variant}`, () => {
+/** The pen w×d: a driftwood fence of posts and two rails, a trough, a little shelter in a corner, and its animals: a
+ *  sheep, a goat, two ducks by a puddle or two geese (none while it is empty). */
+function pen(t: T, w: number, d: number, variant: number, herd: string | undefined): Geo {
+	return cached(`pen:${w}x${d}:${variant}:${herd ?? ""}`, () => {
 		const ww = w * 0.92, dd = d * 0.92, parts: Part[] = [];
 		const posts = (n: number) => Array.from({ length: n + 1 }, (_, i) => i / n - 0.5);
 		for (const f of posts(Math.round(w * 2))) for (const sz of [-1, 1]) parts.push({ g: new t.BoxGeometry(0.07, 0.42, 0.07), c: WOOD_DARK, p: [f * ww, 0.21, (sz * dd) / 2] });
@@ -255,17 +256,52 @@ function pen(t: T, w: number, d: number, variant: number): Geo {
 		parts.push({ g: new t.BoxGeometry(0.5, 0.12, 0.18), c: WOOD_DARK, p: [ww * 0.2, 0.06, dd * 0.32] }); // the trough
 		parts.push({ g: new t.BoxGeometry(0.7, 0.45, 0.6), c: WOOD, p: [-ww * 0.3, 0.23, -dd * 0.3] });  // the shelter
 		parts.push({ g: new t.BoxGeometry(0.82, 0.05, 0.74), c: THATCH[variant % 3]!, p: [-ww * 0.3, 0.5, -dd * 0.3], r: [0.2, 0, 0] });
-		const wool = [0xe8e4d8, 0xd8d0c0, 0xf0ece0][variant % 3]!;
-		parts.push({ g: new t.IcosahedronGeometry(0.2, 0), c: wool, p: [ww * 0.1, 0.28, 0], s: [1.3, 0.9, 1] });
-		parts.push({ g: new t.IcosahedronGeometry(0.09, 0), c: 0x3a3430, p: [ww * 0.1 + 0.27, 0.32, 0] });
-		for (const [dx, dz] of [[-0.12, -0.08], [-0.12, 0.08], [0.14, -0.08], [0.14, 0.08]] as const) parts.push({ g: new t.BoxGeometry(0.04, 0.16, 0.04), c: 0x3a3430, p: [ww * 0.1 + dx, 0.08, dz] });
+		const four = (fur: number, legs: number, head: number, x: number, horns: boolean) => {
+			parts.push({ g: new t.IcosahedronGeometry(0.2, 0), c: fur, p: [x, 0.28, 0], s: [1.3, 0.9, 1] });
+			parts.push({ g: new t.IcosahedronGeometry(0.09, 0), c: head, p: [x + 0.27, 0.34, 0] });
+			if (horns) for (const dz of [-0.04, 0.04]) parts.push({ g: new t.ConeGeometry(0.02, 0.12, 4), c: 0x5e5240, p: [x + 0.24, 0.46, dz], r: [0, 0, 0.5] });
+			for (const [dx, dz] of [[-0.12, -0.08], [-0.12, 0.08], [0.14, -0.08], [0.14, 0.08]] as const) parts.push({ g: new t.BoxGeometry(0.04, 0.16, 0.04), c: legs, p: [x + dx, 0.08, dz] });
+		};
+		const fowl = (body: number, head: number, x: number, z: number, neck: number) => {
+			parts.push({ g: new t.IcosahedronGeometry(0.1, 0), c: body, p: [x, 0.1, z], s: [1.4, 0.9, 1] });
+			parts.push({ g: new t.BoxGeometry(0.04, neck, 0.04), c: body, p: [x + 0.11, 0.12 + neck / 2, z] });
+			parts.push({ g: new t.IcosahedronGeometry(0.05, 0), c: head, p: [x + 0.12, 0.14 + neck, z] });
+			parts.push({ g: new t.BoxGeometry(0.06, 0.02, 0.03), c: 0xe8902c, p: [x + 0.18, 0.14 + neck, z] });
+		};
+		if (herd === "schaf") four([0xe8e4d8, 0xd8d0c0, 0xf0ece0][variant % 3]!, 0x3a3430, 0x3a3430, ww * 0.1, false);
+		if (herd === "ziege") four(0xa89a80, 0x5e5240, 0xa89a80, ww * 0.1, true);
+		if (herd === "ente" || herd === "gans") {
+			if (herd === "ente") parts.push({ g: new t.CylinderGeometry(0.3, 0.3, 0.02, 10), c: 0x3d7fa0, p: [ww * 0.15, 0.01, -dd * 0.05] }); // a puddle
+			for (const [x, z] of [[ww * 0.05, 0.1], [ww * 0.25, -0.15]] as const) herd === "ente" ? fowl(0x8a7a5a, 0x2f6a4a, x, z, 0.04) : fowl(0xf0ece0, 0xf0ece0, x, z, 0.16);
+		}
 		return merge(t, parts, `pen:${variant}`);
 	});
 }
 
-/** A building by its plan: the hut, the rain barrel, the scarecrow, the windmill, the bakery, the coop, the pen, any other plan a hut in its colour. */
-export function buildingGeometry(t: T, plan: string | undefined, w: number, d: number, color: number, variant: number): Geo {
-	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : plan === "windmuehle" ? windmill(t, variant % 3) : plan === "backhaus" ? bakery(t, w, d, variant % 3) : plan === "huehnerstall" ? coop(t, w, variant % 3) : plan === "gehege" ? pen(t, w, d, variant % 3) : hut(t, w, d, color, variant % 3);
+/** The loom w×1: an open lean-to on four posts and under it the loom's frame, a cloth on its beam, a stool. */
+function loom(t: T, w: number, variant: number): Geo {
+	return cached(`loom:${w}:${variant}`, () => {
+		const ww = w * 0.85, cloth = [0x8a6a9a, 0x6a8a9a, 0x9a6a5a][variant % 3]!, parts: Part[] = [
+			{ g: new t.BoxGeometry(w * 0.92, 0.06, 0.86), c: STONE, p: [0, 0.03, 0] },
+			...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz]) => ({ g: new t.BoxGeometry(0.07, 0.9, 0.07), c: WOOD_DARK, p: [sx! * ww / 2, 0.48, sz! * 0.36] as V3 })),
+			{ g: new t.BoxGeometry(ww + 0.2, 0.05, 0.95), c: THATCH[variant % 3]!, p: [0, 0.95, 0], r: [0.18, 0, 0] },
+			// the loom: two side frames, the beams, the warp and the cloth woven so far
+			{ g: new t.BoxGeometry(0.05, 0.6, 0.4), c: WOOD, p: [-0.4, 0.36, 0] },
+			{ g: new t.BoxGeometry(0.05, 0.6, 0.4), c: WOOD, p: [0.4, 0.36, 0] },
+			{ g: new t.BoxGeometry(0.85, 0.05, 0.05), c: WOOD_DARK, p: [0, 0.64, -0.12] },
+			{ g: new t.BoxGeometry(0.85, 0.05, 0.05), c: WOOD_DARK, p: [0, 0.32, 0.16] },
+			{ g: new t.BoxGeometry(0.7, 0.3, 0.01), c: 0xe8e0cc, p: [0, 0.5, -0.0], r: [-0.8, 0, 0] },
+			{ g: new t.BoxGeometry(0.7, 0.12, 0.012), c: cloth, p: [0, 0.37, 0.12], r: [-0.8, 0, 0] },
+			{ g: new t.CylinderGeometry(0.1, 0.1, 0.22, 6), c: WOOD, p: [0, 0.11, 0.38] }, // the stool
+		];
+		return merge(t, parts, `loom:${variant}`);
+	});
+}
+
+/** A building by its plan: the hut, the rain barrel, the scarecrow, the windmill, the bakery, the coop, the pen (with
+ *  its `herd`), the loom, any other plan a hut in its colour. */
+export function buildingGeometry(t: T, plan: string | undefined, w: number, d: number, color: number, variant: number, herd?: string): Geo {
+	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : plan === "windmuehle" ? windmill(t, variant % 3) : plan === "backhaus" ? bakery(t, w, d, variant % 3) : plan === "huehnerstall" ? coop(t, w, variant % 3) : plan === "gehege" ? pen(t, w, d, variant % 3, herd) : plan === "webstuhl" ? loom(t, w, variant % 3) : hut(t, w, d, color, variant % 3);
 }
 
 /** A hare, sitting up a little, its nose towards +z: body, haunches, head, long ears, a white scut. About 0.4 high. */
