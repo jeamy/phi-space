@@ -201,7 +201,7 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 			if (nearSite && may) {
 				if (o.fieldStage === "brach" && mine) entries.push({ label: "Bestellen …", line: "bestelle" });
 				if (o.fieldStage === "saat") entries.push({ label: "Bestellen (Saatgut, Arbeit)", line: "bestelle" });
-				if (o.fieldStage === "reif" || o.fieldStage === "spaet") entries.push({ label: "Ernten", line: "ernte" });
+				if (o.fieldStage === "reif" || o.fieldStage === "spaet") entries.push({ label: "Ernten", line: "ernte flur" });
 			}
 			if (nearSite && mine) entries.push(o.open ? { label: "Flur für Fremde schließen", line: "flur zu" } : { label: "Flur für alle öffnen", line: "flur offen" });
 			continue;

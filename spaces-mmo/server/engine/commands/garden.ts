@@ -292,9 +292,13 @@ async function giveOwn(c: CommandCtx, what: Array<{ proto: string; count: number
 
 const ernte: Command = {
 	key: "ernte", aliases: ["ernten", "pflücke", "pfluecke", "harvest"],
-	help: "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins oder als Pate; dazu gibt es Samen); an einer reifen Flur ein Arbeitspunkt der Ernte und dein Anteil",
-	async func(c) {
+	help: "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins oder als Pate; dazu gibt es Samen); an einer reifen Flur (ernte flur, wenn auch ein Beet nah ist) ein Arbeitspunkt der Ernte und dein Anteil",
+	async func(c, arg) {
 		const g = garden(c);
+		if (/^(?:die\s+|der\s+|das\s+)?(?:flur|acker|feld|field)$/i.test(arg.trim())) {
+			if (await harvestField(c)) return;
+			throw new NotUnderstood("Hier ist keine Flur. „flur anlegen“ legt eine an (mit einem Spaten, im Licht eines Feuers).");
+		}
 		// no bed near, but a field: its harvest (field.ts)
 		const b = await bedHere(c).catch(async (e) => { if (e instanceof NotUnderstood && (await harvestField(c))) return null; throw e; });
 		if (!b) return;

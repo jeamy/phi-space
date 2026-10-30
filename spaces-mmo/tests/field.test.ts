@@ -94,6 +94,12 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		assert.equal(f.stage, "waechst");
 		assert.deepEqual(f.yields, [{ proto: "gerste", count: 16 }]);
 		assert.match(await does(boss.p, "ernte", "nicht reif"), /noch nicht reif/);
+		// a bed of the owner's beside her as well as the field: plain "ernte" means the bed, "ernte flur" the field
+		const accountId = String((await s.readAll({ type: "Character", fields: { charId: boss.me } }))[0]!.fields.accountId);
+		await s.write({ type: "Bed", fields: { bedId: "bed-near", room: "graue-bucht", x: 17, y: 10, w: 1, h: 1, owner: boss.me, ownerName: "Bäuerin", accountId, beaconId: "feuer-bucht", points: 1, sponsors: [], plants: [], wateredWorldMs: 0, weedy: false, dueWorldMs: FOREVER, untilWorldMs: FOREVER, at: 0 } as never }, null, FOREVER);
+		assert.match(await does(boss.p, "ernte", "Beet"), /Im Beet ist noch nichts reif/);
+		assert.match(await does(boss.p, "ernte flur", "nicht reif"), /Gerste ist noch nicht reif/);
+		await s.takeIfExists({ type: "Bed", fields: { bedId: "bed-near" } }, 0);
 
 		// its time comes (the date moved forward): the field tick makes it ripe
 		const t = (await s.take({ type: "Field", fields: { fieldId: f.fieldId } }, 5_000))!;
