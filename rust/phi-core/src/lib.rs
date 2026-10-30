@@ -4,6 +4,7 @@
 pub mod claims;
 pub mod driver;
 pub mod mailbox;
+pub mod snapshot;
 pub mod space;
 pub mod state;
 pub mod stream;

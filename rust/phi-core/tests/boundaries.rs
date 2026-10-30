@@ -232,29 +232,34 @@ fn transactions_lapsing_together_and_their_joint_reservations() {
 	});
 }
 
-/// Lines with `$gen` and `$key` (the newest generation and claim key the answers named), resolved by running them.
+/// Lines with `$gen`, `$key` and `$next1`, `$next2`, … (the newest generation and claim key, and the snapshot cursors
+/// in the order answers named them), resolved by running them.
 fn resolve(lines: &[Json]) -> Vec<Json> {
-	fn fill(v: &Json, g: &str, k: &str) -> Json {
+	fn fill(v: &Json, g: &str, k: &str, next: &[String]) -> Json {
 		match v {
 			Json::String(s) if s == "$gen" => g.into(),
 			Json::String(s) if s == "$key" => k.into(),
-			Json::Array(a) => Json::Array(a.iter().map(|x| fill(x, g, k)).collect()),
-			Json::Object(o) => Json::Object(o.iter().map(|(n, x)| (n, fill(x, g, k))).collect()),
+			Json::String(s) if s.starts_with("$next") => next.get(s[5..].parse::<usize>().unwrap() - 1).map_or("ssnone.0".into(), |n| n.as_str().into()),
+			Json::Array(a) => Json::Array(a.iter().map(|x| fill(x, g, k, next)).collect()),
+			Json::Object(o) => Json::Object(o.iter().map(|(n, x)| (n, fill(x, g, k, next))).collect()),
 			other => other.clone(),
 		}
 	}
 	let mut d = Driver::new();
-	let (mut g, mut k) = (String::new(), String::new());
+	let (mut g, mut k, mut next) = (String::new(), String::new(), vec![]);
 	lines
 		.iter()
 		.map(|l| {
-			let l = fill(l, &g, &k);
+			let l = fill(l, &g, &k, &next);
 			if let Ok(v) = d.step(&l) {
 				if let Some(x) = v.get("generation").and_then(Json::as_str) {
 					g = x.to_owned();
 				}
 				if let Some(x) = v.get("key").and_then(Json::as_str) {
 					k = x.to_owned();
+				}
+				if let Some(x) = v.get("next").and_then(Json::as_str).filter(|x| x.starts_with("ss")) {
+					next.push(x.to_owned());
 				}
 			}
 			l
@@ -422,4 +427,92 @@ fn mailboxes_at_their_edges() {
 	lines.push(obj! { "op" => "events", "now" => 1300.0, "principal" => p1() });
 	compare(&lines, "an ack resumes the job");
 	assert!(d.space.state.rest.get("jobs").and_then(Json::as_array).is_some_and(|j| !j.is_empty()), "the case makes a job");
+}
+
+fn snap(now: f64, tmpl: &str, max: f64, after: Option<&str>) -> Json {
+	let mut o = obj! { "maxBytes" => max };
+	if let (Some(a), Json::Object(m)) = (after, &mut o) {
+		m.insert("after", a.into());
+	}
+	obj! { "op" => "snapshotPage", "now" => now, "tmpl" => obj! { "type" => tmpl }, "o" => o }
+}
+fn typed_write(type_: &str, pad: usize) -> Json { obj! { "op" => "write", "now" => 1000.0, "entry" => obj! { "type" => type_, "fields" => obj! { "pad" => "x".repeat(pad) } }, "lease" => 60_000.0 } }
+
+#[test]
+fn entry_snapshots_at_their_edges() {
+	// a read that fits one page makes no snapshot
+	edge("a whole read or a snapshot", 100, 1500, |max| {
+		let mut lines = vec![init(obj! {})];
+		for i in 0..3 {
+			lines.push(typed_write("Task", 50 * i));
+		}
+		lines.push(snap(1000.0, "Task", max as f64, None));
+		lines
+	});
+	// a snapshot lives snapshotTtlMs: at its expiry it is gone
+	for at in [1999.0, 2000.0] {
+		let mut lines = vec![init(obj! { "snapshotTtlMs" => 1000.0 })];
+		for _ in 0..4 {
+			lines.push(typed_write("Task", 100));
+		}
+		lines.push(snap(1000.0, "Task", 500.0, None));
+		lines.push(snap(at, "Task", 500.0, Some("$next1")));
+		let lines = resolve(&lines);
+		assert_paged(&lines);
+		compare(&lines, &format!("a snapshot read at {at}"));
+	}
+	// eviction: snapshots read to their end go first, then the least recently used
+	let mut lines = vec![init(obj! { "maxSnapshots" => 2.0 })];
+	for t in ["A", "B", "C"] {
+		for _ in 0..3 {
+			lines.push(typed_write(t, 120));
+		}
+	}
+	lines.push(snap(1000.0, "A", 500.0, None)); // A: page 1
+	lines.push(snap(1001.0, "B", 500.0, None)); // B: page 1
+	lines.push(snap(1002.0, "A", 500.0, Some("$next1"))); // A used again
+	lines.push(snap(1003.0, "B", 2000.0, Some("$next2"))); // B read to its end
+	lines.push(snap(1004.0, "C", 500.0, None)); // C evicts B (read), not A
+	lines.push(snap(1005.0, "A", 500.0, Some("$next3")));
+	lines.push(snap(1006.0, "B", 500.0, Some("$next2")));
+	lines.push(snap(1007.0, "C", 500.0, Some("$next4")));
+	let lines = resolve(&lines);
+	assert_paged(&lines);
+	compare(&lines, "snapshot eviction");
+	// without one read to its end, the least recently used goes: a page read moves its snapshot to the end
+	let mut lines = vec![init(obj! { "maxSnapshots" => 2.0 })];
+	for t in ["A", "B", "C"] {
+		for _ in 0..3 {
+			lines.push(typed_write(t, 120));
+		}
+	}
+	lines.push(snap(1000.0, "A", 500.0, None)); // A: page 1 of 3
+	lines.push(snap(1001.0, "B", 500.0, None)); // B: page 1 of 3
+	lines.push(snap(1002.0, "A", 500.0, Some("$next1"))); // A: page 2, now the most recently used
+	lines.push(snap(1003.0, "C", 500.0, None)); // C evicts B
+	lines.push(snap(1004.0, "B", 500.0, Some("$next2")));
+	lines.push(snap(1005.0, "A", 500.0, Some("$next3")));
+	let lines = resolve(&lines);
+	assert_paged(&lines);
+	compare(&lines, "least recently used snapshot evicted");
+	// the bytes of all snapshots of a stream are bounded: an older one is evicted, a too large one refused
+	edge("maxSnapshotBytes", 300, 3000, |max| {
+		let mut lines = vec![init(obj! { "maxSnapshotBytes" => max as f64 })];
+		for t in ["A", "B"] {
+			for _ in 0..3 {
+				lines.push(typed_write(t, 120));
+			}
+		}
+		lines.push(snap(1000.0, "A", 500.0, None));
+		lines.push(snap(1001.0, "B", 500.0, None));
+		lines.push(snap(1002.0, "A", 500.0, Some("$next1")));
+		resolve(&lines)
+	});
+}
+
+/// The case really pages: some snapshot page names a next page.
+fn assert_paged(lines: &[Json]) {
+	let mut d = Driver::new();
+	let paged = lines.iter().any(|l| d.step(l).is_ok_and(|v| v.get("next").and_then(Json::as_str).is_some_and(|n| n.starts_with("ss"))));
+	assert!(paged, "the case never pages through a snapshot");
 }

@@ -156,7 +156,7 @@ fn grant(requested: Option<&Json>, now: f64) -> Result<f64> {
 }
 
 /// `===` on JSON values: objects and arrays are never the same value here (each comes from its own parse).
-fn strict_eq(a: &Json, b: &Json) -> bool {
+pub(crate) fn strict_eq(a: &Json, b: &Json) -> bool {
 	match (a, b) {
 		(Json::Null, Json::Null) => true,
 		(Json::Bool(x), Json::Bool(y)) => x == y,
@@ -285,11 +285,11 @@ fn seq_of(id: &str) -> f64 {
 	id[digits..].parse().unwrap_or(0.0)
 }
 
-/// `bytePage`: as many whole elements as fit `cap` encoded bytes together with what `make` adds; at least one.
-pub(crate) fn byte_page(source: &[Json], cap: f64, make: impl Fn(Vec<Json>, Option<usize>) -> Json) -> Result<Json> {
+/// `bytePage`: as many whole elements from `offset` on as fit `cap` encoded bytes with what `make` adds; at least one.
+pub(crate) fn byte_page(source: &[Json], offset: usize, cap: f64, make: impl Fn(Vec<Json>, Option<usize>) -> Json) -> Result<Json> {
 	let mut items = vec![];
 	let mut contents = 0.0;
-	for i in 0..source.len() {
+	for i in offset..source.len() {
 		let next = (i + 1 < source.len()).then_some(i + 1);
 		let size = bytes(&source[i]);
 		let required = bytes(&make(vec![], next)) + contents + size + items.len() as f64;
@@ -1750,7 +1750,7 @@ impl Space {
 			}
 		}
 		let (rev, stream_id) = (stream::revision_of(&self.state.stream), self.stream_id());
-		byte_page(&eligible, cap, |items, next| {
+		byte_page(&eligible, 0, cap, |items, next| {
 			obj! { "items" => items, "next" => next.map_or(Json::Null, |k| Json::String(n(seqs[k - 1]))), "rev" => rev, "streamId" => stream_id.as_str() }
 		})
 	}
@@ -1888,7 +1888,7 @@ impl Space {
 		let rev = stream::revision_of(&self.state.stream);
 		let stream_id = self.stream_id();
 		let batches: Vec<Json> = batches.iter().map(|b| b.to_json()).collect();
-		byte_page(&batches, budget.min(frame), |items, next| {
+		byte_page(&batches, 0, budget.min(frame), |items, next| {
 			let last = items.last().and_then(|b| b.get("rev")).and_then(Json::as_f64).unwrap_or(after_rev);
 			obj! { "streamId" => stream_id.as_str(), "batches" => items, "next" => last, "rev" => rev, "more" => next.is_some() }
 		})

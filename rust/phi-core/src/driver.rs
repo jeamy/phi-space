@@ -24,11 +24,13 @@ pub fn seeded(seed: &str) -> Random {
 
 pub struct Driver {
 	pub space: Space,
+	/// The host's entry snapshots (a new host with every init).
+	pub snapshots: crate::snapshot::Snapshots,
 	clock: f64,
 }
 
 impl Default for Driver {
-	fn default() -> Self { Driver { space: Space::new(SpaceState::initial(), seeded("")), clock: 0.0 } }
+	fn default() -> Self { Driver { space: Space::new(SpaceState::initial(), seeded("")), snapshots: Default::default(), clock: 0.0 } }
 }
 
 /// What the TypeScript driver's `core.plain` makes of a result: a JSON copy, where a number that is not finite is `null`.
@@ -70,6 +72,7 @@ impl Driver {
 			let seed = l.get("seed").map_or_else(String::new, js_string);
 			self.space = Space::new(s, seeded(&seed));
 			self.space.clock = self.clock;
+			self.snapshots = Default::default();
 			return Ok(Json::Null);
 		}
 		if let Some(now) = l.get("now").and_then(Json::as_f64) {
@@ -118,6 +121,7 @@ impl Driver {
 			}
 			"events" => s.mailbox_page(now, l.get("principal"), o),
 			"appendMail" => s.append_mail_line(now, l.get("principal"), l.get("event")),
+			"snapshotPage" => self.snapshots.page(s, now, l.get("tmpl").unwrap_or(&Json::Null), o, as_),
 			"ack" => s.ack_mailbox(l.get("principal"), l.get("mailboxEpoch"), l.get("upTo")),
 			"nextExpiry" => s.next_expiry().map(Json::Number),
 			"stats" => s.stats(now),

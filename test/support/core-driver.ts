@@ -19,6 +19,7 @@ import { pathToFileURL } from "node:url";
 import * as core from "../../src/core.ts";
 import * as claims from "../../src/claims.ts";
 import * as mailbox from "../../src/mailbox.ts";
+import { snapshotPage } from "../../src/snapshot.ts";
 import { digestJson } from "../../src/canonical.ts";
 import type { Json } from "../../src/core.ts";
 
@@ -39,6 +40,8 @@ function install(): void {
 
 type Line = Record<string, any> & { op: string; now?: number };
 let s: core.SpaceState = core.initialState();
+/** The host whose entry snapshots (snapshot.ts) the line `snapshotPage` uses; a new one with every init. */
+let host = {};
 const opt = <T,>(v: T | undefined, d: T): T => (v === undefined ? d : v);
 
 /** One operation; its result as plain JSON. */
@@ -52,6 +55,7 @@ function apply(l: Line): unknown {
 		case "count": return core.count(s, now, opt(l.tmpl, null), opt(l.txn, null), l.as);
 		case "list": return core.list(s, now, opt(l.tmpl, null), opt(l.txn, null), opt(l.limit, Number.MAX_SAFE_INTEGER), l.as);
 		case "listPage": return core.listPage(s, now, opt(l.tmpl, null), opt(l.txn, null), l.o ?? {}, l.as);
+		case "snapshotPage": return snapshotPage(host, s, now, opt(l.tmpl, null), l.o ?? {}, l.as);
 		case "renew": return core.renew(s, now, l.id, l.ms, l.as);
 		case "cancel": core.cancel(s, now, l.id, l.as); return null;
 		case "settle": core.settle(s, now); return null;
@@ -86,6 +90,7 @@ export function step(l: Line, dumpAll = false): Record<string, unknown> {
 	if (l.op === "init") {
 		seed = String(l.seed ?? ""); block = 0; pool = Buffer.alloc(0); clock = l.now ?? 0;
 		s = core.initialState();
+		host = {};
 		if (l.spaceId !== undefined) s.spaceId = l.spaceId;
 		if (l.incarnation !== undefined) s.incarnation = l.incarnation;
 		if (l.limits) s.limits = l.limits;

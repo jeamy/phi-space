@@ -286,7 +286,7 @@ Vergleichstests gegen den TS-Treiber grün sind.
 | 2 | Transaktionen: `createTxn`, `commitTxn`, `abortTxn`, Ablauf in `settle`, Txn-Leases, Schreiben, `announce`, Lesen und Nehmen unter einer Txn, Reservierungen | erledigt |
 | 3 | Wartende, geparkte Operationen, Claims und Generationen; ihre Ereignisse in der Outbox und Fanout-Jobs ohne Consumer | erledigt |
 | 4 | Notify und Mailboxen: Abonnements mit Drosselung und Bündeln, Consumer für Abonnements und Wartende, Fanout-Jobs mit Consumer, Freigabe abgelaufener Takes | erledigt |
-| 5 | Stream und Seiten unter Txns, Snapshots (`snapshot.ts`), Seiten-Token | offen |
+| 5 | Snapshots (`snapshot.ts`) mit Seiten-Token; Stream und Seiten unter Txns kamen schon mit Scheibe 2 | erledigt |
 
 **Bewusst zurückgestellt:** Restore, Wechsel der Autorität, Member-Admission, Löschung, Admin-Wartung, `purgeTasks`,
 Abschlussprofile und RunGate, dazu `setLimits`, `releaseTxn`, `cancelRequest` und negative Claims. Der Standalone-Server braucht sie für R3 nicht. Ihre Felder führt `phi-core::state`
@@ -409,6 +409,18 @@ raten.
   derselben Operation), doppelte Einträge der Freigabe-Warteschlange (in derselben Runde verarbeitet), die
   Lückenprüfung beim `ack` (quittiert werden immer zusammenhängende Präfixe) und `nextExpiry` 0 bei nicht leerer
   Warteschlange (sie wird gleich nach dem Füllen geleert).
+
+**Stand Scheibe 5 (2026-10-30):**
+
+- **`phi-core::snapshot`:** Ein `Snapshots`-Cache je Host, neben dem Dokument wie in `snapshot.ts`. Eine Antwort, die
+  in eine Seite passt, braucht keinen Snapshot und kein Token. Eine größere wird einmal kopiert, ihre Seiten kommen
+  über `ss<hex>.<Position>` aus der Kopie, gebunden an Stream, Prinzipal und Anfrage. Der Cache ist nach Gebrauch
+  geordnet; Platz machen zuerst die zu Ende gelesenen, dann die am längsten unbenutzten. Grenzen: `maxSnapshots`,
+  `maxSnapshotBytes`, `snapshotTtlMs`.
+- **Treiber:** `core-driver.ts` hat die Zeile `snapshotPage` (ein Host je `init`), die Rust-Seite dieselbe.
+- **Tests:** Der Zufallsgang liest Snapshot-Seiten (mit fremdem Token, falschem Cursor, anderem Prinzipal), und kurze
+  Episoden schreiben mehrere Entries und folgen den Seiten bis zum Ende. Grenzfälle: ganze Antwort oder Snapshot, die
+  TTL bei genau ihrem Ablauf, die Reihenfolge der Verdrängung und `maxSnapshotBytes`.
 
 **Befund aus Scheibe 0:** `parkOperation` (`core.ts`, `touch(s, Date.now())`) und `ackMailbox` (`mailbox.ts`) lesen
 die Uhr selbst, statt `now` zu übernehmen. Der Rust-Kern nimmt `now` als Parameter. Im TS-Kern sollten beide Stellen

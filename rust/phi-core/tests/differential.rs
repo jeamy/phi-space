@@ -43,6 +43,8 @@ struct Walk {
 	/// The mailboxes as the last step left them: principal, epoch, acked, delivered, next.
 	boxes: Vec<(Json, String, f64, f64, f64)>,
 	page_next: Option<Json>,
+	/// The newest snapshot cursor and token an answer named.
+	snapshot: Option<(String, String)>,
 }
 
 const TYPES: [&str; 3] = ["Task", "Job", "Note"];
@@ -103,6 +105,12 @@ impl Walk {
 		small("notifyIntervalMs", v, 0.4, r);
 		let v = 1.0 + r.below(3) as f64;
 		small("maxRegsPerOwner", v, 0.2, r);
+		let v = 1.0 + r.below(3) as f64;
+		small("maxSnapshots", v, 0.4, r);
+		let v = 300.0 + r.below(3000) as f64;
+		small("maxSnapshotBytes", v, 0.4, r);
+		let v = 100.0 * (2 + r.below(30)) as f64;
+		small("snapshotTtlMs", v, 0.5, r);
 		let mut line = obj! { "op" => "init", "seed" => "walk", "now" => self.now };
 		let Json::Object(o) = &mut line else { unreachable!() };
 		if !limits.is_empty() {
@@ -332,6 +340,24 @@ impl Walk {
 		lines.push(obj! { "op" => "settle" });
 		self.episode.extend(lines);
 	}
+	/// Several entries, read with a small budget, and the snapshot's pages followed to its end (`$next`).
+	fn snapshot_reading(&mut self) {
+		let r = &mut self.rng;
+		let mut lines = vec![];
+		for i in 0..3 + r.below(6) {
+			lines.push(obj! { "op" => "write", "entry" => obj! { "type" => "Task", "fields" => obj! { "n" => i as f64, "pad" => "x".repeat(20 + r.below(150)) } }, "lease" => 60_000.0 });
+		}
+		let budget = 250.0 + r.below(300) as f64;
+		lines.push(obj! { "op" => "snapshotPage", "tmpl" => obj! { "type" => "Task" }, "o" => obj! { "maxBytes" => budget } });
+		for _ in 0..2 + r.below(5) {
+			let mut l = obj! { "op" => "snapshotPage", "tmpl" => obj! { "type" => "Task" }, "o" => obj! { "maxBytes" => budget, "after" => "$next" } };
+			if let (true, Json::Object(o)) = (r.chance(0.1), &mut l) {
+				o.insert("as", "a".into()); // another principal
+			}
+			lines.push(l);
+		}
+		self.episode.extend(lines);
+	}
 	fn episode(&mut self) {
 		let p = self.principal();
 		let r = &mut self.rng;
@@ -360,6 +386,7 @@ impl Walk {
 		match v {
 			Json::String(s) if s == "$gen" => self.generations.last().map_or("gnone.0".into(), |g| g.0.as_str().into()),
 			Json::String(s) if s == "$key" => self.keys.last().map_or("[]".into(), |k| k.as_str().into()),
+			Json::String(s) if s == "$next" => self.snapshot.as_ref().map_or("ssnone.0".into(), |n| n.0.as_str().into()),
 			Json::Array(a) => Json::Array(a.iter().map(|x| self.fill(x)).collect()),
 			Json::Object(o) => Json::Object(o.iter().map(|(k, x)| (k, self.fill(x))).collect()),
 			other => other.clone(),
@@ -377,6 +404,8 @@ impl Walk {
 			self.episode();
 		} else if self.rng.chance(0.01) {
 			self.subscription();
+		} else if self.rng.chance(0.01) {
+			self.snapshot_reading();
 		}
 		if self.burst > 0 {
 			// several entries with the same lease at the same time: they expire together
@@ -394,7 +423,7 @@ impl Walk {
 				o.insert(k, v);
 			}
 		};
-		let op = match self.rng.below(184) {
+		let op = match self.rng.below(194) {
 			0..=29 => {
 				set("entry", Some(self.entry()));
 				set("lease", self.lease());
@@ -644,6 +673,36 @@ impl Walk {
 				set("upTo", Some(Json::Number(up_to)));
 				"ack"
 			}
+			184..=193 => {
+				// the same query as the snapshot's mostly, so its pages can be read on
+				let same = self.rng.chance(0.7);
+				set("tmpl", if same { Some(obj! { "type" => "Task" }) } else { self.template() });
+				let mut q = Object::new();
+				if self.rng.chance(0.8) {
+					q.insert("maxBytes", Json::Number(if self.rng.chance(0.1) { 0.0 } else { 150.0 + self.rng.below(500) as f64 }));
+				}
+				match (self.rng.below(6), &self.snapshot) {
+					(0..=2, Some((next, _))) => q.insert("after", next.as_str().into()),
+					(3, Some((_, token))) => q.insert("token", token.as_str().into()),
+					(4, Some((next, _))) => {
+						q.insert("after", next.as_str().into());
+						q.insert("token", "ss00000000000000000000000000000000".into());
+					}
+					(5, _) => q.insert("after", "ssgarbage.1".into()),
+					_ => {}
+				}
+				if self.rng.chance(0.2) {
+					q.insert("limit", Json::Number(self.rng.below(4) as f64));
+				}
+				if let Some(t) = self.txn().filter(|_| self.rng.chance(0.2)) {
+					q.insert("txn", t);
+				}
+				set("o", Some(Json::Object(q)));
+				if !same || self.rng.chance(0.1) {
+					set("as", self.as_());
+				}
+				"snapshotPage"
+			}
 			_ => {
 				set("id", Some(self.txn_id()));
 				set("as", self.as_());
@@ -705,7 +764,7 @@ fn diff(a: &Json, b: &Json, path: &str, out: &mut Vec<String>) {
 
 /// Runs one walk; counts what happened into `seen`.
 fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
-	let mut w = Walk { rng: Rng(seed), now: 1000.0, ids: vec![], txns: vec![], burst: 0, episode: Default::default(), waiters: vec![], generations: vec![], keys: vec![], boxes: vec![], page_next: None };
+	let mut w = Walk { rng: Rng(seed), now: 1000.0, ids: vec![], txns: vec![], burst: 0, episode: Default::default(), waiters: vec![], generations: vec![], keys: vec![], boxes: vec![], page_next: None, snapshot: None };
 	let mut rust = Driver::new();
 	let mut lines = vec![w.init()];
 	let mut answers = vec![rust.step(&lines[0])];
@@ -742,6 +801,16 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 				}
 				if op == "nextExpiry" && v.is_null() {
 					note("nextExpiry null", seen);
+				}
+				if op == "snapshotPage" {
+					match (v.get("next").and_then(Json::as_str), v.get("token").and_then(Json::as_str)) {
+						(Some(n), Some(t)) => {
+							w.snapshot = Some((n.to_owned(), t.to_owned()));
+							note("a snapshot page with a next", seen);
+						}
+						(None, Some(_)) => note("a snapshot read to its end", seen),
+						_ => note("a whole read without a snapshot", seen),
+					}
 				}
 				if op == "listPage" {
 					w.page_next = v.get("next").cloned().filter(|n| !n.is_null());
@@ -929,6 +998,14 @@ fn random_walks_agree_with_the_typescript_core() {
 		"entries returned by an abort",
 		"entries written under a transaction",
 		"list TransactionError",
+		"a snapshot page with a next",
+		"a snapshot read to its end",
+		"a whole read without a snapshot",
+		"snapshotPage SnapshotExpired",
+		"snapshotPage PermissionError",
+		"snapshotPage IllegalArgumentError",
+		"snapshotPage ResourceExhausted",
+		"snapshotPage ResponseBudgetTooSmall",
 		"notify LimitError",
 		"notify IllegalArgumentError",
 		"notify ResourceExhausted",

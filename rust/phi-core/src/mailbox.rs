@@ -198,7 +198,7 @@ impl Space {
 		}
 		let pending: Vec<Json> = b.events.iter().filter(|e| num_of(e, "seq").is_some_and(|s| s > after)).cloned().collect();
 		let gap = if asked.is_none() { b.gap.clone() } else { None };
-		let result = crate::space::byte_page(&pending, cap, |events, next| {
+		let result = crate::space::byte_page(&pending, 0, cap, |events, next| {
 			let last = events.last().and_then(|e| num_of(e, "seq")).unwrap_or(after);
 			let mut r = obj! { "mailboxEpoch" => b.epoch.as_str(), "events" => events, "next" => last, "more" => next.is_some() };
 			if let (Some(g), Json::Object(o)) = (&gap, &mut r) {
