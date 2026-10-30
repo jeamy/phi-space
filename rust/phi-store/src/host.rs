@@ -30,6 +30,8 @@ pub struct SpaceHost {
 	/// The highest order of each array part, kept beside its orders as parts.ts does (it only grows, so an order is
 	/// never used twice while the document stays in memory).
 	max_ord: HashMap<String, i64>,
+	/// A write failed: the host takes no more work (its memory may hold what never reached the disk; reopen it).
+	failure: Option<String>,
 }
 
 fn claim_index(v: &Json) -> (Option<f64>, Option<String>, Option<i64>) {
@@ -56,12 +58,15 @@ impl SpaceHost {
 				(state, true, Some(head))
 			}
 		};
-		Ok(SpaceHost { ledger, kind: kind.to_owned(), key: key.map(str::to_owned), space: Space::new(state, random), exists, head_text, max_ord: HashMap::new() })
+		Ok(SpaceHost { ledger, kind: kind.to_owned(), key: key.map(str::to_owned), space: Space::new(state, random), exists, head_text, max_ord: HashMap::new(), failure: None })
 	}
 
 	/// Runs `op` as one commit: its result, or its error with nothing of it kept. A store that fails to write fails this
 	/// commit and takes no more.
 	pub fn commit<T>(&mut self, op: impl FnOnce(&mut Space) -> std::result::Result<T, CoreError>) -> Result<std::result::Result<T, CoreError>> {
+		if let Some(f) = &self.failure {
+			return Err(StoreError::Failed(f.clone()));
+		}
 		let on_disk = matches!(self.ledger, Ledger::Sqlite(_)) && self.exists && self.space.state.rpc.is_some();
 		self.space.begin_tracked_commit(on_disk);
 		match op(&mut self.space) {
@@ -72,7 +77,13 @@ impl SpaceHost {
 			Ok(v) => {
 				let changes = self.space.end_commit();
 				self.space.seal();
-				self.write(changes)?;
+				if let Err(e) = self.write(changes) {
+					self.failure = Some(match &e {
+						StoreError::Failed(m) => m.clone(),
+						other => other.to_string(),
+					});
+					return Err(e);
+				}
 				Ok(Ok(v))
 			}
 		}

@@ -24,6 +24,30 @@ pub enum Synchronous {
 	Normal,
 }
 
+/// Tests: what the writer does at one batch (sqlite.ts `StoreFaults`), as a failing disk or process would.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fault {
+	/// Nothing of the batch is written, and its commits fail (a crash before the commit point).
+	FailBeforeCommit,
+	/// The batch is durable, but its commits fail (a crash after the commit, before the answer).
+	LoseAnswer,
+	/// The writer thread ends without answering (it died).
+	WriterGone,
+}
+
+/// How the writer opens its connection.
+#[derive(Clone, Copy, Debug)]
+pub struct WriterOptions {
+	pub synchronous: Synchronous,
+	/// Tests: the file may not grow beyond this many pages, as on a full disk (SQLITE_FULL).
+	pub max_pages: Option<u64>,
+	/// Tests: what happens at this batch.
+	pub fault: Option<(u64, Fault)>,
+}
+impl Default for WriterOptions {
+	fn default() -> Self { WriterOptions { synchronous: Synchronous::Full, max_pages: None, fault: None } }
+}
+
 pub struct Writer {
 	tx: Sender<Msg>,
 	thread: Option<JoinHandle<()>>,
@@ -39,17 +63,21 @@ fn pause_point() -> Option<(String, u64, String)> {
 }
 
 impl Writer {
-	pub fn open(path: &Path, synchronous: Synchronous) -> std::result::Result<Writer, String> {
+	pub fn open(path: &Path, o: WriterOptions) -> std::result::Result<Writer, String> {
 		let db = Connection::open(path).map_err(|e| e.to_string())?;
 		db.busy_timeout(Duration::from_secs(10)).map_err(|e| e.to_string())?;
 		let _: String = db.query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0)).map_err(|e| e.to_string())?;
-		db.execute_batch(match synchronous {
+		db.execute_batch(match o.synchronous {
 			Synchronous::Full => "PRAGMA synchronous = FULL;",
 			Synchronous::Normal => "PRAGMA synchronous = NORMAL;",
 		})
 		.map_err(|e| e.to_string())?;
+		if let Some(pages) = o.max_pages {
+			let _: i64 = db.query_row(&format!("PRAGMA max_page_count = {pages}"), [], |r| r.get(0)).map_err(|e| e.to_string())?;
+		}
 		let (tx, rx) = channel::<Msg>();
-		let thread = std::thread::Builder::new().name("phi-store-writer".into()).spawn(move || run(db, rx)).map_err(|e| e.to_string())?;
+		let fault = o.fault;
+		let thread = std::thread::Builder::new().name("phi-store-writer".into()).spawn(move || run(db, rx, fault)).map_err(|e| e.to_string())?;
 		Ok(Writer { tx, thread: Some(thread) })
 	}
 	/// Hands a commit's rows over; the receiver settles when they are durable.
@@ -72,7 +100,7 @@ impl Writer {
 	}
 }
 
-fn run(db: Connection, rx: Receiver<Msg>) {
+fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>) {
 	let pause = pause_point();
 	let hold = |at: &str, batch: u64| {
 		if let Some((p, b, file)) = &pause {
@@ -103,9 +131,17 @@ fn run(db: Connection, rx: Receiver<Msg>) {
 		}
 		if !commits.is_empty() {
 			batch += 1;
-			let result = match &failed {
-				Some(e) => Err(e.clone()),
-				None => {
+			let fault = fault.filter(|(b, _)| *b == batch).map(|(_, f)| f);
+			if fault == Some(Fault::WriterGone) {
+				return; // the commits' answers are dropped with the thread
+			}
+			let result = match (&failed, fault) {
+				(Some(e), _) => Err(e.clone()),
+				(None, Some(Fault::FailBeforeCommit)) => {
+					failed = Some("an injected fault before the commit".into());
+					Err("an injected fault before the commit".into())
+				}
+				(None, _) => {
 					let ops: Vec<WriteOp> = commits.iter().flat_map(|(ops, _)| ops.iter().cloned()).collect();
 					let r = (|| -> rusqlite::Result<()> {
 						db.execute_batch("BEGIN IMMEDIATE")?;
@@ -115,12 +151,19 @@ fn run(db: Connection, rx: Receiver<Msg>) {
 						hold("after-commit", batch);
 						Ok(())
 					})();
-					r.map_err(|e| {
+					let r = r.map_err(|e| {
 						let _ = db.execute_batch("ROLLBACK");
 						let m = e.to_string();
 						failed = Some(m.clone()); // a failed write: everything after it fails too (reopen the store)
 						m
-					})
+					});
+					match (r, fault) {
+						(Ok(()), Some(Fault::LoseAnswer)) => {
+							failed = Some("the answer was lost (an injected fault)".into());
+							Err("the answer was lost (an injected fault)".into())
+						}
+						(r, _) => r,
+					}
 				}
 			};
 			for (_, done) in commits {

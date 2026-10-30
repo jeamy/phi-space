@@ -4,25 +4,17 @@
 // every commit it acknowledged must be there, never half of one, and both the Rust and the TypeScript store read the
 // crashed file alike. The other way round, a killed TypeScript child (test/support/store-crash-child.ts) leaves a file
 // the Rust store reads as the TypeScript one does.
+mod support;
 use phi_core::driver::seeded;
-use phi_json::{obj, parse, Json, FOREVER};
+use phi_json::{obj, Json, FOREVER};
 use phi_store::{SpaceHost, SqliteLedger, Synchronous};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
+use support::{dir, root, survivors, KIND};
 use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::channel;
 use std::time::Duration;
-
-const KIND: &str = "phi-spaces.space";
-
-fn root() -> PathBuf { PathBuf::from(format!("{}/../..", env!("CARGO_MANIFEST_DIR"))) }
-fn dir(name: &str) -> PathBuf {
-	let d = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
-	let _ = std::fs::remove_dir_all(&d);
-	std::fs::create_dir_all(&d).unwrap();
-	d
-}
 
 /// The child: commits pairs on the file in PHI_STORE_CRASH_FILE, counting from PHI_STORE_CRASH_FROM, until killed.
 #[test]
@@ -105,46 +97,6 @@ fn crash_run(rust: bool, file: &Path, env: &[(&str, String)], from: u64, when: i
 	reader.join().unwrap();
 	collect();
 	acks.into_inner().unwrap()
-}
-
-/// The pairs on the file as the Rust store reads it: every commit's two halves or none.
-fn survivors_rust(file: &Path) -> BTreeSet<u64> {
-	let ledger = SpaceHost::sqlite(SqliteLedger::open(file, Synchronous::Full).unwrap()); // the dead owner's lock is free
-	let host = SpaceHost::open(ledger, KIND, None, seeded("read")).unwrap();
-	let mut halves: BTreeMap<u64, u32> = BTreeMap::new();
-	for e in host.space.state.entries.iter().filter(|e| e.type_ == "Pair") {
-		*halves.entry(e.fields.get("i").and_then(Json::as_f64).unwrap() as u64).or_default() += 1;
-	}
-	host.close();
-	for (i, n) in &halves {
-		assert_eq!(*n, 2, "commit {i} is there only in part");
-	}
-	halves.into_keys().collect()
-}
-/// The same as the TypeScript store reads it.
-fn survivors_ts(file: &Path) -> BTreeSet<u64> {
-	let script = format!(
-		"const {{ openSqliteHost }} = await import({:?}); const {{ Space }} = await import({:?}); const {{ BACKGROUND_CONTEXT: ctx }} = await import({:?}); const h = await openSqliteHost({:?}); const s = await h.snapshot(Space, ctx); await h.close(ctx); process.stdout.write(JSON.stringify((s?.entries ?? []).filter(e => e.type === 'Pair').map(e => e.fields.i)));",
-		root().join("src/store/sqlite.ts").to_str().unwrap(),
-		root().join("src/doc.ts").to_str().unwrap(),
-		root().join("src/context.ts").to_str().unwrap(),
-		file.to_str().unwrap()
-	);
-	let out = Command::new("node").args(["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", &script]).current_dir(root()).output().unwrap();
-	assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-	let mut halves: BTreeMap<u64, u32> = BTreeMap::new();
-	for i in parse(std::str::from_utf8(&out.stdout).unwrap()).unwrap().as_array().unwrap() {
-		*halves.entry(i.as_f64().unwrap() as u64).or_default() += 1;
-	}
-	for (i, n) in &halves {
-		assert_eq!(*n, 2, "commit {i} is there only in part (TypeScript)");
-	}
-	halves.into_keys().collect()
-}
-fn survivors(file: &Path) -> BTreeSet<u64> {
-	let r = survivors_rust(file);
-	assert_eq!(survivors_ts(file), r, "the Rust and the TypeScript store read the crashed file alike");
-	r
 }
 
 fn wait_for(marker: &Path) {

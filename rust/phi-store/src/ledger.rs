@@ -2,7 +2,7 @@
 use crate::files::{open_files, Result, StoreError, StoreFiles};
 use crate::ops::WriteOp;
 use crate::parts::{head_of, id_of, join_parts, part_at, PartDef, PartKind, PartRow};
-use crate::writer::{Durable, Synchronous, Writer};
+use crate::writer::{Durable, Synchronous, Writer, WriterOptions};
 use phi_json::{parse, Json};
 use rusqlite::params;
 use std::collections::HashMap;
@@ -87,9 +87,10 @@ pub struct SqliteLedger {
 }
 
 impl SqliteLedger {
-	pub fn open(path: &Path, synchronous: Synchronous) -> Result<SqliteLedger> {
+	pub fn open(path: &Path, synchronous: Synchronous) -> Result<SqliteLedger> { SqliteLedger::open_with(path, WriterOptions { synchronous, ..Default::default() }) }
+	pub fn open_with(path: &Path, o: WriterOptions) -> Result<SqliteLedger> {
 		let files = open_files(path)?;
-		let writer = Writer::open(path, synchronous).map_err(|e| StoreError::Unavailable(format!("the store writer could not open {}: {e}", path.display())))?;
+		let writer = Writer::open(path, o).map_err(|e| StoreError::Unavailable(format!("the store writer could not open {}: {e}", path.display())))?;
 		Ok(SqliteLedger { files, writer: Some(writer), ords: HashMap::new() })
 	}
 

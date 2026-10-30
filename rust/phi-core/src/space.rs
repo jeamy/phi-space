@@ -370,10 +370,12 @@ pub(crate) struct Tracking {
 	head: SpaceState,
 	stream_rev: f64,
 	dropped: Vec<crate::state::Batch>,
-	/// Claims the commit changed, each with where and how it was before (none: it was not there), in order of first touch.
-	claims: Vec<(String, Option<(usize, Json)>)>,
+	/// Claims and generations the commit changed, each with how it was before (none: it was not there), in order of first
+	/// touch. Map parts change in place and are undone by assignment, as draft.ts does: a key the commit deleted comes
+	/// back at the end of its map, not where it was (later sweeps go by that order).
+	claims: Vec<(String, Option<Json>)>,
 	claims_seen: std::collections::HashSet<String>,
-	generations: Vec<String>,
+	generations: Vec<(String, Option<Json>)>,
 }
 
 /// What a tracked commit changed, for the rows a store writes (`Space::end_commit`).
@@ -402,7 +404,11 @@ impl Space {
 		let entries = std::mem::take(&mut self.state.entries);
 		let log = self.state.stream.as_mut().map(|s| std::mem::take(&mut s.log));
 		let claims = self.state.rpc.as_mut().map(|r| std::mem::take(&mut r.claims));
+		let generations = self.state.rpc.as_mut().map(|r| std::mem::take(&mut r.generations));
 		let head = self.state.clone();
+		if let (Some(r), Some(g)) = (self.state.rpc.as_mut(), generations) {
+			r.generations = g;
+		}
 		self.state.entries = entries;
 		if let (Some(s), Some(l)) = (self.state.stream.as_mut(), log) {
 			s.log = l;
@@ -418,7 +424,7 @@ impl Space {
 	pub fn end_commit(&mut self) -> Changes {
 		let t = self.tracking.take().expect("a tracked commit");
 		let entries = self.state.entries.untrack();
-		Changes { entries, dropped_revs: t.dropped.iter().map(|b| b.rev).collect(), stream_rev: t.stream_rev, claims: t.claims.into_iter().map(|(k, _)| k).collect(), generations: t.generations }
+		Changes { entries, dropped_revs: t.dropped.iter().map(|b| b.rev).collect(), stream_rev: t.stream_rev, claims: t.claims.into_iter().map(|(k, _)| k).collect(), generations: t.generations.into_iter().map(|(k, _)| k).collect() }
 	}
 	/// Undoes the tracked commit: the state is what it was when the commit began.
 	pub fn rollback(&mut self) {
@@ -437,16 +443,20 @@ impl Space {
 			s.log = restored;
 		}
 		if let Some(r) = head.rpc.as_mut() {
-			let mut claims = self.state.rpc.take().map(|r| r.claims).unwrap_or_default();
-			for (k, before) in t.claims.into_iter().rev() {
-				match before {
-					Some((at, v)) => claims.insert_at(at, k, v),
-					None => {
-						claims.remove(&k);
+			let now = self.state.rpc.take().expect("rpc stays once made");
+			let undo = |mut m: Object, log: Vec<(String, Option<Json>)>| {
+				for (k, before) in log.into_iter().rev() {
+					match before {
+						Some(v) => m.insert(k, v), // assignment: a key that was deleted goes last
+						None => {
+							m.remove(&k);
+						}
 					}
 				}
-			}
-			r.claims = claims;
+				m
+			};
+			r.claims = undo(now.claims, t.claims);
+			r.generations = undo(now.generations, t.generations);
 		}
 		self.state = head;
 		self.open = None;
@@ -458,8 +468,7 @@ impl Space {
 		let st = self.state.rpc.as_mut().expect("rpc made");
 		if let Some(t) = &mut self.tracking {
 			if t.claims_seen.insert(key.to_owned()) {
-				let before = st.claims.position(key).map(|at| (at, st.claims.get(key).cloned().expect("there")));
-				t.claims.push((key.to_owned(), before));
+				t.claims.push((key.to_owned(), st.claims.get(key).cloned()));
 			}
 		}
 		match value {
@@ -469,12 +478,12 @@ impl Space {
 			}
 		}
 	}
-	/// Sets or deletes a generation; a tracked commit records its key (the generations are part of the head's copy).
+	/// Sets or deletes a generation; a tracked commit records how it was.
 	pub(crate) fn generation_put(&mut self, key: &str, value: Option<Json>) {
 		let st = self.state.rpc.as_mut().expect("rpc made");
 		if let Some(t) = &mut self.tracking {
-			if !t.generations.iter().any(|k| k == key) {
-				t.generations.push(key.to_owned());
+			if !t.generations.iter().any(|(k, _)| k == key) {
+				t.generations.push((key.to_owned(), st.generations.get(key).cloned()));
 			}
 		}
 		match value {

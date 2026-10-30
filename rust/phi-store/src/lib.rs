@@ -13,4 +13,4 @@ pub use host::{Ledger, SpaceHost, SPACE_VERSION};
 pub use ledger::{whole_ops, MemoryLedger, SqliteLedger, StoredDoc};
 pub use ops::WriteOp;
 pub use parts::{PartDef, PartKind, SPACE_PARTS};
-pub use writer::Synchronous;
+pub use writer::{Fault, Synchronous, WriterOptions};

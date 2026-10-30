@@ -536,7 +536,7 @@ die Uhr selbst, statt `now` zu übernehmen. Der Rust-Kern nimmt `now` als Parame
 |---|---|---|
 | 0 | Crate `phi-store`: Datei öffnen (Owner-Lock wie TS, WAL, Schema, Format 1→2), Dokument aus Kopf und Teil-Zeilen laden, Zeilen-Ops, Schreib-Thread mit Batches, Speicher-Ledger | erledigt |
 | 1 | Host: ein Commit je Operation mit Rücknahme, Teil-Änderungen mit `ord`; der Rust-Kern im Host-Modus (Wasserstand, Budget und offener Batch je Commit neu; Claims als `DISK_MAP` mit den Plattenzweigen des TS-Kerns); TS-Store-Treiber und Zufallsgang gegen ihn | erledigt |
-| 2 | Absturz und Wiederöffnen an den Commit-Grenzen; Schreibfehler, voller Datenträger, Writer-Ausfall und gesperrter Host nach Persistierungsfehler | offen |
+| 2 | Absturz und Wiederöffnen an den Commit-Grenzen; Schreibfehler, voller Datenträger, Writer-Ausfall und gesperrter Host nach Persistierungsfehler | erledigt (ohne überlappende Commits, Watches und Schließen mit wartenden Commits: die brauchen den asynchronen Host, siehe unten) |
 | 3 | Claims wirklich auf der Platte (gezielt gelesen statt im Speicher), Speicherbudget des Hosts | offen |
 | 4 | Backup/Restore unter Last, Kompaktierung und Shutdown; wachsender Claim-Bestand in SQLite und `memory` | offen |
 
@@ -594,6 +594,31 @@ Claims und der Zähler je Batch (`commit_seq`) sind eigens geprüft.
   Mengen. Beobachtbar ist nur `serve`: Ein fester Fall (`a_served_wait_with_its_claim_on_the_disk`) hält ihn fest.
 - **Gegenprobe:** Erkannt werden ein falscher `ord`-Zähler (die Dateien unterscheiden sich), ein Wasserstand, der
   über Commits bleibt, ein Host ohne Plattenzweig und ein Host ohne Rücknahme.
+
+**Stand Scheibe 2 (2026-10-30):**
+
+- **Absturz** (`phi-store/tests/crash.rs`, wie `test/test-own-store.test.ts`): Ein Kindprozess (das Testprogramm
+  selbst, oder `store-crash-child.ts`) committet Paare von Entries, bis er mit SIGKILL getötet wird. Zu einem
+  beliebigen Zeitpunkt getötet, ist jedes bestätigte Paar da und keines nur halb; Rust- und TS-Store lesen die
+  abgestürzte Datei gleich, auch die eines TS-Kindes. Vor dem `COMMIT` des dritten Batches angehalten
+  (`PHI_SPACES_WRITER_PAUSE`, der Schalter des TS-Schreibers), sind genau die bestätigten Commits da; danach angehalten,
+  ist der dritte da, unbestätigt. Die Sperre des toten Eigentümers ist frei.
+- **Schreibfehler** (`tests/failures.rs`): voller Datenträger (`max_pages`, `SQLITE_FULL`), ein Fehler vor dem
+  `COMMIT`, eine verlorene Antwort danach und ein verschwundener Schreib-Thread (`Fault`, wie `StoreFaults` im TS-Store).
+  Der scheiternde Commit wird nicht bestätigt, der Host nimmt bis zum Wiederöffnen nichts mehr an und lässt die
+  Operation gar nicht erst laufen, Bestätigtes bleibt erhalten.
+- **Wiederholung:** Eine Anfrage, deren Antwort verloren ging (Zulassung, Wirkung und Entscheidung in einem Commit wie
+  `client.ts` `mutate`), wird unter ihrer ursprünglichen Identität wiederholt. Sie bekommt das gespeicherte Ergebnis
+  und hat keine zweite Wirkung.
+- **Gegenprobe:** Ein Schreiber, der vor dem `COMMIT` bestätigt, und ein Host, der nach dem Fehler weiterarbeitet,
+  fallen durch.
+- **Befund aus dem langen Store-Gang:** Der TS-Entwurf ändert Map-Teile (Claims, Generationen) an Ort und Stelle und
+  nimmt einen gescheiterten Commit durch Zuweisung zurück (`draft.ts`). Ein Schlüssel, den der Commit löschte, steht
+  danach am Ende der Map statt an seinem Platz. Spätere Sweeps gehen nach dieser Reihenfolge, wenn das Budget nur für
+  einen Teil reicht. Der Rust-Host nimmt Map-Teile jetzt genauso zurück.
+- **Offen für den asynchronen Host** (mit tokio, vor oder mit R3): Commits, die einander überlappen (der nächste sieht
+  den vorigen vor dessen Persistierung), Watches nur auf dauerhaften Zustand, Batching mehrerer offener Commits und
+  Schließen mit wartenden Commits. Der Host von Scheibe 1 wartet jeden Commit ab, bevor er den nächsten annimmt.
 
 ### R3: `phi-service`, `phi-wire`, `phi-space-server`
 

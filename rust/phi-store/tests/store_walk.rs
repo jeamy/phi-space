@@ -248,3 +248,40 @@ fn a_served_wait_with_its_claim_on_the_disk() {
 	];
 	compare("store-served-wait", &init, &lines);
 }
+
+/// A debugging aid for a divergence: the generations and claims of both hosts after UPTO steps of the walk with seed
+/// PHI_STORE_WALK_SEED (`cargo test -p phi-store --test store_walk show_walk_state -- --ignored --nocapture`).
+#[test]
+#[ignore = "a debugging aid, run by hand"]
+fn show_walk_state() {
+	let seed: u64 = std::env::var("PHI_STORE_WALK_SEED").unwrap().parse().unwrap();
+	let upto: usize = std::env::var("UPTO").unwrap().parse().unwrap();
+	let d = dir("show-walk-state");
+	let mut w = Walk::new(seed);
+	let init = w.init();
+	eprintln!("init {}", init.to_json_text());
+	let mut rust = RustSide::open(&d.join("rust.sqlite"), &init);
+	let mut seen = BTreeMap::new();
+	let mut lines = vec![];
+	for _ in 0..upto {
+		let rev = rust.host.space.state.stream.as_ref().map_or(0.0, |s| s.rev);
+		let line = w.line(rev);
+		let r = rust.step(&line);
+		observe(&mut w, &line, &r, &rust.host.space, &mut seen);
+		lines.push(line);
+	}
+	let g = |v: &Json| v.get("rpc").and_then(|r| r.get("generations")).and_then(Json::as_object).map(|o| o.iter().map(|(k, g)| format!("{} until {}", &k[..8], g.get("admitUntil").unwrap().to_json_text())).collect::<Vec<_>>());
+	eprintln!("Rust gens {:?}", g(&rust.host.space.state.to_json()));
+	let c = |v: &Json| v.get("rpc").and_then(|r| r.get("claims")).and_then(Json::as_object).map(|o| o.iter().map(|(_, c)| format!("{} {} {}", c.get("generation").and_then(Json::as_str).map(|g| &g[..8]).unwrap_or("-"), c.get("state").unwrap().to_json_text(), c.get("decidedAt").map(|x| x.to_json_text()).unwrap_or_default())).collect::<Vec<_>>());
+	eprintln!("Rust claims {:?} sweepAt {:?}", c(&rust.host.space.state.to_json()), rust.host.space.state.rpc.as_ref().map(|r| r.sweep_at));
+	rust.host.close();
+	let mut ti = init.clone();
+	if let Json::Object(o) = &mut ti { o.insert("file", d.join("ts.sqlite").to_str().unwrap().into()); }
+	let mut all = vec![ti];
+	all.extend(lines);
+	if let Json::Object(o) = all.last_mut().unwrap() { o.insert("dump", Json::Bool(true)); }
+	let out = TsDriver::script("test/support/store-driver.ts").run(&all);
+	let dump = out.last().unwrap().get("dump").cloned().unwrap();
+	eprintln!("TS   gens {:?}", g(&dump));
+	eprintln!("TS   claims {:?}", c(&dump));
+}
