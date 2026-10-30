@@ -644,6 +644,15 @@ Claims und der Zähler je Batch (`commit_seq`) sind eigens geprüft.
   hängt es also davon ab, ob der TS-Host das Dokument zwischendurch verdrängt hat. Der Rust-Host muss beim
   Verdrängen dieselbe Abfrage nehmen, dann gilt dasselbe für ihn.
 
+**Stand Scheibe 4 (2026-10-30): offen, nur die Ursachenprüfung begonnen.**
+
+- `server-probe --store memory --clients 8 --ops 1000 --rate 300` (24 000 Aufrufe): 84 Aufrufe/s, 12,0 ms Server-CPU je
+  Aufruf, RSS bis 457 MB. Der Befund aus R0 besteht also fort.
+- Die Ursache ist nicht nachgewiesen. Der Speicher-Ledger selbst tut nichts (`host.ts` `memoryLedger`). Ein CPU-Profil
+  liegt nicht vor, weil die Probe den Server beendet, bevor `--cpu-prof` schreibt.
+- Backup/Restore unter Last, Kompaktierung, Schließen und der wachsende Claim-Bestand in `memory` fehlen noch.
+  Der lange Store-Gang nach dieser Scheibe ist noch nicht ausgewertet.
+
 ### R3: `phi-service`, `phi-wire`, `phi-space-server`
 
 **Arbeit:**
