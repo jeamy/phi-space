@@ -940,6 +940,39 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
    `Setting`-Entries, Rückfall; die Siedlung aus Hütten in einem Raum (Name, Rechte-Stufen Fremder, Helfer, Siedler).
    Abnahme: eine Insel erreicht das Dorf aus Beeten allein; verfällt genug, fällt sie zurück, ihre Bauten arbeiten weiter,
    neue Pläne der Stufe sind gesperrt. Ohne diesen Schritt gibt es keine Epoche 2 für Schritt 5.
+   - **Teil 1, gebaut 2026-10-30** (`server/engine/commands/epoch.ts`, Test `tests/epoch.test.ts`, Weltversion 25): die
+     **Epochen**.
+     - **Punkte:** Jeder Bau, jedes Beet und jede Flur, die noch steht (`untilWorldMs` nicht verstrichen), zählt mit
+       ihren Lichtpunkten zum gehaltenen Bestand ihrer Insel: Hütte, Beet, Hühnerstall, Regentonne, Vogelscheuche,
+       Webstuhl je 1, Flur, Gemeinschaftsbeet, Windmühle, Backhaus, Gehege je 2. Eine Flur zählt auch brach, sonst fiele
+       eine Insel nahe der Schwelle nach jeder Ernte zurück.
+     - **Schwellen** als Einstellungen im Fenster des Betreibers: `epoch.dorf` 15, `epoch.stadt` 40, `epoch.netz` 80
+       (`SPACES_MMO_EPOCH_*`). Jede Insel hat mindestens ein Feuer mit 20 Lichtpunkten, das Dorf ist also überall
+       erreichbar, aber nicht von einem Konto allein (höchstens fünf Bauten, drei Beete, eine Flur: etwa 10 Punkte).
+     - **Zählung:** Job `epoch` jede Weltstunde und einmal beim Start des Welt-Workers, je Region über die Inseln ihrer
+       Räume. Sie schreibt den `Epoch`-Entry einer Insel nur, wenn sich die Stufe ändert, und sagt es allen Räumen der
+       Insel.
+     - **Gesperrt** im Fischerdorf: neue Windmühlen, Backhäuser, Gehege, Webstühle (`PlanDef.epoch`) und Fluren
+       (`FieldDef.epoch`). `bau` und das Zellmenü zeigen „ab Dorf“. Was schon steht oder als Baustelle abgesteckt ist,
+       arbeitet und wird weitergebaut; Rezepte an einem Bau (Brot, Tuch, Käse), Mahlen und Abholen fragen nicht nach
+       der Epoche.
+     - `epoche` zeigt Stufe, Punkte (nach Bauten, Beeten, Fluren) und was die nächste Stufe freischaltet; Hilfe
+       `help epochen`.
+
+     Abnahme (`tests/epoch.test.ts`):
+     - 14 Beete reichen nicht, das 15. macht die Graue Insel zum Dorf; ein verwildertes Beet zählt nicht, eine andere
+       Insel zählt für sich. Zwei Beete weniger, und sie ist wieder ein Fischerdorf.
+     - Ein Spieler bekommt im Fischerdorf „braucht ein Dorf“ für Windmühle und Flur, im Dorf darf er das Backhaus
+       abstecken. Nach dem Rückfall backt ein stehendes Backhaus weiter, eine neue Windmühle ist wieder gesperrt.
+
+     Abweichungen vom Entwurf:
+     - Gezählt wird stündlich statt einmal am Welttag und nach jedem Bau; das kostet ein paar Lesevorgänge je Region
+       und Stunde, schreibt aber nur bei einem Wechsel.
+     - „Gepflegt und Unterhalt bezahlt“ heißt vorerst: nicht verfallen. Unterhalt aus dem Lagerhaus kommt mit Schritt 5.
+     - Mühle, Backhaus, Gehege, Webstuhl und Fluren gab es seit Schritt 3 ohne Epoche; sie sind jetzt Pläne des Dorfs
+       wie im Entwurf. Stadt und Netz haben noch keine eigenen Pläne.
+
+     Noch nicht: die Siedlung aus Hütten (Teil 2).
 5. **Werkstätten, Steinbruch, Lagerhaus** (mit Entnahmelog und Quote), neue Rezepte, Aufträge der Baustellen an der
    Tafel; Skript-NPCs nehmen sie an, die Rolle `bauhelfer` kommt dazu, und `liefere`/`arbeite` ziehen ins
    `AutomatonCmdSet` samt Vorlage „Baustellenhelfer“. **Automaten-Körper** als Werkstatt-Rezept (Tauwerk, Zahnrad,

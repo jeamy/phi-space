@@ -12,6 +12,7 @@
 //   delivering at once finish it exactly once and nothing is lost or counted twice. What is not needed stays in the pack.
 // - At most half of what a site gets may come from NPCs or automata.
 // - A site without progress lapses at its world time (the sweep, buildSweep); work makes a figure rest a while (WorkRest).
+import { epochName, epochOf, islandOf, needEpoch } from "./epoch.ts";
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SiteFields, type WorkRestFields } from "../../model.ts";
@@ -183,7 +184,8 @@ export const bau: Command = {
 		const def = c.world.building;
 		if (!def?.plans.length) throw new CommandError("In dieser Welt wird nicht gebaut.");
 		if (!arg.trim()) {
-			const list = def.plans.map((p) => `${p.name} (${p.w}×${p.h}): ${p.needs.map((n) => `${n.count} ${c.world.prototypes.find((x) => x.key === n.proto)?.name ?? n.proto}`).join(", ")}, ${p.work} Arbeit`);
+			const epoch = await epochOf(c.space, islandOf(c.world, c.actor.room), c.txn);
+			const list = def.plans.map((p) => `${p.name}${(p.epoch ?? 1) > epoch ? ` (erst ab ${epochName(c.world, p.epoch!)})` : ""} (${p.w}×${p.h}): ${p.needs.map((n) => `${n.count} ${c.world.prototypes.find((x) => x.key === n.proto)?.name ?? n.proto}`).join(", ")}, ${p.work} Arbeit`);
 			return msg(c, c.actor.charId, "info", `Baupläne: ${list.join("; ")}. „bau <plan>“ steckt neben dir eine Baustelle ab; liefern und arbeiten können alle.`);
 		}
 		const m = /^(\S+)(?:\s+(\d+)\s+(\d+))?$/.exec(arg.trim().replace(ARTICLE, ""));
@@ -191,6 +193,7 @@ export const bau: Command = {
 		if (!plan) throw new NotUnderstood(`Einen Bauplan „${arg.slice(0, 20)}“ gibt es nicht. „bau“ zeigt die Pläne.`);
 		if (!c.account || c.account.guest) throw new CommandError("Gäste können liefern und mitarbeiten, aber nichts besitzen; registriere dich, um selbst zu bauen.");
 		if (c.account.npc || c.actor.charId.startsWith("npc-")) throw new CommandError("Baustellen stecken nur Menschen ab.");
+		await needEpoch(c, plan.epoch, `Der Bauplan „${plan.name}“`);
 		if ((await c.space.count({ type: "Site", fields: { accountId: c.account.accountId } })) >= def.maxSites) throw new CommandError("Du hast schon eine offene Baustelle; bau sie erst fertig.");
 		if ((await c.space.count({ type: "Site", fields: { accountId: c.account.accountId } })) + (await c.space.count({ type: "Building", fields: { accountId: c.account.accountId } })) >= def.maxBuildings) throw new CommandError(`Mehr als ${def.maxBuildings} Bauten hat niemand.`);
 		const light = await lightFor(c, plan.points);

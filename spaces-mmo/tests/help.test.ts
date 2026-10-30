@@ -13,6 +13,7 @@ import { WILD_COMMANDS } from "../server/engine/commands/wild.ts";
 import { FIELD_COMMANDS } from "../server/engine/commands/field.ts";
 import { MILL_COMMANDS } from "../server/engine/commands/mill.ts";
 import { ANIMAL_COMMANDS } from "../server/engine/commands/animals.ts";
+import { EPOCH_COMMANDS } from "../server/engine/commands/epoch.ts";
 import { LINE as CHAT_LINE } from "../server/chat.ts";
 
 const LANGS = ["de", "en"] as const;
@@ -45,7 +46,7 @@ test("help links point at existing articles and anchors", () => {
 });
 
 test("every command in the command tables exists in the engine, under its English and German names", () => {
-	const known = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
+	const known = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
 	known.add("help"); known.add("hilfe"); known.add("?"); // helpCommand is built per room
 	// the chat's words never reach the engine: the gateway catches them (server/chat.ts)
 	for (const w of /\^\(([^)]+)\)/.exec(CHAT_LINE.source)![1]!.split("|")) known.add(w);
@@ -69,6 +70,6 @@ test("every command in the command tables exists in the engine, under its Englis
 test("no help topic of the world is named like a command (help <topic> would answer with the command)", async () => {
 	const { loadWorld } = await import("../server/engine/world.ts");
 	const w = await loadWorld();
-	const words = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
+	const words = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
 	for (const t of w.help) assert.ok(!words.has(t.key.toLowerCase()), `help topic ${t.key} is also a command word`);
 });

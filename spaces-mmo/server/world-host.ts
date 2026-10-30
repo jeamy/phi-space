@@ -28,6 +28,7 @@ import { sweepTick } from "./engine/sweep.ts";
 import { gardenTick, stormFillsBarrels } from "./engine/commands/garden.ts";
 import { stormTurnsMills } from "./engine/commands/mill.ts";
 import { wildTick } from "./engine/commands/wild.ts";
+import { epochTick } from "./engine/commands/epoch.ts";
 import { fieldTick } from "./engine/commands/field.ts";
 import { ensureTokens, loadIntoSpace } from "./engine/loader.ts";
 import { ClockGuard, runSchedules } from "./engine/schedule.ts";
@@ -62,6 +63,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		storm: async () => { const room = await stormTick(space, w, msgLeaseMs); await stormFillsBarrels(space, w, room); await stormTurnsMills(space, w, room); },
 		garden: async () => { await gardenTick(space, w); await fieldTick(space, w, msgLeaseMs); },
 		wild: async () => { await wildTick(space, w, msgLeaseMs); },
+		epoch: async () => { await epochTick(space, w, msgLeaseMs); },
 	};
 	const handlers = { ...SCHEDULE_HANDLERS, tick: tickHandler(runs) };
 	// a region's world worker reaches the other regions: to deliver the characters that took a ferry out of it
@@ -80,6 +82,8 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 	const proc = announce(space, "world");
 	const delivering = region ? deliver(space, others, full, halt.signal) : Promise.resolve();
 	if (loaded.loaded) console.log(`[world] loaded ${w.id} version ${w.version}${loaded.spawned.length ? `, placed ${loaded.spawned.join(", ")}` : ""}`);
+	// the islands count at once: one that qualified before the epochs came need not wait for the job's first date
+	await epochTick(space, w, msgLeaseMs).catch((e) => console.error("[world] epoch count", e));
 	const tokens = await ensureTokens(space);
 	if (tokens) console.log(`[world] wrote ${tokens} missing tokens`);
 

@@ -10,6 +10,7 @@
 //   The counter stands on the field.
 // - The field tick (in the garden job) writes a field only when its date comes: it ripens, its window passes (each share
 //   then loses a part), the crop is lost; and a field nobody worked for its time goes back to grass.
+import { needEpoch } from "./epoch.ts";
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type FieldFields, type WorkRestFields } from "../../model.ts";
@@ -98,6 +99,7 @@ async function stake(c: CommandCtx, at: string): Promise<void> {
 	const d = fieldDef(c), g = c.world.garden;
 	if (!c.account || c.account.guest) throw new CommandError("Gäste helfen auf offenen Fluren mit, legen aber keine an; registriere dich dafür.");
 	if (!human(c)) throw new CommandError("Fluren legen nur Menschen an.");
+	await needEpoch(c, d.epoch, "Eine neue Flur");
 	if (g && !(await inventory(c)).some((i) => i.f.proto === g.spade)) throw new CommandError(`Eine Flur bricht man mit einem Spaten um („craft ${c.world.prototypes.find((p) => p.key === g.spade)?.name.toLowerCase() ?? g.spade}“).`);
 	if ((await c.space.count({ type: "Field", fields: { accountId: c.account.accountId } })) >= d.maxFields) throw new CommandError(`Mehr als ${plural(d.maxFields, "Flur", "Fluren")} bestellt niemand allein.`);
 	const light = await lightFor(c, d.points);

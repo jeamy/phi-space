@@ -25,7 +25,7 @@ export type CharView = { charId: string; name: string; x: number; y: number; ski
 /** What a client sees of a thing or an exit: on the map when `location` is its room, in its pack when it is its charId. */
 /** `icon`: the URL of a thing's picture (from its prototype); the map draws the glyph without one. */
 /** A building plan as the page offers it (key for `bau <key> <x> <y>`, what it needs as text). */
-export type PlanView = { key: string; name: string; w: number; h: number; needs: string; work: number };
+export type PlanView = { key: string; name: string; w: number; h: number; needs: string; work: number; /** the island's epoch it needs ("Dorf"; none: the first) */ epoch?: string };
 /** A site or building (docs/siedeln.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
 export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed" | "field" | "animal"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
@@ -341,7 +341,7 @@ export class Gateway {
 	/** The building plans for the page's cell menu, with what each needs as text. */
 	#plans(): PlanView[] {
 		const name = (k: string) => this.w.prototypes.find((p) => p.key === k)?.name ?? k;
-		return (this.w.building?.plans ?? []).map((p) => ({ key: p.key, name: p.name, w: p.w, h: p.h, needs: p.needs.map((n) => `${n.count} ${name(n.proto)}`).join(", "), work: p.work }));
+		return (this.w.building?.plans ?? []).map((p) => ({ key: p.key, name: p.name, w: p.w, h: p.h, needs: p.needs.map((n) => `${n.count} ${name(n.proto)}`).join(", "), work: p.work, ...((p.epoch ?? 1) > 1 ? { epoch: this.w.epochs?.names[p.epoch! - 1] ?? `Epoche ${p.epoch}` } : {}) }));
 	}
 	#hello(c: Client): void {
 		const self = this.#chars.get(c.me.charId);

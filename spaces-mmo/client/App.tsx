@@ -273,7 +273,7 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 	}
 	if (step === "plans") {
 		entries.length = 0;
-		for (const p of plans) entries.push({ label: `${p.name} (${p.w}×${p.h})`, line: `#plan ${p.key}`, run: () => setStep(p) });
+		for (const p of plans) entries.push({ label: `${p.name} (${p.w}×${p.h}${p.epoch ? `, ab ${p.epoch}` : ""})`, line: `#plan ${p.key}`, run: () => setStep(p) });
 		entries.push({ label: "Zurück", line: "#zurück", run: () => setStep(null) });
 	} else if (step) {
 		entries.length = 0;

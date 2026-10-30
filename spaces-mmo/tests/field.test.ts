@@ -61,7 +61,8 @@ const rested = async (space: SpaceLike) => { for (const e of await space.readAll
 
 test("a field: staked out with a spade, sown with seed and work, brought in by ten hands exactly once", { timeout: 300_000 }, async () => {
 	// 0.001: a world hour (the rest after work) is 3.6 s
-	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001" } });
+	// a village at once (the threshold 0): the count at the world's start writes it, and fields may be staked out
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001", SPACES_MMO_EPOCH_DORF: "0" } });
 	try {
 		const s = srv.stack.space;
 		const boss = await player(srv.url, "Bäuerin");

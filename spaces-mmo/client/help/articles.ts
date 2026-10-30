@@ -324,6 +324,7 @@ Ausführlich unter [Gärten](help.game.garden).
 | \`scheuche hase\` | \`scare\` | Einen Hasen (auch \`reh\`, \`fuchs\`, \`maus\`) bis drei Schritte von dir in den Nebel zurückjagen |
 | \`zäune\` | \`fence\` | Einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), deine Flur (6 Treibholz, 2 Tangseil) oder deinen Hühnerstall (3 Treibholz, 1 Tangseil) neben dir setzen |
 | \`wache\` | \`guards\` | Wer im Raum vor dem Wild wacht (Hund, Katze, Gänse) und ob sie satt sind |
+| \`epoche\` | \`stufe\` | Auf welcher Stufe die Insel steht (Fischerdorf, Dorf, Stadt, Netz), ihre Punkte und was die nächste freischaltet |
 | \`flur anlegen [x y]\` | \`acker anlegen\` | Mit einem Spaten im Licht eine Flur umbrechen (4×4); \`flur\` zeigt die Fluren hier, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
 | \`bestelle [frucht]\` | \`pflüge\`, \`plough\` | Die Flur bestellen: Frucht wählen, Saatgut und einen Arbeitspunkt bringen |
 | \`mahle [n oder alle] <korn>\` | \`mühle\`, \`grind\` | An einer Windmühle neben dir Korn zu Mehl mahlen lassen; \`mahle\` allein: wie lange sie noch mahlt |
@@ -351,7 +352,7 @@ Ausführlich unter [Handel und Handwerk](help.game.trade).
 
 | Befehl | Wirkung |
 | --- | --- |
-| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help chat\` |
+| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help epochen\`, \`help chat\` |
 
 ## Für Builder {#builder}
 
@@ -426,6 +427,7 @@ In detail under [Gardens](help.game.garden).
 | \`scheuche hase\` | \`scare\` | Chase a hare (also \`reh\`, \`fuchs\`, \`maus\`) up to three cells from you back into the fog |
 | \`zäune\` | \`fence\` | Put a fence round a bed (2 driftwood, 1 kelp rope), your field (6 driftwood, 2 kelp rope) or your coop (3 driftwood, 1 kelp rope) beside you |
 | \`wache\` | \`guards\` | Who keeps watch against the wild in this room (dog, cat, geese) and whether they are fed |
+| \`epoche\` | \`stufe\` | The island's epoch (fishing village, village, town, net), its points and what the next unlocks |
 | \`flur anlegen [x y]\` | \`acker anlegen\`, \`field\` | Break a field (4×4) with a spade in the light; \`flur\` shows the fields here, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
 | \`bestelle [crop]\` | \`pflüge\`, \`plough\` | Sow the field: choose the crop, bring seed and a work point |
 | \`mahle [n or alle] <grain>\` | \`mühle\`, \`grind\` | Have grain ground to flour at a windmill beside you; \`mahle\` alone: how long it still grinds |
@@ -453,7 +455,7 @@ In detail under [Trade and crafting](help.game.trade).
 
 | Command | Effect |
 | --- | --- |
-| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help chat\` |
+| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help epochen\`, \`help chat\` |
 
 ## For builders {#builder}
 
@@ -631,7 +633,20 @@ Ein Bau hält **eine Woche**. \`repariere\` (1 Treibholz, jeder darf helfen) set
 
 ## Abriss {#demolish}
 
-\`abriss\` (oder „reiß die hütte ab“) an deinem Bau gibt die Fläche und das Licht frei, die Hälfte des Materials und den Inhalt der Truhe zurück. Eine aufgegebene Baustelle gibt alles Gelieferte zurück.`,
+\`abriss\` (oder „reiß die hütte ab“) an deinem Bau gibt die Fläche und das Licht frei, die Hälfte des Materials und den Inhalt der Truhe zurück. Eine aufgegebene Baustelle gibt alles Gelieferte zurück.
+
+## Epochen {#epochs}
+
+Jede Insel steht auf einer Stufe: **Fischerdorf**, **Dorf**, **Stadt**, **Netz**. Sie zählt ihren gehaltenen Bestand, jeden Bau, jedes Beet und jede Flur, die noch stehen, mit so vielen Punkten, wie sie vom Licht eines Feuers nehmen. Beete zählen so viel wie Bauten.
+
+| Stufe | ab Punkten | neu |
+| --- | --- | --- |
+| Fischerdorf | 0 | Hütte, Hühnerstall, Regentonne, Vogelscheuche, Beete |
+| Dorf | 15 | Windmühle, Backhaus, Gehege, Webstuhl, Fluren |
+| Stadt | 40 | (noch keine Pläne) |
+| Netz | 80 | (noch keine Pläne) |
+
+Die Schwellen kann der Betreiber ändern, etwa für einen Server mit wenigen Spielern. Gezählt wird jede Weltstunde; ändert sich die Stufe, hören es alle Räume der Insel. Verfällt zu viel, fällt die Insel zurück: was steht, arbeitet weiter (die Mühle mahlt, das Backhaus backt), nur neue Pläne der höheren Stufe warten, bis der Bestand wieder reicht. \`epoche\` zeigt Stufe und Punkte der Insel, auf der du stehst.`,
 			en: `Building is possible only in a **beacon's light**: where no fire burns, nobody stakes out a site. Each fire carries only as many buildings as its light reaches. Staking out and owning need an account; guests may help build ([Guest and account](help.game.account)).
 
 ## Staking out a site {#stake}
@@ -660,7 +675,20 @@ A building lasts **a week**. \`repariere\` (\`repair\`; 1 driftwood, anyone may 
 
 ## Demolition {#demolish}
 
-\`abriss\` (\`demolish\`, or “reiß die hütte ab”) at your building frees the land and the light and gives back half the material and the chest's contents. A site given up gives back everything delivered.`,
+\`abriss\` (\`demolish\`, or “reiß die hütte ab”) at your building frees the land and the light and gives back half the material and the chest's contents. A site given up gives back everything delivered.
+
+## Epochs {#epochs}
+
+Every island stands at a stage: **fishing village**, **village**, **town**, **net**. It counts its held stock, every building, bed and field still standing, with as many points as each takes of a fire's light. Beds count as much as buildings.
+
+| Stage | from points | new |
+| --- | --- | --- |
+| Fishing village | 0 | hut, coop, rain barrel, scarecrow, beds |
+| Village | 15 | windmill, bakery, pen, loom, fields |
+| Town | 40 | (no plans yet) |
+| Net | 80 | (no plans yet) |
+
+The operator can change the thresholds, say for a server with few players. The count runs every world hour; when the stage changes, every room of the island hears it. If too much decays, the island falls back: what stands goes on working (the mill grinds, the bakery bakes), only new plans of the higher stage wait until the stock is enough again. \`epoche\` shows the stage and points of the island you stand on.`,
 		},
 	},
 	{

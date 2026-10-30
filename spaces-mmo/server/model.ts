@@ -45,6 +45,9 @@ export type FlameFields = { beaconId: string; until: number; litAt: number };
 export type ContributionFields = { beaconId: string; charId: string; name: string; pieces: number; ms: number };
 /** The fog of a room, 0 (clear) to the world's maximum; the fog tick raises it without fire and lowers it with fire. */
 export type FogFields = { room: string; level: number };
+/** An island's epoch (engine/commands/epoch.ts): written by the count only when it changes; none means the first.
+ *  `points`: the held stock it was reached with. */
+export type EpochFields = { island: string; epoch: number; points: number; at: number };
 /** A recurring job (Evennia's Script/TickerHandler): due at `due`; the world worker that takes it runs it once. */
 /** The world's clock (docs/weltzeit.md), one entry per world: the world time is `worldAnchorMs + (now - realAnchorMs) * rate`
  *  (unless `paused`). A change takes the entry and writes it again with both anchors moved to the moment of the change. */

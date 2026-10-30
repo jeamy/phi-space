@@ -75,6 +75,9 @@ export type WorldDef = {
 	/** Gardens (docs/siedeln.md "Gärten"): beds, what grows in them and how. Without it nothing is planted. */
 	garden?: GardenDef;
 	wild?: WildDef;
+	/** The epochs of an island (docs/siedeln.md "Epochen"): their names from the first on (`a`: with the article, "ein
+	 *  Dorf"), and how often the count runs. The thresholds are settings (epoch.dorf, epoch.stadt, epoch.netz). */
+	epochs?: { names: string[]; a: string[]; checkWorldMs: number };
 	/** Fields (docs/siedeln.md "Äcker und Getreide"): one crop on a larger area, sown and brought in by many hands. */
 	fields?: FieldDef;
 	/** The windmill (docs/siedeln.md "Warenketten"): grain brought to it becomes flour in its own time. */
@@ -91,8 +94,9 @@ export type WorldDef = {
 /** A plan (docs/siedeln.md, "Was man baut"): its footprint `w`×`h`, what it needs delivered, the work points, what it
  *  counts towards the epoch and takes of a fire's light (`points`), how long it stands without repair. */
 /** `chest`: how many things its chest holds (none without); `repair`: what a repair costs (it then stands `keepWorldMs` again). */
-/** `dative`: the plan with its article as one says "neben einer Hütte" (default "einem <name>"). */
-export type PlanDef = { dative?: string; key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string; chest?: number; repair: Array<{ proto: string; count: number }> };
+/** `dative`: the plan with its article as one says "neben einer Hütte" (default "einem <name>"). `epoch`: the island's
+ *  epoch from which a new one may be staked out (default 1; docs/siedeln.md "Epochen"). */
+export type PlanDef = { epoch?: number; dative?: string; key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string; chest?: number; repair: Array<{ proto: string; count: number }> };
 /** `lightPoints`: what a fire's light carries; `siteWorldMs`: how long a site waits for progress; `restWorldMs`: how long a
  *  figure rests after a work point; `maxSites`/`maxBuildings`: per account. */
 /** `ruinWorldMs`: how long a ruin stays; `estateWorldMs`: how long what lay in its chest waits for its owner. */
@@ -142,7 +146,7 @@ export type CropDef = { key: string; name: string; aliases: string[]; group: str
  *  the harvest a work point per `harvestPerCells` (the same rest as on a site). It is ripe for `windowWorldMs`; after
  *  that each share loses `lateLoss` to the field for another window, then the crop is lost. `tired`: the yield's
  *  factor by how often its crop's group came before it in a row (rest for `fallowWorldMs` heals the soil). */
-export type FieldDef = { w: number; h: number; points: number; maxFields: number; keepWorldMs: number; seedPerCells: number; sowPerCells: number; harvestPerCells: number;
+export type FieldDef = { epoch?: number; w: number; h: number; points: number; maxFields: number; keepWorldMs: number; seedPerCells: number; sowPerCells: number; harvestPerCells: number;
 	windowWorldMs: number; lateLoss: number; tired: number[]; fallowWorldMs: number; crops: CropDef[] };
 /** The mill is the building plan `plan`; it grinds one unit of grain (`grinds`: what becomes what) per `unitWorldMs`, one
  *  load after the other, at most `maxLoad` units a load and `maxLoads` waiting loads per figure; a storm surge on its
@@ -244,6 +248,7 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 		if (!w.building?.plans.some((p) => p.key === w.mill!.plan)) throw new Error(`mill: unknown plan ${w.mill.plan}`);
 		for (const g of w.mill.grinds) { proto(g.from, "mill"); proto(g.to, "mill"); }
 	}
+	for (const p of w.building?.plans ?? []) if (p.epoch !== undefined && (!w.epochs || p.epoch < 1 || p.epoch > w.epochs.names.length)) throw new Error(`plan ${p.key}: no epoch ${p.epoch}`);
 	if (w.wild) {
 		const wd = w.wild;
 		for (const n of [...wd.fence, ...(wd.fieldFence ?? []), ...(wd.coopFence ?? [])]) proto(n.proto, "fence");

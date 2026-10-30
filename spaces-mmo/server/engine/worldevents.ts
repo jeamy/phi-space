@@ -24,7 +24,7 @@ export const SCHEDULE_HANDLERS: Record<string, ScheduleHandler> = { evening };
 /** The world's recurring jobs (the weather and the markets), in world milliseconds: what Phase 2 ran on real-time tickers.
  *  `fire` notices a fire that went out or came back, `fog` moves the fog a step, `flood` brings the tide's flotsam, `sweep`
  *  takes away what has lapsed (flotsam), `orders` and `market` keep the boards. */
-export function tickJobs(w: { fog: { stepMs: number }; flood: { everyMs: number }; orders: { everyMs: number }; storm?: { everyMs: number }; garden?: unknown; wild?: { checkWorldMs: number } }): Array<{ job: string; everyMs: number }> {
+export function tickJobs(w: { fog: { stepMs: number }; flood: { everyMs: number }; orders: { everyMs: number }; storm?: { everyMs: number }; garden?: unknown; wild?: { checkWorldMs: number }; epochs?: { checkWorldMs: number } }): Array<{ job: string; everyMs: number }> {
 	return [
 		{ job: "fire", everyMs: 15_000 }, { job: "fog", everyMs: w.fog.stepMs }, { job: "flood", everyMs: w.flood.everyMs },
 		{ job: "sweep", everyMs: 10_000 }, { job: "orders", everyMs: w.orders.everyMs }, { job: "market", everyMs: 60_000 },
@@ -33,6 +33,8 @@ export function tickJobs(w: { fog: { stepMs: number }; flood: { everyMs: number 
 		...(w.garden ? [{ job: "garden", everyMs: 60_000 }] : []),
 		// the hares from the fog at the beds (engine/commands/wild.ts)
 		...(w.garden && w.wild ? [{ job: "wild", everyMs: w.wild.checkWorldMs }] : []),
+		// the count of each island's held stock and its epoch (engine/commands/epoch.ts)
+		...(w.epochs ? [{ job: "epoch", everyMs: w.epochs.checkWorldMs }] : []),
 	];
 }
 
