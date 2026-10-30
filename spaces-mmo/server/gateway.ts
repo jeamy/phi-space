@@ -283,7 +283,8 @@ export class Gateway {
 		if (this.#atlasDue) clearTimeout(this.#atlasDue);
 		for (const c of [...this.#clients]) c.ws.close();
 		await this.#chat?.close();
-		await this.#watch.catch(() => {});
+		// its long call for changes (like the chat's) ends with the connection, not waited for to its end
+		await Promise.race([this.#watch.catch(() => {}), new Promise((r) => setTimeout(r, 200).unref())]);
 	}
 
 	async #inbound(c: Client, text: string): Promise<void> {

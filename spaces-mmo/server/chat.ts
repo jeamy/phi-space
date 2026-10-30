@@ -97,7 +97,9 @@ export class Chat {
 		this.space = space; this.hooks = hooks;
 		this.#follow = this.#run();
 	}
-	async close(): Promise<void> { this.#closed = true; await this.#follow.catch(() => {}); }
+	// the follower sits in a long call for changes (up to 20 s when nobody writes): it is not waited for to its end, closing
+	// the connection ends it
+	async close(): Promise<void> { this.#closed = true; await Promise.race([this.#follow.catch(() => {}), new Promise((r) => setTimeout(r, 200).unref())]); }
 
 	/** A new page of `me`: the talks so far (what came meanwhile among them) and the state. */
 	async attach(me: ChatUser, send: (f: ChatFrame) => void): Promise<void> {
