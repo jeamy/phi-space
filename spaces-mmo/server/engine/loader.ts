@@ -79,13 +79,14 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			await upsert(txn, replace, "Exit", { exitId: e.exitId }, draftOf("Exit", w.typeclasses, { ...rest, location: room, locks: e.locks ?? "" } satisfies ExitFields));
 		}
 	});
+	// prototypes and help topics each in a transaction of their own too: with the things, NPCs and dates below they
+	// outgrow one commit
+	await underLock(space, txnMs, async (txn) => { for (const p of w.prototypes) await upsert(txn, replace, "Prototype", { key: p.key }, { type: "Prototype", fields: p as never }); });
+	await underLock(space, txnMs, async (txn) => { for (const h of w.help) await upsert(txn, replace, "HelpEntry", { key: h.key }, { type: "HelpEntry", fields: h as never }); });
 	const txn = (await space.createTransaction(txnMs)).id;
 	try {
 		if (!(await space.take(WORLD_LOCK, 20_000, { txn }))) throw new Error("the world lock stayed taken");
 		const marker = await peek(space, { type: "WorldLoaded", fields: { worldId: w.id } }, { txn });
-		const upsertHere = (type: string, key: Record<string, string>, draft: Parameters<SpaceLike["write"]>[0]) => upsert(txn, replace, type, key, draft);
-		for (const p of w.prototypes) await upsertHere("Prototype", { key: p.key }, { type: "Prototype", fields: p as never });
-		for (const h of w.help) await upsertHere("HelpEntry", { key: h.key }, { type: "HelpEntry", fields: h as never });
 		// placed items, when the definition is (re)loaded: only those that exist nowhere (one held right now, being picked
 		// up, counts as existing). Between reloads an item a player used up stays gone.
 		const spawned: string[] = [];
@@ -93,7 +94,7 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			let there: unknown;
 			try { there = await readExisting(space, { type: "Item", fields: { itemId: obj.itemId } }, { txn }); } catch (e) { if (e instanceof StillHeld) continue; throw e; }
 			if (there || (await elsewhere(obj.itemId))) continue;
-			// resolved from the definition: the prototypes written above are not visible outside this transaction
+			// resolved from the definition, as everywhere in this transaction
 			await spawn(space, txn, w, resolveFrom(w.prototypes, obj.proto)!, { itemId: obj.itemId, location: obj.room, x: obj.x, y: obj.y });
 			spawned.push(obj.itemId);
 		}
