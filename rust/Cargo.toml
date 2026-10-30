@@ -2,7 +2,7 @@
 # stays the reference, and test/vectors/ is what both must agree on.
 [workspace]
 resolver = "2"
-members = ["phi-json", "phi-core"]
+members = ["phi-json", "phi-core", "phi-store"]
 
 [workspace.package]
 edition = "2021"
@@ -13,3 +13,4 @@ version = "0.0.1"
 ryu-js = "1"
 sha2 = "0.10"
 hmac = "0.12"
+rusqlite = { version = "0.32", features = ["bundled"] }

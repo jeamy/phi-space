@@ -1,0 +1,10 @@
+[package]
+name = "phi-store"
+description = "The own store of phi-spaces (src/store/): documents with parts as rows in one SQLite file, written in batches by a writer thread, or kept in memory"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+phi-json = { path = "../phi-json" }
+rusqlite.workspace = true

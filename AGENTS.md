@@ -18,7 +18,8 @@ phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dir
 - Single test: `node --experimental-strip-types --test --test-name-pattern=<pattern> test/integration.test.ts`
 - Rust port (`rust/`, cargo workspace; docs/rust-portierung.md): `cd rust && cargo test` and `cargo clippy --all-targets`;
   `phi-core`'s tests start the TypeScript core as `test/support/core-driver.ts` (node on PATH) and hold every state against it
-  (`tests/differential.rs`: seeded random walks, `PHI_CORE_WALK_STEPS`/`PHI_CORE_WALK_SEED`; `tests/boundaries.rs`: each byte budget at its edge).
+  (`tests/differential.rs`: seeded random walks, `PHI_CORE_WALK_STEPS`/`PHI_CORE_WALK_SEED`; `tests/boundaries.rs`: each byte budget at its edge);
+  `phi-store` (rusqlite, bundled SQLite) reads and writes the TypeScript store file, its tests start node for `test/vectors/build.ts`.
 - Space-server probe: `node --experimental-strip-types --no-warnings scripts/server-probe.ts [--store memory|sqlite] [--rate 300] [--cmd "..."]`
   (server CPU per call, RSS, answer times of the standalone service or another implementation; docs/rust-portierung.md R0).
 - Branding: `npm run check:branding` (read-only; rejects obsolete project names in tracked text, generated output

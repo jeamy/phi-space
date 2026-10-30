@@ -455,6 +455,37 @@ die Uhr selbst, statt `now` zu übernehmen. Der Rust-Kern nimmt `now` als Parame
 - Crash/Reopen-Fälle wie in `test/support/persistent.ts`, mit SIGKILL zwischen Persistieren und Bestätigen.
 - Dieselben Zeilen in `documents`/`parts` nach gleichen Operationen, kanonisch verglichen.
 
+**Schnitt (2026-10-30):** R2 läuft wie R1 in Scheiben.
+
+| Scheibe | Inhalt | Stand |
+|---|---|---|
+| 0 | Crate `phi-store`: Datei öffnen (Owner-Lock wie TS, WAL, Schema, Format 1→2), Dokument aus Kopf und Teil-Zeilen laden, Zeilen-Ops, Schreib-Thread mit Batches, Speicher-Ledger | erledigt |
+| 1 | Host: ein Commit je Operation mit Rücknahme, Teil-Änderungen mit `ord`; der Rust-Kern im Host-Modus (Wasserstand, Budget und offener Batch je Commit neu; Claims als `DISK_MAP` mit den Plattenzweigen des TS-Kerns); TS-Store-Treiber und Zufallsgang gegen ihn | offen |
+| 2 | Absturz und Wiederöffnen: SIGKILL zwischen Persistieren und Bestätigen | offen |
+| 3 | Claims wirklich auf der Platte (gezielt gelesen statt im Speicher), Speicherbudget des Hosts | offen |
+
+**Befunde vor Scheibe 1:**
+
+- **Claims auf der Platte:** Auf SQLite ist `rpc.claims` vom ersten Persistieren an ein `DISK_MAP`. Damit nimmt der
+  TS-Kern andere Zweige als im Treiber von R1: `docBytes`, `nextExpiry` (0 ohne `sweepAt`), `serve` (keine Suche
+  nach dem `originRequestKey` einer `wait`-Anfrage), `previewOf` und der Sweep (`disk.due` sortiert per SQL nach
+  Bytes, nicht nach UTF-16, mit Limit und Gruppenfilter). Scheibe 1 bildet diese Zweige nach. Erst Scheibe 3 lädt
+  die Claims wirklich lazy.
+- **Lebensdauer:** Der Host lässt den Kern je Commit auf einem neuen Entwurf laufen, Snapshots sind neue Objekte.
+  Wasserstand, Commit-Budget und offener Batch beginnen also je Commit neu, und eine scheiternde Operation wird
+  zurückgenommen. Der Rust-Host muss das genauso tun.
+- **Kosten:** Eine Kopie des Zustands und ein Vergleich nach Wert je Commit kosten O(Dokument). Vor Scheibe 1 wird
+  gemessen (10 000 Entries, ein Write und ein Take je Commit). Ist es zu teuer, merkt sich der Rust-Space die
+  berührten Ids und schreibt O(Änderungen).
+- **Alte Versionen:** Ein Dokument unter der Version seiner Definition (TS: `migrate`) verweigert der Rust-Store
+  vorerst.
+
+**Stand Scheibe 0 (2026-10-30):** `rusqlite` mit gebündeltem SQLite. `store.sql` wird geöffnet, jedes Dokument
+geladen und in eine neue Datei geschrieben, die dieselben Zeilen hält (`documents`, `parts`, `store_meta` ohne
+Store-Id, Zähler und Index-Marken). Die Lesesitzung des TS-Stores auf der Rust-Datei antwortet genau wie
+`store.expected.json`. TS- und Rust-Store weisen einander über dieselbe Owner-Sperre ab. Die Index-Spalten der
+Claims und der Zähler je Batch (`commit_seq`) sind eigens geprüft.
+
 ### R3: `phi-service`, `phi-wire`, `phi-space-server`
 
 **Arbeit:**
