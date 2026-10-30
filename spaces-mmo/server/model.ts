@@ -53,6 +53,8 @@ export type FogFields = { room: string; level: number };
  *  without it), `closed`: the ranks count. */
 export type SettlementMember = { accountId: string; name: string; rank: "helfer" | "siedler" };
 export type SettlementFields = { settlementId: string; name: string; nameKey: string; room: string; founder: string; founderName: string; members: SettlementMember[]; closed: boolean; at: number };
+/** A line of a warehouse's log: who laid in or took what (`kind`), counted for the quota by world time. */
+export type StoreLogFields = { logId: string; buildId: string; accountId: string; name: string; kind: "ein" | "aus"; itemName: string; count: number; worldMs: number; at: number };
 export type EpochFields = { island: string; epoch: number; points: number; at: number };
 /** A recurring job (Evennia's Script/TickerHandler): due at `due`; the world worker that takes it runs it once. */
 /** The world's clock (docs/weltzeit.md), one entry per world: the world time is `worldAnchorMs + (now - realAnchorMs) * rate`

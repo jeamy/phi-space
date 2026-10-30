@@ -19,7 +19,7 @@ const ORDER: Rank[] = ["fremder", "helfer", "siedler"];
 const RANK_NAME: Record<Rank, string> = { fremder: "Fremder", helfer: "Helfer", siedler: "Siedler" };
 const key = (name: string) => name.trim().toLowerCase().replace(/\s+/g, " ");
 
-const hutsIn = async (space: SpaceLike, w: WorldDef, room: string, txn: string | null = null) => (await space.readAll({ type: "Building", fields: { room, plan: w.settlement?.plan ?? "" } }, txn ? { txn } : {})).map((e) => fieldsOf<BuildingFields>(e));
+export const hutsIn = async (space: SpaceLike, w: WorldDef, room: string, txn: string | null = null) => (await space.readAll({ type: "Building", fields: { room, plan: w.settlement?.plan ?? "" } }, txn ? { txn } : {})).map((e) => fieldsOf<BuildingFields>(e));
 /** Whether huts of this many owners make a settlement. */
 export const enoughHuts = (w: WorldDef, huts: Array<Pick<BuildingFields, "accountId">>) => !!w.settlement && huts.length >= w.settlement.huts && new Set(huts.map((h) => h.accountId)).size >= w.settlement.owners;
 export const settlementIn = async (space: SpaceLike, room: string, txn: string | null = null) => { const e = await peek(space, { type: "Settlement", fields: { room } }, { txn }); return e ? fieldsOf<SettlementFields>(e) : null; };

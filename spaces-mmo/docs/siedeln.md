@@ -1002,6 +1002,17 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
    Tafel; Skript-NPCs nehmen sie an, die Rolle `bauhelfer` kommt dazu, und `liefere`/`arbeite` ziehen ins
    `AutomatonCmdSet` samt Vorlage „Baustellenhelfer“. **Automaten-Körper** als Werkstatt-Rezept (Tauwerk, Zahnrad,
    Gehäuse).
+   - **Teil 1, Lagerhaus (gebaut, `server/engine/commands/build.ts`):** Bauplan ab Epoche Dorf (3×2: 12 Treibholz,
+     4 Tangseil, 6 Muscheln, 20 Arbeit, 3 Punkte, Platz für 120 Dinge). `verstaue` und `entnimm` gehen neben ihm wie an
+     der Truhe, die eigene Truhe hat aber Vorrang; `lager` zeigt Inhalt und Rest der Quote, `lager log` das Lagerbuch.
+     - Ohne Siedlung ist es die Truhe seines Besitzers. In einer Siedlung gelten die Ränge, auch wenn sie offen ist: Je
+       Welttag dürfen Fremde 2 Dinge nehmen, Helfer 5, Siedler 20 (`building.store.quota`). Einlagern darf jeder, in
+       einer geschlossenen Siedlung bleiben Fremde ganz draußen.
+     - Jede Bewegung ist eine `StoreLog`-Zeile mit 3 Tagen Lease; aus ihnen zählt auch die Quote.
+     - Abweichungen vom Entwurf: Auch der Besitzer hat in einer Siedlung nur die Quote seines Rangs, und ein Lager mit
+       Inhalt lässt sich dort nicht abreißen. Verfällt es, geht der Inhalt wie bei jedem Bau an den Besitzer
+       (`nachlass`); `reisse baustelle ab` gibt noch nichts ins Lager. Offen bleiben Steinbruch, Werkstätten,
+       Baustellen-Aufträge und `bauhelfer`.
 6. **Rathaus, Kapelle** (Zonen, Steuern, Abstimmungen, Feste mit den Göttern), **Siedlungsbevölkerung**, erste
    **Parks** und die Blumenschau.
 7. **Kaufhaus** (Laden mit Vorrat), **Kontor**, **Leuchtturm**, **Brauhaus**, **Glashütte und Gewächshaus**,

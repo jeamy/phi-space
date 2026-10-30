@@ -12,11 +12,11 @@
 //   delivering at once finish it exactly once and nothing is lost or counted twice. What is not needed stays in the pack.
 // - At most half of what a site gets may come from NPCs or automata.
 // - A site without progress lapses at its world time (the sweep, buildSweep); work makes a figure rest a while (WorkRest).
-import { needRank } from "./settlement.ts";
+import { hutsIn, needRank, rankOf, settlementIn } from "./settlement.ts";
 import { epochName, epochOf, islandOf, needEpoch } from "./epoch.ts";
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SiteFields, type WorkRestFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
 import { worldNowOf } from "../clock.ts";
@@ -308,7 +308,7 @@ async function moveItem(space: SpaceLike, txn: string | null, itemId: string, fr
 }
 /** "3 holz", "alle muscheln", "tang": how many (null: all) and what. */
 const amount = (arg: string): { n: number | null; name: string } => {
-	const m = /^(?:(\d+|alle?|all)\s+)?(.+)$/i.exec(arg.trim().replace(/\s+(?:in|aus|from|into)\s+(?:die\s+|der\s+)?(?:truhe|kiste|chest)$/i, ""));
+	const m = /^(?:(\d+|alle?|all)\s+)?(.+)$/i.exec(arg.trim().replace(/\s+(?:in|aus|from|into)\s+(?:die\s+|der\s+)?(?:truhe|kiste|chest|lager|lagerhaus|warehouse)$/i, ""));
 	if (!m) return { n: 1, name: "" };
 	return { n: !m[1] ? 1 : /^\d+$/.test(m[1]) ? Number(m[1]) : null, name: m[2]!.replace(ARTICLE, "") };
 };
@@ -319,12 +319,62 @@ const keeperProto = (c: CommandCtx, proto: unknown) => !!c.world.wild?.keepers?.
 /** What lies in a building's chest (its things, without a dog or cat on guard). */
 const chestOf = async (c: CommandCtx, buildId: string) => (await c.space.readAll({ type: "Item", fields: { location: buildId } })).filter((e) => !keeperProto(c, e.fields.proto));
 
+const WORLD_DAY = 24 * 3600_000;
+/** The chest beside the actor: one's own first, else a warehouse (it need not be one's own: `storeRight` decides). */
+async function chestHere(c: CommandCtx): Promise<BuildingFields> {
+	const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
+	const own = near.find((b) => b.accountId === c.account?.accountId && planOf(c.world, b.plan)?.chest && !planOf(c.world, b.plan)?.store);
+	const store = near.find((b) => planOf(c.world, b.plan)?.store);
+	return own || !store ? buildingHere(c, own?.plan ?? "", { own: true }) : buildingHere(c, store.plan, { own: false });
+}
+/** Who may use a warehouse and how much they may still take today. Without a settlement it is its owner's chest; in one,
+ *  the ranks count, also in an open one: an open settlement lets strangers in, not empty the store. */
+async function storeRight(c: CommandCtx, b: BuildingFields): Promise<{ left: number; quota: number | null }> {
+	const d = c.world.building?.store, s = await settlementIn(c.space, c.actor.room, c.txn);
+	if (!d || !s) {
+		if (b.accountId === c.account?.accountId) return { left: Infinity, quota: null };
+		throw new CommandError(`Dieses Lagerhaus gehört ${b.ownerName}; allen dient es erst in einer Siedlung.`);
+	}
+	const rank = rankOf(s, await hutsIn(c.space, c.world, s.room, c.txn), c.account);
+	if (s.closed && rank === "fremder") throw new CommandError(`${s.name} ist geschlossen: an das Lager dürfen nur Helfer und Siedler.`);
+	const now = await worldNowOf(c.space, c.txn), lines = (await c.space.readAll({ type: "StoreLog", fields: { buildId: b.buildId, accountId: c.account?.accountId ?? "", kind: "aus" } })).map((e) => fieldsOf<StoreLogFields>(e));
+	const taken = lines.filter((l) => l.worldMs > now - WORLD_DAY).reduce((n, l) => n + l.count, 0);
+	return { left: Math.max(0, d.quota[rank] - taken), quota: d.quota[rank] };
+}
+const logStore = async (c: CommandCtx, b: BuildingFields, kind: StoreLogFields["kind"], itemName: string, count: number) => {
+	const line: StoreLogFields = { logId: randomBytes(6).toString("hex"), buildId: b.buildId, accountId: c.account?.accountId ?? "", name: c.actor.name, kind, itemName, count, worldMs: await worldNowOf(c.space, c.txn), at: Date.now() };
+	await c.space.write({ type: "StoreLog", fields: line as never }, c.txn, c.world.building?.store?.logKeepMs ?? WORLD_DAY);
+};
+
+const lager: Command = {
+	key: "lager", aliases: ["warehouse", "depot"],
+	help: "lager [log] – was im Lagerhaus neben dir liegt und was du heute noch nehmen darfst; log: wer zuletzt ein- und ausgelagert hat",
+	async func(c, arg) {
+		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e));
+		const b = near.find((x) => planOf(c.world, x.plan)?.store && distTo(c.actor, x) <= 1);
+		if (!b) throw new NotUnderstood("Geh direkt neben ein Lagerhaus.");
+		const right = await storeRight(c, b);
+		if (/^(?:log|protokoll|buch)$/i.test(arg.trim())) {
+			const lines = (await c.space.readAll({ type: "StoreLog", fields: { buildId: b.buildId } })).map((e) => fieldsOf<StoreLogFields>(e)).sort((x, y) => y.worldMs - x.worldMs || y.at - x.at);
+			const show = lines.slice(0, c.world.building?.store?.logShow ?? 10).map((l) => `  ${l.name} ${l.kind === "aus" ? "nimmt" : "legt ein"}: ${l.count} ${l.itemName}`);
+			return msg(c, c.actor.charId, "look", show.length ? ["Das Lagerbuch:", ...show].join("\n") : "Das Lagerbuch ist leer.");
+		}
+		if (arg.trim()) throw new NotUnderstood("„lager“ zeigt das Lager, „lager log“ das Lagerbuch. Einlagern: verstaue <ding>, nehmen: entnimm <ding>.");
+		const count = new Map<string, number>();
+		const inside = (await chestOf(c, b.buildId)).map((e) => fieldsOf<ItemFields>(e).name);
+		for (const n of inside) count.set(n, (count.get(n) ?? 0) + 1);
+		const cap = planOf(c.world, b.plan)?.chest ?? 0;
+		await msg(c, c.actor.charId, "look", `${inside.length ? `Im Lager (${inside.length}/${cap}): ${[...count].map(([n, k]) => `${k} ${n}`).join(", ")}.` : `Das Lager ist leer (Platz für ${cap}).`}${right.quota === null ? "" : ` Du darfst heute noch ${right.left} von ${right.quota} Dingen nehmen.`}`);
+	},
+};
+
 const truhe: Command = {
 	key: "truhe", aliases: ["kiste", "chest"],
 	help: "truhe – was in der Truhe deines Baus neben dir liegt (verstaue <ding>, entnimm <ding>)",
 	async func(c) {
-		const b = await buildingHere(c, "", { own: true });
+		const b = await chestHere(c);
 		await putBack(c, b);
+		if (planOf(c.world, b.plan)?.store) return lager.func(c, "");
 		const cap = planOf(c.world, b.plan)?.chest ?? 0;
 		if (!cap) throw new CommandError(`Die ${b.name} hat keine Truhe.`);
 		const items = (await chestOf(c, b.buildId)).map((e) => fieldsOf<ItemFields>(e).name);
@@ -339,9 +389,11 @@ const verstaue: Command = {
 		const { n, name } = amount(arg);
 		const hits = itemsNamed(c.world, await inventory(c), name);
 		if (!hits.length) throw new NotUnderstood(`Du trägst nichts, was „${name.slice(0, 30)}“ heißt.`);
-		const b = await buildingHere(c, "", { own: true });
+		const b = await chestHere(c);
 		const cap = planOf(c.world, b.plan)?.chest ?? 0;
 		if (!cap) throw new CommandError(`Die ${b.name} hat keine Truhe.`);
+		const shared = !!planOf(c.world, b.plan)?.store;
+		if (shared) await storeRight(c, b);
 		const room = cap - (await chestOf(c, b.buildId)).length;
 		if (room <= 0) throw new CommandError(`Die Truhe ist voll (${cap}).`);
 		const proto = hits[0]!.f.proto, all = (await inventory(c)).filter((i) => i.f.proto === proto);
@@ -349,7 +401,8 @@ const verstaue: Command = {
 		let moved = 0;
 		for (const it of all.slice(0, k)) if (await moveItem(c.space, c.txn, it.f.itemId, c.actor.charId, b.buildId)) moved++;
 		await putBack(c, b);
-		await msg(c, c.actor.charId, "info", `Du legst ${moved} ${hits[0]!.f.name} in die Truhe.${(n ?? all.length) > k && k === room ? " Mehr passt nicht hinein." : ""}`);
+		if (shared) await logStore(c, b, "ein", hits[0]!.f.name, moved);
+		await msg(c, c.actor.charId, "info", `Du legst ${moved} ${hits[0]!.f.name} in ${shared ? "das Lager" : "die Truhe"}.${(n ?? all.length) > k && k === room ? " Mehr passt nicht hinein." : ""}`);
 	},
 };
 const entnimm: Command = {
@@ -357,15 +410,19 @@ const entnimm: Command = {
 	help: "entnimm [n|alle] <ding> – etwas aus der Truhe deines Baus neben dir nehmen",
 	async func(c, arg) {
 		const { n, name } = amount(arg);
-		const b = await buildingHere(c, "", { own: true });
+		const b = await chestHere(c);
+		const shared = !!planOf(c.world, b.plan)?.store, left = shared ? (await storeRight(c, b)).left : Infinity;
+		if (left <= 0) throw new CommandError("Für heute hast du aus dem Lager genommen, was dir zusteht.");
 		const inside = (await chestOf(c, b.buildId)).map((e) => ({ e, f: fieldsOf<ItemFields>(e) }));
 		const hits = itemsNamed(c.world, inside, name);
 		if (!hits.length) throw new NotUnderstood(`In der Truhe ist nichts, was „${name.slice(0, 30)}“ heißt.`);
 		const proto = hits[0]!.f.proto, all = inside.filter((i) => i.f.proto === proto);
 		let moved = 0;
-		for (const it of all.slice(0, Math.min(n ?? all.length, all.length))) if (await moveItem(c.space, c.txn, it.f.itemId, b.buildId, c.actor.charId)) moved++;
+		const want = Math.min(n ?? all.length, all.length);
+		for (const it of all.slice(0, Math.min(want, left))) if (await moveItem(c.space, c.txn, it.f.itemId, b.buildId, c.actor.charId)) moved++;
 		await putBack(c, b);
-		await msg(c, c.actor.charId, "info", `Du nimmst ${moved} ${hits[0]!.f.name} aus der Truhe.`);
+		if (shared) await logStore(c, b, "aus", hits[0]!.f.name, moved);
+		await msg(c, c.actor.charId, "info", `Du nimmst ${moved} ${hits[0]!.f.name} aus ${shared ? "dem Lager" : "der Truhe"}.${want > left ? " Mehr steht dir heute nicht zu." : ""}`);
 	},
 };
 
@@ -420,6 +477,8 @@ const abriss: Command = {
 		}
 		const b = await buildingHere(c, name, { own: true });
 		const plan = planOf(c.world, b.plan);
+		// what a settlement laid in is not the owner's to carry off
+		if (plan?.store && (await settlementIn(c.space, c.actor.room, c.txn)) && (await chestOf(c, b.buildId)).length) throw new CommandError("Im Lager liegt noch, was der Siedlung gehört. Erst wenn es leer ist, kann es weg.");
 		// half of the material comes back; what lay in the chest goes into the pack
 		const back = await giveBack(c, (plan?.needs ?? []).map((n) => ({ proto: n.proto, count: Math.floor(n.count / 2) })));
 		let kept = 0;
@@ -447,7 +506,7 @@ const nachlass: Command = {
 	},
 };
 
-export const BUILD_COMMANDS: Command[] = [bau, liefere, arbeite, baustelle, truhe, verstaue, entnimm, repariere, abriss, nachlass];
+export const BUILD_COMMANDS: Command[] = [bau, liefere, arbeite, baustelle, truhe, lager, verstaue, entnimm, repariere, abriss, nachlass];
 
 /** The sweep's part (engine/sweep.ts), each in a transaction of its own: sites whose world time is up lapse with their
  *  cells and give their light back; a building nobody kept becomes a ruin (its light goes back, what lay in its chest

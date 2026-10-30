@@ -379,6 +379,7 @@ Bauen geht nur im Licht eines Feuers. Ausführlich unter [Bauen](help.game.build
 | \`arbeite\` | \`work\` | An der Baustelle mitarbeiten (bis zwei Felder entfernt) |
 | \`baustelle [x y]\` | \`site\` | Was hier gebaut wird und was fehlt (mit x y: nur auf diesem Feld) |
 | \`truhe\`, \`verstaue\`, \`entnimm\` | \`chest\`, \`store\`, \`retrieve\` | Die Truhe deiner Hütte |
+| \`lager\`, \`lager log\` | \`warehouse\` | Das Lagerhaus neben dir und wer zuletzt etwas bewegt hat |
 | \`repariere\` | \`repair\` | Einen Bau ausbessern |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Deinen Bau oder deine Baustelle abreißen |
 | \`nachlass\` | \`estate\` | Den Nachlass an der Ruine deines Baus abholen |
@@ -533,6 +534,7 @@ Building works only in a fire's light. In detail under [Building](help.game.buil
 | \`arbeite\` | \`work\` | Help build (up to two cells away) |
 | \`baustelle [x y]\` | \`site\` | What is being built here and what is missing (with x y: on that cell only) |
 | \`truhe\`, \`verstaue\`, \`entnimm\` | \`chest\`, \`store\`, \`retrieve\` | Your hut's chest |
+| \`lager\`, \`lager log\` | \`warehouse\` | The warehouse beside you and who last moved something |
 | \`repariere\` | \`repair\` | Repair a building |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Tear down your building or site |
 | \`nachlass\` | \`estate\` | Collect the estate at your building's ruin |
@@ -1429,7 +1431,7 @@ Jede Insel steht auf einer Stufe: **Fischerdorf**, **Dorf**, **Stadt**, **Netz**
 | Stufe | ab Punkten | neu |
 | --- | --- | --- |
 | Fischerdorf | 0 | Hütte, Hühnerstall, Regentonne, Vogelscheuche, Beete |
-| Dorf | 15 | Windmühle, Backhaus, Gehege, Webstuhl, Fluren |
+| Dorf | 15 | Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Fluren |
 | Stadt | 40 | (noch keine Pläne) |
 | Netz | 80 | (noch keine Pläne) |
 

@@ -240,7 +240,8 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 				else for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && ["Hund", "Katze"].includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} hier wachen lassen`, line: `einstallen ${n}` });
 			}
 			entries.push({ label: "Ausbessern", line: "repariere" });
-			if (o.owner === self?.name) entries.push({ label: "Truhe ansehen", line: "truhe" });
+			if (o.plan === "lagerhaus") entries.push({ label: "Lager ansehen", line: "lager" });
+			else if (o.owner === self?.name) entries.push({ label: "Truhe ansehen", line: "truhe" });
 		}
 		if (o.kind === "ruin" && o.owner === self?.name) entries.push({ label: "Nachlass abholen", line: "nachlass" });
 		if ((o.kind === "building" || o.kind === "ruin") && o.plan === "windmuehle" && nearSite) entries.push({ label: "Mehl abholen", line: "abholen" });

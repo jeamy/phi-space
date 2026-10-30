@@ -52,9 +52,9 @@ export function translateRules(line: string, v: TranslateView): string | null {
 	const sell = /^(?:biete|verkaufe|sell)\s+(.+?)\s+(?:(?:am|auf dem|at the)\s+(?:markt|marktbrett|market)\s+)?(?:für|fuer|for)\s+(\d+)(?:\s+(?:münzen?|muenzen?|coins?))?(?:\s+an)?$/.exec(s);
 	if (sell && !/\s(an|to)\s+\S+$/.test(sell[1]!)) return `market biete ${noArticle(sell[1]!)} für ${sell[2]}`;
 	// the chest of one's building: "leg das holz in die truhe", "nimm 2 muscheln aus der kiste"
-	const store = /^(?:lege|leg|tue|tu|packe|pack|put)\s*(.+?)\s+(?:in die|in|into the|into)\s+(?:truhe|kiste|chest)$/.exec(s);
+	const store = /^(?:lege|leg|tue|tu|packe|pack|put)\s*(.+?)\s+(?:in die|in das|ins|in|into the|into)\s+(?:truhe|kiste|chest|lager|lagerhaus|warehouse)$/.exec(s);
 	if (store) return `verstaue ${noArticle(store[1]!)}`;
-	const fromChest = /^(?:nimm|nehme|hole|hol|take)\s+(.+?)\s+(?:aus der|aus|from the|from)\s+(?:truhe|kiste|chest)$/.exec(s);
+	const fromChest = /^(?:nimm|nehme|hole|hol|take)\s+(.+?)\s+(?:aus der|aus dem|aus|from the|from)\s+(?:truhe|kiste|chest|lager|lagerhaus|warehouse)$/.exec(s);
 	if (fromChest) return `entnimm ${noArticle(fromChest[1]!)}`;
 	// a fire: "wirf das holz ins feuer", "leg holz ins feuer" (also run together: "legeholz ins feuer"); the longer verb first, or "leg" takes the "e" of "lege" for the thing
 	const fire = /^(?:werfe|wirf|lege|leg|tue|tu|put|throw)\s*(.+?)\s+(?:ins|in das|in den|in die|into the|into|in)\s+(feuer|leuchtfeuer|fire|beacon)$/.exec(s);
