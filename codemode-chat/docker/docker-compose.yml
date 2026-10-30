@@ -54,6 +54,8 @@ services:
       NODE_ENV: production
       CODEMODE_LISTEN: tcp:0.0.0.0:3800
       CODEMODE_SQLITE: /data/codemode-space.sqlite
+      CODEMODE_MAX_CLAIM_MIB: "${CODEMODE_MAX_CLAIM_MIB:-1024}"
+      CODEMODE_MAX_DOC_MIB: "${CODEMODE_MAX_DOC_MIB:-1280}"
       CODEMODE_HOST_NAME: "${NANO_HOST_NAME:-nano}"
     cpus: "${NANO_CPUS:-0}"
     ports:

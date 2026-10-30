@@ -19,7 +19,22 @@ import { announce, DEFAULT_SPACE, parseTarget } from "./space.ts";
 
 const MiB = 1024 * 1024;
 
+export function persistentSpaceLimits(env: Readonly<Record<string, string | undefined>> = process.env) {
+	const bytes = (name: string, fallback: number) => {
+		const raw = env[name]?.trim(), value = raw ? Number(raw) : fallback;
+		if (!Number.isSafeInteger(value) || value < 1 || !Number.isSafeInteger(value * MiB)) {
+			throw new Error(`${name} must be a positive safe integer in MiB`);
+		}
+		return value * MiB;
+	};
+	const maxClaimBytes = bytes("CODEMODE_MAX_CLAIM_MIB", 1024);
+	const maxDocBytes = bytes("CODEMODE_MAX_DOC_MIB", 1280);
+	if (maxDocBytes <= maxClaimBytes) throw new Error("CODEMODE_MAX_DOC_MIB must exceed CODEMODE_MAX_CLAIM_MIB");
+	return { maxClaimBytes, maxDocBytes };
+}
+
 export async function startSpaceHost(o: { listen?: string; dbPath?: string | null } = {}) {
+	const capacity = o.dbPath ? persistentSpaceLimits() : {};
 	// the store of the space (no agent tools: every process reaches the space over the socket)
 	const harness = o.dbPath ? await (async () => { await mkdir(dirname(o.dbPath!), { recursive: true }); return openSqliteHost(o.dbPath!); })() : openOwnMemoryHost();
 	const stopService = await startService(harness, ctx, { watchDebounceMs: 50 });
@@ -28,12 +43,12 @@ export async function startSpaceHost(o: { listen?: string; dbPath?: string | nul
 	const listen = o.listen ?? DEFAULT_SPACE;
 	// the per-peer limits (default 1024 calls/s, 128 waiting calls) are meant for one remote peer; here they cover every role
 	// at once, and a refused call can be the abort that frees an item's transaction (it then holds the run for its lease)
-	const server = await serveSpace(new SpaceService({ host: harness, ctx, identity, maxCallsPerWindow: 50_000, maxPendingPerPrincipal: 4096, maxPendingPerPeer: 4096 }), { listen: parseTarget(listen), connection: () => ({ peerId: "peer-codemode" }) });
 	const local = new PhiSpaces(harness, ctx);
 	// every process connects as the same peer: the per-owner caps must cover all of them together (judges and agents
-	// each hold a transaction and a waiting take). On the disk the claims of a day (24 h are kept) live there, not in
-	// memory (docs/umstellung-ohne-pi-durable.md, D5): measured 23 800 per idle hour, about 240 MB a day, so twice that
-	await local.setLimits({ maxTxnsPerOwner: 1000, maxWaitersPerOwner: 1000, maxRegsPerOwner: 1000, ...(o.dbPath ? { maxClaimBytes: 512 * MiB, maxDocBytes: 640 * MiB } : {}) });
+	// each hold a transaction and a waiting take). Retained claims live on disk; these capacities are not model quotas.
+	await local.setLimits({ maxTxnsPerOwner: 1000, maxWaitersPerOwner: 1000, maxRegsPerOwner: 1000, ...capacity });
+	// Apply persistent capacities before accepting requests against an already populated store.
+	const server = await serveSpace(new SpaceService({ host: harness, ctx, identity, maxCallsPerWindow: 50_000, maxPendingPerPrincipal: 4096, maxPendingPerPeer: 4096 }), { listen: parseTarget(listen), connection: () => ({ peerId: "peer-codemode" }) });
 	const presence = announce(local, "space");
 	return {
 		listen,

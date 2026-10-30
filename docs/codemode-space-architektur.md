@@ -299,6 +299,17 @@ der Dev-Container verwendet sein vorhandenes `/data`-Volume.
 Der Agentenspeicher läuft mit WAL/`synchronous=FULL`; Verzeichniseinträge werden ebenfalls synchronisiert.
 Die [Stromausfall-Abnahme](agenten-stromausfalltest.md) bleibt trotz dieser stärkeren Schreibpolitik separat.
 
+Der gemeinsame persistente Space hat davon unabhängige Kapazitätsgrenzen:
+`CODEMODE_MAX_CLAIM_MIB` (Standard 1024 MiB) und `CODEMODE_MAX_DOC_MIB` (Standard 1280 MiB).
+Sie müssen positive ganze Zahlen sein; die Dokumentgrenze muss über der Claim-Grenze liegen.
+Die bisherigen 512/640 MiB reichten auf nano für die vorhandene Claim-Historie nicht mehr aus.
+Die höheren Grenzen schaffen Platz für neue Anfragen, ohne bestehende Claims zu löschen oder deren
+Idempotenzfristen zu verkürzen. Sie werden vor dem Öffnen des Sockets gesetzt und gelten nur für
+den SQLite-Space, nicht für Memory-Tests oder den separaten Agentenspeicher. Modell-, Besucher-
+und Laufbudgets ändern sich dadurch nicht. Werte lassen sich in der Codemode-`.env` setzen;
+Compose reicht sie an den Space-Prozess durch. Das ist keine unbegrenzte Historienstrategie:
+Claim-Belegung und freie Plattenkapazität müssen weiterhin überwacht werden.
+
 Die Anbindung liegt in [durable-agent.ts](../codemode-chat/server/durable-agent.ts).
 Die Anwendung importiert nur einen [Node-IPC-Client](../agent/src/durable-client.ts);
 pi-durable und Chord bleiben im [Agentenprozess](../agent/src/durable-worker.ts). Die Importgrenze des
