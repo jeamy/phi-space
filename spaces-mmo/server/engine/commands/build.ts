@@ -12,6 +12,7 @@
 //   delivering at once finish it exactly once and nothing is lost or counted twice. What is not needed stays in the pack.
 // - At most half of what a site gets may come from NPCs or automata.
 // - A site without progress lapses at its world time (the sweep, buildSweep); work makes a figure rest a while (WorkRest).
+import { needRank } from "./settlement.ts";
 import { epochName, epochOf, islandOf, needEpoch } from "./epoch.ts";
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
@@ -199,6 +200,7 @@ export const bau: Command = {
 		if (!c.account || c.account.guest) throw new CommandError("Gäste können liefern und mitarbeiten, aber nichts besitzen; registriere dich, um selbst zu bauen.");
 		if (!human(c)) throw new CommandError("Baustellen stecken nur Menschen ab.");
 		await needEpoch(c, plan.epoch, `Der Bauplan „${plan.name}“`);
+		await needRank(c, "siedler", "Bauen");
 		if ((await c.space.count({ type: "Site", fields: { accountId: c.account.accountId } })) >= def.maxSites) throw new CommandError("Du hast schon eine offene Baustelle; bau sie erst fertig.");
 		if ((await c.space.count({ type: "Site", fields: { accountId: c.account.accountId } })) + (await c.space.count({ type: "Building", fields: { accountId: c.account.accountId } })) >= def.maxBuildings) throw new CommandError(`Mehr als ${def.maxBuildings} Bauten hat niemand.`);
 		const light = await lightFor(c, plan.points);
@@ -228,6 +230,7 @@ const liefere: Command = {
 	async func(c, arg) {
 		const m = /^(?:(\d+)\s+)?(.+?)(?:\s+(?:an|zur|zu|to|für|fuer)\s+(?:die\s+|der\s+)?(.+))?$/i.exec(arg.trim());
 		if (!m) throw new NotUnderstood("Was lieferst du? Zum Beispiel: liefere 3 treibholz");
+		await needRank(c, "helfer", "Liefern");
 		const hits = itemsNamed(c.world, await inventory(c), m[2]!.replace(ARTICLE, ""));
 		if (!hits.length) throw new NotUnderstood(`Du trägst nichts, was „${m[2]!.slice(0, 30)}“ heißt.`);
 		const proto = hits[0]!.f.proto;
@@ -251,6 +254,7 @@ const arbeite: Command = {
 	key: "arbeite", aliases: ["work"],
 	help: "arbeite – an der Baustelle neben dir (bis zwei Schritte) mitarbeiten (danach ruhst du eine Weile)",
 	async func(c, arg) {
+		await needRank(c, "helfer", "Mitarbeiten");
 		const now = await worldNowOf(c.space, c.txn);
 		const rest = await peek(c.space, { type: "WorkRest", fields: { charId: c.actor.charId } });
 		const until = rest ? fieldsOf<WorkRestFields>(rest).untilWorldMs : 0;

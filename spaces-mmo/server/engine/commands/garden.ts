@@ -17,6 +17,7 @@
 //   change), never by rewriting beds when the fog moves.
 // - A plant that reaches its next stage dry (no water for `thirstWorldMs`) wilts; a ripe plant wilts after its time.
 // - Harvesting takes the bed in the command's transaction: ten at one bed, and every ripe plant goes to exactly one.
+import { needRank } from "./settlement.ts";
 import { randomBytes, randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BedFields, type BedPlant, type BuildingFields, type ItemFields, type SeedRestFields, type Variety, type VarietyFields } from "../../model.ts";
@@ -115,6 +116,7 @@ async function dig(c: CommandCtx, arg: string): Promise<void> {
 	const size = kind === "gemein" ? g.commons : g.bed;
 	if (!c.account || c.account.guest) throw new CommandError("Gäste können als Pate gießen und ernten, aber kein eigenes Beet anlegen; registriere dich dafür.");
 	if (!human(c)) throw new CommandError("Beete legen nur Menschen an.");
+	await needRank(c, "siedler", "Beete anlegen");
 	if (!(await inventory(c)).some((i) => i.f.proto === g.spade)) throw new CommandError(`Zum Umgraben brauchst du einen ${protoName(c, g.spade)} („craft ${protoName(c, g.spade).toLowerCase()}“).`);
 	// a community bed is no one's: it does not count to the digger's beds
 	if (kind !== "gemein" && (await c.space.count({ type: "Bed", fields: { accountId: c.account.accountId } })) - (await c.space.count({ type: "Bed", fields: { accountId: c.account.accountId, kind: "gemein" } })) >= g.maxBeds) throw new CommandError(`Mehr als ${g.maxBeds} Beete pflegt niemand (ein Gemeinschaftsbeet zählt nicht dazu).`);

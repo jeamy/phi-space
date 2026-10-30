@@ -49,6 +49,10 @@ export type ContributionFields = { beaconId: string; charId: string; name: strin
 export type FogFields = { room: string; level: number };
 /** An island's epoch (engine/commands/epoch.ts): written by the count only when it changes; none means the first.
  *  `points`: the held stock it was reached with. */
+/** A settlement (engine/commands/settlement.ts), one per room: `members` lists who was taken in (hut owners are settlers
+ *  without it), `closed`: the ranks count. */
+export type SettlementMember = { accountId: string; name: string; rank: "helfer" | "siedler" };
+export type SettlementFields = { settlementId: string; name: string; nameKey: string; room: string; founder: string; founderName: string; members: SettlementMember[]; closed: boolean; at: number };
 export type EpochFields = { island: string; epoch: number; points: number; at: number };
 /** A recurring job (Evennia's Script/TickerHandler): due at `due`; the world worker that takes it runs it once. */
 /** The world's clock (docs/weltzeit.md), one entry per world: the world time is `worldAnchorMs + (now - realAnchorMs) * rate`

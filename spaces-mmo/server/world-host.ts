@@ -29,6 +29,7 @@ import { gardenTick, stormFillsBarrels } from "./engine/commands/garden.ts";
 import { stormTurnsMills } from "./engine/commands/mill.ts";
 import { wildTick } from "./engine/commands/wild.ts";
 import { epochTick } from "./engine/commands/epoch.ts";
+import { settlementTick } from "./engine/commands/settlement.ts";
 import { fieldTick } from "./engine/commands/field.ts";
 import { ensureTokens, loadIntoSpace } from "./engine/loader.ts";
 import { ClockGuard, runSchedules } from "./engine/schedule.ts";
@@ -63,7 +64,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		storm: async () => { const room = await stormTick(space, w, msgLeaseMs); await stormFillsBarrels(space, w, room); await stormTurnsMills(space, w, room); },
 		garden: async () => { await gardenTick(space, w); await fieldTick(space, w, msgLeaseMs); },
 		wild: async () => { await wildTick(space, w, msgLeaseMs); },
-		epoch: async () => { await epochTick(space, w, msgLeaseMs); },
+		epoch: async () => { await epochTick(space, w, msgLeaseMs); await settlementTick(space, w, msgLeaseMs); },
 	};
 	const handlers = { ...SCHEDULE_HANDLERS, tick: tickHandler(runs) };
 	// a region's world worker reaches the other regions: to deliver the characters that took a ferry out of it

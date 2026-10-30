@@ -985,7 +985,19 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      - Mühle, Backhaus, Gehege, Webstuhl und Fluren gab es seit Schritt 3 ohne Epoche; sie sind jetzt Pläne des Dorfs
        wie im Entwurf. Stadt und Netz haben noch keine eigenen Pläne.
 
-     Noch nicht: die Siedlung aus Hütten (Teil 2).
+   - **Teil 2, gebaut 2026-10-30** (`server/engine/commands/settlement.ts`, Test `tests/settlement.test.ts`, Weltversion
+     28): die **Siedlung**. Stehen in einem Raum drei Hütten von mindestens zwei Besitzern, gründet ein Hüttenbesitzer
+     mit `siedlung gründen <name>` eine (ein Entry je Raum, `unique` auf Raum und je Region auf den Namen). Hüttenbesitzer
+     sind Siedler, andere nimmt ein Siedler auf (`siedlung aufnehmen <name> [helfer]`, `entlassen`), Gäste höchstens als
+     Helfer. Offen binden die Stufen niemanden; `siedlung zu` beschränkt Bauen, Beete und Fluren auf Siedler, Liefern und
+     Arbeiten auf Siedler und Helfer. Stehen zu wenige Hütten, endet sie mit der Zählung der Epochen. Siedler (die
+     Skriptfiguren) gründen selbst, benannt nach dem Raum.
+
+     Abnahme (`tests/settlement.test.ts`): zu wenige Hütten, Name, Rechte in offener und geschlossener Siedlung,
+     Gast als Helfer, Ende beim Verfall.
+
+     Abweichungen vom Entwurf: Rechte sind Stufen auf dem Siedlungs-Entry statt Locks; Gemeinschaftsbeete und das
+     Lagerhaus fragen noch nicht danach (das Lagerhaus kommt mit Schritt 5).
 5. **Werkstätten, Steinbruch, Lagerhaus** (mit Entnahmelog und Quote), neue Rezepte, Aufträge der Baustellen an der
    Tafel; Skript-NPCs nehmen sie an, die Rolle `bauhelfer` kommt dazu, und `liefere`/`arbeite` ziehen ins
    `AutomatonCmdSet` samt Vorlage „Baustellenhelfer“. **Automaten-Körper** als Werkstatt-Rezept (Tauwerk, Zahnrad,

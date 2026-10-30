@@ -1,6 +1,7 @@
 // The commands every character has (Evennia's default command set, docs/phasen.md Phase 1). Each runs inside the
 // transaction its intent is taken in: what it changes and what it says commit together, or not at all. An item changes
 // hands by being taken (it is then held by this transaction, invisible to every other) and written anew.
+import { settlementIn } from "./settlement.ts";
 import { cutText, FOREVER, NO_WAIT, type Taken } from "phi-spaces";
 import { fieldsOf, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomFields, type SessionFields } from "../../model.ts";
 import type { CmdSet, Command } from "../cmdsets.ts";
@@ -145,8 +146,10 @@ async function describeRoom(c: CommandCtx, roomId: string, arriving = false): Pr
 	const others = (await online(c, roomId)).filter((ch) => ch.charId !== c.actor.charId).map((ch) => ch.name);
 	const beacons = await beaconsIn(c, roomId);
 	const fog = await fogOf(c.space, roomId);
+	const settlement = await settlementIn(c.space, roomId, c.txn);
 	return [
 		room.name, room.desc,
+		...(settlement ? [`Hier liegt die Siedlung ${settlement.name}.`] : []),
 		...(await Promise.all(beacons.map(async (b) => `Das ${b.f.name} ${burnText(await flameOf(c.space, b.f.beaconId), await worldNowOf(c.space, c.txn))}.`))),
 		...(fog ? [["", "Leichter Nebel liegt über allem.", "Dichter Nebel; man sieht kaum zum Wasser.", "Undurchdringlicher Nebel verschluckt die Wege."][Math.min(3, fog)]!] : []),
 		exits.length ? `Ausgänge: ${exits.join(", ")}.` : "Kein Weg führt hinaus.",

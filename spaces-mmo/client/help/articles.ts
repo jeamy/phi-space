@@ -324,6 +324,7 @@ Ausführlich unter [Gärten](help.game.garden).
 | \`scheuche hase\` | \`scare\` | Einen Hasen (auch \`reh\`, \`fuchs\`, \`maus\`) bis drei Schritte von dir in den Nebel zurückjagen |
 | \`zäune\` | \`fence\` | Einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), deine Flur (6 Treibholz, 2 Tangseil) oder deinen Hühnerstall (3 Treibholz, 1 Tangseil) neben dir setzen |
 | \`wache\` | \`guards\` | Wer im Raum vor dem Wild wacht (Hund, Katze, Gänse) und ob sie satt sind |
+| \`siedlung\` | \`settlement\` | Die Siedlung hier; \`siedlung gründen <name>\`, \`aufnehmen <name> [helfer]\`, \`entlassen <name>\`, \`zu\`, \`offen\` |
 | \`epoche\` | \`stufe\` | Auf welcher Stufe die Insel steht (Fischerdorf, Dorf, Stadt, Netz), ihre Punkte und was die nächste freischaltet |
 | \`flur anlegen [x y]\` | \`acker anlegen\` | Mit einem Spaten im Licht eine Flur umbrechen (4×4); \`flur\` zeigt die Fluren hier, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
 | \`bestelle [frucht]\` | \`pflüge\`, \`plough\` | Die Flur bestellen: Frucht wählen, Saatgut und einen Arbeitspunkt bringen |
@@ -352,7 +353,7 @@ Ausführlich unter [Handel und Handwerk](help.game.trade).
 
 | Befehl | Wirkung |
 | --- | --- |
-| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help epochen\`, \`help chat\` |
+| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help epochen\`, \`help siedlungen\`, \`help chat\` |
 
 ## Für Builder {#builder}
 
@@ -427,6 +428,7 @@ In detail under [Gardens](help.game.garden).
 | \`scheuche hase\` | \`scare\` | Chase a hare (also \`reh\`, \`fuchs\`, \`maus\`) up to three cells from you back into the fog |
 | \`zäune\` | \`fence\` | Put a fence round a bed (2 driftwood, 1 kelp rope), your field (6 driftwood, 2 kelp rope) or your coop (3 driftwood, 1 kelp rope) beside you |
 | \`wache\` | \`guards\` | Who keeps watch against the wild in this room (dog, cat, geese) and whether they are fed |
+| \`siedlung\` | \`settlement\` | The settlement here; \`siedlung gründen <name>\`, \`aufnehmen <name> [helfer]\`, \`entlassen <name>\`, \`zu\`, \`offen\` |
 | \`epoche\` | \`stufe\` | The island's epoch (fishing village, village, town, net), its points and what the next unlocks |
 | \`flur anlegen [x y]\` | \`acker anlegen\`, \`field\` | Break a field (4×4) with a spade in the light; \`flur\` shows the fields here, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
 | \`bestelle [crop]\` | \`pflüge\`, \`plough\` | Sow the field: choose the crop, bring seed and a work point |
@@ -455,7 +457,7 @@ In detail under [Trade and crafting](help.game.trade).
 
 | Command | Effect |
 | --- | --- |
-| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help epochen\`, \`help chat\` |
+| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help epochen\`, \`help siedlungen\`, \`help chat\` |
 
 ## For builders {#builder}
 

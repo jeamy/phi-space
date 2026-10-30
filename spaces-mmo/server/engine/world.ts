@@ -84,6 +84,8 @@ export type WorldDef = {
 	/** The settlers (docs/siedeln.md "Wenige Spieler"): what share of a fire's light they leave free for people, and how
 	 *  many beds each digs. How many play at once is the setting settlers.min, less the people online. */
 	settlers?: { reserve: number; maxBeds: number };
+	/** A settlement needs `huts` buildings of the plan `plan` of at least `owners` owners in one room. */
+	settlement?: { plan: string; huts: number; owners: number };
 	/** Fields (docs/siedeln.md "Äcker und Getreide"): one crop on a larger area, sown and brought in by many hands. */
 	fields?: FieldDef;
 	/** The windmill (docs/siedeln.md "Warenketten"): grain brought to it becomes flour in its own time. */

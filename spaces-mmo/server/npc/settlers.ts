@@ -13,6 +13,7 @@
 // - One command a round, then a rest at the pace of economy.ts (slower while no person is on the island).
 import { randomInt } from "node:crypto";
 import { PATH } from "../engine/commands/build.ts";
+import { enoughHuts, settlementIn } from "../engine/commands/settlement.ts";
 import { regionWorld } from "../engine/regions.ts";
 import { flameOf } from "../engine/fire.ts";
 import { clockOf } from "../engine/clockcache.ts";
@@ -163,6 +164,13 @@ export function siedler(): Script {
 			later(plan, 20); // seen again in twenty rounds: built, staked or refused
 			if (at) { await n.act(`bau ${def.name.toLowerCase()} ${at.x} ${at.y}`); return; }
 			continue;
+		}
+		// three huts of two owners in its room and no settlement yet: it founds one, named after the place
+		if (has("huette") && w.settlement && may("siedlung")) {
+			later("siedlung", 40);
+			const hut = buildings.find((b) => b.plan === "huette")!;
+			const huts = (await n.space.readAll({ type: "Building", fields: { room: hut.room, plan: w.settlement.plan } })).map((e) => fieldsOf<BuildingFields>(e));
+			if (me.room === hut.room && enoughHuts(w, huts) && !(await settlementIn(n.space, hut.room))) { await n.act(`siedlung gründen ${w.rooms.find((r) => r.roomId === hut.room)?.name ?? me.name}`); return; }
 		}
 		// a spade and up to its beds
 		if (g && beds.length < (w.settlers?.maxBeds ?? 1) && has("huette")) {
