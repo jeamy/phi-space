@@ -758,7 +758,7 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      - Der Hase erscheint gleich am Beet, statt vom Rand des Raums zu laufen.
      - Ein Klick auf den Hasen öffnet das Zellmenü mit „Verscheuchen“.
 
-     Noch nicht: Hecke und Hund als Schutz, Sträuße als Geschenke und Opfer, die Blumenschau.
+     Noch nicht: die Hecke als Schutz (der Hund kam mit Schritt 3, Teil 4), Sträuße als Geschenke und Opfer, die Blumenschau.
 3. **Äcker und Mühlen** (der große Strang der Gärten): Flur-Entries über Zellbereiche, eine Frucht je Flur,
    Bestellen und Ernteeinsatz als Arbeitspunkte, Fruchtfolge, Windmühle und die Kette Korn → Mehl → Brot,
    Flachs → Leinen; **erste Tiere** (Hühnerstall mit Tang und Resten schon vorher, Gehege, Futter von den Fluren);
@@ -919,7 +919,7 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      - `scheuche reh|fuchs|maus` wie beim Hasen; das Tier ist ein `Animal`-Entry mit `kind` und `target` (Hasen behalten
        `bedId`, damit Einträge von vor dem Ausrollen weiterlaufen).
      - Karte: Reh, Fuchs und Maus in 2D (Icons) und 3D, der Zaun um Flur und Stall, Hund oder Katze an der Ecke ihres
-       Baus; das Zellmenü bietet Verscheuchen, Zaunsetzen, Wachenlassen, Füttern und Mitnehmen an.
+       Baus (nur in 3D); das Zellmenü bietet Verscheuchen, Zaunsetzen, Wachenlassen, Füttern und Mitnehmen an.
 
      Abnahme (`tests/prey.test.ts`):
      - Nachts kommt je ein Reh, ein Fuchs und eine Maus an die offenen Ziele, keiner an das letzte Huhn oder das letzte
