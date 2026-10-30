@@ -474,9 +474,12 @@ die Uhr selbst, statt `now` zu übernehmen. Der Rust-Kern nimmt `now` als Parame
 - **Lebensdauer:** Der Host lässt den Kern je Commit auf einem neuen Entwurf laufen, Snapshots sind neue Objekte.
   Wasserstand, Commit-Budget und offener Batch beginnen also je Commit neu, und eine scheiternde Operation wird
   zurückgenommen. Der Rust-Host muss das genauso tun.
-- **Kosten:** Eine Kopie des Zustands und ein Vergleich nach Wert je Commit kosten O(Dokument). Vor Scheibe 1 wird
-  gemessen (10 000 Entries, ein Write und ein Take je Commit). Ist es zu teuer, merkt sich der Rust-Space die
-  berührten Ids und schreibt O(Änderungen).
+- **Kosten (gemessen 2026-10-30):** Eine Kopie der Entries und ein Vergleich nach Wert kosten bei 10 000 Entries
+  21 ms je Commit (`--release`), gegen 1,5–3,4 ms Server-CPU je Aufruf in R0. Der Rust-Space merkt sich deshalb, was
+  ein Commit an den Teilen ändert (Entries, Claims, Generationen, Stream-Batches), mit einem Undo-Protokoll für die
+  Rücknahme, und schreibt O(Änderungen). Der Kopf wird wie im TS-Store je Commit ganz geschrieben; seine Kopie für
+  die Rücknahme kostet dasselbe O(Kopf). Die Arrays ändert der Kern nur durch Anhängen, Entfernen und Ersetzen an
+  Ort und Stelle: genau der Fall `alongside` in `parts.ts`, also folgen die `ord` ohne Vergleich.
 - **Alte Versionen:** Ein Dokument unter der Version seiner Definition (TS: `migrate`) verweigert der Rust-Store
   vorerst.
 
