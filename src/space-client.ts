@@ -80,3 +80,9 @@ export function keepAlive(space: SpaceLike, lease: string, leaseMs: number): () 
 	timer.unref?.();
 	return () => clearInterval(timer);
 }
+
+/** The first `max` UTF-16 units of `text`, without half an emoji at the cut (the service would store U+FFFD for it). */
+export const cutText = (text: string, max: number): string => {
+	const cut = text.slice(0, max), last = cut.charCodeAt(cut.length - 1);
+	return last >= 0xd800 && last <= 0xdbff && text.length > max ? cut.slice(0, -1) : cut;
+};

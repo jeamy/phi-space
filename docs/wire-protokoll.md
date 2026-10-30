@@ -56,7 +56,8 @@ Reply = { ok: true, result, claimReceipt? } | { ok: false, error: { code, messag
 
 **Ablauf** (`SpaceService.handle`, in dieser Reihenfolge):
 
-1. Der Text ist länger als `maxFrameBytes`: `ResourceExhausted`. Kein JSON: `BadRequest`.
+1. Der Text ist länger als `maxFrameBytes`: `ResourceExhausted`. Kein JSON: `BadRequest`. Ein einzelnes Surrogat in
+   einem Text oder Schlüssel wird U+FFFD (Abschnitt 6), bevor irgendetwas den Aufruf sieht, also auch vor dem Argument-Hash.
 2. `method` fehlt oder ist kein Text: `BadRequest`. Unbekannte Methode: `UnsupportedMethod`. `args` kein Objekt:
    `BadRequest`.
 3. **Identität** aus der Verbindung, nie aus dem Aufruf. Keine: `Unauthenticated`.
@@ -125,6 +126,12 @@ also `"[\"local\",null]"` (Vektoren: `crypto.json` → `derived.principalId`).
 | Ids | `e`, `t` und `n` mit Inkarnation und laufender Nummer, z. B. `e0a1b2c3d-4` |
 | Stream | `streamId` = `<spaceId>:<incarnation>`, `rev` die Revision des Spaces |
 
+**Texte sind wohlgeformt (R-D10):** Ein einzelnes Surrogat, etwa von einem `slice` mitten in einem Emoji, kommt nur als
+Escape wie `\ud83d` auf die Leitung. Der Dienst ersetzt es durch U+FFFD, wie `String.prototype.toWellFormed`
+(`wellFormed` in `src/service.ts`). So stehen in einem Store nur Texte, die jede Implementierung halten kann. Das gilt
+am Eingang des Dienstes; Host-Code, der `PhiSpaces` direkt nutzt, muss selbst darauf achten. Ein Store mit so einem Wert
+wird vom Rust-Store nicht geöffnet. Projekte kürzen Text mit `cutText` (`phi-spaces`).
+
 Alle Zahlen sind IEEE-754-Doubles; ganze Zahlen über 2^53 kommen nicht vor. Kanonisches JSON (für Hashes und
 Signaturen, nie für die Leitung selbst) folgt RFC 8785 (`canonical.json`):
 
@@ -132,7 +139,8 @@ Signaturen, nie für die Leitung selbst) folgt RFC 8785 (`canonical.json`):
 - Zahlen in ECMAScript-Form: `1e+21`, `1e-7`, `100000000000000000000`, `-0` als `0`.
 - Nicht-endliche Zahlen werden abgewiesen.
 - U+2028 und U+007F bleiben unmaskiert.
-- Ein unpaariges Surrogat wird als `\ud800` geschrieben; ein Rust-`String` kann es nicht halten.
+- Ein unpaariges Surrogat wird als `\ud800` geschrieben. Das zeigt `canonical.json`, kommt aber nach Abschnitt 6 nicht
+  mehr vor; was der Dienst daraus macht, steht dort unter `wellFormed`.
 
 ## 7. Methoden
 

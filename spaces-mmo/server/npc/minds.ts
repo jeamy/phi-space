@@ -3,7 +3,7 @@
 //   NpcOwner{npcId, owner}  leased: the process that plays the role (claimed under the NPC lock)
 //   NpcAwake{npcId}         leased: the NPC answers with the model; woken under the NPC lock, at most SPACES_MMO_NPC_MAX
 //   NpcMemory{npcId, text}  what it remembers (≤ 4 KiB), written by its own NOTE lines
-import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
+import { cutText, FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { DEFAULT_COMMANDS } from "../engine/commands/default.ts";
 import { TRADE_COMMANDS } from "../engine/commands/trade.ts";
 import { worldDayKey, worldNowMs } from "../engine/clockcache.ts";
@@ -86,7 +86,7 @@ export async function remember(space: SpaceLike, npcId: string, note: string): P
 	const txn = (await space.createTransaction(10_000)).id;
 	try {
 		const e = await space.takeIfExists({ type: "NpcMemory", fields: { npcId } }, 1_000, { txn });
-		let text = `${e ? fieldsOf<NpcMemoryFields>(e).text : ""}\n${note.trim().slice(0, 300)}`.trim();
+		let text = `${e ? fieldsOf<NpcMemoryFields>(e).text : ""}\n${cutText(note.trim(), 300)}`.trim();
 		while (text.length > MEMORY_MAX) text = text.slice(text.indexOf("\n") + 1 || text.length);
 		await space.write({ type: "NpcMemory", fields: { npcId, text } satisfies NpcMemoryFields as never }, txn, FOREVER);
 		await space.commit(txn);

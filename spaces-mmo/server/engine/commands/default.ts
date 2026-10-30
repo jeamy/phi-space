@@ -1,7 +1,7 @@
 // The commands every character has (Evennia's default command set, docs/phasen.md Phase 1). Each runs inside the
 // transaction its intent is taken in: what it changes and what it says commit together, or not at all. An item changes
 // hands by being taken (it is then held by this transaction, invisible to every other) and written anew.
-import { FOREVER, NO_WAIT, type Taken } from "phi-spaces";
+import { cutText, FOREVER, NO_WAIT, type Taken } from "phi-spaces";
 import { fieldsOf, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomFields, type SessionFields } from "../../model.ts";
 import type { CmdSet, Command } from "../cmdsets.ts";
 import { byName, check, CommandError, NotUnderstood, exitsHere, inventory, itemsHere, msg, reach, roomOf, stem, type CommandCtx, itemsNamed } from "../context.ts";
@@ -180,7 +180,7 @@ const say: Command = {
 	help: "say <text> – etwas sagen; alle hier hören es (kurz: '<text>)",
 	async func(c, text) {
 		if (!text) throw new CommandError("Was möchtest du sagen? Zum Beispiel: say Hallo");
-		await msg(c, "*", "say", `${c.actor.name}: ${text.slice(0, MAX_SAY)}`);
+		await msg(c, "*", "say", `${c.actor.name}: ${cutText(text, MAX_SAY)}`);
 	},
 };
 
@@ -189,7 +189,7 @@ const emote: Command = {
 	help: "emote <tut etwas> – eine Handlung zeigen, z. B. emote winkt (kurz: :winkt)",
 	async func(c, text) {
 		if (!text) throw new CommandError("Was tust du? Zum Beispiel: emote winkt");
-		await msg(c, "*", "emote", `${c.actor.name} ${text.slice(0, MAX_SAY)}`);
+		await msg(c, "*", "emote", `${c.actor.name} ${cutText(text, MAX_SAY)}`);
 	},
 };
 

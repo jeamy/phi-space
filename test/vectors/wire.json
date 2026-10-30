@@ -1552,6 +1552,64 @@
 					}
 				}
 			}
+		},
+		{
+			"call": {
+				"method": "write",
+				"args": {
+					"entry": {
+						"type": "Cut",
+						"fields": {
+							"text": "a\ud83d",
+							"\ude00": 1
+						}
+					}
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r25"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"id": "e<incarnation1>-13",
+					"expires": 1700003605000
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "take",
+				"args": {
+					"template": {
+						"type": "Cut"
+					}
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r26"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "done",
+					"entry": {
+						"id": "e<incarnation1>-13",
+						"gid": "<space1>/e<incarnation1>-13",
+						"type": "Cut",
+						"types": [
+							"Cut"
+						],
+						"fields": {
+							"text": "a�",
+							"�": 1
+						},
+						"owner": "[\"local\",null]"
+					}
+				}
+			}
 		}
 	]
 }

@@ -1,12 +1,13 @@
 // test/vectors/canonical.json and the hash parts of crypto.json (docs/rust-portierung.md, R1): what the TypeScript code
 // computed, reproduced here. The vector files are read with this crate's own parser.
 use hmac::{Hmac, Mac};
-use phi_json::{digest_json, hex, number_text, obj, parse, Json, Object, ParseError};
+use phi_json::{digest_json, hex, number_text, obj, parse, Json, Object, ParseError, parse_repairing};
 use sha2::{Digest, Sha256};
 
 fn vector(name: &str) -> Json {
 	let path = format!("{}/../../test/vectors/{name}", env!("CARGO_MANIFEST_DIR"));
-	parse(&std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"))).unwrap()
+	// repairing: wire.json holds a call with half an emoji, on purpose
+	parse_repairing(&std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"))).unwrap()
 }
 fn s<'a>(v: &'a Json, key: &str) -> &'a str { v.get(key).and_then(Json::as_str).unwrap_or_else(|| panic!("{key} missing")) }
 
@@ -34,9 +35,12 @@ fn canonical_json_number_form_key_order_digests_and_sizes() {
 			_ => assert!(Json::Number(x).canonical().is_err(), "bits {bits:016x} must be refused"),
 		}
 	}
-	// TypeScript keeps an unpaired surrogate; a Rust String cannot, so the port refuses it
+	// an unpaired surrogate: a stored value is refused, the text of a call repaired as the service does (R-D10)
 	let lone = c.get("unpairedSurrogate").unwrap();
 	assert!(matches!(parse(s(lone, "input")), Err(ParseError::UnpairedSurrogate(_))));
+	for case in c.get("wellFormed").unwrap().as_array().unwrap() {
+		assert_eq!(parse_repairing(s(case, "input")).unwrap().to_json_text(), s(case, "output"), "{}", s(case, "input"));
+	}
 }
 
 fn sha256_hex(bytes: &[u8]) -> String { hex(&Sha256::digest(bytes)) }

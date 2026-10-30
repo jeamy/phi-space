@@ -12,7 +12,7 @@
 // What arrives while a reader is away waits for the next login, and the last messages of each talk come back with every
 // page. The gateway is told of new messages, invitations and memberships by the accounts space's change stream.
 import { randomBytes } from "node:crypto";
-import { FOREVER, NO_WAIT, RevisionAhead, SnapshotExpired, type SpaceLike } from "phi-spaces";
+import { cutText, FOREVER, NO_WAIT, RevisionAhead, SnapshotExpired, type SpaceLike } from "phi-spaces";
 import { envMs } from "./space.ts";
 
 /** `box`: the sealed copy (JSON of client/chatcrypto.ts Box); `note`: a plain note of a group instead. */
@@ -282,7 +282,7 @@ export class Chat {
 		if (!m) throw new ChatError("Diese Nachricht gibt es nicht (mehr).");
 		const f = fields<ChatMsgFields>(m);
 		if (f.fromId === me.accountId || !f.fromId) throw new ChatError("Melden kannst du nur Nachrichten anderer.");
-		const text = typeof r.text === "string" ? r.text.slice(0, 1000) : "";
+		const text = typeof r.text === "string" ? cutText(r.text, 1000) : "";
 		await this.space.write({ type: "ChatReport", fields: { reportId: id(), by: me.accountId, byName: me.name, fromId: f.fromId, fromName: f.fromName, text, at: Date.now() } satisfies ChatReportFields as never }, null, REPORT_MS);
 		reply(note("info", `Gemeldet. Die Admins sehen sich die Nachricht von ${f.fromName} an.`));
 	}

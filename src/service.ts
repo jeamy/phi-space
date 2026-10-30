@@ -125,6 +125,21 @@ export type SpaceServiceOptions = {
 	rateWindowMs?: number;
 };
 
+/** A surrogate without its partner; the replacement is what String.prototype.toWellFormed does. */
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+/** What can stand for one in the text of a call: JSON.stringify writes it as an escape. */
+const LONE_IN_TEXT = /\\u[dD][89a-fA-F]/;
+/**
+ * The JSON contract of a space (docs/wire-protokoll.md, section 6): text is well-formed. A value cut with slice can end in half
+ * an emoji; the service stores U+FFFD for it, so hashes, budgets and a store file are the same in every implementation.
+ */
+export const wellFormed = (v: unknown): unknown => {
+	if (typeof v === "string") return v.replace(LONE_SURROGATE, "\ufffd");
+	if (Array.isArray(v)) return v.map(wellFormed);
+	if (v !== null && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [wellFormed(k), wellFormed(x)]));
+	return v;
+};
+
 class Bad extends Error {}
 class Denied extends Error {}
 const fail = (code: ErrorCode, message: string, extra: { requiredBytes?: number } = {}): Reply => ({ ok: false, error: { code, message, ...extra } });
@@ -177,6 +192,7 @@ export class SpaceService {
 		if (bytes > maxFrameBytes) return JSON.stringify(fail("ResourceExhausted", `a call may take at most ${maxFrameBytes} bytes`));
 		let call: unknown;
 		try { call = JSON.parse(text); } catch { return JSON.stringify(fail("BadRequest", "the call is not JSON")); }
+		if (LONE_IN_TEXT.test(text)) call = wellFormed(call); // the call's text is its only copy here: most calls need no walk
 		const reply = await this.handle(call, conn, maxFrameBytes, bytes);
 		const textReply = encoded.get(reply) ?? JSON.stringify(reply);
 		if (Buffer.byteLength(textReply) > maxFrameBytes) return JSON.stringify(fail("ResourceExhausted", "the transport frame cannot carry this response"));
@@ -185,6 +201,7 @@ export class SpaceService {
 
 	async handle(call: unknown, conn: Connection, transportFrameBytes = core.DEFAULT_LIMITS.maxFrameBytes, rawBytes?: number): Promise<Reply> {
 		let responseFrame = transportFrameBytes;
+		if (rawBytes === undefined) call = wellFormed(call); // not through handleText: a pi-server call, an object
 		try {
 			if (!isObj(call) || typeof call.method !== "string") throw new Bad("a call is an object with a method");
 			if (!(METHODS as readonly string[]).includes(call.method)) return fail("UnsupportedMethod", `unknown method ${call.method}`);

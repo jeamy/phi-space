@@ -5,7 +5,7 @@
 // A character is online while a Session entry for it lives; the gateway holds one per open WebSocket and renews its
 // lease, so a web process that dies takes its players offline within the lease.
 import { randomBytes } from "node:crypto";
-import { RevisionAhead, SnapshotExpired, type SpaceLike } from "phi-spaces";
+import { cutText, RevisionAhead, SnapshotExpired, type SpaceLike } from "phi-spaces";
 import type { Me } from "./accounts.ts";
 import { Chat, isChatFrame, isChatLine, type ChatClientFrame, type ChatFrame, type ChatUser } from "./chat.ts";
 import { render } from "./engine/funcparser.ts";
@@ -313,7 +313,7 @@ export class Gateway {
 			return;
 		}
 		if (f?.t !== "cmd" || typeof f.line !== "string") return;
-		const line = f.line.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, MAX_LINE);
+		const line = cutText(f.line.replace(/[\u0000-\u001f\u007f]/g, " ").trim(), MAX_LINE);
 		if (!line) return;
 		// the command limits are the operator's settings (server/settings.ts), read at most every few seconds
 		const cmdBurst = await setting(this.space, "cmd.burst"), cmdRefillMs = 1000 / Math.max(1, await setting(this.space, "cmd.perSec"));

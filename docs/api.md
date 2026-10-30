@@ -197,6 +197,7 @@ Was jeder Prozess braucht, der einen Space woanders nutzt; die Werte, die sich j
 
 | Funktion | Inhalt |
 | --- | --- |
+| `cutText(text, max)` | die ersten `max` UTF-16-Einheiten, ohne ein halbes Emoji am Schnitt |
 | `parseTarget(spec)` | `unix:/pfad`, `tcp:host:port` oder ein bloßer Pfad → `ListenTarget` (`parseListen` in `src/standalone.ts` ist dieselbe Funktion) |
 | `connectSpace(spec, { callTimeoutMs = 30 s, connectTimeoutMs = 5 s, attempts = 3, … })` | `{ space: RemoteSpace, close }`; die Socket-Anfrage darf 5 s länger dauern als der Aufruf |
 | `readExisting` / `takeExisting(space, tmpl, waitMs, { txn })` | `readIfExists`/`takeIfExists`, das ein fehlendes von einem gehaltenen Entry unterscheidet: `null` heißt weg, ein Fehlschlag nur wegen gehaltener Treffer wirft `StillHeld` (über `probe`; ohne `probe` gilt `null` als weg) |

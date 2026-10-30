@@ -1,11 +1,12 @@
 // AP 1.8: the transport-independent `space` service (federation-plan-v3.md 6.2).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PhiSpaces, SpaceService, StaticIdentity, createSpace, DEFAULT_POLICY, type Reply, type Call, type Policy } from "../src/index.ts";
+import { cutText, PhiSpaces, SpaceService, StaticIdentity, createSpace, DEFAULT_POLICY, type Reply, type Call, type Policy } from "../src/index.ts";
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
 import { RemoteSpace, core } from "../src/index.ts";
 import { readChain } from "../src/read-chain.ts";
 import { openTestHost } from "./support/host.ts";
+import { openOwnMemoryHost } from "../src/store/host.ts";
 import type { StoreHost } from "../src/store/types.ts";
 
 test("linked pages: one RPC, byte bounds, cursors, permissions and malformed chains", async () => {
@@ -255,4 +256,32 @@ test("named spaces: the call names its space by alias or id, the default alias w
 	const hello = ok(await s.handle({ method: "hello", space: "sieve", args: { protocol: 1 } }, as("peer-a")));
 	assert.equal(hello.spaceId, info.spaceId);
 	assert.equal(hello.alias, "sieve");
+});
+
+test("a call's text is well-formed before anything sees it: half an emoji is stored as U+FFFD, and its retry is the same request", async () => {
+	const h = openOwnMemoryHost();
+	const s = new SpaceService({ host: h, ctx, identity: new StaticIdentity({ a: { principal: { peerId: "a" }, roles: ["member"] } }) });
+	const call = async (c: unknown) => JSON.parse(await s.handleText(typeof c === "string" ? c : JSON.stringify(c), { peerId: "a" }));
+	const { result: { generation } } = await call({ method: "generation" });
+	const request = { generation, requestId: "r1" };
+	const write = { method: "write", request, args: { entry: { type: "Cut", fields: { text: "a\ud83d", "\ude00": "\ud83d\ude00" } } } };
+	const first = await call(write);
+	assert.equal(first.ok, true);
+	assert.deepEqual(await call(write), first);
+	assert.equal((await call({ ...write, args: { entry: { type: "Cut", fields: { text: "a\ufffd", "\ufffd": "\ud83d\ude00" } } } })).ok, true, "the repaired call is the same request");
+	const taken = await call({ method: "take", request: { generation, requestId: "r2" }, args: { template: { type: "Cut" } } });
+	assert.deepEqual(taken.result.entry.fields, { text: "a\ufffd", "\ufffd": "\ud83d\ude00" });
+	// not through the text: a call as an object
+	const direct = await s.handle({ method: "write", request: { generation, requestId: "r3" }, args: { entry: { type: "Cut", fields: { text: "\ud83d" } } } }, { peerId: "a" });
+	assert.equal(direct.ok, true);
+	const read = await call({ method: "read", request: { generation, requestId: "r4" }, args: { template: { type: "Cut" } } });
+	assert.deepEqual(read.result.entry.fields, { text: "\ufffd" });
+	await h.close(ctx);
+});
+
+test("cutText keeps a whole emoji out or in, never half of it", () => {
+	assert.equal(cutText("ab\ud83d\ude00c", 3), "ab");
+	assert.equal(cutText("ab\ud83d\ude00c", 4), "ab\ud83d\ude00");
+	assert.equal(cutText("abc", 2), "ab");
+	assert.equal(cutText("ab", 5), "ab");
 });

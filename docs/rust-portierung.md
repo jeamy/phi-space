@@ -330,11 +330,10 @@ brauchen; das ist der zweite Hebel aus R-D2 (Speicher), besonders auf nano mit 8
 - Der zustandsbehaftete Generator findet in 10⁶ Zufallsschritten keine Abweichung zum TS-Kern; Saat,
   Quellstand und getesteter Funktionsumfang werden festgehalten. `proptest` bleibt eine freigegebene Alternative.
 
-**Stand der Abnahme (2026-10-30):** Alle sechs Basisscheiben 0–5 sind erledigt. Die vollständige
-Kompatibilitätsabnahme ist wegen R-D10 und der unten genannten Pflicht-Ergänzungen noch offen.
+**Stand der Abnahme (2026-10-30):** Alle Scheiben 0–6 sind erledigt, R-D10 ist entschieden.
 
 - **Golden-Vektoren:** `phi-json` reproduziert die unterstützten Werte aus `canonical.json` und die Hash-Teile von
-  `crypto.json`; das unpaarige Surrogat wird abweichend von TS verweigert (R-D10). `wire.json` und die Store-Dateien
+  `crypto.json`; ein unpaariges Surrogat wird gemäß R-D10 verweigert, im Text eines Aufrufs repariert. `wire.json` und die Store-Dateien
   prüft erst R3/R2, sie gehören zum Dienst und zum Store, nicht zum Kern.
 - **Aufgezeichnete Folgen:** Es gibt keine eigens aufgezeichneten Folgen. Ihre Rolle übernehmen die festen Folgen von
   `tests/boundaries.rs` (jede Budgetgrenze, Aufbewahrung, Verdrängung) und `tests/state_round_trip.rs`. Beide laufen
@@ -359,7 +358,7 @@ Vergleichstests gegen den TS-Treiber grün sind.
 | 3 | Wartende, geparkte Operationen, Claims und Generationen; ihre Ereignisse in der Outbox und Fanout-Jobs ohne Consumer | erledigt |
 | 4 | Notify und Mailboxen: Abonnements mit Drosselung und Bündeln, Consumer für Abonnements und Wartende, Fanout-Jobs mit Consumer, Freigabe abgelaufener Takes | erledigt |
 | 5 | Snapshots (`snapshot.ts`) mit Seiten-Token; Stream und Seiten unter Txns kamen schon mit Scheibe 2 | erledigt |
-| 6 | Vertragslücken vor R3: `cancelRequest`, `releaseTxn`, `setLimits`, Abschlussprofile (erledigt, Stand unten); JS-Strings (R-D10) | offen: nur noch R-D10 |
+| 6 | Vertragslücken vor R3: `cancelRequest`, `releaseTxn`, `setLimits`, Abschlussprofile, JS-Strings (R-D10) | erledigt |
 
 **Bewusst zurückgestellt:** Restore, Wechsel der Autorität, Member-Admission, Löschung, Admin-Wartung, `purgeTasks`,
 RunGate und negative Claims. Member-Admission und RunGate sind Pflicht für R5b, die übrigen Erweiterungen gehören
@@ -372,7 +371,7 @@ Bootstrap. Abschlussprofile gehören zur TS-`hello`-Capability und zur Übernahm
 Standalone-Stores. Diese Pfade werden in Scheibe 6 ergänzt, nicht durch `NotPorted` als abgenommen behandelt.
 
 **Stand Scheibe 6 (2026-10-30):** `cancelRequest`, `releaseTxn`, `setLimits` und `setCompletionProfiles` sind im
-Kern, im Treiber und im Zufallsgang; offen bleibt nur R-D10.
+Kern, im Treiber und im Zufallsgang.
 
 - **Abschlussprofile:** Eine genommene Aufgabe wird unter ihrer Transaktion festgehalten (`takenTasks`), ihre Frist
   begrenzt die Lease (`completionDeadline`), der Commit prüft die Ergebnisse. Auch wartende Requests ohne Transaktion
@@ -396,7 +395,14 @@ Kern, im Treiber und im Zufallsgang; offen bleibt nur R-D10.
   Emoji an der Schnittstelle hinterlässt ein einzelnes Surrogat.
 - **Folge heute:** Der TS-Server nimmt so einen Text an. Der Rust-Server antwortet auf den Write `BadRequest`, und eine
   Datei, die so einen Wert enthält, öffnet er nicht.
-- **Bestand:** Vier lokale Store-Dateien (3 119 Zeilen) enthalten keinen solchen Wert. big und nano sind nicht geprüft.
+- **Bestand:** Keine der gelesenen Dateien enthält so einen Wert: vier lokale (3 119 Zeilen) und alle auf big und nano
+  (rund 374 000 Zeilen in neun Dateien, nur lesend). Für den Umstieg zählt erst der Scan unmittelbar davor (R4).
+
+**Umsetzung von R-D10 (2026-10-30):** Der TS-Dienst macht Texte am Eingang wohlgeformt, auch Schlüssel; ein Aufruf
+ohne verdächtiges Escape kostet nur einen Regex über den Text. Rust hat dafür `parse_repairing`, und `parse` bleibt für
+gespeicherte Werte streng. `canonical.json` (`wellFormed`) und `wire.json` halten beide Seiten gleich. spaces-mmo kürzt
+gespeicherten Text jetzt mit `cutText`: Meldung, NPC-Erinnerung, Eingabezeile, `say` und `emote`. Fehlermeldungen
+kürzen weiter mit `slice`, dort greift die Reparatur am Eingang.
 
 **Treiber und Zustand:**
 
@@ -752,7 +758,8 @@ Ein Testschalter darf nicht unbemerkt den alten TS-Host statt des Rust-Servers s
 - Docker-Images von spaces-mmo und codemode-chat bekommen das Rust-Binary als Space-Rolle.
 - Zuerst `docker:local:up` auf diesem Rechner.
 - Danach, **nach Rückfrage**, der nano-Accounts-Space und die big-Weltregionen.
-- Vor dem Umschalten: konsistente Sicherung, Bestandsprüfung und dokumentiertes TS-/Rust-Versionspaar.
+- Vor dem Umschalten: konsistente Sicherung, Bestandsprüfung (auch auf einzelne Surrogate, R-D10) und dokumentiertes
+  TS-/Rust-Versionspaar.
   Erst den bisherigen Besitzer stoppen, dann die Datei mit dem neuen Server öffnen; nie zwei Besitzer parallel.
 - Rollback-Fenster und zulässige Schema-/Featureänderungen festhalten (R-D12). Rückweg innerhalb dieses Fensters:
   TS-`space-host` mit demselben Startprofil auf derselben Datei. Nach inkompatiblen Änderungen braucht es eine
@@ -980,7 +987,7 @@ Die Auswahl b) beendet weder die TS-Referenz noch die In-Process-API automatisch
 | R-D7 | Modellaufrufe von spaces-mmo | **entschieden 2026-10-29:** im TS-Model-Prozess lassen (pi-ai: Modellliste, Umgebungsschlüssel und `~/.pi/agent/auth.json` mit OAuth), NPC-Rollen über Entries anbinden. Verworfen: direkte HTTP-Aufrufe aus Rust, weil die Zugangsdaten dann an zwei Stellen verwaltet würden |
 | R-D8 | Spielentwicklung während R8.2 | **entschieden 2026-10-29:** in TS weiterentwickeln, Rust zieht nach |
 | R-D9 | Zusätzliche Crates für R8: `axum` oder `hyper` (HTTP), `tokio-tungstenite` (WebSocket), `scrypt`, `ts-rs` (TS-Typen aus Rust), `tower-http` (statische Dateien) | **entschieden 2026-10-29:** freigegeben |
-| R-D10 | Verlustfreie JS-Strings oder gemeinsame Vertragsänderung? | **offen, vor R3:** UTF-16-Codeeinheiten einschließlich unpaariger Surrogate verlustfrei halten oder TS-Vertrag bewusst ändern, Bestände prüfen und beide Seiten/Vektoren anpassen; die derzeitige Rust-Ablehnung ist keine Freigabe |
+| R-D10 | Verlustfreie JS-Strings oder gemeinsame Vertragsänderung? | **entschieden 2026-10-30:** Vertragsänderung. Texte im Space sind wohlgeformt: Der Dienst ersetzt ein einzelnes Surrogat am Eingang durch U+FFFD, Rust ebenso (`parse_repairing`); ein Store mit so einem Wert wird nicht geöffnet. Vor dem Umstieg in R4 werden die Stores erneut gelesen |
 | R-D11 | Quantitative Ergänzung zu R-D2 | **entschieden 2026-10-30:** verfehlt die CPU den Faktor 2, muss der RSS um mindestens 50 % sinken; p95 und p99 je Lastprofil nicht schlechter als TS; keine zusätzlichen Fehler oder Timeouts |
 | R-D12 | Rollback-Fenster und kompatible Versionspaare | **offen, vor R4 und erneut vor R8.3:** Dauer, TS-/Rust-Versionen, unterstützte Schemata/Features und Downgrade-Grenzen festlegen; Rückwechsel mit laufender Arbeit prüfen |
 | R-D13 | Späterer Entfall der TS-Referenz/In-Process-Implementierung | **offen, kein Teil der Handy-Freigabe:** erst mit Ersatz für Referenztests und `PhiSpaces`-In-Process-Nutzung oder einer ausdrücklich beschlossenen API-Änderung; bis dahin bleibt TS erhalten |

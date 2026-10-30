@@ -27,7 +27,7 @@ import { argHash } from "../../src/claims.ts";
 import { rpcDomain } from "../../src/rpc-domain.ts";
 import type { Call } from "../../src/service.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { SpaceService, StaticIdentity, type Reply } from "../../src/service.ts";
+import { SpaceService, wellFormed, StaticIdentity, type Reply } from "../../src/service.ts";
 import { openOwnMemoryHost } from "../../src/store/host.ts";
 import { openSqliteHost } from "../../src/store/sqlite.ts";
 import type { ClosableStoreHost } from "../../src/store/types.ts";
@@ -71,12 +71,14 @@ export function canonicalVectors(): Record<string, unknown> {
 		const n = fromBits(bits);
 		try { return { bits, canonical: canonicalJson(n) }; } catch { return { bits, error: "non-finite" }; }
 	});
-	// a string with an unpaired surrogate: JSON text can carry it, a Rust String cannot (the port refuses it or keeps it as UTF-16)
+	// a string with an unpaired surrogate: JSON text can carry it, the service never stores it (wellFormed), a store refuses it
 	const lone = JSON.parse('"a\\ud800b"') as string;
 	return {
 		about: "canonical JSON (src/canonical.ts): RFC 8785 order by UTF-16 code units, ECMAScript number form, -0 as 0; sha256 is digestJson; jsonBytes the UTF-8 bytes of JSON.stringify (src/json.ts)",
 		values, numbers,
 		unpairedSurrogate: { input: '"a\\ud800b"', canonical: canonicalJson(lone), jsonBytes: jsonBytes(lone) },
+		// what the service makes of a call's text
+		wellFormed: ['"a\\ud800b"', '"\\ud83d"', '"\\ude00\\ud83d"', '"\\ud83d\\ud83d\\ude00"', '"\\ud83d\\u0041"', '{"\\ud800":[1,"\\udc00"]}', '"\\ud83d\\ude00"'].map((input) => ({ input, output: JSON.stringify(wellFormed(JSON.parse(input))) })),
 	};
 }
 
@@ -243,6 +245,9 @@ export async function runSession(host: ClosableStoreHost, o: { only?: "reads" } 
 	await call("lease", { action: "renew", id: "e-unknown", ms: 1 });
 	await call("txn", { action: "commit", id: txn });
 	await call("read", { template: { type: "Task" } }, "r-unknown-generation-is-fine");
+	// half an emoji arrives as U+FFFD
+	await call("write", { entry: { type: "Cut", fields: { text: "a\ud83d", "\ude00": 1 } } });
+	await call("take", { template: { type: "Cut" } });
 	return steps;
 }
 

@@ -356,5 +356,35 @@
 		"input": "\"a\\ud800b\"",
 		"canonical": "\"a\\ud800b\"",
 		"jsonBytes": 10
-	}
+	},
+	"wellFormed": [
+		{
+			"input": "\"a\\ud800b\"",
+			"output": "\"a�b\""
+		},
+		{
+			"input": "\"\\ud83d\"",
+			"output": "\"�\""
+		},
+		{
+			"input": "\"\\ude00\\ud83d\"",
+			"output": "\"��\""
+		},
+		{
+			"input": "\"\\ud83d\\ud83d\\ude00\"",
+			"output": "\"�😀\""
+		},
+		{
+			"input": "\"\\ud83d\\u0041\"",
+			"output": "\"�A\""
+		},
+		{
+			"input": "{\"\\ud800\":[1,\"\\udc00\"]}",
+			"output": "{\"�\":[1,\"�\"]}"
+		},
+		{
+			"input": "\"\\ud83d\\ude00\"",
+			"output": "\"😀\""
+		}
+	]
 }

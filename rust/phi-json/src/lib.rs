@@ -7,7 +7,8 @@
 //! - [`Json::canonical`] is `canonicalJson` (src/canonical.ts, RFC 8785): keys sorted by UTF-16 code units, non-finite
 //!   numbers refused. [`digest_json`] is the hex SHA-256 of it.
 //!
-//! A string with an unpaired surrogate cannot be a Rust `String`; the parser refuses it (TypeScript keeps it).
+//! A string with an unpaired surrogate cannot be a Rust `String`. `parse` refuses it (a stored value); the text of a call
+//! goes through `parse_repairing`, which writes U+FFFD for it as the service does (R-D10, docs/wire-protokoll.md).
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
 
@@ -123,17 +124,22 @@ pub const MAX_DEPTH: usize = 512;
 
 /// `JSON.parse`: whitespace is space, tab, LF and CR; numbers become the nearest double.
 pub fn parse(text: &str) -> Result<Json, ParseError> {
-	let mut p = Parser { s: text.as_bytes(), at: 0 };
-	p.ws();
-	let v = p.value(0)?;
-	p.ws();
-	if p.at != p.s.len() { return Err(ParseError::Syntax(p.at)); }
-	Ok(v)
+	Parser { s: text.as_bytes(), at: 0, repair: false }.document()
 }
 
-struct Parser<'a> { s: &'a [u8], at: usize }
+/// `parse`, with an unpaired surrogate replaced by U+FFFD (`wellFormed` in src/service.ts).
+pub fn parse_repairing(text: &str) -> Result<Json, ParseError> { Parser { s: text.as_bytes(), at: 0, repair: true }.document() }
+
+struct Parser<'a> { s: &'a [u8], at: usize, repair: bool }
 
 impl Parser<'_> {
+	fn document(mut self) -> Result<Json, ParseError> {
+		self.ws();
+		let v = self.value(0)?;
+		self.ws();
+		if self.at != self.s.len() { return Err(ParseError::Syntax(self.at)); }
+		Ok(v)
+	}
 	fn ws(&mut self) { while let Some(b' ' | b'\t' | b'\n' | b'\r') = self.s.get(self.at) { self.at += 1; } }
 	fn peek(&self) -> Option<u8> { self.s.get(self.at).copied() }
 	fn eat(&mut self, b: u8) -> Result<(), ParseError> {
@@ -238,12 +244,23 @@ impl Parser<'_> {
 							let u = self.hex4()?;
 							let ch = match u {
 								0xD800..=0xDBFF => {
-									if self.s.get(self.at..self.at + 2) != Some(b"\\u") { return Err(ParseError::UnpairedSurrogate(esc)); }
-									self.at += 2;
-									let lo = self.hex4()?;
-									if !(0xDC00..=0xDFFF).contains(&lo) { return Err(ParseError::UnpairedSurrogate(esc)); }
-									0x10000 + ((u - 0xD800) << 10) + (lo - 0xDC00)
+									let after = self.at;
+									let lo = if self.s.get(after..after + 2) == Some(b"\\u") {
+										self.at += 2;
+										self.hex4()?
+									} else {
+										0
+									};
+									if (0xDC00..=0xDFFF).contains(&lo) {
+										0x10000 + ((u - 0xD800) << 10) + (lo - 0xDC00)
+									} else if self.repair {
+										self.at = after; // what follows is looked at on its own
+										0xFFFD
+									} else {
+										return Err(ParseError::UnpairedSurrogate(esc));
+									}
 								}
+								0xDC00..=0xDFFF if self.repair => 0xFFFD,
 								0xDC00..=0xDFFF => return Err(ParseError::UnpairedSurrogate(esc)),
 								_ => u,
 							};
