@@ -9,7 +9,7 @@
 //      free cell near the ferry's landing, its token. A character already in B: an earlier try got that far.
 //   4. A's transaction is committed: the Handover and the old token are gone.
 // A worker that dies in steps 2 or 3 lets A's transaction lapse; the Handover is back and the next try finishes it.
-import { FOREVER, NO_WAIT, StillHeld, takeExisting, type SpaceLike, type Taken } from "phi-spaces";
+import { FOREVER, NO_WAIT, StillHeld, takeExisting, type BatchOp, type BatchResult, type SpaceLike, type Taken } from "phi-spaces";
 import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type RoomFields } from "../model.ts";
 import { awaitWork, envMs, peek, readExisting } from "../space.ts";
 import { CommandError, type CommandCtx } from "./context.ts";
@@ -47,28 +47,23 @@ export async function handOff(c: CommandCtx, from: string, to: string, dest: { r
 	await c.space.write({ type: "Handover", fields: handover as never }, c.txn, FOREVER);
 }
 
-/** How many things go over in one transaction: a transaction holds what it takes and what it writes. */
-const PACK_PER_TXN = 40;
+/** Several steps in one call: both kinds of space have it, `SpaceLike` does not name it. */
+const batch = (space: SpaceLike, ops: BatchOp[]) => (space as SpaceLike & { batch(ops: BatchOp[]): Promise<BatchResult[]> }).batch(ops);
+
+/** How many things go over in one step: a commit has a limit, a full pack would not fit. */
+const PACK_PER_STEP = 40;
 
 /** Step 2: what `charId` carries goes from `here` to `there`. Written there first, so a worker dying in between finds the
- *  thing there on the next try and only takes it here; nobody touches it, the character is in neither region yet. */
+ *  thing there on the next try and only takes it here; nobody touches it, the character is in neither region yet. Each
+ *  step is one call to each space: a crossing is a step the player waits for, and a pack has hundreds of things. */
 export async function carryPack(here: SpaceLike, there: SpaceLike, charId: string): Promise<void> {
 	for (;;) {
-		const batch = await here.readAll({ type: "Item", fields: { location: charId } }, { limit: PACK_PER_TXN });
-		if (!batch.length) return;
-		const txn = (await here.createTransaction(30_000)).id, write = (await there.createTransaction(30_000)).id;
-		try {
-			for (const it of batch) {
-				const t = await here.takeIfExists({ id: it.id }, NO_WAIT, { txn });
-				if (t && !(await peek(there, { type: "Item", fields: { itemId: t.fields.itemId } }))) await there.write({ type: t.type, types: t.types.slice(1), fields: t.fields as never }, write, FOREVER);
-			}
-			await there.commit(write);
-			await here.commit(txn);
-		} catch (e) {
-			await there.abort(write).catch(() => {});
-			await here.abort(txn).catch(() => {});
-			throw e;
-		}
+		const step = await here.readAll({ type: "Item", fields: { location: charId } }, { limit: PACK_PER_STEP });
+		if (!step.length) return;
+		const over = new Set((await there.readAll({ type: "Item", fields: { location: charId } })).map((e) => e.fields.itemId));
+		const missing = step.filter((e) => !over.has(e.fields.itemId));
+		if (missing.length) await batch(there, missing.map((e) => ({ op: "write", entry: { type: e.type, types: e.types.slice(1), fields: e.fields as never }, lease: FOREVER })));
+		await batch(here, step.map((e) => ({ op: "take", template: { id: e.id } })));
 	}
 }
 
