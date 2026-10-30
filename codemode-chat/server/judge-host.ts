@@ -8,7 +8,7 @@
 //   CODEMODE_HOST_NAME=big                         name in the system bar and on the tiles (default: hostname)
 import "./env.ts";
 import { pathToFileURL } from "node:url";
-import { NO_WAIT, TransactionError, type SpaceLike } from "phi-spaces";
+import { NO_WAIT, peek, TransactionError, type SpaceLike } from "phi-spaces";
 import { judgeInSlot, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { setBest, trimArchive } from "./results.ts";
 import { serveExec } from "./exec.ts";
@@ -62,8 +62,10 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 		}
 		// cancelled when this round ends in any way but a hard death of this process
 		start = (await space.write({ type: "JudgeStart", fields: { session, candidateId } }, null, START_LEASE_MS)).id;
-		// the task: its block's CodeTask (a candidate from before carries its own spec; one without a block names a catalog task)
-		const spec = f.custom !== undefined || typeof blockId !== "string" ? f : await taskEntry();
+		// the task: its block's CodeTask (a candidate from before carries its own spec; one without a block names a catalog task).
+		// Read without the transaction: a read under it would hold the CodeTask for the whole time limit, and deleting or
+		// extending the block would wait that long; whether the block still stands is asked under it after the judging
+		const spec = f.custom !== undefined || typeof blockId !== "string" ? f : ((await peek(space, { type: "CodeTask", fields: { session, blockId } }))?.fields as Record<string, unknown> | undefined ?? false);
 		const task = spec ? taskFromSpec(spec) : null;
 		const v: Verdict | null = spec === false ? null : task ? await judgeInSlot(cm, task, String(f.source ?? "")) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
 		if (v && (await alive())) {
