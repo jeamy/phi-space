@@ -13,14 +13,18 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-While `read(template, timeout)` and `take(template, timeout)` block the active call (capped at 60 s in agent tools), `wait` and `notify` allow **long-lived, non-blocking registration** of read/take waiters and subscriptions for hours, days, or `FOREVER`.
+Sometimes you wait for something for days, not seconds. No program should sit blocked all that time. Instead you leave a request behind: "Tell me when something like this turns up." The notice lands in a mailbox and stays there until you pick it up and confirm it.
+
+### Technical Details {#technical-details}
+
+While `read(template, timeout)` and `take(template, timeout)` block the active call (capped at 60 s in agent tools), `wait` and `notify` allow **long-lived, non-blocking registration** of read/take waiters and subscriptions for hours, days, or `FOREVER`. Both need `startService`, so that delivery and the reaper run while idle.
 
 ## Concept And System Model {#concept-model}
 
 ### wait vs. notify {#wait-vs-notify}
 
-- **`space.notify(template, { target, txn?, lease?, handback? })`**: Whenever a matching entry becomes visible, the space appends an event to `target`'s mailbox.
-- **`space.wait(template, { take?, target, timeout, txnLeaseMs?, handback? })`**: One-shot waiter. With `take: true`, the space reserves the matched entry inside a **fresh transaction** owned by `target` and delivers both the entry and `txnId` to the mailbox!
+- **`space.notify(template, { target, txn?, lease?, handback? })`**: Whenever a matching entry becomes visible, the space appends an event to `target`'s mailbox. `notifyIntervalMs` (default 1 s) bundles rapid sequences.
+- **`space.wait(template, { take?, target, timeout, txnLeaseMs?, handback? })`**: One-shot waiter. With `take: true`, the space reserves the matched entry inside a **fresh transaction** owned by `target` and delivers both the entry and `txnId` to the mailbox.
 
 ### Consumer Mailbox And Prefix ACK {#mailbox-and-ack}
 
@@ -37,8 +41,9 @@ if (page.events.length > 0) {
 }
 ```
 
-- **Critical Boundary**: `ack(epoch, upTo)` only acknowledges receipt of mailbox events up to sequence `upTo`—it is **not** a transaction commit! A delivered take transaction must still be committed explicitly via `commit(ev.event.txn)`.
-- TTL expiry changes mailboxEpoch, reports gap and releases affected take reservations. Byte exhaustion rejects new effects with ResourceExhausted instead of silently dropping events.
+- **Critical Boundary**: `ack(epoch, upTo)` only acknowledges receipt of mailbox events up to sequence `upTo`. It is **not** a transaction commit. A delivered take transaction must still be committed explicitly via `commit(ev.event.txn)`.
+- TTL expiry changes `mailboxEpoch`, reports `gap` and releases affected take reservations. Byte exhaustion rejects new effects with `ResourceExhausted` instead of silently dropping events.
+- The `observer` role may use `notify`, `events` and `ack` for its own mailbox. How often the service looks again during a long poll is explained under [when waiting calls look again](help.topic.space_service_and_remote_space#polling).
 
 ## See Also {#see-also}
 

@@ -13,6 +13,10 @@ since: 0.0.1
 
 ## Overview {#overview}
 
+As soon as a space can be reached from outside, it has to be clear who is knocking. A network address alone is not enough for that. So every device identifies itself twice: through the private network and with a key of its own. New devices are paired with a one-time code, and permissions last only a short time.
+
+### Technical Details {#technical-details}
+
 In a multi-host environment, an IP address alone is insufficient identity proof because multiple processes on the same host share the overlay IP. Phase 1b (`src/gate.ts`, `src/auth.ts`, `src/enroll.ts`, `src/grants.ts`, `src/runtime.ts`) therefore combines two authentication layers with short-lived signed **60-second grants** and an external **CAS boot register**.
 
 ## Concept And System Model {#concept-model}
@@ -25,7 +29,7 @@ In a multi-host environment, an IP address alone is insufficient identity proof 
 ### Enrollment, 60s Grants, And Key Rotation {#enrollment-and-grants}
 
 - **Enrollment (`createEnroll` / `enrollQr`)**: An admin creates a one-time token via the supervisor (only the SHA-256 hash is stored in `CONTROL_SPACE`). The new device registers its public key via `remote.enroll(token)`.
-- **Short-Lived Grants (`GrantAuthority` / `GrantVerifier`)**: Before mutating a data space, `RemoteSpace` obtains a control-signed grant (`purpose: "effect" | "resolution"`, max 60 s TTL) via `grantProvider`. The data member re-verifies signature, `authorityId`, `peerId`, `keyId`, scope, and expiry right before commit!
+- **Short-Lived Grants (`GrantAuthority` / `GrantVerifier`)**: Before mutating a data space, `RemoteSpace` obtains a control-signed grant (`purpose: "effect" | "resolution"`, max 60 s TTL) via `grantProvider`. The data member re-verifies signature, `authorityId`, `peerId`, `keyId`, scope, and expiry right before commit.
 - **Own-Key Rotation (`rotateKey`)**: Requires signatures from both the old and replacement keys over a persisted challenge, swapping the key atomically in `CONTROL_SPACE`.
 
 ### Boot Guard And Restore Quarantine {#boot-and-restore}

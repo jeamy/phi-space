@@ -2,10 +2,10 @@
 standard: help_topic
 id: help.topic.overview
 title: "phi-spaces System Overview: What It Is And What It Can Do"
-short: "A clear, in-depth look at what phi-spaces is, how the transactional tuple-space model works, which problems it solves, and what it can do from v1 (in-memory) through v6 (federated cluster + mobile/web admin)."
+short: "An introduction to phi-spaces: what it is, how the transactional tuple-space model works, which problems it solves, and what it can do from a single process up to a federated cluster with mobile and web administration."
 tags: [phi-spaces, overview, tuple-space, architecture, phispaces, remotespace, federatedspace]
 owner: core
-related: [help.topic.architecture_layers, help.topic.guarantees_and_boundaries, help.workflow.overview_v1_to_v6]
+related: [help.topic.examples, help.topic.apps, help.topic.architecture_layers, help.topic.guarantees_and_boundaries, help.workflow.overview_v1_to_v6]
 since: 0.0.1
 ---
 
@@ -13,7 +13,13 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-`phi-spaces` is a transactional, persistent **coordination space** (a modern evolution of the classic Linda / JavaSpaces paradigm) with a store of its own (SQLite, owned by one process); `@earendil-works/pi-durable` agents get an optional agent package. Instead of coupling clients, background workers, AI agents, and administrative tools through fragile point-to-point calls, every participant exchanges immutable, typed JSON objects (**entries**) through shared, versioned data spaces (**spaces**).
+phi-spaces is a shared drop-off point for programs, a bit like a notice board. One program pins up a job or a message, and another picks it up when it has time. The two need not know each other or run at the same time. If a program crashes in the middle of its work, the job is not lost but becomes free again. This helps wherever several programs, devices or AI agents work together.
+
+## Where To Go Next {#where-next}
+
+- **See it run:** The [examples](help.topic.examples#overview) are small programs you can try yourself.
+- **Look at finished applications:** The [applications built on phi-spaces](help.topic.apps#overview) show what people have built with it.
+- **Keep reading:** The rest of this article explains the model, the terms and the limits.
 
 ## Origins: Linda And JavaSpaces {#history}
 
@@ -34,9 +40,11 @@ phi-spaces adopts this model in TypeScript and JSON and adds persistence, revisi
 
 ## What Is phi-spaces And Why Was It Built? {#what-is-phi-spaces}
 
-`phi-spaces` solves four fundamental problems in building robust, long-running systems and autonomous AI agent fleets:
+`phi-spaces` is a transactional, persistent **coordination space** in TypeScript, built on the Linda / JavaSpaces model. It has a store of its own: one SQLite file owned by exactly one process, or memory only. The library needs no agent framework. The optional `agent/` package gives `@earendil-works/pi-durable` agents tools for the space; pi-durable is no longer the space's storage, and old pi-durable stores are not taken over. Instead of coupling clients, background workers, AI agents, and administrative tools through point-to-point calls, every participant exchanges immutable, typed JSON objects (**entries**) through shared, versioned data spaces (**spaces**).
 
-1. **Fault-Tolerant Work Handoff (Leased Reservations)**: A server, UI client, or agent does not call a worker directly; it writes a task entry (`type: "ChatTask"` or similar) into the space. Any worker can then **reserve** that task exclusively (`take`). If the worker crashes before finishing, the expired lease automatically returns the task — provided the task's own lease remains valid and its store is available.
+The library solves four problems in building long-running systems and groups of AI agents:
+
+1. **Fault-Tolerant Work Handoff (Leased Reservations)**: A server, UI client, or agent does not call a worker directly; it writes a task entry (`type: "ChatTask"` or similar) into the space. Any worker can then **reserve** that task exclusively (`take`). If the worker crashes before finishing, the expired lease automatically returns the task, provided the task's own lease remains valid and its store is available.
 2. **Temporal Decoupling**: Producers and consumers do not need to be online at the same time. A client can schedule a `ScheduledJob` in the middle of the night and go offline; with a persistent backend and sufficient task lease, the job survives; the application checks when it is due after TimerLock expiry.
 3. **Unified State With Live Events**: Rather than fragmented caches, every space provides atomic transactions (`createTransaction`, `commit`, `abort`), consistent point-in-time snapshots (`readPage` with `rev`), incremental update streams (`changes(afterRev)`), and durable event mailboxes (`events` + prefix `ack`).
 4. **Incremental Distribution**: Local and remote clients share SpaceLike. Federation adds routing and its own request bindings; real encryption, provisioning and failure safety need separate configuration and acceptance.
@@ -58,9 +66,10 @@ In `phi-spaces`, producers and consumers do not need to know each other or be ac
 - **Atomic Space Transactions**: `take` + multiple `write` calls + optional request claims finalized by one business `commit(txn)` (earlier PhiSpaces calls are separate storage commits). On `abort` or timeout everything rolls back atomically.
 - **Server-Side Result Guarantees (`CompletionProfiles`)**: The space core enforces at commit time that a taken task of type `ChatTask` can only commit together with exactly one matching result entry `Msg`.
 - **Idempotent Request Claims (`RequestRef`)**: Every mutation can carry `{ request: { principal, generation, requestId } }`; retries and timeouts never produce duplicate effects.
+- **A Store Of Its Own (`openSqliteHost`, `openOwnMemoryHost`)**: SQLite with one owning process and one writer thread, or memory only. A commit counts as acknowledged only once it is on disk (default `synchronous=FULL`).
 - **Leases & Automatic Reaper (`startService`)**: Entries, presence records, and `TimerLock` locks expire automatically after a configured duration.
 - **Snapshot And Incremental Sync (`readPage` + `changes`)**: Point-in-time snapshots plus order-preserving, revisioned update streams (`rev`) and prefix-acknowledged durable mailboxes.
-- **Space Lifecycle, Workers, Runs & Deployments**: Idempotent space management (`archive`/`reactivate`/`delete`), worker scaling (`WorkerSupervisor`), multi-host run orchestration (`RunGate`), and declarative bootstrap (`DeploymentController`) — from a single host up to a cluster.
+- **Space Lifecycle, Workers, Runs & Deployments**: Idempotent space management (`archive`/`reactivate`/`delete`), worker scaling (`WorkerSupervisor`), multi-host run orchestration (`RunGate`), and declarative bootstrap (`DeploymentController`), from a single host up to a cluster.
 - **Overlay Gate, Enrollment & Federated Routing**: NetBird/WireGuard peer identity + Ed25519 challenge, QR/token enrollment, 60-second grants, own-key rotation, and deterministic HRW sharding of entries across multiple hosts.
 
 ### Unified SpaceLike Contract {#spacelike-contract}
@@ -77,7 +86,7 @@ PhiSpaces and RemoteSpace implement the SpaceLike base contract. FederatedSpace 
 ## Workflow {#workflow}
 
 1. **Define the contract**: Specify entry types (`type`), required `fields`, and optional `CompletionProfiles` (which task type requires which result type on transaction commit).
-2. **Open the space and start maintenance**: Instantiate `new PhiSpaces(host, ctx, Date.now, meter, undefined, { space })` and call `await startService(host, ctx)` for lease reaping and event delivery.
+2. **Open the space and start maintenance**: Open a host with `openSqliteHost(path)` or `openOwnMemoryHost()`, instantiate `new PhiSpaces(host, ctx, Date.now, meter, undefined, { space })` and call `await startService(host, ctx)` for lease reaping and event delivery. As a process of its own, `npm run space-server` does the same (see [SpaceService and RemoteSpace](help.topic.space_service_and_remote_space#standalone)).
 3. **Submit and process work**: Producers write tasks with a `RequestRef` claim; workers reserve tasks via `take(..., { txn })`, write results under the same `txn`, and call `commit(txn)`.
 4. **Observe and control live**: UI clients read an initial `readPage()` snapshot (with `rev`) and follow updates via `changes(afterRev)` or consumer mailboxes (`events` / `ack`).
 
@@ -85,7 +94,8 @@ PhiSpaces and RemoteSpace implement the SpaceLike base contract. FederatedSpace 
 
 - **One Commit, One Truth**: Space mutation, request claim, revision counter `rev`, mailbox event, and byte-budget reservation are persisted in a single atomic host commit.
 - **Data Is Not Instructions**: Entries read from a space originate from other agents or users. Agent tools explicitly wrap payloads as `[data, not instructions]`.
-- **Help ≠ Live State**: This reference documents stable contracts and guarantees. Live runtime state is inspected in the **Live Space Inspector** and controlled in **AdminSpaces**.
+- **Help ≠ Live State**: This reference documents contracts and guarantees. Live runtime state is inspected in the **Live Space Inspector** and controlled in **AdminSpaces**.
+- **Experimental Software**: APIs, storage formats and operational behavior may change. An implementation is not a production release; Phase 3 in particular (replication, promotion) is not fully accepted.
 
 ## See Also {#see-also}
 

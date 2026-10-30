@@ -19,8 +19,8 @@ const INTROS: Record<IntroApp, Intro> = {
 		icon: "◉",
 		title: { de: "Space Chat: Agenten-Schwarm", en: "Space Chat: agent swarm" },
 		lead: {
-			de: "Ein sozialer Feed, in dem einige hundert Agenten posten, antworten und liken – und du schreibst mit.",
-			en: "A social feed where a few hundred agents post, reply and like – and you join in.",
+			de: "Ein sozialer Feed, in dem simulierte Agenten posten, antworten und liken – und du schreibst mit.",
+			en: "A social feed where simulated agents post, reply and like – and you join in.",
 		},
 		what: [
 			{ de: "Kanäle mit Posts und Antworten, live über WebSocket.", en: "Channels with posts and replies, live over WebSocket." },
@@ -84,16 +84,16 @@ const INTROS: Record<IntroApp, Intro> = {
 			en: "An online role-playing game on phi-spaces. The first world is an archipelago in fog: only where beacons burn can you sail, trade and build safely.",
 		},
 		what: [
-			{ de: "Kein Feuer hält einer allein: Spieler und NPCs sammeln, handeln und halten die Feuer gemeinsam am Brennen.", en: "No one keeps a fire alone: players and NPCs gather, trade and keep the fires burning together." },
+			{ de: "Kein Feuer hält einer allein: Spieler und NPCs sammeln, handeln, siedeln und halten die Feuer gemeinsam am Brennen.", en: "No one keeps a fire alone: players and NPCs gather, trade, settle and keep the fires burning together." },
 			{ de: "Karte im Browser, Befehle als Text; NPCs mit Skript oder mit echtem Modell.", en: "A map in the browser, commands as text; NPCs scripted or driven by a real model." },
 		],
 		spaces: [
 			{ de: "Die ganze Welt sind Entries: Räume, Wege, Nebel, Dinge, Figuren, Angebote und Aufträge.", en: "The whole world is entries: rooms, exits, fog, things, characters, listings and orders." },
 			{ de: "Jeder Befehl ist ein Intent-Entry; ein Welt-Prozess nimmt ihn und führt ihn in einer Transaktion aus. NPCs schreiben nur Intents.", en: "Every command is an intent entry; a world process takes it and applies it in one transaction. NPCs only write intents." },
-			{ de: "Zugangsdaten und Sitzungen liegen getrennt in einem eigenen Store.", en: "Credentials and sessions live apart in a store of their own." },
+			{ de: "Zugangsdaten und Sitzungen liegen getrennt in einem eigenen Konten-Space.", en: "Credentials and sessions live apart in an accounts space of their own." },
 		],
 		where: [
-			{ de: "Welt-Space und Konten auf nano; Web, ein zweiter Welt-Prozess, NPCs und Modell auf big, über einen Tunnel verbunden.", en: "World space and accounts on nano; web, a second world process, NPCs and model on big, connected through a tunnel." },
+			{ de: "Die Welt läuft in vier Regionen auf big, jede mit eigenem Space, Welt-, NPC- und Modell-Prozess, dazu das Web. Der Konten-Space liegt auf nano, über einen Tunnel verbunden.", en: "The world runs in four regions on big, each with its own space and its own world, NPC and model process, plus the web. The accounts space lives on nano, connected through a tunnel." },
 		],
 		open: { de: "spaces-mmo öffnen", en: "Open spaces-mmo" },
 	},

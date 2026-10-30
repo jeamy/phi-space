@@ -2,7 +2,7 @@
 standard: help_topic
 id: help.topic.failure_playbook
 title: "Fehlerdiagnose und sichere nächste Schritte"
-short: "Transportfehler, fachliche Ablehnung und Storage-Fehler sind verschieden. Vor jeder Wiederholung Request-ID, Generation, Argumente, Ziel-Space, Inkarnation und gegebenenfalls Epoche festhalten. Unklar heißt nicht fehlgeschlagen."
+short: "Wenn ein Aufruf scheitert, ist nicht immer klar, ob er gewirkt hat. Diese Anleitung zeigt für jeden Fehler den sicheren nächsten Schritt. Die wichtigste Regel: Unklar heißt nicht fehlgeschlagen. Wiederhole also mit derselben Request-ID, nie mit einer neuen."
 tags: [OutcomeUnknown, RequestConflict, ResultExpired, SnapshotExpired, ResourceExhausted, NotCommitted, needsReview, poisoned, recovery]
 owner: remote
 related: [help.topic.overview, help.workflow.overview_v1_to_v6]
@@ -13,9 +13,11 @@ since: 0.0.1
 
 ## Erst Ausgang und Schicht bestimmen {#overview}
 
-Transportfehler, fachliche Ablehnung und Storage-Fehler sind verschieden. Vor jeder Wiederholung Request-ID, Generation, Argumente, Ziel-Space, Inkarnation und gegebenenfalls Epoche festhalten. Unklar heißt nicht fehlgeschlagen.
+Wenn ein Aufruf scheitert, ist nicht immer klar, ob er gewirkt hat. Diese Anleitung zeigt für jeden Fehler den sicheren nächsten Schritt. Die wichtigste Regel: Unklar heißt nicht fehlgeschlagen. Wiederhole also mit derselben Request-ID, nie mit einer neuen.
 
 ## Entscheidungstabelle {#decisions}
+
+Transportfehler, fachliche Ablehnung und Storage-Fehler sind verschieden. Vor jeder Wiederholung Request-ID, Generation, Argumente, Ziel-Space, Inkarnation und gegebenenfalls Epoche festhalten.
 
 | Fehler | Sichere Aktion | Nicht tun |
 |---|---|---|
@@ -26,7 +28,10 @@ Transportfehler, fachliche Ablehnung und Storage-Fehler sind verschieden. Vor je
 | ResourceExhausted | Grenze identifizieren, Transaktion begrenzen/abbrechen, kleinere Batches versuchen. | Quoten unkontrolliert erhöhen. |
 | NotCommitted | Autoritative Negativentscheidung und aktuellen Rahmen prüfen; zulässigen neuen Auftrag bewusst starten. | Mit OutcomeUnknown gleichsetzen. |
 | needsReview | Tatsächliche Wirkung und Journal prüfen; Entscheidung dokumentieren. | Zweiten Admin-Befehl blind starten. |
-| Session is poisoned | Neue Writes stoppen, versiegelten Kandidaten auflösen und den Host wieder öffnen. | Async-Fallback oder unbestätigte Writes fortsetzen. |
+| PrimarySyncBlocked (poisoned by a sealed candidate) | Neue Writes stoppen, Host neu öffnen und den versiegelten Kandidaten auflösen. | Unbestätigte Writes fortsetzen. |
+| StillHeld | Eintrag ist nicht weg, nur gehalten; später erneut prüfen. | Als gelöscht behandeln. |
+| UniqueConflict | Vorhandenen Entry lesen und weiterverwenden oder bewusst ablehnen. | Mit anderem Schlüssel ein Duplikat anlegen. |
+| StoreUnavailable | Laufenden Besitzerprozess oder falsche Datei prüfen; Format prüfen. | Sperrdatei löschen oder die Datei kopieren, während ein Prozess läuft. |
 
 ## Welche Diagnoseinformationen? {#evidence}
 

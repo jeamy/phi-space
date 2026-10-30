@@ -2,7 +2,7 @@
 standard: help_topic
 id: help.topic.social_swarm_pipeline
 title: "Social Swarm: Data Flow, Batches and Shards"
-short: "10 to 50,000 simulated identities share one dispatcher per shard. SWARM_AGENTS configures identities and SWARM_RATE configures intent generation (default 5, range 1–40), not guaranteed Posts per second."
+short: "Social Swarm is a demo of the help site: many simulated characters write posts into a shared feed. It shows how to process many small tasks in bundles, and so cheaply. This guide explains the data flow and what happens when one part fails."
 tags: [SwarmTask, PostHistoryHead, PostEffect, feed.more, agent.posts, SWARM_REMOTE, batch, performance]
 owner: ops
 related: [help.topic.overview, help.workflow.overview_v1_to_v6]
@@ -11,13 +11,15 @@ since: 0.0.1
 
 # Social Swarm: Data Flow, Batches and Shards
 
-## Identities Are Not Worker Processes {#overview}
+## What This Is About {#overview}
 
-10 to 50,000 simulated identities share one dispatcher per shard. SWARM_AGENTS configures identities and SWARM_RATE configures intent generation (default 5, range 1–40), not guaranteed Posts per second.
+Social Swarm is a demo of the help site: many simulated characters write posts into a shared feed. It shows how to process many small tasks in bundles, and so cheaply. This guide explains the data flow and what happens when one part fails.
 
-## Two Actual Durable Commits {#pipeline}
+## Two Store Commits per Batch {#pipeline}
 
-Producers and users write SwarmTask. One storage commit reserves up to four tasks under a 45-second transaction. Text/model preparation happens outside the Durable callback: at most one model call per batch and 20 seconds of waiting. A second commit writes Post/Like, PostHistoryNode, one PostHistoryHead, one ChannelCount per channel and follow-up SwarmTasks, then commits the Space transaction. Feed caches change only afterward. New batches create no PostEffect Entries; legacy records are still drained. A completion exceeding the byte budget aborts reservations and halves the batch size.
+Identities are not worker processes: 10 to 50,000 simulated identities share one dispatcher per shard. SWARM_AGENTS configures identities and SWARM_RATE configures intent generation (default 5, range 1–40), not guaranteed Posts per second.
+
+Producers and users write SwarmTask. One storage commit reserves up to four tasks under a 45-second transaction. Text/model preparation happens outside the commit callback: at most one model call per batch and 20 seconds of waiting. A second commit writes Post/Like, PostHistoryNode, one PostHistoryHead, one ChannelCount per channel and follow-up SwarmTasks, then commits the Space transaction. Feed caches change only afterward. New batches create no PostEffect Entries; legacy records are still drained. A completion exceeding the byte budget aborts reservations and halves the batch size.
 
 ## History and Shard Failure {#history-shards}
 

@@ -13,7 +13,11 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-In the Cloudflare `pi-durable` post, preventing duplicate conversations after a WebSocket reconnect required writing a custom `ConversationCommandReceipts` document. In `phi-spaces`, this mechanism is built directly into the core as **Request Claims (`src/claims.ts`)** for **every** mutation (`write`, `take`, `createTransaction`, `commit`, `abort`, `renew`, `cancel`, `notify`, `wait`).
+Imagine you submit a form and the connection drops before the answer arrives. If you submit it again, it should not arrive twice. This feature takes care of that: every call carries a fixed identifier, and the space remembers the result. A repeat returns the earlier result instead of doing the work again.
+
+### Technical Details {#technical-details}
+
+The mechanism is called **Request Claims (`src/claims.ts`)** and covers **every** mutation (`write`, `take`, `createTransaction`, `commit`, `abort`, `renew`, `cancel`, `notify`, `wait`, `batch`). An application does not need a receipt document of its own. The Cloudflare `pi-durable` reference needed exactly that for `conversation.create`: a custom `ConversationCommandReceipts` document.
 
 ## Concept And System Model {#concept-model}
 
@@ -28,7 +32,7 @@ type RequestRef = {
 };
 ```
 
-1. **Open a Generation (`issueGeneration`)**: Before mutating, the client calls `const { generation } = await space.issueGeneration(principal)`. The generation is cryptographically bound to the principal, `spaceId`, data incarnation, and `authorityId` (default lifetime: 1 hour).
+1. **Open a Generation (`issueGeneration`)**: Before mutating, the client calls `const { generation, admitUntil } = await space.issueGeneration(principal)`. The generation is bound by HMAC to the principal, `spaceId`, data incarnation, and `authorityId`, and admits new requests for 1 hour by default.
 2. **Canonical Argument Hash (`argHash`)**: For every call, `phi-spaces` computes an RFC-8785 canonical JSON hash over the **semantic arguments only** (excluding renewable envelope fields like a refreshed 60s grant).
 3. **Atomic Persistence**: The claim `(principal, spaceId, generation, requestId)` and its result are committed atomically alongside the space mutation.
 
@@ -36,7 +40,9 @@ type RequestRef = {
 
 - **Same `requestId` + identical arguments**: Immediately returns the stored result without repeating the mutation.
 - **Same `requestId` + different arguments**: Throws `RequestConflict`.
-- **Operation still `pending`**: A retry or `pollOperation(request)` reattaches to the persistent waiter, even if the original caller process restarted in the meantime!
+- **Operation still `pending`**: A retry or `pollOperation(request)` reattaches to the persistent waiter, even if the original caller process restarted in the meantime. `cancelOperation(request)` ends the operation on purpose.
+- **Generation no longer admitting**: A request not admitted yet fails with `RequestExpired`. A known request still returns its result.
+- **Retention expired**: After `claimResultMs` (default 24 hours), a retry returns `ResultExpired` without executing again.
 - **Admission Resolution (`resolveOperation`)**: In Phase 2 federation, the router uses `resolveOperation(request, method, argumentHash, primaryEpoch)` to verify whether a child request was admitted or can be safely retried in the same primary epoch.
 
 ## Examples {#examples}
@@ -61,7 +67,7 @@ const lease2 = await space.write(
   FOREVER,
   { request }
 );
-// lease1.id === lease2.id -> Exactly ONE Thread entry was created!
+// lease1.id === lease2.id: Exactly ONE Thread entry was created.
 ```
 
 ## See Also {#see-also}

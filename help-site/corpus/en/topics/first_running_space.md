@@ -2,7 +2,7 @@
 standard: help_topic
 id: help.topic.first_running_space
 title: "Your First Complete Space: Task to Result"
-short: "A complete example without models, credentials or servers: write, inspect, reserve and complete a job with a matching result. Use the repository's existing dependencies and Node with TypeScript stripping."
+short: "This example shows the whole path of a task in a space: write it, look at it, claim it, and finish it with a result. You need no model, no credentials, and no server. Node and the repository's existing dependencies are enough."
 tags: [start, beginner, tutorial, job, result, shutdown]
 owner: client
 related: [help.topic.overview, help.workflow.overview_v1_to_v6]
@@ -13,11 +13,11 @@ since: 0.0.1
 
 ## Goal and Prerequisites {#overview}
 
-A complete example without models, credentials or servers: write, inspect, reserve and complete a job with a matching result. Use the repository's existing dependencies and Node with TypeScript stripping.
+This example shows the whole path of a task in a space: write it, look at it, claim it, and finish it with a result. You need no model, no credentials, and no server. Node and the repository's existing dependencies are enough.
 
 ## Run and Verify {#run}
 
-Run from the repository root. Expect exactly { inspected: 7, squared: 49, jobsRemaining: 0 }. Reading does not consume the job; its final removal and result become visible together. The task is FOREVER; the processing reservation lasts 30 seconds.
+Run from the repository root with Node and TypeScript stripping. Expect exactly { inspected: 7, squared: 49, jobsRemaining: 0 }. Reading does not consume the job; its final removal and result become visible together. The task is FOREVER; the processing reservation lasts 30 seconds.
 
 ```bash
 PHI_SPACES_LLM=0 node --experimental-strip-types help-site/examples/tuple-basics.ts
@@ -68,4 +68,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
 ## Failure and Persistence {#failure-and-storage}
 
-Experiment by omitting the Result write: commit raises CompletionViolation and catch aborts, returning the job. Finally stops the service and closes the host even on failure. The in-memory store loses data at process exit; use persistent storage for restart survival. This example proves neither power-loss nor multi-host guarantees. Next: [task lifecycle](help.topic.task_lifecycle#overview).
+Experiment by omitting the Result write: commit raises CompletionViolation and catch aborts, returning the job. Finally stops the service and closes the host even on failure. The in-memory store (`openOwnMemoryHost`) loses data at process exit; use `openSqliteHost(path)` to survive restarts. This example proves neither power-loss nor multi-host guarantees. Next: [task lifecycle](help.topic.task_lifecycle#overview).

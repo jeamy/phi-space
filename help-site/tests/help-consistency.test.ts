@@ -48,7 +48,7 @@ test("help corpus: identities, API facts, links, anchors and table structure are
 	const catalog = JSON.parse(await readFile(new URL("../corpus/help_product_catalog.json", import.meta.url), "utf8"));
 	const facts = JSON.parse(await readFile(new URL("../corpus/api_facts.json", import.meta.url), "utf8"));
 	validateCorpus(ALL_ARTICLES, catalog, facts);
-	assert.equal(ALL_ARTICLES.length, 45);
+	assert.equal(ALL_ARTICLES.length, 47);
 	const broken = structuredClone(ALL_ARTICLES);
 	broken[0]!.de.body += "\n[broken](help.topic.overview#absent)";
 	assert.throws(() => validateCorpus(broken, catalog, facts), /Broken link/);

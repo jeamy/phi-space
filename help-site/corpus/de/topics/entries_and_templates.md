@@ -13,6 +13,10 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
+Ein Entry ist wie ein Zettel mit einer Überschrift und ein paar Angaben darauf. Ein Template beschreibt, was du suchst, zum Beispiel alle Zettel mit der Überschrift „Auftrag“ für ein bestimmtes Projekt. Angaben, die du offen lässt, passen auf alles. So finden Programme Daten über ihren Inhalt statt über eine Adresse.
+
+### Technische Details {#technical-details}
+
 Alle Nutz- und Koordinationsdaten in `phi-spaces` werden als **Entries** abgelegt und über **Templates** abgefragt. Das Matching arbeitet über strukturelle Typprüfung und tiefe JSON-Gleichheit auf oberster Feldebene.
 
 ## Begriffs- und Systemmodell {#concept-model}
@@ -30,6 +34,12 @@ type EntryDraft = {
 - `type` ist der primäre Typname (z.B. `"ChatTask"`).
 - `types` ist eine optionale Liste mit dem Haupttyp und seinen Supertypen (z.B. `["ChatTask", "Task", "Auditable"]`). Ein Template mit `type: "Task"` findet auch jeden Entry, dessen `types`-Array `"Task"` enthält.
 - Ein gespeicherter `EntryView` enthält zusätzlich `id` (lokale ID `e<incarnation>-<n>`), `gid` (`<spaceId>/<localId>`), `owner`; `expires` steht auf der zurückgegebenen `Lease`.
+- Text in einem Entry ist wohlgeformt: Über den Dienst wird ein unpaariges Surrogat zu U+FFFD. Wer Text selbst kürzt, nimmt `cutText(text, max)`, das kein halbes Emoji stehen lässt.
+
+### Schreiboptionen {#write-options}
+
+- **`unique: ["feld"]`**: `write` prüft atomar, ob schon ein Entry desselben konkreten Typs dieselben Schlüsselfelder trägt, auch reserviert oder noch uncommitted. Sonst folgt `UniqueConflict`. Das ist eine Prüfung dieses einen Writes, kein dauerhafter Index, und sie gilt je Space.
+- **`transient: true`**: Es entsteht kein Entry. Der Änderungsstrom trägt den Wert als `put` mit `transient: true`, aber kein `read`, `take`, `wait`, `count` oder Abo sieht ihn. Gedacht für Ausgaben, die nur Leser des Stroms brauchen. Nicht zusammen mit `unique`.
 
 ### Template-Matching und Wildcards {#template-matching}
 
@@ -59,7 +69,7 @@ await space.write({
   fields: { threadId: "main", seq: 1, author: "alice", text: "Hallo Space!" }
 });
 
-// Findet alle Nachrichten im Thread "main", unabhängig von seq oder author
+// Findet eine Nachricht im Thread "main", unabhängig von seq oder author
 const msg = await space.read({
   type: "Msg",
   fields: { threadId: "main", author: null } // author: null ist ein Wildcard

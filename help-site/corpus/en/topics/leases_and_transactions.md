@@ -13,7 +13,11 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-In distributed systems, processes crash and network links drop. `phi-spaces` addresses this with two complementary mechanisms: **leases** (bounded lifetimes for entries, transactions, waiters, and subscriptions) and **space transactions** (atomic grouping of `take` reservations and `write` drafts).
+Programs crash and connections drop. So everything in a space is only held for a limited time: whoever stops checking in loses it automatically. Several steps can also be grouped, so that either all of them count or none does. This way nothing stays half finished.
+
+### Technical Details {#technical-details}
+
+Two mechanisms provide this: **leases** (bounded lifetimes for entries, transactions, waiters, and subscriptions) and **space transactions** (atomic grouping of `take` reservations and `write` drafts).
 
 ## Concept And System Model {#concept-model}
 
@@ -31,10 +35,21 @@ Every resource in a space carries an expiration timestamp `expires` (millisecond
 A space transaction is opened with `const txn = await space.createTransaction(leaseMs)`:
 
 1. **`write(entry, txn.id)`**: The new entry is **visible only inside `txn.id`** until `commit(txn.id)`. To all other participants it does not exist yet. On `abort(txn.id)` it is discarded.
-2. **`take(template, timeout, { txn: txn.id })`**: The matching entry is **reserved** (locked and invisible to others). Only `commit(txn.id)` deletes it permanently. On `abort(txn.id)` or transaction lease expiry, the reservation is released and the entry becomes available to other workers again!
+2. **`take(template, timeout, { txn: txn.id })`**: The matching entry is **reserved** (locked and invisible to others). Only `commit(txn.id)` deletes it permanently. On `abort(txn.id)` or transaction lease expiry, the reservation is released and the entry becomes available to other workers again. Without `txn`, `take` removes the entry at once.
 3. **`read` vs. `readIfExists` / `take` vs. `takeIfExists`**:
    - `read` and `take` wait up to `timeout` if no matching entry exists yet.
-   - `readIfExists` and `takeIfExists` return `null` immediately if no matching entry is present—they wait up to `timeout` **only** while matching entries are locked by another transaction!
+   - `readIfExists` and `takeIfExists` return `null` immediately if no matching entry is present. They wait up to `timeout` **only** while matching entries are locked by another transaction.
+
+### Is The Entry Gone Or Only Locked? {#typed-misses}
+
+A `null` does not say why nothing came. `probe(template, timeout, { take? })` therefore returns `{ entry, locked }`: `locked` is set when matches exist but every one is held by another transaction. `probe` is an optional capability of `SpaceLike`; `PhiSpaces` and `RemoteSpace` offer it.
+
+`readExisting` and `takeExisting` from the client helpers are easier to use: `null` means gone, and a miss caused only by held matches throws `StillHeld`. Without `probe`, `null` counts as gone.
+
+### Long Work And Several Steps {#long-work-and-batches}
+
+- **`keepAlive(space, lease, leaseMs)`** renews a lease every `leaseMs / 3` while long work runs inside it, and returns the stop function.
+- **`batch(ops, { request? })`** runs up to 64 steps (`begin`, `write`, `take`, `read`, `commit`, `abort`) in one commit, all or none. `txn: "$"` names the transaction a `begin` earlier in the same batch opened. This costs one round instead of one per step. `take` and `read` never wait inside a batch.
 
 ## Examples {#examples}
 
@@ -60,10 +75,23 @@ try {
       createdAt: Date.now()
     }
   }, txn.id, FOREVER);
-  await space.commit(txn.id); // Atomic: ChatTask is removed, Msg becomes visible!
+  await space.commit(txn.id); // Atomic: ChatTask is removed, Msg becomes visible
 } catch (err) {
-  await space.abort(txn.id); // ChatTask immediately returns to the space
+  await space.abort(txn.id); // ChatTask returns to the space
   throw err;
+}
+```
+
+```ts
+import { readExisting, StillHeld } from "phi-spaces";
+
+// Tells "gone" from "held by someone else right now":
+try {
+  const job = await readExisting(space, { type: "Job" }, 1_000);
+  if (job === null) console.log("No job left");
+} catch (err) {
+  if (!(err instanceof StillHeld)) throw err;
+  console.log("The job is being worked on");
 }
 ```
 

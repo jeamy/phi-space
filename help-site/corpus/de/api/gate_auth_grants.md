@@ -13,9 +13,11 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-`startFederationHost(host, ctx, options)` komponiert Gate, Schicht-A/B-Authentisierung, Enrollment, Grant-Ausstellung/-Prüfung, Supervisor, Schlüsselrotation und Boot-Guard zu einem einzigen persistenten Host-Dienst.
+Diese Bausteine regeln, wer einen Space im Netz benutzen darf. Ein Gerät wird einmal gekoppelt und beweist danach bei jeder Verbindung seinen Schlüssel. Für Aufrufe braucht es zusätzlich kurzlebige Berechtigungen. `startFederationHost` startet das alles zusammen.
 
 ## Technische Referenz {#technical-reference}
+
+`startFederationHost(host, ctx, options)` komponiert Gate, Schicht-A/B-Authentisierung, Enrollment, Grant-Ausstellung/-Prüfung, Supervisor, Schlüsselrotation und Boot-Guard zu einem einzigen persistenten Host-Dienst.
 
 ```ts
 const federation = await startFederationHost(host, ctx, {
@@ -38,12 +40,12 @@ Die Beispielvariablen keyDirectory, grantVerifier, directory und die beiden unab
 | `startGate` | Schicht A: Übersetzt NetBird-Peer-Identität in `peerId` + Rolle und lehnt unbekannte Peers ab. |
 | `authenticate` (Schicht B) | Ed25519-/P-256-Challenge-Beweis des Client-Schlüssels unabhängig vom Overlay. |
 | `EnrollmentService` / `enrollQr` | Einmal-Tokens und QR-Payloads zum Pairing von Smartphone, Host oder Browser. |
-| `GrantAuthority` / `GrantVerifier` | Stellt ~60-s-Grants für einzelne Operationen aus und prüft sie auf Data-Hosts. |
+| `GrantAuthority` / `GrantVerifier` | Stellt Grants mit höchstens 60 Sekunden Laufzeit aus (`purpose`: `effect` oder `resolution`) und prüft sie auf Data-Hosts. |
 | `RotationService` / `rotateKey` | Atomare Schlüsselrotation im laufenden Betrieb ohne Gate-Neustart. |
 | `HostBootState` | CAS-geschützter Boot-Guard gegen doppelte Host-Inkarnationen und Restore-Konflikte. |
 
 ## Typische Anwendungsfälle {#use-cases}
 
-- **Handy-Pairing (v4/v6)**: `enrollQr` am Koordinator erzeugt einen QR-Code; `pi-termux-mobile` scannt ihn, führt `enroll` im `CONTROL_SPACE` aus und erhält `admin`-Rechte.
-- **Kurzlebige Befehle**: `AdminSpaces` und die mobile App rufen jede Steueraktion mit einem frischen 60-s-Grant auf – gestohlene Tokens verfallen sofort.
-- **Notfall-Keywechsel**: `rotateKey` rotiert den Admin-Schlüssel bei kompromittiertem Gerät ohne Downtime.
+- **Handy-Pairing (v6)**: `enrollQr` am Koordinator erzeugt einen QR-Code; `pi-termux-mobile` scannt ihn, führt `enroll` im `CONTROL_SPACE` aus und erhält die Rolle, die das Token festlegt.
+- **Kurzlebige Berechtigungen**: Ein Grant gilt höchstens 60 Sekunden. Ein abgefangener Grant ist also schnell wertlos.
+- **Schlüsselwechsel**: `rotateKey` ersetzt den eigenen Schlüssel im laufenden Betrieb, mit alter und neuer Signatur. Einen fremden Peer sperrt ein Admin mit dem Command `revokePeer`.

@@ -13,7 +13,11 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Im Cloudflare-Blogpost zu `pi-durable` musste für `conversation.create` ein eigenes `ConversationCommandReceipts`-Dokument programmiert werden, damit ein WebSocket-Reconnect keine doppelten Konversationen erzeugt. In `phi-spaces` ist dieser Mechanismus bereits als universelle Kernfunktion **Request-Claims (`src/claims.ts`)** für **alle** Mutationen (`write`, `take`, `createTransaction`, `commit`, `abort`, `renew`, `cancel`, `notify`, `wait`) eingebaut.
+Stell dir vor, du schickst ein Formular ab, und die Verbindung reißt, bevor die Antwort kommt. Schickst du es noch einmal, soll es nicht doppelt ankommen. Genau das regelt diese Funktion: Jeder Aufruf trägt eine feste Kennung, und der Space merkt sich das Ergebnis. Eine Wiederholung liefert das alte Ergebnis, statt die Arbeit noch einmal zu tun.
+
+### Technische Details {#technical-details}
+
+Der Mechanismus heißt **Request-Claims (`src/claims.ts`)** und gilt für **alle** Mutationen (`write`, `take`, `createTransaction`, `commit`, `abort`, `renew`, `cancel`, `notify`, `wait`, `batch`). Eine Anwendung muss dafür kein eigenes Quittungsdokument schreiben. Die Cloudflare-Vorlage zu `pi-durable` brauchte für `conversation.create` genau das: ein eigenes `ConversationCommandReceipts`-Dokument.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -28,7 +32,7 @@ type RequestRef = {
 };
 ```
 
-1. **Generation eröffnen (`issueGeneration`)**: Vor der ersten Mutation ruft der Client `const { generation } = await space.issueGeneration(principal)` auf. Die Generation ist kryptografisch (HMAC/Signatur) an Principal, `spaceId`, Dateninkarnation und `authorityId` gebunden (Standardlaufzeit: 1 Stunde).
+1. **Generation eröffnen (`issueGeneration`)**: Vor der ersten Mutation ruft der Client `const { generation, admitUntil } = await space.issueGeneration(principal)` auf. Die Generation ist per HMAC an Principal, `spaceId`, Dateninkarnation und `authorityId` gebunden und lässt standardmäßig 1 Stunde lang neue Anfragen zu.
 2. **Kanonischer Argument-Hash (`argHash`)**: Für jeden Aufruf berechnet `phi-spaces` über `canonicalJson` (RFC 8785) den SHA-256-Hash ausschließlich über die **fachlichen Argumente** (ohne erneuerbare Rahmenfelder wie einen frischen 60-s-Grant).
 3. **Atomare Speicherung**: Der Claim `(principal, spaceId, generation, requestId)` und das Operationsergebnis werden im selben Commit wie die Space-Mutation gespeichert.
 
@@ -36,7 +40,9 @@ type RequestRef = {
 
 - **Gleiche `requestId` + gleiche Argumente**: Liefert sofort das gespeicherte Ergebnis zurück, ohne die Mutation ein zweites Mal auszuführen.
 - **Gleiche `requestId` + andere Argumente**: Wirft `RequestConflict`.
-- **Operation noch wartend (`pending`)**: Ein Retry oder `pollOperation(request)` hängt sich an denselben laufenden Waiter an, auch wenn der ursprüngliche Client-Prozess zwischendurch neu gestartet wurde!
+- **Operation noch wartend (`pending`)**: Ein Retry oder `pollOperation(request)` hängt sich an denselben laufenden Waiter an, auch wenn der ursprüngliche Client-Prozess zwischendurch neu gestartet wurde. `cancelOperation(request)` beendet die Operation gezielt.
+- **Generation nimmt nichts Neues mehr an**: Eine noch nicht aufgenommene Anfrage scheitert mit `RequestExpired`. Eine bekannte Anfrage liefert weiter ihr Ergebnis.
+- **Aufbewahrung abgelaufen**: Nach `claimResultMs` (Standard 24 Stunden) liefert ein Retry `ResultExpired`, ohne erneut auszuführen.
 - **Vor-Versand-Klärung (`resolveOperation`)**: Der Router in Phase 2 prüft mit `resolveOperation(request, method, argumentHash, primaryEpoch)`, ob ein Child-Request am Member bereits ankam oder in derselben Epoche sicher wiederholt werden darf.
 
 ## Beispiele {#examples}
@@ -61,7 +67,7 @@ const lease2 = await space.write(
   FOREVER,
   { request }
 );
-// lease1.id === lease2.id -> Es wurde exakt EIN Thread-Entry erzeugt!
+// lease1.id === lease2.id: Es wurde genau EIN Thread-Entry erzeugt.
 ```
 
 ## Siehe auch {#see-also}

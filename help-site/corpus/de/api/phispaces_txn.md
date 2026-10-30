@@ -13,9 +13,11 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-`createTransaction(lease?, options?)` erzeugt eine neue Space-Transaktion. `commit(txnId, options?)` macht alle unter `txnId` geschriebenen Entries sichtbar und entfernt alle unter `txnId` genommenen Entries endgültig. `abort(txnId, options?)` verwirft alle Writes und gibt alle reservierten Takes frei.
+Eine Transaktion fasst mehrere Schritte zusammen: Entweder gelten alle oder keiner. `createTransaction` beginnt sie, `commit` macht alles sichtbar, `abort` nimmt alles zurück. Du nutzt sie, wenn etwa eine Aufgabe und ihr Ergebnis nur gemeinsam zählen dürfen.
 
 ## Technische Referenz {#technical-reference}
+
+`createTransaction(lease?, options?)` erzeugt eine neue Space-Transaktion. `commit(txnId, options?)` macht alle unter `txnId` geschriebenen Entries sichtbar und entfernt alle unter `txnId` genommenen Entries endgültig. `abort(txnId, options?)` verwirft alle Writes und gibt alle reservierten Takes frei.
 
 ```ts
 const txn = await space.createTransaction(60_000, { request: reqBegin });
@@ -29,6 +31,7 @@ await space.commit(txn.id, { request: reqCommit });
 - **Atomarität**: `commit` wendet alle Writes und Takes gemeinsam an, erhöht `rev` genau einmal und stößt die zugehörigen Mailbox-Ereignisse an. `abort` verwirft alles und gibt reservierte Entries frei.
 - **Lease**: Die Transaktion besitzt eine eigene Lease (Argument `lease`); bei Ablauf ohne Commit erfolgt implizit ein `abort`.
 - **Vertragsprüfung**: Vor dem Commit prüft der Kern alle `CompletionProfiles` (`CompletionViolation` bei fehlenden Ergebnissen) und die konfigurierten Byte-Budgets (`ResourceExhausted`).
+- **Ein Aufruf statt vieler**: `batch(ops, { request? })` führt Schritte in einem Commit aus, alle oder keiner: `begin`, `write`, `take`, `read`, `commit`, `abort`. `txn: "$"` meint die Transaktion des `begin` im selben Batch. Höchstens 64 Schritte; `take` und `read` warten hier nie. Remote gehört das zum Feature `batch`; ein Space mit Merge-Typen bietet es nicht an.
 
 ## Typische Anwendungsfälle {#use-cases}
 

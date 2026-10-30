@@ -14,13 +14,13 @@
       "en": "write – Write an Entry"
     },
     "short": {
-      "de": "Erzeugt immer einen neuen typisierten Entry mit Lease; unter einer Transaktion bis zum Commit für andere unsichtbar.",
-      "en": "Always creates a new typed entry with a lease; under a transaction it remains invisible to others until commit."
+      "de": "Legt einen neuen typisierten Entry mit Lebensdauer an; unter einer Transaktion bis zum Commit für andere unsichtbar. Mit transient entsteht nur ein Eintrag im Änderungsstrom.",
+      "en": "Creates a new typed entry with a lifetime; under a transaction it remains invisible to others until commit. With transient only the change stream carries it."
     }
   },
   {
     "id": "help.api.phispaces_read",
-    "symbol": "PhiSpaces.read / readIfExists",
+    "symbol": "PhiSpaces.read / readIfExists / probe",
     "provider": "client",
     "family": "entries_templates",
     "category": "query_snapshot",
@@ -58,7 +58,7 @@
   },
   {
     "id": "help.api.phispaces_txn",
-    "symbol": "PhiSpaces.createTransaction / commit / abort",
+    "symbol": "PhiSpaces.createTransaction / commit / abort / batch",
     "provider": "client",
     "family": "leases_transactions",
     "category": "transaction_lease",
@@ -96,7 +96,7 @@
   },
   {
     "id": "help.api.phispaces_read_page_changes",
-    "symbol": "PhiSpaces.readPage / changes / readAll / count / stats",
+    "symbol": "PhiSpaces.readPage / changes / readAll / readChain / count / stats / statsWithRevision",
     "provider": "client",
     "family": "streams_snapshots",
     "category": "query_snapshot",
@@ -166,13 +166,13 @@
       "en": "setCompletionProfiles & setLimits – Server-Side Result and Budget Contracts"
     },
     "short": {
-      "de": "Erzwingt vor dem Commit einer Take-Transaktion den erwarteten Ergebnistyp, korrelierende Felder (matchFields) und Anzahl; verwaltet Byte-Limits.",
-      "en": "Enforces expected result type, correlating fields (matchFields), and count before committing a take transaction; manages byte limits."
+      "de": "Erzwingt vor dem Commit einer Take-Transaktion den erwarteten Ergebnistyp, korrelierende Felder (equalFields) und Anzahl; verwaltet Byte-Limits.",
+      "en": "Enforces expected result type, correlating fields (equalFields), and count before committing a take transaction; manages byte limits."
     }
   },
   {
     "id": "help.api.agent_tools",
-    "symbol": "spaces / createSpaces (space_write, space_read, space_take, space_list, space_txn, space_wait, space_notify, space_lease)",
+    "symbol": "createSpaces / localSpaces / withAgentEventSink (space_write, space_read, space_take, space_list, space_txn, space_wait, space_notify, space_lease)",
     "provider": "tools",
     "family": "agent_tools",
     "category": "mutation",
@@ -185,13 +185,13 @@
       "en": "Agent Tools (spaces) & startService – Replay-Safe LLM Tools"
     },
     "short": {
-      "de": "Stellt KI-Agenten 8 replay-sichere Tools mit automatischem Task-Claim und Ownership-Schutz bereit; startService betreibt Reaper und Zustellung.",
-      "en": "Provides AI agents with 8 replay-safe tools with automatic task claims and ownership protection; startService runs the reaper and delivery."
+      "de": "Stellt KI-Agenten 8 replay-sichere Tools mit Request-Identität pro Aufruf und Ownership-Schutz bereit; startService betreibt Reaper und Zustellung.",
+      "en": "Provides AI agents with 8 replay-safe tools with a request identity per call and ownership protection; startService runs the reaper and delivery."
     }
   },
   {
     "id": "help.api.space_service_and_remote",
-    "symbol": "SpaceService / serveSpace / RemoteSpace / socketTransport",
+    "symbol": "SpaceService / serveSpace / RemoteSpace / socketTransport / connectSpace",
     "provider": "remote",
     "family": "remote_client",
     "category": "wait_stream_mailbox",
@@ -204,8 +204,8 @@
       "en": "SpaceService, serveSpace & RemoteSpace – Network RPC over Socket & TCP"
     },
     "short": {
-      "de": "Veröffentlicht Spaces über Unix-Socket, TCP oder pi-serverd mit Rollen-Policy und bedient RemoteSpace-Clients mit stabiler Retry-Identität.",
-      "en": "Exposes spaces over Unix socket, TCP, or pi-serverd with role policies and serves RemoteSpace clients with stable retry identity."
+      "de": "Veröffentlicht Spaces über Unix-Socket oder TCP, auch als eigenständiger Dienst oder über pi-serverd, mit Rollen-Policy, und bedient RemoteSpace-Clients mit stabiler Retry-Identität.",
+      "en": "Exposes spaces over Unix socket or TCP, also as a standalone service or through pi-serverd, with role policies, and serves RemoteSpace clients with stable retry identity."
     }
   },
   {
@@ -248,7 +248,7 @@
   },
   {
     "id": "help.api.operations_runs_workers",
-    "symbol": "RunController / WorkerSupervisor / SpaceLifecycle / DeploymentController / collectAlerts",
+    "symbol": "RunController / WorkerAssignments / WorkerSupervisor / SpaceLifecycle / DeploymentController / collectAlerts",
     "provider": "ops",
     "family": "run_control",
     "category": "operations_run",
@@ -261,8 +261,8 @@
       "en": "RunController, WorkerSupervisor, SpaceLifecycle & Alerts – Operations Extension (B2–B10)"
     },
     "short": {
-      "de": "Steuert Läufe über RunGate-ACK-Barrieren, weist Hosts signierte Worker-Listen zu, verwaltet Space-Lebenszyklen und speist MobileSpaces & AdminSpaces.",
-      "en": "Controls runs via RunGate ACK barriers, assigns signed worker lists to hosts, manages space lifecycles, and powers MobileSpaces & AdminSpaces."
+      "de": "Steuert Läufe über RunGate-ACK-Barrieren, weist Hosts signierte Worker-Listen zu, verwaltet Space-Lebenszyklen und Deployments und speist AdminSpaces und die mobile Steuerung.",
+      "en": "Controls runs via RunGate ACK barriers, assigns signed worker lists to hosts, manages space lifecycles and deployments, and powers AdminSpaces and mobile control."
     }
   }
 ]

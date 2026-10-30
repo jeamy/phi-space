@@ -13,9 +13,11 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-`issueGeneration(principal)` issues a signed generation. `pollOperation(request)` inspects the status of a known claim (`pending`, `done`, `cancelled`), `cancelOperation(request)` cancels a pending operation, and `resolveOperation` resolves admission bindings before router retries.
+When a reply gets lost on the network, the caller does not know whether its command arrived. These calls solve that: each command gets a fixed identity, and a repeat returns the first result. `issueGeneration` opens a range for such identities, `pollOperation` asks for a command's state.
 
 ## Technical Reference {#technical-reference}
+
+`issueGeneration(principal)` issues a signed generation and returns `{ generation, admitUntil }`. `pollOperation(request)` inspects the status of a known claim (`pending`, `done`, `cancelled`), `cancelOperation(request)` cancels a pending operation, and `resolveOperation` resolves admission bindings before router retries. `RemoteSpace` does this by itself: it opens a generation and gives each mutation a request ID.
 
 ```ts
 const { generation } = await space.issueGeneration({ peerId: "alice" });
@@ -27,7 +29,7 @@ const status = await space.pollOperation({ principal: { peerId: "alice" }, gener
 | Method | Purpose |
 | --- | --- |
 | `issueGeneration(principal)` | Issues a new incarnation-safe generation; all requests of this session carry `{ principal, generation, requestId }`. |
-| `pollOperation(request)` | Queries the status of a claim: `pending`, `done` (with result), or `cancelled`. |
+| `pollOperation(request)` | Queries the status of a claim: `pending`, `done` (with result; `locked` when an `IfExists` call saw only held matches), or `cancelled`. |
 | `cancelOperation(request)` | Deliberately cancels a still-pending blocking operation. |
 | `resolveOperation(req, method, argHash, epoch)` | Resolves before a router/client retry whether an admission is already bound to the same argument hash. |
 

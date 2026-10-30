@@ -13,6 +13,10 @@ since: 0.0.1
 
 ## Overview {#overview}
 
+When many machines work on one big task, you want to pause it, resume it and keep an eye on it. This area brings the tools for that: controlling runs, scaling helpers up and down, creating and deleting spaces. You can do this from a phone or through a web interface. Every command is built so that tapping twice does not trigger anything twice.
+
+### Technical Details {#technical-details}
+
 The operations extension (steps B1–B10 in `docs/betrieb-und-mobile-steuerung.md`) adds operational control on top of the federation core for **runs (`RunGate` / `RunController`)**, **host workers (`WorkerSupervisor`)**, **space lifecycles (`SpaceLifecycle`)**, **deployment bootstrap (`DeploymentController`)**, and **alerting/audit (`collectAlerts` / `auditLog`)**. All capabilities are accessible both from the Android app (`pi-termux-mobile`) and from the login-protected **`AdminSpaces`** web area on `https://spaces.eibrain.org`.
 
 ## Concept And System Model {#concept-model}
@@ -21,8 +25,9 @@ The operations extension (steps B1–B10 in `docs/betrieb-und-mobile-steuerung.m
 
 A `RunGate { runId, controlRevision, state: "preparing" | "running" | "paused" | "stopped" }` is a protected control record inside the space document:
 
-- The space core checks on **every** `take` (including waiting takes and host code) whether the run's `RunGate` is `running`.
+- Tasks are bound to the `RunGate` of their run through `CompletionProfile.gateField`. For such tasks the space core checks on **every** `take` (including waiting takes and host code) whether the `RunGate` is `running`.
 - On `pauseRun`, each participating member first installs a **fence** (blocking new run transactions and lease renewals on existing ones), allows in-flight reserved tasks to finish within their remaining lease, and only then returns its signed ACK to `RunController`. The run becomes globally `paused` only after all member ACKs arrive.
+- The run state `RunView.state` in `RunController` has more stages than the gate in the space, such as `pausing`, `pauseIncomplete`, `reconciling` and `needsReview`.
 
 ### Signed Worker Control (WorkerSupervisor) {#worker-supervisor}
 
@@ -34,7 +39,7 @@ Both `MobileSpaces` (`pi-termux-mobile/runtime/spaces-mobile.mjs`) and our web a
 
 1. **Pre-persisted `commandId`**: Before sending any admin command, `commandId = m-<kind>-<hex>` or `w-<kind>-<hex>` is saved locally. On timeout or double-click, the exact same `commandId` is reused ("checking outcome" rather than duplicate execution).
 2. **Key Proof & 60s Grants**: Every connection proves its `Ed25519`/`P-256` key at the gate and uses short-lived grants.
-3. **Phase 3 Replication Building Blocks**: For delay-tolerant metadata and presence, `EntryReplicationController` provides persistent HLC ordering, Last-Writer-Wins with versioned tombstones, and Add-Wins sets.
+3. **Phase 3 Replication Building Blocks**: For delay-tolerant metadata and presence, `EntryReplicationController` provides persistent HLC ordering, Last-Writer-Wins with versioned tombstones, and Add-Wins sets. It uses a document of its own and does not replicate existing `PhiSpaces` entries automatically. Primary/sync, fencing and promotion are implemented, but Phase 3 is not fully accepted (`docs/abnahme/ap3-abnahme.md`).
 
 ## See Also {#see-also}
 

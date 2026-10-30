@@ -13,9 +13,11 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-`wait` und `notify` registrieren dauerhafte Aufträge im Space-Dokument. Über `events(principal, { mailboxEpoch?, after?, maxBytes? })` und `ack(principal, epoch, upTo)` verarbeiten Consumer die ausgelieferten Ereignisse zuverlässig über Neustarts hinweg.
+`wait` und `notify` lassen ein Programm auf etwas warten, ohne dabei stehen zu bleiben. `wait` meldet einmal einen passenden Eintrag, `notify` meldet jeden neuen. Die Meldungen liegen in einem Postfach, das auch einen Neustart übersteht. Mit `events` liest du es, mit `ack` bestätigst du das Verarbeitete.
 
 ## Technische Referenz {#technical-reference}
+
+`wait` und `notify` registrieren dauerhafte Aufträge im Space-Dokument. Über `events` und `ack` verarbeiten Consumer die ausgelieferten Ereignisse zuverlässig über Neustarts hinweg. Lokal lauten die Aufrufe `events(principal, { mailboxEpoch?, after?, maxBytes? })` und `ack(principal, epoch, upTo)`. Remote kommt der Consumer aus der Verbindung: `events({ mailboxEpoch?, after?, maxBytes?, waitMs? })` und `ack(epoch, upTo)`, mit `target: "self"` bei `wait` und `notify`. Beide brauchen `startService`, damit Zustellung und Reaper im Leerlauf laufen.
 
 ```ts
 const waitId = await space.wait(

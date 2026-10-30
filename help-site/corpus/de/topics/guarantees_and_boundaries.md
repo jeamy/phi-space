@@ -13,7 +13,11 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Ein verlässliches verteiltes System zeichnet sich dadurch aus, dass seine Garantien und seine Grenzen explizit benannt und durch Tests auf persistentem Speicher (JSONL und SQLite) nachgewiesen sind. Dieser Artikel fasst den aktuellen Ist-Stand (`docs/implementierungsstand.md`) und den Vertragsrahmen (`docs/federation-plan-v3.md`) zusammen.
+Dieser Artikel sagt, worauf du dich verlassen kannst und worauf nicht. Ein einmal bestätigter Eintrag übersteht zum Beispiel einen Neustart. Eine E-Mail, die dein Programm verschickt, schützt phi-spaces dagegen nicht vor doppeltem Versand. Wer diese Grenze kennt, baut die eigene Anwendung passend dazu.
+
+### Technische Details {#technical-details}
+
+Die Garantien und Grenzen sind ausdrücklich benannt und durch Tests auf dem eigenen Speicher belegt (SQLite und im Arbeitsspeicher). Tests decken bestimmte Szenarien ab, nicht jede Art von Ausfall. Maßgeblich sind die öffentliche API (`docs/api.md`) und der Vertragsrahmen (`docs/federation-plan-v3.md`).
 
 ## Regeln, Garantien und Grenzen {#rules-and-boundaries}
 
@@ -22,6 +26,8 @@ Ein verlässliches verteiltes System zeichnet sich dadurch aus, dass seine Garan
 | Ebene | Verbindlicher Vertrag in `phi-spaces` | Was ausdrücklich NICHT daraus folgt |
 |---|---|---|
 | **Lokaler Commit** | Space-Mutation, RPC-Claim, Revisionsnummer `rev` und Mailbox-Event werden unteilbar zusammen gespeichert. | Keine externe Exactly-once-Wirkung für HTTP-Calls, E-Mails oder LLM-Tokenkosten außerhalb des Spaces. |
+| **Dauerhaftigkeit** | Eine Erfolgsantwort folgt dem dauerhaften Commit, im Standard mit `synchronous=FULL`. Scheitert das Schreiben, sperrt sich der Host, statt weiter zu bestätigen. | Kein Schutz gegen defekte Datenträger oder Controller mit falschen Flush-Zusagen. Prozessabsturz-Tests belegen keinen echten Stromausfall. Sicherung und Replikation sind eigene Fragen. |
+| **Wohlgeformter Text** | `SpaceService` ersetzt ein unpaariges Surrogat in jedem String und Schlüssel durch U+FFFD, bevor etwas den Aufruf sieht, auch der Argument-Hash. | Gilt für Aufrufe über den Dienst. Direkte Aufrufe von `PhiSpaces` laufen nicht durch diesen Schritt; Text deshalb mit `cutText` kürzen statt mit `slice`. |
 | **Idempotenter Retry** | Gleiches `{ principal, generation, requestId }` mit identischem RFC-8785-Argument-Hash liefert auch nach Prozessneustart dasselbe gespeicherte Ergebnis ohne zweite Mutation. | Nach Ablauf der Aufbewahrungsfrist (Standard 24 h) liefert ein Retry `ResultExpired` ohne erneute Ausführung. |
 | **Take unter Txn** | Höchstens eine aktive Reservierung je Entry; `abort` oder Lease-Ablauf gibt den Entry wieder frei. | Keine globale FIFO-Auswahlreihenfolge über wartende Konsumenten hinweg. |
 | **CompletionProfile** | Ein Take-Txn-Commit wird serverseitig mit `CompletionViolation` abgewiesen, wenn Ergebnistyp, korrelierende Felder oder Anzahl nicht stimmen. | Keine inhaltliche Qualitätsprüfung der berechneten Nutzdaten durch den Space-Kern. |
@@ -38,9 +44,11 @@ In `phi-spaces` ist der Begriff „Epoche“ ohne Präfix unzulässig. Es existi
 
 ## Fehler und Diagnose {#failures-and-diagnostics}
 
-- **`OutcomeUnknown`**: Tritt auf, wenn die Client-Wartezeit (`maxClientWaitMs`) abläuft oder die Verbindung vor Empfang der Antwort abreißt. **Wichtig:** `OutcomeUnknown` ist kein Fehlerbeweis! Der Client muss mit derselben `requestId` über `pollOperation` nachfragen.
+- **`OutcomeUnknown`**: Tritt auf, wenn die Client-Wartezeit (`maxClientWaitMs`) abläuft oder die Verbindung vor Empfang der Antwort abreißt. **Wichtig:** `OutcomeUnknown` ist kein Fehlerbeweis. Der Client muss mit derselben `requestId` über `pollOperation` nachfragen.
 - **`RequestConflict`**: Dieselbe `requestId` wurde mit veränderten fachlichen Argumenten erneut gesendet.
 - **`ResourceExhausted`**: Eine Transaktionserweiterung würde das Commit-/Abort-Bytebudget (`192 KiB`) oder die Dokumentgrenze überschreiten; die bisherige Transaktion bleibt abbrechbar bzw. abschließbar.
+- **`RequestExpired`**: Die Generation nimmt keine neuen Anfragen mehr an und die Anfrage wurde noch nicht aufgenommen.
+- **`StoreUnavailable`**: Ein anderer Prozess besitzt den Speicher, oder die Datei ist kein phi-spaces-Speicher. Alte pi-durable-Stores gehören dazu.
 
 ## Siehe auch {#see-also}
 

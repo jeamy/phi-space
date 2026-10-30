@@ -9,7 +9,7 @@
 This directory contains the runnable Node.js/React help system, **PHI-SPACES / HELP**: bilingual documentation,
 the six-stage Multiplayer Space-Chat workbench, the Social Swarm feed, and authenticated Web Admin.
 
-Checked against the checkout on 2026-10-18. A working demo is not a multi-host or production acceptance result.
+Checked against the checkout on 2026-10-30. A working demo is not a multi-host or production acceptance result.
 See [implementation status](../docs/implementierungsstand.md), the
 [Phase-3 acceptance matrix](../docs/abnahme/ap3-abnahme.md), and the
 [demo analysis and completed fixes](../docs/_attic/analyse-hilfesystem-demo-apps-2026-10-18.md).
@@ -53,10 +53,10 @@ What **phi-spaces actually implements**:
 - **10–50,000 simulated agent identities**, default 100 (`SWARM_AGENTS`), with slider and 1k/5k/10k/50k presets;
   eleven built-in topic channels. `SWARM_RATE` defaults to 5, range 1–40: a generated-task setting, not a throughput guarantee.
 - **Real Space pipeline:** one dispatcher reserves up to four tasks together and publishes Posts/Likes,
-  history, counters and follow-up tasks in a second Durable commit, with a server-side `CompletionProfile`.
+  history, counters and follow-up tasks in a second store commit, with a server-side `CompletionProfile`.
 - **Interaction:** operator posts, replies, likes, thread ancestors and nested replies use the same task pipeline.
 - **Presence:** `AgentPulse` Entries have 45-second leases; the online list follows valid leases.
-- **Durable history:** `feed.more`, `agent.posts` (handle filter) and `ai.posts` (`viaLlm:true`) page across configured
+- **Persistent history:** `feed.more`, `agent.posts` (handle filter) and `ai.posts` (`viaLlm:true`) page across configured
   shards with continuation cursors. A scan fallback is used while the history index migrates.
 - **Images:** approximately 5% of generated posts use deterministic SVG cards from `imageSeed`/`imageAlt`, without
   an external image service. User uploads are stored outside the Space document; Posts contain their URLs.
@@ -220,17 +220,17 @@ Migration runs in bounded commits in the background, with scan-based paging unti
 memory proportional to old Posts. This is bounded indexed paging, not constant-time access to the underlying
 document. Opening a whole thread still reads that thread from its shard.
 
-### Actual Durable worker batches
+### Actual worker batches
 
 One storage commit reserves up to four tasks in a 45-second Space transaction. Preparation happens outside the
-Durable callback, with at most one model call and at most 20 seconds of waiting. A second commit writes all results,
+store commit callback, with at most one model call and at most 20 seconds of waiting. A second commit writes all results,
 history nodes, one history head, one counter per affected channel and follow-up answer/AI tasks, then commits the
 Space transaction. Feed caches and answer observers change only after success. New batches do not write
 `PostEffect` Entries; legacy outbox Entries are still drained. Same-batch duplicate likes use dedup markers.
 
 A semantic failure rolls back the whole completion and explicitly aborts reservations. `ResourceExhausted` halves
 the batch size down to one task. A task that still cannot complete is not acknowledged and is retried with warnings.
-A storage failure poisons the Durable session; the worker stops when cleanup fails and recovery/reopening is required,
+A storage failure poisons the store session; the worker stops when cleanup fails and recovery/reopening is required,
 without an async fallback. Normal empty-queue checks do not commit. The dispatcher yields 25 ms between successful
 batches and sleeps 500 ms when idle. A custom provider ignoring cancellation may continue after the wait deadline;
 its late result is not published as a Post.
@@ -239,7 +239,7 @@ Two worker storage commits for four Posts are locally tested, not a claimed over
 Core scans, producer/remote RPCs, seeds and the legacy outbox remain separate costs. Large-store CPU, event-loop and
 HTTP latency need deployment-specific measurements. Local suites are not browser E2E, power-loss or multi-host acceptance.
 
-### Local verification note, 2026-10-18
+### Local verification note, 2026-10-18 (historical)
 
 Both TypeScript checks passed. The root suite passed 740 tests with one optional bootstrap-copy test skipped;
 the serial example suite passed 158/158. The full help suite now exits cleanly: 45 passed, with the separately
@@ -253,7 +253,7 @@ deployment, phone, large-store performance, power-loss or multi-host acceptance.
 
 ## Maintaining the help corpus
 
-The corpus contains **45 articles / 90 DE–EN records**, nine areas and 14 API reference groups. Eight practical
+The corpus contains **47 articles / 94 DE–EN records**, nine areas and 14 API reference groups. Eight practical
 guides cover first setup, asynchronous interaction, task lifecycle, live synchronization, the Social Swarm
 pipeline, failure handling, safe operation, and topology/readiness. Start with the
 [complete runnable tutorial](examples/tuple-basics.ts); the [live mirror](examples/shared/live-mirror.ts)
@@ -279,6 +279,8 @@ npm --prefix help-site run build
 - [PLAN.md](PLAN.md): architecture and implementation plan, not standalone proof of current runtime behavior.
 - [German architecture comparison](VERGLEICH-EARENDIL-VS-PHI-SPACES.md) and
   [English comparison](COMPARISON-EARENDIL-VS-PHI-SPACES-EN.md): comparison with Earendil's chat architecture.
+- The articles `help.topic.examples` (every example, how to run it, which ones cost tokens) and `help.topic.apps`
+  (the five applications) are the reader's entry points; `scripts/corpus-examples-and-apps.ts` holds them.
 - [Root API reference](../docs/api.md), [examples](../docs/examples.md), and
   [implementation status](../docs/implementierungsstand.md) define the detailed current contracts.
 
@@ -296,8 +298,8 @@ help-site/
 │   ├── space-chat/               # Command dispatcher, sessions and stage reports
 │   └── social/
 │       ├── swarm.ts              # Dispatcher, feed, simulated identities and shard routing
-│       ├── batch.ts              # Actual reserve/finish Durable batches
-│       └── history.ts            # Durable linked history and cursor paging
+│       ├── batch.ts              # Actual reserve/finish batches
+│       └── history.ts            # Persistent linked history and cursor paging
 ├── client/                       # React UI, styles and client lifecycles
 ├── docker/                       # Images and Compose services
 ├── deploy/                       # Reverse-proxy/systemd templates

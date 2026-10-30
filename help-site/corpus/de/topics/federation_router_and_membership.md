@@ -13,7 +13,11 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Phase 2 (`src/router.ts`, `src/delegation.ts`, `src/federation-policy.ts`, `src/federated-space.ts`, `src/membership.ts`) verbindet mehrere physische Member-Spaces unter einem Koordinator-Router zu einem logischen `FederatedSpace`.
+Ein einzelner Rechner hat Grenzen. Mit der Föderation verteilst du einen Space auf mehrere Rechner, und für Programme bleibt es ein gemeinsamer Space. Eine feste Regel entscheidet, welche Daten wo liegen, damit Zusammengehöriges beisammen bleibt. Ein Koordinator merkt sich jeden Schritt, damit nach einem Ausfall nichts doppelt geschieht.
+
+### Technische Details {#technical-details}
+
+Phase 2 (`src/router.ts`, `src/delegation.ts`, `src/federation-policy.ts`, `src/federated-space.ts`, `src/membership.ts`) verbindet mehrere physische Member-Spaces unter einem Koordinator-Router zu einem logischen `FederatedSpace`. Dessen API unterscheidet sich vom `SpaceLike`-Basisvertrag. Der Standalone-Dienst ist kein Föderations-Member; dafür braucht es den Federation-Host.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -26,8 +30,9 @@ Jede föderierte Operation durchläuft im `RouterController` die persistente Zus
 Die `FederationPolicy` ordnet jedem Entry-Typ eine Platzierungsregel zu:
 
 - **`local`**: Fester einzelner Member-Space.
-- **`expand` nach Typ oder Schlüsselfeld (HRW)**: Bei `by: { field: "threadId" }` berechnet der Router deterministisch über den kanonischen Feldwert und die Member-IDs den zuständigen Member.
-- **Vorteil für unseren Multiplayer Space-Chat**: Da `Thread`, `Msg` und `ChatTask` alle über `field: "threadId"` auf dieselbe Member-Menge geroutet werden, landen alle Operationen eines Threads garantiert auf demselben Member-Space! Damit funktionieren lokale Space-Transaktionen und `CompletionProfiles` ohne verteiltes Two-Phase-Locking.
+- **`expand`**: Verteilt nach `by`: `"type"`, `{ field }`, `"capacity"` oder `"capability"`. Bei `by: { field: "threadId" }` berechnet der Router per HRW deterministisch über den kanonischen Feldwert und die Member-IDs den zuständigen Member.
+- **`sync`**: Fester Member mit Primary/Sync-Replikat-Konfiguration.
+- **Beispiel Multiplayer Space-Chat**: Da `Thread`, `Msg` und `ChatTask` alle über `field: "threadId"` auf dieselbe Member-Menge geroutet werden, landen alle Operationen eines Threads auf demselben Member-Space. Damit funktionieren lokale Space-Transaktionen und `CompletionProfiles` ohne verteiltes Two-Phase-Locking.
 
 ### Journalisierter Waiter-Wettlauf bei takeWaiting {#waiter-race}
 

@@ -492,8 +492,8 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 								</h1>
 								<p className="home-hero__lead">
 									{locale === "de"
-										? "Die technische Produktreferenz und interaktive Entwicklungsplattform für phi-spaces: Vom lokalen Tuple-Space über RequestRef-Claims, CompletionProfiles, Overlay-Gate (Schicht A/B) und HRW-Federation bis zum 6-stufigen Multiplayer Space-Chat und der mobilen Steuerung."
-										: "The technical product reference and interactive workbench for phi-spaces: from local tuple spaces through RequestRef claims, CompletionProfiles, overlay gate (Layer A/B), and HRW federation to the 6-stage Multiplayer Space-Chat and mobile control."}
+										? "Hier steht alles über phi-spaces: was ein Space ist, wie man ihn benutzt, welche Beispiele und Apps es gibt. Jeder Artikel beginnt verständlich und geht dann in die technischen Details."
+										: "Everything about phi-spaces in one place: what a space is, how to use it, and which examples and apps exist. Every article starts in plain language and then goes into the technical details."}
 								</p>
 								<div className="hero-actions">
 									<button
@@ -506,6 +506,20 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 												? "Ersten vollständigen Space starten →"
 												: "Start Your First Complete Space →"}
 										</span>
+									</button>
+									<button
+										type="button"
+										className="secondary-action"
+										onClick={() => openArticle("help.topic.examples")}
+									>
+										<span>{locale === "de" ? "▶ Beispiele starten" : "▶ Run the examples"}</span>
+									</button>
+									<button
+										type="button"
+										className="secondary-action"
+										onClick={() => openArticle("help.topic.apps")}
+									>
+										<span>{locale === "de" ? "▦ Alle Apps im Überblick" : "▦ All apps at a glance"}</span>
 									</button>
 									<button
 										type="button"

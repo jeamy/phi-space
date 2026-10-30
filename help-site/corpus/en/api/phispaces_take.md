@@ -13,9 +13,11 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-`take(template, timeout, options?)` removes a matching entry exclusively. Without `txn`, removal is immediate; with `{ txn }`, the entry is reserved under that transaction and automatically returns to the space on `abort(txn)` or transaction lease expiry.
+`take` fetches a matching entry from the space, and only one caller gets it. This is the basic building block for tasks: several workers wait, one wins. With a transaction the removal is provisional, and the entry comes back if the work fails.
 
 ## Technical Reference {#technical-reference}
+
+Without `txn`, removal is immediate. With `{ txn }`, the entry is reserved under that transaction and automatically returns to the space on `abort(txn)` or transaction lease expiry.
 
 ```ts
 const txn = await space.createTransaction(30_000);
@@ -23,6 +25,9 @@ const task = await space.take({ type: "ChatTask", fields: { threadId: "main" } }
 ```
 
 - If the entry type is governed by a `RunGate`, entries are takeable only while the run's `RunGate` is in state `running`.
+- `takeIfExists` waits only while matches are held. `takeExisting(space, template, waitMs, { txn })` also tells missing from held and then throws `StillHeld`.
+- `takeAll(space, template, { txn })` takes every match free right now and returns the count; held ones stay.
+- `awaitWork(space, template, waitMs, halt?)` waits for work while holding nothing: one blocking `read` without a transaction.
 
 ## Parameters And Return Value {#parameters}
 
@@ -37,4 +42,4 @@ const task = await space.take({ type: "ChatTask", fields: { threadId: "main" } }
 
 - **Worker reservation**: The chat worker runs `take({ type: "ChatTask" }, FOREVER, { txn })`, writes the reply `Msg` under the same `txn`, and calls `commit(txn)` — task and result appear atomically.
 - **Crash safety**: If the worker crashes, the transaction lease expires and the `ChatTask` automatically returns to the space for another worker.
-- **Timer disarming**: The reaper takes expired `TimerLock` entries, which triggers due `ScheduledJob` alarms.
+- **Timer disarming**: The reaper removes expired `TimerLock` entries; `tickAlarms()` then turns due `ScheduledJob`s into `ChatTask`s.

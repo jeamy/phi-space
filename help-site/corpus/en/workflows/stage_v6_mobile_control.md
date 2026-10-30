@@ -13,28 +13,31 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-Stage 6 (`help-site/examples/v6-mobile-control/run.ts` and the **`AdminSpaces`** web portal at `https://spaces.eibrain.org/?view=admin`) connects the space cluster to the operational control layer defined in `docs/betrieb-und-mobile-steuerung.md`. Both the mobile app (`spaces.html` + `steuerung.html` in `pi-termux-mobile`) and the web interface issue the same admin commands to `CONTROL_SPACE`.
+Stage 6 shows how to operate running spaces: pair devices, start and stop workers, pause runs, create and archive spaces. The program performs these steps locally. The same actions exist in the AdminSpaces web area and on the control pages of the Android app.
 
 ## Topology: Space Distribution {#topology}
 
-- **1 host** (in the runner's memory) carries **several named spaces**: the `CONTROL_SPACE` (operations layer: enroll, worker assignments, run gate, audit), `sieve-ops`, plus chat spaces created dynamically via `SpaceLifecycle`.
-- Distribution: one host, several isolated spaces — control commands land in the control space while chat data stays in dedicated data spaces. In the live deployment this host is the prod host behind `spaces.eibrain.org`.
+`help-site/examples/v6-mobile-control/run.ts` and the **`AdminSpaces`** web portal at `https://spaces.eibrain.org/?view=admin` implement the operational control defined in `docs/betrieb-und-mobile-steuerung.md`. The mobile app (`spaces.html` + `steuerung.html` in `pi-termux-mobile`) and the website know the same admin commands.
+
+- **1 host** (`openOwnMemoryHost()` in the runner) carries **several named spaces**: the `CONTROL_SPACE` (enroll, audit), `sieve-ops`, and one chat space created via `SpaceLifecycle`.
+- Distribution: one host, several isolated spaces. Control commands land in the control space while chat data stays in its own data space.
 
 ## Workflow {#workflow}
 
 ### Step 1: Login To AdminSpaces & QR Pairing For Mobile {#step-1-login-and-qr}
 
-1. On `https://spaces.eibrain.org`, the administrator clicks **`ADMIN`** in the topbar and logs in with the configured private web-admin password; enrollment tokens pair peers only.
-2. Under **Identity & Device Pairing**, a one-click action generates a fresh enrollment token and `enrollQr` payload ready to paste or scan in `spaces.html` on Android.
+1. On `https://spaces.eibrain.org`, the administrator clicks **`ADMIN`** in the topbar and logs in with the configured private web-admin password. Enrollment tokens pair peers only; they open no web session.
+2. In the first section, **Device Pairing**, `createEnroll` generates a fresh enrollment token and `enrollQr` payload to paste or scan in `spaces.html` on Android. The program shows the same step locally: `enrollQr({ token, endpoint, controlSpaceId })` and an `Enroll` entry in the control space.
 
 ### Step 2: Worker Scaling, RunGate Control, And Space Lifecycle {#step-2-control}
 
-Using identical actions in `AdminSpaces` (web) and `steuerung.html` (mobile), all operations persist their `commandId` before transmission for retry safety:
+The actions in `AdminSpaces` (web) and `steuerung.html` (mobile) cover the operations below, each with a `commandId` that makes a repeat recognizable. The program calls the same controllers directly and shows worker scaling, start/pause/resume, archive/reactivate, alerts, and audit.
 
-- **Scale Workers (`listWorkers` / `setWorkers`)**: Set the desired count of `chat-worker`, `search-subagent`, or `sieve` workers per host and target space (`0` stops cleanly after the active task).
-- **Control Runs & Maintenance Windows (`startRun` / `pauseRun` / `resumeRun` / `stopRun` / `scheduleRun` / `exportRun`)**: Pause and resume runs across all members via the confirmed `RunGate` ACK barrier.
+- **Scale Workers (`listWorkers` / `setWorkers`)**: Set the desired count per worker kind (in the program `chat-worker`, `sieve`), host, and target space (`0` stops after the active task).
+- **Control Runs & Maintenance Windows (`startRun` / `pauseRun` / `resumeRun` / `stopRun` / `scheduleRun` / `exportRun` / `listRuns`)**: Pause and resume runs across all members via the confirmed `RunGate` ACK barrier.
 - **Manage Spaces (`createSpace` / `archiveSpace` / `reactivateSpace` / `deleteSpace`)**: Create new session spaces idempotently or switch completed spaces into read-only `archiveSpace` mode.
-- **Alerts & Audit (`listAlerts` / `auditLog`)**: Monitor active warnings (`collectAlerts`) and the complete audit log of admin commands.
+- **Alerts & Audit (`listAlerts` / `auditLog`)**: Monitor active warnings (`collectAlerts`) and the history of admin commands.
+- **Deployment (`planDeployment` / `applyDeployment` / `startWorkers` / `exportDeployment`)**: Plan and activate hosts, spaces, and workers from a JSON configuration. On the command line this is `npm run bootstrap -- --check|--plan|--apply|--bind a=id|--start-workers|--export`.
 
 ### Run From Terminal {#run-cli}
 

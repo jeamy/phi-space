@@ -2,7 +2,7 @@
 standard: help_topic
 id: help.topic.task_lifecycle
 title: "Task Lifecycle and Safe Retries"
-short: "The task Entry and its transaction reservation have separate leases. A reservation prevents competing claims; the business commit finalizes task removal and its result."
+short: "A task is an entry in the space. A worker claims it, does the work, and finishes it together with the result. This guide shows that path and what happens on failure, so nothing gets lost or runs twice."
 tags: [task, abort, lease, retry, completion, ThreadSequence, unique, fork]
 owner: core
 related: [help.topic.overview, help.workflow.overview_v1_to_v6]
@@ -11,11 +11,13 @@ since: 0.0.1
 
 # Task Lifecycle and Safe Retries
 
-## Two Lifetimes, Two Completion Points {#overview}
+## The Path of a Task {#overview}
 
-The task Entry and its transaction reservation have separate leases. A reservation prevents competing claims; the business commit finalizes task removal and its result.
+A task is an entry in the space. A worker claims it, does the work, and finishes it together with the result. This guide shows that path and what happens on failure, so nothing gets lost or runs twice.
 
 ## States and Failure Boundaries {#states}
+
+The task Entry and its transaction reservation have separate leases. A reservation prevents competing claims; the business commit finalizes task removal and its result.
 
 1. Producer writes a task with a sufficient lease and a RequestRef when required.
 2. Worker opens a bounded transaction and takes the task.
@@ -26,7 +28,7 @@ The task Entry and its transaction reservation have separate leases. A reservati
 
 ## Chat: Sequences, Singletons and Forks {#chat}
 
-ThreadSequence is a Space Entry reserved transactionally for sequence allocation; Msg and the updated counter commit together. Do not rely solely on a process-local increment. write with unique: ["threadId"] checks singleton creation atomically; read followed by write would race. A fork stores parentThreadId/forkUpToSeq; inherited messages are resolved on read rather than copied. [write API](help.api.phispaces_write#parameters).
+ThreadSequence is a Space Entry reserved transactionally for sequence allocation; Msg and the updated counter commit together. Do not rely solely on a process-local increment. write with unique: ["threadId"] checks singleton creation atomically and reports a match as UniqueConflict; read followed by write would race. A fork stores parentThreadId/forkUpToSeq; inherited messages are resolved on read rather than copied. [write API](help.api.phispaces_write#parameters).
 
 ## Verification and Boundaries {#failure-test}
 

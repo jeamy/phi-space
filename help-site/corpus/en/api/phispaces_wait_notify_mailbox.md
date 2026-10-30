@@ -13,9 +13,11 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-`wait` and `notify` register durable subscriptions in the space document. Consumers poll delivered events via `events(principal, { mailboxEpoch?, after?, maxBytes? })` and confirm processed prefixes via `ack(principal, epoch, upTo)` across restarts.
+`wait` and `notify` let a program wait for something without standing still. `wait` reports one matching entry once, `notify` reports each new one. The reports land in a mailbox that survives a restart. `events` reads it, and `ack` confirms what was processed.
 
 ## Technical Reference {#technical-reference}
+
+`wait` and `notify` register durable subscriptions in the space document. Consumers process delivered events through `events` and `ack` across restarts. Locally the calls are `events(principal, { mailboxEpoch?, after?, maxBytes? })` and `ack(principal, epoch, upTo)`. Remotely the consumer comes from the connection: `events({ mailboxEpoch?, after?, maxBytes?, waitMs? })` and `ack(epoch, upTo)`, with `target: "self"` for `wait` and `notify`. Both need `startService` so that delivery and the reaper run while idle.
 
 ```ts
 const waitId = await space.wait(

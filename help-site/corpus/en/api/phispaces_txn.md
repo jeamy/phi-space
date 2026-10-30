@@ -13,9 +13,11 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-`createTransaction(lease?, options?)` starts a space transaction. `commit(txnId, options?)` publishes all entries written under `txnId` and permanently deletes all entries taken under `txnId`. `abort(txnId, options?)` discards all writes and releases all reserved takes.
+A transaction groups several steps: either all count or none does. `createTransaction` starts it, `commit` makes everything visible, `abort` takes everything back. Use one when, say, a task and its result may only count together.
 
 ## Technical Reference {#technical-reference}
+
+`createTransaction(lease?, options?)` starts a space transaction. `commit(txnId, options?)` publishes all entries written under `txnId` and permanently deletes all entries taken under `txnId`. `abort(txnId, options?)` discards all writes and releases all reserved takes.
 
 ```ts
 const txn = await space.createTransaction(60_000, { request: reqBegin });
@@ -29,6 +31,7 @@ await space.commit(txn.id, { request: reqCommit });
 - **Atomicity**: `commit` applies all writes and takes together, bumps `rev` exactly once, and emits the corresponding mailbox events. `abort` discards everything and releases reserved entries.
 - **Lease**: The transaction owns a lease (the `lease` argument); expiry without commit implies an implicit `abort`.
 - **Contract enforcement**: Before committing, the core checks all `CompletionProfiles` (`CompletionViolation` on missing results) and configured byte budgets (`ResourceExhausted`).
+- **One call instead of many**: `batch(ops, { request? })` runs steps in one commit, all or none: `begin`, `write`, `take`, `read`, `commit`, `abort`. `txn: "$"` means the transaction of the `begin` in the same batch. At most 64 steps; `take` and `read` never wait here. Remotely this is the feature `batch`; a space with merge types does not offer it.
 
 ## Typical Use Cases {#use-cases}
 

@@ -32,32 +32,54 @@ export const ARTICLES: Article[] = [
 		body: {
 			de: `## Überblick {#overview}
 
-Leuchtfeuer ist eine **Mehrspielerwelt im Browser**: ein Archipel kleiner Inseln, dauerhaft im Nebel. Wo ein Leuchtfeuer brennt, ist der Nebel licht, und man kann sich frei bewegen, sammeln und handeln. Wo es erlischt, rückt der Nebel vor und verschluckt die Wege.
+Leuchtfeuer ist ein Spiel im Browser, das viele Leute zugleich spielen. Ihr lebt auf kleinen Inseln im Nebel und haltet gemeinsam die Feuer am Brennen. Wo Licht ist, kann man sammeln, handeln, bauen und Gärten anlegen. Du musst nichts installieren und kannst sofort als Gast anfangen.
 
-Du spielst eine Figur auf einer **Karte** (oder nur mit **Text**, wie in einem MUD). Alles, was du tust, ist ein Textbefehl: ein Klick auf die Karte ist \`move x y\`, ein Druck auf die Leertaste ist \`get …\`. Wer lieber tippt, kommt mit denselben Befehlen zum selben Ergebnis.
+Der Archipel hat acht Inseln mit 37 Orten und neun Leuchtfeuern. Wo ein Feuer brennt, ist der Nebel licht. Wo es erlischt, rückt der Nebel vor und verschluckt die Wege.
+
+Du spielst eine Figur auf einer **Karte**, flach in 2D oder als Modell in 3D, oder nur mit **Text**, wie in einem MUD. Alles, was du tust, ist ein Textbefehl: ein Klick auf die Karte ist \`move x y\`, ein Druck auf die Leertaste ist \`get …\`. Wer lieber tippt, kommt mit denselben Befehlen zum selben Ergebnis.
 
 ## Was die Welt besonders macht {#idea}
 
+Hier arbeitet niemand für sich allein. Was einer sammelt, hilft allen, und was ihr aufbaut, bleibt stehen, solange ihr es pflegt.
+
 - **Gemeinsam statt allein:** Kein Spieler kann ein Feuer auf Dauer allein halten. Die Welt lebt davon, dass viele sich gegenseitig zuarbeiten.
 - **Jeder darf mitmachen:** Du kannst sofort als **Gast** losspielen. Wer sich registriert, behält Figur und Fortschritt ([Gast und Konto](help.game.account)).
-- **Echtzeit:** Andere Spieler siehst du live auf der Karte, auch Figuren des Spiels wie Ines und Bo sind unterwegs.
+- **Echtzeit:** Andere Spieler siehst du live auf der Karte, auch Figuren des Spiels wie Ines und Bo sind unterwegs ([Figuren der Welt](help.game.fire#people)).
+- **Aufbau:** Hütten, Beete, Fluren, Mühlen und Tiere machen aus einer Insel mit der Zeit ein Dorf ([Dorf und Siedlung](help.game.village)).
 - **Eine Welt auf phi-spaces:** Strandgut, das nur einer aufheben kann, ein Feuer, das von allein erlischt, ein Tausch, der ganz oder gar nicht gilt: Die Regeln sind die Eigenschaften des Space.
 
-Weiter: [Spielziel](help.game.goal), [Erste Schritte](help.game.start), [Steuerung](help.game.controls), [Befehle](help.game.commands).`,
+Weiter: [Spielziel](help.game.goal), [Erste Schritte](help.game.start), [Steuerung](help.game.controls), [Befehle](help.game.commands).
+
+## Wie die Welt läuft {#tech}
+
+Für dich ist es eine einzige Welt. Im Hintergrund arbeiten mehrere Programme zusammen, damit das Spiel auch mit vielen Leuten schnell bleibt.
+
+Die Welt ist in **vier Regionen** geteilt, jede mit eigenem Space und eigenen Prozessen: West (Graue Insel, Nebelholm), Nord (Möwenfels, Schären), Ost (Kupferhafen, Tangriff, Rauchholm) und Süd (Krabbensand). Nur Fähren führen von einer Region in die andere; dabei wechselt die Figur den Space. Jede Region hat eine eigene Startbucht. Im Betrieb laufen die Regionen und der Web-Prozess auf dem Rechner *big*, die Konten und der Chat in einem eigenen Space auf *nano*. Die Leiste unter dem Spiel zeigt, welche Rechner gerade mitarbeiten.`,
 			en: `## Overview {#overview}
 
-Leuchtfeuer is a **multiplayer world in the browser**: an archipelago of small islands, permanently in the fog. Where a beacon burns, the fog lifts and you can move, collect and trade freely. Where it goes out, the fog advances and swallows the paths.
+Leuchtfeuer is a browser game that many people play at once. You live on small islands in the fog and keep the fires burning together. Where there is light you can gather, trade, build and lay out gardens. You install nothing and can start at once as a guest.
 
-You play a character on a **map** (or with **text** only, like a MUD). Everything you do is a text command: a click on the map is \`move x y\`, the space bar is \`get …\`. If you prefer typing, the same commands lead to the same result.
+The archipelago has eight islands with 37 places and nine beacons. Where a beacon burns, the fog lifts. Where it goes out, the fog advances and swallows the paths.
+
+You play a character on a **map**, flat in 2D or as models in 3D, or with **text** only, like a MUD. Everything you do is a text command: a click on the map is \`move x y\`, the space bar is \`get …\`. If you prefer typing, the same commands lead to the same result.
 
 ## What makes the world special {#idea}
 
+Nobody works alone here. What one person gathers helps everyone, and what you build stays as long as you look after it.
+
 - **Together, not alone:** nobody can keep a beacon burning alone for long. The world lives on many people working for each other.
 - **Anyone can join:** you can start at once as a **guest**. Registering keeps your character and progress ([Guest and account](help.game.account)).
-- **Real time:** you see other players live on the map; characters of the game, like Ines and Bo, walk around too.
+- **Real time:** you see other players live on the map; characters of the game, like Ines and Bo, walk around too ([Characters of the world](help.game.fire#people)).
+- **Building up:** huts, beds, fields, mills and animals turn an island into a village over time ([Village and settlement](help.game.village)).
 - **A world on phi-spaces:** driftwood that only one can pick up, a fire that goes out by itself, a trade that happens wholly or not at all: the rules are properties of the space.
 
-Next: [Goal](help.game.goal), [First steps](help.game.start), [Controls](help.game.controls), [Commands](help.game.commands).`,
+Next: [Goal](help.game.goal), [First steps](help.game.start), [Controls](help.game.controls), [Commands](help.game.commands).
+
+## How the world runs {#tech}
+
+To you it is one world. Behind it several programs work together so the game stays fast with many people.
+
+The world is divided into **four regions**, each with a space and processes of its own: West (Graue Insel, Nebelholm), North (Möwenfels, Schären), East (Kupferhafen, Tangriff, Rauchholm) and South (Krabbensand). Only ferries lead from one region to another; a figure changes space on the way. Each region has a starting bay of its own. In production the regions and the web process run on the machine *big*, accounts and chat in a space of their own on *nano*. The bar below the game shows which machines are working.`,
 		},
 	},
 	{
@@ -77,12 +99,14 @@ Wer viel ins Feuer legt, steht im **Ruf** (\`ruf\` zeigt, was du beigetragen has
 
 ## Die Spielschleife {#loop}
 
-1. **Bergen:** Die Flut spült Treibholz und Muscheln als **Strandgut** an den Strand. Es bleibt nur einige Minuten liegen, dann trägt die See es wieder fort. Wer zuerst ankommt, bekommt es, auch wenn zehn gleichzeitig zugreifen.
+Ein Spieltag besteht aus wenigen Schritten, die sich wiederholen. Was du sammelst, nährt das Feuer, und das Feuer schützt, was ihr aufbaut.
+
+1. **Bergen:** Die Flut spült Treibholz, Tang und Muscheln als **Strandgut** an die Strände. Es bleibt nur eine Weile liegen, dann trägt die See es wieder fort. Wer zuerst ankommt, bekommt es, auch wenn zehn gleichzeitig zugreifen.
 2. **Verarbeiten:** Aus Strandgut wird Brennstoff und Werkzeug (\`craft\`, siehe [Handel und Handwerk](help.game.trade)).
 3. **Feuer halten:** Brennholz ins Leuchtfeuer legen verlängert, wie lange es brennt. Brennt es nicht, steigt der Nebel Stufe für Stufe ([Feuer, Nebel, Flut](help.game.fire)).
 4. **Handeln:** Mit anderen tauschen, am Marktbrett kaufen und verkaufen, Aufträge der Auftragstafel erfüllen.
-5. **Bauen:** Im Licht eines Feuers baut ihr gemeinsam Hütten, jede mit einer Truhe ([Bauen](help.game.build)). Absprechen geht im [Chat](help.game.chat), auch über die Inseln.
-6. **Erkunden:** Von einem brennenden Feuer aus lassen sich weitere Orte im Nebel erreichen. Was dort liegt, wird mit der Welt größer.
+5. **Aufbauen:** Im Licht eines Feuers baut ihr gemeinsam [Hütten](help.game.build), legt [Gärten](help.game.garden) und [Äcker](help.game.fields) an und haltet [Tiere](help.game.animals). So wird eine Insel zum [Dorf](help.game.village). Absprechen geht im [Chat](help.game.chat), auch über die Inseln.
+6. **Erkunden:** Fähren verbinden die acht Inseln, solange der Nebel nicht zu dicht ist. \`help inseln\` nennt die Wege.
 
 ## Zielkonflikt {#conflict}
 
@@ -95,12 +119,14 @@ Whoever puts a lot into the fire gains **reputation** (\`reputation\` shows what
 
 ## The game loop {#loop}
 
-1. **Salvage:** the tide washes driftwood and shells ashore as **flotsam**. It lies only a few minutes before the sea carries it off again. Whoever arrives first gets it, even if ten reach for it at once.
+A day in the game is a few steps that repeat. What you gather feeds the fire, and the fire protects what you build.
+
+1. **Salvage:** the tide washes driftwood, kelp and shells ashore as **flotsam**. It lies only a while before the sea carries it off again. Whoever arrives first gets it, even if ten reach for it at once.
 2. **Process:** flotsam becomes fuel and tools (\`craft\`, see [Trade and crafting](help.game.trade)).
 3. **Keep the fire:** putting fuel into a beacon extends how long it burns. If it does not burn, the fog rises step by step ([Fire, fog, tide](help.game.fire)).
 4. **Trade:** swap with others, buy and sell at the market board, fulfil jobs from the job board.
-5. **Build:** in a fire's light you build huts together, each with a chest ([Building](help.game.build)). Agree on it in the [chat](help.game.chat), also across the islands.
-6. **Explore:** from a burning beacon further places in the fog can be reached. What lies there grows with the world.
+5. **Build up:** in a fire's light you build [huts](help.game.build) together, lay out [gardens](help.game.garden) and [fields](help.game.fields) and keep [animals](help.game.animals). That way an island becomes a [village](help.game.village). Agree on it in the [chat](help.game.chat), also across the islands.
+6. **Explore:** ferries join the eight islands as long as the fog is not too thick. \`help inseln\` names the ways.
 
 ## The conflict {#conflict}
 
@@ -118,6 +144,8 @@ You can **use fuel yourself** (build tools, trade) or **put it into the shared f
 		body: {
 			de: `## So fängst du an {#start}
 
+Du brauchst kein Konto und keine Vorkenntnisse. In drei Minuten hast du dein erstes Feuer entzündet.
+
 1. **Losspielen:** Auf der Startseite „Als Gast spielen“ wählen. Du erscheinst in einer der vier Buchten, an denen Neue ankommen: **Graue Bucht**, **Schärenhafen**, **Rauchhafen** oder **Krabbenbucht**, jede mit einem Leuchtfeuer im Steinring.
 2. **Umsehen:** Tippe \`look\` (oder \`schau\`). Rechts im Seitenfeld steht, was neben dir liegt.
 3. **Treibholz aufheben:** Geh zu einem braunen Quadrat auf dem Sand (Klick auf die Karte oder Pfeiltasten) und drücke die **Leertaste** oder den Knopf „Aufheben“, oder doppelklicke einfach darauf.
@@ -130,6 +158,8 @@ You can **use fuel yourself** (build tools, trade) or **put it into the shared f
 
 Gäste können sofort spielen, aber noch nicht tauschen oder handeln, und ihre Figur verfällt nach einigen Tagen ohne Spiel. Oben in der Kopfzeile kannst du dich registrieren und behältst alles ([Gast und Konto](help.game.account)).`,
 			en: `## How to begin {#start}
+
+You need no account and no experience. In three minutes you will have lit your first fire.
 
 1. **Play:** on the start page choose “Play as guest”. You appear in one of the four bays where newcomers arrive: **Graue Bucht**, **Schärenhafen**, **Rauchhafen** or **Krabbenbucht**, each with a beacon in a stone ring.
 2. **Look around:** type \`look\` (or \`schau\`). The side panel shows what lies next to you.
@@ -155,10 +185,13 @@ Guests can play at once, but cannot swap or trade yet, and their character lapse
 		body: {
 			de: `## Auf der Karte {#map}
 
+Die Karte zeigt den Ort, an dem du gerade bist. Ein Klick lässt deine Figur dorthin gehen. Die rechte Maustaste öffnet ein Menü mit dem, was an dieser Stelle möglich ist.
+
 | Eingabe | Wirkung |
 | --- | --- |
 | Klick oder Tipp auf ein Feld | Dorthin gehen (\`move x y\`), der Server findet den Weg |
-| Rechtsklick oder langes Drücken | Menü zu diesem Feld: ansehen, aufheben, nachlegen, auf einer Figur „Chat mit …“, auf einer Baustelle liefern und mitarbeiten, auf einem freien Feld **Bauen …** (Plan wählen, dann OK: die Baustelle beginnt an diesem Feld nach rechts unten) oder mit Spaten ein Beet umgraben; auf der eigenen Figur Umsehen, Inventar, wer spielt, Uhrzeit, Ruf, Baupläne, Samen sammeln |
+| Doppelklick oder Doppeltipp auf ein Ding | Hingehen und aufheben (Holz, Muschel, Tang …) |
+| Rechtsklick oder langes Drücken | Menü zu diesem Feld (siehe unten) |
 | Klick auf ein Ausgangsfeld | Zum Ausgang gehen; im Menü des Feldes steht „Nach … gehen“ (\`go\`, von überall im Raum) |
 | 2D: Ziehen (gezoomt) | Die Ansicht verschieben |
 | 2D: zwei Finger auseinander oder zusammen | Eine Zoomstufe vor oder zurück (1×, 2×, 3×) |
@@ -166,7 +199,18 @@ Guests can play at once, but cannot swap or trade yet, and their character lapse
 | 3D: Ziehen mit Maus oder Finger | Die Ansicht verschieben (links, rechts, hoch, runter) |
 | 3D: Ziehen mit gedrücktem Mausrad oder mit Umschalttaste, Knöpfe ↶ ↷ | Die Ansicht drehen (die Knöpfe in Achtelschritten) |
 
+Das Menü bietet an, was zum Feld passt:
+
+- **Ding oder Feuer:** ansehen, aufheben, nachlegen.
+- **Figur:** ansehen, „Chat mit …“, Tausch anbieten.
+- **Baustelle:** liefern und mitarbeiten. Deine eigene ist auf der Karte hervorgehoben und heißt „Deine Baustelle“.
+- **Freies Feld:** **Bauen …** (Plan wählen, dann OK: die Baustelle beginnt an diesem Feld nach rechts unten), mit Spaten ein Beet umgraben.
+- **Beet:** was du dort tun kannst.
+- **Eigene Figur:** Umsehen, Inventar, wer spielt, Uhrzeit, Ruf, Baupläne, Samen sammeln.
+
 ## Am Handy und Tablet {#touch}
+
+Am Handy steuerst du alles mit dem Finger. Das Spiel braucht dafür keine App.
 
 Unten rechts auf der Karte liegt ein **Steuerkreuz**: Solange du eine Richtung hältst, gehst du Schritt für Schritt (wie die Pfeiltasten); **✋** in der Mitte hebt auf oder legt nach (wie die Leertaste). Es erscheint nur auf Geräten, die man mit dem Finger bedient. Ein Tipp auf ein Feld geht weiterhin direkt dorthin.
 
@@ -174,11 +218,12 @@ Ein Tablet im Hochformat zeigt die Karte oben und das Seitenfeld darunter, im Qu
 
 ## Tastatur {#keys}
 
+Mit der Tastatur geht vieles schneller. Die Pfeiltasten laufen, die Leertaste hebt auf oder legt nach.
+
 | Taste | Wirkung |
 | --- | --- |
 | Pfeiltasten | Einen Schritt gehen (\`step dx dy\`) |
 | Leertaste | Aufheben, was neben dir liegt; sonst das Feuer neben dir nachlegen |
-| Doppelklick auf ein Ding | Hingehen und aufheben (Holz, Muschel, Tang …); auf dem Handy Doppeltippen |
 | Enter | In die Befehlszeile springen |
 | Buchstaben, Ziffern | Einfach lostippen: der Text geht in die Befehlszeile |
 | Pfeiltasten in der Befehlszeile | Zurück zur Karte und einen Schritt gehen: hoch und runter immer, links und rechts, solange die Zeile leer ist (mit Text bewegen sie den Cursor) |
@@ -188,22 +233,30 @@ Die Tasten gelten, solange die Befehlszeile nicht den Fokus hat.
 
 ## Seitenfeld {#side}
 
+Das Seitenfeld zeigt, was gerade wichtig ist: was neben dir liegt, was du trägst und wie lange das Feuer noch brennt. Darunter steht alles, was du siehst und hörst.
+
 Rechts (auf dem Handy und dem Tablet im Hochformat unter der Karte) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen. Darunter das **Protokoll** mit allem, was du siehst und hörst, daneben die Reiter des [Chats](help.game.chat) (je Gespräch einer, „Chats“ als Übersicht), und die **Befehlszeile**. „Kommen und Gehen“ blendet die Meldungen ein, wer kommt und geht.
 
 ## Kopfzeile {#bar}
+
+Die Kopfzeile zeigt, wo du bist und wie spät es in der Welt ist. Dort stellst du auch die Ansicht um.
 
 - **?** öffnet diese Hilfe.
 - Der Punkt zeigt, ob du verbunden bist (grün) oder nicht (rot).
 - Daneben stehen der **Raum**, in dem du bist, und die **Weltzeit** (Tag und Uhrzeit; ⏸, wenn die Welt angehalten ist), rechts dein Name.
 - **Text / 2D / 3D** wählt die Darstellung. **Text** blendet die Karte aus: für Screenreader, schwache Geräte oder wer es lieber wie ein MUD mag; alles bleibt spielbar. **2D** ist die Kachelkarte, **3D** eine Ansicht derselben Welt von schräg oben.
+- **Admin** (nur für Admins) öffnet das Fenster für Modelle und Grenzen.
 - **Abmelden** beendet die Sitzung.
 - Auf dem Handy liegen Darstellung und Abmelden hinter **⋯**.`,
 			en: `## On the map {#map}
 
+The map shows the place you are in. A click sends your figure there. The right mouse button opens a menu with what you can do at that spot.
+
 | Input | Effect |
 | --- | --- |
 | Click or tap a cell | Walk there (\`move x y\`), the server finds the way |
-| Right click or long press | Menu for that cell: look, pick up, add fuel, on a figure “Chat with …”, on a site deliver and help, on a free cell **Build …** (pick a plan, then OK: the site starts at that cell towards the bottom right) or dig a bed with a spade; on your own figure look, inventory, who plays, time, reputation, plans, gather seeds |
+| Double click or double tap on a thing | Walk there and pick it up (wood, shell, kelp …) |
+| Right click or long press | Menu for that cell (see below) |
 | Click an exit cell | Walk to the exit; the cell's menu has “Go to …” (\`go\`, from anywhere in the room) |
 | 2D: drag (zoomed in) | Move the view |
 | 2D: two fingers apart or together | One zoom step in or out (1×, 2×, 3×) |
@@ -211,7 +264,18 @@ Rechts (auf dem Handy und dem Tablet im Hochformat unter der Karte) stehen **Neb
 | 3D: drag with mouse or finger | Move the view (left, right, up, down) |
 | 3D: drag with the mouse wheel held down or with Shift, ↶ ↷ buttons | Turn the view (the buttons in eighths) |
 
+The menu offers what fits the cell:
+
+- **Thing or fire:** look, pick up, add fuel.
+- **Figure:** look, “Chat with …”, offer a swap.
+- **Site:** deliver and help. Your own is highlighted on the map and called “Deine Baustelle”.
+- **Free cell:** **Build …** (pick a plan, then OK: the site starts at that cell towards the bottom right), dig a bed with a spade.
+- **Bed:** what you can do there.
+- **Your own figure:** look, inventory, who plays, time, reputation, plans, gather seeds.
+
 ## On a phone or tablet {#touch}
+
+On a phone you control everything with a finger. The game needs no app for that.
 
 A **pad** lies at the bottom right of the map: while you hold a direction you walk step by step (like the arrow keys); **✋** in its middle picks up or adds fuel (like the space bar). It appears only on devices used with a finger. A tap on a cell still walks straight there.
 
@@ -219,11 +283,12 @@ A tablet held upright shows the map on top and the side panel below it, held sid
 
 ## Keyboard {#keys}
 
+The keyboard makes many things quicker. The arrow keys walk, the space bar picks up or adds fuel.
+
 | Key | Effect |
 | --- | --- |
 | Arrow keys | Take one step (\`step dx dy\`) |
 | Space | Pick up what lies next to you; otherwise feed the fire next to you |
-| Double click on a thing | Walk there and pick it up (wood, shell, kelp …); on a phone double tap |
 | Enter | Jump to the command line |
 | Letters, digits | Just start typing: the text goes to the command line |
 | Arrow keys in the command line | Back to the map and one step: up and down always, left and right while the line is empty (with text they move the cursor) |
@@ -233,14 +298,19 @@ The keys work as long as the command line does not have the focus.
 
 ## Side panel {#side}
 
+The side panel shows what matters right now: what lies next to you, what you carry and how long the fire still burns. Below it stands everything you see and hear.
+
 On the right (below the map on a phone and an upright tablet) you find **Next to you**, **You carry** and the **beacon** with its time left, each with buttons. Below that the **log** with everything you see and hear, beside it the tabs of the [chat](help.game.chat) (one per talk, “Chats” as the overview), and the **command line**. “Kommen und Gehen” shows the lines about who comes and goes.
 
 ## Header bar {#bar}
+
+The header bar shows where you are and what time it is in the world. You also switch the view there.
 
 - **?** opens this help.
 - The dot shows whether you are connected (green) or not (red).
 - Next to it the **room** you are in and the **world time** (day and hour; ⏸ while the world is paused), on the right your name.
 - **Text / 2D / 3D** picks the view. **Text** hides the map: for screen readers, weak devices or if you prefer a MUD feel; everything stays playable. **2D** is the tile map, **3D** a view of the same world from above at an angle.
+- **Admin** (admins only) opens the window for models and limits.
 - **Log out** ends the session.
 - On a phone the view and logging out sit behind **⋯**.`,
 		},
@@ -256,9 +326,13 @@ On the right (below the map on a phone and an upright tablet) you find **Next to
 		body: {
 			de: `## So funktionieren Befehle {#how}
 
-Tippe sie einfach los, sie landen in der Befehlszeile (oder Enter). Jeder Befehl gilt **auf Englisch und auf Deutsch**, ohne Umschalter: \`get treibholz\` und \`nimm holz\` sind dasselbe. Dinge findest du über Name oder Kurzname (\`holz\`, \`wood\`). Den Namen eines Ausgangs kannst du allein tippen (\`ost\`). \`help <befehl>\` erklärt einen Befehl, \`help\` listet alle.
+Ein Befehl ist ein kurzes Wort, das deine Figur etwas tun lässt. Tippe einfach los, die Buchstaben landen in der Befehlszeile. Jeder Befehl gilt **auf Englisch und auf Deutsch**, ohne Umschalter: \`get treibholz\` und \`nimm holz\` sind dasselbe.
+
+Dinge findest du über Name oder Kurzname (\`holz\`, \`wood\`). Den Namen eines Ausgangs kannst du allein tippen (\`ost\`). \`help <befehl>\` erklärt einen Befehl, \`help\` listet alle. Auch kurze Sätze wie \`lege 3 hölzer ins feuer\` versteht das Spiel.
 
 ## Bewegen und umsehen {#move}
+
+Hiermit gehst du durch die Welt und siehst dich um. Auf der Karte erledigen Klicks und Pfeiltasten dasselbe.
 
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
@@ -271,15 +345,19 @@ Tippe sie einfach los, sie landen in der Befehlszeile (oder Enter). Jeder Befehl
 
 ## Dinge {#things}
 
+Hiermit nimmst du Dinge auf, gibst sie weiter und nährst das Feuer. Die Leertaste erledigt das Häufigste davon.
+
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
 | \`get <ding>\` | \`nimm\`, \`heb\`, \`take\` | Etwas aufheben, das neben dir liegt |
 | \`drop <ding>\` | \`leg\`, \`lege\`, \`lass\` | Etwas ablegen |
 | \`give <ding> an <person>\` | \`gib\` | Jemandem etwas geben (nicht als Gast) |
 | \`inventory\` | \`inventar\`, \`i\` | Was du trägst |
-| \`put <ding> in <feuer>\` | \`nachlegen\`, \`wirf\` | Brennholz ins Leuchtfeuer legen (auch: \`lege holz ins feuer\`) |
+| \`put [anzahl] <ding> in <feuer>\` | \`nachlegen\`, \`wirf\`, \`feed\` | Brennholz ins Leuchtfeuer legen (auch: \`lege 3 hölzer ins feuer\`) |
 
 ## Reden {#talk}
+
+So sprichst du mit anderen. \`say\` hört der Raum, ein Kanal hört alle, der Chat nur, wen du ansprichst.
 
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
@@ -292,14 +370,14 @@ Tippe sie einfach los, sie landen in der Befehlszeile (oder Enter). Jeder Befehl
 
 ## Bauen {#buildcmds}
 
-Ausführlich unter [Bauen](help.game.build).
+Bauen geht nur im Licht eines Feuers. Ausführlich unter [Bauen](help.game.build).
 
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
 | \`bau <plan> [x y]\` | \`build\`, \`errichte\` | Im Licht eines Feuers eine Baustelle abstecken; ohne Plan die Baupläne |
 | \`liefere [n] <ding>\` | \`deliver\` | An die Baustelle liefern (bis zwei Felder entfernt) |
 | \`arbeite\` | \`work\` | An der Baustelle mitarbeiten (bis zwei Felder entfernt) |
-| \`baustelle\` | \`site\` | Was hier gebaut wird und was fehlt |
+| \`baustelle [x y]\` | \`site\` | Was hier gebaut wird und was fehlt (mit x y: nur auf diesem Feld) |
 | \`truhe\`, \`verstaue\`, \`entnimm\` | \`chest\`, \`store\`, \`retrieve\` | Die Truhe deiner Hütte |
 | \`repariere\` | \`repair\` | Einen Bau ausbessern |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Deinen Bau oder deine Baustelle abreißen |
@@ -307,7 +385,7 @@ Ausführlich unter [Bauen](help.game.build).
 
 ## Gärten {#gardencmds}
 
-Ausführlich unter [Gärten](help.game.garden).
+Gärten brauchen einen Spaten, Wasser und Licht. Ausführlich unter [Gärten](help.game.garden).
 
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
@@ -321,24 +399,60 @@ Ausführlich unter [Gärten](help.game.garden).
 | \`ernte\` | \`harvest\`, \`pflücke\` | Reifes ernten, mit Samen; an einer reifen Flur ein Arbeitspunkt und dein Anteil |
 | \`pate <name>\` | \`sponsor\` | Jemanden dein Beet pflegen lassen; \`pate weg <name>\` beendet es |
 | \`benenne <name>\` | \`taufe\` | Deiner Kreuzung einen Namen geben (\`benenne 2 <name>\`, wenn du mehrere trägst) |
-| \`scheuche hase\` | \`scare\` | Einen Hasen (auch \`reh\`, \`fuchs\`, \`maus\`) bis drei Schritte von dir in den Nebel zurückjagen |
-| \`zäune\` | \`fence\` | Einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), deine Flur (6 Treibholz, 2 Tangseil) oder deinen Hühnerstall (3 Treibholz, 1 Tangseil) neben dir setzen |
-| \`wache\` | \`guards\` | Wer im Raum vor dem Wild wacht (Hund, Katze, Gänse) und ob sie satt sind |
-| \`siedlung\` | \`settlement\` | Die Siedlung hier; \`siedlung gründen <name>\`, \`aufnehmen <name> [helfer]\`, \`entlassen <name>\`, \`zu\`, \`offen\` |
-| \`epoche\` | \`stufe\` | Auf welcher Stufe die Insel steht (Fischerdorf, Dorf, Stadt, Netz), ihre Punkte und was die nächste freischaltet |
-| \`flur anlegen [x y]\` | \`acker anlegen\` | Mit einem Spaten im Licht eine Flur umbrechen (4×4); \`flur\` zeigt die Fluren hier, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
+
+## Äcker {#fieldcmds}
+
+Eine Flur ist ein großes Feld für viele Hände. Ausführlich unter [Äcker](help.game.fields).
+
+| Befehl | Auch | Wirkung |
+| --- | --- | --- |
+| \`flur anlegen [x y]\` | \`acker anlegen\`, \`field\` | Mit einem Spaten im Licht eine Flur umbrechen (4×4); \`flur\` zeigt die Fluren hier, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
 | \`bestelle [frucht]\` | \`pflüge\`, \`plough\` | Die Flur bestellen: Frucht wählen, Saatgut und einen Arbeitspunkt bringen |
+
+## Mühle und Backhaus {#millcmds}
+
+Aus Korn wird Mehl, aus Mehl wird Brot. Ausführlich unter [Mühle und Backhaus](help.game.fields#mill).
+
+| Befehl | Auch | Wirkung |
+| --- | --- | --- |
 | \`mahle [n oder alle] <korn>\` | \`mühle\`, \`grind\` | An einer Windmühle neben dir Korn zu Mehl mahlen lassen; \`mahle\` allein: wie lange sie noch mahlt |
 | \`abholen\` | \`pickup\` | Dein fertiges Mehl an der Mühle abholen |
 | \`backe [brot]\` | \`bake\` | Am Backhaus neben dir Brot backen (2 Mehl, 1 Kanne Wasser, 1 Treibholz) |
+
+## Tiere {#animalcmds}
+
+Tiere wollen gefüttert werden und geben dafür Eier, Milch, Wolle oder Daunen. Ausführlich unter [Tiere](help.game.animals).
+
+| Befehl | Auch | Wirkung |
+| --- | --- | --- |
 | \`stall\` | \`coop\`, \`pen\` | Wie es den Tieren im Hühnerstall oder Gehege neben dir geht |
-| \`einstallen <tier>\` | \`stalle\` | Ein Huhn, Schaf oder eine Ziege in deinen Stall bringen, einen Hund oder eine Katze an einem deiner Bauten wachen lassen; \`ausstallen\` holt eins heraus |
+| \`einstallen <tier>\` | \`stalle\` | Ein Huhn, Schaf oder eine Ziege in deinen Stall bringen, einen Hund oder eine Katze an einem deiner Bauten wachen lassen |
+| \`ausstallen [tier]\` | \`ausstellen\` | Ein Tier aus deinem Stall nehmen, auch \`ausstallen hund\` |
 | \`füttere [futter]\` | \`futter\` | Die Tiere neben dir füttern (jeder darf; ein Futter macht ein Tier einen Tag satt) |
 | \`einsammeln\` | \`sammle eier\`, \`melke\`, \`schere\` | Eier, Milch oder Wolle deiner Tiere einsammeln |
 
+## Wild und Wache {#wildcmds}
+
+Wo kein Feuer brennt, kommen Tiere aus dem Nebel. Ausführlich unter [Wild](help.game.wild).
+
+| Befehl | Auch | Wirkung |
+| --- | --- | --- |
+| \`scheuche hase\` | \`scare\` | Einen Hasen (auch \`reh\`, \`fuchs\`, \`maus\`) bis drei Schritte von dir in den Nebel zurückjagen |
+| \`zäune\` | \`fence\` | Einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), deine Flur (6 Treibholz, 2 Tangseil) oder deinen Hühnerstall (3 Treibholz, 1 Tangseil) neben dir setzen |
+| \`wache\` | \`guards\` | Wer im Raum vor dem Wild wacht (Hund, Katze, Gänse) und ob sie satt sind |
+
+## Dorf und Siedlung {#villagecmds}
+
+Eine Insel wächst durch das, was auf ihr steht. Ausführlich unter [Dorf und Siedlung](help.game.village).
+
+| Befehl | Auch | Wirkung |
+| --- | --- | --- |
+| \`siedlung\` | \`settlement\` | Die Siedlung hier; \`siedlung gründen <name>\`, \`aufnehmen <name> [helfer]\`, \`entlassen <name>\`, \`zu\`, \`offen\` |
+| \`epoche\` | \`stufe\` | Auf welcher Stufe die Insel steht (Fischerdorf, Dorf, Stadt, Netz), ihre Punkte und was die nächste freischaltet |
+
 ## Handel und Ruf {#tradecmds}
 
-Ausführlich unter [Handel und Handwerk](help.game.trade).
+Handel braucht ein Konto. Ausführlich unter [Handel und Handwerk](help.game.trade).
 
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
@@ -346,23 +460,33 @@ Ausführlich unter [Handel und Handwerk](help.game.trade).
 | \`accept [person]\` / \`decline [person]\` | \`annehmen\` / \`ablehnen\` | Tausch annehmen oder ablehnen |
 | \`market\` | \`markt\` | Marktbrett: Angebote ansehen, einstellen, kaufen |
 | \`craft [rezept]\` | \`baue\`, \`herstellen\` | Etwas herstellen; ohne Rezept die Liste |
-| \`order\` | \`auftrag\` | Auftragstafel |
+| \`order\` | \`auftrag\`, \`aufträge\` | Auftragstafel: ansehen, nehmen, liefern, zurückgeben |
 | \`reputation\` | \`ruf\` | Was du in die Leuchtfeuer gelegt hast |
 
 ## Hilfe {#helpcmds}
 
+Die Hilfe gibt es auch im Spiel als Text. \`help\` zeigt alle Befehle und Themen.
+
 | Befehl | Wirkung |
 | --- | --- |
-| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help epochen\`, \`help siedlungen\`, \`help chat\` |
+| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help epochen\`, \`help siedlungen\`, \`help chat\`, \`help inseln\`, \`help sturmflut\` |
 
-## Für Builder {#builder}
+## Für Builder und Admins {#builder}
 
-Wer die Stufe *Builder* hat, formt die Welt: \`dig\`/\`grabe\`, \`open\`/\`öffne\`, \`create\`/\`erschaffe\`, \`spawn\`/\`erzeuge\`, \`set\`/\`setze\`, \`tag\`/\`markiere\`, \`lock\`/\`sperre\`, \`examine\`/\`untersuche\`, \`destroy\`/\`vernichte\`. Die Befehle erscheinen nur in der \`help\` dieser Figuren; \`help bauen\` erklärt sie.`,
+Diese Befehle sind nicht für das normale Spiel. Sie stehen nur Figuren mit besonderen Rechten offen.
+
+Wer die Stufe *Builder* hat, formt die Welt: \`dig\`/\`grabe\`, \`open\`/\`öffne\`, \`create\`/\`erschaffe\`, \`spawn\`/\`erzeuge\`, \`set\`/\`setze\`, \`tag\`/\`markiere\`, \`lock\`/\`sperre\`, \`examine\`/\`untersuche\`, \`destroy\`/\`vernichte\`. Die Befehle erscheinen nur in der \`help\` dieser Figuren; \`help bauen\` erklärt sie.
+
+Admins stellen außerdem die Weltuhr: \`clock\` (\`uhr\`) zeigt sie, \`clock pause\`, \`clock weiter\` und \`clock rate <n>\` halten sie an, lassen sie weiterlaufen oder ändern ihr Tempo.`,
 			en: `## How commands work {#how}
 
-Just start typing, they go to the command line (or Enter). Every command works **in English and in German**, with no switch: \`get driftwood\` and \`nimm holz\` are the same. Things are found by name or short name (\`wood\`, \`holz\`). You can type an exit's name alone (\`east\`). \`help <command>\` explains one command, \`help\` lists all.
+A command is a short word that makes your figure do something. Just start typing, the letters go to the command line. Every command works **in English and in German**, with no switch: \`get driftwood\` and \`nimm holz\` are the same.
+
+Things are found by name or short name (\`wood\`, \`holz\`). You can type an exit's name alone (\`east\`). \`help <command>\` explains one command, \`help\` lists all. The game also understands short German sentences like \`lege 3 hölzer ins feuer\`.
 
 ## Moving and looking {#move}
+
+These take you through the world and let you look around. On the map clicks and arrow keys do the same.
 
 | Command | Also | Effect |
 | --- | --- | --- |
@@ -375,15 +499,19 @@ Just start typing, they go to the command line (or Enter). Every command works *
 
 ## Things {#things}
 
+These pick things up, hand them on and feed the fire. The space bar does the most common of them.
+
 | Command | Also | Effect |
 | --- | --- | --- |
 | \`get <thing>\` | \`nimm\`, \`heb\`, \`take\` | Pick up something next to you |
 | \`drop <thing>\` | \`leg\`, \`lege\`, \`lass\` | Put something down |
 | \`give <thing> an <person>\` | \`gib\` | Give someone something (not as a guest) |
 | \`inventory\` | \`inventar\`, \`i\` | What you carry |
-| \`put <thing> in <fire>\` | \`nachlegen\`, \`wirf\` | Put fuel into a beacon |
+| \`put [count] <thing> in <fire>\` | \`nachlegen\`, \`wirf\`, \`feed\` | Put fuel into a beacon |
 
 ## Talking {#talk}
+
+This is how you talk to others. The room hears \`say\`, everyone hears a channel, and the chat reaches only whom you address.
 
 | Command | Also | Effect |
 | --- | --- | --- |
@@ -396,14 +524,14 @@ Just start typing, they go to the command line (or Enter). Every command works *
 
 ## Building {#buildcmds}
 
-In detail under [Building](help.game.build).
+Building works only in a fire's light. In detail under [Building](help.game.build).
 
 | Command | Also | Effect |
 | --- | --- | --- |
 | \`bau <plan> [x y]\` | \`build\`, \`errichte\` | Stake out a site in a fire's light; without a plan the list of plans |
 | \`liefere [n] <thing>\` | \`deliver\` | Deliver to the site (up to two cells away) |
 | \`arbeite\` | \`work\` | Help build (up to two cells away) |
-| \`baustelle\` | \`site\` | What is being built here and what is missing |
+| \`baustelle [x y]\` | \`site\` | What is being built here and what is missing (with x y: on that cell only) |
 | \`truhe\`, \`verstaue\`, \`entnimm\` | \`chest\`, \`store\`, \`retrieve\` | Your hut's chest |
 | \`repariere\` | \`repair\` | Repair a building |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Tear down your building or site |
@@ -411,7 +539,7 @@ In detail under [Building](help.game.build).
 
 ## Gardens {#gardencmds}
 
-In detail under [Gardens](help.game.garden).
+Gardens need a spade, water and light. In detail under [Gardens](help.game.garden).
 
 | Command | Also | Effect |
 | --- | --- | --- |
@@ -425,24 +553,60 @@ In detail under [Gardens](help.game.garden).
 | \`ernte\` | \`harvest\`, \`pflücke\` | Harvest what is ripe, with seeds; at a ripe field a work point and your share |
 | \`pate <name>\` | \`sponsor\` | Let someone tend your bed; \`pate weg <name>\` ends it |
 | \`benenne <name>\` | \`taufe\` | Give your crossing a name (\`benenne 2 <name>\` when you carry several) |
-| \`scheuche hase\` | \`scare\` | Chase a hare (also \`reh\`, \`fuchs\`, \`maus\`) up to three cells from you back into the fog |
-| \`zäune\` | \`fence\` | Put a fence round a bed (2 driftwood, 1 kelp rope), your field (6 driftwood, 2 kelp rope) or your coop (3 driftwood, 1 kelp rope) beside you |
-| \`wache\` | \`guards\` | Who keeps watch against the wild in this room (dog, cat, geese) and whether they are fed |
-| \`siedlung\` | \`settlement\` | The settlement here; \`siedlung gründen <name>\`, \`aufnehmen <name> [helfer]\`, \`entlassen <name>\`, \`zu\`, \`offen\` |
-| \`epoche\` | \`stufe\` | The island's epoch (fishing village, village, town, net), its points and what the next unlocks |
+
+## Fields {#fieldcmds}
+
+A field is a large plot for many hands. In detail under [Fields](help.game.fields).
+
+| Command | Also | Effect |
+| --- | --- | --- |
 | \`flur anlegen [x y]\` | \`acker anlegen\`, \`field\` | Break a field (4×4) with a spade in the light; \`flur\` shows the fields here, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
 | \`bestelle [crop]\` | \`pflüge\`, \`plough\` | Sow the field: choose the crop, bring seed and a work point |
+
+## Mill and bakery {#millcmds}
+
+Grain becomes flour, flour becomes bread. In detail under [Mill and bakery](help.game.fields#mill).
+
+| Command | Also | Effect |
+| --- | --- | --- |
 | \`mahle [n or alle] <grain>\` | \`mühle\`, \`grind\` | Have grain ground to flour at a windmill beside you; \`mahle\` alone: how long it still grinds |
 | \`abholen\` | \`pickup\` | Fetch your flour at the mill |
 | \`backe [brot]\` | \`bake\` | Bake bread at a bakery beside you (2 flour, 1 can of water, 1 driftwood) |
+
+## Animals {#animalcmds}
+
+Animals want feeding and give eggs, milk, wool or down for it. In detail under [Animals](help.game.animals).
+
+| Command | Also | Effect |
+| --- | --- | --- |
 | \`stall\` | \`coop\`, \`pen\` | How the animals in the coop or pen beside you are |
-| \`einstallen <animal>\` | \`stalle\` | Put a hen, sheep or goat into your coop or pen, leave a dog or cat on guard at a building of yours; \`ausstallen\` takes one out |
+| \`einstallen <animal>\` | \`stalle\` | Put a hen, sheep or goat into your coop or pen, leave a dog or cat on guard at a building of yours |
+| \`ausstallen [animal]\` | \`ausstellen\` | Take an animal out of your coop or pen, also \`ausstallen hund\` |
 | \`füttere [feed]\` | \`futter\` | Feed the animals beside you (anyone may; one feed keeps one animal fed a day) |
 | \`einsammeln\` | \`sammle eier\`, \`melke\`, \`schere\` | Collect your animals' eggs, milk or wool |
 
+## Wild animals and guards {#wildcmds}
+
+Where no fire burns, animals come out of the fog. In detail under [Wild animals](help.game.wild).
+
+| Command | Also | Effect |
+| --- | --- | --- |
+| \`scheuche hase\` | \`scare\` | Chase a hare (also \`reh\`, \`fuchs\`, \`maus\`) up to three cells from you back into the fog |
+| \`zäune\` | \`fence\` | Put a fence round a bed (2 driftwood, 1 kelp rope), your field (6 driftwood, 2 kelp rope) or your coop (3 driftwood, 1 kelp rope) beside you |
+| \`wache\` | \`guards\` | Who keeps watch against the wild in this room (dog, cat, geese) and whether they are fed |
+
+## Village and settlement {#villagecmds}
+
+An island grows by what stands on it. In detail under [Village and settlement](help.game.village).
+
+| Command | Also | Effect |
+| --- | --- | --- |
+| \`siedlung\` | \`settlement\` | The settlement here; \`siedlung gründen <name>\`, \`aufnehmen <name> [helfer]\`, \`entlassen <name>\`, \`zu\`, \`offen\` |
+| \`epoche\` | \`stufe\` | The island's epoch (fishing village, village, town, net), its points and what the next unlocks |
+
 ## Trade and reputation {#tradecmds}
 
-In detail under [Trade and crafting](help.game.trade).
+Trade needs an account. In detail under [Trade and crafting](help.game.trade).
 
 | Command | Also | Effect |
 | --- | --- | --- |
@@ -450,18 +614,24 @@ In detail under [Trade and crafting](help.game.trade).
 | \`accept [person]\` / \`decline [person]\` | \`annehmen\` / \`ablehnen\` | Accept or decline a swap |
 | \`market\` | \`markt\` | Market board: see, post and buy offers |
 | \`craft [recipe]\` | \`baue\`, \`herstellen\` | Make something; without a recipe the list |
-| \`order\` | \`auftrag\` | Job board |
+| \`order\` | \`auftrag\`, \`aufträge\` | Job board: see, take, deliver, give back |
 | \`reputation\` | \`ruf\` | What you put into the beacons |
 
 ## Help {#helpcmds}
 
+The help also exists as text inside the game. \`help\` shows all commands and topics.
+
 | Command | Effect |
 | --- | --- |
-| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help epochen\`, \`help siedlungen\`, \`help chat\` |
+| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help wild\`, \`help epochen\`, \`help siedlungen\`, \`help chat\`, \`help inseln\`, \`help sturmflut\` |
 
-## For builders {#builder}
+## For builders and admins {#builder}
 
-Characters with the *Builder* level shape the world: \`dig\`, \`open\`, \`create\`, \`spawn\`, \`set\`, \`tag\`, \`lock\`, \`examine\`, \`destroy\` (German: \`grabe\`, \`öffne\`, \`erschaffe\`, \`erzeuge\`, \`setze\`, \`markiere\`, \`sperre\`, \`untersuche\`, \`vernichte\`). They show up only in the \`help\` of those characters; \`help bauen\` explains them.`,
+These commands are not part of normal play. Only figures with special rights have them.
+
+Characters with the *Builder* level shape the world: \`dig\`, \`open\`, \`create\`, \`spawn\`, \`set\`, \`tag\`, \`lock\`, \`examine\`, \`destroy\` (German: \`grabe\`, \`öffne\`, \`erschaffe\`, \`erzeuge\`, \`setze\`, \`markiere\`, \`sperre\`, \`untersuche\`, \`vernichte\`). They show up only in the \`help\` of those characters; \`help bauen\` explains them.
+
+Admins also set the world clock: \`clock\` (\`uhr\`) shows it, \`clock pause\`, \`clock weiter\` and \`clock rate <n>\` stop it, let it run on or change its speed.`,
 		},
 	},
 	{
@@ -473,7 +643,11 @@ Characters with the *Builder* level shape the world: \`dig\`, \`open\`, \`create
 			en: "How long a fire burns, what the fog does and why flotsam vanishes.",
 		},
 		body: {
-			de: `## Das Leuchtfeuer {#beacon}
+			de: `Die Feuer halten die Welt zusammen. Solange eines brennt, bleibt der Nebel fern und die Wege sind offen. Geht es aus, wird es Stufe für Stufe dunkler. Die Flut bringt das Holz, das ihr dafür braucht.
+
+Alle Zeiten sind Weltzeit. Sie läuft normalerweise so schnell wie die echte Uhr; der Betreiber kann sie anders einstellen.
+
+## Das Leuchtfeuer {#beacon}
 
 Ein Leuchtfeuer brennt, solange es **Brennstoff** hat. Jeder Brennstoff verlängert die Brenndauer:
 
@@ -481,21 +655,47 @@ Ein Leuchtfeuer brennt, solange es **Brennstoff** hat. Jeder Brennstoff verläng
 | --- | --- |
 | Treibholz | 10 Minuten |
 | Holzbündel | 40 Minuten |
+| Tran | 60 Minuten |
 
-Ein Feuer brennt höchstens zwei Stunden im Voraus, mehr nimmt es nicht an. Im Seitenfeld siehst du die Restzeit. Du legst nach mit der Leertaste, dem Knopf „Nachlegen“ oder \`put treibholz in feuer\`. Niemand läuft in ein brennendes Feuer: Auf Feuerfeldern kann man nicht stehen.
+Ein Feuer brennt höchstens zwei Stunden im Voraus, mehr nimmt es nicht an. Tran verkauft Marta in Kupferhafen, und manchmal spült ihn eine Sturmflut an. Im Seitenfeld siehst du die Restzeit. Du legst nach mit der Leertaste, dem Knopf „Nachlegen“ oder \`put treibholz in feuer\`. Niemand läuft in ein brennendes Feuer: Auf Feuerfeldern kann man nicht stehen.
 
 ## Der Nebel {#fog}
 
-Er hat vier Stufen (0 bis 3). Brennt kein Feuer, steigt er alle zwei Minuten um eine Stufe; ein brennendes Feuer lässt ihn in den Räumen, die es beleuchtet, wieder weichen. Bei **Stufe 3 („undurchdringlich“) sind die Wege nicht mehr passierbar**: Du findest den Ausgang nicht, bis das Feuer wieder brennt. \`look\` beschreibt den Nebel in Worten, die Karte zeigt ihn mit.
+Der Nebel kommt, wenn kein Feuer brennt. Er wird langsam dichter, bis man die Wege nicht mehr findet. Ein brennendes Feuer lässt ihn wieder weichen.
+
+Er hat vier Stufen (0 bis 3). Brennt das Feuer eines Ortes nicht, steigt er alle zwei Minuten um eine Stufe; brennt es, sinkt er ebenso. Bei **Stufe 3 („undurchdringlich“) findest du die meisten Ausgänge nicht mehr**, und kein Kahn fährt. Nur der Weg zu dem Feuer, das diesen Ort erhellt, bleibt zu finden, damit niemand im Nebel gefangen ist. \`look\` beschreibt den Nebel in Worten, die Karte zeigt ihn mit.
 
 ## Die Flut {#tide}
 
-Die Flut bringt etwa jede Minute neues **Strandgut** an den Strand der Grauen Bucht (höchstens vier Stücke gleichzeitig): meist Treibholz, seltener Muscheln. Es liegt fünf Minuten, dann ist es fort. Wer schneller ist, bekommt es; kommen zwei gleichzeitig, bekommt es genau einer, der andere sieht eine Meldung.
+Die Flut bringt das **Strandgut**, von dem alle leben. Sie kommt jede Minute und legt neue Stücke an die Strände aller Inseln. Wer zuerst da ist, bekommt sie.
+
+Kommen zwei gleichzeitig, bekommt ein Stück genau einer, der andere sieht eine Meldung. An 22 Orten landet etwas, an jedem bis zu einer festen Zahl (eins bis vier, in der Grauen Bucht vier). Je drei Leute auf einer Insel lassen ein Stück mehr je Strand liegen. Meist ist es Treibholz, seltener Muscheln; manche Strände bringen vor allem Tang oder Muscheln, wenige auch Bernstein und Perlen. Ein Stück liegt fünf Minuten, dann ist es fort.
+
+**Holz, Tang und Muscheln gehen nie aus:** Liegen auf den Stränden einer Insel weniger als 8 Treibholz, 6 Tang oder 3 Muscheln (mehr, wenn mehr Leute dort sind), bringt jede Flut bis zu zwei Stück davon nach. Sie bleiben 30 Minuten liegen.
+
+## Sturmflut {#storm}
+
+Ab und zu wirft ein Sturm viel Strandgut auf einen einzelnen Strand. Der Kanal \`hafen\` meldet, wo. Wer schnell ist, findet am meisten.
+
+Alle 20 Minuten trifft es einen von zehn Stränden mit sechs Stücken, die zehn Minuten liegen. Dabei sind auch Bernstein, Perlen und Tran. Eine Sturmflut füllt außerdem die Regentonnen ihrer Insel und treibt ihre Windmühlen an ([Mühle und Backhaus](help.game.fields#mill)).
 
 ## Figuren der Welt {#people}
 
-Ines und Bo sind Figuren des Spiels. **Ines** hütet das Feuer: Sie sagt, wenn es schwach wird, ausgeht oder wieder brennt, und begrüßt, wer „Hallo“ sagt. **Bo** ist der Fährmann und läuft zwischen den Orten hin und her. Andere Spieler erkennst du an ihrem Namen; mit \`who\` siehst du alle.`,
-			en: `## The beacon {#beacon}
+Auf den Inseln leben Figuren, die das Spiel selbst führt. Sie sammeln, handeln und hüten Feuer wie alle anderen. Am Namen auf der Karte erkennst du, wer kein Mensch ist.
+
+- **Hüter:** Fast jedes Feuer hat jemanden, der nachlegt und für Holz zahlt: Hinnerk in der Grauen Bucht, Mats, Svea, Greta, Nele, Arne, Frida und Thies. Auf Nebelholm hütet niemand das Feuer.
+- **Ines** ist tagsüber (6 bis 22 Uhr) in der Grauen Bucht. Sie sagt, wenn das Feuer schwach wird, ausgeht oder wieder brennt, und begrüßt, wer „Hallo“ sagt.
+- **Bo** ist der Fährmann und läuft zwischen Grauer Bucht und Klippenpfad hin und her.
+- **Händler, Sammler und Handwerker** wie Marta, Kalle oder Piet kaufen und verkaufen. Sprich sie an, sie nennen dir ihre Preise.
+- **(KI)** hinter dem Namen heißt: Hier antwortet ein Sprachmodell, etwa bei Ines, Merle, Hark und dem Fremden, der bei dichtem Nebel auftaucht. Ohne Modell dösen sie und sprechen feste Sätze.
+- **(Siedler)** hinter dem Namen heißt: Ein Skript spielt diese Figur, kein Mensch. Siedler sammeln, bauen, säen und handeln wie Spieler. Standardmäßig sind immer mindestens 30 Figuren unterwegs; für jeden Menschen in der Region geht ein Siedler.
+
+Andere Spieler erkennst du an ihrem Namen; mit \`who\` siehst du alle.`,
+			en: `The fires hold the world together. While one burns, the fog stays away and the paths stay open. If it goes out, it gets darker step by step. The tide brings the wood you need for it.
+
+All times are world time. It normally runs as fast as the real clock; the operator can set it otherwise.
+
+## The beacon {#beacon}
 
 A beacon burns as long as it has **fuel**. Each kind of fuel extends the burn time:
 
@@ -503,20 +703,42 @@ A beacon burns as long as it has **fuel**. Each kind of fuel extends the burn ti
 | --- | --- |
 | Driftwood | 10 minutes |
 | Wood bundle | 40 minutes |
+| Tran (fish oil) | 60 minutes |
 
-A fire accepts at most two hours ahead; more is not taken. The side panel shows the time left. Add fuel with the space bar, the “Add fuel” button or \`put driftwood in fire\`. Nobody walks into a burning fire: you cannot stand on fire cells.
+A fire accepts at most two hours ahead; more is not taken. Marta in Kupferhafen sells tran, and a storm surge sometimes washes it ashore. The side panel shows the time left. Add fuel with the space bar, the “Add fuel” button or \`put driftwood in fire\`. Nobody walks into a burning fire: you cannot stand on fire cells.
 
 ## The fog {#fog}
 
-It has four levels (0 to 3). With no burning fire it rises one level every two minutes; a burning fire pushes it back in the rooms it lights. At **level 3 (“impenetrable”) the paths can no longer be passed**: you do not find the exit until the fire burns again. \`look\` describes the fog in words, the map shows it too.
+The fog comes when no fire burns. It slowly thickens until you can no longer find the paths. A burning fire pushes it back.
+
+It has four levels (0 to 3). If a place's fire does not burn, it rises one level every two minutes; if it burns, it sinks just as fast. At **level 3 (“impenetrable”) you no longer find most exits**, and no ferry runs. Only the way to the fire that lights this place can still be found, so nobody is trapped in the fog. \`look\` describes the fog in words, the map shows it too.
 
 ## The tide {#tide}
 
-About every minute the tide brings new **flotsam** to the beach of the Grey Bay (at most four pieces at a time): mostly driftwood, less often shells. It lies five minutes, then it is gone. Whoever is faster gets it; if two reach for it together, exactly one gets it and the other sees a message.
+The tide brings the **flotsam** everyone lives on. It comes every minute and lays new pieces on the beaches of all islands. Whoever arrives first gets them.
+
+If two reach for a piece together, exactly one gets it and the other sees a message. Things land in 22 places, each up to a fixed number (one to four, four in Graue Bucht). Every three people on an island let one more piece lie per beach. Mostly it is driftwood, less often shells; some beaches bring chiefly kelp or shells, a few also amber and pearls. A piece lies five minutes, then it is gone.
+
+**Wood, kelp and shells never run out:** when fewer than 8 driftwood, 6 kelp or 3 shells lie on an island's beaches (more with more people there), each tide brings up to two more. They lie 30 minutes.
+
+## Storm surge {#storm}
+
+Now and then a storm throws a lot of flotsam onto a single beach. The channel \`hafen\` says where. Whoever is quick finds the most.
+
+Every 20 minutes it hits one of ten beaches with six pieces that lie ten minutes. Amber, pearls and tran are among them. A storm surge also fills the rain barrels of its island and drives its windmills ([Mill and bakery](help.game.fields#mill)).
 
 ## Characters of the world {#people}
 
-Ines and Bo are characters of the game. **Ines** keeps the fire: she says when it gets weak, goes out or burns again, and greets whoever says “hello”. **Bo** is the ferryman and walks back and forth between the places. You recognise other players by name; \`who\` shows everyone.`,
+The islands are home to figures the game runs itself. They gather, trade and keep fires like everyone else. The name on the map tells you who is not a person.
+
+- **Keepers:** nearly every fire has someone who feeds it and pays for wood: Hinnerk in Graue Bucht, Mats, Svea, Greta, Nele, Arne, Frida and Thies. On Nebelholm nobody keeps the fire.
+- **Ines** is in Graue Bucht by day (6 to 22 o'clock). She says when the fire gets weak, goes out or burns again, and greets whoever says “hello”.
+- **Bo** is the ferryman and walks back and forth between Graue Bucht and Klippenpfad.
+- **Traders, gatherers and craftspeople** like Marta, Kalle or Piet buy and sell. Speak to them and they name their prices.
+- **(KI)** after a name means a language model answers here, as with Ines, Merle, Hark and the stranger who turns up in dense fog. Without a model they doze and speak fixed lines.
+- **(Siedler)** after a name means a script plays this figure, not a person. Settlers gather, build, sow and trade like players. By default at least 30 figures are always about; for every person in the region one settler leaves.
+
+You recognise other players by name; \`who\` shows everyone.`,
 		},
 	},
 	{
@@ -528,74 +750,106 @@ Ines and Bo are characters of the game. **Ines** keeps the fire: she says when i
 			en: "Swapping, market board, recipes and jobs.",
 		},
 		body: {
-			de: `Handel steht Gästen nicht offen: Zum Tauschen, Handeln und Weitergeben brauchst du ein Konto ([Gast und Konto](help.game.account)).
+			de: `Auf den Inseln tauscht man direkt oder kauft am Marktbrett. Bezahlt wird in Münzen. Aus Strandgut stellst du Werkzeug und Waren her, und an den Tafeln warten Aufträge. Zum Tauschen, Handeln und Weitergeben brauchst du ein Konto ([Gast und Konto](help.game.account)).
 
 ## Tauschen {#swap}
 
-\`offer treibholz, muschel an Bert für münze\`: Du bietest \`Bert\` Treibholz und eine Muschel für eine Münze. Bert nimmt mit \`accept\` an oder lehnt mit \`decline\` ab. **Alles wechselt auf einmal oder gar nicht**: Es gibt keinen halben Tausch und kein Verdoppeln. Mit \`offer zurück\` nimmst du dein Angebot zurück.
+Ein Tausch geht zwischen zwei Leuten am selben Ort. Du nennst, was du gibst und was du dafür willst. Die andere Seite sagt ja oder nein.
+
+\`offer 3 treibholz, muschel an Bert für 2 münzen\`: Du bietest Bert drei Treibholz und eine Muschel für zwei Münzen. Dinge nennst du nach Art und Anzahl; ohne \`für …\` ist es ein Geschenk. Bert nimmt mit \`accept\` an oder lehnt mit \`decline\` ab. **Alles wechselt auf einmal oder gar nicht**: Es gibt keinen halben Tausch und kein Verdoppeln.
+
+Ein Angebot gilt zwei Minuten und endet, wenn einer den Ort verlässt. Mit \`offer zurück\` nimmst du es zurück. Bequemer geht es im Seitenfeld oder im Menü einer Figur: **Tausch anbieten** listet, was du trägst, je Art eine Zeile mit Anzahl; ein Klick legt eins zu „Du gibst“. Auch die Leute der Inseln tauschen: Sprich sie an, sie nennen dir ihre Preise.
 
 ## Marktbrett {#market}
 
-An der Grauen Bucht gibt es ein Marktbrett, Preise in **Münzen**:
+Am Marktbrett kaufst und verkaufst du, auch wenn der andere gerade nicht da ist. Die Ware wartet am Brett, bis jemand sie kauft. Die Preise sind auf jeder Insel andere.
+
+Marktbretter stehen an sechs Orten: Graue Bucht, Markt von Kupferhafen, Riffdorf, Schärenhafen, Rauchhafen und Krabbenbucht. Preise in **Münzen**:
 
 - \`markt\`: Angebote ansehen
 - \`markt biete <ding> für <n>\`: etwas für n Münzen einstellen
 - \`markt kaufe <nr>\`: Angebot Nummer nr kaufen
 - \`markt zurück <nr>\`: eigenes Angebot zurücknehmen
 
+Ein Angebot bleibt einen Tag stehen, dann kommt die Ware zurück.
+
 ## Handwerk {#craft}
+
+Aus wenigen Dingen machst du Nützliches. Manches braucht ein Werkzeug, manches eine Werkstatt. Werkzeug nutzt sich ab und zerbricht irgendwann.
 
 \`craft\` ohne Rezept zeigt die Liste, \`craft <rezept>\` stellt etwas her:
 
 | Rezept | Man braucht | Ergebnis |
 | --- | --- | --- |
+| Tangseil | 3 Tang | Ein Seil, das fast jeder Bau braucht |
 | Muschelmesser | 2 Muscheln, 1 Treibholz | Werkzeug, stumpft nach einigen Einsätzen ab |
 | Holzbündel | 3 Treibholz und ein Muschelmesser | Brennt vier Mal so lange wie ein Scheit |
+| Spaten | 2 Treibholz, 1 Tangseil | Gräbt Beete und Fluren um |
+| Netz | 2 Tangseil und ein Muschelmesser | Handelsware |
+| Bernsteinkette | 1 Bernstein, 2 Muscheln, 1 Tangseil und ein Muschelmesser | Handelsware |
 | Spindel | 1 Treibholz, 1 Muschel | Werkzeug zum Spinnen, nutzt sich ab |
-| Leinen | 3 Flachs und eine Spindel | Ein Ballen Leinen ([Äcker](help.game.garden#mill)) |
+| Leinen | 3 Flachs und eine Spindel | Ein Ballen Leinen ([Äcker](help.game.fields#mill)) |
 | Brot | 2 Mehl, 1 Kanne Wasser, 1 Treibholz, nur am Backhaus | 3 Brote |
-| Tuch | 3 Wolle und eine Spindel, nur am Webstuhl | Ein Stück Wolltuch ([Tiere](help.game.garden#animals)) |
+| Tuch | 3 Wolle und eine Spindel, nur am Webstuhl | Ein Stück Wolltuch ([Tiere](help.game.animals#products)) |
 | Daunendecke | 2 Tuch, 3 Daunen, nur am Webstuhl | Eine Decke |
 | Käse | 3 Milch, 1 Treibholz, nur an einer Hütte | Ein Käse |
-| Mausefalle | 1 Treibholz, 2 Muscheln, 1 Tangseil | In der Truhe fängt sie die Mäuse ([Wild](help.game.garden#wild)) |
+| Mausefalle | 1 Treibholz, 2 Muscheln, 1 Tangseil | In der Truhe fängt sie die Mäuse ([Wild](help.game.wild#shelter)) |
 
 ## Auftragstafel {#orders}
 
-\`auftrag\` zeigt die Tafel, \`auftrag nimm <nr>\` übernimmt einen Auftrag, \`auftrag liefere\` gibt die geforderten Dinge ab, \`auftrag aufgeben\` stellt einen eigenen ein. Der Lohn wird in Münzen gezahlt. Beispiele: Ines braucht 2 Treibholz für die Nacht, Bo sammelt 2 Muscheln für Netzgewichte; beides bringt eine Münze.`,
-			en: `Trade is not open to guests: to swap, trade and hand things on you need an account ([Guest and account](help.game.account)).
+An den Auftragstafeln suchen Leute Dinge gegen Lohn. Du nimmst einen Auftrag, besorgst, was fehlt, und lieferst ab. Der Lohn wird in Münzen gezahlt.
+
+Tafeln hängen an denselben sechs Orten wie die Marktbretter. \`auftrag\` zeigt die Tafel, \`auftrag nimm <nr>\` übernimmt einen Auftrag, \`auftrag liefere\` gibt die geforderten Dinge ab, an jeder Tafel. \`auftrag aufgeben\` gibt deinen Auftrag an die Tafel zurück. Du hast immer nur einen, und er gilt 30 Minuten. Beispiele: Ines braucht 2 Treibholz für die Nacht, Bo sammelt 2 Muscheln für Netzgewichte; beides bringt eine Münze.`,
+			en: `On the islands you swap directly or buy at the market board. You pay in coins. You make tools and goods from flotsam, and jobs wait on the boards. To swap, trade and hand things on you need an account ([Guest and account](help.game.account)).
 
 ## Swapping {#swap}
 
-\`offer treibholz, muschel an Bert für münze\`: you offer \`Bert\` driftwood and a shell for a coin. Bert accepts with \`accept\` or declines with \`decline\`. **Everything changes hands at once or not at all**: no half swaps and no duplicating. \`offer zurück\` takes your offer back. (The words \`an\` and \`für\` stay as they are in the command.)
+A swap happens between two people in the same place. You name what you give and what you want for it. The other side says yes or no.
+
+\`offer 3 driftwood, shell to Bert for 2 coins\`: you offer Bert three driftwood and a shell for two coins. You name things by kind and count; without \`for …\` it is a gift. Bert accepts with \`accept\` or declines with \`decline\`. **Everything changes hands at once or not at all**: no half swaps and no duplicating.
+
+An offer lasts two minutes and ends when one of you leaves the place. \`offer withdraw\` takes it back. It is easier in the side panel or a figure's menu: **Tausch anbieten** lists what you carry, one line per kind with its count; a click adds one to “Du gibst”. The people of the islands swap too: speak to them and they name their prices.
 
 ## Market board {#market}
 
-The Grey Bay has a market board, prices in **coins**:
+At the market board you buy and sell even when the other person is away. The goods wait at the board until someone buys them. Prices differ from island to island.
+
+Market boards stand in six places: Graue Bucht, the market of Kupferhafen, Riffdorf, Schärenhafen, Rauchhafen and Krabbenbucht. Prices in **coins**:
 
 - \`market\`: see the offers
-- \`market biete <thing> für <n>\`: post something for n coins
-- \`market kaufe <nr>\`: buy offer number nr
-- \`market zurück <nr>\`: take your own offer back
+- \`market sell <thing> for <n>\`: post something for n coins
+- \`market buy <nr>\`: buy offer number nr
+- \`market withdraw <nr>\`: take your own offer back
+
+An offer stays up for a day, then the goods come back.
 
 ## Crafting {#craft}
+
+You turn a few things into useful ones. Some recipes need a tool, some a workshop. Tools wear and break in the end.
 
 \`craft\` without a recipe shows the list, \`craft <recipe>\` makes something:
 
 | Recipe | You need | Result |
 | --- | --- | --- |
+| Kelp rope | 3 kelp | A rope nearly every building needs |
 | Shell knife | 2 shells, 1 driftwood | A tool; it blunts after a few uses |
 | Wood bundle | 3 driftwood and a shell knife | Burns four times as long as one log |
+| Spade | 2 driftwood, 1 kelp rope | Digs beds and fields |
+| Net | 2 kelp rope and a shell knife | Trade goods |
+| Amber necklace | 1 amber, 2 shells, 1 kelp rope and a shell knife | Trade goods |
 | Spindle | 1 driftwood, 1 shell | A tool for spinning; it wears |
-| Linen | 3 flax and a spindle | A bolt of linen ([fields](help.game.garden#mill)) |
+| Linen | 3 flax and a spindle | A bolt of linen ([fields](help.game.fields#mill)) |
 | Bread | 2 flour, 1 can of water, 1 driftwood, only at a bakery | 3 loaves |
-| Cloth | 3 wool and a spindle, only at a loom | A piece of woollen cloth ([animals](help.game.garden#animals)) |
+| Cloth | 3 wool and a spindle, only at a loom | A piece of woollen cloth ([animals](help.game.animals#products)) |
 | Down blanket | 2 cloth, 3 down, only at a loom | A blanket |
 | Cheese | 3 milk, 1 driftwood, only at a hut | A cheese |
-| Mousetrap | 1 driftwood, 2 shells, 1 kelp rope | In a chest it catches the mice ([wild](help.game.garden#wild)) |
+| Mousetrap | 1 driftwood, 2 shells, 1 kelp rope | In a chest it catches the mice ([wild](help.game.wild#shelter)) |
 
 ## Job board {#orders}
 
-\`order\` shows the board, \`order nimm <nr>\` takes a job, \`order liefere\` hands in the demanded things, \`order aufgeben\` posts your own. The reward is paid in coins. Examples: Ines needs 2 driftwood for the night, Bo collects 2 shells for net weights; each pays one coin.`,
+On the job boards people look for things in return for pay. You take a job, get what is missing and deliver. The reward is paid in coins.
+
+Boards hang in the same six places as the market boards. \`order\` shows the board, \`order take <nr>\` takes a job, \`order deliver\` hands in the demanded things, at any board. \`order abandon\` gives your job back to the board. You hold one at a time, and it lasts 30 minutes. Examples: Ines needs 2 driftwood for the night, Bo collects 2 shells for net weights; each pays one coin.`,
 		},
 	},
 	{
@@ -607,15 +861,34 @@ The Grey Bay has a market board, prices in **coins**:
 			en: "Build a hut together in a fire's light, with a chest, repairs and demolition.",
 		},
 		body: {
-			de: `Bauen geht nur im **Licht eines Leuchtfeuers**: Wo kein Feuer brennt, steckt niemand eine Baustelle ab. Jedes Feuer trägt nur so viele Bauten, wie sein Licht reicht. Abstecken und besitzen braucht ein Konto; mitbauen dürfen auch Gäste ([Gast und Konto](help.game.account)).
+			de: `Im Licht eines Feuers könnt ihr gemeinsam bauen. Einer steckt eine Baustelle ab, alle bringen Material und packen mit an. Was fertig ist, steht auf der Karte und gehört dem, der es begonnen hat. Ein Bau will gepflegt werden, sonst verfällt er.
+
+Wo kein Feuer brennt, steckt niemand eine Baustelle ab. Jedes Feuer hat **20 Lichtpunkte**, und jeder Bau nimmt ihm einen oder zwei davon. Abstecken und besitzen braucht ein Konto; mitbauen dürfen auch Gäste ([Gast und Konto](help.game.account)). Wer hier wen bauen lässt, kann eine [Siedlung](help.game.village#settlement) regeln.
 
 ## Baustelle abstecken {#stake}
 
-\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Eine Hütte braucht 2×2 Felder, **6 Treibholz, 2 Tangseil und 20 Arbeit**. Die **Regentonne** (1 Feld, 3 Treibholz, 1 Tangseil, 4 Arbeit) gibt Wasser für die [Gärten](help.game.garden), die **Vogelscheuche** (1 Feld, 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von ihnen fern. **Windmühle** und **Backhaus** machen aus Korn Mehl und Brot ([Mühle und Backhaus](help.game.garden#mill)), **Hühnerstall** und **Gehege** halten [Tiere](help.game.garden#animals), am **Webstuhl** wird aus Wolle Tuch.
+Du wählst einen Plan und einen freien Platz. Das geht mit einem Befehl oder mit der rechten Maustaste auf einem freien Feld. Danach wartet die Baustelle auf Material und Hände.
 
-Nicht gebaut wird auf Ausgängen und Türen, direkt am Feuer, auf Dingen oder Personen. Wege bleiben frei: Ausgänge, der Startplatz und eine Seite jedes Feuers bleiben erreichbar. In einen Bau läuft niemand hinein.
+\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Du hast höchstens eine offene Baustelle und zusammen fünf Baustellen und Bauten.
+
+| Plan | Felder | Material | Arbeit | Licht | ab Stufe |
+| --- | --- | --- | --- | --- | --- |
+| Hütte | 2×2 | 6 Treibholz, 2 Tangseil | 20 | 1 | Fischerdorf |
+| Regentonne | 1×1 | 3 Treibholz, 1 Tangseil | 4 | 1 | Fischerdorf |
+| Vogelscheuche | 1×1 | 2 Treibholz, 1 Tangseil | 3 | 1 | Fischerdorf |
+| Hühnerstall | 2×1 | 4 Treibholz, 1 Tangseil | 6 | 1 | Fischerdorf |
+| Windmühle | 2×2 | 8 Treibholz, 2 Tangseil, 2 Leinen | 16 | 2 | Dorf |
+| Backhaus | 2×2 | 6 Treibholz, 6 Muscheln, 1 Tangseil | 12 | 2 | Dorf |
+| Gehege | 3×3 | 8 Treibholz, 4 Tangseil | 8 | 2 | Dorf |
+| Webstuhl | 2×1 | 6 Treibholz, 2 Tangseil | 8 | 1 | Dorf |
+
+Die Regentonne gibt Wasser für die [Gärten](help.game.garden), die Vogelscheuche hält [Hasen und Rehe](help.game.wild#shelter) fern. Windmühle und Backhaus machen aus Korn Mehl und Brot ([Mühle und Backhaus](help.game.fields#mill)), Hühnerstall und Gehege halten [Tiere](help.game.animals), am Webstuhl wird aus Wolle [Tuch](help.game.animals#products).
+
+Nicht gebaut wird auf gepflasterten Wegen und Plätzen, auf Ausgängen und Türen, direkt am Feuer, auf Dingen oder Personen. Ausgänge, der Startplatz und eine Seite jedes Feuers bleiben immer erreichbar. In einen Bau läuft niemand hinein.
 
 ## Liefern und mitarbeiten {#help}
+
+Jeder darf an einer Baustelle mithelfen, auch ohne Konto. Du bringst Material oder arbeitest ein Stück mit.
 
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
@@ -627,39 +900,49 @@ Liefern und arbeiten geht **aus bis zu zwei Feldern Abstand**, so haben viele um
 
 ## Die Truhe {#chest}
 
+Eine Hütte hat eine Truhe für deine Sachen. Was darin liegt, trägst du nicht mehr mit dir herum.
+
 Die Hütte hat eine Truhe mit 12 Plätzen, die **nur dir** gehört: \`truhe\` zeigt sie, \`verstaue 3 muscheln\` (oder „leg die muscheln in die truhe“) legt etwas hinein, \`entnimm 2 muscheln\` (oder „nimm … aus der truhe“) holt es heraus. Dafür stehst du direkt neben der Hütte.
 
 ## Verfall, Ruine und Nachlass {#decay}
 
-Ein Bau hält **eine Woche**. \`repariere\` (1 Treibholz, jeder darf helfen) setzt die Frist neu. Wer ihn verfallen lässt, hat eine **Ruine**: Sie steht noch zehn Welttage und gibt das Licht des Feuers frei. Was in der Truhe lag, wartet einen Monat als **Nachlass**; \`nachlass\` an der Ruine holt es ab.
+Nichts hält ewig. Wer einen Bau nicht ausbessert, verliert ihn, aber nicht seine Sachen.
+
+Ein Bau hält **eine Woche**, die Vogelscheuche drei Tage. \`repariere\` kostet ein Stück Material (meist 1 Treibholz, beim Backhaus 1 Muschel, bei der Vogelscheuche 1 Tang), jeder darf helfen, und die Frist beginnt neu. Wer ihn verfallen lässt, hat eine **Ruine**: Sie steht noch zehn Welttage und gibt das Licht des Feuers frei. Was in der Truhe lag, wartet einen Monat als **Nachlass**; \`nachlass\` an der Ruine holt es ab.
 
 ## Abriss {#demolish}
 
-\`abriss\` (oder „reiß die hütte ab“) an deinem Bau gibt die Fläche und das Licht frei, die Hälfte des Materials und den Inhalt der Truhe zurück. Eine aufgegebene Baustelle gibt alles Gelieferte zurück.
+Du kannst jederzeit abreißen, was dir gehört. Einen Teil des Materials bekommst du zurück.
 
-## Epochen {#epochs}
+\`abriss\` (oder „reiß die hütte ab“) an deinem Bau gibt die Fläche und das Licht frei, die Hälfte des Materials und den Inhalt der Truhe zurück. Eine aufgegebene Baustelle gibt alles Gelieferte zurück.`,
+			en: `In a fire's light you can build together. One person stakes out a site, everyone brings material and lends a hand. What is finished stands on the map and belongs to whoever started it. A building wants looking after, or it decays.
 
-Jede Insel steht auf einer Stufe: **Fischerdorf**, **Dorf**, **Stadt**, **Netz**. Sie zählt ihren gehaltenen Bestand, jeden Bau, jedes Beet und jede Flur, die noch stehen, mit so vielen Punkten, wie sie vom Licht eines Feuers nehmen. Beete zählen so viel wie Bauten.
-
-| Stufe | ab Punkten | neu |
-| --- | --- | --- |
-| Fischerdorf | 0 | Hütte, Hühnerstall, Regentonne, Vogelscheuche, Beete |
-| Dorf | 15 | Windmühle, Backhaus, Gehege, Webstuhl, Fluren |
-| Stadt | 40 | (noch keine Pläne) |
-| Netz | 80 | (noch keine Pläne) |
-
-Die Schwellen kann der Betreiber ändern, etwa für einen Server mit wenigen Spielern. Gezählt wird jede Weltstunde; ändert sich die Stufe, hören es alle Räume der Insel. Verfällt zu viel, fällt die Insel zurück: was steht, arbeitet weiter (die Mühle mahlt, das Backhaus backt), nur neue Pläne der höheren Stufe warten, bis der Bestand wieder reicht. \`epoche\` zeigt Stufe und Punkte der Insel, auf der du stehst.
-
-Figuren mit dem Zusatz **(Siedler)** spielt ein Skript, kein Mensch: sie sammeln, bauen, säen und handeln, wo gerade wenige Menschen spielen, und werden weniger, wenn mehr Menschen kommen.`,
-			en: `Building is possible only in a **beacon's light**: where no fire burns, nobody stakes out a site. Each fire carries only as many buildings as its light reaches. Staking out and owning need an account; guests may help build ([Guest and account](help.game.account)).
+Where no fire burns, nobody stakes out a site. Every fire has **20 light points**, and each building takes one or two of them. Staking out and owning need an account; guests may help build ([Guest and account](help.game.account)). A [settlement](help.game.village#settlement) can rule who builds where.
 
 ## Staking out a site {#stake}
 
-\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. A hut takes 2×2 cells, **6 driftwood, 2 kelp rope and 20 work**. The **rain barrel** (1 cell, 3 driftwood, 1 kelp rope, 4 work) gives water for the [gardens](help.game.garden), the **scarecrow** (1 cell, 2 driftwood, 1 kelp rope, 3 work) keeps the hares from them. The **windmill** and the **bakery** turn grain into flour and bread ([Mill and bakery](help.game.garden#mill)), the **hen house** and the **pen** keep [animals](help.game.garden#animals), the **loom** turns wool into cloth.
+You choose a plan and a free spot. You do it with a command or with the right mouse button on a free cell. Then the site waits for material and hands.
 
-Nothing is built on exits and doors, right at a fire, on things or people. Ways stay open: exits, the starting place and one side of every fire stay reachable. Nobody walks into a building.
+\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. You hold at most one open site and five sites and buildings together.
+
+| Plan | Cells | Material | Work | Light | from stage |
+| --- | --- | --- | --- | --- | --- |
+| Hütte (hut) | 2×2 | 6 driftwood, 2 kelp rope | 20 | 1 | fishing village |
+| Regentonne (rain barrel) | 1×1 | 3 driftwood, 1 kelp rope | 4 | 1 | fishing village |
+| Vogelscheuche (scarecrow) | 1×1 | 2 driftwood, 1 kelp rope | 3 | 1 | fishing village |
+| Hühnerstall (hen house) | 2×1 | 4 driftwood, 1 kelp rope | 6 | 1 | fishing village |
+| Windmühle (windmill) | 2×2 | 8 driftwood, 2 kelp rope, 2 linen | 16 | 2 | village |
+| Backhaus (bakery) | 2×2 | 6 driftwood, 6 shells, 1 kelp rope | 12 | 2 | village |
+| Gehege (pen) | 3×3 | 8 driftwood, 4 kelp rope | 8 | 2 | village |
+| Webstuhl (loom) | 2×1 | 6 driftwood, 2 kelp rope | 8 | 1 | village |
+
+The rain barrel gives water for the [gardens](help.game.garden), the scarecrow keeps [hares and deer](help.game.wild#shelter) away. The windmill and the bakery turn grain into flour and bread ([Mill and bakery](help.game.fields#mill)), the hen house and the pen keep [animals](help.game.animals), the loom turns wool into [cloth](help.game.animals#products).
+
+Nothing is built on cobbled paths and squares, on exits and doors, right at a fire, on things or people. Exits, the starting place and one side of every fire always stay reachable. Nobody walks into a building.
 
 ## Delivering and helping {#help}
+
+Anyone may help at a site, even without an account. You bring material or work on it for a while.
 
 | Command | Also | Effect |
 | --- | --- | --- |
@@ -671,30 +954,21 @@ Delivering and working work **from up to two cells away**, so many fit around a 
 
 ## The chest {#chest}
 
+A hut has a chest for your things. What lies in it you no longer carry around.
+
 The hut has a chest with 12 places that is **yours alone**: \`truhe\` (\`chest\`) shows it, \`verstaue 3 muscheln\` (\`store\`, or “leg die muscheln in die truhe”) puts something in, \`entnimm 2 muscheln\` (\`retrieve\`) takes it out. You stand right next to the hut for that.
 
 ## Decay, ruin and estate {#decay}
 
-A building lasts **a week**. \`repariere\` (\`repair\`; 1 driftwood, anyone may help) sets the time anew. Let it decay and it becomes a **ruin**: it stands ten more world days and frees the fire's light. What lay in the chest waits a month as an **estate**; \`nachlass\` (\`estate\`) at the ruin collects it.
+Nothing lasts for ever. If you do not repair a building you lose it, but not your things.
+
+A building lasts **a week**, a scarecrow three days. \`repariere\` (\`repair\`) costs one piece of material (mostly 1 driftwood, 1 shell for a bakery, 1 kelp for a scarecrow), anyone may help, and the time starts anew. Let it decay and it becomes a **ruin**: it stands ten more world days and frees the fire's light. What lay in the chest waits a month as an **estate**; \`nachlass\` (\`estate\`) at the ruin collects it.
 
 ## Demolition {#demolish}
 
-\`abriss\` (\`demolish\`, or “reiß die hütte ab”) at your building frees the land and the light and gives back half the material and the chest's contents. A site given up gives back everything delivered.
+You can tear down what is yours at any time. You get part of the material back.
 
-## Epochs {#epochs}
-
-Every island stands at a stage: **fishing village**, **village**, **town**, **net**. It counts its held stock, every building, bed and field still standing, with as many points as each takes of a fire's light. Beds count as much as buildings.
-
-| Stage | from points | new |
-| --- | --- | --- |
-| Fishing village | 0 | hut, coop, rain barrel, scarecrow, beds |
-| Village | 15 | windmill, bakery, pen, loom, fields |
-| Town | 40 | (no plans yet) |
-| Net | 80 | (no plans yet) |
-
-The operator can change the thresholds, say for a server with few players. The count runs every world hour; when the stage changes, every room of the island hears it. If too much decays, the island falls back: what stands goes on working (the mill grinds, the bakery bakes), only new plans of the higher stage wait until the stock is enough again. \`epoche\` shows the stage and points of the island you stand on.
-
-Figures marked **(Siedler)** are played by a script, not a person: they gather, build, sow and trade where few people are playing, and there are fewer of them when more people come.`,
+\`abriss\` (\`demolish\`, or “reiß die hütte ab”) at your building frees the land and the light and gives back half the material and the chest's contents. A site given up gives back everything delivered.`,
 		},
 	},
 	{
@@ -702,19 +976,25 @@ Figures marked **(Siedler)** are played by a script, not a person: they gather, 
 		section: "play",
 		title: { de: "Gärten: Beet, Samen, Gießen, Ernte", en: "Gardens: bed, seeds, watering, harvest" },
 		short: {
-			de: "Mit einem Spaten im Licht ein Beet anlegen, Samen aus der wilden Flora pflanzen, gießen, jäten und ernten; im Zierbeet neue Sorten kreuzen, am Gemeinschaftsbeet mit allen gärtnern.",
-			en: "Dig a bed in the light with a spade, plant seeds from the wild flora, water, weed and harvest; cross new sorts in a flower bed, garden with everyone at a community bed.",
+			de: "Beet anlegen, Samen pflanzen, gießen, jäten und ernten; neue Sorten kreuzen.",
+			en: "Dig a bed, plant seeds, water, weed and harvest; cross new sorts.",
 		},
 		body: {
-			de: `Gärten zählen so viel wie Bauten. Ein Beet braucht wie eine Hütte das **Licht eines Leuchtfeuers** und belegt einen Lichtpunkt des Feuers. Anlegen braucht ein Konto; als **Pate** gießen und ernten dürfen auch Gäste.
+			de: `Ein Garten wächst mit der Zeit und will gepflegt werden. Du gräbst ein Beet um, pflanzt Samen, gießt und erntest. Gärten bringen eine Insel genauso voran wie Bauten. Dafür brauchst du einen Spaten, Wasser und das Licht eines Feuers.
+
+Ein Beet belegt einen Lichtpunkt des Feuers. Anlegen braucht ein Konto; als **Pate** gießen und ernten dürfen auch Gäste. Größer sind die [Äcker](help.game.fields), und was im Nebel an den Beeten frisst, steht unter [Wild](help.game.wild).
 
 ## Spaten und Beet {#bed}
+
+Ein Beet ist ein kleines Stück Land, das dir gehört. Zuerst brauchst du einen Spaten.
 
 \`craft spaten\` macht aus **2 Treibholz und 1 Tangseil** einen Spaten. Damit gräbt \`umgraben\` neben dir ein Beet um (2×2 Felder), \`umgraben <x> <y>\` an einer bestimmten Stelle. Jeder hat höchstens drei Beete. Wie bei Bauten bleiben Ausgänge, Türen und der Platz am Feuer frei, und niemand läuft durch ein Beet.
 
 \`beet\` zeigt die Beete hier: was wächst, wann zuletzt gegossen wurde, ob Unkraut darin ist. \`beet aufgeben\` macht deins wieder zu Gras. Ein Beet, das zwei Wochen niemand pflegt, wächst von selbst zu.
 
 ## Samen {#seeds}
+
+Samen findest du in der wilden Natur der Inseln, oder du kaufst sie bei Gesa. Nicht jede Sorte wächst überall.
 
 \`sammle samen\` sucht in der wilden Flora des Ortes nach Samen; das klappt nicht jedes Mal, danach wartest du eine Weltstunde.
 
@@ -730,15 +1010,21 @@ Figures marked **(Siedler)** are played by a script, not a person: they gather, 
 
 ## Wasser und Pflege {#care}
 
+Pflanzen brauchen Wasser, sonst welken sie. Du holst es aus einer Regentonne und gießt damit das ganze Beet.
+
 Wasser kommt aus der **Regentonne** (\`bau regentonne\`: 3 Treibholz, 1 Tangseil, 4 Arbeit). \`schöpfe\` neben der Tonne füllt eine **Kanne Wasser**; die Tonne fasst sechs, bekommt alle acht Weltstunden eine dazu und ist nach einer Sturmflut auf ihrer Insel voll. \`gieße\` gießt mit einer Kanne das ganze Beet.
 
 Eine Pflanze wächst in Stufen: **Saat**, **Keim**, **reif**, **welk**. Steht sie beim nächsten Schritt länger als 16 Weltstunden ohne Wasser, welkt sie. Eine reife Pflanze welkt nach ein bis drei Tagen. **Nebel** und **Unkraut** lassen sie langsamer wachsen: ein brennendes Feuer hilft auch dem Garten. \`jäte\` zieht Unkraut und Welkes heraus.
 
 ## Ernten {#harvest}
 
+Reife Pflanzen gehören in die Tasche, bevor sie welken. Dabei bekommst du auch neue Samen.
+
 \`ernte\` holt alles Reife des Beets in deine Tasche, mit Samen. Stehen mehrere am Beet, bekommt jede Pflanze genau einer.
 
 ## Zierbeet und Gemeinschaftsbeet {#kinds}
+
+Es gibt drei Arten von Beeten. Das Gartenbeet nimmt alles, das Zierbeet nur Blumen, und das Gemeinschaftsbeet gehört allen.
 
 \`umgraben\` legt ein **Gartenbeet** an, in dem Gemüse und Blumen wachsen. \`umgraben zier\` gräbt ein **Zierbeet** um: Dort wachsen nur Blumen (Strandnelke, Dünenrose, Nebelblume), und nur dort kreuzen sie sich. Es zählt wie jedes Beet zu deinen dreien.
 
@@ -746,105 +1032,40 @@ Eine Pflanze wächst in Stufen: **Saat**, **Keim**, **reif**, **welk**. Steht si
 
 ## Kreuzen und Benennen {#breeding}
 
+Blumen können sich kreuzen und eine ganz neue Sorte ergeben. Wer sie zieht, darf ihr einen Namen geben.
+
 Reift im Zierbeet eine Blume, neben der (nicht über Eck) eine Blume einer anderen Sorte steht, ist bei der Ernte manchmal ein **Kreuzungssamen** dabei. Was daraus wächst, hat eine eigene Farbe zwischen den Farben seiner Eltern. Eine Kreuzung kreuzt sich weiter, auch mit ihrer eigenen Ausgangssorte.
 
 Wer sie gezogen hat, gibt ihr mit \`benenne <name>\` einen Namen, einmal und für immer: Dann heißen ihre Samen „<Name>-Samen“ und ihre Blumen wie die Sorte, und wer sie erntet oder geschenkt bekommt, trägt den Namen weiter. Ein Name hat 3 bis 24 Buchstaben, ist noch nicht vergeben und bezeichnet nichts, was es in der Welt oder als Befehl schon gibt.
 
 ## Die Gärtnerin {#gardener}
 
+Gesa hilft allen, die anfangen. Bei ihr gibt es Samen, Saatgut und Tiere.
+
 **Gesa** in Kupferhafen sammelt selbst Samen in der Flora des Hafens und verkauft sie am Markt; sie kauft Blumen und Gemüse. Ihre Suchaufträge hängen an der Tafel („Gesa sucht eine Nebelblume“). Wer sie anspricht, erfährt ihre Preise.
-
-## Hasen aus dem Nebel {#hares}
-
-Wo das Feuer nicht brennt, kommen aus dem Nebel **Hasen** an die Beete: je dichter der Nebel, desto öfter, nachts doppelt so oft, nie mehr als zwei auf einmal in einem Ort. Solange das Feuer brennt, bleibt jeder Hase fort. Ein Hase sitzt eine halbe Weltstunde am Beet, dann frisst er: Eine Pflanze fällt eine Stufe zurück, ein Setzling ist weg. Die letzte lebende Pflanze eines Beets lässt er stehen.
-
-\`scheuche hase\` jagt ihn aus bis zu drei Schritten fort, bevor er frisst; das darf jeder, auch ein Gast, und wer zuerst kommt, rettet das Beet. Dauerhaft schützt ein **Zaun**: \`zäune\` setzt neben dem Beet für **2 Treibholz und 1 Tangseil** einen um dein Beet (oder eins, das du pflegen darfst). Auch eine **Vogelscheuche** (\`bau vogelscheuche\`: 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von allen Beeten in bis zu drei Feldern ab; sie steht drei Tage, dann will sie ausgebessert werden (1 Tang).
 
 ## Patenschaft {#sponsor}
 
+Du musst nicht jeden Tag da sein. Ein Pate kümmert sich um dein Beet, solange du fort bist.
+
 \`pate <name>\` lässt jemanden dein Beet gießen, jäten und ernten, ohne dass es ihm gehört; auch einen Gast. So bleibt es gepflegt, wenn du ein paar Tage nicht spielst. \`pate weg <name>\` beendet es, \`pate\` allein zeigt die Paten.
 
-Gießen, jäten, ernten und pflanzen gehen aus bis zu **zwei Feldern** Abstand. Die rechte Maustaste auf einem Beet bietet an, was du dort tun kannst.
+Gießen, jäten, ernten und pflanzen gehen aus bis zu **zwei Feldern** Abstand. Die rechte Maustaste auf einem Beet bietet an, was du dort tun kannst.`,
+			en: `A garden grows over time and wants looking after. You dig a bed, plant seeds, water and harvest. Gardens move an island forward just as buildings do. You need a spade, water and a fire's light.
 
-## Äcker {#fields}
-
-Größer als ein Beet ist die **Flur**: 4×4 Felder, eine je Konto, im Licht eines Feuers (zwei Lichtpunkte). Mit einem Spaten bricht \`flur anlegen\` sie neben dir um, \`flur anlegen <x> <y>\` an einer bestimmten Stelle. Eine Flur trägt **eine** Frucht, braucht kaum tägliche Pflege, aber zwei Stöße Arbeit.
-
-**Bestellen:** Wer die Flur anlegte, wählt die Frucht mit \`bestelle gerste\`. Dann braucht sie **4 Saatgut und 2 Arbeit**: Jedes \`bestelle\` bringt, was du an Saatgut trägst, und einen Arbeitspunkt; danach ruhst du eine Weltstunde, wie an der Baustelle.
-
-| Frucht | Saatgut | Woher | Art | Ertrag |
-| --- | --- | --- | --- | --- |
-| Weizen | Weizen | Gesa | Getreide | 16 Weizen |
-| Gerste | Gerste | wild, wo Kräuter wachsen | Getreide | 16 Gerste |
-| Hafer | Hafer | wild: Graue Insel, Nebelholm, Schären | Getreide | 16 Hafer |
-| Kartoffeln | Kartoffel | Gesa | Hackfrucht | 24 Kartoffeln |
-| Rüben | Rübensamen | wild: Graue Insel, Kupferhafen, Krabbensand | Rüben | 16 Rüben, 8 Rübensamen |
-| Flachs | Leinsamen | wild, wo Blumen blühen | Flachs | 16 Flachs, 8 Leinsamen |
-
-**Ernteeinsatz:** Nach zwei bis drei Tagen ist die Flur reif und bleibt es zwei Tage. Jedes \`ernte\` an ihr ist ein Arbeitspunkt (8 für eine Flur) und gibt dir deinen Anteil sofort in die Tasche. Allein dauert das acht Stunden; acht Hände bringen sie in einer ein, und jedes Korn bekommt genau einer. Danach ist die Flur **überreif**, jeder Anteil nur noch halb so groß, und noch zwei Tage später ist die Frucht verdorben.
-
-\`flur offen\` lässt jeden mitsäen und miternten, auch Gäste, und jeder behält seinen Anteil; \`flur zu\` schließt sie wieder.
-
-**Fruchtfolge:** Dieselbe Art zweimal hintereinander macht den Boden müde, er gibt nur noch 60 %, beim dritten Mal 35 %. Eine andere Art oder drei Tage Brache heilen ihn: Getreide, dann Kartoffeln, dann Rüben oder Ruhe. \`flur\` zeigt den Boden. Eine Flur, an der zwei Wochen niemand arbeitet, verwildert.
-
-## Mühle und Backhaus {#mill}
-
-Aus der Ernte wird mehr: **Korn → Mehl → Brot** und **Flachs → Leinen**.
-
-**Windmühle** (\`bau windmühle\`: 2×2 Felder, 8 Treibholz, 2 Tangseil, **2 Leinen** für die Flügel, 16 Arbeit). Mahlen darf jeder an jeder Mühle: \`mahle alle weizen\` schüttet dein Korn hinein (Weizen, Gerste oder Hafer, bis 12 auf einmal, höchstens drei Säcke je Figur). Sie mahlt eine Weltstunde je Handvoll, was vor dir kam, zuerst. \`mahle\` allein sagt, wie lange sie noch zu tun hat; ist dein Mehl fertig, holt \`abholen\` es (bis zwei Felder Abstand). Bei **Sturmflut** auf ihrer Insel dreht sie schneller und mahlt sechs Stunden voraus. Fällt die Mühle, bevor dein Korn gemahlen ist, holst du an ihrer Stelle dein Korn zurück. Was zwei Wochen niemand abholt, ist verloren.
-
-**Backhaus** (\`bau backhaus\`: 2×2 Felder, 6 Treibholz, 6 Muscheln, 1 Tangseil, 12 Arbeit). Daneben bäckt \`backe brot\` aus **2 Mehl, einer Kanne Wasser und einem Scheit Treibholz** drei Brote, an jedem Backhaus, wem es auch gehört.
-
-**Leinen** spinnt man aus Flachs: \`craft spindel\` (1 Treibholz, 1 Muschel), dann \`craft leinen\` (3 Flachs). Leinen braucht die Mühle für ihre Flügel; die Werft zahlt dafür.
-
-Brot, Mehl und Leinen kauft Marta am Markt von Kupferhafen, und die Auftragstafeln fragen danach. Was man vermahlt, sät man nicht: Korn ist Brot und Saatgut zugleich.
-
-## Tiere {#animals}
-
-Die Fluren füttern auch den Hof. **Hühner** wohnen im **Hühnerstall** (\`bau hühnerstall\`: 2×1 Felder, 4 Treibholz, 1 Tangseil, 6 Arbeit, bis 6 Hühner), **Schafe**, **Ziegen**, **Enten** oder **Gänse** im **Gehege** (\`bau gehege\`: 3×3 Felder, 8 Treibholz, 4 Tangseil, 8 Arbeit, bis 4 Tiere einer Art).
-
-Tiere verkauft Gesa am Markt von Kupferhafen. \`einstallen huhn\` bringt eines, das du trägst, in deinen Stall, \`ausstallen\` nimmt eins heraus. \`stall\` zeigt, wie es ihnen geht.
-
-**Füttern** darf jeder: \`füttere\` gibt Futter aus deiner Tasche, ein Futter macht ein Tier einen Tag satt, bis zu drei Tage im Voraus.
-
-| Tier | frisst | gibt, wenn es satt ist |
-| --- | --- | --- |
-| Huhn | Tang, Kohl, Möhren, Weizen, Gerste, Hafer | ein Ei am Tag |
-| Schaf | Rüben, Hafer, Gerste, Kohl, Tang | Wolle alle zwei Tage |
-| Ziege | Rüben, Hafer, Gerste, Kohl, Möhren, Tang | Milch am Tag |
-| Ente | Tang, Kohl, Weizen, Gerste, Hafer | ein Ei am Tag |
-| Gans | Gerste, Hafer, Kohl, Rüben, Tang | Daunen alle drei Tage |
-
-Satte **Gänse** halten Wache: In ihrem Raum kommt kein Hase an die Beete und kein Fuchs in den Stall, sie schnattern ihn fort.
-
-Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nichts. Bis zu drei je Tier warten im Stall; \`einsammeln\` (auch \`sammle eier\`, \`melke\`, \`schere\`) holt sie, nur der Besitzer. Zwei satte Tiere einer Art bekommen ab und zu ein Junges, bis der Stall voll ist. Reißt du den Stall ab, kommen die Tiere in deine Tasche zurück; verfällt er, warten sie im Nachlass.
-
-**Was daraus wird:** Am **Webstuhl** (\`bau webstuhl\`: 2×1 Felder, 6 Treibholz, 2 Tangseil, 8 Arbeit) webt \`craft tuch\` aus 3 Wolle mit einer Spindel ein Tuch, und \`craft decke\` näht aus 2 Tuch und 3 Daunen eine Daunendecke. Am Herd einer **Hütte** macht \`craft käse\` aus 3 Milch und einem Scheit Treibholz einen Käse. Gesa kauft Eier, Wolle, Milch und Daunen, Marta Tuch, Decken und Käse.
-
-## Rehe, Füchse, Mäuse; Hund und Katze {#wild}
-
-Nicht nur Hasen kommen aus dem Nebel, wo kein Feuer brennt: **Rehe** fressen sich an einer wachsenden Flur satt (jeder Besuch kostet einen Teil der Ernte, aber sie gibt immer gut die Hälfte), **Füchse** holen fast nur nachts ein Tier aus dem Hühnerstall (nie das letzte), **Mäuse** nagen an Korn, Mehl, Brot und Käse in der Truhe einer Hütte (nie am letzten Stück). Wie die Hasen fressen sie erst nach einer Weile; \`scheuche reh\`, \`scheuche fuchs\` oder \`scheuche maus\` aus bis zu drei Schritten jagt sie fort.
-
-| Schutz | wogegen |
-| --- | --- |
-| Zaun um die Flur (\`zäune\`: 6 Treibholz, 2 Tangseil) | Rehe |
-| Zaun mit Tür um den Hühnerstall (\`zäune\`: 3 Treibholz, 1 Tangseil) | Füchse |
-| Vogelscheuche (Beete und Fluren in drei Feldern) | Hasen, Rehe |
-| Mausefalle in der Truhe (\`craft mausefalle\`) | Mäuse |
-| satte Gänse im Raum | Hasen, Füchse |
-| ein satter Hund im Raum | Hasen, Rehe, Füchse |
-| eine satte Katze im Raum | Mäuse |
-
-**Hund und Katze** verkauft Gesa. \`einstallen hund\` lässt ihn an einem deiner Bauten wachen (einer je Bau), \`ausstallen hund\` nimmt ihn wieder mit. Satt hält er sein Wild aus dem ganzen Raum fern, also auch von den Beeten und Fluren der Nachbarn. \`füttere hund\` (jeder darf) macht ihn mit einem Ei, Brot, Käse oder Milch einen Tag satt, bis zu drei Tage im Voraus; eine Katze frisst Milch, Eier und Käse. \`wache\` zeigt, wer im Raum wacht.`,
-			en: `Gardens count as much as buildings. Like a hut, a bed needs a **beacon's light** and takes one of the fire's light points. Digging one needs an account; as a **sponsor** guests may water and harvest too.
+A bed takes one of the fire's light points. Digging one needs an account; as a **sponsor** guests may water and harvest too. Larger plots are the [fields](help.game.fields), and what eats at the beds in the fog is under [wild animals](help.game.wild).
 
 ## Spade and bed {#bed}
+
+A bed is a small piece of land that is yours. First you need a spade.
 
 \`craft spaten\` makes a spade from **2 driftwood and 1 kelp rope**. With it \`umgraben\` digs a bed next to you (2×2 cells), \`umgraben <x> <y>\` at a given spot. Everyone has at most three beds. As with buildings, exits, doors and the place at the fire stay free, and nobody walks through a bed.
 
 \`beet\` (\`bed\`) shows the beds here: what grows, when they were last watered, whether weeds grow. \`beet aufgeben\` turns yours back into grass. A bed nobody tends for two weeks grows over by itself.
 
 ## Seeds {#seeds}
+
+You find seeds in the wild plants of the islands, or you buy them from Gesa. Not every sort grows everywhere.
 
 \`sammle samen\` looks for seeds in the place's wild flora; it does not work every time, and afterwards you wait a world hour.
 
@@ -860,15 +1081,21 @@ Nicht nur Hasen kommen aus dem Nebel, wo kein Feuer brennt: **Rehe** fressen sic
 
 ## Water and care {#care}
 
+Plants need water or they wilt. You fetch it from a rain barrel and water the whole bed with it.
+
 Water comes from the **rain barrel** (\`bau regentonne\`: 3 driftwood, 1 kelp rope, 4 work). \`schöpfe\` (\`fill\`) next to the barrel fills a **can of water**; the barrel holds six, gains one every eight world hours and is full after a storm surge on its island. \`gieße\` (\`water\`) waters the whole bed with one can.
 
 A plant grows in stages: **seed**, **sprout**, **ripe**, **wilted**. If it has gone without water for more than 16 world hours at its next step, it wilts. A ripe plant wilts after one to three days. **Fog** and **weeds** slow it down: a burning fire helps the garden too. \`jäte\` (\`weed\`) pulls weeds and what has wilted.
 
 ## Harvest {#harvest}
 
+Ripe plants belong in your pack before they wilt. You also get new seeds.
+
 \`ernte\` (\`harvest\`) takes everything ripe in the bed into your pack, with seeds. If several stand at the bed, each plant goes to exactly one.
 
 ## Flower bed and community bed {#kinds}
+
+There are three kinds of bed. A garden bed takes everything, a flower bed only flowers, and a community bed belongs to everyone.
 
 \`umgraben\` digs a **garden bed**, where vegetables and flowers grow. \`umgraben zier\` digs a **flower bed**: only flowers grow there (thrift, dune rose, fog flower), and only there do they cross. It counts towards your three like any bed.
 
@@ -876,31 +1103,99 @@ A plant grows in stages: **seed**, **sprout**, **ripe**, **wilted**. If it has g
 
 ## Crossing and naming {#breeding}
 
+Flowers can cross and give a completely new sort. Whoever breeds it may name it.
+
 When a flower ripens in a flower bed with a flower of another sort beside it (not across a corner), the harvest sometimes brings a **seed of a crossing** (\`Kreuzungssamen\`). What grows from it has a colour of its own, between its parents' colours. A crossing crosses again, with its own parent sort too.
 
 Whoever bred it names it with \`benenne <name>\`, once and for good. Its seeds are then called "<Name>-Samen" and its flowers like the sort, and whoever harvests them or is given them carries the name on. A name has 3 to 24 letters, is not yet taken, and means nothing the world or its commands already mean.
 
 ## The gardener {#gardener}
 
+Gesa helps everyone who is starting out. She has seeds, seed grain and animals.
+
 **Gesa** in Kupferhafen gathers seeds herself in the harbour's flora and sells them at the market; she buys flowers and vegetables. Her search orders hang on the board ("Gesa sucht eine Nebelblume"). Speak to her to learn her prices.
-
-## Hares from the fog {#hares}
-
-Where the fire does not burn, **hares** come out of the fog to the beds: the thicker the fog, the more often, twice as often at night, never more than two at once in one place. While the fire burns, every hare stays away. A hare sits at the bed for half a world hour, then it eats: one plant falls back a stage, a seedling is gone. It leaves the bed's last living plant standing.
-
-\`scheuche hase\` (\`scare\`) chases it off from up to three cells before it eats; anyone may, a guest too, and whoever comes first saves the bed. A **fence** protects for good: \`zäune\` (\`fence\`) beside the bed puts one round your bed (or one you may tend) for **2 driftwood and 1 kelp rope**. A **scarecrow** (\`bau vogelscheuche\`: 2 driftwood, 1 kelp rope, 3 work) keeps the hares from every bed within three cells too; it stands three days, then it wants repairing (1 kelp).
 
 ## Sponsorship {#sponsor}
 
+You need not be there every day. A sponsor looks after your bed while you are away.
+
 \`pate <name>\` (\`sponsor\`) lets someone water, weed and harvest your bed without it being theirs, a guest too. That keeps it tended while you do not play for a few days. \`pate weg <name>\` ends it, \`pate\` alone shows the sponsors.
 
-Watering, weeding, harvesting and planting work from up to **two cells** away. The right-click menu on a bed offers what you can do there.
+Watering, weeding, harvesting and planting work from up to **two cells** away. The right-click menu on a bed offers what you can do there.`,
+		},
+	},
+	{
+		id: "help.game.fields",
+		section: "play",
+		title: { de: "Äcker, Mühle und Backhaus", en: "Fields, mill and bakery" },
+		short: {
+			de: "Große Felder für viele Hände, Fruchtfolge, aus Korn wird Mehl und Brot.",
+			en: "Large fields for many hands, crop rotation, grain becomes flour and bread.",
+		},
+		body: {
+			de: `Eine Flur ist ein großes Feld, das viele Hände braucht. Man sät gemeinsam, wartet ein paar Tage und bringt die Ernte zusammen ein. Aus dem Korn wird in der Mühle Mehl und im Backhaus Brot. Fluren, Mühle und Backhaus gibt es erst, wenn die Insel ein [Dorf](help.game.village#epochs) ist.
+
+## Äcker {#fields}
+
+Eine Flur ist ein Feld, das eine einzige Frucht trägt. Sie braucht kaum tägliche Pflege, dafür zweimal viel Arbeit.
+
+Die **Flur** hat 4×4 Felder, eine je Konto, im Licht eines Feuers (zwei Lichtpunkte). Mit einem Spaten bricht \`flur anlegen\` sie neben dir um, \`flur anlegen <x> <y>\` an einer bestimmten Stelle. Anlegen braucht ein Konto.
+
+## Bestellen {#sow}
+
+Zuerst wird die Flur bestellt. Wer sie angelegt hat, wählt die Frucht, dann bringen alle Saatgut und Arbeit.
+
+Wer die Flur anlegte, wählt die Frucht mit \`bestelle gerste\`. Dann braucht sie **4 Saatgut und 2 Arbeit**: Jedes \`bestelle\` bringt, was du an Saatgut trägst, und einen Arbeitspunkt; danach ruhst du eine Weltstunde, wie an der Baustelle.
+
+| Frucht | Saatgut | Woher | Art | Ertrag |
+| --- | --- | --- | --- | --- |
+| Weizen | Weizen | Gesa | Getreide | 16 Weizen |
+| Gerste | Gerste | wild, wo Kräuter wachsen | Getreide | 16 Gerste |
+| Hafer | Hafer | wild: Graue Insel, Nebelholm, Schären | Getreide | 16 Hafer |
+| Kartoffeln | Kartoffel | Gesa | Hackfrucht | 24 Kartoffeln |
+| Rüben | Rübensamen | wild: Graue Insel, Kupferhafen, Krabbensand | Rüben | 16 Rüben, 8 Rübensamen |
+| Flachs | Leinsamen | wild, wo Blumen blühen | Flachs | 16 Flachs, 8 Leinsamen |
+
+## Ernteeinsatz {#gang}
+
+Ist die Flur reif, kommt es auf viele Hände an. Jeder bekommt sofort, was er selbst einbringt.
+
+Nach zwei bis drei Tagen ist die Flur reif und bleibt es zwei Tage. Jedes \`ernte\` an ihr (\`ernte flur\`, wenn auch ein Beet nah ist) ist ein Arbeitspunkt (8 für eine Flur) und gibt dir deinen Anteil sofort in die Tasche. Allein dauert das acht Stunden; acht Hände bringen sie in einer ein, und jedes Korn bekommt genau einer. Danach ist die Flur **überreif**, jeder Anteil nur noch halb so groß, und noch zwei Tage später ist die Frucht verdorben.
+
+\`flur offen\` lässt jeden mitsäen und miternten, auch Gäste, und jeder behält seinen Anteil; \`flur zu\` schließt sie wieder.
+
+## Fruchtfolge {#rotation}
+
+Der Boden wird müde, wenn immer dasselbe auf ihm wächst. Wechselt die Frucht, gibt er wieder mehr.
+
+Dieselbe Art zweimal hintereinander macht den Boden müde, er gibt nur noch 60 %, beim dritten Mal 35 %. Eine andere Art oder drei Tage Brache heilen ihn: Getreide, dann Kartoffeln, dann Rüben oder Ruhe. \`flur\` zeigt den Boden. Eine Flur, an der zwei Wochen niemand arbeitet, verwildert.
+
+## Mühle und Backhaus {#mill}
+
+Aus der Ernte lässt sich mehr machen. Wer Korn mahlt und Brot bäckt, verdient besser als mit dem Korn allein. Beide Bauten darf jeder benutzen, egal wem sie gehören.
+
+Aus der Ernte wird mehr: **Korn → Mehl → Brot** und **Flachs → Leinen**.
+
+**Windmühle** (\`bau windmühle\`: 2×2 Felder, 8 Treibholz, 2 Tangseil, **2 Leinen** für die Flügel, 16 Arbeit). Mahlen darf jeder an jeder Mühle: \`mahle alle weizen\` schüttet dein Korn hinein (Weizen, Gerste oder Hafer, bis 12 auf einmal, höchstens drei Säcke je Figur). Sie mahlt eine Weltstunde je Handvoll, was vor dir kam, zuerst. \`mahle\` allein sagt, wie lange sie noch zu tun hat; ist dein Mehl fertig, holt \`abholen\` es (bis zwei Felder Abstand). Bei **Sturmflut** auf ihrer Insel dreht sie schneller und mahlt sechs Stunden voraus. Fällt die Mühle, bevor dein Korn gemahlen ist, holst du an ihrer Stelle dein Korn zurück. Was zwei Wochen niemand abholt, ist verloren.
+
+**Backhaus** (\`bau backhaus\`: 2×2 Felder, 6 Treibholz, 6 Muscheln, 1 Tangseil, 12 Arbeit). Daneben bäckt \`backe brot\` aus **2 Mehl, einer Kanne Wasser und einem Scheit Treibholz** drei Brote, an jedem Backhaus, wem es auch gehört.
+
+**Leinen** spinnt man aus Flachs: \`craft spindel\` (1 Treibholz, 1 Muschel), dann \`craft leinen\` (3 Flachs). Leinen braucht die Mühle für ihre Flügel; die Werft zahlt dafür.
+
+Brot, Mehl und Leinen kauft Marta am Markt von Kupferhafen, und die Auftragstafeln fragen danach. Was man vermahlt, sät man nicht: Korn ist Brot und Saatgut zugleich.`,
+			en: `A field is a large plot that needs many hands. You sow together, wait a few days and bring the harvest in together. At the mill the grain becomes flour, at the bakery bread. Fields, mill and bakery exist only once the island is a [village](help.game.village#epochs).
 
 ## Fields {#fields}
 
-Bigger than a bed is the **field**: 4×4 cells, one per account, in a fire's light (two light points). With a spade \`flur anlegen\` breaks one beside you, \`flur anlegen <x> <y>\` at a given spot. A field carries **one** crop, needs little daily care but two bursts of work.
+A field carries one single crop. It needs little daily care, but two bursts of work.
 
-**Sowing:** whoever made the field chooses the crop with \`bestelle gerste\` (\`plough\`). Then it needs **4 seed and 2 work**: every \`bestelle\` brings what seed you carry and one work point; then you rest a world hour, as at a building site.
+The **field** has 4×4 cells, one per account, in a fire's light (two light points). With a spade \`flur anlegen\` breaks one beside you, \`flur anlegen <x> <y>\` at a given spot. Breaking one needs an account.
+
+## Sowing {#sow}
+
+First the field is sown. Whoever made it chooses the crop, then everyone brings seed and work.
+
+Whoever made the field chooses the crop with \`bestelle gerste\` (\`plough\`). Then it needs **4 seed and 2 work**: every \`bestelle\` brings what seed you carry and one work point; then you rest a world hour, as at a building site.
 
 | Crop | Seed | From | Kind | Yield |
 | --- | --- | --- | --- | --- |
@@ -911,13 +1206,23 @@ Bigger than a bed is the **field**: 4×4 cells, one per account, in a fire's lig
 | Beets | beet seed | wild: Grey Island, Kupferhafen, Krabbensand | beets | 16 beets, 8 beet seed |
 | Flax | linseed | wild, where flowers bloom | flax | 16 flax, 8 linseed |
 
-**Harvest gang:** after two to three days the field is ripe and stays so for two days. Every \`ernte\` at it is a work point (8 for a field) and puts your share in your pack at once. Alone it takes eight hours; eight hands bring it in in one, and every grain goes to exactly one. After that the field is **overripe**, each share only half, and two days later the crop is lost.
+## Harvest gang {#gang}
+
+When the field is ripe, many hands count. Everyone gets at once what they bring in themselves.
+
+After two to three days the field is ripe and stays so for two days. Every \`ernte\` at it (\`ernte flur\` when a bed is near too) is a work point (8 for a field) and puts your share in your pack at once. Alone it takes eight hours; eight hands bring it in in one, and every grain goes to exactly one. After that the field is **overripe**, each share only half, and two days later the crop is lost.
 
 \`flur offen\` lets anyone sow and harvest along, guests too, and each keeps their share; \`flur zu\` closes it again.
 
-**Rotation:** the same kind twice in a row tires the soil, it gives only 60 %, the third time 35 %. Another kind or three days of rest heal it: grain, then potatoes, then beets or rest. \`flur\` shows the soil. A field nobody works for two weeks runs wild.
+## Crop rotation {#rotation}
+
+The soil tires when the same thing keeps growing on it. Change the crop and it gives more again.
+
+The same kind twice in a row tires the soil, it gives only 60 %, the third time 35 %. Another kind or three days of rest heal it: grain, then potatoes, then beets or rest. \`flur\` shows the soil. A field nobody works for two weeks runs wild.
 
 ## Mill and bakery {#mill}
+
+The harvest can become more. Grinding grain and baking bread earns more than the grain alone. Anyone may use both buildings, whoever owns them.
 
 The harvest becomes more: **grain → flour → bread** and **flax → linen**.
 
@@ -927,15 +1232,70 @@ The harvest becomes more: **grain → flour → bread** and **flax → linen**.
 
 **Linen** is spun from flax: \`craft spindel\` (1 driftwood, 1 shell), then \`craft leinen\` (3 flax). The mill needs linen for its sails; the shipyard pays for it.
 
-Marta at the Kupferhafen market buys and sells bread, flour and linen, and the job boards ask for them. What you grind you do not sow: grain is bread and seed at once.
+Marta at the Kupferhafen market buys and sells bread, flour and linen, and the job boards ask for them. What you grind you do not sow: grain is bread and seed at once.`,
+		},
+	},
+	{
+		id: "help.game.animals",
+		section: "play",
+		title: { de: "Tiere", en: "Animals" },
+		short: {
+			de: "Hühner, Schafe, Ziegen, Enten und Gänse halten, füttern und was sie geben.",
+			en: "Keep hens, sheep, goats, ducks and geese, feed them, and what they give.",
+		},
+		body: {
+			de: `Tiere leben in einem Stall oder Gehege, das dir gehört. Du fütterst sie, und sie geben dir Eier, Milch, Wolle oder Daunen. Daraus entstehen Waren, die gut bezahlt werden. Hühner gehen von Anfang an, das Gehege erst im [Dorf](help.game.village#epochs).
 
-## Animals {#animals}
+## Stall und Gehege {#house}
 
-The fields feed the farm too. **Hens** live in the **hen house** (\`bau hühnerstall\`: 2×1 cells, 4 driftwood, 1 kelp rope, 6 work, up to 6 hens), **sheep**, **goats**, **ducks** or **geese** in the **pen** (\`bau gehege\`: 3×3 cells, 8 driftwood, 4 kelp rope, 8 work, up to 4 of one kind).
+Jedes Tier braucht ein Zuhause, das dir gehört. Stall und Gehege baust du wie jeden anderen Bau.
+
+**Hühner** wohnen im **Hühnerstall** (\`bau hühnerstall\`: 2×1 Felder, 4 Treibholz, 1 Tangseil, 6 Arbeit, bis 6 Hühner), **Schafe**, **Ziegen**, **Enten** oder **Gänse** im **Gehege** (\`bau gehege\`: 3×3 Felder, 8 Treibholz, 4 Tangseil, 8 Arbeit, bis 4 Tiere einer Art).
+
+Tiere verkauft Gesa am Markt von Kupferhafen. \`einstallen huhn\` bringt eines, das du trägst, in deinen Stall, \`ausstallen\` nimmt eins heraus. \`stall\` zeigt, wie es ihnen geht.
+
+## Füttern {#feed}
+
+Tiere fressen, was auf Feldern und Beeten wächst. Füttern darf jeder, nicht nur der Besitzer.
+
+\`füttere\` gibt Futter aus deiner Tasche, ein Futter macht ein Tier einen Tag satt, bis zu drei Tage im Voraus.
+
+| Tier | frisst | gibt, wenn es satt ist |
+| --- | --- | --- |
+| Huhn | Tang, Kohl, Möhren, Weizen, Gerste, Hafer | ein Ei am Tag |
+| Schaf | Rüben, Hafer, Gerste, Kohl, Tang | Wolle alle zwei Tage |
+| Ziege | Rüben, Hafer, Gerste, Kohl, Möhren, Tang | Milch am Tag |
+| Ente | Tang, Kohl, Weizen, Gerste, Hafer | ein Ei am Tag |
+| Gans | Gerste, Hafer, Kohl, Rüben, Tang | Daunen alle drei Tage |
+
+## Was Tiere geben {#yield}
+
+Satte Tiere geben regelmäßig etwas. Abholen darf das nur, wem sie gehören.
+
+Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nichts. Bis zu drei je Tier warten im Stall; \`einsammeln\` (auch \`sammle eier\`, \`melke\`, \`schere\`) holt sie, nur der Besitzer. Zwei satte Tiere einer Art bekommen ab und zu ein Junges, bis der Stall voll ist. Reißt du den Stall ab, kommen die Tiere in deine Tasche zurück; verfällt er, warten sie im Nachlass.
+
+Satte **Gänse** halten Wache: In ihrem Raum kommt kein Hase an die Beete und kein Fuchs in den Stall, sie schnattern ihn fort.
+
+## Was daraus wird {#products}
+
+Aus Wolle, Daunen und Milch werden teurere Waren. Dafür brauchst du den Webstuhl oder eine Hütte.
+
+Am **Webstuhl** (\`bau webstuhl\`: 2×1 Felder, 6 Treibholz, 2 Tangseil, 8 Arbeit) webt \`craft tuch\` aus 3 Wolle mit einer Spindel ein Tuch, und \`craft decke\` näht aus 2 Tuch und 3 Daunen eine Daunendecke. Am Herd einer **Hütte** macht \`craft käse\` aus 3 Milch und einem Scheit Treibholz einen Käse. Gesa kauft Eier, Wolle, Milch und Daunen, Marta Tuch, Decken und Käse.`,
+			en: `Animals live in a coop or pen that belongs to you. You feed them, and they give you eggs, milk, wool or down. These make goods that sell well. Hens work from the start, a pen only in a [village](help.game.village#epochs).
+
+## Coop and pen {#house}
+
+Every animal needs a home that belongs to you. You build a coop or pen like any other building.
+
+**Hens** live in the **hen house** (\`bau hühnerstall\`: 2×1 cells, 4 driftwood, 1 kelp rope, 6 work, up to 6 hens), **sheep**, **goats**, **ducks** or **geese** in the **pen** (\`bau gehege\`: 3×3 cells, 8 driftwood, 4 kelp rope, 8 work, up to 4 of one kind).
 
 Gesa at the Kupferhafen market sells animals. \`einstallen huhn\` puts one you carry into your house, \`ausstallen\` takes one out. \`stall\` shows how they are.
 
-Anyone may **feed**: \`füttere\` gives feed from your pack; one feed keeps one animal fed for a day, up to three days ahead.
+## Feeding {#feed}
+
+Animals eat what grows on fields and beds. Anyone may feed them, not just the owner.
+
+\`füttere\` gives feed from your pack; one feed keeps one animal fed for a day, up to three days ahead.
 
 | Animal | eats | gives while fed |
 | --- | --- | --- |
@@ -945,15 +1305,92 @@ Anyone may **feed**: \`füttere\` gives feed from your pack; one feed keeps one 
 | Duck | kelp, cabbage, wheat, barley, oats | an egg a day |
 | Goose | barley, oats, cabbage, beets, kelp | down every three days |
 
-Fed **geese** keep watch: in their room no hare gets to the beds and no fox into the coop, they cackle it away.
+## What animals give {#yield}
+
+Fed animals give something regularly. Only their owner may collect it.
 
 Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`einsammeln\` (also \`sammle eier\`, \`melke\`, \`schere\`) fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate.
 
-**What becomes of it:** at the **loom** (\`bau webstuhl\`: 2×1 cells, 6 driftwood, 2 kelp rope, 8 work) \`craft tuch\` weaves cloth from 3 wool with a spindle, and \`craft decke\` sews a down blanket from 2 cloth and 3 down. At a **hut's** hearth \`craft käse\` makes a cheese from 3 milk and a log of driftwood. Gesa buys eggs, wool, milk and down, Marta cloth, blankets and cheese.
+Fed **geese** keep watch: in their room no hare gets to the beds and no fox into the coop, they cackle it away.
 
-## Deer, foxes, mice; dog and cat {#wild}
+## What becomes of it {#products}
 
-Hares are not the only thing that comes from the fog where no fire burns: **deer** graze a growing field (each visit costs part of the harvest, but it always gives a good half), **foxes** take an animal from a coop, almost only at night (never the last), **mice** gnaw at grain, flour, bread and cheese in a hut's chest (never the last piece). Like the hares they eat only after a while; \`scheuche reh\`, \`scheuche fuchs\` or \`scheuche maus\` from up to three cells chases them off.
+Wool, down and milk become dearer goods. For that you need the loom or a hut.
+
+at the **loom** (\`bau webstuhl\`: 2×1 cells, 6 driftwood, 2 kelp rope, 8 work) \`craft tuch\` weaves cloth from 3 wool with a spindle, and \`craft decke\` sews a down blanket from 2 cloth and 3 down. At a **hut's** hearth \`craft käse\` makes a cheese from 3 milk and a log of driftwood. Gesa buys eggs, wool, milk and down, Marta cloth, blankets and cheese.`,
+		},
+	},
+	{
+		id: "help.game.wild",
+		section: "play",
+		title: { de: "Wild, Zäune und Wächter", en: "Wild animals, fences and guards" },
+		short: {
+			de: "Was aus dem Nebel kommt, wie man es verscheucht und wer dauerhaft schützt.",
+			en: "What comes out of the fog, how to chase it off and what protects for good.",
+		},
+		body: {
+			de: `Wo kein Feuer brennt, kommen Tiere aus dem Nebel an das, was ihr anbaut und haltet. Sie fressen erst nach einer Weile, du hast also Zeit, sie zu verscheuchen. Dauerhaft helfen Zäune, Vogelscheuchen, Fallen und wachsame Tiere. Das beste Mittel bleibt ein brennendes Feuer.
+
+## Hasen aus dem Nebel {#hares}
+
+Hasen knabbern an den Beeten. Sie kommen nur, wenn das Feuer aus ist.
+
+Wo das Feuer nicht brennt, kommen aus dem Nebel **Hasen** an die Beete: je dichter der Nebel, desto öfter, nachts doppelt so oft, nie mehr als zwei auf einmal in einem Ort. Solange das Feuer brennt, bleibt jeder Hase fort. Ein Hase sitzt eine halbe Weltstunde am Beet, dann frisst er: Eine Pflanze fällt eine Stufe zurück, ein Setzling ist weg. Die letzte lebende Pflanze eines Beets lässt er stehen.
+
+\`scheuche hase\` jagt ihn aus bis zu drei Schritten fort, bevor er frisst; das darf jeder, auch ein Gast, und wer zuerst kommt, rettet das Beet. Dauerhaft schützt ein **Zaun**: \`zäune\` setzt neben dem Beet für **2 Treibholz und 1 Tangseil** einen um dein Beet (oder eins, das du pflegen darfst). Auch eine **Vogelscheuche** (\`bau vogelscheuche\`: 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von allen Beeten in bis zu drei Feldern ab; sie steht drei Tage, dann will sie ausgebessert werden (1 Tang).
+
+## Rehe, Füchse, Mäuse {#wild}
+
+Auch größeres Wild kommt aus dem Nebel. Jedes Tier hat sein eigenes Ziel.
+
+- **Rehe** fressen sich an einer wachsenden Flur satt. Jeder Besuch kostet einen Teil der Ernte, aber sie gibt immer gut die Hälfte.
+- **Füchse** holen fast nur nachts ein Tier aus dem Hühnerstall, nie das letzte.
+- **Mäuse** nagen an Korn, Mehl, Brot und Käse in der Truhe einer Hütte, nie am letzten Stück.
+
+Wie die Hasen fressen sie erst nach einer Weile; \`scheuche reh\`, \`scheuche fuchs\` oder \`scheuche maus\` aus bis zu drei Schritten jagt sie fort.
+
+## Schutz {#shelter}
+
+Gegen jedes Tier hilft etwas anderes. Die Tabelle zeigt, was wogegen schützt.
+
+| Schutz | wogegen |
+| --- | --- |
+| Zaun um die Flur (\`zäune\`: 6 Treibholz, 2 Tangseil) | Rehe |
+| Zaun mit Tür um den Hühnerstall (\`zäune\`: 3 Treibholz, 1 Tangseil) | Füchse |
+| Vogelscheuche (Beete und Fluren in drei Feldern) | Hasen, Rehe |
+| Mausefalle in der Truhe (\`craft mausefalle\`) | Mäuse |
+| satte Gänse im Raum | Hasen, Füchse |
+| ein satter Hund im Raum | Hasen, Rehe, Füchse |
+| eine satte Katze im Raum | Mäuse |
+
+## Hund und Katze {#guards}
+
+Hund und Katze wachen an einem deiner Bauten. Sie schützen den ganzen Ort, auch die Nachbarn.
+
+**Hund und Katze** verkauft Gesa. \`einstallen hund\` lässt ihn an einem deiner Bauten wachen (einer je Bau), \`ausstallen hund\` nimmt ihn wieder mit. Satt hält er sein Wild aus dem ganzen Raum fern, also auch von den Beeten und Fluren der Nachbarn. \`füttere hund\` (jeder darf) macht ihn mit einem Ei, Brot, Käse oder Milch einen Tag satt, bis zu drei Tage im Voraus; eine Katze frisst Milch, Eier und Käse. \`wache\` zeigt, wer im Raum wacht.`,
+			en: `Where no fire burns, animals come out of the fog to what you grow and keep. They eat only after a while, so you have time to chase them off. Fences, scarecrows, traps and watchful animals help for good. A burning fire remains the best means.
+
+## Hares from the fog {#hares}
+
+Hares nibble at the beds. They come only while the fire is out.
+
+Where the fire does not burn, **hares** come out of the fog to the beds: the thicker the fog, the more often, twice as often at night, never more than two at once in one place. While the fire burns, every hare stays away. A hare sits at the bed for half a world hour, then it eats: one plant falls back a stage, a seedling is gone. It leaves the bed's last living plant standing.
+
+\`scheuche hase\` (\`scare\`) chases it off from up to three cells before it eats; anyone may, a guest too, and whoever comes first saves the bed. A **fence** protects for good: \`zäune\` (\`fence\`) beside the bed puts one round your bed (or one you may tend) for **2 driftwood and 1 kelp rope**. A **scarecrow** (\`bau vogelscheuche\`: 2 driftwood, 1 kelp rope, 3 work) keeps the hares from every bed within three cells too; it stands three days, then it wants repairing (1 kelp).
+
+## Deer, foxes, mice {#wild}
+
+Bigger wild animals come out of the fog too. Each has a target of its own.
+
+- **Deer** graze a growing field. Each visit costs part of the harvest, but it always gives a good half.
+- **Foxes** take an animal from a coop, almost only at night, never the last.
+- **Mice** gnaw at grain, flour, bread and cheese in a hut's chest, never the last piece.
+
+Like the hares they eat only after a while; \`scheuche reh\`, \`scheuche fuchs\` or \`scheuche maus\` from up to three cells chases them off.
+
+## Shelter {#shelter}
+
+Each animal has its own remedy. The table shows what protects against what.
 
 | Shelter | against |
 | --- | --- |
@@ -965,7 +1402,106 @@ Hares are not the only thing that comes from the fog where no fire burns: **deer
 | A fed dog in the room | hares, deer, foxes |
 | A fed cat in the room | mice |
 
+## Dog and cat {#guards}
+
+A dog or cat keeps watch at one of your buildings. They protect the whole place, the neighbours too.
+
 Gesa sells **dogs and cats**. \`einstallen hund\` leaves one on guard at a building of yours (one per building), \`ausstallen hund\` takes it along again. Fed, it keeps its wild from the whole room, the neighbours' beds and fields too. \`füttere hund\` (anyone may) feeds it for a day with an egg, bread, cheese or milk, up to three days ahead; a cat eats milk, eggs and cheese. \`wache\` shows who keeps watch in the room.`,
+		},
+	},
+	{
+		id: "help.game.village",
+		section: "play",
+		title: { de: "Dorf und Siedlung", en: "Village and settlement" },
+		short: {
+			de: "Wie eine Insel zum Dorf wird und wie Nachbarn eine Siedlung gründen.",
+			en: "How an island becomes a village and how neighbours found a settlement.",
+		},
+		body: {
+			de: `Eine Insel wächst durch das, was auf ihr steht. Sind genug Hütten, Beete und Felder da, wird aus dem Fischerdorf ein Dorf, und neue Baupläne öffnen sich. Nachbarn können außerdem eine Siedlung gründen. Sie bestimmen dann gemeinsam, wer an ihrem Ort bauen darf.
+
+## Epochen {#epochs}
+
+Jede Insel hat eine eigene Stufe. Es zählt, was noch steht und gepflegt wird. Du siehst die Stufe mit \`epoche\`.
+
+Jede Insel steht auf einer Stufe: **Fischerdorf**, **Dorf**, **Stadt**, **Netz**. Sie zählt ihren gehaltenen Bestand, jeden Bau, jedes Beet und jede Flur, die noch stehen, mit so vielen Punkten, wie sie vom Licht eines Feuers nehmen. Beete zählen so viel wie Bauten: Hütte, Beet, Hühnerstall, Regentonne, Vogelscheuche und Webstuhl je 1 Punkt, Flur, Gemeinschaftsbeet, Windmühle, Backhaus und Gehege je 2.
+
+| Stufe | ab Punkten | neu |
+| --- | --- | --- |
+| Fischerdorf | 0 | Hütte, Hühnerstall, Regentonne, Vogelscheuche, Beete |
+| Dorf | 15 | Windmühle, Backhaus, Gehege, Webstuhl, Fluren |
+| Stadt | 40 | (noch keine Pläne) |
+| Netz | 80 | (noch keine Pläne) |
+
+Die Schwellen kann der Betreiber ändern, etwa für einen Server mit wenigen Spielern. Gezählt wird jede Weltstunde; ändert sich die Stufe, hören es alle Räume der Insel. Verfällt zu viel, fällt die Insel zurück: was steht, arbeitet weiter (die Mühle mahlt, das Backhaus backt), nur neue Pläne der höheren Stufe warten, bis der Bestand wieder reicht. \`epoche\` zeigt Stufe und Punkte der Insel, auf der du stehst.
+
+## Siedlung gründen {#settlement}
+
+Eine Siedlung ist eine Gemeinschaft an einem Ort, mit Namen und eigenen Regeln. Sie entsteht, wenn dort genug Nachbarn Hütten gebaut haben. Der Boden gehört weiter niemandem, und jeder Bau bleibt bei seinem Besitzer.
+
+Stehen in einem Raum **drei Hütten von mindestens zwei Besitzern**, gründet \`siedlung gründen <name>\` eine Siedlung. Das darf, wer dort eine Hütte hat; Gäste nicht. Der Name hat 2 bis 30 Buchstaben und darf noch nicht vergeben sein. Je Raum gibt es eine Siedlung. \`siedlung\` zeigt die Siedlung hier, ihre Hütten und wer dazugehört; wo keine ist, wie viele Hütten noch fehlen.
+
+Stehen zu wenige Hütten, endet die Siedlung von selbst, und ihr Name ist wieder frei. Was dort steht, bleibt.
+
+## Ränge {#ranks}
+
+In einer Siedlung hat jeder einen Rang. Wer dort eine Hütte hat, ist von selbst Siedler. Alle anderen können aufgenommen werden.
+
+| Rang | Wer | darf, wenn die Siedlung geschlossen ist |
+| --- | --- | --- |
+| Siedler | Hüttenbesitzer, und wen ein Siedler aufnimmt | bauen, Beete und Fluren anlegen, liefern, mitarbeiten |
+| Helfer | wen ein Siedler als Helfer aufnimmt; ein Gast ist höchstens Helfer | liefern, mitarbeiten |
+| Fremder | alle anderen | nichts davon |
+
+\`siedlung aufnehmen <name>\` nimmt jemanden als Siedler auf, \`siedlung aufnehmen <name> helfer\` als Helfer, \`siedlung entlassen <name>\` nimmt das zurück. Das entscheiden nur Siedler. Hüttenbesitzer lassen sich nicht entlassen.
+
+## Offen oder zu {#door}
+
+Eine neue Siedlung ist offen, jeder darf dort bauen und helfen. Sie kann ihre Tür aber schließen. Dann gelten die Ränge.
+
+\`siedlung zu\` schließt die Siedlung, \`siedlung offen\` öffnet sie wieder; beides dürfen nur Siedler. Was schon steht, bleibt, wem es gehört, und betreten darf den Ort jeder. Die Regeln betreffen neue Baustellen, Beete und Fluren sowie Liefern und Mitarbeiten an Baustellen.`,
+			en: `An island grows by what stands on it. With enough huts, beds and fields the fishing village becomes a village, and new building plans open up. Neighbours can also found a settlement. Together they then decide who may build in their place.
+
+## Epochs {#epochs}
+
+Every island has a stage of its own. What counts is what still stands and is looked after. \`epoche\` shows the stage.
+
+Every island stands at a stage: **fishing village**, **village**, **town**, **net**. It counts its held stock, every building, bed and field still standing, with as many points as each takes of a fire's light. Beds count as much as buildings: hut, bed, hen house, rain barrel, scarecrow and loom 1 point each, field, community bed, windmill, bakery and pen 2 each.
+
+| Stage | from points | new |
+| --- | --- | --- |
+| Fishing village | 0 | hut, coop, rain barrel, scarecrow, beds |
+| Village | 15 | windmill, bakery, pen, loom, fields |
+| Town | 40 | (no plans yet) |
+| Net | 80 | (no plans yet) |
+
+The operator can change the thresholds, say for a server with few players. The count runs every world hour; when the stage changes, every room of the island hears it. If too much decays, the island falls back: what stands goes on working (the mill grinds, the bakery bakes), only new plans of the higher stage wait until the stock is enough again. \`epoche\` shows the stage and points of the island you stand on.
+
+## Founding a settlement {#settlement}
+
+A settlement is a community in one place, with a name and rules of its own. It comes about when enough neighbours have built huts there. The ground still belongs to nobody, and every building stays with its owner.
+
+When **three huts of at least two owners** stand in a room, \`siedlung gründen <name>\` founds a settlement. Whoever has a hut there may do it; guests may not. The name has 2 to 30 letters and must not be taken yet. Each room has one settlement. \`siedlung\` shows the settlement here, its huts and who belongs; where there is none, how many huts are still missing.
+
+If too few huts stand, the settlement ends by itself and its name is free again. What stands there stays.
+
+## Ranks {#ranks}
+
+In a settlement everyone has a rank. Whoever has a hut there is a settler by themselves. Everyone else can be taken in.
+
+| Rank | Who | may, when the settlement is closed |
+| --- | --- | --- |
+| Settler | hut owners, and whom a settler takes in | build, lay out beds and fields, deliver, help |
+| Helper | whom a settler takes in as a helper; a guest is a helper at most | deliver, help |
+| Stranger | everyone else | none of that |
+
+\`siedlung aufnehmen <name>\` takes someone in as a settler, \`siedlung aufnehmen <name> helfer\` as a helper, \`siedlung entlassen <name>\` reverses it. Only settlers decide that. Hut owners cannot be dismissed.
+
+## Open or closed {#door}
+
+A new settlement is open: anyone may build and help there. But it can close its door. Then the ranks count.
+
+\`siedlung zu\` closes the settlement, \`siedlung offen\` opens it again; only settlers may do either. What already stands stays with its owner, and anyone may enter the place. The rules cover new sites, beds and fields, and delivering and working at sites.`,
 		},
 	},
 	{
@@ -977,7 +1513,9 @@ Gesa sells **dogs and cats**. \`einstallen hund\` leaves one on guard at a build
 			en: "Talks between two and in groups, end-to-end encrypted, across all islands.",
 		},
 		body: {
-			de: `\`say\` hört nur der Raum, \`kanal hafen\` alle. Der **Chat** ist das Gespräch zu zweit oder in einer kleinen Gruppe, auch mit jemandem auf einer anderen Insel.
+			de: `Im Chat schreibst du mit einzelnen Leuten oder einer kleinen Gruppe, auch über die Inseln hinweg. Nur ihr könnt mitlesen. Vor dem ersten Gespräch richtest du einmal ein eigenes Passwort ein.
+
+\`say\` hört nur der Raum, \`kanal hafen\` alle. Der **Chat** ist das Gespräch zu zweit oder in einer Gruppe, auch mit jemandem auf einer anderen Insel.
 
 ## Einrichten {#setup}
 
@@ -987,23 +1525,27 @@ Im Reiter **„Chats“** neben dem Protokoll richtest du den Chat mit einem eig
 
 ## Zu zweit {#two}
 
+Ein Gespräch zu zweit beginnt mit einem Befehl oder einem Rechtsklick auf eine Figur. Der andere muss dafür nicht in deiner Nähe sein.
+
 \`chat <name> <text>\` (auch \`tell\`, \`flüstere\`) schreibt jemandem; \`chat <name>\` öffnet nur das Gespräch. Oder die rechte Maustaste (langes Tippen) auf eine Figur, auf einen Namen im Protokoll oder in der Liste von \`who\`: **„Chat mit …“**. Jedes Gespräch hat einen eigenen Reiter mit Zähler für Ungelesenes.
 
 Ist der andere nicht da, wartet die Nachricht **sieben Tage** und erscheint bei seinem nächsten Anmelden (die letzten 50 je Gespräch). Mit NPCs sprichst du mit \`say\`, nicht im Chat.
 
 ## Gruppen {#groups}
 
+Eine Gruppe ist ein gemeinsames Gespräch für mehrere Leute. Wer sie gründet, verwaltet sie.
+
 | Befehl | Wirkung |
 | --- | --- |
 | \`gruppe neu <name>\` | Eine Gruppe gründen; du verwaltest sie |
-| \`gruppe lade <spieler> in <gruppe>\` | Einladen (jedes Mitglied darf; die Einladung gilt einen Welttag) |
+| \`gruppe lade <spieler> in <gruppe>\` | Einladen (jedes Mitglied darf; die Einladung gilt 24 Stunden) |
 | \`gruppe annehmen <gruppe>\` / \`gruppe ablehnen <gruppe>\` | Eine Einladung annehmen oder ablehnen (auch im Reiter „Chats“) |
 | \`gruppe <gruppe> <text>\` | In die Gruppe schreiben (oder im Reiter der Gruppe) |
 | \`gruppe verlasse <gruppe>\` | Austreten |
 | \`gruppe entferne <spieler> aus <gruppe>\` | Jemanden entfernen (nur wer verwaltet) |
 | \`gruppe\` | Deine Gruppen |
 
-Höchstens 20 Mitglieder je Gruppe, höchstens zehn Gruppen je Konto. Gäste chatten, gründen aber keine Gruppe und laden niemanden ein.
+Höchstens 20 Mitglieder je Gruppe, höchstens zehn gegründete Gruppen je Konto. Gäste chatten, gründen aber keine Gruppe und laden niemanden ein.
 
 ## Verschlüsselung {#e2e}
 
@@ -1011,8 +1553,12 @@ Nur die Mitglieder eines Gesprächs können es lesen, nicht der Server und kein 
 
 ## Schutz {#safety}
 
-\`ignoriere <name>\` sperrt Nachrichten und Einladungen eines Spielers, \`erlaube <name>\` hebt es auf, \`ignoriere\` allein listet die Gesperrten. **Melden** an einer Nachricht schickt ihren Text mit Absender an die Admins; sonst sehen Admins keine Gespräche. Gespräche erscheinen nie im Protokoll des Raums.`,
-			en: `\`say\` is heard by the room only, \`channel hafen\` by everyone. The **chat** is the talk between two or in a small group, also with someone on another island.
+Du entscheidest, wer dich erreicht. Wer stört, lässt sich sperren oder melden.
+
+\`ignoriere <name>\` sperrt Nachrichten und Einladungen eines Spielers, \`erlaube <name>\` hebt es auf, \`ignoriere\` allein listet die Gesperrten. **Melden** an einer Nachricht schickt ihren Text mit Absender an die Admins (sie bleibt dort 30 Tage); sonst sehen Admins keine Gespräche. Gespräche erscheinen nie im Protokoll des Raums.`,
+			en: `In the chat you write with single people or a small group, also across the islands. Only you can read along. Before the first talk you set up a password of its own once.
+
+\`say\` is heard by the room only, \`channel hafen\` by everyone. The **chat** is the talk between two or in a group, also with someone on another island.
 
 ## Setting up {#setup}
 
@@ -1022,23 +1568,27 @@ In the **“Chats”** tab beside the log you set up the chat with a **chat pass
 
 ## Between two {#two}
 
+A talk between two starts with a command or a right click on a figure. The other person need not be near you.
+
 \`chat <name> <text>\` (also \`tell\`, \`whisper\`) writes to someone; \`chat <name>\` only opens the talk. Or right-click (long press) a figure, a name in the log or in the list of \`who\`: **“Chat with …”**. Every talk has its own tab with a count of unread lines.
 
 If the other is away, the message waits **seven days** and appears at their next sign-in (the last 50 per talk). You talk to NPCs with \`say\`, not in the chat.
 
 ## Groups {#groups}
 
+A group is a shared talk for several people. Whoever founds it manages it.
+
 | Command | Effect |
 | --- | --- |
 | \`gruppe neu <name>\` (\`group\`) | Found a group; you manage it |
-| \`gruppe lade <player> in <group>\` | Invite (any member may; the invitation lasts a world day) |
+| \`gruppe lade <player> in <group>\` | Invite (any member may; the invitation lasts 24 hours) |
 | \`gruppe annehmen <group>\` / \`gruppe ablehnen <group>\` | Accept or decline an invitation (also in the “Chats” tab) |
 | \`gruppe <group> <text>\` | Write to the group (or in the group's tab) |
 | \`gruppe verlasse <group>\` | Leave |
 | \`gruppe entferne <player> aus <group>\` | Remove someone (only who manages it) |
 | \`gruppe\` | Your groups |
 
-At most 20 members per group, at most ten groups per account. Guests chat but found no group and invite nobody.
+At most 20 members per group, at most ten groups founded per account. Guests chat but found no group and invite nobody.
 
 ## Encryption {#e2e}
 
@@ -1046,7 +1596,9 @@ Only the members of a talk can read it, not the server and no admin. Each messag
 
 ## Safety {#safety}
 
-\`ignoriere <name>\` (\`ignore\`) blocks a player's messages and invitations, \`erlaube <name>\` (\`unignore\`) lifts it, \`ignoriere\` alone lists whom you block. **Report** on a message sends its text with the sender to the admins; otherwise admins see no talks. Talks never appear in the room's log.`,
+You decide who reaches you. Anyone who bothers you can be blocked or reported.
+
+\`ignoriere <name>\` (\`ignore\`) blocks a player's messages and invitations, \`erlaube <name>\` (\`unignore\`) lifts it, \`ignoriere\` alone lists whom you block. **Report** on a message sends its text with the sender to the admins (it stays there 30 days); otherwise admins see no talks. Talks never appear in the room's log.`,
 		},
 	},
 	{
@@ -1060,7 +1612,9 @@ Only the members of a talk can read it, not the server and no admin. Each messag
 		body: {
 			de: `## Gast {#guest}
 
-Als **Gast** spielst du sofort, ohne Konto. Du kannst laufen, sammeln, das Feuer nachlegen, reden, chatten, an Baustellen mitbauen und alles ansehen. **Nicht möglich:** tauschen, handeln, Dinge weitergeben, selbst bauen oder besitzen, Chat-Gruppen gründen. Eine Gastfigur verfällt nach einigen Tagen ohne Spiel.
+Als **Gast** spielst du sofort, ohne Konto. Vieles geht schon, manches braucht ein Konto.
+
+Du kannst laufen, sammeln, das Feuer nachlegen, reden, chatten, an Baustellen mitbauen und alles ansehen. Auch als Pate, am Gemeinschaftsbeet und auf offenen Fluren darfst du helfen. **Nicht möglich:** tauschen, handeln, Dinge weitergeben, selbst bauen oder besitzen, Aufträge nehmen, Chat-Gruppen oder Siedlungen gründen. In einer Siedlung bist du höchstens Helfer. Eine Gastfigur verfällt nach einigen Tagen ohne Spiel.
 
 ## Konto {#account}
 
@@ -1068,14 +1622,20 @@ Mit **„Registrieren, um den Fortschritt zu behalten“** in der Kopfzeile legs
 
 ## Abmelden {#logout}
 
+Abmelden beendet nur die Sitzung. Mit einem Konto kommst du jederzeit zurück.
+
 „Abmelden“ beendet die Sitzung. Als Gast fragt das Spiel vorher, ob du dich erst registrieren möchtest, weil du sonst nicht zu dieser Figur zurückkommst.
 
 ## Datenschutz {#privacy}
 
-Das Spiel speichert nur, was es braucht: Benutzername, ein gesalzener Passwort-Hash, deine Figur und ihren Fortschritt. Alle Texte der Welt werden als reiner Text angezeigt, nie als Code ausgeführt.`,
+Das Spiel speichert nur, was es braucht. Dein Passwort liegt nie im Klartext vor.
+
+Gespeichert sind Benutzername, ein gesalzener Passwort-Hash, deine Figur und ihr Fortschritt. Für den Chat kommen dein öffentlicher Schlüssel, eine mit dem Chat-Passwort versiegelte Sicherung des privaten Schlüssels und versiegelte Nachrichten (sieben Tage) dazu. Der Server sieht dabei, wer mit wem wann schreibt, aber keinen Text; nur eine gemeldete Nachricht geht lesbar an die Admins ([Verschlüsselung](help.game.chat#e2e)). Alle Texte der Welt werden als reiner Text angezeigt, nie als Code ausgeführt.`,
 			en: `## Guest {#guest}
 
-As a **guest** you play at once, without an account. You can walk, collect, feed the fire, talk, chat, help at building sites and look at everything. **Not possible:** swapping, trading, handing things on, building or owning yourself, founding chat groups. A guest character lapses after some days without play.
+As a **guest** you play at once, without an account. Much works already, some things need an account.
+
+You can walk, collect, feed the fire, talk, chat, help at building sites and look at everything. You may also help as a sponsor, at a community bed and on open fields. **Not possible:** swapping, trading, handing things on, building or owning yourself, taking jobs, founding chat groups or settlements. In a settlement you are a helper at most. A guest character lapses after some days without play.
 
 ## Account {#account}
 
@@ -1083,11 +1643,15 @@ With **“Register to keep your progress”** in the header bar you create an ac
 
 ## Logging out {#logout}
 
+Logging out only ends the session. With an account you can come back at any time.
+
 “Log out” ends the session. As a guest the game asks first whether you want to register, because otherwise you will not get back to that character.
 
 ## Privacy {#privacy}
 
-The game stores only what it needs: user name, a salted password hash, your character and its progress. All text of the world is shown as plain text and never executed as code.`,
+The game stores only what it needs. Your password is never kept in plain text.
+
+It stores your user name, a salted password hash, your character and its progress. The chat adds your public key, a backup of your private key sealed with the chat password, and sealed messages (seven days). The server sees who writes to whom and when, but no text; only a reported message reaches the admins readable ([Encryption](help.game.chat#e2e)). All text of the world is shown as plain text and never executed as code.`,
 		},
 	},
 ];

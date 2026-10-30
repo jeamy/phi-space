@@ -13,28 +13,31 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Stufe 6 (`help-site/examples/v6-mobile-control/run.ts` sowie der Web-Bereich **`AdminSpaces`** unter `https://spaces.eibrain.org/?view=admin`) verbindet den Space-Cluster mit der administrativen Steuerung aus `docs/betrieb-und-mobile-steuerung.md`. Sowohl die mobile App (`spaces.html` + `steuerung.html` in `pi-termux-mobile`) als auch die Webseite nutzen dieselben Admin-Commands im `CONTROL_SPACE`.
+Stufe 6 zeigt, wie man laufende Spaces bedient: Geräte koppeln, Worker starten und stoppen, Läufe pausieren, Spaces anlegen und archivieren. Das Programm führt diese Schritte lokal aus. Dieselben Aktionen gibt es im Web-Bereich AdminSpaces und auf den Steuerseiten der Android-App.
 
 ## Topologie: Space-Verteilung {#topology}
 
-- **1 Host** (im Arbeitsspeicher des Runners) trägt **mehrere benannte Spaces**: den `CONTROL_SPACE` (Operations-Ebene: Enroll, Worker-Assignments, RunGate, Audit), `sieve-ops`, plus dynamisch per `SpaceLifecycle` erzeugte Chat-Spaces.
-- Verteilung: ein Host, mehrere isolierte Spaces — Steuerbefehle landen im Control-Space, Chat-Daten bleiben in eigenen Daten-Spaces. In der Live-Bereitstellung entspricht dieser Host dem Prod-Host hinter `spaces.eibrain.org`.
+`help-site/examples/v6-mobile-control/run.ts` sowie der Web-Bereich **`AdminSpaces`** unter `https://spaces.eibrain.org/?view=admin` setzen die administrative Steuerung aus `docs/betrieb-und-mobile-steuerung.md` um. Die mobile App (`spaces.html` + `steuerung.html` in `pi-termux-mobile`) und die Webseite kennen dieselben Admin-Commands.
+
+- **1 Host** (`openOwnMemoryHost()` im Runner) trägt **mehrere benannte Spaces**: den `CONTROL_SPACE` (Enroll, Audit), `sieve-ops` und einen per `SpaceLifecycle` erzeugten Chat-Space.
+- Verteilung: ein Host, mehrere isolierte Spaces. Steuerbefehle landen im Control-Space, Chat-Daten bleiben im eigenen Daten-Space.
 
 ## Arbeitsablauf {#workflow}
 
 ### Schritt 1: Login in AdminSpaces & QR-Pairing für das Smartphone {#step-1-login-and-qr}
 
-1. Auf `https://spaces.eibrain.org` klickt der Administrator oben rechts auf **`ADMIN`** und meldet sich mit dem konfigurierten privaten Web-Admin-Passwort (Enrollment-Tokens koppeln ausschließlich Peers) an.
-2. Im Bereich **Identität & Geräte-Pairing** kann mit einem Klick ein neues Enrollment-Token samt `enrollQr`-Payload generiert werden, das direkt in `spaces.html` der Android-App eingefügt oder gescannt wird.
+1. Auf `https://spaces.eibrain.org` klickt der Administrator oben rechts auf **`ADMIN`** und meldet sich mit dem konfigurierten privaten Web-Admin-Passwort an. Enrollment-Tokens koppeln ausschließlich Peers, sie öffnen keine Web-Sitzung.
+2. Im ersten Bereich **Geräte-Pairing** erzeugt `createEnroll` ein neues Enrollment-Token samt `enrollQr`-Payload, das in `spaces.html` der Android-App eingefügt oder gescannt wird. Das Programm zeigt denselben Schritt lokal: `enrollQr({ token, endpoint, controlSpaceId })` und ein `Enroll`-Entry im Control-Space.
 
 ### Schritt 2: Worker-Skalierung, RunGate-Steuerung und Space-Lebenszyklus {#step-2-control}
 
-Über die identischen Aktionen in `AdminSpaces` (Web) und `steuerung.html` (Mobile) werden folgende Vorgänge mit vorab gespeicherter, wiederholsicherer `commandId` ausgeführt:
+Über die Aktionen in `AdminSpaces` (Web) und `steuerung.html` (Mobile) laufen folgende Vorgänge, jeweils mit einer `commandId`, die eine Wiederholung erkennbar macht. Das Programm ruft dieselben Controller direkt auf und zeigt davon Worker-Skalierung, Start/Pause/Resume, Archivieren/Reaktivieren, Alerts und Audit.
 
-- **Worker steuern (`listWorkers` / `setWorkers`)**: Anzahl der `chat-worker`-, `search-subagent`- oder `sieve`-Worker pro Host und Ziel-Space setzen (`0` stoppt sauber nach dem laufenden Task).
-- **Läufe & Wartungsfenster (`startRun` / `pauseRun` / `resumeRun` / `stopRun` / `scheduleRun` / `exportRun`)**: Pausiert und setzt Verarbeitungsläufe über die `RunGate`-ACK-Barriere auf allen Members fort.
+- **Worker steuern (`listWorkers` / `setWorkers`)**: Anzahl der Worker je Art (im Programm `chat-worker`, `sieve`), Host und Ziel-Space setzen (`0` stoppt nach dem laufenden Task).
+- **Läufe & Wartungsfenster (`startRun` / `pauseRun` / `resumeRun` / `stopRun` / `scheduleRun` / `exportRun` / `listRuns`)**: Pausiert und setzt Verarbeitungsläufe über die `RunGate`-ACK-Barriere auf allen Members fort.
 - **Spaces verwalten (`createSpace` / `archiveSpace` / `reactivateSpace` / `deleteSpace`)**: Legt neue Session-Spaces an oder schaltet abgeschlossene Spaces per `archiveSpace` in den schreibgeschützten Archivmodus.
-- **Hinweise & Audit (`listAlerts` / `auditLog`)**: Zeigt Warnungen (`collectAlerts`) und die lückenlose Historie aller Admin-Aufträge.
+- **Hinweise & Audit (`listAlerts` / `auditLog`)**: Zeigt Warnungen (`collectAlerts`) und die Historie der Admin-Aufträge.
+- **Deployment (`planDeployment` / `applyDeployment` / `startWorkers` / `exportDeployment`)**: Plant und aktiviert Hosts, Spaces und Worker aus einer JSON-Konfiguration. Auf der Kommandozeile heißt das `npm run bootstrap -- --check|--plan|--apply|--bind a=id|--start-workers|--export`.
 
 ### Ausführung im Terminal {#run-cli}
 

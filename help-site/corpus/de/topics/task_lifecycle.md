@@ -2,7 +2,7 @@
 standard: help_topic
 id: help.topic.task_lifecycle
 title: "Task-Lebenszyklus und sichere Wiederholung"
-short: "Ein Task-Entry und seine Transaktionsreservierung haben getrennte Leases. Die Reservierung verhindert gleichzeitige Übernahme; erst der fachliche Commit macht Taskentnahme und Ergebnis endgültig."
+short: "Eine Aufgabe ist ein Eintrag im Space. Ein Worker übernimmt sie, arbeitet und schließt sie zusammen mit dem Ergebnis ab. Diese Anleitung zeigt diesen Weg und was bei Fehlern passiert, damit nichts verloren geht oder doppelt läuft."
 tags: [task, abort, lease, retry, completion, ThreadSequence, unique, fork]
 owner: core
 related: [help.topic.overview, help.workflow.overview_v1_to_v6]
@@ -11,11 +11,13 @@ since: 0.0.1
 
 # Task-Lebenszyklus und sichere Wiederholung
 
-## Zwei Lebensdauern, zwei Abschlüsse {#overview}
+## Der Weg einer Aufgabe {#overview}
 
-Ein Task-Entry und seine Transaktionsreservierung haben getrennte Leases. Die Reservierung verhindert gleichzeitige Übernahme; erst der fachliche Commit macht Taskentnahme und Ergebnis endgültig.
+Eine Aufgabe ist ein Eintrag im Space. Ein Worker übernimmt sie, arbeitet und schließt sie zusammen mit dem Ergebnis ab. Diese Anleitung zeigt diesen Weg und was bei Fehlern passiert, damit nichts verloren geht oder doppelt läuft.
 
 ## Ablauf und Fehlergrenzen {#states}
+
+Ein Task-Entry und seine Transaktionsreservierung haben getrennte Leases. Die Reservierung verhindert gleichzeitige Übernahme; erst der fachliche Commit macht Taskentnahme und Ergebnis endgültig.
 
 1. Producer schreibt den Task mit ausreichender Lease und bei Bedarf RequestRef.
 2. Worker öffnet eine begrenzte Transaktion und nimmt den Task.
@@ -26,7 +28,7 @@ Ein Task-Entry und seine Transaktionsreservierung haben getrennte Leases. Die Re
 
 ## Chat: Sequenzen, Singleton und Fork {#chat}
 
-ThreadSequence ist ein Space-Entry und wird für die Sequenzvergabe transaktional reserviert; Msg und neuer Zählerstand committen zusammen. Nicht allein einen lokalen ++-Zähler verwenden. write mit unique: ["threadId"] prüft die Singleton-Erstanlage atomar; vorangestelltes read + write wäre ein Rennen. Ein Fork schreibt parentThreadId/forkUpToSeq; geerbte Nachrichten werden beim Lesen aufgelöst, nicht kopiert. [write API](help.api.phispaces_write#parameters).
+ThreadSequence ist ein Space-Entry und wird für die Sequenzvergabe transaktional reserviert; Msg und neuer Zählerstand committen zusammen. Nicht allein einen lokalen ++-Zähler verwenden. write mit unique: ["threadId"] prüft die Singleton-Erstanlage atomar und meldet einen Treffer als UniqueConflict; vorangestelltes read + write wäre ein Rennen. Ein Fork schreibt parentThreadId/forkUpToSeq; geerbte Nachrichten werden beim Lesen aufgelöst, nicht kopiert. [write API](help.api.phispaces_write#parameters).
 
 ## Abnahme und Grenzen {#failure-test}
 

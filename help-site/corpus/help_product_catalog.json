@@ -1,6 +1,6 @@
 {
   "schema": "phi-spaces-help-product-catalog-v1",
-  "reviewed": "2026-10-18",
+  "reviewed": "2026-10-30",
   "areas": [
     {
       "id": "spaces_system_map",
@@ -44,6 +44,7 @@
       },
       "articleIds": [
         "help.topic.overview",
+        "help.topic.apps",
         "help.topic.architecture_layers",
         "help.topic.guarantees_and_boundaries",
         "help.topic.comparison_earendil_vs_phi_spaces",
@@ -105,8 +106,8 @@
       "kind": "system",
       "coverage": "current",
       "title": {
-        "de": "Durable Claims, Streams & Mailboxes",
-        "en": "Durable Claims, Streams & Mailboxes"
+        "de": "Claims, Streams & Mailboxes",
+        "en": "Claims, Streams & Mailboxes"
       },
       "short": {
         "de": "Idempotente Request-Claims (RequestRef + Generation), RFC-8785-Argument-Hashes, bytebegrenzte Snapshot-Seiten (readPage), Revisionsströme (changes) und Consumer-Mailboxes (events/ack).",
@@ -192,7 +193,8 @@
       "articleIds": [
         "help.topic.local_client_and_named_spaces",
         "help.topic.agent_tools_and_replay",
-        "help.topic.first_running_space"
+        "help.topic.first_running_space",
+        "help.topic.examples"
       ]
     },
     {
@@ -451,8 +453,8 @@
       "kind": "built_in",
       "repository": "phi-spaces/src/core.ts + doc.ts + spaces.ts",
       "title": {
-        "de": "Core & Dokumentmodell (v5)",
-        "en": "Core & Document Model (v5)"
+        "de": "Core & Dokumentmodell",
+        "en": "Core & Document Model"
       },
       "short": {
         "de": "Reine Tuple-Space-Semantik: Entries, Subtypen, Templates, Leases, Transaktionen, CompletionProfiles, RunGates und Limits.",
@@ -506,7 +508,7 @@
       "id": "pkg_tools",
       "owner": "tools",
       "kind": "host_owned",
-      "repository": "phi-spaces/src/index.ts",
+      "repository": "phi-spaces/agent/src/agent.ts + src/index.ts",
       "title": {
         "de": "LLM-Agent-Tools & Hintergrunddienst",
         "en": "LLM Agent Tools & Background Service"
@@ -532,7 +534,7 @@
       "id": "pkg_remote",
       "owner": "remote",
       "kind": "runtime_service",
-      "repository": "phi-spaces/src/service.ts + remote.ts + socket.ts + pi-server.ts",
+      "repository": "phi-spaces/src/service.ts + remote.ts + socket.ts + standalone.ts + space-client.ts + ws.ts + pi-server.ts",
       "title": {
         "de": "SpaceService, RemoteSpace & Socket/TCP-Transport",
         "en": "SpaceService, RemoteSpace & Socket/TCP Transport"

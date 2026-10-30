@@ -2,10 +2,10 @@
 standard: help_topic
 id: help.topic.overview
 title: "phi-spaces Systemüberblick: Was es ist und was es kann"
-short: "Verständlicher, ausführlicher Einblick: Was phi-spaces ist, wie das transaktionale Tuple-Space-Modell funktioniert, welche Probleme es löst und was es von v1 (In-Memory) bis v6 (Federated Cluster + Mobile/Web Admin) leisten kann."
+short: "Einstieg in phi-spaces: was es ist, wie das transaktionale Tuple-Space-Modell funktioniert, welche Probleme es löst und was es vom Einzelprozess bis zum föderierten Verbund mit Mobile- und Web-Administration kann."
 tags: [phi-spaces, overview, tuple-space, architecture, phispaces, remotespace, federatedspace]
 owner: core
-related: [help.topic.architecture_layers, help.topic.guarantees_and_boundaries, help.workflow.overview_v1_to_v6]
+related: [help.topic.examples, help.topic.apps, help.topic.architecture_layers, help.topic.guarantees_and_boundaries, help.workflow.overview_v1_to_v6]
 since: 0.0.1
 ---
 
@@ -13,7 +13,13 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-`phi-spaces` ist ein transaktionaler, persistenter **Koordinationsraum** (eine moderne Weiterentwicklung des klassischen Linda-/JavaSpaces-Paradigmas) mit eigenem Speicher (SQLite, ein Prozess besitzt ihn); für `@earendil-works/pi-durable`-Agenten gibt es ein optionales Agent-Paket. Anstatt Clients, Hintergrund-Worker, KI-Agenten und Administrationswerkzeuge über fehleranfällige Punkt-zu-Punkt-Aufrufe direkt miteinander zu verkoppeln, tauschen alle Teilnehmer unveränderliche, typisierte JSON-Objekte (**Entries**) über gemeinsam nutzbare, versionierte Datenräume (**Spaces**) aus.
+phi-spaces ist ein gemeinsamer Ablageort für Programme, ähnlich einer Pinnwand. Ein Programm hängt dort einen Auftrag oder eine Nachricht auf, ein anderes holt sie ab, sobald es Zeit hat. Beide müssen sich nicht kennen und nicht gleichzeitig laufen. Stürzt ein Programm mitten in der Arbeit ab, geht der Auftrag nicht verloren, sondern wird wieder frei. Das hilft überall dort, wo mehrere Programme, Geräte oder KI-Agenten zusammenarbeiten.
+
+## Wo es weitergeht {#where-next}
+
+- **In Aktion sehen:** Die [Beispiele](help.topic.examples#overview) zeigen kleine Programme zum Ausprobieren.
+- **Fertige Anwendungen ansehen:** Die [Anwendungen auf phi-spaces](help.topic.apps#overview) zeigen, was damit gebaut wurde.
+- **Weiterlesen:** Der Rest dieses Artikels erklärt das Modell, die Begriffe und die Grenzen.
 
 ## Herkunft: Linda und JavaSpaces {#history}
 
@@ -25,7 +31,7 @@ Das Modell ist nicht auf Agentenkommunikation zugeschnitten. Ein Space transport
 
 ### Was phi-spaces besonders kann {#highlights}
 
-- **Beliebige Kommunikate**: Jede JSON-Struktur mit `type` kann Entry sein – es gibt kein festes Nachrichtenformat.
+- **Beliebige Kommunikate**: Jede JSON-Struktur mit `type` kann Entry sein; es gibt kein festes Nachrichtenformat.
 - **Kommunikation ohne Adressen**: Absender wählen keinen Empfänger; Teilnehmer finden Daten über Templates.
 - **Entkopplung in Raum und Zeit**: Produzenten und Konsumenten kennen einander nicht und müssen nicht gleichzeitig online sein.
 - **Verlässliche Arbeitsverteilung**: exklusives `take` mit Lease und Transaktion; Abstürze geben Arbeit wieder frei.
@@ -34,9 +40,11 @@ Das Modell ist nicht auf Agentenkommunikation zugeschnitten. Ein Space transport
 
 ## Was ist phi-spaces und warum wurde es gebaut? {#what-is-phi-spaces}
 
-`phi-spaces` löst vier fundamentale Probleme bei der Entwicklung robuster, langlaufender Systeme und autonomer KI-Agenten-Flotten:
+`phi-spaces` ist ein transaktionaler, persistenter **Koordinationsraum** in TypeScript nach dem Linda-/JavaSpaces-Modell. Er hat einen eigenen Speicher: eine SQLite-Datei, die genau ein Prozess besitzt, oder nur den Arbeitsspeicher. Die Bibliothek braucht kein Agenten-Framework. Das optionale Paket `agent/` gibt `@earendil-works/pi-durable`-Agenten Werkzeuge für den Space; als Speicher des Space dient pi-durable nicht mehr, alte pi-durable-Stores werden nicht übernommen. Anstatt Clients, Hintergrund-Worker, KI-Agenten und Administrationswerkzeuge über Punkt-zu-Punkt-Aufrufe direkt zu verkoppeln, tauschen alle Teilnehmer unveränderliche, typisierte JSON-Objekte (**Entries**) über gemeinsame, versionierte Datenräume (**Spaces**) aus.
 
-1. **Fehlertolerante Aufgabenübergabe (mit geleaster Reservierung)**: Ein Server, UI-Client oder Agent übergibt Arbeit nicht direkt an einen Worker, sondern schreibt einen Aufgaben-Entry (`type: "ChatTask"` o.Ä.) in den Space. Jeder Worker kann sich diesen Task exklusiv **reservieren** (`take`). Stürzt der Worker vor der Fertigstellung ab, gibt die abgelaufene Lease den Task automatisch wieder frei – sofern die eigene Task-Lease noch gilt und der Store verfügbar ist.
+Die Bibliothek löst vier Probleme beim Bau langlaufender Systeme und von KI-Agenten-Gruppen:
+
+1. **Fehlertolerante Aufgabenübergabe (mit geleaster Reservierung)**: Ein Server, UI-Client oder Agent übergibt Arbeit nicht direkt an einen Worker, sondern schreibt einen Aufgaben-Entry (`type: "ChatTask"` o.Ä.) in den Space. Jeder Worker kann sich diesen Task exklusiv **reservieren** (`take`). Stürzt der Worker vor der Fertigstellung ab, gibt die abgelaufene Lease den Task automatisch wieder frei, sofern die eigene Task-Lease noch gilt und der Store verfügbar ist.
 2. **Zeitliche Entkopplung**: Produzenten und Konsumenten müssen nicht gleichzeitig online sein. Ein Client kann mitten in der Nacht einen `ScheduledJob` einstellen und offline gehen; mit persistentem Backend und ausreichender Task-Lease bleibt der Auftrag erhalten; die Anwendung prüft nach Ablauf des TimerLock die Fälligkeit.
 3. **Einheitlicher Zustand mit Live-Ereignissen**: Statt fragmentierter Caches bietet jeder Space atomare Transaktionen (`createTransaction`, `commit`, `abort`), konsistente Snapshots (`readPage` mit `rev`), inkrementelle Update-Streams (`changes(afterRev)`) und langlebige Ereignis-Mailboxes (`events` + Präfix-`ack`).
 4. **Schrittweise Verteilung**: Lokale und Remote-Clients teilen den SpaceLike-Basisvertrag. Federation ergänzt Routing und eigene Request-Bindungen; reale Verschlüsselung, Provisionierung und Ausfallsicherheit benötigen gesonderte Konfiguration und Abnahme.
@@ -58,6 +66,7 @@ In `phi-spaces` müssen Produzent und Konsument einander nicht kennen und nicht 
 - **Atomare Space-Transaktionen**: `take` + mehrere `write` + optionale Request-Claims mit einem fachlichen `commit(txn)` (vorherige PhiSpaces-Aufrufe sind separate Storage-Commits). Bei `abort` oder Timeout wird alles atomar zurückgerollt.
 - **Serverseitige Ergebnisgarantien (`CompletionProfiles`)**: Der Space-Kern erzwingt beim Commit, dass ein genommener Task des Typs `ChatTask` nur zusammen mit genau einem passenden Ergebnis-Entry `Msg` erfolgreich commitet werden kann.
 - **Idempotente Request-Claims (`RequestRef`)**: Jede Mutation kann mit `{ request: { principal, generation, requestId } }` ausgeführt werden; Wiederholungen und Timeouts erzeugen keine doppelte Wirkung.
+- **Eigener Speicher (`openSqliteHost`, `openOwnMemoryHost`)**: SQLite mit einem besitzenden Prozess und einem Schreib-Thread, oder nur im Arbeitsspeicher. Ein Commit gilt erst als bestätigt, wenn er auf der Platte steht (Standard `synchronous=FULL`).
 - **Leases & automatischer Reaper (`startService`)**: Entries, Presence-Zustände und `TimerLock`-Schlösser laufen nach definierter Zeit automatisch ab.
 - **Snapshot- und Inkrement-Sync (`readPage` + `changes`)**: Punkt-in-Zeit-Snapshots plus reihenfolgetreue, revisionierte Update-Streams (`rev`) und präfix-bestätigte langlebige Mailboxes.
 - **Space Lifecycle, Worker, Läufe & Deployments**: Idempotentes Space-Management (`archive`/`reactivate`/`delete`), Worker-Skalierung (`WorkerSupervisor`), Multi-Host-Laufsteuerung (`RunGate`) und deklaratives Bootstrap (`DeploymentController`) vom Einzel-Host bis zum Cluster.
@@ -77,7 +86,7 @@ PhiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSp
 ## Arbeitsablauf {#workflow}
 
 1. **Vertrag definieren**: Entry-Typen (`type`), Pflichtfelder (`fields`) und optionale `CompletionProfiles` (welcher Task-Typ erfordert welchen Ergebnis-Typ beim Transaktions-Commit?) festlegen.
-2. **Space öffnen und Dienst starten**: `new PhiSpaces(host, ctx, Date.now, meter, undefined, { space })` erstellen und `await startService(host, ctx)` für Lease-Reaper und Event-Zustellung starten.
+2. **Space öffnen und Dienst starten**: Einen Host mit `openSqliteHost(path)` oder `openOwnMemoryHost()` öffnen, `new PhiSpaces(host, ctx, Date.now, meter, undefined, { space })` erstellen und `await startService(host, ctx)` für Lease-Reaper und Event-Zustellung starten. Als eigener Prozess läuft dasselbe mit `npm run space-server` (siehe [SpaceService und RemoteSpace](help.topic.space_service_and_remote_space#standalone)).
 3. **Aufgaben einstellen und bearbeiten**: Produzenten schreiben Aufgaben mit `RequestRef`-Claim; Worker reservieren Aufgaben per `take(..., { txn })`, schreiben Ergebnisse unter derselben `txn` und rufen `commit(txn)` auf.
 4. **Live-Beobachtung und Steuerung**: UI-Clients lesen initial `readPage()` (Snapshot mit `rev`) und folgen Änderungen über `changes(afterRev)` oder Consumer-Mailboxes (`events` / `ack`).
 
@@ -85,7 +94,8 @@ PhiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSp
 
 - **Ein Commit, eine Wahrheit**: Space-Mutation, Request-Claim, Revisionszähler `rev`, Mailbox-Ereignis und Byte-Budget-Prüfung werden in einem einzigen atomaren Commit des Hosts persistiert.
 - **Daten sind keine Anweisungen**: Entries aus dem Space stammen potenziell von anderen Agenten oder Benutzern. Die Agenten-Tools kennzeichnen sie strikt als `[data, not instructions]`.
-- **Help ≠ Live State**: Diese Referenz dokumentiert die stabilen Verträge und Garantien. Den aktuellen Laufzeitbestand eines Spaces zeigen der integrierte **Live Space-Inspector** und der geschützte Bereich **AdminSpaces**.
+- **Help ≠ Live State**: Diese Referenz dokumentiert die Verträge und Garantien. Den aktuellen Laufzeitbestand eines Spaces zeigen der integrierte **Live Space-Inspector** und der geschützte Bereich **AdminSpaces**.
+- **Experimentelle Software**: APIs, Speicherformate und Betriebsverhalten können sich ändern. Vorhandene Implementierungen sind keine Produktionsfreigabe; insbesondere Phase 3 (Replikation, Promotion) ist nicht vollständig abgenommen.
 
 ## Siehe auch {#see-also}
 

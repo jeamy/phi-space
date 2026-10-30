@@ -13,9 +13,11 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-`createFederationController(options)` initializes and recovers the federated router (supporting up to 1024 journal partitions), `FederatedSpace`, `FederationPolicyAuthority`, and `MembershipController`.
+`createFederationController` spreads the data of one logical space across several spaces, also on several machines. Use it when a single host is no longer enough. Entries that belong together stay in the same place.
 
 ## Technical Reference {#technical-reference}
+
+`createFederationController(options)` initializes and recovers the federated router (`journalPartitions` from 1 to 1024, default 1, fixed afterwards), `FederatedSpace`, `FederationPolicyAuthority`, and `MembershipController`. These APIs belong to the server-side router and do not replace the signatures of `RemoteSpace`.
 
 ```ts
 const fed = await createFederationController({
@@ -31,14 +33,15 @@ const fed = await createFederationController({
 
 | Component | Task |
 | --- | --- |
-| `RouterController` | Journals routing decisions partitioned (up to 1024) and signs `RouterLease`s for authorized members. |
-| `FederatedSpace` | `SpaceLike` facade that routes `write`/`read`/`take` to the responsible member space via HRW hash of the correlation field (e.g. `threadId`). |
+| `RouterController` | Journals commands with stable sub-request IDs: `recover`, `submit`, `advance`, `get`, `ingest`, `review`. `renewableRouterLease` looks after the signed lease. |
+| `FederatedSpace` | Routes by policy and HRW hash of the routing field (e.g. `threadId`) to the responsible member. Own signatures, not `SpaceLike`: `write(entry, request, leaseMs)`, `read(template, request)`, `take(template, request)`, `readAll(template, principal, options?)` with `{ entries, complete }`. |
 | `FederationPolicyAuthority` | Manages the authoritative member set and shard mapping. |
-| `MembershipController` | Controlled join/drain/remove of members (`join`, `drain`, `leave`) as journaled commands. |
-| `takeWaiting` | Journaled waiter race: exactly one member wins a cluster-wide parked take wish. |
+| `MembershipController` | Controlled adding, draining, and removing of members as journaled commands: `execute(id, "add" \| "drain" \| "remove", member, ...)`. |
+| `takeWaiting` | Journaled waiter race: exactly one member wins a cluster-wide parked take wish. Bounds: `timeoutMs` up to 3,600,000, `txnLeaseMs` up to 60,000. |
+| `EntryReplicationController` | Its own document for replicated entries (HLC, LWW, Add-Wins), no replication of normal entries. `erasePrincipal`, `completeErasure`, `compactionStatus`, and `compact(id)` erase from and compact its history. |
 
 ## Typical Use Cases {#use-cases}
 
 - **Chat sharding (v5)**: Threads are distributed across three members via HRW over `threadId` – every transaction stays locally atomic; cross-member `txn`s are rejected with `RoutingConflict`.
-- **Cluster-wide search**: The `search_history` subagent writes `SearchTask`s that each member answers locally; the coordinator merges the `SearchResult`s.
-- **Maintenance without downtime**: `membership.execute(cmdId, "drain", member)` empties a host in a controlled fashion before servicing it.
+- **Cluster-wide reads**: `readAll` queries all matching members; `complete: false` shows that answers are missing.
+- **Maintenance without downtime**: `execute` with `"drain"` empties a member in a controlled way before servicing it.

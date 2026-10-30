@@ -1,10 +1,10 @@
 # Architekturvergleich: Earendil Multiplayer Chat (`Pi Durable on Cloudflare`) vs. `phi-spaces` (`v1` In-Memory bis `v5`/`v6` Federated Space)
 
-**Stand:** 17. Oktober 2026  
+**Stand:** 17. Oktober 2026, Persistenz-Zeile und Pfade am 30. Oktober 2026 nachgeführt  
 **Bezug:**
 - Vorlage: [Pi Durable on Cloudflare – Multiplayer Chat](https://earendil.com/posts/pi-durable-on-cloudflare/)
 - Unsere Umsetzung: [`help-site/examples/v1..v6`](file:///media/data/programming/phi-spaces/help-site/examples) und [`help-site/examples/shared/chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts)
-- Abgrenzung zum Aktor-Modell: [`examples/chat.ts`](file:///media/data/programming/phi-spaces/examples/chat.ts)
+- Abgrenzung zum Aktor-Modell: [`agent/examples/chat.ts`](file:///media/data/programming/phi-spaces/agent/examples/chat.ts)
 - Zielarchitektur ohne Pi-Durable: [`docs/umstellung-ohne-pi-durable.md`](file:///media/data/programming/phi-spaces/docs/umstellung-ohne-pi-durable.md)
 
 ---
@@ -19,12 +19,12 @@ Obwohl beide Ansätze historisch aus der `@earendil-works`-Ökosphäre hervorgeg
 | **Geschäftslogik & Zustand** | Im Methoden-Code der Durable-Object-Klasse (`Session`), die direkt `harness.commit(...)`, `conversation.submit(...)` und `watchEvents(...)` aufruft. | In unabhängigen Workern, die über das einheitliche `SpaceLike`-Interface (`write`, `read`, `take`, `wait`, `notify`, `createTransaction`, `commit`) mit dem Space interagieren. | ✅ Implementiert in `processNextChatTask` und `processNextSearchTask`. |
 | **Koppelung Web-Server & KI-Worker** | **Eng gekoppelt (In-Object)**: WebSocket-Terminierung, Konversationszustand und Modellaufrufe laufen zwingend in derselben Cloudflare-Instanz. | **Frei wählbar (`v1`–`v6`)**: Kann im selben Prozess (`v1`/`v2`), über Unix-Socket/TCP getrennt (`v3`), kryptografisch gesichert (`v4`) oder über mehrere Server föderiert (`v5`/`v6`) laufen. | ⚠️ **Lücke:** In `v5-federated-cluster` läuft der Test aktuell in-process mit 4 `MemoryStorage`-Instanzen statt über echte TCP-Sockets. |
 | **Plattformbindung** | Gebunden an **Cloudflare Workers & Durable Objects** (`DurableObjectState`, `ctx.storage.sql`, Hibernatable WebSockets, `alarm()`). | **Plattformunabhängig (Self-Hosted / On-Prem / VPS / Container / Mobile)**: Läuft überall, wo Node.js läuft (RAM, lokale SQLite/JSONL, Docker, Linux-VPS, Android/Termux). | ✅ Verifiziert auf Linux & Android/Termux. |
-| **Persistenz-Abhängigkeit** | Fest verdrahtet mit Cloudflare Edge Storage und `@earendil-works/pi-durable`. | Aktuell noch gekoppelt an `@earendil-works/pi-durable`; Strategieplan [`docs/umstellung-ohne-pi-durable.md`](file:///media/data/programming/phi-spaces/docs/umstellung-ohne-pi-durable.md) sieht autarke SQLite-Engine vor. | ⚠️ **In Umstellung:** Ziel ist vollständige Unabhängigkeit von `pi-durable`. |
+| **Persistenz-Abhängigkeit** | Fest verdrahtet mit Cloudflare Edge Storage und `@earendil-works/pi-durable`. | Eigener SQLite-Speicher ohne pi-durable ([`docs/umstellung-ohne-pi-durable.md`](file:///media/data/programming/phi-spaces/docs/umstellung-ohne-pi-durable.md)); pi-durable nutzt nur das optionale Paket `agent/`. | ✅ **Umgestellt:** Der Space ist unabhängig von `pi-durable`. |
 | **Skalierungsmodell** | **Scale-to-Zero pro Session** (Hibernation bei Inaktivität; unbegrenzt viele kleine, voneinander komplett isolierte Sessions in der Cloud). | **Horizontale & vertikale Skalierung von Workern und Spaces**: Einzel-Space (`v1`–`v4`) bis zum geshardeten Multi-Member-Cluster (`v5` mit HRW-Routing nach `threadId`) und zentraler Betriebssteuerung (`v6`). | ✅ HRW-Routing in Core implementiert; siehe Abschnitt 2.8 für Cluster-Transaktionsgrenzen. |
 
 > [!NOTE]
 > **Koexistenz zweier Chat-Ansätze im Repository:**  
-> Das Root-Beispiel [`examples/chat.ts`](file:///media/data/programming/phi-spaces/examples/chat.ts) implementiert den Chat als **Earendil-Aktor-Netzwerk**, in dem `alice`, `bob` und `carol` langlebige `pi-durable`-Conversations sind und der Space nur als Event-Bus dient.  
+> Das Root-Beispiel [`agent/examples/chat.ts`](file:///media/data/programming/phi-spaces/agent/examples/chat.ts) implementiert den Chat als **Earendil-Aktor-Netzwerk**, in dem `alice`, `bob` und `carol` langlebige `pi-durable`-Conversations sind und der Space nur als Event-Bus dient.  
 > Die Stufen `v1` bis `v6` in `help-site/examples/` ([`chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts)) demonstrieren hingegen die **reine Tuple-Space-Architektur**, die gänzlich ohne Aktor-Konversationen auskommt.
 
 ---

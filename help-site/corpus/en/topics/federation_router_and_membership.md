@@ -13,7 +13,11 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-Phase 2 (`src/router.ts`, `src/delegation.ts`, `src/federation-policy.ts`, `src/federated-space.ts`, `src/membership.ts`) unites multiple physical member spaces under a coordinator router into a logical `FederatedSpace`.
+A single machine has limits. With federation you spread a space across several machines, and to programs it stays one shared space. A fixed rule decides which data lives where, so that what belongs together stays together. A coordinator records every step, so that nothing happens twice after a failure.
+
+### Technical Details {#technical-details}
+
+Phase 2 (`src/router.ts`, `src/delegation.ts`, `src/federation-policy.ts`, `src/federated-space.ts`, `src/membership.ts`) unites multiple physical member spaces under a coordinator router into a logical `FederatedSpace`. Its API differs from the `SpaceLike` base contract. The standalone service is not a federation member; that takes the federation host.
 
 ## Concept And System Model {#concept-model}
 
@@ -26,12 +30,13 @@ Every federated operation transitions through the persistent state machine `acce
 `FederationPolicy` assigns a placement rule to each entry type:
 
 - **`local`**: Pinned to a single member space.
-- **`expand` by type or key field (HRW)**: With `by: { field: "threadId" }`, the router deterministically hashes the canonical field value and member IDs to pick the owning member.
-- **Benefit for our Multiplayer Space-Chat**: Because `Thread`, `Msg`, and `ChatTask` all route by `field: "threadId"` across the same member set, every operation for a given thread lands on the exact same member space! Local space transactions and `CompletionProfiles` therefore work at full speed without cross-node two-phase locking.
+- **`expand`**: Spreads by `by`: `"type"`, `{ field }`, `"capacity"` or `"capability"`. With `by: { field: "threadId" }`, the router deterministically hashes (HRW) the canonical field value and member IDs to pick the owning member.
+- **`sync`**: A fixed member with a primary/sync replica configuration.
+- **Example Multiplayer Space-Chat**: Because `Thread`, `Msg`, and `ChatTask` all route by `field: "threadId"` across the same member set, every operation for a given thread lands on the same member space. Local space transactions and `CompletionProfiles` therefore work without cross-node two-phase locking.
 
 ### Journaled Waiter Race In takeWaiting {#waiter-race}
 
-When a global worker calls `federatedSpace.takeWaiting(template, timeoutMs, txnLeaseMs, request)` with a wildcard key, the router registers bounded take waiters across all candidate members. When mailbox events arrive, they are ingested into the router journal **before** mailbox ACK: the first active reservation is durably elected as the winner, and any competing reservations on other members are automatically aborted and returned.
+When a global worker calls `federatedSpace.takeWaiting(template, timeoutMs, txnLeaseMs, request)` without a fixed key field, the router registers bounded take waiters across all candidate members. When mailbox events arrive, they are ingested into the router journal **before** mailbox ACK: the first active reservation is durably elected as the winner, and any competing reservations on other members are automatically aborted and returned.
 
 ## See Also {#see-also}
 

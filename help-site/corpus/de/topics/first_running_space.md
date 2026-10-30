@@ -2,7 +2,7 @@
 standard: help_topic
 id: help.topic.first_running_space
 title: "Erster vollständiger Space: Aufgabe bis Ergebnis"
-short: "Ein vollständiges Beispiel ohne Modell, Credentials oder Server: einen Job schreiben, lesen, reservieren und mit passendem Ergebnis abschließen. Vorhandene Repository-Abhängigkeiten und Node mit TypeScript-Stripping genügen."
+short: "Dieses Beispiel zeigt den ganzen Weg einer Aufgabe in einem Space: schreiben, ansehen, übernehmen und mit einem Ergebnis abschließen. Du brauchst dafür kein Modell, keine Zugangsdaten und keinen Server. Es reichen Node und die vorhandenen Abhängigkeiten des Repositorys."
 tags: [start, beginner, tutorial, job, result, shutdown]
 owner: client
 related: [help.topic.overview, help.workflow.overview_v1_to_v6]
@@ -13,11 +13,11 @@ since: 0.0.1
 
 ## Ziel und Voraussetzungen {#overview}
 
-Ein vollständiges Beispiel ohne Modell, Credentials oder Server: einen Job schreiben, lesen, reservieren und mit passendem Ergebnis abschließen. Vorhandene Repository-Abhängigkeiten und Node mit TypeScript-Stripping genügen.
+Dieses Beispiel zeigt den ganzen Weg einer Aufgabe in einem Space: schreiben, ansehen, übernehmen und mit einem Ergebnis abschließen. Du brauchst dafür kein Modell, keine Zugangsdaten und keinen Server. Es reichen Node und die vorhandenen Abhängigkeiten des Repositorys.
 
 ## Ausführen und prüfen {#run}
 
-Im Repository-Root ausführen. Erwartet wird exakt { inspected: 7, squared: 49, jobsRemaining: 0 }. Lesen verbraucht den Job nicht; Ergebnis und endgültige Entnahme werden gemeinsam sichtbar. Der Task ist FOREVER, die Bearbeitungsreservierung 30 Sekunden gültig.
+Im Repository-Root mit Node und TypeScript-Stripping ausführen. Erwartet wird exakt { inspected: 7, squared: 49, jobsRemaining: 0 }. Lesen verbraucht den Job nicht; Ergebnis und endgültige Entnahme werden gemeinsam sichtbar. Der Task ist FOREVER, die Bearbeitungsreservierung 30 Sekunden gültig.
 
 ```bash
 PHI_SPACES_LLM=0 node --experimental-strip-types help-site/examples/tuple-basics.ts
@@ -68,4 +68,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
 ## Fehlerfall und Persistenz {#failure-and-storage}
 
-Zum Experimentieren den Result-Write auslassen: commit meldet CompletionViolation, der catch bricht ab und gibt den Job zurück. Das finally stoppt den Dienst und schließt den Host auch bei Fehlern. Der Speicher im Arbeitsspeicher verliert Daten beim Prozessende; für Neustarts einen persistenten Store verwenden. Das Beispiel beweist keine Stromausfall- oder Multi-Host-Garantie. Weiter: [Task-Lebenszyklus](help.topic.task_lifecycle#overview).
+Zum Experimentieren den Result-Write auslassen: commit meldet CompletionViolation, der catch bricht ab und gibt den Job zurück. Das finally stoppt den Dienst und schließt den Host auch bei Fehlern. Der Speicher im Arbeitsspeicher (`openOwnMemoryHost`) verliert Daten beim Prozessende; für Neustarts `openSqliteHost(pfad)` verwenden. Das Beispiel beweist keine Stromausfall- oder Multi-Host-Garantie. Weiter: [Task-Lebenszyklus](help.topic.task_lifecycle#overview).

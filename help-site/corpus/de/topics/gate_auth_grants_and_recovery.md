@@ -13,6 +13,10 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
+Sobald ein Space von außen erreichbar ist, muss klar sein, wer anklopft. Eine Netzwerkadresse allein reicht dafür nicht. Darum weist sich jedes Gerät zweimal aus: über das private Netz und mit einem eigenen Schlüssel. Neue Geräte werden mit einem Einmal-Code gekoppelt, und Erlaubnisse gelten nur kurze Zeit.
+
+### Technische Details {#technical-details}
+
 In einer Mehr-Host-Umgebung reicht eine IP-Adresse nicht als Identitätsnachweis, da mehrere Prozesse auf demselben Host dieselbe Netzwerk-IP teilen können. Phase 1b (`src/gate.ts`, `src/auth.ts`, `src/enroll.ts`, `src/grants.ts`, `src/runtime.ts`) kombiniert daher zwei Sicherheitsschichten mit kurzlebigen, signierten **60-Sekunden-Grants** und einem externen **CAS-Boot-Register**.
 
 ## Begriffs- und Systemmodell {#concept-model}
@@ -25,7 +29,7 @@ In einer Mehr-Host-Umgebung reicht eine IP-Adresse nicht als Identitätsnachweis
 ### Enrollment, 60s-Grants und Schlüsselrotation {#enrollment-and-grants}
 
 - **Enrollment (`createEnroll` / `enrollQr`)**: Ein Admin erzeugt über den Supervisor ein Einmal-Token (nur der SHA-256-Hash liegt im `CONTROL_SPACE`). Das neue Gerät koppelt seinen Public Key per `remote.enroll(token)`.
-- **Kurzlebige Grants (`GrantAuthority` / `GrantVerifier`)**: Vor jedem fachlichen Aufruf auf einem Data-Space holt `RemoteSpace` über `grantProvider` einen vom Control-Host signierten Grant (`purpose: "effect" | "resolution"`, max. 60 s gültig). Der Data-Member prüft Signatur, `authorityId`, `peerId`, `keyId`, Scope und Ablaufzeit noch einmal direkt vor dem Commit!
+- **Kurzlebige Grants (`GrantAuthority` / `GrantVerifier`)**: Vor jedem fachlichen Aufruf auf einem Data-Space holt `RemoteSpace` über `grantProvider` einen vom Control-Host signierten Grant (`purpose: "effect" | "resolution"`, max. 60 s gültig). Der Data-Member prüft Signatur, `authorityId`, `peerId`, `keyId`, Scope und Ablaufzeit noch einmal direkt vor dem Commit.
 - **Eigene Schlüsselrotation (`rotateKey`)**: Erfordert die Signatur des alten **und** des neuen Schlüssels über eine persistierte Challenge und tauscht den Schlüssel im `CONTROL_SPACE` atomar ohne Rechteverlust aus.
 
 ### Boot-Guard und Restore-Quarantäne {#boot-and-restore}
