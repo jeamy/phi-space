@@ -1,7 +1,8 @@
-//! The operations of src/core.ts on one space, as far as R1 has come (docs/rust-portierung.md, slices 1 to 3):
-//! entries, templates, leases, `settle` and expiry, transactions, waiters and parked requests with their events in the
-//! outbox (and fanout jobs when it is full), the change stream records, the commit budget, reads, counts, pages and
-//! `changes`. Claims and generations are in `claims`.
+//! The operations of src/core.ts on one space, as far as R1 has come (docs/rust-portierung.md, slices 1 to 4):
+//! entries, templates, leases, `settle` and expiry, transactions, subscriptions (notify) and waits with their events in
+//! the outbox or a consumer's mailbox (and fanout jobs when they are full), parked requests, the change stream records,
+//! the commit budget, reads, counts, pages and `changes`. Claims and generations are in `claims`, mailboxes in
+//! `mailbox`.
 //!
 //! The statement order is the TypeScript one, also where it is not the obvious one: an operation that fails after
 //! `settle` keeps what `settle` did (a store rolls the commit back; the core does not), so a check moved before or after
@@ -11,10 +12,9 @@
 //! running commit, its byte budget and the expiry watermark. The watermark is not only a speed-up: `nextExpiry` answers
 //! from it, and it can be stale low.
 //!
-//! A space with anything not ported yet (registrations, mailboxes, consumers, membership, restore, completion
-//! profiles, …) is refused with `NotPorted` before anything happens, and so is an argument outside the shapes
+//! A space with anything not ported yet (membership, restore, completion profiles, run gates, …) is refused with `NotPorted` before anything happens, and so is an argument outside the shapes
 //! ported so far.
-use crate::state::{EntryRec, SpaceState, TxnRec, WaiterRec};
+use crate::state::{EntryRec, RegRec, SpaceState, TxnRec, WaiterRec};
 use crate::stream::{self, Collected, Open};
 use phi_json::{number_text, obj, Json, Object, FOREVER};
 
@@ -144,6 +144,7 @@ fn deadline_of(now: f64, timeout: Option<&Json>) -> Result<f64> {
 fn num_of(v: &Json, k: &str) -> Option<f64> { v.get(k).and_then(Json::as_f64) }
 /// A stored wait's template (`assert_ported` checked that it parses).
 fn waiter_template(w: &WaiterRec) -> Template { Template::from_json(Some(&w.template)).unwrap_or(Template::Any) }
+fn reg_template(r: &RegRec) -> Template { Template::from_json(Some(&r.template)).unwrap_or(Template::Any) }
 
 /// Leases are granted as requested: FOREVER never expires, ANY gets the default.
 fn grant(requested: Option<&Json>, now: f64) -> Result<f64> {
@@ -285,7 +286,7 @@ fn seq_of(id: &str) -> f64 {
 }
 
 /// `bytePage`: as many whole elements as fit `cap` encoded bytes together with what `make` adds; at least one.
-fn byte_page(source: &[Json], cap: f64, make: impl Fn(Vec<Json>, Option<usize>) -> Json) -> Result<Json> {
+pub(crate) fn byte_page(source: &[Json], cap: f64, make: impl Fn(Vec<Json>, Option<usize>) -> Json) -> Result<Json> {
 	let mut items = vec![];
 	let mut contents = 0.0;
 	for i in 0..source.len() {
@@ -315,8 +316,17 @@ enum Standing {
 	Visible,
 }
 
+/// A subscription or wait about to be added, counted as if it were there.
+#[derive(Clone, Copy)]
+enum Extra<'a> {
+	None,
+	Waiter(&'a WaiterRec),
+	Reg(&'a RegRec),
+}
+
 #[derive(Clone, Copy)]
 enum Leased {
+	Reg(usize),
 	Waiter(usize),
 	Entry(usize),
 	Txn(usize),
@@ -334,6 +344,9 @@ pub type Random = Box<dyn FnMut(usize) -> Vec<u8> + Send>;
 /// One space: its document and what core.ts keeps beside it.
 pub struct Space {
 	pub state: SpaceState,
+	/// The wall clock, where core.ts reads `Date.now()` itself (a new mailbox, an ack); the driver sets it to the line's
+	/// `now`.
+	pub clock: f64,
 	random: Random,
 	/// The batch of the running commit (stream.ts `open`).
 	open: Option<Open>,
@@ -345,7 +358,7 @@ pub struct Space {
 }
 
 impl Space {
-	pub fn new(state: SpaceState, random: Random) -> Space { Space { state, random, open: None, budget: None, watermark: None } }
+	pub fn new(state: SpaceState, random: Random) -> Space { Space { state, clock: 0.0, random, open: None, budget: None, watermark: None } }
 	pub(crate) fn random_bytes(&mut self, n: usize) -> Vec<u8> { (self.random)(n) }
 
 	pub fn limits(&self) -> Limits { Limits::of(self.state.limits.as_ref()) }
@@ -363,18 +376,21 @@ impl Space {
 
 	/// Refuses a space with parts the Rust core does not port yet. An allowlist: what is not named here is refused.
 	pub fn assert_ported(&self) -> Result<()> {
-		let local = |events: &[Json]| events.iter().all(|e| e.get("consumer").is_none());
 		for (k, v) in self.state.rest.iter() {
 			let fine = match k {
-				"regs" => v.as_array().is_some_and(Vec::is_empty),
 				"outbox" => v.as_array().is_some(),
-				// fanout jobs for the local outbox (consumers' mailboxes come with slice 4)
-				"jobs" => v.as_array().is_some_and(|jobs| jobs.iter().all(|j| j.get("events").and_then(Json::as_array).is_some_and(|e| local(e)))),
+				"jobs" => v.as_array().is_some_and(|jobs| jobs.iter().all(|j| j.get("events").and_then(Json::as_array).is_some())),
+				"releaseQueue" => v.as_array().is_some_and(|q| q.iter().all(|x| x.as_str().is_some())),
 				"maintenance" => v.get("at").and_then(Json::as_f64).is_some(),
 				_ => false,
 			};
 			if !fine {
-				return Err(not_ported(format!("the space's {k} (R1 ports entries, transactions, waiters and claims so far, no registrations)")));
+				return Err(not_ported(format!("the space's {k} (R1 has not ported it yet)")));
+			}
+		}
+		for r in &self.state.regs {
+			if !r.rest.is_empty() || Template::from_json(Some(&r.template)).is_err() || !(r.txn.is_null() || r.txn.as_str().is_some()) {
+				return Err(not_ported(format!("registration {}", r.id)));
 			}
 		}
 		if let Some(t) = self.state.txns.iter().find(|t| t.rest.keys().any(|k| k != "originRequestKey")) {
@@ -383,7 +399,7 @@ impl Space {
 		}
 		for w in &self.state.waiters {
 			if !w.rest.is_empty() || Template::from_json(Some(&w.template)).is_err() || w.request_txn.as_ref().is_some_and(|t| !t.is_null() && t.as_str().is_none()) {
-				return Err(not_ported(format!("waiter {} (consumers come with slice 4)", w.id)));
+				return Err(not_ported(format!("waiter {}", w.id)));
 			}
 		}
 		if let Some(r) = &self.state.rpc {
@@ -465,6 +481,8 @@ impl Space {
 			a.push(event);
 		}
 	}
+	fn regs_bytes(&self) -> f64 { bytes(&Json::Array(self.state.regs.iter().map(RegRec::to_json).collect())) }
+	fn reg_at(&self, id: &str) -> Option<usize> { self.state.regs.iter().position(|r| r.id == id) }
 	fn waiters_bytes(&self) -> f64 { bytes(&Json::Array(self.state.waiters.iter().map(WaiterRec::to_json).collect())) }
 	fn jobs(&self) -> Vec<Json> { self.state.rest.get("jobs").and_then(Json::as_array).cloned().unwrap_or_default() }
 	fn jobs_bytes(&self) -> f64 { self.rest_bytes("jobs", 2.0) }
@@ -486,9 +504,9 @@ impl Space {
 		let claims = self.claim_bytes();
 		let stream = self.state.stream.as_ref().map_or(0.0, |s| s.bytes);
 		let jobs = self.jobs_bytes();
-		let mailboxes = 2.0;
+		let mailboxes = self.mailboxes_bytes();
 		let run_gates = 2.0;
-		admin_maintenance + membership + completion + authority_transition + authority_counters + restore + claims + stream + self.outbox_bytes() + self.waiters_bytes() + self.rest_bytes("regs", 2.0) + self.txns_bytes() + jobs + mailboxes + run_gates
+		admin_maintenance + membership + completion + authority_transition + authority_counters + restore + claims + stream + self.outbox_bytes() + self.waiters_bytes() + self.regs_bytes() + self.txns_bytes() + jobs + mailboxes + run_gates
 	}
 
 	fn txns_bytes(&self) -> f64 { bytes(&Json::Object(self.state.txns.iter().map(|t| (t.id.clone(), t.to_json())).collect())) }
@@ -526,12 +544,19 @@ impl Space {
 		}
 	}
 
-	/// `publishCost`: a bound of what making `e` visible writes, its put and an event for every wait that matches it
-	/// now (registrations: none yet). `extra`: a wait about to be added.
-	fn publish_cost(&self, e: &EntryRec, extra: Option<&WaiterRec>) -> f64 {
+	/// `publishCost`: a bound of what making `e` visible writes, its put and an event for every subscription and wait
+	/// that matches it now. `extra`: one about to be added.
+	fn publish_cost(&self, e: &EntryRec, extra: Extra) -> f64 {
 		let v = bytes(&view(e, self.state.space_id.as_deref()));
 		let mut cost = bytes(&put_op(e)) + 1.0;
-		for w in self.state.waiters.iter().chain(extra) {
+		let reg = if let Extra::Reg(r) = extra { Some(r) } else { None };
+		let wait = if let Extra::Waiter(w) = extra { Some(w) } else { None };
+		for r in self.state.regs.iter().chain(reg) {
+			if reg_template(r).matches(e) {
+				cost += v + bytes(&r.handback) + EVENT_OVERHEAD;
+			}
+		}
+		for w in self.state.waiters.iter().chain(wait) {
 			if waiter_template(w).matches(e) {
 				cost += v + bytes(&w.handback) + EVENT_OVERHEAD;
 			}
@@ -541,16 +566,22 @@ impl Space {
 
 	// ---- events
 
-	/// Whether a fanout job still holds an undelivered event for this outbox target.
-	fn pending_fanout(&self, target: &Json) -> bool {
+	/// Whether a fanout job still holds an undelivered event for this consumer (or, without one, for this outbox target).
+	fn pending_fanout(&self, consumer: Option<&Json>, target: &Json) -> bool {
+		let key = consumer.map(|c| c.canonical().expect("finite")); // once, not per compared event
 		self.jobs().iter().any(|j| {
 			let cursor = num_of(j, "cursor").unwrap_or(0.0) as usize;
-			j.get("events").and_then(Json::as_array).is_some_and(|ev| ev.iter().skip(cursor).any(|x| x.get("consumer").is_none() && x.get("event").and_then(|e| e.get("target")).is_some_and(|t| strict_eq(t, target))))
+			j.get("events").and_then(Json::as_array).is_some_and(|ev| {
+				ev.iter().skip(cursor).any(|x| match &key {
+					Some(k) => x.get("consumer").is_some_and(|c| c.canonical().ok().as_ref() == Some(k)),
+					None => x.get("consumer").is_none() && x.get("event").and_then(|e| e.get("target")).is_some_and(|t| strict_eq(t, target)),
+				})
+			})
 		})
 	}
-	/// `queueEvent` for the local outbox (consumers' mailboxes come with slice 4). `completing`: the event of something
-	/// that must not fail (a timeout); when the outbox is full it waits in a fanout job.
-	fn queue_event(&mut self, now: f64, event: Json, completing: bool) -> Result<()> {
+	/// `queueEvent`: into the consumer's mailbox, or else the local outbox. `completing`: the event of something that
+	/// must not fail (a commit, a timeout, a closed subscription); what does not fit at once waits in a fanout job.
+	fn queue_event(&mut self, now: f64, event: Json, consumer: Option<&Json>, completing: bool) -> Result<()> {
 		let lim = self.limits();
 		let size = bytes(&event);
 		if size > lim.max_event_bytes {
@@ -558,8 +589,11 @@ impl Space {
 		}
 		let target = event.get("target").cloned().unwrap_or(Json::Null);
 		if !completing {
-			if self.pending_fanout(&target) {
+			if self.pending_fanout(consumer, &target) {
 				return Err(exhausted("the consumer has a pending durable fanout backlog"));
+			}
+			if let Some(c) = consumer {
+				return self.append_mail(c, &event, now);
 			}
 			if self.outbox_bytes() + size + 1.0 > lim.max_outbox_bytes {
 				return Err(exhausted("the local outbox is full"));
@@ -568,13 +602,18 @@ impl Space {
 			self.touch(now);
 			return Ok(());
 		}
-		if self.outbox_bytes() + size + 1.0 <= lim.max_outbox_bytes && !self.pending_fanout(&target) {
+		// completion must not fail when a consumer is slow: admission reserved durable storage for this event
+		if consumer.is_none() && self.outbox_bytes() + size + 1.0 <= lim.max_outbox_bytes && !self.pending_fanout(None, &target) {
 			self.push_outbox(event);
 			self.touch(now);
 			return Ok(());
 		}
 		let id = self.new_id("j");
-		let job = obj! { "id" => id, "at" => now, "cursor" => 0.0, "events" => Json::Array(vec![obj! { "event" => event }]) };
+		let mut item = obj! { "event" => event };
+		if let (Some(c), Json::Object(o)) = (consumer, &mut item) {
+			o.insert("consumer", c.clone());
+		}
+		let job = obj! { "id" => id, "at" => now, "cursor" => 0.0, "events" => Json::Array(vec![item]) };
 		match self.state.rest.get_mut("jobs") {
 			Some(Json::Array(a)) => a.push(job),
 			_ => self.state.rest.insert("jobs", Json::Array(vec![job])),
@@ -583,10 +622,10 @@ impl Space {
 		Ok(())
 	}
 	/// Resume fanout from the jobs' cursors into the outbox as it has room.
-	fn run_jobs(&mut self, now: f64) {
-		let Some(Json::Array(mut jobs)) = self.state.rest.get("jobs").cloned() else { return };
+	fn run_jobs(&mut self, now: f64) -> Result<()> {
+		let Some(Json::Array(mut jobs)) = self.state.rest.get("jobs").cloned() else { return Ok(()) };
 		let lim = self.limits();
-		let mut stopped = false;
+		let (mut stopped, mut failed) = (false, None);
 		'jobs: for job in jobs.iter_mut() {
 			if num_of(job, "retryAt").unwrap_or(0.0) > now {
 				continue;
@@ -596,8 +635,20 @@ impl Space {
 			let mut cursor = o.get("cursor").and_then(Json::as_f64).unwrap_or(0.0) as usize;
 			while cursor < events.len() {
 				let event = events[cursor].get("event").cloned().unwrap_or(Json::Null);
+				let consumer = events[cursor].get("consumer").cloned();
 				let size = bytes(&event);
-				if self.outbox_bytes() + size + 1.0 > lim.max_outbox_bytes {
+				let room = match &consumer {
+					Some(c) => match self.assert_mailbox_capacity(c, &event, now) {
+						Ok(()) => true,
+						Err(e) if e.class == "ResourceExhausted" => false,
+						Err(e) => {
+							failed = Some(e);
+							break 'jobs;
+						}
+					},
+					None => self.outbox_bytes() + size + 1.0 <= lim.max_outbox_bytes,
+				};
+				if !room {
 					o.insert("retryAt", Json::Number(until(now, 1000.0)));
 					break;
 				}
@@ -609,17 +660,160 @@ impl Space {
 					break 'jobs;
 				}
 				self.charge(size + EVENT_OVERHEAD).expect("checked");
-				self.push_outbox(event);
+				match &consumer {
+					Some(c) => match self.append_mail(c, &event, now) {
+						Ok(()) => {}
+						Err(e) if e.class == "ResourceExhausted" => {
+							o.insert("retryAt", Json::Number(until(now, 1000.0)));
+							break;
+						}
+						Err(e) => {
+							failed = Some(e);
+							break 'jobs;
+						}
+					},
+					None => self.push_outbox(event),
+				}
 				self.touch(now);
 				o.remove("retryAt");
 				cursor += 1;
 				o.insert("cursor", Json::Number(cursor as f64));
 			}
 		}
+		if let Some(e) = failed {
+			self.state.rest.insert("jobs", Json::Array(jobs)); // the cursors stay where they got to
+			return Err(e);
+		}
 		if !stopped {
 			jobs.retain(|j| num_of(j, "cursor").unwrap_or(0.0) as usize != j.get("events").and_then(Json::as_array).map_or(0, Vec::len));
 		}
 		self.state.rest.insert("jobs", Json::Array(jobs));
+		Ok(())
+	}
+
+	// ---- subscriptions
+
+	/// The rate limit of a subscription, read from the limits when needed (a change applies to existing ones too).
+	fn interval_of(&self, r: &RegRec) -> f64 { if r.min_interval_ms.is_some_and(|m| m != 0.0 && !m.is_nan()) { self.limits().notify_interval_ms } else { 0.0 } }
+
+	fn emit(&mut self, ri: usize, entry: Json, count: f64, now: f64, completing: bool) -> Result<()> {
+		let r = &mut self.state.regs[ri];
+		r.seq += 1.0;
+		r.last_event_at = Some(now);
+		r.pending = Some(0.0);
+		r.pending_entry = None;
+		let mut event = obj! { "kind" => "entry", "eventId" => r.id.as_str(), "seq" => r.seq, "handback" => r.handback.clone(), "target" => r.target.clone(), "entry" => entry };
+		if let (true, Json::Object(o)) = (count > 1.0, &mut event) {
+			o.insert("count", Json::Number(count));
+		}
+		let consumer = r.consumer.clone();
+		self.queue_event(now, event, consumer.as_ref(), completing)
+	}
+
+	/// Registrations fire for committed writes (txn none) and, for one made under transaction T, also for writes under
+	/// T. Too soon after the last event, a write is counted and sent bundled later.
+	fn notify_write(&mut self, e: &EntryRec, txn: Option<&str>, now: f64, completing: bool) -> Result<()> {
+		let entry = view(e, self.state.space_id.as_deref());
+		for ri in 0..self.state.regs.len() {
+			let r = &self.state.regs[ri];
+			let applies = txn.is_none() || r.txn.as_str() == txn;
+			if !applies || !reg_template(r).matches(e) {
+				continue;
+			}
+			let interval = self.interval_of(r);
+			if interval != 0.0 && r.last_event_at.is_some_and(|last| now < last + interval) {
+				let r = &mut self.state.regs[ri];
+				r.pending = Some(r.pending.unwrap_or(0.0) + 1.0);
+				r.pending_entry = Some(entry.clone());
+				continue;
+			}
+			let count = 1.0 + r.pending.unwrap_or(0.0); // pending writes ride along with this one
+			self.emit(ri, entry.clone(), count, now, completing)?;
+		}
+		Ok(())
+	}
+
+	/// Sends the bundled event of subscriptions whose interval is over.
+	fn flush_regs(&mut self, now: f64) -> Result<()> {
+		for ri in 0..self.state.regs.len() {
+			let r = &self.state.regs[ri];
+			let (Some(pending), Some(entry), Some(last)) = (r.pending.filter(|p| *p != 0.0 && !p.is_nan()), r.pending_entry.clone(), r.last_event_at) else { continue };
+			if now >= last + self.interval_of(r) {
+				self.emit(ri, entry, pending, now, false)?;
+			}
+		}
+		Ok(())
+	}
+
+	/// The closing event of a subscription with a consumer.
+	fn close_reg(&mut self, ri: usize, now: f64, reason: &str) -> Result<()> {
+		let r = &mut self.state.regs[ri];
+		let Some(consumer) = r.consumer.clone() else { return Ok(()) };
+		r.seq += 1.0;
+		let event = obj! { "kind" => "registrationClosed", "eventId" => r.id.as_str(), "seq" => r.seq, "handback" => r.handback.clone(), "target" => r.target.clone(), "reason" => reason };
+		self.queue_event(now, event, Some(&consumer), true)
+	}
+
+	/// Subscribes `target` (or `consumer`'s mailbox) to writes matching `tmpl`.
+	#[allow(clippy::too_many_arguments)]
+	pub fn notify(&mut self, now: f64, tmpl: &Json, txn: Option<&Json>, lease_ms: &Json, handback: &Json, target: &Json, as_: Option<&Json>, consumer: Option<&Json>) -> Result<Json> {
+		self.assert_ported()?;
+		let template = Template::from_json(Some(tmpl))?;
+		self.settle(now)?;
+		let txn = txn.map(|t| self.require_txn(t, as_)).transpose()?.map(|t| self.state.txns[t].id.clone());
+		let lim = self.limits();
+		if let Some(as_) = as_ {
+			if self.state.regs.iter().filter(|r| strict_eq(&r.target, as_)).count() as f64 >= lim.max_regs_per_owner {
+				return Err(limit(format!("you already have {} subscriptions", n(lim.max_regs_per_owner))));
+			}
+			check_json_size("handback", handback, &lim)?;
+			// "everything" is a firehose: every write anywhere would wake this conversation
+			let firehose = match &template {
+				Template::Any => true,
+				Template::Of { type_, fields, .. } => type_.is_none() && fields.iter().all(|(_, v)| v.is_null()),
+			};
+			if firehose {
+				return Err(illegal("a subscription needs a type or at least one field"));
+			}
+		}
+		if self.outbox_len() > 0 && self.outbox_bytes() > lim.max_outbox_bytes {
+			return Err(limit(format!("{} bytes of events wait for delivery; try again later", n(lim.max_outbox_bytes))));
+		}
+		if bytes(handback) + EVENT_OVERHEAD > lim.max_event_bytes {
+			return Err(exhausted("the subscription's metadata exceeds maxEventBytes"));
+		}
+		let id = self.new_id("n");
+		let expires = grant(Some(lease_ms), now)?;
+		let mut r = RegRec {
+			id: id.clone(),
+			template: tmpl.clone(),
+			expires,
+			txn: txn.map_or(Json::Null, Json::from),
+			handback: handback.clone(),
+			target: target.clone(),
+			seq: 0.0,
+			consumer: consumer.filter(|c| truthy(Some(c))).cloned(),
+			min_interval_ms: None,
+			last_event_at: None,
+			pending: None,
+			pending_entry: None,
+			rest: Object::new(),
+		};
+		let updated = self.refresh_reservations(Extra::Reg(&r))?;
+		for e in &self.state.entries {
+			if template.matches(e) && bytes(&view(e, self.state.space_id.as_deref())) + bytes(handback) + EVENT_OVERHEAD > lim.max_event_bytes {
+				return Err(exhausted("the subscription would create an oversized event"));
+			}
+		}
+		if as_.is_some() && lim.notify_interval_ms > 0.0 {
+			r.min_interval_ms = Some(lim.notify_interval_ms);
+		}
+		self.state.regs.push(r);
+		self.touch(now);
+		for (i, cost) in updated {
+			self.state.txns[i].reserved = Some(cost);
+		}
+		Ok(obj! { "eventId" => id.as_str(), "lease" => lease(&id, expires) })
 	}
 
 	// ---- waiters
@@ -674,7 +868,7 @@ impl Space {
 						// the request's transaction may not be able to reserve the publication of an abort: the waiter
 						// stays and is looked at again (the caller's unrelated operation must not fail)
 						if w.take && txn.is_some() && e.written_under != txn {
-							let c = self.publish_cost(e, None);
+							let c = self.publish_cost(e, Extra::None);
 							let lim = self.limits();
 							let t = self.txn_at(txn.as_deref().expect("some"));
 							match self.reserve(t, c, &lim) {
@@ -707,13 +901,23 @@ impl Space {
 				self.defer_maintenance(now, &id);
 				continue;
 			}
-			if self.outbox_bytes() + bytes(&event) + 1.0 > self.limits().max_outbox_bytes {
-				continue;
+			match &w.consumer {
+				Some(c) => match self.assert_mailbox_capacity(c, &event, now) {
+					Ok(()) => {}
+					Err(e) if e.class == "ResourceExhausted" => continue,
+					Err(e) => return Err(e),
+				},
+				None => {
+					if self.outbox_bytes() + bytes(&event) + 1.0 > self.limits().max_outbox_bytes {
+						continue;
+					}
+				}
 			}
+			// membership draining: not ported
 			if !w.take {
 				self.charge(cost)?;
 				self.drop_waiter(&id);
-				self.queue_event(now, event, false)?;
+				self.queue_event(now, event, w.consumer.as_ref(), false)?;
 				continue;
 			}
 			let txn = self.new_id("t"); // the receiver commits it
@@ -727,7 +931,7 @@ impl Space {
 			}
 			self.state.txns.push(t);
 			// the reservation of the abort's publication may be refused: the fresh transaction goes, the waiter stays
-			let c = self.publish_cost(&self.state.entries[i], None);
+			let c = self.publish_cost(&self.state.entries[i], Extra::None);
 			let lim = self.limits();
 			if let Err(e) = self.reserve(Some(self.state.txns.len() - 1), c, &lim) {
 				self.state.txns.pop();
@@ -742,17 +946,21 @@ impl Space {
 			let Json::Object(mut o) = event else { unreachable!() };
 			o.insert("entry", view(&copy, self.state.space_id.as_deref()));
 			o.insert("txn", txn.as_str().into());
-			self.queue_event(now, Json::Object(o), false)?;
+			self.queue_event(now, Json::Object(o), w.consumer.as_ref(), false)?;
 		}
 		Ok(())
 	}
 
 	/// Re-counts what completing each transaction may write once the wait `extra` exists (`refreshReservations`):
 	/// transactions without a reservation, and those whose entries the new wait matches.
-	fn refresh_reservations(&self, extra: &WaiterRec) -> Result<Vec<(usize, f64)>> {
+	fn refresh_reservations(&self, extra: Extra) -> Result<Vec<(usize, f64)>> {
 		let lim = self.limits();
-		let tmpl = waiter_template(extra);
-		let mut recount: std::collections::HashSet<String> = self.state.txns.iter().filter(|t| t.reserved.is_none()).map(|t| t.id.clone()).collect();
+		let (tmpl, reg_txn) = match extra {
+			Extra::Waiter(w) => (waiter_template(w), None),
+			Extra::Reg(r) => (reg_template(r), r.txn.as_str()),
+			Extra::None => unreachable!("refreshed for a new subscription or wait"),
+		};
+		let mut recount: std::collections::HashSet<String> = self.state.txns.iter().filter(|t| t.reserved.is_none() || reg_txn == Some(t.id.as_str())).map(|t| t.id.clone()).collect();
 		for e in &self.state.entries {
 			if e.written_under != e.taken_by && tmpl.matches(e) {
 				recount.extend(e.written_under.iter().chain(&e.taken_by).cloned());
@@ -767,7 +975,7 @@ impl Space {
 				if !e.written_under.as_ref().is_some_and(|t| recount.contains(t)) && !e.taken_by.as_ref().is_some_and(|t| recount.contains(t)) {
 					continue;
 				}
-				let cost = self.publish_cost(e, Some(extra));
+				let cost = self.publish_cost(e, extra);
 				for id in e.written_under.iter().chain(&e.taken_by) {
 					*published.entry(id.clone()).or_default() += cost;
 				}
@@ -777,7 +985,13 @@ impl Space {
 		for (i, t) in self.state.txns.iter().enumerate() {
 			let mut cost = t.reserved.unwrap_or(0.0);
 			if recount.contains(&t.id) {
-				let full = published.get(&t.id).copied().unwrap_or(0.0); // registrations under it: none yet
+				let mut full = published.get(&t.id).copied().unwrap_or(0.0);
+				let new_reg = if let Extra::Reg(r) = extra { Some(r) } else { None };
+				for r in self.state.regs.iter().chain(new_reg) {
+					if r.txn.as_str() == Some(t.id.as_str()) {
+						full += bytes(&r.handback) + 512.0;
+					}
+				}
 				cost = full.max(cost);
 			}
 			if cost + COMMIT_FIXED > lim.max_commit_bytes {
@@ -794,9 +1008,6 @@ impl Space {
 	/// Park a read or take for `target`; the space serves it later (or reports a timeout) through the outbox.
 	pub fn add_waiter(&mut self, now: f64, w: &Json) -> Result<Json> {
 		self.assert_ported()?;
-		if w.get("consumer").is_some() {
-			return Err(not_ported("a wait for a consumer (mailboxes come with slice 4)"));
-		}
 		let Some(template) = w.get("template") else { return Err(not_ported("a wait without a template")) };
 		let tmpl = Template::from_json(Some(template))?;
 		let (Some(Json::Bool(take)), Some(target)) = (w.get("take"), w.get("target")) else { return Err(not_ported("a wait without a boolean take and a target")) };
@@ -849,9 +1060,10 @@ impl Space {
 			request_txn: None,
 			if_exists: None,
 			authorized_until,
+			consumer: w.get("consumer").filter(|c| truthy(Some(c))).cloned(),
 			rest: Object::new(),
 		};
-		let updated = self.refresh_reservations(&rec)?;
+		let updated = self.refresh_reservations(Extra::Waiter(&rec))?;
 		for e in &self.state.entries {
 			if tmpl.matches(e) && bytes(&view(e, self.state.space_id.as_deref())) + bytes(&handback) + EVENT_OVERHEAD > lim.max_event_bytes {
 				return Err(exhausted("the wait would create an oversized event"));
@@ -906,6 +1118,7 @@ impl Space {
 			request_txn: Some(txn.clone()),
 			if_exists: Some(if_exists),
 			authorized_until: None,
+			consumer: None,
 			rest: Object::new(),
 		};
 		self.state.waiters.push(rec);
@@ -930,7 +1143,23 @@ impl Space {
 	fn settle_batch(&mut self, now: f64) -> Result<()> {
 		self.state.rest.remove("maintenance");
 		self.sweep(now);
-		// mailboxes and the release queue: none in a space R1 runs so far
+		self.sweep_mailboxes(now);
+		// take transactions whose event expired in a mailbox, or whose holder can no longer be reached
+		let queue: Vec<String> = self.state.rest.get("releaseQueue").and_then(Json::as_array).map(|q| q.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect()).unwrap_or_default();
+		for id in queue {
+			if let Some(t) = self.txn_at(&id) {
+				let reserved = self.state.txns[t].reserved.unwrap_or(0.0);
+				if !self.can_charge(reserved) {
+					self.defer_maintenance(now, &id);
+					return Ok(());
+				}
+				self.charge(reserved).expect("checked");
+				self.finish(&id, false, now)?;
+			}
+			if let Some(Json::Array(q)) = self.state.rest.get_mut("releaseQueue") {
+				q.retain(|x| x.as_str() != Some(&id));
+			}
+		}
 		loop {
 			// the transaction that lapsed first (the first of equals, in the order they were opened)
 			let mut t: Option<usize> = None;
@@ -949,24 +1178,29 @@ impl Space {
 				return Ok(());
 			}
 			self.charge(reserved).expect("checked");
-			self.finish(&id, false, at);
+			self.finish(&id, false, at)?;
 			self.serve(at)?; // the abort may have returned entries that a waiter is waiting for
 		}
 		if !self.expire(now)? {
 			return Ok(());
 		}
 		self.serve(now)?;
-		// bundled notify events: none yet
-		self.run_jobs(now);
-		Ok(())
+		self.flush_regs(now)?;
+		self.run_jobs(now)
 	}
 
 	/// Ends transaction `id`: a commit makes its writes visible and its takes final, an abort the other way round.
-	fn finish(&mut self, id: &str, commit: bool, now: f64) {
+	fn finish(&mut self, id: &str, commit: bool, now: f64) -> Result<()> {
 		self.touch(now);
-		let Some(at) = self.txn_at(id) else { return };
+		let Some(at) = self.txn_at(id) else { return Ok(()) };
 		let t = self.state.txns.remove(at);
-		// run fences and registrations under the transaction: none yet
+		// run fences: none yet; registrations under the transaction end with it
+		for ri in 0..self.state.regs.len() {
+			if self.state.regs[ri].txn.as_str() == Some(id) {
+				self.close_reg(ri, now, "transactionEnded")?;
+			}
+		}
+		self.state.regs.retain(|r| r.txn.as_str() != Some(id));
 		let mut published: Vec<EntryRec> = vec![];
 		for i in (0..self.state.entries.len()).rev() {
 			// backwards: removals do not shift what is still to visit
@@ -999,12 +1233,14 @@ impl Space {
 		published.reverse(); // announced in write order
 		for e in &published {
 			self.log_put_rec(now, e);
+			self.notify_write(e, None, now, true)?;
 		}
 		if commit {
 			for e in t.announced.unwrap_or_default() {
 				self.record(now, &e.id, transient_op(&e));
 			}
 		}
+		Ok(())
 	}
 	/// Expires what lapsed at `at`; false when the commit budget ran out and the rest was deferred.
 	fn expire(&mut self, at: f64) -> Result<bool> {
@@ -1055,7 +1291,24 @@ impl Space {
 				return Ok(false);
 			}
 		}
-		// registrations past their time: none yet
+		let mut lapsed: Vec<(f64, String)> = self.state.regs.iter().filter(|r| r.expires <= at).map(|r| (r.expires, r.id.clone())).collect();
+		lapsed.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+		for (_, id) in lapsed {
+			let Some(ri) = self.reg_at(&id) else { continue };
+			let r = self.state.regs[ri].clone();
+			let cost = bytes(&r.handback) + r.pending_entry.as_ref().map_or(0.0, bytes) + 512.0;
+			if !self.can_charge(cost) {
+				self.defer_maintenance(at, &id);
+				return Ok(false);
+			}
+			self.charge(cost).expect("checked");
+			if let (Some(p), Some(entry)) = (r.pending.filter(|p| *p != 0.0 && !p.is_nan()), r.pending_entry.clone()) {
+				self.emit(ri, entry, p, at, true)?;
+			}
+			self.close_reg(ri, at, "expired")?;
+			self.state.regs.remove(ri);
+			self.touch(at);
+		}
 		let mut lapsed: Vec<(f64, String)> = self.state.waiters.iter().filter(|w| w.deadline <= at).map(|w| (w.deadline, w.id.clone())).collect();
 		lapsed.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
 		for (_, id) in lapsed {
@@ -1077,7 +1330,7 @@ impl Space {
 				}
 				None => {
 					let event = obj! { "kind" => "timeout", "eventId" => id.as_str(), "seq" => 1.0, "handback" => w.handback.clone(), "target" => w.target.clone() };
-					self.queue_event(at, event, true)?;
+					self.queue_event(at, event, w.consumer.as_ref(), true)?;
 				}
 			}
 			self.drop_waiter(&id);
@@ -1102,6 +1355,14 @@ impl Space {
 				min
 			}
 		};
+		for r in &self.state.regs {
+			if r.expires < min {
+				min = r.expires;
+			}
+			if let (Some(_), Some(last)) = (r.pending.filter(|p| *p != 0.0 && !p.is_nan()), r.last_event_at) {
+				min = min.min(last + self.interval_of(r)); // a bundled event is due
+			}
+		}
 		for t in &self.state.txns {
 			if t.expires < min {
 				min = t.expires;
@@ -1115,10 +1376,13 @@ impl Space {
 		for j in self.jobs() {
 			min = min.min(num_of(&j, "retryAt").unwrap_or(0.0));
 		}
+		min = min.min(self.mailboxes_due());
 		if let Some(at) = self.claims_due() {
 			min = min.min(at);
 		}
-		// registrations, mailboxes and the release queue: none yet
+		if self.state.rest.get("releaseQueue").and_then(Json::as_array).is_some_and(|q| !q.is_empty()) {
+			min = 0.0;
+		}
 		if let Some(at) = self.state.rest.get("maintenance").and_then(|m| m.get("at")).and_then(Json::as_f64) {
 			min = min.min(at);
 		}
@@ -1193,8 +1457,9 @@ impl Space {
 		}
 		let view_bytes = bytes(&view(&rec, self.state.space_id.as_deref()));
 		self.check_event_size(view_bytes, &lim)?;
-		self.preflight_fanout(&rec, txn.is_some(), &lim)?;
-		let cost = self.publish_cost(&rec, None);
+		let txn_id = txn.map(|t| self.state.txns[t].id.clone());
+		self.preflight_fanout(&rec, txn_id.as_deref(), now, &lim)?;
+		let cost = self.publish_cost(&rec, Extra::None);
 		let rec_bytes = bytes(&rec.to_json());
 		if !self.can_charge(rec_bytes + if txn.is_none() { cost } else { 0.0 }) {
 			return Err(exhausted("the write exceeds the remaining commit budget"));
@@ -1209,7 +1474,8 @@ impl Space {
 		if txn.is_none() {
 			self.log_put(now, self.state.entries.len() - 1); // visible at once; under a transaction it appears at commit
 		}
-		// notify: no registrations yet
+		let written = self.state.entries.last().cloned().expect("pushed");
+		self.notify_write(&written, txn_id.as_deref(), now, false)?;
 		if txn.is_none() {
 			self.serve(now)?;
 		}
@@ -1219,30 +1485,51 @@ impl Space {
 	/// An event carries the entry, a handback and metadata: a bound with the largest handback of any wait is checked
 	/// before a write is accepted, so no event can exceed `maxEventBytes`.
 	fn check_event_size(&self, view_bytes: f64, lim: &Limits) -> Result<()> {
-		if self.state.waiters.is_empty() {
-			return Ok(()); // registrations: none yet
+		if self.state.regs.is_empty() && self.state.waiters.is_empty() {
+			return Ok(());
 		}
-		let handback = self.state.waiters.iter().map(|w| bytes(&w.handback)).fold(0.0, f64::max);
+		let handback = self.state.regs.iter().map(|r| bytes(&r.handback)).chain(self.state.waiters.iter().map(|w| bytes(&w.handback))).fold(0.0, f64::max);
 		let bound = view_bytes + handback + EVENT_OVERHEAD;
 		if bound > lim.max_event_bytes {
 			return Err(exhausted(format!("an event for this entry could take {} bytes; the limit is {}", n(bound), n(lim.max_event_bytes))));
 		}
 		Ok(())
 	}
-	/// The events a visible write would send now must fit the event limit and the outbox.
-	fn preflight_fanout(&self, rec: &EntryRec, under_txn: bool, lim: &Limits) -> Result<()> {
+	/// The events a write would send now must fit the event limit, each consumer's mailbox and the outbox.
+	fn preflight_fanout(&mut self, rec: &EntryRec, txn: Option<&str>, now: f64, lim: &Limits) -> Result<()> {
 		let entry = view(rec, self.state.space_id.as_deref());
+		let mut groups: Vec<(String, Json, Vec<Json>)> = vec![];
 		let mut local = 0.0;
-		if !under_txn {
+		let mut add = |event: Json, consumer: Option<&Json>| -> Result<()> {
+			if bytes(&event) > lim.max_event_bytes {
+				return Err(exhausted("the event exceeds maxEventBytes"));
+			}
+			match consumer {
+				Some(c) => {
+					let key = c.canonical().expect("finite");
+					match groups.iter_mut().find(|g| g.0 == key) {
+						Some(g) => g.2.push(event),
+						None => groups.push((key, c.clone(), vec![event])),
+					}
+				}
+				None => local += bytes(&event) + 1.0,
+			}
+			Ok(())
+		};
+		for r in &self.state.regs {
+			if (txn.is_none() || r.txn.as_str() == txn) && reg_template(r).matches(rec) {
+				add(obj! { "kind" => "entry", "eventId" => r.id.as_str(), "seq" => r.seq + 1.0, "handback" => r.handback.clone(), "target" => r.target.clone(), "entry" => entry.clone() }, r.consumer.as_ref())?;
+			}
+		}
+		if txn.is_none() {
 			for w in &self.state.waiters {
 				if w.claim_key.is_none() && waiter_template(w).matches(rec) {
-					let event = obj! { "kind" => "waiter", "eventId" => w.id.as_str(), "seq" => 1.0, "handback" => w.handback.clone(), "target" => w.target.clone(), "entry" => entry.clone() };
-					if bytes(&event) > lim.max_event_bytes {
-						return Err(exhausted("the event exceeds maxEventBytes"));
-					}
-					local += bytes(&event) + 1.0;
+					add(obj! { "kind" => "waiter", "eventId" => w.id.as_str(), "seq" => 1.0, "handback" => w.handback.clone(), "target" => w.target.clone(), "entry" => entry.clone() }, w.consumer.as_ref())?;
 				}
 			}
+		}
+		for (_, principal, events) in &groups {
+			self.assert_mailbox_batch(principal, events, now)?;
 		}
 		if self.outbox_bytes() + local > lim.max_outbox_bytes {
 			return Err(exhausted("the local outbox cannot hold this fanout"));
@@ -1303,7 +1590,7 @@ impl Space {
 					return Err(permission("directory entries cannot be consumed or locked"));
 				}
 				if take && txn.is_some() && self.state.entries[i].written_under.as_deref() != txn {
-					let cost = self.publish_cost(&self.state.entries[i], None); // an abort puts it back
+					let cost = self.publish_cost(&self.state.entries[i], Extra::None); // an abort puts it back
 					let lim = self.limits();
 					self.reserve(at, cost, &lim)?;
 				}
@@ -1479,11 +1766,12 @@ impl Space {
 		if e.is_some_and(|i| directory_rec(&self.state.entries[i])) && as_.is_some() {
 			return Err(permission("directory leases require trusted publication"));
 		}
-		let (l, owner) = match (self.waiter_at(id), e, self.txn_at(id)) {
-			(Some(w), _, _) => (Leased::Waiter(w), &self.state.waiters[w].target), // a wait's deadline behaves like a lease
-			(None, Some(i), _) => (Leased::Entry(i), &self.state.entries[i].owner),
-			(None, None, Some(t)) => (Leased::Txn(t), &self.state.txns[t].owner),
-			(None, None, None) => return Err(error("UnknownLeaseError", id)),
+		let (l, owner) = match (self.waiter_at(id), e, self.txn_at(id), self.reg_at(id)) {
+			(Some(w), _, _, _) => (Leased::Waiter(w), &self.state.waiters[w].target), // a wait's deadline behaves like a lease
+			(None, Some(i), _, _) => (Leased::Entry(i), &self.state.entries[i].owner),
+			(None, None, Some(t), _) => (Leased::Txn(t), &self.state.txns[t].owner),
+			(None, None, None, Some(r)) => (Leased::Reg(r), &self.state.regs[r].target),
+			(None, None, None, None) => return Err(error("UnknownLeaseError", id)),
 		};
 		if !may_use(owner, as_) {
 			return Err(permission(format!("lease {id} belongs to another conversation")));
@@ -1498,6 +1786,7 @@ impl Space {
 			}
 			Leased::Txn(t) => self.state.txns[t].expires = v,
 			Leased::Waiter(w) => self.state.waiters[w].deadline = v,
+			Leased::Reg(r) => self.state.regs[r].expires = v,
 		}
 	}
 
@@ -1524,6 +1813,14 @@ impl Space {
 		let l = self.leased(id, as_)?;
 		if let Leased::Waiter(_) = l {
 			return self.cancel_waiter(now, id).map(|_| Json::Null); // cancelled waits send no timeout event
+		}
+		if let Leased::Reg(ri) = l {
+			let r = &mut self.state.regs[ri];
+			r.pending = Some(0.0);
+			r.pending_entry = None;
+			self.close_reg(ri, now, "cancelled")?;
+			self.state.regs.remove(ri);
+			return Ok(Json::Null);
 		}
 		self.set_lease(l, now); // settle removes it; a cancelled txn lease aborts the transaction
 		self.settle(now)?;
@@ -1559,7 +1856,7 @@ impl Space {
 		// completion profiles and run bindings: none yet
 		let (reserved, id) = (self.state.txns[t].reserved.unwrap_or(0.0), self.state.txns[t].id.clone());
 		self.charge(reserved)?;
-		self.finish(&id, commit, now);
+		self.finish(&id, commit, now)?;
 		self.serve(now)?;
 		Ok(Json::Null)
 	}
@@ -1622,20 +1919,20 @@ impl Space {
 		}
 		let txns = self.state.txns.iter().filter(|t| t.expires > now).count() as f64;
 		let waiters = self.state.waiters.iter().filter(|w| w.deadline > now).count() as f64;
-		// registrations: none yet
+		let registrations = self.state.regs.iter().filter(|r| r.expires > now).count() as f64;
 		let outbox = self.outbox_len() as f64;
 		let parts = obj! {
 			"entries" => entry_bytes,
 			"outbox" => self.outbox_bytes(),
 			"claims" => self.claim_bytes(),
 			"waiters" => self.waiters_bytes(),
-			"registrations" => self.rest_bytes("regs", 2.0),
+			"registrations" => self.regs_bytes(),
 			"txns" => self.txns_bytes(),
 			"total" => bytes(&self.state.to_json()),
 		};
 		Ok(obj! {
 			"entries" => entries, "byType" => by_type, "locked" => locked, "uncommitted" => uncommitted, "expired" => expired,
-			"txns" => txns, "waiters" => waiters, "registrations" => 0.0, "outbox" => outbox, "returned" => returned, "bytes" => parts,
+			"txns" => txns, "waiters" => waiters, "registrations" => registrations, "outbox" => outbox, "returned" => returned, "bytes" => parts,
 		})
 	}
 }

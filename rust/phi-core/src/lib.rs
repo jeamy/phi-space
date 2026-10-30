@@ -3,6 +3,7 @@
 //! every state and answer against it.
 pub mod claims;
 pub mod driver;
+pub mod mailbox;
 pub mod space;
 pub mod state;
 pub mod stream;

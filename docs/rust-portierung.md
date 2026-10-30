@@ -285,11 +285,11 @@ Vergleichstests gegen den TS-Treiber grün sind.
 | 1 | Entries, Templates, Leases, `settle`, Ablauf, Stream-Einträge, Budgets (`charge`, `jsonBytes`-Summen); dazu `count`, `list`, `listPage`, `changes`, `stats`, `nextExpiry` ohne Txn | erledigt |
 | 2 | Transaktionen: `createTxn`, `commitTxn`, `abortTxn`, Ablauf in `settle`, Txn-Leases, Schreiben, `announce`, Lesen und Nehmen unter einer Txn, Reservierungen | erledigt |
 | 3 | Wartende, geparkte Operationen, Claims und Generationen; ihre Ereignisse in der Outbox und Fanout-Jobs ohne Consumer | erledigt |
-| 4 | Notify und Mailboxen | offen |
+| 4 | Notify und Mailboxen: Abonnements mit Drosselung und Bündeln, Consumer für Abonnements und Wartende, Fanout-Jobs mit Consumer, Freigabe abgelaufener Takes | erledigt |
 | 5 | Stream und Seiten unter Txns, Snapshots (`snapshot.ts`), Seiten-Token | offen |
 
 **Bewusst zurückgestellt:** Restore, Wechsel der Autorität, Member-Admission, Löschung, Admin-Wartung, `purgeTasks`,
-Abschlussprofile und RunGate. Der Standalone-Server braucht sie für R3 nicht. Ihre Felder führt `phi-core::state`
+Abschlussprofile und RunGate, dazu `setLimits`, `releaseTxn`, `cancelRequest` und negative Claims. Der Standalone-Server braucht sie für R3 nicht. Ihre Felder führt `phi-core::state`
 unverändert mit (`rest`). Ist eines davon in einem Dokument aktiv, verweigert der Rust-Kern Operationen, statt zu
 raten.
 
@@ -383,6 +383,32 @@ raten.
   Reservierungen, Lease-Dauer, Sweep-Ordnung und -Grenzen, Claim-Bytes und Zulassungsende schlagen fehl. Gleichwertig
   und unentdeckt bleiben `sweepAt` `now` statt `now + 1` (Zeiten sind ganze Millisekunden) und das Nachzählen von
   Txns ohne Reservierung (sie schreiben nichts).
+
+**Stand Scheibe 4 (2026-10-30):**
+
+- **Modell:** `RegRec` und `Mailbox` sind typisiert, die Mailboxen in der Reihenfolge, in der sie entstanden.
+- **Abonnements:** `notify` (auch unter einer Txn), Ereignisse beim Schreiben und beim Commit (`notifyWrite`, `emit`),
+  die Drosselung je Gespräch mit gezählten und gebündelt nachgesandten Writes (`flushRegs`), Ablauf (das offene
+  Bündel geht noch hinaus, ein Consumer bekommt `registrationClosed`), Kündigen, Verlängern und das Ende mit der Txn.
+  `publishCost`, `checkEventSize`, `refreshReservations` und `preflightFanout` zählen die Abonnements mit.
+- **`phi-core::mailbox`:** Mailboxen je Prinzipal (`box`, `appendMail`, Kapazität, Bündelprüfung beim Schreiben),
+  Seiten (`events`) mit Epoche und Lücke, `ack` und die begrenzte Wartung, die Quittiertes und Abgelaufenes
+  entfernt. Ein abgelaufenes Take-Ereignis stellt seine Txn in die Freigabe-Warteschlange, `settle` bricht sie ab.
+- **Jobs mit Consumer:** Ein abschließendes Ereignis für einen Consumer geht immer über einen Fanout-Job; `runJobs`
+  liefert in die Mailbox, sobald sie Platz hat, und ein `ack` macht wartende Jobs des Prinzipals sofort fällig.
+- **Uhr:** Wo der TS-Kern selbst `Date.now()` liest (eine neue Mailbox, ein `ack`), liest der Rust-Kern
+  `Space::clock`; der Treiber setzt sie wie `core-driver.ts` auf das `now` der Zeile.
+- **Tests:** Der Zufallsgang abonniert (mit und ohne Consumer), gibt Wartenden Consumer, blättert, hängt an und
+  quittiert. Kurze Abonnement-Episoden schreiben mehrere passende Entries dicht hintereinander, sonst kommt keine
+  Bündelung vor. Grenzfälle: die Drosselung bei genau einem Intervall, ein Abonnement mit offenem Bündel am
+  Commit-Budget, ein Txn-Abonnement an der Outbox-Grenze, `maxMailboxBytes`, Mailboxen in `maxDocBytes` und ein Job,
+  den ein `ack` wieder anstößt. Ein Lauf mit 200 000 Schritten (`--release`) war abweichungsfrei.
+- **Gegenprobe:** Eingebaute Fehler in Intervallgrenze, Bündelzähler, Ablaufkosten, Txn-Reservierung, Vorprüfung unter
+  Txn, Jobs mit Consumer, Wiederanstoß nach `ack`, Cursor, Mailbox-Kapazität, TTL, Lücke und Mailbox-Bytes schlagen fehl.
+- **Gleichwertig und unentdeckt:** die Bündelzahl beim Schreiben (offene Bündel leert `flushRegs` schon im `settle`
+  derselben Operation), doppelte Einträge der Freigabe-Warteschlange (in derselben Runde verarbeitet), die
+  Lückenprüfung beim `ack` (quittiert werden immer zusammenhängende Präfixe) und `nextExpiry` 0 bei nicht leerer
+  Warteschlange (sie wird gleich nach dem Füllen geleert).
 
 **Befund aus Scheibe 0:** `parkOperation` (`core.ts`, `touch(s, Date.now())`) und `ackMailbox` (`mailbox.ts`) lesen
 die Uhr selbst, statt `now` zu übernehmen. Der Rust-Kern nimmt `now` als Parameter. Im TS-Kern sollten beide Stellen

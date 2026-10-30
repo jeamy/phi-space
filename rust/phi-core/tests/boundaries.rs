@@ -336,3 +336,90 @@ fn a_served_wait_remembers_its_request() {
 	}
 	assert!(d.space.state.txns.iter().any(|t| t.rest.get("originRequestKey").is_some()), "the served take's transaction carries the request's key");
 }
+
+fn notify_line(now: f64, extra: Json) -> Json {
+	let mut l = obj! { "op" => "notify", "now" => now, "tmpl" => obj! { "type" => "Task" }, "lease" => 60_000.0, "handback" => obj! { "s" => 1.0 }, "target" => "a", "as" => "a" };
+	if let (Json::Object(o), Json::Object(x)) = (&mut l, extra) {
+		for (k, v) in x.iter() {
+			o.insert(k, v.clone());
+		}
+	}
+	l
+}
+fn mail(now: f64, pad: usize) -> Json {
+	let event = obj! { "kind" => "entry", "eventId" => "nx", "seq" => 1.0, "handback" => Json::Null, "target" => "a", "entry" => obj! { "pad" => "x".repeat(pad) } };
+	obj! { "op" => "appendMail", "now" => now, "principal" => obj! { "peerId" => "p1" }, "event" => event }
+}
+
+#[test]
+fn subscriptions_at_their_edges() {
+	// a write exactly one interval after the last event is sent, not counted
+	let mut lines = vec![init(obj! { "notifyIntervalMs" => 500.0 }), notify_line(1000.0, obj! {})];
+	for now in [1000.0, 1200.0, 1499.0, 1500.0, 1700.0, 2000.0, 2001.0] {
+		lines.push(write(1, 60_000.0, now));
+	}
+	lines.push(obj! { "op" => "nextExpiry", "now" => 2001.0 });
+	lines.push(obj! { "op" => "settle", "now" => 2600.0 });
+	compare(&lines, "the rate limit at its edge");
+	// a subscription lapsing with a bundled event pending costs its handback, the pending entry and 512
+	edge("a subscription lapsing at the commit budget", 1400, 3000, |max| {
+		let mut lines = vec![init(obj! { "maxCommitBytes" => max as f64, "notifyIntervalMs" => 5000.0 })];
+		for i in 0..3 {
+			lines.push(notify_line(1000.0, obj! { "lease" => 2000.0, "handback" => obj! { "s" => i as f64 } }));
+		}
+		lines.push(write(10, 60_000.0, 1000.0));
+		lines.push(write(200, 60_000.0, 1100.0));
+		lines.push(obj! { "op" => "settle", "now" => 3000.0 });
+		lines.push(obj! { "op" => "nextExpiry", "now" => 3000.0 });
+		lines.push(obj! { "op" => "settle", "now" => 3000.0 });
+		lines
+	});
+	// a subscription made under a transaction sees the writes under it, and they must fit the outbox
+	edge("a transaction's subscription and the outbox", 2, 1500, |max| {
+		vec![
+			init(obj! { "maxOutboxBytes" => max as f64 }),
+			obj! { "op" => "createTxn", "now" => 1000.0, "lease" => 60_000.0 },
+			obj! { "op" => "notify", "now" => 1000.0, "tmpl" => obj! { "type" => "Task" }, "txn" => "t0a0b0c0d-1", "lease" => 60_000.0, "target" => "a" },
+			obj! { "op" => "write", "now" => 1000.0, "entry" => obj! { "type" => "Task", "fields" => obj! { "n" => 1.0 } }, "lease" => 5000.0, "txn" => "t0a0b0c0d-1" },
+			obj! { "op" => "write", "now" => 1000.0, "entry" => obj! { "type" => "Task", "fields" => obj! { "n" => 2.0 } }, "lease" => 5000.0, "txn" => "t0a0b0c0d-1" },
+			obj! { "op" => "commitTxn", "now" => 1000.0, "id" => "t0a0b0c0d-1" },
+		]
+	});
+}
+
+#[test]
+fn mailboxes_at_their_edges() {
+	edge("maxMailboxBytes", 100, 1500, |max| {
+		let mut lines = vec![init(obj! { "maxMailboxBytes" => max as f64 })];
+		for i in 0..4 {
+			lines.push(mail(1000.0, 20 * i));
+		}
+		lines.push(obj! { "op" => "events", "now" => 1000.0, "principal" => obj! { "peerId" => "p1" } });
+		lines
+	});
+	// the mailboxes count with their tally in the document's bytes
+	edge("maxDocBytes with mailboxes", 900, 4000, |max| {
+		vec![init(obj! { "maxDocBytes" => max as f64 }), mail(1000.0, 100), obj! { "op" => "appendMail", "now" => 1000.0, "principal" => obj! { "peerId" => "p2" }, "event" => obj! { "kind" => "x" } }, write(300, 5000.0, 1000.0)]
+	});
+	// a completing event that does not fit the mailbox waits in a job; an ack makes the job due at once
+	let w = obj! { "template" => obj! { "type" => "None" }, "take" => false, "target" => "a", "timeout" => 100.0, "handback" => obj! { "h" => "x".repeat(200) }, "consumer" => obj! { "peerId" => "p1" } };
+	let p1 = || obj! { "peerId" => "p1" };
+	let mut lines = vec![init(obj! { "maxMailboxBytes" => 700.0 }), mail(1000.0, 300), obj! { "op" => "addWaiter", "now" => 1000.0, "w" => w }];
+	lines.push(obj! { "op" => "settle", "now" => 1100.0 });
+	lines.push(obj! { "op" => "nextExpiry", "now" => 1100.0 });
+	lines.push(obj! { "op" => "events", "now" => 1100.0, "principal" => p1() });
+	lines.push(obj! { "op" => "settle", "now" => 1200.0 });
+	compare(&lines, "a job for a full mailbox");
+	// the ack needs the epoch the mailbox has now: read it from the Rust side, then replay both
+	let mut d = Driver::new();
+	for l in &lines {
+		let _ = d.step(l);
+	}
+	let (_, b) = &d.space.state.mailboxes.as_ref().unwrap()[0];
+	lines.push(obj! { "op" => "ack", "now" => 1300.0, "principal" => p1(), "mailboxEpoch" => b.epoch.as_str(), "upTo" => b.delivered });
+	lines.push(obj! { "op" => "nextExpiry", "now" => 1300.0 });
+	lines.push(obj! { "op" => "settle", "now" => 1300.0 });
+	lines.push(obj! { "op" => "events", "now" => 1300.0, "principal" => p1() });
+	compare(&lines, "an ack resumes the job");
+	assert!(d.space.state.rest.get("jobs").and_then(Json::as_array).is_some_and(|j| !j.is_empty()), "the case makes a job");
+}

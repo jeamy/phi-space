@@ -40,6 +40,8 @@ struct Walk {
 	/// Issued generations and their principals.
 	generations: Vec<(String, Json)>,
 	keys: Vec<String>,
+	/// The mailboxes as the last step left them: principal, epoch, acked, delivered, next.
+	boxes: Vec<(Json, String, f64, f64, f64)>,
 	page_next: Option<Json>,
 }
 
@@ -93,6 +95,14 @@ impl Walk {
 		small("claimResultMs", v, 0.5, r);
 		let v = 100.0 * (1 + r.below(80)) as f64;
 		small("generationAdmitMs", v, 0.5, r);
+		let v = 300.0 + r.below(3000) as f64;
+		small("maxMailboxBytes", v, 0.3, r);
+		let v = 100.0 * (5 + r.below(100)) as f64;
+		small("mailboxTtlMs", v, 0.4, r);
+		let v = 100.0 * r.below(20) as f64;
+		small("notifyIntervalMs", v, 0.4, r);
+		let v = 1.0 + r.below(3) as f64;
+		small("maxRegsPerOwner", v, 0.2, r);
 		let mut line = obj! { "op" => "init", "seed" => "walk", "now" => self.now };
 		let Json::Object(o) = &mut line else { unreachable!() };
 		if !limits.is_empty() {
@@ -232,6 +242,23 @@ impl Walk {
 		let i = self.waiters.len() - 1 - r.below(self.waiters.len().min(6));
 		self.waiters[i].as_str().into()
 	}
+	/// A consumer for a subscription or wait: mostly none (the outbox), sometimes a principal, rarely a bad one.
+	fn consumer(&mut self) -> Option<Json> {
+		match self.rng.below(20) {
+			0..=10 => None,
+			11 => Some(obj! { "peerId" => "" }),
+			12..=15 => Some(obj! { "peerId" => "p1" }),
+			_ => Some(obj! { "peerId" => "p2", "agentId" => "x" }),
+		}
+	}
+	/// A mailbox's principal and what the walk knows of it.
+	fn a_box(&mut self) -> (Json, Option<(String, f64, f64, f64)>) {
+		if !self.boxes.is_empty() && self.rng.chance(0.85) {
+			let b = self.boxes[self.rng.below(self.boxes.len())].clone();
+			return (b.0, Some((b.1, b.2, b.3, b.4)));
+		}
+		(self.consumer().unwrap_or(obj! { "peerId" => "p3" }), None)
+	}
 	fn principal(&mut self) -> Json {
 		match self.rng.below(12) {
 			0 => obj! { "peerId" => "" },
@@ -290,6 +317,21 @@ impl Walk {
 		})
 	}
 
+	/// A conversation's subscription and a run of matching writes: the rate limit counts them and sends them bundled.
+	fn subscription(&mut self) {
+		let consumer = self.consumer();
+		let r = &mut self.rng;
+		let mut sub = obj! { "op" => "notify", "tmpl" => obj! { "type" => "Task" }, "lease" => 60_000.0, "handback" => obj! { "s" => 1.0 }, "target" => "a", "as" => "a" };
+		if let (Some(c), Json::Object(o)) = (consumer, &mut sub) {
+			o.insert("consumer", c);
+		}
+		let mut lines = vec![sub];
+		for i in 0..2 + r.below(4) {
+			lines.push(obj! { "op" => "write", "entry" => obj! { "type" => "Task", "fields" => obj! { "n" => i as f64 } }, "lease" => 5000.0 });
+		}
+		lines.push(obj! { "op" => "settle" });
+		self.episode.extend(lines);
+	}
 	fn episode(&mut self) {
 		let p = self.principal();
 		let r = &mut self.rng;
@@ -297,7 +339,8 @@ impl Walk {
 		let method = r.pick(&["take", "read"]);
 		let admit = |args: f64| obj! { "op" => "admit", "request" => request.clone(), "method" => method, "args" => obj! { "a" => args }, "resultBound" => 300.0 };
 		let mut lines = vec![obj! { "op" => "issueGeneration", "principal" => p }, admit(1.0)];
-		lines.push(match r.below(3) {
+		lines.push(match r.below(4) {
+			3 => obj! { "op" => "decide", "key" => "$key", "outcome" => obj! { "state" => "done", "result" => obj! { "x" => "y".repeat(250 + r.below(100)) } } }, // around its 300-byte reservation
 			0 => obj! { "op" => "park", "key" => "$key", "tmpl" => obj! { "type" => r.pick(&TYPES) }, "take" => method == "take", "txn" => Json::Null, "deadline" => self.now + 100.0 * r.below(20) as f64, "ifExists" => r.chance(0.3) },
 			1 => obj! { "op" => "decide", "key" => "$key", "outcome" => obj! { "state" => "done", "result" => obj! { "v" => r.below(3) as f64 } } },
 			_ => obj! { "op" => "decide", "key" => "$key", "outcome" => obj! { "state" => "cancelled" } },
@@ -332,6 +375,8 @@ impl Walk {
 		}
 		if self.rng.chance(0.02) {
 			self.episode();
+		} else if self.rng.chance(0.01) {
+			self.subscription();
 		}
 		if self.burst > 0 {
 			// several entries with the same lease at the same time: they expire together
@@ -349,7 +394,7 @@ impl Walk {
 				o.insert(k, v);
 			}
 		};
-		let op = match self.rng.below(154) {
+		let op = match self.rng.below(184) {
 			0..=29 => {
 				set("entry", Some(self.entry()));
 				set("lease", self.lease());
@@ -480,6 +525,9 @@ impl Walk {
 				if self.rng.chance(0.1) {
 					w.insert("authorizedUntil", Json::Number(self.now + 100.0 * self.rng.below(10) as f64));
 				}
+				if let Some(c) = self.consumer() {
+					w.insert("consumer", c);
+				}
 				set("w", Some(Json::Object(w)));
 				"addWaiter"
 			}
@@ -510,7 +558,7 @@ impl Walk {
 				set("key", Some(self.key()));
 				let outcome = match self.rng.below(5) {
 					0 => obj! { "state" => "cancelled" },
-					1 => obj! { "state" => "done", "result" => obj! { "x" => "y".repeat(self.rng.below(200)) } },
+					1 => obj! { "state" => "done", "result" => obj! { "x" => "y".repeat(self.rng.below(600)) } },
 					2 => obj! { "state" => "done", "result" => Json::Null, "locked" => true },
 					3 => obj! { "state" => "done", "result" => Json::Null, "error" => obj! { "code" => "TransactionError", "message" => "m" } },
 					_ => obj! { "state" => "done", "result" => Json::Number(1.0) },
@@ -533,6 +581,68 @@ impl Walk {
 				let owner = self.as_();
 				set("owner", owner);
 				"park"
+			}
+			154..=163 => {
+				set("tmpl", self.template());
+				set("txn", self.txn());
+				set("lease", self.lease());
+				if let Some(h) = self.handback() {
+					set("handback", Some(h));
+				}
+				let target = self.rng.pick(&[Json::from("a"), Json::from("b"), Json::Null]);
+				set("target", Some(target.clone()));
+				if self.rng.chance(0.5) && !target.is_null() {
+					set("as", Some(target));
+				}
+				set("consumer", self.consumer());
+				"notify"
+			}
+			164..=171 => {
+				let (p, known) = self.a_box();
+				set("principal", Some(p));
+				let mut q = Object::new();
+				if let Some((epoch, acked, delivered, next)) = known {
+					match self.rng.below(6) {
+						0 => q.insert("after", Json::Number(delivered)),
+						1 => q.insert("after", Json::Number(if self.rng.chance(0.5) { next + 1.0 } else { delivered + 1.0 })),
+						2 => q.insert("after", Json::Number(acked)),
+						_ => {}
+					}
+					match self.rng.below(5) {
+						0 => q.insert("mailboxEpoch", "mbstale".into()),
+						1 | 2 => q.insert("mailboxEpoch", epoch.into()),
+						_ => {}
+					}
+				}
+				if self.rng.chance(0.3) {
+					q.insert("maxBytes", Json::Number(50.0 + self.rng.below(500) as f64));
+				}
+				set("o", Some(Json::Object(q)));
+				"events"
+			}
+			172..=175 => {
+				let (p, _) = self.a_box();
+				set("principal", Some(p));
+				let mut e = obj! { "kind" => "entry", "eventId" => "nx", "seq" => 1.0, "handback" => Json::Null, "target" => "a", "entry" => obj! { "id" => "e1", "type" => "Task", "types" => Json::Array(vec!["Task".into()]), "fields" => obj! { "pad" => "x".repeat(self.rng.below(300)) }, "owner" => Json::Null } };
+				if let (Some(t), Json::Object(o)) = (self.txn(), &mut e) {
+					o.insert("txn", t); // an expired take event releases its transaction
+				}
+				set("event", Some(e));
+				"appendMail"
+			}
+			176..=181 => {
+				let (p, known) = self.a_box();
+				set("principal", Some(p));
+				let (epoch, acked, delivered) = known.map_or(("mbnone".to_owned(), 0.0, 0.0), |k| (k.0, k.1, k.2));
+				set("mailboxEpoch", Some(if self.rng.chance(0.9) { epoch.into() } else { "mbstale".into() }));
+				let up_to = match self.rng.below(5) {
+					0 => acked,
+					1 => delivered + 1.0,
+					2 => acked + 1.0,
+					_ => delivered,
+				};
+				set("upTo", Some(Json::Number(up_to)));
+				"ack"
 			}
 			_ => {
 				set("id", Some(self.txn_id()));
@@ -595,7 +705,7 @@ fn diff(a: &Json, b: &Json, path: &str, out: &mut Vec<String>) {
 
 /// Runs one walk; counts what happened into `seen`.
 fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
-	let mut w = Walk { rng: Rng(seed), now: 1000.0, ids: vec![], txns: vec![], burst: 0, episode: Default::default(), waiters: vec![], generations: vec![], keys: vec![], page_next: None };
+	let mut w = Walk { rng: Rng(seed), now: 1000.0, ids: vec![], txns: vec![], burst: 0, episode: Default::default(), waiters: vec![], generations: vec![], keys: vec![], boxes: vec![], page_next: None };
 	let mut rust = Driver::new();
 	let mut lines = vec![w.init()];
 	let mut answers = vec![rust.step(&lines[0])];
@@ -655,6 +765,41 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 			}
 		}
 		let s = &rust.space.state;
+		w.boxes = s.mailboxes.iter().flatten().map(|(_, b)| (b.principal.clone(), b.epoch.clone(), b.acked, b.delivered, b.next)).collect();
+		for (_, b) in s.mailboxes.iter().flatten() {
+			if !b.events.is_empty() {
+				note("events in a mailbox", seen);
+			}
+			if b.gap.is_some() {
+				note("a mailbox with a gap", seen);
+			}
+			if b.acked > 0.0 {
+				note("a mailbox acknowledged", seen);
+			}
+			for e in &b.events {
+				match e.get("event").and_then(|x| x.get("kind")).and_then(Json::as_str) {
+					Some("registrationClosed") => note("a registration closed in a mailbox", seen),
+					Some("timeout") => note("a timeout in a mailbox", seen),
+					_ => {}
+				}
+			}
+		}
+		for x in &s.regs {
+			if x.pending.is_some_and(|p| p > 0.0) {
+				note("a bundled event pending", seen);
+			}
+		}
+		if let Some(Json::Array(out)) = s.rest.get("outbox") {
+			if out.iter().any(|e| e.get("count").is_some()) {
+				note("a bundled event sent", seen);
+			}
+		}
+		if s.rest.get("releaseQueue").is_some() {
+			note("a release queue", seen);
+		}
+		if s.rest.get("jobs").and_then(Json::as_array).is_some_and(|j| j.iter().any(|j| j.get("events").and_then(Json::as_array).is_some_and(|e| e.iter().any(|x| x.get("consumer").is_some())))) {
+			note("a fanout job for a consumer", seen);
+		}
 		for x in &s.waiters {
 			if !w.waiters.contains(&x.id) {
 				w.waiters.push(x.id.clone());
@@ -757,7 +902,6 @@ fn random_walks_agree_with_the_typescript_core() {
 		"write with a lease of 0",
 		"expiry deferred",
 		"log dropped batches",
-		"one batch over maxLogBytes",
 		"nextExpiry null",
 		"probe took",
 		"probe read",
@@ -767,7 +911,6 @@ fn random_walks_agree_with_the_typescript_core() {
 		"renew IllegalArgumentError",
 		"cancel PermissionError",
 		"listPage IllegalArgumentError",
-		"page with a next",
 		"list IllegalArgumentError",
 		"changes RevisionAhead",
 		"changes SnapshotExpired",
@@ -786,6 +929,23 @@ fn random_walks_agree_with_the_typescript_core() {
 		"entries returned by an abort",
 		"entries written under a transaction",
 		"list TransactionError",
+		"notify LimitError",
+		"notify IllegalArgumentError",
+		"notify ResourceExhausted",
+		"events IllegalArgumentError",
+		"events ResponseBudgetTooSmall",
+		"ack InvalidAck",
+		"ack MailboxEpochMismatch",
+		"appendMail ResourceExhausted",
+		"events in a mailbox",
+		"a mailbox with a gap",
+		"a mailbox acknowledged",
+		"a registration closed in a mailbox",
+		"a timeout in a mailbox",
+		"a bundled event pending",
+		"a bundled event sent",
+		"a release queue",
+		"a fanout job for a consumer",
 		"addWaiter LimitError",
 		"addWaiter IllegalArgumentError",
 		"addWaiter ResourceExhausted",

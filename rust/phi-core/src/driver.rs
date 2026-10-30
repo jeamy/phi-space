@@ -69,12 +69,14 @@ impl Driver {
 			}
 			let seed = l.get("seed").map_or_else(String::new, js_string);
 			self.space = Space::new(s, seeded(&seed));
+			self.space.clock = self.clock;
 			return Ok(Json::Null);
 		}
 		if let Some(now) = l.get("now").and_then(Json::as_f64) {
 			self.clock = now;
 		}
 		let now = self.clock;
+		self.space.clock = now; // Date.now() in the TypeScript driver
 		self.space.begin_commit();
 		let s = &mut self.space;
 		// `opt(v, null)` in the TypeScript driver: absent is null, and null is no transaction
@@ -110,6 +112,13 @@ impl Driver {
 			}
 			"decide" => s.decide_line(now, l.get("key"), l.get("outcome")),
 			"lookup" => s.lookup(now, l.get("request")),
+			"notify" => {
+				let or_null = |k: &str| l.get(k).unwrap_or(&Json::Null);
+				s.notify(now, or_null("tmpl"), txn, l.get("lease").unwrap_or(&Json::Number(ANY)), or_null("handback"), or_null("target"), as_, l.get("consumer"))
+			}
+			"events" => s.mailbox_page(now, l.get("principal"), o),
+			"appendMail" => s.append_mail_line(now, l.get("principal"), l.get("event")),
+			"ack" => s.ack_mailbox(l.get("principal"), l.get("mailboxEpoch"), l.get("upTo")),
 			"nextExpiry" => s.next_expiry().map(Json::Number),
 			"stats" => s.stats(now),
 			"changes" => s.changes(l.get("afterRev"), o),

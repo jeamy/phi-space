@@ -5,9 +5,9 @@
 //! models keeps the difference between absent and `null` (the byte budgets count `JSON.stringify` output, where an
 //! absent field costs nothing and a `null` one costs its key).
 //!
-//! Modelled so far (R1, slices 1 to 3): the scalars, the entries, the transactions, the waiters, the request claims and
-//! generations (`rpc`) and the change stream. The rest of the document (regs, outbox, jobs, mailboxes, …) is carried as
-//! JSON until its slice is ported.
+//! Modelled so far (R1, slices 1 to 4): the scalars, the entries, the transactions, the registrations, the waiters, the
+//! request claims and generations (`rpc`), the mailboxes and the change stream. The outbox and the fanout jobs are
+//! carried as JSON arrays (the core only appends to them and walks them), and so is the rest of the document.
 use phi_json::{Json, Object};
 
 /// A state that is not the TypeScript document shape.
@@ -182,7 +182,8 @@ pub struct WaiterRec {
 	pub request_txn: Option<Json>,
 	pub if_exists: Option<bool>,
 	pub authorized_until: Option<f64>,
-	/// The consumer, …: carried as read.
+	/// The principal whose mailbox gets the wait's event (instead of the outbox).
+	pub consumer: Option<Json>,
 	pub rest: Object,
 }
 
@@ -202,7 +203,8 @@ impl WaiterRec {
 		let request_txn = f.take("requestTxn");
 		let if_exists = match f.take("ifExists") { None => None, Some(Json::Bool(b)) => Some(b), Some(_) => return Err(ShapeError("waiter.ifExists is not a boolean".into())) };
 		let authorized_until = f.opt_number("authorizedUntil", w)?;
-		Ok(WaiterRec { origin_request_key, id, template, take, target, deadline, txn_lease_ms, handback, claim_key, request_txn, if_exists, authorized_until, rest: f.rest() })
+		let consumer = f.take("consumer");
+		Ok(WaiterRec { origin_request_key, id, template, take, target, deadline, txn_lease_ms, handback, claim_key, request_txn, if_exists, authorized_until, consumer, rest: f.rest() })
 	}
 	/// The record in the order addWaiter (or parkOperation, for the claim fields) writes it.
 	pub fn to_json(&self) -> Json {
@@ -215,12 +217,130 @@ impl WaiterRec {
 		o.insert("deadline", Json::Number(self.deadline));
 		o.insert("txnLeaseMs", Json::Number(self.txn_lease_ms));
 		o.insert("handback", self.handback.clone());
+		if let Some(c) = &self.consumer { o.insert("consumer", c.clone()); }
 		if let Some(k) = &self.claim_key { o.insert("claimKey", k.as_str().into()); }
 		if let Some(t) = &self.request_txn { o.insert("requestTxn", t.clone()); }
 		if let Some(b) = self.if_exists { o.insert("ifExists", Json::Bool(b)); }
 		if let Some(t) = self.authorized_until { o.insert("authorizedUntil", Json::Number(t)); }
 		with_rest(o, &self.rest)
 	}
+}
+
+/// `RegRec`: a subscription (notify). Conversations are rate limited: writes within `minIntervalMs` of the last event
+/// are counted (`pending`) and sent bundled with the latest of them (`pendingEntry`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct RegRec {
+	pub id: String,
+	pub template: Json,
+	pub expires: f64,
+	/// The transaction it was made under (`null`: none).
+	pub txn: Json,
+	pub handback: Json,
+	pub target: Json,
+	/// The last sequence number issued.
+	pub seq: f64,
+	pub consumer: Option<Json>,
+	pub min_interval_ms: Option<f64>,
+	pub last_event_at: Option<f64>,
+	pub pending: Option<f64>,
+	pub pending_entry: Option<Json>,
+	pub rest: Object,
+}
+
+impl RegRec {
+	pub fn from_json(v: &Json) -> Result<Self, ShapeError> {
+		let w = "registration";
+		let mut f = Fields::of(v, w)?;
+		Ok(RegRec {
+			id: f.string("id", w)?,
+			template: f.need("template", w)?,
+			expires: f.number("expires", w)?,
+			txn: f.need("txn", w)?,
+			handback: f.need("handback", w)?,
+			target: f.need("target", w)?,
+			seq: f.number("seq", w)?,
+			consumer: f.take("consumer"),
+			min_interval_ms: f.opt_number("minIntervalMs", w)?,
+			last_event_at: f.opt_number("lastEventAt", w)?,
+			pending: f.opt_number("pending", w)?,
+			pending_entry: f.take("pendingEntry"),
+			rest: f.rest(),
+		})
+	}
+	pub fn to_json(&self) -> Json {
+		let mut o = Object::new();
+		o.insert("id", self.id.as_str().into());
+		o.insert("template", self.template.clone());
+		o.insert("expires", Json::Number(self.expires));
+		o.insert("txn", self.txn.clone());
+		o.insert("handback", self.handback.clone());
+		o.insert("target", self.target.clone());
+		o.insert("seq", Json::Number(self.seq));
+		if let Some(c) = &self.consumer { o.insert("consumer", c.clone()); }
+		if let Some(n) = self.min_interval_ms { o.insert("minIntervalMs", Json::Number(n)); }
+		if let Some(n) = self.last_event_at { o.insert("lastEventAt", Json::Number(n)); }
+		if let Some(n) = self.pending { o.insert("pending", Json::Number(n)); }
+		if let Some(e) = &self.pending_entry { o.insert("pendingEntry", e.clone()); }
+		with_rest(o, &self.rest)
+	}
+}
+
+/// One principal's durable mailbox (mailbox.ts): events by sequence number, acknowledged as a delivered prefix.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Mailbox {
+	pub principal: Json,
+	pub epoch: String,
+	pub next: f64,
+	pub acked: f64,
+	pub delivered: f64,
+	/// Running tally of the JSON bytes of `events`.
+	pub bytes: f64,
+	/// `{seq, at, event}` items.
+	pub events: Vec<Json>,
+	/// What expiry dropped before it was acknowledged.
+	pub gap: Option<Json>,
+	pub rest: Object,
+}
+
+impl Mailbox {
+	pub fn from_json(v: &Json) -> Result<Self, ShapeError> {
+		let w = "mailbox";
+		let mut f = Fields::of(v, w)?;
+		Ok(Mailbox {
+			principal: f.need("principal", w)?,
+			epoch: f.string("epoch", w)?,
+			next: f.number("next", w)?,
+			acked: f.number("acked", w)?,
+			delivered: f.number("delivered", w)?,
+			bytes: f.number("bytes", w)?,
+			events: match f.need("events", w)? { Json::Array(a) => a, _ => return Err(ShapeError("mailbox.events is not an array".into())) },
+			gap: f.take("gap"),
+			rest: f.rest(),
+		})
+	}
+	pub fn to_json(&self) -> Json {
+		let mut o = Object::new();
+		o.insert("principal", self.principal.clone());
+		o.insert("epoch", self.epoch.as_str().into());
+		o.insert("next", Json::Number(self.next));
+		o.insert("acked", Json::Number(self.acked));
+		o.insert("delivered", Json::Number(self.delivered));
+		o.insert("bytes", Json::Number(self.bytes));
+		o.insert("events", Json::Array(self.events.clone()));
+		if let Some(g) = &self.gap { o.insert("gap", g.clone()); }
+		with_rest(o, &self.rest)
+	}
+}
+
+/// `{boxes: {...}}` of the mailboxes.
+pub fn obj_boxes(m: &[(String, Mailbox)]) -> Json {
+	let mut boxes = Object::new();
+	for (k, b) in m {
+		boxes.insert(k.clone(), b.to_json());
+	}
+	let mut o = Object::new();
+	o.insert("boxes", Json::Object(boxes));
+	Json::Object(o)
 }
 
 /// `RpcState`: request claims and generations (claims.ts). Claims and generations are kept as their JSON records,
@@ -333,7 +453,10 @@ pub struct SpaceState {
 	pub entries: Vec<EntryRec>,
 	/// The open transactions in the order they were opened (the document keys them by id).
 	pub txns: Vec<TxnRec>,
+	pub regs: Vec<RegRec>,
 	pub waiters: Vec<WaiterRec>,
+	/// Mailboxes by principal id, in the order they were made; created by the first one.
+	pub mailboxes: Option<Vec<(String, Mailbox)>>,
 	/// Request claims and generations; created by the first request.
 	pub rpc: Option<RpcState>,
 	/// Entries given back by aborted or expired transactions, ever.
@@ -358,9 +481,8 @@ impl SpaceState {
 	/// `initialState()`.
 	pub fn initial() -> Self {
 		let mut rest = Object::new();
-		rest.insert("regs", Json::Array(vec![]));
 		rest.insert("outbox", Json::Array(vec![]));
-		SpaceState { next_id: 1.0, entries: vec![], txns: vec![], waiters: vec![], rpc: None, returned: 0.0, outbox_bytes: Some(2.0), space_id: None, incarnation: None, limits: None, stream: None, rest }
+		SpaceState { next_id: 1.0, entries: vec![], txns: vec![], regs: vec![], waiters: vec![], mailboxes: None, rpc: None, returned: 0.0, outbox_bytes: Some(2.0), space_id: None, incarnation: None, limits: None, stream: None, rest }
 	}
 
 	pub fn from_json(v: &Json) -> Result<Self, ShapeError> {
@@ -371,6 +493,17 @@ impl SpaceState {
 		let txns = match f.need("txns", w)? {
 			Json::Object(o) => o.iter().map(|(_, t)| TxnRec::from_json(t)).collect::<Result<_, _>>()?,
 			_ => return Err(ShapeError("space.txns is not an object".into())),
+		};
+		let regs = match f.need("regs", w)? {
+			Json::Array(a) => a.iter().map(RegRec::from_json).collect::<Result<_, _>>()?,
+			_ => return Err(ShapeError("space.regs is not an array".into())),
+		};
+		let mailboxes = match f.take("mailboxes") {
+			None => None,
+			Some(m) => {
+				let boxes = m.get("boxes").and_then(Json::as_object).filter(|_| m.as_object().is_some_and(|o| o.len() == 1)).ok_or_else(|| ShapeError("space.mailboxes is not {boxes}".into()))?;
+				Some(boxes.iter().map(|(k, b)| Mailbox::from_json(b).map(|b| (k.to_owned(), b))).collect::<Result<_, _>>()?)
+			}
 		};
 		let waiters = match f.need("waiters", w)? {
 			Json::Array(a) => a.iter().map(WaiterRec::from_json).collect::<Result<_, _>>()?,
@@ -384,10 +517,10 @@ impl SpaceState {
 		let limits = match f.take("limits") { None => None, Some(Json::Object(o)) => Some(o), Some(_) => return Err(ShapeError("space.limits is not an object".into())) };
 		let stream = f.take("stream").map(|s| StreamState::from_json(&s)).transpose()?;
 		let rest = f.rest();
-		for key in ["regs", "outbox"] {
+		for key in ["outbox"] {
 			if !rest.contains_key(key) { return Err(ShapeError(format!("space.{key} is missing"))); }
 		}
-		Ok(SpaceState { next_id, entries, txns, waiters, rpc, returned, outbox_bytes, space_id, incarnation, limits, stream, rest })
+		Ok(SpaceState { next_id, entries, txns, regs, waiters, mailboxes, rpc, returned, outbox_bytes, space_id, incarnation, limits, stream, rest })
 	}
 
 	pub fn to_json(&self) -> Json {
@@ -400,6 +533,7 @@ impl SpaceState {
 				"returned" => o.insert(key, Json::Number(self.returned)),
 				"txns" => o.insert(key, Json::Object(self.txns.iter().map(|t| (t.id.clone(), t.to_json())).collect())),
 				"waiters" => o.insert(key, Json::Array(self.waiters.iter().map(WaiterRec::to_json).collect())),
+				"regs" => o.insert(key, Json::Array(self.regs.iter().map(RegRec::to_json).collect())),
 				_ => if let Some(v) = self.rest.get(key) { o.insert(key, v.clone()) },
 			}
 		}
@@ -407,6 +541,7 @@ impl SpaceState {
 		if let Some(s) = &self.space_id { o.insert("spaceId", s.as_str().into()); }
 		if let Some(s) = &self.incarnation { o.insert("incarnation", s.as_str().into()); }
 		if let Some(r) = &self.rpc { o.insert("rpc", r.to_json()); }
+		if let Some(m) = &self.mailboxes { o.insert("mailboxes", obj_boxes(m)); }
 		if let Some(s) = &self.stream { o.insert("stream", s.to_json()); }
 		for (k, v) in self.rest.iter() { if !o.contains_key(k) { o.insert(k, v.clone()); } }
 		Json::Object(o)
