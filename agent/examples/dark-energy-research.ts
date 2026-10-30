@@ -10,7 +10,7 @@
 //   Chat ── space_wait take UserQuery ──► QueryResponse  (nur mit --query)
 //   Monitor ── Host-Loop (kein LLM) ──► SystemStatus
 //
-// Run: node --experimental-strip-types examples/dark-energy-research.ts ["topic"] [--dir <state dir>] [--out report.md] [--query "Frage"]
+// Run: node --experimental-strip-types agent/examples/dark-energy-research.ts ["topic"] [--dir <state dir>] [--out report.md] [--query "Frage"]
 // Model: PI_PROVIDER + PI_MODEL, otherwise the first available (see live-models.ts).
 // The state is a JSONL store in --dir, so an interrupted run can be inspected;
 // the report is also written to --out (default <dir>/report.md).

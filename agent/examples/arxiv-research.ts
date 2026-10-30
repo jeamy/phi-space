@@ -5,7 +5,7 @@
 //   analyst      ── space_wait take AnalyzeTask ──► Analysis entries (one per era/approach) ──► PresentTask
 //   presenter    ── space_wait take PresentTask ──► Report {markdown}
 //
-// Run: node --experimental-strip-types examples/arxiv-research.ts ["topic"] [--dir <state dir>] [--out report.md]
+// Run: node --experimental-strip-types agent/examples/arxiv-research.ts ["topic"] [--dir <state dir>] [--out report.md]
 // Model: PI_PROVIDER + PI_MODEL, otherwise the first available (see live-models.ts). The state is a JSONL store in
 // --dir; --resume reopens the same team and phase handoffs. The report is written to --out (default <dir>/report.md).
 import { join } from "node:path";

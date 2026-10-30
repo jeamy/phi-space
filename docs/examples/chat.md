@@ -1,6 +1,6 @@
 # Space-Chat
 
-Stand: 2026-10-07. Implementierung: [chat.ts](../../examples/chat.ts).
+Stand: 2026-10-07. Implementierung: [chat.ts](../../agent/examples/chat.ts).
 
 Drei Conversations alice → bob → carol kommunizieren über Msg-Entries
 `{room, from, to, n, text}`. Der Host erzeugt pro Empfänger ein Notify-Template nach room und to.
@@ -17,7 +17,7 @@ noch Antworten auslösen. Notify ist best effort, keine allgemeine Exactly-once-
 ```bash
 npm run example:chat
 # Real model: requires approval under AGENTS.md
-node --experimental-strip-types examples/chat.ts --live "Thema"
+node --experimental-strip-types agent/examples/chat.ts --live "Thema"
 ```
 
 Der Faux-Dispatcher ignoriert Systemnachrichten bei der Prüfung des letzten Tool-Resultats.

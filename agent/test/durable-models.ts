@@ -18,7 +18,7 @@ export function modelBundle() {
     const code = user === "repair" || JSON.stringify(context.messages.filter((m: any) => m.role === "system")).includes("[durable-code]");
     const message = user === "loop" || String(user).startsWith("loop:") || code && last?.role !== "toolResult"
       ? fauxAssistantMessage(fauxToolCall("verify_code", { source: "(a, b) => a + b" }), { stopReason: "toolUse" })
-      : fauxAssistantMessage(code ? "```js\n(a, b) => a + b\n```" : `answer:${user}; previous:${messages.filter((m: any) => m.role === "user").map((m: any) => m.content).join("|")}`);
+      : fauxAssistantMessage(code ? "```js\n(a, b) => a + b\n```\nNOTE: plain addition" : `answer:${user}; previous:${messages.filter((m: any) => m.role === "user").map((m: any) => m.content).join("|")}`);
     message.usage.input = 5; message.usage.output = 2; message.usage.totalTokens = 7; message.usage.cost.total = 0.03;
     return message;
   }));

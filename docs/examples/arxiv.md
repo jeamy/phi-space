@@ -1,10 +1,10 @@
 # arXiv-Recherche: Datenvertrag und Workflow
 
 Stand: 2026-10-07. Implementierungen:
-[arxiv-tool.ts](../../examples/arxiv-tool.ts),
-[arxiv-research.ts](../../examples/arxiv-research.ts),
-[dark-energy-research.ts](../../examples/dark-energy-research.ts),
-[research-support.ts](../../examples/research-support.ts).
+[arxiv-tool.ts](../../agent/examples/arxiv-tool.ts),
+[arxiv-research.ts](../../agent/examples/arxiv-research.ts),
+[dark-energy-research.ts](../../agent/examples/dark-energy-research.ts),
+[research-support.ts](../../agent/examples/research-support.ts).
 
 ## Quellenvertrag
 

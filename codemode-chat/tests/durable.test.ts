@@ -49,6 +49,7 @@ test("default durable contributions use the real Space queue, sandbox and per-at
     const first = await answer();
     assert.equal(first.ok, true, first.error ?? "durable contribution failed");
     assert.match(String(first.value?.source), /a \+ b/);
+    assert.equal(first.value?.note, "plain addition");
     assert.ok(Number((first.value?.usage as { total: number }).total) > 0);
     assert.equal(await stack.space.count({ type: "QuotaUse", fields: { key: "llm" } }), 2);
     await stack.kill(host);

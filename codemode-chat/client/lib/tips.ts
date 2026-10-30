@@ -78,8 +78,8 @@ export const TIPS: Record<TipId, Tip> = {
 	},
 	budget: {
 		text: {
-			de: "Obergrenze für die Modellaufrufe eines Laufs, in Tokens und/oder Dollar (Listenpreis). Was zuerst erreicht ist, beendet den Lauf. Leer: kein Limit (die übrigen Grenzen gelten weiter).",
-			en: "Upper bound for a run's model calls, in tokens and/or dollars (list price). Whichever is reached first ends the run. Empty: no limit (the other limits still apply).",
+			de: "Obergrenze für die Modellaufrufe eines Laufs, in Tokens und/oder Dollar (Listenpreis). Was zuerst erreicht ist, beendet den Lauf. Leer: Admins haben kein Limit, Besucher das Standardbudget (die übrigen Grenzen gelten weiter).",
+			en: "Upper bound for a run's model calls, in tokens and/or dollars (list price). Whichever is reached first ends the run. Empty: no limit for admins, the default budget for visitors (the other limits still apply).",
 		},
 		article: "help.topic.runs_and_contenders", anchor: "board",
 	},

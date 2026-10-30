@@ -2,7 +2,7 @@
 // The evaluators are unchanged: whatever a model writes is data and runs only in the sandbox, which can reach no tool.
 // Costs tokens (about 600 per contribution, agents x generations x per-agent calls), so ask before running it.
 //
-// Run: node --experimental-strip-types examples/codemode-evolve-live.ts [--agents 4] [--gens 3] [--per-agent 1] [--n 100] [--log FILE]
+// Run: node --experimental-strip-types agent/examples/codemode-evolve-live.ts [--agents 4] [--gens 3] [--per-agent 1] [--n 100] [--log FILE]
 // PI_PROVIDER / PI_MODEL pick another model; the default is the first Mistral model (codestral-latest if present).
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";

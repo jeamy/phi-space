@@ -1,6 +1,6 @@
 # phi-spaces API
 
-Stand: 2026-10-11. Diese Referenz dokumentiert die öffentliche TypeScript-API
+Stand: 2026-10-30. Diese Referenz dokumentiert die öffentliche TypeScript-API
 des lokalen Clients `PhiSpaces`, des Remote-Clients `RemoteSpace` und den
 Servicevertrag. Sie beschreibt keine Federation-Garantie; dafür ist
 [federation-plan-v3.md](federation-plan-v3.md) maßgeblich.

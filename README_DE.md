@@ -269,15 +269,15 @@ Siehe [Testbed](test/testbed/README.md), [Betrieb](docs/testumgebung-big.md) und
 
 | Beispiel | Inhalt | Voraussetzung |
 |---|---|---|
-| `examples/workers.ts` | Ein Agent veröffentlicht einen Job, ein anderer übernimmt ihn. | Geskriptete Modelle. |
-| `examples/blocking-tool.ts` | Wartender Take mit später eintreffendem Entry. | Kein Live-Modell. |
+| `agent/examples/workers.ts` | Ein Agent veröffentlicht einen Job, ein anderer übernimmt ihn. | Geskriptete Modelle. |
+| `agent/examples/blocking-tool.ts` | Wartender Take mit später eintreffendem Entry. | Kein Live-Modell. |
 | `examples/sensor-pipeline.ts` | Collector, konkurrierende Analysten, Fork/Join und Ausgabe. | Host-Code. |
-| `examples/chat.ts` | Agenten-Ring mit Notify. | Geskriptet; `--live` kostenpflichtig/netzabhängig. |
-| `examples/arxiv-research.ts` | Recherche-Pipeline mit Aufgabenabschluss. | Echtes Modell, Netz, frischer State-Pfad. |
+| `agent/examples/chat.ts` | Agenten-Ring mit Notify. | Geskriptet; `--live` kostenpflichtig/netzabhängig. |
+| `agent/examples/arxiv-research.ts` | Recherche-Pipeline mit Aufgabenabschluss. | Echtes Modell, Netz, frischer State-Pfad. |
 | `examples/sieve.ts` | Segmentiertes Sieb, transaktionale Tasks, JSONL-Wiederanlauf. | Host-Code. |
 | `examples/cache.ts` | Atomarer lokaler Cache, TTL und persistentes Compare-and-set. | Keine Replikation. |
 | `examples/golomb.ts` | Kooperative DFS, isolierte Läufe, Wiederaufnahme abgeschlossener Tasks. | Keine partiellen DFS-Checkpoints. |
-| `examples/dark-energy-research.ts` | Mehrstufige Recherche mit optionalem Dialog. | Echtes Modell, Netz, frischer State-Pfad. |
+| `agent/examples/dark-energy-research.ts` | Mehrstufige Recherche mit optionalem Dialog. | Echtes Modell, Netz, frischer State-Pfad. |
 | [`help-site/`](help-site/README_DE.md) | Hilfe, Social Swarm, sechs Chat-Stufen und Web Admin. | `npm run help`, Standardport 3500. |
 
 ```bash

@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { DurableAgentClient } from "../../agent/src/durable-client.ts";
 import type { AgentUsage } from "../../agent/src/durable-protocol.ts";
 import { ROOT } from "./env.ts";
-import { extractCode, teamPrompt, type llmContribution } from "./llm.ts";
+import { extractCode, extractNote, teamPrompt, type llmContribution } from "./llm.ts";
 import { judge, loadCodemode, verdictFields } from "./judge.ts";
 import type { LlmCall } from "./context.ts";
 import type { Task } from "./tasks.ts";
@@ -39,7 +39,8 @@ export class DurableContributions {
         return verdictFields(await judge(cm, metadata.task as Task, source));
       },
     }, signal);
-    return { source: extractCode(answer.text), model: answer.model, usage: answer.usage };
+    const note = extractNote(answer.text);
+    return { source: extractCode(answer.text), model: answer.model, usage: answer.usage, ...(note ? { note } : {}) };
   }
 
   close() { return this.client.close(); }

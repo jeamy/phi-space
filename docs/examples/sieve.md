@@ -45,7 +45,7 @@ und SIGKILL/Neustart des Host-Prozesses; [AP-1-Abnahme](../abnahme/ap1-abnahme.m
 
 In einer späteren Federation müssen Task und Ergebnis in derselben Member-Txn liegen.
 Siehe [v3-Plan](../federation-plan-v3.md). Weitere Minimalmuster:
-[workers.ts](../../examples/workers.ts), [blocking-tool.ts](../../examples/blocking-tool.ts).
+[workers.ts](../../agent/examples/workers.ts), [blocking-tool.ts](../../agent/examples/blocking-tool.ts).
 [Zur Übersicht](README.md).
 
 

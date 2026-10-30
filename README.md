@@ -343,19 +343,19 @@ Use `--dry-run` to preview actions without contacting the server. See [docs/tui.
 
 | file | what | needs |
 |---|---|---|
-| `examples/workers.ts` | one conversation posts a job, another takes it | – (scripted model) |
-| `examples/blocking-tool.ts` | `space_take` with a timeout, the entry arrives later | – |
+| `agent/examples/workers.ts` | one conversation posts a job, another takes it | – (scripted model) |
+| `agent/examples/blocking-tool.ts` | `space_take` with a timeout, the entry arrives later | – |
 | `examples/sensor-pipeline.ts` | collectors → competing analysts (take under txn, fork/join on `Done`) → presenter; also used by the pipeline tests | – (host code as conversations) |
-| `examples/chat.ts` | three agents chat in a ring; each has a notify subscription for messages addressed to it | – scripted; `--live` uses a real model |
-| `examples/arxiv-research.ts` | collectors search arXiv and attempt read-before-write deduplication; task outputs require a matching transaction; fresh state directory required | real model, network |
+| `agent/examples/chat.ts` | three agents chat in a ring; each has a notify subscription for messages addressed to it | – scripted; `--live` uses a real model |
+| `agent/examples/arxiv-research.ts` | collectors search arXiv and attempt read-before-write deduplication; task outputs require a matching transaction; fresh state directory required | real model, network |
 | `examples/sieve.ts` | bounded segmented sieve with transactional tasks, reference tests and JSONL recovery | – (host code) |
 | `examples/cache.ts` | atomic local cache replacement, TTL and persistent compare-and-set versions | – (host code; no replication) |
 | `examples/golomb.ts` | local cooperative DFS with transactional tasks and isolated runs; persistent completed tasks resume; `--checkpoint` writes completion receipts, not partial DFS cursors | – (host code) |
-| `examples/dark-energy-research.ts` | 7-stage research pipeline (crawl → classify → summarize → analyse → present → optional `--query` chat); host-side monitor writes `SystemStatus` | real model, network |
+| `agent/examples/dark-energy-research.ts` | 7-stage research pipeline (crawl → classify → summarize → analyse → present → optional `--query` chat); host-side monitor writes `SystemStatus` | real model, network |
 | [`help-site/`](help-site/README.md) | PHI-SPACES / HELP: bilingual help, batched Social Swarm feed, 6-stage Space-Chat workbench and AdminSpaces | `npm run help` → http://localhost:3500 (default; configurable) |
 
 Live examples pick the model from `PI_PROVIDER`/`PI_MODEL`, otherwise the first one available via environment
-API keys or `~/.pi/agent/auth.json` (`examples/live-models.ts`). They cost model tokens. Entry types, patterns,
+API keys or `~/.pi/agent/auth.json` (`agent/src/live-models.ts`). They cost model tokens. Entry types, patterns,
 tests and limits of each example: [docs/examples.md](docs/examples.md) and [docs/examples/](docs/examples/).
 
 Actual research runners are tested with scripted models and persistent storage. Real-model quality and network
@@ -372,8 +372,8 @@ npm run example:cache
 ```
 
 ```
-node --experimental-strip-types examples/chat.ts --live "Was war der wichtigste Schritt zu heutigen LLMs?"
-node --experimental-strip-types examples/arxiv-research.ts --out /tmp/llm-history.md
+node --experimental-strip-types agent/examples/chat.ts --live "Was war der wichtigste Schritt zu heutigen LLMs?"
+node --experimental-strip-types agent/examples/arxiv-research.ts --out /tmp/llm-history.md
 ```
 
 ## Documentation

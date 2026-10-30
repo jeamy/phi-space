@@ -3,8 +3,8 @@
 // messages addressed to it, so writing a message wakes exactly its addressee. The messages stay in the space as the
 // transcript. The host stops the chat after MAX_TURNS by cancelling the subscriptions.
 //
-// Run scripted (no model, no network):  node --experimental-strip-types examples/chat.ts
-// Run with a real model:                node --experimental-strip-types examples/chat.ts --live ["topic"]
+// Run scripted (no model, no network):  node --experimental-strip-types agent/examples/chat.ts
+// Run with a real model:                node --experimental-strip-types agent/examples/chat.ts --live ["topic"]
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";

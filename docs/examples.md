@@ -1,6 +1,6 @@
 # Beispiele: Implementierung und Nachweise
 
-Stand: 2026-10-18. Verbindlicher Einstieg für die Beispiele. Die Beispiele in `examples/` verwenden **einen
+Stand: 2026-10-30. Verbindlicher Einstieg für die Beispiele. Die Beispiele in `examples/` verwenden **einen
 lokalen Harness pro Prozess und Storage**. Mehrere Conversations sind keine Federation; föderierte Stufen
 liegen nur im Hilfesystem (v5/v6). Der [Föderationsplan v3](federation-plan-v3.md) ist umgesetzt; Stand und
 Nachweise stehen im [Implementierungsstand](implementierungsstand.md) und den [Abnahmedokumenten](abnahme/ap3-abnahme.md).
@@ -20,10 +20,10 @@ Nachweise stehen im [Implementierungsstand](implementierungsstand.md) und den [A
 
 ## Zwei verschiedene Chat-Architekturen
 
-`examples/chat.ts` und `help-site/examples/shared/chat-core.ts` (`SpaceChatEngine`) sind **absichtlich verschiedene
+`agent/examples/chat.ts` und `help-site/examples/shared/chat-core.ts` (`SpaceChatEngine`) sind **absichtlich verschiedene
 Paradigmen** und kein Duplikat:
 
-- `examples/chat.ts` nutzt `phi-spaces` als Ereignis-Bus **zwischen langlebigen `pi-durable`-Conversations**
+- `agent/examples/chat.ts` nutzt `phi-spaces` als Ereignis-Bus **zwischen langlebigen `pi-durable`-Conversations**
   (Aktor-Modell): jede Figur ist eine eigene Konversation mit Historie; der Space transportiert nur flache `Msg`-Benachrichtigungen.
 - `chat-core.ts` (Stufen v1 bis v6 im Hilfesystem) realisiert den Chat **vollständig in Space-Primitiven**:
   zustandslose Worker ziehen `ChatTask`-Tupel transaktional, Präsenz sind Lease-Einträge, Alarme sind
@@ -45,7 +45,6 @@ npm run example:sieve -- 1001 4
 npm run example:cache
 npm run example:codemode-evolve -- --gens 6 --agents 8
 npm run example:blocking
-npm run example:dark-energy
 npm run example:space-chat
 npm run help
 ```
@@ -70,7 +69,7 @@ die Agenten der nächsten Generation aufbauen. Ohne Modell lauf­fähig (Agenten
 LLM-Agent würde den Quelltext selbst schreiben. `@earendil-works/pi-codemode` ist eine Abhängigkeit des Projekts
 (`PI_CODEMODE_DIR` wählt einen anderen Pfad); lässt es sich nicht laden, wird übersprungen. Gemessene Zeit ist Wandzeit und schwankt.
 
-Live-Beispiele (`examples/chat.ts --live`, `npm run example:arxiv`) benötigen Zugangsdaten und verursachen
+Live-Beispiele (`agent/examples/chat.ts --live`, `npm run example:arxiv`, `npm run example:dark-energy`, `npm run example:codemode-evolve:live`) benötigen Zugangsdaten und verursachen
 Modellkosten; [live-models.ts](../agent/src/live-models.ts) wählt Provider und Modell. Gemäß AGENTS.md werden
 sie erst nach Freigabe ausgeführt. Der arXiv-Netzzugang und wissenschaftliche Ergebnisqualität sind durch
 Faux-Tests nicht validiert. API-Parser und Datenvertrag werden mit lokalen Fixtures geprüft.

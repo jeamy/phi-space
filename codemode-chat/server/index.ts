@@ -6,7 +6,7 @@
 //      CODEMODE_HOST_NAME (name in the system bar),
 //      CODEMODE_ADMIN_PASSWORD (the admin login; CODEMODE_ADMIN_TOKEN is the older name; scripts may send it as the header x-admin-token; unset: no admin),
 //      CODEMODE_REQ_PER_MIN (API requests and WebSocket connects per client IP and minute, default 120),
-//      CODEMODE_TTL_HOURS (lifetime of a room's entries in hours, default 24; 0 = until the block is deleted).
+//      CODEMODE_TTL_HOURS (lifetime of a room's entries in hours, default 8760; 0 = until the block is deleted).
 import http from "node:http";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ROOT } from "./env.ts";
