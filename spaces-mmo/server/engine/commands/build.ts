@@ -268,14 +268,16 @@ const arbeite: Command = {
 
 const baustelle: Command = {
 	key: "baustelle", aliases: ["baustellen", "site", "sites"],
-	help: "baustelle – was hier gebaut wird und was noch fehlt",
-	async func(c) {
-		const sites = (await c.space.readAll({ type: "Site", fields: { room: c.actor.room } })).map((e) => fieldsOf<SiteFields>(e));
-		const built = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e));
-		const ruins = (await c.space.readAll({ type: "Ruin", fields: { room: c.actor.room } })).map((e) => fieldsOf<RuinFields>(e));
+	help: "baustelle [x y] – was hier gebaut wird und was noch fehlt (mit x y: nur das auf dieser Zelle)",
+	async func(c, arg) {
+		const at = /^(\d+)\s+(\d+)$/.exec(arg.trim());
+		const here = <F extends Rect>(all: F[]) => (at ? all.filter((r) => distTo({ x: Number(at[1]), y: Number(at[2]) }, r) === 0) : all);
+		const sites = here((await c.space.readAll({ type: "Site", fields: { room: c.actor.room } })).map((e) => fieldsOf<SiteFields>(e)));
+		const built = here((await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)));
+		const ruins = here((await c.space.readAll({ type: "Ruin", fields: { room: c.actor.room } })).map((e) => fieldsOf<RuinFields>(e)));
 		if (!sites.length && !built.length && !ruins.length) return msg(c, c.actor.charId, "info", "Hier wird nichts gebaut. „bau“ zeigt die Baupläne.");
 		const now = await worldNowOf(c.space, c.txn);
-		const lines = [...sites.map((s) => `Baustelle ${s.name} von ${s.ownerName}: es fehlen ${missing(s).join(", ")}.`), ...built.map((b) => `${b.name} von ${b.ownerName}: hält noch ${days(b.untilWorldMs - now)} („repariere“ bessert sie aus).`), ...ruins.map((r) => `Ruine einer ${r.name} von ${r.ownerName}.`)];
+		const lines = [...sites.map((s) => `${s.accountId === c.account?.accountId ? `Deine Baustelle ${s.name}` : `Baustelle ${s.name} von ${s.ownerName}`}: es fehlen ${missing(s).join(", ")}.`), ...built.map((b) => `${b.name} von ${b.ownerName}: hält noch ${days(b.untilWorldMs - now)} („repariere“ bessert sie aus).`), ...ruins.map((r) => `Ruine einer ${r.name} von ${r.ownerName}.`)];
 		await msg(c, c.actor.charId, "look", lines.join("\n"));
 	},
 };

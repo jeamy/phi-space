@@ -207,7 +207,8 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 			if (beside && may && !o.fenced) entries.push({ label: "Zaun um die Flur ziehen (6 Treibholz, 2 Tangseil)", line: "zäune" });
 			continue;
 		}
-		entries.push({ label: o.kind === "site" ? `Baustelle ${o.name}: was fehlt?` : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: "baustelle" });
+		// this one, not all in the room: the command takes its cell
+		entries.push({ label: o.kind === "site" ? `${o.owner === self?.name ? "Deine Baustelle" : `Baustelle von ${o.owner ?? ""}`} ${o.name}: was fehlt?` : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: `baustelle ${o.x} ${o.y}` });
 		if (o.kind === "building" && beside) {
 			if (o.name === "Regentonne") entries.push({ label: "Wasser schöpfen", line: "schöpfe" });
 			// anyone grinds at a mill and bakes at a bakery (server: mill.ts, the recipes "at" a plan)

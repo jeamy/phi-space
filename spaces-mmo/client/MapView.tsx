@@ -162,7 +162,7 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 				return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
 			}, latest);
 			draw(s, latest.current.chars, latest.current.me);
-			drawObjs(s, room.roomId, latest.current.objs);
+			drawObjs(s, room.roomId, latest.current.objs, latest.current.chars.get(latest.current.me)?.name);
 			let t = 0;
 			a.ticker.add((tk) => { t += tk.deltaMS; frame(s, world, latest.current.me, room.roomId, latest.current.objs, t, tk.deltaMS); });
 		})();
@@ -176,7 +176,7 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 	// the characters: every change of the map of online characters (the ticker glides them there)
 	useEffect(() => { if (scene.current) draw(scene.current, chars, me); }, [chars, me]);
 	// things and exits: few per room, drawn again on every change
-	useEffect(() => { if (scene.current) drawObjs(scene.current, room.roomId, objs); }, [room, objs]);
+	useEffect(() => { if (scene.current) drawObjs(scene.current, room.roomId, objs, chars.get(me)?.name); }, [room, objs, chars, me]);
 	useEffect(() => { if (scene.current) { scene.current.fogLevel = fog; scene.current.fogDirty = true; } }, [fog]);
 	useEffect(() => { store("mmo.zoom", zoom); if (scene.current) { scene.current.view = { zoom, panX: 0, panY: 0 }; scene.current.fogDirty = true; } }, [zoom]);
 
@@ -299,7 +299,7 @@ function fence2d(g: InstanceType<Px["Graphics"]>, x: number, y: number, w: numbe
 	for (let fy = 1; fy < h; fy++) for (const fx of [0, w]) g.rect(x + fx * ts - 1.5, y + fy * ts - 1.5, 3, 3).fill({ color: "#8a6a3a" });
 }
 
-function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
+function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, myName: string | undefined): void {
 	const ts = s.ts, p = s.pixi;
 	for (const child of s.objs.removeChildren()) child.destroy({ children: true });
 	s.flames = [];
@@ -386,11 +386,13 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
 				g.rect(x + w / 2 - ts * 0.2, y + h - ts * 0.55, ts * 0.4, ts * 0.55 - 3).fill({ color: "#2a1d10" });
 				if (o.fenced) fence2d(g, x, y, o.w ?? 1, o.h ?? 1, ts);
 			} else {
-				g.rect(x + 2, y + 2, w - 4, h - 4).fill({ color: "#c9a26b", alpha: 0.35 }).stroke({ width: 2, color: "#7a5a36", alpha: 0.9 });
+				// one's own site stands out at once: a bright border, and its label says so
+				g.rect(x + 2, y + 2, w - 4, h - 4).fill({ color: "#c9a26b", alpha: 0.35 }).stroke(o.owner === myName ? { width: 3, color: "#dfff73" } : { width: 2, color: "#7a5a36", alpha: 0.9 });
 				for (const [px, py] of [[x + 3, y + 3], [x + w - 7, y + 3], [x + 3, y + h - 7], [x + w - 7, y + h - 7]] as const) g.rect(px, py, 4, 4).fill({ color: "#5b3a22" });
 				g.rect(x + 6, y + h - 10, (w - 12) * Math.min(1, o.progress ?? 0), 4).fill({ color: "#AED83C" });
 			}
-			const label = new p.Text({ text: o.kind === "site" ? `Baustelle ${o.name}` : `${o.name} von ${o.owner ?? ""}`, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
+			const own = o.owner === myName;
+			const label = new p.Text({ text: o.kind === "site" ? (own ? `Deine Baustelle: ${o.name}` : `Baustelle ${o.name} von ${o.owner ?? ""}`) : `${o.name} von ${o.owner ?? ""}`, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: o.kind === "site" && own ? "#dfff73" : "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
 			label.anchor.set(0.5, 0);
 			label.position.set(x + w / 2, y + h);
 			s.objs.addChild(g, label);

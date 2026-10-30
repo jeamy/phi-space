@@ -176,6 +176,10 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		// a site given up gives back all that was delivered
 		await clear(s, [[16, 12], [17, 12], [16, 13], [17, 13]]);
 		await does(boss.p, "bau hütte 16 12", "steckt eine Baustelle ab");
+		// asked by its cell (as the map's menu does): only that one; its owner sees it is theirs
+		assert.match(await does(boss.p, "baustelle 17 13", "Baustelle"), /^Deine Baustelle Hütte: es fehlen/);
+		assert.match(await does(other.p, "baustelle", "Baustelle Hütte"), /^Baustelle Hütte von Siedlerin: es fehlen/);
+		assert.match(await does(boss.p, "baustelle 1 1", "nichts gebaut"), /Hier wird nichts gebaut/);
 		await does(boss.p, "liefere 2 treibholz", "Du lieferst");
 		assert.match(await does(boss.p, "abriss baustelle", "gibt die Baustelle"), /Zurück an Siedlerin: 2 Treibholz/);
 		assert.equal(await pack(s, boss.me, "treibholz"), 3);

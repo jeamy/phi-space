@@ -272,7 +272,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		let e = s.objs.get(id);
 		// a site that became a building (or got further) is drawn anew
 		if (e && (e.kind !== obj.kind || e.progress !== obj.progress || e.sig !== bedSig(obj))) { remove(s, s.objs, id); e = undefined; }
-		if (!e) { e = object(s.t, obj); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); s.scene.add(e.obj); s.objs.set(id, e); }
+		if (!e) { e = object(s.t, obj, chars.get(me)?.name); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); s.scene.add(e.obj); s.objs.set(id, e); }
 		e.target.copy(placeOf(s, obj));
 		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; e.flame.light.intensity = lit ? 4 : 0; }
 	}
@@ -294,7 +294,7 @@ function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
 	return v;
 }
 
-function object(t: T, obj: ObjView): Entry {
+function object(t: T, obj: ObjView, myName: string | undefined): Entry {
 	const group = new t.Group(); group.userData.owned = true;
 	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" || obj.kind === "field" || obj.kind === "building" ? { sig: bedSig(obj) } : {}) };
 	if (obj.kind === "bed") {
@@ -342,6 +342,8 @@ function object(t: T, obj: ObjView): Entry {
 		const color = Number.parseInt((obj.color ?? "#8a6a44").slice(1), 16);
 		group.add(propShadow(t, w * 1.15, d * 1.15));
 		group.add(propMesh(t, obj.kind === "building" ? buildingGeometry(t, obj.plan, w, d, color, variant, obj.herd) : siteGeometry(t, obj.plan, w, d, color, obj.progress ?? 0)));
+		// one's own site says so above it
+		if (obj.kind === "site" && obj.owner === myName) { const mark = label(t, "Deine Baustelle", "#dfff73"); mark.position.y = 1.3; group.add(mark); }
 		// a coop with a fence round it (foxes keep out), a dog or cat on guard at its front corner (wild.ts, animals.ts)
 		if (obj.kind === "building" && obj.fenced) group.add(propMesh(t, fenceGeometry(t, w + 0.5, d + 0.5)));
 		if (obj.kind === "building" && obj.keeper) { const k = propMesh(t, keeperGeometry(t, obj.keeper, variant)); k.position.set(w / 2 + 0.05, 0, d / 2 + 0.05); k.rotation.y = 0.6; group.add(k); }
