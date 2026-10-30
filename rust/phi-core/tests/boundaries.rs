@@ -1,0 +1,154 @@
+// R1, slice 1: the byte budgets at their edges. A random walk rarely lands on the one byte where a limit flips, so each
+// case here is a line sequence with a parameter (padding or a limit); the Rust core finds where its outcome flips, and
+// both cores then run the sequence at that point and two either side, answer for answer and state hash for state hash.
+mod common;
+use common::TsDriver;
+use phi_core::driver::Driver;
+use phi_json::{digest_json, obj, Json};
+
+/// What a run looks like from outside: every answer, and the parts of the state the budgets move.
+fn signature(lines: &[Json]) -> (Vec<String>, String) {
+	let mut d = Driver::new();
+	// answers by their shape (strings, which carry the padding, and messages, which carry the limits, left out)
+	let answers = lines.iter().map(|l| match d.step(l) { Ok(v) => shape(&v).canonical().unwrap(), Err(e) => e.class.to_owned() }).collect();
+	let s = &d.space.state;
+	// discrete outcomes only: the byte tally moves with every byte of padding
+	let stream = s.stream.as_ref().map_or(String::new(), |st| format!("floor {} log {}", st.floor, st.log.len()));
+	(answers, format!("{stream} maintenance {} entries {}", s.rest.contains_key("maintenance"), s.entries.len()))
+}
+
+fn shape(v: &Json) -> Json {
+	match v {
+		Json::String(_) => Json::Null,
+		Json::Array(a) => Json::Array(a.iter().map(shape).collect()),
+		Json::Object(o) => Json::Object(o.iter().map(|(k, v)| (k, shape(v))).collect()),
+		other => other.clone(),
+	}
+}
+
+fn compare(lines: &[Json], what: &str) {
+	let mut rust = Driver::new();
+	let mut ts = TsDriver::start();
+	let answers = ts.run(lines);
+	for (i, (l, t)) in lines.iter().zip(&answers).enumerate() {
+		let got = match rust.step(l) { Ok(v) => (true, v.canonical().unwrap()), Err(e) => (false, format!("{}: {}", e.class, e.message)) };
+		let want = if t.get("ok") == Some(&Json::Bool(true)) { (true, t.get("result").unwrap().canonical().unwrap()) } else { (false, format!("{}: {}", t.get("error").and_then(Json::as_str).unwrap(), t.get("message").and_then(Json::as_str).unwrap())) };
+		assert_eq!(got, want, "{what}, step {i}: {}", l.to_json_text());
+		assert_eq!(digest_json(&rust.space.state.to_json()).unwrap(), t.get("state").and_then(Json::as_str).unwrap(), "{what}, step {i}: state of {}", l.to_json_text());
+	}
+}
+
+/// Finds where `make(x)` stops looking like `make(from)` and compares both cores around that point.
+fn edge(what: &str, from: usize, to: usize, make: impl Fn(usize) -> Vec<Json>) {
+	let first = signature(&make(from));
+	let flip = (from..=to).find(|&x| signature(&make(x)) != first).unwrap_or_else(|| panic!("{what}: nothing flips in {from}..={to}"));
+	assert!(flip > from + 1, "{what}: flips at once ({flip}); the case does not reach its edge");
+	for x in flip.saturating_sub(2).max(from)..=(flip + 2).min(to) {
+		compare(&make(x), &format!("{what} at {x} (flips at {flip})"));
+	}
+}
+
+fn init(limits: Json) -> Json { obj! { "op" => "init", "seed" => "edge", "now" => 1000.0, "spaceId" => "sp-1", "incarnation" => "0a0b0c0d", "limits" => limits } }
+fn write(pad: usize, lease: f64, now: f64) -> Json {
+	obj! { "op" => "write", "now" => now, "entry" => obj! { "type" => "Task", "fields" => obj! { "pad" => "x".repeat(pad) } }, "lease" => lease, "as" => "a" }
+}
+
+#[test]
+fn the_commit_budget_of_a_write() {
+	edge("maxCommitBytes of one write", 0, 2000, |pad| vec![init(obj! { "maxCommitBytes" => 2000.0 }), write(pad, 500.0, 1000.0)]);
+	// padding moves the write's cost in steps of two bytes (the field is in the entry and in its put); the limit by one
+	edge("maxCommitBytes against one write", 1100, 2500, |max| vec![init(obj! { "maxCommitBytes" => max as f64 }), write(100, 500.0, 1000.0)]);
+	// expiry in the same commit charges first: the write gets what is left
+	edge("a write after expiry in its commit", 0, 2000, |pad| {
+		vec![init(obj! { "maxCommitBytes" => 2400.0 }), write(10, 100.0, 1000.0), write(10, 100.0, 1000.0), write(pad, 500.0, 1100.0)]
+	});
+}
+
+#[test]
+fn deferred_expiry_at_the_commit_budget() {
+	// six entries written in commits of their own (from 1500 bytes on each write fits), then expiring together: a
+	// commit expires (max - 1024) / 128 of them and defers the rest
+	edge("entries expiring in one commit", 1500, 2200, |max| {
+		let mut lines = vec![init(obj! { "maxCommitBytes" => max as f64 })];
+		for _ in 0..6 {
+			lines.push(write(1, 100.0, 1000.0));
+		}
+		lines.push(obj! { "op" => "settle", "now" => 1100.0 });
+		lines.push(obj! { "op" => "nextExpiry", "now" => 1100.0 });
+		lines.push(obj! { "op" => "settle", "now" => 1100.0 });
+		lines.push(obj! { "op" => "nextExpiry", "now" => 1100.0 });
+		lines
+	});
+}
+
+#[test]
+fn entry_space_and_document_bytes() {
+	edge("maxEntryBytes", 0, 600, |pad| vec![init(obj! { "maxEntryBytes" => 300.0 }), write(pad, 500.0, 1000.0)]);
+	edge("maxEntryBytes of an announce", 0, 600, |pad| {
+		vec![init(obj! { "maxEntryBytes" => 300.0 }), obj! { "op" => "announce", "now" => 1000.0, "entry" => obj! { "type" => "Note", "fields" => obj! { "pad" => "x".repeat(pad) } } }]
+	});
+	// type names count UTF-16 units (JavaScript's length): neither bytes nor chars
+	let typed = |type_: &str, supertype: &str, max: usize| {
+		let entry = obj! { "type" => type_, "types" => Json::Array(vec![supertype.into()]), "fields" => obj! {} };
+		vec![init(obj! { "maxTypeChars" => max as f64 }), obj! { "op" => "write", "now" => 1000.0, "entry" => entry, "lease" => 500.0, "as" => "a" }]
+	};
+	edge("maxTypeChars of a type", 1, 30, |max| typed("ä😀ä😀ä", "A", max));
+	edge("maxTypeChars of a supertype", 1, 30, |max| typed("A", "😀😀😀ä", max));
+	edge("maxEntryBytes against a write", 100, 400, |max| vec![init(obj! { "maxEntryBytes" => max as f64 }), write(200, 500.0, 1000.0)]);
+	edge("maxSpaceBytes against a write", 300, 900, |max| vec![init(obj! { "maxSpaceBytes" => max as f64 }), write(200, 500.0, 1000.0), write(150, 500.0, 1000.0)]);
+	edge("maxDocBytes against a write", 600, 3000, |max| vec![init(obj! { "maxDocBytes" => max as f64 }), write(200, 500.0, 1000.0), write(150, 500.0, 1000.0)]);
+	edge("maxSpaceBytes", 0, 900, |pad| vec![init(obj! { "maxSpaceBytes" => 700.0 }), write(200, 500.0, 1000.0), write(pad, 500.0, 1000.0)]);
+	edge("maxDocBytes", 0, 2000, |pad| vec![init(obj! { "maxDocBytes" => 2500.0 }), write(200, 500.0, 1000.0), write(pad, 500.0, 1000.0)]);
+	edge("maxOutboxBytes", 0, 6, |max| vec![init(obj! { "maxOutboxBytes" => max as f64 }), write(1, 500.0, 1000.0)]);
+}
+
+#[test]
+fn the_change_log_drops_at_max_log_bytes() {
+	edge("maxLogBytes over several commits", 0, 1500, |pad| {
+		let mut lines = vec![init(obj! { "maxLogBytes" => 1200.0 })];
+		for i in 0..4 {
+			lines.push(write(if i == 3 { pad } else { 100 }, 500.0, 1000.0 + i as f64));
+		}
+		lines.push(obj! { "op" => "changes", "now" => 1010.0, "afterRev" => 0.0 });
+		lines.push(obj! { "op" => "changes", "now" => 1010.0, "afterRev" => 2.0 });
+		lines
+	});
+	edge("maxLogBytes against several commits", 200, 1500, |max| {
+		let mut lines = vec![init(obj! { "maxLogBytes" => max as f64 })];
+		for i in 0..4 {
+			lines.push(write(100, 500.0, 1000.0 + i as f64));
+		}
+		lines.push(obj! { "op" => "changes", "now" => 1010.0, "afterRev" => 0.0 });
+		lines
+	});
+	edge("maxLogBytes inside one commit", 0, 1500, |pad| vec![init(obj! { "maxLogBytes" => 700.0 }), write(100, 500.0, 1000.0), write(pad, 500.0, 1001.0), obj! { "op" => "renew", "now" => 1001.0, "id" => "e0a0b0c0d-2", "ms" => 900.0 }]);
+}
+
+#[test]
+fn pages_and_changes_at_their_byte_budgets() {
+	let entries = || {
+		let mut lines = vec![init(obj! {})];
+		for i in 0..4 {
+			lines.push(write(10 * i, 500.0, 1000.0));
+		}
+		lines
+	};
+	edge("listPage maxBytes", 1, 1500, |max| {
+		let mut lines = entries();
+		lines.push(obj! { "op" => "listPage", "now" => 1000.0, "o" => obj! { "maxBytes" => max as f64 } });
+		lines.push(obj! { "op" => "listPage", "now" => 1000.0, "o" => obj! { "maxBytes" => max as f64, "after" => "2" } });
+		lines
+	});
+	edge("listPage at maxFrameBytes", 1, 1500, |max| {
+		let mut lines = entries();
+		lines[0] = init(obj! { "maxFrameBytes" => max as f64 });
+		lines.push(obj! { "op" => "listPage", "now" => 1000.0 });
+		lines
+	});
+	edge("changes maxBytes", 1, 2000, |max| {
+		let mut lines = entries();
+		lines.push(obj! { "op" => "changes", "now" => 1000.0, "afterRev" => 0.0, "o" => obj! { "maxBytes" => max as f64 } });
+		lines.push(obj! { "op" => "changes", "now" => 1000.0, "afterRev" => 2.0, "o" => obj! { "maxBytes" => max as f64 } });
+		lines
+	});
+}

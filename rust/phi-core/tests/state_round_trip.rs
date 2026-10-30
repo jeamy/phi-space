@@ -1,7 +1,7 @@
 // The first gate of R1 (docs/rust-portierung.md): states the TypeScript core wrote come back unchanged from the Rust
 // model: the same canonical form and the same JSON.stringify byte count (what every budget is computed from).
 mod common;
-use common::Driver;
+use common::TsDriver;
 use phi_core::SpaceState;
 use phi_json::{digest_json, obj, parse, Json};
 
@@ -14,7 +14,7 @@ fn check(state: &Json, what: &str) {
 
 #[test]
 fn the_initial_state_is_the_typescript_one() {
-	let mut d = Driver::start();
+	let mut d = TsDriver::start();
 	let r = d.step(&obj! { "op" => "init", "seed" => "x", "dump" => true });
 	let ts = r.get("dump").unwrap();
 	assert_eq!(SpaceState::initial().to_json().to_json_text(), ts.to_json_text(), "same fields in the same order");
@@ -22,7 +22,7 @@ fn the_initial_state_is_the_typescript_one() {
 
 #[test]
 fn states_of_a_scripted_run_round_trip() {
-	let mut d = Driver::start();
+	let mut d = TsDriver::start();
 	let lines = [
 		r#"{"op":"init","seed":"rt","spaceId":"sp-1","incarnation":"0a0b0c0d","now":1000,"dump":true}"#,
 		r#"{"op":"write","now":1000,"entry":{"type":"Task","types":["Job"],"fields":{"n":1,"s":"ä","z":[1.5,null]}},"lease":5000,"as":"local","dump":true}"#,

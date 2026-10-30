@@ -282,11 +282,11 @@ Vergleichstests gegen den TS-Treiber grün sind.
 | Scheibe | Inhalt | Stand |
 |---|---|---|
 | 0 | `phi-json`; TS-Treiber `test/support/core-driver.ts`; Zustandsmodell `phi-core::state` mit Round-Trip-Prüfung | erledigt |
-| 1 | Entries, Templates, Leases, `settle`, Ablauf, Stream-Einträge, Budgets (`charge`, `jsonBytes`-Summen) | offen |
+| 1 | Entries, Templates, Leases, `settle`, Ablauf, Stream-Einträge, Budgets (`charge`, `jsonBytes`-Summen); dazu `count`, `list`, `listPage`, `changes`, `stats`, `nextExpiry` ohne Txn | erledigt |
 | 2 | Transaktionen | offen |
 | 3 | Wartende, geparkte Operationen, Claims und Generationen | offen |
 | 4 | Notify und Mailboxen | offen |
-| 5 | Stream, `changes`, Seiten | offen |
+| 5 | Stream und Seiten unter Txns, Snapshots (`snapshot.ts`), Seiten-Token | offen |
 
 **Bewusst zurückgestellt:** Restore, Wechsel der Autorität, Member-Admission, Löschung, Admin-Wartung, `purgeTasks`,
 Abschlussprofile und RunGate. Der Standalone-Server braucht sie für R3 nicht. Ihre Felder führt `phi-core::state`
@@ -305,6 +305,35 @@ raten.
 - **Rust-Modell:** Jedes noch nicht portierte Feld steht in `rest`. Fehlende und `null`-Felder bleiben
   unterschieden, weil die Budgets auf `JSON.stringify`-Bytes rechnen. Die Prüfung `state_round_trip` hält
   kanonische Form und Bytezahl jedes Zustands gleich.
+
+**Stand Scheibe 1 (2026-10-30):**
+
+- **`phi-core::space`:** Ein `Space` hält das Dokument und das, was `core.ts` in WeakMaps daneben führt: den offenen
+  Batch des laufenden Commits, dessen Bytebudget und den Ablauf-Wasserstand. Der Wasserstand ist Semantik, nicht nur
+  Tempo: `nextExpiry` antwortet aus ihm, und er kann veraltet niedrig sein (eine genommene Entry lässt ihn stehen).
+  Ohne lebende Entries ist er `Infinity`, und `nextExpiry` liefert dann `null`.
+- **`phi-core::stream`:** `touch`, `record`, `collect` wie `stream.ts`, mit derselben laufenden Bytesumme.
+- **`phi-core::driver`:** dieselben Zeilen wie `core-driver.ts`, auf dem Rust-Kern.
+- **Reihenfolge:** Die Prüfungen stehen in der Reihenfolge des TS-Kerns, auch nach `settle`. Der Treiber rollt nichts
+  zurück, ein Fehler behält also, was `settle` schon getan hat (Ablauf, `del`, Batch, `maintenance`).
+- **Verweigerung:** Ein Dokument, dessen `rest` mehr hält als leere `txns`, `regs`, `waiters`, `outbox` und
+  `maintenance`, und Argumente in Formen, die JavaScript über Umwandlungen läse (nicht-Strings in `types`, Templates
+  ohne Objekt), beantwortet der Rust-Kern mit `NotPorted`, bevor er etwas ändert. Die Liste ist eine Positivliste.
+- **Differenztest `tests/differential.rs`:** Zufallsgänge mit eigener Saat und je Gang kleinen Limits
+  (`maxCommitBytes`, `maxLogBytes`, `maxEntryBytes`, …), damit Verweigerungen, aufgeschobener Ablauf und verworfene
+  Batches vorkommen. Er vergleicht Antwort, Fehlerklasse mit Meldung und Zustands-Hash je Schritt. Er zählt die
+  Ausgänge und schlägt fehl, wenn einer nie vorkam. Bei einer Abweichung spielt er beide Kerne bis zu diesem Schritt
+  nach und zeigt die Pfade, an denen sich die Zustände unterscheiden. Vorgabe: 12 000 Schritte,
+  `PHI_CORE_WALK_STEPS` für mehr. Ein Lauf mit 200 000 Schritten (`--release`) war abweichungsfrei. Der gesäte Gang
+  steht für den `proptest`-Lauf der Abnahme, bis der eingerichtet ist.
+- **Grenztest `tests/boundaries.rs`:** Ein Zufallsgang trifft selten das eine Byte, an dem ein Limit kippt. Je Budget
+  sucht der Rust-Kern den Kipppunkt einer parametrierten Folge (Füllbytes oder das Limit selbst), und beide Kerne laufen
+  dort und je zwei Werte daneben. Füllbytes allein reichen nicht, weil ein Feld in Entry und `put` zählt, also in
+  Schritten von zwei Bytes.
+- **Gegenprobe:** Eingebaute Fehler um ein Byte oder einen Vergleich (`>` statt `>=` bei `maxEntryBytes`,
+  `maxSpaceBytes`, Outbox, Seitenbudget, `maxLogBytes`; 127 statt 128 Ablaufkosten; das Komma im Batch) schlagen
+  in mindestens einem Test fehl. Unentdeckt bleibt die exakte Neuberechnung bei genau `maxLogBytes`. Die ist
+  gleichwertig, solange die laufende Summe stimmt.
 
 **Befund aus Scheibe 0:** `parkOperation` (`core.ts`, `touch(s, Date.now())`) und `ackMailbox` (`mailbox.ts`) lesen
 die Uhr selbst, statt `now` zu übernehmen. Der Rust-Kern nimmt `now` als Parameter. Im TS-Kern sollten beide Stellen
