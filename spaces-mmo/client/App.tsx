@@ -216,6 +216,16 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 				for (const n of grain) entries.push({ label: `${n} mahlen`, line: `mahle alle ${n}` });
 			}
 			if (o.plan === "backhaus") entries.push({ label: "Brot backen (2 Mehl, 1 Kanne Wasser, 1 Treibholz)", line: "backe brot" });
+			// a coop or pen: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
+			if (o.plan === "huehnerstall" || o.plan === "gehege") {
+				entries.push({ label: "Tiere ansehen", line: "stall" }, { label: "Füttern", line: "füttere" });
+				if (o.owner === self?.name) {
+					entries.push({ label: o.plan === "huehnerstall" ? "Eier einsammeln" : "Wolle oder Milch einsammeln", line: "einsammeln" });
+					const fits = o.plan === "huehnerstall" ? ["Huhn"] : ["Schaf", "Ziege"];
+					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && fits.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} einstallen`, line: `einstallen ${n}` });
+					entries.push({ label: "Ein Tier herausnehmen", line: "ausstallen" });
+				}
+			}
 			entries.push({ label: "Ausbessern", line: "repariere" });
 			if (o.owner === self?.name) entries.push({ label: "Truhe ansehen", line: "truhe" });
 		}

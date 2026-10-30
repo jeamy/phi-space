@@ -28,6 +28,7 @@ import { resolvePrototype, spawn } from "../prototypes.ts";
 import { fogOf } from "../fire.ts";
 import type { GardenDef, SortDef, WorldDef } from "../world.ts";
 import { harvestField } from "./field.ts";
+import { collect, meansYield } from "./animals.ts";
 import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, plural, putBack, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
 
 const STAGES = ["Saat", "Keim", "reif", "welk"] as const;
@@ -360,8 +361,10 @@ const sammle: Command = {
 	key: "sammle", aliases: ["sammeln", "samen", "seeds", "gather"],
 	help: "sammle samen – in der wilden Flora hier nach Samen suchen (findet nicht immer etwas; danach eine Weile Pause)",
 	async func(c, arg) {
+		// "sammle eier": what the animals gave (animals.ts)
+		if (meansYield(c, arg)) return collect(c);
 		const g = garden(c);
-		if (arg.trim() && !/^(?:samen|seeds?|saatgut)$/i.test(arg.trim().replace(ARTICLE, ""))) throw new NotUnderstood("Gesammelt werden hier Samen („sammle samen“); Dinge am Strand hebst du mit „get“ auf.");
+		if (arg.trim() && !/^(?:samen|seeds?|saatgut)$/i.test(arg.trim().replace(ARTICLE, ""))) throw new NotUnderstood("Gesammelt werden hier Samen („sammle samen“) und im Stall, was die Tiere geben („sammle eier“); Dinge am Strand hebst du mit „get“ auf.");
 		const now = await worldNowOf(c.space, c.txn);
 		const rest = await peek(c.space, { type: "SeedRest", fields: { charId: c.actor.charId } });
 		const until = rest ? fieldsOf<SeedRestFields>(rest).untilWorldMs : 0;

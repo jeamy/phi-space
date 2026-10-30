@@ -328,6 +328,10 @@ Ausführlich unter [Gärten](help.game.garden).
 | \`mahle [n oder alle] <korn>\` | \`mühle\`, \`grind\` | An einer Windmühle neben dir Korn zu Mehl mahlen lassen; \`mahle\` allein: wie lange sie noch mahlt |
 | \`abholen\` | \`pickup\` | Dein fertiges Mehl an der Mühle abholen |
 | \`backe [brot]\` | \`bake\` | Am Backhaus neben dir Brot backen (2 Mehl, 1 Kanne Wasser, 1 Treibholz) |
+| \`stall\` | \`coop\`, \`pen\` | Wie es den Tieren im Hühnerstall oder Gehege neben dir geht |
+| \`einstallen <tier>\` | \`stalle\` | Ein Huhn, Schaf oder eine Ziege in deinen Stall bringen; \`ausstallen\` holt eins heraus |
+| \`füttere [futter]\` | \`futter\` | Die Tiere neben dir füttern (jeder darf; ein Futter macht ein Tier einen Tag satt) |
+| \`einsammeln\` | \`sammle eier\`, \`melke\`, \`schere\` | Eier, Milch oder Wolle deiner Tiere einsammeln |
 
 ## Handel und Ruf {#tradecmds}
 
@@ -346,7 +350,7 @@ Ausführlich unter [Handel und Handwerk](help.game.trade).
 
 | Befehl | Wirkung |
 | --- | --- |
-| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help chat\` |
+| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help chat\` |
 
 ## Für Builder {#builder}
 
@@ -425,6 +429,10 @@ In detail under [Gardens](help.game.garden).
 | \`mahle [n or alle] <grain>\` | \`mühle\`, \`grind\` | Have grain ground to flour at a windmill beside you; \`mahle\` alone: how long it still grinds |
 | \`abholen\` | \`pickup\` | Fetch your flour at the mill |
 | \`backe [brot]\` | \`bake\` | Bake bread at a bakery beside you (2 flour, 1 can of water, 1 driftwood) |
+| \`stall\` | \`coop\`, \`pen\` | How the animals in the coop or pen beside you are |
+| \`einstallen <animal>\` | \`stalle\` | Put a hen, sheep or goat into your coop or pen; \`ausstallen\` takes one out |
+| \`füttere [feed]\` | \`futter\` | Feed the animals beside you (anyone may; one feed keeps one animal fed a day) |
+| \`einsammeln\` | \`sammle eier\`, \`melke\`, \`schere\` | Collect your animals' eggs, milk or wool |
 
 ## Trade and reputation {#tradecmds}
 
@@ -443,7 +451,7 @@ In detail under [Trade and crafting](help.game.trade).
 
 | Command | Effect |
 | --- | --- |
-| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help chat\` |
+| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help tiere\`, \`help chat\` |
 
 ## For builders {#builder}
 
@@ -589,7 +597,7 @@ The Grey Bay has a market board, prices in **coins**:
 
 ## Baustelle abstecken {#stake}
 
-\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Eine Hütte braucht 2×2 Felder, **6 Treibholz, 2 Tangseil und 20 Arbeit**. Die **Regentonne** (1 Feld, 3 Treibholz, 1 Tangseil, 4 Arbeit) gibt Wasser für die [Gärten](help.game.garden), die **Vogelscheuche** (1 Feld, 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von ihnen fern. **Windmühle** und **Backhaus** machen aus Korn Mehl und Brot ([Mühle und Backhaus](help.game.garden#mill)).
+\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Eine Hütte braucht 2×2 Felder, **6 Treibholz, 2 Tangseil und 20 Arbeit**. Die **Regentonne** (1 Feld, 3 Treibholz, 1 Tangseil, 4 Arbeit) gibt Wasser für die [Gärten](help.game.garden), die **Vogelscheuche** (1 Feld, 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von ihnen fern. **Windmühle** und **Backhaus** machen aus Korn Mehl und Brot ([Mühle und Backhaus](help.game.garden#mill)), **Hühnerstall** und **Gehege** halten [Tiere](help.game.garden#animals).
 
 Nicht gebaut wird auf Ausgängen und Türen, direkt am Feuer, auf Dingen oder Personen. Wege bleiben frei: Ausgänge, der Startplatz und eine Seite jedes Feuers bleiben erreichbar. In einen Bau läuft niemand hinein.
 
@@ -618,7 +626,7 @@ Ein Bau hält **eine Woche**. \`repariere\` (1 Treibholz, jeder darf helfen) set
 
 ## Staking out a site {#stake}
 
-\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. A hut takes 2×2 cells, **6 driftwood, 2 kelp rope and 20 work**. The **rain barrel** (1 cell, 3 driftwood, 1 kelp rope, 4 work) gives water for the [gardens](help.game.garden), the **scarecrow** (1 cell, 2 driftwood, 1 kelp rope, 3 work) keeps the hares from them. The **windmill** and the **bakery** turn grain into flour and bread ([Mill and bakery](help.game.garden#mill)).
+\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. A hut takes 2×2 cells, **6 driftwood, 2 kelp rope and 20 work**. The **rain barrel** (1 cell, 3 driftwood, 1 kelp rope, 4 work) gives water for the [gardens](help.game.garden), the **scarecrow** (1 cell, 2 driftwood, 1 kelp rope, 3 work) keeps the hares from them. The **windmill** and the **bakery** turn grain into flour and bread ([Mill and bakery](help.game.garden#mill)), the **hen house** and the **pen** keep [animals](help.game.garden#animals).
 
 Nothing is built on exits and doors, right at a fire, on things or people. Ways stay open: exits, the starting place and one side of every fire stay reachable. Nobody walks into a building.
 
@@ -745,7 +753,23 @@ Aus der Ernte wird mehr: **Korn → Mehl → Brot** und **Flachs → Leinen**.
 
 **Leinen** spinnt man aus Flachs: \`craft spindel\` (1 Treibholz, 1 Muschel), dann \`craft leinen\` (3 Flachs). Leinen braucht die Mühle für ihre Flügel; die Werft zahlt dafür.
 
-Brot, Mehl und Leinen kauft Marta am Markt von Kupferhafen, und die Auftragstafeln fragen danach. Was man vermahlt, sät man nicht: Korn ist Brot und Saatgut zugleich.`,
+Brot, Mehl und Leinen kauft Marta am Markt von Kupferhafen, und die Auftragstafeln fragen danach. Was man vermahlt, sät man nicht: Korn ist Brot und Saatgut zugleich.
+
+## Tiere {#animals}
+
+Die Fluren füttern auch den Hof. **Hühner** wohnen im **Hühnerstall** (\`bau hühnerstall\`: 2×1 Felder, 4 Treibholz, 1 Tangseil, 6 Arbeit, bis 6 Hühner), **Schafe** oder **Ziegen** im **Gehege** (\`bau gehege\`: 3×3 Felder, 8 Treibholz, 4 Tangseil, 8 Arbeit, bis 4 Tiere einer Art).
+
+Tiere verkauft Gesa am Markt von Kupferhafen. \`einstallen huhn\` bringt eines, das du trägst, in deinen Stall, \`ausstallen\` nimmt eins heraus. \`stall\` zeigt, wie es ihnen geht.
+
+**Füttern** darf jeder: \`füttere\` gibt Futter aus deiner Tasche, ein Futter macht ein Tier einen Tag satt, bis zu drei Tage im Voraus.
+
+| Tier | frisst | gibt, wenn es satt ist |
+| --- | --- | --- |
+| Huhn | Tang, Kohl, Möhren, Weizen, Gerste, Hafer | ein Ei am Tag |
+| Schaf | Rüben, Hafer, Gerste, Kohl, Tang | Wolle alle zwei Tage |
+| Ziege | Rüben, Hafer, Gerste, Kohl, Möhren, Tang | Milch am Tag |
+
+Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nichts. Bis zu drei je Tier warten im Stall; \`einsammeln\` (auch \`sammle eier\`, \`melke\`, \`schere\`) holt sie, nur der Besitzer. Zwei satte Tiere einer Art bekommen ab und zu ein Junges, bis der Stall voll ist. Reißt du den Stall ab, kommen die Tiere in deine Tasche zurück; verfällt er, warten sie im Nachlass.`,
 			en: `Gardens count as much as buildings. Like a hut, a bed needs a **beacon's light** and takes one of the fire's light points. Digging one needs an account; as a **sponsor** guests may water and harvest too.
 
 ## Spade and bed {#bed}
@@ -837,7 +861,23 @@ The harvest becomes more: **grain → flour → bread** and **flax → linen**.
 
 **Linen** is spun from flax: \`craft spindel\` (1 driftwood, 1 shell), then \`craft leinen\` (3 flax). The mill needs linen for its sails; the shipyard pays for it.
 
-Marta at the Kupferhafen market buys and sells bread, flour and linen, and the job boards ask for them. What you grind you do not sow: grain is bread and seed at once.`,
+Marta at the Kupferhafen market buys and sells bread, flour and linen, and the job boards ask for them. What you grind you do not sow: grain is bread and seed at once.
+
+## Animals {#animals}
+
+The fields feed the farm too. **Hens** live in the **hen house** (\`bau hühnerstall\`: 2×1 cells, 4 driftwood, 1 kelp rope, 6 work, up to 6 hens), **sheep** or **goats** in the **pen** (\`bau gehege\`: 3×3 cells, 8 driftwood, 4 kelp rope, 8 work, up to 4 of one kind).
+
+Gesa at the Kupferhafen market sells animals. \`einstallen huhn\` puts one you carry into your house, \`ausstallen\` takes one out. \`stall\` shows how they are.
+
+Anyone may **feed**: \`füttere\` gives feed from your pack; one feed keeps one animal fed for a day, up to three days ahead.
+
+| Animal | eats | gives while fed |
+| --- | --- | --- |
+| Hen | kelp, cabbage, carrots, wheat, barley, oats | an egg a day |
+| Sheep | beets, oats, barley, cabbage, kelp | wool every other day |
+| Goat | beets, oats, barley, cabbage, carrots, kelp | milk a day |
+
+Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`einsammeln\` (also \`sammle eier\`, \`melke\`, \`schere\`) fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate.`,
 		},
 	},
 	{

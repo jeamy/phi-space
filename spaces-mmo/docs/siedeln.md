@@ -842,7 +842,42 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      - Wind gibt es nur als Sturmflut; Flauten kommen mit den Jahreszeiten.
      - Brot macht noch nicht satt („Nahrung“ ist später); es ist Handels- und Auftragsware.
 
-     Noch nicht: Tiere (Teil 3), Rehe, Füchse, Mäuse, Hund und Katze (Teil 4).
+   - **Teil 3, gebaut 2026-10-30** (`server/engine/commands/animals.ts`, Test `tests/animals.test.ts`, Weltversion 22):
+     die **ersten Tiere**.
+     - **Ställe:** Hühnerstall (2×1: 4 Treibholz, 1 Tangseil, 6 Arbeit, bis 6 Hühner) und Gehege (3×3: 8 Treibholz,
+       4 Tangseil, 8 Arbeit, bis 4 Schafe oder Ziegen, eine Art je Gehege).
+     - **Tiere als Dinge:** Huhn, Schaf und Ziege sind Dinge, die Gesa verkauft (sie trägt anfangs 4 Hühner, 2 Schafe,
+       2 Ziegen) und die man tragen und handeln kann. `einstallen` legt eins in den eigenen Stall wie in eine Truhe
+       (Ort: die buildId), `ausstallen` holt es heraus. Darum gibt der Abriss die Tiere zurück und eine Ruine legt sie in
+       den Nachlass, ohne eigenen Code.
+     - **Füttern** (`füttere`, jeder darf): ein Futter macht ein Tier einen Welttag satt, bis drei Tage im Voraus.
+       Hühner fressen Tang, Kohl, Möhren und Korn, Schafe und Ziegen Rüben, Hafer, Gerste, Kohl und Tang: die Fluren
+       füttern den Hof.
+     - **Ertrag:** Satt legt ein Huhn ein Ei am Tag, eine Ziege gibt Milch am Tag, ein Schaf Wolle alle zwei Tage;
+       hungrige geben nichts und verlieren nichts. Bis zu drei je Tier warten im Stall, `einsammeln` (auch
+       `sammle eier`, `melke`, `schere`) holt sie, nur der Besitzer.
+     - **Nachwuchs:** Zwei satte Tiere einer Art bekommen ab und zu ein Junges (Hühner alle vier, Ziegen alle fünf,
+       Schafe alle sechs Tage), bis der Stall voll ist. So wächst der Bestand über Gesas Vorrat hinaus.
+     - **Schreibvorgänge:** Der Stall trägt seine Herde (`herd`: Art, satt bis, Ertrag und Nachwuchs seit `atWorldMs`).
+       Wie bei der Regentonne wird sie erst nachgerechnet, wenn ein Befehl den Stall nimmt; für Tiere schreibt kein
+       Ticker.
+     - **Nutzen:** Gesa kauft Eier, Wolle und Milch; drei neue Aufträge fragen danach.
+     - **Karte und Hilfe:** Hühnerstall (Häuschen auf Stelzen mit Rampe und Hühnern) und Gehege (Zaun, Trog, Unterstand,
+       ein Schaf) in 3D; das Zellmenü bietet Ansehen, Füttern, Einstallen, Einsammeln an. Hilfe: Abschnitt „Tiere“ im
+       Artikel „Gärten“, Thema `help tiere`.
+
+     Abnahme (`tests/animals.test.ts`):
+     - Ein Fremder darf füttern, aber nicht einstallen und nicht einsammeln. Gefüttert wird nur, was hineinpasst.
+     - Drei satte Hühner geben an einem Tag drei Eier, genau einmal. Hungrig geben sie nichts.
+     - Nach vier satten Tagen ist ein Küken da, das Nest hält drei Eier je Huhn. Der Abriss gibt die Hühner zurück, und ein
+       Gehege nimmt nur eine Art.
+
+     Abweichungen vom Entwurf:
+     - Statt einer Futter-Lease je Tier trägt der Stall eine Frist für die ganze Herde.
+     - Enten, Gänse, Wolle → Tuch und Milch → Käse fehlen noch, denn Webstuhl und Werkstatt kommen erst mit Schritt 5.
+     - Die Ställe sind nicht an Epochen gebunden.
+
+     Noch nicht: Rehe, Füchse, Mäuse, Hund und Katze (Teil 4).
 4. **Epochen und Siedlung**: Punkte je Bau und Garten, der Zähl-Ticker, `Epoch` je Insel, Schwellen in den
    `Setting`-Entries, Rückfall; die Siedlung aus Hütten in einem Raum (Name, Rechte-Stufen Fremder, Helfer, Siedler).
    Abnahme: eine Insel erreicht das Dorf aus Beeten allein; verfällt genug, fällt sie zurück, ihre Bauten arbeiten weiter,

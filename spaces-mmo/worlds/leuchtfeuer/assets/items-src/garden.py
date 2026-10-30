@@ -2,7 +2,8 @@
 # spade, can of water, seed bags in the colour of their sort, three flowers, a cabbage and a carrot; and the hare that
 # comes from the fog for them (wild.ts). The field crops (field.ts): three ears of grain, a potato, a beet and a bundle
 # of flax. What the mill and the bakery make of them (mill.ts): a sack of flour and a loaf; and the spindle and the
-# linen spun from the flax.
+# linen spun from the flax. The farm's animals (animals.ts): a hen, a sheep and a goat, and what they give: an egg, a
+# ball of wool and a jug of milk.
 # Usage: python3 garden.py <items dir>
 import sys
 from PIL import Image
@@ -280,6 +281,91 @@ def spindle():
     return outline(img)
 
 
+def hen():
+    img = new(); px = img.load()
+    F, FD = rgb("#b0703a"), rgb("#6e3e1a")
+    disc(px, 15, 20, 8, F)                  # the body
+    for i in range(5):                      # the tail feathers, up and back
+        disc(px, 7 - i * 0.3, 15 - i * 1.2, 2.2 - i * 0.2, FD, light=False)
+    disc(px, 22, 11, 4.3, F)                # the head
+    disc(px, 21.5, 6.5, 1.6, rgb("#d83a2a"), light=False)  # the comb
+    disc(px, 23.5, 6.8, 1.4, rgb("#d83a2a"), light=False)
+    line(px, 26, 11, 28, 12, rgb("#e8b030"), 2)  # the beak
+    disc(px, 24.5, 14.5, 1.1, rgb("#d83a2a"), light=False)  # the wattle
+    px[23, 10] = OUT                        # the eye
+    line(px, 12, 18, 18, 22, FD)            # the folded wing
+    line(px, 13, 28, 13, 30, rgb("#e8b030")); line(px, 18, 28, 18, 30, rgb("#e8b030"))
+    return outline(img)
+
+
+def sheep(fleece, face):
+    img = new(); px = img.load()
+    W_, F_ = rgb(fleece), rgb(face)
+    for (x, y, r) in ((10, 17, 5), (15, 15, 5.5), (20, 17, 5), (13, 20, 5), (18, 20, 5)):  # a cloud of wool
+        disc(px, x, y, r, W_)
+    disc(px, 25, 14, 3.6, F_)               # the head, dark
+    disc(px, 23, 11, 1.4, F_, light=False)  # an ear
+    px[26, 13] = OUT
+    for x in (11, 15, 19):                  # thin legs
+        line(px, x, 25, x, 29, F_)
+    return outline(img)
+
+
+def goat():
+    img = new(); px = img.load()
+    G, GD = rgb("#a89a80"), rgb("#5e5240")
+    disc(px, 14, 18, 7, G)                  # the body
+    disc(px, 23, 11, 3.8, G)                # the head
+    line(px, 21, 8, 18, 3, GD, 2)           # the horns, curving back
+    line(px, 23, 8, 21, 3, GD, 2)
+    line(px, 25, 15, 25, 18, GD, 2)         # the beard
+    px[24, 10] = OUT
+    for x in (10, 13, 16, 19):
+        line(px, x, 24, x, 29, GD)
+    line(px, 7, 14, 6, 11, GD)              # a short tail up
+    return outline(img)
+
+
+def egg():
+    img = new(); px = img.load()
+    E = rgb("#e8d0a8")
+    cy = 18
+    for y in range(4, 30):                  # an egg: a taller half above the middle, a rounder one below
+        ry = 13 if y < cy else 10
+        q = 1 - ((y + 0.5 - cy) / ry) ** 2
+        if q <= 0: continue
+        half = 8 * q ** 0.5
+        for x in range(round(16 - half), round(16 + half)):
+            px[x, y] = shade(E, 1.2 if x < 13 and y < 14 else 0.78 if y > 24 or x > 20 else 1.0)
+    px[13, 16] = rgb("#c8a878"); px[18, 21] = rgb("#c8a878"); px[15, 24] = rgb("#c8a878")  # speckles
+    return outline(img)
+
+
+def wool():
+    img = new(); px = img.load()
+    W_, WD = rgb("#f0ece0"), rgb("#b8b0a0")
+    disc(px, 16, 17, 10, W_)                # a ball of yarn
+    for i in range(-2, 3):                  # the windings
+        line(px, 9 + i * 2, 9, 23 + i * 2, 25, WD)
+    line(px, 7, 18, 25, 12, WD)
+    line(px, 22, 25, 28, 29, W_, 2)         # the loose end
+    return outline(img)
+
+
+def jug():
+    img = new(); px = img.load()
+    C, CD = rgb("#b0604a"), rgb("#6e3426")
+    for y in range(9, 29):                  # a clay jug, bellied
+        half = 5 + 3.5 * (1 - abs(y - 20) / 10) if y > 11 else 4
+        for x in range(round(15 - half), round(15 + half) + 1):
+            px[x, y] = shade(C, 1.2 if x < 12 and y < 18 else 0.75 if y > 25 or x > 19 else 1.0)
+    rect(px, 11, 6, 19, 8, rgb("#f4f1e8"))  # milk at the brim
+    line(px, 10, 6, 20, 6, CD)
+    for i in range(7):                      # the handle
+        disc(px, 23.5 + (1.5 if 1 < i < 5 else 0), 12.5 + i * 1.6, 1.2, CD, light=False)
+    return outline(img)
+
+
 out = sys.argv[1]
 things = {
     "spaten": spade(), "wasserkanne": can(),
@@ -290,6 +376,7 @@ things = {
     "weizen": ears("#d9b44a"), "gerste": ears("#c8b06a", awns=True), "hafer": ears("#cdbf8a", loose=True),
     "kartoffel": potato(), "ruebe": beet(), "samen-ruebe": seeds("#9a3a5a"), "flachs": flax(), "leinsamen": seeds("#6a8fd0"),
     "mehl": sack(), "brot": loaf(), "leinen": linen(), "spindel": spindle(),
+    "huhn": hen(), "schaf": sheep("#e8e4d8", "#3a3430"), "ziege": goat(), "ei": egg(), "wolle": wool(), "milch": jug(),
 }
 for key, img in things.items():
     img.save(f"{out}/{key}.png")

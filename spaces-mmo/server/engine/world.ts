@@ -79,6 +79,8 @@ export type WorldDef = {
 	fields?: FieldDef;
 	/** The windmill (docs/siedeln.md "Warenketten"): grain brought to it becomes flour in its own time. */
 	mill?: MillDef;
+	/** Animals on the farm (docs/siedeln.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
+	animals?: AnimalsDef;
 	/** How the world splits into region spaces when SPACES_MMO_REGIONS names them (engine/regions.ts); without it the
 	 *  whole world is one space. */
 	regions?: RegionDef[];
@@ -129,6 +131,12 @@ export type FieldDef = { w: number; h: number; points: number; maxFields: number
  *  load after the other, at most `maxLoad` units a load and `maxLoads` waiting loads per figure; a storm surge on its
  *  island grinds `stormWorldMs` ahead. Flour nobody fetches goes after `keepWorldMs`. */
 export type MillDef = { plan: string; grinds: Array<{ from: string; to: string }>; unitWorldMs: number; maxLoad: number; maxLoads: number; stormWorldMs: number; keepWorldMs: number };
+/** A kind of animal: the prototype it is as a thing (bought, carried, put in), the plan that houses it, what one gives
+ *  every `everyWorldMs` while fed (`yields`, a prototype), what it eats, and how often two fed ones get a young one. */
+export type AnimalKindDef = { key: string; proto: string; name: string; plural: string; plan: string; yields: string; everyWorldMs: number; feed: string[]; breedWorldMs: number };
+/** `houses`: how many a building of each plan holds (one kind at a time); one thing of feed keeps one animal fed for
+ *  `feedWorldMs`, up to `fedMaxWorldMs` ahead; yields wait in the house, at most `nestMax` per animal. */
+export type AnimalsDef = { kinds: AnimalKindDef[]; houses: Record<string, number>; feedWorldMs: number; fedMaxWorldMs: number; nestMax: number };
 export type BuildingDef = { plans: PlanDef[]; lightPoints: number; siteWorldMs: number; restWorldMs: number; maxSites: number; maxBuildings: number; ruinWorldMs: number; estateWorldMs: number };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
@@ -218,6 +226,10 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 	if (w.mill) {
 		if (!w.building?.plans.some((p) => p.key === w.mill!.plan)) throw new Error(`mill: unknown plan ${w.mill.plan}`);
 		for (const g of w.mill.grinds) { proto(g.from, "mill"); proto(g.to, "mill"); }
+	}
+	for (const k of w.animals?.kinds ?? []) {
+		[k.proto, k.yields, ...k.feed].forEach((p) => proto(p, `animal ${k.key}`));
+		if (!w.animals!.houses[k.plan] || !w.building?.plans.some((p) => p.key === k.plan)) throw new Error(`animal ${k.key}: no house ${k.plan}`);
 	}
 	for (const k of w.orders.kinds) { k.needs.forEach((n) => proto(n.proto, `order ${k.key}`)); proto(k.reward.proto, `order ${k.key}`); }
 	for (const o of w.objects) {

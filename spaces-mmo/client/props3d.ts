@@ -1,4 +1,4 @@
-// Models for the 3D map: trees and bushes, the hut, the rain barrel, the windmill and the bakery, a site that grows with its progress, a ruin, the
+// Models for the 3D map: trees and bushes, the hut, the rain barrel, the windmill, the bakery, the coop and the pen, a site that grows with its progress, a ruin, the
 // fire's stone ring, a signpost at an exit. Built from primitives in a chunky low-poly style (faceted faces, a few warm
 // colours, every face a shade lighter or darker), so they need no model file. Each model is one merged geometry with
 // vertex colours, made once per kind and variant and shared (userData.shared: the map's dispose keeps it); where it
@@ -214,9 +214,58 @@ function bakery(t: T, w: number, d: number, variant: number): Geo {
 	});
 }
 
-/** A building by its plan: the hut, the rain barrel, the scarecrow, the windmill, the bakery, any other plan a hut in its colour. */
+/** A hen, small, facing +z, at a place: body, tail, head, red comb. */
+function henParts(t: T, x: number, z: number, turn: number): Part[] {
+	const c = Math.cos(turn), s = Math.sin(turn), at = (dx: number, y: number, dz: number): V3 => [x + dx * c + dz * s, y, z - dx * s + dz * c];
+	return [
+		{ g: new t.IcosahedronGeometry(0.11, 0), c: 0xb0703a, p: at(0, 0.12, 0), s: [1, 0.9, 1.3] },
+		{ g: new t.ConeGeometry(0.06, 0.12, 4), c: 0x6e3e1a, p: at(0, 0.2, -0.12), r: [-0.8, turn, 0] },
+		{ g: new t.IcosahedronGeometry(0.065, 0), c: 0xb0703a, p: at(0, 0.24, 0.1) },
+		{ g: new t.BoxGeometry(0.02, 0.05, 0.06), c: 0xd83a2a, p: at(0, 0.31, 0.1) },
+	];
+}
+
+/** The hen house w×1: a little plank shed on legs, a pent roof, a ramp to its hatch towards +z, and hens about it. */
+function coop(t: T, w: number, variant: number): Geo {
+	return cached(`coop:${w}:${variant}`, () => {
+		const ww = w * 0.55, parts: Part[] = [
+			...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz]) => ({ g: new t.BoxGeometry(0.06, 0.22, 0.06), c: WOOD_DARK, p: [-w * 0.18 + sx! * ww * 0.45, 0.11, sz! * 0.25] as V3 })),
+			{ g: new t.BoxGeometry(ww, 0.4, 0.6), c: WOOD, p: [-w * 0.18, 0.42, 0] },
+			{ g: new t.BoxGeometry(ww + 0.14, 0.05, 0.74), c: THATCH[variant % 3]!, p: [-w * 0.18, 0.66, 0], r: [0.22, 0, 0] },
+			{ g: new t.BoxGeometry(0.14, 0.14, 0.03), c: 0x2a1a10, p: [-w * 0.18, 0.4, 0.31] },
+			{ g: new t.BoxGeometry(0.14, 0.03, 0.42), c: WOOD_DARK, p: [-w * 0.18, 0.18, 0.48], r: [0.55, 0, 0] },
+		];
+		const r = rand(`coop:${variant}`);
+		for (let i = 0; i < 3; i++) parts.push(...henParts(t, w * 0.12 + r() * w * 0.3, -0.25 + r() * 0.5, r() * Math.PI * 2));
+		return merge(t, parts, `coop:${variant}`);
+	});
+}
+
+/** The pen w×d: a driftwood fence of posts and two rails, a trough, a little shelter in a corner, a sheep inside. */
+function pen(t: T, w: number, d: number, variant: number): Geo {
+	return cached(`pen:${w}x${d}:${variant}`, () => {
+		const ww = w * 0.92, dd = d * 0.92, parts: Part[] = [];
+		const posts = (n: number) => Array.from({ length: n + 1 }, (_, i) => i / n - 0.5);
+		for (const f of posts(Math.round(w * 2))) for (const sz of [-1, 1]) parts.push({ g: new t.BoxGeometry(0.07, 0.42, 0.07), c: WOOD_DARK, p: [f * ww, 0.21, (sz * dd) / 2] });
+		for (const f of posts(Math.round(d * 2))) for (const sx of [-1, 1]) parts.push({ g: new t.BoxGeometry(0.07, 0.42, 0.07), c: WOOD_DARK, p: [(sx * ww) / 2, 0.21, f * dd] });
+		for (const y of [0.16, 0.33]) {
+			for (const sz of [-1, 1]) parts.push({ g: new t.BoxGeometry(ww, 0.04, 0.04), c: WOOD, p: [0, y, (sz * dd) / 2] });
+			for (const sx of [-1, 1]) parts.push({ g: new t.BoxGeometry(0.04, 0.04, dd), c: WOOD, p: [(sx * ww) / 2, y, 0] });
+		}
+		parts.push({ g: new t.BoxGeometry(0.5, 0.12, 0.18), c: WOOD_DARK, p: [ww * 0.2, 0.06, dd * 0.32] }); // the trough
+		parts.push({ g: new t.BoxGeometry(0.7, 0.45, 0.6), c: WOOD, p: [-ww * 0.3, 0.23, -dd * 0.3] });  // the shelter
+		parts.push({ g: new t.BoxGeometry(0.82, 0.05, 0.74), c: THATCH[variant % 3]!, p: [-ww * 0.3, 0.5, -dd * 0.3], r: [0.2, 0, 0] });
+		const wool = [0xe8e4d8, 0xd8d0c0, 0xf0ece0][variant % 3]!;
+		parts.push({ g: new t.IcosahedronGeometry(0.2, 0), c: wool, p: [ww * 0.1, 0.28, 0], s: [1.3, 0.9, 1] });
+		parts.push({ g: new t.IcosahedronGeometry(0.09, 0), c: 0x3a3430, p: [ww * 0.1 + 0.27, 0.32, 0] });
+		for (const [dx, dz] of [[-0.12, -0.08], [-0.12, 0.08], [0.14, -0.08], [0.14, 0.08]] as const) parts.push({ g: new t.BoxGeometry(0.04, 0.16, 0.04), c: 0x3a3430, p: [ww * 0.1 + dx, 0.08, dz] });
+		return merge(t, parts, `pen:${variant}`);
+	});
+}
+
+/** A building by its plan: the hut, the rain barrel, the scarecrow, the windmill, the bakery, the coop, the pen, any other plan a hut in its colour. */
 export function buildingGeometry(t: T, plan: string | undefined, w: number, d: number, color: number, variant: number): Geo {
-	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : plan === "windmuehle" ? windmill(t, variant % 3) : plan === "backhaus" ? bakery(t, w, d, variant % 3) : hut(t, w, d, color, variant % 3);
+	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : plan === "windmuehle" ? windmill(t, variant % 3) : plan === "backhaus" ? bakery(t, w, d, variant % 3) : plan === "huehnerstall" ? coop(t, w, variant % 3) : plan === "gehege" ? pen(t, w, d, variant % 3) : hut(t, w, d, color, variant % 3);
 }
 
 /** A hare, sitting up a little, its nose towards +z: body, haunches, head, long ears, a white scut. About 0.4 high. */

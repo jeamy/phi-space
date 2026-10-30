@@ -127,7 +127,12 @@ export type BuildingFields = { buildId: string; plan: string; name: string; room
 	/** A rain barrel's cans at `waterAtWorldMs`; it gains one every so often (engine/commands/garden.ts barrelWater). */
 	water?: number; waterAtWorldMs?: number;
 	/** A mill's: when the last load waiting is ground (engine/commands/mill.ts); a new load starts there. */
-	busyUntilWorldMs?: number };
+	busyUntilWorldMs?: number;
+	/** A coop's or pen's herd (engine/commands/animals.ts): the animals lie in it as things (location: the buildId); here
+	 *  their kind, how long they are fed, and since `atWorldMs` what they gave (`goods`) and how near a young one is
+	 *  (`bred`), both counted on when the herd is next touched. */
+	herd?: HerdFields };
+export type HerdFields = { kind: string; fedUntilWorldMs: number; atWorldMs: number; goods: number; bred: number };
 /** A load of grain at a mill (`buildId`, its place kept so it is found when the mill is gone): `count` of `from`, ground
  *  to `to` at `readyWorldMs` for the figure that brought it. A load whose mill fell before it was ground gives its grain
  *  back (`to` = `from`). It goes, unfetched, at `untilWorldMs`. */
