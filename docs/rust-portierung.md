@@ -670,6 +670,7 @@ Claims und der Zähler je Batch (`commit_seq`) sind eigens geprüft.
   negative oder restaurierte Claims. Die letzten drei verweigert der Rust-Store, statt das Dokument zu beschädigen; ein
   Kopf mit Inline-Teilen hätte bis dahin Daten verloren.
 - **Store-Gang:** Bei ungerader Saat laufen die Commits überlappend, die Zeilen beider Dateien müssen trotzdem gleich sein.
+  Ein Lauf mit 8 000 Schritten (`--release`, 506 s) war abweichungsfrei.
 - **Gegenprobe:** Ohne Stempel, mit Watch ohne Meldung, ohne Bündeln und ohne Inline-Prüfung schlägt je ein Test fehl.
 - **Nach Scheibe 3** war der Store-Gang mit 20 000 Schritten abweichungsfrei.
 - **Bleibt für R3:** Speicherbudget und mehrere Spaces, `pendingClaims`, `migrate` älterer Dokumente, Inline-Teile.
