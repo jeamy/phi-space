@@ -32,6 +32,7 @@ export async function translatePrompt(space: SpaceLike, w: WorldDef, t: Translat
 	const listings = w.market.rooms.includes(t.room) ? (await space.readAll({ type: "Listing", fields: { room: t.room } })).map((e) => fieldsOf<ListingFields>(e)).sort((a, b) => a.at - b.at).map((l, i) => `${i + 1}. ${l.itemName} for ${l.price}`) : [];
 	return [
 		"Commands:", ...COMMANDS.map((c) => `  ${helpLine(c)}`),
+		`Recipes for craft: ${w.recipes.map((r) => r.key).join(", ")}`,
 		`Exits here: ${exits.join(", ") || "–"}`,
 		`Things lying here: ${names(here)}`,
 		`The player carries: ${carried.map((e) => fieldsOf<ItemFields>(e).name).join(", ") || "–"}`,

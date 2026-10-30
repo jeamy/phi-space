@@ -1,12 +1,14 @@
 // A character crossing to another region (regions.ts, docs/welt-aufteilen.md "Übergabe zwischen Regionen"). phi-spaces
 // has no transaction across two spaces, so the crossing goes in steps, each atomic and repeatable:
-//   1. in region A, in the command's transaction: the character, what it carries, its cell and its account are taken
-//      and a Handover written (handOff). The character is now in neither region.
-//   2. a world worker of A takes the Handover in a transaction of A and writes the character into region B, in one
-//      transaction of B: account, character on a free cell near the ferry's landing, its things, its token. A
-//      character already in B means an earlier try got that far: nothing is written twice.
-//   3. A's transaction is committed: the Handover and the old token are gone.
-// A worker that dies in step 2 lets A's transaction lapse; the Handover is back and the next try finishes it.
+//   1. in region A, in the command's transaction: the character, its cell and its account are taken and a Handover
+//      written (handOff). The character is now in neither region; what it carries stays in A, out of anyone's reach.
+//   2. a world worker of A takes the Handover in a transaction of A and carries the pack over, a few things at a time
+//      (carryPack, a full pack does not fit one transaction): written in B, then taken in A. A thing already in B means
+//      an earlier try got that far: it is not written twice.
+//   3. when the pack is over, the character is written into region B, in one transaction of B: account, character on a
+//      free cell near the ferry's landing, its token. A character already in B: an earlier try got that far.
+//   4. A's transaction is committed: the Handover and the old token are gone.
+// A worker that dies in steps 2 or 3 lets A's transaction lapse; the Handover is back and the next try finishes it.
 import { FOREVER, NO_WAIT, StillHeld, takeExisting, type SpaceLike, type Taken } from "phi-spaces";
 import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type RoomFields } from "../model.ts";
 import { awaitWork, envMs, peek, readExisting } from "../space.ts";
@@ -22,7 +24,8 @@ export type HandoverFields = {
 	/** The character as it arrives: in the room of the other region, at the ferry's landing (moved to a free cell there). */
 	character: CharacterFields;
 	account: AccountFields | null;
-	items: Array<{ type: string; types: string[]; fields: Record<string, unknown> }>;
+	/** Only in a Handover written before the pack went on its own (carryPack): an old one still arrives with its things. */
+	items?: Array<{ type: string; types: string[]; fields: Record<string, unknown> }>;
 	at: number;
 };
 
@@ -31,11 +34,6 @@ export async function handOff(c: CommandCtx, from: string, to: string, dest: { r
 	const e = await c.space.take({ type: "Character", fields: { charId: c.actor.charId } }, 5_000, { txn: c.txn });
 	if (!e) throw new CommandError("Deine Figur ist gerade nicht greifbar; bitte noch einmal.");
 	const { refused: _was, ...ch } = fieldsOf<CharacterFields>(e);
-	const items: HandoverFields["items"] = [];
-	for (const it of await c.space.readAll({ type: "Item", fields: { location: c.actor.charId } })) {
-		const t = await c.space.takeIfExists({ id: it.id }, NO_WAIT, { txn: c.txn });
-		if (t) items.push({ type: t.type, types: t.types, fields: t.fields });
-	}
 	await c.space.takeIfExists({ type: "Spot", fields: { charId: c.actor.charId } }, NO_WAIT, { txn: c.txn });
 	// the account goes along; one held by another transaction right now is not left behind: the command fails and the
 	// intent is tried again
@@ -44,12 +42,37 @@ export async function handOff(c: CommandCtx, from: string, to: string, dest: { r
 	catch (e) { if (e instanceof StillHeld) throw new Error("the account is held; the crossing is tried again"); throw e; }
 	const handover: HandoverFields = {
 		handoverId: `h-${c.actor.charId}-${Date.now().toString(36)}`, charId: c.actor.charId, from, to,
-		character: { ...ch, ...dest, ...(c.step ? { ack: c.step } : {}) }, account: acc ? fieldsOf<AccountFields>(acc) : null, items, at: Date.now(),
+		character: { ...ch, ...dest, ...(c.step ? { ack: c.step } : {}) }, account: acc ? fieldsOf<AccountFields>(acc) : null, at: Date.now(),
 	};
 	await c.space.write({ type: "Handover", fields: handover as never }, c.txn, FOREVER);
 }
 
-/** Step 2 in region `to`'s space: the character arrives. False when it was there already (an earlier try). */
+/** How many things go over in one transaction: a transaction holds what it takes and what it writes. */
+const PACK_PER_TXN = 40;
+
+/** Step 2: what `charId` carries goes from `here` to `there`. Written there first, so a worker dying in between finds the
+ *  thing there on the next try and only takes it here; nobody touches it, the character is in neither region yet. */
+export async function carryPack(here: SpaceLike, there: SpaceLike, charId: string): Promise<void> {
+	for (;;) {
+		const batch = await here.readAll({ type: "Item", fields: { location: charId } }, { limit: PACK_PER_TXN });
+		if (!batch.length) return;
+		const txn = (await here.createTransaction(30_000)).id, write = (await there.createTransaction(30_000)).id;
+		try {
+			for (const it of batch) {
+				const t = await here.takeIfExists({ id: it.id }, NO_WAIT, { txn });
+				if (t && !(await peek(there, { type: "Item", fields: { itemId: t.fields.itemId } }))) await there.write({ type: t.type, types: t.types.slice(1), fields: t.fields as never }, write, FOREVER);
+			}
+			await there.commit(write);
+			await here.commit(txn);
+		} catch (e) {
+			await there.abort(write).catch(() => {});
+			await here.abort(txn).catch(() => {});
+			throw e;
+		}
+	}
+}
+
+/** Step 3 in region `to`'s space: the character arrives. False when it was there already (an earlier try). */
 export async function arrive(space: SpaceLike, w: WorldDef, h: HandoverFields): Promise<boolean> {
 	const txn = (await space.createTransaction(30_000)).id;
 	try {
@@ -70,7 +93,7 @@ export async function arrive(space: SpaceLike, w: WorldDef, h: HandoverFields): 
 			}
 		}
 		await space.write({ type: "Character", fields: { ...h.character, ...at } as never }, txn, FOREVER);
-		for (const it of h.items) await space.write({ type: it.type, types: it.types.slice(1), fields: it.fields as never }, txn, FOREVER);
+		for (const it of h.items ?? []) await space.write({ type: it.type, types: it.types.slice(1), fields: it.fields as never }, txn, FOREVER);
 		if (!(await readExisting(space, actorToken(h.charId), { txn }).catch(() => true))) await space.write(actorToken(h.charId), txn, FOREVER);
 		await space.write({ type: "Msg", fields: { room: h.character.room, to: "*", kind: "info", text: `${h.character.name} kommt mit dem Kahn an.`, from: "", at: Date.now() } as never }, txn, 60_000);
 		await space.commit(txn);
@@ -78,7 +101,7 @@ export async function arrive(space: SpaceLike, w: WorldDef, h: HandoverFields): 
 	} catch (e) { await space.abort(txn).catch(() => {}); throw e; }
 }
 
-/** Steps 2 and 3 for every Handover in `here` (region `from`), until `halt`: run by the world workers of a region. */
+/** Steps 2 to 4 for every Handover in `here` (region `from`), until `halt`: run by the world workers of a region. */
 export async function deliver(here: SpaceLike, regions: ReadonlyMap<string, SpaceLike>, w: WorldDef, halt: AbortSignal): Promise<void> {
 	while (!halt.aborted) {
 		try {
@@ -101,6 +124,7 @@ async function deliverOne(here: SpaceLike, regions: ReadonlyMap<string, SpaceLik
 		const h = fieldsOf<HandoverFields>(taken);
 		const there = regions.get(h.to);
 		if (!there) throw new Error(`no address for the region ${h.to}`);
+		await carryPack(here, there, h.charId);
 		await arrive(there, w, h);
 		// the old token: a command of this character can no longer run here
 		await here.takeIfExists(actorToken(h.charId), NO_WAIT, { txn });

@@ -7,7 +7,7 @@ import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { fieldsOf, type AccountFields, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type OfferFields, type OrderFields } from "../../model.ts";
 import { readExisting, StillHeld, peek } from "../../space.ts";
 import type { Command } from "../cmdsets.ts";
-import { byName, CommandError, NotUnderstood, inventory, msg, type CommandCtx, itemsNamed } from "../context.ts";
+import { byName, CommandError, NotUnderstood, inventory, msg, stem, type CommandCtx, itemsNamed } from "../context.ts";
 import { bau, distTo, planOf } from "./build.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { worldNowOf } from "../clock.ts";
@@ -193,44 +193,77 @@ const market: Command = {
 	},
 };
 
+/** How many rounds one `craft` may make: it stays one transaction. */
+const MAX_CRAFT = 20;
+const COUNT_WORDS: Record<string, number> = { ein: 1, eine: 1, einen: 1, eins: 1, zwei: 2, drei: 3, vier: 4, "fünf": 5, fuenf: 5, sechs: 6, sieben: 7, acht: 8, neun: 9, zehn: 10 };
+/** "3 tangseile", "3x seil", "drei stück tangseil": the count and the rest; without a count one. */
+function countOf(arg: string): { count: number; what: string } {
+	const m = /^(\d+|\p{L}+)\s*(?:x|×|mal|stück|stueck)?\s+(.+)$/iu.exec(arg);
+	const count = m ? (/^\d/.test(m[1]!) ? Number(m[1]) : COUNT_WORDS[m[1]!]) : undefined;
+	return count === undefined ? { count: 1, what: arg } : { count, what: m![2]! };
+}
+/** A recipe by its key or name, then in any form or by what it makes is also called: "tangseile", "seil". The own name
+ *  goes first: "tuch" is the cloth, though linen is called so too. */
+function recipeNamed(w: WorldDef, what: string) {
+	const own = (r: WorldDef["recipes"][number]) => [r.key, r.name];
+	const also = (r: WorldDef["recipes"][number]) => w.prototypes.find((p) => p.key === r.makes)?.aliases ?? [];
+	const is = (n: string) => n.toLowerCase() === what;
+	const form = (n: string) => stem(n) === stem(what);
+	return w.recipes.find((r) => own(r).some(is)) ?? w.recipes.find((r) => own(r).some(form)) ?? w.recipes.find((r) => also(r).some(is)) ?? w.recipes.find((r) => also(r).some(form));
+}
+
 export const craft: Command = {
 	key: "craft", aliases: ["baue", "herstellen", "fertige"],
-	help: "craft [rezept] – etwas herstellen; ohne Rezept die Liste",
+	help: "craft [anzahl] [rezept] – etwas herstellen, auch mehrmals (craft 3 tangseil); ohne Rezept die Liste",
 	async func(c, arg) {
 		const rs = c.world.recipes;
 		if (!arg) {
 			const show = (r: (typeof rs)[number]) => `  ${r.key}: ${list(r.needs.map((n) => `${n.count}× ${n.proto}`))}${r.tool ? `, Werkzeug: ${r.tool}` : ""}${r.at ? `, nur am Bau: ${planOf(c.world, r.at)?.name ?? r.at}` : ""}${(r.count ?? 1) > 1 ? ` (gibt ${r.count})` : ""}`;
 			return msg(c, c.actor.charId, "info", ["Rezepte:", ...rs.map(show)].join("\n"));
 		}
-		const a = arg.trim().toLowerCase();
-		const r = rs.find((x) => x.key === a || x.name.toLowerCase() === a);
+		const { count: want, what: a } = countOf(arg.trim().toLowerCase());
+		const r = recipeNamed(c.world, a);
 		// "baue eine hütte": a plan, not a recipe (engine/commands/build.ts)
-		if (!r && planOf(c.world, a.replace(/(?:\s+\d+){2}$/, ""))) return bau.func(c, arg);
+		if (!r && planOf(c.world, arg.trim().toLowerCase().replace(/(?:\s+\d+){2}$/, ""))) return bau.func(c, arg);
 		if (!r) throw new NotUnderstood(`Ein Rezept „${arg.slice(0, 30)}“ gibt es nicht. „craft“ zeigt die Rezepte.`);
 		// a recipe of a building (the bakery's oven) is made beside one of its plan, anyone's
 		if (r.at && !(await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: r.at } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1))
 			throw new CommandError(`${r.name} macht man nur direkt neben ${planOf(c.world, r.at)?.dative ?? `einem ${planOf(c.world, r.at)?.name ?? r.at}`}.`);
+		if (want < 1) throw new NotUnderstood(`Wie viele? Zum Beispiel: craft 3 ${r.key}`);
+		if (want > MAX_CRAFT) throw new CommandError(`Höchstens ${MAX_CRAFT} auf einmal.`);
+		// as many rounds as the pack gives, up to the count; a tool that breaks hands over to the next of its kind
 		const inv = await inventory(c);
-		const used = new Set<string>(), inputs: Inv = [];
-		for (const n of r.needs) {
-			const hits = inv.filter((i) => i.f.proto === n.proto && !used.has(i.f.itemId)).slice(0, n.count);
-			if (hits.length < n.count) throw new CommandError(`Dir fehlt: ${n.count}× ${n.proto}.`);
-			hits.forEach((h) => { used.add(h.f.itemId); inputs.push(h); });
+		const used = new Set<string>(), inputs: Inv = [], wear = new Map<string, number>();
+		const tools = r.tool ? inv.filter((i) => i.f.proto === r.tool) : [];
+		let made = 0, lack = "";
+		rounds: while (made < want) {
+			const round: Inv = [];
+			for (const n of r.needs) {
+				const hits = inv.filter((i) => i.f.proto === n.proto && !used.has(i.f.itemId) && !round.includes(i)).slice(0, n.count);
+				if (hits.length < n.count) { lack = `Dir fehlt: ${n.count}× ${n.proto}.`; break rounds; }
+				round.push(...hits);
+			}
+			const tool = tools.find((i) => !round.includes(i) && !used.has(i.f.itemId) && (wear.get(i.f.itemId) ?? i.f.wear ?? 1) > 0);
+			if (r.tool && !tool) { lack = `Dafür brauchst du ein Werkzeug: ${r.tool}.`; break; }
+			if (tool) wear.set(tool.f.itemId, (wear.get(tool.f.itemId) ?? tool.f.wear ?? 1) - 1);
+			round.forEach((i) => { used.add(i.f.itemId); inputs.push(i); });
+			made++;
 		}
-		const tool = r.tool ? inv.find((i) => i.f.proto === r.tool && !used.has(i.f.itemId)) : undefined;
-		if (r.tool && !tool) throw new CommandError(`Dafür brauchst du ein Werkzeug: ${r.tool}.`);
+		if (!made) throw new CommandError(lack);
 		for (const i of inputs) await consume(c, i.f, c.actor.charId);
-		let broke = false;
-		if (tool) {
-			const left = (tool.f.wear ?? 1) - 1;
-			if (left <= 0) { await consume(c, tool.f, c.actor.charId); broke = true; }
-			else await move(c, tool.f, c.actor.charId, c.actor.charId, { wear: left });
+		const broken: string[] = [];
+		for (const t of tools) {
+			const left = wear.get(t.f.itemId);
+			if (left === undefined) continue;
+			if (left <= 0) { await consume(c, t.f, c.actor.charId); broken.push(t.f.name); }
+			else await move(c, t.f, c.actor.charId, c.actor.charId, { wear: left });
 		}
 		const p = await resolvePrototype(c.space, r.makes);
 		if (!p) throw new CommandError("Das Rezept ist kaputt.");
-		const n = r.count ?? 1;
+		const n = (r.count ?? 1) * made;
 		for (let i = 0; i < n; i++) await spawn(c.space, c.txn, c.world, p, { location: c.actor.charId, x: -1, y: -1 });
-		await msg(c, "*", "info", `$you() $conj(stellst|stellt) ${n > 1 ? `${n} ${p.name}` : p.name} her.${broke ? ` Das ${tool!.f.name} zerbricht dabei.` : ""}`, { templ: true });
+		await msg(c, "*", "info", `$you() $conj(stellst|stellt) ${n > 1 ? `${n} ${p.name}` : p.name} her.${broken.map((b) => ` Das ${b} zerbricht dabei.`).join("")}`, { templ: true });
+		if (made < want) await msg(c, c.actor.charId, "info", `Für ${want} reicht es nicht, es wurden ${made}. ${lack}`);
 	},
 };
 

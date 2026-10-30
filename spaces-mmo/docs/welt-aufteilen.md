@@ -16,11 +16,13 @@ darunter ist die Überlegung davor.
   (auch die Fähren hinaus), ihre Dinge, Feuer, Strände, Märkte und Tafeln. Prototypen, Rezepte, Hilfe und die Uhr hat
   jede Region ganz. Die NPCs kennt jede Region alle (ein Händler fährt über die Grenze); angelegt wird ein NPC nur in
   der Region, in der er beginnt, mit einer Geburtsmarke (`NpcBorn`), damit keine Region ihn ein zweites Mal macht.
-- **Übergabe an der Fähre** (`server/engine/handover.ts`), in drei Schritten wie unten im Entwurf: in der Transaktion
-  des Befehls nimmt Region A die Figur, ihr Gepäck, ihre Zelle und ihr Konto und schreibt eine `Handover`; ein
-  Welt-Worker von A nimmt sie in einer Transaktion, schreibt die Figur in einer Transaktion von B (freie Zelle am Steg,
-  Gepäck, Konto, Token) und schreibt dann die Transaktion von A fest. Stirbt er dazwischen, kommt die `Handover` zurück;
-  eine Figur, die B schon hat, wird nicht noch einmal geschrieben.
+- **Übergabe an der Fähre** (`server/engine/handover.ts`), in Schritten wie unten im Entwurf: in der Transaktion
+  des Befehls nimmt Region A die Figur, ihre Zelle und ihr Konto und schreibt eine `Handover`; das Gepäck bleibt
+  zunächst in A. Ein Welt-Worker von A nimmt die `Handover` in einer Transaktion und bringt zuerst das Gepäck hinüber,
+  je 40 Dinge in einem Paar Transaktionen (erst in B schreiben, dann in A nehmen; ein voller Rucksack passt nicht in
+  eine Transaktion). Danach schreibt er die Figur in einer Transaktion von B (freie Zelle am Steg, Konto, Token) und
+  schreibt die Transaktion von A fest. Stirbt er dazwischen, kommt die `Handover` zurück; ein Ding oder eine Figur, die
+  B schon hat, wird nicht noch einmal geschrieben.
 - **Der Web-Prozess** folgt dem Änderungsstrom jeder Region (Einträge als „Region:ID“), schreibt Befehle und die
   Sitzung einer Figur in die Region, in der sie steht (nach einer Überfahrt sofort), und verteilt neue Gäste reihum auf
   die Startbuchten (`server/region-spaces.ts`). Einstellungen und Modellwahl schreibt er in jede Region.

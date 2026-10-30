@@ -6,6 +6,7 @@ export async function complete(system: string, user: string): Promise<string> {
 		if (typed.includes("holz") && typed.includes("feuer")) return "put treibholz in feuer";
 		if (typed.includes("brennstück") && typed.includes("feuer")) return "put 2 treibholz in feuer";
 		if (typed.includes("zeig mir")) return "look";
+		if (typed.includes("seile") && /Recipes for craft: .*tangseil/.test(user)) return "craft 3 tangseil";
 		if (typed.includes("kaputt")) return "rm -rf /";
 		return "?";
 	}

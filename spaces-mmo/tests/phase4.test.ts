@@ -91,6 +91,33 @@ test("market: a listing waits in escrow; a purchase moves listing, coins and ite
 	} finally { await srv.close(); }
 });
 
+test("craft with a count: forms of the name and of the number, as many as the pack gives, a second tool takes over", async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const a = await player(srv.url, "Seiler");
+		await give(s, a.me, "tang", 15);
+		await does(a.p, "craft 2 tangseile", "Du stellst 2 Tangseil her.");
+		await does(a.p, "craft zwei seile", "Du stellst 2 Tangseil her.");
+		assert.equal((await pack(s, a.me, "tangseil")).length, 4);
+		const from = a.p.frames.length;
+		await does(a.p, "craft 3x tangseil", "Du stellst Tangseil her.");
+		await a.p.until((f) => f.t === "msg" && f.m.text === "Für 3 reicht es nicht, es wurden 1. Dir fehlt: 3× tang.", 10_000, from);
+		assert.equal((await pack(s, a.me, "tang")).length, 0);
+		assert.match(await does(a.p, "craft 2 tangseile", "Dir fehlt"), /3× tang/);
+		assert.match(await does(a.p, "craft 21 tangseile", "Höchstens"), /Höchstens 20/);
+		assert.match(await does(a.p, "craft 3 kiesel", "Ein Rezept"), /„3 kiesel“/);
+		// two knives of 5 uses: seven bundles, the first breaks in between, the second keeps its wear
+		await give(s, a.me, "muschel", 4);
+		await give(s, a.me, "treibholz", 23);
+		await does(a.p, "craft 2 muschelmesser", "Du stellst 2 Muschelmesser her.");
+		assert.match(await does(a.p, "craft 7 holzbündel", "Du stellst 7 Holzbündel her."), /Muschelmesser zerbricht/);
+		assert.deepEqual((await pack(s, a.me, "muschelmesser")).map((k) => k.wear), [3]);
+		assert.equal((await pack(s, a.me, "treibholz")).length, 0, "23 - 2 - 7 × 3");
+		await a.p.leave();
+	} finally { await srv.close(); }
+});
+
 test("craft: inputs are used up, the output appears, a tool wears with every use and breaks at the end", async () => {
 	const srv = await startServer();
 	try {

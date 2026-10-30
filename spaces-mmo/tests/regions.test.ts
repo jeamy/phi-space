@@ -47,7 +47,11 @@ test("a character crosses to another region with its pack and account, exactly o
 		await a.space.write({ type: "Character", fields: ch as never }, null, FOREVER);
 		await a.space.write(actorToken("c-1"), null, FOREVER);
 		await a.space.write({ type: "Spot", fields: { room: "klippenkopf", x: 12, y: 1, charId: "c-1", name: "Kai" } }, null, FOREVER);
-		for (const itemId of ["m-1", "m-2"]) await a.space.write({ type: "Coin", types: ["Item"], fields: { itemId, proto: "muenze", name: "Münze", location: "c-1", x: -1, y: -1 } }, null, FOREVER);
+		// a full pack: it does not fit one transaction of the limit (a commit of 196608 bytes)
+		const pack = Array.from({ length: 300 }, (_, i) => `m-${i}`);
+		for (const itemId of pack) await a.space.write({ type: "Coin", types: ["Item"], fields: { itemId, proto: "muenze", name: "Münze", location: "c-1", x: -1, y: -1, note: "x".repeat(600) } }, null, FOREVER);
+		// another worker got as far as B with one thing and died: it is not written twice
+		await b.space.write({ type: "Coin", types: ["Item"], fields: { itemId: "m-7", proto: "muenze", name: "Münze", location: "c-1", x: -1, y: -1 } }, null, FOREVER);
 		const room = nord.rooms.find((r) => r.roomId === "moewenfels-strand")!;
 		await b.space.write({ type: "Room", fields: { roomId: room.roomId, name: room.name, desc: "", ground: room.ground, spawn: room.spawn } }, null, FOREVER);
 		// step 1 in a command's transaction of A
@@ -55,7 +59,7 @@ test("a character crosses to another region with its pack and account, exactly o
 		await handOff({ space: a.space, txn, world: west, actor: ch, account: null, msgLeaseMs: 60_000, cache: {} } satisfies CommandCtx, "west", "nord", { room: "moewenfels-strand", x: 12, y: 14 });
 		await a.space.commit(txn);
 		assert.equal((await a.space.readAll({ type: "Character" })).length, 0, "in neither region now");
-		assert.equal((await a.space.readAll({ type: "Item" })).length, 0);
+		assert.equal((await a.space.readAll({ type: "Item" })).length, 300, "the pack waits, it goes after the handover");
 		const [h] = await a.space.readAll({ type: "Handover" });
 		// a delivery that got as far as B before its worker died: the next one finds the character there and writes nothing twice
 		assert.equal(await arrive(b.space, nord, h!.fields as unknown as HandoverFields), true);
@@ -68,7 +72,9 @@ test("a character crosses to another region with its pack and account, exactly o
 		const there = await b.space.readAll({ type: "Character" });
 		assert.equal(there.length, 1);
 		assert.equal(there[0]!.fields.room, "moewenfels-strand");
-		assert.deepEqual((await b.space.readAll({ type: "Item" })).map((e) => [e.fields.itemId, e.types]).sort(), [["m-1", ["Coin", "Item"]], ["m-2", ["Coin", "Item"]]], "the pack, with its types");
+		assert.deepEqual((await b.space.readAll({ type: "Item" })).map((e) => String(e.fields.itemId)).sort(), [...pack].sort(), "the whole pack, each thing once");
+		assert.ok((await b.space.readAll({ type: "Item" })).every((e) => e.types.join() === "Coin,Item"), "with its types");
+		assert.equal((await a.space.readAll({ type: "Item" })).length, 0);
 		assert.equal((await b.space.readAll({ type: "Account" })).length, 1);
 		assert.ok(await b.space.readIfExists(actorToken("c-1"), NO_WAIT), "a token in B");
 		assert.equal((await b.space.readAll({ type: "Spot", fields: { charId: "c-1" } })).length, 1, "a cell in B");

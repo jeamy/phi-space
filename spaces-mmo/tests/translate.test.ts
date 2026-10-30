@@ -137,6 +137,9 @@ test("what is not understood goes to the model before any refusal: \"lege 2 bren
 		await a.p.until((f) => f.t === "msg" && f.m.text.startsWith("Du legst 2 Treibholz ins Leuchtfeuer"), 15_000, from);
 		// what the model cannot read either is refused, once (its answer is not sent to the model again), with the
 		// command's own reason
+		// the recipes are in the prompt: a sentence with a count and another word for the thing
+		for (let i = 0; i < 9; i++) await give(s, a.me, "tang");
+		await does(a.p, "dreh mir drei seile", "Du stellst 3 Tangseil her.");
 		assert.equal(await does(a.p, "put kiesel in feuer", /^Du trägst/), "Du trägst nichts, was „kiesel“ heißt. „help“ zeigt die Befehle.");
 		// a command without what it needs goes to the model too; "not now" is refused at once, without the model
 		assert.equal(await does(a.p, "give holz", /^So geht es/), "So geht es: give <ding> an <person> „help“ zeigt die Befehle.");

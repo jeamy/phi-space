@@ -75,7 +75,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		for (const s of [space, ...others.values()]) {
 			if (s !== space && (await s.readAll({ type: "Item", fields: { itemId } }, { limit: 1 })).length) return true;
 			// a thing on a ferry: in a Handover, in neither region's things
-			if ((await s.readAll({ type: "Handover" })).some((h) => (h.fields.items as Array<{ fields: { itemId?: unknown } }>).some((i) => i.fields.itemId === itemId))) return true;
+			if ((await s.readAll({ type: "Handover" })).some((h) => ((h.fields.items ?? []) as Array<{ fields: { itemId?: unknown } }>).some((i) => i.fields.itemId === itemId))) return true;
 		}
 		return false;
 	};
