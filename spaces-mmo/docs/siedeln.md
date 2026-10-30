@@ -137,7 +137,7 @@ gleichwertig sind — die Gartenzeilen führt der Abschnitt „Gärten“ weiter
 | **Äcker** | gemeinsame Fluren am Siedlungsrand: Getreide, Mais, Kartoffeln, Flachs — Bestellen und Ernte in Stößen |
 | **Windmühle** | mahlt Korn zu Mehl für das Backhaus, in festem Takt, an Sturmtagen schneller (Wind als Wetter kommt erst mit den Jahreszeiten) |
 | **Gemeinschaftsgarten, Obstwiese** | Beete für alle mit Recht; Bäume, die über viele Spieltage wachsen |
-| **Gehege, Stall** | Schafe (Wolle → Tuch), Ziegen (Milch); fressen Heu und Rüben von den Fluren |
+| **Gehege, Stall** | Schafe (Wolle → Tuch), Ziegen (Milch), Enten und Gänse (Eier, Daunen); fressen Heu und Rüben von den Fluren |
 | **Kapelle** | sichtbarer Ort der Götter ([goetter.md](goetter.md)): Opfergaben, Segen (Lease), Fest — freiwillig, die Götter wirken auch ohne |
 
 ### Epoche 3: Stadt (Handel und Verwaltung)
@@ -149,6 +149,7 @@ gleichwertig sind — die Gartenzeilen führt der Abschnitt „Gärten“ weiter
 | **Kirche, Glockenturm** | Fest der ganzen Insel; die Glocke ruft (Nachricht an alle Räume, ein Termin der Weltuhr); kann man bauen, muss man nicht |
 | **Rathaus** | Regeln einer Siedlung: Zonen und Baurecht, Steuern ins Lagerhaus, Abstimmungen (Vorschläge und Stimmen wie auf der Arbeitstafel von codemode-chat) |
 | **Werft** | größere Boote: mehr Ladung, neue Fahrten in den Nebel ([spielidee.md](spielidee.md), „Erkunden“) |
+| **Taubenschlag** | Brieftauben tragen kleine Briefe zwischen den Inseln — Post vor der Fahrplan-Fähre |
 | **Brauhaus** | Bier aus Malz und Hopfen — Festgetränk, Handelsware |
 | **Glashütte** | Glas aus Sand — Fenster, und das Gewächshaus der Gärtner |
 | **Park, Gewächshaus** | Ruf der Siedlung, Platz für Feste; ganzjähriges Wachsen hinter Glas |
@@ -206,7 +207,7 @@ Bauten mit gepflegtem Zustand und bezahltem Unterhalt, gewichtet nach Größe. B
 | --- | --- | --- |
 | 1 | Hütte, Trockengestell, Regentonne, Steg, Hühnerstall | gepflegtes Beet, bestellte Flur |
 | 2 | Räucherei, Brunnen, Backhaus, Windmühle, Gehege | Obstwiese, Hecke, Kräutergarten |
-| 3 | Werkstatt, Steinbruch, Lehmgrube, Ziegelei, Lagerhaus, Kapelle | Gemeinschaftsgarten, Park |
+| 3 | Werkstatt, Steinbruch, Lehmgrube, Ziegelei, Lagerhaus, Kapelle, Taubenschlag | Gemeinschaftsgarten, Park |
 | 5 | Kaufhaus, Kontor, Kirche, Rathaus, Werft, Brauhaus, Glashütte, Leuchtturm | Gewächshaus, Botanischer Garten |
 
 Eine Insel kann die Stadtstufe aus Gärten allein erreichen — ein Archipel aus Gartensiedlungen ist ein legitimer
@@ -333,10 +334,25 @@ Wolle), bis wieder gefüttert wird — und einem Ertrag, den man wie eine Ernte 
 
 - **Hühner** (Epoche 1): Eier jeden Welttag, fressen Tang und Gemüsereste, ab Epoche 2 Körner von den Äckern — der
   erste Schritt vom Sammeln zum Halten.
+- **Enten, Gänse** (Epoche 2, Gehege): Eier und Daunen (warmes Bettzeug, später Kleidung); die Gänse schnattern bei
+  Fremden und Nebelwesen — die lebende Wache des Hofes.
+- **Katze** (Epoche 2): fängt Mäuse in Haus und Lager — Getreide und Vorrat verderben langsamer, wo eine Katze jagt.
+  Sie gehört keinem Gehege, sondern dem Hof: sie streunt selbstständig und bleibt bei der Figur, die sie füttert.
+  Gesellschaft wie der Hund.
 - **Schafe, Ziegen** (Epoche 2, Gehege): Wolle → Tuch am Webstuhl in der Werkstatt, Milch → Käse; fressen Heu und
   Rüben von den Fluren — die Äcker füttern den Hof.
 - **Hund** (Epoche 2): folgt einer Figur, warnt vor Nebelwesen — Gesellschaft statt Nutzen.
+- **Tauben** (Epoche 3, Taubenschlag): Brieftauben tragen kleine Briefe zwischen Siedlungen und Inseln — Post lange
+  vor der Fahrplan-Fähre. Eine Taube fliegt immer heim zu ihrem Schlag; wer schreiben will, trägt sie mit.
+- **Singvogel** (selten, ab Epoche 3): eine Drossel oder ein Kanarienvogel im Käfig singt im Haus — kein Nutzen
+  außer Leben und Ruf; ein Geschenk der Vogelhändlerin am Markt.
+- **Falke** (selten, ab Epoche 3): folgt einer Figur und holt Kleines aus dem Nebelrand zurück — ein Begleiter für
+  Strandläufer.
 - **Ochse, später Pferd** (Epoche 3/4): Zugtier für Karren — ein lebendes Fuhrwerk vor dem mechanischen.
+
+Wilde Vögel gehören nicht in den Stall, sondern in die Welt: **Möwen** kreisen dort, wo die Flut gerade Strandgut
+brachte (ein Hinweis statt einer Karte), **Reiher** stehen in den Salzwiesen, **Papageientaucher** nisten auf
+Nebelholm, und mit den Jahreszeiten ziehen Schwärme — der Herbstflug ist Kalender und Ankündigung des Erntefests.
 
 Tiere sind keine Kämpfer und kein Viehmarkt im Großen; sie halten den Hof lebendig und geben den Äckern einen
 zweiten Abnehmer. Ein „Stallknecht“-Automat (füttern, sammeln) ist eine naheliegende Vorlage.
