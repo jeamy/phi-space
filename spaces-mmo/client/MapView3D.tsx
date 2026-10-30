@@ -10,7 +10,7 @@ import type { CharView, ObjView } from "../server/gateway.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
-import { buildingGeometry, fireGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, type PlantModel } from "./props3d.ts";
+import { buildingGeometry, fenceGeometry, fireGeometry, hareGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, type PlantModel } from "./props3d.ts";
 import { tile3d } from "./terrain3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
@@ -242,6 +242,12 @@ function step(s: Scene3D, dt: number, time: number, me: string): void {
 		if (e.fig) animateFigure(e.fig, e.obj.position.x - x0, e.obj.position.z - z0, dt, time);
 	}
 	for (const e of s.objs.values()) {
+		if (e.kind === "animal") {
+			// a hare hops towards its cell and turns to where it goes
+			const body = e.obj.getObjectByName("body"), dx = e.target.x - e.obj.position.x, dz = e.target.z - e.obj.position.z, far = Math.hypot(dx, dz);
+			if (body && far > 0.05) { body.rotation.y = Math.atan2(dx, dz); body.position.y = Math.abs(Math.sin(time * 14)) * 0.12; }
+			else if (body) body.position.y = 0;
+		}
 		e.obj.position.lerp(e.target, k);
 		if (e.flame) { const on = e.flame.light.userData.lit as boolean; e.flame.cone.visible = on; e.flame.cone.scale.y = on ? 1 + Math.sin(time * 9 + e.obj.id) * 0.07 : 1; }
 	}
@@ -295,6 +301,7 @@ function object(t: T, obj: ObjView): Entry {
 		// dug soil a little above the grass; each plant at its cell by its stage
 		const w = obj.w ?? 1, d = obj.h ?? 1;
 		const soil = new t.Mesh(new t.BoxGeometry(w * 0.92, 0.08, d * 0.92), new t.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 1 })); soil.position.y = 0.04; group.add(soil);
+		if (obj.fenced) group.add(propMesh(t, fenceGeometry(t, w, d))); // hares keep out (wild.ts)
 		const stem = new t.MeshStandardMaterial({ color: 0x4f8a3a, roughness: 1 });
 		for (const p of obj.plants ?? []) {
 			const px = p.x - (w - 1) / 2, pz = p.y - (d - 1) / 2;
@@ -316,6 +323,12 @@ function object(t: T, obj: ObjView): Entry {
 		const color = Number.parseInt((obj.color ?? "#8a6a44").slice(1), 16);
 		group.add(propShadow(t, w * 1.15, d * 1.15));
 		group.add(propMesh(t, obj.kind === "building" ? buildingGeometry(t, obj.plan, w, d, color, variant) : siteGeometry(t, obj.plan, w, d, color, obj.progress ?? 0)));
+		return e;
+	}
+	if (obj.kind === "animal") {
+		// a hare (wild.ts): it hops and looks where it goes (step)
+		const hare = propMesh(t, hareGeometry(t, variant)); hare.rotation.y = (variant / 3) * Math.PI * 2; hare.name = "body";
+		group.add(propShadow(t, 0.5, 0.5), hare);
 		return e;
 	}
 	if (obj.kind === "beacon") {
@@ -406,16 +419,19 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		const { w, h } = dims(s.room), x = Math.floor(hit.x + w / 2), y = Math.floor(hit.z + h / 2);
 		return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
 	};
-	let down: { x: number; y: number; at: { x: number; y: number } | null; long: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
+	let down: { x: number; y: number; at: { x: number; y: number } | null; long: boolean; turn: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
 	const fingers = pinch();
 	const onDown = (e: PointerEvent) => {
 		if (e.button === 2) return;
 		// a second finger: a pinch, no tap, no long press, no turn
 		if (fingers.down(e.pointerId, e.clientX, e.clientY)) { if (down) clearTimeout(down.timer); if (dragged) view.current.turned(s.angle); down = null; dragged = false; return; }
 		if (fingers.active) return;
-		const at = cell(e); down = { x: e.clientX, y: e.clientY, at, long: false, timer: setTimeout(() => { if (down?.at) { down.long = true; latest.current.onMenu(down.at.x, down.at.y, e.clientX, e.clientY); } }, LONG_PRESS_MS) };
+		// the wheel held down turns the view (no tap, no menu)
+		if (e.button === 1) { e.preventDefault(); down = { x: e.clientX, y: e.clientY, at: null, long: false, turn: true, timer: setTimeout(() => {}, 0) }; return; }
+		const at = cell(e); down = { x: e.clientX, y: e.clientY, at, long: false, turn: false, timer: setTimeout(() => { if (down?.at) { down.long = true; latest.current.onMenu(down.at.x, down.at.y, e.clientX, e.clientY); } }, LONG_PRESS_MS) };
 	};
-	// dragging moves the view over the ground as in 2D, the ground stays under the pointer; with Shift it turns the view
+	// dragging moves the view over the ground as in 2D, the ground stays under the pointer; with the wheel held down or
+	// with Shift it turns the view
 	// around the room (the camera follows the pointer live, the angle is kept when the pointer is lifted)
 	let last = { x: 0, y: 0 }, dragged = false;
 	const onMove = (e: PointerEvent) => {
@@ -425,7 +441,7 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		if (!dragged && Math.hypot(e.clientX - down.x, e.clientY - down.y) > DRAG_PX) { dragged = true; clearTimeout(down.timer); down.at = null; last = { x: down.x, y: down.y }; s.canvas.setPointerCapture?.(e.pointerId); }
 		if (!dragged) return;
 		const dx = e.clientX - last.x, dy = e.clientY - last.y; last = { x: e.clientX, y: e.clientY };
-		if (e.shiftKey) s.angle += dx * 0.008; // the room turns with the pointer
+		if (down.turn || e.shiftKey) s.angle += dx * 0.008; // the room turns with the pointer
 		else {
 			// world units per pixel at the point looked at; the ground is foreshortened in depth by the camera's elevation
 			const unit = (2 * s.dist * Math.tan((s.camera.fov * Math.PI) / 360)) / Math.max(1, s.size.h);
@@ -436,10 +452,12 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		positionCamera(s);
 	};
 	const onUp = (e: PointerEvent) => { fingers.up(e.pointerId); if (!down) return; clearTimeout(down.timer); if (down.at && !down.long) latest.current.onCell(down.at.x, down.at.y); if (dragged) view.current.turned(s.angle); dragged = false; down = null; };
+	// a click of the wheel scrolls the page by itself in some browsers: not on the map
+	const onMouseDown = (e: MouseEvent) => { if (e.button === 1) e.preventDefault(); };
 	const onWheel = (e: WheelEvent) => { e.preventDefault(); view.current.zoomBy(Math.exp(-Math.sign(e.deltaY) * 0.12)); };
 	const onContext = (e: MouseEvent) => { e.preventDefault(); const at = cell(e as PointerEvent); if (at) latest.current.onMenu(at.x, at.y, e.clientX, e.clientY); };
-	Object.assign(s.canvas.dataset, { map3d: "1" }); s.canvas.addEventListener("pointerdown", onDown); s.canvas.addEventListener("pointermove", onMove); s.canvas.addEventListener("pointerup", onUp); s.canvas.addEventListener("pointercancel", onUp); s.canvas.addEventListener("contextmenu", onContext); s.canvas.addEventListener("wheel", onWheel, { passive: false });
-	(s.canvas as HTMLCanvasElement & { mapCleanup?: () => void }).mapCleanup = () => { s.canvas.removeEventListener("pointerdown", onDown); s.canvas.removeEventListener("pointermove", onMove); s.canvas.removeEventListener("pointerup", onUp); s.canvas.removeEventListener("pointercancel", onUp); s.canvas.removeEventListener("contextmenu", onContext); s.canvas.removeEventListener("wheel", onWheel); };
+	Object.assign(s.canvas.dataset, { map3d: "1" }); s.canvas.addEventListener("pointerdown", onDown); s.canvas.addEventListener("pointermove", onMove); s.canvas.addEventListener("pointerup", onUp); s.canvas.addEventListener("pointercancel", onUp); s.canvas.addEventListener("contextmenu", onContext); s.canvas.addEventListener("wheel", onWheel, { passive: false }); s.canvas.addEventListener("mousedown", onMouseDown);
+	(s.canvas as HTMLCanvasElement & { mapCleanup?: () => void }).mapCleanup = () => { s.canvas.removeEventListener("pointerdown", onDown); s.canvas.removeEventListener("pointermove", onMove); s.canvas.removeEventListener("pointerup", onUp); s.canvas.removeEventListener("pointercancel", onUp); s.canvas.removeEventListener("contextmenu", onContext); s.canvas.removeEventListener("wheel", onWheel); s.canvas.removeEventListener("mousedown", onMouseDown); };
 }
 function unpointer(s: Scene3D): void { (s.canvas as HTMLCanvasElement & { mapCleanup?: () => void }).mapCleanup?.(); }
 function prevent(e: Event): void { e.preventDefault(); }

@@ -148,9 +148,81 @@ function barrel(t: T): Geo {
 	], "barrel"));
 }
 
-/** A building by its plan: the hut, the rain barrel, any other plan a hut in its colour. */
+/** The scarecrow: a driftwood post and crossbar in a patched shirt, a straw head under a wide hat, straw sticking out
+ *  of the sleeves, on a little mound. About 1.3 units high. */
+function scarecrow(t: T, variant: number): Geo {
+	return cached(`scarecrow:${variant}`, () => {
+		const shirt = [0x8a4a3a, 0x4a6a8a, 0x6a7a3a][variant % 3]!, straw = 0xd8b45a, parts: Part[] = [
+			{ g: new t.CylinderGeometry(0.22, 0.3, 0.1, 8), c: 0x6b5236, p: [0, 0.05, 0] },
+			{ g: new t.BoxGeometry(0.07, 1.05, 0.07), c: WOOD_DARK, p: [0, 0.55, 0] },
+			{ g: new t.BoxGeometry(0.78, 0.06, 0.06), c: WOOD_DARK, p: [0, 0.82, 0] },
+			{ g: new t.BoxGeometry(0.3, 0.36, 0.18), c: shirt, p: [0, 0.74, 0], r: [0, 0, 0.04] },
+			{ g: new t.BoxGeometry(0.62, 0.12, 0.13), c: shirt, p: [0, 0.84, 0] },
+			{ g: new t.BoxGeometry(0.1, 0.06, 0.19), c: 0xc8a050, p: [0.06, 0.66, 0.0] }, // a patch
+			{ g: new t.ConeGeometry(0.06, 0.16, 5), c: straw, p: [0.39, 0.82, 0], r: [0, 0, -Math.PI / 2] },
+			{ g: new t.ConeGeometry(0.06, 0.16, 5), c: straw, p: [-0.39, 0.82, 0], r: [0, 0, Math.PI / 2] },
+			{ g: new t.ConeGeometry(0.1, 0.14, 6), c: straw, p: [0, 0.52, 0], r: [Math.PI, 0, 0] }, // straw from the shirt's hem
+			{ g: new t.IcosahedronGeometry(0.14, 0), c: straw, p: [0, 1.05, 0] },
+			{ g: new t.BoxGeometry(0.035, 0.035, 0.02), c: 0x2a2018, p: [-0.05, 1.07, 0.13] },
+			{ g: new t.BoxGeometry(0.035, 0.035, 0.02), c: 0x2a2018, p: [0.05, 1.07, 0.13] },
+			{ g: new t.CylinderGeometry(0.26, 0.26, 0.03, 9), c: 0x7a5a30, p: [0, 1.16, 0], r: [0.12, 0, 0.05] },
+			{ g: new t.ConeGeometry(0.13, 0.2, 7), c: 0x7a5a30, p: [0, 1.27, 0], r: [0.12, 0, 0.05] },
+		];
+		return merge(t, parts, `scarecrow:${variant}`);
+	});
+}
+
+/** A building by its plan: the hut, the rain barrel, the scarecrow, any other plan a hut in its colour. */
 export function buildingGeometry(t: T, plan: string | undefined, w: number, d: number, color: number, variant: number): Geo {
-	return plan === "regentonne" ? barrel(t) : hut(t, w, d, color, variant % 3);
+	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : hut(t, w, d, color, variant % 3);
+}
+
+/** A hare, sitting up a little, its nose towards +z: body, haunches, head, long ears, a white scut. About 0.4 high. */
+export function hareGeometry(t: T, variant: number): Geo {
+	return cached(`hare:${variant}`, () => {
+		const fur = [0x9a7f5e, 0x8a7258, 0xa88e6a][variant % 3]!, belly = 0xd9c9ae;
+		return merge(t, [
+			{ g: new t.IcosahedronGeometry(0.15, 0), c: fur, p: [0, 0.16, -0.04], s: [1, 0.95, 1.35] },
+			{ g: new t.IcosahedronGeometry(0.1, 0), c: fur, p: [0.09, 0.1, -0.12] },
+			{ g: new t.IcosahedronGeometry(0.1, 0), c: fur, p: [-0.09, 0.1, -0.12] },
+			{ g: new t.IcosahedronGeometry(0.09, 0), c: belly, p: [0, 0.13, 0.08], s: [1, 1.1, 0.8] },
+			{ g: new t.IcosahedronGeometry(0.095, 0), c: fur, p: [0, 0.3, 0.13], s: [0.95, 0.9, 1.15] },
+			{ g: new t.BoxGeometry(0.045, 0.2, 0.025), c: fur, p: [0.04, 0.45, 0.09], r: [-0.35, 0, 0.18] },
+			{ g: new t.BoxGeometry(0.045, 0.2, 0.025), c: fur, p: [-0.04, 0.45, 0.09], r: [-0.35, 0, -0.18] },
+			{ g: new t.BoxGeometry(0.025, 0.14, 0.01), c: 0xd8a0a0, p: [0.04, 0.45, 0.105], r: [-0.35, 0, 0.18] },
+			{ g: new t.BoxGeometry(0.025, 0.14, 0.01), c: 0xd8a0a0, p: [-0.04, 0.45, 0.105], r: [-0.35, 0, -0.18] },
+			{ g: new t.IcosahedronGeometry(0.02, 0), c: 0x3a2a2a, p: [0, 0.3, 0.23] },
+			{ g: new t.BoxGeometry(0.02, 0.02, 0.02), c: 0x111111, p: [0.055, 0.33, 0.19] },
+			{ g: new t.BoxGeometry(0.02, 0.02, 0.02), c: 0x111111, p: [-0.055, 0.33, 0.19] },
+			{ g: new t.IcosahedronGeometry(0.045, 0), c: 0xf2efe8, p: [0, 0.17, -0.25] },
+			{ g: new t.BoxGeometry(0.04, 0.04, 0.12), c: fur, p: [0.05, 0.03, 0.12] },
+			{ g: new t.BoxGeometry(0.04, 0.04, 0.12), c: fur, p: [-0.05, 0.03, 0.12] },
+		], `hare:${variant}`);
+	});
+}
+
+/** A fence round a bed w×d: driftwood posts of uneven height at the corners and between the cells, two rails on each
+ *  side, a little gate in the front rail. */
+export function fenceGeometry(t: T, w: number, d: number): Geo {
+	return cached(`fence:${w}x${d}`, () => {
+		const r = rand(`fence:${w}x${d}`), parts: Part[] = [], wood = 0x9a7a4a, grey = 0x8f8676;
+		for (let i = 0; i <= w; i++) for (let j = 0; j <= d; j++) {
+			if (i > 0 && i < w && j > 0 && j < d) continue;
+			const hh = 0.34 + r() * 0.08;
+			parts.push({ g: new t.BoxGeometry(0.07, hh, 0.07), c: r() < 0.5 ? wood : grey, p: [i - w / 2, hh / 2, j - d / 2], r: [0, r() * 0.6, (r() - 0.5) * 0.08] });
+		}
+		for (const y of [0.14, 0.27]) {
+			parts.push({ g: new t.BoxGeometry(w, 0.04, 0.035), c: wood, p: [0, y, -d / 2] });
+			parts.push({ g: new t.BoxGeometry(0.035, 0.04, d), c: wood, p: [-w / 2, y, 0] });
+			parts.push({ g: new t.BoxGeometry(0.035, 0.04, d), c: wood, p: [w / 2, y, 0] });
+			// the front: rails beside the gate, the gate's own boards a little darker
+			parts.push({ g: new t.BoxGeometry(w / 2 - 0.25, 0.04, 0.035), c: wood, p: [-w / 4 - 0.125, y, d / 2] });
+			parts.push({ g: new t.BoxGeometry(w / 2 - 0.25, 0.04, 0.035), c: wood, p: [w / 4 + 0.125, y, d / 2] });
+			parts.push({ g: new t.BoxGeometry(0.46, 0.05, 0.03), c: WOOD_DARK, p: [0, y, d / 2 + 0.01] });
+		}
+		parts.push({ g: new t.BoxGeometry(0.04, 0.2, 0.03), c: WOOD_DARK, p: [0, 0.2, d / 2 + 0.01], r: [0, 0, 0.9] }); // the gate's brace
+		return merge(t, parts, `fence:${w}x${d}`);
+	});
 }
 
 /** A site w×d at `progress` (0..1): its corner posts and sill, the walls rising in planks, a scaffold that comes with
