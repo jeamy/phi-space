@@ -3,7 +3,7 @@
 // (the settings epoch.dorf, epoch.stadt, epoch.netz, so a server with few players can lower them).
 //
 // - The count runs in the world worker (job "epoch", and once at its start) over the islands of its region; it writes
-//   the island's Epoch entry only when the epoch changes, and tells every room of the island.
+//   the island's Epoch entry (unique per island) only when the epoch changes, and tells every room of the island.
 // - Falling back needs no mechanism of its own: what decays no longer counts. Buildings of a higher epoch stand and work
 //   on; only new plans of that epoch are refused (`bau`, `flur anlegen`) until the stock is enough again.
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
@@ -58,7 +58,11 @@ export async function epochTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 			const old = await space.takeIfExists({ type: "Epoch", fields: { island } }, NO_WAIT, { txn });
 			const was = old ? fieldsOf<EpochFields>(old).epoch : 1;
 			if (was === epoch) { await space.abort(txn); continue; }
-			if (epoch > 1 || old) await space.write({ type: "Epoch", fields: { island, epoch, points: t.points, at: now } satisfies EpochFields as never }, txn, FOREVER);
+			// the first entry of an island is unique: two workers counting at once (each at its start) write it once, the
+			// other gives way; a later change is serialized by the take of the old one
+			const fields = { island, epoch, points: t.points, at: now } satisfies EpochFields;
+			try { await space.write({ type: "Epoch", fields: fields as never }, txn, FOREVER, old ? {} : { unique: ["island"] }); }
+			catch (e) { if (/unique entry already exists/.test((e as Error).message)) { await space.abort(txn); continue; } throw e; }
 			const text = epoch > was
 				? `${island} ist jetzt ${a(w, epoch)} (Epoche ${epoch}): ${unlocks(w, epoch) || "neue Pläne"} lassen sich jetzt bauen.`
 				: `${island} ist wieder ${a(w, epoch)} (Epoche ${epoch}): zu viel ist verfallen. Was steht, arbeitet weiter; neue Pläne der höheren Stufe warten, bis der Bestand wieder reicht.`;

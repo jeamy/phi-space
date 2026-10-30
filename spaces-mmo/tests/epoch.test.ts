@@ -53,6 +53,13 @@ test("the count: an island becomes a village from beds alone; what decays makes 
 		assert.deepEqual((await epochTick(s, w, 60_000)).filter((x) => x.island === GRAU), [{ island: GRAU, epoch: 2 }]);
 		assert.equal(await epochOf(s, GRAU), 2);
 		assert.deepEqual(await epochTick(s, w, 60_000), [], "unchanged: nothing written");
+		// two workers counting at once: the change is written once
+		await s.write({ type: "Bed", fields: bed(50, grey[2]!, { points: 30 }) as never }, null, FOREVER);
+		const both = (await Promise.all([epochTick(s, w, 60_000), epochTick(s, w, 60_000)])).flat().filter((x) => x.island === GRAU);
+		assert.deepEqual(both, [{ island: GRAU, epoch: 3 }]);
+		assert.equal((await s.readAll({ type: "Epoch", fields: { island: GRAU } })).length, 1);
+		await s.takeIfExists({ type: "Bed", fields: { bedId: `bed-${grey[2]}-50` } }, 0);
+		assert.deepEqual((await epochTick(s, w, 60_000)).filter((x) => x.island === GRAU), [{ island: GRAU, epoch: 2 }]);
 		assert.equal((await s.readAll({ type: "Epoch", fields: { island: GRAU } })).length, 1);
 		// two beds decay: back to the fishing village
 		for (const id of [`bed-${grey[0]}-0`, `bed-${grey[0]}-1`]) await s.takeIfExists({ type: "Bed", fields: { bedId: id } }, 0);
