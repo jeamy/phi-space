@@ -17,5 +17,5 @@ tokio-rustls.workspace = true
 webpki-roots = "1"
 tokio.workspace = true
 ed25519-dalek = "2"
-p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "std"] }
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem", "std"] }
 getrandom = "0.2"
