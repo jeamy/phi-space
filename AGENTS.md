@@ -21,6 +21,8 @@ phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dir
   (`tests/differential.rs`: seeded random walks, `PHI_CORE_WALK_STEPS`/`PHI_CORE_WALK_SEED`; `tests/boundaries.rs`: each byte budget at its edge);
   `phi-store` (rusqlite, bundled SQLite) reads and writes the TypeScript store file, its tests start node for `test/vectors/build.ts`
   and `test/support/store-driver.ts` (core-driver lines as commits through the TypeScript store; `tests/store_walk.rs`, `PHI_STORE_WALK_STEPS`).
+  `phi-service` (`handle_text`, reaper, delivery) is held against the TypeScript service as `test/support/service-driver.ts` (`tests/walk.rs`: every reply byte for byte, the state by its hash; `PHI_SERVICE_WALK_STEPS`/`PHI_SERVICE_WALK_SEED`, `PHI_SERVICE_TRACE=1` prints the calls, `PHI_SERVICE_DUMP=1` the states);
+  `phi-wire` is the socket transport, `phi-space-server` the binary with the CLI of `src/standalone.ts`: `PHI_SPACES_SERVER_CMD=rust/target/release/phi-space-server node --experimental-strip-types --test test/test-standalone.test.ts` runs that suite against it.
 - Space-server probe: `node --experimental-strip-types --no-warnings scripts/server-probe.ts [--store memory|sqlite] [--rate 300] [--cmd "..."]`
   (server CPU per call, RSS, answer times of the standalone service or another implementation; docs/rust-portierung.md R0).
 - Branding: `npm run check:branding` (read-only; rejects obsolete project names in tracked text, generated output

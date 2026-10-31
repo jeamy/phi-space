@@ -2,7 +2,7 @@
 use crate::files::{open_files, Result, StoreError, StoreFiles};
 use crate::ops::WriteOp;
 use crate::parts::{head_of, id_of, join_parts, part_at, PartDef, PartKind, PartRow};
-use crate::writer::{Compaction, Durable, Synchronous, Writer, WriterOptions};
+use crate::writer::{Compaction, Durable, Synchronous, Waker, Writer, WriterOptions};
 use phi_json::{parse, Json};
 use rusqlite::params;
 use std::collections::HashMap;
@@ -211,6 +211,8 @@ impl SqliteLedger {
 		let rx = self.writer.as_ref().expect("open").compact().ok_or_else(|| StoreError::Failed("the writer is gone".into()))?;
 		rx.recv().map_err(|_| StoreError::Failed("the writer is gone".into()))
 	}
+	/// The owner is told when a batch is durable.
+	pub fn set_waker(&self, waker: Waker) { self.writer.as_ref().expect("open").set_waker(waker); }
 	/// Hands a commit's rows to the writer; the receiver settles when they are durable.
 	pub fn persist(&mut self, ops: Vec<WriteOp>) -> Durable { self.writer.as_ref().expect("open").write(ops) }
 

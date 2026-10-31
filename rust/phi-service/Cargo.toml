@@ -1,0 +1,11 @@
+[package]
+name = "phi-service"
+description = "The space service of phi-spaces (src/service.ts and the part of src/client.ts it uses): one call in, one reply out, on a store; no network"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+phi-core = { path = "../phi-core" }
+phi-json = { path = "../phi-json" }
+phi-store = { path = "../phi-store" }

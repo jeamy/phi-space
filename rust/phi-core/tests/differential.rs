@@ -4,7 +4,7 @@
 // expiry and the dropped log batches are reached, not only the paths a default space takes; the test counts which
 // outcomes occurred and fails when one never did.
 //
-// Steps: PHI_CORE_WALK_STEPS (all walks together, default 12 000); one walk: PHI_CORE_WALK_SEED.
+// Steps: PHI_CORE_WALK_STEPS (all walks together, default 24 000); one walk: PHI_CORE_WALK_SEED.
 // A seeded walk stands in for the proptest run of the acceptance (10⁶ steps) until that is set up.
 mod common;
 use common::walk::{diff, observe, reply, ts_reply, Walk};
@@ -60,7 +60,7 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 
 #[test]
 fn random_walks_agree_with_the_typescript_core() {
-	let total: usize = std::env::var("PHI_CORE_WALK_STEPS").ok().and_then(|s| s.parse().ok()).unwrap_or(12_000);
+	let total: usize = std::env::var("PHI_CORE_WALK_STEPS").ok().and_then(|s| s.parse().ok()).unwrap_or(24_000);
 	let mut seen = BTreeMap::new();
 	if let Some(seed) = std::env::var("PHI_CORE_WALK_SEED").ok().and_then(|s| s.parse().ok()) {
 		walk(seed, total, &mut seen);

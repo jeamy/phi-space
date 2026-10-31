@@ -156,7 +156,7 @@ export function cryptoVectors(): Record<string, unknown> {
 
 // ---- wire session
 
-type Step = { call: Json; reply: Json };
+type Step = { now?: number; call: Json; reply: Json };
 export type Session = { steps: Step[]; close(): Promise<void> };
 
 /**
@@ -172,7 +172,7 @@ export async function runSession(host: ClosableStoreHost, o: { only?: "reads" } 
 		const c: Record<string, Json> = { method, args };
 		if (request) c.request = { generation, requestId: request };
 		const reply = JSON.parse(await service.handleText(JSON.stringify(c), { peerId: "local" })) as Reply;
-		steps.push({ call: c, reply: reply as unknown as Json });
+		steps.push({ now, call: c, reply: reply as unknown as Json });
 		return reply as Record<string, any>;
 	};
 	await call("hello", { protocol: 1 }, false);
@@ -276,7 +276,7 @@ export function normalize(steps: Step[]): Step[] {
 		if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, k === "process" && key === "result" ? "<process>" : rewrite(x, k)]));
 		return v;
 	};
-	return steps.map((s) => ({ call: rewrite(s.call) as Json, reply: rewrite(s.reply) as Json }));
+	return steps.map((s) => ({ ...(s.now === undefined ? {} : { now: s.now }), call: rewrite(s.call) as Json, reply: rewrite(s.reply) as Json }));
 }
 
 export async function wireVectors(): Promise<Json> {
@@ -325,7 +325,7 @@ export async function currentSchema(): Promise<string[]> {
 /** What the read-only session answers on the store file (not normalized: the file fixes its ids). */
 export async function readStore(path: string): Promise<Json> {
 	const host = await openSqliteHost(path);
-	try { return (await runSession(host, { only: "reads" })) as unknown as Json; }
+	try { return (await runSession(host, { only: "reads" })).map(({ call, reply }) => ({ call, reply })) as unknown as Json; }
 	finally { await host.close(ctx); }
 }
 

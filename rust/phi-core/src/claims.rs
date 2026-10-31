@@ -79,7 +79,7 @@ impl Space {
 			},
 		}
 	}
-	fn key_of(&self, r: &RequestRef) -> String {
+	pub fn key_of(&self, r: &RequestRef) -> String {
 		let parts = vec![
 			r.principal.cloned().unwrap_or(Json::Null),
 			self.state.space_id.as_deref().map_or(Json::Null, Json::from),
@@ -314,6 +314,20 @@ impl Space {
 			crate::state::Claims::Memory(m) => m.iter().map(|(k, v)| (k.to_owned(), v.clone())).collect(),
 		};
 		held.into_iter().filter(|(_, c)| str_of(c, "state") == Some("pending")).collect()
+	}
+
+	/// How many open requests a principal has, and how many its peer has (`beginOperation`'s quotas).
+	pub fn pending_counts(&self, principal: &Json) -> (usize, usize) {
+		let peer = principal.get("peerId");
+		let who = |p: Option<&Json>| (p.and_then(|p| p.get("peerId")).cloned(), p.and_then(|p| p.get("agentId")).cloned());
+		let me = who(Some(principal));
+		let mut mine = (0, 0);
+		for (_, c) in self.pending_claims() {
+			let p = c.get("principal");
+			mine.0 += usize::from(who(p) == me);
+			mine.1 += usize::from(p.and_then(|p| p.get("peerId")) == peer);
+		}
+		mine
 	}
 
 	/// `resolveAdmission`: what became of a request that may never have arrived. A known one answers as `lookup` does; a

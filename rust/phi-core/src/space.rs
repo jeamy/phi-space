@@ -62,7 +62,8 @@ pub(crate) fn js_string(v: &Json) -> String {
 		Json::Number(x) => n(*x),
 		Json::Bool(b) => b.to_string(),
 		Json::Null => "null".into(),
-		other => other.to_json_text(),
+		Json::Object(_) => "[object Object]".into(),
+		Json::Array(a) => a.iter().map(|x| if matches!(x, Json::Null) { String::new() } else { js_string(x) }).collect::<Vec<_>>().join(","),
 	}
 }
 pub(crate) fn bytes(v: &Json) -> f64 { v.json_bytes() as f64 }
@@ -144,7 +145,7 @@ limits! {
 pub fn until(now: f64, ms: f64) -> f64 { if ms >= FOREVER - now { FOREVER } else { now + ms } }
 
 /// A timeout (duration) into an absolute deadline; FOREVER never passes.
-fn deadline_of(now: f64, timeout: Option<&Json>) -> Result<f64> {
+pub fn deadline_of(now: f64, timeout: Option<&Json>) -> Result<f64> {
 	let Some(Json::Number(t)) = timeout else { return Err(illegal("bad timeout")) };
 	if *t < 0.0 {
 		return Err(illegal("negative timeout"));
@@ -377,6 +378,8 @@ pub(crate) struct Tracking {
 	/// The state as the commit found it, without its parts (entries, the stream log and the claims are undone from
 	/// their logs instead of copied).
 	head: SpaceState,
+	/// The watermark of the state as the commit found it: a commit that fails leaves that state, not its draft.
+	watermark: Option<f64>,
 	stream_rev: f64,
 	dropped: Vec<crate::state::Batch>,
 	/// Claims and generations the commit changed, each with how it was before (none: it was not there), in order of first
@@ -411,7 +414,7 @@ impl Space {
 	/// it can be written as rows or undone (`rollback`).
 	pub fn begin_tracked_commit(&mut self) {
 		self.begin_commit();
-		self.watermark = None;
+		let watermark = self.watermark.take();
 		let entries = std::mem::take(&mut self.state.entries);
 		let log = self.state.stream.as_mut().map(|s| std::mem::take(&mut s.log));
 		let claims = self.state.rpc.as_mut().map(|r| std::mem::take(&mut r.claims));
@@ -429,7 +432,7 @@ impl Space {
 		}
 		self.state.entries.track();
 		let stream_rev = stream::revision_of(&self.state.stream);
-		self.tracking = Some(Tracking { head, stream_rev, dropped: vec![], claims: vec![], claims_seen: Default::default(), generations: vec![] });
+		self.tracking = Some(Tracking { head, watermark, stream_rev, dropped: vec![], claims: vec![], claims_seen: Default::default(), generations: vec![] });
 	}
 	/// What the tracked commit changed; tracking ends.
 	pub fn end_commit(&mut self) -> Changes {
@@ -440,6 +443,7 @@ impl Space {
 	/// Undoes the tracked commit: the state is what it was when the commit began.
 	pub fn rollback(&mut self) {
 		let t = self.tracking.take().expect("a tracked commit");
+		self.watermark = t.watermark;
 		let mut entries = std::mem::take(&mut self.state.entries);
 		let log = entries.untrack();
 		entries.undo(log);
@@ -1511,6 +1515,24 @@ impl Space {
 
 	/// Earliest time something can change without a commit. Initialises the watermark when there is none.
 	pub fn needs_maintenance(&mut self, now: f64) -> Result<bool> { Ok(self.next_expiry()? <= now) }
+	/// `maintenanceSignature`: changes when a maintenance commit got anywhere.
+	pub fn maintenance_signature(&self) -> String {
+		let jobs = self.state.rest.get("jobs").and_then(Json::as_array).map(|js| js.iter().map(|j| [j.get("id"), j.get("cursor"), j.get("retryAt")].map(|v| v.map_or(0.0.into(), Clone::clone)).to_vec().into()).collect::<Vec<Json>>());
+		let boxes: Vec<Json> = self.state.mailboxes.iter().flatten().map(|(_, b)| Json::Array(vec![b.epoch.as_str().into(), b.next.into(), b.acked.into()])).collect();
+		let of = |n: usize| Json::Number(n as f64);
+		let parts = vec![
+			self.state.rpc.as_ref().and_then(|r| r.bytes).unwrap_or(0.0).into(),
+			of(self.state.entries.len()),
+			of(self.state.txns.len()),
+			of(self.state.regs.len()),
+			of(self.state.waiters.len()),
+			stream::revision_of(&self.state.stream).into(),
+			jobs.map_or(Json::Null, Json::Array),
+			self.state.rest.get("releaseQueue").cloned().unwrap_or(Json::Null),
+			Json::Array(boxes),
+		];
+		Json::Array(parts).to_json_text()
+	}
 	pub fn next_expiry(&mut self) -> Result<f64> {
 		self.assert_ported()?;
 		let mut min = match self.watermark {

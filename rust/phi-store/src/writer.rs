@@ -5,6 +5,7 @@ use crate::ops::{apply_ops, WriteOp};
 use rusqlite::Connection;
 use std::path::Path;
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -60,9 +61,13 @@ impl Default for WriterOptions {
 	fn default() -> Self { WriterOptions { synchronous: Synchronous::Full, max_pages: None, fault: None } }
 }
 
+/// Called on the writer's thread after each batch has been answered: the owner has something to `pump`.
+pub type Waker = Arc<dyn Fn() + Send + Sync>;
+
 pub struct Writer {
 	tx: Sender<Msg>,
 	thread: Option<JoinHandle<()>>,
+	waker: Arc<Mutex<Option<Waker>>>,
 }
 
 /// Tests (crash tests): `PHI_SPACES_WRITER_PAUSE=<before-commit|after-commit>:<batch>:<file>` stops the writer at that
@@ -89,9 +94,12 @@ impl Writer {
 		}
 		let (tx, rx) = channel::<Msg>();
 		let fault = o.fault;
-		let thread = std::thread::Builder::new().name("phi-store-writer".into()).spawn(move || run(db, rx, fault)).map_err(|e| e.to_string())?;
-		Ok(Writer { tx, thread: Some(thread) })
+		let waker = Arc::new(Mutex::new(None));
+		let wakes = Arc::clone(&waker);
+		let thread = std::thread::Builder::new().name("phi-store-writer".into()).spawn(move || run(db, rx, fault, wakes)).map_err(|e| e.to_string())?;
+		Ok(Writer { tx, thread: Some(thread), waker })
 	}
+	pub fn set_waker(&self, waker: Waker) { *self.waker.lock().expect("the writer does not panic holding it") = Some(waker); }
 	/// Hands a commit's rows over; the receiver settles when they are durable.
 	pub fn write(&self, ops: Vec<WriteOp>) -> Durable {
 		let (done, rx) = channel();
@@ -119,7 +127,7 @@ impl Writer {
 	}
 }
 
-fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>) {
+fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>, waker: Arc<Mutex<Option<Waker>>>) {
 	let pause = pause_point();
 	let hold = |at: &str, batch: u64| {
 		if let Some((p, b, file)) = &pause {
@@ -191,6 +199,9 @@ fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>) {
 			};
 			for (_, done) in commits {
 				let _ = done.send(result.clone());
+			}
+			if let Some(wake) = waker.lock().expect("set_waker does not panic holding it").as_ref() {
+				wake();
 			}
 		}
 		match other {

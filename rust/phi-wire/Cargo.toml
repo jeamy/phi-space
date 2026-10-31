@@ -1,0 +1,14 @@
+[package]
+name = "phi-wire"
+description = "The socket transport of the space service (src/socket.ts): frames, connections, replies held until durable, long polls and the background work on the store's owner thread"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+phi-service = { path = "../phi-service" }
+tokio.workspace = true
+
+[dev-dependencies]
+phi-json = { path = "../phi-json" }
+phi-store = { path = "../phi-store" }

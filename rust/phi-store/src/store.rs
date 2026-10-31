@@ -5,9 +5,11 @@
 use crate::files::{Result, StoreError};
 use crate::host::{Committed, Ledger, SharedLedger, SpaceHost};
 use crate::ops::WriteOp;
+use crate::writer::Waker;
 use phi_core::space::{error, CoreError, Random, Space};
 use phi_json::{hex, obj, Json, Object};
 use std::cell::RefCell;
+use std::io::Read;
 use std::rc::Rc;
 
 pub const DEFAULT_ALIAS: &str = "default";
@@ -17,6 +19,16 @@ const DEFAULT_SPACE: &str = "phi-spaces.space";
 const NAMED_SPACE: &str = "phi-spaces.named-space";
 
 /// `randomUUID`: version 4 in the usual form.
+/// One source of the system's randomness for a document.
+pub fn system_random() -> Random {
+	let mut source = std::fs::File::open("/dev/urandom").expect("the system has /dev/urandom");
+	Box::new(move |n| {
+		let mut out = vec![0; n];
+		source.read_exact(&mut out).expect("/dev/urandom does not end");
+		out
+	})
+}
+
 pub fn random_uuid(random: &mut Random) -> String {
 	let mut b = random(16);
 	b[6] = (b[6] & 0x0f) | 0x40;
@@ -105,16 +117,25 @@ impl Store {
 
 	/// Runs `op` as one commit on a Space (`spaceDoc`). The first commit of a new store registers the host and the default
 	/// Space with it, in the same commit: one that fails leaves no trace of either.
-	pub fn commit<T>(&mut self, space: Option<&str>, now: f64, op: impl FnOnce(&mut Space) -> std::result::Result<T, CoreError>) -> Result<std::result::Result<Committed<T>, CoreError>> {
+	pub fn commit<T>(&mut self, space: Option<&str>, now: f64, op: impl FnOnce(&mut Space) -> std::result::Result<T, CoreError>) -> Result<std::result::Result<Committed<T>, CoreError>> { self.commit_keyed(space, now, |s, _| op(s)) }
+
+	/// `commit`, with the host key at hand (`hostKey`).
+	pub fn commit_keyed<T>(&mut self, space: Option<&str>, now: f64, op: impl FnOnce(&mut Space, &str) -> std::result::Result<T, CoreError>) -> Result<std::result::Result<Committed<T>, CoreError>> {
 		let id = match self.commit_id(space) {
 			Ok(id) => id,
 			Err(e) => return Ok(Err(e)),
 		};
-		if self.default_id().is_some() {
-			return self.host_of(id.as_deref()).start_commit(op);
+		if let (Some(_), Some(key)) = (self.default_id(), self.host_key().map(str::to_owned)) {
+			return self.host_of(id.as_deref()).start_commit(|s| {
+				s.clock = now;
+				op(s, &key)
+			});
 		}
 		let host_id = format!("host-{}", random_uuid(&mut self.random));
-		let host_key = hex(&(self.random)(32));
+		let host_key = match self.host_key().map(str::to_owned) {
+			Some(k) => k,
+			None => hex(&(self.random)(32)),
+		};
 		let existing = self.registry.clone().and_then(|r| r.as_object().cloned());
 		let state = &self.default.space.state;
 		let space_id = state.space_id.clone().unwrap_or_else(|| format!("sp-{}", random_uuid(&mut self.random)));
@@ -126,20 +147,26 @@ impl Store {
 				r.insert(k, v);
 			}
 		}
-		r.insert("defaultSpaceId", space_id.as_str().into());
-		if let Some(Json::Object(s)) = r.get_mut("spaces") {
-			s.insert(&space_id, info);
-		}
-		if let Some(Json::Object(a)) = r.get_mut("aliases") {
-			a.insert(DEFAULT_ALIAS, space_id.as_str().into());
+		if self.default_id().is_none() {
+			r.insert("defaultSpaceId", space_id.as_str().into());
+			if let Some(Json::Object(s)) = r.get_mut("spaces") {
+				s.insert(&space_id, info);
+			}
+			if let Some(Json::Object(a)) = r.get_mut("aliases") {
+				a.insert(DEFAULT_ALIAS, space_id.as_str().into());
+			}
 		}
 		let registry = Json::Object(r);
 		self.default.also.push(WriteOp::Doc { kind: REGISTRY.into(), key: String::new(), version: REGISTRY_VERSION, value: registry.to_json_text() });
+		let new_space = self.default_id().is_none();
 		let done = self.default.start_commit(|s| {
-			s.touch(now);
-			s.state.space_id = Some(space_id);
-			s.state.incarnation = Some(incarnation);
-			op(s)
+			s.clock = now;
+			if new_space {
+				s.touch(now);
+				s.state.space_id = Some(space_id);
+				s.state.incarnation = Some(incarnation);
+			}
+			op(s, &host_key)
 		})?;
 		if done.is_ok() {
 			self.registry = Some(registry);
@@ -147,6 +174,31 @@ impl Store {
 		Ok(done)
 	}
 
+	/// Commits handed to the store, and those durable. The writer works in the order they were handed over, so `durable()`
+	/// reaching a count of `handed()` means all of those are on the disk, whichever Space they were of.
+	pub fn handed(&self) -> u64 { self.default.handed_count() + self.named.iter().map(|(_, h)| h.handed_count()).sum::<u64>() }
+	pub fn durable(&self) -> u64 { self.default.durable_count() + self.named.iter().map(|(_, h)| h.durable_count()).sum::<u64>() }
+	/// The registered Spaces in `listSpaces` order: the default first, then by creation; deleted ones are left out.
+	pub fn spaces(&self) -> Vec<Json> {
+		let Some(r) = &self.registry else { return vec![] };
+		let def = self.default_id();
+		let mut all: Vec<&Json> = r.get("spaces").and_then(Json::as_object).map_or(vec![], |s| s.iter().map(|(_, i)| i).filter(|i| i.get("deletedAt").is_none()).collect());
+		let id = |i: &Json| i.get("spaceId").and_then(Json::as_str).map(str::to_owned);
+		let created = |i: &Json| i.get("createdAt").and_then(Json::as_f64).unwrap_or(0.0);
+		all.sort_by(|a, b| {
+			let (x, y) = (id(a).as_deref() == def, id(b).as_deref() == def);
+			y.cmp(&x).then(created(a).total_cmp(&created(b)))
+		});
+		all.into_iter().cloned().collect()
+	}
+
+	/// The ids of the named Spaces.
+	pub fn named_ids(&self) -> Vec<String> { self.named.iter().map(|(id, _)| id.clone()).collect() }
+	/// `waker` runs on the writer's thread when commits have become durable; a store in memory has none, its commits
+	/// are durable at once.
+	pub fn set_waker(&self, waker: Waker) {
+		self.default.set_waker(waker);
+	}
 	/// Every host of the store.
 	pub fn hosts(&mut self) -> impl Iterator<Item = &mut SpaceHost> { std::iter::once(&mut self.default).chain(self.named.iter_mut().map(|(_, h)| h)) }
 	/// Takes in what the store has made durable.

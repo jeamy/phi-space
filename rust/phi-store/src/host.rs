@@ -166,6 +166,14 @@ impl SpaceHost {
 		});
 	}
 
+	pub(crate) fn set_waker(&self, waker: crate::writer::Waker) {
+		if let Ledger::Sqlite(l) = &*self.ledger.borrow() {
+			l.set_waker(waker);
+		}
+	}
+	pub fn handed_count(&self) -> u64 { self.handed }
+	pub fn durable_count(&self) -> u64 { self.durable }
+
 	/// Takes in what the store has made durable: claims it wrote are read from the disk from now on, watches hear of it.
 	pub fn pump(&mut self) -> Result<()> { self.settle(0) }
 

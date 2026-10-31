@@ -1,0 +1,16 @@
+[package]
+name = "phi-space-server"
+description = "The space process in Rust: what src/standalone.ts is, on the same store file and the same socket protocol"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "phi-space-server"
+path = "src/main.rs"
+
+[dependencies]
+phi-service = { path = "../phi-service" }
+phi-store = { path = "../phi-store" }
+phi-wire = { path = "../phi-wire" }
+tokio.workspace = true
