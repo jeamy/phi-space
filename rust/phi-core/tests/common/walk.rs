@@ -46,9 +46,12 @@ pub struct Walk {
 	/// Tasks belong to a run, whose gate rules their takes; the newest revision given to each.
 	gated: bool,
 	revisions: [f64; 3],
+	/// The space is a Member under a policy, whose state moves.
+	member: bool,
 }
 
 const TYPES: [&str; 3] = ["Task", "Job", "Note"];
+const MEMBER_TYPES: [&str; 5] = ["Task", "Job", "Note", "Result", "Log"];
 
 impl Walk {
 	pub fn new(seed: u64) -> Walk { Walk { seed, rng: Rng(seed), now: 1000.0, ..Default::default() } }
@@ -130,6 +133,13 @@ impl Walk {
 		if r.chance(0.5) {
 			o.insert("incarnation", "f00d".into());
 		}
+		if r.chance(0.3) {
+			self.episode.push_back(obj! { "op" => "nextExpiry" }); // a space with nothing in it
+		}
+		if r.chance(0.2) {
+			self.member = true;
+			self.episode.push_back(Walk::membership("active"));
+		}
 		if r.chance(0.4) {
 			self.profiled = true;
 			let mut p = obj! { "taskType" => "Task", "resultTypes" => vec![Json::from("Result")], "equalFields" => vec![Json::from("n")], "maxResultCount" => (1 + r.below(2)) as f64 };
@@ -180,6 +190,7 @@ impl Walk {
 			4 => "ä😀".repeat(1 + r.below(4)).into(),
 			2 => "".into(),
 			3 => Json::Number(5.0),
+			_ if self.member => r.pick(&MEMBER_TYPES).into(),
 			_ => r.pick(&TYPES).into(),
 		}
 	}
@@ -446,6 +457,32 @@ impl Walk {
 		self.episode.extend(lines);
 	}
 	/// A task taken under a transaction, its result written, the transaction committed.
+	fn membership(state: &str) -> Json {
+		let strings = |l: &[&str]| Json::Array(l.iter().map(|s| Json::from(*s)).collect());
+		let task = obj! { "taskType" => "Task", "resultTypes" => strings(&["Result"]), "equalFields" => strings(&["n"]), "maxResultCount" => 2.0, "maxResultBytes" => 300.0, "maxLeaseMs" => 5000.0 };
+		let rules = vec![
+			obj! { "type" => "Task", "mode" => "local", "member" => "m1" },
+			obj! { "type" => "Job", "mode" => "expand", "by" => "type", "members" => strings(&["m1", "m2", "m3"]) },
+			obj! { "type" => "Note", "mode" => "expand", "by" => obj! { "field" => "n" }, "members" => strings(&["m1", "m2"]) },
+			obj! { "type" => "Result", "mode" => "expand", "by" => "selection", "members" => strings(&["m1", "m2"]) },
+			obj! { "type" => "Log", "mode" => "sync", "variant" => "primary", "member" => "m2", "supertypes" => strings(&["Note"]) },
+		];
+		let policy = obj! { "authorityId" => "a", "policyVersion" => 1.0, "rules" => rules, "completionProfiles" => vec![task], "default" => obj! { "mode" => "local", "member" => "m1" } };
+		obj! { "op" => "setMembership", "membership" => obj! { "memberId" => "m1", "authorityId" => "a", "policy" => policy, "state" => state, "admissionVersion" => 1.0, "transitionId" => "t1" } }
+	}
+
+	/// An entry a transaction holds: a take from outside finds it locked.
+	fn locked(&mut self) {
+		let mark = self.now;
+		let tmpl = obj! { "type" => "Job", "fields" => obj! { "lock" => mark } };
+		self.episode.extend([
+			obj! { "op" => "write", "entry" => obj! { "type" => "Job", "fields" => obj! { "lock" => mark } }, "lease" => 50_000.0 },
+			obj! { "op" => "createTxn", "lease" => 40_000.0 },
+			obj! { "op" => "probe", "tmpl" => tmpl.clone(), "take" => true, "txn" => "$txn" },
+			obj! { "op" => "probe", "tmpl" => tmpl, "take" => true },
+		]);
+	}
+
 	/// A controller's command: mostly the next revision, sometimes an old one or the same one again.
 	fn gate_command(&mut self, run: usize, kind: &str) -> Json {
 		let r = &mut self.rng;
@@ -515,6 +552,19 @@ impl Walk {
 		}
 		if self.profiled && self.rng.chance(0.03) {
 			self.completion();
+			return self.line(rev);
+		}
+		if self.member && self.rng.chance(0.02) {
+			let state = self.rng.pick(&["active", "active", "active", "draining", "draining", "adding", "removing", "detached", "recoveryBlocked", "profileFrozen"]);
+			self.episode.push_back(Walk::membership(state));
+			return self.line(rev);
+		}
+		if self.member && self.rng.chance(0.01) {
+			self.episode.push_back(obj! { "op" => "permitRoutedWrite", "proven" => self.rng.chance(0.5) });
+			return self.line(rev);
+		}
+		if self.rng.chance(0.01) {
+			self.locked();
 			return self.line(rev);
 		}
 		if self.rng.chance(0.02) {

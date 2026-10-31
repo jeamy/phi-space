@@ -699,6 +699,7 @@ impl Service {
 		self.commit(c, |s, now| {
 			let key = s.key_of(&RequestRef::of(Some(&request)));
 			if s.state.rpc.as_ref().and_then(|r| r.claims.get(&key)).is_none() {
+				s.assert_member_admission(&method)?;
 				let (mine, peer) = s.pending_counts(request.get("principal").expect("set by the service"));
 				if mine as f64 >= max_pending {
 					return Err(error("ResourceExhausted", "too many pending operations for this principal"));
@@ -1319,7 +1320,9 @@ impl Service {
 			"UnknownSpaceError" => "UnknownSpace",
 			"RequestConflict" | "RequestExpired" | "ResultExpired" | "IncarnationChanged" | "NotCommitted" | "OperationCancelled" | "SnapshotExpired" | "RevisionAhead" | "CompletionViolation" | "MailboxEpochMismatch" | "InvalidAck" | "UniqueConflict" => e.class,
 			"LimitError" | "ResourceExhausted" => "ResourceExhausted",
-			"TransactionError" | "UnknownLeaseError" => "TransactionError",
+			"RoutingConflict" => "RoutingConflict",
+			"MemberDrained" => "MemberDrained",
+			"TransactionError" | "UnknownLeaseError" | "RunGateConflict" => "TransactionError",
 			"IllegalArgumentError" | "TypeError" => "BadRequest",
 			_ => {
 				// unclassified errors stay on this host: their text can name local paths and internal identifiers
@@ -1349,6 +1352,10 @@ fn retained_bound(l: &Limits) -> f64 { l.max_entry_bytes + 4.0 * l.max_type_char
 
 /// `claims.admit` in a commit that runs at once: the stored answer of a replay, or the fresh key.
 fn admitted(s: &mut Space, now: f64, request: &Json, method: &str, args: &Json, deadline: f64, bound: f64) -> R<Admission> {
+	let key = s.key_of(&RequestRef::of(Some(request)));
+	if s.state.rpc.as_ref().and_then(|r| r.claims.get(&key)).is_none() {
+		s.assert_member_admission(method)?;
+	}
 	let ad = s.admit(now, Some(request), &method.into(), args, &Json::Number(deadline), bound)?;
 	match ad.get("kind").and_then(Json::as_str) {
 		Some("done") => Ok(Admission::Replay(or_null(ad.get("result")))),

@@ -415,7 +415,7 @@ where
 			spawn_local(replies(Rc::clone(&hub), Rc::clone(&link), write));
 			tokio::select! {
 				_ = frames(&hub, &link, &who, read) => {}
-				_ = idle(&hub, &link) => {}
+				_ = idle(&hub, &link), if counted => {} // the test hooks are no client: a case's short limit is not theirs
 				_ = hub.stop.notified() => {}
 				_ = ended(session.as_ref()) => {}
 			}

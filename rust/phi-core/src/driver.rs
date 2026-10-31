@@ -138,6 +138,14 @@ pub fn apply_line(s: &mut Space, snapshots: &mut crate::snapshot::Snapshots, now
 			"releaseTxn" => s.release_txn(now, l.get("id")).map(Json::Bool),
 			"setLimits" => s.set_limits(now, l.get("limits").unwrap_or(&Json::Null)),
 			"setCompletionProfiles" => s.set_completion_profiles(now, l.get("profiles")),
+			"setMembership" => {
+				s.state.rest.insert("membership", l.get("membership").cloned().unwrap_or(Json::Null));
+				Ok(Json::Null)
+			}
+			"permitRoutedWrite" => {
+				s.router_permit = l.get("proven") == Some(&Json::Bool(true));
+				Ok(Json::Null)
+			}
 			"applyRunGate" => s.apply_run_gate(now, l.get("command").unwrap_or(&Json::Null)),
 			"notify" => {
 				let or_null = |k: &str| l.get(k).unwrap_or(&Json::Null);

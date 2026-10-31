@@ -366,6 +366,8 @@ pub struct Space {
 	/// The smallest `expires` of the entries that stayed at the last full sweep (core.ts `expiryWatermarks`); can only
 	/// be stale low. `None`: not swept yet. Infinity is a value of its own (nothing stayed).
 	watermark: Option<f64>,
+	/// A proven Router placed the write at hand (`permitRoutedWrite`); never stored.
+	pub router_permit: bool,
 	/// The document came with claims of a kind not ported (looked for once: a space holds a day of claims).
 	unported_claims: bool,
 	/// What the running commit changed, while a host tracks it.
@@ -406,7 +408,7 @@ pub struct Changes {
 impl Space {
 	pub fn new(state: SpaceState, random: Random) -> Space {
 		let unported_claims = state.rpc.as_ref().and_then(|r| r.claims.memory()).is_some_and(|m| m.iter().any(|(_, c)| c.get("notCommitted").is_some() || c.as_object().is_none()));
-		Space { unported_claims, state, clock: 0.0, random, open: None, budget: None, watermark: None, tracking: None }
+		Space { unported_claims, state, clock: 0.0, random, open: None, budget: None, watermark: None, router_permit: false, tracking: None }
 	}
 
 	/// A commit as the TypeScript host runs one: on a fresh draft (the watermark, the budget and the open batch start
@@ -530,6 +532,7 @@ impl Space {
 				"maintenance" => v.get("at").and_then(Json::as_f64).is_some(),
 				"completionProfiles" => v.as_array().is_some(),
 				"runGates" => v.as_object().is_some(),
+				"membership" => v.as_object().is_some(),
 				_ => false,
 			};
 			if !fine {
@@ -541,7 +544,7 @@ impl Space {
 				return Err(not_ported(format!("registration {}", r.id)));
 			}
 		}
-		if let Some(t) = self.state.txns.iter().find(|t| t.rest.keys().any(|k| !["originRequestKey", "completionDeadline", "takenTasks", "runs"].contains(&k))) {
+		if let Some(t) = self.state.txns.iter().find(|t| t.rest.keys().any(|k| !["originRequestKey", "completionDeadline", "takenTasks", "runs", "completion"].contains(&k))) {
 			let keys: Vec<&str> = t.rest.keys().collect();
 			return Err(not_ported(format!("transaction {} carries {}", t.id, keys.join(", "))));
 		}
@@ -658,8 +661,8 @@ impl Space {
 	/// `assert_ported` refuses are their empty values (`{}` or `[]`, 2 bytes), claims and restore none.
 	pub(crate) fn overhead_bytes(&self) -> f64 {
 		let admin_maintenance = 2.0;
-		let membership = 2.0;
-		let completion = 0.0;
+		let membership = self.rest_bytes("membership", 2.0);
+		let completion = self.completion_bytes();
 		let authority_transition = 2.0;
 		let authority_counters = 2.0;
 		let restore = 0.0;
@@ -920,6 +923,7 @@ impl Space {
 	#[allow(clippy::too_many_arguments)]
 	pub fn notify(&mut self, now: f64, tmpl: &Json, txn: Option<&Json>, lease_ms: &Json, handback: &Json, target: &Json, as_: Option<&Json>, consumer: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_member_admission("notify")?;
 		let template = Template::from_json(Some(tmpl))?;
 		self.settle(now)?;
 		let txn = txn.map(|t| self.require_txn(t, as_)).transpose()?.map(|t| self.state.txns[t].id.clone());
@@ -987,6 +991,9 @@ impl Space {
 	/// Serve waiters whose match appeared. A take-waiter takes its entry under a fresh transaction, so a lost delivery
 	/// is not a lost job: the entry returns when that transaction lapses unless the receiver commits it.
 	pub(crate) fn serve(&mut self, now: f64) -> Result<()> {
+		if self.member_state().is_some_and(|m| crate::member::NOT_SERVING.contains(&m)) {
+			return Ok(());
+		}
 		let ids: Vec<String> = self.state.waiters.iter().map(|w| w.id.clone()).collect();
 		for id in ids {
 			let Some(wi) = self.waiter_at(&id) else { continue };
@@ -1022,6 +1029,14 @@ impl Space {
 							self.drop_waiter(&id);
 							continue;
 						}
+						if w.take {
+							let types = e.types.clone();
+							match self.assert_member_take(&types, txn.as_deref(), now) {
+								Err(_) if self.draining() => continue,
+								other => other?,
+							}
+						}
+						let e = &self.state.entries[i];
 						if w.take && txn.is_none() && !self.profiles_of(&e.types).is_empty() {
 							let err = obj! { "code" => "CompletionViolation", "message" => "profiled tasks require a transaction" };
 							self.decide_done(now, key, Json::Null, false, Some(err))?;
@@ -1063,6 +1078,9 @@ impl Space {
 			if directory_rec(&self.state.entries[i]) && !w.target.is_null() && w.take {
 				continue;
 			}
+			if self.draining() && w.take && !self.has_completion_profile(&self.state.entries[i].types) {
+				continue;
+			}
 			let entry = view(&self.state.entries[i], self.state.space_id.as_deref());
 			let event = obj! { "kind" => "waiter", "eventId" => w.id.as_str(), "seq" => 1.0, "handback" => w.handback.clone(), "target" => w.target.clone(), "entry" => entry };
 			let cost = bytes(&event) + 256.0;
@@ -1082,7 +1100,6 @@ impl Space {
 					}
 				}
 			}
-			// membership draining: not ported
 			if !w.take {
 				self.charge(cost)?;
 				self.drop_waiter(&id);
@@ -1091,6 +1108,7 @@ impl Space {
 			}
 			let txn = self.new_id("t"); // the receiver commits it
 			let mut t = TxnRec { id: txn.clone(), expires: until(now, w.txn_lease_ms), owner: w.target.clone(), reserved: None, announced: None, rest: Object::new() };
+			self.initialize_member_txn(&mut t, now)?;
 			// waiters of requests carry their key; the search is for states from before that (claims on the disk are newer)
 			let origin = w.origin_request_key.clone().or_else(|| {
 				let claims = self.state.rpc.as_ref()?.claims.memory()?; // none on the disk
@@ -1100,10 +1118,12 @@ impl Space {
 				t.rest.insert("originRequestKey", k.into());
 			}
 			self.state.txns.push(t);
-			// the reservation of the abort's publication may be refused: the fresh transaction goes, the waiter stays
+			// admission or the reservation of the abort's publication may be refused: the fresh transaction goes, the waiter stays
+			let types = self.state.entries[i].types.clone();
+			let admitted = self.assert_member_take(&types, Some(&txn), now);
 			let c = self.publish_cost(&self.state.entries[i], Extra::None);
 			let lim = self.limits();
-			if let Err(e) = self.reserve(Some(self.state.txns.len() - 1), c, &lim) {
+			if let Err(e) = admitted.and_then(|()| self.reserve(Some(self.state.txns.len() - 1), c, &lim)) {
 				self.state.txns.pop();
 				if e.class == "ResourceExhausted" {
 					continue;
@@ -1178,6 +1198,7 @@ impl Space {
 	/// Park a read or take for `target`; the space serves it later (or reports a timeout) through the outbox.
 	pub fn add_waiter(&mut self, now: f64, w: &Json) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_member_admission("wait")?;
 		let Some(template) = w.get("template") else { return Err(not_ported("a wait without a template")) };
 		let tmpl = Template::from_json(Some(template))?;
 		let (Some(Json::Bool(take)), Some(target)) = (w.get("take"), w.get("target")) else { return Err(not_ported("a wait without a boolean take and a target")) };
@@ -1594,6 +1615,14 @@ impl Space {
 		if directory_draft(entry) && (as_.is_some() || txn.is_some()) {
 			return Err(permission("directory entries require trusted publication"));
 		}
+		if directory_draft(entry) {
+			self.assert_member_admission("write")?;
+			if self.member_state().is_some_and(|m| m != "active") {
+				return Err(permission("directory publication requires active Member"));
+			}
+		} else {
+			self.assert_member_write_draft(entry, &supertypes, txn.and_then(Json::as_str), now)?;
+		}
 		self.settle(now)?;
 		let (type_, fields) = draft_parts(entry)?;
 		let txn = txn.map(|t| self.require_txn(t, as_)).transpose()?;
@@ -1667,6 +1696,7 @@ impl Space {
 		let id = rec.id.clone();
 		self.state.entries.push(rec);
 		self.note_expiry(expires);
+		self.charge_member_write(entry, txn_id.as_deref());
 		self.touch(now);
 		if txn.is_none() {
 			self.log_put(now, self.state.entries.len() - 1); // visible at once; under a transaction it appears at commit
@@ -1737,6 +1767,7 @@ impl Space {
 	/// A write that is announced, not kept: the change stream carries it as a transient put.
 	pub fn announce(&mut self, now: f64, entry: &Json, txn: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_member_admission("write")?;
 		let supertypes = draft_types(entry)?;
 		self.settle(now)?;
 		let (type_, fields) = draft_parts(entry)?;
@@ -1777,6 +1808,7 @@ impl Space {
 	/// One non-waiting read or take.
 	pub fn probe(&mut self, now: f64, tmpl: &Template, txn: Option<&Json>, take: bool, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_member_admission(if take { "take" } else { "read" })?;
 		self.settle(now)?;
 		let at = txn.map(|t| self.require_txn(t, as_)).transpose()?;
 		let id = at.map(|t| self.state.txns[t].id.clone());
@@ -1785,6 +1817,10 @@ impl Space {
 			Found::At(i) => {
 				if as_.is_some() && directory_rec(&self.state.entries[i]) && (take || txn.is_some()) {
 					return Err(permission("directory entries cannot be consumed or locked"));
+				}
+				if take {
+					let types = self.state.entries[i].types.clone();
+					self.assert_member_take(&types, txn, now)?;
 				}
 				if take && txn.is_none() && !self.profiles_of(&self.state.entries[i].types).is_empty() {
 					return Err(violation("profiled tasks must be taken under a transaction"));
@@ -2277,6 +2313,7 @@ impl Space {
 		self.settle(now)?;
 		let l = self.leased(id, as_)?;
 		let v = grant(ms, now)?;
+		self.assert_member_renew(id.and_then(Json::as_str).unwrap_or(""), v)?;
 		let boundary = id.and_then(Json::as_str).and_then(|id| self.txn_at(id)).and_then(|t| self.state.txns[t].rest.get("completionDeadline")).and_then(Json::as_f64);
 		if boundary.is_some_and(|b| v > b) {
 			return Err(violation("lease exceeds task completion boundary"));
@@ -2330,12 +2367,23 @@ impl Space {
 		let id = self.peek_id("t");
 		self.state.next_id += 1.0;
 		let expires = grant(lease_ms, now)?;
-		self.state.txns.push(TxnRec { id: id.clone(), expires, owner: as_.cloned().unwrap_or(Json::Null), reserved: None, announced: None, rest: Object::new() });
+		let mut t = TxnRec { id: id.clone(), expires, owner: as_.cloned().unwrap_or(Json::Null), reserved: None, announced: None, rest: Object::new() };
+		self.initialize_member_txn(&mut t, now)?;
+		if let Some(held) = t.rest.get("completion").and_then(|c| c.get("remainingBytes")).and_then(Json::as_f64) {
+			if self.entry_bytes() + self.overhead_bytes() + held + bytes(&t.to_json()) > lim.max_doc_bytes {
+				return Err(error("ResourceExhausted", "completion reservation exceeds Member document budget"));
+			}
+		}
+		let expires = t.expires;
+		self.state.txns.push(t);
 		self.touch(now);
 		Ok(lease(&id, expires))
 	}
 
-	pub fn commit_txn(&mut self, now: f64, id: Option<&Json>, as_: Option<&Json>) -> Result<Json> { self.complete_txn(now, id, as_, true) }
+	pub fn commit_txn(&mut self, now: f64, id: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
+		self.assert_member_admission("txn.commit")?;
+		self.complete_txn(now, id, as_, true)
+	}
 	pub fn abort_txn(&mut self, now: f64, id: Option<&Json>, as_: Option<&Json>) -> Result<Json> { self.complete_txn(now, id, as_, false) }
 	fn complete_txn(&mut self, now: f64, id: Option<&Json>, as_: Option<&Json>, commit: bool) -> Result<Json> {
 		self.assert_ported()?;

@@ -125,8 +125,9 @@ test("a blocked take is polled; the client's own patience ends only the waiting"
 	// a patient client simply gets it
 	const patient = new RemoteSpace(u.transport("peer-a"), fast);
 	const waiting = patient.take({ type: "Soon" }, 5_000);
-	setTimeout(() => void u.local.write({ type: "Soon", fields: { v: 1 } }, null, FOREVER), 100);
+	const written = new Promise((r) => setTimeout(r, 100)).then(() => u.local.write({ type: "Soon", fields: { v: 1 } }, null, FOREVER));
 	assert.equal((await waiting)?.fields.v, 1);
+	await written; // the waiter's answer can overtake the write's; the test must not end between the two
 });
 
 test("cancelOperation ends a pending call for its waiter", async (tc) => {

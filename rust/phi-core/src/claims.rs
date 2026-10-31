@@ -358,6 +358,9 @@ impl Space {
 			return Err(error("IncarnationChanged", "missing request cannot be resolved across epochs or legacy generations"));
 		}
 		let of = |v: Option<&str>| v.map_or(Json::Null, Json::from);
+		if self.member_state() == Some("recoveryBlocked") {
+			return Err(error("IncarnationChanged", "missing request requires uninterrupted current history"));
+		}
 		Ok(obj! {
 			"state" => "notAdmitted",
 			"spaceId" => of(self.state.space_id.as_deref()),

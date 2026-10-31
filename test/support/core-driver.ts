@@ -16,6 +16,7 @@ import crypto, { createHash } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
+import { permitRoutedWrite } from "../../src/member-admission.ts";
 import * as core from "../../src/core.ts";
 import * as claims from "../../src/claims.ts";
 import * as mailbox from "../../src/mailbox.ts";
@@ -73,6 +74,8 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 		case "releaseTxn": return core.releaseTxn(s, now, l.id);
 		case "setLimits": return core.setLimits(s, l.limits, now);
 		case "setCompletionProfiles": core.setCompletionProfiles(s, l.profiles, now); return null;
+		case "setMembership": s.membership = l.membership; return null;
+		case "permitRoutedWrite": permitRoutedWrite(s, l.proven === true); return null;
 		case "applyRunGate": return core.applyRunGate(s, now, l.command);
 		// ---- waiters, subscriptions
 		case "addWaiter": return core.addWaiter(s, now, l.w);
