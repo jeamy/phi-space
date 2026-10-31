@@ -51,7 +51,7 @@ impl Both {
 		format!(r#"{{"generation":"{generation}","requestId":"r{}"}}"#, self.n)
 	}
 }
-fn rust_side(limits: Option<Json>, max_pending: Option<f64>, max_peer: Option<f64>) -> RustSide { RustSide::start(&Setup { seed: "edges".into(), now: T0, store: None, limits, max_calls: None, max_pending, max_peer }) }
+fn rust_side(limits: Option<Json>, max_pending: Option<f64>, max_peer: Option<f64>) -> RustSide { RustSide::start(&Setup { seed: "edges".into(), now: T0, store: None, limits, max_calls: None, max_pending, max_peer, authorized: false }) }
 
 fn pending_take(request: &str) -> String { format!(r#"{{"method":"take","args":{{"template":{{"type":"Task"}},"timeoutMs":60000,"waitMs":0}},"request":{request}}}"#) }
 

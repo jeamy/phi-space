@@ -365,6 +365,19 @@ impl Walk {
 	}
 
 	/// What a reply teaches the walk.
+	/// What a host decides about a call: mostly the peer's rights, sometimes fewer, and now and then a grant at its end.
+	fn decided(&mut self, peer: &str) -> common::Decided {
+		let role = match peer { "watcher" => "observer", "typed" => "tasks", _ => "member" };
+		let roles = if self.rng.chance(0.05) { vec![] } else { vec![role.to_owned()] };
+		let can = match self.rng.below(4) {
+			0 => vec![],
+			1 => ["read:Task", "take:Task", "write:Task"].iter().map(|s| s.to_string()).collect(),
+			_ => ["read:*", "take:*", "write:*", "notify:*"].iter().map(|s| s.to_string()).collect(),
+		};
+		let valid_until = self.now + self.rng.pick(&[0.0, 500.0, 5000.0, 60_000.0]);
+		common::Decided { valid_until, roles, can, expired: self.rng.chance(0.05) }
+	}
+
 	fn learn(&mut self, peer: &str, text: &str, call: &str, seen: &mut BTreeMap<String, usize>) {
 		let Ok(reply) = parse(text) else { panic!("not JSON: {text}") };
 		let method = parse(call).ok().and_then(|c| c.get("method").and_then(Json::as_str).map(str::to_owned)).unwrap_or_else(|| "garbage".into());
@@ -421,6 +434,7 @@ fn run(seed: u64, steps: usize, seen: &mut BTreeMap<String, usize>) {
 	};
 	let max_calls = init.chance(0.2).then_some(40.0);
 	let max_pending = init.chance(0.3).then_some(3.0);
+	let authorized = seed % 3 == 0;
 	let now = 1_700_000_000_000.0;
 	let seed_text = format!("walk{seed}");
 	let mut ts = TsService::start();
@@ -438,9 +452,12 @@ fn run(seed: u64, steps: usize, seen: &mut BTreeMap<String, usize>) {
 		if let Some(m) = max_pending {
 			o.insert("maxPending", Json::Number(m));
 		}
+		if authorized {
+			o.insert("authorized", Json::Bool(true));
+		}
 	}
 	ts.step(&line);
-	let mut rust = RustSide::start(&Setup { seed: seed_text, now, store: file.then(|| dir.join("r/s.sqlite")), limits, max_calls, max_pending, max_peer: None });
+	let mut rust = RustSide::start(&Setup { seed: seed_text, now, store: file.then(|| dir.join("r/s.sqlite")), limits, max_calls, max_pending, max_peer: None, authorized });
 	let mut w = Walk { rng: Rng(seed ^ 0xabcdef), now, ..Default::default() };
 	for step in 0..steps {
 		// what an agent host would have left in the file: the wire alone only ever fills mailboxes
@@ -506,6 +523,14 @@ fn run(seed: u64, steps: usize, seen: &mut BTreeMap<String, usize>) {
 		let mut l = obj! { "now" => w.now, "peer" => peer.as_str(), "text" => text.as_str() };
 		if let (Some(m), Json::Object(o)) = (frame, &mut l) {
 			o.insert("maxFrame", Json::Number(m));
+		}
+		if authorized {
+			let d = w.decided(&peer);
+			if let Json::Object(o) = &mut l {
+				o.insert("auth", obj! { "validUntil" => d.valid_until, "roles" => Json::Array(d.roles.iter().map(|r| r.as_str().into()).collect()), "can" => Json::Array(d.can.iter().map(|c| c.as_str().into()).collect()), "expired" => d.expired });
+			}
+			*seen.entry(format!("auth expired={} rights={}", d.expired, !d.can.is_empty())).or_default() += 1;
+			*rust.auth.borrow_mut() = d;
 		}
 		let t = ts.step(&l);
 		let want = t.get("reply").and_then(Json::as_str).unwrap();

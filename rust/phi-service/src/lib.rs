@@ -16,6 +16,7 @@ use phi_core::Space;
 use phi_json::{digest_json, obj, parse_repairing, Json, Object, FOREVER};
 use phi_store::{Store, DEFAULT_ALIAS};
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 pub const PROTOCOL_VERSION: f64 = 1.0;
 pub const METHODS: [&str; 20] = ["hello", "generation", "write", "read", "take", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "spaces", "txn", "lease", "changes", "wait", "notify", "events", "ack", "batch"];
@@ -38,6 +39,53 @@ fn too_small(required: f64) -> CoreError { error("ResponseBudgetTooSmall", forma
 
 // ---- identity and rights
 
+fn check(auth: &Option<Rc<dyn Authorization>>, now: f64) -> R<()> {
+	match auth {
+		Some(a) => a.check(now).map_err(|m| error("PermissionError", m)),
+		None => Ok(()),
+	}
+}
+/// Whether `authorize_pending` would give a waiter of `request` a new authorization time.
+fn renews_pending(s: &Space, request: &Json, a: &dyn Authorization) -> bool {
+	let key = s.key_of(&RequestRef::of(Some(request)));
+	s.state.waiters.iter().any(|w| w.claim_key.as_deref() == Some(key.as_str()) && w.authorized_until != Some(a.valid_until()) && pending_allowed(w, a))
+}
+fn pending_allowed(w: &phi_core::state::WaiterRec, a: &dyn Authorization) -> bool {
+	a.can_execute_pending(if w.take { "take" } else { "read" }, w.template.get("type").and_then(Json::as_str))
+}
+fn authorize_pending(s: &mut Space, now: f64, request: &Json, auth: &Option<Rc<dyn Authorization>>) {
+	let Some(a) = auth else { return };
+	let key = s.key_of(&RequestRef::of(Some(request)));
+	for i in 0..s.state.waiters.len() {
+		let w = &s.state.waiters[i];
+		if w.claim_key.as_deref() == Some(key.as_str()) && pending_allowed(w, a.as_ref()) {
+			s.state.waiters[i].authorized_until = Some(a.valid_until());
+			s.touch(now);
+		}
+	}
+}
+fn check_transaction_rights(s: &Space, txn: &str, auth: &Option<Rc<dyn Authorization>>) -> R<()> {
+	let Some(a) = auth else { return Ok(()) };
+	for e in &s.state.entries {
+		let uses = [(e.written_under.as_deref() == Some(txn), "write"), (e.taken_by.as_deref() == Some(txn), "take"), (e.read_by.iter().any(|t| t == txn), "read")];
+		for (_, method) in uses.iter().filter(|(on, _)| *on) {
+			if !e.types.iter().any(|t| a.can_execute_pending(method, Some(t))) {
+				return Err(error("PermissionError", format!("current grant cannot {method} transaction entry {}", e.id)));
+			}
+		}
+	}
+	Ok(())
+}
+fn check_renewal(s: &Space, id: &str, auth: &Option<Rc<dyn Authorization>>) -> R<()> {
+	let Some(a) = auth else { return Ok(()) };
+	if s.state.txns.iter().any(|t| t.id == id) { check_transaction_rights(s, id, auth)?; }
+	let entry = s.state.entries.iter().find(|e| e.id == id).is_some_and(|e| !e.types.iter().any(|t| a.can_execute_pending("write", Some(t))));
+	let reg = s.state.regs.iter().find(|r| r.id == id).is_some_and(|r| !a.can_execute_pending("notify", r.template.get("type").and_then(Json::as_str)));
+	let waiter = s.state.waiters.iter().find(|w| w.id == id).is_some_and(|w| !pending_allowed(w, a.as_ref()));
+	if entry || reg || waiter { return Err(error("PermissionError", "current grant cannot renew the original lease operation")); }
+	Ok(())
+}
+
 /// What a transport knows about a connection.
 #[derive(Clone, Debug, Default)]
 pub struct Conn {
@@ -48,6 +96,18 @@ pub struct Identity {
 	pub principal: Json,
 	pub roles: Vec<String>,
 }
+/// What a host decided about one call (`DecisionAuthorization` of src/service.ts): it narrows the roles and rules what may
+/// still run on the caller's behalf.
+pub trait Authorization {
+	fn roles(&self) -> Vec<String>;
+	fn principal(&self) -> Option<Json> { None }
+	fn valid_until(&self) -> f64;
+	fn can_execute_pending(&self, method: &str, type_name: Option<&str>) -> bool;
+	/// Again inside each commit: the right may have ended since the call came in.
+	fn check(&self, now: f64) -> Result<(), String>;
+}
+pub type Authorize = Box<dyn Fn(&Json, &Identity, &Conn) -> Result<Rc<dyn Authorization>, String>>;
+
 /// A role allows a set of methods (`None`: all), optionally only for entries of some types.
 #[derive(Clone, Debug)]
 pub struct RolePolicy {
@@ -76,6 +136,8 @@ type Grant = Option<HashSet<String>>;
 pub struct Options {
 	pub identity: HashMap<String, Identity>,
 	pub policy: Policy,
+	/// A host's check of each call; `None` for the standalone service.
+	pub authorize: Option<Authorize>,
 	pub now: Box<dyn Fn() -> f64>,
 	/// The host's id where it is not the registry's.
 	pub host_id: Option<String>,
@@ -94,7 +156,7 @@ impl Options {
 	pub fn single_peer(peer: &str) -> Options {
 		let identity = Identity { principal: obj! { "peerId" => peer }, roles: vec!["member".into()] };
 		let now = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("after 1970").as_millis() as f64;
-		Options { identity: HashMap::from([(peer.to_owned(), identity)]), policy: default_policy(), now: Box::new(now), host_id: None, authority_id: "local".into(), primary_epoch: 0.0, max_poll_ms: 25_000.0, max_pending_per_principal: 32.0, max_pending_per_peer: 128.0, max_calls_per_window: 1024.0, rate_window_ms: 1000.0, wake_on_commit: false }
+		Options { identity: HashMap::from([(peer.to_owned(), identity)]), policy: default_policy(), authorize: None, now: Box::new(now), host_id: None, authority_id: "local".into(), primary_epoch: 0.0, max_poll_ms: 25_000.0, max_pending_per_principal: 32.0, max_pending_per_peer: 128.0, max_calls_per_window: 1024.0, rate_window_ms: 1000.0, wake_on_commit: false }
 	}
 }
 
@@ -140,6 +202,7 @@ struct Ctx {
 	/// Who acts (`principalId`).
 	as_: Json,
 	grant: Grant,
+	auth: Option<Rc<dyn Authorization>>,
 	frame_bytes: f64,
 	/// The frame the transport allows, for the reply's last check.
 	max_frame: f64,
@@ -345,11 +408,19 @@ impl Service {
 			Some(Json::Object(a)) => a,
 			Some(_) => return Err(bad("args must be an object")),
 		};
-		let Some(id) = conn.peer_id.as_ref().and_then(|p| self.o.identity.get(p)).cloned() else {
+		let Some(mut id) = conn.peer_id.as_ref().and_then(|p| self.o.identity.get(p)).cloned() else {
 			return Ok(HandledCall::Reply(fail("Unauthenticated", "the connection has no known identity", None)));
 		};
 		let peer = id.principal.get("peerId").and_then(Json::as_str).unwrap_or("").to_owned();
 		self.rate(&peer)?;
+		let auth = match &self.o.authorize {
+			None => None,
+			Some(f) => Some(f(call, &id, conn).map_err(|m| error("PermissionError", m))?),
+		};
+		if let Some(a) = &auth {
+			id.roles = a.roles();
+			if let Some(p) = a.principal() { id.principal = p; }
+		}
 		let grant = self.allowed(&id.roles, method)?;
 		let frame = call.get("frame");
 		if let Some(f) = frame {
@@ -402,7 +473,7 @@ impl Service {
 			claim = Some((self.allowed(&id.roles, "resolveOperation")?, Json::Array(vec![domain.0.into(), domain.1])));
 		}
 		let as_ = Json::String(principal_id(&id.principal));
-		let c = Ctx { principal: id.principal, roles: id.roles, request, space: call.get("space").and(space), as_, grant, frame_bytes, max_frame: transport_frame, claim };
+		let c = Ctx { principal: id.principal, roles: id.roles, request, space: call.get("space").and(space), as_, grant, auth, frame_bytes, max_frame: transport_frame, claim };
 		match self.dispatch(method, args, &c)? {
 			Step::Reply(result) => self.finish(&c, result).map(HandledCall::Reply),
 			Step::Wait(p) => Ok(HandledCall::Wait(p)),
@@ -493,7 +564,14 @@ impl Service {
 
 	// ---- commits and reads (src/client.ts)
 
-	fn commit<T>(&mut self, c: &Ctx, op: impl FnOnce(&mut Space, f64) -> R<T>) -> R<T> { self.commit_on(c.space.as_deref(), op) }
+	/// A commit on the caller's behalf: its authorization is checked inside it.
+	fn commit<T>(&mut self, c: &Ctx, op: impl FnOnce(&mut Space, f64) -> R<T>) -> R<T> {
+		let auth = c.auth.clone();
+		self.commit_on(c.space.as_deref(), |s, now| {
+			check(&auth, now)?;
+			op(s, now)
+		})
+	}
 	fn commit_on<T>(&mut self, space: Option<&str>, op: impl FnOnce(&mut Space, f64) -> R<T>) -> R<T> {
 		let now = self.now();
 		match self.store.commit(space, now, |s| op(s, now)) {
@@ -513,7 +591,7 @@ impl Service {
 				return Ok(());
 			}
 			let signature = prior.maintenance_signature();
-			let (more, after) = self.commit(c, |s, now| {
+			let (more, after) = self.commit_on(c.space.as_deref(), |s, now| {
 				s.settle(now)?;
 				Ok((s.needs_maintenance(now)?, s.maintenance_signature()))
 			})?;
@@ -592,10 +670,16 @@ impl Service {
 		let now = self.now();
 		let s = self.snap(c)?;
 		let v = s.lookup(now, Some(target))?;
-		if v.get("state").and_then(Json::as_str) != Some("pending") || !s.needs_maintenance(now)? {
+		if v.get("state").and_then(Json::as_str) != Some("pending") {
 			return Ok(v);
 		}
+		if !s.needs_maintenance(now)? && !c.auth.as_ref().is_some_and(|a| renews_pending(s, target, a.as_ref())) {
+			check(&c.auth, now)?;
+			return Ok(v);
+		}
+		let auth = c.auth.clone();
 		self.commit(c, |s, now| {
+			authorize_pending(s, now, target, &auth);
 			s.settle(now)?;
 			s.lookup(now, Some(target))
 		})
@@ -609,7 +693,7 @@ impl Service {
 		self.maintain(c)?;
 		let request = c.request.clone().expect("a mutating call");
 		let (max_pending, max_peer) = (self.o.max_pending_per_principal, self.o.max_pending_per_peer);
-		let (budget, as_) = (c.frame_bytes - 64.0, c.as_.clone());
+		let (budget, as_, auth) = (c.frame_bytes - 64.0, c.as_.clone(), c.auth.clone());
 		self.commit(c, |s, now| {
 			let key = s.key_of(&RequestRef::of(Some(&request)));
 			if s.state.rpc.as_ref().and_then(|r| r.claims.get(&key)).is_none() {
@@ -630,6 +714,7 @@ impl Service {
 			let kind = ad.get("kind").and_then(Json::as_str);
 			let key = or_null(ad.get("key"));
 			if kind == Some("pending") {
+				authorize_pending(s, now, &request, &auth);
 				s.settle(now)?;
 				return s.lookup(now, Some(&request));
 			}
@@ -654,6 +739,7 @@ impl Service {
 					s.decide_line(now, Some(&key), Some(&outcome))?;
 				} else {
 					s.park(now, key.as_str().expect("an admitted key"), tmpl, take, txn, until, if_exists, Some(&as_))?;
+					authorize_pending(s, now, &request, &auth);
 				}
 			}
 			s.lookup(now, Some(&request))
@@ -718,8 +804,18 @@ impl Service {
 			Kind::Events { o } => {
 				let o = Json::Object(o.clone());
 				self.maintain(&c)?;
-				let (principal, grant) = (c.principal.clone(), c.grant.clone());
+				let (principal, grant, auth) = (c.principal.clone(), c.grant.clone(), c.auth.clone());
 				let page = self.commit(&c, |s, now| {
+					if let Some(a) = &auth {
+						let wanted = phi_json::canonical_key(&principal);
+						for i in 0..s.state.waiters.len() {
+							let w = &s.state.waiters[i];
+							if w.consumer.as_ref().is_some_and(|p| phi_json::canonical_key(p) == wanted) && a.can_execute_pending(if w.take { "take" } else { "read" }, w.template.get("type").and_then(Json::as_str)) {
+								s.state.waiters[i].authorized_until = Some(a.valid_until());
+								s.touch(now);
+							}
+						}
+					}
 					s.settle(now)?;
 					let page = s.mailbox_page(now, Some(&principal), &o)?;
 					if let (Some(g), Some(items)) = (&grant, page.get("events").and_then(Json::as_array)) {
@@ -766,7 +862,8 @@ impl Service {
 			"hello" => self.hello(a, c).map(Step::Reply),
 			"generation" => {
 				let (now, authority, principal, epoch) = (self.now(), self.o.authority_id.clone(), c.principal.clone(), self.o.primary_epoch);
-				let r = self.store.commit_keyed(c.space.as_deref(), now, |s, key| s.issue_generation(now, Some(&principal), &obj! { "key" => key, "authorityId" => authority.as_str(), "primaryEpoch" => epoch }));
+				let auth = c.auth.clone();
+				let r = self.store.commit_keyed(c.space.as_deref(), now, |s, key| check(&auth, now).and_then(|()| s.issue_generation(now, Some(&principal), &obj! { "key" => key, "authorityId" => authority.as_str(), "primaryEpoch" => epoch })));
 				reply(r.map_err(store_failed)??.value)
 			}
 			"write" => self.write_call(c, a).map(Step::Reply),
@@ -897,11 +994,12 @@ impl Service {
 				w.insert("timeout", Json::Number(timeout));
 				w.insert("txnLeaseMs", Json::Number(txn_lease));
 				w.insert("handback", handback);
-				let (request, consumer) = (c.request.clone().expect("a mutating call"), c.principal.clone());
+				let (request, consumer, until) = (c.request.clone().expect("a mutating call"), c.principal.clone(), c.auth.as_ref().map(|a| a.valid_until()));
 				let id = self.mutate(c, "wait", Json::Object(w.clone()), |s, now| {
 					w.insert("originRequestKey", s.key_of(&RequestRef::of(Some(&request))).into());
 					w.insert("as", as_.clone());
 					w.insert("consumer", consumer);
+					if let Some(u) = until { w.insert("authorizedUntil", Json::Number(u)); }
 					s.add_waiter(now, &Json::Object(w))
 				})?;
 				reply(obj! { "id" => id })
@@ -942,7 +1040,7 @@ impl Service {
 		let find = |infos: Vec<Json>| infos.into_iter().find(|i| i.get("alias").and_then(Json::as_str) == Some(c.space.as_deref().unwrap_or(DEFAULT_ALIAS)) || (c.space.is_some() && i.get("spaceId").and_then(Json::as_str) == c.space.as_deref()));
 		let mut info = find(self.store.spaces());
 		if info.is_none() && c.space.is_none() {
-			self.commit(c, |_, _| Ok(()))?; // an untouched session registers its default space on first use
+			self.commit_on(c.space.as_deref(), |_, _| Ok(()))?; // an untouched session registers its default space on first use
 			info = find(self.store.spaces());
 		}
 		let Some(info) = info else { return Err(error("UnknownSpaceError", format!("unknown space: {}", c.space.as_deref().unwrap_or("undefined")))) };
@@ -1032,7 +1130,7 @@ impl Service {
 		o.insert("after", or_null(a.get("cursor")));
 		o.insert("txn", or_null(a.get("txn")));
 		if self.snap(c)?.state.space_id.is_none() {
-			self.commit(c, |_, _| Ok(()))?;
+			self.commit_on(c.space.as_deref(), |_, _| Ok(()))?;
 		}
 		let key = c.space.clone();
 		let host = self.store.reader(c.space.as_deref())?;
@@ -1058,7 +1156,11 @@ impl Service {
 				Ok(t.map_or(obj! { "state" => "inactive" }, |t| obj! { "state" => "active", "expires" => t.expires }))
 			}),
 			"commit" => {
-				self.mutate(c, "txn.commit", obj! { "txn" => idj.clone() }, |s, now| s.commit_txn(now, Some(&idj), Some(&as_)))?;
+				let auth = c.auth.clone();
+				self.mutate(c, "txn.commit", obj! { "txn" => idj.clone() }, |s, now| {
+					check_transaction_rights(s, &id, &auth)?;
+					s.commit_txn(now, Some(&idj), Some(&as_))
+				})?;
 				Ok(obj! { "state" => "committed" })
 			}
 			"abort" => {
@@ -1076,7 +1178,11 @@ impl Service {
 		match action.as_str() {
 			"renew" => {
 				let ms = duration(a.get("ms"), "ms", ANY)?;
-				let expires = self.mutate(c, "lease.renew", obj! { "leaseId" => id.clone(), "ms" => ms }, |s, now| s.renew(now, Some(&id), Some(&Json::Number(ms)), Some(&as_)))?;
+				let auth = c.auth.clone();
+				let expires = self.mutate(c, "lease.renew", obj! { "leaseId" => id.clone(), "ms" => ms }, |s, now| {
+					check_renewal(s, id.as_str().expect("a string"), &auth)?;
+					s.renew(now, Some(&id), Some(&Json::Number(ms)), Some(&as_))
+				})?;
 				Ok(obj! { "expires" => expires })
 			}
 			"cancel" => {

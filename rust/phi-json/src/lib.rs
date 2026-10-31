@@ -360,6 +360,8 @@ impl Json {
 }
 
 /// Lowercase hex of bytes.
+/// The canonical text of a value as a comparison key; a non-finite number has none and equals nothing.
+pub fn canonical_key(v: &Json) -> Option<String> { v.canonical().ok() }
 pub fn hex(bytes: &[u8]) -> String { let mut s = String::with_capacity(bytes.len() * 2); for b in bytes { let _ = write!(s, "{b:02x}"); } s }
 
 /// `digestJson(v)` (src/canonical.ts): the hex SHA-256 of the canonical form.

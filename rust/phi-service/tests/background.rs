@@ -6,7 +6,7 @@ use phi_json::{obj, Json, FOREVER};
 
 const T0: f64 = 1_700_000_000_000.0;
 
-fn side() -> RustSide { RustSide::start(&Setup { seed: "background".into(), now: T0, store: None, limits: None, max_calls: None, max_pending: None, max_peer: None }) }
+fn side() -> RustSide { RustSide::start(&Setup { seed: "background".into(), now: T0, store: None, limits: None, max_calls: None, max_pending: None, max_peer: None, authorized: false }) }
 fn outbox(r: &mut RustSide, events: Vec<Json>) {
 	let now = r.clock.get();
 	r.service.store.commit(None, now, |s| { s.state.rest.insert("outbox", Json::Array(events)); s.state.outbox_bytes = None; Ok(()) }).unwrap().unwrap();

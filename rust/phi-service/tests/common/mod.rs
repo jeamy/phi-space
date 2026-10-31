@@ -4,9 +4,9 @@
 use phi_core::driver::seeded;
 use phi_core::space::Random;
 use phi_json::{obj, parse, Json};
-use phi_service::{default_policy, Conn, Identity, Options, Outcome, RolePolicy, Service, METHODS};
+use phi_service::{default_policy, Authorization, Conn, Identity, Options, Outcome, RolePolicy, Service, METHODS};
 use phi_store::{Ledger, MemoryLedger, SpaceHost, SqliteLedger, Store, Synchronous};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -57,11 +57,27 @@ pub struct Setup {
 	pub max_pending: Option<f64>,
 	/// The peers' limit, when it is not twice `max_pending`.
 	pub max_peer: Option<f64>,
+	/// Every call goes through a host's authorization (`RustSide::auth`).
+	pub authorized: bool,
+}
+
+/// What the driver's `auth` says of a call.
+#[derive(Clone, Default)]
+pub struct Decided { pub valid_until: f64, pub roles: Vec<String>, pub can: Vec<String>, pub expired: bool }
+impl Authorization for Decided {
+	fn roles(&self) -> Vec<String> { self.roles.clone() }
+	fn valid_until(&self) -> f64 { self.valid_until }
+	fn can_execute_pending(&self, method: &str, type_name: Option<&str>) -> bool {
+		let m = if method.starts_with("take") { "take" } else if method.starts_with("read") { "read" } else { method };
+		self.can.iter().any(|c| *c == format!("{m}:*") || type_name.is_some_and(|t| *c == format!("{m}:{t}")))
+	}
+	fn check(&self, _now: f64) -> Result<(), String> { if self.expired { Err("grant expired before commit".into()) } else { Ok(()) } }
 }
 
 pub struct RustSide {
 	pub service: Service,
 	pub clock: Rc<Cell<f64>>,
+	pub auth: Rc<RefCell<Decided>>,
 }
 impl RustSide {
 	pub fn start(o: &Setup) -> RustSide {
@@ -90,11 +106,16 @@ impl RustSide {
 			options.max_pending_per_principal = m;
 			options.max_pending_per_peer = o.max_peer.unwrap_or(m * 2.0);
 		}
+		let auth = Rc::new(RefCell::new(Decided::default()));
+		if o.authorized {
+			let a = auth.clone();
+			options.authorize = Some(Box::new(move |_, _, _| Ok(Rc::new(a.borrow().clone()) as Rc<dyn Authorization>)));
+		}
 		let mut service = Service::new(store, options);
 		if let Some(l) = &o.limits {
 			service.set_limits(l).unwrap();
 		}
-		RustSide { service, clock }
+		RustSide { service, clock, auth }
 	}
 	/// The reply to a call that does not wait.
 	pub fn step(&mut self, now: f64, peer: &str, text: &str, max_frame: Option<f64>) -> String {

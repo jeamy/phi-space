@@ -8,6 +8,8 @@
 //      {"op": "setLimits", "now": <ms>, "limits": {...}}
 //      {"op": "maintain"|"deliver", "now": <ms>} one round of the reaper, of delivery (src/index.ts)
 //      {"op": "event", "now": <ms>, "event": {...}} an event in the outbox, as an agent host leaves it in the file
+//      "auth" on a call: {"validUntil": n, "roles": [...], "can": ["take:Task", "read:*", ...], "expired": bool}: what a host
+//      decided about it (DecisionAuthorization); "can" lists method and type, "*" any type
 //      {"op": "close"}
 // Out: {"reply": "<text>", "state": "<sha256 of the default space>"} (one line each). Randomness and the clock as in
 // core-driver.ts, randomUUID included: ids of the registry come from the same stream.
@@ -41,6 +43,16 @@ const identity = new StaticIdentity({
 	typed: { principal: { peerId: "typed" }, roles: ["tasks"] },
 });
 const policy = { roles: { ...DEFAULT_POLICY.roles, tasks: { methods: METHODS, types: ["Task"] } } };
+let auth: { validUntil: number; roles: string[]; can: string[]; expired?: boolean } | undefined;
+const authorize = async () => {
+	if (!auth) return { validUntil: core.FOREVER, roles: [], check() {}, canExecutePending: () => false };
+	const a = auth;
+	return { validUntil: a.validUntil, roles: a.roles, check() { if (a.expired) throw new core.PermissionError("grant expired before commit"); },
+		canExecutePending: (method: string, template: core.Template) => {
+			const m = method.startsWith("take") ? "take" : method.startsWith("read") ? "read" : method;
+			return a.can.includes(`${m}:*`) || (!!template?.type && a.can.includes(`${m}:${template.type}`));
+		} };
+};
 let host: ClosableStoreHost | undefined, service: SpaceService | undefined, file: string | undefined;
 /** The state's hash; on a file without its claims, which are not enumerated. */
 const state = async (): Promise<string> => {
@@ -60,7 +72,7 @@ for await (const text of rl) {
 		file = l.store;
 		host = file ? await openSqliteHost(file) : openOwnMemoryHost();
 		reseed(String(l.seed ?? ""), l.now ?? 0); // what opening a store draws is not part of what is compared
-		service = new SpaceService({ host, ctx, identity, policy, ...(l.maxCallsPerWindow ? { maxCallsPerWindow: l.maxCallsPerWindow } : {}), ...(l.maxPending ? { maxPendingPerPrincipal: l.maxPending, maxPendingPerPeer: l.maxPeer ?? l.maxPending * 2 } : {}) });
+		service = new SpaceService({ host, ctx, identity, policy, ...(l.authorized ? { authorize } : {}), ...(l.maxCallsPerWindow ? { maxCallsPerWindow: l.maxCallsPerWindow } : {}), ...(l.maxPending ? { maxPendingPerPrincipal: l.maxPending, maxPendingPerPeer: l.maxPeer ?? l.maxPending * 2 } : {}) });
 		if (l.limits) await new PhiSpaces(host, ctx).setLimits(l.limits);
 		out = { reply: "" };
 	} else if (l.op === "close") { await host!.close(ctx); out = { reply: "" }; }
@@ -80,6 +92,7 @@ for await (const text of rl) {
 	} else {
 		tick(l);
 		if (process.env.PHI_SERVICE_TRACE) process.stderr.write(`TRACE ${l.now} ${l.peer} ${l.text.slice(0, 600)}\n`);
+		auth = l.auth;
 		const reply = await service!.handleText(l.text, { peerId: l.peer ?? "local" }, l.maxFrame);
 		out = { reply };
 	}

@@ -2,7 +2,8 @@
 //! presentation.
 use crate::auth::{to_base64, verify_detached, Algorithm, KeyDirectory, Proof, Signer};
 use phi_json::{hex, Json, Object};
-use phi_service::{Identity, Policy};
+use phi_service::{Authorization, Identity, Policy};
+use std::rc::Rc;
 
 const DOMAIN: &str = "phi-spaces/grant/v1\n";
 const RESOLUTION: [&str; 7] = ["hello", "pollOperation", "resolveOperation", "cancelOperation", "txn", "lease", "rotationStatus"];
@@ -120,6 +121,15 @@ impl Decision {
 	pub fn check(&self, now: f64) -> Result<(), String> {
 		if now + self.margin >= self.expires_at { Err("grant expired before commit".into()) } else { Ok(()) }
 	}
+}
+
+/// A decision and the policy it is read against, as the service asks for it.
+pub struct Bound { pub decision: Decision, pub policy: Rc<Policy> }
+impl Authorization for Bound {
+	fn roles(&self) -> Vec<String> { self.decision.roles.clone() }
+	fn valid_until(&self) -> f64 { self.decision.valid_until }
+	fn can_execute_pending(&self, method: &str, type_name: Option<&str>) -> bool { self.decision.can_execute_pending(&self.policy, method, type_name) }
+	fn check(&self, now: f64) -> Result<(), String> { self.decision.check(now) }
 }
 
 impl GrantVerifier {
