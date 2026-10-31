@@ -134,7 +134,7 @@ impl RustSide {
 		let auth = Rc::new(RefCell::new(Decided::default()));
 		if o.authorized {
 			let a = auth.clone();
-			options.authorize = Some(Box::new(move |_, _, _| Ok(Rc::new(a.borrow().clone()) as Rc<dyn Authorization>)));
+			options.authorize = Some(Box::new(move |_, _, _, _| Ok(Rc::new(a.borrow().clone()) as Rc<dyn Authorization>)));
 		}
 		let mut service = Service::new(store, options);
 		if let Some(l) = &o.limits {
@@ -145,7 +145,7 @@ impl RustSide {
 	/// The reply to a call that does not wait.
 	pub fn step(&mut self, now: f64, peer: &str, text: &str, max_frame: Option<f64>) -> String {
 		self.clock.set(now);
-		let conn = Conn { peer_id: Some(peer.to_owned()), identity: None };
+		let conn = Conn { peer_id: Some(peer.to_owned()), identity: None, proof_key: None };
 		match self.service.handle_text(text, &conn, max_frame.unwrap_or(phi_service::DEFAULT_MAX_FRAME_BYTES)) {
 			Outcome::Done { text, .. } => {
 				self.service.store.drain().unwrap();

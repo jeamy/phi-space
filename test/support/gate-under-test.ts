@@ -8,7 +8,7 @@ import type net from "node:net";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
-import { BootstrapClosed, CONTROL_SPACE, ControlAccess, EnrollmentService, GateIdentity, MemoryKeyDirectory, NetbirdDirectory, PhiSpaces, ProvingService, SpaceKeyDirectory, SpaceService, Supervisor, bootstrapEnroll, MemberLifecycle, RunGateService, createSpace, spaceDoc, core, createEnroll, serveTlsRegister, GrantAuthority, GrantVerifier, RotationService, listSpaces, revokePeerKey, snapshotSpace, socketTransport, startGate, DEFAULT_GROUP_ROLES, rolesOf, type Connection, type RunSpec, type KeyDirectory, type PeerKeyRec, type Policy } from "../../src/index.ts";
+import { BootstrapClosed, CONTROL_SPACE, ControlAccess, EnrollmentService, GateIdentity, MemoryKeyDirectory, NetbirdDirectory, PhiSpaces, ProvingService, SpaceKeyDirectory, SpaceService, Supervisor, bootstrapEnroll, MemberLifecycle, DelegationVerifier, RunGateService, createSpace, spaceDoc, core, createEnroll, serveTlsRegister, GrantAuthority, GrantVerifier, RotationService, listSpaces, revokePeerKey, snapshotSpace, socketTransport, startGate, DEFAULT_GROUP_ROLES, rolesOf, type Call, type Connection, type Identity, type RunSpec, type KeyDirectory, type PeerKeyRec, type Policy } from "../../src/index.ts";
 import { plainDoc } from "./host.ts";
 import { openSqliteHost } from "../../src/store/sqlite.ts";
 import { openTestHost } from "./host.ts";
@@ -50,6 +50,9 @@ export type GateCase = {
 	/** This host is a run Member under the controller `control` with this key; its run kind `jobs` writes two Jobs. */
 	runGates?: { controllerKey: string };
 	/** This host is Member `a` with a Space of its own, under the Control host `control` with this key. */
+	/** The authority's public keys, and its installed policy version (a clock's value, so a test can move it). */
+	delegation?: { supervisorKey: string; grantKey: string; controlSpaceId: string; policy: TestClock };
+	maxPendingPerPeer?: number;
 	membership?: { controllerKey: string; seed?: (lifecycle: MemberLifecycle) => Promise<void> };
 };
 /** The grant signing key: PKCS#8 and SPKI of Ed25519 end in the seed and the public key. */
@@ -80,7 +83,9 @@ async function inProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 	tc.after(() => host.close(ctx));
 	const identity = new GateIdentity();
 	const keys: KeyDirectory | undefined = c.spaceKeys ? new SpaceKeyDirectory(host, ctx, c.clock.now) : c.keys;
-	const service = new SpaceService({ host, ctx, identity, ...(c.policy ? { policy: c.policy } : {}), ...(c.serviceClock ? { now: c.clock.now } : {}) });
+	const verifier = c.delegation && new DelegationVerifier({ host, ctx, authorityId: "authority", controlSpaceId: c.delegation.controlSpaceId, supervisorPeerId: "supervisor", supervisorKey: { algorithm: "ed25519", publicKey: c.delegation.supervisorKey }, keys: keys!, grants: new GrantVerifier({ authorityId: "authority", issuerHostId: "control-host", publicKey: c.delegation.grantKey, algorithm: "ed25519", now: c.clock.now }), policy: async () => ({ authorityId: "authority", policyVersion: c.delegation!.policy.t }), now: c.clock.now });
+	const service = new SpaceService({ host, ctx, identity, ...(c.policy ? { policy: c.policy } : {}), ...(c.serviceClock ? { now: c.clock.now } : {}), ...(c.maxPendingPerPeer ? { maxPendingPerPeer: c.maxPendingPerPeer } : {}),
+		...(verifier ? { authorize: async (call: Call, id: Identity, conn: Connection) => { const auth = call.frame?.delegation ? await verifier.check(call, id, conn) : new GrantVerifier({ authorityId: "authority", issuerHostId: "control-host", publicKey: c.delegation!.grantKey, algorithm: "ed25519", now: c.clock.now }).check(call.frame?.grant, id, call, conn); auth.check(); return auth; } } : {}) });
 	const proving = c.gateHostId && keys ? new ProvingService(service, { gateHostId: c.gateHostId, keys, now: c.clock.now }) : service;
 	const access = c.controlAccess ? new ControlAccess(proving as ProvingService, { identity, host, ctx }) : proving;
 	const enrollEvents: EnrollSeen[] = [], commandEvents: CommandSeen[] = [];
@@ -113,6 +118,19 @@ async function inProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 				const id = await identity.authenticate(conn);
 				if (!(conn.state as { proof?: unknown } | undefined)?.proof || !id?.roles.some((r) => ["router", "host", "admin"].includes(r))) throw new Error("epoch notice requires proven service peer");
 				return JSON.stringify({ ok: true, result: await runs.apply(call.args?.instruction as never) });
+			} catch (e) { return JSON.stringify({ ok: false, error: { code: "PermissionDenied", message: (e as Error).message } }); }
+		} } as unknown as ProvingService;
+	}
+	if (verifier) {
+		const inner = served;
+		served = { handle: (x: unknown, conn: Connection) => inner.handle(x, conn), async handleText(t: string, conn: Connection, max?: number) {
+			const call = JSON.parse(t) as { method?: string; space?: string; args?: { signedNotice?: never } };
+			if (call?.method !== "epochNotice") return inner.handleText(t, conn, max);
+			try {
+				const id = await identity.authenticate(conn);
+				if (!(conn.state as { proof?: unknown } | undefined)?.proof || !id?.roles.some((r) => ["router", "host", "admin"].includes(r))) throw new Error("epoch notice requires proven service peer");
+				await verifier.epochNotice(call.args?.signedNotice as never, call.space as never);
+				return JSON.stringify({ ok: true, result: { installed: true } });
 			} catch (e) { return JSON.stringify({ ok: false, error: { code: "PermissionDenied", message: (e as Error).message } }); }
 		} } as unknown as ProvingService;
 	}
@@ -167,8 +185,8 @@ async function asProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 		await seed.close(ctx);
 	}
 	writeFileSync(config, JSON.stringify({
-		hooks: hooksPath, endpoints: [], identities: {}, policy: c.policy?.roles,
-		gate: { host: c.host ?? "127.0.0.1", port: 0, url: c.url, token: c.token ?? "t", cacheMs: c.cacheMs, handshakeMs: c.handshakeMs, maxConnectionsPerPeer: c.maxConnectionsPerPeer, connectionsPerSecondPerPeer: c.connectionsPerSecondPerPeer, clockFile: c.clock.file, eventsFile, keysFile: c.keys?.file, gateHostId: c.gateHostId, spaceKeys: c.spaceKeys, enrollment: c.enrollment, controlAccess: c.controlAccess, supervisor: c.supervisor, serviceClock: c.serviceClock, membership: c.membership ? { memberId: "a", spaceId: memberSpace, authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.membership.controllerKey } : undefined, runGates: c.runGates ? { authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.runGates.controllerKey } : undefined, grants: c.grants ? (() => { const k = grantKey(); return { authorityId: "authority", hostId: "host-1", seed: k.seed, publicKey: k.publicKey }; })() : undefined },
+		hooks: hooksPath, endpoints: [], identities: {}, policy: c.policy?.roles, maxPendingPerPeer: c.maxPendingPerPeer,
+		gate: { host: c.host ?? "127.0.0.1", port: 0, url: c.url, token: c.token ?? "t", cacheMs: c.cacheMs, handshakeMs: c.handshakeMs, maxConnectionsPerPeer: c.maxConnectionsPerPeer, connectionsPerSecondPerPeer: c.connectionsPerSecondPerPeer, clockFile: c.clock.file, eventsFile, keysFile: c.keys?.file, gateHostId: c.gateHostId, spaceKeys: c.spaceKeys, enrollment: c.enrollment, controlAccess: c.controlAccess, supervisor: c.supervisor, serviceClock: c.serviceClock, delegation: c.delegation ? { authorityId: "authority", controlSpaceId: c.delegation.controlSpaceId, supervisor: "supervisor", supervisorKey: c.delegation.supervisorKey, issuer: "control-host", grantKey: c.delegation.grantKey, policyFile: c.delegation.policy.file } : undefined, membership: c.membership ? { memberId: "a", spaceId: memberSpace, authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.membership.controllerKey } : undefined, runGates: c.runGates ? { authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.runGates.controllerKey } : undefined, grants: c.grants ? (() => { const k = grantKey(); return { authorityId: "authority", hostId: "host-1", seed: k.seed, publicKey: k.publicKey }; })() : undefined },
 	}));
 	const proc = spawn(CMD![0]!, [...CMD!.slice(1), "--store", c.membership ? storeFile : "memory", "--listen", `unix:${join(dir, "unused.sock")}`, "--test-hooks", config], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
 	const port = await new Promise<number>((resolve, reject) => {

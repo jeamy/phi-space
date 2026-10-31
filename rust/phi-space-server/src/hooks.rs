@@ -9,7 +9,8 @@
 //  "maxConnectionsPerPeer"?, "connectionsPerSecondPerPeer"?, "clockFile"?, "eventsFile"?, "keysFile"?, "gateHostId"?, "spaceKeys"?,
 //  "enrollment"?, "controlAccess"?, "supervisor"?, "serviceClock"?, "grants"?: {"authorityId", "hostId", "seed", "publicKey"},
 //  "runGates"?: {"authorityId", "peerId", "seed", "controller", "controllerKey"},
-//  "membership"?: {"memberId", "spaceId", "authorityId", "peerId", "seed", "controller", "controllerKey"}}}
+//  "membership"?: {"memberId", "spaceId", "authorityId", "peerId", "seed", "controller", "controllerKey"},
+//  "delegation"?: {"authorityId", "controlSpaceId", "supervisor", "supervisorKey", "issuer", "grantKey", "policyFile"}}}
 //
 // The gate's clock, its keys and its events are files, so a test can change them between two calls without a round trip.
 //
@@ -68,7 +69,8 @@ pub fn apply(file: &str, o: &mut Options, serving: &mut ServeOptions) -> Result<
 	}
 	let mut gate_clock = None;
 	if let Some(g) = c.get("gate") {
-		let (listen, front, now) = gate(g)?;
+		let (listen, front, now, authorize) = gate(g, &o.policy)?;
+		o.authorize = authorize;
 		serving.gates.push((listen, front));
 		gate_clock = g.get("serviceClock").filter(|v| **v == Json::Bool(true)).map(|_| now);
 	}
@@ -85,13 +87,14 @@ pub fn apply(file: &str, o: &mut Options, serving: &mut ServeOptions) -> Result<
 /// Keys as a file of `PeerKey` fields, read at each look.
 struct FileKeys(String);
 impl Keys for FileKeys {
-	fn find(&self, _: &mut Service, peer_id: &str, key_id: &str) -> Option<PeerKey> {
+	fn find(&self, _: &mut phi_store::Store, peer_id: &str, key_id: &str) -> Option<PeerKey> {
 		let list = parse(&std::fs::read_to_string(&self.0).ok()?).ok()?;
 		list.as_array()?.iter().filter_map(PeerKey::from_json).find(|k| k.peer_id == peer_id && k.key_id == key_id)
 	}
 }
 
-fn gate(g: &Json) -> Result<(Listen, Rc<dyn phi_wire::Front>, Now), String> {
+type Gated = (Listen, Rc<dyn phi_wire::Front>, Now, Option<phi_service::Authorize>);
+fn gate(g: &Json, policy: &phi_service::Policy) -> Result<Gated, String> {
 	let text = |k: &str| g.get(k).and_then(Json::as_str);
 	let number = |k: &str| g.get(k).and_then(Json::as_f64);
 	let flag = |k: &str| g.get(k) == Some(&Json::Bool(true));
@@ -160,6 +163,19 @@ fn gate(g: &Json) -> Result<(Listen, Rc<dyn phi_wire::Front>, Now), String> {
 		let jobs: phi_host::run_member::RunPreparer = Box::new(jobs_preparer);
 		o.run_gates = Some(phi_host::run_member::RunGates { authority_id: part("authorityId")?, peer_id: part("peerId")?, signer: phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)), controller: phi_host::run_member::Pin { issuer: part("controller")?, algorithm: phi_host::auth::Algorithm::Ed25519, public_key: part("controllerKey")? }, preparers: [("jobs".to_owned(), jobs)].into_iter().collect(), assert_authority: Box::new(|_| Ok(())) });
 	}
+	let mut authorize = None;
+	if let Some(d) = g.get("delegation") {
+		let part = |k: &str| d.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("delegation without {k}"));
+		let keys = o.proving.as_ref().map(|(_, k)| Rc::clone(k)).ok_or("delegation needs keys")?;
+		let (authority, file) = (part("authorityId")?, part("policyFile")?);
+		let held = authority.clone();
+		let installed: Rc<dyn Fn() -> (String, f64)> = Rc::new(move || (held.clone(), std::fs::read_to_string(&file).ok().and_then(|t| t.trim().parse().ok()).unwrap_or(0.0)));
+		let ed = phi_host::auth::Algorithm::Ed25519;
+		let grants = phi_host::grants::GrantVerifier { authority_id: authority.clone(), issuer_host_id: part("issuer")?, public_key: part("grantKey")?, algorithm: ed, uncertainty_ms: 2000.0 };
+		let verifier = phi_host::delegation::DelegationVerifier::new(phi_host::delegation::DelegationOptions { authority_id: authority, control_space_id: part("controlSpaceId")?, supervisor_peer_id: part("supervisor")?, supervisor: (ed, part("supervisorKey")?), keys, grants, policy: installed, rules: Rc::new(policy.clone()), uncertainty_ms: 2000.0 }).map_err(|e| e.message)?;
+		o.delegation = Some(Rc::clone(&verifier));
+		authorize = Some(phi_host::delegation::authorize(verifier, Rc::clone(&o.now)));
+	}
 	if let Some(m) = g.get("membership") {
 		let part = |k: &str| m.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("membership without {k}"));
 		let seed: [u8; 32] = phi_host::auth::base64(&part("seed")?).try_into().map_err(|_| "a seed is 32 bytes")?;
@@ -168,7 +184,7 @@ fn gate(g: &Json) -> Result<(Listen, Rc<dyn phi_wire::Front>, Now), String> {
 	}
 	let host = text("host").ok_or("the gate names no host")?;
 	let front: Rc<dyn phi_wire::Front> = Gate::new(host, o)?;
-	Ok((Listen::Tcp { host: host.to_owned(), port: number("port").unwrap_or(0.0) as u16 }, front, now))
+	Ok((Listen::Tcp { host: host.to_owned(), port: number("port").unwrap_or(0.0) as u16 }, front, now, authorize))
 }
 
 /// The test's run kind: two jobs per Member, idempotent.

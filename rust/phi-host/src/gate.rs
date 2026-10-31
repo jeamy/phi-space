@@ -181,7 +181,7 @@ pub fn roles_of(groups: &[String], map: &GroupRoles) -> Vec<String> {
 
 /// The control space's keys, looked at in the service's store.
 pub trait Keys {
-	fn find(&self, service: &mut Service, peer_id: &str, key_id: &str) -> Option<PeerKey>;
+	fn find(&self, store: &mut phi_store::Store, peer_id: &str, key_id: &str) -> Option<PeerKey>;
 }
 
 /// `Keys` where `Proving` asks a `KeyDirectory`.
@@ -190,7 +190,7 @@ struct InService<'a> {
 	service: RefCell<&'a mut Service>,
 }
 impl KeyDirectory for InService<'_> {
-	fn find(&self, peer_id: &str, key_id: &str) -> Option<PeerKey> { self.keys.find(&mut self.service.borrow_mut(), peer_id, key_id) }
+	fn find(&self, peer_id: &str, key_id: &str) -> Option<PeerKey> { self.keys.find(&mut self.service.borrow_mut().store, peer_id, key_id) }
 }
 
 pub struct GateOptions {
@@ -207,6 +207,8 @@ pub struct GateOptions {
 	pub run_gates: Option<crate::run_member::RunGates>,
 	/// Signed membership instructions of the Control host.
 	pub lifecycle: Option<crate::membership::MemberLifecycle>,
+	/// Who takes the epoch notices of the supervisor.
+	pub delegation: Option<Rc<crate::delegation::DelegationVerifier>>,
 	pub handshake_ms: u64,
 	pub max_per_peer: usize,
 	pub connections_per_second: f64,
@@ -218,7 +220,7 @@ pub struct GateOptions {
 
 impl GateOptions {
 	pub fn new(directory: Rc<Netbird>, now: Now) -> GateOptions {
-		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
+		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, delegation: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
 	}
 }
 
@@ -348,7 +350,7 @@ impl Gate {
 	fn key_gone(&self, service: &mut Service, c: &GateSession) -> Option<&'static str> {
 		let state = c.state.borrow();
 		let (proof, (_, keys)) = (state.proof.as_ref()?, self.o.proving.as_ref()?);
-		match keys.find(service, &c.peer_id, &proof.key_id) {
+		match keys.find(&mut service.store, &c.peer_id, &proof.key_id) {
 			Some(k) if k.active && k.roles == proof.roles => None,
 			Some(k) if k.active => Some("the roles of the key changed"),
 			_ => Some("the key of this connection was revoked"),
@@ -431,6 +433,16 @@ impl GateSession {
 		}
 	}
 
+	fn notice_args(&self, apply: impl FnOnce(&mut phi_store::Store, &Json) -> Result<(), phi_core::space::CoreError>, service: &mut Service, call: &Json) -> Json {
+		let id = self.identity();
+		let proven = self.state.borrow().proof.is_some() && id.roles.iter().any(|r| ["router", "host", "admin"].contains(&r.as_str()));
+		let done = if proven { apply(&mut service.store, call.get("args").and_then(|a| a.get("signedNotice")).unwrap_or(&Json::Null)) } else { Err(phi_core::space::error("PermissionError", "epoch notice requires proven service peer")) };
+		match done {
+			Ok(()) => crate::control::answered(obj! { "installed" => true }),
+			Err(e) => crate::control::refuse(&e.message),
+		}
+	}
+
 	/// `grant`: on the identity the directory gives now, not the one of the connection's start.
 	async fn grant(&self, owner: &Owner, call: &Json) -> Json {
 		let (Some(rotating), Some((_, keys))) = (&self.gate.o.rotating, &self.gate.o.proving) else { return crate::control::refuse("grants are not served here") };
@@ -473,7 +485,7 @@ impl GateSession {
 }
 
 impl Session for GateSession {
-	fn conn(&self) -> Conn { Conn { peer_id: Some(self.peer_id.clone()), identity: Some(self.identity()) } }
+	fn conn(&self) -> Conn { Conn { peer_id: Some(self.peer_id.clone()), identity: Some(self.identity()), proof_key: self.state.borrow().proof.as_ref().map(|p| p.key_id.clone()) } }
 
 	fn call(&self, service: &mut Service, text: &str) -> Option<String> {
 		let (proving, keys) = self.gate.o.proving.as_ref()?;
@@ -488,6 +500,13 @@ impl Session for GateSession {
 			let key_id = proof.filter(|_| active).map(|p| p.key_id);
 			return Some(rotating.handle(service, &call, &self.identity(), proven, key_id.as_deref(), now).to_json_text());
 		}
+		if method == "epochNotice" {
+			if let Some(verifier) = &self.gate.o.delegation {
+				let space = call.get("space").and_then(Json::as_str).map(str::to_owned);
+				let notice = self.notice_args(|store, q| verifier.epoch_notice(store, q, space.as_deref(), now), service, &call);
+				return Some(notice.to_json_text());
+			}
+		}
 		if method == "membershipInstruction" {
 			if let Some(lifecycle) = &self.gate.o.lifecycle {
 				return Some(self.notice(|service, q| lifecycle.apply(service, q), service, &call).to_json_text());
@@ -500,7 +519,7 @@ impl Session for GateSession {
 		}
 		if let (Some(enrolling), "enroll" | "enrollStatus") = (&self.gate.o.enrolling, method) {
 			let unpaired = self.roles.iter().any(|r| r == crate::control::UNPAIRED_ROLE);
-			let proven = self.state.borrow().proof.as_ref().map(|p| p.key_id.clone()).is_some_and(|k| keys.find(service, &self.peer_id, &k).is_some_and(|k| k.active));
+			let proven = self.state.borrow().proof.as_ref().map(|p| p.key_id.clone()).is_some_and(|k| keys.find(&mut service.store, &self.peer_id, &k).is_some_and(|k| k.active));
 			return Some(enrolling.handle(service, &call, &self.peer_id, (unpaired, proven), &mut self.state.borrow_mut(), now).to_json_text());
 		}
 		if let Some(control) = &self.gate.o.control {

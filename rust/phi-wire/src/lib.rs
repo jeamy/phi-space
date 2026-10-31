@@ -464,7 +464,7 @@ async fn frames<R: AsyncRead + Unpin>(hub: &Rc<Hub>, link: &Rc<Link>, who: &Who,
 			let id = u32::from_be_bytes(buf[at + 4..at + 8].try_into().expect("four bytes"));
 			let text = String::from_utf8_lossy(&buf[at + HEADER..at + HEADER + n]);
 			match who {
-				Who::Peer(peer) => call(hub, link, &Conn { peer_id: peer.clone(), identity: None }, id, &text),
+				Who::Peer(peer) => call(hub, link, &Conn { peer_id: peer.clone(), identity: None, proof_key: None }, id, &text),
 				Who::Gate(_) => {
 					let conn = link.session.as_ref().expect("a gate's connection has its session").conn();
 					call(hub, link, &conn, id, &text);

@@ -148,7 +148,7 @@ impl Space {
 		self.sweep(now);
 		self.rpc_mut();
 		let key = self.key_of(&r);
-		let hash = digest_json(&obj! { "method" => method.clone(), "args" => args.clone() }).expect("finite");
+		let hash = digest_json(&obj! { "method" => method.clone(), "args" => args.clone() }).map_err(|_| type_error("canonical JSON: non-finite number"))?;
 		let keep = self.limits().claim_result_ms;
 		if let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)) {
 			let c = &c;
@@ -192,7 +192,7 @@ impl Space {
 
 	/// `validateGeneration`: the generation is known, bound to this space and incarnation, signed, the requester's, and
 	/// still admits.
-	fn validate_generation(&self, now: f64, r: &RequestRef) -> Result<&Json> {
+	pub fn validate_generation(&self, now: f64, r: &RequestRef) -> Result<&Json> {
 		check_principal(r.principal)?;
 		let expired = |m: String| error("RequestExpired", m);
 		let Some(st) = &self.state.rpc else { return Err(expired("generation is unknown".into())) };

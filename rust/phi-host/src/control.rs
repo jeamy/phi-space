@@ -176,9 +176,9 @@ pub struct SpaceKeys {
 	pub now: crate::gate::Now,
 }
 impl Keys for SpaceKeys {
-	fn find(&self, service: &mut Service, peer_id: &str, key_id: &str) -> Option<PeerKey> {
-		let id = known_id(service)?;
-		let host = service.store.reader(Some(&id)).ok()?;
+	fn find(&self, store: &mut phi_store::Store, peer_id: &str, key_id: &str) -> Option<PeerKey> {
+		let id = store.spaces().into_iter().find(|i| i.get("alias").and_then(Json::as_str) == Some(CONTROL_SPACE))?.get("spaceId")?.as_str()?.to_owned();
+		let host = store.reader(Some(&id)).ok()?;
 		let found = listed(&host.space, (self.now)(), &obj! { "type" => "PeerKey", "fields" => obj! { "peerId" => peer_id, "keyId" => key_id } }).ok()?;
 		PeerKey::from_json(&fields(found.first()?))
 	}

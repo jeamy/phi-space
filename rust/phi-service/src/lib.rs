@@ -107,6 +107,8 @@ pub struct Conn {
 	pub peer_id: Option<String>,
 	/// What the host in front of the transport made of the connection (`IdentityAdapter`); without it the static table.
 	pub identity: Option<Identity>,
+	/// The key the connection proved.
+	pub proof_key: Option<String>,
 }
 #[derive(Clone, Debug)]
 pub struct Identity {
@@ -135,7 +137,7 @@ pub trait Authorization {
 	/// Inside each commit, with what only the host keeps (`checkTx`).
 	fn check_commit(&self) -> Result<(), String> { Ok(()) }
 }
-pub type Authorize = Box<dyn Fn(&Json, &Identity, &Conn) -> Result<Rc<dyn Authorization>, String>>;
+pub type Authorize = Box<dyn Fn(&mut Store, &Json, &Identity, &Conn) -> Result<Rc<dyn Authorization>, CoreError>>;
 
 /// A role allows a set of methods (`None`: all), optionally only for entries of some types.
 #[derive(Clone, Debug)]
@@ -444,7 +446,7 @@ impl Service {
 		self.rate(&peer)?;
 		let auth = match &self.o.authorize {
 			None => None,
-			Some(f) => Some(f(call, &id, conn).map_err(|m| error("PermissionError", m))?),
+			Some(f) => Some(f(&mut self.store, call, &id, conn)?),
 		};
 		if let Some(a) = &auth {
 			id.roles = a.roles();
@@ -1359,6 +1361,8 @@ impl Service {
 			"UnknownSpaceError" => "UnknownSpace",
 			"RequestConflict" | "RequestExpired" | "ResultExpired" | "IncarnationChanged" | "NotCommitted" | "OperationCancelled" | "SnapshotExpired" | "RevisionAhead" | "CompletionViolation" | "MailboxEpochMismatch" | "InvalidAck" | "UniqueConflict" => e.class,
 			"LimitError" | "ResourceExhausted" => "ResourceExhausted",
+			"ReplicaConfigPending" => "ReplicaConfigPending",
+			"StalePolicyVersion" => "StalePolicyVersion",
 			"RoutingConflict" => "RoutingConflict",
 			"MemberDrained" => "MemberDrained",
 			"TransactionError" | "UnknownLeaseError" | "RunGateConflict" => "TransactionError",
@@ -1395,7 +1399,7 @@ fn admitted(s: &mut Space, now: f64, request: &Json, method: &str, args: &Json, 
 	if s.state.rpc.as_ref().and_then(|r| r.claims.get(&key)).is_none() {
 		s.assert_member_admission(method)?;
 	}
-	let ad = s.admit(now, Some(request), &method.into(), args, &Json::Number(deadline), bound)?;
+	let ad = s.admit(now, Some(request), &method.into(), &args, &Json::Number(deadline), bound)?;
 	match ad.get("kind").and_then(Json::as_str) {
 		Some("done") => Ok(Admission::Replay(or_null(ad.get("result")))),
 		Some("cancelled") => Err(error("OperationCancelled", format!("request {} was cancelled", request.get("requestId").and_then(Json::as_str).unwrap_or("")))),
