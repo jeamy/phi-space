@@ -240,6 +240,31 @@ impl Signer {
 	}
 }
 
+impl Signer {
+	/// A key file of `provisionFileSigner` (src/keys.ts): `{algorithm, privateKey}` with a PKCS#8 PEM. Its key id, too.
+	pub fn from_key_file(json: &Json) -> Result<(Signer, String), String> {
+		use p256::pkcs8::DecodePrivateKey as _;
+		let pem = json.get("privateKey").and_then(Json::as_str).ok_or("invalid provisioned key")?;
+		let der = base64(&pem.lines().filter(|l| !l.starts_with("-----")).collect::<String>());
+		let (signer, public) = match json.get("algorithm").and_then(Json::as_str) {
+			Some("ed25519") => {
+				let seed: [u8; 32] = der.get(der.len().wrapping_sub(32)..).and_then(|s| s.try_into().ok()).ok_or("invalid provisioned key")?;
+				let k = ed25519_dalek::SigningKey::from_bytes(&seed);
+				let public = k.verifying_key().to_bytes().to_vec();
+				(Signer::Ed25519(k), public)
+			}
+			Some("ecdsa-p256") => {
+				use p256::pkcs8::EncodePublicKey as _;
+				let k = p256::ecdsa::SigningKey::from_pkcs8_der(&der).map_err(|_| "invalid provisioned key")?;
+				let public = k.verifying_key().to_public_key_der().map_err(|_| "invalid provisioned key")?.as_bytes().to_vec();
+				(Signer::EcdsaP256(k), public)
+			}
+			_ => return Err("invalid provisioned key".to_owned()),
+		};
+		Ok((signer, crate::control::key_fingerprint(&to_base64(&public))))
+	}
+}
+
 pub fn to_base64(bytes: &[u8]) -> String {
 	const ABC: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 	let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);

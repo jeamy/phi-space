@@ -6,6 +6,7 @@ pub mod delegation;
 pub mod gate;
 pub mod grants;
 pub mod register;
+pub mod remote;
 pub mod membership;
 pub mod rotation;
 pub mod run_member;

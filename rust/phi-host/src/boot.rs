@@ -40,6 +40,7 @@ impl External {
 #[derive(Clone)]
 struct Seen {
 	boot: Json,
+	authority: Option<Json>,
 	erasure: HashMap<String, Json>,
 	at: f64,
 }
@@ -53,6 +54,8 @@ pub struct BootGuard {
 	/// How long a read of the register counts.
 	max_age_ms: f64,
 	seen: RefCell<Option<Seen>>,
+	/// The control authority this host follows: its space, host and key, read with the rest.
+	pub authority: Option<(String, String, String)>,
 }
 
 /// `validateErasureBarrier`, on a record read just now.
@@ -75,7 +78,7 @@ fn check_barrier(record: &Json, id: &str, s: &Space, now: f64) -> R<()> {
 
 impl BootGuard {
 	pub fn new(host_id: &str, authority_id: &str, external: External, installed: SqliteRegister, now: crate::gate::Now, max_age_ms: f64) -> BootGuard {
-		BootGuard { host_id: host_id.to_owned(), authority_id: authority_id.to_owned(), external, installed, now, max_age_ms, seen: RefCell::new(None) }
+		BootGuard { host_id: host_id.to_owned(), authority_id: authority_id.to_owned(), external, installed, now, max_age_ms, seen: RefCell::new(None), authority: None }
 	}
 
 	/// Reads the register for these Spaces. A failed read forgets the last one.
@@ -83,10 +86,12 @@ impl BootGuard {
 		let boot = format!("boot:{}", self.host_id);
 		let mut keys = vec![boot.clone()];
 		keys.extend(spaces.iter().map(|s| format!("erasure:{s}")));
+		let authority = self.authority.as_ref().map(|(space, ..)| format!("authority:{space}"));
+		keys.extend(authority.clone());
 		*self.seen.borrow_mut() = None;
 		let Ok(read) = self.external.read(&keys).await else { return };
 		let erasure = spaces.iter().map(|s| (s.clone(), read.get(&format!("erasure:{s}")).cloned().unwrap_or(Json::Null))).collect();
-		*self.seen.borrow_mut() = Some(Seen { boot: read.get(&boot).cloned().unwrap_or(Json::Null), erasure, at: (self.now)() });
+		*self.seen.borrow_mut() = Some(Seen { boot: read.get(&boot).cloned().unwrap_or(Json::Null), authority: authority.and_then(|k| read.get(&k).cloned()), erasure, at: (self.now)() });
 	}
 
 	fn seen(&self) -> R<Seen> {
@@ -96,6 +101,12 @@ impl BootGuard {
 		let v = seen.boot.get("value").ok_or_else(inactive)?;
 		if text(v, "state") != Some("active") || text(v, "hostId") != Some(&self.host_id) {
 			return Err(inactive());
+		}
+		if let Some((_, host, key)) = &self.authority {
+			let a = seen.authority.as_ref().and_then(|a| a.get("value")).filter(|a| text(a, "state") == Some("active") && text(a, "authorityId") == Some(&self.authority_id) && text(a, "hostId") == Some(host) && text(a, "supervisorKey") == Some(key));
+			if a.is_none() {
+				return Err(blocked("the control authority is not the installed one"));
+			}
 		}
 		Ok(seen)
 	}

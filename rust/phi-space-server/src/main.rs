@@ -4,10 +4,12 @@
 //   phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID]
 //   phi-space-server --profile mmo|codemode     what the project's server/space-host.ts is, from the same environment
 //   phi-space-server --tls-register CONFIG.json the independent register over pinned mutual TLS (src/tls-register.ts)
+//   phi-space-server --store FILE --member CONFIG.json a federation Member behind a TypeScript control host
 //
 // Prints "[phi-spaces] ready on <listen> (store <file|memory>)" once it serves; SIGINT/SIGTERM close it. A panic ends the
 // process: what was acknowledged is on the disk, and a half-done commit is not left running.
 mod hooks;
+mod member;
 mod profiles;
 mod register;
 use register::register;
@@ -19,7 +21,7 @@ use std::path::Path;
 use std::time::Duration;
 use tokio::signal::unix::{signal, SignalKind};
 
-const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode\n       phi-space-server --tls-register CONFIG.json";
+const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode\n       phi-space-server --tls-register CONFIG.json\n       phi-space-server --store FILE --member CONFIG.json";
 
 pub(crate) fn fail(message: impl std::fmt::Display) -> ! {
 	eprintln!("{message}");
@@ -41,6 +43,9 @@ fn main() {
 	}
 	if let Some(config) = arg("--tls-register") {
 		return register(&config);
+	}
+	if let Some(config) = arg("--member") {
+		return member::run(&config, &arg("--store").unwrap_or_else(|| fail("--member needs --store")));
 	}
 	let (Some(store), Some(listen)) = (arg("--store"), arg("--listen")) else {
 		eprintln!("{USAGE}");

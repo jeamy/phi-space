@@ -211,6 +211,8 @@ pub struct GateOptions {
 	pub delegation: Option<Rc<crate::delegation::DelegationVerifier>>,
 	/// The boot guard, read before each call.
 	pub boot: Option<Rc<crate::boot::BootGuard>>,
+	/// Keys asked of the control host, before the call that needs them.
+	pub remote_keys: Option<Rc<crate::remote::RemoteKeys>>,
 	pub handshake_ms: u64,
 	pub max_per_peer: usize,
 	pub connections_per_second: f64,
@@ -222,7 +224,7 @@ pub struct GateOptions {
 
 impl GateOptions {
 	pub fn new(directory: Rc<Netbird>, now: Now) -> GateOptions {
-		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, delegation: None, boot: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
+		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, delegation: None, boot: None, remote_keys: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
 	}
 }
 
@@ -325,6 +327,10 @@ impl Gate {
 	pub async fn revalidate(self: &Rc<Self>, owner: &Owner) -> usize {
 		if self.busy.replace(true) {
 			return 0;
+		}
+		if let Some(remote) = &self.o.remote_keys {
+			let held: Vec<(String, String)> = self.open.borrow().values().filter_map(|c| Some((c.session.peer_id.clone(), c.session.state.borrow().proof.as_ref()?.key_id.clone()))).collect();
+			remote.fetch(held).await;
 		}
 		let down = self.o.directory.refresh().await.is_err();
 		let mut closed = 0;
@@ -435,6 +441,30 @@ async fn supervise(gate: Rc<Gate>, owner: Owner) {
 }
 
 impl GateSession {
+	/// The keys a call will be judged by.
+	fn keys_of(&self, text: &str) -> Vec<(String, String)> {
+		let mut wanted = vec![];
+		if let Some(p) = &self.state.borrow().proof {
+			wanted.push((self.peer_id.clone(), p.key_id.clone()));
+		}
+		let Ok(call) = parse_repairing(text) else { return wanted };
+		let as_text = |v: Option<&Json>| v.and_then(Json::as_str).map(str::to_owned);
+		if let Some(k) = call.get("args").and_then(|a| a.get("keyId")).and_then(Json::as_str) {
+			wanted.push((self.peer_id.clone(), k.to_owned()));
+		}
+		let frame = call.get("frame");
+		if let Some(k) = as_text(frame.and_then(|f| f.get("delegation")).and_then(|d| d.get("keyId"))) {
+			wanted.push((self.peer_id.clone(), k));
+		}
+		let grant = frame.and_then(|f| f.get("grant")).and_then(|g| g.get("grant"));
+		if let (Some(p), Some(k)) = (as_text(grant.and_then(|g| g.get("principal")).and_then(|p| p.get("peerId"))), as_text(grant.and_then(|g| g.get("keyId")))) {
+			wanted.push((p, k));
+		}
+		wanted.sort();
+		wanted.dedup();
+		wanted
+	}
+
 	/// A notice of the control plane: only a proven service peer brings one.
 	fn notice(&self, apply: impl FnOnce(&mut Service, &Json) -> Result<Json, phi_core::space::CoreError>, service: &mut Service, call: &Json) -> Json {
 		let id = self.identity();
@@ -550,11 +580,25 @@ impl Session for GateSession {
 		Some(reply.to_json_text())
 	}
 
-	fn prepare(&self, owner: Owner) -> Option<Local<()>> {
-		let boot = Rc::clone(self.gate.o.boot.as_ref()?);
+	fn prepare(&self, owner: Owner, text: &str) -> Option<Local<()>> {
+		let boot = self.gate.o.boot.clone();
+		let remote = self.gate.o.remote_keys.clone();
+		if boot.is_none() && remote.is_none() {
+			return None;
+		}
+		let wanted = remote.as_ref().map_or(vec![], |_| self.keys_of(text));
+		let delegated = text.contains("\"delegation\"");
 		Some(Box::pin(async move {
-			let spaces = owner.with(|service| service.store.spaces().iter().filter_map(|i| i.get("spaceId")?.as_str().map(str::to_owned)).collect());
-			boot.refresh(spaces).await;
+			if let Some(boot) = boot {
+				let spaces = owner.with(|service| service.store.spaces().iter().filter_map(|i| i.get("spaceId")?.as_str().map(str::to_owned)).collect());
+				boot.refresh(spaces).await;
+			}
+			if let Some(remote) = remote {
+				remote.fetch(wanted).await;
+				if delegated {
+					remote.fetch_policy().await;
+				}
+			}
 		}))
 	}
 

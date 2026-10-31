@@ -70,7 +70,7 @@ pub trait Session {
 	/// The answer to a call the front has to go away for; it comes back on the owner thread.
 	fn later(self: Rc<Self>, _owner: Owner, _text: &str) -> Option<Local<String>> { None }
 	/// What has to be read before a call is looked at; the frames of the connection wait for it.
-	fn prepare(&self, _owner: Owner) -> Option<Local<()>> { None }
+	fn prepare(&self, _owner: Owner, _text: &str) -> Option<Local<()>> { None }
 	/// What the client gets of the service's answer.
 	fn reply(&self, text: String) -> String;
 	/// Resolves when the front ends the connection.
@@ -469,7 +469,7 @@ async fn frames<R: AsyncRead + Unpin>(hub: &Rc<Hub>, link: &Rc<Link>, who: &Who,
 				Who::Peer(peer) => call(hub, link, &Conn { peer_id: peer.clone(), identity: None, proof_key: None }, id, &text),
 				Who::Gate(_) => {
 					let session = link.session.as_ref().expect("a gate's connection has its session");
-					if let Some(ready) = session.prepare(Owner(Rc::clone(hub))) {
+					if let Some(ready) = session.prepare(Owner(Rc::clone(hub)), &text) {
 						ready.await;
 					}
 					let conn = session.conn();
