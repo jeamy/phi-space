@@ -322,10 +322,15 @@ impl Space {
 		let who = |p: Option<&Json>| (p.and_then(|p| p.get("peerId")).cloned(), p.and_then(|p| p.get("agentId")).cloned());
 		let me = who(Some(principal));
 		let mut mine = (0, 0);
-		for (_, c) in self.pending_claims() {
+		let mut count = |c: &Json| {
 			let p = c.get("principal");
 			mine.0 += usize::from(who(p) == me);
 			mine.1 += usize::from(p.and_then(|p| p.get("peerId")) == peer);
+		};
+		// claims in memory are not copied for this: a take would pay for every result the Space keeps
+		match self.state.rpc.as_ref().map(|r| &r.claims) {
+			Some(crate::state::Claims::Memory(m)) => m.iter().map(|(_, c)| c).filter(|c| str_of(c, "state") == Some("pending")).for_each(&mut count),
+			_ => self.pending_claims().iter().for_each(|(_, c)| count(c)),
 		}
 		mine
 	}

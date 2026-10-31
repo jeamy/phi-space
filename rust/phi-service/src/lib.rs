@@ -22,8 +22,10 @@ pub const METHODS: [&str; 20] = ["hello", "generation", "write", "read", "take",
 const MUTATING: [&str; 10] = ["write", "read", "take", "cancelOperation", "txn", "lease", "wait", "notify", "ack", "batch"];
 /// A long poll looks again at the latest after this long even without a commit (a decision that came without one).
 const POLL_FALLBACK_MS: f64 = 1000.0;
-/// A waiting call looks again at the first commit, then at most this often.
-pub const POLL_GAP_MS: f64 = 25.0;
+/// After a look, a waiting call looks no sooner than this however busy the Space is. TypeScript keeps 25 ms because a look
+/// is dear there; here a look is a lookup, and at 25 ms a commit that means nothing to the call made the one that serves it
+/// wait (the steps of `spaces-mmo` under load: p50 22 ms against 11 ms).
+pub const POLL_GAP_MS: f64 = 2.0;
 /// Without `wake_on_commit`: look again every 50 ms.
 const SLEEP_MS: f64 = 50.0;
 const NO_WAIT: f64 = 0.0;

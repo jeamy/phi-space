@@ -4,6 +4,7 @@
 // while the space is not saturated; its CPU time per command says how many commands a core carries.
 //
 //   LOAD_BOTS=50 LOAD_SECONDS=60 node --no-warnings --experimental-strip-types --import ./tests/test-env.ts tests/perf/space-cost.ts
+//   SPACES_MMO_SPACE_SERVER=<binary> measures the Rust server the same way.
 //
 // Prints one JSON line: commands, commands per second, p50/p95 answer, space CPU ms per command, the CPU share of the
 // space process, of the world workers and of the web part (this process).
@@ -18,6 +19,8 @@ const BOTS = process.env.LOAD_BOTS || "50", SECONDS = process.env.LOAD_SECONDS |
 const TICK = Number(execFileSync("getconf", ["CLK_TCK"]).toString().trim()) || 100;
 
 /** CPU ms (user + system) of this process's children that run `script`, together. */
+/** How the space process shows in the process table: the host script, or the Rust server. */
+const SPACE = process.env.SPACES_MMO_SPACE_SERVER ? "phi-space-server" : "server/space-host.ts";
 function cpuOf(script: string): number {
 	let ms = 0, found = false;
 	for (const pid of readdirSync("/proc").filter((p) => /^\d+$/.test(p))) {
@@ -39,12 +42,12 @@ await stack.npcProcess();
 const srv = await startServer({ stack });
 try {
 	await new Promise((r) => setTimeout(r, 3000)); // the NPCs and the world settle in
-	const cpu0 = cpuOf("server/space-host.ts"), world0 = cpuOf("server/world-host.ts"), web0 = ownCpu(), t0 = Date.now();
+	const cpu0 = cpuOf(SPACE), world0 = cpuOf("server/world-host.ts"), web0 = ownCpu(), t0 = Date.now();
 	await new Promise<void>((ok, fail) => {
 		const c = spawn(process.execPath, ["--no-warnings", "--experimental-strip-types", "tests/perf/live-load.ts"], { env: { ...process.env, LOAD_URL: srv.url, LOAD_BOTS: BOTS, LOAD_SECONDS: SECONDS, LOAD_OUT: out }, stdio: ["ignore", "inherit", "inherit"] });
 		c.on("exit", (code) => (code === 0 ? ok() : fail(new Error(`live-load exited ${code}`))));
 	});
-	const cpu = cpuOf("server/space-host.ts") - cpu0, world = cpuOf("server/world-host.ts") - world0, web = ownCpu() - web0, wall = Date.now() - t0;
+	const cpu = cpuOf(SPACE) - cpu0, world = cpuOf("server/world-host.ts") - world0, web = ownCpu() - web0, wall = Date.now() - t0;
 	const rows = (await readFile(join(out, "commands.jsonl"), "utf8")).trim().split("\n").map((l) => JSON.parse(l) as { ms: number; outcome: string });
 	const ms = rows.filter((r) => r.outcome !== "timeout").map((r) => r.ms).sort((a, b) => a - b);
 	const at = (p: number) => ms[Math.min(ms.length - 1, Math.floor(ms.length * p))] ?? null;

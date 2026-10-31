@@ -749,8 +749,30 @@ Ein Testschalter darf nicht unbemerkt den alten TS-Host statt des Rust-Servers s
 | 3 | Hintergrund: Reaper, Outbox-Entscheidungstabelle aus `deliverEvents`, Mailbox- und Claim-Wartung | erledigt |
 | 4 | `phi-wire`, `phi-space-server`: ein Besitzer-Thread je Store, Antworten erst nach `durable`, Long Polls, CLI und Ready-Zeile wie `standalone.ts` | erledigt; `test-standalone` läuft gegen das Binary |
 | 5 | Gruppe A und B3 gegen den Rust-Server, `--test-hooks`, Fallmatrix | erledigt, Matrix unten |
-| 6 | Startprofile, `SPACES_MMO_SPACE_SERVER`, `CODEMODE_SPACE_SERVER`; ein fehlendes Binary bricht ab und fällt nie auf TS zurück | offen |
-| 7 | TS→Rust→TS mit offener Arbeit, Messung nach R-D2/R-D11 | offen |
+| 6 | Startprofile, `SPACES_MMO_SPACE_SERVER`, `CODEMODE_SPACE_SERVER`; ein fehlendes Binary bricht ab und fällt nie auf TS zurück | erledigt |
+| 7 | TS→Rust→TS mit offener Arbeit, Messung nach R-D2/R-D11 | erledigt, Messwerte unten |
+
+**Messung nach R-D2/R-D11 (2026-10-31, dieser Rechner, je TS gegen Rust):**
+
+| Lastprofil | CPU | p50 | p95 | p99 | RSS Spitze | Timeouts |
+|---|---|---|---|---|---|---|
+| `server-probe`, SQLite, 300/s | 2,04 → 0,34 ms je Aufruf | 1,49 → 0,36 ms | 6,04 → 1,0 ms | 13,3 → 1,5 ms | 257 → 27 MB | |
+| `server-probe`, SQLite, Ziel 900/s | 1,60 → 0,25 ms (729/s → 900/s) | 6,66 → 0,31 ms | 20,5 → 0,7 ms | 29,2 → 1,2 ms | 371 → 28 MB | |
+| `server-probe`, Speicher, 7.200 Aufrufe | 3,14 → 0,59 ms | 19,6 → 0,7 ms | 44,9 → 10,6 ms | 60,2 → 15,6 ms | 179 → 30 MB | |
+| `space-cost`, 50 Figuren, 60 s | 12,8 → 3,8 ms je Kommando | 20 → 10 ms | 32–40 → 20–21 ms | | | 18–22 → 16–18 |
+| `space-cost`, 200 Figuren, 60 s | 10,7 → 3,8 ms je Kommando | 31–33 → 11 ms | 81–112 → 31 ms | | | 73–92 → 71–89 |
+| `test:perf`, 10 Spieler | | 11 → 11 ms | 25 → 16–19 ms | 38 → 20–22 ms | | 0 → 0 |
+
+R-D2 ist damit erfüllt: Die CPU je Kommando sinkt um den Faktor 2,8 bis 3,4, im reinen Dienst um 6 und mehr; der RSS um den Faktor 10. p95 und p99 sind in jedem Profil besser, Timeouts nicht häufiger. Die Timeouts bei 200 Figuren sind Wege ohne Antwort, die auch TS hat. Der Speicher-Store wächst in beiden Servern mit den Claims (O(n)) und ist nur für Tests. Die Zahlen gelten für den lokalen Rechner; eine Messung auf `big`/`nano` steht aus und ändert dort laufende Dienste, gehört also zu R4.
+
+**Was die Messung und die Projekttests gefunden haben:**
+
+- **Lücke beim Long Poll:** 25 ms aus TS verdoppelten p50 und verschlechterten p95 (22/41 ms). Ein Blick ist in Rust eine Abfrage, die Lücke beträgt jetzt 2 ms.
+- **Plätze je Verbindung:** Ein Aufruf, der nur noch auf das `fsync` wartet, belegt keinen der 32 Plätze mehr. Auf einem Thread läuft ein Stoß bis zu seinem Ende durch und füllte die Plätze sonst sofort (107 Timeouts in der ersten Sekunde bei 200 Figuren). Zurückgehaltene Antworten sind je Verbindung auf 1024 begrenzt.
+- **Zählen ohne Kopie:** `pending_counts` kopierte im Speicher-Store bei jedem Lesen alle Claims; das machte Rust dort zunächst langsamer als TS.
+- **Bereitzeile:** Sie erscheint erst, wenn Limits und Sperren auf der Platte sind.
+- **Fehler in `spaces-mmo/server/gateway.ts`, unabhängig von Rust:** Eine Figur steht zwischen zwei Commits ihres Ankommens nicht im Strom. Traf das `hello` diese Lücke, kam es nie nach; der schnellere Server traf sie in 2 von 6 Läufen. Jetzt bringt der nächste Schreibvorgang der Figur das `hello`, die Meldung kommt erst nach 2 s.
+- **Standard-Gang von `phi-core`:** Er verfehlte bei 12.000 Schritten seine Abdeckung schon vor R3 (`probe locked`); die Vorgabe sind jetzt 24.000.
 
 **Fallmatrix R3:** Alle Suiten laufen mit `PHI_SPACES_SERVER_CMD=rust/target/release/phi-space-server` gegen den Prozess; `test/support/service-under-test.ts` startet ihn je Test mit `--test-hooks` (Identitäten, Policy und Limits des Falls, ein Socket je Peer, die Hooks auf einem eigenen Unix-Socket). Fehlt das Binary, scheitert der Test, es gibt keinen Rückfall auf TS. `rust/phi-space-server/tests/process.rs` prüft, dass die Hooks ohne den Schalter nicht erreichbar sind.
 
@@ -775,6 +797,7 @@ Ein Testschalter darf nicht unbemerkt den alten TS-Host statt des Rust-Servers s
 - **Zustellung:** Der Rust-Server hat keine Konversationen. Ereignisse mit numerischem Ziel warten in der Outbox, Ereignisse ohne solches Ziel oder mit fehlender Transaktion werden verworfen und geben ihre Transaktion frei. `retryAt` und `tries` aus einer Datei eines Agent-Hosts werden wie in TS geachtet.
 - **Ein Thread:** `phi-wire` bedient alle Sockets, Long Polls und den Hintergrund auf dem Thread, dem der Store gehört (tokio `current_thread`). Nur der SQLite-Writer ist ein weiterer Thread; er weckt den Besitzer nach jedem Batch. Ein Aufruf läuft ohne `await` bis zu seinem Ende.
 - **Antwort erst nach `durable`:** Jede Antwort trägt die Marke der bis dahin übergebenen Commits, auch ein Lesezugriff: Er sieht Festgeschriebenes und wird zurückgehalten, bis es auf der Platte ist. Scheitert der Store, wird alles noch nicht Dauerhafte mit `Internal` beantwortet.
+- **Startprofile:** `phi-space-server --profile mmo|codemode` liest dieselbe Umgebung wie der jeweilige `server/space-host.ts` und gibt dieselbe Bereitzeile aus. Limits gelten in beiden Profilen vor dem ersten Aufruf; in TS setzt `spaces-mmo` sie erst nach dem Start des Sockets. Je Store läuft ein Besitzer-Thread, eine Panik beendet den ganzen Prozess. `skipUnchangedRecords` entfällt, weil der Rust-Store ohnehin nur Geändertes schreibt. Die `.env` liest weiterhin der TS-Starter; Docker startet noch TS und zieht mit R4 um.
 - **Eingespielte Fehler in `phi-service`:** 10 von 12 fallen auf, die Grenzfälle in `tests/edges.rs` und `tests/background.rs`, weil ein Gang nicht auf das Byte trifft. Zwei bleiben unentdeckt: Der Abbruch „a maintenance item cannot fit the configured commit budget" ist über die API nicht erreichbar, weil `setLimits` die Lage verhindert (auch TS hat dafür keinen Test), und das `settle` nach einer `pending`-Zulassung ändert nichts, weil `maintain` bei derselben Uhrzeit gerade gelaufen ist.
 - **Panik:** Eine Panik beendet den Prozess. Bestätigtes liegt auf der Platte, ein halber Commit läuft nicht weiter.
 - **Wasserzeichen:** Ein gescheiterter Commit stellt auch das Ablauf-Wasserzeichen des Stands wieder her, den er vorfand; der Gang hat das gefunden.

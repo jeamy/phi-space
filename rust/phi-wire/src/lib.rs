@@ -23,6 +23,8 @@ use tokio::time::{sleep, timeout, Instant};
 const HEADER: usize = 8;
 /// The longest a timer runs at once (`core.timerDelay`); what is further off is reached in steps.
 const MAX_TIMER_MS: f64 = 2_147_483_647.0;
+/// Answers of one connection waiting for the disk; a client that outruns a stalled disk by more is refused.
+const MAX_HELD_REPLIES: usize = 1024;
 const INTERNAL: &str = r#"{"ok":false,"error":{"code":"Internal","message":"internal error"}}"#;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -58,7 +60,14 @@ pub struct Endpoint {
 /// What the test hooks do with a line (`--test-hooks`): the service, how many connections are open, the text.
 pub type Hook = Box<dyn FnMut(&mut Service, usize, &str) -> String>;
 
+/// Host work at a regular interval, on the owner thread between two calls.
+pub struct Periodic {
+	pub every_ms: u64,
+	pub run: Box<dyn FnMut(&mut Service)>,
+}
+
 pub struct ServeOptions {
+	pub periodic: Vec<Periodic>,
 	pub endpoints: Vec<Endpoint>,
 	/// A socket apart from the service's own, for tests only.
 	pub hooks: Option<(PathBuf, Hook)>,
@@ -72,7 +81,7 @@ pub struct ServeOptions {
 }
 impl ServeOptions {
 	pub fn new(listen: Listen, peer: &str) -> ServeOptions {
-		ServeOptions { endpoints: vec![Endpoint { listen, peer: Some(peer.to_owned()) }], hooks: None, max_frame_bytes: 256 * 1024, max_connections: 64, max_inflight_per_connection: 32, idle_ms: 5 * 60_000, watch_debounce_ms: 20 }
+		ServeOptions { periodic: vec![], endpoints: vec![Endpoint { listen, peer: Some(peer.to_owned()) }], hooks: None, max_frame_bytes: 256 * 1024, max_connections: 64, max_inflight_per_connection: 32, idle_ms: 5 * 60_000, watch_debounce_ms: 20 }
 	}
 }
 
@@ -171,6 +180,7 @@ async fn serve_here(service: Service, mut o: ServeOptions, ready: impl FnOnce(Ve
 	service.store.set_waker(Arc::new(move || woken.notify_one()));
 	let durable = service.store.durable();
 	let handed = service.store.handed();
+	let periodic = std::mem::take(&mut o.periodic);
 	let (hooks, hook) = o.hooks.take().map_or((None, None), |(path, hook)| (Some(path), Some(hook)));
 	let hub = Rc::new(Hub { service: RefCell::new(service), handed: Cell::new(handed), commits: Notify::new(), due: Notify::new(), durable: watch::channel(durable).0, failed: Cell::new(false), open: Cell::new(0), stop: Notify::new(), hook: RefCell::new(hook), o });
 
@@ -184,6 +194,16 @@ async fn serve_here(service: Service, mut o: ServeOptions, ready: impl FnOnce(Ve
 		}
 	});
 	spawn_local(background(Rc::clone(&hub)));
+	for mut p in periodic {
+		let hub = Rc::clone(&hub);
+		spawn_local(async move {
+			loop {
+				sleep(Duration::from_millis(p.every_ms)).await;
+				(p.run)(&mut hub.service.borrow_mut());
+				hub.committed();
+			}
+		});
+	}
 
 	let mut bound = vec![];
 	for e in &hub.o.endpoints {
@@ -396,7 +416,7 @@ fn hooked(hub: &Rc<Hub>, link: &Rc<Link>, id: u32, text: &str) {
 
 fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
 	let most = hub.o.max_inflight_per_connection;
-	if link.inflight.get() >= most {
+	if link.inflight.get() >= most || link.queue.borrow().len() >= MAX_HELD_REPLIES {
 		let text = format!(r#"{{"ok":false,"error":{{"code":"ResourceExhausted","message":"at most {most} calls at once per connection"}}}}"#);
 		link.reply(Reply { mark: 0, id, text, counted: false });
 		return;
@@ -406,7 +426,12 @@ fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
 	let seen = hub.handed.get();
 	hub.committed();
 	match outcome {
-		Outcome::Done { text, mark } => link.reply(Reply { mark, id, text, counted: true }),
+		// A call that has its answer is over, only the disk holds that back. On one thread a burst is handled to its end at
+		// once, and what waits for a fsync must not fill the places of the calls that wait for work.
+		Outcome::Done { text, mark } => {
+			link.inflight.set(link.inflight.get() - 1);
+			link.reply(Reply { mark, id, text, counted: false });
+		}
 		Outcome::Wait(parked) => {
 			spawn_local(wait(Rc::clone(hub), Rc::clone(link), id, parked, seen));
 		}

@@ -99,7 +99,7 @@ function spend(b: Bucket, burst: number, refillMs: number): boolean {
 	return true;
 }
 
-type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; leaseRegion?: string; keep?: () => Promise<void>; timer: ReturnType<typeof setInterval> | null; atlas?: boolean; limits: { steps: Bucket; cmds: Bucket }; warned: number;
+type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; leaseRegion?: string; awaitsHello?: boolean; keep?: () => Promise<void>; timer: ReturnType<typeof setInterval> | null; atlas?: boolean; limits: { steps: Bucket; cmds: Bucket }; warned: number;
 	/** The client's commands, one after another (a step counts the ones waiting before it). */ chain: Promise<void> };
 /** At most this often the overview's state goes out after a change (people walk, fires burn down, fog moves). */
 const ATLAS_MS = 1_000;
@@ -347,7 +347,14 @@ export class Gateway {
 	#hello(c: Client): void {
 		const self = this.#chars.get(c.me.charId);
 		const room = self ? this.#rooms.get(self.room) : undefined;
-		if (!self || !room) { c.ws.send({ t: "msg", m: { kind: "error", text: "Deine Figur ist noch nicht in der Welt angekommen.", from: "", at: Date.now() } } satisfies ServerFrame); return; }
+		// a character between two commits of a command (its arrival moves it): its next write in the stream brings the hello
+		if (!self || !room) {
+			if (c.awaitsHello) return;
+			c.awaitsHello = true;
+			setTimeout(() => { if (c.awaitsHello && this.#clients.has(c)) c.ws.send({ t: "msg", m: { kind: "error", text: "Deine Figur ist noch nicht in der Welt angekommen.", from: "", at: Date.now() } } satisfies ServerFrame); }, 2000).unref();
+			return;
+		}
+		c.awaitsHello = false;
 		c.room = self.room;
 		const chars = [...this.#chars.values()].filter((ch) => ch.room === self.room && (ch.charId === self.charId || this.#online.get(ch.charId))).map((ch) => charView(ch, this.#modelChars));
 		const objs = [...this.#objs.values()].filter((o) => o.location === self.room || o.location === self.charId).map((o) => this.#view(o));
@@ -539,7 +546,7 @@ export class Gateway {
 		const visible = !!c && !!this.#online.get(charId);
 		for (const cl of this.#clients) {
 			// its own room changed (a client not greeted yet gets its hello from attach)
-			if (cl.me.charId === charId && c && cl.room !== null && cl.room !== c.room) { this.#hello(cl); continue; }
+			if (cl.me.charId === charId && c && (cl.awaitsHello || (cl.room !== null && cl.room !== c.room))) { this.#hello(cl); continue; }
 			if (visible && cl.room === c!.room) cl.ws.send({ t: "char", c: charView(c!, this.#modelChars), ...(cl.me.charId === charId && c!.ack?.conn === cl.ws.id ? { ack: c!.ack.seq } : {}) } satisfies ServerFrame);
 			else if (cl.room !== null && (cl.room === roomBefore || cl.room === c?.room)) cl.ws.send({ t: "gone", charId } satisfies ServerFrame);
 		}

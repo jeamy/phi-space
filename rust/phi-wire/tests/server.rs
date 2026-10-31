@@ -113,6 +113,22 @@ fn a_reply_waits_for_the_disk_and_a_read_for_what_it_saw() {
 }
 
 #[test]
+fn calls_held_back_by_the_disk_take_no_place_among_the_calls_at_once() {
+	let d = dir("held");
+	let file = d.join("s.sqlite");
+	let slow = WriterOptions { synchronous: Synchronous::Normal, fault: Some((0, Fault::Slow(Duration::from_millis(200)))), ..Default::default() };
+	let s = try_start(&d, move || SpaceHost::sqlite(SqliteLedger::open_with(&file, slow).unwrap()), |o, _| o.max_inflight_per_connection = 2).unwrap();
+	let mut a = Client::new(&s);
+	let generation = a.generation();
+	a.send(1, &write_call(&generation, "r1"));
+	for id in 2..12 {
+		a.send(id, &write_call(&generation, &format!("w{id}")));
+	}
+	let replies: Vec<String> = (0..11).map(|_| a.receive().1).collect();
+	assert!(replies.iter().all(|r| r.contains(r#""ok":true"#)), "{replies:?}");
+}
+
+#[test]
 fn a_store_that_fails_answers_internal_and_goes_on_answering() {
 	let d = dir("failed");
 	let file = d.join("s.sqlite");

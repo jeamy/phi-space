@@ -2,10 +2,12 @@
 // protocol. Every connection is one peer; whoever can reach the socket uses the space.
 //
 //   phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID]
+//   phi-space-server --profile mmo|codemode     what the project's server/space-host.ts is, from the same environment
 //
 // Prints "[phi-spaces] ready on <listen> (store <file|memory>)" once it serves; SIGINT/SIGTERM close it. A panic ends the
 // process: what was acknowledged is on the disk, and a half-done commit is not left running.
 mod hooks;
+mod profiles;
 
 use phi_service::{Options, Service};
 use phi_store::{system_random, Ledger, MemoryLedger, SpaceHost, SqliteLedger, Store, Synchronous};
@@ -14,9 +16,9 @@ use std::path::Path;
 use std::time::Duration;
 use tokio::signal::unix::{signal, SignalKind};
 
-const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]";
+const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode";
 
-fn fail(message: impl std::fmt::Display) -> ! {
+pub(crate) fn fail(message: impl std::fmt::Display) -> ! {
 	eprintln!("{message}");
 	std::process::exit(1)
 }
@@ -31,6 +33,9 @@ fn main() {
 	});
 	let args: Vec<String> = std::env::args().collect();
 	let arg = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
+	if let Some(profile) = arg("--profile") {
+		return profiles::run(&profile);
+	}
 	let (Some(store), Some(listen)) = (arg("--store"), arg("--listen")) else {
 		eprintln!("{USAGE}");
 		std::process::exit(2);
@@ -47,6 +52,7 @@ fn main() {
 	if let Some(Some(limits)) = limits {
 		service.set_limits(&limits).unwrap_or_else(|e| fail(e.message));
 	}
+	service.store.drain().unwrap_or_else(|e| fail(e));
 
 	let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap_or_else(|e| fail(e));
 	let served = runtime.block_on(async {

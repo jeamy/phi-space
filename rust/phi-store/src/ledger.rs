@@ -211,6 +211,8 @@ impl SqliteLedger {
 		let rx = self.writer.as_ref().expect("open").compact().ok_or_else(|| StoreError::Failed("the writer is gone".into()))?;
 		rx.recv().map_err(|_| StoreError::Failed("the writer is gone".into()))
 	}
+	/// The same, without waiting for it: its answer comes through the receiver.
+	pub fn compact_begin(&self) -> Option<std::sync::mpsc::Receiver<Compaction>> { self.writer.as_ref().expect("open").compact() }
 	/// The owner is told when a batch is durable.
 	pub fn set_waker(&self, waker: Waker) { self.writer.as_ref().expect("open").set_waker(waker); }
 	/// Hands a commit's rows to the writer; the receiver settles when they are durable.

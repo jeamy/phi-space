@@ -7,6 +7,7 @@
 //   --dev                              every process restarts when its sources change, web in Next's dev mode
 import { ROOT } from "./env.ts";
 import { spawn, type ChildProcess } from "node:child_process";
+import { spaceServer } from "./space-server.ts";
 import { DEFAULT_ACCOUNTS, DEFAULT_SPACE } from "./space.ts";
 
 const ROLES = { space: "server/space-host.ts", world: "server/world-host.ts", npc: "server/npc-host.ts", model: "server/model-host.ts", web: "server/index.ts" } as const;
@@ -35,7 +36,8 @@ const pipe = (role: Role, stream: NodeJS.ReadableStream | null, out: NodeJS.Writ
 function start(role: Role): Promise<void> {
 	return new Promise((ready) => {
 		const args = [...(dev ? ["--watch-path=server", "--watch-path=worlds", "--watch-path=../src"] : []), "--no-warnings", "--experimental-strip-types", ROLES[role], ...(dev && role === "web" ? ["--dev"] : [])];
-		const child = spawn(process.execPath, args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
+		const server = role === "space" ? spaceServer() : null;
+		const child = spawn(server?.command ?? process.execPath, server?.args ?? args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
 		children.set(role, child);
 		// the space is ready once it says so; the others as soon as they run (they reconnect on their own)
 		if (role !== "space") ready();

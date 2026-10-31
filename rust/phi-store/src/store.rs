@@ -192,6 +192,8 @@ impl Store {
 		all.into_iter().cloned().collect()
 	}
 
+	/// `SpaceHost::compact_begin`: the file is one, whichever Space asks.
+	pub fn compact_begin(&self) -> Option<std::sync::mpsc::Receiver<crate::writer::Compaction>> { self.default.compact_begin() }
 	/// The ids of the named Spaces.
 	pub fn named_ids(&self) -> Vec<String> { self.named.iter().map(|(id, _)| id.clone()).collect() }
 	/// `waker` runs on the writer's thread when commits have become durable; a store in memory has none, its commits

@@ -10,6 +10,7 @@ name = "phi-space-server"
 path = "src/main.rs"
 
 [dependencies]
+phi-core = { path = "../phi-core" }
 phi-json = { path = "../phi-json" }
 phi-service = { path = "../phi-service" }
 phi-store = { path = "../phi-store" }

@@ -248,6 +248,14 @@ impl SpaceHost {
 		}
 	}
 
+	/// `compact`, for a host that serves meanwhile: nothing in memory, and no waiting for the answer.
+	pub fn compact_begin(&self) -> Option<std::sync::mpsc::Receiver<Compaction>> {
+		match &*self.ledger.borrow() {
+			Ledger::Sqlite(l) => l.compact_begin(),
+			Ledger::Memory(_) => None,
+		}
+	}
+
 	fn write(&mut self, c: Changes) -> Result<()> {
 		let shared = self.ledger.clone();
 		let mut guard = shared.borrow_mut();

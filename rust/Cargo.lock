@@ -211,6 +211,7 @@ dependencies = [
 name = "phi-space-server"
 version = "0.0.1"
 dependencies = [
+ "phi-core",
  "phi-json",
  "phi-service",
  "phi-store",

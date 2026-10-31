@@ -1,6 +1,7 @@
 // The processes a test needs, started as real OS processes: the space (in memory, or on a SQLite file to survive a
 // restart) on a socket of its own, and judge processes. The web part runs in the test process (startServer), so a test
 // can hand it a fake model team; it reaches the space over the socket like in production. close() stops them all.
+import { spaceServer } from "../server/space-server.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -13,7 +14,8 @@ let seq = 0;
 
 function run(file: string, env: Record<string, string>, ready: (line: string) => boolean): Promise<ChildProcess> {
 	return new Promise((ok, fail) => {
-		const child = spawn(process.execPath, ["--no-warnings", "--experimental-strip-types", file], { cwd: ROOT, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
+		const server = file === "server/space-host.ts" ? spaceServer() : null;
+		const child = spawn(server?.command ?? process.execPath, server?.args ?? ["--no-warnings", "--experimental-strip-types", file], { cwd: ROOT, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
 		let out = "", done = false;
 		const timer = setTimeout(() => { if (!done) { done = true; child.kill("SIGKILL"); fail(new Error(`${file} did not start:\n${out}`)); } }, 20_000);
 		const seen = (d: Buffer) => { out += d.toString(); if (!done && out.split("\n").some(ready)) { done = true; clearTimeout(timer); ok(child); } };
