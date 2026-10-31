@@ -1,12 +1,12 @@
 // AP 1.8: the transport-independent `space` service (federation-plan-v3.md 6.2).
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { cutText, PhiSpaces, SpaceService, StaticIdentity, createSpace, DEFAULT_POLICY, type Reply, type Call, type Policy } from "../src/index.ts";
+import { cutText, PhiSpaces, SpaceService, StaticIdentity, DEFAULT_POLICY, type Reply, type Call, type Policy } from "../src/index.ts";
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
 import { RemoteSpace, core } from "../src/index.ts";
 import { readChain } from "../src/read-chain.ts";
 import { openTestHost } from "./support/host.ts";
-import { openOwnMemoryHost } from "../src/store/host.ts";
+import { OTHER_SERVER, underTest, type Case, type UnderTest } from "./support/service-under-test.ts";
 import type { StoreHost } from "../src/store/types.ts";
 
 test("linked pages: one RPC, byte bounds, cursors, permissions and malformed chains", async () => {
@@ -53,10 +53,13 @@ const ids = new StaticIdentity({
 });
 const policy: Policy = { roles: { ...DEFAULT_POLICY.roles, "jobs-only": { methods: ["hello", "generation", "write", "read", "take", "readAll", "count", "changes"], types: ["Job"] } } };
 const svc = (h: StoreHost, extra: Record<string, unknown> = {}) => new SpaceService({ host: h, ctx, identity: ids, policy, ...extra });
+const IDENTITIES = { "peer-admin": { principal: { peerId: "peer-admin" }, roles: ["admin"] }, "peer-a": { principal: { peerId: "peer-a", agentId: "w1" }, roles: ["member"] }, "peer-b": { principal: { peerId: "peer-b" }, roles: ["member"] }, "peer-obs": { principal: { peerId: "peer-obs" }, roles: ["observer"] }, "peer-jobs": { principal: { peerId: "peer-jobs" }, roles: ["jobs-only"] } };
+/** The service under test (the TypeScript one, or PHI_SPACES_SERVER_CMD), closed when the test ends. */
+const under = async (t: TestContext, c: Partial<Case> = {}) => { const u = await underTest({ identities: IDENTITIES, policy, ...c }); t.after(() => u.close()); return u; };
 const as = (peerId: string) => ({ peerId });
 const ok = (r: Reply): any => { assert.ok(r.ok, JSON.stringify(r)); return (r as { ok: true; result: unknown }).result; };
 const err = (r: Reply, code: string): any => { assert.ok(!r.ok && r.error.code === code, JSON.stringify(r)); return (r as { ok: false; error: any }).error; };
-async function session(s: SpaceService, peer: string, space?: string) {
+async function session(s: SpaceService | UnderTest, peer: string, space?: string) {
 	const g = ok(await s.handle({ method: "generation", ...(space ? { space } : {}) }, as(peer)));
 	let n = 0;
 	return {
@@ -66,15 +69,14 @@ async function session(s: SpaceService, peer: string, space?: string) {
 	};
 }
 
-test("hello: identity, limits and features; the call cannot name its principal", async () => {
-	const h = await memory();
-	const s = svc(h, { hostId: "host-1" });
+test("hello: identity, limits and features; the call cannot name its principal", async (tc) => {
+	const s = await under(tc, { service: { hostId: "host-1" } });
 	const r = ok(await s.handle({ method: "hello", args: { protocol: 1 } }, as("peer-a")));
 	assert.equal(r.principal, "peer-a/w1");
 	assert.equal(r.role, "single");
 	assert.equal(r.hostId, "host-1");
 	assert.ok(r.spaceId && r.incarnation !== undefined && r.streamId.includes(r.spaceId));
-	assert.equal(r.limits.maxFrameBytes, 256 * 1024);
+	assert.equal(r.limits.maxFrameBytes, 256 * 1024 - (OTHER_SERVER ? 8 : 0), "a socket keeps its frame header off that");
 	assert.ok(r.features.includes("write") && r.features.includes("events"), "mailbox methods are offered");
 	err(await s.handle({ method: "hello", args: { protocol: 2 } }, as("peer-a")), "UnsupportedProtocol");
 	err(await s.handle({ method: "hello", args: { protocol: 1 } }, as("nobody")), "Unauthenticated");
@@ -85,9 +87,8 @@ test("hello: identity, limits and features; the call cannot name its principal",
 	assert.deepEqual(ok(sneaky).roles, ["observer"]);
 });
 
-test("rights: methods per role, types per role including the supertypes of an entry", async () => {
-	const h = await memory();
-	const s = svc(h);
+test("rights: methods per role, types per role including the supertypes of an entry", async (tc) => {
+	const s = await under(tc);
 	const obs = await session(s, "peer-obs");
 	err(await obs.call("write", { entry: { type: "Job", fields: {} } }), "PermissionDenied");
 	err(await obs.call("txn", { action: "begin" }), "PermissionDenied");
@@ -105,7 +106,8 @@ test("rights: methods per role, types per role including the supertypes of an en
 	assert.equal(ok(await member.call("readAll", { template: { type: "Secret" } })).items.length, 1, "a member has no type limits");
 });
 
-test("write, take and the lost answer: the same request returns the stored result, one effect", async () => {
+test("write, take and the lost answer: the same request returns the stored result, one effect", async (tc) => {
+	if (OTHER_SERVER) return tc.skip("a lost answer at the store: rust/phi-store/tests/failures.rs and crash.rs, a restart: test-standalone");
 	await forEachBackend(async (home) => {
 		let h = await home.open();
 		let s = svc(h);
@@ -131,9 +133,8 @@ test("write, take and the lost answer: the same request returns the stored resul
 	});
 });
 
-test("a blocked take answers pending, keeps running, and a poll sees it done; claims are private to their principal", async () => {
-	const h = await memory();
-	const s = svc(h);
+test("a blocked take answers pending, keeps running, and a poll sees it done; claims are private to their principal", async (tc) => {
+	const s = await under(tc);
 	const a = await session(s, "peer-a");
 	const b = await session(s, "peer-b");
 	const first = ok(await a.call("take", { template: { type: "Late" }, timeoutMs: 1_500, waitMs: 80 }, "wait-1"));
@@ -153,9 +154,8 @@ test("a blocked take answers pending, keeps running, and a poll sees it done; cl
 	assert.deepEqual(ok(await a.call("take", { template: { type: "Nothing" }, timeoutMs: 30, ifExists: true }, "miss-1")), { state: "done", entry: null });
 });
 
-test("cancelOperation ends a pending call; transactions and leases run through the service", async () => {
-	const h = await memory();
-	const s = svc(h);
+test("cancelOperation ends a pending call; transactions and leases run through the service", async (tc) => {
+	const s = await under(tc);
 	const a = await session(s, "peer-a");
 	assert.equal(ok(await a.call("read", { template: { type: "Never" }, timeoutMs: 1_200, waitMs: 30 }, "blocked")).state, "pending");
 	const c = ok(await a.call("cancelOperation", { targetRequest: { generation: a.generation, requestId: "blocked" } }));
@@ -175,9 +175,8 @@ test("cancelOperation ends a pending call; transactions and leases run through t
 	err(await other.call("txn", { action: "commit", id: t2.id }), "PermissionDenied");
 });
 
-test("pages by bytes through the service: ResponseBudgetTooSmall carries requiredBytes, changes give batches or resync", async () => {
-	const h = await memory();
-	const s = svc(h);
+test("pages by bytes through the service: ResponseBudgetTooSmall carries requiredBytes, changes give batches or resync", async (tc) => {
+	const s = await under(tc);
 	const a = await session(s, "peer-a");
 	for (let i = 0; i < 12; i++) ok(await a.call("write", { entry: { type: "Job", fields: { i, pad: "x".repeat(200) } } }));
 	const small = err(await a.call("readAll", { template: { type: "Job" }, maxBytes: 150 }), "ResponseBudgetTooSmall");
@@ -200,9 +199,8 @@ test("pages by bytes through the service: ResponseBudgetTooSmall carries require
 	assert.equal(ok(await a.call("changes", { afterRev: 0, streamId: "somewhere-else:0" })).resync, true);
 });
 
-test("frame checks, size limits and bad calls", async () => {
-	const h = await memory();
-	const s = svc(h, { authorityId: "auth-1", primaryEpoch: 3 });
+test("frame checks, size limits and bad calls", async (tc) => {
+	const s = await under(tc, { service: { authorityId: "auth-1", primaryEpoch: 3 }, socket: { maxFrameBytes: 1024 * 1024 } });
 	const a = await session(s, "peer-a", undefined);
 	ok(await a.call("write", { entry: { type: "Job", fields: {} } }, "f1", { frame: { authorityId: "auth-1", primaryEpoch: 3 } }));
 	err(await a.call("write", { entry: { type: "Job", fields: {} } }, "f2", { frame: { authorityId: "auth-2" } }), "AuthorityMismatch");
@@ -224,9 +222,8 @@ test("frame checks, size limits and bad calls", async () => {
 	err(huge, "ResourceExhausted"); // maxEntryBytes
 });
 
-test("limits of the space come back as ResourceExhausted; too many pending operations are refused", async () => {
-	const h = await memory();
-	const s = svc(h, { maxPendingPerPrincipal: 2 });
+test("limits of the space come back as ResourceExhausted; too many pending operations are refused", async (tc) => {
+	const s = await under(tc, { service: { maxPendingPerPrincipal: 2 } });
 	const a = await session(s, "peer-a");
 	assert.equal(ok(await a.call("take", { template: { type: "X1" }, timeoutMs: 1_200, waitMs: 20 })).state, "pending");
 	assert.equal(ok(await a.call("take", { template: { type: "X2" }, timeoutMs: 1_200, waitMs: 20 })).state, "pending");
@@ -234,16 +231,15 @@ test("limits of the space come back as ResourceExhausted; too many pending opera
 	const other = await session(s, "peer-b");
 	assert.equal(ok(await other.call("take", { template: { type: "X3" }, timeoutMs: 1_200, waitMs: 20 })).state, "pending", "the limit is per principal");
 	for (const id of ["r1", "r2"]) ok(await a.call("cancelOperation", { targetRequest: { generation: a.generation, requestId: id } }));
-	const ownLimit = await new PhiSpaces(h, ctx).setLimits({ maxEntries: 1 });
+	const ownLimit = await s.local.setLimits({ maxEntries: 1 }) as { maxEntries: number };
 	assert.equal(ownLimit.maxEntries, 1);
 	ok(await a.call("write", { entry: { type: "Job", fields: {} } }));
 	err(await a.call("write", { entry: { type: "Job", fields: {} } }), "ResourceExhausted");
 });
 
-test("named spaces: the call names its space by alias or id, the default alias works too", async () => {
-	const h = await memory();
-	const info = await h.commit((tx) => createSpace(tx, "sieve", Date.now()), ctx);
-	const s = svc(h);
+test("named spaces: the call names its space by alias or id, the default alias works too", async (tc) => {
+	const s = await under(tc, { named: ["sieve"] });
+	const info = { spaceId: s.named.sieve! };
 	const named = await session(s, "peer-a", "sieve");
 	ok(await named.call("write", { entry: { type: "Job", fields: { in: "sieve" } } }));
 	const byId = await session(s, "peer-a", info.spaceId);
@@ -258,9 +254,8 @@ test("named spaces: the call names its space by alias or id, the default alias w
 	assert.equal(hello.alias, "sieve");
 });
 
-test("a call's text is well-formed before anything sees it: half an emoji is stored as U+FFFD, and its retry is the same request", async () => {
-	const h = openOwnMemoryHost();
-	const s = new SpaceService({ host: h, ctx, identity: new StaticIdentity({ a: { principal: { peerId: "a" }, roles: ["member"] } }) });
+test("a call's text is well-formed before anything sees it: half an emoji is stored as U+FFFD, and its retry is the same request", async (tc) => {
+	const s = await under(tc, { identities: { a: { principal: { peerId: "a" }, roles: ["member"] } } });
 	const call = async (c: unknown) => JSON.parse(await s.handleText(typeof c === "string" ? c : JSON.stringify(c), { peerId: "a" }));
 	const { result: { generation } } = await call({ method: "generation" });
 	const request = { generation, requestId: "r1" };
@@ -276,7 +271,6 @@ test("a call's text is well-formed before anything sees it: half an emoji is sto
 	assert.equal(direct.ok, true);
 	const read = await call({ method: "read", request: { generation, requestId: "r4" }, args: { template: { type: "Cut" } } });
 	assert.deepEqual(read.result.entry.fields, { text: "\ufffd" });
-	await h.close(ctx);
 });
 
 test("cutText keeps a whole emoji out or in, never half of it", () => {

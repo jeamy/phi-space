@@ -49,10 +49,19 @@ impl Listen {
 	}
 }
 
-pub struct ServeOptions {
+/// Where connections come in, and who they are. `None`: nobody the service knows.
+pub struct Endpoint {
 	pub listen: Listen,
-	/// The peer every connection is.
-	pub peer_id: String,
+	pub peer: Option<String>,
+}
+
+/// What the test hooks do with a line (`--test-hooks`): the service, how many connections are open, the text.
+pub type Hook = Box<dyn FnMut(&mut Service, usize, &str) -> String>;
+
+pub struct ServeOptions {
+	pub endpoints: Vec<Endpoint>,
+	/// A socket apart from the service's own, for tests only.
+	pub hooks: Option<(PathBuf, Hook)>,
 	pub max_frame_bytes: usize,
 	pub max_connections: usize,
 	pub max_inflight_per_connection: usize,
@@ -62,8 +71,8 @@ pub struct ServeOptions {
 	pub watch_debounce_ms: u64,
 }
 impl ServeOptions {
-	pub fn new(listen: Listen, peer_id: &str) -> ServeOptions {
-		ServeOptions { listen, peer_id: peer_id.to_owned(), max_frame_bytes: 8 * 1024 * 1024, max_connections: 64, max_inflight_per_connection: 32, idle_ms: 5 * 60_000, watch_debounce_ms: 20 }
+	pub fn new(listen: Listen, peer: &str) -> ServeOptions {
+		ServeOptions { endpoints: vec![Endpoint { listen, peer: Some(peer.to_owned()) }], hooks: None, max_frame_bytes: 256 * 1024, max_connections: 64, max_inflight_per_connection: 32, idle_ms: 5 * 60_000, watch_debounce_ms: 20 }
 	}
 }
 
@@ -79,6 +88,7 @@ struct Hub {
 	failed: Cell<bool>,
 	open: Cell<usize>,
 	stop: Notify,
+	hook: RefCell<Option<Hook>>,
 	o: ServeOptions,
 }
 impl Hub {
@@ -146,7 +156,7 @@ fn put(out: &mut Vec<u8>, id: u32, text: &str) {
 
 /// Serves until `stop` resolves, then gives the service back with nothing left in flight on its side. `ready` is told the
 /// address once the server listens.
-pub async fn serve(service: Service, o: ServeOptions, ready: impl FnOnce(String), stop: impl Future<Output = ()>) -> io::Result<Service> {
+pub async fn serve(service: Service, o: ServeOptions, ready: impl FnOnce(Vec<String>), stop: impl Future<Output = ()>) -> io::Result<Service> {
 	let local = tokio::task::LocalSet::new();
 	let hub = local.run_until(serve_here(service, o, ready, stop)).await?;
 	drop(local); // the tasks go, and what they hold of the hub
@@ -154,14 +164,15 @@ pub async fn serve(service: Service, o: ServeOptions, ready: impl FnOnce(String)
 	Ok(hub.service.into_inner())
 }
 
-async fn serve_here(service: Service, o: ServeOptions, ready: impl FnOnce(String), stop: impl Future<Output = ()>) -> io::Result<Rc<Hub>> {
+async fn serve_here(service: Service, mut o: ServeOptions, ready: impl FnOnce(Vec<String>), stop: impl Future<Output = ()>) -> io::Result<Rc<Hub>> {
 	assert!(o.max_frame_bytes >= 256, "maxFrameBytes must be at least 256");
 	let wake = Arc::new(Notify::new());
 	let woken = Arc::clone(&wake);
 	service.store.set_waker(Arc::new(move || woken.notify_one()));
 	let durable = service.store.durable();
 	let handed = service.store.handed();
-	let hub = Rc::new(Hub { service: RefCell::new(service), handed: Cell::new(handed), commits: Notify::new(), due: Notify::new(), durable: watch::channel(durable).0, failed: Cell::new(false), open: Cell::new(0), stop: Notify::new(), o });
+	let (hooks, hook) = o.hooks.take().map_or((None, None), |(path, hook)| (Some(path), Some(hook)));
+	let hub = Rc::new(Hub { service: RefCell::new(service), handed: Cell::new(handed), commits: Notify::new(), due: Notify::new(), durable: watch::channel(durable).0, failed: Cell::new(false), open: Cell::new(0), stop: Notify::new(), hook: RefCell::new(hook), o });
 
 	spawn_local({
 		let hub = Rc::clone(&hub);
@@ -174,20 +185,38 @@ async fn serve_here(service: Service, o: ServeOptions, ready: impl FnOnce(String
 	});
 	spawn_local(background(Rc::clone(&hub)));
 
-	let listener = Bound::bind(&hub.o.listen).await?;
-	ready(listener.address());
-	tokio::pin!(stop);
-	loop {
-		tokio::select! {
-			_ = &mut stop => break,
-			r = listener.accept(&hub) => r?,
-		}
+	let mut bound = vec![];
+	for e in &hub.o.endpoints {
+		bound.push((Bound::bind(&e.listen).await?, Who::Peer(e.peer.clone())));
 	}
+	if let Some(path) = hooks {
+		bound.push((Bound::bind(&Listen::Unix(path)).await?, Who::Hooks));
+	}
+	ready(bound.iter().map(|(b, _)| b.address()).collect());
+	let bound = Rc::new(bound);
+	tokio::pin!(stop);
+	let mut accepting = tokio::task::JoinSet::new();
+	for (i, _) in bound.iter().enumerate() {
+		let (hub, bound) = (Rc::clone(&hub), Rc::clone(&bound));
+		accepting.spawn_local(async move { accepts(&hub, &bound[i].0, &bound[i].1).await });
+	}
+	tokio::select! {
+		_ = &mut stop => {}
+		Some(r) = accepting.join_next() => r.map_err(io::Error::other)??,
+	}
+	accepting.abort_all();
 	hub.stop.notify_waiters();
-	listener.close();
+	bound.iter().for_each(|(b, _)| b.close());
 	tokio::task::yield_now().await;
 	let _ = hub.service.borrow_mut().store.drain();
 	Ok(hub)
+}
+
+/// Connections of one listener, until accepting fails.
+async fn accepts(hub: &Rc<Hub>, bound: &Bound, who: &Who) -> io::Result<()> {
+	loop {
+		bound.accept(hub, who).await?;
+	}
 }
 
 /// The reaper and delivery: at the next due time, and looked at again after commits, which may bring an earlier one.
@@ -230,18 +259,18 @@ impl Bound {
 			Bound::Tcp(_, a) => a.clone(),
 		}
 	}
-	async fn accept(&self, hub: &Rc<Hub>) -> io::Result<()> {
+	async fn accept(&self, hub: &Rc<Hub>, who: &Who) -> io::Result<()> {
 		match self {
 			Bound::Unix(l, ..) => {
 				let (socket, _): (UnixStream, _) = l.accept().await?;
 				let (r, w) = socket.into_split();
-				connection(hub, r, w);
+				connection(hub, who.clone(), r, w);
 			}
 			Bound::Tcp(l, _) => {
 				let (socket, _): (TcpStream, _) = l.accept().await?;
 				socket.set_nodelay(true)?;
 				let (r, w) = socket.into_split();
-				connection(hub, r, w);
+				connection(hub, who.clone(), r, w);
 			}
 		}
 		Ok(())
@@ -280,28 +309,28 @@ async fn prepare_socket_path(path: &Path) -> io::Result<()> {
 	}
 }
 
-fn connection<R, W>(hub: &Rc<Hub>, read: R, write: W)
+fn connection<R, W>(hub: &Rc<Hub>, who: Who, read: R, write: W)
 where
 	R: AsyncRead + Unpin + 'static,
 	W: AsyncWrite + Unpin + 'static,
 {
-	if hub.open.get() >= hub.o.max_connections {
+	let counted = matches!(who, Who::Peer(_));
+	if counted && hub.open.get() >= hub.o.max_connections {
 		return; // dropping the halves closes the socket
 	}
-	hub.open.set(hub.open.get() + 1);
+	hub.open.set(hub.open.get() + usize::from(counted));
 	let link = Rc::new(Link::default());
 	link.touch();
 	spawn_local(replies(Rc::clone(hub), Rc::clone(&link), write));
 	let hub = Rc::clone(hub);
 	spawn_local(async move {
-		let conn = Conn { peer_id: Some(hub.o.peer_id.clone()) };
 		tokio::select! {
-			_ = frames(&hub, &link, &conn, read) => {}
+			_ = frames(&hub, &link, &who, read) => {}
 			_ = idle(&hub, &link) => {}
 			_ = hub.stop.notified() => {}
 		}
 		link.close();
-		hub.open.set(hub.open.get() - 1);
+		hub.open.set(hub.open.get() - usize::from(counted));
 	});
 }
 
@@ -318,7 +347,7 @@ async fn idle(hub: &Hub, link: &Link) {
 }
 
 /// Reads frames until the peer leaves, a read fails or a frame is over the limit.
-async fn frames<R: AsyncRead + Unpin>(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, mut read: R) {
+async fn frames<R: AsyncRead + Unpin>(hub: &Rc<Hub>, link: &Rc<Link>, who: &Who, mut read: R) {
 	let max = hub.o.max_frame_bytes - HEADER;
 	let mut buf: Vec<u8> = Vec::with_capacity(16 * 1024);
 	let mut at = 0;
@@ -333,7 +362,10 @@ async fn frames<R: AsyncRead + Unpin>(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Con
 			}
 			let id = u32::from_be_bytes(buf[at + 4..at + 8].try_into().expect("four bytes"));
 			let text = String::from_utf8_lossy(&buf[at + HEADER..at + HEADER + n]);
-			call(hub, link, conn, id, &text);
+			match who {
+				Who::Peer(peer) => call(hub, link, &Conn { peer_id: peer.clone() }, id, &text),
+				Who::Hooks => hooked(hub, link, id, &text),
+			}
 			at += HEADER + n;
 		}
 		buf.drain(..at);
@@ -343,6 +375,23 @@ async fn frames<R: AsyncRead + Unpin>(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Con
 			_ => return,
 		}
 	}
+}
+
+#[derive(Clone)]
+enum Who {
+	Peer(Option<String>),
+	Hooks,
+}
+
+fn hooked(hub: &Rc<Hub>, link: &Rc<Link>, id: u32, text: &str) {
+	let text = {
+		let mut hook = hub.hook.borrow_mut();
+		let hook = hook.as_mut().expect("the socket exists only with hooks");
+		hook(&mut hub.service.borrow_mut(), hub.open.get(), text)
+	};
+	hub.committed();
+	let mark = hub.service.borrow().store.handed();
+	link.reply(Reply { mark, id, text, counted: false });
 }
 
 fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
@@ -367,7 +416,7 @@ fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
 /// A call that waits: looked at again when the clock or, where the service wakes on commits, a commit gives a reason.
 async fn wait(hub: Rc<Hub>, link: Rc<Link>, id: u32, mut parked: Box<Parked>, mut seen: u64) {
 	let wakes = hub.service.borrow().options().wake_on_commit;
-	let mut last = Instant::now();
+	let mut last = None; // the first look after the call's own has no gap to keep, as commitSignal
 	loop {
 		let ms = parked.sleep_ms(hub.service.borrow().now(), wakes);
 		let pause = sleep(Duration::from_millis(ms.min(MAX_TIMER_MS) as u64));
@@ -379,7 +428,9 @@ async fn wait(hub: Rc<Hub>, link: Rc<Link>, id: u32, mut parked: Box<Parked>, mu
 					_ = link.closing.notified() => return,
 				}
 			}
-			tokio::time::sleep_until(last + Duration::from_millis(parked.gap_ms() as u64)).await;
+			if let Some(last) = last {
+				tokio::time::sleep_until(last + Duration::from_millis(parked.gap_ms() as u64)).await;
+			}
 		} else {
 			tokio::select! {
 				_ = pause => {}
@@ -390,7 +441,7 @@ async fn wait(hub: Rc<Hub>, link: Rc<Link>, id: u32, mut parked: Box<Parked>, mu
 			return;
 		}
 		seen = hub.handed.get();
-		last = Instant::now();
+		last = Some(Instant::now());
 		let looked = hub.service.borrow_mut().resume(parked);
 		hub.committed();
 		match looked {

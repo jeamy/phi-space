@@ -748,9 +748,23 @@ Ein Testschalter darf nicht unbemerkt den alten TS-Host statt des Rust-Servers s
 | 2 | `phi-service` synchron: `handle_text` mit eingespeister Uhr und Zufall, `wire.json` exakt, gesäter Gang gegen einen TS-Treiber um `handleText`, Antwort byte-genau | erledigt |
 | 3 | Hintergrund: Reaper, Outbox-Entscheidungstabelle aus `deliverEvents`, Mailbox- und Claim-Wartung | erledigt |
 | 4 | `phi-wire`, `phi-space-server`: ein Besitzer-Thread je Store, Antworten erst nach `durable`, Long Polls, CLI und Ready-Zeile wie `standalone.ts` | erledigt; `test-standalone` läuft gegen das Binary |
-| 5 | Gruppe A und B3 gegen den Rust-Server, `--test-hooks`, Fallmatrix | offen |
+| 5 | Gruppe A und B3 gegen den Rust-Server, `--test-hooks`, Fallmatrix | erledigt, Matrix unten |
 | 6 | Startprofile, `SPACES_MMO_SPACE_SERVER`, `CODEMODE_SPACE_SERVER`; ein fehlendes Binary bricht ab und fällt nie auf TS zurück | offen |
 | 7 | TS→Rust→TS mit offener Arbeit, Messung nach R-D2/R-D11 | offen |
+
+**Fallmatrix R3:** Alle Suiten laufen mit `PHI_SPACES_SERVER_CMD=rust/target/release/phi-space-server` gegen den Prozess; `test/support/service-under-test.ts` startet ihn je Test mit `--test-hooks` (Identitäten, Policy und Limits des Falls, ein Socket je Peer, die Hooks auf einem eigenen Unix-Socket). Fehlt das Binary, scheitert der Test, es gibt keinen Rückfall auf TS. `rust/phi-space-server/tests/process.rs` prüft, dass die Hooks ohne den Schalter nicht erreichbar sind.
+
+| Suite | Tests | Gegen Rust | Nur TS, mit Grund |
+|---|---|---|---|
+| `test-standalone` | 4 | 4 | |
+| `test-remote` | 12 | 11 | Spaces zur Laufzeit anlegen: Host-Operation, gehört zu R5b |
+| `test-service` | 12 | 10 | `linked pages` greift auf den Zustand zu (`readChain` steht im Gang des Kerns); verlorene Antwort am Store: `phi-store/tests/failures.rs`, `crash.rs` |
+| `test-socket` | 8 | 7 | Derselbe Dienst an neuem Listener ist ein Wunsch des Hosts; Neustart und TCP stehen in `test-standalone` |
+| `test-socket`, „requestTimeoutMs" | | zählt mit | Prüft den Client gegen einen Stub, läuft in beiden Fällen auf TS |
+| `test-service`, `cutText` | | zählt mit | Reine Funktion des Clients |
+| `test-scenario` | 2 | 0 | Testbett `sieve-mobile`, kommt mit R4 |
+| Gate, Auth, Enrollment (B5) | | offen | R5 |
+| Föderation | | offen | R5b, R6 |
 
 **Festlegungen aus den Scheiben:**
 

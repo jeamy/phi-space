@@ -75,6 +75,8 @@ pub struct Options {
 	pub identity: HashMap<String, Identity>,
 	pub policy: Policy,
 	pub now: Box<dyn Fn() -> f64>,
+	/// The host's id where it is not the registry's.
+	pub host_id: Option<String>,
 	pub authority_id: String,
 	pub primary_epoch: f64,
 	pub max_poll_ms: f64,
@@ -90,7 +92,7 @@ impl Options {
 	pub fn single_peer(peer: &str) -> Options {
 		let identity = Identity { principal: obj! { "peerId" => peer }, roles: vec!["member".into()] };
 		let now = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("after 1970").as_millis() as f64;
-		Options { identity: HashMap::from([(peer.to_owned(), identity)]), policy: default_policy(), now: Box::new(now), authority_id: "local".into(), primary_epoch: 0.0, max_poll_ms: 25_000.0, max_pending_per_principal: 32.0, max_pending_per_peer: 128.0, max_calls_per_window: 1024.0, rate_window_ms: 1000.0, wake_on_commit: false }
+		Options { identity: HashMap::from([(peer.to_owned(), identity)]), policy: default_policy(), now: Box::new(now), host_id: None, authority_id: "local".into(), primary_epoch: 0.0, max_poll_ms: 25_000.0, max_pending_per_principal: 32.0, max_pending_per_peer: 128.0, max_calls_per_window: 1024.0, rate_window_ms: 1000.0, wake_on_commit: false }
 	}
 }
 
@@ -431,7 +433,7 @@ impl Service {
 			let types: Vec<String> = types.iter().filter_map(|t| t.as_str().map(str::to_owned)).collect();
 			self.check_types(grant, Some(&types), "this retained result").ok()?;
 		}
-		let host_id = self.store.host_id()?;
+		let host_id = self.o.host_id.as_deref().or(self.store.host_id())?;
 		Some(obj! { "protocol" => "phi-spaces-claim-receipt-v1", "hostId" => host_id, "binding" => binding, "resolution" => resolution })
 	}
 
@@ -943,7 +945,7 @@ impl Service {
 		}
 		let Some(info) = info else { return Err(error("UnknownSpaceError", format!("unknown space: {}", c.space.as_deref().unwrap_or("undefined")))) };
 		let (poll, principal_pending, peer_pending, authority, epoch) = (self.o.max_poll_ms, self.o.max_pending_per_principal, self.o.max_pending_per_peer, self.o.authority_id.clone(), self.o.primary_epoch);
-		let host_id = self.store.host_id().unwrap_or("").to_owned();
+		let host_id = self.o.host_id.as_deref().or(self.store.host_id()).unwrap_or("").to_owned();
 		let s = self.snap(c)?;
 		let lim = s.limits();
 		let features: Vec<Json> = METHODS.iter().copied().chain(["write.unique", "write.transient", "read.chain", "read.locked"]).map(Json::from).collect();

@@ -46,7 +46,7 @@ fn try_start(d: &Path, ledger: impl FnOnce() -> Ledger + Send + 'static, tune: i
 		let service = Service::new(store, options);
 		let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
 		let told = ready.clone();
-		let r = runtime.block_on(serve(service, o, move |_| told.send(Ok(())).unwrap(), async move { let _ = stopped.await; }));
+		let r = runtime.block_on(serve(service, o, move |_: Vec<String>| told.send(Ok(())).unwrap(), async move { let _ = stopped.await; }));
 		match r {
 			Ok(service) => service.store.close(),
 			Err(e) => { let _ = ready.send(Err(e.to_string())); }
