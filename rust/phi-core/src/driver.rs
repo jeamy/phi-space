@@ -138,6 +138,7 @@ pub fn apply_line(s: &mut Space, snapshots: &mut crate::snapshot::Snapshots, now
 			"releaseTxn" => s.release_txn(now, l.get("id")).map(Json::Bool),
 			"setLimits" => s.set_limits(now, l.get("limits").unwrap_or(&Json::Null)),
 			"setCompletionProfiles" => s.set_completion_profiles(now, l.get("profiles")),
+			"applyRunGate" => s.apply_run_gate(now, l.get("command").unwrap_or(&Json::Null)),
 			"notify" => {
 				let or_null = |k: &str| l.get(k).unwrap_or(&Json::Null);
 				s.notify(now, or_null("tmpl"), txn, l.get("lease").unwrap_or(&Json::Number(ANY)), or_null("handback"), or_null("target"), as_, l.get("consumer"))

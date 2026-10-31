@@ -1,4 +1,4 @@
-//! The operations of src/core.ts on one space, as far as R1 has come (docs/rust-portierung.md, slices 1 to 4):
+//! The operations of src/core.ts on one space, as far as R1 has come (docs/rust-portierung.en.md, slices 1 to 4):
 //! entries, templates, leases, `settle` and expiry, transactions, subscriptions (notify) and waits with their events in
 //! the outbox or a consumer's mailbox (and fanout jobs when they are full), parked requests, the change stream records,
 //! the commit budget, reads, counts, pages and `changes`. Claims and generations are in `claims`, mailboxes in
@@ -528,8 +528,8 @@ impl Space {
 				"jobs" => v.as_array().is_some_and(|jobs| jobs.iter().all(|j| j.get("events").and_then(Json::as_array).is_some())),
 				"releaseQueue" => v.as_array().is_some_and(|q| q.iter().all(|x| x.as_str().is_some())),
 				"maintenance" => v.get("at").and_then(Json::as_f64).is_some(),
-				// a gate field needs the run gates (R5b)
-				"completionProfiles" => v.as_array().is_some_and(|ps| ps.iter().all(|p| p.get("gateField").is_none())),
+				"completionProfiles" => v.as_array().is_some(),
+				"runGates" => v.as_object().is_some(),
 				_ => false,
 			};
 			if !fine {
@@ -541,7 +541,7 @@ impl Space {
 				return Err(not_ported(format!("registration {}", r.id)));
 			}
 		}
-		if let Some(t) = self.state.txns.iter().find(|t| t.rest.keys().any(|k| !["originRequestKey", "completionDeadline", "takenTasks"].contains(&k))) {
+		if let Some(t) = self.state.txns.iter().find(|t| t.rest.keys().any(|k| !["originRequestKey", "completionDeadline", "takenTasks", "runs"].contains(&k))) {
 			let keys: Vec<&str> = t.rest.keys().collect();
 			return Err(not_ported(format!("transaction {} carries {}", t.id, keys.join(", "))));
 		}
@@ -583,7 +583,7 @@ impl Space {
 	fn log_put_rec(&mut self, now: f64, e: &EntryRec) { self.record(now, &e.id, put_op(e)); }
 	fn log_del(&mut self, now: f64, id: &str) { self.record(now, id, obj! { "op" => "del", "id" => id }); }
 
-	fn charge(&mut self, cost: f64) -> Result<()> {
+	pub(crate) fn charge(&mut self, cost: f64) -> Result<()> {
 		let max = self.limits().max_commit_bytes;
 		let Some(used) = self.budget.as_mut() else { return Ok(()) };
 		if *used + cost + COMMIT_FIXED > max {
@@ -592,7 +592,7 @@ impl Space {
 		*used += cost;
 		Ok(())
 	}
-	fn can_charge(&self, cost: f64) -> bool { self.budget.is_none_or(|used| used + cost + COMMIT_FIXED <= self.limits().max_commit_bytes) }
+	pub(crate) fn can_charge(&self, cost: f64) -> bool { self.budget.is_none_or(|used| used + cost + COMMIT_FIXED <= self.limits().max_commit_bytes) }
 	fn defer_maintenance(&mut self, at: f64, cursor: &str) { self.state.rest.insert("maintenance", obj! { "at" => at, "cursor" => cursor }); }
 	/// Reserve one bounded maintenance mutation; persist where to go on when the commit is full.
 	pub(crate) fn maintenance_step(&mut self, cost: f64, now: f64, cursor: &str) -> bool {
@@ -625,7 +625,7 @@ impl Space {
 	}
 
 	/// Bytes of all entries' fields.
-	fn entry_bytes(&self) -> f64 { self.state.entries.iter().map(|e| e.size.unwrap_or_else(|| bytes(&Json::Object(e.fields.clone())))).sum() }
+	pub(crate) fn entry_bytes(&self) -> f64 { self.state.entries.iter().map(|e| e.size.unwrap_or_else(|| bytes(&Json::Object(e.fields.clone())))).sum() }
 	fn rest_bytes(&self, key: &str, absent: f64) -> f64 { self.state.rest.get(key).map_or(absent, bytes) }
 	fn outbox_bytes(&self) -> f64 { self.state.outbox_bytes.unwrap_or_else(|| self.rest_bytes("outbox", 2.0)) }
 	fn outbox_len(&self) -> usize { self.state.rest.get("outbox").and_then(Json::as_array).map_or(0, Vec::len) }
@@ -656,7 +656,7 @@ impl Space {
 	}
 	/// `overheadBytes`: the parts of the document that are not entries. Term by term as core.ts adds them; the parts
 	/// `assert_ported` refuses are their empty values (`{}` or `[]`, 2 bytes), claims and restore none.
-	fn overhead_bytes(&self) -> f64 {
+	pub(crate) fn overhead_bytes(&self) -> f64 {
 		let admin_maintenance = 2.0;
 		let membership = 2.0;
 		let completion = 0.0;
@@ -667,7 +667,7 @@ impl Space {
 		let stream = self.state.stream.as_ref().map_or(0.0, |s| s.bytes);
 		let jobs = self.jobs_bytes();
 		let mailboxes = self.mailboxes_bytes();
-		let run_gates = 2.0;
+		let run_gates = self.rest_bytes("runGates", 2.0);
 		admin_maintenance + membership + completion + authority_transition + authority_counters + restore + claims + stream + self.outbox_bytes() + self.waiters_bytes() + self.regs_bytes() + self.txns_bytes() + jobs + mailboxes + run_gates
 	}
 
@@ -986,7 +986,7 @@ impl Space {
 
 	/// Serve waiters whose match appeared. A take-waiter takes its entry under a fresh transaction, so a lost delivery
 	/// is not a lost job: the entry returns when that transaction lapses unless the receiver commits it.
-	fn serve(&mut self, now: f64) -> Result<()> {
+	pub(crate) fn serve(&mut self, now: f64) -> Result<()> {
 		let ids: Vec<String> = self.state.waiters.iter().map(|w| w.id.clone()).collect();
 		for id in ids {
 			let Some(wi) = self.waiter_at(&id) else { continue };
@@ -1364,7 +1364,10 @@ impl Space {
 		self.touch(now);
 		let Some(at) = self.txn_at(id) else { return Ok(()) };
 		let t = self.state.txns.remove(at);
-		// run fences: none yet; registrations under the transaction end with it
+		for (run, _) in t.rest.get("runs").and_then(Json::as_object).map_or(vec![], |r| r.iter().map(|(k, v)| (k.to_owned(), v.clone())).collect()) {
+			self.complete_fence(&run, now);
+		}
+		// registrations under the transaction end with it
 		for ri in 0..self.state.regs.len() {
 			if self.state.regs[ri].txn.as_str() == Some(id) {
 				self.close_reg(ri, now, "transactionEnded")?;
@@ -1594,7 +1597,8 @@ impl Space {
 		self.settle(now)?;
 		let (type_, fields) = draft_parts(entry)?;
 		let txn = txn.map(|t| self.require_txn(t, as_)).transpose()?;
-		// run gates: no completion profiles yet
+		let txn_id = txn.map(|t| self.state.txns[t].id.clone());
+		self.assert_run_write(&type_, &supertypes, &fields, txn_id.as_deref())?;
 		let expires = grant(lease_ms, now)?;
 		let lim = self.limits();
 		if let Some(as_) = as_ {
@@ -1805,7 +1809,13 @@ impl Space {
 			if !tmpl.matches(e) || (e.restored_unverified && (take || txn.is_some())) {
 				continue;
 			}
-			// run gates: a gated profile is refused (assert_ported)
+			if take {
+				if let Some(run) = self.run_of(&e.types, &e.fields) {
+					if !self.takeable_run(run.as_deref()) {
+						continue; // gated: invisible to takes, not a conflict
+					}
+				}
+			}
 			let mine = txn.is_some() && e.written_under.as_deref() == txn;
 			if e.written_under.is_some() && !mine {
 				continue; // not yet committed elsewhere: invisible, not a conflict
@@ -1853,6 +1863,15 @@ impl Space {
 				match t.rest.get_mut("takenTasks") {
 					Some(Json::Array(tasks)) => tasks.push(capture),
 					_ => t.rest.insert("takenTasks", Json::Array(vec![capture])),
+				}
+				if let Some(Some(run)) = self.run_of(&copy.types, &copy.fields).filter(|r| r.as_deref() != Some("")) {
+					// find admitted it: the gate is running
+					let revision = self.state.rest.get("runGates").and_then(|g| g.get(&run)).and_then(|g| g.get("revision")).cloned().unwrap_or(Json::Null);
+					let t = &mut self.state.txns[at];
+					match t.rest.get_mut("runs") {
+						Some(Json::Object(runs)) => runs.insert(run, revision),
+						_ => t.rest.insert("runs", obj! { run.as_str() => revision }),
+					}
 				}
 			}
 			if copy.written_under.is_none() {
@@ -1906,9 +1925,7 @@ impl Space {
 			}
 			seen.push(task);
 		}
-		if profiles.iter().any(|p| p.get("gateField").is_some()) {
-			return Err(not_ported("a gated completion profile (run gates: R5b)"));
-		}
+		self.assert_gated_profiles_kept(profiles)?;
 		self.state.rest.insert("completionProfiles", Json::Array(profiles.clone()));
 		self.touch(now);
 		Ok(Json::Null)
@@ -2260,10 +2277,12 @@ impl Space {
 		self.settle(now)?;
 		let l = self.leased(id, as_)?;
 		let v = grant(ms, now)?;
-		// run fences: none yet
 		let boundary = id.and_then(Json::as_str).and_then(|id| self.txn_at(id)).and_then(|t| self.state.txns[t].rest.get("completionDeadline")).and_then(Json::as_f64);
 		if boundary.is_some_and(|b| v > b) {
 			return Err(violation("lease exceeds task completion boundary"));
+		}
+		if let Some(id) = id.and_then(Json::as_str) {
+			self.check_run_renewal(id)?;
 		}
 		self.set_lease(l, v);
 		self.touch(now);
@@ -2324,7 +2343,8 @@ impl Space {
 		let t = self.require_txn(id.unwrap_or(&Json::Null), as_)?;
 		let (reserved, id) = (self.state.txns[t].reserved.unwrap_or(0.0), self.state.txns[t].id.clone());
 		if commit {
-			self.check_completion(&id)?; // run bindings: none yet
+			self.check_completion(&id)?;
+			self.check_run_bindings(&id)?;
 		}
 		self.charge(reserved)?;
 		self.finish(&id, commit, now)?;

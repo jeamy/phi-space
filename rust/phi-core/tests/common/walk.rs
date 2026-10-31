@@ -1,4 +1,4 @@
-// The random walk of the differential tests (docs/rust-portierung.md, R1 and R2): the lines it makes, what it learns
+// The random walk of the differential tests (docs/rust-portierung.en.md, R1 and R2): the lines it makes, what it learns
 // from the answers, and how two answers and two states are compared. Shared by phi-core's tests against the core driver
 // and phi-store's against the store driver.
 #![allow(dead_code)]
@@ -43,6 +43,9 @@ pub struct Walk {
 	snapshot: Option<(String, String)>,
 	/// Tasks have a completion profile.
 	profiled: bool,
+	/// Tasks belong to a run, whose gate rules their takes; the newest revision given to each.
+	gated: bool,
+	revisions: [f64; 3],
 }
 
 const TYPES: [&str; 3] = ["Task", "Job", "Note"];
@@ -131,9 +134,15 @@ impl Walk {
 			self.profiled = true;
 			let mut p = obj! { "taskType" => "Task", "resultTypes" => vec![Json::from("Result")], "equalFields" => vec![Json::from("n")], "maxResultCount" => (1 + r.below(2)) as f64 };
 			let Json::Object(po) = &mut p else { unreachable!() };
-			if r.chance(0.5) {
+			let gated = r.chance(0.5);
+			if gated {
+				po.insert("equalFields", vec![Json::from("n"), Json::from("run")].into());
+				po.insert("gateField", "run".into());
+			}
+			if gated || r.chance(0.5) {
 				po.insert("maxLeaseMs", Json::Number(100.0 * (1 + r.below(30)) as f64));
 			}
+			self.gated = gated;
 			if r.chance(0.4) {
 				po.insert("maxResultBytes", Json::Number(30.0 + r.below(100) as f64));
 			}
@@ -437,13 +446,39 @@ impl Walk {
 		self.episode.extend(lines);
 	}
 	/// A task taken under a transaction, its result written, the transaction committed.
+	/// A controller's command: mostly the next revision, sometimes an old one or the same one again.
+	fn gate_command(&mut self, run: usize, kind: &str) -> Json {
+		let r = &mut self.rng;
+		let revision = match r.below(10) {
+			0 => self.revisions[run],
+			1 => (self.revisions[run] - 1.0).max(1.0),
+			2 => self.revisions[run] + 2.0,
+			_ => self.revisions[run] + 1.0,
+		};
+		self.revisions[run] = self.revisions[run].max(revision);
+		let id = if r.chance(0.8) { format!("c{revision}") } else { "c-other".to_owned() };
+		obj! { "op" => "applyRunGate", "command" => obj! { "runId" => format!("r{run}"), "commandId" => id, "kind" => kind, "revision" => revision } }
+	}
+
 	fn completion(&mut self) {
+		let (run, gated) = (self.rng.below(3), self.gated);
+		let gate_kind = self.rng.pick(&["pause", "pause", "stop", "resume", "release"]);
+		let prepare = gated.then(|| self.gate_command(run, "prepare"));
+		let release = gated.then(|| self.gate_command(run, "release"));
+		let during = (gated && self.rng.chance(0.5)).then(|| self.gate_command(run, gate_kind));
+		let after = (gated && self.rng.chance(0.5)).then(|| self.gate_command(run, gate_kind));
 		let r = &mut self.rng;
 		let n = r.below(3) as f64;
-		let task = obj! { "op" => "write", "entry" => obj! { "type" => "Task", "fields" => obj! { "n" => n } }, "lease" => 50_000.0 };
+		let name = format!("r{run}");
+		let of = |n: f64| if gated { obj! { "n" => n, "run" => name.as_str() } } else { obj! { "n" => n } };
+		let task = obj! { "op" => "write", "entry" => obj! { "type" => "Task", "fields" => of(n) }, "lease" => 50_000.0 };
 		let take = obj! { "op" => "probe", "tmpl" => obj! { "type" => "Task" }, "take" => true, "txn" => "$txn" };
-		let result = |n: f64| obj! { "op" => "write", "entry" => obj! { "type" => "Result", "fields" => obj! { "n" => n } }, "txn" => "$txn" };
-		let mut lines = vec![task, obj! { "op" => "createTxn", "lease" => 40_000.0 }, take];
+		let result = |n: f64| obj! { "op" => "write", "entry" => obj! { "type" => "Result", "fields" => of(n) }, "txn" => "$txn" };
+		let mut lines: Vec<Json> = prepare.into_iter().collect();
+		lines.extend([task]);
+		lines.extend(release);
+		lines.extend([obj! { "op" => "createTxn", "lease" => 40_000.0 }, take]);
+		lines.extend(during);
 		match r.below(5) {
 			0 => {}
 			1 => lines.push(result(n + 7.0)),
@@ -454,6 +489,7 @@ impl Walk {
 			lines.push(obj! { "op" => "renew", "id" => "$txn", "ms" => r.pick(&[10.0, 100_000.0]) });
 		}
 		lines.push(obj! { "op" => "commitTxn", "id" => "$txn" });
+		lines.extend(after);
 		self.episode.extend(lines);
 	}
 	/// Fills in `$gen`, `$key` and `$txn` from what the walk has seen.

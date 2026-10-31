@@ -862,6 +862,8 @@ All Rust values come from the same binary, the state of this commit. R-D2 is the
 
 ### R5b: Federation-capable member behind a TS root
 
+**Status 2026-10-31:** Begun. Slice 1: `phi-core::run_gates` is `applyRunGate` with the takes, writes, renewals and commits it rules; a gated completion profile is no longer refused. The walk runs gated profiles and `tests/run_gates.rs` aims at the rest, line for line against TypeScript. The recovery operations on gates (entry fence, restored evidence) come with R6; their branches in `applyRunGate` are ported but only reachable there, as is `check_run_bindings`.
+
 This stage presupposes R5 and is mandatory before a Rust server replaces a present-day TS member. It ports
 the member side of the contracts that already exist, no new Rust root and no replication. If it stays open,
 the federation members also stay in TS; the Rust standalone is no replacement.

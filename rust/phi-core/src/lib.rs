@@ -1,9 +1,10 @@
-//! The semantics of a phi-space, ported from src/core.ts and its helpers (docs/rust-portierung.md, R1). The TypeScript
+//! The semantics of a phi-space, ported from src/core.ts and its helpers (docs/rust-portierung.en.md, R1). The TypeScript
 //! code is the reference: test/support/core-driver.ts runs it operation by operation, and the tests of this crate hold
 //! every state and answer against it.
 pub mod claims;
 pub mod driver;
 pub mod mailbox;
+pub mod run_gates;
 pub mod snapshot;
 pub mod space;
 pub mod state;

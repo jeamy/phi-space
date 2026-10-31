@@ -1,4 +1,4 @@
-// The core as a process (docs/rust-portierung.md, R1): operations of src/core.ts, src/claims.ts and src/mailbox.ts on
+// The core as a process (docs/rust-portierung.en.md, R1): operations of src/core.ts, src/claims.ts and src/mailbox.ts on
 // one SpaceState, one JSON line in, one JSON line out, so another implementation can be held against this one step by
 // step (rust/phi-core/tests, the differential tests).
 //
@@ -73,6 +73,7 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 		case "releaseTxn": return core.releaseTxn(s, now, l.id);
 		case "setLimits": return core.setLimits(s, l.limits, now);
 		case "setCompletionProfiles": core.setCompletionProfiles(s, l.profiles, now); return null;
+		case "applyRunGate": return core.applyRunGate(s, now, l.command);
 		// ---- waiters, subscriptions
 		case "addWaiter": return core.addWaiter(s, now, l.w);
 		case "cancelWaiter": return core.cancelWaiter(s, l.id, now);
