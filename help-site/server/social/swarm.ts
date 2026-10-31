@@ -28,6 +28,7 @@ import { hostFacts, purgeOldest, retentionConfig, writeHostInfo, type HostFacts,
 export const SWARM_ALIAS = "social-swarm";
 export const SWARM_AGENT_COUNT = Math.max(10, Math.min(50_000, Number(process.env.SWARM_AGENTS ?? 100)));
 export const SWARM_AGENT_MAX = 50_000;
+const clampAgents = (n: unknown): number => Math.max(10, Math.min(SWARM_AGENT_MAX, Math.round(Number(n))));
 /** Share of new posts that ask a live model for their text (default 1 %, `SWARM_LLM_RATE` 0..1). Only the hub shard has model access. */
 const LLM_POST_RATE = Math.max(0, Math.min(1, Number(process.env.SWARM_LLM_RATE ?? 0.01) || 0));
 /** A single dispatcher loop: one waiting take = one doc watch probe per commit; processing pipelines async. */
@@ -371,6 +372,8 @@ export class SocialSwarmHub {
 	#admins = new Set<WsConnection>();
 	#retention: RetentionConfig | null;
 	#purging = false;
+	/** Roster writes run one after the other: quick changes on the slider must not race each other. */
+	#rosterSync: Promise<void> = Promise.resolve();
 
 	constructor(host: SpaceHost, ctx: Context, meter: Meter, opts: SwarmShardOptions = {}) {
 		this.host = host;
@@ -519,12 +522,17 @@ export class SocialSwarmHub {
 			.then(() => { this.#historyReady = true; })
 			.catch((e) => { if (!this.#closed) this.#shardWarn("history migration failed – scan paging stays active", e); })
 			.finally(() => { this.#running = wasRunning; });
+		if (this.#seedContent) {
+			const saved = (await this.space.readAll({ type: "SwarmConfig" }, { limit: 1 }))[0]?.fields.agentCount;
+			if (saved !== undefined) this.#agentCount = clampAgents(saved);
+		}
 		this.#seedAgents(this.#agentCount);
 		const existing = await this.space.readAll({ type: "Agent" }, { limit: 4 });
 		if (existing.length === 0 && this.#seedContent) {
 			await this.#seedSpace();
 		} else {
 			await this.#rebuildFeedCache();
+			if (this.#seedContent) await this.#syncRoster();
 		}
 
 		// User-created channels are durable Channel entries carrying a createdBy field.
@@ -690,6 +698,7 @@ export class SocialSwarmHub {
 		// Init is intentionally backgrounded by the HTTP server. Never let it install timers after close.
 		await this.#initPromise?.catch(() => {});
 		for (const t of this.#timers) clearInterval(t);
+		await this.#rosterSync;
 		await this.#historyTask;
 		for (const c of this.clients) c.close();
 		this.clients.clear();
@@ -739,18 +748,7 @@ export class SocialSwarmHub {
 		}
 		await this.space.commit(txn.id);
 
-		// 1000 Agent entries exceed one commit's byte budget – write them in batches of 200
-		for (let off = 0; off < this.agents.length; off += 200) {
-			const batch = await this.space.createTransaction(60_000);
-			for (const a of this.agents.slice(off, off + 200)) {
-				await this.space.write(
-					{ type: "Agent", fields: { agentId: a.agentId, name: a.name, handle: a.handle, hue: a.hue, bio: a.bio, joinedAt: Date.now() } },
-					batch.id,
-					FOREVER,
-				);
-			}
-			await this.space.commit(batch.id);
-		}
+		await this.#syncRoster();
 
 		// Seed ~50 initial posts so the feed is alive immediately
 		for (let i = 0; i < 50; i++) {
@@ -760,6 +758,56 @@ export class SocialSwarmHub {
 			await this.#commitPost(agent, channel.channelId, replyTarget, `seed-${i}`);
 		}
 		this.#rev = (await this.space.readPage(null, { maxBytes: 1_000 })).rev;
+	}
+
+	/**
+	 * Brings the Agent entries in line with the roster. The rest of the swarm derives identities from their index, so
+	 * above a quarter of the entry cap the entries stop: a full retention budget of profiles would purge every post.
+	 */
+	async #syncRoster(): Promise<void> {
+		const limit = this.#retention ? Math.floor(this.#retention.cap / 4) : Infinity;
+		const wanted = new Map(this.agents.slice(0, limit).map((a) => [a.agentId, a]));
+		const surplus: string[] = [];
+		for (const e of await this.space.readAll({ type: "Agent" }, { limit: 100_000 })) {
+			const agentId = String(e.fields.agentId);
+			if (!wanted.delete(agentId)) surplus.push(agentId);
+		}
+		// 1000 Agent entries exceed one commit's byte budget – work in batches of 200
+		const inBatches = async <T>(items: T[], step: (item: T, txn: string) => Promise<unknown>) => {
+			for (let off = 0; off < items.length && !this.#closed; off += 200) {
+				const txn = await this.space.createTransaction(60_000);
+				try {
+					for (const item of items.slice(off, off + 200)) await step(item, txn.id);
+					await this.space.commit(txn.id);
+				} catch (e) {
+					await this.space.abort(txn.id).catch(() => {});
+					throw e;
+				}
+			}
+		};
+		await inBatches(surplus, (agentId, txn) => this.space.take({ type: "Agent", fields: { agentId } }, 0, { txn }));
+		await inBatches([...wanted.values()], (a, txn) => this.space.write(
+			{ type: "Agent", fields: { agentId: a.agentId, name: a.name, handle: a.handle, hue: a.hue, bio: a.bio, joinedAt: Date.now() } },
+			txn,
+			FOREVER,
+		));
+	}
+
+	/** Keeps an admin's agent count over restarts and updates the Agent entries behind it. */
+	#saveAgentCount(): void {
+		this.#rosterSync = this.#rosterSync.then(async () => {
+			const txn = await this.space.createTransaction(60_000);
+			try {
+				await this.space.take({ type: "SwarmConfig" }, 0, { txn: txn.id });
+				await this.space.write({ type: "SwarmConfig", fields: { agentCount: this.#agentCount } }, txn.id, FOREVER);
+				await this.space.commit(txn.id);
+			} catch (e) {
+				await this.space.abort(txn.id).catch(() => {});
+				throw e;
+			}
+			await this.#syncRoster();
+			await this.#statsTick();
+		}).catch((e) => this.#shardWarn("agent count not saved", e));
 	}
 
 	async #rebuildFeedCache(): Promise<void> {
@@ -1626,12 +1674,13 @@ export class SocialSwarmHub {
 					}
 					case "swarm.agentCount": {
 						if (!requireAdmin()) break;
-						const n = Math.max(10, Math.min(SWARM_AGENT_MAX, Math.round(Number(msg.count ?? this.#agentCount))));
+						const n = clampAgents(msg.count ?? this.#agentCount);
 						if (n !== this.#agentCount) {
 							const userAgent = this.#agentIndex.get("agent-you");
 							this.#agentCount = n;
 							this.#seedAgents(n);
 							if (userAgent) this.#agentIndex.set(userAgent.agentId, userAgent);
+							if (this.#seedContent) this.#saveAgentCount();
 						}
 						break;
 					}

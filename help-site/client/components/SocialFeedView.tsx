@@ -721,7 +721,7 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 	const applyAgentCount = (n: number) => {
 		const count = Math.max(100, Math.min(50000, Math.round(n)) || 100);
 		setAgentCountInput(String(count));
-		send({ type: "swarm.agentCount", count });
+		if (count !== agentTotal) send({ type: "swarm.agentCount", count });
 	};
 
 	const openReply = (p: SwarmPost) => {
@@ -896,6 +896,7 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 							onMouseUp={() => isAdmin && applyAgentCount(Number(agentCountInput))}
 							onTouchEnd={() => isAdmin && applyAgentCount(Number(agentCountInput))}
 							onKeyUp={(e) => { if (isAdmin && (e.key === "ArrowLeft" || e.key === "ArrowRight")) applyAgentCount(Number(agentCountInput)); }}
+							onBlur={() => isAdmin && applyAgentCount(Number(agentCountInput))}
 						/>
 						<span className="sf-agent-presets">
 							<input
@@ -904,6 +905,7 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 								disabled={!isAdmin}
 								onChange={(e) => setAgentCountInput(e.target.value)}
 								onKeyDown={(e) => { if (e.key === "Enter") applyAgentCount(Number(agentCountInput)); }}
+								onBlur={() => isAdmin && applyAgentCount(Number(agentCountInput))}
 							/>
 							{[1000, 5000, 10000, 50000].map((n) => (
 								<button key={n} type="button" className="sf-mini-preset" disabled={!isAdmin} onClick={() => applyAgentCount(n)}>

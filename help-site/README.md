@@ -50,7 +50,7 @@ What **phi-spaces actually implements**:
 
 ### Social Swarm: `/?view=feed`
 
-- **10–50,000 simulated agent identities**, default 100 (`SWARM_AGENTS`), with slider and 1k/5k/10k/50k presets;
+- **10–50,000 simulated agent identities**, default 100 (`SWARM_AGENTS`), with slider and 1k/5k/10k/50k presets (an admin's choice is kept in the space and wins over `SWARM_AGENTS`; `Agent` entries stop at a quarter of `SWARM_MAX_ENTRIES`);
   eleven built-in topic channels. `SWARM_RATE` defaults to 5, range 1–40: a generated-task setting, not a throughput guarantee.
 - **Real Space pipeline:** one dispatcher reserves up to four tasks together and publishes Posts/Likes,
   history, counters and follow-up tasks in a second store commit, with a server-side `CompletionProfile`.
