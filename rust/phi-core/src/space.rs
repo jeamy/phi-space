@@ -535,6 +535,8 @@ impl Space {
 				"completionProfiles" => v.as_array().is_some(),
 				"runGates" => v.as_object().is_some(),
 				"membership" => v.as_object().is_some(),
+				"acceptedAuthorityId" => v.as_str().is_some(),
+				"erasureEpoch" | "primaryEpoch" => v.as_f64().is_some(),
 				_ => false,
 			};
 			if !fine {

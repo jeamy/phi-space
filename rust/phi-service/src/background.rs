@@ -57,9 +57,15 @@ impl Service {
 	/// The first run, before the service takes calls: every Space's document exists from here on, and what fell due
 	/// while nothing ran is settled.
 	pub fn start_background(&mut self) -> R<()> {
-		self.maintenance_round(None)?;
-		for id in self.store.named_ids() {
-			self.maintenance_round(Some(&id))?;
+		let mut spaces = vec![None];
+		spaces.extend(self.store.named_ids().into_iter().map(Some));
+		for space in spaces {
+			match self.maintenance_round(space.as_deref()) {
+				Err(e) if e.class == "BootBlocked" => {} // a fenced host starts, and serves when it may
+				other => {
+					other?;
+				}
+			}
 		}
 		Ok(())
 	}
@@ -75,7 +81,9 @@ impl Service {
 			match self.background_of(space) {
 				Ok(at) => wake = wake.min(at),
 				Err(e) => {
-					eprintln!("phi-spaces reaper: {}: {}", e.class, e.message);
+					if e.class != "BootBlocked" {
+						eprintln!("phi-spaces reaper: {}: {}", e.class, e.message);
+					}
 					wake = wake.min(self.now() + RETRY_MS);
 				}
 			}

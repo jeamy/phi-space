@@ -10,7 +10,8 @@
 //  "enrollment"?, "controlAccess"?, "supervisor"?, "serviceClock"?, "grants"?: {"authorityId", "hostId", "seed", "publicKey"},
 //  "runGates"?: {"authorityId", "peerId", "seed", "controller", "controllerKey"},
 //  "membership"?: {"memberId", "spaceId", "authorityId", "peerId", "seed", "controller", "controllerKey"},
-//  "delegation"?: {"authorityId", "controlSpaceId", "supervisor", "supervisorKey", "issuer", "grantKey", "policyFile"}}}
+//  "delegation"?: {"authorityId", "controlSpaceId", "supervisor", "supervisorKey", "issuer", "grantKey", "policyFile"},
+//  "boot"?: {"hostId", "authorityId", "external", "installed"}}}
 //
 // The gate's clock, its keys and its events are files, so a test can change them between two calls without a round trip.
 //
@@ -69,8 +70,9 @@ pub fn apply(file: &str, o: &mut Options, serving: &mut ServeOptions) -> Result<
 	}
 	let mut gate_clock = None;
 	if let Some(g) = c.get("gate") {
-		let (listen, front, now, authorize) = gate(g, &o.policy)?;
+		let (listen, front, now, authorize, guard) = gate(g, &o.policy)?;
 		o.authorize = authorize;
+		o.guard = guard;
 		serving.gates.push((listen, front));
 		gate_clock = g.get("serviceClock").filter(|v| **v == Json::Bool(true)).map(|_| now);
 	}
@@ -93,7 +95,7 @@ impl Keys for FileKeys {
 	}
 }
 
-type Gated = (Listen, Rc<dyn phi_wire::Front>, Now, Option<phi_service::Authorize>);
+type Gated = (Listen, Rc<dyn phi_wire::Front>, Now, Option<phi_service::Authorize>, Option<Rc<dyn phi_service::Guard>>);
 fn gate(g: &Json, policy: &phi_service::Policy) -> Result<Gated, String> {
 	let text = |k: &str| g.get(k).and_then(Json::as_str);
 	let number = |k: &str| g.get(k).and_then(Json::as_f64);
@@ -163,6 +165,14 @@ fn gate(g: &Json, policy: &phi_service::Policy) -> Result<Gated, String> {
 		let jobs: phi_host::run_member::RunPreparer = Box::new(jobs_preparer);
 		o.run_gates = Some(phi_host::run_member::RunGates { authority_id: part("authorityId")?, peer_id: part("peerId")?, signer: phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)), controller: phi_host::run_member::Pin { issuer: part("controller")?, algorithm: phi_host::auth::Algorithm::Ed25519, public_key: part("controllerKey")? }, preparers: [("jobs".to_owned(), jobs)].into_iter().collect(), assert_authority: Box::new(|_| Ok(())) });
 	}
+	let mut guard: Option<Rc<dyn phi_service::Guard>> = None;
+	if let Some(b) = g.get("boot") {
+		let part = |k: &str| b.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("boot without {k}"));
+		let file = |k: &str| phi_host::register::SqliteRegister::open(std::path::Path::new(&part(k)?)).map_err(|e| e.to_string());
+		let boot = Rc::new(phi_host::boot::BootGuard::new(&part("hostId")?, &part("authorityId")?, phi_host::boot::External::File(file("external")?), file("installed")?, Rc::clone(&o.now), 60_000.0));
+		o.boot = Some(Rc::clone(&boot));
+		guard = Some(boot);
+	}
 	let mut authorize = None;
 	if let Some(d) = g.get("delegation") {
 		let part = |k: &str| d.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("delegation without {k}"));
@@ -184,7 +194,7 @@ fn gate(g: &Json, policy: &phi_service::Policy) -> Result<Gated, String> {
 	}
 	let host = text("host").ok_or("the gate names no host")?;
 	let front: Rc<dyn phi_wire::Front> = Gate::new(host, o)?;
-	Ok((Listen::Tcp { host: host.to_owned(), port: number("port").unwrap_or(0.0) as u16 }, front, now, authorize))
+	Ok((Listen::Tcp { host: host.to_owned(), port: number("port").unwrap_or(0.0) as u16 }, front, now, authorize, guard))
 }
 
 /// The test's run kind: two jobs per Member, idempotent.
@@ -212,13 +222,20 @@ fn control_hook(service: &mut Service, name: &str, line: &Json) -> String {
 		let done = service.store.create_space(text("alias"), now, phi_store::system_random()).map_err(|e| phi_core::space::error("Error", e.to_string())).and_then(|r| r).and_then(|info| {
 			let id = info.get("spaceId").and_then(Json::as_str).unwrap_or("").to_owned();
 			let profiles = line.get("profiles").cloned();
-			service.commit_on(Some(&id), |s, now| s.set_completion_profiles(now, profiles.as_ref()))?;
-			Ok(Json::String(id))
+			// host code, before a boot permit can name the Space
+			match service.store.commit(Some(&id), now, |s| s.set_completion_profiles(now, profiles.as_ref())) {
+				Ok(r) => r.map(|_| Json::String(id)),
+				Err(e) => Err(phi_core::space::error("Error", e.to_string())),
+			}
 		});
 		return match done {
 			Ok(v) => phi_json::obj! { "ok" => true, "result" => v }.to_json_text(),
 			Err(e) => phi_json::obj! { "ok" => false, "class" => e.class, "message" => e.message }.to_json_text(),
 		};
+	}
+	if name == "spaceInfo" {
+		let found = service.store.spaces().into_iter().find(|i| i.get("alias").and_then(Json::as_str) == Some(text("alias")));
+		return phi_json::obj! { "ok" => true, "result" => found.unwrap_or(Json::Null) }.to_json_text();
 	}
 	if name == "jobs" {
 		let done = service.store.reader(Some(text("space"))).and_then(|h| h.space.list(now, &phi_core::space::Template::from_json(Some(&phi_json::obj! { "type" => "Job" }))?, None, None, None));

@@ -66,6 +66,13 @@ fn authorize_pending(s: &mut Space, now: f64, request: &Json, auth: &Option<Rc<d
 	}
 	Ok(())
 }
+fn guarded(guard: &Option<Rc<dyn Guard>>, s: &Space) -> R<()> {
+	if let Some(g) = guard {
+		g.host()?;
+		g.space(s)?;
+	}
+	Ok(())
+}
 /// What opening a commit asks of a host's decision (`doc` of src/client.ts), maintenance included.
 fn host_checked(s: &mut Space, auth: &Option<Rc<dyn Authorization>>) -> R<()> {
 	if let Some(a) = auth {
@@ -139,6 +146,12 @@ pub trait Authorization {
 }
 pub type Authorize = Box<dyn Fn(&mut Store, &Json, &Identity, &Conn) -> Result<Rc<dyn Authorization>, CoreError>>;
 
+/// What a host demands of everything served (`installBootGuard`): of the host, and of each Space read or committed.
+pub trait Guard {
+	fn host(&self) -> R<()>;
+	fn space(&self, s: &Space) -> R<()>;
+}
+
 /// A role allows a set of methods (`None`: all), optionally only for entries of some types.
 #[derive(Clone, Debug)]
 pub struct RolePolicy {
@@ -169,6 +182,7 @@ pub struct Options {
 	pub policy: Policy,
 	/// A host's check of each call; `None` for the standalone service.
 	pub authorize: Option<Authorize>,
+	pub guard: Option<Rc<dyn Guard>>,
 	pub now: Box<dyn Fn() -> f64>,
 	/// The host's id where it is not the registry's.
 	pub host_id: Option<String>,
@@ -187,7 +201,7 @@ impl Options {
 	pub fn single_peer(peer: &str) -> Options {
 		let identity = Identity { principal: obj! { "peerId" => peer }, roles: vec!["member".into()] };
 		let now = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("after 1970").as_millis() as f64;
-		Options { identity: HashMap::from([(peer.to_owned(), identity)]), policy: default_policy(), authorize: None, now: Box::new(now), host_id: None, authority_id: "local".into(), primary_epoch: 0.0, max_poll_ms: 25_000.0, max_pending_per_principal: 32.0, max_pending_per_peer: 128.0, max_calls_per_window: 1024.0, rate_window_ms: 1000.0, wake_on_commit: false }
+		Options { identity: HashMap::from([(peer.to_owned(), identity)]), policy: default_policy(), authorize: None, guard: None, now: Box::new(now), host_id: None, authority_id: "local".into(), primary_epoch: 0.0, max_poll_ms: 25_000.0, max_pending_per_principal: 32.0, max_pending_per_peer: 128.0, max_calls_per_window: 1024.0, rate_window_ms: 1000.0, wake_on_commit: false }
 	}
 }
 
@@ -485,7 +499,7 @@ impl Service {
 			v => Some(str_of(v, "space")?),
 		};
 		let space = space.filter(|s| s != DEFAULT_ALIAS);
-		let limits = self.store.reader(space.as_deref())?.space.limits();
+		let limits = self.snap_of(space.as_deref())?.limits();
 		let frame_bytes = transport_frame.min(limits.max_frame_bytes);
 		*response_frame = frame_bytes;
 		if raw_bytes > frame_bytes {
@@ -606,13 +620,28 @@ impl Service {
 	}
 	pub fn commit_on<T>(&mut self, space: Option<&str>, op: impl FnOnce(&mut Space, f64) -> R<T>) -> R<T> {
 		let now = self.now();
-		match self.store.commit(space, now, |s| op(s, now)) {
+		let guard = self.o.guard.clone();
+		match self.store.commit(space, now, |s| {
+			if let Some(g) = &guard {
+				g.host()?;
+				g.space(s)?;
+			}
+			op(s, now)
+		}) {
 			Err(e) => Err(store_failed(e)),
 			Ok(r) => r.map(|c| c.value),
 		}
 	}
 	fn snap(&mut self, c: &Ctx) -> R<&mut Space> { self.snap_of(c.space.as_deref()) }
-	fn snap_of(&mut self, space: Option<&str>) -> R<&mut Space> { Ok(&mut self.store.reader(space)?.space) }
+	fn snap_of(&mut self, space: Option<&str>) -> R<&mut Space> {
+		let guard = self.o.guard.clone();
+		let host = self.store.reader(space)?;
+		if let Some(g) = guard {
+			g.host()?;
+			g.space(&host.space)?;
+		}
+		Ok(&mut host.space)
+	}
 
 	/// `maintain`: due work drained in separate bounded commits before a domain mutation is admitted.
 	fn maintain(&mut self, c: &Ctx) -> R<()> {
@@ -901,8 +930,8 @@ impl Service {
 			"hello" => self.hello(a, c).map(Step::Reply),
 			"generation" => {
 				let (now, authority, principal, epoch) = (self.now(), self.o.authority_id.clone(), c.principal.clone(), self.o.primary_epoch);
-				let auth = c.auth.clone();
-				let r = self.store.commit_keyed(c.space.as_deref(), now, |s, key| host_checked(s, &auth).and_then(|()| check(&auth, now)).and_then(|()| s.issue_generation(now, Some(&principal), &obj! { "key" => key, "authorityId" => authority.as_str(), "primaryEpoch" => epoch })));
+				let (auth, guard) = (c.auth.clone(), self.o.guard.clone());
+				let r = self.store.commit_keyed(c.space.as_deref(), now, |s, key| guarded(&guard, s).and_then(|()| host_checked(s, &auth)).and_then(|()| check(&auth, now)).and_then(|()| s.issue_generation(now, Some(&principal), &obj! { "key" => key, "authorityId" => authority.as_str(), "primaryEpoch" => epoch })));
 				reply(r.map_err(store_failed)??.value)
 			}
 			"write" => self.write_call(c, a).map(Step::Reply),
@@ -1172,6 +1201,7 @@ impl Service {
 			self.commit_on(c.space.as_deref(), |_, _| Ok(()))?;
 		}
 		let key = c.space.clone();
+		self.snap_of(c.space.as_deref())?;
 		let host = self.store.reader(c.space.as_deref())?;
 		self.snapshots.entry(key).or_default().page(&mut host.space, now, &tmpl, &Json::Object(o), Some(&as_))
 	}
@@ -1399,7 +1429,7 @@ fn admitted(s: &mut Space, now: f64, request: &Json, method: &str, args: &Json, 
 	if s.state.rpc.as_ref().and_then(|r| r.claims.get(&key)).is_none() {
 		s.assert_member_admission(method)?;
 	}
-	let ad = s.admit(now, Some(request), &method.into(), &args, &Json::Number(deadline), bound)?;
+	let ad = s.admit(now, Some(request), &method.into(), args, &Json::Number(deadline), bound)?;
 	match ad.get("kind").and_then(Json::as_str) {
 		Some("done") => Ok(Admission::Replay(or_null(ad.get("result")))),
 		Some("cancelled") => Err(error("OperationCancelled", format!("request {} was cancelled", request.get("requestId").and_then(Json::as_str).unwrap_or("")))),

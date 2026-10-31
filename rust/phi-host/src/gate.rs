@@ -209,6 +209,8 @@ pub struct GateOptions {
 	pub lifecycle: Option<crate::membership::MemberLifecycle>,
 	/// Who takes the epoch notices of the supervisor.
 	pub delegation: Option<Rc<crate::delegation::DelegationVerifier>>,
+	/// The boot guard, read before each call.
+	pub boot: Option<Rc<crate::boot::BootGuard>>,
 	pub handshake_ms: u64,
 	pub max_per_peer: usize,
 	pub connections_per_second: f64,
@@ -220,7 +222,7 @@ pub struct GateOptions {
 
 impl GateOptions {
 	pub fn new(directory: Rc<Netbird>, now: Now) -> GateOptions {
-		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, delegation: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
+		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, delegation: None, boot: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
 	}
 }
 
@@ -379,6 +381,17 @@ impl Front for Gate {
 			if self.o.control.as_ref().is_some_and(|c| c.supervisor.is_some()) {
 				spawn_local(supervise(Rc::clone(&self), owner.clone()));
 			}
+			if let Some(boot) = self.o.boot.clone() {
+				// what runs without a call stays authorized too
+				let owner = owner.clone();
+				spawn_local(async move {
+					loop {
+						let spaces = owner.with(|service| service.store.spaces().iter().filter_map(|i| i.get("spaceId")?.as_str().map(str::to_owned)).collect());
+						boot.refresh(spaces).await;
+						sleep(Duration::from_millis(1000)).await;
+					}
+				});
+			}
 			if self.o.revalidate_ms == 0 {
 				return;
 			}
@@ -535,6 +548,14 @@ impl Session for GateSession {
 		let found = InService { keys: keys.as_ref(), service: RefCell::new(service) };
 		let reply = proving.proof(method, call.get("args"), Some(&self.peer_id), &mut self.state.borrow_mut(), &found, (now, nonce));
 		Some(reply.to_json_text())
+	}
+
+	fn prepare(&self, owner: Owner) -> Option<Local<()>> {
+		let boot = Rc::clone(self.gate.o.boot.as_ref()?);
+		Some(Box::pin(async move {
+			let spaces = owner.with(|service| service.store.spaces().iter().filter_map(|i| i.get("spaceId")?.as_str().map(str::to_owned)).collect());
+			boot.refresh(spaces).await;
+		}))
 	}
 
 	fn later(self: Rc<Self>, owner: Owner, text: &str) -> Option<Local<String>> {
