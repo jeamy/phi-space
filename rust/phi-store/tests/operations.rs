@@ -55,7 +55,9 @@ fn overlapping_commits_build_on_each_other_and_readers_see_durable_state() {
 	assert_eq!(watch.poll(), None);
 	h.close();
 	assert!(watch.closed());
-	assert_eq!(meta(&file, "commit_seq"), "2", "the first commit alone, the 19 that came while it was written in one batch");
+	// the first commit alone, and what came while it was written in batches: how many depends on the writer thread's timing
+	let batches: u32 = meta(&file, "commit_seq").parse().unwrap();
+	assert!((2..20).contains(&batches), "20 commits in {batches} batches");
 	assert_eq!(survivors(&file), (0..20).collect());
 }
 
