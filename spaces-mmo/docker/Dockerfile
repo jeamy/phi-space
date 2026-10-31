@@ -8,6 +8,7 @@
 # package's pi-ai: the image carries both, as the codemode-chat image does.
 
 ARG NODE_IMAGE=node:22-bookworm-slim
+ARG RUST_IMAGE=rust:1.99-bookworm
 
 # ---- Stage 1: dependencies (root phi-spaces + spaces-mmo Next.js/React/PixiJS) ----
 FROM ${NODE_IMAGE} AS deps
@@ -67,3 +68,14 @@ WORKDIR /opt/phi-spaces/spaces-mmo
 # all roles in this one container; a role container runs its own server/<role>-host.ts (health checks: per service in
 # docker-compose.yml)
 CMD ["node", "--no-warnings", "--experimental-strip-types", "server/launch.ts"]
+
+# ---- Stage 5: production-rust: the production image with the Rust space server (docs/rust-portierung.md, R4) ----
+# docker-compose.rust.yml gives it to the space containers; the other roles and every other command stay as they are.
+# The builder is Debian bookworm like the Node image, so the binary finds the same libc.
+FROM ${RUST_IMAGE} AS rust-builder
+WORKDIR /opt/phi-spaces/rust
+COPY rust ./
+RUN cargo build --release --locked -p phi-space-server
+
+FROM production AS production-rust
+COPY --from=rust-builder /opt/phi-spaces/rust/target/release/phi-space-server /usr/local/bin/phi-space-server

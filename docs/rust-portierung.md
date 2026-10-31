@@ -1,9 +1,10 @@
 # Portierung von phi-spaces nach Rust
 
-Stand: 2026-10-30. **Ziel- und Arbeitsplan.** R0 ist umgesetzt; der Cargo-Workspace enthält `phi-json`, `phi-core`
-und die erste Scheibe von `phi-store`. Die R1-Basisscheiben 0–5 sind umgesetzt, die unten genannten Vertragslücken
-sind noch offen. Die Entscheidungen R-D0 bis R-D9 (Abschnitt 9) sind am 2026-10-29 getroffen, die genannten Crates
-damit freigegeben. R-D10 bis R-D13 halten offene Entscheidungen aus der Planprüfung fest; sie sind keine Freigaben.
+Stand: 2026-10-31. **Ziel- und Arbeitsplan.** R0 bis R3 sind umgesetzt und abgenommen, R-D2 ist erfüllt: Der
+Cargo-Workspace enthält `phi-json`, `phi-core`, `phi-store`, `phi-service`, `phi-wire` und `phi-space-server`, und beide
+Projekte laufen auf dem Rust-Server. Von R4 ist der lokale Teil erledigt, der Umstieg auf `big` und `nano` steht aus und
+braucht R-D12 und eine Freigabe. R5 bis R8 und M1 sind nicht begonnen. Die Entscheidungen R-D0 bis R-D11 (Abschnitt 9)
+sind getroffen, R-D12 und R-D13 sind offen und keine Freigaben.
 
 ## 1. Ergebnis und Abgrenzung
 
@@ -89,12 +90,9 @@ nicht unterstützte Bestände verweigert er vor dem Bedienen und vor fachlichen 
 darf weder Daten löschen noch Identitäten neu anlegen. Der Rückweg ist zusätzlich an R4/R8 gebunden.
 Ein eigenes Format mit Export/Import wäre eine Änderung von R-D1 und braucht eine neue Entscheidung.
 
-**Offene Vertragslücke: JS-Strings (R-D10).** TS akzeptiert und speichert etwa `{"value":"\ud800"}`; auch
-`canonicalJson` schreibt das unpaarige Surrogat als Escape. Rust-`String` kann es nicht halten, und `phi-json`
-weist es derzeit ab. Der Golden-Test erwartet diese Ablehnung ausdrücklich: Er belegt die bekannte Abweichung,
-nicht die Kompatibilität. Vor R3 ist entweder eine verlustfreie Repräsentation von UTF-16-Codeeinheiten festzulegen
-oder eine bewusste gemeinsame Vertragsänderung mit TS-Anpassung und Bestandsprüfung zu beschließen. Verlustbehaftetes
-Ersetzen ist kein kompatibler Import. Parsergrenzen und ungültiges UTF-8 gehören ebenfalls in die Negativvektoren.
+**Vertragslücke JS-Strings, geschlossen (R-D10):** TS nahm einzelne Surrogate an, Rust-`String` kann sie nicht halten.
+Texte im Space sind seit R-D10 wohlgeformt; der Dienst ersetzt ein einzelnes Surrogat am Eingang durch U+FFFD, und ein
+Store mit so einem Wert wird nicht geöffnet. Parsergrenzen und ungültiges UTF-8 stehen in den Negativvektoren.
 
 ## 4. Zielarchitektur
 
@@ -763,7 +761,7 @@ Ein Testschalter darf nicht unbemerkt den alten TS-Host statt des Rust-Servers s
 | `space-cost`, 200 Figuren, 60 s | 10,7 → 3,8 ms je Kommando | 31–33 → 11 ms | 81–112 → 31 ms | | | 73–92 → 71–89 |
 | `test:perf`, Last, 10 Spieler | | 11 → 11 ms | 26 → 17 ms | 36 → 20 ms | | 0 → 0 |
 
-Alle Rust-Werte stammen vom selben Binary, dem Stand dieses Commits. R-D2 ist damit erfüllt: Die CPU je Kommando sinkt um den Faktor 2,8 bis 3,4, im reinen Dienst um 6 und mehr; der RSS um den Faktor 10. p95 und p99 sind in jedem Profil besser, Timeouts nicht häufiger. Die Timeouts bei 200 Figuren sind in beiden Servern fast nur Wege ohne Antwort. `tests/perf/latency.test.ts` scheitert auf beiden Servern gleich und schon vor dem Gateway-Fix; das ist ein offener Befund in `spaces-mmo`, kein Unterschied der Server. Der Speicher-Store wächst in beiden Servern mit den Claims (O(n)) und ist nur für Tests. Die Zahlen gelten für den lokalen Rechner; eine Messung auf `big`/`nano` steht aus und ändert dort laufende Dienste, gehört also zu R4.
+Alle Rust-Werte stammen vom selben Binary, dem Stand dieses Commits. R-D2 ist damit erfüllt: Die CPU je Kommando sinkt um den Faktor 2,8 bis 3,4, im reinen Dienst um 6 und mehr; der RSS um den Faktor 10. p95 und p99 sind in jedem Profil besser, Timeouts nicht häufiger. Die Timeouts bei 200 Figuren sind in beiden Servern fast nur Wege ohne Antwort. `tests/perf/latency.test.ts` scheiterte auf beiden Servern gleich an sich selbst: Er schickte Schritte schneller als die Seite und lief in die Drossel des Gateways, ein verworfener Schritt bekommt keine Antwort. Im Takt der Seite (`WALK_MS`) misst er auf beiden Servern im Median 26 ms. Der Speicher-Store wächst in beiden Servern mit den Claims (O(n)) und ist nur für Tests. Die Zahlen gelten für den lokalen Rechner; eine Messung auf `big`/`nano` steht aus und ändert dort laufende Dienste, gehört also zu R4.
 
 **Was die Messung und die Projekttests gefunden haben:**
 
@@ -797,7 +795,7 @@ Alle Rust-Werte stammen vom selben Binary, dem Stand dieses Commits. R-D2 ist da
 - **Zustellung:** Der Rust-Server hat keine Konversationen. Ereignisse mit numerischem Ziel warten in der Outbox, Ereignisse ohne solches Ziel oder mit fehlender Transaktion werden verworfen und geben ihre Transaktion frei. `retryAt` und `tries` aus einer Datei eines Agent-Hosts werden wie in TS geachtet.
 - **Ein Thread:** `phi-wire` bedient alle Sockets, Long Polls und den Hintergrund auf dem Thread, dem der Store gehört (tokio `current_thread`). Nur der SQLite-Writer ist ein weiterer Thread; er weckt den Besitzer nach jedem Batch. Ein Aufruf läuft ohne `await` bis zu seinem Ende.
 - **Antwort erst nach `durable`:** Jede Antwort trägt die Marke der bis dahin übergebenen Commits, auch ein Lesezugriff: Er sieht Festgeschriebenes und wird zurückgehalten, bis es auf der Platte ist. Scheitert der Store, wird alles noch nicht Dauerhafte mit `Internal` beantwortet.
-- **Startprofile:** `phi-space-server --profile mmo|codemode` liest dieselbe Umgebung wie der jeweilige `server/space-host.ts` und gibt dieselbe Bereitzeile aus. Limits gelten in beiden Profilen vor dem ersten Aufruf; in TS setzt `spaces-mmo` sie erst nach dem Start des Sockets. Je Store läuft ein Besitzer-Thread, eine Panik beendet den ganzen Prozess. `skipUnchangedRecords` entfällt: Der Schalter spart in TS die Suche nach Änderungen im Entwurf, der Rust-Store führt sie beim Schreiben mit. Beide Profile starten auf Kopien von Stores, die TS schrieb, und TS öffnet sie danach wieder. Die `.env` liest weiterhin der TS-Starter; Docker startet noch TS und zieht mit R4 um.
+- **Startprofile:** `phi-space-server --profile mmo|codemode` liest dieselbe Umgebung wie der jeweilige `server/space-host.ts` und gibt dieselbe Bereitzeile aus. Limits gelten in beiden Profilen vor dem ersten Aufruf; in TS setzt `spaces-mmo` sie erst nach dem Start des Sockets. Je Store läuft ein Besitzer-Thread, eine Panik beendet den ganzen Prozess. `skipUnchangedRecords` entfällt: Der Schalter spart in TS die Suche nach Änderungen im Entwurf, der Rust-Store führt sie beim Schreiben mit. Beide Profile starten auf Kopien von Stores, die TS schrieb, und TS öffnet sie danach wieder. Die `.env` liest weiterhin der TS-Starter. Die Hosts starten in Docker weiterhin TS, siehe R4.
 - **Eingespielte Fehler in `phi-service`:** 10 von 12 fallen auf, die Grenzfälle in `tests/edges.rs` und `tests/background.rs`, weil ein Gang nicht auf das Byte trifft. Zwei bleiben unentdeckt: Der Abbruch „a maintenance item cannot fit the configured commit budget" ist über die API nicht erreichbar, weil `setLimits` die Lage verhindert (auch TS hat dafür keinen Test), und das `settle` nach einer `pending`-Zulassung ändert nichts, weil `maintain` bei derselben Uhrzeit gerade gelaufen ist.
 - **Panik:** Eine Panik beendet den Prozess. Bestätigtes liegt auf der Platte, ein halber Commit läuft nicht weiter.
 - **Wasserzeichen:** Ein gescheiterter Commit stellt auch das Ablauf-Wasserzeichen des Stands wieder her, den er vorfand; der Gang hat das gefunden.
@@ -815,6 +813,16 @@ Alle Rust-Werte stammen vom selben Binary, dem Stand dieses Commits. R-D2 ist da
   R-D2 gewinnen, ohne die vorab festgelegten Latenz-/Fehlerratengrenzen zu verletzen (R-D11).
 
 ### R4: Betrieb einer Anwendung auf Rust
+
+**Stand 2026-10-31:** Der lokale Teil ist erledigt, der Umstieg auf den Servern nicht begonnen.
+
+- **Image:** Die Stufe `production-rust` der beiden Dockerfiles legt das Binary in das Produktions-Image, `npm run docker:image:rust` baut `:prod` und `:rust`. `docker/docker-compose.rust.yml` gibt es nur den Space-Containern. `docker:rust:up|down|logs` läuft als eigenes Compose-Projekt mit eigenen Volumes auf den Ports von `docker:local`. `docker:nano:up` und `docker:big:up` lesen die Datei nicht und bleiben auf TS.
+- **`spaces-mmo`:** Fünf Space-Container auf Rust (je 2–10 MB RSS unter leichter Last), vier World-Worker und Web auf TS, 5 Gäste 60 s über `live-load.ts` ohne Fehler in den Logs. `npc` und `model` liefen nicht mit, weil die lokale `.env` Modellaufrufe einschaltet.
+- **Rückwechsel `spaces-mmo`:** Bei gestoppten Workern wurden alle fünf Stores mit `kill -9` von Rust zu TS und zurück gewechselt. Alle Einträge außer den `Process`-Einträgen der Space-Prozesse waren in beiden Wechseln gleich (1.226 Einträge). Der Zustand stammte aus dem Lauf; aktive Txns und wartende Requests prüft dieser Lauf nicht, das tut `test/test-server-handover.test.ts`.
+- **`codemode-chat`:** Space auf Rust, Judge und Web auf TS, Start und Rückwechsel laufen. Der Store war dabei leer, belegt ist hier also nur der Start; Daten belegen die `.local`-Kopien aus R3 Scheibe 7.
+- **Build aus dem Arbeitsbaum:** Das Image übernimmt unversionierte Dateien. Scheitert ihre Typprüfung, scheitert der Build; das gilt für `docker:image` genauso.
+
+**Noch offen:** R-D12, Bestandsprüfung und Sicherung auf `big` und `nano`, Umstieg nach Rückfrage, Testbett `sieve-mobile` (`test-scenario`), eine Woche Betrieb, Rückwechsel mit laufender Arbeit im Betrieb, das Dashboard gegen den Rust-Server.
 
 **Arbeit:**
 

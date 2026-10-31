@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Player, startServer } from "../stack.ts";
+import { WALK_MS } from "../../client/walk.ts";
 import type { ServerFrame } from "../../server/gateway.ts";
 
 async function player(url: string, name: string): Promise<{ p: Player; h: Extract<ServerFrame, { t: "hello" }> }> {
@@ -24,7 +25,10 @@ test("a step shows up fast: command to position frame, median below 150 ms", asy
 				const from = p.frames.length, dx = i % 2 ? -1 : 1, t0 = performance.now();
 				p.send(`step ${dx} 0`);
 				await p.until((f) => f.t === "char" && f.c.charId === h.me.charId, 5_000, from);
-				times.push(performance.now() - t0);
+				const took = performance.now() - t0;
+				times.push(took);
+				// at the page's pace: a step beyond the gateway's burst is dropped and never answered
+				await new Promise((r) => setTimeout(r, Math.max(0, WALK_MS - took)));
 			}
 			times.sort((a, b) => a - b);
 			const median = times[Math.floor(times.length / 2)]!;

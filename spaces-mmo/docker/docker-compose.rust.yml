@@ -1,0 +1,33 @@
+# The Rust space server in the space containers, for a test bed on this machine (docs/rust-portierung.md, R4):
+# `npm run docker:rust:up` after `npm run docker:image:rust`, as a project of its own with volumes of its own. The hosts
+# keep the TypeScript server: docker:nano:up and docker:big:up do not read this file.
+services:
+  space:
+    build:
+      target: production-rust
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/phi-space-server", "--profile", "mmo"]
+
+  space-west:
+    build:
+      target: production-rust
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/phi-space-server", "--profile", "mmo"]
+
+  space-nord:
+    build:
+      target: production-rust
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/phi-space-server", "--profile", "mmo"]
+
+  space-ost:
+    build:
+      target: production-rust
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/phi-space-server", "--profile", "mmo"]
+
+  space-sued:
+    build:
+      target: production-rust
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/phi-space-server", "--profile", "mmo"]
