@@ -434,7 +434,7 @@ fn run(seed: u64, steps: usize, seen: &mut BTreeMap<String, usize>) {
 	};
 	let max_calls = init.chance(0.2).then_some(40.0);
 	let max_pending = init.chance(0.3).then_some(3.0);
-	let authorized = seed % 3 == 0;
+	let authorized = seed.is_multiple_of(3);
 	let now = 1_700_000_000_000.0;
 	let seed_text = format!("walk{seed}");
 	let mut ts = TsService::start();
@@ -499,21 +499,29 @@ fn run(seed: u64, steps: usize, seen: &mut BTreeMap<String, usize>) {
 				// the server commits a round only when something is due; TypeScript's reaper always does, and that
 				// has to leave no trace in the state either
 				let next = if rust.service.store.reader(None).unwrap().space.needs_maintenance(w.now).unwrap() || step == 0 {
-					rust.service.maintenance_round(None).unwrap()
+					rust.service.maintenance_round(None)
 				} else {
-					rust.service.store.reader(None).unwrap().space.next_expiry().unwrap()
+					rust.service.store.reader(None).unwrap().space.next_expiry()
 				};
-				if next >= phi_json::FOREVER { "forever".to_owned() } else { phi_json::number_text(next) }
+				match next {
+					Ok(n) if n >= phi_json::FOREVER => "forever".to_owned(),
+					Ok(n) => phi_json::number_text(n),
+					Err(e) => format!("failed: {e}"),
+				}
 			} else {
 				let txns = rust.service.store.reader(None).unwrap().space.state.txns.len();
-				let n = rust.service.deliver_events(None).unwrap();
+				let delivered = rust.service.deliver_events(None);
+				if delivered.is_err() {
+					*seen.entry("deliver failed".to_owned()).or_default() += 1;
+				}
+				let n = delivered.as_ref().map_or(0, |n| *n);
 				if n > 0 {
 					*seen.entry("deliver dropped".to_owned()).or_default() += 1;
 				}
 				if rust.service.store.reader(None).unwrap().space.state.txns.len() < txns {
 					*seen.entry("deliver released".to_owned()).or_default() += 1;
 				}
-				n.to_string()
+				delivered.map_or_else(|e| format!("failed: {e}"), |n| n.to_string())
 			};
 			rust.service.store.drain().unwrap();
 			assert_eq!(got, want, "seed {seed}, step {step}: reaper {reaper}");

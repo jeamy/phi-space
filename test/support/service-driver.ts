@@ -62,6 +62,10 @@ const state = async (): Promise<string> => {
 	if (process.env.PHI_SERVICE_DUMP) process.stderr.write(JSON.stringify(v) + "\n");
 	return digestJson(v);
 };
+/** A background round that fails rolls back and is tried again; the reply names the failure. */
+const failed = async (run: () => Promise<Record<string, unknown>>): Promise<Record<string, unknown>> => {
+	try { return await run(); } catch (e) { return { reply: `failed: ${(e as Error).constructor.name}: ${(e as Error).message}` }; }
+};
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const text of rl) {
 	if (!text.trim()) continue;
@@ -82,13 +86,14 @@ for await (const text of rl) {
 		out = { reply: "" };
 	} else if (l.op === "maintain") {
 		tick(l);
-		const next = await host!.commit(async (tx) => { const s = await spaceDoc(tx, undefined, Date.now()); core.settle(s, Date.now()); return core.nextExpiry(s); }, ctx);
-		out = { reply: next >= core.FOREVER ? "forever" : String(next) };
+		out = await failed(async () => {
+			const next = await host!.commit(async (tx) => { const s = await spaceDoc(tx, undefined, Date.now()); core.settle(s, Date.now()); return core.nextExpiry(s); }, ctx);
+			return { reply: next >= core.FOREVER ? "forever" : String(next) };
+		});
 	} else if (l.op === "deliver") {
 		tick(l);
 		const before = (await host!.snapshot(Space, ctx))?.outbox.length ?? 0;
-		await deliverEvents(host!, ctx);
-		out = { reply: String(before - ((await host!.snapshot(Space, ctx))?.outbox.length ?? 0)) };
+		out = await failed(async () => { await deliverEvents(host!, ctx); return { reply: String(before - ((await host!.snapshot(Space, ctx))?.outbox.length ?? 0)) }; });
 	} else {
 		tick(l);
 		if (process.env.PHI_SERVICE_TRACE) process.stderr.write(`TRACE ${l.now} ${l.peer} ${l.text.slice(0, 600)}\n`);
