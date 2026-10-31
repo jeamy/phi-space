@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { X509Certificate, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { registerUnderTest } from "./support/gate-under-test.ts";
 import { SqliteRecoveryRegister, RegisterConflict, RecoveryBlocked, RecoveryCoordinator, MemberTransitionInstaller, PhiSpaces, core, Space, installBootGuard, BootBlocked, serveTlsRegister, TlsRecoveryRegister, ControlAckService, RecoveryReceipts, RecoveryClient, serveRecovery, generateKey, spaceDoc, createSpace, type RecoveryRegister } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
 
@@ -72,7 +73,7 @@ function certificates(dir:string){
 test("mutual TLS register separates readers, scoped writers and operators and persists CAS across restart",async()=>{
  const dir=mkdtempSync(join(tmpdir(),"phi-spaces-tls-register-")),pki=certificates(dir);let db=new SqliteRecoveryRegister(join(dir,"register.sqlite"));
  const config={...pki.identity("server"),host:"127.0.0.1",port:0,peers:{[pki.fingerprint("reader")]:{operator:false},[pki.fingerprint("operator")]:{operator:true},[pki.fingerprint("scoped")]:{writeKeys:["boot:member"]}}};
- let server=await serveTlsRegister(db,config);
+ const registerFile=join(dir,"register.sqlite");let server=await registerUnderTest(db,registerFile,config);
  const unixPath=join(dir,"register-tunnel.sock"),tunnelSockets=new Set<ReturnType<typeof rawConnect>>();
  const tunnel=createRawServer(socket=>{const upstream=rawConnect({host:"127.0.0.1",port:(server.address() as any).port});
   for(const current of [socket,upstream]){tunnelSockets.add(current);current.on("close",()=>tunnelSockets.delete(current));}
@@ -99,16 +100,16 @@ test("mutual TLS register separates readers, scoped writers and operators and pe
   await client("operator").compareAndSet("boot:member",1,{state:"fenced"});
   assert.equal(((await client("reader").getMany(["boot:member"]))["boot:member"]!.value as any).state,"fenced");
   assert.equal(((await tunneled.getMany(["boot:member"]))["boot:member"]!.value as any).state,"fenced");
-  const readerPolicy=config.peers[pki.fingerprint("reader")];delete config.peers[pki.fingerprint("reader")];
+  const readerPolicy=config.peers[pki.fingerprint("reader")];delete config.peers[pki.fingerprint("reader")];server.peersChanged();
   await assert.rejects(client("reader").getMany(["boot:member"]));
   await assert.rejects(tunneled.getMany(["boot:member"]));
-  config.peers[pki.fingerprint("reader")]=readerPolicy;
+  config.peers[pki.fingerprint("reader")]=readerPolicy;server.peersChanged();
   const erasure={spaceId:"jobs",epoch:1,state:"pending",commandHash:"a".repeat(64),archiveDeadline:2000,archivesPending:true};
   await client("operator").compareAndSet("erasure:jobs",null,erasure);
   await assert.rejects(client("operator").compareAndSet("erasure:jobs",1,{...erasure,epoch:0}),RegisterConflict);
   await assert.rejects(client("operator").compareAndSet("erasure-archives:jobs",null,{spaceId:"jobs",artifacts:[{id:"stale",sha256:"b".repeat(64),epoch:0,kind:"backup",state:"retained"}]}),RegisterConflict);
   assert.equal((await client("reader").get<any>("erasure:jobs"))?.version,1);
-  await server.close();db.close();db=new SqliteRecoveryRegister(join(dir,"register.sqlite"));server=await serveTlsRegister(db,config);
+  await server.close();db.close();db=new SqliteRecoveryRegister(join(dir,"register.sqlite"));server=await registerUnderTest(db,registerFile,config);
   assert.equal((await client("reader").get<any>("authority:control"))?.value.authorityId,"a");
   const wrongName=new TlsRecoveryRegister({...pki.identity("reader"),host:"127.0.0.1",serverName:"untrusted.example",port:(server.address() as any).port});await assert.rejects(wrongName.get("authority:control"));
  }finally{for(const socket of tunnelSockets)socket.destroy();await new Promise<void>(resolve=>tunnel.close(()=>resolve()));await server.close();db.close();rmSync(dir,{recursive:true,force:true});}

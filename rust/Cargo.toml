@@ -1,4 +1,4 @@
-# The Rust port of phi-spaces (docs/rust-portierung.md). Crates are added phase by phase; the TypeScript code in src/
+# The Rust port of phi-spaces (docs/rust-portierung.en.md). Crates are added phase by phase; the TypeScript code in src/
 # stays the reference, and test/vectors/ is what both must agree on.
 [workspace]
 resolver = "2"
@@ -14,4 +14,5 @@ ryu-js = "1"
 sha2 = "0.10"
 hmac = "0.12"
 rusqlite = { version = "0.32", features = ["bundled"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 tokio = { version = "1", default-features = false, features = ["rt", "net", "io-util", "time", "sync", "signal", "macros"] }

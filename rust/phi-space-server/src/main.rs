@@ -1,13 +1,16 @@
-// The space process in Rust (docs/rust-portierung.md, R3): what src/standalone.ts is, on the same store file and the same
+// The space process in Rust (docs/rust-portierung.en.md, R3): what src/standalone.ts is, on the same store file and the same
 // protocol. Every connection is one peer; whoever can reach the socket uses the space.
 //
 //   phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID]
 //   phi-space-server --profile mmo|codemode     what the project's server/space-host.ts is, from the same environment
+//   phi-space-server --tls-register CONFIG.json the independent register over pinned mutual TLS (src/tls-register.ts)
 //
 // Prints "[phi-spaces] ready on <listen> (store <file|memory>)" once it serves; SIGINT/SIGTERM close it. A panic ends the
 // process: what was acknowledged is on the disk, and a half-done commit is not left running.
 mod hooks;
 mod profiles;
+mod register;
+use register::register;
 
 use phi_service::{Options, Service};
 use phi_store::{system_random, Ledger, MemoryLedger, SpaceHost, SqliteLedger, Store, Synchronous};
@@ -16,7 +19,7 @@ use std::path::Path;
 use std::time::Duration;
 use tokio::signal::unix::{signal, SignalKind};
 
-const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode";
+const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode\n       phi-space-server --tls-register CONFIG.json";
 
 pub(crate) fn fail(message: impl std::fmt::Display) -> ! {
 	eprintln!("{message}");
@@ -35,6 +38,9 @@ fn main() {
 	let arg = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
 	if let Some(profile) = arg("--profile") {
 		return profiles::run(&profile);
+	}
+	if let Some(config) = arg("--tls-register") {
+		return register(&config);
 	}
 	let (Some(store), Some(listen)) = (arg("--store"), arg("--listen")) else {
 		eprintln!("{USAGE}");

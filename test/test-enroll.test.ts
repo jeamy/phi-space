@@ -24,7 +24,7 @@ async function setup(tc: TestContext) {
 	await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 	tc.after(() => { server.closeAllConnections(); server.close(); });
 	const clock = new TestClock(tc, 1_700_000_000_000);
-	const gate = await gateUnderTest(tc, { url: `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`, clock, gateHostId: "host-1", spaceKeys: true, enrollment: true, policy });
+	const gate = await gateUnderTest(tc, { url: `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`, clock, gateHostId: "host-1", spaceKeys: true, enrollment: true, serviceClock: true, policy });
 	const port = gate.port;
 	const transports: Array<{ close(): void }> = [];
 	tc.after(() => transports.forEach((t) => t.close()));

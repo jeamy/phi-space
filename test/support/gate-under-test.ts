@@ -8,7 +8,7 @@ import type net from "node:net";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
-import { BootstrapClosed, CONTROL_SPACE, ControlAccess, EnrollmentService, GateIdentity, MemoryKeyDirectory, NetbirdDirectory, PhiSpaces, ProvingService, SpaceKeyDirectory, SpaceService, Supervisor, bootstrapEnroll, core, createEnroll, GrantAuthority, GrantVerifier, RotationService, listSpaces, revokePeerKey, snapshotSpace, socketTransport, startGate, DEFAULT_GROUP_ROLES, rolesOf, type Connection, type KeyDirectory, type PeerKeyRec, type Policy } from "../../src/index.ts";
+import { BootstrapClosed, CONTROL_SPACE, ControlAccess, EnrollmentService, GateIdentity, MemoryKeyDirectory, NetbirdDirectory, PhiSpaces, ProvingService, SpaceKeyDirectory, SpaceService, Supervisor, bootstrapEnroll, core, createEnroll, serveTlsRegister, GrantAuthority, GrantVerifier, RotationService, listSpaces, revokePeerKey, snapshotSpace, socketTransport, startGate, DEFAULT_GROUP_ROLES, rolesOf, type Connection, type KeyDirectory, type PeerKeyRec, type Policy } from "../../src/index.ts";
 import { plainDoc } from "./host.ts";
 import { openTestHost } from "./host.ts";
 import { ctx } from "./persistent.ts";
@@ -153,6 +153,24 @@ async function asProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 		peers: () => hook("peers"),
 		revalidate: () => hook("revalidate"),
 	};
+}
+
+type RegisterConfig = { host: string; port: number; caFile: string; certFile: string; keyFile: string; peers: Record<string, { operator?: boolean; writeKeys?: string[] }> };
+/** The register server: `peersChanged` after a test changed `peers`, which the process reads from a file. */
+export async function registerUnderTest(db: Parameters<typeof serveTlsRegister>[0], file: string, config: RegisterConfig) {
+	if (!OTHER_SERVER) return { ...(await serveTlsRegister(db, config)), peersChanged: () => {} };
+	const peersFile = `${file}.peers.json`, configFile = `${file}.config.json`, save = () => put(peersFile, JSON.stringify(config.peers));
+	save();
+	writeFileSync(configFile, JSON.stringify({ ...config, peers: undefined, peersFile, file }));
+	const proc = spawn(CMD![0]!, [...CMD!.slice(1), "--tls-register", configFile], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
+	const port = await new Promise<number>((resolve, reject) => {
+		let out = "";
+		const seen = (d: Buffer) => { out += d; const m = /ready on tcp:[^:]+:(\d+)/.exec(out); if (m) resolve(Number(m[1])); };
+		proc.stdout.on("data", seen);
+		proc.stderr.on("data", seen);
+		proc.on("exit", (code) => reject(new Error(`the register exited (${code}):\n${out}`)));
+	});
+	return { address: () => ({ port }), peersChanged: save, close: () => new Promise<void>((r) => { proc.removeAllListeners("exit"); proc.once("exit", () => r()); proc.kill("SIGTERM"); }) };
 }
 
 export const gateUnderTest = (tc: TestContext, c: GateCase): Promise<GateUnderTest> => OTHER_SERVER ? asProcess(tc, c) : inProcess(tc, c);

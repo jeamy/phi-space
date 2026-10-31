@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::net::IpAddr;
 use std::rc::Rc;
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::{watch, Notify};
 use tokio::task::spawn_local;
@@ -38,6 +38,8 @@ pub struct Netbird {
 	token: String,
 	cache_ms: f64,
 	timeout_ms: u64,
+	/// PEM of a private CA; the public roots without it.
+	pub ca: RefCell<Option<String>>,
 	now: Now,
 	by_ip: RefCell<HashMap<String, PeerInfo>>,
 	fetched_at: Cell<f64>,
@@ -52,7 +54,7 @@ impl Netbird {
 		if cache_ms.is_nan() || cache_ms < 1.0 {
 			return Err("cacheMs must be between 1 and 60000".to_owned());
 		}
-		Ok(Rc::new(Netbird { url: url.trim_end_matches('/').to_owned(), token: token.to_owned(), cache_ms, timeout_ms: 4_000, now, by_ip: RefCell::default(), fetched_at: Cell::new(f64::NEG_INFINITY), inflight: RefCell::default(), requests: Cell::new(0) }))
+		Ok(Rc::new(Netbird { url: url.trim_end_matches('/').to_owned(), token: token.to_owned(), cache_ms, timeout_ms: 4_000, ca: RefCell::default(), now, by_ip: RefCell::default(), fetched_at: Cell::new(f64::NEG_INFINITY), inflight: RefCell::default(), requests: Cell::new(0) }))
 	}
 
 	pub fn cache_ms(&self) -> f64 { self.cache_ms }
@@ -82,7 +84,8 @@ impl Netbird {
 
 	async fn fetch(&self) -> Result<(), String> {
 		let unreachable = |e: String| format!("the management API could not be reached: {e}");
-		let got = timeout(Duration::from_millis(self.timeout_ms), get(&self.url, &self.token)).await;
+		let ca = self.ca.borrow().clone();
+		let got = timeout(Duration::from_millis(self.timeout_ms), get(&self.url, &self.token, ca.as_deref())).await;
 		let (status, body) = got.map_err(|_| unreachable("timed out".to_owned()))?.map_err(unreachable)?;
 		if !(200..300).contains(&status) {
 			return Err(format!("the management API answered HTTP {status}"));
@@ -114,22 +117,40 @@ impl Netbird {
 	}
 }
 
-/// `GET {url}/api/peers`: status and body. Plain HTTP only for now; https comes with the TLS register (R5).
-async fn get(url: &str, token: &str) -> Result<(u16, String), String> {
-	let Some(rest) = url.strip_prefix("http://") else { return Err(format!("{url}: only http:// is implemented yet")) };
+/// `GET {url}/api/peers`: status and body. `ca`: the roots of a private CA, else the public ones.
+async fn get(url: &str, token: &str, ca: Option<&str>) -> Result<(u16, String), String> {
+	let (secure, rest) = match (url.strip_prefix("https://"), url.strip_prefix("http://")) {
+		(Some(rest), _) => (true, rest),
+		(_, Some(rest)) => (false, rest),
+		_ => return Err(format!("{url}: not an http or https address")),
+	};
 	let (authority, base) = rest.split_once('/').map_or((rest, String::new()), |(a, p)| (a, format!("/{p}")));
-	let address = if authority.contains(':') { authority.to_owned() } else { format!("{authority}:80") };
-	let mut socket = TcpStream::connect(&address).await.map_err(|e| e.to_string())?;
+	let address = if authority.contains(':') { authority.to_owned() } else { format!("{authority}:{}", if secure { 443 } else { 80 }) };
+	let socket = TcpStream::connect(&address).await.map_err(|e| e.to_string())?;
 	let request = format!("GET {base}/api/peers HTTP/1.1\r\nHost: {authority}\r\nAuthorization: Token {token}\r\nAccept: application/json\r\nConnection: close\r\n\r\n");
-	socket.write_all(request.as_bytes()).await.map_err(|e| e.to_string())?;
-	let mut raw = vec![];
-	socket.read_to_end(&mut raw).await.map_err(|e| e.to_string())?;
+	let raw = if secure {
+		let host = authority.split(':').next().unwrap_or(authority);
+		exchange(crate::tls::connect_web(host, socket, ca).await?, &request).await?
+	} else {
+		exchange(socket, &request).await?
+	};
 	let end = raw.windows(4).position(|w| w == b"\r\n\r\n").ok_or("an answer without headers")?;
 	let head = String::from_utf8_lossy(&raw[..end]).to_ascii_lowercase();
 	let status = head.split_whitespace().nth(1).and_then(|s| s.parse().ok()).ok_or("an answer without a status")?;
 	let body = &raw[end + 4..];
 	let chunked = head.lines().any(|l| l.starts_with("transfer-encoding:") && l.contains("chunked"));
 	Ok((status, String::from_utf8_lossy(&if chunked { unchunked(body)? } else { body.to_vec() }).into_owned()))
+}
+
+async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(mut socket: S, request: &str) -> Result<Vec<u8>, String> {
+	socket.write_all(request.as_bytes()).await.map_err(|e| e.to_string())?;
+	let mut raw = vec![];
+	match socket.read_to_end(&mut raw).await {
+		Ok(_) => Ok(raw),
+		// servers often end TLS without a close_notify; the head says what was meant
+		Err(_) if !raw.is_empty() => Ok(raw),
+		Err(e) => Err(e.to_string()),
+	}
 }
 
 fn unchunked(mut body: &[u8]) -> Result<Vec<u8>, String> {

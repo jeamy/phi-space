@@ -3,4 +3,6 @@ pub mod auth;
 pub mod control;
 pub mod gate;
 pub mod grants;
+pub mod register;
 pub mod rotation;
+pub mod tls;
