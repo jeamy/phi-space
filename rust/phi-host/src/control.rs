@@ -1,6 +1,6 @@
 //! The control space: pairing (src/enroll.ts), the rules of the wire around it and the supervisor (src/supervisor.ts).
 //! Every effect is one commit on the control space. The plain token lives in `Enrolling::enroll` only; what is stored is
-//! its hash. The commands of a remote effect (`asyncCommands`) and key rotation are not here yet.
+//! its hash. The commands of a remote effect (`asyncCommands`) come with their handlers.
 use crate::auth::{base64, signed_text, to_base64, verify_detached, Algorithm, AuthState, PeerKey, Proving};
 use crate::gate::Keys;
 use phi_core::space::{error, CoreError, Space, Template};
@@ -26,7 +26,7 @@ type R<T> = Result<T, CoreError>;
 pub fn hash_token(token: &str) -> String { hex(&Sha256::digest(token.as_bytes())) }
 pub fn key_fingerprint(public_key: &str) -> String { hex(&Sha256::digest(base64(public_key)))[..32].to_owned() }
 
-fn illegal(m: &str) -> CoreError { error("IllegalArgumentError", m) }
+pub(crate) fn illegal(m: &str) -> CoreError { error("IllegalArgumentError", m) }
 
 /// The control space's id; made when it does not exist yet.
 pub fn control_id(service: &mut Service, now: f64) -> R<String> {
@@ -38,26 +38,26 @@ pub fn control_id(service: &mut Service, now: f64) -> R<String> {
 		Ok(info) => Ok(info?.get("spaceId").and_then(Json::as_str).unwrap_or_default().to_owned()),
 	}
 }
-fn known_id(service: &Service) -> Option<String> {
+pub(crate) fn known_id(service: &Service) -> Option<String> {
 	service.store.spaces().into_iter().find(|i| i.get("alias").and_then(Json::as_str) == Some(CONTROL_SPACE))?.get("spaceId")?.as_str().map(str::to_owned)
 }
 
-fn listed(s: &Space, now: f64, tmpl: &Json) -> R<Vec<Json>> {
+pub(crate) fn listed(s: &Space, now: f64, tmpl: &Json) -> R<Vec<Json>> {
 	let t = Template::from_json(Some(tmpl))?;
 	Ok(s.list(now, &t, None, None, None)?.as_array().cloned().unwrap_or_default())
 }
-fn fields(e: &Json) -> Json { e.get("fields").cloned().unwrap_or(Json::Null) }
-fn text<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or("") }
-fn put(s: &mut Space, now: f64, type_name: &str, f: Json, lease: f64) -> R<()> {
+pub(crate) fn fields(e: &Json) -> Json { e.get("fields").cloned().unwrap_or(Json::Null) }
+pub(crate) fn text<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or("") }
+pub(crate) fn put(s: &mut Space, now: f64, type_name: &str, f: Json, lease: f64) -> R<()> {
 	s.write(now, &obj! { "type" => type_name, "fields" => f }, None, Some(&Json::Number(lease)), None).map(|_| ())
 }
 /// Takes the first entry the template finds; its fields.
-fn take(s: &mut Space, now: f64, tmpl: &Json) -> R<Option<Json>> {
+pub(crate) fn take(s: &mut Space, now: f64, tmpl: &Json) -> R<Option<Json>> {
 	let t = Template::from_json(Some(tmpl))?;
 	let p = s.probe(now, &t, None, true, None)?;
 	Ok(if p.get("status").and_then(Json::as_str) == Some("found") { p.get("entry").cloned() } else { None })
 }
-fn with(rec: &Json, changes: &[(&str, Json)]) -> Json {
+pub(crate) fn with(rec: &Json, changes: &[(&str, Json)]) -> Json {
 	let mut o = rec.as_object().cloned().unwrap_or_default();
 	for (k, v) in changes {
 		o.insert(*k, v.clone());
@@ -195,8 +195,8 @@ fn valid_key(algorithm: Algorithm, public_key: &str) -> bool {
 	}
 }
 
-fn refuse(message: &str) -> Json { obj! { "ok" => false, "error" => obj! { "code" => "PermissionDenied", "message" => message } } }
-fn answered(result: Json) -> Json { obj! { "ok" => true, "result" => result } }
+pub(crate) fn refuse(message: &str) -> Json { obj! { "ok" => false, "error" => obj! { "code" => "PermissionDenied", "message" => message } } }
+pub(crate) fn answered(result: Json) -> Json { obj! { "ok" => true, "result" => result } }
 
 /// `enroll` and `enrollStatus`, for peers whose roles contain "unpaired" and for a proven key resolving its own request.
 pub struct Enrolling {
@@ -433,7 +433,7 @@ impl Supervisor {
 			put(s, now, "Result", res, RESULT_RETENTION_MS)?;
 			Ok(Some(event(if message.is_some() { "failed" } else { "completed" }, message.as_deref())))
 		};
-		if requested_by.is_empty() || !has_admin_key(s, now, &requested_by)? {
+		if requested_by.is_empty() || (kind != "rotateKey" && !has_admin_key(s, now, &requested_by)?) {
 			return finish(s, Err("the writer of this command holds no active admin key".to_owned()));
 		}
 		let empty = Json::Object(Object::new());
@@ -448,6 +448,7 @@ impl Supervisor {
 				None => Err(illegal("revokePeer needs a peerId")),
 				Some(peer) => revoke_peer_keys_in(s, now, peer).map(|n| obj! { "peerId" => peer, "revoked" => n }),
 			},
+			"rotateKey" => crate::rotation::rotate_key_in(s, now, args, &requested_by),
 			other => return finish(s, Err(format!("unknown command {other}"))),
 		};
 		match effect {

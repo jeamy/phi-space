@@ -67,6 +67,8 @@ pub trait Session {
 	fn conn(&self) -> Conn;
 	/// The answer to a call the front handles itself; `None` passes it to the service.
 	fn call(&self, service: &mut Service, text: &str) -> Option<String>;
+	/// The answer to a call the front has to go away for; it comes back on the owner thread.
+	fn later(self: Rc<Self>, _owner: Owner, _text: &str) -> Option<Local<String>> { None }
 	/// What the client gets of the service's answer.
 	fn reply(&self, text: String) -> String;
 	/// Resolves when the front ends the connection.
@@ -514,6 +516,16 @@ fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
 	if link.inflight.get() >= most || link.queue.borrow().len() >= MAX_HELD_REPLIES {
 		let text = format!(r#"{{"ok":false,"error":{{"code":"ResourceExhausted","message":"at most {most} calls at once per connection"}}}}"#);
 		link.reply(Reply { mark: 0, id, text, counted: false });
+		return;
+	}
+	if let Some(answer) = link.session.as_ref().and_then(|s| Rc::clone(s).later(Owner(Rc::clone(hub)), text)) {
+		link.inflight.set(link.inflight.get() + 1);
+		let (hub, link) = (Rc::clone(hub), Rc::clone(link));
+		spawn_local(async move {
+			let text = answer.await;
+			let mark = hub.service.borrow().store.handed();
+			link.reply(Reply { mark, id, text, counted: true });
+		});
 		return;
 	}
 	let answer = link.session.as_ref().and_then(|s| s.call(&mut hub.service.borrow_mut(), text));

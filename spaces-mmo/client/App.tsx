@@ -241,6 +241,7 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 			}
 			entries.push({ label: "Ausbessern", line: "repariere" });
 			if (o.plan === "steinbruch") entries.push({ label: "Stein brechen", line: "breche" });
+			if (o.plan === "kapelle") entries.push({ label: "Was man opfern kann", line: "opfere" });
 			if (o.plan === "lehmgrube") entries.push({ label: "Lehm stechen", line: "steche" });
 			if (o.plan === "ziegelei") entries.push({ label: "Ziegel brennen", line: "craft ziegel" });
 			if (o.plan === "lagerhaus") entries.push({ label: "Lager ansehen", line: "lager" });

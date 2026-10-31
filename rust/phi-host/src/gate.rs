@@ -4,6 +4,7 @@
 //! refresh.
 use crate::auth::{AuthState, KeyDirectory, PeerKey, Proving};
 use crate::control::{Control, Enrolling};
+use crate::rotation::Rotating;
 use phi_json::{obj, parse_repairing, Json};
 use phi_service::{Conn, Identity, Service};
 use phi_wire::{Front, Local, Owner, Session};
@@ -179,6 +180,8 @@ pub struct GateOptions {
 	/// Pairing, and with it the rules of the control space.
 	pub enrolling: Option<Enrolling>,
 	pub control: Option<Control>,
+	/// The authoritative side of grants, and with it the rotation of own keys.
+	pub rotating: Option<Rotating>,
 	pub handshake_ms: u64,
 	pub max_per_peer: usize,
 	pub connections_per_second: f64,
@@ -190,7 +193,7 @@ pub struct GateOptions {
 
 impl GateOptions {
 	pub fn new(directory: Rc<Netbird>, now: Now) -> GateOptions {
-		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
+		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
 	}
 }
 
@@ -392,13 +395,42 @@ async fn supervise(gate: Rc<Gate>, owner: Owner) {
 }
 
 impl GateSession {
+	/// `grant`: on the identity the directory gives now, not the one of the connection's start.
+	async fn grant(&self, owner: &Owner, call: &Json) -> Json {
+		let (Some(rotating), Some((_, keys))) = (&self.gate.o.rotating, &self.gate.o.proving) else { return crate::control::refuse("grants are not served here") };
+		let directory = &self.gate.o.directory;
+		let looked = match directory.refresh().await {
+			Err(e) => Err(e),
+			Ok(()) => directory.lookup(&self.ip).await,
+		};
+		let fresh = looked.map(|p| p.filter(|p| p.id == self.peer_id).map(|p| self.identity_of(&roles_of(&p.groups, &self.gate.o.group_roles))));
+		let proof = self.state.borrow().proof.clone();
+		let held = fresh.and_then(|id| {
+			owner.with(|service| {
+				let found = InService { keys: keys.as_ref(), service: RefCell::new(service) };
+				let mut id16 = [0u8; 16];
+				getrandom::getrandom(&mut id16).expect("the system gives random bytes");
+				rotating.issue(&found, id.as_ref(), proof.as_ref(), call, (self.gate.o.now)(), id16)
+			})
+		});
+		match held {
+			Ok(signed) => crate::control::answered(signed),
+			Err(message) => {
+				let code = if proof.is_none() && self.roles.iter().any(|r| r == "admin" || r == "host") { "ProofRequired" } else { "PermissionDenied" };
+				obj! { "ok" => false, "error" => obj! { "code" => code, "message" => message } }
+			}
+		}
+	}
+
 	/// `GateIdentity.authenticate`: with a proof the intersection with the key's roles, without one no privileged role.
-	fn identity(&self) -> Identity {
+	fn identity(&self) -> Identity { self.identity_of(&self.roles) }
+
+	fn identity_of(&self, groups: &[String]) -> Identity {
 		let state = self.state.borrow();
 		let privileged = self.gate.o.proving.as_ref().map_or_else(|| crate::auth::DEFAULT_PRIVILEGED.map(String::from).to_vec(), |(p, _)| p.privileged.clone());
 		let roles = match &state.proof {
-			Some(p) => self.roles.iter().filter(|r| p.roles.contains(r)).cloned().collect(),
-			None => self.roles.iter().filter(|r| !privileged.contains(r)).cloned().collect(),
+			Some(p) => groups.iter().filter(|r| p.roles.contains(r)).cloned().collect(),
+			None => groups.iter().filter(|r| !privileged.contains(r)).cloned().collect(),
 		};
 		Identity { principal: obj! { "peerId" => self.peer_id.as_str() }, roles }
 	}
@@ -412,6 +444,14 @@ impl Session for GateSession {
 		let call = parse_repairing(text).ok()?;
 		let method = call.as_object().and_then(|_| call.get("method")).and_then(Json::as_str)?;
 		let now = (self.gate.o.now)();
+		if let (Some(rotating), true) = (&self.gate.o.rotating, crate::rotation::METHODS.contains(&method)) {
+			let found = InService { keys: keys.as_ref(), service: RefCell::new(&mut *service) };
+			let proof = self.state.borrow().proof.clone();
+			let proven = proof.is_some();
+			let active = proof.as_ref().and_then(|p| found.find(&self.peer_id, &p.key_id)).is_some_and(|k| k.active);
+			let key_id = proof.filter(|_| active).map(|p| p.key_id);
+			return Some(rotating.handle(service, &call, &self.identity(), proven, key_id.as_deref(), now).to_json_text());
+		}
 		if let (Some(enrolling), "enroll" | "enrollStatus") = (&self.gate.o.enrolling, method) {
 			let unpaired = self.roles.iter().any(|r| r == crate::control::UNPAIRED_ROLE);
 			let proven = self.state.borrow().proof.as_ref().map(|p| p.key_id.clone()).is_some_and(|k| keys.find(service, &self.peer_id, &k).is_some_and(|k| k.active));
@@ -430,6 +470,15 @@ impl Session for GateSession {
 		let found = InService { keys: keys.as_ref(), service: RefCell::new(service) };
 		let reply = proving.proof(method, call.get("args"), Some(&self.peer_id), &mut self.state.borrow_mut(), &found, (now, nonce));
 		Some(reply.to_json_text())
+	}
+
+	fn later(self: Rc<Self>, owner: Owner, text: &str) -> Option<Local<String>> {
+		self.gate.o.rotating.as_ref()?;
+		let call = parse_repairing(text).ok()?;
+		if call.as_object().and_then(|_| call.get("method")).and_then(Json::as_str) != Some("grant") {
+			return None;
+		}
+		Some(Box::pin(async move { self.grant(&owner, &call).await.to_json_text() }))
 	}
 
 	fn reply(&self, text: String) -> String {

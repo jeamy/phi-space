@@ -383,6 +383,7 @@ Bauen geht nur im Licht eines Feuers. Ausführlich unter [Bauen](help.game.build
 | \`lager\`, \`lager log\` | \`warehouse\` | Das Lagerhaus neben dir und wer zuletzt etwas bewegt hat |
 | \`breche\` | \`quarry\` | Am Steinbruch mit Spitzhacke Stein brechen |
 | \`steche\` | \`clay\` | An der Lehmgrube mit Spaten Lehm stechen |
+| \`opfere <ding>\` | \`sacrifice\` | An einer Kapelle opfern: einen Tag lang kürzere Ruhe |
 | \`repariere\` | \`repair\` | Einen Bau ausbessern |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Deinen Bau oder deine Baustelle abreißen |
 | \`nachlass\` | \`estate\` | Den Nachlass an der Ruine deines Baus abholen |
@@ -540,6 +541,7 @@ Building works only in a fire's light. In detail under [Building](help.game.buil
 | \`lager\`, \`lager log\` | \`warehouse\` | The warehouse beside you and who last moved something |
 | \`breche\` | \`quarry\` | Break stone at a quarry with a pickaxe |
 | \`steche\` | \`clay\` | Cut clay at a clay pit with a spade |
+| \`opfere <ding>\` | \`sacrifice\` | Make an offering at a chapel: shorter rest for a day |
 | \`repariere\` | \`repair\` | Repair a building |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Tear down your building or site |
 | \`nachlass\` | \`estate\` | Collect the estate at your building's ruin |

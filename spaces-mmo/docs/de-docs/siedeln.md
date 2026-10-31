@@ -1044,6 +1044,11 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      offline, bis eine Siedlung im Licht dieses Feuers 5 und 10 Bauten hat. Dann legen sie Holz nach, wenn das Feuer niedrig
      brennt, gießen Gemeinschaftsbeete mit Wasser aus einer Regentonne des Dorfs und reden auf dem Platz. Geht die Siedlung, gehen sie auch.
      Abweichung: höchstens zwei je Feuer statt beliebig viele, denn NPCs stehen fest in der Weltdatei.
+   - **Teil 2, Kapelle (gebaut, `server/engine/commands/chapel.ts`):** Plan ab Epoche Dorf aus Stein, Ziegeln und Bohlen, damit braucht der erste Bau
+     Ziegel. Daneben gibt `opfere` eine Perle, einen Bernstein, ein Brot oder eine Blume hin; einen Welttag lang ruht man nach der Arbeit
+     nur halb so lange. Abweichungen: Der Segen wirkt ohne die Götter, gilt nur in der Region, in der man opfert, und Feste fehlen noch.
+   - **Teil 3, Park (gebaut, nur Bauplan):** Ab Epoche Stadt aus Ziegeln, Stein und Blumen, 4×4 groß, zählt 9 Punkte, also dreifach für den Bestand.
+     Abweichung: noch ohne Ruf für die Pflegenden und ohne Blumenschau. Rathaus, Abstimmungen und Feste sind offen.
 7. **Kaufhaus** (Laden mit Vorrat), **Kontor**, **Leuchtturm**, **Brauhaus**, **Glashütte und Gewächshaus**,
    Fischerei (Netz-Rezept, Steg) und Boote; **Nahrung** (Sattsein), wenn Brot und Räucherfisch da sind.
 8. **Straßen, Karren, Fahrplan-Fähren**, dann die **Inselbahn** als Automat.

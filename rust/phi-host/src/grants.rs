@@ -25,7 +25,7 @@ fn agent_id_ok(id: &str) -> bool {
 pub struct GrantAuthority<'a> {
 	pub authority_id: String,
 	pub host_id: String,
-	pub signer: Signer,
+	pub signer: Rc<Signer>,
 	pub keys: &'a dyn KeyDirectory,
 	pub ttl_ms: f64,
 	/// `Some(false)`: A-only rights are off after a recovery.

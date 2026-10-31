@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { FOREVER, type SpaceLike } from "phi-spaces";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
+import { worldNowOf } from "../server/engine/clock.ts";
 import type { BuildingFields, CharacterFields, ItemFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, Player, startServer } from "./stack.ts";
@@ -77,5 +78,29 @@ test("clay and bricks: a spade cuts clay and stays whole; a brickworks burns it"
 		await does(p, "brenne ziegel", /Ziegel/);
 		await eventually(async () => (await pack(s, me, "ziegel")).length === 3, 10_000, "three bricks");
 		assert.equal((await pack(s, me, "lehm")).length, 0);
+	} finally { await srv.close(); }
+});
+
+test("a chapel: an offering of worth gives a blessing, and the rest after work is half as long", { timeout: 120_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Opfernde", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, "Opfernde"))!.fields as unknown as CharacterFields;
+		await give(s, me, "perle", 1);
+		await give(s, me, "treibholz", 1);
+		await give(s, me, "spaten", 1);
+		assert.match(await does(p, "opfere perle", "direkt neben"), /nur direkt neben einer Kapelle/);
+		await s.write({ type: "Building", fields: building("chapel", "kapelle", "Kapelle", c.x + 1, c.y) as never }, null, FOREVER);
+		await s.write({ type: "Building", fields: building("pit", "lehmgrube", "Lehmgrube", c.x - 2, c.y) as never }, null, FOREVER);
+		assert.match(await does(p, "opfere treibholz", "kein Opfer"), /Treibholz ist kein Opfer/);
+		await does(p, "opfere perle", "Segen");
+		assert.equal((await pack(s, me, "perle")).length, 0);
+		await does(p, "steche", "aus der Grube");
+		const clock = (await s.readAll({ type: "WorkRest", fields: { charId: me } }))[0]!.fields as unknown as { untilWorldMs: number };
+		const until = clock.untilWorldMs - (await worldNowOf(s)), rest = w.building!.restWorldMs;
+		assert.ok(until <= rest / 2 && until > rest / 4, `${until} of ${rest}`);
 	} finally { await srv.close(); }
 });

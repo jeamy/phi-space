@@ -14,6 +14,7 @@
 // - A site without progress lapses at its world time (the sweep, buildSweep); work makes a figure rest a while (WorkRest).
 import { hutsIn, needRank, rankOf, settlementIn } from "./settlement.ts";
 import { epochName, epochOf, islandOf, needEpoch } from "./epoch.ts";
+import { blessed } from "./chapel.ts";
 import { closeOrders, keptUntil, orderLine, ordersOfSite, payFor } from "./siteorder.ts";
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
@@ -264,7 +265,8 @@ export async function rested(c: CommandCtx) {
 /** The actor worked: it rests for a while. */
 export async function tire(c: CommandCtx, now: number, rest: Awaited<ReturnType<typeof rested>>["rest"]): Promise<void> {
 	if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
-	await c.space.write({ type: "WorkRest", fields: { charId: c.actor.charId, untilWorldMs: now + (c.world.building?.restWorldMs ?? 3600_000) } satisfies WorkRestFields as never }, c.txn, FOREVER);
+	const ms = (c.world.building?.restWorldMs ?? 3600_000) / ((await blessed(c, now)) ? 2 : 1);
+	await c.space.write({ type: "WorkRest", fields: { charId: c.actor.charId, untilWorldMs: now + ms } satisfies WorkRestFields as never }, c.txn, FOREVER);
 }
 
 const arbeite: Command = {
@@ -584,7 +586,7 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 			return true;
 		});
 	}
-	for (const e of await space.readAll({ type: "WorkRest" })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
+	for (const type of ["WorkRest", "Blessing"]) for (const e of await space.readAll({ type })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
 	// flour (or grain back) nobody fetched
 	for (const e of await space.readAll({ type: "MillLoad" })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
 }

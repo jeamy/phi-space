@@ -89,7 +89,7 @@ test("as a player: a village plan is refused in the fishing village, allowed in 
 		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
 		await lightFire(s, 600_000, "feuer-bucht");
-		assert.match(await does(p, "epoche", "Punkte"), /Graue Insel ist ein Fischerdorf \(Epoche 1\): 0 Punkte gehaltener Bestand \(Bauten 0, Beete 0, Fluren 0\)\. Ein Dorf braucht 15 Punkte; dann gibt es Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Werkstatt, Fluren\./);
+		assert.match(await does(p, "epoche", "Punkte"), /Graue Insel ist ein Fischerdorf \(Epoche 1\): 0 Punkte gehaltener Bestand \(Bauten 0, Beete 0, Fluren 0\)\. Ein Dorf braucht 15 Punkte; dann gibt es Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Kapelle, Werkstatt, Fluren\./);
 		assert.match(await does(p, "bau", "Baupläne"), /Windmühle \(erst ab Dorf\)/);
 		assert.match(await does(p, "bau windmühle", "braucht"), /Der Bauplan „Windmühle“ braucht ein Dorf \(Epoche 2\); Graue Insel hat noch nicht genug Bestand \(ab 15 Punkten/);
 		await give(s, me, "spaten", 1);
@@ -99,7 +99,7 @@ test("as a player: a village plan is refused in the fishing village, allowed in 
 		await writeBeds(s, 15, grey[1]!);
 		const from = p.frames.length;
 		await epochTick(s, w, 60_000);
-		await p.until((f) => f.t === "msg" && /Graue Insel ist jetzt ein Dorf \(Epoche 2\): Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Werkstatt, Fluren lassen sich jetzt bauen/.test(f.m.text), 10_000, from);
+		await p.until((f) => f.t === "msg" && /Graue Insel ist jetzt ein Dorf \(Epoche 2\): Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Kapelle, Werkstatt, Fluren lassen sich jetzt bauen/.test(f.m.text), 10_000, from);
 		assert.match(await does(p, "epoche", "Punkte"), /Graue Insel ist ein Dorf \(Epoche 2\): 15 Punkte/);
 		const staked = await does(p, "bau backhaus", /steckt eine Baustelle ab|passt keine|braucht/);
 		assert.doesNotMatch(staked, /braucht ein Dorf/);

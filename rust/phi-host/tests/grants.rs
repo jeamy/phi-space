@@ -19,7 +19,7 @@ fn app_key(active: bool, roles: &[&str], scope: &[&str]) -> PeerKey {
 }
 fn proof() -> Proof { Proof { key_id: "app".into(), principal: "w".into(), roles: vec![], scope: None, at: 0.0 } }
 fn authority(keys: &Keys, allow: Option<bool>) -> GrantAuthority<'_> {
-	GrantAuthority { authority_id: "authority".into(), host_id: "control".into(), signer: signer(9), keys, ttl_ms: 60_000.0, allow_a_only: allow }
+	GrantAuthority { authority_id: "authority".into(), host_id: "control".into(), signer: std::rc::Rc::new(signer(9)), keys, ttl_ms: 60_000.0, allow_a_only: allow }
 }
 fn verifier() -> GrantVerifier {
 	GrantVerifier { authority_id: "authority".into(), issuer_host_id: "control".into(), public_key: public(9), algorithm: Algorithm::Ed25519, uncertainty_ms: 2000.0 }

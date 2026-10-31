@@ -3,3 +3,4 @@ pub mod auth;
 pub mod control;
 pub mod gate;
 pub mod grants;
+pub mod rotation;

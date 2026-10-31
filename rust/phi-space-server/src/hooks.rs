@@ -7,7 +7,7 @@
 //  "primaryEpoch"?, "maxPendingPerPrincipal"?, "maxPendingPerPeer"?, "maxCallsPerWindow"?, "wakeOnCommit"?, "maxFrameBytes"?,
 //  "maxConnections"?, "maxInflightPerConnection"?, "idleMs"?, "gate"?: {"host", "port", "url", "token", "cacheMs"?, "handshakeMs"?,
 //  "maxConnectionsPerPeer"?, "connectionsPerSecondPerPeer"?, "clockFile"?, "eventsFile"?, "keysFile"?, "gateHostId"?, "spaceKeys"?,
-//  "enrollment"?, "controlAccess"?, "supervisor"?, "serviceClock"?}}
+//  "enrollment"?, "controlAccess"?, "supervisor"?, "serviceClock"?, "grants"?: {"authorityId", "hostId", "seed", "publicKey"}}}
 //
 // The gate's clock, its keys and its events are files, so a test can change them between two calls without a round trip.
 //
@@ -145,6 +145,12 @@ fn gate(g: &Json) -> Result<(Listen, Rc<dyn phi_wire::Front>, Now), String> {
 	}
 	if flag("controlAccess") {
 		o.control = Some(Control { supervisor: flag("supervisor").then(|| Supervisor { on_event: on(&events) }) });
+	}
+	if let Some(g) = g.get("grants") {
+		let part = |k: &str| g.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("grants without {k}"));
+		let seed: [u8; 32] = phi_host::auth::base64(&part("seed")?).try_into().map_err(|_| "a seed is 32 bytes")?;
+		let signer = phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed));
+		o.rotating = Some(phi_host::rotation::Rotating::new(&part("authorityId")?, &part("hostId")?, signer, &part("publicKey")?));
 	}
 	let host = text("host").ok_or("the gate names no host")?;
 	let front: Rc<dyn phi_wire::Front> = Gate::new(host, o)?;

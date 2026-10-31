@@ -94,6 +94,8 @@ export type WorldDef = {
 	quarry?: { plan: string; tool: string; makes: string; count: number };
 	/** A clay pit, the same with a spade. */
 	clay?: { plan: string; tool: string; makes: string; count: number };
+	/** Chapels: `plan`, what may be offered, and how long a blessing lasts. */
+	chapel?: { plan: string; offerings: string[]; blessWorldMs: number };
 	/** Animals on the farm (docs/siedeln.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
 	animals?: AnimalsDef;
 	/** How the world splits into region spaces when SPACES_MMO_REGIONS names them (engine/regions.ts); without it the

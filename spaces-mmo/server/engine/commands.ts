@@ -5,6 +5,7 @@ import { distinct, merge, type CmdSet, type Command } from "./cmdsets.ts";
 import { BUILDER_COMMANDS } from "./commands/builder.ts";
 import { BUILD_COMMANDS } from "./commands/build.ts";
 import { SITE_ORDER_COMMANDS } from "./commands/siteorder.ts";
+import { CHAPEL_COMMANDS } from "./commands/chapel.ts";
 import { GARDEN_COMMANDS } from "./commands/garden.ts";
 import { WILD_COMMANDS } from "./commands/wild.ts";
 import { FIELD_COMMANDS } from "./commands/field.ts";
@@ -34,7 +35,7 @@ export async function commandsOf(c: CommandCtx): Promise<Map<string, Command>> {
 	// the help lists the commands, not the exits (look names those)
 	const help = helpCommand(() => distinct(all).filter((cmd) => !exits.commands.includes(cmd)));
 	const sets: CmdSet[] = [
-		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...SETTLEMENT_COMMANDS, ...CLOCK_COMMANDS, help]) },
+		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...SETTLEMENT_COMMANDS, ...CLOCK_COMMANDS, help]) },
 		{ key: "builder", priority: 1, mergeType: "Union", commands: offered(BUILDER_COMMANDS) },
 		exits,
 	];

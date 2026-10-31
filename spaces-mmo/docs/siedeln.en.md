@@ -1023,6 +1023,11 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      offline until a settlement in that fire's light has 5 and 10 buildings. Then they add wood when the fire burns low, water
      the community beds from a barrel of the village and chat on the square. When the settlement goes, they go.
      Deviation: at most two per fire instead of any number, because NPCs are fixed in the world file.
+   - **Part 2, chapel (built, `server/engine/commands/chapel.ts`):** A plan from the village epoch of stone, bricks and planks, the
+     first building that needs bricks. Beside it `opfere` gives up a pearl, amber, bread or a flower; for a world day the rest after
+     work is half as long. Deviations: the blessing works without the gods, holds only in the region of the offering, no festivals yet.
+   - **Part 3, park (built, a plan only):** From the town epoch, of bricks, stone and flowers, 4×4, worth 9 points, threefold
+     towards the stock. Deviation: no reputation for its tenders and no flower show yet. Town hall, votes and festivals are open.
 7. **Department store** (shop with stock), **counting house**, **lighthouse**, **brewery**, **glassworks and greenhouse**,
    fishing (net recipe, jetty) and boats; **food** (being sated), when bread and smoked fish exist.
 8. **Roads, carts, timetable ferries**, then the **island railway** as automaton.

@@ -56,6 +56,8 @@ export type SettlementFields = { settlementId: string; name: string; nameKey: st
 /** A line of a warehouse's log: who laid in or took what (`kind`), counted for the quota by world time. */
 /** What a site pays for (docs/siedeln.md, engine/commands/siteorder.ts): `proto` "" is work; the coins lie at `orderId`. */
 export type SiteOrderFields = { orderId: string; buildId: string; siteName: string; room: string; x: number; y: number; w: number; h: number; ownerName: string; proto: string; name: string; left: number; pay: number; at: number };
+/** A blessing of the chapel (engine/commands/chapel.ts): until then the rest after work is halved. */
+export type BlessingFields = { charId: string; untilWorldMs: number };
 export type StoreLogFields = { logId: string; buildId: string; accountId: string; name: string; kind: "ein" | "aus"; itemName: string; count: number; worldMs: number; at: number };
 export type EpochFields = { island: string; epoch: number; points: number; at: number };
 /** A recurring job (Evennia's Script/TickerHandler): due at `due`; the world worker that takes it runs it once. */

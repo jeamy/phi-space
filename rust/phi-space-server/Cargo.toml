@@ -16,4 +16,5 @@ phi-json = { path = "../phi-json" }
 phi-service = { path = "../phi-service" }
 phi-store = { path = "../phi-store" }
 phi-wire = { path = "../phi-wire" }
+ed25519-dalek = "2"
 tokio.workspace = true
