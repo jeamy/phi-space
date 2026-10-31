@@ -66,7 +66,7 @@ pub type Local<T> = Pin<Box<dyn Future<Output = T>>>;
 pub trait Session {
 	fn conn(&self) -> Conn;
 	/// The answer to a call the front handles itself; `None` passes it to the service.
-	fn call(&self, text: &str) -> Option<String>;
+	fn call(&self, service: &mut Service, text: &str) -> Option<String>;
 	/// What the client gets of the service's answer.
 	fn reply(&self, text: String) -> String;
 	/// Resolves when the front ends the connection.
@@ -80,9 +80,24 @@ pub trait Front {
 	/// `None` refuses the connection; it then closes.
 	fn admit(self: Rc<Self>, ip: IpAddr) -> Local<Option<Rc<dyn Session>>>;
 	/// Runs for as long as the server does.
-	fn run(self: Rc<Self>) -> Local<()>;
+	fn run(self: Rc<Self>, owner: Owner) -> Local<()>;
 	/// A line of the test hooks this front answers.
-	fn hook(self: Rc<Self>, _text: &str) -> Option<Local<String>> { None }
+	fn hook(self: Rc<Self>, _owner: Owner, _text: &str) -> Option<Local<String>> { None }
+}
+
+/// A front's way to the service, between two calls on the owner thread.
+#[derive(Clone)]
+pub struct Owner(Rc<Hub>);
+impl Owner {
+	pub fn with<T>(&self, f: impl FnOnce(&mut Service) -> T) -> T {
+		let out = f(&mut self.0.service.borrow_mut());
+		self.0.committed();
+		out
+	}
+	/// Commits handed to the store so far.
+	pub fn handed(&self) -> u64 { self.0.service.borrow().store.handed() }
+	/// Resolves after the next commit.
+	pub async fn commit(&self) { self.0.commits.notified().await }
 }
 
 /// What the test hooks do with a line (`--test-hooks`): the service, how many connections are open, the text.
@@ -249,7 +264,7 @@ async fn serve_here(service: Service, mut o: ServeOptions, ready: impl FnOnce(Ve
 	}
 	for (listen, front) in &hub.o.gates {
 		bound.push((Bound::bind(listen).await?, Who::Gate(Rc::clone(front))));
-		spawn_local(Rc::clone(front).run());
+		spawn_local(Rc::clone(front).run(Owner(Rc::clone(&hub))));
 	}
 	if let Some(path) = hooks {
 		bound.push((Bound::bind(&Listen::Unix(path)).await?, Who::Hooks));
@@ -474,7 +489,7 @@ enum Who {
 
 fn hooked(hub: &Rc<Hub>, link: &Rc<Link>, id: u32, text: &str) {
 	for (_, front) in &hub.o.gates {
-		if let Some(answer) = Rc::clone(front).hook(text) {
+		if let Some(answer) = Rc::clone(front).hook(Owner(Rc::clone(hub)), text) {
 			let (hub, link) = (Rc::clone(hub), Rc::clone(link));
 			spawn_local(async move {
 				let text = answer.await;
@@ -501,8 +516,11 @@ fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
 		link.reply(Reply { mark: 0, id, text, counted: false });
 		return;
 	}
-	if let Some(text) = link.session.as_ref().and_then(|s| s.call(text)) {
-		link.reply(Reply { mark: 0, id, text, counted: false });
+	let answer = link.session.as_ref().and_then(|s| s.call(&mut hub.service.borrow_mut(), text));
+	if let Some(text) = answer {
+		hub.committed();
+		let mark = hub.service.borrow().store.handed();
+		link.reply(Reply { mark, id, text, counted: false });
 		return;
 	}
 	link.inflight.set(link.inflight.get() + 1);

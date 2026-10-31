@@ -32,7 +32,7 @@ pub enum Ledger {
 pub type SharedLedger = Rc<RefCell<Ledger>>;
 
 pub struct SpaceHost {
-	ledger: SharedLedger,
+	pub(crate) ledger: SharedLedger,
 	kind: String,
 	key: Option<String>,
 	pub space: Space,

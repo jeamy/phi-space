@@ -372,9 +372,12 @@ dependencies = [
  "ed25519-dalek",
  "getrandom",
  "p256",
+ "phi-core",
  "phi-json",
  "phi-service",
+ "phi-store",
  "phi-wire",
+ "sha2",
  "tokio",
 ]
 

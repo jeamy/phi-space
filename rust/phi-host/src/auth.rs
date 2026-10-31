@@ -189,6 +189,24 @@ impl Proving {
 		Ok(Proof { key_id: key.key_id, principal: key.principal, roles: key.roles, scope: key.scope, at: now })
 	}
 
+	/// The challenge of this connection as a new key must have signed it; used once. Enrollment asks this.
+	pub fn consume_challenge(st: &mut AuthState, claimed: Option<&Json>, now: f64) -> Option<Json> {
+		let (value, used) = st.challenge.as_mut()?;
+		if *used {
+			return None;
+		}
+		let claimed = claimed?;
+		*used = true;
+		if claimed.canonical().ok() != value.canonical().ok() {
+			return None;
+		}
+		let issued = value.get("issuedAt").and_then(Json::as_f64).unwrap_or(f64::NAN);
+		if now - issued > CHALLENGE_TTL_MS || now < issued {
+			return None;
+		}
+		Some(value.clone())
+	}
+
 	/// A refusal because roles are withheld is `ProofRequired`: the client can fix it by proving.
 	pub fn annotate(&self, reply: String, st: &AuthState, group_roles: &[String]) -> String {
 		if st.proof.is_some() || !group_roles.iter().any(|r| self.privileged.contains(r)) { return reply; }

@@ -129,3 +129,28 @@ fn a_failed_first_commit_on_the_file_writes_no_registry() {
 	let seen = ts(&file, r#"console.log(JSON.stringify({ r: (await host.snapshot(Registry, ctx)) ?? null }))"#);
 	assert_eq!(seen.get("r"), Some(&Json::Null));
 }
+
+/// A Space made at run time is a Space of the file: the next open finds it, and TypeScript reads what it holds.
+#[test]
+fn a_space_created_in_rust_is_read_by_rust_and_typescript_after_a_reopen() {
+	let dir = std::env::temp_dir().join(format!("phi-create-{}", std::process::id()));
+	std::fs::create_dir_all(&dir).unwrap();
+	let file = dir.join("s.sqlite");
+	let open = || Store::open(SpaceHost::sqlite(SqliteLedger::open(&file, Synchronous::Full).unwrap()), phi_store::system_random).unwrap();
+	let mut s = open();
+	let info = s.create_space("control", 1000.0, phi_store::system_random()).unwrap().unwrap();
+	let again = s.create_space("control", 2000.0, phi_store::system_random()).unwrap().unwrap();
+	assert_eq!(info, again, "one Space per alias");
+	assert!(s.create_space("No Alias", 1000.0, phi_store::system_random()).unwrap().is_err());
+	let entry = obj! { "type" => "Key", "fields" => obj! { "n" => 7.0 } };
+	s.commit(Some("control"), 1000.0, |d| d.write(1000.0, &entry, None, Some(&Json::Number(phi_json::FOREVER)), None)).unwrap().unwrap();
+	s.drain().unwrap();
+	drop(s);
+	let mut s = open();
+	assert_eq!(s.reader(Some("control")).unwrap().space.state.entries.len(), 1);
+	s.close();
+	let script = format!(r#"import {{ openSqliteHost }} from "./src/store/sqlite.ts"; import {{ listSpaces, snapshotSpace }} from "./src/spaces.ts"; const ctx = {{}}; const h = await openSqliteHost({file:?}); const i = (await listSpaces(h, ctx)).find((x) => x.alias === "control"); const d = await snapshotSpace(h, i.spaceId, ctx); console.log(d.entries[0].fields.n, i.spaceId === d.spaceId, d.incarnation === i.incarnation); await h.close(ctx);"#);
+	let out = Command::new("node").args(["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", &script]).current_dir(root()).output().unwrap();
+	assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "7 true true", "{}", String::from_utf8_lossy(&out.stderr));
+	std::fs::remove_dir_all(&dir).unwrap();
+}

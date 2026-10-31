@@ -574,7 +574,7 @@ impl Service {
 			op(s, now)
 		})
 	}
-	fn commit_on<T>(&mut self, space: Option<&str>, op: impl FnOnce(&mut Space, f64) -> R<T>) -> R<T> {
+	pub fn commit_on<T>(&mut self, space: Option<&str>, op: impl FnOnce(&mut Space, f64) -> R<T>) -> R<T> {
 		let now = self.now();
 		match self.store.commit(space, now, |s| op(s, now)) {
 			Err(e) => Err(store_failed(e)),

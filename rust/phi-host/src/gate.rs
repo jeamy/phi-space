@@ -2,10 +2,11 @@
 //! the NetBird management API. The source address names the peer, its groups give the roles, and privileged roles wait for
 //! a proof of layer B (`auth`). Answers of the API are cached for at most 60 s; open connections are checked again on each
 //! refresh.
-use crate::auth::{AuthState, KeyDirectory, Proving};
+use crate::auth::{AuthState, KeyDirectory, PeerKey, Proving};
+use crate::control::{Control, Enrolling};
 use phi_json::{obj, parse_repairing, Json};
-use phi_service::{Conn, Identity};
-use phi_wire::{Front, Local, Session};
+use phi_service::{Conn, Identity, Service};
+use phi_wire::{Front, Local, Owner, Session};
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::net::IpAddr;
@@ -156,11 +157,28 @@ pub fn roles_of(groups: &[String], map: &GroupRoles) -> Vec<String> {
 	groups.iter().filter_map(|g| map.get(g)).flatten().cloned().collect::<BTreeSet<_>>().into_iter().collect()
 }
 
+/// The control space's keys, looked at in the service's store.
+pub trait Keys {
+	fn find(&self, service: &mut Service, peer_id: &str, key_id: &str) -> Option<PeerKey>;
+}
+
+/// `Keys` where `Proving` asks a `KeyDirectory`.
+struct InService<'a> {
+	keys: &'a dyn Keys,
+	service: RefCell<&'a mut Service>,
+}
+impl KeyDirectory for InService<'_> {
+	fn find(&self, peer_id: &str, key_id: &str) -> Option<PeerKey> { self.keys.find(&mut self.service.borrow_mut(), peer_id, key_id) }
+}
+
 pub struct GateOptions {
 	pub directory: Rc<Netbird>,
 	pub group_roles: GroupRoles,
 	/// Layer B and the key directory; without it nobody can prove anything.
-	pub proving: Option<(Proving, Rc<dyn KeyDirectory>)>,
+	pub proving: Option<(Proving, Rc<dyn Keys>)>,
+	/// Pairing, and with it the rules of the control space.
+	pub enrolling: Option<Enrolling>,
+	pub control: Option<Control>,
 	pub handshake_ms: u64,
 	pub max_per_peer: usize,
 	pub connections_per_second: f64,
@@ -172,7 +190,7 @@ pub struct GateOptions {
 
 impl GateOptions {
 	pub fn new(directory: Rc<Netbird>, now: Now) -> GateOptions {
-		GateOptions { directory, group_roles: default_group_roles(), proving: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
+		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
 	}
 }
 
@@ -272,7 +290,7 @@ impl Gate {
 	}
 
 	/// Checks every open connection against a fresh directory; closes those whose peer is gone or whose rights changed.
-	pub async fn revalidate(self: &Rc<Self>) -> usize {
+	pub async fn revalidate(self: &Rc<Self>, owner: &Owner) -> usize {
 		if self.busy.replace(true) {
 			return 0;
 		}
@@ -286,7 +304,7 @@ impl Gate {
 				Ok(None) => Some("the peer is gone"),
 				Ok(Some(p)) if p.id != c.peer_id => Some("the peer is gone"),
 				Ok(Some(p)) if roles_of(&p.groups, &self.o.group_roles) != c.roles => Some("the roles of the peer changed"),
-				Ok(Some(_)) => self.key_gone(&c),
+				Ok(Some(_)) => owner.with(|service| self.key_gone(service, &c)),
 			};
 			if let Some(reason) = reason {
 				self.event("revoked", &c.ip, Some(&c.peer_id), Some(reason));
@@ -299,10 +317,10 @@ impl Gate {
 		closed
 	}
 
-	fn key_gone(&self, c: &GateSession) -> Option<&'static str> {
+	fn key_gone(&self, service: &mut Service, c: &GateSession) -> Option<&'static str> {
 		let state = c.state.borrow();
 		let (proof, (_, keys)) = (state.proof.as_ref()?, self.o.proving.as_ref()?);
-		match keys.find(&c.peer_id, &proof.key_id) {
+		match keys.find(service, &c.peer_id, &proof.key_id) {
 			Some(k) if k.active && k.roles == proof.roles => None,
 			Some(k) if k.active => Some("the roles of the key changed"),
 			_ => Some("the key of this connection was revoked"),
@@ -326,28 +344,49 @@ impl Front for Gate {
 		Box::pin(self.identify(ip))
 	}
 
-	fn run(self: Rc<Self>) -> Local<()> {
+	fn run(self: Rc<Self>, owner: Owner) -> Local<()> {
 		Box::pin(async move {
+			if self.o.control.as_ref().is_some_and(|c| c.supervisor.is_some()) {
+				spawn_local(supervise(Rc::clone(&self), owner.clone()));
+			}
 			if self.o.revalidate_ms == 0 {
 				return;
 			}
 			loop {
 				sleep(Duration::from_millis(self.o.revalidate_ms)).await;
-				self.revalidate().await;
+				self.revalidate(&owner).await;
 			}
 		})
 	}
 
-	fn hook(self: Rc<Self>, text: &str) -> Option<Local<String>> {
+	fn hook(self: Rc<Self>, owner: Owner, text: &str) -> Option<Local<String>> {
 		let line = phi_json::parse(text).ok()?;
 		let answered = |v: Json| obj! { "ok" => true, "result" => v }.to_json_text();
 		match line.get("hook")?.as_str()? {
 			"revalidate" => Some(Box::pin(async move {
-				let closed = self.revalidate().await;
+				let closed = self.revalidate(&owner).await;
 				answered(Json::Number(closed as f64))
 			})),
 			"peers" => Some(Box::pin(async move { answered(self.peers()) })),
 			_ => None,
+		}
+	}
+}
+
+/// The supervisor: a pass after commits, and now and then so that none is missed.
+async fn supervise(gate: Rc<Gate>, owner: Owner) {
+	let mut seen = None;
+	loop {
+		if seen != Some(owner.handed()) {
+			let supervisor = gate.o.control.as_ref().and_then(|c| c.supervisor.as_ref()).expect("started with one");
+			if let Err(e) = owner.with(|service| supervisor.tick(service, (gate.o.now)())) {
+				eprintln!("phi-spaces supervisor: {}", e.message);
+			}
+			seen = Some(owner.handed());
+		}
+		tokio::select! {
+			_ = owner.commit() => {}
+			_ = sleep(Duration::from_millis(100)) => {}
 		}
 	}
 }
@@ -368,16 +407,28 @@ impl GateSession {
 impl Session for GateSession {
 	fn conn(&self) -> Conn { Conn { peer_id: Some(self.peer_id.clone()), identity: Some(self.identity()) } }
 
-	fn call(&self, text: &str) -> Option<String> {
+	fn call(&self, service: &mut Service, text: &str) -> Option<String> {
 		let (proving, keys) = self.gate.o.proving.as_ref()?;
 		let call = parse_repairing(text).ok()?;
 		let method = call.as_object().and_then(|_| call.get("method")).and_then(Json::as_str)?;
+		let now = (self.gate.o.now)();
+		if let (Some(enrolling), "enroll" | "enrollStatus") = (&self.gate.o.enrolling, method) {
+			let unpaired = self.roles.iter().any(|r| r == crate::control::UNPAIRED_ROLE);
+			let proven = self.state.borrow().proof.as_ref().map(|p| p.key_id.clone()).is_some_and(|k| keys.find(service, &self.peer_id, &k).is_some_and(|k| k.active));
+			return Some(enrolling.handle(service, &call, &self.peer_id, (unpaired, proven), &mut self.state.borrow_mut(), now).to_json_text());
+		}
+		if let Some(control) = &self.gate.o.control {
+			if let Some(denied) = control.check(service, &call, &self.identity()) {
+				return Some(denied.to_json_text());
+			}
+		}
 		if method != "challenge" && method != "prove" {
 			return None;
 		}
 		let mut nonce = [0u8; 32];
 		getrandom::getrandom(&mut nonce).expect("the system gives random bytes");
-		let reply = proving.proof(method, call.get("args"), Some(&self.peer_id), &mut self.state.borrow_mut(), keys.as_ref(), ((self.gate.o.now)(), nonce));
+		let found = InService { keys: keys.as_ref(), service: RefCell::new(service) };
+		let reply = proving.proof(method, call.get("args"), Some(&self.peer_id), &mut self.state.borrow_mut(), &found, (now, nonce));
 		Some(reply.to_json_text())
 	}
 

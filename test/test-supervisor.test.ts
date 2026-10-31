@@ -4,11 +4,12 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import net from "node:net";
 import {
-	SpaceService, RemoteSpace, socketTransport, startGate, NetbirdDirectory, GateIdentity, ProvingService, EnrollmentService, ControlAccess, Supervisor, SpaceKeyDirectory, generateKey,
-	bootstrapEnroll, newEnrollToken, hashToken, CONTROL_SPACE, FOREVER, core, PhiSpaces, createSpace, listSpaces, snapshotSpace, spaceDoc, DEFAULT_POLICY, type Signer,
+	RemoteSpace, socketTransport, Supervisor, generateKey,
+	newEnrollToken, hashToken, CONTROL_SPACE, FOREVER, core, PhiSpaces, createSpace, snapshotSpace, spaceDoc, DEFAULT_POLICY, type Signer,
 } from "../src/index.ts";
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
 import { openTestHost } from "./support/host.ts";
+import { TestClock, gateUnderTest } from "./support/gate-under-test.ts";
 
 type Peer = { id: string; name: string; ip: string; connected: boolean; groups: Array<{ id: string; name: string }> };
 const peer = (id: string, ip: string, groups: string[]): Peer => ({ id, name: id, ip, connected: true, groups: groups.map((g) => ({ id: `g-${g}`, name: g })) });
@@ -20,20 +21,10 @@ async function setup(tc: TestContext) {
 	const server = http.createServer((_req, res) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(peers)); });
 	await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 	tc.after(() => { server.closeAllConnections(); server.close(); });
-	const clock = new Clock();
-	const directory = new NetbirdDirectory({ url: `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`, token: "t", now: clock.now });
-	const host = await openTestHost(ctx);
-	const keys = new SpaceKeyDirectory(host, ctx, clock.now);
-	const identity = new GateIdentity();
-	const service = new SpaceService({ host, ctx, identity, policy: DEFAULT_POLICY, hostId: "host-1", now: clock.now });
-	const front = new EnrollmentService(new ControlAccess(new ProvingService(service, { gateHostId: "host-1", keys, now: clock.now }), { identity, host, ctx }), { host, ctx, now: clock.now });
-	const gate = await startGate(front, { listen: { host: "127.0.0.1", port: 0 }, directory, keys, revalidateMs: 0, now: clock.now });
-	tc.after(() => gate.close());
-	const events: Array<{ commandId: string; kind: string; state: string; requestedBy: string; error?: string }> = [];
-	const supervisor = new Supervisor(host, ctx, { now: clock.now, onEvent: (e) => events.push(e) });
-	const stop = await supervisor.start();
-	tc.after(() => stop());
-	const port = (gate.address() as net.AddressInfo).port;
+	const clock = new TestClock(tc, 1_700_000_000_000);
+	const gate = await gateUnderTest(tc, { url: `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`, clock, gateHostId: "host-1", spaceKeys: true, enrollment: true, controlAccess: true, supervisor: true, serviceClock: true, policy: DEFAULT_POLICY });
+	const control = gate.control;
+	const port = gate.port;
 	const transports: Array<{ close(): void }> = [];
 	tc.after(() => transports.forEach((t) => t.close()));
 	const remote = (ip: string, peerId: string, signer?: Signer, space: string | undefined = CONTROL_SPACE) => {
@@ -44,7 +35,7 @@ async function setup(tc: TestContext) {
 	/** The first admin is paired through the bootstrap token and then proves its key as admin. */
 	const pairAdmin = async () => {
 		const token = newEnrollToken();
-		await bootstrapEnroll(host, ctx, { tokenHash: hashToken(token), allowedPeerId: "p-admin", now: clock.now });
+		await control.bootstrap({ tokenHash: hashToken(token), allowedPeerId: "p-admin" });
 		const key = generateKey("ed25519", "k");
 		const enrolling = remote("127.0.0.3", "p-admin", key.signer);
 		const res = await enrolling.enroll(token);
@@ -55,10 +46,9 @@ async function setup(tc: TestContext) {
 		await admin.authenticate();
 		return { admin, signer, key, keyId: res.keyId };
 	};
-	const controlState = async () => { const info = (await listSpaces(host, ctx)).find((i) => i.alias === CONTROL_SPACE)!; return (await snapshotSpace(host, info.spaceId, ctx))!; };
-	const results = async (commandId?: string) => core.list(await controlState(), clock.now(), { type: "Result", ...(commandId ? { fields: { commandId } } : {}) }).map((e) => e.fields as Record<string, any>);
+	const results = async (commandId?: string) => (await control.entries({ type: "Result", ...(commandId ? { fields: { commandId } } : {}) })).map((e) => e.fields);
 	const command = (kind: string, args: Record<string, unknown>, commandId = `c-${Math.random().toString(36).slice(2)}`) => ({ type: "Command", fields: { commandId, kind, args } as core.Fields, commandId });
-	return { host, clock, keys, gate, events, peers, remote, pairAdmin, controlState, results, command, supervisor };
+	return { clock, gate, control, peers, remote, pairAdmin, results, command };
 }
 
 test("a paired admin pairs a host through the control space: Command -> supervisor -> Result -> enroll -> revokePeer", async (tc) => {
@@ -80,15 +70,15 @@ test("a paired admin pairs a host through the control space: Command -> supervis
 	const hostKey = generateKey("ed25519", "hk");
 	const enrolled = await g.remote("127.0.0.2", "p-host", hostKey.signer).enroll(token);
 	assert.equal(enrolled.role, "host");
-	assert.equal((await g.keys.find("p-host", enrolled.keyId))?.state, "active");
+	assert.equal((await g.control.find("p-host", enrolled.keyId))?.state, "active");
 	// revoking the peer
 	const c2 = g.command("revokePeer", { peerId: "p-host" });
 	await admin.write({ type: c2.type, fields: c2.fields }, null, 60 * 60_000);
 	assert.ok(await until(async () => (await g.results(c2.commandId)).length === 1));
 	const r2 = (await g.results(c2.commandId))[0]!;
 	assert.deepEqual([r2.state, r2.result.revoked], ["completed", 1]);
-	assert.equal((await g.keys.find("p-host", enrolled.keyId))?.state, "revoked");
-	assert.deepEqual(g.events.map((e) => [e.kind, e.state]), [["createEnroll", "completed"], ["revokePeer", "completed"]]);
+	assert.equal((await g.control.find("p-host", enrolled.keyId))?.state, "revoked");
+	assert.deepEqual(g.gate.commandEvents.map((e) => [e.kind, e.state]), [["createEnroll", "completed"], ["revokePeer", "completed"]]);
 });
 
 test("a repeated commandId acts once; bad arguments and unknown kinds become failed results, not crashes", async (tc) => {
@@ -98,8 +88,8 @@ test("a repeated commandId acts once; bad arguments and unknown kinds become fai
 	const c = g.command("createEnroll", { tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host" }, "same-id");
 	await admin.write({ type: c.type, fields: c.fields }, null, 60 * 60_000);
 	await admin.write({ type: c.type, fields: c.fields }, null, 60 * 60_000); // the admin's retry
-	assert.ok(await until(async () => g.events.length >= 2));
-	assert.deepEqual(g.events.map((e) => e.state), ["completed", "duplicate"]);
+	assert.ok(await until(async () => g.gate.commandEvents.length >= 2));
+	assert.deepEqual(g.gate.commandEvents.map((e) => e.state), ["completed", "duplicate"]);
 	assert.equal((await g.results("same-id")).length, 1);
 	const bad = g.command("createEnroll", { tokenHash: "nope", role: "host", allowedPeerId: "p-host" });
 	const wrongRole = g.command("createEnroll", { tokenHash: hashToken("x"), role: "admin", allowedPeerId: "p-host" });
@@ -132,15 +122,14 @@ test("only an admin who proved a key writes commands; the control space is close
 	await assert.rejects(admin.take({ type: "Command" }, 0), core.PermissionError);
 	await assert.rejects(admin.stats(), core.PermissionError);
 	assert.equal((await admin.readAll({ type: "PeerKey" })).length, 1, "keys are readable for the audit");
-	assert.equal((await g.controlState()).entries.some((e) => e.type === "Command"), false);
+	assert.equal((await g.control.entries({ type: "Command" })).length, 0);
 });
 
 test("a command whose writer holds no active admin key fails; the revoked admin loses its power", async (tc) => {
 	const g = await setup(tc);
 	const { admin } = await g.pairAdmin();
 	// written straight into the control space by someone who is no admin (as a local tool might)
-	const local = new PhiSpaces(g.host, ctx, g.clock.now, undefined, "p-ghost", { space: CONTROL_SPACE });
-	await local.write({ type: "Command", fields: { commandId: "ghost", kind: "revokePeer", args: { peerId: "p-admin" } } }, null, FOREVER);
+	await g.control.writeAs("p-ghost", { type: "Command", fields: { commandId: "ghost", kind: "revokePeer", args: { peerId: "p-admin" } } }, FOREVER);
 	assert.ok(await until(async () => (await g.results("ghost")).length === 1));
 	assert.equal((await g.results("ghost"))[0]!.state, "failed");
 	assert.match((await g.results("ghost"))[0]!.error, /no active admin key/);
@@ -149,7 +138,7 @@ test("a command whose writer holds no active admin key fails; the revoked admin 
 	await admin.write({ type: self.type, fields: self.fields }, null, 60 * 60_000);
 	assert.ok(await until(async () => (await g.results(self.commandId)).length === 1));
 	assert.equal((await g.results(self.commandId))[0]!.state, "completed");
-	await local.write({ type: "Command", fields: { commandId: "after", kind: "revokePeer", args: { peerId: "p-host" } } }, null, FOREVER);
+	await g.control.writeAs("p-ghost", { type: "Command", fields: { commandId: "after", kind: "revokePeer", args: { peerId: "p-host" } } }, FOREVER);
 	assert.ok(await until(async () => (await g.results("after")).length === 1));
 	assert.equal((await g.results("after"))[0]!.state, "failed");
 });

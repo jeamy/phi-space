@@ -7,7 +7,8 @@ import type net from "node:net";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
-import { GateIdentity, MemoryKeyDirectory, NetbirdDirectory, ProvingService, SpaceService, socketTransport, startGate, type PeerKeyRec, type Policy } from "../../src/index.ts";
+import { BootstrapClosed, CONTROL_SPACE, ControlAccess, EnrollmentService, GateIdentity, MemoryKeyDirectory, NetbirdDirectory, PhiSpaces, ProvingService, SpaceKeyDirectory, SpaceService, Supervisor, bootstrapEnroll, core, createEnroll, listSpaces, revokePeerKey, snapshotSpace, socketTransport, startGate, type KeyDirectory, type PeerKeyRec, type Policy } from "../../src/index.ts";
+import { plainDoc } from "./host.ts";
 import { openTestHost } from "./host.ts";
 import { ctx } from "./persistent.ts";
 
@@ -20,9 +21,9 @@ const put = (file: string, text: string) => { writeFileSync(`${file}.tmp`, text)
 
 /** The gate's clock. */
 export class TestClock {
-	private at = 1_000_000;
+	private at: number;
 	readonly file: string;
-	constructor(tc: TestContext) { this.file = join(scratch(tc), "clock"); put(this.file, String(this.at)); }
+	constructor(tc: TestContext, at = 1_000_000) { this.at = at; this.file = join(scratch(tc), "clock"); put(this.file, String(this.at)); }
 	get t() { return this.at; }
 	set t(v: number) { this.at = v; put(this.file, String(v)); }
 	now = () => this.at;
@@ -38,24 +39,58 @@ export class TestKeys extends MemoryKeyDirectory {
 	override revoke(peerId: string, keyId: string) { super.revoke(peerId, keyId); const k = this.list.get(`${peerId}\n${keyId}`); if (k) k.state = "revoked"; this.save(); }
 }
 
-export type GateCase = { url: string; token?: string; cacheMs?: number; clock: TestClock; keys?: TestKeys; gateHostId?: string; policy?: Policy; host?: string; handshakeMs?: number; maxConnectionsPerPeer?: number; connectionsPerSecondPerPeer?: number };
+export type GateCase = {
+	url: string; token?: string; cacheMs?: number; clock: TestClock; keys?: TestKeys; gateHostId?: string; policy?: Policy; host?: string; handshakeMs?: number; maxConnectionsPerPeer?: number; connectionsPerSecondPerPeer?: number;
+	/** Keys from the control space, pairing, its wire rules, its supervisor; the service then runs on the case's clock if asked. */
+	spaceKeys?: boolean; enrollment?: boolean; controlAccess?: boolean; supervisor?: boolean; serviceClock?: boolean;
+};
 type Seen = { event: string; ip: string; peerId?: string; reason?: string };
-export type GateUnderTest = { port: number; readonly events: Seen[]; peers(): Promise<Array<{ peerId: string; ip: string; roles: string[]; proven: boolean }>>; revalidate(): Promise<number> };
+type EnrollSeen = { peerId: string; outcome: string; keyId?: string };
+type CommandSeen = { commandId: string; kind: string; state: string; requestedBy: string; error?: string };
+type Enroll = { tokenHash: string; allowedPeerId: string; role?: string; scope?: string[]; ttlMs?: number };
+/** What a test does on the host itself. */
+export type HostSide = {
+	bootstrap(o: Enroll): Promise<Record<string, any>>;
+	create(o: Enroll): Promise<Record<string, any>>;
+	revoke(peerId: string, keyId: string): Promise<boolean>;
+	find(peerId: string, keyId: string): Promise<PeerKeyRec | null>;
+	entries(template: { type: string; fields?: Record<string, unknown> }): Promise<Array<{ fields: Record<string, any> }>>;
+	/** The control space's document, as text. */
+	state(): Promise<string>;
+	writeAs(owner: string, entry: { type: string; fields: Record<string, unknown> }, leaseMs: number): Promise<unknown>;
+};
+export type GateUnderTest = { port: number; readonly events: Seen[]; readonly enrollEvents: EnrollSeen[]; readonly commandEvents: CommandSeen[]; control: HostSide; peers(): Promise<Array<{ peerId: string; ip: string; roles: string[]; proven: boolean }>>; revalidate(): Promise<number> };
 
 async function inProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 	const directory = new NetbirdDirectory({ url: c.url, token: c.token ?? "t", now: c.clock.now, ...(c.cacheMs === undefined ? {} : { cacheMs: c.cacheMs }) });
 	const host = await openTestHost(ctx);
 	tc.after(() => host.close(ctx));
-	const service = new SpaceService({ host, ctx, identity: new GateIdentity(), ...(c.policy ? { policy: c.policy } : {}) });
-	const front = c.gateHostId && c.keys ? new ProvingService(service, { gateHostId: c.gateHostId, keys: c.keys, now: c.clock.now }) : service;
+	const identity = new GateIdentity();
+	const keys: KeyDirectory | undefined = c.spaceKeys ? new SpaceKeyDirectory(host, ctx, c.clock.now) : c.keys;
+	const service = new SpaceService({ host, ctx, identity, ...(c.policy ? { policy: c.policy } : {}), ...(c.serviceClock ? { now: c.clock.now } : {}) });
+	const proving = c.gateHostId && keys ? new ProvingService(service, { gateHostId: c.gateHostId, keys, now: c.clock.now }) : service;
+	const access = c.controlAccess ? new ControlAccess(proving as ProvingService, { identity, host, ctx }) : proving;
+	const enrollEvents: EnrollSeen[] = [], commandEvents: CommandSeen[] = [];
+	const front = c.enrollment ? new EnrollmentService(access as ProvingService, { host, ctx, now: c.clock.now, ...(c.spaceKeys ? { keys: keys! } : {}), onEvent: (e) => enrollEvents.push(e) }) : access;
 	const events: Seen[] = [];
 	const gate = await startGate(front, {
 		listen: { host: c.host ?? "127.0.0.1", port: 0 }, directory, revalidateMs: 0, now: c.clock.now, onEvent: (e) => events.push(e),
-		...(c.keys ? { keys: c.keys } : {}), ...(c.handshakeMs === undefined ? {} : { handshakeMs: c.handshakeMs }),
+		...(keys ? { keys } : {}), ...(c.handshakeMs === undefined ? {} : { handshakeMs: c.handshakeMs }),
 		...(c.maxConnectionsPerPeer === undefined ? {} : { maxConnectionsPerPeer: c.maxConnectionsPerPeer }), ...(c.connectionsPerSecondPerPeer === undefined ? {} : { connectionsPerSecondPerPeer: c.connectionsPerSecondPerPeer }),
 	});
 	tc.after(() => gate.close());
-	return { port: (gate.address() as net.AddressInfo).port, events, peers: async () => gate.peers(), revalidate: () => gate.revalidate() };
+	if (c.supervisor) { const stop = await new Supervisor(host, ctx, { now: c.clock.now, onEvent: (e) => commandEvents.push(e) }).start(); tc.after(() => stop()); }
+	const controlState = async () => { const info = (await listSpaces(host, ctx)).find((i) => i.alias === CONTROL_SPACE)!; return (await snapshotSpace(host, info.spaceId, ctx))!; };
+	const control: HostSide = {
+		bootstrap: (o) => bootstrapEnroll(host, ctx, { ...o, now: c.clock.now }),
+		create: (o) => createEnroll(host, ctx, { ...o, role: o.role ?? "", now: c.clock.now }),
+		revoke: (peerId, keyId) => revokePeerKey(host, ctx, peerId, keyId, c.clock.now),
+		find: (peerId, keyId) => new SpaceKeyDirectory(host, ctx, c.clock.now).find(peerId, keyId),
+		entries: async (t) => core.list(await controlState(), c.clock.now(), t as never) as never,
+		state: async () => JSON.stringify(plainDoc(await controlState())),
+		writeAs: (owner, entry, leaseMs) => new PhiSpaces(host, ctx, c.clock.now, undefined, owner, { space: CONTROL_SPACE }).write(entry as never, null, leaseMs),
+	};
+	return { port: (gate.address() as net.AddressInfo).port, events, enrollEvents, commandEvents, control, peers: async () => gate.peers(), revalidate: () => gate.revalidate() };
 }
 
 async function asProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
@@ -63,7 +98,7 @@ async function asProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 	put(eventsFile, "");
 	writeFileSync(config, JSON.stringify({
 		hooks: hooksPath, endpoints: [], identities: {}, policy: c.policy?.roles,
-		gate: { host: c.host ?? "127.0.0.1", port: 0, url: c.url, token: c.token ?? "t", cacheMs: c.cacheMs, handshakeMs: c.handshakeMs, maxConnectionsPerPeer: c.maxConnectionsPerPeer, connectionsPerSecondPerPeer: c.connectionsPerSecondPerPeer, clockFile: c.clock.file, eventsFile, keysFile: c.keys?.file, gateHostId: c.gateHostId },
+		gate: { host: c.host ?? "127.0.0.1", port: 0, url: c.url, token: c.token ?? "t", cacheMs: c.cacheMs, handshakeMs: c.handshakeMs, maxConnectionsPerPeer: c.maxConnectionsPerPeer, connectionsPerSecondPerPeer: c.connectionsPerSecondPerPeer, clockFile: c.clock.file, eventsFile, keysFile: c.keys?.file, gateHostId: c.gateHostId, spaceKeys: c.spaceKeys, enrollment: c.enrollment, controlAccess: c.controlAccess, supervisor: c.supervisor, serviceClock: c.serviceClock },
 	}));
 	const proc = spawn(CMD![0]!, [...CMD!.slice(1), "--store", "memory", "--listen", `unix:${join(dir, "unused.sock")}`, "--test-hooks", config], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
 	const port = await new Promise<number>((resolve, reject) => {
@@ -76,10 +111,26 @@ async function asProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 	});
 	const hooks = socketTransport({ path: hooksPath });
 	tc.after(async () => { hooks.close(); await new Promise<void>((r) => { proc.removeAllListeners("exit"); proc.once("exit", () => r()); proc.kill("SIGTERM"); }); });
-	const hook = async <T,>(name: string) => { const r = JSON.parse(await hooks.request(JSON.stringify({ hook: name }))) as { result: T }; return r.result; };
+	const hook = async <T,>(name: string, line: Record<string, unknown> = {}) => {
+		const r = JSON.parse(await hooks.request(JSON.stringify({ hook: name, now: c.clock.now(), ...line }))) as { ok: boolean; result: T; class?: string; message?: string };
+		if (r.ok) return r.result;
+		throw r.class === "BootstrapClosed" ? new BootstrapClosed(r.message) : r.class === "IllegalArgumentError" ? new core.IllegalArgumentError(r.message!) : new Error(r.message);
+	};
+	const seen = <T,>(key: string): T[] => readFileSync(eventsFile, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as T).filter((e) => key in (e as object));
 	return {
 		port,
-		get events() { return readFileSync(eventsFile, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Seen); },
+		get events() { return seen<Seen>("event"); },
+		get enrollEvents() { return seen<EnrollSeen>("outcome"); },
+		get commandEvents() { return seen<CommandSeen>("commandId"); },
+		control: {
+			bootstrap: (o) => hook("bootstrapEnroll", o),
+			create: (o) => hook("createEnroll", o),
+			revoke: (peerId, keyId) => hook("revokePeerKey", { peerId, keyId }),
+			find: (peerId, keyId) => hook("findKey", { peerId, keyId }),
+			entries: (template) => hook("entries", { template }),
+			state: async () => JSON.stringify(await hook("controlState")),
+			writeAs: (owner, entry, leaseMs) => hook("writeAs", { owner, entry, leaseMs }),
+		},
 		peers: () => hook("peers"),
 		revalidate: () => hook("revalidate"),
 	};

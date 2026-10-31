@@ -1,4 +1,4 @@
-// `--test-hooks CONFIG.json` (docs/rust-portierung.md, section 5): what test/support/service-fixture.ts needs of a server it
+// `--test-hooks CONFIG.json` (docs/rust-portierung.en.md, section 5): what test/support/service-fixture.ts needs of a server it
 // cannot reach into. The identities, the policy and the limits of the case, one socket per peer, and a socket of its own
 // for the hooks, unix only and never one the service listens on. Without the flag none of this exists.
 //
@@ -6,13 +6,16 @@
 //  "roles": [...]}}, "policy": {"role": {"methods"?: [...], "types"?: [...]}}, "limits"?: {...}, "hostId"?, "authorityId"?,
 //  "primaryEpoch"?, "maxPendingPerPrincipal"?, "maxPendingPerPeer"?, "maxCallsPerWindow"?, "wakeOnCommit"?, "maxFrameBytes"?,
 //  "maxConnections"?, "maxInflightPerConnection"?, "idleMs"?, "gate"?: {"host", "port", "url", "token", "cacheMs"?, "handshakeMs"?,
-//  "maxConnectionsPerPeer"?, "connectionsPerSecondPerPeer"?, "clockFile"?, "eventsFile"?, "keysFile"?, "gateHostId"?}}
+//  "maxConnectionsPerPeer"?, "connectionsPerSecondPerPeer"?, "clockFile"?, "eventsFile"?, "keysFile"?, "gateHostId"?, "spaceKeys"?,
+//  "enrollment"?, "controlAccess"?, "supervisor"?, "serviceClock"?}}
 //
 // The gate's clock, its keys and its events are files, so a test can change them between two calls without a round trip.
 //
-// A hook is a frame with {"hook": ...}: setLimits {limits}, connections, clock {now}, state.
-use phi_host::auth::{KeyDirectory, PeerKey, Proving};
-use phi_host::gate::{Gate, GateOptions, Netbird, Now};
+// A hook is a frame with {"hook": ...}: setLimits {limits}, connections, clock {now}, state; on a gate also revalidate, peers,
+// bootstrapEnroll, createEnroll, revokePeerKey, findKey, entries, controlState and writeAs, each with {now}.
+use phi_host::auth::{PeerKey, Proving};
+use phi_host::control::{self, Control, CreateEnroll, Enrolling, SpaceKeys, Supervisor, CONTROL_SPACE};
+use phi_host::gate::{Gate, GateOptions, Keys, Netbird, Now};
 use phi_json::{parse, Json};
 use phi_service::{default_policy, Identity, Options, RolePolicy, Service};
 use phi_wire::{Endpoint, Listen, ServeOptions};
@@ -61,8 +64,14 @@ pub fn apply(file: &str, o: &mut Options, serving: &mut ServeOptions) -> Result<
 	if let Some(n) = number("idleMs") {
 		serving.idle_ms = n as u64;
 	}
+	let mut gate_clock = None;
 	if let Some(g) = c.get("gate") {
-		serving.gates.push(gate(g)?);
+		let (listen, front, now) = gate(g)?;
+		serving.gates.push((listen, front));
+		gate_clock = g.get("serviceClock").filter(|v| **v == Json::Bool(true)).map(|_| now);
+	}
+	if let Some(now) = gate_clock {
+		o.now = Box::new(move || now());
 	}
 	let clock: Rc<Cell<Option<f64>>> = Rc::default();
 	let (real, held) = (std::mem::replace(&mut o.now, Box::new(|| 0.0)), clock.clone());
@@ -73,16 +82,17 @@ pub fn apply(file: &str, o: &mut Options, serving: &mut ServeOptions) -> Result<
 
 /// Keys as a file of `PeerKey` fields, read at each look.
 struct FileKeys(String);
-impl KeyDirectory for FileKeys {
-	fn find(&self, peer_id: &str, key_id: &str) -> Option<PeerKey> {
+impl Keys for FileKeys {
+	fn find(&self, _: &mut Service, peer_id: &str, key_id: &str) -> Option<PeerKey> {
 		let list = parse(&std::fs::read_to_string(&self.0).ok()?).ok()?;
 		list.as_array()?.iter().filter_map(PeerKey::from_json).find(|k| k.peer_id == peer_id && k.key_id == key_id)
 	}
 }
 
-fn gate(g: &Json) -> Result<(Listen, Rc<dyn phi_wire::Front>), String> {
+fn gate(g: &Json) -> Result<(Listen, Rc<dyn phi_wire::Front>, Now), String> {
 	let text = |k: &str| g.get(k).and_then(Json::as_str);
 	let number = |k: &str| g.get(k).and_then(Json::as_f64);
+	let flag = |k: &str| g.get(k) == Some(&Json::Bool(true));
 	let now: Now = match text("clockFile") {
 		None => Rc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("after 1970").as_millis() as f64),
 		Some(file) => {
@@ -96,7 +106,7 @@ fn gate(g: &Json) -> Result<(Listen, Rc<dyn phi_wire::Front>), String> {
 		}
 	};
 	let directory = Netbird::new(text("url").ok_or("the gate names no url")?, text("token").unwrap_or(""), number("cacheMs"), Rc::clone(&now))?;
-	let mut o = GateOptions::new(directory, now);
+	let mut o = GateOptions::new(directory, Rc::clone(&now));
 	o.revalidate_ms = 0;
 	if let Some(n) = number("handshakeMs") {
 		o.handshake_ms = n as u64;
@@ -107,21 +117,61 @@ fn gate(g: &Json) -> Result<(Listen, Rc<dyn phi_wire::Front>), String> {
 	if let Some(n) = number("connectionsPerSecondPerPeer") {
 		o.connections_per_second = n;
 	}
-	if let Some(file) = text("eventsFile") {
-		let file = file.to_owned();
-		o.on_event = Box::new(move |e| {
+	let log = |file: Option<&str>| -> Rc<dyn Fn(&Json)> {
+		let file = file.map(str::to_owned);
+		Rc::new(move |e| {
 			use std::io::Write as _;
-			if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open(&file) {
+			if let Some(mut f) = file.as_ref().and_then(|f| std::fs::OpenOptions::new().append(true).create(true).open(f).ok()) {
 				let _ = writeln!(f, "{}", e.to_json_text());
 			}
-		});
+		})
+	};
+	let events = log(text("eventsFile"));
+	let on = |events: &Rc<dyn Fn(&Json)>| -> Box<dyn Fn(&Json)> {
+		let events = Rc::clone(events);
+		Box::new(move |e| events(e))
+	};
+	o.on_event = on(&events);
+	if let Some(id) = text("gateHostId") {
+		let keys: Option<Rc<dyn Keys>> = match text("keysFile") {
+			Some(file) => Some(Rc::new(FileKeys(file.to_owned()))),
+			None if flag("spaceKeys") => Some(Rc::new(SpaceKeys { now: Rc::clone(&o.now) })),
+			None => None,
+		};
+		o.proving = keys.map(|k| (Proving::new(id), k));
 	}
-	if let (Some(id), Some(keys)) = (text("gateHostId"), text("keysFile")) {
-		o.proving = Some((Proving::new(id), Rc::new(FileKeys(keys.to_owned()))));
+	if flag("enrollment") {
+		o.enrolling = Some(Enrolling::new(on(&events)));
+	}
+	if flag("controlAccess") {
+		o.control = Some(Control { supervisor: flag("supervisor").then(|| Supervisor { on_event: on(&events) }) });
 	}
 	let host = text("host").ok_or("the gate names no host")?;
 	let front: Rc<dyn phi_wire::Front> = Gate::new(host, o)?;
-	Ok((Listen::Tcp { host: host.to_owned(), port: number("port").unwrap_or(0.0) as u16 }, front))
+	Ok((Listen::Tcp { host: host.to_owned(), port: number("port").unwrap_or(0.0) as u16 }, front, now))
+}
+
+/// What a test does on the host itself, where the in-process test holds it.
+fn control_hook(service: &mut Service, name: &str, line: &Json) -> String {
+	let text = |k: &str| line.get(k).and_then(Json::as_str).unwrap_or("");
+	let now = line.get("now").and_then(Json::as_f64).unwrap_or(0.0);
+	let ttl = line.get("ttlMs").and_then(Json::as_f64);
+	let scope = line.get("scope").and_then(strings).unwrap_or_default();
+	let id = control::control_id(service, now);
+	let result = id.and_then(|id| match name {
+		"bootstrapEnroll" => control::bootstrap_enroll(service, now, text("tokenHash"), text("allowedPeerId"), ttl),
+		"createEnroll" => control::create_enroll(service, now, &CreateEnroll { token_hash: text("tokenHash").to_owned(), role: text("role").to_owned(), allowed_peer_id: text("allowedPeerId").to_owned(), scope, ttl_ms: ttl }),
+		"revokePeerKey" => control::revoke_peer_key(service, now, text("peerId"), text("keyId")).map(Json::Bool),
+		"findKey" => Ok(service.store.reader(Some(CONTROL_SPACE))?.space.list(now, &phi_core::space::Template::from_json(Some(&phi_json::obj! { "type" => "PeerKey", "fields" => phi_json::obj! { "peerId" => text("peerId"), "keyId" => text("keyId") } }))?, None, None, None)?.as_array().and_then(|a| a.first()).and_then(|e| e.get("fields")).cloned().unwrap_or(Json::Null)),
+		"entries" => service.store.reader(Some(CONTROL_SPACE))?.space.list(now, &phi_core::space::Template::from_json(line.get("template"))?, None, None, None),
+		"controlState" => Ok(service.store.reader(Some(CONTROL_SPACE))?.space.state.to_json()),
+		"writeAs" => service.commit_on(Some(&id), |s, _| s.write(now, line.get("entry").unwrap_or(&Json::Null), None, line.get("leaseMs"), line.get("owner"))),
+		other => Err(phi_core::space::error("Error", format!("no hook {other}"))),
+	});
+	match result {
+		Ok(v) => phi_json::obj! { "ok" => true, "result" => v }.to_json_text(),
+		Err(e) => phi_json::obj! { "ok" => false, "class" => e.class, "message" => e.message }.to_json_text(),
+	}
 }
 
 fn hook(service: &mut Service, open: usize, clock: &Cell<Option<f64>>, text: &str) -> String {
@@ -137,6 +187,7 @@ fn hook(service: &mut Service, open: usize, clock: &Cell<Option<f64>>, text: &st
 			Ok(h) => Ok(h.space.state.to_json_without_claims()),
 			Err(e) => Err(e.message),
 		},
+		Some(name) if name != "state" => return control_hook(service, name, &line),
 		other => Err(format!("no hook {other:?}")),
 	};
 	match result {

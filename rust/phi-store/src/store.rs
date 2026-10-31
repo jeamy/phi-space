@@ -174,6 +174,52 @@ impl Store {
 		Ok(done)
 	}
 
+	/// `createSpace`: a named Space, or the one with this alias. `random` is the new document's source.
+	pub fn create_space(&mut self, alias: &str, now: f64, random: Random) -> Result<std::result::Result<Json, CoreError>> {
+		if let Some(id) = self.registry.as_ref().and_then(|r| r.get("aliases")?.get(alias)?.as_str()) {
+			let info = self.registry.as_ref().and_then(|r| r.get("spaces")?.get(id)).cloned().unwrap_or(Json::Null);
+			return Ok(Ok(info));
+		}
+		let fine = alias.len() <= 64 && alias.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit()) && alias.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || ".-_".contains(c));
+		if !fine {
+			return Ok(Err(error("IllegalArgumentError", "alias: 1-64 of a-z 0-9 . _ - (starting with a letter or digit)")));
+		}
+		if self.default_id().is_none() {
+			if let Err(e) = self.commit(None, now, |_| Ok(()))? {
+				return Ok(Err(e));
+			}
+		}
+		let id = format!("sp-{}", random_uuid(&mut self.random));
+		let incarnation = hex(&(self.random)(4));
+		let info = obj! { "spaceId" => id.as_str(), "alias" => alias, "incarnation" => incarnation.as_str(), "createdAt" => now };
+		let mut registry = self.registry.clone().and_then(|r| r.as_object().cloned()).unwrap_or_default();
+		if let Some(Json::Object(s)) = registry.get_mut("spaces") {
+			s.insert(&id, info.clone());
+		}
+		if let Some(Json::Object(a)) = registry.get_mut("aliases") {
+			a.insert(alias, id.as_str().into());
+		}
+		let registry = Json::Object(registry);
+		let mut host = SpaceHost::open_shared(self.default.ledger.clone(), NAMED_SPACE, Some(&id), random)?;
+		host.also.push(WriteOp::Doc { kind: REGISTRY.into(), key: String::new(), version: REGISTRY_VERSION, value: registry.to_json_text() });
+		let (space, carried) = (id.clone(), incarnation);
+		let done = host.start_commit(|s| {
+			s.clock = now;
+			s.touch(now);
+			s.state.space_id = Some(space);
+			s.state.incarnation = Some(carried);
+			Ok(())
+		})?;
+		Ok(match done {
+			Err(e) => Err(e),
+			Ok(_) => {
+				self.registry = Some(registry);
+				self.named.push((id, host));
+				Ok(info)
+			}
+		})
+	}
+
 	/// Commits handed to the store, and those durable. The writer works in the order they were handed over, so `durable()`
 	/// reaching a count of `handed()` means all of those are on the disk, whichever Space they were of.
 	pub fn handed(&self) -> u64 { self.default.handed_count() + self.named.iter().map(|(_, h)| h.handed_count()).sum::<u64>() }
