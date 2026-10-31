@@ -3,9 +3,8 @@ import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import net from "node:net";
-import { SpaceService, RemoteSpace, socketTransport, startGate, NetbirdDirectory, GateIdentity, FOREVER, core, type Gate, type GateOptions } from "../src/index.ts";
-import { ctx } from "./support/persistent.ts";
-import { openTestHost } from "./support/host.ts";
+import { RemoteSpace, socketTransport, NetbirdDirectory, FOREVER, core } from "../src/index.ts";
+import { TestClock, gateUnderTest, type GateCase } from "./support/gate-under-test.ts";
 
 type Peer = { id: string; name: string; ip: string; connected: boolean; groups: Array<{ id: string; name: string }> };
 const peer = (id: string, ip: string, groups: string[]): Peer => ({ id, name: id, ip, connected: true, groups: groups.map((g) => ({ id: `g-${g}`, name: g })) });
@@ -35,10 +34,8 @@ class Management {
 		return this;
 	}
 }
-const memory = () => openTestHost(ctx);
-class Clock { t = 1_000_000; now = () => this.t; }
 
-async function setup(tc: TestContext, o: Partial<GateOptions> = {}, dirOpts: { cacheMs?: number } = {}) {
+async function setup(tc: TestContext, o: Partial<GateCase> = {}) {
 	const mgmt = await new Management().start(tc);
 	mgmt.peers = [
 		peer("p-host", "127.0.0.2", ["space-hosts"]),
@@ -47,16 +44,11 @@ async function setup(tc: TestContext, o: Partial<GateOptions> = {}, dirOpts: { c
 		peer("p-nogroup", "127.0.0.5", ["something-else"]),
 		peer("p-both", "127.0.0.7", ["space-hosts", "space-observer"]),
 	];
-	const clock = new Clock();
-	const directory = new NetbirdDirectory({ url: mgmt.url, token: "secret-token", now: clock.now, ...dirOpts });
-	const h = await memory();
-	const service = new SpaceService({ host: h, ctx, identity: new GateIdentity() });
-	const events: Array<{ event: string; ip: string; peerId?: string; reason?: string }> = [];
-	const gate = await startGate(service, { listen: { host: "127.0.0.1", port: 0 }, directory, revalidateMs: 0, now: clock.now, onEvent: (e) => events.push(e), ...o });
-	tc.after(() => gate.close());
-	const port = (gate.address() as net.AddressInfo).port;
+	const clock = new TestClock(tc);
+	const gate = await gateUnderTest(tc, { url: mgmt.url, token: "secret-token", clock, ...o });
+	const port = gate.port;
 	const as = (ip: string, attempts = 2) => new RemoteSpace(socketTransport({ host: "127.0.0.1", port }, { localAddress: ip }), { attempts, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 3_000 });
-	return { mgmt, clock, directory, gate, events, as, port, h };
+	return { mgmt, clock, gate, as, port };
 }
 
 test("the peer behind the address decides: roles come from its groups, the principal is its peer id", async (tc) => {
@@ -80,23 +72,23 @@ test("no peer, or no group that grants a role: no access at all, and the refusal
 	const g = await setup(tc);
 	await assert.rejects(g.as("127.0.0.5").count()); // a peer in an unrelated group
 	await assert.rejects(g.as("127.0.0.6").count()); // an address nobody owns
-	const reasons = g.events.filter((e) => e.event === "refused").map((e) => e.reason);
+	const reasons = g.gate.events.filter((e) => e.event === "refused").map((e) => e.reason);
 	assert.ok(reasons.some((r) => r?.includes("no group")), JSON.stringify(reasons));
 	assert.ok(reasons.some((r) => r?.includes("no peer owns")), JSON.stringify(reasons));
-	assert.equal(g.gate.peers().length, 0);
+	assert.equal((await g.gate.peers()).length, 0);
 });
 
 test("the directory answer is cached: many connections, one request; stale after the cache time", async (tc) => {
 	const g = await setup(tc);
 	const clients = Array.from({ length: 8 }, () => g.as("127.0.0.2"));
 	await Promise.all(clients.map((c) => c.count()));
-	assert.equal(g.directory.requests, 1);
+	assert.equal(g.mgmt.requests, 1);
 	g.clock.t += 30_000;
 	await g.as("127.0.0.3").count();
-	assert.equal(g.directory.requests, 1, "still within the 60 s");
+	assert.equal(g.mgmt.requests, 1, "still within the 60 s");
 	g.clock.t += 31_000;
 	await g.as("127.0.0.3").count();
-	assert.equal(g.directory.requests, 2, "refreshed once it is older than the cache time");
+	assert.equal(g.mgmt.requests, 2, "refreshed once it is older than the cache time");
 	assert.throws(() => new NetbirdDirectory({ url: g.mgmt.url, token: "t", cacheMs: 0 }));
 	const capped = new NetbirdDirectory({ url: g.mgmt.url, token: "t", cacheMs: 600_000 });
 	await capped.lookup("127.0.0.2");
@@ -112,7 +104,7 @@ test("management API down: the cache serves for its lifetime, then new connectio
 	assert.equal(await g.as("127.0.0.2").count(), 0, "served from a 20 s old answer");
 	g.clock.t += 45_000; // the answer is 65 s old now and cannot be renewed
 	await assert.rejects(g.as("127.0.0.2").count());
-	assert.ok(g.events.some((e) => e.event === "refused" && e.reason?.includes("management API")), JSON.stringify(g.events));
+	assert.ok(g.gate.events.some((e) => e.event === "refused" && e.reason?.includes("management API")), JSON.stringify(g.gate.events));
 	g.mgmt.status = 200;
 	assert.equal(await g.as("127.0.0.2").count(), 0, "and back to normal");
 });
@@ -122,17 +114,17 @@ test("revalidation closes the connections of a peer that lost its roles or vanis
 	const a = g.as("127.0.0.2", 1);
 	const b = g.as("127.0.0.3", 1);
 	await a.count(); await b.count();
-	assert.equal(g.gate.peers().length, 2);
+	assert.equal((await g.gate.peers()).length, 2);
 	g.mgmt.peers = g.mgmt.peers.map((p) => (p.id === "p-host" ? { ...p, groups: [] } : p));
 	g.clock.t += 1_000;
 	assert.equal(await g.gate.revalidate(), 1);
-	assert.deepEqual(g.gate.peers().map((p) => p.peerId), ["p-admin"]);
+	assert.deepEqual((await g.gate.peers()).map((p) => p.peerId), ["p-admin"]);
 	await assert.rejects(a.count(), "the old connection is gone and a new one is refused");
 	assert.equal(await b.count(), 0, "an unaffected peer keeps working");
 	g.mgmt.peers = g.mgmt.peers.filter((p) => p.id !== "p-admin"); // the peer is removed
 	assert.equal(await g.gate.revalidate(), 1);
 	await assert.rejects(b.count());
-	const revoked = g.events.filter((e) => e.event === "revoked").map((e) => e.reason);
+	const revoked = g.gate.events.filter((e) => e.event === "revoked").map((e) => e.reason);
 	assert.deepEqual(revoked, ["the roles of the peer changed", "the peer is gone"]);
 	// roles that change without disappearing also end the connection (the new roles apply to the next one)
 	g.mgmt.peers = [...g.mgmt.peers, peer("p-admin", "127.0.0.3", ["space-hosts"])];
@@ -147,7 +139,7 @@ test("a peer that is not identified within the handshake time is closed; a slow 
 	const g = await setup(tc, { handshakeMs: 150 });
 	g.mgmt.delayMs = 600;
 	await assert.rejects(g.as("127.0.0.2", 1).count());
-	assert.ok(g.events.some((e) => e.reason?.includes("not identified in time")), JSON.stringify(g.events));
+	assert.ok(g.gate.events.some((e) => e.reason?.includes("not identified in time")), JSON.stringify(g.gate.events));
 	g.mgmt.delayMs = 0;
 	await new Promise((r) => setTimeout(r, 700)); // the slow refresh is still in flight and is shared by the next lookup
 	assert.equal(await g.as("127.0.0.2").count(), 0);
@@ -161,11 +153,11 @@ test("connections per peer and new connections per second are limited", async (t
 	const knock = (s: net.Socket) => { const body = Buffer.from(JSON.stringify({ method: "hello", args: { protocol: 1 } })); const h = Buffer.alloc(8); h.writeUInt32BE(body.length, 0); h.writeUInt32BE(1, 4); s.write(Buffer.concat([h, body])); };
 	const c1 = await raw("127.0.0.2"); knock(c1);
 	const c2 = await raw("127.0.0.2"); knock(c2);
-	for (let i = 0; i < 100 && g.gate.peers().length < 2; i++) await new Promise((r) => setTimeout(r, 10));
+	for (let i = 0; i < 100 && (await g.gate.peers()).length < 2; i++) await new Promise((r) => setTimeout(r, 10));
 	const c3 = await raw("127.0.0.2"); knock(c3);
 	await closed(c3);
-	assert.equal(g.gate.peers().length, 2);
-	assert.ok(g.events.some((e) => e.reason?.includes("already 2 connections")));
+	assert.equal((await g.gate.peers()).length, 2);
+	assert.ok(g.gate.events.some((e) => e.reason?.includes("already 2 connections")));
 	const other = await raw("127.0.0.3"); knock(other);
 	await new Promise((r) => setTimeout(r, 100));
 	assert.ok(!other.destroyed, "another peer has its own count");
@@ -181,42 +173,41 @@ test("connections per peer and new connections per second are limited", async (t
 
 test("the gate refuses to listen on a wildcard address", async (tc) => {
 	const mgmt = await new Management().start(tc);
-	const service = new SpaceService({ host: await memory(), ctx, identity: new GateIdentity() });
-	const directory = new NetbirdDirectory({ url: mgmt.url, token: "t" });
-	for (const host of ["0.0.0.0", "::", ""]) await assert.rejects(startGate(service, { listen: { host, port: 0 }, directory }), /overlay address only/);
+	const clock = new TestClock(tc);
+	for (const host of ["0.0.0.0", "::", ""]) await assert.rejects(gateUnderTest(tc, { url: mgmt.url, clock, host }), /overlay address only/);
 });
 
-
-test("silent sockets are identified at accept and a hung directory closes them within the handshake bound", async tc => {
- const h = await memory(); tc.after(() => h.close(ctx));
- const events: Array<{event:string;reason?:string}> = [];
- const gate = await startGate(new SpaceService({host:h,ctx,identity:new GateIdentity()}), {
-  listen:{host:"127.0.0.1",port:0}, handshakeMs:100, revalidateMs:0,
-  directory:{async refresh(){},lookup:()=>new Promise(()=>{})}, onEvent:e=>events.push(e),
- });
- tc.after(()=>gate.close());
- const socket = net.createConnection({host:"127.0.0.1",port:(gate.address() as net.AddressInfo).port});
- tc.after(()=>socket.destroy()); socket.on("error",()=>{});
- await new Promise<void>((resolve,reject)=>{
-  const timeout=setTimeout(()=>reject(new Error("silent socket survived handshake deadline")),1500);
-  socket.once("close",()=>{clearTimeout(timeout);resolve();});
- });
- assert.ok(events.some(e=>e.event==="refused" && e.reason?.includes("not identified in time")));
- assert.equal(gate.peers().length,0);
+test("silent sockets are identified at accept and a hung directory closes them within the handshake bound", async (tc) => {
+	const mgmt = await new Management().start(tc);
+	mgmt.delayMs = 2_000;
+	const gate = await gateUnderTest(tc, { url: mgmt.url, clock: new TestClock(tc), handshakeMs: 100 });
+	const socket = net.createConnection({ host: "127.0.0.1", port: gate.port });
+	tc.after(() => socket.destroy());
+	socket.on("error", () => {});
+	await new Promise<void>((resolve, reject) => {
+		const timeout = setTimeout(() => reject(new Error("silent socket survived handshake deadline")), 1500);
+		socket.once("close", () => { clearTimeout(timeout); resolve(); });
+	});
+	assert.ok(gate.events.some((e) => e.event === "refused" && e.reason?.includes("not identified in time")));
+	assert.equal((await gate.peers()).length, 0);
 });
 
-test("silent identified sockets consume the per-peer cap before sending their first frame", async tc => {
- const h = await memory(); tc.after(()=>h.close(ctx));
- const gate = await startGate(new SpaceService({host:h,ctx,identity:new GateIdentity()}),{
-  listen:{host:"127.0.0.1",port:0},maxConnectionsPerPeer:1,revalidateMs:0,
-  directory:{async refresh(){},async lookup(ip){return {id:"silent",name:"silent",ip,groups:["space-hosts"],connected:true};}},
- });
- tc.after(()=>gate.close());
- const address={host:"127.0.0.1",port:(gate.address() as net.AddressInfo).port};
- const first=net.createConnection(address);tc.after(()=>first.destroy()); first.on("error",()=>{});
- for(let n=0;n<100 && gate.peers().length!==1;n++)await new Promise(r=>setTimeout(r,5));
- assert.equal(gate.peers().length,1);
- const second=net.createConnection(address);tc.after(()=>second.destroy());second.on("error",()=>{});
- await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error("second silent peer connection survived")),1500);second.once("close",()=>{clearTimeout(timer);resolve();});});
- assert.equal(gate.peers().length,1);
+test("silent identified sockets consume the per-peer cap before sending their first frame", async (tc) => {
+	const mgmt = await new Management().start(tc);
+	mgmt.peers = [peer("silent", "127.0.0.1", ["space-hosts"])];
+	const gate = await gateUnderTest(tc, { url: mgmt.url, clock: new TestClock(tc), maxConnectionsPerPeer: 1 });
+	const address = { host: "127.0.0.1", port: gate.port };
+	const first = net.createConnection(address);
+	tc.after(() => first.destroy());
+	first.on("error", () => {});
+	for (let n = 0; n < 100 && (await gate.peers()).length !== 1; n++) await new Promise((r) => setTimeout(r, 5));
+	assert.equal((await gate.peers()).length, 1);
+	const second = net.createConnection(address);
+	tc.after(() => second.destroy());
+	second.on("error", () => {});
+	await new Promise<void>((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error("second silent peer connection survived")), 1500);
+		second.once("close", () => { clearTimeout(timer); resolve(); });
+	});
+	assert.equal((await gate.peers()).length, 1);
 });

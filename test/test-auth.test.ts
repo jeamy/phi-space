@@ -4,15 +4,13 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import net from "node:net";
 import {
-	SpaceService, RemoteSpace, RemoteError, socketTransport, startGate, NetbirdDirectory, GateIdentity, ProvingService, MemoryKeyDirectory, generateKey, FOREVER, core,
+	RemoteSpace, RemoteError, socketTransport, generateKey, FOREVER, core,
 	type Policy, type Signer, type Transport,
 } from "../src/index.ts";
-import { ctx } from "./support/persistent.ts";
-import { openTestHost } from "./support/host.ts";
+import { TestClock, TestKeys, gateUnderTest } from "./support/gate-under-test.ts";
 
 type Peer = { id: string; name: string; ip: string; connected: boolean; groups: Array<{ id: string; name: string }> };
 const peer = (id: string, ip: string, groups: string[]): Peer => ({ id, name: id, ip, connected: true, groups: groups.map((g) => ({ id: `g-${g}`, name: g })) });
-class Clock { t = 1_000_000; now = () => this.t; }
 // writing is for admins only: it is what a withheld admin role would be missed for
 const policy: Policy = { roles: { admin: { methods: "*" }, member: { methods: ["hello", "generation", "count", "readAll", "stats"] } } };
 
@@ -25,16 +23,10 @@ async function setup(tc: TestContext) {
 	const server = http.createServer((_req, res) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(peers)); });
 	await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 	tc.after(() => { server.closeAllConnections(); server.close(); });
-	const clock = new Clock();
-	const keys = new MemoryKeyDirectory();
-	const directory = new NetbirdDirectory({ url: `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`, token: "t", now: clock.now });
-	const host = await openTestHost(ctx);
-	const service = new SpaceService({ host, ctx, identity: new GateIdentity(), policy });
-	const proving = new ProvingService(service, { gateHostId: "host-1", keys, now: clock.now });
-	const events: Array<{ event: string; reason?: string }> = [];
-	const gate = await startGate(proving, { listen: { host: "127.0.0.1", port: 0 }, directory, keys, revalidateMs: 0, now: clock.now, onEvent: (e) => events.push(e) });
-	tc.after(() => gate.close());
-	const port = (gate.address() as net.AddressInfo).port;
+	const clock = new TestClock(tc);
+	const keys = new TestKeys(tc);
+	const gate = await gateUnderTest(tc, { url: `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`, clock, keys, gateHostId: "host-1", policy });
+	const port = gate.port;
 	const transports: Array<{ close(): void }> = [];
 	tc.after(() => transports.forEach((t) => t.close()));
 	const transport = (ip: string) => { const t = socketTransport({ host: "127.0.0.1", port }, { localAddress: ip }); transports.push(t); return t; };
@@ -45,7 +37,7 @@ async function setup(tc: TestContext) {
 		keys.add({ peerId, keyId, principal: `agent of ${peerId}`, algorithm, publicKey: k.publicKey, roles, state: "active" });
 		return k.signer;
 	};
-	return { clock, keys, gate, events, client, transport, withKey, peers, port };
+	return { clock, keys, gate, client, transport, withKey, peers, port };
 }
 const admin = (signer: Signer, extra: Partial<ConstructorParameters<typeof RemoteSpace>[1]> = {}) => ({ signer, expectedGateHostId: "host-1", ownPeerId: "p-admin", ...extra });
 
@@ -57,7 +49,7 @@ test("without a proof only the A-only roles remain: a member works, the withheld
 	const a = g.client("127.0.0.3");
 	assert.deepEqual((await a.info()).roles, ["member"], "the admin role of the group is withheld");
 	await assert.rejects(a.write({ type: "Job", fields: {} }, null, FOREVER), (e: unknown) => e instanceof RemoteError && e.code === "ProofRequired");
-	assert.equal(g.gate.peers().find((p) => p.peerId === "p-admin")?.proven, false);
+	assert.equal((await g.gate.peers()).find((p) => p.peerId === "p-admin")?.proven, false);
 });
 
 test("with a proof the roles are the intersection of groups and key: Ed25519 and ECDSA P-256", async (tc) => {
@@ -67,7 +59,7 @@ test("with a proof the roles are the intersection of groups and key: Ed25519 and
 		const a = g.client("127.0.0.3", admin(signer));
 		const lease = await a.write({ type: "Job", fields: { by: algorithm } }, null, FOREVER); // proves by itself on ProofRequired
 		assert.ok(lease.id);
-		assert.equal(g.gate.peers().filter((p) => p.peerId === "p-admin" && p.proven).length >= 1, true);
+		assert.equal((await g.gate.peers()).filter((p) => p.peerId === "p-admin" && p.proven).length >= 1, true);
 	}
 	assert.equal(await g.client("127.0.0.2").count({ type: "Job" }), 2);
 });
@@ -147,7 +139,7 @@ test("wrong proofs are refused: unknown key, another peer's key, other connectio
 	const vf = await fresh(f);
 	r = await call(f, "prove", { keyId: "k-good", signature: Buffer.from(await good.sign(signedBytes(vf as never))).toString("base64"), challenge: vf });
 	assert.ok(!r.ok && /revoked/.test(r.error.message));
-	assert.ok(g.events.length > 0);
+	assert.ok(g.gate.events.length > 0);
 });
 
 test("the client signs only for the host and the peer it means: a relayed or foreign challenge is not answered", async (tc) => {
@@ -171,11 +163,11 @@ test("an open proven connection ends when its key is revoked, and the failure co
 	const signer = g.withKey("p-admin", "ed25519", ["admin", "member"], "k-live");
 	const a = g.client("127.0.0.3", admin(signer));
 	await a.write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
-	assert.equal(g.gate.peers().some((p) => p.proven), true);
+	assert.equal((await g.gate.peers()).some((p) => p.proven), true);
 	g.keys.revoke("p-admin", "k-live");
 	g.clock.t += 1_000;
 	assert.ok((await g.gate.revalidate()) >= 1);
-	assert.ok(g.events.some((e) => e.event === "revoked" && /key of this connection was revoked/.test(e.reason ?? "")), JSON.stringify(g.events));
+	assert.ok(g.gate.events.some((e) => e.event === "revoked" && /key of this connection was revoked/.test(e.reason ?? "")), JSON.stringify(g.gate.events));
 	// guessing: five wrong proofs on one connection, then nothing more is tried
 	const guesser = g.client("127.0.0.3");
 	await guesser.info();

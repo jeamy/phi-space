@@ -90,6 +90,8 @@ fn check_renewal(s: &Space, id: &str, auth: &Option<Rc<dyn Authorization>>) -> R
 #[derive(Clone, Debug, Default)]
 pub struct Conn {
 	pub peer_id: Option<String>,
+	/// What the host in front of the transport made of the connection (`IdentityAdapter`); without it the static table.
+	pub identity: Option<Identity>,
 }
 #[derive(Clone, Debug)]
 pub struct Identity {
@@ -408,7 +410,7 @@ impl Service {
 			Some(Json::Object(a)) => a,
 			Some(_) => return Err(bad("args must be an object")),
 		};
-		let Some(mut id) = conn.peer_id.as_ref().and_then(|p| self.o.identity.get(p)).cloned() else {
+		let Some(mut id) = conn.identity.clone().or_else(|| conn.peer_id.as_ref().and_then(|p| self.o.identity.get(p)).cloned()) else {
 			return Ok(HandledCall::Reply(fail("Unauthenticated", "the connection has no known identity", None)));
 		};
 		let peer = id.principal.get("peerId").and_then(Json::as_str).unwrap_or("").to_owned();

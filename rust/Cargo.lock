@@ -374,6 +374,8 @@ dependencies = [
  "p256",
  "phi-json",
  "phi-service",
+ "phi-wire",
+ "tokio",
 ]
 
 [[package]]
@@ -399,6 +401,7 @@ name = "phi-space-server"
 version = "0.0.1"
 dependencies = [
  "phi-core",
+ "phi-host",
  "phi-json",
  "phi-service",
  "phi-store",

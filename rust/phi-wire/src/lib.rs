@@ -9,8 +9,10 @@ use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::future::Future;
 use std::io;
+use std::net::IpAddr;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -57,6 +59,32 @@ pub struct Endpoint {
 	pub peer: Option<String>,
 }
 
+/// Work on the owner thread that a front hands to the transport.
+pub type Local<T> = Pin<Box<dyn Future<Output = T>>>;
+
+/// One admitted connection of a front. Who it is may change while it is open, so each call asks.
+pub trait Session {
+	fn conn(&self) -> Conn;
+	/// The answer to a call the front handles itself; `None` passes it to the service.
+	fn call(&self, text: &str) -> Option<String>;
+	/// What the client gets of the service's answer.
+	fn reply(&self, text: String) -> String;
+	/// Resolves when the front ends the connection.
+	fn ended(&self) -> Local<()>;
+	/// The connection is gone.
+	fn closed(&self);
+}
+
+/// Decides who may talk to a listener (src/gate.ts). A connection waits for `admit` before a frame of it is read.
+pub trait Front {
+	/// `None` refuses the connection; it then closes.
+	fn admit(self: Rc<Self>, ip: IpAddr) -> Local<Option<Rc<dyn Session>>>;
+	/// Runs for as long as the server does.
+	fn run(self: Rc<Self>) -> Local<()>;
+	/// A line of the test hooks this front answers.
+	fn hook(self: Rc<Self>, _text: &str) -> Option<Local<String>> { None }
+}
+
 /// What the test hooks do with a line (`--test-hooks`): the service, how many connections are open, the text.
 pub type Hook = Box<dyn FnMut(&mut Service, usize, &str) -> String>;
 
@@ -69,6 +97,8 @@ pub struct Periodic {
 pub struct ServeOptions {
 	pub periodic: Vec<Periodic>,
 	pub endpoints: Vec<Endpoint>,
+	/// TCP listeners behind a front; their addresses follow those of the endpoints.
+	pub gates: Vec<(Listen, Rc<dyn Front>)>,
 	/// A socket apart from the service's own, for tests only.
 	pub hooks: Option<(PathBuf, Hook)>,
 	pub max_frame_bytes: usize,
@@ -81,7 +111,7 @@ pub struct ServeOptions {
 }
 impl ServeOptions {
 	pub fn new(listen: Listen, peer: &str) -> ServeOptions {
-		ServeOptions { periodic: vec![], endpoints: vec![Endpoint { listen, peer: Some(peer.to_owned()) }], hooks: None, max_frame_bytes: 256 * 1024, max_connections: 64, max_inflight_per_connection: 32, idle_ms: 5 * 60_000, watch_debounce_ms: 20 }
+		ServeOptions { periodic: vec![], endpoints: vec![Endpoint { listen, peer: Some(peer.to_owned()) }], gates: vec![], hooks: None, max_frame_bytes: 256 * 1024, max_connections: 64, max_inflight_per_connection: 32, idle_ms: 5 * 60_000, watch_debounce_ms: 20 }
 	}
 }
 
@@ -143,6 +173,7 @@ struct Link {
 	closed: Cell<bool>,
 	closing: Notify,
 	last: Cell<Option<Instant>>,
+	session: Option<Rc<dyn Session>>,
 }
 impl Link {
 	fn reply(&self, r: Reply) {
@@ -155,6 +186,13 @@ impl Link {
 		self.ready.notify_one();
 	}
 	fn touch(&self) { self.last.set(Some(Instant::now())); }
+	/// A service answer on its way to the client.
+	fn outgoing(&self, text: String) -> String {
+		match &self.session {
+			Some(s) => s.reply(text),
+			None => text,
+		}
+	}
 }
 
 fn put(out: &mut Vec<u8>, id: u32, text: &str) {
@@ -208,6 +246,10 @@ async fn serve_here(service: Service, mut o: ServeOptions, ready: impl FnOnce(Ve
 	let mut bound = vec![];
 	for e in &hub.o.endpoints {
 		bound.push((Bound::bind(&e.listen).await?, Who::Peer(e.peer.clone())));
+	}
+	for (listen, front) in &hub.o.gates {
+		bound.push((Bound::bind(listen).await?, Who::Gate(Rc::clone(front))));
+		spawn_local(Rc::clone(front).run());
 	}
 	if let Some(path) = hooks {
 		bound.push((Bound::bind(&Listen::Unix(path)).await?, Who::Hooks));
@@ -284,13 +326,13 @@ impl Bound {
 			Bound::Unix(l, ..) => {
 				let (socket, _): (UnixStream, _) = l.accept().await?;
 				let (r, w) = socket.into_split();
-				connection(hub, who.clone(), r, w);
+				connection(hub, who.clone(), None, r, w);
 			}
 			Bound::Tcp(l, _) => {
-				let (socket, _): (TcpStream, _) = l.accept().await?;
+				let (socket, from): (TcpStream, _) = l.accept().await?;
 				socket.set_nodelay(true)?;
 				let (r, w) = socket.into_split();
-				connection(hub, who.clone(), r, w);
+				connection(hub, who.clone(), Some(from.ip()), r, w);
 			}
 		}
 		Ok(())
@@ -329,29 +371,51 @@ async fn prepare_socket_path(path: &Path) -> io::Result<()> {
 	}
 }
 
-fn connection<R, W>(hub: &Rc<Hub>, who: Who, read: R, write: W)
+fn connection<R, W>(hub: &Rc<Hub>, who: Who, from: Option<IpAddr>, read: R, write: W)
 where
 	R: AsyncRead + Unpin + 'static,
 	W: AsyncWrite + Unpin + 'static,
 {
-	let counted = matches!(who, Who::Peer(_));
+	let counted = !matches!(who, Who::Hooks);
 	if counted && hub.open.get() >= hub.o.max_connections {
 		return; // dropping the halves closes the socket
 	}
 	hub.open.set(hub.open.get() + usize::from(counted));
-	let link = Rc::new(Link::default());
-	link.touch();
-	spawn_local(replies(Rc::clone(hub), Rc::clone(&link), write));
 	let hub = Rc::clone(hub);
 	spawn_local(async move {
-		tokio::select! {
-			_ = frames(&hub, &link, &who, read) => {}
-			_ = idle(&hub, &link) => {}
-			_ = hub.stop.notified() => {}
+		let session = match (&who, from) {
+			(Who::Gate(front), Some(ip)) => {
+				tokio::select! {
+					s = Rc::clone(front).admit(ip) => s,
+					_ = hub.stop.notified() => None,
+				}
+			}
+			_ => None,
+		};
+		if !matches!(who, Who::Gate(_)) || session.is_some() {
+			let link = Rc::new(Link { session: session.clone(), ..Link::default() });
+			link.touch();
+			spawn_local(replies(Rc::clone(&hub), Rc::clone(&link), write));
+			tokio::select! {
+				_ = frames(&hub, &link, &who, read) => {}
+				_ = idle(&hub, &link) => {}
+				_ = hub.stop.notified() => {}
+				_ = ended(session.as_ref()) => {}
+			}
+			link.close();
 		}
-		link.close();
+		if let Some(s) = session {
+			s.closed();
+		}
 		hub.open.set(hub.open.get() - usize::from(counted));
 	});
+}
+
+async fn ended(session: Option<&Rc<dyn Session>>) {
+	match session {
+		Some(s) => s.ended().await,
+		None => std::future::pending().await,
+	}
 }
 
 /// Returns when the connection has had no traffic for the idle limit.
@@ -383,7 +447,11 @@ async fn frames<R: AsyncRead + Unpin>(hub: &Rc<Hub>, link: &Rc<Link>, who: &Who,
 			let id = u32::from_be_bytes(buf[at + 4..at + 8].try_into().expect("four bytes"));
 			let text = String::from_utf8_lossy(&buf[at + HEADER..at + HEADER + n]);
 			match who {
-				Who::Peer(peer) => call(hub, link, &Conn { peer_id: peer.clone() }, id, &text),
+				Who::Peer(peer) => call(hub, link, &Conn { peer_id: peer.clone(), identity: None }, id, &text),
+				Who::Gate(_) => {
+					let conn = link.session.as_ref().expect("a gate's connection has its session").conn();
+					call(hub, link, &conn, id, &text);
+				}
 				Who::Hooks => hooked(hub, link, id, &text),
 			}
 			at += HEADER + n;
@@ -400,10 +468,22 @@ async fn frames<R: AsyncRead + Unpin>(hub: &Rc<Hub>, link: &Rc<Link>, who: &Who,
 #[derive(Clone)]
 enum Who {
 	Peer(Option<String>),
+	Gate(Rc<dyn Front>),
 	Hooks,
 }
 
 fn hooked(hub: &Rc<Hub>, link: &Rc<Link>, id: u32, text: &str) {
+	for (_, front) in &hub.o.gates {
+		if let Some(answer) = Rc::clone(front).hook(text) {
+			let (hub, link) = (Rc::clone(hub), Rc::clone(link));
+			spawn_local(async move {
+				let text = answer.await;
+				let mark = hub.service.borrow().store.handed();
+				link.reply(Reply { mark, id, text, counted: false });
+			});
+			return;
+		}
+	}
 	let text = {
 		let mut hook = hub.hook.borrow_mut();
 		let hook = hook.as_mut().expect("the socket exists only with hooks");
@@ -421,6 +501,10 @@ fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
 		link.reply(Reply { mark: 0, id, text, counted: false });
 		return;
 	}
+	if let Some(text) = link.session.as_ref().and_then(|s| s.call(text)) {
+		link.reply(Reply { mark: 0, id, text, counted: false });
+		return;
+	}
 	link.inflight.set(link.inflight.get() + 1);
 	let outcome = hub.service.borrow_mut().handle_text(text, conn, (hub.o.max_frame_bytes - HEADER) as f64);
 	let seen = hub.handed.get();
@@ -430,7 +514,7 @@ fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
 		// once, and what waits for a fsync must not fill the places of the calls that wait for work.
 		Outcome::Done { text, mark } => {
 			link.inflight.set(link.inflight.get() - 1);
-			link.reply(Reply { mark, id, text, counted: false });
+			link.reply(Reply { mark, id, text: link.outgoing(text), counted: false });
 		}
 		Outcome::Wait(parked) => {
 			spawn_local(wait(Rc::clone(hub), Rc::clone(link), id, parked, seen));
@@ -470,7 +554,7 @@ async fn wait(hub: Rc<Hub>, link: Rc<Link>, id: u32, mut parked: Box<Parked>, mu
 		let looked = hub.service.borrow_mut().resume(parked);
 		hub.committed();
 		match looked {
-			Ok((text, mark)) => return link.reply(Reply { mark, id, text, counted: true }),
+			Ok((text, mark)) => return link.reply(Reply { mark, id, text: link.outgoing(text), counted: true }),
 			Err(p) => parked = p,
 		}
 	}

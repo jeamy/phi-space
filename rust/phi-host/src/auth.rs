@@ -32,6 +32,24 @@ pub struct PeerKey {
 	pub active: bool,
 }
 
+impl PeerKey {
+	/// A `PeerKey` entry's fields.
+	pub fn from_json(v: &Json) -> Option<PeerKey> {
+		let text = |k: &str| v.get(k).and_then(Json::as_str).map(str::to_owned);
+		let list = |j: &Json| j.as_array().map(|a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect::<Vec<_>>());
+		Some(PeerKey {
+			peer_id: text("peerId")?,
+			key_id: text("keyId")?,
+			principal: text("principal").unwrap_or_default(),
+			algorithm: Algorithm::parse(v.get("algorithm")?.as_str()?)?,
+			public_key: text("publicKey")?,
+			scope: v.get("scope").and_then(list),
+			roles: v.get("roles").and_then(list).unwrap_or_default(),
+			active: v.get("state").and_then(Json::as_str) == Some("active"),
+		})
+	}
+}
+
 pub trait KeyDirectory {
 	/// The key if it exists, in any state.
 	fn find(&self, peer_id: &str, key_id: &str) -> Option<PeerKey>;

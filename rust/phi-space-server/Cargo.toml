@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 phi-core = { path = "../phi-core" }
+phi-host = { path = "../phi-host" }
 phi-json = { path = "../phi-json" }
 phi-service = { path = "../phi-service" }
 phi-store = { path = "../phi-store" }

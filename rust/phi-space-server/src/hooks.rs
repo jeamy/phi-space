@@ -5,9 +5,14 @@
 // {"hooks": "/path.sock", "endpoints": [{"listen": "unix:/p", "peer": "peer-a"|null}], "identities": {"peer": {"principal": {...},
 //  "roles": [...]}}, "policy": {"role": {"methods"?: [...], "types"?: [...]}}, "limits"?: {...}, "hostId"?, "authorityId"?,
 //  "primaryEpoch"?, "maxPendingPerPrincipal"?, "maxPendingPerPeer"?, "maxCallsPerWindow"?, "wakeOnCommit"?, "maxFrameBytes"?,
-//  "maxConnections"?, "maxInflightPerConnection"?, "idleMs"?}
+//  "maxConnections"?, "maxInflightPerConnection"?, "idleMs"?, "gate"?: {"host", "port", "url", "token", "cacheMs"?, "handshakeMs"?,
+//  "maxConnectionsPerPeer"?, "connectionsPerSecondPerPeer"?, "clockFile"?, "eventsFile"?, "keysFile"?, "gateHostId"?}}
+//
+// The gate's clock, its keys and its events are files, so a test can change them between two calls without a round trip.
 //
 // A hook is a frame with {"hook": ...}: setLimits {limits}, connections, clock {now}, state.
+use phi_host::auth::{KeyDirectory, PeerKey, Proving};
+use phi_host::gate::{Gate, GateOptions, Netbird, Now};
 use phi_json::{parse, Json};
 use phi_service::{default_policy, Identity, Options, RolePolicy, Service};
 use phi_wire::{Endpoint, Listen, ServeOptions};
@@ -56,11 +61,67 @@ pub fn apply(file: &str, o: &mut Options, serving: &mut ServeOptions) -> Result<
 	if let Some(n) = number("idleMs") {
 		serving.idle_ms = n as u64;
 	}
+	if let Some(g) = c.get("gate") {
+		serving.gates.push(gate(g)?);
+	}
 	let clock: Rc<Cell<Option<f64>>> = Rc::default();
 	let (real, held) = (std::mem::replace(&mut o.now, Box::new(|| 0.0)), clock.clone());
 	o.now = Box::new(move || held.get().unwrap_or_else(&real));
 	serving.hooks = Some((hooks.into(), Box::new(move |service, open, text| hook(service, open, &clock, text))));
 	Ok(c.get("limits").cloned())
+}
+
+/// Keys as a file of `PeerKey` fields, read at each look.
+struct FileKeys(String);
+impl KeyDirectory for FileKeys {
+	fn find(&self, peer_id: &str, key_id: &str) -> Option<PeerKey> {
+		let list = parse(&std::fs::read_to_string(&self.0).ok()?).ok()?;
+		list.as_array()?.iter().filter_map(PeerKey::from_json).find(|k| k.peer_id == peer_id && k.key_id == key_id)
+	}
+}
+
+fn gate(g: &Json) -> Result<(Listen, Rc<dyn phi_wire::Front>), String> {
+	let text = |k: &str| g.get(k).and_then(Json::as_str);
+	let number = |k: &str| g.get(k).and_then(Json::as_f64);
+	let now: Now = match text("clockFile") {
+		None => Rc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("after 1970").as_millis() as f64),
+		Some(file) => {
+			let (file, last) = (file.to_owned(), Cell::new(0.0));
+			Rc::new(move || {
+				if let Some(t) = std::fs::read_to_string(&file).ok().and_then(|t| t.trim().parse().ok()) {
+					last.set(t);
+				}
+				last.get()
+			})
+		}
+	};
+	let directory = Netbird::new(text("url").ok_or("the gate names no url")?, text("token").unwrap_or(""), number("cacheMs"), Rc::clone(&now))?;
+	let mut o = GateOptions::new(directory, now);
+	o.revalidate_ms = 0;
+	if let Some(n) = number("handshakeMs") {
+		o.handshake_ms = n as u64;
+	}
+	if let Some(n) = number("maxConnectionsPerPeer") {
+		o.max_per_peer = n as usize;
+	}
+	if let Some(n) = number("connectionsPerSecondPerPeer") {
+		o.connections_per_second = n;
+	}
+	if let Some(file) = text("eventsFile") {
+		let file = file.to_owned();
+		o.on_event = Box::new(move |e| {
+			use std::io::Write as _;
+			if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open(&file) {
+				let _ = writeln!(f, "{}", e.to_json_text());
+			}
+		});
+	}
+	if let (Some(id), Some(keys)) = (text("gateHostId"), text("keysFile")) {
+		o.proving = Some((Proving::new(id), Rc::new(FileKeys(keys.to_owned()))));
+	}
+	let host = text("host").ok_or("the gate names no host")?;
+	let front: Rc<dyn phi_wire::Front> = Gate::new(host, o)?;
+	Ok((Listen::Tcp { host: host.to_owned(), port: number("port").unwrap_or(0.0) as u16 }, front))
 }
 
 fn hook(service: &mut Service, open: usize, clock: &Cell<Option<f64>>, text: &str) -> String {
