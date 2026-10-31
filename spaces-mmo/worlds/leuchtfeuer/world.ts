@@ -311,7 +311,7 @@ const NPCS: NpcDef[] = [
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 33,
+	version: 34,
 	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.md)
 	evening: { hour: 20 }, // a daily evening event
 	tileSize: 32,
@@ -706,6 +706,20 @@ world.npcs.push(...SETTLER_NAMES.map((name, i): NpcDef => {
 	const s: NpcDef = { npcId: `siedler-${i + 1}`, name, skin: i % 5, room, ...at, script: "siedler", beacon: fire.beaconId, home: fire.covers, settler: true };
 	settlers.push(s);
 	return s;
+}));
+
+// The villagers: two per fire, offline until a settlement in its light has five and ten buildings
+const VILLAGER_NAMES = ["Alke", "Bendix", "Dirk", "Edda", "Fokke", "Geeske", "Hajo", "Ilka", "Jasper", "Kerrin", "Lorenz", "Maike", "Nanne", "Ocke", "Petra", "Rickmer", "Sinje", "Theda"];
+const villagers: NpcDef[] = [];
+world.npcs.push(...VILLAGER_NAMES.map((name, i): NpcDef => {
+	const fire = world.beacons[i % world.beacons.length]!, room = fire.room, r = world.rooms.find((x) => x.roomId === room)!;
+	const taken = new Set([...world.npcs, ...villagers, ...world.objects, ...world.beacons, ...world.exits, r.spawn].filter((o) => !("room" in o) || o.room === room).map((o) => `${o.x},${o.y}`));
+	let at = near(room, r.spawn.x, r.spawn.y + 2);
+	for (let d = 1; taken.has(`${at.x},${at.y}`); d++) at = near(room, r.spawn.x + (d % 7) - 3, r.spawn.y + 2 + Math.floor(d / 7));
+	const v: NpcDef = { npcId: `dorf-${i + 1}`, name, skin: i % 5, room, ...at, script: "dorfbewohner", beacon: fire.beaconId, home: fire.covers, villager: i < world.beacons.length ? 1 : 2,
+		carry: [{ proto: "wasserkanne", count: 1 }], lines: ["Schön, wie das Dorf wächst.", "Das Feuer hält uns zusammen.", "Hier bleibe ich."] };
+	villagers.push(v);
+	return v;
 }));
 
 // The plants come last: they keep clear of everything placed above (the spawn, the ways in and out, people, fires,

@@ -53,3 +53,20 @@ test("settlers: two play while nobody does, one builds its hut by the commands; 
 		assert.match((who as { m: { text: string } }).m.text, new RegExp(`${first.name}, Siedler`));
 	} finally { await srv.close(); }
 });
+
+test("villagers: one comes when a settlement has five buildings, keeps the fire and leaves when the settlement goes", { timeout: 240_000 }, async () => {
+	const v = w.npcs.find((n) => n.villager === 1)!, fire = w.beacons.find((b) => b.beaconId === v.beacon)!;
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001", SPACES_MMO_NPCS: v.npcId } });
+	try {
+		const s = srv.stack.space;
+		await srv.stack.npcProcess();
+		const online = () => s.count({ type: "Session", fields: { charId: `npc-${v.npcId}` } });
+		assert.equal(await online(), 0, "no settlement, no villager");
+		const hut = (i: number) => ({ buildId: `b${i}`, plan: "huette", name: "Hütte", room: fire.room, x: 1 + i * 3, y: 1, w: 2, h: 2, owner: `x${i}`, ownerName: "X", accountId: `x${i}`, beaconId: fire.beaconId, points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 });
+		for (let i = 0; i < 5; i++) await s.write({ type: "Building", fields: hut(i) as never }, null, FOREVER);
+		await s.write({ type: "Settlement", fields: { settlementId: "st", name: "Dorf", nameKey: "dorf", room: fire.room, founder: "x", founderName: "X", members: [], closed: false, at: 0 } as never }, null, FOREVER);
+		await eventually(async () => (await online()) > 0, 90_000, "the villager comes");
+		await s.takeIfExists({ type: "Settlement", fields: { settlementId: "st" } }, 0);
+		await eventually(async () => (await online()) === 0, 90_000, "the villager leaves");
+	} finally { await srv.close(); }
+});

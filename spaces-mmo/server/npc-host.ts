@@ -56,7 +56,7 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 		if (!scriptFor(def.script)) { console.error(`[npc] ${def.npcId}: unknown script ${def.script}`); continue; }
 		const charId = `npc-${def.npcId}`;
 		// a wanderer is away until its event, a settler until its script finds too few people playing (npc/settlers.ts)
-		let lease: string | null = null, online = !def.wanderer && !def.settler;
+		let lease: string | null = null, online = !def.wanderer && !def.settler && !def.villager;
 		let started!: () => void, startingDone = false;
 		starting.push(new Promise<void>((resolve) => { started = resolve; }));
 		const ready = () => { if (!startingDone) { startingDone = true; started(); } };

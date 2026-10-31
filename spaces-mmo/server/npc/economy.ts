@@ -150,7 +150,7 @@ function tradeTalk(n: Npc, to: string): string {
 }
 
 /** The common part of every round: offers first, then whoever spoke to it. True when it did something. */
-function social(): (n: Npc, l: Look) => Promise<boolean> {
+export function social(): (n: Npc, l: Look) => Promise<boolean> {
 	const heard = newHeard();
 	const greeted = new Map<string, number>();
 	return async (n, l) => {

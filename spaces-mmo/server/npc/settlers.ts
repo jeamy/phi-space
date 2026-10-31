@@ -20,7 +20,7 @@ import { clockOf } from "../engine/clockcache.ts";
 import { setting } from "../settings.ts";
 import type { NpcDef, WorldDef } from "../engine/world.ts";
 import { fieldsOf, type BedFields, type BuildingFields, type ListingFields, type SiteFields, type SiteOrderFields, type WorkRestFields } from "../model.ts";
-import { gather, look, nextTo, rest, travel, type Look } from "./economy.ts";
+import { gather, look, nextTo, rest, social, travel, type Look } from "./economy.ts";
 import type { Npc, Script } from "./scripts.ts";
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -307,4 +307,63 @@ function bauhelfer(): Script {
 	};
 }
 
-export const SETTLER_SCRIPTS: Record<string, () => Script> = { siedler, bauhelfer };
+/** How many buildings bring one more villager (docs/siedeln.md "Wenige Spieler"). */
+const PER_VILLAGER = 5;
+/** The room of a settlement in the NPC's rooms that has enough buildings for it, if any. */
+async function villageOf(n: Npc, homes: string[]): Promise<string | undefined> {
+	for (const e of await n.space.readAll({ type: "Settlement" })) {
+		const room = String(e.fields.room);
+		if (homes.includes(room) && (await n.space.count({ type: "Building", fields: { room } })) >= PER_VILLAGER * (n.def.villager ?? 1)) return room;
+	}
+	return undefined;
+}
+
+/** The villager: dozes until its settlement has grown enough, then lives on its square: it puts wood on the fire when it
+ *  burns low, waters the community beds and chats. It owns nothing and builds nothing. */
+function dorfbewohner(): Script {
+	const talk = social();
+	let round = 0;
+	return async (n) => {
+		round++;
+		const homes = n.def.home ?? [n.def.room], room = await villageOf(n, homes);
+		if (!room) {
+			if (n.isOnline()) { await n.act("emote zieht sich zurück."); await n.setOnline(false); }
+			await n.sleep(n.pace(60_000, 5_000));
+			return;
+		}
+		if (!n.isOnline()) { await n.setOnline(true); await n.act("emote zieht ins Dorf."); }
+		const l = await look(n);
+		if (!l) { await n.sleep(1000); return; }
+		if (!(await talk(n, l)) && !(await chores(n, l, room)) && round % 6 === 0) await n.act(`say ${n.def.lines?.[round % (n.def.lines.length || 1)] ?? "Schön, wie das Dorf wächst."}`);
+		await n.sleep(await rest(n, l.me.room));
+	};
+	async function chores(n: Npc, l: Look, room: string): Promise<boolean> {
+		const w = n.world, now = (await clockOf(n.space).now()) ?? 0, fire = w.beacons.find((b) => b.beaconId === n.def.beacon);
+		const fuels = Object.keys(w.fire.fuel), fuel = l.pack.find((i) => fuels.includes(i.proto));
+		if (fire) {
+			const f = await flameOf(n.space, fire.beaconId), piece = Math.min(...Object.values(w.fire.fuel));
+			if (!f || f.until - now < piece * 2) {
+				if (!fuel) { if (await gather(n, l, fuels)) return true; }
+				else {
+					if (!(await travel(n, l, fire.room))) return true;
+					if (dist(l.me, { ...fire, w: 1, h: 1 }) <= 1) await n.act(`put ${fuel.name} in ${fire.aliases[0] ?? "feuer"}`);
+					else await nextTo(n, l, fire);
+					return true;
+				}
+			}
+		}
+		if (!(await travel(n, l, room))) return true;
+		const g = w.garden;
+		if (!g) return false;
+		const dry = (await n.space.readAll({ type: "Bed", fields: { room, kind: "gemein" } })).map((e) => fieldsOf<BedFields>(e)).find((b) => b.plants.some((p) => p.stage < 2) && now - b.wateredWorldMs > g.thirstWorldMs * 0.6);
+		if (!dry) return false;
+		if (count(l, g.can)) { if (!(await besideOf(n, l, dry))) await n.act("gieße"); return true; }
+		// a can from a barrel of the village; an empty one leaves the bed for the next round
+		const barrel = (await n.space.readAll({ type: "Building", fields: { room, plan: g.barrel } })).map((e) => fieldsOf<BuildingFields>(e))[0];
+		if (!barrel) return false;
+		if (!(await besideOf(n, l, barrel))) await n.act("schöpfe");
+		return true;
+	}
+}
+
+export const SETTLER_SCRIPTS: Record<string, () => Script> = { siedler, bauhelfer, dorfbewohner };

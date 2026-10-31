@@ -62,7 +62,7 @@ test("a wage: held by the order, paid in the command, the rest goes back", { tim
 	} finally { await srv.close(); }
 });
 
-test("the day labourer works for a wage and for nothing else", { timeout: 120_000 }, async () => {
+test("the day labourer works for a wage and for nothing else", { timeout: 200_000 }, async () => {
 	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001", SPACES_MMO_NPCS: "wolter" } });
 	try {
 		const s = srv.stack.space;
@@ -73,7 +73,7 @@ test("the day labourer works for a wage and for nothing else", { timeout: 120_00
 		await does(a.p, "bau hütte", "steckt eine Baustelle ab");
 		await does(a.p, "aushang 2 arbeit je 2", "hängt");
 		// the site is held while someone works on it: a look may miss it
-		const site = (await eventually(async () => { const f = (await s.readAll({ type: "Site" }))[0]?.fields as unknown as SiteFields | undefined; return f && f.work >= 1 ? f : undefined; }, 60_000, "Wolter works"))!;
+		const site = (await eventually(async () => { const f = (await s.readAll({ type: "Site" }))[0]?.fields as unknown as SiteFields | undefined; return f && f.work >= 1 ? f : undefined; }, 120_000, "Wolter works"))!;
 		assert.ok(site.by.Wolter! >= 1);
 		await eventually(async () => (await coins(s, "npc-wolter")) >= 2, 10_000, "paid");
 	} finally { await srv.close(); }

@@ -195,6 +195,8 @@ export type NpcDef = {
 	 *  commands; it may build and sow (rules as for people), but only while the fire keeps `settlers.reserve` of its
 	 *  light free for the people who come. Its account is an NPC's (no model calls), marked `settler`. */
 	settler?: boolean;
+	/** A villager (script "dorfbewohner"): comes once a settlement of its rooms has this many times five buildings. */
+	villager?: number;
 };
 
 import type { RegionDef } from "./regions.ts";
