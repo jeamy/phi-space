@@ -2,8 +2,9 @@
 
 Stand: 2026-10-31. **Ziel- und Arbeitsplan.** R0 bis R3 sind umgesetzt und abgenommen, R-D2 ist erfüllt: Der
 Cargo-Workspace enthält `phi-json`, `phi-core`, `phi-store`, `phi-service`, `phi-wire` und `phi-space-server`, und beide
-Projekte laufen auf dem Rust-Server. Von R4 ist der lokale Teil erledigt, der Umstieg auf `big` und `nano` steht aus und
-braucht R-D12 und eine Freigabe. R5 bis R8 und M1 sind nicht begonnen. Die Entscheidungen R-D0 bis R-D11 (Abschnitt 9)
+Projekte laufen auf dem Rust-Server. Von R4 ist der lokale Teil erledigt. **Festlegung 2026-10-31:** Zuerst wird die
+Implementierung vollständig, es gibt keine Teilportierung im Betrieb; bis dahin wird nur lokal entwickelt und getestet.
+Die Server-Schritte von R4, R8.6 und R-D12 kommen danach. R5 bis R8 und M1 sind nicht begonnen. Die Entscheidungen R-D0 bis R-D11 (Abschnitt 9)
 sind getroffen, R-D12 und R-D13 sind offen und keine Freigaben.
 
 ## 1. Ergebnis und Abgrenzung
