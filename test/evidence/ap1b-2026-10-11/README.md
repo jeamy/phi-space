@@ -15,7 +15,7 @@ These public reports record successful live checks from this run. They contain n
 
 - `control-restore.json`: isolated Control-authority restore, source fencing, separate member installation with public OP pin and scoped register certificate, both release guards, fresh keys, normal gate restart and successful grants/write/take; 233 tests passed.
 
-The full NetBird outage matrix and complete mobile UI/background acceptance remain outstanding. See [acceptance status](../../../docs/abnahme/ap1b-abnahme.md).
+The full NetBird outage matrix and complete mobile UI/background acceptance remain outstanding. See [acceptance status](../../../docs/_attic/abnahme/ap1b-abnahme.en.md).
 
 - `phone-ui.json`: actual native UI pairing-status/authentication/rotation/status-repeat/object buttons after the live status bug was fixed; four mobile regressions passed. First pairing forms and camera QR remain separate.
 

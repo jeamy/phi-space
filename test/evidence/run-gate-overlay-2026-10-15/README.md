@@ -1,6 +1,6 @@
 # Run gate case 3 over the real NetBird overlay — 2026-10-15
 
-Acceptance case 3 of [Betrieb und mobile Steuerung](../../../docs/betrieb-und-mobile-steuerung.md) §7.4 (step B4):
+Acceptance case 3 of [Betrieb und mobile Steuerung](../../../docs/betrieb-und-mobile-steuerung.en.md) §7.4 (step B4):
 a Member is offline during a pause. Driver: `test/testbed/netbird/run-run-gate-overlay.py`, node fixture
 `test/testbed/scenarios/run-gate-overlay-node.ts` (only the compiled `.mjs` and `phi-spaces.mjs` were shipped).
 

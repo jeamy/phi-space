@@ -1,18 +1,18 @@
 # phi-spaces Help & Multiplayer Chat (`help-site`)
 
-[English](README.md) · [Deutsch](README_DE.md)
+[English](README.md) · [Deutsch](de-docs/README_DE.md)
 
 > Upgrade warning: the complete namespace change includes persistent `phi-spaces.*` document kinds.
 > Do not run this version against an existing store without a verified offline migration and recovery copy.
-> This change does not automatically migrate stored documents. See the [namespace report](../docs/namensumstellung-2026-10-18.md).
+> This change does not automatically migrate stored documents. See the [namespace report](../docs/namensumstellung-2026-10-18.en.md).
 
 This directory contains the runnable Node.js/React help system, **PHI-SPACES / HELP**: bilingual documentation,
 the six-stage Multiplayer Space-Chat workbench, the Social Swarm feed, and authenticated Web Admin.
 
 Checked against the checkout on 2026-10-30. A working demo is not a multi-host or production acceptance result.
-See [implementation status](../docs/implementierungsstand.md), the
-[Phase-3 acceptance matrix](../docs/abnahme/ap3-abnahme.md), and the
-[demo analysis and completed fixes](../docs/_attic/analyse-hilfesystem-demo-apps-2026-10-18.md).
+See [implementation status](../docs/implementierungsstand.en.md), the
+[Phase-3 acceptance matrix](../docs/_attic/abnahme/ap3-abnahme.en.md), and the
+[demo analysis and completed fixes](../docs/_attic/analyse-hilfesystem-demo-apps-2026-10-18.en.md).
 
 ## What the demos demonstrate
 
@@ -249,7 +249,7 @@ disable models and operator-configured remote shards before importing the server
 
 Local browser checks supplement these automated results; they are not exhaustive browser E2E, accessibility,
 deployment, phone, large-store performance, power-loss or multi-host acceptance. See the
-[completion report (German)](../docs/_attic/analyse-hilfecorpus-konsistenz-2026-10-18.md) for evidence and open gates.
+[completion report (German)](../docs/_attic/analyse-hilfecorpus-konsistenz-2026-10-18.en.md) for evidence and open gates.
 
 ## Maintaining the help corpus
 
@@ -276,13 +276,13 @@ npm --prefix help-site run build
 
 ## Documents and layout
 
-- [PLAN.md](PLAN.md): architecture and implementation plan, not standalone proof of current runtime behavior.
-- [German architecture comparison](VERGLEICH-EARENDIL-VS-PHI-SPACES.md) and
+- [PLAN.en.md](PLAN.en.md): architecture and implementation plan, not standalone proof of current runtime behavior.
+- [German architecture comparison](COMPARISON-EARENDIL-VS-PHI-SPACES-EN.md) and
   [English comparison](COMPARISON-EARENDIL-VS-PHI-SPACES-EN.md): comparison with Earendil's chat architecture.
 - The articles `help.topic.examples` (every example, how to run it, which ones cost tokens) and `help.topic.apps`
   (the five applications) are the reader's entry points; `scripts/corpus-examples-and-apps.ts` holds them.
-- [Root API reference](../docs/api.md), [examples](../docs/examples.md), and
-  [implementation status](../docs/implementierungsstand.md) define the detailed current contracts.
+- [Root API reference](../docs/api.en.md), [examples](../docs/examples.en.md), and
+  [implementation status](../docs/implementierungsstand.en.md) define the detailed current contracts.
 
 ```text
 help-site/

@@ -17,7 +17,7 @@ When many machines work on one big task, you want to pause it, resume it and kee
 
 ### Technical Details {#technical-details}
 
-The operations extension (steps B1–B10 in `docs/betrieb-und-mobile-steuerung.md`) adds operational control on top of the federation core for **runs (`RunGate` / `RunController`)**, **host workers (`WorkerSupervisor`)**, **space lifecycles (`SpaceLifecycle`)**, **deployment bootstrap (`DeploymentController`)**, and **alerting/audit (`collectAlerts` / `auditLog`)**. All capabilities are accessible both from the Android app (`pi-termux-mobile`) and from the login-protected **`AdminSpaces`** web area on `https://spaces.eibrain.org`.
+The operations extension (steps B1–B10 in `docs/betrieb-und-mobile-steuerung.en.md`) adds operational control on top of the federation core for **runs (`RunGate` / `RunController`)**, **host workers (`WorkerSupervisor`)**, **space lifecycles (`SpaceLifecycle`)**, **deployment bootstrap (`DeploymentController`)**, and **alerting/audit (`collectAlerts` / `auditLog`)**. All capabilities are accessible both from the Android app (`pi-termux-mobile`) and from the login-protected **`AdminSpaces`** web area on `https://spaces.eibrain.org`.
 
 ## Concept And System Model {#concept-model}
 
@@ -39,7 +39,7 @@ Both `MobileSpaces` (`pi-termux-mobile/runtime/spaces-mobile.mjs`) and our web a
 
 1. **Pre-persisted `commandId`**: Before sending any admin command, `commandId = m-<kind>-<hex>` or `w-<kind>-<hex>` is saved locally. On timeout or double-click, the exact same `commandId` is reused ("checking outcome" rather than duplicate execution).
 2. **Key Proof & 60s Grants**: Every connection proves its `Ed25519`/`P-256` key at the gate and uses short-lived grants.
-3. **Phase 3 Replication Building Blocks**: For delay-tolerant metadata and presence, `EntryReplicationController` provides persistent HLC ordering, Last-Writer-Wins with versioned tombstones, and Add-Wins sets. It uses a document of its own and does not replicate existing `PhiSpaces` entries automatically. Primary/sync, fencing and promotion are implemented, but Phase 3 is not fully accepted (`docs/abnahme/ap3-abnahme.md`).
+3. **Phase 3 Replication Building Blocks**: For delay-tolerant metadata and presence, `EntryReplicationController` provides persistent HLC ordering, Last-Writer-Wins with versioned tombstones, and Add-Wins sets. It uses a document of its own and does not replicate existing `PhiSpaces` entries automatically. Primary/sync, fencing and promotion are implemented, but Phase 3 is not fully accepted (`docs/_attic/abnahme/ap3-abnahme.en.md`).
 
 ## See Also {#see-also}
 

@@ -17,7 +17,7 @@ Dieser Artikel sagt, worauf du dich verlassen kannst und worauf nicht. Ein einma
 
 ### Technische Details {#technical-details}
 
-Die Garantien und Grenzen sind ausdrücklich benannt und durch Tests auf dem eigenen Speicher belegt (SQLite und im Arbeitsspeicher). Tests decken bestimmte Szenarien ab, nicht jede Art von Ausfall. Maßgeblich sind die öffentliche API (`docs/api.md`) und der Vertragsrahmen (`docs/federation-plan-v3.md`).
+Die Garantien und Grenzen sind ausdrücklich benannt und durch Tests auf dem eigenen Speicher belegt (SQLite und im Arbeitsspeicher). Tests decken bestimmte Szenarien ab, nicht jede Art von Ausfall. Maßgeblich sind die öffentliche API (`docs/api.en.md`) und der Vertragsrahmen (`docs/federation-plan-v3.en.md`).
 
 ## Regeln, Garantien und Grenzen {#rules-and-boundaries}
 

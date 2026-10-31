@@ -71,7 +71,7 @@ JSONL ist kein Speicher des Space mehr. pi-durable-Stores werden nicht importier
 
 ### Rust-Portierung {#rust-port}
 
-Das laufende System ist TypeScript. Im Ordner `rust/` entstehen `phi-json`, `phi-core` und `phi-store` (`docs/rust-portierung.md`). R0 (Verträge festschreiben) ist umgesetzt, die Scheiben von R1 (Kern) und die Scheiben 0–4 von R2 (Speicher) sind erledigt. Speicherbudget und mehrere Spaces sind auf R3 verschoben. Einen Rust-Server gibt es noch nicht: Er ist R3.
+Das laufende System ist TypeScript. Im Ordner `rust/` entstehen `phi-json`, `phi-core` und `phi-store` (`docs/rust-portierung.en.md`). R0 (Verträge festschreiben) ist umgesetzt, die Scheiben von R1 (Kern) und die Scheiben 0–4 von R2 (Speicher) sind erledigt. Speicherbudget und mehrere Spaces sind auf R3 verschoben. Einen Rust-Server gibt es noch nicht: Er ist R3.
 
 ## Technische Referenz {#technical-reference}
 

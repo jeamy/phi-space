@@ -1,6 +1,6 @@
 # AGENTS.md
 
-phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run directly with
+phi-spaces: a space library with its own store; the optional `agent/` package connects `@earendil-works/pi-durable` agents. TypeScript, ESM, run directly with
 `node --experimental-strip-types` (no build step for tests or examples).
 
 ## Commands
@@ -10,13 +10,13 @@ phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dir
   `PHI_SPACES_MOBILE_ROOT` selects another mobile checkout)
 - Tests: `npm test` (node test runner, all suites in `test/`: `test/test-core.test.ts`, `test/test-meter.test.ts`, `test/integration.test.ts`,
   `test/test-persistence.test.ts`, `test/test-spaces.test.ts`, `test/test-claims.test.ts`, `test/test-budgets.test.ts`, `test/test-stream.test.ts`, `test/test-service.test.ts`, `test/test-remote.test.ts`, `test/test-socket.test.ts`, `test/test-gate.test.ts`, `test/test-auth.test.ts`, `test/test-enroll.test.ts`, `test/test-supervisor.test.ts`,
-  `test/test-scenario.test.ts`, `test/test-tui.test.ts`, `test/test-ap1.test.ts`, `test/test-pi-server.test.ts`, `test/test-federation-runtime.test.ts`, `test/test-grants.test.ts`, `test/test-recovery.test.ts`, `test/test-operations.test.ts`, `test/test-recovery-boundaries.test.ts`, `test/test-router.test.ts`, `test/test-run-gate.test.ts`, `test/test-run-member.test.ts`, `test/test-run-recovery.test.ts`, `test/test-workers.test.ts`, `test/test-space-lifecycle.test.ts`, `test/test-deployment.test.ts`, `test/test-alerts.test.ts`, `test/test-run-export.test.ts`, `test/test-primary-sync.test.ts`, `test/test-replica-control.test.ts`, `test/test-netcup-fencing.test.ts`, `test/test-replica-transport.test.ts`, `test/test-bootstrap.test.ts`, `test/test-container-fencing.test.ts`, `test/test-control-host-change.test.ts`, `test/test-merge-service.test.ts`, `test/test-entry-erasure.test.ts`, `test/test-entry-compaction.test.ts`, `test/test-commit-sealed.test.ts`, `test/test-not-committed.test.ts`, `test/test-degrade-revoke.test.ts`, `test/test-own-store.test.ts`, `test/test-own-store-ops.test.ts`, `test/test-standalone.test.ts`, `test/test-space-client.test.ts`, `test/test-shared-copies.test.ts` (the copies the projects keep: palettes, markdown, env), `test/test-vectors.test.ts` (the vectors in `test/vectors/` a Rust port must reproduce: canonical JSON, crypto, a wire session, a store file; `npm run vectors` writes them anew, `-- --store` also the store files, docs/wire-protokoll.md), `test/agent-integration.test.ts`); the suite runs on the own store (SQLite, strict about disk maps), `PHI_SPACES_STORE=own` keeps it in memory; pi-durable stores are discarded (decision D6, docs/umstellung-u0-bestand.md); `npm test` first runs `npm run check:durable` (`scripts/durable-imports.mjs --check`: no pi-durable, chord or pi-ai outside its allowlist) and `npm run check:package` (`scripts/package-imports.mjs --check`: projects built on phi-spaces import `phi-spaces`/its exported subpaths, no relative `src/` imports outside its allowlist; docs/api.md „Paket und Unterpfade“); `NODE_OPTIONS=--import=./test/support/no-durable.mjs` blocks them at runtime
-  (docs/umstellung-ohne-pi-durable.md) crash/reopen helpers for the own SQLite store
+  `test/test-scenario.test.ts`, `test/test-tui.test.ts`, `test/test-ap1.test.ts`, `test/test-pi-server.test.ts`, `test/test-federation-runtime.test.ts`, `test/test-grants.test.ts`, `test/test-recovery.test.ts`, `test/test-operations.test.ts`, `test/test-recovery-boundaries.test.ts`, `test/test-router.test.ts`, `test/test-run-gate.test.ts`, `test/test-run-member.test.ts`, `test/test-run-recovery.test.ts`, `test/test-workers.test.ts`, `test/test-space-lifecycle.test.ts`, `test/test-deployment.test.ts`, `test/test-alerts.test.ts`, `test/test-run-export.test.ts`, `test/test-primary-sync.test.ts`, `test/test-replica-control.test.ts`, `test/test-netcup-fencing.test.ts`, `test/test-replica-transport.test.ts`, `test/test-bootstrap.test.ts`, `test/test-container-fencing.test.ts`, `test/test-control-host-change.test.ts`, `test/test-merge-service.test.ts`, `test/test-entry-erasure.test.ts`, `test/test-entry-compaction.test.ts`, `test/test-commit-sealed.test.ts`, `test/test-not-committed.test.ts`, `test/test-degrade-revoke.test.ts`, `test/test-own-store.test.ts`, `test/test-own-store-ops.test.ts`, `test/test-standalone.test.ts`, `test/test-space-client.test.ts`, `test/test-shared-copies.test.ts` (the copies the projects keep: palettes, markdown, env), `test/test-vectors.test.ts` (the vectors in `test/vectors/` a Rust port must reproduce: canonical JSON, crypto, a wire session, a store file; `npm run vectors` writes them anew, `-- --store` also the store files, docs/wire-protokoll.en.md), `test/agent-integration.test.ts`); the suite runs on the own store (SQLite, strict about disk maps), `PHI_SPACES_STORE=own` keeps it in memory; pi-durable stores are discarded (decision D6, docs/umstellung-u0-bestand.en.md); `npm test` first runs `npm run check:durable` (`scripts/durable-imports.mjs --check`: no pi-durable, chord or pi-ai outside its allowlist) and `npm run check:package` (`scripts/package-imports.mjs --check`: projects built on phi-spaces import `phi-spaces`/its exported subpaths, no relative `src/` imports outside its allowlist; docs/api.en.md „Paket und Unterpfade“); `NODE_OPTIONS=--import=./test/support/no-durable.mjs` blocks them at runtime
+  (docs/umstellung-ohne-pi-durable.en.md) crash/reopen helpers for the own SQLite store
   in `test/support/persistent.ts`
 - Native pi-server acceptance: `npm run test:pi-server`; uses packages from the sibling mobile runtime
   (`PI_SERVER_RUNTIME_DIR` overrides the path); skips if not installed, never installs dependencies.
 - Single test: `node --experimental-strip-types --test --test-name-pattern=<pattern> test/integration.test.ts`
-- Rust port (`rust/`, cargo workspace; docs/rust-portierung.md): `cd rust && cargo test` and `cargo clippy --all-targets`;
+- Rust port (`rust/`, cargo workspace; docs/rust-portierung.en.md): `cd rust && cargo test` and `cargo clippy --all-targets`;
   `phi-core`'s tests start the TypeScript core as `test/support/core-driver.ts` (node on PATH) and hold every state against it
   (`tests/differential.rs`: seeded random walks, `PHI_CORE_WALK_STEPS`/`PHI_CORE_WALK_SEED`; `tests/boundaries.rs`: each byte budget at its edge);
   `phi-store` (rusqlite, bundled SQLite) reads and writes the TypeScript store file, its tests start node for `test/vectors/build.ts`
@@ -24,28 +24,28 @@ phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dir
   `phi-service` (`handle_text`, reaper, delivery) is held against the TypeScript service as `test/support/service-driver.ts` (`tests/walk.rs`: every reply byte for byte, the state by its hash; `PHI_SERVICE_WALK_STEPS`/`PHI_SERVICE_WALK_SEED`, `PHI_SERVICE_TRACE=1` prints the calls, `PHI_SERVICE_DUMP=1` the states);
   `phi-wire` is the socket transport, `phi-space-server` the binary with the CLI of `src/standalone.ts`: `PHI_SPACES_SERVER_CMD=rust/target/release/phi-space-server node --experimental-strip-types --test test/test-standalone.test.ts` runs that suite against it, and the same variable points `test-remote`, `test-service` and `test-socket` at it (`test/support/service-under-test.ts`, `--test-hooks`); `test/test-server-handover.test.ts` takes a store from TypeScript to Rust and back with open work (only with that variable, not part of `npm test`). `SPACES_MMO_SPACE_SERVER`/`CODEMODE_SPACE_SERVER` name the binary for the two projects (`--profile mmo|codemode`; launch, tests, `tests/perf/space-cost.ts`); a missing binary ends the start. `npm --prefix spaces-mmo run docker:image:rust` and `docker:rust:up|down|logs` (also in `codemode-chat`) run the space containers on this binary on this machine, a compose project of its own; the hosts stay on TypeScript.
 - Space-server probe: `node --experimental-strip-types --no-warnings scripts/server-probe.ts [--store memory|sqlite] [--rate 300] [--cmd "..."]`
-  (server CPU per call, RSS, answer times of the standalone service or another implementation; docs/rust-portierung.md R0).
+  (server CPU per call, RSS, answer times of the standalone service or another implementation; docs/rust-portierung.en.md R0).
 - Branding: `npm run check:branding` (read-only; rejects obsolete project names in tracked text, generated output
   and local `.env` keys).
 - Remote test bed (docker on the server `big`; verifies the BUILT artifacts, no source goes to the server;
   `npm run testbed -- check|up|test|status|down`, `--dry-run` first): `test/testbed/`,
-  docs in `docs/testumgebung-big.md`; `scenario sieve-mobile create|run|evaluate|all` is the phone-simulating sieve test. Starting containers or shipping artifacts changes a shared server: ask before the first real run.
-- TUI: `npm run tui` (read-only spaces/objects and test-bed controls); `--dry-run` previews without server access, `--local-dir DIR` inspects local JSONL state. Docs: `docs/tui.md`.
+  docs in `docs/testumgebung-big.en.md`; `scenario sieve-mobile create|run|evaluate|all` is the phone-simulating sieve test. Starting containers or shipping artifacts changes a shared server: ask before the first real run.
+- TUI: `npm run tui` (read-only spaces/objects and test-bed controls); `--dry-run` previews without server access, `--local-dir DIR` inspects local store files. Docs: `docs/tui.en.md`.
 - Dashboard (read-only live UI): `npm run dashboard -- --dir <store>` in the foreground;
   `npm run dashboard:start|stop|status` (via `scripts/dashboard.sh`) in the background; it also shows the projects'
   spaces over their sockets (`DASHBOARD_APPS` / `--app`, read from the root `.env`; defaults: unix socket, then the
-  docker:local port, then the tunnel port on big; public on big as spaces-stats.eibrain.org). Docs: `docs/dashboard.md`.
+  docker:local port, then the tunnel port on big; public on big as spaces-stats.eibrain.org). Docs: `docs/dashboard.en.md`.
 - Codemode chat (`codemode-chat/`: Next.js; every role its own process around one space, see
-  `docs/codemode-space-architektur.md` and its README): `npm --prefix codemode-chat run dev` (space, judge, agents, model, web; port 3700),
+  `docs/codemode-space-architektur.en.md` and its README): `npm --prefix codemode-chat run dev` (space, judge, agents, model, web; port 3700),
   `npm run codemode-chat` (after `npm --prefix codemode-chat run build`), tests `npm run test:codemode-chat` (they start
-  the processes), typecheck `npm --prefix codemode-chat run typecheck` (own tsconfig, not part of the root `tsc`),
+  the processes; `npm --prefix codemode-chat run test:durable` runs the same suites with the durable agent path on, the fake teams answering inside the agent worker: `tests/test-env-durable.ts`, `tests/durable-deviations.ts`), typecheck `npm --prefix codemode-chat run typecheck` (own tsconfig, not part of the root `tsc`),
   Docker `npm --prefix codemode-chat run docker:*` (one container per role; `docker:local:up` runs big and nano together on
   this machine as a test bed, port 3710)
   (changes containers on this machine; never on a shared server without asking).
-- spaces-mmo (`spaces-mmo/`: MMORPG engine, first world Leuchtfeuer; processes space, world, web; PixiJS map; docs German in
-  `spaces-mmo/docs/`, plan and phases in `spaces-mmo/docs/phasen.md`): `npm --prefix spaces-mmo run build`, then
-  `npm --prefix spaces-mmo start` (port 3900; `SPACES_MMO_MEM=1` in memory; model calls only with `SPACES_MMO_LLM=1`, they cost tokens), tests `npm --prefix spaces-mmo test` (they start the
-  processes; `npm --prefix spaces-mmo run test:perf` measures the step latency alone, `tests/perf/space-cost.ts` the space process's CPU ms per command, `tests/perf/live-load.ts` plays guest figures against a running world), typecheck `npm --prefix spaces-mmo run typecheck` (own tsconfig). Graphics: `worlds/<id>/assets/CREDITS.md` (CC BY 4.0). Docker like codemode-chat (`spaces-mmo/docker/`, docs `spaces-mmo/docs/betrieb.md`): `npm --prefix spaces-mmo run docker:local:up|down|logs` (big and nano together on this machine, port 3910), `docker:dev:up|down|logs` (one container, the checkout mounted, recompiles and restarts on every change, port 3920), `docker:nano:up` (the accounts space) / `docker:big:up` (the world in its four regions, web) on the servers (change containers; never on a shared server without asking).
+- spaces-mmo (`spaces-mmo/`: MMORPG engine, first world Leuchtfeuer; processes space, world, web; PixiJS map; docs in
+  `spaces-mmo/docs/`, plan and phases in `spaces-mmo/docs/phasen.en.md`): `npm --prefix spaces-mmo run build`, then
+  `npm --prefix spaces-mmo start` (port 3900; `SPACES_MMO_MEM=1` in memory; model calls only with `SPACES_MMO_LLM=1`, they cost tokens), tests `npm --prefix spaces-mmo test` (`npm --prefix spaces-mmo run test:durable`: the same suites with the durable NPC dialogues on, `tests/test-env-durable.ts`, `tests/durable-deviations.ts`; they start the
+  processes; `npm --prefix spaces-mmo run test:perf` measures the step latency alone, `tests/perf/space-cost.ts` the space process's CPU ms per command, `tests/perf/live-load.ts` plays guest figures against a running world), typecheck `npm --prefix spaces-mmo run typecheck` (own tsconfig). Graphics: `worlds/<id>/assets/CREDITS.md` (CC BY 4.0). Docker like codemode-chat (`spaces-mmo/docker/`, docs `spaces-mmo/docs/betrieb.en.md`): `npm --prefix spaces-mmo run docker:local:up|down|logs` (big and nano together on this machine, port 3910), `docker:dev:up|down|logs` (one container, the checkout mounted, recompiles and restarts on every change, port 3920), `docker:nano:up` (the accounts space) / `docker:big:up` (the world in its four regions, web) on the servers (change containers; never on a shared server without asking).
 - Standalone space service (own store, no pi-durable): `npm run space-server -- --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT`
   (`src/standalone.ts`); `examples/sieve.ts` and `examples/cache.ts` take `--remote <address>`. `test/support/no-durable.mjs`
   (`node --import`) refuses pi-durable, chord and pi-ai; `test/test-standalone.test.ts` runs service and examples under it.
@@ -81,15 +81,15 @@ Run typecheck and tests after every change (root: `npm run typecheck`, `npm test
   `src/alerts.ts` derives alerts, publishes their changes (webhook) and lists the admin command audit.
   `test/testbed/device/b9-coordinator.ts` is the LAN coordinator for phone acceptance of the mobile control page.
 - `examples/` runnable examples; `examples/sensor-pipeline.ts` is also imported by the pipeline tests.
-- `docs/` plans and documentation: `implementierungsstand.md` (current implementation), `api.md` (public API), `_attic/spaces-v1.md` (historical), `federation-plan-v3.md` (current
-  federation plan; v1/v2 are superseded), `examples.md` (examples in detail).
+- `docs/` plans and documentation: `implementierungsstand.en.md` (current implementation), `api.en.md` (public API), `_attic/spaces-v1.en.md` (historical), `federation-plan-v3.en.md` (current
+  federation plan; v1/v2 are superseded), `examples.en.md` (examples in detail).
 
 ## Conventions
 
 - No new dependencies without asking; nothing is installed locally.
 - Projects built on phi-spaces depend on it as `"phi-spaces": "file:.."` and import `phi-spaces`, `phi-spaces/context`,
   `phi-spaces/core`, `phi-spaces/store/*` (root `exports`, pointing at the `.ts` sources); `agent/` keeps relative imports.
-- Scripted model tests: filter out system messages before checking the last message (see `docs/examples.md`, „Testumfang").
-- Documentation in `docs/` is German; code comments and README are English.
+- Scripted model tests: filter out system messages before checking the last message (see `docs/examples.en.md`, „Testumfang").
+- Documentation is English: code comments, READMEs and all docs. A document is `name.en.md`; its German version, where one exists, sits in `de-docs/` beside it, and links point to the English document. New documents are English only. The German help corpus (`help-site/corpus/de`) is a language version of the help site, not an old document.
 - Call this project's library and spaces phi-spaces; the local client class is `PhiSpaces`.
   JavaSpaces names the historical reference only.

@@ -93,6 +93,6 @@ Die Tests prüfen diese Programme mit geskripteten Modellen. Die Qualität echte
 
 ## Weiterlesen {#further}
 
-- Ausführliche Nachweise und Grenzen je Beispiel stehen im Repository in `docs/examples.md` und `docs/examples/`.
+- Ausführliche Nachweise und Grenzen je Beispiel stehen im Repository in `docs/examples.en.md` und `docs/examples/`.
 - Eine eigene erste Anwendung baut [Ein vollständiger erster Space](help.topic.first_running_space#overview) Schritt für Schritt auf.
 - Fertige Anwendungen stehen unter [Apps auf phi-spaces](help.topic.apps#overview).

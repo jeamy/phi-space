@@ -93,6 +93,6 @@ The tests check these programs with scripted models. They do not prove the quali
 
 ## Further reading {#further}
 
-- Detailed evidence and limits per example are in the repository in `docs/examples.md` and `docs/examples/`.
+- Detailed evidence and limits per example are in the repository in `docs/examples.en.md` and `docs/examples/`.
 - [A complete first space](help.topic.first_running_space#overview) builds your own first application step by step.
 - Finished applications are under [Apps on phi-spaces](help.topic.apps#overview).

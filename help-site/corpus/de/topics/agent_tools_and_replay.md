@@ -48,7 +48,7 @@ Space und Agent teilen sich keinen Commit. Die Zusage „einmal“ entsteht desh
 Der Space liegt im eigenen Speicher, der Agent im Speicher von pi-durable. Beide dürfen im selben Prozess laufen, haben aber getrennte Commit-Grenzen. So überlebt der Space einen Neustart des Agenten und umgekehrt.
 
 - **Agentenspeicher**: Der Worker und die mobile Laufzeit nutzen SQLite mit `synchronous=FULL`. Nur die Rechercheläufe der Beispiele nutzen JSONL mit `{ fsync: true }` und zusätzlichem Flush von Commit-Marker und Verzeichniseinträgen (`agent/src/storage.ts`). JSONL ist kein Speicher des Space.
-- **Grenze**: Die Zusage setzt voraus, dass das Memo den Ausfall überlebt. Stabile Identitäten ersetzen keinen gemeinsamen Commit. Prozessabstürze sind getestet, ein echter Stromausfall nicht (`docs/agenten-stromausfalltest.md`).
+- **Grenze**: Die Zusage setzt voraus, dass das Memo den Ausfall überlebt. Stabile Identitäten ersetzen keinen gemeinsamen Commit. Prozessabstürze sind getestet, ein echter Stromausfall nicht (`docs/agenten-stromausfalltest.en.md`).
 - **Externe Dienste**: Ein nach einem Absturz wiederholter Modellaufruf kann erneut ausgeführt und berechnet werden.
 
 ### Getrennter Agentenprozess {#agent-process}
@@ -61,7 +61,7 @@ Der Space liegt im eigenen Speicher, der Agent im Speicher von pi-durable. Beide
 - pi-durable 1.4.0 migriert seine SQLite-Datenbank automatisch auf Schema 2. Danach lässt sie sich mit 1.3.0 oder älter nicht mehr öffnen. **Agentendatenbanken vorher sichern**, einschließlich WAL-Zustand.
 - Das betrifft nur den Agentenspeicher. Format 2 des eigenen phi-spaces-Speichers ist davon unabhängig.
 
-Details stehen in `docs/upgrade-pi-1.4.0.md`.
+Details stehen in `docs/upgrade-pi-1.4.0.en.md`.
 
 ## Siehe auch {#see-also}
 

@@ -1,6 +1,6 @@
 # Mobile Spaces control on the device — 2026-10-16
 
-Device acceptance of step B9 ([Betrieb und mobile Steuerung](../../../docs/betrieb-und-mobile-steuerung.md) §8):
+Device acceptance of step B9 ([Betrieb und mobile Steuerung](../../../docs/betrieb-und-mobile-steuerung.en.md) §8):
 the Spaces control page of `pi-termux-mobile`, served by the real app runtime on a Xiaomi M2007J17G (Android 12),
 installed as a fresh debug APK over wireless ADB without clearing app data. The coordinator
 (`test/testbed/device/b9-coordinator.ts`) ran on the operator host in the production composition

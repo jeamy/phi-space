@@ -34,7 +34,7 @@ PhiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag; Mailbox-Zug
 
 ## Replikationsarten und Freigabe {#replication}
 
-Merge-Replikation nutzt HLC, versionierte Tombstones und je nach Policy LWW/Add-Wins-Sets für geeignete Daten; sie ist keine Exklusiv-Queue. primary/sync bestätigt erst nach dem vorgesehenen synchronen Storage-/Standby-Pfad. Promotion/degrade benötigen autorisierte Übergänge und wirksame Fencing-/Sperrnachweise; eine höhere Epoche allein stoppt keinen isolierten alten Primary. Die maßgebliche Abnahmematrix docs/abnahme/ap3-abnahme.md trennt lokale Komponenten, echte Netz-/Fencing-Läufe und offene Kriterien. Ein Metadaten- oder LWW-Beispiel ist keine Freigabe aller Phase-3-Pfade.
+Merge-Replikation nutzt HLC, versionierte Tombstones und je nach Policy LWW/Add-Wins-Sets für geeignete Daten; sie ist keine Exklusiv-Queue. primary/sync bestätigt erst nach dem vorgesehenen synchronen Storage-/Standby-Pfad. Promotion/degrade benötigen autorisierte Übergänge und wirksame Fencing-/Sperrnachweise; eine höhere Epoche allein stoppt keinen isolierten alten Primary. Die maßgebliche Abnahmematrix docs/_attic/abnahme/ap3-abnahme.en.md trennt lokale Komponenten, echte Netz-/Fencing-Läufe und offene Kriterien. Ein Metadaten- oder LWW-Beispiel ist keine Freigabe aller Phase-3-Pfade.
 
 ## Testsystem: Hardware und Datenbegrenzung {#testsystem}
 

@@ -37,7 +37,7 @@ Two things have to be kept apart: the [Pi Durable on Cloudflare](https://earendi
 
 ### phi-spaces And pi-durable 1.4.0 {#pi-durable-today}
 
-As of 2026-10-30, compared with the published release 1.4.0 (`docs/vergleich-pi-durable.md`):
+As of 2026-10-30, compared with the published release 1.4.0 (`docs/vergleich-pi-durable.en.md`):
 
 | Area | `phi-spaces` | pi-durable 1.4.0 |
 |---|---|---|

@@ -37,7 +37,7 @@ Zwei Dinge sind zu trennen: die Vorlage [Pi Durable on Cloudflare](https://earen
 
 ### phi-spaces und pi-durable 1.4.0 {#pi-durable-today}
 
-Stand 30.10.2026, verglichen mit dem veröffentlichten Release 1.4.0 (`docs/vergleich-pi-durable.md`):
+Stand 30.10.2026, verglichen mit dem veröffentlichten Release 1.4.0 (`docs/vergleich-pi-durable.en.md`):
 
 | Bereich | `phi-spaces` | pi-durable 1.4.0 |
 |---|---|---|

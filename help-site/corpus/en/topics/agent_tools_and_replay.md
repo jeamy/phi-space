@@ -48,7 +48,7 @@ The space and the agent share no commit. The promise of "once" therefore comes f
 The space lives in the own store, the agent in pi-durable's store. Both may run in one process, but their commit boundaries are separate. So the space survives an agent restart and the other way round.
 
 - **Agent store**: The worker and the mobile runtime use SQLite with `synchronous=FULL`. Only the research runs of the examples use JSONL with `{ fsync: true }` plus an extra flush of commit marker and directory entries (`agent/src/storage.ts`). JSONL is not a store of the space.
-- **Boundary**: The promise assumes the memo survives the failure. Stable identities do not replace a shared commit. Process crashes are tested; a real power loss is not (`docs/agenten-stromausfalltest.md`).
+- **Boundary**: The promise assumes the memo survives the failure. Stable identities do not replace a shared commit. Process crashes are tested; a real power loss is not (`docs/agenten-stromausfalltest.en.md`).
 - **External services**: A model call repeated after a crash can run and be billed again.
 
 ### Separate Agent Process {#agent-process}
@@ -61,7 +61,7 @@ The space lives in the own store, the agent in pi-durable's store. Both may run 
 - pi-durable 1.4.0 migrates its SQLite database to schema 2 automatically. After that, 1.3.0 or older can no longer open it. **Back up agent databases first**, including their WAL state.
 - This concerns the agent store only. Format 2 of the own phi-spaces store has nothing to do with it.
 
-Details are in `docs/upgrade-pi-1.4.0.md`.
+Details are in `docs/upgrade-pi-1.4.0.en.md`.
 
 ## See Also {#see-also}
 

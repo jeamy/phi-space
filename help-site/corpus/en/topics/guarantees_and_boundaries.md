@@ -17,7 +17,7 @@ This article says what you can rely on and what you cannot. An entry that was ac
 
 ### Technical Details {#technical-details}
 
-The guarantees and boundaries are named explicitly and backed by tests on the own store (SQLite and memory). Tests cover specific scenarios, not every kind of failure. The public API (`docs/api.md`) and the contract (`docs/federation-plan-v3.md`) are authoritative.
+The guarantees and boundaries are named explicitly and backed by tests on the own store (SQLite and memory). Tests cover specific scenarios, not every kind of failure. The public API (`docs/api.en.md`) and the contract (`docs/federation-plan-v3.en.md`) are authoritative.
 
 ## Rules, Guarantees And Boundaries {#rules-and-boundaries}
 

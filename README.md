@@ -1,6 +1,6 @@
 # phi-spaces
 
-[English](README.md) · [Deutsch](README_DE.md)
+[English](README.md) · [Deutsch](de-docs/README_DE.md)
 
 > **Experimental software — use at your own risk.** APIs, storage formats and operational behavior may change.
 > Do not rely on this project for production or irreplaceable data without independent validation, tested backups
@@ -30,8 +30,8 @@ with overlay identity, key proof, enrollment, signed grants and key rotation. Fe
 run/worker/Space administration and mobile controls are implemented. Merge replication, primary/sync replication,
 promotion and recovery also have implementations and documented tests, but **Phase 3 is not fully accepted**.
 Implementation is not a production or failure-model guarantee: see
-[current implementation](docs/implementierungsstand.md) and the [Phase-3 acceptance matrix](docs/abnahme/ap3-abnahme.md).
-This README was checked against the checkout on 2026-10-18; those documents carry the detailed evidence and open gates.
+[current implementation](docs/implementierungsstand.en.md) and the [Phase-3 acceptance matrix](docs/_attic/abnahme/ap3-abnahme.en.md).
+This README was checked against the checkout on 2026-10-30; those documents carry the detailed evidence and open gates.
 
 ## Tuple spaces: coordination through data
 
@@ -64,8 +64,8 @@ A space is not inherently a FIFO queue, and matching is not a SQL query language
 ### Four dimensions of loose coupling
 
 - **Time decoupling:** a producer can publish now and a consumer can act later, without overlapping lifetimes.
-  In phi-spaces this depends on the Entry's lease and continued availability of its Space/storage. A durable
-  backend can retain it across host-process restarts; `MemoryStorage` cannot.
+  In phi-spaces this depends on the Entry's lease and continued availability of its Space/storage. A persistent
+  store can retain it across host-process restarts; the in-memory store cannot.
 - **Location decoupling:** producer and consumer need not know each other's network addresses. They must still
   discover/configure and reach the appropriate Space endpoint, with authorization. Location independence does
   not remove service discovery, routing or network failures.
@@ -82,7 +82,7 @@ Linda's time/process separation is described in the
 [original paper](https://www.cs.tufts.edu/comp/150FP/archive/david-gelernter/generative-linda.pdf).
 The blocking calls and RMI exceptions are explicit in the
 [JavaSpace API](https://river.apache.org/release-doc/current/api/net/jini/space/JavaSpace.html).
-The phi-spaces-specific behavior is documented in [our API](docs/api.md).
+The phi-spaces-specific behavior is documented in [our API](docs/api.en.md).
 
 ### Asynchronous interaction actually implemented in phi-spaces
 
@@ -102,7 +102,7 @@ points differ:
 
 Thus phi-spaces implements both caller-waiting async operations and durable, event-driven interaction. It does
 not make synchronous serialization/CPU work non-blocking or remove finite Space budgets. See
-[`src/client.ts`](src/client.ts), [`src/index.ts`](src/index.ts) and the [waiter API](docs/api.md).
+[`src/client.ts`](src/client.ts), [`src/index.ts`](src/index.ts) and the [waiter API](docs/api.en.md).
 
 ### What phi-spaces adds, and what it does not promise
 
@@ -120,7 +120,7 @@ external HTTP call, payment or file write exactly-once: those effects need their
 The blackboard is a **logical** shared repository; its physical implementation may be local, remote or federated.
 The pattern alone does not provide unlimited scaling, replication, failover or partition tolerance. In this
 implementation each Space is a document, so large documents, scans and serialization remain real costs.
-An asynchronous API is not CPU parallelism, and a logical Space transaction is not automatically one Durable
+An asynchronous API is not CPU parallelism, and a logical Space transaction is not automatically one
 storage commit. The Social Swarm worker explicitly batches up to four tasks into two storage commits; see
 the [Help-Site runtime contract](help-site/README.md#demo-vertrag-und-wiederanlauf).
 
@@ -162,8 +162,8 @@ try {
 
 The result is `squared: 49` and `job remaining: 0`. `read` leaves the job available; the transactional `take`
 and Result write become final together. This small example runs two clients in one process and uses volatile
-memory: it demonstrates coordination, not persistence or network failover. Use a durable backend for restart
-survival and `RemoteSpace` for a separate worker process; see [examples](docs/examples.md) and [API](docs/api.md).
+memory: it demonstrates coordination, not persistence or network failover. Use `openSqliteHost` for restart
+survival and `RemoteSpace` for a separate worker process; see [examples](docs/examples.en.md) and [API](docs/api.en.md).
 
 ## Layers
 
@@ -177,7 +177,8 @@ survival and `RemoteSpace` for a separate worker process; see [examples](docs/ex
 | `src/index.ts` | the public exports; the background service of a space: notify delivery, reaper (`startService`) |
 | `agent/` | the optional agent package (own dependencies): the `spaces` extension of a pi-durable agent (tools `space_write/read/take/wait/notify/txn/lease`, prompt section) over a separate space host, the mobile bundle entry, agent examples and tests |
 | `src/context.ts` | the invocation context (abort signal, values) |
-| `src/store/` | storage boundary: `types.ts` (StoreHost, StoreTx, documents), `documents.ts` (`defineDoc`), `host.ts` / `sqlite.ts` (the own store, docs/umstellung-ohne-pi-durable.md) |
+| `src/standalone.ts`, `src/dashboard.ts` | the standalone space service (`npm run space-server`) and the read-only live dashboard |
+| `src/store/` | storage boundary: `types.ts` (StoreHost, StoreTx, documents), `documents.ts` (`defineDoc`), `host.ts` / `sqlite.ts` (the own store, docs/umstellung-ohne-pi-durable.en.md) |
 | `src/meter.ts` | process-local counters and rates |
 | `src/canonical.ts` | canonical JSON (RFC 8785) for field comparison and hashes |
 | `src/stream.ts` | bounded revision log and visible-entry change batches |
@@ -187,15 +188,20 @@ survival and `RemoteSpace` for a separate worker process; see [examples](docs/ex
 | `src/entry-replication.ts`, `src/primary-sync.ts`, `src/replica-control.ts` | merge replication, synchronous commit replication and fenced transitions; acceptance limits apply |
 | `src/run-controller.ts`, `src/workers.ts`, `src/space-lifecycle.ts` | run, worker and Space administration |
 | `help-site/` | bilingual help, Social Swarm, Space-Chat stages and authenticated Web Admin |
+| `codemode-chat/` | agents and people solve coding tasks together around one space; every role is its own process |
+| `spaces-mmo/` | online role-playing engine on spaces, first world Leuchtfeuer |
+| `rust/` | Rust port of core, store and service, in progress ([docs/rust-portierung.en.md](docs/rust-portierung.en.md)); the TypeScript code stays authoritative |
 
-A Space is one document; Durable commits provide atomic state changes. Restart survival requires a persistent backend,
+A Space is one document; commits of the own store (`src/store/`) provide atomic state changes. Restart survival requires
+the SQLite store,
 and power-loss/host-loss guarantees depend on storage settings and the deployment's replication/recovery model.
-The default space is the Session-scoped document
-`phi-spaces.space` (version 5); further named spaces live in the Session-scoped family `phi-spaces.named-space`, keyed by an
+The default space is the document
+`phi-spaces.space` (version 5); further named spaces live in the family `phi-spaces.named-space`, keyed by an
 immutable, generated `spaceId`. The registry document maps aliases to ids and holds this host's id.
 
-**Storage compatibility.** Version 5 migrates a stored version-4 space forward. It is one-way: a bundle that only knows
-version 4 cannot open a storage that has run this version.
+**Storage compatibility.** The store has its own file format; stores written through pi-durable are not taken over
+(decision D6, [docs/umstellung-u0-bestand.en.md](docs/umstellung-u0-bestand.en.md)). Agent conversations keep their own
+pi-durable storage: 1.4.0 migrates it to schema 2 one-way, see [docs/upgrade-pi-1.4.0.en.md](docs/upgrade-pi-1.4.0.en.md).
 
 ## Spec mapping
 
@@ -275,13 +281,13 @@ instead receive a transport outcome or `OutcomeUnknown` and must poll the same r
 
 ## Scope
 
-One harness process owns one persistent storage and may expose it as a space service. Named spaces share that
+One process owns one persistent store and may expose it as a space service. Named spaces share that
 storage; they are not separate hosts. `SpaceService` and `RemoteSpace` let clients in other processes reach that host;
 the federation runtime (gate, enrollment, grants, router, `FederatedSpace`, membership) composes several hosts
-according to [docs/federation-plan-v3.md](docs/federation-plan-v3.md) — stages 1b and 2 have acceptance evidence
+according to [docs/federation-plan-v3.en.md](docs/federation-plan-v3.en.md) — stages 1b and 2 have acceptance evidence
 within their documented profiles and exceptions. Stage 3 has working replication/promotion components but
-remaining system acceptance gates in [the current matrix](docs/abnahme/ap3-abnahme.md). The operations extension (runs, workers, Space lifecycle, deployment
-bootstrap, mobile control) is described in [docs/betrieb-und-mobile-steuerung.md](docs/betrieb-und-mobile-steuerung.md).
+remaining system acceptance gates in [the current matrix](docs/_attic/abnahme/ap3-abnahme.en.md). The operations extension (runs, workers, Space lifecycle, deployment
+bootstrap, mobile control) is described in [docs/betrieb-und-mobile-steuerung.en.md](docs/betrieb-und-mobile-steuerung.en.md).
 `space_take`/`space_read` with `timeoutMs` block the turn and are capped at 60 s; use `space_wait` for long waits.
 
 ## Running it
@@ -317,14 +323,19 @@ set `PHI_SPACES_SOURCE` there if this source checkout is elsewhere.
 
 ```
 npm run typecheck
-npm test        # core spec, integration, persistence (JSONL and SQLite crash/reopen with injected faults),
+npm test        # core spec, integration, persistence (SQLite crash/reopen with injected faults),
                 # named spaces, request claims, the mobile sieve scenario
+npm run typecheck:agent && npm run test:agent   # the optional agent package
 npm run example
 ```
 
-Crash and recovery tests use `test/support/persistent.ts`: harnesses on real JSONL and SQLite storage that can be abandoned like
-a killed process, with a switch that fails the next commit or loses its answer after it became durable. `MemoryStorage`
-alone proves nothing about durability.
+`npm run space-server -- --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT` runs a space as a service of its
+own, without pi-durable; `npm run dashboard -- --dir <store>` shows spaces live ([docs/dashboard.en.md](docs/dashboard.en.md)).
+The service authenticates nobody by itself: whoever reaches its socket uses it under its static identity.
+
+Crash and recovery tests use `test/support/persistent.ts`: hosts on the real SQLite store that can be abandoned like
+a killed process, with a switch that fails the next commit or loses its answer after it became durable. A store in
+memory alone proves nothing about durability.
 
 ### Remote test bed
 
@@ -332,12 +343,12 @@ alone proves nothing about durability.
 source code) in docker containers on a server instead of on this machine: `check`, `up`, `test`, `scenario`, `status`, `kill`,
 `partition`, `heal`, `down`. Server, directory and credentials come from environment variables or a git-ignored
 `test/testbed/testbed.env`. See [test/testbed/README.md](test/testbed/README.md) and
-[docs/testumgebung-big.md](docs/testumgebung-big.md) (German). The scenario `sieve-mobile` runs a prime sieve driven by a
+[docs/testumgebung-big.en.md](docs/testumgebung-big.en.md) (German). The scenario `sieve-mobile` runs a prime sieve driven by a
 simulated phone: lost calls and answers with retries under the same request id, app in the background, workers dying
 with a reserved task, a host restart; its evaluation compares the stored state with trial division.
 
 `npm run tui` opens a terminal dashboard with spaces, object details, container controls, tests and reports.
-Use `--dry-run` to preview actions without contacting the server. See [docs/tui.md](docs/tui.md).
+Use `--dry-run` to preview actions without contacting the server. See [docs/tui.en.md](docs/tui.en.md).
 
 ## Examples
 
@@ -347,20 +358,23 @@ Use `--dry-run` to preview actions without contacting the server. See [docs/tui.
 | `agent/examples/blocking-tool.ts` | `space_take` with a timeout, the entry arrives later | – |
 | `examples/sensor-pipeline.ts` | collectors → competing analysts (take under txn, fork/join on `Done`) → presenter; also used by the pipeline tests | – (host code as conversations) |
 | `agent/examples/chat.ts` | three agents chat in a ring; each has a notify subscription for messages addressed to it | – scripted; `--live` uses a real model |
-| `agent/examples/arxiv-research.ts` | collectors search arXiv and attempt read-before-write deduplication; task outputs require a matching transaction; fresh state directory required | real model, network |
-| `examples/sieve.ts` | bounded segmented sieve with transactional tasks, reference tests and JSONL recovery | – (host code) |
-| `examples/cache.ts` | atomic local cache replacement, TTL and persistent compare-and-set versions | – (host code; no replication) |
+| `agent/examples/arxiv-research.ts` | collectors search arXiv and attempt read-before-write deduplication; task outputs require a matching transaction; fresh state directory, or `--resume --dir` to continue a run | real model, network |
+| `examples/sieve.ts` | bounded segmented sieve with transactional tasks, reference tests and SQLite recovery; `--remote` runs it over a space service | – (host code) |
+| `examples/cache.ts` | atomic local cache replacement, TTL and persistent compare-and-set versions; `--remote` as above | – (host code; no replication) |
 | `examples/golomb.ts` | local cooperative DFS with transactional tasks and isolated runs; persistent completed tasks resume; `--checkpoint` writes completion receipts, not partial DFS cursors | – (host code) |
-| `agent/examples/dark-energy-research.ts` | 7-stage research pipeline (crawl → classify → summarize → analyse → present → optional `--query` chat); host-side monitor writes `SystemStatus` | real model, network |
+| `examples/codemode-evolve.ts` | random code candidates are judged in a sandbox over generations; `agent/examples/codemode-evolve-live.ts` lets a model write them | – (seeded generators); live: real model |
+| `agent/examples/dark-energy-research.ts` | 7-stage research pipeline (crawl → classify → summarize → analyse → present → optional `--query` chat); host-side monitor writes `SystemStatus`; `--resume --dir` continues a run | real model, network |
 | [`help-site/`](help-site/README.md) | PHI-SPACES / HELP: bilingual help, batched Social Swarm feed, 6-stage Space-Chat workbench and AdminSpaces | `npm run help` → http://localhost:3500 (default; configurable) |
+| [`codemode-chat/`](codemode-chat/README.md) | agents and people write code together; a sandbox judges every contribution | `npm --prefix codemode-chat run dev` → port 3700 |
+| [`spaces-mmo/`](spaces-mmo/docs/README.en.md) | role-playing world on spaces | `npm --prefix spaces-mmo run build`, then `npm --prefix spaces-mmo start` → port 3900 |
 
 Live examples pick the model from `PI_PROVIDER`/`PI_MODEL`, otherwise the first one available via environment
 API keys or `~/.pi/agent/auth.json` (`agent/src/live-models.ts`). They cost model tokens. Entry types, patterns,
-tests and limits of each example: [docs/examples.md](docs/examples.md) and [docs/examples/](docs/examples/).
+tests and limits of each example: [docs/examples.en.md](docs/examples.en.md) and [docs/examples/](docs/examples/).
 
 Actual research runners are tested with scripted models and persistent storage. Real-model quality and network
-integration are not validated by these tests. Research runs require fresh directories; automatic research resume
-is unsupported. Citation metrics are unavailable from arXiv metadata and remain null. Example tests do not establish
+integration are not validated by these tests. A new research run needs a fresh directory; `--resume --dir` reopens a
+compatible run explicitly, nothing resumes on its own. Citation metrics are unavailable from arXiv metadata and remain null. Example tests do not establish
 general production scaling: component/load measurements have their own documented scope. Several async workers
 do not provide CPU parallelism.
 
@@ -378,19 +392,22 @@ node --experimental-strip-types agent/examples/arxiv-research.ts --out /tmp/llm-
 
 ## Documentation
 
-German documents in [docs/](docs/README.md):
+German documents in [docs/](docs/README.en.md):
 
 | document | what |
 |---|---|
-| [implementierungsstand.md](docs/implementierungsstand.md) | implemented scope, evidence and limits |
-| [api.md](docs/api.md) | TypeScript, service and remote API reference |
-| [ap1b-abnahme.md](docs/abnahme/ap1b-abnahme.md) | phase 1b integration evidence |
-| [ap2-abnahme.md](docs/abnahme/ap2-abnahme.md) | phase 2 acceptance |
-| [ap3-replikation.md](docs/abnahme/ap3-replikation.md) | phase 3 replication architecture |
-| [ap3-abnahme.md](docs/abnahme/ap3-abnahme.md) | phase 3 acceptance criteria, evidence and remaining gates |
-| [spaces-v1.md](docs/_attic/spaces-v1.md) | historical local snapshot (2026-10-07) |
-| [federation-plan-v3.md](docs/federation-plan-v3.md) | the contract for federated spaces (stages 0–2 implemented, 3 in progress) |
-| [implementierungsplan-v3.md](docs/implementierungsplan-v3.md) | readiness, decisions, work packages and progress |
-| [betrieb-und-mobile-steuerung.md](docs/betrieb-und-mobile-steuerung.md) | operations extension: runs, workers, Spaces, bootstrap, mobile control, acceptance status |
-| [testumgebung-big.md](docs/testumgebung-big.md) | the remote docker test bed |
-| [VALIDIERUNG.md](docs/VALIDIERUNG.md) | what was verified locally, and measurements |
+| [implementierungsstand.md](docs/implementierungsstand.en.md) | implemented scope, evidence and limits |
+| [api.md](docs/api.en.md) | TypeScript, service and remote API reference |
+| [vergleich-pi-durable.md](docs/vergleich-pi-durable.en.md) | phi-spaces and pi-durable compared, and where each is used here |
+| [upgrade-pi-1.4.0.md](docs/upgrade-pi-1.4.0.en.md) | the upgrade of the agent runtime to 1.4.0, data and rollback limits |
+| [rust-portierung.md](docs/rust-portierung.en.md) | the Rust port: plan and slices |
+| [ap1b-abnahme.md](docs/_attic/abnahme/ap1b-abnahme.en.md) | phase 1b integration evidence |
+| [ap2-abnahme.md](docs/_attic/abnahme/ap2-abnahme.en.md) | phase 2 acceptance |
+| [ap3-replikation.md](docs/_attic/abnahme/ap3-replikation.en.md) | phase 3 replication architecture |
+| [ap3-abnahme.md](docs/_attic/abnahme/ap3-abnahme.en.md) | phase 3 acceptance criteria, evidence and remaining gates |
+| [spaces-v1.md](docs/_attic/spaces-v1.en.md) | historical local snapshot (2026-10-07) |
+| [federation-plan-v3.md](docs/federation-plan-v3.en.md) | the contract for federated spaces (stages 0–2 implemented, 3 in progress) |
+| [implementierungsplan-v3.md](docs/_attic/implementierungsplan-v3.en.md) | readiness, decisions, work packages and progress |
+| [betrieb-und-mobile-steuerung.md](docs/betrieb-und-mobile-steuerung.en.md) | operations extension: runs, workers, Spaces, bootstrap, mobile control, acceptance status |
+| [testumgebung-big.md](docs/testumgebung-big.en.md) | the remote docker test bed |
+| [VALIDIERUNG.md](docs/_attic/VALIDIERUNG.en.md) | what was verified locally, and measurements |

@@ -34,7 +34,7 @@ PhiSpaces and RemoteSpace implement the SpaceLike base contract; mailbox access 
 
 ## Replication Modes and Acceptance {#replication}
 
-Merge replication uses HLC, versioned tombstones and policy-specific LWW/Add-Wins sets for suitable data; it is not an exclusive queue. primary/sync confirms only through its configured synchronous storage/standby path. Promotion/degrade require authorized transitions and effective fencing/revocation evidence; a higher epoch alone does not stop an isolated old primary. The authoritative docs/abnahme/ap3-abnahme.md separates local components, real network/fencing runs and remaining gates. A metadata/LWW demo does not accept every Phase-3 path.
+Merge replication uses HLC, versioned tombstones and policy-specific LWW/Add-Wins sets for suitable data; it is not an exclusive queue. primary/sync confirms only through its configured synchronous storage/standby path. Promotion/degrade require authorized transitions and effective fencing/revocation evidence; a higher epoch alone does not stop an isolated old primary. The authoritative docs/_attic/abnahme/ap3-abnahme.en.md separates local components, real network/fencing runs and remaining gates. A metadata/LWW demo does not accept every Phase-3 path.
 
 ## Test System: Hardware and Data Cap {#testsystem}
 

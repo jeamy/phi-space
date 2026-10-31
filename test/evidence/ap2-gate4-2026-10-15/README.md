@@ -48,4 +48,4 @@ Gate 4 accepts the documented baseline for the tested workload, not peak
 throughput or a new guarantee for every combination of maximum quotas. Phase 2
 is closed with the owner's explicitly retained Block 4 exception; unconditional
 native production acceptance and Phase 3 replication/promotion are not claimed.
-See [acceptance and limits](../../../docs/abnahme/ap2-gate4.md).
+See [acceptance and limits](../../../docs/_attic/abnahme/ap2-gate4.en.md).

@@ -5,7 +5,7 @@
 - Baseline Reference: [Pi Durable on Cloudflare – Multiplayer Chat](https://earendil.com/posts/pi-durable-on-cloudflare/)
 - Our Implementation: [`help-site/examples/v1..v6`](file:///media/data/programming/phi-spaces/help-site/examples) and [`help-site/examples/shared/chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts)
 - Contrast to Actor Model: [`agent/examples/chat.ts`](file:///media/data/programming/phi-spaces/agent/examples/chat.ts)
-- Target Architecture without Pi-Durable: [`docs/umstellung-ohne-pi-durable.md`](file:///media/data/programming/phi-spaces/docs/umstellung-ohne-pi-durable.md)
+- Target Architecture without Pi-Durable: [`docs/umstellung-ohne-pi-durable.en.md`](file:///media/data/programming/phi-spaces/docs/umstellung-ohne-pi-durable.md)
 
 ---
 
@@ -19,7 +19,7 @@ Although both architectures historically originated from the `@earendil-works` e
 | **Where Business Logic Lives** | Inside the methods of the `Session` Durable Object class, directly calling `harness.commit(...)`, `conversation.submit(...)`, and `watchEvents(...)`. | Inside independent workers interacting with the space through the unified `SpaceLike` contract (`write`, `read`, `take`, `wait`, `notify`, `createTransaction`, `commit`). | ✅ Implemented in `processNextChatTask` and `processNextSearchTask`. |
 | **Coupling of Web Server & AI Workers** | **Tightly Coupled (In-Object)**: WebSocket termination, conversation state, and model invocations all run inside the same Durable Object instance. | **Freely Composable (`v1`–`v6`)**: Can run in-process (`v1`/`v2`), decoupled across Unix sockets or TCP (`v3`), cryptographically authenticated across host boundaries (`v4`), or federated across multiple servers (`v5`/`v6`). | ⚠️ **Gap:** In `v5-federated-cluster`, the test currently runs in-process with 4 `MemoryStorage` instances rather than over physical TCP sockets. |
 | **Platform Dependency** | Tied to **Cloudflare Workers & Durable Objects** (`DurableObjectState`, `ctx.storage.sql`, Hibernatable WebSockets, `alarm()`). | **Platform-Independent (Self-Hosted / On-Prem / VPS / Docker / Mobile)**: Runs anywhere Node.js runs (RAM, local SQLite/JSONL, Docker containers, Linux VPS, Android/Termux). | ✅ Verified on Linux & Android/Termux. |
-| **Persistence Dependency** | Hardwired to Cloudflare Edge Storage and `@earendil-works/pi-durable`. | Own SQLite store without pi-durable ([`docs/umstellung-ohne-pi-durable.md`](file:///media/data/programming/phi-spaces/docs/umstellung-ohne-pi-durable.md)); only the optional `agent/` package uses pi-durable. | ✅ **Migrated:** the space is independent of `pi-durable`. |
+| **Persistence Dependency** | Hardwired to Cloudflare Edge Storage and `@earendil-works/pi-durable`. | Own SQLite store without pi-durable ([`docs/umstellung-ohne-pi-durable.en.md`](file:///media/data/programming/phi-spaces/docs/umstellung-ohne-pi-durable.md)); only the optional `agent/` package uses pi-durable. | ✅ **Migrated:** the space is independent of `pi-durable`. |
 | **Scaling Model** | **Scale-to-Zero per Session** (hibernates when idle; supports thousands of small, completely isolated sessions on edge infrastructure). | **Horizontal & Vertical Scaling of Workers and Spaces**: Scales from a single space (`v1`–`v4`) to a sharded multi-member cluster (`v5` with HRW routing by `threadId`) and centralized operational control (`v6`). | ✅ HRW routing implemented in core; see Section 2.8 for cluster transaction boundaries. |
 
 > [!NOTE]

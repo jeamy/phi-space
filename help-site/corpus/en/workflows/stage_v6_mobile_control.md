@@ -17,7 +17,7 @@ Stage 6 shows how to operate running spaces: pair devices, start and stop worker
 
 ## Topology: Space Distribution {#topology}
 
-`help-site/examples/v6-mobile-control/run.ts` and the **`AdminSpaces`** web portal at `https://spaces.eibrain.org/?view=admin` implement the operational control defined in `docs/betrieb-und-mobile-steuerung.md`. The mobile app (`spaces.html` + `steuerung.html` in `pi-termux-mobile`) and the website know the same admin commands.
+`help-site/examples/v6-mobile-control/run.ts` and the **`AdminSpaces`** web portal at `https://spaces.eibrain.org/?view=admin` implement the operational control defined in `docs/betrieb-und-mobile-steuerung.en.md`. The mobile app (`spaces.html` + `steuerung.html` in `pi-termux-mobile`) and the website know the same admin commands.
 
 - **1 host** (`openOwnMemoryHost()` in the runner) carries **several named spaces**: the `CONTROL_SPACE` (enroll, audit), `sieve-ops`, and one chat space created via `SpaceLifecycle`.
 - Distribution: one host, several isolated spaces. Control commands land in the control space while chat data stays in its own data space.

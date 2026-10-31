@@ -66,7 +66,7 @@ agents are assigned to them in turn, and all of them work in one team.
 
 ## Processes and the one space
 
-Everything is space (`docs/codemode-space-architektur.md`): every role is its own process, and the processes talk only
+Everything is space (`docs/codemode-space-architektur.en.md`): every role is its own process, and the processes talk only
 through one phi-space. Nothing a process knows lives only in its memory. A process that dies lets its transactions and
 leases lapse, and its work comes back for another process of the same role.
 
@@ -220,7 +220,7 @@ docker compose -f docker/docker-compose.yml --profile nano run --rm --no-deps sp
 ```
 
 This does not cover `codemode-agent.sqlite`. Back it up separately, with its WAL state, before an upgrade: pi-durable
-1.4.0 moves an older file to schema 2, and 1.3.0 or older cannot open it afterwards (`docs/upgrade-pi-1.4.0.md`).
+1.4.0 moves an older file to schema 2, and 1.3.0 or older cannot open it afterwards (`docs/upgrade-pi-1.4.0.en.md`).
 
 ## Help pages and themes
 

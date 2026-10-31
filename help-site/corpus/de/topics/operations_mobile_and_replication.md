@@ -17,7 +17,7 @@ Wenn viele Rechner an einer großen Aufgabe arbeiten, will man sie anhalten, for
 
 ### Technische Details {#technical-details}
 
-Die Betriebserweiterung (Schritte B1–B10 in `docs/betrieb-und-mobile-steuerung.md`) ergänzt über dem Federation-Kern die operative Steuerung für **Rechenläufe (`RunGate` / `RunController`)**, **Host-Worker (`WorkerSupervisor`)**, **Space-Lebenszyklen (`SpaceLifecycle`)**, **Deployment-Bootstrap (`DeploymentController`)** und **Alarmierung/Audit (`collectAlerts` / `auditLog`)**. Alle Funktionen sind sowohl über die Android-App (`pi-termux-mobile`) als auch über den login-geschützten Web-Bereich **`AdminSpaces`** auf `https://spaces.eibrain.org` bedienbar.
+Die Betriebserweiterung (Schritte B1–B10 in `docs/betrieb-und-mobile-steuerung.en.md`) ergänzt über dem Federation-Kern die operative Steuerung für **Rechenläufe (`RunGate` / `RunController`)**, **Host-Worker (`WorkerSupervisor`)**, **Space-Lebenszyklen (`SpaceLifecycle`)**, **Deployment-Bootstrap (`DeploymentController`)** und **Alarmierung/Audit (`collectAlerts` / `auditLog`)**. Alle Funktionen sind sowohl über die Android-App (`pi-termux-mobile`) als auch über den login-geschützten Web-Bereich **`AdminSpaces`** auf `https://spaces.eibrain.org` bedienbar.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -39,7 +39,7 @@ Sowohl `MobileSpaces` (`pi-termux-mobile/runtime/spaces-mobile.mjs`) als auch un
 
 1. **Vorab persistierte `commandId`**: Vor jedem Senden wird `commandId = m-<kind>-<hex>` bzw. `w-<kind>-<hex>` lokal gespeichert. Bei Timeout oder Doppeltippen wird exakt dieselbe `commandId` erneut gesendet („Ausgang wird geprüft“ statt doppelter Ausführung).
 2. **Schlüsselbeweis & 60s-Grants**: Jede Verbindung beweist ihren `Ed25519`/`P-256`-Schlüssel am Gate und nutzt kurzlebige Grants.
-3. **Phase-3-Replikationsbausteine**: Für verzögerungstolerante Metadaten und Präsenz steht `EntryReplicationController` (persistenter HLC, Last-Writer-Wins mit versionierten Tombstones und Add-Wins-Sets) bereit. Er nutzt ein eigenes Dokument und repliziert bestehende `PhiSpaces`-Entries nicht automatisch. Primary/Sync, Fencing und Promotion sind implementiert, Phase 3 ist aber nicht vollständig abgenommen (`docs/abnahme/ap3-abnahme.md`).
+3. **Phase-3-Replikationsbausteine**: Für verzögerungstolerante Metadaten und Präsenz steht `EntryReplicationController` (persistenter HLC, Last-Writer-Wins mit versionierten Tombstones und Add-Wins-Sets) bereit. Er nutzt ein eigenes Dokument und repliziert bestehende `PhiSpaces`-Entries nicht automatisch. Primary/Sync, Fencing und Promotion sind implementiert, Phase 3 ist aber nicht vollständig abgenommen (`docs/_attic/abnahme/ap3-abnahme.en.md`).
 
 ## Siehe auch {#see-also}
 
