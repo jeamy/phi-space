@@ -1,4 +1,4 @@
-// The windmill (docs/siedeln.md "Warenketten", step 3 part 2): grain brought to a mill becomes flour in the mill's
+// The windmill (docs/siedeln.en.md "Warenketten", step 3 part 2): grain brought to a mill becomes flour in the mill's
 // own time, for whoever brought it.
 //
 // - Anyone may grind at any mill. `mahle` takes the mill's Building in the command's transaction, so loads brought at

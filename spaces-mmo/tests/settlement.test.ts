@@ -1,4 +1,4 @@
-// Settlements, step 4 part 2 (docs/siedeln.md "Siedlungen und Besitz", engine/commands/settlement.ts): three huts of two
+// Settlements, step 4 part 2 (docs/siedeln.en.md "Siedlungen und Besitz", engine/commands/settlement.ts): three huts of two
 // owners found one; hut owners are settlers; closed, the ranks count; a guest is a helper at most; it ends with its huts.
 import "./test-env.ts";
 import { test } from "node:test";

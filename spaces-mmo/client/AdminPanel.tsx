@@ -1,5 +1,5 @@
 "use client";
-// The operator's window (docs/automaten.md, "Einstellungen für Betreiber"): the models (as in codemode-chat's admin
+// The operator's window (docs/automaten.en.md, "Einstellungen für Betreiber"): the models (as in codemode-chat's admin
 // panel and the help system's feed: every model with credentials, grouped by provider, one box per provider, the one
 // calls use) and the limits as fields with unit, default, where the value comes from and a "?" each. Saving writes
 // `Setting` entries into the space (server/settings.ts); every process follows within seconds, without a restart.

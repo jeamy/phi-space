@@ -1,4 +1,4 @@
-// SPACES_MMO_SPACE_SERVER: the switch to the Rust server, and that it never falls back (docs/rust-portierung.md, R3).
+// SPACES_MMO_SPACE_SERVER: the switch to the Rust server, and that it never falls back (docs/rust-portierung.en.md, R3).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spaceServer } from "../server/space-server.ts";

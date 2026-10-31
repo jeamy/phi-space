@@ -1,4 +1,4 @@
-// A load test against a running spaces-mmo (docs/betrieb.md, "Lasttest"): N guest figures play over the web process
+// A load test against a running spaces-mmo (docs/betrieb.en.md, "Lasttest"): N guest figures play over the web process
 // like pages do (HTTP for the guest login, the game socket for commands): they pick up driftwood and shells, carry the
 // wood to the fire and put it in, sell shells to Kalle, look at the market and walk through the exits. Every command is
 // timed from sending it to the first answer meant for the figure (its own position, a message to it, an error, the

@@ -3,7 +3,7 @@
 // colours, every face a shade lighter or darker), so they need no model file. Each model is one merged geometry with
 // vertex colours, made once per kind and variant and shared (userData.shared: the map's dispose keeps it); where it
 // stands, how it is turned and how large it is come from the place, so a room looks the same every time it is drawn.
-// Everything here is visual only (docs/architektur.md, "3D-Ansicht").
+// Everything here is visual only (docs/architektur.en.md, "3D-Ansicht").
 import { stableHash } from "./terrain3d.ts";
 
 type T = typeof import("three");
@@ -12,7 +12,7 @@ type V3 = [number, number, number];
 /** One primitive of a model: its geometry, colour, place, turn and size. */
 type Part = { g: Geo; c: number; p?: V3; r?: V3; s?: V3 };
 
-export type PlantModel = "tree" | "conifer" | "bush" | "berrybush";
+export type PlantModel = "tree" | "conifer" | "bush" | "berrybush" | "flower" | "herb" | "grass" | "fern";
 /** How many shapes of each plant there are; a place picks one. */
 export const PLANT_VARIANTS = 3;
 
@@ -72,9 +72,13 @@ function cached(key: string, make: () => Geo): Geo {
 // ---- plants ----
 
 /** A plant's geometry (about 1.7 units for a tree, 0.6 for a bush), standing on y = 0. */
-export function plantGeometry(t: T, model: PlantModel, variant: number): Geo {
-	return cached(`${model}:${variant}`, () => {
+export function plantGeometry(t: T, model: PlantModel, variant: number, color = 0xf4f0e6): Geo {
+	return cached(`${model}:${variant}:${color}`, () => {
 		const r = rand(`${model}:${variant}`), parts: Part[] = [];
+		if (model === "flower" || model === "herb" || model === "grass" || model === "fern") {
+			small(t, model, parts, r, variant, color);
+			return merge(t, parts, `${model}:${variant}`);
+		}
 		const blob = (radius: number, c: number, p: V3) => parts.push({ g: new t.IcosahedronGeometry(radius, 0), c, p, r: [r() * 3, r() * 3, r() * 3] });
 		if (model === "tree") {
 			const trunk = 0.62 + r() * 0.18;
@@ -99,6 +103,104 @@ export function plantGeometry(t: T, model: PlantModel, variant: number): Geo {
 			}
 		}
 		return merge(t, parts, `${model}:${variant}`);
+	});
+}
+
+/** A stem from the ground, leaning `lean` towards `a`, with its tip returned. */
+function stem(t: T, parts: Part[], x: number, z: number, high: number, a: number, lean: number, c: number, thick = 0.014): V3 {
+	parts.push({ g: new t.CylinderGeometry(thick * 0.7, thick, high, 4), c, p: [x + (Math.cos(a) * lean) / 2, high / 2, z + (Math.sin(a) * lean) / 2], r: [Math.sin(a) * lean / high, 0, -Math.cos(a) * lean / high] });
+	return [x + Math.cos(a) * lean, high, z + Math.sin(a) * lean];
+}
+/** A blossom at `p`: five petals round a yellow eye. */
+function blossom(t: T, parts: Part[], p: V3, size: number, c: number, turn: number, eye = 0xe8c23a): void {
+	for (let i = 0; i < 5; i++) {
+		const a = turn + (i / 5) * Math.PI * 2;
+		parts.push({ g: new t.IcosahedronGeometry(size * 0.6, 0), c, p: [p[0] + Math.cos(a) * size, p[1], p[2] + Math.sin(a) * size], s: [1, 0.4, 1] });
+	}
+	parts.push({ g: new t.IcosahedronGeometry(size * 0.5, 0), c: eye, p: [p[0], p[1] + size * 0.15, p[2]] });
+}
+/** A leaf: a flat lens from `p` towards `a`. */
+function leaf(t: T, parts: Part[], p: V3, a: number, len: number, c: number, tilt = 0.5): void {
+	parts.push({ g: new t.IcosahedronGeometry(0.5, 0), c, p: [p[0] + (Math.cos(a) * len) / 2, p[1] + (tilt * len) / 2, p[2] + (Math.sin(a) * len) / 2], r: [0, -a, tilt], s: [len, 0.03, len * 0.4] });
+}
+/** The small plants of the ground, about 0.3 units high, a few to a cell. */
+function small(t: T, model: PlantModel, parts: Part[], r: () => number, variant: number, color: number): void {
+	const green = LEAF[variant % 3]!;
+	if (model === "flower") {
+		for (let i = 0; i < 4 + variant; i++) {
+			const a = r() * 6.28, far = 0.08 + r() * 0.26, x = Math.cos(a) * far, z = Math.sin(a) * far;
+			const tip = stem(t, parts, x, z, 0.16 + r() * 0.16, r() * 6.28, 0.03, green);
+			leaf(t, parts, [x, 0.05, z], r() * 6.28, 0.11, green);
+			blossom(t, parts, tip, 0.045, color, r() * 6.28);
+		}
+	} else if (model === "grass") {
+		for (let i = 0; i < 12; i++) { const a = r() * 6.28, far = r() * 0.3; stem(t, parts, Math.cos(a) * far, Math.sin(a) * far, 0.14 + r() * 0.2, r() * 6.28, 0.07, LEAF[(variant + i) % 3]!, 0.012); }
+	} else if (model === "herb") {
+		for (let i = 0; i < 7; i++) leaf(t, parts, [0, 0.03, 0], (i / 7) * 6.28 + r(), 0.28 + r() * 0.1, LEAF[(variant + i) % 3]!, 0.7);
+	} else {
+		for (let i = 0; i < 6; i++) leaf(t, parts, [0, 0.04, 0], (i / 6) * 6.28 + r(), 0.36 + r() * 0.1, 0x3f7d3a, 0.35);
+	}
+}
+
+/** What grows in a bed: its form, by the sort (world.garden.sorts[].model). */
+export type CropModel = "flower" | "rose" | "mist" | "cabbage" | "carrot";
+/** A plant in a bed by its stage: seed (a mound), sprout, grown, wilted; `color` that of the sort or the variety. */
+export function cropGeometry(t: T, model: CropModel, stage: number, color: number): Geo {
+	return cached(`crop:${model}:${stage}:${color}`, () => {
+		const r = rand(`crop:${model}:${stage}`), parts: Part[] = [], green = 0x4f8a3a, dry = 0x7a6a4a;
+		if (stage === 0) parts.push({ g: new t.IcosahedronGeometry(0.1, 0), c: 0x4e3420, p: [0, 0.02, 0], s: [1, 0.45, 1] });
+		else if (stage === 1) { for (let i = 0; i < 3; i++) leaf(t, parts, [0, 0.02, 0], (i / 3) * 6.28 + r(), 0.15, 0x6fb04a, 1); }
+		else if (stage === 3) {
+			for (let i = 0; i < 4; i++) leaf(t, parts, [0, 0.02, 0], (i / 4) * 6.28 + r(), 0.2, dry, 0.1);
+			const tip = stem(t, parts, 0, 0, 0.16, r() * 6.28, 0.1, dry);
+			parts.push({ g: new t.IcosahedronGeometry(0.04, 0), c: 0x5b4a33, p: tip });
+		} else if (model === "cabbage") {
+			parts.push({ g: new t.IcosahedronGeometry(0.17, 1), c: color, p: [0, 0.15, 0], s: [1, 0.85, 1] });
+			for (let i = 0; i < 7; i++) leaf(t, parts, [0, 0.05, 0], (i / 7) * 6.28 + r(), 0.3, i % 2 ? color : green, 0.55);
+		} else if (model === "carrot") {
+			parts.push({ g: new t.ConeGeometry(0.075, 0.16, 6), c: color, p: [0, 0.05, 0], r: [Math.PI, 0, 0] });
+			for (let i = 0; i < 6; i++) stem(t, parts, 0, 0, 0.26 + r() * 0.1, (i / 6) * 6.28 + r(), 0.09, 0x5c9c42, 0.016);
+		} else if (model === "rose") {
+			for (let i = 0; i < 5; i++) { const a = (i / 5) * 6.28 + r(); leaf(t, parts, [0, 0.1 + r() * 0.15, 0], a, 0.15, 0x3f7d3a); }
+			for (let i = 0; i < 3; i++) {
+				const tip = stem(t, parts, (i - 1) * 0.08, r() * 0.1 - 0.05, 0.3 + r() * 0.12, r() * 6.28, 0.05, 0x3f7d3a, 0.02);
+				parts.push({ g: new t.IcosahedronGeometry(0.075, 1), c: color, p: tip, s: [1, 0.85, 1] });
+				parts.push({ g: new t.IcosahedronGeometry(0.04, 0), c: 0xffffff, p: [tip[0], tip[1] + 0.05, tip[2]] });
+			}
+		} else if (model === "mist") {
+			const tip = stem(t, parts, 0, 0, 0.42, r() * 6.28, 0.08, 0x7fa89a, 0.016);
+			for (let i = 0; i < 4; i++) parts.push({ g: new t.ConeGeometry(0.06, 0.12, 5), c: color, p: [tip[0] + (i - 1.5) * 0.02, tip[1] - i * 0.075, tip[2]], r: [Math.PI, 0, 0] });
+			leaf(t, parts, [0, 0.05, 0], 1, 0.2, 0x7fa89a); leaf(t, parts, [0, 0.05, 0], 4, 0.2, 0x7fa89a);
+		} else {
+			for (let i = 0; i < 3; i++) {
+				const tip = stem(t, parts, (i - 1) * 0.08, r() * 0.12 - 0.06, 0.26 + r() * 0.12, r() * 6.28, 0.05, green);
+				blossom(t, parts, tip, 0.06, color, r() * 6.28);
+			}
+			for (let i = 0; i < 4; i++) leaf(t, parts, [0, 0.03, 0], (i / 4) * 6.28 + r(), 0.16, green);
+		}
+		return merge(t, parts, `crop:${model}:${stage}`);
+	});
+}
+
+/** What stands on a field: its form, by the crop (world.fields.crops[].model). */
+export type FieldModel = "grain" | "tuber" | "beet" | "flax";
+/** A field's crop w×d in rows along x: `grown` 0.4 for young plants, 1 ripe; `color` its colour then, `limp` when it stands too long. */
+export function fieldCropGeometry(t: T, model: FieldModel, w: number, d: number, grown: number, color: number, limp: boolean): Geo {
+	return cached(`field:${model}:${w}:${d}:${grown}:${color}:${limp}`, () => {
+		const r = rand(`field:${model}:${w}:${d}`), parts: Part[] = [], rows = Math.max(2, d * 2), each = model === "grain" || model === "flax" ? 6 : 3;
+		const c = grown < 1 ? 0x5f9a3a : color, high = (model === "grain" ? 0.5 : model === "flax" ? 0.46 : 0.26) * grown;
+		for (let row = 0; row < rows; row++) for (let i = 0; i < w * each; i++) {
+			const x = -w / 2 + ((i + 0.5) / (w * each)) * w + (r() - 0.5) * 0.05, z = -d / 2 + ((row + 0.5) / rows) * d + (r() - 0.5) * 0.06;
+			if (model === "grain" || model === "flax") {
+				const tip = stem(t, parts, x, z, high * (0.85 + r() * 0.3), r() * 6.28, limp ? 0.16 : 0.04, c, 0.012);
+				if (grown === 1 && model === "grain") parts.push({ g: new t.IcosahedronGeometry(0.03, 0), c, p: tip, s: [0.8, 2, 0.8] });
+				if (grown === 1 && model === "flax") parts.push({ g: new t.IcosahedronGeometry(0.03, 0), c: limp ? c : 0x6f8fe0, p: tip });
+			} else {
+				for (let k = 0; k < 4; k++) leaf(t, parts, [x, 0.01, z], (k / 4) * 6.28 + r(), high * 1.1, c, limp ? 0.1 : 0.8);
+				if (model === "beet" && grown === 1) parts.push({ g: new t.IcosahedronGeometry(0.06, 0), c: 0xb8486a, p: [x, 0.03, z] });
+			}
+		}
+		return merge(t, parts, `field:${model}`);
 	});
 }
 

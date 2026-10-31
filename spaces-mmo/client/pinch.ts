@@ -6,7 +6,11 @@ export type Pinch = {
 	down(id: number, x: number, y: number): boolean;
 	/** The distance of the two fingers now over the one at the start (above 1: they spread), or null without a pinch. */
 	move(id: number, x: number, y: number): number | null;
-	/** The current distance becomes the new start (after a zoom step). */
+	/** The point between the two fingers. */
+	readonly center: { x: number; y: number } | null;
+	/** How far the two fingers turned since the start, in radians (clockwise on the screen is positive). */
+	readonly twist: number;
+	/** The current distance and direction become the new start (after a zoom step). */
 	rebase(): void;
 	up(id: number): void;
 	readonly active: boolean;
@@ -14,16 +18,20 @@ export type Pinch = {
 
 export function pinch(): Pinch {
 	const at = new Map<number, { x: number; y: number }>();
-	let base = 0;
+	let base = 0, baseDir = 0;
 	const dist = () => { const [a, b] = [...at.values()]; return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0; };
+	const dir = () => { const [a, b] = [...at.values()]; return a && b ? Math.atan2(b.y - a.y, b.x - a.x) : 0; };
 	return {
-		down(id, x, y) { at.set(id, { x, y }); if (at.size === 2) { base = dist(); return true; } return false; },
+		down(id, x, y) { at.set(id, { x, y }); if (at.size === 2) { base = dist(); baseDir = dir(); return true; } return false; },
 		move(id, x, y) {
 			if (!at.has(id)) return null;
 			at.set(id, { x, y });
 			return at.size === 2 && base > 0 ? dist() / base : null;
 		},
-		rebase() { base = dist(); },
+		rebase() { base = dist(); baseDir = dir(); },
+		get center() { const [a, b] = [...at.values()]; return a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : null; },
+		// the shorter way round: the direction jumps by a full turn where atan2 wraps
+		get twist() { return at.size < 2 ? 0 : Math.atan2(Math.sin(dir() - baseDir), Math.cos(dir() - baseDir)); },
 		up(id) { at.delete(id); if (at.size < 2) base = 0; },
 		get active() { return at.size >= 2; },
 	};

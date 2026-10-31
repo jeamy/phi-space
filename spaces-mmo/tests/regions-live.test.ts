@@ -29,9 +29,7 @@ test("regions: newcomers start in every region's bay, and a ferry takes a charac
 		await lightFire(r.space("west"), 60_000, "feuer-bucht");
 		await lightFire(r.space("west"), 60_000, "feuer-anleger");
 		for (const [line, room] of [["go ost", "klippenpfad"], ["go ost", "klippenkopf"], ["go möwenfels", "moewenfels-strand"]] as const) {
-			const n = west.p.frames.length;
-			west.p.send(line);
-			await west.p.until((f) => f.t === "hello" && f.room.roomId === room, 15_000, n);
+			await through(west.p, line, room);
 		}
 		// it is in the north region now, with its account and session, and gone from the west
 		assert.equal((await r.space("west").readAll({ type: "Character", fields: { charId: me } })).length, 0);
@@ -52,6 +50,18 @@ test("regions: newcomers start in every region's bay, and a ferry takes a charac
 	} finally { await srv.close(); await r.close(); }
 });
 
+/** Through an exit. A fire lit from outside clears the fog only with the next fog step: a refusal until then is asked again. */
+async function through(p: Player, line: string, room: string, ms = 60_000): Promise<void> {
+	const end = Date.now() + ms;
+	for (;;) {
+		const n = p.frames.length;
+		p.send(line);
+		const f = await p.until((f) => (f.t === "hello" && f.room.roomId === room) || (f.t === "msg" && f.m.text.includes("zu dicht")), Math.max(1, end - Date.now()), n);
+		if (f.t === "hello") return;
+		await new Promise((r) => setTimeout(r, 250));
+	}
+}
+
 test("regions: a trader on his way stays a while where people are and answers who speaks to him (also without the '→ say' line)", { timeout: 300_000 }, async () => {
 	const r = await startRegions({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.1", SPACES_MMO_NPCS: "kalle" } });
 	const srv = await startWeb({ port: 0, space: "unix:/nowhere", accounts: r.accounts, regions: r.list });
@@ -62,9 +72,7 @@ test("regions: a trader on his way stays a while where people are and answers wh
 		await lightFire(r.space("west"), 600_000, "feuer-bucht");
 		await lightFire(r.space("west"), 600_000, "feuer-anleger");
 		for (const [line, room] of [["go ost", "klippenpfad"], ["go ost", "klippenkopf"]] as const) {
-			const n = p.frames.length;
-			p.send(line);
-			await p.until((f) => f.t === "hello" && f.room.roomId === room, 40_000, n);
+			await through(p, line, room);
 		}
 		// Kalle comes by on his way from the bay to Kupferhafen (another region)
 		await eventually(async () => (await r.space("west").readAll({ type: "Character", fields: { charId: "npc-kalle", room: "klippenkopf" } })).length === 1, 120_000, "Kalle at the cliff head");

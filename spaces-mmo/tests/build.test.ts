@@ -1,4 +1,4 @@
-// Building, step 1 (docs/siedeln.md, "Wie ein Bau entsteht", engine/commands/build.ts): a site is staked out only in
+// Building, step 1 (docs/siedeln.en.md, "Wie ein Bau entsteht", engine/commands/build.ts): a site is staked out only in
 // the light and never on a way; twenty people delivering at once, up to two cells away, fill it exactly (what it does not need stays in their
 // packs); shared work finishes it exactly once; nobody walks into it; a fire's light carries only so many buildings.
 import "./test-env.ts";
@@ -61,7 +61,7 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		let staked = "";
 		for (let i = 0; i < 5 && !staked.includes("steckt"); i++) { await clear(s, foot); staked = await does(boss.p, "baue eine hütte 16 12", /steckt eine Baustelle ab|passt keine/); }
 		assert.match(staked, /Baumeisterin steckt eine Baustelle ab: Hütte\. Es fehlen 6 Treibholz, 2 Tangseil, 20 Arbeit/);
-		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).length, 4);
+		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => !String(e.fields.of).startsWith("bucht-")).length, 4);
 		assert.match(await does(boss.p, "bau hütte", "offene Baustelle"), /bau sie erst fertig/);
 		// nobody walks into it
 		assert.match(await does(boss.p, "step 0 1", "Bau"), /Dort steht ein Bau/);
@@ -134,7 +134,7 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 			await s.write({ type: "Building", fields: { buildId, plan: "huette", name: "Hütte", room: "graue-bucht", x: 16, y: 12, w: 2, h: 2, owner: boss.me, ownerName: "Siedlerin", accountId, beaconId: "feuer-bucht", points: 1, by: { Siedlerin: 28 }, untilWorldMs: now + 7 * 24 * 3600_000, builtAt: now } as never }, null, FOREVER);
 		};
 		const light = async () => Number((await s.readAll({ type: "LightUse", fields: { beaconId: "feuer-bucht" } }))[0]?.fields.used ?? 0);
-		const plots = async () => (await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).length;
+		const plots = async () => (await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => !String(e.fields.of).startsWith("bucht-")).length;
 		await hut("b1");
 		await give(s, boss.me, "muschel", 3);
 		// the chest: the owner's alone
@@ -146,7 +146,7 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		// anyone repairs, with material
 		assert.match(await does(other.p, "repariere", "brauchst du"), /brauchst du 1 Treibholz/);
 		await give(s, other.me, "treibholz", 1);
-		assert.match(await does(other.p, "repariere", "bessert"), /Nachbar bessert die Hütte von Siedlerin aus; sie hält wieder etwa 7 Tage/);
+		assert.match(await does(other.p, "repariere", "bessert"), /Nachbar bessert die Hütte von Siedlerin aus; sie hält wieder etwa 30 Tage/);
 
 		// not kept: its time runs out, it becomes a ruin; the light goes back, the chest waits as an estate
 		const b = (await s.readAll({ type: "Building" }))[0]!;
@@ -186,4 +186,15 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		assert.equal(await plots(), 0);
 		await boss.p.leave(); await other.p.leave();
 	} finally { await srv.close(); }
+});
+
+test("every plan names the admin's setting for how long it stands, and the setting's default says the same as the plan", async () => {
+	const { SETTINGS } = await import("../server/settings.ts");
+	const w = await loadWorld(), keeps = new Map(w.building!.plans.map((p) => [p.key, p.keepSetting]));
+	for (const p of w.building!.plans) {
+		const d = SETTINGS.find((x) => x.key === p.keepSetting);
+		assert.ok(d, `${p.key} has a setting`);
+		assert.equal(p.keepWorldMs, d.def * 24 * 3600_000, `${p.key}: the default says the same`);
+	}
+	assert.deepEqual([keeps.get("vogelscheuche"), keeps.get("huette"), keeps.get("lagerhaus"), keeps.get("kapelle"), keeps.get("park")], ["keep.scheuche", "keep.bau", "keep.lager", "keep.kapelle", "keep.park"]);
 });

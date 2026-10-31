@@ -1,4 +1,4 @@
-// Trade and economy (docs/phasen.md Phase 4). Every exchange moves its items in the command's transaction: a trade takes
+// Trade and economy (docs/phasen.en.md Phase 4). Every exchange moves its items in the command's transaction: a trade takes
 // both sides and writes them swapped, a purchase takes the listing, the coins and the item, a craft takes the inputs and
 // writes the output. When anything is missing the transaction aborts and nothing has moved, so an item is never doubled
 // or lost however many trades race each other.
@@ -236,7 +236,7 @@ export const craft: Command = {
 		const inv = await inventory(c);
 		const used = new Set<string>(), inputs: Inv = [], wear = new Map<string, number>();
 		const tools = r.tool ? inv.filter((i) => i.f.proto === r.tool) : [];
-		// a workshop beside one: a tool wears half as fast there (docs/siedeln.md "Epoche 2")
+		// a workshop beside one: a tool wears half as fast there (docs/siedeln.en.md "Epoche 2")
 		const near = r.tool ? (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1) : [];
 		const wearing = near.some((b) => planOf(c.world, b.plan)?.sparesTools) ? 0.5 : 1;
 		let made = 0, lack = "";

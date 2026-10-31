@@ -1,4 +1,4 @@
-// The world clock (docs/weltzeit.md): the calculation, the calendar, the plans in world hours, and the clock in the game
+// The world clock (docs/weltzeit.en.md): the calculation, the calendar, the plans in world hours, and the clock in the game
 // (created with the world, shown to the browser, changed by the operator without a jump).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -193,7 +193,9 @@ test("with two world workers the evening is made once; Ines goes home at 22:00 a
 		await eventually(async () => !(await here()), 20_000, "Ines goes home at 22:00");
 		await eventually(here, 30_000, "Ines is back at 06:00");
 		const ids = (await s.readAll({ type: "WorldEvent" })).map((e) => String(e.fields.eventId));
-		assert.deepEqual(ids, ["evening:e1:d0"], "one event for the day, two workers");
+		// a slow machine may reach the next evening as well (24 s on): each day has its one event
+		assert.deepEqual(ids.filter((id) => id === "evening:e1:d0"), ["evening:e1:d0"], "one event for the day, two workers");
+		assert.equal(new Set(ids).size, ids.length, ids.join());
 		// a date is taken and written back many times a second: one read may catch one of them twice or not at all (the read
 		// is not one snapshot), a duplicate that is real shows in every read
 		const reads: string[][] = [];
@@ -250,13 +252,15 @@ test("a paused world keeps its fire, takes no fog step and brings no tide; resum
 	const stack = await startStack({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.005" } });
 	try {
 		const s = stack.space;
-		await lightFire(s, 4_000); // burns for four real seconds
-		await eventually(async () => (await s.count({ type: "Item", fields: { flotsam: true } })) >= 1, 10_000, "the tide has brought something");
+		await eventually(async () => (await s.count({ type: "Item", fields: { flotsam: true } })) >= 1, 30_000, "the tide has brought something");
+		await lightFire(s, 10_000); // only now: waiting for the tide can take longer under load, and the fire would be out
+		await eventually(async () => (await s.readIfExists({ type: "Beacon", fields: { beaconId: "feuer-bucht" } }, 1_000))?.fields.lit, 8_000, "the beacon knows"); // a tick says so
 		await rewriteClock(s, (c, realNow) => paused(c, realNow));
-		await new Promise((r) => setTimeout(r, 1_000)); // a tick that was already running ends
 		const flotsam = () => s.count({ type: "Item", fields: { flotsam: true } });
 		const fog = async () => Number((await s.readIfExists({ type: "Fog", fields: { room: "graue-bucht" } }, 1_000))?.fields.level);
-		const before = { flotsam: await flotsam(), fog: await fog() };
+		// a pass over the dates that was already running ends with the clock it read: under load that takes a while
+		let before = { flotsam: await flotsam(), fog: await fog() };
+		await eventually(async () => { await new Promise((r) => setTimeout(r, 1_500)); const was = before; before = { flotsam: await flotsam(), fog: await fog() }; return was.flotsam === before.flotsam && was.fog === before.fog; }, 60_000, "the pass that ran has ended");
 		await new Promise((r) => setTimeout(r, 6_000)); // longer than the fire would burn, many fog steps, many tides
 		const clock = await readClock(s);
 		assert.equal(clock.paused, true);

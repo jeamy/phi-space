@@ -1,4 +1,4 @@
-// Orders of a site, step 5 part 3 (docs/siedeln.md "Wenige Spieler: die Welt packt mit an"): the owner of a site hangs out
+// Orders of a site, step 5 part 3 (docs/siedeln.en.md "Wenige Spieler: die Welt packt mit an"): the owner of a site hangs out
 // what it lacks with a wage per piece or per work point, and whoever delivers or works there is paid, people and NPCs
 // alike, through `liefere` and `arbeite`; nothing is reserved, the first to come earns.
 //

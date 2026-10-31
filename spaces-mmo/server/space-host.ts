@@ -10,7 +10,7 @@
 //                                                                 (expired claims, removed entries; 0: never; also once
 //                                                                 at the start, before serving)
 //   SPACES_MMO_SPACES=world,accounts                              which of the two this process serves (default both):
-//                                                                 on two hosts, one each (docs/betrieb.md)
+//                                                                 on two hosts, one each (docs/betrieb.en.md)
 //   SPACES_MMO_REGION=west                                        the world space is this region's (world-west.sqlite):
 //                                                                 one space process per region, each on a core of its own
 import { ROOT } from "./env.ts";
@@ -45,7 +45,7 @@ async function serveStore(listen: string, dbPath: string | null, peer: string) {
 	// every process of the game is this one peer: the service's limits per peer (calls per second, blocking calls at once)
 	// cover all of them together, so they are sized for the whole game, not for one client
 	// waiting calls end at the commit that serves them, and a commit that appends to the change history does not walk it:
-	// both off in phi-spaces by default, tested here (docs/betrieb.md, "Last und Latenz")
+	// both off in phi-spaces by default, tested here (docs/betrieb.en.md, "Last und Latenz")
 	harness.skipUnchangedRecords = true;
 	const server = await serveSpace(new SpaceService({ host: harness, ctx, identity, maxCallsPerWindow: 50_000, maxPendingPerPrincipal: 4096, maxPendingPerPeer: 4096, wakeOnCommit: true }), { listen: parseTarget(listen), connection: () => ({ peerId: peer }), maxInflightPerConnection: 1024 });
 	const local = new PhiSpaces(harness, ctx);

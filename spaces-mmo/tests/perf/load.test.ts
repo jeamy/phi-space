@@ -1,4 +1,4 @@
-// Load as on big and nano (docs/betrieb.md, "Last und Latenz"): the space on SQLite, every NPC role, several players
+// Load as on big and nano (docs/betrieb.en.md, "Last und Latenz"): the space on SQLite, every NPC role, several players
 // walking at the page's own pace (one step per WALK_MS, at most eight ahead of the answers, client/walk.ts), and the
 // processes of big reaching the space of nano through a proxy that delays every chunk (the network between the hosts).
 // It measures what a player feels: the time from a step to its answer (the `ack` on the own character).

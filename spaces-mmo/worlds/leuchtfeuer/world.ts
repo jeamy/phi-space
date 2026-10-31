@@ -1,4 +1,4 @@
-// Leuchtfeuer, the first world on spaces-mmo (docs/spielidee.md): an archipelago in the fog. Eight islands of 37 rooms:
+// Leuchtfeuer, the first world on spaces-mmo (docs/spielidee.en.md): an archipelago in the fog. Eight islands of 37 rooms:
 // the Graue Insel where every character starts (the grey bay and the cliff path are drawn by hand, the other rooms by
 // the seeded generator in islands.ts), Möwenfels in the north, the trading town Kupferhafen in the east, Tangriff with
 // its wrecks and pearls in the south, and Nebelholm in the west, where nobody keeps the fire; beyond them the Schären,
@@ -7,6 +7,7 @@
 // trade (server/npc/economy.ts). Graphics: assets/CREDITS.md; items are drawn as glyphs until licensed item graphics
 // exist.
 import type { ExitDef, NpcDef, RoomDef, WorldDef } from "../../server/engine/world.ts";
+import { SCENERY } from "./scenery.ts";
 import { ARRIVE, DOOR, land, OPPOSITE, plants, scatter, spot, type Cell, type Flora, type LandSpec, type Side } from "./islands.ts";
 
 const ITEM_LOCKS = "get:all();drop:all();give:not guest()";
@@ -30,7 +31,7 @@ const PLACES: Place[] = [
 	// Graue Insel
 	{
 		roomId: "graue-bucht", name: "Graue Bucht", island: "grau", at: [1, 1],
-		desc: "Ein flacher Strand unter tiefem Nebel. Die Flut leckt am Sand, und auf dem Kopfsteinplatz in der Mitte ist noch kein Feuer entzündet.",
+		desc: "Ein flacher Strand aus hellem Sand, dahinter grüne Wiesen. Auf dem Kopfsteinplatz in der Mitte steht das Leuchtfeuer.",
 		spawn: { x: 10, y: 8 },
 		ground: [
 			"~~~~~~~~~~~~~~~~~~~~~~~~",
@@ -74,16 +75,16 @@ const PLACES: Place[] = [
 			",,,,,,,,,,,,,,,,,,,,,,,,",
 		],
 	},
-	{ roomId: "fischerdorf", name: "Fischerdorf", island: "grau", at: [0, 1], sea: ["n", "w"], plaza: { x: 15, y: 11, r: 2 }, desc: "Ein paar schiefe Hütten, Netze auf Gestellen, der Geruch von Teer und Salz. Ein Steg führt nach Westen in den Nebel, wo Nebelholm liegen soll." },
+	{ roomId: "fischerdorf", name: "Fischerdorf", island: "grau", at: [0, 1], sea: ["n", "w"], plaza: { x: 15, y: 11, r: 2 }, desc: "Ein paar schiefe Hütten, Netze auf Gestellen, der Geruch von Teer und Salz. Ein Steg führt nach Westen hinüber nach Nebelholm." },
 	{ roomId: "torfmoor", name: "Torfmoor", island: "grau", at: [0, 2], sea: ["w", "s"], beach: 1, flora: { flowers: 0.4, bushes: 0.6, trees: 0.3 }, desc: "Weicher, federnder Boden, braune Tümpel, Wollgras. Am Ufer liegt Tang in dicken Wülsten." },
 	{ roomId: "duenen", name: "Dünen", island: "grau", at: [1, 2], soil: ".", flora: { flowers: 0.3, bushes: 0.3, trees: 0 }, desc: "Sandhügel mit Strandhafer, der im Wind flüstert. Von hier sieht man bei klarem Wetter alle Wege der Insel." },
 	{ roomId: "salzwiesen", name: "Salzwiesen", island: "grau", at: [2, 2], sea: ["e", "s"], flora: { flowers: 1.3, bushes: 0.4, trees: 0 }, desc: "Flache Wiesen, die die Springflut überschwemmt. Zwischen den Prielen bleibt allerlei hängen." },
 	{ roomId: "klippenkopf", name: "Klippenkopf", island: "grau", at: [3, 1], sea: ["n", "e", "s"], desc: "Das Ende der Klippen. Zwei Stege hängen über der Brandung: nach Norden zum Möwenfels, nach Osten nach Kupferhafen." },
 	{ roomId: "anleger", name: "Anleger", island: "grau", at: [1, 3], sea: ["w", "e", "s"], plaza: { x: 7, y: 5, r: 2 }, desc: "Der alte Anleger der Insel, Pfähle voller Muscheln. Von hier setzt der Kahn nach Süden zum Tangriff über; ein Feuerkorb soll den Booten leuchten." },
 	// Möwenfels
-	{ roomId: "moewenfels-strand", name: "Möwenstrand", island: "moewe", at: [3, -1], sea: ["w", "s"], desc: "Ein Kiesstrand unter einem Felsen voller Möwen. Ihr Geschrei übertönt fast die Brandung." },
-	{ roomId: "vogelklippen", name: "Vogelklippen", island: "moewe", at: [4, -1], sea: ["e", "s"], desc: "Steile Klippen, weiß von Vogelmist. In den Spalten liegen Muscheln, die die Möwen fallen ließen." },
-	{ roomId: "moewennest", name: "Möwennest", island: "moewe", at: [3, -2], sea: ["n", "w"], desc: "Eine windige Hochfläche mit niedrigen Steinmauern. Eier, Federn, und ein Blick über das ganze Nebelmeer." },
+	{ roomId: "moewenfels-strand", name: "Möwenstrand", island: "moewe", at: [3, -1], sea: ["w", "s"], desc: "Ein Strand unter Felsen voller Möwen. Ihr Geschrei übertönt fast die Brandung." },
+	{ roomId: "vogelklippen", name: "Vogelklippen", island: "moewe", at: [4, -1], sea: ["e", "s"], desc: "Steile Klippen über der Brandung. In den Spalten liegen Muscheln, die die Möwen fallen ließen." },
+	{ roomId: "moewennest", name: "Möwennest", island: "moewe", at: [3, -2], sea: ["n", "w"], desc: "Eine windige Hochfläche mit niedrigen Steinmauern. Eier, Federn, und ein Blick über das ganze Meer." },
 	{ roomId: "alte-warte", name: "Alte Warte", island: "moewe", at: [4, -2], sea: ["n", "e"], plaza: { x: 7, y: 10, r: 2 }, desc: "Der Stumpf eines alten Leuchtturms. Sein Feuer ist das nördlichste des Archipels; brennt es, sehen es die Schiffe von weit her." },
 	// Kupferhafen
 	{ roomId: "kupferhafen-kai", name: "Kai von Kupferhafen", island: "kupfer", at: [5, 1], sea: ["w", "n", "s"], beach: 1, desc: "Ein gemauerter Kai mit Pollern und Kränen. Fässer, Kisten, Rufe. Ein Steg führt nach Westen zum Klippenkopf." },
@@ -97,7 +98,7 @@ const PLACES: Place[] = [
 	{ roomId: "wrackbucht", name: "Wrackbucht", island: "tang", at: [1, 6], sea: ["w", "s"], beach: 3, desc: "Das Gerippe eines Schiffs ragt aus dem Sand. Nach jedem Sturm liegt neues Strandgut zwischen den Spanten, manchmal Bernstein." },
 	{ roomId: "perlengrund", name: "Perlengrund", island: "tang", at: [2, 6], sea: ["e", "s"], beach: 3, desc: "Flaches, klares Wasser über weißem Sand. Wer Glück hat, findet hier eine Perle in einer Muschel." },
 	// Nebelholm
-	{ roomId: "nebelholm-ufer", name: "Ufer von Nebelholm", island: "nebel", at: [-2, 1], sea: ["n", "e"], desc: "Grauer Sand, grauer Himmel, graues Wasser. Ein morscher Steg im Osten führt zurück zum Fischerdorf." },
+	{ roomId: "nebelholm-ufer", name: "Ufer von Nebelholm", island: "nebel", at: [-2, 1], sea: ["n", "e"], desc: "Ein stiller Strand am flachen Wasser. Ein morscher Steg im Osten führt zurück zum Fischerdorf." },
 	{ roomId: "moorwald", name: "Moorwald", island: "nebel", at: [-3, 1], sea: ["n", "w"], flora: { flowers: 0.2, bushes: 1, trees: 3 }, desc: "Krumme Birken im Moor, Flechten wie Bärte. Man hört Schritte, wo keine sind." },
 	{ roomId: "steinkreis", name: "Steinkreis", island: "nebel", at: [-2, 2], sea: ["e", "s"], plaza: { x: 8, y: 5, r: 2 }, desc: "Ein Kreis aus hohen Steinen um eine alte Feuerstelle. Niemand hütet sie; wer sie entzündet, vertreibt den Nebel von ganz Nebelholm." },
 	{ roomId: "verlorener-hain", name: "Verlorener Hain", island: "nebel", at: [-3, 2], sea: ["w", "s"], flora: { flowers: 0.6, bushes: 1, trees: 3 }, desc: "Ein Hain, der auf keiner Karte steht. Zwischen den Wurzeln liegt, was andere verloren haben." },
@@ -105,12 +106,12 @@ const PLACES: Place[] = [
 	// own fire, keeper, market and board
 	{ roomId: "schaerenhafen", name: "Schärenhafen", island: "schaer", at: [6, -2], sea: ["w", "s"], plaza: { x: 9, y: 9, r: 2 }, desc: "Ein kleiner Hafen zwischen glatt geschliffenen Felsen. Ein Feuerring auf dem Platz, ein Marktbrett, und im Westen ein Steg zur Alten Warte." },
 	{ roomId: "robbenbank", name: "Robbenbank", island: "schaer", at: [7, -2], sea: ["e", "s"], beach: 3, desc: "Eine flache Sandbank, auf der Robben dösen. Sie schauen jedem nach, der vorbeigeht." },
-	{ roomId: "leuchtklippe", name: "Leuchtklippe", island: "schaer", at: [6, -3], sea: ["n", "w"], desc: "Ein kahler Fels hoch über dem Wasser. Von hier sieht man die Feuer von Möwenfels." },
-	{ roomId: "seehundstrand", name: "Seehundstrand", island: "schaer", at: [7, -3], sea: ["n", "e"], beach: 3, desc: "Ein Kiesstrand voller Muscheln. Was die Robben übrig lassen, holt die Flut." },
+	{ roomId: "leuchtklippe", name: "Leuchtklippe", island: "schaer", at: [6, -3], sea: ["n", "w"], desc: "Ein kahler Fels hoch über dem Wasser. Von hier blickt man hinüber nach Möwenfels." },
+	{ roomId: "seehundstrand", name: "Seehundstrand", island: "schaer", at: [7, -3], sea: ["n", "e"], beach: 3, desc: "Ein Strand voller Muscheln. Was die Robben übrig lassen, holt die Flut." },
 	// Rauchholm (east, beyond the Speicher of Kupferhafen)
-	{ roomId: "rauchhafen", name: "Rauchhafen", island: "rauch", at: [9, 1], sea: ["n", "w"], plaza: { x: 9, y: 9, r: 2 }, desc: "Ein rußiger Hafen, über dem immer eine Rauchfahne steht. Köhler bringen hier ihr Holz zum Markt; ein Steg im Westen führt nach Kupferhafen." },
+	{ roomId: "rauchhafen", name: "Rauchhafen", island: "rauch", at: [9, 1], sea: ["n", "w"], plaza: { x: 9, y: 9, r: 2 }, desc: "Ein rußiger Hafen. Köhler bringen hier ihr Holz zum Markt; ein Steg im Westen führt nach Kupferhafen." },
 	{ roomId: "koehlerwald", name: "Köhlerwald", island: "rauch", at: [10, 1], sea: ["n", "e"], flora: { flowers: 0.2, bushes: 1, trees: 3 }, desc: "Dichter Wald mit Meilern, die schwelen. Hier ist Holz nicht knapp." },
-	{ roomId: "schwarzer-strand", name: "Schwarzer Strand", island: "rauch", at: [9, 2], sea: ["w", "s"], beach: 3, desc: "Schwarzer Sand, warm unter den Füßen. Zwischen den Steinen glänzt manchmal Bernstein." },
+	{ roomId: "schwarzer-strand", name: "Schwarzer Strand", island: "rauch", at: [9, 2], sea: ["w", "s"], beach: 3, desc: "Warmer Sand unter den Füßen. Zwischen den Steinen glänzt manchmal Bernstein." },
 	{ roomId: "kraterhang", name: "Kraterhang", island: "rauch", at: [10, 2], sea: ["e", "s"], desc: "Ein alter Krater, mit Heidekraut bewachsen. Aus Spalten steigt warme Luft." },
 	// Krabbensand (south, beyond the Perlengrund of Tangriff)
 	{ roomId: "krabbenbucht", name: "Krabbenbucht", island: "krabbe", at: [2, 8], sea: ["n", "e"], plaza: { x: 9, y: 9, r: 2 }, desc: "Eine Bucht mit Pfahlhütten und Krabbenkörben. Auf dem Platz ein Feuerring und ein Marktbrett; im Norden der Kahn zum Perlengrund." },
@@ -176,7 +177,7 @@ const plazaOf = (roomId: string) => byId.get(roomId)!.plaza!;
 const NPCS: NpcDef[] = [
 	{
 		npcId: "ines", name: "Ines", skin: 4, room: "graue-bucht", x: 10, y: 9, script: "waerter", beacon: "feuer-bucht",
-		plan: { presentFromHour: 6, presentUntilHour: 22 }, // she goes home for the night (docs/weltzeit.md)
+		plan: { presentFromHour: 6, presentUntilHour: 22 }, // she goes home for the night (docs/weltzeit.en.md)
 		model: {
 			persona: "Ines hütet seit Jahren das Leuchtfeuer der Grauen Bucht. Sie ist ruhig, praktisch und ein wenig spöttisch, kennt jede Boje und jeden Stammgast und sorgt sich um das Licht. Sie bittet um Treibholz, wenn das Feuer schwach wird, und erklärt Neuen kurz, wie man es nährt. Sie weiß, dass man in Kupferhafen am besten handelt und dass auf Nebelholm niemand das Feuer hütet. Das Feuer brennt mit Treibholz (zehn Minuten je Stück), Holzbündeln (vierzig Minuten; Jorin im Fischerdorf macht sie aus drei Treibholz) oder Tran (eine Stunde; Marta verkauft ihn auf dem Markt von Kupferhafen, und manchmal spült ein Sturm ein Fass an). Kohle oder Torf gibt es im Archipel nicht, und das sagt sie auch so, statt etwas zu erfinden.",
 			wake: ["fire.low", "fire.out", "spoken", "person.enters", "offer"], budgetDay: 40,
@@ -185,7 +186,7 @@ const NPCS: NpcDef[] = [
 	},
 	{ npcId: "bo", name: "Bo", skin: 0, room: "graue-bucht", x: 20, y: 8, script: "faehrmann", route: ["graue-bucht", "klippenpfad"] },
 	// Ines is a model role (she feeds nothing without the model, and goes home at night): Hinnerk keeps the bay's fire,
-	// so the bay where people start does not lie in the fog when nobody plays (docs/lasttest-2026-10-28.md)
+	// so the bay where people start does not lie in the fog when nobody plays (docs/lasttest-2026-10-28.en.md)
 	{ npcId: "hinnerk", name: "Hinnerk", skin: 2, room: "graue-bucht", x: 7, y: 12, script: "huter", beacon: "feuer-bucht", home: ["graue-bucht", "klippenpfad"],
 		prices: { treibholz: [2, 0], holzbuendel: [5, 0], tran: [6, 0] }, carry: [{ proto: "treibholz", count: 2 }, { proto: "muenze", count: 4 }],
 		lines: ["Hier fangen alle an. Also muss hier Licht sein.", "Ein Scheit für das Feuer, eine Münze für dich."] },
@@ -229,7 +230,7 @@ const NPCS: NpcDef[] = [
 	{ npcId: "ruben", name: "Ruben", skin: 3, room: "hafenviertel", ...near("hafenviertel", 8, 6), script: "haendler", route: ["kupferhafen-markt", "riffdorf"],
 		prices: { perle: [4, 7], bernstein: [3, 6], tang: [1, 2], netz: [8, 11], treibholz: [1, 3], muschel: [1, 2] }, carry: [{ proto: "muenze", count: 12 }],
 		lines: ["Zwischen Riff und Hafen bin ich zu Hause.", "Im Riffdorf ist Holz knapp, in Kupferhafen Perlen."] },
-	// the gardener (docs/siedeln.md "Gärten"): seeds from the flora of Kupferhafen, flowers and vegetables bought and sold
+	// the gardener (docs/siedeln.en.md "Gärten"): seeds from the flora of Kupferhafen, flowers and vegetables bought and sold
 	{ npcId: "gesa", name: "Gesa", skin: 1, room: "hafenviertel", ...near("hafenviertel", 4, 10), script: "gaertnerin", home: ["kupferhafen-markt", "hafenviertel", "kupferhafen-kai"], market: "kupferhafen-markt",
 		prices: { "samen-strandnelke": [1, 3], "samen-strandkohl": [1, 2], "samen-moehre": [1, 2], "samen-duenenrose": [2, 4], "samen-nebelblume": [4, 8], strandnelke: [2, 4], duenenrose: [3, 5], nebelblume: [6, 10], kohl: [1, 2], moehre: [1, 2],
 			weizen: [1, 2], gerste: [1, 2], hafer: [1, 2], kartoffel: [1, 2], ruebe: [1, 2], "samen-ruebe": [1, 2], leinsamen: [1, 2], flachs: [1, 3],
@@ -311,8 +312,8 @@ const NPCS: NpcDef[] = [
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 35,
-	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.md)
+	version: 39,
+	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.en.md)
 	evening: { hour: 20 }, // a daily evening event
 	tileSize: 32,
 	tiles: {
@@ -324,13 +325,13 @@ export const world: WorldDef = {
 	},
 	// plants over the grass (islands.ts `plants`): white flowers, three of them tinted, herbs, two bushes, two small trees
 	decor: {
-		"*": { sheet: "tilesets/Plants.png", x: 0, y: 0, w: 32, h: 32 },
-		"+": { sheet: "tilesets/Plants.png", x: 32, y: 0, w: 32, h: 32, tint: 0xffd54a },
-		"o": { sheet: "tilesets/Plants.png", x: 64, y: 0, w: 32, h: 32, tint: 0xff9ec4 },
-		"x": { sheet: "tilesets/Plants.png", x: 0, y: 0, w: 32, h: 32, tint: 0xc7a6ff },
-		"i": { sheet: "tilesets/Plants.png", x: 96, y: 0, w: 32, h: 32 },
-		"w": { sheet: "tilesets/Plants.png", x: 128, y: 0, w: 32, h: 32 },
-		"v": { sheet: "tilesets/Plants.png", x: 160, y: 0, w: 32, h: 32 },
+		"*": { model: "flower", sheet: "tilesets/Plants.png", x: 0, y: 0, w: 32, h: 32 },
+		"+": { model: "flower", sheet: "tilesets/Plants.png", x: 32, y: 0, w: 32, h: 32, tint: 0xffd54a },
+		"o": { model: "flower", sheet: "tilesets/Plants.png", x: 64, y: 0, w: 32, h: 32, tint: 0xff9ec4 },
+		"x": { model: "flower", sheet: "tilesets/Plants.png", x: 0, y: 0, w: 32, h: 32, tint: 0xc7a6ff },
+		"i": { model: "grass", sheet: "tilesets/Plants.png", x: 96, y: 0, w: 32, h: 32 },
+		"w": { model: "herb", sheet: "tilesets/Plants.png", x: 128, y: 0, w: 32, h: 32 },
+		"v": { model: "fern", sheet: "tilesets/Plants.png", x: 160, y: 0, w: 32, h: 32 },
 		"r": { sheet: "tilesets/Plants.png", x: 192, y: 0, w: 32, h: 32, upright: true, model: "berrybush" },
 		"b": { sheet: "tilesets/Plants.png", x: 224, y: 0, w: 32, h: 32, upright: true, model: "bush" },
 		"T": { sheet: "tilesets/Plants.png", x: 0, y: 32, w: 32, h: 64, upright: true, model: "tree" },
@@ -338,6 +339,7 @@ export const world: WorldDef = {
 	},
 	skins: ["Misc_George", "Misc_PixelFox", "Misc_Zetasis", "Misc_jcsnider", "Misc_Kibbelz"].map((n) => ({ sheet: `entities/${n}.png`, frameW: 32, frameH: 48 })),
 	rooms: ROOMS,
+	scenery: SCENERY,
 	start: "graue-bucht",
 	// with SPACES_MMO_REGIONS each region is a space of its own (server/engine/regions.ts): only ferries cross between
 	// them, and each has a bay where newcomers start
@@ -362,7 +364,7 @@ export const world: WorldDef = {
 		{ key: "perle", parent: "ding", typeclass: "Gem", name: "Perle", desc: "Eine milchweiße Perle, kaum größer als eine Erbse.", aliases: ["pearl"], glyph: { shape: "circle", color: "#f4f1e8" }, icon: "items/perle.png", locks: ITEM_LOCKS },
 		{ key: "bernstein", parent: "ding", typeclass: "Gem", name: "Bernstein", desc: "Ein honigfarbener Stein, warm in der Hand. In ihm schläft ein Insekt.", aliases: ["amber"], glyph: { shape: "diamond", color: "#e89a2c" }, icon: "items/bernstein.png", locks: ITEM_LOCKS },
 		{ key: "tran", parent: "ding", typeclass: "Fuel", name: "Tran", desc: "Ein kleines Fass Tran aus den Speichern von Kupferhafen. Er brennt lange und hell, riecht aber nach Fisch.", aliases: ["tranfass", "fass", "oel", "öl", "oil"], glyph: { shape: "circle", color: "#b8862b" }, icon: "items/tran.png", locks: ITEM_LOCKS },
-		// gardens (docs/siedeln.md "Gärten"): the spade, a can of water, seeds from the wild flora and what grows from them
+		// gardens (docs/siedeln.en.md "Gärten"): the spade, a can of water, seeds from the wild flora and what grows from them
 		{ key: "spaten", parent: "ding", typeclass: "Tool", name: "Spaten", desc: "Ein Spaten aus Treibholz, das Blatt mit Tangseil festgezurrt. Damit gräbt man ein Beet um.", aliases: ["schaufel", "spade"], glyph: { shape: "diamond", color: "#a07850" }, icon: "items/spaten.png", locks: ITEM_LOCKS },
 		{ key: "wasserkanne", parent: "ding", typeclass: "Water", name: "Kanne Wasser", desc: "Regenwasser aus der Tonne, genug für ein Beet.", aliases: ["kanne", "wasser", "water", "can"], glyph: { shape: "circle", color: "#5aa0d8" }, icon: "items/wasserkanne.png", locks: ITEM_LOCKS },
 		{ key: "samen-strandnelke", parent: "ding", typeclass: "Seed", name: "Strandnelkensamen", desc: "Winzige Samen einer Strandnelke, in ein Blatt gewickelt.", aliases: ["nelkensamen", "strandnelke", "nelke"], glyph: { shape: "circle", color: "#c98aa0" }, icon: "items/samen-strandnelke.png", locks: ITEM_LOCKS },
@@ -375,7 +377,7 @@ export const world: WorldDef = {
 		{ key: "nebelblume", parent: "ding", typeclass: "Flower", name: "Nebelblume", desc: "Eine blasse blaue Blüte, die im Halbdunkel leuchtet. Selten.", aliases: ["nebelblüte"], glyph: { shape: "diamond", color: "#9fb6e8" }, icon: "items/nebelblume.png", locks: ITEM_LOCKS },
 		{ key: "kohl", parent: "ding", typeclass: "Produce", name: "Kohl", desc: "Ein fester Kopf Strandkohl, salzig und gut.", aliases: ["kohlkopf", "cabbage"], glyph: { shape: "circle", color: "#7fae6a" }, icon: "items/kohl.png", locks: ITEM_LOCKS },
 		{ key: "moehre", parent: "ding", typeclass: "Produce", name: "Möhre", desc: "Eine krumme, süße Möhre mit Erde dran.", aliases: ["möhren", "moehren", "karotte", "carrot"], glyph: { shape: "circle", color: "#e8902c" }, icon: "items/moehre.png", locks: ITEM_LOCKS },
-		// field crops (docs/siedeln.md "Äcker und Getreide"): grain is its own seed
+		// field crops (docs/siedeln.en.md "Äcker und Getreide"): grain is its own seed
 		{ key: "weizen", parent: "ding", typeclass: "Produce", name: "Weizen", desc: "Eine Handvoll goldener Weizenkörner. Mehl daraus, oder Saatgut für die nächste Flur.", aliases: ["weizenkorn", "korn", "wheat"], glyph: { shape: "circle", color: "#d9b44a" }, icon: "items/weizen.png", locks: ITEM_LOCKS },
 		{ key: "gerste", parent: "ding", typeclass: "Produce", name: "Gerste", desc: "Gerstenkörner mit langen Grannen. Wächst auch wild an den Rändern der Dünen.", aliases: ["gerstenkorn", "barley"], glyph: { shape: "circle", color: "#c8b06a" }, icon: "items/gerste.png", locks: ITEM_LOCKS },
 		{ key: "hafer", parent: "ding", typeclass: "Produce", name: "Hafer", desc: "Lockere Haferrispen. Genügsam, er wächst auch im Nebel.", aliases: ["haferkorn", "oats"], glyph: { shape: "circle", color: "#cdbf8a" }, icon: "items/hafer.png", locks: ITEM_LOCKS },
@@ -384,12 +386,12 @@ export const world: WorldDef = {
 		{ key: "samen-ruebe", parent: "ding", typeclass: "Seed", name: "Rübensamen", desc: "Knubbelige Samenknäuel der wilden Strandrübe.", aliases: ["ruebensamen", "strandrübe", "strandruebe"], glyph: { shape: "circle", color: "#8a5a4a" }, icon: "items/samen-ruebe.png", locks: ITEM_LOCKS },
 		{ key: "flachs", parent: "ding", typeclass: "Produce", name: "Flachs", desc: "Ein Bündel Flachsstängel. Daraus wird Leinen, für Segel und Netze.", aliases: ["lein", "flax"], glyph: { shape: "diamond", color: "#c9b88a" }, icon: "items/flachs.png", locks: ITEM_LOCKS },
 		{ key: "leinsamen", parent: "ding", typeclass: "Seed", name: "Leinsamen", desc: "Glatte braune Samen des Flachses, der blau blüht.", aliases: ["flachssamen", "linseed"], glyph: { shape: "circle", color: "#8a6a3a" }, icon: "items/leinsamen.png", locks: ITEM_LOCKS },
-		// what the mill, the bakery and the spindle make of them (docs/siedeln.md "Warenketten")
+		// what the mill, the bakery and the spindle make of them (docs/siedeln.en.md "Warenketten")
 		{ key: "mehl", parent: "ding", typeclass: "Produce", name: "Mehl", desc: "Ein kleiner Sack Mehl aus der Windmühle. Im Backhaus wird Brot daraus.", aliases: ["flour", "mehlsack"], glyph: { shape: "square", color: "#e8e0cc" }, icon: "items/mehl.png", locks: ITEM_LOCKS },
 		{ key: "brot", parent: "ding", typeclass: "Produce", name: "Brot", desc: "Ein runder Laib, die Kruste noch warm. Die Schenken und die Fischer zahlen gut dafür.", aliases: ["brote", "laib", "bread"], glyph: { shape: "circle", color: "#c88a3a" }, icon: "items/brot.png", locks: ITEM_LOCKS },
 		{ key: "spindel", parent: "ding", typeclass: "Tool", name: "Spindel", desc: "Ein Holzstab mit einer Muschel als Wirtel. Damit spinnt man Flachs zu Garn.", aliases: ["handspindel", "spindle"], glyph: { shape: "diamond", color: "#b5674f" }, icon: "items/spindel.png", locks: ITEM_LOCKS, wear: 5 },
 		{ key: "leinen", parent: "ding", typeclass: "Gear", name: "Leinen", desc: "Ein Ballen Leinen aus gesponnenem Flachs. Segel für Mühle und Werft werden daraus.", aliases: ["leinenballen", "tuch", "linen"], glyph: { shape: "square", color: "#e8e0cc" }, icon: "items/leinen.png", locks: ITEM_LOCKS },
-		// animals on the farm (docs/siedeln.md "Tiere auf dem Hof"): carried as things, kept in a coop or pen, and what they give
+		// animals on the farm (docs/siedeln.en.md "Tiere auf dem Hof"): carried as things, kept in a coop or pen, and what they give
 		{ key: "huhn", parent: "ding", typeclass: "Livestock", name: "Huhn", desc: "Ein braunes Huhn, das empört gluckst, wenn man es trägt. Im Hühnerstall legt es jeden Tag ein Ei.", aliases: ["henne", "hühner", "huehner", "hen", "chicken"], glyph: { shape: "circle", color: "#b0703a" }, icon: "items/huhn.png", locks: ITEM_LOCKS },
 		{ key: "schaf", parent: "ding", typeclass: "Livestock", name: "Schaf", desc: "Ein Inselschaf mit dichter Wolle. Es frisst sogar Tang vom Strand.", aliases: ["schafe", "sheep"], glyph: { shape: "circle", color: "#e8e4d8" }, icon: "items/schaf.png", locks: ITEM_LOCKS },
 		{ key: "ziege", parent: "ding", typeclass: "Livestock", name: "Ziege", desc: "Eine neugierige Ziege mit Bart. Sie gibt jeden Tag Milch und frisst fast alles.", aliases: ["ziegen", "geiß", "geiss", "goat"], glyph: { shape: "circle", color: "#a89a80" }, icon: "items/ziege.png", locks: ITEM_LOCKS },
@@ -441,6 +443,7 @@ export const world: WorldDef = {
 		{ key: "lagerhaus", category: "Allgemein", text: "Ein Lagerhaus ist das gemeinsame Lager eines Dorfs, „bau lagerhaus“ steckt eines ab (ab Epoche Dorf). Neben ihm zeigt „lager“, was darin liegt, „verstaue 3 treibholz“ legt ein, „entnimm 3 treibholz“ nimmt heraus, „lager log“ zeigt, wer zuletzt etwas bewegt hat. Ohne Siedlung darf nur der Besitzer heran. In einer Siedlung dürfen alle, je Welttag aber nur begrenzt nehmen: Fremde 2 Dinge, Helfer 5, Siedler 20. In einer geschlossenen Siedlung dürfen Fremde gar nicht heran. Solange etwas darin liegt, lässt es sich in einer Siedlung nicht abreißen." },
 		{ key: "stein", category: "Allgemein", text: "Stein liegt als Geröll an den Stränden, aber nur wenig. In Menge kommt er aus einem Steinbruch (ab Epoche Dorf): Mit einer Spitzhacke („craft spitzhacke“) bricht „breche“ daneben 3 Stein, danach ruhst du eine Weile. Jeder darf an jedem Steinbruch brechen, in einer geschlossenen Siedlung nur Helfer und Siedler. Aus Stein baut man die Werkstatt. Neben ihr gibt es Bohle, Tauwerk und Gehäuse, und Werkzeug nutzt sich dort nur halb so schnell ab." },
 		{ key: "kapelle", category: "Allgemein", text: "Eine Kapelle (ab Epoche Dorf) braucht Stein, Ziegel und Bohlen. Daneben gibt „opfere <ding>“ eine Perle, einen Bernstein, ein Brot oder eine Blume hin; dafür ruhst du einen Tag lang nach der Arbeit nur halb so lange. Niemand muss das tun." },
+		{ key: "rathaus", category: "Allgemein", text: "Ein Rathaus (ab Epoche Stadt) braucht Ziegel, Stein und Bohlen. Steht es in einer Siedlung, entscheiden die Siedler gemeinsam: „antrag zu“, „antrag offen“ oder „antrag <text>“ stellt daneben einen Antrag, „antrag grünzone“, „antrag wegerecht“ oder „antrag zone frei“ überall im Ort einen für die Fläche um dich: In einer Grünzone gehen nur Beete und Parks, auf einem Wegerecht gar nichts. „antrag steuer <n>“ setzt, wie viele Münzen je Stück eine Entnahme aus dem Lagerhaus kostet; sie bleiben im Lager. „stimme ja“ oder „stimme nein“ gilt einen Tag lang. Mehr Ja als Nein trägt ihn. „siedlung zu“ allein geht dann nicht mehr." },
 		{ key: "lehm", category: "Allgemein", text: "Lehm kommt aus einer Lehmgrube (ab Epoche Dorf): Mit einem Spaten sticht „steche“ daneben 3 Lehm, danach ruhst du eine Weile. Neben einer Ziegelei brennt „craft ziegel“ aus 3 Lehm und 1 Treibholz 3 Ziegel." },
 		{ key: "siedlungen", category: "Allgemein", text: "Eine Siedlung ist eine Gemeinschaft an einem Ort, mit Namen und eigenen Regeln. Nachbarn gründen sie, wenn dort genug Hütten stehen. Stehen in einem Raum drei Hütten von mindestens zwei Besitzern, gründet „siedlung gründen <name>“ eine (wer dort eine Hütte hat, darf das; Gäste nicht). Wer dort eine Hütte hat, ist Siedler; andere nimmt ein Siedler mit „siedlung aufnehmen <name>“ auf, „siedlung aufnehmen <name> helfer“ als Helfer; ein Gast ist höchstens Helfer. „siedlung entlassen <name>“ nimmt das zurück. Anfangs ist eine Siedlung offen, jeder darf bauen und helfen. „siedlung zu“ schließt sie: dann legen dort nur Siedler Baustellen, Beete und Fluren an, liefern und arbeiten nur Siedler und Helfer. „siedlung offen“ hebt das auf. Was schon steht, bleibt, wem es gehört. Stehen zu wenige Hütten, endet die Siedlung von selbst. „siedlung“ zeigt die Siedlung hier." },
 		{ key: "chat", category: "Allgemein", text: "Im Chat schreibst du mit einzelnen Leuten oder einer kleinen Gruppe, auch über die Inseln hinweg. Vor dem ersten Gespräch richtest du einmal ein Passwort ein. Er ist Ende-zu-Ende verschlüsselt: nur die Mitglieder eines Gesprächs können es lesen, kein Admin. Richte ihn im Reiter „Chats“ neben dem Log mit einem eigenen Chat-Passwort ein (nicht dein Login-Passwort); vergisst du es, sind deine Verläufe verloren; „Verlauf sichern“ speichert sie als Datei. Ein Gespräch beginnt mit „chat <name> <text>“ (tell, flüstere) oder per rechter Maustaste (langes Tippen) auf eine Figur: „Chat mit …“. Gruppen: „gruppe neu <name>“, „gruppe lade <spieler> in <gruppe>“, „gruppe annehmen <gruppe>“ oder „gruppe ablehnen <gruppe>“, „gruppe verlasse <gruppe>“, „gruppe entferne <spieler> aus <gruppe>“, „gruppe <gruppe> <text>“; „gruppe“ allein zeigt deine Gruppen. „ignoriere <name>“ sperrt Nachrichten und Einladungen, „erlaube <name>“ hebt es auf. Gäste können chatten, aber keine Gruppe gründen oder einladen." },
@@ -502,70 +505,71 @@ export const world: WorldDef = {
 	npcs: NPCS,
 	currency: "muenze",
 	market: { rooms: ["graue-bucht", "kupferhafen-markt", "riffdorf", "schaerenhafen", "rauchhafen", "krabbenbucht"], listMs: 24 * 3600_000 },
-	// docs/siedeln.md: building, first the hut (step 1)
+	// docs/siedeln.en.md: building, first the hut (step 1)
 	building: {
 		store: { quota: { fremder: 2, helfer: 5, siedler: 20 }, logKeepMs: 3 * 24 * 3600_000, logShow: 12 },
 		lightPoints: 20, siteWorldMs: 2 * 24 * 3600_000, restWorldMs: 30 * 60_000, maxSites: 1, maxBuildings: 5, ruinWorldMs: 10 * 24 * 3600_000, estateWorldMs: 30 * 24 * 3600_000,
 		plans: [
-			{ key: "huette", name: "Hütte", dative: "einer Hütte", aliases: ["hütte", "hut"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "tangseil", count: 2 }], work: 20, points: 1, keepWorldMs: 7 * 24 * 3600_000, color: "#8a6a44", chest: 12, repair: [{ proto: "treibholz", count: 1 }] },
+			{ key: "huette", name: "Hütte", dative: "einer Hütte", aliases: ["hütte", "hut"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "tangseil", count: 2 }], work: 20, points: 1, keepWorldMs: 30 * 24 * 3600_000, keepSetting: "keep.bau", color: "#8a6a44", chest: 12, repair: [{ proto: "treibholz", count: 1 }] },
 			// water for the beds (garden below): it gains a can every eight world hours, up to six, and is full after a storm surge
 			// keeps the hares from the beds within three cells (wild below); it stands only three days without repair
-			{ key: "vogelscheuche", name: "Vogelscheuche", aliases: ["strohmann", "scarecrow"], w: 1, h: 1, needs: [{ proto: "treibholz", count: 2 }, { proto: "tangseil", count: 1 }], work: 3, points: 1, keepWorldMs: 3 * 24 * 3600_000, color: "#b08a4a", repair: [{ proto: "tang", count: 1 }] },
+			{ key: "vogelscheuche", name: "Vogelscheuche", aliases: ["strohmann", "scarecrow"], w: 1, h: 1, needs: [{ proto: "treibholz", count: 2 }, { proto: "tangseil", count: 1 }], work: 3, points: 1, keepWorldMs: 7 * 24 * 3600_000, keepSetting: "keep.scheuche", color: "#b08a4a", repair: [{ proto: "tang", count: 1 }] },
 			// step 3 part 2: the windmill grinds grain to flour (mill below), its sails are linen; the bakery's oven bakes it
-			{ key: "windmuehle", epoch: 2, name: "Windmühle", aliases: ["windmühle", "mühle", "muehle", "windmill", "mill"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 8 }, { proto: "tangseil", count: 2 }, { proto: "leinen", count: 2 }], work: 16, points: 2, keepWorldMs: 7 * 24 * 3600_000, color: "#c8b48a", repair: [{ proto: "treibholz", count: 1 }] },
-			{ key: "backhaus", epoch: 2, name: "Backhaus", aliases: ["bäckerei", "baeckerei", "ofen", "bakery", "bakehouse"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "muschel", count: 6 }, { proto: "tangseil", count: 1 }], work: 12, points: 2, keepWorldMs: 7 * 24 * 3600_000, color: "#b0604a", repair: [{ proto: "muschel", count: 1 }] },
+			{ key: "windmuehle", epoch: 2, name: "Windmühle", aliases: ["windmühle", "mühle", "muehle", "windmill", "mill"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 8 }, { proto: "tangseil", count: 2 }, { proto: "leinen", count: 2 }], work: 16, points: 2, keepWorldMs: 30 * 24 * 3600_000, keepSetting: "keep.bau", color: "#c8b48a", repair: [{ proto: "treibholz", count: 1 }] },
+			{ key: "backhaus", epoch: 2, name: "Backhaus", aliases: ["bäckerei", "baeckerei", "ofen", "bakery", "bakehouse"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "muschel", count: 6 }, { proto: "tangseil", count: 1 }], work: 12, points: 2, keepWorldMs: 30 * 24 * 3600_000, keepSetting: "keep.bau", color: "#b0604a", repair: [{ proto: "muschel", count: 1 }] },
 			// step 3 part 3: hens in the coop, sheep or goats in the pen (animals below)
-			{ key: "huehnerstall", name: "Hühnerstall", aliases: ["hühnerstall", "stall", "coop", "henhouse"], w: 2, h: 1, needs: [{ proto: "treibholz", count: 4 }, { proto: "tangseil", count: 1 }], work: 6, points: 1, keepWorldMs: 7 * 24 * 3600_000, color: "#a0784a", repair: [{ proto: "treibholz", count: 1 }] },
-			{ key: "gehege", epoch: 2, name: "Gehege", aliases: ["koppel", "pferch", "pen", "paddock"], w: 3, h: 3, needs: [{ proto: "treibholz", count: 8 }, { proto: "tangseil", count: 4 }], work: 8, points: 2, keepWorldMs: 7 * 24 * 3600_000, color: "#8a7a4a", repair: [{ proto: "treibholz", count: 1 }] },
+			{ key: "huehnerstall", name: "Hühnerstall", aliases: ["hühnerstall", "stall", "coop", "henhouse"], w: 2, h: 1, needs: [{ proto: "treibholz", count: 4 }, { proto: "tangseil", count: 1 }], work: 6, points: 1, keepWorldMs: 30 * 24 * 3600_000, keepSetting: "keep.bau", color: "#a0784a", repair: [{ proto: "treibholz", count: 1 }] },
+			{ key: "gehege", epoch: 2, name: "Gehege", aliases: ["koppel", "pferch", "pen", "paddock"], w: 3, h: 3, needs: [{ proto: "treibholz", count: 8 }, { proto: "tangseil", count: 4 }], work: 8, points: 2, keepWorldMs: 30 * 24 * 3600_000, keepSetting: "keep.bau", color: "#8a7a4a", repair: [{ proto: "treibholz", count: 1 }] },
 			// the loom: wool to cloth, cloth and down to a blanket (recipes "at" it)
-			{ key: "webstuhl", epoch: 2, name: "Webstuhl", aliases: ["webhütte", "webhuette", "loom"], w: 2, h: 1, needs: [{ proto: "treibholz", count: 6 }, { proto: "tangseil", count: 2 }], work: 8, points: 1, keepWorldMs: 7 * 24 * 3600_000, color: "#7a5a8a", repair: [{ proto: "treibholz", count: 1 }] },
+			{ key: "webstuhl", epoch: 2, name: "Webstuhl", aliases: ["webhütte", "webhuette", "loom"], w: 2, h: 1, needs: [{ proto: "treibholz", count: 6 }, { proto: "tangseil", count: 2 }], work: 8, points: 1, keepWorldMs: 30 * 24 * 3600_000, keepSetting: "keep.bau", color: "#7a5a8a", repair: [{ proto: "treibholz", count: 1 }] },
 			// step 5: the village's common store; a settlement shares it by rank, with a quota and a log (building.store)
-			{ key: "lagerhaus", epoch: 2, store: true, name: "Lagerhaus", dative: "einem Lagerhaus", aliases: ["lager", "speicher", "warehouse", "depot"], w: 3, h: 2, needs: [{ proto: "treibholz", count: 12 }, { proto: "tangseil", count: 4 }, { proto: "muschel", count: 6 }], work: 20, points: 3, keepWorldMs: 14 * 24 * 3600_000, color: "#7a6a52", chest: 120, repair: [{ proto: "treibholz", count: 3 }, { proto: "tangseil", count: 1 }] },
+			{ key: "lagerhaus", epoch: 2, store: true, name: "Lagerhaus", dative: "einem Lagerhaus", aliases: ["lager", "speicher", "warehouse", "depot"], w: 3, h: 2, needs: [{ proto: "treibholz", count: 12 }, { proto: "tangseil", count: 4 }, { proto: "muschel", count: 6 }], work: 20, points: 3, keepWorldMs: 45 * 24 * 3600_000, keepSetting: "keep.lager", color: "#7a6a52", chest: 120, repair: [{ proto: "treibholz", count: 3 }, { proto: "tangseil", count: 1 }] },
 			// step 5: stone in quantity ("breche", quarry below), and the workshop: its recipes, and tools that last there
-			{ key: "steinbruch", epoch: 2, name: "Steinbruch", dative: "einem Steinbruch", aliases: ["bruch", "quarry"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 8 }, { proto: "tangseil", count: 3 }, { proto: "stein", count: 4 }], work: 16, points: 3, keepWorldMs: 14 * 24 * 3600_000, color: "#8d8f93", repair: [{ proto: "treibholz", count: 2 }, { proto: "tangseil", count: 1 }] },
-			{ key: "lehmgrube", epoch: 2, name: "Lehmgrube", dative: "einer Lehmgrube", aliases: ["grube", "clay pit"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "tangseil", count: 2 }, { proto: "stein", count: 2 }], work: 12, points: 2, keepWorldMs: 14 * 24 * 3600_000, color: "#a9774d", repair: [{ proto: "treibholz", count: 2 }] },
-			{ key: "ziegelei", epoch: 2, name: "Ziegelei", dative: "einer Ziegelei", aliases: ["brennofen", "brickworks"], w: 2, h: 2, needs: [{ proto: "stein", count: 8 }, { proto: "treibholz", count: 6 }, { proto: "lehm", count: 6 }], work: 20, points: 3, keepWorldMs: 14 * 24 * 3600_000, color: "#b4553a", repair: [{ proto: "stein", count: 1 }, { proto: "lehm", count: 2 }] },
-			{ key: "kapelle", epoch: 2, name: "Kapelle", dative: "einer Kapelle", aliases: ["chapel"], w: 3, h: 2, needs: [{ proto: "stein", count: 10 }, { proto: "ziegel", count: 12 }, { proto: "bohle", count: 4 }], work: 30, points: 3, keepWorldMs: 21 * 24 * 3600_000, color: "#d8d2c2", repair: [{ proto: "ziegel", count: 2 }] },
-			{ key: "park", epoch: 3, name: "Park", dative: "einem Park", aliases: ["garten", "anlage"], w: 4, h: 4, needs: [{ proto: "ziegel", count: 10 }, { proto: "stein", count: 6 }, { proto: "strandnelke", count: 6 }, { proto: "duenenrose", count: 4 }], work: 30, points: 9, keepWorldMs: 21 * 24 * 3600_000, color: "#6f9f5a", repair: [{ proto: "strandnelke", count: 2 }] },
-			{ key: "werkstatt", epoch: 2, sparesTools: true, name: "Werkstatt", dative: "einer Werkstatt", aliases: ["tischlerei", "seilerei", "workshop"], w: 3, h: 2, needs: [{ proto: "treibholz", count: 10 }, { proto: "stein", count: 8 }, { proto: "tangseil", count: 4 }], work: 24, points: 3, keepWorldMs: 14 * 24 * 3600_000, color: "#7f5f3f", repair: [{ proto: "treibholz", count: 3 }, { proto: "stein", count: 1 }] },
-			{ key: "regentonne", name: "Regentonne", aliases: ["tonne", "barrel", "rain-barrel"], w: 1, h: 1, needs: [{ proto: "treibholz", count: 3 }, { proto: "tangseil", count: 1 }], work: 4, points: 1, keepWorldMs: 7 * 24 * 3600_000, color: "#5e7a8a", repair: [{ proto: "treibholz", count: 1 }] },
+			{ key: "steinbruch", epoch: 2, name: "Steinbruch", dative: "einem Steinbruch", aliases: ["bruch", "quarry"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 8 }, { proto: "tangseil", count: 3 }, { proto: "stein", count: 4 }], work: 16, points: 3, keepWorldMs: 45 * 24 * 3600_000, keepSetting: "keep.lager", color: "#8d8f93", repair: [{ proto: "treibholz", count: 2 }, { proto: "tangseil", count: 1 }] },
+			{ key: "lehmgrube", epoch: 2, name: "Lehmgrube", dative: "einer Lehmgrube", aliases: ["grube", "clay pit"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "tangseil", count: 2 }, { proto: "stein", count: 2 }], work: 12, points: 2, keepWorldMs: 45 * 24 * 3600_000, keepSetting: "keep.lager", color: "#a9774d", repair: [{ proto: "treibholz", count: 2 }] },
+			{ key: "ziegelei", epoch: 2, name: "Ziegelei", dative: "einer Ziegelei", aliases: ["brennofen", "brickworks"], w: 2, h: 2, needs: [{ proto: "stein", count: 8 }, { proto: "treibholz", count: 6 }, { proto: "lehm", count: 6 }], work: 20, points: 3, keepWorldMs: 45 * 24 * 3600_000, keepSetting: "keep.lager", color: "#b4553a", repair: [{ proto: "stein", count: 1 }, { proto: "lehm", count: 2 }] },
+			{ key: "kapelle", epoch: 2, name: "Kapelle", dative: "einer Kapelle", aliases: ["chapel"], w: 3, h: 2, needs: [{ proto: "stein", count: 10 }, { proto: "ziegel", count: 12 }, { proto: "bohle", count: 4 }], work: 30, points: 3, keepWorldMs: 60 * 24 * 3600_000, keepSetting: "keep.kapelle", color: "#d8d2c2", repair: [{ proto: "ziegel", count: 2 }] },
+			{ key: "park", epoch: 3, green: true, name: "Park", dative: "einem Park", aliases: ["garten", "anlage"], w: 4, h: 4, needs: [{ proto: "ziegel", count: 10 }, { proto: "stein", count: 6 }, { proto: "strandnelke", count: 6 }, { proto: "duenenrose", count: 4 }], work: 30, points: 9, keepWorldMs: 120 * 24 * 3600_000, keepSetting: "keep.park", color: "#6f9f5a", repair: [{ proto: "strandnelke", count: 2 }] },
+			{ key: "rathaus", epoch: 3, name: "Rathaus", dative: "einem Rathaus", aliases: ["townhall", "stadthaus"], w: 4, h: 3, needs: [{ proto: "ziegel", count: 16 }, { proto: "stein", count: 10 }, { proto: "bohle", count: 6 }], work: 40, points: 6, keepWorldMs: 45 * 24 * 3600_000, keepSetting: "keep.lager", color: "#9c6b4e", repair: [{ proto: "ziegel", count: 2 }] },
+			{ key: "werkstatt", epoch: 2, sparesTools: true, name: "Werkstatt", dative: "einer Werkstatt", aliases: ["tischlerei", "seilerei", "workshop"], w: 3, h: 2, needs: [{ proto: "treibholz", count: 10 }, { proto: "stein", count: 8 }, { proto: "tangseil", count: 4 }], work: 24, points: 3, keepWorldMs: 45 * 24 * 3600_000, keepSetting: "keep.lager", color: "#7f5f3f", repair: [{ proto: "treibholz", count: 3 }, { proto: "stein", count: 1 }] },
+			{ key: "regentonne", name: "Regentonne", aliases: ["tonne", "barrel", "rain-barrel"], w: 1, h: 1, needs: [{ proto: "treibholz", count: 3 }, { proto: "tangseil", count: 1 }], work: 4, points: 1, keepWorldMs: 30 * 24 * 3600_000, keepSetting: "keep.bau", color: "#5e7a8a", repair: [{ proto: "treibholz", count: 1 }] },
 		],
 	},
-	// docs/siedeln.md "Gärten", step 2: beds of 2×2 in the light (and one community bed of 3×3 per fire), five sorts
+	// docs/siedeln.en.md "Gärten", step 2: beds of 2×2 in the light (and one community bed of 3×3 per fire), five sorts
 	// from the wild flora; flowers side by side in a flower bed cross now and then
 	garden: {
 		bed: { w: 2, h: 2, points: 1, keepWorldMs: 14 * 24 * 3600_000 }, commons: { w: 3, h: 3, points: 2 }, crossChance: 0.25, maxBeds: 3, spade: "spaten", can: "wasserkanne", barrel: "regentonne", barrelCap: 6, barrelFillWorldMs: 8 * 3600_000,
 		thirstWorldMs: 16 * 3600_000, seedRestWorldMs: 10 * 60_000, seedChance: 0.5,
 		decor: { flowers: ["*", "+", "o", "x"], herbs: ["i", "w", "v"] },
 		sorts: [
-			{ key: "strandnelke", name: "Strandnelke", aliases: ["nelke"], kind: "zier", seed: "samen-strandnelke", grow: [6 * 3600_000, 18 * 3600_000], ripeWorldMs: 2 * 24 * 3600_000, yields: { proto: "strandnelke", count: 1 }, color: "#e88fb0", wild: { decor: "flowers" } },
-			{ key: "duenenrose", name: "Dünenrose", aliases: ["rose"], kind: "zier", seed: "samen-duenenrose", grow: [8 * 3600_000, 24 * 3600_000], ripeWorldMs: 2 * 24 * 3600_000, yields: { proto: "duenenrose", count: 1 }, color: "#d9476b", wild: { decor: "flowers", islands: ["Graue Insel", "Krabbensand", "Möwenfels"] } },
-			{ key: "nebelblume", name: "Nebelblume", aliases: [], kind: "zier", seed: "samen-nebelblume", grow: [12 * 3600_000, 36 * 3600_000], ripeWorldMs: 3 * 24 * 3600_000, yields: { proto: "nebelblume", count: 1 }, color: "#9fb6e8", wild: { decor: "flowers", islands: ["Nebelholm"] } },
-			{ key: "strandkohl", name: "Strandkohl", aliases: ["kohl"], kind: "nutz", seed: "samen-strandkohl", grow: [6 * 3600_000, 24 * 3600_000], ripeWorldMs: 24 * 3600_000, yields: { proto: "kohl", count: 2 }, color: "#7fae6a", wild: { decor: "herbs" } },
-			{ key: "moehre", name: "Möhre", aliases: ["wilde möhre"], kind: "nutz", seed: "samen-moehre", grow: [6 * 3600_000, 18 * 3600_000], ripeWorldMs: 24 * 3600_000, yields: { proto: "moehre", count: 2 }, color: "#e8902c", wild: { decor: "herbs", islands: ["Graue Insel", "Kupferhafen", "Rauchholm", "Krabbensand"] } },
+			{ key: "strandnelke", model: "flower", name: "Strandnelke", aliases: ["nelke"], kind: "zier", seed: "samen-strandnelke", grow: [6 * 3600_000, 18 * 3600_000], ripeWorldMs: 2 * 24 * 3600_000, yields: { proto: "strandnelke", count: 1 }, color: "#e88fb0", wild: { decor: "flowers" } },
+			{ key: "duenenrose", model: "rose", name: "Dünenrose", aliases: ["rose"], kind: "zier", seed: "samen-duenenrose", grow: [8 * 3600_000, 24 * 3600_000], ripeWorldMs: 2 * 24 * 3600_000, yields: { proto: "duenenrose", count: 1 }, color: "#d9476b", wild: { decor: "flowers", islands: ["Graue Insel", "Krabbensand", "Möwenfels"] } },
+			{ key: "nebelblume", model: "mist", name: "Nebelblume", aliases: [], kind: "zier", seed: "samen-nebelblume", grow: [12 * 3600_000, 36 * 3600_000], ripeWorldMs: 3 * 24 * 3600_000, yields: { proto: "nebelblume", count: 1 }, color: "#9fb6e8", wild: { decor: "flowers", islands: ["Nebelholm"] } },
+			{ key: "strandkohl", model: "cabbage", name: "Strandkohl", aliases: ["kohl"], kind: "nutz", seed: "samen-strandkohl", grow: [6 * 3600_000, 24 * 3600_000], ripeWorldMs: 24 * 3600_000, yields: { proto: "kohl", count: 2 }, color: "#7fae6a", wild: { decor: "herbs" } },
+			{ key: "moehre", model: "carrot", name: "Möhre", aliases: ["wilde möhre"], kind: "nutz", seed: "samen-moehre", grow: [6 * 3600_000, 18 * 3600_000], ripeWorldMs: 24 * 3600_000, yields: { proto: "moehre", count: 2 }, color: "#e8902c", wild: { decor: "herbs", islands: ["Graue Insel", "Kupferhafen", "Rauchholm", "Krabbensand"] } },
 		],
 	},
-	// docs/siedeln.md "Äcker und Getreide", step 3 part 1: fields of 4×4 in the light, sown and brought in by many hands;
+	// docs/siedeln.en.md "Äcker und Getreide", step 3 part 1: fields of 4×4 in the light, sown and brought in by many hands;
 	// barley, oats, beet and flax grow wild (their seed from "sammle samen"), wheat and potatoes come from Gesa
 	fields: {
 		epoch: 2, w: 4, h: 4, points: 2, maxFields: 1, keepWorldMs: 14 * 24 * 3600_000, seedPerCells: 4, sowPerCells: 8, harvestPerCells: 2,
 		windowWorldMs: 2 * 24 * 3600_000, lateLoss: 0.5, tired: [1, 0.6, 0.35], fallowWorldMs: 3 * 24 * 3600_000,
 		crops: [
-			{ key: "weizen", name: "Weizen", aliases: ["wheat"], group: "Getreide", seed: "weizen", growWorldMs: 3 * 24 * 3600_000, yields: [{ proto: "weizen", perCell: 1 }], color: "#d9b44a" },
-			{ key: "gerste", name: "Gerste", aliases: ["barley"], group: "Getreide", seed: "gerste", growWorldMs: 60 * 3600_000, yields: [{ proto: "gerste", perCell: 1 }], color: "#c8b06a", wild: { decor: "herbs" } },
-			{ key: "hafer", name: "Hafer", aliases: ["oats"], group: "Getreide", seed: "hafer", growWorldMs: 2 * 24 * 3600_000, yields: [{ proto: "hafer", perCell: 1 }], color: "#cdbf8a", wild: { decor: "herbs", islands: ["Graue Insel", "Nebelholm", "Schären"] } },
-			{ key: "kartoffel", name: "Kartoffeln", aliases: ["kartoffel", "potato", "potatoes"], group: "Hackfrucht", seed: "kartoffel", growWorldMs: 3 * 24 * 3600_000, yields: [{ proto: "kartoffel", perCell: 1.5 }], color: "#6f8f3a" },
-			{ key: "ruebe", name: "Rüben", aliases: ["rübe", "ruebe", "rueben", "beet"], group: "Rüben", seed: "samen-ruebe", growWorldMs: 2 * 24 * 3600_000, yields: [{ proto: "ruebe", perCell: 1 }, { proto: "samen-ruebe", perCell: 0.5 }], color: "#9a3a5a", wild: { decor: "herbs", islands: ["Graue Insel", "Kupferhafen", "Krabbensand"] } },
-			{ key: "flachs", name: "Flachs", aliases: ["lein", "flax"], group: "Flachs", seed: "leinsamen", growWorldMs: 60 * 3600_000, yields: [{ proto: "flachs", perCell: 1 }, { proto: "leinsamen", perCell: 0.5 }], color: "#6a8fd0", wild: { decor: "flowers" } },
+			{ key: "weizen", model: "grain", name: "Weizen", aliases: ["wheat"], group: "Getreide", seed: "weizen", growWorldMs: 3 * 24 * 3600_000, yields: [{ proto: "weizen", perCell: 1 }], color: "#d9b44a" },
+			{ key: "gerste", model: "grain", name: "Gerste", aliases: ["barley"], group: "Getreide", seed: "gerste", growWorldMs: 60 * 3600_000, yields: [{ proto: "gerste", perCell: 1 }], color: "#c8b06a", wild: { decor: "herbs" } },
+			{ key: "hafer", model: "grain", name: "Hafer", aliases: ["oats"], group: "Getreide", seed: "hafer", growWorldMs: 2 * 24 * 3600_000, yields: [{ proto: "hafer", perCell: 1 }], color: "#cdbf8a", wild: { decor: "herbs", islands: ["Graue Insel", "Nebelholm", "Schären"] } },
+			{ key: "kartoffel", model: "tuber", name: "Kartoffeln", aliases: ["kartoffel", "potato", "potatoes"], group: "Hackfrucht", seed: "kartoffel", growWorldMs: 3 * 24 * 3600_000, yields: [{ proto: "kartoffel", perCell: 1.5 }], color: "#6f8f3a" },
+			{ key: "ruebe", model: "beet", name: "Rüben", aliases: ["rübe", "ruebe", "rueben", "beet"], group: "Rüben", seed: "samen-ruebe", growWorldMs: 2 * 24 * 3600_000, yields: [{ proto: "ruebe", perCell: 1 }, { proto: "samen-ruebe", perCell: 0.5 }], color: "#9a3a5a", wild: { decor: "herbs", islands: ["Graue Insel", "Kupferhafen", "Krabbensand"] } },
+			{ key: "flachs", model: "flax", name: "Flachs", aliases: ["lein", "flax"], group: "Flachs", seed: "leinsamen", growWorldMs: 60 * 3600_000, yields: [{ proto: "flachs", perCell: 1 }, { proto: "leinsamen", perCell: 0.5 }], color: "#6a8fd0", wild: { decor: "flowers" } },
 		],
 	},
-	// docs/siedeln.md "Epochen", step 4 part 1: an island's held stock (by light points) reaches the village at 15 points,
+	// docs/siedeln.en.md "Epochen", step 4 part 1: an island's held stock (by light points) reaches the village at 15 points,
 	// the town at 40, the net at 80 (settings epoch.dorf, epoch.stadt, epoch.netz); mill, bakery, pen, loom and fields
 	// are village plans
-	// docs/siedeln.md "Siedlungen und Besitz", step 4 part 2: three huts of two owners in a room may found a settlement
+	// docs/siedeln.en.md "Siedlungen und Besitz", step 4 part 2: three huts of two owners in a room may found a settlement
 	settlement: { plan: "huette", huts: 3, owners: 2 },
 	epochs: { names: ["Fischerdorf", "Dorf", "Stadt", "Netz"], a: ["ein Fischerdorf", "ein Dorf", "eine Stadt", "ein Netz"], checkWorldMs: 3600_000 },
-	// docs/siedeln.md "Wild im Nebel", step 2 part 3: hares at the beds of rooms in fog, none while the fire burns
+	// docs/siedeln.en.md "Wild im Nebel", step 2 part 3: hares at the beds of rooms in fog, none while the fire burns
 	wild: {
 		checkWorldMs: 20 * 60_000, chance: [0, 0.04, 0.12, 0.25], nightFactor: 2, maxPerRoom: 2, eatAfterWorldMs: 30 * 60_000, scareReach: 3,
 		hare: { name: "Hase", icon: "items/hase.png" }, fence: [{ proto: "treibholz", count: 2 }, { proto: "tangseil", count: 1 }], scarecrow: "vogelscheuche", scarecrowReach: 3,
@@ -590,13 +594,14 @@ export const world: WorldDef = {
 		],
 		fieldFence: [{ proto: "treibholz", count: 6 }, { proto: "tangseil", count: 2 }], coopFence: [{ proto: "treibholz", count: 3 }, { proto: "tangseil", count: 1 }],
 	},
-	// docs/siedeln.md "Warenketten", step 3 part 2: grain to flour at the mill (an hour a handful, a storm surge on its
+	// docs/siedeln.en.md "Warenketten", step 3 part 2: grain to flour at the mill (an hour a handful, a storm surge on its
 	// island grinds six hours ahead); flour to bread in the bakery's oven, flax to linen with a spindle
 	quarry: { plan: "steinbruch", tool: "spitzhacke", makes: "stein", count: 3 },
 	clay: { plan: "lehmgrube", tool: "spaten", makes: "lehm", count: 3 },
+	townhall: { plan: "rathaus", voteWorldMs: 24 * 3600_000, zoneRadius: 3, maxTax: 5 },
 	chapel: { plan: "kapelle", offerings: ["perle", "bernstein", "brot", "strandnelke", "duenenrose", "nebelblume"], blessWorldMs: 24 * 3600_000 },
 	mill: { plan: "windmuehle", grinds: [{ from: "weizen", to: "mehl" }, { from: "gerste", to: "mehl" }, { from: "hafer", to: "mehl" }], unitWorldMs: 3600_000, maxLoad: 12, maxLoads: 3, stormWorldMs: 6 * 3600_000, keepWorldMs: 14 * 24 * 3600_000 },
-	// docs/siedeln.md "Tiere auf dem Hof", step 3 part 3: one thing of feed keeps one animal a day; fed, a hen lays an egg a
+	// docs/siedeln.en.md "Tiere auf dem Hof", step 3 part 3: one thing of feed keeps one animal a day; fed, a hen lays an egg a
 	// day, a sheep gives wool every other day, a goat milk a day; two fed ones now and then get a young one
 	animals: {
 		houses: { huehnerstall: 6, gehege: 4 }, feedWorldMs: 24 * 3600_000, fedMaxWorldMs: 3 * 24 * 3600_000, nestMax: 3,
@@ -691,7 +696,7 @@ export const world: WorldDef = {
 	},
 };
 
-// The settlers (docs/siedeln.md "Wenige Spieler", server/npc/settlers.ts): figures that play like people where too few
+// The settlers (docs/siedeln.en.md "Wenige Spieler", server/npc/settlers.ts): figures that play like people where too few
 // people play. Each lives in a room of one fire's light,
 // spread over the nine fires. How many play at once is the setting settlers.min, less the people online.
 const SETTLER_NAMES = ["Fenna", "Tjark", "Swantje", "Frauke", "Talea", "Ubbo", "Gesche", "Enno", "Neele", "Tomke", "Lüder", "Femke", "Keno", "Rieke", "Harm", "Anke",

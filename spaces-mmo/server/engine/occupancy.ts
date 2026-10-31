@@ -1,4 +1,4 @@
-// Who stands where (docs/evennia-abbildung.md, "Stand Phase 2"): two characters never share a cell. A character that is
+// Who stands where (docs/evennia-abbildung.en.md, "Stand Phase 2"): two characters never share a cell. A character that is
 // online holds its cell as a Spot entry (model.ts), written with the space's `unique` check on room and cell: the
 // space refuses a second Spot on a cell even while the first is only written in an open transaction, so a step needs
 // no lock on its room and steps in one room run side by side. Only online characters (a live Session) block a cell;

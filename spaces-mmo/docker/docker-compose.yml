@@ -1,8 +1,8 @@
 # Docker Compose for spaces-mmo: one container per role, all from the one `production` image, talking only through the
-# space over TCP (docs/architektur.md), laid out like codemode-chat/docker/docker-compose.yml.
+# space over TCP (docs/architektur.en.md), laid out like codemode-chat/docker/docker-compose.yml.
 #
 #   profile nano:  the accounts space (credentials, web sessions) in a volume — on nano
-#   profile big:   the world in its regions (server/engine/regions.ts, docs/welt-aufteilen.md): per region a space process
+#   profile big:   the world in its regions (server/engine/regions.ts, docs/welt-aufteilen.en.md): per region a space process
 #                  (world-<region>.sqlite), a world worker, an npc and a model process, each region's space on a core of
 #                  its own; and the web process — on big. npc and model are the only roles with model credentials
 #                  (the host's pi CLI login)

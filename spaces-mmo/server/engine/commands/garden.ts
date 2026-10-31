@@ -1,4 +1,4 @@
-// Gardens, step 2 (docs/siedeln.md "Gärten"): a player digs a bed in the light with a spade, plants seeds from the
+// Gardens, step 2 (docs/siedeln.en.md "Gärten"): a player digs a bed in the light with a spade, plants seeds from the
 // wild flora, waters it with cans from a rain barrel, weeds it and harvests what is ripe; a sponsor may tend a bed
 // without owning it.
 //
@@ -60,13 +60,14 @@ export const nextDue = (plants: BedPlant[]) => plants.reduce((m, p) => Math.min(
  *  sprouts or ripens may bring weeds. */
 export function advance(g: GardenDef, b: BedFields, now: number, fog: number, rnd: () => number = Math.random): boolean {
 	let changed = false;
+	const weedy = b.weedy; // weeds of this round count from the next: plants that move on together keep one date
 	for (const p of b.plants) {
 		if (p.dueWorldMs > now) continue;
 		changed = true;
 		const sort = sortOf(g, p.sort);
 		if (!sort || p.stage >= 2 || now - b.wateredWorldMs > g.thirstWorldMs) { p.stage = 3; p.dueWorldMs = FOREVER; continue; }
 		p.stage = (p.stage + 1) as 1 | 2;
-		p.dueWorldMs = now + (p.stage === 1 ? sort.grow[1] * growFactor(fog, b.weedy) : sort.ripeWorldMs);
+		p.dueWorldMs = now + (p.stage === 1 ? sort.grow[1] * growFactor(fog, weedy) : sort.ripeWorldMs);
 		if (!b.weedy && rnd() < 0.2) b.weedy = true;
 	}
 	b.dueWorldMs = nextDue(b.plants);
@@ -127,7 +128,7 @@ async function dig(c: CommandCtx, arg: string): Promise<void> {
 	const m = /^(\d+)\s+(\d+)$/.exec(at.trim());
 	const tries: Rect[] = m ? [{ x: Number(m[1]), y: Number(m[2]), w: size.w, h: size.h }] : besides(c, size);
 	let rect: Rect | null = null, why = "";
-	for (const r of tries) { const no = await refusal(c, room, r); if (!no) { rect = r; break; } why ||= no; }
+	for (const r of tries) { const no = await refusal(c, room, r, true); if (!no) { rect = r; break; } why ||= no; }
 	if (!rect) throw new CommandError(`Hier passt kein Beet hin: ${why}`);
 	const bedId = `bed-${randomBytes(6).toString("hex")}`, now = await worldNowOf(c.space, c.txn);
 	for (const p of cells(rect)) {
@@ -466,6 +467,7 @@ export async function gardenTick(space: SpaceLike, w: WorldDef): Promise<number>
 			const t = await space.takeIfExists({ type: "Bed", fields: { bedId: b.bedId } }, NO_WAIT, { txn });
 			if (!t) { await space.abort(txn); continue; }
 			const bed = fieldsOf<BedFields>(t);
+			if (bed.dueWorldMs > now && bed.untilWorldMs > now) { await space.abort(txn); continue; } // the read was older: done already
 			if (bed.untilWorldMs <= now) await freeBed(space, txn, bed);
 			else {
 				advance(g, bed, now, await fogOf(space, bed.room));
@@ -500,4 +502,4 @@ export async function stormFillsBarrels(space: SpaceLike, w: WorldDef, roomId: s
 }
 
 /** A bed as the page draws it: its plants at their cells (relative to the bed), with the colour of their sort. */
-export const bedPlantsView = (w: WorldDef, b: BedFields) => b.plants.map((p) => ({ x: p.x - b.x, y: p.y - b.y, stage: p.stage, color: p.variety?.color ?? w.garden?.sorts.find((s) => s.key === p.sort)?.color ?? "#7fae6a" }));
+export const bedPlantsView = (w: WorldDef, b: BedFields) => b.plants.map((p) => ({ x: p.x - b.x, y: p.y - b.y, stage: p.stage, color: p.variety?.color ?? w.garden?.sorts.find((s) => s.key === p.sort)?.color ?? "#7fae6a", model: w.garden?.sorts.find((s) => s.key === p.sort)?.model }));

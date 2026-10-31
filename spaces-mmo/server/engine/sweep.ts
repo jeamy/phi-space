@@ -1,4 +1,4 @@
-// The sweep (docs/weltzeit.md): what the world gave a world-time life to is taken away when that time is up. A lease of the
+// The sweep (docs/weltzeit.en.md): what the world gave a world-time life to is taken away when that time is up. A lease of the
 // space cannot do this, because a lease runs on real time and does not stand still with the clock. Flotsam of the tide, jobs
 // of the order board and listings of the market carry `expiresWorldMs`; the date `tick.sweep` calls this every few world
 // seconds. Each thing is taken in a transaction of its own, so what someone picks up or buys at that moment is theirs.
@@ -27,5 +27,5 @@ export async function sweepTick(space: SpaceLike, w?: WorldDef): Promise<void> {
 	for (const e of await space.readAll({ type: "NpcAwake" })) if (Number(e.fields.untilWorldMs ?? 0) <= now) await takeIfLapsed(space, e.id, "NpcAwake"); // a role awake until a world time
 	for (const e of await space.readAll({ type: "Order" })) if ((fieldsOf<OrderFields>(e).expiresWorldMs ?? Infinity) <= now) await takeIfLapsed(space, e.id, "Order");
 	for (const e of await space.readAll({ type: "Listing" })) if ((fieldsOf<ListingFields>(e).expiresWorldMs ?? Infinity) <= now) await takeIfLapsed(space, e.id, "Listing");
-	await buildSweep(space, w); // sites without progress, buildings not kept, ruins and estates whose time is up (docs/siedeln.md)
+	await buildSweep(space, w); // sites without progress, buildings not kept, ruins and estates whose time is up (docs/siedeln.en.md)
 }

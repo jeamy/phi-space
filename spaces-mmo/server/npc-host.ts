@@ -1,4 +1,4 @@
-// The npc process (docs/phasen.md Phases 2 and 5, docs/modell-npcs.md): the world's NPCs. An NPC is a character like any
+// The npc process (docs/phasen.en.md Phases 2 and 5, docs/modell-npcs.en.md): the world's NPCs. An NPC is a character like any
 // other: it is online while this process keeps its Session entry, and it acts only by writing intents, which a world
 // worker runs like a player's commands (locks, fog and transactions apply to it the same way). Scripts
 // (server/npc/scripts.ts) look at the world through reads and decide what to type next; model roles answer with a
@@ -36,7 +36,7 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 	const starting: Promise<void>[] = [];
 	const owner = `npc-proc-${randomBytes(4).toString("hex")}`;
 	const clock = new ClockCache(space, w.id);
-	/** The role's plan in world hours (docs/weltzeit.md): where the plan says away, the figure leaves (with a word) and its
+	/** The role's plan in world hours (docs/weltzeit.en.md): where the plan says away, the figure leaves (with a word) and its
 	 *  script does not run; where it says present, it comes back. Read from the clock every round, so a restart or a role taken
 	 *  over starts from what the hour says. False: the role is away now. */
 	const atPlan = async (npc: Npc): Promise<boolean> => {
@@ -80,10 +80,17 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 				await space.write({ type: "Intent", fields: asFields(intent) }, null, 30_000);
 				// one command at a time: wait until a world worker has taken it, then until its transaction is over (the
 				// worker holds the character's token meanwhile; a read of the token waits for it), so the next look of
-				// the script sees what the command did
+				// the script sees what the command did. A refused command is aborted, which puts the intent back, and is then
+				// consumed in a second transaction that writes the refusal: so after the token, look again, and wait for that
+				// one as well, or the script would go on before the refusal is there and claim what failed
 				const giveUp = Date.now() + 5_000;
 				for (let i = 0; Date.now() < giveUp && !halt.signal.aborted; i++) {
-					if (!(await space.count({ type: "Intent", fields: { charId } }))) { await space.readIfExists(actorToken(charId), 5_000).catch(() => null); return; }
+					if (!(await space.count({ type: "Intent", fields: { charId } }))) {
+						await space.readIfExists(actorToken(charId), 5_000).catch(() => null);
+						if (await space.count({ type: "Intent", fields: { charId } })) continue;
+						await space.readIfExists(actorToken(charId), 5_000).catch(() => null);
+						return;
+					}
 					await sleep(Math.min(250, 50 * 2 ** Math.min(i, 3))); // 50, 100, 200, 250 …: every look is a call to the space
 				}
 			},

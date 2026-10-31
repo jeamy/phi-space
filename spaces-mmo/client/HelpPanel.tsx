@@ -5,6 +5,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ARTICLES, DEFAULT_ARTICLE, SECTIONS, articleById, tocOf, type Article, type Lang } from "./help/articles.ts";
 import { renderMarkdownToHtml } from "./lib/markdown.ts";
+import { useBack } from "./useBack.ts";
+import { isTouch } from "./useShell.ts";
 
 const T = {
 	de: { title: "Hilfe", close: "Hilfe schließen", search: "Hilfe durchsuchen …", topics: "Alle Themen", toc: "Auf dieser Seite", none: "Keine Treffer.", lang: "Sprache" },
@@ -19,9 +21,11 @@ const initialLang = (): Lang => {
 
 const textOf = (a: Article, lang: Lang) => `${a.title[lang]} ${a.short[lang]} ${a.body[lang]}`.toLowerCase();
 
-export function HelpPanel({ onClose }: { onClose: () => void }) {
+export function HelpPanel({ onClose, article: first = null, onCommands }: { onClose: () => void; /** The article to open on. */ article?: string | null; /** The tab with the commands: asks the world for them. */ onCommands?: () => void }) {
 	const [lang, setLang] = useState<Lang>(initialLang);
-	const [articleId, setArticleId] = useState<string | null>(null); // null: the topic list
+	const [articleId, setArticleId] = useState<string | null>(first); // null: the topic list
+	// on a phone the back gesture leads from an article to the list before it closes the help
+	useBack(isTouch() && articleId !== null, () => setArticleId(null));
 	const [query, setQuery] = useState("");
 	const scroller = useRef<HTMLDivElement>(null);
 	const t = T[lang];
@@ -66,8 +70,9 @@ export function HelpPanel({ onClose }: { onClose: () => void }) {
 				</div>
 				<button className="help-x" onClick={onClose} aria-label={t.close} title={t.close}>×</button>
 			</div>
+			{onCommands && <div className="help-seg" role="tablist"><button role="tab" aria-selected="true" className="on">{t.title}</button><button role="tab" aria-selected="false" onClick={onCommands}>{lang === "de" ? "Befehle" : "Commands"}</button></div>}
 			<div className="help-search">
-				<input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.search} aria-label={t.search} autoFocus />
+				<input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.search} aria-label={t.search} autoFocus={!isTouch()} />
 			</div>
 			<div className="help-scroll" ref={scroller}>
 				{article && !q ? (

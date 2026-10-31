@@ -4,8 +4,9 @@
 // same window. The text of the answer stays in the log for text mode; this is the same content, laid out.
 import { useEffect, useState } from "react";
 import type { HelpView } from "../server/model.ts";
+import { isTouch } from "./useShell.ts";
 
-export function CommandHelp({ view, onTopic, onArticles, onClose }: { view: HelpView; onTopic: (key: string | null) => void; onArticles: () => void; onClose: () => void }) {
+export function CommandHelp({ view, onTopic, onArticles, onClose, onInsert }: { view: HelpView; onTopic: (key: string | null) => void; onArticles: () => void; onClose: () => void; /** Puts a command into the command line (it never runs by itself). */ onInsert?: (command: string) => void }) {
 	const [query, setQuery] = useState("");
 	useEffect(() => {
 		const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -27,9 +28,10 @@ export function CommandHelp({ view, onTopic, onArticles, onClose }: { view: Help
 				<button className="help-more" onClick={onArticles} title="Die ausführliche Hilfe mit Anleitungen">Ausführliche Hilfe</button>
 				<button className="help-x" onClick={onClose} aria-label="Schließen" title="Schließen">×</button>
 			</div>
+			<div className="help-seg" role="tablist"><button role="tab" aria-selected="false" onClick={onArticles}>Hilfe</button><button role="tab" aria-selected="true" className="on">Befehle</button></div>
 			{!view.topic && (
 				<div className="help-search">
-					<input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Befehl suchen …" aria-label="Befehl suchen" autoFocus />
+					<input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Befehl suchen …" aria-label="Befehl suchen" autoFocus={!isTouch()} />
 				</div>
 			)}
 			<div className="help-scroll">
@@ -57,7 +59,7 @@ export function CommandHelp({ view, onTopic, onArticles, onClose }: { view: Help
 							<ul className="cmd-help-list">
 								{commands.map((c) => (
 									<li key={c.names[0]}>
-										<div className="cmd-help-sig"><code>{c.names[0]}{c.usage ? ` ${c.usage}` : ""}</code></div>
+										<div className="cmd-help-sig"><code>{c.names[0]}{c.usage ? ` ${c.usage}` : ""}</code>{onInsert && <button className="cmd-insert" onClick={() => onInsert(c.names[0]!)} title="In die Befehlszeile setzen, ohne es auszuführen">Einfügen</button>}</div>
 										{c.names.length > 1 && <div className="cmd-help-also">auch {c.names.slice(1).map((n, i) => <span key={n}>{i ? ", " : ""}<code>{n}</code></span>)}</div>}
 										<div className="cmd-help-text">{c.text}</div>
 									</li>

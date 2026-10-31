@@ -1,4 +1,4 @@
-// Dates in world time (docs/weltzeit.md, "Termine und Ablauf"). A WorldSchedule entry says when, by the world clock, a
+// Dates in world time (docs/weltzeit.en.md, "Termine und Ablauf"). A WorldSchedule entry says when, by the world clock, a
 // kind of event is due. Every world worker looks; the one that takes a due entry in a transaction runs its handler and
 // writes the next date in the same transaction, so a date is served once however many workers there are, and a worker
 // that dies before the commit lets the date come back. The wake-up from a real-time wait is only an estimate: whether a
@@ -36,7 +36,7 @@ export async function ensureSchedule(space: SpaceLike, txn: string | null, f: Wo
 	return true;
 }
 
-/** Fail-closed watch on the host's clock (docs/weltzeit.md, "Serverzeit"): a real clock that jumps back, or forward by more
+/** Fail-closed watch on the host's clock (docs/weltzeit.en.md, "Serverzeit"): a real clock that jumps back, or forward by more
  *  than `toleranceMs` between two looks, stops new world-time events for `holdMs` and says so; then it is trusted again from
  *  the new reading. Events already served are never taken back. */
 export class ClockGuard {

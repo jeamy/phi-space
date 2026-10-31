@@ -1,4 +1,4 @@
-// Lock strings as in Evennia (docs/evennia-abbildung.md, "Locks"): `get:all();give:not guest();traverse:perm(Player)`.
+// Lock strings as in Evennia (docs/evennia-abbildung.en.md, "Locks"): `get:all();give:not guest();traverse:perm(Player)`.
 // Builders write them, so they are untrusted text: a small recursive-descent parser over a fixed set of functions,
 // never evaluated as code. An access type without a lock is allowed.
 

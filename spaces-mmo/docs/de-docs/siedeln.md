@@ -1048,10 +1048,34 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      Ziegel. Daneben gibt `opfere` eine Perle, einen Bernstein, ein Brot oder eine Blume hin; einen Welttag lang ruht man nach der Arbeit
      nur halb so lange. Abweichungen: Der Segen wirkt ohne die Götter, gilt nur in der Region, in der man opfert, und Feste fehlen noch.
    - **Teil 3, Park (gebaut, nur Bauplan):** Ab Epoche Stadt aus Ziegeln, Stein und Blumen, 4×4 groß, zählt 9 Punkte, also dreifach für den Bestand.
-     Abweichung: noch ohne Ruf für die Pflegenden und ohne Blumenschau. Rathaus, Abstimmungen und Feste sind offen.
+     Abweichung: noch ohne Ruf für die Pflegenden und ohne Blumenschau.
+   - **Teil 5, Rathaus und Abstimmungen (gebaut, `server/engine/commands/townhall.ts`):** Plan ab Epoche Stadt aus Ziegeln, Stein und Bohlen. Daneben stellt ein Siedler
+     mit `antrag` einen Antrag, je Raum läuft einer. Jeder Siedler stimmt mit `stimme ja|nein`, die letzte Stimme zählt, nach einem Welttag entscheidet die Zählung:
+     Mehr Ja als Nein trägt ihn. Steht ein Rathaus, geht `siedlung zu` und `offen` nur noch über einen Antrag.
+     Stimmen sind eigene Einträge: Ein genommener Antrag hielte seinen `unique`-Anspruch bis zum Commit, er ließe sich in derselben Transaktion nicht neu schreiben.
+     Abweichungen: Freie Anträge werden bloß verkündet; das Rathaus kommt früher als die Tabelle (Stufe 5) es nennt.
+   - **Teil 6, Zonen (gebaut, ebenda):** `antrag grünzone` und `antrag wegerecht` gehen überall im Ort für 7×7 Felder um den Antragsteller, `antrag zone frei` hebt die Zonen an seinem Feld auf. In der Grünzone
+     gehen nur Beete und Parks, auf dem Wegerecht gar nichts; Stehendes bleibt. Zonen enden mit der Siedlung. Abweichung: noch kein Overlay auf der Karte, `siedlung` nennt sie als Text; Abriss per Beschluss fehlt.
+   - **Teil 7, Steuer (gebaut, ebenda):** `antrag steuer <n>` (höchstens 5) setzt, wie viele Münzen je Stück eine Entnahme aus dem Lagerhaus kostet; sie bleiben im Lager, Münzen selbst sind frei.
+     Abweichung: Die Umsatzsteuer des Kaufhauses wartet auf das Kaufhaus (Schritt 7). Feste, Ruf und Blumenschau sind offen.
 7. **Kaufhaus** (Laden mit Vorrat), **Kontor**, **Leuchtturm**, **Brauhaus**, **Glashütte und Gewächshaus**,
    Fischerei (Netz-Rezept, Steg) und Boote; **Nahrung** (Sattsein), wenn Brot und Räucherfisch da sind.
 8. **Straßen, Karren, Fahrplan-Fähren**, dann die **Inselbahn** als Automat.
+
+### Spätere Einstellungen und Ansichten
+
+**Wie lange ein Bau steht**, gilt je Klasse in Welttagen, und der Admin kann es im Admin-Panel ändern; eine gespeicherte
+Zahl gilt für den nächsten Bau, ein stehender behält sein Datum. Vorgaben: Vogelscheuche 7 (`keep.scheuche`), Hütten und
+Ähnliches 30 (`keep.bau`), Lagerhäuser und Ähnliches 45 (`keep.lager`), Kapelle 60 (`keep.kapelle`), Park 120
+(`keep.park`). Ein Plan nennt seine Klasse mit `keepSetting`.
+
+**Pflanzen sind 3D-Modelle** wie die Bauten: wilde Blumen, Kräuter, Gras und Farne als Dekor, die Pflanzen von Beeten und
+Fluren nach ihrer Sorte (`model` an Sorte und Frucht), zusammengeführte Geometrie mit Eckenfarben in `client/props3d.ts`.
+
+**Die Leiste „Hier möglich“** (`hereEntries` in `client/cellActions.ts`) zeigt, was die Menüs der Zellen um die Figur
+anbieten, jedes einmal, untereinander: zuerst die Ernte, dann die Pflege dessen, was wächst, die Arbeit an Begonnenem, den
+Rest und zuletzt die Samensuche. Fünf Einträge sind zu sehen; „Mehr“ klappt die übrigen auf, und eine lange Liste
+scrollt. „Mein Ruf“ und das Ansehen bleiben im Menü.
 
 ## Offene Fragen
 

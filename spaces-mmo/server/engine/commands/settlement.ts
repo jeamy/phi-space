@@ -1,4 +1,4 @@
-// Settlements, step 4 part 2 (docs/siedeln.md "Siedlungen und Besitz"): enough huts of more than one owner in a room may
+// Settlements, step 4 part 2 (docs/siedeln.en.md "Siedlungen und Besitz"): enough huts of more than one owner in a room may
 // found a settlement (`siedlung gründen <name>`): a name, members and rules, on one entry per room.
 //
 // - Ranks: stranger, helper (delivers and works at sites), settler (also builds, digs and ploughs here). Whoever owns a hut
@@ -13,6 +13,7 @@ import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, msgOptions, NotUnderstood, type CommandCtx } from "../context.ts";
 import { peek } from "../../space.ts";
 import type { WorldDef } from "../world.ts";
+import { hallIn, zonesLine } from "./townhall.ts";
 
 export type Rank = "fremder" | "helfer" | "siedler";
 const ORDER: Rank[] = ["fremder", "helfer", "siedler"];
@@ -51,6 +52,7 @@ export async function settlementTick(space: SpaceLike, w: WorldDef, leaseMs: num
 		try {
 			if (!(await space.takeIfExists({ type: "Settlement", fields: { settlementId: s.settlementId } }, NO_WAIT, { txn }))) { await space.abort(txn); continue; }
 			await space.takeIfExists({ type: "SettlementName", fields: { nameKey: s.nameKey } }, NO_WAIT, { txn }); // the name is free again
+			for (const z of await space.readAll({ type: "Zone", fields: { room: s.room } })) await space.takeIfExists({ id: z.id }, NO_WAIT, { txn }); // its zones go with it
 			await space.write({ type: "Msg", fields: { room: s.room, to: "*", kind: "world", text: `${s.name} gibt es nicht mehr: zu wenige Hütten stehen noch. Was hier steht, bleibt.`, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
 			await space.commit(txn);
 			gone++;
@@ -97,6 +99,7 @@ const siedlung: Command = {
 		if (/^(?:gründen|gruenden|gründe|gruende|found)$/i.test(word)) return found(c, tail);
 		if (/^(?:zu|schließen|schliessen|close)$/i.test(word) || /^(?:offen|auf|öffnen|oeffnen|open)$/i.test(word)) {
 			const s = await manage(c), closed = /^(?:zu|schl|close)/i.test(word);
+			if (await hallIn(c.space, c.world, s.room, c.txn)) throw new CommandError(`In ${s.name} entscheidet das Rathaus: „antrag ${closed ? "zu" : "offen"}“ stellt es zur Abstimmung.`);
 			await put(c, { ...s, closed });
 			return msg(c, "*", "info", closed ? `${c.actor.name} schließt ${s.name}: bauen dürfen hier nur noch Siedler, liefern und arbeiten auch Helfer.` : `${c.actor.name} öffnet ${s.name}: hier darf wieder jeder bauen und helfen.`);
 		}
@@ -121,7 +124,8 @@ const siedlung: Command = {
 		if (!s) return msg(c, c.actor.charId, "info", `Hier ist keine Siedlung; hier stehen ${huts.length} Hütten von ${new Set(huts.map((h) => h.accountId)).size} Besitzern (nötig: ${d.huts} Hütten von ${d.owners}).${enoughHuts(c.world, huts) ? " „siedlung gründen <name>“ gründet eine, wenn du hier eine Hütte hast." : ""}`);
 		const owners = [...new Set(huts.map((h) => h.ownerName))];
 		const named = (r: string) => s.members.filter((m) => m.rank === r).map((m) => m.name);
-		await msg(c, c.actor.charId, "info", `${s.name} (gegründet von ${s.founderName}, ${s.closed ? "geschlossen" : "offen"}): ${huts.length} Hütten. Siedler: ${[...owners, ...named("siedler")].join(", ")}.${named("helfer").length ? ` Helfer: ${named("helfer").join(", ")}.` : ""} Du bist ${RANK_NAME[rankOf(s, huts, c.account)]}.`);
+		const zones = await zonesLine(c.space, s.room);
+		await msg(c, c.actor.charId, "info", `${s.name} (gegründet von ${s.founderName}, ${s.closed ? "geschlossen" : "offen"}): ${huts.length} Hütten. Siedler: ${[...owners, ...named("siedler")].join(", ")}.${named("helfer").length ? ` Helfer: ${named("helfer").join(", ")}.` : ""} Du bist ${RANK_NAME[rankOf(s, huts, c.account)]}.${zones ? ` Zonen: ${zones}.` : ""}${s.tax ? ` Steuer: ${s.tax} Münzen je Stück aus dem Lager.` : ""}`);
 	},
 };
 

@@ -1,4 +1,4 @@
-// Building (docs/siedeln.md, "Wie ein Bau entsteht", step 1): a player stakes out a site for a plan; everyone may
+// Building (docs/siedeln.en.md, "Wie ein Bau entsteht", step 1): a player stakes out a site for a plan; everyone may
 // deliver what it needs and work on it; when nothing is missing it becomes the building, in the same transaction.
 //
 // - The site, and later the building, stands on Plot entries, one per cell, written with the space's `unique` check on
@@ -15,10 +15,11 @@
 import { hutsIn, needRank, rankOf, settlementIn } from "./settlement.ts";
 import { epochName, epochOf, islandOf, needEpoch } from "./epoch.ts";
 import { blessed } from "./chapel.ts";
+import { zoneRefusal } from "./townhall.ts";
 import { closeOrders, keptUntil, orderLine, ordersOfSite, payFor } from "./siteorder.ts";
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
 import { worldNowOf } from "../clock.ts";
@@ -27,6 +28,7 @@ import { byName, CommandError, exitsHere, inventory, msg, NotUnderstood, roomOf,
 import { flameOf, isLit } from "../fire.ts";
 import { blockedIn, cellKey, isPassage, occupiedIn } from "../occupancy.ts";
 import { walkable, type PlanDef, type WorldDef } from "../world.ts";
+import { setting } from "../../settings.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -60,11 +62,13 @@ function reachable(w: WorldDef, ground: string[], from: { x: number; y: number }
 }
 
 /** Why `rect` cannot be built on (null: it can). */
-/** The cobbles of paths and plazas: nothing is built or dug on them (docs/siedeln.md "Bebauung"). */
+/** The cobbles of paths and plazas: nothing is built or dug on them (docs/siedeln.en.md "Bebauung"). */
 export const PATH = ":";
-export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect): Promise<string | null> {
+export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green = false): Promise<string | null> {
 	const height = room.ground.length, width = room.ground[0]?.length ?? 0;
 	if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > width || rect.y + rect.h > height) return "Dort ist der Raum zu Ende.";
+	const zoned = await zoneRefusal(c, room.roomId, cells(rect), green);
+	if (zoned) return zoned;
 	const exits = (await exitsHere(c, room.roomId)).map((x) => x.f);
 	const blocked = await blockedIn(c.space, c.world, room.roomId);
 	const people = await occupiedIn(c.space, room.roomId);
@@ -76,7 +80,7 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect): Prom
 		if (room.ground[p.y]?.[p.x] === PATH) return "Das ist ein Weg; Wege und Plätze bleiben frei.";
 		if (isPassage(exits, p)) return "Dort ist ein Weg hinaus; den baut niemand zu.";
 		if (fires.some((b) => Math.max(Math.abs(b.x - p.x), Math.abs(b.y - p.y)) <= 1)) return "So nah am Feuer baut man nicht.";
-		if (blocked.has(k)) return "Dort steht schon etwas oder wird gebaut.";
+		if (blocked.has(k)) { const piece = (await c.space.readAll({ type: "Scenery", fields: { room: room.roomId } })).map((e) => fieldsOf<SceneryFields>(e)).find((s) => distTo(p, s) === 0); return piece && !piece.fixed ? `Dort steht ${piece.name}; erst abräumen (räume).` : "Dort steht schon etwas oder wird gebaut."; }
 		if (people.has(k) || (p.x === c.actor.x && p.y === c.actor.y)) return "Dort steht jemand.";
 		if (things.has(k)) return "Dort liegt etwas; räum es erst weg.";
 	}
@@ -161,12 +165,19 @@ export async function siteHere(c: CommandCtx, name: string): Promise<{ s: SiteFi
 	throw new NotUnderstood(r.far ? "Geh näher an die Baustelle heran (höchstens zwei Schritte entfernt)." : "Hier ist keine Baustelle. „bau <plan>“ steckt eine ab.");
 }
 
+const WORLD_DAY = 24 * 3600_000;
+/** How long a plan stands after building or repair: the admin's setting when it has one. */
+async function keepOf(c: CommandCtx, plan: PlanDef | undefined): Promise<number> {
+	if (plan?.keepSetting) return (await setting(c.space, plan.keepSetting)) * WORLD_DAY;
+	return plan?.keepWorldMs ?? 7 * WORLD_DAY;
+}
+
 /** Writes the site back, or, when nothing is missing, the building in its place. */
 export async function settle(c: CommandCtx, s: SiteFields): Promise<void> {
 	const now = await worldNowOf(c.space, c.txn);
 	if (s.needs.every((n) => n.have >= n.count) && s.work >= s.workNeed) {
 		const plan = planOf(c.world, s.plan);
-		const b: BuildingFields = { buildId: s.buildId, plan: s.plan, name: s.name, room: s.room, x: s.x, y: s.y, w: s.w, h: s.h, owner: s.owner, ownerName: s.ownerName, accountId: s.accountId, beaconId: s.beaconId, points: s.points, by: s.by, untilWorldMs: now + (plan?.keepWorldMs ?? 7 * 24 * 3600_000), builtAt: now };
+		const b: BuildingFields = { buildId: s.buildId, plan: s.plan, name: s.name, room: s.room, x: s.x, y: s.y, w: s.w, h: s.h, owner: s.owner, ownerName: s.ownerName, accountId: s.accountId, beaconId: s.beaconId, points: s.points, by: s.by, untilWorldMs: now + (await keepOf(c, plan)), builtAt: now };
 		await c.space.write({ type: "Building", fields: b as never }, c.txn, FOREVER);
 		await closeOrders(c.space, c.txn, s, now + (c.world.building?.estateWorldMs ?? 30 * 24 * 3600_000));
 		const helpers = Object.entries(s.by).sort((a, b) => b[1] - a[1]).map(([n, k]) => `${n} (${k})`).join(", ");
@@ -211,7 +222,7 @@ export const bau: Command = {
 		const room = await roomOf(c);
 		const tries = m[2] !== undefined ? [{ x: Number(m[2]), y: Number(m[3]), w: plan.w, h: plan.h }] : besides(c, plan);
 		let rect: Rect | null = null, why = "";
-		for (const r of tries) { const no = await refusal(c, room, r); if (!no) { rect = r; break; } why ||= no; }
+		for (const r of tries) { const no = await refusal(c, room, r, !!plan.green); if (!no) { rect = r; break; } why ||= no; }
 		if (!rect) throw new CommandError(`Hier passt keine ${plan.name} hin: ${why}`);
 		const buildId = randomBytes(6).toString("hex"), now = await worldNowOf(c.space, c.txn);
 		for (const p of cells(rect)) {
@@ -338,7 +349,7 @@ const keeperProto = (c: CommandCtx, proto: unknown) => !!c.world.wild?.keepers?.
 /** What lies in a building's chest (its things, without a dog or cat on guard). */
 const chestOf = async (c: CommandCtx, buildId: string) => (await c.space.readAll({ type: "Item", fields: { location: buildId } })).filter((e) => !keeperProto(c, e.fields.proto));
 
-const WORLD_DAY = 24 * 3600_000;
+
 /** The chest beside the actor: one's own first, else a warehouse (it need not be one's own: `storeRight` decides). */
 async function chestHere(c: CommandCtx): Promise<BuildingFields> {
 	const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
@@ -438,10 +449,16 @@ const entnimm: Command = {
 		const proto = hits[0]!.f.proto, all = inside.filter((i) => i.f.proto === proto);
 		let moved = 0;
 		const want = Math.min(n ?? all.length, all.length);
-		for (const it of all.slice(0, Math.min(want, left))) if (await moveItem(c.space, c.txn, it.f.itemId, b.buildId, c.actor.charId)) moved++;
+		// a town hall's tax: coins for each thing, into the store; the coins themselves go free
+		const tax = shared && proto !== c.world.currency ? (await settlementIn(c.space, c.actor.room, c.txn))?.tax ?? 0 : 0;
+		const coins = tax ? (await inventory(c)).filter((i) => i.f.proto === c.world.currency) : [];
+		const payable = tax ? Math.floor(coins.length / tax) : Infinity;
+		if (!payable) throw new CommandError(`Das Lager nimmt ${tax} Münzen Steuer je Stück; so viele hast du nicht.`);
+		for (const it of all.slice(0, Math.min(want, left, payable))) if (await moveItem(c.space, c.txn, it.f.itemId, b.buildId, c.actor.charId)) moved++;
+		for (const coin of coins.slice(0, moved * tax)) if (!(await moveItem(c.space, c.txn, coin.f.itemId, c.actor.charId, b.buildId))) throw new CommandError("Die Münzen sind gerade nicht greifbar; bitte noch einmal.");
 		await putBack(c, b);
 		if (shared) await logStore(c, b, "aus", hits[0]!.f.name, moved);
-		await msg(c, c.actor.charId, "info", `Du nimmst ${moved} ${hits[0]!.f.name} aus ${shared ? "dem Lager" : "der Truhe"}.${want > left ? " Mehr steht dir heute nicht zu." : ""}`);
+		await msg(c, c.actor.charId, "info", `Du nimmst ${moved} ${hits[0]!.f.name} aus ${shared ? "dem Lager" : "der Truhe"}.${tax ? ` ${moved * tax} Münzen Steuer bleiben im Lager.` : ""}${want > Math.min(left, payable) ? (payable < left ? " Für mehr reichen deine Münzen nicht." : " Mehr steht dir heute nicht zu.") : ""}`);
 	},
 };
 
@@ -456,7 +473,7 @@ const repariere: Command = {
 		const inv = await inventory(c);
 		for (const r of cost) if (inv.filter((i) => i.f.proto === r.proto).length < r.count) throw new CommandError(`Zum Ausbessern brauchst du ${r.count} ${c.world.prototypes.find((p) => p.key === r.proto)?.name ?? r.proto}.`);
 		for (const r of cost) for (const it of inv.filter((i) => i.f.proto === r.proto).slice(0, r.count)) await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn });
-		const until = now + (plan?.keepWorldMs ?? 7 * 24 * 3600_000);
+		const until = now + (await keepOf(c, plan));
 		await putBack(c, { ...b, untilWorldMs: until });
 		await msg(c, "*", "emote", `${c.actor.name} bessert die ${b.name} von ${b.ownerName} aus; sie hält wieder ${days(until - now)}.`);
 	},

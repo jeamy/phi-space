@@ -1,4 +1,4 @@
-// Commands and command sets as in Evennia (docs/evennia-abbildung.md, "Befehle"). A command set comes from the
+// Commands and command sets as in Evennia (docs/evennia-abbildung.en.md, "Befehle"). A command set comes from the
 // character, its permission level and its room (one command per exit); for each command line the sets are merged by
 // priority: a Union adds its commands (a higher priority wins a name both have), a Replace drops everything below it,
 // a Remove takes its names out. A command's `cmd` lock decides whether it is offered at all.

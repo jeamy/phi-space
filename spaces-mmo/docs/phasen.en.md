@@ -93,6 +93,16 @@ bounded).
   side panel like the phone, in landscape they stand side by side. `viewport-fit=cover` with safe-area margins for
   notch devices, `100dvh` instead of `100vh`, a web app manifest (`app/manifest.ts`, icon `app/icon.svg`) for the
   home screen. Not yet checked on real devices.
+- **Phone view** (2026-10-31; replaces the stacked layout above on phones and tablets held upright): `client/useShell.ts`
+  is what remains of a choice of frames: since 2026-10-31 the game has one frame everywhere, the desktop too, and the page never scrolls; a phone on its side goes to full screen at the first touch. The canvas takes
+  the frame's size, the camera follows the figure and leaves the sheet's height free, the sea goes on around the room,
+  zoom steps are whole device pixels per art pixel (`fillZooms`). A tap walks the whole way by numbered steps (`nextStep`
+  in `client/walk.ts`; `move` would set the figure down at the end in one go), on the desktop a click stays one step and the
+  right click's menu opens as the same action sheet. What is on a cell comes from `client/cellActions.ts`, shown as an action sheet;
+  `client/Sheet.tsx` holds bag, log and chats in three heights; two fingers also turn the 3D view; `client/useBack.ts` makes the back gesture close the topmost
+  layer. Help and commands are one page with two tabs, the world map a page of its own. Not yet checked on real devices;
+  frame rate on a phone not measured. A hint leads to the home screen on iPhone (the only full screen there) and Android
+  (icons in `public/` and `app/apple-icon.png`, manifest `fullscreen`); `useKeyboardInset` keeps the frame on the visual viewport for its keyboard.
 - **Measured** (`tests/phase3.test.ts`, latency alone with `npm run test:perf`): greeting 3 KB with 12 figures (limit 64 KiB); from step to
   position report on average 105 ms with 90 % under 186 ms (target under 150 ms); each player receives only their room.
 - **In headless Chromium** with 30 figures, 29 of them running bots: 38 frames/s at zoom 1, 37 at zoom 2. That is

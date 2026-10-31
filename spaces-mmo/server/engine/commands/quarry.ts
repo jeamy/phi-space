@@ -1,4 +1,4 @@
-// The quarry, step 5 part 2 (docs/siedeln.md "Stoffe"): beside a quarry, anyone's, a pickaxe breaks stone. It is work: the
+// The quarry, step 5 part 2 (docs/siedeln.en.md "Stoffe"): beside a quarry, anyone's, a pickaxe breaks stone. It is work: the
 // tool wears, and the figure rests afterwards like after `arbeite`.
 import { fieldsOf, type BuildingFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";

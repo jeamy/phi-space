@@ -10,7 +10,7 @@ import type { CharView, ObjView } from "../server/gateway.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
-import { buildingGeometry, fenceGeometry, fireGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
+import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
 import { tile3d } from "./terrain3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
@@ -18,7 +18,7 @@ type T = typeof import("three");
 type O3 = import("three").Object3D;
 type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; kind?: string; progress?: number; sig?: string };
 /** What a bed shows: rebuilt when its plants or weeds change. */
-const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
+const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
 type Scene3D = {
 	t: T;
 	renderer: import("three").WebGLRenderer;
@@ -52,7 +52,7 @@ type Scene3D = {
 };
 
 const LONG_PRESS_MS = 500;
-const DRAG_PX = 8;
+const DRAG_PX = 12;
 const ZOOM_MIN = 0.5, ZOOM_MAX = 3;
 const ELEVATION = (52 * Math.PI) / 180;
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
@@ -206,17 +206,17 @@ function buildPlants(s: Scene3D, covered: Set<string>): import("three").Group {
 	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
 		const key = room.decor?.[y]?.[x] ?? " ", d = world.decor?.[key];
 		if (!d?.model || covered.has(`${x},${y}`)) continue;
-		const look = placeLook(`${room.roomId}:${x}:${y}`), at = `${d.model}:${look.variant}`;
+		const look = placeLook(`${room.roomId}:${x}:${y}`), at = `${d.model}:${look.variant}:${d.tint ?? ""}`;
 		const list = models.get(at) ?? []; list.push({ x, y, turn: look.turn, size: look.size }); models.set(at, list);
 	}
 	for (const [at, cells] of models) {
-		const [model, variant] = at.split(":") as [PlantModel, string];
-		const mesh = new t.InstancedMesh(plantGeometry(t, model, Number(variant) % PLANT_VARIANTS), propMaterial(t), cells.length);
+		const [model, variant, tint] = at.split(":") as [PlantModel, string, string];
+		const mesh = new t.InstancedMesh(plantGeometry(t, model, Number(variant) % PLANT_VARIANTS, tint ? Number(tint) : undefined), propMaterial(t), cells.length);
 		const matrix = new t.Matrix4(), q = new t.Quaternion(), up = new t.Vector3(0, 1, 0);
 		cells.forEach((c, i) => { matrix.compose(new t.Vector3(c.x - w / 2 + 0.5, surface(room, world, c.x, c.y), c.y - h / 2 + 0.5), q.setFromAxisAngle(up, c.turn), new t.Vector3(c.size, c.size, c.size)); mesh.setMatrixAt(i, matrix); });
 		mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); group.add(mesh);
 		const tall = model === "tree" || model === "conifer";
-		for (const c of cells) { const sh = propShadow(t, tall ? 1.1 : 0.8, tall ? 1.1 : 0.8); sh.position.set(c.x - w / 2 + 0.5, surface(room, world, c.x, c.y) + 0.012, c.y - h / 2 + 0.5); group.add(sh); }
+		if (model === "tree" || model === "conifer" || model === "bush" || model === "berrybush") for (const c of cells) { const sh = propShadow(t, tall ? 1.1 : 0.8, tall ? 1.1 : 0.8); sh.position.set(c.x - w / 2 + 0.5, surface(room, world, c.x, c.y) + 0.012, c.y - h / 2 + 0.5); group.add(sh); }
 	}
 	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
 		const key = room.decor?.[y]?.[x] ?? " ", d = world.decor?.[key], map = plants.get(key);
@@ -266,13 +266,17 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		e.target.copy(at(s, c.x, c.y, 0));
 		if (snap) e.obj.position.copy(e.target);
 	}
-	for (const id of [...s.objs.keys()]) if (!objs.has(id) || objs.get(id)?.location !== s.room.roomId) remove(s, s.objs, id);
+	for (const id of [...s.objs.keys()]) if (!objs.has(id) || objs.get(id)?.location !== s.room.roomId) {
+		const e = s.objs.get(id)!;
+		// cleared scenery sinks away instead of vanishing
+		if (e.kind === "scenery" && !objs.has(id)) { s.objs.delete(id); fadeOut(s, e.obj); } else remove(s, s.objs, id);
+	}
 	for (const [id, obj] of objs) {
 		if (obj.location !== s.room.roomId) continue;
 		let e = s.objs.get(id);
 		// a site that became a building (or got further) is drawn anew
 		if (e && (e.kind !== obj.kind || e.progress !== obj.progress || e.sig !== bedSig(obj))) { remove(s, s.objs, id); e = undefined; }
-		if (!e) { e = object(s.t, obj, chars.get(me)?.name); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); s.scene.add(e.obj); s.objs.set(id, e); }
+		if (!e) { e = object(s.t, obj, me); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); s.scene.add(e.obj); s.objs.set(id, e); }
 		e.target.copy(placeOf(s, obj));
 		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; e.flame.light.intensity = lit ? 4 : 0; }
 	}
@@ -294,7 +298,7 @@ function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
 	return v;
 }
 
-function object(t: T, obj: ObjView, myName: string | undefined): Entry {
+function object(t: T, obj: ObjView, me: string): Entry {
 	const group = new t.Group(); group.userData.owned = true;
 	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" || obj.kind === "field" || obj.kind === "building" ? { sig: bedSig(obj) } : {}) };
 	if (obj.kind === "bed") {
@@ -305,6 +309,7 @@ function object(t: T, obj: ObjView, myName: string | undefined): Entry {
 		const stem = new t.MeshStandardMaterial({ color: 0x4f8a3a, roughness: 1 });
 		for (const p of obj.plants ?? []) {
 			const px = p.x - (w - 1) / 2, pz = p.y - (d - 1) / 2;
+			if (p.model) { const crop = propMesh(t, cropGeometry(t, p.model, p.stage, Number.parseInt(p.color.slice(1), 16))); crop.position.set(px, 0.08, pz); crop.rotation.y = placeLook(`${obj.id}:${p.x}:${p.y}`).turn; group.add(crop); continue; }
 			if (p.stage === 0) { const s0 = new t.Mesh(new t.SphereGeometry(0.04, 6, 4), new t.MeshStandardMaterial({ color: 0x2e1e10 })); s0.position.set(px, 0.1, pz); group.add(s0); continue; }
 			const tall = p.stage === 1 ? 0.2 : p.stage === 2 ? 0.38 : 0.15;
 			const st = new t.Mesh(new t.CylinderGeometry(0.03, 0.03, tall, 5), p.stage === 3 ? new t.MeshStandardMaterial({ color: 0x7a6a4a }) : stem); st.position.set(px, 0.08 + tall / 2, pz); group.add(st);
@@ -319,6 +324,11 @@ function object(t: T, obj: ObjView, myName: string | undefined): Entry {
 		const soil = new t.Mesh(new t.BoxGeometry(w * 0.96, 0.06, d * 0.96), new t.MeshStandardMaterial({ color: stage === "brach" ? 0x7a6040 : 0x5e4028, roughness: 1 })); soil.position.y = 0.03; group.add(soil);
 		if (obj.fenced) group.add(propMesh(t, fenceGeometry(t, w, d))); // deer keep out (wild.ts)
 		if (stage === "brach") return e;
+		if (obj.cropModel && stage !== "saat") {
+			const ripe = stage === "reif" || stage === "spaet", color = Number.parseInt((obj.color ?? "#d9b44a").slice(1), 16);
+			const crop = propMesh(t, fieldCropGeometry(t, obj.cropModel, w, d, ripe ? 1 : 0.4, color, stage === "spaet")); crop.position.y = 0.06; group.add(crop);
+			return e;
+		}
 		const ridge = new t.MeshStandardMaterial({ color: 0x4e3420, roughness: 1 });
 		const crop = new t.MeshStandardMaterial({ color: stage === "reif" || stage === "spaet" ? Number.parseInt((obj.color ?? "#d9b44a").slice(1), 16) : 0x5f9a3a, roughness: 0.9 });
 		if (stage === "spaet") crop.color.multiplyScalar(0.7);
@@ -343,7 +353,7 @@ function object(t: T, obj: ObjView, myName: string | undefined): Entry {
 		group.add(propShadow(t, w * 1.15, d * 1.15));
 		group.add(propMesh(t, obj.kind === "building" ? buildingGeometry(t, obj.plan, w, d, color, variant, obj.herd) : siteGeometry(t, obj.plan, w, d, color, obj.progress ?? 0)));
 		// one's own site says so above it
-		if (obj.kind === "site" && obj.owner === myName) { const mark = label(t, "Deine Baustelle", "#dfff73"); mark.position.y = 1.3; group.add(mark); }
+		if (obj.kind === "site" && obj.ownerId === me) { const mark = label(t, "Deine Baustelle", "#dfff73"); mark.position.y = 1.3; group.add(mark); }
 		// a coop with a fence round it (foxes keep out), a dog or cat on guard at its front corner (wild.ts, animals.ts)
 		if (obj.kind === "building" && obj.fenced) group.add(propMesh(t, fenceGeometry(t, w + 0.5, d + 0.5)));
 		if (obj.kind === "building" && obj.keeper) { const k = propMesh(t, keeperGeometry(t, obj.keeper, variant)); k.position.set(w / 2 + 0.05, 0, d / 2 + 0.05); k.rotation.y = 0.6; group.add(k); }
@@ -361,8 +371,13 @@ function object(t: T, obj: ObjView, myName: string | undefined): Entry {
 		const cone = new t.Mesh(new t.ConeGeometry(0.17, 0.5, 7), new t.MeshStandardMaterial({ color: 0xffa23a, emissive: 0xff7a14, emissiveIntensity: 1.6, transparent: true, opacity: 0.92, flatShading: true })); cone.position.y = 0.6; group.add(cone);
 		const light = new t.PointLight(0xff9d32, 0, 4); light.position.y = 0.85; group.add(light);
 		e.flame = { light, cone };
+	} else if (obj.kind === "scenery") {
+		const w = obj.w ?? 1, d = obj.h ?? 1;
+		const mesh = ["huette", "felsen", "mauer", "turm", "meiler"].includes(obj.model ?? "") ? ruinGeometry(t, w, d, variant) : obj.model === "netz" ? fenceGeometry(t, w, d) : siteGeometry(t, undefined, w, d, obj.model === "steg" ? 0x7a5c3e : 0x6b4a2e, 1);
+		group.add(propMesh(t, mesh));
 	} else if (obj.kind === "exit") {
 		const sign = propMesh(t, signGeometry(t)); sign.rotation.y = (variant / 3) * Math.PI * 2; group.add(sign);
+		const mark = label(t, obj.to ?? obj.name, "#AED83C"); mark.position.y = 1.1; group.add(mark);
 	} else if (obj.icon) {
 		// the thing's picture as a small sign that always faces the camera
 		const sprite = new t.Sprite(new t.SpriteMaterial({ map: iconTexture(t, obj.icon), transparent: true, alphaTest: 0.1 }));
@@ -438,9 +453,14 @@ function resize(s: Scene3D): void {
 
 function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { current: { zoomBy: (f: number) => void; turned: (angle: number) => void } }): void {
 	const t = s.t, ray = new t.Raycaster(), mouse = new t.Vector2(), plane = new t.Plane(new t.Vector3(0, 1, 0), -0.25), hit = new t.Vector3();
+	/** The point of the ground at a place on the screen. */
+	const ground = (x: number, y: number) => {
+		const r = s.canvas.getBoundingClientRect(); mouse.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+		s.camera.updateMatrixWorld(); ray.setFromCamera(mouse, s.camera);
+		return ray.ray.intersectPlane(plane, hit);
+	};
 	const cell = (e: PointerEvent) => {
-		const r = s.canvas.getBoundingClientRect(); mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(mouse, s.camera);
-		if (!ray.ray.intersectPlane(plane, hit)) return null;
+		if (!ground(e.clientX, e.clientY)) return null;
 		const { w, h } = dims(s.room), x = Math.floor(hit.x + w / 2), y = Math.floor(hit.z + h / 2);
 		return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
 	};
@@ -461,7 +481,17 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 	let last = { x: 0, y: 0 }, dragged = false;
 	const onMove = (e: PointerEvent) => {
 		const spread = fingers.move(e.pointerId, e.clientX, e.clientY);
-		if (spread !== null) { view.current.zoomBy(spread); fingers.rebase(); return; }
+		// two fingers zoom and turn at once: the room turns with them (the state too: its effect would set the old angle back)
+		if (spread !== null) {
+			// what lies between the fingers stays there: the view moves over the ground by what the zoom and the turn shifted
+			const c = fingers.center!, before = ground(c.x, c.y)?.clone(), a = s.angle - fingers.twist, z = clamp(s.zoom * spread, ZOOM_MIN, ZOOM_MAX);
+			view.current.zoomBy(spread); view.current.turned(a);
+			s.angle = a; s.zoom = z; positionCamera(s);
+			const after = ground(c.x, c.y);
+			if (before && after) { s.panX += before.x - after.x; s.panZ += before.z - after.z; positionCamera(s); }
+			fingers.rebase();
+			return;
+		}
 		if (!down) return;
 		if (!dragged && Math.hypot(e.clientX - down.x, e.clientY - down.y) > DRAG_PX) { dragged = true; clearTimeout(down.timer); down.at = null; last = { x: down.x, y: down.y }; s.canvas.setPointerCapture?.(e.pointerId); }
 		if (!dragged) return;
@@ -484,6 +514,17 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 	Object.assign(s.canvas.dataset, { map3d: "1" }); s.canvas.addEventListener("pointerdown", onDown); s.canvas.addEventListener("pointermove", onMove); s.canvas.addEventListener("pointerup", onUp); s.canvas.addEventListener("pointercancel", onUp); s.canvas.addEventListener("contextmenu", onContext); s.canvas.addEventListener("wheel", onWheel, { passive: false }); s.canvas.addEventListener("mousedown", onMouseDown);
 	(s.canvas as HTMLCanvasElement & { mapCleanup?: () => void }).mapCleanup = () => { s.canvas.removeEventListener("pointerdown", onDown); s.canvas.removeEventListener("pointermove", onMove); s.canvas.removeEventListener("pointerup", onUp); s.canvas.removeEventListener("pointercancel", onUp); s.canvas.removeEventListener("contextmenu", onContext); s.canvas.removeEventListener("wheel", onWheel); s.canvas.removeEventListener("mousedown", onMouseDown); };
 }
+function fadeOut(s: Scene3D, obj: O3): void {
+	const from = performance.now();
+	const tick = () => {
+		const k = 1 - (performance.now() - from) / 900;
+		if (k <= 0 || state3dGone(s)) { s.scene.remove(obj); dispose(obj); return; }
+		obj.scale.set(k, k * k, k);
+		requestAnimationFrame(tick);
+	};
+	tick();
+}
+const state3dGone = (s: Scene3D) => !s.canvas.isConnected;
 function unpointer(s: Scene3D): void { (s.canvas as HTMLCanvasElement & { mapCleanup?: () => void }).mapCleanup?.(); }
 function prevent(e: Event): void { e.preventDefault(); }
 function stored(key: string, fallback: number): number { try { const raw = localStorage.getItem(key); if (raw === null) return fallback; const n = Number(raw); return Number.isFinite(n) ? n : fallback; } catch { return fallback; } }

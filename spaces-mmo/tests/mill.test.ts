@@ -1,4 +1,4 @@
-// Mill and bakery, step 3 part 2 (docs/siedeln.md "Warenketten", engine/commands/mill.ts): grain brought at once to a
+// Mill and bakery, step 3 part 2 (docs/siedeln.en.md "Warenketten", engine/commands/mill.ts): grain brought at once to a
 // mill queues load after load, each figure gets exactly its own flour, none early and none twice; a storm surge grinds
 // ahead; a mill that falls gives back the grain it had not ground; bread only beside a bakery; flax to linen with a
 // spindle.
@@ -58,6 +58,12 @@ test("a mill: ten bring grain at once, each gets exactly their own flour; a stor
 	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001" } });
 	try {
 		const s = srv.stack.space;
+		// the storms here are the test's own: one of the world's would turn the mill as well (a date taken for a moment by a worker is asked for again)
+		await eventually(async () => {
+			const e = (await s.readAll({ type: "WorldSchedule" })).find((x) => JSON.stringify(x.fields.payload ?? "").includes("storm") || String(x.fields.scheduleId).includes("storm"));
+			if (e) await s.takeIfExists({ id: e.id }, 0);
+			return e === undefined && (await s.readAll({ type: "WorldSchedule" })).length > 3;
+		}, 20_000, "no storm on the calendar");
 		const miller = await player(srv.url, "Müllerin");
 		const accountId = String((await s.readAll({ type: "Character", fields: { charId: miller.me } }))[0]!.fields.accountId);
 		const mill = await building(s, { buildId: "muehle-1", plan: "windmuehle", name: "Windmühle", x: 16, y: 12, owner: miller.me, ownerName: miller.name, accountId });

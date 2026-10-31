@@ -1,4 +1,4 @@
-// The settlers (docs/siedeln.md "Wenige Spieler: die Welt packt mit an"): script figures that play like people where too
+// The settlers (docs/siedeln.en.md "Wenige Spieler: die Welt packt mit an"): script figures that play like people where too
 // few people play. Each lives on one fire's island (its rooms are its `home`, it takes no ferry) and plays through the
 // commands a player types: it gathers driftwood, kelp and shells, twists rope, stakes out a hut and a rain barrel,
 // builds them and a coop, helps at the sites of others, digs a bed or two, looks for seeds, plants, waters, weeds and
@@ -307,7 +307,7 @@ function bauhelfer(): Script {
 	};
 }
 
-/** How many buildings bring one more villager (docs/siedeln.md "Wenige Spieler"). */
+/** How many buildings bring one more villager (docs/siedeln.en.md "Wenige Spieler"). */
 const PER_VILLAGER = 5;
 /** The room of a settlement in the NPC's rooms that has enough buildings for it, if any. */
 async function villageOf(n: Npc, homes: string[]): Promise<string | undefined> {

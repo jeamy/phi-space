@@ -1,4 +1,4 @@
-// Chat between players (docs/siedeln.md, "Chat zwischen Spielern"): talks between two, groups by invitation, blocks,
+// Chat between players (docs/siedeln.en.md, "Chat zwischen Spielern"): talks between two, groups by invitation, blocks,
 // reports. It runs in the web process and keeps its entries in the accounts space: the one space every region shares
 // and only the web process reaches (the dashboard leaves it out). A chat line never reaches the world: no world worker,
 // no translation, no NPC and no model reads it.
@@ -10,13 +10,17 @@
 // key is a ChatKey entry: the public key and the private key sealed with the player's chat password (a backup only the
 // player can open, so another device reads the same talks). The notes of a group (someone joined or left) are plain.
 // What arrives while a reader is away waits for the next login, and the last messages of each talk come back with every
-// page. The gateway is told of new messages, invitations and memberships by the accounts space's change stream.
+// page. A reader without a key cannot get a copy yet: a ChatWaiting entry says so (no text in it), the reader is told to set
+// up the chat, and once they have, the sender's page opens its own copy and seals it for them (frames "chatreseal",
+// "chatdeliver"), the moment it is unlocked if the sender is away. The server keeps the time the message was written. The gateway is told of new messages, invitations and memberships by the accounts space's change stream.
 import { randomBytes } from "node:crypto";
 import { cutText, FOREVER, NO_WAIT, RevisionAhead, SnapshotExpired, type SpaceLike } from "phi-spaces";
 import { envMs } from "./space.ts";
 
 /** `box`: the sealed copy (JSON of client/chatcrypto.ts Box); `note`: a plain note of a group instead. */
 export type ChatMsgFields = { msgId: string; to: string; conv: string; title: string; fromId: string; fromName: string; box?: string; note?: string; at: number };
+/** A message `to` cannot read yet: they have no key. `conv` as `to` will see it; `first`: the first one from this sender. */
+export type ChatWaitFields = { msgId: string; to: string; fromId: string; fromName: string; conv: string; title: string; first: boolean; at: number };
 export type ChatKeyFields = { accountId: string; pub: string; wrapped: string; salt: string; iter: number; at: number };
 type Box = { iv: string; ct: string; pub: string };
 export type ChatGroupFields = { groupId: string; name: string; key: string; owner: string; at: number };
@@ -31,13 +35,18 @@ export type ChatConv = { kind: "dm" | "group"; id: string; title: string };
 export type ChatView = { id: string; conv: ChatConv; from: string; fromId: string; at: number; mine?: true; box?: Box; note?: string };
 /** A key backup as the page sends and gets it (client/chatcrypto.ts KeyBackup). */
 export type ChatKeyView = { pub: string; wrapped: string; salt: string; iter: number };
+/** A message of the sender's that a reader can get now: `pub` their new key. */
+export type ChatResealItem = { msgId: string; to: string; pub: string; groupId: string };
 /** The player's groups (with the names of their members), the invitations waiting and whom they ignore. */
-export type ChatState = { groups: Array<{ groupId: string; name: string; members: string[]; owner: boolean }>; invites: Array<{ groupId: string; name: string; from: string }>; blocked: string[] };
+export type ChatState = { groups: Array<{ groupId: string; name: string; members: string[]; owner: boolean }>; invites: Array<{ groupId: string; name: string; from: string }>; blocked: string[];
+	/** Who wrote to a player without a chat key, and how many messages wait for it. */ waiting: Array<{ from: string; count: number }> };
 export type ChatFrame =
 	| { t: "chat"; m: ChatView }
 	| { t: "chatlog"; msgs: ChatView[] }
 	| { t: "chats"; state: ChatState }
 	| { t: "chatopen"; conv: ChatConv }
+	/** To the sender's pages: open these of your own copies and seal them for their reader. */
+	| { t: "chatreseal"; items: ChatResealItem[] }
 	/** The player's account and key backup (null: no chat key yet). */
 	| { t: "chatme"; accountId: string; key: ChatKeyView | null }
 	/** The readers of a talk with their public keys (the page seals a copy for each); `missing`: readers without a key. */
@@ -47,7 +56,11 @@ export type ChatClientFrame =
 	| { t: "chatkey"; key: ChatKeyView; replace?: boolean }
 	| { t: "chatkeys"; conv: { kind: "dm" | "group"; id: string }; req: number }
 	| { t: "chatsend"; msgId: string; conv: { kind: "dm" | "group"; id: string }; copies: Array<{ to: string; box: Box }> }
-	| { t: "chatreport"; msgId: string; text: string };
+	| { t: "chatreport"; msgId: string; text: string }
+	/** An unlocked page asks what it can hand on now. */
+	| { t: "chatwaiting" }
+	/** A message handed on to a reader who has a key now. */
+	| { t: "chatdeliver"; msgId: string; to: string; box: Box };
 type Note = { t: "msg"; m: { kind: "info" | "error"; text: string; from: string; at: number } };
 
 /** Someone chat can address: a player's account and the name of their character. */
@@ -83,7 +96,7 @@ const id = () => randomBytes(8).toString("hex");
 const fields = <T>(e: { fields: Record<string, unknown> }) => e.fields as unknown as T;
 
 export const isChatLine = (line: string) => LINE.test(line);
-export const isChatFrame = (f: { t?: unknown }): f is ChatClientFrame => f.t === "chatkey" || f.t === "chatkeys" || f.t === "chatsend" || f.t === "chatreport";
+export const isChatFrame = (f: { t?: unknown }): f is ChatClientFrame => f.t === "chatkey" || f.t === "chatkeys" || f.t === "chatsend" || f.t === "chatreport" || f.t === "chatwaiting" || f.t === "chatdeliver";
 const NOT_PLAIN = "Chat-Nachrichten gehen nur verschlüsselt, aus dem Chat der Seite (Reiter „Chats“); dort richtest du ihn mit einem Chat-Passwort ein.";
 
 export class Chat {
@@ -106,7 +119,9 @@ export class Chat {
 		const msgs = (await this.space.readAll({ type: "ChatMsg", fields: { to: me.accountId } })).map((e) => fields<ChatMsgFields>(e)).sort((a, b) => a.at - b.at);
 		send({ t: "chatme", accountId: me.accountId, key: await this.#key(me.accountId) });
 		send({ t: "chatlog", msgs: msgs.slice(-300).map((m) => this.#view(m)) });
-		send({ t: "chats", state: await this.state(me.accountId) });
+		const state = await this.state(me.accountId);
+		send({ t: "chats", state });
+		if (state.waiting.length && !(await this.#key(me.accountId))) send(note("info", waitNote(state.waiting.map((w) => w.from))) as never);
 	}
 
 	/** Runs a chat line of `me`; false when the line is not one (it goes to the world). */
@@ -133,6 +148,8 @@ export class Chat {
 			if (f.t === "chatkey") await this.#setKey(me, f, reply);
 			else if (f.t === "chatkeys") { const r = await this.#readers(me, f.conv); reply({ t: "chatkeys", conv: r.conv, readers: r.readers.filter((x) => x.pub).map((x) => ({ accountId: x.accountId, name: x.name, pub: x.pub! })), missing: r.readers.filter((x) => !x.pub).map((x) => x.name), req: Number(f.req) || 0 }); }
 			else if (f.t === "chatsend") await this.#send(me, f);
+			else if (f.t === "chatwaiting") { const items = await this.#handOn(me.accountId); if (items.length) reply({ t: "chatreseal", items }); }
+			else if (f.t === "chatdeliver") await this.#deliver(me, f);
 			else await this.#report(me, f, reply);
 		} catch (e) {
 			if (e instanceof ChatError) reply(note("error", e.message));
@@ -155,7 +172,9 @@ export class Chat {
 			if (g) invites.push({ groupId: g.groupId, name: g.name, from: this.hooks.nameOf(inv.fromId) });
 		}
 		const blocked = (await this.space.readAll({ type: "ChatBlock", fields: { who: accountId } })).map((e) => this.hooks.nameOf(fields<ChatBlockFields>(e).whom)).sort();
-		return { groups: groups.sort((a, b) => a.name.localeCompare(b.name)), invites, blocked };
+		const waits = new Map<string, number>();
+		for (const e of await this.space.readAll({ type: "ChatWait", fields: { to: accountId } })) { const w = fields<ChatWaitFields>(e), n = this.hooks.nameOf(w.fromId) || w.fromName; waits.set(n, (waits.get(n) ?? 0) + 1); }
+		return { groups: groups.sort((a, b) => a.name.localeCompare(b.name)), invites, blocked, waiting: [...waits].map(([from, count]) => ({ from, count })) };
 	}
 
 	/** The reports for the admins, newest first. */
@@ -344,6 +363,11 @@ export class Chat {
 		await this.space.write({ type: "ChatKey", fields: { accountId: me.accountId, pub: k.pub, wrapped: k.wrapped, salt: k.salt, iter: k.iter, at: Date.now() } satisfies ChatKeyFields as never }, null, FOREVER);
 		// every page of the account learns the key (another device unlocks it with the password)
 		this.hooks.send(me.accountId, { t: "chatme", accountId: me.accountId, key: { pub: k.pub, wrapped: k.wrapped, salt: k.salt, iter: k.iter } });
+		// what was written to the player meanwhile comes now: the senders' pages seal it for this key
+		if (old?.pub !== k.pub) {
+			const senders = new Set((await this.space.readAll({ type: "ChatWait", fields: { to: me.accountId } })).map((e) => fields<ChatWaitFields>(e).fromId));
+			for (const s of senders) { const items = (await this.#handOn(s)).filter((i) => i.to === me.accountId); if (items.length) this.hooks.send(s, { t: "chatreseal", items }); }
+		}
 		reply(note("info", !old ? "Chat eingerichtet. Deine Nachrichten sind Ende-zu-Ende verschlüsselt." : old.pub === k.pub ? "Chat-Passwort geändert." : "Neuer Chat-Schlüssel: was für den alten geschrieben wurde, ist nicht mehr lesbar."));
 	}
 	/** Who reads a talk of `me`: between two, both (unless the other ignores `me`); in a group, its members (but those
@@ -385,6 +409,39 @@ export class Chat {
 			const title = r.groupId ? r.conv.title : c.to === me.accountId ? r.conv.title : me.name;
 			await this.#store({ msgId: f.msgId, to: c.to, conv, title, fromId: me.accountId, fromName: me.name, box: JSON.stringify({ iv: c.box.iv, ct: c.box.ct, pub: c.box.pub }), at });
 		}
+		await this.#wait(me, f.msgId, r, at);
+	}
+	/** Remembers that the readers without a key wait for this message; each keeps the last KEEP from one sender. */
+	async #wait(me: ChatUser, msgId: string, r: { conv: ChatConv; groupId: string; readers: Array<{ accountId: string; pub: string | null }> }, at: number): Promise<void> {
+		for (const x of r.readers) {
+			if (x.pub) continue;
+			const had = await this.space.readAll({ type: "ChatWait", fields: { to: x.accountId, fromId: me.accountId } });
+			await this.space.write({ type: "ChatWait", fields: { msgId, to: x.accountId, fromId: me.accountId, fromName: me.name, conv: r.groupId ? `g:${r.groupId}` : `dm:${me.accountId}`, title: r.groupId ? r.conv.title : me.name, first: !had.length, at } satisfies ChatWaitFields as never }, null, MSG_MS());
+			if (had.length >= KEEP) for (const e of had.sort((a, b) => Number(a.fields.at) - Number(b.fields.at)).slice(0, had.length - KEEP + 1)) await this.space.takeIfExists({ id: e.id }, NO_WAIT);
+		}
+	}
+	/** What `sender`'s page can hand on now: their waiting messages whose reader has a key by now. */
+	async #handOn(sender: string): Promise<ChatResealItem[]> {
+		const items: ChatResealItem[] = [], keys = new Map<string, string | null>();
+		for (const e of await this.space.readAll({ type: "ChatWait", fields: { fromId: sender } })) {
+			const w = fields<ChatWaitFields>(e);
+			if (!keys.has(w.to)) keys.set(w.to, (await this.#key(w.to))?.pub ?? null);
+			const pub = keys.get(w.to);
+			if (pub) items.push({ msgId: w.msgId, to: w.to, pub, groupId: w.conv.startsWith("g:") ? w.conv.slice(2) : "" });
+		}
+		return items;
+	}
+	/** A waiting message sealed by its sender for a reader who has a key now; it keeps the time it was written. A second
+	 *  page of the sender finds it gone. Who ignores the sender or left the group meanwhile gets nothing. */
+	async #deliver(me: ChatUser, f: Extract<ChatClientFrame, { t: "chatdeliver" }>): Promise<void> {
+		const b = f.box, mine = await this.#key(me.accountId), theirs = typeof f.to === "string" ? await this.#key(f.to) : null;
+		if (!mine || !theirs || typeof f.msgId !== "string" || !b || b.pub !== mine.pub || ![b.iv, b.ct, b.pub].every((x) => typeof x === "string" && B64.test(x)) || b.ct.length > MAX_BOX || b.iv.length > 40) throw new ChatError("Ungültige Nachricht.");
+		const e = await this.space.takeIfExists({ type: "ChatWait", fields: { msgId: f.msgId, to: f.to, fromId: me.accountId } }, NO_WAIT);
+		if (!e) return;
+		const w = fields<ChatWaitFields>(e);
+		if (await this.#blocks(w.to, me.accountId)) return;
+		if (w.conv.startsWith("g:") && !(await this.space.count({ type: "ChatMember", fields: { groupId: w.conv.slice(2), accountId: w.to } }))) return;
+		await this.#store({ msgId: w.msgId, to: w.to, conv: w.conv, title: w.title, fromId: me.accountId, fromName: me.name, box: JSON.stringify({ iv: b.iv, ct: b.ct, pub: b.pub }), at: w.at });
 	}
 	#view(m: ChatMsgFields): ChatView {
 		const [kind, convId] = m.conv.startsWith("g:") ? ["group", m.conv.slice(2)] as const : ["dm", m.conv.slice(3)] as const;
@@ -408,7 +465,7 @@ export class Chat {
 				if (rev < 0) {
 					rev = (await this.space.readPage({ type: "-" })).rev;
 					this.#concerns.clear();
-					for (const type of ["ChatGroup", "ChatMember", "ChatInvite", "ChatBlock"]) for (const e of await this.space.readAll({ type })) this.#remember(e.id, type, e.fields);
+					for (const type of ["ChatGroup", "ChatMember", "ChatInvite", "ChatBlock", "ChatWait"]) for (const e of await this.space.readAll({ type })) this.#remember(e.id, type, e.fields);
 				}
 				const ch = await this.space.changes(rev, { waitMs: 20_000 });
 				for (const b of ch.batches) {
@@ -416,10 +473,11 @@ export class Chat {
 					for (const op of b.ops) {
 						if (op.op === "put") {
 							if (op.type === "ChatMsg") { const m = fields<ChatMsgFields>(op); this.hooks.send(m.to, { t: "chat", m: this.#view(m) }); continue; }
-							if (!["ChatGroup", "ChatMember", "ChatInvite", "ChatBlock"].includes(op.type)) continue;
+							if (!["ChatGroup", "ChatMember", "ChatInvite", "ChatBlock", "ChatWait"].includes(op.type)) continue;
 							const c = this.#remember(op.id, op.type, op.fields);
 							for (const a of c.accounts) touched.add(a);
 							if (c.group) groups.add(c.group);
+							if (op.type === "ChatWait") { const w = fields<ChatWaitFields>(op); if (w.first) this.hooks.send(w.to, note("info", waitNote([w.fromName]))); }
 							if (op.type === "ChatInvite") {
 								const inv = fields<ChatInviteFields>(op), g = await this.#groupById(inv.groupId);
 								if (g) this.hooks.send(inv.to, note("info", `${this.hooks.nameOf(inv.fromId)} lädt dich in die Gruppe „${g.name}“ ein: „gruppe annehmen ${g.name}“ oder „gruppe ablehnen ${g.name}“.`));
@@ -447,11 +505,12 @@ export class Chat {
 	#remember(entryId: string, type: string, f: Record<string, unknown>): { accounts: string[]; group?: string } {
 		const c = type === "ChatGroup" ? { accounts: [String(f.owner)], group: String(f.groupId) }
 			: type === "ChatMember" ? { accounts: [String(f.accountId)], group: String(f.groupId) }
-			: type === "ChatInvite" ? { accounts: [String(f.to)] }
+			: type === "ChatInvite" || type === "ChatWait" ? { accounts: [String(f.to)] }
 			: { accounts: [String(f.who)] };
 		this.#concerns.set(entryId, c);
 		return c;
 	}
 }
 
+const waitNote = (from: string[]) => `${from.join(", ")} möchte dir im Chat schreiben. Richte im Reiter „Chats“ den Chat mit einem Chat-Passwort ein, dann kommen die Nachrichten an.`;
 const note = (kind: "info" | "error", text: string): Note => ({ t: "msg", m: { kind, text, from: "", at: Date.now() } });

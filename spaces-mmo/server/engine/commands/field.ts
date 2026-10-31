@@ -1,4 +1,4 @@
-// Fields, step 3 part 1 (docs/siedeln.md "Äcker und Getreide"): the big sister of the beds. A field is one entry over a
+// Fields, step 3 part 1 (docs/siedeln.en.md "Äcker und Getreide"): the big sister of the beds. A field is one entry over a
 // larger area (its cells are Plot entries like a building's), carries one crop at a time, and needs little daily care
 // but two bursts of work: sowing (`bestelle`: seed and work points) and the harvest in its window (`ernte` at the field:
 // a work point each, ten hands bring in in an hour what one needs a day for).
@@ -274,4 +274,4 @@ export async function fieldTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 }
 
 /** A field as the page draws it: its crop's colour and the stage. */
-export const fieldView = (w: WorldDef, f: FieldFields) => ({ crop: cropOf(w.fields!, f.crop)?.name, color: cropOf(w.fields!, f.crop)?.color, stage: f.stage, progress: f.workNeed ? f.work / f.workNeed : 0 });
+export const fieldView = (w: WorldDef, f: FieldFields) => ({ crop: cropOf(w.fields!, f.crop)?.name, color: cropOf(w.fields!, f.crop)?.color, model: cropOf(w.fields!, f.crop)?.model, stage: f.stage, progress: f.workNeed ? f.work / f.workNeed : 0 });

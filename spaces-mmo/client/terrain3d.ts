@@ -1,5 +1,5 @@
 // Pure, versioned conversion from the authoritative 2D grid to visual 2.5D heights and colours. Nothing here affects
-// walkability, collision or any other server rule (docs/architektur.md, "3D-Ansicht").
+// walkability, collision or any other server rule (docs/architektur.en.md, "3D-Ansicht").
 export const TERRAIN_RENDERER_VERSION = 1;
 
 export type Tile3d = { color: number; height: number; water: boolean };

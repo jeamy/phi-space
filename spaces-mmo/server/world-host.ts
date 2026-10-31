@@ -1,4 +1,4 @@
-// The world worker (docs/architektur.md): loads the world definition into the space (engine/loader.ts), takes
+// The world worker (docs/architektur.en.md): loads the world definition into the space (engine/loader.ts), takes
 // intents oldest first and runs each command in a transaction together with taking its intent, and removes the
 // characters of lapsed guest accounts. It holds no state of its own: a world worker that dies loses at most the
 // command it was running, whose intent comes back when the transaction lapses. Several may run; each intent is taken
@@ -14,7 +14,7 @@
 //   SPACES_MMO_WORLD_INTENTS=0    this worker runs no commands, only the world's dates and the sweeps: a command makes about
 //                                 a dozen calls to the space one after another, so it belongs next to the space (nano)
 //   SPACES_MMO_SLOW_MS            log commands answered later than this after they were typed (default off)
-//   SPACES_MMO_TIME_SCALE         the starting rate of a new world's clock (docs/weltzeit.md); an existing clock keeps its rate
+//   SPACES_MMO_TIME_SCALE         the starting rate of a new world's clock (docs/weltzeit.en.md); an existing clock keeps its rate
 //   SPACES_MMO_REGION             the region this worker runs (engine/regions.ts): SPACES_MMO_SPACE is its space, and
 //                                 SPACES_MMO_REGIONS names every region's (a ferry to another hands the character over)
 import "./env.ts";
@@ -30,6 +30,7 @@ import { stormTurnsMills } from "./engine/commands/mill.ts";
 import { wildTick } from "./engine/commands/wild.ts";
 import { epochTick } from "./engine/commands/epoch.ts";
 import { settlementTick } from "./engine/commands/settlement.ts";
+import { motionTick } from "./engine/commands/townhall.ts";
 import { fieldTick } from "./engine/commands/field.ts";
 import { ensureTokens, loadIntoSpace } from "./engine/loader.ts";
 import { ClockGuard, runSchedules } from "./engine/schedule.ts";
@@ -64,7 +65,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		storm: async () => { const room = await stormTick(space, w, msgLeaseMs); await stormFillsBarrels(space, w, room); await stormTurnsMills(space, w, room); },
 		garden: async () => { await gardenTick(space, w); await fieldTick(space, w, msgLeaseMs); },
 		wild: async () => { await wildTick(space, w, msgLeaseMs); },
-		epoch: async () => { await epochTick(space, w, msgLeaseMs); await settlementTick(space, w, msgLeaseMs); },
+		epoch: async () => { await epochTick(space, w, msgLeaseMs); await settlementTick(space, w, msgLeaseMs); await motionTick(space, w, msgLeaseMs); },
 	};
 	const handlers = { ...SCHEDULE_HANDLERS, tick: tickHandler(runs) };
 	// a region's world worker reaches the other regions: to deliver the characters that took a ferry out of it
@@ -97,10 +98,10 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		return e ? fieldsOf<IntentFields>(e) : null;
 	};
 
-	/** A new transaction holding the character's token and its oldest intent (claim): with batching one call and one
-	 *  commit for the three steps; the intent is null when either is missing (the transaction is then only aborted). */
-	// Batching needs a space that offers it (an older one refuses): asked once. With batching the intent is taken even
-	// when the token is held elsewhere; the abort then puts it back at once.
+	/** A new transaction holding the character's token and its oldest intent (claim); the intent is null when either is
+	 *  missing (the transaction is then only aborted). The intent is taken only with the token in hand, in a call of its
+	 *  own: a worker that held it for a moment without the token would hide it, and the token's holder would run the next one. */
+	// Batching needs a space that offers it (an older one refuses): asked once.
 	const batch = await batching(space);
 	// a copy of the world in this process answers the commands' snapshot reads (Mirror); it needs batching (the reads go
 	// through bufferedTxn)
@@ -108,8 +109,10 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 	await mirror?.ready();
 	const begin = async (charId: string): Promise<{ txn: string; intent: IntentFields | null }> => {
 		if (!batch) { const txn = (await space.createTransaction(TXN_MS)).id; return { txn, intent: await claim(txn, charId) }; }
-		const [t, token, intent] = (await batch.batch([{ op: "begin", lease: TXN_MS }, { op: "take", template: actorToken(charId), txn: "$" }, { op: "take", template: { type: "Intent", fields: { charId } }, txn: "$" }])) as [{ id: string }, { entry: Taken | null }, { entry: Taken | null }];
-		return { txn: t.id, intent: token.entry && intent.entry ? fieldsOf<IntentFields>(intent.entry) : null };
+		const [t, token] = (await batch.batch([{ op: "begin", lease: TXN_MS }, { op: "take", template: actorToken(charId), txn: "$" }])) as [{ id: string }, { entry: Taken | null }];
+		if (!token.entry) return { txn: t.id, intent: null };
+		const intent = await space.takeIfExists({ type: "Intent", fields: { charId } }, NO_WAIT, { txn: t.id });
+		return { txn: t.id, intent: intent ? fieldsOf<IntentFields>(intent) : null };
 	};
 	/** The space for the rest of a command under `txn`, and how it ends: with batching its writes go with the commit (the
 	 *  character's token written back last) in one call. */

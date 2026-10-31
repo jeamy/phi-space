@@ -1,4 +1,4 @@
-// The people of the archipelago (docs/welt.md): script NPCs that gather, keep fires, craft, trade and talk. They act
+// The people of the archipelago (docs/welt.en.md): script NPCs that gather, keep fires, craft, trade and talk. They act
 // only by typing the commands a player types (npc.act → an intent the world worker runs), so every exchange of theirs is
 // a player's exchange, in one transaction, nothing lost or doubled (Phase 4). No model calls. A round looks at the world
 // once, types at most one or two commands and rests a few game seconds; the world worker refuses what has become

@@ -36,7 +36,7 @@ Leuchtfeuer ist ein Spiel im Browser, das viele Leute zugleich spielen. Ihr lebt
 
 Der Archipel hat acht Inseln mit 37 Orten und neun Leuchtfeuern. Wo ein Feuer brennt, ist der Nebel licht. Wo es erlischt, rückt der Nebel vor und verschluckt die Wege.
 
-Du spielst eine Figur auf einer **Karte**, flach in 2D oder als Modell in 3D, oder nur mit **Text**, wie in einem MUD. Alles, was du tust, ist ein Textbefehl: ein Klick auf die Karte ist \`move x y\`, ein Druck auf die Leertaste ist \`get …\`. Wer lieber tippt, kommt mit denselben Befehlen zum selben Ergebnis.
+Du spielst eine Figur auf einer **Karte**, flach in 2D oder als Modell in 3D, oder nur mit **Text**, wie in einem MUD. Alles, was du tust, ist ein Textbefehl: ein Klick auf die Karte ist ein \`step\`, „Hierhin gehen“ im Menü ist \`move x y\`, ein Druck auf die Leertaste ist \`get …\`. Wer lieber tippt, kommt mit denselben Befehlen zum selben Ergebnis.
 
 ## Was die Welt besonders macht {#idea}
 
@@ -61,7 +61,7 @@ Leuchtfeuer is a browser game that many people play at once. You live on small i
 
 The archipelago has eight islands with 37 places and nine beacons. Where a beacon burns, the fog lifts. Where it goes out, the fog advances and swallows the paths.
 
-You play a character on a **map**, flat in 2D or as models in 3D, or with **text** only, like a MUD. Everything you do is a text command: a click on the map is \`move x y\`, the space bar is \`get …\`. If you prefer typing, the same commands lead to the same result.
+You play a character on a **map**, flat in 2D or as models in 3D, or with **text** only, like a MUD. Everything you do is a text command: a click on the map is a \`step\`, "Hierhin gehen" in the menu is \`move x y\`, the space bar is \`get …\`. If you prefer typing, the same commands lead to the same result.
 
 ## What makes the world special {#idea}
 
@@ -189,8 +189,10 @@ Die Karte zeigt den Ort, an dem du gerade bist. Ein Klick lässt deine Figur dor
 
 | Eingabe | Wirkung |
 | --- | --- |
-| Klick oder Tipp auf ein Feld | Dorthin gehen (\`move x y\`), der Server findet den Weg |
-| Doppelklick oder Doppeltipp auf ein Ding | Hingehen und aufheben (Holz, Muschel, Tang …) |
+| Klick auf ein Feld | Einen Schritt in diese Richtung (\`step dx dy\`) |
+| Rechtsklick → **Hierhin gehen** | Den ganzen Weg dorthin |
+| Tipp auf ein Feld | Am Handy den ganzen Weg dorthin, Schritt für Schritt; ein neuer Tipp ändert das Ziel |
+| Doppelklick auf ein Ding | Hingehen und aufheben, wenn es nahe liegt (Holz, Muschel, Tang …); am Handy reicht ein Tipp, auch von weit |
 | Rechtsklick oder langes Drücken | Menü zu diesem Feld (siehe unten) |
 | Klick auf ein Ausgangsfeld | Zum Ausgang gehen; im Menü des Feldes steht „Nach … gehen“ (\`go\`, von überall im Raum) |
 | 2D: Ziehen (gezoomt) | Die Ansicht verschieben |
@@ -208,13 +210,29 @@ Das Menü bietet an, was zum Feld passt:
 - **Beet:** was du dort tun kannst.
 - **Eigene Figur:** Umsehen, Inventar, wer spielt, Uhrzeit, Ruf, Baupläne, Samen sammeln.
 
+## Kulissen abräumen {#scenery}
+
+Hütten, Netzgestelle, Boote und Fässer, die schon in der Welt stehen, sind Kulisse. Man läuft nicht hindurch und baut dort nicht. Stege und Anleger bleiben fest. Alles andere räumst du mit **räume** ab (oder über **Hier möglich**): Arbeit für Arbeit, wie auf einer Baustelle. Wer die letzte Arbeit tut, bekommt das Material darin, und das Land ist für immer frei für Bau, Beet oder Flur.
+
+## Aushang {#orders}
+
+Ein Aushang gehört immer zu einer Baustelle. Ihr Besitzer bietet dort Lohn für das, was fehlt. Baustellen mit Aushang sind auf der Karte markiert. Unter **Tasche → Aushang** stehen alle Aushänge des Raums: Mit **Hingehen** läufst du hin, neben der Baustelle (bis zwei Felder) lieferst du oder arbeitest mit und bekommst sofort den Lohn. An deiner eigenen Baustelle hängst du dort aus, was fehlt, und nimmst den Aushang wieder ab. Der Lohn liegt schon beim Aushang, was nicht verdient wird, kommt zurück.
+
+## Alias {#alias}
+
+Mit **Alias** (am Handy unter **⋯**) wählst du, unter welchem Namen dich alle im Spiel sehen. Angemeldet wirst du weiter mit deinem bisherigen Namen und Passwort. Was dir gehört, bleibt deins. Ein Alias ist einmalig: Einen Namen, den schon jemand nutzt oder zum Anmelden hat, gibt es kein zweites Mal.
+
 ## Am Handy und Tablet {#touch}
 
 Am Handy steuerst du alles mit dem Finger. Das Spiel braucht dafür keine App.
 
-Unten rechts auf der Karte liegt ein **Steuerkreuz**: Solange du eine Richtung hältst, gehst du Schritt für Schritt (wie die Pfeiltasten); **✋** in der Mitte hebt auf oder legt nach (wie die Leertaste). Es erscheint nur auf Geräten, die man mit dem Finger bedient. Ein Tipp auf ein Feld geht weiterhin direkt dorthin.
+Die Karte füllt den Bildschirm, im Browser am Rechner genauso, und die Kamera folgt deiner Figur. **Tippe auf ein Feld**, und sie geht den ganzen Weg dorthin. **Tippe auf eine Figur, ein Gebäude oder ein Beet**, und von unten öffnet sich, was du dort tun kannst; langes Drücken öffnet das für jedes Feld, auch ein freies zum Bauen. **Tippe auf ein Ding**, und du gehst hin und hebst es auf. Zwei Finger zoomen und drehen die Karte in 3D, Ziehen sieht sich um. Der Knopf **Zoom** wechselt die Stufe auch ohne zwei Finger.
 
-Ein Tablet im Hochformat zeigt die Karte oben und das Seitenfeld darunter, im Querformat beide nebeneinander. Über „Zum Startbildschirm hinzufügen“ öffnet sich das Spiel ohne die Leisten des Browsers.
+Das **Steuerkreuz** geht Schritt für Schritt, solange du eine Richtung hältst. Unter **⋯** schaltest du es zusammen mit den Knöpfen für Zoom und Drehen ab oder legst es nach links. Über der Karte steht unter **Hier möglich**, was du gerade tun kannst, zum Beispiel **Treibholz nachlegen**. Ausgänge außerhalb des Bilds stehen als Schild am Rand.
+
+Unten liegt ein **Blatt** mit [Tasche, Protokoll und Chats](help.game.controls#side). Zieh es am Griff auf die Höhe und, wo es schmaler als die Seite ist, nach links oder rechts, dorthin, wo du es möchtest, es bleibt so; ein Tipp auf den Griff oder die Karte schließt es, der nächste Tipp öffnet es wieder auf dieser Höhe. Im Querformat liegt es genauso unten, und das Spiel geht beim ersten Tipp ins Vollbild, ohne Adressleiste (abschaltbar unter **⋯**; auf dem iPhone geht das nur vom Home-Bildschirm). Die Zurück-Taste schließt immer die oberste Ebene.
+
+Ein Tipp auf den **Raumnamen** oben öffnet die Weltkarte. Dort zeigt der grüne Punkt, wo du bist, und farbige Quadrate zeigen, wo deine Bauten, Baustellen, Beete und Fluren liegen. Auf dem Home-Bildschirm wird das Spiel zu einer eigenen App ohne Adressleiste: am iPhone **Teilen → Zum Home-Bildschirm**, am Android-Handy **Browser-Menü ⋮ → Zum Startbildschirm hinzufügen**. Dann öffnest du es von dort.
 
 ## Tastatur {#keys}
 
@@ -235,7 +253,7 @@ Die Tasten gelten, solange die Befehlszeile nicht den Fokus hat.
 
 Das Seitenfeld zeigt, was gerade wichtig ist: was neben dir liegt, was du trägst und wie lange das Feuer noch brennt. Darunter steht alles, was du siehst und hörst.
 
-Rechts (auf dem Handy und dem Tablet im Hochformat unter der Karte) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen. Darunter das **Protokoll** mit allem, was du siehst und hörst, daneben die Reiter des [Chats](help.game.chat) (je Gespräch einer, „Chats“ als Übersicht), und die **Befehlszeile**. „Kommen und Gehen“ blendet die Meldungen ein, wer kommt und geht.
+Rechts (auf dem Handy und dem Tablet im Hochformat im Blatt, dort im Reiter **Tasche**) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen. Darunter (am Handy: Reiter **Protokoll**) das **Protokoll** mit allem, was du siehst und hörst, daneben die Reiter des [Chats](help.game.chat) (je Gespräch einer, „Chats“ als Übersicht), und die **Befehlszeile**. „Kommen und Gehen“ blendet die Meldungen ein, wer kommt und geht.
 
 ## Kopfzeile {#bar}
 
@@ -247,15 +265,17 @@ Die Kopfzeile zeigt, wo du bist und wie spät es in der Welt ist. Dort stellst d
 - **Text / 2D / 3D** wählt die Darstellung. **Text** blendet die Karte aus: für Screenreader, schwache Geräte oder wer es lieber wie ein MUD mag; alles bleibt spielbar. **2D** ist die Kachelkarte, **3D** eine Ansicht derselben Welt von schräg oben.
 - **Admin** (nur für Admins) öffnet das Fenster für Modelle und Grenzen.
 - **Abmelden** beendet die Sitzung.
-- Auf dem Handy liegen Darstellung und Abmelden hinter **⋯**.`,
+- Am Handy gibt es keine Kopfzeile: Raum, Punkt und Weltzeit stehen oben links über der Karte, **?** und **⋯** rechts. Darstellung, Steuerkreuz, Abmelden und die Nachweise liegen hinter **⋯**.`,
 			en: `## On the map {#map}
 
 The map shows the place you are in. A click sends your figure there. The right mouse button opens a menu with what you can do at that spot.
 
 | Input | Effect |
 | --- | --- |
-| Click or tap a cell | Walk there (\`move x y\`), the server finds the way |
-| Double click or double tap on a thing | Walk there and pick it up (wood, shell, kelp …) |
+| Click a cell | One step that way (\`step dx dy\`) |
+| Right click → **Hierhin gehen** | The whole way there |
+| Tap a cell | On a phone the whole way there, step by step; a new tap changes the goal |
+| Double click on a thing | Walk there and pick it up when it lies close (wood, shell, kelp …); on a phone one tap is enough, from afar too |
 | Right click or long press | Menu for that cell (see below) |
 | Click an exit cell | Walk to the exit; the cell's menu has “Go to …” (\`go\`, from anywhere in the room) |
 | 2D: drag (zoomed in) | Move the view |
@@ -273,13 +293,29 @@ The menu offers what fits the cell:
 - **Bed:** what you can do there.
 - **Your own figure:** look, inventory, who plays, time, reputation, plans, gather seeds.
 
+## Clearing scenery {#scenery}
+
+Huts, net racks, boats and barrels that already stand in the world are scenery. You do not walk through them and cannot build there. Jetties stay. Everything else you clear with **räume** (or through **Hier möglich**): work by work, like on a site. Whoever does the last work gets the material in it, and the land is free for good for a building, a bed or a field.
+
+## Site orders {#orders}
+
+An order ("Aushang") always belongs to a site. Its owner offers a wage there for what is missing. Sites with an order are marked on the map. Under **Tasche → Aushang** you find all orders of the room: **Hingehen** walks you there, and beside the site (up to two cells) you deliver or work and are paid at once. At your own site you hang out what is missing there, and take it down again. The wage already lies with the order; what is not earned comes back.
+
+## Alias {#alias}
+
+**Alias** (on a phone under **⋯**) sets the name everyone sees in the game. You keep logging in with your name and password as before, and what you own stays yours. An alias is unique: a name someone already uses or logs in with cannot be taken.
+
 ## On a phone or tablet {#touch}
 
-On a phone you control everything with a finger. The game needs no app for that.
+On a phone you steer everything with your finger. The game needs no app for it.
 
-A **pad** lies at the bottom right of the map: while you hold a direction you walk step by step (like the arrow keys); **✋** in its middle picks up or adds fuel (like the space bar). It appears only on devices used with a finger. A tap on a cell still walks straight there.
+The map fills the screen, in a desktop browser too, and the camera follows your figure. **Tap a cell** and it walks the whole way there. **Tap a figure, a building or a bed** and what you can do there opens from below; a long press opens that for any cell, a free one for building too. **Tap a thing** and you walk there and pick it up. Two fingers zoom, and turn the map in 3D; dragging looks around. The **Zoom** button changes the step without two fingers.
 
-A tablet held upright shows the map on top and the side panel below it, held sideways both next to each other. “Add to Home Screen” opens the game without the browser's bars.
+The **D-pad** walks step by step while you hold a direction. Under **⋯** you switch it off, together with the zoom and turn buttons, or move it to the left. Above the map **Hier möglich** lists what you can do right now, for example **Treibholz nachlegen**. Exits outside the picture stand as signs at its edge.
+
+At the bottom lies a **sheet** with [bag, log and chats](help.game.controls#side). Drag its handle to the height you like and, where it is narrower than the page, left or right, and it stays there; a tap on the handle or the map closes it, the next tap opens it at that height again. On its side it lies at the bottom just the same, and the game goes to full screen at the first tap, without the address bar (off under **⋯**; on an iPhone only from the home screen). The back button always closes the topmost layer.
+
+A tap on the **room name** at the top opens the world map. The green dot shows where you are, coloured squares where your buildings, sites, beds and fields lie. On the home screen the game becomes an app of its own without an address bar: on an iPhone **Share → Add to Home Screen**, on an Android phone **browser menu ⋮ → Add to Home screen**. Then open it from there.
 
 ## Keyboard {#keys}
 
@@ -312,7 +348,7 @@ The header bar shows where you are and what time it is in the world. You also sw
 - **Text / 2D / 3D** picks the view. **Text** hides the map: for screen readers, weak devices or if you prefer a MUD feel; everything stays playable. **2D** is the tile map, **3D** a view of the same world from above at an angle.
 - **Admin** (admins only) opens the window for models and limits.
 - **Log out** ends the session.
-- On a phone the view and logging out sit behind **⋯**.`,
+- A phone has no header bar: room, dot and world time stand top left over the map, **?** and **⋯** on the right. View, D-pad, logging out and the credits sit behind **⋯**.`,
 		},
 	},
 	{
@@ -384,6 +420,10 @@ Bauen geht nur im Licht eines Feuers. Ausführlich unter [Bauen](help.game.build
 | \`breche\` | \`quarry\` | Am Steinbruch mit Spitzhacke Stein brechen |
 | \`steche\` | \`clay\` | An der Lehmgrube mit Spaten Lehm stechen |
 | \`opfere <ding>\` | \`sacrifice\` | An einer Kapelle opfern: einen Tag lang kürzere Ruhe |
+| \`antrag <zu\|offen\|text>\` | \`motion\` | Am Rathaus einen Antrag stellen; allein: den laufenden zeigen |
+| \`antrag grünzone\`, \`antrag wegerecht\`, \`antrag zone frei\` | | Über die Fläche um dich abstimmen lassen |
+| \`antrag steuer <n>\` | | Münzen je Stück für Entnahmen aus dem Lager |
+| \`stimme ja\|nein\` | \`vote\` | Als Siedler über den Antrag abstimmen |
 | \`repariere\` | \`repair\` | Einen Bau ausbessern |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Deinen Bau oder deine Baustelle abreißen |
 | \`nachlass\` | \`estate\` | Den Nachlass an der Ruine deines Baus abholen |
@@ -542,6 +582,10 @@ Building works only in a fire's light. In detail under [Building](help.game.buil
 | \`breche\` | \`quarry\` | Break stone at a quarry with a pickaxe |
 | \`steche\` | \`clay\` | Cut clay at a clay pit with a spade |
 | \`opfere <ding>\` | \`sacrifice\` | Make an offering at a chapel: shorter rest for a day |
+| \`antrag <zu\|offen\|text>\` | \`motion\` | Put a motion at a town hall; alone: show the open one |
+| \`antrag grünzone\`, \`antrag wegerecht\`, \`antrag zone frei\` | | Put the ground around you to a vote |
+| \`antrag steuer <n>\` | | Coins per thing taken from the warehouse |
+| \`stimme ja\|nein\` | \`vote\` | Vote on the motion as a settler |
 | \`repariere\` | \`repair\` | Repair a building |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Tear down your building or site |
 | \`nachlass\` | \`estate\` | Collect the estate at your building's ruin |
@@ -1530,7 +1574,7 @@ A new settlement is open: anyone may build and help there. But it can close its 
 
 Im Reiter **„Chats“** neben dem Protokoll richtest du den Chat mit einem eigenen **Chat-Passwort** ein. Es ist nicht dein Login-Passwort und geht nie an den Server; mit ihm entsperrst du den Chat auch an einem anderen Gerät.
 
-**Vergisst du das Chat-Passwort, sind deine Verläufe verloren.** Niemand kann sie wiederherstellen. **„Verlauf sichern“** speichert die geöffneten Gespräche als Textdatei. Das Passwort lässt sich ändern, solange du es kennst.
+**Vergisst du das Chat-Passwort, sind deine Verläufe verloren.** Niemand kann sie wiederherstellen. Schreibt dir jemand, bevor du den Chat eingerichtet hast, sagt dir das Spiel Bescheid; die Nachrichten kommen an, sobald du ihn eingerichtet hast und die Seite des Absenders einmal entsperrt offen war. Sie warten bis zu 7 Tage. **„Verlauf sichern“** speichert die geöffneten Gespräche als Textdatei. Das Passwort lässt sich ändern, solange du es kennst.
 
 ## Zu zweit {#two}
 

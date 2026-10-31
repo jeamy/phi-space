@@ -1,4 +1,4 @@
-// Acceptance of Phase 0 (docs/phasen.md): guests and accounts, one room, text and map, and what survives a process
+// Acceptance of Phase 0 (docs/phasen.en.md): guests and accounts, one room, text and map, and what survives a process
 // that dies. Every test starts its own space process and world worker (tests/stack.ts).
 import { test } from "node:test";
 import assert from "node:assert/strict";

@@ -1,4 +1,4 @@
-// The people of the islands (server/npc/economy.ts, docs/welt.md): script NPCs that keep fires, trade by their price
+// The people of the islands (server/npc/economy.ts, docs/welt.en.md): script NPCs that keep fires, trade by their price
 // lists, gather and sell, talk, and a storm surge. No model calls. Game time runs fast; every fire burns for the whole
 // test, so the fog keeps the ways open.
 import { test } from "node:test";
@@ -125,7 +125,7 @@ test("the whole archipelago lives: every NPC plays at once, they trade, and no c
 		const coins = async () => (await s.readAll({ type: "Item", fields: { proto: "muenze" } })).length;
 		const before = await coins();
 		await stack.npcProcess();
-		await eventually(async () => (await s.count({ type: "Session" })) >= w.npcs.filter((n) => !n.settler && !n.villager).length - 1, 20_000, "everyone online");
+		await eventually(async () => (await s.count({ type: "Session" })) >= w.npcs.filter((n) => !n.settler && !n.villager).length - 1, 90_000, "everyone online");
 		// a while of island life: people gather, keep fires, list and buy
 		await eventually(async () => (await s.count({ type: "Listing" })) >= 1, 120_000, "something on a board"); // slow under the load of the whole suite
 		await new Promise((r) => setTimeout(r, 5_000));

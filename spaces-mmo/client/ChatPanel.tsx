@@ -1,5 +1,5 @@
 "use client";
-// The chat between players on the page (docs/siedeln.md, "Chat zwischen Spielern"): a tab per talk beside the log, a
+// The chat between players on the page (docs/siedeln.en.md, "Chat zwischen Spielern"): a tab per talk beside the log, a
 // count of what is unread, and the overview of groups, invitations and whom one ignores. Every button sends the text
 // command the help names (chat, gruppe, ignoriere, erlaube, melde); the server answers through the same socket.
 import { useState } from "react";
@@ -8,28 +8,6 @@ import type { Talks } from "./chat.ts";
 import { keyOf } from "./chat.ts";
 import { MIN_PASSWORD } from "./chatcrypto.ts";
 import type { ChatKeys } from "./useChat.ts";
-
-/** The tabs: the log, the overview (with the invitations waiting), one per open talk. */
-export function ChatTabs({ talks, hidden, tab, setTab, close, state }: { talks: Talks; hidden: Set<string>; tab: string; setTab: (k: string) => void; close: (k: string) => void; state: ChatState | null }) {
-	const shown = [...talks.entries()].filter(([k, t]) => !hidden.has(k) || t.unread || k === tab);
-	const unread = shown.reduce((n, [, t]) => n + t.unread, 0);
-	return (
-		<div className="chat-tabs" role="tablist" aria-label="Log und Gespräche">
-			<button role="tab" aria-selected={tab === "log"} onClick={() => setTab("log")}>Log</button>
-			<button role="tab" aria-selected={tab === "chats"} onClick={() => setTab("chats")} title="Gruppen, Einladungen, neues Gespräch">
-				Chats{state?.invites.length ? <span className="chat-count">{state.invites.length}</span> : null}{!state?.invites.length && unread && tab !== "chats" ? <span className="chat-dot" aria-label={`${unread} ungelesen`} /> : null}
-			</button>
-			{shown.map(([k, t]) => (
-				<span key={k} className={`chat-tab${tab === k ? " on" : ""}`}>
-					<button role="tab" aria-selected={tab === k} onClick={() => setTab(k)} title={t.conv.kind === "group" ? `Gruppe ${t.conv.title}` : `Gespräch mit ${t.conv.title}`}>
-						{t.conv.kind === "group" ? "# " : ""}{t.conv.title || "…"}{t.unread ? <span className="chat-count">{t.unread}</span> : null}
-					</button>
-					<button className="chat-close" onClick={() => close(k)} aria-label={`${t.conv.title} schließen`}>×</button>
-				</span>
-			))}
-		</div>
-	);
-}
 
 /** One talk: its messages; another's message can be reported. */
 export function TalkView({ talk, keys }: { talk: Talks extends Map<string, infer T> ? T : never; keys: ChatKeys }) {
@@ -60,6 +38,8 @@ function KeyBox({ keys, talks }: { keys: ChatKeys; talks: Talks }) {
 		setBusy(true); setMsg("");
 		try { await f(); setA(""); setB(""); setMode(""); setMsg(done); } catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
 	};
+	// WebCrypto exists only on https (and localhost)
+	if (typeof window !== "undefined" && !window.isSecureContext) return <div className="chat-keybox"><h3>Verschlüsselung</h3><p className="error">Der Chat braucht eine sichere Verbindung (https). Öffne das Spiel über https, dann lässt er sich einrichten.</p></div>;
 	const warn = <p className="muted chat-warn">Das Chat-Passwort ist nicht dein Login-Passwort und verlässt dein Gerät nie. Vergisst du es, sind deine Chatverläufe verloren: niemand, auch kein Admin, kann sie wiederherstellen. Sichere wichtige Verläufe mit „Verlauf sichern“.</p>;
 	if (!keys.me) return null;
 	const setupForm = (replace: boolean) => (
@@ -106,17 +86,25 @@ function KeyBox({ keys, talks }: { keys: ChatKeys; talks: Talks }) {
 }
 
 /** The overview: invitations, groups, a new talk or group, whom one ignores. */
-export function ChatOverview({ state, guest, talks, open, send, keys }: { state: ChatState | null; guest: boolean; talks: Talks; open: (k: string) => void; send: (line: string, echo?: boolean) => void; keys: ChatKeys }) {
+export function ChatOverview({ state, guest, talks, open, send, keys }: { state: ChatState | null; guest: boolean; talks: Talks; open: (k: string) => void; send: (line: string, echo?: boolean) => void; keys: ChatKeys; }) {
 	const [who, setWho] = useState(""), [group, setGroup] = useState("");
 	return (
 		<div className="log chat-overview">
-			<KeyBox keys={keys} talks={talks} />
+			{!keys.me?.key && state?.waiting.map((w) => <div key={w.from} className="chat-invite">{w.from} möchte dir schreiben ({w.count === 1 ? "1 Nachricht wartet" : `${w.count} Nachrichten warten`}). Richte unten den Chat ein, dann kommen sie an.</div>)}
+			{keys.unlocked ? <details className="chat-keyfold"><summary>Verschlüsselung</summary><KeyBox keys={keys} talks={talks} /></details> : <KeyBox keys={keys} talks={talks} />}
 			{state?.invites.map((i) => (
 				<div key={i.groupId} className="chat-invite">
 					{i.from} lädt dich in die Gruppe <b>{i.name}</b> ein.
 					<button className="primary" onClick={() => send(`gruppe annehmen ${i.name}`)}>Annehmen</button>
 					<button onClick={() => send(`gruppe ablehnen ${i.name}`)}>Ablehnen</button>
 				</div>
+			))}
+			{[...talks.entries()].map(([k, t]) => (
+				<button key={k} className="chat-line" onClick={() => open(k)}>
+					<span className="chat-av" aria-hidden="true">{t.conv.kind === "group" ? "#" : (t.conv.title[0] ?? "?").toUpperCase()}</span>
+					<span className="chat-name">{t.conv.title || "…"}<small>{t.conv.kind === "group" ? "Gruppe" : "Gespräch"}</small></span>
+					{t.unread ? <span className="chat-count">{t.unread}</span> : null}
+				</button>
 			))}
 			<form className="chat-row" onSubmit={(e) => { e.preventDefault(); const n = who.trim(); if (n) { send(`chat ${n}`, false); setWho(""); } }}>
 				<input value={who} onChange={(e) => setWho(e.target.value)} placeholder="Name einer Spielerin, eines Spielers" aria-label="Gespräch mit" maxLength={20} />

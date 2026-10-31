@@ -1,4 +1,4 @@
-// The warehouse, step 5 part 1 (docs/siedeln.md "Siedlungen und Besitz", engine/commands/build.ts): without a settlement
+// The warehouse, step 5 part 1 (docs/siedeln.en.md "Siedlungen und Besitz", engine/commands/build.ts): without a settlement
 // its owner's chest; in one everyone may lay in, and take by rank up to a quota per world day; closed, strangers stay out;
 // a log shows who moved what; what a settlement laid in does not leave with the owner.
 import "./test-env.ts";
@@ -43,7 +43,7 @@ test("a warehouse: its owner's chest alone; in a settlement shared by rank, with
 		await s.write({ type: "Building", fields: store as never }, null, FOREVER);
 		assert.ok(atB.room === at.room);
 		bert.p.send(`move ${at.x} ${at.y + 1}`);
-		await eventually(async () => { const c = (await s.readAll({ type: "Character", fields: { charId: bert.me } }))[0]!.fields as unknown as CharacterFields; return Math.abs(c.x - at.x) <= 1 && c.y >= at.y - 1 && c.y <= at.y + 2 ? c : null; }, 15_000, "Bert beside the store");
+		await eventually(async () => { const c = (await s.readAll({ type: "Character", fields: { charId: bert.me } }))[0]?.fields as unknown as CharacterFields | undefined; return !!c && Math.abs(c.x - at.x) <= 1 && c.y >= at.y - 1 && c.y <= at.y + 2 ? c : null; }, 15_000, "Bert beside the store");
 
 		await give(s, anna.me, "tang", 30);
 		await give(s, bert.me, "tang", 1);

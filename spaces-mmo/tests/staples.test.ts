@@ -1,4 +1,4 @@
-// What one builds with never runs out, and paths stay free (docs/siedeln.md "Bebauung", engine/fire.ts bringStaples):
+// What one builds with never runs out, and paths stay free (docs/siedeln.en.md "Bebauung", engine/fire.ts bringStaples):
 // the tide fills every island's beaches with driftwood and kelp up to their number; a hut is refused on the cobbles.
 import "./test-env.ts";
 import { test } from "node:test";
@@ -11,7 +11,7 @@ import { lightFire, Player, startServer, startStack } from "./stack.ts";
 const w = await loadWorld();
 const st = w.flood.staples!;
 
-test("the tide: each island gets its driftwood and kelp up to the number, then writes no more; what is taken comes back", { timeout: 60_000 }, async () => {
+test("the tide: each island gets its driftwood and kelp up to the number, then writes no more; what is taken comes back", { timeout: 180_000 }, async () => {
 	const stack = await startStack();
 	process.env.SPACES_MMO_STAPLES = "";
 	try {

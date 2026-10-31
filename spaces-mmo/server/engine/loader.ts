@@ -1,4 +1,4 @@
-// Loading a world definition into the space (Evennia's batch processors; docs/evennia-abbildung.md). Under the world
+// Loading a world definition into the space (Evennia's batch processors; docs/evennia-abbildung.en.md). Under the world
 // lock and in one transaction: rooms, exits, prototypes and help topics are written when missing, or replaced when the
 // space holds an older version of the world (or `replace` is asked for); a placed item is spawned only while no item
 // with its itemId exists anywhere, so a restart never brings back what a player picked up, and two world workers
@@ -134,6 +134,15 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			if (old && !replace) continue;
 			if (old) await space.take({ type: "Beacon", id: old.id }, NO_WAIT, { txn });
 			await space.write({ type: "Beacon", fields: { ...b, lit: old ? !!old.fields.lit : false } satisfies BeaconFields as never }, txn, FOREVER);
+		}
+		// the scenery: once, and never again what was cleared or on land someone built on meanwhile
+		for (const s of w.scenery ?? []) {
+			if (await space.readIfExists({ type: "Scenery", fields: { sceneryId: s.sceneryId } }, 2_000, { txn }) || await space.readIfExists({ type: "SceneryGone", fields: { sceneryId: s.sceneryId } }, 2_000, { txn })) continue;
+			const cells = Array.from({ length: s.w * s.h }, (_, i) => ({ x: s.x + (i % s.w), y: s.y + Math.floor(i / s.w) }));
+			const plots = s.through ? [] : await space.readAll({ type: "Plot", fields: { room: s.room } }, { txn });
+			if (plots.some((p) => cells.some((c) => c.x === p.fields.x && c.y === p.fields.y))) continue;
+			await space.write({ type: "Scenery", fields: { ...s, left: s.work } as never }, txn, FOREVER);
+			if (!s.through) for (const c of cells) await space.write({ type: "Plot", fields: { room: s.room, ...c, of: s.sceneryId } as never }, txn, FOREVER, { unique: ["room", "x", "y"] });
 		}
 		for (const room of new Set(w.beacons.flatMap((b) => b.covers))) {
 			if (!(await space.readIfExists({ type: "Fog", fields: { room } }, 2_000, { txn }))) await space.write({ type: "Fog", fields: { room, level: w.fog.start } satisfies FogFields as never }, txn, FOREVER);

@@ -1,4 +1,4 @@
-// The narrative budget of a role counts by world day (docs/weltzeit.md, "Modellbudgets"): the key carries the clock epoch
+// The narrative budget of a role counts by world day (docs/weltzeit.en.md, "Modellbudgets"): the key carries the clock epoch
 // and the day, a new world day gives a new count, and the operator's real limits (per UTC day and per minute) stay on top.
 // Its own file: it turns the scripted model on for this process.
 process.env.SPACES_MMO_LLM = "1";

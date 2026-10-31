@@ -58,6 +58,7 @@ COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/node_modules ./
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/next.config.mjs /opt/phi-spaces/spaces-mmo/tsconfig.json ./spaces-mmo/
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/.next ./spaces-mmo/.next
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/app ./spaces-mmo/app
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/public ./spaces-mmo/public
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/client ./spaces-mmo/client
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/server ./spaces-mmo/server
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/worlds ./spaces-mmo/worlds
@@ -69,7 +70,7 @@ WORKDIR /opt/phi-spaces/spaces-mmo
 # docker-compose.yml)
 CMD ["node", "--no-warnings", "--experimental-strip-types", "server/launch.ts"]
 
-# ---- Stage 5: production-rust: the production image with the Rust space server (docs/rust-portierung.md, R4) ----
+# ---- Stage 5: production-rust: the production image with the Rust space server (docs/rust-portierung.en.md, R4) ----
 # docker-compose.rust.yml gives it to the space containers; the other roles and every other command stay as they are.
 # The builder is Debian bookworm like the Node image, so the binary finds the same libc.
 FROM ${RUST_IMAGE} AS rust-builder

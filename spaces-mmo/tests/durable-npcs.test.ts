@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -65,5 +66,26 @@ test("default NPC dialogues retain history after agent reopen, isolated by world
     await saveModelChoice(space, { on: false, allowed: null, model: null });
     assert.equal(await think(space, { ...npc, npcId: "bo" }, question), "budget");
     assert.equal(await space.count({ type: "Intent" }), 0, "agent replies do not execute world commands");
+  } finally { await closeDurableNpcs(); await host.close(ctx); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("an NPC's dialogue survives the world process dying by SIGKILL with its agent store open", { timeout: 30_000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "durable-npcs-kill-"));
+  process.env.SPACES_MMO_DURABLE_STORE = join(dir, "npc.sqlite");
+  const child = spawnSync(process.execPath, ["--no-warnings", "--experimental-strip-types", fileURLToPath(new URL("./durable-npc-child.ts", import.meta.url))], { encoding: "utf8", timeout: 20_000 });
+  const host = openOwnMemoryHost(), space = new PhiSpaces(host, ctx);
+  try {
+    assert.equal(child.signal, "SIGKILL", child.stderr);
+    assert.match(child.stdout, /say Du heißt Anna\./);
+    await saveSettings(space, { "npc.budgetDay": 20, "llm.perDay": 500, "llm.perMin": 20 });
+    const npc = { npcId: "ines", name: "Ines", persona: "Keep the beacon.", budgetDay: 20, worldId: "one" };
+    const end = Date.now() + 10_000; // the orphaned worker notices the lost parent and gives up the store
+    for (;;) {
+      try {
+        const second = await think(space, npc, { room: "Hafen", people: [], event: "talk", heard: ["Wie heiße ich?"] });
+        assert.deepEqual(typeof second === "object" ? second.lines : second, ["say Du heißt Anna."]);
+        break;
+      } catch (error) { await closeDurableNpcs(); if (Date.now() > end) throw error; await new Promise(resolve => setTimeout(resolve, 100)); }
+    }
   } finally { await closeDurableNpcs(); await host.close(ctx); rmSync(dir, { recursive: true, force: true }); }
 });

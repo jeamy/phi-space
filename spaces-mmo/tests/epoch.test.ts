@@ -1,4 +1,4 @@
-// The epochs, step 4 part 1 (docs/siedeln.md "Epochen", engine/commands/epoch.ts): an island reaches the village from
+// The epochs, step 4 part 1 (docs/siedeln.en.md "Epochen", engine/commands/epoch.ts): an island reaches the village from
 // beds alone; when enough decays it falls back, its buildings of the village go on working, and new village plans are
 // refused again until the stock is enough.
 import "./test-env.ts";
@@ -31,7 +31,7 @@ const bed = (i: number, room: string, over: Partial<BedFields> = {}): BedFields 
 	sponsors: [], plants: [], wateredWorldMs: 0, weedy: false, dueWorldMs: FOREVER, untilWorldMs: FOREVER, at: 0, ...over });
 const writeBeds = async (s: SpaceLike, n: number, room: string, over: Partial<BedFields> = {}) => { for (let i = 0; i < n; i++) await s.write({ type: "Bed", fields: bed(i, room, over) as never }, null, FOREVER); };
 
-test("the count: an island becomes a village from beds alone; what decays makes it fall back; another island counts apart", { timeout: 60_000 }, async () => {
+test("the count: an island becomes a village from beds alone; what decays makes it fall back; another island counts apart", { timeout: 180_000 }, async () => {
 	const stack = await startStack({ worlds: 0 });
 	try {
 		const s = stack.space;

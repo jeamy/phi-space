@@ -1,4 +1,4 @@
-// What a command sees (docs/evennia-abbildung.md, "Ablauf eines Befehls"): the space and the transaction its intent
+// What a command sees (docs/evennia-abbildung.en.md, "Ablauf eines Befehls"): the space and the transaction its intent
 // is taken in, the world, the actor and its account, and helpers every command needs: finding things by name,
 // asking locks, writing messages.
 import { NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
@@ -78,6 +78,18 @@ export function typos(a: string, b: string, max: number): number {
 }
 /** How many typos a word of this length may have and still mean a name: none below four letters, one, two from eight. */
 const tolerance = (n: string) => (n.length < 4 ? 0 : n.length < 8 ? 1 : 2);
+
+/** Where an exit leads, as the players know the place: the room's name; a dug room's exit keeps its own. */
+export const whereTo = (w: WorldDef, exit: { name: string; destination: string }) => w.rooms.find((r) => r.roomId === exit.destination)?.name ?? exit.name;
+
+const PLURALS: Record<string, string> = { Ei: "Eier", Brot: "Brote", Hund: "Hunde", Netz: "Netze", Stein: "Steine", Tangseil: "Tangseile", Tuch: "Tücher", "Kanne Wasser": "Kannen Wasser" };
+/** Names on -e or -el that stay as they are: what is counted as a stuff, and those whose plural is the same word. */
+const SAME = new Set(["Wolle", "Gerste", "Käse", "Gehäuse", "Ziegel", "Holzbündel"]);
+/** A thing's name for several of it ("5 Muscheln"). Stuffs and what is not known stay as they are ("3 Treibholz"). */
+export function pluralOf(name: string, world?: WorldDef): string {
+	const animal = world?.animals?.kinds.find((k) => k.name === name);
+	return animal?.plural ?? PLURALS[name] ?? (!SAME.has(name) && /(e|el)$/.test(name) ? `${name}n` : name);
+}
 
 /** A word without its German plural or case ending and with plain vowels: "hölzer" → "holz", "muscheln" → "muschel",
  *  "münzen" → "munz", "münze" → "munz", "holzstücke" → "holz" (both sides of a comparison are stemmed alike). */

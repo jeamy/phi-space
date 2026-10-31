@@ -1,4 +1,4 @@
-// Regions (docs/welt-aufteilen.md): the world split into spaces, each served by its own space process (a core of its
+// Regions (docs/welt-aufteilen.en.md): the world split into spaces, each served by its own space process (a core of its
 // own), with its own world worker and npc process. A region is a group of islands; its space holds those islands' rooms,
 // exits, fires, things and the characters standing there. A ferry to an island of another region hands the character
 // over (handover.ts). Without `regions` in the world definition the whole world is one region, "world".
@@ -50,6 +50,7 @@ export function regionWorld(w: WorldDef, regionId: string): WorldDef & { region:
 		exits: w.exits.filter((e) => inHere(e.room)),
 		objects: w.objects.filter((o) => inHere(o.room)),
 		beacons: w.beacons.filter((b) => inHere(b.room)),
+		scenery: w.scenery?.filter((s) => inHere(s.room)),
 		flood: { ...w.flood, rooms: w.flood.rooms.filter((f) => inHere(f.room)) },
 		...(w.storm ? { storm: { ...w.storm, rooms: w.storm.rooms.filter(inHere) } } : {}),
 		market: { ...w.market, rooms: w.market.rooms.filter(inHere) },

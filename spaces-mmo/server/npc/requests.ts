@@ -1,7 +1,7 @@
 // What people ask an NPC in plain words, and what the keeper can do about it without a model: bring wood to the fire.
 // "hi ines, geh holz sammeln", "ines, sammle bitte drei Scheit Treibholz", "bitte an ines, holz zu sammeln": the sentence
 // names her and asks for wood, so she walks to the driftwood, picks it up, takes it to the fire and says what she did.
-// With a model (docs/modell-npcs.md) the model answers; this is the script that answers when it is off or asleep.
+// With a model (docs/modell-npcs.en.md) the model answers; this is the script that answers when it is off or asleep.
 import { fieldsOf, type ItemFields } from "../model.ts";
 import type { Npc } from "./scripts.ts";
 

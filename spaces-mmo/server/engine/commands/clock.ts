@@ -1,4 +1,4 @@
-// The world's clock as commands (docs/weltzeit.md): `time` tells everyone the world time; `clock` is the operator's
+// The world's clock as commands (docs/weltzeit.en.md): `time` tells everyone the world time; `clock` is the operator's
 // (Admin): status, pause, resume and rate. A change takes the clock entry and writes it again with both anchors moved to
 // the moment of the change, in the command's transaction: no jump, and two changes at once cannot both succeed.
 import { FOREVER, NO_WAIT } from "phi-spaces";

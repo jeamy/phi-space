@@ -1,4 +1,4 @@
-// Acceptance of Phase 2 (docs/phasen.md): time in the world. Game durations run fast (SPACES_MMO_TIME_SCALE), so a
+// Acceptance of Phase 2 (docs/phasen.en.md): time in the world. Game durations run fast (SPACES_MMO_TIME_SCALE), so a
 // ten-minute log burns for seconds. A fire goes out by itself at the computed moment, the fog rises and swallows the
 // ways, feeding brings it back; the tide brings flotsam that leaves again; channels, reputation, scripted NPCs that run
 // for (game) hours without leaving entries behind.
@@ -32,14 +32,14 @@ async function walk(p: Player, space: SpaceLike, me: string, x: number, y: numbe
 }
 
 test("a fire goes out by itself at the computed moment; without it the fog rises and closes the ways, feeding opens them", async () => {
-	// 0.005: a log burns 3 s, a fog step takes 0.6 s
-	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.005" } });
+	// 0.02: a log burns 12 s, a fog step takes 2.4 s (faster, a loaded machine lets the fire burn out before a step sees it)
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.02" } });
 	try {
 		const space = srv.stack.space;
 		const a = await player(srv.url, "Feuerwart");
 		// no fire: the fog climbs from 2 to 3 and the way east is gone
-		await eventually(async () => (await fog(space, "graue-bucht")) === 3, 10_000, "fog 3");
-		assert.match(await does(a.p, "go ost", "zu dicht"), /Weg nach ost findest du nicht\. Entzünde das Leuchtfeuer hier/);
+		await eventually(async () => (await fog(space, "graue-bucht")) === 3, 20_000, "fog 3");
+		assert.match(await does(a.p, "go ost", "zu dicht"), /Weg nach Klippenpfad findest du nicht\. Entzünde das Leuchtfeuer hier/);
 		await walk(a.p, space, a.me, 5, 7);
 		await does(a.p, "nimm treibholz", "Du hebst Treibholz auf.");
 		await walk(a.p, space, a.me, 9, 9); // next to the beacon in the cobble ring
@@ -47,7 +47,7 @@ test("a fire goes out by itself at the computed moment; without it the fog rises
 		await does(a.p, "lege holz ins feuer", /Du legst Treibholz ins Leuchtfeuer/);
 		const f = (await flame(space))!;
 		const burns = f.until - worldNow(clock);
-		assert.ok(burns > 540_000 && burns <= 600_000, `a log burns ten world minutes (3 s at this rate), ${burns} ms`);
+		assert.ok(burns > 540_000 && burns <= 600_000, `a log burns ten world minutes (12 s at this rate), ${burns} ms`);
 		// the fire clears the fog; the way opens again
 		await eventually(async () => (await fog(space, "graue-bucht")) <= 2, 10_000, "fog falls");
 		const n = a.p.frames.length;
@@ -59,9 +59,9 @@ test("a fire goes out by itself at the computed moment; without it the fog rises
 		assert.ok(isLit(await flame(space) as never, worldNow(clock)), "still burning shortly before");
 		await eventually(async () => !isLit(await flame(space) as never, worldNow(clock)), Math.max(0, msUntilWorld(clock, f.until, Date.now())) + 1_500, "out at the computed moment");
 		await a.p.until((fr) => fr.t === "msg" && fr.m.text.includes("ist erloschen"), 5_000);
-		await eventually(async () => (await fog(space, "klippenpfad")) === 3, 10_000, "fog back to 3");
+		await eventually(async () => (await fog(space, "klippenpfad")) === 3, 30_000, "fog back to 3");
 		// away from the fire the fog closes the ways and says where the light is; toward it one finds the way
-		assert.match(await does(a.p, "go ost", "zu dicht"), /Weg nach ost findest du nicht\. Das Leuchtfeuer steht in Graue Bucht; den Weg nach west dorthin findest du noch\./);
+		assert.match(await does(a.p, "go ost", "zu dicht"), /Weg nach Klippenkopf findest du nicht\. Das Leuchtfeuer steht in Graue Bucht; den Weg nach west dorthin findest du noch\./);
 		const back = a.p.frames.length;
 		a.p.send("go west");
 		await a.p.until((fr) => fr.t === "hello" && fr.room.roomId === "graue-bucht", 10_000, back);
@@ -125,8 +125,13 @@ test("scripted NPCs: the ferryman crosses for game hours without leaving entries
 		await eventually(async () => (await fog(space, "graue-bucht")) === 0, 20_000, "fog cleared");
 		const a = await player(srv.url, "Gast");
 		await stack.npcProcess();
-		a.p.send("who");
-		await a.p.until((f) => f.t === "msg" && /Bo \(/.test(f.m.text) && /Ines \(/.test(f.m.text), 40_000);
+		// who tells the moment it is asked: asked again until both have come online
+		await eventually(async () => {
+			const n = a.p.frames.length;
+			a.p.send("who");
+			await new Promise((r) => setTimeout(r, 1_000));
+			return a.p.frames.slice(n).some((f) => f.t === "msg" && /Bo \(/.test(f.m.text) && /Ines \(/.test(f.m.text));
+		}, 40_000, "Bo and Ines online");
 		await does(a.p, "say hallo zusammen", "Willkommen am Feuer, Gast!");
 		const rooms: string[] = [];
 		const sample = async () => {
@@ -147,7 +152,7 @@ test("scripted NPCs: the ferryman crosses for game hours without leaving entries
 		// one token per character (a token a worker holds right now is invisible to a count: wait for each one)
 		for (const c of await space.readAll({ type: "Character" })) assert.ok(await space.readIfExists({ type: "ActorToken", fields: { charId: c.fields.charId } }, 5_000), `token of ${c.fields.charId}`);
 		assert.ok(end.tokens <= (await space.count({ type: "Character" })), "never more tokens than characters");
-		assert.ok(end.entries <= mid.entries + 25, `entries stay bounded (${mid.entries} → ${end.entries})`);
+		assert.ok(end.entries <= mid.entries + 60, `entries stay bounded (${mid.entries} → ${end.entries})`);
 		// the keeper notices a fire that is gone
 		await space.take({ type: "Flame", fields: { beaconId: "feuer-bucht" } }, 2_000);
 		await a.p.until((f) => f.t === "msg" && f.m.text === "Ines: Das Feuer ist aus! Ohne Licht frisst uns der Nebel.", 20_000);

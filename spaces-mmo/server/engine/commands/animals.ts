@@ -1,4 +1,4 @@
-// Animals on the farm (docs/siedeln.md "Tiere auf dem Hof", step 3 part 3): hens in a coop, sheep and goats in a pen.
+// Animals on the farm (docs/siedeln.en.md "Tiere auf dem Hof", step 3 part 3): hens in a coop, sheep and goats in a pen.
 //
 // - An animal is a thing (bought from Gesa, carried, traded); `einstallen` puts it into its owner's coop or pen, where it
 //   lies like a chest's content (location: the buildId). Demolition gives it back, a ruin keeps it for the owner's
@@ -163,7 +163,7 @@ const fuettere: Command = {
 	},
 };
 
-// The guards (docs/siedeln.md "Wild im Nebel", step 3 part 4): a dog or a cat left at a building of one's own lies in it
+// The guards (docs/siedeln.en.md "Wild im Nebel", step 3 part 4): a dog or a cat left at a building of one's own lies in it
 // as a thing, like a herd (abriss gives it back, a ruin keeps it for the estate); the building carries its kind and how
 // long it is fed. Fed, it keeps its kinds of wild from the whole room (wild.ts guardsIn).
 const keepers = (c: CommandCtx): KeeperDef[] => c.world.wild?.keepers ?? [];

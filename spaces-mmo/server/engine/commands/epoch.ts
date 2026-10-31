@@ -1,4 +1,4 @@
-// The epochs of an island, step 4 part 1 (docs/siedeln.md "Epochen: was die Stufe freischaltet"): an island counts its
+// The epochs of an island, step 4 part 1 (docs/siedeln.en.md "Epochen: was die Stufe freischaltet"): an island counts its
 // held stock, every building, bed and field by the light points it takes, and reaches the next epoch at a threshold
 // (the settings epoch.dorf, epoch.stadt, epoch.netz, so a server with few players can lower them).
 //

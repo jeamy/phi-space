@@ -1,4 +1,4 @@
-// Accounts, guests and web logins (docs/architektur.md, "Konten und Login", "Gastzugang"). Used only by the web process.
+// Accounts, guests and web logins (docs/architektur.en.md, "Konten und Login", "Gastzugang"). Used only by the web process.
 //
 // The account and its character live in the world space; the credential (salted scrypt hash) and the web sessions in
 // the accounts space, which nothing else reaches. A registration therefore spans two spaces and runs in three
@@ -11,7 +11,7 @@ import { RegionSpaces } from "./region-spaces.ts";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { cellKey, freeCellNear, occupiedIn } from "./engine/occupancy.ts";
 import { walkable, type WorldDef } from "./engine/world.ts";
-import { actorToken, asFields, fieldsOf, NAMES_LOCK, type AccountFields, type CharacterFields, type CredentialFields, type WebSessionFields } from "./model.ts";
+import { actorToken, asFields, fieldsOf, NAMES_LOCK, type AccountFields, type CharacterFields, type CredentialFields, type NameAliasFields, type WebSessionFields } from "./model.ts";
 import { envMs, readExisting, StillHeld, peek } from "./space.ts";
 
 const scrypt = (password: string, salt: Buffer): Promise<Buffer> =>
@@ -35,7 +35,7 @@ export type AccountOptions = {
 	setupToken?: string;
 };
 
-export type Me = { accountId: string; name: string; guest: boolean; admin: boolean; charId: string };
+export type Me = { accountId: string; name: string; guest: boolean; admin: boolean; charId: string; /** The name shown in the game, when it is not the login name. */ alias?: string };
 
 const NAME = /^[\p{L}\p{N}_-]{3,20}$/u;
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -109,6 +109,7 @@ export class Accounts {
 			if (!lock) throw new AuthError(503, "Die Namensvergabe ist gerade belegt; bitte gleich noch einmal");
 			// waits for a credential another transaction holds (an activation in step 3): held is not free
 			const taken = await readExisting(this.store, { type: "Credential", fields: { key } }, { txn: t1 }).catch((e) => { throw e instanceof StillHeld ? new AuthError(503, "Die Namensvergabe ist gerade belegt; bitte gleich noch einmal") : e; });
+			if (await peek(this.store, { type: "NameAlias", fields: { key } })) throw new AuthError(409, "Dieser Name ist schon vergeben");
 			if (taken) {
 				const c = fieldsOf<CredentialFields>(taken);
 				// a pending claim of this very account (its earlier attempt broke off) is taken over; anything else is taken
@@ -152,6 +153,41 @@ export class Accounts {
 		// step 3: the credential becomes permanent
 		await this.#activate(key, accountId);
 		return { accountId, name, guest: false, admin, charId };
+	}
+
+	/** The name the game shows for this account; empty goes back to the login name. Only the display changes: one logs in
+	 *  with the same name as before, and what one owns hangs on the character's id. */
+	async setAlias(accountId: string, wanted: string): Promise<Me> {
+		const account = await this.#account(accountId);
+		if (!account) throw new AuthError(403, "Dieses Konto gibt es nicht mehr");
+		if (account.guest) throw new AuthError(403, "Einen Alias gibt es für registrierte Konten");
+		const name = String(wanted ?? "").trim() || account.name, key = name.toLowerCase(), own = key === account.name.toLowerCase();
+		if (!NAME.test(name)) throw new AuthError(400, "Name: 3 bis 20 Buchstaben, Ziffern, _ oder -");
+		if (key.startsWith(`${this.w.guestName.toLowerCase()}-`)) throw new AuthError(400, `Namen wie „${this.w.guestName}-…“ sind Gästen vorbehalten`);
+		if (this.w.npcs.some((n) => n.name.toLowerCase() === key)) throw new AuthError(409, "Dieser Name gehört einer Figur der Welt");
+		// the name first, under the lock of all names: a world step that fails after it leaves a claim the next try takes over
+		const t1 = (await this.store.createTransaction(15_000)).id;
+		try {
+			const lock = await this.store.take(NAMES_LOCK, 10_000, { txn: t1 });
+			if (!lock) throw new AuthError(503, "Die Namensvergabe ist gerade belegt; bitte gleich noch einmal");
+			const login = await peek(this.store, { type: "Credential", fields: { key } });
+			if (login && fieldsOf<CredentialFields>(login).accountId !== accountId) throw new AuthError(409, "Dieser Name ist schon vergeben");
+			const other = await peek(this.store, { type: "NameAlias", fields: { key } });
+			if (other && fieldsOf<NameAliasFields>(other).accountId !== accountId) throw new AuthError(409, "Dieser Name ist schon vergeben");
+			for (const e of await this.store.readAll({ type: "NameAlias", fields: { accountId } })) await this.store.takeIfExists({ type: "NameAlias", id: e.id }, NO_WAIT, { txn: t1 });
+			if (!own) await this.store.write({ type: "NameAlias", fields: asFields<NameAliasFields>({ key, name, accountId }) }, t1, FOREVER);
+			await this.store.write({ type: NAMES_LOCK.type, fields: { ...NAMES_LOCK.fields } }, t1, FOREVER);
+			await this.store.commit(t1);
+		} catch (e) { await this.store.abort(t1).catch(() => {}); throw e; }
+		const world = await this.#spaceOf(accountId);
+		const t2 = (await world.createTransaction(15_000)).id;
+		try {
+			const c = await world.take({ type: "Character", fields: { accountId } }, 5_000, { txn: t2 });
+			if (!c) throw new AuthError(409, "Deine Figur ist gerade nicht greifbar; bitte noch einmal");
+			await world.write({ type: "Character", fields: asFields<CharacterFields>({ ...fieldsOf<CharacterFields>(c), name }) }, t2, FOREVER);
+			await world.commit(t2);
+		} catch (e) { await world.abort(t2).catch(() => {}); throw e; }
+		return this.#me(account);
 	}
 
 	/** The account a name and password belong to. A credential left pending by a registration that got as far as the
@@ -262,7 +298,8 @@ export class Accounts {
 		// with the account's region, or (a crossing half done) wherever the character stands
 		const c = (await readExisting(await this.#spaceOf(account.accountId), tmpl)) ?? (await this.#regions.find(tmpl, this.#regions.size > 1 ? 3_000 : 0).then((r) => (r ? readExisting(r.space, tmpl) : null)));
 		if (!c) throw new AuthError(409, "Zu diesem Konto gibt es keine Figur");
-		return { ...pick(account), charId: fieldsOf<CharacterFields>(c).charId };
+		const char = fieldsOf<CharacterFields>(c);
+		return { ...pick(account), charId: char.charId, ...(char.name !== account.name ? { alias: char.name } : {}) };
 	}
 
 	/** A new character at the start, on a cell near the spawn that no one online stands on. Two new characters may pick

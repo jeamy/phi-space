@@ -1,4 +1,4 @@
-// Acceptance of Phase 5 (docs/modell-npcs.md): model NPCs with a scripted model (tests/fake-llm.ts; never a real one in
+// Acceptance of Phase 5 (docs/modell-npcs.en.md): model NPCs with a scripted model (tests/fake-llm.ts; never a real one in
 // the tests). Game time runs fast (SPACES_MMO_TIME_SCALE), so five minutes awake last 0.6 s.
 import { test } from "node:test";
 import assert from "node:assert/strict";

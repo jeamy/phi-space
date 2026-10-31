@@ -9,7 +9,7 @@ export const WALK_MS = 150;
 /** Steps the page may walk ahead of the answers: a guard against running away from a server that stopped answering. */
 export const MAX_AHEAD = 8;
 /** No answer for this long while steps are on their way (an intent lost): the page takes the server's place again.
- *  Longer than a busy world takes to answer (2 to 9 s with 200 figures, docs/lasttest-2026-10-28.md): sooner, the
+ *  Longer than a busy world takes to answer (2 to 9 s with 200 figures, docs/lasttest-2026-10-28.en.md): sooner, the
  *  figure jumped back to where the answers stood and forward again when they came. A lost intent lapses after 30 s. */
 export const RESYNC_MS = 15_000;
 
@@ -70,6 +70,26 @@ export class Walker {
 		this.#pending = [];
 		return this.shown;
 	}
+}
+
+/** The first step of a shortest way from `from` to `to` over cells `free` allows (`to` itself need not be free when it is
+ *  an exit the walk ends on: the caller says), or null when there is none or it is there. A way is searched anew at every
+ *  step, so a figure that steps in is walked around. At most `limit` cells are looked at (a room has 384). */
+export function nextStep(free: (x: number, y: number) => boolean, from: Cell, to: Cell, limit = 1024): [number, number] | null {
+	if (from.x === to.x && from.y === to.y) return null;
+	// from the goal back, so the first cell reached beside `from` is the step to take
+	const seen = new Set([`${to.x},${to.y}`]), queue: Cell[] = [to];
+	for (let i = 0; i < queue.length && i < limit; i++) {
+		const c = queue[i]!;
+		for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as Array<[number, number]>) {
+			const n = { x: c.x + dx, y: c.y + dy }, key = `${n.x},${n.y}`;
+			if (n.x === from.x && n.y === from.y) return [dx ? -dx : 0, dy ? -dy : 0];
+			if (seen.has(key) || !free(n.x, n.y)) continue;
+			seen.add(key);
+			queue.push(n);
+		}
+	}
+	return null;
 }
 
 /** An arrow on the screen (up is [0, -1]) as a step on the grid, for a 3D view whose camera stands at `angle` around the

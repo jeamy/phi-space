@@ -1,9 +1,9 @@
-// What a world brings (docs/architektur.md, "Verzeichnisaufbau"): rooms, the tiles their grids use, the character
+// What a world brings (docs/architektur.en.md, "Verzeichnisaufbau"): rooms, the tiles their grids use, the character
 // skins and the help text. The engine loads exactly one world (SPACES_MMO_WORLD); a world adds data, never engine rules.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT } from "../env.ts";
-import type { BeaconFields, ExitFields, HelpEntryFields, PrototypeFields } from "../model.ts";
+import type { BeaconFields, ExitFields, HelpEntryFields, PrototypeFields, SceneryFields } from "../model.ts";
 import { parseLocks } from "./locks.ts";
 import { typeChain } from "./typeclasses.ts";
 
@@ -14,7 +14,7 @@ export type TileDef = { sheet: string; x: number; y: number; walk: boolean; auto
 /** Something drawn over a ground tile (a flower, a bush, a small tree): a `w`×`h` cut of a sheet, standing on the bottom of
  *  its cell (taller cuts reach into the cell above), optionally tinted; `upright` ones stand among the figures (one behind
  *  it is hidden), the others lie flat under things and figures. Only for the eye: it changes no rule. */
-export type DecorDef = { sheet: string; x: number; y: number; w: number; h: number; tint?: number; upright?: boolean; /** the 3D map's model instead of the picture (client/props3d.ts) */ model?: "tree" | "conifer" | "bush" | "berrybush" };
+export type DecorDef = { sheet: string; x: number; y: number; w: number; h: number; tint?: number; upright?: boolean; /** the 3D map's model instead of the picture (client/props3d.ts) */ model?: "tree" | "conifer" | "bush" | "berrybush" | "flower" | "herb" | "grass" | "fern" };
 /** A character sheet: 4 frames per row, rows down, left, right, up. */
 export type SkinDef = { sheet: string; frameW: number; frameH: number };
 /** `map`: where the room lies on the overview of the world (one unit per room; rooms of one island side by side),
@@ -24,15 +24,16 @@ export type RoomDef = { roomId: string; name: string; desc: string; ground: stri
 export type ExitDef = Omit<ExitFields, "location" | "locks"> & { room: string; locks?: string };
 /** An item the world places once: spawned only while no item with its itemId exists anywhere. */
 export type PlacedDef = { itemId: string; proto: string; room: string; x: number; y: number };
+export type SceneryDef = Omit<SceneryFields, "left">;
 export type WorldDef = {
 	id: string; title: string; tileSize: number; tiles: Record<string, TileDef>; skins: SkinDef[]; rooms: RoomDef[]; start: string; guestName: string;
 	/** What a room's `decor` grid names (plants and the like). */
 	decor?: Record<string, DecorDef>;
 	/** Raised when the definition changes: a world worker loads a newer version (rooms, exits, prototypes, help). */
 	version: number;
-	/** The hour of day 0 a new world's clock starts at (default 8; docs/weltzeit.md). */
+	/** The hour of day 0 a new world's clock starts at (default 8; docs/weltzeit.en.md). */
 	startHour?: number;
-	/** A daily `evening` event at this world hour (docs/weltzeit.md): the schedule is made with the world. */
+	/** A daily `evening` event at this world hour (docs/weltzeit.en.md): the schedule is made with the world. */
 	evening?: { hour: number };
 	/** Typeclasses below the engine's (name → parent). */
 	typeclasses: Record<string, string | null>;
@@ -45,6 +46,8 @@ export type WorldDef = {
 	dig: { ground: string[]; spawn: { x: number; y: number }; desc: string };
 	/** Phase 2. Where fires can burn and which rooms each keeps clear of fog. */
 	beacons: Array<Omit<BeaconFields, "lit">>;
+	/** What stands in the rooms besides plants (commands/scenery.ts). */
+	scenery?: SceneryDef[];
 	/** Burn time each fuel prototype gives, and the most a fire can hold. */
 	fire: { fuel: Record<string, number>; maxMs: number };
 	/** Fog levels 0..max; every `stepMs` it rises by one in rooms without a burning fire and falls by one with. */
@@ -73,30 +76,32 @@ export type WorldDef = {
 	recipes: Array<{ key: string; name: string; needs: Array<{ proto: string; count: number }>; tool?: string; makes: string; count?: number; at?: string }>;
 	/** The order board: jobs the world posts (up to `max` open), each lasting `leaseMs` once posted. */
 	orders: { rooms: string[]; max: number; everyMs: number; leaseMs: number; kinds: Array<{ key: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; rooms?: string[] }> };
-	/** What can be built (docs/siedeln.md): plans and the rules of building. Without it nothing can be built. */
+	/** What can be built (docs/siedeln.en.md): plans and the rules of building. Without it nothing can be built. */
 	building?: BuildingDef;
-	/** Gardens (docs/siedeln.md "Gärten"): beds, what grows in them and how. Without it nothing is planted. */
+	/** Gardens (docs/siedeln.en.md "Gärten"): beds, what grows in them and how. Without it nothing is planted. */
 	garden?: GardenDef;
 	wild?: WildDef;
-	/** The epochs of an island (docs/siedeln.md "Epochen"): their names from the first on (`a`: with the article, "ein
+	/** The epochs of an island (docs/siedeln.en.md "Epochen"): their names from the first on (`a`: with the article, "ein
 	 *  Dorf"), and how often the count runs. The thresholds are settings (epoch.dorf, epoch.stadt, epoch.netz). */
 	epochs?: { names: string[]; a: string[]; checkWorldMs: number };
-	/** The settlers (docs/siedeln.md "Wenige Spieler"): what share of a fire's light they leave free for people, and how
+	/** The settlers (docs/siedeln.en.md "Wenige Spieler"): what share of a fire's light they leave free for people, and how
 	 *  many beds each digs. How many play at once is the setting settlers.min, less the people online. */
 	settlers?: { reserve: number; maxBeds: number };
 	/** A settlement needs `huts` buildings of the plan `plan` of at least `owners` owners in one room. */
 	settlement?: { plan: string; huts: number; owners: number };
-	/** Fields (docs/siedeln.md "Äcker und Getreide"): one crop on a larger area, sown and brought in by many hands. */
+	/** Fields (docs/siedeln.en.md "Äcker und Getreide"): one crop on a larger area, sown and brought in by many hands. */
 	fields?: FieldDef;
-	/** The windmill (docs/siedeln.md "Warenketten"): grain brought to it becomes flour in its own time. */
+	/** The windmill (docs/siedeln.en.md "Warenketten"): grain brought to it becomes flour in its own time. */
 	mill?: MillDef;
-	/** A quarry: `plan` beside one, with `tool`, a work gives `count` of `makes` and a rest (docs/siedeln.md "Stoffe"). */
+	/** A quarry: `plan` beside one, with `tool`, a work gives `count` of `makes` and a rest (docs/siedeln.en.md "Stoffe"). */
 	quarry?: { plan: string; tool: string; makes: string; count: number };
 	/** A clay pit, the same with a spade. */
 	clay?: { plan: string; tool: string; makes: string; count: number };
+	/** Town halls: `plan`, and how long a motion is open. */
+	townhall?: { plan: string; voteWorldMs: number; zoneRadius: number; maxTax: number };
 	/** Chapels: `plan`, what may be offered, and how long a blessing lasts. */
 	chapel?: { plan: string; offerings: string[]; blessWorldMs: number };
-	/** Animals on the farm (docs/siedeln.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
+	/** Animals on the farm (docs/siedeln.en.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
 	animals?: AnimalsDef;
 	/** How the world splits into region spaces when SPACES_MMO_REGIONS names them (engine/regions.ts); without it the
 	 *  whole world is one space. */
@@ -105,20 +110,20 @@ export type WorldDef = {
 	region?: string;
 	allRooms?: RoomDef[];
 };
-/** A plan (docs/siedeln.md, "Was man baut"): its footprint `w`×`h`, what it needs delivered, the work points, what it
+/** A plan (docs/siedeln.en.md, "Was man baut"): its footprint `w`×`h`, what it needs delivered, the work points, what it
  *  counts towards the epoch and takes of a fire's light (`points`), how long it stands without repair. */
 /** `chest`: how many things its chest holds (none without); `repair`: what a repair costs (it then stands `keepWorldMs` again). */
 /** `dative`: the plan with its article as one says "neben einer Hütte" (default "einem <name>"). `epoch`: the island's
- *  epoch from which a new one may be staked out (default 1; docs/siedeln.md "Epochen"). */
+ *  epoch from which a new one may be staked out (default 1; docs/siedeln.en.md "Epochen"). */
 /** `sparesTools`: a recipe made beside it wears a tool half as fast. */
-export type PlanDef = { sparesTools?: boolean; store?: boolean; epoch?: number; dative?: string; key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string; chest?: number; repair: Array<{ proto: string; count: number }> };
+export type PlanDef = { /** The admin's setting in world days that replaces `keepWorldMs` (server/settings.ts). */ keepSetting?: string; /** A green zone of a town hall admits it. */ green?: boolean; sparesTools?: boolean; store?: boolean; epoch?: number; dative?: string; key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string; chest?: number; repair: Array<{ proto: string; count: number }> };
 /** `lightPoints`: what a fire's light carries; `siteWorldMs`: how long a site waits for progress; `restWorldMs`: how long a
  *  figure rests after a work point; `maxSites`/`maxBuildings`: per account. */
 /** `ruinWorldMs`: how long a ruin stays; `estateWorldMs`: how long what lay in its chest waits for its owner. */
 /** A sort that grows in a bed: from seed (`seed`, a prototype) to sprout after `grow[0]`, to ripe after `grow[1]`, ripe
  *  for `ripeWorldMs`, then it wilts. A harvest gives `yields` and a seed (sometimes two). `wild`: where its seeds are found
  *  in the wild flora (rooms whose decor has flowers or herbs, on these islands; without islands everywhere). */
-export type SortDef = { key: string; name: string; aliases: string[]; kind: "nutz" | "zier"; seed: string; grow: [number, number]; ripeWorldMs: number; yields: { proto: string; count: number }; color: string;
+export type SortDef = { /** Its form on the 3D map (client/props3d.ts). */ model?: "flower" | "rose" | "mist" | "cabbage" | "carrot"; key: string; name: string; aliases: string[]; kind: "nutz" | "zier"; seed: string; grow: [number, number]; ripeWorldMs: number; yields: { proto: string; count: number }; color: string;
 	wild?: { decor: "flowers" | "herbs"; islands?: string[] } };
 /** `bed`: the size of a bed, the light it takes, how long it stays without care; `spade`: the tool that digs one;
  *  `can`: a can of water (from the rain barrel, the building plan `barrel`, which holds `barrelCap` cans and gains one
@@ -129,7 +134,7 @@ export type SortDef = { key: string; name: string; aliases: string[]; kind: "nut
  *  seed of a crossing. */
 export type GardenDef = { bed: { w: number; h: number; points: number; keepWorldMs: number }; commons: { w: number; h: number; points: number }; crossChance: number; maxBeds: number; spade: string; can: string; barrel: string; barrelCap: number; barrelFillWorldMs: number;
 	thirstWorldMs: number; seedRestWorldMs: number; seedChance: number; decor: { flowers: string[]; herbs: string[] }; sorts: SortDef[] };
-/** The wild from the fog (docs/siedeln.md "Wild im Nebel"), first the hares in the beds: every `checkWorldMs` a room
+/** The wild from the fog (docs/siedeln.en.md "Wild im Nebel"), first the hares in the beds: every `checkWorldMs` a room
  *  with beds rolls `chance[fog]` (by its fog level 0 to 3; `nightFactor` times that at night) for a hare, at most
  *  `maxPerRoom` at once. A hare eats `eatAfterWorldMs` after it came unless someone within `scareReach` scared it off;
  *  a bed with a fence (it costs `fence`) or within `scarecrowReach` of a scarecrow (the building plan `scarecrow`)
@@ -155,7 +160,7 @@ export type KeeperDef = { key: string; proto: string; name: string; the: string;
 /** A crop of a field: its seed (a prototype, for grain the grain itself), the `group` it rotates in (the same group
  *  twice in a row tires the soil), how long it grows once sown, what each cell gives (some of it the next seed), its
  *  colour when ripe, and where its seed is found in the wild flora (like a garden sort's). */
-export type CropDef = { key: string; name: string; aliases: string[]; group: string; seed: string; growWorldMs: number; yields: Array<{ proto: string; perCell: number }>; color: string; wild?: SortDef["wild"] };
+export type CropDef = { /** Its form on the 3D map (client/props3d.ts). */ model?: "grain" | "tuber" | "beet" | "flax"; key: string; name: string; aliases: string[]; group: string; seed: string; growWorldMs: number; yields: Array<{ proto: string; perCell: number }>; color: string; wild?: SortDef["wild"] };
 /** A field of `w`×`h` cells takes `points` of a fire's light, at most `maxFields` per account, and goes back to grass
  *  after `keepWorldMs` without work. Sowing takes a seed per `seedPerCells` cells and a work point per `sowPerCells`,
  *  the harvest a work point per `harvestPerCells` (the same rest as on a site). It is ripe for `windowWorldMs`; after
@@ -173,7 +178,7 @@ export type AnimalKindDef = { key: string; proto: string; name: string; plural: 
 /** `houses`: how many a building of each plan holds (one kind at a time); one thing of feed keeps one animal fed for
  *  `feedWorldMs`, up to `fedMaxWorldMs` ahead; yields wait in the house, at most `nestMax` per animal. */
 export type AnimalsDef = { kinds: AnimalKindDef[]; houses: Record<string, number>; feedWorldMs: number; fedMaxWorldMs: number; nestMax: number };
-/** `store` (a plan whose chest a settlement shares, docs/siedeln.md "Siedlungen und Besitz"): `quota`: how many things a rank
+/** `store` (a plan whose chest a settlement shares, docs/siedeln.en.md "Siedlungen und Besitz"): `quota`: how many things a rank
  *  may take per world day; `logKeepMs`: how long a line of the log stays (real time, it must outlast the quota's day);
  *  `logShow`: how many lines `lager log` shows. */
 export type StoreDef = { quota: { fremder: number; helfer: number; siedler: number }; logKeepMs: number; logShow: number };
@@ -182,7 +187,7 @@ export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
 	/** In world hours: the NPC is there from `presentFromHour` to `presentUntilHour` (over midnight too), else away. */
 	plan?: { presentFromHour: number; presentUntilHour: number };
-	/** A model role (docs/modell-npcs.md): who it is, which events wake it, its model calls per day. Without model calls
+	/** A model role (docs/modell-npcs.en.md): who it is, which events wake it, its model calls per day. Without model calls
 	 *  (SPACES_MMO_LLM unset) or with its budget used up it dozes and speaks script lines. */
 	model?: { persona: string; wake: string[]; budgetDay: number; dozing: string[] };
 	/** A wanderer: appears only through its event, at most once per `cooldownMs`, leaves after `stayMs` without being

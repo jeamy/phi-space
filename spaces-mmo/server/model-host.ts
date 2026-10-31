@@ -1,4 +1,4 @@
-// The model process (docs/modell-npcs.md, "Kosten und Grenzen"): turns sentences no rule understood into commands. It
+// The model process (docs/modell-npcs.en.md, "Kosten und Grenzen"): turns sentences no rule understood into commands. It
 // takes a Translate entry, shows a cheap model the commands and what the player sees (exits, things, people, market),
 // and writes the answer back as an Intent with `asked` (the original sentence), which a world worker runs like any
 // command. An answer that is not a command is refused. Every call is counted (server/llm.ts): per account and day

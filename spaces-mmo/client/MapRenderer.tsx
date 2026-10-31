@@ -19,6 +19,11 @@ export type MapRendererProps = {
 	controls?: React.ReactNode;
 	/** The 3D view tells where its camera stands (the arrows then follow the view, client/walk.ts screenToGrid). */
 	onTurn?: (angle: number) => void;
+	/** The map fills its frame and the camera follows (a phone); the sheet covers this many px at the bottom. */
+	fill?: boolean;
+	insetBottom?: number;
+	/** The end of the walk under way, marked on the map. */
+	goal?: { x: number; y: number } | null;
 };
 
 /** The shared renderer boundary: both views consume the same server-authoritative room and emit the same cell input. */

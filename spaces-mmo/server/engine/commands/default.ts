@@ -1,15 +1,15 @@
-// The commands every character has (Evennia's default command set, docs/phasen.md Phase 1). Each runs inside the
+// The commands every character has (Evennia's default command set, docs/phasen.en.md Phase 1). Each runs inside the
 // transaction its intent is taken in: what it changes and what it says commit together, or not at all. An item changes
 // hands by being taken (it is then held by this transaction, invisible to every other) and written anew.
 import { settlementIn } from "./settlement.ts";
 import { cutText, FOREVER, NO_WAIT, type Taken } from "phi-spaces";
 import { fieldsOf, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomFields, type SessionFields } from "../../model.ts";
 import type { CmdSet, Command } from "../cmdsets.ts";
-import { byName, check, CommandError, NotUnderstood, exitsHere, inventory, itemsHere, msg, reach, roomOf, stem, type CommandCtx, itemsNamed } from "../context.ts";
+import { byName, check, CommandError, NotUnderstood, exitsHere, inventory, itemsHere, msg, pluralOf, reach, roomOf, stem, whereTo, type CommandCtx, itemsNamed } from "../context.ts";
 import { worldNowOf } from "../clock.ts";
 import { burnText, feed, flameOf, fogOf } from "../fire.ts";
 import { blockedIn, cellKey, claimSpot, freeCellNear, isPassage, occupiedIn, releaseSpot } from "../occupancy.ts";
-import { findPath, walkable, wayTo } from "../world.ts";
+import { findPath, walkable, wayTo, type WorldDef } from "../world.ts";
 import { handOff } from "../handover.ts";
 import { regionOfRoom } from "../regions.ts";
 
@@ -102,13 +102,13 @@ async function throughFog(c: CommandCtx, exit: ExitFields): Promise<void> {
 	const fires = c.world.beacons.filter((b) => b.covers.includes(c.actor.room));
 	const roomName = (id: string) => c.world.rooms.find((r) => r.roomId === id)?.name ?? id;
 	const here = fires.find((b) => b.room === c.actor.room);
-	if (here) throw new CommandError(`Der Nebel ist zu dicht; den Weg nach ${exit.name} findest du nicht. Entzünde das ${here.name} hier, dann lichtet er sich.`);
+	if (here) throw new CommandError(`Der Nebel ist zu dicht; den Weg nach ${whereTo(c.world, exit)} findest du nicht. Entzünde das ${here.name} hier, dann lichtet er sich.`);
 	const ways = fires.map((b) => ({ b, way: wayTo(c.world, c.actor.room, b.room) })).filter((x) => x.way);
 	if (ways.some((x) => x.way === exit.name)) return; // toward the light: one finds it
 	const to = ways[0];
 	throw new CommandError(to
-		? `Der Nebel ist zu dicht; den Weg nach ${exit.name} findest du nicht. Das ${to.b.name} steht in ${roomName(to.b.room)}; den Weg nach ${to.way} dorthin findest du noch.`
-		: `Der Nebel ist zu dicht; den Weg nach ${exit.name} findest du nicht. Ein Leuchtfeuer würde helfen.`);
+		? `Der Nebel ist zu dicht; den Weg nach ${whereTo(c.world, exit)} findest du nicht. Das ${to.b.name} steht in ${roomName(to.b.room)}; den Weg nach ${to.way} dorthin findest du noch.`
+		: `Der Nebel ist zu dicht; den Weg nach ${whereTo(c.world, exit)} findest du nicht. Ein Leuchtfeuer würde helfen.`);
 }
 
 /** The region a room of another region lies in, seen from the part of the world `w` runs; null when it is here (or the
@@ -119,13 +119,13 @@ function crossing(w: CommandCtx["world"], room: string): string | null {
 }
 
 export async function traverse(c: CommandCtx, exit: ExitFields): Promise<void> {
-	await check(c, exit.locks, "traverse", `Der Weg nach ${exit.name} ist dir versperrt.`);
+	await check(c, exit.locks, "traverse", `Der Weg nach ${whereTo(c.world, exit)} ist dir versperrt.`);
 	if (exit.fogMax !== undefined && (await fogOf(c.space, c.actor.room)) > exit.fogMax) await throughFog(c, exit);
 	// a ferry into another region: the character leaves this space and a world worker brings it over (handover.ts)
 	const toRegion = crossing(c.world, exit.destination);
 	if (toRegion) {
 		await dropOffers(c);
-		await msg(c, "*", "info", `$you() $conj(gehst|geht) nach ${exit.name}.`, { templ: true });
+		await msg(c, "*", "info", `$you() $conj(gehst|geht) nach ${whereTo(c.world, exit)}.`, { templ: true });
 		await handOff(c, c.world.region!, toRegion, { room: exit.destination, ...exit.arrive });
 		return;
 	}
@@ -134,15 +134,16 @@ export async function traverse(c: CommandCtx, exit: ExitFields): Promise<void> {
 	const at = await placeIn(c, dest, exit.arrive);
 	await relocate(c, { room: dest.roomId, x: at.x, y: at.y }, { spot: false });
 	await dropOffers(c);
-	await msg(c, "*", "info", `$you() $conj(gehst|geht) nach ${exit.name}.`, { templ: true });
+	await msg(c, "*", "info", `$you() $conj(gehst|geht) nach ${whereTo(c.world, exit)}.`, { templ: true });
 	await msg(c, "*", "info", `$you() $conj(kommst|kommt) an.`, { templ: true, room: dest.roomId });
 	await msg(c, c.actor.charId, "look", await describeRoom(c, dest.roomId, true), { room: dest.roomId });
 }
 
 async function describeRoom(c: CommandCtx, roomId: string, arriving = false): Promise<string> {
 	const room = await roomOf(c, roomId);
-	const exits = (await exitsHere(c, roomId)).map((x) => x.f.name).sort();
+	const exits = (await exitsHere(c, roomId)).map((x) => { const to = whereTo(c.world, x.f); return to === x.f.name ? to : `${x.f.name} (${to})`; }).sort();
 	const items = (await c.space.readAll({ type: "Item", fields: { location: roomId } })).map((e) => fieldsOf<ItemFields>(e).name).sort();
+	const scenery = (await c.space.readAll({ type: "Scenery", fields: { room: roomId } })).map((e) => String(e.fields.name)).sort();
 	const others = (await online(c, roomId)).filter((ch) => ch.charId !== c.actor.charId).map((ch) => ch.name);
 	const beacons = await beaconsIn(c, roomId);
 	const fog = await fogOf(c.space, roomId);
@@ -151,9 +152,10 @@ async function describeRoom(c: CommandCtx, roomId: string, arriving = false): Pr
 		room.name, room.desc,
 		...(settlement ? [`Hier liegt die Siedlung ${settlement.name}.`] : []),
 		...(await Promise.all(beacons.map(async (b) => `Das ${b.f.name} ${burnText(await flameOf(c.space, b.f.beaconId), await worldNowOf(c.space, c.txn))}.`))),
-		...(fog ? [["", "Leichter Nebel liegt über allem.", "Dichter Nebel; man sieht kaum zum Wasser.", "Undurchdringlicher Nebel verschluckt die Wege."][Math.min(3, fog)]!] : []),
+		...(!fog ? ["Die Luft ist klar."] : [["", "Leichter Nebel liegt über allem.", "Dichter Nebel; man sieht kaum zum Wasser.", "Undurchdringlicher Nebel verschluckt die Wege."][Math.min(3, fog)]!]),
 		exits.length ? `Ausgänge: ${exits.join(", ")}.` : "Kein Weg führt hinaus.",
-		...(items.length ? [`Hier liegt: ${items.join(", ")}.`] : []),
+		...(items.length ? [`Hier liegt: ${countedNames(items, c.world).join(", ")}.`] : []),
+		...(scenery.length ? [`Hier steht: ${countedNames(scenery, c.world).join(", ")}.`] : []),
 		arriving && !others.length ? "Niemand ist hier." : others.length ? `Hier sind: ${others.join(", ")}.` : "Niemand sonst ist hier.",
 	].join("\n");
 }
@@ -319,12 +321,19 @@ const give: Command = {
 	},
 };
 
+/** Things by name, each once with its count, as in the inventory: ["Stein", "Stein", "Tang"] → ["2 Steine", "Tang"]. */
+function countedNames(names: string[], w: WorldDef): string[] {
+	const kinds = new Map<string, number>();
+	for (const n of names) kinds.set(n, (kinds.get(n) ?? 0) + 1);
+	return [...kinds].sort(([a], [b]) => a.localeCompare(b)).map(([name, n]) => (n > 1 ? `${n} ${pluralOf(name, w)}` : name));
+}
+
 const inv: Command = {
 	key: "inventory", aliases: ["inventar", "i", "inv"],
 	help: "inventory – was du trägst",
 	async func(c) {
-		const names = (await inventory(c)).map((i) => i.f.name).sort();
-		await msg(c, c.actor.charId, "info", names.length ? `Du trägst: ${names.join(", ")}.` : "Du trägst nichts.");
+		const list = countedNames((await inventory(c)).map((i) => i.f.name), c.world);
+		await msg(c, c.actor.charId, "info", list.length ? `Du trägst: ${list.join(", ")}.` : "Du trägst nichts.");
 	},
 };
 

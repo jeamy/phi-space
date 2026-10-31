@@ -1,4 +1,4 @@
-// Acceptance of Phase 1 (docs/phasen.md): the world core after Evennia. Things are taken and written in the
+// Acceptance of Phase 1 (docs/phasen.en.md): the world core after Evennia. Things are taken and written in the
 // transaction of their command, so twenty hands on one coin leave it with exactly one, and a give survives its world
 // process dying in the middle. Exits, builders, locks, tags and the world loader.
 import { test } from "node:test";
@@ -143,7 +143,7 @@ test("things: get, inventory, look, drop; the map and the pack follow", async ()
 		assert.equal(a.h.objs.find((o) => o.id === "treibholz-1")?.icon, "/assets/leuchtfeuer/items/treibholz.png", "with its picture");
 		assert.ok(a.h.world.icons.includes("/assets/leuchtfeuer/items/netz.png"), "the page loads every picture of the world");
 		assert.ok(a.h.objs.some((o) => o.id === "bucht-ost" && o.kind === "exit"), "and the exits");
-		assert.match(await does(a.p, "look", "Ausgänge"), /Ausgänge: ost, süd, west\.\nHier liegt: .*Treibholz/);
+		assert.match(await does(a.p, "look", "Ausgänge"), /Ausgänge: ost \(Klippenpfad\), süd \(Dünen\), west \(Fischerdorf\)\.\nHier liegt: .*Treibh/);
 		assert.match(await does(a.p, "get treibholz", /weit weg|Hier liegt nichts/), /Treibholz liegt zu weit weg/);
 		a.p.send("move 17 9");
 		await eventually(async () => (await charAt(srv.stack.space, a.h.me.charId)).x === 17, 10_000, "next to the driftwood");
@@ -173,7 +173,7 @@ test("exits: go, the exit's name, or a step onto its cell lead to the next room;
 		assert.equal(there.room.name, "Klippenpfad");
 		assert.ok(there.objs.some((o) => o.id === "muschel-2"));
 		await b.p.until((f) => f.t === "gone" && f.charId === a.h.me.charId, 10_000, fromB);
-		await b.p.until((f) => f.t === "msg" && f.m.text === "Rasmus geht nach ost.", 10_000, fromB);
+		await b.p.until((f) => f.t === "msg" && f.m.text === "Rasmus geht nach Klippenpfad.", 10_000, fromB);
 		// the arrival look reaches the player after its new hello (messages of a commit come after the moves)
 		const helloAt = a.p.frames.indexOf(there);
 		await a.p.until((f) => f.t === "msg" && f.m.text.startsWith("Klippenpfad\n"), 10_000, helloAt);

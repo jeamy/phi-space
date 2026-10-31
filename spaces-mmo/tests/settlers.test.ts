@@ -1,4 +1,4 @@
-// The settlers (docs/siedeln.md "Wenige Spieler", server/npc/settlers.ts): with too few people, settlers play; one with
+// The settlers (docs/siedeln.en.md "Wenige Spieler", server/npc/settlers.ts): with too few people, settlers play; one with
 // the material stakes out a hut in its fire's light and builds it through the same commands as a person; when a person
 // comes, the last settler of the order goes; who and the page mark them.
 import "./test-env.ts";

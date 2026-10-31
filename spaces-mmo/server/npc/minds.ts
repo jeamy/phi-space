@@ -1,4 +1,4 @@
-// Model NPCs (docs/modell-npcs.md): who plays a role, who is awake, and what an awake NPC says. Everything lives in the
+// Model NPCs (docs/modell-npcs.en.md): who plays a role, who is awake, and what an awake NPC says. Everything lives in the
 // world space, so a restarted npc process finds the same states and memories, and two processes never play one role:
 //   NpcOwner{npcId, owner}  leased: the process that plays the role (claimed under the NPC lock)
 //   NpcAwake{npcId}         leased: the NPC answers with the model; woken under the NPC lock, at most SPACES_MMO_NPC_MAX

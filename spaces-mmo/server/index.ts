@@ -107,7 +107,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			? `${COOKIE}=${sid}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(accounts.webSessionMs / 1000)}${secure}`
 			: `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure}`;
 	};
-	const meView = (me: Me | null) => ({ account: me ? { name: me.name, guest: me.guest, admin: me.admin } : null, world: { id: w.id, title: w.title }, build });
+	const meView = (me: Me | null) => ({ account: me ? { name: me.name, guest: me.guest, admin: me.admin, ...(me.alias ? { alias: me.alias } : {}) } : null, world: { id: w.id, title: w.title }, build });
 	/** Logs `me` in: a new web session, the old one (a guest's, say) ends. */
 	const signIn = async (req: http.IncomingMessage, res: http.ServerResponse, me: Me) => {
 		await accounts.closeSession(cookieOf(req, COOKIE));
@@ -191,6 +191,12 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 					const name = String(b.name ?? "").trim().toLowerCase();
 					if (!loginByIp(ip) || !loginByName(name)) return json(res, 429, { error: "Zu viele Anmeldeversuche; bitte in einer Minute noch einmal" });
 					return await signIn(req, res, await accounts.login(b.name, b.password, typeof b.setupToken === "string" && b.setupToken ? { setupToken: b.setupToken } : {}));
+				}
+				if (p === "/api/alias") {
+					const me = await accounts.resolve(cookieOf(req, COOKIE));
+					if (!me) return json(res, 401, { error: "Nicht angemeldet" });
+					if (!loginByIp(ip)) return json(res, 429, { error: "Zu viele Versuche; bitte in einer Minute noch einmal" });
+					return json(res, 200, meView(await accounts.setAlias(me.accountId, String(b.alias ?? ""))));
 				}
 				if (p === "/api/admin/settings") return json(res, 200, await adminSettings(await accounts.resolve(cookieOf(req, COOKIE)), b));
 				if (p === "/api/logout") {

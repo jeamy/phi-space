@@ -1,4 +1,4 @@
-// Model calls of spaces-mmo (docs/modell-npcs.md): off unless SPACES_MMO_LLM=1 and credentials exist (the same resolution
+// Model calls of spaces-mmo (docs/modell-npcs.en.md): off unless SPACES_MMO_LLM=1 and credentials exist (the same resolution
 // as agent/src/live-models.ts: environment keys or ~/.pi/agent/auth.json). Which model a call uses is the admin's choice
 // (server/settings.ts, the window in the game): the allowed models and the one calls use; without a choice the newest
 // available model whose id contains SPACES_MMO_LLM_MODEL (default "haiku"). Every call is admitted against counters kept

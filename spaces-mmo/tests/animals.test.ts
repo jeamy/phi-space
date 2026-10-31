@@ -1,4 +1,4 @@
-// Animals on the farm, step 3 part 3 (docs/siedeln.md "Tiere auf dem Hof", engine/commands/animals.ts): hens put into a
+// Animals on the farm, step 3 part 3 (docs/siedeln.en.md "Tiere auf dem Hof", engine/commands/animals.ts): hens put into a
 // coop give eggs only while fed; anyone feeds, only the owner puts in, takes out and collects; two fed ones get a young
 // one; a pen keeps one kind; demolition gives the animals back.
 import "./test-env.ts";

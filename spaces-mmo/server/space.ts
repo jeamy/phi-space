@@ -1,4 +1,4 @@
-// How the processes of spaces-mmo reach their spaces (docs/architektur.md): the world space, which every process
+// How the processes of spaces-mmo reach their spaces (docs/architektur.en.md): the world space, which every process
 // shares, and the accounts space with the credentials and web sessions, which only the web process knows the address
 // of. Both are served by the space process (space-host.ts), each from its own store on its own socket.
 import os from "node:os";
@@ -82,7 +82,7 @@ export function bufferedTxn(space: Batching, txn: string, mirror: Mirror | null 
  * The space's visible entries, copied into this process: read once, then kept by the change stream (the web process
  * does the same, gateway.ts). It answers the snapshot reads of a command (`readAll` and `count` without `txn`) here, on
  * this process's core, instead of a call each to the space process, which runs every command of the world on one core
- * (docs/lasttest-2026-10-28.md, 200 figures). `fresh()` asks the space for its revision once and waits until the copy has
+ * (docs/lasttest-2026-10-28.en.md, 200 figures). `fresh()` asks the space for its revision once and waits until the copy has
  * reached it, so a command sees at least what was committed before it began (its own character's last command too).
  * Takes, writes and reads under a transaction still go to the space: they decide, the copy only informs.
  * SPACES_MMO_MIRROR=0 turns it off.

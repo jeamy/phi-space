@@ -23,7 +23,21 @@ gardens just as from houses, and the most beautiful places of the archipelago ar
 buildings. The one is the large shared work, the other the quiet permanent rhythm that keeps the world alive even with
 two or three players.
 
+## Kulissen (scenery)
+
+Rooms show what their descriptions promise (`worlds/leuchtfeuer/scenery.ts`, Grey Island first). A piece holds its cells with Plot
+entries like a building. Jetties are `fixed`, and those on a way out are `through` (they hold no cell). The rest anyone clears with
+`räume`: work by work with a rest between, as on a site, in a settlement from the rank of helper. The last stroke frees the cells,
+gives the material to whoever did it and writes `SceneryGone`, so no new world version brings the piece back; a piece also stays
+away where someone built meanwhile. The page shows it going, dust in 2D, sinking in 3D.
+
 ## Chat between players (first, built)
+
+A reader without a key gets no copy at first. A `ChatWait` entry (no text in it) keeps who waits for which message, the reader
+is told once per sender and sees it under "Chats". When they set up a key, the sender's page opens its own copy and seals it
+for that key (frames `chatreseal`, `chatdeliver`), at once or the next time it is unlocked, and the message arrives with the
+time it was written. The server still sees no text. It waits as long as a message stays (7 days); a copy the sender's page no
+longer has cannot be handed on.
 
 Building together means agreeing, also across islands and with someone who is standing elsewhere right now. `say` is
 heard only by the room, a channel (`channel hafen`) by all. What was missing was the conversation between two and in a
@@ -1027,10 +1041,34 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      first building that needs bricks. Beside it `opfere` gives up a pearl, amber, bread or a flower; for a world day the rest after
      work is half as long. Deviations: the blessing works without the gods, holds only in the region of the offering, no festivals yet.
    - **Part 3, park (built, a plan only):** From the town epoch, of bricks, stone and flowers, 4×4, worth 9 points, threefold
-     towards the stock. Deviation: no reputation for its tenders and no flower show yet. Town hall, votes and festivals are open.
+     towards the stock. Deviation: no reputation for its tenders and no flower show yet.
+   - **Part 5, town hall and votes (built, `server/engine/commands/townhall.ts`):** A plan from the town epoch of bricks, stone and planks. Beside it a settler
+     puts a motion with `antrag`, one per room at a time. Each settler votes with `stimme ja|nein`, the last vote counts, and after a world day the count decides:
+     more yes than no carries it. Once a hall stands, `siedlung zu` and `offen` go only through a motion.
+     Votes are entries of their own: a taken motion holds its `unique` claim until the commit, so the same transaction could not write it anew.
+     Deviations: free motions are merely announced; the hall comes earlier than the table (level 5) says.
+   - **Part 6, zones (built, same file):** `antrag grünzone` and `antrag wegerecht` go up anywhere in the settlement for 7×7 cells around whoever puts them, `antrag zone frei` lifts the zones at their cell. A green
+     zone admits only beds and parks, a right of way nothing; what stands stays. Zones end with the settlement. Deviation: no map overlay yet, `siedlung` names them as text; demolition by resolution is missing.
+   - **Part 7, tax (built, same file):** `antrag steuer <n>` (at most 5) sets the coins per thing taken from the warehouse; they stay in it, coins themselves go free.
+     Deviation: the tax on the market hall's sales waits for that hall (step 7). Festivals, reputation and the flower show are open.
 7. **Department store** (shop with stock), **counting house**, **lighthouse**, **brewery**, **glassworks and greenhouse**,
    fishing (net recipe, jetty) and boats; **food** (being sated), when bread and smoked fish exist.
 8. **Roads, carts, timetable ferries**, then the **island railway** as automaton.
+
+### Later settings and views
+
+**How long a building stands** is set per class, in world days, and the admin can change it in the admin panel; a saved
+number holds for the next building, one that stands keeps its date. Defaults: scarecrow 7 (`keep.scheuche`), huts and the
+like 30 (`keep.bau`), storehouses and the like 45 (`keep.lager`), chapel 60 (`keep.kapelle`), park 120 (`keep.park`). A
+plan names its class with `keepSetting`.
+
+**Plants are 3D models** like the buildings: wild flowers, herbs, grass and ferns as decoration, and the plants of beds
+and fields by their sort (`model` on the sort and the crop), merged vertex-coloured geometry in `client/props3d.ts`.
+
+**The bar "Hier möglich"** (`hereEntries` in `client/cellActions.ts`) shows what the menus of the cells around the figure
+offer, each once, one below the other: first the harvest, then the care of what grows, the work on what is begun, the
+rest, and looking for seeds last. Five entries show; "Mehr" unfolds the others, and a long list scrolls. "Mein Ruf" and
+looking stay in the menu.
 
 ## Open questions
 

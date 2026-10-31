@@ -1,4 +1,4 @@
-// The other wild from the fog, step 3 part 4 (docs/siedeln.md "Wild im Nebel", engine/commands/wild.ts): deer graze a
+// The other wild from the fog, step 3 part 4 (docs/siedeln.en.md "Wild im Nebel", engine/commands/wild.ts): deer graze a
 // growing field (its yield falls, never below its floor), a fox takes a hen at night (never the last), mice eat from a
 // chest (never the last); a fence, a mousetrap and the fed guards (dog, cat, geese) keep them away; the dog and the
 // cat as a player leaves, feeds and takes them again; scheuche and zäune for the new kinds.

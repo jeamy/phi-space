@@ -1,4 +1,4 @@
-// The wild from the fog (docs/siedeln.md "Wild im Nebel"): hares at the beds (step 2 part 3), deer at the fields, foxes
+// The wild from the fog (docs/siedeln.en.md "Wild im Nebel"): hares at the beds (step 2 part 3), deer at the fields, foxes
 // at the coops and mice at the chests (step 3 part 4) come to rooms whose fire does not hold the fog back, and take a
 // little unless someone scares them off first.
 //

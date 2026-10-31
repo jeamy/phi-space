@@ -1,4 +1,4 @@
-// Stone and the workshop, step 5 part 2 (docs/siedeln.md, engine/commands/quarry.ts): a quarry gives stone for a pickaxe's
+// Stone and the workshop, step 5 part 2 (docs/siedeln.en.md, engine/commands/quarry.ts): a quarry gives stone for a pickaxe's
 // wear and a rest; a workshop has recipes of its own, and a tool wears half as fast beside it.
 import "./test-env.ts";
 import { test } from "node:test";
@@ -29,6 +29,7 @@ test("stone: a pickaxe of rubble; a quarry gives three for its wear and a rest; 
 		const p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Hauer", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
+		await does(p, "who", /./); // the arrival may still move the figure: its commands run in order
 		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, "Hauer"))!.fields as unknown as CharacterFields;
 		await give(s, me, "treibholz", 10);
 		await give(s, me, "stein", 2);
@@ -65,6 +66,7 @@ test("clay and bricks: a spade cuts clay and stays whole; a brickworks burns it"
 		const p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Lehmer", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
+		await does(p, "who", /./); // the arrival may still move the figure: its commands run in order
 		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, "Lehmer"))!.fields as unknown as CharacterFields;
 		await give(s, me, "treibholz", 2);
 		assert.match(await does(p, "steche", "direkt neben"), /Lehm sticht man direkt neben einer Lehmgrube/);
@@ -88,6 +90,7 @@ test("a chapel: an offering of worth gives a blessing, and the rest after work i
 		const p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Opfernde", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
+		await does(p, "who", /./); // the arrival may still move the figure: its commands run in order
 		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, "Opfernde"))!.fields as unknown as CharacterFields;
 		await give(s, me, "perle", 1);
 		await give(s, me, "treibholz", 1);

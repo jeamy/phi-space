@@ -1,4 +1,4 @@
-// Acceptance of Phase 4 (docs/phasen.md): trade and economy. Every exchange moves its items in one transaction, so a
+// Acceptance of Phase 4 (docs/phasen.en.md): trade and economy. Every exchange moves its items in one transaction, so a
 // fuzz of many trades, purchases and withdrawals racing each other across two world workers ends with every item
 // existing exactly once: with a player, or in the market's escrow behind a live listing.
 import { test } from "node:test";
@@ -165,7 +165,7 @@ test("order board: the world posts jobs, one player takes one, delivering uses u
 	} finally { await srv.close(); }
 });
 
-test("conservation: a fuzz of trades, purchases, withdrawals and gifts across two world workers loses or doubles nothing", async () => {
+test("conservation: a fuzz of trades, purchases, withdrawals and gifts across two world workers loses or doubles nothing", { timeout: 360_000 }, async () => {
 	const srv = await startServer();
 	try {
 		await srv.stack.worldProcess();
@@ -186,9 +186,10 @@ test("conservation: a fuzz of trades, purchases, withdrawals and gifts across tw
 			(i: number) => `give münze an ${other(i).name}`,
 			() => "offer zurück",
 		];
-		const end = Date.now() + 15_000;
+		// at least 15 s, longer while a loaded machine has got little done (what counts is what happened)
+		const start = Date.now(), succeeded = () => ps.flatMap((x) => x.p.frames.flatMap((f) => (f.t === "msg" && /^(Tausch mit |Du kaufst |Du holst |Du gibst )/.test(f.m.text) ? [1] : []))).length;
 		await Promise.all(ps.map(async (x, i) => {
-			while (Date.now() < end) { x.p.send(ops[randomInt(0, ops.length)]!(i)); await new Promise((r) => setTimeout(r, randomInt(20, 120))); }
+			while (Date.now() - start < 15_000 || (succeeded() < 30 && Date.now() - start < 240_000)) { x.p.send(ops[randomInt(0, ops.length)]!(i)); await new Promise((r) => setTimeout(r, randomInt(20, 120))); }
 		}));
 		await eventually(async () => !(await s.count({ type: "Intent" })), 60_000, "every command taken");
 		await new Promise((r) => setTimeout(r, 2_000)); // the last ones commit

@@ -1,4 +1,4 @@
-// Orders of a site, step 5 part 3 (docs/siedeln.md, engine/commands/siteorder.ts): the wage lies in the order, whoever
+// Orders of a site, step 5 part 3 (docs/siedeln.en.md, engine/commands/siteorder.ts): the wage lies in the order, whoever
 // delivers or works is paid in that command, what is left goes back, and the day labourer works for it.
 import "./test-env.ts";
 import { test } from "node:test";
@@ -36,7 +36,7 @@ test("a wage: held by the order, paid in the command, the rest goes back", { tim
 		await does(a.p, "bau hütte", "steckt eine Baustelle ab");
 		const site = (await eventually(async () => (await s.readAll({ type: "Site" }))[0], 10_000, "site"))!.fields as unknown as SiteFields;
 		await does(b.p, "move " + (site.x - 1) + " " + site.y, /./).catch(() => "");
-		await eventually(async () => { const c = (await s.readAll({ type: "Character", fields: { charId: b.me } }))[0]!.fields as unknown as CharacterFields; return c.x === site.x - 1 && c.y === site.y; }, 15_000, "walked");
+		await eventually(async () => { const c = (await s.readAll({ type: "Character", fields: { charId: b.me } }))[0]?.fields as unknown as CharacterFields | undefined; return !!c && c.x === site.x - 1 && c.y === site.y; }, 15_000, "walked");
 
 		assert.match(await does(b.p, "aushang 2 treibholz je 1", "gehört"), /nur, wem die Baustelle gehört/);
 		assert.match(await does(a.p, "aushang 3 treibholz je 9", "kostet"), /kostet 27 Münzen, du hast 12/);

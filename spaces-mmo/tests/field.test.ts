@@ -1,4 +1,4 @@
-// Fields, step 3 part 1 (docs/siedeln.md "Äcker und Getreide", engine/commands/field.ts): a field is staked out with a
+// Fields, step 3 part 1 (docs/siedeln.en.md "Äcker und Getreide", engine/commands/field.ts): a field is staked out with a
 // spade in the light, its owner chooses the crop, seed and work sow it (on an open field anyone helps); when it is ripe,
 // ten hands at once bring it in exactly once, every grain in someone's pack; the same crop group twice tires the soil.
 import "./test-env.ts";

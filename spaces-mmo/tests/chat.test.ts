@@ -1,4 +1,4 @@
-// The chat between players (server/chat.ts, docs/siedeln.md "Chat zwischen Spielern") with the world in its regions:
+// The chat between players (server/chat.ts, docs/siedeln.en.md "Chat zwischen Spielern") with the world in its regions:
 // end-to-end encrypted talks between two and in groups, as the page does it (client/chatcrypto.ts, run here in Node),
 // across regions, waiting for a login, invitations that are taken or lapse, ignoring, guests, reports. The server keeps
 // sealed copies only: no text of a message is in any space.
@@ -52,6 +52,13 @@ const read = (me: { priv: CryptoKey; accountId: string }, m: ChatView) => openBo
 async function heard(me: Me, title: string, from: number): Promise<{ m: ChatView; text: string }> {
 	const f = await frame(me.p, "chat", from, (x) => x.m.conv.title === title && !!x.m.box && !x.m.mine);
 	return { m: f.m, text: await read(me, f.m) };
+}
+
+/** The regions and a web process, for a test of its own. */
+async function chatStack() {
+	const r = await startRegions();
+	const web = await startWeb({ port: 0, space: "unix:/nowhere", accounts: r.accounts, regions: r.list });
+	return { web, stop: async () => { await web.close(); await r.close(); } };
 }
 
 test("chat: end-to-end encrypted talks across regions, waiting for the next login, groups by invitation, ignoring, guests", { timeout: 240_000 }, async () => {
@@ -172,4 +179,70 @@ test("chat: end-to-end encrypted talks across regions, waiting for the next logi
 		}
 		for (const p of [anna.p, bert.p, cara.p, guest]) await p.leave();
 	} finally { accounts.close(); await srv.close(); await r.close(); delete process.env.SPACES_MMO_CHAT_INVITE_MS; }
+});
+
+test("what is written to a player without a key is told to them and arrives once they set up the chat", { timeout: 180_000 }, async () => {
+	const { web, stop } = await chatStack();
+	try {
+		const a = await register(web.url, "Waltraud"), b = await register(web.url, "Bodo");
+		const alice = await setup(a, "Waltraud", "alice-chat-pw");
+		const bob = await frame(b, "chatme");
+		const seenFrom = b.frames.length;
+		const conv = { kind: "dm" as const, id: bob.accountId };
+		assert.deepEqual(await say(alice, conv, "erste Nachricht"), ["Bodo"]);
+		await say(alice, conv, "zweite Nachricht");
+		await note(b, "möchte dir im Chat schreiben", seenFrom);
+		const waiting = await frame(b, "chats", seenFrom, (f) => f.state.waiting.some((w) => w.count === 2));
+		assert.deepEqual(waiting.state.waiting, [{ from: "Waltraud", count: 2 }]);
+
+		// the sender's own copies, as its page has them
+		const own = a.frames.filter((f): f is Extract<ChatFrame, { t: "chat" }> => f.t === "chat" && !!f.m.box);
+		assert.equal(own.length, 2);
+		const k = await newKey("bodo-chat-pw");
+		const from = a.frames.length, fromB = b.frames.length;
+		raw(b, { t: "chatkey", key: k.backup });
+		const asked = await frame(a, "chatreseal", from);
+		assert.equal(asked.items.length, 2);
+		for (const it of asked.items) {
+			const m = own.find((f) => f.m.id === it.msgId)!.m;
+			const text = await openBox(alice.priv, m.box!, aad(it.msgId, alice.accountId, alice.accountId, it.groupId));
+			raw(a, { t: "chatdeliver", msgId: it.msgId, to: it.to, box: await sealFor(alice.priv, alice.pub, it.pub, text, aad(it.msgId, alice.accountId, it.to, it.groupId)) });
+		}
+		const got = await Promise.all(asked.items.map(async (it) => {
+			const f = await frame(b, "chat", fromB, (x) => x.m.id === it.msgId);
+			return openBox(k.priv, f.m.box!, aad(it.msgId, alice.accountId, bob.accountId, ""));
+		}));
+		assert.deepEqual(got.sort(), ["erste Nachricht", "zweite Nachricht"]);
+		await frame(b, "chats", fromB, (f) => f.state.waiting.length === 0);
+
+		// a second page of the sender finds nothing left to hand on
+		const again = a.frames.length;
+		raw(a, { t: "chatwaiting" });
+		await new Promise((r) => setTimeout(r, 300));
+		assert.ok(!a.frames.slice(again).some((f) => f.t === "chatreseal"));
+	} finally { await stop(); }
+});
+
+test("a locked sender hands on after the unlock: the page asks, and only the sender can", { timeout: 180_000 }, async () => {
+	const { web, stop } = await chatStack();
+	try {
+		const a = await register(web.url, "Wanda"), b = await register(web.url, "Bruno");
+		const alice = await setup(a, "Wanda", "alice-chat-pw");
+		const bob = await frame(b, "chatme");
+		await say(alice, { kind: "dm", id: bob.accountId }, "später");
+		await frame(b, "chats", 0, (f) => f.state.waiting.length === 1);
+		const k = await newKey("bruno-chat-pw");
+		const fromB = b.frames.length;
+		raw(b, { t: "chatkey", key: k.backup });
+		await note(b, "Chat eingerichtet", fromB);
+		const from = a.frames.length;
+		raw(a, { t: "chatwaiting" });
+		const asked = await frame(a, "chatreseal", from);
+		assert.equal(asked.items.length, 1);
+		// another player cannot deliver in the sender's place
+		const it = asked.items[0]!, before = b.frames.length;
+		raw(b, { t: "chatdeliver", msgId: it.msgId, to: it.to, box: await sealFor(k.priv, k.backup.pub, it.pub, "untergeschoben", aad(it.msgId, bob.accountId, it.to, "")) });
+		await new Promise((r) => setTimeout(r, 300));
+		assert.ok(!b.frames.slice(before).some((f) => f.t === "chat"));
+	} finally { await stop(); }
 });

@@ -1,4 +1,4 @@
-// The world clock as the engine reads it inside a command or a job: the world time now (docs/weltzeit.md). Processes that
+// The world clock as the engine reads it inside a command or a job: the world time now (docs/weltzeit.en.md). Processes that
 // look often use ClockCache (clockcache.ts); a command reads the entry in its transaction, so the time it works with is
 // the one its transaction sees.
 import { NO_WAIT, type SpaceLike } from "phi-spaces";

@@ -47,7 +47,7 @@ export const worldNowMs = async (space: SpaceLike, realNow = Date.now()): Promis
 export const paceMs = (space: SpaceLike, worldMs: number, minMs = 50): number => Math.max(minMs, Math.round(worldMs / clockOf(space).rate()));
 
 /** The key of the world day, `e1:d183` (clock epoch and day), or null while the world has no clock: what a narrative
- *  budget "per day" counts by (docs/weltzeit.md, "Modellbudgets"). */
+ *  budget "per day" counts by (docs/weltzeit.en.md, "Modellbudgets"). */
 export async function worldDayKey(space: SpaceLike, realNow = Date.now()): Promise<string | null> {
 	const c = await clockOf(space).clock(realNow);
 	return c ? `e${c.epoch}:d${calendar(worldNow(c, realNow)).day}` : null;

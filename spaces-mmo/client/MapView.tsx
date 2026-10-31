@@ -1,5 +1,5 @@
 "use client";
-// The tile map of the current room, drawn with PixiJS (docs/architektur.md, "Grafik"). React owns the frame; PixiJS
+// The tile map of the current room, drawn with PixiJS (docs/architektur.en.md, "Grafik"). React owns the frame; PixiJS
 // only the canvas: the ground once per room (autotiled water whose waves move), exits and things on it, one sprite per
 // online character that glides from cell to cell with its walking frames, a flickering fire, and the fog as a veil with
 // clearings around the own character and a burning fire. A zoom of 2 or 3 follows the own character; dragging looks
@@ -22,6 +22,10 @@ type Scene = {
 	/** The pictures of things, by URL (loaded with the scene; a thing without one is drawn as its glyph). */
 	icons: Map<string, InstanceType<Px["Texture"]>>;
 	size: { w: number; h: number }; ts: number;
+	/** The canvas fills its frame (a phone): the frame's size, the sheet's height over it (`inset` follows `insetGoal`), the zoom steps. */
+	fill: boolean; vp: { w: number; h: number }; inset: number; insetGoal: number; zooms: readonly number[];
+	/** The marked end of a walk. */ goal: InstanceType<Px["Graphics"]>;
+	/** The scenery drawn last, and the dust of what was cleared. */ scenery: Map<string, ObjView>; dust: Array<InstanceType<Px["Graphics"]>>;
 	/** Camera: zoom and how far the player dragged the view away from the own character. */
 	view: { zoom: number; panX: number; panY: number };
 	fogLevel: number; fogDirty: boolean;
@@ -35,8 +39,17 @@ const SPEED = (32 * 1000) / WALK_MS * 1.1;
 const WALK_GRACE_MS = WALK_MS + 60;
 const STEP_MS = 130; // one walking frame
 const LONG_PRESS_MS = 500;
-const DRAG_PX = 8;
+const DRAG_PX = 12;
 const ZOOMS = [1, 2, 3] as const;
+/** Sea drawn around the room when the canvas fills the screen, in cells: a phone held upright is taller than a room. */
+const SEA_MARGIN = 14;
+/** The zoom steps of a filling canvas: a third smaller, the art's size, a third larger and twice it, each a whole number of
+ *  device pixels per art pixel, so the pixels stay sharp (on a 3× screen 2/3, 1, 4/3, 2; on a 2× screen 1/2, 1, 3/2, 2; on a
+ *  plain screen 1, 2, where a third would not be sharp). */
+export function fillZooms(dpr: number): number[] {
+	const d = Math.max(1, Math.round(dpr));
+	return [...new Set([2 / 3, 1, 4 / 3, 2].map((z) => Math.max(1, Math.round(z * d)) / d))];
+}
 /** How far two fingers spread (or close) before the zoom goes one step: the zoom stays an integer, for sharp pixels. */
 const PINCH_STEP = 1.35;
 /** Above this many characters in a room only the own name and the names close by are shown. */
@@ -55,27 +68,31 @@ const QUARTER: Record<"TL" | "TR" | "BL" | "BR", Record<"center" | "inner" | "ve
 const stored = (key: string, fallback: number) => { try { const v = Number(localStorage.getItem(key)); return Number.isFinite(v) && v > 0 ? v : fallback; } catch { return fallback; } };
 const store = (key: string, v: number) => { try { localStorage.setItem(key, String(v)); } catch { /* private window */ } };
 
-export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onFail, controls }: {
+export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onFail, controls, fill = false, insetBottom = 0, goal = null }: {
 	world: Hello["world"]; room: Hello["room"]; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; fog: number;
 	onCell: (x: number, y: number) => void; onMenu: (x: number, y: number, clientX: number, clientY: number) => void; onFail: (why: string) => void;
-	controls?: React.ReactNode;
+	controls?: React.ReactNode; fill?: boolean; insetBottom?: number; goal?: { x: number; y: number } | null;
 }) {
 	const host = useRef<HTMLDivElement>(null);
 	const scene = useRef<Scene | null>(null);
-	const [zoom, setZoom] = useState(() => stored("mmo.zoom", 1));
-	const latest = useRef({ chars, objs, me, fog, onCell, onMenu, onFail, zoom, setZoom });
-	latest.current = { chars, objs, me, fog, onCell, onMenu, onFail, zoom, setZoom };
+	const zoomKey = fill ? "mmo.zoom.fill" : "mmo.zoom";
+	const [zoom, setZoom] = useState(() => stored(zoomKey, 1));
+	// exits outside the picture, as signs at its edge (a filling canvas only)
+	const [edges, setEdges] = useState<Edge[]>([]);
+	const latest = useRef({ chars, objs, me, fog, onCell, onMenu, onFail, zoom, setZoom, setEdges, insetBottom });
+	latest.current = { chars, objs, me, fog, onCell, onMenu, onFail, zoom, setZoom, setEdges, insetBottom };
 
 	// the scene: built again when the room changes
 	useEffect(() => {
 		let dead = false;
 		let app: InstanceType<Px["Application"]> | null = null;
+		let observer: ResizeObserver | null = null;
 		const ts = world.tileSize, w = room.ground[0]!.length, h = room.ground.length;
 		void (async () => {
 			const pixi = await import("pixi.js");
 			const a = new pixi.Application();
 			try {
-				await a.init({ width: w * ts, height: h * ts, background: "#0b1016", antialias: false, preference: "webgl", resolution: Math.max(1, Math.round(window.devicePixelRatio || 1)), autoDensity: true });
+				await a.init({ width: fill ? Math.max(1, host.current!.clientWidth) : w * ts, height: fill ? Math.max(1, host.current!.clientHeight) : h * ts, background: "#0b1016", antialias: false, preference: "webgl", resolution: Math.max(1, Math.round(window.devicePixelRatio || 1)), autoDensity: true });
 			} catch (e) {
 				latest.current.onFail(`Die Karte braucht WebGL (${(e as Error).message || "nicht verfügbar"}); das Spiel läuft als Text weiter.`);
 				return;
@@ -85,7 +102,7 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 			// autoDensity sets the CSS size inline; the stylesheet scales the canvas to its frame instead (pointer events
 			// follow, PixiJS maps them through the element's box)
 			a.canvas.style.width = "100%";
-			a.canvas.style.height = "auto";
+			a.canvas.style.height = fill ? "100%" : "auto";
 			host.current?.querySelector(".map-canvas")?.replaceChildren(a.canvas);
 			a.canvas.setAttribute("aria-label", `Karte: ${room.name}`);
 			a.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -134,6 +151,17 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 					});
 				}
 			}
+			// the sea goes on around the room: one plain cell per frame of the waves
+			const sea = fill ? Object.values(world.tiles).find((t) => t.auto) : undefined;
+			if (sea) for (let y = -SEA_MARGIN; y < h + SEA_MARGIN; y++) for (let x = -SEA_MARGIN; x < w + SEA_MARGIN; x++) {
+				if (x >= 0 && y >= 0 && x < w && y < h) continue;
+				water.forEach((layer, f) => {
+					const b = sea.auto!.blocks[f % sea.auto!.blocks.length]!;
+					const s = new pixi.Sprite(tex(sea.sheet, b.x + 16, b.y + 48, ts));
+					s.position.set(x * ts, y * ts);
+					layer.addChild(s);
+				});
+			}
 			const objLayer = new pixi.Container();
 			const charLayer = new pixi.Container();
 			charLayer.sortableChildren = true;
@@ -149,56 +177,100 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 				if (d.upright) { sp.zIndex = y * ts * 2 + 0.5; charLayer.addChild(sp); } else flat.addChild(sp);
 			}
 			const fogLayer = new pixi.Graphics();
-			cam.addChild(ground, ...water, flat, objLayer, charLayer, fogLayer);
+			const goalMark = new pixi.Graphics();
+			cam.addChild(ground, ...water, flat, goalMark, objLayer, charLayer, fogLayer);
 			a.stage.addChild(cam);
 			const s: Scene = {
 				pixi, app: a, cam, water, waterMs: Math.min(...Object.values(world.tiles).map((t) => t.auto?.frameMs ?? Infinity)),
 				objs: objLayer, chars: charLayer, fog: fogLayer, flames: [], skins, frames: new Map(), sprites: new Map(), icons,
 				size: { w: w * ts, h: h * ts }, ts, view: { zoom: latest.current.zoom, panX: 0, panY: 0 }, fogLevel: latest.current.fog, fogDirty: true,
+				fill, vp: { w: a.screen.width, h: a.screen.height }, inset: latest.current.insetBottom, insetGoal: latest.current.insetBottom, zooms: fill ? fillZooms(window.devicePixelRatio || 1) : ZOOMS, goal: goalMark, scenery: new Map(), dust: [],
 			};
+			// the frame changes with a turned phone and the browser's bars
+			if (fill) {
+				s.view.zoom = nearest(s.zooms, s.view.zoom); latest.current.setZoom(s.view.zoom);
+				observer = new ResizeObserver(() => { const b = host.current; if (!b || !b.clientWidth || !b.clientHeight || (b.clientWidth === s.vp.w && b.clientHeight === s.vp.h)) return; a.renderer.resize(b.clientWidth, b.clientHeight); s.vp = { w: b.clientWidth, h: b.clientHeight }; s.fogDirty = true; });
+				observer.observe(host.current!);
+			}
 			scene.current = s;
 			pointer(s, (cx, cy) => {
 				const x = Math.floor(cx / ts), y = Math.floor(cy / ts);
 				return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
 			}, latest);
 			draw(s, latest.current.chars, latest.current.me);
-			drawObjs(s, room.roomId, latest.current.objs, latest.current.chars.get(latest.current.me)?.name);
+			drawObjs(s, room.roomId, latest.current.objs, latest.current.me);
 			let t = 0;
-			a.ticker.add((tk) => { t += tk.deltaMS; frame(s, world, latest.current.me, room.roomId, latest.current.objs, t, tk.deltaMS); });
+			let edgeMs = 0, edgeKey = "";
+			a.ticker.add((tk) => {
+				t += tk.deltaMS; frame(s, world, latest.current.me, room.roomId, latest.current.objs, t, tk.deltaMS);
+				if (!s.fill || (edgeMs += tk.deltaMS) < 300) return;
+				edgeMs = 0;
+				const now = offscreenExits(s, room.roomId, latest.current.objs), key = JSON.stringify(now);
+				if (key !== edgeKey) { edgeKey = key; latest.current.setEdges(now); }
+			});
 		})();
 		return () => {
 			dead = true;
 			scene.current = null;
+			observer?.disconnect();
 			app?.destroy(true, { children: true });
 		};
-	}, [world, room]);
+	}, [world, room, fill]);
 
 	// the characters: every change of the map of online characters (the ticker glides them there)
 	useEffect(() => { if (scene.current) draw(scene.current, chars, me); }, [chars, me]);
 	// things and exits: few per room, drawn again on every change
-	useEffect(() => { if (scene.current) drawObjs(scene.current, room.roomId, objs, chars.get(me)?.name); }, [room, objs, chars, me]);
+	useEffect(() => { if (scene.current) drawObjs(scene.current, room.roomId, objs, me); }, [room, objs, chars, me]);
 	useEffect(() => { if (scene.current) { scene.current.fogLevel = fog; scene.current.fogDirty = true; } }, [fog]);
-	useEffect(() => { store("mmo.zoom", zoom); if (scene.current) { scene.current.view = { zoom, panX: 0, panY: 0 }; scene.current.fogDirty = true; } }, [zoom]);
+	useEffect(() => { if (scene.current) scene.current.insetGoal = insetBottom; }, [insetBottom]);
+	useEffect(() => { const s = scene.current; if (!s) return; s.goal.clear(); if (goal) s.goal.roundRect(goal.x * s.ts + 2, goal.y * s.ts + 2, s.ts - 4, s.ts - 4, 5).fill({ color: "#AED83C", alpha: 0.22 }).stroke({ width: 2, color: "#AED83C" }); }, [goal]);
+	useEffect(() => { store(zoomKey, zoom); if (scene.current && scene.current.view.zoom !== zoom) { scene.current.view = { zoom, panX: 0, panY: 0 }; scene.current.fogDirty = true; } }, [zoom]);
 
 	return (
-		<div className="map" ref={host}>
+		<div className={`map${fill ? " fill" : ""}`} ref={host}>
 			<div className="map-canvas" />
 			<div className="map-zoom" role="group" aria-label="Zoom">
-				{ZOOMS.map((z) => <button key={z} aria-pressed={zoom === z} onClick={() => setZoom(z)}>{z}×</button>)}
+				{fill ? <button aria-label="Zoom ändern" onClick={() => { const zs = fillZooms(window.devicePixelRatio || 1); setZoom(zs[(zs.indexOf(zoom) + 1) % zs.length]!); }}>Zoom</button>
+					: ZOOMS.map((z) => <button key={z} aria-pressed={zoom === z} onClick={() => setZoom(z)}>{z}×</button>)}
 			</div>
+			{edges.map((e) => <button key={e.id} className={`map-edge ${e.side}`} style={{ "--pos": `${e.pos}px` } as React.CSSProperties} onClick={() => onCell(e.x, e.y)}>{e.name}</button>)}
 			{controls}
 		</div>
 	);
 }
 
+type Edge = { id: string; name: string; x: number; y: number; side: "left" | "right" | "top" | "bottom"; pos: number };
+const nearest = (zs: readonly number[], z: number) => zs.reduce((a, b) => (Math.abs(b - z) < Math.abs(a - z) ? b : a));
+
+/** The exits of the room that lie outside the picture: at which edge a sign for each goes, and where along it. */
+function offscreenExits(s: Scene, roomId: string, objs: Map<string, ObjView>): Edge[] {
+	const z = s.view.zoom, free = s.vp.h - s.insetGoal, out: Edge[] = [];
+	for (const o of objs.values()) {
+		if (o.kind !== "exit" || o.location !== roomId) continue;
+		const x = (o.x + 0.5) * s.ts * z + s.cam.position.x, y = (o.y + 0.5) * s.ts * z + s.cam.position.y;
+		if (x >= 0 && y >= 0 && x <= s.vp.w && y <= free) continue;
+		const side = x < 0 ? "left" : x > s.vp.w ? "right" : y < 0 ? "top" : "bottom";
+		const pos = side === "left" || side === "right" ? Math.max(120, Math.min(free - 60, y)) : Math.max(70, Math.min(s.vp.w - 70, x));
+		out.push({ id: o.id, name: o.to ?? o.name, x: o.x, y: o.y, side, pos: Math.round(pos / 8) * 8 });
+	}
+	return out;
+}
+
 /** Taps, long presses, right clicks, drags and pinches on the canvas. A drag (zoomed in) moves the view and is no tap; a
  *  pinch steps the zoom and is neither. */
-function pointer(s: Scene, cellAt: (x: number, y: number) => { x: number; y: number } | null, latest: { current: { onCell: (x: number, y: number) => void; onMenu: (x: number, y: number, cx: number, cy: number) => void; zoom: number; setZoom: (z: number) => void } }) {
+function pointer(s: Scene, cellAt: (x: number, y: number) => { x: number; y: number } | null, latest: { current: { me: string; onCell: (x: number, y: number) => void; onMenu: (x: number, y: number, cx: number, cy: number) => void; zoom: number; setZoom: (z: number) => void } }) {
 	const stage = s.app.stage;
 	stage.eventMode = "static";
 	stage.hitArea = s.app.screen;
 	const fingers = pinch();
-	s.app.canvas.addEventListener("pointercancel", (e) => { fingers.up(e.pointerId); if (down) { clearTimeout(down.timer); down = null; } });
+	let mid: { x: number; y: number } | null = null;
+	// the wheel goes through the zoom steps of a filling map (a framed one has its buttons, and the page scrolls past it)
+	if (s.fill) s.app.canvas.addEventListener("wheel", (e) => {
+		e.preventDefault();
+		const i = s.zooms.indexOf(latest.current.zoom), next = s.zooms[i + (e.deltaY < 0 ? 1 : -1)];
+		if (next) latest.current.setZoom(next);
+	}, { passive: false });
+	s.app.canvas.addEventListener("pointercancel", (e) => { mid = null; fingers.up(e.pointerId); if (down) { clearTimeout(down.timer); down = null; } });
 	let down: { x: number; y: number; panX: number; panY: number; dragged: boolean; pressed: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
 	const cell = (e: { getLocalPosition: (c: InstanceType<Px["Container"]>) => { x: number; y: number } }) => { const p = e.getLocalPosition(s.cam); return cellAt(p.x, p.y); };
 	stage.on("pointerdown", (e) => {
@@ -215,18 +287,30 @@ function pointer(s: Scene, cellAt: (x: number, y: number) => { x: number; y: num
 	stage.on("pointermove", (e) => {
 		const spread = fingers.move(e.pointerId, e.global.x, e.global.y);
 		if (spread !== null) {
-			const i = ZOOMS.indexOf(latest.current.zoom as (typeof ZOOMS)[number]);
-			const next = spread > PINCH_STEP ? ZOOMS[i + 1] : spread < 1 / PINCH_STEP ? ZOOMS[i - 1] : undefined;
-			if (next) { latest.current.setZoom(next); fingers.rebase(); }
+			const i = s.zooms.indexOf(latest.current.zoom);
+			const next = spread > PINCH_STEP ? s.zooms[i + 1] : spread < 1 / PINCH_STEP ? s.zooms[i - 1] : undefined;
+			const c = fingers.center!;
+			// the fingers carry the map along, and what lies between them stays there through a zoom step
+			if (s.fill && mid) { s.view.panX += c.x - mid.x; s.view.panY += c.y - mid.y; }
+			mid = c;
+			if (next) {
+				const own = s.sprites.get(latest.current.me);
+				if (s.fill && own) {
+					const z = s.view.zoom, wx = (c.x - s.cam.position.x) / z, wy = (c.y - s.cam.position.y) / z, ts = s.ts;
+					s.view = { zoom: next, panX: c.x - wx * next - (s.vp.w / 2 - (own.px + ts / 2) * next), panY: c.y - wy * next - ((s.vp.h - s.inset) / 2 - (own.py + ts / 2) * next) };
+					s.fogDirty = true;
+				}
+				latest.current.setZoom(next); fingers.rebase();
+			}
 			return;
 		}
 		if (!down) return;
 		const dx = e.global.x - down.x, dy = e.global.y - down.y;
 		if (!down.dragged && Math.hypot(dx, dy) > DRAG_PX) { down.dragged = true; clearTimeout(down.timer); }
-		if (down.dragged && s.view.zoom > 1) { s.view.panX = down.panX + dx; s.view.panY = down.panY + dy; s.fogDirty = true; }
+		if (down.dragged && (s.fill || s.view.zoom > 1)) { s.view.panX = down.panX + dx; s.view.panY = down.panY + dy; s.fogDirty = true; }
 	});
 	const up = (e: { pointerId: number; getLocalPosition: (c: InstanceType<Px["Container"]>) => { x: number; y: number } }, inside: boolean) => {
-		fingers.up(e.pointerId);
+		fingers.up(e.pointerId); mid = null;
 		if (!down) return;
 		clearTimeout(down.timer);
 		const tap = !down.dragged && !down.pressed;
@@ -269,12 +353,21 @@ function frame(s: Scene, world: Hello["world"], me: string, roomId: string, objs
 	// camera: zoomed in, the own character in the middle (plus how far the player dragged), never past the map's edge
 	const z = s.view.zoom, own = s.sprites.get(me);
 	s.cam.scale.set(z);
-	if (z === 1 || !own) s.cam.position.set(0, 0);
+	if (s.fill && own) {
+		// the own character in the middle of what the sheet leaves free; a step brings a dragged view back to it
+		s.inset += (s.insetGoal - s.inset) * Math.min(1, dt / 120);
+		if (own.px !== own.tx * ts || own.py !== own.ty * ts) { s.view.panX *= 0.85; s.view.panY *= 0.85; }
+		const edge = SEA_MARGIN * ts * z;
+		const cx = s.vp.w / 2 - (own.px + ts / 2) * z + s.view.panX, cy = (s.vp.h - s.inset) / 2 - (own.py + ts / 2) * z + s.view.panY;
+		s.cam.position.set(Math.round(Math.min(edge, Math.max(s.vp.w - s.size.w * z - edge, cx))), Math.round(Math.min(edge, Math.max(s.vp.h - s.size.h * z - edge, cy))));
+	}
+	else if (z === 1 || !own) s.cam.position.set(0, 0);
 	else {
 		const vw = s.size.w, vh = s.size.h;
 		const cx = vw / 2 - (own.px + ts / 2) * z + s.view.panX, cy = vh / 2 - (own.py + ts / 2) * z + s.view.panY;
 		s.cam.position.set(Math.min(0, Math.max(vw - s.size.w * z, cx)), Math.min(0, Math.max(vh - s.size.h * z, cy)));
 	}
+	for (const g of [...s.dust]) { g.alpha -= dt / 900; g.scale.set(1 + (1 - g.alpha) * 0.04); if (g.alpha <= 0) { s.dust.splice(s.dust.indexOf(g), 1); g.destroy(); } }
 	if (s.fogDirty) { s.fogDirty = false; drawFog(s, roomId, objs, own); }
 }
 
@@ -285,9 +378,52 @@ function drawFog(s: Scene, roomId: string, objs: Map<string, ObjView>, own: Sp |
 	g.clear();
 	const alpha = [0, 0.22, 0.42, 0.62][Math.max(0, Math.min(3, s.fogLevel))]!;
 	if (!alpha) return;
-	g.rect(0, 0, s.size.w, s.size.h).fill({ color: "#c9d2da", alpha });
+	const m = s.fill ? SEA_MARGIN * ts : 0;
+	g.rect(-m, -m, s.size.w + 2 * m, s.size.h + 2 * m).fill({ color: "#c9d2da", alpha });
 	if (own) g.circle(own.px + ts / 2, own.py + ts / 2, ts * 2.2).cut();
 	for (const o of objs.values()) if (o.kind === "beacon" && o.location === roomId && (o.until ?? 0) > Date.now()) g.circle(o.x * ts + ts / 2, o.y * ts + ts / 2, ts * 4).cut();
+}
+
+/** Scenery drawn from plain shapes, weathered: the room's huts, nets, boats, barrels and jetties. */
+function sceneryView(p: Px, o: ObjView, ts: number): InstanceType<Px["Graphics"]> {
+	const x = o.x * ts, y = o.y * ts, w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts, g = new p.Graphics();
+	if (o.model === "huette") {
+		g.poly([x + 4, y + h * 0.45, x + w - 2, y + h * 0.4, x + w - 4, y + h - 2, x + 6, y + h - 3]).fill({ color: "#6d6256" }).stroke({ width: 2, color: "#2a241d" });
+		g.poly([x - 2, y + h * 0.5, x + w * 0.46, y + 2, x + w + 2, y + h * 0.42]).fill({ color: "#4a4038" }).stroke({ width: 2, color: "#2a241d" });
+		g.rect(x + w * 0.42, y + h * 0.66, 14, h * 0.34 - 3).fill({ color: "#2a241d" });
+	} else if (o.model === "netz") {
+		for (const px of [x + 6, x + w - 6]) g.rect(px - 2, y + 2, 4, h - 4).fill({ color: "#5b4530" });
+		g.rect(x + 6, y + 4, w - 12, 2).fill({ color: "#5b4530" });
+		for (let i = 0; i < 12; i++) { const a = x + 9 + (i * (w - 18)) / 11; g.moveTo(a, y + 6).lineTo(a + 3, y + h - 6).stroke({ width: 1, color: "#c8c0a8", alpha: 0.8 }); }
+		for (const dy of [12, 19]) g.moveTo(x + 9, y + dy).lineTo(x + w - 9, y + dy).stroke({ width: 1, color: "#c8c0a8", alpha: 0.8 });
+	} else if (o.model === "boot") {
+		g.poly([x + 2, y + 8, x + w - 2, y + 8, x + w - 12, y + h - 3, x + 12, y + h - 3]).fill({ color: "#6b4a2e" }).stroke({ width: 2, color: "#2a1d10" });
+		for (const dx of [0.33, 0.66]) g.rect(x + w * dx, y + 9, 3, h - 13).fill({ color: "#3e2a18" });
+	} else if (o.model === "felsen" || o.model === "mauer" || o.model === "turm") {
+		const n = Math.max(1, Math.round(w / ts)) * (o.model === "mauer" ? 2 : 1);
+		for (let i = 0; i < n; i++) g.roundRect(x + 2 + (i * w) / n, y + (o.model === "turm" ? 2 : h * 0.35) + (i % 2) * 3, w / n + 2, h * (o.model === "turm" ? 0.9 : 0.55), 5).fill({ color: i % 2 ? "#7c8086" : "#6b6f75" }).stroke({ width: 2, color: "#34373b" });
+	} else if (o.model === "kisten") {
+		for (const dx of [0, 1]) { g.rect(x + dx * ts + 4, y + 6, ts - 8, ts - 9).fill({ color: "#8a6a44" }).stroke({ width: 2, color: "#3e2a18" }); g.moveTo(x + dx * ts + 4, y + 6).lineTo(x + dx * ts + ts - 4, y + ts - 3).stroke({ width: 1.5, color: "#3e2a18" }); }
+	} else if (o.model === "stand") {
+		g.rect(x + 3, y + 14, w - 6, h - 16).fill({ color: "#6b4a2e" }).stroke({ width: 2, color: "#2a1d10" });
+		for (let i = 0; i < 6; i++) g.rect(x + 2 + (i * (w - 4)) / 6, y + 2, (w - 4) / 6, 12).fill({ color: i % 2 ? "#e8e0cc" : "#b5533c" });
+	} else if (o.model === "meiler") {
+		g.ellipse(x + w / 2, y + h * 0.58, w * 0.46, h * 0.4).fill({ color: "#3b3430" }).stroke({ width: 2, color: "#1b1715" });
+		g.circle(x + w / 2, y + h * 0.3, 4).fill({ color: "#8d8d8d", alpha: 0.6 }); g.circle(x + w / 2 + 3, y + h * 0.16, 6).fill({ color: "#a8a8a8", alpha: 0.4 });
+	} else if (o.model === "becken") {
+		g.roundRect(x + 2, y + 2, w - 4, h - 4, 6).fill({ color: "#cfe0e6" }).stroke({ width: 3, color: "#8a7a66" });
+		g.moveTo(x + w * 0.5, y + 3).lineTo(x + w * 0.5, y + h - 3).stroke({ width: 3, color: "#8a7a66" });
+	} else if (o.model === "rumpf") {
+		g.poly([x + 2, y + h * 0.3, x + w - 2, y + h * 0.2, x + w - 16, y + h - 3, x + 14, y + h - 3]).fill({ color: "#5e4028", alpha: 0.5 }).stroke({ width: 2, color: "#2a1d10" });
+		for (let i = 1; i < 6; i++) g.rect(x + (i * w) / 6, y + 6, 4, h - 10).fill({ color: "#7a5c3e" });
+	} else if (o.model === "faesser") {
+		for (const dx of [0, 1]) { g.roundRect(x + dx * ts + 5, y + 5, ts - 10, ts - 8, 6).fill({ color: "#4b3626" }).stroke({ width: 2, color: "#1f160e" }); g.rect(x + dx * ts + 5, y + 13, ts - 10, 2).fill({ color: "#8a8f94" }); }
+	} else {
+		g.rect(x, y, w, h).fill({ color: "#7a5c3e" });
+		const across = w >= h;
+		for (let i = 0; i <= (across ? w : h) / 8; i++) { if (across) g.rect(x + i * 8, y, 1.5, h).fill({ color: "#3e2a18" }); else g.rect(x, y + i * 8, w, 1.5).fill({ color: "#3e2a18" }); }
+	}
+	return g;
 }
 
 /** Exits as marked cells with their name, things lying in the room as their pictures (or glyphs where a thing has
@@ -299,14 +435,22 @@ function fence2d(g: InstanceType<Px["Graphics"]>, x: number, y: number, w: numbe
 	for (let fy = 1; fy < h; fy++) for (const fx of [0, w]) g.rect(x + fx * ts - 1.5, y + fy * ts - 1.5, 3, 3).fill({ color: "#8a6a3a" });
 }
 
-function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, myName: string | undefined): void {
+function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: string): void {
 	const ts = s.ts, p = s.pixi;
 	for (const child of s.objs.removeChildren()) child.destroy({ children: true });
 	s.flames = [];
 	s.fogDirty = true;
+	// what was cleared goes in a puff of dust
+	for (const [id, o] of s.scenery) if (!objs.has(id) && o.location === roomId) {
+		const g = new p.Graphics(), w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts;
+		for (let i = 0; i < 9; i++) g.circle(o.x * ts + (w * ((i * 37) % 10)) / 10, o.y * ts + (h * ((i * 53) % 10)) / 10, 5 + (i % 4) * 3).fill({ color: "#b9a98c", alpha: 0.7 });
+		s.cam.addChild(g); s.dust.push(g);
+	}
+	s.scenery = new Map([...objs].filter(([, o]) => o.kind === "scenery"));
 	for (const o of objs.values()) {
 		if (o.location !== roomId) continue;
 		const x = o.x * ts, y = o.y * ts, cx = x + ts / 2, cy = y + ts / 2;
+		if (o.kind === "scenery") { s.objs.addChild(sceneryView(p, o, ts)); continue; }
 		if (o.kind === "beacon") {
 			const lit = (o.until ?? 0) > Date.now();
 			const ring = new p.Graphics().circle(cx, cy, 13).fill({ color: lit ? "#3a2412" : "#2b2f33" }).stroke({ width: 2, color: lit ? "#8a5a2b" : "#5a6068" });
@@ -387,12 +531,12 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, myName: 
 				if (o.fenced) fence2d(g, x, y, o.w ?? 1, o.h ?? 1, ts);
 			} else {
 				// one's own site stands out at once: a bright border, and its label says so
-				g.rect(x + 2, y + 2, w - 4, h - 4).fill({ color: "#c9a26b", alpha: 0.35 }).stroke(o.owner === myName ? { width: 3, color: "#dfff73" } : { width: 2, color: "#7a5a36", alpha: 0.9 });
+				g.rect(x + 2, y + 2, w - 4, h - 4).fill({ color: "#c9a26b", alpha: 0.35 }).stroke(o.ownerId === me ? { width: 3, color: "#dfff73" } : { width: 2, color: "#7a5a36", alpha: 0.9 });
 				for (const [px, py] of [[x + 3, y + 3], [x + w - 7, y + 3], [x + 3, y + h - 7], [x + w - 7, y + h - 7]] as const) g.rect(px, py, 4, 4).fill({ color: "#5b3a22" });
 				g.rect(x + 6, y + h - 10, (w - 12) * Math.min(1, o.progress ?? 0), 4).fill({ color: "#AED83C" });
 			}
-			const own = o.owner === myName;
-			const label = new p.Text({ text: o.kind === "site" ? (own ? `Deine Baustelle: ${o.name}` : `Baustelle ${o.name} von ${o.owner ?? ""}`) : `${o.name} von ${o.owner ?? ""}`, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: o.kind === "site" && own ? "#dfff73" : "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
+			const own = o.ownerId === me;
+			const label = new p.Text({ text: `${o.kind === "site" ? (own ? `Deine Baustelle: ${o.name}` : `Baustelle ${o.name} von ${o.owner ?? ""}`) : `${o.name} von ${o.owner ?? ""}`}${o.orders?.length ? " · Aushang" : ""}`, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: o.kind === "site" && own ? "#dfff73" : "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
 			label.anchor.set(0.5, 0);
 			label.position.set(x + w / 2, y + h);
 			s.objs.addChild(g, label);
@@ -400,7 +544,7 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, myName: 
 		}
 		if (o.kind === "exit") {
 			const g = new p.Graphics().rect(x + 2, y + 2, ts - 4, ts - 4).fill({ color: "#AED83C", alpha: 0.22 }).stroke({ width: 2, color: "#AED83C" });
-			const label = new p.Text({ text: o.name, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#AED83C", stroke: { color: "#000000", width: 3 } } });
+			const label = new p.Text({ text: o.to ?? o.name, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#AED83C", stroke: { color: "#000000", width: 3 } } });
 			label.anchor.set(0.5, 0);
 			label.position.set(cx, y + ts);
 			s.objs.addChild(g, label);

@@ -1,4 +1,4 @@
-// Acceptance of Phase 3 that a test can measure (docs/phasen.md): the hello of a room stays small and each player is
+// Acceptance of Phase 3 that a test can measure (docs/phasen.en.md): the hello of a room stays small and each player is
 // sent only what happens around it. The latency: tests/perf/latency.test.ts (run alone). Drawing (autotiles, gliding,
 // zoom, frame rate) is checked in the browser.
 import { test } from "node:test";
@@ -37,7 +37,7 @@ test("each player is sent only its room: moves in the bay do not reach the cliff
 		await b.p.until((f) => f.t === "hello" && f.room.roomId === "klippenpfad", 10_000, n);
 		const from = b.p.frames.length;
 		// at the page's pace (one step per 500 ms; faster ones are dropped)
-		for (let i = 0; i < 4; i++) { const n = a.p.frames.length; a.p.send(`step ${i % 2 ? -1 : 1} 0`); await a.p.until((f) => f.t === "char" && f.c.charId === a.h.me.charId, 5_000, n); await new Promise((r) => setTimeout(r, 450)); }
+		for (let i = 0; i < 4; i++) { const n = a.p.frames.length; a.p.send(`step ${i % 2 ? -1 : 1} 0`); await a.p.until((f) => (f.t === "char" && f.c.charId === a.h.me.charId) || (f.t === "msg" && f.m.kind === "error"), 5_000, n); /* one may stand beside the fire */ await new Promise((r) => setTimeout(r, 450)); }
 		await new Promise((r) => setTimeout(r, 500));
 		assert.equal(b.p.frames.slice(from).filter((f) => f.t === "char" && f.c.charId === a.h.me.charId).length, 0, "no frames about a room one is not in");
 		await a.p.leave(); await b.p.leave();

@@ -1,4 +1,4 @@
-// The wild from the fog, step 2 part 3 (docs/siedeln.md "Wild im Nebel", engine/commands/wild.ts): no hare comes while
+// The wild from the fog, step 2 part 3 (docs/siedeln.en.md "Wild im Nebel", engine/commands/wild.ts): no hare comes while
 // the fire burns; in thick fog hares come to the beds; one scared off eats nothing; a fenced bed or one by a scarecrow
 // loses nothing; the bed's last living plant stays; scheuche and zäune as a player types them.
 import "./test-env.ts";

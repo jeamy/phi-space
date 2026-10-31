@@ -1,4 +1,4 @@
-// The chapel, step 6 part 2 (docs/siedeln.md "Epoch 2"): beside one, anyone's, `opfere` gives up a thing of worth for a
+// The chapel, step 6 part 2 (docs/siedeln.en.md "Epoch 2"): beside one, anyone's, `opfere` gives up a thing of worth for a
 // blessing: for a world day the rest after work is half as long. It is voluntary, nothing needs a chapel. A blessing is one
 // entry per figure in its region; it does not cross over with it.
 import { FOREVER, NO_WAIT } from "phi-spaces";

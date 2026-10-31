@@ -40,7 +40,8 @@ button {
   border-radius: 999px; padding: 7px 14px; font: 600 12px/1 var(--font-sans); cursor: pointer;
   transition: transform .12s ease, filter .12s ease, border-color .12s ease;
 }
-button:hover { filter: brightness(1.15); transform: translateY(-1px); border-color: var(--line-strong); }
+/* only under a real pointer: on a touch screen :hover stays stuck after the tap */
+@media (hover: hover) { button:hover { filter: brightness(1.15); transform: translateY(-1px); border-color: var(--line-strong); } }
 button.primary { background: var(--accent-fill); color: var(--accent-ink); border-color: transparent; font-weight: 700; }
 button:disabled { opacity: 0.45; cursor: default; transform: none; filter: none; }
 input, select, textarea {
@@ -85,17 +86,7 @@ a { color: var(--accent); }
 .bar { display: flex; align-items: center; gap: 12px; padding: calc(8px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left)); border-bottom: 1px solid var(--line); background: var(--header-bg); backdrop-filter: blur(16px); flex-wrap: wrap; }
 .bar { position: relative; }
 .bar-tools { display: flex; align-items: center; gap: 12px; }
-.bar-more, .bar .short, .bar-backdrop { display: none; }
-/* a phone: a short "Registrieren", the map modes and logging out behind "⋯" (client/App.tsx) */
-@media (max-width: 760px) {
-  .bar { gap: 8px 10px; }
-  .bar .long { display: none; }
-  .bar .short { display: inline; }
-  .bar-more { display: inline-block; font-weight: 700; letter-spacing: .05em; }
-  .bar-backdrop { display: block; }
-  .bar-tools { display: none; position: absolute; z-index: 21; top: calc(100% - 4px); right: max(16px, env(safe-area-inset-right)); flex-direction: column; align-items: stretch; gap: 8px; padding: 10px; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
-  .bar-tools.open { display: flex; }
-}
+.bar .short { display: none; }
 .bar .title { color: var(--text-strong); font-size: 16px; font-weight: 760; letter-spacing: 0.08em; }
 .bar .spacer { flex: 1; }
 .badge { font: 700 9px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent); color: var(--warning); border-radius: 999px; padding: 4px 8px; }
@@ -116,13 +107,12 @@ a { color: var(--accent); }
 .panel { background: var(--surface); border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--line)); border-radius: 14px; padding: 12px; }
 .panel h2 { font: 700 10px/1.4 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; margin: 0 0 8px; color: var(--muted); }
 .about { font-size: 12px; }
-/* a phone, and a tablet held upright: the map on top, the side panel below it, the page scrolls */
-@media (max-width: 760px), (max-width: 1100px) and (orientation: portrait) {
-  .main { grid-template-columns: 1fr; grid-template-rows: auto minmax(220px, 1fr); }
-  .game { height: auto; min-height: 100vh; }
-}
 .things { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; font-size: 13px; }
 .things h3 { margin: 4px 0 6px; font: 700 10px/1.4 var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
+.things .here { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.things .here button { text-align: left; }
+.things .here.open { max-height: 40vh; overflow-y: auto; }
+.things .here .more { color: var(--muted); }
 .things ul { list-style: none; margin: 0 0 4px; padding: 0; display: grid; gap: 4px; }
 .things li { display: flex; align-items: center; gap: 6px; }
 .things li span { flex: 1; color: var(--text-strong); }
@@ -145,7 +135,7 @@ a { color: var(--accent); }
 .map-mode-label { position: absolute; left: 8px; bottom: 8px; padding: 3px 8px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 80%, transparent); color: var(--text); font: 600 10px/1.3 var(--font-mono); pointer-events: none; }
 .main.text-only { grid-template-columns: minmax(0, 1fr); max-width: 900px; margin: 0 auto; width: 100%; }
 .menu-backdrop { position: fixed; inset: 0; z-index: 20; }
-.cell-menu { position: fixed; z-index: 21; list-style: none; margin: 0; padding: 4px; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 10px; min-width: 180px; box-shadow: 0 6px 24px var(--shadow); }
+.cell-menu { position: fixed; z-index: 21; list-style: none; margin: 0; padding: 4px; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 10px; min-width: 180px; max-height: calc(100dvh - 16px); overflow-y: auto; box-shadow: 0 6px 24px var(--shadow); }
 .cell-menu button { width: 100%; text-align: left; border: 0; border-radius: 6px; background: transparent; padding: 8px 10px; }
 .cell-menu button:hover { transform: none; }
 .cell-menu button:hover { background: var(--surface); }
@@ -217,16 +207,14 @@ button.link:hover { transform: none; text-decoration: underline; }
 .ai-badge { margin-left: 6px; font: 700 9px var(--font-mono); letter-spacing: .06em; color: var(--color-c); border: 1px solid color-mix(in srgb, var(--color-c) 60%, transparent); border-radius: 4px; padding: 0 4px; vertical-align: 1px; }
 
 /* the overview of the world, top left over the map (client/Atlas.tsx) */
-.atlas { position: absolute; top: 18px; left: 22px; z-index: 5; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; pointer-events: none; }
+.atlas { position: absolute; top: calc(60px + env(safe-area-inset-top)); left: 12px; z-index: 5; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; pointer-events: none; }
 .atlas > * { pointer-events: auto; }
 .atlas canvas { width: min(250px, 44vw); height: auto; image-rendering: pixelated; border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 4px 16px var(--shadow); cursor: zoom-in; display: block; }
-.atlas.big canvas { width: min(560px, calc(100vw - 48px)); cursor: zoom-out; }
+.atlas.big { z-index: 12; }
+.atlas.big canvas { width: min(1008px, calc(100vw - 48px), calc((100dvh - 170px) * 1.6)); cursor: zoom-out; }
 .atlas-toggle { font-size: 12px; padding: 2px 8px; background: color-mix(in srgb, var(--surface) 85%, transparent); }
 .atlas-label { font-size: 12px; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--text-strong); }
 .main.text-only .atlas { position: static; }
-@media (max-width: 760px), (max-width: 1100px) and (orientation: portrait) {
-  .atlas { top: 14px; left: max(18px, calc(env(safe-area-inset-left) + 2px)); }
-}
 
 /* the pack: one chip per kind of thing, icon and count (client/App.tsx, Things) */
 .pack { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 4px; }
@@ -317,3 +305,167 @@ img.icon { image-rendering: pixelated; display: inline-block; vertical-align: mi
 .chat-e2e { font-size: 11px; }
 .name-link { border: 0; background: transparent; padding: 0; font: inherit; color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; border-radius: 0; }
 .name-link:hover { transform: none; color: var(--accent); }
+
+/* A phone, and a tablet held upright (client/useShell.ts): the page never scrolls. The map fills the screen, a sheet lies over it
+   (.sheet), on a phone on its side a fixed bar beside it (.rail-bar). Fingers need 44 px; 16 px in a field, or iOS zooms the page. */
+html { -webkit-tap-highlight-color: transparent; }
+html.page-held, html.page-held body { overflow: hidden; overscroll-behavior: none; height: 100%; }
+html.page-held body { position: fixed; inset: 0; width: 100%; touch-action: manipulation; }
+.game-touch { --sheet-peek: 116px; position: fixed; left: 0; right: 0; top: var(--vv-top, 0px); height: var(--vv-h, 100%); overflow: hidden; display: flex; background: var(--map-bg); overscroll-behavior: none; }
+@media (max-height: 500px) and (orientation: landscape) {
+  .game-touch { --sheet-peek: 64px; }
+  .game-touch.sheet > section.sheet-peek { height: calc(64px + env(safe-area-inset-bottom)); }
+  .game-touch.sheet > section.sheet-half { height: 64%; }
+  .game-touch.sheet > section.sheet { --sheet-w: min(380px, 46vw); left: calc(var(--sheet-x, 1) * (100% - var(--sheet-w))); border-radius: 16px 16px 0 0; }
+  .here-bar { z-index: 11; right: 164px; }
+  .stage.open .map-edge { display: revert; }
+  .stage.open .here-bar { display: flex; }
+  .stage.open .touchpad { display: grid; }
+  .sheet-grab { height: 16px; }
+  button.sheet-peek { display: none; }
+  .sheet-tabs { padding-bottom: 4px; }
+  .stage .map-zoom { top: calc(8px + env(safe-area-inset-top)); right: 106px; }
+}
+.game-touch input, .game-touch select, .game-touch textarea, aside.help input { font-size: 16px; }
+/* a long press on the map is the game's, not the browser's selection or callout */
+.stage { position: relative; flex: 1; min-width: 0; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.stage .map { position: absolute; inset: 0; border: 0; border-radius: 0; }
+.map.fill .map-canvas { width: 100%; height: 100%; }
+.map.fill canvas { width: 100%; height: 100%; max-height: none; object-fit: fill; }
+.stage .map-3d canvas { min-height: 0; }
+.hud { position: absolute; z-index: 5; top: calc(8px + env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); right: 10px; display: flex; gap: 6px; align-items: center; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.hud .spacer { flex: 1; pointer-events: none; }
+.hud-pill, .hud-btn { height: 44px; border-radius: 14px; background: color-mix(in srgb, var(--header-bg) 88%, transparent); border: 1px solid var(--line-strong); color: var(--text-strong); backdrop-filter: blur(10px); font: 650 14px/1 var(--font-sans); }
+.hud-pill { display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; min-width: 0; max-width: 72%; }
+.hud-pill:disabled { opacity: 1; }
+.hud-pill b { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-pill small { color: var(--muted); font: 500 12px/1 var(--font-sans); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hud-btn { width: 44px; padding: 0; flex: none; font-size: 17px; font-weight: 700; }
+.stage .touchpad { display: grid; position: absolute; right: max(10px, env(safe-area-inset-right)); left: auto; bottom: calc(var(--sheet-peek) + 10px + env(safe-area-inset-bottom)); z-index: 3; opacity: .9; grid-template: ". up ." 46px "left act right" 46px ". down ." 46px / 46px 46px 46px; gap: 3px; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.stage .touchpad button { padding: 0; border-radius: 12px; font-size: 14px; background: color-mix(in srgb, var(--raised) 78%, transparent); }
+.stage.pad-left .touchpad { left: max(10px, env(safe-area-inset-left)); right: auto; }
+.stage.open .touchpad, .stage.open .map-edge { display: none; }
+/* "Aus" in the menu takes all buttons off the map: the fingers alone steer, zoom and turn */
+.stage.pad-off .map-zoom, .stage .map-mode-label { display: none; }
+.stage .map-zoom { top: calc(60px + env(safe-area-inset-top)); right: 10px; }
+.stage .map-zoom button { min-height: 44px; border-radius: 14px; font-size: 12px; padding: 0 11px; }
+.map-edge { position: absolute; z-index: 4; min-height: 44px; padding: 0 12px; background: color-mix(in srgb, var(--accent-fill) 90%, #000); color: var(--accent-ink); border: 0; font-weight: 700; font-size: 13px; }
+.map-edge.right { right: 0; top: var(--pos); border-radius: 14px 0 0 14px; } .map-edge.right::after { content: " →"; }
+.map-edge.left { left: 0; top: var(--pos); border-radius: 0 14px 14px 0; } .map-edge.left::before { content: "← "; }
+.map-edge.top { top: calc(60px + env(safe-area-inset-top)); left: var(--pos); transform: translateX(-50%); border-radius: 14px; } .map-edge.top::before { content: "↑ "; }
+.map-edge.bottom { bottom: calc(var(--sheet-peek) + 72px); left: var(--pos); transform: translateX(-50%); border-radius: 14px; } .map-edge.bottom::before { content: "↓ "; }
+/* what can be done here, always in view above the sheet; on a phone on its side the sheet stays to the right of it */
+.here-bar { position: absolute; z-index: 4; left: max(10px, env(safe-area-inset-left)); right: 162px; bottom: calc(var(--sheet-peek) + 10px + env(safe-area-inset-bottom)); display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.stage.open .here-bar { display: none; }
+.stage.pad-off .here-bar { right: 10px; }
+.here-bar button { flex: none; min-height: 40px; background: color-mix(in srgb, var(--raised) 88%, transparent); color: var(--text-strong); border-color: var(--line-strong); }
+.chat-toast { position: absolute; z-index: 6; left: 10px; right: 10px; top: calc(60px + env(safe-area-inset-top)); min-height: 52px; border-radius: 14px; text-align: left; background: var(--raised); border: 1px solid var(--line-strong); box-shadow: 0 6px 20px var(--shadow); padding: 8px 12px; font: 600 14px/1.3 var(--font-sans); color: var(--text-strong); }
+.home-hint { position: absolute; z-index: 6; left: 10px; right: 10px; top: calc(60px + env(safe-area-inset-top)); display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 14px; background: var(--raised); border: 1px solid var(--line-strong); color: var(--text-strong); font-size: 13px; }
+.home-hint span { flex: 1; }
+.home-hint button { width: 40px; height: 40px; padding: 0; flex: none; font-size: 18px; }
+.home-hint .home-install { width: auto; padding: 0 12px; font-size: 13px; }
+.chat-toast small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
+.sheet { background: var(--surface); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.game-touch.sheet { display: block; }
+.game-touch.sheet .stage { position: absolute; inset: 0; }
+.game-touch.sheet > section.sheet { position: absolute; z-index: 10; --sheet-w: min(100%, 720px); width: var(--sheet-w); left: calc(var(--sheet-x, 0.5) * (100% - var(--sheet-w))); bottom: 0; max-height: 100%; border-radius: 20px 20px 0 0; border-top: 1px solid var(--line-strong); box-shadow: 0 -8px 28px var(--shadow); padding-bottom: env(safe-area-inset-bottom); transition: height .22s ease; }
+@media (prefers-reduced-motion: reduce) { .game-touch.sheet > section.sheet { transition: none; } }
+.game-touch.sheet > section.sheet-peek { height: calc(116px + env(safe-area-inset-bottom)); }
+.game-touch.sheet > section.sheet-half { height: 52%; }
+.game-touch.sheet > section.sheet-full { height: calc(100% - env(safe-area-inset-top) - 8px); }
+.game-touch > section.text-page { position: absolute; left: 0; right: 0; max-width: 720px; margin-inline: auto; top: calc(60px + env(safe-area-inset-top)); bottom: 0; z-index: 4; padding-bottom: env(safe-area-inset-bottom); }
+.sheet-grab { flex: none; width: 100%; height: 26px; border: 0; background: none; border-radius: 0; padding: 0; display: grid; place-items: center; touch-action: none; }
+.sheet-grab::after { content: ""; width: 40px; height: 4px; border-radius: 2px; background: var(--line-strong); }
+.sheet-tabs { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 0 12px 6px; }
+.sheet-tabs button { height: 44px; padding: 0; border: 0; background: transparent; color: var(--muted); border-radius: 12px; font-size: 13px; }
+.sheet-tabs button[aria-selected="true"] { background: var(--raised); color: var(--text-strong); }
+.sheet-tabs .chat-count { margin-left: 5px; }
+button.sheet-peek { flex: none; height: auto; border: 0; background: none; border-radius: 0; padding: 0 16px 8px; text-align: left; color: var(--text); font: 400 13.5px/1.4 var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 2px 12px 10px; }
+.sheet-scroll { flex: 1; min-height: 0; overflow-y: auto; display: grid; gap: 8px; align-content: start; overscroll-behavior: contain; }
+.sheet-scroll .things { border: 0; padding: 0; background: none; }
+.game-touch .things button { min-height: 40px; padding: 0 13px; font-size: 13px; }
+.game-touch .things .chip { min-height: 48px; padding: 0 10px 0 7px; border-radius: 13px; }
+.game-touch .things li { min-height: 46px; }
+.sheet-body .log { flex: 1; min-height: 0; border: 0; background: none; padding: 0; overscroll-behavior: contain; font: 13.5px/1.5 var(--font-sans); }
+.sheet-body .log-filter { align-self: flex-end; min-height: 28px; }
+.log-new { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); z-index: 2; min-height: 36px; background: var(--accent-fill); color: var(--accent-ink); border: 0; box-shadow: 0 4px 12px var(--shadow); }
+.quick { display: flex; gap: 6px; overflow-x: auto; flex: none; scrollbar-width: none; }
+.quick button { flex: none; min-height: 40px; border-radius: 10px; font: 600 12.5px/1 var(--font-mono); background: var(--raised); }
+.game-touch .cmd { flex: none; }
+.game-touch .cmd input { height: 44px; border-radius: 13px; }
+.game-touch .cmd .primary { height: 44px; border-radius: 13px; flex: none; }
+.talk-head { flex: none; display: flex; align-items: center; gap: 6px; padding: 0 12px 6px; border-bottom: 1px solid var(--line); }
+.talk-head strong { color: var(--text-strong); font-size: 16px; }
+.talk-back { width: 44px; height: 44px; padding: 0; border: 0; background: none; color: var(--accent); font-size: 20px; }
+.sheet-body .chat-log { display: flex; flex-direction: column; gap: 6px; }
+.sheet-body .chat-log .say, .sheet-body .chat-log .chat-mine { max-width: 82%; padding: 7px 11px; border-radius: 14px 14px 14px 4px; background: var(--raised); color: var(--text-strong); align-self: flex-start; white-space: pre-wrap; }
+.sheet-body .chat-log .chat-mine { align-self: flex-end; border-radius: 14px 14px 4px 14px; background: color-mix(in srgb, var(--accent-fill) 22%, var(--raised)); }
+.sheet-body .chat-report { min-height: 32px; display: inline-block; margin-left: 6px; opacity: 1; color: var(--muted); }
+.sheet-body .chat-overview { align-content: start; }
+.chat-line { display: flex; align-items: center; gap: 10px; min-height: 58px; width: 100%; padding: 0; border: 0; background: none; border-radius: 0; text-align: left; font: 600 14px/1.3 var(--font-sans); }
+.chat-av { width: 40px; height: 40px; border-radius: 12px; flex: none; display: grid; place-items: center; background: var(--raised); color: var(--accent); font-weight: 700; }
+.chat-name { flex: 1; min-width: 0; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; }
+.chat-name small { display: block; color: var(--muted); font-weight: 400; font-size: 13px; }
+.chat-keyfold summary { min-height: 40px; display: flex; align-items: center; color: var(--muted); cursor: pointer; font-size: 13px; }
+.game-touch .chat-overview button.link { min-height: 40px; }
+.game-touch .chat-row { flex-wrap: wrap; }
+.game-touch .chat-row button, .game-touch .chat-key button, .game-touch .chat-invite button { min-height: 44px; }
+.menu-backdrop.dim { background: rgba(0,0,0,.45); }
+.cell-menu.action-sheet { left: 0; right: 0; bottom: 0; top: auto; min-width: 0; max-width: 720px; margin-inline: auto; max-height: 72dvh; border-radius: 20px 20px 0 0; border-width: 1px 0 0; padding: 12px 8px calc(10px + env(safe-area-inset-bottom)); }
+@media (max-height: 500px) and (orientation: landscape) { .cell-menu.action-sheet { max-height: 88dvh; padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); } }
+.action-sheet .action-title { padding: 2px 10px 10px; color: var(--text-strong); font-size: 16px; font-weight: 700; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.action-sheet li button { min-height: 50px; padding: 0 10px; font-size: 15px; font-weight: 550; }
+.action-sheet .action-help { color: var(--accent); }
+.action-sheet .menu-note { max-width: none; }
+/* one column no wider than the screen; what does not fit beside its label goes below it */
+.more-sheet { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; overflow-x: hidden; }
+.more-row { min-height: 54px; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; padding: 6px 10px; border-bottom: 1px solid var(--line); color: var(--text-strong); }
+.more-row button { min-height: 40px; }
+.more-acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.more-row .theme-controls { flex-wrap: wrap; max-width: 100%; }
+.more-row .theme-picker__select { max-width: 100%; min-height: 40px; }
+.more-sheet .system-bar { border: 0; background: none; padding: 8px 10px 0; min-width: 0; }
+.more-sheet .system-bar__host { white-space: normal; }
+.more-sheet .about { margin: 8px 10px 0; }
+.touch-page { position: fixed; inset: 0; z-index: 25; background: var(--surface); display: flex; flex-direction: column; gap: 8px; padding: calc(8px + env(safe-area-inset-top)) 12px calc(8px + env(safe-area-inset-bottom)); overflow-y: auto; }
+.touch-page-head { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.touch-page-head strong { color: var(--text-strong); font-size: 16px; }
+.touch-page-head .spacer { flex: 1; }
+.atlas-page { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.atlas-scroll { flex: 1; min-height: 0; overflow: auto; border-radius: 12px; background: #12283a; touch-action: pan-x pan-y; }
+.atlas-scroll canvas { width: 100%; min-width: 620px; display: block; image-rendering: pixelated; }
+.atlas-scroll canvas.big { min-width: 1240px; }
+.atlas-info { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--text-strong); }
+.atlas-info small { display: block; color: var(--muted); }
+.atlas-info button { min-height: 44px; flex: none; }
+.atlas-legend { flex: none; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--muted); }
+.atlas-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.atlas-legend i { width: 11px; height: 11px; border: 1px solid #101010; }
+/* the help is one page with two tabs, whatever opened it */
+.help-seg { display: flex; gap: 3px; margin: 8px 12px 0; border: 1px solid var(--line); border-radius: 12px; padding: 3px; flex: none; }
+.help-seg button { flex: 1; border: 0; border-radius: 9px; background: transparent; color: var(--muted); }
+.help-seg button.on { background: var(--accent-fill); color: var(--accent-ink); }
+.cmd-help-sig { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cmd-insert { flex: none; }
+@media (pointer: coarse) {
+  .help-seg button, .cmd-insert, .help-toc button, .help-lang button, .help-x, .help-back { min-height: 40px; }
+}
+@media (max-width: 760px), (max-width: 1100px) and (orientation: portrait), (max-height: 500px) and (orientation: landscape) {
+  aside.help { top: var(--vv-top, 0px); bottom: auto; height: var(--vv-h, 100%); width: 100vw; right: 0; padding-right: env(safe-area-inset-right); border-right: 0; }
+  .help-toc { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .help-toc button { flex: none; }
+}
+
+/* the bag's parts (client/App.tsx): what one has, the market, the sites' orders */
+.bag-parts { flex: none; display: flex; gap: 3px; border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
+.bag-parts button { flex: 1; min-height: 38px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-size: 12.5px; }
+.bag-parts button[aria-selected="true"] { background: var(--accent-fill); color: var(--accent-ink); }
+.bag-parts .chat-count { margin-left: 5px; }
+.bag-note { margin: 4px 2px; font-size: 13.5px; }
+.orders { display: grid; gap: 10px; }
+.order-need { flex: none !important; font-size: 12.5px; color: var(--muted) !important; }
+.order-form { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--text-strong); }
+.order-form label { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
+.order-form .row { display: flex; gap: 6px; }

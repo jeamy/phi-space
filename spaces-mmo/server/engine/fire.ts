@@ -1,4 +1,4 @@
-// Beacons, fog and the tide (docs/spielidee.md, docs/phasen.md Phase 2), in world time (docs/weltzeit.md). A fire is a
+// Beacons, fog and the tide (docs/spielidee.en.md, docs/phasen.en.md Phase 2), in world time (docs/weltzeit.en.md). A fire is a
 // Flame entry that says until which world time it burns: nobody has to put it out, the clock decides, and a paused world
 // keeps its fires. Feeding takes the Beacon entry (the lock of its fire), the fuel and the old flame in one transaction and
 // writes a longer one. The world's dates turn what the clock shows into the weather: the fire tick notices a fire that went

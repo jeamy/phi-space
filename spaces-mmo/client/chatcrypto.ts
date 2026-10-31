@@ -1,4 +1,4 @@
-// End-to-end encryption of the chat between players (docs/siedeln.md, "Chat zwischen Spielern"): only the people of a
+// End-to-end encryption of the chat between players (docs/siedeln.en.md, "Chat zwischen Spielern"): only the people of a
 // talk can read it, not the server and not its operator. WebCrypto only (browsers, Node 22), no dependency.
 //
 // - Every account has one ECDH key pair (P-256), made in the browser. The private key leaves it only sealed with the

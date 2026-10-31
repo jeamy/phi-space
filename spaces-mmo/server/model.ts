@@ -1,11 +1,11 @@
-// The entries of spaces-mmo (docs/evennia-abbildung.md). The world space holds the game; the accounts space only the
+// The entries of spaces-mmo (docs/evennia-abbildung.en.md). The world space holds the game; the accounts space only the
 // credentials, the web sessions and the lock that keeps names unique. Every entry has its own id field (accountId,
 // charId, …): a change is a take and a write, which gives the entry a new space id, so nothing refers to space ids.
 import type { Fields } from "phi-spaces";
 
 /** World space. `guest` accounts carry a lease (renewed on activity); registered ones live until deleted. `perms`:
  *  levels granted on top (Builder); an admin has every level. */
-export type AccountFields = { accountId: string; name: string; guest: boolean; admin: boolean; createdAt: number; touchedAt: number; perms?: string[]; npc?: boolean;
+export type AccountFields = { accountId: string; /** The name one logs in with; what others see is the character's name, which an alias changes. */ name: string; guest: boolean; admin: boolean; createdAt: number; touchedAt: number; perms?: string[]; npc?: boolean;
 	/** An NPC that plays like a person (server/npc/settlers.ts): it may build and sow like one. */
 	settler?: boolean };
 /** One character per account; `guest` mirrors the account so the cleanup can find orphans. A character's location is
@@ -24,7 +24,7 @@ export type ItemFields = { itemId: string; name: string; aliases: string[]; desc
 	/** A tool: uses left (it breaks at 0). */ wear?: number;
 	/** On the market board: `location` is "market", these name the listing and who gets it back. */ listing?: string; seller?: string;
 	/** A bred sort (garden.ts): seeds and flowers of a crossing carry it, so it travels with them to other regions. */ variety?: Variety };
-/** A crossing of two sorts in a flower bed (docs/siedeln.md "Vermehren und züchten"): its own colour and its breeder;
+/** A crossing of two sorts in a flower bed (docs/siedeln.en.md "Vermehren und züchten"): its own colour and its breeder;
  *  `name` stays empty until the breeder names it (`benenne`). The thing keeps the prototype of the sort it grew from. */
 export type Variety = { id: string; name: string; color: string; breeder: string; breederName: string };
 /** A name given to a variety, `unique` on `nameKey` within its region's space. */
@@ -40,7 +40,7 @@ export type PrototypeFields = { key: string; parent: string | null; typeclass: s
 /** A beacon: where a fire can burn. It is also the lock every change of its fire takes (feeding, the fire tick), so
  *  two players feeding at once cannot light two flames. `lit` is what the fire tick last saw. */
 export type BeaconFields = { beaconId: string; name: string; aliases: string[]; room: string; x: number; y: number; covers: string[]; lit: boolean };
-/** A fire: it burns while the world time is before `until` (world milliseconds, docs/weltzeit.md); it stays as an entry
+/** A fire: it burns while the world time is before `until` (world milliseconds, docs/weltzeit.en.md); it stays as an entry
  *  when it has gone out, and the clock decides. `litAt`: since when it burns, in world time. */
 export type FlameFields = { beaconId: string; until: number; litAt: number };
 /** What a character has put into a beacon (its reputation there). */
@@ -52,19 +52,26 @@ export type FogFields = { room: string; level: number };
 /** A settlement (engine/commands/settlement.ts), one per room: `members` lists who was taken in (hut owners are settlers
  *  without it), `closed`: the ranks count. */
 export type SettlementMember = { accountId: string; name: string; rank: "helfer" | "siedler" };
-export type SettlementFields = { settlementId: string; name: string; nameKey: string; room: string; founder: string; founderName: string; members: SettlementMember[]; closed: boolean; at: number };
+export type SettlementFields = { settlementId: string; name: string; nameKey: string; room: string; founder: string; founderName: string; members: SettlementMember[]; closed: boolean; at: number; /** Coins per thing taken from the warehouse, set by a town hall; they go into it. */ tax?: number };
 /** A line of a warehouse's log: who laid in or took what (`kind`), counted for the quota by world time. */
-/** What a site pays for (docs/siedeln.md, engine/commands/siteorder.ts): `proto` "" is work; the coins lie at `orderId`. */
+/** What a site pays for (docs/siedeln.en.md, engine/commands/siteorder.ts): `proto` "" is work; the coins lie at `orderId`. */
 export type SiteOrderFields = { orderId: string; buildId: string; siteName: string; room: string; x: number; y: number; w: number; h: number; ownerName: string; proto: string; name: string; left: number; pay: number; at: number };
+/** A motion at a town hall (engine/commands/townhall.ts), one per room: `kind` "zu" and "offen" change the settlement, "text" is only recorded. */
+export type MotionFields = { motionId: string; room: string; settlementId: string; settlementName: string; by: string; byName: string; kind: MotionKind; text: string; endsWorldMs: number; tax?: number; zone?: { x: number; y: number; w: number; h: number } };
+export type MotionKind = "zu" | "offen" | "text" | "gruen" | "weg" | "frei" | "steuer";
+/** A zone a town hall set: "gruen" keeps it for beds and green plans, "weg" keeps it free of everything. */
+export type ZoneFields = { zoneId: string; room: string; settlementId: string; kind: "gruen" | "weg"; x: number; y: number; w: number; h: number };
+/** A settler's vote on a motion, an entry of its own: the motion keeps its claim on the room (a taken entry still holds it). */
+export type VoteFields = { motionId: string; accountId: string; yes: boolean };
 /** A blessing of the chapel (engine/commands/chapel.ts): until then the rest after work is halved. */
 export type BlessingFields = { charId: string; untilWorldMs: number };
 export type StoreLogFields = { logId: string; buildId: string; accountId: string; name: string; kind: "ein" | "aus"; itemName: string; count: number; worldMs: number; at: number };
 export type EpochFields = { island: string; epoch: number; points: number; at: number };
 /** A recurring job (Evennia's Script/TickerHandler): due at `due`; the world worker that takes it runs it once. */
-/** The world's clock (docs/weltzeit.md), one entry per world: the world time is `worldAnchorMs + (now - realAnchorMs) * rate`
+/** The world's clock (docs/weltzeit.en.md), one entry per world: the world time is `worldAnchorMs + (now - realAnchorMs) * rate`
  *  (unless `paused`). A change takes the entry and writes it again with both anchors moved to the moment of the change. */
 export type WorldClockFields = { worldId: string; epoch: number; realAnchorMs: number; worldAnchorMs: number; rate: number; paused: boolean; version: number };
-/** A date in world time (docs/weltzeit.md): fires once when the world time reaches `dueWorldMs`. `kind` names the handler
+/** A date in world time (docs/weltzeit.en.md): fires once when the world time reaches `dueWorldMs`. `kind` names the handler
  *  (server/engine/worldevents.ts); `scheduleId` is the deterministic key (one entry per id). `missed`: what a late one does
  *  (the clock was behind: a restart, a pause): `once` runs it, `coalesce` runs it once and goes on from now; a later
  *  `replay-bounded` is not implemented. */
@@ -105,6 +112,8 @@ export type HelpView = { intro?: string; commands?: Array<{ names: string[]; usa
 export type MsgKind = "say" | "emote" | "system" | "look" | "error" | "help" | "who" | "info" | "channel" | "world";
 
 /** Accounts space. `key` is the lower-cased name; a `pending` credential belongs to a registration in progress. */
+/** An alias in use: names are unique across logins and aliases, so nobody can pass for someone else. */
+export type NameAliasFields = { key: string; name: string; accountId: string };
 export type CredentialFields = { key: string; name: string; accountId: string; salt: string; hash: string; state: "pending" | "active" };
 /** A web login: `key` is the SHA-256 of the cookie value (the cookie itself is never stored). */
 export type WebSessionFields = { key: string; accountId: string; at: number };
@@ -126,12 +135,12 @@ export const NPC_LOCK = { type: "Lock", fields: { name: "npc" } } as const;
 /** An npc process plays this role while the lease lives. */
 export type NpcOwnerFields = { npcId: string; owner: string };
 /** A model NPC is awake (answers with the model) while this lives; its lease is renewed whenever it is spoken to. */
-/** A model role that is awake until a world time (docs/weltzeit.md); the sweep removes it when that has passed. */
+/** A model role that is awake until a world time (docs/weltzeit.en.md); the sweep removes it when that has passed. */
 export type NpcAwakeFields = { npcId: string; since: number; untilWorldMs: number };
 /** What a model NPC remembers (≤ 4 KiB), written by itself with NOTE lines. */
 export type NpcMemoryFields = { npcId: string; text: string };
 
-/** Building (docs/siedeln.md): a site where people deliver and work until its plan is done. `buildId` stays the same
+/** Building (docs/siedeln.en.md): a site where people deliver and work until its plan is done. `buildId` stays the same
  *  when the site becomes a building. `needs`: per prototype what the plan asks and what was delivered; `work`/`workNeed`
  *  the work points; `human`/`other`: what people and what NPCs or automata gave (at most half may come from others).
  *  `beaconId`: the fire whose light it uses (engine/build.ts). The site lapses at `untilWorldMs` without progress. */
@@ -157,7 +166,7 @@ export type HerdFields = { kind: string; fedUntilWorldMs: number; atWorldMs: num
 export type MillLoadFields = { loadId: string; buildId: string; room: string; x: number; y: number; w: number; h: number; charId: string; name: string; from: string; to: string; count: number; readyWorldMs: number; untilWorldMs: number };
 /** A plant in a bed, at a cell of it: its sort, its stage (0 seed, 1 sprout, 2 ripe, 3 wilted) and when the next is due. */
 export type BedPlant = { x: number; y: number; sort: string; stage: 0 | 1 | 2 | 3; dueWorldMs: number; variety?: Variety };
-/** A bed (docs/siedeln.md "Gärten"): cells like a building's (Plot entries), its plants inside it, so a stage change or
+/** A bed (docs/siedeln.en.md "Gärten"): cells like a building's (Plot entries), its plants inside it, so a stage change or
  *  a watering is one write of the bed whatever grows in it. `dueWorldMs`: the earliest date of its plants (the garden
  *  tick looks at nothing else); `wateredWorldMs`: the last watering; `sponsors`: who may tend it besides the owner;
  *  `untilWorldMs`: a bed nobody tends goes back to grass. `kind`: a flower bed ("zier": flowers only, and only there
@@ -165,7 +174,7 @@ export type BedPlant = { x: number; y: number; sort: string; stage: 0 | 1 | 2 | 
  *  `fenced`: a fence keeps the hares out (engine/commands/wild.ts). */
 export type BedFields = { kind?: "zier" | "gemein"; fenced?: boolean; bedId: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number;
 	sponsors: Array<{ charId: string; name: string }>; plants: BedPlant[]; wateredWorldMs: number; weedy: boolean; dueWorldMs: number; untilWorldMs: number; at: number };
-/** A field (docs/siedeln.md "Äcker und Getreide", engine/commands/field.ts): one entry over its cells (Plot entries like a
+/** A field (docs/siedeln.en.md "Äcker und Getreide", engine/commands/field.ts): one entry over its cells (Plot entries like a
  *  building's), one crop at a time. `stage`: fallow, being sown (seed and work delivered so far), growing, ripe, late
  *  (the window passed: each share loses part). `dueWorldMs`: the next stage the field tick writes (ripe, late, lost);
  *  `yields`: what the whole harvest gives (fixed when the sowing is done), handed out in shares per work point;
@@ -189,6 +198,8 @@ export type RuinFields = { buildId: string; plan: string; name: string; room: st
  *  `untilWorldMs`, then they are gone. */
 export type EstateFields = { estateId: string; accountId: string; ownerName: string; room: string; name: string; untilWorldMs: number };
 /** One cell a site or building stands on, written with the space's `unique` check on room and cell: two never share one. */
+/** A piece of the world's scenery (worlds/<id>/scenery.ts): `left` the work it still takes. */
+export type SceneryFields = { sceneryId: string; room: string; x: number; y: number; w: number; h: number; model: string; name: string; fixed?: boolean; through?: boolean; work: number; left: number; yields: Array<{ proto: string; count: number }> };
 export type PlotFields = { room: string; x: number; y: number; of: string };
 /** How much of a fire's light the sites and buildings that use it take (engine/build.ts, "Lichtpunkte"). */
 export type LightUseFields = { beaconId: string; used: number };

@@ -1,4 +1,4 @@
-// The latency target of Phase 3 (docs/architektur.md, "Takt"): command to position frame below 150 ms. Run alone
+// The latency target of Phase 3 (docs/architektur.en.md, "Takt"): command to position frame below 150 ms. Run alone
 // (`npm run test:perf`): inside `npm test` every test file starts its own stack at the same time, and that measures the
 // test run, not the game.
 import { test } from "node:test";

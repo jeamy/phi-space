@@ -1,4 +1,4 @@
-// A character crossing to another region (regions.ts, docs/welt-aufteilen.md "Übergabe zwischen Regionen"). phi-spaces
+// A character crossing to another region (regions.ts, docs/welt-aufteilen.en.md "Übergabe zwischen Regionen"). phi-spaces
 // has no transaction across two spaces, so the crossing goes in steps, each atomic and repeatable:
 //   1. in region A, in the command's transaction: the character, its cell and its account are taken and a Handover
 //      written (handOff). The character is now in neither region; what it carries stays in A, out of anyone's reach.

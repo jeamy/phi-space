@@ -1,4 +1,4 @@
-// Runs one command line (docs/evennia-abbildung.md, "Ablauf eines Befehls"): the actor's command sets are merged
+// Runs one command line (docs/evennia-abbildung.en.md, "Ablauf eines Befehls"): the actor's command sets are merged
 // (defaults, builder commands, one command per exit of the room), commands whose `cmd` lock the actor fails are
 // dropped, and the command the first word names runs inside the intent's transaction.
 import { distinct, merge, type CmdSet, type Command } from "./cmdsets.ts";
@@ -6,6 +6,7 @@ import { BUILDER_COMMANDS } from "./commands/builder.ts";
 import { BUILD_COMMANDS } from "./commands/build.ts";
 import { SITE_ORDER_COMMANDS } from "./commands/siteorder.ts";
 import { CHAPEL_COMMANDS } from "./commands/chapel.ts";
+import { TOWNHALL_COMMANDS } from "./commands/townhall.ts";
 import { GARDEN_COMMANDS } from "./commands/garden.ts";
 import { WILD_COMMANDS } from "./commands/wild.ts";
 import { FIELD_COMMANDS } from "./commands/field.ts";
@@ -17,6 +18,7 @@ import { SETTLEMENT_COMMANDS } from "./commands/settlement.ts";
 import { DEFAULT_COMMANDS, exitCmdSet, helpCommand } from "./commands/default.ts";
 import { CLOCK_COMMANDS } from "./commands/clock.ts";
 import { TRADE_COMMANDS } from "./commands/trade.ts";
+import { SCENERY_COMMANDS } from "./commands/scenery.ts";
 import { randomBytes } from "node:crypto";
 import { llmEnabled } from "../llm.ts";
 import { fieldsOf, type ListingFields, type TranslateFields } from "../model.ts";
@@ -35,7 +37,7 @@ export async function commandsOf(c: CommandCtx): Promise<Map<string, Command>> {
 	// the help lists the commands, not the exits (look names those)
 	const help = helpCommand(() => distinct(all).filter((cmd) => !exits.commands.includes(cmd)));
 	const sets: CmdSet[] = [
-		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...SETTLEMENT_COMMANDS, ...CLOCK_COMMANDS, help]) },
+		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...SCENERY_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...SETTLEMENT_COMMANDS, ...CLOCK_COMMANDS, help]) },
 		{ key: "builder", priority: 1, mergeType: "Union", commands: offered(BUILDER_COMMANDS) },
 		exits,
 	];

@@ -1,4 +1,4 @@
-// Builder and admin commands (docs/phasen.md Phase 1): shaping the world from inside it. Each carries a `cmd` lock, so
+// Builder and admin commands (docs/phasen.en.md Phase 1): shaping the world from inside it. Each carries a `cmd` lock, so
 // for everyone below the level the command does not exist. Lock strings a builder writes are parsed before they are
 // stored; a string that does not parse is refused with the reason.
 import { randomBytes } from "node:crypto";

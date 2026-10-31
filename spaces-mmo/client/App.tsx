@@ -14,9 +14,13 @@ import type { HelpView } from "../server/model.ts";
 import { appendLine, isComing } from "./log.ts";
 import type { ChatState } from "../server/chat.ts";
 import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
-import { ChatOverview, ChatTabs, TalkView } from "./ChatPanel.tsx";
+import { ChatOverview, TalkView } from "./ChatPanel.tsx";
 import { forgetDeviceKeys, useChat } from "./useChat.ts";
-import { screenToGrid, WALK_MS, Walker } from "./walk.ts";
+import { MAX_AHEAD, nextStep, screenToGrid, WALK_MS, Walker } from "./walk.ts";
+import { cellAbout, cellEntries, HERE_SHOWN, hereEntries, tapTarget, wildHere } from "./cellActions.ts";
+import { canFullscreen, enterFullscreen, homeSteps, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
+import { useBack } from "./useBack.ts";
+import { detentPx, Sheet, type Detent } from "./Sheet.tsx";
 import { formatWorldTime, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
 
 /** How long a "gone" waits for the "char" that follows it when a character is only being moved (see the handler). */
@@ -30,7 +34,7 @@ const PICKUP_MS = 3_000;
 const DOUBLE_MS = 400;
 /** How long a double-clicked thing is walked to before giving up (a long way, someone else took it). */
 const FETCH_MS = 15_000;
-type Account = { name: string; guest: boolean; admin: boolean };
+type Account = { name: string; guest: boolean; admin: boolean; /** The name shown in the game, when it is not the login name. */ alias?: string };
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 /** The names of what burns in a fire, cheapest first (from the hello): what the space key and the buttons feed. */
 let fuels: string[] = ["Treibholz"];
@@ -139,6 +143,27 @@ function AccountForm({ onDone, guest = false }: { onDone: (a: Account) => void; 
 	);
 }
 
+/** The name others see; the login stays the same. */
+function AliasForm({ account, onDone }: { account: Account; onDone: (a: Account) => void }) {
+	const [alias, setAlias] = useState(account.alias ?? "");
+	const [busy, setBusy] = useState(false), [error, setError] = useState("");
+	const save = async (value: string) => {
+		setBusy(true); setError("");
+		try { onDone((await post("/api/alias", { alias: value })).account!); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+	};
+	return (
+		<form className="form" onSubmit={(e) => { e.preventDefault(); void save(alias); }}>
+			<p className="muted" style={{ margin: 0, fontSize: 13 }}>So sehen dich alle im Spiel. Anmelden tust du dich weiter als <b>{account.name}</b>.</p>
+			<label>Alias<input value={alias} onChange={(e) => setAlias(e.target.value)} placeholder={account.name} autoComplete="off" maxLength={20} /></label>
+			<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+				<button className="primary" disabled={busy}>Speichern</button>
+				{account.alias && <button type="button" disabled={busy} onClick={() => void save("")}>Alias entfernen</button>}
+			</div>
+			{error && <p className="error" style={{ margin: 0 }}>{error}</p>}
+		</form>
+	);
+}
+
 function About() {
 	return (
 		<p className="about muted">
@@ -149,9 +174,16 @@ function About() {
 	);
 }
 
+/** Closes a menu, but not at what opened it: a long press ends in a context menu or a click on the backdrop that just came up
+ *  under the finger. */
+function useDismiss(close: () => void): () => void {
+	const opened = useRef(Date.now());
+	return () => { if (Date.now() - opened.current > 500) close(); };
+}
+
 /** The menu of a long press or a right click on a cell: what stands, lies or burns there, and what one can do with it.
  *  Every entry is a text command. */
-function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, offer, chat }: { at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; send: (line: string) => void; close: () => void; offer?: (name: string) => void;
+function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, send, close, offer, chat, sheet = false, onHelp, onWalk, onOrders }: { wild?: boolean; at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; send: (line: string) => void; close: () => void; offer?: (name: string) => void; sheet?: boolean; onHelp?: (article: string) => void; /** A phone walks there step by step, to the free cell nearest it. */ onWalk?: (at: { x: number; y: number }) => void; onOrders?: () => void;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] } }) {
 	useEffect(() => {
 		const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
@@ -161,123 +193,8 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 	// building goes in steps: "Bauen …" → the plans → a plan with what it needs and OK
 	const [step, setStep] = useState<"plans" | PlanView | null>(null);
 	useEffect(() => setStep(null), [at]);
-	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const fuel = fuelIn(objs, me);
-	const entries: Array<{ label: string; line: string; run?: () => void }> = [];
-	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
-		entries.push({ label: `${c.name} ansehen`, line: `look ${c.name}` });
-		if (offer) entries.push({ label: `${c.name} einen Tausch anbieten …`, line: `#offer ${c.name}`, run: () => offer(c.name) });
-		if (chat && !c.charId.startsWith("npc-")) {
-			entries.push({ label: `Chat mit ${c.name}`, line: `#chat ${c.name}`, run: () => chat.talk(c.name) });
-			for (const g of chat.groups.slice(0, 4)) entries.push({ label: `${c.name} in „${g}“ einladen`, line: `#invite ${c.name} ${g}`, run: () => chat.invite(c.name, g) });
-		}
-	}
-	// a site or building covers more than one cell: its entries on every one of them
-	for (const o of objs.values()) {
-		if ((o.kind !== "site" && o.kind !== "building" && o.kind !== "ruin" && o.kind !== "bed" && o.kind !== "field") || o.location !== room || at.x < o.x || at.y < o.y || at.x >= o.x + (o.w ?? 1) || at.y >= o.y + (o.h ?? 1)) continue;
-		const dist = self ? Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) : Infinity;
-		// a site is worked on from two cells away (server: build.ts SITE_REACH), a building only from beside it
-		const beside = dist <= 1, nearSite = dist <= 2;
-		if (o.kind === "bed") {
-			// a bed is tended from two cells away too, by its owner and its sponsors, a community bed by everyone; planting
-			// there needs an account (server: garden.ts)
-			const commons = o.bedKind === "gemein";
-			entries.push({ label: commons ? "Gemeinschaftsbeet ansehen" : `${o.name} von ${o.owner ?? ""} ansehen`, line: "beet" });
-			const mine = o.owner === self?.name || (commons && !guest), mayTend = commons || mine || (!!self && (o.sponsors ?? []).includes(self.name));
-			if (nearSite && mayTend) {
-				const carried = [...objs.values()].filter((i) => i.kind === "item" && i.location === me).map((i) => i.name);
-				if (carried.includes("Kanne Wasser")) entries.push({ label: "Gießen", line: "gieße" });
-				if (o.weedy || (o.plants ?? []).some((pl) => pl.stage === 3)) entries.push({ label: "Jäten", line: "jäte" });
-				if ((o.plants ?? []).some((pl) => pl.stage === 2)) entries.push({ label: "Ernten", line: "ernte" });
-				if (beside && !o.fenced) entries.push({ label: "Zaun setzen (2 Treibholz, 1 Tangseil)", line: "zäune" });
-				if (mine && (o.plants ?? []).length < (o.w ?? 1) * (o.h ?? 1)) for (const n of [...new Set(carried.filter((n) => /samen$/i.test(n)))]) entries.push({ label: `${n} pflanzen`, line: `pflanze ${n}` });
-			}
-			continue;
-		}
-		if (o.kind === "field") {
-			// a field is sown and harvested from two cells away, by its owner, or by everyone when it is open (server: field.ts)
-			const mine = o.owner === self?.name, may = mine || !!o.open;
-			entries.push({ label: `Flur von ${o.owner ?? ""} ansehen`, line: "flur" });
-			if (nearSite && may) {
-				if (o.fieldStage === "brach" && mine) entries.push({ label: "Bestellen …", line: "bestelle" });
-				if (o.fieldStage === "saat") entries.push({ label: "Bestellen (Saatgut, Arbeit)", line: "bestelle" });
-				if (o.fieldStage === "reif" || o.fieldStage === "spaet") entries.push({ label: "Ernten", line: "ernte flur" });
-			}
-			if (nearSite && mine) entries.push(o.open ? { label: "Flur für Fremde schließen", line: "flur zu" } : { label: "Flur für alle öffnen", line: "flur offen" });
-			if (beside && may && !o.fenced) entries.push({ label: "Zaun um die Flur ziehen (6 Treibholz, 2 Tangseil)", line: "zäune" });
-			continue;
-		}
-		// this one, not all in the room: the command takes its cell
-		entries.push({ label: o.kind === "site" ? `${o.owner === self?.name ? "Deine Baustelle" : `Baustelle von ${o.owner ?? ""}`} ${o.name}: was fehlt?` : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: `baustelle ${o.x} ${o.y}` });
-		if (o.kind === "building" && beside) {
-			if (o.name === "Regentonne") entries.push({ label: "Wasser schöpfen", line: "schöpfe" });
-			// anyone grinds at a mill and bakes at a bakery (server: mill.ts, the recipes "at" a plan)
-			if (o.plan === "windmuehle") {
-				entries.push({ label: "Mühle: wie lange noch?", line: "mahle" });
-				const grain = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && ["Weizen", "Gerste", "Hafer"].includes(i.name)).map((i) => i.name))];
-				for (const n of grain) entries.push({ label: `${n} mahlen`, line: `mahle alle ${n}` });
-			}
-			if (o.plan === "backhaus") entries.push({ label: "Brot backen (2 Mehl, 1 Kanne Wasser, 1 Treibholz)", line: "backe brot" });
-			if (o.plan === "webstuhl") entries.push({ label: "Tuch weben (3 Wolle, Spindel)", line: "craft tuch" }, { label: "Daunendecke nähen (2 Tuch, 3 Daunen)", line: "craft decke" });
-			if (o.plan === "huette") entries.push({ label: "Käse machen (3 Milch, 1 Treibholz)", line: "craft käse" });
-			// a coop or pen: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
-			if (o.plan === "huehnerstall" || o.plan === "gehege") {
-				entries.push({ label: "Tiere ansehen", line: "stall" }, { label: "Füttern", line: "füttere" });
-				if (o.owner === self?.name) {
-					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", gans: "Daunen" };
-					if (o.herd) entries.push({ label: `${yields[o.herd] ?? "Ertrag"} einsammeln`, line: "einsammeln" });
-					const fits = o.plan === "huehnerstall" ? ["Huhn"] : ["Schaf", "Ziege", "Ente", "Gans"];
-					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && fits.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} einstallen`, line: `einstallen ${n}` });
-					entries.push({ label: "Ein Tier herausnehmen", line: "ausstallen" });
-					if (o.plan === "huehnerstall" && !o.fenced) entries.push({ label: "Zaun mit Tür setzen (3 Treibholz, 1 Tangseil)", line: "zäune" });
-				}
-			}
-			// a dog or cat on guard: anyone feeds it; at an own building one leaves one or takes it along (server: animals.ts)
-			const keeperName: Record<string, string> = { hund: "Hund", katze: "Katze" };
-			if (o.keeper) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} füttern`, line: `füttere ${o.keeper}` }, { label: "Wer wacht hier?", line: "wache" });
-			if (o.owner === self?.name) {
-				if (o.keeper) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} mitnehmen`, line: `ausstallen ${o.keeper}` });
-				else for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && ["Hund", "Katze"].includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} hier wachen lassen`, line: `einstallen ${n}` });
-			}
-			entries.push({ label: "Ausbessern", line: "repariere" });
-			if (o.plan === "steinbruch") entries.push({ label: "Stein brechen", line: "breche" });
-			if (o.plan === "kapelle") entries.push({ label: "Was man opfern kann", line: "opfere" });
-			if (o.plan === "lehmgrube") entries.push({ label: "Lehm stechen", line: "steche" });
-			if (o.plan === "ziegelei") entries.push({ label: "Ziegel brennen", line: "craft ziegel" });
-			if (o.plan === "lagerhaus") entries.push({ label: "Lager ansehen", line: "lager" });
-			else if (o.owner === self?.name) entries.push({ label: "Truhe ansehen", line: "truhe" });
-		}
-		if (o.kind === "ruin" && o.owner === self?.name) entries.push({ label: "Nachlass abholen", line: "nachlass" });
-		if ((o.kind === "building" || o.kind === "ruin") && o.plan === "windmuehle" && nearSite) entries.push({ label: "Mehl abholen", line: "abholen" });
-		if (o.kind === "site" && nearSite) {
-			entries.push({ label: "Aushang ansehen", line: "aushang" });
-			entries.push({ label: "Mitarbeiten", line: "arbeite" });
-			// what one carries that it still needs
-			const carried = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me).map((i) => i.name))];
-			// "2 Tangseil, 5 Arbeit" → the names, matched whole: "Tang" is not the "Tangseil" it needs
-			const needed = new Set((o.missing ?? "").split(",").map((p) => p.trim().replace(/^\d+\s+/, "")).filter(Boolean));
-			for (const n of carried.filter((n) => needed.has(n))) entries.push({ label: `${n} liefern`, line: `liefere ${n}` });
-		}
-	}
-	for (const o of objs.values()) {
-		if (o.location !== room || o.x !== at.x || o.y !== at.y || o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field") continue;
-		if (o.kind === "item") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach) entries.push({ label: `${o.name} aufheben`, line: `get ${o.name}` }); }
-		if (o.kind === "beacon") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach && fuel) entries.push({ label: "Treibholz nachlegen", line: `put ${fuel.name} in ${o.name}` }); }
-		if (o.kind === "exit") entries.push({ label: `Nach ${o.name} gehen`, line: `go ${o.name}` });
-		// a hare, deer, fox or mouse from the fog: anyone scares it off from three cells (server: wild.ts)
-		if (o.kind === "animal") entries.push({ label: `${o.animal === "hase" || !o.animal ? `${o.name}n` : o.name} verscheuchen`, line: `scheuche ${o.animal ?? "hase"}` });
-	}
-	if (!(self && self.x === at.x && self.y === at.y)) entries.push({ label: "Hierhin gehen", line: `move ${at.x} ${at.y}` });
-	// a cell nothing covers: build here (the plan's top left corner; the server says why not when it does not fit)
-	const covered = [...objs.values()].some((o) => o.location === room && o.kind !== "item" && at.x >= o.x && at.y >= o.y && at.x < o.x + (o.w ?? 1) && at.y < o.y + (o.h ?? 1));
-	if (!guest && plans.length && !covered) entries.push({ label: "Bauen …", line: "#bau", run: () => setStep("plans") });
-	if (!guest && !covered && [...objs.values()].some((o) => o.kind === "item" && o.location === me && o.name === "Spaten")) { entries.push({ label: "Hier ein Beet umgraben", line: `umgraben ${at.x} ${at.y}` }); entries.push({ label: "Hier eine Flur anlegen (4×4)", line: `flur anlegen ${at.x} ${at.y}` }); }
-	// on the own figure: what works without anything more
-	if (self && self.x === at.x && self.y === at.y) {
-		entries.push({ label: "Umsehen", line: "look" }, { label: "Was trage ich?", line: "inventory" }, { label: "Wer spielt?", line: "who" }, { label: "Uhrzeit", line: "time" }, { label: "Mein Ruf", line: "reputation" });
-		if (plans.length) entries.push({ label: "Baupläne", line: "bau" });
-		entries.push({ label: "Samen sammeln", line: "sammle samen" });
-	}
+	const entries = cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, chat, wild, onPlans: () => setStep("plans"), onOrders });
 	if (step === "plans") {
 		entries.length = 0;
 		for (const p of plans) entries.push({ label: `${p.name} (${p.w}×${p.h}${p.epoch ? `, ab ${p.epoch}` : ""})`, line: `#plan ${p.key}`, run: () => setStep(p) });
@@ -286,13 +203,19 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 		entries.length = 0;
 		entries.push({ label: `OK: ${step.name} hier abstecken`, line: `bau ${step.key} ${at.x} ${at.y}` }, { label: "Zurück", line: "#zurück", run: () => setStep("plans") });
 	}
-	const left = Math.min(at.left, window.innerWidth - 220), top = Math.min(at.top, window.innerHeight - 40 * (entries.length + 1));
+	useBack(sheet, close);
+	const dismiss = useDismiss(close);
+	// on the desktop the list stays on the screen and scrolls when it is taller than the room there is
+	const left = Math.min(at.left, window.innerWidth - 220), top = Math.max(8, Math.min(at.top, window.innerHeight - 40 * (entries.length + 1)));
+	const about = sheet ? cellAbout(at, chars, objs, room) : {};
 	return (
 		<>
-			<div className="menu-backdrop" onClick={close} onContextMenu={(e) => { e.preventDefault(); close(); }} />
-			<ul className="cell-menu" role="menu" style={{ left, top }}>
+			<div className={`menu-backdrop${sheet ? " dim" : ""}`} onClick={dismiss} onContextMenu={(e) => { e.preventDefault(); dismiss(); }} />
+			<ul className={sheet ? "cell-menu action-sheet" : "cell-menu"} role="menu" style={sheet ? undefined : { left, top }}>
+				{sheet && about.title && <li className="action-title">{about.title}</li>}
 				{step && typeof step === "object" && <li className="menu-note">{step.name} ({step.w}×{step.h}) ab hier nach rechts unten: {step.needs}, {step.work} Arbeit</li>}
-				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (e.run) { e.run(); if (!e.line.startsWith("#bau") && !e.line.startsWith("#plan") && !e.line.startsWith("#zurück")) close(); } else { send(e.line); close(); } }}>{e.label}</button></li>)}
+				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (onWalk && e.line.startsWith("move ")) { onWalk(at); close(); } else if (e.run) { e.run(); if (!e.line.startsWith("#bau") && !e.line.startsWith("#plan") && !e.line.startsWith("#zurück")) close(); } else { send(e.line); close(); } }}>{e.label}</button></li>)}
+				{sheet && about.article && onHelp && <li role="menuitem"><button className="action-help" onClick={() => { close(); onHelp(about.article!); }}>Was ist das?</button></li>}
 			</ul>
 		</>
 	);
@@ -323,18 +246,21 @@ function LogText({ l, self, onName }: { l: Line; self: string; onName: (name: st
 }
 
 /** The menu of a player's name in the log: chat, invite into one's groups, ignore. */
-function NameMenu({ at, name, groups, talk, invite, ignore, close }: { at: { left: number; top: number }; name: string; groups: string[]; talk: () => void; invite: (group: string) => void; ignore: () => void; close: () => void }) {
+function NameMenu({ at, name, groups, talk, invite, ignore, close, sheet = false }: { at: { left: number; top: number }; name: string; groups: string[]; talk: () => void; invite: (group: string) => void; ignore: () => void; close: () => void; sheet?: boolean }) {
 	useEffect(() => {
 		const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
 		window.addEventListener("keydown", key);
 		return () => window.removeEventListener("keydown", key);
 	}, [close]);
 	const entries = [{ label: `Chat mit ${name}`, run: talk }, ...groups.slice(0, 4).map((g) => ({ label: `${name} in „${g}“ einladen`, run: () => invite(g) })), { label: `${name} ignorieren`, run: ignore }];
-	const left = Math.min(at.left, window.innerWidth - 220), top = Math.min(at.top, window.innerHeight - 40 * (entries.length + 1));
+	useBack(sheet, close);
+	const dismiss = useDismiss(close);
+	const left = Math.min(at.left, window.innerWidth - 220), top = Math.max(8, Math.min(at.top, window.innerHeight - 40 * (entries.length + 1)));
 	return (
 		<>
-			<div className="menu-backdrop" onClick={close} onContextMenu={(e) => { e.preventDefault(); close(); }} />
-			<ul className="cell-menu" role="menu" style={{ left, top }}>
+			<div className={`menu-backdrop${sheet ? " dim" : ""}`} onClick={dismiss} onContextMenu={(e) => { e.preventDefault(); dismiss(); }} />
+			<ul className={sheet ? "cell-menu action-sheet" : "cell-menu"} role="menu" style={sheet ? undefined : { left, top }}>
+				{sheet && <li className="action-title">{name}</li>}
 				{entries.map((e) => <li key={e.label} role="menuitem"><button onClick={() => { e.run(); close(); }}>{e.label}</button></li>)}
 			</ul>
 		</>
@@ -422,7 +348,7 @@ function Glyph({ o, size = 16 }: { o: ObjView; size?: number }) {
 }
 
 /** What the player carries and what lies within reach, as buttons (on a phone there is no keyboard to type with). */
-function Things({ objs, self, room, me, send, pick }: { objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void; pick: (o: ObjView) => void }) {
+function Things({ objs, chars, self, room, me, plans, guest, wild, send, pick }: { objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string) => void; pick: (o: ObjView) => void }) {
 	const all = [...objs.values()].filter((o) => o.kind === "item");
 	const carried = all.filter((o) => o.location === me);
 	const close = (o: ObjView) => !!self && o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
@@ -436,7 +362,9 @@ function Things({ objs, self, room, me, send, pick }: { objs: Map<string, ObjVie
 	const [picked, setPicked] = useState<string | null>(null);
 	const kinds = [...carried.reduce((m, o) => m.set(o.name, [...(m.get(o.name) ?? []), o]), new Map<string, ObjView[]>())].sort(([a], [b]) => a.localeCompare(b));
 	const chosen = kinds.find(([name]) => name === picked);
-	if (!carried.length && !near.length && !fire) return <div />;
+	const here = hereEntries({ chars, objs, self, room, me, plans, guest, fuel, wild });
+	const [allHere, setAllHere] = useState(false);
+	if (!carried.length && !near.length && !fire && !here.length) return <div />;
 	const row = (o: ObjView, verb: string, label: string) => (
 		<li key={o.id}><Glyph o={o} size={20} /><span>{o.name}</span><button onClick={() => (verb === "get" ? pick(o) : send(`${verb} ${o.name}`))}>{label}</button><button onClick={() => send(`look ${o.name}`)}>Ansehen</button></li>
 	);
@@ -448,6 +376,10 @@ function Things({ objs, self, room, me, send, pick }: { objs: Map<string, ObjVie
 					<button disabled={!fuel} onClick={() => fuel && send(`put ${fuel.name} in ${fire.name}`)} title={fuel ? "" : "Du trägst kein Brennholz"}>Nachlegen</button>
 				</li></ul></>
 			)}
+			{here.length > 0 && <><h3>Hier möglich</h3><div className={`here${allHere ? " open" : ""}`}>
+				{(allHere ? here : here.slice(0, HERE_SHOWN)).map((e) => <button key={e.line} onClick={() => send(e.line)}>{e.label}</button>)}
+				{here.length > HERE_SHOWN && <button className="more" aria-expanded={allHere} onClick={() => setAllHere(!allHere)}>{allHere ? "Weniger" : `Mehr (${here.length - HERE_SHOWN})`}</button>}
+			</div></>}
 			{near.length > 0 && <><h3>Neben dir</h3><ul>{near.map((o) => row(o, "get", "Aufheben"))}</ul></>}
 			{carried.length > 0 && <>
 				<h3>Du trägst</h3>
@@ -462,6 +394,52 @@ function Things({ objs, self, room, me, send, pick }: { objs: Map<string, ObjVie
 					<button onClick={() => send(`look ${chosen[0]}`)}>Ansehen</button>
 				</div>}
 			</>}
+		</div>
+	);
+}
+
+/** What the sites of this room have hung out, and what one can do about it: go there, deliver, work; one's own site hangs
+ *  out what it lacks or takes it down. Every button sends the command the help names. A site is worked on from two cells. */
+function SiteOrders({ objs, self, room, me, send, walk }: { objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void; walk: (at: { x: number; y: number }) => void }) {
+	const [form, setForm] = useState<{ site: string; name: string; n: string; pay: string } | null>(null);
+	const sites = [...objs.values()].filter((o) => o.kind === "site" && o.location === room);
+	const carried = new Set([...objs.values()].filter((o) => o.kind === "item" && o.location === me).map((o) => o.name));
+	const shown = sites.filter((s) => s.orders?.length || s.ownerId === me);
+	if (!shown.length) return <p className="muted bag-note">In diesem Raum hängt nichts aus. Ein Aushang gehört zu einer Baustelle: Ihr Besitzer bietet dort Lohn für das, was fehlt. Wer liefert oder mitarbeitet, wird sofort bezahlt. Der Lohn liegt schon beim Aushang.</p>;
+	return (
+		<div className="things orders">
+			{shown.map((s) => {
+				const near = !!self && Math.max(Math.max(s.x - self.x, 0, self.x - (s.x + (s.w ?? 1) - 1)), Math.max(s.y - self.y, 0, self.y - (s.y + (s.h ?? 1) - 1))) <= 2;
+				const mine = s.ownerId === me, orders = s.orders ?? [];
+				const open = (s.missing ?? "").split(",").map((p) => /^(\d+)\s+(.+)$/.exec(p.trim())).filter((m) => !!m).map((m) => ({ n: m![1]!, name: m![2]! })).filter((m) => !orders.some((o) => o.name === m.name));
+				return (
+					<section key={s.id}>
+						<h3>{mine ? `Deine Baustelle ${s.name}` : `${s.name} von ${s.owner ?? ""}`}</h3>
+						<ul>
+							{orders.map((o) => (
+								<li key={o.name}><span>{o.left} {o.name}, je {o.pay} Münze{o.pay === 1 ? "" : "n"}</span>
+									{!near ? <button onClick={() => walk({ x: s.x, y: s.y })}>Hingehen</button>
+										: !o.proto ? <button onClick={() => send("arbeite")}>Mitarbeiten</button>
+										: carried.has(o.name) ? <button onClick={() => send(`liefere ${o.name}`)}>Liefern</button>
+										: <span className="muted order-need">fehlt dir</span>}
+								</li>
+							))}
+							{mine && open.map((m) => (
+								<li key={m.name}><span>{m.n} {m.name} fehlen</span>{near ? <button onClick={() => setForm({ site: s.id, name: m.name, n: m.n, pay: "1" })}>Aushängen …</button> : <button onClick={() => walk({ x: s.x, y: s.y })}>Hingehen</button>}</li>
+							))}
+						</ul>
+						{form?.site === s.id && (
+							<form className="order-form" onSubmit={(e) => { e.preventDefault(); send(`aushang ${form.n} ${form.name.toLowerCase()} je ${form.pay}`); setForm(null); }}>
+								<b>{form.name}</b>
+								<label>Menge <input type="number" min={1} max={999} value={form.n} onChange={(e) => setForm({ ...form, n: e.target.value })} /></label>
+								<label>Münzen je Stück <input type="number" min={1} max={999} value={form.pay} onChange={(e) => setForm({ ...form, pay: e.target.value })} /></label>
+								<div className="row"><button className="primary">Aushängen</button><button type="button" onClick={() => setForm(null)}>Abbrechen</button></div>
+							</form>
+						)}
+						{mine && near && orders.length > 0 && <button className="link" onClick={() => send("aushang ab")}>Aushang abnehmen, Lohn zurück</button>}
+					</section>
+				);
+			})}
 		</div>
 	);
 }
@@ -481,19 +459,46 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const [talks, setTalks] = useState<Talks>(new Map());
 	const [tab, setTabState] = useState("log");
 	const tabRef = useRef("log");
-	const [hiddenTalks, setHiddenTalks] = useState<Set<string>>(new Set());
 	const [chatState, setChatState] = useState<ChatState | null>(null);
 	const [notice, setNotice] = useState<{ text: string; error: boolean; at: number } | null>(null);
 	const setTab = useCallback((k: string) => { tabRef.current = k; setTabState(k); if (k !== "log" && k !== "chats") setTalks((t) => readTalk(t, k)); }, []);
 	const [live, setLive] = useState(false);
 	const [line, setLine] = useState("");
-	const [panel, setPanel] = useState<null | "account" | "leave" | "admin">(null);
+	const [panel, setPanel] = useState<null | "account" | "leave" | "admin" | "alias">(null);
 	const [help, setHelp] = useState(false);
 	// the answer of `help` laid out in a window like the help (CommandHelp); a topic keeps the list it came from
 	const [cmdHelp, setCmdHelp] = useState<HelpView | null>(null);
-	// on a phone the map modes and logging out sit behind "⋯" in the header bar (styles.css, `.bar-tools`)
+	// on a phone the map modes and logging out sit behind "⋯"
 	const [more, setMore] = useState(false);
 	const [stale, setStale] = useState(false);
+	// how far the sheet is open, the bag beside log and chats with its part, the world map as a page, the article the help opens
+	// on, the steering cross (off, left, right; a mouse has no need of it), the word of a new message over the map
+	useKeyboardInset();
+	const [fullscreen, setFullscreenState] = useState(() => { try { return localStorage.getItem("mmo.fullscreen") !== "0"; } catch { return true; } });
+	const setFullscreen = (on: boolean) => { setFullscreenState(on); try { localStorage.setItem("mmo.fullscreen", on ? "1" : "0"); } catch { /* private window */ } if (on) enterFullscreen(); else if (document.fullscreenElement) void document.exitFullscreen().catch(() => {}); };
+	useLandscapeFullscreen(fullscreen);
+	usePageHeld(true);
+	// the game from the home screen has no browser bars at all (an iPhone has no other full screen): once, how to get there;
+	// where the browser offers to install it, a button does it
+	const steps = homeSteps();
+	const [homeHint, setHomeHint] = useState(() => { try { return !!steps && localStorage.getItem("mmo.homeHint") !== "1"; } catch { return !!steps; } });
+	const [install, setInstall] = useState<(Event & { prompt: () => Promise<void> }) | null>(null);
+	useEffect(() => { const on = (e: Event) => { e.preventDefault(); setInstall(e as Event & { prompt: () => Promise<void> }); }; window.addEventListener("beforeinstallprompt", on); return () => window.removeEventListener("beforeinstallprompt", on); }, []);
+	const hideHomeHint = () => { setHomeHint(false); try { localStorage.setItem("mmo.homeHint", "1"); } catch { /* private window */ } };
+	const [detent, setDetent] = useState<Detent>("peek");
+	// the height the sheet was pulled to, remembered per browser
+	const [sheetPx, setSheetPxState] = useState<number | null>(() => { try { const v = Number(localStorage.getItem("mmo.sheet")); return v > 0 ? v : null; } catch { return null; } });
+	const [sheetAt, setSheetAtState] = useState<number | null>(() => { try { const v = localStorage.getItem("mmo.sheet.x"); return v === null ? null : Number(v); } catch { return null; } });
+	const setSheetAt = (x: number) => { setSheetAtState(x); try { localStorage.setItem("mmo.sheet.x", x.toFixed(4)); } catch { /* private window */ } };
+	const setSheetPx = (h: number) => { setSheetPxState(h); try { localStorage.setItem("mmo.sheet", String(Math.round(h))); } catch { /* private window */ } };
+	const [bag, setBag] = useState(false);
+	const [bagPart, setBagPart] = useState<"mine" | "market" | "orders">("mine");
+	const [atlasPage, setAtlasPage] = useState(false);
+	const [helpArticle, setHelpArticle] = useState<string | null>(null);
+	const [pad, setPadState] = useState<"off" | "left" | "right">(() => { try { const v = localStorage.getItem("mmo.pad"); return v === "off" || v === "left" || v === "right" ? v : isTouch() ? "right" : "off"; } catch { return "right"; } });
+	const setPad = (v: "off" | "left" | "right") => { setPadState(v); try { localStorage.setItem("mmo.pad", v); } catch { /* private window */ } };
+	const [toast, setToast] = useState<{ key: string; from: string } | null>(null);
+	useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 6000); return () => clearTimeout(t); }, [toast]);
 	// Text, established 2D or optional 3D: remembered per browser. The old text-only preference migrates forward.
 	// coming and going in the log ("… geht nach ost.", "… kommt an."): hidden unless asked for, remembered in the browser
 	const [comings, setComingsState] = useState(() => { try { return localStorage.getItem("mmo.comings") === "1"; } catch { return false; } });
@@ -506,6 +511,8 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const [nameMenu, setNameMenu] = useState<null | { name: string; left: number; top: number }>(null);
 	const setMapMode = (mode: MapMode) => { setMenu(null); setMapModeState(mode); try { localStorage.setItem("mmo.renderer", mode); localStorage.setItem("mmo.textOnly", mode === "text" ? "1" : "0"); } catch { /* private window */ } };
 	const ws = useRef<WebSocket | null>(null);
+	const stopWalk = useRef(() => {});
+	const openLineRef = useRef(() => {});
 	// the end-to-end keys of the chat (client/useChat.ts): its frames go through the same socket
 	const sendFrame = useCallback((f: unknown) => { const s = ws.current; if (!s || s.readyState !== WebSocket.OPEN) return false; s.send(JSON.stringify(f)); return true; }, []);
 	const keys = useChat(sendFrame);
@@ -517,10 +524,13 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const sealAndSend = useCallback(async (conv: { kind: "dm" | "group"; id: string; title: string }, text: string) => {
 		try {
 			const missing = await keysRef.current.sendText(conv, text);
-			if (missing.length) setNotice({ text: `Ohne eingerichteten Chat lesen nicht mit: ${missing.join(", ")}.`, error: false, at: Date.now() });
+			if (missing.length) setNotice({ text: `${missing.join(", ")} hat den Chat noch nicht eingerichtet. Die Nachricht kommt an, sobald das geschehen ist.`, error: false, at: Date.now() });
 		} catch (e) { setNotice({ text: (e as Error).message, error: true, at: Date.now() }); }
 	}, []);
-	const logEnd = useRef<HTMLDivElement>(null);
+	const logBox = useRef<HTMLDivElement>(null);
+	// the log follows while one stands at its end; who reads further up stays there and is told of what is new
+	const atEnd = useRef(true);
+	const [behind, setBehind] = useState(false);
 	const input = useRef<HTMLInputElement>(null);
 	const me = hello?.me.charId ?? "";
 	// the own figure's walk: drawn ahead of the server, matched by step numbers (client/walk.ts)
@@ -531,6 +541,8 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	useEffect(() => { if (!worldTime || worldTime.v.paused) return; const t = setInterval(() => setTick((n) => n + 1), 1000); return () => clearInterval(t); }, [worldTime]);
 	const meRef = useRef("");
 	meRef.current = me;
+	const nameRef = useRef(account.name), detentRef = useRef(detent);
+	nameRef.current = account.name; detentRef.current = detent;
 	/** Draws the own figure at `at` (where the walk puts it). */
 	const showOwn = useCallback((at: { x: number; y: number } | null) => {
 		if (!at) return;
@@ -552,7 +564,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				if (f.t === "hello") {
 					// the server runs a newer build than this page: reload, so the page understands what it is sent
 					if (pageBuild && f.build && f.build !== pageBuild) { setStale(true); setTimeout(() => location.reload(), 1500); return; }
-					retry = 0; setHello(f); setWorldTime(f.worldTime ? { v: f.worldTime, at: Date.now() } : null);
+					stopWalk.current(); retry = 0; setHello(f); setWorldTime(f.worldTime ? { v: f.worldTime, at: Date.now() } : null);
 					for (const t of goneTimers.values()) clearTimeout(t); goneTimers.clear();
 					meRef.current = f.me.charId;
 					{ const mine = f.chars.find((c) => c.charId === f.me.charId); if (mine) walker.current.reset(mine); } fuels = f.world.fuels;
@@ -593,7 +605,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 					const h = f.m.help;
 					setCmdHelp((old) => (h.topic ? { intro: old?.intro, commands: old?.commands, topics: old?.topics, topic: h.topic } : h));
 					setHelp(false);
-					append({ ...f.m, text: h.topic ? `Hilfe zu „${h.topic.key}“ im Fenster links.` : "Die Befehle stehen im Fenster links (help)." });
+					append({ ...f.m, text: h.topic ? `Hilfe zu „${h.topic.key}“ ist geöffnet.` : "Die Befehle sind geöffnet (help)." });
 				}
 				else if (f.t === "msg") { if (f.m.kind === "error") putBack(); append(f.m); if (tabRef.current !== "log" && (f.m.kind === "error" || f.m.kind === "info")) setNotice({ text: f.m.text, error: f.m.kind === "error", at: Date.now() }); }
 				else if (f.t === "chatme" || f.t === "chatkeys") keysRef.current.onFrame(f);
@@ -601,11 +613,11 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				else if (f.t === "chat") {
 					keysRef.current.onFrame(f);
 					setTalks((t) => { const n = addMsg(t, f.m, tabRef.current); return tabRef.current === keyOf(f.m.conv) ? readTalk(n, tabRef.current) : n; });
-					setHiddenTalks((h) => { const k = keyOf(f.m.conv); if (!h.has(k)) return h; const n = new Set(h); n.delete(k); return n; });
+					if (f.m.from && f.m.from !== nameRef.current && (tabRef.current !== keyOf(f.m.conv) || detentRef.current === "peek")) setToast({ key: keyOf(f.m.conv), from: f.m.conv.kind === "group" ? `# ${f.m.conv.title}` : f.m.from });
 				}
 				else if (f.t === "chats") setChatState(f.state);
 				else if (f.t === "chatopen") {
-					setTalks((t) => openTalk(t, f.conv)); setHiddenTalks((h) => { const n = new Set(h); n.delete(keyOf(f.conv)); return n; }); setTab(keyOf(f.conv));
+					setTalks((t) => openTalk(t, f.conv)); setTab(keyOf(f.conv));
 					const p = pendingChat.current;
 					if (p && p.name.toLowerCase() === f.conv.title.toLowerCase()) { pendingChat.current = null; void sealAndSend(f.conv, p.text); }
 				}
@@ -621,7 +633,8 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		return () => { dead = true; clearTimeout(timer); for (const t of goneTimers.values()) clearTimeout(t); ws.current?.close(); };
 	}, [append, onAccount, setTab]);
 
-	useEffect(() => { logEnd.current?.scrollIntoView({ block: "end" }); }, [log]);
+	useEffect(() => { const b = logBox.current; if (!b) return; if (atEnd.current) b.scrollTop = b.scrollHeight; else setBehind(true); }, [log, bag, tab, detent]);
+	const toLogEnd = () => { const b = logBox.current; if (b) b.scrollTop = b.scrollHeight; atEnd.current = true; setBehind(false); };
 
 	const send = useCallback((text: string, echo = true) => {
 		const s = ws.current;
@@ -636,20 +649,24 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 
 	/** One step of the own figure: by `d`, or toward a tapped cell (the longer axis first; if that cell is not free, the
 	 *  other axis). It is drawn at once and sent with its number; a cell that is not free is not walked into. */
-	const step = useCallback((d: [number, number] | { x: number; y: number }) => {
+	const freeCells = useCallback(() => {
 		const { chars, objs, hello } = seen.current;
-		const from = walker.current.shown;
-		if (!from || !hello) return;
-		const s = ws.current;
-		if (!s || s.readyState !== WebSocket.OPEN) return;
+		if (!hello) return () => false;
 		// walkable and nobody standing there (the server checks again and answers either way); at a door (an exit's cell or
 		// one next to it) others do not block: one walks through them, as the server lets one (engine/occupancy.ts)
 		const exits = [...objs.values()].filter((o) => o.kind === "exit" && o.location === hello.room.roomId);
 		const passage = (c: { x: number; y: number }) => exits.some((e) => Math.max(Math.abs(e.x - c.x), Math.abs(e.y - c.y)) <= 1);
 		const taken = new Set([...[...chars.values()].filter((c) => c.charId !== meRef.current && !passage(c)), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)].map((c) => `${c.x},${c.y}`));
 		// sites and buildings cover their cells: nobody walks into them (server: occupancy.ts blockedIn)
-		for (const o of objs.values()) if ((o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field") && o.location === hello.room.roomId) for (let dy = 0; dy < (o.h ?? 1); dy++) for (let dx = 0; dx < (o.w ?? 1); dx++) taken.add(`${o.x + dx},${o.y + dy}`);
-		const free = (x: number, y: number) => !!hello.world.tiles[hello.room.ground[y]?.[x] ?? ""]?.walk && !taken.has(`${x},${y}`);
+		for (const o of objs.values()) if ((o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field" || (o.kind === "scenery" && !o.through)) && o.location === hello.room.roomId) for (let dy = 0; dy < (o.h ?? 1); dy++) for (let dx = 0; dx < (o.w ?? 1); dx++) taken.add(`${o.x + dx},${o.y + dy}`);
+		return (x: number, y: number) => !!hello.world.tiles[hello.room.ground[y]?.[x] ?? ""]?.walk && !taken.has(`${x},${y}`);
+	}, []);
+	const step = useCallback((d: [number, number] | { x: number; y: number }) => {
+		const from = walker.current.shown;
+		if (!from || !seen.current.hello) return;
+		const s = ws.current;
+		if (!s || s.readyState !== WebSocket.OPEN) return;
+		const free = freeCells();
 		let moves: Array<[number, number]>;
 		if (Array.isArray(d)) moves = [d];
 		else {
@@ -664,7 +681,36 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		if (!st) return;
 		s.send(JSON.stringify({ t: "step", seq: st.seq, dx: st.dx, dy: st.dy }));
 		showOwn(walker.current.shown);
-	}, [showOwn]);
+	}, [showOwn, freeCells]);
+
+	// a tap on a touch screen walks the whole way: steps like a held key's, so the figure is seen walking and a new tap or the
+	// cross ends it at once. (`move` would set it down at the end in one go.) The way is searched anew at every step.
+	const [walkGoal, setWalkGoal] = useState<{ x: number; y: number } | null>(null);
+	const walkTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+	stopWalk.current = () => { if (walkTimer.current) clearInterval(walkTimer.current); walkTimer.current = null; setWalkGoal(null); };
+	const walkTo = useCallback((goal: { x: number; y: number }) => {
+		stopWalk.current();
+		const start = walker.current.shown;
+		if (!start) return;
+		// on something that stands there one cannot stand: the nearest cell a way leads to, the one beside it
+		const free = freeCells(), cells: Array<{ x: number; y: number }> = [goal];
+		for (let r = 1; r <= 6; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) === r) cells.push({ x: goal.x + dx, y: goal.y + dy });
+		const here = (c: { x: number; y: number }) => c.x === start.x && c.y === start.y;
+		const end = free(goal.x, goal.y) ? goal : cells.find((c) => (free(c.x, c.y) || here(c)) && (here(c) || nextStep(free, start, c)));
+		const way = () => { const from = walker.current.shown; return from && end ? nextStep(freeCells(), from, end) : null; };
+		if (end && here(end)) return;
+		if (!way()) { if (!here(goal)) append({ kind: "error", text: "Dorthin führt kein Weg.", from: "", at: Date.now() }); return; }
+		setWalkGoal(end!);
+		const tick = () => {
+			const go = way();
+			if (!go) return stopWalk.current();
+			if (walker.current.ahead >= MAX_AHEAD) return; // the answers come first
+			step(go);
+		};
+		tick();
+		walkTimer.current = setInterval(tick, WALK_MS);
+	}, [freeCells, step, append]);
+	useEffect(() => () => stopWalk.current(), []);
 
 	// steps without any answer for a while are given up: the figure goes to the server's place
 	useEffect(() => { const t = setInterval(() => showOwn(walker.current.tick(Date.now())), 500); return () => clearInterval(t); }, [showOwn]);
@@ -738,12 +784,24 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		const item = [...objs.values()].find((o) => o.kind === "item" && o.location === hello.room.roomId && o.x === x && o.y === y);
 		if (item) fetching.current = { id: item.id, until: now + FETCH_MS };
 	}, [step, objs, hello]);
+	/** A tap of a finger: on a thing lying there, go and pick it up; on what stands there, its actions (a phone); else walk. */
+	const onTap = useCallback((x: number, y: number) => {
+		if (!isTouch() || !hello) return onCell(x, y);
+		const room = hello.room.roomId, hit = tapTarget({ x, y }, chars, objs, room, me), at = hit ?? { x, y };
+		const item = [...objs.values()].find((o) => o.kind === "item" && o.location === room && o.x === at.x && o.y === at.y);
+		if (item) { fetching.current = { id: item.id, until: Date.now() + FETCH_MS }; walkTo(at); return; }
+		// a fire out of reach: to it, "Hier möglich" then offers to feed it
+		const fire = [...objs.values()].find((o) => o.kind === "beacon" && o.location === room && o.x === at.x && o.y === at.y), own = chars.get(me);
+		if (fire && own && Math.max(Math.abs(fire.x - own.x), Math.abs(fire.y - own.y)) > 1) { walkTo(at); return; }
+		if (hit) { stopWalk.current(); setMenu({ x: at.x, y: at.y, left: 0, top: 0 }); return; }
+		walkTo({ x, y });
+	}, [hello, chars, objs, me, onCell, walkTo]);
 	useEffect(() => {
 		const f = fetching.current, self = chars.get(me);
 		if (!f || !self || !hello) return;
 		const o = objs.get(f.id);
 		if (!o || o.location !== hello.room.roomId || Date.now() > f.until) { fetching.current = null; return; }
-		if (Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1) { fetching.current = null; pickUp(o); }
+		if (Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1) { fetching.current = null; stopWalk.current(); pickUp(o); }
 	}, [chars, objs, me, hello, pickUp]);
 
 	// an arrow key in the command line goes back to the map and walks: up and down always, left and right while the line is
@@ -763,18 +821,16 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		const dirOf = (k: string) => ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[k];
 		const onKey = (e: KeyboardEvent) => {
 			if (document.activeElement === input.current || ["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) return;
-			if (e.key === "Enter") { e.preventDefault(); release(); input.current?.focus(); return; }
+			if (e.key === "Enter") { e.preventDefault(); release(); openLineRef.current(); return; }
 			if (e.key === " ") { e.preventDefault(); if (!e.repeat) action(); return; }
 			// typing text: the first letter goes to the command line, which takes the rest (a shortcut with Ctrl, Alt or
 			// Cmd stays the browser's)
 			if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
 				e.preventDefault();
 				release();
-				const el = input.current;
-				if (!el) return;
 				setLine((l) => l + e.key);
-				el.focus();
-				requestAnimationFrame(() => { const n = el.value.length; el.setSelectionRange(n, n); });
+				openLineRef.current();
+				requestAnimationFrame(() => { const el = input.current; if (el) { const n = el.value.length; el.setSelectionRange(n, n); } });
 				return;
 			}
 			const d = dirOf(e.key);
@@ -790,97 +846,189 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 
 	const logout = async () => { await post("/api/logout").catch(() => {}); await forgetDeviceKeys(); onAccount(null); };
 
-	return (
-		<div className="game">
-			<header className="bar">
-				<span className="title">{hello?.world.title ?? "Leuchtfeuer"}</span>
-				<button className="help-btn" onClick={() => { setCmdHelp(null); setHelp((h) => !h); }} aria-expanded={help} aria-label="Hilfe / Help" title="Hilfe / Help">?</button>
-				<span className={`live${live ? " on" : ""}`} title={live ? "verbunden" : "getrennt"} />
-				<span>{hello?.room.name ?? ""}</span>
-				{worldTime && <span className="worldtime" title="Weltzeit (Tag und Uhrzeit in der Welt)">{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}</span>}
-				<span className="spacer" />
-				<span>{account.name}</span>
-				{account.guest && <span className="badge">Gast</span>}
-				{account.guest && <button onClick={() => setPanel(panel === "account" ? null : "account")} title="Registrieren, um den Fortschritt zu behalten"><span className="long">Registrieren, um den Fortschritt zu behalten</span><span className="short">Registrieren</span></button>}
-				<button className="bar-more" onClick={() => setMore((m) => !m)} aria-expanded={more} aria-label="Darstellung und Abmelden">⋯</button>
-				{more && <div className="menu-backdrop bar-backdrop" onClick={() => setMore(false)} />}
-				<div className={`bar-tools${more ? " open" : ""}`}>
-					<div className="renderer-tabs" role="group" aria-label="Kartendarstellung">
-						{(["text", "2d", "3d"] as const).map((mode) => <button key={mode} onClick={() => { setMore(false); setMapMode(mode); }} aria-pressed={mapMode === mode}>{mode === "text" ? "Text" : mode.toUpperCase()}</button>)}
-					</div>
-					{controls}
-					{account.admin && <button onClick={() => { setMore(false); setPanel(panel === "admin" ? null : "admin"); }} aria-pressed={panel === "admin"}>Admin</button>}
-					<button onClick={() => { setMore(false); if (account.guest) setPanel("leave"); else void logout(); }}>Abmelden</button>
-				</div>
-			</header>
-			{help && <HelpPanel onClose={() => setHelp(false)} />}
-			{cmdHelp && !help && <CommandHelp view={cmdHelp} onTopic={(key) => (key ? send(`help ${key}`, false) : setCmdHelp((old) => (old ? { ...old, topic: undefined } : old)))} onArticles={() => { setCmdHelp(null); setHelp(true); }} onClose={() => setCmdHelp(null)} />}
-			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
-			<div className={`main${mapMode === "text" ? " text-only" : ""}`}>
-				{atlas && atlas.rooms.length > 1 && <Atlas atlas={atlas} state={atlasState} />}
-				{mapMode === "text" ? null : hello ? (
-					<MapRenderer mode={mapMode} world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog} onTurn={onTurn}
-						controls={<TouchPad hold={(d) => { input.current?.blur(); setMenu(null); hold(d); }} release={release} action={action} />}
-						onCell={(x, y) => { input.current?.blur(); setMenu(null); onCell(x, y); }}
-						onMenu={(x, y, left, top) => { input.current?.blur(); setMenu({ x, y, left, top }); }}
-						onFail={(why) => { setMapMode(mapMode === "3d" ? "2d" : "text"); append({ kind: "error", text: `${why} ${mapMode === "3d" ? "Die 2D-Karte bleibt aktiv." : "Das Spiel läuft als Text weiter."}`, from: "", at: Date.now() }); }} />
-				) : <div className="map"><p className="muted">Verbinde …</p></div>}
-				{menu && hello && <CellMenu at={menu} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setOfferTo(name); }}
-					chat={{ talk: (name) => send(`chat ${name}`, false), invite: (name, g) => send(`gruppe lade ${name} in ${g}`), groups: account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? []) }} />}
-				{nameMenu && <NameMenu at={nameMenu} name={nameMenu.name} groups={account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? [])} close={() => setNameMenu(null)}
-					talk={() => send(`chat ${nameMenu.name}`, false)} invite={(g) => send(`gruppe lade ${nameMenu.name} in ${g}`)} ignore={() => send(`ignoriere ${nameMenu.name}`)} />}
-				<aside className="side">
-					{panel === "account" && (
-						<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a) => { setPanel(null); onAccount(a); }} /></div>
-					)}
-					{panel === "admin" && <AdminPanel onClose={() => setPanel(null)} />}
-					{panel === "leave" && (
-						<div className="panel">
-							<h2>Als Gast abmelden?</h2>
-							<p style={{ margin: "0 0 10px", fontSize: 13 }}>Ohne Registrierung kommst du nicht zu dieser Figur zurück; sie verfällt nach einigen Tagen.</p>
-							<div style={{ display: "flex", gap: 8 }}><button onClick={() => setPanel("account")}>Erst registrieren</button><button onClick={() => void logout()}>Trotzdem abmelden</button></div>
-						</div>
-					)}
-					{!panel && (
-						<div className="side-top">
-							<Things objs={objs} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} send={send} pick={pickUp} />
-							{trade && hello && <TradePanel trade={trade} chars={chars} objs={objs} me={me} guest={account.guest} offerTo={offerTo} setOfferTo={setOfferTo} send={send} />}
-						</div>
-					)}
-					<div className="log-head">
-						<ChatTabs talks={talks} hidden={hiddenTalks} tab={tab} setTab={setTab} state={chatState} close={(k) => { setHiddenTalks((h) => new Set(h).add(k)); if (tab === k) setTab("log"); }} />
-						{tab === "log" && <label className="log-filter"><input type="checkbox" checked={comings} onChange={(e) => setComings(e.target.checked)} /> Kommen und Gehen</label>}
-					</div>
-					{tab === "log" ? (
-						<div className="log" role="log" aria-live="polite">
-							{(comings ? log : log.filter((l) => !isComing(l))).map((l, i) => <div key={i} className={`${l.kind}${"toMe" in l && l.toMe ? " to-me" : ""}`}><LogText l={l} self={chars.get(me)?.name ?? account.name} onName={(name, left, top) => setNameMenu({ name, left, top })} />{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
-							<div ref={logEnd} />
-						</div>
-					) : tab === "chats" || !talks.get(tab) ? (
-						<ChatOverview state={chatState} guest={account.guest} talks={talks} open={setTab} send={send} keys={keys} />
-					) : <TalkView talk={talks.get(tab)!} keys={keys} />}
-					{tab !== "log" && notice && Date.now() - notice.at < 10_000 && <p className={`chat-notice${notice.error ? " error" : ""}`} role="status">{notice.text}</p>}
-					<form className="cmd" onSubmit={(e) => {
-						e.preventDefault(); const t = line.trim(); if (!t) return;
-						const talk = talks.get(tab);
-						// in a talk, what is typed is a message of the talk (sealed here); elsewhere a command or a sentence, but
-						// "chat <name> <text>" and "gruppe <name> <text>" are sealed here too: no chat text reaches the server plain
-						const dm = /^(?:chat|tell|whisper|flüstere|fluestere|flüster)\s+(\S+)\s+([\s\S]+)$/i.exec(t);
-						const grp = /^(?:gruppe|group)\s+(\S+)\s+([\s\S]+)$/i.exec(t);
-						const g = grp && chatState?.groups.find((x) => x.name.toLowerCase() === grp[1]!.toLowerCase());
-						if (talk) void sealAndSend(talk.conv, t);
-						else if (dm) { pendingChat.current = { name: dm[1]!, text: dm[2]! }; send(`chat ${dm[1]}`, false); }
-						else if (g) { const conv = { kind: "group" as const, id: g.groupId, title: g.name }; setTalks((x) => openTalk(x, conv)); setTab(keyOf(conv)); void sealAndSend(conv, grp![2]!); }
-						else send(t);
-						setLine("");
-					}}>
-						<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={onCommandKey} onFocus={() => release()} placeholder={talks.get(tab) ? `Nachricht an ${talks.get(tab)!.conv.kind === "group" ? `die Gruppe ${talks.get(tab)!.conv.title}` : talks.get(tab)!.conv.title} …` : "Einfach lostippen: Befehl oder Satz, z. B. look, say Hallo · Esc oder Pfeiltaste: zurück zur Karte"} maxLength={300} aria-label={talks.get(tab) ? "Nachricht" : "Befehl"} />
-						<button className="primary">Senden</button>
-					</form>
-					<About />
-				</aside>
+	// a phone's layers: the back gesture closes them, the topmost first
+	useBack(help, () => setHelp(false));
+	useBack(!!cmdHelp && !help, () => setCmdHelp(null));
+	useBack(more, () => setMore(false));
+	useBack(atlasPage, () => setAtlasPage(false));
+	useBack(!!panel, () => setPanel(null));
+
+	/** The sheet's tabs: the bag, the log, the chats. */
+	const pane: "bag" | "log" | "chats" = bag ? "bag" : tab === "log" ? "log" : "chats";
+	const openPane = (k: "bag" | "log" | "chats") => {
+		setBag(k === "bag");
+		if (k !== "bag") setTab(k);
+		if (detent === "peek") setDetent("half");
+	};
+	const talkTab = !bag && tab !== "log" && tab !== "chats" && !!talks.get(tab);
+	// a talk opens over the whole height: there is a keyboard to make room for
+	useEffect(() => { if (tab !== "log" && tab !== "chats") { setBag(false); setDetent("full"); } }, [tab]);
+	const unreadAll = [...talks.values()].reduce((n, t) => n + t.unread, 0) + (chatState?.invites.length ?? 0) + (chatState?.waiting.reduce((n, w) => n + w.count, 0) ?? 0);
+	const shownLog = comings ? log : log.filter((l) => !isComing(l));
+	const lastLine = shownLog.at(-1);
+
+	const self = chars.get(me);
+	const openLine = () => { if (input.current) return input.current.focus(); setBag(false); setTab("log"); setDetent("half"); requestAnimationFrame(() => input.current?.focus()); };
+	openLineRef.current = openLine;
+
+	const mapView = mapMode === "text" ? null : hello ? (
+		<MapRenderer mode={mapMode} world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog} onTurn={onTurn}
+			fill goal={walkGoal} insetBottom={detent === "peek" ? detentPx("peek", window.innerHeight) : Math.min(sheetPx ?? detentPx("half", window.innerHeight), window.innerHeight * 0.7)}
+			controls={pad !== "off" ? <TouchPad hold={(d) => { input.current?.blur(); stopWalk.current(); setMenu(null); hold(d); }} release={release} action={action} noAction /> : undefined}
+			onCell={(x, y) => { input.current?.blur(); setMenu(null); if (detent !== "peek") setDetent("peek"); else onTap(x, y); }}
+			onMenu={(x, y, left, top) => { input.current?.blur(); stopWalk.current(); setMenu({ x, y, left, top }); }}
+			onFail={(why) => { setMapMode(mapMode === "3d" ? "2d" : "text"); append({ kind: "error", text: `${why} ${mapMode === "3d" ? "Die 2D-Karte bleibt aktiv." : "Das Spiel läuft als Text weiter."}`, from: "", at: Date.now() }); }} />
+	) : <div className="map"><p className="muted">Verbinde …</p></div>;
+	const menus = <>
+		{menu && hello && <CellMenu at={menu} wild={wildHere(hello.world.decor, hello.room.decor)} sheet onWalk={walkTo} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
+			chat={{ talk: (name) => send(`chat ${name}`, false), invite: (name, g) => send(`gruppe lade ${name} in ${g}`), groups: account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? []) }} />}
+		{nameMenu && <NameMenu at={nameMenu} sheet name={nameMenu.name} groups={account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? [])} close={() => setNameMenu(null)}
+			talk={() => send(`chat ${nameMenu.name}`, false)} invite={(g) => send(`gruppe lade ${nameMenu.name} in ${g}`)} ignore={() => send(`ignoriere ${nameMenu.name}`)} />}
+	</>;
+	const panels = <>
+		{panel === "account" && (
+			<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a) => { setPanel(null); onAccount(a); }} /></div>
+		)}
+		{panel === "admin" && <AdminPanel onClose={() => setPanel(null)} />}
+		{panel === "alias" && <div className="panel"><h2>Name im Spiel</h2><AliasForm account={account} onDone={(a) => { setPanel(null); onAccount(a); }} /></div>}
+		{panel === "leave" && (
+			<div className="panel">
+				<h2>Als Gast abmelden?</h2>
+				<p style={{ margin: "0 0 10px", fontSize: 13 }}>Ohne Registrierung kommst du nicht zu dieser Figur zurück; sie verfällt nach einigen Tagen.</p>
+				<div style={{ display: "flex", gap: 8 }}><button onClick={() => setPanel("account")}>Erst registrieren</button><button onClick={() => void logout()}>Trotzdem abmelden</button></div>
 			</div>
-			<SystemBar />
+		)}
+	</>;
+	const hereBar = hereEntries({ chars, objs, self: chars.get(me), room: hello?.room.roomId ?? "", me, plans: hello?.world.plans ?? [], guest: account.guest, fuel: fuelIn(objs, me), wild: hello ? wildHere(hello.world.decor, hello.room.decor) : false });
+	const mineView = <Things objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildHere(hello?.world.decor, hello?.room.decor)} send={send} pick={pickUp} />;
+	const marketView = <>
+		{trade && hello && <TradePanel trade={trade} chars={chars} objs={objs} me={me} guest={account.guest} offerTo={offerTo} setOfferTo={setOfferTo} send={send} />}
+		{!!trade && !trade.orders && !trade.listings && <p className="muted bag-note">Das Marktbrett und die Auftragstafel stehen in den Häfen und Dörfern. Stell dich daneben, dann erscheinen sie hier. Tauschen geht überall, wo jemand neben dir steht.</p>}
+	</>;
+	const ordersHere = [...objs.values()].filter((o) => o.kind === "site" && o.location === hello?.room.roomId).reduce((n, o) => n + (o.orders?.length ?? 0), 0);
+	const logFilter = <label className="log-filter"><input type="checkbox" checked={comings} onChange={(e) => setComings(e.target.checked)} /> Kommen und Gehen</label>;
+	const logView = (
+		<div className="log" role="log" aria-live="polite" ref={logBox} onScroll={(e) => { const b = e.currentTarget; atEnd.current = b.scrollHeight - b.scrollTop - b.clientHeight < 24; if (atEnd.current) setBehind(false); }}>
+			{shownLog.map((l, i) => <div key={i} className={`${l.kind}${"toMe" in l && l.toMe ? " to-me" : ""}`}><LogText l={l} self={chars.get(me)?.name ?? account.name} onName={(name, left, top) => setNameMenu({ name, left, top })} />{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
+		</div>
+	);
+	const chatView = tab === "chats" || !talks.get(tab) ? (
+		<ChatOverview state={chatState} guest={account.guest} talks={talks} open={setTab} send={send} keys={keys} />
+	) : <TalkView talk={talks.get(tab)!} keys={keys} />;
+	const noticeView = tab !== "log" && notice && Date.now() - notice.at < 10_000 && <p className={`chat-notice${notice.error ? " error" : ""}`} role="status">{notice.text}</p>;
+	const talkHere = talks.get(tab);
+	const commandForm = (
+		<form className="cmd" onSubmit={(e) => {
+			e.preventDefault(); const t = line.trim(); if (!t) return;
+			const talk = talks.get(tab);
+			// in a talk, what is typed is a message of the talk (sealed here); elsewhere a command or a sentence, but
+			// "chat <name> <text>" and "gruppe <name> <text>" are sealed here too: no chat text reaches the server plain
+			const dm = /^(?:chat|tell|whisper|flüstere|fluestere|flüster)\s+(\S+)\s+([\s\S]+)$/i.exec(t);
+			const grp = /^(?:gruppe|group)\s+(\S+)\s+([\s\S]+)$/i.exec(t);
+			const g = grp && chatState?.groups.find((x) => x.name.toLowerCase() === grp[1]!.toLowerCase());
+			if (talk) void sealAndSend(talk.conv, t);
+			else if (dm) { pendingChat.current = { name: dm[1]!, text: dm[2]! }; send(`chat ${dm[1]}`, false); }
+			else if (g) { const conv = { kind: "group" as const, id: g.groupId, title: g.name }; setTalks((x) => openTalk(x, conv)); setTab(keyOf(conv)); void sealAndSend(conv, grp![2]!); }
+			else send(t);
+			setLine("");
+		}}>
+			<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={onCommandKey} onFocus={() => release()} placeholder={talkHere ? `Nachricht an ${talkHere.conv.kind === "group" ? `die Gruppe ${talkHere.conv.title}` : talkHere.conv.title} …` : "Befehl oder Satz …"} maxLength={300} aria-label={talkHere ? "Nachricht" : "Befehl"} />
+			<button className="primary">Senden</button>
+		</form>
+	);
+	const helpView = <>
+		{help && <HelpPanel onClose={() => { setHelp(false); setHelpArticle(null); }} article={helpArticle} onCommands={() => send("help", false)} />}
+		{cmdHelp && !help && <CommandHelp view={cmdHelp} onTopic={(key) => (key ? send(`help ${key}`, false) : setCmdHelp((old) => (old ? { ...old, topic: undefined } : old)))} onArticles={() => { setCmdHelp(null); setHelp(true); }} onClose={() => setCmdHelp(null)}
+			onInsert={(c) => { setCmdHelp(null); setLine(`${c} `); setBag(false); setTab("log"); if (detent === "peek") setDetent("half"); requestAnimationFrame(() => input.current?.focus()); }} />}
+	</>;
+	const rendererTabs = (
+		<div className="renderer-tabs" role="group" aria-label="Kartendarstellung">
+			{(["text", "2d", "3d"] as const).map((mode) => <button key={mode} onClick={() => { setMore(false); setMapMode(mode); }} aria-pressed={mapMode === mode}>{mode === "text" ? "Text" : mode.toUpperCase()}</button>)}
+		</div>
+	);
+
+	const sheetBody = (
+		<>
+			{talkTab && detent !== "peek" ? (
+				<div className="talk-head"><button className="talk-back" onClick={() => setTab("chats")} aria-label="Zurück zu den Chats">←</button><strong>{talkHere!.conv.kind === "group" ? `# ${talkHere!.conv.title}` : talkHere!.conv.title}</strong></div>
+			) : (
+				<div className="sheet-tabs" role="tablist" aria-label="Tasche, Protokoll und Chats">
+					<button role="tab" aria-selected={pane === "bag"} onClick={() => openPane("bag")}>Tasche</button>
+					<button role="tab" aria-selected={pane === "log"} onClick={() => openPane("log")}>Protokoll</button>
+					<button role="tab" aria-selected={pane === "chats"} onClick={() => openPane("chats")}>Chats{unreadAll ? <span className="chat-count">{unreadAll}</span> : null}</button>
+				</div>
+			)}
+			{detent === "peek" && mapMode !== "text" ? <button className="sheet-peek" onClick={() => openPane("log")}>{lastLine?.text ?? ""}</button> : (
+				<div className="sheet-body">
+					{pane === "bag" ? (
+						<>
+							<div className="bag-parts" role="tablist" aria-label="Tasche">
+								{([["mine", "Bei dir"], ["market", "Markt"], ["orders", "Aushang"]] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={bagPart === k} onClick={() => setBagPart(k)}>{l}{k === "market" && trade?.offersIn.length ? <span className="chat-count">{trade.offersIn.length}</span> : k === "orders" && ordersHere ? <span className="chat-count">{ordersHere}</span> : null}</button>)}
+							</div>
+							<div className="sheet-scroll">{bagPart === "mine" ? mineView : bagPart === "market" ? marketView : <SiteOrders objs={objs} self={self} room={hello?.room.roomId ?? ""} me={me} send={send} walk={walkTo} />}</div>
+						</>
+					) : pane === "log" ? (
+						<>
+							{logFilter}
+							{logView}
+							{behind && <button className="log-new" onClick={toLogEnd}>Neue Meldungen</button>}
+							<div className="quick">{["look", "who", "inventory", "time", "reputation"].map((c) => <button key={c} onClick={() => send(c)}>{c}</button>)}</div>
+							{commandForm}
+						</>
+					) : (
+						<>
+							{chatView}
+							{noticeView}
+							{talkTab && commandForm}
+						</>
+					)}
+				</div>
+			)}
+		</>
+	);
+	return (
+		<div className="game-touch sheet">
+			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
+			<div className={`stage${pad === "left" ? " pad-left" : ""}${pad === "off" ? " pad-off" : ""}${detent !== "peek" ? " open" : ""}`}>
+				{mapView}
+				{atlas && atlas.rooms.length > 1 && !isTouch() && mapMode !== "text" && <Atlas atlas={atlas} state={atlasState} me={chars.get(me) ?? null} />}
+				<div className="hud">
+					<button className="hud-pill" onClick={() => setAtlasPage(true)} disabled={!atlas || atlas.rooms.length < 2} aria-label="Weltkarte öffnen">
+						<span className={`live${live ? " on" : ""}`} /><b>{hello?.room.name ?? ""}</b>
+						{worldTime && <small>{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}</small>}
+					</button>
+					<span className="spacer" />
+					<button className="hud-btn" onClick={() => { setCmdHelp(null); setHelp(true); }} aria-label="Hilfe / Help">?</button>
+					<button className="hud-btn" onClick={() => setMore(true)} aria-label="Darstellung und Abmelden">⋯</button>
+				</div>
+				{hereBar.length > 0 && mapMode !== "text" && <div className="here-bar" role="group" aria-label="Hier möglich">{hereBar.map((e) => <button key={e.line} onClick={() => send(e.line)}>{e.label}</button>)}</div>}
+				{homeHint && steps && <div className="home-hint"><span>Ohne Adressleiste spielen: <b>{steps.first}</b>, dann <b>{steps.then}</b>, und das Spiel von dort öffnen.</span>{install && <button className="primary home-install" onClick={() => { void install.prompt(); hideHomeHint(); }}>Installieren</button>}<button onClick={hideHomeHint} aria-label="Hinweis schließen">×</button></div>}
+				{toast && <button className="chat-toast" onClick={() => { setToast(null); setTab(toast.key); }}><b>{toast.from}</b><small>Neue Nachricht</small></button>}
+			</div>
+			{mapMode === "text" ? <section className="sheet text-page">{sheetBody}</section>
+				: <Sheet detent={detent} setDetent={setDetent} height={sheetPx} setHeight={setSheetPx} place={sheetAt} setPlace={setSheetAt}>{sheetBody}</Sheet>}
+			{menus}
+			{more && <>
+				<div className="menu-backdrop dim" onClick={() => setMore(false)} />
+				<div className="cell-menu action-sheet more-sheet" role="dialog" aria-label="Darstellung und Konto">
+					<div className="more-row"><span>Darstellung</span>{rendererTabs}</div>
+					<div className="more-row"><span>Aussehen</span>{controls}</div>
+					{mapMode !== "text" && <div className="more-row"><span>Steuerung</span><div className="renderer-tabs" role="group" aria-label="Steuerkreuz, Zoom und Drehen">{(["off", "left", "right"] as const).map((v) => <button key={v} aria-pressed={pad === v} onClick={() => setPad(v)}>{v === "off" ? "Aus" : v === "left" ? "Links" : "Rechts"}</button>)}</div></div>}
+					{canFullscreen() && <div className="more-row"><span>Vollbild im Querformat</span><div className="renderer-tabs" role="group" aria-label="Vollbild">{([true, false] as const).map((v) => <button key={String(v)} aria-pressed={fullscreen === v} onClick={() => setFullscreen(v)}>{v ? "An" : "Aus"}</button>)}</div></div>}
+					{steps && <div className="more-row"><span>Ohne Adressleiste: <b>{steps.first}</b>, dann <b>{steps.then}</b></span>{install && <button onClick={() => void install.prompt()}>Installieren</button>}</div>}
+					<div className="more-row"><span>{account.alias ?? account.name}{account.guest ? " · Gast" : ""}</span><span className="more-acts">
+						{!account.guest && <button onClick={() => { setMore(false); setPanel("alias"); }}>Alias</button>}
+						{account.guest && <button onClick={() => { setMore(false); setPanel("account"); }}>Registrieren</button>}
+						{account.admin && <button onClick={() => { setMore(false); setPanel("admin"); }}>Admin</button>}
+						<button onClick={() => { setMore(false); if (account.guest) setPanel("leave"); else void logout(); }}>Abmelden</button>
+					</span></div>
+					<SystemBar />
+					<About />
+				</div>
+			</>}
+			{panel && <div className="touch-page"><div className="touch-page-head"><button className="hud-btn" onClick={() => setPanel(null)} aria-label="Schließen">×</button></div>{panels}</div>}
+			{atlasPage && atlas && <div className="touch-page"><div className="touch-page-head"><strong>Weltkarte</strong><span className="spacer" /><button className="hud-btn" onClick={() => setAtlasPage(false)} aria-label="Schließen">×</button></div><Atlas atlas={atlas} state={atlasState} page me={chars.get(me) ?? null} /></div>}
+			{helpView}
 		</div>
 	);
 }

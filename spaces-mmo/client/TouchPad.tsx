@@ -11,7 +11,8 @@ const DIRS: Array<{ d: Dir; label: string; glyph: string; area: string }> = [
 	{ d: [0, 1], label: "Nach unten gehen", glyph: "▼", area: "down" },
 ];
 
-export function TouchPad({ hold, release, action }: { hold: (d: Dir) => void; release: (d?: Dir) => void; action: () => void }) {
+export function TouchPad({ hold, release, action, noAction = false }: { hold: (d: Dir) => void; release: (d?: Dir) => void; action: () => void;
+	/** A phone has the action as a button of its own that says what it does. */ noAction?: boolean }) {
 	return (
 		<div className="touchpad" role="group" aria-label="Steuerkreuz">
 			{DIRS.map(({ d, label, glyph, area }) => (
@@ -20,8 +21,8 @@ export function TouchPad({ hold, release, action }: { hold: (d: Dir) => void; re
 					onPointerUp={() => release(d)} onPointerCancel={() => release(d)} onLostPointerCapture={() => release(d)}
 					onContextMenu={(e) => e.preventDefault()}>{glyph}</button>
 			))}
-			<button type="button" className="touchpad-act" style={{ gridArea: "act" }} aria-label="Aufheben oder nachlegen (Leertaste)"
-				onPointerDown={(e) => { e.preventDefault(); action(); }} onContextMenu={(e) => e.preventDefault()}>✋</button>
+			{!noAction && <button type="button" className="touchpad-act" style={{ gridArea: "act" }} aria-label="Aufheben oder nachlegen (Leertaste)"
+				onPointerDown={(e) => { e.preventDefault(); action(); }} onContextMenu={(e) => e.preventDefault()}>✋</button>}
 		</div>
 	);
 }

@@ -3,7 +3,10 @@
 // sockets like in production. Player is a small client: HTTP with a cookie jar and the game WebSocket.
 import { spaceServer } from "../server/space-server.ts";
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
 import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import type { ClientFrame, ServerFrame } from "../server/gateway.ts";
@@ -16,12 +19,32 @@ import { worldNow } from "../server/engine/worldtime.ts";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 let seq = 0;
 
+/** `npm run test:durable`: an agent store per npc process, kept for the process that takes its place (the store has an
+ *  owner lock); `key` names the stack or region. Removed when the test process ends. */
+const npcStores = new Map<string, Array<ChildProcess | null>>();
+let durableDir: string | null = null;
+async function withAgentStore(key: string, start: (env: Record<string, string>) => Promise<ChildProcess>): Promise<ChildProcess> {
+	if (process.env.SPACES_MMO_DURABLE_MATRIX !== "1") return start({});
+	if (!durableDir) {
+		const dir = durableDir = mkdtempSync(join(tmpdir(), "mmo-durable-"));
+		process.once("exit", () => rmSync(dir, { recursive: true, force: true }));
+	}
+	const slots = npcStores.get(key) ?? [], free = slots.findIndex((c) => !c || c.exitCode !== null || c.signalCode !== null);
+	const slot = free < 0 ? slots.length : free;
+	slots[slot] = null; npcStores.set(key, slots);
+	return (slots[slot] = await start({ SPACES_MMO_DURABLE_STORE: join(durableDir, `${encodeURIComponent(key)}-${slot}.sqlite`) }));
+}
+
+/** Waits are for what must come, so they may be long: a machine shared with other work stalls for many seconds, and a wait
+ *  that is too short only says so. Only a failing test waits them out. */
+const PATIENCE = Number(process.env.STACK_PATIENCE ?? 3);
+
 function run(file: string, env: Record<string, string>, ready: (line: string) => boolean): Promise<ChildProcess> {
 	return new Promise((ok, fail) => {
 		const server = file === "server/space-host.ts" ? spaceServer() : null;
 		const child = spawn(server?.command ?? process.execPath, server?.args ?? ["--no-warnings", "--experimental-strip-types", file], { cwd: ROOT, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
 		let out = "", done = false;
-		const timer = setTimeout(() => { if (!done) { done = true; child.kill("SIGKILL"); fail(new Error(`${file} did not start:\n${out}`)); } }, 45_000);
+		const timer = setTimeout(() => { if (!done) { done = true; child.kill("SIGKILL"); fail(new Error(`${file} did not start:\n${out}`)); } }, 120_000);
 		const seen = (d: Buffer) => { out += d.toString(); if (!done && out.split("\n").some(ready)) { done = true; clearTimeout(timer); ok(child); } };
 		child.stdout?.on("data", seen);
 		child.stderr?.on("data", (d: Buffer) => { out += d.toString(); if (process.env.STACK_LOG) process.stderr.write(d); });
@@ -73,7 +96,7 @@ export async function startStack(o: { dataDir?: string; worldEnv?: Record<string
 			return c;
 		},
 		async npcProcess(env = {}) {
-			const c = await run("server/npc-host.ts", { SPACES_MMO_SPACE: world, ...o.worldEnv, ...env }, (l) => l.startsWith("[npc] ready"));
+			const c = await withAgentStore(base, (store) => run("server/npc-host.ts", { SPACES_MMO_SPACE: world, ...store, ...o.worldEnv, ...env }, (l) => l.startsWith("[npc] ready")));
 			procs.push(c);
 			return c;
 		},
@@ -91,7 +114,8 @@ export async function startStack(o: { dataDir?: string; worldEnv?: Record<string
 		kill: (c, sig) => stop(c, sig),
 		async close() { await Promise.all(procs.map((c) => stop(c))); conn.close(); await stop(spaceProc); await rm(`${base}-world.sock`, { force: true }); await rm(`${base}-accounts.sock`, { force: true }); },
 	};
-	for (let i = 0; i < (o.worlds ?? 1); i++) await stack.worldProcess();
+	// a world that does not start must not leave the space behind: its child would keep this test file alive for good
+	try { for (let i = 0; i < (o.worlds ?? 1); i++) await stack.worldProcess(); } catch (e) { await stack.close(); throw e; }
 	return stack;
 }
 
@@ -104,18 +128,20 @@ export async function startRegions(o: { worldEnv?: Record<string, string>; worke
 	const addr = (id: string) => `unix:${base}-${id}.sock`;
 	const list = ids.map((id) => `${id}=${addr(id)}`).join(",");
 	const procs: ChildProcess[] = [];
-	procs.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "accounts", SPACES_MMO_ACCOUNTS_LISTEN: accounts, SPACES_MMO_MEM: "1" }, (l) => l.startsWith("[space] ready")));
-	const store: Record<string, string> = o.dataDir ? { SPACES_MMO_DATA: o.dataDir, SPACES_MMO_MEM: "" } : { SPACES_MMO_MEM: "1" };
-	for (const id of ids) procs.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "world", SPACES_MMO_LISTEN: addr(id), SPACES_MMO_REGION: id, ...store }, (l) => l.startsWith("[space] ready")));
 	const env = (id: string) => ({ SPACES_MMO_SPACE: addr(id), SPACES_MMO_REGION: id, SPACES_MMO_REGIONS: list, ...o.worldEnv });
 	const workers = async () => { for (const id of ids) procs.push(await run("server/world-host.ts", env(id), (l) => l.startsWith("[world] ready"))); };
-	if (o.workers !== false) await workers();
+	try {
+		procs.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "accounts", SPACES_MMO_ACCOUNTS_LISTEN: accounts, SPACES_MMO_MEM: "1" }, (l) => l.startsWith("[space] ready")));
+		const store: Record<string, string> = o.dataDir ? { SPACES_MMO_DATA: o.dataDir, SPACES_MMO_MEM: "" } : { SPACES_MMO_MEM: "1" };
+		for (const id of ids) procs.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "world", SPACES_MMO_LISTEN: addr(id), SPACES_MMO_REGION: id, ...store }, (l) => l.startsWith("[space] ready")));
+		if (o.workers !== false) await workers();
+	} catch (e) { await Promise.all(procs.map((c) => stop(c))); throw e; }
 	const conns = new Map(ids.map((id) => [id, connectSpace(addr(id))]));
 	return {
 		ids, accounts, list, space: (id: string) => conns.get(id)!.space,
 		/** The world workers, one per region (started already unless `workers: false`). */
 		workers,
-		async npcProcess(id: string, extra: Record<string, string> = {}) { const c = await run("server/npc-host.ts", { ...env(id), ...extra }, (l) => l.startsWith("[npc] ready")); procs.push(c); return c; },
+		async npcProcess(id: string, extra: Record<string, string> = {}) { const c = await withAgentStore(`${base}-${id}`, (store) => run("server/npc-host.ts", { ...store, ...env(id), ...extra }, (l) => l.startsWith("[npc] ready"))); procs.push(c); return c; },
 		async close() { for (const c of conns.values()) c.close(); await Promise.all(procs.reverse().map((c) => stop(c))); for (const id of [...ids, "accounts"]) await rm(`${base}-${id}.sock`, { force: true }); },
 	};
 }
@@ -124,7 +150,7 @@ export async function startRegions(o: { worldEnv?: Record<string, string>; worke
 export async function startServer(o: Parameters<typeof startWeb>[0] & { stack?: Stack; dataDir?: string; worldEnv?: Record<string, string> } = {}) {
 	const { stack: given, dataDir, worldEnv, ...web } = o;
 	const stack = given ?? (await startStack({ ...(dataDir ? { dataDir } : {}), ...(worldEnv ? { worldEnv } : {}) }));
-	const srv = await startWeb({ port: 0, ...web, space: stack.world, accounts: stack.accounts });
+	const srv = await startWeb({ port: 0, ...web, space: stack.world, accounts: stack.accounts }).catch(async (e) => { if (!given) await stack.close(); throw e; });
 	return { ...srv, stack, async close() { await srv.close(); if (!given) await stack.close(); } };
 }
 
@@ -164,11 +190,11 @@ export class Player {
 
 	/** The first frame (from `from` on) that satisfies `pred`, waiting up to `ms`. */
 	async until(pred: (f: ServerFrame) => boolean, ms = 10_000, from = 0): Promise<ServerFrame> {
-		const end = Date.now() + ms;
+		const end = Date.now() + ms * PATIENCE;
 		for (;;) {
 			const f = this.frames.slice(from).find(pred);
 			if (f) return f;
-			if (Date.now() > end) throw new Error(`no matching frame within ${ms} ms; got ${JSON.stringify(this.frames.slice(-8))}`);
+			if (Date.now() > end) throw new Error(`no matching frame within ${ms} ms; said since: ${JSON.stringify(this.frames.slice(from).flatMap((x) => (x.t === "msg" ? [x.m.text] : [])).slice(-30))}; last: ${JSON.stringify(this.frames.slice(-3)).slice(0, 400)}`);
 			await new Promise((r) => setTimeout(r, 25));
 		}
 	}
@@ -181,7 +207,7 @@ export class Player {
 
 /** Waits until `check` returns something truthy (polling), or fails after `ms`. */
 export async function eventually<T>(check: () => Promise<T | null | undefined | false>, ms = 10_000, what = "condition"): Promise<T> {
-	const end = Date.now() + ms;
+	const end = Date.now() + ms * PATIENCE;
 	for (;;) {
 		const v = await check();
 		if (v) return v;

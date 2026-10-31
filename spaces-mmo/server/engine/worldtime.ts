@@ -1,4 +1,4 @@
-// The world's clock (docs/weltzeit.md): a persisted anchor and a rate, the world time derived from them, a calendar of
+// The world's clock (docs/weltzeit.en.md): a persisted anchor and a rate, the world time derived from them, a calendar of
 // 24-hour days without time zones, and the plans of NPCs in world hours. Pure: no space, no process, so the browser
 // can use it too (it only shows; the server decides).
 import type { WorldClockFields } from "../model.ts";

@@ -1,4 +1,4 @@
-// Inline functions in messages (Evennia's FuncParser, the basic form of docs/evennia-abbildung.md): a message written
+// Inline functions in messages (Evennia's FuncParser, the basic form of docs/evennia-abbildung.en.md): a message written
 // with an actor is rendered for each reader. German verbs are irregular, so $conj takes both forms.
 //   $you()          "du"/"Du" for the actor, the actor's name for everyone else
 //   $conj(a|b)      a for the actor ("hebst"), b for everyone else ("hebt")

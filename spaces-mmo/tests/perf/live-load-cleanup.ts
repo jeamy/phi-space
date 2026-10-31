@@ -2,8 +2,8 @@
 // him another NPC there: they got them from the traders, so the world keeps its coins), then their guest accounts are
 // taken; the world's own cleanup (world-host.ts, every SPACES_MMO_CLEANUP_MS) then removes each character with what it
 // carried, its cell and what it gave to the fires. Waits until every character is gone. With SPACES_MMO_REGIONS (the
-// world in regions, docs/welt-aufteilen.md) it does this in every region. Run where `phi-spaces` resolves and the spaces
-// are reachable, e.g. in the web container (docs/betrieb.md, "Lasttest"):
+// world in regions, docs/welt-aufteilen.en.md) it does this in every region. Run where `phi-spaces` resolves and the spaces
+// are reachable, e.g. in the web container (docs/betrieb.en.md, "Lasttest"):
 //
 //   node --experimental-strip-types live-load-cleanup.ts bots.json [tcp:127.0.0.1:3950]
 import { readFileSync } from "node:fs";

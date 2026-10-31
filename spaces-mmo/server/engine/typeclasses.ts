@@ -1,4 +1,4 @@
-// Typeclasses (docs/evennia-abbildung.md, "Grundsätze"): a typeclass is an entry type, its parents are the entry's
+// Typeclasses (docs/evennia-abbildung.en.md, "Grundsätze"): a typeclass is an entry type, its parents are the entry's
 // supertypes, fixed when the entry is written. Templates match subtypes, so `{ type: "Item" }` finds every coin and
 // every piece of driftwood. Behaviour is code in the world worker, keyed by these names; a world may add typeclasses
 // below the engine's, never above them.

@@ -40,6 +40,22 @@ export function useChat(wsSend: (f: unknown) => boolean) {
 	const state = useRef({ me, priv });
 	state.current = { me, priv };
 
+	/** Asks what this unlocked page can hand on to readers who have a key by now. */
+	const askWaiting = useCallback(() => { if (state.current.priv) wsSend({ t: "chatwaiting" }); }, [wsSend]);
+	/** Opens the own copy of each message and seals it for its reader who has a key now. A copy gone from the talk stays behind. */
+	const reseal = useCallback(async (items: Extract<ChatFrame, { t: "chatreseal" }>["items"]) => {
+		const { me: m, priv: k } = state.current;
+		if (!m || !k) return; // locked: askWaiting after the unlock
+		for (const it of items) {
+			const own = seen.current.find((x) => x.id === it.msgId && x.mine && x.box);
+			if (!own?.box) continue;
+			try {
+				const text = await openBox(k.priv, own.box, aad(it.msgId, m.accountId, m.accountId, it.groupId));
+				wsSend({ t: "chatdeliver", msgId: it.msgId, to: it.to, box: await sealFor(k.priv, k.pub, it.pub, text, aad(it.msgId, m.accountId, it.to, it.groupId)) });
+			} catch { /* sealed for an older key of this account: it cannot be handed on */ }
+		}
+	}, [wsSend]);
+
 	const fp = useCallback((pub: string) => { if (!fingerprints.has(pub)) void fingerprint(pub).then((f) => setFingerprints((m) => new Map(m).set(pub, f))); return fingerprints.get(pub) ?? ""; }, [fingerprints]);
 
 	/** Opens what it can of `msgs` with the key at hand. */
@@ -60,20 +76,23 @@ export function useChat(wsSend: (f: unknown) => boolean) {
 			setMe({ accountId: f.accountId, key: f.key });
 			// this device's key, if it is the account's current one
 			void idb<Stored>("readonly", (s) => s.get(f.accountId)).then((k) => {
-				if (k && f.key && k.pub === f.key.pub) { setPriv(k); void open(seen.current, k, f.accountId); }
+				if (k && f.key && k.pub === f.key.pub) { state.current = { ...state.current, priv: k }; setPriv(k); void open(seen.current, k, f.accountId); askWaiting(); }
 				else setPriv(null);
 			});
 		}
-		else if (f.t === "chatlog") { seen.current = f.msgs.slice(-500); void open(f.msgs); }
+		else if (f.t === "chatlog") { seen.current = f.msgs.slice(-500); void open(f.msgs); askWaiting(); }
+		else if (f.t === "chatreseal") void reseal(f.items);
 		else if (f.t === "chat") { seen.current = [...seen.current, f.m].slice(-500); void open([f.m]); }
 		else if (f.t === "chatkeys") { const done = pending.current.get(f.req); if (done) { pending.current.delete(f.req); done(f); } }
-	}, [open]);
+	}, [open, askWaiting, reseal]);
 
 	const keep = async (k: CryptoKey, backup: KeyBackup, accountId: string) => {
 		const s = { priv: k, pub: backup.pub };
 		await idb("readwrite", (st) => st.put(s, accountId));
+		state.current = { ...state.current, priv: s };
 		setPriv(s);
 		await open(seen.current, s, accountId);
+		askWaiting();
 	};
 	/** The first key of the account (or a new one after a forgotten password: `replace`). */
 	const setup = useCallback(async (password: string, replace = false) => {
