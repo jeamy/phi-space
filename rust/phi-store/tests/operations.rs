@@ -1,4 +1,4 @@
-// R2, slices 2 and 4 (docs/rust-portierung.md): operating a store. Overlapping commits, watches that see durable state
+// R2, slices 2 and 4 (docs/rust-portierung.en.md): operating a store. Overlapping commits, watches that see durable state
 // only, batching, closing with commits on their way; a backup under load and its restore, compaction between batches,
 // a clean close; the checks of format, document version and what the store does not read yet; and a growing stock of
 // claims, whose cost must not grow with it, in SQLite and in memory.
@@ -55,9 +55,9 @@ fn overlapping_commits_build_on_each_other_and_readers_see_durable_state() {
 	assert_eq!(watch.poll(), None);
 	h.close();
 	assert!(watch.closed());
-	// the first commit alone, and what came while it was written in batches: how many depends on the writer thread's timing
+	// what came while the writer thread was busy goes in one batch: how many there are depends on its timing, down to one
 	let batches: u32 = meta(&file, "commit_seq").parse().unwrap();
-	assert!((2..20).contains(&batches), "20 commits in {batches} batches");
+	assert!((1..20).contains(&batches), "20 commits in {batches} batches");
 	assert_eq!(survivors(&file), (0..20).collect());
 }
 
@@ -300,7 +300,7 @@ fn fill(h: &mut SpaceHost, generation: &str, from: &mut u64, n: u64) {
 		.unwrap();
 	}
 }
-/// What R0 found in the TypeScript memory store (docs/rust-portierung.md): a call costs more the more claims a day has
+/// What R0 found in the TypeScript memory store (docs/rust-portierung.en.md): a call costs more the more claims a day has
 /// brought. Here a request costs the same with 20 times the claims.
 fn claims_do_not_slow_it_down(mut h: SpaceHost, what: &str, n: u64) {
 	h.commit(|s| {

@@ -342,7 +342,7 @@ impl Space {
 	pub fn run_preparing(&self, run: &str) -> bool { self.gate(run).is_some_and(|g| text(g, "state") == Some("preparing")) }
 
 	/// `assertGatedProfilesKept`: every path that replaces completion profiles must keep the gates of unstopped runs.
-	pub(crate) fn assert_gated_profiles_kept(&self, profiles: &[Json]) -> Result<()> {
+	pub fn assert_gated_profiles_kept(&self, profiles: &[Json]) -> Result<()> {
 		let active = self.gates().is_some_and(|g| g.iter().any(|(_, x)| text(x, "state") != Some("stopped")));
 		let lost = self.profiles().iter().filter(|o| o.get("gateField").is_some()).any(|o| !profiles.iter().any(|p| p.get("taskType") == o.get("taskType") && p.get("gateField") == o.get("gateField")));
 		if active && lost { Err(conflict("gated profiles cannot change while a run is not stopped")) } else { Ok(()) }

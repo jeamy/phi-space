@@ -205,6 +205,8 @@ pub struct GateOptions {
 	pub rotating: Option<Rotating>,
 	/// Signed RunGate instructions of the controller.
 	pub run_gates: Option<crate::run_member::RunGates>,
+	/// Signed membership instructions of the Control host.
+	pub lifecycle: Option<crate::membership::MemberLifecycle>,
 	pub handshake_ms: u64,
 	pub max_per_peer: usize,
 	pub connections_per_second: f64,
@@ -216,7 +218,7 @@ pub struct GateOptions {
 
 impl GateOptions {
 	pub fn new(directory: Rc<Netbird>, now: Now) -> GateOptions {
-		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
+		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
 	}
 }
 
@@ -419,10 +421,10 @@ async fn supervise(gate: Rc<Gate>, owner: Owner) {
 
 impl GateSession {
 	/// A notice of the control plane: only a proven service peer brings one.
-	fn instruction(&self, service: &mut Service, gates: &crate::run_member::RunGates, call: &Json) -> Json {
+	fn notice(&self, apply: impl FnOnce(&mut Service, &Json) -> Result<Json, phi_core::space::CoreError>, service: &mut Service, call: &Json) -> Json {
 		let id = self.identity();
 		let proven = self.state.borrow().proof.is_some() && id.roles.iter().any(|r| ["router", "host", "admin"].contains(&r.as_str()));
-		let done = if proven { gates.apply(service, call.get("args").and_then(|a| a.get("instruction")).unwrap_or(&Json::Null)) } else { Err(phi_core::space::error("PermissionError", "epoch notice requires proven service peer")) };
+		let done = if proven { apply(service, call.get("args").and_then(|a| a.get("instruction")).unwrap_or(&Json::Null)) } else { Err(phi_core::space::error("PermissionError", "epoch notice requires proven service peer")) };
 		match done {
 			Ok(ack) => crate::control::answered(ack),
 			Err(e) => crate::control::refuse(&e.message),
@@ -486,9 +488,14 @@ impl Session for GateSession {
 			let key_id = proof.filter(|_| active).map(|p| p.key_id);
 			return Some(rotating.handle(service, &call, &self.identity(), proven, key_id.as_deref(), now).to_json_text());
 		}
+		if method == "membershipInstruction" {
+			if let Some(lifecycle) = &self.gate.o.lifecycle {
+				return Some(self.notice(|service, q| lifecycle.apply(service, q), service, &call).to_json_text());
+			}
+		}
 		if method == "runGateInstruction" {
 			if let Some(gates) = &self.gate.o.run_gates {
-				return Some(self.instruction(service, gates, &call).to_json_text());
+				return Some(self.notice(|service, q| gates.apply(service, q), service, &call).to_json_text());
 			}
 		}
 		if let (Some(enrolling), "enroll" | "enrollStatus") = (&self.gate.o.enrolling, method) {

@@ -8,7 +8,8 @@
 //  "maxConnections"?, "maxInflightPerConnection"?, "idleMs"?, "gate"?: {"host", "port", "url", "token", "cacheMs"?, "handshakeMs"?,
 //  "maxConnectionsPerPeer"?, "connectionsPerSecondPerPeer"?, "clockFile"?, "eventsFile"?, "keysFile"?, "gateHostId"?, "spaceKeys"?,
 //  "enrollment"?, "controlAccess"?, "supervisor"?, "serviceClock"?, "grants"?: {"authorityId", "hostId", "seed", "publicKey"},
-//  "runGates"?: {"authorityId", "peerId", "seed", "controller", "controllerKey"}}}
+//  "runGates"?: {"authorityId", "peerId", "seed", "controller", "controllerKey"},
+//  "membership"?: {"memberId", "spaceId", "authorityId", "peerId", "seed", "controller", "controllerKey"}}}
 //
 // The gate's clock, its keys and its events are files, so a test can change them between two calls without a round trip.
 //
@@ -158,6 +159,12 @@ fn gate(g: &Json) -> Result<(Listen, Rc<dyn phi_wire::Front>, Now), String> {
 		let seed: [u8; 32] = phi_host::auth::base64(&part("seed")?).try_into().map_err(|_| "a seed is 32 bytes")?;
 		let jobs: phi_host::run_member::RunPreparer = Box::new(jobs_preparer);
 		o.run_gates = Some(phi_host::run_member::RunGates { authority_id: part("authorityId")?, peer_id: part("peerId")?, signer: phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)), controller: phi_host::run_member::Pin { issuer: part("controller")?, algorithm: phi_host::auth::Algorithm::Ed25519, public_key: part("controllerKey")? }, preparers: [("jobs".to_owned(), jobs)].into_iter().collect(), assert_authority: Box::new(|_| Ok(())) });
+	}
+	if let Some(m) = g.get("membership") {
+		let part = |k: &str| m.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("membership without {k}"));
+		let seed: [u8; 32] = phi_host::auth::base64(&part("seed")?).try_into().map_err(|_| "a seed is 32 bytes")?;
+		let control = phi_host::run_member::Pin { issuer: part("controller")?, algorithm: phi_host::auth::Algorithm::Ed25519, public_key: part("controllerKey")? };
+		o.lifecycle = Some(phi_host::membership::MemberLifecycle::new(&part("memberId")?, &part("spaceId")?, &part("authorityId")?, &part("peerId")?, phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)), control, Box::new(|_| Ok(()))));
 	}
 	let host = text("host").ok_or("the gate names no host")?;
 	let front: Rc<dyn phi_wire::Front> = Gate::new(host, o)?;

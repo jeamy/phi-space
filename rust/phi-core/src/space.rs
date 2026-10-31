@@ -368,6 +368,8 @@ pub struct Space {
 	watermark: Option<f64>,
 	/// A proven Router placed the write at hand (`permitRoutedWrite`); never stored.
 	pub router_permit: bool,
+	/// Documents to write in the running commit beside this space: kind, key, version, value.
+	pub doc_writes: Vec<(String, String, i64, String)>,
 	/// The document came with claims of a kind not ported (looked for once: a space holds a day of claims).
 	unported_claims: bool,
 	/// What the running commit changed, while a host tracks it.
@@ -408,7 +410,7 @@ pub struct Changes {
 impl Space {
 	pub fn new(state: SpaceState, random: Random) -> Space {
 		let unported_claims = state.rpc.as_ref().and_then(|r| r.claims.memory()).is_some_and(|m| m.iter().any(|(_, c)| c.get("notCommitted").is_some() || c.as_object().is_none()));
-		Space { unported_claims, state, clock: 0.0, random, open: None, budget: None, watermark: None, router_permit: false, tracking: None }
+		Space { unported_claims, state, clock: 0.0, random, open: None, budget: None, watermark: None, router_permit: false, doc_writes: vec![], tracking: None }
 	}
 
 	/// A commit as the TypeScript host runs one: on a fresh draft (the watermark, the budget and the open batch start
@@ -746,7 +748,7 @@ impl Space {
 	}
 	/// `queueEvent`: into the consumer's mailbox, or else the local outbox. `completing`: the event of something that
 	/// must not fail (a commit, a timeout, a closed subscription); what does not fit at once waits in a fanout job.
-	fn queue_event(&mut self, now: f64, event: Json, consumer: Option<&Json>, completing: bool) -> Result<()> {
+	pub(crate) fn queue_event(&mut self, now: f64, event: Json, consumer: Option<&Json>, completing: bool) -> Result<()> {
 		let lim = self.limits();
 		let size = bytes(&event);
 		if size > lim.max_event_bytes {
@@ -911,7 +913,7 @@ impl Space {
 	}
 
 	/// The closing event of a subscription with a consumer.
-	fn close_reg(&mut self, ri: usize, now: f64, reason: &str) -> Result<()> {
+	pub(crate) fn close_reg(&mut self, ri: usize, now: f64, reason: &str) -> Result<()> {
 		let r = &mut self.state.regs[ri];
 		let Some(consumer) = r.consumer.clone() else { return Ok(()) };
 		r.seq += 1.0;

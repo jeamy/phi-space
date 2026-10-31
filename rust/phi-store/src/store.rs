@@ -174,6 +174,14 @@ impl Store {
 		Ok(done)
 	}
 
+	/// A document of the file beside the Spaces, as last made durable (`tx.doc` of a family).
+	pub fn stored_document(&self, kind: &str, key: Option<&str>) -> Result<Option<Json>> {
+		Ok(match &*self.default.ledger.borrow() {
+			Ledger::Sqlite(l) => l.document(kind, key)?.map(|d| d.value),
+			Ledger::Memory(l) => l.load(kind, key).map(|d| d.value),
+		})
+	}
+
 	/// `createSpace`: a named Space, or the one with this alias. `random` is the new document's source.
 	pub fn create_space(&mut self, alias: &str, now: f64, random: Random) -> Result<std::result::Result<Json, CoreError>> {
 		if let Some(id) = self.registry.as_ref().and_then(|r| r.get("aliases")?.get(alias)?.as_str()) {

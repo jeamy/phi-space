@@ -58,6 +58,8 @@ pub(crate) const NOT_SERVING: [&str; 4] = ["adding", "removing", "detached", "re
 
 impl Space {
 	pub(crate) fn membership(&self) -> Option<&Json> { self.state.rest.get("membership").filter(|m| !m.is_null()) }
+	/// `s.membership?.state ?? "local"`.
+	pub fn member_state_or_local(&self) -> &str { self.member_state().unwrap_or("local") }
 	pub(crate) fn member_state(&self) -> Option<&str> { self.membership().and_then(|m| text(m, "state")) }
 	pub(crate) fn draining(&self) -> bool { self.member_state() == Some("draining") }
 
@@ -88,7 +90,7 @@ impl Space {
 	}
 
 	/// `assertMemberWrite`: `txn` as the call named it.
-	pub(crate) fn assert_member_write(&self, entry: &Json, type_: &str, types: &[String], fields: &phi_json::Object, txn: Option<&str>, now: f64) -> Result<()> {
+	pub fn assert_member_write(&self, entry: &Json, type_: &str, types: &[String], fields: &phi_json::Object, txn: Option<&str>, now: f64) -> Result<()> {
 		self.assert_member_admission("write")?;
 		let Some(a) = self.membership() else { return Ok(()) };
 		let Some(p) = a.get("policy").filter(|p| !p.is_null()) else { return Err(routing("Member policy is not installed")) };
@@ -211,6 +213,20 @@ impl Space {
 	pub(crate) fn has_completion_profile(&self, types: &[String]) -> bool {
 		let profiles = self.membership().and_then(|a| a.get("policy")).and_then(|p| p.get("completionProfiles")).and_then(Json::as_array);
 		profiles.is_some_and(|l| l.iter().any(|f| text(f, "taskType").is_some_and(|x| types.iter().any(|y| y == x))))
+	}
+
+	/// `closeRegistrationsForRemoval`: every subscription ends for a Member that goes.
+	pub fn close_registrations_for_removal(&mut self, now: f64) -> Result<()> {
+		while !self.state.regs.is_empty() {
+			let r = &mut self.state.regs[0];
+			r.seq += 1.0;
+			let event = obj! { "kind" => "registrationClosed", "eventId" => r.id.as_str(), "seq" => r.seq, "handback" => r.handback.clone(), "target" => r.target.clone(), "reason" => "removing" };
+			let consumer = r.consumer.clone();
+			self.queue_event(now, event, consumer.as_ref(), true)?;
+			self.state.regs.remove(0);
+		}
+		self.touch(now);
+		Ok(())
 	}
 
 	/// What is reserved for the bounded completions of open transactions.

@@ -8,8 +8,9 @@ import type net from "node:net";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
-import { BootstrapClosed, CONTROL_SPACE, ControlAccess, EnrollmentService, GateIdentity, MemoryKeyDirectory, NetbirdDirectory, PhiSpaces, ProvingService, SpaceKeyDirectory, SpaceService, Supervisor, bootstrapEnroll, RunGateService, createSpace, spaceDoc, core, createEnroll, serveTlsRegister, GrantAuthority, GrantVerifier, RotationService, listSpaces, revokePeerKey, snapshotSpace, socketTransport, startGate, DEFAULT_GROUP_ROLES, rolesOf, type Connection, type RunSpec, type KeyDirectory, type PeerKeyRec, type Policy } from "../../src/index.ts";
+import { BootstrapClosed, CONTROL_SPACE, ControlAccess, EnrollmentService, GateIdentity, MemoryKeyDirectory, NetbirdDirectory, PhiSpaces, ProvingService, SpaceKeyDirectory, SpaceService, Supervisor, bootstrapEnroll, MemberLifecycle, RunGateService, createSpace, spaceDoc, core, createEnroll, serveTlsRegister, GrantAuthority, GrantVerifier, RotationService, listSpaces, revokePeerKey, snapshotSpace, socketTransport, startGate, DEFAULT_GROUP_ROLES, rolesOf, type Connection, type RunSpec, type KeyDirectory, type PeerKeyRec, type Policy } from "../../src/index.ts";
 import { plainDoc } from "./host.ts";
+import { openSqliteHost } from "../../src/store/sqlite.ts";
 import { openTestHost } from "./host.ts";
 import { ctx } from "./persistent.ts";
 
@@ -48,6 +49,8 @@ export type GateCase = {
 	grants?: boolean;
 	/** This host is a run Member under the controller `control` with this key; its run kind `jobs` writes two Jobs. */
 	runGates?: { controllerKey: string };
+	/** This host is Member `a` with a Space of its own, under the Control host `control` with this key. */
+	membership?: { controllerKey: string; seed?: (lifecycle: MemberLifecycle) => Promise<void> };
 };
 /** The grant signing key: PKCS#8 and SPKI of Ed25519 end in the seed and the public key. */
 const grantKey = () => { const { publicKey, privateKey } = generateKeyPairSync("ed25519"); return { privateKey, publicKey: publicKey.export({ format: "der", type: "spki" }).subarray(-32).toString("base64"), seed: privateKey.export({ format: "der", type: "pkcs8" }).subarray(-32).toString("base64") }; };
@@ -69,7 +72,7 @@ export type HostSide = {
 	jobsSpace(alias: string, profiles: core.CompletionProfile[]): Promise<string>;
 	jobs(space: string): Promise<Array<{ fields: Record<string, any> }>>;
 };
-export type GateUnderTest = { memberKey: string; port: number; readonly events: Seen[]; readonly enrollEvents: EnrollSeen[]; readonly commandEvents: CommandSeen[]; control: HostSide; peers(): Promise<Array<{ peerId: string; ip: string; roles: string[]; proven: boolean }>>; revalidate(): Promise<number> };
+export type GateUnderTest = { memberKey: string; memberSpace: string; /** Ends the server under test; its store file stays. */ stop(): Promise<string | null>; port: number; readonly events: Seen[]; readonly enrollEvents: EnrollSeen[]; readonly commandEvents: CommandSeen[]; control: HostSide; peers(): Promise<Array<{ peerId: string; ip: string; roles: string[]; proven: boolean }>>; revalidate(): Promise<number> };
 
 async function inProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 	const directory = new NetbirdDirectory({ url: c.url, token: c.token ?? "t", now: c.clock.now, ...(c.cacheMs === undefined ? {} : { cacheMs: c.cacheMs }) });
@@ -113,6 +116,22 @@ async function inProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 			} catch (e) { return JSON.stringify({ ok: false, error: { code: "PermissionDenied", message: (e as Error).message } }); }
 		} } as unknown as ProvingService;
 	}
+	let memberSpace = "";
+	if (c.membership) {
+		memberSpace = (await host.commit((tx) => createSpace(tx, "member", Date.now()), ctx)).spaceId;
+		const signer = { keyId: "member", algorithm: "ed25519" as const, sign: (d: Uint8Array) => sign(null, Buffer.from(d), member.privateKey) };
+		const lifecycle = new MemberLifecycle({ host, ctx, memberId: "a", spaceId: memberSpace, authorityId: "authority", peerId: "host-1", signer, controlPin: { issuer: "control", algorithm: "ed25519", publicKey: c.membership.controllerKey }, assertAuthority: async () => {} });
+		const inner = served;
+		served = { handle: (x: unknown, conn: Connection) => inner.handle(x, conn), async handleText(t: string, conn: Connection, max?: number) {
+			const call = JSON.parse(t) as { method?: string; args?: { instruction?: never } };
+			if (call?.method !== "membershipInstruction") return inner.handleText(t, conn, max);
+			try {
+				const id = await identity.authenticate(conn);
+				if (!(conn.state as { proof?: unknown } | undefined)?.proof || !id?.roles.some((r) => ["router", "host", "admin"].includes(r))) throw new Error("epoch notice requires proven service peer");
+				return JSON.stringify({ ok: true, result: await lifecycle.apply(call.args?.instruction as never) });
+			} catch (e) { return JSON.stringify({ ok: false, error: { code: "PermissionDenied", message: (e as Error).message } }); }
+		} } as unknown as ProvingService;
+	}
 	const gate = await startGate(served, {
 		listen: { host: c.host ?? "127.0.0.1", port: 0 }, directory, revalidateMs: 0, now: c.clock.now, onEvent: (e) => events.push(e),
 		...(keys ? { keys } : {}), ...(c.handshakeMs === undefined ? {} : { handshakeMs: c.handshakeMs }),
@@ -132,18 +151,26 @@ async function inProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 		jobsSpace: async (alias, profiles) => { const id = (await host.commit((tx) => createSpace(tx, alias, Date.now()), ctx)).spaceId; await host.commit(async (tx) => core.setCompletionProfiles(await spaceDoc(tx, id, Date.now()), profiles), ctx); return id; },
 		jobs: async (space) => core.list((await snapshotSpace(host, space, ctx))!, Date.now(), { type: "Job" }) as never,
 	};
-	return { memberKey: member.publicKey, port: (gate.address() as net.AddressInfo).port, events, enrollEvents, commandEvents, control, peers: async () => gate.peers(), revalidate: () => gate.revalidate() };
+	return { memberKey: member.publicKey, memberSpace, stop: async () => null, port: (gate.address() as net.AddressInfo).port, events, enrollEvents, commandEvents, control, peers: async () => gate.peers(), revalidate: () => gate.revalidate() };
 }
 
 async function asProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 	const member = grantKey();
 	const dir = scratch(tc), eventsFile = join(dir, "events"), config = join(dir, "case.json"), hooksPath = join(dir, "hooks.sock");
 	put(eventsFile, "");
+	const storeFile = join(dir, "s.sqlite");
+	let memberSpace = "";
+	if (c.membership) {
+		const seed = await openSqliteHost(storeFile);
+		memberSpace = (await seed.commit((tx) => createSpace(tx, "member", Date.now()), ctx)).spaceId;
+		await c.membership.seed?.(new MemberLifecycle({ host: seed, ctx, memberId: "a", spaceId: memberSpace, authorityId: "authority", peerId: "host-1", signer: { keyId: "member", algorithm: "ed25519", sign: (d) => sign(null, Buffer.from(d), member.privateKey) }, controlPin: { issuer: "control", algorithm: "ed25519", publicKey: c.membership.controllerKey }, assertAuthority: async () => {} }));
+		await seed.close(ctx);
+	}
 	writeFileSync(config, JSON.stringify({
 		hooks: hooksPath, endpoints: [], identities: {}, policy: c.policy?.roles,
-		gate: { host: c.host ?? "127.0.0.1", port: 0, url: c.url, token: c.token ?? "t", cacheMs: c.cacheMs, handshakeMs: c.handshakeMs, maxConnectionsPerPeer: c.maxConnectionsPerPeer, connectionsPerSecondPerPeer: c.connectionsPerSecondPerPeer, clockFile: c.clock.file, eventsFile, keysFile: c.keys?.file, gateHostId: c.gateHostId, spaceKeys: c.spaceKeys, enrollment: c.enrollment, controlAccess: c.controlAccess, supervisor: c.supervisor, serviceClock: c.serviceClock, runGates: c.runGates ? { authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.runGates.controllerKey } : undefined, grants: c.grants ? (() => { const k = grantKey(); return { authorityId: "authority", hostId: "host-1", seed: k.seed, publicKey: k.publicKey }; })() : undefined },
+		gate: { host: c.host ?? "127.0.0.1", port: 0, url: c.url, token: c.token ?? "t", cacheMs: c.cacheMs, handshakeMs: c.handshakeMs, maxConnectionsPerPeer: c.maxConnectionsPerPeer, connectionsPerSecondPerPeer: c.connectionsPerSecondPerPeer, clockFile: c.clock.file, eventsFile, keysFile: c.keys?.file, gateHostId: c.gateHostId, spaceKeys: c.spaceKeys, enrollment: c.enrollment, controlAccess: c.controlAccess, supervisor: c.supervisor, serviceClock: c.serviceClock, membership: c.membership ? { memberId: "a", spaceId: memberSpace, authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.membership.controllerKey } : undefined, runGates: c.runGates ? { authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.runGates.controllerKey } : undefined, grants: c.grants ? (() => { const k = grantKey(); return { authorityId: "authority", hostId: "host-1", seed: k.seed, publicKey: k.publicKey }; })() : undefined },
 	}));
-	const proc = spawn(CMD![0]!, [...CMD!.slice(1), "--store", "memory", "--listen", `unix:${join(dir, "unused.sock")}`, "--test-hooks", config], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
+	const proc = spawn(CMD![0]!, [...CMD!.slice(1), "--store", c.membership ? storeFile : "memory", "--listen", `unix:${join(dir, "unused.sock")}`, "--test-hooks", config], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
 	const port = await new Promise<number>((resolve, reject) => {
 		let out = "";
 		const seen = (d: Buffer) => { out += d; const m = /ready on tcp:[^:]+:(\d+)/.exec(out); if (m) resolve(Number(m[1])); };
@@ -153,7 +180,9 @@ async function asProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 		proc.on("exit", (code) => reject(new Error(`the server under test exited (${code}):\n${out}`)));
 	});
 	const hooks = socketTransport({ path: hooksPath });
-	tc.after(async () => { hooks.close(); await new Promise<void>((r) => { proc.removeAllListeners("exit"); proc.once("exit", () => r()); proc.kill("SIGTERM"); }); });
+	let stopped = false;
+	const stop = async () => { if (stopped) return storeFile; stopped = true; hooks.close(); await new Promise<void>((r) => { proc.removeAllListeners("exit"); proc.once("exit", () => r()); proc.kill("SIGTERM"); }); return storeFile; };
+	tc.after(stop);
 	const hook = async <T,>(name: string, line: Record<string, unknown> = {}) => {
 		const r = JSON.parse(await hooks.request(JSON.stringify({ hook: name, now: c.clock.now(), ...line }))) as { ok: boolean; result: T; class?: string; message?: string };
 		if (r.ok) return r.result;
@@ -162,6 +191,8 @@ async function asProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 	const seen = <T,>(key: string): T[] => readFileSync(eventsFile, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as T).filter((e) => key in (e as object));
 	return {
 		memberKey: member.publicKey,
+		memberSpace,
+		stop,
 		port,
 		get events() { return seen<Seen>("event"); },
 		get enrollEvents() { return seen<EnrollSeen>("outcome"); },

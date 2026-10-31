@@ -144,9 +144,13 @@ impl SpaceHost {
 			Err(e) => {
 				self.space.rollback();
 				self.also.clear();
+				self.space.doc_writes.clear();
 				Ok(Err(e))
 			}
 			Ok(value) => {
+				for (kind, key, version, value) in self.space.doc_writes.drain(..) {
+					self.also.push(WriteOp::Doc { kind, key, version, value });
+				}
 				let changes = self.space.end_commit();
 				self.space.seal();
 				if let Err(e) = self.write(changes) {

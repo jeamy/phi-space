@@ -4,6 +4,7 @@ pub mod control;
 pub mod gate;
 pub mod grants;
 pub mod register;
+pub mod membership;
 pub mod rotation;
 pub mod run_member;
 pub mod tls;
