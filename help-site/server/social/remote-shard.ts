@@ -7,6 +7,8 @@ import type { SwarmPost } from "./swarm.ts";
 
 /** Posts kept when the hub (re)joins the shard (the newest): the newest 300 of them go into the index, all count replies. */
 const SYNC_POSTS = 4_000;
+/** A shard holds at most its entry cap, so this covers every like of a shard with the default cap. */
+const SYNC_LIKES = 20_000;
 /** A page of the join read: frames stay bounded even when posts carry large bodies. */
 const SYNC_PAGE_BYTES = 256 * 1024;
 /** How long a lost shard is left alone before the next try. */
@@ -80,7 +82,7 @@ export class RemoteShard {
 	/** Joins the shard: its newest posts (the last SYNC_POSTS in entry order, oldest first to `onPosts`) and its channel
 	 *  totals. Pages come oldest first, so all of them are read (each of bounded size) and only the tail is kept. `rev`
 	 *  becomes the revision of that snapshot, so the changes after it complete the picture. */
-	async sync(onPosts: (posts: SwarmPost[]) => void): Promise<void> {
+	async sync(onPosts: (posts: SwarmPost[], likes: Array<{ postId: string; agentId: string }>) => void): Promise<void> {
 		if (this.#syncing) return;
 		this.#syncing = true;
 		try {
@@ -98,7 +100,9 @@ export class RemoteShard {
 				const f = e.fields as { channel?: string; count?: number };
 				if (f.channel) this.channelTotals.set(f.channel, Number(f.count) || 0);
 			}
-			onPosts(posts.sort((a, b) => a.at - b.at));
+			const likes = (await this.space.readAll({ type: "Like" }, { limit: SYNC_LIKES }).catch(() => []))
+				.filter((e) => !e.fields.dedup).map((e) => ({ postId: String(e.fields.postId), agentId: String(e.fields.agentId) }));
+			onPosts(posts.sort((a, b) => a.at - b.at), likes);
 			this.rev = rev;
 			this.markUp(`${posts.length} posts, rev ${this.rev}`);
 		} catch (e) {

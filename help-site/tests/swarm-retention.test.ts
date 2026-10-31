@@ -36,6 +36,24 @@ test("retention config: default 20000 entries per database, 0/off disables, low-
 	assert.deepEqual(retentionConfig(100), { cap: 100, low: 95 });
 });
 
+test("retention: likes without a post on this shard go first, oldest first, and the posts stay", async () => {
+	const f = await fixture(null);
+	try {
+		for (let i = 1; i <= 40; i++) await addPost(f.hub, i, 0);
+		for (let i = 0; i < 300; i++) await f.hub.space.write({ type: "Like", fields: { likeId: `s-${i}`, postId: "b-post-1", agentId: `ag-${i}`, at: 1_000 + i } }, null, FOREVER);
+		const before = await f.hub.space.count();
+		const r = (await purgeOldest(f.b, { cap: 200, low: 190 }))!;
+		assert.equal(r.posts, 0, "the strays alone reach the mark");
+		assert.equal(await f.hub.space.count({ type: "Post" }), 40);
+		assert.equal(r.removed, before - 190);
+		const left = (await f.hub.space.readAll({ type: "Like" }, { limit: 1000 })).map((e) => Number(e.fields.at));
+		assert.equal(Math.min(...left), 1_000 + r.removed, "the oldest went");
+		await purgeOldest(f.b, { cap: 60, low: 50 });
+		assert.equal(await f.hub.space.count({ type: "Like" }), 0);
+		assert.ok(await f.hub.space.count() <= 51, "the posts go only after the strays are gone");
+	} finally { await f.close(); }
+});
+
 test("retention: the oldest posts leave with their history nodes and likes, and the history chain stays whole", async () => {
 	const f = await fixture(null);
 	try {
@@ -212,4 +230,32 @@ test("retention keeps the operator's own posts and every reply under them; the h
 		const own = await historyPage(f.hub.space, { beforeAt: Infinity, beforeId: "", limit: 50, channel: "meins" });
 		assert.deepEqual(own.candidates.map((c) => c.post.postId), ["post-2"]);
 	} finally { await f.close(); }
+});
+
+test("like tasks run on the shard of their post, and a joining hub sees that shard's likes", async () => {
+	const rate = process.env.SWARM_RATE;
+	process.env.SWARM_RATE = "40";
+	const hostA = openOwnMemoryHost(), hostB = openOwnMemoryHost();
+	const shard = new SocialSwarmHub(hostB, ctx, new Meter(), { produce: false, pulses: false, seedContent: false, shardTag: "b-", maxEntries: null });
+	const hub = new SocialSwarmHub(hostA, ctx, new Meter(), { pulses: false, maxEntries: null });
+	try {
+		await shard.init();
+		for (let i = 1; i <= 40; i++) await shard.space.write({ type: "Post", fields: { postId: `b-post-${i}`, seq: i, at: Date.now(), handle: "b", name: "B", hue: 0, channel: "home", text: "b", likes: 0, replies: 0 } }, null, FOREVER);
+		await shard.space.write({ type: "Like", fields: { likeId: "held", postId: "b-post-2", agentId: "ag-held", at: Date.now() } }, null, FOREVER);
+		hub.attachRemoteShard(shard.space, "b-");
+		await hub.init();
+		const seen = () => hub.snapshot().posts.find((p) => p.postId === "b-post-2");
+		for (let i = 0; i < 200 && !seen(); i++) await new Promise((r) => setTimeout(r, 25));
+		assert.equal(seen()?.likes, 1, "the shard's own like is counted after the join");
+
+		const isRemote = (id: unknown) => String(id).startsWith("b-");
+		const moved = () => shard.space.count({ type: "Like" });
+		for (let i = 0; i < 400 && await moved() < 4; i++) await new Promise((r) => setTimeout(r, 25));
+		assert.ok(await moved() >= 4, "like tasks reach the shard of their post");
+		for (const e of await shard.space.readAll({ type: "Like" }, { limit: 5000 })) assert.ok(isRemote(e.fields.postId), "a shard holds only likes of its own posts");
+		for (const e of await hub.space.readAll({ type: "Like" }, { limit: 5000 })) assert.ok(!isRemote(e.fields.postId), "no like on the hub for a post of the shard");
+	} finally {
+		await hub.close(); await shard.close(); await hostA.close(ctx); await hostB.close(ctx);
+		if (rate === undefined) delete process.env.SWARM_RATE; else process.env.SWARM_RATE = rate;
+	}
 });

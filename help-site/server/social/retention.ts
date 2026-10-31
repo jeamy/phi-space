@@ -12,6 +12,7 @@ const MIN_KEEP_POSTS = 20;
 /** The author id of the operator's own posts (SwarmTask kind user): never purged, nor are the replies under them. */
 const HUMAN_AUTHOR = "agent-you";
 const BATCH_POSTS = 50;
+const BATCH_LIKES = 200;
 
 export interface RetentionConfig { cap: number; low: number }
 export interface PurgeNotice { at: number; removed: number; posts: number; totalRemoved: number; cap: number; entries: number }
@@ -81,6 +82,13 @@ export async function purgeOldest(b: BatchHost, cfg: RetentionConfig): Promise<P
 		seen.add(id); newestFirst.push(n); id = String(n.fields.next ?? "");
 	}
 	const oldest = newestFirst.reverse();
+	const target = visible - cfg.low;
+	// A like task lands on either shard while its post lies on the other, so these likes have no post here to leave with.
+	// They go first, oldest first: otherwise the purge eats the posts down to MIN_KEEP_POSTS and stays above the cap for good.
+	const strays = snap.entries
+		.filter((e) => e.type === "Like" && e.writtenUnder === null && e.takenBy === null && !posts.has(String(e.fields.postId)))
+		.sort((a, b) => Number(a.fields.at) - Number(b.fields.at))
+		.slice(0, target);
 	// What stays: posts of people (the operator's own) and every reply under them, however deep the thread: the swarm's
 	// own posts are what the cap is for.
 	const info = oldest.map((n) => { try { const p = JSON.parse(String(n.fields.post)); return { id: String(p.postId ?? ""), author: String(p.author ?? ""), replyTo: p.replyTo ? String(p.replyTo) : "" }; } catch { return { id: "", author: "", replyTo: "" }; } });
@@ -89,9 +97,8 @@ export async function purgeOldest(b: BatchHost, cfg: RetentionConfig): Promise<P
 	const keep = new Set<string>();
 	const todo = info.filter((i) => i.author === HUMAN_AUTHOR && i.id).map((i) => i.id);
 	for (let id = todo.pop(); id !== undefined; id = todo.pop()) if (!keep.has(id)) { keep.add(id); todo.push(...(children.get(id) ?? [])); }
-	const target = visible - cfg.low;
 	const victims: Array<{ node: string; refs: Ref[]; postId: string }> = [];
-	let planned = 0;
+	let planned = strays.length;
 	for (let i = 0; i < oldest.length - MIN_KEEP_POSTS && planned < target; i++) {
 		const node = oldest[i]!, postId = info[i]!.id;
 		if (postId && keep.has(postId)) continue;
@@ -99,7 +106,7 @@ export async function purgeOldest(b: BatchHost, cfg: RetentionConfig): Promise<P
 		victims.push({ node: node.id, refs, postId });
 		planned += refs.length;
 	}
-	if (!victims.length) return null;
+	if (!victims.length && !strays.length) return null;
 
 	// The history chain runs from the newest node to the oldest (`next` points to the older one). A node that goes is
 	// unlinked: the next newer node takes over its `next`, so survivors in the middle (the kept threads) stay chained.
@@ -107,6 +114,17 @@ export async function purgeOldest(b: BatchHost, cfg: RetentionConfig): Promise<P
 	oldest.forEach((n, i) => { olderOf.set(n.id, String(n.fields.next ?? "")); if (i + 1 < oldest.length) newerOf.set(n.id, oldest[i + 1]!.id); });
 	let removed = 0;
 	const postIds: string[] = [];
+	for (let a = 0; a < strays.length; a += BATCH_LIKES) {
+		const part = strays.slice(a, a + BATCH_LIKES);
+		removed += await b.host.commit(async (tx) => {
+			const now = Date.now(), s = await spaceDoc(tx, b.spaceId, now);
+			let n = 0;
+			for (const e of part) if (core.probe(s, now, { type: "Like", id: e.id }, null, true).status === "found") n++;
+			core.touch(s, now);
+			return n;
+		}, b.ctx);
+		await new Promise((r) => setTimeout(r, 25));
+	}
 	for (let a = 0; a < victims.length; a += BATCH_POSTS) {
 		const part = victims.slice(a, a + BATCH_POSTS);
 		const links = part.map((v) => { const l = { node: v.node, newer: newerOf.get(v.node) ?? "", older: olderOf.get(v.node) ?? "" }; if (l.newer) olderOf.set(l.newer, l.older); if (l.older) newerOf.set(l.older, l.newer); return l; });

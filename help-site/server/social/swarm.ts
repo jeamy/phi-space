@@ -398,9 +398,14 @@ export class SocialSwarmHub {
 
 	/** Joins the remote shard: the newest 300 of its posts go into the index, the older ones only count replies. */
 	async #syncRemoteShard(): Promise<void> {
-		await this.#shard?.sync((allRemote) => {
+		await this.#shard?.sync((allRemote, likes) => {
 			const windowPosts = allRemote.slice(-300);
 			const inWindow = new Set(windowPosts.map((p) => p.postId));
+			for (const l of likes) {
+				if (!inWindow.has(l.postId)) continue;
+				if (!this.#likeSets.has(l.postId)) this.#likeSets.set(l.postId, new Set());
+				this.#likeSets.get(l.postId)!.add(l.agentId);
+			}
 			for (const p of allRemote) {
 				if (p.replyTo && !inWindow.has(p.postId)) {
 					this.#replyCounts.set(p.replyTo, (this.#replyCounts.get(p.replyTo) ?? 0) + 1);
@@ -936,8 +941,9 @@ export class SocialSwarmHub {
 			const roll = this.#rng();
 			const taskId = `swarm-${Date.now().toString(36)}-${Math.floor(this.#rng() * 1e6)}-${i}`;
 			let replyTo: string | null = null;
-			if (roll >= 0.62 && roll < 0.88 && this.#recentPosts.length > 0) {
-				const target = this.#recentPosts[Math.floor(this.#rng() * Math.min(60, this.#recentPosts.length))]!;
+			// A like names its post here: the task then runs on that post's shard, where the Like can leave with the post.
+			if (roll >= 0.62 && this.#recentPosts.length > 0) {
+				const target = this.#recentPosts[Math.floor(this.#rng() * Math.min(roll >= 0.88 ? 80 : 60, this.#recentPosts.length))]!;
 				replyTo = target.postId;
 			}
 			const kind = roll >= 0.88 ? "like" : replyTo ? "reply" : "post";
