@@ -184,3 +184,34 @@ impl Proving {
 		object(vec![("ok", Json::Bool(false)), ("error", Json::Object(error))]).to_json_text()
 	}
 }
+
+/// What a host holds to sign with; the public half goes to the control space.
+pub enum Signer {
+	Ed25519(ed25519_dalek::SigningKey),
+	EcdsaP256(p256::ecdsa::SigningKey),
+}
+
+impl Signer {
+	pub fn algorithm(&self) -> Algorithm {
+		match self { Signer::Ed25519(_) => Algorithm::Ed25519, Signer::EcdsaP256(_) => Algorithm::EcdsaP256 }
+	}
+	pub fn sign(&self, data: &[u8]) -> Vec<u8> {
+		use ed25519_dalek::Signer as _;
+		match self {
+			Signer::Ed25519(k) => k.sign(data).to_bytes().to_vec(),
+			Signer::EcdsaP256(k) => { let s: DerSignature = p256::ecdsa::signature::Signer::sign(k, data); s.as_bytes().to_vec() }
+		}
+	}
+}
+
+pub fn to_base64(bytes: &[u8]) -> String {
+	const ABC: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+	for c in bytes.chunks(3) {
+		let n = (u32::from(c[0]) << 16) | (u32::from(*c.get(1).unwrap_or(&0)) << 8) | u32::from(*c.get(2).unwrap_or(&0));
+		for i in 0..4 {
+			if i <= c.len() { out.push(ABC[(n >> (18 - 6 * i)) as usize & 63] as char); } else { out.push('='); }
+		}
+	}
+	out
+}

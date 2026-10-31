@@ -847,7 +847,7 @@ Alle Rust-Werte stammen vom selben Binary, dem Stand dieses Commits. R-D2 ist da
 
 ### R5: Sicherer Host (`phi-host`)
 
-**Stand 2026-10-31:** Scheibe 1 steht: `phi-host::auth` prüft Schlüsselbeweise gegen `test/vectors/crypto.json`, samt der Absagen aus `test-auth` je Verbindung. Ed25519 prüft strikt: Kleine Schlüssel und nicht kanonische Signaturen, die OpenSSL annimmt, lehnt Rust ab; kein Schlüssel von uns erzeugt sie. Grants, Gate, Enrollment, Rotation, Supervisor und TLS-Register folgen.
+**Stand 2026-10-31:** Scheibe 1 steht: `phi-host::auth` prüft Schlüsselbeweise gegen `test/vectors/crypto.json`, samt der Absagen aus `test-auth` je Verbindung. Ed25519 prüft strikt: Kleine Schlüssel und nicht kanonische Signaturen, die OpenSSL annimmt, lehnt Rust ab; kein Schlüssel von uns erzeugt sie. Scheibe 2: `phi-host::grants` stellt Grants aus und prüft sie, mit den Fällen aus `test-grants`, soweit sie den Grant selbst betreffen; Ed25519-Signaturen sind byte-gleich mit den Vektoren. Noch nicht verbunden ist die Prüfung im Dienst (`authorize`, `canExecutePending`, `check` am Commit); sie läuft durch den Kern und ist die nächste Scheibe. Gate, Enrollment, Rotation, Supervisor und TLS-Register folgen.
 
 **Arbeit:**
 

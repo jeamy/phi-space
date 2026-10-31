@@ -7,6 +7,7 @@ version.workspace = true
 
 [dependencies]
 phi-json = { path = "../phi-json" }
+phi-service = { path = "../phi-service" }
 ed25519-dalek = "2"
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "std"] }
 getrandom = "0.2"

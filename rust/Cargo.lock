@@ -373,6 +373,7 @@ dependencies = [
  "getrandom",
  "p256",
  "phi-json",
+ "phi-service",
 ]
 
 [[package]]
