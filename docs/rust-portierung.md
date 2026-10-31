@@ -4,7 +4,7 @@ Stand: 2026-10-31. **Ziel- und Arbeitsplan.** R0 bis R3 sind umgesetzt und abgen
 Cargo-Workspace enthält `phi-json`, `phi-core`, `phi-store`, `phi-service`, `phi-wire` und `phi-space-server`, und beide
 Projekte laufen auf dem Rust-Server. Von R4 ist der lokale Teil erledigt. **Festlegung 2026-10-31:** Zuerst wird die
 Implementierung vollständig, es gibt keine Teilportierung im Betrieb; bis dahin wird nur lokal entwickelt und getestet.
-Die Server-Schritte von R4, R8.6 und R-D12 kommen danach. R5 bis R8 und M1 sind nicht begonnen. Die Entscheidungen R-D0 bis R-D11 (Abschnitt 9)
+`big`, `nano` und ihr Zusammenspiel werden lokal simuliert (`docker:local`, mehrere Container und ein Netz dazwischen), jede Abnahme mit mehreren Hosts, Replikation, Fencing oder Handy bekommt so eine Simulation und bleibt nicht offen. Der echte Umstieg auf den Servern, R8.6 auf den Hosts und R-D12 kommen danach. R5 bis R8 und M1 sind nicht begonnen. Die Entscheidungen R-D0 bis R-D11 (Abschnitt 9)
 sind getroffen, R-D12 und R-D13 sind offen und keine Freigaben.
 
 ## 1. Ergebnis und Abgrenzung
