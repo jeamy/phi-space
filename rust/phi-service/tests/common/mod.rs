@@ -63,7 +63,24 @@ pub struct Setup {
 
 /// What the driver's `auth` says of a call.
 #[derive(Clone, Default)]
-pub struct Decided { pub valid_until: f64, pub roles: Vec<String>, pub can: Vec<String>, pub expired: bool }
+pub struct Decided { pub valid_until: f64, pub roles: Vec<String>, pub can: Vec<String>, pub expired: bool, pub extra: Option<Json> }
+impl Decided {
+	fn more(&self, k: &str) -> Option<&Json> { self.extra.as_ref()?.get(k) }
+	/// What a call says of this decision.
+	pub fn to_json(&self) -> Json {
+		let mut o = phi_json::Object::new();
+		o.insert("validUntil", Json::Number(self.valid_until));
+		o.insert("roles", Json::Array(self.roles.iter().map(|r| r.as_str().into()).collect()));
+		o.insert("can", Json::Array(self.can.iter().map(|r| r.as_str().into()).collect()));
+		o.insert("expired", Json::Bool(self.expired));
+		if let Some(Json::Object(e)) = &self.extra {
+			for (k, v) in e.iter() {
+				o.insert(k, v.clone());
+			}
+		}
+		Json::Object(o)
+	}
+}
 impl Authorization for Decided {
 	fn roles(&self) -> Vec<String> { self.roles.clone() }
 	fn valid_until(&self) -> f64 { self.valid_until }
@@ -72,6 +89,14 @@ impl Authorization for Decided {
 		self.can.iter().any(|c| *c == format!("{m}:*") || type_name.is_some_and(|t| *c == format!("{m}:{t}")))
 	}
 	fn check(&self, _now: f64) -> Result<(), String> { if self.expired { Err("grant expired before commit".into()) } else { Ok(()) } }
+	fn transport_peer_id(&self) -> Option<String> { self.more("transportPeerId").and_then(Json::as_str).map(str::to_owned) }
+	fn renewal_waiter_id(&self) -> Option<Option<String>> { self.more("renewalWaiterId").map(|v| v.as_str().map(str::to_owned)) }
+	fn allow_closed_waiter(&self) -> bool { self.more("allowClosedWaiter") == Some(&Json::Bool(true)) }
+	fn router_epoch(&self) -> Option<f64> { self.more("routerEpoch").and_then(Json::as_f64) }
+	fn control_primary_epoch(&self) -> Option<f64> { self.more("controlPrimaryEpoch").and_then(Json::as_f64) }
+	fn policy_version(&self) -> Option<f64> { self.more("policyVersion").and_then(Json::as_f64) }
+	fn known_request(&self) -> bool { self.more("knownRequest") == Some(&Json::Bool(true)) }
+	fn check_commit(&self) -> Result<(), String> { if self.more("fenced") == Some(&Json::Bool(true)) { Err("epoch changed before commit".into()) } else { Ok(()) } }
 }
 
 pub struct RustSide {

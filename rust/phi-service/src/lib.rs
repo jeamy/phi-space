@@ -53,16 +53,31 @@ fn renews_pending(s: &Space, request: &Json, a: &dyn Authorization) -> bool {
 fn pending_allowed(w: &phi_core::state::WaiterRec, a: &dyn Authorization) -> bool {
 	a.can_execute_pending(if w.take { "take" } else { "read" }, w.template.get("type").and_then(Json::as_str))
 }
-fn authorize_pending(s: &mut Space, now: f64, request: &Json, auth: &Option<Rc<dyn Authorization>>) {
-	let Some(a) = auth else { return };
+fn authorize_pending(s: &mut Space, now: f64, request: &Json, auth: &Option<Rc<dyn Authorization>>) -> R<()> {
+	let Some(a) = auth else { return Ok(()) };
 	let key = s.key_of(&RequestRef::of(Some(request)));
 	for i in 0..s.state.waiters.len() {
 		let w = &s.state.waiters[i];
 		if w.claim_key.as_deref() == Some(key.as_str()) && pending_allowed(w, a.as_ref()) {
+			claim_metadata(s, &key, auth)?;
 			s.state.waiters[i].authorized_until = Some(a.valid_until());
 			s.touch(now);
 		}
 	}
+	Ok(())
+}
+/// What opening a commit asks of a host's decision (`doc` of src/client.ts), maintenance included.
+fn host_checked(s: &mut Space, auth: &Option<Rc<dyn Authorization>>) -> R<()> {
+	if let Some(a) = auth {
+		a.check_commit().map_err(|m| error("PermissionError", m))?;
+	}
+	s.router_permit = auth.as_ref().is_some_and(|a| a.router_epoch().is_some_and(|e| e != 0.0));
+	Ok(())
+}
+/// `claimMetadata`: who brought the request, for the checks of later calls on it.
+fn claim_metadata(s: &mut Space, key: &str, auth: &Option<Rc<dyn Authorization>>) -> R<()> {
+	let Some(a) = auth else { return Ok(()) };
+	s.set_metadata(key, &[("policyVersion", a.policy_version().map(Json::Number)), ("transportPeerId", a.transport_peer_id().map(Json::String)), ("routerEpoch", a.router_epoch().map(Json::Number)), ("controlPrimaryEpoch", a.control_primary_epoch().map(Json::Number))])
 }
 fn check_transaction_rights(s: &Space, txn: &str, auth: &Option<Rc<dyn Authorization>>) -> R<()> {
 	let Some(a) = auth else { return Ok(()) };
@@ -107,6 +122,18 @@ pub trait Authorization {
 	fn can_execute_pending(&self, method: &str, type_name: Option<&str>) -> bool;
 	/// Again inside each commit: the right may have ended since the call came in.
 	fn check(&self, now: f64) -> Result<(), String>;
+	/// The peer that carried the call, where that is not the principal's (a router).
+	fn transport_peer_id(&self) -> Option<String> { None }
+	/// `Some`: only this waiter is renewed by the call, or none.
+	fn renewal_waiter_id(&self) -> Option<Option<String>> { None }
+	fn allow_closed_waiter(&self) -> bool { false }
+	fn router_epoch(&self) -> Option<f64> { None }
+	fn control_primary_epoch(&self) -> Option<f64> { None }
+	fn policy_version(&self) -> Option<f64> { None }
+	/// The call continues a request this host knows.
+	fn known_request(&self) -> bool { false }
+	/// Inside each commit, with what only the host keeps (`checkTx`).
+	fn check_commit(&self) -> Result<(), String> { Ok(()) }
 }
 pub type Authorize = Box<dyn Fn(&Json, &Identity, &Conn) -> Result<Rc<dyn Authorization>, String>>;
 
@@ -434,7 +461,7 @@ impl Service {
 			}
 			let epoch = self.o.primary_epoch;
 			if let Some(p) = f.get("primaryEpoch") {
-				let earlier = method == "resolveOperation" && p.as_f64().is_some_and(|x| x.trunc() == x && x.abs() <= 9_007_199_254_740_991.0 && x < epoch);
+				let earlier = (method == "resolveOperation" || auth.as_ref().is_some_and(|a| a.known_request())) && p.as_f64().is_some_and(|x| x.trunc() == x && x.abs() <= 9_007_199_254_740_991.0 && x < epoch);
 				if p.as_f64() != Some(epoch) && !earlier {
 					return Ok(HandledCall::Reply(fail("StaleEpoch", &format!("the primary epoch is {}", phi_json::number_text(epoch)), None)));
 				}
@@ -570,6 +597,7 @@ impl Service {
 	fn commit<T>(&mut self, c: &Ctx, op: impl FnOnce(&mut Space, f64) -> R<T>) -> R<T> {
 		let auth = c.auth.clone();
 		self.commit_on(c.space.as_deref(), |s, now| {
+			host_checked(s, &auth)?;
 			check(&auth, now)?;
 			op(s, now)
 		})
@@ -593,7 +621,9 @@ impl Service {
 				return Ok(());
 			}
 			let signature = prior.maintenance_signature();
+			let auth = c.auth.clone();
 			let (more, after) = self.commit_on(c.space.as_deref(), |s, now| {
+				host_checked(s, &auth)?;
 				s.settle(now)?;
 				Ok((s.needs_maintenance(now)?, s.maintenance_signature()))
 			})?;
@@ -606,7 +636,7 @@ impl Service {
 	/// An immediate mutation under a request identity: claim check, effect and stored result in one commit.
 	fn mutate(&mut self, c: &Ctx, method: &str, args: Json, run: impl FnOnce(&mut Space, f64) -> R<Json>) -> R<Json> {
 		self.maintain(c)?;
-		let request = c.request.clone();
+		let (request, auth) = (c.request.clone(), c.auth.clone());
 		self.commit(c, |s, now| {
 			let Some(request) = &request else { return run(s, now) };
 			let lim = s.limits();
@@ -615,6 +645,7 @@ impl Service {
 				Admission::Replay(v) => return Ok(v),
 				Admission::Fresh(k) => k,
 			};
+			claim_metadata(s, key.as_str().unwrap_or(""), &auth)?;
 			let value = run(s, now)?;
 			s.decide_line(now, Some(&key), Some(&obj! { "state" => "done", "result" => value.clone() }))?;
 			Ok(value)
@@ -681,7 +712,7 @@ impl Service {
 		}
 		let auth = c.auth.clone();
 		self.commit(c, |s, now| {
-			authorize_pending(s, now, target, &auth);
+			authorize_pending(s, now, target, &auth)?;
 			s.settle(now)?;
 			s.lookup(now, Some(target))
 		})
@@ -700,7 +731,8 @@ impl Service {
 			let key = s.key_of(&RequestRef::of(Some(&request)));
 			if s.state.rpc.as_ref().and_then(|r| r.claims.get(&key)).is_none() {
 				s.assert_member_admission(&method)?;
-				let (mine, peer) = s.pending_counts(request.get("principal").expect("set by the service"));
+				let transport = auth.as_ref().and_then(|a| a.transport_peer_id());
+				let (mine, peer) = s.pending_counts(request.get("principal").expect("set by the service"), transport.as_deref());
 				if mine as f64 >= max_pending {
 					return Err(error("ResourceExhausted", "too many pending operations for this principal"));
 				}
@@ -717,11 +749,12 @@ impl Service {
 			let kind = ad.get("kind").and_then(Json::as_str);
 			let key = or_null(ad.get("key"));
 			if kind == Some("pending") {
-				authorize_pending(s, now, &request, &auth);
+				authorize_pending(s, now, &request, &auth)?;
 				s.settle(now)?;
 				return s.lookup(now, Some(&request));
 			}
 			if kind == Some("fresh") {
+				claim_metadata(s, key.as_str().unwrap_or(""), &auth)?;
 				if deadline.is_some_and(|d| d < now) {
 					s.decide_line(now, Some(&key), Some(&obj! { "state" => "done", "result" => Json::Null }))?;
 					return s.lookup(now, Some(&request));
@@ -742,7 +775,7 @@ impl Service {
 					s.decide_line(now, Some(&key), Some(&outcome))?;
 				} else {
 					s.park(now, key.as_str().expect("an admitted key"), tmpl, take, txn, until, if_exists, Some(&as_))?;
-					authorize_pending(s, now, &request, &auth);
+					authorize_pending(s, now, &request, &auth)?;
 				}
 			}
 			s.lookup(now, Some(&request))
@@ -813,7 +846,8 @@ impl Service {
 						let wanted = phi_json::canonical_key(&principal);
 						for i in 0..s.state.waiters.len() {
 							let w = &s.state.waiters[i];
-							if w.consumer.as_ref().is_some_and(|p| phi_json::canonical_key(p) == wanted) && a.can_execute_pending(if w.take { "take" } else { "read" }, w.template.get("type").and_then(Json::as_str)) {
+							let chosen = a.renewal_waiter_id().is_none_or(|only| only.as_deref() == Some(w.id.as_str()));
+							if chosen && w.consumer.as_ref().is_some_and(|p| phi_json::canonical_key(p) == wanted) && a.can_execute_pending(if w.take { "take" } else { "read" }, w.template.get("type").and_then(Json::as_str)) {
 								s.state.waiters[i].authorized_until = Some(a.valid_until());
 								s.touch(now);
 							}
@@ -866,7 +900,7 @@ impl Service {
 			"generation" => {
 				let (now, authority, principal, epoch) = (self.now(), self.o.authority_id.clone(), c.principal.clone(), self.o.primary_epoch);
 				let auth = c.auth.clone();
-				let r = self.store.commit_keyed(c.space.as_deref(), now, |s, key| check(&auth, now).and_then(|()| s.issue_generation(now, Some(&principal), &obj! { "key" => key, "authorityId" => authority.as_str(), "primaryEpoch" => epoch })));
+				let r = self.store.commit_keyed(c.space.as_deref(), now, |s, key| host_checked(s, &auth).and_then(|()| check(&auth, now)).and_then(|()| s.issue_generation(now, Some(&principal), &obj! { "key" => key, "authorityId" => authority.as_str(), "primaryEpoch" => epoch })));
 				reply(r.map_err(store_failed)??.value)
 			}
 			"write" => self.write_call(c, a).map(Step::Reply),
@@ -1189,7 +1223,11 @@ impl Service {
 				Ok(obj! { "expires" => expires })
 			}
 			"cancel" => {
-				self.mutate(c, "lease.cancel", obj! { "leaseId" => id.clone() }, |s, now| s.cancel(now, Some(&id), Some(&as_)))?;
+				let closed = c.auth.as_ref().is_some_and(|a| a.allow_closed_waiter());
+				self.mutate(c, "lease.cancel", obj! { "leaseId" => id.clone() }, |s, now| match s.cancel(now, Some(&id), Some(&as_)) {
+					Err(e) if closed && e.class == "UnknownLeaseError" => Ok(Json::Null),
+					other => other,
+				})?;
 				Ok(obj! { "state" => "cancelled" })
 			}
 			_ => Err(bad("action must be renew or cancel")),
@@ -1249,7 +1287,7 @@ impl Service {
 		}
 		self.maintain(c)?;
 		let args = Json::Array(ops.clone());
-		let (request, as_) = (c.request.clone().expect("a mutating call"), c.as_.clone());
+		let (request, as_, auth) = (c.request.clone().expect("a mutating call"), c.as_.clone(), c.auth.clone());
 		self.commit(c, |s, now| {
 			let lim = s.limits();
 			let reads = ops.iter().filter(|o| matches!(o.get("op").and_then(Json::as_str), Some("take" | "read"))).count() as f64;
@@ -1258,6 +1296,7 @@ impl Service {
 				Admission::Replay(v) => return Ok(v),
 				Admission::Fresh(k) => k,
 			};
+			claim_metadata(s, key.as_str().unwrap_or(""), &auth)?;
 			let mut begun: Option<Json> = None;
 			let txn_of = |t: Option<&Json>, begun: &Option<Json>| match t.filter(|t| !t.is_null()) {
 				Some(Json::String(d)) if d == "$" => begun.clone().ok_or_else(|| error("IllegalArgumentError", "txn \"$\" needs a begin earlier in the batch")),

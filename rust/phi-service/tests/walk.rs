@@ -375,7 +375,23 @@ impl Walk {
 			_ => ["read:*", "take:*", "write:*", "notify:*"].iter().map(|s| s.to_string()).collect(),
 		};
 		let valid_until = self.now + self.rng.pick(&[0.0, 500.0, 5000.0, 60_000.0]);
-		common::Decided { valid_until, roles, can, expired: self.rng.chance(0.05) }
+		let r = &mut self.rng;
+		// half the time as a router delegates it
+		let extra = r.chance(0.5).then(|| {
+			let mut o = Object::new();
+			o.insert("transportPeerId", "router".into());
+			o.insert("routerEpoch", Json::Number(r.below(3) as f64));
+			o.insert("controlPrimaryEpoch", Json::Number(1.0));
+			o.insert("policyVersion", Json::Number(1.0 + r.below(2) as f64));
+			o.insert("knownRequest", Json::Bool(r.chance(0.3)));
+			o.insert("allowClosedWaiter", Json::Bool(r.chance(0.3)));
+			if r.chance(0.3) {
+				o.insert("renewalWaiterId", Json::Null);
+			}
+			o.insert("fenced", Json::Bool(r.chance(0.05)));
+			Json::Object(o)
+		});
+		common::Decided { valid_until, roles, can, expired: self.rng.chance(0.05), extra }
 	}
 
 	fn learn(&mut self, peer: &str, text: &str, call: &str, seen: &mut BTreeMap<String, usize>) {
@@ -535,7 +551,7 @@ fn run(seed: u64, steps: usize, seen: &mut BTreeMap<String, usize>) {
 		if authorized {
 			let d = w.decided(&peer);
 			if let Json::Object(o) = &mut l {
-				o.insert("auth", obj! { "validUntil" => d.valid_until, "roles" => Json::Array(d.roles.iter().map(|r| r.as_str().into()).collect()), "can" => Json::Array(d.can.iter().map(|c| c.as_str().into()).collect()), "expired" => d.expired });
+				o.insert("auth", d.to_json());
 			}
 			*seen.entry(format!("auth expired={} rights={}", d.expired, !d.can.is_empty())).or_default() += 1;
 			*rust.auth.borrow_mut() = d;

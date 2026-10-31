@@ -266,6 +266,26 @@ impl Space {
 		Ok(())
 	}
 
+	/// `setMetadata`: who brought a request, for the checks of later calls on it. Claims are values: the record is replaced.
+	pub fn set_metadata(&mut self, key: &str, meta: &[(&str, Option<Json>)]) -> Result<()> {
+		let Some(c) = self.rpc_mut().claims.get(key) else { return Err(error("RequestExpired", "metadata requires known claim")) };
+		let before = bytes(&c);
+		let Json::Object(mut next) = c else { unreachable!("claims are objects") };
+		for (k, v) in meta {
+			if let Some(v) = v {
+				next.insert(*k, v.clone());
+			}
+		}
+		let next = Json::Object(next);
+		let delta = bytes(&next) - before;
+		if self.claim_bytes() + delta > self.limits().max_claim_bytes {
+			return Err(error("LimitError", "authenticated claim metadata exceeds budget"));
+		}
+		self.claim_put(key, Some(next));
+		*self.rpc_mut().bytes.as_mut().expect("tally") += delta;
+		Ok(())
+	}
+
 	/// `decide` as a line of the driver states it: `outcome` is `{state, result?, locked?, error?}`.
 	pub fn decide_line(&mut self, now: f64, key: Option<&Json>, outcome: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
@@ -317,7 +337,7 @@ impl Space {
 	}
 
 	/// How many open requests a principal has, and how many its peer has (`beginOperation`'s quotas).
-	pub fn pending_counts(&self, principal: &Json) -> (usize, usize) {
+	pub fn pending_counts(&self, principal: &Json, transport: Option<&str>) -> (usize, usize) {
 		let peer = principal.get("peerId");
 		let who = |p: Option<&Json>| (p.and_then(|p| p.get("peerId")).cloned(), p.and_then(|p| p.get("agentId")).cloned());
 		let me = who(Some(principal));
@@ -325,7 +345,7 @@ impl Space {
 		let mut count = |c: &Json| {
 			let p = c.get("principal");
 			mine.0 += usize::from(who(p) == me);
-			mine.1 += usize::from(p.and_then(|p| p.get("peerId")) == peer);
+			mine.1 += usize::from(p.and_then(|p| p.get("peerId")) == peer || (transport.is_some() && str_of(c, "transportPeerId") == transport));
 		};
 		// claims in memory are not copied for this: a take would pay for every result the Space keeps
 		match self.state.rpc.as_ref().map(|r| &r.claims) {

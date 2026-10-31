@@ -1,4 +1,4 @@
-// The service as a process (docs/rust-portierung.md, R3): the text of a call in, the text of its reply out, on one store
+// The service as a process (docs/rust-portierung.en.md, R3): the text of a call in, the text of its reply out, on one store
 // with the clock and the randomness of the line, so another implementation can be held against this one byte for byte.
 //
 //   node --experimental-strip-types --no-warnings test/support/service-driver.ts
@@ -43,11 +43,13 @@ const identity = new StaticIdentity({
 	typed: { principal: { peerId: "typed" }, roles: ["tasks"] },
 });
 const policy = { roles: { ...DEFAULT_POLICY.roles, tasks: { methods: METHODS, types: ["Task"] } } };
-let auth: { validUntil: number; roles: string[]; can: string[]; expired?: boolean } | undefined;
+let auth: { validUntil: number; roles: string[]; can: string[]; expired?: boolean; transportPeerId?: string; renewalWaiterId?: string | null; allowClosedWaiter?: boolean; routerEpoch?: number; controlPrimaryEpoch?: number; policyVersion?: number; knownRequest?: boolean; fenced?: boolean } | undefined;
 const authorize = async () => {
 	if (!auth) return { validUntil: core.FOREVER, roles: [], check() {}, canExecutePending: () => false };
 	const a = auth;
-	return { validUntil: a.validUntil, roles: a.roles, check() { if (a.expired) throw new core.PermissionError("grant expired before commit"); },
+	const { transportPeerId, renewalWaiterId, allowClosedWaiter, routerEpoch, controlPrimaryEpoch, policyVersion, knownRequest } = a;
+	return { transportPeerId, ...(renewalWaiterId === undefined ? {} : { renewalWaiterId }), allowClosedWaiter, routerEpoch, controlPrimaryEpoch, policyVersion, knownRequest, checkTx: async () => { if (a.fenced) throw new core.PermissionError("epoch changed before commit"); },
+		validUntil: a.validUntil, roles: a.roles, check() { if (a.expired) throw new core.PermissionError("grant expired before commit"); },
 		canExecutePending: (method: string, template: core.Template) => {
 			const m = method.startsWith("take") ? "take" : method.startsWith("read") ? "read" : method;
 			return a.can.includes(`${m}:*`) || (!!template?.type && a.can.includes(`${m}:${template.type}`));
