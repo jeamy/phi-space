@@ -76,6 +76,7 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 		case "setCompletionProfiles": core.setCompletionProfiles(s, l.profiles, now); return null;
 		case "setMembership": s.membership = l.membership; return null;
 		case "permitRoutedWrite": permitRoutedWrite(s, l.proven === true); return null;
+		case "recoverRunGate": return core.recoverRunGate(s, now, l.o);
 		case "applyRunGate": return core.applyRunGate(s, now, l.command);
 		// ---- waiters, subscriptions
 		case "addWaiter": return core.addWaiter(s, now, l.w);

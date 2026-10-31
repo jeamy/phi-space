@@ -147,3 +147,30 @@ fn a_gate_is_charged_to_the_document() {
 	assert!(flips.iter().any(|s| s.contains("exceeds maxDocBytes")), "{flips:?}");
 	assert!(flips.iter().any(String::is_empty), "{flips:?}");
 }
+
+#[test]
+fn a_recovery_fence_holds_a_run_until_its_decision() {
+	let mut b = Both::new(obj! {});
+	let recover = |id: &str, run: &str| obj! { "op" => "recoverRunGate", "o" => obj! { "runId" => run, "recoveryId" => id } };
+	let view = b.step(recover("rec", "absent")).unwrap();
+	assert_eq!(view.get("present"), Some(&Json::Bool(false)));
+	b.profile().unwrap();
+	b.gate("r", "c1", "prepare", 1.0).unwrap();
+	b.task("r").unwrap();
+	b.gate("r", "c2", "release", 2.0).unwrap();
+	let t = b.bound();
+	let view = b.step(recover("rec", "r")).unwrap();
+	assert_eq!(view.get("stable"), Some(&Json::Bool(false)), "{}", view.to_json_text());
+	b.step(recover("rec", "r")).unwrap();
+	refused(b.gate("r", "c3", "pause", 3.0), "under recovery");
+	refused(b.step(obj! { "op" => "renew", "id" => t.as_str(), "ms" => 1000.0 }), "under recovery");
+	refused(b.step(obj! { "op" => "applyRunGate", "command" => obj! { "runId" => "r", "commandId" => "d", "kind" => "pause", "revision" => 3.0, "recoveryId" => "other" } }), "only its decision applies");
+	let decide = |kind: &str, rev: f64, expect: f64| obj! { "op" => "applyRunGate", "command" => obj! { "runId" => "r", "commandId" => "d", "kind" => kind, "revision" => rev, "recoveryId" => "rec", "expect" => obj! { "revision" => expect, "state" => "running" } } };
+	refused(b.step(decide("pause", 3.0, 1.0)), "review again");
+	assert_eq!(phase(b.step(decide("pause", 3.0, 2.0))), "fenced");
+	b.step(obj! { "op" => "abortTxn", "id" => t.as_str() }).unwrap();
+	assert_eq!(phase(b.step(decide("pause", 3.0, 2.0))), "applied");
+	let view = b.step(recover("next", "r")).unwrap();
+	assert_eq!(view.get("stable"), Some(&Json::Bool(true)), "{}", view.to_json_text());
+	refused(b.step(obj! { "op" => "recoverRunGate", "o" => obj! { "runId" => "-", "recoveryId" => "x" } }), "invalid run recovery request");
+}

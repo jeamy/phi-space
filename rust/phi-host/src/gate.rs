@@ -203,6 +203,8 @@ pub struct GateOptions {
 	pub control: Option<Control>,
 	/// The authoritative side of grants, and with it the rotation of own keys.
 	pub rotating: Option<Rotating>,
+	/// Signed RunGate instructions of the controller.
+	pub run_gates: Option<crate::run_member::RunGates>,
 	pub handshake_ms: u64,
 	pub max_per_peer: usize,
 	pub connections_per_second: f64,
@@ -214,7 +216,7 @@ pub struct GateOptions {
 
 impl GateOptions {
 	pub fn new(directory: Rc<Netbird>, now: Now) -> GateOptions {
-		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
+		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
 	}
 }
 
@@ -416,6 +418,17 @@ async fn supervise(gate: Rc<Gate>, owner: Owner) {
 }
 
 impl GateSession {
+	/// A notice of the control plane: only a proven service peer brings one.
+	fn instruction(&self, service: &mut Service, gates: &crate::run_member::RunGates, call: &Json) -> Json {
+		let id = self.identity();
+		let proven = self.state.borrow().proof.is_some() && id.roles.iter().any(|r| ["router", "host", "admin"].contains(&r.as_str()));
+		let done = if proven { gates.apply(service, call.get("args").and_then(|a| a.get("instruction")).unwrap_or(&Json::Null)) } else { Err(phi_core::space::error("PermissionError", "epoch notice requires proven service peer")) };
+		match done {
+			Ok(ack) => crate::control::answered(ack),
+			Err(e) => crate::control::refuse(&e.message),
+		}
+	}
+
 	/// `grant`: on the identity the directory gives now, not the one of the connection's start.
 	async fn grant(&self, owner: &Owner, call: &Json) -> Json {
 		let (Some(rotating), Some((_, keys))) = (&self.gate.o.rotating, &self.gate.o.proving) else { return crate::control::refuse("grants are not served here") };
@@ -472,6 +485,11 @@ impl Session for GateSession {
 			let active = proof.as_ref().and_then(|p| found.find(&self.peer_id, &p.key_id)).is_some_and(|k| k.active);
 			let key_id = proof.filter(|_| active).map(|p| p.key_id);
 			return Some(rotating.handle(service, &call, &self.identity(), proven, key_id.as_deref(), now).to_json_text());
+		}
+		if method == "runGateInstruction" {
+			if let Some(gates) = &self.gate.o.run_gates {
+				return Some(self.instruction(service, gates, &call).to_json_text());
+			}
 		}
 		if let (Some(enrolling), "enroll" | "enrollStatus") = (&self.gate.o.enrolling, method) {
 			let unpaired = self.roles.iter().any(|r| r == crate::control::UNPAIRED_ROLE);

@@ -298,6 +298,49 @@ impl Space {
 		Ok(self.gate_ack(&run, c, &state, phase))
 	}
 
+	fn recovery_view(&self, run: &str, recovery_id: &str) -> Json {
+		let or_null = |v: Option<&Json>| v.filter(|x| !x.is_null()).cloned().unwrap_or(Json::Null);
+		let base = |o: &mut Vec<(&str, Json)>| {
+			o.extend([("runId", run.into()), ("spaceId", self.state.space_id.as_deref().map_or(Json::Null, Json::from)), ("incarnation", self.state.incarnation.as_deref().map_or(Json::Null, Json::from)), ("authorityId", or_null(self.state.rest.get("acceptedAuthorityId").or_else(|| self.state.rest.get("membership").and_then(|m| m.get("authorityId"))))), ("recoveryId", recovery_id.into())]);
+		};
+		let mut o = vec![];
+		base(&mut o);
+		let Some(g) = self.gate(run) else {
+			o.extend([("present", Json::Bool(false)), ("gate", Json::Null), ("fence", Json::Null), ("restored", Json::Null), ("historical", Json::Bool(false)), ("stopped", Json::Bool(false)), ("maxRevision", Json::Number(0.0)), ("boundTxns", Json::Number(0.0)), ("stable", Json::Bool(true))]);
+			return Json::Object(o.into_iter().map(|(k, v)| (k.to_owned(), v)).collect());
+		};
+		let bound = self.bound_txns(run) as f64;
+		let fence = g.get("fence").map_or(Json::Null, |f| obj! { "revision" => or_null(f.get("revision")), "commandId" => or_null(f.get("commandId")), "kind" => or_null(f.get("kind")) });
+		let history = g.get("history").and_then(Json::as_array).map_or(&[][..], Vec::as_slice);
+		let restored = g.get("restored");
+		let stopped = text(g, "state") == Some("stopped") || restored.and_then(|r| text(r, "state")) == Some("stopped") || history.iter().any(|h| text(h, "state") == Some("stopped"));
+		let top = history.iter().map(|h| number(h, "revision")).fold(number(g, "revision").max(g.get("fence").map_or(0.0, |f| number(f, "revision"))).max(restored.map_or(0.0, |r| number(r, "maxRevision"))), f64::max);
+		o.extend([("present", Json::Bool(true)), ("gate", obj! { "revision" => or_null(g.get("revision")), "state" => or_null(g.get("state")), "commandId" => or_null(g.get("commandId")), "kind" => or_null(g.get("kind")) }), ("fence", fence), ("restored", or_null(restored)), ("historical", Json::Bool(g.get("historical") == Some(&Json::Bool(true)))), ("stopped", Json::Bool(stopped)), ("maxRevision", Json::Number(top)), ("boundTxns", Json::Number(bound)), ("stable", Json::Bool(bound == 0.0))]);
+		Json::Object(o.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
+	}
+
+	/// `recoverRunGate`: installs the recovery entry fence and returns the run's view; a newer recovery replaces an older one.
+	pub fn recover_run_gate(&mut self, now: f64, o: &Json) -> Result<Json> {
+		if !valid_id(o.get("runId")) || !valid_id(o.get("recoveryId")) {
+			return Err(error("IllegalArgumentError", "invalid run recovery request"));
+		}
+		self.assert_ported()?;
+		self.settle(now)?;
+		let (run, recovery) = (text(o, "runId").unwrap_or("").to_owned(), text(o, "recoveryId").unwrap_or("").to_owned());
+		if self.gate(&run).is_some_and(|g| g.get("recovery").and_then(|r| text(r, "id")) != Some(&recovery)) {
+			if !self.can_charge(GATE_COST) {
+				return Err(exhausted("the recovery fence exceeds the remaining commit budget"));
+			}
+			self.charge(GATE_COST)?;
+			self.gate_mut(&run).expect("looked at above").insert("recovery", obj! { "id" => recovery.as_str(), "at" => now });
+			self.touch(now);
+		}
+		Ok(self.recovery_view(&run, &recovery))
+	}
+
+	/// Whether a run's gate stands at preparing (`runGateView`).
+	pub fn run_preparing(&self, run: &str) -> bool { self.gate(run).is_some_and(|g| text(g, "state") == Some("preparing")) }
+
 	/// `assertGatedProfilesKept`: every path that replaces completion profiles must keep the gates of unstopped runs.
 	pub(crate) fn assert_gated_profiles_kept(&self, profiles: &[Json]) -> Result<()> {
 		let active = self.gates().is_some_and(|g| g.iter().any(|(_, x)| text(x, "state") != Some("stopped")));

@@ -8,7 +8,7 @@ import type net from "node:net";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
-import { BootstrapClosed, CONTROL_SPACE, ControlAccess, EnrollmentService, GateIdentity, MemoryKeyDirectory, NetbirdDirectory, PhiSpaces, ProvingService, SpaceKeyDirectory, SpaceService, Supervisor, bootstrapEnroll, core, createEnroll, serveTlsRegister, GrantAuthority, GrantVerifier, RotationService, listSpaces, revokePeerKey, snapshotSpace, socketTransport, startGate, DEFAULT_GROUP_ROLES, rolesOf, type Connection, type KeyDirectory, type PeerKeyRec, type Policy } from "../../src/index.ts";
+import { BootstrapClosed, CONTROL_SPACE, ControlAccess, EnrollmentService, GateIdentity, MemoryKeyDirectory, NetbirdDirectory, PhiSpaces, ProvingService, SpaceKeyDirectory, SpaceService, Supervisor, bootstrapEnroll, RunGateService, createSpace, spaceDoc, core, createEnroll, serveTlsRegister, GrantAuthority, GrantVerifier, RotationService, listSpaces, revokePeerKey, snapshotSpace, socketTransport, startGate, DEFAULT_GROUP_ROLES, rolesOf, type Connection, type RunSpec, type KeyDirectory, type PeerKeyRec, type Policy } from "../../src/index.ts";
 import { plainDoc } from "./host.ts";
 import { openTestHost } from "./host.ts";
 import { ctx } from "./persistent.ts";
@@ -46,6 +46,8 @@ export type GateCase = {
 	spaceKeys?: boolean; enrollment?: boolean; controlAccess?: boolean; supervisor?: boolean; serviceClock?: boolean;
 	/** This host issues grants (authority "authority") and serves the rotation of own keys. */
 	grants?: boolean;
+	/** This host is a run Member under the controller `control` with this key; its run kind `jobs` writes two Jobs. */
+	runGates?: { controllerKey: string };
 };
 /** The grant signing key: PKCS#8 and SPKI of Ed25519 end in the seed and the public key. */
 const grantKey = () => { const { publicKey, privateKey } = generateKeyPairSync("ed25519"); return { privateKey, publicKey: publicKey.export({ format: "der", type: "spki" }).subarray(-32).toString("base64"), seed: privateKey.export({ format: "der", type: "pkcs8" }).subarray(-32).toString("base64") }; };
@@ -63,8 +65,11 @@ export type HostSide = {
 	/** The control space's document, as text. */
 	state(): Promise<string>;
 	writeAs(owner: string, entry: { type: string; fields: Record<string, unknown> }, leaseMs: number): Promise<unknown>;
+	/** A named Space with these completion profiles; its id. */
+	jobsSpace(alias: string, profiles: core.CompletionProfile[]): Promise<string>;
+	jobs(space: string): Promise<Array<{ fields: Record<string, any> }>>;
 };
-export type GateUnderTest = { port: number; readonly events: Seen[]; readonly enrollEvents: EnrollSeen[]; readonly commandEvents: CommandSeen[]; control: HostSide; peers(): Promise<Array<{ peerId: string; ip: string; roles: string[]; proven: boolean }>>; revalidate(): Promise<number> };
+export type GateUnderTest = { memberKey: string; port: number; readonly events: Seen[]; readonly enrollEvents: EnrollSeen[]; readonly commandEvents: CommandSeen[]; control: HostSide; peers(): Promise<Array<{ peerId: string; ip: string; roles: string[]; proven: boolean }>>; revalidate(): Promise<number> };
 
 async function inProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 	const directory = new NetbirdDirectory({ url: c.url, token: c.token ?? "t", now: c.clock.now, ...(c.cacheMs === undefined ? {} : { cacheMs: c.cacheMs }) });
@@ -92,6 +97,22 @@ async function inProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 			catch (e) { return JSON.stringify({ ok: false, error: { code: !(conn.state as { proof?: unknown } | undefined)?.proof && (conn.credentials as { roles?: string[] } | undefined)?.roles?.some((r) => ["admin", "host"].includes(r)) ? "ProofRequired" : "PermissionDenied", message: (e as Error).message } }); }
 		} } as unknown as ProvingService;
 	}
+	const member = grantKey();
+	if (c.runGates) {
+		const signer = { keyId: "member", algorithm: "ed25519" as const, sign: (d: Uint8Array) => sign(null, Buffer.from(d), member.privateKey) };
+		const preparers = { jobs: async (run: RunSpec, space: string) => { await host.commit(async (tx) => { const s = await spaceDoc(tx, space, Date.now()); for (const n of [1, 2]) if (!core.count(s, Date.now(), { type: "Job", fields: { runId: run.runId, n } })) core.write(s, Date.now(), { type: "Job", fields: { runId: run.runId, n } }, null, core.FOREVER); }, ctx); } };
+		const runs = new RunGateService({ host, ctx, authorityId: "authority", peerId: "host-1", signer, controllerPin: { issuer: "control", algorithm: "ed25519", publicKey: c.runGates.controllerKey }, preparers, assertAuthority: async () => {} });
+		const inner = served;
+		served = { handle: (x: unknown, conn: Connection) => inner.handle(x, conn), async handleText(t: string, conn: Connection, max?: number) {
+			const call = JSON.parse(t) as { method?: string; args?: { instruction?: never } };
+			if (call?.method !== "runGateInstruction") return inner.handleText(t, conn, max);
+			try {
+				const id = await identity.authenticate(conn);
+				if (!(conn.state as { proof?: unknown } | undefined)?.proof || !id?.roles.some((r) => ["router", "host", "admin"].includes(r))) throw new Error("epoch notice requires proven service peer");
+				return JSON.stringify({ ok: true, result: await runs.apply(call.args?.instruction as never) });
+			} catch (e) { return JSON.stringify({ ok: false, error: { code: "PermissionDenied", message: (e as Error).message } }); }
+		} } as unknown as ProvingService;
+	}
 	const gate = await startGate(served, {
 		listen: { host: c.host ?? "127.0.0.1", port: 0 }, directory, revalidateMs: 0, now: c.clock.now, onEvent: (e) => events.push(e),
 		...(keys ? { keys } : {}), ...(c.handshakeMs === undefined ? {} : { handshakeMs: c.handshakeMs }),
@@ -108,16 +129,19 @@ async function inProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 		entries: async (t) => core.list(await controlState(), c.clock.now(), t as never) as never,
 		state: async () => JSON.stringify(plainDoc(await controlState())),
 		writeAs: (owner, entry, leaseMs) => new PhiSpaces(host, ctx, c.clock.now, undefined, owner, { space: CONTROL_SPACE }).write(entry as never, null, leaseMs),
+		jobsSpace: async (alias, profiles) => { const id = (await host.commit((tx) => createSpace(tx, alias, Date.now()), ctx)).spaceId; await host.commit(async (tx) => core.setCompletionProfiles(await spaceDoc(tx, id, Date.now()), profiles), ctx); return id; },
+		jobs: async (space) => core.list((await snapshotSpace(host, space, ctx))!, Date.now(), { type: "Job" }) as never,
 	};
-	return { port: (gate.address() as net.AddressInfo).port, events, enrollEvents, commandEvents, control, peers: async () => gate.peers(), revalidate: () => gate.revalidate() };
+	return { memberKey: member.publicKey, port: (gate.address() as net.AddressInfo).port, events, enrollEvents, commandEvents, control, peers: async () => gate.peers(), revalidate: () => gate.revalidate() };
 }
 
 async function asProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
+	const member = grantKey();
 	const dir = scratch(tc), eventsFile = join(dir, "events"), config = join(dir, "case.json"), hooksPath = join(dir, "hooks.sock");
 	put(eventsFile, "");
 	writeFileSync(config, JSON.stringify({
 		hooks: hooksPath, endpoints: [], identities: {}, policy: c.policy?.roles,
-		gate: { host: c.host ?? "127.0.0.1", port: 0, url: c.url, token: c.token ?? "t", cacheMs: c.cacheMs, handshakeMs: c.handshakeMs, maxConnectionsPerPeer: c.maxConnectionsPerPeer, connectionsPerSecondPerPeer: c.connectionsPerSecondPerPeer, clockFile: c.clock.file, eventsFile, keysFile: c.keys?.file, gateHostId: c.gateHostId, spaceKeys: c.spaceKeys, enrollment: c.enrollment, controlAccess: c.controlAccess, supervisor: c.supervisor, serviceClock: c.serviceClock, grants: c.grants ? (() => { const k = grantKey(); return { authorityId: "authority", hostId: "host-1", seed: k.seed, publicKey: k.publicKey }; })() : undefined },
+		gate: { host: c.host ?? "127.0.0.1", port: 0, url: c.url, token: c.token ?? "t", cacheMs: c.cacheMs, handshakeMs: c.handshakeMs, maxConnectionsPerPeer: c.maxConnectionsPerPeer, connectionsPerSecondPerPeer: c.connectionsPerSecondPerPeer, clockFile: c.clock.file, eventsFile, keysFile: c.keys?.file, gateHostId: c.gateHostId, spaceKeys: c.spaceKeys, enrollment: c.enrollment, controlAccess: c.controlAccess, supervisor: c.supervisor, serviceClock: c.serviceClock, runGates: c.runGates ? { authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.runGates.controllerKey } : undefined, grants: c.grants ? (() => { const k = grantKey(); return { authorityId: "authority", hostId: "host-1", seed: k.seed, publicKey: k.publicKey }; })() : undefined },
 	}));
 	const proc = spawn(CMD![0]!, [...CMD!.slice(1), "--store", "memory", "--listen", `unix:${join(dir, "unused.sock")}`, "--test-hooks", config], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
 	const port = await new Promise<number>((resolve, reject) => {
@@ -137,6 +161,7 @@ async function asProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 	};
 	const seen = <T,>(key: string): T[] => readFileSync(eventsFile, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as T).filter((e) => key in (e as object));
 	return {
+		memberKey: member.publicKey,
 		port,
 		get events() { return seen<Seen>("event"); },
 		get enrollEvents() { return seen<EnrollSeen>("outcome"); },
@@ -149,6 +174,8 @@ async function asProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 			entries: (template) => hook("entries", { template }),
 			state: async () => JSON.stringify(await hook("controlState")),
 			writeAs: (owner, entry, leaseMs) => hook("writeAs", { owner, entry, leaseMs }),
+			jobsSpace: (alias, profiles) => hook("jobsSpace", { alias, profiles }),
+			jobs: (space) => hook("jobs", { space }),
 		},
 		peers: () => hook("peers"),
 		revalidate: () => hook("revalidate"),

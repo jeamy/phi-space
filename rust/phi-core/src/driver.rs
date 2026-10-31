@@ -146,6 +146,7 @@ pub fn apply_line(s: &mut Space, snapshots: &mut crate::snapshot::Snapshots, now
 				s.router_permit = l.get("proven") == Some(&Json::Bool(true));
 				Ok(Json::Null)
 			}
+			"recoverRunGate" => s.recover_run_gate(now, l.get("o").unwrap_or(&Json::Null)),
 			"applyRunGate" => s.apply_run_gate(now, l.get("command").unwrap_or(&Json::Null)),
 			"notify" => {
 				let or_null = |k: &str| l.get(k).unwrap_or(&Json::Null);

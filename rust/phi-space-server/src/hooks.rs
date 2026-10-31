@@ -7,7 +7,8 @@
 //  "primaryEpoch"?, "maxPendingPerPrincipal"?, "maxPendingPerPeer"?, "maxCallsPerWindow"?, "wakeOnCommit"?, "maxFrameBytes"?,
 //  "maxConnections"?, "maxInflightPerConnection"?, "idleMs"?, "gate"?: {"host", "port", "url", "token", "cacheMs"?, "handshakeMs"?,
 //  "maxConnectionsPerPeer"?, "connectionsPerSecondPerPeer"?, "clockFile"?, "eventsFile"?, "keysFile"?, "gateHostId"?, "spaceKeys"?,
-//  "enrollment"?, "controlAccess"?, "supervisor"?, "serviceClock"?, "grants"?: {"authorityId", "hostId", "seed", "publicKey"}}}
+//  "enrollment"?, "controlAccess"?, "supervisor"?, "serviceClock"?, "grants"?: {"authorityId", "hostId", "seed", "publicKey"},
+//  "runGates"?: {"authorityId", "peerId", "seed", "controller", "controllerKey"}}}
 //
 // The gate's clock, its keys and its events are files, so a test can change them between two calls without a round trip.
 //
@@ -152,9 +153,30 @@ fn gate(g: &Json) -> Result<(Listen, Rc<dyn phi_wire::Front>, Now), String> {
 		let signer = phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed));
 		o.rotating = Some(phi_host::rotation::Rotating::new(&part("authorityId")?, &part("hostId")?, signer, &part("publicKey")?));
 	}
+	if let Some(r) = g.get("runGates") {
+		let part = |k: &str| r.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("runGates without {k}"));
+		let seed: [u8; 32] = phi_host::auth::base64(&part("seed")?).try_into().map_err(|_| "a seed is 32 bytes")?;
+		let jobs: phi_host::run_member::RunPreparer = Box::new(jobs_preparer);
+		o.run_gates = Some(phi_host::run_member::RunGates { authority_id: part("authorityId")?, peer_id: part("peerId")?, signer: phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)), controller: phi_host::run_member::Pin { issuer: part("controller")?, algorithm: phi_host::auth::Algorithm::Ed25519, public_key: part("controllerKey")? }, preparers: [("jobs".to_owned(), jobs)].into_iter().collect(), assert_authority: Box::new(|_| Ok(())) });
+	}
 	let host = text("host").ok_or("the gate names no host")?;
 	let front: Rc<dyn phi_wire::Front> = Gate::new(host, o)?;
 	Ok((Listen::Tcp { host: host.to_owned(), port: number("port").unwrap_or(0.0) as u16 }, front, now))
+}
+
+/// The test's run kind: two jobs per Member, idempotent.
+fn jobs_preparer(service: &mut Service, run: &Json, space: &str) -> Result<(), phi_core::space::CoreError> {
+	let id = run.get("runId").cloned().unwrap_or(Json::Null);
+	service.commit_on(Some(space), |s, now| {
+		for n in [1.0, 2.0] {
+			let fields = phi_json::obj! { "runId" => id.clone(), "n" => n };
+			let t = phi_core::space::Template::from_json(Some(&phi_json::obj! { "type" => "Job", "fields" => fields.clone() }))?;
+			if s.list(now, &t, None, None, None)?.as_array().is_some_and(Vec::is_empty) {
+				s.write(now, &phi_json::obj! { "type" => "Job", "fields" => fields }, None, Some(&Json::Number(phi_json::FOREVER)), None)?;
+			}
+		}
+		Ok(())
+	})
 }
 
 /// What a test does on the host itself, where the in-process test holds it.
@@ -163,6 +185,25 @@ fn control_hook(service: &mut Service, name: &str, line: &Json) -> String {
 	let now = line.get("now").and_then(Json::as_f64).unwrap_or(0.0);
 	let ttl = line.get("ttlMs").and_then(Json::as_f64);
 	let scope = line.get("scope").and_then(strings).unwrap_or_default();
+	if name == "jobsSpace" {
+		let done = service.store.create_space(text("alias"), now, phi_store::system_random()).map_err(|e| phi_core::space::error("Error", e.to_string())).and_then(|r| r).and_then(|info| {
+			let id = info.get("spaceId").and_then(Json::as_str).unwrap_or("").to_owned();
+			let profiles = line.get("profiles").cloned();
+			service.commit_on(Some(&id), |s, now| s.set_completion_profiles(now, profiles.as_ref()))?;
+			Ok(Json::String(id))
+		});
+		return match done {
+			Ok(v) => phi_json::obj! { "ok" => true, "result" => v }.to_json_text(),
+			Err(e) => phi_json::obj! { "ok" => false, "class" => e.class, "message" => e.message }.to_json_text(),
+		};
+	}
+	if name == "jobs" {
+		let done = service.store.reader(Some(text("space"))).and_then(|h| h.space.list(now, &phi_core::space::Template::from_json(Some(&phi_json::obj! { "type" => "Job" }))?, None, None, None));
+		return match done {
+			Ok(v) => phi_json::obj! { "ok" => true, "result" => v }.to_json_text(),
+			Err(e) => phi_json::obj! { "ok" => false, "message" => e.message }.to_json_text(),
+		};
+	}
 	let id = control::control_id(service, now);
 	let result = id.and_then(|id| match name {
 		"bootstrapEnroll" => control::bootstrap_enroll(service, now, text("tokenHash"), text("allowedPeerId"), ttl),
