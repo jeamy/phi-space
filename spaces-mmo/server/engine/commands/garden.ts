@@ -361,14 +361,14 @@ const pate: Command = {
 
 const sammle: Command = {
 	key: "sammle", aliases: ["sammeln", "samen", "seeds", "gather"],
-	help: "sammle samen – in der wilden Flora hier nach Samen suchen (findet nicht immer etwas; danach eine Weile Pause)",
+	help: "sammle samen – in der wilden Flora hier nach Samen suchen (findet nicht immer etwas; an dieser Stelle danach eine kurze Pause)",
 	async func(c, arg) {
 		// "sammle eier": what the animals gave (animals.ts)
 		if (meansYield(c, arg)) return collect(c);
 		const g = garden(c);
 		if (arg.trim() && !/^(?:samen|seeds?|saatgut)$/i.test(arg.trim().replace(ARTICLE, ""))) throw new NotUnderstood("Gesammelt werden hier Samen („sammle samen“) und im Stall, was die Tiere geben („sammle eier“); Dinge am Strand hebst du mit „get“ auf.");
 		const now = await worldNowOf(c.space, c.txn);
-		const rest = await peek(c.space, { type: "SeedRest", fields: { charId: c.actor.charId } });
+		const rest = await peek(c.space, { type: "SeedRest", fields: { charId: c.actor.charId, room: c.actor.room } });
 		const until = rest ? fieldsOf<SeedRestFields>(rest).untilWorldMs : 0;
 		if (until > now) throw new CommandError(`Du hast hier eben erst gesucht; in etwa ${hours(until - now)} wieder.`);
 		const room = c.world.rooms.find((r) => r.roomId === c.actor.room);
@@ -378,7 +378,7 @@ const sammle: Command = {
 		const wild = [...g.sorts, ...(c.world.fields?.crops ?? [])].filter(grows);
 		if (!wild.length) throw new CommandError("Hier wächst nichts Wildes, das Samen trägt.");
 		if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
-		await c.space.write({ type: "SeedRest", fields: { charId: c.actor.charId, untilWorldMs: now + g.seedRestWorldMs } satisfies SeedRestFields as never }, c.txn, FOREVER);
+		await c.space.write({ type: "SeedRest", fields: { charId: c.actor.charId, room: c.actor.room, untilWorldMs: now + g.seedRestWorldMs } satisfies SeedRestFields as never }, c.txn, FOREVER);
 		if (randomInt(0, 1000) >= g.seedChance * 1000) return msg(c, c.actor.charId, "info", "Du suchst zwischen den Pflanzen, findest aber keine reifen Samen.");
 		const sort = wild[randomInt(0, wild.length)]!;
 		const got = await giveBack(c, [{ proto: sort.seed, count: 1 }]);

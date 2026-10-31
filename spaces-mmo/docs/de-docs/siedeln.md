@@ -664,7 +664,7 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
    ist das Licht eines Feuers voll, nimmt `bau` keinen Plan mehr an.
    - **Teil 1, gebaut 2026-10-29** (`server/engine/commands/build.ts`, Test `tests/build.test.ts`): Bauplan „Hütte“
      in der Weltdatei (`building.plans`), `bau` (neben sich oder `bau hütte <x> <y>`), `liefere`, `arbeite` (eine
-     Weltstunde Ruhe danach), `baustelle`, Fertigstellen in derselben Transaktion; Flächen als `Plot` mit `unique` auf
+     halbe Weltstunde Ruhe danach), `baustelle`, Fertigstellen in derselben Transaktion; Flächen als `Plot` mit `unique` auf
      Raum und Zelle, niemand läuft hinein (`blockedIn` in `occupancy.ts`, auch Strandgut, Ankunft und die Seite);
      Sperrzellen (Ausgang und Tür, Feuer und seine Nachbarzellen, Dinge, Personen) und die Prüfung, dass Ausgänge,
      Spawn und eine Seite jedes Feuers erreichbar bleiben; Lichtpunkte je Feuer (`LightUse`, 20 je Feuer, die Hütte
@@ -697,7 +697,7 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      2 Treibholz, 1 Tangseil), **Regentonne** als Bauplan (1×1, 3 Treibholz, 1 Tangseil, 4 Arbeit; `schöpfe` füllt eine
      Kanne Wasser), **Beete** 2×2 im Licht (`umgraben`, Flächen als `Plot` wie Bauten, ein Lichtpunkt, höchstens drei
      je Konto, `beet aufgeben`), **Samen** aus der wilden Flora (`sammle samen`: in Räumen mit Blumen oder Kräutern im
-     Dekor, einmal je Weltstunde, jedes zweite Mal ein Fund), fünf Sorten (Strandnelke, Dünenrose, Nebelblume nur auf
+     Dekor, alle zehn Weltminuten je Ort, jedes zweite Mal ein Fund), fünf Sorten (Strandnelke, Dünenrose, Nebelblume nur auf
      Nebelholm, Strandkohl, Möhre), `pflanze`, **Stufen** Saat, Keim, reif, welk in Weltzeit, `gieße` (eine Kanne
      für das ganze Beet), `jäte` (Unkraut und Welkes), `ernte` (Ertrag und ein bis zwei Samen, jede Pflanze genau
      einmal), **Patenschaft** (`pate <name>`, auch für Gäste; `pate weg`). Die Pflanzen liegen im Eintrag ihres Beets,

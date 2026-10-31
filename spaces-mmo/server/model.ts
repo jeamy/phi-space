@@ -181,8 +181,8 @@ export type FieldFields = { fieldId: string; room: string; x: number; y: number;
 export type AnimalFields = { animalId: string; kind: "hase" | "reh" | "fuchs" | "maus"; name: string; room: string; x: number; y: number; bedId?: string; eatsAtWorldMs: number; at: number;
 	/** What the other kinds came for: a field (reh), a coop (fuchs), a building with a chest (maus). */
 	target?: string };
-/** How long a figure waits before it looks for wild seeds again (the sweep removes it). */
-export type SeedRestFields = { charId: string; untilWorldMs: number };
+/** How long a figure waits before it looks for wild seeds in this room again (the sweep removes it). */
+export type SeedRestFields = { charId: string; room: string; untilWorldMs: number };
 /** What is left of a building that was not kept: it still covers its cells until `untilWorldMs` (the sweep removes it). */
 export type RuinFields = { buildId: string; plan: string; name: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; untilWorldMs: number };
 /** What lay in a chest of a building that fell into ruin: its things wait (location `estateId`) for their owner until

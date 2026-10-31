@@ -902,7 +902,7 @@ Jeder darf an einer Baustelle mithelfen, auch ohne Konto. Du bringst Material od
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
 | \`liefere [n] <ding>\` | \`deliver\` | Liefern, was die Baustelle braucht; zu viel bleibt bei dir |
-| \`arbeite\` | \`work\` | Einen Arbeitspunkt beitragen; danach ruhst du eine Stunde Weltzeit |
+| \`arbeite\` | \`work\` | Einen Arbeitspunkt beitragen; danach ruhst du eine halbe Stunde Weltzeit |
 | \`baustelle\` | \`site\` | Was hier gebaut wird und was noch fehlt |
 
 Liefern und arbeiten geht **aus bis zu zwei Feldern Abstand**, so haben viele um eine Baustelle Platz. Das Menü der rechten Maustaste auf einer Baustelle bietet Liefern und Mitarbeiten an. Höchstens die Hälfte darf von NPCs oder Automaten kommen. Fehlt nichts mehr, steht der Bau; an ihm steht, wer mitgebaut hat. Eine Baustelle ohne Fortschritt verfällt nach zwei Welttagen.
@@ -956,7 +956,7 @@ Anyone may help at a site, even without an account. You bring material or work o
 | Command | Also | Effect |
 | --- | --- | --- |
 | \`liefere [n] <thing>\` | \`deliver\` | Deliver what the site needs; anything extra stays with you |
-| \`arbeite\` | \`work\` | Add one point of work; afterwards you rest for a world hour |
+| \`arbeite\` | \`work\` | Add one point of work; afterwards you rest for half a world hour |
 | \`baustelle\` | \`site\` | What is being built here and what is still missing |
 
 Delivering and working work **from up to two cells away**, so many fit around a site. The right-click menu on a site offers delivering and helping. At most half may come from NPCs or automata. When nothing is missing, the building stands, naming who helped. A site without progress lapses after two world days.
@@ -1005,7 +1005,7 @@ Ein Beet ist ein kleines Stück Land, das dir gehört. Zuerst brauchst du einen 
 
 Samen findest du in der wilden Natur der Inseln, oder du kaufst sie bei Gesa. Nicht jede Sorte wächst überall.
 
-\`sammle samen\` sucht in der wilden Flora des Ortes nach Samen; das klappt nicht jedes Mal, danach wartest du eine Weltstunde.
+\`sammle samen\` sucht in der wilden Flora des Ortes nach Samen; das klappt nicht jedes Mal, danach wartest du an diesem Ort zehn Weltminuten; anderswo kannst du gleich weitersuchen.
 
 | Sorte | Wo sie wild wächst | Ernte |
 | --- | --- | --- |
@@ -1076,7 +1076,7 @@ A bed is a small piece of land that is yours. First you need a spade.
 
 You find seeds in the wild plants of the islands, or you buy them from Gesa. Not every sort grows everywhere.
 
-\`sammle samen\` looks for seeds in the place's wild flora; it does not work every time, and afterwards you wait a world hour.
+\`sammle samen\` looks for seeds in the place's wild flora; it does not work every time, and afterwards you wait ten world minutes at this place; elsewhere you can go on looking at once.
 
 | Sort | Where it grows wild | Harvest |
 | --- | --- | --- |

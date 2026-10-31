@@ -657,7 +657,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
    if the light of a fire is full, `bau` accepts no plan any more.
    - **Part 1, built 2026-10-29** (`server/engine/commands/build.ts`, test `tests/build.test.ts`): building plan "Hütte"
      in the world file (`building.plans`), `bau` (next to oneself or `bau hütte <x> <y>`), `liefere`, `arbeite` (one
-     world hour of rest afterwards), `baustelle`, completion in the same transaction; areas as `Plot` with `unique` on
+     half a world hour of rest afterwards), `baustelle`, completion in the same transaction; areas as `Plot` with `unique` on
      room and cell, nobody walks into them (`blockedIn` in `occupancy.ts`, also flotsam, arrival and the page); blocked
      cells (exit and door, fire and its neighboring cells, things, persons) and the check that exits, spawn and one side
      of each fire stay reachable; light points per fire (`LightUse`, 20 per fire, the hut 1); at most half from non-humans;
@@ -688,7 +688,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      2 driftwood, 1 kelp rope), **rain barrel** as building plan (1×1, 3 driftwood, 1 kelp rope, 4 work; `schöpfe` fills
      a can of water), **beds** 2×2 in the light (`umgraben`, areas as `Plot` like buildings, one light point, at most
      three per account, `beet aufgeben`), **seeds** from the wild flora (`sammle samen`: in rooms with flowers or herbs in
-     the decor, once per world hour, every second time a find), five varieties (Strandnelke, Dünenrose, Nebelblume only on
+     the decor, every ten world minutes per place, every second time a find), five varieties (Strandnelke, Dünenrose, Nebelblume only on
      Nebelholm, Strandkohl, Möhre), `pflanze`, **stages** seed, sprout, ripe, wilted in world time, `gieße` (one can
      for the whole bed), `jäte` (weeds and wilted), `ernte` (yield and one to two seeds, each plant exactly
      once), **sponsorship** (`pate <name>`, also for guests; `pate weg`). The plants lie in the entry of their bed,

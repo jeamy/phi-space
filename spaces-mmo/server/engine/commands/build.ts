@@ -265,7 +265,7 @@ export async function rested(c: CommandCtx) {
 /** The actor worked: it rests for a while. */
 export async function tire(c: CommandCtx, now: number, rest: Awaited<ReturnType<typeof rested>>["rest"]): Promise<void> {
 	if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
-	const ms = (c.world.building?.restWorldMs ?? 3600_000) / ((await blessed(c, now)) ? 2 : 1);
+	const ms = (c.world.building?.restWorldMs ?? 30 * 60_000) / ((await blessed(c, now)) ? 2 : 1);
 	await c.space.write({ type: "WorkRest", fields: { charId: c.actor.charId, untilWorldMs: now + ms } satisfies WorkRestFields as never }, c.txn, FOREVER);
 }
 
