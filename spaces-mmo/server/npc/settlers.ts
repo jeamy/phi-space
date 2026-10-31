@@ -19,7 +19,7 @@ import { flameOf } from "../engine/fire.ts";
 import { clockOf } from "../engine/clockcache.ts";
 import { setting } from "../settings.ts";
 import type { NpcDef, WorldDef } from "../engine/world.ts";
-import { fieldsOf, type BedFields, type BuildingFields, type ListingFields, type SiteFields, type WorkRestFields } from "../model.ts";
+import { fieldsOf, type BedFields, type BuildingFields, type ListingFields, type SiteFields, type SiteOrderFields, type WorkRestFields } from "../model.ts";
 import { gather, look, nextTo, rest, travel, type Look } from "./economy.ts";
 import type { Npc, Script } from "./scripts.ts";
 
@@ -255,4 +255,56 @@ export function siedler(): Script {
 	}
 }
 
-export const SETTLER_SCRIPTS: Record<string, () => Script> = { siedler };
+/** Sites of the NPC's rooms that pay for something. Half of a site at most comes from NPCs (build.ts credit): a site that
+ *  has had that is left out, and a site refused otherwise (a closed settlement) is tried again only after a while. */
+async function paidJobs(n: Npc, homes: string[], tried: Map<string, number>, turn: number): Promise<Array<{ o: SiteOrderFields; s: SiteFields }>> {
+	const orders = (await n.space.readAll({ type: "SiteOrder" })).map((e) => fieldsOf<SiteOrderFields>(e)).filter((o) => homes.includes(o.room) && (tried.get(o.orderId) ?? 0) <= turn);
+	if (!orders.length) return [];
+	const sites = new Map((await n.space.readAll({ type: "Site" })).map((e) => fieldsOf<SiteFields>(e)).map((s) => [s.buildId, s]));
+	const open = (s: SiteFields) => s.other < Math.floor((s.needs.reduce((a, x) => a + x.count, 0) + s.workNeed) / 2);
+	return orders.flatMap((o) => { const s = sites.get(o.buildId); return s && open(s) ? [{ o, s }] : []; });
+}
+
+/** One step towards a site that pays for what the NPC carries: false when there is none. */
+export function deliverer(): (n: Npc, l: Look, homes: string[]) => Promise<boolean> {
+	const tried = new Map<string, number>();
+	let turn = 0;
+	return async (n, l, homes) => {
+		turn++;
+		const job = (await paidJobs(n, homes, tried, turn)).find(({ o }) => o.proto && count(l, o.proto));
+		if (!job) return false;
+		if (await besideOf(n, l, job.s)) return true;
+		tried.set(job.o.orderId, turn + 10);
+		await n.act(`liefere ${Math.min(job.o.left, count(l, job.o.proto))} ${job.o.name}`);
+		return true;
+	};
+}
+
+/** The day labourer: waits in its rooms until a site pays for work or goods, works there (the rest after work holds for it
+ *  too), and gathers what is ordered and lies about. Nothing happens without a wage. */
+function bauhelfer(): Script {
+	const carry = deliverer(), tried = new Map<string, number>();
+	let turn = 0, home = 0;
+	return async (n) => {
+		turn++;
+		const l = await look(n);
+		if (!l) { await n.sleep(1000); return; }
+		const homes = n.def.home ?? [n.def.room];
+		const jobs = await paidJobs(n, homes, tried, turn);
+		if (!(await carry(n, l, homes))) {
+			const now = (await clockOf(n.space).now()) ?? 0;
+			const rest0 = (await n.space.readAll({ type: "WorkRest", fields: { charId: l.me.charId } })).map((e) => fieldsOf<WorkRestFields>(e))[0];
+			const work = !rest0 || rest0.untilWorldMs <= now ? jobs.find(({ o }) => !o.proto) : undefined;
+			if (work) {
+				if (!(await besideOf(n, l, work.s))) { tried.set(work.o.orderId, turn + 5); await n.act("arbeite"); }
+			}
+			else if (jobs.some(({ o }) => o.proto)) {
+				if (!(await gather(n, l, jobs.map(({ o }) => o.proto)))) { home = (home + 1) % homes.length; await travel(n, l, homes[home]!); }
+			}
+			else if (!homes.includes(l.me.room)) await travel(n, l, homes[home]!);
+		}
+		await n.sleep(await rest(n, l.me.room));
+	};
+}
+
+export const SETTLER_SCRIPTS: Record<string, () => Script> = { siedler, bauhelfer };

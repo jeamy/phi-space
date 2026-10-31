@@ -56,3 +56,26 @@ test("stone: a pickaxe of rubble; a quarry gives three for its wear and a rest; 
 		assert.equal((await pack(s, me, "tauwerk")).length, 1);
 	} finally { await srv.close(); }
 });
+
+test("clay and bricks: a spade cuts clay and stays whole; a brickworks burns it", { timeout: 120_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Lehmer", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, "Lehmer"))!.fields as unknown as CharacterFields;
+		await give(s, me, "treibholz", 2);
+		assert.match(await does(p, "steche", "direkt neben"), /Lehm sticht man direkt neben einer Lehmgrube/);
+		await s.write({ type: "Building", fields: building("pit", "lehmgrube", "Lehmgrube", c.x + 1, c.y) as never }, null, FOREVER);
+		assert.match(await does(p, "steche", "Werkzeug"), /Werkzeug: spaten/);
+		await give(s, me, "spaten", 1);
+		assert.match(await does(p, "steche", "aus der Grube"), /Du stichst 3 Lehm aus der Grube/);
+		assert.equal((await pack(s, me, "spaten")).length, 1, "the spade stays");
+		assert.match(await does(p, "craft ziegel", "nur direkt"), /Ziegel macht man nur direkt neben einer Ziegelei/);
+		await s.write({ type: "Building", fields: building("kiln", "ziegelei", "Ziegelei", c.x - 2, c.y) as never }, null, FOREVER);
+		await does(p, "brenne ziegel", /Ziegel/);
+		await eventually(async () => (await pack(s, me, "ziegel")).length === 3, 10_000, "three bricks");
+		assert.equal((await pack(s, me, "lehm")).length, 0);
+	} finally { await srv.close(); }
+});

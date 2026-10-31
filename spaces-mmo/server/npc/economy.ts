@@ -9,6 +9,7 @@
 //   haendler    travels between the markets of its route; buys cheap, sells dear
 //   handwerker  gathers and buys the inputs of its recipes, crafts, sells what it made
 //   plauderer   walks about, tells what it knows: prices, fires, orders, stories, now and then on the harbour channel
+//   bauhelfer   (settlers.ts) works and fetches for a wage at sites of its rooms; a sammler brings what such a site pays for
 //   gaertnerin  looks for seeds in the wild flora of its rooms like anyone (once a world hour), sells them at its market
 //               and buys flowers and vegetables there; its search orders hang on the board (world orders)
 //
@@ -20,6 +21,7 @@ import { stem } from "../engine/context.ts";
 import { flameOf } from "../engine/fire.ts";
 import { wayTo, type WorldDef } from "../engine/world.ts";
 import { fieldsOf, type CharacterFields, type ItemFields, type ListingFields, type MsgFields, type OfferFields, type OrderFields } from "../model.ts";
+import { deliverer } from "./settlers.ts";
 import { byPerson, humansIn, newHeard, self, type Npc, type Script } from "./scripts.ts";
 
 /** One round of a trader or a worker: every look is several calls to the space (each a transaction), and players do not
@@ -201,7 +203,7 @@ function chatter(everyMs: number): (n: Npc, l: Look) => Promise<boolean> {
 }
 
 function sammler(): Script {
-	const talk = social(), say = chatter(3 * 60_000);
+	const talk = social(), say = chatter(3 * 60_000), carry = deliverer();
 	let home = 0;
 	return async (n) => {
 		const l = await look(n);
@@ -209,7 +211,7 @@ function sammler(): Script {
 		const goods = Object.entries(n.def.prices ?? {}).filter(([, [, s]]) => s > 0).map(([p]) => p);
 		const homes = n.def.home ?? [l.me.room];
 		const carried = l.pack.filter((i) => goods.includes(i.proto));
-		const done = (await talk(n, l)) || (await say(n, l));
+		const done = (await talk(n, l)) || (await say(n, l)) || (await carry(n, l, homes));
 		if (!done) {
 			const toSell = carried.length >= 3 || (carried.length && !l.ground.some((i) => goods.includes(i.proto)) && !homes.includes(l.me.room));
 			if (toSell && n.def.market) {

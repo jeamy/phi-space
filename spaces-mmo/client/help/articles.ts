@@ -378,9 +378,11 @@ Bauen geht nur im Licht eines Feuers. Ausführlich unter [Bauen](help.game.build
 | \`liefere [n] <ding>\` | \`deliver\` | An die Baustelle liefern (bis zwei Felder entfernt) |
 | \`arbeite\` | \`work\` | An der Baustelle mitarbeiten (bis zwei Felder entfernt) |
 | \`baustelle [x y]\` | \`site\` | Was hier gebaut wird und was fehlt (mit x y: nur auf diesem Feld) |
+| \`aushang <n> <ding\|arbeit> je <münzen>\` | \`hire\` | An deiner Baustelle Lohn aushängen; \`aushang ab\` nimmt ihn zurück |
 | \`truhe\`, \`verstaue\`, \`entnimm\` | \`chest\`, \`store\`, \`retrieve\` | Die Truhe deiner Hütte |
 | \`lager\`, \`lager log\` | \`warehouse\` | Das Lagerhaus neben dir und wer zuletzt etwas bewegt hat |
 | \`breche\` | \`quarry\` | Am Steinbruch mit Spitzhacke Stein brechen |
+| \`steche\` | \`clay\` | An der Lehmgrube mit Spaten Lehm stechen |
 | \`repariere\` | \`repair\` | Einen Bau ausbessern |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Deinen Bau oder deine Baustelle abreißen |
 | \`nachlass\` | \`estate\` | Den Nachlass an der Ruine deines Baus abholen |
@@ -537,6 +539,7 @@ Building works only in a fire's light. In detail under [Building](help.game.buil
 | \`truhe\`, \`verstaue\`, \`entnimm\` | \`chest\`, \`store\`, \`retrieve\` | Your hut's chest |
 | \`lager\`, \`lager log\` | \`warehouse\` | The warehouse beside you and who last moved something |
 | \`breche\` | \`quarry\` | Break stone at a quarry with a pickaxe |
+| \`steche\` | \`clay\` | Cut clay at a clay pit with a spade |
 | \`repariere\` | \`repair\` | Repair a building |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Tear down your building or site |
 | \`nachlass\` | \`estate\` | Collect the estate at your building's ruin |

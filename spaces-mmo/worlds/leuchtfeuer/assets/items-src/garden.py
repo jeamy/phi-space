@@ -533,6 +533,24 @@ def stone():
     return outline(img)
 
 
+def clay():
+    img = new(); px = img.load()
+    C = rgb("#a9774d")
+    disc(px, 16, 18, 10, C)
+    disc(px, 10, 15, 5, shade(C, 1.1))
+    line(px, 18, 14, 22, 21, shade(C, 0.65))  # the mark of the spade
+    return outline(img)
+
+
+def brick():
+    img = new(); px = img.load()
+    B = rgb("#b4553a")
+    for y in range(11, 21):                   # a burnt brick, seen from its long side
+        rect(px, 5, y, 26, y, shade(B, 1.15) if y == 11 else shade(B, 0.7) if y == 20 else B)
+    line(px, 15, 12, 15, 19, shade(B, 0.6))
+    return outline(img)
+
+
 def pickaxe():
     img = new(); px = img.load()
     line(px, 8, 26, 21, 9, WOOD, 2)           # the handle
@@ -588,7 +606,7 @@ things = {
     "ente": bird("#8a7a5a", "#2f6a4a", "#e8b030", ring="#f0ece0"), "gans": bird("#f0ece0", "#f0ece0", "#e8902c", neck=3), "daunen": down(),
     "tuch": cloth("#8a6a9a"), "decke": blanket(), "kaese": cheese(),
     "reh": deer(), "fuchs": fox(), "maus": mouse(), "hund": dog(), "katze": cat(), "mausefalle": trap(),
-    "stein": stone(), "spitzhacke": pickaxe(), "bohle": plank(), "tauwerk": rigging(), "gehaeuse": casing(),
+    "stein": stone(), "spitzhacke": pickaxe(), "lehm": clay(), "ziegel": brick(), "bohle": plank(), "tauwerk": rigging(), "gehaeuse": casing(),
 }
 for key, img in things.items():
     img.save(f"{out}/{key}.png")

@@ -51,6 +51,9 @@ export function translateRules(line: string, v: TranslateView): string | null {
 	// selling: "biete muschel am markt für 2 an", "verkaufe die muschel für 3 münzen", "sell the shell for 2"
 	const sell = /^(?:biete|verkaufe|sell)\s+(.+?)\s+(?:(?:am|auf dem|at the)\s+(?:markt|marktbrett|market)\s+)?(?:für|fuer|for)\s+(\d+)(?:\s+(?:münzen?|muenzen?|coins?))?(?:\s+an)?$/.exec(s);
 	if (sell && !/\s(an|to)\s+\S+$/.test(sell[1]!)) return `market biete ${noArticle(sell[1]!)} für ${sell[2]}`;
+	// bricks are burnt, by the recipe: "brenne 3 ziegel"
+	const burn = /^(?:brenne|brennen|burn)\s+(?:(\d+)\s+)?(?:ziegel|ziegelsteine?|bricks?)$/.exec(s);
+	if (burn) return `craft ${burn[1] ? `${burn[1]} ` : ""}ziegel`;
 	// the chest of one's building: "leg das holz in die truhe", "nimm 2 muscheln aus der kiste"
 	const store = /^(?:lege|leg|tue|tu|packe|pack|put)\s*(.+?)\s+(?:in die|in das|ins|in|into the|into)\s+(?:truhe|kiste|chest|lager|lagerhaus|warehouse)$/.exec(s);
 	if (store) return `verstaue ${noArticle(store[1]!)}`;

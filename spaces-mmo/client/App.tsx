@@ -241,12 +241,15 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 			}
 			entries.push({ label: "Ausbessern", line: "repariere" });
 			if (o.plan === "steinbruch") entries.push({ label: "Stein brechen", line: "breche" });
+			if (o.plan === "lehmgrube") entries.push({ label: "Lehm stechen", line: "steche" });
+			if (o.plan === "ziegelei") entries.push({ label: "Ziegel brennen", line: "craft ziegel" });
 			if (o.plan === "lagerhaus") entries.push({ label: "Lager ansehen", line: "lager" });
 			else if (o.owner === self?.name) entries.push({ label: "Truhe ansehen", line: "truhe" });
 		}
 		if (o.kind === "ruin" && o.owner === self?.name) entries.push({ label: "Nachlass abholen", line: "nachlass" });
 		if ((o.kind === "building" || o.kind === "ruin") && o.plan === "windmuehle" && nearSite) entries.push({ label: "Mehl abholen", line: "abholen" });
 		if (o.kind === "site" && nearSite) {
+			entries.push({ label: "Aushang ansehen", line: "aushang" });
 			entries.push({ label: "Mitarbeiten", line: "arbeite" });
 			// what one carries that it still needs
 			const carried = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me).map((i) => i.name))];

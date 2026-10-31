@@ -9,6 +9,7 @@ import { readExisting, StillHeld, peek } from "../../space.ts";
 import type { Command } from "../cmdsets.ts";
 import { byName, CommandError, NotUnderstood, inventory, msg, stem, type CommandCtx, itemsNamed } from "../context.ts";
 import { bau, distTo, planOf } from "./build.ts";
+import { boardLines } from "./siteorder.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { worldNowOf } from "../clock.ts";
 import type { WorldDef } from "../world.ts";
@@ -286,7 +287,8 @@ const order: Command = {
 		const reward = (o: OrderFields) => `${o.reward.count} Münze${o.reward.count === 1 ? "" : "n"}`;
 		if (!verb) {
 			const lines = open.map((o, i) => `  ${i + 1}. ${o.f.text} Lohn: ${reward(o.f)}`);
-			return msg(c, c.actor.charId, "info", [open.length ? "Auftragstafel:" : "Die Auftragstafel ist leer; bald kommen neue Aufträge.", ...lines, ...(mine ? [`Dein Auftrag: ${mine.f.text} („order liefere“, sobald du alles hast)`] : [])].join("\n"));
+			const sites = await boardLines(c.space, c.world);
+			return msg(c, c.actor.charId, "info", [open.length ? "Auftragstafel:" : "Die Auftragstafel ist leer; bald kommen neue Aufträge.", ...lines, ...(sites.length ? ["Baustellen zahlen vor Ort beim Liefern und Mitarbeiten:", ...sites] : []), ...(mine ? [`Dein Auftrag: ${mine.f.text} („order liefere“, sobald du alles hast)`] : [])].join("\n"));
 		}
 		noGuest(c);
 		if (/^(nimm|take)$/i.test(verb)) {

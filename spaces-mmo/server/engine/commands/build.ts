@@ -14,6 +14,7 @@
 // - A site without progress lapses at its world time (the sweep, buildSweep); work makes a figure rest a while (WorkRest).
 import { hutsIn, needRank, rankOf, settlementIn } from "./settlement.ts";
 import { epochName, epochOf, islandOf, needEpoch } from "./epoch.ts";
+import { closeOrders, keptUntil, orderLine, ordersOfSite, payFor } from "./siteorder.ts";
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
@@ -39,7 +40,7 @@ export const planOf = (w: WorldDef, name: string): PlanDef | undefined => {
 	const n = name.trim().toLowerCase().replace(ARTICLE, "");
 	return w.building?.plans.find((p) => p.key === n || p.name.toLowerCase() === n || p.aliases.includes(n));
 };
-const missing = (s: SiteFields) => [...s.needs.filter((n) => n.have < n.count).map((n) => `${n.count - n.have} ${n.name}`), ...(s.work < s.workNeed ? [`${s.workNeed - s.work} Arbeit`] : [])];
+export const missing = (s: SiteFields) => [...s.needs.filter((n) => n.have < n.count).map((n) => `${n.count - n.have} ${n.name}`), ...(s.work < s.workNeed ? [`${s.workNeed - s.work} Arbeit`] : [])];
 
 /** The cells reachable from `from` without passing `blocked` (4 directions, as one walks). */
 function reachable(w: WorldDef, ground: string[], from: { x: number; y: number }, blocked: ReadonlySet<string>): Set<string> {
@@ -153,19 +154,20 @@ export async function takeNear<F extends Rect>(c: CommandCtx, type: string, idKe
 }
 
 /** The site within SITE_REACH of the actor (by plan name when given), taken in the transaction. */
-async function siteHere(c: CommandCtx, name: string): Promise<{ s: SiteFields }> {
+export async function siteHere(c: CommandCtx, name: string): Promise<{ s: SiteFields }> {
 	const r = await takeNear<SiteFields>(c, "Site", "buildId", SITE_REACH, (s) => !name || planOf(c.world, name)?.key === s.plan || s.name.toLowerCase() === name.toLowerCase());
 	if ("f" in r) return { s: r.f };
 	throw new NotUnderstood(r.far ? "Geh näher an die Baustelle heran (höchstens zwei Schritte entfernt)." : "Hier ist keine Baustelle. „bau <plan>“ steckt eine ab.");
 }
 
 /** Writes the site back, or, when nothing is missing, the building in its place. */
-async function settle(c: CommandCtx, s: SiteFields): Promise<void> {
+export async function settle(c: CommandCtx, s: SiteFields): Promise<void> {
 	const now = await worldNowOf(c.space, c.txn);
 	if (s.needs.every((n) => n.have >= n.count) && s.work >= s.workNeed) {
 		const plan = planOf(c.world, s.plan);
 		const b: BuildingFields = { buildId: s.buildId, plan: s.plan, name: s.name, room: s.room, x: s.x, y: s.y, w: s.w, h: s.h, owner: s.owner, ownerName: s.ownerName, accountId: s.accountId, beaconId: s.beaconId, points: s.points, by: s.by, untilWorldMs: now + (plan?.keepWorldMs ?? 7 * 24 * 3600_000), builtAt: now };
 		await c.space.write({ type: "Building", fields: b as never }, c.txn, FOREVER);
+		await closeOrders(c.space, c.txn, s, now + (c.world.building?.estateWorldMs ?? 30 * 24 * 3600_000));
 		const helpers = Object.entries(s.by).sort((a, b) => b[1] - a[1]).map(([n, k]) => `${n} (${k})`).join(", ");
 		await msg(c, "*", "world", `Die ${s.name} von ${s.ownerName} steht! Mitgebaut: ${helpers}.`);
 		return;
@@ -245,7 +247,8 @@ const liefere: Command = {
 		n = credit(c, s, n);
 		for (const it of mine.slice(0, n)) if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError(`${it.f.name} ist gerade nicht greifbar; bitte noch einmal.`);
 		need.have += n;
-		await msg(c, c.actor.charId, "info", `Du lieferst ${plural(n, `Stück ${need.name}`, `Stück ${need.name}`)} an die ${s.name}.${mine.length > n && m[1] && Number(m[1]) > n ? " Den Rest braucht sie nicht; er bleibt bei dir." : ""}${missing(s).length ? ` Es fehlen noch ${missing(s).join(", ")}.` : ""}`);
+		const wage = await payFor(c, s.buildId, proto, n);
+		await msg(c, c.actor.charId, "info", `Du lieferst ${plural(n, `Stück ${need.name}`, `Stück ${need.name}`)} an die ${s.name}.${wage ? ` Lohn: ${plural(wage, "Münze", "Münzen")}.` : ""}${mine.length > n && m[1] && Number(m[1]) > n ? " Den Rest braucht sie nicht; er bleibt bei dir." : ""}${missing(s).length ? ` Es fehlen noch ${missing(s).join(", ")}.` : ""}`);
 		await settle(c, s);
 	},
 };
@@ -275,7 +278,9 @@ const arbeite: Command = {
 		credit(c, s, 1);
 		s.work += 1;
 		await tire(c, now, rest);
+		const wage = await payFor(c, s.buildId, "", 1);
 		await msg(c, "*", "emote", `${c.actor.name} arbeitet an der ${s.name} (${s.work}/${s.workNeed}).`);
+		if (wage) await msg(c, c.actor.charId, "info", `Lohn: ${plural(wage, "Münze", "Münzen")}.`);
 		await settle(c, s);
 	},
 };
@@ -291,7 +296,9 @@ const baustelle: Command = {
 		const ruins = here((await c.space.readAll({ type: "Ruin", fields: { room: c.actor.room } })).map((e) => fieldsOf<RuinFields>(e)));
 		if (!sites.length && !built.length && !ruins.length) return msg(c, c.actor.charId, "info", "Hier wird nichts gebaut. „bau“ zeigt die Baupläne.");
 		const now = await worldNowOf(c.space, c.txn);
-		const lines = [...sites.map((s) => `${s.accountId === c.account?.accountId ? `Deine Baustelle ${s.name}` : `Baustelle ${s.name} von ${s.ownerName}`}: es fehlen ${missing(s).join(", ")}.`), ...built.map((b) => `${b.name} von ${b.ownerName}: hält noch ${days(b.untilWorldMs - now)} („repariere“ bessert sie aus).`), ...ruins.map((r) => `Ruine einer ${r.name} von ${r.ownerName}.`)];
+		const wages = new Map<string, string>();
+		for (const s of sites) { const o = await ordersOfSite(c.space, s.buildId); if (o.length) wages.set(s.buildId, ` Lohn: ${o.map(orderLine).join("; ")}.`); }
+		const lines = [...sites.map((s) => `${s.accountId === c.account?.accountId ? `Deine Baustelle ${s.name}` : `Baustelle ${s.name} von ${s.ownerName}`}: es fehlen ${missing(s).join(", ")}.${wages.get(s.buildId) ?? ""}`), ...built.map((b) => `${b.name} von ${b.ownerName}: hält noch ${days(b.untilWorldMs - now)} („repariere“ bessert sie aus).`), ...ruins.map((r) => `Ruine einer ${r.name} von ${r.ownerName}.`)];
 		await msg(c, c.actor.charId, "look", lines.join("\n"));
 	},
 };
@@ -480,6 +487,7 @@ const abriss: Command = {
 		if (site && (!name || /baustelle/i.test(arg) || planOf(c.world, name)?.key === site.plan)) {
 			if (!(await c.space.takeIfExists({ type: "Site", fields: { buildId: site.buildId } }, 5_000, { txn: c.txn }))) throw new CommandError("Die Baustelle ist gerade nicht greifbar; bitte noch einmal.");
 			const back = await giveBack(c, site.needs.map((n) => ({ proto: n.proto, count: n.have })));
+			await closeOrders(c.space, c.txn, site, await keptUntil(c));
 			await freeCells(c.space, c.txn, site.room, site.buildId);
 			await releaseLight(c.space, c.txn, site.beaconId, site.points ?? 1);
 			await msg(c, "*", "info", `${c.actor.name} gibt die Baustelle ${site.name} auf.${back.length ? ` Zurück an ${c.actor.name}: ${back.join(", ")}.` : ""}`);
@@ -534,6 +542,7 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 		if (s.untilWorldMs > now) continue;
 		await inTxn(async (txn) => {
 			if (!(await space.takeIfExists({ type: "Site", fields: { buildId: s.buildId } }, NO_WAIT, { txn }))) return false;
+			await closeOrders(space, txn, s, now + (w?.building?.estateWorldMs ?? 30 * 24 * 3600_000));
 			await freeCells(space, txn, s.room, s.buildId);
 			await releaseLight(space, txn, s.beaconId, s.points ?? 1);
 			return true;

@@ -92,6 +92,8 @@ export type WorldDef = {
 	mill?: MillDef;
 	/** A quarry: `plan` beside one, with `tool`, a work gives `count` of `makes` and a rest (docs/siedeln.md "Stoffe"). */
 	quarry?: { plan: string; tool: string; makes: string; count: number };
+	/** A clay pit, the same with a spade. */
+	clay?: { plan: string; tool: string; makes: string; count: number };
 	/** Animals on the farm (docs/siedeln.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
 	animals?: AnimalsDef;
 	/** How the world splits into region spaces when SPACES_MMO_REGIONS names them (engine/regions.ts); without it the
