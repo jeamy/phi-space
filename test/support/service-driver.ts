@@ -60,7 +60,7 @@ for await (const text of rl) {
 		file = l.store;
 		host = file ? await openSqliteHost(file) : openOwnMemoryHost();
 		reseed(String(l.seed ?? ""), l.now ?? 0); // what opening a store draws is not part of what is compared
-		service = new SpaceService({ host, ctx, identity, policy, ...(l.maxCallsPerWindow ? { maxCallsPerWindow: l.maxCallsPerWindow } : {}), ...(l.maxPending ? { maxPendingPerPrincipal: l.maxPending, maxPendingPerPeer: l.maxPending * 2 } : {}) });
+		service = new SpaceService({ host, ctx, identity, policy, ...(l.maxCallsPerWindow ? { maxCallsPerWindow: l.maxCallsPerWindow } : {}), ...(l.maxPending ? { maxPendingPerPrincipal: l.maxPending, maxPendingPerPeer: l.maxPeer ?? l.maxPending * 2 } : {}) });
 		if (l.limits) await new PhiSpaces(host, ctx).setLimits(l.limits);
 		out = { reply: "" };
 	} else if (l.op === "close") { await host!.close(ctx); out = { reply: "" }; }

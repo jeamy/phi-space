@@ -440,7 +440,7 @@ fn run(seed: u64, steps: usize, seen: &mut BTreeMap<String, usize>) {
 		}
 	}
 	ts.step(&line);
-	let mut rust = RustSide::start(&Setup { seed: seed_text, now, store: file.then(|| dir.join("r/s.sqlite")), limits, max_calls, max_pending });
+	let mut rust = RustSide::start(&Setup { seed: seed_text, now, store: file.then(|| dir.join("r/s.sqlite")), limits, max_calls, max_pending, max_peer: None });
 	let mut w = Walk { rng: Rng(seed ^ 0xabcdef), now, ..Default::default() };
 	for step in 0..steps {
 		// what an agent host would have left in the file: the wire alone only ever fills mailboxes
@@ -479,7 +479,13 @@ fn run(seed: u64, steps: usize, seen: &mut BTreeMap<String, usize>) {
 			let want = t.get("reply").and_then(Json::as_str).unwrap();
 			rust.clock.set(w.now);
 			let got = if reaper {
-				let next = rust.service.maintenance_round(None).unwrap();
+				// the server commits a round only when something is due; TypeScript's reaper always does, and that
+				// has to leave no trace in the state either
+				let next = if rust.service.store.reader(None).unwrap().space.needs_maintenance(w.now).unwrap() || step == 0 {
+					rust.service.maintenance_round(None).unwrap()
+				} else {
+					rust.service.store.reader(None).unwrap().space.next_expiry().unwrap()
+				};
 				if next >= phi_json::FOREVER { "forever".to_owned() } else { phi_json::number_text(next) }
 			} else {
 				let txns = rust.service.store.reader(None).unwrap().space.state.txns.len();

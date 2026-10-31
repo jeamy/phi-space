@@ -106,10 +106,19 @@ impl Hub {
 	}
 }
 
+struct Reply {
+	/// The commits it rests on.
+	mark: u64,
+	id: u32,
+	text: String,
+	/// It ends a call that holds a place among the connection's calls at once.
+	counted: bool,
+}
+
 /// One connection's replies on their way out.
 #[derive(Default)]
 struct Link {
-	queue: RefCell<VecDeque<(u64, u32, String)>>,
+	queue: RefCell<VecDeque<Reply>>,
 	ready: Notify,
 	inflight: Cell<usize>,
 	closed: Cell<bool>,
@@ -117,8 +126,8 @@ struct Link {
 	last: Cell<Option<Instant>>,
 }
 impl Link {
-	fn reply(&self, mark: u64, id: u32, text: String) {
-		self.queue.borrow_mut().push_back((mark, id, text));
+	fn reply(&self, r: Reply) {
+		self.queue.borrow_mut().push_back(r);
 		self.ready.notify_one();
 	}
 	fn close(&self) {
@@ -340,7 +349,7 @@ fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
 	let most = hub.o.max_inflight_per_connection;
 	if link.inflight.get() >= most {
 		let text = format!(r#"{{"ok":false,"error":{{"code":"ResourceExhausted","message":"at most {most} calls at once per connection"}}}}"#);
-		link.reply(0, id, text);
+		link.reply(Reply { mark: 0, id, text, counted: false });
 		return;
 	}
 	link.inflight.set(link.inflight.get() + 1);
@@ -348,7 +357,7 @@ fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
 	let seen = hub.handed.get();
 	hub.committed();
 	match outcome {
-		Outcome::Done { text, mark } => link.reply(mark, id, text),
+		Outcome::Done { text, mark } => link.reply(Reply { mark, id, text, counted: true }),
 		Outcome::Wait(parked) => {
 			spawn_local(wait(Rc::clone(hub), Rc::clone(link), id, parked, seen));
 		}
@@ -385,7 +394,7 @@ async fn wait(hub: Rc<Hub>, link: Rc<Link>, id: u32, mut parked: Box<Parked>, mu
 		let looked = hub.service.borrow_mut().resume(parked);
 		hub.committed();
 		match looked {
-			Ok((text, mark)) => return link.reply(mark, id, text),
+			Ok((text, mark)) => return link.reply(Reply { mark, id, text, counted: true }),
 			Err(p) => parked = p,
 		}
 	}
@@ -400,13 +409,10 @@ async fn replies<W: AsyncWrite + Unpin>(hub: Rc<Hub>, link: Rc<Link>, mut write:
 		let failed = hub.failed.get();
 		{
 			let mut queue = link.queue.borrow_mut();
-			while let Some((mark, ..)) = queue.front() {
-				if *mark > upto && !failed {
-					break;
-				}
-				let (mark, id, text) = queue.pop_front().expect("looked at");
-				put(&mut out, id, if mark > upto { INTERNAL } else { &text });
-				if link.inflight.get() > 0 {
+			while queue.front().is_some_and(|r| r.mark <= upto || failed) {
+				let r = queue.pop_front().expect("looked at");
+				put(&mut out, r.id, if r.mark > upto { INTERNAL } else { &r.text });
+				if r.counted {
 					link.inflight.set(link.inflight.get() - 1);
 				}
 			}

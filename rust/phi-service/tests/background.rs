@@ -6,7 +6,7 @@ use phi_json::{obj, Json, FOREVER};
 
 const T0: f64 = 1_700_000_000_000.0;
 
-fn side() -> RustSide { RustSide::start(&Setup { seed: "background".into(), now: T0, store: None, limits: None, max_calls: None, max_pending: None }) }
+fn side() -> RustSide { RustSide::start(&Setup { seed: "background".into(), now: T0, store: None, limits: None, max_calls: None, max_pending: None, max_peer: None }) }
 fn outbox(r: &mut RustSide, events: Vec<Json>) {
 	let now = r.clock.get();
 	r.service.store.commit(None, now, |s| { s.state.rest.insert("outbox", Json::Array(events)); s.state.outbox_bytes = None; Ok(()) }).unwrap().unwrap();
@@ -79,4 +79,25 @@ fn a_poisoned_event_goes_with_the_next_commit_and_a_retry_is_waited_for() {
 	r.clock.set(T0 + 500.0);
 	r.service.background();
 	assert!(left(&mut r).is_empty());
+}
+
+#[test]
+fn delivery_counts_the_outbox_again() {
+	let mut r = side();
+	r.service.background();
+	let now = r.clock.get();
+	r.service.store.commit(None, now, |s| { s.state.rest.insert("outbox", Json::Array(vec![event("nobody", "peer".into())])); s.state.outbox_bytes = Some(999.0); Ok(()) }).unwrap().unwrap();
+	r.service.background();
+	assert_eq!(r.service.store.reader(None).unwrap().space.state.outbox_bytes, None);
+}
+
+#[test]
+fn a_failed_commit_leaves_the_watermark_of_the_state_it_found() {
+	let mut r = side();
+	r.service.background();
+	let now = r.clock.get();
+	r.service.store.commit(None, now, |s| { s.write(now, &obj! { "type" => "Task", "fields" => obj! {} }, None, Some(&1000.0.into()), None)?; Ok(()) }).unwrap().unwrap();
+	let later = now + 2000.0;
+	assert!(r.service.store.commit(None, later, |s| { s.settle(later)?; Err::<(), _>(phi_core::space::error("ResourceExhausted", "no")) }).unwrap().is_err());
+	assert!(r.service.store.reader(None).unwrap().space.needs_maintenance(later).unwrap(), "the entry is still there, and due");
 }

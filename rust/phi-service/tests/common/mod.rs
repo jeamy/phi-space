@@ -55,6 +55,8 @@ pub struct Setup {
 	pub limits: Option<Json>,
 	pub max_calls: Option<f64>,
 	pub max_pending: Option<f64>,
+	/// The peers' limit, when it is not twice `max_pending`.
+	pub max_peer: Option<f64>,
 }
 
 pub struct RustSide {
@@ -86,7 +88,7 @@ impl RustSide {
 		}
 		if let Some(m) = o.max_pending {
 			options.max_pending_per_principal = m;
-			options.max_pending_per_peer = m * 2.0;
+			options.max_pending_per_peer = o.max_peer.unwrap_or(m * 2.0);
 		}
 		let mut service = Service::new(store, options);
 		if let Some(l) = &o.limits {

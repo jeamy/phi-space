@@ -92,7 +92,7 @@ fn the_scripted_session() {
 	let root = format!("{}/../../test/vectors/wire.json", env!("CARGO_MANIFEST_DIR"));
 	let vector = parse_repairing(&std::fs::read_to_string(root).unwrap()).unwrap();
 	let steps = vector.get("steps").and_then(Json::as_array).unwrap();
-	let mut side = RustSide::start(&Setup { seed: "wire".into(), now: vector.get("t0").and_then(Json::as_f64).unwrap(), store: None, limits: None, max_calls: None, max_pending: None });
+	let mut side = RustSide::start(&Setup { seed: "wire".into(), now: vector.get("t0").and_then(Json::as_f64).unwrap(), store: None, limits: None, max_calls: None, max_pending: None, max_peer: None });
 	let mut names = Names::default();
 	for (i, s) in steps.iter().enumerate() {
 		let call = names.fill(s.get("call").unwrap());

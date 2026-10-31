@@ -149,7 +149,11 @@ fn calls_at_once_are_limited_per_connection() {
 	a.send(1, &take_call(&generation, "r1", 500));
 	a.send(2, COUNT);
 	let (id, text) = a.receive();
-	assert_eq!((id, text.as_str()), (2, r#"{"ok":false,"error":{"code":"ResourceExhausted","message":"at most 1 calls at once per connection"}}"#));
+	let full = r#"{"ok":false,"error":{"code":"ResourceExhausted","message":"at most 1 calls at once per connection"}}"#;
+	assert_eq!((id, text.as_str()), (2, full));
+	a.send(3, COUNT);
+	let (id, text) = a.receive();
+	assert_eq!((id, text.as_str()), (3, full), "a refused call gives no place back");
 	assert_eq!(a.receive().0, 1);
 	assert!(a.call(COUNT).contains(r#""ok":true"#), "the place is free again");
 }
