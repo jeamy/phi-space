@@ -37,11 +37,13 @@ struct Instance {
 }
 
 fn env(name: &str) -> Option<String> { std::env::var(name).ok().filter(|v| !v.is_empty()) }
+/// `ROOT/.local`: the starters run this process in the project's directory.
+fn local() -> PathBuf { std::env::current_dir().unwrap_or_else(|e| fail(e)).join(".local") }
 fn positive(name: &str, fallback: f64) -> f64 { env(name).and_then(|v| v.parse().ok()).filter(|n: &f64| *n > 0.0).unwrap_or(fallback) }
 
 fn mmo() -> (Vec<Instance>, String) {
 	let mem = env("SPACES_MMO_MEM").as_deref() == Some("1");
-	let data = (!mem).then(|| env("SPACES_MMO_DATA").map_or_else(|| PathBuf::from(".local"), PathBuf::from));
+	let data = (!mem).then(|| env("SPACES_MMO_DATA").map_or_else(local, PathBuf::from));
 	let region = env("SPACES_MMO_REGION");
 	let serves = env("SPACES_MMO_SPACES").unwrap_or_else(|| "world,accounts".to_owned());
 	let list: Vec<&str> = serves.split(',').map(str::trim).filter(|x| !x.is_empty()).collect();
@@ -60,7 +62,7 @@ fn mmo() -> (Vec<Instance>, String) {
 		}
 		l
 	};
-	let compact_ms = env("SPACES_MMO_COMPACT_MS").and_then(|v| v.parse().ok()).unwrap_or(600_000);
+	let compact_ms = std::env::var("SPACES_MMO_COMPACT_MS").map_or(600_000, |v| v.trim().parse().unwrap_or(0)); // empty: off, as Number("")
 	let world_listen = env("SPACES_MMO_LISTEN").unwrap_or_else(|| "unix:/tmp/spaces-mmo-world.sock".to_owned());
 	let accounts_listen = env("SPACES_MMO_ACCOUNTS_LISTEN").unwrap_or_else(|| "unix:/tmp/spaces-mmo-accounts.sock".to_owned());
 	let (world, accounts) = (list.contains(&"world"), list.contains(&"accounts"));
@@ -98,7 +100,7 @@ fn codemode_capacity() -> Result<(f64, f64), String> {
 
 fn codemode() -> (Vec<Instance>, String) {
 	let mem = env("CODEMODE_MEM").as_deref() == Some("1");
-	let file = (!mem).then(|| env("CODEMODE_SQLITE").map_or_else(|| Path::new(".local").join("codemode-space.sqlite"), PathBuf::from));
+	let file = (!mem).then(|| env("CODEMODE_SQLITE").map_or_else(|| local().join("codemode-space.sqlite"), PathBuf::from));
 	let mut limits = obj! { "maxTxnsPerOwner" => 1000.0, "maxWaitersPerOwner" => 1000.0, "maxRegsPerOwner" => 1000.0 };
 	if let Some(f) = &file {
 		let (claim, doc) = codemode_capacity().unwrap_or_else(|e| fail(e));
