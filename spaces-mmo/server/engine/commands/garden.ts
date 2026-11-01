@@ -28,7 +28,7 @@ import { CommandError, inventory, itemsNamed, msg, NotUnderstood, roomOf, type C
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { fogOf } from "../fire.ts";
 import type { GardenDef, SortDef, WorldDef } from "../world.ts";
-import { harvestField } from "./field.ts";
+import { harvestField, sowOnField } from "./field.ts";
 import { collect, meansYield } from "./animals.ts";
 import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, plural, putBack, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
 
@@ -128,7 +128,7 @@ async function dig(c: CommandCtx, arg: string): Promise<void> {
 	const m = /^(\d+)\s+(\d+)$/.exec(at.trim());
 	const tries: Rect[] = m ? [{ x: Number(m[1]), y: Number(m[2]), w: size.w, h: size.h }] : besides(c, size);
 	let rect: Rect | null = null, why = "";
-	for (const r of tries) { const no = await refusal(c, room, r, true); if (!no) { rect = r; break; } why ||= no; }
+	for (const r of tries) { const no = await refusal(c, room, r, true, true); if (!no) { rect = r; break; } why ||= no; }
 	if (!rect) throw new CommandError(`Hier passt kein Beet hin: ${why}`);
 	const bedId = `bed-${randomBytes(6).toString("hex")}`, now = await worldNowOf(c.space, c.txn);
 	for (const p of cells(rect)) {
@@ -176,7 +176,7 @@ const beet: Command = {
 
 const pflanze: Command = {
 	key: "pflanze", aliases: ["pflanz", "pflanzen", "säe", "säen", "saee", "sae", "plant", "sow", "setze-samen"],
-	help: "pflanze <samen> [x y] – Samen in dein Beet oder ins Gemeinschaftsbeet neben dir setzen (bis zwei Schritte; eine Pflanze je Zelle; ins Zierbeet nur Blumen)",
+	help: "pflanze <samen> [x y] – Samen in dein Beet oder ins Gemeinschaftsbeet neben dir setzen (bis zwei Schritte; eine Pflanze je Zelle; ins Zierbeet nur Blumen). Korn, Kartoffeln, Rüben und Flachs wachsen auf dem Acker: „bestelle“",
 	async func(c, arg) {
 		const g = garden(c);
 		const m = /^(.+?)(?:\s+(\d+)\s+(\d+))?$/.exec(arg.trim().replace(/\s+(?:in|ins)\s+(?:das\s+|mein\s+)?beet$/i, ""));
@@ -185,6 +185,7 @@ const pflanze: Command = {
 		// a sort's name means its plain seeds before a crossing of it, unless it is the crossing's own name
 		const said = m[1].replace(ARTICLE, "").trim().toLowerCase(), hits = itemsNamed(c.world, seeds, said);
 		const hit = hits.find((i) => !i.f.variety || [i.f.name, ...i.f.aliases].some((a) => a.toLowerCase() === said)) ?? hits[0];
+		if (!hit && (await sowOnField(c, said))) return;
 		if (!hit) throw new NotUnderstood(seeds.length ? `Du hast keinen Samen, der „${m[1].slice(0, 30)}“ heißt. Du trägst: ${[...new Set(seeds.map((s) => s.f.name))].join(", ")}.` : "Du trägst keine Samen. „sammle samen“ sucht welche in der wilden Flora.");
 		const sort = g.sorts.find((s) => s.seed === hit.f.proto)!;
 		const b = await bedHere(c, { may: (x) => mayPlant(c, x) }).catch(async (e) => {
@@ -296,12 +297,12 @@ async function giveOwn(c: CommandCtx, what: Array<{ proto: string; count: number
 
 const ernte: Command = {
 	key: "ernte", aliases: ["ernten", "pflücke", "pfluecke", "harvest"],
-	help: "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins oder als Pate; dazu gibt es Samen); an einer reifen Flur (ernte flur, wenn auch ein Beet nah ist) ein Arbeitspunkt der Ernte und dein Anteil",
+	help: "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins oder als Pate; dazu gibt es Samen); an einem reifen Acker (ernte flur, wenn auch ein Beet nah ist) ein Arbeitspunkt der Ernte und dein Anteil",
 	async func(c, arg) {
 		const g = garden(c);
 		if (/^(?:die\s+|der\s+|das\s+)?(?:flur|acker|feld|field)$/i.test(arg.trim())) {
 			if (await harvestField(c)) return;
-			throw new NotUnderstood("Hier ist keine Flur. „flur anlegen“ legt eine an (mit einem Spaten, im Licht eines Feuers).");
+			throw new NotUnderstood("Hier ist kein Acker. „flur anlegen“ legt eine an (mit einem Spaten, im Licht eines Feuers).");
 		}
 		// no bed near, but a field: its harvest (field.ts)
 		const b = await bedHere(c).catch(async (e) => { if (e instanceof NotUnderstood && (await harvestField(c))) return null; throw e; });

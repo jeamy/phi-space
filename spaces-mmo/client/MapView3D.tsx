@@ -10,13 +10,14 @@ import type { CharView, ObjView } from "../server/gateway.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
+import { tr } from "./i18n/index.ts";
 import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
 import { tile3d } from "./terrain3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
 type T = typeof import("three");
 type O3 = import("three").Object3D;
-type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; kind?: string; progress?: number; sig?: string };
+type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; kind?: string; progress?: number; sig?: string; /** The name on a figure. */ shown?: string };
 /** What a bed shows: rebuilt when its plants or weeds change. */
 const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
 type Scene3D = {
@@ -258,10 +259,12 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 	for (const id of [...s.chars.keys()]) if (!chars.has(id)) remove(s, s.chars, id);
 	for (const [id, c] of chars) {
 		let e = s.chars.get(id);
+		// an alias shows at once: the figure is made anew under its new name
+		if (e && e.shown !== c.name) { remove(s, s.chars, id); e = undefined; }
 		if (!e) {
 			const fig = makeFigure(s.t, { id, skin: c.skin, own: id === me, ai: !!c.ai });
 			fig.group.add(label(s.t, c.settler ? `${c.name} (Siedler)` : c.name, id === me ? "#dfff73" : c.ai ? "#9fd3ff" : "#ffffff"));
-			e = { obj: fig.group, target: at(s, c.x, c.y, 0), fig }; e.obj.position.copy(e.target); s.scene.add(e.obj); s.chars.set(id, e);
+			e = { obj: fig.group, target: at(s, c.x, c.y, 0), fig, shown: c.name }; e.obj.position.copy(e.target); s.scene.add(e.obj); s.chars.set(id, e);
 		}
 		e.target.copy(at(s, c.x, c.y, 0));
 		if (snap) e.obj.position.copy(e.target);
@@ -301,6 +304,12 @@ function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
 function object(t: T, obj: ObjView, me: string): Entry {
 	const group = new t.Group(); group.userData.owned = true;
 	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" || obj.kind === "field" || obj.kind === "building" ? { sig: bedSig(obj) } : {}) };
+	if (obj.kind === "zone") {
+		// a zone of the town hall: a tint just above the ground
+		const tint = new t.Mesh(new t.BoxGeometry(obj.w ?? 1, 0.01, obj.h ?? 1), new t.MeshBasicMaterial({ color: Number.parseInt((obj.color ?? "#5fbf6a").slice(1), 16), transparent: true, opacity: 0.22, depthWrite: false }));
+		tint.position.y = 0.03; group.add(tint);
+		return e;
+	}
 	if (obj.kind === "bed") {
 		// dug soil a little above the grass; each plant at its cell by its stage
 		const w = obj.w ?? 1, d = obj.h ?? 1;
@@ -377,7 +386,7 @@ function object(t: T, obj: ObjView, me: string): Entry {
 		group.add(propMesh(t, mesh));
 	} else if (obj.kind === "exit") {
 		const sign = propMesh(t, signGeometry(t)); sign.rotation.y = (variant / 3) * Math.PI * 2; group.add(sign);
-		const mark = label(t, obj.to ?? obj.name, "#AED83C"); mark.position.y = 1.1; group.add(mark);
+		const mark = label(t, tr(obj.to ?? obj.name), "#AED83C"); mark.position.y = 1.1; group.add(mark);
 	} else if (obj.icon) {
 		// the thing's picture as a small sign that always faces the camera
 		const sprite = new t.Sprite(new t.SpriteMaterial({ map: iconTexture(t, obj.icon), transparent: true, alphaTest: 0.1 }));

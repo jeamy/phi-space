@@ -45,7 +45,7 @@ Hier arbeitet niemand für sich allein. Was einer sammelt, hilft allen, und was 
 - **Gemeinsam statt allein:** Kein Spieler kann ein Feuer auf Dauer allein halten. Die Welt lebt davon, dass viele sich gegenseitig zuarbeiten.
 - **Jeder darf mitmachen:** Du kannst sofort als **Gast** losspielen. Wer sich registriert, behält Figur und Fortschritt ([Gast und Konto](help.game.account)).
 - **Echtzeit:** Andere Spieler siehst du live auf der Karte, auch Figuren des Spiels wie Ines und Bo sind unterwegs ([Figuren der Welt](help.game.fire#people)).
-- **Aufbau:** Hütten, Beete, Fluren, Mühlen und Tiere machen aus einer Insel mit der Zeit ein Dorf ([Dorf und Siedlung](help.game.village)).
+- **Aufbau:** Hütten, Beete, Äcker, Mühlen und Tiere machen aus einer Insel mit der Zeit ein Dorf ([Dorf und Siedlung](help.game.village)).
 - **Eine Welt auf phi-spaces:** Strandgut, das nur einer aufheben kann, ein Feuer, das von allein erlischt, ein Tausch, der ganz oder gar nicht gilt: Die Regeln sind die Eigenschaften des Space.
 
 Weiter: [Spielziel](help.game.goal), [Erste Schritte](help.game.start), [Steuerung](help.game.controls), [Befehle](help.game.commands).
@@ -212,7 +212,7 @@ Das Menü bietet an, was zum Feld passt:
 
 ## Kulissen abräumen {#scenery}
 
-Hütten, Netzgestelle, Boote und Fässer, die schon in der Welt stehen, sind Kulisse. Man läuft nicht hindurch und baut dort nicht. Stege und Anleger bleiben fest. Alles andere räumst du mit **räume** ab (oder über **Hier möglich**): Arbeit für Arbeit, wie auf einer Baustelle. Wer die letzte Arbeit tut, bekommt das Material darin, und das Land ist für immer frei für Bau, Beet oder Flur.
+Hütten, Netzgestelle, Boote und Fässer, die schon in der Welt stehen, sind Kulisse. Man läuft nicht hindurch und baut dort nicht. Stege und Anleger bleiben fest. Alles andere räumst du mit **räume** ab (oder über **Hier möglich**): Arbeit für Arbeit, wie auf einer Baustelle. Wer die letzte Arbeit tut, bekommt das Material darin, und das Land ist für immer frei für Bau, Beet oder Acker.
 
 ## Aushang {#orders}
 
@@ -230,9 +230,9 @@ Die Karte füllt den Bildschirm, im Browser am Rechner genauso, und die Kamera f
 
 Das **Steuerkreuz** geht Schritt für Schritt, solange du eine Richtung hältst. Unter **⋯** schaltest du es zusammen mit den Knöpfen für Zoom und Drehen ab oder legst es nach links. Über der Karte steht unter **Hier möglich**, was du gerade tun kannst, zum Beispiel **Treibholz nachlegen**. Ausgänge außerhalb des Bilds stehen als Schild am Rand.
 
-Unten liegt ein **Blatt** mit [Tasche, Protokoll und Chats](help.game.controls#side). Zieh es am Griff auf die Höhe und, wo es schmaler als die Seite ist, nach links oder rechts, dorthin, wo du es möchtest, es bleibt so; ein Tipp auf den Griff oder die Karte schließt es, der nächste Tipp öffnet es wieder auf dieser Höhe. Im Querformat liegt es genauso unten, und das Spiel geht beim ersten Tipp ins Vollbild, ohne Adressleiste (abschaltbar unter **⋯**; auf dem iPhone geht das nur vom Home-Bildschirm). Die Zurück-Taste schließt immer die oberste Ebene.
+Unten liegt ein **Blatt** mit [Aktionen, Protokoll und Chats](help.game.controls#side). Zieh es am Griff auf die Höhe und, wo es schmaler als die Seite ist, nach links oder rechts, dorthin, wo du es möchtest, es bleibt so; ein Tipp auf den Griff oder die Karte schließt es, der nächste Tipp öffnet es wieder auf dieser Höhe. Im Querformat liegt es genauso unten, und das Spiel geht beim ersten Tipp ins Vollbild, ohne Adressleiste (abschaltbar unter **⋯**; auf dem iPhone geht das nur vom Home-Bildschirm). Die Zurück-Taste schließt immer die oberste Ebene.
 
-Ein Tipp auf den **Raumnamen** oben öffnet die Weltkarte. Dort zeigt der grüne Punkt, wo du bist, und farbige Quadrate zeigen, wo deine Bauten, Baustellen, Beete und Fluren liegen. Auf dem Home-Bildschirm wird das Spiel zu einer eigenen App ohne Adressleiste: am iPhone **Teilen → Zum Home-Bildschirm**, am Android-Handy **Browser-Menü ⋮ → Zum Startbildschirm hinzufügen**. Dann öffnest du es von dort.
+Ein Tipp auf den **Raumnamen** oben öffnet die Weltkarte. Dort zeigt der grüne Punkt, wo du bist, und farbige Quadrate zeigen, wo deine Bauten, Baustellen, Beete und Äcker liegen. Auf dem Home-Bildschirm wird das Spiel zu einer eigenen App ohne Adressleiste: am iPhone **Teilen → Zum Home-Bildschirm**, am Android-Handy **Browser-Menü ⋮ → Zum Startbildschirm hinzufügen**. Dann öffnest du es von dort.
 
 ## Tastatur {#keys}
 
@@ -253,7 +253,7 @@ Die Tasten gelten, solange die Befehlszeile nicht den Fokus hat.
 
 Das Seitenfeld zeigt, was gerade wichtig ist: was neben dir liegt, was du trägst und wie lange das Feuer noch brennt. Darunter steht alles, was du siehst und hörst.
 
-Rechts (auf dem Handy und dem Tablet im Hochformat im Blatt, dort im Reiter **Tasche**) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen. Darunter (am Handy: Reiter **Protokoll**) das **Protokoll** mit allem, was du siehst und hörst, daneben die Reiter des [Chats](help.game.chat) (je Gespräch einer, „Chats“ als Übersicht), und die **Befehlszeile**. „Kommen und Gehen“ blendet die Meldungen ein, wer kommt und geht.
+Rechts (auf dem Handy und dem Tablet im Hochformat im Blatt, dort im Reiter **Aktionen**) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen; ein Tipp auf etwas, das du trägst, zeigt, was du gerade damit tun kannst. Unter **Du trägst** die **Befehlszeile** mit der letzten Antwort. Darunter (am Handy: Reiter **Protokoll**) das **Protokoll** mit allem, was du siehst und hörst, daneben die Reiter des [Chats](help.game.chat) (je Gespräch einer, „Chats“ als Übersicht). „Kommen und Gehen“ blendet die Meldungen ein, wer kommt und geht.
 
 ## Kopfzeile {#bar}
 
@@ -313,7 +313,7 @@ The map fills the screen, in a desktop browser too, and the camera follows your 
 
 The **D-pad** walks step by step while you hold a direction. Under **⋯** you switch it off, together with the zoom and turn buttons, or move it to the left. Above the map **Hier möglich** lists what you can do right now, for example **Treibholz nachlegen**. Exits outside the picture stand as signs at its edge.
 
-At the bottom lies a **sheet** with [bag, log and chats](help.game.controls#side). Drag its handle to the height you like and, where it is narrower than the page, left or right, and it stays there; a tap on the handle or the map closes it, the next tap opens it at that height again. On its side it lies at the bottom just the same, and the game goes to full screen at the first tap, without the address bar (off under **⋯**; on an iPhone only from the home screen). The back button always closes the topmost layer.
+At the bottom lies a **sheet** with [actions, log and chats](help.game.controls#side). Drag its handle to the height you like and, where it is narrower than the page, left or right, and it stays there; a tap on the handle or the map closes it, the next tap opens it at that height again. On its side it lies at the bottom just the same, and the game goes to full screen at the first tap, without the address bar (off under **⋯**; on an iPhone only from the home screen). The back button always closes the topmost layer.
 
 A tap on the **room name** at the top opens the world map. The green dot shows where you are, coloured squares where your buildings, sites, beds and fields lie. On the home screen the game becomes an app of its own without an address bar: on an iPhone **Share → Add to Home Screen**, on an Android phone **browser menu ⋮ → Add to Home screen**. Then open it from there.
 
@@ -336,7 +336,7 @@ The keys work as long as the command line does not have the focus.
 
 The side panel shows what matters right now: what lies next to you, what you carry and how long the fire still burns. Below it stands everything you see and hear.
 
-On the right (below the map on a phone and an upright tablet) you find **Next to you**, **You carry** and the **beacon** with its time left, each with buttons. Below that the **log** with everything you see and hear, beside it the tabs of the [chat](help.game.chat) (one per talk, “Chats” as the overview), and the **command line**. “Kommen und Gehen” shows the lines about who comes and goes.
+On the right (below the map on a phone and an upright tablet) you find **Next to you**, **You carry** and the **beacon** with its time left, each with buttons; a tap on something you carry shows what you can do with it right now. Under **You carry** the **command line** with its last answer. Below that the **log** with everything you see and hear, beside it the tabs of the [chat](help.game.chat) (one per talk, “Chats” as the overview). “Kommen und Gehen” shows the lines about who comes and goes.
 
 ## Header bar {#bar}
 
@@ -423,6 +423,7 @@ Bauen geht nur im Licht eines Feuers. Ausführlich unter [Bauen](help.game.build
 | \`antrag <zu\|offen\|text>\` | \`motion\` | Am Rathaus einen Antrag stellen; allein: den laufenden zeigen |
 | \`antrag grünzone\`, \`antrag wegerecht\`, \`antrag zone frei\` | | Über die Fläche um dich abstimmen lassen |
 | \`antrag steuer <n>\` | | Münzen je Stück für Entnahmen aus dem Lager |
+| \`antrag abriss\` | | Über den Abriss des Baus neben dir abstimmen lassen; was bleibt, gehört dem Besitzer als Nachlass |
 | \`stimme ja\|nein\` | \`vote\` | Als Siedler über den Antrag abstimmen |
 | \`repariere\` | \`repair\` | Einen Bau ausbessern |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Deinen Bau oder deine Baustelle abreißen |
@@ -441,18 +442,18 @@ Gärten brauchen einen Spaten, Wasser und Licht. Ausführlich unter [Gärten](he
 | \`schöpfe\` | \`fill\` | An der Regentonne eine Kanne Wasser füllen |
 | \`gieße\` | \`water\` | Ein Beet gießen (deins oder als Pate) |
 | \`jäte\` | \`weed\` | Unkraut und Welkes herausziehen |
-| \`ernte\` | \`harvest\`, \`pflücke\` | Reifes ernten, mit Samen; an einer reifen Flur ein Arbeitspunkt und dein Anteil |
+| \`ernte\` | \`harvest\`, \`pflücke\` | Reifes ernten, mit Samen; an einem reifen Acker ein Arbeitspunkt und dein Anteil |
 | \`pate <name>\` | \`sponsor\` | Jemanden dein Beet pflegen lassen; \`pate weg <name>\` beendet es |
 | \`benenne <name>\` | \`taufe\` | Deiner Kreuzung einen Namen geben (\`benenne 2 <name>\`, wenn du mehrere trägst) |
 
 ## Äcker {#fieldcmds}
 
-Eine Flur ist ein großes Feld für viele Hände. Ausführlich unter [Äcker](help.game.fields).
+Ein Acker ist ein großes Feld für viele Hände. Ausführlich unter [Äcker](help.game.fields).
 
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
-| \`flur anlegen [x y]\` | \`acker anlegen\`, \`field\` | Mit einem Spaten im Licht eine Flur umbrechen (4×4); \`flur\` zeigt die Fluren hier, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
-| \`bestelle [frucht]\` | \`pflüge\`, \`plough\` | Die Flur bestellen: Frucht wählen, Saatgut und einen Arbeitspunkt bringen |
+| \`flur anlegen [x y]\` | \`acker anlegen\`, \`field\` | Mit einem Spaten im Licht einen Acker umbrechen (4×4); \`flur\` zeigt die Äcker hier, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
+| \`bestelle [frucht]\` | \`pflüge\`, \`plough\` | Den Acker bestellen: Frucht wählen, Saatgut und einen Arbeitspunkt bringen |
 
 ## Mühle und Backhaus {#millcmds}
 
@@ -483,7 +484,7 @@ Wo kein Feuer brennt, kommen Tiere aus dem Nebel. Ausführlich unter [Wild](help
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
 | \`scheuche hase\` | \`scare\` | Einen Hasen (auch \`reh\`, \`fuchs\`, \`maus\`) bis drei Schritte von dir in den Nebel zurückjagen |
-| \`zäune\` | \`fence\` | Einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), deine Flur (6 Treibholz, 2 Tangseil) oder deinen Hühnerstall (3 Treibholz, 1 Tangseil) neben dir setzen |
+| \`zäune\` | \`fence\` | Einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), deinen Acker (6 Treibholz, 2 Tangseil) oder deinen Hühnerstall (3 Treibholz, 1 Tangseil) neben dir setzen |
 | \`wache\` | \`guards\` | Wer im Raum vor dem Wild wacht (Hund, Katze, Gänse) und ob sie satt sind |
 
 ## Dorf und Siedlung {#villagecmds}
@@ -492,6 +493,10 @@ Eine Insel wächst durch das, was auf ihr steht. Ausführlich unter [Dorf und Si
 
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
+| \`siedlung rang\` | | Die Siedlungen der Gegend nach ihrem Bestand; ein Park wiegt am meisten, wer ihn zuletzt pflegte, zählt dazu |
+| \`pflege\` | \`tend\` | Einmal am Tag eine Blume in den Park neben dir setzen: Ruf für dich, Rang für die Siedlung |
+| \`fest blumen\`, \`fest ernte\` | \`festival\` | Als Siedler am Park eine Blumenschau oder ein Erntefest eröffnen; allein: das laufende zeigen |
+| \`zeige <ding>\` | \`exhibit\` | Am Park eine Blume zur Schau oder Ernte zum Fest geben; der Preis wartet im \`nachlass\` |
 | \`siedlung\` | \`settlement\` | Die Siedlung hier; \`siedlung gründen <name>\`, \`aufnehmen <name> [helfer]\`, \`entlassen <name>\`, \`zu\`, \`offen\` |
 | \`epoche\` | \`stufe\` | Auf welcher Stufe die Insel steht (Fischerdorf, Dorf, Stadt, Netz), ihre Punkte und was die nächste freischaltet |
 
@@ -585,6 +590,7 @@ Building works only in a fire's light. In detail under [Building](help.game.buil
 | \`antrag <zu\|offen\|text>\` | \`motion\` | Put a motion at a town hall; alone: show the open one |
 | \`antrag grünzone\`, \`antrag wegerecht\`, \`antrag zone frei\` | | Put the ground around you to a vote |
 | \`antrag steuer <n>\` | | Coins per thing taken from the warehouse |
+| \`antrag abriss\` | | Put the building beside you to a vote; what is left is the owner's estate |
 | \`stimme ja\|nein\` | \`vote\` | Vote on the motion as a settler |
 | \`repariere\` | \`repair\` | Repair a building |
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Tear down your building or site |
@@ -654,6 +660,10 @@ An island grows by what stands on it. In detail under [Village and settlement](h
 
 | Command | Also | Effect |
 | --- | --- | --- |
+| \`siedlung rang\` | | The settlements of the region by what they hold; a park weighs most, and whoever tended it lately counts too |
+| \`pflege\` | \`tend\` | Once a day set a flower in the park beside you: reputation for you, rank for the settlement |
+| \`fest blumen\`, \`fest ernte\` | \`festival\` | As a settler at a park, open a flower show or a harvest festival; alone: show the running one |
+| \`zeige <ding>\` | \`exhibit\` | Give a flower to the show or crops to the festival at the park; the prize waits in \`nachlass\` |
 | \`siedlung\` | \`settlement\` | The settlement here; \`siedlung gründen <name>\`, \`aufnehmen <name> [helfer]\`, \`entlassen <name>\`, \`zu\`, \`offen\` |
 | \`epoche\` | \`stufe\` | The island's epoch (fishing village, village, town, net), its points and what the next unlocks |
 
@@ -837,7 +847,7 @@ Aus wenigen Dingen machst du Nützliches. Manches braucht ein Werkzeug, manches 
 | Tangseil | 3 Tang | Ein Seil, das fast jeder Bau braucht |
 | Muschelmesser | 2 Muscheln, 1 Treibholz | Werkzeug, stumpft nach einigen Einsätzen ab |
 | Holzbündel | 3 Treibholz und ein Muschelmesser | Brennt vier Mal so lange wie ein Scheit |
-| Spaten | 2 Treibholz, 1 Tangseil | Gräbt Beete und Fluren um |
+| Spaten | 2 Treibholz, 1 Tangseil | Gräbt Beete und Äcker um |
 | Netz | 2 Tangseil und ein Muschelmesser | Handelsware |
 | Bernsteinkette | 1 Bernstein, 2 Muscheln, 1 Tangseil und ein Muschelmesser | Handelsware |
 | Spindel | 1 Treibholz, 1 Muschel | Werkzeug zum Spinnen, nutzt sich ab |
@@ -1186,19 +1196,19 @@ Watering, weeding, harvesting and planting work from up to **two cells** away. T
 			en: "Large fields for many hands, crop rotation, grain becomes flour and bread.",
 		},
 		body: {
-			de: `Eine Flur ist ein großes Feld, das viele Hände braucht. Man sät gemeinsam, wartet ein paar Tage und bringt die Ernte zusammen ein. Aus dem Korn wird in der Mühle Mehl und im Backhaus Brot. Fluren, Mühle und Backhaus gibt es erst, wenn die Insel ein [Dorf](help.game.village#epochs) ist.
+			de: `Ein Acker ist ein großes Feld, das viele Hände braucht. Man sät gemeinsam, wartet ein paar Tage und bringt die Ernte zusammen ein. Aus dem Korn wird in der Mühle Mehl und im Backhaus Brot. Äcker, Mühle und Backhaus gibt es erst, wenn die Insel ein [Dorf](help.game.village#epochs) ist.
 
 ## Äcker {#fields}
 
-Eine Flur ist ein Feld, das eine einzige Frucht trägt. Sie braucht kaum tägliche Pflege, dafür zweimal viel Arbeit.
+Ein Acker ist ein Feld, das eine einzige Frucht trägt. Sie braucht kaum tägliche Pflege, dafür zweimal viel Arbeit.
 
-Die **Flur** hat 4×4 Felder, eine je Konto, im Licht eines Feuers (zwei Lichtpunkte). Mit einem Spaten bricht \`flur anlegen\` sie neben dir um, \`flur anlegen <x> <y>\` an einer bestimmten Stelle. Anlegen braucht ein Konto.
+Der **Acker** hat 4×4 Felder, einerr je Konto, im Licht eines Feuers (zwei Lichtpunkte). Mit einem Spaten bricht \`flur anlegen\` sie neben dir um, \`flur anlegen <x> <y>\` an einer bestimmten Stelle. Anlegen braucht ein Konto.
 
 ## Bestellen {#sow}
 
-Zuerst wird die Flur bestellt. Wer sie angelegt hat, wählt die Frucht, dann bringen alle Saatgut und Arbeit.
+Zuerst wird der Acker bestellt. Wer ihn angelegt hat, wählt die Frucht, dann bringen alle Saatgut und Arbeit.
 
-Wer die Flur anlegte, wählt die Frucht mit \`bestelle gerste\`. Dann braucht sie **4 Saatgut und 2 Arbeit**: Jedes \`bestelle\` bringt, was du an Saatgut trägst, und einen Arbeitspunkt; danach ruhst du eine Weltstunde, wie an der Baustelle.
+Wer den Acker anlegte, wählt die Frucht mit \`bestelle gerste\`. Dann braucht sie **4 Saatgut und 2 Arbeit**: Jedes \`bestelle\` bringt, was du an Saatgut trägst, und einen Arbeitspunkt; danach ruhst du eine Weltstunde, wie an der Baustelle.
 
 | Frucht | Saatgut | Woher | Art | Ertrag |
 | --- | --- | --- | --- | --- |
@@ -1211,9 +1221,9 @@ Wer die Flur anlegte, wählt die Frucht mit \`bestelle gerste\`. Dann braucht si
 
 ## Ernteeinsatz {#gang}
 
-Ist die Flur reif, kommt es auf viele Hände an. Jeder bekommt sofort, was er selbst einbringt.
+Ist der Acker reif, kommt es auf viele Hände an. Jeder bekommt sofort, was er selbst einbringt.
 
-Nach zwei bis drei Tagen ist die Flur reif und bleibt es zwei Tage. Jedes \`ernte\` an ihr (\`ernte flur\`, wenn auch ein Beet nah ist) ist ein Arbeitspunkt (8 für eine Flur) und gibt dir deinen Anteil sofort in die Tasche. Allein dauert das acht Stunden; acht Hände bringen sie in einer ein, und jedes Korn bekommt genau einer. Danach ist die Flur **überreif**, jeder Anteil nur noch halb so groß, und noch zwei Tage später ist die Frucht verdorben.
+Nach zwei bis drei Tagen ist der Acker reif und bleibt es zwei Tage. Jedes \`ernte\` an ihr (\`ernte flur\`, wenn auch ein Beet nah ist) ist ein Arbeitspunkt (8 für einen Acker) und gibt dir deinen Anteil sofort in die Tasche. Allein dauert das acht Stunden; acht Hände bringen sie in einer ein, und jedes Korn bekommt genau einer. Danach ist der Acker **überreif**, jeder Anteil nur noch halb so groß, und noch zwei Tage später ist die Frucht verdorben.
 
 \`flur offen\` lässt jeden mitsäen und miternten, auch Gäste, und jeder behält seinen Anteil; \`flur zu\` schließt sie wieder.
 
@@ -1221,7 +1231,7 @@ Nach zwei bis drei Tagen ist die Flur reif und bleibt es zwei Tage. Jedes \`ernt
 
 Der Boden wird müde, wenn immer dasselbe auf ihm wächst. Wechselt die Frucht, gibt er wieder mehr.
 
-Dieselbe Art zweimal hintereinander macht den Boden müde, er gibt nur noch 60 %, beim dritten Mal 35 %. Eine andere Art oder drei Tage Brache heilen ihn: Getreide, dann Kartoffeln, dann Rüben oder Ruhe. \`flur\` zeigt den Boden. Eine Flur, an der zwei Wochen niemand arbeitet, verwildert.
+Dieselbe Art zweimal hintereinander macht den Boden müde, er gibt nur noch 60 %, beim dritten Mal 35 %. Eine andere Art oder drei Tage Brache heilen ihn: Getreide, dann Kartoffeln, dann Rüben oder Ruhe. \`flur\` zeigt den Boden. Ein Acker, an dem zwei Wochen niemand arbeitet, verwildert.
 
 ## Mühle und Backhaus {#mill}
 
@@ -1396,7 +1406,7 @@ Wo das Feuer nicht brennt, kommen aus dem Nebel **Hasen** an die Beete: je dicht
 
 Auch größeres Wild kommt aus dem Nebel. Jedes Tier hat sein eigenes Ziel.
 
-- **Rehe** fressen sich an einer wachsenden Flur satt. Jeder Besuch kostet einen Teil der Ernte, aber sie gibt immer gut die Hälfte.
+- **Rehe** fressen sich an einem wachsenden Acker satt. Jeder Besuch kostet einen Teil der Ernte, aber sie gibt immer gut die Hälfte.
 - **Füchse** holen fast nur nachts ein Tier aus dem Hühnerstall, nie das letzte.
 - **Mäuse** nagen an Korn, Mehl, Brot und Käse in der Truhe einer Hütte, nie am letzten Stück.
 
@@ -1408,9 +1418,9 @@ Gegen jedes Tier hilft etwas anderes. Die Tabelle zeigt, was wogegen schützt.
 
 | Schutz | wogegen |
 | --- | --- |
-| Zaun um die Flur (\`zäune\`: 6 Treibholz, 2 Tangseil) | Rehe |
+| Zaun um den Acker (\`zäune\`: 6 Treibholz, 2 Tangseil) | Rehe |
 | Zaun mit Tür um den Hühnerstall (\`zäune\`: 3 Treibholz, 1 Tangseil) | Füchse |
-| Vogelscheuche (Beete und Fluren in drei Feldern) | Hasen, Rehe |
+| Vogelscheuche (Beete und Äcker in drei Feldern) | Hasen, Rehe |
 | Mausefalle in der Truhe (\`craft mausefalle\`) | Mäuse |
 | satte Gänse im Raum | Hasen, Füchse |
 | ein satter Hund im Raum | Hasen, Rehe, Füchse |
@@ -1477,12 +1487,12 @@ Gesa sells **dogs and cats**. \`einstallen hund\` leaves one on guard at a build
 
 Jede Insel hat eine eigene Stufe. Es zählt, was noch steht und gepflegt wird. Du siehst die Stufe mit \`epoche\`.
 
-Jede Insel steht auf einer Stufe: **Fischerdorf**, **Dorf**, **Stadt**, **Netz**. Sie zählt ihren gehaltenen Bestand, jeden Bau, jedes Beet und jede Flur, die noch stehen, mit so vielen Punkten, wie sie vom Licht eines Feuers nehmen. Beete zählen so viel wie Bauten: Hütte, Beet, Hühnerstall, Regentonne, Vogelscheuche und Webstuhl je 1 Punkt, Flur, Gemeinschaftsbeet, Windmühle, Backhaus und Gehege je 2.
+Jede Insel steht auf einer Stufe: **Fischerdorf**, **Dorf**, **Stadt**, **Netz**. Sie zählt ihren gehaltenen Bestand, jeden Bau, jedes Beet und jeden Acker, die noch stehen, mit so vielen Punkten, wie sie vom Licht eines Feuers nehmen. Beete zählen so viel wie Bauten: Hütte, Beet, Hühnerstall, Regentonne, Vogelscheuche und Webstuhl je 1 Punkt, Acker, Gemeinschaftsbeet, Windmühle, Backhaus und Gehege je 2.
 
 | Stufe | ab Punkten | neu |
 | --- | --- | --- |
 | Fischerdorf | 0 | Hütte, Hühnerstall, Regentonne, Vogelscheuche, Beete |
-| Dorf | 15 | Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Werkstatt, Fluren |
+| Dorf | 15 | Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Werkstatt, Äcker |
 | Stadt | 40 | (noch keine Pläne) |
 | Netz | 80 | (noch keine Pläne) |
 
@@ -1502,7 +1512,7 @@ In einer Siedlung hat jeder einen Rang. Wer dort eine Hütte hat, ist von selbst
 
 | Rang | Wer | darf, wenn die Siedlung geschlossen ist |
 | --- | --- | --- |
-| Siedler | Hüttenbesitzer, und wen ein Siedler aufnimmt | bauen, Beete und Fluren anlegen, liefern, mitarbeiten |
+| Siedler | Hüttenbesitzer, und wen ein Siedler aufnimmt | bauen, Beete und Äcker anlegen, liefern, mitarbeiten |
 | Helfer | wen ein Siedler als Helfer aufnimmt; ein Gast ist höchstens Helfer | liefern, mitarbeiten |
 | Fremder | alle anderen | nichts davon |
 
@@ -1512,7 +1522,7 @@ In einer Siedlung hat jeder einen Rang. Wer dort eine Hütte hat, ist von selbst
 
 Eine neue Siedlung ist offen, jeder darf dort bauen und helfen. Sie kann ihre Tür aber schließen. Dann gelten die Ränge.
 
-\`siedlung zu\` schließt die Siedlung, \`siedlung offen\` öffnet sie wieder; beides dürfen nur Siedler. Was schon steht, bleibt, wem es gehört, und betreten darf den Ort jeder. Die Regeln betreffen neue Baustellen, Beete und Fluren sowie Liefern und Mitarbeiten an Baustellen.`,
+\`siedlung zu\` schließt die Siedlung, \`siedlung offen\` öffnet sie wieder; beides dürfen nur Siedler. Was schon steht, bleibt, wem es gehört, und betreten darf den Ort jeder. Die Regeln betreffen neue Baustellen, Beete und Äcker sowie Liefern und Mitarbeiten an Baustellen.`,
 			en: `An island grows by what stands on it. With enough huts, beds and fields the fishing village becomes a village, and new building plans open up. Neighbours can also found a settlement. Together they then decide who may build in their place.
 
 ## Epochs {#epochs}
@@ -1667,7 +1677,7 @@ You decide who reaches you. Anyone who bothers you can be blocked or reported.
 
 Als **Gast** spielst du sofort, ohne Konto. Vieles geht schon, manches braucht ein Konto.
 
-Du kannst laufen, sammeln, das Feuer nachlegen, reden, chatten, an Baustellen mitbauen und alles ansehen. Auch als Pate, am Gemeinschaftsbeet und auf offenen Fluren darfst du helfen. **Nicht möglich:** tauschen, handeln, Dinge weitergeben, selbst bauen oder besitzen, Aufträge nehmen, Chat-Gruppen oder Siedlungen gründen. In einer Siedlung bist du höchstens Helfer. Eine Gastfigur verfällt nach einigen Tagen ohne Spiel.
+Du kannst laufen, sammeln, das Feuer nachlegen, reden, chatten, an Baustellen mitbauen und alles ansehen. Auch als Pate, am Gemeinschaftsbeet und auf offenen Äckern darfst du helfen. **Nicht möglich:** tauschen, handeln, Dinge weitergeben, selbst bauen oder besitzen, Aufträge nehmen, Chat-Gruppen oder Siedlungen gründen. In einer Siedlung bist du höchstens Helfer. Eine Gastfigur verfällt nach einigen Tagen ohne Spiel.
 
 ## Konto {#account}
 

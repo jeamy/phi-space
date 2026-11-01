@@ -1,8 +1,9 @@
 // What a finger means on the map (client/cellActions.ts) and the way a tap walks (client/walk.ts nextStep).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cellAbout, cellEntries, hereEntries, tapTarget } from "../client/cellActions.ts";
+import { cellAbout, cellEntries, hereEntries, itemEntries, tapTarget } from "../client/cellActions.ts";
 import { nextStep } from "../client/walk.ts";
+import { sentences } from "../client/sentences.ts";
 import type { CharView, ObjView } from "../server/gateway.ts";
 
 const char = (charId: string, name: string, x: number, y: number) => ({ charId, name, x, y }) as CharView;
@@ -57,8 +58,41 @@ test("the way goes around what stands in it, and none is none", () => {
 	assert.equal(nextStep(closed, { x: 0, y: 0 }, { x: 4, y: 0 }), null);
 });
 
+test("a carried thing shows what it can do here and now, nothing it cannot", () => {
+	const uses = { recipes: [{ key: "tangseil", name: "Tangseil", needs: [{ name: "Tang", count: 3 }] }, { key: "tuch", name: "Tuch", needs: [{ name: "Wolle", count: 3 }], tool: "Spindel", at: "webstuhl" }], feed: { huhn: ["Hafer"] }, offerings: ["Perle"], flowers: [], chests: ["huette"], stores: [] };
+	const pack = (n: string, k: number) => Array.from({ length: k }, (_, i): [string, ObjView] => [`${n}${i}`, obj({ id: `${n}${i}`, kind: "item", name: n, location: "me", x: 0, y: 0 })]);
+	const at = (...more: Array<[string, ObjView]>) => ({ ...input, objs: new Map<string, ObjView>(more) });
+	const lines = (n: string, i: ReturnType<typeof at>) => itemEntries(n, i, uses, { fuels: ["Treibholz"] }).map((e) => e.line);
+	assert.deepEqual(lines("Hafer", at(...pack("Hafer", 1))), [], "far from everything: only laying down and looking");
+	assert.deepEqual(lines("Tang", at(...pack("Tang", 2))), [], "two of three");
+	assert.deepEqual(lines("Tang", at(...pack("Tang", 3))), ["craft tangseil"]);
+	const coop: [string, ObjView] = ["c", obj({ id: "c", kind: "building", name: "Hühnerstall", plan: "huehnerstall", herd: "huhn", x: 6, y: 5, w: 2, h: 1 })];
+	assert.ok(lines("Hafer", at(coop, ...pack("Hafer", 1))).includes("füttere Hafer"));
+	assert.ok(!lines("Stein", at(coop, ...pack("Stein", 1))).includes("füttere Stein"));
+	const site: [string, ObjView] = ["s", obj({ id: "s", kind: "site", name: "Hütte", ownerId: "me", missing: "2 Treibholz, 5 Arbeit", x: 6, y: 5, w: 2, h: 2 })];
+	assert.ok(lines("Treibholz", at(site, ...pack("Treibholz", 1))).includes("liefere Treibholz"));
+	assert.ok(!lines("Tang", at(site, ...pack("Tangseil", 1), ...pack("Tang", 1))).includes("liefere Tangseil"), "Tang is not the Tangseil");
+	const fire: [string, ObjView] = ["b", obj({ id: "b", kind: "beacon", name: "Leuchtfeuer", x: 6, y: 5 })];
+	assert.ok(lines("Treibholz", at(fire, ...pack("Treibholz", 1))).includes("put Treibholz in Leuchtfeuer"));
+	const ines = new Map([["me", me], ["o", char("o", "Ines", 6, 5)]]);
+	assert.deepEqual(itemEntries("Hafer", { ...at(...pack("Hafer", 1)), chars: ines, offer: () => {} }, uses, { fuels: [], market: () => {} }).map((e) => e.line), ["give Hafer an Ines", "#offer Ines", "#sell"]);
+	assert.deepEqual(itemEntries("Hafer", { ...at(...pack("Hafer", 1)), chars: ines, guest: true }, uses, { fuels: [] }), [], "a guest gives nothing");
+});
+
+test("an own fallow field offers what one carries to sow", () => {
+	const field = (more: Array<[string, ObjView]>) => new Map<string, ObjView>([["f", obj({ id: "f", kind: "field", ownerId: "me", owner: "Mira", fieldStage: "brach", x: 6, y: 5, w: 4, h: 4 })], ...more]);
+	const lines = (o: Map<string, ObjView>) => cellEntries({ ...input, at: { x: 6, y: 5 }, objs: o }).map((e) => e.line);
+	assert.ok(lines(field([])).includes("bestelle"));
+	const carried = lines(field([["h", obj({ id: "h", kind: "item", name: "Hafer", location: "me", x: 0, y: 0 })], ["l", obj({ id: "l", kind: "item", name: "Leinsamen", location: "me", x: 0, y: 0 })]]));
+	assert.ok(carried.includes("bestelle hafer") && carried.includes("bestelle flachs") && !carried.includes("bestelle"));
+});
+
 test("the bar offers a field once, for the cell one stands on, not for every cell around", () => {
 	const spade = new Map([...objs, ["spade", obj({ id: "spade", kind: "item", name: "Spaten", location: "me", x: -1, y: -1 })]]);
 	const lines = hereEntries({ chars, objs: spade, self: me, room: "r", me: "me", plans: [], guest: false, fuel: undefined }).map((e) => e.line).filter((l) => l.startsWith("flur anlegen"));
 	assert.deepEqual(lines, ["flur anlegen 5 5"]);
+});
+
+test("a long text falls into sentences, an abbreviation does not end one", () => {
+	assert.deepEqual(sentences("Eins, z. B. dies. Zwei „look“. Drei."), ["Eins, z. B. dies.", "Zwei „look“.", "Drei."]);
 });

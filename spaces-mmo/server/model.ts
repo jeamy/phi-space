@@ -52,13 +52,20 @@ export type FogFields = { room: string; level: number };
 /** A settlement (engine/commands/settlement.ts), one per room: `members` lists who was taken in (hut owners are settlers
  *  without it), `closed`: the ranks count. */
 export type SettlementMember = { accountId: string; name: string; rank: "helfer" | "siedler" };
-export type SettlementFields = { settlementId: string; name: string; nameKey: string; room: string; founder: string; founderName: string; members: SettlementMember[]; closed: boolean; at: number; /** Coins per thing taken from the warehouse, set by a town hall; they go into it. */ tax?: number };
+export type SettlementFields = { settlementId: string; name: string; nameKey: string; room: string; founder: string; founderName: string; members: SettlementMember[]; closed: boolean; at: number; /** Coins per thing taken from the warehouse, set by a town hall; they go into it. */ tax?: number; /** Before this world time no new festival (engine/commands/festival.ts). */ showRestWorldMs?: number };
+/** A festival of a settlement, one per room (`unique`), ending at `endsWorldMs`. */
+export type ShowKind = "blumen" | "ernte";
+export type ShowFields = { showId: string; room: string; settlementId: string; settlementName: string; kind: ShowKind; byName: string; endsWorldMs: number };
+/** What one account shows at a festival; `score`: the worth of the flower, or the count of the crops. */
+export type ShowEntryFields = { showId: string; accountId: string; charName: string; name: string; score: number; at: number };
+/** The tending of the park of a room by one account: `points` how often, `lastWorldMs` the last time. */
+export type ParkCareFields = { room: string; accountId: string; charName: string; points: number; lastWorldMs: number };
 /** A line of a warehouse's log: who laid in or took what (`kind`), counted for the quota by world time. */
 /** What a site pays for (docs/siedeln.en.md, engine/commands/siteorder.ts): `proto` "" is work; the coins lie at `orderId`. */
 export type SiteOrderFields = { orderId: string; buildId: string; siteName: string; room: string; x: number; y: number; w: number; h: number; ownerName: string; proto: string; name: string; left: number; pay: number; at: number };
 /** A motion at a town hall (engine/commands/townhall.ts), one per room: `kind` "zu" and "offen" change the settlement, "text" is only recorded. */
-export type MotionFields = { motionId: string; room: string; settlementId: string; settlementName: string; by: string; byName: string; kind: MotionKind; text: string; endsWorldMs: number; tax?: number; zone?: { x: number; y: number; w: number; h: number } };
-export type MotionKind = "zu" | "offen" | "text" | "gruen" | "weg" | "frei" | "steuer";
+export type MotionFields = { motionId: string; room: string; settlementId: string; settlementName: string; by: string; byName: string; kind: MotionKind; text: string; endsWorldMs: number; tax?: number; zone?: { x: number; y: number; w: number; h: number }; /** What `abriss` would take down. */ target?: { buildId: string; name: string; ownerName: string } };
+export type MotionKind = "zu" | "offen" | "text" | "gruen" | "weg" | "frei" | "steuer" | "abriss";
 /** A zone a town hall set: "gruen" keeps it for beds and green plans, "weg" keeps it free of everything. */
 export type ZoneFields = { zoneId: string; room: string; settlementId: string; kind: "gruen" | "weg"; x: number; y: number; w: number; h: number };
 /** A settler's vote on a motion, an entry of its own: the motion keeps its claim on the room (a taken entry still holds it). */

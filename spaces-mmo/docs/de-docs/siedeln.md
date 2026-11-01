@@ -1048,16 +1048,20 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      Ziegel. Daneben gibt `opfere` eine Perle, einen Bernstein, ein Brot oder eine Blume hin; einen Welttag lang ruht man nach der Arbeit
      nur halb so lange. Abweichungen: Der Segen wirkt ohne die Götter, gilt nur in der Region, in der man opfert, und Feste fehlen noch.
    - **Teil 3, Park (gebaut, nur Bauplan):** Ab Epoche Stadt aus Ziegeln, Stein und Blumen, 4×4 groß, zählt 9 Punkte, also dreifach für den Bestand.
-     Abweichung: noch ohne Ruf für die Pflegenden und ohne Blumenschau.
+     Pflege und Feste kamen mit Teil 9.
    - **Teil 5, Rathaus und Abstimmungen (gebaut, `server/engine/commands/townhall.ts`):** Plan ab Epoche Stadt aus Ziegeln, Stein und Bohlen. Daneben stellt ein Siedler
      mit `antrag` einen Antrag, je Raum läuft einer. Jeder Siedler stimmt mit `stimme ja|nein`, die letzte Stimme zählt, nach einem Welttag entscheidet die Zählung:
      Mehr Ja als Nein trägt ihn. Steht ein Rathaus, geht `siedlung zu` und `offen` nur noch über einen Antrag.
      Stimmen sind eigene Einträge: Ein genommener Antrag hielte seinen `unique`-Anspruch bis zum Commit, er ließe sich in derselben Transaktion nicht neu schreiben.
      Abweichungen: Freie Anträge werden bloß verkündet; das Rathaus kommt früher als die Tabelle (Stufe 5) es nennt.
    - **Teil 6, Zonen (gebaut, ebenda):** `antrag grünzone` und `antrag wegerecht` gehen überall im Ort für 7×7 Felder um den Antragsteller, `antrag zone frei` hebt die Zonen an seinem Feld auf. In der Grünzone
-     gehen nur Beete und Parks, auf dem Wegerecht gar nichts; Stehendes bleibt. Zonen enden mit der Siedlung. Abweichung: noch kein Overlay auf der Karte, `siedlung` nennt sie als Text; Abriss per Beschluss fehlt.
+     gehen nur Beete und Parks, auf dem Wegerecht gar nichts; Stehendes bleibt. Zonen enden mit der Siedlung. `siedlung` nennt sie als Text, beide Karten tönen sie ein, grün die Grünzone, gelb das Wegerecht; der Abriss per Beschluss kam mit Teil 8.
+   - **Teil 8, Abriss per Beschluss (gebaut, gleiche Datei):** `antrag abriss` geht überall im Ort für den einen Bau neben der antragstellenden Figur. Angenommen fällt er, wem er auch gehört: Fläche und Licht sind sofort frei, die Hälfte des Materials und der Inhalt der Truhe warten als Nachlass auf den Besitzer (`nachlass`). Nie das Rathaus und kein Lager, in dem noch Waren liegen; das prüft der Antrag und noch einmal die Zählung.
+   - **Rang der Siedlungen (gebaut, `settlement.ts`):** `siedlung rang` listet die Siedlungen der Region nach den Punkten dessen, was in ihnen steht, ein Park (9) wiegt also am meisten. Der Warenumsatz zählt noch nicht. Eine Region ist ein eigener Space, die Liste endet also an ihrer Grenze.
    - **Teil 7, Steuer (gebaut, ebenda):** `antrag steuer <n>` (höchstens 5) setzt, wie viele Münzen je Stück eine Entnahme aus dem Lagerhaus kostet; sie bleiben im Lager, Münzen selbst sind frei.
-     Abweichung: Die Umsatzsteuer des Kaufhauses wartet auf das Kaufhaus (Schritt 7). Feste, Ruf und Blumenschau sind offen.
+     Abweichung: Die Umsatzsteuer des Kaufhauses wartet auf das Kaufhaus (Schritt 7). 
+   - **Teil 9, Feste und Pflege (gebaut, `server/engine/commands/festival.ts`):** Neben einem Park eröffnet ein Siedler eine Blumenschau (`fest blumen`) oder ein Erntefest (`fest ernte`), eines je Raum, zwei Welttage lang, danach ruht die Siedlung eine Woche. Registrierte Figuren geben mit `zeige <ding>` dazu: eine Blume, wobei eine benannte Sorte vor einer gezüchteten und diese vor einer wilden liegt, oder Ernte stückweise, die größte Menge siegt. Was gezeigt ist, bleibt beim Fest. Die Zählung (Job „epoch“) nennt den Sieger, bei Gleichstand den früheren; 10 Münzen warten als Nachlass (`nachlass`), und mit weniger als zwei Teilnehmern gibt es keinen Preis, damit niemand allein Münzen prägt. `pflege` setzt einmal am Welttag eine Blume in den Park: Das steht in `reputation`, und wer in den letzten sieben Tagen pflegte, zählt einen Punkt in `siedlung rang`.
+     Abweichungen: Der Preis kommt von der Welt, nicht von einer Tafel; das Erntefest braucht keinen Herbst, weil es noch keine Jahreszeiten gibt; der Park hat keine Beete, Pflege ist eine Blume für den Bau. Die Regatta wartet auf Boote, Feuerkette und regionsübergreifender Rang auf die Tafel. Der Warenumsatz zählt im Rang weiter nicht.
 7. **Kaufhaus** (Laden mit Vorrat), **Kontor**, **Leuchtturm**, **Brauhaus**, **Glashütte und Gewächshaus**,
    Fischerei (Netz-Rezept, Steg) und Boote; **Nahrung** (Sattsein), wenn Brot und Räucherfisch da sind.
 8. **Straßen, Karren, Fahrplan-Fähren**, dann die **Inselbahn** als Automat.

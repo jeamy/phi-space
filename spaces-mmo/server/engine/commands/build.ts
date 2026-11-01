@@ -64,7 +64,8 @@ function reachable(w: WorldDef, ground: string[], from: { x: number; y: number }
 /** Why `rect` cannot be built on (null: it can). */
 /** The cobbles of paths and plazas: nothing is built or dug on them (docs/siedeln.en.md "Bebauung"). */
 export const PATH = ":";
-export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green = false): Promise<string | null> {
+/** `onPeople`: beds and fields are dug and sown under anyone's feet, who walks off them afterwards (default.ts moveTo). */
+export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green = false, onPeople = false): Promise<string | null> {
 	const height = room.ground.length, width = room.ground[0]?.length ?? 0;
 	if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > width || rect.y + rect.h > height) return "Dort ist der Raum zu Ende.";
 	const zoned = await zoneRefusal(c, room.roomId, cells(rect), green);
@@ -81,7 +82,7 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green
 		if (isPassage(exits, p)) return "Dort ist ein Weg hinaus; den baut niemand zu.";
 		if (fires.some((b) => Math.max(Math.abs(b.x - p.x), Math.abs(b.y - p.y)) <= 1)) return "So nah am Feuer baut man nicht.";
 		if (blocked.has(k)) { const piece = (await c.space.readAll({ type: "Scenery", fields: { room: room.roomId } })).map((e) => fieldsOf<SceneryFields>(e)).find((s) => distTo(p, s) === 0); return piece && !piece.fixed ? `Dort steht ${piece.name}; erst abräumen (räume).` : "Dort steht schon etwas oder wird gebaut."; }
-		if (people.has(k) || (p.x === c.actor.x && p.y === c.actor.y)) return "Dort steht jemand.";
+		if (!onPeople && (people.has(k) || (p.x === c.actor.x && p.y === c.actor.y))) return "Dort steht jemand.";
 		if (things.has(k)) return "Dort liegt etwas; räum es erst weg.";
 	}
 	// nothing may close a way: from the room's spawn every exit, every fire's side and the builder stay reachable
@@ -89,7 +90,7 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green
 	const start = room.spawn && !after.has(cellKey(room.spawn)) ? room.spawn : exits[0] ? { x: exits[0].x, y: exits[0].y } : { x: c.actor.x, y: c.actor.y };
 	const reach = reachable(c.world, room.ground, start, after);
 	const ok = (p: { x: number; y: number }) => reach.has(cellKey(p));
-	if (!exits.every((x) => ok(x)) || (room.spawn && !ok(room.spawn)) || !ok(c.actor)) return "Damit wäre ein Weg zugebaut.";
+	if (!exits.every((x) => ok(x)) || (room.spawn && !ok(room.spawn)) || !(ok(c.actor) || (onPeople && distTo(c.actor, rect) === 0))) return "Damit wäre ein Weg zugebaut.";
 	if (!fires.every((b) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => ok({ x: b.x + dx!, y: b.y + dy! })))) return "Damit käme niemand mehr ans Feuer.";
 	return null;
 }
@@ -222,7 +223,7 @@ export const bau: Command = {
 		const room = await roomOf(c);
 		const tries = m[2] !== undefined ? [{ x: Number(m[2]), y: Number(m[3]), w: plan.w, h: plan.h }] : besides(c, plan);
 		let rect: Rect | null = null, why = "";
-		for (const r of tries) { const no = await refusal(c, room, r, !!plan.green); if (!no) { rect = r; break; } why ||= no; }
+		for (const r of tries) { const no = await refusal(c, room, r, !!plan.green, !!plan.green); if (!no) { rect = r; break; } why ||= no; }
 		if (!rect) throw new CommandError(`Hier passt keine ${plan.name} hin: ${why}`);
 		const buildId = randomBytes(6).toString("hex"), now = await worldNowOf(c.space, c.txn);
 		for (const p of cells(rect)) {
@@ -607,6 +608,21 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 	// flour (or grain back) nobody fetched
 	for (const e of await space.readAll({ type: "MillLoad" })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
 }
+/** A building a town hall voted away, in the transaction of the count: the area and the light are free at once, and half of
+ *  the material with what lay in the chest waits for the owner as an estate on the spot. */
+export async function demolishByVote(space: SpaceLike, txn: string, w: WorldDef, b: BuildingFields, now: number): Promise<void> {
+	await freeCells(space, txn, b.room, b.buildId);
+	await releaseLight(space, txn, b.beaconId, b.points ?? 1);
+	await stopLoads(space, txn, b.buildId, now);
+	const est: EstateFields = { estateId: `est-${b.buildId}`, accountId: b.accountId, ownerName: b.ownerName, room: b.room, name: b.name, untilWorldMs: now + (w.building?.estateWorldMs ?? 30 * 24 * 3600_000) };
+	await space.write({ type: "Estate", fields: est as never }, txn, FOREVER);
+	for (const it of await space.readAll({ type: "Item", fields: { location: b.buildId } })) await moveItem(space, txn, String(it.fields.itemId), b.buildId, est.estateId);
+	for (const n of planOf(w, b.plan)?.needs ?? []) {
+		const proto = await resolvePrototype(space, n.proto);
+		if (proto) for (let i = 0; i < Math.floor(n.count / 2); i++) await spawn(space, txn, w, proto, { location: est.estateId, x: -1, y: -1 });
+	}
+}
+
 /** A mill that falls stops grinding: its loads not yet ground give their grain back, ready now, at the mill's place
  *  (engine/commands/mill.ts). How many it stopped. */
 export async function stopLoads(space: SpaceLike, txn: string, buildId: string, now: number): Promise<number> {

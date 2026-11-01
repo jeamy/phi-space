@@ -25,6 +25,8 @@ export type ExitDef = Omit<ExitFields, "location" | "locks"> & { room: string; l
 /** An item the world places once: spawned only while no item with its itemId exists anywhere. */
 export type PlacedDef = { itemId: string; proto: string; room: string; x: number; y: number };
 export type SceneryDef = Omit<SceneryFields, "left">;
+/** Festivals at the plan `plan` (engine/commands/festival.ts): each lasts `showWorldMs`, the settlement then rests `restWorldMs`, the winner gets `prize` coins. A figure tends once per `careWorldMs` and counts in the rank for `tendedWorldMs` after. */
+export type FestivalDef = { plan: string; showWorldMs: number; restWorldMs: number; prize: number; careWorldMs: number; tendedWorldMs: number };
 export type WorldDef = {
 	id: string; title: string; tileSize: number; tiles: Record<string, TileDef>; skins: SkinDef[]; rooms: RoomDef[]; start: string; guestName: string;
 	/** What a room's `decor` grid names (plants and the like). */
@@ -101,6 +103,7 @@ export type WorldDef = {
 	townhall?: { plan: string; voteWorldMs: number; zoneRadius: number; maxTax: number };
 	/** Chapels: `plan`, what may be offered, and how long a blessing lasts. */
 	chapel?: { plan: string; offerings: string[]; blessWorldMs: number };
+	festival?: FestivalDef;
 	/** Animals on the farm (docs/siedeln.en.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
 	animals?: AnimalsDef;
 	/** How the world splits into region spaces when SPACES_MMO_REGIONS names them (engine/regions.ts); without it the

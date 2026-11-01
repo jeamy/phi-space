@@ -1041,16 +1041,20 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      first building that needs bricks. Beside it `opfere` gives up a pearl, amber, bread or a flower; for a world day the rest after
      work is half as long. Deviations: the blessing works without the gods, holds only in the region of the offering, no festivals yet.
    - **Part 3, park (built, a plan only):** From the town epoch, of bricks, stone and flowers, 4×4, worth 9 points, threefold
-     towards the stock. Deviation: no reputation for its tenders and no flower show yet.
+     towards the stock. Tending and festivals came with part 9.
    - **Part 5, town hall and votes (built, `server/engine/commands/townhall.ts`):** A plan from the town epoch of bricks, stone and planks. Beside it a settler
      puts a motion with `antrag`, one per room at a time. Each settler votes with `stimme ja|nein`, the last vote counts, and after a world day the count decides:
      more yes than no carries it. Once a hall stands, `siedlung zu` and `offen` go only through a motion.
      Votes are entries of their own: a taken motion holds its `unique` claim until the commit, so the same transaction could not write it anew.
      Deviations: free motions are merely announced; the hall comes earlier than the table (level 5) says.
    - **Part 6, zones (built, same file):** `antrag grünzone` and `antrag wegerecht` go up anywhere in the settlement for 7×7 cells around whoever puts them, `antrag zone frei` lifts the zones at their cell. A green
-     zone admits only beds and parks, a right of way nothing; what stands stays. Zones end with the settlement. Deviation: no map overlay yet, `siedlung` names them as text; demolition by resolution is missing.
+     zone admits only beds and parks, a right of way nothing; what stands stays. Zones end with the settlement. `siedlung` names them as text and both maps tint them, green for a green zone, yellow for a right of way; demolition by resolution came with part 8.
+   - **Part 8, demolition by resolution (built, same file):** `antrag abriss` goes up anywhere in the settlement for the one building beside whoever puts it. Carried, it comes down whoever owns it: area and light are free at once, and half of the material with what lay in the chest waits for the owner as an estate (`nachlass`). Never the town hall, and no store still holding goods, checked at the motion and again at the count.
+   - **The rank of the settlements (built, `settlement.ts`):** `siedlung rang` lists the settlements of the region by the points of what stands in them, so a park (9) weighs most. Goods turnover is not counted yet. A region is a space of its own, so the list ends at the region.
    - **Part 7, tax (built, same file):** `antrag steuer <n>` (at most 5) sets the coins per thing taken from the warehouse; they stay in it, coins themselves go free.
-     Deviation: the tax on the market hall's sales waits for that hall (step 7). Festivals, reputation and the flower show are open.
+     Deviation: the tax on the market hall's sales waits for that hall (step 7). 
+   - **Part 9, festivals and tending (built, `server/engine/commands/festival.ts`):** Beside a park a settler opens a flower show (`fest blumen`) or a harvest festival (`fest ernte`), one per room, two world days, then the settlement rests a week. Registered figures give to it with `zeige <ding>`: one flower, a named sort beating a bred one and a bred one a wild one, or crops by the piece, the most winning. What is shown stays with the festival. The count (job "epoch") names the winner, the earlier of equals; 10 coins wait as an estate (`nachlass`), and with fewer than two taking part there is no prize, so nobody mints coins alone. `pflege` sets a flower in the park once a world day: it stands in `reputation`, and whoever tended in the last seven days adds a point in `siedlung rang`.
+     Deviations: the prize comes from the world, not a board; the harvest festival needs no autumn, as seasons are not there yet; the park holds no beds, tending is a flower given to the building. The regatta waits for boats, the fire chain and the rank across regions for the board. Goods turnover still does not count in the rank.
 7. **Department store** (shop with stock), **counting house**, **lighthouse**, **brewery**, **glassworks and greenhouse**,
    fishing (net recipe, jetty) and boats; **food** (being sated), when bread and smoked fish exist.
 8. **Roads, carts, timetable ferries**, then the **island railway** as automaton.

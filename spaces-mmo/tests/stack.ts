@@ -194,7 +194,7 @@ export class Player {
 		for (;;) {
 			const f = this.frames.slice(from).find(pred);
 			if (f) return f;
-			if (Date.now() > end) throw new Error(`no matching frame within ${ms} ms; said since: ${JSON.stringify(this.frames.slice(from).flatMap((x) => (x.t === "msg" ? [x.m.text] : [])).slice(-30))}; last: ${JSON.stringify(this.frames.slice(-3)).slice(0, 400)}`);
+			if (Date.now() > end) throw new Error(`no matching frame within ${ms} ms; said since: ${JSON.stringify(this.frames.slice(from).flatMap((x) => (x.t === "msg" && !/^(?:\[hafen\] Sturmflut|Die Flut spült)/.test(x.m.text) ? [x.m.text] : [])).slice(-30))}; last: ${JSON.stringify(this.frames.slice(-3)).slice(0, 400)}`);
 			await new Promise((r) => setTimeout(r, 25));
 		}
 	}

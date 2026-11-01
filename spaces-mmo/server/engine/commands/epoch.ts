@@ -80,7 +80,7 @@ const cap = (t: string) => t[0]!.toUpperCase() + t.slice(1);
 /** What an epoch unlocks: the plans of exactly that epoch, and the fields. */
 function unlocks(w: WorldDef, epoch: number): string {
 	const names = (w.building?.plans ?? []).filter((p) => (p.epoch ?? 1) === epoch).map((p) => p.name);
-	if ((w.fields?.epoch ?? 1) === epoch && epoch > 1) names.push("Fluren");
+	if ((w.fields?.epoch ?? 1) === epoch && epoch > 1) names.push("Äcker");
 	return names.join(", ");
 }
 
@@ -103,7 +103,7 @@ const epoche: Command = {
 		const now = await worldNowOf(c.space, c.txn), limits = await thresholds(c.space);
 		const t = (await islandPoints(c.space, c.world, now)).get(island) ?? { points: 0, buildings: 0, beds: 0, fields: 0 };
 		const epoch = await epochOf(c.space, island, c.txn), last = c.world.epochs.names.length;
-		const parts = `Bauten ${t.buildings}, Beete ${t.beds}, Fluren ${t.fields}`;
+		const parts = `Bauten ${t.buildings}, Beete ${t.beds}, Äcker ${t.fields}`;
 		const next = epoch < last ? ` ${cap(a(c.world, epoch + 1))} braucht ${limits[epoch - 1]} Punkte${unlocks(c.world, epoch + 1) ? `; dann gibt es ${unlocks(c.world, epoch + 1)}` : ""}.` : "";
 		const due = epochFor(t.points, limits, last) !== epoch ? " (Die Zählung holt das bald nach.)" : "";
 		await msg(c, c.actor.charId, "info", `${island} ist ${a(c.world, epoch)} (Epoche ${epoch}): ${t.points} Punkte gehaltener Bestand (${parts}).${next}${due}`);

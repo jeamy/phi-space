@@ -148,7 +148,7 @@ async function eat(space: SpaceLike, w: WorldDef, leaseMs: number, a: AnimalFiel
 			if (f) {
 				text = back;
 				if (fled) text = fled;
-				else if (f.fenced) text = `${cap(k.the)} findet den Zaun um die ${fieldName(f)} und ${k.goes} in den Nebel zurück.`;
+				else if (f.fenced) text = `${cap(k.the)} findet den Zaun um den ${fieldName(f)} und ${k.goes} in den Nebel zurück.`;
 				else if (s.scarecrows.some((c) => c.room === f.room && gap(f, c) <= wd.scarecrowReach)) text = `${cap(k.the)} scheut die Vogelscheuche bei der ${fieldName(f)} und ${k.goes} in den Nebel zurück.`;
 				else if (f.stage === "waechst") {
 					const t = await space.takeIfExists({ type: "Field", fields: { fieldId: f.fieldId } }, NO_WAIT, { txn });
@@ -307,7 +307,7 @@ async function payFence(c: CommandCtx, needs: Array<{ proto: string; count: numb
 
 const zaeune: Command = {
 	key: "zäune", aliases: ["zaeune", "umzäune", "umzaeune", "zäunen", "zaeunen", "fence"],
-	help: "zäune – einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), eine Flur oder einen Hühnerstall neben dir setzen: Hasen, Rehe und Füchse kommen nicht mehr hinein",
+	help: "zäune – einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), einen Acker oder einen Hühnerstall neben dir setzen: Hasen, Rehe und Füchse kommen nicht mehr hinein",
 	async func(c) {
 		const wd = wild(c), room = { room: c.actor.room };
 		const near = <F extends Rect>(xs: F[]) => xs.filter((x) => distTo(c.actor, x) <= 1);
@@ -322,11 +322,11 @@ const zaeune: Command = {
 		const mineField = (f: FieldFields) => f.accountId === c.account?.accountId || !!f.open;
 		if (wd.fieldFence && near((await c.space.readAll({ type: "Field", fields: room })).map((e) => fieldsOf<FieldFields>(e))).some(mineField)) {
 			const r = await takeNear<FieldFields>(c, "Field", "fieldId", 1, mineField);
-			if (!("f" in r)) throw new CommandError("Die Flur ist gerade nicht greifbar; bitte noch einmal.");
+			if (!("f" in r)) throw new CommandError("Der Acker ist gerade nicht greifbar; bitte noch einmal.");
 			if (r.f.fenced) throw new CommandError(`Um die ${fieldName(r.f)} steht schon ein Zaun.`);
 			await payFence(c, wd.fieldFence);
 			await c.space.write({ type: "Field", fields: { ...r.f, fenced: true } as never }, c.txn, FOREVER);
-			return msg(c, "*", "emote", `${c.actor.name} zieht einen Zaun um die ${fieldName(r.f)}; kein Reh kommt mehr hinein.`);
+			return msg(c, "*", "emote", `${c.actor.name} zieht einen Zaun um den ${fieldName(r.f)}; kein Reh kommt mehr hinein.`);
 		}
 		const houses = wildKinds(wd).find((k) => k.key === "fuchs")?.houses ?? [];
 		const mineCoop = (b: BuildingFields) => b.accountId === c.account?.accountId && houses.includes(b.plan);
@@ -338,7 +338,7 @@ const zaeune: Command = {
 			await putBack(c, { ...r.f, fenced: true });
 			return msg(c, "*", "emote", `${c.actor.name} setzt einen Zaun mit Tür um den Stall; kein Fuchs kommt mehr hinein.`);
 		}
-		throw new NotUnderstood("Neben dir ist kein Beet, keine Flur und kein Hühnerstall, den du einzäunen darfst.");
+		throw new NotUnderstood("Neben dir ist kein Beet, kein Acker und kein Hühnerstall, den du einzäunen darfst.");
 	},
 };
 

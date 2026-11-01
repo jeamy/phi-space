@@ -184,10 +184,29 @@ export class Accounts {
 		try {
 			const c = await world.take({ type: "Character", fields: { accountId } }, 5_000, { txn: t2 });
 			if (!c) throw new AuthError(409, "Deine Figur ist gerade nicht greifbar; bitte noch einmal");
-			await world.write({ type: "Character", fields: asFields<CharacterFields>({ ...fieldsOf<CharacterFields>(c), name }) }, t2, FOREVER);
+			const char = fieldsOf<CharacterFields>(c);
+			await world.write({ type: "Character", fields: asFields<CharacterFields>({ ...char, name }) }, t2, FOREVER);
 			await world.commit(t2);
+			await this.#renameOwned(char.charId, accountId, char.name, name);
 		} catch (e) { await world.abort(t2).catch(() => {}); throw e; }
 		return this.#me(account);
+	}
+
+	/** What a character owns keeps its owner's name for the world's sentences ("die Hütte von …"): they follow the alias, in
+	 *  every region. An entry held right now keeps the old name until its next change. */
+	async #renameOwned(charId: string, accountId: string, from: string, to: string): Promise<void> {
+		for (const [, space] of this.#regions.entries()) {
+			const owned = [
+				...(await Promise.all(["Site", "Building", "Ruin", "Bed", "Field"].map((type) => space.readAll({ type, fields: { owner: charId } })))).flat().map((e) => ({ e, key: "ownerName" })),
+				...(await space.readAll({ type: "Estate", fields: { accountId } })).map((e) => ({ e, key: "ownerName" })),
+				...(await space.readAll({ type: "SiteOrder", fields: { ownerName: from } })).map((e) => ({ e, key: "ownerName" })),
+				...(await space.readAll({ type: "Listing", fields: { seller: charId } })).map((e) => ({ e, key: "sellerName" })),
+			];
+			for (const { e, key } of owned) {
+				const taken = await space.takeIfExists({ type: e.type, id: e.id }, NO_WAIT);
+				if (taken) await space.write({ type: taken.type, types: taken.types.slice(1), fields: { ...taken.fields, [key]: to } as never }, null, FOREVER);
+			}
+		}
 	}
 
 	/** The account a name and password belong to. A credential left pending by a registration that got as far as the

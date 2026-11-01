@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CharView, ObjView, ServerFrame } from "../server/gateway.ts";
 import { pinch } from "./pinch.ts";
+import { tr } from "./i18n/index.ts";
 import { WALK_MS } from "./walk.ts";
 
 type Hello = Extract<ServerFrame, { t: "hello" }>;
@@ -251,7 +252,7 @@ function offscreenExits(s: Scene, roomId: string, objs: Map<string, ObjView>): E
 		if (x >= 0 && y >= 0 && x <= s.vp.w && y <= free) continue;
 		const side = x < 0 ? "left" : x > s.vp.w ? "right" : y < 0 ? "top" : "bottom";
 		const pos = side === "left" || side === "right" ? Math.max(120, Math.min(free - 60, y)) : Math.max(70, Math.min(s.vp.w - 70, x));
-		out.push({ id: o.id, name: o.to ?? o.name, x: o.x, y: o.y, side, pos: Math.round(pos / 8) * 8 });
+		out.push({ id: o.id, name: tr(o.to ?? o.name), x: o.x, y: o.y, side, pos: Math.round(pos / 8) * 8 });
 	}
 	return out;
 }
@@ -467,6 +468,16 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 			s.objs.addChild(label);
 			continue;
 		}
+		if (o.kind === "zone") {
+			// a zone of the town hall: a tint over its ground, the name in the corner
+			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts;
+			const g = new p.Graphics().rect(x, y, w, h).fill({ color: o.color ?? "#5fbf6a", alpha: 0.16 }).stroke({ width: 1, color: o.color ?? "#5fbf6a", alpha: 0.7 });
+			const label = new p.Text({ text: tr(o.name), resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 9, fill: o.color ?? "#5fbf6a", stroke: { color: "#000000", width: 3 } } });
+			label.position.set(x + 3, y + 2);
+			s.objs.addChildAt(g, 0);
+			s.objs.addChild(label);
+			continue;
+		}
 		if (o.kind === "bed") {
 			// a bed: dug soil with furrows, each plant at its cell by its stage (seed, sprout, ripe in the sort's colour, wilted)
 			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts;
@@ -536,7 +547,7 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 				g.rect(x + 6, y + h - 10, (w - 12) * Math.min(1, o.progress ?? 0), 4).fill({ color: "#AED83C" });
 			}
 			const own = o.ownerId === me;
-			const label = new p.Text({ text: `${o.kind === "site" ? (own ? `Deine Baustelle: ${o.name}` : `Baustelle ${o.name} von ${o.owner ?? ""}`) : `${o.name} von ${o.owner ?? ""}`}${o.orders?.length ? " · Aushang" : ""}`, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: o.kind === "site" && own ? "#dfff73" : "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
+			const label = new p.Text({ text: `${tr(o.kind === "site" ? (own ? `Deine Baustelle: ${o.name}` : `Baustelle ${o.name} von ${o.owner ?? ""}`) : `${o.name} von ${o.owner ?? ""}`)}${o.orders?.length ? ` · ${tr("Aushang")}` : ""}`, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: o.kind === "site" && own ? "#dfff73" : "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
 			label.anchor.set(0.5, 0);
 			label.position.set(x + w / 2, y + h);
 			s.objs.addChild(g, label);
@@ -544,7 +555,7 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 		}
 		if (o.kind === "exit") {
 			const g = new p.Graphics().rect(x + 2, y + 2, ts - 4, ts - 4).fill({ color: "#AED83C", alpha: 0.22 }).stroke({ width: 2, color: "#AED83C" });
-			const label = new p.Text({ text: o.to ?? o.name, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#AED83C", stroke: { color: "#000000", width: 3 } } });
+			const label = new p.Text({ text: tr(o.to ?? o.name), resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#AED83C", stroke: { color: "#000000", width: 3 } } });
 			label.anchor.set(0.5, 0);
 			label.position.set(cx, y + ts);
 			s.objs.addChild(g, label);
@@ -577,6 +588,7 @@ function draw(s: Scene, chars: Map<string, CharView>, me: string): void {
 	for (const [id, sp] of s.sprites) if (!chars.has(id)) { sp.body.destroy(); sp.label.destroy(); s.sprites.delete(id); }
 	for (const c of chars.values()) {
 		let sp = s.sprites.get(c.charId);
+		if (sp && sp.label.text !== c.name) sp.label.text = c.name; // an alias shows at once
 		if (!sp) {
 			const body = new s.pixi.Sprite();
 			const label = new s.pixi.Text({ text: c.name, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 11, fill: c.charId === me ? "#AED83C" : c.ai ? "#9fd3ff" : "#ffffff", stroke: { color: "#000000", width: 3 } } });

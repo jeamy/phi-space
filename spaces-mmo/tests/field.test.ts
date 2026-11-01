@@ -68,17 +68,19 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		const boss = await player(srv.url, "Bäuerin");
 		await lightFire(s, 3_600_000, "feuer-bucht");
 		await walk(boss, s, 16, 11);
+		await give(s, boss.me, "hafer", 1);
+		assert.match(await does(boss.p, "pflanze hafer", "Acker"), /Hafer wächst nicht im Beet.*bestelle hafer.*4× Hafer/);
 		assert.match(await does(boss.p, "flur anlegen", "Spaten"), /bricht man mit einem Spaten/);
 		await give(s, boss.me, "spaten", 1);
 		let staked = "";
-		for (let i = 0; i < 5 && !staked.includes("bricht eine Flur"); i++) {
+		for (let i = 0; i < 5 && !staked.includes("bricht einen Acker"); i++) {
 			for (const e of await s.readAll({ type: "Item", fields: { location: "graue-bucht" } })) if (Number(e.fields.x) >= 14 && Number(e.fields.y) >= 12) await s.takeIfExists({ id: e.id }, 0);
-			staked = await does(boss.p, "flur anlegen", /bricht eine Flur um|passt keine Flur/);
+			staked = await does(boss.p, "flur anlegen", /bricht einen Acker um|passt kein Acker/);
 		}
-		assert.match(staked, /Bäuerin bricht eine Flur um \(4×4\)/);
+		assert.match(staked, /Bäuerin bricht einen Acker um \(4×4\)/);
 		const f0 = (await theField(s))!;
 		assert.equal((await s.readAll({ type: "Plot", fields: { of: f0.fieldId } })).length, 16, "one entry, sixteen cells");
-		assert.match(await does(boss.p, "flur anlegen", "Flur"), /Mehr als 1 Flur/);
+		assert.match(await does(boss.p, "flur anlegen", "Acker"), /Mehr als 1 Acker/);
 		await boss.p.until((f) => f.t === "obj" && f.o.kind === "field" && f.o.fieldStage === "brach" && f.o.w === 4, 10_000);
 
 		// sowing: the owner chooses, seed and work; a stranger may not until the field is open
@@ -88,7 +90,7 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		assert.equal(await pack(s, boss.me, "gerste"), 1, "only what it needs is taken");
 		const helper = await player(srv.url, "Knecht");
 		await walk(helper, s, f0.x + 1, f0.y - 1);
-		assert.match(await does(helper.p, "bestelle", "darf"), /wer sie angelegt hat/);
+		assert.match(await does(helper.p, "bestelle", "darf"), /wer ihn angelegt hat/);
 		assert.match(await does(boss.p, "flur offen", "öffnet"), /säen und ernten darf jetzt jeder/);
 		assert.match(await does(helper.p, "bestelle", "bestellt"), /ist mit Gerste bestellt \(Bäuerin \(1\), Knecht \(1\)\)\. Reif in etwa/);
 		let f = (await theField(s))!;
@@ -105,7 +107,7 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		// its time comes (the date moved forward): the field tick makes it ripe
 		const t = (await s.take({ type: "Field", fields: { fieldId: f.fieldId } }, 5_000))!;
 		await s.write({ type: "Field", fields: { ...(t.fields as unknown as FieldFields), dueWorldMs: (await worldNowOf(s)) - 1 } as never }, null, FOREVER);
-		await boss.p.until((x) => x.t === "msg" && /Gerste auf der Flur von Bäuerin ist reif: 8 Hände-Stunden/.test(x.m.text), 30_000);
+		await boss.p.until((x) => x.t === "msg" && /Gerste auf dem Acker von Bäuerin ist reif: 8 Hände-Stunden/.test(x.m.text), 30_000);
 		f = (await theField(s))!;
 		assert.equal(f.stage, "reif");
 
@@ -132,11 +134,11 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		await rested(s);
 		for (let round = 0; round < 4 && (await theField(s))?.stage !== "brach"; round++) {
 			if (round) { await new Promise((ok) => setTimeout(ok, 4_000)); await rested(s); }
-			await Promise.all(crew.map((a) => does(a.p, "ernte", /erntet auf der Flur|eingebracht|liegt brach|müde|greifbar|darf/)));
+			await Promise.all(crew.map((a) => does(a.p, "ernte", /erntet auf dem Acker|eingebracht|liegt brach|müde|greifbar|darf/)));
 			await new Promise((ok) => setTimeout(ok, 500));
 		}
 		await eventually(async () => (await theField(s))?.stage === "brach", 30_000, "the field brought in");
-		await boss.p.until((x) => x.t === "msg" && /Die Gerste der Flur von Bäuerin ist eingebracht!/.test(x.m.text), 10_000);
+		await boss.p.until((x) => x.t === "msg" && /Die Gerste des Ackers von Bäuerin ist eingebracht!/.test(x.m.text), 10_000);
 		let total = 0, hands = 0;
 		for (const a of crew) { const n = (await pack(s, a.me, "gerste")) - (a === boss ? 1 : 0); total += n; if (n) hands++; }
 		assert.equal(total, 16, "every grain in exactly one pack");
@@ -149,12 +151,12 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		// the same group again: the soil is tired
 		await rested(s);
 		await give(s, boss.me, "hafer", 4);
-		await does(boss.p, "bestelle hafer", "pflügt");
+		await does(boss.p, "pflanze hafer", "pflügt");
 		await rested(s);
 		assert.match(await does(boss.p, "bestelle", "bestellt"), /der Boden ist müde und gibt weniger/);
 		f = (await theField(s))!;
 		assert.deepEqual(f.yields, [{ proto: "hafer", count: Math.floor(16 * d.tired[1]!) }]);
-		assert.match(await does(boss.p, "flur", "Flur von Bäuerin"), /Hafer wächst/);
+		assert.match(await does(boss.p, "flur", "Acker von Bäuerin"), /Hafer wächst/);
 		for (const a of crew) await a.p.leave();
 	} finally { await srv.close(); }
 });

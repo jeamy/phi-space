@@ -203,7 +203,7 @@ test("a dog and a cat as a player keeps them; scheuche reh; a fence round the ow
 		assert.match(await does(p, "zäune", "brauchst"), /Für diesen Zaun brauchst du 6 Treibholz und 2 Tangseil/);
 		await give(s, a.me, "treibholz", 6);
 		await give(s, a.me, "tangseil", 2);
-		assert.match(await does(p, "zäune", "Zaun um die"), /Ida zieht einen Zaun um die Flur von Ida; kein Reh kommt mehr hinein/);
+		assert.match(await does(p, "zäune", "Zaun um den"), /Ida zieht einen Zaun um den Acker von Ida; kein Reh kommt mehr hinein/);
 		assert.equal(((await s.readAll({ type: "Field", fields: { fieldId: f.fieldId } }))[0]!.fields as unknown as FieldFields).fenced, true);
 		await p.until((fr) => fr.t === "obj" && fr.o.kind === "field" && fr.o.fenced === true, 10_000);
 		assert.equal(await pack(s, a.me, "treibholz"), 0);

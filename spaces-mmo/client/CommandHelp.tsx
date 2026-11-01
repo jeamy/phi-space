@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import type { HelpView } from "../server/model.ts";
 import { isTouch } from "./useShell.ts";
+import { Rich, RichBlock } from "./RichText.tsx";
 
 export function CommandHelp({ view, onTopic, onArticles, onClose, onInsert }: { view: HelpView; onTopic: (key: string | null) => void; onArticles: () => void; onClose: () => void; /** Puts a command into the command line (it never runs by itself). */ onInsert?: (command: string) => void }) {
 	const [query, setQuery] = useState("");
@@ -41,12 +42,12 @@ export function CommandHelp({ view, onTopic, onArticles, onClose, onInsert }: { 
 						<article className="help-article">
 							<h1>{view.topic.key}</h1>
 							<p className="cmd-help-cat">{view.topic.category}</p>
-							<div className="help-body"><p>{view.topic.text}</p></div>
+							<div className="help-body"><RichBlock text={view.topic.text} onCommand={onInsert} /></div>
 						</article>
 					</>
 				) : (
 					<>
-						{view.intro && !q && <p className="cmd-help-intro">{view.intro}</p>}
+						{view.intro && !q && <p className="cmd-help-intro"><Rich text={view.intro} onCommand={onInsert} /></p>}
 						{topics.length > 0 && (
 							<section className="help-section">
 								<h2>Themen</h2>
@@ -61,7 +62,7 @@ export function CommandHelp({ view, onTopic, onArticles, onClose, onInsert }: { 
 									<li key={c.names[0]}>
 										<div className="cmd-help-sig"><code>{c.names[0]}{c.usage ? ` ${c.usage}` : ""}</code>{onInsert && <button className="cmd-insert" onClick={() => onInsert(c.names[0]!)} title="In die Befehlszeile setzen, ohne es auszuführen">Einfügen</button>}</div>
 										{c.names.length > 1 && <div className="cmd-help-also">auch {c.names.slice(1).map((n, i) => <span key={n}>{i ? ", " : ""}<code>{n}</code></span>)}</div>}
-										<div className="cmd-help-text">{c.text}</div>
+										<div className="cmd-help-text"><Rich text={c.text} onCommand={onInsert} /></div>
 									</li>
 								))}
 							</ul>

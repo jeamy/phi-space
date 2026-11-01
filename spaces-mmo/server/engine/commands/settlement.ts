@@ -14,6 +14,8 @@ import { CommandError, msg, msgOptions, NotUnderstood, type CommandCtx } from ".
 import { peek } from "../../space.ts";
 import type { WorldDef } from "../world.ts";
 import { hallIn, zonesLine } from "./townhall.ts";
+import { tendersIn } from "./festival.ts";
+import { worldNowOf } from "../clock.ts";
 
 export type Rank = "fremder" | "helfer" | "siedler";
 const ORDER: Rank[] = ["fremder", "helfer", "siedler"];
@@ -90,13 +92,28 @@ async function manage(c: CommandCtx): Promise<SettlementFields> {
 }
 const put = (c: CommandCtx, s: SettlementFields) => c.space.write({ type: "Settlement", fields: s as never }, c.txn, FOREVER);
 
+/** The settlements of this space, the best first: what they hold standing, in the points of the epochs (a park weighs most).
+ *  Each region is a space of its own, so the list is that of the region. */
+export async function settlementRanks(space: SpaceLike, w: WorldDef): Promise<Array<{ name: string; points: number; parks: number; tenders: number }>> {
+	const buildings = (await space.readAll({ type: "Building" })).map((e) => fieldsOf<BuildingFields>(e));
+	const now = await worldNowOf(space);
+	return (await Promise.all((await space.readAll({ type: "Settlement" })).map(async (e) => {
+		const s = fieldsOf<SettlementFields>(e), here = buildings.filter((b) => b.room === s.room), tenders = await tendersIn(space, w, s.room, now);
+		return { name: s.name, points: here.reduce((n, b) => n + (b.points ?? 1), 0) + tenders, parks: here.filter((b) => b.plan === "park").length, tenders };
+	}))).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+}
+
 const siedlung: Command = {
 	key: "siedlung", aliases: ["settlement", "dorfrat"],
-	help: "siedlung – die Siedlung hier: Name, Hütten, wer dazugehört (siedlung gründen <name>; aufnehmen <name> [helfer]; entlassen <name>; zu; offen)",
+	help: "siedlung – die Siedlung hier: Name, Hütten, wer dazugehört (siedlung gründen <name>; aufnehmen <name> [helfer]; entlassen <name>; zu; offen; rang)",
 	async func(c, arg) {
 		const d = defOf(c);
 		const [word = "", ...rest] = arg.trim().split(/\s+/), tail = rest.join(" ");
 		if (/^(?:gründen|gruenden|gründe|gruende|found)$/i.test(word)) return found(c, tail);
+		if (/^(?:rang|rangliste|rank)$/i.test(word)) {
+			const ranks = await settlementRanks(c.space, c.world);
+			return msg(c, c.actor.charId, "info", ranks.length ? `Die Siedlungen dieser Gegend: ${ranks.map((r, i) => `${i + 1}. ${r.name}, ${r.points} Punkte${r.parks ? ` (${r.parks === 1 ? "ein Park" : `${r.parks} Parks`}${r.tenders ? `, gepflegt von ${r.tenders}` : ""})` : ""}`).join("; ")}.` : "In dieser Gegend gibt es noch keine Siedlung.");
+		}
 		if (/^(?:zu|schließen|schliessen|close)$/i.test(word) || /^(?:offen|auf|öffnen|oeffnen|open)$/i.test(word)) {
 			const s = await manage(c), closed = /^(?:zu|schl|close)/i.test(word);
 			if (await hallIn(c.space, c.world, s.room, c.txn)) throw new CommandError(`In ${s.name} entscheidet das Rathaus: „antrag ${closed ? "zu" : "offen"}“ stellt es zur Abstimmung.`);

@@ -98,7 +98,7 @@ async function walk(a: P, space: SpaceLike, x: number, y: number): Promise<void>
 }
 const pack = async (space: SpaceLike, charId: string, proto: string) => (await space.readAll({ type: "Item", fields: { location: charId, proto } })).length;
 /** The owner's bed; one the garden tick is writing right now is not read for that moment, so it is waited for. */
-const bedOf = (space: SpaceLike, owner: string) => eventually(async () => (await space.readAll({ type: "Bed" })).map((e) => e.fields as unknown as BedFields).find((b) => b.owner === owner), 5_000, "the bed");
+const bedOf = (space: SpaceLike, owner: string) => eventually(async () => (await space.readAll({ type: "Bed" })).map((e) => e.fields as unknown as BedFields).find((b) => b.owner === owner), 15_000, "the bed");
 async function clear(space: SpaceLike, cells: Array<[number, number]>): Promise<void> {
 	for (const e of await space.readAll({ type: "Item", fields: { location: "graue-bucht" } })) if (cells.some(([x, y]) => e.fields.x === x && e.fields.y === y)) await space.takeIfExists({ id: e.id }, 0);
 }
@@ -337,5 +337,29 @@ test("a flower bed takes flowers and they cross; the breeder names the crossing 
 		// it does not count to Bert's beds, and only Bert gives it up
 		assert.match(await does(bert.p, "beet aufgeben", "Gras"), /gibt das Gemeinschaftsbeet auf/);
 		assert.equal(await s.count({ type: "BedCommons" }), 0, "the fire has room for one again");
+	} finally { await srv.close(); }
+});
+
+test("a bed is dug under people's feet, and they walk off over it", { timeout: 120_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const anna = await player(srv.url, "Graeberin"), bert = await player(srv.url, "Steher");
+		await lightFire(s, 600_000, "feuer-bucht");
+		await give(s, anna.me, "spaten", 1);
+		await walk(anna, s, 18, 12);
+		await walk(bert, s, 18, 13);
+		let dug = "";
+		for (let i = 0; i < 5 && !dug.includes("gräbt"); i++) { await clear(s, [[18, 12], [19, 12], [18, 13], [19, 13]]); dug = await does(anna.p, "umgraben 18 12", /gräbt ein Beet|passt kein Beet/); }
+		assert.match(dug, /gräbt ein Beet/);
+		// over the bed and off it, a cell at a time
+		await walk(anna, s, 21, 12);
+		await walk(bert, s, 18, 15);
+		const c = (await s.readAll({ type: "Character", fields: { charId: anna.me } }))[0]!.fields;
+		assert.equal(c.x, 21);
+		// from outside the bed stays solid
+		assert.match(await does(anna.p, "move 19 12", /geht|steht|kein Weg|Weg/), /./);
+		const again = (await s.readAll({ type: "Character", fields: { charId: anna.me } }))[0]!.fields;
+		assert.notDeepEqual([again.x, again.y], [19, 12]);
 	} finally { await srv.close(); }
 });

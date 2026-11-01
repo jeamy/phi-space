@@ -8,7 +8,13 @@ import { FOREVER, type SpaceLike } from "phi-spaces";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, lightFire, Player, startServer } from "./stack.ts";
+import { settle } from "../server/engine/commands/build.ts";
+import { worldNowOf } from "../server/engine/clock.ts";
+import type { CommandCtx } from "../server/engine/context.ts";
+import { initialClock } from "../server/engine/worldtime.ts";
+import type { BuildingFields, SiteFields } from "../server/model.ts";
+import { saveSettings } from "../server/settings.ts";
+import { eventually, lightFire, Player, startServer, startStack } from "./stack.ts";
 
 const w = await loadWorld();
 type P = { p: Player; me: string; name: string };
@@ -186,6 +192,26 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		assert.equal(await plots(), 0);
 		await boss.p.leave(); await other.p.leave();
 	} finally { await srv.close(); }
+});
+
+test("a number saved for a class holds for the next building of that class, and only for it; taken back, the default holds again", { timeout: 120_000 }, async () => {
+	const stack = await startStack({ worlds: 0 });
+	try {
+		const s = stack.space;
+		await s.write({ type: "WorldClock", fields: initialClock(w.id, 12, Date.now(), 1) as never }, null, FOREVER);
+		const standing = async (plan: string, buildId: string) => {
+			const site = { buildId, plan, name: plan, room: "graue-bucht", x: 1, y: 1, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "a", beaconId: "feuer-bucht", points: 1, needs: [], work: 0, workNeed: 0, by: {}, human: 0, other: 0 } as unknown as SiteFields;
+			await settle({ space: s, txn: null, world: w, actor: { room: "graue-bucht", name: "O", charId: "o" }, msgLeaseMs: 60_000 } as unknown as CommandCtx, site);
+			const b = (await s.readAll({ type: "Building", fields: { buildId } }))[0]!.fields as unknown as BuildingFields;
+			return Math.round((b.untilWorldMs - (await worldNowOf(s))) / (24 * 3600_000));
+		};
+		assert.equal(await standing("vogelscheuche", "a"), 7);
+		await saveSettings(s, { "keep.scheuche": 2 });
+		assert.equal(await standing("vogelscheuche", "b"), 2, "the saved number");
+		assert.equal(await standing("huette", "c"), 30, "another class keeps its own");
+		await saveSettings(s, { "keep.scheuche": null });
+		assert.equal(await standing("vogelscheuche", "d"), 7, "taken back");
+	} finally { await stack.close(); }
 });
 
 test("every plan names the admin's setting for how long it stands, and the setting's default says the same as the plan", async () => {

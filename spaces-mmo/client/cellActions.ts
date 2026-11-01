@@ -1,6 +1,6 @@
 // What can be done on a cell of the map: one function for the mouse's menu and the action sheet of a touch screen. Every
 // entry is a text command; `run` is for what stays on the page. Pure, so it is tested without a browser.
-import type { CharView, ObjView, PlanView } from "../server/gateway.ts";
+import type { CharView, ItemUses, ObjView, PlanView } from "../server/gateway.ts";
 
 export type CellEntry = { label: string; line: string; run?: () => void };
 export type CellInput = {
@@ -40,9 +40,54 @@ export function hereEntries(input: Omit<CellInput, "at" | "onPlans">): CellEntry
 	return [...seen.values()].sort((a, b) => rank(a.line) - rank(b.line));
 }
 
+/** Bar entries that need a thing without naming it. */
+const NEEDS: Record<string, string[]> = { "Kanne Wasser": ["gieße"], Spitzhacke: ["breche"], Spaten: ["steche"] };
+/** What a carried thing can do right now, besides laying it down and looking at it: what the bar offers with it or for it
+ *  (a price in brackets counts when all of it is carried), and what only the thing brings: feeding, offering, the chest, recipes,
+ *  people beside one and the market board. */
+export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans">, uses: ItemUses, o: { fuels: string[]; market?: () => void }): CellEntry[] {
+	const { objs, chars, self, room, me, guest, offer } = input;
+	if (!self) return [];
+	const out = new Map<string, CellEntry>(), add = (e: CellEntry) => { if (!out.has(e.line)) out.set(e.line, e); };
+	const count = new Map<string, number>();
+	for (const i of objs.values()) if (i.kind === "item" && i.location === me) count.set(i.name, (count.get(i.name) ?? 0) + 1);
+	const word = new RegExp(`(?<![\\p{L}])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "iu");
+	const here = hereEntries(input);
+	for (const e of here) {
+		const [head = "", price] = e.label.split(/ \((.*)\)$/);
+		if (word.test(head) || NEEDS[name]?.includes(e.line) || (e.line === "pflege" && uses.flowers.includes(name))) { add(e); continue; }
+		const costs = price?.split(", ").map((p) => /^(?:(\d+) )?(.+)$/.exec(p)!) ?? [];
+		if (costs.some((c) => c[2] === name) && costs.every((c) => (count.get(c[2]!) ?? 0) >= Number(c[1] ?? 1))) add(e);
+	}
+	const beside = [...objs.values()].filter((b) => b.location === room && self.x >= b.x - 1 && self.y >= b.y - 1 && self.x <= b.x + (b.w ?? 1) && self.y <= b.y + (b.h ?? 1));
+	const built = beside.filter((b) => b.kind === "building");
+	if (o.fuels.includes(name) && beside.some((b) => b.kind === "beacon")) { const fire = beside.find((b) => b.kind === "beacon")!; add({ label: `${name} nachlegen`, line: `put ${name} in ${fire.name}` }); }
+	for (const b of built) {
+		if (b.herd && uses.feed[b.herd]?.includes(name)) add({ label: `${name} verfüttern`, line: `füttere ${name}` });
+		if (b.keeper && uses.feed[b.keeper]?.includes(name)) add({ label: `${name} verfüttern (${b.keeper === "hund" ? "Hund" : "Katze"})`, line: `füttere ${b.keeper} ${name}` });
+		if (b.plan === "kapelle" && uses.offerings.includes(name)) add({ label: `${name} opfern`, line: `opfere ${name}` });
+		if (uses.stores.includes(b.plan ?? "") || (uses.chests.includes(b.plan ?? "") && b.ownerId === me)) add({ label: uses.stores.includes(b.plan ?? "") ? "Ins Lager legen" : "In die Truhe legen", line: `verstaue ${name}` });
+	}
+	if (name === "Spaten" && !guest) add({ label: "Beet umgraben", line: "umgraben" });
+	for (const r of uses.recipes) {
+		const uses1 = r.tool === name || r.needs.some((n) => n.name === name);
+		if (!uses1 || (r.tool && !count.has(r.tool)) || r.needs.some((n) => (count.get(n.name) ?? 0) < n.count)) continue;
+		if (r.at && !built.some((b) => b.plan === r.at)) continue;
+		if (![...out.values()].some((e) => e.label.startsWith(`${r.name} `))) add({ label: `${r.name} herstellen`, line: `craft ${r.key}` });
+	}
+	if (!guest) for (const c of chars.values()) if (c.charId !== me && Math.max(Math.abs(c.x - self.x), Math.abs(c.y - self.y)) <= 1) {
+		add({ label: `${c.name} geben`, line: `give ${name} an ${c.name}` });
+		if (offer) add({ label: `${c.name} anbieten …`, line: `#offer ${c.name}`, run: () => offer(c.name) });
+	}
+	if (o.market) add({ label: "Am Markt verkaufen …", line: "#sell", run: o.market });
+	return [...out.values()];
+}
+
 /** How many entries the bar shows before "Mehr": it must not push the rest of the panel out of the window. */
 export const HERE_SHOWN = 5;
 
+/** What a field is sown with, and the crop's word for `bestelle` (server: world.fields.crops). */
+const SOWN: Record<string, string> = { Weizen: "weizen", Gerste: "gerste", Hafer: "hafer", Kartoffel: "kartoffel", "Rübensamen": "rüben", Leinsamen: "flachs" };
 const AREA = new Set(["site", "building", "ruin", "bed", "field", "scenery"]);
 const covers = (o: ObjView, c: { x: number; y: number }) => c.x >= o.x && c.y >= o.y && c.x < o.x + (o.w ?? 1) && c.y < o.y + (o.h ?? 1);
 
@@ -83,18 +128,22 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 		if (o.kind === "field") {
 			// a field is sown and harvested from two cells away, by its owner, or by everyone when it is open (server: field.ts)
 			const mine = o.ownerId === me, may = mine || !!o.open;
-			entries.push({ label: `Flur von ${o.owner ?? ""} ansehen`, line: "flur" });
+			entries.push({ label: `Acker von ${o.owner ?? ""} ansehen`, line: "flur" });
 			if (nearSite && may) {
-				if (o.fieldStage === "brach" && mine) entries.push({ label: "Bestellen …", line: "bestelle" });
+				if (o.fieldStage === "brach" && mine) {
+					const seeds = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && SOWN[i.name]).map((i) => i.name))];
+					for (const n of seeds) entries.push({ label: `${n} säen`, line: `bestelle ${SOWN[n]}` });
+					if (!seeds.length) entries.push({ label: "Bestellen …", line: "bestelle" });
+				}
 				if (o.fieldStage === "saat") entries.push({ label: "Bestellen (Saatgut, Arbeit)", line: "bestelle" });
 				if (o.fieldStage === "reif" || o.fieldStage === "spaet") entries.push({ label: "Ernten", line: "ernte flur" });
 			}
-			if (nearSite && mine) entries.push(o.open ? { label: "Flur für Fremde schließen", line: "flur zu" } : { label: "Flur für alle öffnen", line: "flur offen" });
-			if (beside && may && !o.fenced) entries.push({ label: "Zaun um die Flur ziehen (6 Treibholz, 2 Tangseil)", line: "zäune" });
+			if (nearSite && mine) entries.push(o.open ? { label: "Acker für Fremde schließen", line: "flur zu" } : { label: "Acker für alle öffnen", line: "flur offen" });
+			if (beside && may && !o.fenced) entries.push({ label: "Zaun um den Acker ziehen (6 Treibholz, 2 Tangseil)", line: "zäune" });
 			continue;
 		}
 		// this one, not all in the room: the command takes its cell
-		entries.push({ label: o.kind === "site" ? `${o.ownerId === me ? "Deine Baustelle" : `Baustelle von ${o.owner ?? ""}`} ${o.name}: was fehlt?` : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: `baustelle ${o.x} ${o.y}` });
+		entries.push({ label: o.kind === "site" ? (o.ownerId === me ? `Deine Baustelle ${o.name}: was fehlt?` : `Baustelle ${o.name} von ${o.owner ?? ""}: was fehlt?`) : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: `baustelle ${o.x} ${o.y}` });
 		if (o.kind === "building" && beside) {
 			if (o.name === "Regentonne") entries.push({ label: "Wasser schöpfen", line: "schöpfe" });
 			// anyone grinds at a mill and bakes at a bakery (server: mill.ts, the recipes "at" a plan)
@@ -129,6 +178,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.plan === "steinbruch") entries.push({ label: "Stein brechen", line: "breche" });
 			if (o.plan === "kapelle") entries.push({ label: "Was man opfern kann", line: "opfere" });
 			if (o.plan === "rathaus") entries.push({ label: "Laufender Antrag", line: "antrag" });
+			if (o.plan === "park") entries.push({ label: "Park pflegen", line: "pflege" }, { label: "Laufendes Fest", line: "fest" });
 			if (o.plan === "lehmgrube") entries.push({ label: "Lehm stechen", line: "steche" });
 			if (o.plan === "ziegelei") entries.push({ label: "Ziegel brennen", line: "craft ziegel" });
 			if (o.plan === "lagerhaus") entries.push({ label: "Lager ansehen", line: "lager" });
@@ -147,7 +197,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 		}
 	}
 	for (const o of objs.values()) {
-		if (o.location !== room || o.x !== at.x || o.y !== at.y || o.kind === "scenery" || o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field") continue;
+		if (o.location !== room || o.x !== at.x || o.y !== at.y || o.kind === "zone" || o.kind === "scenery" || o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field") continue;
 		if (o.kind === "item") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach) entries.push({ label: `${o.name} aufheben`, line: `get ${o.name}` }); }
 		if (o.kind === "beacon") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach && fuel) entries.push({ label: "Treibholz nachlegen", line: `put ${fuel.name} in ${o.name}` }); }
 		if (o.kind === "exit") entries.push({ label: `Nach ${o.to ?? o.name} gehen`, line: `go ${o.name}` });
@@ -158,7 +208,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 	// a cell nothing covers: build here (the plan's top left corner; the server says why not when it does not fit)
 	const covered = [...objs.values()].some((o) => o.location === room && o.kind !== "item" && at.x >= o.x && at.y >= o.y && at.x < o.x + (o.w ?? 1) && at.y < o.y + (o.h ?? 1));
 	if (!guest && plans.length && !covered) entries.push({ label: "Bauen …", line: "#bau", run: onPlans });
-	if (!guest && !covered && [...objs.values()].some((o) => o.kind === "item" && o.location === me && o.name === "Spaten")) { entries.push({ label: "Hier ein Beet umgraben", line: `umgraben ${at.x} ${at.y}` }); entries.push({ label: "Hier eine Flur anlegen (4×4)", line: `flur anlegen ${at.x} ${at.y}` }); }
+	if (!guest && !covered && [...objs.values()].some((o) => o.kind === "item" && o.location === me && o.name === "Spaten")) { entries.push({ label: "Beet umgraben", line: `umgraben ${at.x} ${at.y}` }); entries.push({ label: "Acker anlegen (4×4)", line: `flur anlegen ${at.x} ${at.y}` }); }
 	// on the own figure: what works without anything more
 	if (self && self.x === at.x && self.y === at.y) {
 		entries.push({ label: "Umsehen", line: "look" }, { label: "Was trage ich?", line: "inventory" }, { label: "Wer spielt?", line: "who" }, { label: "Uhrzeit", line: "time" }, { label: "Mein Ruf", line: "reputation" });

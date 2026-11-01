@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ThemeControls } from "./ThemeControls.tsx";
 import { AdminPanel } from "./AdminPanel.tsx";
 import { useTheme } from "./lib/theme.ts";
-import type { AtlasState, AtlasView, CharView, MsgView, ObjView, PlanView, ServerFrame, TradeView } from "../server/gateway.ts";
+import type { AtlasState, AtlasView, CharView, ItemUses, MsgView, ObjView, PlanView, ServerFrame, TradeView } from "../server/gateway.ts";
 import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
 import { CommandHelp } from "./CommandHelp.tsx";
@@ -17,10 +17,12 @@ import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.t
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
 import { forgetDeviceKeys, useChat } from "./useChat.ts";
 import { MAX_AHEAD, nextStep, screenToGrid, WALK_MS, Walker } from "./walk.ts";
-import { cellAbout, cellEntries, HERE_SHOWN, hereEntries, tapTarget, wildHere } from "./cellActions.ts";
+import { cellAbout, cellEntries, HERE_SHOWN, hereEntries, itemEntries, tapTarget, wildHere } from "./cellActions.ts";
 import { canFullscreen, enterFullscreen, homeSteps, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
 import { useBack } from "./useBack.ts";
 import { detentPx, Sheet, type Detent } from "./Sheet.tsx";
+import { Rich } from "./RichText.tsx";
+import { language, setLanguage, watchPage } from "./i18n/index.ts";
 import { formatWorldTime, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
 
 /** How long a "gone" waits for the "char" that follows it when a character is only being moved (see the handler). */
@@ -80,6 +82,7 @@ function SystemBar() {
 }
 
 export function MmoApp() {
+	useEffect(() => watchPage(), []);
 	const [account, setAccount] = useState<Account | null | undefined>(undefined);
 	const theme = useTheme();
 	const controls = <ThemeControls {...theme} />;
@@ -223,10 +226,10 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, send, c
 
 /** A log line with the names of players as buttons (they open the name menu): the speaker of what was said, every player
  *  in the list of who plays; never one's own name. */
-function LogText({ l, self, onName }: { l: Line; self: string; onName: (name: string, left: number, top: number) => void }) {
+function LogText({ l, self, onName, onCommand }: { l: Line; self: string; onName: (name: string, left: number, top: number) => void; onCommand: (command: string) => void }) {
 	const names = "players" in l && l.players ? l.players : "player" in l && l.player ? [l.from] : [];
 	const wanted = names.filter((n) => n && n !== self);
-	if (!wanted.length) return <>{l.text}</>;
+	if (!wanted.length) return <Rich text={l.text} onCommand={onCommand} />;
 	const parts: ReactNode[] = [];
 	let rest = l.text, k = 0;
 	for (;;) {
@@ -269,10 +272,11 @@ function NameMenu({ at, name, groups, talk, invite, ignore, close, sheet = false
 
 /** Trade as buttons: offers to and from the player, a form for a new offer, the order board and the market board when
  *  standing at them. Every button sends the text command the help names. */
-function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, send }: { trade: TradeView; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; guest: boolean; offerTo: string | null; setOfferTo: (n: string | null) => void; send: (line: string) => void }) {
+function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, send }: { /** the thing a tap in the pack brought here */ item: { name: string } | null; trade: TradeView; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; guest: boolean; offerTo: string | null; setOfferTo: (n: string | null) => void; send: (line: string) => void }) {
 	const carried = [...objs.values()].filter((o) => o.kind === "item" && o.location === me);
 	const others = [...chars.values()].filter((c) => c.charId !== me);
 	const [give, setGive] = useState("");
+	useEffect(() => { if (item) { setGive(item.name.toLowerCase()); setSell(item.name); } }, [item]);
 	// what one carries, one line per kind with its count
 	const kinds = [...carried.reduce((m, o) => m.set(o.name, (m.get(o.name) ?? 0) + 1), new Map<string, number>())].sort(([a], [b]) => a.localeCompare(b));
 	// a click on a kind adds one of it to "Du gibst" ("muschel" → "2 muschel"), up to what one carries
@@ -320,10 +324,10 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, send }
 			{trade.myOrder && <><h3>Dein Auftrag</h3><ul><li><span>{trade.myOrder.text}</span>{trade.myOrder.here && <><button onClick={() => send("auftrag liefere")}>Liefern</button><button onClick={() => send("auftrag aufgeben")}>Aufgeben</button></>}</li></ul>
 				{!trade.myOrder.here && <p className="muted" style={{ margin: "0 0 4px" }}>Abliefern an einer Auftragstafel: {trade.myOrder.boards.join(", ")}.</p>}</>}
 			{trade.orders && <><h3>Auftragstafel</h3>{trade.orders.length ? <ul>{trade.orders.map((o) => (
-				<li key={o.nr}><span>{o.text} ({o.reward} Münze{o.reward === 1 ? "" : "n"})</span>{!guest && !trade.myOrder && <button onClick={() => send(`auftrag nimm ${o.nr}`)}>Nehmen</button>}</li>
+				<li key={o.nr}><span>{o.text} ({o.reward} {o.reward === 1 ? "Münze" : "Münzen"})</span>{!guest && !trade.myOrder && <button onClick={() => send(`auftrag nimm ${o.nr}`)}>Nehmen</button>}</li>
 			))}</ul> : <p className="muted">Gerade keine Aufträge.</p>}</>}
 			{trade.listings && <><h3>Marktbrett</h3>{trade.listings.length ? <ul>{trade.listings.map((l) => (
-				<li key={l.nr}><span>{l.itemName} – {l.price} Münze{l.price === 1 ? "" : "n"} ({l.mine ? "deins" : l.sellerName})</span>{!guest && (l.mine ? <button onClick={() => send(`markt zurück ${l.nr}`)}>Zurückholen</button> : <button onClick={() => send(`markt kaufe ${l.nr}`)}>Kaufen</button>)}</li>
+				<li key={l.nr}><span>{l.itemName} – {l.price} {l.price === 1 ? "Münze" : "Münzen"} ({l.mine ? "deins" : l.sellerName})</span>{!guest && (l.mine ? <button onClick={() => send(`markt zurück ${l.nr}`)}>Zurückholen</button> : <button onClick={() => send(`markt kaufe ${l.nr}`)}>Kaufen</button>)}</li>
 			))}</ul> : <p className="muted">Das Brett ist leer.</p>}
 			{!guest && carried.length > 0 && (
 				<form className="row" onSubmit={(e) => { e.preventDefault(); if (sell) send(`markt biete ${sell} für ${price}`); setSell(""); }}>
@@ -348,7 +352,7 @@ function Glyph({ o, size = 16 }: { o: ObjView; size?: number }) {
 }
 
 /** What the player carries and what lies within reach, as buttons (on a phone there is no keyboard to type with). */
-function Things({ objs, chars, self, room, me, plans, guest, wild, send, pick }: { objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string) => void; pick: (o: ObjView) => void }) {
+function Things({ objs, chars, self, room, me, plans, guest, wild, uses, market, offer, send, pick }: { uses: ItemUses | undefined; /** a market board stands here: sell the thing there */ market?: (name: string) => void; offer?: (to: string, name: string) => void; objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string) => void; pick: (o: ObjView) => void }) {
 	const all = [...objs.values()].filter((o) => o.kind === "item");
 	const carried = all.filter((o) => o.location === me);
 	const close = (o: ObjView) => !!self && o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
@@ -390,9 +394,13 @@ function Things({ objs, chars, self, room, me, plans, guest, wild, send, pick }:
 				))}</div>
 				{chosen && <div className="pack-do"><span>{chosen[0]}{chosen[1].length > 1 ? ` ×${chosen[1].length}` : ""}</span>
 					<button onClick={() => send(`drop ${chosen[0]}`)}>Ablegen</button>
-					{fire && fuels.includes(chosen[0]) && <button onClick={() => send(`put ${chosen[0]} in ${fire.name}`)}>Nachlegen</button>}
 					<button onClick={() => send(`look ${chosen[0]}`)}>Ansehen</button>
 				</div>}
+				{chosen && uses && (() => {
+					// what it can do here and now; the rest of the world's uses stay in the help
+					const can = itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) });
+					return can.length > 0 && <div className="pack-can">{can.map((e) => <button key={e.line} onClick={() => (e.run ? e.run() : send(e.line))}>{e.label}</button>)}</div>;
+				})()}
 			</>}
 		</div>
 	);
@@ -417,7 +425,7 @@ function SiteOrders({ objs, self, room, me, send, walk }: { objs: Map<string, Ob
 						<h3>{mine ? `Deine Baustelle ${s.name}` : `${s.name} von ${s.owner ?? ""}`}</h3>
 						<ul>
 							{orders.map((o) => (
-								<li key={o.name}><span>{o.left} {o.name}, je {o.pay} Münze{o.pay === 1 ? "" : "n"}</span>
+								<li key={o.name}><span>{o.left} {o.name}, je {o.pay} {o.pay === 1 ? "Münze" : "Münzen"}</span>
 									{!near ? <button onClick={() => walk({ x: s.x, y: s.y })}>Hingehen</button>
 										: !o.proto ? <button onClick={() => send("arbeite")}>Mitarbeiten</button>
 										: carried.has(o.name) ? <button onClick={() => send(`liefere ${o.name}`)}>Liefern</button>
@@ -493,6 +501,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const setSheetPx = (h: number) => { setSheetPxState(h); try { localStorage.setItem("mmo.sheet", String(Math.round(h))); } catch { /* private window */ } };
 	const [bag, setBag] = useState(false);
 	const [bagPart, setBagPart] = useState<"mine" | "market" | "orders">("mine");
+	const [tradeItem, setTradeItem] = useState<{ name: string } | null>(null);
 	const [atlasPage, setAtlasPage] = useState(false);
 	const [helpArticle, setHelpArticle] = useState<string | null>(null);
 	const [pad, setPadState] = useState<"off" | "left" | "right">(() => { try { const v = localStorage.getItem("mmo.pad"); return v === "off" || v === "left" || v === "right" ? v : isTouch() ? "right" : "off"; } catch { return "right"; } });
@@ -652,13 +661,15 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const freeCells = useCallback(() => {
 		const { chars, objs, hello } = seen.current;
 		if (!hello) return () => false;
+		// a bed or field under one's feet: one walks off over it, as the server lets one
+		const from = walker.current.shown;
 		// walkable and nobody standing there (the server checks again and answers either way); at a door (an exit's cell or
 		// one next to it) others do not block: one walks through them, as the server lets one (engine/occupancy.ts)
 		const exits = [...objs.values()].filter((o) => o.kind === "exit" && o.location === hello.room.roomId);
 		const passage = (c: { x: number; y: number }) => exits.some((e) => Math.max(Math.abs(e.x - c.x), Math.abs(e.y - c.y)) <= 1);
 		const taken = new Set([...[...chars.values()].filter((c) => c.charId !== meRef.current && !passage(c)), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)].map((c) => `${c.x},${c.y}`));
 		// sites and buildings cover their cells: nobody walks into them (server: occupancy.ts blockedIn)
-		for (const o of objs.values()) if ((o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field" || (o.kind === "scenery" && !o.through)) && o.location === hello.room.roomId) for (let dy = 0; dy < (o.h ?? 1); dy++) for (let dx = 0; dx < (o.w ?? 1); dx++) taken.add(`${o.x + dx},${o.y + dy}`);
+		for (const o of objs.values()) if ((o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field" || (o.kind === "scenery" && !o.through)) && !(from && (o.kind === "bed" || o.kind === "field") && from.x >= o.x && from.y >= o.y && from.x < o.x + (o.w ?? 1) && from.y < o.y + (o.h ?? 1)) && o.location === hello.room.roomId) for (let dy = 0; dy < (o.h ?? 1); dy++) for (let dx = 0; dx < (o.w ?? 1); dx++) taken.add(`${o.x + dx},${o.y + dy}`);
 		return (x: number, y: number) => !!hello.world.tiles[hello.room.ground[y]?.[x] ?? ""]?.walk && !taken.has(`${x},${y}`);
 	}, []);
 	const step = useCallback((d: [number, number] | { x: number; y: number }) => {
@@ -853,7 +864,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	useBack(atlasPage, () => setAtlasPage(false));
 	useBack(!!panel, () => setPanel(null));
 
-	/** The sheet's tabs: the bag, the log, the chats. */
+	/** The sheet's tabs: Aktionen (`bag`: what one has and can do, with the command line), the log, the chats. */
 	const pane: "bag" | "log" | "chats" = bag ? "bag" : tab === "log" ? "log" : "chats";
 	const openPane = (k: "bag" | "log" | "chats") => {
 		setBag(k === "bag");
@@ -868,7 +879,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const lastLine = shownLog.at(-1);
 
 	const self = chars.get(me);
-	const openLine = () => { if (input.current) return input.current.focus(); setBag(false); setTab("log"); setDetent("half"); requestAnimationFrame(() => input.current?.focus()); };
+	const openLine = () => { if (input.current) return input.current.focus(); setBag(true); setBagPart("mine"); setDetent("half"); requestAnimationFrame(() => input.current?.focus()); };
 	openLineRef.current = openLine;
 
 	const mapView = mapMode === "text" ? null : hello ? (
@@ -900,27 +911,31 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		)}
 	</>;
 	const hereBar = hereEntries({ chars, objs, self: chars.get(me), room: hello?.room.roomId ?? "", me, plans: hello?.world.plans ?? [], guest: account.guest, fuel: fuelIn(objs, me), wild: hello ? wildHere(hello.world.decor, hello.room.decor) : false });
-	const mineView = <Things objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildHere(hello?.world.decor, hello?.room.decor)} send={send} pick={pickUp} />;
+	const mineView = <Things objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildHere(hello?.world.decor, hello?.room.decor)} uses={hello?.world.uses} send={send} pick={pickUp}
+		{...(trade?.listings && !account.guest ? { market: (name: string) => { setTradeItem({ name }); setBagPart("market"); } } : {})}
+		{...(account.guest ? {} : { offer: (to: string, name: string) => { setTradeItem({ name }); setOfferTo(to); setBagPart("market"); } })} />;
 	const marketView = <>
-		{trade && hello && <TradePanel trade={trade} chars={chars} objs={objs} me={me} guest={account.guest} offerTo={offerTo} setOfferTo={setOfferTo} send={send} />}
+		{trade && hello && <TradePanel trade={trade} chars={chars} objs={objs} me={me} guest={account.guest} offerTo={offerTo} setOfferTo={setOfferTo} item={tradeItem} send={send} />}
 		{!!trade && !trade.orders && !trade.listings && <p className="muted bag-note">Das Marktbrett und die Auftragstafel stehen in den Häfen und Dörfern. Stell dich daneben, dann erscheinen sie hier. Tauschen geht überall, wo jemand neben dir steht.</p>}
 	</>;
 	const ordersHere = [...objs.values()].filter((o) => o.kind === "site" && o.location === hello?.room.roomId).reduce((n, o) => n + (o.orders?.length ?? 0), 0);
+	const insertCommand = (c: string) => { setCmdHelp(null); setLine(`${c} `); setBag(true); setBagPart("mine"); if (detent === "peek") setDetent("half"); requestAnimationFrame(() => input.current?.focus()); };
 	const logFilter = <label className="log-filter"><input type="checkbox" checked={comings} onChange={(e) => setComings(e.target.checked)} /> Kommen und Gehen</label>;
 	const logView = (
 		<div className="log" role="log" aria-live="polite" ref={logBox} onScroll={(e) => { const b = e.currentTarget; atEnd.current = b.scrollHeight - b.scrollTop - b.clientHeight < 24; if (atEnd.current) setBehind(false); }}>
-			{shownLog.map((l, i) => <div key={i} className={`${l.kind}${"toMe" in l && l.toMe ? " to-me" : ""}`}><LogText l={l} self={chars.get(me)?.name ?? account.name} onName={(name, left, top) => setNameMenu({ name, left, top })} />{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
+			{shownLog.map((l, i) => <div key={i} className={`${l.kind}${"toMe" in l && l.toMe ? " to-me" : ""}`}><LogText l={l} self={chars.get(me)?.name ?? account.name} onName={(name, left, top) => setNameMenu({ name, left, top })} onCommand={insertCommand} />{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
 		</div>
 	);
 	const chatView = tab === "chats" || !talks.get(tab) ? (
 		<ChatOverview state={chatState} guest={account.guest} talks={talks} open={setTab} send={send} keys={keys} />
 	) : <TalkView talk={talks.get(tab)!} keys={keys} />;
 	const noticeView = tab !== "log" && notice && Date.now() - notice.at < 10_000 && <p className={`chat-notice${notice.error ? " error" : ""}`} role="status">{notice.text}</p>;
-	const talkHere = talks.get(tab);
+	// the bag's line is for commands, whichever talk stays open behind it
+	const talkHere = bag ? undefined : talks.get(tab);
 	const commandForm = (
 		<form className="cmd" onSubmit={(e) => {
 			e.preventDefault(); const t = line.trim(); if (!t) return;
-			const talk = talks.get(tab);
+			const talk = talkHere;
 			// in a talk, what is typed is a message of the talk (sealed here); elsewhere a command or a sentence, but
 			// "chat <name> <text>" and "gruppe <name> <text>" are sealed here too: no chat text reaches the server plain
 			const dm = /^(?:chat|tell|whisper|flüstere|fluestere|flüster)\s+(\S+)\s+([\s\S]+)$/i.exec(t);
@@ -939,7 +954,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const helpView = <>
 		{help && <HelpPanel onClose={() => { setHelp(false); setHelpArticle(null); }} article={helpArticle} onCommands={() => send("help", false)} />}
 		{cmdHelp && !help && <CommandHelp view={cmdHelp} onTopic={(key) => (key ? send(`help ${key}`, false) : setCmdHelp((old) => (old ? { ...old, topic: undefined } : old)))} onArticles={() => { setCmdHelp(null); setHelp(true); }} onClose={() => setCmdHelp(null)}
-			onInsert={(c) => { setCmdHelp(null); setLine(`${c} `); setBag(false); setTab("log"); if (detent === "peek") setDetent("half"); requestAnimationFrame(() => input.current?.focus()); }} />}
+			onInsert={insertCommand} />}
 	</>;
 	const rendererTabs = (
 		<div className="renderer-tabs" role="group" aria-label="Kartendarstellung">
@@ -952,8 +967,8 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 			{talkTab && detent !== "peek" ? (
 				<div className="talk-head"><button className="talk-back" onClick={() => setTab("chats")} aria-label="Zurück zu den Chats">←</button><strong>{talkHere!.conv.kind === "group" ? `# ${talkHere!.conv.title}` : talkHere!.conv.title}</strong></div>
 			) : (
-				<div className="sheet-tabs" role="tablist" aria-label="Tasche, Protokoll und Chats">
-					<button role="tab" aria-selected={pane === "bag"} onClick={() => openPane("bag")}>Tasche</button>
+				<div className="sheet-tabs" role="tablist" aria-label="Aktionen, Protokoll und Chats">
+					<button role="tab" aria-selected={pane === "bag"} onClick={() => openPane("bag")}>Aktionen</button>
 					<button role="tab" aria-selected={pane === "log"} onClick={() => openPane("log")}>Protokoll</button>
 					<button role="tab" aria-selected={pane === "chats"} onClick={() => openPane("chats")}>Chats{unreadAll ? <span className="chat-count">{unreadAll}</span> : null}</button>
 				</div>
@@ -962,10 +977,15 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				<div className="sheet-body">
 					{pane === "bag" ? (
 						<>
-							<div className="bag-parts" role="tablist" aria-label="Tasche">
+							<div className="bag-parts" role="tablist" aria-label="Aktionen">
 								{([["mine", "Bei dir"], ["market", "Markt"], ["orders", "Aushang"]] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={bagPart === k} onClick={() => setBagPart(k)}>{l}{k === "market" && trade?.offersIn.length ? <span className="chat-count">{trade.offersIn.length}</span> : k === "orders" && ordersHere ? <span className="chat-count">{ordersHere}</span> : null}</button>)}
 							</div>
 							<div className="sheet-scroll">{bagPart === "mine" ? mineView : bagPart === "market" ? marketView : <SiteOrders objs={objs} self={self} room={hello?.room.roomId ?? ""} me={me} send={send} walk={walkTo} />}</div>
+							{bagPart === "mine" && <>
+								{/* the answers go to the log: the last one shows here, a tap opens the rest */}
+								{lastLine && <button className="last-line" onClick={() => openPane("log")}>{lastLine.text}</button>}
+								{commandForm}
+							</>}
 						</>
 					) : pane === "log" ? (
 						<>
@@ -973,7 +993,6 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 							{logView}
 							{behind && <button className="log-new" onClick={toLogEnd}>Neue Meldungen</button>}
 							<div className="quick">{["look", "who", "inventory", "time", "reputation"].map((c) => <button key={c} onClick={() => send(c)}>{c}</button>)}</div>
-							{commandForm}
 						</>
 					) : (
 						<>
@@ -1012,7 +1031,8 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				<div className="menu-backdrop dim" onClick={() => setMore(false)} />
 				<div className="cell-menu action-sheet more-sheet" role="dialog" aria-label="Darstellung und Konto">
 					<div className="more-row"><span>Darstellung</span>{rendererTabs}</div>
-					<div className="more-row"><span>Aussehen</span>{controls}</div>
+					<div className="more-row"><span>Sprache</span><div className="renderer-tabs" role="group" aria-label="Sprache" data-no-tr>{(["de", "en"] as const).map((l) => <button key={l} aria-pressed={language() === l} onClick={() => setLanguage(l)}>{l.toUpperCase()}</button>)}</div></div>
+						<div className="more-row"><span>Aussehen</span>{controls}</div>
 					{mapMode !== "text" && <div className="more-row"><span>Steuerung</span><div className="renderer-tabs" role="group" aria-label="Steuerkreuz, Zoom und Drehen">{(["off", "left", "right"] as const).map((v) => <button key={v} aria-pressed={pad === v} onClick={() => setPad(v)}>{v === "off" ? "Aus" : v === "left" ? "Links" : "Rechts"}</button>)}</div></div>}
 					{canFullscreen() && <div className="more-row"><span>Vollbild im Querformat</span><div className="renderer-tabs" role="group" aria-label="Vollbild">{([true, false] as const).map((v) => <button key={String(v)} aria-pressed={fullscreen === v} onClick={() => setFullscreen(v)}>{v ? "An" : "Aus"}</button>)}</div></div>}
 					{steps && <div className="more-row"><span>Ohne Adressleiste: <b>{steps.first}</b>, dann <b>{steps.then}</b></span>{install && <button onClick={() => void install.prompt()}>Installieren</button>}</div>}

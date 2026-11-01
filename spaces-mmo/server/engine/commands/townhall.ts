@@ -5,6 +5,8 @@
 // A motion of a zone goes up anywhere in the settlement, for the ground around the one who puts it: a green zone keeps that
 // ground for beds and green plans, a right of way free of everything. What stands there stays; zones end with the settlement.
 // `antrag steuer <n>` sets the coins per thing taken from the warehouse; they stay in it, for the settlement.
+// `antrag abriss` puts the building beside whoever puts it to the vote: carried, it comes down whoever owns it, and half of
+// its material with what lay in its chest waits for the owner as an estate. Not the hall, and no store the settlement filled.
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type MotionFields, type MotionKind, type SettlementFields, type VoteFields, type ZoneFields } from "../../model.ts";
@@ -13,14 +15,14 @@ import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, msgOptions, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import { peek } from "../../space.ts";
 import type { WorldDef } from "../world.ts";
-import { distTo, planOf } from "./build.ts";
+import { demolishByVote, distTo, planOf } from "./build.ts";
 import { hutsIn, rankOf, settlementIn } from "./settlement.ts";
 
 /** Whether a town hall stands in the room. */
 export const hallIn = async (space: SpaceLike, w: WorldDef, room: string, txn: string | null = null) => !!w.townhall && (await space.count({ type: "Building", fields: { room, plan: w.townhall.plan } }, txn)) > 0;
 
 const WHAT: Record<string, string> = { zu: "die Siedlung schließen", offen: "die Siedlung öffnen", gruen: "eine Grünzone", weg: "ein Wegerecht", frei: "die Zonen aufheben" };
-const said = (m: MotionFields) => (m.kind === "steuer" ? `die Steuer auf ${m.tax} Münzen je Stück aus dem Lager setzen` : WHAT[m.kind] ? `${WHAT[m.kind]}${m.zone ? ` (${m.zone.w}×${m.zone.h} ab Feld ${m.zone.x}, ${m.zone.y})` : ""}` : `„${m.text}“`);
+const said = (m: MotionFields) => (m.target ? `den Abriss der ${m.target.name} von ${m.target.ownerName}` : m.kind === "steuer" ? `die Steuer auf ${m.tax} Münzen je Stück aus dem Lager setzen` : WHAT[m.kind] ? `${WHAT[m.kind]}${m.zone ? ` (${m.zone.w}×${m.zone.h} ab Feld ${m.zone.x}, ${m.zone.y})` : ""}` : `„${m.text}“`);
 const ZONE: Record<string, "gruen" | "weg" | "frei"> = { "grünzone": "gruen", gruenzone: "gruen", greenzone: "gruen", wegerecht: "weg", "right of way": "weg", "zone frei": "frei" };
 const isIn = (p: { x: number; y: number }, r: { x: number; y: number; w: number; h: number }) => p.x >= r.x && p.y >= r.y && p.x < r.x + r.w && p.y < r.y + r.h;
 
@@ -62,9 +64,22 @@ async function zoneAt(c: CommandCtx, kind: string, radius: number) {
 	return { x: left, y: top, w: right - left + 1, h: bottom - top + 1 };
 }
 
+/** The one building beside the actor that a vote may take down. */
+async function condemned(c: CommandCtx, room: string, hall: string): Promise<NonNullable<MotionFields["target"]>> {
+	const beside = (await c.space.readAll({ type: "Building", fields: { room } }, { txn: c.txn })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
+	if (!beside.length) throw new CommandError("Stell dich neben den Bau, über dessen Abriss abgestimmt werden soll.");
+	if (beside.length > 1) throw new CommandError(`Hier stehen mehrere Bauten nebeneinander (${beside.map((b) => b.name).join(", ")}); stell dich so, dass nur einer neben dir steht.`);
+	const b = beside[0]!;
+	if (b.plan === hall) throw new CommandError("Das Rathaus reißt kein Beschluss ab.");
+	if (await holdsGoods(c.space, c.world, b)) throw new CommandError("Im Lager liegt noch, was der Siedlung gehört. Erst wenn es leer ist, lässt sich darüber abstimmen.");
+	return { buildId: b.buildId, name: b.name, ownerName: b.ownerName };
+}
+/** What a settlement laid in is not an estate of the owner's. */
+const holdsGoods = async (space: SpaceLike, w: WorldDef, b: BuildingFields) => !!planOf(w, b.plan)?.store && (await space.count({ type: "Item", fields: { location: b.buildId } })) > 0;
+
 const antrag: Command = {
 	key: "antrag", aliases: ["motion", "beantrage"],
-	help: "antrag <zu|offen|text> – am Rathaus einen Antrag stellen, über den die Siedler einen Tag lang abstimmen; „antrag grünzone“, „antrag wegerecht“, „antrag zone frei“ für die Fläche um dich; „antrag steuer <n>“ für das Lager; „antrag“ allein zeigt den laufenden",
+	help: "antrag <zu|offen|text> – am Rathaus einen Antrag stellen, über den die Siedler einen Tag lang abstimmen; „antrag grünzone“, „antrag wegerecht“, „antrag zone frei“ für die Fläche um dich; „antrag abriss“ für den Bau neben dir; „antrag steuer <n>“ für das Lager; „antrag“ allein zeigt den laufenden",
 	async func(c, arg) {
 		const d = c.world.townhall;
 		if (!d) throw new CommandError("In dieser Welt gibt es keine Rathäuser.");
@@ -78,16 +93,18 @@ const antrag: Command = {
 		}
 		const word = text.toLowerCase(), zone = Object.hasOwn(ZONE, word) ? ZONE[word] : undefined;
 		const halls = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: d.plan } }, { txn: c.txn })).map((e) => fieldsOf<BuildingFields>(e));
-		if (zone && !halls.length) throw new CommandError("Zonen setzt ein Rathaus; hier steht keines.");
-		if (!zone && !halls.some((b) => distTo(c.actor, b) <= 1)) throw new CommandError(`Anträge stellt man direkt neben ${planOf(c.world, d.plan)?.dative ?? "einem Rathaus"}.`);
+		const down = /^(?:abriss|abreißen|abreissen|demolish)$/.test(word);
+		if ((zone || down) && !halls.length) throw new CommandError(`${zone ? "Zonen setzt" : "Einen Abriss beschließt"} ein Rathaus; hier steht keines.`);
+		if (!zone && !down && !halls.some((b) => distTo(c.actor, b) <= 1)) throw new CommandError(`Anträge stellt man direkt neben ${planOf(c.world, d.plan)?.dative ?? "einem Rathaus"}.`);
 		const s = await ofSettler(c, "Anträge stellen");
 		const taxed = /^steuer\s+(\d+)$/i.exec(text);
 		if (taxed && Number(taxed[1]) > d.maxTax) throw new CommandError(`Mehr als ${d.maxTax} Münzen je Stück trägt kein Lager.`);
 		if (open) throw new CommandError("Hier läuft schon ein Antrag; erst wenn er entschieden ist, kommt der nächste.");
-		const kind: MotionKind = taxed ? "steuer" : zone ?? (/^(?:zu|schließen|schliessen|close)$/i.test(text) ? "zu" : /^(?:offen|auf|öffnen|oeffnen|open)$/i.test(text) ? "offen" : "text");
+		const target = down ? await condemned(c, s.room, d.plan) : undefined;
+		const kind: MotionKind = down ? "abriss" : taxed ? "steuer" : zone ?? (/^(?:zu|schließen|schliessen|close)$/i.test(text) ? "zu" : /^(?:offen|auf|öffnen|oeffnen|open)$/i.test(text) ? "offen" : "text");
 		if (kind === "text" && text.length > 120) throw new NotUnderstood("Ein Antrag hat höchstens 120 Zeichen.");
 		if ((kind === "zu" || kind === "offen") && s.closed === (kind === "zu")) throw new CommandError(`${s.name} ist schon ${s.closed ? "geschlossen" : "offen"}.`);
-		const m: MotionFields = { motionId: randomBytes(6).toString("hex"), room: s.room, settlementId: s.settlementId, settlementName: s.name, by: c.account!.accountId, byName: c.actor.name, kind, text: kind === "text" ? text : "", endsWorldMs: (await worldNowOf(c.space, c.txn)) + d.voteWorldMs, ...(zone ? { zone: await zoneAt(c, zone, d.zoneRadius) } : {}), ...(taxed ? { tax: Number(taxed[1]) } : {}) };
+		const m: MotionFields = { motionId: randomBytes(6).toString("hex"), room: s.room, settlementId: s.settlementId, settlementName: s.name, by: c.account!.accountId, byName: c.actor.name, kind, text: kind === "text" ? text : "", endsWorldMs: (await worldNowOf(c.space, c.txn)) + d.voteWorldMs, ...(zone ? { zone: await zoneAt(c, zone, d.zoneRadius) } : {}), ...(taxed ? { tax: Number(taxed[1]) } : {}), ...(target ? { target } : {}) };
 		try { await c.space.write({ type: "Motion", fields: m as never }, c.txn, FOREVER, { unique: ["room"] }); }
 		catch (e) { if (/unique entry already exists/.test((e as Error).message)) throw new CommandError("Hier läuft schon ein Antrag; erst wenn er entschieden ist, kommt der nächste."); throw e; }
 		await c.space.write({ type: "Vote", fields: { motionId: m.motionId, accountId: m.by, yes: true } satisfies VoteFields as never }, c.txn, FOREVER);
@@ -129,7 +146,15 @@ export async function motionTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 				const s = fieldsOf<SettlementFields>(held);
 				await space.write({ type: "Settlement", fields: (!carried ? s : m.kind === "zu" || m.kind === "offen" ? { ...s, closed: m.kind === "zu" } : m.kind === "steuer" ? { ...s, tax: m.tax! } : s) as never }, txn, FOREVER);
 				if (carried && m.zone) await applyZone(space, m, txn);
-				const text = `Abstimmung in ${s.name}: ${said(m)} ist ${carried ? "angenommen" : "abgelehnt"}, ${yes(votes)} dafür, ${no(votes)} dagegen.`;
+				let after = "";
+				if (carried && m.target) {
+					const standing = await space.takeIfExists({ type: "Building", fields: { buildId: m.target.buildId } }, NO_WAIT, { txn });
+					const b = standing && fieldsOf<BuildingFields>(standing);
+					if (!b) after = (await space.count({ type: "Building", fields: { buildId: m.target.buildId } })) ? " Der Bau war gerade in Arbeit und bleibt stehen." : " Der Bau steht nicht mehr.";
+					else if (await holdsGoods(space, w, b)) { await space.write({ type: "Building", fields: b as never }, txn, FOREVER); after = " Im Lager liegt inzwischen wieder etwas; es bleibt stehen."; }
+					else { await demolishByVote(space, txn, w, b, now); after = ` Die Fläche ist frei; was blieb, holt ${b.ownerName} hier mit „nachlass“ ab.`; }
+				}
+				const text = `Abstimmung in ${s.name}: ${said(m)} ist ${carried ? "angenommen" : "abgelehnt"}, ${yes(votes)} dafür, ${no(votes)} dagegen.${after}`;
 				await space.write({ type: "Msg", fields: { room: m.room, to: "*", kind: "world", text, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
 			}
 			await space.commit(txn);

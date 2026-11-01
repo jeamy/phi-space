@@ -4,6 +4,7 @@ import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER } from "phi-spaces";
+import { planOf } from "../server/engine/commands/build.ts";
 import { motionTick } from "../server/engine/commands/townhall.ts";
 import { settlementIn } from "../server/engine/commands/settlement.ts";
 import { loadWorld } from "../server/engine/world.ts";
@@ -22,7 +23,7 @@ async function does(p: Player, line: string, text: string | RegExp, ms = 30_000)
 	return (f as Extract<ServerFrame, { t: "msg" }>).m.text;
 }
 
-test("a town hall: a motion, one vote each with the last counting, and after a day more yes than no closes the settlement; a tie carries nothing", { timeout: 120_000 }, async () => {
+test("a town hall: a motion, one vote each with the last counting, and after a day more yes than no closes the settlement; a tie carries nothing", { timeout: 360_000 }, async () => {
 	const srv = await startServer();
 	try {
 		const s = srv.stack.space;
@@ -69,12 +70,44 @@ test("a town hall: a motion, one vote each with the last counting, and after a d
 		assert.equal((await s.readAll({ type: "Motion" })).length, 0);
 		assert.equal((await s.readAll({ type: "Vote" })).length, 0, "the votes go with it");
 
+		// the settlers take a building down, whoever owns it; what is left is its owner's, and the area is free at once
+		// (only the shed beside whoever puts it: they may stand beside the hall, which is moved off)
+		const hall = (await s.takeIfExists({ type: "Building", fields: { buildId: "hall" } }, 5_000))!;
+		await s.write({ type: "Building", fields: { ...hall.fields, x: cb!.x + 5, y: cb!.y } as never }, null, FOREVER);
+		const hutAt = { x: cb!.x + 1, y: cb!.y };
+		await s.write({ type: "Building", fields: building("shed", "huette", "Hütte", hutAt.x, hutAt.y, ca!) as never }, null, FOREVER);
+		await s.write({ type: "Plot", fields: { room, x: hutAt.x, y: hutAt.y, of: "shed" } as never }, null, FOREVER);
+		const inChest = (await resolvePrototype(s, "muschel"))!;
+		await spawn(s, null, w, inChest, { location: "shed", x: -1, y: -1 });
+		await does(b, "antrag abriss", "den Abriss der Hütte von Quirina");
+		await does(a, "stimme nein", "Deine Stimme");
+		await does(c, "antrag", "beantragt");
+		await end();
+		assert.equal(await motionTick(s, w, 60_000), 1);
+		assert.equal((await s.readAll({ type: "Building", fields: { buildId: "shed" } })).length, 1, "a tie keeps it");
+		await does(b, "antrag abriss", "den Abriss");
+		from = a.frames.length;
+		await end();
+		assert.equal(await motionTick(s, w, 60_000), 1);
+		await a.until((f) => f.t === "msg" && /ist angenommen.*Die Fläche ist frei; was blieb, holt Quirina hier mit „nachlass“ ab/.test(f.m.text), 10_000, from);
+		assert.equal((await s.readAll({ type: "Building", fields: { buildId: "shed" } })).length, 0);
+		assert.equal((await s.readAll({ type: "Plot", fields: { room } })).filter((e) => e.fields.of === "shed").length, 0, "the area is free");
+		const estate = (await s.readAll({ type: "Estate", fields: { estateId: "est-shed" } }))[0]!;
+		const left = (await s.readAll({ type: "Item", fields: { location: "est-shed" } })).map((e) => String(e.fields.proto));
+		const half = planOf(w, "huette")!.needs.reduce((n, x) => n + Math.floor(x.count / 2), 0);
+		assert.equal(estate.fields.accountId, ca!.accountId);
+		assert.equal(left.length, half + 1, "half the material and the chest");
+		assert.ok(left.includes("muschel"));
+		await s.takeIfExists({ type: "Building", fields: { buildId: "hall" } }, 5_000);
+		await s.write({ type: "Building", fields: hall.fields as never }, null, FOREVER);
+
 		// a zone: anywhere in the settlement, for the ground around whoever puts it; green admits beds and parks, a way nothing
 		await does(b, "antrag grünzone", "eine Grünzone (7×7");
 		await does(a, "stimme ja", "Deine Stimme");
 		await end();
 		assert.equal(await motionTick(s, w, 60_000), 1);
 		const z = (await s.readAll({ type: "Zone" }))[0]!.fields as unknown as ZoneFields;
+		await a.until((f) => f.t === "obj" && f.o.kind === "zone" && f.o.name === "Grünzone" && f.o.w === z.w, 10_000, 0); // the map shows it
 		assert.equal(z.kind, "gruen");
 		assert.ok(z.x <= cb!.x && cb!.x < z.x + z.w && z.y <= cb!.y && cb!.y < z.y + z.h);
 		const cell = [{ x: z.x, y: z.y }], ctx = { space: s, world: w, txn: null } as never;

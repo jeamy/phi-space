@@ -5,6 +5,7 @@
 // button folds it away (remembered per browser; on a phone it starts folded). It shows the world, it never changes it.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AtlasState, AtlasView } from "../server/gateway.ts";
+import { tr } from "./i18n/index.ts";
 
 const W = 24, H = 16;
 const COLORS: Record<string, string> = { "~": "#1b3a52", ".": "#cdb57e", ",": "#4d7a3c", ":": "#8b8f95" };
@@ -12,7 +13,7 @@ const SEA = "#12283a";
 
 /** The marks of what the player owns, and their words below the map. */
 const MINE: Record<AtlasState["mine"][number]["kind"], { color: string; label: string }> = {
-	building: { color: "#7fd4ff", label: "Bau" }, site: { color: "#ffb02e", label: "Baustelle" }, bed: { color: "#ff7fb5", label: "Beet" }, field: { color: "#ffe066", label: "Flur" }, ruin: { color: "#b8bec6", label: "Ruine" },
+	building: { color: "#7fd4ff", label: "Bau" }, site: { color: "#ffb02e", label: "Baustelle" }, bed: { color: "#ff7fb5", label: "Beet" }, field: { color: "#ffe066", label: "Acker" }, ruin: { color: "#b8bec6", label: "Ruine" },
 };
 
 const stored = (key: string, fallback: boolean) => { try { const v = localStorage.getItem(key); return v === null ? fallback : v === "1"; } catch { return fallback; } };
@@ -104,7 +105,7 @@ export function Atlas({ atlas, state, page = false, me = null }: { atlas: AtlasV
 		for (const [name, b] of islands) {
 			if (!name) continue;
 			const x = ((b.x0 + b.x1) / 2) * s, y = b.y0 * s + 14;
-			g.lineWidth = 3; g.strokeStyle = "rgba(0,0,0,0.75)"; g.strokeText(name, x, y); g.fillStyle = "#f2efe6"; g.fillText(name, x, y);
+			g.lineWidth = 3; g.strokeStyle = "rgba(0,0,0,0.75)"; const shown = tr(name); g.strokeText(shown, x, y); g.fillStyle = "#f2efe6"; g.fillText(shown, x, y);
 		}
 	}, [ground, state, open, atlas, me?.x, me?.y]);
 	// the page opens on the player

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ARTICLES, DEFAULT_ARTICLE, SECTIONS, articleById, tocOf, type Article, type Lang } from "./help/articles.ts";
 import { renderMarkdownToHtml } from "./lib/markdown.ts";
 import { useBack } from "./useBack.ts";
+import { setLanguage } from "./i18n/index.ts";
 import { isTouch } from "./useShell.ts";
 
 const T = {
@@ -16,7 +17,7 @@ const T = {
 const LANG_KEY = "mmo-help-lang";
 const initialLang = (): Lang => {
 	try { const v = localStorage.getItem(LANG_KEY); if (v === "de" || v === "en") return v; } catch { /* storage may be blocked */ }
-	return typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("de") ? "de" : "en";
+	return "de";
 };
 
 const textOf = (a: Article, lang: Lang) => `${a.title[lang]} ${a.short[lang]} ${a.body[lang]}`.toLowerCase();
@@ -30,7 +31,7 @@ export function HelpPanel({ onClose, article: first = null, onCommands }: { onCl
 	const scroller = useRef<HTMLDivElement>(null);
 	const t = T[lang];
 
-	const changeLang = (l: Lang) => { setLang(l); try { localStorage.setItem(LANG_KEY, l); } catch { /* ignore */ } };
+	const changeLang = (l: Lang) => { setLang(l); setLanguage(l); };
 	const open = useCallback((id: string, anchor?: string) => {
 		setArticleId(id); setQuery("");
 		requestAnimationFrame(() => {

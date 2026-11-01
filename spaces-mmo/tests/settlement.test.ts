@@ -4,11 +4,12 @@ import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER, type SpaceLike } from "phi-spaces";
-import { rankOf, settlementTick } from "../server/engine/commands/settlement.ts";
+import { initialClock } from "../server/engine/worldtime.ts";
+import { rankOf, settlementRanks, settlementTick } from "../server/engine/commands/settlement.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { BuildingFields, SettlementFields, SiteFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { lightFire, Player, startServer } from "./stack.ts";
+import { lightFire, Player, startServer, startStack } from "./stack.ts";
 
 const w = await loadWorld();
 type P = { p: Player; me: string; acc: string };
@@ -79,4 +80,21 @@ test("a settlement: founded from three huts of two owners; closed, strangers nei
 		assert.equal(await s.count({ type: "SettlementName" }), 0, "its name is free again");
 		assert.equal(await s.count({ type: "Building", fields: { plan: "huette" } }), 2);
 	} finally { await srv.close(); }
+});
+
+test("the rank of the settlements goes by what stands in them, a park weighing most; each counts its own room", { timeout: 60_000 }, async () => {
+	const stack = await startStack({ worlds: 0 });
+	try {
+		const s = stack.space;
+		const settlement = (name: string, room: string) => ({ settlementId: name, name, nameKey: name, room, founder: "a", founderName: "A", members: [], closed: false, at: 0 });
+		const building = (buildId: string, plan: string, room: string, points: number) => ({ buildId, plan, name: plan, room, x: 1, y: 1, w: 1, h: 1, owner: "a", ownerName: "A", accountId: "a", beaconId: "f", points, by: {}, untilWorldMs: FOREVER, builtAt: 0 });
+		await s.write({ type: "WorldClock", fields: initialClock(w.id, 12, Date.now(), 1) as never }, null, FOREVER);
+		assert.deepEqual(await settlementRanks(s, w), []);
+		await s.write({ type: "Settlement", fields: settlement("Neuhafen", "r1") as never }, null, FOREVER);
+		await s.write({ type: "Settlement", fields: settlement("Altdorf", "r2") as never }, null, FOREVER);
+		for (let i = 0; i < 3; i++) await s.write({ type: "Building", fields: building(`h${i}`, "huette", "r1", 2) as never }, null, FOREVER);
+		await s.write({ type: "Building", fields: building("p", "park", "r2", 9) as never }, null, FOREVER);
+		await s.write({ type: "Building", fields: building("x", "huette", "r3", 50) as never }, null, FOREVER);
+		assert.deepEqual(await settlementRanks(s, w), [{ name: "Altdorf", points: 9, parks: 1, tenders: 0 }, { name: "Neuhafen", points: 6, parks: 0, tenders: 0 }]);
+	} finally { await stack.close(); }
 });
