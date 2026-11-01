@@ -296,6 +296,9 @@ impl Root {
 		Ok(held)
 	}
 
+	/// Recovers the journals.
+	pub async fn start(&self, owner: Owner) -> R<()> { self.open(owner).await.map(drop) }
+
 	/// One call of a proven local peer (`rootCall`).
 	pub async fn call(&self, owner: Owner, call: &Json) -> Json {
 		let done = self.run(owner, call).await;

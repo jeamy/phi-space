@@ -29,14 +29,14 @@ export async function provision(dir: string, phone?: { ip: string }) {
 	write("peers.json", peers);
 	write("token", "local");
 	const key = (name: string) => provisionFileSigner(join(dir, `${name}.json`));
-	const controlKey = key("control-key"), memberKey = key("member-key"), userKey = key("user-key"), routerKey = key("router-key");
+	const controlKey = key("control-key"), memberKey = key("member-key"), userKey = key("user-key"), routerKey = key("router-key"), rootRouter = key("root-router"), rootHost = key("root-host");
 	const now = Date.now();
 	const control = await openSqliteHost(join(dir, "control.sqlite"));
 	const space = await control.commit((tx) => createSpace(tx, CONTROL_SPACE, now), ctx);
 	await control.commit(async (tx) => {
 		const s = await spaceDoc(tx, space.spaceId, now);
 		const put = (peerId: string, k: typeof memberKey, roles: string[]) => core.write(s, now, { type: "PeerKey", fields: { peerId, keyId: k.keyId, principal: peerId, algorithm: k.algorithm, publicKey: k.publicKey, roles, scope: ["*"], state: "active" } }, null, FOREVER);
-		put("member-peer", memberKey, ["host"]); put("user", userKey, ["member"]); put("router-peer", routerKey, ["host", "router", "member"]);
+		put("member-peer", memberKey, ["host"]); put("user", userKey, ["member"]); put("router-peer", routerKey, ["host", "router", "member"]); put("control-peer", rootRouter, ["host", "router", "member"]); put("control-peer", rootHost, ["host", "member"]);
 	}, ctx);
 	await control.commit((tx) => spaceDoc(tx, undefined, now).then(() => {}), ctx);
 	let token: string | undefined;
@@ -57,10 +57,16 @@ export async function provision(dir: string, phone?: { ip: string }) {
 	const memberSpaces: Record<string, unknown> = {};
 	for (const i of await listSpaces(seed, ctx)) memberSpaces[i.spaceId] = permit(i.incarnation);
 	await seed.close(ctx);
+	// the Root's one Member is this Space; a Root starts only on a table it was provisioned for
+	const jobsInfo = { hostId: "data-host", spaceId: jobs.spaceId, authorityId: "authority", dataIncarnation: jobs.incarnation, primaryEpoch: 1 };
+	const table = await openSqliteHost(join(dir, "control.sqlite"));
+	await table.commit(async (tx) => { const d = await tx.doc(FederationRouting, space.spaceId, null); d.members = { a: { id: "a", state: "active", target: jobsInfo } } as never; }, ctx);
+	await table.close(ctx);
 	await external.compareAndSet("boot:data-host", null, { hostId: "data-host", state: "active", spaces: memberSpaces } as never);
 	external.close();
 	const base = (name: string, host: string, port: number) => ({ authorityId: "authority", controlHostId: "control-host", controlSpaceId: space.spaceId, listen: { host, port }, keyFile: `/fed/${name}-key.json`, installedRegisterFile: `/fed/installed-${name}.sqlite`, registerTls: { ...identity(name), host: IP.register, port: PORT.register, batchReads: true }, management: { url: `http://${IP.management}:8080`, tokenFile: "/fed/token" }, control: { address: { host: IP.control, port: PORT.control }, algorithm: controlKey.algorithm, publicKey: controlKey.publicKey } });
-	write("control.config.json", { ...base("control", IP.control, PORT.control), hostId: "control-host", peerId: "control-peer", mode: "control", capabilities: { hostBindings: { "control-peer": "control-host", "member-peer": "data-host" } } });
+	const root = { id: "root", keyFile: "/fed/root-router.json", hostKeyFile: "/fed/root-host.json", leaseFile: "/fed/root-lease", journalPartitions: 1, members: { a: { target: jobsInfo, peerId: "member-peer", keyId: memberKey.keyId, algorithm: memberKey.algorithm, publicKey: memberKey.publicKey, address: { host: IP.member, port: PORT.member } } } };
+	write("control.config.json", { ...base("control", IP.control, PORT.control), root, hostId: "control-host", peerId: "control-peer", mode: "control", capabilities: { hostBindings: { "control-peer": "control-host", "member-peer": "data-host" } } });
 	write("member.config.json", { ...base("member", IP.member, PORT.member), hostId: "data-host", peerId: "member-peer", mode: "member", membership: { memberId: "a", spaceId: jobs.spaceId }, capabilities: { tools: ["sieve"], models: [], dataSpaces: [jobs.spaceId] }, runGates: true, spaceLifecycle: true });
 	write("state.json", { controlSpace: space.spaceId, jobs: jobs.spaceId, notes: notes.spaceId });
 	return { token, controlSpace: space.spaceId, jobs: jobs.spaceId };

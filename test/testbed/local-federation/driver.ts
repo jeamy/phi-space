@@ -37,6 +37,19 @@ const bare = async () => { const t = line(IP.member, PORT.member, IP.client); tr
 const until = async <T>(f: () => Promise<T>, ms = 40_000): Promise<T> => { const end = Date.now() + ms; for (;;) { try { return await f(); } catch (e) { if (Date.now() > end) throw e; await new Promise((r) => setTimeout(r, 500)); } } };
 const operator = () => new TlsRecoveryRegister({ caFile: "/fed/ca.crt", certFile: "/fed/operator.crt", keyFile: "/fed/operator.key", host: IP.register, port: PORT.register });
 
+/** The Root's own agent, on a line of the control host's peer; a step in the `control` container. */
+async function agent() {
+	const t = line(IP.control, PORT.control, IP.control);
+	await new RemoteSpace(t, { ...options, signer: loadFileSigner("/fed/root-host.json"), expectedGateHostId: "control-host", ownPeerId: "control-peer" }).authenticate();
+	return async (method: string, args: Record<string, unknown>) => {
+		const r = JSON.parse(await t.request(JSON.stringify({ method, args: { agentId: "worker", ...args } }))) as { ok: boolean; result?: any; error?: { code: string } };
+		if (!r.ok) throw new Error(r.error!.code);
+		return r.result;
+	};
+}
+const code = (f: () => Promise<unknown>) => f().then(() => "answered", (e: Error) => e.message);
+const ROOTED = (n: number) => ({ type: "Rooted", fields: { n } });
+
 const steps: Record<string, () => Promise<void>> = {
 	async ready() { await until(user, 90_000); seen.ready = true; },
 	async routerReady() { await until(router, 90_000); seen.routerReady = true; },
@@ -45,6 +58,35 @@ const steps: Record<string, () => Promise<void>> = {
 		seen.add = (await member(r, "t1", "prepareAdd")).state;
 		seen.retry = (await member(r, "t1", "prepareAdd")).state;
 		seen.active = (await member(r, "t1", "activate", { policy: POLICY(1) })).state;
+	},
+	async rootFirst() {
+		const root = await until(agent, 90_000);
+		const wrote = await until(() => root("rootWrite", { id: "w1", entry: ROOTED(1), leaseMs: 600_000 }));
+		seen.retry = JSON.stringify(await root("rootWrite", { id: "w1", entry: ROOTED(1), leaseMs: 600_000 })) === JSON.stringify(wrote);
+		seen.conflict = await code(() => root("rootWrite", { id: "w1", entry: ROOTED(9), leaseMs: 600_000 }));
+		seen.count = (await root("rootCount", { template: { type: "Rooted" } })).count;
+	},
+	async rootMemberDown() { seen.down = await code(async () => (await agent())("rootWrite", { id: "w2", entry: ROOTED(2), leaseMs: 600_000 })); },
+	async rootMemberBack() {
+		const root = await until(agent);
+		await until(() => root("rootResume", { id: "w2" }));
+		seen.count = (await until(() => root("rootCount", { template: { type: "Rooted" } }))).count;
+	},
+	async rootAfterKill() {
+		const root = await until(agent, 90_000);
+		seen.count = (await until(() => root("rootCount", { template: { type: "Rooted" } }))).count;
+		seen.resumed = await code(() => root("rootResume", { id: "w1" }));
+		await until(() => root("rootWrite", { id: "w3", entry: ROOTED(3), leaseMs: 600_000 }));
+	},
+	async rootHandedOver() {
+		const root = await until(agent, 90_000);
+		seen.retry = await until(() => code(() => root("rootResume", { id: "w3" })));
+		seen.fresh = await code(() => until(() => root("rootTake", { id: "t1", template: { type: "Rooted", fields: { n: 1 } } })));
+		seen.count = (await until(() => root("rootCount", { template: { type: "Rooted" } }))).count;
+	},
+	async rootAfterKill2() {
+		const root = await until(agent, 90_000);
+		seen.count = (await until(() => root("rootCount", { template: { type: "Rooted" } }))).count;
 	},
 	async prepare() {
 		const spec = { runId: "r", kind: "tasks", config: { tasks: [{ type: "Gated", fields: { n: 1 } }, { type: "Gated", fields: { n: 2 } }] }, members: [state.jobs] };

@@ -27,7 +27,19 @@ async function scenario(impl: string, control: string) {
 	try {
 		await provision(dir);
 		compose("up", "-d", "--no-build");
-		step("ready"); step("routerReady", "router"); step("setup", "router"); step("prepare", "router"); step("work"); step("pause", "router"); step("waiting");
+		step("ready"); step("routerReady", "router"); step("setup", "router");
+		// the Root on the control host: a Member gone and back, the Root killed, its journal handed to the other server and back
+		step("rootFirst", "control");
+		sh("docker", ["kill", "-s", "KILL", "phi-federation-member-1"]);
+		step("rootMemberDown", "control");
+		sh("docker", ["start", "phi-federation-member-1"]);
+		step("rootMemberBack", "control");
+		sh("docker", ["kill", "-s", "KILL", "phi-federation-control-1"]);
+		sh("docker", ["start", "phi-federation-control-1"]);
+		step("rootAfterKill", "control");
+		const other = control === "rust" ? "ts" : "rust", swap = (impl: string) => sh("docker", ["compose", "-f", COMPOSE, "up", "-d", "--no-build", "--no-deps", "--force-recreate", "control"], { ...env, CONTROL_IMPL: impl });
+		swap(other); step("rootHandedOver", "control"); swap(control); step("rootAfterKill2", "control");
+		step("prepare", "router"); step("work"); step("pause", "router"); step("waiting");
 		sh("docker", ["kill", "-s", "KILL", "phi-federation-member-1"]);
 		sh("docker", ["start", "phi-federation-member-1"]);
 		step("afterKillRouter", "router"); step("afterKill");

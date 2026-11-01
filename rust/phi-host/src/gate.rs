@@ -396,6 +396,16 @@ impl Front for Gate {
 			if self.o.control.as_ref().is_some_and(|c| c.supervisor.is_some()) {
 				spawn_local(supervise(Rc::clone(&self), owner.clone()));
 			}
+			if let Some(root) = self.o.root.clone() {
+				// the journals recover at the start: what a crash left open does not wait for the next call
+				let owner = owner.clone();
+				spawn_local(async move {
+					while let Err(e) = root.start(owner.clone()).await {
+						eprintln!("phi-spaces root: {}", e.message);
+						sleep(Duration::from_millis(1000)).await;
+					}
+				});
+			}
 			if let Some(boot) = self.o.boot.clone() {
 				// what runs without a call stays authorized too
 				let owner = owner.clone();
