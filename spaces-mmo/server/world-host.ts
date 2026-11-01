@@ -32,7 +32,8 @@ import { epochTick } from "./engine/commands/epoch.ts";
 import { settlementTick } from "./engine/commands/settlement.ts";
 import { motionTick } from "./engine/commands/townhall.ts";
 import { showTick } from "./engine/commands/festival.ts";
-import { syncRates } from "./engine/clock.ts";
+import { byPeoplesPace, syncRates } from "./engine/clock.ts";
+import { stormRaisesWind, windTick } from "./engine/commands/wind.ts";
 import { fieldTick } from "./engine/commands/field.ts";
 import { ensureTokens, loadIntoSpace } from "./engine/loader.ts";
 import { ClockGuard, runSchedules } from "./engine/schedule.ts";
@@ -60,11 +61,12 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 	const runs: Record<string, () => Promise<void>> = {
 		fire: () => fireTick(space, w, msgLeaseMs),
 		fog: () => fogTick(space, w, msgLeaseMs),
-		flood: () => floodTick(space, w, msgLeaseMs),
+		flood: async () => { if (await byPeoplesPace(space)) await floodTick(space, w, msgLeaseMs); },
 		sweep: async () => { await syncRates(space); await sweepTick(space, w); },
 		orders: () => ordersTick(space, w),
 		market: () => marketTick(space),
-		storm: async () => { const room = await stormTick(space, w, msgLeaseMs); await stormFillsBarrels(space, w, room); await stormTurnsMills(space, w, room); },
+		storm: async () => { if (!(await byPeoplesPace(space))) return; const room = await stormTick(space, w, msgLeaseMs); await stormFillsBarrels(space, w, room); await stormTurnsMills(space, w, room); await stormRaisesWind(space, w, room, msgLeaseMs); },
+		wind: async () => { if (process.env.SPACES_MMO_WIND !== "0") await windTick(space, w, msgLeaseMs); },
 		garden: async () => { await gardenTick(space, w); await fieldTick(space, w, msgLeaseMs); },
 		wild: async () => { await wildTick(space, w, msgLeaseMs); },
 		epoch: async () => { await epochTick(space, w, msgLeaseMs); await settlementTick(space, w, msgLeaseMs); await motionTick(space, w, msgLeaseMs); await showTick(space, w, msgLeaseMs); },

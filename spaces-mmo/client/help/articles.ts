@@ -494,6 +494,7 @@ Eine Insel wächst durch das, was auf ihr steht. Ausführlich unter [Dorf und Si
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
 | \`siedlung rang\` | | Die Siedlungen der Gegend nach ihrem Bestand; ein Park wiegt am meisten, wer ihn zuletzt pflegte, zählt dazu |
+| \`wetter\` | \`weather\`, \`wind\` | Wie der Wind steht und wie dicht der Nebel ist; der Wind treibt die Mühlen |
 | \`pflege\` | \`tend\` | Einmal am Tag eine Blume in den Park neben dir setzen: Ruf für dich, Rang für die Siedlung |
 | \`fest blumen\`, \`fest ernte\` | \`festival\` | Als Siedler am Park eine Blumenschau oder ein Erntefest eröffnen; allein: das laufende zeigen |
 | \`zeige <ding>\` | \`exhibit\` | Am Park eine Blume zur Schau oder Ernte zum Fest geben; der Preis wartet im \`nachlass\` |
@@ -661,6 +662,7 @@ An island grows by what stands on it. In detail under [Village and settlement](h
 | Command | Also | Effect |
 | --- | --- | --- |
 | \`siedlung rang\` | | The settlements of the region by what they hold; a park weighs most, and whoever tended it lately counts too |
+| \`wetter\` | \`weather\`, \`wind\` | How the wind stands and how thick the fog is; the wind drives the mills |
 | \`pflege\` | \`tend\` | Once a day set a flower in the park beside you: reputation for you, rank for the settlement |
 | \`fest blumen\`, \`fest ernte\` | \`festival\` | As a settler at a park, open a flower show or a harvest festival; alone: show the running one |
 | \`zeige <ding>\` | \`exhibit\` | Give a flower to the show or crops to the festival at the park; the prize waits in \`nachlass\` |

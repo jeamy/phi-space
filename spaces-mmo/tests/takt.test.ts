@@ -3,7 +3,7 @@ import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER } from "phi-spaces";
-import { decayNowOf, patienceOf, syncRates, worldNowOf } from "../server/engine/clock.ts";
+import { byPeoplesPace, decayNowOf, patienceOf, syncRates, worldNowOf } from "../server/engine/clock.ts";
 import { advance } from "../server/engine/commands/garden.ts";
 import { buildSweep } from "../server/engine/commands/build.ts";
 import { saveSettings } from "../server/settings.ts";
@@ -32,6 +32,23 @@ test("one clock until the two are told apart; then a new life rate leaves the se
 	assert.equal(patience(slow), 12);
 	assert.throws(() => withDecayRate(fast, 0, 0), RangeError);
 	assert.equal(patience(initialClock("x", 8, 0, 0.5)), 1, "a new world starts with both alike");
+});
+
+test("the tide serves people: at 24 it comes about once in 24 of its dates, at 1 always", { timeout: 120_000 }, async () => {
+	const stack = await startStack({ worlds: 0 });
+	try {
+		const s = stack.space;
+		await s.write({ type: "WorldClock", fields: initialClock(w.id, 12, Date.now(), 1) as never }, null, FOREVER);
+		assert.ok(await byPeoplesPace(s));
+		const e = (await s.readAll({ type: "WorldClock" }))[0]!;
+		await s.takeIfExists({ id: e.id }, 0);
+		await s.write({ type: "WorldClock", fields: withRate(e.fields as unknown as WorldClockFields, 24, Date.now()) as never }, null, FOREVER);
+		const random = Math.random;
+		try {
+			Math.random = () => 0.03; assert.ok(await byPeoplesPace(s));
+			Math.random = () => 0.5; assert.ok(!(await byPeoplesPace(s)));
+		} finally { Math.random = random; }
+	} finally { await stack.close(); }
 });
 
 test("at 24 a plant ripens within the hour but waits a whole day dry; the keeping of the settings is real", () => {

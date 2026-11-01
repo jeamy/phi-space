@@ -151,7 +151,7 @@ By epochs; each level presupposes the previous one. Buildings and gardens are in
 | **Storehouse** | shared storage of a village: everyone with the right deposits and withdraws (escrow as at the market) |
 | **Well, bakery** | water in quantity for gardens and stables; bread (below, "Food") |
 | **Fields** | shared plots at the edge of the settlement: grain, maize, potatoes, flax — sowing and harvest in bursts |
-| **Windmill** | grinds grain to flour for the bakery, at a fixed pace, faster on storm days (wind as weather comes only with the seasons) |
+| **Windmill** | grinds grain to flour for the bakery, by the wind of its island |
 | **Communal garden, orchard** | beds for everyone with the right; trees that grow over many game days |
 | **Pen, stable** | sheep (wool → cloth), goats (milk), ducks and geese (eggs, down); they eat hay and turnips from the fields |
 | **Chapel** | visible place of the gods ([goetter.en.md](goetter.en.md)): offerings, blessing (lease), festival — voluntary, the gods work without it too |
@@ -1054,7 +1054,9 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
    - **Part 7, tax (built, same file):** `antrag steuer <n>` (at most 5) sets the coins per thing taken from the warehouse; they stay in it, coins themselves go free.
      Deviation: the tax on the market hall's sales waits for that hall (step 7). 
    - **Part 9, festivals and tending (built, `server/engine/commands/festival.ts`):** Beside a park a settler opens a flower show (`fest blumen`) or a harvest festival (`fest ernte`), one per room, two world days, then the settlement rests a week. Registered figures give to it with `zeige <ding>`: one flower, a named sort beating a bred one and a bred one a wild one, or crops by the piece, the most winning. What is shown stays with the festival. The count (job "epoch") names the winner, the earlier of equals; 10 coins wait as an estate (`nachlass`), and with fewer than two taking part there is no prize, so nobody mints coins alone. `pflege` sets a flower in the park once a world day: it stands in `reputation`, and whoever tended in the last seven days adds a point in `siedlung rang`.
+     The settlers of the world take part from their home rooms, count as participants and tend parks; one that wins takes the honour and no coins.
      Deviations: the prize comes from the world, not a board; the harvest festival needs no autumn, as seasons are not there yet; the park holds no beds, tending is a flower given to the building. The regatta waits for boats, the fire chain and the rank across regions for the board. Goods turnover still does not count in the rank.
+   - **Wind (built, `server/engine/commands/wind.ts`):** Each island has a level, a lull, a breeze, a fresh wind or a gale, that moves a step every six world hours; a storm surge makes it a gale at once. `wetter` tells it. A mill grinds at half to twice its pace by the wind that blows when the load comes, on top of what a surge grinds ahead. A load keeps the pace it started with. Hedges do not break it yet.
 7. **Department store** (shop with stock), **counting house**, **lighthouse**, **brewery**, **glassworks and greenhouse**,
    fishing (net recipe, jetty) and boats; **food** (being sated), when bread and smoked fish exist.
 8. **Roads, carts, timetable ferries**, then the **island railway** as automaton.
@@ -1084,5 +1086,3 @@ nonviolent (festivals, reputation, regatta); animals come early. Still open:
   chain of its own?
 - How many light points does a fire carry, and does a fixed number suffice, or does it grow with the number of players of
   an island (like the flotsam, `flood.perPlayers`)?
-- Does wind come as weather with the seasons, or does the storm tide stay the only weather (then the mill always grinds
-  at the fixed pace)?

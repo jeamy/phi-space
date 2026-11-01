@@ -137,7 +137,7 @@ gleichwertig sind — die Gartenzeilen führt der Abschnitt „Gärten“ weiter
 | **Lagerhaus** | gemeinsames Lager eines Dorfs: alle mit Recht legen ein und entnehmen (Treuhand wie beim Markt) |
 | **Brunnen, Backhaus** | Wasser in Menge für Gärten und Ställe; Brot (unten, „Nahrung“) |
 | **Äcker** | gemeinsame Fluren am Siedlungsrand: Getreide, Mais, Kartoffeln, Flachs — Bestellen und Ernte in Stößen |
-| **Windmühle** | mahlt Korn zu Mehl für das Backhaus, in festem Takt, an Sturmtagen schneller (Wind als Wetter kommt erst mit den Jahreszeiten) |
+| **Windmühle** | mahlt Getreide zu Mehl für das Backhaus, mit dem Wind seiner Insel |
 | **Gemeinschaftsgarten, Obstwiese** | Beete für alle mit Recht; Bäume, die über viele Spieltage wachsen |
 | **Gehege, Stall** | Schafe (Wolle → Tuch), Ziegen (Milch), Enten und Gänse (Eier, Daunen); fressen Heu und Rüben von den Fluren |
 | **Kapelle** | sichtbarer Ort der Götter ([goetter.md](../goetter.en.md)): Opfergaben, Segen (Lease), Fest — freiwillig, die Götter wirken auch ohne |
@@ -1061,7 +1061,9 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
    - **Teil 7, Steuer (gebaut, ebenda):** `antrag steuer <n>` (höchstens 5) setzt, wie viele Münzen je Stück eine Entnahme aus dem Lagerhaus kostet; sie bleiben im Lager, Münzen selbst sind frei.
      Abweichung: Die Umsatzsteuer des Kaufhauses wartet auf das Kaufhaus (Schritt 7). 
    - **Teil 9, Feste und Pflege (gebaut, `server/engine/commands/festival.ts`):** Neben einem Park eröffnet ein Siedler eine Blumenschau (`fest blumen`) oder ein Erntefest (`fest ernte`), eines je Raum, zwei Welttage lang, danach ruht die Siedlung eine Woche. Registrierte Figuren geben mit `zeige <ding>` dazu: eine Blume, wobei eine benannte Sorte vor einer gezüchteten und diese vor einer wilden liegt, oder Ernte stückweise, die größte Menge siegt. Was gezeigt ist, bleibt beim Fest. Die Zählung (Job „epoch“) nennt den Sieger, bei Gleichstand den früheren; 10 Münzen warten als Nachlass (`nachlass`), und mit weniger als zwei Teilnehmern gibt es keinen Preis, damit niemand allein Münzen prägt. `pflege` setzt einmal am Welttag eine Blume in den Park: Das steht in `reputation`, und wer in den letzten sieben Tagen pflegte, zählt einen Punkt in `siedlung rang`.
+     Die Figuren der Welt machen aus ihren Heimaträumen mit, zählen als Teilnehmer und pflegen Parks; gewinnt eine, bleibt es bei der Ehre, ohne Münzen.
      Abweichungen: Der Preis kommt von der Welt, nicht von einer Tafel; das Erntefest braucht keinen Herbst, weil es noch keine Jahreszeiten gibt; der Park hat keine Beete, Pflege ist eine Blume für den Bau. Die Regatta wartet auf Boote, Feuerkette und regionsübergreifender Rang auf die Tafel. Der Warenumsatz zählt im Rang weiter nicht.
+   - **Wind (gebaut, `server/engine/commands/wind.ts`):** Jede Insel hat eine Stufe, Flaute, Brise, frischer Wind oder Sturm, die sich alle sechs Weltstunden um einen Schritt bewegt; eine Sturmflut bringt sofort Sturm. `wetter` sagt, wie er steht. Eine Mühle mahlt mit dem Wind, der weht, wenn die Ladung kommt, halb bis doppelt so schnell, dazu kommt, was eine Sturmflut vorausmahlt. Eine Ladung behält das Tempo, mit dem sie begann. Hecken brechen ihn noch nicht.
 7. **Kaufhaus** (Laden mit Vorrat), **Kontor**, **Leuchtturm**, **Brauhaus**, **Glashütte und Gewächshaus**,
    Fischerei (Netz-Rezept, Steg) und Boote; **Nahrung** (Sattsein), wenn Brot und Räucherfisch da sind.
 8. **Straßen, Karren, Fahrplan-Fähren**, dann die **Inselbahn** als Automat.
@@ -1091,5 +1093,3 @@ ist gewaltfrei (Feste, Ruf, Regatta); Tiere kommen früh. Offen bleibt:
   Kette?
 - Wie viele Lichtpunkte trägt ein Feuer, und reicht eine feste Zahl, oder wächst sie mit der Zahl der Spieler einer
   Insel (wie das Strandgut, `flood.perPlayers`)?
-- Kommt Wind als Wetter mit den Jahreszeiten, oder bleibt die Sturmflut das einzige Wetter (dann mahlt die Mühle immer
-  im festen Takt)?

@@ -112,6 +112,8 @@ export type WorldDef = {
 	townhall?: { plan: string; voteWorldMs: number; zoneRadius: number; maxTax: number };
 	/** Chapels: `plan`, what may be offered, and how long a blessing lasts. */
 	chapel?: { plan: string; offerings: string[]; blessWorldMs: number };
+	/** Wind (engine/commands/wind.ts): each `stepMs` an island's level moves a step; `names` by level, the last a gale, `mill` how fast a mill grinds at it. */
+	wind?: { stepMs: number; names: string[]; mill: number[] };
 	festival?: FestivalDef;
 	/** Animals on the farm (docs/siedeln.en.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
 	animals?: AnimalsDef;

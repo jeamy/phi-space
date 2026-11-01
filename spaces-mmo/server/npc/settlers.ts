@@ -19,7 +19,8 @@ import { flameOf } from "../engine/fire.ts";
 import { clockOf } from "../engine/clockcache.ts";
 import { setting } from "../settings.ts";
 import type { NpcDef, WorldDef } from "../engine/world.ts";
-import { fieldsOf, type BedFields, type BuildingFields, type ListingFields, type SiteFields, type SiteOrderFields, type WorkRestFields } from "../model.ts";
+import { fieldsOf, type BedFields, type BuildingFields, type ListingFields, type SiteFields, type ShowFields, type SiteOrderFields, type WorkRestFields } from "../model.ts";
+import { crops, flowers } from "../engine/commands/festival.ts";
 import { gather, look, nextTo, rest, social, travel, type Look } from "./economy.ts";
 import type { Npc, Script } from "./scripts.ts";
 
@@ -131,6 +132,7 @@ export function siedler(): Script {
 				return;
 			}
 		}
+		if (await festive(n, l, w, homes)) return;
 		const rested = await n.space.readIfExists({ type: "WorkRest", fields: { charId: me.charId } }, 0).then((e) => (e ? fieldsOf<WorkRestFields>(e).untilWorldMs : 0)).catch(() => 0);
 		const tired = rested > now;
 		const sites = homes.length ? (await n.space.readAll({ type: "Site" })).map((e) => fieldsOf<SiteFields>(e)).filter((s) => homes.includes(s.room)) : [];
@@ -232,6 +234,31 @@ export function siedler(): Script {
 		if (!lack) { await n.act(`craft ${r.key}`); return true; }
 		if (lack.proto === "tangseil" && count(l, "tang") >= 3) { await n.act("craft tangseil"); return true; }
 		return gather(n, l, [lack.proto, ...(lack.proto === "tangseil" ? ["tang"] : [])]);
+	}
+
+	/** A festival at home: it shows what it carries; a park at home it tends now and then. True when it did something. */
+	async function festive(n: Npc, l: Look, w: WorldDef, homes: string[]): Promise<boolean> {
+		const d = w.festival;
+		if (!d) return false;
+		const parks = (await n.space.readAll({ type: "Building", fields: { plan: d.plan } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => homes.includes(b.room));
+		for (const park of parks) {
+			const room = park.room, show = await n.space.readIfExists({ type: "Show", fields: { room } }, 0).then((e) => e && fieldsOf<ShowFields>(e)).catch(() => null);
+			const flower = l.pack.find((i) => flowers(w).includes(i.proto));
+			if (show && may(`fest-${show.showId}`)) {
+				const thing = show.kind === "blumen" ? flower : l.pack.find((i) => crops(w).includes(i.proto));
+				if (thing) {
+					if (!(await travel(n, l, room))) return true;
+					if (!(await besideOf(n, l, park))) { await n.act(`zeige ${thing.name}`); if (show.kind === "blumen") later(`fest-${show.showId}`, 100_000); }
+					return true;
+				}
+			}
+			if (flower && may("pflege")) {
+				if (!(await travel(n, l, room))) return true;
+				if (!(await besideOf(n, l, park))) { await n.act("pflege"); later("pflege", 60); }
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Tends a bed of its own: harvest, weed, water (a can from its barrel), plant a seed it carries, look for seeds. */

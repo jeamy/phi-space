@@ -45,3 +45,7 @@ export async function syncRates(space: SpaceLike): Promise<void> {
 		await space.commit(txn);
 	} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
 }
+
+/** For a job that serves people, not the life of the world: the tide and the surge bring what people fetch and burn, and what
+ *  they bring lies by the second rate, so they come about as often as at that rate, however fast the world lives. */
+export const byPeoplesPace = async (space: SpaceLike): Promise<boolean> => Math.random() * (await patienceOf(space)) < 1;

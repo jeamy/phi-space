@@ -18,6 +18,7 @@ process.env.SPACES_MMO_GUESTS_PER_HOUR = "100000";
 process.env.SPACES_MMO_REGISTRATIONS_PER_DAY = "100000";
 process.env.SPACES_MMO_CMD_BURST = "100000"; // likewise for typed commands; tests/collision.test.ts tests the limit with a web process of its own
 process.env.SPACES_MMO_CMD_PER_SEC = "100000";
+process.env.SPACES_MMO_WIND = "0"; // a mill grinds by the wind: the tests that time one need it still; tests/wind.test.ts moves it itself
 process.env.SPACES_MMO_LLM = ""; // never a real model in the tests: a test that wants one names tests/fake-llm.ts
 process.env.SPACES_MMO_LLM_MODULE = "";
 process.env.SPACES_MMO_TEST = "";

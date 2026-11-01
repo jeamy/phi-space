@@ -161,8 +161,8 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		assert.match(await does(anna.p, "gieße", "gießt"), /Gärtnerin gießt das Beet/);
 		// keep it watered until something is ripe (weeds slow it, and a dry plant would wilt)
 		// a can per watering: slow machines water more often
-		for (let i = 0; i < 30 && !(await bedOf(s, anna.me)).plants.some((p) => p.stage === 2); i++) {
-			await new Promise((ok) => setTimeout(ok, 4_000));
+		for (let i = 0; i < 60 && !(await bedOf(s, anna.me)).plants.some((p) => p.stage === 2); i++) {
+			await new Promise((ok) => setTimeout(ok, 2_000)); // dry for 5.8 s it wilts
 			if (!(await bedOf(s, anna.me)).plants.some((p) => p.stage === 2)) { await give(s, anna.me, "wasserkanne", 1); await does(anna.p, "gieße", "gießt"); }
 		}
 		await eventually(async () => (await bedOf(s, anna.me)).plants.some((p) => p.stage === 2), 10_000, `something ripe (stages ${(await bedOf(s, anna.me)).plants.map((p) => p.stage)})`);

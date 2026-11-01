@@ -3,6 +3,7 @@
 // With `zeige` everyone registered gives a thing up to it: a flower for the show (a named sort beats a bred one, a bred one a
 // wild one), crops for the festival (the most wins). At its end the count (job "epoch") names the winner, who fetches the
 // prize with `nachlass`, online or not; with fewer than two taking part nobody wins anything, so it mints no coins alone.
+// The settlers of the world take part and count as a second; one of them that wins takes the honour and no coins.
 // `pflege` gives a flower to the park once a world day: reputation for whoever tends it, and in the rank of the settlements
 // each who tended lately counts a point.
 import { randomBytes } from "node:crypto";
@@ -20,8 +21,8 @@ import { consume } from "./trade.ts";
 
 const NAME: Record<ShowKind, string> = { blumen: "Blumenschau", ernte: "Erntefest" };
 const defOf = (c: CommandCtx): FestivalDef => { const d = c.world.festival; if (!d) throw new CommandError("In dieser Welt gibt es keine Feste."); return d; };
-const flowers = (w: WorldDef) => (w.garden?.sorts ?? []).filter((s) => s.kind === "zier").map((s) => s.yields.proto);
-const crops = (w: WorldDef) => (w.fields?.crops ?? []).flatMap((x) => x.yields.map((y) => y.proto)).filter((p) => !p.startsWith("samen-"));
+export const flowers = (w: WorldDef) => (w.garden?.sorts ?? []).filter((s) => s.kind === "zier").map((s) => s.yields.proto);
+export const crops = (w: WorldDef) => (w.fields?.crops ?? []).flatMap((x) => x.yields.map((y) => y.proto)).filter((p) => !p.startsWith("samen-"));
 const members = (c: CommandCtx) => { if (!c.account || c.account.guest) throw new CommandError("Gäste machen hier nicht mit; registriere dich dafür."); return c.account; };
 const parkBeside = async (c: CommandCtx, d: FestivalDef) => (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: d.plan } }, { txn: c.txn })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
 const atPark = (c: CommandCtx, d: FestivalDef) => `direkt neben ${planOf(c.world, d.plan)?.dative ?? "einem Park"}`;
@@ -78,7 +79,7 @@ const zeige: Command = {
 		const had = mine && fieldsOf<ShowEntryFields>(mine);
 		if (had && s.kind === "blumen") throw new CommandError(`Du zeigst schon ${had.name}.`);
 		await consume(c, it.f, c.actor.charId);
-		const entry: ShowEntryFields = { showId: s.showId, accountId: account.accountId, charName: c.actor.name, name: had?.name ?? (it.f.variety?.name || it.f.name), score: s.kind === "blumen" ? bloom(it.f) : (had?.score ?? 0) + 1, at: had?.at ?? Date.now() };
+		const entry: ShowEntryFields = { showId: s.showId, accountId: account.accountId, charName: c.actor.name, name: had?.name ?? (it.f.variety?.name || it.f.name), ...(account.settler ? { figure: true } : {}), score: s.kind === "blumen" ? bloom(it.f) : (had?.score ?? 0) + 1, at: had?.at ?? Date.now() };
 		await c.space.write({ type: "ShowEntry", fields: entry as never }, c.txn, FOREVER);
 		await msg(c, "*", "info", s.kind === "blumen" ? `$you() $conj(zeigst|zeigt) ${entry.name} auf der Blumenschau.` : `$you() $conj(legst|legt) ${it.f.name} zum Erntefest (${entry.score}).`, { templ: true });
 	},
@@ -128,13 +129,13 @@ export async function showTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 			if (held) {
 				await space.write({ type: "Settlement", fields: { ...fieldsOf<SettlementFields>(held), showRestWorldMs: now + d.restWorldMs } as never }, txn, FOREVER);
 				const won = all.length >= 2 ? all[0]! : null;
-				if (won) {
+				if (won && !won.figure) {
 					const coin = await resolvePrototype(space, w.currency);
 					const est: EstateFields = { estateId: `est-${s.showId}`, accountId: won.accountId, ownerName: won.charName, room: s.room, name: NAME[s.kind], untilWorldMs: now + (w.building?.estateWorldMs ?? 30 * 24 * 3600_000) };
 					await space.write({ type: "Estate", fields: est as never }, txn, FOREVER);
 					if (coin) for (let i = 0; i < d.prize; i++) await spawn(space, txn, w, coin, { location: est.estateId, x: -1, y: -1 });
 				}
-				const text = `${NAME[s.kind]} von ${s.settlementName} ist zu Ende: ${won ? `${won.charName} gewinnt mit ${won.name}${s.kind === "ernte" ? ` (${won.score})` : ""} ${d.prize} Münzen; abzuholen hier mit „nachlass“.` : "zu wenige haben mitgemacht, einen Preis gibt es nicht."}`;
+				const text = `${NAME[s.kind]} von ${s.settlementName} ist zu Ende: ${won?.figure ? `Es gewinnt ${won.charName} mit ${won.name}${s.kind === "ernte" ? ` (${won.score})` : ""}, zur Ehre der Siedlung.` : won ? `${won.charName} gewinnt mit ${won.name}${s.kind === "ernte" ? ` (${won.score})` : ""} ${d.prize} Münzen; abzuholen hier mit „nachlass“.` : "zu wenige haben mitgemacht, einen Preis gibt es nicht."}`;
 				await space.write({ type: "Msg", fields: { room: s.room, to: "*", kind: "world", text, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
 			}
 			await space.commit(txn);

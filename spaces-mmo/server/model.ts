@@ -54,10 +54,12 @@ export type FogFields = { room: string; level: number };
 export type SettlementMember = { accountId: string; name: string; rank: "helfer" | "siedler" };
 export type SettlementFields = { settlementId: string; name: string; nameKey: string; room: string; founder: string; founderName: string; members: SettlementMember[]; closed: boolean; at: number; /** Coins per thing taken from the warehouse, set by a town hall; they go into it. */ tax?: number; /** Before this world time no new festival (engine/commands/festival.ts). */ showRestWorldMs?: number };
 /** A festival of a settlement, one per room (`unique`), ending at `endsWorldMs`. */
+/** The wind of an island: an index into `WorldDef.wind.names`. */
+export type WindFields = { island: string; level: number };
 export type ShowKind = "blumen" | "ernte";
 export type ShowFields = { showId: string; room: string; settlementId: string; settlementName: string; kind: ShowKind; byName: string; endsWorldMs: number };
 /** What one account shows at a festival; `score`: the worth of the flower, or the count of the crops. */
-export type ShowEntryFields = { showId: string; accountId: string; charName: string; name: string; score: number; at: number };
+export type ShowEntryFields = { showId: string; accountId: string; charName: string; name: string; score: number; at: number; /** A settler of the world (npc/settlers.ts): wins no coins. */ figure?: boolean };
 /** The tending of the park of a room by one account: `points` how often, `lastWorldMs` the last time. */
 export type ParkCareFields = { room: string; accountId: string; charName: string; points: number; lastWorldMs: number };
 /** A line of a warehouse's log: who laid in or took what (`kind`), counted for the quota by world time. */

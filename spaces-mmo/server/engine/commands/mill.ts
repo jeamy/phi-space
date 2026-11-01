@@ -13,6 +13,7 @@ import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type MillLoadFields } from "../../model.ts";
 import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
+import { windFactor } from "./wind.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, NotUnderstood, type CommandCtx } from "../context.ts";
 import type { MillDef, WorldDef } from "../world.ts";
@@ -64,7 +65,7 @@ const mahle: Command = {
 		const n = Math.min(a[1] && /^\d+$/.test(a[1]) ? Number(a[1]) : have.length, have.length, m.maxLoad);
 		if (n <= 0) throw new CommandError(`Du hast kein ${protoName(c, grind.from)}.`);
 		for (const it of have.slice(0, n)) if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError(`${it.f.name} ist gerade nicht greifbar; bitte noch einmal.`);
-		const ready = Math.max(now, b.busyUntilWorldMs ?? 0) + n * m.unitWorldMs;
+		const ready = Math.max(now, b.busyUntilWorldMs ?? 0) + (n * m.unitWorldMs) / (await windFactor(c.space, c.world, b.room, c.txn));
 		await putBack(c, { ...b, busyUntilWorldMs: ready });
 		const load: MillLoadFields = { loadId: randomBytes(6).toString("hex"), buildId: b.buildId, room: b.room, x: b.x, y: b.y, w: b.w, h: b.h, charId: c.actor.charId, name: c.actor.name,
 			from: grind.from, to: grind.to, count: n, readyWorldMs: ready, untilWorldMs: (await decayNowOf(c.space, c.txn)) + m.keepWorldMs + (ready - now) / (await patienceOf(c.space, c.txn)) };
