@@ -1054,7 +1054,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
 			<div className={`stage${pad === "left" ? " pad-left" : ""}${pad === "off" ? " pad-off" : ""}${detent !== "peek" ? " open" : ""}`}>
 				{mapView}
-				{atlas && atlas.rooms.length > 1 && !isTouch() && mapMode !== "text" && <Atlas atlas={atlas} state={atlasState} me={chars.get(me) ?? null} />}
+				{atlas && atlas.rooms.length > 1 && !isTouch() && mapMode !== "text" && <Atlas atlas={atlas} state={atlasState} me={chars.get(me) ?? null} onBeam={(room) => send(`beam ${room}`)} />}
 				<div className="hud">
 					<button className="hud-pill" onClick={() => setAtlasPage(true)} disabled={!atlas || atlas.rooms.length < 2} aria-label="Weltkarte öffnen">
 						<span className={`live${live ? " on" : ""}`} /><b>{hello?.room.name ?? ""}</b>

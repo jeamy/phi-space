@@ -139,7 +139,7 @@ export function Atlas({ atlas, state, page = false, me = null, onBeam }: { atlas
 	const beamButton = (room: { roomId: string; x: number; y: number }) => {
 		if (!onBeam || room.roomId === state?.here || !state?.lit.includes(room.roomId)) return null;
 		const n = beamCoins(room);
-		return <button className="primary" onClick={() => { onBeam(room.roomId); setPicked(null); }}>Hierher beamen · {n} {n === 1 ? "Münze" : "Münzen"}</button>;
+		return <button className="primary" onClick={() => { onBeam(room.roomId); setPicked(null); if (!page) setBig(false); }}>Hierher beamen · {n} {n === 1 ? "Münze" : "Münzen"}</button>;
 	};
 
 	if (page) {
