@@ -67,7 +67,8 @@ impl Store {
 		let default_id = registry.as_ref().and_then(|r| r.get("defaultSpaceId")).and_then(Json::as_str).map(str::to_owned);
 		let mut named = vec![];
 		if let Some(spaces) = registry.as_ref().and_then(|r| r.get("spaces")).and_then(Json::as_object) {
-			for (id, _) in spaces.iter().filter(|(id, _)| Some(*id) != default_id.as_deref()) {
+			// a deleted Space is opened when a snapshot read asks for it (`reader`)
+			for (id, _) in spaces.iter().filter(|(id, i)| Some(*id) != default_id.as_deref() && i.get("deletedAt").is_none()) {
 				named.push((id.to_owned(), SpaceHost::open_shared(shared.clone(), NAMED_SPACE, Some(id), random())?));
 			}
 		}
@@ -112,6 +113,10 @@ impl Store {
 	/// The host of a Space for a snapshot read: the default Space even before it is registered.
 	pub fn reader(&mut self, space: Option<&str>) -> std::result::Result<&mut SpaceHost, CoreError> {
 		let id = space.map(|n| self.read_id(n)).transpose()?;
+		if let Some(id) = id.as_deref().filter(|id| Some(*id) != self.default_id() && !self.named.iter().any(|(n, _)| n == id)) {
+			let host = SpaceHost::open_shared(self.default.ledger.clone(), NAMED_SPACE, Some(id), system_random()).map_err(|e| error("Error", e.to_string()))?;
+			self.named.push((id.to_owned(), host));
+		}
 		Ok(self.host_of(id.as_deref()))
 	}
 
@@ -188,13 +193,13 @@ impl Store {
 	/// `create_space` with `op` in the commit that makes the Space, so what it sets exists with the Space or not at all. `op`
 	/// does not run for an alias that exists: the caller finds that Space in the result.
 	pub fn create_space_with(&mut self, alias: &str, now: f64, random: Random, op: impl FnOnce(&mut Space) -> std::result::Result<(), CoreError>) -> Result<std::result::Result<Json, CoreError>> {
-		if let Some(id) = self.registry.as_ref().and_then(|r| r.get("aliases")?.get(alias)?.as_str()) {
-			let info = self.registry.as_ref().and_then(|r| r.get("spaces")?.get(id)).cloned().unwrap_or(Json::Null);
-			return Ok(Ok(info));
-		}
 		let fine = alias.len() <= 64 && alias.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit()) && alias.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || ".-_".contains(c));
 		if !fine {
 			return Ok(Err(error("IllegalArgumentError", "alias: 1-64 of a-z 0-9 . _ - (starting with a letter or digit)")));
+		}
+		if let Some(id) = self.registry.as_ref().and_then(|r| r.get("aliases")?.get(alias)?.as_str()) {
+			let info = self.registry.as_ref().and_then(|r| r.get("spaces")?.get(id)).cloned().unwrap_or(Json::Null);
+			return Ok(Ok(info));
 		}
 		if self.default_id().is_none() {
 			if let Err(e) = self.commit(None, now, |_| Ok(()))? {

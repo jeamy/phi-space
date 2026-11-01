@@ -343,6 +343,7 @@ test("a control host hands keys, policy and the directory only to who may have t
 	await rival.remote.authenticate();
 	await assert.rejects(rival.remote.requestRouterLease(), /previous router lease is live/, "a second router waits for the first");
 	// the control Space itself
+	assert.match((await ask(router.t, { method: "membershipInstruction", space: "control", args: { instruction: {} } })).error?.message ?? "", /for admins who proved their key/, "the notices stop at it too");
 	const nothing = await ask(router.t, { method: "count", space: "control", args: { template: { type: "Job" } } });
 	assert.match(nothing.error?.message ?? "", /for admins who proved their key/, "the control Space stays the admins'");
 	assert.match((await ask(router.t, { method: "count", args: { template: { type: "Job" } } })).error?.message ?? "", /signed control grant/, "no call without a grant");
@@ -419,10 +420,15 @@ test("what a control host does not carry stops it at the start", { skip: CONTROL
 		await refused({ hostId: "other" }, /identity disagrees/);
 		await refused({ controlSpaceId: "sp-other" }, /identity disagrees/);
 		await refused({ control: { ...config.control, publicKey: g.userKey.publicKey } }, /disagrees with installed authority/);
-		await g.external.compareAndSet("access:authority", null, { authorityId: "authority", aOnlyAllowed: false });
-		await refused({}, /access policy of a recovery/);
-		await g.external.compareAndSet("access:authority", 1, { authorityId: "authority", aOnlyAllowed: true });
 	});
+	const aOnly = async () => { const user = g.atControl(g.USER_IP, g.userKey.signer, "user"); return JSON.parse(await user.t.request(JSON.stringify({ method: "grant", args: { purpose: "effect" } }))) as { ok: boolean; error?: { message: string } }; };
+	assert.equal((await aOnly()).ok, true, "A-only rights stand without a recovery");
+	await g.external.compareAndSet("access:authority", null, { authorityId: "authority", aOnlyAllowed: true });
+	await g.controlDown(async () => {});
+	assert.equal((await aOnly()).ok, true, "the register allows them");
+	await g.external.compareAndSet("access:authority", 1, { authorityId: "authority", aOnlyAllowed: false });
+	await g.controlDown(async () => {});
+	assert.match((await aOnly()).error?.message ?? "", /A-only rights remain disabled/, "the register ends them after a recovery");
 });
 
 test("what a Member does not carry stops it at the start instead of being ignored", { skip: CMD ? false : "the refusals of the other server" }, async (tc) => {

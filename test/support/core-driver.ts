@@ -115,6 +115,7 @@ export function step(l: Line, dumpAll = false): Record<string, unknown> {
 		host = {};
 		if (l.spaceId !== undefined) s.spaceId = l.spaceId;
 		if (l.incarnation !== undefined) s.incarnation = l.incarnation;
+		if (l.primaryEpoch !== undefined) s.primaryEpoch = l.primaryEpoch;
 		if (l.limits) s.limits = l.limits;
 		return { ok: true, result: null, state: digestJson(s as unknown as Json), ...(l.dump || dumpAll ? { dump: core.plain(s) } : {}) };
 	}

@@ -3,7 +3,7 @@
 use crate::auth::{to_base64, PeerKey, Signer};
 use crate::gate::Keys;
 use phi_json::{obj, parse, Json};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
@@ -121,14 +121,13 @@ pub struct RemoteKeys {
 	held: RefCell<HashMap<KeyName, (f64, Option<PeerKey>)>>,
 	/// The routing policy as last read, signed.
 	pub policy: RefCell<Option<Json>>,
-	pub policy_at: Cell<f64>,
 	/// Why the signed policy could not be brought to the Member just now: its calls wait for the next read.
 	pub policy_failed: RefCell<Option<String>>,
 }
 
 impl RemoteKeys {
 	pub fn new(client: Rc<ControlClient>, now: crate::gate::Now) -> RemoteKeys {
-		RemoteKeys { client, now, held: RefCell::default(), policy: RefCell::new(None), policy_at: Cell::new(f64::NEG_INFINITY), policy_failed: RefCell::new(None) }
+		RemoteKeys { client, now, held: RefCell::default(), policy: RefCell::new(None), policy_failed: RefCell::new(None) }
 	}
 
 	/// Asks the control host for these keys. One it does not answer for is unknown: nothing is served on an old answer.
@@ -142,7 +141,6 @@ impl RemoteKeys {
 
 	pub async fn fetch_policy(&self) {
 		let read = self.client.routing_policy().await.ok();
-		self.policy_at.set((self.now)());
 		*self.policy.borrow_mut() = read;
 	}
 }

@@ -10,7 +10,7 @@ fn routing(m: impl Into<String>) -> CoreError { error("RoutingConflict", m) }
 fn migration(m: impl Into<String>) -> CoreError { error("MigrationRequired", m) }
 fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 fn array<'a>(v: &'a Json, k: &str) -> &'a [Json] { v.get(k).and_then(Json::as_array).map_or(&[], Vec::as_slice) }
-fn safe(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| n.fract() == 0.0 && n.abs() <= phi_json::FOREVER) }
+fn safe(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| phi_json::safe_integer(*n)) }
 fn hash(v: &Json) -> Result<String> { digest_json(v).map_err(|_| routing("a value that cannot be hashed")) }
 fn same(a: Option<&Json>, b: Option<&Json>) -> Result<bool> { Ok(hash(a.unwrap_or(&Json::Null))? == hash(b.unwrap_or(&Json::Null))?) }
 
@@ -29,7 +29,7 @@ fn members(r: &Json) -> Vec<Json> {
 
 fn sorted(v: Option<&Json>) -> Json {
 	let mut all: Vec<String> = v.and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect());
-	all.sort();
+	all.sort_by(|a, b| phi_json::utf16_cmp(a, b));
 	Json::Array(all.into_iter().map(Json::String).collect())
 }
 

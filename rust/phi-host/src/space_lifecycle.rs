@@ -31,7 +31,7 @@ fn valid_id(id: &str) -> bool {
 fn signed_text(kind: &str, v: &Json) -> R<String> { Ok(format!("phi-spaces/space-lifecycle-{kind}/v1\n{}", canonical(v)?)) }
 
 /// `verifyLifecycle`.
-pub fn verify_lifecycle(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
+fn verify_lifecycle(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
 	let bad = || denied(format!("invalid Space lifecycle {kind} signature"));
 	let (Some(value), Some(signature)) = (t.get("value"), text(t, "signature")) else { return Err(bad()) };
 	if text(t, "issuer") != Some(&pin.issuer) || text(t, "algorithm") != Some(algorithm_name(pin.algorithm)) || !verify_detached(pin.algorithm, &pin.public_key, signed_text(kind, value).map_err(|_| bad())?.as_bytes(), signature) {
@@ -41,7 +41,7 @@ pub fn verify_lifecycle(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
 }
 
 /// `signLifecycle`.
-pub fn sign_lifecycle(kind: &str, value: Json, issuer: &str, signer: &Signer) -> R<Json> {
+fn sign_lifecycle(kind: &str, value: Json, issuer: &str, signer: &Signer) -> R<Json> {
 	let signature = to_base64(&signer.sign(signed_text(kind, &value)?.as_bytes()));
 	let mut o = Object::new();
 	o.insert("value", value);

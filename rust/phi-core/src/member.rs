@@ -13,7 +13,7 @@ fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::a
 fn number(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
 fn names(v: Option<&Json>) -> Vec<String> { v.and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect()) }
 fn sorted(mut v: Vec<String>) -> Vec<String> {
-	v.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
+	v.sort_by(|a, b| phi_json::utf16_cmp(a, b));
 	v
 }
 
@@ -22,8 +22,8 @@ pub fn hrw(value: &Json, ids: &[String]) -> Result<String> {
 	if ids.is_empty() {
 		return Err(routing("empty HRW set"));
 	}
-	let hash = |id: &String| digest_json(&Json::Array(vec![value.clone(), id.as_str().into()])).unwrap_or_default();
-	let mut all: Vec<(String, &String)> = ids.iter().map(|i| (hash(i), i)).collect();
+	let hash = |id: &String| digest_json(&Json::Array(vec![value.clone(), id.as_str().into()])).map_err(|_| routing("a value that has no canonical form"));
+	let mut all = ids.iter().map(|i| Ok((hash(i)?, i))).collect::<Result<Vec<(String, &String)>>>()?;
 	all.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(b.1)));
 	Ok(all[0].1.clone())
 }

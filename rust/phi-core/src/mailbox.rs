@@ -19,13 +19,17 @@ fn safe_integer(v: Option<&Json>) -> Option<f64> {
 
 /// `principalId`: the canonical `[peerId, agentId or null]`.
 pub fn principal_id(p: &Json) -> String {
-	Json::Array(vec![p.get("peerId").cloned().unwrap_or(Json::Null), p.get("agentId").cloned().unwrap_or(Json::Null)]).canonical().expect("finite")
+	Json::Array(vec![p.get("peerId").cloned().unwrap_or(Json::Null), p.get("agentId").cloned().unwrap_or(Json::Null)]).key_text()
 }
 
 impl Space {
 	fn new_epoch(&mut self) -> String { format!("mb{}", hex(&self.random_bytes(16))) }
 	fn box_at(&self, id: &str) -> Option<usize> { self.state.mailboxes.as_ref()?.iter().position(|(k, _)| k == id) }
-	pub(crate) fn mailbox(&mut self, i: usize) -> &mut Mailbox { &mut self.state.mailboxes.as_mut().expect("made")[i].1 }
+	pub(crate) fn mailbox(&mut self, i: usize) -> &mut Mailbox {
+		self.save_box(i);
+		&mut self.state.mailboxes.as_mut().expect("made")[i].1
+	}
+	fn mailbox_ref(&self, i: usize) -> &Mailbox { &self.state.mailboxes.as_ref().expect("made")[i].1 }
 
 	/// `box`: the principal's mailbox, made when it has none (which touches the stream at the wall clock).
 	pub(crate) fn mailbox_of(&mut self, p: &Json) -> Result<usize> {
@@ -172,7 +176,7 @@ impl Space {
 		let i = self.mailbox_of(principal.unwrap_or(&Json::Null))?;
 		self.expire_box(i, now);
 		let frame = self.limits().max_frame_bytes;
-		let b = self.mailbox(i).clone();
+		let b = self.mailbox_ref(i);
 		let after = match o.get("after") {
 			None | Some(Json::Null) => b.acked,
 			a => safe_integer(a).filter(|&a| a >= 0.0).ok_or_else(|| illegal("invalid mailbox cursor"))?,
@@ -196,9 +200,9 @@ impl Space {
 		if after >= b.next || after < b.acked || after > b.delivered {
 			return Err(illegal("mailbox cursor is ahead, undelivered or already acknowledged"));
 		}
-		let pending: Vec<Json> = b.events.iter().filter(|e| num_of(e, "seq").is_some_and(|s| s > after)).cloned().collect();
+		let pending = &b.events[b.events.partition_point(|e| num_of(e, "seq").is_none_or(|s| s <= after))..]; // by sequence
 		let gap = if asked.is_none() { b.gap.clone() } else { None };
-		let result = crate::space::byte_page(&pending, 0, cap, |events, next| {
+		let result = crate::space::byte_page(pending, 0, cap, |events, next| {
 			let last = events.last().and_then(|e| num_of(e, "seq")).unwrap_or(after);
 			let mut r = obj! { "mailboxEpoch" => b.epoch.as_str(), "events" => events, "next" => last, "more" => next.is_some() };
 			if let (Some(g), Json::Object(o)) = (&gap, &mut r) {
@@ -206,8 +210,8 @@ impl Space {
 			}
 			r
 		})?;
-		let next = num_of(&result, "next").unwrap_or(after);
-		if next > b.delivered {
+		let (next, delivered) = (num_of(&result, "next").unwrap_or(after), b.delivered);
+		if next > delivered {
 			self.mailbox(i).delivered = next;
 			self.touch(now);
 		}
@@ -219,7 +223,7 @@ impl Space {
 		self.assert_ported()?;
 		let p = principal.cloned().unwrap_or(Json::Null);
 		let i = self.mailbox_of(&p)?;
-		let b = self.mailbox(i).clone();
+		let b = self.mailbox_ref(i);
 		if epoch.and_then(Json::as_str) != Some(&b.epoch) {
 			return Err(error("MailboxEpochMismatch", "ACK refers to another mailbox epoch"));
 		}
@@ -233,6 +237,7 @@ impl Space {
 			let clock = self.clock;
 			self.touch(clock);
 			let id = principal_id(&p);
+			self.save_rest("jobs");
 			if let Some(Json::Array(jobs)) = self.state.rest.get_mut("jobs") {
 				for job in jobs.iter_mut() {
 					let cursor = num_of(job, "cursor").unwrap_or(0.0) as usize;

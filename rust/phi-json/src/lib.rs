@@ -64,12 +64,6 @@ impl Object {
 	}
 	/// The position of a key.
 	pub fn position(&self, key: &str) -> Option<usize> { self.0.iter().position(|(k, _)| k == key) }
-	/// Puts a key back where it was (an undo of `remove`: the place it had, not where JavaScript would add it).
-	pub fn insert_at(&mut self, at: usize, key: impl Into<String>, value: Json) {
-		let key = key.into();
-		self.remove(&key);
-		self.0.insert(at.min(self.0.len()), (key, value));
-	}
 	pub fn remove(&mut self, key: &str) -> Option<Json> {
 		let at = self.0.iter().position(|(k, _)| k == key)?;
 		Some(self.0.remove(at).1)
@@ -301,9 +295,17 @@ fn quote(s: &str, out: &mut String) {
 }
 
 /// Orders keys by their UTF-16 code units, as JavaScript's default sort does.
-fn utf16_cmp(a: &str, b: &str) -> std::cmp::Ordering { a.encode_utf16().cmp(b.encode_utf16()) }
+/// JavaScript's string order: by UTF-16 code units.
+pub fn utf16_cmp(a: &str, b: &str) -> std::cmp::Ordering { a.encode_utf16().cmp(b.encode_utf16()) }
+/// `Number.isSafeInteger`.
+pub fn safe_integer(n: f64) -> bool { n.trunc() == n && n.abs() <= FOREVER }
+/// The hex SHA-256 form: 64 lowercase hex digits.
+pub fn is_sha256_hex(h: &str) -> bool { h.len() == 64 && h.bytes().all(|b| matches!(b, b'a'..=b'f' | b'0'..=b'9')) }
 
 impl Json {
+	/// A key made of this value: `canonical`, and for a value without a canonical form (non-finite numbers, which validated
+	/// input does not hold) its JSON text, so that no caller has to end the process for it.
+	pub fn key_text(&self) -> String { self.canonical().unwrap_or_else(|_| self.to_json_text()) }
 	/// `JSON.stringify(v)`.
 	pub fn to_json_text(&self) -> String { let mut out = String::new(); self.write_text(&mut out); out }
 	fn write_text(&self, out: &mut String) {
@@ -359,9 +361,9 @@ impl Json {
 	pub fn get(&self, key: &str) -> Option<&Json> { self.as_object()?.get(key) }
 }
 
-/// Lowercase hex of bytes.
 /// The canonical text of a value as a comparison key; a non-finite number has none and equals nothing.
 pub fn canonical_key(v: &Json) -> Option<String> { v.canonical().ok() }
+/// Lowercase hex of bytes.
 pub fn hex(bytes: &[u8]) -> String { let mut s = String::with_capacity(bytes.len() * 2); for b in bytes { let _ = write!(s, "{b:02x}"); } s }
 
 /// `digestJson(v)` (src/canonical.ts): the hex SHA-256 of the canonical form.

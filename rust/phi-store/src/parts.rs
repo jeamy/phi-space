@@ -41,7 +41,6 @@ pub const SPACE_PARTS: &[PartDef] = &[
 /// One stored record of a part.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PartRow {
-	pub part: String,
 	pub id: String,
 	pub ord: i64,
 	pub value: Json,

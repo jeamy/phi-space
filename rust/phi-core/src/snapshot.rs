@@ -3,7 +3,7 @@
 //! beside the document (a host's memory, lost on a restart), bounded by `maxSnapshots`, `maxSnapshotBytes` and
 //! `snapshotTtlMs`.
 use crate::space::{byte_page, bytes, error, js_string, strict_eq, until, Result, Space, Template};
-use phi_json::{hex, number_text, obj, Json, FOREVER};
+use phi_json::{hex, number_text, obj, Json};
 
 #[derive(Clone, Debug)]
 struct Record {
@@ -28,7 +28,7 @@ pub struct Snapshots {
 
 fn illegal(m: &str) -> crate::space::CoreError { error("IllegalArgumentError", m) }
 /// `Number.isSafeInteger`.
-fn safe_integer(x: f64) -> bool { x.trunc() == x && x.abs() <= FOREVER }
+use phi_json::safe_integer;
 fn same_owner(a: &Option<Json>, b: Option<&Json>) -> bool {
 	match (a, b) {
 		(None, None) => true,

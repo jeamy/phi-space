@@ -34,6 +34,7 @@ impl Service {
 		self.commit_on(space, |s, now| {
 			let mut release = vec![];
 			let mut lost = 0;
+			s.save_rest("outbox");
 			if let Some(Json::Array(outbox)) = s.state.rest.get_mut("outbox") {
 				outbox.retain(|x| {
 					let gone = x.get("tries").and_then(Json::as_f64).unwrap_or(0.0) >= MAX_TRIES || dropped.contains(&key_of(x));

@@ -282,8 +282,8 @@ fn hook(service: &mut Service, open: usize, clock: &Cell<Option<f64>>, text: &st
 			Ok(h) => Ok(h.space.state.to_json_without_claims()),
 			Err(e) => Err(e.message),
 		},
-		Some(name) if name != "state" => return control_hook(service, name, &line),
-		other => Err(format!("no hook {other:?}")),
+		Some(name) => return control_hook(service, name, &line),
+		None => Err("no hook None".to_owned()),
 	};
 	match result {
 		Ok(v) => phi_json::obj! { "ok" => true, "result" => v }.to_json_text(),

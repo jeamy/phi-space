@@ -9,13 +9,12 @@ type Result<T> = std::result::Result<T, CoreError>;
 const MAX_RUN_GATES: usize = 256;
 const MAX_GATE_HISTORY: usize = 32;
 const GATE_COST: f64 = 1024.0;
-const SAFE: f64 = 9_007_199_254_740_991.0;
 
 fn conflict(m: impl Into<String>) -> CoreError { error("RunGateConflict", m) }
 fn exhausted(m: impl Into<String>) -> CoreError { error("ResourceExhausted", m) }
 fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 fn number(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(0.0) }
-fn safe(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| n.fract() == 0.0 && n.abs() <= SAFE) }
+fn safe(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| phi_json::safe_integer(*n)) }
 /// `/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/`
 fn valid_id(v: Option<&Json>) -> bool {
 	v.and_then(Json::as_str).is_some_and(|s| {

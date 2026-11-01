@@ -8,11 +8,10 @@ use std::rc::Rc;
 const DOMAIN: &str = "phi-spaces/grant/v1\n";
 const RESOLUTION: [&str; 7] = ["hello", "pollOperation", "resolveOperation", "cancelOperation", "txn", "lease", "rotationStatus"];
 const OWN_KEY: [&str; 4] = ["rotationChallenge", "rotationGeneration", "rotateKey", "rotationStatus"];
-const SAFE: f64 = 9_007_199_254_740_991.0;
 pub const MAX_TTL_MS: f64 = 60_000.0;
 
 fn strings(list: &[String]) -> Json { Json::Array(list.iter().cloned().map(Json::String).collect()) }
-fn safe(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| n.fract() == 0.0 && n.abs() <= SAFE) }
+fn safe(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| phi_json::safe_integer(*n)) }
 fn text_list(v: Option<&Json>) -> Option<Vec<&str>> { v?.as_array()?.iter().map(Json::as_str).collect() }
 
 /// `/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/`

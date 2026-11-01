@@ -85,12 +85,14 @@ pub struct Rotating {
 	host_id: String,
 	signer: Rc<Signer>,
 	verifier: GrantVerifier,
+	/// `allowAOnly` of the configured control host; elsewhere A-only rights are not ruled on.
+	pub allow_a_only: Option<bool>,
 }
 
 impl Rotating {
 	pub fn new(authority_id: &str, host_id: &str, signer: Signer, public_key: &str) -> Rotating {
 		let verifier = GrantVerifier { authority_id: authority_id.to_owned(), issuer_host_id: host_id.to_owned(), public_key: public_key.to_owned(), algorithm: signer.algorithm(), uncertainty_ms: 2000.0 };
-		Rotating { authority_id: authority_id.to_owned(), host_id: host_id.to_owned(), signer: Rc::new(signer), verifier }
+		Rotating { authority_id: authority_id.to_owned(), host_id: host_id.to_owned(), signer: Rc::new(signer), verifier, allow_a_only: None }
 	}
 
 	/// The `grant` call.
@@ -98,7 +100,7 @@ impl Rotating {
 		let a = call.get("args");
 		let purpose = a.and_then(|a| a.get("purpose")).and_then(Json::as_str).unwrap_or("effect");
 		let agent = a.and_then(|a| a.get("agentId")).and_then(Json::as_str);
-		GrantAuthority { authority_id: self.authority_id.clone(), host_id: self.host_id.clone(), signer: Rc::clone(&self.signer), keys, ttl_ms: MAX_TTL_MS, allow_a_only: None }.issue(id, proof, purpose, agent, now, id16)
+		GrantAuthority { authority_id: self.authority_id.clone(), host_id: self.host_id.clone(), signer: Rc::clone(&self.signer), keys, ttl_ms: MAX_TTL_MS, allow_a_only: self.allow_a_only }.issue(id, proof, purpose, agent, now, id16)
 	}
 
 	/// `proven`: a proof stands on the connection; `key_id`: its key, while that is active.

@@ -1,7 +1,7 @@
 // `--member CONFIG.json`: a federation Member, what `startConfiguredFederation` (src/configured-runtime.ts) makes of a config of
 // mode "member". What this host does not carry yet is refused at the start, never ignored: a root, primary/sync Spaces, entry
 // replication and recovery stay on TypeScript hosts (R6).
-use crate::fail;
+use crate::{fail, stopping};
 use phi_host::auth::{Algorithm, Proving, Signer};
 use phi_host::boot::{BootGuard, External};
 use phi_host::capability::Capabilities;
@@ -21,7 +21,6 @@ use phi_store::{system_random, SpaceHost, SqliteLedger, Store, Synchronous};
 use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
 use std::rc::Rc;
-use tokio::signal::unix::{signal, SignalKind};
 
 const REFUSED: [&str; 7] = ["root", "syncSpaces", "entryReplication", "recovery", "recoveryAdmin", "registerSshTarget", "registerReadSocket"];
 
@@ -71,7 +70,7 @@ pub fn run(config: &str, store: &str) {
 	let management = c.get("management").unwrap_or_else(|| fail("the config has no management"));
 	let token = String::from_utf8_lossy(&private_file(Path::new(field(management, "tokenFile"))).unwrap_or_else(|e| fail(e))).trim().to_owned();
 	let directory = Netbird::new(field(management, "url"), &token, None, Rc::clone(&now)).unwrap_or_else(|e| fail(e));
-	let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap_or_else(|e| fail(e));
+	let runtime = stopping::runtime();
 	let address = c.get("control").and_then(|x| x.get("address")).unwrap_or_else(|| fail("the config has no control address"));
 	let peers = tokio::task::LocalSet::new().block_on(&runtime, async {
 		guard.admit_at_start(&opened.spaces()).await?;
@@ -163,14 +162,7 @@ pub fn run(config: &str, store: &str) {
 	serving.endpoints.clear();
 	serving.gates.push((Listen::Tcp { host: host.clone(), port: listen_port }, gate));
 	let served = runtime.block_on(async {
-		let mut term = signal(SignalKind::terminate()).unwrap_or_else(|e| fail(e));
-		let mut int = signal(SignalKind::interrupt()).unwrap_or_else(|e| fail(e));
-		let stop = async move {
-			tokio::select! {
-				_ = term.recv() => {}
-				_ = int.recv() => {}
-			}
-		};
+		let stop = stopping::stop();
 		serve(service, serving, |address: Vec<String>| println!("[phi-spaces] member ready on {}", address[0]), stop).await
 	});
 	match served {

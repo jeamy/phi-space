@@ -103,8 +103,6 @@ pub struct Proof {
 	pub key_id: String,
 	pub principal: String,
 	pub roles: Vec<String>,
-	pub scope: Option<Vec<String>>,
-	pub at: f64,
 }
 
 /// Per-connection state; the gate owns it.
@@ -186,7 +184,7 @@ impl Proving {
 		let text = signed_text(value).ok_or("the signature does not match")?;
 		if !verify_detached(key.algorithm, &key.public_key, text.as_bytes(), signature) { return Err("the signature does not match"); }
 		if let Some(c) = &mut st.challenge { c.1 = true; }
-		Ok(Proof { key_id: key.key_id, principal: key.principal, roles: key.roles, scope: key.scope, at: now })
+		Ok(Proof { key_id: key.key_id, principal: key.principal, roles: key.roles })
 	}
 
 	/// The challenge of this connection as a new key must have signed it; used once. Enrollment asks this.

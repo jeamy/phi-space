@@ -35,7 +35,7 @@ fn conflict(m: impl Into<String>) -> RegisterError { RegisterError::Conflict(m.i
 fn failed(e: impl std::fmt::Display) -> RegisterError { RegisterError::Failed(e.to_string()) }
 
 fn integer(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| n.fract() == 0.0 && n.abs() <= SAFE) }
-fn digest(v: Option<&Json>) -> bool { v.and_then(Json::as_str).is_some_and(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))) }
+fn digest(v: Option<&Json>) -> bool { v.and_then(Json::as_str).is_some_and(phi_json::is_sha256_hex) }
 fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 
 fn barrier(v: &Json, space: &str) -> R<()> {

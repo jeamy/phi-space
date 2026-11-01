@@ -25,6 +25,7 @@ use tokio::time::{sleep, timeout, Instant};
 const HEADER: usize = 8;
 /// The longest a timer runs at once (`core.timerDelay`); what is further off is reached in steps.
 const MAX_TIMER_MS: f64 = 2_147_483_647.0;
+const ACCEPT_PAUSE_MS: u64 = 100;
 /// Answers of one connection waiting for the disk; a client that outruns a stalled disk by more is refused.
 const MAX_HELD_REPLIES: usize = 1024;
 const INTERNAL: &str = r#"{"ok":false,"error":{"code":"Internal","message":"internal error"}}"#;
@@ -40,7 +41,7 @@ impl Listen {
 		if let Some(rest) = spec.strip_prefix("tcp:") {
 			let wrong = || format!("a tcp address is tcp:host:port, not {spec}");
 			let (host, port) = rest.split_once(':').ok_or_else(wrong)?;
-			if host.is_empty() || host.contains(':') {
+			if host.is_empty() {
 				return Err(wrong());
 			}
 			return Ok(Listen::Tcp { host: host.to_owned(), port: port.parse().map_err(|_| wrong())? });
@@ -263,15 +264,23 @@ async fn serve_here(service: Service, mut o: ServeOptions, ready: impl FnOnce(Ve
 	}
 
 	let mut bound = vec![];
-	for e in &hub.o.endpoints {
-		bound.push((Bound::bind(&e.listen).await?, Who::Peer(e.peer.clone())));
+	let binding: io::Result<()> = async {
+		for e in &hub.o.endpoints {
+			bound.push((Bound::bind(&e.listen).await?, Who::Peer(e.peer.clone())));
+		}
+		for (listen, front) in &hub.o.gates {
+			bound.push((Bound::bind(listen).await?, Who::Gate(Rc::clone(front))));
+			spawn_local(Rc::clone(front).run(Owner(Rc::clone(&hub))));
+		}
+		if let Some(path) = hooks {
+			bound.push((Bound::bind(&Listen::Unix(path)).await?, Who::Hooks));
+		}
+		Ok(())
 	}
-	for (listen, front) in &hub.o.gates {
-		bound.push((Bound::bind(listen).await?, Who::Gate(Rc::clone(front))));
-		spawn_local(Rc::clone(front).run(Owner(Rc::clone(&hub))));
-	}
-	if let Some(path) = hooks {
-		bound.push((Bound::bind(&Listen::Unix(path)).await?, Who::Hooks));
+	.await;
+	if let Err(e) = binding {
+		bound.iter().for_each(|(b, _)| b.close());
+		return Err(e);
 	}
 	ready(bound.iter().map(|(b, _)| b.address()).collect());
 	let bound = Rc::new(bound);
@@ -281,22 +290,34 @@ async fn serve_here(service: Service, mut o: ServeOptions, ready: impl FnOnce(Ve
 		let (hub, bound) = (Rc::clone(&hub), Rc::clone(&bound));
 		accepting.spawn_local(async move { accepts(&hub, &bound[i].0, &bound[i].1).await });
 	}
-	tokio::select! {
-		_ = &mut stop => {}
-		Some(r) = accepting.join_next() => r.map_err(io::Error::other)??,
-	}
+	let ended = tokio::select! {
+		_ = &mut stop => Ok(()),
+		Some(r) = accepting.join_next() => r.map_err(io::Error::other).and_then(|r| r),
+	};
 	accepting.abort_all();
 	hub.stop.notify_waiters();
 	bound.iter().for_each(|(b, _)| b.close());
 	tokio::task::yield_now().await;
 	let _ = hub.service.borrow_mut().store.drain();
-	Ok(hub)
+	ended.map(|()| hub)
 }
 
-/// Connections of one listener, until accepting fails.
+/// What one accept can run into while the listener stands: out of descriptors or memory, a peer that went already.
+fn passing(e: &io::Error) -> bool {
+	const LINUX: [i32; 4] = [23, 24, 71, 105]; // ENFILE, EMFILE, EPROTO, ENOBUFS
+	matches!(e.kind(), io::ErrorKind::ConnectionAborted | io::ErrorKind::ConnectionReset | io::ErrorKind::Interrupted | io::ErrorKind::OutOfMemory) || e.raw_os_error().is_some_and(|c| LINUX.contains(&c))
+}
+
+/// Connections of one listener, until accepting fails for good. A passing failure pauses it: the queue is not lost, and
+/// without descriptors the next accept fails at once.
 async fn accepts(hub: &Rc<Hub>, bound: &Bound, who: &Who) -> io::Result<()> {
 	loop {
-		bound.accept(hub, who).await?;
+		if let Err(e) = bound.accept(hub, who).await {
+			if !passing(&e) {
+				return Err(e);
+			}
+			sleep(Duration::from_millis(ACCEPT_PAUSE_MS)).await;
+		}
 	}
 }
 
@@ -349,7 +370,7 @@ impl Bound {
 			}
 			Bound::Tcp(l, _) => {
 				let (socket, from): (TcpStream, _) = l.accept().await?;
-				socket.set_nodelay(true)?;
+				let _ = socket.set_nodelay(true); // Node does not end a server for it either
 				let (r, w) = socket.into_split();
 				connection(hub, who.clone(), Some(from.ip()), r, w);
 			}
@@ -628,5 +649,16 @@ async fn replies<W: AsyncWrite + Unpin>(hub: Rc<Hub>, link: Rc<Link>, mut write:
 			_ = link.ready.notified() => {}
 			_ = durable.changed() => {}
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn a_listener_outlives_what_one_accept_runs_into() {
+		for code in [23, 24, 71, 103, 104, 105, 12] { assert!(passing(&io::Error::from_raw_os_error(code)), "{code}"); }
+		for code in [9, 22, 88] { assert!(!passing(&io::Error::from_raw_os_error(code)), "{code}"); }
 	}
 }

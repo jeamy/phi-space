@@ -25,7 +25,7 @@ fn same(a: Option<&Json>, b: Option<&Json>) -> R<bool> { Ok(hash(a.unwrap_or(&Js
 fn signed_text(kind: &str, v: &Json) -> R<String> { Ok(format!("phi-spaces/membership-{kind}/v1\n{}", v.canonical().map_err(|_| routing("invalid membership signature"))?)) }
 
 /// `verifyMembership`.
-pub fn verify_membership(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
+fn verify_membership(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
 	let bad = || routing("invalid membership signature");
 	let (Some(value), Some(signature)) = (t.get("value"), text(t, "signature")) else { return Err(bad()) };
 	if text(t, "issuer") != Some(&pin.issuer) || text(t, "algorithm") != Some(algorithm_name(pin.algorithm)) || !verify_detached(pin.algorithm, &pin.public_key, signed_text(kind, value)?.as_bytes(), signature) {
@@ -431,5 +431,4 @@ impl MemberLifecycle {
 		Ok(Json::Object(out))
 	}
 
-	pub fn space_id(&self) -> &str { &self.space_id }
 }

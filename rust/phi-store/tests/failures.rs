@@ -6,7 +6,8 @@
 mod support;
 use phi_core::driver::seeded;
 use phi_json::{obj, Json, FOREVER};
-use phi_store::{Fault, SpaceHost, SqliteLedger, StoreError, WriterOptions};
+use phi_store::disk::SqliteClaims;
+use phi_store::{system_random, Fault, SpaceHost, SqliteLedger, Store, StoreError, WriterOptions};
 use std::collections::BTreeSet;
 use std::path::Path;
 use support::{commit_pair, dir, survivors, KIND};
@@ -116,4 +117,34 @@ fn a_request_whose_answer_was_lost_is_retried_without_a_second_effect() {
 	let tasks = again.space.state.entries.iter().filter(|e| e.type_ == "Task").count();
 	assert_eq!(tasks, 1, "one effect");
 	again.close();
+}
+
+#[test]
+fn one_failed_batch_stops_every_space_of_the_store() {
+	let d = dir("two-spaces");
+	let file = d.join("s.sqlite");
+	let o = WriterOptions { fault: Some((4, Fault::FailBeforeCommit)), ..WriterOptions::default() };
+	let mut store = Store::open(SpaceHost::sqlite(SqliteLedger::open_with(&file, o).unwrap()), system_random).unwrap();
+	store.commit(None, 1.0, |_| Ok(())).unwrap().unwrap();
+	store.drain().unwrap();
+	store.create_space("a", 1.0, system_random()).unwrap().unwrap();
+	store.drain().unwrap();
+	store.create_space("b", 1.0, system_random()).unwrap().unwrap();
+	store.drain().unwrap();
+	let at = store.commit(Some("a"), 2.0, |s| s.write(2.0, &obj! { "type" => "T", "fields" => obj! {} }, None, Some(&Json::Number(FOREVER)), None).map(|_| ())).unwrap().unwrap().seq;
+	assert!(matches!(store.reader(Some("a")).unwrap().durable(at), Err(StoreError::Failed(_))), "the batch failed");
+	assert!(matches!(store.commit(Some("b"), 3.0, |_| Ok(())), Err(StoreError::Failed(_))), "the other Space stops at it too");
+	assert!(store.reader(Some("b")).unwrap().compact_begin().is_none(), "no VACUUM on a failed store");
+}
+
+#[test]
+fn a_read_of_the_claims_that_fails_is_noted_and_does_not_end_the_process() {
+	use phi_core::ClaimSource;
+	let d = dir("claims-read");
+	std::fs::write(d.join("no-store"), b"x".repeat(8192)).unwrap();
+	let broken = SqliteClaims::open(&d.join("no-store"), "k", "k", "p").unwrap();
+	assert_eq!(broken.get("x"), None);
+	assert_eq!(broken.next_at(0.0), None);
+	assert!(broken.take_failure().is_some_and(|m| m.contains("reading the claims")));
+	assert!(broken.take_failure().is_none(), "once");
 }

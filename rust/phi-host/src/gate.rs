@@ -25,7 +25,6 @@ type Fetched = watch::Receiver<Option<Result<(), String>>>;
 #[derive(Clone, Debug)]
 pub struct PeerInfo {
 	pub id: String,
-	pub name: String,
 	pub ip: String,
 	pub groups: Vec<String>,
 }
@@ -97,7 +96,7 @@ impl Netbird {
 			let (Some(id), Some(ip)) = (p.get("id").and_then(Json::as_str), p.get("ip").and_then(Json::as_str)) else { continue };
 			let groups = p.get("groups").and_then(Json::as_array).map_or(vec![], |g| g.iter().filter_map(|g| g.get("name")?.as_str()).filter(|n| !n.is_empty()).map(str::to_owned).collect());
 			let ip = bare(ip).to_owned();
-			next.insert(ip.clone(), PeerInfo { id: id.to_owned(), name: p.get("name").and_then(Json::as_str).unwrap_or(id).to_owned(), ip, groups });
+			next.insert(ip.clone(), PeerInfo { id: id.to_owned(), ip, groups });
 		}
 		*self.by_ip.borrow_mut() = next;
 		self.fetched_at.set((self.now)());
@@ -175,7 +174,7 @@ pub fn default_group_roles() -> GroupRoles {
 	[("space-hosts", "member"), ("space-admin", "admin"), ("space-observer", "observer"), ("space-enroll", "unpaired")].map(|(g, r)| (g.to_owned(), vec![r.to_owned()])).into()
 }
 
-pub fn roles_of(groups: &[String], map: &GroupRoles) -> Vec<String> {
+fn roles_of(groups: &[String], map: &GroupRoles) -> Vec<String> {
 	groups.iter().filter_map(|g| map.get(g)).flatten().cloned().collect::<BTreeSet<_>>().into_iter().collect()
 }
 
@@ -331,6 +330,12 @@ impl Gate {
 		if self.busy.replace(true) {
 			return 0;
 		}
+		// also when the caller drops this future at an await: `finally` of the TS loop
+		struct Busy<'a>(&'a Cell<bool>);
+		impl Drop for Busy<'_> {
+			fn drop(&mut self) { self.0.set(false); }
+		}
+		let _busy = Busy(&self.busy);
 		if let Some(remote) = &self.o.remote_keys {
 			let held: Vec<(String, String)> = self.open.borrow().values().filter_map(|c| Some((c.session.peer_id.clone(), c.session.state.borrow().proof.as_ref()?.key_id.clone()))).collect();
 			remote.fetch(held).await;
@@ -354,7 +359,6 @@ impl Gate {
 				closed += 1;
 			}
 		}
-		self.busy.set(false);
 		closed
 	}
 
@@ -557,6 +561,12 @@ impl Session for GateSession {
 			let held = proof.as_ref().map(|p| p.key_id.clone()).zip(key.map(|k| k.roles));
 			return Some(host.handle(service, method, &call, &self.identity(), held.as_ref().map(|(k, r)| (k.as_str(), r.as_slice())), proven).to_json_text());
 		}
+		// the notices too: naming the control Space they are refused as every other call (ControlAccess)
+		if let Some(control) = &self.gate.o.control {
+			if let Some(denied) = control.check(service, &call, &self.identity()) {
+				return Some(denied.to_json_text());
+			}
+		}
 		if method == "epochNotice" {
 			if let Some(verifier) = &self.gate.o.delegation {
 				let space = call.get("space").and_then(Json::as_str).map(str::to_owned);
@@ -587,11 +597,6 @@ impl Session for GateSession {
 			let unpaired = self.roles.iter().any(|r| r == crate::control::UNPAIRED_ROLE);
 			let proven = self.state.borrow().proof.as_ref().map(|p| p.key_id.clone()).is_some_and(|k| keys.find(&mut service.store, &self.peer_id, &k).is_some_and(|k| k.active));
 			return Some(enrolling.handle(service, &call, &self.peer_id, (unpaired, proven), &mut self.state.borrow_mut(), now).to_json_text());
-		}
-		if let Some(control) = &self.gate.o.control {
-			if let Some(denied) = control.check(service, &call, &self.identity()) {
-				return Some(denied.to_json_text());
-			}
 		}
 		if method != "challenge" && method != "prove" {
 			return None;

@@ -699,3 +699,27 @@ fn a_chain_that_runs_in_a_circle() {
 	let last = lines.iter().take(5).map(|l| d.step(l)).last().unwrap();
 	assert_eq!(last.unwrap_err().message, "cyclic entry chain");
 }
+
+#[test]
+fn the_epoch_of_a_space_stands_behind_its_generations() {
+	let hash = "a".repeat(64);
+	let mut init = init(obj! {});
+	if let Json::Object(o) = &mut init { o.insert("primaryEpoch", 7.0.into()); }
+	let lines = vec![init, obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => obj! { "peerId" => "p" } }];
+	let mut driver = Driver::new();
+	for l in &lines { driver.step(l).unwrap(); }
+	let issued = driver.step(&obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => obj! { "peerId" => "p" }, "options" => obj! { "primaryEpoch" => 3.0 } }).unwrap();
+	let generation = issued.get("generation").cloned().unwrap();
+	let resolve = |epoch: f64| obj! { "op" => "resolveAdmission", "now" => 1000.0, "request" => obj! { "principal" => obj! { "peerId" => "p" }, "generation" => generation.clone(), "requestId" => "r" }, "method" => "write", "argumentHash" => hash.as_str(), "primaryEpoch" => epoch };
+	let mut all = lines;
+	all.push(obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => obj! { "peerId" => "p" }, "options" => obj! { "primaryEpoch" => 3.0 } });
+	all.push(resolve(3.0));
+	all.push(resolve(7.0));
+	compare(&all, "the epoch");
+}
+
+#[test]
+fn a_chain_budget_above_the_frame_is_the_frame() {
+	let chain = |max: Json| obj! { "op" => "readChain", "now" => 1000.0, "tmpl" => obj! { "type" => "Task" }, "o" => obj! { "head" => obj! { "type" => "Task" }, "maxBytes" => max } };
+	compare(&[init(obj! {}), write(4, 60_000.0, 1000.0), chain(1e16.into()), chain(1.5.into()), chain(0.0.into()), chain((-1.0).into()), chain("x".into())], "the chain budget");
+}

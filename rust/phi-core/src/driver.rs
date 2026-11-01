@@ -64,6 +64,9 @@ impl Driver {
 			};
 			s.space_id = text("spaceId")?;
 			s.incarnation = text("incarnation")?;
+			if let Some(e) = l.get("primaryEpoch") {
+				s.rest.insert("primaryEpoch", e.clone());
+			}
 			match l.get("limits") {
 				None | Some(Json::Null) => {}
 				Some(Json::Object(o)) => s.limits = Some(o.clone()),
@@ -82,14 +85,6 @@ impl Driver {
 		self.space.clock = now; // Date.now() in the TypeScript driver
 		self.space.begin_commit();
 		apply_line(&mut self.space, &mut self.snapshots, now, l)
-	}
-
-	/// The clock a line sets (its `now`, else the one before), as the driver keeps it.
-	pub fn clock_of(&mut self, l: &Json) -> f64 {
-		if let Some(now) = l.get("now").and_then(Json::as_f64) {
-			self.clock = now;
-		}
-		self.clock
 	}
 }
 

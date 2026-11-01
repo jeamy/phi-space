@@ -189,7 +189,6 @@ impl Entries {
 			}
 		}
 	}
-	pub fn as_slice(&self) -> &[EntryRec] { &self.items }
 }
 impl std::ops::Deref for Entries {
 	type Target = [EntryRec];
@@ -440,6 +439,8 @@ pub trait ClaimSource: Send + Sync {
 	fn first_ids(&self, limit: usize) -> Vec<String>;
 	/// Every key: reads the whole map (only what asks for all of it on purpose).
 	fn ids(&self) -> Vec<String>;
+	/// A read that failed since the last look: its answer was empty, so the commit that made it must not stand.
+	fn take_failure(&self) -> Option<String> { None }
 }
 
 /// The claims of a space: a map in memory, or a map part on the disk (store/disk-map.ts `DiskMap`). The core takes the
@@ -537,8 +538,6 @@ fn claim_group(v: &Json) -> String {
 		Some(other) => other.to_json_text(),
 	}
 }
-/// JavaScript's default string order (UTF-16 code units).
-fn js_order(a: &str, b: &str) -> std::cmp::Ordering { a.encode_utf16().cmp(b.encode_utf16()) }
 
 impl DiskClaims {
 	/// Over the rows of `source`: the open requests are held from the start.
@@ -556,6 +555,8 @@ impl DiskClaims {
 		}
 		d
 	}
+	/// `ClaimSource::take_failure`.
+	pub fn take_failure(&self) -> Option<String> { self.source.take_failure() }
 	fn held_at(&self, k: &str) -> Option<&Option<Json>> { self.held.iter().find(|(x, _, _)| x == k).map(|(_, v, _)| v) }
 	pub fn get(&self, k: &str) -> Option<Json> {
 		match self.held_at(k) {
@@ -622,7 +623,7 @@ impl DiskClaims {
 				out.push(k.clone());
 			}
 		}
-		out.sort_by(|a, b| js_order(a, b));
+		out.sort_by(|a, b| phi_json::utf16_cmp(a, b));
 		out.truncate(limit);
 		out
 	}

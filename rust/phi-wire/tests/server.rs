@@ -235,3 +235,16 @@ fn addresses() {
 	assert!(Listen::parse("tcp:a").is_err());
 	assert!(Listen::parse("unix:").is_err());
 }
+
+#[test]
+fn a_failed_second_bind_leaves_no_socket_file_of_the_first() {
+	let d = dir("second-bind");
+	let (first, second) = (d.join("first.sock"), d.join("second.sock"));
+	let _taken = UnixListener::bind(&second).unwrap();
+	let service = Service::new(Store::open(Ledger::Memory(MemoryLedger::default()), system_random).unwrap(), Options::single_peer("local"));
+	let mut o = ServeOptions::new(Listen::Unix(first.clone()), "local");
+	o.endpoints.push(phi_wire::Endpoint { listen: Listen::Unix(second), peer: Some("local".into()) });
+	let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+	assert!(runtime.block_on(serve(service, o, |_| (), std::future::pending())).is_err());
+	assert!(!first.exists());
+}

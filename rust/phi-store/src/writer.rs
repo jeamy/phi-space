@@ -68,6 +68,7 @@ pub struct Writer {
 	tx: Sender<Msg>,
 	thread: Option<JoinHandle<()>>,
 	waker: Arc<Mutex<Option<Waker>>>,
+	failure: Arc<Mutex<Option<String>>>,
 }
 
 /// Tests (crash tests): `PHI_SPACES_WRITER_PAUSE=<before-commit|after-commit>:<batch>:<file>` stops the writer at that
@@ -96,9 +97,13 @@ impl Writer {
 		let fault = o.fault;
 		let waker = Arc::new(Mutex::new(None));
 		let wakes = Arc::clone(&waker);
-		let thread = std::thread::Builder::new().name("phi-store-writer".into()).spawn(move || run(db, rx, fault, wakes)).map_err(|e| e.to_string())?;
-		Ok(Writer { tx, thread: Some(thread), waker })
+		let failure = Arc::new(Mutex::new(None));
+		let told = Arc::clone(&failure);
+		let thread = std::thread::Builder::new().name("phi-store-writer".into()).spawn(move || run(db, rx, fault, wakes, told)).map_err(|e| e.to_string())?;
+		Ok(Writer { tx, thread: Some(thread), waker, failure })
 	}
+	/// What failed the store: every document of it stops at this.
+	pub fn failure(&self) -> Option<String> { self.failure.lock().expect("the writer does not panic holding it").clone() }
 	pub fn set_waker(&self, waker: Waker) { *self.waker.lock().expect("the writer does not panic holding it") = Some(waker); }
 	/// Hands a commit's rows over; the receiver settles when they are durable.
 	pub fn write(&self, ops: Vec<WriteOp>) -> Durable {
@@ -127,7 +132,7 @@ impl Writer {
 	}
 }
 
-fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>, waker: Arc<Mutex<Option<Waker>>>) {
+fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>, waker: Arc<Mutex<Option<Waker>>>, failure: Arc<Mutex<Option<String>>>) {
 	let pause = pause_point();
 	let hold = |at: &str, batch: u64| {
 		if let Some((p, b, file)) = &pause {
@@ -197,6 +202,9 @@ fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>, waker: Ar
 					}
 				}
 			};
+			if failed.is_some() {
+				failure.lock().expect("no one panics holding it").clone_from(&failed);
+			}
 			for (_, done) in commits {
 				let _ = done.send(result.clone());
 			}
@@ -206,7 +214,10 @@ fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>, waker: Ar
 		}
 		match other {
 			Some(Msg::Compact(done)) => {
-				let _ = done.send(compact(&db));
+				let _ = done.send(match &failed {
+					Some(e) => Compaction { error: Some(e.clone()), ..Default::default() },
+					None => compact(&db),
+				});
 			}
 			Some(Msg::Close(done)) => {
 				drop(db);

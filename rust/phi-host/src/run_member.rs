@@ -30,7 +30,7 @@ pub fn algorithm_name(a: Algorithm) -> &'static str {
 fn signed_text(kind: &str, v: &Json) -> R<String> { Ok(format!("phi-spaces/run-gate-{kind}/v1\n{}", v.canonical().map_err(|_| denied(format!("invalid run gate {kind} signature")))?)) }
 
 /// `verifyRun`.
-pub fn verify_run(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
+fn verify_run(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
 	let bad = || denied(format!("invalid run gate {kind} signature"));
 	let (Some(value), Some(signature)) = (t.get("value"), text(t, "signature")) else { return Err(bad()) };
 	if text(t, "issuer") != Some(&pin.issuer) || text(t, "algorithm") != Some(algorithm_name(pin.algorithm)) || !verify_detached(pin.algorithm, &pin.public_key, signed_text(kind, value)?.as_bytes(), signature) {
@@ -40,7 +40,7 @@ pub fn verify_run(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
 }
 
 /// `signRun`.
-pub fn sign_run(kind: &str, value: Json, issuer: &str, signer: &Signer) -> R<Json> {
+fn sign_run(kind: &str, value: Json, issuer: &str, signer: &Signer) -> R<Json> {
 	let signature = to_base64(&signer.sign(signed_text(kind, &value)?.as_bytes()));
 	let mut o = Object::new();
 	o.insert("value", value);
@@ -95,7 +95,7 @@ impl RunGates {
 		if kind == "recover" {
 			let Some(recovery) = text(&q, "recoveryId") else { return Err(illegal("recover needs a recovery ID")) };
 			let expires = q.get("expiresAt").and_then(Json::as_f64).unwrap_or(f64::NAN);
-			if !(expires > service.now()) {
+			if expires.is_nan() || expires <= service.now() {
 				return Err(denied("this recovery instruction has expired"));
 			}
 			(self.assert_authority)(service)?;

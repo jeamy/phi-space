@@ -23,7 +23,7 @@ const REFUSED: &str = "enrollment refused";
 
 type R<T> = Result<T, CoreError>;
 
-pub fn hash_token(token: &str) -> String { hex(&Sha256::digest(token.as_bytes())) }
+fn hash_token(token: &str) -> String { hex(&Sha256::digest(token.as_bytes())) }
 pub fn key_fingerprint(public_key: &str) -> String { hex(&Sha256::digest(base64(public_key)))[..32].to_owned() }
 
 pub(crate) fn illegal(m: &str) -> CoreError { error("IllegalArgumentError", m) }
@@ -68,7 +68,7 @@ fn enroll_tmpl(hash: &str) -> Json { obj! { "type" => "Enroll", "fields" => obj!
 fn strings(list: &[String]) -> Json { Json::Array(list.iter().map(|s| s.as_str().into()).collect()) }
 
 fn check_hash(h: &str) -> R<()> {
-	if h.len() == 64 && h.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) { Ok(()) } else { Err(illegal("tokenHash must be the SHA-256 of the token in hex")) }
+	if phi_json::is_sha256_hex(h) { Ok(()) } else { Err(illegal("tokenHash must be the SHA-256 of the token in hex")) }
 }
 
 pub struct CreateEnroll {
@@ -95,7 +95,7 @@ fn new_enroll(now: f64, o: &CreateEnroll, bootstrap: bool) -> Json {
 }
 
 /// `createEnrollIn`: inside a commit on the control space; idempotent per hash.
-pub fn create_enroll_in(s: &mut Space, now: f64, o: &CreateEnroll) -> R<Json> {
+fn create_enroll_in(s: &mut Space, now: f64, o: &CreateEnroll) -> R<Json> {
 	validate(o)?;
 	if let Some(have) = listed(s, now, &enroll_tmpl(&o.token_hash))?.first() {
 		return Ok(fields(have));
@@ -142,7 +142,7 @@ pub fn bootstrap_enroll(service: &mut Service, now: f64, token_hash: &str, allow
 }
 
 /// Every active key of a peer becomes revoked; how many.
-pub fn revoke_peer_keys_in(s: &mut Space, now: f64, peer_id: &str) -> R<f64> {
+fn revoke_peer_keys_in(s: &mut Space, now: f64, peer_id: &str) -> R<f64> {
 	let mut n = 0.0;
 	for e in listed(s, now, &obj! { "type" => "PeerKey", "fields" => obj! { "peerId" => peer_id } })? {
 		if text(&fields(&e), "state") != "active" {
@@ -165,7 +165,7 @@ pub fn revoke_peer_key(service: &mut Service, now: f64, peer_id: &str, key_id: &
 	})
 }
 
-pub fn has_admin_key(s: &Space, now: f64, peer_id: &str) -> R<bool> {
+fn has_admin_key(s: &Space, now: f64, peer_id: &str) -> R<bool> {
 	Ok(listed(s, now, &obj! { "type" => "PeerKey", "fields" => obj! { "peerId" => peer_id } })?.iter().map(fields).any(|f| {
 		text(&f, "state") == "active" && f.get("roles").and_then(Json::as_array).is_some_and(|r| r.iter().any(|x| x.as_str() == Some("admin")))
 	}))

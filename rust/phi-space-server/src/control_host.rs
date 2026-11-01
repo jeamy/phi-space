@@ -1,6 +1,6 @@
 // `--control CONFIG.json`: a control host, what `startConfiguredFederation` makes of a config of mode "control". What this host does
 // not carry yet is refused at the start, never ignored: a root, replication and recovery (R6b).
-use crate::fail;
+use crate::{fail, stopping};
 use crate::member::{clock, field, register_client};
 use phi_host::auth::{Proving, Signer};
 use phi_host::boot::{BootGuard, External};
@@ -19,7 +19,6 @@ use phi_store::{system_random, SpaceHost, SqliteLedger, Store, Synchronous};
 use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
 use std::rc::Rc;
-use tokio::signal::unix::{signal, SignalKind};
 
 const REFUSED: [&str; 10] = ["root", "syncSpaces", "entryReplication", "recovery", "recoveryAdmin", "registerSshTarget", "registerReadSocket", "membership", "runGates", "spaceLifecycle"];
 
@@ -67,19 +66,17 @@ pub fn run(config: &str, store: &str) {
 	let directory = Netbird::new(field(management, "url"), &token, None, Rc::clone(&now)).unwrap_or_else(|e| fail(e));
 	let listen = c.get("listen").unwrap_or_else(|| fail("the config has no listen"));
 	let (listen_host, listen_port) = (field(listen, "host"), listen.get("port").and_then(Json::as_f64).unwrap_or(0.0) as u16);
-	let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap_or_else(|e| fail(e));
+	let runtime = stopping::runtime();
 	let own = tokio::task::LocalSet::new().block_on(&runtime, async {
 		guard.admit_at_start(&opened.spaces()).await?;
 		guard.refresh(vec![]).await;
 		guard.assert_active().map_err(|e| e.message)?;
-		// A-only rights after a recovery stay with a host that carries recovery
-		if client.get(&access).await.map_err(|e| e.to_string())?.get("value").is_some_and(|v| v.get("aOnlyAllowed") != Some(&Json::Bool(true))) {
-			return Err("an access policy of a recovery is not served by this host".to_owned());
-		}
+		let policy = client.get(&access).await.map_err(|e| e.to_string())?.get("value").cloned();
 		directory.refresh().await?;
-		directory.lookup(listen_host).await
+		Ok::<_, String>((directory.lookup(listen_host).await?, policy))
 	});
-	if own.unwrap_or_else(|e| fail(e)).is_none_or(|p| p.id != peer_id) {
+	let (own, access_policy) = own.unwrap_or_else(|e| fail(e));
+	if own.is_none_or(|p| p.id != peer_id) {
 		fail("listen address does not belong to the provisioned NetBird peer");
 	}
 
@@ -102,7 +99,12 @@ pub fn run(config: &str, store: &str) {
 	o.proving = Some((Proving::new(host_id), keys));
 	o.enrolling = Some(Enrolling::new(Box::new(|_| ())));
 	o.control = Some(Control { supervisor: Some(Supervisor { on_event: Box::new(|_| ()), routing: Some(Routing { control_space: control_space.to_owned(), authority_id: authority_id.to_owned(), state: Default::default() }) }) });
-	o.rotating = Some(Rotating::new(authority_id, host_id, signer, control_key));
+	let mut rotating = Rotating::new(authority_id, host_id, signer, control_key);
+	// configured-runtime's allowAOnly. A recovery writes the policy under the new authority before that authority runs,
+	// so what stood at the start stands while this host runs. Without a policy TS asks the control Space's restore; a Space
+	// under a restore does not open in this core at all.
+	rotating.allow_a_only = access_policy.map(|p| p.get("authorityId").and_then(Json::as_str) == Some(authority_id) && p.get("aOnlyAllowed") == Some(&Json::Bool(true)));
+	o.rotating = Some(rotating);
 	let capabilities = c.get("capabilities").filter(|k| !k.is_null());
 	let hosts = capabilities.and_then(|k| k.get("hostBindings")).and_then(Json::as_object).map_or_else(Default::default, |b| b.iter().filter_map(|(k, v)| Some((k.to_owned(), v.as_str()?.to_owned()))).collect());
 	o.control_host = Some(ControlHost { peer_id: peer_id.to_owned(), control_space: control_space.to_owned(), signer: key_of().0, public_key: control_key.to_owned(), grants, hosts, now: Rc::clone(&now) });
@@ -122,14 +124,7 @@ pub fn run(config: &str, store: &str) {
 	serving.endpoints.clear();
 	serving.gates.push((Listen::Tcp { host: listen_host.to_owned(), port: listen_port }, gate));
 	let served = runtime.block_on(async {
-		let mut term = signal(SignalKind::terminate()).unwrap_or_else(|e| fail(e));
-		let mut int = signal(SignalKind::interrupt()).unwrap_or_else(|e| fail(e));
-		let stop = async move {
-			tokio::select! {
-				_ = term.recv() => {}
-				_ = int.recv() => {}
-			}
-		};
+		let stop = stopping::stop();
 		serve(service, serving, |address: Vec<String>| println!("[phi-spaces] control ready on {}", address[0]), stop).await
 	});
 	match served {

@@ -130,7 +130,7 @@ impl SqliteLedger {
 				let (part, id, ord, v): (String, String, i64, String) = (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?);
 				let v = parse(&v).map_err(|e| StoreError::Unavailable(format!("a row of {kind}: {e}")))?;
 				ords.entry(part.clone()).or_default().insert(id.clone(), ord);
-				rows.entry(part.clone()).or_default().push(PartRow { part, id, ord, value: v });
+				rows.entry(part.clone()).or_default().push(PartRow { id, ord, value: v });
 			}
 			// a map part on the disk stays there: the caller puts a map over its rows in its place (SpaceHost)
 			for p in parts.iter().filter(|p| p.disk.is_some() && p.kind == PartKind::Map) {
@@ -215,6 +215,8 @@ impl SqliteLedger {
 	pub fn compact_begin(&self) -> Option<std::sync::mpsc::Receiver<Compaction>> { self.writer.as_ref().expect("open").compact() }
 	/// The owner is told when a batch is durable.
 	pub fn set_waker(&self, waker: Waker) { self.writer.as_ref().expect("open").set_waker(waker); }
+	/// What failed the store, whichever document it was a commit of.
+	pub fn failure(&self) -> Option<String> { self.writer.as_ref().and_then(Writer::failure) }
 	/// Hands a commit's rows to the writer; the receiver settles when they are durable.
 	pub fn persist(&mut self, ops: Vec<WriteOp>) -> Durable { self.writer.as_ref().expect("open").write(ops) }
 

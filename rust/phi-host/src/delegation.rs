@@ -21,7 +21,7 @@ fn denied(m: impl Into<String>) -> CoreError { error("PermissionError", m) }
 fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 fn number(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
 fn positive(v: Option<&Json>) -> bool { v.and_then(Json::as_f64).is_some_and(|n| n.fract() == 0.0 && n > 0.0 && n <= FOREVER) }
-fn safe(v: Option<&Json>) -> bool { v.and_then(Json::as_f64).is_some_and(|n| n.fract() == 0.0 && n.abs() <= FOREVER) }
+fn safe(v: Option<&Json>) -> bool { v.and_then(Json::as_f64).is_some_and(phi_json::safe_integer) }
 fn signed(kind: &str, v: &Json) -> R<String> { Ok(format!("phi-spaces/{kind}/v1\n{}", v.canonical().map_err(|_| denied("a value that cannot be signed"))?)) }
 fn arg_hash(method: &str, args: &Json) -> R<String> { digest_json(&obj! { "method" => method, "args" => args.clone() }).map_err(|_| denied("a value that cannot be hashed")) }
 fn same(a: Option<&Json>, b: Option<&Json>) -> bool { a.and_then(|x| x.canonical().ok()) == b.and_then(|x| x.canonical().ok()) }
@@ -233,7 +233,8 @@ impl DelegationVerifier {
 		}
 		let empty = obj! {};
 		let args = call.get("args").unwrap_or(&empty);
-		let (domain, domain_args) = rpc_domain(method, args.as_object().expect("an object"), principal);
+		let Some(fields) = args.as_object() else { return Err(denied("delegation request/hash mismatch")) };
+		let (domain, domain_args) = rpc_domain(method, fields, principal);
 		let request = call.get("request");
 		if text(d, "argumentHash") != Some(arg_hash(&domain, &domain_args)?.as_str()) || request.is_some_and(|r| r.get("requestId") != d.get("requestId") || r.get("generation") != d.get("requestGeneration")) {
 			return Err(denied("delegation request/hash mismatch"));

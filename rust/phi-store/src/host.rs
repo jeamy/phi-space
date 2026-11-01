@@ -5,7 +5,7 @@ use crate::files::{Result, StoreError};
 use crate::ledger::{MemoryLedger, Ords, SqliteLedger, StoredDoc};
 use crate::ops::WriteOp;
 use crate::writer::{Compaction, Durable};
-use crate::parts::{id_of, PartDef, SPACE_PARTS};
+use crate::parts::{id_of, SPACE_PARTS};
 use phi_core::space::{Changes, CoreError, Random, Space};
 use phi_core::state::{EntryUndo, SpaceState};
 use phi_core::{ClaimSource, Claims, DiskClaims};
@@ -43,7 +43,8 @@ pub struct SpaceHost {
 	/// The highest order of each array part, kept beside its orders as parts.ts does (it only grows, so an order is
 	/// never used twice while the document stays in memory).
 	max_ord: HashMap<String, i64>,
-	/// A write failed: the host takes no more work (its memory may hold what never reached the disk; reopen it).
+	/// A write of this store failed, of this document or another: the host takes no more work (its memory may hold what
+	/// never reached the disk; reopen it).
 	failure: Option<String>,
 	/// Commits handed to the store, and those durable (their numbers: `Committed::seq`).
 	handed: u64,
@@ -139,8 +140,15 @@ impl SpaceHost {
 		if let Some(Claims::Disk(d)) = self.space.state.rpc.as_mut().map(|r| &mut r.claims) {
 			d.stamp = stamp;
 		}
+		self.claim_failure(); // a look outside a commit answered for itself
 		self.space.begin_tracked_commit();
-		match op(&mut self.space) {
+		let done = op(&mut self.space);
+		// what a failed read of the claims decided is not to be kept: this call fails, as in TS
+		let done = match self.claim_failure() {
+			Some(m) => Err(phi_core::space::error("Error", m)),
+			None => done,
+		};
+		match done {
 			Err(e) => {
 				self.space.rollback();
 				self.also.clear();
@@ -157,9 +165,17 @@ impl SpaceHost {
 					self.fail(&e);
 					return Err(e);
 				}
-				self.pump()?;
+				// handed over: a failure from here on is the answer of `durable(seq)`
+				let _ = self.pump();
 				Ok(Ok(Committed { value, seq: self.handed }))
 			}
+		}
+	}
+
+	fn claim_failure(&self) -> Option<String> {
+		match self.space.state.rpc.as_ref().map(|r| &r.claims) {
+			Some(Claims::Disk(d)) => d.take_failure(),
+			_ => None,
 		}
 	}
 
@@ -220,6 +236,10 @@ impl SpaceHost {
 				w.lock().unwrap().pending = Some(self.durable);
 			}
 		}
+		let failed = failed.or_else(|| match &*self.ledger.borrow() {
+			Ledger::Sqlite(l) => l.failure(),
+			Ledger::Memory(_) => None,
+		});
 		if let Some(m) = failed {
 			let e = StoreError::Failed(m);
 			self.fail(&e);
@@ -254,6 +274,9 @@ impl SpaceHost {
 
 	/// `compact`, for a host that serves meanwhile: nothing in memory, and no waiting for the answer.
 	pub fn compact_begin(&self) -> Option<std::sync::mpsc::Receiver<Compaction>> {
+		if self.failure.is_some() {
+			return None;
+		}
 		match &*self.ledger.borrow() {
 			Ledger::Sqlite(l) => l.compact_begin(),
 			Ledger::Memory(_) => None,
@@ -393,6 +416,7 @@ impl SpaceHost {
 		for w in &self.watches {
 			w.lock().unwrap().closed = true;
 		}
+		drop(self.space); // its claims connection goes before the owner lock
 		// the last document of the store closes it
 		if let Ok(Ledger::Sqlite(l)) = Rc::try_unwrap(self.ledger).map(RefCell::into_inner) {
 			(*l).close();
@@ -400,7 +424,6 @@ impl SpaceHost {
 	}
 	/// Waits for everything handed over; the store's failure, if it failed.
 	pub fn drain(&mut self) -> Result<()> { self.durable(self.handed) }
-	pub fn parts() -> &'static [PartDef] { SPACE_PARTS }
 	#[doc(hidden)]
 	pub fn ords_of(&mut self) -> Option<Ords> {
 		match &mut *self.ledger.borrow_mut() {

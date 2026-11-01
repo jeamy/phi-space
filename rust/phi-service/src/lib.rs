@@ -1253,9 +1253,10 @@ impl Service {
 		if self.snap(c)?.state.space_id.is_none() {
 			self.commit_on(c.space.as_deref(), |_, _| Ok(()))?;
 		}
-		let key = c.space.clone();
 		self.snap_of(c.space.as_deref())?;
 		let host = self.store.reader(c.space.as_deref())?;
+		// by the Space, not by the name of this call: alias and id share their pages
+		let key = host.space.state.space_id.clone();
 		self.snapshots.entry(key).or_default().page(&mut host.space, now, &tmpl, &Json::Object(o), Some(&as_))
 	}
 

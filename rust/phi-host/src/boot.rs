@@ -68,7 +68,7 @@ fn check_barrier(record: &Json, id: &str, s: &Space, now: f64) -> R<()> {
 	}
 	let v = record.get("value").unwrap_or(&Json::Null);
 	let e = v.get("epoch").and_then(Json::as_f64).unwrap_or(0.0);
-	let hash = text(v, "commandHash").is_some_and(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)));
+	let hash = text(v, "commandHash").is_some_and(phi_json::is_sha256_hex);
 	if text(v, "spaceId") != Some(id) || e < 1.0 || e.fract() != 0.0 || text(v, "state") != Some("sealed") || !hash || epoch != e {
 		return Err(blocked("erasure barrier requires completed deletion at its current epoch"));
 	}

@@ -17,7 +17,7 @@ impl KeyDirectory for Keys {
 fn app_key(active: bool, roles: &[&str], scope: &[&str]) -> PeerKey {
 	PeerKey { peer_id: "worker".into(), key_id: "app".into(), principal: "w".into(), algorithm: Algorithm::Ed25519, public_key: public(1), scope: Some(scope.iter().map(|s| s.to_string()).collect()), roles: roles.iter().map(|r| r.to_string()).collect(), active }
 }
-fn proof() -> Proof { Proof { key_id: "app".into(), principal: "w".into(), roles: vec![], scope: None, at: 0.0 } }
+fn proof() -> Proof { Proof { key_id: "app".into(), principal: "w".into(), roles: vec![] } }
 fn authority(keys: &Keys, allow: Option<bool>) -> GrantAuthority<'_> {
 	GrantAuthority { authority_id: "authority".into(), host_id: "control".into(), signer: std::rc::Rc::new(signer(9)), keys, ttl_ms: 60_000.0, allow_a_only: allow }
 }

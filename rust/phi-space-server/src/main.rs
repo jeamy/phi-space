@@ -12,6 +12,7 @@ mod hooks;
 mod control_host;
 mod member;
 mod profiles;
+mod stopping;
 mod register;
 use register::register;
 
@@ -19,10 +20,8 @@ use phi_service::{Options, Service};
 use phi_store::{system_random, Ledger, MemoryLedger, SpaceHost, SqliteLedger, Store, Synchronous};
 use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
-use std::time::Duration;
-use tokio::signal::unix::{signal, SignalKind};
 
-const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode\n       phi-space-server --tls-register CONFIG.json\n       phi-space-server --store FILE --member CONFIG.json";
+const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode\n       phi-space-server --tls-register CONFIG.json\n       phi-space-server --store FILE --control CONFIG.json\n       phi-space-server --store FILE --member CONFIG.json";
 
 pub(crate) fn fail(message: impl std::fmt::Display) -> ! {
 	eprintln!("{message}");
@@ -69,21 +68,9 @@ fn main() {
 	}
 	service.store.drain().unwrap_or_else(|e| fail(e));
 
-	let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap_or_else(|e| fail(e));
+	let runtime = stopping::runtime();
 	let served = runtime.block_on(async {
-		let mut term = signal(SignalKind::terminate()).unwrap_or_else(|e| fail(e));
-		let mut int = signal(SignalKind::interrupt()).unwrap_or_else(|e| fail(e));
-		let stop = async move {
-			tokio::select! {
-				_ = term.recv() => {}
-				_ = int.recv() => {}
-			}
-			// what closing does not finish in this time is not waited for
-			std::thread::spawn(|| {
-				std::thread::sleep(Duration::from_secs(3));
-				std::process::exit(0);
-			});
-		};
+		let stop = stopping::stop();
 		let ready = |address: Vec<String>| println!("[phi-spaces] ready on {} (store {store})", address[0]);
 		serve(service, serving, ready, stop).await
 	});

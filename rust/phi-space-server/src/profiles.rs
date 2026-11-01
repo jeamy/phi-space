@@ -3,7 +3,7 @@
 // a Process entry whose lease is renewed, the store file given back. All of this is host code, which writes as nobody, so
 // it runs on the store's own thread, not through a call. One thread per store: a slow disk under one space holds back
 // no other.
-use crate::fail;
+use crate::{fail, stopping};
 use phi_json::{obj, Json, FOREVER};
 use phi_service::{Options, Service};
 use phi_store::{system_random, Compaction, Ledger, MemoryLedger, SpaceHost, SqliteLedger, Store, Synchronous};
@@ -12,8 +12,6 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc;
-use std::time::Duration;
-use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::watch;
 
 const MIB: f64 = 1024.0 * 1024.0;
@@ -28,6 +26,7 @@ struct Instance {
 	file: Option<PathBuf>,
 	peer: &'static str,
 	wake_on_commit: bool,
+	max_inflight: usize,
 	limits: Json,
 	/// Written once, when the store is new.
 	locks: Vec<&'static str>,
@@ -62,17 +61,17 @@ fn mmo() -> (Vec<Instance>, String) {
 		}
 		l
 	};
-	let compact_ms = std::env::var("SPACES_MMO_COMPACT_MS").map_or(600_000, |v| v.trim().parse().unwrap_or(0)); // empty: off, as Number("")
+	let compact_ms = std::env::var("SPACES_MMO_COMPACT_MS").map_or(600_000, |v| v.trim().parse::<f64>().ok().filter(|n| n.is_finite() && *n > 0.0).map_or(0, |n| n as u64)); // empty or no number: off, as Number()
 	let world_listen = env("SPACES_MMO_LISTEN").unwrap_or_else(|| "unix:/tmp/spaces-mmo-world.sock".to_owned());
 	let accounts_listen = env("SPACES_MMO_ACCOUNTS_LISTEN").unwrap_or_else(|| "unix:/tmp/spaces-mmo-accounts.sock".to_owned());
 	let (world, accounts) = (list.contains(&"world"), list.contains(&"accounts"));
 	let mut all = vec![];
 	if world {
 		let name = region.map_or_else(|| "world.sqlite".to_owned(), |r| format!("world-{r}.sqlite"));
-		all.push(Instance { listen: world_listen.clone(), file: data.as_ref().map(|d| d.join(name)), peer: "peer-mmo-world", wake_on_commit: true, limits: limits(), locks: vec!["world", "npc"], presence: Some("SPACES_MMO_HOST_NAME"), compact_ms });
+		all.push(Instance { listen: world_listen.clone(), file: data.as_ref().map(|d| d.join(name)), peer: "peer-mmo-world", wake_on_commit: true, max_inflight: 1024, limits: limits(), locks: vec!["world", "npc"], presence: Some("SPACES_MMO_HOST_NAME"), compact_ms });
 	}
 	if accounts {
-		all.push(Instance { listen: accounts_listen.clone(), file: data.as_ref().map(|d| d.join("accounts.sqlite")), peer: "peer-mmo-web", wake_on_commit: true, limits: limits(), locks: vec!["names"], presence: (!world).then_some("SPACES_MMO_HOST_NAME"), compact_ms });
+		all.push(Instance { listen: accounts_listen.clone(), file: data.as_ref().map(|d| d.join("accounts.sqlite")), peer: "peer-mmo-web", wake_on_commit: true, max_inflight: 1024, limits: limits(), locks: vec!["names"], presence: (!world).then_some("SPACES_MMO_HOST_NAME"), compact_ms });
 	}
 	let shown = |served: bool, l: &str| if served { l.to_owned() } else { "-".to_owned() };
 	let line = format!("[space] ready: world on {}, accounts on {} ({})", shown(world, &world_listen), shown(accounts, &accounts_listen), data.as_ref().map_or_else(|| "memory".to_owned(), |d| d.display().to_string()));
@@ -114,7 +113,7 @@ fn codemode() -> (Vec<Instance>, String) {
 	}
 	let listen = env("CODEMODE_LISTEN").unwrap_or_else(|| "unix:/tmp/codemode-space.sock".to_owned());
 	let line = format!("[space] ready on {listen} (db {})", file.as_ref().map_or_else(|| "memory".to_owned(), |f| f.display().to_string()));
-	(vec![Instance { listen, file, peer: "peer-codemode", wake_on_commit: false, limits, locks: vec![], presence: Some("CODEMODE_HOST_NAME"), compact_ms: 0 }], line)
+	(vec![Instance { listen, file, peer: "peer-codemode", wake_on_commit: false, max_inflight: 32, limits, locks: vec![], presence: Some("CODEMODE_HOST_NAME"), compact_ms: 0 }], line)
 }
 
 fn text_of(file: &str) -> String { std::fs::read_to_string(file).unwrap_or_default() }
@@ -126,7 +125,12 @@ fn host_facts(name_var: &str, now: f64) -> Json {
 	let model = info.lines().find(|l| l.starts_with("model name")).and_then(|l| l.split_once(':')).map(|(_, m)| m.split_whitespace().collect::<Vec<_>>().join(" "));
 	let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
 	let kib = text_of("/proc/meminfo").lines().find(|l| l.starts_with("MemTotal:")).and_then(|l| l.split_whitespace().nth(1)?.parse::<f64>().ok()).unwrap_or(0.0);
-	let arch = if std::env::consts::ARCH == "x86_64" { "x64" } else { std::env::consts::ARCH };
+	let arch = match std::env::consts::ARCH { // process.arch
+		"x86_64" => "x64",
+		"aarch64" => "arm64",
+		"x86" => "ia32",
+		other => other,
+	};
 	obj! { "name" => name, "cpu" => model.unwrap_or_else(|| "unknown CPU".to_owned()), "cores" => cores as f64, "memGiB" => (kib * 1024.0 / 2f64.powi(30) * 10.0).round() / 10.0, "platform" => format!("Linux {arch}"), "startedAt" => now }
 }
 
@@ -138,8 +142,7 @@ struct Presence {
 impl Presence {
 	fn new(name_var: &str, now: f64) -> Presence {
 		let mut fields = host_facts(name_var, now);
-		let mut id = vec![0; 6];
-		std::io::Read::read_exact(&mut std::fs::File::open("/dev/urandom").expect("the system has /dev/urandom"), &mut id).expect("/dev/urandom does not end");
+		let id = system_random()(6);
 		if let Json::Object(o) = &mut fields {
 			o.insert("procId", phi_json::hex(&id).into());
 			o.insert("role", "space".into());
@@ -225,6 +228,7 @@ fn run_instance(i: Instance, ready: mpsc::Sender<()>, mut stop: watch::Receiver<
 	let listen = Listen::parse(&i.listen).unwrap_or_else(|e| fail(e));
 	let mut serving = ServeOptions::new(listen, i.peer);
 	serving.watch_debounce_ms = WATCH_DEBOUNCE_MS;
+	serving.max_inflight_per_connection = i.max_inflight;
 	if let Some(p) = &presence {
 		let p = Rc::clone(p);
 		serving.periodic.push(Periodic { every_ms: PROCESS_BEAT_MS, run: Box::new(move |s| p.borrow_mut().beat(s)) });
@@ -275,10 +279,9 @@ pub fn run(profile: &str) {
 		})
 		.collect();
 	drop(ready);
-	let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap_or_else(|e| fail(e));
+	let runtime = stopping::runtime();
 	runtime.block_on(async {
-		let mut term = signal(SignalKind::terminate()).unwrap_or_else(|e| fail(e));
-		let mut int = signal(SignalKind::interrupt()).unwrap_or_else(|e| fail(e));
+		let stopped = stopping::signalled();
 		// the starter and the tests wait for this line
 		let announced = tokio::task::spawn_blocking(move || {
 			for _ in 0..count {
@@ -288,17 +291,10 @@ pub fn run(profile: &str) {
 			}
 			println!("{line}");
 		});
-		tokio::select! {
-			_ = term.recv() => {}
-			_ = int.recv() => {}
-		}
+		stopped.await;
 		drop(announced);
 	});
-	// what closing does not finish in this time is not waited for
-	std::thread::spawn(|| {
-		std::thread::sleep(Duration::from_secs(3));
-		std::process::exit(0);
-	});
+	stopping::limit_closing();
 	let _ = stop.send(true);
 	for t in threads {
 		let _ = t.join();

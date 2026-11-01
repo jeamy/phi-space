@@ -68,7 +68,7 @@ pub(crate) fn js_string(v: &Json) -> String {
 }
 pub(crate) fn bytes(v: &Json) -> f64 { v.json_bytes() as f64 }
 /// JavaScript's default string order (`Array.prototype.sort`): by UTF-16 code units.
-pub(crate) fn js_cmp(a: &str, b: &str) -> std::cmp::Ordering { a.encode_utf16().cmp(b.encode_utf16()) }
+pub(crate) use phi_json::utf16_cmp as js_cmp;
 /// `Number.isInteger`.
 fn is_integer(v: Option<&Json>) -> Option<f64> {
 	match v {
@@ -377,6 +377,9 @@ pub struct Space {
 }
 
 /// What a tracked commit changed in the parts of a space, and what undoes it.
+/// The parts of `rest` that can be large and that few commits change.
+const UNDONE_REST: [&str; 2] = ["outbox", "jobs"];
+
 #[derive(Debug)]
 pub(crate) struct Tracking {
 	/// The state as the commit found it, without its parts (entries, the stream log and the claims are undone from
@@ -392,6 +395,11 @@ pub(crate) struct Tracking {
 	claims: Vec<(String, Option<Json>)>,
 	claims_seen: std::collections::HashSet<String>,
 	generations: Vec<(String, Option<Json>)>,
+	/// How many mailboxes there were (`None`: no map yet), and each one as it was before the commit changed it.
+	boxes_at_begin: Option<usize>,
+	boxes: Vec<(usize, crate::state::Mailbox)>,
+	/// Each of `UNDONE_REST` as it was before the commit changed it.
+	rest: Vec<(&'static str, Option<Json>)>,
 }
 
 /// What a tracked commit changed, for the rows a store writes (`Space::end_commit`).
@@ -423,7 +431,17 @@ impl Space {
 		let log = self.state.stream.as_mut().map(|s| std::mem::take(&mut s.log));
 		let claims = self.state.rpc.as_mut().map(|r| std::mem::take(&mut r.claims));
 		let generations = self.state.rpc.as_mut().map(|r| std::mem::take(&mut r.generations));
+		// these keep their place in the head; `rollback` gets them from what a commit saved on its first change of them
+		let mailboxes = self.state.mailboxes.take();
+		let rest = UNDONE_REST.map(|k| self.state.rest.get_mut(k).map(|v| std::mem::replace(v, Json::Null)));
 		let head = self.state.clone();
+		for (k, v) in UNDONE_REST.iter().zip(rest) {
+			if let (Some(slot), Some(v)) = (self.state.rest.get_mut(k), v) {
+				*slot = v;
+			}
+		}
+		let boxes_at_begin = mailboxes.as_ref().map(Vec::len);
+		self.state.mailboxes = mailboxes;
 		if let (Some(r), Some(g)) = (self.state.rpc.as_mut(), generations) {
 			r.generations = g;
 		}
@@ -436,7 +454,7 @@ impl Space {
 		}
 		self.state.entries.track();
 		let stream_rev = stream::revision_of(&self.state.stream);
-		self.tracking = Some(Tracking { head, watermark, stream_rev, dropped: vec![], claims: vec![], claims_seen: Default::default(), generations: vec![] });
+		self.tracking = Some(Tracking { head, watermark, stream_rev, dropped: vec![], claims: vec![], claims_seen: Default::default(), generations: vec![], boxes_at_begin, boxes: vec![], rest: vec![] });
 	}
 	/// What the tracked commit changed; tracking ends.
 	pub fn end_commit(&mut self) -> Changes {
@@ -453,6 +471,20 @@ impl Space {
 		entries.undo(log);
 		let mut head = t.head;
 		head.entries = entries;
+		head.mailboxes = t.boxes_at_begin.and_then(|n| {
+			let mut boxes = self.state.mailboxes.take()?;
+			boxes.truncate(n);
+			for (i, b) in t.boxes.into_iter().rev().filter(|(i, _)| *i < n) {
+				boxes[i].1 = b;
+			}
+			Some(boxes)
+		});
+		for k in UNDONE_REST {
+			if let Some(slot) = head.rest.get_mut(k) {
+				let saved = t.rest.iter().find(|(s, _)| *s == k).and_then(|(_, v)| v.clone());
+				*slot = saved.or_else(|| self.state.rest.get(k).cloned()).unwrap_or(Json::Null);
+			}
+		}
 		if let Some(s) = head.stream.as_mut() {
 			// the batches the commit added go, the ones it dropped come back in front
 			let mut log = self.state.stream.take().map(|s| s.log).unwrap_or_default();
@@ -482,6 +514,21 @@ impl Space {
 		self.state = head;
 		self.open = None;
 		self.budget = None;
+	}
+
+	/// `key` of `UNDONE_REST` is about to change: a tracked commit saves it, once.
+	pub fn save_rest(&mut self, key: &'static str) {
+		let value = self.state.rest.get(key);
+		if let Some(t) = self.tracking.as_mut().filter(|t| t.rest.iter().all(|(k, _)| *k != key)) {
+			t.rest.push((key, value.cloned()));
+		}
+	}
+	/// Mailbox `i` is about to change: a tracked commit saves it, once.
+	pub(crate) fn save_box(&mut self, i: usize) {
+		let Some(b) = self.state.mailboxes.as_ref().and_then(|m| m.get(i)) else { return };
+		if let Some(t) = self.tracking.as_mut().filter(|t| t.boxes.iter().all(|(n, _)| *n != i)) {
+			t.boxes.push((i, b.1.clone()));
+		}
 	}
 
 	/// Sets or deletes a claim; a tracked commit records how it was.
@@ -646,6 +693,7 @@ impl Space {
 	/// An event joins the outbox: it and its JSON separator are counted at once.
 	fn push_outbox(&mut self, event: Json) {
 		self.state.outbox_bytes = Some(self.outbox_bytes() + bytes(&event) + 1.0);
+		self.save_rest("outbox");
 		if let Some(Json::Array(a)) = self.state.rest.get_mut("outbox") {
 			a.push(event);
 		}
@@ -660,7 +708,7 @@ impl Space {
 	fn regs_bytes(&self) -> f64 { bytes(&Json::Array(self.state.regs.iter().map(RegRec::to_json).collect())) }
 	fn reg_at(&self, id: &str) -> Option<usize> { self.state.regs.iter().position(|r| r.id == id) }
 	fn waiters_bytes(&self) -> f64 { bytes(&Json::Array(self.state.waiters.iter().map(WaiterRec::to_json).collect())) }
-	fn jobs(&self) -> Vec<Json> { self.state.rest.get("jobs").and_then(Json::as_array).cloned().unwrap_or_default() }
+	fn jobs(&self) -> &[Json] { self.state.rest.get("jobs").and_then(Json::as_array).map_or(&[], Vec::as_slice) }
 	fn jobs_bytes(&self) -> f64 { self.rest_bytes("jobs", 2.0) }
 	fn waiter_at(&self, id: &str) -> Option<usize> { self.state.waiters.iter().position(|w| w.id == id) }
 	fn drop_waiter(&mut self, id: &str) {
@@ -744,7 +792,7 @@ impl Space {
 
 	/// Whether a fanout job still holds an undelivered event for this consumer (or, without one, for this outbox target).
 	fn pending_fanout(&self, consumer: Option<&Json>, target: &Json) -> bool {
-		let key = consumer.map(|c| c.canonical().expect("finite")); // once, not per compared event
+		let key = consumer.map(Json::key_text); // once, not per compared event
 		self.jobs().iter().any(|j| {
 			let cursor = num_of(j, "cursor").unwrap_or(0.0) as usize;
 			j.get("events").and_then(Json::as_array).is_some_and(|ev| {
@@ -790,6 +838,7 @@ impl Space {
 			o.insert("consumer", c.clone());
 		}
 		let job = obj! { "id" => id, "at" => now, "cursor" => 0.0, "events" => Json::Array(vec![item]) };
+		self.save_rest("jobs");
 		match self.state.rest.get_mut("jobs") {
 			Some(Json::Array(a)) => a.push(job),
 			_ => self.state.rest.insert("jobs", Json::Array(vec![job])),
@@ -799,6 +848,10 @@ impl Space {
 	}
 	/// Resume fanout from the jobs' cursors into the outbox as it has room.
 	fn run_jobs(&mut self, now: f64) -> Result<()> {
+		if self.jobs().is_empty() {
+			return Ok(());
+		}
+		self.save_rest("jobs");
 		let Some(Json::Array(mut jobs)) = self.state.rest.get("jobs").cloned() else { return Ok(()) };
 		let lim = self.limits();
 		let (mut stopped, mut failed) = (false, None);
@@ -1606,7 +1659,7 @@ impl Space {
 			}
 		}
 		for j in self.jobs() {
-			min = min.min(num_of(&j, "retryAt").unwrap_or(0.0));
+			min = min.min(num_of(j, "retryAt").unwrap_or(0.0));
 		}
 		min = min.min(self.mailboxes_due());
 		if let Some(at) = self.claims_due() {
@@ -1749,7 +1802,7 @@ impl Space {
 			}
 			match consumer {
 				Some(c) => {
-					let key = c.canonical().expect("finite");
+					let key = c.key_text();
 					match groups.iter_mut().find(|g| g.0 == key) {
 						Some(g) => g.2.push(event),
 						None => groups.push((key, c.clone(), vec![event])),
@@ -2175,7 +2228,7 @@ impl Space {
 	/// cursor, nextField, limit, maxBytes.
 	pub fn read_chain(&self, now: f64, tmpl: &Json, o: &Json, owner: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
-		let safe = |v: Option<&Json>| is_integer(v).filter(|x| x.abs() <= 9_007_199_254_740_991.0);
+		let safe = |v: Option<&Json>| v.and_then(Json::as_f64).filter(|x| phi_json::safe_integer(*x));
 		let frame = self.limits().max_frame_bytes;
 		let limit = match o.get("limit").filter(|v| !v.is_null()) {
 			None => Some(100.0),
@@ -2184,10 +2237,10 @@ impl Space {
 		let limit = limit.filter(|l| (1.0..=512.0).contains(l)).ok_or_else(|| illegal("chain limit must be between 1 and 512"))?;
 		let cap = match o.get("maxBytes").filter(|v| !v.is_null()) {
 			None => Some(frame),
-			c => safe(c).map(|c| c.min(frame)),
+			c => c.and_then(Json::as_f64).map(|c| c.min(frame)), // clamped first: a budget above the frame is the frame
 		};
 		let field = o.get("nextField").filter(|v| !v.is_null()).map_or(Some("next"), Json::as_str).filter(|f| !f.is_empty() && js_len(f) <= 128.0);
-		let (Some(cap), Some(field)) = (cap.filter(|c| *c >= 1.0), field) else { return Err(illegal("invalid chain budget or pointer field")) };
+		let (Some(cap), Some(field)) = (cap.filter(|c| *c >= 1.0 && c.trunc() == *c), field) else { return Err(illegal("invalid chain budget or pointer field")) };
 		let cursor = match o.get("cursor") {
 			None => None,
 			Some(Json::String(c)) => Some(c.clone()),
@@ -2504,4 +2557,48 @@ fn check_json_size(what: &str, v: &Json, lim: &Limits) -> Result<()> {
 		return Err(limit(format!("{what} is {} bytes; the limit is {}", n(size), n(lim.max_entry_bytes))));
 	}
 	Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::driver::seeded;
+	use phi_json::obj;
+
+	#[test]
+	fn a_rollback_gives_back_what_the_head_leaves_out() {
+		let mut s = Space::new(SpaceState::initial(), seeded("undo"));
+		let (a, b) = (obj! { "peerId" => "a" }, obj! { "peerId" => "b" });
+		let first = s.mailbox_of(&a).unwrap();
+		s.mailbox(first).acked = 1.0;
+		s.push_outbox(1.0.into());
+		s.save_rest("jobs");
+		s.state.rest.insert("jobs", Json::Array(vec![obj! { "id" => "j", "cursor" => 0.0, "events" => Json::Array(vec![]) }]));
+		let before = s.state.to_json();
+		for change in 0..4 {
+			s.begin_tracked_commit();
+			match change {
+				0 => s.push_outbox(2.0.into()),
+				1 => s.mailbox(first).acked = 2.0,
+				2 => { s.mailbox_of(&b).unwrap(); }
+				_ => {
+					s.save_rest("jobs");
+					if let Some(Json::Array(jobs)) = s.state.rest.get_mut("jobs") { jobs.clear(); }
+				}
+			}
+			assert_ne!(s.state.to_json(), before, "change {change}");
+			s.rollback();
+			assert_eq!(s.state.to_json(), before, "change {change}");
+		}
+		s.begin_tracked_commit();
+		s.rollback();
+		assert_eq!(s.state.to_json(), before, "nothing changed");
+		let mut empty = Space::new(SpaceState::initial(), seeded("undo"));
+		let none = empty.state.to_json();
+		empty.begin_tracked_commit();
+		empty.mailbox_of(&a).unwrap();
+		empty.push_outbox(1.0.into());
+		empty.rollback();
+		assert_eq!(empty.state.to_json(), none, "a map the commit made goes with it");
+	}
 }

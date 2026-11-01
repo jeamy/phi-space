@@ -33,7 +33,7 @@ fn sign(key: &str, nonce: &str, rec: &Object) -> String {
 		bound.insert(k, v.clone());
 	}
 	let mut mac = Hmac::<Sha256>::new_from_slice(key.as_bytes()).expect("any key length");
-	mac.update(Json::Object(bound).canonical().expect("finite").as_bytes());
+	mac.update(Json::Object(bound).key_text().as_bytes());
 	format!("{nonce}.{}", hex(&mac.finalize().into_bytes()))
 }
 
@@ -86,7 +86,7 @@ impl Space {
 			r.generation.cloned().unwrap_or(Json::Null),
 			r.request_id.cloned().unwrap_or(Json::Null),
 		];
-		Json::Array(parts).canonical().expect("finite")
+		Json::Array(parts).key_text()
 	}
 	/// Something becomes due for sweeping at `at`: the next sweep must not skip it.
 	fn due_at(&mut self, at: f64) {
@@ -114,7 +114,7 @@ impl Space {
 		let lim = self.limits();
 		let admit_until = now + lim.generation_admit_ms;
 		let mut rec = Object::new();
-		rec.insert("primaryEpoch", options.get("primaryEpoch").filter(|v| !v.is_null()).cloned().unwrap_or(Json::Number(1.0)));
+		rec.insert("primaryEpoch", options.get("primaryEpoch").filter(|v| !v.is_null()).or_else(|| self.state.rest.get("primaryEpoch")).cloned().unwrap_or(Json::Number(1.0)));
 		rec.insert("principal", principal.cloned().expect("checked"));
 		rec.insert("incarnation", self.state.incarnation.as_deref().map_or(Json::Null, Json::from));
 		rec.insert("issuedAt", Json::Number(now));
@@ -360,8 +360,8 @@ impl Space {
 	pub fn resolve_admission(&self, now: f64, request: Option<&Json>, method: &Json, hash: &Json, epoch: &Json) -> Result<Json> {
 		self.assert_ported()?;
 		let r = RequestRef::of(request);
-		let hex64 = hash.as_str().is_some_and(|h| h.len() == 64 && h.bytes().all(|b| matches!(b, b'a'..=b'f' | b'0'..=b'9')));
-		let fine_epoch = epoch.as_f64().is_some_and(|e| (0.0..=9_007_199_254_740_991.0).contains(&e) && e.trunc() == e);
+		let hex64 = hash.as_str().is_some_and(phi_json::is_sha256_hex);
+		let fine_epoch = epoch.as_f64().is_some_and(|e| e >= 0.0 && phi_json::safe_integer(e));
 		let named = r.request_id.and_then(Json::as_str).is_some_and(|s| !s.is_empty()) && method.as_str().is_some_and(|m| !m.is_empty());
 		if !named || !hex64 || !fine_epoch {
 			return Err(type_error("invalid admission resolution binding"));
@@ -374,7 +374,7 @@ impl Space {
 			return self.lookup(now, request);
 		}
 		let generation = self.validate_generation(now, &r)?;
-		if generation.get("primaryEpoch") != Some(epoch) {
+		if generation.get("primaryEpoch") != Some(epoch) || self.state.rest.get("primaryEpoch").is_some_and(|e| e != epoch) {
 			return Err(error("IncarnationChanged", "missing request cannot be resolved across epochs or legacy generations"));
 		}
 		let of = |v: Option<&str>| v.map_or(Json::Null, Json::from);
