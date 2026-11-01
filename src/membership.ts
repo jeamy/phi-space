@@ -16,7 +16,7 @@ import {
     type SignedFederationPolicy,
     verifyFederationPolicy
 } from './federation-policy.ts';
-import {verifyDetached} from './grants.ts';
+import {signatureOf, signedBy} from './grants.ts';
 import {assertMemberWrite, permitRoutedWrite} from './member-admission.ts';
 import {
     type FederationMember,
@@ -64,14 +64,13 @@ export async function signMembership<T>(kind: 'instruction'|'proof', value: T, i
         value : copy(value),
         issuer,
         algorithm : signer.algorithm,
-        signature : Buffer.from(await signer.sign(bytes(kind, value))).toString('base64')
+        signature : await signatureOf(signer, bytes(kind, value))
     };
 }
 export function verifyMembership<T>(
     kind: 'instruction'|'proof', t: SignedMembership<T>,
     pin: {issuer: string; algorithm : Algorithm; publicKey : string}): T {
-    if (!t || t.issuer !== pin.issuer || t.algorithm !== pin.algorithm ||
-        !verifyDetached(pin.algorithm, pin.publicKey, bytes(kind, t.value), t.signature))
+    if (!signedBy(t, pin, bytes(kind, t?.value)))
         throw new RoutingConflict('invalid membership signature');
     return copy(t.value);
 }

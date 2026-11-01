@@ -4,7 +4,7 @@
 // the caller's fencing check, then checked for integrity. Public as compactErasedSqlite (erasure-sqlite.ts).
 import { lstatSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
-import { openFiles } from "./sqlite.ts";
+import { openFiles, releaseLock } from "./sqlite.ts";
 
 export async function compactErasedOwnStore(path: string, assertExclusiveFenced: () => Promise<void>): Promise<{ documents: number; revisionsRemoved: number; pagesBefore: number; pagesAfter: number; completed: true }> {
 	await assertExclusiveFenced();
@@ -26,7 +26,6 @@ export async function compactErasedOwnStore(path: string, assertExclusiveFenced:
 		return { documents: 0, revisionsRemoved: 0, pagesBefore, pagesAfter: pages(), completed: true };
 	} finally {
 		db.close();
-		try { lock.exec("ROLLBACK"); } catch { /* ends with the connection */ }
-		lock.close();
+		releaseLock(lock);
 	}
 }

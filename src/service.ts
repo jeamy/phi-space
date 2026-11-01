@@ -14,7 +14,7 @@ import { canonicalJson, digestJson } from "./canonical.ts";
 import type { Context } from "./context.ts";
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";
-import {rpcDomain} from "./rpc-domain.ts";
+import {batchStep, rpcDomain} from "./rpc-domain.ts";
 import { PhiSpaces, type BatchOp, type SpaceHost } from "./client.ts";
 import { listSpaces, snapshotSpace, spaceDoc, UnknownSpaceError, DEFAULT_ALIAS, Registry } from "./spaces.ts";
 import type { Principal, RequestRef } from "./claims.ts";
@@ -375,27 +375,26 @@ export class SpaceService {
 				// every step needs the right its own call would need (write, take, read, txn), with the same type checks
 				if (this.o.merge?.(c.space)) throw new Bad("batch is not offered on a space with merged entry types (each write is merged on its own)");
 				if (!Array.isArray(a.ops) || a.ops.length === 0 || a.ops.length > 64) throw new Bad("ops must be 1 to 64 steps");
-				const ops: BatchOp[] = a.ops.map((x) => {
+				// here the rights and the shape of each step; what it means for the space is batchStep's, which the claim is hashed by
+				for (const x of a.ops) {
 					if (!isObj(x) || typeof x.op !== "string") throw new Bad("a step is an object with an op");
 					const txn = x.txn === undefined || x.txn === null ? null : str(x.txn, "txn");
-					if (x.op === "begin") { this.allowed(c.id, "txn"); return { op: "begin", lease: duration(x.leaseMs, "leaseMs", core.ANY) }; }
-					if (x.op === "commit" || x.op === "abort") { this.allowed(c.id, "txn"); if (txn === null) throw new Bad(`${x.op} needs a txn`); return { op: x.op, txn }; }
-					if (x.op === "write") {
+					if (x.op === "begin") { this.allowed(c.id, "txn"); duration(x.leaseMs, "leaseMs", core.ANY); }
+					else if (x.op === "commit" || x.op === "abort") { this.allowed(c.id, "txn"); if (txn === null) throw new Bad(`${x.op} needs a txn`); }
+					else if (x.op === "write") {
 						const g = this.allowed(c.id, "write");
 						if (!isObj(x.entry) || !isObj(x.entry.fields)) throw new Bad("entry with fields is required");
 						const type = str(x.entry.type, "entry.type");
 						const types = x.entry.types === undefined ? undefined : (Array.isArray(x.entry.types) && x.entry.types.every((t) => typeof t === "string") ? (x.entry.types as string[]) : (() => { throw new Bad("entry.types must be strings"); })());
 						this.checkTypes(g, [type, ...(types ?? [])], `type ${type}`);
 						if (x.unique !== undefined && (!Array.isArray(x.unique) || !x.unique.every((k) => typeof k === "string"))) throw new Bad("unique must be field names");
-						return { op: "write", entry: { type, ...(types ? { types } : {}), fields: x.entry.fields }, txn, lease: duration(x.leaseMs, "leaseMs", core.ANY), ...(x.unique === undefined ? {} : { unique: x.unique as string[] }), ...(x.transient === true ? { transient: true } : {}) };
-					}
-					if (x.op === "take" || x.op === "read") {
+						duration(x.leaseMs, "leaseMs", core.ANY);
+					} else if (x.op === "take" || x.op === "read") {
 						const g = this.allowed(c.id, x.op), t = template(x.template);
 						if (g.types !== "*") this.checkTypes(g, t?.type ? [t.type] : undefined, "this template");
-						return { op: x.op, template: t, txn };
-					}
-					throw new Bad(`unknown batch step ${x.op}`);
-				});
+					} else throw new Bad(`unknown batch step ${x.op}`);
+				}
+				const ops = (a.ops as Array<Record<string, core.Json>>).map(batchStep) as unknown as BatchOp[];
 				return await client.batch(ops, { request }) as unknown as Json;
 			}
 			case "spaces": {

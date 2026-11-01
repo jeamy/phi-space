@@ -9,7 +9,7 @@ const duration = (v: Json|undefined, d: number): number => v === undefined   ? d
                                                            : v === "forever" ? FOREVER
                                                                              : v as number;
 /** One step as service.ts hands it to the client, which claims the steps as they are. */
-function batchStep(x: Record<string, Json>): Json {
+export function batchStep(x: Record<string, Json>): Json {
     const txn = x.txn ?? null;
     if (x.op === "begin") return {op : "begin", lease : duration(x.leaseMs, -1)};
     if (x.op === "commit" || x.op === "abort") return {op : x.op, txn};

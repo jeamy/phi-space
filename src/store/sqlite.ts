@@ -72,6 +72,9 @@ CREATE INDEX IF NOT EXISTS parts_open ON parts (kind, key, part) WHERE at IS NUL
 
 const docKey = (key: string | null) => key ?? "";
 
+/** Ends the owner lock: its transaction goes with the connection anyway. */
+export const releaseLock = (lock: DatabaseSync): void => { try { lock.exec("ROLLBACK"); } catch { /* ends with the connection */ } lock.close(); };
+
 class SqliteLedger implements Ledger {
 	readonly #read: DatabaseSync;
 	readonly #lock: DatabaseSync;
@@ -364,16 +367,14 @@ class SqliteLedger implements Ledger {
 		if (this.#failure) {
 			await this.#worker.terminate();
 			try { this.#read.close(); } catch { /* already closed */ }
-			try { this.#lock.exec("ROLLBACK"); } catch { /* the lock transaction ends with the connection */ }
-			try { this.#lock.close(); } catch { /* already closed */ }
+			try { releaseLock(this.#lock); } catch { /* already closed */ }
 			return;
 		}
 		this.#worker.ref(); // waiting for the writer to close keeps the process alive
 		await new Promise<void>((resolve) => { this.#closing = resolve; this.#worker.postMessage({ type: "close" } satisfies WriterRequest); });
 		await this.#worker.terminate();
 		this.#read.close();
-		try { this.#lock.exec("ROLLBACK"); } catch { /* the lock transaction ends with the connection */ }
-		this.#lock.close();
+		releaseLock(this.#lock);
 	}
 }
 

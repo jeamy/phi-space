@@ -10,7 +10,7 @@ import { claimPage } from "./claims.ts";
 import type { Algorithm, Signer } from "./auth.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
 import type { SpaceHost } from "./client.ts";
-import { verifyDetached } from "./grants.ts";
+import { signatureOf, signedBy } from "./grants.ts";
 import { CONTROL_SPACE } from "./enroll.ts";
 import { DEFAULT_ALIAS, Registry, createSpace, spaceDoc, type SpaceInfo } from "./spaces.ts";
 import * as core from "./core.ts";
@@ -98,10 +98,10 @@ export type LifecyclePin = { issuer: string; algorithm: Algorithm; publicKey: st
 export type SpaceLifecycleInstruction = SpaceLifecycleRequest & { authorityId: string; hostId: string };
 const bytes = (kind: "instruction" | "result", v: unknown) => Buffer.from(`phi-spaces/space-lifecycle-${kind}/v1\n` + canonicalJson(v as core.Json));
 export async function signLifecycle<T>(kind: "instruction" | "result", value: T, issuer: string, signer: Signer): Promise<SignedLifecycle<T>> {
-	return { value: core.plain(value), issuer, algorithm: signer.algorithm, signature: Buffer.from(await signer.sign(bytes(kind, value))).toString("base64") };
+	return { value: core.plain(value), issuer, algorithm: signer.algorithm, signature: await signatureOf(signer, bytes(kind, value)) };
 }
 export function verifyLifecycle<T>(kind: "instruction" | "result", t: SignedLifecycle<T>, pin: LifecyclePin): T {
-	if (!t || typeof t !== "object" || t.issuer !== pin.issuer || t.algorithm !== pin.algorithm || typeof t.signature !== "string" || !verifyDetached(pin.algorithm, pin.publicKey, bytes(kind, t.value), t.signature)) throw new core.PermissionError(`invalid Space lifecycle ${kind} signature`);
+	if (!signedBy(t, pin, bytes(kind, t?.value))) throw new core.PermissionError(`invalid Space lifecycle ${kind} signature`);
 	return core.plain(t.value);
 }
 

@@ -74,6 +74,8 @@ async function control(host: Host, ctx: Context, now: number): Promise<{ spaceId
 const fieldsOf = (e: { fields: core.Fields }): Record<string, Json> => e.fields as Record<string, Json>;
 const asEnroll = (e: { fields: core.Fields }): EnrollRec => fieldsOf(e) as unknown as EnrollRec;
 
+const openEnroll = (now: number, o: { tokenHash: string; allowedPeerId: string; ttlMs?: number }, role: string, scope: string[], bootstrap: boolean | undefined): EnrollRec =>
+	({ tokenHash: o.tokenHash, role, scope, allowedPeerId: o.allowedPeerId, expiresAt: now + Math.min(o.ttlMs ?? ENROLL_TTL_MS, ENROLL_TTL_MS), attempts: 0, bootstrap, state: "open" }) as EnrollRec;
 function putEnroll(s: core.SpaceState, now: number, rec: EnrollRec): void {
 	core.write(s, now, { type: "Enroll", fields: rec as unknown as core.Fields }, null, core.FOREVER);
 }
@@ -105,7 +107,7 @@ export function createEnrollIn(s: core.SpaceState, now: number, o: CreateEnrollO
 	validateCreateEnroll(o);
 	const have = findEnroll(s, now, o.tokenHash);
 	if (have) return core.plain(have);
-	const rec: EnrollRec = { tokenHash: o.tokenHash, role: o.role, scope: o.scope ?? [], allowedPeerId: o.allowedPeerId, expiresAt: now + Math.min(o.ttlMs ?? ENROLL_TTL_MS, ENROLL_TTL_MS), attempts: 0, bootstrap: false, state: "open" };
+	const rec = openEnroll(now, o, o.role, o.scope ?? [], false);
 	putEnroll(s, now, rec);
 	return rec;
 }
@@ -133,7 +135,7 @@ async function writeEnroll(host: Host, ctx: Context, o: CreateEnrollOptions & { 
 		const s = await spaceDoc(tx, info.spaceId, now);
 		const have = findEnroll(s, now, o.tokenHash);
 		if (have) return core.plain(have);
-		const rec: EnrollRec = { tokenHash: o.tokenHash, role: o.role, scope: o.scope ?? [], allowedPeerId: o.allowedPeerId, expiresAt: now + Math.min(o.ttlMs ?? ENROLL_TTL_MS, ENROLL_TTL_MS), attempts: 0, bootstrap: o.bootstrap, state: "open" };
+		const rec = openEnroll(now, o, o.role, o.scope ?? [], o.bootstrap);
 		putEnroll(s, now, rec);
 		return rec;
 	}, ctx);
@@ -159,7 +161,7 @@ export async function bootstrapEnroll(host: Host, ctx: Context, o: { tokenHash: 
 		}
 		const have = findEnroll(s, now, o.tokenHash);
 		if (have) return core.plain(have);
-		const rec: EnrollRec = { tokenHash: o.tokenHash, role: "admin", scope: ["*"], allowedPeerId: o.allowedPeerId, expiresAt: now + Math.min(o.ttlMs ?? ENROLL_TTL_MS, ENROLL_TTL_MS), attempts: 0, bootstrap: true, state: "open" };
+		const rec = openEnroll(now, o, "admin", ["*"], true);
 		putEnroll(s, now, rec);
 		return rec;
 	}, ctx);

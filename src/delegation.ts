@@ -9,7 +9,7 @@ import {canonicalJson} from "./canonical.ts";
 import {argHash, keyOf, resolveAdmission, validateGeneration, type ClaimRec, type Principal, type RequestRef} from "./claims.ts";
 import type {SpaceHost} from "./client.ts";
 import * as core from "./core.ts";
-import {GrantVerifier, type SignedGrant, verifyDetached} from "./grants.ts";
+import {GrantVerifier, signedBy, type SignedGrant, verifyDetached} from "./grants.ts";
 import {rpcDomain} from "./rpc-domain.ts";
 import type {Call, Connection, DecisionAuthorization, Identity} from "./service.ts";
 import {listSpaces, snapshotSpace, spaceDoc} from "./spaces.ts";
@@ -269,10 +269,7 @@ export class DelegationVerifier {
     }
     private supervisor(kind: string, v: unknown,
                        t: {issuer: string; algorithm : Algorithm; signature : string}) {
-        if (t.issuer !== this.o.supervisorPeerId ||
-            t.algorithm !== this.o.supervisorKey.algorithm ||
-            !verifyDetached(t.algorithm, this.o.supervisorKey.publicKey, bytes(kind, v),
-                            t.signature))
+        if (!signedBy(t, {...this.o.supervisorKey, issuer : this.o.supervisorPeerId}, bytes(kind, v)))
             throw new DelegationDenied("invalid supervisor signature");
     }
     async epochNotice(t: SignedEpochNotice, spaceId: string) {

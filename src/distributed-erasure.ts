@@ -2,6 +2,7 @@
 // The independent register and exact target bindings survive a coordinator restart.
 import {canonicalJson,digestJson} from './canonical.ts';
 import type {Principal} from './claims.ts';
+import {validPrincipal} from './mailbox.ts';
 import type {RecoveryRegister} from './recovery-register.ts';
 import type {TargetBinding} from './router.ts';
 import {ErasureArchiveController} from './erasure-archives.ts';
@@ -27,7 +28,7 @@ export class DistributedPrincipalErasure {
  private o:{register:RecoveryRegister;archives:ErasureArchiveController;driver:DistributedErasureDriver;authorize:()=>Promise<void>};
  constructor(o:DistributedPrincipalErasure['o']){this.o=o;}
  private validate(p:DistributedErasurePlan){
-  if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(p.id)||!p.principal||typeof p.principal.peerId!=='string'||!p.principal.peerId||p.principal.peerId.length>128||p.principal.agentId!==undefined&&(typeof p.principal.agentId!=='string'||!p.principal.agentId||p.principal.agentId.length>128)||Object.keys(p.principal).some(k=>!['peerId','agentId'].includes(k))||!Number.isSafeInteger(p.retentionMs)||p.retentionMs<0||p.retentionMs>86400000||!p.participants.length||p.participants.length>32||p.participants.filter(t=>t.root).length!==1||new Set(p.participants.map(t=>t.spaceId)).size!==p.participants.length)throw Error('invalid distributed erasure plan');
+  if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(p.id)||!validPrincipal(p.principal)||!Number.isSafeInteger(p.retentionMs)||p.retentionMs<0||p.retentionMs>86400000||!p.participants.length||p.participants.length>32||p.participants.filter(t=>t.root).length!==1||new Set(p.participants.map(t=>t.spaceId)).size!==p.participants.length)throw Error('invalid distributed erasure plan');
   for(const t of p.participants)if(['hostId','spaceId','authorityId','dataIncarnation'].some(k=>typeof(t as any)[k]!=='string'||!(t as any)[k]||(t as any)[k].length>128)||!Number.isSafeInteger(t.primaryEpoch)||t.primaryEpoch<1||t.root!==undefined&&typeof t.root!=='boolean'||t.authorityId!==p.participants[0]!.authorityId)throw Error('invalid pinned erasure target');
  }
  async advance(input:DistributedErasurePlan){

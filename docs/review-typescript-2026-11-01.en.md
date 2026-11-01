@@ -124,33 +124,33 @@ of section 9 in [rust-portierung.en.md](rust-portierung.en.md), security and fed
 
 ## 3. Duplicate code
 
-- **Signed envelopes.** Seven verifiers of the shape `{value,issuer,algorithm,signature}` plus pin: `verifyRun`,
+- teilweise (`signedBy`, `signatureOf` und `publicKeyObject` ersetzen die Prüfung in Run, Lifecycle, Workers, Membership und Delegation sowie das SPKI-Präfix; die Policy, der Router-Lease und die Replikations-Helfer sind offen): **Signed envelopes.** Seven verifiers of the shape `{value,issuer,algorithm,signature}` plus pin: `verifyRun`,
   `verifyLifecycle`, `verifyWorkers`, `verifyMembership`, `verifyFederationPolicy`, `DelegationVerifier.supervisor`, and
   `federation-controller.ts:60-63` with the router-lease domain inline. Eight matching sign helpers. Five more detached-signature
   helpers in replication: `replica-transport.ts:18-22`, `replica-notice.ts`, `control-host-change.ts`, `recovery.ts`,
   `recovery-service.ts`. The signature primitive itself twice: `auth.ts:288-307` and `grants.ts:74-76`, both with the SPKI
   prefix as a literal.
-- `rpc-domain.ts` mirrors `dispatch`'s argument mapping by hand (`service.ts:162` vs `rpc-domain.ts:328` `duration`), which
+- teilweise (`batch` hat mit `batchStep` eine einzige Abbildung, und ein Test verlangt für jede mutierende Methode einen Receipt, sodass Abweichungen auffallen; `write`, `read`, `txn` und `lease` bleiben von Hand): `rpc-domain.ts` mirrors `dispatch`'s argument mapping by hand (`service.ts:162` vs `rpc-domain.ts:328` `duration`), which
   is how the drift in section 1 happened. One table of "wire args → admission args" used by both.
 - Alias → document resolution three times (`client.ts:110-127`, `index.ts:178-191`, `spaces.ts:527-532`); `snap()` and
   `watch()` snapshot the Registry twice each. (erledigt: `findControlSpace`) "Find the control space id by alias" seven times (`enroll.ts:67,178,330`,
   `supervisor.ts:50,167`, `runtime.ts:183,186`).
-- Principal keying four ways: `canonicalPrincipal` (`client.ts:559`), `principalId` (`mailbox.ts:122`), `samePrincipal`
+- teilweise (`client.ts` nutzt `principalId`, die Formprüfung läuft in drei Dateien über `validPrincipal`; `samePrincipal`, die `canonicalJson(consumer)`-Stellen im Kern und die strengere Prüfung in `entry-replication.ts` bleiben, weil sie Extra-Felder oder Zeichen anders behandeln): Principal keying four ways: `canonicalPrincipal` (`client.ts:559`), `principalId` (`mailbox.ts:122`), `samePrincipal`
   (`claims.ts:73`), `canonicalJson(consumer)` in `core.ts:369,705`. Principal shape validation four times (`data-admin.ts:33`,
   `distributed-erasure.ts:30`, `root-erasure.ts:21`, `entry-replication.ts:130`).
 - erledigt: Role derivation: `gate.ts:94` `rolesOf` (dedupe, sort) vs inline `groups.flatMap(...)` in `configured-runtime.ts:348,424`
   and `configured-root.ts:544`, which neither dedupe nor sort.
-- `runtime.ts:119-151`: five copies of "authenticate + proof + keys.find + active + role check" with divergent role sets and
+- teilweise (`proven` und `isHost` ersetzen die Kopien; die abweichenden Rollenmengen und Fehlercodes bleiben absichtlich): `runtime.ts:119-151`: five copies of "authenticate + proof + keys.find + active + role check" with divergent role sets and
   error codes.
 - The placement rule three times: `member-admission.ts:62-76`, `membership.ts:451-463`, `routing-semantics.ts:289-301`;
   `membership.ts:433-448` and `:480-495` build the policy with stock rules twice verbatim.
 - `announce` and `write` repeat the type/fields/limits validation (`core.ts:625-635` vs `:648-658`); `service.ts:312-318`
   vs `:384-391` for `write` and the batch step. The `registrationClosed` literal four times; the miss/locked decision four
   times.
-- `EnrollRec` built three times (`enroll.ts:106,134,160`); revoke-a-PeerKey three times (`enroll.ts:116,190`,
+- teilweise (`openEnroll` und `signedChallenge` erledigt; Revoke-a-PeerKey bleibt, die drei Stellen schreiben verschieden): `EnrollRec` built three times (`enroll.ts:106,134,160`); revoke-a-PeerKey three times (`enroll.ts:116,190`,
   `rotation.ts:40`). `remote.ts:256-260` vs `:278-282` challenge fetch and signing copied between `authenticate()` and
   `enroll()`.
-- Store: `host.ts:261` re-implements `partAt` inline while it is imported at `:12`; the owner-lock release
+- teilweise (`releaseLock` erledigt, `partAt` und `isDiskMap` offen): Store: `host.ts:261` re-implements `partAt` inline while it is imported at `:12`; the owner-lock release
   (`ROLLBACK` + `close()`) four times (`sqlite.ts:366,374`, `sync-sqlite.ts:109`, `erasure-own.ts:29`);
   `disk-map.ts:161` `isDiskMap` equals `diskMapOf(v) !== undefined`.
 - Replication: boot-permit-matches-config in `replica-notice.ts:52` and `replica-control.ts:81`; the "install the external

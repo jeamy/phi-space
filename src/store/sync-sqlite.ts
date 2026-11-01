@@ -18,7 +18,7 @@ import { PrimarySyncBlocked, SyncJournalFull, durabilityOf, type PrimaryIntent, 
 import type { OwnStoreHost } from "./host.ts";
 import { OWN_CODEC, markerKey } from "./own-sync-codec.ts";
 import { applyOps, prepareOps, type WriteOp } from "./sqlite-ops.ts";
-import { hostOver, openFiles, type LedgerReplication, type SqliteStoreOptions, type StoreFaults, type StoreFiles } from "./sqlite.ts";
+import { hostOver, openFiles, releaseLock, type LedgerReplication, type SqliteStoreOptions, type StoreFaults, type StoreFiles } from "./sqlite.ts";
 import type { SyncMarker, SyncStore } from "./sync-store.ts";
 
 const canonical = (v: unknown) => canonicalJson(v as Json);
@@ -106,8 +106,7 @@ export class OwnSyncStore implements SyncStore<WriteOp> {
 		const { read, lock } = this.#files;
 		this.#files = null;
 		read.close();
-		try { lock.exec("ROLLBACK"); } catch { /* ends with the connection */ }
-		lock.close();
+		releaseLock(lock);
 	}
 }
 

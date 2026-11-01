@@ -6,7 +6,7 @@ import type { Context } from "./context.ts";
 import { canonicalJson } from "./canonical.ts";
 import type { Algorithm, Signer } from "./auth.ts";
 import type { SpaceHost } from "./client.ts";
-import { verifyDetached } from "./grants.ts";
+import { signatureOf, signedBy } from "./grants.ts";
 import { listSpaces, spaceDoc } from "./spaces.ts";
 import { localRunMember, type RunMember, type RunSpec } from "./run-controller.ts";
 import * as core from "./core.ts";
@@ -22,10 +22,10 @@ export type RunPreparer = (run: RunSpec, spaceId: string) => Promise<void>;
 
 const bytes = (kind: "instruction" | "ack", v: unknown) => Buffer.from(`phi-spaces/run-gate-${kind}/v1\n` + canonicalJson(v as core.Json));
 export async function signRun<T>(kind: "instruction" | "ack", value: T, issuer: string, signer: Signer): Promise<SignedRun<T>> {
-	return { value: core.plain(value), issuer, algorithm: signer.algorithm, signature: Buffer.from(await signer.sign(bytes(kind, value))).toString("base64") };
+	return { value: core.plain(value), issuer, algorithm: signer.algorithm, signature: await signatureOf(signer, bytes(kind, value)) };
 }
 export function verifyRun<T>(kind: "instruction" | "ack", t: SignedRun<T>, pin: RunPin): T {
-	if (!t || typeof t !== "object" || t.issuer !== pin.issuer || t.algorithm !== pin.algorithm || typeof t.signature !== "string" || !verifyDetached(pin.algorithm, pin.publicKey, bytes(kind, t.value), t.signature)) throw new core.PermissionError(`invalid run gate ${kind} signature`);
+	if (!signedBy(t, pin, bytes(kind, t?.value))) throw new core.PermissionError(`invalid run gate ${kind} signature`);
 	return core.plain(t.value);
 }
 

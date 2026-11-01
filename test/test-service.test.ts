@@ -117,6 +117,28 @@ test("a claim receipt comes for a transient write and for a batch: rpcDomain has
 	} finally { await h.close(ctx); }
 });
 
+test("every effect keeps its claim receipt: rpcDomain and dispatch cannot drift apart unnoticed", async () => {
+	const h = await memory();
+	try {
+		const c = await session(svc(h, { hostId: "host-1" }), "peer-admin");
+		const frame = { frame: { claimReceipt: true } }, receipt = async (method: Call["method"], args: Record<string, any>, id: string) => {
+			const r = await c.call(method, args, id, frame);
+			assert.ok(r.ok && r.claimReceipt, `${method}: ${JSON.stringify(r)}`);
+			return ok(r);
+		};
+		await receipt("write", { entry: { type: "Job", fields: { n: 1 } }, leaseMs: 60_000, unique: ["n"] }, "w");
+		await receipt("write", { entry: { type: "Job", fields: { n: 2 } }, leaseMs: "forever", transient: true }, "wt");
+		await receipt("read", { template: { type: "Job" }, ifExists: true }, "r");
+		const t = await receipt("txn", { action: "begin", leaseMs: 60_000 }, "tb");
+		await receipt("take", { template: { type: "Job" }, ifExists: true, txn: t.id }, "tk");
+		await receipt("txn", { action: "abort", id: t.id }, "ta");
+		const l = await receipt("write", { entry: { type: "Job", fields: { n: 3 } }, leaseMs: 60_000 }, "wl");
+		await receipt("lease", { action: "renew", id: l.id, ms: 60_000 }, "lr");
+		await receipt("lease", { action: "cancel", id: l.id }, "lc");
+		await receipt("batch", { ops: [{ op: "begin" }, { op: "write", entry: { type: "Job", types: ["Task"], fields: { n: 4 } }, leaseMs: "forever", unique: ["n"] }, { op: "take", template: { type: "Job", fields: { n: 1 } } }] }, "b");
+	} finally { await h.close(ctx); }
+});
+
 test("write, take and the lost answer: the same request returns the stored result, one effect", async (tc) => {
 	if (OTHER_SERVER) return tc.skip("a lost answer at the store: rust/phi-store/tests/failures.rs and crash.rs, a restart: test-standalone");
 	await forEachBackend(async (home) => {

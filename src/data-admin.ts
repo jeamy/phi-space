@@ -6,7 +6,7 @@ import type {SpaceHost} from './client.ts';
 import {claimPage,pendingClaims,setRestored,type ClaimRec,type Principal} from './claims.ts';
 import {diskMapOf} from './store/types.ts';
 import {canonicalJson,digestJson} from './canonical.ts';
-import {principalId} from './mailbox.ts';
+import {principalId,validPrincipal} from './mailbox.ts';
 import {spaceDoc} from './spaces.ts';
 import {seal as sealStream} from './stream.ts';
 import * as core from './core.ts';
@@ -31,7 +31,7 @@ function commandHash(id:string,kind:Audit['kind'],spaceId:string,admin:string,in
  return digestJson({kind,spaceId,admin,input} as any);
 }
 function validatePrincipal(p:Principal) {
- if(!p||typeof p.peerId!=='string'||!p.peerId||p.peerId.length>128||p.agentId!==undefined&&(typeof p.agentId!=='string'||!p.agentId||p.agentId.length>128)||Object.keys(p).some(k=>!['peerId','agentId'].includes(k)))throw new core.IllegalArgumentError('invalid deletion principal');
+ if(!validPrincipal(p))throw new core.IllegalArgumentError('invalid deletion principal');
 }
 function assertTuple(c:Command,s:core.SpaceState) {
  if(c.incarnation!==undefined&&(c.incarnation!==(s.incarnation??null)||c.authorityId!==(s.acceptedAuthorityId??s.membership?.authorityId??null)))throw new core.TransactionError('deletion incarnation or authority changed; restore review required');

@@ -2,7 +2,7 @@
 import type { StoreHost } from "./store/types.ts";
 import { defineDoc } from "./store/documents.ts";
 import type { Context } from "./context.ts";
-import type { Signer, Algorithm } from "./auth.ts";
+import { publicKeyObject, type Signer, type Algorithm } from "./auth.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { RegisterConflict } from "./recovery-register.ts";
 import { RecoveryBlocked, RecoveryCoordinator, verifyAuthorityTransition, type SignedAuthorityTransition } from "./recovery.ts";
@@ -68,7 +68,7 @@ export class ControlRecoveryController {
  }
  async authorizeKey(id:string,key:ReauthorizeKey){await this.quiesced();const job=await this.job(id);await this.authority(job);if(job.state!=="waiting"||![key.peerId,key.publicKey].every(v=>typeof v==="string"&&v.length>0&&v.length<=4096)||!["ed25519","ecdsa-p256"].includes(key.algorithm)||!Array.isArray(key.roles)||!key.roles.length||!key.roles.every(v=>["admin","host","member","observer"].includes(v))||!Array.isArray(key.scope)||!key.scope.length||!key.scope.every(v=>typeof v==="string"&&v.length>0&&v.length<=256))throw new RecoveryBlocked("invalid explicit key authorization or recovery stage");
   // Parsing and verification are shared with the live app-proof verifier; reject malformed public encodings.
-  const {createPublicKey}=await import("node:crypto");const raw=Buffer.from(key.publicKey,"base64"),publicKey=createPublicKey({key:key.algorithm==="ed25519"?Buffer.concat([Buffer.from("302a300506032b6570032100","hex"),raw]):raw,format:"der",type:"spki"});if(key.algorithm==="ecdsa-p256"&&(publicKey.asymmetricKeyType!=="ec"||publicKey.asymmetricKeyDetails?.namedCurve!=="prime256v1")||key.algorithm==="ed25519"&&publicKey.asymmetricKeyType!=="ed25519")throw new RecoveryBlocked("wrong authorized key algorithm");
+  const publicKey=publicKeyObject(key.algorithm,key.publicKey);if(key.algorithm==="ecdsa-p256"&&(publicKey.asymmetricKeyType!=="ec"||publicKey.asymmetricKeyDetails?.namedCurve!=="prime256v1")||key.algorithm==="ed25519"&&publicKey.asymmetricKeyType!=="ed25519")throw new RecoveryBlocked("wrong authorized key algorithm");
   const keyId=keyFingerprint(key.publicKey),record={...key,keyId,principal:`enrolled:${key.peerId}`,state:"active"};await this.o.host.commit(async tx=>{const s=await spaceDoc(tx,job.request.controlSpaceId,this.now()),known=core.list(s,this.now(),{type:"PeerKey",fields:{peerId:key.peerId,keyId}})[0];if(known){if(known.fields.state==="active"&&canonicalJson(known.fields)===canonicalJson(record as any))return;throw new RegisterConflict("old or conflicting key cannot be revived through recovery");}core.write(s,this.now(),{type:"PeerKey",fields:record},null,core.FOREVER);},this.o.ctx);return{keyId,peerId:key.peerId};
  }
  async status(id:string){return this.job(id);}

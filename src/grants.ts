@@ -1,7 +1,7 @@
 // Short-lived control-primary grants. Verification never trusts roles, scope or authority from a client presentation.
 import { randomBytes, verify } from "node:crypto";
 import { canonicalJson } from "./canonical.ts";
-import { type Signer, type KeyDirectory, type AuthState } from "./auth.ts";
+import { publicKeyObject, type Signer, type KeyDirectory, type AuthState } from "./auth.ts";
 import type { Principal } from "./claims.ts";
 import { DEFAULT_POLICY, type Policy, type IdentityAdapter, type Connection, type Call, type Identity, type DecisionAuthorization } from "./service.ts";
 import * as core from "./core.ts";
@@ -70,7 +70,11 @@ export class GrantVerifier {
 	}
 }
 // Detached signatures share the same accepted key formats as app proofs.
-import { createPublicKey } from "node:crypto";
+/** A signature in the form the envelopes carry. */
+export const signatureOf = async (signer: Signer, message: Uint8Array): Promise<string> => Buffer.from(await signer.sign(message)).toString("base64");
+/** Whether a signed envelope comes from the pinned issuer and `message` is what it signed. */
+export const signedBy = (t: { issuer?: unknown; algorithm?: unknown; signature?: unknown } | null | undefined, pin: { issuer: string; algorithm: Signer["algorithm"]; publicKey: string }, message: Uint8Array): boolean =>
+	!!t && typeof t === "object" && t.issuer === pin.issuer && t.algorithm === pin.algorithm && typeof t.signature === "string" && verifyDetached(pin.algorithm, pin.publicKey, message, t.signature);
 export function verifyDetached(algorithm: Signer["algorithm"], publicKey: string, message: Uint8Array, signature: string): boolean {
-	try { const raw = Buffer.from(publicKey, "base64"), key = createPublicKey({ key: algorithm === "ed25519" ? Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), raw]) : raw, format: "der", type: "spki" }); return verify(algorithm === "ed25519" ? null : "sha256", message, key, Buffer.from(signature, "base64")); } catch { return false; }
+	try { const key = publicKeyObject(algorithm, publicKey); return verify(algorithm === "ed25519" ? null : "sha256", message, key, Buffer.from(signature, "base64")); } catch { return false; }
 }

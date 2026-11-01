@@ -8,7 +8,7 @@ import { defineDoc } from "./store/documents.ts";
 import type { Algorithm, Signer } from "./auth.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
 import { PhiSpaces, type SpaceHost, type SpaceLike } from "./client.ts";
-import { verifyDetached } from "./grants.ts";
+import { signedBy } from "./grants.ts";
 import { listSpaces } from "./spaces.ts";
 import * as core from "./core.ts";
 
@@ -22,7 +22,7 @@ const MAX_COUNT = 64, MAX_PER_HOST = 32, MAX_ASSIGNMENTS = 1024, MAX_COMMANDS = 
 const bytes = (v: WorkerList) => Buffer.from("phi-spaces/worker-assignments/v1\n" + canonicalJson(v as unknown as core.Json));
 const hashOf = digestJson;
 export function verifyWorkers(t: SignedWorkers, pin: WorkerPin): WorkerList {
-	if (!t || typeof t !== "object" || t.issuer !== pin.issuer || t.algorithm !== pin.algorithm || typeof t.signature !== "string" || !verifyDetached(pin.algorithm, pin.publicKey, bytes(t.value), t.signature)) throw new core.PermissionError("invalid worker assignment signature");
+	if (!signedBy(t, pin, bytes(t?.value))) throw new core.PermissionError("invalid worker assignment signature");
 	return core.plain(t.value);
 }
 

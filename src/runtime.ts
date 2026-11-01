@@ -115,6 +115,9 @@ export async function startFederationHost(host: ClosableStoreHost, ctx: Context,
 			const inner = new RotationService(enrollment, { host: o.control.host, ctx, keys: o.keys, identity, verifier: o.verifier, now: o.now }), authority = o.control.authority;
 			chain = {
 				async handle(c, conn) {
+					// who stands behind a call: the identity, the key proof of the connection, and that key as it is now
+					const proven = async (conn: Parameters<typeof identity.authenticate>[0]) => { const id = await identity.authenticate(conn), proof = (conn.state as any)?.proof, key = proof && conn.peerId ? await o.keys.find(conn.peerId, proof.keyId) : null; return { id: id!, proof, key }; }; // isHost and the checks below refuse a missing id
+					const isHost = <K extends { state: string; roles: readonly string[] }>(id: any, proof: any, key: K | null | undefined): key is K => !!id && !!proof && !!key && key.state === "active" && key.roles.includes("host") && id.roles.includes("host");
 					if ((c as any)?.method === "keyLookup") {
 						const id = await identity.authenticate(conn), state = conn.state as import("./auth.ts").AuthState | undefined;
 						const key = state?.proof && conn.peerId ? await o.keys.find(conn.peerId, state.proof.keyId) : undefined;
@@ -125,30 +128,30 @@ export async function startFederationHost(host: ClosableStoreHost, ctx: Context,
 					}
                     if((c as any)?.method==="workerAssignments") {
                      // Only the own share, for the host proven on this connection; the request carries no host.
-                     try{const id=await identity.authenticate(conn),proof=(conn.state as any)?.proof,key=proof&&conn.peerId?await o.keys.find(conn.peerId,proof.keyId):null;
-                      if(!id||!proof||!key||key.state!=="active"||!key.roles.includes("host")||!id.roles.includes("host")||!o.control!.workers)throw Error("worker assignments require a currently proven host");
+                     try{const {id,proof,key}=await proven(conn);
+                      if(!isHost(id,proof,key)||!o.control!.workers)throw Error("worker assignments require a currently proven host");
                       const list=await o.control!.workers.forHost(id.principal.peerId);const current=await o.keys.find(id.principal.peerId,proof.keyId);if(!current||current.state!=="active"||!current.roles.includes("host"))throw Error("host key no longer authorized");return{ok:true,result:list as any};
                      }catch(e){return{ok:false,error:{code:"PermissionDenied",message:e instanceof Error?e.message:String(e)}};}
                     }
                     if((c as any)?.method==="replicaNotice") {
                      // v3 5.3.1 step 5: a proven primary host leaves its own signed notice for the router to adopt.
-                     try{const id=await identity.authenticate(conn),proof=(conn.state as any)?.proof,key=proof&&conn.peerId?await o.keys.find(conn.peerId,proof.keyId):null;
-                      if(!id||!proof||!key||key.state!=="active"||!key.roles.includes("host")||!id.roles.includes("host")||!o.control!.replicaNotices)throw Error("replica notices require a currently proven host");
+                     try{const {id,proof,key}=await proven(conn);
+                      if(!isHost(id,proof,key)||!o.control!.replicaNotices)throw Error("replica notices require a currently proven host");
                       const auth=o.verifier.check((c as any).frame?.grant,id,{method:"write",space:"control"},conn);auth.check();
                       if(!auth.roles.includes("host"))throw Error("notice grant does not authorize host publication");
                       const r=await o.control!.replicaNotices.publish((c as any).args?.notice,{peerId:id.principal.peerId,roles:auth.roles,key:{algorithm:key.algorithm,publicKey:key.publicKey},check:async()=>{auth.check();const current=await o.keys.find(id.principal.peerId,proof.keyId);if(!current||current.state!=="active"||!current.roles.includes("host"))throw Error("host key no longer authorized");}});return{ok:true,result:r as any};
                      }catch(e){return{ok:false,error:{code:"PermissionDenied",message:e instanceof Error?e.message:String(e)}};}
                     }
                     if((c as any)?.method==="capabilityHeartbeat") {
-                     try{const id=await identity.authenticate(conn),proof=(conn.state as any)?.proof,key=proof&&conn.peerId?await o.keys.find(conn.peerId,proof.keyId):null;
-                      if(!id||!proof||!key||key.state!=="active"||!key.roles.includes("host")||!id.roles.includes("host")||!o.control!.directory)throw Error("capability requires a currently proven host");
+                     try{const {id,proof,key}=await proven(conn);
+                      if(!isHost(id,proof,key)||!o.control!.directory)throw Error("capability requires a currently proven host");
                       const auth=o.verifier.check((c as any).frame?.grant,id,{method:"write",space:"control"},conn);auth.check();
                       if(!auth.roles.includes("host"))throw Error("capability grant does not authorize host publication");
                       const lease=await o.control!.directory.heartbeat((c as any).args?.report,{peerId:id.principal.peerId,roles:auth.roles,check:async()=>{auth.check();const current=await o.keys.find(id.principal.peerId,proof.keyId);if(!current||current.state!=="active"||!current.roles.includes("host"))throw Error("host key no longer authorized");}});return{ok:true,result:lease as any};
                      }catch(e){return{ok:false,error:{code:(conn.state as any)?.proof?"PermissionDenied":"ProofRequired",message:e instanceof Error?e.message:String(e)}};}
                     }
 					if((c as any)?.method==="routingPolicy") {
-					 try{const id=await identity.authenticate(conn),proof=(conn.state as any)?.proof,key=proof&&conn.peerId?await o.keys.find(conn.peerId,proof.keyId):null;if(!key||key.state!=="active"||!id?.roles.some(r=>["host","router","admin"].includes(r))||!o.control!.routing)throw new Error("policy requires proven service peer");o.verifier.check((c as any).frame?.grant,id,{method:"hello",space:"control"},conn).check();return{ok:true,result:await o.control!.routing.signed() as any};}catch(e){return{ok:false,error:{code:(conn.state as any)?.proof?"PermissionDenied":"ProofRequired",message:e instanceof Error?e.message:String(e)}};}
+					 try{const {id,proof,key}=await proven(conn);if(!key||key.state!=="active"||!id?.roles.some(r=>["host","router","admin"].includes(r))||!o.control!.routing)throw new Error("policy requires proven service peer");o.verifier.check((c as any).frame?.grant,id,{method:"hello",space:"control"},conn).check();return{ok:true,result:await o.control!.routing.signed() as any};}catch(e){return{ok:false,error:{code:(conn.state as any)?.proof?"PermissionDenied":"ProofRequired",message:e instanceof Error?e.message:String(e)}};}
 					}
 
 					if((c as any)?.method==="routerLease") {

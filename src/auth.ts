@@ -51,7 +51,7 @@ export class MemoryKeyDirectory implements KeyDirectory {
 // ---- cryptography
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
-const publicKeyObject = (algorithm: Algorithm, publicKey: string): KeyObject => {
+export const publicKeyObject = (algorithm: Algorithm, publicKey: string): KeyObject => {
 	const raw = Buffer.from(publicKey, "base64");
 	if (algorithm === "ed25519") {
 		if (raw.length !== 32) throw new Error("an Ed25519 public key is 32 bytes");

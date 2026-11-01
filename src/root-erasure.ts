@@ -3,6 +3,7 @@ import type {Context} from './context.ts';
 import {canonicalJson,digestJson} from './canonical.ts';
 import type {SpaceHost} from './client.ts';
 import type {Principal} from './claims.ts';
+import {validPrincipal} from './mailbox.ts';
 import {FederationJournalLayout,parentJournalKey} from './federation-journals.ts';
 import {FederationOperations} from './federated-space.ts';
 import {RouterCommands,RouterJournal} from './router.ts';
@@ -18,7 +19,7 @@ export class RootHistoryErasure {
  constructor(o:RootHistoryErasure['o']){this.o=o;}
  private async check(){await this.o.authorize();await this.o.assertExclusiveFenced();}
  async start(id:string,principal:Principal){
-  if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(id)||['constructor','prototype','__proto__'].includes(id)||!principal||typeof principal.peerId!=='string'||!principal.peerId||principal.peerId.length>128||principal.agentId!==undefined&&(typeof principal.agentId!=='string'||!principal.agentId||principal.agentId.length>128)||Object.keys(principal).some(k=>!['peerId','agentId'].includes(k)))throw new RoutingConflict('invalid Root erasure identity');
+  if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(id)||['constructor','prototype','__proto__'].includes(id)||!validPrincipal(principal))throw new RoutingConflict('invalid Root erasure identity');
   await this.check();return this.o.host.commit(async tx=>{
    await this.check();const ledger=await tx.doc(RootErasures,this.o.federationId,null),h=hash([id,principal]),old=ledger.operations[id];if(old){if(old.hash!==h)throw new RoutingConflict('Root erasure ID changed principal');return copy(old);}
    if(Object.values(ledger.operations).some(o=>o.phase!=='completed')||Object.keys(ledger.operations).length>=32)throw new RoutingConflict('Root erasure already active or history full');

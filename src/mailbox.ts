@@ -12,6 +12,11 @@ export type MailboxPage = { mailboxEpoch: string; events: MailItem[]; next: numb
 export class MailboxEpochMismatch extends Error {}
 export class InvalidAck extends Error {}
 export const principalId = (p: Principal): string => canonicalJson([p.peerId, p.agentId ?? null]);
+/** The shape administrative operations accept: a peer of at most 128 characters, an agent likewise, nothing else. */
+export const validPrincipal = (p: Principal | null | undefined): boolean => {
+	const part = (v: unknown) => typeof v === "string" && v !== "" && v.length <= 128;
+	return !!p && part(p.peerId) && (p.agentId === undefined || part(p.agentId)) && Object.keys(p).every((k) => k === "peerId" || k === "agentId");
+};
 const epoch = () => `mb${randomBytes(16).toString("hex")}`;
 
 function box(s: core.SpaceState, p: Principal): Mailbox {

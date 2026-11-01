@@ -252,14 +252,19 @@ export class RemoteSpace implements SpaceLike {
 		const signer = this.o.signer;
 		if (!signer) return Promise.reject(new UnsupportedOperation("this RemoteSpace has no signer"));
 		this.proving ??= orderedProof(this.t, async () => {
-			const ch = (await this.send({ method: "challenge" as Call["method"], args: { protocol: AUTH_PROTOCOL } })) as unknown as Challenge & { expiresAt?: number };
-			if (ch.gateHostId !== this.o.expectedGateHostId) throw new RemoteError("AuthorityMismatch", `the challenge comes from host ${ch.gateHostId}, not from ${this.o.expectedGateHostId}`);
-			if (ch.observedPeerId !== this.o.ownPeerId) throw new RemoteError("AuthorityMismatch", `the host saw peer ${ch.observedPeerId} on this connection, not ${this.o.ownPeerId}: a challenge for another peer is not signed`);
-			const { expiresAt: _expires, ...challenge } = ch;
-			const signature = Buffer.from(await signer.sign(signedBytes(challenge))).toString("base64");
+			const { challenge, signature } = await this.signedChallenge(signer);
 			return this.send({ method: "prove" as Call["method"], args: { keyId: signer.keyId, signature, challenge: challenge as unknown as Json } });
 		}).finally(() => { this.proving = undefined; });
 		return this.proving as Promise<{ keyId: string; principal: string; roles: string[] }>;
+	}
+
+	/** The host's challenge, checked to come from the expected host and to name this peer, and its signature. */
+	private async signedChallenge(signer: NonNullable<RemoteOptions["signer"]>) {
+		const ch = (await this.send({ method: "challenge" as Call["method"], args: { protocol: AUTH_PROTOCOL } })) as unknown as Challenge & { expiresAt?: number };
+		if (ch.gateHostId !== this.o.expectedGateHostId) throw new RemoteError("AuthorityMismatch", `the challenge comes from host ${ch.gateHostId}, not from ${this.o.expectedGateHostId}`);
+		if (ch.observedPeerId !== this.o.ownPeerId) throw new RemoteError("AuthorityMismatch", `the host saw peer ${ch.observedPeerId} on this connection, not ${this.o.ownPeerId}: a challenge for another peer is not signed`);
+		const { expiresAt: _expires, ...challenge } = ch;
+		return { challenge, signature: Buffer.from(await signer.sign(signedBytes(challenge))).toString("base64") };
 	}
 
 	/**
@@ -274,11 +279,7 @@ export class RemoteSpace implements SpaceLike {
 		if (!prepared?.request) await this.info();
 		this.enrollRequest ??= prepared?.request ?? { generation: await this.generation(), requestId: this.o.newRequestId() };
 		await prepared?.beforeSend?.(this.enrollRequest);
-		const ch = (await this.send({ method: "challenge" as Call["method"], args: { protocol: AUTH_PROTOCOL } })) as unknown as Challenge & { expiresAt?: number };
-		if (ch.gateHostId !== this.o.expectedGateHostId) throw new RemoteError("AuthorityMismatch", `the challenge comes from host ${ch.gateHostId}, not from ${this.o.expectedGateHostId}`);
-		if (ch.observedPeerId !== this.o.ownPeerId) throw new RemoteError("AuthorityMismatch", `the host saw peer ${ch.observedPeerId} on this connection, not ${this.o.ownPeerId}`);
-		const { expiresAt: _expires, ...challenge } = ch;
-		const signature = Buffer.from(await signer.sign(signedBytes(challenge))).toString("base64");
+		const { challenge, signature } = await this.signedChallenge(signer);
 		const request = this.enrollRequest;
 		return (await this.send({ method: "enroll" as Call["method"], request, args: { token, algorithm: signer.algorithm, publicKey: signer.publicKey, signature, challenge: challenge as unknown as Json } } as Call, () => new OutcomeUnknown(request, "the transport kept failing"))) as { keyId: string; role: string; peerId: string; scope?: string[] };
 	}

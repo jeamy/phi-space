@@ -15,7 +15,7 @@ import type { ClaimView, Principal, RequestRef } from "./claims.ts";
 import { meter as defaultMeter, type Meter } from "./meter.ts";
 import type { EntryDraft, Fields, Json, Lease, Template } from "./core.ts";
 import { snapshotPage, type SnapshotPageOptions } from "./snapshot.ts";
-import { mailboxPage, ackMailbox, type MailboxPage } from "./mailbox.ts";
+import { mailboxPage, ackMailbox, principalId, type MailboxPage } from "./mailbox.ts";
 
 export { NO_WAIT, ANY, FOREVER, DEFAULT_LIMITS, IllegalArgumentError, LimitError, PermissionError, ResourceExhausted, TransactionError, UnknownLeaseError, SnapshotExpired, RevisionAhead, UniqueConflict } from "./core.ts";
 export type { EntryDraft, Fields, Json, Lease, Limits, Template } from "./core.ts";
@@ -246,12 +246,12 @@ export class PhiSpaces implements SpaceLike {
  }
  /** v3 6.2 after a promotion: the durable negative claim for an unknown request of an earlier epoch (claims.decideNotCommitted). */
  async resolveNotCommitted(target:RequestRef,method:string,argumentHash:string,requestEpoch:number,primaryEpoch:number,proofHash:string):Promise<claims.ClaimView>{
-  if(this.options.consumer&&canonicalPrincipal(target.principal)!==canonicalPrincipal(this.options.consumer))throw new core.PermissionError('another principal request');
+  if(this.options.consumer&&principalId(target.principal)!==principalId(this.options.consumer))throw new core.PermissionError('another principal request');
   return this.host.commit(async tx=>{const s=await this.doc(tx);this.options.authorization?.check();return core.plain(claims.decideNotCommitted(s,this.now(),target,method,argumentHash,requestEpoch,primaryEpoch,proofHash) as unknown as Json) as unknown as claims.ClaimView;},this.ctx);
  }
  /** Resolve the SAME original claim and capture its space binding in one guarded storage commit. */
  async resolveOperationRecord(target:RequestRef,method:string,argumentHash:string,primaryEpoch:number){
-  if(this.options.consumer&&canonicalPrincipal(target.principal)!==canonicalPrincipal(this.options.consumer))throw new core.PermissionError('another principal request');
+  if(this.options.consumer&&principalId(target.principal)!==principalId(this.options.consumer))throw new core.PermissionError('another principal request');
   const record=await this.host.commit(async tx=>{const s=await this.doc(tx);this.options.authorization?.check();return core.plain({
    binding:{spaceId:s.spaceId??null,authorityId:this.options.authorityId??'local',dataIncarnation:s.incarnation??null,primaryEpoch:s.primaryEpoch??primaryEpoch,principal:target.principal,generation:target.generation,requestId:target.requestId,method,argumentHash},
    resolution:claims.resolveAdmission(s,this.now(),target,method,argumentHash,primaryEpoch)
@@ -305,15 +305,15 @@ export class PhiSpaces implements SpaceLike {
 		return (await this.mutate("wait", w as unknown as Json, o.request, (s, now) => core.addWaiter(s, now, { ...w, ...(o.request?{originRequestKey:claims.keyOf(s,o.request)}:{}), ...(this.as === undefined ? {} : { as: this.as }), consumer: this.options.consumer, ...(this.options.authorization ? { authorizedUntil: this.options.authorization.validUntil } : {}) }))).value;
 	}
 	async events(principal: Principal, o: { mailboxEpoch?: string; after?: number; maxBytes?: number } = {}, validate?: (page: MailboxPage) => void): Promise<MailboxPage> {
-		if (this.options.consumer && canonicalPrincipal(principal) !== canonicalPrincipal(this.options.consumer)) throw new core.PermissionError("another consumer's mailbox");
+		if (this.options.consumer && principalId(principal) !== principalId(this.options.consumer)) throw new core.PermissionError("another consumer's mailbox");
 		await this.maintain();
 		return this.host.commit(async tx => { const s = await this.doc(tx); this.options.authorization?.check();
 			const authorization = this.options.authorization;
-			if (authorization) for (const w of s.waiters) if ((authorization.renewalWaiterId === undefined || authorization.renewalWaiterId === w.id) && w.consumer && canonicalPrincipal(w.consumer) === canonicalPrincipal(principal) && authorization.canExecutePending(w.take ? "take" : "read", w.template)) { w.authorizedUntil = authorization.validUntil; core.touch(s, this.now()); }
+			if (authorization) for (const w of s.waiters) if ((authorization.renewalWaiterId === undefined || authorization.renewalWaiterId === w.id) && w.consumer && principalId(w.consumer) === principalId(principal) && authorization.canExecutePending(w.take ? "take" : "read", w.template)) { w.authorizedUntil = authorization.validUntil; core.touch(s, this.now()); }
 			core.settle(s, this.now()); const p = mailboxPage(s, principal, this.now(), o); validate?.(p); return p; }, this.ctx);
 	}
 	async ack(principal: Principal, mailboxEpoch: string, upTo: number, o: Req = {}): Promise<{ mailboxEpoch: string; acked: number }> {
-		if (this.options.consumer && canonicalPrincipal(principal) !== canonicalPrincipal(this.options.consumer)) throw new core.PermissionError("another consumer's mailbox");
+		if (this.options.consumer && principalId(principal) !== principalId(this.options.consumer)) throw new core.PermissionError("another consumer's mailbox");
 		return (await this.mutate("ack", { mailboxEpoch, upTo, principal } as unknown as Json, o.request, s => ackMailbox(s, principal, mailboxEpoch, upTo))).value;
 	}
 	/** Quotas for conversations in this space (host code only; stored in the document). */
@@ -482,7 +482,7 @@ export class PhiSpaces implements SpaceLike {
 			if (!existing) {
 				assertMemberAdmission(s,method);
 				const open = claims.pendingClaims(s).map(([, c]) => c);
-				const n = open.filter(c => canonicalPrincipal(c.principal) === canonicalPrincipal(o.request.principal)).length;
+				const n = open.filter(c => principalId(c.principal) === principalId(o.request.principal)).length;
 				if (n >= (this.options.maxPending ?? 32)) throw new core.ResourceExhausted("too many pending operations for this principal");
 				const peerCount = open.filter(c => (c.principal.peerId === o.request.principal.peerId || (!!this.options.authorization?.transportPeerId && c.transportPeerId===this.options.authorization.transportPeerId))).length;
 				if (peerCount >= (this.options.maxPendingPeer ?? 128)) throw new core.ResourceExhausted("too many pending operations for this peer");
@@ -554,6 +554,5 @@ export class PhiSpaces implements SpaceLike {
 	}
 }
 
-const canonicalPrincipal = (p: Principal): string => JSON.stringify([p.peerId, p.agentId ?? null]);
 // claims count by their tally: a sweep that drops 256 of thousands of due claims (after a pause) is progress
 const maintenanceSignature = (s: Readonly<core.SpaceState>): string => JSON.stringify([s.rpc?.bytes ?? 0, s.entries.length, Object.keys(s.txns).length, s.regs.length, s.waiters.length, core.revision(s), s.jobs?.map(j => [j.id, j.cursor, j.retryAt ?? 0]), s.releaseQueue, Object.values(s.mailboxes?.boxes ?? {}).map(b => [b.epoch, b.next, b.acked])]);
