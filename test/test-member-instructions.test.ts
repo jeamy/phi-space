@@ -89,10 +89,15 @@ test("a Member goes through its life: add, activate, policy, profiles, drain, fr
 	const resumed = await g.send("pf2", "profileResume", { policy: next });
 	assert.deepEqual([resumed.state, resumed.admissionVersion], ["active", 5]);
 	await assert.rejects(g.send("f", "freeze"), /freeze requires drained/);
+	const held = await g.space.createTransaction(30_000);
+	assert.ok(await g.space.take({ type: "Job" }, 0, { txn: held.id }), "invisible, but physically here");
 	assert.equal((await g.send("d", "drain")).state, "draining");
 	await assert.rejects(g.space.write({ type: "Job", fields: {} }, null, FOREVER), /no bounded completion allowance/);
 	await assert.rejects(g.send("f", "freeze"), /physical entries or open work/);
-	for (let i = 0; i < 2; i++) assert.ok(await g.space.take({ type: "Job" }, 0));
+	assert.ok(await g.space.take({ type: "Job" }, 0));
+	await assert.rejects(g.send("f", "freeze"), /physical entries or open work/, "what a transaction holds counts");
+	await g.space.abort(held.id);
+	assert.ok(await g.space.take({ type: "Job" }, 0));
 	const frozen = await g.send("f", "freeze");
 	assert.deepEqual([frozen.state, frozen.empty], ["removing", true]);
 	await assert.rejects(g.send("other", "detach"), /detach requires matching removal/);

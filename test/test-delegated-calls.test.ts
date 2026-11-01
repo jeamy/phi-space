@@ -17,14 +17,14 @@ type Reply = { ok: boolean; result?: any; error?: { code: string; message: strin
 type Call = { method: string; args?: Record<string, unknown>; request?: { generation: string; requestId: string }; space?: string; frame?: Record<string, unknown> };
 
 async function setup(tc: TestContext, o: { maxPendingPerPeer?: number } = {}) {
-	const peers = [peer("router", "127.0.0.3", ["space-admin"]), peer("other", "127.0.0.4", ["space-admin"])];
+	const peers = [peer("router", "127.0.0.3", ["space-admin", "space-hosts"]), peer("other", "127.0.0.4", ["space-admin"])];
 	const server = http.createServer((_req, res) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(peers)); });
 	await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 	tc.after(() => { server.closeAllConnections(); server.close(); });
 	const clock = new TestClock(tc, 1_700_000_000_000), policy = new TestClock(tc, 1), keys = new TestKeys(tc);
 	const supervisor = generateKey("ed25519", "supervisor"), routerKey = generateKey("ecdsa-p256", "router-key"), userKey = generateKey("ed25519", "user-key"), user2Key = generateKey("ed25519", "user2-key");
 	const add = (peerId: string, k: ReturnType<typeof generateKey>, roles: string[]) => keys.add({ peerId, keyId: k.signer.keyId, principal: peerId, algorithm: k.signer.algorithm, publicKey: k.publicKey, roles, scope: ["*"], state: "active" });
-	add("router", routerKey, ["router", "admin"]); add("user", userKey, ["member"]); add("user2", user2Key, ["member"]);
+	add("router", routerKey, ["router", "admin", "member"]); add("user", userKey, ["member"]); add("user2", user2Key, ["member"]);
 	const root = await openTestHost(ctx);
 	tc.after(() => root.close(ctx));
 	const control = await root.commit((tx) => createSpace(tx, "control", clock.now()), ctx);
@@ -66,7 +66,7 @@ async function setup(tc: TestContext, o: { maxPendingPerPeer?: number } = {}) {
 		return raw(o.via ?? wire, { ...call, frame: { grant: g, delegation: signed } });
 	};
 	const generation = async (o: Parameters<typeof send>[1] = {}) => (await send({ method: "generation" }, o)).result.generation as string;
-	return { foreign, clock, policy, keys, gate, sid, wire, raw, send, generation, grant, leases, link, supervisor, routerKey, userKey, user2Key, control, renew: async () => { lease = await leases().issue("router", routerKey.signer.keyId); return lease; }, lease: () => lease };
+	return { foreign, clock, policy, keys, gate, sid, wire, raw, send, generation, grant, authority, leases, link, supervisor, routerKey, userKey, user2Key, control, renew: async () => { lease = await leases().issue("router", routerKey.signer.keyId); return lease; }, lease: () => lease };
 }
 const refused = (r: Reply, part: string | RegExp) => assert.ok(!r.ok && (typeof part === "string" ? r.error!.message.includes(part) : part.test(r.error!.message)), JSON.stringify(r));
 
@@ -166,6 +166,34 @@ test("a follow-up names its own request", async (tc) => {
 	refused(await g.send({ method: "write", args: { entry: { type: "Job", fields: {} } }, request: { generation, requestId: "w" } }, { targetRequest: target }), "forbidden for this follow-up");
 	refused(await g.send({ ...commit, args: { action: "commit", id: "t-other" } }, { targetRequest: target }), "not bound to target result");
 	assert.ok((await g.send(commit, { targetRequest: target })).ok);
+});
+
+test("an epoch notice by alias fences the same Space", async (tc) => {
+	const g = await setup(tc);
+	const generation = await g.generation();
+	const old = g.lease();
+	await g.renew();
+	assert.ok((await g.raw(g.wire, { method: "epochNotice", space: "jobs", args: { signedNotice: await g.leases().notice(1) } })).ok);
+	refused(await g.send({ method: "write", args: { entry: { type: "Task", fields: {} }, leaseMs: 60_000 }, request: { generation, requestId: "w" } }, { lease: old }), "superseded by higher epoch");
+});
+
+test("a grant that ran out completes no waiting take; a resolution grant looks, an effect grant goes on", async (tc) => {
+	const g = await setup(tc);
+	const issue = (purpose: "effect" | "resolution") => g.authority("router").issue({ peerId: "router", state: { proof: { keyId: g.routerKey.signer.keyId } } }, purpose);
+	const as = async (c: Call, purpose: "effect" | "resolution" = "effect") => g.raw(g.wire, { ...c, space: g.sid, frame: { grant: await issue(purpose) } });
+	const generation = (await as({ method: "generation" })).result.generation as string;
+	const later = { template: { type: "Later" } };
+	assert.equal((await as({ method: "take", args: { ...later, timeoutMs: 3_600_000, waitMs: 0 }, request: { generation, requestId: "p" } })).result.state, "pending");
+	g.clock.t += 61_000;
+	const count = async () => (await as({ method: "count", args: later })).result.value;
+	assert.ok((await as({ method: "write", args: { entry: { type: "Later", fields: {} }, leaseMs: 3_600_000 }, request: { generation, requestId: "w" } })).ok);
+	assert.equal(await count(), 1, "an expired grant cannot complete the old take");
+	const poll = { method: "pollOperation", args: { targetRequest: { generation, requestId: "p" }, waitMs: 0 } };
+	assert.equal((await as(poll, "resolution")).result.state, "pending");
+	assert.equal(await count(), 1);
+	refused(await as({ method: "write", args: { entry: { type: "Later", fields: {} }, leaseMs: 1000 }, request: { generation, requestId: "x" } }, "resolution"), /resolution/);
+	assert.equal((await as(poll)).result.state, "done");
+	assert.equal(await count(), 0);
 });
 
 test("the waiting work of a router counts for that router, whoever it is for", async (tc) => {

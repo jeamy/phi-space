@@ -120,6 +120,13 @@ async function setup(tc: TestContext) {
 		return { t, remote };
 	};
 	const leases = new RouterLeaseAuthority({ host: control, ctx, controlSpaceId: space.spaceId, authorityId: "authority", peerId: "control-peer", signer: controlKey, keys: new SpaceKeyDirectory(control, ctx), assertAuthority: async () => {} });
+	/** A user's line to the Member, proven, without a client's retries. */
+	const user = async () => {
+		const t = socketTransport({ host: MEMBER_IP, port: memberPort }, { localAddress: USER_IP });
+		transports.push(t);
+		await new RemoteSpace(t, { attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 8_000, signer: userKey.signer, expectedGateHostId: "data-host", ownPeerId: "user" }).authenticate();
+		return { t: () => t };
+	};
 	/** A device paired at the control host: its token, its own key, a client of each host. */
 	const phone = async () => {
 		const token = newEnrollToken();
@@ -134,7 +141,7 @@ async function setup(tc: TestContext) {
 		await home.authenticate();
 		return new RemoteSpace(line({ host: MEMBER_IP, port: memberPort }, PAIRED_IP), { ...options, space: jobs.spaceId, signer, expectedGateHostId: "data-host", grantProvider: () => home.requestGrant() });
 	};
-	return { phone, toMember, toControl, external, jobs, control, space, userKey, routerKey, controlKey, authority, config, storeFile, router, leases, routing, restart };
+	return { user, phone, toMember, toControl, external, jobs, control, space, userKey, routerKey, controlKey, authority, config, storeFile, router, leases, routing, restart };
 }
 
 test("a Member serves on the grants of its control host and follows its keys and its fence", async (tc) => {
@@ -178,6 +185,27 @@ test("a Member publishes what it offers at the control host and in its data Spac
 	const user = g.toMember();
 	await user.authenticate();
 	assert.equal(await user.count({ type: "Capability" }), 1, "and it stands in the data Space");
+});
+
+test("work left waiting survives a restart of the Member", async (tc) => {
+	const g = await setup(tc);
+	await g.toControl.authenticate();
+	const user = g.toMember();
+	await user.authenticate();
+	const grant = await g.authority().issue({ peerId: "user", state: { proof: { keyId: g.userKey.signer.keyId } } });
+	const { t } = await g.user();
+	const send = async (c: Record<string, unknown>) => JSON.parse(await t().request(JSON.stringify({ ...c, space: g.jobs.spaceId, frame: { grant } }))) as { result: Record<string, any> };
+	const generation = (await send({ method: "generation" })).result.generation as string;
+	assert.equal((await send({ method: "take", args: { template: { type: "Later" }, timeoutMs: 3_600_000, waitMs: 0 }, request: { generation, requestId: "p" } })).result.state, "pending");
+	await g.restart();
+	await g.user();
+	const after = g.toMember();
+	await after.authenticate();
+	await after.write({ type: "Later", fields: { n: 1 } }, null, FOREVER);
+	const { t: again } = await g.user();
+	const done = JSON.parse(await again().request(JSON.stringify({ method: "pollOperation", args: { targetRequest: { generation, requestId: "p" }, waitMs: 0 }, space: g.jobs.spaceId, frame: { grant } }))) as { result: { state: string } };
+	assert.equal(done.result.state, "done");
+	assert.equal(await after.count({ type: "Later" }), 0, "the take came through once");
 });
 
 test("a device pairs at the control host and works on the Member with what that gave it", async (tc) => {
