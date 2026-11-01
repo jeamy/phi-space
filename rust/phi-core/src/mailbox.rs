@@ -2,13 +2,12 @@
 //! principal's mailbox; the principal pages through it and acknowledges a delivered prefix, which bounded maintenance
 //! then drops. Events older than `mailboxTtlMs` expire unacknowledged: the mailbox gets a new epoch and records the gap,
 //! and a take transaction whose event expired is released.
-use crate::space::{bytes, error, js_string, truthy, CoreError, Result, Space};
+use phi_json::num_of;
+use crate::space::{illegal, exhausted};
+use crate::space::{bytes, error, js_string, truthy, Result, Space};
 use crate::state::Mailbox;
 use phi_json::{hex, obj, Json, Object, FOREVER};
 
-fn illegal(m: &str) -> CoreError { error("IllegalArgumentError", m) }
-fn exhausted(m: &str) -> CoreError { error("ResourceExhausted", m) }
-fn num_of(v: &Json, k: &str) -> Option<f64> { v.get(k).and_then(Json::as_f64) }
 /// `Number.isSafeInteger`.
 fn safe_integer(v: Option<&Json>) -> Option<f64> {
 	match v {
@@ -192,7 +191,7 @@ impl Space {
 				let gap = b.gap.clone().unwrap_or_else(|| obj! { "epoch" => asked.clone(), "from" => after + 1.0, "to" => after.max(b.next - 1.0) });
 				let result = obj! { "mailboxEpoch" => b.epoch.as_str(), "events" => Json::Array(vec![]), "next" => b.acked, "more" => !b.events.is_empty(), "gap" => gap };
 				if bytes(&result) > cap {
-					return Err(error("ResponseBudgetTooSmall", format!("the next element needs {} bytes of budget", phi_json::number_text(bytes(&result)))));
+					return Err(crate::space::too_small(bytes(&result)));
 				}
 				return Ok(result);
 			}

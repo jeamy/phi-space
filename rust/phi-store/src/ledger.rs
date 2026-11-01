@@ -101,10 +101,8 @@ impl SqliteLedger {
 	/// Reads a committed document: its head with the rows of its parts. A map part kept on the disk is not read: the head
 	/// holds an empty map for it, and the caller asks its rows through a `SqliteClaims`.
 	pub fn load(&mut self, kind: &str, key: Option<&str>, parts: &[PartDef]) -> Result<Option<StoredDoc>> {
+		let Some(StoredDoc { mut value, version, .. }) = self.document(kind, key)? else { return Ok(None) };
 		let db = &self.files.read;
-		let row: Option<(i64, String)> = db.query_row("SELECT version, value FROM documents WHERE kind = ? AND key = ?", params![kind, doc_key(key)], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
-		let Some((version, text)) = row else { return Ok(None) };
-		let mut value = parse(&text).map_err(|e| StoreError::Unavailable(format!("document {kind}: {e}")))?;
 		if !parts.is_empty() {
 			let on_disk: Vec<String> = parts.iter().filter(|p| p.disk.is_some() && p.kind == PartKind::Map).map(PartDef::name).collect();
 			let marks = vec!["?"; on_disk.len()].join(", ");
@@ -164,11 +162,7 @@ impl SqliteLedger {
 
 	/// A document without parts as it is stored.
 	pub fn document(&self, kind: &str, key: Option<&str>) -> Result<Option<StoredDoc>> {
-		let row: Option<(i64, String)> = match self.files.read.query_row("SELECT version, value FROM documents WHERE kind = ? AND key = ?", params![kind, doc_key(key)], |r| Ok((r.get(0)?, r.get(1)?))) {
-			Ok(r) => Some(r),
-			Err(rusqlite::Error::QueryReturnedNoRows) => None,
-			Err(e) => return Err(e.into()),
-		};
+		let row: Option<(i64, String)> = self.files.read.query_row("SELECT version, value FROM documents WHERE kind = ? AND key = ?", params![kind, doc_key(key)], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
 		let Some((version, text)) = row else { return Ok(None) };
 		let value = parse(&text).map_err(|e| StoreError::Unavailable(format!("document {kind}: {e}")))?;
 		Ok(Some(StoredDoc { kind: kind.to_owned(), key: key.map(str::to_owned), version, value }))

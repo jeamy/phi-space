@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpSocket, TcpStream};
 use tokio::sync::Mutex;
 use tokio::time::timeout;
@@ -36,20 +36,10 @@ fn ok(reply: Json) -> Result<Json, String> {
 }
 
 async fn exchange(s: &mut TcpStream, id: u32, call: &Json) -> Result<Json, String> {
-	let body = call.to_json_text();
-	let mut out = Vec::with_capacity(body.len() + 8);
-	out.extend_from_slice(&(body.len() as u32).to_be_bytes());
-	out.extend_from_slice(&id.to_be_bytes());
-	out.extend_from_slice(body.as_bytes());
+	let mut out = Vec::new();
+	phi_wire::put(&mut out, id, &call.to_json_text());
 	s.write_all(&out).await.map_err(|e| e.to_string())?;
-	let mut head = [0u8; 8];
-	s.read_exact(&mut head).await.map_err(|e| e.to_string())?;
-	let n = u32::from_be_bytes(head[..4].try_into().expect("four bytes")) as usize;
-	if n > 1 << 24 {
-		return Err("a frame over the limit".to_owned());
-	}
-	let mut text = vec![0u8; n];
-	s.read_exact(&mut text).await.map_err(|e| e.to_string())?;
+	let text = phi_wire::read_frame(s).await.map_err(|e| e.to_string())?;
 	parse(&String::from_utf8_lossy(&text)).map_err(|e| e.to_string())
 }
 

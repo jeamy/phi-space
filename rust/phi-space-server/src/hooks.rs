@@ -27,6 +27,10 @@ use phi_wire::{Endpoint, Listen, ServeOptions};
 use std::cell::Cell;
 use std::rc::Rc;
 
+fn seed_signer(seed: &str) -> Result<phi_host::auth::Signer, String> {
+	let seed: [u8; 32] = phi_host::auth::base64(seed).try_into().map_err(|_| "a seed is 32 bytes")?;
+	Ok(phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)))
+}
 fn strings(v: &Json) -> Option<Vec<String>> { v.as_array().map(|a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect()) }
 
 /// Sets the case up; the limits it names are for after the store has opened.
@@ -156,15 +160,14 @@ fn gate(g: &Json, policy: &phi_service::Policy) -> Result<Gated, String> {
 	}
 	if let Some(g) = g.get("grants") {
 		let part = |k: &str| g.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("grants without {k}"));
-		let seed: [u8; 32] = phi_host::auth::base64(&part("seed")?).try_into().map_err(|_| "a seed is 32 bytes")?;
-		let signer = phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed));
+		let signer = seed_signer(&part("seed")?)?;
 		o.rotating = Some(phi_host::rotation::Rotating::new(&part("authorityId")?, &part("hostId")?, signer, &part("publicKey")?));
 	}
 	if let Some(r) = g.get("runGates") {
 		let part = |k: &str| r.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("runGates without {k}"));
-		let seed: [u8; 32] = phi_host::auth::base64(&part("seed")?).try_into().map_err(|_| "a seed is 32 bytes")?;
+		let signer = seed_signer(&part("seed")?)?;
 		let jobs: phi_host::run_member::RunPreparer = Box::new(jobs_preparer);
-		o.run_gates = Some(phi_host::run_member::RunGates { authority_id: part("authorityId")?, peer_id: part("peerId")?, signer: phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)), controller: phi_host::run_member::Pin { issuer: part("controller")?, algorithm: phi_host::auth::Algorithm::Ed25519, public_key: part("controllerKey")? }, preparers: [("jobs".to_owned(), jobs)].into_iter().collect(), assert_authority: Box::new(|_| Ok(())) });
+		o.run_gates = Some(phi_host::run_member::RunGates { authority_id: part("authorityId")?, peer_id: part("peerId")?, signer, controller: phi_host::run_member::Pin { issuer: part("controller")?, algorithm: phi_host::auth::Algorithm::Ed25519, public_key: part("controllerKey")? }, preparers: [("jobs".to_owned(), jobs)].into_iter().collect(), assert_authority: Box::new(|_| Ok(())) });
 	}
 	let mut guard: Option<Rc<dyn phi_service::Guard>> = None;
 	if let Some(b) = g.get("boot") {
@@ -189,16 +192,16 @@ fn gate(g: &Json, policy: &phi_service::Policy) -> Result<Gated, String> {
 	}
 	if let Some(m) = g.get("membership") {
 		let part = |k: &str| m.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("membership without {k}"));
-		let seed: [u8; 32] = phi_host::auth::base64(&part("seed")?).try_into().map_err(|_| "a seed is 32 bytes")?;
+		let signer = seed_signer(&part("seed")?)?;
 		let control = phi_host::run_member::Pin { issuer: part("controller")?, algorithm: phi_host::auth::Algorithm::Ed25519, public_key: part("controllerKey")? };
-		o.lifecycle = Some(phi_host::membership::MemberLifecycle::new(&part("memberId")?, &part("spaceId")?, &part("authorityId")?, &part("peerId")?, phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)), control, Box::new(|_| Ok(()))));
+		o.lifecycle = Some(phi_host::membership::MemberLifecycle::new(&part("memberId")?, &part("spaceId")?, &part("authorityId")?, &part("peerId")?, signer, control, Box::new(|_| Ok(()))));
 	}
 	if let Some(m) = g.get("spaceLifecycle") {
 		let part = |k: &str| m.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("spaceLifecycle without {k}"));
-		let seed: [u8; 32] = phi_host::auth::base64(&part("seed")?).try_into().map_err(|_| "a seed is 32 bytes")?;
+		let signer = seed_signer(&part("seed")?)?;
 		let control = phi_host::run_member::Pin { issuer: part("controller")?, algorithm: phi_host::auth::Algorithm::Ed25519, public_key: part("controllerKey")? };
 		let check = o.boot.clone();
-		o.spaces = Some(phi_host::space_lifecycle::SpaceLifecycleService::new(&part("hostId")?, &part("authorityId")?, &part("peerId")?, phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)), control, Box::new(move |_| check.as_ref().map_or(Ok(()), |b| b.assert_active()))));
+		o.spaces = Some(phi_host::space_lifecycle::SpaceLifecycleService::new(&part("hostId")?, &part("authorityId")?, &part("peerId")?, signer, control, Box::new(move |_| check.as_ref().map_or(Ok(()), |b| b.assert_active()))));
 	}
 	let host = text("host").ok_or("the gate names no host")?;
 	let front: Rc<dyn phi_wire::Front> = Gate::new(host, o)?;
@@ -242,7 +245,7 @@ fn control_hook(service: &mut Service, name: &str, line: &Json) -> String {
 		};
 	}
 	if name == "spaceInfo" {
-		let found = service.store.spaces().into_iter().find(|i| i.get("alias").and_then(Json::as_str) == Some(text("alias")));
+		let found = service.store.space_info(text("alias")).cloned();
 		return phi_json::obj! { "ok" => true, "result" => found.unwrap_or(Json::Null) }.to_json_text();
 	}
 	if name == "jobs" {

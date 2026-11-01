@@ -32,12 +32,14 @@ pub fn touch(stream: &mut Option<StreamState>, open: &mut Option<Open>, now: f64
 	st.bytes += batch_bytes(&batch) + 1.0;
 	st.log.push(batch);
 	*open = Some(Open { rev, at: HashMap::new() });
-	while st.bytes > max_log_bytes && st.log.len() > 1 {
-		let old = st.log.remove(0);
+	let mut gone = 0;
+	while st.bytes > max_log_bytes && st.log.len() - gone > 1 {
+		let old = &st.log[gone];
 		st.floor = old.rev;
-		st.bytes -= batch_bytes(&old) + 1.0;
-		dropped.push(old);
+		st.bytes -= batch_bytes(old) + 1.0;
+		gone += 1;
 	}
+	dropped.extend(st.log.drain(..gone));
 	if st.log.len() == 1 && st.bytes > max_log_bytes {
 		st.bytes = exact(st);
 	}

@@ -1,4 +1,5 @@
 //! Layer B of the identity (src/auth.ts): an app key per principal, proven per connection by a signed challenge.
+use phi_json::strings;
 use ed25519_dalek::{Signature as EdSignature, VerifyingKey};
 use p256::ecdsa::signature::Verifier as _;
 use p256::ecdsa::{DerSignature, VerifyingKey as P256Key};
@@ -98,13 +99,34 @@ pub fn verify_detached(algorithm: Algorithm, public_key: &str, message: &[u8], s
 	}
 }
 
-/// Checks a signed value envelope against a pinned issuer/key and an explicit protocol domain.
-pub(crate) fn verify_value<'a>(token: &'a Json, issuer: &str, algorithm: Algorithm, public_key: &str, domain: &str) -> Option<&'a Json> {
-	let value = token.get("value")?;
-	let signature = token.get("signature")?.as_str()?;
-	if token.get("issuer")?.as_str()? != issuer || token.get("algorithm")?.as_str()? != algorithm.name() { return None; }
-	let message = format!("{domain}{}", value.canonical().ok()?);
-	verify_detached(algorithm, public_key, message.as_bytes(), signature).then_some(value)
+/// What a domain signs: its tag, then the canonical text of the value. `name` is the middle of `phi-spaces/<name>/v1`.
+fn domain_text(name: &str, value: &Json) -> Option<String> { Some(format!("phi-spaces/{name}/v1\n{}", value.canonical().ok()?)) }
+
+/// Whether the token's signature stands on `value` in this domain.
+pub(crate) fn signature_holds(value: &Json, token: &Json, name: &str, algorithm: Algorithm, public_key: &str) -> bool {
+	let (Some(signature), Some(message)) = (token.get("signature").and_then(Json::as_str), domain_text(name, value)) else { return false };
+	verify_detached(algorithm, public_key, message.as_bytes(), signature)
+}
+
+/// `signature_holds`, by this issuer under this algorithm.
+pub(crate) fn signed_by(value: &Json, token: &Json, name: &str, issuer: &str, algorithm: Algorithm, public_key: &str) -> bool {
+	token.get("issuer").and_then(Json::as_str) == Some(issuer) && token.get("algorithm").and_then(Json::as_str) == Some(algorithm.name()) && signature_holds(value, token, name, algorithm, public_key)
+}
+
+/// The value of a signed envelope, checked against a pinned issuer and key.
+pub(crate) fn verify_value<'a>(token: &'a Json, name: &str, issuer: &str, algorithm: Algorithm, public_key: &str) -> Option<&'a Json> {
+	token.get("value").filter(|v| signed_by(v, token, name, issuer, algorithm, public_key))
+}
+
+/// A signed envelope: the value under `field`, issuer, algorithm and signature, in the order the TypeScript side writes them.
+pub(crate) fn seal(field: &str, value: Json, name: &str, issuer: &str, signer: &Signer) -> Option<Json> {
+	let signature = to_base64(&signer.sign(domain_text(name, &value)?.as_bytes()));
+	let mut o = Object::new();
+	o.insert(field, value);
+	o.insert("issuer", issuer.into());
+	o.insert("algorithm", signer.algorithm().name().into());
+	o.insert("signature", signature.into());
+	Some(Json::Object(o))
 }
 
 /// What is signed: a domain tag plus the canonical encoding of the challenge.
@@ -136,7 +158,6 @@ fn object(pairs: Vec<(&str, Json)>) -> Json {
 	for (k, v) in pairs { o.insert(k, v); }
 	Json::Object(o)
 }
-fn strings(list: &[String]) -> Json { Json::Array(list.iter().cloned().map(Json::String).collect()) }
 fn bad(code: &str, message: &str) -> Json {
 	object(vec![("ok", Json::Bool(false)), ("error", object(vec![("code", code.into()), ("message", message.into())]))])
 }

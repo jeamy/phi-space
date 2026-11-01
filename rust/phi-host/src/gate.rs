@@ -5,7 +5,7 @@
 use crate::auth::{AuthState, KeyDirectory, PeerKey, Proving};
 use crate::control::{Control, Enrolling};
 use crate::rotation::Rotating;
-use phi_json::{obj, parse_repairing, Json};
+use phi_json::{obj, Json};
 use phi_service::{Conn, Identity, Service};
 use phi_wire::{Front, Local, Owner, Session};
 use std::cell::{Cell, RefCell};
@@ -452,12 +452,12 @@ async fn supervise(gate: Rc<Gate>, owner: Owner) {
 
 impl GateSession {
 	/// The keys a call will be judged by.
-	fn keys_of(&self, text: &str) -> Vec<(String, String)> {
+	fn keys_of(&self, call: Option<&Json>) -> Vec<(String, String)> {
 		let mut wanted = vec![];
 		if let Some(p) = &self.state.borrow().proof {
 			wanted.push((self.peer_id.clone(), p.key_id.clone()));
 		}
-		let Ok(call) = parse_repairing(text) else { return wanted };
+		let Some(call) = call else { return wanted };
 		let as_text = |v: Option<&Json>| v.and_then(Json::as_str).map(str::to_owned);
 		if let Some(k) = call.get("args").and_then(|a| a.get("keyId")).and_then(Json::as_str) {
 			wanted.push((self.peer_id.clone(), k.to_owned()));
@@ -476,22 +476,12 @@ impl GateSession {
 	}
 
 	/// A notice of the control plane: only a proven service peer brings one.
-	fn notice(&self, apply: impl FnOnce(&mut Service, &Json) -> Result<Json, phi_core::space::CoreError>, service: &mut Service, call: &Json) -> Json {
+	fn notice(&self, key: &str, apply: impl FnOnce(&Json) -> Result<Json, phi_core::space::CoreError>, call: &Json) -> Json {
 		let id = self.identity();
 		let proven = self.state.borrow().proof.is_some() && id.roles.iter().any(|r| ["router", "host", "admin"].contains(&r.as_str()));
-		let done = if proven { apply(service, call.get("args").and_then(|a| a.get("instruction")).unwrap_or(&Json::Null)) } else { Err(phi_core::space::error("PermissionError", "epoch notice requires proven service peer")) };
+		let done = if proven { apply(call.get("args").and_then(|a| a.get(key)).unwrap_or(&Json::Null)) } else { Err(phi_core::space::error("PermissionError", "epoch notice requires proven service peer")) };
 		match done {
 			Ok(ack) => crate::control::answered(ack),
-			Err(e) => crate::control::refuse(&e.message),
-		}
-	}
-
-	fn notice_args(&self, apply: impl FnOnce(&mut phi_store::Store, &Json) -> Result<(), phi_core::space::CoreError>, service: &mut Service, call: &Json) -> Json {
-		let id = self.identity();
-		let proven = self.state.borrow().proof.is_some() && id.roles.iter().any(|r| ["router", "host", "admin"].contains(&r.as_str()));
-		let done = if proven { apply(&mut service.store, call.get("args").and_then(|a| a.get("signedNotice")).unwrap_or(&Json::Null)) } else { Err(phi_core::space::error("PermissionError", "epoch notice requires proven service peer")) };
-		match done {
-			Ok(()) => crate::control::answered(obj! { "installed" => true }),
 			Err(e) => crate::control::refuse(&e.message),
 		}
 	}
@@ -540,9 +530,8 @@ impl GateSession {
 impl Session for GateSession {
 	fn conn(&self) -> Conn { Conn { peer_id: Some(self.peer_id.clone()), identity: Some(self.identity()), proof_key: self.state.borrow().proof.as_ref().map(|p| p.key_id.clone()) } }
 
-	fn call(&self, service: &mut Service, text: &str) -> Option<String> {
+	fn call(&self, service: &mut Service, call: &Json) -> Option<String> {
 		let (proving, keys) = self.gate.o.proving.as_ref()?;
-		let call = parse_repairing(text).ok()?;
 		let method = call.as_object().and_then(|_| call.get("method")).and_then(Json::as_str)?;
 		let now = (self.gate.o.now)();
 		if let (Some(rotating), true) = (&self.gate.o.rotating, crate::rotation::METHODS.contains(&method)) {
@@ -551,7 +540,7 @@ impl Session for GateSession {
 			let proven = proof.is_some();
 			let active = proof.as_ref().and_then(|p| found.find(&self.peer_id, &p.key_id)).is_some_and(|k| k.active);
 			let key_id = proof.filter(|_| active).map(|p| p.key_id);
-			return Some(rotating.handle(service, &call, &self.identity(), proven, key_id.as_deref(), now).to_json_text());
+			return Some(rotating.handle(service, call, &self.identity(), proven, key_id.as_deref(), now).to_json_text());
 		}
 		if let (Some(host), "keyLookup" | "routingPolicy" | "capabilityHeartbeat" | "routerLease") = (&self.gate.o.control_host, method) {
 			let found = InService { keys: keys.as_ref(), service: RefCell::new(service) };
@@ -559,44 +548,44 @@ impl Session for GateSession {
 			let proven = proof.is_some();
 			let key = proof.as_ref().and_then(|p| found.find(&self.peer_id, &p.key_id)).filter(|k| k.active);
 			let held = proof.as_ref().map(|p| p.key_id.clone()).zip(key.map(|k| k.roles));
-			return Some(host.handle(service, method, &call, &self.identity(), held.as_ref().map(|(k, r)| (k.as_str(), r.as_slice())), proven).to_json_text());
+			return Some(host.handle(service, method, call, &self.identity(), held.as_ref().map(|(k, r)| (k.as_str(), r.as_slice())), proven).to_json_text());
 		}
 		// the notices too: naming the control Space they are refused as every other call (ControlAccess)
 		if let Some(control) = &self.gate.o.control {
-			if let Some(denied) = control.check(service, &call, &self.identity()) {
+			if let Some(denied) = control.check(service, call, &self.identity()) {
 				return Some(denied.to_json_text());
 			}
 		}
 		if method == "epochNotice" {
 			if let Some(verifier) = &self.gate.o.delegation {
 				let space = call.get("space").and_then(Json::as_str).map(str::to_owned);
-				let notice = self.notice_args(|store, q| verifier.epoch_notice(store, q, space.as_deref(), now), service, &call);
+				let notice = self.notice("signedNotice", |q| verifier.epoch_notice(&mut service.store, q, space.as_deref(), now).map(|()| obj! { "installed" => true }), call);
 				return Some(notice.to_json_text());
 			}
 		}
 		if method == "membershipInstruction" {
 			if let Some(lifecycle) = &self.gate.o.lifecycle {
-				return Some(self.notice(|service, q| lifecycle.apply(service, q), service, &call).to_json_text());
+				return Some(self.notice("instruction", |q| lifecycle.apply(service, q), call).to_json_text());
 			}
 		}
 		if method == "runGateInstruction" {
 			if let Some(gates) = &self.gate.o.run_gates {
-				return Some(self.notice(|service, q| gates.apply(service, q), service, &call).to_json_text());
+				return Some(self.notice("instruction", |q| gates.apply(service, q), call).to_json_text());
 			}
 		}
 		if method == "spaceLifecycleInstruction" {
 			if let Some(spaces) = &self.gate.o.spaces {
-				return Some(self.notice(|service, q| spaces.apply(service, q), service, &call).to_json_text());
+				return Some(self.notice("instruction", |q| spaces.apply(service, q), call).to_json_text());
 			}
 		}
 		// an instruction this host was not given must not pass for a call it does not know
 		if let Some(what) = [("membershipInstruction", "membership"), ("runGateInstruction", "run gates"), ("spaceLifecycleInstruction", "space lifecycle")].iter().find(|(m, _)| *m == method).map(|(_, w)| w) {
-			return Some(self.notice(|_, _| Err(phi_core::space::error("Error", format!("{what} not configured"))), service, &call).to_json_text());
+			return Some(self.notice("instruction", |_| Err(phi_core::space::error("Error", format!("{what} not configured"))), call).to_json_text());
 		}
 		if let (Some(enrolling), "enroll" | "enrollStatus") = (&self.gate.o.enrolling, method) {
 			let unpaired = self.roles.iter().any(|r| r == crate::control::UNPAIRED_ROLE);
 			let proven = self.state.borrow().proof.as_ref().map(|p| p.key_id.clone()).is_some_and(|k| keys.find(&mut service.store, &self.peer_id, &k).is_some_and(|k| k.active));
-			return Some(enrolling.handle(service, &call, &self.peer_id, (unpaired, proven), &mut self.state.borrow_mut(), now).to_json_text());
+			return Some(enrolling.handle(service, call, &self.peer_id, (unpaired, proven), &mut self.state.borrow_mut(), now).to_json_text());
 		}
 		if method != "challenge" && method != "prove" {
 			return None;
@@ -608,13 +597,13 @@ impl Session for GateSession {
 		Some(reply.to_json_text())
 	}
 
-	fn prepare(&self, owner: Owner, text: &str) -> Option<Local<()>> {
+	fn prepare(&self, owner: Owner, call: Option<&Json>, text: &str) -> Option<Local<()>> {
 		let boot = self.gate.o.boot.clone();
 		let remote = self.gate.o.remote_keys.clone();
 		if boot.is_none() && remote.is_none() {
 			return None;
 		}
-		let wanted = remote.as_ref().map_or(vec![], |_| self.keys_of(text));
+		let wanted = remote.as_ref().map_or(vec![], |_| self.keys_of(call));
 		let delegated = text.contains("\"delegation\"");
 		// `refreshPolicy`: a Member's admission follows what the control host signs now
 		let refreshing = self.gate.o.lifecycle.is_some() && text.contains("\"grant\"");
@@ -641,12 +630,12 @@ impl Session for GateSession {
 		}))
 	}
 
-	fn later(self: Rc<Self>, owner: Owner, text: &str) -> Option<Local<String>> {
+	fn later(self: Rc<Self>, owner: Owner, call: &Json) -> Option<Local<String>> {
 		self.gate.o.rotating.as_ref()?;
-		let call = parse_repairing(text).ok()?;
 		if call.as_object().and_then(|_| call.get("method")).and_then(Json::as_str) != Some("grant") {
 			return None;
 		}
+		let call = call.clone();
 		Some(Box::pin(async move { self.grant(&owner, &call).await.to_json_text() }))
 	}
 

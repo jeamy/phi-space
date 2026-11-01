@@ -11,7 +11,7 @@ mod background;
 use phi_core::claims::RequestRef;
 use phi_core::mailbox::principal_id;
 use phi_core::snapshot::Snapshots;
-use phi_core::space::{deadline_of, deep_equal, error, CoreError, Limits, Template, ANY};
+use phi_core::space::{deadline_of, deep_equal, error, too_small, CoreError, Limits, Template, ANY};
 use phi_core::Space;
 use phi_json::{digest_json, obj, parse_repairing, Json, Object, FOREVER};
 use phi_store::{Store, DEFAULT_ALIAS};
@@ -35,7 +35,6 @@ pub const DEFAULT_MAX_FRAME_BYTES: f64 = phi_core::space::DEFAULT_LIMITS.max_fra
 type R<T> = Result<T, CoreError>;
 fn bad(m: impl Into<String>) -> CoreError { error("Bad", m) }
 fn denied(m: impl Into<String>) -> CoreError { error("Denied", m) }
-fn too_small(required: f64) -> CoreError { error("ResponseBudgetTooSmall", format!("the next element needs {} bytes of budget", phi_json::number_text(required))) }
 
 // ---- identity and rights
 
@@ -209,7 +208,7 @@ impl Options {
 
 /// A call that waits. `look` again with `Service::resume`.
 pub struct Parked {
-	c: Ctx,
+	c: Rc<Ctx>,
 	kind: Kind,
 	end: f64,
 }
@@ -440,13 +439,17 @@ impl Service {
 
 	/// Decode, check the frame size, dispatch, encode. `max_frame`: what the transport carries.
 	pub fn handle_text(&mut self, text: &str, conn: &Conn, max_frame: f64) -> Outcome {
-		let bytes = text.len() as f64;
+		let call = parse_repairing(text).ok();
+		self.handle_call(call.as_ref(), text.len() as f64, conn, max_frame)
+	}
+	/// `handle_text` of a frame already parsed: `call` is `None` when it is not JSON, `bytes` its length on the wire.
+	pub fn handle_call(&mut self, call: Option<&Json>, bytes: f64, conn: &Conn, max_frame: f64) -> Outcome {
 		if bytes > max_frame {
 			return self.done(fail("ResourceExhausted", &format!("a call may take at most {} bytes", phi_json::number_text(max_frame)), None));
 		}
-		let Ok(call) = parse_repairing(text) else { return self.done(fail("BadRequest", "the call is not JSON", None)) };
+		let Some(call) = call else { return self.done(fail("BadRequest", "the call is not JSON", None)) };
 		let mut response_frame = max_frame;
-		match self.handle(&call, conn, max_frame, bytes, &mut response_frame) {
+		match self.handle(call, conn, max_frame, bytes, &mut response_frame) {
 			Ok(HandledCall::Reply(text)) => self.done(carried(text, max_frame)),
 			Ok(HandledCall::Wait(p)) => Outcome::Wait(p),
 			Err(e) => {
@@ -573,8 +576,7 @@ impl Service {
 		let (method, args) = (domain.as_array()?.first()?, domain.as_array()?.get(1)?);
 		let hash = digest_json(&obj! { "method" => method.clone(), "args" => args.clone() }).ok()?;
 		let (binding, resolution) = self.resolve_record(c, request, method, &hash.into(), &Json::Number(self.o.primary_epoch)).ok()?;
-		if let Some(types) = resolution.get("result").filter(|r| is_obj(Some(r))).and_then(|r| r.get("types")).and_then(Json::as_array) {
-			let types: Vec<String> = types.iter().filter_map(|t| t.as_str().map(str::to_owned)).collect();
+		if let Some(types) = retained_types(&resolution) {
 			self.check_types(grant, Some(&types), "this retained result").ok()?;
 		}
 		let host_id = self.o.host_id.as_deref().or(self.store.host_id())?;
@@ -596,7 +598,12 @@ impl Service {
 			return Err(error("ResourceExhausted", "the rate table is full"));
 		}
 		let (at, calls) = r.unwrap_or((now, 0.0));
-		self.rates.insert(peer.to_owned(), (at, calls + 1.0));
+		match self.rates.get_mut(peer) {
+			Some(slot) => slot.1 = calls + 1.0,
+			None => {
+				self.rates.insert(peer.to_owned(), (at, calls + 1.0));
+			}
+		}
 		if calls + 1.0 > self.o.max_calls_per_window {
 			return Err(error("ResourceExhausted", "the peer exceeded its call rate"));
 		}
@@ -648,10 +655,7 @@ impl Service {
 		let now = self.now();
 		let guard = self.o.guard.clone();
 		match self.store.commit(space, now, |s| {
-			if let Some(g) = &guard {
-				g.host()?;
-				g.space(s)?;
-			}
+			guarded(&guard, s)?;
 			op(s, now)
 		}) {
 			Err(e) => Err(store_failed(e)),
@@ -663,10 +667,7 @@ impl Service {
 		let now = self.now();
 		let guard = self.o.guard.clone();
 		self.store.create_space_with(alias, now, random, |s| {
-			if let Some(g) = &guard {
-				g.host()?;
-				g.space(s)?;
-			}
+			guarded(&guard, s)?;
 			op(s, now)
 		}).map_err(store_failed)?
 	}
@@ -675,10 +676,7 @@ impl Service {
 		let now = self.now();
 		let guard = self.o.guard.clone();
 		match self.store.delete_space(id, now, |s| {
-			if let Some(g) = &guard {
-				g.host()?;
-				g.space(s)?;
-			}
+			guarded(&guard, s)?;
 			op(s, now)
 		}) {
 			Err(e) => Err(store_failed(e)),
@@ -689,10 +687,7 @@ impl Service {
 	fn snap_of(&mut self, space: Option<&str>) -> R<&mut Space> {
 		let guard = self.o.guard.clone();
 		let host = self.store.reader(space)?;
-		if let Some(g) = guard {
-			g.host()?;
-			g.space(&host.space)?;
-		}
+		guarded(&guard, &host.space)?;
 		Ok(&mut host.space)
 	}
 
@@ -736,24 +731,20 @@ impl Service {
 		})
 	}
 
-	fn write_call(&mut self, c: &Ctx, a: &Object) -> R<Json> {
-		let (entry, type_, types) = entry_draft(a.get("entry"), "entry is required")?;
+	/// The entry and `unique` of a write, the entry's types inside the grant.
+	fn write_draft(&self, grant: &Grant, entry: Option<&Json>, unique: Option<&Json>, batch: bool) -> R<(Json, Option<Vec<String>>)> {
+		let (entry, type_, types) = entry_draft(entry, batch)?;
 		let mut all = vec![type_.clone()];
 		all.extend(types);
-		self.check_types(&c.grant, Some(&all), &format!("type {type_}"))?;
-		let unique = unique_of(a.get("unique"))?;
+		self.check_types(grant, Some(&all), &format!("type {type_}"))?;
+		Ok((entry, unique_of(unique)?))
+	}
+	fn write_call(&mut self, c: &Ctx, a: &Object) -> R<Json> {
+		let (entry, unique) = self.write_draft(&c.grant, a.get("entry"), a.get("unique"), false)?;
 		let lease = duration(a.get("leaseMs"), "leaseMs", ANY)?;
 		let transient = a.get("transient") == Some(&Json::Bool(true));
 		let txn = or_null(a.get("txn"));
-		let mut args = obj! { "entry" => entry.clone(), "txn" => txn.clone(), "lease" => lease };
-		if let Json::Object(m) = &mut args {
-			if let Some(u) = &unique {
-				m.insert("unique", Json::Array(u.iter().map(|k| Json::from(k.as_str())).collect()));
-			}
-			if transient {
-				m.insert("transient", Json::Bool(true));
-			}
-		}
+		let args = write_options(obj! { "entry" => entry.clone(), "txn" => txn.clone(), "lease" => lease }, unique.as_deref(), transient);
 		let as_ = c.as_.clone();
 		self.mutate(c, "write", args, |s, now| write_in(s, now, &entry, &txn, lease, unique.as_deref(), transient, &as_))
 	}
@@ -891,14 +882,13 @@ impl Service {
 	/// One look of a waiting call: its result, or `None` to wait on.
 	fn look(&mut self, p: &mut Parked) -> R<Option<Json>> {
 		let now = self.now();
-		let c = p.c.clone();
+		let c = Rc::clone(&p.c);
 		match &p.kind {
 			Kind::Operation(t) | Kind::Poll(t) => {
 				let t = t.clone();
 				let v = self.poll_operation(&c, &t)?;
-				if let Some(types) = v.get("result").filter(|r| is_obj(Some(r))).and_then(|r| r.get("types")).and_then(Json::as_array) {
+				if let Some(types) = retained_types(&v) {
 					let grant = self.allowed(&c.roles, "pollOperation")?;
-					let types: Vec<String> = types.iter().filter_map(|t| t.as_str().map(str::to_owned)).collect();
 					self.check_types(&grant, Some(&types), "this retained result")?;
 				}
 				if v.get("state").and_then(Json::as_str) == Some("pending") && now < p.end {
@@ -959,7 +949,7 @@ impl Service {
 	}
 	/// The first look of a call that may wait.
 	fn first_look(&mut self, c: &Ctx, kind: Kind, end: f64) -> R<Step> {
-		let mut p = Box::new(Parked { c: c.clone(), kind, end });
+		let mut p = Box::new(Parked { c: Rc::new(c.clone()), kind, end });
 		Ok(match self.look(&mut p)? {
 			Some(result) => Step::Reply(result),
 			None => Step::Wait(p),
@@ -995,10 +985,7 @@ impl Service {
 				}
 				let timeout = duration(a.get("timeoutMs"), "timeoutMs", NO_WAIT)?;
 				let wait_ms = opt_int(a.get("waitMs"), "waitMs", 0.0)?.unwrap_or(self.o.max_poll_ms).min(self.o.max_poll_ms);
-				let deadline = match a.get("deadline") {
-					None => None,
-					d => Some(int(d, "deadline", 0.0)?),
-				};
+				let deadline = deadline_arg(a.get("deadline"))?;
 				let view = self.begin_operation(c, &parsed, timeout, &or_null(a.get("txn")), deadline, (method == "take", a.get("ifExists") == Some(&Json::Bool(true))))?;
 				if view.get("state").and_then(Json::as_str) == Some("pending") && wait_ms > 0.0 {
 					let request = c.request.clone().expect("a mutating call");
@@ -1025,8 +1012,7 @@ impl Service {
 				if view.get("state").and_then(Json::as_str) == Some("notAdmitted") && epoch != self.o.primary_epoch {
 					return Err(error("IncarnationChanged", "missing request requires current Member epoch"));
 				}
-				if let Some(types) = view.get("result").filter(|r| is_obj(Some(r))).and_then(|r| r.get("types")).and_then(Json::as_array) {
-					let types: Vec<String> = types.iter().filter_map(|t| t.as_str().map(str::to_owned)).collect();
+				if let Some(types) = retained_types(&view) {
 					self.check_types(&c.grant, Some(&types), "this retained result")?;
 				}
 				reply(view)
@@ -1071,12 +1057,9 @@ impl Service {
 				}
 				let after = int(a.get("afterRev"), "afterRev", 0.0)?;
 				let wait_ms = opt_int(a.get("waitMs"), "waitMs", 0.0)?.unwrap_or(0.0).min(self.o.max_poll_ms);
-				let cap = match a.get("maxBytes") {
-					None => c.frame_bytes,
-					v => int(v, "maxBytes", 1.0)?,
-				};
+				let cap = reply_cap(a.get("maxBytes"), "maxBytes", c.frame_bytes)?;
 				let end = self.now() + wait_ms;
-				self.first_look(c, Kind::Changes { after, max_bytes: cap.min(c.frame_bytes - 21.0), stream_id: a.get("streamId").cloned() }, end)
+				self.first_look(c, Kind::Changes { after, max_bytes: cap, stream_id: a.get("streamId").cloned() }, end)
 			}
 			"notify" => {
 				let (tmpl, _) = template(a.get("template"))?;
@@ -1099,10 +1082,7 @@ impl Service {
 				let g = self.allowed(&c.roles, if take { "take" } else { "read" })?;
 				self.check_types(&g, template_type(&tmpl).as_deref(), "this wait operation")?;
 				let timeout = duration(a.get("timeoutMs"), "timeoutMs", NO_WAIT)?;
-				let deadline = match a.get("deadline") {
-					None => None,
-					d => Some(int(d, "deadline", 0.0)?),
-				};
+				let deadline = deadline_arg(a.get("deadline"))?;
 				let txn_lease = duration(a.get("txnLeaseMs"), "txnLeaseMs", ANY)?;
 				let handback = or_null(a.get("handback"));
 				let mut w = Object::new();
@@ -1136,11 +1116,8 @@ impl Service {
 				if let Some(after) = opt_int(a.get("after"), "after", 0.0)? {
 					o.insert("after", Json::Number(after));
 				}
-				let cap = match a.get("maxBytes") {
-					None => c.frame_bytes,
-					v => int(v, "maxBytes", 1.0)?,
-				};
-				o.insert("maxBytes", Json::Number(cap.min(c.frame_bytes - 21.0)));
+				let cap = reply_cap(a.get("maxBytes"), "maxBytes", c.frame_bytes)?;
+				o.insert("maxBytes", Json::Number(cap));
 				self.first_look(c, Kind::Events { o }, end)
 			}
 			"ack" => {
@@ -1158,11 +1135,11 @@ impl Service {
 		if a.get("protocol") != Some(&Json::Number(PROTOCOL_VERSION)) {
 			return Err(error("UnsupportedProtocol", "this host speaks protocol 1"));
 		}
-		let find = |infos: Vec<Json>| infos.into_iter().find(|i| i.get("alias").and_then(Json::as_str) == Some(c.space.as_deref().unwrap_or(DEFAULT_ALIAS)) || (c.space.is_some() && i.get("spaceId").and_then(Json::as_str) == c.space.as_deref()));
-		let mut info = find(self.store.spaces());
+		let name = c.space.as_deref().unwrap_or(DEFAULT_ALIAS);
+		let mut info = self.store.space_info(name).cloned();
 		if info.is_none() && c.space.is_none() {
 			self.commit_on(c.space.as_deref(), |_, _| Ok(()))?; // an untouched session registers its default space on first use
-			info = find(self.store.spaces());
+			info = self.store.space_info(name).cloned();
 		}
 		let Some(info) = info else { return Err(error("UnknownSpaceError", format!("unknown space: {}", c.space.as_deref().unwrap_or("undefined")))) };
 		let (poll, principal_pending, peer_pending, authority, epoch) = (self.o.max_poll_ms, self.o.max_pending_per_principal, self.o.max_pending_per_peer, self.o.authority_id.clone(), self.o.primary_epoch);
@@ -1229,19 +1206,13 @@ impl Service {
 				None => 100.0,
 				v => int(v, "chain.limit", 1.0)?,
 			}));
-			let cap = match chain.get("maxBytes") {
-				None => c.frame_bytes - 21.0,
-				v => int(v, "chain.maxBytes", 1.0)?,
-			};
-			o.insert("maxBytes", Json::Number(cap.min(c.frame_bytes - 21.0)));
+			let cap = reply_cap(chain.get("maxBytes"), "chain.maxBytes", c.frame_bytes)?;
+			o.insert("maxBytes", Json::Number(cap));
 			return self.snap(c)?.read_chain(now, &tmpl, &Json::Object(o), Some(&as_));
 		}
-		let cap = match a.get("maxBytes") {
-			None => c.frame_bytes,
-			v => int(v, "maxBytes", 1.0)?,
-		};
+		let cap = reply_cap(a.get("maxBytes"), "maxBytes", c.frame_bytes)?;
 		let mut o = Object::new();
-		o.insert("maxBytes", Json::Number(cap.min(c.frame_bytes - 21.0)));
+		o.insert("maxBytes", Json::Number(cap));
 		if a.get("token").is_some() {
 			o.insert("token", str_of(a.get("token"), "token")?.into());
 		}
@@ -1344,21 +1315,9 @@ impl Service {
 				}
 				"write" => {
 					let g = self.allowed(&c.roles, "write")?;
-					let (entry, type_, types) = entry_draft(x.get("entry"), "entry with fields is required")?;
-					let mut all = vec![type_.clone()];
-					all.extend(types);
-					self.check_types(&g, Some(&all), &format!("type {type_}"))?;
-					let unique = unique_of(x.get("unique"))?;
-					let mut s = obj! { "op" => "write", "entry" => entry, "txn" => txn, "lease" => duration(x.get("leaseMs"), "leaseMs", ANY)? };
-					if let Json::Object(m) = &mut s {
-						if let Some(u) = unique {
-							m.insert("unique", Json::Array(u.into_iter().map(Json::from).collect()));
-						}
-						if x.get("transient") == Some(&Json::Bool(true)) {
-							m.insert("transient", Json::Bool(true));
-						}
-					}
-					s
+					let (entry, unique) = self.write_draft(&g, x.get("entry"), x.get("unique"), true)?;
+					let step = obj! { "op" => "write", "entry" => entry, "txn" => txn, "lease" => duration(x.get("leaseMs"), "leaseMs", ANY)? };
+					write_options(step, unique.as_deref(), x.get("transient") == Some(&Json::Bool(true)))
 				}
 				"take" | "read" => {
 					let g = self.allowed(&c.roles, op)?;
@@ -1431,13 +1390,12 @@ impl Service {
 	// ---- errors
 
 	fn error(&self, e: CoreError, response_frame: f64) -> String {
-		let required = || e.message.split_whitespace().nth(4).and_then(|n| n.parse::<f64>().ok());
 		let code = match e.class {
 			"ResponseBudgetTooSmall" => {
-				if required().is_some_and(|r| r > response_frame - 21.0) {
+				if e.required.is_some_and(|r| r > response_frame - 21.0) {
 					return fail("ResourceExhausted", "the configured frame cannot hold the next whole element", None);
 				}
-				return fail("ResponseBudgetTooSmall", &e.message, required());
+				return fail("ResponseBudgetTooSmall", &e.message, e.required);
 			}
 			"Bad" => "BadRequest",
 			"Denied" | "PermissionError" => "PermissionDenied",
@@ -1492,12 +1450,9 @@ fn admitted(s: &mut Space, now: f64, request: &Json, method: &str, args: &Json, 
 }
 
 /// The checked parts of an entry draft: `{type, types?, fields}`, its type and its supertypes.
-fn entry_draft(v: Option<&Json>, missing: &str) -> R<(Json, String, Vec<String>)> {
-	if !is_obj(v) {
-		return Err(bad(missing));
-	}
-	let v = v.expect("checked");
-	let batch = missing != "entry is required";
+fn entry_draft(v: Option<&Json>, batch: bool) -> R<(Json, String, Vec<String>)> {
+	let missing = if batch { "entry with fields is required" } else { "entry is required" };
+	let Some(v) = v.filter(|v| is_obj(Some(v))) else { return Err(bad(missing)) };
 	if batch && !is_obj(v.get("fields")) {
 		return Err(bad(missing));
 	}
@@ -1514,6 +1469,32 @@ fn entry_draft(v: Option<&Json>, missing: &str) -> R<(Json, String, Vec<String>)
 	o.insert("fields", or_null(v.get("fields")));
 	Ok((Json::Object(o), type_, types.unwrap_or_default()))
 }
+/// A write's optional arguments on `args`.
+fn write_options(mut args: Json, unique: Option<&[String]>, transient: bool) -> Json {
+	if let Json::Object(m) = &mut args {
+		if let Some(u) = unique {
+			m.insert("unique", Json::Array(u.iter().map(|k| Json::from(k.as_str())).collect()));
+		}
+		if transient {
+			m.insert("transient", Json::Bool(true));
+		}
+	}
+	args
+}
+/// The types of a retained result, when it has them.
+fn retained_types(view: &Json) -> Option<Vec<String>> {
+	let types = view.get("result").filter(|r| is_obj(Some(r)))?.get("types")?.as_array()?;
+	Some(types.iter().filter_map(|t| t.as_str().map(str::to_owned)).collect())
+}
+/// A `maxBytes` argument, inside what the reply frame leaves.
+fn reply_cap(v: Option<&Json>, what: &str, frame: f64) -> R<f64> {
+	let cap = match v {
+		None => frame,
+		v => int(v, what, 1.0)?,
+	};
+	Ok(cap.min(frame - 21.0))
+}
+fn deadline_arg(v: Option<&Json>) -> R<Option<f64>> { v.map(|d| int(Some(d), "deadline", 0.0)).transpose() }
 fn unique_of(v: Option<&Json>) -> R<Option<Vec<String>>> { v.map(|u| string_list(u, "unique must be field names")).transpose() }
 
 /// `writeIn`.

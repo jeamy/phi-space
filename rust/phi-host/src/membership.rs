@@ -1,9 +1,11 @@
 //! The Member side of membership (src/membership.ts): only pinned Control instructions change admission, and an uncertain
 //! transition stays frozen. Each step is one commit of the Space and the journal of its proofs, so a repeated instruction
 //! gets the proof it got before. The controller's side (R6) is not here.
-use crate::auth::{to_base64, verify_detached, verify_value, Signer};
-use crate::control::take;
-use crate::run_member::{algorithm_name, AuthorityCheck, Pin};
+use phi_json::text;
+use phi_core::space::routing;
+use crate::auth::{seal, signed_by, verify_value, Signer};
+use crate::control::{held_document, take};
+use crate::run_member::{AuthorityCheck, Pin};
 use phi_core::member::declared_supertypes;
 use phi_core::space::{error, CoreError, Space};
 use phi_core::state::SpaceState;
@@ -15,27 +17,22 @@ use std::collections::HashSet;
 
 type R<T> = Result<T, CoreError>;
 const JOURNAL: &str = "phi-spaces.member-transitions";
-fn routing(m: impl Into<String>) -> CoreError { error("RoutingConflict", m) }
 fn migration(m: impl Into<String>) -> CoreError { error("MigrationRequired", m) }
-fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 fn number(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(0.0) }
 fn hash(v: &Json) -> R<String> { digest_json(v).map_err(|_| routing("a value that cannot be hashed")) }
 fn same(a: Option<&Json>, b: Option<&Json>) -> R<bool> { Ok(hash(a.unwrap_or(&Json::Null))? == hash(b.unwrap_or(&Json::Null))?) }
 
-fn signed_text(kind: &str, v: &Json) -> R<String> { Ok(format!("phi-spaces/membership-{kind}/v1\n{}", v.canonical().map_err(|_| routing("invalid membership signature"))?)) }
-
 /// `verifyMembership`.
 fn verify_membership(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
-	verify_value(t, &pin.issuer, pin.algorithm, &pin.public_key, &format!("phi-spaces/membership-{kind}/v1\n"))
+	verify_value(t, &format!("membership-{kind}"), &pin.issuer, pin.algorithm, &pin.public_key)
 		.cloned().ok_or_else(|| routing("invalid membership signature"))
 }
 
 /// `verifyFederationPolicy`: the Control host signed it for this authority.
 pub fn verify_federation_policy(t: &Json, authority_id: &str, pin: &Pin) -> R<Json> {
 	let bad = || routing("policy signature/authority/version mismatch");
-	let (Some(policy), Some(signature)) = (t.get("policy"), text(t, "signature")) else { return Err(bad()) };
-	let message = format!("phi-spaces/federation-policy/v1\n{}", policy.canonical().map_err(|_| bad())?);
-	if text(t, "issuer") != Some(&pin.issuer) || text(t, "algorithm") != Some(algorithm_name(pin.algorithm)) || text(policy, "authorityId") != Some(authority_id) || number(policy, "policyVersion") < 1.0 || !verify_detached(pin.algorithm, &pin.public_key, message.as_bytes(), signature) {
+	let Some(policy) = t.get("policy") else { return Err(bad()) };
+	if text(policy, "authorityId") != Some(authority_id) || number(policy, "policyVersion") < 1.0 || !signed_by(policy, t, "federation-policy", &pin.issuer, pin.algorithm, &pin.public_key) {
 		return Err(bad());
 	}
 	Ok(policy.clone())
@@ -127,11 +124,7 @@ impl MemberLifecycle {
 	}
 
 	fn journal(&self, service: &Service) -> R<Json> {
-		if let Some(j) = self.journal.borrow().clone() {
-			return Ok(j);
-		}
-		let stored = service.store.stored_document(JOURNAL, Some(&self.space_id)).map_err(|e| error("Unavailable", e.to_string()))?;
-		Ok(stored.unwrap_or_else(|| obj! { "steps" => obj! {} }))
+		held_document(&self.journal, &service.store, JOURNAL, Some(&self.space_id), |d| d.unwrap_or_else(|| obj! { "steps" => obj! {} }))
 	}
 
 	/// `installPolicy`: a signed policy of the Control host, on a serving Member.
@@ -418,13 +411,7 @@ impl MemberLifecycle {
 			proof
 		};
 		(self.assert_authority)(service)?;
-		let signature = to_base64(&self.signer.sign(signed_text("proof", &proof)?.as_bytes()));
-		let mut out = Object::new();
-		out.insert("value", proof);
-		out.insert("issuer", self.peer_id.as_str().into());
-		out.insert("algorithm", algorithm_name(self.signer.algorithm()).into());
-		out.insert("signature", signature.into());
-		Ok(Json::Object(out))
+		seal("value", proof, "membership-proof", &self.peer_id, &self.signer).ok_or_else(|| routing("invalid membership signature"))
 	}
 
 }

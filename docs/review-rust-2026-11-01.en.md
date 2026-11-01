@@ -87,8 +87,9 @@ them: profile constants, store error paths, fields the walks never set, and the 
 
 - ✅ Snapshot pages are cached per call string (`phi-service/src/lib.rs:396,1230`): alias and id of one Space get two caches,
   a page opened under one and continued under the other gets `SnapshotExpired`. TS has one cache per host.
-- `requiredBytes` is recovered by parsing the fifth word of the error message (`lib.rs:1406-1414`); `entry_draft` decides
+- ✅ `requiredBytes` is recovered by parsing the fifth word of the error message (`lib.rs:1406-1414`); `entry_draft` decides
   batch-vs-single by comparing an error string (`lib.rs:1473`).
+  *`CoreError.required` carries the number; `entry_draft` takes `batch`.*
 - ✅ **The server dies on a transient accept error.** `rust/phi-wire/src/lib.rs:310-314` (`accept().await?`) and `:365`
   (`set_nodelay(true)?`) end the server on EMFILE/ECONNABORTED, `serve_here` returns without `bound.close()`, the socket
   file stays, and every caller exits without `store.close()`. Node tolerates both. A failed second bind also leaves earlier
@@ -122,32 +123,40 @@ them: profile constants, store error paths, fields the walks never set, and the 
 
 ## 3. Duplicate code
 
-- **Signed envelopes.** Verification is written five times (`auth::verify_value` plus inline copies in
+- ✅ **Signed envelopes.** Verification is written five times (`auth::verify_value` plus inline copies in
   `space_lifecycle.rs:34-40`, `membership.rs:34-43`, `delegation.rs:153-159`, `control_host.rs:118-125`), signing four times
   (`run_member.rs:34-42`, `space_lifecycle.rs:44-51`, `membership.rs:421-427`, `control_host.rs:89-96`). The domain strings
   are spelled out in eight files. `gate.rs` `notice` and `notice_args` differ only in the argument key.
+  *`auth::{verify_value, signed_by, signature_holds, seal}` over `phi-spaces/<name>/v1`; each file names only its domain. `gate.rs` has one `notice`.*
 - ✅ **UTF-16 string order** four times: `phi-json::utf16_cmp`, `space.rs:71` `js_cmp`, `state.rs` `js_order`, `member.rs:15`
   `sorted`; `policy.rs:30` sorts by bytes instead.
   *`phi_json::utf16_cmp`. `policy.rs` now sorts as TS does.*
 - ✅ **Safe-integer checks** five ways (`snapshot.rs:32`, `mailbox.rs:13`, `run_gates.rs:18`, `policy.rs:13`, inline in
   `claims.rs:364` and `space.rs:2178`); the 64-hex-digit check three times (`control.rs:70`, `register.rs:38`, `boot.rs:71`).
   *`phi_json::safe_integer` and `is_sha256_hex`; the `safe(Option<&Json>)` wrappers stay in their files.*
-- Per-file helpers: `text`/`str_of`, `num_of`/`number` (with defaults 0.0 in `run_gates.rs`/`membership.rs`, NaN elsewhere),
+- ✅ Per-file helpers: `text`/`str_of`, `num_of`/`number` (with defaults 0.0 in `run_gates.rs`/`membership.rs`, NaN elsewhere),
   `illegal`, `denied`, `exhausted`, `conflict`, `strings`, `safe`; `run_member::algorithm_name` is `Algorithm::name`.
-- `write` and `announce` repeat the type-limit checks and the "type first, no duplicates" fold (`space.rs:1649-1672`
+  *`phi_json::{text, num_of, safe_of, strings}`, the error constructors in `phi_core::space`, `algorithm_name` gone. `number` stays per file on purpose: its defaults differ (0.0 and NaN). `control.rs` `text` answers "" and `delegation.rs` `safe` a bool for their callers.*
+- ✅ `write` and `announce` repeat the type-limit checks and the "type first, no duplicates" fold (`space.rs:1649-1672`
   vs `:1796-1813`).
-- phi-space-server: runtime plus signal boilerplate five times (`main.rs`, `profiles.rs`, `control_host.rs`, `member.rs`,
+  *`check_types`, `type_list`.*
+- ✅ phi-space-server: runtime plus signal boilerplate five times (`main.rs`, `profiles.rs`, `control_host.rs`, `member.rs`,
   `register.rs`); `control_host.rs` and `member.rs` share group roles, listen parsing, `key_of`, the peer check and the
   serve tail; `hooks.rs` repeats the seed-to-signer pattern four times; `profiles.rs:141` reads `/dev/urandom` by hand next
   to the imported `system_random`.
-- Framing exists in `phi-wire::put`/`frames` and again by hand in `phi-host/src/remote.rs:39-55` with its own 16 MiB limit.
-- Store: the registry document is rebuilt three times in `store.rs` (`:158,226,257`); `disk.rs` `num()` equals `ops.rs`
+  *`member.rs` holds `config_of`, `address_of`, `key_of`, `open_store`, `boot_guard`, `netbird`, `own_peer`, `set_group_roles`, `serve_gate`, both modes use them; `seed_signer` in `hooks.rs`.*
+- ✅ Framing exists in `phi-wire::put`/`frames` and again by hand in `phi-host/src/remote.rs:39-55` with its own 16 MiB limit.
+  *`phi_wire::{put, read_frame}`; the limit is the service's default frame.*
+- ✅ Store: the registry document is rebuilt three times in `store.rs` (`:158,226,257`); `disk.rs` `num()` equals `ops.rs`
   `at_value()`; `rows()`/`ids_of()` differ only in the row mapper; `load()` and `document()` run the same SELECT.
-- Service: the guard preamble three times although `guarded()` exists (`lib.rs:624-656`); the retained-result type check
+  *`registry_doc`, `registry_copy`, `ops::at_value`, `load` over `document`. `rows`/`ids_of` already share `query`.*
+- ✅ Service: the guard preamble three times although `guarded()` exists (`lib.rs:624-656`); the retained-result type check
   three times (`:550,873,1002`); write argument assembly in `write_call` and the batch step; deadline parsing and the
   `maxBytes` clamp repeated.
-- Journal-cache pattern (`RefCell<Option<..>>` with fallback) four times: `membership.rs:129`, `space_lifecycle.rs:118`,
+  *`guarded`, `retained_types`, `write_draft`, `write_options`, `reply_cap`, `deadline_arg`.*
+- ✅ Journal-cache pattern (`RefCell<Option<..>>` with fallback) four times: `membership.rs:129`, `space_lifecycle.rs:118`,
   `control.rs:434`, `delegation.rs:166`. `control_host.rs:58-70` `key_lookup` re-implements `SpaceKeys::find`.
+  *`control::held_document` for three; `delegation.rs` caches typed epochs per key and keeps its own. `control::peer_key` behind both key lookups.*
 
 ## 4. Optimization opportunities that matter
 
@@ -160,22 +169,31 @@ them: profile constants, store error paths, fields the walks never set, and the 
   *`jobs()` is a slice. `run_jobs` still copies the jobs once, in a commit that has jobs to run.*
 - ✅ **Mailbox page clones the whole mailbox** three times (`mailbox.rs:175,199,222` plus `byte_page`).
   *Page and ack read by reference; the page is a slice of the events.*
-- **Each frame is parsed up to four times**: `keys_of`, `call`, `later` in the gate (`gate.rs:456,541,641`) and once more
+- ✅ **Each frame is parsed up to four times**: `keys_of`, `call`, `later` in the gate (`gate.rs:456,541,641`) and once more
   in the service.
-- `Store::spaces()` clones and sorts the registry per request (`store.rs:265`), hit from `Control::check`, `SpaceKeys::find`,
+  *The transport parses once and hands the value to `prepare`, `later`, `call` and `Service::handle_call`.*
+- ✅ `Store::spaces()` clones and sorts the registry per request (`store.rs:265`), hit from `Control::check`, `SpaceKeys::find`,
   `prepare` and the boot loop; an alias→id map is O(1). `host_of` is a linear scan per commit.
-- `Template::matches` builds a `Json::String` per scanned entry for id templates (`space.rs:216`); no type buckets or
+  *`Store::space_info` answers by alias or id through the registry's key index and replaces the lookups; `named_at` makes `host_of` O(1). `spaces()` stays for the callers that want the whole list.*
+- ✅ `Template::matches` builds a `Json::String` per scanned entry for id templates (`space.rs:216`); no type buckets or
   entry-byte cache as in `core.ts:278-286,472-487`.
-- `Object::remove` reindexes the whole map (`phi-json/src/lib.rs:89-93`); `sweep` removes up to 256 generations per commit.
-- `DiskClaims.held` and `txns` are linear `Vec`s (`state.rs:516,562-578,607-630,809`): O(held × due), O(entries × txns).
-- Write path: three owned Strings per `WriteOp::Part` row (`host.rs:310-356`); `join_parts` clones and re-sorts rows at open
+  *The id compare allocates nothing; `Entries` keeps the byte sum and the positions by type until its next change, and `count`, `list` and the page walk use them.*
+- ✅ `Object::remove` reindexes the whole map (`phi-json/src/lib.rs:89-93`); `sweep` removes up to 256 generations per commit.
+  *Removal moves the positions without copying a key.*
+- ✅ `DiskClaims.held` and `txns` are linear `Vec`s (`state.rs:516,562-578,607-630,809`): O(held × due), O(entries × txns).
+  *`held` has a key index. `txns` stays a `Vec`: its length is the open transactions, and its order is what the head writes.*
+- ➖ Write path: three owned Strings per `WriteOp::Part` row (`host.rs:310-356`); `join_parts` clones and re-sorts rows at open
   (`parts.rs:481-496`).
-- Service: `look()` clones the whole `Ctx` per look of a parked call (`lib.rs:868`); `rate()` allocates a String per call
+  *Not changed: nothing measured says three short strings matter next to the SQLite write and the fsync, and `join_parts` runs at open only.*
+- ✅ Service: `look()` clones the whole `Ctx` per look of a parked call (`lib.rs:868`); `rate()` allocates a String per call
   (`:558-577`); `background.rs:39` scans a `Vec` with a fresh `to_json_text` per outbox item.
-- Wire: every commit wakes every parked long poll and every connection's reply task (`lib.rs:160,172`), parity with TS;
+  *`Parked` holds an `Rc<Ctx>`; `rate()` allocates for a new peer only; `background.rs` looks up in a `HashSet`.*
+- ✅ Wire: every commit wakes every parked long poll and every connection's reply task (`lib.rs:160,172`), parity with TS;
   after a store failure `take_durable` wakes all writers on every `committed()` for the rest of the process (`:173-175`).
-- Smaller: `overhead_bytes` re-serializes regs, waiters, txns, gates and jobs per write (parity); `Entries::get_mut` clones
+  *The failure wakes the writers once. The wake per commit stays: parity with TS.*
+- ✅ Smaller: `overhead_bytes` re-serializes regs, waiters, txns, gates and jobs per write (parity); `Entries::get_mut` clones
   the full record into the undo log per call; `stream::touch` drops with `Vec::remove(0)` in a loop.
+  *`stream::touch` drains in one go. `overhead_bytes` stays (parity); `Entries::get_mut` keeps its copy, the undo needs it.*
 
 ## 5. Suggested order
 

@@ -30,3 +30,16 @@ fn side_documents_commit_and_roll_back_with_the_space_in_memory() {
 	assert!(failed.is_err());
 	assert_eq!(store.stored_document("phi-spaces.test-journal", Some("proof")).unwrap(), Some(obj! { "epoch" => 7.0 }));
 }
+
+#[test]
+fn a_space_is_found_by_alias_and_id_until_it_is_deleted() {
+	let mut store = Store::open(Ledger::Memory(MemoryLedger::default()), || seeded("space-info")).unwrap();
+	let info = store.create_space("work", 1.0, seeded("work")).unwrap().unwrap();
+	let id = info.get("spaceId").and_then(Json::as_str).unwrap().to_owned();
+	assert_eq!(store.space_info("work"), Some(&info));
+	assert_eq!(store.space_info(&id), Some(&info));
+	assert_eq!(store.space_info("other"), None);
+	store.delete_space(&id, 2.0, |_| Ok(())).unwrap().unwrap();
+	assert_eq!(store.space_info("work"), None);
+	assert_eq!(store.space_info(&id), None);
+}

@@ -1,16 +1,15 @@
 //! `validateFederationPolicy` (src/routing-semantics.ts): what a federation policy must be before a control host installs it, and
 //! how it may differ from the one before. Members must already be registered; placement changes need an explicit proven removal.
+use phi_json::{text, safe_of};
+use crate::space::routing;
 use crate::member::declared_supertypes;
 use crate::space::{error, CoreError};
 use phi_json::{digest_json, obj, Json};
 use std::collections::{HashMap, HashSet};
 
 type Result<T> = std::result::Result<T, CoreError>;
-fn routing(m: impl Into<String>) -> CoreError { error("RoutingConflict", m) }
 fn migration(m: impl Into<String>) -> CoreError { error("MigrationRequired", m) }
-fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 fn array<'a>(v: &'a Json, k: &str) -> &'a [Json] { v.get(k).and_then(Json::as_array).map_or(&[], Vec::as_slice) }
-fn safe(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| phi_json::safe_integer(*n)) }
 fn hash(v: &Json) -> Result<String> { digest_json(v).map_err(|_| routing("a value that cannot be hashed")) }
 fn same(a: Option<&Json>, b: Option<&Json>) -> Result<bool> { Ok(hash(a.unwrap_or(&Json::Null))? == hash(b.unwrap_or(&Json::Null))?) }
 
@@ -92,7 +91,7 @@ fn check_rule(r: &Json, p: &Json, table: &Json, types: &mut HashSet<String>, pri
 		(Some("sync"), Some("primary")) => {
 			let durability = text(r, "durability");
 			let standby = r.get("standbyReplica").filter(|s| s.as_str().is_some_and(|s| !s.is_empty()));
-			if !r.get("primaryReplica").is_some_and(|x| x.as_str().is_some_and(|x| !x.is_empty())) || !safe(r.get("replicaConfigVersion")).is_some_and(|v| v >= 1.0) || (durability == Some("sync") && standby.is_none()) || (durability == Some("single") && standby.is_some()) {
+			if !r.get("primaryReplica").is_some_and(|x| x.as_str().is_some_and(|x| !x.is_empty())) || !safe_of(r.get("replicaConfigVersion")).is_some_and(|v| v >= 1.0) || (durability == Some("sync") && standby.is_none()) || (durability == Some("single") && standby.is_some()) {
 				return Err(routing("invalid primary replica configuration"));
 			}
 			let signature = hash(&obj! { "primaryReplica" => no_null(r.get("primaryReplica")), "replicaConfigVersion" => no_null(r.get("replicaConfigVersion")), "durability" => no_null(r.get("durability")), "standbyReplica" => no_null(r.get("standbyReplica")), "backupReplica" => no_null(r.get("backupReplica")) })?;
@@ -133,7 +132,7 @@ fn check_rule(r: &Json, p: &Json, table: &Json, types: &mut HashSet<String>, pri
 fn check_profile(f: &Json, seen: &mut HashSet<String>) -> Result<()> {
 	name(f.get("taskType"))?;
 	let task = text(f, "taskType").unwrap_or("");
-	let positive = |k: &str| safe(f.get(k)).is_some_and(|n| n >= 1.0);
+	let positive = |k: &str| safe_of(f.get(k)).is_some_and(|n| n >= 1.0);
 	let gate_fine = match f.get("gateField") {
 		None => true,
 		Some(g) => g.as_str().is_some() && array(f, "equalFields").contains(g),
@@ -200,7 +199,7 @@ pub fn validate_federation_policy(p: &Json, table: &Json, old: Option<&Json>, al
 	name(p.get("authorityId"))?;
 	let (rules, profiles) = (p.get("rules").and_then(Json::as_array), p.get("completionProfiles").and_then(Json::as_array));
 	let (Some(rules), Some(profiles)) = (rules, profiles) else { return Err(routing("policy exceeds schema/budget")) };
-	if !safe(p.get("policyVersion")).is_some_and(|v| v >= 1.0) || rules.len() > 128 || profiles.len() > 32 || p.to_json_text().len() > 65536 {
+	if !safe_of(p.get("policyVersion")).is_some_and(|v| v >= 1.0) || rules.len() > 128 || profiles.len() > 32 || p.to_json_text().len() > 65536 {
 		return Err(routing("policy exceeds schema/budget"));
 	}
 	let default = p.get("default").filter(|d| text(d, "mode") == Some("local")).ok_or_else(|| routing("default must name local member"))?;

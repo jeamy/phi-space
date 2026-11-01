@@ -6,9 +6,9 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
+phi-json = { path = "../phi-json" }
 phi-service = { path = "../phi-service" }
 tokio.workspace = true
 
 [dev-dependencies]
-phi-json = { path = "../phi-json" }
 phi-store = { path = "../phi-store" }

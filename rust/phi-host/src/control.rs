@@ -1,6 +1,7 @@
 //! The control space: pairing (src/enroll.ts), the rules of the wire around it and the supervisor (src/supervisor.ts).
 //! Every effect is one commit on the control space. The plain token lives in `Enrolling::enroll` only; what is stored is
 //! its hash. The commands of a remote effect (`asyncCommands`) come with their handlers.
+use phi_json::strings;
 use crate::auth::{base64, signed_text, to_base64, verify_detached, Algorithm, AuthState, PeerKey, Proving};
 use crate::gate::Keys;
 use phi_core::space::{error, CoreError, Space, Template};
@@ -39,7 +40,7 @@ pub fn control_id(service: &mut Service, now: f64) -> R<String> {
 	}
 }
 pub(crate) fn known_id(service: &Service) -> Option<String> {
-	service.store.spaces().into_iter().find(|i| i.get("alias").and_then(Json::as_str) == Some(CONTROL_SPACE))?.get("spaceId")?.as_str().map(str::to_owned)
+	service.store.space_info(CONTROL_SPACE)?.get("spaceId")?.as_str().map(str::to_owned)
 }
 
 pub fn listed(s: &Space, now: f64, tmpl: &Json) -> R<Vec<Json>> {
@@ -65,7 +66,6 @@ pub(crate) fn with(rec: &Json, changes: &[(&str, Json)]) -> Json {
 	Json::Object(o)
 }
 fn enroll_tmpl(hash: &str) -> Json { obj! { "type" => "Enroll", "fields" => obj! { "tokenHash" => hash } } }
-fn strings(list: &[String]) -> Json { Json::Array(list.iter().map(|s| s.as_str().into()).collect()) }
 
 fn check_hash(h: &str) -> R<()> {
 	if phi_json::is_sha256_hex(h) { Ok(()) } else { Err(illegal("tokenHash must be the SHA-256 of the token in hex")) }
@@ -175,12 +175,26 @@ fn has_admin_key(s: &Space, now: f64, peer_id: &str) -> R<bool> {
 pub struct SpaceKeys {
 	pub now: crate::gate::Now,
 }
+/// The fields of a key in the control Space's directory.
+/// What `make` reads from a document, kept in `cell` after the first read of the file.
+pub(crate) fn held_document<T: Clone>(cell: &RefCell<Option<T>>, store: &phi_store::Store, kind: &str, key: Option<&str>, make: impl FnOnce(Option<Json>) -> T) -> R<T> {
+	if let Some(held) = cell.borrow().clone() {
+		return Ok(held);
+	}
+	let value = make(store.stored_document(kind, key).map_err(|e| error("Unavailable", e.to_string()))?);
+	*cell.borrow_mut() = Some(value.clone());
+	Ok(value)
+}
+
+/// The fields of a key in the control Space's directory.
+pub(crate) fn peer_key(store: &mut phi_store::Store, now: f64, peer_id: &str, key_id: &str) -> Option<Json> {
+	let host = store.reader(Some(CONTROL_SPACE)).ok()?;
+	let found = listed(&host.space, now, &obj! { "type" => "PeerKey", "fields" => obj! { "peerId" => peer_id, "keyId" => key_id } }).ok()?;
+	found.first().map(fields)
+}
 impl Keys for SpaceKeys {
 	fn find(&self, store: &mut phi_store::Store, peer_id: &str, key_id: &str) -> Option<PeerKey> {
-		let id = store.spaces().into_iter().find(|i| i.get("alias").and_then(Json::as_str) == Some(CONTROL_SPACE))?.get("spaceId")?.as_str()?.to_owned();
-		let host = store.reader(Some(&id)).ok()?;
-		let found = listed(&host.space, (self.now)(), &obj! { "type" => "PeerKey", "fields" => obj! { "peerId" => peer_id, "keyId" => key_id } }).ok()?;
-		PeerKey::from_json(&fields(found.first()?))
+		PeerKey::from_json(&peer_key(store, (self.now)(), peer_id, key_id)?)
 	}
 }
 
@@ -446,17 +460,8 @@ impl Supervisor {
 	/// The document, once from the file, with the check of profile transitions, which only the Root starts.
 	fn routing_state(&self, service: &Service) -> R<Option<(Json, bool)>> {
 		let Some(r) = &self.routing else { return Ok(None) };
-		let unavailable = |e: phi_store::StoreError| error("Unavailable", e.to_string());
-		let held = r.state.borrow().clone();
-		let state = match held {
-			Some(s) => s,
-			None => {
-				let s = service.store.stored_document(ROUTING, Some(&r.control_space)).map_err(unavailable)?.unwrap_or(obj! { "policy" => Json::Null, "members" => Object::new() });
-				*r.state.borrow_mut() = Some(s.clone());
-				s
-			}
-		};
-		let open = service.store.stored_document(PROFILE_TRANSITIONS, Some(&r.control_space)).map_err(unavailable)?.and_then(|d| d.get("operations").and_then(Json::as_object).map(|o| o.iter().any(|(_, op)| op.get("phase").and_then(Json::as_str) != Some("completed")))).unwrap_or(false);
+		let state = held_document(&r.state, &service.store, ROUTING, Some(&r.control_space), |d| d.unwrap_or(obj! { "policy" => Json::Null, "members" => Object::new() }))?;
+		let open = service.store.stored_document(PROFILE_TRANSITIONS, Some(&r.control_space)).map_err(|e| error("Unavailable", e.to_string()))?.and_then(|d| d.get("operations").and_then(Json::as_object).map(|o| o.iter().any(|(_, op)| op.get("phase").and_then(Json::as_str) != Some("completed")))).unwrap_or(false);
 		Ok(Some((state, open)))
 	}
 

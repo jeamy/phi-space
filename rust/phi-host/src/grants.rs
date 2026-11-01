@@ -1,5 +1,6 @@
 //! Short-lived control-primary grants (src/grants.ts). Verification never trusts roles, scope or authority from a client
 //! presentation.
+use phi_json::{safe_of, strings};
 use crate::auth::{to_base64, verify_detached, Algorithm, KeyDirectory, Proof, Signer};
 use phi_json::{hex, Json, Object};
 use phi_service::{Authorization, Identity, Policy};
@@ -10,8 +11,6 @@ const RESOLUTION: [&str; 7] = ["hello", "pollOperation", "resolveOperation", "ca
 const OWN_KEY: [&str; 4] = ["rotationChallenge", "rotationGeneration", "rotateKey", "rotationStatus"];
 pub const MAX_TTL_MS: f64 = 60_000.0;
 
-fn strings(list: &[String]) -> Json { Json::Array(list.iter().cloned().map(Json::String).collect()) }
-fn safe(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| phi_json::safe_integer(*n)) }
 fn text_list(v: Option<&Json>) -> Option<Vec<&str>> { v?.as_array()?.iter().map(Json::as_str).collect() }
 
 /// `/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/`
@@ -152,7 +151,7 @@ impl GrantVerifier {
 		if let Some(conn_key) = conn_key {
 			if key.map(|k| k.as_str()) != conn_key.map(Some) { return Err("grant belongs to another app key".into()); }
 		}
-		let (Some(issued), Some(expires)) = (safe(g.get("issuedAt")), safe(g.get("expiresAt"))) else { return Err("grant expired or has invalid timestamps".into()) };
+		let (Some(issued), Some(expires)) = (safe_of(g.get("issuedAt")), safe_of(g.get("expiresAt"))) else { return Err("grant expired or has invalid timestamps".into()) };
 		if expires <= issued || expires - issued > MAX_TTL_MS || issued > now + margin || now + margin >= expires {
 			return Err("grant expired or has invalid timestamps".into());
 		}

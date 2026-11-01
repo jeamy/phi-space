@@ -6,7 +6,7 @@ use phi_host::auth::{Algorithm, Proving, Signer};
 use phi_host::boot::{BootGuard, External};
 use phi_host::capability::Capabilities;
 use phi_host::delegation::{authorize, DelegationOptions, DelegationVerifier};
-use phi_host::gate::{default_group_roles, Gate, GateOptions, Netbird, Now};
+use phi_host::gate::{default_group_roles, Gate, GateOptions, Netbird, Now, PeerInfo};
 use phi_host::grants::GrantVerifier;
 use phi_host::membership::{verify_federation_policy, MemberLifecycle};
 use phi_host::register::{RegisterClient, SqliteRegister};
@@ -26,6 +26,85 @@ const REFUSED: [&str; 7] = ["root", "syncSpaces", "entryReplication", "recovery"
 
 pub(crate) fn field<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or_else(|| fail(format!("the config has no {k}"))) }
 
+/// A config file of this mode; what this host does not carry is refused.
+pub(crate) fn config_of(config: &str, mode: &str, other: &str, refused: &[&str]) -> Json {
+	let bytes = private_file(Path::new(config)).unwrap_or_else(|e| fail(e));
+	let c = parse(&String::from_utf8_lossy(&bytes)).unwrap_or_else(|e| fail(format!("{config}: {e}")));
+	if field(&c, "mode") != mode {
+		fail(other);
+	}
+	if let Some(k) = refused.iter().find(|k| c.get(k).is_some_and(|v| !v.is_null())) {
+		fail(format!("{k} is not served by this host"));
+	}
+	c
+}
+
+/// `{host, port}` of a section.
+pub(crate) fn address_of(v: &Json) -> (&str, u16) { (field(v, "host"), v.get("port").and_then(Json::as_f64).unwrap_or(0.0) as u16) }
+
+/// A key file the config names, and its key id.
+pub(crate) fn key_of(c: &Json, name: &str) -> (Signer, String) {
+	let text = private_file(Path::new(field(c, name))).unwrap_or_else(|e| fail(e));
+	let json = parse(&String::from_utf8_lossy(&text)).unwrap_or_else(|e| fail(e));
+	Signer::from_key_file(&json).unwrap_or_else(|e| fail(e))
+}
+
+pub(crate) fn open_store(store: &str) -> Store {
+	Store::open(SpaceHost::sqlite(SqliteLedger::open(Path::new(store), Synchronous::Full).unwrap_or_else(|e| fail(e))), system_random).unwrap_or_else(|e| fail(e))
+}
+
+/// The guard of the Space this host follows, refusing a host that changed.
+pub(crate) fn boot_guard(c: &Json, host_id: &str, authority_id: &str, control_space: &str, control_host: &str, control_key: &str, now: &Now) -> Rc<BootGuard> {
+	let register = c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint"));
+	let installed = SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e));
+	let mut guard = BootGuard::new(host_id, authority_id, External::Tls(Box::new(register_client(register))), installed, Rc::clone(now), 60_000.0);
+	guard.authority = Some((control_space.to_owned(), control_host.to_owned(), control_key.to_owned()));
+	if guard.control_changed(control_space).unwrap_or_else(|e| fail(e)) {
+		fail("the control host changed; this host follows no such change");
+	}
+	Rc::new(guard)
+}
+
+pub(crate) fn netbird(c: &Json, now: &Now) -> Rc<Netbird> {
+	let management = c.get("management").unwrap_or_else(|| fail("the config has no management"));
+	let token = String::from_utf8_lossy(&private_file(Path::new(field(management, "tokenFile"))).unwrap_or_else(|e| fail(e))).trim().to_owned();
+	Netbird::new(field(management, "url"), &token, None, Rc::clone(now)).unwrap_or_else(|e| fail(e))
+}
+
+pub(crate) fn own_peer(own: Option<PeerInfo>, peer_id: &str) {
+	if own.is_none_or(|p| p.id != peer_id) {
+		fail("listen address does not belong to the provisioned NetBird peer");
+	}
+}
+
+/// `groupRoles` of the config, or the deployment's default.
+pub(crate) fn set_group_roles(o: &mut GateOptions, c: &Json) {
+	if let Some(g) = c.get("groupRoles").and_then(Json::as_object) {
+		o.group_roles = g.iter().map(|(k, v)| (k.to_owned(), v.as_array().map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect()))).collect();
+	} else {
+		o.group_roles = default_group_roles();
+		o.group_roles.insert("space-hosts".into(), ["member", "host", "router"].map(String::from).to_vec());
+	}
+}
+
+/// Serves `gate` until the host is stopped, then closes the store.
+pub(crate) fn serve_gate(runtime: &tokio::runtime::Runtime, opened: Store, options: Options, gate: Rc<Gate>, peer_id: &str, (host, port): (&str, u16), name: &str) {
+	let mut service = Service::new(opened, options);
+	service.start_background().unwrap_or_else(|e| fail(e.message));
+	service.store.drain().unwrap_or_else(|e| fail(e));
+	let mut serving = ServeOptions::new(Listen::Tcp { host: host.to_owned(), port: 0 }, peer_id);
+	serving.endpoints.clear();
+	serving.gates.push((Listen::Tcp { host: host.to_owned(), port }, gate));
+	let served = runtime.block_on(async {
+		let stop = stopping::stop();
+		serve(service, serving, |address: Vec<String>| println!("[phi-spaces] {name} ready on {}", address[0]), stop).await
+	});
+	match served {
+		Ok(service) => service.store.close(),
+		Err(e) => fail(e),
+	}
+}
+
 pub(crate) fn clock() -> Now { Rc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("after 1970").as_millis() as f64) }
 
 pub(crate) fn register_client(r: &Json) -> RegisterClient {
@@ -34,14 +113,7 @@ pub(crate) fn register_client(r: &Json) -> RegisterClient {
 }
 
 pub fn run(config: &str, store: &str) {
-	let bytes = private_file(Path::new(config)).unwrap_or_else(|e| fail(e));
-	let c = parse(&String::from_utf8_lossy(&bytes)).unwrap_or_else(|e| fail(format!("{config}: {e}")));
-	if field(&c, "mode") != "member" {
-		fail("this host runs as a member; a control host stays on TypeScript");
-	}
-	if let Some(k) = REFUSED.iter().find(|k| c.get(k).is_some_and(|v| !v.is_null())) {
-		fail(format!("{k} is not served by this host"));
-	}
+	let c = config_of(config, "member", "this host runs as a member; a control host stays on TypeScript", &REFUSED);
 	let now = clock();
 	let (host_id, peer_id, authority_id) = (field(&c, "hostId"), field(&c, "peerId"), field(&c, "authorityId"));
 	let (control_host, control_space) = (field(&c, "controlHostId"), field(&c, "controlSpaceId"));
@@ -52,24 +124,10 @@ pub fn run(config: &str, store: &str) {
 	}
 	let algorithm = Algorithm::parse(field(control, "algorithm")).expect("checked");
 	let listen = c.get("listen").unwrap_or_else(|| fail("the config has no listen"));
-	let (listen_host, listen_port) = (field(listen, "host"), listen.get("port").and_then(Json::as_f64).unwrap_or(0.0) as u16);
-	let key_of = |name: &str| {
-		let text = private_file(Path::new(field(&c, name))).unwrap_or_else(|e| fail(e));
-		let json = parse(&String::from_utf8_lossy(&text)).unwrap_or_else(|e| fail(e));
-		Signer::from_key_file(&json).unwrap_or_else(|e| fail(e))
-	};
-	let register = c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint"));
-	let installed = SqliteRegister::open(Path::new(field(&c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e));
-	let mut guard = BootGuard::new(host_id, authority_id, External::Tls(Box::new(register_client(register))), installed, Rc::clone(&now), 60_000.0);
-	guard.authority = Some((control_space.to_owned(), control_host.to_owned(), control_key.to_owned()));
-	if guard.control_changed(control_space).unwrap_or_else(|e| fail(e)) {
-		fail("the control host changed; this host follows no such change");
-	}
-	let guard = Rc::new(guard);
-	let opened = Store::open(SpaceHost::sqlite(SqliteLedger::open(Path::new(store), Synchronous::Full).unwrap_or_else(|e| fail(e))), system_random).unwrap_or_else(|e| fail(e));
-	let management = c.get("management").unwrap_or_else(|| fail("the config has no management"));
-	let token = String::from_utf8_lossy(&private_file(Path::new(field(management, "tokenFile"))).unwrap_or_else(|e| fail(e))).trim().to_owned();
-	let directory = Netbird::new(field(management, "url"), &token, None, Rc::clone(&now)).unwrap_or_else(|e| fail(e));
+	let (listen_host, listen_port) = address_of(listen);
+	let guard = boot_guard(&c, host_id, authority_id, control_space, control_host, control_key, &now);
+	let opened = open_store(store);
+	let directory = netbird(&c, &now);
 	let runtime = stopping::runtime();
 	let address = c.get("control").and_then(|x| x.get("address")).unwrap_or_else(|| fail("the config has no control address"));
 	let peers = tokio::task::LocalSet::new().block_on(&runtime, async {
@@ -80,17 +138,15 @@ pub fn run(config: &str, store: &str) {
 		Ok::<_, String>((directory.lookup(listen_host).await?, directory.lookup(field(address, "host")).await?))
 	});
 	let (own, control_peer) = peers.unwrap_or_else(|e| fail(e));
-	if own.is_none_or(|p| p.id != peer_id) {
-		fail("listen address does not belong to the provisioned NetBird peer");
-	}
+	own_peer(own, peer_id);
 	let supervisor = control_peer.unwrap_or_else(|| fail("control peer unavailable in provisioned directory")).id;
 
 	let mut options = Options::single_peer(peer_id);
 	options.identity.clear();
 	options.host_id = Some(host_id.to_owned());
 	options.authority_id = authority_id.to_owned();
-	let (signer, key_id) = key_of("keyFile");
-	let client = Rc::new(ControlClient::new((field(address, "host").to_owned(), address.get("port").and_then(Json::as_f64).unwrap_or(0.0) as u16), listen_host, peer_id, control_host, signer, &key_id));
+	let (signer, key_id) = key_of(&c, "keyFile");
+	let client = Rc::new(ControlClient::new((field(address, "host").to_owned(), address_of(address).1), listen_host, peer_id, control_host, signer, &key_id));
 	let keys = Rc::new(RemoteKeys::new(Rc::clone(&client), Rc::clone(&now)));
 
 	let policy_keys = Rc::clone(&keys);
@@ -115,19 +171,14 @@ pub fn run(config: &str, store: &str) {
 	options.guard = Some(Rc::clone(&guard) as _);
 
 	let mut o = GateOptions::new(directory, Rc::clone(&now));
-	if let Some(g) = c.get("groupRoles").and_then(Json::as_object) {
-		o.group_roles = g.iter().map(|(k, v)| (k.to_owned(), v.as_array().map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect()))).collect();
-	} else {
-		o.group_roles = default_group_roles();
-		o.group_roles.insert("space-hosts".into(), ["member", "host", "router"].map(String::from).to_vec());
-	}
+	set_group_roles(&mut o, &c);
 	o.proving = Some((Proving::new(host_id), Rc::clone(&keys) as _));
 	o.delegation = Some(verifier);
 	let o_boot = Rc::clone(&guard);
 	o.boot = Some(guard);
 	o.remote_keys = Some(keys);
 	if let Some(m) = c.get("membership").filter(|m| !m.is_null()) {
-		let (signer, _) = key_of("keyFile");
+		let (signer, _) = key_of(&c, "keyFile");
 		let check = o.boot.clone().expect("set above");
 		let pin = Pin { issuer: supervisor.clone(), algorithm, public_key: control_key.to_owned() };
 		o.lifecycle = Some(MemberLifecycle::new(field(m, "memberId"), field(m, "spaceId"), authority_id, peer_id, signer, pin, Box::new(move |_| check.assert_active())));
@@ -147,26 +198,11 @@ pub fn run(config: &str, store: &str) {
 	};
 	if c.get("runGates") == Some(&Json::Bool(true)) {
 		let tasks: phi_host::run_member::RunPreparer = Box::new(tasks_preparer);
-		o.run_gates = Some(RunGates { authority_id: authority_id.to_owned(), peer_id: peer_id.to_owned(), signer: key_of("keyFile").0, controller: pin.clone(), preparers: [("tasks".to_owned(), tasks)].into_iter().collect(), assert_authority: assert_host() });
+		o.run_gates = Some(RunGates { authority_id: authority_id.to_owned(), peer_id: peer_id.to_owned(), signer: key_of(&c, "keyFile").0, controller: pin.clone(), preparers: [("tasks".to_owned(), tasks)].into_iter().collect(), assert_authority: assert_host() });
 	}
 	if c.get("spaceLifecycle") == Some(&Json::Bool(true)) {
-		o.spaces = Some(SpaceLifecycleService::new(host_id, authority_id, peer_id, key_of("keyFile").0, pin, assert_host()));
+		o.spaces = Some(SpaceLifecycleService::new(host_id, authority_id, peer_id, key_of(&c, "keyFile").0, pin, assert_host()));
 	}
-	let host = listen_host.to_owned();
-	let gate = Gate::new(&host, o).unwrap_or_else(|e| fail(e));
-
-	let mut service = Service::new(opened, options);
-	service.start_background().unwrap_or_else(|e| fail(e.message));
-	service.store.drain().unwrap_or_else(|e| fail(e));
-	let mut serving = ServeOptions::new(Listen::Tcp { host: host.clone(), port: 0 }, peer_id);
-	serving.endpoints.clear();
-	serving.gates.push((Listen::Tcp { host: host.clone(), port: listen_port }, gate));
-	let served = runtime.block_on(async {
-		let stop = stopping::stop();
-		serve(service, serving, |address: Vec<String>| println!("[phi-spaces] member ready on {}", address[0]), stop).await
-	});
-	match served {
-		Ok(service) => service.store.close(),
-		Err(e) => fail(e),
-	}
+	let gate = Gate::new(listen_host, o).unwrap_or_else(|e| fail(e));
+	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "member");
 }

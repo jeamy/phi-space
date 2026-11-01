@@ -9,6 +9,7 @@ use crate::writer::Waker;
 use phi_core::space::{error, CoreError, Random, Space};
 use phi_json::{hex, obj, Json, Object};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::io::Read;
 use std::rc::Rc;
 
@@ -45,8 +46,14 @@ pub struct Store {
 	default: SpaceHost,
 	/// Named Spaces by id, deleted ones too (their ids stay reserved and a snapshot read still finds them).
 	named: Vec<(String, SpaceHost)>,
+	/// Where each id sits in `named`.
+	named_at: HashMap<String, usize>,
 	/// The randomness of the registry's ids.
 	random: Random,
+}
+
+fn registry_doc(registry: &Json) -> WriteOp {
+	WriteOp::Doc { kind: REGISTRY.into(), key: String::new(), version: REGISTRY_VERSION, value: registry.to_json_text() }
 }
 
 impl Store {
@@ -72,10 +79,12 @@ impl Store {
 				named.push((id.to_owned(), SpaceHost::open_shared(shared.clone(), NAMED_SPACE, Some(id), random())?));
 			}
 		}
-		Ok(Store { registry, default, named, random: random() })
+		let named_at = named.iter().enumerate().map(|(i, (id, _))| (id.clone(), i)).collect();
+		Ok(Store { registry, default, named, named_at, random: random() })
 	}
 
 	pub fn registry(&self) -> Option<&Json> { self.registry.as_ref() }
+	fn registry_copy(&self) -> Object { self.registry.as_ref().and_then(Json::as_object).cloned().unwrap_or_default() }
 	fn default_id(&self) -> Option<&str> { self.registry.as_ref()?.get("defaultSpaceId")?.as_str() }
 	/// `hostId` of the registry.
 	pub fn host_id(&self) -> Option<&str> { self.registry.as_ref()?.get("hostId")?.as_str() }
@@ -102,20 +111,25 @@ impl Store {
 	}
 	fn host_of(&mut self, id: Option<&str>) -> &mut SpaceHost {
 		match id {
-			Some(id) if Some(id) != self.default_id() => match self.named.iter().position(|(n, _)| n == id) {
-				Some(i) => &mut self.named[i].1,
+			Some(id) if Some(id) != self.default_id() => match self.named_at.get(id) {
+				Some(&i) => &mut self.named[i].1,
 				None => &mut self.default, // not reached: the registry and the opened documents agree
 			},
 			_ => &mut self.default,
 		}
 	}
 
+	fn keep_named(&mut self, id: String, host: SpaceHost) {
+		self.named_at.insert(id.clone(), self.named.len());
+		self.named.push((id, host));
+	}
+
 	/// The host of a Space for a snapshot read: the default Space even before it is registered.
 	pub fn reader(&mut self, space: Option<&str>) -> std::result::Result<&mut SpaceHost, CoreError> {
 		let id = space.map(|n| self.read_id(n)).transpose()?;
-		if let Some(id) = id.as_deref().filter(|id| Some(*id) != self.default_id() && !self.named.iter().any(|(n, _)| n == id)) {
+		if let Some(id) = id.as_deref().filter(|id| Some(*id) != self.default_id() && !self.named_at.contains_key(*id)) {
 			let host = SpaceHost::open_shared(self.default.ledger.clone(), NAMED_SPACE, Some(id), system_random()).map_err(|e| error("Error", e.to_string()))?;
-			self.named.push((id.to_owned(), host));
+			self.keep_named(id.to_owned(), host);
 		}
 		Ok(self.host_of(id.as_deref()))
 	}
@@ -141,12 +155,11 @@ impl Store {
 			Some(k) => k,
 			None => hex(&(self.random)(32)),
 		};
-		let existing = self.registry.clone().and_then(|r| r.as_object().cloned());
-		let state = &self.default.space.state;
+				let state = &self.default.space.state;
 		let space_id = state.space_id.clone().unwrap_or_else(|| format!("sp-{}", random_uuid(&mut self.random)));
 		let incarnation = state.incarnation.clone().unwrap_or_else(|| hex(&(self.random)(4)));
 		let info = obj! { "spaceId" => space_id.as_str(), "alias" => DEFAULT_ALIAS, "incarnation" => incarnation.as_str(), "createdAt" => now };
-		let mut r = existing.unwrap_or_default();
+		let mut r = self.registry_copy();
 		for (k, v) in [("hostId", Json::from(host_id.as_str())), ("defaultSpaceId", Json::Null), ("spaces", Json::Object(Object::new())), ("aliases", Json::Object(Object::new())), ("hostKey", Json::from(host_key.as_str()))] {
 			if r.get(k).is_none_or(|old| k == "defaultSpaceId" && old.is_null()) {
 				r.insert(k, v);
@@ -162,7 +175,7 @@ impl Store {
 			}
 		}
 		let registry = Json::Object(r);
-		self.default.also.push(WriteOp::Doc { kind: REGISTRY.into(), key: String::new(), version: REGISTRY_VERSION, value: registry.to_json_text() });
+		self.default.also.push(registry_doc(&registry));
 		let new_space = self.default_id().is_none();
 		let done = self.default.start_commit(|s| {
 			s.clock = now;
@@ -209,7 +222,7 @@ impl Store {
 		let id = format!("sp-{}", random_uuid(&mut self.random));
 		let incarnation = hex(&(self.random)(4));
 		let info = obj! { "spaceId" => id.as_str(), "alias" => alias, "incarnation" => incarnation.as_str(), "createdAt" => now };
-		let mut registry = self.registry.clone().and_then(|r| r.as_object().cloned()).unwrap_or_default();
+		let mut registry = self.registry_copy();
 		if let Some(Json::Object(s)) = registry.get_mut("spaces") {
 			s.insert(&id, info.clone());
 		}
@@ -218,7 +231,7 @@ impl Store {
 		}
 		let registry = Json::Object(registry);
 		let mut host = SpaceHost::open_shared(self.default.ledger.clone(), NAMED_SPACE, Some(&id), random)?;
-		host.also.push(WriteOp::Doc { kind: REGISTRY.into(), key: String::new(), version: REGISTRY_VERSION, value: registry.to_json_text() });
+		host.also.push(registry_doc(&registry));
 		let (space, carried) = (id.clone(), incarnation);
 		let done = host.start_commit(|s| {
 			s.clock = now;
@@ -231,7 +244,7 @@ impl Store {
 			Err(e) => Err(e),
 			Ok(_) => {
 				self.registry = Some(registry);
-				self.named.push((id, host));
+				self.keep_named(id, host);
 				Ok(info)
 			}
 		})
@@ -240,7 +253,7 @@ impl Store {
 	/// The delete step of a Space's lifecycle: `op` decides in the commit that takes the alias, the id stays reserved in the
 	/// registry and the document stays in the file.
 	pub fn delete_space<T>(&mut self, id: &str, now: f64, op: impl FnOnce(&mut Space) -> std::result::Result<T, CoreError>) -> Result<std::result::Result<Committed<T>, CoreError>> {
-		let mut registry = self.registry.clone().and_then(|r| r.as_object().cloned()).unwrap_or_default();
+		let mut registry = self.registry_copy();
 		let Some(mut info) = registry.get("spaces").and_then(|s| s.get(id)).and_then(Json::as_object).cloned().filter(|i| i.get("deletedAt").is_none()) else { return Ok(Err(unknown(id))) };
 		info.insert("deletedAt", now.into());
 		if let (Some(Json::Object(a)), Some(alias)) = (registry.get_mut("aliases"), info.get("alias").and_then(Json::as_str)) {
@@ -251,7 +264,7 @@ impl Store {
 		}
 		let registry = Json::Object(registry);
 		let host = self.host_of(Some(id));
-		host.also.push(WriteOp::Doc { kind: REGISTRY.into(), key: String::new(), version: REGISTRY_VERSION, value: registry.to_json_text() });
+		host.also.push(registry_doc(&registry));
 		let done = host.start_commit(|s| {
 			s.clock = now;
 			op(s)
@@ -266,6 +279,13 @@ impl Store {
 	/// reaching a count of `handed()` means all of those are on the disk, whichever Space they were of.
 	pub fn handed(&self) -> u64 { self.default.handed_count() + self.named.iter().map(|(_, h)| h.handed_count()).sum::<u64>() }
 	pub fn durable(&self) -> u64 { self.default.durable_count() + self.named.iter().map(|(_, h)| h.durable_count()).sum::<u64>() }
+	/// The live Space with this alias or id.
+	pub fn space_info(&self, name: &str) -> Option<&Json> {
+		let r = self.registry.as_ref()?;
+		let spaces = r.get("spaces")?;
+		let id = r.get("aliases").and_then(|a| a.get(name)).and_then(Json::as_str).unwrap_or(name);
+		spaces.get(id).filter(|i| i.get("deletedAt").is_none())
+	}
 	/// The registered Spaces in `listSpaces` order: the default first, then by creation; deleted ones are left out.
 	pub fn spaces(&self) -> Vec<Json> {
 		let Some(r) = &self.registry else { return vec![] };

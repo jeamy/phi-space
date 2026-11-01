@@ -2,6 +2,7 @@
 //! served from the copy by a token, private to the host, the stream, the principal and the query. Snapshots live
 //! beside the document (a host's memory, lost on a restart), bounded by `maxSnapshots`, `maxSnapshotBytes` and
 //! `snapshotTtlMs`.
+use crate::space::illegal;
 use crate::space::{byte_page, bytes, error, js_string, strict_eq, until, Result, Space, Template};
 use phi_json::{hex, number_text, obj, Json};
 use std::rc::Rc;
@@ -27,7 +28,6 @@ pub struct Snapshots {
 	cache: Vec<Record>,
 }
 
-fn illegal(m: &str) -> crate::space::CoreError { error("IllegalArgumentError", m) }
 /// `Number.isSafeInteger`.
 use phi_json::safe_integer;
 fn same_owner(a: &Option<Json>, b: Option<&Json>) -> bool {

@@ -1,5 +1,6 @@
 //! App-key rotation and the grants that go with it (src/rotation.ts, the `grant` call of src/runtime.ts): a persisted, one-use
 //! challenge and proofs of both keys. Privileges are copied from the old key, never supplied by clients.
+use phi_core::space::permission as denied;
 use crate::auth::{verify_detached, Algorithm, KeyDirectory, Proof, Signer};
 use crate::control::{answered, fields, illegal, known_id, key_fingerprint, listed, put, refuse, take, text, with, CONTROL_SPACE};
 use crate::grants::{Decision, GrantAuthority, GrantVerifier, MAX_TTL_MS};
@@ -15,7 +16,6 @@ const COMMAND_MS: f64 = 60_000.0;
 const DOMAIN: &str = "phi-spaces/rotate/v1\n";
 
 type R<T> = Result<T, CoreError>;
-fn denied(m: impl Into<String>) -> CoreError { error("PermissionError", m) }
 
 fn signed(c: &Json) -> R<String> { Ok(format!("{DOMAIN}{}", c.canonical().map_err(|_| denied("unknown, used or changed rotation challenge"))?)) }
 

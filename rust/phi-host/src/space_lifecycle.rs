@@ -1,9 +1,12 @@
 //! The host side of Space lifecycle (src/space-lifecycle.ts): idempotent creation, archiving and checked deletion of named Spaces
 //! on this host, per signed instruction of the control host. Each step is one commit with its line in the journal, so a
 //! repeated command gets the result it got before. The admin commands of the control side stay in TypeScript (R6).
-use crate::auth::{to_base64, verify_detached, Signer};
+use phi_json::text;
+use phi_core::space::{illegal, permission as denied, conflict};
+use crate::auth::{seal, verify_value, Signer};
+use crate::control::held_document;
 use crate::control::CONTROL_SPACE;
-use crate::run_member::{algorithm_name, AuthorityCheck, Pin};
+use crate::run_member::{AuthorityCheck, Pin};
 use phi_core::space::{error, CoreError, Space};
 use phi_json::{digest_json, obj, Json, Object};
 use phi_service::Service;
@@ -13,11 +16,7 @@ use std::cell::RefCell;
 type R<T> = Result<T, CoreError>;
 const JOURNAL: &str = "phi-spaces.space-lifecycle";
 const MAX_COMMANDS: usize = 4096;
-fn denied(m: impl Into<String>) -> CoreError { error("PermissionError", m) }
-fn illegal(m: impl Into<String>) -> CoreError { error("IllegalArgumentError", m) }
-fn conflict(m: impl Into<String>) -> CoreError { error("RunGateConflict", m) }
 fn in_use(m: impl Into<String>) -> CoreError { error("TransactionError", m) }
-fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 /// JavaScript's truth, for an optional field an instruction may send empty.
 fn given<'a>(q: &'a Json, k: &str) -> Option<&'a Json> {
 	q.get(k).filter(|v| !matches!(v, Json::Null | Json::Bool(false)) && v.as_f64() != Some(0.0) && v.as_str() != Some(""))
@@ -28,27 +27,15 @@ fn valid_id(id: &str) -> bool {
 	c.next().is_some_and(|f| f.is_ascii_alphanumeric()) && id.chars().count() <= 96 && c.all(|x| x.is_ascii_alphanumeric() || "._:-".contains(x))
 }
 
-fn signed_text(kind: &str, v: &Json) -> R<String> { Ok(format!("phi-spaces/space-lifecycle-{kind}/v1\n{}", canonical(v)?)) }
-
 /// `verifyLifecycle`.
 fn verify_lifecycle(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
-	let bad = || denied(format!("invalid Space lifecycle {kind} signature"));
-	let (Some(value), Some(signature)) = (t.get("value"), text(t, "signature")) else { return Err(bad()) };
-	if text(t, "issuer") != Some(&pin.issuer) || text(t, "algorithm") != Some(algorithm_name(pin.algorithm)) || !verify_detached(pin.algorithm, &pin.public_key, signed_text(kind, value).map_err(|_| bad())?.as_bytes(), signature) {
-		return Err(bad());
-	}
-	Ok(value.clone())
+	verify_value(t, &format!("space-lifecycle-{kind}"), &pin.issuer, pin.algorithm, &pin.public_key)
+		.cloned().ok_or_else(|| denied(format!("invalid Space lifecycle {kind} signature")))
 }
 
 /// `signLifecycle`.
 fn sign_lifecycle(kind: &str, value: Json, issuer: &str, signer: &Signer) -> R<Json> {
-	let signature = to_base64(&signer.sign(signed_text(kind, &value)?.as_bytes()));
-	let mut o = Object::new();
-	o.insert("value", value);
-	o.insert("issuer", issuer.into());
-	o.insert("algorithm", algorithm_name(signer.algorithm()).into());
-	o.insert("signature", signature.into());
-	Ok(Json::Object(o))
+	seal("value", value, &format!("space-lifecycle-{kind}"), issuer, signer).ok_or_else(|| illegal("a value that cannot be hashed"))
 }
 
 /// `why`: what still holds a Space that is to be deleted.
@@ -105,13 +92,7 @@ impl SpaceLifecycleService {
 	}
 
 	fn commands(&self, service: &Service) -> R<Object> {
-		if let Some(j) = self.journal.borrow().clone() {
-			return Ok(j);
-		}
-		let stored = service.store.stored_document(JOURNAL, None).map_err(|e| error("Unavailable", e.to_string()))?;
-		let commands = stored.as_ref().and_then(|d| d.get("commands")).and_then(Json::as_object).cloned().unwrap_or_default();
-		*self.journal.borrow_mut() = Some(commands.clone());
-		Ok(commands)
+		held_document(&self.journal, &service.store, JOURNAL, None, |d| d.as_ref().and_then(|d| d.get("commands")).and_then(Json::as_object).cloned().unwrap_or_default())
 	}
 
 	/// `SpaceLifecycle.apply`.

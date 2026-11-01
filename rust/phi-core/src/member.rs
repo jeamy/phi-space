@@ -1,6 +1,8 @@
 //! Member admission (src/member-admission.ts): the same rules for local workers and network clients. A Member that is not
 //! serving refuses new work, a draining one finishes what it holds inside a bounded allowance. The membership stays JSON in
 //! the document's rest, as a transaction's `completion` does.
+use phi_json::text;
+use crate::space::routing;
 use crate::space::{error, CoreError, Space};
 use crate::state::TxnRec;
 use phi_json::{digest_json, obj, Json};
@@ -8,8 +10,6 @@ use phi_json::{digest_json, obj, Json};
 type Result<T> = std::result::Result<T, CoreError>;
 
 fn drained(m: impl Into<String>) -> CoreError { error("MemberDrained", m) }
-fn routing(m: impl Into<String>) -> CoreError { error("RoutingConflict", m) }
-fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 fn number(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
 fn names(v: Option<&Json>) -> Vec<String> { v.and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect()) }
 fn sorted(mut v: Vec<String>) -> Vec<String> {

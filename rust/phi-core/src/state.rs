@@ -8,7 +8,10 @@
 //! Modelled so far (R1, slices 1 to 4): the scalars, the entries, the transactions, the registrations, the waiters, the
 //! request claims and generations (`rpc`), the mailboxes and the change stream. The outbox and the fanout jobs are
 //! carried as JSON arrays (the core only appends to them and walks them), and so is the rest of the document.
-use phi_json::{Json, Object};
+use phi_json::{strings, Json, Object};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 /// A state that is not the TypeScript document shape.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -58,7 +61,6 @@ impl Fields {
 	fn rest(self) -> Object { self.0 }
 }
 
-fn strings(v: &[String]) -> Json { Json::Array(v.iter().map(|s| Json::String(s.clone())).collect()) }
 fn nullable(v: &Option<String>) -> Json { v.as_ref().map_or(Json::Null, |s| Json::String(s.clone())) }
 /// Appends `rest` after the modelled fields (an extra field written by a newer TypeScript keeps its value).
 fn with_rest(mut o: Object, rest: &Object) -> Json { for (k, v) in rest.iter() { o.insert(k, v.clone()); } Json::Object(o) }
@@ -125,10 +127,22 @@ impl EntryRec {
 
 /// The entries of a space, in their order. They change only through these methods, so a commit knows what it changed:
 /// `track` starts an undo log, `untrack` hands it over (the host writes the changed rows from it, or undoes them).
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default)]
 pub struct Entries {
 	items: Vec<EntryRec>,
 	log: Option<Vec<EntryUndo>>,
+	memo: RefCell<Memo>,
+}
+impl PartialEq for Entries {
+	fn eq(&self, other: &Self) -> bool { self.items == other.items && self.log == other.log }
+}
+
+/// What reads worked out from the records, kept until the next change (`entrySums`, `typeBuckets` of core.ts).
+#[derive(Clone, Debug, Default)]
+struct Memo {
+	bytes: Option<f64>,
+	/// The positions of the records of a type, in order; a template's type matches subtypes.
+	types: HashMap<String, Rc<[usize]>>,
 }
 
 /// One change of the entries, with what undoes it.
@@ -143,13 +157,34 @@ pub enum EntryUndo {
 }
 
 impl Entries {
+	fn changed(&mut self) { *self.memo.get_mut() = Memo::default(); }
+	/// The sum of `size` over all records.
+	pub fn total_bytes(&self, size: impl Fn(&EntryRec) -> f64) -> f64 {
+		if let Some(known) = self.memo.borrow().bytes {
+			return known;
+		}
+		let total = self.items.iter().map(size).sum();
+		self.memo.borrow_mut().bytes = Some(total);
+		total
+	}
+	/// The positions of the records of `type_`, in order.
+	pub fn of_type(&self, type_: &str) -> Rc<[usize]> {
+		if let Some(known) = self.memo.borrow().types.get(type_) {
+			return Rc::clone(known);
+		}
+		let found: Rc<[usize]> = self.items.iter().enumerate().filter(|(_, e)| e.types.iter().any(|t| t == type_)).map(|(i, _)| i).collect();
+		self.memo.borrow_mut().types.insert(type_.to_owned(), Rc::clone(&found));
+		found
+	}
 	pub fn push(&mut self, e: EntryRec) {
+		self.changed();
 		if let Some(log) = &mut self.log {
 			log.push(EntryUndo::Pushed(e.id.clone()));
 		}
 		self.items.push(e);
 	}
 	pub fn remove(&mut self, i: usize) -> EntryRec {
+		self.changed();
 		let e = self.items.remove(i);
 		if let Some(log) = &mut self.log {
 			log.push(EntryUndo::Removed(i, e.clone()));
@@ -158,6 +193,7 @@ impl Entries {
 	}
 	/// Keeps the records `keep` accepts, in order.
 	pub fn retain(&mut self, mut keep: impl FnMut(&EntryRec) -> bool) {
+		self.changed();
 		let mut kept = 0;
 		let log = &mut self.log;
 		self.items.retain(|entry| {
@@ -172,6 +208,7 @@ impl Entries {
 	}
 	/// The record at `i`, to change.
 	pub fn get_mut(&mut self, i: usize) -> &mut EntryRec {
+		self.changed();
 		if let Some(log) = &mut self.log {
 			log.push(EntryUndo::Set(i, self.items[i].clone()));
 		}
@@ -182,6 +219,7 @@ impl Entries {
 	pub fn untrack(&mut self) -> Vec<EntryUndo> { self.log.take().unwrap_or_default() }
 	/// Undoes `changes` (as `untrack` handed them over).
 	pub fn undo(&mut self, changes: Vec<EntryUndo>) {
+		self.changed();
 		for c in changes.into_iter().rev() {
 			match c {
 				EntryUndo::Pushed(_) => {
@@ -203,7 +241,7 @@ impl<'a> IntoIterator for &'a Entries {
 	fn into_iter(self) -> Self::IntoIter { self.items.iter() }
 }
 impl From<Vec<EntryRec>> for Entries {
-	fn from(items: Vec<EntryRec>) -> Self { Entries { items, log: None } }
+	fn from(items: Vec<EntryRec>) -> Self { Entries { items, log: None, memo: Default::default() } }
 }
 
 /// `TxnRec`: an open transaction. `owner`: the only conversation that may use, commit, abort, renew or cancel it.
@@ -515,6 +553,8 @@ impl PartialEq for Claims {
 pub struct DiskClaims {
 	source: std::sync::Arc<dyn ClaimSource>,
 	held: Vec<(String, Option<Json>, u64)>,
+	/// Where each key sits in `held`.
+	held_index: HashMap<String, usize>,
 	/// The number of the commit that writes now (a host sets it; several commits may be on their way to the disk).
 	pub stamp: u64,
 	/// How often the whole map was read (`entries`): code that scans a day of claims shows here.
@@ -546,7 +586,9 @@ impl DiskClaims {
 	/// Over the rows of `source`: the open requests are held from the start.
 	pub fn new(source: std::sync::Arc<dyn ClaimSource>) -> DiskClaims {
 		let held = source.unindexed().into_iter().map(|(k, v)| (k, Some(v), 0)).collect();
-		DiskClaims { source, held, stamp: 0, enumerations: Default::default() }
+		let mut claims = DiskClaims { source, held, held_index: HashMap::new(), stamp: 0, enumerations: Default::default() };
+		claims.index_held();
+		claims
 	}
 	/// From a map in memory that commit `written` is writing to the disk now (`DiskMap.adopt`): every record held until
 	/// that commit is durable.
@@ -560,7 +602,8 @@ impl DiskClaims {
 	}
 	/// `ClaimSource::take_failure`.
 	pub fn take_failure(&self) -> Option<String> { self.source.take_failure() }
-	fn held_at(&self, k: &str) -> Option<&Option<Json>> { self.held.iter().find(|(x, _, _)| x == k).map(|(_, v, _)| v) }
+	fn index_held(&mut self) { self.held_index = self.held.iter().enumerate().map(|(i, (k, _, _))| (k.clone(), i)).collect(); }
+	fn held_at(&self, k: &str) -> Option<&Option<Json>> { self.held_index.get(k).map(|&i| &self.held[i].1) }
 	pub fn get(&self, k: &str) -> Option<Json> {
 		match self.held_at(k) {
 			Some(v) => v.clone(),
@@ -569,16 +612,25 @@ impl DiskClaims {
 	}
 	pub fn write(&mut self, k: &str, v: Option<Json>) {
 		let stamp = self.stamp;
-		match self.held.iter_mut().find(|(x, _, _)| x == k) {
-			Some(slot) => {
-				slot.1 = v;
-				slot.2 = stamp;
+		match self.held_index.get(k) {
+			Some(&i) => {
+				self.held[i].1 = v;
+				self.held[i].2 = stamp;
 			}
-			None => self.held.push((k.to_owned(), v, stamp)),
+			None => {
+				self.held_index.insert(k.to_owned(), self.held.len());
+				self.held.push((k.to_owned(), v, stamp));
+			}
 		}
 	}
 	/// The commits up to `durable` are on the disk: what they wrote is read from there from now on (open requests stay held).
-	pub fn settle(&mut self, durable: u64) { self.held.retain(|(_, v, stamp)| *stamp > durable || v.as_ref().is_some_and(|v| claim_at(v).is_none())); }
+	pub fn settle(&mut self, durable: u64) {
+		let before = self.held.len();
+		self.held.retain(|(_, v, stamp)| *stamp > durable || v.as_ref().is_some_and(|v| claim_at(v).is_none()));
+		if self.held.len() != before {
+			self.index_held();
+		}
+	}
 	/// `unindexed`: the records memory holds without a decision time, which are the open requests.
 	pub fn unindexed(&self) -> Vec<(String, Json)> { self.held.iter().filter_map(|(k, v, _)| v.as_ref().filter(|v| claim_at(v).is_none()).map(|v| (k.clone(), v.clone()))).collect() }
 	/// How many records memory holds.

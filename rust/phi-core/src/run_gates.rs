@@ -1,6 +1,8 @@
 //! RunGates (src/core.ts; docs/betrieb-und-mobile-steuerung.en.md §6): per-run control state that the core enforces on every
 //! take, so direct, waiting and host takes cannot bypass a pause. A take binds its transaction to the gate's revision. The
 //! gates stay JSON in the document's rest, as a transaction's `runs` does.
+use phi_json::{text, safe_of};
+use crate::space::{exhausted, conflict};
 use crate::space::{error, CoreError, Space};
 use phi_json::{obj, Json, Object};
 
@@ -10,11 +12,7 @@ const MAX_RUN_GATES: usize = 256;
 const MAX_GATE_HISTORY: usize = 32;
 const GATE_COST: f64 = 1024.0;
 
-fn conflict(m: impl Into<String>) -> CoreError { error("RunGateConflict", m) }
-fn exhausted(m: impl Into<String>) -> CoreError { error("ResourceExhausted", m) }
-fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 fn number(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(0.0) }
-fn safe(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| phi_json::safe_integer(*n)) }
 /// `/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/`
 fn valid_id(v: Option<&Json>) -> bool {
 	v.and_then(Json::as_str).is_some_and(|s| {
@@ -26,7 +24,7 @@ const STATES: [&str; 4] = ["preparing", "running", "paused", "stopped"];
 
 fn valid_command(c: &Json) -> bool {
 	let expect = c.get("expect");
-	valid_id(c.get("runId")) && valid_id(c.get("commandId")) && safe(c.get("revision")).is_some_and(|r| r >= 1.0) && matches!(text(c, "kind"), Some("prepare" | "release" | "pause" | "resume" | "stop")) && c.get("recoveryId").is_none_or(|r| valid_id(Some(r))) && expect.is_none_or(|e| safe(e.get("revision")).is_some() && text(e, "state").is_some_and(|s| STATES.contains(&s)))
+	valid_id(c.get("runId")) && valid_id(c.get("commandId")) && safe_of(c.get("revision")).is_some_and(|r| r >= 1.0) && matches!(text(c, "kind"), Some("prepare" | "release" | "pause" | "resume" | "stop")) && c.get("recoveryId").is_none_or(|r| valid_id(Some(r))) && expect.is_none_or(|e| safe_of(e.get("revision")).is_some() && text(e, "state").is_some_and(|s| STATES.contains(&s)))
 }
 
 impl Space {

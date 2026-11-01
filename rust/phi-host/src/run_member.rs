@@ -1,16 +1,15 @@
 //! The Member side of remote runs (src/run-member.ts): the controller signs every RunGate command, this host checks it against
 //! the pinned controller key, applies it to its own Space and signs the ACK. A replayed instruction changes nothing new,
 //! because the gate answers a repeated command with its stored confirmation.
-use crate::auth::{to_base64, verify_value, Algorithm, Signer};
-use phi_core::space::{error, CoreError};
+use phi_json::text;
+use phi_core::space::{illegal, permission as denied};
+use crate::auth::{seal, verify_value, Algorithm, Signer};
+use phi_core::space::{CoreError};
 use phi_json::{Json, Object};
 use phi_service::Service;
 use std::collections::HashMap;
 
 type R<T> = Result<T, CoreError>;
-fn denied(m: impl Into<String>) -> CoreError { error("PermissionError", m) }
-fn illegal(m: impl Into<String>) -> CoreError { error("IllegalArgumentError", m) }
-fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 
 /// A key this host trusts for one issuer.
 #[derive(Clone, Debug)]
@@ -20,25 +19,15 @@ pub struct Pin {
 	pub public_key: String,
 }
 
-pub fn algorithm_name(a: Algorithm) -> &'static str { a.name() }
-
-fn signed_text(kind: &str, v: &Json) -> R<String> { Ok(format!("phi-spaces/run-gate-{kind}/v1\n{}", v.canonical().map_err(|_| denied(format!("invalid run gate {kind} signature")))?)) }
-
 /// `verifyRun`.
 fn verify_run(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
-	verify_value(t, &pin.issuer, pin.algorithm, &pin.public_key, &format!("phi-spaces/run-gate-{kind}/v1\n"))
+	verify_value(t, &format!("run-gate-{kind}"), &pin.issuer, pin.algorithm, &pin.public_key)
 		.cloned().ok_or_else(|| denied(format!("invalid run gate {kind} signature")))
 }
 
 /// `signRun`.
 fn sign_run(kind: &str, value: Json, issuer: &str, signer: &Signer) -> R<Json> {
-	let signature = to_base64(&signer.sign(signed_text(kind, &value)?.as_bytes()));
-	let mut o = Object::new();
-	o.insert("value", value);
-	o.insert("issuer", issuer.into());
-	o.insert("algorithm", algorithm_name(signer.algorithm()).into());
-	o.insert("signature", signature.into());
-	Ok(Json::Object(o))
+	seal("value", value, &format!("run-gate-{kind}"), issuer, signer).ok_or_else(|| denied(format!("invalid run gate {kind} signature")))
 }
 
 /// Registered host code that writes a run's tasks while its gate is preparing. Never a shell command.
@@ -81,7 +70,7 @@ impl RunGates {
 		if text(&q, "authorityId") != Some(&self.authority_id) {
 			return Err(denied("run gate instruction belongs to another authority"));
 		}
-		let space = text(&q, "spaceId").filter(|s| service.store.spaces().iter().any(|i| text(i, "spaceId") == Some(s))).ok_or_else(|| illegal("run gate instruction names no local Space"))?.to_owned();
+		let space = text(&q, "spaceId").filter(|s| service.store.space_info(s).is_some_and(|i| text(i, "spaceId") == Some(s))).ok_or_else(|| illegal("run gate instruction names no local Space"))?.to_owned();
 		let kind = text(&q, "kind").unwrap_or("");
 		if kind == "recover" {
 			let Some(recovery) = text(&q, "recoveryId") else { return Err(illegal("recover needs a recovery ID")) };

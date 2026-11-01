@@ -3,6 +3,7 @@
 //! thread and must not wait, so the gate reads the register before a call and the commit checks against what that read
 //! found. A read that fails or has grown old blocks the host: nothing is served on an authorization that cannot be seen.
 //! A primary/sync or standby permit stays blocked: replication is not served here (R6).
+use phi_json::text;
 use crate::register::{RegisterClient, RegisterError, SqliteRegister};
 use phi_core::space::{error, CoreError, Space};
 use phi_json::Json;
@@ -12,7 +13,6 @@ use std::collections::HashMap;
 
 type R<T> = Result<T, CoreError>;
 fn blocked(m: impl Into<String>) -> CoreError { error("BootBlocked", m) }
-fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 
 /// Where the external authorization is read.
 pub enum External {

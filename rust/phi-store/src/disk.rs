@@ -1,5 +1,6 @@
 //! The claims of a Space as a map part on the disk (src/store/sqlite.ts `#source`, store/disk-map.ts): the durable rows
 //! of `rpc.claims`, asked through the index columns `at`, `grp` and `flag` on a read connection of their own.
+use crate::ops::at_value;
 use phi_core::ClaimSource;
 use phi_json::{parse, Json};
 use rusqlite::{params_from_iter, Connection};
@@ -50,21 +51,19 @@ impl SqliteClaims {
 	fn ids_of(&self, sql: &str, extra: Vec<rusqlite::types::Value>) -> Vec<String> { self.query(sql, extra, |r| r.get::<_, String>(0)) }
 }
 
-fn num(t: f64) -> rusqlite::types::Value { if t.fract() == 0.0 && t.abs() < 9.3e18 { rusqlite::types::Value::Integer(t as i64) } else { rusqlite::types::Value::Real(t) } }
-
 impl ClaimSource for SqliteClaims {
 	fn get(&self, key: &str) -> Option<Json> { self.rows(&format!("SELECT id, value {BASE} AND id = ?"), vec![key.to_owned().into()]).pop().map(|(_, v)| v) }
 	fn due(&self, t: f64, limit: usize, in_groups: &[String], known: &[String]) -> Vec<(String, Json)> {
 		let in_part = if in_groups.is_empty() { String::new() } else { format!(" OR grp IN ({})", marks(in_groups.len())) };
 		let sql = format!("SELECT id, value {BASE} AND at IS NOT NULL AND at <= ? AND (flag = 0{in_part} OR grp NOT IN ({})) ORDER BY id LIMIT ?", marks(known.len()));
-		let mut extra = vec![num(t)];
+		let mut extra = vec![at_value(Some(t))];
 		extra.extend(in_groups.iter().map(|g| g.clone().into()));
 		extra.extend(known.iter().map(|g| g.clone().into()));
 		extra.push((limit as i64).into());
 		self.rows(&sql, extra)
 	}
 	fn next_at(&self, t: f64) -> Option<f64> {
-		self.query(&format!("SELECT min(at) {BASE} AND at IS NOT NULL AND at > ? AND flag = 0"), vec![num(t)], |r| r.get::<_, Option<f64>>(0)).pop().flatten()
+		self.query(&format!("SELECT min(at) {BASE} AND at IS NOT NULL AND at > ? AND flag = 0"), vec![at_value(Some(t))], |r| r.get::<_, Option<f64>>(0)).pop().flatten()
 	}
 	fn group(&self, g: &str, limit: usize) -> Vec<String> { self.ids_of(&format!("SELECT id {BASE} AND grp = ? LIMIT ?"), vec![g.to_owned().into(), (limit as i64).into()]) }
 	fn unindexed(&self) -> Vec<(String, Json)> { self.rows(&format!("SELECT id, value {BASE} AND at IS NULL"), vec![]) }

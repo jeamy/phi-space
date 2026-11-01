@@ -14,6 +14,7 @@
 //!
 //! Unsupported document fields (including unported restore/replication state) are refused with `NotPorted` before
 //! operations change them. Member admission, completion profiles and RunGates are supported.
+use phi_json::num_of;
 use crate::state::{EntryRec, RegRec, SpaceState, TxnRec, WaiterRec};
 use crate::stream::{self, Collected, Open};
 use phi_json::{number_text, obj, Json, Object, FOREVER};
@@ -31,23 +32,29 @@ const COMMIT_FIXED: f64 = 1024.0;
 const EXPIRE_COST: f64 = 128.0;
 
 /// An error as core.ts throws it: the class name and the message.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CoreError {
 	pub class: &'static str,
 	pub message: String,
+	/// `ResponseBudgetTooSmall`: the bytes the next element needs.
+	pub required: Option<f64>,
 }
 impl std::fmt::Display for CoreError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}: {}", self.class, self.message) }
 }
 impl std::error::Error for CoreError {}
 
-pub fn error(class: &'static str, message: impl Into<String>) -> CoreError { CoreError { class, message: message.into() } }
+pub fn error(class: &'static str, message: impl Into<String>) -> CoreError { CoreError { class, message: message.into(), required: None } }
 fn limit(m: impl Into<String>) -> CoreError { error("LimitError", m) }
-fn exhausted(m: impl Into<String>) -> CoreError { error("ResourceExhausted", m) }
-fn illegal(m: impl Into<String>) -> CoreError { error("IllegalArgumentError", m) }
-fn permission(m: impl Into<String>) -> CoreError { error("PermissionError", m) }
+pub fn exhausted(m: impl Into<String>) -> CoreError { error("ResourceExhausted", m) }
+pub fn illegal(m: impl Into<String>) -> CoreError { error("IllegalArgumentError", m) }
+pub fn permission(m: impl Into<String>) -> CoreError { error("PermissionError", m) }
+pub fn routing(m: impl Into<String>) -> CoreError { error("RoutingConflict", m) }
+pub fn conflict(m: impl Into<String>) -> CoreError { error("RunGateConflict", m) }
 fn violation(m: impl Into<String>) -> CoreError { error("CompletionViolation", m) }
-fn too_small(required: f64) -> CoreError { error("ResponseBudgetTooSmall", format!("the next element needs {} bytes of budget", n(required))) }
+pub fn too_small(required: f64) -> CoreError {
+	CoreError { required: Some(required), ..error("ResponseBudgetTooSmall", format!("the next element needs {} bytes of budget", n(required))) }
+}
 /// The space or an argument is outside what the Rust core does so far.
 pub fn not_ported(m: impl Into<String>) -> CoreError { error("NotPorted", m) }
 
@@ -152,7 +159,6 @@ pub fn deadline_of(now: f64, timeout: Option<&Json>) -> Result<f64> {
 	}
 	Ok(until(now, *t))
 }
-fn num_of(v: &Json, k: &str) -> Option<f64> { v.get(k).and_then(Json::as_f64) }
 /// A stored wait's template (`assert_ported` checked that it parses).
 fn waiter_template(w: &WaiterRec) -> Template { Template::from_json(Some(&w.template)).unwrap_or(Template::Any) }
 fn reg_template(r: &RegRec) -> Template { Template::from_json(Some(&r.template)).unwrap_or(Template::Any) }
@@ -213,7 +219,7 @@ impl Template {
 	}
 	pub fn matches(&self, e: &EntryRec) -> bool {
 		let Template::Of { id, type_, fields } = self else { return true };
-		if id.as_ref().is_some_and(|id| !strict_eq(id, &Json::String(e.id.clone()))) {
+		if id.as_ref().is_some_and(|id| id.as_str() != Some(e.id.as_str())) {
 			return false; // exact entry id
 		}
 		if type_.as_ref().is_some_and(|t| !t.as_str().is_some_and(|t| e.types.iter().any(|x| x == t))) {
@@ -238,6 +244,29 @@ fn draft_types(entry: &Json) -> Result<Vec<String>> {
 		Some(Json::Array(a)) => a.iter().map(|t| t.as_str().map(str::to_owned).ok_or_else(|| not_ported("a supertype that is not a string"))).collect(),
 		Some(_) => Err(not_ported("entry types that are not an array")),
 	}
+}
+/// What a caller's draft may name.
+fn check_types(type_: &str, supertypes: &[String], lim: &Limits) -> Result<()> {
+	if js_len(type_) > lim.max_type_chars {
+		return Err(limit(format!("type name longer than {} characters", n(lim.max_type_chars))));
+	}
+	if supertypes.len() as f64 + 1.0 > lim.max_types {
+		return Err(limit(format!("more than {} types", n(lim.max_types))));
+	}
+	if supertypes.iter().any(|t| js_len(t) > lim.max_type_chars) {
+		return Err(limit("bad or too long supertype name"));
+	}
+	Ok(())
+}
+/// The type first, no duplicates.
+fn type_list(type_: &str, supertypes: Vec<String>) -> Vec<String> {
+	let mut types = vec![type_.to_owned()];
+	for t in supertypes {
+		if !types.contains(&t) {
+			types.push(t);
+		}
+	}
+	types
 }
 fn draft_parts(entry: &Json) -> Result<(String, Object)> {
 	let type_ = match entry.get("type") {
@@ -686,7 +715,14 @@ impl Space {
 	}
 
 	/// Bytes of all entries' fields.
-	pub(crate) fn entry_bytes(&self) -> f64 { self.state.entries.iter().map(|e| e.size.unwrap_or_else(|| bytes(&Json::Object(e.fields.clone())))).sum() }
+	pub(crate) fn entry_bytes(&self) -> f64 { self.state.entries.total_bytes(|e| e.size.unwrap_or_else(|| bytes(&Json::Object(e.fields.clone())))) }
+	/// The entries a walk of all matches of `tmpl` has to look at, in order.
+	fn candidates<'a>(&'a self, tmpl: &Template) -> Box<dyn Iterator<Item = &'a EntryRec> + 'a> {
+		let entries = &self.state.entries;
+		let Template::Of { type_: Some(Json::String(t)), .. } = tmpl else { return Box::new(entries.iter()) };
+		let at = entries.of_type(t);
+		Box::new((0..at.len()).map(move |i| &entries[at[i]]))
+	}
 	fn rest_bytes(&self, key: &str, absent: f64) -> f64 { self.state.rest.get(key).map_or(absent, bytes) }
 	fn outbox_bytes(&self) -> f64 { self.state.outbox_bytes.unwrap_or_else(|| self.rest_bytes("outbox", 2.0)) }
 	fn outbox_len(&self) -> usize { self.state.rest.get("outbox").and_then(Json::as_array).map_or(0, Vec::len) }
@@ -1700,15 +1736,7 @@ impl Space {
 		let expires = grant(lease_ms, now)?;
 		let lim = self.limits();
 		if let Some(as_) = as_ {
-			if js_len(&type_) > lim.max_type_chars {
-				return Err(limit(format!("type name longer than {} characters", n(lim.max_type_chars))));
-			}
-			if supertypes.len() as f64 + 1.0 > lim.max_types {
-				return Err(limit(format!("more than {} types", n(lim.max_types))));
-			}
-			if supertypes.iter().any(|t| js_len(t) > lim.max_type_chars) {
-				return Err(limit("bad or too long supertype name"));
-			}
+			check_types(&type_, &supertypes, &lim)?;
 			check_size("entry", &fields, &lim)?;
 			if self.state.entries.len() as f64 >= lim.max_entries {
 				return Err(limit(format!("the space holds {} entries already", n(lim.max_entries))));
@@ -1717,12 +1745,7 @@ impl Space {
 				return Err(limit(format!("you already have {} entries in the space", n(lim.max_entries_per_owner))));
 			}
 		}
-		let mut types = vec![type_.clone()]; // the type first, no duplicates
-		for t in supertypes {
-			if !types.contains(&t) {
-				types.push(t);
-			}
-		}
+		let types = type_list(&type_, supertypes);
 		let size = bytes(&Json::Object(fields.clone()));
 		let rec = EntryRec {
 			id: self.peek_id("e"),
@@ -1847,23 +1870,10 @@ impl Space {
 		let txn = txn.map(|t| self.require_txn(t, as_)).transpose()?;
 		let lim = self.limits();
 		if as_.is_some() {
-			if js_len(&type_) > lim.max_type_chars {
-				return Err(limit(format!("type name longer than {} characters", n(lim.max_type_chars))));
-			}
-			if supertypes.len() as f64 + 1.0 > lim.max_types {
-				return Err(limit(format!("more than {} types", n(lim.max_types))));
-			}
-			if supertypes.iter().any(|t| js_len(t) > lim.max_type_chars) {
-				return Err(limit("bad or too long supertype name"));
-			}
+			check_types(&type_, &supertypes, &lim)?;
 		}
 		check_size("entry", &fields, &lim)?;
-		let mut types = vec![type_.clone()];
-		for t in supertypes {
-			if !types.contains(&t) {
-				types.push(t);
-			}
-		}
+		let types = type_list(&type_, supertypes);
 		let rec = EntryRec { id: self.peek_id("e"), type_, types, fields, expires: now, written_under: None, taken_by: None, read_by: vec![], owner: as_.cloned().unwrap_or(Json::Null), size: None, restored_unverified: false, rest: Object::new() };
 		self.state.next_id += 1.0;
 		self.touch(now);
@@ -2188,7 +2198,7 @@ impl Space {
 		let txn = id.as_deref();
 		let mine = self.active(txn, now);
 		let mut count = 0.0;
-		for e in &self.state.entries {
+		for e in self.candidates(tmpl) {
 			if e.restored_unverified && txn.is_some() {
 				continue;
 			}
@@ -2210,7 +2220,7 @@ impl Space {
 		let txn = id.as_deref();
 		let mine = self.active(txn, now);
 		let mut out = vec![];
-		for e in &self.state.entries {
+		for e in self.candidates(tmpl) {
 			if e.restored_unverified && txn.is_some() {
 				continue;
 			}
@@ -2331,7 +2341,7 @@ impl Space {
 		let mine = self.active(txn, now);
 		let mut eligible = vec![];
 		let mut seqs = vec![];
-		for e in &self.state.entries {
+		for e in self.candidates(tmpl) {
 			if seq_of(&e.id) <= after || (e.restored_unverified && txn.is_some()) {
 				continue;
 			}

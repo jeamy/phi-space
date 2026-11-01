@@ -82,7 +82,12 @@ impl Object {
 	pub fn remove(&mut self, key: &str) -> Option<Json> {
 		let at = self.position(key)?;
 		let value = self.0.remove(at).1;
-		self.reindex();
+		if self.0.len() < 32 {
+			self.1 = None;
+		} else if let Some(index) = &mut self.1 {
+			index.remove(key);
+			index.values_mut().filter(|i| **i > at).for_each(|i| *i -= 1); // no key is copied
+		}
 		Some(value)
 	}
 }
@@ -318,6 +323,15 @@ pub fn utf16_cmp(a: &str, b: &str) -> std::cmp::Ordering { a.encode_utf16().cmp(
 pub fn safe_integer(n: f64) -> bool { n.trunc() == n && n.abs() <= FOREVER }
 /// The hex SHA-256 form: 64 lowercase hex digits.
 pub fn is_sha256_hex(h: &str) -> bool { h.len() == 64 && h.bytes().all(|b| matches!(b, b'a'..=b'f' | b'0'..=b'9')) }
+
+/// A string field.
+pub fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
+/// A number field.
+pub fn num_of(v: &Json, k: &str) -> Option<f64> { v.get(k).and_then(Json::as_f64) }
+/// A value that is a safe integer.
+pub fn safe_of(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| safe_integer(*n)) }
+/// A list of strings as JSON.
+pub fn strings(list: &[String]) -> Json { Json::Array(list.iter().map(|s| Json::String(s.clone())).collect()) }
 
 impl Json {
 	/// A copy with JSON.stringify's numeric semantics, without encoding and parsing the text.

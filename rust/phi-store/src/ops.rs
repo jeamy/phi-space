@@ -21,7 +21,7 @@ pub const SEQ: &str = "UPDATE store_meta SET value = CAST(CAST(value AS INTEGER)
 
 /// `at` as node:sqlite binds a number: an integral one as an integer, any other as a real (which the STRICT INTEGER
 /// column refuses, as it does for the TypeScript store).
-fn at_value(at: Option<f64>) -> rusqlite::types::Value {
+pub(crate) fn at_value(at: Option<f64>) -> rusqlite::types::Value {
 	match at {
 		None => rusqlite::types::Value::Null,
 		Some(x) if x.fract() == 0.0 && x.abs() < 9.3e18 => rusqlite::types::Value::Integer(x as i64),

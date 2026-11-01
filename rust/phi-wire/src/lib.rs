@@ -16,6 +16,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
+use phi_json::{parse_repairing, Json};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, UnixListener, UnixStream};
 use tokio::sync::{watch, Notify};
@@ -69,11 +70,11 @@ pub type Local<T> = Pin<Box<dyn Future<Output = T>>>;
 pub trait Session {
 	fn conn(&self) -> Conn;
 	/// The answer to a call the front handles itself; `None` passes it to the service.
-	fn call(&self, service: &mut Service, text: &str) -> Option<String>;
+	fn call(&self, service: &mut Service, call: &Json) -> Option<String>;
 	/// The answer to a call the front has to go away for; it comes back on the owner thread.
-	fn later(self: Rc<Self>, _owner: Owner, _text: &str) -> Option<Local<String>> { None }
+	fn later(self: Rc<Self>, _owner: Owner, _call: &Json) -> Option<Local<String>> { None }
 	/// What has to be read before a call is looked at; the frames of the connection wait for it.
-	fn prepare(&self, _owner: Owner, _text: &str) -> Option<Local<()>> { None }
+	fn prepare(&self, _owner: Owner, _call: Option<&Json>, _text: &str) -> Option<Local<()>> { None }
 	/// What the client gets of the service's answer.
 	fn reply(&self, text: String) -> String;
 	/// Resolves when the front ends the connection.
@@ -167,13 +168,11 @@ impl Hub {
 		if let Err(e) = service.store.pump() {
 			if !self.failed.replace(true) {
 				eprintln!("phi-spaces socket: store failed: {e}");
+				self.durable.send_modify(|_| ()); // once: a writer looks at `failed` on every turn
 			}
 		}
 		let durable = service.store.durable();
 		self.durable.send_if_modified(|d| std::mem::replace(d, durable) != durable);
-		if self.failed.get() {
-			self.durable.send_modify(|_| ());
-		}
 	}
 }
 
@@ -228,10 +227,23 @@ impl Link {
 	}
 }
 
-fn put(out: &mut Vec<u8>, id: u32, text: &str) {
+pub fn put(out: &mut Vec<u8>, id: u32, text: &str) {
 	out.extend_from_slice(&(text.len() as u32).to_be_bytes());
 	out.extend_from_slice(&id.to_be_bytes());
 	out.extend_from_slice(text.as_bytes());
+}
+
+/// One frame's body from a line that answers in turn: the client's side of `frames`.
+pub async fn read_frame<R: AsyncRead + Unpin>(read: &mut R) -> io::Result<Vec<u8>> {
+	let mut head = [0u8; HEADER];
+	read.read_exact(&mut head).await?;
+	let n = u32::from_be_bytes(head[..4].try_into().expect("four bytes")) as usize;
+	if (n + HEADER) as f64 > phi_service::DEFAULT_MAX_FRAME_BYTES {
+		return Err(io::Error::other("a frame over the limit"));
+	}
+	let mut text = vec![0u8; n];
+	read.read_exact(&mut text).await?;
+	Ok(text)
 }
 
 /// Serves until `stop` resolves, then gives the service back with nothing left in flight on its side. `ready` is told the
@@ -501,14 +513,15 @@ async fn frames<R: AsyncRead + Unpin>(hub: &Rc<Hub>, link: &Rc<Link>, who: &Who,
 			let id = u32::from_be_bytes(buf[at + 4..at + 8].try_into().expect("four bytes"));
 			let text = String::from_utf8_lossy(&buf[at + HEADER..at + HEADER + n]);
 			match who {
-				Who::Peer(peer) => call(hub, link, &Conn { peer_id: peer.clone(), identity: None, proof_key: None }, id, &text),
+				Who::Peer(peer) => call(hub, link, &Conn { peer_id: peer.clone(), identity: None, proof_key: None }, id, &text, parse_repairing(&text).ok().as_ref()),
 				Who::Gate(_) => {
 					let session = link.session.as_ref().expect("a gate's connection has its session");
-					if let Some(ready) = session.prepare(Owner(Rc::clone(hub)), &text) {
+					let parsed = parse_repairing(&text).ok();
+					if let Some(ready) = session.prepare(Owner(Rc::clone(hub)), parsed.as_ref(), &text) {
 						ready.await;
 					}
 					let conn = session.conn();
-					call(hub, link, &conn, id, &text);
+					call(hub, link, &conn, id, &text, parsed.as_ref());
 				}
 				Who::Hooks => hooked(hub, link, id, &text),
 			}
@@ -553,14 +566,15 @@ fn hooked(hub: &Rc<Hub>, link: &Rc<Link>, id: u32, text: &str) {
 	link.reply(Reply { mark, id, text, counted: false });
 }
 
-fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
+/// `parsed`: the frame as JSON, read once for all who look at it.
+fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str, parsed: Option<&Json>) {
 	let most = hub.o.max_inflight_per_connection;
 	if link.inflight.get() >= most {
 		let text = format!(r#"{{"ok":false,"error":{{"code":"ResourceExhausted","message":"at most {most} calls at once per connection"}}}}"#);
 		link.reply(Reply { mark: 0, id, text, counted: false });
 		return;
 	}
-	if let Some(answer) = link.session.as_ref().and_then(|s| Rc::clone(s).later(Owner(Rc::clone(hub)), text)) {
+	if let Some(answer) = link.session.as_ref().zip(parsed).and_then(|(s, c)| Rc::clone(s).later(Owner(Rc::clone(hub)), c)) {
 		link.inflight.set(link.inflight.get() + 1);
 		let (hub, link) = (Rc::clone(hub), Rc::clone(link));
 		spawn_local(async move {
@@ -570,7 +584,7 @@ fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
 		});
 		return;
 	}
-	let answer = link.session.as_ref().and_then(|s| s.call(&mut hub.service.borrow_mut(), text));
+	let answer = link.session.as_ref().zip(parsed).and_then(|(s, c)| s.call(&mut hub.service.borrow_mut(), c));
 	if let Some(text) = answer {
 		hub.committed();
 		let mark = hub.service.borrow().store.handed();
@@ -578,7 +592,7 @@ fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
 		return;
 	}
 	link.inflight.set(link.inflight.get() + 1);
-	let outcome = hub.service.borrow_mut().handle_text(text, conn, (hub.o.max_frame_bytes - HEADER) as f64);
+	let outcome = hub.service.borrow_mut().handle_call(parsed, text.len() as f64, conn, (hub.o.max_frame_bytes - HEADER) as f64);
 	let seen = hub.handed.get();
 	hub.committed();
 	match outcome {

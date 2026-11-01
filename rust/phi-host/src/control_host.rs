@@ -1,13 +1,14 @@
 //! What a control host answers its Members and routers (src/runtime.ts): their keys, the routing policy under its signature, and the
 //! capability directory. Grants, pairing and the supervisor have their own modules.
-use crate::auth::{to_base64, verify_detached, Signer};
+use phi_json::text;
+use phi_core::space::permission as denied;
+use crate::auth::{seal, signed_by, Signer};
 use crate::capability::publish;
-use crate::control::{answered, fields, listed, refuse, CONTROL_SPACE};
+use crate::control::{peer_key, answered, fields, listed, refuse, CONTROL_SPACE};
 use crate::gate::Now;
 use crate::grants::GrantVerifier;
-use crate::run_member::algorithm_name;
 use phi_core::space::{error, CoreError};
-use phi_json::{obj, Json, Object};
+use phi_json::{obj, Json};
 use phi_service::{Identity, Service};
 use phi_store::{random_uuid, system_random};
 use std::collections::HashMap;
@@ -18,8 +19,6 @@ const MAX_REPORT: usize = 16384;
 const LEASE_MS: f64 = 60_000.0;
 /// A different router starts only after the previous lease expired plus this clock uncertainty.
 const ROUTER_CHANGE_SKEW_MS: f64 = 5_000.0;
-fn denied(m: impl Into<String>) -> CoreError { error("PermissionError", m) }
-fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 
 pub struct ControlHost {
 	pub peer_id: String,
@@ -64,9 +63,7 @@ impl ControlHost {
 		let (Some(peer), Some(key_id)) = (args.and_then(|a| text(a, "peerId")), args.and_then(|a| text(a, "keyId"))) else {
 			return obj! { "ok" => false, "error" => obj! { "code" => "BadRequest", "message" => "peerId and keyId required" } };
 		};
-		let now = (self.now)();
-		let found = service.store.reader(Some(CONTROL_SPACE)).ok().and_then(|h| listed(&h.space, now, &obj! { "type" => "PeerKey", "fields" => obj! { "peerId" => peer, "keyId" => key_id } }).ok());
-		answered(found.and_then(|f| f.first().map(fields)).unwrap_or(Json::Null))
+		answered(peer_key(&mut service.store, (self.now)(), peer, key_id).unwrap_or(Json::Null))
 	}
 
 	fn checked(&self, call: &Json, id: &Identity, method: &str, proof: Option<&str>) -> R<crate::grants::Decision> {
@@ -87,13 +84,7 @@ impl ControlHost {
 	}
 
 	fn signed(&self, kind: &str, value: Json, field: &str) -> R<Json> {
-		let bytes = format!("phi-spaces/{kind}/v1\n{}", value.canonical().map_err(|_| denied("a value that cannot be signed"))?);
-		let mut o = Object::new();
-		o.insert(field, value);
-		o.insert("issuer", self.peer_id.as_str().into());
-		o.insert("algorithm", algorithm_name(self.signer.algorithm()).into());
-		o.insert("signature", to_base64(&self.signer.sign(bytes.as_bytes())).into());
-		Ok(Json::Object(o))
+		seal(field, value, kind, &self.peer_id, &self.signer).ok_or_else(|| denied("a value that cannot be signed"))
 	}
 
 	/// `RouterLeaseAuthority.issue`: the epoch rises with a new lease, a renewal keeps it. A lease from before a replica transition
@@ -115,11 +106,7 @@ impl ControlHost {
 			let mut epoch = counters.get("routerEpoch").and_then(Json::as_f64).unwrap_or(0.0);
 			if let Some(r) = renew {
 				let names = |l: &Json| text(l, "id").is_some() && l.get("id") == r.get("id") && text(l, "routerPeerId") == Some(&peer) && text(l, "routerKeyId") == Some(key_id) && l.get("routerEpoch") == r.get("routerEpoch") && l.get("controlPrimaryEpoch").and_then(Json::as_f64) == Some(current);
-				let retained = r.get("token").filter(|t| {
-					let Some(l) = t.get("lease") else { return false };
-					let message = l.canonical().map(|c| format!("phi-spaces/router-lease/v1\n{c}"));
-					text(t, "issuer") == Some(&self.peer_id) && text(t, "algorithm") == Some(algorithm_name(self.signer.algorithm())) && message.is_ok_and(|m| verify_detached(self.signer.algorithm(), &self.public_key, m.as_bytes(), text(t, "signature").unwrap_or(""))) && names(l) && text(l, "authorityId") == Some(&authority) && text(l, "controlSpaceId") == Some(&self.control_space)
-				});
+				let retained = r.get("token").filter(|t| t.get("lease").is_some_and(|l| signed_by(l, t, "router-lease", &self.peer_id, self.signer.algorithm(), &self.public_key) && names(l) && text(l, "authorityId") == Some(&authority) && text(l, "controlSpaceId") == Some(&self.control_space)));
 				if r.get("routerEpoch").and_then(Json::as_f64) != Some(epoch) || !(retained.is_some() || held.as_ref().is_some_and(names)) {
 					return Err(denied("lease renewal no longer owns current epoch"));
 				}

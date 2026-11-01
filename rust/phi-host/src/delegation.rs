@@ -2,10 +2,11 @@
 //! behalf: its own signature, the supervisor's lease, the principal's grant, each bound to the call. Epochs only go up, in a
 //! document of their own, and a higher one fences the work older leases left waiting. Issuing leases is the control host's
 //! (R6), and so are replicated Members.
-use crate::auth::{verify_detached, Algorithm};
+use phi_json::text;
+use phi_core::space::permission as denied;
+use crate::auth::{signature_holds, signed_by, Algorithm};
 use crate::gate::Keys;
 use crate::grants::{Bound, Decision, GrantVerifier};
-use crate::run_member::algorithm_name;
 use phi_core::claims::RequestRef;
 use phi_core::space::{error, CoreError, Space};
 use phi_json::{digest_json, obj, Json, FOREVER};
@@ -17,12 +18,9 @@ use std::rc::Rc;
 
 type R<T> = Result<T, CoreError>;
 const DOC: &str = "phi-spaces.delegation-epochs";
-fn denied(m: impl Into<String>) -> CoreError { error("PermissionError", m) }
-fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 fn number(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
 fn positive(v: Option<&Json>) -> bool { v.and_then(Json::as_f64).is_some_and(|n| n.fract() == 0.0 && n > 0.0 && n <= FOREVER) }
 fn safe(v: Option<&Json>) -> bool { v.and_then(Json::as_f64).is_some_and(phi_json::safe_integer) }
-fn signed(kind: &str, v: &Json) -> R<String> { Ok(format!("phi-spaces/{kind}/v1\n{}", v.canonical().map_err(|_| denied("a value that cannot be signed"))?)) }
 fn arg_hash(method: &str, args: &Json) -> R<String> { digest_json(&obj! { "method" => method, "args" => args.clone() }).map_err(|_| denied("a value that cannot be hashed")) }
 fn same(a: Option<&Json>, b: Option<&Json>) -> bool { a.and_then(|x| x.canonical().ok()) == b.and_then(|x| x.canonical().ok()) }
 
@@ -152,7 +150,7 @@ impl DelegationVerifier {
 
 	fn supervisor(&self, kind: &str, v: &Json, t: &Json) -> R<()> {
 		let (algorithm, key) = &self.o.supervisor;
-		let good = text(t, "issuer") == Some(&self.o.supervisor_peer_id) && text(t, "algorithm") == Some(algorithm_name(*algorithm)) && text(t, "signature").is_some_and(|sig| signed(kind, v).is_ok_and(|m| verify_detached(*algorithm, key, m.as_bytes(), sig)));
+		let good = signed_by(v, t, kind, &self.o.supervisor_peer_id, *algorithm, key);
 		if good { Ok(()) } else { Err(denied("invalid supervisor signature")) }
 	}
 
@@ -191,7 +189,7 @@ impl DelegationVerifier {
 			return Err(denied("epoch notice binding mismatch"));
 		}
 		let wanted = space.unwrap_or("");
-		let info = store.spaces().into_iter().find(|i| text(i, "spaceId") == Some(wanted) || text(i, "alias") == Some(wanted)).ok_or_else(|| denied("unknown epoch-notice space"))?;
+		let info = store.space_info(wanted).cloned().ok_or_else(|| denied("unknown epoch-notice space"))?;
 		let id = text(&info, "spaceId").unwrap_or("").to_owned();
 		let key = self.epoch_key(&id)?;
 		self.raise(store, &id, &key, now, |e| Ok(Epochs { router: e.router.max(number(n, "routerEpoch")), control: e.control.max(number(n, "controlPrimaryEpoch")), policy: e.policy.max(number(n, "policyVersion")) }))
@@ -211,8 +209,8 @@ impl DelegationVerifier {
 			return Err(denied("delegation requires its proven router connection"));
 		}
 		let peer = peer.unwrap_or("");
-		let router = self.o.keys.find(store, peer, key_id.unwrap_or("")).filter(|k| k.active && k.roles.iter().any(|r| r == "router") && Some(algorithm_name(k.algorithm)) == text(t, "algorithm"));
-		let verified = router.is_some_and(|k| text(t, "signature").is_some_and(|sig| signed("delegation", d).is_ok_and(|m| verify_detached(k.algorithm, &k.public_key, m.as_bytes(), sig))));
+		let router = self.o.keys.find(store, peer, key_id.unwrap_or("")).filter(|k| k.active && k.roles.iter().any(|r| r == "router") && Some(k.algorithm.name()) == text(t, "algorithm"));
+		let verified = router.is_some_and(|k| signature_holds(d, t, "delegation", k.algorithm, &k.public_key));
 		if !verified {
 			return Err(denied("invalid router signature/key"));
 		}
@@ -223,7 +221,7 @@ impl DelegationVerifier {
 			return Err(denied("lease authority/epochs mismatch"));
 		}
 		let wanted = call.get("space").and_then(Json::as_str);
-		let info = store.spaces().into_iter().find(|i| wanted.is_some() && text(i, "spaceId") == wanted || text(i, "alias") == Some(wanted.unwrap_or("default")));
+		let info = store.space_info(wanted.unwrap_or("default")).cloned();
 		let Some(info) = info.filter(|i| i.get("spaceId") == d.get("targetSpace")) else { return Err(denied("delegation audience mismatch")) };
 		let space = text(&info, "spaceId").unwrap_or("").to_owned();
 		let method = call.get("method").and_then(Json::as_str).unwrap_or("");

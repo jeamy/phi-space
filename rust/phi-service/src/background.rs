@@ -5,6 +5,7 @@
 use crate::{Service, R};
 use phi_core::Space;
 use phi_json::{Json, FOREVER};
+use std::collections::HashSet;
 
 /// Events looked at per run; a run that dropped some is followed by another.
 const DELIVERY_BATCH: usize = 64;
@@ -106,7 +107,7 @@ fn key_of(e: &Json) -> (String, String) { (e.get("eventId").map_or_else(String::
 fn outbox(s: &Space) -> &[Json] { s.state.rest.get("outbox").and_then(Json::as_array).map_or(&[], Vec::as_slice) }
 
 /// The events of this run nobody can receive.
-fn undeliverable(s: &Space, now: f64) -> Vec<(String, String)> {
+fn undeliverable(s: &Space, now: f64) -> HashSet<(String, String)> {
 	let due = outbox(s).iter().filter(|e| e.get("retryAt").and_then(Json::as_f64).unwrap_or(0.0) <= now).take(DELIVERY_BATCH);
 	due.filter(|e| {
 		let numeric = matches!(e.get("target"), Some(Json::Number(_)));

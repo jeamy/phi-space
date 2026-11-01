@@ -4,6 +4,7 @@
 //!
 //! Claims and generations stay the JSON records the TypeScript code writes. Historical (restored) claims, invalid
 //! generations, negative claims and claims kept on the disk are not ported; `assert_ported` refuses spaces with them.
+use phi_json::{num_of, text as str_of};
 use crate::space::{bytes, error, js_cmp, Result, Space};
 use crate::state::RpcState;
 use hmac::{Hmac, Mac};
@@ -16,8 +17,6 @@ const MAX_RECORDS: usize = 256;
 const SWEEP_COST: f64 = 128.0;
 
 fn type_error(m: &str) -> crate::space::CoreError { error("TypeError", m) }
-fn str_of<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
-fn num_of(v: &Json, k: &str) -> Option<f64> { v.get(k).and_then(Json::as_f64) }
 
 /// `checkPrincipal`.
 fn check_principal(p: Option<&Json>) -> Result<()> {

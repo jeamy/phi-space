@@ -1,6 +1,7 @@
 //! The independent register (src/recovery-register.ts, src/tls-register.ts, src/erasure-register-policy.ts): compare-and-set
 //! records in a SQLite file of their own, over pinned mutual TLS. A certificate reads; only an operator's, or one scoped to
 //! the key, writes. Every request is one connection, so no authentication outlives its check.
+use phi_json::text;
 use crate::tls::{server_name, TlsIdentity};
 use phi_json::{hex, obj, parse, Json, Object};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -36,7 +37,6 @@ fn failed(e: impl std::fmt::Display) -> RegisterError { RegisterError::Failed(e.
 
 fn integer(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| n.fract() == 0.0 && n.abs() <= SAFE) }
 fn digest(v: Option<&Json>) -> bool { v.and_then(Json::as_str).is_some_and(phi_json::is_sha256_hex) }
-fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 
 fn barrier(v: &Json, space: &str) -> R<()> {
 	let fine = v.as_object().is_some() && text(v, "spaceId") == Some(space) && integer(v.get("epoch")).is_some_and(|e| e >= 1.0) && matches!(text(v, "state"), Some("pending" | "sealed")) && digest(v.get("commandHash")) && integer(v.get("archiveDeadline")).is_some_and(|d| d >= 0.0) && v.get("archivesPending").and_then(Json::as_bool).is_some();
