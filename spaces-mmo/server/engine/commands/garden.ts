@@ -22,7 +22,7 @@ import { randomBytes, randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BedFields, type BedPlant, type BuildingFields, type ItemFields, type SeedRestFields, type Variety, type VarietyFields } from "../../model.ts";
 import { peek } from "../../space.ts";
-import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
+import { decayNowOf, frozenUntil, patienceOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
@@ -58,12 +58,14 @@ export const nextDue = (plants: BedPlant[]) => plants.reduce((m, p) => Math.min(
 
 /** The plants whose date has come move on (or wilt, dry or past their time); true when anything changed. Each plant that
  *  sprouts or ripens may bring weeds. */
-export function advance(g: GardenDef, b: BedFields, now: number, fog: number, rnd: () => number = Math.random, patient = 1): boolean {
+export function advance(g: GardenDef, b: BedFields, now: number, fog: number, rnd: () => number = Math.random, patient = 1, frozen: number | null = null): boolean {
 	let changed = false;
 	const weedy = b.weedy; // weeds of this round count from the next: plants that move on together keep one date
 	for (const p of b.plants) {
 		if (p.dueWorldMs > now) continue;
 		changed = true;
+		// winter: it stands still and is not lost; from the spring on it goes on, watered
+		if (frozen !== null) { if (p.stage < 3) { p.dueWorldMs = frozen; b.wateredWorldMs = frozen; } continue; }
 		const sort = sortOf(g, p.sort);
 		if (!sort || p.stage >= 2 || now - b.wateredWorldMs > g.thirstWorldMs * patient) { p.stage = 3; p.dueWorldMs = FOREVER; continue; }
 		p.stage = (p.stage + 1) as 1 | 2;
@@ -458,7 +460,8 @@ export const GARDEN_COMMANDS: Command[] = [beet, umgraben, pflanze, giesse, jaet
 export async function gardenTick(space: SpaceLike, w: WorldDef): Promise<number> {
 	const g = w.garden;
 	if (!g) return 0;
-	const now = await worldNowOf(space), kept = await decayNowOf(space), patient = await patienceOf(space);
+	const now = await worldNowOf(space), kept = await decayNowOf(space), patient = await patienceOf(space), winter = await frozenUntil(space, now), glass = g.greenhouse;
+	const houses = winter === null || !glass ? [] : (await space.readAll({ type: "Building", fields: { plan: glass.plan } })).map((e) => fieldsOf<BuildingFields>(e));
 	let written = 0;
 	for (const e of await space.readAll({ type: "Bed" })) {
 		const b = fieldsOf<BedFields>(e);
@@ -471,7 +474,7 @@ export async function gardenTick(space: SpaceLike, w: WorldDef): Promise<number>
 			if (bed.dueWorldMs > now && bed.untilWorldMs > kept) { await space.abort(txn); continue; } // the read was older: done already
 			if (bed.untilWorldMs <= kept) await freeBed(space, txn, bed);
 			else {
-				advance(g, bed, now, await fogOf(space, bed.room), Math.random, patient);
+				advance(g, bed, now, await fogOf(space, bed.room), Math.random, patient, houses.some((h) => h.room === bed.room && Math.max(h.x - (bed.x + bed.w - 1), bed.x - (h.x + h.w - 1), h.y - (bed.y + bed.h - 1), bed.y - (h.y + h.h - 1)) <= glass!.reach) ? null : winter);
 				await space.write({ type: "Bed", fields: bed as never }, txn, FOREVER);
 			}
 			await space.commit(txn);

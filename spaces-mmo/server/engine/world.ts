@@ -158,7 +158,7 @@ export type SortDef = { /** Its form on the 3D map (client/props3d.ts). */ model
  *  looks for wild seeds and how often one finds some. `commons`: a community bed (its size and light; one per fire,
  *  not counted to anyone's beds); `crossChance`: how often a ripe flower beside another sort in a flower bed gives a
  *  seed of a crossing. */
-export type GardenDef = { bed: { w: number; h: number; points: number; keepWorldMs: number }; commons: { w: number; h: number; points: number }; crossChance: number; maxBeds: number; spade: string; can: string; barrel: string; barrelCap: number; barrelFillWorldMs: number;
+export type GardenDef = { /** A bed this near a building of this plan grows through the winter. */ greenhouse?: { plan: string; reach: number }; bed: { w: number; h: number; points: number; keepWorldMs: number }; commons: { w: number; h: number; points: number }; crossChance: number; maxBeds: number; spade: string; can: string; barrel: string; barrelCap: number; barrelFillWorldMs: number;
 	thirstWorldMs: number; seedRestWorldMs: number; seedChance: number; decor: { flowers: string[]; herbs: string[] }; sorts: SortDef[] };
 /** The wild from the fog (docs/siedeln.en.md "Wild im Nebel"), first the hares in the beds: every `checkWorldMs` a room
  *  with beds rolls `chance[fog]` (by its fog level 0 to 3; `nightFactor` times that at night) for a hare, at most

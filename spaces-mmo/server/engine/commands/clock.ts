@@ -5,7 +5,8 @@ import { FOREVER, NO_WAIT } from "phi-spaces";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, type CommandCtx } from "../context.ts";
 import { fieldsOf, type WorldClockFields } from "../../model.ts";
-import { calendar, formatWorldTime, MAX_RATE, MIN_RATE, paused, resumed, withRate, withDecayRate, worldNow } from "../worldtime.ts";
+import { seasonNow } from "../clock.ts";
+import { calendar, formatWorldTime, MAX_RATE, MIN_RATE, paused, resumed, SEASONS, withRate, withDecayRate, worldNow } from "../worldtime.ts";
 import { peek } from "../../space.ts";
 
 const ADMIN = "cmd:perm(Admin)";
@@ -27,7 +28,8 @@ const time: Command = {
 	help: "time – die Zeit in der Welt: Tag und Uhrzeit",
 	async func(c) {
 		const { clock } = await readClock(c);
-		await msg(c, c.actor.charId, "info", `Es ist ${formatWorldTime(worldNow(clock, Date.now()))} Uhr${clock.paused ? " (die Zeit steht still)" : ""}.`);
+		const season = await seasonNow(c.space, worldNow(clock, Date.now()));
+		await msg(c, c.actor.charId, "info", `Es ist ${formatWorldTime(worldNow(clock, Date.now()))} Uhr${season === null ? "" : `, ${SEASONS[season]}`}${clock.paused ? " (die Zeit steht still)" : ""}.`);
 	},
 };
 

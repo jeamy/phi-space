@@ -9,6 +9,8 @@
 //      free cell near the ferry's landing, its token. A character already in B: an earlier try got that far.
 //   4. A's transaction is committed: the Handover and the old token are gone.
 // A worker that dies in steps 2 or 3 lets A's transaction lapse; the Handover is back and the next try finishes it.
+import { grownPoint, pinTerrain } from "./room-growth.ts";
+import type { RoomGrowthFields } from "../model.ts";
 import { FOREVER, NO_WAIT, StillHeld, takeExisting, type BatchOp, type BatchResult, type SpaceLike, type Taken } from "phi-spaces";
 import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type RoomFields } from "../model.ts";
 import { awaitWork, envMs, peek, readExisting } from "../space.ts";
@@ -26,11 +28,12 @@ export type HandoverFields = {
 	account: AccountFields | null;
 	/** Only in a Handover written before the pack went on its own (carryPack): an old one still arrives with its things. */
 	items?: Array<{ type: string; types: string[]; fields: Record<string, unknown> }>;
+	arrivalGrowthRevision?: number;
 	at: number;
 };
 
 /** Step 1, inside the command's transaction in region `from`: the character leaves this region for `dest` in `to`. */
-export async function handOff(c: CommandCtx, from: string, to: string, dest: { room: string; x: number; y: number }): Promise<void> {
+export async function handOff(c: CommandCtx, from: string, to: string, dest: { room: string; x: number; y: number }, arrivalGrowthRevision = 0): Promise<void> {
 	const e = await c.space.take({ type: "Character", fields: { charId: c.actor.charId } }, 5_000, { txn: c.txn });
 	if (!e) throw new CommandError("Deine Figur ist gerade nicht greifbar; bitte noch einmal.");
 	const { refused: _was, ...ch } = fieldsOf<CharacterFields>(e);
@@ -41,6 +44,7 @@ export async function handOff(c: CommandCtx, from: string, to: string, dest: { r
 	try { acc = await takeExisting(c.space, { type: "Account", fields: { accountId: ch.accountId } }, 2_000, { txn: c.txn }); }
 	catch (e) { if (e instanceof StillHeld) throw new Error("the account is held; the crossing is tried again"); throw e; }
 	const handover: HandoverFields = {
+		arrivalGrowthRevision,
 		handoverId: `h-${c.actor.charId}-${Date.now().toString(36)}`, charId: c.actor.charId, from, to,
 		character: { ...ch, ...dest, ...(c.step ? { ack: c.step } : {}) }, account: acc ? fieldsOf<AccountFields>(acc) : null, at: Date.now(),
 	};
@@ -71,11 +75,14 @@ export async function carryPack(here: SpaceLike, there: SpaceLike, charId: strin
 export async function arrive(space: SpaceLike, w: WorldDef, h: HandoverFields): Promise<boolean> {
 	const txn = (await space.createTransaction(30_000)).id;
 	try {
+		await pinTerrain(space, txn);
 		if (await readExisting(space, { type: "Character", fields: { charId: h.charId } }, { txn })) { await space.abort(txn); return false; }
 		// a guest's account lapses as before (the lapsed guests' cleanup goes by it); a registered one stays
 		if (h.account && !(await readExisting(space, { type: "Account", fields: { accountId: h.account.accountId } }, { txn }))) await space.write({ type: "Account", fields: h.account as never }, txn, h.account.guest ? GUEST_MS() : FOREVER);
 		const room = (await peek(space, { type: "Room", fields: { roomId: h.character.room } }))?.fields as unknown as RoomFields | undefined;
+		const growth = (await space.readAll({ type: "RoomGrowth", fields: { roomId: h.character.room } }, { txn }))[0];
 		let at = { x: h.character.x, y: h.character.y };
+		if (growth) at = grownPoint(at, fieldsOf<RoomGrowthFields>(growth), h.arrivalGrowthRevision ?? 0);
 		// the ferry's landing is a passage (occupancy.ts): the character lands there whoever stands on it
 		const landing = room ? isPassage((await space.readAll({ type: "Exit", fields: { location: room.roomId } })).map((e) => e.fields as unknown as { x: number; y: number }), at) : false;
 		if (room && !landing) {

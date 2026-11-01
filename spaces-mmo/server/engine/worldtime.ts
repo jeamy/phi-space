@@ -30,6 +30,17 @@ export function decayNow(clock: Pick<WorldClockFields, "paused" | "worldAnchorMs
  *  in world time. */
 export const patience = (clock: Pick<WorldClockFields, "rate" | "decayRate">) => clock.rate / (clock.decayRate ?? clock.rate);
 
+/** The seasons of a year of `yearDays` world days (docs/siedeln.en.md "Seasons"): four of equal length, spring first, from day 0. */
+export const SEASONS = ["Frühling", "Sommer", "Herbst", "Winter"] as const;
+/** The index in `SEASONS`, or null in a world without seasons (`yearDays` 0). */
+export function seasonIndex(worldMs: number, yearDays: number): number | null {
+	if (yearDays <= 0) return null;
+	const inYear = (worldMs / WORLD_DAY_MS) % yearDays;
+	return Math.min(3, Math.floor((inYear * 4) / yearDays));
+}
+/** The first world time of the next spring. */
+export const nextSpring = (worldMs: number, yearDays: number) => (Math.floor(worldMs / WORLD_DAY_MS / yearDays) + 1) * yearDays * WORLD_DAY_MS;
+
 export type CalendarTime = { day: number; hour: number; minute: number; millisOfDay: number };
 
 /** Day, hour and minute of a world time; day 0 is the world's first. */
@@ -72,7 +83,7 @@ export const paused = (clock: WorldClockFields, realNow: number): WorldClockFiel
 export const resumed = (clock: WorldClockFields, realNow: number): WorldClockFields => ({ ...materialize(clock, realNow), paused: false });
 
 /** What the gateway tells a browser; the browser interpolates between two of these, and decides nothing by it. */
-export type WorldTimeView = { epoch: number; worldMs: number; rate: number; paused: boolean; serverNowMs: number };
+export type WorldTimeView = { epoch: number; worldMs: number; rate: number; paused: boolean; serverNowMs: number; /** World days of a year; 0 or absent: no seasons. */ yearDays?: number };
 export const viewOf = (clock: WorldClockFields, serverNowMs: number): WorldTimeView => ({ epoch: clock.epoch, worldMs: worldNow(clock, serverNowMs), rate: clock.rate, paused: clock.paused, serverNowMs });
 /** The world time a browser shows `now`, from the view it received at `receivedAtMs` (its own clock). */
 export const shownWorldMs = (v: WorldTimeView, receivedAtMs: number, now: number): number => (v.paused ? v.worldMs : v.worldMs + Math.max(0, now - receivedAtMs) * v.rate);

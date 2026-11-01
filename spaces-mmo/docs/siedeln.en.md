@@ -259,11 +259,22 @@ for this (it arises from huts, below); the epoch counts what stands on the islan
   have dozens of nearly empty rooms.
 - **Ownership changes:** `uebergib`/`verkaufe` on an area is a transaction like `offer`: land and building go together,
   co-residents run via rights (locks). What decays becomes free — the claim runs with the building.
-- **Rooms grow, new ones arise:** If a room is full, it grows by a strip of cells — the world adds new building land to
-  the same room, the claims stay; the strip goes to a side without an exit and without a beach, exits, fires and beaches
-  of the world file stay where they are. And new rooms arise: the world file or a god (authority `insel`,
-  [goetter.en.md](goetter.en.md)) creates new building land, reachable from a burning fire. A full room is therefore both:
-  signal to grow and signal to expand.
+- **Rooms grow, new ones arise:** At 70 % occupied building land, the same room gains a strip of 4 cells, east first,
+  then south, up to 36×24. A grassy edge can extend directly. With boundary exits or a coast, the planner tries seams
+  in the outer half of the room and inserts land before the boundary. Paths continue across the strip; the original
+  beach and water cells remain. No seam may cut a building, bed, field, scenery footprint or zone. Whole objects beyond
+  the seam move with their ground, including characters, held cells, fires, loose items and claims. A breadth-first
+  check preserves previously reachable free land and connects the added land; if no safe seam exists, growth waits.
+  Terrain, decor, spawn, positions and local reciprocal exit arrivals commit together. Commands, spawns and background
+  jobs hold shared world-lock reads; growth takes that lock exclusively and defers while the world is busy. Overview
+  map slots, islands and regions stay the same.
+  `RoomGrowth` stores ordered strips and their actual tile profiles, alongside the compatible east/south totals.
+  Reloads replay those strips and transform new definition objects into the current coordinate frame; changing a grown
+  room's base dimensions requires an explicit migration. Exit and ferry arrival revisions let the destination apply
+  only growth missing from an incoming coordinate, including crossings between separate region spaces.
+  Tests: `tests/room-growth.test.ts` covers coordinate migration, paths, reciprocal exits, reloads, ferries, rollback,
+  busy-world deferral and the first strip in every room of the real Leuchtfeuer definition (only fullness is forced).
+  New rooms still require the world file or a god (authority `insel`, [goetter.en.md](goetter.en.md)).
 
 ## Gardens
 
@@ -377,7 +388,11 @@ towards the held holdings of the epoch, gives reputation points to the tenders a
 plots of an island, with the seasons in autumn), weddings and market days. Between settlements the most beautiful park is
 the nonviolent competition that the archipelago can bear.
 
-### Seasons (later)
+### Seasons
+
+Built (`worldtime.ts`, `clock.ts`): a year of `year.days` world days (a setting, 56 by default, 14 per season, 0 switches them off) has four equal seasons, spring first. In winter beds and fields out of doors stand still, nothing is lost and the plants count as watered when spring comes; a bed within three cells of a greenhouse grows on. The harvest festival is only in autumn, the flower show in spring and summer, regattas not in winter. `time` and the head of the page name the season, and a new one is told. Not yet: frost, what blooms when, the flight of the birds, a sowing calendar.
+
+The plan:
 
 What blooms when, frost in winter, harvest in autumn; a harvest festival of the island at the church. A sowing calendar
 of the gardener says what is worthwhile now — see [weltzeit.en.md](weltzeit.en.md).
@@ -1057,7 +1072,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      The settlers of the world take part from their home rooms, count as participants and tend parks; one that wins takes the honour and no coins.
      Deviations: the prize comes from the world, not a board; the harvest festival needs no autumn, as seasons are not there yet; the park holds no beds, tending is a flower given to the building. The regatta waits for boats, the fire chain and the rank across regions for the board. Goods turnover still does not count in the rank.
    - **Wind (built, `server/engine/commands/wind.ts`):** Each island has a level, a lull, a breeze, a fresh wind or a gale, that moves a step every six world hours; a storm surge makes it a gale at once. `wetter` tells it. A mill grinds at half to twice its pace by the wind that blows when the load comes, on top of what a surge grinds ahead. A load keeps the pace it started with. Hedges do not break it yet.
-   - **Sizes settled (built):** A room grows by a strip of 4 cells of grass, east or south, once 70 % of its land is taken, up to 36×24 (`server/engine/commands/growth.ts`, job "epoch"); east and south only, so nothing has to move, and not where an exit is near or the edge is no grass, so of the 37 rooms 15 cannot grow and wait for new ones. A fire carries 20 points and 5 more for each registered player who built there in the last seven days, at most 40; figures fill the light without widening it. One account owns at most 2 coops and pens. Cattle come with the town (epoch 3) in the pen: milk at twice a goat's pace, breeding slow. Deviation: no leather yet.
+   - **Sizes settled (built):** A room grows by a strip of 4 cells of grass, east or south, once 70 % of its land is taken, up to 36×24 (`server/engine/commands/growth.ts`, job "epoch"); boundary exits extend with their paths, and safe seams before coasts allow controlled strip insertion. Positions and reciprocal arrivals move atomically; footprints and reachability are checked. The first-strip regression covers all 37 Leuchtfeuer rooms, with fullness forced for the test; later construction can still leave no safe seam. A fire carries 20 points and 5 more for each registered player who built there in the last seven days, at most 40; figures fill the light without widening it. One account owns at most 2 coops and pens. Cattle come with the town (epoch 3) in the pen: milk at twice a goat's pace, breeding slow. Deviation: no leather yet.
 7. **Department store** (step 7, part by part):
    - **Food (built, `server/engine/commands/food.ts`):** `iss <ding>` keeps a figure sated, bread longest, for up to a world day; sated, the rest after work is 1.5 times shorter. Deviation: it shortens the rest rather than counting work points by half again, since a point is one action. There is no hunger.
    - **Jetty, fishing, smokehouse (built, `fishing.ts`):** A jetty must touch water, `wirf netz` beside it with a net brings fish and now and then a find, for the rest of a work. The smokehouse makes smoked fish by a recipe, from wood and kelp rope, as stone comes only with the village. The net holds; gulls are not there yet.
@@ -1066,7 +1081,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
    - **Brewery, glassworks (built, plans and recipes):** Beer from barley, no hops yet; sand dug with a spade on the beach (`schaufle`), glass from sand and wood. Nothing uses glass yet: the greenhouse waits for the seasons.
    - **Rowing boat (built, `fishing.ts`):** A workshop recipe; `rudere <ort>` goes from a jetty to a jetty of the island. It stays a thing in the pack, with no hatch, and the owner needs one. Open: the shipyard, sailing boats to other regions, the regatta.
    - **Shipyard, sailing boat, regatta (built):** The shipyard is a plan at the shore with a recipe for the sailing boat; `segle <insel>` goes from a jetty to the bay of any island, across regions by the handover. `fest regatta` opens a regatta at a jetty, `zeige <boot>` enters a boat, which stays with its owner; a sailing boat beats a rowing boat, and luck decides among equals. Deviations: no buoys and no course, the race is counted at the end; a boat has no hatch.
-   - **Open in this step:** the greenhouse (with the seasons), hops, a boat's cargo hatch, delivery orders and tax of the store.
+   - **Open in this step:** hops, a boat's cargo hatch, delivery orders and tax of the store.
 8. **Roads, carts, timetable ferries**, then the **island railway** as automaton.
 
 ### Later settings and views

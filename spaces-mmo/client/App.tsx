@@ -24,7 +24,7 @@ import { useBack } from "./useBack.ts";
 import { detentPx, Sheet, type Detent } from "./Sheet.tsx";
 import { Rich } from "./RichText.tsx";
 import { language, setLanguage, watchPage } from "./i18n/index.ts";
-import { formatWorldTime, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
+import { formatWorldTime, seasonIndex, SEASONS, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
 
 /** How long a "gone" waits for the "char" that follows it when a character is only being moved (see the handler). */
 const GONE_GRACE_MS = 2500;
@@ -1048,7 +1048,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				<div className="hud">
 					<button className="hud-pill" onClick={() => setAtlasPage(true)} disabled={!atlas || atlas.rooms.length < 2} aria-label="Weltkarte öffnen">
 						<span className={`live${live ? " on" : ""}`} /><b>{hello?.room.name ?? ""}</b>
-						{worldTime && <small>{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}{wind ? ` · ${tr(wind)}` : ""}</small>}
+						{worldTime && <small>{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}{(() => { const i = seasonIndex(shownWorldMs(worldTime.v, worldTime.at, Date.now()), worldTime.v.yearDays ?? 0); return i === null ? "" : ` · ${tr(SEASONS[i]!)}`; })()}{wind ? ` · ${tr(wind)}` : ""}</small>}
 					</button>
 					<span className="spacer" />
 					<button className="hud-btn" onClick={() => { setCmdHelp(null); setHelp(true); }} aria-label="Hilfe / Help">?</button>

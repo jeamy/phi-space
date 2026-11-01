@@ -10,7 +10,7 @@ import { ensureSchedule } from "./schedule.ts";
 import { worldSchedules } from "./worldevents.ts";
 import { DEFAULT_START_HOUR, initialClock, worldNow } from "./worldtime.ts";
 import { actorToken, fieldsOf, WORLD_LOCK, type AccountFields, type BeaconFields, type CharacterFields, type ExitFields, type FogFields, type RoomFields, type RoomGrowthFields, type WorldClockFields, type WorldLoadedFields } from "../model.ts";
-import { grownDecor, grownGround } from "./commands/growth.ts";
+import { grownDecor, grownGround, grownPoint } from "./room-growth.ts";
 import { readExisting, StillHeld, peek } from "../space.ts";
 import { resolveFrom, spawn } from "./prototypes.ts";
 import { draftOf } from "./typeclasses.ts";
@@ -57,6 +57,11 @@ async function underLock<T>(space: SpaceLike, txnMs: number, fn: (txn: string) =
  *  crossing on a ferry). A placed thing or an NPC's purse is spawned only where it exists nowhere at all. */
 export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?: boolean; txnMs?: number; elsewhere?: (itemId: string) => Promise<boolean> } = {}): Promise<LoadResult> {
 	const txnMs = o.txnMs ?? 30_000;
+	const growthAt = async (txn: string, roomId: string): Promise<RoomGrowthFields> => {
+		const e = await peek(space, { type: "RoomGrowth", fields: { roomId } }, { txn });
+		return e ? fieldsOf<RoomGrowthFields>(e) : { roomId, east: 0, south: 0 };
+	};
+	const at = async <T extends { x: number; y: number }>(txn: string, roomId: string, p: T): Promise<T> => grownPoint(p, await growthAt(txn, roomId));
 	const elsewhere = o.elsewhere ?? (async () => false);
 	/** Writes `draft` keyed by `key` in `txn`: when missing, or (replacing) instead of what is there. */
 	const upsert = async (txn: string, replace: boolean, type: string, key: Record<string, string>, draft: Parameters<SpaceLike["write"]>[0]) => {
@@ -74,13 +79,14 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 	for (let i = 0; i < w.rooms.length; i += ROOMS_PER_TXN) await underLock(space, txnMs, async (txn) => {
 		for (const r of w.rooms.slice(i, i + ROOMS_PER_TXN)) {
 			const grown = await peek(space, { type: "RoomGrowth", fields: { roomId: r.roomId } }, { txn }), g = grown ? fieldsOf<RoomGrowthFields>(grown) : { east: 0, south: 0 }, decor = grownDecor(r.decor, g); // what a room grew stays
-			await upsert(txn, replace, "Room", { roomId: r.roomId }, draftOf("Room", w.typeclasses, { roomId: r.roomId, name: r.name, desc: r.desc, ground: grownGround(r.ground, g, w.growth?.tile ?? ","), ...(decor ? { decor } : {}), spawn: r.spawn, ...(r.map ? { map: r.map } : {}), ...(r.island ? { island: r.island } : {}) } satisfies RoomFields));
+			await upsert(txn, replace, "Room", { roomId: r.roomId }, draftOf("Room", w.typeclasses, { roomId: r.roomId, name: r.name, desc: r.desc, ground: grownGround(r.ground, g, w.growth?.tile ?? ","), ...(decor ? { decor } : {}), spawn: grownPoint(r.spawn, g), ...(r.map ? { map: r.map } : {}), ...(r.island ? { island: r.island } : {}) } satisfies RoomFields));
 		}
 	});
 	for (let i = 0; i < w.exits.length; i += ROOMS_PER_TXN * 4) await underLock(space, txnMs, async (txn) => {
 		for (const e of w.exits.slice(i, i + ROOMS_PER_TXN * 4)) {
-			const { room, ...rest } = e;
-			await upsert(txn, replace, "Exit", { exitId: e.exitId }, draftOf("Exit", w.typeclasses, { ...rest, location: room, locks: e.locks ?? "" } satisfies ExitFields));
+			const { room, ...rest } = await at(txn, e.room, e);
+			const destGrowth = await growthAt(txn, e.destination);
+			await upsert(txn, replace, "Exit", { exitId: e.exitId }, draftOf("Exit", w.typeclasses, { ...rest, arrive: grownPoint(e.arrive, destGrowth), arriveGrowthRevision: destGrowth.steps?.length ?? 0, location: room, locks: e.locks ?? "" } satisfies ExitFields));
 		}
 	});
 	// prototypes and help topics each in a transaction of their own too: with the things and dates below they
@@ -102,7 +108,7 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			if (!exists) {
 				const now = Date.now();
 				await space.write({ type: "Account", fields: { accountId: charId, name: n.name, guest: false, admin: false, npc: true, ...(n.settler ? { settler: true } : {}), createdAt: now, touchedAt: now } satisfies AccountFields as never }, txn, FOREVER);
-				await space.write({ type: "Character", fields: { charId, accountId: charId, name: n.name, room: n.room, x: n.x, y: n.y, skin: n.skin, guest: false } satisfies CharacterFields as never }, txn, FOREVER);
+				await space.write({ type: "Character", fields: { charId, accountId: charId, name: n.name, room: n.room, ...await at(txn, n.room, { x: n.x, y: n.y }), skin: n.skin, guest: false } satisfies CharacterFields as never }, txn, FOREVER);
 				await space.write(actorToken(charId), txn, FOREVER);
 			}
 			// what it has in its pack from the start (a trader's purse), each thing by a fixed itemId: with the character,
@@ -128,7 +134,7 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			try { there = await readExisting(space, { type: "Item", fields: { itemId: obj.itemId } }, { txn }); } catch (e) { if (e instanceof StillHeld) continue; throw e; }
 			if (there || (await elsewhere(obj.itemId))) continue;
 			// resolved from the definition, as everywhere in this transaction
-			await spawn(space, txn, w, resolveFrom(w.prototypes, obj.proto)!, { itemId: obj.itemId, location: obj.room, x: obj.x, y: obj.y });
+			await spawn(space, txn, w, resolveFrom(w.prototypes, obj.proto)!, { itemId: obj.itemId, location: obj.room, ...await at(txn, obj.room, { x: obj.x, y: obj.y }) });
 			spawned.push(obj.itemId);
 		}
 		// Phase 2: beacons (a reload keeps whether one burns), the fog of the rooms they cover, the tickers, the NPCs (with
@@ -137,10 +143,11 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			const old = await space.readIfExists({ type: "Beacon", fields: { beaconId: b.beaconId } }, 2_000, { txn });
 			if (old && !replace) continue;
 			if (old) await space.take({ type: "Beacon", id: old.id }, NO_WAIT, { txn });
-			await space.write({ type: "Beacon", fields: { ...b, lit: old ? !!old.fields.lit : false } satisfies BeaconFields as never }, txn, FOREVER);
+			await space.write({ type: "Beacon", fields: { ...await at(txn, b.room, b), lit: old ? !!old.fields.lit : false } satisfies BeaconFields as never }, txn, FOREVER);
 		}
 		// the scenery: once, and never again what was cleared or on land someone built on meanwhile
-		for (const s of w.scenery ?? []) {
+		for (const base of w.scenery ?? []) {
+			const s = await at(txn, base.room, base);
 			if (await space.readIfExists({ type: "Scenery", fields: { sceneryId: s.sceneryId } }, 2_000, { txn }) || await space.readIfExists({ type: "SceneryGone", fields: { sceneryId: s.sceneryId } }, 2_000, { txn })) continue;
 			const cells = Array.from({ length: s.w * s.h }, (_, i) => ({ x: s.x + (i % s.w), y: s.y + Math.floor(i / s.w) }));
 			const plots = s.through ? [] : await space.readAll({ type: "Plot", fields: { room: s.room } }, { txn });

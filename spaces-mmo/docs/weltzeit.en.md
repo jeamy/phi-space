@@ -64,7 +64,7 @@ The test for each span: does it punish someone who is away, or need someone to w
 
 | Follows | What |
 | --- | --- |
-| Life rate | day and night, fog, growth of plants and crops, grinding, the rest after work and after gathering seeds, the barrel filling, animals laying, eating and breeding, fallow soil, the blessing, wild animals coming to the beds |
+| Life rate | day and night, the seasons, fog, growth of plants and crops, grinding, the rest after work and after gathering seeds, the barrel filling, animals laying, eating and breeding, fallow soil, the blessing, wild animals coming to the beds |
 | Decay rate, second clock | buildings, sites, ruins, estates, beds and fields lapsing, an unfetched sack at the mill, market listings, votes, festivals with their rest, tending the park, how long NPCs stay awake, their greetings, gossip and visits, how often a role looks around |
 | Decay rate, as a span in world time | thirst, a ripe plant wilting, the harvest window, a dog's food, how long fuel burns, how long flotsam lies, a job on the order board |
 | Decay rate, as a chance | the tide and the storm surge: their job comes by the life rate and acts about once per its period at the decay rate. People fetch and burn what they bring, and it lies by the decay rate; otherwise 24 times as much would pile up and the wind would be a gale for good |

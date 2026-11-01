@@ -17,6 +17,7 @@
 //   SPACES_MMO_TIME_SCALE         the starting rate of a new world's clock (docs/weltzeit.en.md); an existing clock keeps its rate
 //   SPACES_MMO_REGION             the region this worker runs (engine/regions.ts): SPACES_MMO_SPACE is its space, and
 //                                 SPACES_MMO_REGIONS names every region's (a ferry to another hands the character over)
+import { pinTerrain, spatialWorld, stableTerrain } from "./engine/room-growth.ts";
 import "./env.ts";
 import { pathToFileURL } from "node:url";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
@@ -32,7 +33,7 @@ import { epochTick } from "./engine/commands/epoch.ts";
 import { settlementTick } from "./engine/commands/settlement.ts";
 import { motionTick } from "./engine/commands/townhall.ts";
 import { showTick } from "./engine/commands/festival.ts";
-import { byPeoplesPace, syncRates } from "./engine/clock.ts";
+import { byPeoplesPace, seasonTick, syncRates } from "./engine/clock.ts";
 import { growthTick } from "./engine/commands/growth.ts";
 import { loanTick } from "./engine/commands/shop.ts";
 import { stormRaisesWind, windTick } from "./engine/commands/wind.ts";
@@ -44,7 +45,7 @@ import { SCHEDULE_HANDLERS, tickHandler } from "./engine/worldevents.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { regionAddresses, regionWorld } from "./engine/regions.ts";
 import { deliver } from "./engine/handover.ts";
-import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields } from "./model.ts";
+import { WORLD_LOCK, actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields } from "./model.ts";
 import { announce, awaitWork, batching, bufferedTxn, connectSpace, DEFAULT_SPACE, envMs, Mirror, readExisting, StillHeld } from "./space.ts";
 
 export async function startWorld(o: { space?: string; world?: WorldDef; region?: string } = {}) {
@@ -60,18 +61,22 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 
 	// the world's recurring jobs run as dates in world time (engine/schedule.ts, worldevents.ts tickJobs): whichever worker
 	// takes a due date runs the job, once
+	const job = (fn: (live: WorldDef) => Promise<void>) => () => stableTerrain(space, async () => fn(await spatialWorld(space, w)));
 	const runs: Record<string, () => Promise<void>> = {
-		fire: () => fireTick(space, w, msgLeaseMs),
-		fog: () => fogTick(space, w, msgLeaseMs),
-		flood: async () => { if (await byPeoplesPace(space)) await floodTick(space, w, msgLeaseMs); },
-		sweep: async () => { await syncRates(space); await sweepTick(space, w); },
-		orders: () => ordersTick(space, w),
-		market: () => marketTick(space),
-		storm: async () => { if (!(await byPeoplesPace(space))) return; const room = await stormTick(space, w, msgLeaseMs); await stormFillsBarrels(space, w, room); await stormTurnsMills(space, w, room); await stormRaisesWind(space, w, room, msgLeaseMs); },
-		wind: async () => { if (process.env.SPACES_MMO_WIND !== "0") await windTick(space, w, msgLeaseMs); },
-		garden: async () => { await gardenTick(space, w); await fieldTick(space, w, msgLeaseMs); },
-		wild: async () => { await wildTick(space, w, msgLeaseMs); },
-		epoch: async () => { await epochTick(space, w, msgLeaseMs); await settlementTick(space, w, msgLeaseMs); await motionTick(space, w, msgLeaseMs); await showTick(space, w, msgLeaseMs); await growthTick(space, w, msgLeaseMs); await loanTick(space, w, msgLeaseMs); },
+		fire: job((live) => fireTick(space, live, msgLeaseMs)),
+		fog: job((live) => fogTick(space, live, msgLeaseMs)),
+		flood: job(async (live) => { if (await byPeoplesPace(space)) await floodTick(space, live, msgLeaseMs); }),
+		sweep: job(async (live) => { await syncRates(space); await sweepTick(space, live); }),
+		orders: job((live) => ordersTick(space, live)),
+		market: job(() => marketTick(space)),
+		storm: job(async (live) => { if (!(await byPeoplesPace(space))) return; const room = await stormTick(space, live, msgLeaseMs); await stormFillsBarrels(space, live, room); await stormTurnsMills(space, live, room); await stormRaisesWind(space, live, room, msgLeaseMs); }),
+		wind: job(async (live) => { if (process.env.SPACES_MMO_WIND !== "0") await windTick(space, live, msgLeaseMs); }),
+		garden: job(async (live) => { await gardenTick(space, live); await fieldTick(space, live, msgLeaseMs); }),
+		wild: job(async (live) => { await wildTick(space, live, msgLeaseMs); }),
+		epoch: async () => {
+			await job(async (live) => { await epochTick(space, live, msgLeaseMs); await settlementTick(space, live, msgLeaseMs); await motionTick(space, live, msgLeaseMs); await showTick(space, live, msgLeaseMs); await loanTick(space, live, msgLeaseMs); await seasonTick(space, live, msgLeaseMs); })();
+			await growthTick(space, w, msgLeaseMs);
+		},
 	};
 	const handlers = { ...SCHEDULE_HANDLERS, tick: tickHandler(runs) };
 	// a region's world worker reaches the other regions: to deliver the characters that took a ferry out of it
@@ -114,9 +119,13 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 	const mirror = batch && process.env.SPACES_MMO_WORLD_INTENTS !== "0" && process.env.SPACES_MMO_MIRROR !== "0" ? new Mirror(space) : null;
 	await mirror?.ready();
 	const begin = async (charId: string): Promise<{ txn: string; intent: IntentFields | null }> => {
-		if (!batch) { const txn = (await space.createTransaction(TXN_MS)).id; return { txn, intent: await claim(txn, charId) }; }
-		const [t, token] = (await batch.batch([{ op: "begin", lease: TXN_MS }, { op: "take", template: actorToken(charId), txn: "$" }])) as [{ id: string }, { entry: Taken | null }];
-		if (!token.entry) return { txn: t.id, intent: null };
+		if (!batch) {
+			const txn = (await space.createTransaction(TXN_MS)).id;
+			try { await pinTerrain(space, txn); return { txn, intent: await claim(txn, charId) }; }
+			catch (e) { await space.abort(txn).catch(() => {}); throw e; }
+		}
+		const [t, terrain, token] = (await batch.batch([{ op: "begin", lease: TXN_MS }, { op: "read", template: WORLD_LOCK, txn: "$" }, { op: "take", template: actorToken(charId), txn: "$" }])) as [{ id: string }, { entry: Taken | null }, { entry: Taken | null }];
+		if (!terrain.entry || !token.entry) return { txn: t.id, intent: null };
 		const intent = await space.takeIfExists({ type: "Intent", fields: { charId } }, NO_WAIT, { txn: t.id });
 		return { txn: t.id, intent: intent ? fieldsOf<IntentFields>(intent) : null };
 	};
@@ -164,7 +173,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 				const accountId = actor.accountId;
 				const loadAccount = async () => { const e = await one({ type: "Account", fields: { accountId } }, 2_000); return e ? fieldsOf<AccountFields>(e) : null; };
 				const account = /^step\s/.test(intent.line) ? null : await loadAccount();
-				await execute({ space: end.space, txn, world: w, actor, account, ...(account ? {} : { loadAccount }), msgLeaseMs, cache: {}, ...(intent.asked ? { asked: intent.asked } : {}), ...(intent.lang ? { lang: intent.lang } : {}), ...(intent.step ? { step: intent.step } : {}) }, intent.line);
+				await execute({ space: end.space, txn, world: await spatialWorld(end.space, w), actor, account, ...(account ? {} : { loadAccount }), msgLeaseMs, cache: {}, ...(intent.asked ? { asked: intent.asked } : {}), ...(intent.lang ? { lang: intent.lang } : {}), ...(intent.step ? { step: intent.step } : {}) }, intent.line);
 			}
 			await end.commit();
 			if (SLOW_MS && Date.now() - intent.at > SLOW_MS) console.error(`[world] slow: ${charId} "${intent.line.slice(0, 40)}" ${Date.now() - intent.at} ms after it was typed, ${Date.now() - t0} ms to run`);

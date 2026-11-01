@@ -10,7 +10,7 @@ import { world } from "../worlds/leuchtfeuer/world.ts";
 import { checkRegions, regionOfRoom, regionsOf, regionWorld } from "../server/engine/regions.ts";
 import { arrive, deliver, handOff, type HandoverFields } from "../server/engine/handover.ts";
 import { connectSpace, parseTarget } from "../server/space.ts";
-import { actorToken, type CharacterFields } from "../server/model.ts";
+import { WORLD_LOCK, actorToken, type CharacterFields } from "../server/model.ts";
 import type { CommandCtx } from "../server/engine/context.ts";
 
 test("every island in exactly one region, each region starts in a bay of its own, and only ferries cross between them", () => {
@@ -34,6 +34,8 @@ const serve = async (sock: string) => {
 	// limits as the game's space process sets them (space-host.ts): loading a world is many calls at once
 	const server = await serveSpace(new SpaceService({ host, ctx, identity: new StaticIdentity({ p: { principal: { peerId: "p" }, roles: ["member"] } }), wakeOnCommit: true, maxCallsPerWindow: 50_000, maxPendingPerPrincipal: 4096, maxPendingPerPeer: 4096 }), { listen: parseTarget(sock), connection: () => ({ peerId: "p" }) });
 	const conn = connectSpace(sock);
+	// As in space-host.ts: arrivals pin the coordinate frame while growth needs the exclusive world lock.
+	await conn.space.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, null, FOREVER);
 	return { space: conn.space, async close() { conn.close(); await server.close(); await stop(); } };
 };
 

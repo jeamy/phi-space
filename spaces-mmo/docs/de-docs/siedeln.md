@@ -369,7 +369,11 @@ der Fluren einer Insel, mit den Jahreszeiten im Herbst),
 Hochzeiten und Markttage. Zwischen Siedlungen ist der schönste Park der gewaltfreie Wettbewerb, den der Archipel
 verträgt.
 
-### Jahreszeiten (später)
+### Jahreszeiten
+
+Gebaut (`worldtime.ts`, `clock.ts`): Ein Jahr von `year.days` Welttagen (eine Einstellung, Standard 56, je Jahreszeit 14, 0 schaltet sie ab) hat vier gleich lange Jahreszeiten, zuerst den Frühling. Im Winter stehen Beete und Äcker draußen still, nichts geht verloren, und zum Frühling gelten die Pflanzen als gegossen; ein Beet bis drei Felder neben einem Gewächshaus wächst weiter. Das Erntefest gibt es nur im Herbst, die Blumenschau im Frühling und Sommer, Regatten nicht im Winter. `time` und der Kopf der Seite nennen die Jahreszeit, eine neue wird angesagt. Noch nicht: Frost, was wann blüht, der Vogelzug, ein Aussaatkalender.
+
+Der Plan:
 
 Was wann blüht, Frost im Winter, Ernte im Herbst; ein Erntefest der Insel an der Kirche. Ein Saatkalender der
 Gärtnerin sagt, was sich jetzt lohnt — siehe [weltzeit.md](../weltzeit.en.md).
@@ -1073,7 +1077,7 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
    - **Brauerei, Glashütte (gebaut, Pläne und Rezepte):** Bier aus Gerste, noch ohne Hopfen; Sand mit dem Spaten am Strand (`schaufle`), Glas aus Sand und Holz. Noch verwendet nichts Glas: Das Gewächshaus wartet auf die Jahreszeiten.
    - **Ruderboot (gebaut, `fishing.ts`):** Ein Rezept der Werkstatt; `rudere <ort>` fährt von Steg zu Steg der Insel. Es bleibt ein Ding im Gepäck, ohne Luke. Offen: Werft, Segelboote in andere Regionen, Regatta.
    - **Werft, Segelboot, Regatta (gebaut):** Die Werft ist ein Plan am Ufer mit dem Rezept für das Segelboot; `segle <insel>` fährt vom Steg in die Bucht jeder Insel, über Regionen hinweg per Übergabe. `fest regatta` eröffnet am Steg eine Regatta, `zeige <boot>` meldet ein Boot, das bei seinem Besitzer bleibt; ein Segelboot schlägt ein Ruderboot, unter Gleichen entscheidet das Glück. Abweichungen: keine Bojen und kein Kurs, das Rennen wird am Ende gezählt; ein Boot hat keine Luke.
-   - **Offen in diesem Schritt:** Gewächshaus (mit den Jahreszeiten), Hopfen, die Luke eines Boots, Lieferaufträge und Steuer des Kaufhauses.
+   - **Offen in diesem Schritt:** Hopfen, die Luke eines Boots, Lieferaufträge und Steuer des Kaufhauses.
 8. **Straßen, Karren, Fahrplan-Fähren**, dann die **Inselbahn** als Automat.
 
 ### Spätere Einstellungen und Ansichten

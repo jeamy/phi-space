@@ -30,7 +30,7 @@ export type Variety = { id: string; name: string; color: string; breeder: string
 /** A name given to a variety, `unique` on `nameKey` within its region's space. */
 export type VarietyFields = { varietyId: string; name: string; nameKey: string; sort: string; color: string; breeder: string; breederName: string; at: number };
 /** A way out of a room, on a cell of it; stepping on the cell or `go <name>` leads to `destination`, arriving at `arrive`. */
-export type ExitFields = { exitId: string; name: string; aliases: string[]; desc: string; location: string; destination: string; x: number; y: number; arrive: { x: number; y: number }; locks: string; fogMax?: number };
+export type ExitFields = { exitId: string; name: string; aliases: string[]; desc: string; location: string; destination: string; x: number; y: number; arrive: { x: number; y: number }; arriveGrowthRevision?: number; locks: string; fogMax?: number };
 /** A label on an object (Tags cannot be array fields: templates match whole values). */
 export type TagFields = { target: string; key: string; category: string };
 /** A template to spawn items from; `parent` names the prototype whose fields it extends. */
@@ -56,7 +56,8 @@ export type SettlementFields = { settlementId: string; name: string; nameKey: st
 /** A festival of a settlement, one per room (`unique`), ending at `endsWorldMs`. */
 /** The wind of an island: an index into `WorldDef.wind.names`. */
 /** What a room grew by (engine/commands/growth.ts), so that a new version of the world file keeps it. */
-export type RoomGrowthFields = { roomId: string; east: number; south: number };
+export type RoomGrowthStep = { axis: "x" | "y"; at: number; size: number; fill: string[] };
+export type RoomGrowthFields = { roomId: string; east: number; south: number; steps?: RoomGrowthStep[]; baseWidth?: number; baseHeight?: number };
 /** A registered player who built in a fire's light: the light grows with them (engine/commands/build.ts lightFor). */
 export type FireBuilderFields = { beaconId: string; accountId: string; atWorldMs: number };
 /** A figure that has eaten, until when (engine/commands/food.ts). */

@@ -9,7 +9,8 @@
 import { randomBytes, randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type ParkCareFields, type SettlementFields, type ShowEntryFields, type ShowFields, type ShowKind } from "../../model.ts";
-import { decayNowOf } from "../clock.ts";
+import { decayNowOf, seasonNow, worldNowOf } from "../clock.ts";
+import { SEASONS } from "../worldtime.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
@@ -20,6 +21,8 @@ import { hutsIn, rankOf, settlementIn } from "./settlement.ts";
 import { consume } from "./trade.ts";
 
 const NAME: Record<ShowKind, string> = { blumen: "Blumenschau", ernte: "Erntefest", regatta: "Regatta" };
+/** The seasons of each festival, by `SEASONS`. */
+const ALLOWED: Record<ShowKind, number[]> = { blumen: [0, 1], ernte: [2], regatta: [0, 1, 2] };
 const REGATTA_CREW = 2; // a boat is worth twice its rower: the sailing boat over the rowing boat, then the wind and the crew
 const defOf = (c: CommandCtx): FestivalDef => { const d = c.world.festival; if (!d) throw new CommandError("In dieser Welt gibt es keine Feste."); return d; };
 export const flowers = (w: WorldDef) => (w.garden?.sorts ?? []).filter((s) => s.kind === "zier").map((s) => s.yields.proto);
@@ -50,6 +53,8 @@ const fest: Command = {
 		if (!kind) throw new NotUnderstood("So eröffnest du eines: fest blumen, fest ernte oder fest regatta.");
 		const account = members(c);
 		if (!(await parkBeside(c, d, placeOf(d, kind)))) throw new CommandError(`${kind === "regatta" ? "Eine Regatta" : "Dieses Fest"} eröffnet man ${atPark(c, d, placeOf(d, kind))}.`);
+		const season = await seasonNow(c.space, await worldNowOf(c.space, c.txn));
+		if (season !== null && !ALLOWED[kind].includes(season)) throw new CommandError(`${NAME[kind]} ist nicht jetzt: ${ALLOWED[kind].map((i) => SEASONS[i]).join(", ")}.`);
 		const s = await settlementIn(c.space, c.actor.room, c.txn);
 		if (!s) throw new CommandError("Feste feiert eine Siedlung; hier ist keine.");
 		if (rankOf(s, await hutsIn(c.space, c.world, s.room, c.txn), account) !== "siedler") throw new CommandError(`Feste eröffnen die Siedler von ${s.name}.`);

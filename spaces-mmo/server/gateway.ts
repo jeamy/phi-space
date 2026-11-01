@@ -143,6 +143,7 @@ export class Gateway {
 	readonly #online = new Map<string, number>(); // charId -> live sessions
 	readonly #rooms = new Map<string, RoomFields>();
 	readonly #winds = new Map<string, number>();
+	#yearDays = 0;
 	/** The name of the wind in a room; an island nobody counted yet has the breeze. */
 	#windIn(room: string): string { return this.w.wind?.names[this.#winds.get(this.#rooms.get(room)?.island ?? "") ?? 1] ?? ""; }
 	readonly #objs = new Map<string, ObjView>(); // by itemId / exitId
@@ -281,8 +282,9 @@ export class Gateway {
 	}
 
 	/** The clock as a browser is told it (null in a world that has none yet). */
-	#worldTime(): WorldTimeView | null { return this.#clock ? viewOf(this.#clock, Date.now()) : null; }
+	#worldTime(): WorldTimeView | null { return this.#clock ? { ...viewOf(this.#clock, Date.now()), yearDays: this.#yearDays } : null; }
 	#broadcastTime(): void {
+		void setting(this.space, "year.days").then((d) => { this.#yearDays = d; }, () => {}); // the next one carries it
 		const time = this.#worldTime();
 		if (time) for (const c of this.#clients) if (c.room !== null) c.ws.send({ t: "time", time } satisfies ServerFrame);
 	}

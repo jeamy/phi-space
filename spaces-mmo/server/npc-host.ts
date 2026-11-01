@@ -10,6 +10,7 @@
 //   SPACES_MMO_NPCS         the roles this process plays, by npcId with commas (default: all of the world)
 //   SPACES_MMO_REGION       this process plays in that region's space (SPACES_MMO_SPACE): every role, but each only while
 //                           its NPC stands there (it walks by the whole world's map, also across a ferry)
+import { spatialWorld } from "./engine/room-growth.ts";
 import "./env.ts";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
@@ -114,7 +115,7 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 				beat.unref?.();
 				try {
 					while (!halt.signal.aborted && !lost) {
-						try { if (await atPlan(npc)) await script(npc); else await sleep(paceMs(space, 5_000, 200)); } catch (e) { if (!halt.signal.aborted) { console.error(`[npc] ${def.npcId}:`, (e as Error).message); await sleep(1000); } }
+						try { npc.world = await spatialWorld(space, w); npc.def = npc.world.npcs.find((n) => n.npcId === def.npcId) ?? def; if (await atPlan(npc)) await script(npc); else await sleep(paceMs(space, 5_000, 200)); } catch (e) { if (!halt.signal.aborted) { console.error(`[npc] ${def.npcId}:`, (e as Error).message); await sleep(1000); } }
 					}
 				} finally {
 					clearInterval(beat);

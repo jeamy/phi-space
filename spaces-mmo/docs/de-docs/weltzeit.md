@@ -8,7 +8,7 @@ Die Prüffrage für jede Spanne: Bestraft sie Abwesende, oder muss jemand hinlau
 
 | Folgt | Was |
 | --- | --- |
-| Lebenstakt | Tag und Nacht, Nebel, Wachstum von Pflanzen und Getreide, Mahlen, die Ruhe nach der Arbeit und nach dem Samensammeln, das Füllen der Tonne, Legen, Fressen und Vermehren der Tiere, Brache, der Segen, Wild an den Beeten |
+| Lebenstakt | Tag und Nacht, die Jahreszeiten, Nebel, Wachstum von Pflanzen und Getreide, Mahlen, die Ruhe nach der Arbeit und nach dem Samensammeln, das Füllen der Tonne, Legen, Fressen und Vermehren der Tiere, Brache, der Segen, Wild an den Beeten |
 | Verfallstakt, zweite Uhr | Verfall von Bauten, Baustellen, Ruinen, Nachlässen, Beeten und Äckern, ein nicht abgeholter Sack an der Mühle, Marktangebote, Abstimmungen, Feste samt Ruhezeit, Parkpflege, wie lange NPCs wach bleiben, ihr Grüßen, Klatsch und ihre Besuche, wie oft eine Rolle sich umsieht |
 | Verfallstakt, als Spanne in Weltzeit | Durst, Welken reifer Pflanzen, Erntefenster, das Futter eines Hundes, Brenndauer, Liegezeit von Strandgut, ein Auftrag der Tafel |
 | Verfallstakt, als Zufall | Flut und Sturmflut: ihr Job kommt im Lebenstakt und wirkt etwa einmal je Periode im Verfallstakt. Menschen holen und verbrennen, was sie bringen, und es liegt im Verfallstakt; sonst häufte sich das 24-Fache an, und der Wind stünde dauerhaft auf Sturm |

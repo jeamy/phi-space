@@ -1,9 +1,10 @@
 // The commands every character has (Evennia's default command set, docs/phasen.en.md Phase 1). Each runs inside the
 // transaction its intent is taken in: what it changes and what it says commit together, or not at all. An item changes
 // hands by being taken (it is then held by this transaction, invisible to every other) and written anew.
+import { grownPoint } from "../room-growth.ts";
 import { settlementIn } from "./settlement.ts";
 import { cutText, FOREVER, NO_WAIT, type Taken } from "phi-spaces";
-import { fieldsOf, type PlotFields, type SceneryFields, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomFields, type SessionFields } from "../../model.ts";
+import { fieldsOf, type PlotFields, type SceneryFields, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomGrowthFields, type RoomFields, type SessionFields } from "../../model.ts";
 import type { CmdSet, Command } from "../cmdsets.ts";
 import { byName, check, CommandError, NotUnderstood, exitsHere, inventory, itemsHere, msg, pluralOf, reach, roomOf, stem, whereTo, type CommandCtx, itemsNamed } from "../context.ts";
 import { worldNowOf } from "../clock.ts";
@@ -129,12 +130,14 @@ export async function traverse(c: CommandCtx, exit: ExitFields): Promise<void> {
 	if (toRegion) {
 		await dropOffers(c);
 		await msg(c, "*", "info", `$you() $conj(gehst|geht) nach ${whereTo(c.world, exit)}.`, { templ: true });
-		await handOff(c, c.world.region!, toRegion, { room: exit.destination, ...exit.arrive });
+		await handOff(c, c.world.region!, toRegion, { room: exit.destination, ...exit.arrive }, exit.arriveGrowthRevision ?? 0);
 		return;
 	}
 	const dest = await roomOf(c, exit.destination);
 	// arriving: the exit's arrival cell, or the nearest free one when someone stands there (never on an exit cell)
-	const at = await placeIn(c, dest, exit.arrive);
+	const growth = (await c.space.readAll({ type: "RoomGrowth", fields: { roomId: dest.roomId } }, { txn: c.txn }))[0];
+	const arrival = growth ? grownPoint(exit.arrive, fieldsOf<RoomGrowthFields>(growth), exit.arriveGrowthRevision ?? 0) : exit.arrive;
+	const at = await placeIn(c, dest, arrival);
 	await relocate(c, { room: dest.roomId, x: at.x, y: at.y }, { spot: false });
 	await dropOffers(c);
 	await msg(c, "*", "info", `$you() $conj(gehst|geht) nach ${whereTo(c.world, exit)}.`, { templ: true });
@@ -234,8 +237,8 @@ const step: Command = {
 		if (!Number.isInteger(dx) || !Number.isInteger(dy) || Math.abs(dx!) + Math.abs(dy!) !== 1) throw new CommandError("So geht es: step <dx> <dy> mit einem Schritt, z. B. step 1 0");
 		const to = { x: c.actor.x + dx!, y: c.actor.y + dy! };
 		try {
-			// the ground of a room of the world comes from its definition (no builder changes it); only a dug room is read
-			const room = (c.world.rooms.find((r) => r.roomId === c.actor.room) as RoomFields | undefined) ?? (await roomOf(c));
+			// Growth changes persisted terrain, including rooms present in the world definition.
+			const room = await roomOf(c);
 			if (!walkable(c.world, room.ground, to.x, to.y)) throw new CommandError("Da geht es nicht weiter.");
 			await moveTo(c, to, { room });
 		} catch (e) {

@@ -39,15 +39,9 @@ export async function releaseSpot(space: SpaceLike, txn: string, charId: string)
 	await space.takeIfExists({ type: "Spot", fields: { charId } }, NO_WAIT, { txn });
 }
 
-/** Cells nobody may stand on, whoever is online: the beacons of `room` (one does not walk into a fire). Beacons stand
- *  where the world definition puts them. */
-export function solidIn(w: WorldDef, room: string): Set<string> {
-	return new Set(w.beacons.filter((b) => b.room === room).map((b) => cellKey(b)));
-}
-
-/** Cells nobody walks onto: the fires (solidIn) and the cells of sites and buildings (Plot entries, engine/commands/build.ts). */
-export async function blockedIn(space: SpaceLike, w: WorldDef, room: string): Promise<Set<string>> {
-	const out = solidIn(w, room);
+/** Cells nobody walks onto: persisted fires and the cells claimed by sites and buildings. */
+export async function blockedIn(space: SpaceLike, _w: WorldDef, room: string): Promise<Set<string>> {
+	const out = new Set((await space.readAll({ type: "Beacon", fields: { room } })).map((e) => cellKey(e.fields as unknown as Cell)));
 	for (const e of await space.readAll({ type: "Plot", fields: { room } })) out.add(cellKey(e.fields as unknown as Cell));
 	return out;
 }

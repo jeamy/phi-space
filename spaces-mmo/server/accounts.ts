@@ -6,6 +6,7 @@
 // cannot both succeed), turn the account into a registered one in the world (or create it), then activate the
 // credential. A run that stops after step 1 leaves a pending credential whose lease frees the name again; one that
 // stops after step 2 is completed by the next login.
+import { pinTerrain, spatialWorld } from "./engine/room-growth.ts";
 import { createHash, randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { RegionSpaces } from "./region-spaces.ts";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
@@ -74,6 +75,7 @@ export class Accounts {
 		const txn = (await world.createTransaction(10_000)).id;
 		let char: CharacterFields;
 		try {
+			await pinTerrain(world, txn);
 			const made = await this.#newCharacter(account, start.room, world);
 			char = made.char;
 			await made.release();
@@ -128,6 +130,7 @@ export class Accounts {
 		const t2 = (await world.createTransaction(15_000)).id;
 		let charId: string;
 		try {
+			await pinTerrain(world, t2);
 			if (guest) {
 				const a = await world.take({ type: "Account", fields: { accountId, guest: true } }, 5_000, { txn: t2 });
 				if (!a) throw new AuthError(409, "Dieses Gastkonto gibt es nicht mehr");
@@ -182,6 +185,7 @@ export class Accounts {
 		const world = await this.#spaceOf(accountId);
 		const t2 = (await world.createTransaction(15_000)).id;
 		try {
+			await pinTerrain(world, t2);
 			const c = await world.take({ type: "Character", fields: { accountId } }, 5_000, { txn: t2 });
 			if (!c) throw new AuthError(409, "Deine Figur ist gerade nicht greifbar; bitte noch einmal");
 			const char = fieldsOf<CharacterFields>(c);
@@ -325,8 +329,9 @@ export class Accounts {
 	 *  the same one: the character holds no cell until it comes online, and then `arrive` (engine/commands/default.ts)
 	 *  moves the later one aside. */
 	async #newCharacter(account: AccountFields, start: string, world: SpaceLike): Promise<{ char: CharacterFields; release: () => Promise<void> }> {
-		const room = this.w.rooms.find((r) => r.roomId === start)!;
-		const avoid = new Set([...(await occupiedIn(world, room.roomId)).keys(), ...this.w.exits.filter((e) => e.room === room.roomId).map((e) => cellKey(e)), ...this.w.beacons.filter((b) => b.room === room.roomId).map((b) => cellKey(b))]);
+		const live = await spatialWorld(world, this.w);
+		const room = live.rooms.find((r) => r.roomId === start)!;
+		const avoid = new Set([...(await occupiedIn(world, room.roomId)).keys(), ...live.exits.filter((e) => e.room === room.roomId).map((e) => cellKey(e)), ...live.beacons.filter((b) => b.room === room.roomId).map((b) => cellKey(b))]);
 		// a little scatter around the spawn, then the nearest free cell from there
 		const near = { x: room.spawn.x + randomInt(-3, 4), y: room.spawn.y + randomInt(-2, 3) };
 		const at = freeCellNear(this.w, room.ground, walkable(this.w, room.ground, near.x, near.y) ? near : room.spawn, avoid) ?? room.spawn;

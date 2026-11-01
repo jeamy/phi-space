@@ -2,7 +2,7 @@
 // look often use ClockCache (clockcache.ts); a command reads the entry in its transaction, so the time it works with is
 // the one its transaction sees.
 import { fieldsOf, type WorldClockFields } from "../model.ts";
-import { decayNow, patience, withDecayRate, withRate, worldNow, MIN_RATE, MAX_RATE } from "./worldtime.ts";
+import { decayNow, nextSpring, patience, seasonIndex, withDecayRate, withRate, worldNow, MIN_RATE, MAX_RATE } from "./worldtime.ts";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { setting } from "../settings.ts";
 import { peek } from "../space.ts";
@@ -49,3 +49,27 @@ export async function syncRates(space: SpaceLike): Promise<void> {
 /** For a job that serves people, not the life of the world: the tide and the surge bring what people fetch and burn, and what
  *  they bring lies by the second rate, so they come about as often as at that rate, however fast the world lives. */
 export const byPeoplesPace = async (space: SpaceLike): Promise<boolean> => Math.random() * (await patienceOf(space)) < 1;
+
+/** Until when things out of doors stand still: the next spring in winter, else null. */
+export async function frozenUntil(space: SpaceLike, now: number): Promise<number | null> {
+	const yearDays = await setting(space, "year.days");
+	return seasonIndex(now, yearDays) === 3 ? nextSpring(now, yearDays) : null;
+}
+/** The season now, for a word: null in a world without seasons. */
+export const seasonNow = async (space: SpaceLike, now: number) => seasonIndex(now, await setting(space, "year.days"));
+
+/** A new season is told in every room of the region, once (in the job of the epochs). */
+export async function seasonTick(space: SpaceLike, w: { rooms: Array<{ roomId: string }> }, leaseMs: number): Promise<boolean> {
+	const season = await seasonNow(space, await worldNowOf(space));
+	if (season === null) return false;
+	const txn = (await space.createTransaction(10_000)).id;
+	try {
+		const was = await space.takeIfExists({ type: "Season" }, NO_WAIT, { txn });
+		if (was && Number(was.fields.season) === season) { await space.abort(txn); return false; }
+		await space.write({ type: "Season", fields: { season } as never }, txn, FOREVER);
+		if (was) for (const r of w.rooms) await space.write({ type: "Msg", fields: { room: r.roomId, to: "*", kind: "world", text: SEASON_TEXT[season]!, from: "", at: Date.now() } as never }, txn, leaseMs);
+		await space.commit(txn);
+		return !!was;
+	} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
+}
+const SEASON_TEXT = ["Der Frühling kommt: Was im Winter stand, wächst weiter.", "Es wird Sommer.", "Der Herbst beginnt: Zeit für das Erntefest.", "Der Winter kommt: Draußen wächst nichts mehr, bis es Frühling wird."];

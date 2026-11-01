@@ -16,7 +16,7 @@ import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type FieldFields, type WorkRestFields } from "../../model.ts";
 import { peek } from "../../space.ts";
-import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
+import { decayNowOf, frozenUntil, patienceOf, worldNowOf } from "../clock.ts";
 import { satedFactor } from "./food.ts";
 import { workRestMs } from "../../settings.ts";
 import type { Command } from "../cmdsets.ts";
@@ -253,7 +253,7 @@ async function tell(space: SpaceLike, leaseMs: number, room: string, text: strin
 export async function fieldTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<number> {
 	const d = w.fields;
 	if (!d) return 0;
-	const now = await worldNowOf(space), kept = await decayNowOf(space), patient = await patienceOf(space);
+	const now = await worldNowOf(space), kept = await decayNowOf(space), patient = await patienceOf(space), winter = await frozenUntil(space, now);
 	let written = 0;
 	for (const e of await space.readAll({ type: "Field" })) {
 		const f0 = fieldsOf<FieldFields>(e);
@@ -267,6 +267,8 @@ export async function fieldTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 				await freeCells(space, txn, f.room, f.fieldId);
 				await releaseLight(space, txn, f.beaconId, f.points);
 				await tell(space, leaseMs, f.room, `Der ${fieldName(f)} ist verwildert; dort wächst wieder Gras.`, txn);
+			} else if (winter !== null && f.stage !== "brach") {
+				await space.write({ type: "Field", fields: { ...f, dueWorldMs: winter } as never }, txn, FOREVER); // it stands still until the spring
 			} else if (f.stage === "waechst") {
 				const need = Math.ceil((f.w * f.h) / d.harvestPerCells);
 				await space.write({ type: "Field", fields: { ...f, stage: "reif", workNeed: need, dueWorldMs: now + d.windowWorldMs * patient } as never }, txn, FOREVER);

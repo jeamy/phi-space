@@ -16,15 +16,15 @@ const w = await loadWorld();
 const room = (ground: string[]): RoomFields => ({ roomId: "r", name: "Testwiese", desc: "", ground });
 const grass = (wide: number, high: number) => Array.from({ length: high }, () => ",".repeat(wide));
 
-test("a room grows east first, then south, never past its size, nor to a beach or an exit", () => {
+test("a room grows east first, then south, respecting limits and extending paths at exits", () => {
 	assert.deepEqual(grownGround(["ab", "cd"], { east: 1, south: 1 }, ","), ["ab,", "cd,", ",,,"]);
 	assert.deepEqual(grownDecor(["  "], { east: 1, south: 0 }), ["   "]);
 	assert.equal(freeSide(w, room(grass(24, 16)), []), "east");
-	assert.equal(freeSide(w, room(grass(24, 16)), [{ x: 23, y: 5 }]), "south");
-	assert.equal(freeSide(w, room(grass(24, 16)), [{ x: 23, y: 5 }, { x: 4, y: 15 }]), null);
+	assert.equal(freeSide(w, room(grass(24, 16)), [{ x: 23, y: 5 }]), "east");
+	assert.equal(freeSide(w, room(grass(24, 16)), [{ x: 23, y: 5 }, { x: 4, y: 15 }]), "east");
 	assert.equal(freeSide(w, room(grass(36, 16)), []), "south");
 	assert.equal(freeSide(w, room(grass(36, 24)), []), null, "the largest a room gets");
-	assert.equal(freeSide(w, room(Array.from({ length: 16 }, () => ",".repeat(23) + "~")), []), "south", "not into the sea");
+	assert.equal(freeSide(w, room(Array.from({ length: 16 }, () => ",".repeat(23) + "~")), []), "east", "inserts land before the coast");
 });
 
 test("a full room grows once, what it grew stays in its entry, and the next count waits for land to fill", { timeout: 120_000 }, async () => {
