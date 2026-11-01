@@ -129,6 +129,17 @@ pub(crate) fn seal(field: &str, value: Json, name: &str, issuer: &str, signer: &
 	Some(Json::Object(o))
 }
 
+/// `signDelegation`: a value under its signer's key id.
+pub(crate) fn seal_keyed(field: &str, value: Json, name: &str, key_id: &str, signer: &Signer) -> Option<Json> {
+	let signature = to_base64(&signer.sign(domain_text(name, &value)?.as_bytes()));
+	let mut o = Object::new();
+	o.insert(field, value);
+	o.insert("keyId", key_id.into());
+	o.insert("algorithm", signer.algorithm().name().into());
+	o.insert("signature", signature.into());
+	Some(Json::Object(o))
+}
+
 /// What is signed: a domain tag plus the canonical encoding of the challenge.
 pub fn signed_text(challenge: &Json) -> Option<String> { Some(format!("{DOMAIN}{}", challenge.canonical().ok()?)) }
 

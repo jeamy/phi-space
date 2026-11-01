@@ -5,6 +5,7 @@ pub mod boot;
 pub mod control;
 pub mod control_host;
 pub mod delegation;
+pub mod federation_rpc;
 pub mod gate;
 pub mod grants;
 pub mod register;

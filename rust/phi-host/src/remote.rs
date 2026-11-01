@@ -55,7 +55,13 @@ impl ControlClient {
 		socket.bind((from, 0).into()).map_err(|e| e.to_string())?;
 		let mut s = socket.connect(to).await.map_err(|e| e.to_string())?;
 		s.set_nodelay(true).map_err(|e| e.to_string())?;
-		let asked = ok(exchange(&mut s, 1, &obj! { "method" => "challenge", "args" => obj! { "protocol" => crate::auth::AUTH_PROTOCOL } }).await?)?;
+		self.prove_on(&mut s, 1).await?;
+		Ok((s, 3))
+	}
+
+	/// Layer B on this connection: the challenge must name the host meant and this peer before anything is signed.
+	async fn prove_on(&self, s: &mut TcpStream, first: u32) -> Result<(), String> {
+		let asked = ok(exchange(s, first, &obj! { "method" => "challenge", "args" => obj! { "protocol" => crate::auth::AUTH_PROTOCOL } }).await?)?;
 		if asked.get("gateHostId").and_then(Json::as_str) != Some(&self.control_host_id) || asked.get("observedPeerId").and_then(Json::as_str) != Some(&self.peer_id) {
 			return Err("the challenge is not from the control host, or not for this peer".to_owned());
 		}
@@ -64,8 +70,47 @@ impl ControlClient {
 		let challenge = Json::Object(challenge);
 		let text = crate::auth::signed_text(&challenge).ok_or("a challenge that cannot be signed")?;
 		let signature = to_base64(&self.signer.sign(text.as_bytes()));
-		ok(exchange(&mut s, 2, &obj! { "method" => "prove", "args" => obj! { "keyId" => self.key_id.as_str(), "signature" => signature, "challenge" => challenge } }).await?)?;
-		Ok((s, 3))
+		ok(exchange(s, first + 1, &obj! { "method" => "prove", "args" => obj! { "keyId" => self.key_id.as_str(), "signature" => signature, "challenge" => challenge } }).await?)?;
+		Ok(())
+	}
+
+	/// Proves the key anew on the open connection, or opens one.
+	pub async fn prove(&self) -> Result<(), String> {
+		let mut line = self.line.lock().await;
+		if let Some((s, id)) = line.as_mut() {
+			let first = *id + 1;
+			match timeout(Duration::from_millis(CALL_MS), self.prove_on(s, first)).await {
+				Ok(Ok(())) => {
+					*id += 2;
+					return Ok(());
+				}
+				Ok(Err(e)) => {
+					*line = None;
+					return Err(e);
+				}
+				Err(_) => *line = None,
+			}
+		}
+		*line = Some(timeout(Duration::from_millis(CALL_MS), self.open()).await.map_err(|_| "the host does not answer".to_owned())??);
+		Ok(())
+	}
+
+	/// One round trip, its whole reply; a failure of the line says nothing about the call, which is not repeated.
+	pub async fn reply(&self, call: &Json) -> Result<Json, String> {
+		let mut line = self.line.lock().await;
+		if line.is_none() {
+			*line = Some(timeout(Duration::from_millis(CALL_MS), self.open()).await.map_err(|_| "the host does not answer".to_owned())??);
+		}
+		let (s, id) = line.as_mut().expect("just opened");
+		*id += 1;
+		let id = *id;
+		match timeout(Duration::from_millis(CALL_MS), exchange(s, id, call)).await {
+			Ok(Ok(reply)) => Ok(reply),
+			failed => {
+				*line = None;
+				Err(failed.map_or_else(|_| "the host does not answer".to_owned(), |e| e.err().unwrap_or_default()))
+			}
+		}
 	}
 
 	/// One call; a lost connection is opened again once.

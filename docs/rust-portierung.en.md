@@ -930,6 +930,8 @@ Not ported with the Root, because it is R6b: `replicas` per Member, `ReplicaNoti
 
 **R6a, router (2026-11-01).** `phi-host::router` is `RouterController`: submit, advance, recover, review and future reservations. `test/support/router-driver.ts` and `phi-host/tests/router.rs` walk the same lines through both, with lost replies, refusals, wrong receipts, restarts, crashes at the checkpoints and a lost authority, and compare each answer, the journal index and every command document byte for byte, which also holds the shapes of item 1 for these two families. Not there yet: the `RouterEnv` over the control store and the Members, the commit hooks and `recoverMany` that `FederatedSpace` uses. `reconcileDataRestore` stays R6b.
 
+**R6a, the Root's wire adapter (2026-11-01).** `phi-host::federation_rpc` is `FederationRpc`: proof, grant and signed delegation per call, and the check of claims and witnesses. `test/support/rpc-driver.ts` and `phi-host/tests/federation_rpc.rs` run both over a scripted line and compare every frame with its signature and every receipt. A successor of a replicated Member and a policy raised by a replica notice are refused here; they come with R6b.
+
 **R6b, acceptance in TypeScript in the local federation (R-D3).** Before any port, each with kills and cut-offs: primary/sync with the primary killed, promotion with the container fencing adapter, `degradeToSingle` and `setStandby`, a control host change, a control and a data restore, entry replication with a Member cut off. Each scenario holds what clients were answered and what the stores contain afterwards.
 
 **Content:**
