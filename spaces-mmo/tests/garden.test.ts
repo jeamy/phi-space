@@ -162,7 +162,7 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		// from here on it cannot go dry: at this rate 5.8 s without water wilt it, and a loaded machine stalls that long
 		const wet = (await s.readAll({ type: "Bed" })).find((e) => e.fields.owner === anna.me)!;
 		await s.takeIfExists({ id: wet.id }, 0);
-		await s.write({ type: "Bed", fields: { ...wet.fields, wateredWorldMs: FOREVER } as never }, null, FOREVER);
+		await s.write({ type: "Bed", fields: { ...wet.fields, wateredWorldMs: FOREVER, untilWorldMs: FOREVER } as never }, null, FOREVER);
 		await eventually(async () => (await bedOf(s, anna.me)).plants.some((p) => p.stage === 2), 60_000, `something ripe (stages ${(await bedOf(s, anna.me)).plants.map((p) => p.stage)})`);
 		// two harvest at once: what is ripe goes once (whoever comes second finds nothing ripe, or what ripened since)
 		const [a, b] = await Promise.all([does(anna.p, "ernte", /erntet|nichts reif/), does(bert.p, "ernte", /erntet|nichts reif/)]);
