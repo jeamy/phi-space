@@ -11,6 +11,7 @@ import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { DEFAULT_COMMANDS, helpLine } from "./engine/commands/default.ts";
 import { TRADE_COMMANDS } from "./engine/commands/trade.ts";
 import { msgOptions } from "./engine/context.ts";
+import { gameFacts, isQuestion } from "./engine/facts.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { availableModels, complete, llmEnabled } from "./llm.ts";
 import { setting, type ModelInfoFields } from "./settings.ts";
@@ -20,7 +21,7 @@ import { announce, awaitWork, connectSpace, DEFAULT_SPACE, envMs } from "./space
 const COMMANDS = [...DEFAULT_COMMANDS, ...TRADE_COMMANDS].filter((c) => !c.hidden);
 const VERBS = new Set(COMMANDS.flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
 
-export const TRANSLATE_SYSTEM = "You turn what a player of a text adventure typed (German or English) into exactly one game command. Answer with the command alone on one line, no explanation, no quotes. Use the names of things, people and exits exactly as listed. When the player speaks to someone who is here (names them, greets them, asks them to do something), or greets anyone at all, that is talk, not a command for the player: answer say <the player's words, all of them, the name included>. If no command fits, answer ?";
+export const TRANSLATE_SYSTEM = "You turn what a player of a text adventure typed (German or English) into exactly one game command. Answer with the command alone on one line, no explanation, no quotes. Use the names of things, people and exits exactly as listed. When the player speaks to someone who is here (names them, greets them, asks them to do something), or greets anyone at all, that is talk, not a command for the player: answer say <the player's words, all of them, the name included>. If no command fits, answer ?. A question about the game that is not for a person here and that no command answers (where something is found, who sells it, how something works) you answer yourself instead: one line that starts with ANSWER: and then at most three short sentences, in the language of the question, using only the Facts and Help topics given and nothing else; if they do not say, write ANSWER: and that you do not know it and that \"help\" lists the commands.";
 
 /** What the model is shown: the commands, then what the player sees, then the sentence. */
 export async function translatePrompt(space: SpaceLike, w: WorldDef, t: TranslateFields): Promise<string> {
@@ -38,6 +39,8 @@ export async function translatePrompt(space: SpaceLike, w: WorldDef, t: Translat
 		`The player carries: ${carried.map((e) => fieldsOf<ItemFields>(e).name).join(", ") || "–"}`,
 		`People here: ${names(people)}`,
 		...(listings.length ? [`Market board: ${listings.join("; ")}`] : []),
+		"",
+		...(isQuestion(t.line) ? ["", ...gameFacts(w, t.line), `Answer language: ${t.lang === "en" ? "English" : "German"}`] : []),
 		"",
 		`The player typed: ${t.line}`,
 	].join("\n");
@@ -58,7 +61,7 @@ export async function startModel(o: { space?: string; world?: WorldDef } = {}) {
 	const conn = connectSpace(o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE));
 	const space = conn.space, halt = new AbortController();
 	const msgLeaseMs = envMs("SPACES_MMO_MSG_LEASE_MS", 2 * 60_000);
-	const say = async (t: TranslateFields, text: string, txn: string) => space.write({ type: "Msg", fields: { room: t.room, to: t.charId, kind: "error", text, from: "", at: Date.now() } as never }, txn, msgLeaseMs, await msgOptions(space, { to: t.charId, kind: "error" }));
+	const say = async (t: TranslateFields, text: string, txn: string, kind: "error" | "info" = "error") => space.write({ type: "Msg", fields: { room: t.room, to: t.charId, kind, text, from: "", at: Date.now(), ...(kind === "info" && t.lang ? { lang: t.lang } : {}) } as never }, txn, msgLeaseMs, await msgOptions(space, { to: t.charId, kind: "error" }));
 
 	const step = async (): Promise<boolean> => {
 		const [next] = await space.readAll({ type: "Translate" }, { limit: 1 });
@@ -69,13 +72,16 @@ export async function startModel(o: { space?: string; world?: WorldDef } = {}) {
 			if (!e) { await space.abort(txn); return true; }
 			const t = fieldsOf<TranslateFields>(e);
 			const perDay = await setting(space, t.guest ? "translate.guestPerDay" : "translate.perDay");
-			const res = await complete(space, TRANSLATE_SYSTEM, await translatePrompt(space, w, t), { maxTokens: 60, own: { key: `translate:${t.accountId}`, perDay } }).catch((err) => { console.error("[model] translate:", (err as Error).message); return null; });
+			const res = await complete(space, TRANSLATE_SYSTEM, await translatePrompt(space, w, t), { maxTokens: isQuestion(t.line) ? 220 : 60, own: { key: `translate:${t.accountId}`, perDay } }).catch((err) => { console.error("[model] translate:", (err as Error).message); return null; });
 			const exitNames = (await space.readAll({ type: "Exit", fields: { location: t.room } })).flatMap((x) => [String(x.fields.name), ...((x.fields.aliases as string[]) ?? [])].map((n) => n.toLowerCase()));
 			// talk is said as it was typed (the model may shorten it and drop the name of whom it is for)
-			const cmd = res && commandOf(res.text, exitNames);
+			// a question about the game the model answered itself ("ANSWER: …"): told as information, not as a command
+			const answer = res && /^\s*ANSWER:\s*(\S[\s\S]*)$/i.exec(res.text)?.[1]?.trim().slice(0, 600);
+			const cmd = res && !answer && commandOf(res.text, exitNames);
 			const line = cmd && /^(say|sag|sage)\s/i.test(cmd) ? `say ${t.line}` : cmd;
 			// a command that refused the line said why ("Hier ist niemand namens Kalle"): that stays the answer
-			if (!res) await say(t, t.why ? `${t.why} „help“ zeigt die Befehle.` : `„${t.line.slice(0, 80)}“ kann ich gerade nicht übersetzen (Modell aus oder Kontingent für heute aufgebraucht). „help“ zeigt die Befehle.`, txn);
+			if (answer) await say(t, answer, txn, "info");
+			else if (!res) await say(t, t.why ? `${t.why} „help“ zeigt die Befehle.` : `„${t.line.slice(0, 80)}“ kann ich gerade nicht übersetzen (Modell aus oder Kontingent für heute aufgebraucht). „help“ zeigt die Befehle.`, txn);
 			else if (!line) await say(t, t.why ? `${t.why} „help“ zeigt die Befehle.` : `„${t.line.slice(0, 80)}“ habe ich nicht verstanden. „help“ zeigt die Befehle.`, txn);
 			else await space.write({ type: "Intent", fields: { intentId: randomBytes(8).toString("hex"), charId: t.charId, line, at: Date.now(), asked: t.line, ...(t.lang ? { lang: t.lang } : {}) } satisfies IntentFields as never }, txn, 30_000);
 			await space.commit(txn);

@@ -114,6 +114,13 @@ Whoever types a sentence instead of a command is understood in two stages:
    command is discarded; a translation is never translated again. Quotas: per account and day (guests less), plus the
    shared limits per minute and day.
 
+   **Questions about the game** ("wo bekommt man hafer?", "wie funktioniert ein Acker?") the model answers itself: for a
+   sentence that asks something (`isQuestion`, `server/engine/facts.ts`) the prompt carries the facts of the things the
+   question names (what it is, where it grows wild, who sells it, where the tide brings it, how it is made, all worked
+   out from the world definition) and the best fitting help topics. An answer that starts with `ANSWER:` is told to the
+   player as information, in the language of the question; the model is told to use only these facts and to say that it
+   does not know otherwise.
+
 The player sees each time how he was understood: "gehe nach osten" → go ost. Only spoken text not: "hallo kalle" becomes
 `say hallo kalle`, the spoken line already shows it (a line "→ say …" afterwards read as if the saying were still
 pending).

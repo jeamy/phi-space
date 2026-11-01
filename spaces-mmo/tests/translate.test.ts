@@ -6,6 +6,7 @@ import type { SpaceLike } from "phi-spaces";
 import { translateRules } from "../server/engine/translate.ts";
 import { commandOf } from "../server/model-host.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
+import { gameFacts, isQuestion } from "../server/engine/facts.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, Player, startServer, startStack } from "./stack.ts";
@@ -146,6 +147,29 @@ test("what is not understood goes to the model before any refusal: \"lege 2 bren
 		const before = a.p.frames.length;
 		assert.equal(await does(a.p, "accept", "Angebot"), "Dir liegt kein Angebot vor.");
 		assert.ok(!a.p.frames.slice(before).some((f) => f.t === "msg" && /einen Moment/.test(f.m.text)), "no model for a refusal of the moment");
+		await a.p.leave();
+	} finally { await srv.close(); await stack.close(); }
+});
+
+test("a question about the game is answered from the world's facts and help, told as information", async () => {
+	const w = await loadWorld();
+	const facts = gameFacts(w, "wo bekommt man hafer?").join("\n");
+	assert.match(facts, /Gesa sells it for \d+ coin/);
+	assert.match(facts, /sammle samen/);
+	assert.ok(isQuestion("wo bekommt man hafer?") && isQuestion("how does a field work") && !isQuestion("put treibholz in feuer") && !isQuestion("geh nach osten"));
+	assert.match(gameFacts(w, "wie funktioniert ein acker?").join("\n"), /\[ackerbau\]/);
+	assert.deepEqual(gameFacts(w, "wie spät ist es"), [], "nothing fits: nothing is added");
+	const env = { SPACES_MMO_LLM: "1", SPACES_MMO_LLM_MODULE: "tests/fake-llm.ts" };
+	const stack = await startStack({ worldEnv: env });
+	const srv = await startServer({ stack });
+	try {
+		await stack.modelProcess();
+		const a = await player(srv.url, "Fragerin");
+		const from = a.p.frames.length;
+		a.p.send("wo bekommt man hafer");
+		const f = await a.p.until((f) => f.t === "msg" && /Gesa verkauft Hafer/.test(f.m.text), 15_000, from);
+		assert.equal((f as { m: { kind: string } }).m.kind, "info", "an answer, not an error");
+		assert.match((f as { m: { text: string } }).m.text, /sammle samen/);
 		await a.p.leave();
 	} finally { await srv.close(); await stack.close(); }
 });
