@@ -15,6 +15,15 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 
 fn provider() -> Arc<CryptoProvider> { Arc::new(ring::default_provider()) }
 
+/// A file only its owner reads.
+pub fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
+	use std::io::Write as _;
+	use std::os::unix::fs::OpenOptionsExt as _;
+	let failed = |e: std::io::Error| format!("{}: {e}", path.display());
+	let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path).map_err(failed)?;
+	f.write_all(bytes).and_then(|()| f.sync_all()).map_err(failed)
+}
+
 /// `privateFile` (src/keys.ts): a regular file of this user, no link, mode 0600 at most.
 pub fn private_file(path: &Path) -> Result<Vec<u8>, String> {
 	const O_NOFOLLOW: i32 = 0o400_000;

@@ -209,6 +209,8 @@ pub struct GateOptions {
 	pub spaces: Option<crate::space_lifecycle::SpaceLifecycleService>,
 	pub capabilities: Option<Rc<crate::capability::Capabilities>>,
 	pub control_host: Option<crate::control_host::ControlHost>,
+	/// The Root of this host, for its own agents.
+	pub root: Option<Rc<crate::root::Root>>,
 	/// Who takes the epoch notices of the supervisor.
 	pub delegation: Option<Rc<crate::delegation::DelegationVerifier>>,
 	/// The boot guard, read before each call.
@@ -226,7 +228,7 @@ pub struct GateOptions {
 
 impl GateOptions {
 	pub fn new(directory: Rc<Netbird>, now: Now) -> GateOptions {
-		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, spaces: None, capabilities: None, control_host: None, delegation: None, boot: None, remote_keys: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
+		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, spaces: None, capabilities: None, control_host: None, root: None, delegation: None, boot: None, remote_keys: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
 	}
 }
 
@@ -631,6 +633,23 @@ impl Session for GateSession {
 	}
 
 	fn later(self: Rc<Self>, owner: Owner, call: &Json) -> Option<Local<String>> {
+		if let Some(root) = self.gate.o.root.clone().filter(|_| crate::root::METHODS.iter().any(|m| call.get("method").and_then(Json::as_str) == Some(*m))) {
+			let call = call.clone();
+			return Some(Box::pin(async move {
+				let proof = self.state.borrow().proof.clone();
+				let id = self.identity();
+				let key = proof.as_ref().and_then(|p| {
+					let (_, keys) = self.gate.o.proving.as_ref()?;
+					owner.with(|service| keys.find(&mut service.store, &self.peer_id, &p.key_id))
+				});
+				let host = key.is_some_and(|k| k.active && k.roles.iter().any(|r| r == "host")) && id.roles.iter().any(|r| r == "host") && self.peer_id == root.peer_id();
+				if !host {
+					let code = if proof.is_some() { "PermissionDenied" } else { "ProofRequired" };
+					return obj! { "ok" => false, "error" => obj! { "code" => code, "message" => "the Root serves the proven host of its own peer" } }.to_json_text();
+				}
+				root.call(owner, &call).await.to_json_text()
+			}));
+		}
 		self.gate.o.rotating.as_ref()?;
 		if call.as_object().and_then(|_| call.get("method")).and_then(Json::as_str) != Some("grant") {
 			return None;

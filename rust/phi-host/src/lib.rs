@@ -12,6 +12,7 @@ pub mod grants;
 pub mod register;
 pub mod remote;
 pub mod membership;
+pub mod root;
 pub mod rotation;
 pub mod router;
 pub mod run_member;

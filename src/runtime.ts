@@ -9,6 +9,7 @@ import {findControlSpace} from "./enroll.ts";
 import type {SpaceLifecycleService,spaceCommands} from "./space-lifecycle.ts";
 import {deploymentCommands,type DeploymentController} from "./deployment.ts";
 import {auditLog,collectAlerts} from "./alerts.ts";
+import {isRootMethod,rootCall} from "./root-wire.ts";
 // One composition root for the persistent host: gate -> enrollment -> control rules -> proof -> space.
 // The control primary is supplied explicitly; members never mint grants from a local key/cache snapshot.
 import type {FederationPolicyAuthority} from "./federation-policy.ts";
@@ -64,6 +65,8 @@ export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	merge?: import("./service.ts").SpaceServiceOptions["merge"];
 	/** Entry stream export of this host's merge replica to its pinned peers (docs/_attic/abnahme/ap3-replikation.en.md, step 2). */
 	entryExport?: { peers: ReadonlySet<string>; describe: () => Promise<Json>; changes: (after: number, maxBytes: number) => Promise<Json> };
+	/** The Root on this host, for its own hosted agents (root-wire.ts). */
+	rootWire?: { peerId: string; space: Parameters<typeof rootCall>[0] };
 	control?: { host: SpaceHost; authority: GrantAuthority; leases?: RouterLeaseAuthority; routing?: FederationPolicyAuthority; directory?: CapabilityDirectory; replicaNotices?: import("./replica-notice.ts").ReplicaNoticeBoard; dataAdmin?:DataAdminController; membership?: MembershipController; profiles?:ProfileTransitionController; runs?: RunController; runAdvanceMs?: number; workers?: WorkerAssignments; spaces?: ReturnType<typeof spaceCommands>; deployment?: DeploymentController; withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> };
 };
 export async function startFederationHost(host: ClosableStoreHost, ctx: Context, o: FederationHostOptions) {
@@ -158,6 +161,13 @@ export async function startFederationHost(host: ClosableStoreHost, ctx: Context,
 					 try { const id=await identity.authenticate(conn),proof=(conn.state as any)?.proof;if(!id||!proof||!id.roles.includes("router")||!o.control!.leases)throw new Error("lease requires proven router and configured control authority");o.verifier.check((c as any).frame?.grant,id,{method:"generation",space:"control"},conn).check();return{ok:true,result:await o.control!.leases.issue(id.principal.peerId,proof.keyId,(c as any).args?.renew) as any}; } catch(e){return{ok:false,error:{code:(conn.state as any)?.proof?"PermissionDenied":"ProofRequired",message:e instanceof Error?e.message:String(e)}};}
 					}
 
+					if (isRootMethod((c as any)?.method)) {
+						try {
+							const { id, proof, key } = await proven(conn);
+							if (!isHost(id, proof, key) || !o.rootWire || id.principal.peerId !== o.rootWire.peerId) throw new Error("the Root serves the proven host of its own peer");
+							return await rootCall(o.rootWire.space, id.principal.peerId, c as any);
+						} catch (e) { return { ok: false, error: { code: (conn.state as any)?.proof ? "PermissionDenied" : "ProofRequired", message: e instanceof Error ? e.message : String(e) } }; }
+					}
 					if ((c as { method?: string } | null)?.method === "grant") {
 						try { return { ok: true, result: await authority.issue(conn, (c as any).args?.purpose ?? "effect",(c as any).args?.agentId) as any }; }
 						catch (e) { return { ok: false, error: { code: !(conn.state as any)?.proof && (conn.credentials as any)?.roles?.some((r: string) => ["admin", "host"].includes(r)) ? "ProofRequired" : "PermissionDenied", message: e instanceof Error ? e.message : String(e) } }; }
@@ -166,6 +176,7 @@ export async function startFederationHost(host: ClosableStoreHost, ctx: Context,
 				},
 				async handleText(t, conn, bytes) {
 					let c: unknown; try { c = JSON.parse(t); } catch { return inner.handleText(t, conn, bytes); }
+					if (isRootMethod((c as any)?.method)) return JSON.stringify(await this.handle(c, conn));
 					if (["grant", "keyLookup", "routerLease", "routingPolicy", "capabilityHeartbeat", "replicaNotice", "workerAssignments"].includes((c as any)?.method)) { if (Buffer.byteLength(t) > (bytes ?? 256 * 1024)) return JSON.stringify({ ok: false, error: { code: "ResourceExhausted", message: "grant request exceeds frame budget" } }); return JSON.stringify(await this.handle(c, conn)); }
 					return inner.handleText(t, conn, bytes);
 				},

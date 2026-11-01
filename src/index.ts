@@ -34,6 +34,7 @@ export { serveSpace, socketTransport, type ServeOptions, type SpaceServer, type 
 export { withSpaceService, piServerTransport, type RoutedServices, type RoutedAttachment, type RoutedCall } from "./pi-server.ts";
 export { RemoteSpace, inProcessTransport, RemoteError, OutcomeUnknown, CommitSealedPending, UnsupportedOperation, type Transport, type RemoteOptions } from "./remote.ts";
 export { cutText, parseTarget, connectSpace, StillHeld, readExisting, takeExisting, peek, takeAll, awaitWork, keepAlive, type ConnectOptions } from "./space-client.ts";
+export { ROOT_METHODS, isRootMethod, rootCall } from "./root-wire.ts";
 export { SpaceService, MergeTypeNotExclusive, type MergeAdapter, StaticIdentity, DEFAULT_POLICY, PROTOCOL_VERSION, METHODS, principalKey, type Call, type Reply, type ErrorCode, type Identity, type IdentityAdapter, type Connection, type Policy, type RolePolicy, type SpaceServiceOptions, type Method } from "./service.ts";
 export { RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled, argHash, type Principal, type RequestRef, type ClaimView, type AdmissionResolution, type ClaimState } from "./claims.ts";
 export * as claims from "./claims.ts";

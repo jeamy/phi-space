@@ -96,7 +96,11 @@ impl ControlHost {
 			return Err(denied("lease requires an active router key"));
 		}
 		let peer = text(&id.principal, "peerId").unwrap_or("").to_owned();
-		let renew = call.get("args").and_then(|a| a.get("renew")).filter(|r| !r.is_null());
+		self.issue_lease(service, &peer, key_id, call.get("args").and_then(|a| a.get("renew")).filter(|r| !r.is_null()))
+	}
+
+	/// The lease itself, for a router proven here or for the Root on this host.
+	pub fn issue_lease(&self, service: &mut Service, peer: &str, key_id: &str, renew: Option<&Json>) -> R<Json> {
 		let authority = self.grants.authority_id.clone();
 		let lease = service.commit_on(Some(&self.control_space), |s, now| {
 			let counters = s.state.rest.get("authorityCounters").cloned().unwrap_or(obj! { "routerEpoch" => 0.0, "policyVersion" => 1.0 });
@@ -105,13 +109,13 @@ impl ControlHost {
 			let current = s.state.rest.get("primaryEpoch").and_then(Json::as_f64).unwrap_or(1.0);
 			let mut epoch = counters.get("routerEpoch").and_then(Json::as_f64).unwrap_or(0.0);
 			if let Some(r) = renew {
-				let names = |l: &Json| text(l, "id").is_some() && l.get("id") == r.get("id") && text(l, "routerPeerId") == Some(&peer) && text(l, "routerKeyId") == Some(key_id) && l.get("routerEpoch") == r.get("routerEpoch") && l.get("controlPrimaryEpoch").and_then(Json::as_f64) == Some(current);
+				let names = |l: &Json| text(l, "id").is_some() && l.get("id") == r.get("id") && text(l, "routerPeerId") == Some(peer) && text(l, "routerKeyId") == Some(key_id) && l.get("routerEpoch") == r.get("routerEpoch") && l.get("controlPrimaryEpoch").and_then(Json::as_f64) == Some(current);
 				let retained = r.get("token").filter(|t| t.get("lease").is_some_and(|l| signed_by(l, t, "router-lease", &self.peer_id, self.signer.algorithm(), &self.public_key) && names(l) && text(l, "authorityId") == Some(&authority) && text(l, "controlSpaceId") == Some(&self.control_space)));
 				if r.get("routerEpoch").and_then(Json::as_f64) != Some(epoch) || !(retained.is_some() || held.as_ref().is_some_and(names)) {
 					return Err(denied("lease renewal no longer owns current epoch"));
 				}
 			} else {
-				if let Some(h) = held.as_ref().filter(|h| text(h, "routerPeerId") != Some(&peer) || text(h, "routerKeyId") != Some(key_id)) {
+				if let Some(h) = held.as_ref().filter(|h| text(h, "routerPeerId") != Some(peer) || text(h, "routerKeyId") != Some(key_id)) {
 					let until = h.get("expiresAt").and_then(Json::as_f64).unwrap_or(0.0) + ROUTER_CHANGE_SKEW_MS;
 					if now < until {
 						return Err(denied(format!("previous router lease is live until {until}")));
@@ -129,7 +133,7 @@ impl ControlHost {
 				Some(i) => i.clone(),
 				None => random_uuid(&mut system_random()).into(),
 			};
-			let result = obj! { "id" => lease_id, "routerPeerId" => peer.as_str(), "routerKeyId" => key_id, "routerEpoch" => epoch, "controlSpaceId" => self.control_space.as_str(), "authorityId" => authority.as_str(), "controlPrimaryEpoch" => current, "issuedAt" => now, "expiresAt" => now + LEASE_MS };
+			let result = obj! { "id" => lease_id, "routerPeerId" => peer, "routerKeyId" => key_id, "routerEpoch" => epoch, "controlSpaceId" => self.control_space.as_str(), "authorityId" => authority.as_str(), "controlPrimaryEpoch" => current, "issuedAt" => now, "expiresAt" => now + LEASE_MS };
 			if let Some(l) = &live {
 				s.probe(now, &phi_core::space::Template::from_json(Some(&obj! { "id" => l.get("id").cloned().unwrap_or(Json::Null) }))?, None, true, None)?;
 			}

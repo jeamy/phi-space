@@ -166,7 +166,7 @@ fn frames_and_receipts_are_the_same() {
 	let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
 	let mut ts = TsDriver::script("test/support/rpc-driver.ts");
 	let script = Rc::new(Script { replies: RefCell::default(), sent: RefCell::default(), state: RefCell::new(Json::Null) });
-	let signer = Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&[7; 32]));
+	let signer = Rc::new(Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&[7; 32])));
 	let rpc = FederationRpc { io: Io(Rc::clone(&script)), signer, key_id: "router-key".into() };
 	let mut r = Rng(0x1234_5678_9abc_def1);
 	let mut outcomes = std::collections::HashMap::<String, usize>::new();

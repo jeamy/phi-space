@@ -180,7 +180,7 @@ struct Remote<L> {
 
 pub struct FederationRpc<I: RootIo> {
 	pub io: I,
-	pub signer: Signer,
+	pub signer: Rc<Signer>,
 	pub key_id: String,
 }
 

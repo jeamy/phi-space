@@ -145,6 +145,7 @@ pub fn run(config: &str, store: &str) {
 	options.identity.clear();
 	options.host_id = Some(host_id.to_owned());
 	options.authority_id = authority_id.to_owned();
+	options.primary_epoch = 1.0;
 	let (signer, key_id) = key_of(&c, "keyFile");
 	let client = Rc::new(ControlClient::new((field(address, "host").to_owned(), address_of(address).1), listen_host, peer_id, control_host, signer, &key_id));
 	let keys = Rc::new(RemoteKeys::new(Rc::clone(&client), Rc::clone(&now)));

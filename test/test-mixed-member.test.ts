@@ -7,9 +7,9 @@ import { X509Certificate, createHash } from "node:crypto";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CONTROL_SPACE, FOREVER, GrantAuthority, createEnroll, hashToken, newEnrollToken, RemoteSpace, SqliteRecoveryRegister, SpaceKeyDirectory, core, createSpace, generateKey, listSpaces, snapshotSpace, provisionFileSigner, serveTlsRegister, socketTransport, spaceDoc, startConfiguredFederation, type Signer } from "../src/index.ts";
+import { CONTROL_SPACE, FOREVER, GrantAuthority, createEnroll, hashToken, newEnrollToken, RemoteSpace, SqliteRecoveryRegister, SpaceKeyDirectory, core, createSpace, generateKey, listSpaces, snapshotSpace, provisionFileSigner, loadFileSigner, serveTlsRegister, socketTransport, spaceDoc, startConfiguredFederation, type Signer } from "../src/index.ts";
 import { delegationForCall, signDelegation } from "../src/delegation.ts";
 import { verifyDetached } from "../src/grants.ts";
 import { canonicalJson } from "../src/canonical.ts";
@@ -167,6 +167,55 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}) {
 	const atControl = (ip: string, signer: Signer, ownPeerId: string) => { const t = socketTransport({ host: CONTROL_IP, port: controlPort }, { localAddress: ip }); transports.push(t); const remote: RemoteSpace = new RemoteSpace(t, { space: "control", attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 8_000, signer, expectedGateHostId: "control-host", ownPeerId, grantProvider: (call) => (call.method as string) === "routerLease" ? remote.requestGrant() : Promise.resolve(undefined as never) }); return { t, remote }; };
 	return { controlPort, adminKey, ADMIN_IP, PAIR_IP: SECOND_ROUTER_IP, pairKey, controlDown: async (f: () => Promise<void>) => { await stopControl(); try { await f(); } finally { stopControl = await startControl(); } }, controlStore: join(dir, "control.sqlite"), atControl, controlConfig, ROUTER_IP, USER_IP, withControl, notes, user, phone, toMember, get toControl() { return toControl; }, external, jobs, space, userKey, routerKey, controlKey, authority, config, storeFile, router, routing, restart };
 }
+
+test("a control host with a Root serves federated work to its own agents, also after a restart", async (tc) => {
+	const g = await setup(tc);
+	const dir = dirname(g.controlStore), sid = g.jobs.spaceId;
+	const { remote } = await g.router();
+	const member = (id: string, action: string, more = {}) => signMembership("instruction", { authorityId: "authority", memberId: "a", spaceId: sid, id, action, ...more } as never, "control-peer", g.controlKey).then((t) => remote.requestMembership(t as never));
+	await member("t1", "prepareAdd");
+	await member("t1", "activate", { policy: g.routing(1) });
+	const routerKey = provisionFileSigner(join(dir, "root-router.json")), hostKey = provisionFileSigner(join(dir, "root-host.json"));
+	const config = JSON.parse(readFileSync(g.config, "utf8")), memberKey = loadFileSigner(join(dir, "member.json"));
+	const target = { authorityId: "authority", hostId: "data-host", spaceId: sid, dataIncarnation: g.jobs.incarnation, primaryEpoch: 1 };
+	await g.controlDown(async () => {
+		const host = await openSqliteHost(g.controlStore), now = Date.now();
+		await host.commit(async (tx) => {
+			const s = await spaceDoc(tx, g.space.spaceId, now);
+			for (const [k, roles] of [[routerKey, ["host", "router", "member"]], [hostKey, ["host", "member"]]] as const) core.write(s, now, { type: "PeerKey", fields: { peerId: "control-peer", keyId: k.keyId, principal: "control-peer", algorithm: k.algorithm, publicKey: k.publicKey!, roles: [...roles], scope: ["*"], state: "active" } }, null, FOREVER);
+			const d = await tx.doc(FederationRouting, g.space.spaceId, null);
+			d.policy = g.routing(1); d.members = { a: { id: "a", state: "active", target } } as never;
+		}, ctx);
+		await host.close(ctx);
+		const file = JSON.parse(readFileSync(g.controlConfig, "utf8"));
+		file.root = { id: "root", keyFile: join(dir, "root-router.json"), hostKeyFile: join(dir, "root-host.json"), leaseFile: join(dir, "root-lease"), journalPartitions: 1, members: { a: { target, peerId: "member-peer", keyId: memberKey.keyId, algorithm: memberKey.algorithm, publicKey: memberKey.publicKey, address: { host: config.listen.host, port: config.listen.port } } } };
+		writeFileSync(g.controlConfig, JSON.stringify(file), { mode: 0o600 });
+	});
+	const line = async () => {
+		const t = socketTransport({ host: CONTROL_IP, port: g.controlPort }, { localAddress: CONTROL_IP });
+		tc.after(() => t.close());
+		await new RemoteSpace(t, { attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 8_000, signer: hostKey, expectedGateHostId: "control-host", ownPeerId: "control-peer" }).authenticate();
+		return (method: string, args: Record<string, unknown>) => t.request(JSON.stringify({ method, args })).then((r) => JSON.parse(r) as { ok: boolean; result?: any; error?: { code: string; message: string } });
+	};
+	let root = await line();
+	const principal = { agentId: "worker" };
+	const wrote = await root("rootWrite", { ...principal, id: "w1", entry: { type: "Job", fields: { n: 1 } }, leaseMs: 60_000 });
+	assert.equal(wrote.ok, true, JSON.stringify(wrote));
+	assert.deepEqual((await root("rootWrite", { ...principal, id: "w1", entry: { type: "Job", fields: { n: 1 } }, leaseMs: 60_000 })).result, wrote.result, "a retry finds the journalled answer");
+	assert.equal((await root("rootWrite", { ...principal, id: "w1", entry: { type: "Job", fields: { n: 2 } }, leaseMs: 60_000 })).error?.code, "RoutingConflict");
+	assert.equal((await root("rootCount", { ...principal, template: { type: "Job" } })).result.count, 1);
+	const read = await root("rootRead", { ...principal, id: "r1", template: { type: "Job" } });
+	assert.equal(read.result?.fields?.n ?? read.result?.entry?.fields?.n, 1, JSON.stringify(read));
+	await g.controlDown(async () => {});
+	root = await line();
+	const taken = await root("rootTake", { ...principal, id: "t1", template: { type: "Job" } });
+	assert.equal(taken.ok, true, JSON.stringify(taken));
+	assert.equal((await root("rootCount", { ...principal, template: { type: "Job" } })).result.count, 0, "after a restart the journal goes on");
+	// a stranger gets nothing
+	const stranger = await g.user();
+	const refused = JSON.parse(await stranger.t().request(JSON.stringify({ method: "rootCount", args: {} })));
+	assert.equal(refused.ok, false);
+});
 
 test("a Member serves on the grants of its control host and follows its keys and its fence", async (tc) => {
 	const g = await setup(tc);
@@ -414,7 +463,7 @@ test("what a control host does not carry stops it at the start", { skip: CONTROL
 			assert.equal(code, 1, out);
 			assert.match(out, part);
 		};
-		for (const k of ["root", "syncSpaces", "entryReplication", "recovery", "recoveryAdmin", "membership", "runGates", "spaceLifecycle"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
+		for (const k of ["syncSpaces", "entryReplication", "recovery", "recoveryAdmin", "membership", "runGates", "spaceLifecycle"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
 		await refused({ mode: "member" }, /runs as a control host/);
 		await refused({ peerId: "someone-else" }, /does not belong to the provisioned NetBird peer/);
 		await refused({ hostId: "other" }, /identity disagrees/);
@@ -445,7 +494,7 @@ test("what a Member does not carry stops it at the start instead of being ignore
 		assert.equal(code, 1, out);
 		assert.match(out, part);
 	};
-	for (const k of ["root", "syncSpaces", "entryReplication", "recovery"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
+	for (const k of ["syncSpaces", "entryReplication", "recovery"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
 	await refused({ recoveryAdmin: { any: 1 } }, /recoveryAdmin is not served/);
 	await refused({ capabilities: { tools: [""] } }, /invalid capability report/);
 	await refused({ mode: "control" }, /a control host stays on TypeScript/);
