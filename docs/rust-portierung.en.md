@@ -916,6 +916,20 @@ the federation members also stay in TS; the Rust standalone is no replacement.
 
 **R6a, slice 3 (2026-11-01):** The supervisor's `setPolicy` command runs on a control host: `phi-core::policy::validate_federation_policy` is `validateFederationPolicy`, held against the TypeScript function by `phi-core/tests/policy.rs` (`PHI_POLICY_CASES`, seeded random policies, 30000 passed), and `phi-host::control::Routing` installs the checked policy and answers a stale or refused one as a failed command. `test-mixed-member` sets the policy over the wire, a Member follows the new version.
 
+**R6a, what is open (2026-11-01).** Done: the control host's keys, policy, leases, capability directory and own supervisor commands (slices 1 to 3), and the placement of `routing-semantics.ts` and `federation-journals.ts` (`phi-core::routing`, held against TypeScript by `phi-core/tests/routing.rs`). In this order:
+
+1. The journal documents as vectors, before any code that writes them: `FederationJournalLayout`, `RouterJournal`, `RouterCommands`, `FederationOperations`, `FederationRouting` and the lease file. A router takes over another router's journal, so TS and Rust must read each other's.
+2. The client: what the Root needs of `remote.ts` (`authenticate`, grants, delegation, `sendEpochNotice`) as its own piece; `phi-host::remote` today knows key lookup and policy only.
+3. `RouterController` on the store (`submit`, `ingest`, `advance`, `recover`, `review`).
+4. `FederatedSpace` and `federation-rpc.ts`.
+5. The composition of `configured-root.ts`: `assertRoot`, lease retain and takeover, heartbeat, epoch notices. `AsyncLocalStorage` becomes explicit parameters.
+6. Harness: `test-configured-root` calls `createConfiguredRoot` in-process, so `PHI_SPACES_CONTROL_CMD` does not reach a Rust Root. It needs a mode that starts the binary, and the local federation a scenario in which the control host carries `root` (the `router` container is a TS client script today).
+7. The control host's commands: asynchronous supervisor commands, then `run-controller.ts`, `workers.ts`, the controller side of `space-lifecycle.ts`, `deployment.ts`, `alerts.ts`, `data-admin.ts`.
+
+Not ported with the Root, because it is R6b: `replicas` per Member, `ReplicaNoticeBoard` and `adoptReplicaConfigNotice`, `controlEpoch` of a replicated main store, `reconcileDataRestore`. A config with any of them, or a restore in progress, is refused at the start.
+
+**R6b, acceptance in TypeScript in the local federation (R-D3).** Before any port, each with kills and cut-offs: primary/sync with the primary killed, promotion with the container fencing adapter, `degradeToSingle` and `setStandby`, a control host change, a control and a data restore, entry replication with a Member cut off. Each scenario holds what clients were answered and what the stores contain afterwards.
+
 **Content:**
 
 - `router.ts`, `federated-space.ts` and the root/controller sides of delegation and membership; the member contracts

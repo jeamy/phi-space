@@ -29,7 +29,7 @@ pub fn hrw(value: &Json, ids: &[String]) -> Result<String> {
 }
 
 /// `ruleFor`: the rule of a type; a type without one lives on the default Member.
-fn rule_for(policy: &Json, type_: &str) -> Json {
+pub(crate) fn rule_for(policy: &Json, type_: &str) -> Json {
 	let found = policy.get("rules").and_then(Json::as_array).and_then(|r| r.iter().find(|x| text(x, "type") == Some(type_)));
 	found.cloned().unwrap_or_else(|| obj! { "type" => type_, "mode" => "local", "member" => policy.get("default").and_then(|d| d.get("member")).cloned().unwrap_or(Json::Null) })
 }

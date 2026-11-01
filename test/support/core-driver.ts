@@ -12,7 +12,8 @@
 // line's `now`, Date.now included (parkOperation and the mailbox ack read it). Randomness is a counter stream from the
 // seed: crypto.randomBytes(n) gives the next n bytes of SHA-256("phi-spaces/driver/v1\n<seed>\n<block>") blocks, so
 // generation nonces, signing keys and mailbox epochs are the same on both sides.
-import { validateFederationPolicy } from "../../src/routing-semantics.ts";
+import { isMergeType, normalizeFederatedEntry, searchMembers, validateFederationPolicy, writeMember } from "../../src/routing-semantics.ts";
+import { operationPartition, parentJournalKey, partitionRouterId } from "../../src/federation-journals.ts";
 import crypto, { createHash } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
 import { createInterface } from "node:readline";
@@ -77,6 +78,15 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 		case "setCompletionProfiles": core.setCompletionProfiles(s, l.profiles, now); return null;
 		case "setMembership": s.membership = l.membership; return null;
 		case "validatePolicy": validateFederationPolicy(l.policy, l.table, l.old ?? undefined, new Set(l.allow ?? []), l.future === true); return null;
+		case "routing": switch (l.fn) {
+			case "normalize": return normalizeFederatedEntry(l.policy, l.entry);
+			case "isMerge": return isMergeType(l.policy, l.type);
+			case "write": return writeMember(l.policy, l.table, l.entry, l.now!);
+			case "search": return searchMembers(l.policy, l.template);
+			case "partition": return operationPartition(l.id, l.n);
+			case "parent": return parentJournalKey(l.id, l.n, l.partition);
+			default: return partitionRouterId(l.id, l.partition);
+		}
 		case "setArchived": if (l.archived) s.archived = l.archived; else delete s.archived; return null;
 		case "permitRoutedWrite": permitRoutedWrite(s, l.proven === true); return null;
 		case "recoverRunGate": return core.recoverRunGate(s, now, l.o);
