@@ -23,6 +23,7 @@ import { announce, connectSpace, DEFAULT_ACCOUNTS, DEFAULT_SPACE, systemInfo } f
 import { RegionSpaces } from "./region-spaces.ts";
 import { upgradeWebSocket } from "phi-spaces/ws";
 import { chosen } from "./llm.ts";
+import { llmStatus } from "./llm-status.ts";
 import { saveModelChoice, saveSettings, SETTINGS, settingsOf, type ModelInfoFields } from "./settings.ts";
 
 const COOKIE = "mmo_sid";
@@ -145,7 +146,9 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 		}
 		const s = await settingsOf(world.space);
 		const pick = chosen(available, s.models);
+		const status = await Promise.all([...regions.entries()].map(async ([region, space]) => llmStatus(region, space).catch((e) => ({ region, problems: [{ level: "error" as const, text: `Der Raum ${region} ist nicht erreichbar: ${(e as Error).message.slice(0, 120)}`, fix: "Prüfe den Container space-" + region + "." }], last: null, ok: null, day: { used: 0, limit: 0 }, minute: { used: 0, limit: 0 } }))));
 		return {
+			status,
 			fields: SETTINGS.map((d) => ({ key: d.key, label: d.label, unit: d.unit, help: d.help, env: d.env, def: d.def, min: d.min, max: d.max, ...s.values[d.key]! })),
 			models: { enabled: info?.enabled ?? false, published: !!info, on: s.models.on, custom: s.models.allowed !== null, available, allowed: pick.allowed.map((m) => m.label), model: pick.model?.label ?? null },
 		};

@@ -917,8 +917,11 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 			onMenu={(x, y, left, top) => { input.current?.blur(); stopWalk.current(); setMenu({ x, y, left, top }); }}
 			onFail={(why) => { setMapMode(mapMode === "3d" ? "2d" : "text"); append({ kind: "error", text: `${why} ${mapMode === "3d" ? "Die 2D-Karte bleibt aktiv." : "Das Spiel läuft als Text weiter."}`, from: "", at: Date.now() }); }} />
 	) : <div className="map"><p className="muted">Verbinde …</p></div>;
+	// the search for seeds rests a while in the room it was made (server: garden.ts): the page does not offer it then
+	const searching = trade?.seedRestUntilWorldMs ?? 0, resting = !!worldTime && searching > shownWorldMs(worldTime.v, worldTime.at, Date.now());
+	const wildNow = (decor: Parameters<typeof wildHere>[0], roomDecor: Parameters<typeof wildHere>[1]) => (resting ? false : wildHere(decor, roomDecor));
 	const menus = <>
-		{menu && hello && <CellMenu at={menu} wild={wildHere(hello.world.decor, hello.room.decor)} sheet onWalk={walkTo} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
+		{menu && hello && <CellMenu at={menu} wild={wildNow(hello.world.decor, hello.room.decor)} sheet onWalk={walkTo} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
 			chat={{ talk: (name) => send(`chat ${name}`, false), invite: (name, g) => send(`gruppe lade ${name} in ${g}`), groups: account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? []) }} />}
 		{nameMenu && <NameMenu at={nameMenu} sheet name={nameMenu.name} groups={account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? [])} close={() => setNameMenu(null)}
 			talk={() => send(`chat ${nameMenu.name}`, false)} invite={(g) => send(`gruppe lade ${nameMenu.name} in ${g}`)} ignore={() => send(`ignoriere ${nameMenu.name}`)} />}
@@ -937,8 +940,8 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 			</div>
 		)}
 	</>;
-	const hereBar = hereEntries({ chars, objs, self: chars.get(me), room: hello?.room.roomId ?? "", me, plans: hello?.world.plans ?? [], guest: account.guest, fuel: fuelIn(objs, me), wild: hello ? wildHere(hello.world.decor, hello.room.decor) : false });
-	const mineView = <Things objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildHere(hello?.world.decor, hello?.room.decor)} uses={hello?.world.uses} send={send} pick={pickUp}
+	const hereBar = hereEntries({ chars, objs, self: chars.get(me), room: hello?.room.roomId ?? "", me, plans: hello?.world.plans ?? [], guest: account.guest, fuel: fuelIn(objs, me), wild: hello ? wildNow(hello.world.decor, hello.room.decor) : false });
+	const mineView = <Things objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildNow(hello?.world.decor, hello?.room.decor)} uses={hello?.world.uses} send={send} pick={pickUp}
 		{...(trade?.listings && !account.guest ? { market: (name: string) => { setTradeItem({ name }); setBagPart("market"); } } : {})}
 		{...(account.guest ? {} : { offer: (to: string, name: string) => { setTradeItem({ name }); setOfferTo(to); setBagPart("market"); } })} />;
 	const marketView = <>

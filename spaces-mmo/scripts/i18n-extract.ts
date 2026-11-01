@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 const ts = createRequire(import.meta.url)("typescript") as typeof import("typescript");
 const ROOT = join(import.meta.dirname, "..");
 const walk = (d: string): string[] => readdirSync(d).flatMap((f) => { const p = join(d, f); return statSync(p).isDirectory() ? walk(p) : /\.tsx?$/.test(f) ? [p] : []; });
-const SKIP = /client\/(help\/articles|i18n\/|lib\/|chatcrypto|figure3d|props3d|terrain3d|tiles3d)|server\/(llm|space|launch|env|npc-host|model-host|space-host|world-host|settings)\.ts|server\/npc\//;
+const SKIP = /client\/(help\/articles|i18n\/|lib\/|chatcrypto|figure3d|props3d|terrain3d|tiles3d)|server\/(llm|llm-status|space|launch|env|npc-host|model-host|space-host|world-host|settings)\.ts|server\/npc\//;
 
 /** Whether a string reads as text for a person, not as code. */
 function isText(s: string): boolean {

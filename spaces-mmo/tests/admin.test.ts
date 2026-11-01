@@ -75,7 +75,12 @@ test("the models: the model process publishes what it can use; the admin allows 
 		const from = admin.p.frames.length;
 		admin.p.send("zeig mir doch bitte alles");
 		await admin.p.until((f) => f.t === "msg" && /nicht übersetzen/.test(f.m.text), 15_000, from);
+		// the window says why: the problem with what to do, and the refusal the model process noted
+		const why = (await settings(admin.p)).body.status;
+		assert.ok(why.some((r: any) => r.problems.some((p: any) => /im Fenster ausgeschaltet/.test(p.text) && /Haken/.test(p.fix))), JSON.stringify(why));
+		assert.match(why.map((r: any) => r.last?.text ?? "").join(" "), /im Fenster ausgeschaltet/);
 		assert.equal((await settings(admin.p, { models: null })).body.models.custom, false, "Standard: the default choice again");
+		assert.deepEqual((await settings(admin.p)).body.status.flatMap((r: any) => r.problems), [], "nothing in the way with the default choice");
 		await admin.p.leave();
 	} finally { await srv.close(); await stack.close(); }
 });

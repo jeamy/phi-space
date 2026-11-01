@@ -7,7 +7,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 type Field = { key: string; label: string; unit: string; help: string; env: string; def: number; min: number; max: number; value: number; source: "space" | "env" | "default" };
 type Model = { label: string; provider: string; id: string; name: string };
-type State = { fields: Field[]; models: { enabled: boolean; published: boolean; on: boolean; custom: boolean; available: Model[]; allowed: string[]; model: string | null } };
+type Problem = { level: "error" | "warn"; text: string; fix: string };
+type Noted = { text: string; at: number };
+type RegionStatus = { region: string; problems: Problem[]; last: Noted | null; ok: Noted | null; day: { used: number; limit: number }; minute: { used: number; limit: number } };
+type State = { status: RegionStatus[]; fields: Field[]; models: { enabled: boolean; published: boolean; on: boolean; custom: boolean; available: Model[]; allowed: string[]; model: string | null } };
 
 const SOURCE = { space: "gespeichert", env: ".env", default: "Standard" } as const;
 
@@ -16,6 +19,36 @@ async function call(body?: unknown): Promise<State> {
 	const d = await r.json().catch(() => ({}));
 	if (!r.ok) throw new Error((d as { error?: string }).error || `HTTP ${r.status}`);
 	return d as State;
+}
+
+/** "vor 3 Min." for a time that lies `at` ms back. */
+const ago = (at: number) => { const s = Math.max(0, Math.round((Date.now() - at) / 1000)); return s < 90 ? `vor ${s} s` : s < 5400 ? `vor ${Math.round(s / 60)} Min.` : s < 129_600 ? `vor ${Math.round(s / 3600)} Std.` : `vor ${Math.round(s / 86_400)} Tagen`; };
+
+/** Why model calls do not work, or that nothing stands in their way: the problems of every region (one line each, with the regions it
+ *  concerns when not all of them), what to do about it, the last refusal and the last answer, the use of today. */
+function Status({ list }: { list: RegionStatus[] }) {
+	const merged = new Map<string, { p: Problem; regions: string[] }>();
+	for (const r of list) for (const p of r.problems) { const e = merged.get(p.text) ?? { p, regions: [] }; e.regions.push(r.region); merged.set(p.text, e); }
+	const newest = (pick: (r: RegionStatus) => Noted | null) => list.map((r) => ({ n: pick(r), region: r.region })).filter((x): x is { n: Noted; region: string } => !!x.n).sort((a, b) => b.n.at - a.n.at)[0];
+	const last = newest((r) => r.last), ok = newest((r) => r.ok);
+	const where = (region: string) => (list.length > 1 ? ` (${region})` : "");
+	return (
+		<div className="admin-status">
+			{merged.size === 0 ? <p className="admin-good">✔ Nichts steht den Modellaufrufen im Weg.</p> : (
+				<ul className="admin-problems">
+					{[...merged.values()].sort((a, b) => Number(b.p.level === "error") - Number(a.p.level === "error")).map(({ p, regions }) => (
+						<li key={p.text} className={p.level}>
+							<b>{p.text}</b>{regions.length < list.length ? <span className="muted"> ({regions.join(", ")})</span> : null}
+							<span className="muted">{p.fix}</span>
+						</li>
+					))}
+				</ul>
+			)}
+			{last && <p className="muted">Letzte Ablehnung {ago(last.n.at)}{where(last.region)}: {last.n.text}</p>}
+			{ok ? <p className="muted">Letzte Antwort {ago(ok.n.at)}{where(ok.region)}: {ok.n.text}</p> : <p className="muted">Seit dem Start gab es noch keine Antwort des Modells.</p>}
+			<p className="muted">Heute (UTC): {list.map((r) => `${list.length > 1 ? `${r.region} ` : ""}${r.day.used} von ${r.day.limit} Aufrufen`).join(" · ")}</p>
+		</div>
+	);
 }
 
 type Report = { reportId: string; byName: string; fromName: string; text: string; at: number };
@@ -85,6 +118,9 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
 	return (
 		<div className="panel admin">
 			<div className="admin-head"><h2>Systemeinstellungen</h2><button className="help-x" onClick={onClose} aria-label="Schließen">×</button></div>
+
+			<h3>Modellaufrufe</h3>
+			<Status list={state.status ?? []} />
 
 			<h3>Modelle</h3>
 			{!models.enabled ? (

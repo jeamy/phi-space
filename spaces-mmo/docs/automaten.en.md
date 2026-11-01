@@ -319,7 +319,12 @@ translation on/off, all models with credentials grouped by provider (one checkbo
 that is used; "Standard" returns to the newest model for `SPACES_MMO_LLM_MODEL` (otherwise Haiku). The list of models is
 published by the model process as a `ModelInfo` entry, because only it has credentials. Model calls cannot be enabled
 from the window: without `SPACES_MMO_LLM=1` in the `.env` they stay off, the window can only switch them off in
-addition. Below that the **limits**:
+addition. At the very top the **model calls** block says why they do not work, or that nothing stands in their way
+(`server/llm-status.ts`): per region the model process that does not report, calls off in the environment, switched off in
+the window, no model with credentials, no allowed model, a limit at 0 or used up (per minute, per day, per account), a
+provider that answers with errors; each with what to do about it. The model calls write the last refusal or failure and
+the last answer as `LlmStatus` entries (`note` in `server/llm.ts`); the block shows them with their age and today's use.
+Below that the **limits**:
 
 | Field | Environment variable | Default |
 | --- | --- | --- |

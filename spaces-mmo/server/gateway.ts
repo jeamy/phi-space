@@ -12,7 +12,7 @@ import { render } from "./engine/funcparser.ts";
 import { sceneryText, type CropDef, type SortDef, type WorldDef } from "./engine/world.ts";
 import { whereTo } from "./engine/context.ts";
 import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
-import { asFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WindFields, type WorldClockFields, type ZoneFields } from "./model.ts";
+import { asFields, type SeedRestFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WindFields, type WorldClockFields, type ZoneFields } from "./model.ts";
 import { bedPlantsView } from "./engine/commands/garden.ts";
 import { fieldView } from "./engine/commands/field.ts";
 import { wildKinds } from "./engine/commands/wild.ts";
@@ -60,6 +60,8 @@ export type TradeView = {
 	/** The player's order; `here`: a board stands in this room (only there it is delivered or given up); `boards`: where. */
 	myOrder: { text: string; needs: OrderFields["needs"]; here: boolean; boards: string[] } | null;
 	listings: Array<{ nr: number; itemName: string; price: number; sellerName: string; mine: boolean }> | null;
+	/** Until when (world time) the figure rests from searching for seeds in this room, null: it does not (the page then offers the search). */
+	seedRestUntilWorldMs: number | null;
 };
 /** Frames to the browser. */
 export type ServerFrame =
@@ -158,6 +160,7 @@ export class Gateway {
 	readonly #offers = new Map<string, OfferFields>(); // entry id -> offer
 	readonly #orders = new Map<string, OrderFields>(); // entry id -> order
 	readonly #listings = new Map<string, ListingFields>(); // entry id -> listing
+	readonly #seedRests = new Map<string, SeedRestFields>(); // entry id -> the rest of a figure after a search for seeds
 	readonly #siteOrders = new Map<string, SiteOrderFields>(); // entry id -> what a site hung out
 	// the revision of each region's stream the state above reflects; entries are kept by "region:id" (two spaces may
 	// number their entries alike), and each character by the region whose stream showed it last
@@ -413,7 +416,7 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Wind"]) await this.#readPaged(region, space, { type }, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "SeedRest", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Wind"]) await this.#readPaged(region, space, { type }, msgs);
 					await this.#readPaged(region, space, { type: "Msg", fields: { to: "*" } }, msgs); // #put keeps the last RECENT of each room
 					this.#advance(region, rev);
 					ready();
@@ -426,6 +429,7 @@ export class Gateway {
 					const msgs: MsgFields[] = [];
 					const fogs = new Set<string>(); // rooms whose fog changed
 					let trade = false; // offers, orders or listings changed
+					const seeking = new Set<string>(); // figures whose rest from searching for seeds changed
 					let clock = false; // the world clock was written
 					const touch = (entryId: string, fields?: Record<string, unknown>, types?: string[]) => {
 						entryId = key(entryId);
@@ -438,8 +442,8 @@ export class Gateway {
 					for (const op of b.ops) {
 						// a renewed session is the same session: the character did not change, nothing to announce
 						const id = key(op.id);
-						if (op.op === "put") { clock ||= op.type === "WorldClock"; if (!(op.type === "Session" && this.#sessions.has(id))) touch(op.id, op.fields, op.types); trade ||= ["Offer", "Order", "Listing"].includes(op.type); this.#put(id, op.type, op.types, op.fields, msgs); }
-						else { touch(op.id); trade ||= this.#offers.has(id) || this.#orders.has(id) || this.#listings.has(id); this.#del(id); }
+						if (op.op === "put") { clock ||= op.type === "WorldClock"; if (!(op.type === "Session" && this.#sessions.has(id))) touch(op.id, op.fields, op.types); trade ||= ["Offer", "Order", "Listing"].includes(op.type); if (op.type === "SeedRest") seeking.add(String(op.fields.charId)); this.#put(id, op.type, op.types, op.fields, msgs); }
+						else { touch(op.id); trade ||= this.#offers.has(id) || this.#orders.has(id) || this.#listings.has(id); const sought = this.#seedRests.get(id); if (sought) seeking.add(sought.charId); this.#del(id); }
 					}
 					// first where everyone and everything is now (a client whose own room changed gets its hello), then what was said
 					for (const [charId, roomBefore] of chars) this.#announce(charId, roomBefore);
@@ -447,7 +451,7 @@ export class Gateway {
 					if (!trade && [...chars.keys()].some((id) => [...this.#offers.values()].some((o) => o.from === id || o.to === id))) trade = true;
 					for (const [objId, before] of objs) this.#announceObj(objId, before);
 					if (clock) { this.#broadcastTime(); for (const [id, o] of this.#objs) if (o.kind === "beacon") this.#announceObj(id, o.location); }
-					if (trade) for (const c of this.#clients) if (c.room !== null) c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
+					for (const c of this.#clients) if (c.room !== null && (trade || seeking.has(c.me.charId))) c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
 					if (chars.size || fogs.size || objs.size) this.#atlasChanged();
 					for (const room of fogs) for (const c of this.#clients) if (c.room === room) c.ws.send({ t: "fog", level: this.#fog.get(room) ?? 0 } satisfies ServerFrame);
 					for (const m of msgs) for (const c of this.#clients) if (m.to.startsWith("#") || (m.to === "*" ? c.room === m.room : c.me.charId === m.to)) c.ws.send({ t: "msg", m: msgView(m, c.me.charId, this.#modelNames, this.#chars.get(c.me.charId)?.name, m.kind === "who" ? this.#playerNames() : undefined) } satisfies ServerFrame);
@@ -469,11 +473,11 @@ export class Gateway {
 	#reset(region: string): void {
 		if (this.#regions.size === 1) {
 			this.#clock = null;
-			for (const m of [this.#chars, this.#charOf, this.#charEntry, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#objEntry, this.#recent, this.#flames, this.#flameOf, this.#fog, this.#offers, this.#orders, this.#listings]) m.clear();
+			for (const m of [this.#chars, this.#charOf, this.#charEntry, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#objEntry, this.#recent, this.#flames, this.#flameOf, this.#fog, this.#offers, this.#orders, this.#listings, this.#seedRests]) m.clear();
 			return;
 		}
 		const mine = (id: string) => id.startsWith(`${region}:`);
-		for (const m of [this.#charOf, this.#objOf, this.#sessions, this.#flameOf, this.#offers, this.#orders, this.#listings, this.#siteOrders] as Array<Map<string, unknown>>) for (const id of [...m.keys()]) if (mine(id)) this.#del(id);
+		for (const m of [this.#charOf, this.#objOf, this.#sessions, this.#flameOf, this.#offers, this.#orders, this.#listings, this.#seedRests, this.#siteOrders] as Array<Map<string, unknown>>) for (const id of [...m.keys()]) if (mine(id)) this.#del(id);
 	}
 
 	/** Applies a put; a message is collected in `msgs` to be sent after the batch. */
@@ -549,6 +553,7 @@ export class Gateway {
 		else if (type === "Offer") this.#offers.set(id, fields as unknown as OfferFields);
 		else if (type === "Order") this.#orders.set(id, fields as unknown as OrderFields);
 		else if (type === "Listing") this.#listings.set(id, fields as unknown as ListingFields);
+		else if (type === "SeedRest") this.#seedRests.set(id, fields as unknown as SeedRestFields);
 		else if (type === "Scenery") { const s = fields as unknown as SceneryFields; this.#setObj(id, { id: s.sceneryId, kind: "scenery", name: s.name, desc: sceneryText(this.w, s), location: s.room, x: s.x, y: s.y, w: s.w, h: s.h, model: s.model, left: s.left, ...(s.fixed ? { fixed: true } : {}), ...(s.through ? { through: true } : {}) }); }
 		else if (type === "SiteOrder") { const o = fields as unknown as SiteOrderFields; this.#siteOrders.set(id, o); this.#showOrders(o.buildId); }
 		else if (types.includes("Item") || types.includes("Exit")) {
@@ -588,7 +593,7 @@ export class Gateway {
 	#del(id: string): void {
 		const order = this.#siteOrders.get(id);
 		if (order) { this.#siteOrders.delete(id); this.#showOrders(order.buildId); return; }
-		if (this.#offers.delete(id) || this.#orders.delete(id) || this.#listings.delete(id)) return;
+		if (this.#offers.delete(id) || this.#orders.delete(id) || this.#listings.delete(id) || this.#seedRests.delete(id)) return;
 		const beaconId = this.#flameOf.get(id);
 		if (beaconId) { this.#flameOf.delete(id); if (![...this.#flameOf.values()].includes(beaconId)) this.#flames.delete(beaconId); return; }
 		const charId = this.#charOf.get(id);
@@ -625,6 +630,7 @@ export class Gateway {
 			offersOut: offers.filter((o) => o.from === me && this.#here(o.to, c.room)).map(({ offerId, toName, giveNames, want }) => ({ offerId, toName, giveNames, want })),
 			orders: c.room && this.w.orders.rooms.includes(c.room) ? open.filter((o) => o.room === c.room).map((o, i) => ({ nr: i + 1, text: o.text, reward: o.reward.count })) : null,
 			myOrder: mine ? { text: mine.text, needs: mine.needs, here: !!c.room && this.w.orders.rooms.includes(c.room), boards: this.w.orders.rooms.map((r) => this.#rooms.get(r)?.name ?? r) } : null,
+			seedRestUntilWorldMs: c.room ? Math.max(0, ...[...this.#seedRests.values()].filter((r) => r.charId === me && r.room === c.room).map((r) => r.untilWorldMs)) || null : null,
 			listings: c.room && this.w.market.rooms.includes(c.room) ? listings.filter((l) => l.room === c.room).map((l, i) => ({ nr: i + 1, itemName: l.itemName, price: l.price, sellerName: l.sellerName, mine: l.seller === me })) : null,
 		};
 	}
