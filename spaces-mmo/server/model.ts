@@ -210,6 +210,8 @@ export type AnimalFields = { animalId: string; kind: "hase" | "reh" | "fuchs" | 
 	/** What the other kinds came for: a field (reh), a coop (fuchs), a building with a chest (maus). */
 	target?: string };
 /** How long a figure waits before it looks for wild seeds in this room again (the sweep removes it). */
+/** The pause after a beam (`beam`): until when the figure cannot beam again, in world time. */
+export type BeamRestFields = { charId: string; untilWorldMs: number };
 export type SeedRestFields = { charId: string; room: string; untilWorldMs: number };
 /** What is left of a building that was not kept: it still covers its cells until `untilWorldMs` (the sweep removes it). */
 export type RuinFields = { buildId: string; plan: string; name: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; untilWorldMs: number };

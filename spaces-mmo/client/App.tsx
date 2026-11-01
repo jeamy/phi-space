@@ -1088,7 +1088,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				</div>
 			</>}
 			{panel && <div className="touch-page"><div className="touch-page-head"><button className="hud-btn" onClick={() => setPanel(null)} aria-label="Schließen">×</button></div>{panels}</div>}
-			{atlasPage && atlas && <div className="touch-page"><div className="touch-page-head"><strong>Weltkarte</strong><span className="spacer" /><button className="hud-btn" onClick={() => setAtlasPage(false)} aria-label="Schließen">×</button></div><Atlas atlas={atlas} state={atlasState} page me={chars.get(me) ?? null} /></div>}
+			{atlasPage && atlas && <div className="touch-page"><div className="touch-page-head"><strong>Weltkarte</strong><span className="spacer" /><button className="hud-btn" onClick={() => setAtlasPage(false)} aria-label="Schließen">×</button></div><Atlas atlas={atlas} state={atlasState} page me={chars.get(me) ?? null} onBeam={(room) => { send(`beam ${room}`); setAtlasPage(false); }} /></div>}
 			{helpView}
 		</div>
 	);

@@ -136,6 +136,8 @@ export type WorldDef = {
 	/** Set on the part of the world one region runs (regionWorld): its id and every room of the whole world. */
 	region?: string;
 	allRooms?: RoomDef[];
+	/** In a region: every fire of the whole world (where one can beam to, also in another region). */
+	allBeacons?: WorldDef["beacons"];
 };
 /** A plan (docs/siedeln.en.md, "Was man baut"): its footprint `w`×`h`, what it needs delivered, the work points, what it
  *  counts towards the epoch and takes of a fire's light (`points`), how long it stands without repair. */

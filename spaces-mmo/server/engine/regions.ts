@@ -45,6 +45,7 @@ export function regionWorld(w: WorldDef, regionId: string): WorldDef & { region:
 		...w,
 		region: regionId,
 		allRooms: w.rooms,
+		allBeacons: w.beacons,
 		rooms,
 		start: region.start,
 		exits: w.exits.filter((e) => inHere(e.room)),

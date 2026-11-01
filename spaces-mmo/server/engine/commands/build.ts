@@ -631,7 +631,7 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 			return true;
 		});
 	}
-	for (const type of ["WorkRest", "Blessing"]) for (const e of await space.readAll({ type })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
+	for (const type of ["WorkRest", "Blessing", "BeamRest"]) for (const e of await space.readAll({ type })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
 	// flour (or grain back) nobody fetched
 	for (const e of await space.readAll({ type: "MillLoad" })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
 }

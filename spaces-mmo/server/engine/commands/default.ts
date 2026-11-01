@@ -117,7 +117,7 @@ async function throughFog(c: CommandCtx, exit: ExitFields): Promise<void> {
 
 /** The region a room of another region lies in, seen from the part of the world `w` runs; null when it is here (or the
  *  world runs as one space). */
-function crossing(w: CommandCtx["world"], room: string): string | null {
+export function crossing(w: CommandCtx["world"], room: string): string | null {
 	if (!w.region || w.rooms.some((r) => r.roomId === room)) return null;
 	return regionOfRoom({ ...w, rooms: w.allRooms ?? w.rooms }, room);
 }
@@ -145,7 +145,7 @@ export async function traverse(c: CommandCtx, exit: ExitFields): Promise<void> {
 	await msg(c, c.actor.charId, "look", await describeRoom(c, dest.roomId, true), { room: dest.roomId });
 }
 
-async function describeRoom(c: CommandCtx, roomId: string, arriving = false): Promise<string> {
+export async function describeRoom(c: CommandCtx, roomId: string, arriving = false): Promise<string> {
 	const room = await roomOf(c, roomId);
 	const exits = (await exitsHere(c, roomId)).map((x) => { const to = whereTo(c.world, x.f); return to === x.f.name ? to : `${x.f.name} (${to})`; }).sort();
 	const items = (await c.space.readAll({ type: "Item", fields: { location: roomId } })).map((e) => fieldsOf<ItemFields>(e).name).sort();

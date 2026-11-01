@@ -19,7 +19,7 @@ const MINE: Record<AtlasState["mine"][number]["kind"], { color: string; label: s
 const stored = (key: string, fallback: boolean) => { try { const v = localStorage.getItem(key); return v === null ? fallback : v === "1"; } catch { return fallback; } };
 const store = (key: string, v: boolean) => { try { localStorage.setItem(key, v ? "1" : "0"); } catch { /* private window */ } };
 
-export function Atlas({ atlas, state, page = false, me = null }: { atlas: AtlasView; state: AtlasState | null; /** Where the player stands in their room: the mark on the map. */ me?: { x: number; y: number } | null; /** A page of its own on a phone: it scrolls, and a tap names a room (there is no pointer to hover with). */ page?: boolean }) {
+export function Atlas({ atlas, state, page = false, me = null, onBeam }: { atlas: AtlasView; state: AtlasState | null; /** Where the player stands in their room: the mark on the map. */ me?: { x: number; y: number } | null; /** A page of its own on a phone: it scrolls, and a tap names a room (there is no pointer to hover with). */ page?: boolean; /** Beam to the fire of a room (the page sends `beam`; the server says what it costs and whether it may). */ onBeam?: (room: string) => void }) {
 	const canvas = useRef<HTMLCanvasElement>(null);
 	const pin = useRef<{ x: number; y: number } | null>(null);
 	const scroller = useRef<HTMLDivElement>(null);
@@ -140,6 +140,7 @@ export function Atlas({ atlas, state, page = false, me = null }: { atlas: AtlasV
 						<small>{shown?.roomId === state?.here ? "Du bist hier · " : ""}{shown && state?.lit.includes(shown.roomId) ? "Feuer brennt · " : ""}{humans} Personen, {npcs} NPCs</small>
 						{inRoom.length > 0 && <small>Deins hier: {inRoom.map((m) => m.name).join(", ")}</small>}</div>
 					<button onClick={() => setBig((b) => !b)}>{big ? "Kleiner" : "Größer"}</button>
+					{onBeam && shown && shown.roomId !== state?.here && state?.lit.includes(shown.roomId) && <button className="primary" onClick={() => onBeam(shown.roomId)}>Hierher beamen</button>}
 				</div>
 				{kinds.length > 0 && <div className="atlas-legend">{kinds.map((k) => <span key={k}><i style={{ background: MINE[k].color }} />{MINE[k].label}</span>)}</div>}
 			</div>

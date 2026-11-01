@@ -54,6 +54,7 @@ export async function spatialWorld(space: SpaceLike, w: WorldDef): Promise<World
 	return { ...w,
 		rooms: w.rooms.map(room),
 		...(w.allRooms ? { allRooms: w.allRooms.map(room) } : {}),
+		...(w.allBeacons ? { allBeacons: w.allBeacons.map((b) => point(b.room, b)) } : {}),
 		exits: w.exits.map((e) => ({ ...point(e.room, e), arrive: point(e.destination, e.arrive) })),
 		beacons: w.beacons.map((b) => point(b.room, b)),
 		npcs: w.npcs.map((n) => point(n.room, n)),
