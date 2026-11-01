@@ -1,4 +1,4 @@
-// Remote run Members (docs/betrieb-und-mobile-steuerung.md §8 B4). The run controller signs every RunGate command;
+// Remote run Members (docs/betrieb-und-mobile-steuerung.en.md §8 B4). The run controller signs every RunGate command;
 // the Member host verifies it against the pinned controller key, applies it to its own Space and signs the ACK.
 // The signature authorizes the effect, not the transport: a relayed or replayed instruction changes nothing new,
 // because the gate answers a repeated command with its stored confirmation.
@@ -7,7 +7,7 @@ import { canonicalJson } from "./canonical.ts";
 import type { Algorithm, Signer } from "./auth.ts";
 import type { SpaceHost } from "./client.ts";
 import { verifyDetached } from "./grants.ts";
-import { listSpaces } from "./spaces.ts";
+import { listSpaces, spaceDoc } from "./spaces.ts";
 import { localRunMember, type RunMember, type RunSpec } from "./run-controller.ts";
 import * as core from "./core.ts";
 
@@ -26,6 +26,19 @@ export function verifyRun<T>(kind: "instruction" | "ack", t: SignedRun<T>, pin: 
 	if (!t || typeof t !== "object" || t.issuer !== pin.issuer || t.algorithm !== pin.algorithm || typeof t.signature !== "string" || !verifyDetached(pin.algorithm, pin.publicKey, bytes(kind, t.value), t.signature)) throw new core.PermissionError(`invalid run gate ${kind} signature`);
 	return core.plain(t.value);
 }
+
+/** The preparer of a configured host (`runGates`): the tasks a run's own manifest names, each bound to the run. Idempotent. */
+export const tasksPreparer = (host: SpaceHost, ctx: Context, now: () => number = Date.now): RunPreparer => async (run, spaceId) => {
+	const tasks = (run.config as { tasks?: Array<{ type: string; fields?: core.Fields }> } | null)?.tasks;
+	if (!Array.isArray(tasks) || tasks.length > 64) throw new core.IllegalArgumentError("a tasks run names at most 64 tasks");
+	await host.commit(async tx => {
+		const s = await spaceDoc(tx, spaceId, now());
+		for (const t of tasks) {
+			const fields = { ...t.fields, runId: run.runId };
+			if (!core.count(s, now(), { type: t.type, fields })) core.write(s, now(), { type: t.type, fields }, null, core.FOREVER);
+		}
+	}, ctx);
+};
 
 /** The Member side: one per host, for every local Space that takes part in controlled runs. */
 export class RunGateService {

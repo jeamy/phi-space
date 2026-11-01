@@ -122,11 +122,13 @@ pub struct RemoteKeys {
 	/// The routing policy as last read, signed.
 	pub policy: RefCell<Option<Json>>,
 	pub policy_at: Cell<f64>,
+	/// Why the signed policy could not be brought to the Member just now: its calls wait for the next read.
+	pub policy_failed: RefCell<Option<String>>,
 }
 
 impl RemoteKeys {
 	pub fn new(client: Rc<ControlClient>, now: crate::gate::Now) -> RemoteKeys {
-		RemoteKeys { client, now, held: RefCell::default(), policy: RefCell::new(None), policy_at: Cell::new(f64::NEG_INFINITY) }
+		RemoteKeys { client, now, held: RefCell::default(), policy: RefCell::new(None), policy_at: Cell::new(f64::NEG_INFINITY), policy_failed: RefCell::new(None) }
 	}
 
 	/// Asks the control host for these keys. One it does not answer for is unknown: nothing is served on an old answer.

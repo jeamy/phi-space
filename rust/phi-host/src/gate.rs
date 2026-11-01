@@ -602,6 +602,9 @@ impl Session for GateSession {
 		}
 		let wanted = remote.as_ref().map_or(vec![], |_| self.keys_of(text));
 		let delegated = text.contains("\"delegation\"");
+		// `refreshPolicy`: a Member's admission follows what the control host signs now
+		let refreshing = self.gate.o.lifecycle.is_some() && text.contains("\"grant\"");
+		let gate = Rc::clone(&self.gate);
 		Some(Box::pin(async move {
 			if let Some(boot) = boot {
 				let spaces = owner.with(|service| service.store.spaces().iter().filter_map(|i| i.get("spaceId")?.as_str().map(str::to_owned)).collect());
@@ -609,8 +612,16 @@ impl Session for GateSession {
 			}
 			if let Some(remote) = remote {
 				remote.fetch(wanted).await;
-				if delegated {
+				if delegated || refreshing {
 					remote.fetch_policy().await;
+				}
+				if let (true, Some(lifecycle)) = (refreshing, &gate.o.lifecycle) {
+					let token = remote.policy.borrow().clone();
+					let done = match token {
+						Some(t) => owner.with(|service| lifecycle.install_policy(service, &t)).map_err(|e| e.message),
+						None => Err("the control host's policy cannot be read".to_owned()),
+					};
+					*remote.policy_failed.borrow_mut() = done.err();
 				}
 			}
 		}))

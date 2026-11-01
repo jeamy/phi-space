@@ -3,6 +3,8 @@ import {CapabilityDirectory,CAPABILITY_HEARTBEAT_MS} from "./capability-director
 import {ReplicaNoticeBoard} from "./replica-notice.ts";
 import {totalmem,freemem,availableParallelism} from "node:os";
 import {MemberLifecycle} from "./membership.ts";
+import {RunGateService,tasksPreparer} from "./run-member.ts";
+import {SpaceLifecycle,SpaceLifecycleService} from "./space-lifecycle.ts";
 // Deployed composition from explicitly provisioned identities, pinned keys and independently supplied boot records.
 import type { ClosableStoreHost } from "./store/types.ts";
 import { OWN_SYNC_FACTORIES } from "./store/sync-sqlite.ts";
@@ -53,6 +55,8 @@ export type FederationConfig = {
 		peers?: Array<{ replicaId: string; hostId: string; peerId: string; address: { host: string; port: number } }> };
 	/** Explicit logical Member/Space installed by signed Control commands. */
 	membership?:{memberId:string;spaceId:string};
+	/** Signed run gate instructions of the Control host, with the preparer `tasks`, and signed Space lifecycle instructions. */
+	runGates?:boolean; spaceLifecycle?:boolean;
 	management: { url: string; tokenFile: string }; groupRoles?: GroupRoles;
 	control: { address: { host: string; port: number }; algorithm: Algorithm; publicKey: string };
 	/** primary/sync Spaces, each in its own store with its replica listener on `listen.host` (sync-spaces.ts). */
@@ -128,6 +132,10 @@ export async function startConfiguredFederation(host: ClosableStoreHost, ctx: Co
 		const verifierFor=(h:ClosableStoreHost,replicaConfig?:(spaceId:string)=>{replicaConfigVersion:number}|null)=>new DelegationVerifier({host:h,replicaConfig,ctx,authorityId,controlSpaceId:config.controlSpaceId,supervisorPeerId:controlPeer.id,supervisorKey:{algorithm:config.control.algorithm,publicKey:controlPublicKey},keys,grants:grantVerifier,policy:async()=>{if(control){const p=(await control.routing!.state()).policy;if(!p)throw new Error("no federation policy installed");return p;}return verifyFederationPolicy(await controlRemote!.requestRoutingPolicy(),{authorityId,peerId:controlPeer.id,algorithm:config.control.algorithm,publicKey:controlPublicKey});}});const delegation=verifierFor(host,factories?.mainReplica?()=>factories.mainReplica!():undefined);
 
 		const membership=config.membership?new MemberLifecycle({host,ctx,memberId:config.membership.memberId,spaceId:config.membership.spaceId,authorityId,peerId:config.peerId,signer,controlPin:{issuer:controlPeer.id,algorithm:config.control.algorithm,publicKey:controlPublicKey},assertAuthority:async()=>{const b=await external.get<any>(`boot:${config.hostId}`);if(b?.value.state!=="active"||b.value.spaces?.[config.membership!.spaceId]?.authorityId!==authorityId)throw new BootBlocked("Member boot authority changed");}}):undefined;
+		const assertHost=async()=>{const b=await external.get<any>(`boot:${config.hostId}`);if(b?.value.state!=="active")throw new BootBlocked("host boot authorization changed");};
+		const controllerPin={issuer:controlPeer.id,algorithm:config.control.algorithm,publicKey:controlPublicKey};
+		const runGates=config.runGates?new RunGateService({host,ctx,authorityId,peerId:config.peerId,signer,controllerPin,preparers:{tasks:tasksPreparer(host,ctx)},assertAuthority:assertHost}):undefined;
+		const spaceLifecycle=config.spaceLifecycle?new SpaceLifecycleService({lifecycle:new SpaceLifecycle({host,ctx}),hostId:config.hostId,authorityId,peerId:config.peerId,signer,controlPin:controllerPin,assertAuthority:assertHost}):undefined;
         let root:Awaited<ReturnType<typeof createConfiguredRoot>>|undefined;
         if(config.root){try{root=await createConfiguredRoot({...(factories?.mainReplica?{controlEpoch:()=>factories.mainReplica!().primaryEpoch}:{}),host,ctx,hostId:config.hostId,peerId:config.peerId,ownAddress:config.listen.host,authorityId,controlSpaceId:config.controlSpaceId,controlSigner:signer,keys,directory,groupRoles,external,installed,grants:control!.authority,leases:control!.leases!,root:config.root,assertControl,checkControlAuthority});control!.membership=root.membership;control!.profiles=root.profiles;control!.withAdmin=root.withAdmin;}catch(e){await root?.close();throw e;}}
 		const syncSpaces:SyncSpace[]=[];
@@ -167,7 +175,7 @@ export async function startConfiguredFederation(host: ClosableStoreHost, ctx: Co
 			const peers = new Set((er.peers ?? []).map(p => p.peerId));
 			if (peers.size) entryExport = { peers, describe: async () => await controller.describeStream() as unknown as import("./core.ts").Json, changes: async (after, maxBytes) => await controller.streamChanges(after, maxBytes) as unknown as import("./core.ts").Json };
 		}
-		let runtime:Awaited<ReturnType<typeof startFederationHost>>;try{runtime = await startFederationHost(host, ctx, { ...config, ...(merge ? { merge } : {}), ...(entryExport ? { entryExport } : {}), syncSpaces: syncOptions, unresolvedSyncSpaces, ...(factories?.mainPromotionProof ? { promotionProof: async (_space: string | undefined, epoch: number) => factories.mainPromotionProof!(epoch) } : {}), membership, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed, ...(factories?.mainReplica?{replicaConfig:()=>factories.mainReplica!()}:{}) } });}catch(e){for(const sp of syncSpaces)await sp.close();await root?.close();throw e;}
+		let runtime:Awaited<ReturnType<typeof startFederationHost>>;try{runtime = await startFederationHost(host, ctx, { ...config, ...(merge ? { merge } : {}), ...(entryExport ? { entryExport } : {}), syncSpaces: syncOptions, unresolvedSyncSpaces, ...(factories?.mainPromotionProof ? { promotionProof: async (_space: string | undefined, epoch: number) => factories.mainPromotionProof!(epoch) } : {}), membership, runGates, spaceLifecycle, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed, ...(factories?.mainReplica?{replicaConfig:()=>factories.mainReplica!()}:{}) } });}catch(e){for(const sp of syncSpaces)await sp.close();await root?.close();throw e;}
 		if(syncSpaces.length)publishNotices();
 		for(const sp of syncSpaces)if(!sp.harness&&sp.role()==="primary"&&sealedOf(sp))resolveSealed(sp);
 		// The reaper can seal a candidate too, without any call noticing it.

@@ -11,7 +11,9 @@ use phi_host::grants::GrantVerifier;
 use phi_host::membership::{verify_federation_policy, MemberLifecycle};
 use phi_host::register::{RegisterClient, SqliteRegister};
 use phi_host::remote::{ControlClient, RemoteKeys};
-use phi_host::run_member::Pin;
+use phi_host::run_member::{tasks_preparer, Pin, RunGates};
+use phi_host::space_lifecycle::SpaceLifecycleService;
+use phi_core::space::error;
 use phi_host::tls::{private_file, TlsIdentity};
 use phi_json::{parse, Json};
 use phi_service::{Options, Service};
@@ -104,7 +106,13 @@ pub fn run(config: &str, store: &str) {
 	});
 	let grants = GrantVerifier { authority_id: authority_id.to_owned(), issuer_host_id: control_host.to_owned(), public_key: control_key.to_owned(), algorithm, uncertainty_ms: 2000.0 };
 	let verifier = DelegationVerifier::new(DelegationOptions { authority_id: authority_id.to_owned(), control_space_id: control_space.to_owned(), supervisor_peer_id: supervisor.clone(), supervisor: (algorithm, control_key.to_owned()), keys: Rc::clone(&keys) as _, grants, policy, rules: Rc::new(options.policy.clone()), uncertainty_ms: 2000.0 }).unwrap_or_else(|e| fail(e.message));
-	options.authorize = Some(authorize(Rc::clone(&verifier), Rc::clone(&now)));
+	let (checked, held) = (authorize(Rc::clone(&verifier), Rc::clone(&now)), Rc::clone(&keys));
+	options.authorize = Some(Box::new(move |store, call, identity, conn| {
+		if let Some(why) = held.policy_failed.borrow().clone() {
+			return Err(error("PermissionError", why));
+		}
+		checked(store, call, identity, conn)
+	}));
 	options.guard = Some(Rc::clone(&guard) as _);
 
 	let mut o = GateOptions::new(directory, Rc::clone(&now));
@@ -116,6 +124,7 @@ pub fn run(config: &str, store: &str) {
 	}
 	o.proving = Some((Proving::new(host_id), Rc::clone(&keys) as _));
 	o.delegation = Some(verifier);
+	let o_boot = Rc::clone(&guard);
 	o.boot = Some(guard);
 	o.remote_keys = Some(keys);
 	if let Some(m) = c.get("membership").filter(|m| !m.is_null()) {
@@ -131,6 +140,18 @@ pub fn run(config: &str, store: &str) {
 			fail("invalid capability report");
 		}
 		o.capabilities = Some(Rc::new(Capabilities { host_id: host_id.to_owned(), tools, models, data_spaces: names("dataSpaces"), client: Rc::clone(&client) }));
+	}
+	let pin = Pin { issuer: supervisor.clone(), algorithm, public_key: control_key.to_owned() };
+	let assert_host = || -> phi_host::run_member::AuthorityCheck {
+		let check = o_boot.clone();
+		Box::new(move |_| check.assert_active())
+	};
+	if c.get("runGates") == Some(&Json::Bool(true)) {
+		let tasks: phi_host::run_member::RunPreparer = Box::new(tasks_preparer);
+		o.run_gates = Some(RunGates { authority_id: authority_id.to_owned(), peer_id: peer_id.to_owned(), signer: key_of("keyFile").0, controller: pin.clone(), preparers: [("tasks".to_owned(), tasks)].into_iter().collect(), assert_authority: assert_host() });
+	}
+	if c.get("spaceLifecycle") == Some(&Json::Bool(true)) {
+		o.spaces = Some(SpaceLifecycleService::new(host_id, authority_id, peer_id, key_of("keyFile").0, pin, assert_host()));
 	}
 	let host = listen_host.to_owned();
 	let gate = Gate::new(&host, o).unwrap_or_else(|e| fail(e));

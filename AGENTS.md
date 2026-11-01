@@ -30,6 +30,7 @@ phi-spaces: a space library with its own store; the optional `agent/` package co
 - Remote test bed (docker on the server `big`; verifies the BUILT artifacts, no source goes to the server;
   `npm run testbed -- check|up|test|status|down`, `--dry-run` first): `test/testbed/`,
   docs in `docs/testumgebung-big.en.md`; `scenario sieve-mobile create|run|evaluate|all` is the phone-simulating sieve test. Starting containers or shipping artifacts changes a shared server: ask before the first real run.
+- Local federation (docker on this machine, project `phi-federation`): `npm run testbed:federation -- both|rust|ts`: a TS control host, the TLS register and one Member in containers of their own (`test/testbed/local-federation/`); the Member is killed, the control host and the register are cut off, the host is fenced, and the two Members are held against each other. Builds `phi-federation:local`; changes no other containers.
 - TUI: `npm run tui` (read-only spaces/objects and test-bed controls); `--dry-run` previews without server access, `--local-dir DIR` inspects local store files. Docs: `docs/tui.en.md`.
 - Dashboard (read-only live UI): `npm run dashboard -- --dir <store>` in the foreground;
   `npm run dashboard:start|stop|status` (via `scripts/dashboard.sh`) in the background; it also shows the projects'

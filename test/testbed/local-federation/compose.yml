@@ -1,0 +1,49 @@
+# A federation on this machine, a project of its own beside the other local containers: register, directory, a TypeScript control
+# host, one Member (MEMBER_IMPL: rust or ts) and a client. Each has its own address on its own network, and the gate knows a
+# peer by that address. `npm run testbed:federation` provisions FED_DIR, starts this, and breaks it on purpose.
+name: phi-federation
+
+x-host: &host
+  image: phi-federation:local
+  pull_policy: never
+  init: true
+  user: "${FED_UID}:${FED_GID}"
+  volumes: ["${FED_DIR}:/fed"]
+  working_dir: /opt/phi-spaces
+
+services:
+  register:
+    <<: *host
+    command: ["phi-space-server", "--tls-register", "/fed/register.json"]
+    networks: {fed: {ipv4_address: 172.30.7.2}}
+  management:
+    <<: *host
+    command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/host.ts", "management"]
+    networks: {fed: {ipv4_address: 172.30.7.3}}
+  control:
+    <<: *host
+    command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/host.ts", "control"]
+    depends_on: [register, management]
+    restart: on-failure:20
+    ports: ["${FED_PHONE_BIND:-127.0.0.1}:7431:7431"]
+    networks: {fed: {ipv4_address: 172.30.7.4}}
+  member:
+    <<: *host
+    command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/host.ts", "member", "${MEMBER_IMPL:-rust}"]
+    depends_on: [control]
+    restart: on-failure:20
+    ports: ["${FED_PHONE_BIND:-127.0.0.1}:7432:7432"]
+    networks: {fed: {ipv4_address: 172.30.7.5}}
+  client:
+    <<: *host
+    command: ["sleep", "infinity"]
+    networks: {fed: {ipv4_address: 172.30.7.7}}
+  router:
+    <<: *host
+    command: ["sleep", "infinity"]
+    networks: {fed: {ipv4_address: 172.30.7.8}}
+
+networks:
+  fed:
+    ipam:
+      config: [{subnet: 172.30.7.0/24}]

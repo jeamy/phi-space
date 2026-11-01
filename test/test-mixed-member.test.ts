@@ -22,6 +22,7 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CMD = process.env.PHI_SPACES_SERVER_CMD?.trim() ? process.env.PHI_SPACES_SERVER_CMD.trim().split(/\s+/) : null;
 const peer = (id: string, ip: string, groups: string[]) => ({ id, name: id, ip, connected: true, groups: groups.map((g) => ({ id: `g-${g}`, name: g })) });
 const CONTROL_IP = "127.0.0.5", MEMBER_IP = "127.0.0.1", USER_IP = "127.0.0.3", ROUTER_IP = "127.0.0.4", PHONE_IP = "127.0.0.6", PAIRED_IP = "127.0.0.7"; // a host reaches its control host from the Member address: on loopback that is 127.0.0.1
+const GATED = { taskType: "Gated", resultTypes: ["GatedDone"], equalFields: ["runId", "n"], maxResultCount: 1, maxResultBytes: 1024, maxLeaseMs: 60_000, gateField: "runId" };
 const freePort = () => new Promise<number>((r) => { const s = net.createServer(); s.listen(0, "127.0.0.1", () => { const { port } = s.address() as net.AddressInfo; s.close(() => r(port)); }); });
 
 function pki(dir: string) {
@@ -37,7 +38,7 @@ function pki(dir: string) {
 	return { identity: (name: string) => ({ caFile: join(dir, "ca.crt"), certFile: join(dir, `${name}.crt`), keyFile: join(dir, `${name}.key`) }), print: (name: string) => createHash("sha256").update(new X509Certificate(readFileSync(join(dir, `${name}.crt`))).raw).digest("hex") };
 }
 
-async function setup(tc: TestContext) {
+async function setup(tc: TestContext, more: Record<string, unknown> = {}) {
 	const dir = mkdtempSync("/tmp/phi-mixed-");
 	tc.after(() => rmSync(dir, { recursive: true, force: true }));
 	const certs = pki(dir);
@@ -65,8 +66,8 @@ async function setup(tc: TestContext) {
 		put("router-peer", routerKey.signer, routerKey.publicKey, ["host", "router", "member"]);
 	}, ctx);
 	await control.commit((tx) => spaceDoc(tx, undefined, now).then(() => {}), ctx);
-	const routing = (version: number) => ({ authorityId: "authority", policyVersion: version, rules: [], completionProfiles: [], default: { mode: "local", member: "a" } }) as never;
-	await control.commit(async (tx) => { (await tx.doc(FederationRouting, space.spaceId, null)).members.a = { id: "a", state: "active" } as never; await applyFederationPolicyIn(tx, space.spaceId, "authority", routing(1), 0); }, ctx);
+	const routing = (version: number, rules: unknown[] = []) => ({ authorityId: "authority", policyVersion: version, rules, completionProfiles: [GATED], default: { mode: "local", member: "a" } }) as never;
+	await control.commit(async (tx) => { (await tx.doc(FederationRouting, space.spaceId, null)).members.a = { id: "a", state: "active", target: { authorityId: "authority", hostId: "data-host", spaceId: "sp-a", dataIncarnation: "00000000", primaryEpoch: 1 } } as never; (await tx.doc(FederationRouting, space.spaceId, null)).members.b = { id: "b", state: "active", target: { authorityId: "authority", hostId: "other-host", spaceId: "sp-b", dataIncarnation: "00000000", primaryEpoch: 1 } } as never; await applyFederationPolicyIn(tx, space.spaceId, "authority", routing(1), 0); }, ctx);
 	const permit = (incarnation: string) => ({ state: "active", authorityId: "authority", dataIncarnation: incarnation, role: "local", transitionId: "t1" });
 	const installedControl = new SqliteRecoveryRegister(join(dir, "installed-control.sqlite"));
 	tc.after(() => installedControl.close());
@@ -81,13 +82,13 @@ async function setup(tc: TestContext) {
 	tc.after(() => root.close());
 	// the Member's store, seeded as a provisioning does; its permits
 	const storeFile = join(dir, "member.sqlite"), seed = await openSqliteHost(storeFile);
-	const jobs = await seed.commit((tx) => createSpace(tx, "jobs", now), ctx);
+	const jobs = await seed.commit((tx) => createSpace(tx, "jobs", now), ctx), notes = await seed.commit((tx) => createSpace(tx, "notes", now), ctx);
 	await seed.commit((tx) => spaceDoc(tx, undefined, now).then(() => {}), ctx);
 	// the permits are only external: the start installs them where the data is the one they name
 	const memberSpaces: Record<string, unknown> = {};
 	for (const i of await listSpaces(seed, ctx)) memberSpaces[i.spaceId] = permit(i.incarnation);
 	await external.compareAndSet("boot:data-host", null, { hostId: "data-host", state: "active", spaces: memberSpaces } as never);
-	const config = write("member", { ...base("member", MEMBER_IP, memberPort), hostId: "data-host", peerId: "member-peer", mode: "member", membership: { memberId: "a", spaceId: jobs.spaceId }, capabilities: { tools: ["sieve"], models: [], dataSpaces: [jobs.spaceId] } });
+	const config = write("member", { ...base("member", MEMBER_IP, memberPort), hostId: "data-host", peerId: "member-peer", mode: "member", membership: { memberId: "a", spaceId: jobs.spaceId }, capabilities: { tools: ["sieve"], models: [], dataSpaces: [jobs.spaceId] }, ...more });
 	await seed.close(ctx);
 	const start = async () => {
 		if (!CMD) {
@@ -141,7 +142,7 @@ async function setup(tc: TestContext) {
 		await home.authenticate();
 		return new RemoteSpace(line({ host: MEMBER_IP, port: memberPort }, PAIRED_IP), { ...options, space: jobs.spaceId, signer, expectedGateHostId: "data-host", grantProvider: () => home.requestGrant() });
 	};
-	return { user, phone, toMember, toControl, external, jobs, control, space, userKey, routerKey, controlKey, authority, config, storeFile, router, leases, routing, restart };
+	return { notes, user, phone, toMember, toControl, external, jobs, control, space, userKey, routerKey, controlKey, authority, config, storeFile, router, leases, routing, restart };
 }
 
 test("a Member serves on the grants of its control host and follows its keys and its fence", async (tc) => {
@@ -206,6 +207,56 @@ test("work left waiting survives a restart of the Member", async (tc) => {
 	const done = JSON.parse(await again().request(JSON.stringify({ method: "pollOperation", args: { targetRequest: { generation, requestId: "p" }, waitMs: 0 }, space: g.jobs.spaceId, frame: { grant } }))) as { result: { state: string } };
 	assert.equal(done.result.state, "done");
 	assert.equal(await after.count({ type: "Later" }), 0, "the take came through once");
+});
+
+test("the control host runs a run on the Member and moves a Space through its life; its next policy arrives by itself", async (tc) => {
+	const g = await setup(tc, { runGates: true, spaceLifecycle: true });
+	let { remote } = await g.router();
+	const sid = g.jobs.spaceId, sign = (v: unknown) => signRun("instruction", v, "control-peer", g.controlKey) as never;
+	const step = async (commandId: string, kind: string, revision: number, more = {}) => (await remote.requestRunGate(await sign({ runId: "r", commandId, kind, revision, authorityId: "authority", spaceId: sid, ...more }))).value as unknown as { state: string };
+	const member = async (id: string, action: string, more = {}) => remote.requestMembership(await signMembership("instruction", { authorityId: "authority", memberId: "a", spaceId: sid, id, action, ...more } as never, "control-peer", g.controlKey));
+	await member("t1", "prepareAdd");
+	await member("t1", "activate", { policy: g.routing(1) });
+	await g.toControl.authenticate();
+	const user = g.toMember();
+	await user.authenticate();
+	await assert.rejects(remote.requestRunGate(await signRun("instruction", { runId: "r", commandId: "x", kind: "stop", revision: 1, authorityId: "authority", spaceId: sid }, "control-peer", generateKey("ed25519", "rogue").signer) as never), /invalid run gate instruction signature/);
+	const spec = { runId: "r", kind: "tasks", config: { tasks: [{ type: "Gated", fields: { n: 1 } }, { type: "Gated", fields: { n: 2 } }] }, members: [sid] };
+	assert.equal((await step("p", "prepare", 1, { spec })).state, "preparing");
+	assert.equal((await step("p", "prepare", 1, { spec })).state, "preparing", "a retried instruction");
+	assert.equal(await user.count({ type: "Gated" }), 2, "the manifest's tasks, once");
+	assert.equal(await user.take({ type: "Gated" }, 0), null, "held behind the gate");
+	assert.equal((await step("go", "release", 2)).state, "running");
+	const txn = await user.createTransaction(30_000);
+	assert.ok(await user.take({ type: "Gated" }, 0, { txn: txn.id }));
+	await user.abort(txn.id);
+	const paused = await step("hold", "pause", 3);
+	assert.ok(["pausing", "paused"].includes(paused.state), paused.state);
+	await g.restart();
+	({ remote } = await g.router());
+	assert.deepEqual(await step("hold", "pause", 3), paused, "the gate and its answer outlive the process");
+	const again = g.toMember();
+	await again.authenticate();
+	assert.equal(await again.take({ type: "Gated" }, 0), null, "paused stays paused");
+	await assert.rejects(step("other", "pause", 3), /revision|conflict/i, "an outdated instruction changes nothing");
+	assert.equal((await step("end", "stop", 4)).state, "stopped");
+	// a Space through its life, under this host's permits
+	const life = async (q: Record<string, unknown>) => (await remote.requestSpaceLifecycle(await signLifecycle("instruction", { authorityId: "authority", hostId: "data-host", ...q }, "control-peer", g.controlKey) as never)).value;
+	const notes = g.notes.spaceId;
+	assert.equal((await life({ commandId: "a", action: "archive", spaceId: notes })).state, "archived");
+	assert.equal((await life({ commandId: "a", action: "archive", spaceId: notes })).state, "archived", "a retry");
+	await assert.rejects(life({ commandId: "c", action: "create", alias: "unpermitted" }), /boot permission/);
+	await assert.rejects(life({ commandId: "m", action: "archive", spaceId: sid }), /federation Member/);
+	assert.equal((await life({ commandId: "b", action: "reactivate", spaceId: notes })).state, "active");
+	// the control host signs a new policy: the next call of a user brings it
+	await again.write({ type: "Far", fields: {} }, null, 60_000);
+	await g.control.commit((tx) => applyFederationPolicyIn(tx, g.space.spaceId, "authority", g.routing(2, [{ type: "Far", mode: "local", member: "b" }]), 1), ctx);
+	await assert.rejects(again.write({ type: "Far", fields: {} }, null, 60_000), /another Member|RoutingConflict|Member b|belongs/i);
+	// a policy this Member cannot take stops its calls, it does not pass for the old one
+	await g.control.commit(async (tx) => { (await tx.doc(FederationRouting, g.space.spaceId, null)).policy!.rules = []; }, ctx);
+	await assert.rejects(again.count({ type: "Job" }), /policy changed within version/);
+	const many = Array.from({ length: 65 }, (_, n) => ({ type: "Gated", fields: { n } }));
+	await assert.rejects(remote.requestRunGate(await sign({ runId: "r2", commandId: "p2", kind: "prepare", revision: 1, authorityId: "authority", spaceId: sid, spec: { runId: "r2", kind: "tasks", config: { tasks: many }, members: [sid] } })), /at most 64 tasks/);
 });
 
 test("a device pairs at the control host and works on the Member with what that gave it", async (tc) => {

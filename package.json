@@ -29,6 +29,7 @@
     "build": "tsc -p tsconfig.build.json",
     "bundle": "node scripts/bundle-mobile.mjs",
     "testbed": "bash test/testbed/testbed.sh",
+    "testbed:federation": "node --experimental-strip-types --no-warnings test/testbed/local-federation/run.ts",
     "test:examples": "node --experimental-strip-types --test test/examples/*.test.ts",
     "example:golomb": "node --experimental-strip-types examples/golomb.ts",
     "example:dark-energy": "node --experimental-strip-types agent/examples/dark-energy-research.ts",

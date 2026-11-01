@@ -53,6 +53,23 @@ pub fn sign_run(kind: &str, value: Json, issuer: &str, signer: &Signer) -> R<Jso
 /// Registered host code that writes a run's tasks while its gate is preparing. Never a shell command.
 pub type RunPreparer = Box<dyn Fn(&mut Service, &Json, &str) -> R<()>>;
 
+/// `tasksPreparer`: the preparer of a configured host, the tasks a run's own manifest names, each bound to the run. Idempotent.
+pub fn tasks_preparer(service: &mut Service, run: &Json, space: &str) -> R<()> {
+	let tasks = run.get("config").and_then(|c| c.get("tasks")).and_then(Json::as_array).filter(|t| t.len() <= 64).ok_or_else(|| illegal("a tasks run names at most 64 tasks"))?;
+	let id = run.get("runId").cloned().unwrap_or(Json::Null);
+	service.commit_on(Some(space), |s, now| {
+		for t in tasks {
+			let mut fields = t.get("fields").and_then(Json::as_object).cloned().unwrap_or_default();
+			fields.insert("runId", id.clone());
+			let entry = phi_json::obj! { "type" => t.get("type").cloned().unwrap_or(Json::Null), "fields" => Json::Object(fields) };
+			if s.list(now, &phi_core::space::Template::from_json(Some(&entry))?, None, None, None)?.as_array().is_some_and(Vec::is_empty) {
+				s.write(now, &entry, None, Some(&Json::Number(phi_json::FOREVER)), None)?;
+			}
+		}
+		Ok(())
+	})
+}
+
 /// Whether this host still holds the authority.
 pub type AuthorityCheck = Box<dyn Fn(&mut Service) -> R<()>>;
 
