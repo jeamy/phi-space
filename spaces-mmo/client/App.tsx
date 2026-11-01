@@ -318,13 +318,16 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 			{offerTo !== null && !guest && (
 				<form className="trade-form" onSubmit={(e) => { e.preventDefault(); if (!offerTo || !give.trim()) return; send(`offer ${give.trim()} an ${offerTo}${want.trim() ? ` für ${want.trim()}` : ""}`); setGive(""); setWant(""); setOfferTo(null); }}>
 					<h3>Tausch anbieten</h3>
-					<label>An <select value={offerTo} onChange={(e) => setOfferTo(e.target.value)}><option value="">wählen …</option>{others.map((c) => <option key={c.charId} value={c.name}>{c.name}</option>)}</select></label>
+					<div className="trade-who"><span>Anbieten an</span>{others.length ? <ul className="carried" aria-label="An wen">{[...others].sort((a, b) => Number(!!a.ai || !!a.settler) - Number(!!b.ai || !!b.settler)).map((c) => (
+						<li key={c.charId}><button type="button" className={offerTo === c.name ? "on" : ""} aria-pressed={offerTo === c.name} onClick={() => setOfferTo(c.name)}><span>{c.name}</span></button></li>
+					))}</ul> : <span className="muted">Hier ist niemand.</span>}</div>
 					{kinds.length ? <ul className="carried" aria-label="Was du trägst">{kinds.map(([name, n]) => (
 						<li key={name}><button type="button" onClick={() => addGive(name, n)} title={`1 ${name} dazugeben`}><span>{name}</span><span className="count">{n}×</span></button></li>
 					))}</ul> : <span className="muted">Du trägst nichts.</span>}
 					<label>Du gibst <input value={give} onChange={(e) => setGive(e.target.value)} placeholder="z. B. 2 muschel, tang" /></label>
 					<label>Dafür (leer: Geschenk) <input value={want} onChange={(e) => setWant(e.target.value)} placeholder="z. B. 2 münze" /></label>
 					<div className="row"><button className="primary" disabled={!offerTo || !give.trim()}>Anbieten</button><button type="button" onClick={() => setOfferTo(null)}>Abbrechen</button></div>
+					{(!offerTo || !give.trim()) && <p className="muted trade-hint">{!offerTo ? "Tippe oben auf die Person, der du es anbietest." : "Tippe auf etwas, das du gibst."}</p>}
 				</form>
 			)}
 			{offerTo === null && !guest && others.length > 0 && carried.length > 0 && <button className="link" onClick={() => setOfferTo("")}>Tausch anbieten …</button>}

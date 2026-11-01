@@ -1,5 +1,10 @@
 // The English of the game, by its German (scripts/i18n-extract.ts lists the German; {0}, {1} … are values, {9} a name).
 export const EN: Record<string, string> = {
+	"Tippe oben auf die Person, der du es anbietest.": "Tap the person above you want to offer it to.",
+	"Tippe auf etwas, das du gibst.": "Tap something you give.",
+	"Hier ist niemand.": "Nobody is here.",
+	"An wen": "To whom",
+	"Anbieten an": "Offer to",
 	"gieße": "water",
 	"flüster": "whisper",
 	"flüstere": "whisper",
