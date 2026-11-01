@@ -52,7 +52,7 @@ export type AtlasView = { rooms: Array<{ roomId: string; name: string; island: s
  *  people and NPCs are online in each room. */
 /** What a player owns, for the marks on the overview. */
 export type AtlasOwned = { id: string; kind: "site" | "building" | "bed" | "field" | "ruin"; name: string; room: string; x: number; y: number };
-export type AtlasState = { here: string; fog: Record<string, number>; lit: string[]; people: Record<string, [number, number]>; mine: AtlasOwned[] };
+export type AtlasState = { here: string; fog: Record<string, number>; lit: string[]; people: Record<string, [number, number]>; mine: AtlasOwned[]; /** Coins per field of distance for beaming (the admin's setting), for the price on the map. */ beamCost: number };
 export type TradeView = {
 	offersIn: Array<Pick<OfferFields, "offerId" | "fromName" | "giveNames" | "want">>;
 	offersOut: Array<Pick<OfferFields, "offerId" | "toName" | "giveNames" | "want">>;
@@ -146,6 +146,7 @@ export class Gateway {
 	readonly #rooms = new Map<string, RoomFields>();
 	readonly #winds = new Map<string, number>();
 	#yearDays = 0;
+	#beamCost = 1;
 	/** The name of the wind in a room; an island nobody counted yet has the breeze. */
 	#windIn(room: string): string { return this.w.wind?.names[this.#winds.get(this.#rooms.get(room)?.island ?? "") ?? 1] ?? ""; }
 	readonly #objs = new Map<string, ObjView>(); // by itemId / exitId
@@ -663,7 +664,8 @@ export class Gateway {
 			n[ch.charId.startsWith("npc-") ? 1 : 0]++;
 		}
 		const lit = this.w.beacons.filter((b) => this.#burns(this.#flames.get(b.beaconId) ?? 0)).map((b) => b.room);
-		return { here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people, mine: owned.get(c.me.charId) ?? [] };
+		void setting(this.space, "beam.cost").then((n) => { this.#beamCost = n; }, () => {}); // the next state carries it
+		return { here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people, mine: owned.get(c.me.charId) ?? [], beamCost: this.#beamCost };
 	}
 
 	/** Something on the overview changed: its state goes out to every client once the short pause is over. */

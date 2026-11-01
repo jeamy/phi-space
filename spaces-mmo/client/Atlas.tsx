@@ -92,6 +92,15 @@ export function Atlas({ atlas, state, page = false, me = null, onBeam }: { atlas
 			g.fillStyle = MINE[m.kind].color; g.strokeStyle = "#101010"; g.lineWidth = 3;
 			g.fillRect((px + m.x) * s - 9, (py + m.y) * s - 9, 18, 18); g.strokeRect((px + m.x) * s - 9, (py + m.y) * s - 9, 18, 18);
 		}
+		// the picked target: outlined, and a dashed line to it from where the player stands (beaming goes this way)
+		const target = picked ? byId.get(picked) : null;
+		if (target && target.roomId !== state?.here) {
+			const { px, py } = at(target), lit = !!state?.lit.includes(target.roomId);
+			g.strokeStyle = lit ? "#AED83C" : "#ff8a6a"; g.lineWidth = page ? 6 : 3; g.strokeRect(px * s + 1.5, py * s + 1.5, W * s - 3, H * s - 3);
+			if (here) {
+				g.save(); g.setLineDash([14, 10]); g.lineWidth = page ? 6 : 4; g.beginPath(); g.moveTo(here.x, here.y); g.lineTo((px + W / 2) * s, (py + H / 2) * s); g.stroke(); g.restore();
+			}
+		}
 		// the player: a mark big enough for a small screen, on top of everything but the names
 		if (here) {
 			g.beginPath(); g.arc(here.x, here.y, 26, 0, Math.PI * 2); g.fillStyle = "rgba(174,216,60,0.3)"; g.fill();
@@ -107,7 +116,7 @@ export function Atlas({ atlas, state, page = false, me = null, onBeam }: { atlas
 			const x = ((b.x0 + b.x1) / 2) * s, y = b.y0 * s + 14;
 			g.lineWidth = 3; g.strokeStyle = "rgba(0,0,0,0.75)"; const shown = tr(name); g.strokeText(shown, x, y); g.fillStyle = "#f2efe6"; g.fillText(shown, x, y);
 		}
-	}, [ground, state, open, atlas, me?.x, me?.y]);
+	}, [ground, state, open, atlas, me?.x, me?.y, picked]);
 	// the page opens on the player
 	useEffect(() => {
 		const b = scroller.current, c = canvas.current, p = pin.current;
@@ -125,6 +134,13 @@ export function Atlas({ atlas, state, page = false, me = null, onBeam }: { atlas
 	const toggle = () => { setOpen((o) => { store("mmo.atlas", !o); return !o; }); };
 	const here = atlas.rooms.find((r) => r.roomId === state?.here);
 	const label = hover ? atlas.rooms.find((r) => r.roomId === hover) : here;
+	/** What beaming to `room` costs from where the player stands: the fields between the two rooms on the map, at least one, at the admin's price. */
+	const beamCoins = (room: { x: number; y: number }) => (here ? Math.max(1, Math.abs(room.x - here.x) + Math.abs(room.y - here.y)) : 1) * (state?.beamCost ?? 1);
+	const beamButton = (room: { roomId: string; x: number; y: number }) => {
+		if (!onBeam || room.roomId === state?.here || !state?.lit.includes(room.roomId)) return null;
+		const n = beamCoins(room);
+		return <button className="primary" onClick={() => { onBeam(room.roomId); setPicked(null); }}>Hierher beamen · {n} {n === 1 ? "Münze" : "Münzen"}</button>;
+	};
 
 	if (page) {
 		const shown = atlas.rooms.find((r) => r.roomId === picked) ?? here;
@@ -140,7 +156,7 @@ export function Atlas({ atlas, state, page = false, me = null, onBeam }: { atlas
 						<small>{shown?.roomId === state?.here ? "Du bist hier · " : ""}{shown && state?.lit.includes(shown.roomId) ? "Feuer brennt · " : ""}{humans} Personen, {npcs} NPCs</small>
 						{inRoom.length > 0 && <small>Deins hier: {inRoom.map((m) => m.name).join(", ")}</small>}</div>
 					<button onClick={() => setBig((b) => !b)}>{big ? "Kleiner" : "Größer"}</button>
-					{onBeam && shown && shown.roomId !== state?.here && state?.lit.includes(shown.roomId) && <button className="primary" onClick={() => onBeam(shown.roomId)}>Hierher beamen</button>}
+					{shown && beamButton(shown)}
 				</div>
 				{kinds.length > 0 && <div className="atlas-legend">{kinds.map((k) => <span key={k}><i style={{ background: MINE[k].color }} />{MINE[k].label}</span>)}</div>}
 			</div>
@@ -152,9 +168,10 @@ export function Atlas({ atlas, state, page = false, me = null, onBeam }: { atlas
 			<button className="atlas-toggle" onClick={toggle} aria-expanded={open} title={open ? "Übersichtskarte einklappen" : "Übersichtskarte zeigen"}>{open ? "▾" : "▸"} Karte</button>
 			{open && <>
 				<canvas ref={canvas} aria-label={`Übersichtskarte${here ? `, du bist in ${here.name} (${here.island})` : ""}`} role="img"
-					onClick={() => setBig((b) => !b)}
+					onClick={(e) => { if (!big) setBig(true); else setPicked(roomAt(e as unknown as React.PointerEvent<HTMLCanvasElement>)?.roomId ?? null); }}
 					onPointerMove={(e) => setHover(roomAt(e)?.roomId ?? null)} onPointerLeave={() => setHover(null)} />
 				{label && <div className="atlas-label">{label.name} · {label.island}</div>}
+				{big && picked && (() => { const r = atlas.rooms.find((x) => x.roomId === picked); return r ? <div className="atlas-info"><div><b>{r.name} · {r.island}</b><small>{state?.lit.includes(r.roomId) ? "Feuer brennt" : "Das Feuer ist aus"}</small></div>{beamButton(r)}<button onClick={() => setBig(false)}>Kleiner</button></div> : null; })()}
 			</>}
 		</div>
 	);

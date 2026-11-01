@@ -1,5 +1,5 @@
-// Beaming (engine/commands/beam.ts): from a burning fire to a burning fire, for coins by the distance on the world map, with a
-// pause after it; a dark fire cannot be reached, and nothing happens without the coins or while the pause lasts.
+// Beaming (engine/commands/beam.ts): from wherever one stands to a burning fire, for coins by the distance on the world map,
+// with a pause after it; a dark fire cannot be reached, and nothing happens without the coins or while the pause lasts.
 import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -32,7 +32,7 @@ test("the distance between two rooms is the fields between them on the world map
 	assert.equal(fieldsBetween(undefined, room("anleger")), 1);
 });
 
-test("beam: only from and to a burning fire, for coins, with a pause", { timeout: 120_000 }, async () => {
+test("beam: to a burning fire from anywhere, for coins, with a pause", { timeout: 120_000 }, async () => {
 	const srv = await startServer({ worldEnv: { SPACES_MMO_BEAM_EPOCH: "1" } });
 	try {
 		const s = srv.stack.space, p = new Player(srv.url);
@@ -41,9 +41,9 @@ test("beam: only from and to a burning fire, for coins, with a pause", { timeout
 		const cost = fieldsBetween(w.rooms.find((r) => r.roomId === "graue-bucht"), w.rooms.find((r) => r.roomId === "anleger"));
 		const coins = async () => (await s.readAll({ type: "Item", fields: { location: me, proto: "muenze" } })).length;
 		const roomNow = async () => (await s.readIfExists({ type: "Character", fields: { charId: me } }, 2_000))?.fields.room;
-		assert.match(await does(p, "beam anleger", "brennenden Feuer"), /Du beamst von einem brennenden Feuer aus/);
-		await lightFire(s, 3_600_000, "feuer-bucht");
 		assert.match(await does(p, "beam", "Hierhin kannst du"), /Anleger/);
+		// the map's state carries the price per field
+		await eventually(async () => p.frames.some((f) => f.t === "atlasState" && typeof f.state.beamCost === "number") || null, 10_000, "the atlas state with the beam cost");
 		assert.match(await does(p, "beam anleger", "ist aus"), /Das Feuer in Anleger ist aus/);
 		await lightFire(s, 3_600_000, "feuer-anleger");
 		assert.match(await does(p, "beam anleger", "kostet"), new RegExp(`kostet ${cost} Münze`));
@@ -74,7 +74,6 @@ test("beam to a fire in another region: the character goes over like on a ferry,
 			if (h.room.roomId === "graue-bucht") me = h.me.charId;
 		}
 		assert.ok(me, "a guest started in the west");
-		await lightFire(r.space("west"), 60_000, "feuer-bucht");
 		await give(r.space("west"), me, "muenze", cost);
 		assert.match(await does(p, `beam ${to!.name}`, /./), /./);
 		await eventually(async () => (await r.space(there).readAll({ type: "Character", fields: { charId: me } })).length === 1, 30_000, `in the ${there} region`);

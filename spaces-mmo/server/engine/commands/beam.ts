@@ -1,6 +1,6 @@
-// Beaming: from a burning fire to another fire, for coins and with a pause after it, so no way has to be walked again. The
-// fires hold the world together (docs/siedeln.en.md, "Epochen": the net, epoch 4): who stands in the room of a burning fire may
-// go to the room of any other fire; a dark fire cannot be reached. The cost is the coins per field of distance on the world
+// Beaming: from wherever one stands to the room of a burning fire, for coins and with a pause after it, so no way has to be
+// walked again. The fires hold the world together (docs/siedeln.en.md, "Epochen": the net, epoch 4): only the target needs a
+// fire, and it must burn. The cost is the coins per field of distance on the world
 // map, the pause and the epoch from which it is allowed are the admin's settings (beam.cost, beam.cooldown, beam.epoch).
 // Within a region the target's fire is checked; to another region the character goes over like on a ferry (handover.ts) and
 // the command cannot see that region's fires: the world map offers only burning ones, and a dark one is a place like another.
@@ -27,12 +27,6 @@ const roomOfId = (w: WorldDef, id: string): RoomDef | undefined => (w.allRooms ?
 export const fieldsBetween = (a: RoomDef | undefined, b: RoomDef | undefined): number => (a?.map && b?.map ? Math.max(1, Math.abs(a.map.x - b.map.x) + Math.abs(a.map.y - b.map.y)) : 1);
 const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 
-/** The fire the figure stands at: one in its room that burns now. */
-async function burningHere(c: CommandCtx, now: number): Promise<Fire | null> {
-	for (const b of c.world.beacons.filter((x) => x.room === c.actor.room)) if (isLit(await flameOf(c.space, b.beaconId, c.txn ?? undefined), now)) return b;
-	return null;
-}
-
 /** Every other fire of the world with what it costs from here; `lit` is known for the fires of this region only. */
 async function targets(c: CommandCtx, now: number): Promise<Target[]> {
 	const per = await setting(c.space, "beam.cost"), from = roomOfId(c.world, c.actor.room), here = new Set(c.world.beacons.map((b) => b.beaconId));
@@ -49,19 +43,18 @@ const place = (t: Target) => `${t.room.name}${t.room.island ? ` (${t.room.island
 
 const beam: Command = {
 	key: "beam", aliases: ["beame", "beamen"],
-	help: "beam [ort] – von einem brennenden Feuer zu einem anderen Feuer springen (kostet Münzen, danach eine Pause); ohne Ort zeigt es die Ziele",
+	help: "beam [ort] – zu einem brennenden Feuer springen, von wo du stehst (kostet Münzen, danach eine Pause); ohne Ort zeigt es die Ziele",
 	async func(c, arg) {
 		if (!human(c)) throw new CommandError("Beamen können nur Menschen.");
 		await needEpoch(c, await setting(c.space, "beam.epoch"), "Das Beamen");
 		const now = await worldNowOf(c.space, c.txn);
-		if (!(await burningHere(c, now))) throw new CommandError("Du beamst von einem brennenden Feuer aus: stell dich in einen Raum, in dem ein Feuer brennt („feed“ hält es am Leben).");
 		const all = await targets(c, now);
 		const coins = (await inventory(c)).filter((i) => i.f.proto === c.world.currency);
 		const rest = await peek(c.space, { type: "BeamRest", fields: { charId: c.actor.charId } });
 		const until = rest ? fieldsOf<BeamRestFields>(rest).untilWorldMs : 0;
 		if (!arg.trim()) {
 			return msg(c, c.actor.charId, "info", [
-				`Hierhin kannst du von hier beamen (du trägst ${plural(coins.length, "Münze", "Münzen")}${until > now ? `; die Pause dauert noch etwa ${Math.max(1, Math.round((until - now) / 60_000))} Minuten` : ""}):`,
+				`Hierhin kannst du beamen (zu einem brennenden Feuer; du trägst ${plural(coins.length, "Münze", "Münzen")}${until > now ? `; die Pause dauert noch etwa ${Math.max(1, Math.round((until - now) / 60_000))} Minuten` : ""}):`,
 				...all.map((t) => `  ${place(t)}: ${plural(t.cost, "Münze", "Münzen")}${t.lit === false ? " (das Feuer ist aus)" : ""}  – beam ${t.room.name}`),
 			].join("\n"));
 		}
@@ -78,7 +71,7 @@ const beam: Command = {
 		const pause = (await setting(c.space, "beam.cooldown")) * 60_000;
 		if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
 		if (pause > 0) await c.space.write({ type: "BeamRest", fields: { charId: c.actor.charId, untilWorldMs: now + pause } satisfies BeamRestFields as never }, c.txn, FOREVER);
-		await msg(c, "*", "info", `$you() $conj(löst|löst) $conj(dich|sich) im Licht des Feuers auf.`, { templ: true });
+		await msg(c, "*", "info", `$you() $conj(löst|löst) $conj(dich|sich) auf.`, { templ: true });
 		const landing = { x: t.fire.x, y: t.fire.y + 1 }, toRegion = crossing(c.world, t.room.roomId);
 		await dropOffers(c);
 		if (toRegion) { await handOff(c, c.world.region!, toRegion, { room: t.room.roomId, ...landing }); return; }

@@ -340,9 +340,10 @@ Below that the **limits**:
 | Beaming: pause afterwards (world minutes) | `SPACES_MMO_BEAM_COOLDOWN` | 10 |
 | Beaming from this epoch of the island one stands on | `SPACES_MMO_BEAM_EPOCH` | 4 |
 
-Beaming (`beam [place]`, `server/engine/commands/beam.ts`): from the room of a burning fire to the room of any other fire, for coins by the
+Beaming (`beam [place]`, `server/engine/commands/beam.ts`): from wherever one stands to the room of a burning fire, for coins by the
 distance of the rooms on the world map; a dark fire cannot be reached (checked within a region; the world map offers only burning ones),
-and a pause follows. The world map's page has a button "Hierher beamen" for a picked room with a burning fire.
+and a pause follows. On the world map (the page on a phone, the enlarged map with a mouse) a click or tap on a room with a burning fire
+picks it: a dashed line runs from where one stands, and the button "Hierher beamen" shows the price.
 | Figures that always play (settlers fill up, [siedeln.en.md](siedeln.en.md)) | `SPACES_MMO_SETTLERS_MIN` | 30 |
 | Points of an island for the village (epoch 2, [siedeln.en.md](siedeln.en.md)) | `SPACES_MMO_EPOCH_DORF` | 15 |
 | Points of an island for the town (epoch 3) | `SPACES_MMO_EPOCH_STADT` | 40 |
