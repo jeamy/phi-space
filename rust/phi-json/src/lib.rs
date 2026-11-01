@@ -396,6 +396,7 @@ impl Json {
 	pub fn as_array(&self) -> Option<&Vec<Json>> { if let Json::Array(a) = self { Some(a) } else { None } }
 	pub fn as_object(&self) -> Option<&Object> { if let Json::Object(o) = self { Some(o) } else { None } }
 	pub fn as_object_mut(&mut self) -> Option<&mut Object> { if let Json::Object(o) = self { Some(o) } else { None } }
+	pub fn as_array_mut(&mut self) -> Option<&mut Vec<Json>> { if let Json::Array(a) = self { Some(a) } else { None } }
 	pub fn is_null(&self) -> bool { matches!(self, Json::Null) }
 	/// `v[key]` of an object (None for anything else or a missing key).
 	pub fn get(&self, key: &str) -> Option<&Json> { self.as_object()?.get(key) }

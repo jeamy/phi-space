@@ -73,7 +73,7 @@ pub(crate) fn js_string(v: &Json) -> String {
 		Json::Array(a) => a.iter().map(|x| if matches!(x, Json::Null) { String::new() } else { js_string(x) }).collect::<Vec<_>>().join(","),
 	}
 }
-pub(crate) fn bytes(v: &Json) -> f64 { v.json_bytes() as f64 }
+pub fn bytes(v: &Json) -> f64 { v.json_bytes() as f64 }
 /// JavaScript's default string order (`Array.prototype.sort`): by UTF-16 code units.
 pub(crate) use phi_json::utf16_cmp as js_cmp;
 /// `Number.isInteger`.

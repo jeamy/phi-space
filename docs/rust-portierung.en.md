@@ -928,6 +928,8 @@ the federation members also stay in TS; the Rust standalone is no replacement.
 
 Not ported with the Root, because it is R6b: `replicas` per Member, `ReplicaNoticeBoard` and `adoptReplicaConfigNotice`, `controlEpoch` of a replicated main store, `reconcileDataRestore`. A config with any of them, or a restore in progress, is refused at the start.
 
+**R6a, router (2026-11-01).** `phi-host::router` is `RouterController`: submit, advance, recover, review and future reservations. `test/support/router-driver.ts` and `phi-host/tests/router.rs` walk the same lines through both, with lost replies, refusals, wrong receipts, restarts, crashes at the checkpoints and a lost authority, and compare each answer, the journal index and every command document byte for byte, which also holds the shapes of item 1 for these two families. Not there yet: the `RouterEnv` over the control store and the Members, the commit hooks and `recoverMany` that `FederatedSpace` uses. `reconcileDataRestore` stays R6b.
+
 **R6b, acceptance in TypeScript in the local federation (R-D3).** Before any port, each with kills and cut-offs: primary/sync with the primary killed, promotion with the container fencing adapter, `degradeToSingle` and `setStandby`, a control host change, a control and a data restore, entry replication with a Member cut off. Each scenario holds what clients were answered and what the stores contain afterwards.
 
 **Content:**
