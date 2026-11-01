@@ -92,7 +92,7 @@ test("an own fallow field offers what one carries to sow", () => {
 test("the bar offers a field once, for the cell one stands on, not for every cell around", () => {
 	const spade = new Map([...objs, ["spade", obj({ id: "spade", kind: "item", name: "Spaten", location: "me", x: -1, y: -1 })]]);
 	const lines = hereEntries({ chars, objs: spade, self: me, room: "r", me: "me", plans: [], guest: false, fuel: undefined }).map((e) => e.line).filter((l) => l.startsWith("flur anlegen"));
-	assert.deepEqual(lines, ["flur anlegen 5 5"]);
+	assert.deepEqual(lines, ["flur anlegen"], "on one's own cell, which may be a way, the field lies beside the figure");
 });
 
 test("a long text falls into sentences, an abbreviation does not end one", () => {

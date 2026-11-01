@@ -5,7 +5,7 @@ import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER, type SpaceLike } from "phi-spaces";
-import { harvestOf, shareOf, soilFor } from "../server/engine/commands/field.ts";
+import { around, harvestOf, shareOf, soilFor } from "../server/engine/commands/field.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld, walkable } from "../server/engine/world.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
@@ -159,4 +159,12 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		assert.match(await does(boss.p, "flur", "Acker von Bäuerin"), /Hafer wächst/);
 		for (const a of crew) await a.p.leave();
 	} finally { await srv.close(); }
+});
+
+test("a field asked for at a cell covers that cell, its corner there first, then shifted by the fewest cells", () => {
+	const rects = around(10, 7, { w: 4, h: 4 });
+	assert.equal(rects.length, 16);
+	assert.deepEqual(rects[0], { x: 10, y: 7, w: 4, h: 4 });
+	assert.ok(rects.every((r) => r.x <= 10 && r.y <= 7 && r.x + r.w > 10 && r.y + r.h > 7), "each covers the cell");
+	assert.deepEqual(rects.at(-1), { x: 7, y: 4, w: 4, h: 4 }, "the most shifted last");
 });

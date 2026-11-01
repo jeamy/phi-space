@@ -208,7 +208,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 	// a cell nothing covers: build here (the plan's top left corner; the server says why not when it does not fit)
 	const covered = [...objs.values()].some((o) => o.location === room && o.kind !== "item" && at.x >= o.x && at.y >= o.y && at.x < o.x + (o.w ?? 1) && at.y < o.y + (o.h ?? 1));
 	if (!guest && plans.length && !covered) entries.push({ label: "Bauen …", line: "#bau", run: onPlans });
-	if (!guest && !covered && [...objs.values()].some((o) => o.kind === "item" && o.location === me && o.name === "Spaten")) { entries.push({ label: "Beet umgraben", line: `umgraben ${at.x} ${at.y}` }); entries.push({ label: "Acker anlegen (4×4)", line: `flur anlegen ${at.x} ${at.y}` }); }
+	if (!guest && !covered && [...objs.values()].some((o) => o.kind === "item" && o.location === me && o.name === "Spaten")) { entries.push({ label: "Beet umgraben", line: `umgraben ${at.x} ${at.y}` }); entries.push({ label: "Acker anlegen (4×4)", line: self && self.x === at.x && self.y === at.y ? "flur anlegen" : `flur anlegen ${at.x} ${at.y}` }); }
 	// on the own figure: what works without anything more
 	if (self && self.x === at.x && self.y === at.y) {
 		entries.push({ label: "Umsehen", line: "look" }, { label: "Was trage ich?", line: "inventory" }, { label: "Wer spielt?", line: "who" }, { label: "Uhrzeit", line: "time" }, { label: "Mein Ruf", line: "reputation" });

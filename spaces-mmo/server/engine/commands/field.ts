@@ -97,6 +97,14 @@ const describe = (d: FieldDef, f: FieldFields, now: number) => {
 	return `${fieldName(f)} (${f.w}×${f.h}${f.open ? ", offen für alle" : ""}${f.fenced ? ", eingezäunt" : ""}): ${what}${soil}${grazed}.`;
 };
 
+/** The rectangles that cover the cell (x, y), the one with its corner there first, then those shifted by the fewest cells, so a cell
+ *  beside a way or the water finds the room on the side that has some. */
+export const around = (x: number, y: number, d: Pick<FieldDef, "w" | "h">): Rect[] => {
+	const out: Rect[] = [];
+	for (let dy = 0; dy < d.h; dy++) for (let dx = 0; dx < d.w; dx++) out.push({ x: x - dx, y: y - dy, w: d.w, h: d.h });
+	return out.sort((a, b) => (x - a.x) + (y - a.y) - ((x - b.x) + (y - b.y)));
+};
+
 /** `[x y]`: a field beside the actor (or at x y), on Plot cells in the light of a fire. */
 async function stake(c: CommandCtx, at: string): Promise<void> {
 	const d = fieldDef(c), g = c.world.garden;
@@ -110,7 +118,9 @@ async function stake(c: CommandCtx, at: string): Promise<void> {
 	if (typeof light === "string") throw new CommandError(light.replace("gebaut wird", "gepflügt wird").replace("Bau", "Acker"));
 	const room = await roomOf(c);
 	const m = /^(\d+)\s+(\d+)$/.exec(at.trim());
-	const tries: Rect[] = m ? [{ x: Number(m[1]), y: Number(m[2]), w: d.w, h: d.h }] : besides(c, d);
+	// "flur anlegen x y": a field that covers that cell (its corner there first); on the cell one stands on, which may be a way,
+	// it lies beside the figure, as without a cell
+	const tries: Rect[] = !m || (Number(m[1]) === c.actor.x && Number(m[2]) === c.actor.y) ? besides(c, d) : around(Number(m[1]), Number(m[2]), d);
 	let rect: Rect | null = null, why = "";
 	for (const r of tries) { const no = await refusal(c, room, r, false, true); if (!no) { rect = r; break; } why ||= no; }
 	if (!rect) throw new CommandError(`Hier passt kein Acker hin (${d.w}×${d.h}): ${why}`);
