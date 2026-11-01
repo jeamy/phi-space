@@ -1,5 +1,5 @@
 //! Opening a store file (src/store/sqlite.ts `openFiles`): the owner lock next to it, WAL, the schema and its format.
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -73,10 +73,10 @@ pub fn open_files(path: &Path) -> Result<StoreFiles> {
 	let tables: Vec<String> = read.prepare("SELECT name FROM sqlite_master WHERE type = 'table'")?.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
 	if !tables.is_empty() && !tables.iter().any(|t| t == "store_meta") {
 		let some: Vec<&str> = tables.iter().take(6).map(String::as_str).collect();
-		return Err(StoreError::Unavailable(format!("{} is not a phi-spaces store (tables: {}); move it aside: pi-durable stores are discarded, not taken over (decision D6, docs/umstellung-u0-bestand.md)", path.display(), some.join(", "))));
+		return Err(StoreError::Unavailable(format!("{} is not a phi-spaces store (tables: {}); move it aside: pi-durable stores are discarded, not taken over (decision D6, docs/umstellung-u0-bestand.en.md)", path.display(), some.join(", "))));
 	}
 	read.execute_batch(SCHEMA)?;
-	let format: Option<String> = read.query_row("SELECT value FROM store_meta WHERE key = 'format_version'", [], |r| r.get(0)).ok();
+	let format: Option<String> = read.query_row("SELECT value FROM store_meta WHERE key = 'format_version'", [], |r| r.get(0)).optional()?;
 	match format.as_deref().map(|f| f.parse::<f64>().unwrap_or(f64::NAN)) {
 		None => {
 			// randomUUID's form: 8-4-4-4-12 hex digits, version 4

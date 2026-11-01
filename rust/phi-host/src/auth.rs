@@ -14,6 +14,9 @@ const DOMAIN: &str = "phi-spaces/auth/v1\n";
 pub enum Algorithm { Ed25519, EcdsaP256 }
 
 impl Algorithm {
+	pub fn name(self) -> &'static str {
+		match self { Algorithm::Ed25519 => "ed25519", Algorithm::EcdsaP256 => "ecdsa-p256" }
+	}
 	pub fn parse(name: &str) -> Option<Algorithm> {
 		match name { "ed25519" => Some(Algorithm::Ed25519), "ecdsa-p256" => Some(Algorithm::EcdsaP256), _ => None }
 	}
@@ -93,6 +96,15 @@ pub fn verify_detached(algorithm: Algorithm, public_key: &str, message: &[u8], s
 			key.verify(message, &sig).is_ok()
 		}
 	}
+}
+
+/// Checks a signed value envelope against a pinned issuer/key and an explicit protocol domain.
+pub(crate) fn verify_value<'a>(token: &'a Json, issuer: &str, algorithm: Algorithm, public_key: &str, domain: &str) -> Option<&'a Json> {
+	let value = token.get("value")?;
+	let signature = token.get("signature")?.as_str()?;
+	if token.get("issuer")?.as_str()? != issuer || token.get("algorithm")?.as_str()? != algorithm.name() { return None; }
+	let message = format!("{domain}{}", value.canonical().ok()?);
+	verify_detached(algorithm, public_key, message.as_bytes(), signature).then_some(value)
 }
 
 /// What is signed: a domain tag plus the canonical encoding of the challenge.

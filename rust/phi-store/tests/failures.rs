@@ -1,4 +1,4 @@
-// R2, slice 2 (docs/rust-portierung.md): what a store does when writing fails. A full disk (SQLITE_FULL), a fault before
+// R2, slice 2 (docs/rust-portierung.en.md): what a store does when writing fails. A full disk (SQLITE_FULL), a fault before
 // the commit point, an answer lost after it, and a writer thread that is gone: the failing commit is not acknowledged,
 // the host takes no more work until it is reopened, and what was acknowledged stays (read by the Rust and the
 // TypeScript store alike). A request whose answer was lost is retried under its original identity and has no second

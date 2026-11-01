@@ -28,6 +28,8 @@ const MAX_TIMER_MS: f64 = 2_147_483_647.0;
 const ACCEPT_PAUSE_MS: u64 = 100;
 /// Answers of one connection waiting for the disk; a client that outruns a stalled disk by more is refused.
 const MAX_HELD_REPLIES: usize = 1024;
+/// Includes replies already handed to a blocked socket writer.
+const MAX_HELD_REPLY_BYTES: usize = 8 * 1024 * 1024;
 const INTERNAL: &str = r#"{"ok":false,"error":{"code":"Internal","message":"internal error"}}"#;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -188,6 +190,8 @@ struct Reply {
 #[derive(Default)]
 struct Link {
 	queue: RefCell<VecDeque<Reply>>,
+	held_replies: Cell<usize>,
+	held_bytes: Cell<usize>,
 	ready: Notify,
 	inflight: Cell<usize>,
 	closed: Cell<bool>,
@@ -197,11 +201,20 @@ struct Link {
 }
 impl Link {
 	fn reply(&self, r: Reply) {
+		if self.closed.get() { return; }
+		let bytes = r.text.len().saturating_add(HEADER);
+		if self.held_replies.get() >= MAX_HELD_REPLIES || bytes > MAX_HELD_REPLY_BYTES.saturating_sub(self.held_bytes.get()) {
+			self.close();
+			return;
+		}
+		self.held_replies.set(self.held_replies.get() + 1);
+		self.held_bytes.set(self.held_bytes.get() + bytes);
 		self.queue.borrow_mut().push_back(r);
 		self.ready.notify_one();
 	}
 	fn close(&self) {
-		self.closed.set(true);
+		if self.closed.replace(true) { return; }
+		self.queue.borrow_mut().clear();
 		self.closing.notify_waiters();
 		self.ready.notify_one();
 	}
@@ -438,6 +451,7 @@ where
 			spawn_local(replies(Rc::clone(&hub), Rc::clone(&link), write));
 			tokio::select! {
 				_ = frames(&hub, &link, &who, read) => {}
+				_ = link.closing.notified() => {}
 				_ = idle(&hub, &link), if counted => {} // the test hooks are no client: a case's short limit is not theirs
 				_ = hub.stop.notified() => {}
 				_ = ended(session.as_ref()) => {}
@@ -498,6 +512,7 @@ async fn frames<R: AsyncRead + Unpin>(hub: &Rc<Hub>, link: &Rc<Link>, who: &Who,
 				}
 				Who::Hooks => hooked(hub, link, id, &text),
 			}
+			if link.closed.get() { return; }
 			at += HEADER + n;
 		}
 		buf.drain(..at);
@@ -540,7 +555,7 @@ fn hooked(hub: &Rc<Hub>, link: &Rc<Link>, id: u32, text: &str) {
 
 fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str) {
 	let most = hub.o.max_inflight_per_connection;
-	if link.inflight.get() >= most || link.queue.borrow().len() >= MAX_HELD_REPLIES {
+	if link.inflight.get() >= most {
 		let text = format!(r#"{{"ok":false,"error":{{"code":"ResourceExhausted","message":"at most {most} calls at once per connection"}}}}"#);
 		link.reply(Reply { mark: 0, id, text, counted: false });
 		return;
@@ -584,6 +599,7 @@ async fn wait(hub: Rc<Hub>, link: Rc<Link>, id: u32, mut parked: Box<Parked>, mu
 	let wakes = hub.service.borrow().options().wake_on_commit;
 	let mut last = None; // the first look after the call's own has no gap to keep, as commitSignal
 	loop {
+		if link.closed.get() { return; }
 		let ms = parked.sleep_ms(hub.service.borrow().now(), wakes);
 		let pause = sleep(Duration::from_millis(ms.min(MAX_TIMER_MS) as u64));
 		if wakes {
@@ -622,12 +638,16 @@ async fn replies<W: AsyncWrite + Unpin>(hub: Rc<Hub>, link: Rc<Link>, mut write:
 	let mut durable = hub.durable.subscribe();
 	let mut out = Vec::with_capacity(16 * 1024);
 	loop {
+		if link.closed.get() { return; }
+		let (mut sent, mut charged) = (0, 0);
 		let upto = *durable.borrow_and_update();
 		let failed = hub.failed.get();
 		{
 			let mut queue = link.queue.borrow_mut();
 			while queue.front().is_some_and(|r| r.mark <= upto || failed) {
 				let r = queue.pop_front().expect("looked at");
+				sent += 1;
+				charged += HEADER + r.text.len();
 				put(&mut out, r.id, if r.mark > upto { INTERNAL } else { &r.text });
 				if r.counted {
 					link.inflight.set(link.inflight.get() - 1);
@@ -635,9 +655,14 @@ async fn replies<W: AsyncWrite + Unpin>(hub: Rc<Hub>, link: Rc<Link>, mut write:
 			}
 		}
 		if !out.is_empty() {
-			if write.write_all(&out).await.is_err() {
-				return link.close();
-			}
+			let written = tokio::select! {
+				biased;
+				_ = link.closing.notified() => return,
+				r = write.write_all(&out) => r,
+			};
+			if written.is_err() { return link.close(); }
+			link.held_replies.set(link.held_replies.get() - sent);
+			link.held_bytes.set(link.held_bytes.get() - charged);
 			out.clear();
 			link.touch();
 			continue;
@@ -655,10 +680,59 @@ async fn replies<W: AsyncWrite + Unpin>(hub: Rc<Hub>, link: Rc<Link>, mut write:
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use phi_service::Options;
+	use phi_store::{system_random, Ledger, MemoryLedger, Store};
+
+	fn memory_hub() -> Rc<Hub> {
+		let store = Store::open(Ledger::Memory(MemoryLedger::default()), system_random).unwrap();
+		Rc::new(Hub { service: RefCell::new(Service::new(store, Options::single_peer("local"))), handed: Cell::new(0), commits: Notify::new(), due: Notify::new(), durable: watch::channel(0).0, failed: Cell::new(false), open: Cell::new(0), stop: Notify::new(), hook: RefCell::new(None), o: ServeOptions::new(Listen::Unix("unused".into()), "local") })
+	}
 
 	#[test]
 	fn a_listener_outlives_what_one_accept_runs_into() {
 		for code in [23, 24, 71, 103, 104, 105, 12] { assert!(passing(&io::Error::from_raw_os_error(code)), "{code}"); }
 		for code in [9, 22, 88] { assert!(!passing(&io::Error::from_raw_os_error(code)), "{code}"); }
 	}
+
+	#[tokio::test(flavor = "current_thread")]
+	async fn the_reply_budget_includes_a_blocked_write_and_closing_cancels_it() {
+		tokio::task::LocalSet::new().run_until(async {
+			let hub = memory_hub();
+			let link = Rc::new(Link::default());
+			let (_read, write) = tokio::io::duplex(1);
+			link.reply(Reply { mark: 0, id: 0, text: "x".repeat(64 * 1024), counted: false });
+			let writer = spawn_local(replies(hub, Rc::clone(&link), write));
+			tokio::task::yield_now().await;
+			assert!(link.queue.borrow().is_empty(), "the first reply is now held by the blocked writer");
+			assert!(link.held_bytes.get() > 0);
+			for id in 1..MAX_HELD_REPLIES as u32 {
+				link.reply(Reply { mark: 0, id, text: "x".repeat(64 * 1024), counted: false });
+				if link.closed.get() { break; }
+			}
+			assert!(link.closed.get(), "the byte budget closes the connection before the reply-count limit");
+			assert!(link.held_bytes.get() <= MAX_HELD_REPLY_BYTES);
+			assert!(link.queue.borrow().is_empty());
+			timeout(Duration::from_secs(1), writer).await.unwrap().unwrap();
+		}).await;
+	}
+	#[tokio::test(flavor = "current_thread")]
+	async fn closing_before_a_parked_task_starts_does_not_lose_its_cancellation() {
+		let hub = memory_hub();
+		let conn = Conn { peer_id: Some("local".into()), identity: None, proof_key: None };
+		let parked = {
+			let mut service = hub.service.borrow_mut();
+			let Outcome::Done { text, .. } = service.handle_text(r#"{"method":"generation"}"#, &conn, 262136.0) else { panic!("generation waits") };
+			let value = phi_json::parse(&text).unwrap();
+			let generation = value.get("result").unwrap().get("generation").unwrap().to_json_text();
+			let call = format!(r#"{{"method":"take","request":{{"generation":{generation},"requestId":"parked"}},"args":{{"timeoutMs":60000,"waitMs":25000}}}}"#);
+			let Outcome::Wait(parked) = service.handle_text(&call, &conn, 262136.0) else { panic!("take did not park") };
+			parked
+		};
+		hub.committed();
+		let seen = hub.handed.get();
+		let link = Rc::new(Link::default());
+		link.close();
+		timeout(Duration::from_secs(1), wait(hub, link, 1, parked, seen)).await.unwrap();
+	}
+
 }

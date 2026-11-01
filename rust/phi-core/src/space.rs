@@ -12,8 +12,8 @@
 //! running commit, its byte budget and the expiry watermark. The watermark is not only a speed-up: `nextExpiry` answers
 //! from it, and it can be stale low.
 //!
-//! A space with anything not ported yet (membership, restore, completion profiles, run gates, …) is refused with `NotPorted` before anything happens, and so is an argument outside the shapes
-//! ported so far.
+//! Unsupported document fields (including unported restore/replication state) are refused with `NotPorted` before
+//! operations change them. Member admission, completion profiles and RunGates are supported.
 use crate::state::{EntryRec, RegRec, SpaceState, TxnRec, WaiterRec};
 use crate::stream::{self, Collected, Open};
 use phi_json::{number_text, obj, Json, Object, FOREVER};
@@ -245,7 +245,7 @@ fn draft_parts(entry: &Json) -> Result<(String, Object)> {
 		_ => return Err(illegal("entry needs a type")),
 	};
 	match entry.get("fields") {
-		Some(Json::Object(f)) => Ok((type_, f.clone())),
+		Some(Json::Object(f)) => Ok((type_, f.iter().map(|(k, v)| (k, v.json_copy())).collect())),
 		_ => Err(illegal("entry fields must be an object")),
 	}
 }
@@ -594,7 +594,7 @@ impl Space {
 				_ => false,
 			};
 			if !fine {
-				return Err(not_ported(format!("the space's {k} (R1 has not ported it yet)")));
+				return Err(not_ported(format!("the space's {k} (not supported by this core)")));
 			}
 		}
 		for r in &self.state.regs {

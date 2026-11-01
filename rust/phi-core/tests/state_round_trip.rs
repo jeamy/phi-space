@@ -1,4 +1,4 @@
-// The first gate of R1 (docs/rust-portierung.md): states the TypeScript core wrote come back unchanged from the Rust
+// The first gate of R1 (docs/rust-portierung.en.md): states the TypeScript core wrote come back unchanged from the Rust
 // model: the same canonical form and the same JSON.stringify byte count (what every budget is computed from).
 mod common;
 use common::TsDriver;

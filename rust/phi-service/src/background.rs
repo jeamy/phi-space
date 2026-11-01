@@ -40,7 +40,7 @@ impl Service {
 					let gone = x.get("tries").and_then(Json::as_f64).unwrap_or(0.0) >= MAX_TRIES || dropped.contains(&key_of(x));
 					if gone {
 						lost += 1;
-						if let Some(t) = x.get("txn").filter(|t| truthy(t)) {
+						if let Some(t) = x.get("txn").filter(|t| phi_core::space::truthy(Some(t))) {
 							release.push(t.clone());
 						}
 					}
@@ -102,7 +102,6 @@ impl Service {
 	}
 }
 
-fn truthy(v: &Json) -> bool { !matches!(v, Json::Null | Json::Bool(false)) && v.as_str() != Some("") }
 fn key_of(e: &Json) -> (String, String) { (e.get("eventId").map_or_else(String::new, Json::to_json_text), e.get("seq").map_or_else(String::new, Json::to_json_text)) }
 fn outbox(s: &Space) -> &[Json] { s.state.rest.get("outbox").and_then(Json::as_array).map_or(&[], Vec::as_slice) }
 
@@ -111,7 +110,7 @@ fn undeliverable(s: &Space, now: f64) -> Vec<(String, String)> {
 	let due = outbox(s).iter().filter(|e| e.get("retryAt").and_then(Json::as_f64).unwrap_or(0.0) <= now).take(DELIVERY_BATCH);
 	due.filter(|e| {
 		let numeric = matches!(e.get("target"), Some(Json::Number(_)));
-		let gone = e.get("txn").filter(|t| truthy(t)).is_some_and(|t| !t.as_str().is_some_and(|t| s.state.txns.iter().any(|x| x.id == t)));
+		let gone = e.get("txn").filter(|t| phi_core::space::truthy(Some(t))).is_some_and(|t| !t.as_str().is_some_and(|t| s.state.txns.iter().any(|x| x.id == t)));
 		!numeric || gone
 	})
 	.map(key_of)

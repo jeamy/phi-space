@@ -1,7 +1,7 @@
 //! The Member side of remote runs (src/run-member.ts): the controller signs every RunGate command, this host checks it against
 //! the pinned controller key, applies it to its own Space and signs the ACK. A replayed instruction changes nothing new,
 //! because the gate answers a repeated command with its stored confirmation.
-use crate::auth::{to_base64, verify_detached, Algorithm, Signer};
+use crate::auth::{to_base64, verify_value, Algorithm, Signer};
 use phi_core::space::{error, CoreError};
 use phi_json::{Json, Object};
 use phi_service::Service;
@@ -20,23 +20,14 @@ pub struct Pin {
 	pub public_key: String,
 }
 
-pub fn algorithm_name(a: Algorithm) -> &'static str {
-	match a {
-		Algorithm::Ed25519 => "ed25519",
-		Algorithm::EcdsaP256 => "ecdsa-p256",
-	}
-}
+pub fn algorithm_name(a: Algorithm) -> &'static str { a.name() }
 
 fn signed_text(kind: &str, v: &Json) -> R<String> { Ok(format!("phi-spaces/run-gate-{kind}/v1\n{}", v.canonical().map_err(|_| denied(format!("invalid run gate {kind} signature")))?)) }
 
 /// `verifyRun`.
 fn verify_run(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
-	let bad = || denied(format!("invalid run gate {kind} signature"));
-	let (Some(value), Some(signature)) = (t.get("value"), text(t, "signature")) else { return Err(bad()) };
-	if text(t, "issuer") != Some(&pin.issuer) || text(t, "algorithm") != Some(algorithm_name(pin.algorithm)) || !verify_detached(pin.algorithm, &pin.public_key, signed_text(kind, value)?.as_bytes(), signature) {
-		return Err(bad());
-	}
-	Ok(value.clone())
+	verify_value(t, &pin.issuer, pin.algorithm, &pin.public_key, &format!("phi-spaces/run-gate-{kind}/v1\n"))
+		.cloned().ok_or_else(|| denied(format!("invalid run gate {kind} signature")))
 }
 
 /// `signRun`.

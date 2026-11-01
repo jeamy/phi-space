@@ -1,4 +1,4 @@
-// R2, slice 1 (docs/rust-portierung.md): the random walk of R1, each line a commit of a Space document, through the
+// R2, slice 1 (docs/rust-portierung.en.md): the random walk of R1, each line a commit of a Space document, through the
 // TypeScript store host (test/support/store-driver.ts, its own SQLite file) and through the Rust one (phi_store's
 // SpaceHost over its file). Answers and state hashes are compared step for step, and at the end the rows of both files
 // (documents and parts, values compared canonically). The host takes other branches than the core driver: every commit

@@ -29,8 +29,8 @@ fn at_value(at: Option<f64>) -> rusqlite::types::Value {
 	}
 }
 
-/// Applies `ops` inside the caller's transaction and counts it as one commit.
-pub fn apply_ops(db: &Connection, ops: &[WriteOp]) -> rusqlite::Result<()> {
+/// Applies rows without advancing the sequence; a writer batch advances it once for all its commits.
+pub(crate) fn apply_rows(db: &Connection, ops: &[WriteOp]) -> rusqlite::Result<()> {
 	for op in ops {
 		match op {
 			WriteOp::Doc { kind, key, version, value } => {
@@ -48,6 +48,5 @@ pub fn apply_ops(db: &Connection, ops: &[WriteOp]) -> rusqlite::Result<()> {
 			}
 		}
 	}
-	db.prepare_cached(SEQ)?.execute([])?;
 	Ok(())
 }

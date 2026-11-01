@@ -1,7 +1,7 @@
 //! The writer of the SQLite store (src/store/sqlite-writer.ts), on a thread of its own: a synchronous COMMIT with
 //! synchronous=FULL waits for the disk. It takes the commits handed to it and writes whatever came while the previous
 //! batch was written as one batch, in one transaction; each commit is acknowledged once its batch is durable.
-use crate::ops::{apply_ops, WriteOp};
+use crate::ops::{apply_rows, WriteOp, SEQ};
 use rusqlite::Connection;
 use std::path::Path;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -178,10 +178,10 @@ fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>, waker: Ar
 					Err("an injected fault before the commit".into())
 				}
 				(None, _) => {
-					let ops: Vec<WriteOp> = commits.iter().flat_map(|(ops, _)| ops.iter().cloned()).collect();
 					let r = (|| -> rusqlite::Result<()> {
 						db.execute_batch("BEGIN IMMEDIATE")?;
-						apply_ops(&db, &ops)?;
+						for (ops, _) in &commits { apply_rows(&db, ops)?; }
+						db.prepare_cached(SEQ)?.execute([])?;
 						hold("before-commit", batch);
 						db.execute_batch("COMMIT")?;
 						hold("after-commit", batch);

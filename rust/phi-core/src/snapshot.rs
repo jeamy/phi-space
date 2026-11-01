@@ -4,6 +4,7 @@
 //! `snapshotTtlMs`.
 use crate::space::{byte_page, bytes, error, js_string, strict_eq, until, Result, Space, Template};
 use phi_json::{hex, number_text, obj, Json};
+use std::rc::Rc;
 
 #[derive(Clone, Debug)]
 struct Record {
@@ -15,7 +16,7 @@ struct Record {
 	rev: f64,
 	expires: f64,
 	bytes: f64,
-	items: Vec<Json>,
+	items: Rc<[Json]>,
 	/// Its last page was handed out: kept for a retry of that page, but the first to go when room is needed.
 	read: bool,
 }
@@ -55,7 +56,7 @@ impl Snapshots {
 		let lim = space.limits();
 		let stream_id = space.stream_id();
 		let txn = o.get("txn").filter(|t| !t.is_null());
-		let query = obj! { "tmpl" => tmpl.clone(), "txn" => txn.cloned().unwrap_or(Json::Null) }.canonical().expect("finite");
+		let query = obj! { "tmpl" => tmpl.clone(), "txn" => txn.cloned().unwrap_or(Json::Null) }.canonical().map_err(|_| error("TypeError", "canonical JSON: non-finite number"))?;
 		let mut token = o.get("token").cloned();
 		let mut offset = 0.0;
 		if let Some(after) = o.get("after").filter(|a| !a.is_null()) {
@@ -82,23 +83,24 @@ impl Snapshots {
 				let Json::Array(items) = space.list(now, &template, txn, o.get("limit").filter(|l| !l.is_null()), owner)? else { unreachable!("list answers an array") };
 				// the whole answer in one page: no snapshot, no token
 				let rev = space.revision()?;
+				let size = 2.0 + items.iter().map(bytes).sum::<f64>() + items.len().saturating_sub(1) as f64;
 				let cap = match o.get("maxBytes").filter(|m| !m.is_null()) {
 					None => Some(lim.max_frame_bytes),
 					Some(Json::Number(m)) => Some(m.min(lim.max_frame_bytes)),
 					Some(_) => None,
 				};
 				if let Some(cap) = cap.filter(|&c| safe_integer(c) && c >= 1.0) {
-					let page = obj! { "items" => items.clone(), "next" => Json::Null, "streamId" => stream_id.as_str(), "rev" => rev.clone() };
-					if bytes(&page) <= cap {
+					let mut page = obj! { "items" => Vec::<Json>::new(), "next" => Json::Null, "streamId" => stream_id.as_str(), "rev" => rev.clone() };
+					if bytes(&page) - 2.0 + size <= cap {
+						page.as_object_mut().expect("page object").insert("items", Json::Array(items));
 						return Ok(page);
 					}
 				}
-				let size = bytes(&Json::Array(items.clone()));
 				if size > lim.max_snapshot_bytes {
 					return Err(error("ResourceExhausted", "the snapshot exceeds maxSnapshotBytes"));
 				}
 				let token = format!("ss{}", hex(&space.random_bytes(16)));
-				Record { snapshot_epoch: 0.0, token, stream_id: stream_id.clone(), query, owner: owner.cloned(), rev: rev.as_f64().unwrap_or(0.0), expires: until(now, lim.snapshot_ttl_ms), bytes: size, items, read: false }
+				Record { snapshot_epoch: 0.0, token, stream_id: stream_id.clone(), query, owner: owner.cloned(), rev: rev.as_f64().unwrap_or(0.0), expires: until(now, lim.snapshot_ttl_ms), bytes: size, items: items.into(), read: false }
 			}
 		};
 		if !safe_integer(offset) || offset < 0.0 || offset > rec.items.len() as f64 {

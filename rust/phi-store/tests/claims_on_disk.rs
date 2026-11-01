@@ -1,4 +1,4 @@
-// R2, slice 3 (docs/rust-portierung.md): the claims of a Space stay on the disk. A growing stock of claims is admitted
+// R2, slice 3 (docs/rust-portierung.en.md): the claims of a Space stay on the disk. A growing stock of claims is admitted
 // and decided; memory holds none of the decided ones, no operation reads the whole map, and the sweep drops them in
 // bounded steps through the store's indexes. The same lines through the TypeScript store give the same states and rows.
 #[path = "../../phi-core/tests/common/mod.rs"]

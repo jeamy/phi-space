@@ -237,6 +237,28 @@ fn addresses() {
 }
 
 #[test]
+fn a_client_that_never_reads_is_disconnected_and_does_not_hold_other_clients() {
+	let d = dir("backpressure");
+	let server = try_start(&d, memory, |_, options| options.max_calls_per_window = 1_000_000_000.0).unwrap();
+	let mut client = Client::new(&server);
+	client.0.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
+	let mut burst = Vec::new();
+	let text = r#"{"method":"hello"}"#;
+	for id in 0..100_000u32 {
+		burst.extend_from_slice(&(text.len() as u32).to_be_bytes());
+		burst.extend_from_slice(&id.to_be_bytes());
+		burst.extend_from_slice(text.as_bytes());
+	}
+	if let Err(e) = client.0.write_all(&burst) {
+		assert!(matches!(e.kind(), ErrorKind::BrokenPipe | ErrorKind::ConnectionReset), "{e}");
+	}
+	if let Err(e) = std::io::copy(&mut client.0, &mut std::io::sink()) {
+		assert_eq!(e.kind(), ErrorKind::ConnectionReset);
+	}
+	assert_eq!(parse(&Client::new(&server).call(COUNT)).unwrap().get("ok"), Some(&Json::Bool(true)));
+}
+
+#[test]
 fn a_failed_second_bind_leaves_no_socket_file_of_the_first() {
 	let d = dir("second-bind");
 	let (first, second) = (d.join("first.sock"), d.join("second.sock"));

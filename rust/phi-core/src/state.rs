@@ -158,14 +158,17 @@ impl Entries {
 	}
 	/// Keeps the records `keep` accepts, in order.
 	pub fn retain(&mut self, mut keep: impl FnMut(&EntryRec) -> bool) {
-		let mut i = 0;
-		while i < self.items.len() {
-			if keep(&self.items[i]) {
-				i += 1;
+		let mut kept = 0;
+		let log = &mut self.log;
+		self.items.retain(|entry| {
+			if keep(entry) {
+				kept += 1;
+				true
 			} else {
-				self.remove(i);
+				if let Some(log) = log { log.push(EntryUndo::Removed(kept, entry.clone())); }
+				false
 			}
-		}
+		});
 	}
 	/// The record at `i`, to change.
 	pub fn get_mut(&mut self, i: usize) -> &mut EntryRec {
@@ -901,5 +904,26 @@ impl SpaceState {
 		if let Some(s) = &self.stream { o.insert("stream", s.to_json_with(head)); }
 		for (k, v) in self.rest.iter() { if !o.contains_key(k) { o.insert(k, v.clone()); } }
 		Json::Object(o)
+	}
+}
+
+#[cfg(test)]
+mod entry_tests {
+	use super::*;
+	fn entry(i: usize) -> EntryRec {
+		EntryRec { id: format!("e{i}"), type_: "Task".into(), types: vec!["Task".into()], fields: Object::new(), expires: 1000.0, written_under: None, taken_by: None, read_by: vec![], owner: Json::Null, size: None, restored_unverified: false, rest: Object::new() }
+	}
+	#[test]
+	fn compaction_undo_restores_order_across_multiple_removals_and_later_edits() {
+		let mut entries = Entries::from((0..20).map(entry).collect::<Vec<_>>());
+		let original = entries.clone();
+		entries.track();
+		entries.retain(|e| e.id[1..].parse::<usize>().unwrap() % 3 != 0);
+		entries.push(entry(21));
+		entries.get_mut(2).expires = 2000.0;
+		entries.retain(|e| e.expires == 1000.0 && e.id != "e7");
+		let changes = entries.untrack();
+		entries.undo(changes);
+		assert_eq!(entries, original);
 	}
 }

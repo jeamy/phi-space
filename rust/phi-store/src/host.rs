@@ -2,23 +2,21 @@
 //! its own on the document, rolled back when it fails, written as rows when it succeeds (the head whole, the parts by
 //! what the commit changed: O(changes)), and acknowledged once those rows are durable.
 use crate::files::{Result, StoreError};
-use crate::ledger::{MemoryLedger, Ords, SqliteLedger, StoredDoc};
+use crate::ledger::{MemoryLedger, SqliteLedger, StoredDoc};
 use crate::ops::WriteOp;
 use crate::writer::{Compaction, Durable};
-use crate::parts::{id_of, SPACE_PARTS};
+use crate::parts::{id_of, CLAIM_INDEX, SPACE_PARTS};
 use phi_core::space::{Changes, CoreError, Random, Space};
 use phi_core::state::{EntryUndo, SpaceState};
 use phi_core::{ClaimSource, Claims, DiskClaims};
-use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
 fn claim_source(l: &SqliteLedger, kind: &str, key: Option<&str>) -> Result<Arc<dyn ClaimSource>> {
 	Ok(Arc::new(crate::disk::SqliteClaims::open(l.path(), kind, key.unwrap_or(""), "rpc.claims")?))
 }
-use phi_json::Json;
-use std::collections::{HashMap, HashSet};
 
 /// The schema version of a Space document (src/doc.ts, src/spaces.ts).
 pub const SPACE_VERSION: i64 = 5;
@@ -51,7 +49,7 @@ pub struct SpaceHost {
 	durable: u64,
 	/// Commits on their way to the disk, oldest first.
 	unsettled: VecDeque<(u64, Durable)>,
-	watches: Vec<Arc<Mutex<WatchSlot>>>,
+	watches: Vec<Weak<Mutex<WatchSlot>>>,
 	/// Rows of another document that belong to the next commit of this one (the registry).
 	pub also: Vec<WriteOp>,
 }
@@ -78,9 +76,6 @@ impl Watch {
 	pub fn closed(&self) -> bool { self.0.lock().unwrap().closed }
 }
 
-fn claim_index(v: &Json) -> (Option<f64>, Option<String>, Option<i64>) {
-	(v.get("decidedAt").and_then(Json::as_f64), v.get("generation").and_then(Json::as_str).map(str::to_owned), Some(i64::from(phi_core::space::truthy(v.get("resultExpired")))))
-}
 
 impl SpaceHost {
 	/// The host over `ledger` for the Space document `kind`/`key`: read from the store, or a new one.
@@ -232,9 +227,7 @@ impl SpaceHost {
 			if let Some(Claims::Disk(d)) = self.space.state.rpc.as_mut().map(|r| &mut r.claims) {
 				d.settle(self.durable);
 			}
-			for w in &self.watches {
-				w.lock().unwrap().pending = Some(self.durable);
-			}
+			self.publish_watches();
 		}
 		let failed = failed.or_else(|| match &*self.ledger.borrow() {
 			Ledger::Sqlite(l) => l.failure(),
@@ -254,10 +247,19 @@ impl SpaceHost {
 		Ok(&self.space.state)
 	}
 
+	fn publish_watches(&mut self) {
+		self.watches.retain(|weak| {
+			let Some(slot) = weak.upgrade() else { return false };
+			slot.lock().unwrap().pending = Some(self.durable);
+			true
+		});
+	}
+
 	/// A watch from now on.
 	pub fn watch(&mut self) -> Watch {
+		self.watches.retain(|slot| slot.strong_count() > 0);
 		let slot = Arc::new(Mutex::new(WatchSlot::default()));
-		self.watches.push(slot.clone());
+		self.watches.push(Arc::downgrade(&slot));
 		Watch(slot)
 	}
 
@@ -287,13 +289,12 @@ impl SpaceHost {
 		let shared = self.ledger.clone();
 		let mut guard = shared.borrow_mut();
 		let Ledger::Sqlite(ledger) = &mut *guard else {
-			self.also.clear();
+			let Ledger::Memory(ledger) = &mut *guard else { unreachable!() };
+			ledger.write_documents(std::mem::take(&mut self.also))?;
 			self.exists = true;
 			self.handed += 1;
 			self.durable = self.handed; // memory: the host holds the only copy
-			for w in &self.watches {
-				w.lock().unwrap().pending = Some(self.durable);
-			}
+			self.publish_watches();
 			return Ok(());
 		};
 		let kind = self.kind.clone();
@@ -366,7 +367,7 @@ impl SpaceHost {
 			for k in &c.claims {
 				parts.push(match r.claims.get(k) {
 					Some(v) => {
-						let (at, grp, flag) = claim_index(&v);
+						let (at, grp, flag) = CLAIM_INDEX.values(&v);
 						WriteOp::Part { kind: kind.clone(), key: key.clone(), part: "rpc.claims".into(), id: k.clone(), ord: 0, value: v.to_json_text(), at, grp, flag }
 					}
 					None => WriteOp::PartDel { kind: kind.clone(), key: key.clone(), part: "rpc.claims".into(), id: k.clone() },
@@ -413,7 +414,7 @@ impl SpaceHost {
 	/// Writes what is pending and closes the store: commits still on their way are written first (`drain` says whether
 	/// they were), watches end.
 	pub fn close(self) {
-		for w in &self.watches {
+		for w in self.watches.iter().filter_map(Weak::upgrade) {
 			w.lock().unwrap().closed = true;
 		}
 		drop(self.space); // its claims connection goes before the owner lock
@@ -424,11 +425,25 @@ impl SpaceHost {
 	}
 	/// Waits for everything handed over; the store's failure, if it failed.
 	pub fn drain(&mut self) -> Result<()> { self.durable(self.handed) }
-	#[doc(hidden)]
-	pub fn ords_of(&mut self) -> Option<Ords> {
-		match &mut *self.ledger.borrow_mut() {
-			Ledger::Sqlite(l) => Some(l.ords(&self.kind, self.key.as_deref()).clone()),
-			Ledger::Memory(_) => None,
-		}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn cancelled_watches_release_slots_and_do_not_accumulate() {
+		let mut host = SpaceHost::open(Ledger::Memory(MemoryLedger::default()), "phi-spaces.space", None, phi_core::driver::seeded("watch")).unwrap();
+		for _ in 0..1000 { drop(host.watch()); }
+		let active = host.watch();
+		assert_eq!(host.watches.len(), 1);
+		host.commit(|_| Ok(())).unwrap().unwrap();
+		assert_eq!(active.poll(), Some(host.durable_count()));
+		drop(active);
+		host.commit(|_| Ok(())).unwrap().unwrap();
+		assert!(host.watches.is_empty());
+		let last = host.watch();
+		host.close();
+		assert!(last.closed());
 	}
 }

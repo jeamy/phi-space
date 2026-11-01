@@ -1,4 +1,4 @@
-// R2, slice 2 (docs/rust-portierung.md): crash and reopen, as test/test-own-store.test.ts does for the TypeScript store.
+// R2, slice 2 (docs/rust-portierung.en.md): crash and reopen, as test/test-own-store.test.ts does for the TypeScript store.
 // A child process (this test binary again, `crash_child`) commits pairs of entries until it is killed with SIGKILL, at a
 // random moment or at a pause of its writer thread (PHI_SPACES_WRITER_PAUSE, the same switch as sqlite-writer.ts):
 // every commit it acknowledged must be there, never half of one, and both the Rust and the TypeScript store read the

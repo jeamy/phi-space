@@ -10,6 +10,12 @@ pub struct DiskIndex {
 	pub flag: &'static str,
 }
 
+impl DiskIndex {
+	pub(crate) fn values(&self, value: &Json) -> (Option<f64>, Option<String>, Option<i64>) {
+		(value.get(self.at).and_then(Json::as_f64), value.get(self.group).and_then(Json::as_str).map(str::to_owned), Some(i64::from(phi_core::space::truthy(value.get(self.flag)))))
+	}
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PartKind {
 	Array,
@@ -28,7 +34,7 @@ impl PartDef {
 	pub fn name(&self) -> String { self.path.join(".") }
 }
 
-const CLAIM_INDEX: DiskIndex = DiskIndex { at: "decidedAt", group: "generation", flag: "resultExpired" };
+pub(crate) const CLAIM_INDEX: DiskIndex = DiskIndex { at: "decidedAt", group: "generation", flag: "resultExpired" };
 /// The parts of a Space document (src/doc.ts `SPACE_PARTS`), in that order.
 pub const SPACE_PARTS: &[PartDef] = &[
 	PartDef { path: &["entries"], kind: PartKind::Array, disk: None },

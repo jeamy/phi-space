@@ -1,4 +1,4 @@
-// test/vectors/canonical.json and the hash parts of crypto.json (docs/rust-portierung.md, R1): what the TypeScript code
+// test/vectors/canonical.json and the hash parts of crypto.json (docs/rust-portierung.en.md, R1): what the TypeScript code
 // computed, reproduced here. The vector files are read with this crate's own parser.
 use hmac::{Hmac, Mac};
 use phi_json::{digest_json, hex, number_text, obj, parse, Json, Object, ParseError, parse_repairing};

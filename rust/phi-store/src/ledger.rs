@@ -4,7 +4,7 @@ use crate::ops::WriteOp;
 use crate::parts::{head_of, id_of, join_parts, part_at, PartDef, PartKind, PartRow};
 use crate::writer::{Compaction, Durable, Synchronous, Waker, Writer, WriterOptions};
 use phi_json::{parse, Json};
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -27,15 +27,7 @@ fn doc_id(kind: &str, key: Option<&str>) -> String { format!("{kind}\u{0}{}", do
 fn index_of(p: &PartDef, v: &Json) -> (Option<f64>, Option<String>, Option<i64>) {
 	match &p.disk {
 		None => (None, None, None),
-		Some(ix) => (v.get(ix.at).and_then(Json::as_f64), v.get(ix.group).and_then(Json::as_str).map(str::to_owned), Some(i64::from(phi_core_truthy(v.get(ix.flag))))),
-	}
-}
-fn phi_core_truthy(v: Option<&Json>) -> bool {
-	match v {
-		None | Some(Json::Null) | Some(Json::Bool(false)) => false,
-		Some(Json::Number(x)) => *x != 0.0 && !x.is_nan(),
-		Some(Json::String(s)) => !s.is_empty(),
-		Some(_) => true,
+		Some(ix) => ix.values(v),
 	}
 }
 
@@ -110,7 +102,7 @@ impl SqliteLedger {
 	/// holds an empty map for it, and the caller asks its rows through a `SqliteClaims`.
 	pub fn load(&mut self, kind: &str, key: Option<&str>, parts: &[PartDef]) -> Result<Option<StoredDoc>> {
 		let db = &self.files.read;
-		let row: Option<(i64, String)> = db.query_row("SELECT version, value FROM documents WHERE kind = ? AND key = ?", params![kind, doc_key(key)], |r| Ok((r.get(0)?, r.get(1)?))).ok();
+		let row: Option<(i64, String)> = db.query_row("SELECT version, value FROM documents WHERE kind = ? AND key = ?", params![kind, doc_key(key)], |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
 		let Some((version, text)) = row else { return Ok(None) };
 		let mut value = parse(&text).map_err(|e| StoreError::Unavailable(format!("document {kind}: {e}")))?;
 		if !parts.is_empty() {
@@ -229,13 +221,34 @@ impl SqliteLedger {
 	}
 }
 
-/// The ledger of a store in memory: committed documents kept in the host only.
+/// A memory store: Space documents live in their hosts, side documents are committed here.
 #[derive(Default)]
 pub struct MemoryLedger {
 	docs: HashMap<String, StoredDoc>,
 }
 impl MemoryLedger {
 	pub fn load(&self, kind: &str, key: Option<&str>) -> Option<StoredDoc> { self.docs.get(&doc_id(kind, key)).cloned() }
-	pub fn put(&mut self, doc: StoredDoc) { self.docs.insert(doc_id(&doc.kind, doc.key.as_deref()), doc); }
-	pub fn retire(&mut self, kind: &str, key: Option<&str>) { self.docs.remove(&doc_id(kind, key)); }
+
+	/// Side documents (registry, signed instruction journals and epochs) belong to the same commit in memory too.
+	pub(crate) fn write_documents(&mut self, ops: Vec<WriteOp>) -> Result<()> {
+		let mut changes = Vec::new();
+		for op in ops {
+			match op {
+				WriteOp::Doc { kind, key, version, value } => {
+					let value = parse(&value).map_err(|e| StoreError::Unavailable(format!("document {kind}: {e}")))?;
+					let id = doc_id(&kind, Some(&key));
+					changes.push((id, Some(StoredDoc { kind, key: Some(key).filter(|k| !k.is_empty()), version, value })));
+				}
+				WriteOp::Retire { kind, key } => changes.push((doc_id(&kind, Some(&key)), None)),
+				_ => {}
+			}
+		}
+		for (id, value) in changes {
+			match value {
+				Some(doc) => { self.docs.insert(id, doc); }
+				None => { self.docs.remove(&id); }
+			}
+		}
+		Ok(())
+	}
 }

@@ -1,4 +1,4 @@
-// R2, slice 0 (docs/rust-portierung.md): the store file of test/vectors (store.sql, written by the TypeScript store) is
+// R2, slice 0 (docs/rust-portierung.en.md): the store file of test/vectors (store.sql, written by the TypeScript store) is
 // opened and read by the Rust store, every document written into a new file by it, and the two files hold the same
 // rows; the TypeScript store then opens the Rust file and its read-only session answers exactly as store.expected.json.
 #[path = "../../phi-core/tests/common/mod.rs"]

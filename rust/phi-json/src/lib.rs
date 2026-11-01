@@ -1,4 +1,4 @@
-//! JSON as phi-spaces' TypeScript code sees it (docs/wire-protokoll.md, section 6; test/vectors/canonical.json).
+//! JSON as phi-spaces' TypeScript code sees it (docs/wire-protokoll.en.md, section 6; test/vectors/canonical.json).
 //!
 //! - A value is what `JSON.parse` makes: numbers are IEEE-754 doubles, objects keep JavaScript's property order (array
 //!   index keys first, ascending, then the others in insertion order; a repeated key keeps its first place and its last
@@ -8,9 +8,10 @@
 //!   numbers refused. [`digest_json`] is the hex SHA-256 of it.
 //!
 //! A string with an unpaired surrogate cannot be a Rust `String`. `parse` refuses it (a stored value); the text of a call
-//! goes through `parse_repairing`, which writes U+FFFD for it as the service does (R-D10, docs/wire-protokoll.md).
+//! goes through `parse_repairing`, which writes U+FFFD for it as the service does (R-D10, docs/wire-protokoll.en.md).
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
+use std::collections::HashMap;
 
 pub const FOREVER: f64 = 9_007_199_254_740_991.0; // Number.MAX_SAFE_INTEGER
 
@@ -25,8 +26,12 @@ pub enum Json {
 }
 
 /// An object's properties in JavaScript's order.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Object(Vec<(String, Json)>);
+#[derive(Clone, Debug, Default)]
+pub struct Object(Vec<(String, Json)>, Option<HashMap<String, usize>>);
+
+impl PartialEq for Object {
+	fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
+}
 
 /// An array index as a property key: "0" or digits without a leading zero, at most 2^32 - 2.
 fn index_of(key: &str) -> Option<u32> {
@@ -38,11 +43,11 @@ fn index_of(key: &str) -> Option<u32> {
 }
 
 impl Object {
-	pub fn new() -> Self { Object(Vec::new()) }
+	pub fn new() -> Self { Self::default() }
 	pub fn len(&self) -> usize { self.0.len() }
 	pub fn is_empty(&self) -> bool { self.0.is_empty() }
-	pub fn get(&self, key: &str) -> Option<&Json> { self.0.iter().find(|(k, _)| k == key).map(|(_, v)| v) }
-	pub fn get_mut(&mut self, key: &str) -> Option<&mut Json> { self.0.iter_mut().find(|(k, _)| k == key).map(|(_, v)| v) }
+	pub fn get(&self, key: &str) -> Option<&Json> { self.position(key).map(|i| &self.0[i].1) }
+	pub fn get_mut(&mut self, key: &str) -> Option<&mut Json> { self.position(key).map(|i| &mut self.0[i].1) }
 	pub fn contains_key(&self, key: &str) -> bool { self.get(key).is_some() }
 	pub fn iter(&self) -> impl Iterator<Item = (&str, &Json)> { self.0.iter().map(|(k, v)| (k.as_str(), v)) }
 	pub fn keys(&self) -> impl Iterator<Item = &str> { self.0.iter().map(|(k, _)| k.as_str()) }
@@ -54,19 +59,31 @@ impl Object {
 			*slot = value;
 			return;
 		}
-		match index_of(&key) {
-			Some(n) => {
-				let at = self.0.iter().position(|(k, _)| index_of(k).is_none_or(|m| m > n)).unwrap_or(self.0.len());
-				self.0.insert(at, (key, value));
-			}
-			None => self.0.push((key, value)),
+		let at = index_of(&key).map_or(self.0.len(), |n| self.0.partition_point(|(k, _)| index_of(k).is_some_and(|m| m < n)));
+		if at == self.0.len() {
+			if let Some(index) = &mut self.1 { index.insert(key.clone(), at); }
+			self.0.push((key, value));
+			if self.1.is_none() && self.0.len() >= 32 { self.reindex(); }
+		} else {
+			self.0.insert(at, (key, value));
+			self.reindex();
 		}
 	}
-	/// The position of a key.
-	pub fn position(&self, key: &str) -> Option<usize> { self.0.iter().position(|(k, _)| k == key) }
+	/// The position of a key. Small objects avoid a second allocation; larger ones use a key index.
+	pub fn position(&self, key: &str) -> Option<usize> {
+		match &self.1 {
+			Some(index) => index.get(key).copied(),
+			None => self.0.iter().position(|(k, _)| k == key),
+		}
+	}
+	fn reindex(&mut self) {
+		self.1 = (self.0.len() >= 32).then(|| self.0.iter().enumerate().map(|(i, (k, _))| (k.clone(), i)).collect());
+	}
 	pub fn remove(&mut self, key: &str) -> Option<Json> {
-		let at = self.0.iter().position(|(k, _)| k == key)?;
-		Some(self.0.remove(at).1)
+		let at = self.position(key)?;
+		let value = self.0.remove(at).1;
+		self.reindex();
+		Some(value)
 	}
 }
 
@@ -303,6 +320,15 @@ pub fn safe_integer(n: f64) -> bool { n.trunc() == n && n.abs() <= FOREVER }
 pub fn is_sha256_hex(h: &str) -> bool { h.len() == 64 && h.bytes().all(|b| matches!(b, b'a'..=b'f' | b'0'..=b'9')) }
 
 impl Json {
+	/// A copy with JSON.stringify's numeric semantics, without encoding and parsing the text.
+	pub fn json_copy(&self) -> Json {
+		match self {
+			Json::Number(n) if !n.is_finite() => Json::Null,
+			Json::Array(a) => Json::Array(a.iter().map(Json::json_copy).collect()),
+			Json::Object(o) => Json::Object(o.iter().map(|(k, v)| (k, v.json_copy())).collect()),
+			other => other.clone(),
+		}
+	}
 	/// A key made of this value: `canonical`, and for a value without a canonical form (non-finite numbers, which validated
 	/// input does not hold) its JSON text, so that no caller has to end the process for it.
 	pub fn key_text(&self) -> String { self.canonical().unwrap_or_else(|_| self.to_json_text()) }

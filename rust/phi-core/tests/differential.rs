@@ -1,4 +1,4 @@
-// R1, slice 1 (docs/rust-portierung.md): random walks over entries, leases, expiry, the change stream and the commit
+// R1, slice 1 (docs/rust-portierung.en.md): random walks over entries, leases, expiry, the change stream and the commit
 // budget, each line run by the Rust core and by the TypeScript one (test/support/core-driver.ts), answer for answer and
 // state hash for state hash. Each walk has a seed of its own and small limits drawn from it, so the refusals, the deferred
 // expiry and the dropped log batches are reached, not only the paths a default space takes; the test counts which

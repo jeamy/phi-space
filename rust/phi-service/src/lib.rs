@@ -829,7 +829,7 @@ impl Service {
 				Some(d) => d,
 				None => deadline_of(now, Some(&Json::Number(timeout)))?,
 			};
-			let ad = s.admit(now, Some(&request), &method.as_str().into(), &args, &Json::Number(until), bound)?;
+			let ad = s.admit(now, Some(&request), &method.as_str().into(), &args.json_copy(), &Json::Number(until), bound)?;
 			let kind = ad.get("kind").and_then(Json::as_str);
 			let key = or_null(ad.get("key"));
 			if kind == Some("pending") {
@@ -1483,7 +1483,7 @@ fn admitted(s: &mut Space, now: f64, request: &Json, method: &str, args: &Json, 
 	if s.state.rpc.as_ref().and_then(|r| r.claims.get(&key)).is_none() {
 		s.assert_member_admission(method)?;
 	}
-	let ad = s.admit(now, Some(request), &method.into(), args, &Json::Number(deadline), bound)?;
+	let ad = s.admit(now, Some(request), &method.into(), &args.json_copy(), &Json::Number(deadline), bound)?;
 	match ad.get("kind").and_then(Json::as_str) {
 		Some("done") => Ok(Admission::Replay(or_null(ad.get("result")))),
 		Some("cancelled") => Err(error("OperationCancelled", format!("request {} was cancelled", request.get("requestId").and_then(Json::as_str).unwrap_or("")))),

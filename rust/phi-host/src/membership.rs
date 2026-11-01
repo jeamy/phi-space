@@ -1,7 +1,7 @@
 //! The Member side of membership (src/membership.ts): only pinned Control instructions change admission, and an uncertain
 //! transition stays frozen. Each step is one commit of the Space and the journal of its proofs, so a repeated instruction
 //! gets the proof it got before. The controller's side (R6) is not here.
-use crate::auth::{to_base64, verify_detached, Signer};
+use crate::auth::{to_base64, verify_detached, verify_value, Signer};
 use crate::control::take;
 use crate::run_member::{algorithm_name, AuthorityCheck, Pin};
 use phi_core::member::declared_supertypes;
@@ -26,12 +26,8 @@ fn signed_text(kind: &str, v: &Json) -> R<String> { Ok(format!("phi-spaces/membe
 
 /// `verifyMembership`.
 fn verify_membership(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
-	let bad = || routing("invalid membership signature");
-	let (Some(value), Some(signature)) = (t.get("value"), text(t, "signature")) else { return Err(bad()) };
-	if text(t, "issuer") != Some(&pin.issuer) || text(t, "algorithm") != Some(algorithm_name(pin.algorithm)) || !verify_detached(pin.algorithm, &pin.public_key, signed_text(kind, value)?.as_bytes(), signature) {
-		return Err(bad());
-	}
-	Ok(value.clone())
+	verify_value(t, &pin.issuer, pin.algorithm, &pin.public_key, &format!("phi-spaces/membership-{kind}/v1\n"))
+		.cloned().ok_or_else(|| routing("invalid membership signature"))
 }
 
 /// `verifyFederationPolicy`: the Control host signed it for this authority.
