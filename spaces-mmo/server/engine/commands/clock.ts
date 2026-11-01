@@ -5,7 +5,7 @@ import { FOREVER, NO_WAIT } from "phi-spaces";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, type CommandCtx } from "../context.ts";
 import { fieldsOf, type WorldClockFields } from "../../model.ts";
-import { calendar, formatWorldTime, MAX_RATE, MIN_RATE, paused, resumed, withRate, worldNow } from "../worldtime.ts";
+import { calendar, formatWorldTime, MAX_RATE, MIN_RATE, paused, resumed, withRate, withDecayRate, worldNow } from "../worldtime.ts";
 import { peek } from "../../space.ts";
 
 const ADMIN = "cmd:perm(Admin)";
@@ -19,7 +19,7 @@ async function readClock(c: CommandCtx) {
 const describe = (clock: WorldClockFields, now: number) => {
 	const t = calendar(worldNow(clock, now));
 	const speed = clock.rate === 1 ? "in Echtzeit" : clock.rate > 1 ? `${clock.rate}-fach beschleunigt` : `${clock.rate}-fach verlangsamt`;
-	return `${formatWorldTime(worldNow(clock, now))} Uhr (Welttag ${t.day + 1}); ${clock.paused ? "die Uhr ist angehalten" : `die Uhr läuft ${speed}`}.`;
+	return `${formatWorldTime(worldNow(clock, now))} Uhr (Welttag ${t.day + 1}); ${clock.paused ? "die Uhr ist angehalten" : `die Uhr läuft ${speed}`}, der Verfall ${(clock.decayRate ?? clock.rate) === 1 ? "in Echtzeit" : `${clock.decayRate ?? clock.rate}-fach`}.`;
 };
 
 const time: Command = {
@@ -33,7 +33,7 @@ const time: Command = {
 
 const clock: Command = {
 	key: "clock", aliases: ["uhr"], locks: ADMIN,
-	help: "clock [pause|weiter|rate <n>] – die Weltuhr: Stand, anhalten, fortsetzen, Tempo (Weltsekunden je Sekunde; 1 = Echtzeit)",
+	help: "clock [pause|weiter|rate <n>|verfall <n>] – die Weltuhr dieser Region: Stand, anhalten, fortsetzen, Lebenstakt und Verfallstakt (je Sekunde; 1 = Echtzeit). Das Admin-Fenster stellt beide für alle Regionen ein",
 	async func(c, arg) {
 		const { e, clock: now } = await readClock(c);
 		const [verb = "", value] = arg.trim().split(/\s+/);
@@ -45,7 +45,11 @@ const clock: Command = {
 			const rate = Number(value?.replace(",", "."));
 			if (!Number.isFinite(rate) || rate < MIN_RATE || rate > MAX_RATE) throw new CommandError(`So geht es: clock rate <n> mit ${MIN_RATE} bis ${MAX_RATE} (1 = Echtzeit, 60 = eine Weltminute je Sekunde).`);
 			next = withRate(now, rate, realNow);
-		} else if (verb && !/^(status|stand)$/i.test(verb)) throw new CommandError("So geht es: clock | clock pause | clock weiter | clock rate <n>");
+		} else if (/^(verfall|decay)$/i.test(verb)) {
+			const rate = Number(value?.replace(",", "."));
+			if (!Number.isFinite(rate) || rate < MIN_RATE || rate > MAX_RATE) throw new CommandError(`So geht es: clock verfall <n> mit ${MIN_RATE} bis ${MAX_RATE} (1 = echte Tage).`);
+			next = withDecayRate(now, rate, realNow);
+		} else if (verb && !/^(status|stand)$/i.test(verb)) throw new CommandError("So geht es: clock | clock pause | clock weiter | clock rate <n> | clock verfall <n>");
 		if (next) {
 			const t = await c.space.take({ type: e.type, id: e.id }, NO_WAIT, { txn: c.txn });
 			if (!t) throw new CommandError("Die Uhr wird gerade geändert; bitte gleich noch einmal.");

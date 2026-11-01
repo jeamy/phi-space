@@ -8,7 +8,7 @@
 //   on; only new plans of that epoch are refused (`bau`, `flur anlegen`) until the stock is enough again.
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BedFields, type BuildingFields, type EpochFields, type FieldFields } from "../../model.ts";
-import { worldNowOf } from "../clock.ts";
+import { decayNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, msgOptions, type CommandCtx } from "../context.ts";
 import { peek } from "../../space.ts";
@@ -49,7 +49,7 @@ export async function epochOf(space: SpaceLike, island: string | undefined, txn:
 /** The count (job "epoch"): each island of the region whose epoch changed gets its entry written anew and is told. */
 export async function epochTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<Array<{ island: string; epoch: number }>> {
 	if (!w.epochs) return [];
-	const now = await worldNowOf(space), limits = await thresholds(space), changed: Array<{ island: string; epoch: number }> = [];
+	const now = await decayNowOf(space), limits = await thresholds(space), changed: Array<{ island: string; epoch: number }> = [];
 	for (const [island, t] of await islandPoints(space, w, now)) {
 		const epoch = epochFor(t.points, limits, w.epochs.names.length);
 		if (epoch === (await epochOf(space, island))) continue;
@@ -100,7 +100,7 @@ const epoche: Command = {
 		if (!c.world.epochs) throw new CommandError("In dieser Welt gibt es keine Epochen.");
 		const island = islandOf(c.world, c.actor.room);
 		if (!island) throw new CommandError("Dieser Ort gehört zu keiner Insel.");
-		const now = await worldNowOf(c.space, c.txn), limits = await thresholds(c.space);
+		const now = await decayNowOf(c.space, c.txn), limits = await thresholds(c.space);
 		const t = (await islandPoints(c.space, c.world, now)).get(island) ?? { points: 0, buildings: 0, beds: 0, fields: 0 };
 		const epoch = await epochOf(c.space, island, c.txn), last = c.world.epochs.names.length;
 		const parts = `Bauten ${t.buildings}, Beete ${t.beds}, Äcker ${t.fields}`;

@@ -74,7 +74,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
 	};
 	const toggle = (labels: string[], add: boolean) => setAllowed((cur) => { const n = new Set(cur); for (const l of labels) (add ? n.add(l) : n.delete(l)); return n; });
 
-	if (!state) return <div className="panel admin"><h2>Admin</h2><p className="muted">{msg || "Lädt …"}</p></div>;
+	if (!state) return <div className="panel admin"><h2>Systemeinstellungen</h2><p className="muted">{msg || "Lädt …"}</p></div>;
 	const changed = state.fields.filter((f) => draft[f.key] !== String(f.value));
 	const models = state.models, chosen = [...allowed].sort();
 	// the select offers the allowed models grouped by provider, as the help site's picker does
@@ -84,7 +84,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
 	}, new Map<string, Model[]>())];
 	return (
 		<div className="panel admin">
-			<div className="admin-head"><h2>Admin · Einstellungen</h2><button className="help-x" onClick={onClose} aria-label="Schließen">×</button></div>
+			<div className="admin-head"><h2>Systemeinstellungen</h2><button className="help-x" onClick={onClose} aria-label="Schließen">×</button></div>
 
 			<h3>Modelle</h3>
 			{!models.enabled ? (

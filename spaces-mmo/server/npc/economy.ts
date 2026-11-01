@@ -239,7 +239,7 @@ function huter(): Script {
 		const fuels = Object.keys(n.world.fire.fuel);
 		const fuel = l.pack.filter((i) => fuels.includes(i.proto));
 		const f = await flameOf(n.space, beacon.beaconId), now = (await clockOf(n.space).now()) ?? 0; // world time
-		const piece = Math.min(...Object.values(n.world.fire.fuel)); // in world milliseconds
+		const piece = Math.min(...Object.values(n.world.fire.fuel)) * clockOf(n.space).patience(); // in world milliseconds
 		const weak = !f || f.until - now < piece * 3;
 		const homes = n.def.home ?? [beacon.room];
 		let acted = (await talk(n, l));

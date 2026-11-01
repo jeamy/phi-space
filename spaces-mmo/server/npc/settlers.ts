@@ -123,7 +123,7 @@ export function siedler(): Script {
 		const fire = w.beacons.find((b) => b.beaconId === n.def.beacon);
 		const fuels = Object.keys(w.fire.fuel), fuel = l.pack.filter((i) => fuels.includes(i.proto));
 		if (fire && fuel.length) {
-			const f = await flameOf(n.space, fire.beaconId), piece = Math.min(...Object.values(w.fire.fuel));
+			const f = await flameOf(n.space, fire.beaconId), piece = Math.min(...Object.values(w.fire.fuel)) * clockOf(n.space).patience();
 			if (!f || f.until - now < piece * 2) {
 				if (!(await travel(n, l, fire.room))) return;
 				if (Math.max(Math.abs(me.x - fire.x), Math.abs(me.y - fire.y)) <= 1) await n.act(`put ${fuel[0]!.name} in ${fire.aliases[0] ?? "feuer"}`);
@@ -147,7 +147,7 @@ export function siedler(): Script {
 		// repairs: what it built and that will not stand two more days
 		for (const b of buildings) {
 			const cost = w.building?.plans.find((p) => p.key === b.plan)?.repair ?? [];
-			if (b.untilWorldMs - now > 2 * 24 * 3600_000 || !cost.every((r) => count(l, r.proto) >= r.count)) continue;
+			if (b.untilWorldMs - ((await clockOf(n.space).decayNow()) ?? 0) > 2 * 24 * 3600_000 || !cost.every((r) => count(l, r.proto) >= r.count)) continue;
 			if (!(await besideOf(n, l, b))) await n.act(`repariere ${b.name}`);
 			return;
 		}
@@ -241,7 +241,7 @@ export function siedler(): Script {
 		if (b.plants.some((p) => p.stage === 2)) return near("ernte");
 		if (b.weedy || b.plants.some((p) => p.stage === 3)) return near("jäte");
 		const growing = b.plants.some((p) => p.stage < 2);
-		if (growing && now - b.wateredWorldMs > g.thirstWorldMs * 0.6) {
+		if (growing && now - b.wateredWorldMs > g.thirstWorldMs * 0.6 * clockOf(n.space).patience()) {
 			if (count(l, g.can)) return near("gieße");
 			const barrel = buildings.find((x) => x.plan === g.barrel);
 			if (barrel && may("schoepfe")) { later("schoepfe", 6); if (!(await besideOf(n, l, barrel))) await n.act("schöpfe"); return true; }
@@ -341,7 +341,7 @@ function dorfbewohner(): Script {
 		const w = n.world, now = (await clockOf(n.space).now()) ?? 0, fire = w.beacons.find((b) => b.beaconId === n.def.beacon);
 		const fuels = Object.keys(w.fire.fuel), fuel = l.pack.find((i) => fuels.includes(i.proto));
 		if (fire) {
-			const f = await flameOf(n.space, fire.beaconId), piece = Math.min(...Object.values(w.fire.fuel));
+			const f = await flameOf(n.space, fire.beaconId), piece = Math.min(...Object.values(w.fire.fuel)) * clockOf(n.space).patience();
 			if (!f || f.until - now < piece * 2) {
 				if (!fuel) { if (await gather(n, l, fuels)) return true; }
 				else {
@@ -355,7 +355,7 @@ function dorfbewohner(): Script {
 		if (!(await travel(n, l, room))) return true;
 		const g = w.garden;
 		if (!g) return false;
-		const dry = (await n.space.readAll({ type: "Bed", fields: { room, kind: "gemein" } })).map((e) => fieldsOf<BedFields>(e)).find((b) => b.plants.some((p) => p.stage < 2) && now - b.wateredWorldMs > g.thirstWorldMs * 0.6);
+		const dry = (await n.space.readAll({ type: "Bed", fields: { room, kind: "gemein" } })).map((e) => fieldsOf<BedFields>(e)).find((b) => b.plants.some((p) => p.stage < 2) && now - b.wateredWorldMs > g.thirstWorldMs * 0.6 * clockOf(n.space).patience());
 		if (!dry) return false;
 		if (count(l, g.can)) { if (!(await besideOf(n, l, dry))) await n.act("gieße"); return true; }
 		// a can from a barrel of the village; an empty one leaves the bed for the next round

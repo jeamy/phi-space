@@ -27,6 +27,14 @@ export type PlacedDef = { itemId: string; proto: string; room: string; x: number
 export type SceneryDef = Omit<SceneryFields, "left">;
 /** Festivals at the plan `plan` (engine/commands/festival.ts): each lasts `showWorldMs`, the settlement then rests `restWorldMs`, the winner gets `prize` coins. A figure tends once per `careWorldMs` and counts in the rank for `tendedWorldMs` after. */
 export type FestivalDef = { plan: string; showWorldMs: number; restWorldMs: number; prize: number; careWorldMs: number; tendedWorldMs: number };
+/** What `look` and the map say about a piece of scenery: what it is, and whether and how it can be cleared. */
+export function sceneryText(w: WorldDef, s: Pick<SceneryFields, "name" | "fixed" | "yields"> & { left: number }): string {
+	const about = w.sceneryAbout?.[s.name] ?? "";
+	if (s.fixed) return `${about} Das bleibt stehen.`.trim();
+	const gain = s.yields.map((y) => `${y.count} ${w.prototypes.find((p) => p.key === y.proto)?.name ?? y.proto}`).join(", ");
+	return `${about} Lässt sich abräumen („räume“, noch ${s.left} Arbeit)${gain ? `, das bringt ${gain}` : ""}.`.trim();
+}
+
 export type WorldDef = {
 	id: string; title: string; tileSize: number; tiles: Record<string, TileDef>; skins: SkinDef[]; rooms: RoomDef[]; start: string; guestName: string;
 	/** What a room's `decor` grid names (plants and the like). */
@@ -50,6 +58,7 @@ export type WorldDef = {
 	beacons: Array<Omit<BeaconFields, "lit">>;
 	/** What stands in the rooms besides plants (commands/scenery.ts). */
 	scenery?: SceneryDef[];
+	/** What a piece of scenery is, by its name. */ sceneryAbout?: Record<string, string>;
 	/** Burn time each fuel prototype gives, and the most a fire can hold. */
 	fire: { fuel: Record<string, number>; maxMs: number };
 	/** Fog levels 0..max; every `stepMs` it rises by one in rooms without a burning fire and falls by one with. */

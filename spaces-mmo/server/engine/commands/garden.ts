@@ -22,7 +22,7 @@ import { randomBytes, randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BedFields, type BedPlant, type BuildingFields, type ItemFields, type SeedRestFields, type Variety, type VarietyFields } from "../../model.ts";
 import { peek } from "../../space.ts";
-import { worldNowOf } from "../clock.ts";
+import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
@@ -58,16 +58,16 @@ export const nextDue = (plants: BedPlant[]) => plants.reduce((m, p) => Math.min(
 
 /** The plants whose date has come move on (or wilt, dry or past their time); true when anything changed. Each plant that
  *  sprouts or ripens may bring weeds. */
-export function advance(g: GardenDef, b: BedFields, now: number, fog: number, rnd: () => number = Math.random): boolean {
+export function advance(g: GardenDef, b: BedFields, now: number, fog: number, rnd: () => number = Math.random, patient = 1): boolean {
 	let changed = false;
 	const weedy = b.weedy; // weeds of this round count from the next: plants that move on together keep one date
 	for (const p of b.plants) {
 		if (p.dueWorldMs > now) continue;
 		changed = true;
 		const sort = sortOf(g, p.sort);
-		if (!sort || p.stage >= 2 || now - b.wateredWorldMs > g.thirstWorldMs) { p.stage = 3; p.dueWorldMs = FOREVER; continue; }
+		if (!sort || p.stage >= 2 || now - b.wateredWorldMs > g.thirstWorldMs * patient) { p.stage = 3; p.dueWorldMs = FOREVER; continue; }
 		p.stage = (p.stage + 1) as 1 | 2;
-		p.dueWorldMs = now + (p.stage === 1 ? sort.grow[1] * growFactor(fog, weedy) : sort.ripeWorldMs);
+		p.dueWorldMs = now + (p.stage === 1 ? sort.grow[1] * growFactor(fog, weedy) : sort.ripeWorldMs * patient);
 		if (!b.weedy && rnd() < 0.2) b.weedy = true;
 	}
 	b.dueWorldMs = nextDue(b.plants);
@@ -89,12 +89,12 @@ export async function bedHere(c: CommandCtx, o: { own?: boolean; may?: (b: BedFi
 	throw new NotUnderstood(r.far ? (o.own ? "Geh näher an dein Beet heran." : "Geh näher an das Beet heran (höchstens zwei Schritte entfernt).") : "Hier ist kein Beet. „umgraben“ legt eins an (mit einem Spaten).");
 }
 export const writeBed = (c: CommandCtx, b: BedFields) => c.space.write({ type: "Bed", fields: b as never }, c.txn, FOREVER);
-const describe = (c: CommandCtx, g: GardenDef, b: BedFields, now: number) => {
+const describe = async (c: CommandCtx, g: GardenDef, b: BedFields, now: number) => {
 	const count = new Map<string, number>();
 	for (const p of b.plants) { const k = `${plantName(g, p)} (${STAGES[p.stage]})`; count.set(k, (count.get(k) ?? 0) + 1); }
 	const plants = count.size ? [...count].map(([k, n]) => `${n}× ${k}`).join(", ") : "noch nichts gepflanzt";
 	const ago = now - b.wateredWorldMs;
-	const water = ago > g.thirstWorldMs * 0.75 ? "braucht Wasser" : `gegossen vor ${hours(ago)}`;
+	const water = ago > g.thirstWorldMs * 0.75 * (await patienceOf(c.space, c.txn)) ? "braucht Wasser" : `gegossen vor ${hours(ago)}`;
 	return `${bedName(b)}${b.kind === "gemein" ? `, angelegt von ${b.ownerName}` : ""} (${b.w}×${b.h}): ${plants}; ${water}${b.weedy ? ", voller Unkraut" : ""}${b.sponsors.length ? `; Paten: ${b.sponsors.map((s) => s.name).join(", ")}` : ""}.`;
 };
 
@@ -142,7 +142,7 @@ async function dig(c: CommandCtx, arg: string): Promise<void> {
 	}
 	await useLight(c, light.beaconId, light.use, size.points, light.fresh);
 	const b: BedFields = { ...(kind ? { kind } : {}), bedId, room: room.roomId, ...rect, owner: c.actor.charId, ownerName: c.actor.name, accountId: c.account.accountId, beaconId: light.beaconId, points: size.points,
-		sponsors: [], plants: [], wateredWorldMs: now, weedy: false, dueWorldMs: FOREVER, untilWorldMs: now + g.bed.keepWorldMs, at: now };
+		sponsors: [], plants: [], wateredWorldMs: now, weedy: false, dueWorldMs: FOREVER, untilWorldMs: (await decayNowOf(c.space, c.txn)) + g.bed.keepWorldMs, at: now };
 	await writeBed(c, b);
 	await msg(c, "*", "info", kind === "gemein" ? `${c.actor.name} legt ein Gemeinschaftsbeet an (${rect.w}×${rect.h}): pflanzen darf jeder mit Konto, gießen, jäten und ernten alle.`
 		: kind === "zier" ? `${c.actor.name} gräbt ein Zierbeet um (${rect.w}×${rect.h}): nur Blumen wachsen darin, und nebeneinander kreuzen sie sich manchmal.`
@@ -170,7 +170,7 @@ const beet: Command = {
 		const beds = (await c.space.readAll({ type: "Bed", fields: { room: c.actor.room } })).map((e) => fieldsOf<BedFields>(e));
 		if (!beds.length) return msg(c, c.actor.charId, "info", `Hier ist kein Beet. Mit einem ${protoName(c, g.spade)} legt „umgraben“ eins an.`);
 		const now = await worldNowOf(c.space, c.txn);
-		await msg(c, c.actor.charId, "look", beds.map((b) => describe(c, g, b, now)).join("\n"));
+		await msg(c, c.actor.charId, "look", (await Promise.all(beds.map((b) => describe(c, g, b, now)))).join("\n"));
 	},
 };
 
@@ -201,7 +201,7 @@ const pflanze: Command = {
 		b.plants.push({ x: cell.x, y: cell.y, sort: sort.key, stage: 0, dueWorldMs: now + sort.grow[0] * growFactor(await fogOf(c.space, b.room), b.weedy), ...(hit.f.variety ? { variety: hit.f.variety } : {}) });
 		// planting waters the seed
 		b.wateredWorldMs = now;
-		b.untilWorldMs = now + g.bed.keepWorldMs;
+		b.untilWorldMs = (await decayNowOf(c.space, c.txn)) + g.bed.keepWorldMs;
 		b.dueWorldMs = nextDue(b.plants);
 		await writeBed(c, b);
 		await msg(c, "*", "emote", `${c.actor.name} setzt ${hit.f.variety ? plantName(g, b.plants.at(-1)!) : sort.name} ins ${b.kind === "gemein" ? "Gemeinschaftsbeet" : b.kind === "zier" ? "Zierbeet" : "Beet"}.`);
@@ -220,7 +220,7 @@ const giesse: Command = {
 		if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: can.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Die Kanne ist gerade nicht greifbar; bitte noch einmal.");
 		const now = await worldNowOf(c.space, c.txn);
 		b.wateredWorldMs = now;
-		b.untilWorldMs = now + g.bed.keepWorldMs;
+		b.untilWorldMs = (await decayNowOf(c.space, c.txn)) + g.bed.keepWorldMs;
 		await writeBed(c, b);
 		await msg(c, "*", "emote", mine(c, b) ? `${c.actor.name} gießt das ${b.kind === "gemein" ? "Gemeinschaftsbeet" : "Beet"}.` : `${c.actor.name} gießt das ${bedName(b)}.`);
 	},
@@ -239,7 +239,7 @@ const jaete: Command = {
 		b.weedy = false;
 		b.plants = b.plants.filter((p) => p.stage !== 3);
 		b.dueWorldMs = nextDue(b.plants);
-		b.untilWorldMs = now + g.bed.keepWorldMs;
+		b.untilWorldMs = (await decayNowOf(c.space, c.txn)) + g.bed.keepWorldMs;
 		await writeBed(c, b);
 		await msg(c, "*", "emote", `${c.actor.name} jätet das Beet${wilted ? ` und zieht ${plural(wilted, "welke Pflanze", "welke Pflanzen")} heraus` : ""}.`);
 	},
@@ -327,7 +327,7 @@ const ernte: Command = {
 		const names = await giveOwn(c, got);
 		b.plants = b.plants.filter((p) => p.stage !== 2);
 		b.dueWorldMs = nextDue(b.plants);
-		b.untilWorldMs = now + g.bed.keepWorldMs;
+		b.untilWorldMs = (await decayNowOf(c.space, c.txn)) + g.bed.keepWorldMs;
 		await writeBed(c, b);
 		await msg(c, "*", "emote", `${c.actor.name} erntet ${mine(c, b) && b.kind !== "gemein" ? `das ${b.kind === "zier" ? "Zierbeet" : "Beet"}` : `das ${bedName(b)}`}: ${names.join(", ")}.`);
 		if (news.length) await msg(c, c.actor.charId, "info", `Unter den Samen ${news.length === 1 ? "ist eine Kreuzung" : "sind Kreuzungen"} aus ${news.join("; aus ")}! Was daraus wächst, hat eine eigene Farbe; „benenne <name>“ gibt der neuen Sorte einen Namen.`);
@@ -458,20 +458,20 @@ export const GARDEN_COMMANDS: Command[] = [beet, umgraben, pflanze, giesse, jaet
 export async function gardenTick(space: SpaceLike, w: WorldDef): Promise<number> {
 	const g = w.garden;
 	if (!g) return 0;
-	const now = await worldNowOf(space);
+	const now = await worldNowOf(space), kept = await decayNowOf(space), patient = await patienceOf(space);
 	let written = 0;
 	for (const e of await space.readAll({ type: "Bed" })) {
 		const b = fieldsOf<BedFields>(e);
-		if (b.dueWorldMs > now && b.untilWorldMs > now) continue;
+		if (b.dueWorldMs > now && b.untilWorldMs > kept) continue;
 		const txn = (await space.createTransaction(10_000)).id;
 		try {
 			const t = await space.takeIfExists({ type: "Bed", fields: { bedId: b.bedId } }, NO_WAIT, { txn });
 			if (!t) { await space.abort(txn); continue; }
 			const bed = fieldsOf<BedFields>(t);
-			if (bed.dueWorldMs > now && bed.untilWorldMs > now) { await space.abort(txn); continue; } // the read was older: done already
-			if (bed.untilWorldMs <= now) await freeBed(space, txn, bed);
+			if (bed.dueWorldMs > now && bed.untilWorldMs > kept) { await space.abort(txn); continue; } // the read was older: done already
+			if (bed.untilWorldMs <= kept) await freeBed(space, txn, bed);
 			else {
-				advance(g, bed, now, await fogOf(space, bed.room));
+				advance(g, bed, now, await fogOf(space, bed.room), Math.random, patient);
 				await space.write({ type: "Bed", fields: bed as never }, txn, FOREVER);
 			}
 			await space.commit(txn);

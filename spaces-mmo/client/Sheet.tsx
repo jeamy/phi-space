@@ -21,7 +21,7 @@ export function Sheet({ detent, setDetent, height, setHeight, place, setPlace, c
 	const spare = () => (box.current?.parentElement?.clientWidth ?? 0) - (box.current?.offsetWidth ?? 0);
 	const placeNow = () => { const b = box.current; return b && spare() > 0 ? b.offsetLeft / spare() : place ?? 0.5; };
 	return (
-		<section ref={box} className={`sheet sheet-${detent}`} style={{ ...(drag !== null ? { height: drag, transition: "none" } : detent === "half" && height ? { height } : {}), ...(dragX ?? place) !== null ? { "--sheet-x": dragX ?? place, ...(dragX !== null ? { transition: "none" } : {}) } as React.CSSProperties : {} }} aria-label="Tasche, Protokoll und Chats">
+		<section ref={box} className={`sheet sheet-${detent}`} style={{ ...(drag !== null ? { height: drag, transition: "none" } : detent === "half" && height ? { height } : {}), ...(dragX ?? place) !== null ? { "--sheet-x": dragX ?? place, ...(dragX !== null ? { transition: "none" } : {}) } as React.CSSProperties : {} }} aria-label="Tasche, Ereignisse und Chats">
 			<button type="button" className="sheet-grab" aria-label={detent === "peek" ? "Blatt öffnen" : "Blatt schließen"}
 				onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); start.current = { x: e.clientX, y: e.clientY, h: box.current?.offsetHeight ?? 0, place: placeNow(), movedX: false, movedY: false }; }}
 				onPointerMove={(e) => { const s = start.current; if (!s) return;

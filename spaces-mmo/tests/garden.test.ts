@@ -160,10 +160,10 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		await eventually(async () => (await bedOf(s, anna.me)).plants.every((p) => p.stage >= 1), 30_000, "the seeds sprout");
 		assert.match(await does(anna.p, "gieße", "gießt"), /Gärtnerin gießt das Beet/);
 		// keep it watered until something is ripe (weeds slow it, and a dry plant would wilt)
-		await give(s, anna.me, "wasserkanne", 25); // slow machines water more often
+		// a can per watering: slow machines water more often
 		for (let i = 0; i < 30 && !(await bedOf(s, anna.me)).plants.some((p) => p.stage === 2); i++) {
 			await new Promise((ok) => setTimeout(ok, 4_000));
-			if (!(await bedOf(s, anna.me)).plants.some((p) => p.stage === 2)) await does(anna.p, "gieße", "gießt");
+			if (!(await bedOf(s, anna.me)).plants.some((p) => p.stage === 2)) { await give(s, anna.me, "wasserkanne", 1); await does(anna.p, "gieße", "gießt"); }
 		}
 		await eventually(async () => (await bedOf(s, anna.me)).plants.some((p) => p.stage === 2), 10_000, `something ripe (stages ${(await bedOf(s, anna.me)).plants.map((p) => p.stage)})`);
 		// two harvest at once: what is ripe goes once (whoever comes second finds nothing ripe, or what ripened since)

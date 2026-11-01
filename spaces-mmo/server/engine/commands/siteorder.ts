@@ -9,7 +9,7 @@
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type EstateFields, type ItemFields, type SiteFields, type SiteOrderFields } from "../../model.ts";
-import { worldNowOf } from "../clock.ts";
+import { decayNowOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, msg, NotUnderstood, stem, type CommandCtx } from "../context.ts";
 import type { WorldDef } from "../world.ts";
@@ -54,7 +54,7 @@ export async function closeOrders(space: SpaceLike, txn: string, s: Pick<SiteFie
 }
 
 /** Until when wages wait as an estate for an owner in another region. */
-export const keptUntil = async (c: CommandCtx) => (await worldNowOf(c.space, c.txn)) + (c.world.building?.estateWorldMs ?? 30 * 24 * 3600_000);
+export const keptUntil = async (c: CommandCtx) => (await decayNowOf(c.space, c.txn)) + (c.world.building?.estateWorldMs ?? 30 * 24 * 3600_000);
 
 const WORK = /^(?:arbeit|arbeitspunkte?|arbeitsstunden?|work)$/i;
 const aushang: Command = {

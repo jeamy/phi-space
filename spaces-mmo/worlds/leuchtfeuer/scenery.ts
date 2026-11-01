@@ -10,6 +10,30 @@ const boat = (sceneryId: string, room: string, x: number, y: number): SceneryDef
 const barrels = (sceneryId: string, room: string, x: number, y: number): SceneryDef => ({ sceneryId, room, x, y, w: 2, h: 1, model: "faesser", name: "Teerfässer", work: 2, yields: [{ proto: "treibholz", count: 1 }] });
 const jetty = (sceneryId: string, room: string, x: number, y: number, w: number, h: number): SceneryDef => ({ sceneryId, room, x, y, w, h, model: "steg", name: "Steg", fixed: true, through: true, work: 0, yields: [] });
 
+/** What a piece is, by its name (`look`, "Was ist das?"). */
+export const SCENERY_ABOUT: Record<string, string> = {
+	"Hoher Stein": "Ein aufrechter Stein, höher als ein Mann, von Flechten bewachsen. Niemand weiß mehr, wer ihn hier aufgestellt hat.",
+	"Schiefe Hütte": "Eine verlassene Fischerhütte, die sich zur Seite neigt. Das Holz taugt noch.",
+	"Netzgestell": "Ein Gestell, auf dem Fischer ihre Netze zum Trocknen aufhängen.",
+	"Altes Boot": "Ein ausgedientes Boot, das niemand mehr zu Wasser lässt.",
+	"Teerfässer": "Alte Fässer mit Resten von Bootsteer.",
+	"Steg": "Ein Holzsteg aufs Wasser hinaus. Man geht einfach darüber.",
+	"Felsbrocken": "Ein schwerer Brocken, von der Klippe gefallen oder vom Meer herangerollt.",
+	"Steinmauer": "Eine niedrige Mauer aus Feldsteinen, vor langer Zeit aufgeschichtet.",
+	"Kisten": "Gestapelte Kisten, die jemand hier stehen ließ.",
+	"Krabbenkörbe": "Geflochtene Körbe, in denen Krabben gefangen werden.",
+	"Marktstand": "Ein Stand mit Dach, an dem hier Waren ausliegen.",
+	"Fässer": "Fässer für Fisch, Salz und Tran.",
+	"Lagerschuppen": "Ein alter Schuppen aus Brettern, längst ausgeräumt.",
+	"Enges Haus": "Ein schmales Wohnhaus, in dem jemand lebt.",
+	"Pfahlhaus": "Ein Haus auf Pfählen, sicher vor Flut und Moor.",
+	"Meiler": "Ein mit Erde gedeckter Holzhaufen, in dem Holzkohle entsteht.",
+	"Salzbecken": "Flache Becken, in denen Meerwasser verdunstet, bis Salz bleibt.",
+	"Schiffsgerippe": "Die Spanten eines gestrandeten Schiffs, vom Wetter ausgebleicht.",
+	"Halbfertiger Rumpf": "Ein Schiffsrumpf, an dem die Werft noch arbeitet.",
+	"Turmstumpf": "Was von einem alten Wachturm übrig ist.",
+};
+
 /** The small pieces of the other rooms, one kind per what their descriptions name. */
 const KINDS: Record<string, Omit<SceneryDef, "sceneryId" | "room" | "x" | "y">> = {
 	felsen: { model: "felsen", name: "Felsbrocken", w: 2, h: 1, work: 3, yields: [{ proto: "stein", count: 1 }] },

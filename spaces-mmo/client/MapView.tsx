@@ -5,6 +5,7 @@
 // clearings around the own character and a burning fire. A zoom of 2 or 3 follows the own character; dragging looks
 // around, two fingers pinch through the zoom steps. A tap on a cell goes to `onCell`, a long press or a right click to
 // `onMenu`; the map never changes the world by itself. pixi.js is imported in the browser only; without WebGL `onFail` says so and the page plays as text.
+import { building2d } from "./buildings2d.ts";
 import { useEffect, useRef, useState } from "react";
 import type { CharView, ObjView, ServerFrame } from "../server/gateway.ts";
 import { pinch } from "./pinch.ts";
@@ -531,14 +532,12 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 			continue;
 		}
 		if (o.kind === "site" || o.kind === "building") {
-			// a building as a house of its footprint (walls, a roof, a door at the bottom); a site as staked-out ground with
+			// a building as its picture (buildings2d.ts); a site as staked-out ground with
 			// posts at the corners and a bar of how far it is
 			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts, color = o.color ?? "#8a6a44";
 			const g = new p.Graphics();
 			if (o.kind === "building") {
-				g.rect(x + 3, y + h * 0.35, w - 6, h * 0.65 - 3).fill({ color }).stroke({ width: 2, color: "#2a1d10" });
-				g.poly([x, y + h * 0.4, x + w / 2, y + 2, x + w, y + h * 0.4]).fill({ color: "#5b3a22" }).stroke({ width: 2, color: "#2a1d10" });
-				g.rect(x + w / 2 - ts * 0.2, y + h - ts * 0.55, ts * 0.4, ts * 0.55 - 3).fill({ color: "#2a1d10" });
+				building2d(g, o.plan, x, y, w, h, ts, color);
 				if (o.fenced) fence2d(g, x, y, o.w ?? 1, o.h ?? 1, ts);
 			} else {
 				// one's own site stands out at once: a bright border, and its label says so

@@ -4,12 +4,18 @@ import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER } from "phi-spaces";
-import { loadWorld, walkable } from "../server/engine/world.ts";
+import { loadWorld, sceneryText, walkable } from "../server/engine/world.ts";
 import { eventually, Player, startServer } from "./stack.ts";
 import type { CharacterFields, ItemFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 
 const w = await loadWorld();
+
+test("every piece says what it is and how it can be cleared", () => {
+	for (const s of w.scenery ?? []) assert.ok(w.sceneryAbout?.[s.name], `${s.name} has no text`);
+	assert.match(sceneryText(w, { name: "Hoher Stein", fixed: true, yields: [], left: 0 }), /aufrechter Stein.*bleibt stehen/);
+	assert.match(sceneryText(w, { name: "Felsbrocken", yields: [{ proto: "stein", count: 1 }], left: 3 }), /noch 3 Arbeit\), das bringt 1 Stein\.$/);
+});
 const cells = (s: { x: number; y: number; w: number; h: number }) => Array.from({ length: s.w * s.h }, (_, i) => ({ x: s.x + (i % s.w), y: s.y + Math.floor(i / s.w) }));
 
 test("no piece stands on a way, a door, a fire, a thing or a person's place, and every exit of a room still reaches the others", () => {

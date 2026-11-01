@@ -10,7 +10,7 @@
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type MotionFields, type MotionKind, type SettlementFields, type VoteFields, type ZoneFields } from "../../model.ts";
-import { worldNowOf } from "../clock.ts";
+import { decayNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, msgOptions, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import { peek } from "../../space.ts";
@@ -104,7 +104,7 @@ const antrag: Command = {
 		const kind: MotionKind = down ? "abriss" : taxed ? "steuer" : zone ?? (/^(?:zu|schließen|schliessen|close)$/i.test(text) ? "zu" : /^(?:offen|auf|öffnen|oeffnen|open)$/i.test(text) ? "offen" : "text");
 		if (kind === "text" && text.length > 120) throw new NotUnderstood("Ein Antrag hat höchstens 120 Zeichen.");
 		if ((kind === "zu" || kind === "offen") && s.closed === (kind === "zu")) throw new CommandError(`${s.name} ist schon ${s.closed ? "geschlossen" : "offen"}.`);
-		const m: MotionFields = { motionId: randomBytes(6).toString("hex"), room: s.room, settlementId: s.settlementId, settlementName: s.name, by: c.account!.accountId, byName: c.actor.name, kind, text: kind === "text" ? text : "", endsWorldMs: (await worldNowOf(c.space, c.txn)) + d.voteWorldMs, ...(zone ? { zone: await zoneAt(c, zone, d.zoneRadius) } : {}), ...(taxed ? { tax: Number(taxed[1]) } : {}), ...(target ? { target } : {}) };
+		const m: MotionFields = { motionId: randomBytes(6).toString("hex"), room: s.room, settlementId: s.settlementId, settlementName: s.name, by: c.account!.accountId, byName: c.actor.name, kind, text: kind === "text" ? text : "", endsWorldMs: (await decayNowOf(c.space, c.txn)) + d.voteWorldMs, ...(zone ? { zone: await zoneAt(c, zone, d.zoneRadius) } : {}), ...(taxed ? { tax: Number(taxed[1]) } : {}), ...(target ? { target } : {}) };
 		try { await c.space.write({ type: "Motion", fields: m as never }, c.txn, FOREVER, { unique: ["room"] }); }
 		catch (e) { if (/unique entry already exists/.test((e as Error).message)) throw new CommandError("Hier läuft schon ein Antrag; erst wenn er entschieden ist, kommt der nächste."); throw e; }
 		await c.space.write({ type: "Vote", fields: { motionId: m.motionId, accountId: m.by, yes: true } satisfies VoteFields as never }, c.txn, FOREVER);
@@ -132,7 +132,7 @@ const stimme: Command = {
 /** The motions whose day is over are decided (in the job of the epochs); without their settlement they lapse. */
 export async function motionTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<number> {
 	if (!w.townhall) return 0;
-	const now = await worldNowOf(space);
+	const now = await decayNowOf(space);
 	let ended = 0;
 	for (const e of await space.readAll({ type: "Motion" })) {
 		if (fieldsOf<MotionFields>(e).endsWorldMs > now) continue;

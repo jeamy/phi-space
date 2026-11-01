@@ -227,9 +227,11 @@ export function tapTarget(at: { x: number; y: number }, chars: Map<string, CharV
 }
 
 /** A name for the sheet's head and the help article about what stands on a cell (help/articles.ts). */
-export function cellAbout(at: { x: number; y: number }, chars: Map<string, CharView>, objs: Map<string, ObjView>, room: string): { title?: string; article?: string } {
-	const articles: Record<string, string> = { scenery: "help.game.build", site: "help.game.build", building: "help.game.build", ruin: "help.game.build", bed: "help.game.garden", field: "help.game.fields", beacon: "help.game.fire", animal: "help.game.wild", exit: "help.game.controls" };
+export function cellAbout(at: { x: number; y: number }, chars: Map<string, CharView>, objs: Map<string, ObjView>, room: string): { title?: string; article?: string; desc?: string } {
+	const articles: Record<string, string> = { site: "help.game.build", building: "help.game.build", ruin: "help.game.build", bed: "help.game.garden", field: "help.game.fields", beacon: "help.game.fire", animal: "help.game.wild", exit: "help.game.controls" };
 	const area = [...objs.values()].find((o) => o.location === room && AREA.has(o.kind) && !o.through && covers(o, at));
+	// a piece of scenery says itself what it is; the rest has its article
+	if (area?.kind === "scenery") return { title: area.name, ...(area.desc ? { desc: area.desc } : {}) };
 	if (area) return { title: area.owner ? `${area.name} von ${area.owner}` : area.name, article: articles[area.kind] };
 	const figure = [...chars.values()].find((c) => c.x === at.x && c.y === at.y);
 	if (figure) return { title: figure.name };

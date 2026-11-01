@@ -4,7 +4,7 @@
 // seconds. Each thing is taken in a transaction of its own, so what someone picks up or buys at that moment is theirs.
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type ItemFields, type ListingFields, type OrderFields } from "../model.ts";
-import { worldNowOf } from "./clock.ts";
+import { decayNowOf, worldNowOf } from "./clock.ts";
 import { buildSweep } from "./commands/build.ts";
 import type { WorldDef } from "./world.ts";
 
@@ -19,13 +19,13 @@ async function takeIfLapsed(space: SpaceLike, id: string, type: string): Promise
 /** Flotsam, open or taken jobs, listings and awake roles whose world time is up are removed (a listing's item goes back to its seller with
  *  the market tick, as when its lease used to end). A thing picked up is stripped of the date (the `get` command), so what is carried stays. */
 export async function sweepTick(space: SpaceLike, w?: WorldDef): Promise<void> {
-	const now = await worldNowOf(space);
+	const now = await worldNowOf(space), kept = await decayNowOf(space);
 	for (const e of await space.readAll({ type: "Item", fields: { flotsam: true } })) {
 		const f = fieldsOf<ItemFields>(e);
 		if (f.expiresWorldMs !== undefined && f.expiresWorldMs <= now) await takeIfLapsed(space, e.id, "Item");
 	}
-	for (const e of await space.readAll({ type: "NpcAwake" })) if (Number(e.fields.untilWorldMs ?? 0) <= now) await takeIfLapsed(space, e.id, "NpcAwake"); // a role awake until a world time
+	for (const e of await space.readAll({ type: "NpcAwake" })) if (Number(e.fields.untilWorldMs ?? 0) <= kept) await takeIfLapsed(space, e.id, "NpcAwake"); // a role awake until a world time
 	for (const e of await space.readAll({ type: "Order" })) if ((fieldsOf<OrderFields>(e).expiresWorldMs ?? Infinity) <= now) await takeIfLapsed(space, e.id, "Order");
-	for (const e of await space.readAll({ type: "Listing" })) if ((fieldsOf<ListingFields>(e).expiresWorldMs ?? Infinity) <= now) await takeIfLapsed(space, e.id, "Listing");
+	for (const e of await space.readAll({ type: "Listing" })) if ((fieldsOf<ListingFields>(e).expiresWorldMs ?? Infinity) <= kept) await takeIfLapsed(space, e.id, "Listing");
 	await buildSweep(space, w); // sites without progress, buildings not kept, ruins and estates whose time is up (docs/siedeln.en.md)
 }

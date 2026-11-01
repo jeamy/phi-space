@@ -25,6 +25,20 @@ const join = async (srv: Awaited<ReturnType<typeof startServer>>, name: string) 
 	return { p, me: (await p.play()).me.charId };
 };
 
+/** A hut where a figure may build: it spawned somewhere in the bay, perhaps too near the fire, so it walks off when refused. */
+async function stake(s: SpaceLike, f: { p: Player; me: string }): Promise<void> {
+	const fire = (await s.readAll({ type: "Beacon", fields: { beaconId: "feuer-bucht" } }))[0]!.fields as unknown as { x: number; y: number };
+	for (const [dx, dy] of [[0, 0], [3, 0], [-3, 0], [0, 3], [0, -3]] as const) {
+		if (dx || dy) {
+			const x = fire.x + dx, y = fire.y + dy;
+			await does(f.p, `move ${x} ${y}`, /./, 5_000).catch(() => "");
+			await eventually(async () => { const c = (await s.readAll({ type: "Character", fields: { charId: f.me } }))[0]?.fields as unknown as CharacterFields | undefined; return !!c && c.x === x && c.y === y ? c : undefined; }, 5_000, "walked").catch(() => undefined);
+		}
+		if (/steckt eine Baustelle ab/.test(await does(f.p, "bau hütte", /steckt eine Baustelle ab|Hier passt keine/))) return;
+	}
+	throw new Error("no place for a hut");
+}
+
 test("a wage: held by the order, paid in the command, the rest goes back", { timeout: 120_000 }, async () => {
 	const srv = await startServer();
 	try {
@@ -33,10 +47,10 @@ test("a wage: held by the order, paid in the command, the rest goes back", { tim
 		const a = await join(srv, "Bauherrin"), b = await join(srv, "Zutraeger");
 		await give(s, a.me, "muenze", 12);
 		await give(s, b.me, "treibholz", 3);
-		await does(a.p, "bau hütte", "steckt eine Baustelle ab");
+		await stake(s, a);
 		const site = (await eventually(async () => (await s.readAll({ type: "Site" }))[0], 10_000, "site"))!.fields as unknown as SiteFields;
 		await does(b.p, "move " + (site.x - 1) + " " + site.y, /./).catch(() => "");
-		await eventually(async () => { const c = (await s.readAll({ type: "Character", fields: { charId: b.me } }))[0]?.fields as unknown as CharacterFields | undefined; return !!c && c.x === site.x - 1 && c.y === site.y; }, 15_000, "walked");
+		await eventually(async () => { const c = (await s.readAll({ type: "Character", fields: { charId: b.me } }))[0]?.fields as unknown as CharacterFields | undefined; return !!c && Math.max(c.x - site.x - site.w + 1, site.x - c.x, c.y - site.y - site.h + 1, site.y - c.y) <= 2; }, 15_000, "walked"); // the cell may be taken: two away is near enough to deliver
 
 		assert.match(await does(b.p, "aushang 2 treibholz je 1", "gehört"), /nur, wem die Baustelle gehört/);
 		assert.match(await does(a.p, "aushang 3 treibholz je 9", "kostet"), /kostet 27 Münzen, du hast 12/);
@@ -70,7 +84,7 @@ test("the day labourer works for a wage and for nothing else", { timeout: 200_00
 		await lightFire(s, 3_600_000, "feuer-bucht");
 		const a = await join(srv, "Meisterin");
 		await give(s, a.me, "muenze", 4);
-		await does(a.p, "bau hütte", "steckt eine Baustelle ab");
+		await stake(s, a);
 		await does(a.p, "aushang 2 arbeit je 2", "hängt");
 		// the site is held while someone works on it: a look may miss it
 		const site = (await eventually(async () => { const f = (await s.readAll({ type: "Site" }))[0]?.fields as unknown as SiteFields | undefined; return f && f.work >= 1 ? f : undefined; }, 120_000, "Wolter works"))!;

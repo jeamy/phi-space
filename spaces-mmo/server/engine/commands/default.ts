@@ -3,13 +3,13 @@
 // hands by being taken (it is then held by this transaction, invisible to every other) and written anew.
 import { settlementIn } from "./settlement.ts";
 import { cutText, FOREVER, NO_WAIT, type Taken } from "phi-spaces";
-import { fieldsOf, type PlotFields, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomFields, type SessionFields } from "../../model.ts";
+import { fieldsOf, type PlotFields, type SceneryFields, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomFields, type SessionFields } from "../../model.ts";
 import type { CmdSet, Command } from "../cmdsets.ts";
 import { byName, check, CommandError, NotUnderstood, exitsHere, inventory, itemsHere, msg, pluralOf, reach, roomOf, stem, whereTo, type CommandCtx, itemsNamed } from "../context.ts";
 import { worldNowOf } from "../clock.ts";
 import { burnText, feed, flameOf, fogOf } from "../fire.ts";
 import { blockedIn, cellKey, claimSpot, freeCellNear, isPassage, occupiedIn, releaseSpot } from "../occupancy.ts";
-import { findPath, walkable, wayTo, type WorldDef } from "../world.ts";
+import { findPath, sceneryText, walkable, wayTo, type WorldDef } from "../world.ts";
 import { handOff } from "../handover.ts";
 import { regionOfRoom } from "../regions.ts";
 
@@ -179,6 +179,8 @@ const look: Command = {
 		if (exit) return msg(c, c.actor.charId, "look", `${exit.f.name}: ${exit.f.desc || "ein Weg"}`);
 		const person = (await online(c, c.actor.room)).find((ch) => ch.name.toLowerCase().startsWith(arg.toLowerCase()));
 		if (person) return msg(c, c.actor.charId, "look", `${person.name} steht hier.`);
+		const piece = (await c.space.readAll({ type: "Scenery", fields: { room: c.actor.room } })).map((e) => fieldsOf<SceneryFields>(e)).find((s) => s.name.toLowerCase() === arg.trim().toLowerCase());
+		if (piece) return msg(c, c.actor.charId, "look", `${piece.name}\n${sceneryText(c.world, piece)}`);
 		throw new NotUnderstood(`Hier ist nichts, was „${arg.slice(0, 30)}“ heißt.`);
 	},
 };

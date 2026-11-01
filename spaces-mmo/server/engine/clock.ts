@@ -1,9 +1,10 @@
 // The world clock as the engine reads it inside a command or a job: the world time now (docs/weltzeit.en.md). Processes that
 // look often use ClockCache (clockcache.ts); a command reads the entry in its transaction, so the time it works with is
 // the one its transaction sees.
-import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type WorldClockFields } from "../model.ts";
-import { worldNow } from "./worldtime.ts";
+import { decayNow, patience, withDecayRate, withRate, worldNow, MIN_RATE, MAX_RATE } from "./worldtime.ts";
+import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
+import { setting } from "../settings.ts";
 import { peek } from "../space.ts";
 
 export async function readClock(space: SpaceLike, txn?: string | null): Promise<WorldClockFields> {
@@ -15,4 +16,32 @@ export async function readClock(space: SpaceLike, txn?: string | null): Promise<
 /** The world time now, in world milliseconds. */
 export async function worldNowOf(space: SpaceLike, txn?: string | null, realNow = Date.now()): Promise<number> {
 	return worldNow(await readClock(space, txn), realNow);
+}
+
+/** The time of the second clock now: what waits for people who are away lapses in it. */
+export async function decayNowOf(space: SpaceLike, txn?: string | null, realNow = Date.now()): Promise<number> {
+	return decayNow(await readClock(space, txn), realNow);
+}
+/** World milliseconds per millisecond of the second clock, for spans inside a date of the world time. */
+export async function patienceOf(space: SpaceLike, txn?: string | null): Promise<number> {
+	return patience(await readClock(space, txn));
+}
+
+/** The admin's two rates reach the clock of this region (the settings are written to every region); -1 leaves it alone. */
+export async function syncRates(space: SpaceLike): Promise<void> {
+	const life = await setting(space, "clock.life"), decay = await setting(space, "clock.decay");
+	const valid = (r: number) => r >= MIN_RATE && r <= MAX_RATE, now = await readClock(space);
+	const changeLife = valid(life) && life !== now.rate, changeDecay = valid(decay) && decay !== (now.decayRate ?? now.rate);
+	if (!changeLife && !changeDecay) return;
+	const realNow = Date.now();
+	const txn = (await space.createTransaction(10_000)).id;
+	try {
+		const t = await space.takeIfExists({ type: "WorldClock" }, NO_WAIT, { txn });
+		if (!t) { await space.abort(txn); return; }
+		let next = fieldsOf<WorldClockFields>(t);
+		if (changeLife) next = withRate(next, life, realNow);
+		if (changeDecay) next = withDecayRate(next, decay, realNow);
+		await space.write({ type: "WorldClock", fields: next as never }, txn, FOREVER);
+		await space.commit(txn);
+	} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
 }

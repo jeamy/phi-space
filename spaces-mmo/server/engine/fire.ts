@@ -9,7 +9,7 @@ import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { fieldsOf, type BeaconFields, type ContributionFields, type FlameFields, type FogFields, type ItemFields } from "../model.ts";
 import { CommandError, msg, msgOptions, type CommandCtx } from "./context.ts";
 import { resolvePrototype, spawn } from "./prototypes.ts";
-import { worldNowOf } from "./clock.ts";
+import { patienceOf, worldNowOf } from "./clock.ts";
 import { walkable, type WorldDef } from "./world.ts";
 import { peek } from "../space.ts";
 
@@ -37,7 +37,7 @@ export async function feed(c: CommandCtx, item: { e: Taken; f: ItemFields }, bea
 	const b = await c.space.take({ type: "Beacon", fields: { beaconId: beacon.beaconId } }, 5_000, { txn: c.txn });
 	if (!b) throw new CommandError("Gerade legt jemand anderes nach; einen Moment.");
 	if (!(await c.space.take({ type: item.e.type, id: item.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError(`${item.f.name} ist gerade nicht greifbar.`);
-	const now = await worldNowOf(c.space, c.txn), add = fuel, max = c.world.fire.maxMs; // world milliseconds
+	const now = await worldNowOf(c.space, c.txn), patient = await patienceOf(c.space, c.txn), add = fuel * patient, max = c.world.fire.maxMs * patient; // a log burns as long whatever the life of the world
 	const old = await c.space.take({ type: "Flame", fields: { beaconId: beacon.beaconId } }, NO_WAIT, { txn: c.txn });
 	const was = old ? fieldsOf<FlameFields>(old) : null;
 	const left = was && was.until > now ? was.until - now : 0;
@@ -145,7 +145,7 @@ export async function floodTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 			const proto = await resolvePrototype(space, weighted(fr.protos ?? w.flood.protos));
 			if (!proto) continue;
 			const at = cells.splice(randomInt(0, cells.length), 1)[0]!;
-			names.push((await spawn(space, null, w, proto, { location: fr.room, x: at.x, y: at.y, flotsam: true, expiresWorldMs: (await worldNowOf(space)) + w.flood.lifetimeMs })).name);
+			names.push((await spawn(space, null, w, proto, { location: fr.room, x: at.x, y: at.y, flotsam: true, expiresWorldMs: (await worldNowOf(space)) + (await patienceOf(space)) * w.flood.lifetimeMs })).name);
 		}
 		if (names.length) await say(space, leaseMs, [fr.room], "info", names.length === 1 ? `Die Flut spült ${names[0]} an.` : `Die Flut spült ${names.length} Dinge an: ${[...new Set(names)].join(", ")}.`);
 	}
@@ -173,7 +173,7 @@ async function bringStaples(space: SpaceLike, w: WorldDef, people: Map<string, n
 			const fr = rooms[randomInt(0, rooms.length)]!, cells = await freeCells(space, w, fr.room, fr.tile);
 			if (!cells.length) continue;
 			const at = cells[randomInt(0, cells.length)]!;
-			await spawn(space, null, w, proto, { location: fr.room, x: at.x, y: at.y, flotsam: true, expiresWorldMs: (await worldNowOf(space)) + st.lifetimeMs });
+			await spawn(space, null, w, proto, { location: fr.room, x: at.x, y: at.y, flotsam: true, expiresWorldMs: (await worldNowOf(space)) + (await patienceOf(space)) * st.lifetimeMs });
 		}
 	}
 }
@@ -203,7 +203,7 @@ export async function stormTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 		const proto = await resolvePrototype(space, weighted(w.storm.protos));
 		if (!proto) continue;
 		const at = cells.splice(randomInt(0, cells.length), 1)[0]!;
-		names.push((await spawn(space, null, w, proto, { location: roomId, x: at.x, y: at.y, flotsam: true, expiresWorldMs: (await worldNowOf(space)) + w.flood.lifetimeMs * 2 })).name);
+		names.push((await spawn(space, null, w, proto, { location: roomId, x: at.x, y: at.y, flotsam: true, expiresWorldMs: (await worldNowOf(space)) + (await patienceOf(space)) * w.flood.lifetimeMs * 2 })).name);
 	}
 	if (!names.length) return null;
 	const room = w.rooms.find((r) => r.roomId === roomId)!;

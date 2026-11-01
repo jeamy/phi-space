@@ -22,7 +22,7 @@ import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
-import { worldNowOf } from "../clock.ts";
+import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { byName, CommandError, exitsHere, inventory, msg, NotUnderstood, roomOf, type CommandCtx, itemsNamed } from "../context.ts";
 import { flameOf, isLit } from "../fire.ts";
@@ -175,17 +175,17 @@ async function keepOf(c: CommandCtx, plan: PlanDef | undefined): Promise<number>
 
 /** Writes the site back, or, when nothing is missing, the building in its place. */
 export async function settle(c: CommandCtx, s: SiteFields): Promise<void> {
-	const now = await worldNowOf(c.space, c.txn);
+	const now = await worldNowOf(c.space, c.txn), kept = await decayNowOf(c.space, c.txn);
 	if (s.needs.every((n) => n.have >= n.count) && s.work >= s.workNeed) {
 		const plan = planOf(c.world, s.plan);
-		const b: BuildingFields = { buildId: s.buildId, plan: s.plan, name: s.name, room: s.room, x: s.x, y: s.y, w: s.w, h: s.h, owner: s.owner, ownerName: s.ownerName, accountId: s.accountId, beaconId: s.beaconId, points: s.points, by: s.by, untilWorldMs: now + (await keepOf(c, plan)), builtAt: now };
+		const b: BuildingFields = { buildId: s.buildId, plan: s.plan, name: s.name, room: s.room, x: s.x, y: s.y, w: s.w, h: s.h, owner: s.owner, ownerName: s.ownerName, accountId: s.accountId, beaconId: s.beaconId, points: s.points, by: s.by, untilWorldMs: kept + (await keepOf(c, plan)), builtAt: now };
 		await c.space.write({ type: "Building", fields: b as never }, c.txn, FOREVER);
-		await closeOrders(c.space, c.txn, s, now + (c.world.building?.estateWorldMs ?? 30 * 24 * 3600_000));
+		await closeOrders(c.space, c.txn, s, kept + (c.world.building?.estateWorldMs ?? 30 * 24 * 3600_000));
 		const helpers = Object.entries(s.by).sort((a, b) => b[1] - a[1]).map(([n, k]) => `${n} (${k})`).join(", ");
 		await msg(c, "*", "world", `Die ${s.name} von ${s.ownerName} steht! Mitgebaut: ${helpers}.`);
 		return;
 	}
-	await c.space.write({ type: "Site", fields: { ...s, untilWorldMs: now + (c.world.building?.siteWorldMs ?? 2 * 24 * 3600_000) } as never }, c.txn, FOREVER);
+	await c.space.write({ type: "Site", fields: { ...s, untilWorldMs: kept + (c.world.building?.siteWorldMs ?? 2 * 24 * 3600_000) } as never }, c.txn, FOREVER);
 }
 /** Counts a contribution of `n` for the actor; NPCs and automata may give at most half of what the site needs. */
 function credit(c: CommandCtx, s: SiteFields, n: number): number {
@@ -233,7 +233,7 @@ export const bau: Command = {
 		await useLight(c, light.beaconId, light.use, plan.points, light.fresh);
 		const s: SiteFields = { buildId, plan: plan.key, name: plan.name, room: room.roomId, ...rect, owner: c.actor.charId, ownerName: c.actor.name, accountId: c.account.accountId,
 			needs: plan.needs.map((n) => ({ proto: n.proto, name: c.world.prototypes.find((x) => x.key === n.proto)?.name ?? n.proto, count: n.count, have: 0 })), work: 0, workNeed: plan.work, human: 0, other: 0, beaconId: light.beaconId, points: plan.points, by: {},
-			untilWorldMs: now + def.siteWorldMs, at: now };
+			untilWorldMs: (await decayNowOf(c.space, c.txn)) + def.siteWorldMs, at: now };
 		await c.space.write({ type: "Site", fields: s as never }, c.txn, FOREVER);
 		await msg(c, "*", "info", `${c.actor.name} steckt eine Baustelle ab: ${plan.name}. Es fehlen ${missing(s).join(", ")} – liefern („liefere <ding>“) und mitarbeiten („arbeite“) können alle.`);
 	},
@@ -474,7 +474,7 @@ const repariere: Command = {
 		const inv = await inventory(c);
 		for (const r of cost) if (inv.filter((i) => i.f.proto === r.proto).length < r.count) throw new CommandError(`Zum Ausbessern brauchst du ${r.count} ${c.world.prototypes.find((p) => p.key === r.proto)?.name ?? r.proto}.`);
 		for (const r of cost) for (const it of inv.filter((i) => i.f.proto === r.proto).slice(0, r.count)) await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn });
-		const until = now + (await keepOf(c, plan));
+		const until = (await decayNowOf(c.space, c.txn)) + (await keepOf(c, plan));
 		await putBack(c, { ...b, untilWorldMs: until });
 		await msg(c, "*", "emote", `${c.actor.name} bessert die ${b.name} von ${b.ownerName} aus; sie hält wieder ${days(until - now)}.`);
 	},
@@ -551,7 +551,7 @@ export const BUILD_COMMANDS: Command[] = [bau, liefere, arbeite, baustelle, truh
  *  waits as an estate for its owner); a ruin whose time is up goes with its cells; an estate nobody fetched goes with its
  *  things; rests that are over go. */
 export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> {
-	const now = await worldNowOf(space);
+	const now = await decayNowOf(space), life = await worldNowOf(space);
 	const inTxn = async (run: (txn: string) => Promise<boolean>) => {
 		const txn = (await space.createTransaction(10_000)).id;
 		try { if (await run(txn)) await space.commit(txn); else await space.abort(txn); }
@@ -576,7 +576,7 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 			const ruin: RuinFields = { buildId: b.buildId, plan: b.plan, name: b.name, room: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: b.owner, ownerName: b.ownerName, accountId: b.accountId, untilWorldMs: now + (w?.building?.ruinWorldMs ?? 10 * 24 * 3600_000) };
 			await space.write({ type: "Ruin", fields: ruin as never }, txn, FOREVER);
 			await releaseLight(space, txn, b.beaconId, b.points ?? 1);
-			await stopLoads(space, txn, b.buildId, now);
+			await stopLoads(space, txn, b.buildId, life);
 			const inside = await space.readAll({ type: "Item", fields: { location: b.buildId } });
 			if (inside.length) {
 				const est: EstateFields = { estateId: `est-${b.buildId}`, accountId: b.accountId, ownerName: b.ownerName, room: b.room, name: b.name, untilWorldMs: now + (w?.building?.estateWorldMs ?? 30 * 24 * 3600_000) };
@@ -613,7 +613,7 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 export async function demolishByVote(space: SpaceLike, txn: string, w: WorldDef, b: BuildingFields, now: number): Promise<void> {
 	await freeCells(space, txn, b.room, b.buildId);
 	await releaseLight(space, txn, b.beaconId, b.points ?? 1);
-	await stopLoads(space, txn, b.buildId, now);
+	await stopLoads(space, txn, b.buildId, await worldNowOf(space));
 	const est: EstateFields = { estateId: `est-${b.buildId}`, accountId: b.accountId, ownerName: b.ownerName, room: b.room, name: b.name, untilWorldMs: now + (w.building?.estateWorldMs ?? 30 * 24 * 3600_000) };
 	await space.write({ type: "Estate", fields: est as never }, txn, FOREVER);
 	for (const it of await space.readAll({ type: "Item", fields: { location: b.buildId } })) await moveItem(space, txn, String(it.fields.itemId), b.buildId, est.estateId);

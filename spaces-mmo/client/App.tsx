@@ -211,6 +211,7 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, send, c
 	// on the desktop the list stays on the screen and scrolls when it is taller than the room there is
 	const left = Math.min(at.left, window.innerWidth - 220), top = Math.max(8, Math.min(at.top, window.innerHeight - 40 * (entries.length + 1)));
 	const about = sheet ? cellAbout(at, chars, objs, room) : {};
+	const [told, setTold] = useState(false);
 	return (
 		<>
 			<div className={`menu-backdrop${sheet ? " dim" : ""}`} onClick={dismiss} onContextMenu={(e) => { e.preventDefault(); dismiss(); }} />
@@ -218,6 +219,7 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, send, c
 				{sheet && about.title && <li className="action-title">{about.title}</li>}
 				{step && typeof step === "object" && <li className="menu-note">{step.name} ({step.w}×{step.h}) ab hier nach rechts unten: {step.needs}, {step.work} Arbeit</li>}
 				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (onWalk && e.line.startsWith("move ")) { onWalk(at); close(); } else if (e.run) { e.run(); if (!e.line.startsWith("#bau") && !e.line.startsWith("#plan") && !e.line.startsWith("#zurück")) close(); } else { send(e.line); close(); } }}>{e.label}</button></li>)}
+				{sheet && about.desc && (told ? <li className="menu-note">{about.desc}</li> : <li role="menuitem"><button className="action-help" onClick={() => setTold(true)}>Was ist das?</button></li>)}
 				{sheet && about.article && onHelp && <li role="menuitem"><button className="action-help" onClick={() => { close(); onHelp(about.article!); }}>Was ist das?</button></li>}
 			</ul>
 		</>
@@ -967,9 +969,9 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 			{talkTab && detent !== "peek" ? (
 				<div className="talk-head"><button className="talk-back" onClick={() => setTab("chats")} aria-label="Zurück zu den Chats">←</button><strong>{talkHere!.conv.kind === "group" ? `# ${talkHere!.conv.title}` : talkHere!.conv.title}</strong></div>
 			) : (
-				<div className="sheet-tabs" role="tablist" aria-label="Aktionen, Protokoll und Chats">
+				<div className="sheet-tabs" role="tablist" aria-label="Aktionen, Ereignisse und Chats">
 					<button role="tab" aria-selected={pane === "bag"} onClick={() => openPane("bag")}>Aktionen</button>
-					<button role="tab" aria-selected={pane === "log"} onClick={() => openPane("log")}>Protokoll</button>
+					<button role="tab" aria-selected={pane === "log"} onClick={() => openPane("log")}>Ereignisse</button>
 					<button role="tab" aria-selected={pane === "chats"} onClick={() => openPane("chats")}>Chats{unreadAll ? <span className="chat-count">{unreadAll}</span> : null}</button>
 				</div>
 			)}
@@ -1039,7 +1041,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 					<div className="more-row"><span>{account.alias ?? account.name}{account.guest ? " · Gast" : ""}</span><span className="more-acts">
 						{!account.guest && <button onClick={() => { setMore(false); setPanel("alias"); }}>Alias</button>}
 						{account.guest && <button onClick={() => { setMore(false); setPanel("account"); }}>Registrieren</button>}
-						{account.admin && <button onClick={() => { setMore(false); setPanel("admin"); }}>Admin</button>}
+						{account.admin && <button onClick={() => { setMore(false); setPanel("admin"); }}>Systemeinstellungen</button>}
 						<button onClick={() => { setMore(false); if (account.guest) setPanel("leave"); else void logout(); }}>Abmelden</button>
 					</span></div>
 					<SystemBar />

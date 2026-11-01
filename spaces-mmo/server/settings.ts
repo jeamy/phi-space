@@ -24,11 +24,13 @@ export const SETTINGS: SettingDef[] = [
 	{ key: "epoch.dorf", env: "SPACES_MMO_EPOCH_DORF", def: 15, min: 0, max: 10_000, label: "Punkte einer Insel für das Dorf", unit: "Punkte", help: "Gehaltener Bestand einer Insel (Bauten, Beete, Äcker nach ihren Lichtpunkten), ab dem sie Epoche 2 erreicht und Mühle, Backhaus, Gehege, Webstuhl und Äcker freischaltet. Wenige Spieler: kleiner." },
 	{ key: "epoch.stadt", env: "SPACES_MMO_EPOCH_STADT", def: 40, min: 0, max: 10_000, label: "Punkte einer Insel für die Stadt", unit: "Punkte", help: "Dasselbe für Epoche 3." },
 	{ key: "epoch.netz", env: "SPACES_MMO_EPOCH_NETZ", def: 80, min: 0, max: 10_000, label: "Punkte einer Insel für das Netz", unit: "Punkte", help: "Dasselbe für Epoche 4." },
-	{ key: "keep.scheuche", env: "SPACES_MMO_KEEP_SCHEUCHE", def: 7, min: 1, max: 1_000, label: "Vogelscheuche steht", unit: "Welttage", help: "So lange hält sie nach Bau oder Reparatur. Gilt für Neues und die nächste Reparatur; was steht, behält sein Datum." },
-	{ key: "keep.bau", env: "SPACES_MMO_KEEP_BAU", def: 30, min: 1, max: 1_000, label: "Hütten, Mühle, Backhaus, Ställe stehen", unit: "Welttage", help: "Dasselbe für Hütte, Windmühle, Backhaus, Webstuhl, Hühnerstall, Gehege und Regentonne." },
-	{ key: "keep.lager", env: "SPACES_MMO_KEEP_LAGER", def: 45, min: 1, max: 1_000, label: "Lager, Gruben, Werkstätten, Rathaus stehen", unit: "Welttage", help: "Dasselbe für Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Werkstatt und Rathaus." },
-	{ key: "keep.kapelle", env: "SPACES_MMO_KEEP_KAPELLE", def: 60, min: 1, max: 1_000, label: "Kapelle steht", unit: "Welttage", help: "Dasselbe für die Kapelle." },
-	{ key: "keep.park", env: "SPACES_MMO_KEEP_PARK", def: 120, min: 1, max: 1_000, label: "Park steht", unit: "Welttage", help: "Dasselbe für den Park." },
+	{ key: "clock.life", env: "SPACES_MMO_CLOCK_LIFE", def: -1, min: -1, max: 100_000, label: "Lebenstakt", unit: "Welttage je Tag", help: "Wie schnell die Welt lebt, in allen Regionen: Tag und Nacht, Wetter, Wachstum, Arbeit, Tiere. 1 ist Echtzeit, 24 ein Welttag je Stunde. −1: Die Uhr bleibt, wie sie steht." },
+	{ key: "clock.decay", env: "SPACES_MMO_CLOCK_DECAY", def: -1, min: -1, max: 100_000, label: "Verfallstakt", unit: "Tage je Tag", help: "Wie schnell läuft, was auf Menschen wartet: Verfall, Abstimmungen, Feste, Durst, Erntefenster, Marktangebote, Feuer, Strandgut. 1 ist Echtzeit, die Tage hier sind dann echte Tage. −1: bleibt, wie es steht." },
+	{ key: "keep.scheuche", env: "SPACES_MMO_KEEP_SCHEUCHE", def: 7, min: 1, max: 1_000, label: "Vogelscheuche steht", unit: "Tage", help: "So lange hält sie nach Bau oder Reparatur. Gilt für Neues und die nächste Reparatur; was steht, behält sein Datum." },
+	{ key: "keep.bau", env: "SPACES_MMO_KEEP_BAU", def: 30, min: 1, max: 1_000, label: "Hütten, Mühle, Backhaus, Ställe stehen", unit: "Tage", help: "Dasselbe für Hütte, Windmühle, Backhaus, Webstuhl, Hühnerstall, Gehege und Regentonne." },
+	{ key: "keep.lager", env: "SPACES_MMO_KEEP_LAGER", def: 45, min: 1, max: 1_000, label: "Lager, Gruben, Werkstätten, Rathaus stehen", unit: "Tage", help: "Dasselbe für Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Werkstatt und Rathaus." },
+	{ key: "keep.kapelle", env: "SPACES_MMO_KEEP_KAPELLE", def: 60, min: 1, max: 1_000, label: "Kapelle steht", unit: "Tage", help: "Dasselbe für die Kapelle." },
+	{ key: "keep.park", env: "SPACES_MMO_KEEP_PARK", def: 120, min: 1, max: 1_000, label: "Park steht", unit: "Tage", help: "Dasselbe für den Park." },
 	{ key: "cmd.perSec", env: "SPACES_MMO_CMD_PER_SEC", def: 5, min: 1, max: 100, label: "Befehle je Sekunde je Konto", unit: "je s", help: "Danach so viele je Sekunde." },
 ];
 

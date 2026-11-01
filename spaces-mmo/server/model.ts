@@ -77,7 +77,8 @@ export type EpochFields = { island: string; epoch: number; points: number; at: n
 /** A recurring job (Evennia's Script/TickerHandler): due at `due`; the world worker that takes it runs it once. */
 /** The world's clock (docs/weltzeit.en.md), one entry per world: the world time is `worldAnchorMs + (now - realAnchorMs) * rate`
  *  (unless `paused`). A change takes the entry and writes it again with both anchors moved to the moment of the change. */
-export type WorldClockFields = { worldId: string; epoch: number; realAnchorMs: number; worldAnchorMs: number; rate: number; paused: boolean; version: number };
+/** `rate` drives the life of the world; `decayRate` from `decayAnchorMs` drives what must wait for people who are away (docs/weltzeit.en.md "Two rates"). A clock without them has both as one. */
+export type WorldClockFields = { worldId: string; epoch: number; realAnchorMs: number; worldAnchorMs: number; rate: number; paused: boolean; version: number; decayAnchorMs?: number; decayRate?: number };
 /** A date in world time (docs/weltzeit.en.md): fires once when the world time reaches `dueWorldMs`. `kind` names the handler
  *  (server/engine/worldevents.ts); `scheduleId` is the deterministic key (one entry per id). `missed`: what a late one does
  *  (the clock was behind: a restart, a pause): `once` runs it, `coalesce` runs it once and goes on from now; a later

@@ -107,7 +107,10 @@ export function itemsNamed<T extends { name: string; aliases: string[]; proto: s
 	const n = name.trim().toLowerCase();
 	const protos = new Set(world.prototypes.filter((p) => p.key === n || [p.name, ...p.aliases].some((a) => a.toLowerCase() === n)).map((p) => p.key));
 	const hits = byName(list, name, near);
-	return protos.size ? hits.filter((i) => protos.has(i.f.proto) || [i.f.name, ...i.f.aliases].some((a) => a.toLowerCase() === n)) : hits;
+	if (!protos.size) return hits;
+	const named = hits.filter((i) => protos.has(i.f.proto) || [i.f.name, ...i.f.aliases].some((a) => a.toLowerCase() === n));
+	// a thing written before its prototype got this alias carries only the old ones
+	return named.length ? named : list.filter((i) => protos.has(i.f.proto));
 }
 
 /** Things named `name` (name or alias, case-insensitive; exact matches first, then prefixes, then the same word in

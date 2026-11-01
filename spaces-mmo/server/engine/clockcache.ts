@@ -3,7 +3,7 @@
 // space nothing. A change by the operator reaches the process within `ttlMs`.
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type WorldClockFields } from "../model.ts";
-import { calendar, worldNow } from "./worldtime.ts";
+import { calendar, decayNow, patience, worldNow } from "./worldtime.ts";
 import { peek } from "../space.ts";
 
 export class ClockCache {
@@ -27,6 +27,17 @@ export class ClockCache {
 	/** World milliseconds per real millisecond as last read (1 before the first read). */
 	rate(): number { return this.#clock?.rate ?? 1; }
 
+	/** World milliseconds per millisecond of the second clock, as last read (1 before the first read). */
+	patience(): number { return this.#clock ? patience(this.#clock) : 1; }
+	/** Milliseconds of the second clock per real millisecond, as last read (1 before the first read). */
+	decayRate(): number { return this.#clock?.decayRate ?? this.#clock?.rate ?? 1; }
+
+	/** The time of the second clock now, or null while the world has no clock. */
+	async decayNow(realNow = Date.now()): Promise<number | null> {
+		const c = await this.clock(realNow);
+		return c ? decayNow(c, realNow) : null;
+	}
+
 	/** The world time now, or null while the world has no clock. */
 	async now(realNow = Date.now()): Promise<number | null> {
 		const c = await this.clock(realNow);
@@ -40,11 +51,12 @@ export const clockOf = (space: SpaceLike): ClockCache => { let c = caches.get(sp
 
 /** The world time now (real time while the world has no clock): what an NPC's own timers count in. */
 export const worldNowMs = async (space: SpaceLike, realNow = Date.now()): Promise<number> => (await clockOf(space).now(realNow)) ?? realNow;
+export const decayNowMs = async (space: SpaceLike, realNow = Date.now()): Promise<number> => (await clockOf(space).decayNow(realNow)) ?? realNow;
 
-/** Real milliseconds for a rhythm of `worldMs` of the world's time (at least `minMs`): how often a role looks around.
- *  A rhythm follows the clock's rate, so a world that runs fast has quick roles; it does not stop with a pause (a role still
- *  hears what is said in a world that stands still). */
-export const paceMs = (space: SpaceLike, worldMs: number, minMs = 50): number => Math.max(minMs, Math.round(worldMs / clockOf(space).rate()));
+/** Real milliseconds for a rhythm of `worldMs` (at least `minMs`): how often a role looks around. A role deals with people,
+ *  so it follows the second rate, not the life of the world; it does not stop with a pause (a role still hears what is said
+ *  in a world that stands still). */
+export const paceMs = (space: SpaceLike, worldMs: number, minMs = 50): number => Math.max(minMs, Math.round(worldMs / clockOf(space).decayRate()));
 
 /** The key of the world day, `e1:d183` (clock epoch and day), or null while the world has no clock: what a narrative
  *  budget "per day" counts by (docs/weltzeit.en.md, "Modellbudgets"). */

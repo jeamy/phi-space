@@ -31,11 +31,12 @@ function textsOf(file: string): string[] {
 		if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n) || ts.isTypeNode(n)) return;
 		if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) {
 			const up = n.parent;
-			const key = ts.isPropertyAssignment(up) && up.name === n;
+			const key = (ts.isPropertyAssignment(up) && (up.name === n || /^(?:key|line)$/.test(up.name.getText()))) || (ts.isArrayLiteralExpression(up) && ts.isPropertyAssignment(up.parent) && up.parent.name.getText() === "aliases");
 			const attr = ts.isJsxAttribute(up) && !["placeholder", "title", "aria-label", "label"].includes(up.name.getText());
 			const compare = ts.isBinaryExpression(up) && /[=!]==?/.test(up.operatorToken.getText());
 			const call = ts.isCallExpression(up) && /\.(startsWith|endsWith|includes|test|getItem|setItem|querySelector\w*|addEventListener|matchMedia|readAll|take|write|peek|takeIfExists|readIfExists|count)$|^(fetch|post|matchMedia|Number)$/.test(up.expression.getText());
-			if (!key && !attr && !compare && !call) add(n.text);
+			const sent = ts.isCallExpression(up) && up.expression.getText() === "send";
+			if (!key && !attr && !compare && !call && !sent) add(n.text);
 		} else if (ts.isJsxText(n)) add(n.text);
 		else if (ts.isTemplateExpression(n)) {
 			let i = 0, s = n.head.text;

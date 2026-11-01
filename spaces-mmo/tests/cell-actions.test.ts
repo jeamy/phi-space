@@ -48,6 +48,8 @@ test("a free cell offers the walk and building", () => {
 test("the sheet's head names the thing and finds its help", () => {
 	assert.deepEqual(cellAbout({ x: 10, y: 10 }, chars, objs, "r"), { title: "Hütte von Mira", article: "help.game.build" });
 	assert.equal(cellAbout({ x: 8, y: 5 }, chars, objs, "r").title, "Ines");
+	const stone = new Map([["s", obj({ id: "s", kind: "scenery", name: "Hoher Stein", desc: "Ein aufrechter Stein.", x: 3, y: 3 })]]);
+	assert.deepEqual(cellAbout({ x: 3, y: 3 }, chars, stone, "r"), { title: "Hoher Stein", desc: "Ein aufrechter Stein." }, "scenery tells what it is, no general article");
 });
 
 test("the way goes around what stands in it, and none is none", () => {

@@ -8,7 +8,7 @@
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type ParkCareFields, type SettlementFields, type ShowEntryFields, type ShowFields, type ShowKind } from "../../model.ts";
-import { worldNowOf } from "../clock.ts";
+import { decayNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
@@ -51,7 +51,7 @@ const fest: Command = {
 		if (!s) throw new CommandError("Feste feiert eine Siedlung; hier ist keine.");
 		if (rankOf(s, await hutsIn(c.space, c.world, s.room, c.txn), account) !== "siedler") throw new CommandError(`Feste eröffnen die Siedler von ${s.name}.`);
 		if (open) throw new CommandError("Hier läuft schon ein Fest.");
-		const now = await worldNowOf(c.space, c.txn);
+		const now = await decayNowOf(c.space, c.txn);
 		if ((s.showRestWorldMs ?? 0) > now) throw new CommandError(`${s.name} hat gerade erst gefeiert; das nächste Fest braucht noch etwas Zeit.`);
 		const show: ShowFields = { showId: randomBytes(6).toString("hex"), room: s.room, settlementId: s.settlementId, settlementName: s.name, kind, byName: c.actor.name, endsWorldMs: now + d.showWorldMs };
 		try { await c.space.write({ type: "Show", fields: show as never }, c.txn, FOREVER, { unique: ["room"] }); }
@@ -90,7 +90,7 @@ const pflege: Command = {
 	async func(c) {
 		const d = defOf(c), account = members(c);
 		if (!(await parkBeside(c, d))) throw new CommandError(`Pflegen kann man nur ${atPark(c, d)}.`);
-		const now = await worldNowOf(c.space, c.txn), key = { room: c.actor.room, accountId: account.accountId };
+		const now = await decayNowOf(c.space, c.txn), key = { room: c.actor.room, accountId: account.accountId };
 		const held = await c.space.takeIfExists({ type: "ParkCare", fields: key }, NO_WAIT, { txn: c.txn });
 		const had = held && fieldsOf<ParkCareFields>(held);
 		if (had && had.lastWorldMs + d.careWorldMs > now) throw new CommandError("Der Park ist für heute gepflegt; morgen wieder.");
@@ -114,7 +114,7 @@ export async function tendersIn(space: SpaceLike, w: WorldDef, room: string, now
 export async function showTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<number> {
 	const d = w.festival;
 	if (!d) return 0;
-	const now = await worldNowOf(space);
+	const now = await decayNowOf(space);
 	let ended = 0;
 	for (const e of await space.readAll({ type: "Show" })) {
 		if (fieldsOf<ShowFields>(e).endsWorldMs > now) continue;

@@ -6,7 +6,7 @@
 import { cutText, FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { DEFAULT_COMMANDS } from "../engine/commands/default.ts";
 import { TRADE_COMMANDS } from "../engine/commands/trade.ts";
-import { worldDayKey, worldNowMs } from "../engine/clockcache.ts";
+import { decayNowMs, worldDayKey } from "../engine/clockcache.ts";
 import { complete, llmEnabled } from "../llm.ts";
 import { fieldsOf, NPC_LOCK, type NpcAwakeFields, type NpcMemoryFields, type NpcOwnerFields } from "../model.ts";
 import { readExisting, StillHeld } from "../space.ts";
@@ -49,7 +49,7 @@ export async function claimRole(space: SpaceLike, npcId: string, owner: string, 
  *  (engine/sweep.ts) removes it when the time has come. */
 export async function tryWake(space: SpaceLike, npcId: string, max: number, forWorldMs: number): Promise<boolean> {
 	return locked(space, async (txn) => {
-		const now = await worldNowMs(space);
+		const now = await decayNowMs(space);
 		const awake = (await space.readAll({ type: "NpcAwake" }, { txn })).filter((e) => Number(e.fields.untilWorldMs) > now);
 		if (awake.some((e) => e.fields.npcId === npcId)) return true;
 		if (awake.length >= max) return false;
@@ -61,7 +61,7 @@ export async function tryWake(space: SpaceLike, npcId: string, max: number, forW
 
 export const isAwake = async (space: SpaceLike, npcId: string) => {
 	const e = await space.readIfExists({ type: "NpcAwake", fields: { npcId } }, 1_000);
-	return !!e && Number(e.fields.untilWorldMs) > (await worldNowMs(space));
+	return !!e && Number(e.fields.untilWorldMs) > (await decayNowMs(space));
 };
 
 /** Keeps an awake NPC awake for another `forWorldMs` of world time (it was spoken to, or something happened). */
@@ -69,7 +69,7 @@ export async function keepAwake(space: SpaceLike, npcId: string, forWorldMs: num
 	const txn = (await space.createTransaction(10_000)).id;
 	try {
 		const e = await space.takeIfExists({ type: "NpcAwake", fields: { npcId } }, 1_000, { txn });
-		if (e) await space.write({ type: "NpcAwake", fields: { ...e.fields, untilWorldMs: (await worldNowMs(space)) + forWorldMs } }, txn, FOREVER);
+		if (e) await space.write({ type: "NpcAwake", fields: { ...e.fields, untilWorldMs: (await decayNowMs(space)) + forWorldMs } }, txn, FOREVER);
 		await space.commit(txn);
 	} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
 }

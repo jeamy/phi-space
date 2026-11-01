@@ -19,6 +19,17 @@ export function worldNow(clock: Pick<WorldClockFields, "paused" | "worldAnchorMs
 	return clock.worldAnchorMs + (realNow - clock.realAnchorMs) * clock.rate;
 }
 
+/** The time of the second clock, in which everything that waits for people who are away lapses (docs/weltzeit.en.md "Two
+ *  rates"). Until the two are told apart it is the world time, so what a world already stored stays valid. */
+export function decayNow(clock: Pick<WorldClockFields, "paused" | "worldAnchorMs" | "realAnchorMs" | "rate" | "decayAnchorMs" | "decayRate">, realNow = Date.now()): number {
+	if (clock.decayAnchorMs === undefined || clock.decayRate === undefined) return worldNow(clock, realNow);
+	if (clock.paused) return clock.decayAnchorMs;
+	return clock.decayAnchorMs + (realNow - clock.realAnchorMs) * clock.decayRate;
+}
+/** World milliseconds that last as long as one millisecond of the second clock: a span that is meant for people, measured
+ *  in world time. */
+export const patience = (clock: Pick<WorldClockFields, "rate" | "decayRate">) => clock.rate / (clock.decayRate ?? clock.rate);
+
 export type CalendarTime = { day: number; hour: number; minute: number; millisOfDay: number };
 
 /** Day, hour and minute of a world time; day 0 is the world's first. */
@@ -44,13 +55,18 @@ const clampRate = (rate: number) => Math.min(MAX_RATE, Math.max(MIN_RATE, rate))
 
 /** The clock with both anchors moved to `realNow`: the same world time, a fresh starting point for a change. */
 export function materialize(clock: WorldClockFields, realNow: number): WorldClockFields {
-	return { ...clock, worldAnchorMs: worldNow(clock, realNow), realAnchorMs: realNow };
+	return { ...clock, worldAnchorMs: worldNow(clock, realNow), decayAnchorMs: decayNow(clock, realNow), decayRate: clock.decayRate ?? clock.rate, realAnchorMs: realNow };
 }
 
 /** A new rate without a jump. Throws a RangeError unless 0.001 ≤ rate ≤ 100 000 (a pause is `paused`, never rate 0). */
 export function withRate(clock: WorldClockFields, rate: number, realNow: number): WorldClockFields {
 	if (!Number.isFinite(rate) || rate < MIN_RATE || rate > MAX_RATE) throw new RangeError(`rate must be between ${MIN_RATE} and ${MAX_RATE}`);
 	return { ...materialize(clock, realNow), rate };
+}
+/** A new second rate without a jump; the same range. */
+export function withDecayRate(clock: WorldClockFields, decayRate: number, realNow: number): WorldClockFields {
+	if (!Number.isFinite(decayRate) || decayRate < MIN_RATE || decayRate > MAX_RATE) throw new RangeError(`rate must be between ${MIN_RATE} and ${MAX_RATE}`);
+	return { ...materialize(clock, realNow), decayRate };
 }
 export const paused = (clock: WorldClockFields, realNow: number): WorldClockFields => ({ ...materialize(clock, realNow), paused: true });
 export const resumed = (clock: WorldClockFields, realNow: number): WorldClockFields => ({ ...materialize(clock, realNow), paused: false });

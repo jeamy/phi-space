@@ -15,7 +15,7 @@ import { peek } from "../../space.ts";
 import type { WorldDef } from "../world.ts";
 import { hallIn, zonesLine } from "./townhall.ts";
 import { tendersIn } from "./festival.ts";
-import { worldNowOf } from "../clock.ts";
+import { decayNowOf } from "../clock.ts";
 
 export type Rank = "fremder" | "helfer" | "siedler";
 const ORDER: Rank[] = ["fremder", "helfer", "siedler"];
@@ -96,7 +96,7 @@ const put = (c: CommandCtx, s: SettlementFields) => c.space.write({ type: "Settl
  *  Each region is a space of its own, so the list is that of the region. */
 export async function settlementRanks(space: SpaceLike, w: WorldDef): Promise<Array<{ name: string; points: number; parks: number; tenders: number }>> {
 	const buildings = (await space.readAll({ type: "Building" })).map((e) => fieldsOf<BuildingFields>(e));
-	const now = await worldNowOf(space);
+	const now = await decayNowOf(space);
 	return (await Promise.all((await space.readAll({ type: "Settlement" })).map(async (e) => {
 		const s = fieldsOf<SettlementFields>(e), here = buildings.filter((b) => b.room === s.room), tenders = await tendersIn(space, w, s.room, now);
 		return { name: s.name, points: here.reduce((n, b) => n + (b.points ?? 1), 0) + tenders, parks: here.filter((b) => b.plan === "park").length, tenders };

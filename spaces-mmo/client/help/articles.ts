@@ -230,7 +230,7 @@ Die Karte füllt den Bildschirm, im Browser am Rechner genauso, und die Kamera f
 
 Das **Steuerkreuz** geht Schritt für Schritt, solange du eine Richtung hältst. Unter **⋯** schaltest du es zusammen mit den Knöpfen für Zoom und Drehen ab oder legst es nach links. Über der Karte steht unter **Hier möglich**, was du gerade tun kannst, zum Beispiel **Treibholz nachlegen**. Ausgänge außerhalb des Bilds stehen als Schild am Rand.
 
-Unten liegt ein **Blatt** mit [Aktionen, Protokoll und Chats](help.game.controls#side). Zieh es am Griff auf die Höhe und, wo es schmaler als die Seite ist, nach links oder rechts, dorthin, wo du es möchtest, es bleibt so; ein Tipp auf den Griff oder die Karte schließt es, der nächste Tipp öffnet es wieder auf dieser Höhe. Im Querformat liegt es genauso unten, und das Spiel geht beim ersten Tipp ins Vollbild, ohne Adressleiste (abschaltbar unter **⋯**; auf dem iPhone geht das nur vom Home-Bildschirm). Die Zurück-Taste schließt immer die oberste Ebene.
+Unten liegt ein **Blatt** mit [Aktionen, Ereignisse und Chats](help.game.controls#side). Zieh es am Griff auf die Höhe und, wo es schmaler als die Seite ist, nach links oder rechts, dorthin, wo du es möchtest, es bleibt so; ein Tipp auf den Griff oder die Karte schließt es, der nächste Tipp öffnet es wieder auf dieser Höhe. Im Querformat liegt es genauso unten, und das Spiel geht beim ersten Tipp ins Vollbild, ohne Adressleiste (abschaltbar unter **⋯**; auf dem iPhone geht das nur vom Home-Bildschirm). Die Zurück-Taste schließt immer die oberste Ebene.
 
 Ein Tipp auf den **Raumnamen** oben öffnet die Weltkarte. Dort zeigt der grüne Punkt, wo du bist, und farbige Quadrate zeigen, wo deine Bauten, Baustellen, Beete und Äcker liegen. Auf dem Home-Bildschirm wird das Spiel zu einer eigenen App ohne Adressleiste: am iPhone **Teilen → Zum Home-Bildschirm**, am Android-Handy **Browser-Menü ⋮ → Zum Startbildschirm hinzufügen**. Dann öffnest du es von dort.
 
@@ -253,7 +253,7 @@ Die Tasten gelten, solange die Befehlszeile nicht den Fokus hat.
 
 Das Seitenfeld zeigt, was gerade wichtig ist: was neben dir liegt, was du trägst und wie lange das Feuer noch brennt. Darunter steht alles, was du siehst und hörst.
 
-Rechts (auf dem Handy und dem Tablet im Hochformat im Blatt, dort im Reiter **Aktionen**) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen; ein Tipp auf etwas, das du trägst, zeigt, was du gerade damit tun kannst. Unter **Du trägst** die **Befehlszeile** mit der letzten Antwort. Darunter (am Handy: Reiter **Protokoll**) das **Protokoll** mit allem, was du siehst und hörst, daneben die Reiter des [Chats](help.game.chat) (je Gespräch einer, „Chats“ als Übersicht). „Kommen und Gehen“ blendet die Meldungen ein, wer kommt und geht.
+Rechts (auf dem Handy und dem Tablet im Hochformat im Blatt, dort im Reiter **Aktionen**) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen; ein Tipp auf etwas, das du trägst, zeigt, was du gerade damit tun kannst. Unter **Du trägst** die **Befehlszeile** mit der letzten Antwort. Darunter (am Handy: Reiter **Ereignisse**) die **Ereignisse** mit allem, was du siehst und hörst, daneben die Reiter des [Chats](help.game.chat) (je Gespräch einer, „Chats“ als Übersicht). „Kommen und Gehen“ blendet die Meldungen ein, wer kommt und geht.
 
 ## Kopfzeile {#bar}
 
@@ -313,7 +313,7 @@ The map fills the screen, in a desktop browser too, and the camera follows your 
 
 The **D-pad** walks step by step while you hold a direction. Under **⋯** you switch it off, together with the zoom and turn buttons, or move it to the left. Above the map **Hier möglich** lists what you can do right now, for example **Treibholz nachlegen**. Exits outside the picture stand as signs at its edge.
 
-At the bottom lies a **sheet** with [actions, log and chats](help.game.controls#side). Drag its handle to the height you like and, where it is narrower than the page, left or right, and it stays there; a tap on the handle or the map closes it, the next tap opens it at that height again. On its side it lies at the bottom just the same, and the game goes to full screen at the first tap, without the address bar (off under **⋯**; on an iPhone only from the home screen). The back button always closes the topmost layer.
+At the bottom lies a **sheet** with [actions, events and chats](help.game.controls#side). Drag its handle to the height you like and, where it is narrower than the page, left or right, and it stays there; a tap on the handle or the map closes it, the next tap opens it at that height again. On its side it lies at the bottom just the same, and the game goes to full screen at the first tap, without the address bar (off under **⋯**; on an iPhone only from the home screen). The back button always closes the topmost layer.
 
 A tap on the **room name** at the top opens the world map. The green dot shows where you are, coloured squares where your buildings, sites, beds and fields lie. On the home screen the game becomes an app of its own without an address bar: on an iPhone **Share → Add to Home Screen**, on an Android phone **browser menu ⋮ → Add to Home screen**. Then open it from there.
 
@@ -336,7 +336,7 @@ The keys work as long as the command line does not have the focus.
 
 The side panel shows what matters right now: what lies next to you, what you carry and how long the fire still burns. Below it stands everything you see and hear.
 
-On the right (below the map on a phone and an upright tablet) you find **Next to you**, **You carry** and the **beacon** with its time left, each with buttons; a tap on something you carry shows what you can do with it right now. Under **You carry** the **command line** with its last answer. Below that the **log** with everything you see and hear, beside it the tabs of the [chat](help.game.chat) (one per talk, “Chats” as the overview). “Kommen und Gehen” shows the lines about who comes and goes.
+On the right (below the map on a phone and an upright tablet) you find **Next to you**, **You carry** and the **beacon** with its time left, each with buttons; a tap on something you carry shows what you can do with it right now. Under **You carry** the **command line** with its last answer. Below that the **events** with everything you see and hear, beside it the tabs of the [chat](help.game.chat) (one per talk, “Chats” as the overview). “Kommen und Gehen” shows the lines about who comes and goes.
 
 ## Header bar {#bar}
 
@@ -569,7 +569,7 @@ This is how you talk to others. The room hears \`say\`, everyone hears a channel
 | \`emote <does something>\` | \`geste\`, \`:waves\` | Show an action |
 | \`channel <name> <text>\` | \`kanal\` | Speak on a channel everyone hears (e.g. \`channel hafen Hello\`); without text it lists the channels |
 | \`chat <name> <text>\` | \`tell\`, \`whisper\` | Encrypted talk between two, also across islands ([Chat](help.game.chat)) |
-| \`gruppe …\` | \`group\` | Groups: found, invite, write, leave ([Chat](help.game.chat#groups)) |
+| \`group …\` | \`group\` | Groups: found, invite, write, leave ([Chat](help.game.chat#groups)) |
 | \`ignoriere <name>\` / \`erlaube <name>\` | \`ignore\` / \`unignore\` | Block a player in the chat or allow them again |
 
 ## Building {#buildcmds}
@@ -1025,7 +1025,7 @@ The hut has a chest with 12 places that is **yours alone**: \`truhe\` (\`chest\`
 
 Nothing lasts for ever. If you do not repair a building you lose it, but not your things.
 
-A building lasts **a week**, a scarecrow three days. \`repariere\` (\`repair\`) costs one piece of material (mostly 1 driftwood, 1 shell for a bakery, 1 kelp for a scarecrow), anyone may help, and the time starts anew. Let it decay and it becomes a **ruin**: it stands ten more world days and frees the fire's light. What lay in the chest waits a month as an **estate**; \`nachlass\` (\`estate\`) at the ruin collects it.
+A building lasts **a week**, a scarecrow three days. \`repariere\` (\`repair\`) costs one piece of material (mostly 1 driftwood, 1 shell for a bakery, 1 kelp for a scarecrow), anyone may help, and the time starts anew. Let it decay and it becomes a **ruin**: it stands ten more world days and frees the fire's light. What lay in the chest waits a month as an **estate**; \`estate\` (\`estate\`) at the ruin collects it.
 
 ## Demolition {#demolish}
 
@@ -1252,13 +1252,13 @@ Brot, Mehl und Leinen kauft Marta am Markt von Kupferhafen, und die Auftragstafe
 
 A field carries one single crop. It needs little daily care, but two bursts of work.
 
-The **field** has 4×4 cells, one per account, in a fire's light (two light points). With a spade \`flur anlegen\` breaks one beside you, \`flur anlegen <x> <y>\` at a given spot. Breaking one needs an account.
+The **field** has 4×4 cells, one per account, in a fire's light (two light points). With a spade \`field new\` breaks one beside you, \`field new <x> <y>\` at a given spot. Breaking one needs an account.
 
 ## Sowing {#sow}
 
 First the field is sown. Whoever made it chooses the crop, then everyone brings seed and work.
 
-Whoever made the field chooses the crop with \`bestelle gerste\` (\`plough\`). Then it needs **4 seed and 2 work**: every \`bestelle\` brings what seed you carry and one work point; then you rest a world hour, as at a building site.
+Whoever made the field chooses the crop with \`plough gerste\` (\`plough\`). Then it needs **4 seed and 2 work**: every \`plough\` brings what seed you carry and one work point; then you rest a world hour, as at a building site.
 
 | Crop | Seed | From | Kind | Yield |
 | --- | --- | --- | --- | --- |
@@ -1275,13 +1275,13 @@ When the field is ripe, many hands count. Everyone gets at once what they bring 
 
 After two to three days the field is ripe and stays so for two days. Every \`ernte\` at it (\`ernte flur\` when a bed is near too) is a work point (8 for a field) and puts your share in your pack at once. Alone it takes eight hours; eight hands bring it in in one, and every grain goes to exactly one. After that the field is **overripe**, each share only half, and two days later the crop is lost.
 
-\`flur offen\` lets anyone sow and harvest along, guests too, and each keeps their share; \`flur zu\` closes it again.
+\`field offen\` lets anyone sow and harvest along, guests too, and each keeps their share; \`field zu\` closes it again.
 
 ## Crop rotation {#rotation}
 
 The soil tires when the same thing keeps growing on it. Change the crop and it gives more again.
 
-The same kind twice in a row tires the soil, it gives only 60 %, the third time 35 %. Another kind or three days of rest heal it: grain, then potatoes, then beets or rest. \`flur\` shows the soil. A field nobody works for two weeks runs wild.
+The same kind twice in a row tires the soil, it gives only 60 %, the third time 35 %. Another kind or three days of rest heal it: grain, then potatoes, then beets or rest. \`field\` shows the soil. A field nobody works for two weeks runs wild.
 
 ## Mill and bakery {#mill}
 
@@ -1352,13 +1352,13 @@ Every animal needs a home that belongs to you. You build a coop or pen like any 
 
 **Hens** live in the **hen house** (\`bau hühnerstall\`: 2×1 cells, 4 driftwood, 1 kelp rope, 6 work, up to 6 hens), **sheep**, **goats**, **ducks** or **geese** in the **pen** (\`bau gehege\`: 3×3 cells, 8 driftwood, 4 kelp rope, 8 work, up to 4 of one kind).
 
-Gesa at the Kupferhafen market sells animals. \`einstallen huhn\` puts one you carry into your house, \`ausstallen\` takes one out. \`stall\` shows how they are.
+Gesa at the Kupferhafen market sells animals. \`stable huhn\` puts one you carry into your house, \`unstall\` takes one out. \`stall\` shows how they are.
 
 ## Feeding {#feed}
 
 Animals eat what grows on fields and beds. Anyone may feed them, not just the owner.
 
-\`füttere\` gives feed from your pack; one feed keeps one animal fed for a day, up to three days ahead.
+\`fodder\` gives feed from your pack; one feed keeps one animal fed for a day, up to three days ahead.
 
 | Animal | eats | gives while fed |
 | --- | --- | --- |
@@ -1372,7 +1372,7 @@ Animals eat what grows on fields and beds. Anyone may feed them, not just the ow
 
 Fed animals give something regularly. Only their owner may collect it.
 
-Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`einsammeln\` (also \`sammle eier\`, \`melke\`, \`schere\`) fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate.
+Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`collect\` (also \`sammle eier\`, \`collect\`, \`collect\`) fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate.
 
 Fed **geese** keep watch: in their room no hare gets to the beds and no fox into the coop, they cackle it away.
 
@@ -1469,7 +1469,7 @@ Each animal has its own remedy. The table shows what protects against what.
 
 A dog or cat keeps watch at one of your buildings. They protect the whole place, the neighbours too.
 
-Gesa sells **dogs and cats**. \`einstallen hund\` leaves one on guard at a building of yours (one per building), \`ausstallen hund\` takes it along again. Fed, it keeps its wild from the whole room, the neighbours' beds and fields too. \`füttere hund\` (anyone may) feeds it for a day with an egg, bread, cheese or milk, up to three days ahead; a cat eats milk, eggs and cheese. \`wache\` shows who keeps watch in the room.`,
+Gesa sells **dogs and cats**. \`stable hund\` leaves one on guard at a building of yours (one per building), \`unstall hund\` takes it along again. Fed, it keeps its wild from the whole room, the neighbours' beds and fields too. \`fodder hund\` (anyone may) feeds it for a day with an egg, bread, cheese or milk, up to three days ahead; a cat eats milk, eggs and cheese. \`wache\` shows who keeps watch in the room.`,
 		},
 	},
 	{
@@ -1544,7 +1544,7 @@ The operator can change the thresholds, say for a server with few players. The c
 
 A settlement is a community in one place, with a name and rules of its own. It comes about when enough neighbours have built huts there. The ground still belongs to nobody, and every building stays with its owner.
 
-When **three huts of at least two owners** stand in a room, \`siedlung gründen <name>\` founds a settlement. Whoever has a hut there may do it; guests may not. The name has 2 to 30 letters and must not be taken yet. Each room has one settlement. \`siedlung\` shows the settlement here, its huts and who belongs; where there is none, how many huts are still missing.
+When **three huts of at least two owners** stand in a room, \`settlement gründen <name>\` founds a settlement. Whoever has a hut there may do it; guests may not. The name has 2 to 30 letters and must not be taken yet. Each room has one settlement. \`settlement\` shows the settlement here, its huts and who belongs; where there is none, how many huts are still missing.
 
 If too few huts stand, the settlement ends by itself and its name is free again. What stands there stays.
 
@@ -1558,13 +1558,13 @@ In a settlement everyone has a rank. Whoever has a hut there is a settler by the
 | Helper | whom a settler takes in as a helper; a guest is a helper at most | deliver, help |
 | Stranger | everyone else | none of that |
 
-\`siedlung aufnehmen <name>\` takes someone in as a settler, \`siedlung aufnehmen <name> helfer\` as a helper, \`siedlung entlassen <name>\` reverses it. Only settlers decide that. Hut owners cannot be dismissed.
+\`settlement aufnehmen <name>\` takes someone in as a settler, \`settlement aufnehmen <name> helfer\` as a helper, \`settlement entlassen <name>\` reverses it. Only settlers decide that. Hut owners cannot be dismissed.
 
 ## Open or closed {#door}
 
 A new settlement is open: anyone may build and help there. But it can close its door. Then the ranks count.
 
-\`siedlung zu\` closes the settlement, \`siedlung offen\` opens it again; only settlers may do either. What already stands stays with its owner, and anyone may enter the place. The rules cover new sites, beds and fields, and delivering and working at sites.`,
+\`settlement zu\` closes the settlement, \`settlement offen\` opens it again; only settlers may do either. What already stands stays with its owner, and anyone may enter the place. The rules cover new sites, beds and fields, and delivering and working at sites.`,
 		},
 	},
 	{
@@ -1582,7 +1582,7 @@ A new settlement is open: anyone may build and help there. But it can close its 
 
 ## Einrichten {#setup}
 
-Im Reiter **„Chats“** neben dem Protokoll richtest du den Chat mit einem eigenen **Chat-Passwort** ein. Es ist nicht dein Login-Passwort und geht nie an den Server; mit ihm entsperrst du den Chat auch an einem anderen Gerät.
+Im Reiter **„Chats“** neben den Ereignissen richtest du den Chat mit einem eigenen **Chat-Passwort** ein. Es ist nicht dein Login-Passwort und geht nie an den Server; mit ihm entsperrst du den Chat auch an einem anderen Gerät.
 
 **Vergisst du das Chat-Passwort, sind deine Verläufe verloren.** Niemand kann sie wiederherstellen. Schreibt dir jemand, bevor du den Chat eingerichtet hast, sagt dir das Spiel Bescheid; die Nachrichten kommen an, sobald du ihn eingerichtet hast und die Seite des Absenders einmal entsperrt offen war. Sie warten bis zu 7 Tage. **„Verlauf sichern“** speichert die geöffneten Gespräche als Textdatei. Das Passwort lässt sich ändern, solange du es kennst.
 
@@ -1590,7 +1590,7 @@ Im Reiter **„Chats“** neben dem Protokoll richtest du den Chat mit einem eig
 
 Ein Gespräch zu zweit beginnt mit einem Befehl oder einem Rechtsklick auf eine Figur. Der andere muss dafür nicht in deiner Nähe sein.
 
-\`chat <name> <text>\` (auch \`tell\`, \`flüstere\`) schreibt jemandem; \`chat <name>\` öffnet nur das Gespräch. Oder die rechte Maustaste (langes Tippen) auf eine Figur, auf einen Namen im Protokoll oder in der Liste von \`who\`: **„Chat mit …“**. Jedes Gespräch hat einen eigenen Reiter mit Zähler für Ungelesenes.
+\`chat <name> <text>\` (auch \`tell\`, \`flüstere\`) schreibt jemandem; \`chat <name>\` öffnet nur das Gespräch. Oder die rechte Maustaste (langes Tippen) auf eine Figur, auf einen Namen in den Ereignissen oder in der Liste von \`who\`: **„Chat mit …“**. Jedes Gespräch hat einen eigenen Reiter mit Zähler für Ungelesenes.
 
 Ist der andere nicht da, wartet die Nachricht **sieben Tage** und erscheint bei seinem nächsten Anmelden (die letzten 50 je Gespräch). Mit NPCs sprichst du mit \`say\`, nicht im Chat.
 
@@ -1618,7 +1618,7 @@ Nur die Mitglieder eines Gesprächs können es lesen, nicht der Server und kein 
 
 Du entscheidest, wer dich erreicht. Wer stört, lässt sich sperren oder melden.
 
-\`ignoriere <name>\` sperrt Nachrichten und Einladungen eines Spielers, \`erlaube <name>\` hebt es auf, \`ignoriere\` allein listet die Gesperrten. **Melden** an einer Nachricht schickt ihren Text mit Absender an die Admins (sie bleibt dort 30 Tage); sonst sehen Admins keine Gespräche. Gespräche erscheinen nie im Protokoll des Raums.`,
+\`ignoriere <name>\` sperrt Nachrichten und Einladungen eines Spielers, \`erlaube <name>\` hebt es auf, \`ignoriere\` allein listet die Gesperrten. **Melden** an einer Nachricht schickt ihren Text mit Absender an die Admins (sie bleibt dort 30 Tage); sonst sehen Admins keine Gespräche. Gespräche erscheinen nie in den Ereignissen des Raums.`,
 			en: `In the chat you write with single people or a small group, also across the islands. Only you can read along. Before the first talk you set up a password of its own once.
 
 \`say\` is heard by the room only, \`channel hafen\` by everyone. The **chat** is the talk between two or in a group, also with someone on another island.
@@ -1633,7 +1633,7 @@ In the **“Chats”** tab beside the log you set up the chat with a **chat pass
 
 A talk between two starts with a command or a right click on a figure. The other person need not be near you.
 
-\`chat <name> <text>\` (also \`tell\`, \`whisper\`) writes to someone; \`chat <name>\` only opens the talk. Or right-click (long press) a figure, a name in the log or in the list of \`who\`: **“Chat with …”**. Every talk has its own tab with a count of unread lines.
+\`chat <name> <text>\` (also \`tell\`, \`whisper\`) writes to someone; \`chat <name>\` only opens the talk. Or right-click (long press) a figure, a name in the events or in the list of \`who\`: **“Chat with …”**. Every talk has its own tab with a count of unread lines.
 
 If the other is away, the message waits **seven days** and appears at their next sign-in (the last 50 per talk). You talk to NPCs with \`say\`, not in the chat.
 
@@ -1643,13 +1643,13 @@ A group is a shared talk for several people. Whoever founds it manages it.
 
 | Command | Effect |
 | --- | --- |
-| \`gruppe neu <name>\` (\`group\`) | Found a group; you manage it |
-| \`gruppe lade <player> in <group>\` | Invite (any member may; the invitation lasts 24 hours) |
-| \`gruppe annehmen <group>\` / \`gruppe ablehnen <group>\` | Accept or decline an invitation (also in the “Chats” tab) |
-| \`gruppe <group> <text>\` | Write to the group (or in the group's tab) |
-| \`gruppe verlasse <group>\` | Leave |
-| \`gruppe entferne <player> aus <group>\` | Remove someone (only who manages it) |
-| \`gruppe\` | Your groups |
+| \`group neu <name>\` (\`group\`) | Found a group; you manage it |
+| \`group lade <player> in <group>\` | Invite (any member may; the invitation lasts 24 hours) |
+| \`group annehmen <group>\` / \`group ablehnen <group>\` | Accept or decline an invitation (also in the “Chats” tab) |
+| \`group <group> <text>\` | Write to the group (or in the group's tab) |
+| \`group verlasse <group>\` | Leave |
+| \`group entferne <player> aus <group>\` | Remove someone (only who manages it) |
+| \`group\` | Your groups |
 
 At most 20 members per group, at most ten groups founded per account. Guests chat but found no group and invite nobody.
 

@@ -1,5 +1,23 @@
 # Weltzeit
 
+## Zwei Takte
+
+Die Welt hat zwei Takte, im Admin-Fenster für alle Regionen einstellbar (`clock.life`, `clock.decay`) oder je Region mit `clock rate <n>` und `clock verfall <n>`. Eine gespeicherte Einstellung schlägt den Befehl. Der **Lebenstakt** ist die bisherige `rate`: wie schnell die Welt lebt. Der **Verfallstakt** ist, wie schnell alles läuft, was auf Menschen warten muss, weil sie schlafen, arbeiten oder laufen. Steht er auf 1, ist ein Tag in den Einstellungen ein echter Tag, wie schnell die Welt auch lebt.
+
+Die Prüffrage für jede Spanne: Bestraft sie Abwesende, oder muss jemand hinlaufen oder antworten? Dann folgt sie dem Verfallstakt.
+
+| Folgt | Was |
+| --- | --- |
+| Lebenstakt | Tag und Nacht, Nebel, Flut, Sturm, Wachstum von Pflanzen und Getreide, Mahlen, die Ruhe nach der Arbeit und nach dem Samensammeln, das Füllen der Tonne, Legen, Fressen und Vermehren der Tiere, Brache, der Segen, Wild an den Beeten |
+| Verfallstakt, zweite Uhr | Verfall von Bauten, Baustellen, Ruinen, Nachlässen, Beeten und Äckern, ein nicht abgeholter Sack an der Mühle, Marktangebote, Abstimmungen, Feste samt Ruhezeit, Parkpflege, wie lange NPCs wach bleiben, ihr Grüßen, Klatsch und ihre Besuche, wie oft eine Rolle sich umsieht |
+| Verfallstakt, als Spanne in Weltzeit | Durst, Welken reifer Pflanzen, Erntefenster, das Futter eines Hundes, Brenndauer, Liegezeit von Strandgut, ein Auftrag der Tafel |
+
+**Die zweite Uhr** ist ein zweiter Anker am `WorldClock`-Eintrag (`decayAnchorMs`, `decayRate`), gelesen mit `decayNow`. Ihre Felder heißen wie bisher `untilWorldMs`. Eine Uhr ohne diese Anker hat die Weltzeit als zweite Zeit, es wird also nichts migriert: Die erste Änderung eines Takts startet sie bei der aktuellen Weltzeit, Gespeichertes bleibt gültig. Spätere Änderungen des Lebenstakts berühren diese Fristen nicht. Eine Pause hält beide an.
+
+**Spannen in Weltzeit** (`patience`, Lebenstakt durch Verfallstakt) gehören zu einem Termin der Weltuhr, etwa der nächsten Stufe eines Ackers. Sie werden beim Schreiben des Termins umgerechnet. Eine Taktänderung erreicht sie erst dann, geschriebene Termine kommen also beim Hochsetzen einmalig früher: Beim Wechsel von 1 auf 24 brennt ein Feuer bis zu 24-mal früher aus und welkt eine reife Pflanze entsprechend früher.
+
+Modellaufrufe behalten ihre Grenzen je echter Minute und je Tag; `npc.budgetDay` zählt je Welttag und erlaubt bei höherem Lebenstakt also mehr je echtem Tag.
+
 ## Status
 
 **Alle sechs Schritte der [Migration](#migration) sind implementiert** (2026-10-26). Die Uhr bestimmt, wann etwas fällig ist:

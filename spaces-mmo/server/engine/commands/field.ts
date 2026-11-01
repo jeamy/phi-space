@@ -16,7 +16,7 @@ import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type FieldFields, type WorkRestFields } from "../../model.ts";
 import { peek } from "../../space.ts";
-import { worldNowOf } from "../clock.ts";
+import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import { fogOf } from "../fire.ts";
@@ -120,7 +120,7 @@ async function stake(c: CommandCtx, at: string): Promise<void> {
 	await useLight(c, light.beaconId, light.use, d.points, light.fresh);
 	const f: FieldFields = { fieldId, room: room.roomId, ...rect, owner: c.actor.charId, ownerName: c.actor.name, accountId: c.account.accountId, beaconId: light.beaconId, points: d.points,
 		stage: "brach", crop: null, seeds: 0, seedNeed: 0, work: 0, workNeed: 0, yields: [], soil: 1, by: {}, human: 0, other: 0, lastGroup: null, tired: 0, lastHarvestWorldMs: 0,
-		dueWorldMs: FOREVER, untilWorldMs: now + d.keepWorldMs, at: now };
+		dueWorldMs: FOREVER, untilWorldMs: (await decayNowOf(c.space, c.txn)) + d.keepWorldMs, at: now };
 	await writeField(c, f);
 	await msg(c, "*", "info", `${c.actor.name} bricht einen Acker um (${rect.w}×${rect.h}). „bestelle <frucht>“ sät darauf: ${d.crops.map((x) => x.name).join(", ")}.`);
 }
@@ -185,7 +185,7 @@ const bestelle: Command = {
 		}
 		const seedName = c.world.prototypes.find((p) => p.key === crop.seed)?.name ?? crop.seed;
 		if (!seed.length && !worked) throw new CommandError(f.seeds < f.seedNeed ? `Es fehlt Saatgut: ${f.seedNeed - f.seeds} ${seedName}.` : "Die Arbeit ist getan.");
-		f.untilWorldMs = now + d.keepWorldMs;
+		f.untilWorldMs = (await decayNowOf(c.space, c.txn)) + d.keepWorldMs;
 		const done = f.seeds >= f.seedNeed && f.work >= f.workNeed;
 		if (done) {
 			const soil = soilFor(d, f, crop, now);
@@ -216,7 +216,7 @@ export async function harvestField(c: CommandCtx): Promise<boolean> {
 	const late = f.stage === "spaet";
 	const share = f.yields.map((y) => { const n = shareOf(y.count, f.workNeed, i); return { proto: y.proto, count: late ? n - Math.round(n * d.lateLoss) : n }; });
 	const got = await giveBack(c, share);
-	f.untilWorldMs = now + d.keepWorldMs;
+	f.untilWorldMs = (await decayNowOf(c.space, c.txn)) + d.keepWorldMs;
 	if (f.work >= f.workNeed) {
 		const helpers = Object.entries(f.by).sort((a, b) => b[1] - a[1]).map(([n, k]) => `${n} (${k})`).join(", ");
 		await writeField(c, { ...fresh(f), stage: "brach", crop: null, seeds: 0, seedNeed: 0, yields: [], soil: 1, lastGroup: crop?.group ?? null, lastHarvestWorldMs: now, dueWorldMs: FOREVER });
@@ -251,26 +251,26 @@ async function tell(space: SpaceLike, leaseMs: number, room: string, text: strin
 export async function fieldTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<number> {
 	const d = w.fields;
 	if (!d) return 0;
-	const now = await worldNowOf(space);
+	const now = await worldNowOf(space), kept = await decayNowOf(space), patient = await patienceOf(space);
 	let written = 0;
 	for (const e of await space.readAll({ type: "Field" })) {
 		const f0 = fieldsOf<FieldFields>(e);
-		if (f0.dueWorldMs > now && f0.untilWorldMs > now) continue;
+		if (f0.dueWorldMs > now && f0.untilWorldMs > kept) continue;
 		const txn = (await space.createTransaction(10_000)).id;
 		try {
 			const t = await space.takeIfExists({ type: "Field", fields: { fieldId: f0.fieldId } }, NO_WAIT, { txn });
 			if (!t) { await space.abort(txn); continue; }
 			const f = fieldsOf<FieldFields>(t), crop = cropOf(d, f.crop)?.name ?? "Die Frucht";
-			if (f.untilWorldMs <= now) {
+			if (f.untilWorldMs <= kept) {
 				await freeCells(space, txn, f.room, f.fieldId);
 				await releaseLight(space, txn, f.beaconId, f.points);
 				await tell(space, leaseMs, f.room, `Der ${fieldName(f)} ist verwildert; dort wächst wieder Gras.`, txn);
 			} else if (f.stage === "waechst") {
 				const need = Math.ceil((f.w * f.h) / d.harvestPerCells);
-				await space.write({ type: "Field", fields: { ...f, stage: "reif", workNeed: need, dueWorldMs: now + d.windowWorldMs } as never }, txn, FOREVER);
+				await space.write({ type: "Field", fields: { ...f, stage: "reif", workNeed: need, dueWorldMs: now + d.windowWorldMs * patient } as never }, txn, FOREVER);
 				await tell(space, leaseMs, f.room, `${crop} auf dem ${fieldName(f)} ist reif: ${need} Hände-Stunden Ernte („ernte“ am Acker)${f.open ? ", jeder darf mithelfen" : ""}.`, txn);
 			} else if (f.stage === "reif") {
-				await space.write({ type: "Field", fields: { ...f, stage: "spaet", dueWorldMs: now + d.windowWorldMs } as never }, txn, FOREVER);
+				await space.write({ type: "Field", fields: { ...f, stage: "spaet", dueWorldMs: now + d.windowWorldMs * patient } as never }, txn, FOREVER);
 				await tell(space, leaseMs, f.room, `${crop} auf dem ${fieldName(f)} ist überreif; was jetzt noch geerntet wird, ist weniger.`, txn);
 			} else if (f.stage === "spaet") {
 				await space.write({ type: "Field", fields: { ...fresh(f), stage: "brach", crop: null, seeds: 0, seedNeed: 0, yields: [], soil: 1, lastGroup: cropOf(d, f.crop)?.group ?? null, lastHarvestWorldMs: now, dueWorldMs: FOREVER } as never }, txn, FOREVER);

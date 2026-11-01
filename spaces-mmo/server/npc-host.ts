@@ -13,7 +13,7 @@
 import "./env.ts";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { ClockCache, paceMs, worldNowMs } from "./engine/clockcache.ts";
+import { ClockCache, decayNowMs, paceMs } from "./engine/clockcache.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { presentAt } from "./engine/worldtime.ts";
 import { claimRole } from "./npc/minds.ts";
@@ -73,7 +73,7 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 			def, charId, space, world: w, halt: halt.signal, sleep,
 			async setOnline(on) { online = on; await keep(); if (on) await npc.act("arrive"); },
 			isOnline: () => online,
-			now: () => worldNowMs(space),
+			now: () => decayNowMs(space), // what a role times, it times for people
 			pace: (worldMs, minMs) => paceMs(space, worldMs, minMs),
 			async act(line) {
 				const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId, line, at: Date.now() };

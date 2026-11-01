@@ -12,7 +12,7 @@
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type MillLoadFields } from "../../model.ts";
-import { worldNowOf } from "../clock.ts";
+import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, NotUnderstood, type CommandCtx } from "../context.ts";
 import type { MillDef, WorldDef } from "../world.ts";
@@ -67,7 +67,7 @@ const mahle: Command = {
 		const ready = Math.max(now, b.busyUntilWorldMs ?? 0) + n * m.unitWorldMs;
 		await putBack(c, { ...b, busyUntilWorldMs: ready });
 		const load: MillLoadFields = { loadId: randomBytes(6).toString("hex"), buildId: b.buildId, room: b.room, x: b.x, y: b.y, w: b.w, h: b.h, charId: c.actor.charId, name: c.actor.name,
-			from: grind.from, to: grind.to, count: n, readyWorldMs: ready, untilWorldMs: ready + m.keepWorldMs };
+			from: grind.from, to: grind.to, count: n, readyWorldMs: ready, untilWorldMs: (await decayNowOf(c.space, c.txn)) + m.keepWorldMs + (ready - now) / (await patienceOf(c.space, c.txn)) };
 		await c.space.write({ type: "MillLoad", fields: load as never }, c.txn, FOREVER);
 		const more = a[1] && /^\d+$/.test(a[1]) && Number(a[1]) > n && n === m.maxLoad ? ` Mehr als ${m.maxLoad} nimmt sie auf einmal nicht.` : "";
 		await msg(c, "*", "emote", `${c.actor.name} schüttet ${plural(n, `Handvoll ${protoName(c, grind.from)}`, `Handvoll ${protoName(c, grind.from)}`)} in die ${b.name}.`);

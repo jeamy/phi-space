@@ -54,7 +54,7 @@ function waerter(): Script {
 		let fireText: string | undefined;
 		if (beacon) {
 			const f = await flameOf(n.space, beacon.beaconId), now = (await clockOf(n.space).now()) ?? 0; // world time
-			const piece = Math.min(...Object.values(n.world.fire.fuel)); // a piece of fuel, in world milliseconds
+			const piece = Math.min(...Object.values(n.world.fire.fuel)) * clockOf(n.space).patience(); // a piece of fuel, in world milliseconds
 			const next = !f || f.until <= now ? "out" : f.until - now < piece * 1.5 ? "low" : "ok";
 			if (state !== null && next !== state) events.push(next === "low" ? "fire.low" : next === "out" ? "fire.out" : "fire.ok");
 			state = next;

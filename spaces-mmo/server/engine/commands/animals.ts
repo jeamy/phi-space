@@ -11,7 +11,7 @@
 //   house is full. Anyone may feed (`füttere`), only the owner puts in, takes out and collects.
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type HerdFields, type ItemFields } from "../../model.ts";
-import { worldNowOf } from "../clock.ts";
+import { patienceOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, NotUnderstood, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
@@ -82,7 +82,7 @@ const stall: Command = {
 };
 
 const einstallen: Command = {
-	key: "einstallen", aliases: ["stalle", "einstellen"],
+	key: "einstallen", aliases: ["stalle", "einstellen", "stable"],
 	help: "einstallen <tier> – ein Tier, das du trägst, in deinen Hühnerstall oder dein Gehege neben dir bringen; einen Hund oder eine Katze an einen deiner Bauten, wo sie wachen",
 	async func(c, arg) {
 		const d = animalsOf(c);
@@ -108,7 +108,7 @@ const einstallen: Command = {
 };
 
 const ausstallen: Command = {
-	key: "ausstallen", aliases: ["ausstellen"],
+	key: "ausstallen", aliases: ["ausstellen", "unstall"],
 	help: "ausstallen [tier] – ein Tier aus deinem Hühnerstall oder Gehege neben dir nehmen (auch: ausstallen hund)",
 	async func(c, arg) {
 		const d = animalsOf(c);
@@ -129,7 +129,7 @@ const ausstallen: Command = {
 };
 
 const fuettere: Command = {
-	key: "füttere", aliases: ["fuettere", "füttern", "fuettern", "futter"],
+	key: "füttere", aliases: ["fuettere", "füttern", "fuettern", "futter", "fodder"],
 	help: "füttere [n] [futter] – die Tiere im Stall oder Gehege neben dir füttern (jeder darf; ein Futter macht ein Tier einen Tag satt); füttere hund [futter], füttere katze [futter]",
 	async func(c, arg) {
 		const d = animalsOf(c);
@@ -218,13 +218,14 @@ async function feedKeeper(c: CommandCtx, kp: KeeperDef | null, arg: string): Pro
 	if (m[2] && named.length && !k.feed.includes(named[0]!.f.proto)) throw new CommandError(`${cap(k.the)} mag ${named[0]!.f.name} nicht; ${k.the.startsWith("die ") ? "sie" : "er"} frisst ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);
 	const offer = m[2] ? named.filter((i) => i.f.proto === named[0]!.f.proto) : named;
 	if (!offer.length) throw new CommandError(`Du hast kein Futter für ${k.acc}: ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);
-	const from = Math.max(now, b.keeper.fedUntilWorldMs), room = now + d.fedMaxWorldMs - from;
-	if (room < d.feedWorldMs) throw new CommandError(`${cap(k.the)} ist satt (noch ${hours(from - now)}).`);
-	const want = Math.min(Math.floor(room / d.feedWorldMs), offer.length, m[1] && /^\d+$/.test(m[1]) ? Number(m[1]) : Infinity);
+	const patient = await patienceOf(c.space, c.txn), feedMs = d.feedWorldMs * patient; // it keeps the beds for people who are away
+	const from = Math.max(now, b.keeper.fedUntilWorldMs), room = now + d.fedMaxWorldMs * patient - from;
+	if (room < feedMs) throw new CommandError(`${cap(k.the)} ist satt (noch ${hours(from - now)}).`);
+	const want = Math.min(Math.floor(room / feedMs), offer.length, m[1] && /^\d+$/.test(m[1]) ? Number(m[1]) : Infinity);
 	let count = 0;
 	for (const it of offer.slice(0, want)) if (await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn })) count++;
 	if (!count) throw new CommandError("Das Futter ist gerade nicht greifbar; bitte noch einmal.");
-	const until = from + count * d.feedWorldMs;
+	const until = from + count * feedMs;
 	await putBack(c, { ...b, keeper: { ...b.keeper, fedUntilWorldMs: until } });
 	await msg(c, "*", "emote", `${c.actor.name} füttert ${k.acc} von ${b.ownerName} mit ${count} ${offer[0]!.f.name}; satt für etwa ${hours(until - now)}.`);
 }
@@ -263,7 +264,7 @@ export async function collect(c: CommandCtx): Promise<void> {
 }
 
 const einsammeln: Command = {
-	key: "einsammeln", aliases: ["melke", "melken", "schere", "scheren", "eier"],
+	key: "einsammeln", aliases: ["melke", "melken", "schere", "scheren", "eier", "collect"],
 	help: "einsammeln – Eier, Wolle oder Milch deiner Tiere im Stall oder Gehege neben dir (auch: sammle eier, melke, schere)",
 	async func(c) { await collect(c); },
 };

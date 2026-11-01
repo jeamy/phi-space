@@ -14,7 +14,7 @@
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type AnimalFields, type BedFields, type BedPlant, type BuildingFields, type FieldFields, type ItemFields } from "../../model.ts";
-import { worldNowOf } from "../clock.ts";
+import { decayNowOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, msg, msgOptions, NotUnderstood, type CommandCtx } from "../context.ts";
 import { fogOf } from "../fire.ts";
@@ -316,7 +316,7 @@ const zaeune: Command = {
 			const b = await bedHere(c, { may: (x) => mayTend(c, x), reach: 1 });
 			if (b.fenced) throw new CommandError(`Um das ${bedName(b)} steht schon ein Zaun.`);
 			await payFence(c, wd.fence);
-			await writeBed(c, { ...b, fenced: true, untilWorldMs: Math.max(b.untilWorldMs, (await worldNowOf(c.space, c.txn)) + (c.world.garden?.bed.keepWorldMs ?? 0)) });
+			await writeBed(c, { ...b, fenced: true, untilWorldMs: Math.max(b.untilWorldMs, (await decayNowOf(c.space, c.txn)) + (c.world.garden?.bed.keepWorldMs ?? 0)) });
 			return msg(c, "*", "emote", `${c.actor.name} setzt einen Zaun um das ${bedName(b)}; kein Hase kommt mehr hinein.`);
 		}
 		const mineField = (f: FieldFields) => f.accountId === c.account?.accountId || !!f.open;

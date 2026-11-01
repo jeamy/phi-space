@@ -56,6 +56,24 @@ browser interpolation, the clock in the game with admin commands, appointments, 
 This document fixes the contract for a real world time. It enables in particular NPC plans such as "Ines is
 there from 6 to 22 o'clock", the event `evening`, works of the gods scheduled by world time, and narrative daily budgets.
 
+## Two rates
+
+The world has two rates, set in the admin window (`clock.life`, `clock.decay`) for all regions, or per region with `clock rate <n>` and `clock verfall <n>`. A saved setting wins over the command. The **life rate** is the old `rate`: how fast the world lives. The **decay rate** is how fast everything runs that has to wait for people, because they sleep, work or walk. With the decay rate at 1 a day in the settings is a real day, however fast the world lives.
+
+The test for each span: does it punish someone who is away, or need someone to walk or answer? Then it follows the decay rate.
+
+| Follows | What |
+| --- | --- |
+| Life rate | day and night, fog, tide, storm, growth of plants and crops, grinding, the rest after work and after gathering seeds, the barrel filling, animals laying, eating and breeding, fallow soil, the blessing, wild animals coming to the beds |
+| Decay rate, second clock | buildings, sites, ruins, estates, beds and fields lapsing, an unfetched sack at the mill, market listings, votes, festivals with their rest, tending the park, how long NPCs stay awake, their greetings, gossip and visits, how often a role looks around |
+| Decay rate, as a span in world time | thirst, a ripe plant wilting, the harvest window, a dog's food, how long fuel burns, how long flotsam lies, a job on the order board |
+
+**The second clock** is a second anchor on the `WorldClock` entry (`decayAnchorMs`, `decayRate`), read with `decayNow`. Its fields are stored as `untilWorldMs` like before. A clock without them has the world time as its second time, so nothing is migrated: the first change of a rate starts it at the current world time and what is stored stays valid. Later changes of the life rate do not touch those deadlines. A pause stops both.
+
+**Spans in world time** (`patience`, the life rate over the decay rate) belong to a date of the world clock, like a field's next stage. They are multiplied when the date is written. A change of the rates reaches them only then, so when the life rate goes up, dates already written come sooner once: on the change from 1 to 24 a fire burns out and a ripe plant wilts up to 24 times sooner than it said.
+
+Model calls keep their limits per real minute and day; `npc.budgetDay` counts per world day, so it allows more per real day at a higher life rate.
+
 ## Goals and limits
 
 - World time is reproducible after restarts and by default keeps running during a server outage.
