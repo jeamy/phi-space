@@ -272,8 +272,11 @@ for this (it arises from huts, below); the epoch counts what stands on the islan
   Reloads replay those strips and transform new definition objects into the current coordinate frame; changing a grown
   room's base dimensions requires an explicit migration. Exit and ferry arrival revisions let the destination apply
   only growth missing from an incoming coordinate, including crossings between separate region spaces.
+  Connected clients receive the resized room and a refreshed atlas with persisted fire positions. The 3D view rebuilds
+  its terrain when that room snapshot changes, including growth without a room change.
   Tests: `tests/room-growth.test.ts` covers coordinate migration, paths, reciprocal exits, reloads, ferries, rollback,
   busy-world deferral and the first strip in every room of the real Leuchtfeuer definition (only fullness is forced).
+  `tests/growth.test.ts` also checks the live room/atlas refresh and the displaced fire over WebSocket.
   New rooms still require the world file or a god (authority `insel`, [goetter.en.md](goetter.en.md)).
 
 ## Gardens

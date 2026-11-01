@@ -246,11 +246,17 @@ Voraussetzung (sie entsteht aus Hütten, unten); die Epoche zählt, was auf der 
   Räume.
 - **Besitz wechselt:** `uebergib`/`verkaufe` auf eine Fläche ist eine Transaktion wie `offer`: Grund und Bau gehen
   gemeinsam, Mitbewohner laufen über Rechte (Locks). Was verfällt, wird frei — der Claim läuft mit dem Bau.
-- **Räume wachsen, neue entstehen:** Ist ein Raum voll, wächst er um einen Streifen Zellen — die Welt legt neues
-  Bauland an denselben Raum, die Claims bleiben; der Streifen kommt an eine Seite ohne Ausgang und ohne Strand,
-  Ausgänge, Feuer und Strände der Weltdatei bleiben, wo sie sind. Und es entstehen neue Räume: die Weltdatei oder ein Gott
-  (Befugnis `insel`, [goetter.md](../goetter.en.md)) schafft neues Bauland, erreichbar von einem brennenden Feuer aus.
-  Ein voller Raum ist also beides: Signal zum Wachsen und Signal zum Erweitern.
+- **Räume wachsen, neue entstehen:** Ab 70 % belegtem Bauland wächst ein Raum um 4 Felder, zuerst nach Osten,
+  dann nach Süden, bis 36×24. Ausgänge am Rand wandern mit ihren verlängerten Wegen nach außen. Vor Küsten können
+  Streifen an einer sicheren Naht in der äußeren Raumhälfte eingeschoben werden; die bisherigen Strand- und Wasserfelder
+  bleiben erhalten. Gebäude, Beete, Felder, Landschaftsobjekte und Zonen werden dabei nicht zerschnitten. Ganze Objekte,
+  Figuren, Feuer, Claims und Rückwege hinter der Naht werden gemeinsam mit dem Raster verschoben. Eine Breitensuche
+  prüft die Erreichbarkeit; ohne sichere Naht wartet das Wachstum. Karte, Insel und Region bleiben gleich.
+  Gespeicherte Erweiterungsschritte erhalten das Ergebnis beim erneuten Laden. Ankunftsrevisionen berücksichtigen auch
+  das Wachstum anderer Regions-Spaces. Verbundene Seiten erhalten den gewachsenen Raum und die aktualisierte
+  Übersicht mit den gespeicherten Feuerpositionen; die 3D-Ansicht baut das Terrain dabei auch ohne Raumwechsel neu auf.
+  Die technischen Regeln und Tests stehen in [siedeln.en.md](../siedeln.en.md).
+  Neue Räume entstehen weiterhin durch die Weltdatei oder einen Gott (Befugnis `insel`, [goetter.en.md](../goetter.en.md)).
 
 ## Gärten
 
@@ -1068,7 +1074,7 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      Die Figuren der Welt machen aus ihren Heimaträumen mit, zählen als Teilnehmer und pflegen Parks; gewinnt eine, bleibt es bei der Ehre, ohne Münzen.
      Abweichungen: Der Preis kommt von der Welt, nicht von einer Tafel; das Erntefest braucht keinen Herbst, weil es noch keine Jahreszeiten gibt; der Park hat keine Beete, Pflege ist eine Blume für den Bau. Die Regatta wartet auf Boote, Feuerkette und regionsübergreifender Rang auf die Tafel. Der Warenumsatz zählt im Rang weiter nicht.
    - **Wind (gebaut, `server/engine/commands/wind.ts`):** Jede Insel hat eine Stufe, Flaute, Brise, frischer Wind oder Sturm, die sich alle sechs Weltstunden um einen Schritt bewegt; eine Sturmflut bringt sofort Sturm. `wetter` sagt, wie er steht. Eine Mühle mahlt mit dem Wind, der weht, wenn die Ladung kommt, halb bis doppelt so schnell, dazu kommt, was eine Sturmflut vorausmahlt. Eine Ladung behält das Tempo, mit dem sie begann. Hecken brechen ihn noch nicht.
-   - **Größen festgelegt (gebaut):** Ein Raum wächst um einen Streifen von 4 Feldern Gras nach Osten oder Süden, sobald 70 % seines Landes belegt sind, bis 36×24 (`server/engine/commands/growth.ts`, Job „epoch“); nur Osten und Süden, damit nichts verschoben wird, und nicht, wo ein Ausgang nah ist oder der Rand kein Gras hat, von den 37 Räumen können also 15 nicht wachsen und warten auf neue Räume. Ein Feuer trägt 20 Punkte und 5 mehr je registriertem Spieler, der dort in den letzten sieben Tagen gebaut hat, höchstens 40; Figuren füllen das Licht, ohne es zu erweitern. Ein Konto besitzt höchstens 2 Ställe und Gehege. Rinder kommen mit der Stadt (Epoche 3) ins Gehege: Milch doppelt so schnell wie die Ziege, die Zucht langsam. Abweichung: noch kein Leder.
+   - **Größen festgelegt (gebaut):** Ein Raum wächst um einen Streifen von 4 Feldern Gras nach Osten oder Süden, sobald 70 % seines Landes belegt sind, bis 36×24 (`server/engine/commands/growth.ts`, Job „epoch“); Rand-Ausgänge wachsen mit, vor Küsten ist kontrolliertes Einschieben an sicheren Nähten möglich. Positionen und Rückwege werden atomar angepasst, Grundflächen und Erreichbarkeit geprüft. Der Test des ersten Streifens deckt alle 37 Leuchtfeuer-Räume mit erzwungener Belegungsschwelle ab; spätere Bebauung kann weiterhin jede sichere Naht versperren. Ein Feuer trägt 20 Punkte und 5 mehr je registriertem Spieler, der dort in den letzten sieben Tagen gebaut hat, höchstens 40; Figuren füllen das Licht, ohne es zu erweitern. Ein Konto besitzt höchstens 2 Ställe und Gehege. Rinder kommen mit der Stadt (Epoche 3) ins Gehege: Milch doppelt so schnell wie die Ziege, die Zucht langsam. Abweichung: noch kein Leder.
 7. **Kaufhaus** (Schritt 7, Teil für Teil):
    - **Nahrung (gebaut, `server/engine/commands/food.ts`):** `iss <ding>` macht eine Figur satt, Brot am längsten, höchstens einen Welttag voraus; satt ist die Ruhe nach der Arbeit 1,5-mal kürzer. Abweichung: Das kürzt die Ruhe, statt Arbeitspunkte anderthalbfach zu zählen, weil ein Punkt eine Handlung ist. Hunger gibt es nicht.
    - **Steg, Fischen, Räucherei (gebaut, `fishing.ts`):** Ein Steg muss ans Wasser grenzen, `wirf netz` daneben bringt mit einem Netz Fisch und manchmal einen Fund, für die Ruhe einer Arbeit. Die Räucherei macht Räucherfisch nach Rezept, gebaut aus Holz und Tangseil, weil Stein erst mit dem Dorf kommt. Das Netz hält; Möwen gibt es noch nicht.
