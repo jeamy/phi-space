@@ -558,21 +558,35 @@ function prune<T>(a: T[], drop: (x: T) => boolean): number {
  * entry's expiry pushes it down eagerly, so a stale HIGH watermark cannot occur.
  */
 const expiryWatermarks = new WeakMap<SpaceState, number>();
+/** The same for a published entries array: every commit works on a fresh draft, so a mark kept only by state dies with it. */
+const committedWatermarks = new WeakMap<readonly EntryRec[], number>();
+const watermarkOf = (s: Readonly<SpaceState>): number | undefined => {
+	const known = expiryWatermarks.get(s as SpaceState);
+	if (known !== undefined) return known;
+	const base = committedArray(s.entries);
+	return base && committedWatermarks.get(base);
+};
+const setWatermark = (s: SpaceState, min: number): void => {
+	expiryWatermarks.set(s, min);
+	const base = committedArray(s.entries);
+	if (base) committedWatermarks.set(base, min);
+};
 const noteExpiry = (s: SpaceState, expires: number): void => {
 	// An unknown document may contain older deadlines than the newly imported entry.
-	const known = expiryWatermarks.get(s);
-	if (known !== undefined && expires < known) expiryWatermarks.set(s, expires);
+	const known = watermarkOf(s);
+	if (known !== undefined && expires < known) setWatermark(s, expires);
 };
 function expire(s: SpaceState, at: number): boolean {
 	// A reopened document has no watermark: its persisted entries must be scanned once.
-	if ((expiryWatermarks.get(s) ?? -Infinity) <= at) {
+	if ((watermarkOf(s) ?? -Infinity) <= at) {
 		let min = Infinity;
 		const dead: EntryRec[] = [];
 		for (const e of s.entries) {
 			if (e.expires <= at) dead.push(e);
 			else if (e.expires < min) min = e.expires;
 		}
-		expiryWatermarks.set(s, min);
+		// with dead entries it holds for this draft only: a commit that fails leaves them in the published array
+		if (dead.length) expiryWatermarks.set(s, min); else setWatermark(s, min);
 		dead.sort((a, b) => a.expires - b.expires || a.id.localeCompare(b.id));
 		const removed = new Set<EntryRec>();
 		let deferred = false;
@@ -1083,9 +1097,9 @@ export function nextExpiry(s: Readonly<SpaceState>): number {
 	// The watermark replaces the O(entries) sweep: `maintain` asks this before EVERY mutation,
 	// so a full scan per operation was the dominant cost on large durable spaces.
 	// loops, not Math.min(...spread): spreading a large array overflows the stack
-	const knownMin = expiryWatermarks.get(s as SpaceState);
+	const knownMin = watermarkOf(s);
 	let min = knownMin ?? FOREVER;
-	if (knownMin === undefined) { for (const e of s.entries) if (e.expires < min) min = e.expires; expiryWatermarks.set(s as SpaceState, min); }
+	if (knownMin === undefined) { for (const e of s.entries) if (e.expires < min) min = e.expires; setWatermark(s as SpaceState, min); }
 	for (const r of s.regs) {
 		if (r.expires < min) min = r.expires;
 		if (r.pending && r.lastEventAt !== undefined) min = Math.min(min, r.lastEventAt + intervalOf(s, r)); // bundled event due

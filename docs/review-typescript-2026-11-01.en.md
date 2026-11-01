@@ -167,7 +167,7 @@ of section 9 in [rust-portierung.en.md](rust-portierung.en.md), security and fed
   and walks the registrations four times (`checkEventSize`, `publishCost`, `preflightFanout`, `notifyWrite`), each
   re-stringifying every handback. `overheadBytes` (`:271`) stringifies waiters, regs, txns, jobs, run gates and mailboxes on
   every write; `reserve` (`:424`) stringifies `s.jobs` (up to 16 MiB) on every write and transactional take.
-- **The expiry watermark never survives a commit on the own store.** `expiryWatermarks` is keyed by the state object
+- teilweise (hält jetzt über Commits mit unveränderten Einträgen; ein Commit, der Einträge ändert, scannt einmal neu): **The expiry watermark never survives a commit on the own store.** `expiryWatermarks` is keyed by the state object
   (`core.ts:560`), but every commit works on a fresh draft proxy (`store/draft.ts:257`, `store/host.ts:215`), so the first
   `expire()`/`nextExpiry()` of every commit does the full scan the watermark was meant to avoid. Keying it by
   `committedArray(s.entries)`, as `entrySums`/`typeBuckets` do (`:278,472`), makes it effective.

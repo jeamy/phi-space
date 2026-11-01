@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import type { StoreTx as Tx } from "../src/store/types.ts";
 import { defineDoc } from "../src/store/documents.ts";
 import { PhiSpaces, FOREVER, type Once } from "../src/index.ts";
+import { Space } from "../src/doc.ts";
+import * as core from "../src/core.ts";
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
 
 test("persistent home: committed writes survive close and crash", async () => {
@@ -60,3 +62,13 @@ test("take with lost answer: after reopen the retry returns the same entry, no s
 	});
 });
 
+
+test("expiry after a failed commit: what the sweep found dead in it is found again", async () => {
+	await forEachBackend(async (home) => {
+		const host = await home.open();
+		await host.commit(async (tx) => { const s = await tx.doc(Space); core.write(s, 1000, { type: "Job", fields: {} }, null, 100); }, ctx);
+		await assert.rejects(host.commit(async (tx) => { const s = await tx.doc(Space); core.settle(s, 2000); assert.equal(s.entries.length, 0); throw new Error("the commit fails"); }, ctx), /the commit fails/);
+		const after = await host.commit(async (tx) => { const s = await tx.doc(Space); core.settle(s, 2000); return s.entries.length; }, ctx);
+		assert.equal(after, 0);
+	});
+});
