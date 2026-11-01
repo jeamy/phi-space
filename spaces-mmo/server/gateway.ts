@@ -81,7 +81,7 @@ export type ServerFrame =
 /** Frames from the browser. */
 /** Frames from the browser: a typed command, or a numbered step of the own character (the page walks ahead of the
  *  server and matches the answers by number, client/walk.ts). */
-export type ClientFrame = { t: "cmd"; line: string } | { t: "step"; seq: number; dx: number; dy: number } | ChatClientFrame;
+export type ClientFrame = { t: "cmd"; line: string; /** the language the page shows, German when left out */ lang?: "en" } | { t: "step"; seq: number; dx: number; dy: number } | ChatClientFrame;
 
 const MAX_LINE = 300;
 const RECENT = 40;
@@ -104,7 +104,7 @@ function spend(b: Bucket, burst: number, refillMs: number): boolean {
 	return true;
 }
 
-type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; leaseRegion?: string; awaitsHello?: boolean; keep?: () => Promise<void>; timer: ReturnType<typeof setInterval> | null; atlas?: boolean; limits: { steps: Bucket; cmds: Bucket }; warned: number;
+type Client = { ws: WsConnection; me: Me; lang?: "en"; room: string | null; lease: string | null; leaseRegion?: string; awaitsHello?: boolean; keep?: () => Promise<void>; timer: ReturnType<typeof setInterval> | null; atlas?: boolean; limits: { steps: Bucket; cmds: Bucket }; warned: number;
 	/** The client's commands, one after another (a step counts the ones waiting before it). */ chain: Promise<void> };
 /** At most this often the overview's state goes out after a change (people walk, fires burn down, fog moves). */
 const ATLAS_MS = 1_000;
@@ -319,6 +319,7 @@ export class Gateway {
 			return;
 		}
 		if (f?.t !== "cmd" || typeof f.line !== "string") return;
+		if (f.lang === "en") c.lang = "en"; else delete c.lang;
 		const line = cutText(f.line.replace(/[\u0000-\u001f\u007f]/g, " ").trim(), MAX_LINE);
 		if (!line) return;
 		// the command limits are the operator's settings (server/settings.ts), read at most every few seconds
@@ -340,7 +341,7 @@ export class Gateway {
 	}
 
 	async #intent(c: Client, line: string, step?: { conn: string; seq: number }): Promise<void> {
-		const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId: c.me.charId, line, at: Date.now(), ...(step ? { step } : {}) };
+		const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId: c.me.charId, line, at: Date.now(), ...(c.lang ? { lang: c.lang } : {}), ...(step ? { step } : {}) };
 		try { await this.#regions.get(await this.#regionOf(c.me.charId))!.write({ type: "Intent", fields: asFields(intent) }, null, INTENT_LEASE_MS); }
 		catch { c.ws.send({ t: "msg", m: { kind: "error", text: "Die Welt ist gerade nicht erreichbar; bitte gleich noch einmal.", from: "", at: Date.now() } } satisfies ServerFrame); }
 	}

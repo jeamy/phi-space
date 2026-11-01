@@ -105,15 +105,15 @@ export type RoomFields = { roomId: string; name: string; desc: string; ground: s
 export type SessionFields = { sessionId: string; charId: string; accountId: string };
 /** One command line, written by the web process (or later an NPC), taken by a world worker. */
 /** `step`: a numbered step of a page (its connection and number), acknowledged on the character. */
-export type IntentFields = { intentId: string; charId: string; line: string; at: number; asked?: string; step?: { conn: string; seq: number } };
+export type IntentFields = { intentId: string; charId: string; line: string; at: number; /** the player reads English */ lang?: "en"; asked?: string; step?: { conn: string; seq: number } };
 /** A sentence no rule understood, for the model process to turn into a command (an Intent with `asked`). */
 /** A line for the model to read; `why`: why the command itself refused it, said when the model cannot read it either. */
-export type TranslateFields = { reqId: string; charId: string; accountId: string; guest: boolean; line: string; room: string; at: number; why?: string };
+export type TranslateFields = { reqId: string; charId: string; accountId: string; guest: boolean; line: string; room: string; at: number; why?: string; lang?: "en" };
 /** Output: to one character (`to` = its charId), to everyone in `room` (`to` = "*"), or to everyone on a channel
  *  (`to` = "#hafen"). With `actor` (a charId) the text
  *  holds FuncParser calls ($you(), $conj(a|b)) that the gateway renders for each reader. */
 /** `fromId`: the speaker's charId (NPCs start with "npc-"), so model NPCs answer people, not each other. */
-export type MsgFields = { room: string; to: string; kind: MsgKind; text: string; from: string; at: number; actor?: string; fromId?: string; help?: HelpView };
+export type MsgFields = { room: string; to: string; kind: MsgKind; text: string; from: string; at: number; /** whoever said it reads English: a model NPC answers so */ lang?: "en"; actor?: string; fromId?: string; help?: HelpView };
 /** The answer of `help` in parts, for the page's command window (the text stays for the log and text mode): the intro,
  *  the commands (every name, the arguments, what it does), the topics, or one topic. */
 export type HelpView = { intro?: string; commands?: Array<{ names: string[]; usage: string; text: string }>; topics?: string[]; topic?: { key: string; category: string; text: string } };

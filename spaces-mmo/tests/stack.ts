@@ -181,7 +181,7 @@ export class Player {
 		await new Promise<void>((ok, fail) => { ws.onopen = () => ok(); ws.onerror = () => fail(new Error("websocket did not open")); });
 		return (await this.until((f) => f.t === "hello")) as Extract<ServerFrame, { t: "hello" }>;
 	}
-	send(line: string): void { this.ws!.send(JSON.stringify({ t: "cmd", line } satisfies ClientFrame)); }
+	send(line: string, lang?: "en"): void { this.ws!.send(JSON.stringify({ t: "cmd", line, ...(lang ? { lang } : {}) } satisfies ClientFrame)); }
 	async leave(): Promise<void> {
 		const ws = this.ws; this.ws = null;
 		if (!ws || ws.readyState === WebSocket.CLOSED) return;

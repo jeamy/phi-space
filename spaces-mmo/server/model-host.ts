@@ -77,7 +77,7 @@ export async function startModel(o: { space?: string; world?: WorldDef } = {}) {
 			// a command that refused the line said why ("Hier ist niemand namens Kalle"): that stays the answer
 			if (!res) await say(t, t.why ? `${t.why} „help“ zeigt die Befehle.` : `„${t.line.slice(0, 80)}“ kann ich gerade nicht übersetzen (Modell aus oder Kontingent für heute aufgebraucht). „help“ zeigt die Befehle.`, txn);
 			else if (!line) await say(t, t.why ? `${t.why} „help“ zeigt die Befehle.` : `„${t.line.slice(0, 80)}“ habe ich nicht verstanden. „help“ zeigt die Befehle.`, txn);
-			else await space.write({ type: "Intent", fields: { intentId: randomBytes(8).toString("hex"), charId: t.charId, line, at: Date.now(), asked: t.line } satisfies IntentFields as never }, txn, 30_000);
+			else await space.write({ type: "Intent", fields: { intentId: randomBytes(8).toString("hex"), charId: t.charId, line, at: Date.now(), asked: t.line, ...(t.lang ? { lang: t.lang } : {}) } satisfies IntentFields as never }, txn, 30_000);
 			await space.commit(txn);
 		} catch (err) { await space.abort(txn).catch(() => {}); console.error("[model]", (err as Error).message); await new Promise((r) => setTimeout(r, 500)); }
 		return true;

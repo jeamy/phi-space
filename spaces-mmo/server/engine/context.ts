@@ -18,6 +18,7 @@ export type CommandCtx = {
 	msgLeaseMs: number;
 	/** The sentence this command was translated from by the model process, if it was. */
 	asked?: string;
+	/** The player reads English (its Intent). */ lang?: "en";
 	/** A numbered step of a page: written on the character with the step, taken or not (CharacterFields.ack). */
 	step?: { conn: string; seq: number };
 	/** Memo of the actor's inventory for this command (read once, outside the transaction). */
@@ -152,8 +153,8 @@ export async function msgOptions(space: SpaceLike, m: Pick<MsgFields, "to" | "ki
 
 /** A message from the actor in `room` (default its room). `templ`: the text holds $you()/$conj() and is rendered per
  *  reader. `txn` null writes it at once (a refusal after the abort). */
-export async function msg(c: Pick<CommandCtx, "space" | "actor" | "msgLeaseMs"> & { txn: string | null }, to: string, kind: MsgKind, text: string, o: { templ?: boolean; room?: string; help?: MsgFields["help"] } = {}): Promise<void> {
-	const m: MsgFields = { room: o.room ?? c.actor.room, to, kind, text, from: c.actor.name, fromId: c.actor.charId, at: Date.now(), ...(o.templ ? { actor: c.actor.charId } : {}), ...(o.help ? { help: o.help } : {}) };
+export async function msg(c: Pick<CommandCtx, "space" | "actor" | "msgLeaseMs" | "lang"> & { txn: string | null }, to: string, kind: MsgKind, text: string, o: { templ?: boolean; room?: string; help?: MsgFields["help"] } = {}): Promise<void> {
+	const m: MsgFields = { room: o.room ?? c.actor.room, to, kind, text, from: c.actor.name, fromId: c.actor.charId, at: Date.now(), ...(c.lang ? { lang: c.lang } : {}), ...(o.templ ? { actor: c.actor.charId } : {}), ...(o.help ? { help: o.help } : {}) };
 	await c.space.write({ type: "Msg", fields: m as never }, c.txn, c.msgLeaseMs, await msgOptions(c.space, m));
 }
 

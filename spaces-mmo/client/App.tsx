@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ThemeControls } from "./ThemeControls.tsx";
 import { AdminPanel } from "./AdminPanel.tsx";
 import { useTheme } from "./lib/theme.ts";
-import type { AtlasState, AtlasView, CharView, ItemUses, MsgView, ObjView, PlanView, ServerFrame, TradeView } from "../server/gateway.ts";
+import type { AtlasState, AtlasView, CharView, ClientFrame, ItemUses, MsgView, ObjView, PlanView, ServerFrame, TradeView } from "../server/gateway.ts";
 import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
 import { CommandHelp } from "./CommandHelp.tsx";
@@ -504,6 +504,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const [bag, setBag] = useState(false);
 	const [bagPart, setBagPart] = useState<"mine" | "market" | "orders">("mine");
 	const [tradeItem, setTradeItem] = useState<{ name: string } | null>(null);
+	const tapFrom = useRef<{ id: number; x: number; y: number; at: number } | null>(null);
 	const [atlasPage, setAtlasPage] = useState(false);
 	const [helpArticle, setHelpArticle] = useState<string | null>(null);
 	const [pad, setPadState] = useState<"off" | "left" | "right">(() => { try { const v = localStorage.getItem("mmo.pad"); return v === "off" || v === "left" || v === "right" ? v : isTouch() ? "right" : "off"; } catch { return "right"; } });
@@ -650,7 +651,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const send = useCallback((text: string, echo = true) => {
 		const s = ws.current;
 		if (!s || s.readyState !== WebSocket.OPEN) { append({ kind: "error", text: "Nicht verbunden; ein Moment …", from: "", at: Date.now() }); return; }
-		s.send(JSON.stringify({ t: "cmd", line: text }));
+		s.send(JSON.stringify({ t: "cmd", line: text, ...(language() === "en" ? { lang: "en" } : {}) } satisfies ClientFrame));
 		if (echo) append({ kind: "echo", text: `> ${text}`, from: "", at: Date.now() });
 	}, [append]);
 
@@ -964,6 +965,14 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		</div>
 	);
 
+	// a tap beside the open sheet closes it, also where the map has no cell; pulling and turning the map leave it open
+	const tapStart = (e: React.PointerEvent) => { tapFrom.current = e.isPrimary ? { id: e.pointerId, x: e.clientX, y: e.clientY, at: Date.now() } : null; };
+	const tapBeside = (e: React.PointerEvent) => {
+		const from = tapFrom.current, t = e.target as Element;
+		tapFrom.current = null;
+		if (!from || from.id !== e.pointerId || detent === "peek" || mapMode === "text" || Date.now() - from.at > 500 || Math.hypot(e.clientX - from.x, e.clientY - from.y) > 10) return;
+		if (t.tagName === "CANVAS" || t.classList.contains("stage") || t.classList.contains("map")) setDetent("peek");
+	};
 	const sheetBody = (
 		<>
 			{talkTab && detent !== "peek" ? (
@@ -1008,7 +1017,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		</>
 	);
 	return (
-		<div className="game-touch sheet">
+		<div className="game-touch sheet" onPointerDownCapture={tapStart} onPointerUpCapture={tapBeside}>
 			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
 			<div className={`stage${pad === "left" ? " pad-left" : ""}${pad === "off" ? " pad-off" : ""}${detent !== "peek" ? " open" : ""}`}>
 				{mapView}

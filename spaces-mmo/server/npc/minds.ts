@@ -101,7 +101,11 @@ export type Situation = {
 	exits?: string[];
 	/** Trade offers made to the NPC, and the market board while it stands at the market (numbered like `market`). */
 	offers?: string[]; board?: string[];
+	/** The one who spoke last reads English. */ lang?: "en";
 };
+
+/** The language of what an NPC says: the reader's when known, else the speaker's. Commands and names stay as the game writes them. */
+export const languageRule = (lang?: "en") => (lang === "en" ? "You speak English, whatever language you are spoken to in." : "You speak the language you are spoken to in, German or English; when in doubt, German.") + " Only your words follow this: commands and the names of things stay exactly as the game writes them.";
 
 /** One answer of an awake model NPC: its command lines and a note for its memory. "off": model calls are off;
  *  "budget": its day (or the shared limit) is used up. */
@@ -110,7 +114,7 @@ export async function think(space: SpaceLike, npc: { npcId: string; name: string
 	const all = await setting(space, "npc.budgetDay"), budget = all < 0 ? npc.budgetDay : all; // -1: the world's budget of the role
 	const system = [
 		`You are ${npc.name}, a character in the text game "Leuchtfeuer" (an archipelago in the fog; fires keep the fog away). ${npc.persona}`,
-		"You speak German, briefly (one or two sentences), in character. You act only by typing game commands, one per line;",
+		`${languageRule(s.lang)} Briefly (one or two sentences), in character. You act only by typing game commands, one per line;`,
 		"you may do everything a player may (say speaks, emote shows what you do in third person without your name):",
 		...NPC_COMMANDS.map((c) => `  ${c.help}`),
 		"When someone asks you to do something, decide in character; if you do it, type the commands in order (e.g. walk, pick up, feed the fire, accept a trade) and say so briefly; if you cannot (you lack the thing, it is too far), say why. Use the names of things exactly as listed.",

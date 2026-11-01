@@ -160,7 +160,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 				const accountId = actor.accountId;
 				const loadAccount = async () => { const e = await one({ type: "Account", fields: { accountId } }, 2_000); return e ? fieldsOf<AccountFields>(e) : null; };
 				const account = /^step\s/.test(intent.line) ? null : await loadAccount();
-				await execute({ space: end.space, txn, world: w, actor, account, ...(account ? {} : { loadAccount }), msgLeaseMs, cache: {}, ...(intent.asked ? { asked: intent.asked } : {}), ...(intent.step ? { step: intent.step } : {}) }, intent.line);
+				await execute({ space: end.space, txn, world: w, actor, account, ...(account ? {} : { loadAccount }), msgLeaseMs, cache: {}, ...(intent.asked ? { asked: intent.asked } : {}), ...(intent.lang ? { lang: intent.lang } : {}), ...(intent.step ? { step: intent.step } : {}) }, intent.line);
 			}
 			await end.commit();
 			if (SLOW_MS && Date.now() - intent.at > SLOW_MS) console.error(`[world] slow: ${charId} "${intent.line.slice(0, 40)}" ${Date.now() - intent.at} ms after it was typed, ${Date.now() - t0} ms to run`);

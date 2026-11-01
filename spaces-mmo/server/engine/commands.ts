@@ -82,7 +82,7 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 	if (!cmd) {
 		// nothing understood it: the model process may (once; a translation that is no command is refused)
 		if (llmEnabled() && !c.asked && c.account && !c.account.npc) {
-			const t: TranslateFields = { reqId: randomBytes(6).toString("hex"), charId: c.actor.charId, accountId: c.account.accountId, guest: c.account.guest, line: line.slice(0, 300), room: c.actor.room, at: Date.now() };
+			const t: TranslateFields = { reqId: randomBytes(6).toString("hex"), charId: c.actor.charId, accountId: c.account.accountId, guest: c.account.guest, line: line.slice(0, 300), room: c.actor.room, at: Date.now(), ...(c.lang ? { lang: c.lang } : {}) };
 			await c.space.write({ type: "Translate", fields: t as never }, c.txn, 60_000);
 			return msg(c, c.actor.charId, "info", `„${line.slice(0, 80)}“ – einen Moment, ich versuche das zu verstehen …`);
 		}
@@ -95,7 +95,7 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 		// not understood (no thing of that name, a command without what it needs): the model reads the sentence first;
 		// only what it cannot read either is refused (a translation is never sent again, `c.asked`)
 		if (e instanceof NotUnderstood && llmEnabled() && !c.asked && c.account && !c.account.npc) {
-			const t: TranslateFields = { reqId: randomBytes(6).toString("hex"), charId: c.actor.charId, accountId: c.account.accountId, guest: c.account.guest, line: said.slice(0, 300), room: c.actor.room, at: Date.now(), why: e.message.slice(0, 300) };
+			const t: TranslateFields = { reqId: randomBytes(6).toString("hex"), charId: c.actor.charId, accountId: c.account.accountId, guest: c.account.guest, line: said.slice(0, 300), room: c.actor.room, at: Date.now(), why: e.message.slice(0, 300), ...(c.lang ? { lang: c.lang } : {}) };
 			await c.space.write({ type: "Translate", fields: t as never }, c.txn, 60_000);
 			return msg(c, c.actor.charId, "info", `„${said.slice(0, 80)}“ – einen Moment, ich versuche das zu verstehen …`);
 		}
