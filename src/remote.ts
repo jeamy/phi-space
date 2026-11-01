@@ -82,7 +82,6 @@ export type RemoteOptions = {
 	/** Request ids (default: random). */
 	newRequestId?: () => string;
 	/** What to expect from the server when it is hello'd, for example `features`. */
-	frameFraction?: number;
 };
 
 export type Hello = { principal: string; roles: string[]; hostId?: string; spaceId: string; alias: string; incarnation: string; streamId: string; authorityId: string; primaryEpoch: number; limits: { maxFrameBytes: number; maxPollMs: number } & Record<string, number>; features: string[]; capabilities: { snapshotPagination: boolean; mailboxes: boolean; completionProfiles: boolean; transactions: boolean; blockingTake: boolean; mode: "single" } };
@@ -115,7 +114,7 @@ export class TransportFailure extends Error {}
 
 export class RemoteSpace implements SpaceLike {
 	private t: Transport;
-	private o: Required<Omit<RemoteOptions, "space" | "maxClientWaitMs" | "frameFraction" | "signer" | "expectedGateHostId" | "ownPeerId" | "grantProvider" | "delegationProvider">> & Pick<RemoteOptions, "space" | "maxClientWaitMs" | "signer" | "expectedGateHostId" | "ownPeerId" | "grantProvider" | "delegationProvider">;
+	private o: Required<Omit<RemoteOptions, "space" | "maxClientWaitMs" | "signer" | "expectedGateHostId" | "ownPeerId" | "grantProvider" | "delegationProvider">> & Pick<RemoteOptions, "space" | "maxClientWaitMs" | "signer" | "expectedGateHostId" | "ownPeerId" | "grantProvider" | "delegationProvider">;
 	private proving?: Promise<unknown>;
 	private enrollRequest?: { generation: string; requestId: string };
 	/** What the link cost so far: transport attempts repeated with the same identity, and calls given up as OutcomeUnknown. */

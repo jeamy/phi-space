@@ -8,7 +8,7 @@ import type { SpaceState } from "./core.ts";
  *  them without copying and keeps them as rows of their own. */
 export const SPACE_PARTS = [
 	{ path: ["entries"], kind: "array" },
-	// a day of claims is far more than memory should hold (docs/umstellung-ohne-pi-durable.md, U2c): on the disk, by key;
+	// a day of claims is far more than memory should hold (docs/umstellung-ohne-pi-durable.en.md, U2c): on the disk, by key;
 	// indexed by decision time, generation and dropped result for the sweep (claims.ts)
 	{ path: ["rpc", "claims"], kind: "map", disk: { at: "decidedAt", group: "generation", flag: "resultExpired" } },
 	// the historical claims after a restore: as many, on the disk as well (counted by restoredBytes, walked by key)

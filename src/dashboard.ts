@@ -1,4 +1,4 @@
-// Read-only live dashboard over a phi-spaces host (docs/dashboard.md; design: docs/ui-mockups/).
+// Read-only live dashboard over a phi-spaces host (docs/dashboard.en.md; design: docs/_attic/ui-mockups/).
 // Phase 1 by decision: no mutation endpoint exists on the dashboard itself; the UI observes spaces, gauges, entries,
 // transactions, waiters and the process meter. The optional space socket (`serve`) lets real clients produce the
 // traffic the dashboard then shows; their identity comes from the trusted local boundary (file permissions of the
@@ -42,11 +42,11 @@ const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".cs
 export type AppSource = { id: string; label: string; addresses: string[]; space?: string };
 
 /** The default addresses of the projects' space processes: the unix socket of a plain start (`npm start`, `dev`), the
- *  port `docker:local:up` publishes on loopback, then the loopback end of the tunnel to nano on big (docs/dashboard.md). The spaces-mmo accounts space (credentials, sessions) is left out on
+ *  port `docker:local:up` publishes on loopback, then the loopback port on big (a tunnel to nano for the chat and the help system, the region's own port for the world) (docs/dashboard.en.md). The spaces-mmo accounts space (credentials, sessions) is left out on
  *  purpose. The help system's hub serves only figures (stats and its list of spaces, HELP_SPACE_LISTEN), no entries. */
-export const ALL_SPACES = "*";
+const ALL_SPACES = "*";
 
-export const DEFAULT_APPS: AppSource[] = [
+const DEFAULT_APPS: AppSource[] = [
 	{ id: "codemode-chat", label: "Codemode Chat", addresses: ["unix:/tmp/codemode-space.sock", "tcp:127.0.0.1:3810", "tcp:127.0.0.1:3800"] },
 	{ id: "spaces-mmo", label: "spaces-mmo · Welt", addresses: ["unix:/tmp/spaces-mmo-world.sock", "tcp:127.0.0.1:3960", "tcp:127.0.0.1:3950"] },
 	// the shard keeps its posts in the named space "social-swarm" (help-site SWARM_ALIAS), its default space stays empty
@@ -111,7 +111,7 @@ const HISTORY_POINTS = 720;
 const mb = (b: number | undefined) => Math.round(((b ?? 0) / 1e6) * 10) / 10;
 
 /** The sum of several spaces' stats (counts, types, bytes). */
-export function sumStats(all: readonly core.SpaceStats[]): core.SpaceStats {
+function sumStats(all: readonly core.SpaceStats[]): core.SpaceStats {
 	const r: core.SpaceStats = { entries: 0, byType: {}, locked: 0, uncommitted: 0, expired: 0, txns: 0, waiters: 0, registrations: 0, outbox: 0, returned: 0, bytes: { entries: 0, outbox: 0, claims: 0, waiters: 0, registrations: 0, txns: 0, total: 0 } };
 	for (const st of all) {
 		for (const k of ["entries", "locked", "uncommitted", "expired", "txns", "waiters", "registrations", "outbox", "returned"] as const) r[k] += st[k] ?? 0;
@@ -494,7 +494,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 	};
 }
 
-// ---- standalone start: `npm run dashboard -- --dir <dir>` or `--sqlite <file>` (docs/dashboard.md).
+// ---- standalone start: `npm run dashboard -- --dir <dir>` or `--sqlite <file>` (docs/dashboard.en.md).
 
 const usage = `phi-spaces dashboard (read-only Phase 1)
   --dir <path>      open the store in a directory (<path>/store.sqlite, created if absent)

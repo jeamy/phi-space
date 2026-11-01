@@ -19,7 +19,7 @@ type Command = Audit & {phase?:Phase;principal?:Principal;incarnation?:string|nu
  claimKey?:string;
  /** Likewise for the historical claims (restoredClaims). */
  restoredKey?:string};
-export const DataAdminJournal=defineDocFamily<{commands:Record<string,Command>},null>({
+const DataAdminJournal=defineDocFamily<{commands:Record<string,Command>},null>({
  kind:'phi-spaces.data-admin',version:1,scope:'session',family:true,initial:()=>({commands:{}})
 });
 const bytes=jsonBytes;

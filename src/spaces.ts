@@ -42,7 +42,7 @@ export const NamedSpace = defineDocFamily<core.SpaceState & Record<string, any>,
 export class UnknownSpaceError extends Error {}
 
 /** A fresh incarnation id: 8 hex digits, random (also part of local ids, which stay plain words for models). */
-export const newIncarnation = (): string => randomBytes(4).toString("hex");
+const newIncarnation = (): string => randomBytes(4).toString("hex");
 const newSpaceId = (): string => `sp-${randomUUID()}`;
 
 /** The registry with this host's id and the default space registered; creates both on first use. */

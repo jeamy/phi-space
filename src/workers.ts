@@ -1,4 +1,4 @@
-// Worker control (docs/betrieb-und-mobile-steuerung.md §7.3, §8 B6). The control host keeps the desired worker state
+// Worker control (docs/betrieb-und-mobile-steuerung.en.md §7.3, §8 B6). The control host keeps the desired worker state
 // per host (`WorkerAssignments`); each host pulls only its own signed list and reconciles registered worker kinds
 // locally (`WorkerSupervisor`). The last accepted list is persisted, so local workers keep running while the
 // coordinator is unreachable (v3 5.2). Workers are in-process loops of registered code: they coordinate work, they

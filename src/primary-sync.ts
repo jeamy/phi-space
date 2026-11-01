@@ -1,5 +1,5 @@
 // Complete store batches, sealed durably before transport. Administrative storage substrate.
-// Replica configuration changes (promotion, degradeToSingle, setStandby; docs/federation-plan-v3.md 5.3, 5.3.1) are
+// Replica configuration changes (promotion, degradeToSingle, setStandby; docs/federation-plan-v3.en.md 5.3, 5.3.1) are
 // entries of the same hash chain: a version-2 intent whose only write is the replication marker, carrying the new
 // configuration. The current configuration is derived from the chain, so markers, replay and catch-up stay exact.
 import {DatabaseSync} from 'node:sqlite';
@@ -17,7 +17,7 @@ import { canonicalCopy } from './json.ts';
 /** `durability` absent means sync (older configurations keep their hash). Single has no standby. */
 export type PrimarySyncConfig={spaceId:string;authorityId:string;primaryEpoch:number;replicaConfigVersion:number;primaryReplica:string;standbyReplica:string|null;durability?:'sync'|'single'};
 /** `deltas`: the writes of the store the journal belongs to (its SyncCodec, store/sync-store.ts), the marker write last. */
-export type SyncDelta=any;
+type SyncDelta=any;
 export type PrimaryCommitIntent={version:1;config:PrimarySyncConfig;revision:number;previousHash:string;batchHash:string;deltas:SyncDelta[];validatedAt:number;hash:string};
 /** A configuration change in the chain; `config` is the configuration from this revision on. */
 export type PrimaryConfigIntent={version:2;config:PrimarySyncConfig;previousConfigHash:string;reason:string;revision:number;previousHash:string;batchHash:string;deltas:SyncDelta[];validatedAt:number;hash:string};
@@ -42,7 +42,7 @@ const zero='0'.repeat(64);
 /** The codecs by journal format: the own store's. */
 const CODECS:Record<string,SyncCodec>={own:OWN_CODEC};
 /** A journal of a pi-durable store (its format stored, or entries from before the format was): not taken over. */
-const PI_DURABLE_JOURNAL='this journal belongs to a pi-durable store; pi-durable stores are discarded, not taken over (decision D6, docs/umstellung-u0-bestand.md): set the Space up anew on the own store';
+const PI_DURABLE_JOURNAL='this journal belongs to a pi-durable store; pi-durable stores are discarded, not taken over (decision D6, docs/umstellung-u0-bestand.en.md): set the Space up anew on the own store';
 const exact=(v:object,keys:string[])=>Object.keys(v).sort().join(',')===[...keys].sort().join(',');
 const name=(v:unknown)=>typeof v==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(v);
 const integer=(v:unknown):v is number=>Number.isSafeInteger(v)&&(v as number)>=0;
@@ -55,7 +55,7 @@ function configOf(input:PrimarySyncConfig){
  return c;
 }
 /** Allowed configuration steps: same Space and authority, version +1, epoch unchanged or +1, a new primary only with a new epoch. */
-export function validateConfigTransition(previous:PrimarySyncConfig,next:PrimarySyncConfig){
+function validateConfigTransition(previous:PrimarySyncConfig,next:PrimarySyncConfig){
  const p=configOf(previous),n=configOf(next);
  if(n.spaceId!==p.spaceId||n.authorityId!==p.authorityId)throw new PrimarySyncBlocked('a replica transition keeps Space and authority');
  if(n.replicaConfigVersion!==p.replicaConfigVersion+1)throw new PrimarySyncBlocked('a replica transition raises replicaConfigVersion by exactly one');

@@ -1,4 +1,4 @@
-// The own SQLite store under primary/sync replication (docs/federation-plan-v3.md 5.3, docs/umstellung-ohne-pi-durable.md
+// The own SQLite store under primary/sync replication (docs/federation-plan-v3.en.md 5.3, docs/umstellung-ohne-pi-durable.en.md
 // U4). Two sides:
 //
 //   - OwnSyncStore: a store file opened by its owner without a host (a stopped daemon). The journal applies, checks and

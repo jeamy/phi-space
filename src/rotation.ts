@@ -5,7 +5,7 @@ import type { SpaceHost } from "./client.ts";
 import { PhiSpaces } from "./client.ts";
 import type { Algorithm } from "./auth.ts";
 import { keyFingerprint, CONTROL_SPACE } from "./enroll.ts";
-import { spaceDoc } from "./spaces.ts";
+import { Registry, snapshotSpace, spaceDoc } from "./spaces.ts";
 import { canonicalJson } from "./canonical.ts";
 import { verifyDetached } from "./grants.ts";
 import * as core from "./core.ts";
@@ -70,9 +70,9 @@ export class RotationService {
 			if (call.method === "rotationGeneration") return { ok: true, result: await new PhiSpaces(this.o.host, this.o.ctx, this.o.now, undefined, undefined, { space: CONTROL_SPACE, authorization }).issueGeneration(id.principal) };
 			if (call.method === "rotationChallenge") return { ok: true, result: await createRotationChallenge(this.o.host, this.o.ctx, id.principal.peerId, proof.keyId, a.algorithm, a.publicKey, now, authorization.check) as unknown as core.Json };
 			if (call.method === "rotationStatus") {
-				const state = await this.o.host.snapshot((await import("./spaces.ts")).Registry, this.o.ctx);
+				const state = await this.o.host.snapshot(Registry, this.o.ctx);
 				const controlId = state?.aliases[CONTROL_SPACE];
-				const s = controlId ? await (await import("./spaces.ts")).snapshotSpace(this.o.host, controlId, this.o.ctx) : undefined;
+				const s = controlId ? await snapshotSpace(this.o.host, controlId, this.o.ctx) : undefined;
 				const entry = s ? core.list(s, now, { type: "Result", fields: { commandId: a.commandId, requestedBy: id.principal.peerId } })[0] : undefined;
 				return { ok: true, result: entry ? entry.fields : { state: "pending" } };
 			}

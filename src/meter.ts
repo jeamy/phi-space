@@ -7,7 +7,7 @@ import * as core from "./core.ts";
 
 /** `events`: delivered; `failures`: events never delivered (target gone, or given up); `retries`: failed attempts. */
 export type Counter = "writes" | "reads" | "takes" | "misses" | "events" | "failures" | "retries";
-export const COUNTERS: readonly Counter[] = ["writes", "reads", "takes", "misses", "events", "failures", "retries"];
+const COUNTERS: readonly Counter[] = ["writes", "reads", "takes", "misses", "events", "failures", "retries"];
 
 const SLOTS = 300; // seconds of history kept
 

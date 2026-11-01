@@ -1,3 +1,4 @@
+import {rolesOf} from "./gate.ts";
 import {checkErasureBarrier,validateErasureBarrier} from './erasure-barrier.ts';
 import {readRegisterRecords,type RegisterRecord} from './recovery-register.ts';
 import {AsyncLocalStorage} from 'node:async_hooks';
@@ -57,7 +58,7 @@ export async function createConfiguredRoot(o:{host:SpaceHost;ctx:Context;hostId:
  };
  const adminContext=new AsyncLocalStorage<string>();
  const connection=async(keySigner:Signer=hostSigner)=>{
-  const verified=await assertRoot(),k=keySigner.keyId===signer.keyId?verified.router:keySigner.keyId===hostSigner.keyId?verified.host:null,peer=await o.directory.lookup(o.ownAddress);if(!peer||peer.id!==o.peerId||!k||k.state!=='active'||k.publicKey!==keySigner.publicKey||k.algorithm!==keySigner.algorithm)throw new BootBlocked('Root local proven key or overlay binding changed');return {peerId:o.peerId,overlayIp:peer.ip,credentials:{roles:peer.groups.flatMap(g=>o.groupRoles[g]??[])},state:{proof:{keyId:k.keyId,principal:k.principal,roles:k.roles,scope:k.scope,at:Date.now()}}};
+  const verified=await assertRoot(),k=keySigner.keyId===signer.keyId?verified.router:keySigner.keyId===hostSigner.keyId?verified.host:null,peer=await o.directory.lookup(o.ownAddress);if(!peer||peer.id!==o.peerId||!k||k.state!=='active'||k.publicKey!==keySigner.publicKey||k.algorithm!==keySigner.algorithm)throw new BootBlocked('Root local proven key or overlay binding changed');return {peerId:o.peerId,overlayIp:peer.ip,credentials:{roles:rolesOf(peer.groups,o.groupRoles)},state:{proof:{keyId:k.keyId,principal:k.principal,roles:k.roles,scope:k.scope,at:Date.now()}}};
  };
  // The directory lookup of this host is explicitly supplied below, never inferred from a request body.
  const grant=async(p:Principal)=>{if(p.peerId!==o.peerId)throw new BootBlocked('native Root only grants its own hosted-agent namespace');return o.grants.issue(await connection(),'effect',p.agentId);};

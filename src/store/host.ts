@@ -1,4 +1,4 @@
-// phi-spaces' own store host (docs/umstellung-ohne-pi-durable.md, U2): commits run one after the other on drafts of
+// phi-spaces' own store host (docs/umstellung-ohne-pi-durable.en.md, U2): commits run one after the other on drafts of
 // the documents they touch (store/draft.ts), are published together or not at all, and wake the watches of what
 // changed. Where committed values are kept is the host's `Ledger`: nowhere (memory) or a SQLite file (store/sqlite.ts).
 //
@@ -50,7 +50,7 @@ export type StoreStats = { batches: number; commits: number; rows: number; write
 const inCommit = new AsyncLocalStorage<true>();
 
 /** The message a closed host refuses work with (callers recognise it, as they did pi-durable's). */
-export const HOST_CLOSED = "Session is closed";
+const HOST_CLOSED = "Session is closed";
 
 const addr = (kind: string, key: string | null) => (key === null ? kind : `${kind}\u0000${key}`);
 
@@ -346,7 +346,7 @@ function holdsDraft(v: unknown, depth = 0): boolean {
 }
 
 /** A ledger that keeps nothing: the host's own map is all there is (tests, throwaway spaces). */
-export const memoryLedger = (): Ledger => ({ load: () => null, persist: () => {}, close: () => {} });
+const memoryLedger = (): Ledger => ({ load: () => null, persist: () => {}, close: () => {} });
 
 /** A throwaway own host in memory. */
 export function openOwnMemoryHost(): OwnStoreHost { return new OwnStoreHost(memoryLedger()); }

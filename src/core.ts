@@ -21,7 +21,7 @@ export const ANY = -1; // Lease.ANY: the space picks the duration
 export const FOREVER = Number.MAX_SAFE_INTEGER;
 export const DEFAULT_LEASE_MS = 3600 * 1000;
 /** setTimeout fires after 1 ms for longer delays; long waits sleep in chunks of this and look again. */
-export const MAX_TIMER_MS = 2 ** 31 - 1;
+const MAX_TIMER_MS = 2 ** 31 - 1;
 
 /** Absolute time `ms` after `now`; FOREVER (or anything reaching it) stays FOREVER instead of overflowing. */
 export const until = (now: number, ms: number): number => (ms >= FOREVER - now ? FOREVER : now + ms);
@@ -441,7 +441,7 @@ function checkSize(what: string, v: unknown, lim: Limits): void {
 const peekId = (s: SpaceState, p: string) => (s.incarnation ? `${p}${s.incarnation}-${s.nextId}` : `${p}${s.nextId}`);
 const newId = (s: SpaceState, p: string) => { const id = peekId(s, p); s.nextId++; return id; };
 /** Global id of a local entry id in space `spaceId`: `<spaceId>/<localId>`. */
-export const gidOf = (spaceId: string, id: string): string => `${spaceId}/${id}`;
+const gidOf = (spaceId: string, id: string): string => `${spaceId}/${id}`;
 
 /** Leases are granted as requested: FOREVER (or Infinity) never expires, ANY gets the default. */
 function grant(requested: number, now: number): number {

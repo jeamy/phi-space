@@ -1,4 +1,4 @@
-// Space lifecycle (docs/betrieb-und-mobile-steuerung.md §5, §7.3, §8 B7): idempotent creation, archiving and checked
+// Space lifecycle (docs/betrieb-und-mobile-steuerung.en.md §5, §7.3, §8 B7): idempotent creation, archiving and checked
 // deletion of named Spaces on their own host. Creation reuses an existing alias (project start reuses Spaces).
 // Archiving keeps the data readable and refuses new work. Deletion needs an archived, empty Space that is no
 // federation Member and retains no claims or mailbox results; its spaceId stays reserved as a tombstone.

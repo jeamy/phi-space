@@ -4,6 +4,9 @@ A read-through of `src/` and `agent/src/` looking for logic errors, dead code, d
 opportunities, with the same criteria as the Rust review (`review-rust-2026-11-01.en.md`). Everything below was verified in
 the code; nothing was changed. Byte-exact behaviour that the Rust port pins as a contract is not listed.
 
+**Status:** `erledigt:` fixed (section 1 in f5a553d). `offen (...)`: still open, with the reason. `S-Dn`: the decisions
+of section 9 in [rust-portierung.en.md](rust-portierung.en.md), security and federation.
+
 ## 1. Logic errors (ranked)
 
 ### Change behaviour today
@@ -21,12 +24,12 @@ the code; nothing was changed. Byte-exact behaviour that the Rust port pins as a
   (`src/client.ts:545-555`) sees `more` with an unchanged signature and throws `ResourceExhausted` for every mutation,
   masking `MemberDrained`; the reaper (`src/index.ts:232-237`) arms a 1 ms timer and commits every millisecond for the
   whole deletion. One expired entry is enough. No erasure test starts the maintenance loop.
-- erledigt: **A signed `recover` instruction can be replayed.** `RunGateInstruction` (`src/run-member.ts:15`) has no issuedAt,
+- erledigt (S-D1): **A signed `recover` instruction can be replayed.** `RunGateInstruction` (`src/run-member.ts:15`) has no issuedAt,
   expiresAt or nonce; `verifyRun` checks issuer and signature only. `recoverRunGate` (`src/core.ts:1454-1458`) fences the
   gate whenever the recoveryId differs from the current one, so a captured `kind:"recover"` re-delivered by any proven
   router, host or admin peer wedges the run; the controller's reconcile hits the commandId dedupe and issues no new recovery.
   The Rust port (`rust/phi-host/src/run_member.rs`) carries the same shape. Fixing it changes the instruction contract.
-- erledigt: **Async supervisor commands produce no audit event.** `src/supervisor.ts:101` returns before `onEvent` at `:102`, and
+- erledigt (S-D6, the retry stays unbounded by decision): **Async supervisor commands produce no audit event.** `src/supervisor.ts:101` returns before `onEvent` at `:102`, and
   `resumeJobs` never calls it, so addMember, drain, removeMember, startRun, setWorkers, createSpace and deployment leave no
   trace, contrary to the option doc at `:35`. `src/supervisor.ts:110` `catch{continue;}` swallows every handler exception
   and retries the job every second forever, without a log.
@@ -67,16 +70,16 @@ the code; nothing was changed. Byte-exact behaviour that the Rust port pins as a
 
 ### Security and federation
 
-- erledigt: `enroll` maps any non-`EnrollError` (commit failure, `BootBlocked`) to the generic "enrollment refused" and skips the audit
+- erledigt (S-D5; the audit event `failed` now carries the error's name): `enroll` maps any non-`EnrollError` (commit failure, `BootBlocked`) to the generic "enrollment refused" and skips the audit
   event (`src/enroll.ts:242-243`); `rotation.ts:96` likewise maps `IllegalArgumentError` to `PermissionDenied`.
-- erledigt: `src/runtime.ts:209` `runs.advance(id).catch(()=>{})` drops every error.
-- offen (nur Ablehnungsrichtung; ein Abgleich braucht die Alias-Auflösung im Grant-Check): Grant scope is matched against the raw `call.space` for direct calls (`src/grants.ts:60-63`) but against the alias for
+- erledigt (S-D7): `src/runtime.ts:209` `runs.advance(id).catch(()=>{})` drops every error.
+- offen, decided S-D2 (always the alias; TS and Rust together with the next R6a slice): Grant scope is matched against the raw `call.space` for direct calls (`src/grants.ts:60-63`) but against the alias for
   delegated calls (`delegation.ts:415`); deny-direction only, but inconsistent.
-- offen (Entscheidung nötig: Standard-Scope oder klare Fehlermeldung): `key.scope` defaults to `[]` (`grants.ts:31`, `enroll.ts:106`), so a key enrolled without scope passes no space and no error
+- offen, decided S-D3 (`createEnroll` without `scope` is refused; TS and Rust together): `key.scope` defaults to `[]` (`grants.ts:31`, `enroll.ts:106`), so a key enrolled without scope passes no space and no error
   says why.
-- offen (Entscheidung nötig: welche Rollen `space-hosts` bekommt, das ist eine Rechtefrage): Two defaults for the same group: `DEFAULT_GROUP_ROLES` maps `space-hosts → ["member"]` (`gate.ts:93`), the deployed default
+- offen, decided S-D4 (one default exported from `gate.ts`, with the deployment's `["member","host","router"]`): Two defaults for the same group: `DEFAULT_GROUP_ROLES` maps `space-hosts → ["member"]` (`gate.ts:93`), the deployed default
   `["member","host","router"]` (`configured-runtime.ts:316`).
-- erledigt: `src/delegation.ts:322` `(await snapshotSpace(...))!` on a Space deleted between `listSpaces` and here yields a TypeError.
+- erledigt (S-D8): `src/delegation.ts:322` `(await snapshotSpace(...))!` on a Space deleted between `listSpaces` and here yields a TypeError.
 - erledigt: `src/replica-control.ts:49` throw is unreachable (the loop rethrows at attempt 7); `src/alerts.ts:48-58` two overlapping
   passes race on `known`; `agent/src/durable-worker.ts:251-269` treats any unknown IPC message as `run`;
   `agent/src/durable-client.ts:72-76` dispatches every message twice.
@@ -84,14 +87,17 @@ the code; nothing was changed. Byte-exact behaviour that the Rust port pins as a
   RemoteSpace retries, FrameReader partial frames, challenge TTL and single use, enroll ordering, revoke ordering, grant
   timestamps and scope, delegation binding chain, journal idempotence, replica transport nonce/timestamp/bodyHash, erasure
   precedence, fencing fail-closed. No secret is compared with `===`.
+- Recorded as contracts, not changed (S-D9 to S-D11): a revoked key works on an open connection until the next
+  revalidation (15 s; the grant TTL of 60 s is the bound); the one-attempt-per-minute enrollment limit is per process, the
+  durable bound is the `attempts` counter; a `commandId` is deduplicated for `RESULT_RETENTION_MS` (7 days).
 
 ## 2. Dead code
 
-- JavaSpaces-compat shims: `PhiSpaces.snapshot(entry)` and type `Snapshot` (`src/client.ts:386,29`, no caller);
+- teilweise (`snapshot(entry)` und `Snapshot` entfernt; `once` hat noch einen Integrationstest): JavaSpaces-compat shims: `PhiSpaces.snapshot(entry)` and type `Snapshot` (`src/client.ts:386,29`, no caller);
   `OpOptions.once`/`Once` (`client.ts:28,36,446-455`, one integration test), superseded by `request` claims.
 - `core.listPage` (`src/core.ts:1175`): no production caller (`readPage` uses `snapshotPage`); the client doc comments at
   `client.ts:74,338` still name it. It is core-driver contract surface for the Rust port.
-- Declared, never read: `RemoteOptions.frameFraction` (`src/remote.ts:85`), `JsonValue` (`src/store/types.ts:7`),
+- teilweise (`frameFraction`, `privilegedRoles` entfernt; `JsonValue` und `why`s `now` werden doch gebraucht, der `mode`-Parameter offen): Declared, never read: `RemoteOptions.frameFraction` (`src/remote.ts:85`), `JsonValue` (`src/store/types.ts:7`),
   `privilegedRoles` (`gate.ts:103`, `auth.ts:108`, no caller passes it), `why(s, now)`'s `now` (`space-lifecycle.ts:30`),
   the `mode` parameter of `FencingAdapter.release` (dropped by both adapters).
 - Unreachable: `src/core.ts:786` (both callers check first), `src/ws.ts:88` (the data handler rejects earlier),
@@ -101,7 +107,7 @@ the code; nothing was changed. Byte-exact behaviour that the Rust port pins as a
   `allowFutureModes` (`routing-semantics.ts:117`) passed only by tests; `sealedCandidateOf` aliased twice.
 - Test-only helpers in production code: `createEnroll`/`writeEnroll` (`enroll.ts:91-138`), `revokePeerKey` (`:185`),
   `router.ingest` (`router.ts:300`).
-- Exported but imported nowhere (the `export` is the dead part): `gidOf`, `MAX_TIMER_MS`, `WAKE_DEBOUNCE_MS`, `COUNTERS`,
+- erledigt: Exported but imported nowhere (the `export` is the dead part): `gidOf`, `MAX_TIMER_MS`, `WAKE_DEBOUNCE_MS`, `COUNTERS`,
   `newIncarnation`, `HOST_CLOSED`, `memoryLedger`, `memoryFenceState`; `enroll.ts` `ATTEMPT_INTERVAL_MS`,
   `MAX_FAILED_ATTEMPTS`, `validateCreateEnroll`, `EnrollError`, `EnrollOutcome`, `CreateEnrollOptions`; `delegation.ts`
   `DelegationEpochs`, `ROUTER_CHANGE_SKEW_MS`; `router.ts` `RouterCommitHook`; `runtime.ts` `UnresolvedSyncSpace`;
@@ -110,10 +116,10 @@ the code; nothing was changed. Byte-exact behaviour that the Rust port pins as a
   `validateConfigTransition`, `SyncDelta`; `entry-replication.ts` `EntryReplicaPeers`, `EntryPeerVectors`,
   `EntryVersionVector`, `EntryCompactionStatus`, `ENTRY_EXPIRY_GRACE_MS`, `RedactedMutation`; `dashboard.ts` `sumStats`,
   `DEFAULT_APPS`, `ALL_SPACES` and its option types; `data-admin.ts` `DataAdminJournal`.
-- Compat shims that still run: `delete st.sweepCursor` (`claims.ts:227`), the O(claims) scan for pre-key states
+- teilweise (`rotation.ts` importiert statisch; `sweepCursor`, die Altzustand-Suche und `migrate` bleiben wegen gespeicherter Zustände): Compat shims that still run: `delete st.sweepCursor` (`claims.ts:227`), the O(claims) scan for pre-key states
   (`core.ts:968`), `migrate(v, _from)` ignoring `_from`; `rotation.ts:73,75` `await import("./spaces.ts")` twice although
   `spaceDoc` is statically imported.
-- Stale comments: `types.ts:21` and `claims.ts:202` refer to `store/cold.ts` (now `disk-map.ts`); `gate.ts:12-13` "Not here
+- teilweise (`store/cold.ts` und `gate.ts` korrigiert, `supervisor.ts:4` offen): Stale comments: `types.ts:21` and `claims.ts:202` refer to `store/cold.ts` (now `disk-map.ts`); `gate.ts:12-13` "Not here
   yet: layer B and the grants"; `supervisor.ts:4` "first part".
 
 ## 3. Duplicate code
@@ -127,12 +133,12 @@ the code; nothing was changed. Byte-exact behaviour that the Rust port pins as a
 - `rpc-domain.ts` mirrors `dispatch`'s argument mapping by hand (`service.ts:162` vs `rpc-domain.ts:328` `duration`), which
   is how the drift in section 1 happened. One table of "wire args → admission args" used by both.
 - Alias → document resolution three times (`client.ts:110-127`, `index.ts:178-191`, `spaces.ts:527-532`); `snap()` and
-  `watch()` snapshot the Registry twice each. "Find the control space id by alias" seven times (`enroll.ts:67,178,330`,
+  `watch()` snapshot the Registry twice each. (erledigt: `findControlSpace`) "Find the control space id by alias" seven times (`enroll.ts:67,178,330`,
   `supervisor.ts:50,167`, `runtime.ts:183,186`).
 - Principal keying four ways: `canonicalPrincipal` (`client.ts:559`), `principalId` (`mailbox.ts:122`), `samePrincipal`
   (`claims.ts:73`), `canonicalJson(consumer)` in `core.ts:369,705`. Principal shape validation four times (`data-admin.ts:33`,
   `distributed-erasure.ts:30`, `root-erasure.ts:21`, `entry-replication.ts:130`).
-- Role derivation: `gate.ts:94` `rolesOf` (dedupe, sort) vs inline `groups.flatMap(...)` in `configured-runtime.ts:348,424`
+- erledigt: Role derivation: `gate.ts:94` `rolesOf` (dedupe, sort) vs inline `groups.flatMap(...)` in `configured-runtime.ts:348,424`
   and `configured-root.ts:544`, which neither dedupe nor sort.
 - `runtime.ts:119-151`: five copies of "authenticate + proof + keys.find + active + role check" with divergent role sets and
   error codes.

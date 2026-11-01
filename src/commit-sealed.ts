@@ -1,4 +1,4 @@
-// The error of a primary/sync commit that is durably sealed but not confirmed (docs/abnahme/ap3-primary-sync.md). Its own
+// The error of a primary/sync commit that is durably sealed but not confirmed (docs/_attic/abnahme/ap3-primary-sync.en.md). Its own
 // module, so the space service can recognise it without loading the journal (node:sqlite) or the store behind it.
 export class CommitSealed extends Error{
  readonly revision:number;readonly hash:string;

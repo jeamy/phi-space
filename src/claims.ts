@@ -199,7 +199,7 @@ export function sweep(s: SpaceState, now: number, maxRecords = 256): void {
 	const disk = diskMapOf<ClaimRec>(st.claims);
 	let eligible: string[];
 	if (disk) {
-		// claims on the disk (store/cold.ts): the store finds the due ones by its index; a claim whose result is gone
+		// claims on the disk (store/disk-map.ts): the store finds the due ones by its index; a claim whose result is gone
 		// waits for its generation, which the loop over generations below accounts for
 		const gens = Object.keys(st.generations), closed = gens.filter(id => st.generations[id]!.admitUntil < now);
 		eligible = disk.due(now - keep, maxRecords + 1, { in: closed, known: gens }, c => {

@@ -23,14 +23,14 @@ export type EntryMutation =
  | { kind: 'delete'; type: string; fields: Fields; owner: Principal }
  | { kind: 'remove'; type: string; tags: string[]; owner: Principal }
  | { kind: 'renew'; type: string; tag: string; fields: Fields; owner: Principal; expiresAt: number | null }
- /** Erases every earlier change owned by `principal` (docs/abnahme/ap3-replikation.md, step 3); `owner` is the issuing admin. */
+ /** Erases every earlier change owned by `principal` (docs/_attic/abnahme/ap3-replikation.en.md, step 3); `owner` is the issuing admin. */
  | { kind: 'erase'; principal: Principal; owner: Principal }
  | RedactedMutation;
 /**
  * An erased change: id, clock, type and owner stay, the content goes. `argumentHash` of its event stays the original's;
  * an lww change keeps only a hash of its canonical key, a renewal its tag.
  */
-export type RedactedMutation = { kind: 'redacted'; type: string; owner: Principal; was: 'put' | 'add' | 'delete' | 'renew'; erase: string; keyHash?: string; tag?: string };
+type RedactedMutation = { kind: 'redacted'; type: string; owner: Principal; was: 'put' | 'add' | 'delete' | 'renew'; erase: string; keyHash?: string; tag?: string };
 type ContentMutation = Extract<EntryMutation, { kind: 'put' | 'add' | 'delete' | 'renew' }>;
 export type ReplicatedEntryChange = {
  originReplicaId: string; incarnation: string; seq: number; clock: HybridClock;
@@ -38,20 +38,20 @@ export type ReplicatedEntryChange = {
 };
 /**
  * `dropped`: runs [first, last] of stream positions whose events compaction removed. Positions are assigned in logical
- * order and never reused; without runs, position = index + 1 (docs/abnahme/ap3-replikation.md, step 4).
+ * order and never reused; without runs, position = index + 1 (docs/_attic/abnahme/ap3-replikation.en.md, step 4).
  */
 export type EntryReplicationState = { config: EntryReplicationConfig | null; configHash: string; clock: HybridClock; lastWallTime: number; seq: number; events: ReplicatedEntryChange[]; segments?: EntrySnapshotSegment[]; dropped?: Array<[number, number]>;
  /** Per origin: every change up to this sequence was held here and by every member; an unknown one is a removed one. */
  floor?: Record<string, number> };
 /** Contiguous received sequence per origin (`canonical([replicaId, incarnation])`), advertised by `describeStream`. */
-export type EntryVersionVector = Record<string, number>;
+type EntryVersionVector = Record<string, number>;
 /** The last vector each peer advertised, as recorded here; `regressed` blocks compaction until the peer gets a new incarnation. */
-export type EntryPeerVectors = { peers: Record<string, { incarnation: string; vector: EntryVersionVector; recordedAt: number; regressed?: true }> };
-export const EntryReplicaPeers = defineDocFamily<EntryPeerVectors, null>({ kind: 'phi-spaces.entry-replica-peers', version: 1, scope: 'session', family: true, initial: () => ({ peers: {} }) });
-/** Why nothing can be compacted, or what would be removed (docs/abnahme/ap3-replikation.md, step 4). */
-export type EntryCompactionStatus = { blocked: string | null; events: number; droppable: number; floor: EntryVersionVector };
+type EntryPeerVectors = { peers: Record<string, { incarnation: string; vector: EntryVersionVector; recordedAt: number; regressed?: true }> };
+const EntryReplicaPeers = defineDocFamily<EntryPeerVectors, null>({ kind: 'phi-spaces.entry-replica-peers', version: 1, scope: 'session', family: true, initial: () => ({ peers: {} }) });
+/** Why nothing can be compacted, or what would be removed (docs/_attic/abnahme/ap3-replikation.en.md, step 4). */
+type EntryCompactionStatus = { blocked: string | null; events: number; droppable: number; floor: EntryVersionVector };
 /** Expiry is judged this long after the deadline: the bound on remote clock skew. */
-export const ENTRY_EXPIRY_GRACE_MS = 60_000;
+const ENTRY_EXPIRY_GRACE_MS = 60_000;
 export type EntryReplicationSnapshot = { version: 1; spaceId: string; authorityId: string; configHash: string; events: ReplicatedEntryChange[]; sha256: string };
 export type ReplicatedEntryView = { id: string; type: string; fields: Fields; owner: Principal; expiresAt: number | null; clock: HybridClock; originReplicaId: string };
 export class ReplicationConflict extends Error {}
@@ -453,7 +453,7 @@ export class EntryReplicationController {
   const s=await this.state('export'),p=canonical(principal);
   return (s?.events??[]).filter(e=>e.mutation.kind!=='erase'&&canonical(e.mutation.owner)===p).map(e=>entryChangeId(e));
  }
- /** Step 3 (docs/abnahme/ap3-replikation.md): erases every earlier change of `principal` on all replicas, as a change of its own. */
+ /** Step 3 (docs/_attic/abnahme/ap3-replikation.en.md): erases every earlier change of `principal` on all replicas, as a change of its own. */
  async erasePrincipal(requestId: string, principal: Principal, admin: Principal): Promise<ReplicatedEntryChange> {
   return this.mutate(requestId,{kind:'erase',principal:copy(principal),owner:copy(admin)});
  }
@@ -613,7 +613,7 @@ export class EntryReplicationController {
   },this.o.ctx);
  }
  /**
-  * Which events can go (docs/abnahme/ap3-replikation.md, step 4). Stable: every member advertised a vector covering it, and this
+  * Which events can go (docs/_attic/abnahme/ap3-replikation.en.md, step 4). Stable: every member advertised a vector covering it, and this
   * replica holds each member's own changes up to its advertised vector. Candidates are stable, invisible for a stable
   * reason and never an erase; a candidate stays while it still suppresses or anchors a retained change (fixpoint).
   */

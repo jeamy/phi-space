@@ -1,4 +1,4 @@
-// Document definitions of phi-spaces (docs/umstellung-ohne-pi-durable.md, U1). A definition carries its kind, version,
+// Document definitions of phi-spaces (docs/umstellung-ohne-pi-durable.en.md, U1). A definition carries its kind, version,
 // initial value, migration and parts. `scope: "session"` is accepted for the older definitions and means nothing: every
 // document belongs to the store.
 import type { DocDef, DocFamilyDef } from "./types.ts";

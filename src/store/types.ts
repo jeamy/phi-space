@@ -1,4 +1,4 @@
-// phi-spaces' own storage boundary (docs/umstellung-ohne-pi-durable.md, U1): document definitions, the transaction a
+// phi-spaces' own storage boundary (docs/umstellung-ohne-pi-durable.en.md, U1): document definitions, the transaction a
 // commit callback gets, and the host that runs commits, reads committed documents and watches them. Nothing here
 // names pi-durable; the host behind it is the own store (store/host.ts). pi-durable's Harness still serves the same
 // definitions for the agent side (src/agent.ts) until it moves to its own package (U6).
@@ -18,7 +18,7 @@ type DocCommon<T> = {
 };
 
 /** A big collection of a document (DocCommon.parts). A map part with `disk` is kept on the disk by a store that can
- *  (store/cold.ts): its records are read by key when asked for, and only the records without an `at` value (open
+ *  (store/disk-map.ts): its records are read by key when asked for, and only the records without an `at` value (open
  *  requests) stay in memory. Its fields `at` (a number), `group` (a string) and `flag` (true or absent) are indexed,
  *  so the questions of DiskMapQuery need no scan. */
 export type PartDef = { readonly path: readonly string[]; readonly kind: "array" | "map"; readonly disk?: { readonly at: string; readonly group: string; readonly flag: string } };

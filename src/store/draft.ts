@@ -1,4 +1,4 @@
-// Copy-on-write drafts of JSON documents (docs/umstellung-ohne-pi-durable.md, U2). A commit callback works on a draft:
+// Copy-on-write drafts of JSON documents (docs/umstellung-ohne-pi-durable.en.md, U2). A commit callback works on a draft:
 // reads go through to the committed value, the first write to an object copies it (and its ancestors) shallowly, so the
 // committed value and every snapshot of it stay as they were. `finish()` returns the new value, in which every object
 // the commit did not change is the very same object as before: the store finds what changed by identity. After

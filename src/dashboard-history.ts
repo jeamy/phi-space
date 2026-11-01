@@ -1,4 +1,4 @@
-// The dashboard's long statistics (docs/dashboard.md "Verlauf"): the polls of every app folded into one point per minute
+// The dashboard's long statistics (docs/dashboard.en.md "Verlauf"): the polls of every app folded into one point per minute
 // (the mean of its polls), kept for a week and, with a file, appended there so a restart loses at most the open minute.
 // The file is one JSON line per minute and app; it is rewritten without the lapsed lines when it opens and every few hours.
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";

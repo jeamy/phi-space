@@ -118,7 +118,7 @@ const specOf = (c: RouterCommand) => ({
         ({target, principal, generation, method, args, resultBudgetBytes,policyVersion,targetRequest,generationAdmitUntil}) =>
             ({target, principal, generation, method, args, resultBudgetBytes,policyVersion,targetRequest,generationAdmitUntil}))
 });
-export type RouterCommitHook=(command:Readonly<RouterCommand>,tx:import('./store/types.ts').StoreTx,context:{roomBytes:number;releaseFuture:(id:string)=>void})=>Promise<void>;
+type RouterCommitHook=(command:Readonly<RouterCommand>,tx:import('./store/types.ts').StoreTx,context:{roomBytes:number;releaseFuture:(id:string)=>void})=>Promise<void>;
 export type RouterOptions = {
     host: Pick<StoreHost, "commit"|"snapshot">; ctx: Context; routerId: string; authorityId: string;
     target: RouterTarget;

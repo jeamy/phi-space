@@ -1,4 +1,4 @@
-// Run control (docs/betrieb-und-mobile-steuerung.md §6, §8 B3): a durable journal of start/pause/resume/stop with
+// Run control (docs/betrieb-und-mobile-steuerung.en.md §6, §8 B3): a durable journal of start/pause/resume/stop with
 // monotone control revisions. Every Member of a run's manifest applies the command to its RunGate; a transition is
 // complete only when every Member confirmed it with a matching ACK. A crash or a lost reply resends the same
 // command (same revision and command ID), which the gate answers with its stored confirmation.

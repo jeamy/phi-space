@@ -1,4 +1,4 @@
-// A map part kept on the disk (PartDef.disk; docs/umstellung-ohne-pi-durable.md, U2c): to the code of a document it is
+// A map part kept on the disk (PartDef.disk; docs/umstellung-ohne-pi-durable.en.md, U2c): to the code of a document it is
 // a plain object of records by key, but a record is read from the store when it is asked for, and memory holds only
 //
 //   - what commits wrote that is not yet durable (the store's read connection does not see it yet), with the deletions,

@@ -32,9 +32,11 @@ import type { Connection, Reply } from "./service.ts";
 import type { Json } from "./core.ts";
 
 export const CONTROL_SPACE = "control";
+/** The control space of a host, if it has one. */
+export const findControlSpace = async (host: Pick<StoreHost, "snapshot">, ctx: Context) => (await listSpaces(host, ctx)).find((i) => i.alias === CONTROL_SPACE);
 export const ENROLL_TTL_MS = 5 * 60_000;
-export const MAX_FAILED_ATTEMPTS = 3;
-export const ATTEMPT_INTERVAL_MS = 60_000;
+const MAX_FAILED_ATTEMPTS = 3;
+const ATTEMPT_INTERVAL_MS = 60_000;
 export const UNPAIRED_ROLE = "unpaired";
 /** Roles an admin's `createEnroll` may hand out; the admin role only comes through the bootstrap token. */
 export const ENROLLABLE_ROLES = ["host", "member", "observer", "router"] as const;
@@ -52,7 +54,7 @@ export type EnrollRec = {
 type Host = Pick<StoreHost, "commit" | "snapshot">;
 
 export class BootstrapClosed extends Error {}
-export class EnrollError extends Error {}
+class EnrollError extends Error {}
 
 // ---- the admin's side: tokens
 
@@ -65,7 +67,7 @@ export const enrollQr = (o: { endpoint: string; controlSpaceId: string; token: s
 export const keyFingerprint = (publicKey: string): string => createHash("sha256").update(Buffer.from(publicKey, "base64")).digest("hex").slice(0, 32);
 
 async function control(host: Host, ctx: Context, now: number): Promise<{ spaceId: string; alias: string }> {
-	const known = (await listSpaces(host, ctx)).find((i) => i.alias === CONTROL_SPACE);
+	const known = await findControlSpace(host, ctx);
 	if (known) return known;
 	return host.commit((tx) => createSpace(tx, CONTROL_SPACE, now), ctx);
 }
@@ -81,7 +83,7 @@ function takeEnroll(s: core.SpaceState, now: number, tokenHash: string): EnrollR
 }
 const findEnroll = (s: Readonly<core.SpaceState>, now: number, tokenHash: string): EnrollRec | undefined => { const l = core.list(s, now, { type: "Enroll", fields: { tokenHash } }); return l[0] ? asEnroll(l[0]) : undefined; };
 
-export type CreateEnrollOptions = { tokenHash: string; role: string; allowedPeerId: string; scope?: string[]; ttlMs?: number; now?: () => number };
+type CreateEnrollOptions = { tokenHash: string; role: string; allowedPeerId: string; scope?: string[]; ttlMs?: number; now?: () => number };
 const checkHash = (h: string) => { if (!/^[0-9a-f]{64}$/.test(h)) throw new core.IllegalArgumentError("tokenHash must be the SHA-256 of the token in hex"); };
 
 /**
@@ -93,7 +95,7 @@ export async function createEnroll(host: Host, ctx: Context, o: CreateEnrollOpti
 	return writeEnroll(host, ctx, { ...o, bootstrap: false });
 }
 /** The checks of `createEnroll`, before anything is written. */
-export function validateCreateEnroll(o: { tokenHash: string; role: string; allowedPeerId: string }): void {
+function validateCreateEnroll(o: { tokenHash: string; role: string; allowedPeerId: string }): void {
 	checkHash(o.tokenHash);
 	if (!(ENROLLABLE_ROLES as readonly string[]).includes(o.role)) throw new core.IllegalArgumentError(`createEnroll hands out ${ENROLLABLE_ROLES.join(", ")}; an admin is paired through the bootstrap token`);
 	if (!o.allowedPeerId) throw new core.IllegalArgumentError("a token is bound to the peer id of the device (from the management API)");
@@ -175,7 +177,7 @@ export class SpaceKeyDirectory implements KeyDirectory {
     async inspect(keys:readonly {peerId:string;keyId:string}[]) {
         if(keys.length<1||keys.length>32||keys.some(k=>!k||typeof k.peerId!=='string'||!k.peerId||typeof k.keyId!=='string'||!k.keyId))throw new TypeError('bounded explicit key lookup required');
         // The entire batch comes from one normal, freshly fenced snapshot. Nothing is retained.
-        const info=this.controlSpaceId?undefined:(await listSpaces(this.host,this.ctx)).find(i=>i.alias===CONTROL_SPACE);
+        const info=this.controlSpaceId?undefined:await findControlSpace(this.host,this.ctx);
         const s=this.controlSpaceId?await this.host.snapshot(NamedSpace,this.controlSpaceId,this.ctx):info?await snapshotSpace(this.host,info.spaceId,this.ctx):undefined;
         if(!s||this.controlSpaceId&&s.spaceId!==this.controlSpaceId)return {state:undefined,keys:keys.map(()=>null)};
         const now=this.now();return {state:s,keys:keys.map(({peerId,keyId})=>{const e=core.list(s,now,{type:'PeerKey',fields:{peerId,keyId}})[0];return e?({...fieldsOf(e),roles:[...(fieldsOf(e).roles as string[])]} as unknown as PeerKeyRec):null;})};
@@ -196,15 +198,15 @@ export async function revokePeerKey(host: Host, ctx: Context, peerId: string, ke
 
 // ---- the unpaired peer's side of the wire
 
-export type EnrollOutcome = { ok: true; keyId: string; role: string; peerId: string; scope: string[] } | { ok: false; reason: "unknown-token" | "wrong-peer" | "expired" | "too-many-attempts" | "bad-signature" | "bad-key" | "rate-limited" | "bad-challenge" };
+type EnrollOutcome = { ok: true; keyId: string; role: string; peerId: string; scope: string[] } | { ok: false; reason: "unknown-token" | "wrong-peer" | "expired" | "too-many-attempts" | "bad-signature" | "bad-key" | "rate-limited" | "bad-challenge" };
 
 export type EnrollmentOptions = {
 	keys?: KeyDirectory;
 	host: Host;
 	ctx: Context;
 	now?: () => number;
-	/** For audit: what happened, never the token. */
-	onEvent?: (e: { peerId: string; outcome: string; keyId?: string }) => void;
+	/** For audit: what happened, never the token. `error` names the failure's class when the outcome is "failed" (S-D5). */
+	onEvent?: (e: { peerId: string; outcome: string; keyId?: string; error?: string }) => void;
 };
 
 const refuse = (message = "enrollment refused"): Reply => ({ ok: false, error: { code: "PermissionDenied", message } });
@@ -240,10 +242,10 @@ export class EnrollmentService {
 			if (!key || key.state !== "active") return refuse("paired enrollment resolution requires a current app-key proof");
 		}
 		try { return m === "enroll" ? await this.enroll(call as { args?: Record<string, Json>; request?: Record<string, Json> }, conn, !unpaired) : await this.status(call as { request?: Record<string, Json>; args?: Record<string, Json> }, conn); }
-		catch (e) { if (!(e instanceof EnrollError)) { this.event(conn.peerId, "failed"); console.error("enrollment failed:", e); } return refuse(e instanceof EnrollError ? e.message : "enrollment refused"); }
+		catch (e) { if (!(e instanceof EnrollError)) { this.event(conn.peerId, "failed", undefined, e instanceof Error ? e.constructor.name : String(e)); console.error("enrollment failed:", e); } return refuse(e instanceof EnrollError ? e.message : "enrollment refused"); }
 	}
 
-	private event(peerId: string, outcome: string, keyId?: string) { try { this.o.onEvent?.({ peerId, outcome, ...(keyId ? { keyId } : {}) }); } catch { /* audit must not break the handler */ } }
+	private event(peerId: string, outcome: string, keyId?: string, error?: string) { try { this.o.onEvent?.({ peerId, outcome, ...(keyId ? { keyId } : {}), ...(error ? { error } : {}) }); } catch { /* audit must not break the handler */ } }
 
 	private async enroll(call: { args?: Record<string, Json>; request?: Record<string, Json> }, conn: Connection, replayOnly = false): Promise<Reply> {
 		const now = (this.o.now ?? Date.now)();

@@ -1,4 +1,4 @@
-// netcup SCP REST fencing (docs/federation-plan-v3.md 5.5, plan 3.3) and its mutual-TLS service.
+// netcup SCP REST fencing (docs/federation-plan-v3.en.md 5.5, plan 3.3) and its mutual-TLS service.
 // The SCP token stays on the fencing host (vpsc); transition hosts use `TlsFencing`, a thin client. Only hosts in the
 // local pin list (host ID -> server ID + MAC) can be fenced; a caller never supplies a server ID. With netcup,
 // "restart-locked" means autostart off and the server observed SHUTOFF; the real barrier against an operator

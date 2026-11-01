@@ -26,7 +26,7 @@ export { startFederationHost, type FederationHostOptions } from "./runtime.ts";
 export { GrantAuthority, GrantVerifier, GrantDenied, verifyDetached, type Grant, type SignedGrant } from "./grants.ts";
 export { createSpace, listSpaces, snapshotSpace, resolveSpaceId, spaceDoc, Registry, NamedSpace, UnknownSpaceError, DEFAULT_ALIAS, type SpaceInfo, type RegistryState } from "./spaces.ts";
 export { canonicalJson } from "./canonical.ts";
-export { Supervisor, ControlAccess, COMMAND_KINDS, RESULT_RETENTION_MS, type CommandKind, type CommandResult, type SupervisorOptions, type ControlAccessOptions } from "./supervisor.ts";
+export { Supervisor, ControlAccess, RESULT_RETENTION_MS, type CommandResult, type SupervisorOptions, type ControlAccessOptions } from "./supervisor.ts";
 export { EnrollmentService, SpaceKeyDirectory, createEnroll, bootstrapEnroll, revokePeerKey, newEnrollToken, hashToken, enrollQr, keyFingerprint, BootstrapClosed, CONTROL_SPACE, ENROLL_TTL_MS, UNPAIRED_ROLE, ENROLLABLE_ROLES, type EnrollRec, type EnrollmentOptions } from "./enroll.ts";
 export { ProvingService, MemoryKeyDirectory, generateKey, verifySignature, signedBytes, AUTH_PROTOCOL, CHALLENGE_TTL_MS, DEFAULT_PRIVILEGED, type Algorithm, type Challenge, type KeyDirectory, type PeerKeyRec, type Signer, type AuthState, type ProvingOptions } from "./auth.ts";
 export { startGate, NetbirdDirectory, GateIdentity, DirectoryDown, DEFAULT_GROUP_ROLES, rolesOf, type Gate, type GateOptions, type PeerDirectory, type PeerInfo, type GroupRoles, type NetbirdDirectoryOptions } from "./gate.ts";
@@ -43,8 +43,8 @@ export { RunController, RunBusy, RunJournal, localRunMember, runCommands, type R
 export { auditLog, collectAlerts, startAlertMonitor, webhookPublisher, type Alert } from "./alerts.ts";
 export { DeploymentController, DeploymentState, capabilityHostStatus, deploymentCommands, validateDeployment, type DeploymentConfig, type DeploymentPlan, type DeploymentPorts, type PlanStep } from "./deployment.ts";
 export { SpaceLifecycle, SpaceLifecycleService, SpaceLifecycleJournal, SpaceInUse, signLifecycle, verifyLifecycle, spaceCommands, type SpaceAction, type SpaceLifecycleRequest, type SpaceLifecycleResult, type SpaceLifecycleInstruction, type SignedLifecycle, type LifecyclePin } from "./space-lifecycle.ts";
-export { WorkerAssignments, WorkerSupervisor, WorkerJournal, appliedWorkers, abortableSleep, startWorkerSupervisor, verifyWorkers, workerCommands, type SignedWorkers, type WorkerKind, type WorkerList, type WorkerPin, type WorkerSpec, type WorkerSummary } from "./workers.ts";
-export { RunGateService, remoteRunMember, signRun, verifyRun, type RunGateInstruction, type RunPin, type RunPreparer, type SignedRun } from "./run-member.ts";
+export { WorkerAssignments, WorkerSupervisor, WorkerJournal, appliedWorkers, abortableSleep, startWorkerSupervisor, workerCommands, type SignedWorkers, type WorkerKind, type WorkerList, type WorkerPin, type WorkerSpec, type WorkerSummary } from "./workers.ts";
+export { RunGateService, remoteRunMember, signRun, type RunGateInstruction, type RunPin, type RunPreparer, type SignedRun } from "./run-member.ts";
 export * from "./meter.ts";
 export { core };
 
@@ -323,7 +323,7 @@ export { startQuarantineReplicas } from "./configured-runtime.ts";
 export { openSyncSpace, openSyncSpaces, sealedResolver, sealedCandidateOf, type SealedSyncSpace, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
 export { replicaConfigNotice, latestReplicaConfigNotice, ReplicaNoticeBoard, signReplicaConfigNotice, adoptReplicaConfigNotice, type ReplicaConfigNotice, type SignedReplicaConfigNotice } from "./replica-notice.ts";
 export { signedReplicaPeer, replicaSyncHandler, ReplicaTransportRefused, type ReplicaPin } from "./replica-transport.ts";
-export { NetcupScp, NetcupFencing, NetcupError, fileTokenProvider, fileFenceState, memoryFenceState, serveFencing, TlsFencing, type NetcupServerPin, type NetcupFenceState } from "./netcup-fencing.ts";
+export { NetcupScp, NetcupFencing, NetcupError, fileTokenProvider, fileFenceState, serveFencing, TlsFencing, type NetcupServerPin, type NetcupFenceState } from "./netcup-fencing.ts";
 export { signControlHostChange, verifyControlHostChange, recordControlHostChange, followControlHostChange, ControlHostChangeBlocked, type ControlHostChange, type SignedControlHostChange } from "./control-host-change.ts";
 export { ContainerFencing, ContainerFencingError, execRunner, type ContainerPin, type CommandRunner } from "./container-fencing.ts";
 export { SimulatorFencing, ReplicaTransitionBlocked, unconfiguredFencing, fenceHostBoot, revokeSpacePermit, releaseHostToQuarantine, assertSyncPrimary, assertSyncStandby, assertQuarantine, degradeToSingle, promote, setStandby, readmitSpace, installAdmittedPermit, type FencingAdapter, type FenceProof, type StandbyTarget } from "./replica-control.ts";

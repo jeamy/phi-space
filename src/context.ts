@@ -1,5 +1,5 @@
 // The invocation context of phi-spaces: an optional abort signal and immutable values passed explicitly through
-// operations. phi-spaces' own type (docs/umstellung-u0-bestand.md, decision D1); it has the same shape as the
+// operations. phi-spaces' own type (docs/umstellung-u0-bestand.en.md, decision D1); it has the same shape as the
 // context the pi-durable adapter still hands on, so a context made here passes through unchanged.
 
 /** A typed key of a context value. */

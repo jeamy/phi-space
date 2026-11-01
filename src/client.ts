@@ -26,7 +26,6 @@ export type SpaceHost = Pick<StoreHost, "commit" | "watchDoc" | "snapshot">;
 /** `space`: alias or spaceId of a named space (see `createSpace`); omitted: the default space. */
 export type PhiSpacesOptions = { space?: string; authorityId?: string; maxPending?: number; maxPendingPeer?: number; consumer?: Principal; authorization?: DecisionAuthorization };
 export type Once = { get(tx: StoreTx): Promise<Json | undefined>; set(tx: StoreTx, v: Json): Promise<void> };
-export type Snapshot = { readonly entry: Readonly<EntryDraft> };
 export type OpOptions = {
 	txn?: string | null;
 	/** Absolute deadline (ms). Overrides `timeout`; lets a durable caller keep the clock across a restart. */
@@ -55,7 +54,7 @@ export type BatchOp =
 /** What each step gave: a lease (begin, write), the entry or null (take, read; `locked` as for probe), null (commit, abort). */
 export type BatchResult = Lease | { entry: Taken | null; locked?: true } | null;
 /** Pause (plus up to as much again of jitter) between a change waking a blocked read/take and its next probe. */
-export const WAKE_DEBOUNCE_MS = 20;
+const WAKE_DEBOUNCE_MS = 20;
 
 /** What tools and federated/remote implementations share. `PhiSpaces` is the local one. */
 export interface SpaceLike {
@@ -383,7 +382,6 @@ export class PhiSpaces implements SpaceLike {
 		return { stats: core.stats(s, this.now()), rev: core.revision(s), streamId: core.streamIdOf(s) };
 	}
 	/** A frozen canonical copy. JavaSpaces' snapshot is a serialization cache; this keeps the contract only. */
-	snapshot(entry: EntryDraft): Snapshot { return { entry: Object.freeze(structuredClone(entry)) }; }
 
 	async createTransaction(lease: number = core.ANY, o: Req = {}) { return (await this.mutate("txn.begin", { lease }, o.request, (s, now) => core.createTxn(s, now, lease, this.as))).value; }
 	setCompletionProfiles(profiles: core.CompletionProfile[]): Promise<void> {

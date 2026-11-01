@@ -1,4 +1,4 @@
-// A phi-space as a service of its own (docs/umstellung-ohne-pi-durable.md, U3): the own store (SQLite, or memory) served
+// A phi-space as a service of its own (docs/umstellung-ohne-pi-durable.en.md, U3): the own store (SQLite, or memory) served
 // over a unix socket or TCP, with no pi-durable, no model and no agent. Every connection is one peer; whoever can reach
 // the socket uses the space (keep it on a unix socket or an internal address, or put the overlay gate in front).
 //

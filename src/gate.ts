@@ -8,9 +8,6 @@
 // Layer A depends on the management API: answers are cached for at most `cacheMs` (60 s). When the API cannot be reached
 // the cache is used until it is that old, then new connections are refused, and open connections are re-checked on
 // every refresh: a peer that vanished or lost its roles is disconnected.
-//
-// Not here yet: layer B (the per-connection key challenge, needs PeerKey entries in the control space) and the grants
-// of 4.4. A host that is not enrolled with a key therefore works under its group rules alone ("A-only").
 import type net from "node:net";
 import type { Connection, Identity, IdentityAdapter } from "./service.ts";
 import { DEFAULT_PRIVILEGED, type AuthState, type KeyDirectory } from "./auth.ts";
@@ -99,13 +96,11 @@ export const rolesOf = (groups: readonly string[], map: GroupRoles): string[] =>
  * the intersection of the groups' and the key's: neither side can add what the other did not grant (4.3).
  */
 export class GateIdentity implements IdentityAdapter {
-	private privileged: readonly string[];
-	constructor(o: { privilegedRoles?: readonly string[] } = {}) { this.privileged = o.privilegedRoles ?? DEFAULT_PRIVILEGED; }
 	authenticate(conn: Connection): Identity | null {
 		const roles = (conn.credentials as { roles?: unknown } | undefined)?.roles;
 		if (!conn.peerId || !Array.isArray(roles) || roles.length === 0 || !roles.every((r) => typeof r === "string")) return null;
 		const proof = (conn.state as AuthState | undefined)?.proof;
-		const effective = proof ? (roles as string[]).filter((r) => proof.roles.includes(r)) : (roles as string[]).filter((r) => !this.privileged.includes(r));
+		const effective = proof ? (roles as string[]).filter((r) => proof.roles.includes(r)) : (roles as string[]).filter((r) => !DEFAULT_PRIVILEGED.includes(r));
 		// Only withheld roles and no proof: the peer is known but may do nothing yet (the refusal then says a proof is required)
 		return { principal: { peerId: conn.peerId }, roles: effective };
 	}

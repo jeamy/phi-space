@@ -5,7 +5,7 @@ import type {MemberLifecycle,MembershipController} from "./membership.ts";
 import type {RunGateService} from "./run-member.ts";
 import {runCommands,type RunController} from "./run-controller.ts";
 import {appliedWorkers,workerCommands,type WorkerAssignments} from "./workers.ts";
-import {CONTROL_SPACE} from "./enroll.ts";
+import {findControlSpace} from "./enroll.ts";
 import type {SpaceLifecycleService,spaceCommands} from "./space-lifecycle.ts";
 import {deploymentCommands,type DeploymentController} from "./deployment.ts";
 import {auditLog,collectAlerts} from "./alerts.ts";
@@ -29,7 +29,7 @@ import type { SpaceHost } from "./client.ts";
 import { installBootGuard } from "./boot.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 
-export type UnresolvedSyncSpace = { spaceId: string; alias: string; sealed: { revision: number; hash: string } };
+type UnresolvedSyncSpace = { spaceId: string; alias: string; sealed: { revision: number; hash: string } };
 type SyncEntry = NonNullable<FederationHostOptions["syncSpaces"]>[number];
 export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	hostId: string; authorityId: string; keys: KeyDirectory; verifier: GrantVerifier;
@@ -180,10 +180,10 @@ export async function startFederationHost(host: ClosableStoreHost, ctx: Context,
                 };
             }
             if(o.control.runs)Object.assign(asyncCommands,runCommands(o.control.runs));
-            if(o.control.workers){const ch=o.control.host;Object.assign(asyncCommands,workerCommands(o.control.workers,async()=>{const id=(await listSpaces(ch,ctx)).find(i=>i.alias===CONTROL_SPACE)?.spaceId;const s=id?await snapshotSpace(ch,id,ctx):undefined;return s?appliedWorkers(s,(o.now??Date.now)()):{};}));}
+            if(o.control.workers){const ch=o.control.host;Object.assign(asyncCommands,workerCommands(o.control.workers,async()=>{const id=(await findControlSpace(ch,ctx))?.spaceId;const s=id?await snapshotSpace(ch,id,ctx):undefined;return s?appliedWorkers(s,(o.now??Date.now)()):{};}));}
             if(o.control.spaces)Object.assign(asyncCommands,o.control.spaces);
             if(o.control.deployment)Object.assign(asyncCommands,deploymentCommands(o.control.deployment));
-            {const ch=o.control.host,runs=o.control.runs,workers=o.control.workers,controlId=async()=>(await listSpaces(ch,ctx)).find(i=>i.alias===CONTROL_SPACE)?.spaceId??"";
+            {const ch=o.control.host,runs=o.control.runs,workers=o.control.workers,controlId=async()=>(await findControlSpace(ch,ctx))?.spaceId??"";
              // Read-only admin views: alerts derived from runs, workers and host reports, and the command audit.
              asyncCommands.listAlerts=async()=>await collectAlerts({runs,workers,host:ch,ctx,controlSpaceId:await controlId(),now:o.now}) as any;
              asyncCommands.auditLog=async(_id,a)=>await auditLog(ch,ctx,await controlId(),{limit:Number(a.limit??100),now:o.now}) as any;}

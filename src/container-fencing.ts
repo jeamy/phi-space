@@ -1,4 +1,4 @@
-// Container fencing (docs/federation-plan-v3.md 5.5, plan 3.3) for a host that is a docker container started by a
+// Container fencing (docs/federation-plan-v3.en.md 5.5, plan 3.3) for a host that is a docker container started by a
 // systemd user unit, as host-a on big. It runs on the docker host, outside the fenced container, behind the same
 // mutual-TLS `serveFencing` service as the netcup adapter. Only pinned host IDs can be fenced; a caller never names a
 // container. "Restart-locked" means three independent locks, each re-read by `verify`: the container is stopped, its

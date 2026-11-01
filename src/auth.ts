@@ -105,9 +105,8 @@ export type ProvingOptions = {
 	/** Wrong proofs allowed per connection before it is closed by the caller (default 5). */
 	maxFailures?: number;
 	/** Roles that need a proof: without one they are withheld. */
-	privilegedRoles?: readonly string[];
 };
-export const DEFAULT_PRIVILEGED = ["admin", "router", "replicator", "supervisor", "host"] as const;
+export const DEFAULT_PRIVILEGED: readonly string[] = ["admin", "router", "replicator", "supervisor", "host"];
 
 const reply = (r: Reply): Reply => r;
 const bad = (code: "BadRequest" | "PermissionDenied" | "Unauthenticated", message: string): Reply => reply({ ok: false, error: { code, message } });
@@ -145,8 +144,7 @@ export class ProvingService {
 		const st = stateOf(conn);
 		if (st.proof) return text;
 		const A = (conn.credentials as { roles?: string[] } | undefined)?.roles ?? [];
-		const privileged = this.o.privilegedRoles ?? DEFAULT_PRIVILEGED;
-		if (!A.some((r) => privileged.includes(r))) return text;
+		if (!A.some((r) => DEFAULT_PRIVILEGED.includes(r))) return text;
 		try {
 			const r = JSON.parse(text) as Reply;
 			if (!r.ok && r.error.code === "PermissionDenied") return JSON.stringify({ ok: false, error: { ...r.error, code: "ProofRequired", message: "a proof of your app key is required for this: call challenge, then prove" } });

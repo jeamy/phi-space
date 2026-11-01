@@ -12,7 +12,7 @@ import { openSyncSpace, openSyncSpaces, sealedCandidateOf, sealedResolver, type 
 import { promotionEvidence } from "./primary-sync.ts";
 import type { Context } from "./context.ts";
 import { privateFile, loadFileSigner } from "./keys.ts";
-import { NetbirdDirectory, GateIdentity, type GroupRoles } from "./gate.ts";
+import { NetbirdDirectory, GateIdentity, rolesOf, type GroupRoles } from "./gate.ts";
 import { GrantAuthority, GrantVerifier } from "./grants.ts";
 import { SpaceKeyDirectory } from "./enroll.ts";
 import { RemoteSpace, TransportFailure } from "./remote.ts";
@@ -66,7 +66,7 @@ export type FederationConfig = {
 export const syncStores = (f?: SyncSpaceFactories) => (f?.openSyncStorage && f.openSyncHarness ? { openStorage: f.openSyncStorage, openHarness: f.openSyncHarness } : OWN_SYNC_FACTORIES);
 /** Factories for the dedicated stores of primary/sync Spaces; supplied by the daemon, which owns the storage backend. */
 /** Absent store factories: the own store (OWN_SYNC_FACTORIES). */
-export type SyncSpaceFactories = { openSyncStorage?: (path: string) => Promise<import("./store/sync-store.ts").SyncStore>; openSyncHarness?: (storage: any) => Promise<ClosableStoreHost>;
+type SyncSpaceFactories = { openSyncStorage?: (path: string) => Promise<import("./store/sync-store.ts").SyncStore>; openSyncHarness?: (storage: any) => Promise<ClosableStoreHost>;
 	/** The main store runs on primary/sync (3.8): its current replica configuration, for every Space in it. */
 	mainReplica?: () => import("./primary-sync.ts").PrimarySyncConfig;
 	/** The last configuration transition of the main store's journal (v3 5.3.1 step 6). */
@@ -116,7 +116,7 @@ export async function startConfiguredFederation(host: ClosableStoreHost, ctx: Co
 			const transition = factories?.mainTransition?.();
 			if (transition) { const t = transition.config, b = transition.previous; await host.commit(tx => alignControlReplicaIn(tx, config.controlSpaceId, authorityId, { transitionId: transition.transitionId, primaryEpoch: t.primaryEpoch, replicaConfigVersion: t.replicaConfigVersion, primaryReplica: t.primaryReplica }, { primaryEpoch: b.primaryEpoch, primaryReplica: b.primaryReplica }), ctx); }
 			keys = new SpaceKeyDirectory(host, ctx, Date.now, config.controlSpaceId);
-			control = { host, authority: new GrantAuthority({ authorityId, hostId: config.hostId, signer, keys, identity, allowAOnly: async () => { const state = await snapshotSpace(host, config.controlSpaceId, ctx), policy = await external.get<any>(`access:${authorityId}`); return policy ? policy.value.authorityId === authorityId && policy.value.aOnlyAllowed === true : state?.restore?.kind !== "control"; }, refreshIdentity: async conn => { await directory.refresh(); const peer = conn.overlayIp ? await directory.lookup(conn.overlayIp) : null; if (!peer) return null; return identity.authenticate({ ...conn, credentials: { roles: peer.groups.flatMap(g => groupRoles[g] ?? []) } }); } }) };
+			control = { host, authority: new GrantAuthority({ authorityId, hostId: config.hostId, signer, keys, identity, allowAOnly: async () => { const state = await snapshotSpace(host, config.controlSpaceId, ctx), policy = await external.get<any>(`access:${authorityId}`); return policy ? policy.value.authorityId === authorityId && policy.value.aOnlyAllowed === true : state?.restore?.kind !== "control"; }, refreshIdentity: async conn => { await directory.refresh(); const peer = conn.overlayIp ? await directory.lookup(conn.overlayIp) : null; if (!peer) return null; return identity.authenticate({ ...conn, credentials: { roles: rolesOf(peer.groups, groupRoles) } }); } }) };
 		} else {
 			controlSocket = socketTransport(config.control.address);
 			let remote: RemoteSpace;
@@ -192,7 +192,7 @@ export async function startConfiguredFederation(host: ClosableStoreHost, ctx: Co
         })().catch(e=>console.error("Capability heartbeat:",e instanceof Error?e.message:String(e))).then(()=>{if(!capabilityStopped)capabilityTimer=setTimeout(heartbeat,CAPABILITY_HEARTBEAT_MS);});};
         // Start only from explicit directory provisioning; a directory entry does not add a routing Member.
         if(config.capabilities)heartbeat();
-		const trustedConnection = async () => { await directory.refresh(); const peer = await directory.lookup(config.listen.host); if (!peer || peer.id !== config.peerId) throw new Error("local service peer is no longer known to NetBird"); return { peerId: peer.id, overlayIp: peer.ip, credentials: { roles: peer.groups.flatMap(g => groupRoles[g] ?? []) } }; };
+		const trustedConnection = async () => { await directory.refresh(); const peer = await directory.lookup(config.listen.host); if (!peer || peer.id !== config.peerId) throw new Error("local service peer is no longer known to NetBird"); return { peerId: peer.id, overlayIp: peer.ip, credentials: { roles: rolesOf(peer.groups, groupRoles) } }; };
 		const nativeService = { async handle(call: unknown, conn: import("./service.ts").Connection) { Object.assign(conn, await trustedConnection()); return runtime.service.handle(call, conn); } };
 		// lww/set step 2: pull the entry stream of every pinned peer. Network failures are temporary and retried by the
 		// pump; anything else stops it, is logged and restarts after a pause.

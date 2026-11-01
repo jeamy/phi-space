@@ -62,7 +62,7 @@ export class DelegationDenied extends core.PermissionError {}
 /** v3 5.3.1 step 5: the Member changed its replica configuration and the router has not adopted the notice yet. */
 export { ReplicaConfigPending } from "./core.ts";
 import { ReplicaConfigPending } from "./core.ts";
-export const DelegationEpochs =
+const DelegationEpochs =
     defineDocFamily<{routerEpoch : number; controlPrimaryEpoch : number; policyVersion : number},
                     null>({
         kind : "phi-spaces.delegation-epochs",
@@ -88,7 +88,7 @@ export const ControlReplicaMarker =
                           primaryReplica : null, samePrimary : false})
     });
 /** Maximum clock uncertainty between control and router hosts for a router change. */
-export const ROUTER_CHANGE_SKEW_MS = 5_000;
+const ROUTER_CHANGE_SKEW_MS = 5_000;
 const epochKey = (authority: string, space: string) => canonicalJson([ authority, space ]);
 async function fencePending(tx: StoreTx, space: string, now: number,
                             e: {routerEpoch: number; controlPrimaryEpoch : number}) {

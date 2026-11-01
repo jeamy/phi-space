@@ -1,4 +1,4 @@
-// What the primary/sync journal (src/primary-sync.ts) needs of a store (docs/umstellung-ohne-pi-durable.md, U4). The
+// What the primary/sync journal (src/primary-sync.ts) needs of a store (docs/umstellung-ohne-pi-durable.en.md, U4). The
 // journal itself (hash chain, configuration steps, fencing, the one unresolved candidate) does not depend on the store;
 // a store brings the shape of its writes (a codec) and a few operations on its stopped or exclusively opened files.
 // The own SQLite store (store/sqlite.ts) is the one such store; pi-durable's is gone (decision D6).

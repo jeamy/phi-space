@@ -1,4 +1,4 @@
-// Deployment bootstrap (docs/betrieb-und-mobile-steuerung.md §4, §8 B8). A declarative config names hosts, Spaces,
+// Deployment bootstrap (docs/betrieb-und-mobile-steuerung.en.md §4, §8 B8). A declarative config names hosts, Spaces,
 // routing and workers by alias only. The coordinator keeps the alias -> ID mapping, computes a plan against it and
 // applies it idempotently through the existing building blocks: Space lifecycle (B7) and worker assignments (B6).
 // Host installation, NetBird join and enrollment are prerequisites, not steps here: an alias must be bound to an

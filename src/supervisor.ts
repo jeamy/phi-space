@@ -15,7 +15,7 @@ import type { Context } from "./context.ts";
 import type { StoreHost } from "./store/types.ts";
 import * as core from "./core.ts";
 import { NamedSpace, listSpaces, spaceDoc, createSpace } from "./spaces.ts";
-import { CONTROL_SPACE, createEnrollIn, hasAdminKey, revokePeerKeysIn } from "./enroll.ts";
+import { CONTROL_SPACE, createEnrollIn, findControlSpace, hasAdminKey, revokePeerKeysIn } from "./enroll.ts";
 import type { Connection, IdentityAdapter, Reply } from "./service.ts";
 import type { Json } from "./core.ts";
 
@@ -48,7 +48,7 @@ export class Supervisor {
 	private now = () => (this.o.now ?? Date.now)();
 
 	private async controlId(): Promise<string> {
-		const known = (await listSpaces(this.host, this.ctx)).find((i) => i.alias === CONTROL_SPACE);
+		const known = await findControlSpace(this.host, this.ctx);
 		return (known ?? (await this.host.commit((tx) => createSpace(tx, CONTROL_SPACE, this.now()), this.ctx))).spaceId;
 	}
 
@@ -165,7 +165,7 @@ export class ControlAccess {
 	private async isControl(space: unknown): Promise<boolean> {
 		if (space === CONTROL_SPACE) return true;
 		if (typeof space !== "string") return false;
-		if (!this.controlId) this.controlId = (await listSpaces(this.o.host, this.o.ctx)).find((i) => i.alias === CONTROL_SPACE)?.spaceId;
+		if (!this.controlId) this.controlId = (await findControlSpace(this.o.host, this.o.ctx))?.spaceId;
 		return this.controlId !== undefined && space === this.controlId;
 	}
 	private async check(call: unknown, conn: Connection): Promise<Reply | undefined> {

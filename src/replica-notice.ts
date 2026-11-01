@@ -1,4 +1,4 @@
-// ReplicaConfigNotice (docs/federation-plan-v3.md 5.3.1 step 5): after promote, degradeToSingle or setStandby the
+// ReplicaConfigNotice (docs/federation-plan-v3.en.md 5.3.1 step 5): after promote, degradeToSingle or setStandby the
 // primary of a replicated Space offers a signed notice of its new replica configuration; the router adopts it in a
 // separate control commit that changes only that Member's replication and target binding and raises policyVersion.
 // The signature only identifies the sender. The authority is the independent register: the router adopts a notice
