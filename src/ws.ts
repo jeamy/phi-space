@@ -124,7 +124,7 @@ export function upgradeWebSocket(req: IncomingMessage, socket: Duplex, head: Buf
   buffer = Buffer.concat([buffer, chunk]); parse();
  });
  socket.on("close", fireClose);
- socket.on("end", fireClose);
+ socket.on("end", () => { socket.end(); fireClose(); }); // the peer's FIN: a half-open socket would stay until a reset
  socket.on("error", () => { socket.destroy(); fireClose(); });
  if (buffer.length) queueMicrotask(parse);
  return {

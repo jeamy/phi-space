@@ -1,4 +1,4 @@
-// Remote run Members (docs/betrieb-und-mobile-steuerung.md §7.4 case 3, §8 B4): signed RunGate instructions,
+// Remote run Members (docs/betrieb-und-mobile-steuerung.en.md §7.4 case 3, §8 B4): signed RunGate instructions,
 // pauseIncomplete with an unreachable Member, controller restart, admin commands and the composed Gate over TCP.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -106,6 +106,7 @@ test("signed instructions bind authority, Space, run kind and both keys", async 
 		const forged = remoteRunMember({ spaceId: sid, authorityId: "authority", peerId: "control", signer: controllerKey.signer, memberPin: pin("b", generateKey("ed25519", "b2")), send: t => service.apply(t) });
 		await assert.rejects(forged.prepare(q.spec!, { runId: "r", commandId: "p", kind: "prepare", revision: 1 }), c.PermissionError, "an ACK signed by another key is not a confirmation");
 		const genuine = remoteRunMember({ spaceId: sid, authorityId: "authority", peerId: "control", signer: controllerKey.signer, memberPin: pin("b", key), send: t => service.apply(t) });
+		await assert.rejects(remoteRunMember({ now: () => 0, spaceId: sid, authorityId: "authority", peerId: "control", signer: controllerKey.signer, memberPin: pin("b", key), send: t => service.apply(t) }).recover("r", "rec-late"), /expired/, "a captured recovery instruction does not hold for ever");
 		const view = await genuine.recover("r", "rec-x");
 		assert.deepEqual([view.recoveryId, view.present, view.gate!.state, view.stable], ["rec-x", true, "preparing", true], "a signed recover instruction returns the signed recovery view");
 	} finally { await home.dispose(); }

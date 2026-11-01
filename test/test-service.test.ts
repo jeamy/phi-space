@@ -106,6 +106,17 @@ test("rights: methods per role, types per role including the supertypes of an en
 	assert.equal(ok(await member.call("readAll", { template: { type: "Secret" } })).items.length, 1, "a member has no type limits");
 });
 
+test("a claim receipt comes for a transient write and for a batch: rpcDomain hashes what the client claimed", async () => {
+	const h = await memory();
+	try {
+		const c = await session(svc(h, { hostId: "host-1" }), "peer-a");
+		const write = await c.call("write", { entry: { type: "Job", fields: { n: 1 } }, leaseMs: "forever", transient: true }, "t1", { frame: { claimReceipt: true } });
+		assert.ok(write.ok && write.claimReceipt, JSON.stringify(write));
+		const batch = await c.call("batch", { ops: [{ op: "begin", leaseMs: 60_000 }, { op: "write", entry: { type: "Job", fields: { n: 2 } }, leaseMs: "forever" }, { op: "read", template: { type: "Job" } }] }, "b1", { frame: { claimReceipt: true } });
+		assert.ok(batch.ok && batch.claimReceipt, JSON.stringify(batch));
+	} finally { await h.close(ctx); }
+});
+
 test("write, take and the lost answer: the same request returns the stored result, one effect", async (tc) => {
 	if (OTHER_SERVER) return tc.skip("a lost answer at the store: rust/phi-store/tests/failures.rs and crash.rs, a restart: test-standalone");
 	await forEachBackend(async (home) => {

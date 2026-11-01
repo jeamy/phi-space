@@ -1,5 +1,5 @@
 // A primary/sync Space on a federation host (plan 3.2/3.5): its own dedicated store (one commit history per Space,
-// docs/abnahme/ap3-primary-sync.md), the signed replica listener, and on the primary a host over primarySyncStorage with
+// docs/_attic/abnahme/ap3-primary-sync.en.md), the signed replica listener, and on the primary a host over primarySyncStorage with
 // the boot guard bound to the journal configuration. A standby serves no business calls. Transitions (promote,
 // degradeToSingle, setStandby) run with the host's service for this Space stopped; on the next start the host
 // follows the journal: as primary it serves the Space and offers the ReplicaConfigNotice of its last transition.
@@ -14,7 +14,7 @@ import type { RecoveryRegister } from "./recovery-register.ts";
 import { installBootGuard } from "./boot.ts";
 import { PrimarySyncJournal, PrimarySyncBlocked, primarySyncStorage, recoverPrimarySync, durabilityOf, type PrimarySyncConfig } from "./primary-sync.ts";
 import { assertQuarantine, assertSyncPrimary, assertSyncStandby, installAdmittedPermit } from "./replica-control.ts";
-import { replicaSyncHandler, signedReplicaPeer, type ReplicaPin } from "./replica-transport.ts";
+import { replicaSyncHandler, signedReplicaPeer, StandbyRefused, type ReplicaPin } from "./replica-transport.ts";
 import { latestReplicaConfigNotice, signReplicaConfigNotice, type SignedReplicaConfigNotice } from "./replica-notice.ts";
 import { serveSpace, socketTransport } from "./socket.ts";
 import { createSpace, listSpaces } from "./spaces.ts";
@@ -36,7 +36,7 @@ export type SyncSpace = {
 	/** Primary: stops serving after a sealed, unconfirmed commit (its host refuses all work until reopened). */
 	unserve: () => Promise<void>;
 	/**
-	 * Primary: one attempt to resolve the sealed candidate with the standby and serve again (docs/abnahme/ap3-primary-sync.md).
+	 * Primary: one attempt to resolve the sealed candidate with the standby and serve again (docs/_attic/abnahme/ap3-primary-sync.en.md).
 	 * "served", "pending" (try again later: standby or register unreachable) or "excluded" (this host lost its active
 	 * primary permit, e.g. fenced by a promotion: stop trying; the candidate is never applied here).
 	 */
@@ -102,7 +102,7 @@ export async function openSyncSpace(o: {
 		poisoned = null; harness = h;
 	};
 	// A host being closed (by the sealed resolver, say) still holds its store: closing and serving again wait for it.
-	let closing: Promise<void> = Promise.resolve();
+	let closing: Promise<void> = Promise.resolve(), standbyWaits = false; // the standby refused at the start: resolved like a sealed candidate
 	const unserve = async () => { const h = harness; harness = undefined; stopGuard?.(); stopGuard = undefined; if (h) closing = closing.then(() => bounded(h.close(o.ctx))); await closing; };
 	try {
 		if (!o.listenOnly && role() === "primary") {
@@ -113,6 +113,7 @@ export async function openSyncSpace(o: {
 				// an active permit it is not served but keeps its listener for setStandby's catch-up.
 				// Anything else (no permit, another configuration) keeps the Space unserved as before.
 				if (journal.head().revision === 0) console.error(`primary/sync Space ${c.alias} is an empty replica and waits for setStandby:`, e instanceof Error ? e.message : String(e));
+				else if (e instanceof StandbyRefused) { standbyWaits = true; console.error(`primary/sync Space ${c.alias} waits for its standby:`, e.message); }
 				else if (journal.head().revision === journal.appliedRevision || e instanceof PrimarySyncBlocked) throw e;
 				else console.error(`primary/sync Space ${c.alias} has an unresolved sealed candidate:`, e instanceof Error ? e.message : String(e));
 			}
@@ -120,7 +121,7 @@ export async function openSyncSpace(o: {
 	} catch (e) { for (const t of transports) t.close(); await listener.close(); journal.close(); throw e; }
 	return {
 		config: c, journal, role, get harness() { return harness; }, unserve,
-		sealed: () => { if (harness) return poisoned; if (role() !== "primary") return null; const h = journal.head(); return h.revision !== journal.appliedRevision ? { revision: h.revision, hash: h.hash } : null; },
+		sealed: () => { if (harness) return poisoned; if (role() !== "primary") return null; const h = journal.head(); return h.revision !== journal.appliedRevision || standbyWaits ? { revision: h.revision, hash: h.hash } : null; },
 		onSealed: listener => { sealedListener = listener; },
 		resolve: async () => {
 			if (harness) return { state: "served" };
@@ -156,7 +157,7 @@ export type SealedSyncSpace = { spaceId: string; alias: string; sealed: { revisi
 /** The unresolved sealed candidate of a primary/sync Space, or null (see SyncSpace.sealed). */
 export const sealedCandidateOf = (sp: SyncSpace): { revision: number; hash: string } | null => sp.sealed();
 /**
- * Resolves sealed, unconfirmed commits while the host runs (docs/abnahme/ap3-primary-sync.md): the Space is set unresolved
+ * Resolves sealed, unconfirmed commits while the host runs (docs/_attic/abnahme/ap3-primary-sync.en.md): the Space is set unresolved
  * (answered with CommitSealed), its host closed, and `resolve()` retried with backoff until the standby confirms
  * or rejects the candidate; then the Space is served anew. A host that lost its primary permit stops trying.
  */

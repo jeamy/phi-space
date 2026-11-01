@@ -1079,6 +1079,7 @@ export function cancel(s: SpaceState, now: number, id: string, as?: Target): voi
 
 /** Earliest time something can change without a commit (lease expiry); the waiter must wake then. */
 export function nextExpiry(s: Readonly<SpaceState>): number {
+	if (s.adminMaintenance) return FOREVER; // settle() stands still under the fence: nothing is due until it lifts
 	// The watermark replaces the O(entries) sweep: `maintain` asks this before EVERY mutation,
 	// so a full scan per operation was the dominant cost on large durable spaces.
 	// loops, not Math.min(...spread): spreading a large array overflows the stack
@@ -1294,7 +1295,7 @@ export function purgeTasks(s:SpaceState,now:number,template:Template):number {
  touch(s,now);return tasks.length;
 }
 
-// RunGates (docs/betrieb-und-mobile-steuerung.md §6): per-run control state that the core enforces on every take,
+// RunGates (docs/betrieb-und-mobile-steuerung.en.md §6): per-run control state that the core enforces on every take,
 // so direct, waiting and host takes cannot bypass a pause. A take binds its transaction to the gate's revision.
 const MAX_RUN_GATES = 256, MAX_GATE_HISTORY = 32, GATE_COST = 1024;
 const validId = (v: unknown): v is string => typeof v === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(v);

@@ -335,6 +335,28 @@ fn or_null(v: Option<&Json>) -> Json { v.cloned().unwrap_or(Json::Null) }
 fn some(txn: &Json) -> Option<&Json> { Some(txn).filter(|t| !t.is_null()) }
 
 /// `rpcDomain`: the method and arguments a request's claim is kept under.
+/// One step as `batch` hands it to the space, which claims the steps as they are.
+fn batch_step(x: &Json) -> Json {
+	let txn = or_null(x.get("txn"));
+	match x.get("op").and_then(Json::as_str) {
+		Some("begin") => obj! { "op" => "begin", "lease" => domain_duration(x.get("leaseMs"), -1.0) },
+		Some(op @ ("commit" | "abort")) => obj! { "op" => op, "txn" => txn },
+		Some("write") => {
+			let e = x.get("entry");
+			let mut entry = obj! { "type" => or_null(e.and_then(|e| e.get("type"))), "fields" => or_null(e.and_then(|e| e.get("fields"))) };
+			if let (Some(t), Json::Object(m)) = (e.and_then(|e| e.get("types")), &mut entry) {
+				m.insert("types", t.clone());
+			}
+			let mut o = obj! { "op" => "write", "entry" => entry, "txn" => txn, "lease" => domain_duration(x.get("leaseMs"), -1.0) };
+			if let (Some(u), Json::Object(m)) = (x.get("unique"), &mut o) {
+				m.insert("unique", u.clone());
+			}
+			o
+		}
+		op => obj! { "op" => op.map_or(Json::Null, Json::from), "template" => or_null(x.get("template")), "txn" => txn },
+	}
+}
+
 pub fn rpc_domain(method: &str, a: &Object, principal: &Json) -> (String, Json) {
 	let get = |k: &str| a.get(k);
 	let txn = || or_null(get("txn"));
@@ -344,8 +366,12 @@ pub fn rpc_domain(method: &str, a: &Object, principal: &Json) -> (String, Json) 
 			if let (Some(u), Json::Object(m)) = (get("unique"), &mut o) {
 				m.insert("unique", u.clone());
 			}
+			if let (Some(Json::Bool(true)), Json::Object(m)) = (get("transient"), &mut o) {
+				m.insert("transient", Json::Bool(true));
+			}
 			("write".into(), o)
 		}
+		"batch" => ("batch".into(), Json::Array(get("ops").and_then(Json::as_array).map(|ops| ops.iter().map(batch_step).collect()).unwrap_or_default())),
 		"read" | "take" => {
 			let name = format!("{method}{}", if get("ifExists") == Some(&Json::Bool(true)) { "IfExists" } else { "" });
 			(name, obj! { "tmpl" => or_null(get("template")), "timeout" => domain_duration(get("timeoutMs"), 0.0), "deadline" => or_null(get("deadline")), "txn" => txn() })

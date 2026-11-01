@@ -213,7 +213,8 @@ export function sweep(s: SpaceState, now: number, maxRecords = 256): void {
 		if (c.state === "pending" || c.decidedAt === undefined) return false;
 		const due = c.resultExpired ? (g ? g.admitUntil + 1 : now) : c.decidedAt + keep;
 		if (due > now) { next = Math.min(next, due); return false; }
-		return c.decidedAt + keep <= now && (!c.resultExpired || !g || g.admitUntil < now);
+		if (c.decidedAt + keep > now) { next = Math.min(next, c.decidedAt + keep); return false; } // its retention decides, not its generation
+		return !c.resultExpired || !g || g.admitUntil < now;
 	}).sort();
 	let changed = false, complete = eligible.length <= maxRecords;
 	for (const k of eligible.slice(0, maxRecords)) {

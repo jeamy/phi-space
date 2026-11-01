@@ -42,6 +42,7 @@ for(const backend of BACKENDS)test(`${backend}: large deletion resumes bounded c
  const make=()=>new DataAdminController({host,ctx,assertAuthority:async()=>{},authorize:async()=>{if(!allowed)throw new core.PermissionError('scope revoked');},now:()=>1001});let admin=make();
  await admin.startDeletion('bulk-delete',sid,'admin',p);
  let state=(await snapshotSpace(host,sid,ctx))!;assert.ok(state.adminMaintenance);
+ assert.equal(core.nextExpiry(state),core.FOREVER,'under the fence nothing is due, so the reaper rests');assert.equal(core.needsMaintenance(state,1e12),false);
  assert.throws(()=>core.write(core.plain(state),1001,{type:'Race',fields:{}},null,10000,principalId(q)),/administrative deletion/);
  assert.throws(()=>core.createTxn(core.plain(state),1001,1000),core.PermissionError);
  assert.throws(()=>claims.issueGeneration(core.plain(state),1001,p),core.PermissionError);

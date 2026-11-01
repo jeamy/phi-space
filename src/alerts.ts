@@ -1,4 +1,4 @@
-// Alerts and audit (docs/betrieb-und-mobile-steuerung.md §7.5, §8 B10). Alerts are hints derived from the durable
+// Alerts and audit (docs/betrieb-und-mobile-steuerung.en.md §7.5, §8 B10). Alerts are hints derived from the durable
 // state of runs, worker assignments and host reports; they are never a proof of a state. The monitor publishes only
 // changes (new and resolved alerts), e.g. to a webhook such as ntfy. The audit view lists command results of the
 // control Space without their payloads.
@@ -47,7 +47,10 @@ export async function collectAlerts(o: { runs?: RunController; workers?: WorkerA
 /** Calls `collect` periodically and `publish` only with changes; a failing publish is retried with the next pass. */
 export function startAlertMonitor(o: { collect: () => Promise<Alert[]>; publish: (change: { raised: Alert[]; resolved: Alert[] }) => Promise<void>; intervalMs?: number; onError?: (e: unknown) => void }): { pass: () => Promise<void>; stop: () => Promise<void> } {
 	let known = new Map<string, Alert>(), stopped = false, timer: ReturnType<typeof setTimeout> | undefined, active: Promise<void> = Promise.resolve();
-	const pass = async () => {
+	let turn: Promise<unknown> = Promise.resolve();
+	// one at a time: two overlapping passes would compare against the same `known`
+	const pass = (): Promise<void> => { const run = turn.catch(() => {}).then(once); turn = run; return run; };
+	const once = async () => {
 		const current = new Map((await o.collect()).map(a => [a.key, a]));
 		const raised = [...current.values()].filter(a => !known.has(a.key)), resolved = [...known.values()].filter(a => !current.has(a.key));
 		if (raised.length || resolved.length) await o.publish({ raised, resolved });

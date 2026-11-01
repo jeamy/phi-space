@@ -270,7 +270,7 @@ export class PhiSpaces implements SpaceLike {
 		// A waiting call is decided in the commit that makes its entry visible (a write, a commit or abort, a gate change);
 		// only time (a deadline, a lease: nextExpiry) or a renewal of its waiter's authorization needs a commit of the
 		// poll. Otherwise a poll reads: the service polls every waiting call every 50 ms, and a settle per poll matched
-		// every waiter against every entry (half a CPU for ten idle roles, docs/umstellung-ohne-pi-durable.md U2d).
+		// every waiter against every entry (half a CPU for ten idle roles, docs/umstellung-ohne-pi-durable.en.md U2d).
 		const a = this.options.authorization;
 		if (!core.needsMaintenance(s, this.now()) && !(a && this.renewsPending(s, target, a))) { a?.check(); return v; }
 		return this.host.commit(async tx => { const d = await this.doc(tx); this.options.authorization?.check(); this.authorizePending(d, target); core.settle(d, this.now()); return core.plain(claims.lookup(d, target, this.now())); }, this.ctx);
@@ -531,7 +531,7 @@ export class PhiSpaces implements SpaceLike {
 		try {
 			for (;;) {
 				if (value.resultExpired) throw new claims.ResultExpired("the operation's retained result expired");
-				if (value.error) throw value.error.code === "CompletionViolation" ? new core.CompletionViolation(value.error.message) : new core.TransactionError(value.error.message);
+				if (value.error) throw value.error.code === "CompletionViolation" ? new core.CompletionViolation(value.error.message) : value.error.code === "PermissionDenied" ? new core.PermissionError(value.error.message) : new core.TransactionError(value.error.message);
 				if (value.state === "cancelled") throw new claims.OperationCancelled("the operation was cancelled");
 				if (value.state === "done") { this.meter.inc(value.result === null ? "misses" : take ? "takes" : "reads"); if (out) out.locked = value.locked === true; return (value.result ?? null) as unknown as Taken | null; }
 				if (!dirty) await awaitWithContext(new Promise<void>(res => { wake = res; timer = setTimeout(res, core.timerDelay(Math.min(1000, value.deadline - this.now()))); }), this.ctx);

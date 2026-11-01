@@ -60,9 +60,9 @@ export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	/** Applies signed Space lifecycle instructions (create, archive, reactivate, delete) to this host's Spaces. */
 	spaceLifecycle?: SpaceLifecycleService;
 	refreshPolicy?:()=>Promise<void>;
-	/** lww/set types of this host's main-store Spaces, served by entry replication (docs/abnahme/ap3-replikation.md). */
+	/** lww/set types of this host's main-store Spaces, served by entry replication (docs/_attic/abnahme/ap3-replikation.en.md). */
 	merge?: import("./service.ts").SpaceServiceOptions["merge"];
-	/** Entry stream export of this host's merge replica to its pinned peers (docs/abnahme/ap3-replikation.md, step 2). */
+	/** Entry stream export of this host's merge replica to its pinned peers (docs/_attic/abnahme/ap3-replikation.en.md, step 2). */
 	entryExport?: { peers: ReadonlySet<string>; describe: () => Promise<Json>; changes: (after: number, maxBytes: number) => Promise<Json> };
 	control?: { host: SpaceHost; authority: GrantAuthority; leases?: RouterLeaseAuthority; routing?: FederationPolicyAuthority; directory?: CapabilityDirectory; replicaNotices?: import("./replica-notice.ts").ReplicaNoticeBoard; dataAdmin?:DataAdminController; membership?: MembershipController; profiles?:ProfileTransitionController; runs?: RunController; runAdvanceMs?: number; workers?: WorkerAssignments; spaces?: ReturnType<typeof spaceCommands>; deployment?: DeploymentController; withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> };
 };
@@ -206,7 +206,7 @@ export async function startFederationHost(host: ClosableStoreHost, ctx: Context,
         // All proof, grant, Control access and boot guards are installed before listening.
         if(supervisor)stopSupervisor=await supervisor.start();
         // Transitions waiting for Member ACKs continue server side, also when no client is connected.
-        if(o.control?.runs){const runs=o.control.runs;let busy=false;const timer=setInterval(()=>{if(busy)return;busy=true;void (async()=>{try{for(const id of await runs.pending())await runs.advance(id).catch(()=>{});}finally{busy=false;}})();},o.control.runAdvanceMs??1000);timer.unref?.();const prior=stopSupervisor;stopSupervisor=async()=>{clearInterval(timer);await prior?.();};}
+        if(o.control?.runs){const runs=o.control.runs;let busy=false;const timer=setInterval(()=>{if(busy)return;busy=true;void (async()=>{try{for(const id of await runs.pending())await runs.advance(id).catch(e=>console.error(`run ${id} did not advance:`,e));}finally{busy=false;}})();},o.control.runAdvanceMs??1000);timer.unref?.();const prior=stopSupervisor;stopSupervisor=async()=>{clearInterval(timer);await prior?.();};}
 		let closed = false;
 		/**
 		 * Swaps a primary/sync Space while running: unresolved after a sealed commit (its reaper stops, calls get

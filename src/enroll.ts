@@ -240,7 +240,7 @@ export class EnrollmentService {
 			if (!key || key.state !== "active") return refuse("paired enrollment resolution requires a current app-key proof");
 		}
 		try { return m === "enroll" ? await this.enroll(call as { args?: Record<string, Json>; request?: Record<string, Json> }, conn, !unpaired) : await this.status(call as { request?: Record<string, Json>; args?: Record<string, Json> }, conn); }
-		catch (e) { return refuse(e instanceof EnrollError ? e.message : "enrollment refused"); }
+		catch (e) { if (!(e instanceof EnrollError)) { this.event(conn.peerId, "failed"); console.error("enrollment failed:", e); } return refuse(e instanceof EnrollError ? e.message : "enrollment refused"); }
 	}
 
 	private event(peerId: string, outcome: string, keyId?: string) { try { this.o.onEvent?.({ peerId, outcome, ...(keyId ? { keyId } : {}) }); } catch { /* audit must not break the handler */ } }

@@ -77,7 +77,7 @@ const MAX_TRIES = 5; // a poisoned event is dropped after this many failed deliv
  * harmless. Delivered and given-up events leave the outbox in one commit. When a served take cannot be delivered
  * (dropped or given up), its transaction is aborted in that commit, so the entry is back in the space at once.
  *
- * Who receives (docs/umstellung-ohne-pi-durable.md, section 6):
+ * Who receives (docs/umstellung-ohne-pi-durable.en.md, section 6):
  * - no target: nobody ever will; dropped;
  * - no agent host connected (the host has no `conversation`): the event waits in the (bounded) outbox, and nothing is
  *   released; a missing adapter is "not connected", not "gone";
@@ -92,7 +92,7 @@ export async function deliverEvents(harness: ServiceHost, ctx: Context, o: Servi
 	const events = (snap?.outbox ?? []).filter((e) => (e.retryAt ?? 0) <= now()).slice(0, 64); // bounded cleanup/release, failed ones wait for backoff
 	const done = new Set<string>(); // submitted
 	const dropped = new Set<string>(); // nobody to deliver to: no target, or the conversation no longer exists
-	const failed = new Set<string>();
+	const failed = new Set<string>(), lastError = new Map<string, string>();
 	const key = (e: core.SpaceEvent) => `${e.eventId}:${e.seq}`;
 	const m = o.meter ?? defaultMeter;
 	const served: Counter[] = []; // waiter ops the space performed on someone's behalf; counted once delivered
@@ -109,8 +109,9 @@ export async function deliverEvents(harness: ServiceHost, ctx: Context, o: Servi
 				done.add(key(e));
 				if (e.kind === "waiter") served.push(e.txn ? "takes" : "reads");
 			}
-		} catch {
+		} catch (err) {
 			failed.add(key(e));
+			lastError.set(key(e), err instanceof Error ? err.message : String(err));
 		}
 	};
 	// In order per target (a conversation sees its events as written), in parallel across targets, so one slow
@@ -135,7 +136,7 @@ export async function deliverEvents(harness: ServiceHost, ctx: Context, o: Servi
 			if (!giveUp && !dropped.has(key(x))) continue;
 			lost.add(key(x));
 			if (x.txn) release.push(x.txn);
-			if (giveUp) gaveUp.push(`gave up delivering ${x.kind} event ${x.eventId}:${x.seq} after ${MAX_TRIES} attempts`);
+			if (giveUp) gaveUp.push(`gave up delivering ${x.kind} event ${x.eventId}:${x.seq} after ${MAX_TRIES} attempts${lastError.has(key(x)) ? `: ${lastError.get(key(x))}` : ""}`);
 		}
 		s.outbox = s.outbox.filter((x) => !lost.has(key(x))); delete s.outboxBytes;
 		for (const t of release) core.releaseTxn(s, now(), t); // may serve the entry to the next waiter (new outbox event)
@@ -389,7 +390,7 @@ export { EntryStreamCheckpoints, EntryStreamCursorConflict, EntryReplicationUnav
 export { EntrySnapshotMaintenance } from "./entry-replication-transfer.ts";
 export type { EntrySnapshotMaintenanceJob } from "./entry-replication-transfer.ts";
 // The own store: a SQLite file (one writer process, the owner lock) or memory; under primary/sync, OwnSyncStore and its
-// factories (docs/umstellung-ohne-pi-durable.md).
+// factories (docs/umstellung-ohne-pi-durable.en.md).
 export { openSqliteHost, StoreUnavailable, type SqliteStoreOptions } from "./store/sqlite.ts";
 export { OwnStoreHost, openOwnMemoryHost } from "./store/host.ts";
 export { OwnSyncStore, ReplicatedOwnStore, OWN_SYNC_FACTORIES } from "./store/sync-sqlite.ts";

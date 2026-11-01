@@ -94,6 +94,10 @@ impl RunGates {
 		let kind = text(&q, "kind").unwrap_or("");
 		if kind == "recover" {
 			let Some(recovery) = text(&q, "recoveryId") else { return Err(illegal("recover needs a recovery ID")) };
+			let expires = q.get("expiresAt").and_then(Json::as_f64).unwrap_or(f64::NAN);
+			if !(expires > service.now()) {
+				return Err(denied("this recovery instruction has expired"));
+			}
 			(self.assert_authority)(service)?;
 			let o = phi_json::obj! { "runId" => q.get("runId").cloned().unwrap_or(Json::Null), "recoveryId" => recovery };
 			let view = service.commit_on(Some(&space), |s, now_| s.recover_run_gate(now_, &o))?;

@@ -22,6 +22,9 @@ const sign = async <T>(kind: keyof typeof DOMAIN, value: T, signer: Signer): Pro
 const verify = (kind: keyof typeof DOMAIN, s: Signed<unknown>, pin: ReplicaPin) => !!s && typeof s.signature === "string" && verifyDetached(pin.algorithm, pin.publicKey, bytes(kind, s.value), s.signature);
 export class ReplicaTransportRefused extends Error {}
 
+/** The standby answered with a refusal, which may be passing (its register unreachable): resolve() tries again. */
+export class StandbyRefused extends PrimarySyncBlocked {}
+
 /** Client side: the signed counterpart of a PrimarySyncPeer and StandbyTarget. */
 export function signedReplicaPeer(o: { transport: Transport; signer: Signer; self: string; remote: ReplicaPin; now?: () => number }): StandbyTarget {
 	const call = async (method: Method, body: unknown): Promise<any> => {
@@ -29,7 +32,7 @@ export function signedReplicaPeer(o: { transport: Transport; signer: Signer; sel
 		const reply = JSON.parse(await o.transport.request(JSON.stringify({ request: await sign("request", req, o.signer), body })));
 		const v = reply?.value;
 		if (!verify("response", reply, o.remote) || v?.from !== o.remote.hostId || v?.to !== o.self || v?.nonce !== req.nonce || v?.method !== method) throw new ReplicaTransportRefused("unauthenticated replica response");
-		if (v.ok !== true) throw new PrimarySyncBlocked(`standby refused: ${String(v.error).slice(0, 200)}`);
+		if (v.ok !== true) throw new StandbyRefused(`standby refused: ${String(v.error).slice(0, 200)}`);
 		return v.result;
 	};
 	return { hostId: o.remote.hostId, head: () => call("head", null), accept: (i: PrimaryIntent) => call("accept", i), catchUp: (i: PrimaryIntent) => call("catchUp", i) };

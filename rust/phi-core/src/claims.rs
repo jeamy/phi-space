@@ -448,7 +448,11 @@ impl Space {
 							next = next.min(due);
 							return false;
 						}
-						decided + keep <= now && (!gone || admit_until(g).is_none_or(|u| u < now))
+						if decided + keep > now {
+							next = next.min(decided + keep); // its retention decides, not its generation
+							return false;
+						}
+						!gone || admit_until(g).is_none_or(|u| u < now)
 					})
 					.map(|(k, _)| k.to_owned())
 					.collect();

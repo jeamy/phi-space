@@ -81,7 +81,7 @@ export type ClaimReceipt={protocol:'phi-spaces-claim-receipt-v1';hostId:string;b
 export type Reply = { ok: true; result: Json; claimReceipt?:ClaimReceipt } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
 
 export type DecisionAuthorization = { principal?: Principal; transportPeerId?: string; renewalWaiterId?: string | null; allowClosedWaiter?:boolean; routerEpoch?: number; controlPrimaryEpoch?: number; policyVersion?: number; knownRequest?: boolean; checkTx?: (tx: import("./store/types.ts").StoreTx) => Promise<void>; validUntil: number; roles: string[]; canExecutePending(method: string, template: core.Template): boolean; check(): void };
-/** lww/set types of a Space served by its entry replication controller (docs/abnahme/ap3-replikation.md, step 1). */
+/** lww/set types of a Space served by its entry replication controller (docs/_attic/abnahme/ap3-replikation.en.md, step 1). */
 export type MergeAdapter = { controller: import("./entry-replication.ts").EntryReplicationController; rules: readonly import("./entry-replication.ts").EntryReplicationRule[] };
 /** v3 7.2: merge types know no exclusive allocation (take, transactions, waits, lease changes). */
 export class MergeTypeNotExclusive extends core.IllegalArgumentError {}
@@ -93,7 +93,7 @@ export type SpaceServiceOptions = {
 	 */
 	wakeOnCommit?: boolean;
 	/**
-	 * primary/sync: a commit of this Space was sealed but not confirmed (docs/abnahme/ap3-primary-sync.md). From then on every
+	 * primary/sync: a commit of this Space was sealed but not confirmed (docs/_attic/abnahme/ap3-primary-sync.en.md). From then on every
 	 * call is answered with `CommitSealed` until the host resolved the candidate and serves the Space anew.
 	 */
 	onSealed?: () => void;
@@ -130,7 +130,7 @@ const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[
 /** What can stand for one in the text of a call: JSON.stringify writes it as an escape. */
 const LONE_IN_TEXT = /\\u[dD][89a-fA-F]/;
 /**
- * The JSON contract of a space (docs/wire-protokoll.md, section 6): text is well-formed. A value cut with slice can end in half
+ * The JSON contract of a space (docs/wire-protokoll.en.md, section 6): text is well-formed. A value cut with slice can end in half
  * an emoji; the service stores U+FFFD for it, so hashes, budgets and a store file are the same in every implementation.
  */
 export const wellFormed = (v: unknown): unknown => {
@@ -169,7 +169,6 @@ const duration = (v: unknown, what: string, dflt: number): number => {
 export const principalKey = (p: Principal): string => (p.agentId ? `${p.peerId}/${p.agentId}` : p.peerId);
 
 export class SpaceService {
-	private resolutionGrant?: { types: ReadonlySet<string> | "*" };
 	private o: Required<Pick<SpaceServiceOptions, "maxPollMs" | "maxPendingPerPrincipal" | "maxPendingPerPeer" | "maxCallsPerWindow" | "rateWindowMs" | "authorityId" | "primaryEpoch">> & SpaceServiceOptions;
 	private policy: Policy;
 	private now: () => number;
@@ -238,7 +237,8 @@ export class SpaceService {
 			if ((rawBytes ?? encodedBytes(call)) > frameBytes) throw new core.ResourceExhausted("the request exceeds the space frame limit");
 			const includeClaim=isObj(frame)&&frame.claimReceipt===true;
             if(isObj(frame)&&frame.claimReceipt!==undefined&&typeof frame.claimReceipt!=='boolean')throw new Bad('claimReceipt must be boolean');
-            if(includeClaim){if(!request)throw new Bad('claim receipt requires an original effect request');this.resolutionGrant=this.allowed(id,'resolveOperation');}
+            let resolutionGrant:ReturnType<SpaceService['allowed']>|undefined;
+            if(includeClaim){if(!request)throw new Bad('claim receipt requires an original effect request');resolutionGrant=this.allowed(id,'resolveOperation');}
             const result = await this.dispatch(method, args, { id, request, client, space, grant, frameBytes });
             const reply: Reply = { ok: true, result };
             if(includeClaim&&request){
@@ -247,8 +247,7 @@ export class SpaceService {
                 try{
                     const domain=rpcDomain(call as unknown as Call,id.principal),epoch=await this.o.epochForSpace?.(space)??this.o.primaryEpoch;
                     const record=await client.resolveOperationRecord(request,domain.method,claims.argHash(domain.method,domain.args),epoch);
-                    const resolutionGrant=this.resolutionGrant!;
-                    if('result' in record.resolution&&isObj(record.resolution.result)&&Array.isArray(record.resolution.result.types))this.checkTypes(resolutionGrant,record.resolution.result.types as string[],'this retained result');
+                    if('result' in record.resolution&&isObj(record.resolution.result)&&Array.isArray(record.resolution.result.types))this.checkTypes(resolutionGrant!,record.resolution.result.types as string[],'this retained result');
                     const hostId=this.o.hostId??(await this.o.host.snapshot(Registry,this.o.ctx))?.hostId;
                     if(hostId)reply.claimReceipt={protocol:'phi-spaces-claim-receipt-v1',hostId,...record};
                 }catch{/* Effect may already be committed. Leave the witness absent; never fabricate completion. */}

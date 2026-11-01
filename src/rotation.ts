@@ -93,6 +93,6 @@ export class RotationService {
 				const out = { state: "accepted", commandId }; claims.decide(s, now, admitted.key, { state: "done", result: out }); return out;
 			}, this.o.ctx);
 			return { ok: true, result };
-		} catch (e) { return { ok: false, error: { code: e instanceof core.ResourceExhausted ? "ResourceExhausted" : "PermissionDenied", message: e instanceof Error ? e.message : String(e) } }; }
+		} catch (e) { return { ok: false, error: { code: e instanceof core.ResourceExhausted ? "ResourceExhausted" : e instanceof core.IllegalArgumentError ? "BadRequest" : "PermissionDenied", message: e instanceof Error ? e.message : String(e) } }; }
 	}
 }

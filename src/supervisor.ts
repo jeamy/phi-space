@@ -107,8 +107,9 @@ export class Supervisor {
   const jobs=(await this.host.snapshot(SupervisorJobs,id,this.ctx))?.jobs??{};let n=0;
   for(const job of Object.values(jobs)){const handler=this.o.asyncCommands?.[job.kind];if(!handler)continue;
    const active=await this.host.commit(async tx=>hasAdminKey(await spaceDoc(tx,id,this.now()),this.now(),job.requestedBy),this.ctx);if(!active)continue;
-   let result:Json;try{result=await handler(job.commandId,core.plain(job.args),job.requestedBy);}catch{continue;} // no transport error proves a failed effect
+   let result:Json;try{result=await handler(job.commandId,core.plain(job.args),job.requestedBy);}catch(e){this.o.onError?.(e);continue;} // no transport error proves a failed effect; it runs again
    await this.host.commit(async tx=>{const j=await tx.doc(SupervisorJobs,id,null);if(j.jobs[job.commandId]?.hash!==job.hash)throw new core.IllegalArgumentError("remote command binding changed");const s=await spaceDoc(tx,id,this.now());if(!core.list(s,this.now(),{type:"Result",fields:{commandId:job.commandId}}).length)core.write(s,this.now(),{type:"Result",fields:{commandId:job.commandId,kind:job.kind,state:(result as any)?.phase==="failed"?"failed":"completed",requestedBy:job.requestedBy,at:this.now(),result}},null,RESULT_RETENTION_MS);delete j.jobs[job.commandId];},this.ctx);n++;
+   try{this.o.onEvent?.({commandId:job.commandId,kind:job.kind,state:(result as any)?.phase==="failed"?"failed":"completed",requestedBy:job.requestedBy});}catch{/* an audit hook must not stop the supervisor */}
   }return n;
  }
 

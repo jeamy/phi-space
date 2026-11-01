@@ -227,8 +227,10 @@ async function run(id: number, supplied: AgentRequest, signal: AbortSignal): Pro
     }, ctx);
   } catch (error) {
     const reason = failures.get(conversation.id) ?? (error as Error).message;
+    const cancelled = signal.aborted; // the caller gave up, the request did not fail: it may run again under its id
     const usage = await conversation.commit(async tx => {
-      const job = await tx.doc(Jobs, key, null); job.error = reason;
+      const job = await tx.doc(Jobs, key, null);
+      if (!cancelled) job.error = reason;
       return { ...job.usage };
     }, ctx);
     throw Object.assign(new Error(reason), { usage });
@@ -249,7 +251,7 @@ process.on("message", (message: ParentMessage) => {
     running.get(message.id)?.abort();
   } else if (message.kind === "close") {
     void close();
-  } else {
+  } else if (message.kind === "run") {
     const controller = new AbortController(); running.set(message.id, controller);
     const task = (queued.get(message.request.session) ?? Promise.resolve()).catch(() => {}).then(() => run(message.id, message.request, controller.signal));
     queued.set(message.request.session, task);

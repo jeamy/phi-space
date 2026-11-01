@@ -319,7 +319,8 @@ export class DelegationVerifier {
                 .find(i => i.spaceId === call.space || i.alias === (call.space ?? "default"));
         if (!info || d.targetSpace !== info.spaceId)
             throw new DelegationDenied("delegation audience mismatch");
-        const s = (await snapshotSpace(this.o.host, info.spaceId, this.o.ctx))!;
+        const s = await snapshotSpace(this.o.host, info.spaceId, this.o.ctx);
+        if (!s) throw new DelegationDenied("the Space no longer exists"); // deleted since listSpaces
         if (d.operation !== call.method || !d.principal?.peerId || !positive(d.policyVersion))
             throw new DelegationDenied("delegation operation/principal mismatch");
         const domain = rpcDomain(call, d.principal);

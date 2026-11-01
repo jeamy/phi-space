@@ -8,11 +8,24 @@ const duration = (v: Json|undefined, d: number): number => v === undefined   ? d
                                                            : v === null      ? -1
                                                            : v === "forever" ? FOREVER
                                                                              : v as number;
+/** One step as service.ts hands it to the client, which claims the steps as they are. */
+function batchStep(x: Record<string, Json>): Json {
+    const txn = x.txn ?? null;
+    if (x.op === "begin") return {op : "begin", lease : duration(x.leaseMs, -1)};
+    if (x.op === "commit" || x.op === "abort") return {op : x.op, txn};
+    if (x.op === "write") {
+        const e = x.entry as Record<string, Json>;
+        return {op : "write", entry : {type : e.type!, ...(e.types === undefined ? {} : {types: e.types}), fields : e.fields!}, txn, lease : duration(x.leaseMs, -1), ...(x.unique === undefined ? {} : {unique: x.unique})};
+    }
+    return {op : x.op!, template : x.template ?? null, txn};
+}
 export function rpcDomain(call: Call, principal: Principal): {method: string; args : Json} {
     const a = call.args ?? {}, txn = a.txn ?? null;
     switch (call.method) {
     case "write":
-        return {method : "write", args : {entry : a.entry!, txn, lease : duration(a.leaseMs, -1), ...(a.unique === undefined ? {} : {unique: a.unique})}};
+        return {method : "write", args : {entry : a.entry!, txn, lease : duration(a.leaseMs, -1), ...(a.unique === undefined ? {} : {unique: a.unique}), ...(a.transient === true ? {transient: true} : {})}};
+    case "batch":
+        return {method : "batch", args : (a.ops as Array<Record<string, Json>>).map(batchStep) as unknown as Json};
     case "read":
     case "take":
         return {

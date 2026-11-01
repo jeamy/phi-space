@@ -1,4 +1,4 @@
-// phi-spaces' own SQLite store (docs/umstellung-ohne-pi-durable.md, U2): one file, `node:sqlite`, WAL, and by default
+// phi-spaces' own SQLite store (docs/umstellung-ohne-pi-durable.en.md, U2): one file, `node:sqlite`, WAL, and by default
 // synchronous=FULL (every acknowledged commit survives a power loss, decision D3). Tables:
 //
 //   store_meta      format version, store id, commit counter
@@ -328,6 +328,7 @@ class SqliteLedger implements Ledger {
 		this.#writing = null;
 		this.#queued = [];
 		for (const w of this.#idleWaiters.splice(0)) w();
+		this.#worker.unref(); // nothing is in flight any more: #send ref'd it
 	}
 
 	/** Gives the file's free pages back (sqlite-writer.ts, `compact`), in the writer's order between two batches: the
@@ -411,7 +412,7 @@ export function openFiles(path: string): StoreFiles {
 		read.exec("PRAGMA journal_mode = WAL;");
 		// a file of another program (pi-durable has a `documents` table of its own) is refused, never taken over
 		const tables = (read.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map((t) => t.name);
-		if (tables.length && !tables.includes("store_meta")) throw new StoreUnavailable(`${path} is not a phi-spaces store (tables: ${tables.slice(0, 6).join(", ")}); move it aside: pi-durable stores are discarded, not taken over (decision D6, docs/umstellung-u0-bestand.md)`);
+		if (tables.length && !tables.includes("store_meta")) throw new StoreUnavailable(`${path} is not a phi-spaces store (tables: ${tables.slice(0, 6).join(", ")}); move it aside: pi-durable stores are discarded, not taken over (decision D6, docs/umstellung-u0-bestand.en.md)`);
 		read.exec(SCHEMA);
 		const meta = new Map((read.prepare("SELECT key, value FROM store_meta WHERE key IN ('format_version', 'store_id', 'commit_seq')").all() as Array<{ key: string; value: string }>).map((r) => [r.key, r.value]));
 		if (!meta.has("format_version")) {
@@ -445,7 +446,7 @@ export async function openSqliteHost(path: string, o: SqliteStoreOptions = {}): 
 export async function hostOver(files: StoreFiles, o: SqliteStoreOptions): Promise<OwnStoreHost> {
 	const { path, read, lock } = files;
 	const worker = new Worker(writerSource(), { eval: true });
-	const opened = await new Promise<WriterReply>((resolve) => { worker.once("message", resolve); worker.postMessage({ type: "open", path, synchronous: o.synchronous ?? "FULL", ...(o.maxPages ? { maxPages: o.maxPages } : {}) } satisfies WriterRequest); });
+	const opened = await new Promise<WriterReply>((resolve) => { worker.once("message", resolve); worker.once("error", (e) => resolve({ type: "failed", error: (e as Error).message } as WriterReply)); worker.postMessage({ type: "open", path, synchronous: o.synchronous ?? "FULL", ...(o.maxPages ? { maxPages: o.maxPages } : {}) } satisfies WriterRequest); });
 	if (opened.type !== "opened") { await worker.terminate(); read.close(); lock.close(); throw new StoreUnavailable(`the store writer could not open ${path}: ${(opened as { error?: string }).error}`); }
 	const ledger = new SqliteLedger(read, lock, worker, o.strictDiskMaps ?? process.env.PHI_SPACES_STRICT_DISK_MAPS === "1");
 	if (o.gate) ledger.gate = o.gate;

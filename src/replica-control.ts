@@ -1,4 +1,4 @@
-// Replica control for primary/sync Spaces (docs/federation-plan-v3.md 5.3, 5.3.1, 5.5; plan 3.3-3.6).
+// Replica control for primary/sync Spaces (docs/federation-plan-v3.en.md 5.3, 5.3.1, 5.5; plan 3.3-3.6).
 // Fencing adapters prove that a host is stopped and restart-locked; boot states live in the independent recovery
 // register. Promotion, degradeToSingle and setStandby are journaled by transition ID, change the replica
 // configuration as an entry of the sync chain and then align the external boot permits; until local and external
@@ -38,7 +38,7 @@ export function unconfiguredFencing(kind: "power" | "hypervisor" | "cloud" | "co
 type Boot = HostBootState & { transitionId?: string };
 const permitEq = (a: unknown, b: unknown) => canonicalJson(a as Json) === canonicalJson(b as Json);
 async function casBoot(register: RecoveryRegister, hostId: string, change: (b: Boot | null) => Boot | null): Promise<Boot> {
-	for (let attempt = 0; attempt < 8; attempt++) {
+	for (let attempt = 0; ; attempt++) {
 		const current = await register.get<Boot & Json>(`boot:${hostId}`);
 		const next = change(current ? structuredClone(current.value) : null);
 		if (next === null) return current!.value;
@@ -46,7 +46,6 @@ async function casBoot(register: RecoveryRegister, hostId: string, change: (b: B
 		try { return (await register.compareAndSet(`boot:${hostId}`, current?.version ?? null, next as Boot & Json)).value; }
 		catch (e) { if (!(e instanceof RegisterConflict) || attempt === 7) throw e; } // concurrent change: read again
 	}
-	throw new ReplicaTransitionBlocked("boot state kept changing");
 }
 /** fence: host `fenced`, every Space permit `revoked` (values kept for audit). Idempotent per transition. */
 export function fenceHostBoot(register: RecoveryRegister, hostId: string, transitionId: string): Promise<Boot> {

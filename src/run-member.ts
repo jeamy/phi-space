@@ -11,8 +11,10 @@ import { listSpaces, spaceDoc } from "./spaces.ts";
 import { localRunMember, type RunMember, type RunSpec } from "./run-controller.ts";
 import * as core from "./core.ts";
 
+/** How long a signed recovery instruction holds: a fence that a captured one could set again must not outlive its reason. */
+export const RECOVER_TTL_MS = 60_000;
 /** A gate command, or `kind: "recover"` (revision 0, commandId = recoveryId) for the recovery fence and view. */
-export type RunGateInstruction = (core.RunGateCommand | { runId: string; commandId: string; kind: "recover"; revision: 0; recoveryId: string }) & { authorityId: string; spaceId: string; spec?: RunSpec };
+export type RunGateInstruction = (core.RunGateCommand | { runId: string; commandId: string; kind: "recover"; revision: 0; recoveryId: string; expiresAt: number }) & { authorityId: string; spaceId: string; spec?: RunSpec };
 export type SignedRun<T> = { value: T; issuer: string; algorithm: Algorithm; signature: string };
 export type RunPin = { issuer: string; algorithm: Algorithm; publicKey: string };
 /** Registered host code that writes a run's tasks while its gate is preparing. Never a shell command. */
@@ -50,6 +52,7 @@ export class RunGateService {
 		if (typeof q.spaceId !== "string" || !(await listSpaces(this.o.host, this.o.ctx)).some(i => i.spaceId === q.spaceId)) throw new core.IllegalArgumentError("run gate instruction names no local Space");
 		if (q.kind === "recover") {
 			if (typeof q.recoveryId !== "string") throw new core.IllegalArgumentError("recover needs a recovery ID");
+			if (typeof q.expiresAt !== "number" || !(q.expiresAt > (this.o.now ?? Date.now)())) throw new core.PermissionError("this recovery instruction has expired");
 			await this.o.assertAuthority();
 			const view = await localRunMember(this.o.host, this.o.ctx, q.spaceId, async () => {}, this.o.now).recover(q.runId, q.recoveryId);
 			await this.o.assertAuthority();
@@ -73,7 +76,7 @@ export class RunGateService {
 }
 
 /** The controller side of a Member on another host; `send` carries the signed instruction (e.g. RemoteSpace.requestRunGate). */
-export function remoteRunMember(o: { spaceId: string; authorityId: string; peerId: string; signer: Signer; memberPin: RunPin; send: (t: SignedRun<RunGateInstruction>) => Promise<SignedRun<core.RunGateAck | core.RunRecoveryView>> }): RunMember {
+export function remoteRunMember(o: { now?: () => number; spaceId: string; authorityId: string; peerId: string; signer: Signer; memberPin: RunPin; send: (t: SignedRun<RunGateInstruction>) => Promise<SignedRun<core.RunGateAck | core.RunRecoveryView>> }): RunMember {
 	const call = async <T extends { spaceId: string | null }>(command: RunGateInstruction extends infer I ? Omit<I & {}, "authorityId" | "spaceId" | "spec"> : never, spec?: RunSpec): Promise<T> => {
 		const q = { ...command, authorityId: o.authorityId, spaceId: o.spaceId, ...(spec ? { spec } : {}) } as RunGateInstruction;
 		const ack = verifyRun("ack", await o.send(await signRun("instruction", q, o.peerId, o.signer)), o.memberPin) as unknown as T;
@@ -84,6 +87,6 @@ export function remoteRunMember(o: { spaceId: string; authorityId: string; peerI
 		spaceId: o.spaceId,
 		prepare: (run, command) => call<core.RunGateAck>(command, run),
 		gate: command => call<core.RunGateAck>(command),
-		recover: (runId, recoveryId) => call<core.RunRecoveryView>({ runId, commandId: recoveryId, kind: "recover", revision: 0, recoveryId }),
+		recover: (runId, recoveryId) => call<core.RunRecoveryView>({ runId, commandId: recoveryId, kind: "recover", revision: 0, recoveryId, expiresAt: (o.now ?? Date.now)() + RECOVER_TTL_MS } as never),
 	};
 }

@@ -401,15 +401,14 @@
 				},
 				"domain": {
 					"method": "batch",
-					"args": {
-						"ops": [
-							{
-								"op": "begin"
-							}
-						]
-					}
+					"args": [
+						{
+							"op": "begin",
+							"lease": -1
+						}
+					]
 				},
-				"argumentHash": "b30eed1b60d4bda76d0facc6c8a3a053f218e52689a9935a2c505293b54d5675"
+				"argumentHash": "7d63d8ff70bae9b2b7913582a87027f2da4fe8ef6d023a903435f1737263dc8c"
 			}
 		],
 		"changeRequestHash": {

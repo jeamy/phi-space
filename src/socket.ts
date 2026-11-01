@@ -12,6 +12,9 @@ import { chmodSync, lstatSync, unlinkSync } from "node:fs";
 import type { Connection, SpaceService } from "./service.ts";
 import type { Transport } from "./remote.ts";
 import { DEFAULT_LIMITS } from "./core.ts";
+/** A connection the server turned away: not an internal error. */
+const REFUSED = new Error("refused");
+const MAX_QUEUED_FRAMES = 4;
 
 const HEADER = 8;
 
@@ -81,19 +84,20 @@ export async function serveSpace(service: Pick<SpaceService, "handleText">, o: S
 		let inflight = 0;
 		let conn: Promise<Connection> | undefined;
 		const identify = () => conn ??= Promise.resolve().then(() => o.connection ? o.connection(socket) : {}).then(c => {
-			if (c === null) { socket.destroy(); throw new Error("refused"); }
+			if (c === null) { socket.destroy(); throw REFUSED; }
 			return c;
 		});
 		// Attach a rejection handler even if this socket never sends a request.
 		if (o.identifyOnConnect) void identify().catch(() => socket.destroy());
-		const reply = (id: number, text: string) => { if (!socket.destroyed) socket.write(frame(id, text)); };
+		// a peer that sends without reading must not grow the queue of replies without bound
+		const reply = (id: number, text: string) => { if (socket.destroyed) return; if (socket.writableLength > MAX_QUEUED_FRAMES * maxFrame) { socket.destroy(); return; } socket.write(frame(id, text)); };
 		socket.on("data", (chunk) => {
 			try {
 				reader.push(chunk, (id, text) => {
 					if (inflight >= maxInflight) { reply(id, JSON.stringify({ ok: false, error: { code: "ResourceExhausted", message: `at most ${maxInflight} calls at once per connection` } })); return; }
 					inflight++;
 					identify().then((c) => service.handleText(text, c, maxFrame - HEADER))
-						.then((r) => reply(id, r), (e) => { console.error("phi-spaces socket: internal error", e); reply(id, JSON.stringify({ ok: false, error: { code: "Internal", message: "internal error" } })); })
+						.then((r) => reply(id, r), (e) => { if (e === REFUSED) return; console.error("phi-spaces socket: internal error", e); reply(id, JSON.stringify({ ok: false, error: { code: "Internal", message: "internal error" } })); })
 						.finally(() => { inflight--; });
 				});
 			} catch { socket.destroy(); } // a frame over the limit: protocol violation
@@ -189,7 +193,7 @@ export function socketTransport(target: ListenTarget, o: SocketTransportOptions 
 			if (Buffer.byteLength(text) + HEADER > maxFrame) throw new Error("request exceeds maxFrameBytes");
 			const s = await connect();
 			return new Promise<string>((resolve, reject) => {
-				const id = nextId++ >>> 0 || nextId++;
+				const id = nextId; nextId = nextId >= 0xffffffff ? 1 : nextId + 1; // ids are 32 bits on the wire, 0 is none
 				const timer = o.requestTimeoutMs === undefined ? undefined : setTimeout(() => { if (pending.delete(id)) { reject(new Error("request timed out")); s.destroy(); } }, o.requestTimeoutMs);
 				const done = <T,>(f: (v: T) => void) => (v: T) => { clearTimeout(timer); f(v); };
 				pending.set(id, { socket: s, resolve: done(resolve), reject: done(reject) });

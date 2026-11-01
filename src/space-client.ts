@@ -70,7 +70,9 @@ export async function awaitWork(space: SpaceLike, tmpl: Template, waitMs: number
 	const read = space.read(tmpl, waitMs).then((e) => e !== null);
 	if (!halt) return read;
 	read.catch(() => {}); // after a halt nobody waits for it
-	return Promise.race([read, new Promise<boolean>((r) => halt.addEventListener("abort", () => r(false), { once: true }))]);
+	let stop!: () => void;
+	const halted = new Promise<boolean>((r) => { stop = () => r(false); halt.addEventListener("abort", stop, { once: true }); });
+	try { return await Promise.race([read, halted]); } finally { halt.removeEventListener("abort", stop); } // the signal outlives this wait
 }
 
 /** Renews a transaction's (or any lease's) lease every third of `leaseMs` while long work runs in it, so a process that
