@@ -4,6 +4,7 @@
 use crate::fail;
 use phi_host::auth::{Algorithm, Proving, Signer};
 use phi_host::boot::{BootGuard, External};
+use phi_host::capability::Capabilities;
 use phi_host::delegation::{authorize, DelegationOptions, DelegationVerifier};
 use phi_host::gate::{default_group_roles, Gate, GateOptions, Netbird, Now};
 use phi_host::grants::GrantVerifier;
@@ -20,7 +21,7 @@ use std::path::Path;
 use std::rc::Rc;
 use tokio::signal::unix::{signal, SignalKind};
 
-const REFUSED: [&str; 6] = ["root", "syncSpaces", "entryReplication", "recovery", "registerSshTarget", "registerReadSocket"];
+const REFUSED: [&str; 7] = ["root", "syncSpaces", "entryReplication", "recovery", "recoveryAdmin", "registerSshTarget", "registerReadSocket"];
 
 fn field<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or_else(|| fail(format!("the config has no {k}"))) }
 
@@ -60,13 +61,20 @@ pub fn run(config: &str, store: &str) {
 	let installed = SqliteRegister::open(Path::new(field(&c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e));
 	let mut guard = BootGuard::new(host_id, authority_id, External::Tls(Box::new(register_client(register))), installed, Rc::clone(&now), 60_000.0);
 	guard.authority = Some((control_space.to_owned(), control_host.to_owned(), control_key.to_owned()));
+	if guard.control_changed(control_space).unwrap_or_else(|e| fail(e)) {
+		fail("the control host changed; this host follows no such change");
+	}
 	let guard = Rc::new(guard);
+	let opened = Store::open(SpaceHost::sqlite(SqliteLedger::open(Path::new(store), Synchronous::Full).unwrap_or_else(|e| fail(e))), system_random).unwrap_or_else(|e| fail(e));
 	let management = c.get("management").unwrap_or_else(|| fail("the config has no management"));
 	let token = String::from_utf8_lossy(&private_file(Path::new(field(management, "tokenFile"))).unwrap_or_else(|e| fail(e))).trim().to_owned();
 	let directory = Netbird::new(field(management, "url"), &token, None, Rc::clone(&now)).unwrap_or_else(|e| fail(e));
 	let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap_or_else(|e| fail(e));
 	let address = c.get("control").and_then(|x| x.get("address")).unwrap_or_else(|| fail("the config has no control address"));
 	let peers = tokio::task::LocalSet::new().block_on(&runtime, async {
+		guard.admit_at_start(&opened.spaces()).await?;
+		guard.refresh(vec![]).await;
+		guard.assert_active().map_err(|e| e.message)?;
 		directory.refresh().await?;
 		Ok::<_, String>((directory.lookup(listen_host).await?, directory.lookup(field(address, "host")).await?))
 	});
@@ -76,7 +84,6 @@ pub fn run(config: &str, store: &str) {
 	}
 	let supervisor = control_peer.unwrap_or_else(|| fail("control peer unavailable in provisioned directory")).id;
 
-	let opened = Store::open(SpaceHost::sqlite(SqliteLedger::open(Path::new(store), Synchronous::Full).unwrap_or_else(|e| fail(e))), system_random).unwrap_or_else(|e| fail(e));
 	let mut options = Options::single_peer(peer_id);
 	options.identity.clear();
 	options.host_id = Some(host_id.to_owned());
@@ -116,6 +123,14 @@ pub fn run(config: &str, store: &str) {
 		let check = o.boot.clone().expect("set above");
 		let pin = Pin { issuer: supervisor.clone(), algorithm, public_key: control_key.to_owned() };
 		o.lifecycle = Some(MemberLifecycle::new(field(m, "memberId"), field(m, "spaceId"), authority_id, peer_id, signer, pin, Box::new(move |_| check.assert_active())));
+	}
+	if let Some(k) = c.get("capabilities").filter(|k| !k.is_null()) {
+		let names = |key: &str| k.get(key).and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect::<Vec<_>>());
+		let (tools, models) = (names("tools"), names("models"));
+		if tools.iter().chain(&models).any(|n| n.is_empty() || n.len() > 128) || host_id.len() > 128 {
+			fail("invalid capability report");
+		}
+		o.capabilities = Some(Rc::new(Capabilities { host_id: host_id.to_owned(), tools, models, data_spaces: names("dataSpaces"), client: Rc::clone(&client) }));
 	}
 	let host = listen_host.to_owned();
 	let gate = Gate::new(&host, o).unwrap_or_else(|e| fail(e));

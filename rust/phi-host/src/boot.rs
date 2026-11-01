@@ -125,6 +125,29 @@ impl BootGuard {
 		Ok(seen)
 	}
 
+	/// The start of a configured host: only an active authorization boots it, and the permit of a re-admitted Space
+	/// (`installAdmittedPermit`) comes into the local installation when it names the data this host holds.
+	pub async fn admit_at_start(&self, spaces: &[Json]) -> Result<(), String> {
+		let boot = format!("boot:{}", self.host_id);
+		let read = self.external.read(std::slice::from_ref(&boot)).await.map_err(|e| e.to_string())?;
+		let v = read.get(&boot).and_then(|r| r.get("value")).filter(|v| text(v, "hostId") == Some(&self.host_id) && text(v, "state") == Some("active")).ok_or("configured host is not authorized for normal boot")?;
+		for info in spaces {
+			let (id, incarnation) = (text(info, "spaceId").unwrap_or(""), text(info, "incarnation"));
+			let Some(permit) = v.get("spaces").and_then(|p| p.get(id)).filter(|p| text(p, "state") == Some("active") && text(p, "dataIncarnation") == incarnation) else { continue };
+			let key = format!("installed:{}:{id}", self.host_id);
+			let local = self.installed.get(&key).map_err(|e| e.to_string())?;
+			if local.get("value").and_then(|l| l.canonical().ok()) != permit.canonical().ok() {
+				self.installed.compare_and_set(&key, local.get("version").and_then(Json::as_f64), permit).map_err(|e| e.to_string())?;
+			}
+		}
+		Ok(())
+	}
+
+	/// A change of the control host recorded on this host is followed by a TypeScript host (R6): here it stops the start.
+	pub fn control_changed(&self, control_space: &str) -> Result<bool, String> {
+		Ok(!self.installed.get(&format!("installed-authority:{control_space}")).map_err(|e| e.to_string())?.is_null())
+	}
+
 	/// `assertAuthority` of a host with this guard.
 	pub fn assert_active(&self) -> R<()> { self.seen().map(|_| ()) }
 }

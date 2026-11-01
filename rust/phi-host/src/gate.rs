@@ -208,6 +208,7 @@ pub struct GateOptions {
 	/// Signed membership instructions of the Control host.
 	pub lifecycle: Option<crate::membership::MemberLifecycle>,
 	pub spaces: Option<crate::space_lifecycle::SpaceLifecycleService>,
+	pub capabilities: Option<Rc<crate::capability::Capabilities>>,
 	/// Who takes the epoch notices of the supervisor.
 	pub delegation: Option<Rc<crate::delegation::DelegationVerifier>>,
 	/// The boot guard, read before each call.
@@ -225,7 +226,7 @@ pub struct GateOptions {
 
 impl GateOptions {
 	pub fn new(directory: Rc<Netbird>, now: Now) -> GateOptions {
-		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, spaces: None, delegation: None, boot: None, remote_keys: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
+		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, spaces: None, capabilities: None, delegation: None, boot: None, remote_keys: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
 	}
 }
 
@@ -398,6 +399,9 @@ impl Front for Gate {
 						sleep(Duration::from_millis(1000)).await;
 					}
 				});
+			}
+			if let Some(capabilities) = self.o.capabilities.clone() {
+				spawn_local(capabilities.run(owner.clone()));
 			}
 			if self.o.revalidate_ms == 0 {
 				return;
