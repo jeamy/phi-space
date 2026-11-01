@@ -797,7 +797,7 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
        `Field`-Entry über ihre Zellen; die Zellen sind `Plot`-Entries mit `unique` wie bei Bauten und Beeten.
      - **Früchte:** Weizen, Gerste, Hafer (Getreide), Kartoffeln (Hackfrucht), Rüben und Flachs. Korn ist sein eigenes
        Saatgut; Rüben geben Rübensamen, Flachs gibt Leinsamen zurück. Gerste, Hafer, Rüben- und Leinsamen findet
-       `sammle samen` in der wilden Flora. Weizen und Kartoffeln trägt Gesa beim Anlegen der Welt (je 8), sie kauft und
+       `sammle samen` in der wilden Flora. Weizen, Hafer und Kartoffeln trägt Gesa beim Anlegen der Welt (je 8), sie kauft und
        verkauft alles davon.
      - **Bestellen** (`bestelle <frucht>`): Wer die Flur anlegte, wählt die Frucht. Dann braucht sie 4 Saatgut und 2
        Arbeit. Jedes `bestelle` bringt das Saatgut, das man trägt, und einen Arbeitspunkt mit derselben Ruhe

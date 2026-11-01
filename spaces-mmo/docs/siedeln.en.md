@@ -810,7 +810,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
        cells; the cells are `Plot` entries with `unique` as with buildings and beds.
      - **Crops:** wheat, barley, oats (grain), potatoes (root crop), turnips and flax. Grain is its own seed; turnips give
        turnip seed, flax gives linseed back. Barley, oats, turnip and linseed are found by `sammle samen` in the wild
-       flora. Wheat and potatoes Gesa carries when the world is created (8 each), she buys and sells everything of it.
+       flora. Wheat, oats and potatoes Gesa carries when the world is created (8 each), she buys and sells everything of it.
      - **Sowing** (`bestelle <frucht>`): Whoever laid out the plot chooses the crop. Then it needs 4 seed and 2 work. Every
        `bestelle` brings the seed one carries, and one work point with the same rest (`WorkRest`) as at the building site.
        The growing time (two to three days) is stretched by fog as in the bed.
