@@ -100,6 +100,15 @@ them: profile constants, store error paths, fields the walks never set, and the 
 - ✅ `USAGE` in `main.rs:25` omits `--control`; `SPACES_MMO_COMPACT_MS` is parsed as `u64` (TS `Number()`); the platform
   string maps only `x86_64`.
 
+### Open after the TypeScript review (`review-typescript-2026-11-01.en.md`)
+
+Both sides were changed for what the TypeScript review found where a contract needed it. These may still need the port's attention:
+
+- **The expiry watermark over commits.** `src/core.ts` now keeps it by the published entries array too, so it survives a commit that leaves the entries alone. `begin_tracked_commit` (`rust/phi-core/src/space.rs:453`) starts each commit without one, and `nextExpiry` answers from the watermark, which can be stale low. The two can therefore answer differently in a commit without entry changes. The walks of `phi-core` still pass, but they may not reach this case. The port may need the same rule, or the difference has to be shown harmless. On the way the watermark gives the port the same speed-up.
+- **`setLimits`.** Open on both sides: a limit that cannot fit an event in a commit defers for ever. A check against `maxCommitBytes` alone refuses valid configurations, so it needs the real events.
+- **Replay of `recover`.** `expiresAt` narrows it to 60 s, in both languages, and adds no nonce.
+- **What stays apart on purpose.** The order of the checks in `write` and `announce`, and the placement rule, were left as they are in TypeScript because the port is held to them. A change there needs both sides.
+
 ## 2. Dead code
 
 - ✅ No callers: `Driver::clock_of` (`phi-core/src/driver.rs:88`), `Object::insert_at` (`phi-json/src/lib.rs:83`, only its
