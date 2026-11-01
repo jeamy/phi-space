@@ -169,7 +169,10 @@ const beet: Command = {
 			await freeBed(c.space, c.txn, b);
 			return msg(c, "*", "info", `${c.actor.name} gibt das ${b.kind === "gemein" ? "Gemeinschaftsbeet" : b.kind === "zier" ? "Zierbeet" : "Beet"} auf; dort wächst wieder Gras.`);
 		}
-		const beds = (await c.space.readAll({ type: "Bed", fields: { room: c.actor.room } })).map((e) => fieldsOf<BedFields>(e));
+		// "beet ansehen x y": the one bed at that cell (the map's menu), else all of the room
+		const [x, y] = /^(?:ansehen|look)$/i.test(word) ? rest.map(Number) : [];
+		const one = (b: BedFields) => x === undefined || y === undefined || (x >= b.x && y >= b.y && x < b.x + b.w && y < b.y + b.h);
+		const beds = (await c.space.readAll({ type: "Bed", fields: { room: c.actor.room } })).map((e) => fieldsOf<BedFields>(e)).filter(one);
 		if (!beds.length) return msg(c, c.actor.charId, "info", `Hier ist kein Beet. Mit einem ${protoName(c, g.spade)} legt „umgraben“ eins an.`);
 		const now = await worldNowOf(c.space, c.txn);
 		await msg(c, c.actor.charId, "look", (await Promise.all(beds.map((b) => describe(c, g, b, now)))).join("\n"));

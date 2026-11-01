@@ -6,18 +6,18 @@
 // Everything here is visual only (docs/architektur.en.md, "3D-Ansicht").
 import { stableHash } from "./terrain3d.ts";
 
-type T = typeof import("three");
-type Geo = import("three").BufferGeometry;
-type V3 = [number, number, number];
+export type T = typeof import("three");
+export type Geo = import("three").BufferGeometry;
+export type V3 = [number, number, number];
 /** One primitive of a model: its geometry, colour, place, turn and size. */
-type Part = { g: Geo; c: number; p?: V3; r?: V3; s?: V3 };
+export type Part = { g: Geo; c: number; p?: V3; r?: V3; s?: V3 };
 
 export type PlantModel = "tree" | "conifer" | "bush" | "berrybush" | "flower" | "herb" | "grass" | "fern";
 /** How many shapes of each plant there are; a place picks one. */
 export const PLANT_VARIANTS = 3;
 
-const BARK = 0x6b4a2e, LEAF = [0x4f8f3a, 0x5c9c42, 0x437d33], NEEDLE = [0x2f6b3a, 0x3a7a42, 0x285c33];
-const STONE = 0x8a8577, STONE_DARK = 0x6a675e, WOOD = 0x8a6a44, WOOD_DARK = 0x5b3a22, THATCH = [0xb8954e, 0xa98545, 0xc4a25c];
+export const BARK = 0x6b4a2e, LEAF = [0x4f8f3a, 0x5c9c42, 0x437d33], NEEDLE = [0x2f6b3a, 0x3a7a42, 0x285c33];
+export const STONE = 0x8a8577, STONE_DARK = 0x6a675e, WOOD = 0x8a6a44, WOOD_DARK = 0x5b3a22, THATCH = [0xb8954e, 0xa98545, 0xc4a25c];
 
 /** A place's own numbers: which variant, how far turned, how large (0.88 to 1.12). */
 export function placeLook(key: string): { variant: number; turn: number; size: number } {
@@ -26,13 +26,13 @@ export function placeLook(key: string): { variant: number; turn: number; size: n
 }
 
 /** A small deterministic random stream for the shape of one variant. */
-function rand(seed: string): () => number {
+export function rand(seed: string): () => number {
 	let h = stableHash(seed) || 1;
 	return () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) % 10_000) / 10_000; };
 }
 
 /** The parts merged into one geometry: positions, flat normals and a colour per face (a little lighter or darker). */
-function merge(t: T, parts: Part[], seed: string): Geo {
+export function merge(t: T, parts: Part[], seed: string): Geo {
 	const pos: number[] = [], col: number[] = [], r = rand(`${seed}:shade`);
 	const m = new t.Matrix4(), q = new t.Quaternion(), e = new t.Euler(), c = new t.Color();
 	for (const part of parts) {
@@ -63,7 +63,7 @@ export function propMaterial(t: T): import("three").MeshStandardMaterial {
 }
 
 const cache = new Map<string, Geo>();
-function cached(key: string, make: () => Geo): Geo {
+export function cached(key: string, make: () => Geo): Geo {
 	let g = cache.get(key);
 	if (!g) { g = make(); cache.set(key, g); }
 	return g;
@@ -208,7 +208,7 @@ export function fieldCropGeometry(t: T, model: FieldModel, w: number, d: number,
 
 /** A plank hut w×d on a stone plinth: corner posts, a straw gable roof with a ridge beam, a door and a window towards +z,
  *  a stone chimney, a stack of firewood beside it. About 1.7 units high for 2×2. */
-function hut(t: T, w: number, d: number, wall: number, variant: number): Geo {
+export function hut(t: T, w: number, d: number, wall: number, variant: number): Geo {
 	return cached(`hut:${w}x${d}:${wall}:${variant}`, () => {
 		const r = rand(`hut:${variant}`), parts: Part[] = [], ww = w * 0.8, dd = d * 0.78, wh = 0.72, roofC = THATCH[variant % 3]!;
 		parts.push({ g: new t.BoxGeometry(w * 0.9, 0.12, d * 0.9), c: STONE, p: [0, 0.06, 0] });
@@ -382,6 +382,35 @@ function pen(t: T, w: number, d: number, variant: number, herd: string | undefin
 }
 
 /** The loom w×1: an open lean-to on four posts and under it the loom's frame, a cloth on its beam, a stool. */
+/** A jetty as a small bridge over its long side: planks on a low arch one can walk over, piles at each cell, a handrail on both sides. */
+export function jettyGeometry(t: T, w: number, d: number): Geo {
+	return cached(`jetty:${w}x${d}`, () => {
+		const along = w >= d, long = (along ? w : d) * 0.98, wide = (along ? d : w) * 0.84, rise = 0.07, parts: Part[] = [], cells = Math.round(along ? w : d), n = cells * 7;
+		const high = (f: number) => 0.12 + rise * (1 - 4 * f * f), slope = (f: number) => Math.atan((-8 * rise * f) / long);
+		/** A beam `len` long over the bridge, at `at` along it and `side` across, leaning with the arch by `a`. */
+		const beam = (len: number, tall: number, thick: number, at: number, y: number, side: number, a: number, c: number): Part => (along
+			? { g: new t.BoxGeometry(len, tall, thick), c, p: [at, y, side], r: [0, 0, a] }
+			: { g: new t.BoxGeometry(thick, tall, len), c, p: [side, y, at], r: [-a, 0, 0] });
+		for (let i = 0; i < n; i++) {
+			const f = (i + 0.5) / n - 0.5;
+			parts.push(beam((long / n) * 0.86, 0.035, wide, f * long, high(f), 0, slope(f), i % 3 ? WOOD : 0x7a5c3a));
+		}
+		for (const sz of [-1, 1]) {
+			const side = (sz * wide) / 2;
+			for (let i = 0; i <= cells; i++) {
+				const f = i / cells - 0.5, top = high(f) + 0.3;
+				parts.push(beam(0.07, top + 0.2, 0.07, f * long, (top - 0.2) / 2, side, 0, WOOD_DARK));
+			}
+			for (let i = 0; i < cells; i++) {
+				const f = (i + 0.5) / cells - 0.5, len = (long / cells) * 1.04;
+				parts.push(beam(len, 0.04, 0.04, f * long, high(f) + 0.28, side, slope(f), WOOD));
+				parts.push(beam(len, 0.03, 0.03, f * long, high(f) + 0.15, side, slope(f), WOOD));
+			}
+		}
+		return merge(t, parts, "jetty");
+	});
+}
+
 function loom(t: T, w: number, variant: number): Geo {
 	return cached(`loom:${w}:${variant}`, () => {
 		const ww = w * 0.85, cloth = [0x8a6a9a, 0x6a8a9a, 0x9a6a5a][variant % 3]!, parts: Part[] = [
@@ -402,9 +431,9 @@ function loom(t: T, w: number, variant: number): Geo {
 }
 
 /** A building by its plan: the hut, the rain barrel, the scarecrow, the windmill, the bakery, the coop, the pen (with
- *  its `herd`), the loom, any other plan a hut in its colour. */
+ *  its `herd`), the loom, the jetty, any other plan a hut in its colour. */
 export function buildingGeometry(t: T, plan: string | undefined, w: number, d: number, color: number, variant: number, herd?: string): Geo {
-	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : plan === "windmuehle" ? windmill(t, variant % 3) : plan === "backhaus" ? bakery(t, w, d, variant % 3) : plan === "huehnerstall" ? coop(t, w, variant % 3) : plan === "gehege" ? pen(t, w, d, variant % 3, herd) : plan === "webstuhl" ? loom(t, w, variant % 3) : hut(t, w, d, color, variant % 3);
+	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : plan === "windmuehle" ? windmill(t, variant % 3) : plan === "backhaus" ? bakery(t, w, d, variant % 3) : plan === "huehnerstall" ? coop(t, w, variant % 3) : plan === "gehege" ? pen(t, w, d, variant % 3, herd) : plan === "webstuhl" ? loom(t, w, variant % 3) : plan === "steg" ? jettyGeometry(t, w, d) : hut(t, w, d, color, variant % 3);
 }
 
 /** A hare, sitting up a little, its nose towards +z: body, haunches, head, long ears, a white scut. About 0.4 high. */

@@ -39,8 +39,8 @@ const DOUBLE_MS = 400;
 const FETCH_MS = 15_000;
 /** How long after a command what arrives counts as its answer. */
 const ANSWER_MS = 4_000;
-/** The sheet with the log open on a command's answer: half the device, with a mouse about ten lines (and the tabs and buttons around them). */
-const logOpenPx = () => Math.round(isTouch() ? window.innerHeight / 2 : Math.min(window.innerHeight, 10 * 21 + 170));
+/** The sheet with the log open on a command's answer: two lines of it above the tabs and buttons, on every device. */
+const logOpenPx = () => Math.min(240, Math.round(window.innerHeight * 0.8));
 type Account = { name: string; guest: boolean; admin: boolean; /** The name shown in the game, when it is not the login name. */ alias?: string };
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 /** The names of what burns in a fire, cheapest first (from the hello): what the space key and the buttons feed. */
@@ -668,11 +668,12 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	useEffect(() => { const b = logBox.current; if (!b) return; if (atEnd.current) b.scrollTop = b.scrollHeight; else setBehind(true); }, [log, bag, tab, detent]);
 	const toLogEnd = () => { const b = logBox.current; if (b) b.scrollTop = b.scrollHeight; atEnd.current = true; setBehind(false); };
 
-	const send = useCallback((text: string, echo = true) => {
+	const send = useCallback((text: string, echo = true, opensLog = echo) => {
 		const s = ws.current;
 		if (!s || s.readyState !== WebSocket.OPEN) { append({ kind: "error", text: "Nicht verbunden; ein Moment …", from: "", at: Date.now() }); return; }
 		s.send(JSON.stringify({ t: "cmd", line: text, ...(language() === "en" ? { lang: "en" } : {}) } satisfies ClientFrame));
-		if (echo) { append({ kind: "echo", text: `> ${text}`, from: "", at: Date.now() }); awaited.current = Date.now(); }
+		if (echo) append({ kind: "echo", text: `> ${text}`, from: "", at: Date.now() });
+		awaited.current = opensLog ? Date.now() : 0;
 	}, [append]);
 
 	// what the walk looks at between renders (the hold timer runs outside React's render)
@@ -781,7 +782,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const pickUp = useCallback((o: ObjView) => {
 		pickups.current.set(o.id, { o, at: Date.now() });
 		setObjs((m) => new Map(m).set(o.id, { ...o, location: meRef.current, x: -1, y: -1 }));
-		send(`get ${o.name}`);
+		send(`get ${o.name}`, true, false); // picking up goes on while walking: the sheet stays as it is
 	}, [send]);
 	const putBack = useCallback((older = 0) => {
 		const back = [...pickups.current.values()].filter((p) => Date.now() - p.at >= older);

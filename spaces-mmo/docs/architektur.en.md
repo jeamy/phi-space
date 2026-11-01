@@ -272,7 +272,10 @@ files (in style modeled on cubic dioramas like mitsuhiko's "dungeon-crawler", bu
 conifers and bushes (`model` on an entry of `decor` in the world; without `model` the image stays), the hut and the rain
 barrel according to their plan (`ObjView.plan`), a building site whose walls and scaffolding grow with progress (one
 geometry per tenth) and whose wood pile shrinks in the process, the ruin, the stone ring of the fire and a signpost at
-the exit. Each model is a merged geometry with colors at the vertices (faceted, each face slightly lighter or darker),
+the exit. The later buildings (storehouse to town hall, shipyard, greenhouse, lighthouse), the jetty as a small bridge
+and the things lying about (boat, barrels, crates, stall, salt basin, hull, rocks, wall, tower stump, kiln) have their
+own models in `client/buildings3d.ts` (`buildingModel` by plan, `sceneryModel` by scenery model); a plan or piece without
+one keeps the hut or the scaffold. Each model is a merged geometry with colors at the vertices (faceted, each face slightly lighter or darker),
 built once per kind and variant and shared (`userData.shared`, the `dispose` of the map leaves them standing); variant,
 rotation and size come from the place (`stableHash`), so a room looks the same on every build. Plants do not grow on cells
 occupied by a building, a building site, a ruin or a bed: the plants are a group of their own that is recreated when these

@@ -33,7 +33,7 @@ export function hereEntries(input: Omit<CellInput, "at" | "onPlans">): CellEntry
 		for (const e of cellEntries({ ...input, at: { x: self.x + dx, y: self.y + dy }, onPlans: () => {} })) {
 			// what is done on a cell of one's choice is offered once, for the cell one stands on
 			if ((dx || dy) && e.line.startsWith("flur anlegen ")) continue;
-			if (e.run || e.line.startsWith("#") || e.line.startsWith("move ") || e.line.startsWith("umgraben ") || INFO.test(e.line) || e.line === "beet" || /ansehen$/.test(e.label)) continue;
+			if (e.run || e.line.startsWith("#") || e.line.startsWith("move ") || e.line.startsWith("umgraben ") || INFO.test(e.line) || /ansehen$/.test(e.label)) continue;
 			if (!seen.has(e.line)) seen.set(e.line, e);
 		}
 	}
@@ -113,7 +113,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			// a bed is tended from two cells away too, by its owner and its sponsors, a community bed by everyone; planting
 			// there needs an account (server: garden.ts)
 			const commons = o.bedKind === "gemein";
-			entries.push({ label: commons ? "Gemeinschaftsbeet ansehen" : `${o.name} von ${o.owner ?? ""} ansehen`, line: "beet" });
+			entries.push({ label: commons ? "Gemeinschaftsbeet ansehen" : `${o.name} von ${o.owner ?? ""} ansehen`, line: `beet ansehen ${o.x} ${o.y}` });
 			const mine = o.ownerId === me || (commons && !guest), mayTend = commons || mine || (!!self && (o.sponsorIds ?? []).includes(me));
 			if (nearSite && mayTend) {
 				const carried = [...objs.values()].filter((i) => i.kind === "item" && i.location === me).map((i) => i.name);

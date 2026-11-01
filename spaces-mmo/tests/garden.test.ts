@@ -320,6 +320,9 @@ test("a flower bed takes flowers and they cross; the breeder names the crossing 
 		}
 		assert.match(commons, /Bert legt ein Gemeinschaftsbeet an \(3×3\)/);
 		assert.match(await does(anna.p, "umgraben gemeinschaft", "Gemeinschaftsbeet"), /liegt schon ein Gemeinschaftsbeet/);
+		const commonBed = (await s.readAll({ type: "Bed", fields: { kind: "gemein" } }))[0]!.fields as unknown as BedFields;
+		const shown = await does(anna.p, `beet ansehen ${commonBed.x} ${commonBed.y}`, "Gemeinschaftsbeet");
+		assert.equal(shown.split("\n").length, 1, "the map's menu shows the one bed, not the room's");
 		// Anna plants there (her flower bed is out of reach), a guest may not plant but waters
 		await walk(anna, s, 22, 14);
 		assert.match(await does(anna.p, "pflanze kohl", "setzt"), /Anna setzt Strandkohl ins Gemeinschaftsbeet/);

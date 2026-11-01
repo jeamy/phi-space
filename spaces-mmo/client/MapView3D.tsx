@@ -11,7 +11,8 @@ import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
-import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
+import { buildingModel, sceneryModel } from "./buildings3d.ts";
+import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
 import { tile3d } from "./terrain3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
@@ -360,7 +361,7 @@ function object(t: T, obj: ObjView, me: string): Entry {
 	if (obj.kind === "building" || obj.kind === "site") {
 		const color = Number.parseInt((obj.color ?? "#8a6a44").slice(1), 16);
 		group.add(propShadow(t, w * 1.15, d * 1.15));
-		group.add(propMesh(t, obj.kind === "building" ? buildingGeometry(t, obj.plan, w, d, color, variant, obj.herd) : siteGeometry(t, obj.plan, w, d, color, obj.progress ?? 0)));
+		group.add(propMesh(t, obj.kind === "building" ? (buildingModel(t, obj.plan, w, d, variant) ?? buildingGeometry(t, obj.plan, w, d, color, variant, obj.herd)) : siteGeometry(t, obj.plan, w, d, color, obj.progress ?? 0)));
 		// one's own site says so above it
 		if (obj.kind === "site" && obj.ownerId === me) { const mark = label(t, "Deine Baustelle", "#dfff73"); mark.position.y = 1.3; group.add(mark); }
 		// a coop with a fence round it (foxes keep out), a dog or cat on guard at its front corner (wild.ts, animals.ts)
@@ -382,7 +383,7 @@ function object(t: T, obj: ObjView, me: string): Entry {
 		e.flame = { light, cone };
 	} else if (obj.kind === "scenery") {
 		const w = obj.w ?? 1, d = obj.h ?? 1;
-		const mesh = ["huette", "felsen", "mauer", "turm", "meiler"].includes(obj.model ?? "") ? ruinGeometry(t, w, d, variant) : obj.model === "netz" ? fenceGeometry(t, w, d) : siteGeometry(t, undefined, w, d, obj.model === "steg" ? 0x7a5c3e : 0x6b4a2e, 1);
+		const mesh = sceneryModel(t, obj.model, w, d, variant) ?? (["huette", "felsen", "mauer", "turm", "meiler"].includes(obj.model ?? "") ? ruinGeometry(t, w, d, variant) : obj.model === "netz" ? fenceGeometry(t, w, d) : obj.model === "steg" ? jettyGeometry(t, w, d) : siteGeometry(t, undefined, w, d, 0x6b4a2e, 1));
 		group.add(propMesh(t, mesh));
 	} else if (obj.kind === "exit") {
 		const sign = propMesh(t, signGeometry(t)); sign.rotation.y = (variant / 3) * Math.PI * 2; group.add(sign);
