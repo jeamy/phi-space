@@ -17,6 +17,8 @@ import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type FieldFields, type WorkRestFields } from "../../model.ts";
 import { peek } from "../../space.ts";
 import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
+import { satedFactor } from "./food.ts";
+import { workRestMs } from "../../settings.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import { fogOf } from "../fire.ts";
@@ -72,7 +74,7 @@ async function tire(c: CommandCtx, now: number): Promise<void> {
 	const until = rest ? fieldsOf<WorkRestFields>(rest).untilWorldMs : 0;
 	if (until > now) throw new CommandError(`Du bist noch müde von der letzten Arbeit; in etwa ${Math.max(1, Math.round((until - now) / 60_000))} Minuten wieder.`);
 	if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
-	await c.space.write({ type: "WorkRest", fields: { charId: c.actor.charId, untilWorldMs: now + (c.world.building?.restWorldMs ?? 30 * 60_000) } satisfies WorkRestFields as never }, c.txn, FOREVER);
+	await c.space.write({ type: "WorkRest", fields: { charId: c.actor.charId, untilWorldMs: now + (await workRestMs(c.space)) / (await satedFactor(c, now)) } satisfies WorkRestFields as never }, c.txn, FOREVER);
 }
 /** Counts a work point; NPCs and automata may give at most half of them, as at a site. */
 function credit(c: CommandCtx, f: FieldFields): void {

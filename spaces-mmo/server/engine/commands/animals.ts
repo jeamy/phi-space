@@ -9,6 +9,7 @@
 // - Fed animals give their yield (an egg a day, wool every other day, milk a day), up to a few per animal waiting; hungry
 //   ones give nothing until fed again, and lose nothing. Two fed ones of a kind now and then get a young one, until the
 //   house is full. Anyone may feed (`füttere`), only the owner puts in, takes out and collects.
+import { randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type HerdFields, type ItemFields } from "../../model.ts";
 import { patienceOf, worldNowOf } from "../clock.ts";
@@ -261,7 +262,8 @@ export async function collect(c: CommandCtx): Promise<void> {
 		throw new CommandError(`Noch kein ${protoName(c, k.yields)} bereit; ${next}.`);
 	}
 	await putBack(c, { ...b, herd: { ...b.herd, goods: b.herd.goods - whole } });
-	const got = await giveBack(c, [{ proto: k.yields, count: whole }]);
+	const extra = k.also ? Math.floor(whole / k.also.per) + (randomInt(0, k.also.per) < whole % k.also.per ? 1 : 0) : 0;
+	const got = await giveBack(c, [{ proto: k.yields, count: whole }, ...(k.also && extra ? [{ proto: k.also.proto, count: extra }] : [])]);
 	await msg(c, c.actor.charId, "info", `Du sammelst ${got.join(", ")} im Stall.`);
 }
 

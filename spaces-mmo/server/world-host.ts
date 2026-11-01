@@ -34,6 +34,7 @@ import { motionTick } from "./engine/commands/townhall.ts";
 import { showTick } from "./engine/commands/festival.ts";
 import { byPeoplesPace, syncRates } from "./engine/clock.ts";
 import { growthTick } from "./engine/commands/growth.ts";
+import { loanTick } from "./engine/commands/shop.ts";
 import { stormRaisesWind, windTick } from "./engine/commands/wind.ts";
 import { fieldTick } from "./engine/commands/field.ts";
 import { ensureTokens, loadIntoSpace } from "./engine/loader.ts";
@@ -70,7 +71,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		wind: async () => { if (process.env.SPACES_MMO_WIND !== "0") await windTick(space, w, msgLeaseMs); },
 		garden: async () => { await gardenTick(space, w); await fieldTick(space, w, msgLeaseMs); },
 		wild: async () => { await wildTick(space, w, msgLeaseMs); },
-		epoch: async () => { await epochTick(space, w, msgLeaseMs); await settlementTick(space, w, msgLeaseMs); await motionTick(space, w, msgLeaseMs); await showTick(space, w, msgLeaseMs); await growthTick(space, w, msgLeaseMs); },
+		epoch: async () => { await epochTick(space, w, msgLeaseMs); await settlementTick(space, w, msgLeaseMs); await motionTick(space, w, msgLeaseMs); await showTick(space, w, msgLeaseMs); await growthTick(space, w, msgLeaseMs); await loanTick(space, w, msgLeaseMs); },
 	};
 	const handlers = { ...SCHEDULE_HANDLERS, tick: tickHandler(runs) };
 	// a region's world worker reaches the other regions: to deliver the characters that took a ferry out of it

@@ -1,0 +1,68 @@
+// Fishing, step 7 (docs/siedeln.en.md "Boats and fishing"): beside a jetty, anyone's, `wirf netz` brings a catch, now and then a
+// find, and costs the rest that work costs; the net holds. A smokehouse turns fish into smoked fish by a recipe.
+import { randomInt } from "node:crypto";
+import { fieldsOf, type BuildingFields } from "../../model.ts";
+import type { Command } from "../cmdsets.ts";
+import { CommandError, inventory, msg, NotUnderstood, roomOf } from "../context.ts";
+import { distTo, giveBack, planOf, rested, tire } from "./build.ts";
+import { placeIn, relocate } from "./default.ts";
+
+const weighted = (xs: Array<{ proto: string; weight: number }>) => { let r = randomInt(0, xs.reduce((n, x) => n + x.weight, 0)); return xs.find((x) => (r -= x.weight) < 0)!; };
+
+const wirf: Command = {
+	key: "wirf", aliases: ["fische", "fish"],
+	help: "wirf netz – an einem Steg neben dir das Netz auswerfen: Fisch, manchmal ein Fund; danach ruhst du eine Weile",
+	async func(c, arg) {
+		const d = c.world.fishing;
+		if (!d) throw new CommandError("In dieser Welt wird nicht gefischt.");
+		if (arg.trim() && !/^(?:(?:das\s+)?netz|net)$/i.test(arg.trim())) throw new NotUnderstood("So geht es: wirf netz");
+		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: d.plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
+		if (!near) throw new CommandError(`Das Netz wirft man direkt neben ${planOf(c.world, d.plan)?.dative ?? "einem Steg"} aus.`);
+		if (!(await inventory(c)).some((i) => i.f.proto === d.net)) throw new CommandError("Dafür brauchst du ein Netz.");
+		const { now, rest } = await rested(c);
+		const got = weighted(d.catch);
+		await giveBack(c, [{ proto: got.proto, count: 1 }]);
+		await tire(c, now, rest);
+		await msg(c, "*", "info", `$you() $conj(ziehst|zieht) ${c.world.prototypes.find((p) => p.key === got.proto)?.name ?? got.proto} aus dem Wasser.`, { templ: true });
+	},
+};
+
+const rudere: Command = {
+	key: "rudere", aliases: ["rudern", "row"],
+	help: "rudere <ort> – mit einem Ruderboot vom Steg neben dir zu einem Steg dieser Insel; „rudere“ allein zeigt, wohin",
+	async func(c, arg) {
+		const d = c.world.boat, plan = c.world.fishing?.plan;
+		if (!d || !plan) throw new CommandError("In dieser Welt gibt es keine Boote.");
+		if (!(await inventory(c)).some((i) => i.f.proto === d.proto)) throw new CommandError("Dafür brauchst du ein Ruderboot.");
+		const island = c.world.rooms.find((r) => r.roomId === c.actor.room)?.island;
+		const jetties = (await c.space.readAll({ type: "Building", fields: { plan } })).map((e) => fieldsOf<BuildingFields>(e));
+		if (!jetties.some((b) => b.room === c.actor.room && distTo(c.actor, b) <= 1)) throw new CommandError(`Abgelegt wird direkt neben ${planOf(c.world, plan)?.dative ?? "einem Steg"}.`);
+		const there = c.world.rooms.filter((r) => r.island === island && r.roomId !== c.actor.room && jetties.some((b) => b.room === r.roomId));
+		const word = arg.trim().toLowerCase();
+		if (!word) return msg(c, c.actor.charId, "info", there.length ? `Stege gibt es in: ${there.map((r) => r.name).join(", ")}.` : "Auf dieser Insel gibt es keinen anderen Steg.");
+		const to = there.find((r) => r.name.toLowerCase() === word || r.roomId === word);
+		if (!to) throw new NotUnderstood(`Dorthin führt kein Steg.${there.length ? ` Stege gibt es in: ${there.map((r) => r.name).join(", ")}.` : ""}`);
+		const jetty = jetties.find((b) => b.room === to.roomId)!, dest = await roomOf(c, to.roomId), at = await placeIn(c, dest, { x: jetty.x, y: jetty.y + 1 });
+		await msg(c, "*", "info", `$you() $conj(ruderst|rudert) nach ${to.name}.`, { templ: true });
+		await relocate(c, { room: dest.roomId, x: at.x, y: at.y }, { spot: false });
+		await msg(c, "*", "info", `$you() $conj(legst|legt) am Steg an.`, { templ: true, room: dest.roomId });
+	},
+};
+
+const schaufle: Command = {
+	key: "schaufle", aliases: ["schaufeln", "dig sand"],
+	help: "schaufle – am Strand mit dem Spaten Sand graben (danach ruhst du eine Weile)",
+	async func(c) {
+		const d = c.world.sand;
+		if (!d) throw new CommandError("In dieser Welt gibt es keinen Sand.");
+		const room = await roomOf(c);
+		if (room.ground[c.actor.y]?.[c.actor.x] !== d.tile) throw new CommandError("Sand gräbt man am Strand.");
+		if (!(await inventory(c)).some((i) => i.f.proto === d.tool)) throw new CommandError("Dafür brauchst du einen Spaten.");
+		const { now, rest } = await rested(c);
+		await giveBack(c, [{ proto: d.makes, count: d.count }]);
+		await tire(c, now, rest);
+		await msg(c, "*", "info", `$you() $conj(gräbst|gräbt) ${d.count} Sand aus dem Strand.`, { templ: true });
+	},
+};
+
+export const FISHING_COMMANDS: Command[] = [wirf, rudere, schaufle];

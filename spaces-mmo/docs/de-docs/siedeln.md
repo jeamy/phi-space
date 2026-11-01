@@ -1065,7 +1065,14 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      Abweichungen: Der Preis kommt von der Welt, nicht von einer Tafel; das Erntefest braucht keinen Herbst, weil es noch keine Jahreszeiten gibt; der Park hat keine Beete, Pflege ist eine Blume für den Bau. Die Regatta wartet auf Boote, Feuerkette und regionsübergreifender Rang auf die Tafel. Der Warenumsatz zählt im Rang weiter nicht.
    - **Wind (gebaut, `server/engine/commands/wind.ts`):** Jede Insel hat eine Stufe, Flaute, Brise, frischer Wind oder Sturm, die sich alle sechs Weltstunden um einen Schritt bewegt; eine Sturmflut bringt sofort Sturm. `wetter` sagt, wie er steht. Eine Mühle mahlt mit dem Wind, der weht, wenn die Ladung kommt, halb bis doppelt so schnell, dazu kommt, was eine Sturmflut vorausmahlt. Eine Ladung behält das Tempo, mit dem sie begann. Hecken brechen ihn noch nicht.
    - **Größen festgelegt (gebaut):** Ein Raum wächst um einen Streifen von 4 Feldern Gras nach Osten oder Süden, sobald 70 % seines Landes belegt sind, bis 36×24 (`server/engine/commands/growth.ts`, Job „epoch“); nur Osten und Süden, damit nichts verschoben wird, und nicht, wo ein Ausgang nah ist oder der Rand kein Gras hat, von den 37 Räumen können also 15 nicht wachsen und warten auf neue Räume. Ein Feuer trägt 20 Punkte und 5 mehr je registriertem Spieler, der dort in den letzten sieben Tagen gebaut hat, höchstens 40; Figuren füllen das Licht, ohne es zu erweitern. Ein Konto besitzt höchstens 2 Ställe und Gehege. Rinder kommen mit der Stadt (Epoche 3) ins Gehege: Milch doppelt so schnell wie die Ziege, die Zucht langsam. Abweichung: noch kein Leder.
-7. **Kaufhaus** (Laden mit Vorrat), **Kontor**, **Leuchtturm**, **Brauhaus**, **Glashütte und Gewächshaus**,
+7. **Kaufhaus** (Schritt 7, Teil für Teil):
+   - **Nahrung (gebaut, `server/engine/commands/food.ts`):** `iss <ding>` macht eine Figur satt, Brot am längsten, höchstens einen Welttag voraus; satt ist die Ruhe nach der Arbeit 1,5-mal kürzer. Abweichung: Das kürzt die Ruhe, statt Arbeitspunkte anderthalbfach zu zählen, weil ein Punkt eine Handlung ist. Hunger gibt es nicht.
+   - **Steg, Fischen, Räucherei (gebaut, `fishing.ts`):** Ein Steg muss ans Wasser grenzen, `wirf netz` daneben bringt mit einem Netz Fisch und manchmal einen Fund, für die Ruhe einer Arbeit. Die Räucherei macht Räucherfisch nach Rezept, gebaut aus Holz und Tangseil, weil Stein erst mit dem Dorf kommt. Das Netz hält; Möwen gibt es noch nicht.
+   - **Leuchtturm (gebaut, ein Plan):** Ab der Stadt, gibt seinem Feuer 20 Lichtpunkte über die Grenze von 40 hinaus. Mehr Räume deckt er noch nicht ab.
+   - **Kaufhaus, Kontor (gebaut, `shop.ts`):** `laden` handelt mit einem Laden zu Preisen, die sein Regal lenkt, vom Doppelten des Grundpreises leer bis zur Hälfte bei zehn Stück; es zahlt 70 % aus eigener Kasse, die der Besitzer füllt, prägt also nichts, und sein Umsatz zählt im Rang mit einem Punkt je 20 Münzen. `kredit <n> gegen <ding>` leiht aus der Kasse des Hauses gegen ein Pfand, bis zum Doppelten des Grundpreises, sieben Tage zu einem Zehntel; `tilge` löst es aus, sonst fällt es ans Haus (Job „epoch“). Abweichungen: keine Lieferaufträge an der Tafel, keine Umsatzsteuer, kein Wechsel.
+   - **Brauerei, Glashütte (gebaut, Pläne und Rezepte):** Bier aus Gerste, noch ohne Hopfen; Sand mit dem Spaten am Strand (`schaufle`), Glas aus Sand und Holz. Noch verwendet nichts Glas: Das Gewächshaus wartet auf die Jahreszeiten.
+   - **Ruderboot (gebaut, `fishing.ts`):** Ein Rezept der Werkstatt; `rudere <ort>` fährt von Steg zu Steg der Insel. Es bleibt ein Ding im Gepäck, ohne Luke. Offen: Werft, Segelboote in andere Regionen, Regatta.
+   - **Offen in diesem Schritt:** (Laden mit Vorrat), **Kontor**, **Leuchtturm**, **Brauhaus**, **Glashütte und Gewächshaus**,
    Fischerei (Netz-Rezept, Steg) und Boote; **Nahrung** (Sattsein), wenn Brot und Räucherfisch da sind.
 8. **Straßen, Karren, Fahrplan-Fähren**, dann die **Inselbahn** als Automat.
 
@@ -1075,6 +1082,9 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
 Zahl gilt für den nächsten Bau, ein stehender behält sein Datum. Vorgaben: Vogelscheuche 7 (`keep.scheuche`), Hütten und
 Ähnliches 30 (`keep.bau`), Lagerhäuser und Ähnliches 45 (`keep.lager`), Kapelle 60 (`keep.kapelle`), Park 120
 (`keep.park`). Ein Plan nennt seine Klasse mit `keepSetting`.
+
+**Die Ruhe nach der Arbeit** ist die Einstellung `work.rest`, Vorgabe 15, in Weltminuten: Sie läuft im Lebenstakt. Segen und
+satter Magen kürzen sie. Ein gespeicherter Wert gilt ab der nächsten Arbeit; wer schon ruht, ruht zu Ende.
 
 **Pflanzen sind 3D-Modelle** wie die Bauten: wilde Blumen, Kräuter, Gras und Farne als Dekor, die Pflanzen von Beeten und
 Fluren nach ihrer Sorte (`model` an Sorte und Frucht), zusammengeführte Geometrie mit Eckenfarben in `client/props3d.ts`.

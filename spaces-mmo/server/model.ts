@@ -59,6 +59,10 @@ export type SettlementFields = { settlementId: string; name: string; nameKey: st
 export type RoomGrowthFields = { roomId: string; east: number; south: number };
 /** A registered player who built in a fire's light: the light grows with them (engine/commands/build.ts lightFor). */
 export type FireBuilderFields = { beaconId: string; accountId: string; atWorldMs: number };
+/** A figure that has eaten, until when (engine/commands/food.ts). */
+export type SatedFields = { charId: string; untilWorldMs: number };
+/** A loan of a counting house (engine/commands/shop.ts): its pledge lies at `loanId`; `untilWorldMs` in the second clock. */
+export type LoanFields = { loanId: string; buildId: string; room: string; accountId: string; charId: string; charName: string; owed: number; untilWorldMs: number };
 export type WindFields = { island: string; level: number };
 export type ShowKind = "blumen" | "ernte";
 export type ShowFields = { showId: string; room: string; settlementId: string; settlementName: string; kind: ShowKind; byName: string; endsWorldMs: number };
@@ -172,7 +176,7 @@ export type BuildingFields = { buildId: string; plan: string; name: string; room
 	herd?: HerdFields;
 	/** A dog or cat left here as a guard (engine/commands/animals.ts; it lies in it as a thing, like a herd): its kind and
 	 *  how long it is fed. `fenced`: a coop with a fence round it (the foxes do not get in). */
-	keeper?: { kind: string; fedUntilWorldMs: number }; fenced?: boolean };
+	keeper?: { kind: string; fedUntilWorldMs: number }; fenced?: boolean; /** Coins a department store turned over (engine/commands/shop.ts). */ turnover?: number };
 export type HerdFields = { kind: string; fedUntilWorldMs: number; atWorldMs: number; goods: number; bred: number };
 /** A load of grain at a mill (`buildId`, its place kept so it is found when the mill is gone): `count` of `from`, ground
  *  to `to` at `readyWorldMs` for the figure that brought it. A load whose mill fell before it was ground gives its grain

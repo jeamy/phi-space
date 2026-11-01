@@ -10,6 +10,7 @@ import { worldNowOf } from "../server/engine/clock.ts";
 import type { BuildingFields, CharacterFields, ItemFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, Player, startServer } from "./stack.ts";
+import { saveSettings, workRestMs } from "../server/settings.ts";
 
 const w = await loadWorld();
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -83,6 +84,26 @@ test("clay and bricks: a spade cuts clay and stays whole; a brickworks burns it"
 	} finally { await srv.close(); }
 });
 
+test("the rest after work is the admin's setting, in world minutes", { timeout: 120_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const p = new Player(srv.url);
+		await saveSettings(s, { "work.rest": 5 });
+		await new Promise((r) => setTimeout(r, Number(process.env.SPACES_MMO_SETTINGS_MS) || 5_100));
+		assert.equal((await p.post("/api/register", { name: "Ruhende", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		await does(p, "who", /./); // the arrival may still move the figure: its commands run in order
+		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, "Ruhende"))!.fields as unknown as CharacterFields;
+		await give(s, me, "spaten", 1);
+		await s.write({ type: "Building", fields: building("pit", "lehmgrube", "Lehmgrube", c.x + 1, c.y) as never }, null, FOREVER);
+		await does(p, "steche", "aus der Grube");
+		const until = ((await s.readAll({ type: "WorkRest", fields: { charId: me } }))[0]!.fields as unknown as { untilWorldMs: number }).untilWorldMs - (await worldNowOf(s));
+		assert.ok(until <= 5 * 60_000 && until > 60_000, `${until}`);
+		assert.match(await does(p, "steche", "müde"), /noch müde/);
+	} finally { await srv.close(); }
+});
+
 test("a chapel: an offering of worth gives a blessing, and the rest after work is half as long", { timeout: 120_000 }, async () => {
 	const srv = await startServer();
 	try {
@@ -103,7 +124,7 @@ test("a chapel: an offering of worth gives a blessing, and the rest after work i
 		assert.equal((await pack(s, me, "perle")).length, 0);
 		await does(p, "steche", "aus der Grube");
 		const clock = (await s.readAll({ type: "WorkRest", fields: { charId: me } }))[0]!.fields as unknown as { untilWorldMs: number };
-		const until = clock.untilWorldMs - (await worldNowOf(s)), rest = w.building!.restWorldMs;
+		const until = clock.untilWorldMs - (await worldNowOf(s)), rest = await workRestMs(s);
 		assert.ok(until <= rest / 2 && until > rest / 4, `${until} of ${rest}`);
 	} finally { await srv.close(); }
 });

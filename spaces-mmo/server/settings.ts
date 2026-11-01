@@ -26,6 +26,7 @@ export const SETTINGS: SettingDef[] = [
 	{ key: "epoch.netz", env: "SPACES_MMO_EPOCH_NETZ", def: 80, min: 0, max: 10_000, label: "Punkte einer Insel für das Netz", unit: "Punkte", help: "Dasselbe für Epoche 4." },
 	{ key: "clock.life", env: "SPACES_MMO_CLOCK_LIFE", def: -1, min: -1, max: 100_000, label: "Lebenstakt", unit: "Welttage je Tag", help: "Wie schnell die Welt lebt, in allen Regionen: Tag und Nacht, Wetter, Wachstum, Arbeit, Tiere. 1 ist Echtzeit, 24 ein Welttag je Stunde. −1: Die Uhr bleibt, wie sie steht." },
 	{ key: "clock.decay", env: "SPACES_MMO_CLOCK_DECAY", def: -1, min: -1, max: 100_000, label: "Verfallstakt", unit: "Tage je Tag", help: "Wie schnell läuft, was auf Menschen wartet: Verfall, Abstimmungen, Feste, Durst, Erntefenster, Marktangebote, Feuer, Strandgut. 1 ist Echtzeit, die Tage hier sind dann echte Tage. −1: bleibt, wie es steht." },
+	{ key: "work.rest", env: "SPACES_MMO_WORK_REST", def: 15, min: 0, max: 1_440, label: "Ruhe nach der Arbeit", unit: "Weltminuten", help: "So lange ruht eine Figur nach einem Arbeitspunkt (Baustelle, Acker, Steinbruch, Lehmgrube, Netz). Es sind Minuten der Weltzeit, sie laufen also im Lebenstakt. Segen und Essen kürzen die Ruhe. Gilt ab der nächsten Arbeit; wer schon ruht, ruht zu Ende. 0: keine Ruhe." },
 	{ key: "keep.scheuche", env: "SPACES_MMO_KEEP_SCHEUCHE", def: 7, min: 1, max: 1_000, label: "Vogelscheuche steht", unit: "Tage", help: "So lange hält sie nach Bau oder Reparatur. Gilt für Neues und die nächste Reparatur; was steht, behält sein Datum." },
 	{ key: "keep.bau", env: "SPACES_MMO_KEEP_BAU", def: 30, min: 1, max: 1_000, label: "Hütten, Mühle, Backhaus, Ställe stehen", unit: "Tage", help: "Dasselbe für Hütte, Windmühle, Backhaus, Webstuhl, Hühnerstall, Gehege und Regentonne." },
 	{ key: "keep.lager", env: "SPACES_MMO_KEEP_LAGER", def: 45, min: 1, max: 1_000, label: "Lager, Gruben, Werkstätten, Rathaus stehen", unit: "Tage", help: "Dasselbe für Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Werkstatt und Rathaus." },
@@ -75,6 +76,9 @@ export async function settingsOf(space: SpaceLike): Promise<Snapshot> {
 
 /** One number by key. */
 export const setting = async (space: SpaceLike, key: string): Promise<number> => (await settingsOf(space)).values[key]!.value;
+
+/** How long a figure rests after a point of work, in world milliseconds. */
+export const workRestMs = async (space: SpaceLike): Promise<number> => (await setting(space, "work.rest")) * 60_000;
 
 /** Forget the cached settings (the web process after saving, so its own next read sees them). */
 export const forgetSettings = (space: SpaceLike) => { caches.delete(space); };

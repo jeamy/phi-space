@@ -74,3 +74,6 @@ it (`items/tuch.png`, `items/decke.png`, `items/kaese.png`), the other wild from
 `items/maus.png`) and the guards against it (`items/hund.png`, `items/katze.png`, `items/mausefalle.png`), and stone and the workshop's things (`items/stein.png`, `items/spitzhacke.png`, `items/bohle.png`, `items/tauwerk.png`, `items/gehaeuse.png`) were drawn for this world in the
 same way, by the script `items-src/garden.py` (same license as this project).
 
+
+The harbour's things (`items/rind.png`, `items/leder.png`, `items/fisch.png`, `items/raeucherfisch.png`, `items/bier.png`, `items/sand.png`, `items/glas.png`, `items/ruderboot.png`) were drawn the same way, by the
+script `items-src/harbour.py` (same license as this project).

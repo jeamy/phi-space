@@ -494,6 +494,12 @@ Eine Insel wächst durch das, was auf ihr steht. Ausführlich unter [Dorf und Si
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
 | \`siedlung rang\` | | Die Siedlungen der Gegend nach ihrem Bestand; ein Park wiegt am meisten, wer ihn zuletzt pflegte, zählt dazu |
+| \`laden\` | \`shop\` | Regal und Preise des Kaufhauses; \`laden kaufe\`, \`laden verkaufe\`, \`laden einlegen\`, \`laden entnehme\` |
+| \`kredit <n> gegen <ding>\`, \`tilge\` | \`credit\`, \`repay\` | Am Kontor gegen ein Pfand leihen und zurückzahlen |
+| \`rudere <ort>\` | \`row\` | Mit dem Ruderboot von Steg zu Steg einer Insel |
+| \`schaufle\` | | Am Strand Sand graben |
+| \`iss <ding>\` | \`eat\` | Etwas essen: Satt ruhst du nach der Arbeit kürzer |
+| \`wirf netz\` | \`fish\` | An einem Steg das Netz auswerfen |
 | \`wetter\` | \`weather\`, \`wind\` | Wie der Wind steht und wie dicht der Nebel ist; der Wind treibt die Mühlen |
 | \`pflege\` | \`tend\` | Einmal am Tag eine Blume in den Park neben dir setzen: Ruf für dich, Rang für die Siedlung |
 | \`fest blumen\`, \`fest ernte\` | \`festival\` | Als Siedler am Park eine Blumenschau oder ein Erntefest eröffnen; allein: das laufende zeigen |
@@ -662,6 +668,12 @@ An island grows by what stands on it. In detail under [Village and settlement](h
 | Command | Also | Effect |
 | --- | --- | --- |
 | \`siedlung rang\` | | The settlements of the region by what they hold; a park weighs most, and whoever tended it lately counts too |
+| \`laden\` | \`shop\` | Shelf and prices of the department store; \`laden kaufe\`, \`laden verkaufe\`, \`laden einlegen\`, \`laden entnehme\` |
+| \`kredit <n> gegen <ding>\`, \`tilge\` | \`credit\`, \`repay\` | Borrow against a pledge at a counting house and pay it back |
+| \`rudere <ort>\` | \`row\` | By rowing boat from jetty to jetty of an island |
+| \`schaufle\` | | Dig sand on the beach |
+| \`iss <ding>\` | \`eat\` | Eat something: sated, you rest less after work |
+| \`wirf netz\` | \`fish\` | Cast the net at a jetty |
 | \`wetter\` | \`weather\`, \`wind\` | How the wind stands and how thick the fog is; the wind drives the mills |
 | \`pflege\` | \`tend\` | Once a day set a flower in the park beside you: reputation for you, rank for the settlement |
 | \`fest blumen\`, \`fest ernte\` | \`festival\` | As a settler at a park, open a flower show or a harvest festival; alone: show the running one |
@@ -958,7 +970,7 @@ Jeder darf an einer Baustelle mithelfen, auch ohne Konto. Du bringst Material od
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
 | \`liefere [n] <ding>\` | \`deliver\` | Liefern, was die Baustelle braucht; zu viel bleibt bei dir |
-| \`arbeite\` | \`work\` | Einen Arbeitspunkt beitragen; danach ruhst du eine halbe Stunde Weltzeit |
+| \`arbeite\` | \`work\` | Einen Arbeitspunkt beitragen; danach ruhst du eine Weile |
 | \`baustelle\` | \`site\` | Was hier gebaut wird und was noch fehlt |
 
 Liefern und arbeiten geht **aus bis zu zwei Feldern Abstand**, so haben viele um eine Baustelle Platz. Das Menü der rechten Maustaste auf einer Baustelle bietet Liefern und Mitarbeiten an. Höchstens die Hälfte darf von NPCs oder Automaten kommen. Fehlt nichts mehr, steht der Bau; an ihm steht, wer mitgebaut hat. Eine Baustelle ohne Fortschritt verfällt nach zwei Welttagen.

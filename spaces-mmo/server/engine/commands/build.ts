@@ -16,6 +16,7 @@ import { hutsIn, needRank, rankOf, settlementIn } from "./settlement.ts";
 import { epochName, epochOf, islandOf, needEpoch } from "./epoch.ts";
 import { blessed } from "./chapel.ts";
 import { zoneRefusal } from "./townhall.ts";
+import { satedFactor } from "./food.ts";
 import { closeOrders, keptUntil, orderLine, ordersOfSite, payFor } from "./siteorder.ts";
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
@@ -28,7 +29,7 @@ import { byName, CommandError, exitsHere, inventory, msg, NotUnderstood, roomOf,
 import { flameOf, isLit } from "../fire.ts";
 import { blockedIn, cellKey, isPassage, occupiedIn } from "../occupancy.ts";
 import { walkable, type PlanDef, type WorldDef } from "../world.ts";
-import { setting } from "../../settings.ts";
+import { setting, workRestMs } from "../../settings.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -110,9 +111,10 @@ export function besides(c: CommandCtx, plan: Pick<PlanDef, "w" | "h">): Rect[] {
  *  deserted one holds no place. */
 async function lightOf(c: CommandCtx, beaconId: string): Promise<number> {
 	const def = c.world.building, base = def?.lightPoints ?? 0, more = def?.lightGrowth;
-	if (!more) return base;
+	const bonus = (await c.space.readAll({ type: "Building", fields: { beaconId } }, { txn: c.txn })).reduce((n, e) => n + (planOf(c.world, String(e.fields.plan))?.lightBonus ?? 0), 0); // a lighthouse
+	if (!more) return base + bonus;
 	const now = await decayNowOf(c.space, c.txn), active = (await c.space.readAll({ type: "FireBuilder", fields: { beaconId } }, { txn: c.txn })).filter((e) => fieldsOf<FireBuilderFields>(e).atWorldMs + more.activeMs > now).length;
-	return Math.min(more.max, base + active * more.perPlayer);
+	return Math.min(more.max, base + active * more.perPlayer) + bonus;
 }
 /** The actor counts as building at this fire. Figures fill the light, they do not widen it. */
 async function noteBuilder(c: CommandCtx, beaconId: string): Promise<void> {
@@ -121,6 +123,9 @@ async function noteBuilder(c: CommandCtx, beaconId: string): Promise<void> {
 	await c.space.takeIfExists({ type: "FireBuilder", fields: key }, NO_WAIT, { txn: c.txn });
 	await c.space.write({ type: "FireBuilder", fields: { ...key, atWorldMs: await decayNowOf(c.space, c.txn) } satisfies FireBuilderFields as never }, c.txn, FOREVER);
 }
+
+/** Whether a cell beside the rect is water. */
+const touchesWater = (w: WorldDef, room: RoomFields, r: Rect) => cells({ x: r.x - 1, y: r.y - 1, w: r.w + 2, h: r.h + 2 }).some((p) => room.ground[p.y]?.[p.x] !== undefined && !walkable(w, room.ground, p.x, p.y));
 
 /** A burning fire that covers the room and has light left for `points` (its LightUse taken in the transaction); null with
  *  the reason. */
@@ -245,7 +250,7 @@ export const bau: Command = {
 		const room = await roomOf(c);
 		const tries = m[2] !== undefined ? [{ x: Number(m[2]), y: Number(m[3]), w: plan.w, h: plan.h }] : besides(c, plan);
 		let rect: Rect | null = null, why = "";
-		for (const r of tries) { const no = await refusal(c, room, r, !!plan.green, !!plan.green); if (!no) { rect = r; break; } why ||= no; }
+		for (const r of tries) { const no = (await refusal(c, room, r, !!plan.green, !!plan.green)) ?? (plan.shore && !touchesWater(c.world, room, r) ? "Das muss ans Wasser grenzen." : null); if (!no) { rect = r; break; } why ||= no; }
 		if (!rect) throw new CommandError(`Hier passt keine ${plan.name} hin: ${why}`);
 		const buildId = randomBytes(6).toString("hex"), now = await worldNowOf(c.space, c.txn);
 		for (const p of cells(rect)) {
@@ -299,7 +304,7 @@ export async function rested(c: CommandCtx) {
 /** The actor worked: it rests for a while. */
 export async function tire(c: CommandCtx, now: number, rest: Awaited<ReturnType<typeof rested>>["rest"]): Promise<void> {
 	if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
-	const ms = (c.world.building?.restWorldMs ?? 30 * 60_000) / ((await blessed(c, now)) ? 2 : 1);
+	const ms = (await workRestMs(c.space)) / ((await blessed(c, now)) ? 2 : 1) / (await satedFactor(c, now));
 	await c.space.write({ type: "WorkRest", fields: { charId: c.actor.charId, untilWorldMs: now + ms } satisfies WorkRestFields as never }, c.txn, FOREVER);
 }
 

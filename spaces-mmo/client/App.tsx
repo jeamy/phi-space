@@ -4,6 +4,7 @@
 // tap on the map or an arrow key becomes `move x y` for one step. All text from the world is rendered as React text nodes.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ThemeControls } from "./ThemeControls.tsx";
+import { tr } from "./i18n/index.ts";
 import { AdminPanel } from "./AdminPanel.tsx";
 import { useTheme } from "./lib/theme.ts";
 import type { AtlasState, AtlasView, CharView, ClientFrame, ItemUses, MsgView, ObjView, PlanView, ServerFrame, TradeView } from "../server/gateway.ts";
@@ -36,6 +37,10 @@ const PICKUP_MS = 3_000;
 const DOUBLE_MS = 400;
 /** How long a double-clicked thing is walked to before giving up (a long way, someone else took it). */
 const FETCH_MS = 15_000;
+/** How long after a command what arrives counts as its answer. */
+const ANSWER_MS = 4_000;
+/** The sheet with the log open on a command's answer: half the device, with a mouse about ten lines (and the tabs and buttons around them). */
+const logOpenPx = () => Math.round(isTouch() ? window.innerHeight / 2 : Math.min(window.innerHeight, 10 * 19 + 170));
 type Account = { name: string; guest: boolean; admin: boolean; /** The name shown in the game, when it is not the login name. */ alias?: string };
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 /** The names of what burns in a fire, cheapest first (from the hello): what the space key and the buttons feed. */
@@ -548,13 +553,27 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	// the own figure's walk: drawn ahead of the server, matched by step numbers (client/walk.ts)
 	const walker = useRef(new Walker());
 	// the world's clock as the server last told it; shown by interpolation, nothing is decided by it
+	const [wind, setWind] = useState("");
 	const [worldTime, setWorldTime] = useState<{ v: WorldTimeView; at: number } | null>(null);
 	const [, setTick] = useState(0);
 	useEffect(() => { if (!worldTime || worldTime.v.paused) return; const t = setInterval(() => setTick((n) => n + 1), 1000); return () => clearInterval(t); }, [worldTime]);
 	const meRef = useRef("");
 	meRef.current = me;
-	const nameRef = useRef(account.name), detentRef = useRef(detent);
-	nameRef.current = account.name; detentRef.current = detent;
+	const nameRef = useRef(account.name), detentRef = useRef(detent), bagRef = useRef(bag);
+	nameRef.current = account.name; detentRef.current = detent; bagRef.current = bag;
+	// a command's answer lands in the log: the log opens on it, unless a talk or the chats are in front
+	const awaited = useRef(0);
+	const [logFit, setLogFit] = useState<number | null>(null);
+	const showAnswer = useCallback(() => {
+		if (Date.now() - awaited.current > ANSWER_MS) return;
+		awaited.current = 0;
+		if (!bagRef.current && tabRef.current !== "log") return;
+		if (tabRef.current !== "log") setTab("log");
+		atEnd.current = true;
+		setBehind(false);
+		setBag(false);
+		if (detentRef.current === "peek") { setLogFit(logOpenPx()); setDetent("half"); }
+	}, [setTab]);
 	/** Draws the own figure at `at` (where the walk puts it). */
 	const showOwn = useCallback((at: { x: number; y: number } | null) => {
 		if (!at) return;
@@ -576,7 +595,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				if (f.t === "hello") {
 					// the server runs a newer build than this page: reload, so the page understands what it is sent
 					if (pageBuild && f.build && f.build !== pageBuild) { setStale(true); setTimeout(() => location.reload(), 1500); return; }
-					stopWalk.current(); retry = 0; setHello(f); setWorldTime(f.worldTime ? { v: f.worldTime, at: Date.now() } : null);
+					stopWalk.current(); retry = 0; setHello(f); setWind(f.wind); setWorldTime(f.worldTime ? { v: f.worldTime, at: Date.now() } : null);
 					for (const t of goneTimers.values()) clearTimeout(t); goneTimers.clear();
 					meRef.current = f.me.charId;
 					{ const mine = f.chars.find((c) => c.charId === f.me.charId); if (mine) walker.current.reset(mine); } fuels = f.world.fuels;
@@ -608,6 +627,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				}
 				else if (f.t === "obj") { pickups.current.delete(f.o.id); setObjs((m) => new Map(m).set(f.o.id, f.o)); }
 				else if (f.t === "fog") setFog(f.level);
+				else if (f.t === "wind") setWind(f.wind);
 				else if (f.t === "time") setWorldTime({ v: f.time, at: Date.now() });
 				else if (f.t === "trade") setTrade(f.trade);
 				else if (f.t === "atlas") setAtlas(f.atlas);
@@ -619,7 +639,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 					setHelp(false);
 					append({ ...f.m, text: h.topic ? `Hilfe zu „${h.topic.key}“ ist geöffnet.` : "Die Befehle sind geöffnet (help)." });
 				}
-				else if (f.t === "msg") { if (f.m.kind === "error") putBack(); append(f.m); if (tabRef.current !== "log" && (f.m.kind === "error" || f.m.kind === "info")) setNotice({ text: f.m.text, error: f.m.kind === "error", at: Date.now() }); }
+				else if (f.t === "msg") { if (f.m.kind === "error") putBack(); showAnswer(); append(f.m); if (tabRef.current !== "log" && (f.m.kind === "error" || f.m.kind === "info")) setNotice({ text: f.m.text, error: f.m.kind === "error", at: Date.now() }); }
 				else if (f.t === "chatme" || f.t === "chatkeys") keysRef.current.onFrame(f);
 				else if (f.t === "chatlog") { keysRef.current.onFrame(f); setTalks(fromLog(f.msgs, tabRef.current)); }
 				else if (f.t === "chat") {
@@ -652,7 +672,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		const s = ws.current;
 		if (!s || s.readyState !== WebSocket.OPEN) { append({ kind: "error", text: "Nicht verbunden; ein Moment …", from: "", at: Date.now() }); return; }
 		s.send(JSON.stringify({ t: "cmd", line: text, ...(language() === "en" ? { lang: "en" } : {}) } satisfies ClientFrame));
-		if (echo) append({ kind: "echo", text: `> ${text}`, from: "", at: Date.now() });
+		if (echo) { append({ kind: "echo", text: `> ${text}`, from: "", at: Date.now() }); awaited.current = Date.now(); }
 	}, [append]);
 
 	// what the walk looks at between renders (the hold timer runs outside React's render)
@@ -973,6 +993,9 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		if (!from || from.id !== e.pointerId || detent === "peek" || mapMode === "text" || Date.now() - from.at > 500 || Math.hypot(e.clientX - from.x, e.clientY - from.y) > 10) return;
 		if (t.tagName === "CANVAS" || t.classList.contains("stage") || t.classList.contains("map")) setDetent("peek");
 	};
+	/** A height for the log the sheet opened by itself, null: the one it was pulled to. */
+	const setPulled = (h: number) => { setLogFit(null); setSheetPx(h); };
+	useEffect(() => { if (detent === "peek") setLogFit(null); }, [detent]);
 	const sheetBody = (
 		<>
 			{talkTab && detent !== "peek" ? (
@@ -1025,7 +1048,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				<div className="hud">
 					<button className="hud-pill" onClick={() => setAtlasPage(true)} disabled={!atlas || atlas.rooms.length < 2} aria-label="Weltkarte öffnen">
 						<span className={`live${live ? " on" : ""}`} /><b>{hello?.room.name ?? ""}</b>
-						{worldTime && <small>{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}</small>}
+						{worldTime && <small>{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}{wind ? ` · ${tr(wind)}` : ""}</small>}
 					</button>
 					<span className="spacer" />
 					<button className="hud-btn" onClick={() => { setCmdHelp(null); setHelp(true); }} aria-label="Hilfe / Help">?</button>
@@ -1036,7 +1059,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				{toast && <button className="chat-toast" onClick={() => { setToast(null); setTab(toast.key); }}><b>{toast.from}</b><small>Neue Nachricht</small></button>}
 			</div>
 			{mapMode === "text" ? <section className="sheet text-page">{sheetBody}</section>
-				: <Sheet detent={detent} setDetent={setDetent} height={sheetPx} setHeight={setSheetPx} place={sheetAt} setPlace={setSheetAt}>{sheetBody}</Sheet>}
+				: <Sheet detent={detent} setDetent={setDetent} height={logFit ?? sheetPx} setHeight={setPulled} place={sheetAt} setPlace={setSheetAt}>{sheetBody}</Sheet>}
 			{menus}
 			{more && <>
 				<div className="menu-backdrop dim" onClick={() => setMore(false)} />

@@ -12,7 +12,7 @@ import { render } from "./engine/funcparser.ts";
 import { sceneryText, type CropDef, type SortDef, type WorldDef } from "./engine/world.ts";
 import { whereTo } from "./engine/context.ts";
 import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
-import { asFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WorldClockFields, type ZoneFields } from "./model.ts";
+import { asFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WindFields, type WorldClockFields, type ZoneFields } from "./model.ts";
 import { bedPlantsView } from "./engine/commands/garden.ts";
 import { fieldView } from "./engine/commands/field.ts";
 import { wildKinds } from "./engine/commands/wild.ts";
@@ -63,8 +63,9 @@ export type TradeView = {
 };
 /** Frames to the browser. */
 export type ServerFrame =
-	| { t: "hello"; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins" | "decor"> & { fuels: string[]; icons: string[]; plans: PlanView[]; uses: ItemUses }; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number; worldTime: WorldTimeView | null }
+	| { t: "hello"; wind: string; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins" | "decor"> & { fuels: string[]; icons: string[]; plans: PlanView[]; uses: ItemUses }; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number; worldTime: WorldTimeView | null }
 	| { t: "fog"; level: number }
+	| { t: "wind"; wind: string }
 	/** The world clock changed (or the regular reminder): the browser interpolates from it; it decides nothing by it. */
 	| { t: "time"; time: WorldTimeView }
 	| { t: "trade"; trade: TradeView }
@@ -141,6 +142,9 @@ export class Gateway {
 	readonly #sessions = new Map<string, string>(); // session entry id -> charId
 	readonly #online = new Map<string, number>(); // charId -> live sessions
 	readonly #rooms = new Map<string, RoomFields>();
+	readonly #winds = new Map<string, number>();
+	/** The name of the wind in a room; an island nobody counted yet has the breeze. */
+	#windIn(room: string): string { return this.w.wind?.names[this.#winds.get(this.#rooms.get(room)?.island ?? "") ?? 1] ?? ""; }
 	readonly #objs = new Map<string, ObjView>(); // by itemId / exitId
 	readonly #objOf = new Map<string, string>(); // space entry id -> itemId / exitId
 	readonly #objEntry = new Map<string, string>(); // itemId / exitId / beaconId -> its current space entry id
@@ -384,7 +388,7 @@ export class Gateway {
 			if (!c.atlas) { c.atlas = true; c.ws.send({ t: "atlas", atlas: this.#atlas() } satisfies ServerFrame); }
 			c.ws.send({ t: "atlasState", state: this.#atlasState(c) } satisfies ServerFrame);
 		});
-		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set([...this.#protoIcons.values(), ...(this.w.wild ? [`/assets/${this.w.id}/${this.w.wild.hare.icon}`] : [])])], plans: this.#plans(), uses: this.#uses() }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
+		c.ws.send({ t: "hello", wind: this.#windIn(self.room), build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set([...this.#protoIcons.values(), ...(this.w.wild ? [`/assets/${this.w.id}/${this.w.wild.hare.icon}`] : [])])], plans: this.#plans(), uses: this.#uses() }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
 	}
 
 	/** Puts every entry `tmpl` matches, read in pages of bounded size (one snapshot: the pages share its token). */
@@ -407,7 +411,7 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone"]) await this.#readPaged(region, space, { type }, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Wind"]) await this.#readPaged(region, space, { type }, msgs);
 					await this.#readPaged(region, space, { type: "Msg", fields: { to: "*" } }, msgs); // #put keeps the last RECENT of each room
 					this.#advance(region, rev);
 					ready();
@@ -538,6 +542,7 @@ export class Gateway {
 			this.#setObj(id, { id: b.buildId, kind: site ? "site" : "building", name: b.name, location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: this.#shownName(b.owner, b.ownerName), ownerId: b.owner, plan: b.plan, ...(site ? { orders: this.#ordersOf(b.buildId) } : {}), ...(site ? { progress: total ? have / total : 0, missing } : {}), ...(color ? { color } : {}), ...(!site && b.herd ? { herd: b.herd.kind } : {}), ...(!site && b.keeper ? { keeper: b.keeper.kind } : {}), ...(!site && b.fenced ? { fenced: true } : {}) });
 		}
 		else if (type === "Flame") { const f = fields as unknown as FlameFields; this.#flames.set(f.beaconId, f.until); this.#flameOf.set(id, f.beaconId); }
+		else if (type === "Wind") { const f = fields as unknown as WindFields; this.#winds.set(f.island, f.level); for (const c of this.#clients) if (c.room !== null && this.#rooms.get(c.room)?.island === f.island) c.ws.send({ t: "wind", wind: this.#windIn(c.room) } satisfies ServerFrame); }
 		else if (type === "Fog") { const f = fields as unknown as FogFields; this.#fog.set(f.room, f.level); }
 		else if (type === "Offer") this.#offers.set(id, fields as unknown as OfferFields);
 		else if (type === "Order") this.#orders.set(id, fields as unknown as OrderFields);

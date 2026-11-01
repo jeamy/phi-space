@@ -1058,7 +1058,14 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      Deviations: the prize comes from the world, not a board; the harvest festival needs no autumn, as seasons are not there yet; the park holds no beds, tending is a flower given to the building. The regatta waits for boats, the fire chain and the rank across regions for the board. Goods turnover still does not count in the rank.
    - **Wind (built, `server/engine/commands/wind.ts`):** Each island has a level, a lull, a breeze, a fresh wind or a gale, that moves a step every six world hours; a storm surge makes it a gale at once. `wetter` tells it. A mill grinds at half to twice its pace by the wind that blows when the load comes, on top of what a surge grinds ahead. A load keeps the pace it started with. Hedges do not break it yet.
    - **Sizes settled (built):** A room grows by a strip of 4 cells of grass, east or south, once 70 % of its land is taken, up to 36×24 (`server/engine/commands/growth.ts`, job "epoch"); east and south only, so nothing has to move, and not where an exit is near or the edge is no grass, so of the 37 rooms 15 cannot grow and wait for new ones. A fire carries 20 points and 5 more for each registered player who built there in the last seven days, at most 40; figures fill the light without widening it. One account owns at most 2 coops and pens. Cattle come with the town (epoch 3) in the pen: milk at twice a goat's pace, breeding slow. Deviation: no leather yet.
-7. **Department store** (shop with stock), **counting house**, **lighthouse**, **brewery**, **glassworks and greenhouse**,
+7. **Department store** (step 7, part by part):
+   - **Food (built, `server/engine/commands/food.ts`):** `iss <ding>` keeps a figure sated, bread longest, for up to a world day; sated, the rest after work is 1.5 times shorter. Deviation: it shortens the rest rather than counting work points by half again, since a point is one action. There is no hunger.
+   - **Jetty, fishing, smokehouse (built, `fishing.ts`):** A jetty must touch water, `wirf netz` beside it with a net brings fish and now and then a find, for the rest of a work. The smokehouse makes smoked fish by a recipe, from wood and kelp rope, as stone comes only with the village. The net holds; gulls are not there yet.
+   - **Lighthouse (built, a plan):** From the town epoch, it adds 20 light points to its fire above the limit of 40. It does not cover more rooms yet.
+   - **Department store, counting house (built, `shop.ts`):** `laden` trades with a shop at prices led by its shelf, from twice the base price empty to half of it at ten pieces; it pays 70 % from its own till, which the owner fills, so it mints nothing, and its turnover counts in the rank at a point per 20 coins. `kredit <n> gegen <ding>` lends from the house's till against a pledge in escrow, up to twice its base price, for seven days at a tenth; `tilge` frees it, else it goes to the house (job "epoch"). Deviations: no delivery orders on the board, no tax on sales, no exchange.
+   - **Brewery, glassworks (built, plans and recipes):** Beer from barley, no hops yet; sand dug with a spade on the beach (`schaufle`), glass from sand and wood. Nothing uses glass yet: the greenhouse waits for the seasons.
+   - **Rowing boat (built, `fishing.ts`):** A workshop recipe; `rudere <ort>` goes from a jetty to a jetty of the island. It stays a thing in the pack, with no hatch, and the owner needs one. Open: the shipyard, sailing boats to other regions, the regatta.
+   - **Open in this step:** (shop with stock), **counting house**, **lighthouse**, **brewery**, **glassworks and greenhouse**,
    fishing (net recipe, jetty) and boats; **food** (being sated), when bread and smoked fish exist.
 8. **Roads, carts, timetable ferries**, then the **island railway** as automaton.
 
@@ -1068,6 +1075,9 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
 number holds for the next building, one that stands keeps its date. Defaults: scarecrow 7 (`keep.scheuche`), huts and the
 like 30 (`keep.bau`), storehouses and the like 45 (`keep.lager`), chapel 60 (`keep.kapelle`), park 120 (`keep.park`). A
 plan names its class with `keepSetting`.
+
+**The rest after work** is the setting `work.rest`, 15 by default, in world minutes: it runs at the life rate. A blessing and
+a full stomach shorten it. A saved number holds from the next work on; who already rests rests to the end.
 
 **Plants are 3D models** like the buildings: wild flowers, herbs, grass and ferns as decoration, and the plants of beds
 and fields by their sort (`model` on the sort and the crop), merged vertex-coloured geometry in `client/props3d.ts`.

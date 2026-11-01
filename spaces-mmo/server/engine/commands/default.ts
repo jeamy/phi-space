@@ -55,7 +55,7 @@ async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: b
 
 /** Takes the actor's character and writes it at a new place; its Spot goes along (`spot` false: the place is known to
  *  be its own, e.g. a step that was not taken and is only answered). */
-async function relocate(c: CommandCtx, to: { room: string; x: number; y: number }, o: { spot?: boolean; refused?: string } = {}): Promise<void> {
+export async function relocate(c: CommandCtx, to: { room: string; x: number; y: number }, o: { spot?: boolean; refused?: string } = {}): Promise<void> {
 	if (o.spot !== false) {
 		const there = await claimSpot(c.space, c.txn, c.actor, to);
 		if (there) throw new CommandError(`Dort steht schon ${there}.`);
@@ -69,7 +69,7 @@ async function relocate(c: CommandCtx, to: { room: string; x: number; y: number 
 
 /** Onto a free cell of `room`, starting at `at`: the nearest cell no online character holds, no exit and no fire is on,
  *  claimed with the space's unique check (a few tries: someone may take one meanwhile). */
-async function placeIn(c: CommandCtx, room: RoomFields, at: { x: number; y: number }, o: { exits?: boolean } = {}): Promise<{ x: number; y: number }> {
+export async function placeIn(c: CommandCtx, room: RoomFields, at: { x: number; y: number }, o: { exits?: boolean } = {}): Promise<{ x: number; y: number }> {
 	// arriving through a door: its landing is a passage, free whoever stands there
 	const exits = (await exitsHere(c, room.roomId)).map((x) => x.f);
 	const blocked = await blockedIn(c.space, c.world, room.roomId);
