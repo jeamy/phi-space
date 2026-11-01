@@ -12,6 +12,7 @@ import { eventually, lightFire, Player, startServer } from "./stack.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
 import { loanTick, shopPrice } from "../server/engine/commands/shop.ts";
 import { showTick } from "../server/engine/commands/festival.ts";
+import { shipIn } from "../server/engine/commands/fishing.ts";
 
 const w = await loadWorld();
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -170,5 +171,28 @@ test("a regatta starts at a jetty, a boat stays with its owner and the sailing b
 		const island = w.rooms.find((r) => r.island && r.island !== w.rooms.find((x) => x.roomId === ca.room)!.island)!.island!;
 		await does(a, `segle ${island}`, /legst in .* an/);
 		await eventually(async () => (await char(ma)).room !== ca.room, 10_000, "sailed");
+	} finally { await srv.close(); }
+});
+
+test("the large ship keeps its timetable: half of the time it lies in the bays, and a crossing costs its fare", { timeout: 180_000 }, async () => {
+	assert.deepEqual([0, 3599_000, 3600_000, 5400_000].map((t) => shipIn(t, 7200_000)), [0, 0, 3600_000, 1800_000]);
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const line = w.liner!, home = w.rooms.find((r) => r.roomId === c.room)!.island!, away = w.rooms.find((r) => r.island && r.island !== home)!.island!;
+		const at = async (m: number) => { const e = (await s.readAll({ type: "WorldClock" }))[0]!; await s.takeIfExists({ id: e.id }, 0); await s.write({ type: "WorldClock", fields: { ...e.fields, worldAnchorMs: m, realAnchorMs: Date.now(), rate: 0.001 } as never }, null, FOREVER); };
+		await at(line.everyWorldMs * 10 + line.everyWorldMs * 0.75);
+		assert.match(await does(p, "fahrplan", "Schiff"), /kommt in etwa/);
+		assert.match(await does(p, `einschiffen ${away}`, "Schiff"), /kommt erst/);
+		await at(line.everyWorldMs * 10);
+		assert.match(await does(p, `einschiffen ${away}`, "kostet"), /kostet 3 Münzen/);
+		await give(s, me, w.currency, line.fare);
+		await does(p, `einschiffen ${away}`, /kommst in .* an/);
+		assert.notEqual((await eventually(async () => { const x = (await s.readAll({ type: "Character", fields: { charId: me } }))[0]; return x; }, 10_000, "me"))!.fields.room, c.room);
+		assert.equal(await s.count({ type: "Item", fields: { location: me, proto: w.currency } }), 0, "the fare is paid");
 	} finally { await srv.close(); }
 });

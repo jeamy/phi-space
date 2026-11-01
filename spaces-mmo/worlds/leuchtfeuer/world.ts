@@ -312,7 +312,7 @@ const NPCS: NpcDef[] = [
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 47,
+	version: 48,
 	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.en.md)
 	evening: { hour: 20 }, // a daily evening event
 	tileSize: 32,
@@ -458,6 +458,7 @@ export const world: WorldDef = {
 		{ key: "fischen", category: "Allgemein", text: "An einem Steg (der muss ans Wasser grenzen) wirft „wirf netz“ das Netz aus: meist Fisch, manchmal etwas Treibgut, selten Bernstein. Danach ruhst du wie nach anderer Arbeit. In einer Räucherei macht „craft räucherfisch“ aus zwei Fischen und Holz zwei Räucherfische. Mit „iss <ding>“ wirst du satt: Satt ruhst du nach der Arbeit kürzer, Brot hält am längsten. Hunger gibt es nicht." },
 		{ key: "jahreszeiten", category: "Allgemein", text: "Das Jahr hat Frühling, Sommer, Herbst und Winter, die Länge stellt der Betreiber ein. „time“ nennt die Jahreszeit. Im Winter wächst draußen nichts: Beete und Äcker stehen still, nichts geht verloren, im Frühling geht es weiter. Beete bis drei Felder neben einem Gewächshaus (ab Stadt, braucht Glas) wachsen durch. Das Erntefest gibt es nur im Herbst, die Blumenschau im Frühling und Sommer, Regatten nicht im Winter." },
 		{ key: "strasse", category: "Allgemein", text: "Eine Straße (ab Dorf) baut man neben einem Ausgang; sie verbindet die beiden Räume dieses Ausgangs. Ein Karren (Werkstatt) fährt nur auf Straßen: „karren stelle“ stellt ihn ab, „karren lade <ding>“ lädt bis zu 20 Stück, „karren fahre <ort>“ schickt ihn los, und er fährt allein. Dort holt „karren entlade“ die Ladung, „karren nimm“ nimmt den leeren Karren wieder mit." },
+		{ key: "fahrplan", category: "Allgemein", text: "Die Fähren fahren jederzeit nach Bedarf. Das große Schiff hält einen Fahrplan: Jede zweite Weltstunde liegt es eine Stunde in den Buchten der Inseln. „fahrplan“ sagt, wann, „einschiffen <insel>“ fährt für 3 Münzen mit." },
 		{ key: "wetter", category: "Allgemein", text: "Jede Insel hat ihren Wind: Flaute, leichte Brise, frischer Wind oder Sturm. Er ändert sich alle paar Stunden um eine Stufe, eine Sturmflut bringt sofort Sturm. „wetter“ sagt, wie er steht. Eine Mühle mahlt mit dem Wind, der weht, wenn man ihr das Korn bringt: bei Flaute halb so schnell, bei Sturm doppelt so schnell." },
 		{ key: "fest", category: "Allgemein", text: "Beim Park feiert eine Siedlung: Ein Siedler eröffnet mit „fest blumen“ eine Blumenschau oder mit „fest ernte“ ein Erntefest. Zwei Tage lang gibt jeder Registrierte am Park mit „zeige <ding>“ etwas dazu: eine Blume zur Schau, wobei eine benannte Sorte vor einer gezüchteten und diese vor einer wilden liegt, oder beliebig viel Ernte zum Fest, wobei die größte Menge siegt. Was gezeigt ist, bleibt beim Fest. Die Figuren der Welt machen mit und zählen als Teilnehmer. Machen mindestens zwei mit, wartet der Preis von 10 Münzen dort im „nachlass“; gewinnt eine Figur, bleibt es bei der Ehre. Danach ruht die Siedlung eine Woche. „pflege“ setzt einmal am Tag eine Blume in den Park: Das steht in deinem Ruf, und wer in den letzten sieben Tagen pflegte, zählt in „siedlung rang“." },
 		{ key: "rathaus", category: "Allgemein", text: "Ein Rathaus (ab Epoche Stadt) braucht Ziegel, Stein und Bohlen. Steht es in einer Siedlung, entscheiden die Siedler gemeinsam: „antrag zu“, „antrag offen“ oder „antrag <text>“ stellt daneben einen Antrag, „antrag grünzone“, „antrag wegerecht“ oder „antrag zone frei“ überall im Ort einen für die Fläche um dich: In einer Grünzone gehen nur Beete und Parks, auf einem Wegerecht gar nichts. „antrag abriss“ stellt den Bau neben dir zur Abstimmung; was von ihm bleibt, holt der Besitzer dort mit „nachlass“ ab. „antrag steuer <n>“ setzt, wie viele Münzen je Stück eine Entnahme aus dem Lagerhaus kostet; sie bleiben im Lager. „stimme ja“ oder „stimme nein“ gilt einen Tag lang. Mehr Ja als Nein trägt ihn. „siedlung zu“ allein geht dann nicht mehr." },
@@ -636,6 +637,7 @@ export const world: WorldDef = {
 	boat: { proto: "ruderboot", sail: "segelboot" },
 	sand: { tool: "spaten", makes: "sand", count: 2, tile: "." },
 	cart: { road: "strasse", proto: "karren", capacity: 20, hopWorldMs: 3600_000 },
+	liner: { everyWorldMs: 2 * 3600_000, fare: 3 },
 	wind: { stepMs: 6 * 3600_000, names: ["Flaute", "Eine leichte Brise", "Frischer Wind", "Sturm"], mill: [0.5, 1, 1.5, 2] },
 	festival: { regatta: "steg", plan: "park", showWorldMs: 2 * 24 * 3600_000, restWorldMs: 7 * 24 * 3600_000, prize: 10, careWorldMs: 24 * 3600_000, tendedWorldMs: 7 * 24 * 3600_000 },
 	chapel: { plan: "kapelle", offerings: ["perle", "bernstein", "brot", "strandnelke", "duenenrose", "nebelblume"], blessWorldMs: 24 * 3600_000 },

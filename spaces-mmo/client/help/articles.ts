@@ -498,6 +498,7 @@ Eine Insel wächst durch das, was auf ihr steht. Ausführlich unter [Dorf und Si
 | \`kredit <n> gegen <ding>\`, \`tilge\` | \`credit\`, \`repay\` | Am Kontor gegen ein Pfand leihen und zurückzahlen |
 | \`karren\` | \`cart\` | Deine Karren; \`karren stelle\`, \`karren lade\`, \`karren entlade\`, \`karren fahre <ort>\`, \`karren nimm\` |
 | \`rudere <ort>\` | \`row\` | Mit dem Ruderboot von Steg zu Steg einer Insel |
+| \`fahrplan\`, \`einschiffen <insel>\` | \`timetable\`, \`board\` | Das große Schiff nach Fahrplan, ab den Buchten |
 | \`segle <insel>\` | \`sail\` | Mit dem Segelboot vom Steg zu einer anderen Insel |
 | \`schaufle\` | | Am Strand Sand graben |
 | \`iss <ding>\` | \`eat\` | Etwas essen: Satt ruhst du nach der Arbeit kürzer |
@@ -674,6 +675,7 @@ An island grows by what stands on it. In detail under [Village and settlement](h
 | \`kredit <n> gegen <ding>\`, \`tilge\` | \`credit\`, \`repay\` | Borrow against a pledge at a counting house and pay it back |
 | \`karren\` | \`cart\` | Your carts; \`karren stelle\`, \`karren lade\`, \`karren entlade\`, \`karren fahre <ort>\`, \`karren nimm\` |
 | \`rudere <ort>\` | \`row\` | By rowing boat from jetty to jetty of an island |
+| \`fahrplan\`, \`einschiffen <insel>\` | \`timetable\`, \`board\` | The large ship on its timetable, from the bays |
 | \`segle <insel>\` | \`sail\` | By sailing boat from a jetty to another island |
 | \`schaufle\` | | Dig sand on the beach |
 | \`iss <ding>\` | \`eat\` | Eat something: sated, you rest less after work |

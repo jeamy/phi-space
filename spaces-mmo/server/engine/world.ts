@@ -129,6 +129,8 @@ export type WorldDef = {
 	sand?: { tool: string; makes: string; count: number; tile: string };
 	/** Roads and carts (engine/commands/cart.ts): `road` the plan, `proto` the cart as a thing, `capacity` its cargo, `hopWorldMs` a room of its way. */
 	cart?: { road: string; proto: string; capacity: number; hopWorldMs: number };
+	/** The large ship on a timetable (engine/commands/fishing.ts): it lies in every bay for the first half of `everyWorldMs`; ferries stay on demand. */
+	liner?: { everyWorldMs: number; fare: number };
 	festival?: FestivalDef;
 	/** Animals on the farm (docs/siedeln.en.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
 	animals?: AnimalsDef;
