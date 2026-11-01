@@ -127,6 +127,8 @@ export type WorldDef = {
 	/** A rowing boat (engine/commands/fishing.ts) goes between the jetties of an island; `sand` is dug with `tool` on `tile`. */
 	boat?: { proto: string; sail?: string };
 	sand?: { tool: string; makes: string; count: number; tile: string };
+	/** Roads and carts (engine/commands/cart.ts): `road` the plan, `proto` the cart as a thing, `capacity` its cargo, `hopWorldMs` a room of its way. */
+	cart?: { road: string; proto: string; capacity: number; hopWorldMs: number };
 	festival?: FestivalDef;
 	/** Animals on the farm (docs/siedeln.en.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
 	animals?: AnimalsDef;
@@ -145,7 +147,7 @@ export type WorldDef = {
 /** `dative`: the plan with its article as one says "neben einer Hütte" (default "einem <name>"). `epoch`: the island's
  *  epoch from which a new one may be staked out (default 1; docs/siedeln.en.md "Epochen"). */
 /** `sparesTools`: a recipe made beside it wears a tool half as fast. */
-export type PlanDef = { /** It must touch water (a jetty). */ shore?: boolean; /** Light points it adds to its fire (a lighthouse). */ lightBonus?: number; /** The admin's setting in world days that replaces `keepWorldMs` (server/settings.ts). */ keepSetting?: string; /** A green zone of a town hall admits it. */ green?: boolean; sparesTools?: boolean; store?: boolean; epoch?: number; dative?: string; key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string; chest?: number; repair: Array<{ proto: string; count: number }> };
+export type PlanDef = { /** It must stand beside an exit (a road). */ atExit?: boolean; /** It must touch water (a jetty). */ shore?: boolean; /** Light points it adds to its fire (a lighthouse). */ lightBonus?: number; /** The admin's setting in world days that replaces `keepWorldMs` (server/settings.ts). */ keepSetting?: string; /** A green zone of a town hall admits it. */ green?: boolean; sparesTools?: boolean; store?: boolean; epoch?: number; dative?: string; key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string; chest?: number; repair: Array<{ proto: string; count: number }> };
 /** `lightPoints`: what a fire's light carries; `siteWorldMs`: how long a site waits for progress; `maxSites`/`maxBuildings`: per account. */
 /** `ruinWorldMs`: how long a ruin stays; `estateWorldMs`: how long what lay in its chest waits for its owner. */
 /** A sort that grows in a bed: from seed (`seed`, a prototype) to sprout after `grow[0]`, to ripe after `grow[1]`, ripe

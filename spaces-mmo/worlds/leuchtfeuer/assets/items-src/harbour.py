@@ -88,6 +88,15 @@ def sailboat():
     return img
 
 
+def cart():
+    img, d = new()
+    d.rectangle([5, 12, 27, 20], fill=rgb("#8a6a44"), outline=OUT)
+    d.line([6, 15, 26, 15], fill=rgb("#b98a55"))
+    d.ellipse([11, 18, 21, 28], fill=rgb("#5a4028"), outline=OUT)
+    d.line([1, 10, 6, 13], fill=OUT, width=2)
+    return img
+
+
 out = sys.argv[1]
-for key, img in {"rind": cow(), "leder": leather(), "fisch": fish("#7f9fb0", "#d8e4e8"), "raeucherfisch": fish("#b0702a", "#d8a860", True), "bier": beer(), "sand": heap(), "glas": pane(), "ruderboot": boat(), "segelboot": sailboat()}.items():
+for key, img in {"rind": cow(), "leder": leather(), "fisch": fish("#7f9fb0", "#d8e4e8"), "raeucherfisch": fish("#b0702a", "#d8a860", True), "bier": beer(), "sand": heap(), "glas": pane(), "ruderboot": boat(), "segelboot": sailboat(), "karren": cart()}.items():
     img.save(f"{out}/{key}.png")

@@ -12,7 +12,7 @@ import { render } from "./engine/funcparser.ts";
 import { sceneryText, type CropDef, type SortDef, type WorldDef } from "./engine/world.ts";
 import { whereTo } from "./engine/context.ts";
 import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
-import { asFields, type EpochFields, type SeedRestFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WindFields, type WorldClockFields, type ZoneFields } from "./model.ts";
+import { asFields, type EpochFields, type SeedRestFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type CartFields, type WindFields, type WorldClockFields, type ZoneFields } from "./model.ts";
 import { bedPlantsView } from "./engine/commands/garden.ts";
 import { fieldView } from "./engine/commands/field.ts";
 import { wildKinds } from "./engine/commands/wild.ts";
@@ -31,7 +31,7 @@ export type ItemUses = { recipes: Array<{ key: string; name: string; needs: Arra
 export type PlanView = { key: string; name: string; w: number; h: number; needs: string; work: number; /** the island's epoch it needs ("Dorf"; none: the first) */ epoch?: string };
 /** A site or building (docs/siedeln.en.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
-export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed" | "field" | "animal" | "scenery" | "zone"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
+export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed" | "field" | "animal" | "scenery" | "zone" | "cart"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
 	w?: number; h?: number; /** Scenery: what it is. */ desc?: string; /** Scenery: its picture, how much work it still takes, whether it stays or is walked over. */ model?: string; left?: number; fixed?: boolean; through?: boolean; /** An exit: the place it leads to (its `name` is what `go` takes). */ to?: string; /** The owner's name as shown and their character (a name can change, an alias; the id cannot). */ owner?: string; ownerId?: string; sponsorIds?: string[]; /** What a site has hung out, with a wage per piece (`proto` "": work). */ orders?: Array<{ proto: string; name: string; left: number; pay: number }>; progress?: number; missing?: string; color?: string; /** the plan of a site, building or ruin (the 3D map draws each its own) */ plan?: string; /** the kind of animal a coop or pen houses */ herd?: string; /** a building's dog or cat on guard */ keeper?: string; /** an animal from the fog: hase, reh, fuchs, maus */ animal?: string;
 	/** A bed: its plants at their cells (relative to the bed), when it was watered and how long its plants go without
 	 *  water, whether weeds grow in it, and who may tend it besides the owner; `bedKind`: a flower bed or a community bed; `fenced`: hares keep out. An animal: the bed it came to (`target`). */
@@ -170,6 +170,7 @@ export class Gateway {
 	readonly #charRegion = new Map<string, string>();
 	readonly #regions: RegionSpaces;
 	#atlasDue: ReturnType<typeof setTimeout> | null = null;
+	#atlasGeometryDirty = false;
 	readonly #waiting = new Set<{ region: string; rev: number; ok: () => void }>();
 	#watch: Promise<void>;
 	#modelChars!: Set<string>; #modelNames!: Set<string>; #protoIcons!: Map<string, string>;
@@ -418,7 +419,7 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Wind"]) await this.#readPaged(region, space, { type }, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Wind", "Cart"]) await this.#readPaged(region, space, { type }, msgs);
 					await this.#readPaged(region, space, { type: "Msg", fields: { to: "*" } }, msgs); // #put keeps the last RECENT of each room
 					this.#advance(region, rev);
 					ready();
@@ -437,7 +438,7 @@ export class Gateway {
 						entryId = key(entryId);
 						const charId = this.#charOf.get(entryId) ?? this.#sessions.get(entryId) ?? (fields && (types?.includes("Character") || types?.includes("Session")) ? String(fields.charId) : undefined);
 						if (charId && !chars.has(charId)) chars.set(charId, this.#chars.get(charId)?.room ?? null);
-						const objId = this.#objOf.get(entryId) ?? this.#flameOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : fields && (types?.includes("Beacon") || types?.includes("Flame")) ? String(fields.beaconId) : fields && types?.includes("Scenery") ? String(fields.sceneryId) : fields && (types?.includes("Site") || types?.includes("Building") || types?.includes("Ruin")) ? String(fields.buildId) : fields && types?.includes("Bed") ? String(fields.bedId) : fields && types?.includes("Field") ? String(fields.fieldId) : fields && types?.includes("Animal") ? String(fields.animalId) : fields && types?.includes("Zone") ? String(fields.zoneId) : undefined);
+						const objId = this.#objOf.get(entryId) ?? this.#flameOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : fields && (types?.includes("Beacon") || types?.includes("Flame")) ? String(fields.beaconId) : fields && types?.includes("Scenery") ? String(fields.sceneryId) : fields && (types?.includes("Site") || types?.includes("Building") || types?.includes("Ruin")) ? String(fields.buildId) : fields && types?.includes("Bed") ? String(fields.bedId) : fields && types?.includes("Field") ? String(fields.fieldId) : fields && types?.includes("Animal") ? String(fields.animalId) : fields && types?.includes("Zone") ? String(fields.zoneId) : fields && types?.includes("Cart") ? String(fields.cartId) : undefined);
 						if (fields && types?.includes("Fog")) fogs.add(String(fields.room));
 						if (objId && !objs.has(objId)) objs.set(objId, this.#objs.get(objId)?.location ?? null);
 					};
@@ -488,7 +489,10 @@ export class Gateway {
 		else if (type === "Room") {
 			const r = fields as unknown as RoomFields, was = this.#rooms.get(r.roomId);
 			this.#rooms.set(r.roomId, r);
-			if (was && (was.ground.length !== r.ground.length || was.ground[0]!.length !== r.ground[0]!.length)) for (const c of this.#clients) if (c.room === r.roomId) this.#hello(c); // it grew
+			if (was && (was.ground.length !== r.ground.length || was.ground[0]!.length !== r.ground[0]!.length)) {
+				this.#atlasChanged(true);
+				for (const c of this.#clients) if (c.room === r.roomId) this.#hello(c);
+			}
 		}
 		else if (type === "Character") {
 			const c = fields as unknown as CharacterFields;
@@ -519,6 +523,10 @@ export class Gateway {
 			const b = fields as unknown as BeaconFields;
 			const o: ObjView = { id: b.beaconId, kind: "beacon", name: b.name, location: b.room, x: b.x, y: b.y };
 			this.#setObj(id, o);
+		}
+		else if (type === "Cart") {
+			const f = fields as unknown as CartFields;
+			this.#setObj(id, { id: f.cartId, kind: "cart", name: `Karren von ${this.#shownName(f.charId, f.ownerName)}`, location: f.room, x: f.x, y: f.y, glyph: { shape: "square", color: "#8a6a44" }, icon: "items/karren.png" });
 		}
 		else if (type === "Zone") {
 			const z = fields as unknown as ZoneFields;
@@ -641,7 +649,7 @@ export class Gateway {
 
 	/** The overview: the rooms with a place on it (rooms builders dug have none) and the ways between them. */
 	#atlas(): AtlasView {
-		const rooms = [...this.#rooms.values()].filter((r) => r.map).map((r) => ({ roomId: r.roomId, name: r.name, island: r.island ?? "", x: r.map!.x, y: r.map!.y, ground: r.ground, fires: this.w.beacons.filter((b) => b.room === r.roomId).map(({ x, y }) => ({ x, y })) }));
+		const rooms = [...this.#rooms.values()].filter((r) => r.map).map((r) => ({ roomId: r.roomId, name: r.name, island: r.island ?? "", x: r.map!.x, y: r.map!.y, ground: r.ground, fires: [...this.#objs.values()].filter((o) => o.kind === "beacon" && o.location === r.roomId).map(({ x, y }) => ({ x, y })) }));
 		const placed = new Set(rooms.map((r) => r.roomId)), links = new Map<string, [string, string]>();
 		for (const e of this.w.exits) if (placed.has(e.room) && placed.has(e.destination)) links.set([e.room, e.destination].sort().join(" "), [e.room, e.destination].sort() as [string, string]);
 		return { rooms, links: [...links.values()] };
@@ -672,12 +680,17 @@ export class Gateway {
 	}
 
 	/** Something on the overview changed: its state goes out to every client once the short pause is over. */
-	#atlasChanged(): void {
+	#atlasChanged(geometry = false): void {
+		this.#atlasGeometryDirty ||= geometry;
 		if (this.#atlasDue) return;
 		this.#atlasDue = setTimeout(() => {
 			this.#atlasDue = null;
-			const owned = this.#owned();
-			for (const c of this.#clients) if (c.atlas) c.ws.send({ t: "atlasState", state: this.#atlasState(c, owned) } satisfies ServerFrame);
+			const owned = this.#owned(), atlas = this.#atlasGeometryDirty ? this.#atlas() : null;
+			this.#atlasGeometryDirty = false;
+			for (const c of this.#clients) if (c.atlas) {
+				if (atlas) c.ws.send({ t: "atlas", atlas } satisfies ServerFrame);
+				c.ws.send({ t: "atlasState", state: this.#atlasState(c, owned) } satisfies ServerFrame);
+			}
 		}, ATLAS_MS);
 		this.#atlasDue.unref?.();
 	}

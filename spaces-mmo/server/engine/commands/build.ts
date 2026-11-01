@@ -250,7 +250,8 @@ export const bau: Command = {
 		const room = await roomOf(c);
 		const tries = m[2] !== undefined ? [{ x: Number(m[2]), y: Number(m[3]), w: plan.w, h: plan.h }] : besides(c, plan);
 		let rect: Rect | null = null, why = "";
-		for (const r of tries) { const no = (await refusal(c, room, r, !!plan.green, !!plan.green)) ?? (plan.shore && !touchesWater(c.world, room, r) ? "Das muss ans Wasser grenzen." : null); if (!no) { rect = r; break; } why ||= no; }
+		const exits = plan.atExit ? await exitsHere(c) : [];
+		for (const r of tries) { const no = (await refusal(c, room, r, !!plan.green, !!plan.green)) ?? (plan.shore && !touchesWater(c.world, room, r) ? "Das muss ans Wasser grenzen." : plan.atExit && !exits.some((x) => distTo(x.f, r) <= 1) ? "Eine Straße beginnt neben einem Ausgang." : null); if (!no) { rect = r; break; } why ||= no; }
 		if (!rect) throw new CommandError(`Hier passt keine ${plan.name} hin: ${why}`);
 		const buildId = randomBytes(6).toString("hex"), now = await worldNowOf(c.space, c.txn);
 		for (const p of cells(rect)) {

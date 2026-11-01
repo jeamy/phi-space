@@ -163,7 +163,7 @@ gleichwertig sind — die Gartenzeilen führt der Abschnitt „Gärten“ weiter
 | --- | --- |
 | **Straße** | verbindet Räume über Inselgrenzen nicht, aber innerhalb einer Insel; Karren fahren darauf |
 | **Karren, Fuhrwerk** | ein Automat ([automaten.md](../automaten.en.md)) mit Ladung, der eine Route fährt |
-| **Fährlinie mit Fahrplan** | Fähren fahren zu Zeiten, die Überfahrt ist ein eigener Raum ([welt.md](../welt.en.md), „Noch offen“) |
+| **Schiffe mit Fahrplan** | Fähren fahren nach Bedarf jederzeit; nur große Schiffe halten einen Fahrplan, die Überfahrt ein eigener Raum ([welt.en.md](welt.en.md), „Noch offen“) |
 | **Inselbahn** | Gleise sind Zellen, ein Zug ist ein Automat mit Fahrplan; Bahnhöfe sind Ausgänge; Ladung wie ein Lagerhaus auf Rädern |
 | **Signalfeuer-Kette** | Feuer, die sich gegenseitig sehen, teilen ihr Licht: eine Kette brennt nur, solange jedes Glied brennt |
 | **Botanischer Garten** | Sammelort seltener Sorten, Saatgut-Archiv aller Inseln, Ort der Züchter |
@@ -1084,7 +1084,8 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
    - **Ruderboot (gebaut, `fishing.ts`):** Ein Rezept der Werkstatt; `rudere <ort>` fährt von Steg zu Steg der Insel. Es bleibt ein Ding im Gepäck, ohne Luke. Offen: Werft, Segelboote in andere Regionen, Regatta.
    - **Werft, Segelboot, Regatta (gebaut):** Die Werft ist ein Plan am Ufer mit dem Rezept für das Segelboot; `segle <insel>` fährt vom Steg in die Bucht jeder Insel, über Regionen hinweg per Übergabe. `fest regatta` eröffnet am Steg eine Regatta, `zeige <boot>` meldet ein Boot, das bei seinem Besitzer bleibt; ein Segelboot schlägt ein Ruderboot, unter Gleichen entscheidet das Glück. Abweichungen: keine Bojen und kein Kurs, das Rennen wird am Ende gezählt; ein Boot hat keine Luke.
    - **Offen in diesem Schritt:** Hopfen, die Luke eines Boots, Lieferaufträge und Steuer des Kaufhauses.
-8. **Straßen, Karren, Fahrplan-Fähren**, dann die **Inselbahn** als Automat.
+8. **Straßen, Karren, große Schiffe mit Fahrplan** (Fähren bleiben nach Bedarf), dann die **Inselbahn** als Automat.
+   - **Straßen und Karren (gebaut, `server/engine/commands/cart.ts`):** Eine Straße ist ein Plan ab dem Dorf neben einem Ausgang und verbindet die beiden Räume dieses Ausgangs. Ein Karren kommt aus der Werkstatt; `karren lade`, `karren fahre <ort>`, `karren entlade`. Er fährt einen Raum je Weltstunde mit bis zu 20 Stück, allein, soweit die Straßen reichen. Abweichungen: Der Besitzer fährt ihn per Befehl, keine feste Route; er ist kein Automat mit Budget nach automaten.en.md; Karren verlassen die Region nicht.
 
 ### Spätere Einstellungen und Ansichten
 

@@ -35,6 +35,7 @@ import { motionTick } from "./engine/commands/townhall.ts";
 import { showTick } from "./engine/commands/festival.ts";
 import { byPeoplesPace, seasonTick, syncRates } from "./engine/clock.ts";
 import { growthTick } from "./engine/commands/growth.ts";
+import { cartTick } from "./engine/commands/cart.ts";
 import { loanTick } from "./engine/commands/shop.ts";
 import { stormRaisesWind, windTick } from "./engine/commands/wind.ts";
 import { fieldTick } from "./engine/commands/field.ts";
@@ -71,7 +72,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		market: job(() => marketTick(space)),
 		storm: job(async (live) => { if (!(await byPeoplesPace(space))) return; const room = await stormTick(space, live, msgLeaseMs); await stormFillsBarrels(space, live, room); await stormTurnsMills(space, live, room); await stormRaisesWind(space, live, room, msgLeaseMs); }),
 		wind: job(async (live) => { if (process.env.SPACES_MMO_WIND !== "0") await windTick(space, live, msgLeaseMs); }),
-		garden: job(async (live) => { await gardenTick(space, live); await fieldTick(space, live, msgLeaseMs); }),
+		garden: job(async (live) => { await gardenTick(space, live); await fieldTick(space, live, msgLeaseMs); await cartTick(space, live, msgLeaseMs); }),
 		wild: job(async (live) => { await wildTick(space, live, msgLeaseMs); }),
 		epoch: async () => {
 			await job(async (live) => { await epochTick(space, live, msgLeaseMs); await settlementTick(space, live, msgLeaseMs); await motionTick(space, live, msgLeaseMs); await showTick(space, live, msgLeaseMs); await loanTick(space, live, msgLeaseMs); await seasonTick(space, live, msgLeaseMs); })();

@@ -75,5 +75,5 @@ it (`items/tuch.png`, `items/decke.png`, `items/kaese.png`), the other wild from
 same way, by the script `items-src/garden.py` (same license as this project).
 
 
-The harbour's things (`items/rind.png`, `items/leder.png`, `items/fisch.png`, `items/raeucherfisch.png`, `items/bier.png`, `items/sand.png`, `items/glas.png`, `items/ruderboot.png`, `items/segelboot.png`) were drawn the same way, by the
+The harbour's things (`items/rind.png`, `items/leder.png`, `items/fisch.png`, `items/raeucherfisch.png`, `items/bier.png`, `items/sand.png`, `items/glas.png`, `items/ruderboot.png`, `items/segelboot.png`, `items/karren.png`) were drawn the same way, by the
 script `items-src/harbour.py` (same license as this project).

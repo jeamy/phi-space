@@ -143,7 +143,7 @@ export function MapView3D(props: MapRendererProps) {
 			resize(s);
 		})();
 		return () => { dead = true; };
-	}, [ready, props.room.roomId, props.world.id]);
+	}, [ready, props.room, props.world]);
 
 	useEffect(() => { if (state.current) sync(state.current, props.chars, props.objs, props.me, false); }, [props.chars, props.objs, props.me]);
 	useEffect(() => { if (state.current) applyFog(state.current, props.fog); }, [props.fog, ready]);
@@ -305,6 +305,17 @@ function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
 function object(t: T, obj: ObjView, me: string): Entry {
 	const group = new t.Group(); group.userData.owned = true;
 	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" || obj.kind === "field" || obj.kind === "building" ? { sig: bedSig(obj) } : {}) };
+	if (obj.kind === "cart") {
+		// a two-wheeled cart: a box of planks on an axle, its shafts on the ground
+		const wood = new t.MeshStandardMaterial({ color: 0x8a6a44, roughness: 1 }), dark = new t.MeshStandardMaterial({ color: 0x4a3522, roughness: 1 });
+		const box = new t.Mesh(new t.BoxGeometry(0.7, 0.22, 0.46), wood); box.position.y = 0.34; group.add(box);
+		for (const z of [-0.26, 0.26]) {
+			const wheel = new t.Mesh(new t.CylinderGeometry(0.2, 0.2, 0.05, 12), dark); wheel.rotation.x = Math.PI / 2; wheel.position.set(0, 0.2, z); group.add(wheel);
+			const shaft = new t.Mesh(new t.BoxGeometry(0.42, 0.04, 0.04), dark); shaft.position.set(0.52, 0.16, z * 0.8); shaft.rotation.z = -0.35; group.add(shaft);
+		}
+		group.add(propShadow(t, 0.7, 0.5));
+		return e;
+	}
 	if (obj.kind === "zone") {
 		// a zone of the town hall: a tint just above the ground
 		const tint = new t.Mesh(new t.BoxGeometry(obj.w ?? 1, 0.01, obj.h ?? 1), new t.MeshBasicMaterial({ color: Number.parseInt((obj.color ?? "#5fbf6a").slice(1), 16), transparent: true, opacity: 0.22, depthWrite: false }));

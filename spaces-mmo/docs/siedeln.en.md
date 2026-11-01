@@ -177,7 +177,7 @@ By epochs; each level presupposes the previous one. Buildings and gardens are in
 | --- | --- |
 | **Road** | connects rooms not across island borders, but within an island; carts drive on it |
 | **Cart, wagon** | an automaton ([automaten.en.md](automaten.en.md)) with cargo that drives a route |
-| **Ferry line with timetable** | ferries run at set times, the crossing is a room of its own ([welt.en.md](welt.en.md), "Noch offen") |
+| **Ships with timetable** | ferries run on demand at any time; only large ships keep a timetable, the crossing a room of their own ([welt.en.md](welt.en.md), "Noch offen") |
 | **Island railway** | tracks are cells, a train is an automaton with a timetable; stations are exits; cargo like a storehouse on wheels |
 | **Signal fire chain** | fires that see each other share their light: a chain burns only as long as every link burns |
 | **Botanical garden** | gathering place of rare varieties, seed archive of all islands, place of the breeders |
@@ -1085,7 +1085,8 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
    - **Rowing boat (built, `fishing.ts`):** A workshop recipe; `rudere <ort>` goes from a jetty to a jetty of the island. It stays a thing in the pack, with no hatch, and the owner needs one. Open: the shipyard, sailing boats to other regions, the regatta.
    - **Shipyard, sailing boat, regatta (built):** The shipyard is a plan at the shore with a recipe for the sailing boat; `segle <insel>` goes from a jetty to the bay of any island, across regions by the handover. `fest regatta` opens a regatta at a jetty, `zeige <boot>` enters a boat, which stays with its owner; a sailing boat beats a rowing boat, and luck decides among equals. Deviations: no buoys and no course, the race is counted at the end; a boat has no hatch.
    - **Open in this step:** hops, a boat's cargo hatch, delivery orders and tax of the store.
-8. **Roads, carts, timetable ferries**, then the **island railway** as automaton.
+8. **Roads, carts, large ships with a timetable** (ferries stay on demand), then the **island railway** as automaton.
+   - **Roads and carts (built, `server/engine/commands/cart.ts`):** A road is a plan from the village epoch beside an exit and links the two rooms of that exit. A cart comes from the workshop; `karren lade`, `karren fahre <ort>`, `karren entlade`. It goes a room per world hour with up to 20 pieces, alone, within what the roads reach. Deviations: its owner drives it by command, no standing route; it is no automaton of the budget of automaten.en.md; carts do not leave a region.
 
 ### Later settings and views
 

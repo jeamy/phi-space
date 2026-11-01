@@ -4,6 +4,7 @@ import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER, type SpaceLike } from "phi-spaces";
+import { pinTerrain } from "../server/engine/room-growth.ts";
 import { freeSide, grownDecor, grownGround, growthTick } from "../server/engine/commands/growth.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import { initialClock } from "../server/engine/worldtime.ts";
@@ -74,4 +75,35 @@ test("a fire carries 20 and grows with a builder; two animal houses are the most
 		await give(s, me, "rind");
 		assert.match(await does(p, "einstallen rind", "braucht"), /Rinder braucht/);
 	} finally { await srv.close(); }
+});
+
+
+test("room growth refreshes the open map and atlas with the persisted fire position", { timeout: 120_000 }, async () => {
+	const srv = await startServer();
+	const p = new Player(srv.url);
+	try {
+		assert.equal((await p.post("/api/register", { name: "Wachstum", password: "geheim-123" })).status, 200);
+		const hello = await p.play(), s = srv.stack.space, roomId = hello.room.roomId;
+		const width = hello.room.ground[0]!.length, height = hello.room.ground.length;
+		const txn = (await s.createTransaction(10_000)).id;
+		try {
+			await pinTerrain(s, txn);
+			const r = (await s.takeIfExists({ type: "Room", fields: { roomId } }, 0, { txn }))!;
+			await s.write({ type: "Room", fields: { ...r.fields, ground: grass(width, height) } as never }, txn, FOREVER);
+			const fire = (await s.takeIfExists({ type: "Beacon", fields: { room: roomId } }, 0, { txn }))!;
+			await s.write({ type: "Beacon", fields: { ...fire.fields, x: width - 1, y: 8 } as never }, txn, FOREVER);
+			await s.write({ type: "Exit", fields: { exitId: "growth-edge", name: "Test edge", aliases: [], desc: "", location: roomId, destination: roomId, x: width - 1, y: 8, arrive: { x: 1, y: 8 }, locks: "" } }, txn, FOREVER);
+			await s.commit(txn);
+		} catch (e) { await s.abort(txn).catch(() => {}); throw e; }
+		const from = p.frames.length;
+		await eventually(async () => {
+			if (((await s.readAll({ type: "Room", fields: { roomId } }))[0]!.fields.ground as string[])[0]!.length > width) return true;
+			await growthTick(s, { ...w, growth: { ...w.growth!, fullShare: 0 } }, 60_000);
+			return false;
+		}, 30_000, "the room grew");
+		const changed = await p.until((f) => f.t === "hello" && f.room.roomId === roomId && f.room.ground[0]!.length > width, 10_000, from) as Extract<ServerFrame, { t: "hello" }>;
+		assert.equal(changed.objs.find((o) => o.kind === "beacon")!.x, width - 1 + w.growth!.strip);
+		const atlas = await p.until((f) => f.t === "atlas" && !!f.atlas.rooms.find((r) => r.roomId === roomId && r.ground[0]!.length > width), 10_000, from) as Extract<ServerFrame, { t: "atlas" }>;
+		assert.ok(atlas.atlas.rooms.find((r) => r.roomId === roomId)!.fires.some((f) => f.x === width - 1 + w.growth!.strip));
+	} finally { await p.leave().catch(() => {}); await srv.close(); }
 });

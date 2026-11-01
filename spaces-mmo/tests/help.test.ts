@@ -13,6 +13,7 @@ import { CHAPEL_COMMANDS } from "../server/engine/commands/chapel.ts";
 import { TOWNHALL_COMMANDS } from "../server/engine/commands/townhall.ts";
 import { FESTIVAL_COMMANDS } from "../server/engine/commands/festival.ts";
 import { WIND_COMMANDS } from "../server/engine/commands/wind.ts";
+import { CART_COMMANDS } from "../server/engine/commands/cart.ts";
 import { FOOD_COMMANDS } from "../server/engine/commands/food.ts";
 import { SHOP_COMMANDS } from "../server/engine/commands/shop.ts";
 import { FISHING_COMMANDS } from "../server/engine/commands/fishing.ts";
@@ -56,7 +57,7 @@ test("help links point at existing articles and anchors", () => {
 });
 
 test("every command in the command tables exists in the engine, under its English and German names", () => {
-	const known = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...FESTIVAL_COMMANDS, ...WIND_COMMANDS, ...FOOD_COMMANDS, ...SHOP_COMMANDS, ...FISHING_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...SETTLEMENT_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
+	const known = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...FESTIVAL_COMMANDS, ...WIND_COMMANDS, ...CART_COMMANDS, ...FOOD_COMMANDS, ...SHOP_COMMANDS, ...FISHING_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...SETTLEMENT_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
 	known.add("help"); known.add("hilfe"); known.add("?"); // helpCommand is built per room
 	// the chat's words never reach the engine: the gateway catches them (server/chat.ts)
 	for (const w of /\^\(([^)]+)\)/.exec(CHAT_LINE.source)![1]!.split("|")) known.add(w);

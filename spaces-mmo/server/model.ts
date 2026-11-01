@@ -64,6 +64,8 @@ export type FireBuilderFields = { beaconId: string; accountId: string; atWorldMs
 export type SatedFields = { charId: string; untilWorldMs: number };
 /** A loan of a counting house (engine/commands/shop.ts): its pledge lies at `loanId`; `untilWorldMs` in the second clock. */
 export type LoanFields = { loanId: string; buildId: string; room: string; accountId: string; charId: string; charName: string; owed: number; untilWorldMs: number };
+/** A cart (engine/commands/cart.ts): its cargo lies at `cartId`, `path` the rooms still ahead, the next at `dueWorldMs`. */
+export type CartFields = { cartId: string; accountId: string; charId: string; ownerName: string; room: string; x: number; y: number; path: string[]; dueWorldMs: number };
 export type WindFields = { island: string; level: number };
 export type ShowKind = "blumen" | "ernte" | "regatta";
 export type ShowFields = { showId: string; room: string; settlementId: string; settlementName: string; kind: ShowKind; byName: string; endsWorldMs: number };
