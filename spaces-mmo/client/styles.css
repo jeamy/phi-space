@@ -214,7 +214,10 @@ button.link:hover { transform: none; text-decoration: underline; }
 .atlas > * { pointer-events: auto; }
 .atlas canvas { width: min(250px, 44vw); height: auto; image-rendering: pixelated; border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 4px 16px var(--shadow); cursor: zoom-in; display: block; }
 .atlas.big { z-index: 12; }
-.atlas.big canvas { width: min(1008px, calc(100vw - 48px), calc((100dvh - 170px) * 1.6)); cursor: zoom-out; }
+.atlas.big canvas { width: min(1008px, calc(100vw - 48px), calc((100dvh - 250px) * 1.6)); cursor: zoom-out; }
+/* what the picked room says and the beam button: a bar of its own, readable over the map's scene */
+.atlas .atlas-info { box-sizing: border-box; width: 100%; padding: 6px 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line-strong); box-shadow: 0 4px 16px var(--shadow); flex-wrap: wrap; justify-content: flex-start; }
+.atlas .atlas-info > div { flex: 1 1 160px; min-width: 0; }
 .atlas-toggle { font-size: 12px; padding: 2px 8px; background: color-mix(in srgb, var(--surface) 85%, transparent); }
 .atlas-label { font-size: 12px; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--text-strong); }
 .main.text-only .atlas { position: static; }

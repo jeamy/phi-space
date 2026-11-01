@@ -170,7 +170,7 @@ export function Atlas({ atlas, state, page = false, me = null, onBeam }: { atlas
 				<canvas ref={canvas} aria-label={`Übersichtskarte${here ? `, du bist in ${here.name} (${here.island})` : ""}`} role="img"
 					onClick={(e) => { if (!big) setBig(true); else setPicked(roomAt(e as unknown as React.PointerEvent<HTMLCanvasElement>)?.roomId ?? null); }}
 					onPointerMove={(e) => setHover(roomAt(e)?.roomId ?? null)} onPointerLeave={() => setHover(null)} />
-				{label && <div className="atlas-label">{label.name} · {label.island}</div>}
+				{label && !(big && picked) && <div className="atlas-label">{label.name} · {label.island}</div>}
 				{big && picked && (() => { const r = atlas.rooms.find((x) => x.roomId === picked); return r ? <div className="atlas-info"><div><b>{r.name} · {r.island}</b><small>{state?.lit.includes(r.roomId) ? "Feuer brennt" : "Das Feuer ist aus"}</small></div>{beamButton(r)}<button onClick={() => setBig(false)}>Kleiner</button></div> : null; })()}
 			</>}
 		</div>

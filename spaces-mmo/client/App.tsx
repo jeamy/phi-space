@@ -920,6 +920,9 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	// the search for seeds rests a while in the room it was made (server: garden.ts): the page does not offer it then
 	const searching = trade?.seedRestUntilWorldMs ?? 0, resting = !!worldTime && searching > shownWorldMs(worldTime.v, worldTime.at, Date.now());
 	const wildNow = (decor: Parameters<typeof wildHere>[0], roomDecor: Parameters<typeof wildHere>[1]) => (resting ? false : wildHere(decor, roomDecor));
+	// the epoch of the island the player stands on (the world map's state names each island's), for the header
+	const islandHere = atlas?.rooms.find((r) => r.roomId === hello?.room.roomId)?.island;
+	const epochHere = islandHere && atlasState?.epochs ? atlasState.epochs[islandHere] ?? 1 : null;
 	const menus = <>
 		{menu && hello && <CellMenu at={menu} wild={wildNow(hello.world.decor, hello.room.decor)} sheet onWalk={walkTo} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
 			chat={{ talk: (name) => send(`chat ${name}`, false), invite: (name, g) => send(`gruppe lade ${name} in ${g}`), groups: account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? []) }} />}
@@ -1055,6 +1058,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				<div className="hud">
 					<button className="hud-pill" onClick={() => setAtlasPage(true)} disabled={!atlas || atlas.rooms.length < 2} aria-label="Weltkarte öffnen">
 						<span className={`live${live ? " on" : ""}`} /><b>{hello?.room.name ?? ""}</b>
+						{epochHere !== null && <small className="epoch">Epoche: {epochHere}</small>}
 						{worldTime && <small>{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}{(() => { const i = seasonIndex(shownWorldMs(worldTime.v, worldTime.at, Date.now()), worldTime.v.yearDays ?? 0); return i === null ? "" : ` · ${tr(SEASONS[i]!)}`; })()}{wind ? ` · ${tr(wind)}` : ""}</small>}
 					</button>
 					<span className="spacer" />

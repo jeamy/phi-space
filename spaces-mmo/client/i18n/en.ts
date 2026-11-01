@@ -1,5 +1,6 @@
 // The English of the game, by its German (scripts/i18n-extract.ts lists the German; {0}, {1} … are values, {9} a name).
 export const EN: Record<string, string> = {
+	"Epoche: {0}": "Epoch: {0}",
 	"Hierher beamen · {0} Münze": "Beam here · {0} coin",
 	"Hierher beamen · {0} Münzen": "Beam here · {0} coins",
 	"Das Feuer ist aus": "The fire is out",

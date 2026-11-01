@@ -44,6 +44,8 @@ test("beam: to a burning fire from anywhere, for coins, with a pause", { timeout
 		assert.match(await does(p, "beam", "Hierhin kannst du"), /Anleger/);
 		// the map's state carries the price per field
 		await eventually(async () => p.frames.some((f) => f.t === "atlasState" && typeof f.state.beamCost === "number") || null, 10_000, "the atlas state with the beam cost");
+		// and the epochs of the islands, for the header (an island that never left the first has no entry)
+		assert.ok(p.frames.some((f) => f.t === "atlasState" && f.state.epochs !== null && typeof f.state.epochs === "object"), "the atlas state names the epochs");
 		assert.match(await does(p, "beam anleger", "ist aus"), /Das Feuer in Anleger ist aus/);
 		await lightFire(s, 3_600_000, "feuer-anleger");
 		assert.match(await does(p, "beam anleger", "kostet"), new RegExp(`kostet ${cost} Münze`));
