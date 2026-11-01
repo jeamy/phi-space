@@ -632,6 +632,33 @@ impl Service {
 			Ok(r) => r.map(|c| c.value),
 		}
 	}
+	/// A named Space and what `op` sets in it, in one commit, under the boot guard: a Space no permit names yet is refused.
+	pub fn create_space_with(&mut self, alias: &str, random: phi_core::space::Random, op: impl FnOnce(&mut Space, f64) -> R<()>) -> R<Json> {
+		let now = self.now();
+		let guard = self.o.guard.clone();
+		self.store.create_space_with(alias, now, random, |s| {
+			if let Some(g) = &guard {
+				g.host()?;
+				g.space(s)?;
+			}
+			op(s, now)
+		}).map_err(store_failed)?
+	}
+	/// The delete step of a Space's lifecycle, under the boot guard; `op` decides.
+	pub fn delete_space<T>(&mut self, id: &str, op: impl FnOnce(&mut Space, f64) -> R<T>) -> R<T> {
+		let now = self.now();
+		let guard = self.o.guard.clone();
+		match self.store.delete_space(id, now, |s| {
+			if let Some(g) = &guard {
+				g.host()?;
+				g.space(s)?;
+			}
+			op(s, now)
+		}) {
+			Err(e) => Err(store_failed(e)),
+			Ok(r) => r.map(|c| c.value),
+		}
+	}
 	fn snap(&mut self, c: &Ctx) -> R<&mut Space> { self.snap_of(c.space.as_deref()) }
 	fn snap_of(&mut self, space: Option<&str>) -> R<&mut Space> {
 		let guard = self.o.guard.clone();

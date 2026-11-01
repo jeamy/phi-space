@@ -10,6 +10,7 @@
 //  "enrollment"?, "controlAccess"?, "supervisor"?, "serviceClock"?, "grants"?: {"authorityId", "hostId", "seed", "publicKey"},
 //  "runGates"?: {"authorityId", "peerId", "seed", "controller", "controllerKey"},
 //  "membership"?: {"memberId", "spaceId", "authorityId", "peerId", "seed", "controller", "controllerKey"},
+//  "spaceLifecycle"?: {"hostId", "authorityId", "peerId", "seed", "controller", "controllerKey"},
 //  "delegation"?: {"authorityId", "controlSpaceId", "supervisor", "supervisorKey", "issuer", "grantKey", "policyFile"},
 //  "boot"?: {"hostId", "authorityId", "external", "installed"}}}
 //
@@ -191,6 +192,13 @@ fn gate(g: &Json, policy: &phi_service::Policy) -> Result<Gated, String> {
 		let seed: [u8; 32] = phi_host::auth::base64(&part("seed")?).try_into().map_err(|_| "a seed is 32 bytes")?;
 		let control = phi_host::run_member::Pin { issuer: part("controller")?, algorithm: phi_host::auth::Algorithm::Ed25519, public_key: part("controllerKey")? };
 		o.lifecycle = Some(phi_host::membership::MemberLifecycle::new(&part("memberId")?, &part("spaceId")?, &part("authorityId")?, &part("peerId")?, phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)), control, Box::new(|_| Ok(()))));
+	}
+	if let Some(m) = g.get("spaceLifecycle") {
+		let part = |k: &str| m.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("spaceLifecycle without {k}"));
+		let seed: [u8; 32] = phi_host::auth::base64(&part("seed")?).try_into().map_err(|_| "a seed is 32 bytes")?;
+		let control = phi_host::run_member::Pin { issuer: part("controller")?, algorithm: phi_host::auth::Algorithm::Ed25519, public_key: part("controllerKey")? };
+		let check = o.boot.clone();
+		o.spaces = Some(phi_host::space_lifecycle::SpaceLifecycleService::new(&part("hostId")?, &part("authorityId")?, &part("peerId")?, phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)), control, Box::new(move |_| check.as_ref().map_or(Ok(()), |b| b.assert_active()))));
 	}
 	let host = text("host").ok_or("the gate names no host")?;
 	let front: Rc<dyn phi_wire::Front> = Gate::new(host, o)?;

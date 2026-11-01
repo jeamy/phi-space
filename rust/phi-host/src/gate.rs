@@ -207,6 +207,7 @@ pub struct GateOptions {
 	pub run_gates: Option<crate::run_member::RunGates>,
 	/// Signed membership instructions of the Control host.
 	pub lifecycle: Option<crate::membership::MemberLifecycle>,
+	pub spaces: Option<crate::space_lifecycle::SpaceLifecycleService>,
 	/// Who takes the epoch notices of the supervisor.
 	pub delegation: Option<Rc<crate::delegation::DelegationVerifier>>,
 	/// The boot guard, read before each call.
@@ -224,7 +225,7 @@ pub struct GateOptions {
 
 impl GateOptions {
 	pub fn new(directory: Rc<Netbird>, now: Now) -> GateOptions {
-		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, delegation: None, boot: None, remote_keys: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
+		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, spaces: None, delegation: None, boot: None, remote_keys: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
 	}
 }
 
@@ -559,6 +560,15 @@ impl Session for GateSession {
 			if let Some(gates) = &self.gate.o.run_gates {
 				return Some(self.notice(|service, q| gates.apply(service, q), service, &call).to_json_text());
 			}
+		}
+		if method == "spaceLifecycleInstruction" {
+			if let Some(spaces) = &self.gate.o.spaces {
+				return Some(self.notice(|service, q| spaces.apply(service, q), service, &call).to_json_text());
+			}
+		}
+		// an instruction this host was not given must not pass for a call it does not know
+		if let Some(what) = [("membershipInstruction", "membership"), ("runGateInstruction", "run gates"), ("spaceLifecycleInstruction", "space lifecycle")].iter().find(|(m, _)| *m == method).map(|(_, w)| w) {
+			return Some(self.notice(|_, _| Err(phi_core::space::error("Error", format!("{what} not configured"))), service, &call).to_json_text());
 		}
 		if let (Some(enrolling), "enroll" | "enrollStatus") = (&self.gate.o.enrolling, method) {
 			let unpaired = self.roles.iter().any(|r| r == crate::control::UNPAIRED_ROLE);

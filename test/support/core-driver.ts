@@ -75,6 +75,7 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 		case "setLimits": return core.setLimits(s, l.limits, now);
 		case "setCompletionProfiles": core.setCompletionProfiles(s, l.profiles, now); return null;
 		case "setMembership": s.membership = l.membership; return null;
+		case "setArchived": if (l.archived) s.archived = l.archived; else delete s.archived; return null;
 		case "permitRoutedWrite": permitRoutedWrite(s, l.proven === true); return null;
 		case "recoverRunGate": return core.recoverRunGate(s, now, l.o);
 		case "applyRunGate": return core.applyRunGate(s, now, l.command);

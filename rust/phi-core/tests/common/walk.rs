@@ -48,6 +48,7 @@ pub struct Walk {
 	revisions: [f64; 3],
 	/// The space is a Member under a policy, whose state moves.
 	member: bool,
+	archived: bool,
 }
 
 const TYPES: [&str; 3] = ["Task", "Job", "Note"];
@@ -561,6 +562,12 @@ impl Walk {
 		}
 		if self.member && self.rng.chance(0.01) {
 			self.episode.push_back(obj! { "op" => "permitRoutedWrite", "proven" => self.rng.chance(0.5) });
+			return self.line(rev);
+		}
+		if self.rng.chance(if self.archived { 0.1 } else { 0.005 }) {
+			self.archived = !self.archived;
+			let archived = if self.archived { obj! { "at" => self.now, "commandId" => "a" } } else { Json::Null };
+			self.episode.push_back(obj! { "op" => "setArchived", "archived" => archived });
 			return self.line(rev);
 		}
 		if self.rng.chance(0.01) {

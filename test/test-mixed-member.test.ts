@@ -10,13 +10,18 @@ import net from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONTROL_SPACE, FOREVER, GrantAuthority, RemoteSpace, SqliteRecoveryRegister, SpaceKeyDirectory, core, createSpace, generateKey, listSpaces, provisionFileSigner, serveTlsRegister, socketTransport, spaceDoc, startConfiguredFederation, type Signer } from "../src/index.ts";
+import { RouterLeaseAuthority, delegationForCall, signDelegation } from "../src/delegation.ts";
+import { FederationRouting, applyFederationPolicyIn } from "../src/federation-policy.ts";
+import { signMembership } from "../src/membership.ts";
+import { signRun } from "../src/run-member.ts";
+import { signLifecycle } from "../src/space-lifecycle.ts";
 import { openSqliteHost } from "../src/store/sqlite.ts";
 import { ctx } from "./support/persistent.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CMD = process.env.PHI_SPACES_SERVER_CMD?.trim() ? process.env.PHI_SPACES_SERVER_CMD.trim().split(/\s+/) : null;
 const peer = (id: string, ip: string, groups: string[]) => ({ id, name: id, ip, connected: true, groups: groups.map((g) => ({ id: `g-${g}`, name: g })) });
-const CONTROL_IP = "127.0.0.5", MEMBER_IP = "127.0.0.1", USER_IP = "127.0.0.3"; // a host reaches its control host from the Member address: on loopback that is 127.0.0.1
+const CONTROL_IP = "127.0.0.5", MEMBER_IP = "127.0.0.1", USER_IP = "127.0.0.3", ROUTER_IP = "127.0.0.4"; // a host reaches its control host from the Member address: on loopback that is 127.0.0.1
 const freePort = () => new Promise<number>((r) => { const s = net.createServer(); s.listen(0, "127.0.0.1", () => { const { port } = s.address() as net.AddressInfo; s.close(() => r(port)); }); });
 
 function pki(dir: string) {
@@ -40,13 +45,13 @@ async function setup(tc: TestContext) {
 	tc.after(() => external.close());
 	const register = await serveTlsRegister(external, { ...certs.identity("server"), host: "127.0.0.1", port: 0, peers: { [certs.print("control")]: {}, [certs.print("member")]: {} } });
 	tc.after(() => register.close());
-	const peers = [peer("control-peer", CONTROL_IP, ["space-hosts"]), peer("member-peer", MEMBER_IP, ["space-hosts"]), peer("user", USER_IP, ["space-hosts"])];
+	const peers = [peer("control-peer", CONTROL_IP, ["space-hosts"]), peer("member-peer", MEMBER_IP, ["space-hosts"]), peer("user", USER_IP, ["space-hosts"]), peer("router-peer", ROUTER_IP, ["space-hosts"])];
 	const management = http.createServer((_req, res) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(peers)); });
 	await new Promise<void>((r) => management.listen(0, "127.0.0.1", r));
 	tc.after(() => { management.closeAllConnections(); management.close(); });
 	writeFileSync(join(dir, "token"), "t", { mode: 0o600 });
 	const controlKey = provisionFileSigner(join(dir, "control.json")), memberKey = provisionFileSigner(join(dir, "member.json"));
-	const userKey = generateKey("ed25519", "user-key");
+	const userKey = generateKey("ed25519", "user-key"), routerKey = generateKey("ed25519", "router-key");
 	const now = Date.now();
 	// the control host's store: its Space, its keys, its permit
 	const control = await openSqliteHost(join(dir, "control.sqlite"));
@@ -57,8 +62,11 @@ async function setup(tc: TestContext) {
 		const put = (peerId: string, k: Signer & { publicKey?: string }, publicKey: string, roles: string[]) => core.write(s, now, { type: "PeerKey", fields: { peerId, keyId: k.keyId, principal: peerId, algorithm: k.algorithm, publicKey, roles, scope: ["*"], state: "active" } }, null, FOREVER);
 		put("member-peer", memberKey, memberKey.publicKey, ["host"]);
 		put("user", userKey.signer, userKey.publicKey, ["member"]);
+		put("router-peer", routerKey.signer, routerKey.publicKey, ["host", "router", "member"]);
 	}, ctx);
 	await control.commit((tx) => spaceDoc(tx, undefined, now).then(() => {}), ctx);
+	const routing = (version: number) => ({ authorityId: "authority", policyVersion: version, rules: [], completionProfiles: [], default: { mode: "local", member: "a" } }) as never;
+	await control.commit(async (tx) => { (await tx.doc(FederationRouting, space.spaceId, null)).members.a = { id: "a", state: "active" } as never; await applyFederationPolicyIn(tx, space.spaceId, "authority", routing(1), 0); }, ctx);
 	const permit = (incarnation: string) => ({ state: "active", authorityId: "authority", dataIncarnation: incarnation, role: "local", transitionId: "t1" });
 	const installedControl = new SqliteRecoveryRegister(join(dir, "installed-control.sqlite"));
 	tc.after(() => installedControl.close());
@@ -80,14 +88,13 @@ async function setup(tc: TestContext) {
 	for (const i of await listSpaces(seed, ctx)) { memberSpaces[i.spaceId] = permit(i.incarnation); await installed.compareAndSet(`installed:data-host:${i.spaceId}`, null, permit(i.incarnation)); }
 	installed.close();
 	await external.compareAndSet("boot:data-host", null, { hostId: "data-host", state: "active", spaces: memberSpaces } as never);
-	const config = write("member", { ...base("member", MEMBER_IP, memberPort), hostId: "data-host", peerId: "member-peer", mode: "member" });
+	const config = write("member", { ...base("member", MEMBER_IP, memberPort), hostId: "data-host", peerId: "member-peer", mode: "member", membership: { memberId: "a", spaceId: jobs.spaceId } });
+	await seed.close(ctx);
 	const start = async () => {
 		if (!CMD) {
-			await seed.close(ctx);
 			const host = await openSqliteHost(storeFile), member = await startConfiguredFederation(host, ctx, config);
 			return async () => { await member.close(); await host.close(ctx); };
 		}
-		await seed.close(ctx);
 		const proc = spawn(CMD[0]!, [...CMD.slice(1), "--store", storeFile, "--member", config], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
 		await new Promise<void>((resolve, reject) => {
 			let out = "";
@@ -97,13 +104,24 @@ async function setup(tc: TestContext) {
 		});
 		return () => new Promise<void>((r) => { proc.removeAllListeners("exit"); proc.once("exit", () => r()); proc.kill("SIGTERM"); });
 	};
-	tc.after(await start());
+	let stop = await start();
+	tc.after(() => stop());
+	const restart = async () => { await stop(); stop = await start(); };
 	const transports: Array<{ close(): void }> = [];
 	tc.after(() => transports.forEach((t) => t.close()));
 	const toControl = (() => { const t = socketTransport({ host: CONTROL_IP, port: controlPort }, { localAddress: USER_IP }); transports.push(t); return new RemoteSpace(t, { space: "control", attempts: 2, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 5_000, signer: userKey.signer, expectedGateHostId: "control-host", ownPeerId: "user" }); })();
 	const toMember = (grants = true) => { const t = socketTransport({ host: MEMBER_IP, port: memberPort }, { localAddress: USER_IP }); transports.push(t); return new RemoteSpace(t, { space: jobs.spaceId, attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 8_000, signer: userKey.signer, expectedGateHostId: "data-host", ownPeerId: "user", ...(grants ? { grantProvider: () => toControl.requestGrant() } : {}) }); };
 	const authority = () => new GrantAuthority({ authorityId: "authority", hostId: "control-host", signer: controlKey, keys: new SpaceKeyDirectory(control, ctx), identity: { authenticate: () => ({ principal: { peerId: "user" }, roles: ["member"] }) }, refreshIdentity: async () => ({ principal: { peerId: "user" }, roles: ["member"] }) });
-	return { toMember, toControl, external, jobs, control, space, userKey, authority, config, storeFile };
+	/** A router's line to the Member: proven, its role from the directory. */
+	const router = async () => {
+		const t = socketTransport({ host: MEMBER_IP, port: memberPort }, { localAddress: ROUTER_IP });
+		transports.push(t);
+		const remote = new RemoteSpace(t, { attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 8_000, signer: routerKey.signer, expectedGateHostId: "data-host", ownPeerId: "router-peer" });
+		await remote.authenticate();
+		return { t, remote };
+	};
+	const leases = new RouterLeaseAuthority({ host: control, ctx, controlSpaceId: space.spaceId, authorityId: "authority", peerId: "control-peer", signer: controlKey, keys: new SpaceKeyDirectory(control, ctx), assertAuthority: async () => {} });
+	return { toMember, toControl, external, jobs, control, space, userKey, routerKey, controlKey, authority, config, storeFile, router, leases, routing, restart };
 }
 
 test("a Member serves on the grants of its control host and follows its keys and its fence", async (tc) => {
@@ -152,4 +170,56 @@ test("what a Member does not carry stops it at the start instead of being ignore
 	for (const k of ["root", "syncSpaces", "entryReplication", "recovery"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
 	await refused({ mode: "control" }, /a control host stays on TypeScript/);
 	await refused({ peerId: "someone-else" }, /does not belong to the provisioned NetBird peer/);
+});
+
+test("a router's delegated call follows the policy the control host signs now, and old versions stop", async (tc) => {
+	const g = await setup(tc);
+	const { t } = await g.router();
+	const lease = await g.leases.issue("router-peer", g.routerKey.signer.keyId);
+	const grant = await g.authority().issue({ peerId: "user", state: { proof: { keyId: g.userKey.signer.keyId } } });
+	const send = async (c: Record<string, unknown>, policyVersion: number) => {
+		const call = { ...c, space: g.jobs.spaceId };
+		const d = delegationForCall({ call: call as never, principal: { peerId: "user" }, lease, policyVersion, spaceId: g.jobs.spaceId, primaryEpoch: 1, grant: grant as never, now: Date.now() });
+		return JSON.parse(await t.request(JSON.stringify({ ...call, frame: { grant, delegation: await signDelegation(g.routerKey.signer, d) } }))) as { ok: boolean; result?: any; error?: { message: string } };
+	};
+	const first = await send({ method: "generation" }, 1);
+	assert.ok(first.ok, JSON.stringify(first));
+	const write = await send({ method: "write", args: { entry: { type: "Job", fields: { n: 1 } }, txn: null, leaseMs: FOREVER }, request: { generation: first.result.generation, requestId: "r1" } }, 1);
+	assert.ok(write.ok, JSON.stringify(write));
+	assert.equal((await send({ method: "count", args: { template: { type: "Job" } } }, 1)).result.value, 1);
+	assert.match((await send({ method: "count", args: { template: { type: "Job" } } }, 7)).error?.message ?? "", /policy/i, "a version the control host does not sign");
+	await g.control.commit((tx) => applyFederationPolicyIn(tx, g.space.spaceId, "authority", g.routing(2), 1), ctx);
+	assert.match((await send({ method: "count", args: { template: { type: "Job" } } }, 1)).error?.message ?? "", /policy/i, "the old version stops at once");
+	assert.equal((await send({ method: "count", args: { template: { type: "Job" } } }, 2)).result.value, 1);
+});
+
+test("signed instructions reach the Member, a drain holds over a restart, and what it was not given is refused", async (tc) => {
+	const g = await setup(tc);
+	const base = { authorityId: "authority", memberId: "a", spaceId: g.jobs.spaceId };
+	const q = (id: string, action: string, more: Record<string, unknown> = {}, k = g.controlKey as Signer) => signMembership("instruction", { ...base, id, action, ...more } as never, "control-peer", k);
+	let { remote } = await g.router();
+	const send = async (id: string, action: string, more: Record<string, unknown> = {}) => (await remote.requestMembership(await q(id, action, more))).value as unknown as Record<string, any>;
+	await assert.rejects(remote.requestMembership(await q("x", "prepareAdd", {}, generateKey("ed25519", "rogue").signer)), /invalid membership signature/);
+	await assert.rejects(remote.requestMembership(await q("x", "prepareAdd", { memberId: "b" })), /binding mismatch/);
+	const added = await send("t1", "prepareAdd");
+	assert.deepEqual(await send("t1", "prepareAdd"), added, "a retry gets the same proof");
+	await send("t1", "activate", { policy: g.routing(1) });
+	await g.toControl.authenticate();
+	const user = g.toMember();
+	await user.authenticate();
+	await user.write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
+	const drained = await send("t3", "drain");
+	assert.equal(drained.state, "draining");
+	await assert.rejects(user.write({ type: "Job", fields: { n: 2 } }, null, FOREVER), /no bounded completion allowance/);
+	await g.restart();
+	({ remote } = await g.router());
+	assert.deepEqual(await send("t3", "drain"), drained, "the journal outlives the process");
+	const back = g.toMember();
+	await back.authenticate();
+	await assert.rejects(back.write({ type: "Job", fields: { n: 2 } }, null, FOREVER), /no bounded completion allowance/, "and so does the drain");
+	assert.equal(await back.count({ type: "Job" }), 1);
+	const run = await signRun("instruction", { runId: "r", commandId: "p", kind: "stop", revision: 1, authorityId: "authority", spaceId: g.jobs.spaceId }, "control-peer", g.controlKey) as never;
+	await assert.rejects(remote.requestRunGate(run), /run gates not configured/);
+	const life = await signLifecycle("instruction", { commandId: "c", action: "create", alias: "x", authorityId: "authority", hostId: "data-host" }, "control-peer", g.controlKey) as never;
+	await assert.rejects(remote.requestSpaceLifecycle(life), /space lifecycle not configured/);
 });

@@ -7,7 +7,7 @@ use crate::register::{RegisterClient, RegisterError, SqliteRegister};
 use phi_core::space::{error, CoreError, Space};
 use phi_json::Json;
 use phi_service::Guard;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 type R<T> = Result<T, CoreError>;
@@ -54,6 +54,8 @@ pub struct BootGuard {
 	/// How long a read of the register counts.
 	max_age_ms: f64,
 	seen: RefCell<Option<Seen>>,
+	/// Reads begun, and the newest that has answered: calls overlap, and an older read must not replace a newer one.
+	reads: Cell<(u64, u64)>,
 	/// The control authority this host follows: its space, host and key, read with the rest.
 	pub authority: Option<(String, String, String)>,
 }
@@ -78,18 +80,30 @@ fn check_barrier(record: &Json, id: &str, s: &Space, now: f64) -> R<()> {
 
 impl BootGuard {
 	pub fn new(host_id: &str, authority_id: &str, external: External, installed: SqliteRegister, now: crate::gate::Now, max_age_ms: f64) -> BootGuard {
-		BootGuard { host_id: host_id.to_owned(), authority_id: authority_id.to_owned(), external, installed, now, max_age_ms, seen: RefCell::new(None), authority: None }
+		BootGuard { host_id: host_id.to_owned(), authority_id: authority_id.to_owned(), external, installed, now, max_age_ms, seen: RefCell::new(None), reads: Cell::new((0, 0)), authority: None }
 	}
 
-	/// Reads the register for these Spaces. A failed read forgets the last one.
+	/// Reads the register for these Spaces. A failed read forgets the last one. What was read stays while another call's
+	/// read is under way: emptied before the answer, it would block a call that overlaps this one.
 	pub async fn refresh(&self, spaces: Vec<String>) {
 		let boot = format!("boot:{}", self.host_id);
 		let mut keys = vec![boot.clone()];
 		keys.extend(spaces.iter().map(|s| format!("erasure:{s}")));
 		let authority = self.authority.as_ref().map(|(space, ..)| format!("authority:{space}"));
 		keys.extend(authority.clone());
-		*self.seen.borrow_mut() = None;
-		let Ok(read) = self.external.read(&keys).await else { return };
+		let (begun, answered) = self.reads.get();
+		self.reads.set((begun + 1, answered));
+		let ticket = begun + 1;
+		let read = self.external.read(&keys).await;
+		let (begun, answered) = self.reads.get();
+		if ticket < answered {
+			return;
+		}
+		self.reads.set((begun, ticket));
+		let Ok(read) = read else {
+			*self.seen.borrow_mut() = None;
+			return;
+		};
 		let erasure = spaces.iter().map(|s| (s.clone(), read.get(&format!("erasure:{s}")).cloned().unwrap_or(Json::Null))).collect();
 		*self.seen.borrow_mut() = Some(Seen { boot: read.get(&boot).cloned().unwrap_or(Json::Null), authority: authority.and_then(|k| read.get(&k).cloned()), erasure, at: (self.now)() });
 	}

@@ -142,6 +142,15 @@ pub fn apply_line(s: &mut Space, snapshots: &mut crate::snapshot::Snapshots, now
 				s.state.rest.insert("membership", l.get("membership").cloned().unwrap_or(Json::Null));
 				Ok(Json::Null)
 			}
+			"setArchived" => {
+				match l.get("archived").filter(|a| !a.is_null()) {
+					Some(a) => s.state.rest.insert("archived", a.clone()),
+					None => {
+						s.state.rest.remove("archived");
+					}
+				}
+				Ok(Json::Null)
+			}
 			"permitRoutedWrite" => {
 				s.router_permit = l.get("proven") == Some(&Json::Bool(true));
 				Ok(Json::Null)

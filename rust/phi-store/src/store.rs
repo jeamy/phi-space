@@ -183,7 +183,11 @@ impl Store {
 	}
 
 	/// `createSpace`: a named Space, or the one with this alias. `random` is the new document's source.
-	pub fn create_space(&mut self, alias: &str, now: f64, random: Random) -> Result<std::result::Result<Json, CoreError>> {
+	pub fn create_space(&mut self, alias: &str, now: f64, random: Random) -> Result<std::result::Result<Json, CoreError>> { self.create_space_with(alias, now, random, |_| Ok(())) }
+
+	/// `create_space` with `op` in the commit that makes the Space, so what it sets exists with the Space or not at all. `op`
+	/// does not run for an alias that exists: the caller finds that Space in the result.
+	pub fn create_space_with(&mut self, alias: &str, now: f64, random: Random, op: impl FnOnce(&mut Space) -> std::result::Result<(), CoreError>) -> Result<std::result::Result<Json, CoreError>> {
 		if let Some(id) = self.registry.as_ref().and_then(|r| r.get("aliases")?.get(alias)?.as_str()) {
 			let info = self.registry.as_ref().and_then(|r| r.get("spaces")?.get(id)).cloned().unwrap_or(Json::Null);
 			return Ok(Ok(info));
@@ -216,7 +220,7 @@ impl Store {
 			s.touch(now);
 			s.state.space_id = Some(space);
 			s.state.incarnation = Some(carried);
-			Ok(())
+			op(s)
 		})?;
 		Ok(match done {
 			Err(e) => Err(e),
@@ -226,6 +230,31 @@ impl Store {
 				Ok(info)
 			}
 		})
+	}
+
+	/// The delete step of a Space's lifecycle: `op` decides in the commit that takes the alias, the id stays reserved in the
+	/// registry and the document stays in the file.
+	pub fn delete_space<T>(&mut self, id: &str, now: f64, op: impl FnOnce(&mut Space) -> std::result::Result<T, CoreError>) -> Result<std::result::Result<Committed<T>, CoreError>> {
+		let mut registry = self.registry.clone().and_then(|r| r.as_object().cloned()).unwrap_or_default();
+		let Some(mut info) = registry.get("spaces").and_then(|s| s.get(id)).and_then(Json::as_object).cloned().filter(|i| i.get("deletedAt").is_none()) else { return Ok(Err(unknown(id))) };
+		info.insert("deletedAt", now.into());
+		if let (Some(Json::Object(a)), Some(alias)) = (registry.get_mut("aliases"), info.get("alias").and_then(Json::as_str)) {
+			a.remove(alias);
+		}
+		if let Some(Json::Object(s)) = registry.get_mut("spaces") {
+			s.insert(id, Json::Object(info));
+		}
+		let registry = Json::Object(registry);
+		let host = self.host_of(Some(id));
+		host.also.push(WriteOp::Doc { kind: REGISTRY.into(), key: String::new(), version: REGISTRY_VERSION, value: registry.to_json_text() });
+		let done = host.start_commit(|s| {
+			s.clock = now;
+			op(s)
+		})?;
+		if done.is_ok() {
+			self.registry = Some(registry);
+		}
+		Ok(done)
 	}
 
 	/// Commits handed to the store, and those durable. The writer works in the order they were handed over, so `durable()`
@@ -248,8 +277,11 @@ impl Store {
 
 	/// `SpaceHost::compact_begin`: the file is one, whichever Space asks.
 	pub fn compact_begin(&self) -> Option<std::sync::mpsc::Receiver<crate::writer::Compaction>> { self.default.compact_begin() }
-	/// The ids of the named Spaces.
-	pub fn named_ids(&self) -> Vec<String> { self.named.iter().map(|(id, _)| id.clone()).collect() }
+	/// The ids of the named Spaces that were not deleted.
+	pub fn named_ids(&self) -> Vec<String> {
+		let live = |id: &str| self.registry.as_ref().and_then(|r| r.get("spaces")?.get(id)).is_some_and(|i| i.get("deletedAt").is_none());
+		self.named.iter().map(|(id, _)| id.clone()).filter(|id| live(id)).collect()
+	}
 	/// `waker` runs on the writer's thread when commits have become durable; a store in memory has none, its commits
 	/// are durable at once.
 	pub fn set_waker(&self, waker: Waker) {

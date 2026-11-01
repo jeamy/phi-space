@@ -97,7 +97,7 @@ macro_rules! limits {
 		const LIMIT_KEYS: &[&str] = &[$($key),*];
 		impl Limits {
 			/// `limitsOf`: the defaults in their order, then what the space sets.
-			fn to_json(&self) -> Json {
+			pub fn to_json(&self) -> Json {
 				let mut o = Object::new();
 				$(o.insert($key, Json::Number(self.$field));)*
 				Json::Object(o)
@@ -524,6 +524,11 @@ impl Space {
 		self.budget = None;
 	}
 
+	/// `assertNotArchived`: an archived Space keeps its data readable but takes no new work (phi-host::space_lifecycle).
+	fn assert_not_archived(&self) -> Result<()> {
+		if self.state.rest.get("archived").is_some() { Err(permission("the Space is archived; reactivate it first")) } else { Ok(()) }
+	}
+
 	/// Refuses a space with parts the Rust core does not port yet. An allowlist: what is not named here is refused.
 	pub fn assert_ported(&self) -> Result<()> {
 		for (k, v) in self.state.rest.iter() {
@@ -536,6 +541,7 @@ impl Space {
 				"runGates" => v.as_object().is_some(),
 				"membership" => v.as_object().is_some(),
 				"acceptedAuthorityId" => v.as_str().is_some(),
+				"archived" => v.as_object().is_some(),
 				"erasureEpoch" | "primaryEpoch" => v.as_f64().is_some(),
 				_ => false,
 			};
@@ -927,6 +933,7 @@ impl Space {
 	#[allow(clippy::too_many_arguments)]
 	pub fn notify(&mut self, now: f64, tmpl: &Json, txn: Option<&Json>, lease_ms: &Json, handback: &Json, target: &Json, as_: Option<&Json>, consumer: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_not_archived()?;
 		self.assert_member_admission("notify")?;
 		let template = Template::from_json(Some(tmpl))?;
 		self.settle(now)?;
@@ -1202,6 +1209,9 @@ impl Space {
 	/// Park a read or take for `target`; the space serves it later (or reports a timeout) through the outbox.
 	pub fn add_waiter(&mut self, now: f64, w: &Json) -> Result<Json> {
 		self.assert_ported()?;
+		if w.get("take") == Some(&Json::Bool(true)) {
+			self.assert_not_archived()?;
+		}
 		self.assert_member_admission("wait")?;
 		let Some(template) = w.get("template") else { return Err(not_ported("a wait without a template")) };
 		let tmpl = Template::from_json(Some(template))?;
@@ -1615,6 +1625,7 @@ impl Space {
 	/// Writes an entry under a lease: visible at once, or under `txn` when it commits.
 	pub fn write(&mut self, now: f64, entry: &Json, txn: Option<&Json>, lease_ms: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_not_archived()?;
 		let supertypes = draft_types(entry)?;
 		if directory_draft(entry) && (as_.is_some() || txn.is_some()) {
 			return Err(permission("directory entries require trusted publication"));
@@ -1771,6 +1782,7 @@ impl Space {
 	/// A write that is announced, not kept: the change stream carries it as a transient put.
 	pub fn announce(&mut self, now: f64, entry: &Json, txn: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_not_archived()?;
 		self.assert_member_admission("write")?;
 		let supertypes = draft_types(entry)?;
 		self.settle(now)?;
@@ -1813,6 +1825,9 @@ impl Space {
 	pub fn probe(&mut self, now: f64, tmpl: &Template, txn: Option<&Json>, take: bool, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
 		self.assert_member_admission(if take { "take" } else { "read" })?;
+		if take {
+			self.assert_not_archived()?;
+		}
 		self.settle(now)?;
 		let at = txn.map(|t| self.require_txn(t, as_)).transpose()?;
 		let id = at.map(|t| self.state.txns[t].id.clone());
@@ -2360,6 +2375,7 @@ impl Space {
 
 	pub fn create_txn(&mut self, now: f64, lease_ms: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_not_archived()?;
 		self.settle(now)?;
 		let lim = self.limits();
 		if let Some(as_) = as_ {

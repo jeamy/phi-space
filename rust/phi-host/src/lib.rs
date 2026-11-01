@@ -10,4 +10,5 @@ pub mod remote;
 pub mod membership;
 pub mod rotation;
 pub mod run_member;
+pub mod space_lifecycle;
 pub mod tls;

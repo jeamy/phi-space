@@ -580,6 +580,8 @@ impl DiskClaims {
 	/// How many records memory holds.
 	pub fn held(&self) -> usize { self.held.len() }
 	/// Every record: reads the whole map (counted in `enumerations`).
+	/// `any`: a look at the first keys, not an enumeration.
+	pub fn any(&self) -> bool { self.held.iter().any(|(_, v, _)| v.is_some()) || self.source.first_ids(self.held.len() + 1).iter().any(|k| self.held_at(k).is_none()) }
 	pub fn entries(&self) -> Object {
 		self.enumerations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 		let mut out = Object::new();
@@ -664,6 +666,13 @@ impl Claims {
 		}
 	}
 	pub fn on_disk(&self) -> bool { matches!(self, Claims::Disk(_)) }
+	/// `any`: whether a record exists, without reading the map.
+	pub fn any(&self) -> bool {
+		match self {
+			Claims::Memory(o) => !o.is_empty(),
+			Claims::Disk(d) => d.any(),
+		}
+	}
 	/// Every record (a map on the disk is read whole: only for what asks for all of it).
 	pub fn entries(&self) -> Object {
 		match self {
