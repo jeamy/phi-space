@@ -6,7 +6,6 @@
 use phi_core::space::{bytes, error, CoreError};
 use phi_json::{digest_json, num_of, obj, safe_integer, text, Json, Object};
 use phi_wire::Local;
-use std::collections::HashMap;
 
 type R<T> = Result<T, CoreError>;
 
@@ -97,7 +96,7 @@ pub enum Reprepared {
 
 /// The store, the authority and the Members around one journal.
 pub trait RouterEnv {
-	/// A document as committed.
+	/// A document as committed, this journal's own writes included.
 	fn read(&self, kind: &str, key: &str) -> R<Option<Json>>;
 	/// Writes `(kind, key, value)` as one commit.
 	fn commit(&self, writes: Vec<(String, String, Json)>) -> R<()>;
@@ -111,23 +110,38 @@ pub trait RouterEnv {
 }
 
 /// One commit: the documents it read, as they will be written.
-struct Tx<'a> {
+pub struct Tx<'a> {
 	env: &'a dyn RouterEnv,
-	seen: &'a HashMap<(String, String), Json>,
 	docs: Vec<(String, String, Json, Option<Json>)>,
 }
-impl Tx<'_> {
-	fn doc(&mut self, kind: &str, key: &str, initial: fn() -> Json) -> R<usize> {
+impl<'a> Tx<'a> {
+	pub fn new(env: &'a dyn RouterEnv) -> Self { Tx { env, docs: vec![] } }
+	/// The place of a document in this commit, read the first time.
+	pub fn doc(&mut self, kind: &str, key: &str, initial: fn() -> Json) -> R<usize> {
 		if let Some(at) = self.docs.iter().position(|(k, x, _, _)| k == kind && x == key) {
 			return Ok(at);
 		}
-		let was = match self.seen.get(&(kind.to_owned(), key.to_owned())) {
-			Some(held) => Some(held.clone()),
-			None => self.env.read(kind, key)?,
-		};
+		let was = self.env.read(kind, key)?;
 		self.docs.push((kind.to_owned(), key.to_owned(), was.clone().unwrap_or_else(initial), was));
 		Ok(self.docs.len() - 1)
 	}
+	pub fn at(&mut self, at: usize) -> &mut Json { &mut self.docs[at].2 }
+	/// Writes what changed, as one commit.
+	pub fn commit(self) -> R<()> {
+		let writes: Vec<_> = self.docs.into_iter().filter(|(_, _, value, was)| was.as_ref() != Some(value)).map(|(kind, key, value, _)| (kind, key, value)).collect();
+		if writes.is_empty() { Ok(()) } else { self.env.commit(writes) }
+	}
+}
+/// A hook inside the commit that admits or completes a command: the command, the commit, the journal index and the bytes left.
+pub type CommitHook<'h, 'd> = &'h mut (dyn FnMut(&Json, &mut Tx<'_>, &mut Json, f64) -> R<()> + 'd);
+/// `context.releaseFuture`: inside a commit hook.
+pub fn release_future_in(i: &mut Json, id: &str) -> R<()> {
+	ident(id)?;
+	let held = i.as_object_mut().and_then(|o| o.get_mut("future")).and_then(Json::as_object_mut).and_then(|f| f.remove(id));
+	if let Some(r) = held {
+		add_reserved(i, -(num_of(&r, "slots").unwrap_or(0.0) * num_of(&r, "bytesPerSlot").unwrap_or(0.0)));
+	}
+	Ok(())
 }
 fn empty_index() -> Json { obj! { "authorityId" => Json::Null, "mode" => "recovering", "limits" => Json::Null, "refs" => Object::new(), "reservedBytes" => 0.0 } }
 fn empty_command() -> Json { obj! { "command" => Json::Null } }
@@ -138,8 +152,6 @@ pub struct RouterController<E: RouterEnv> {
 	authority_id: String,
 	limits: Limits,
 	ready: bool,
-	/// What this controller wrote, in front of a store that shows it only once it is durable.
-	seen: HashMap<(String, String), Json>,
 }
 
 impl<E: RouterEnv> RouterController<E> {
@@ -150,7 +162,7 @@ impl<E: RouterEnv> RouterController<E> {
 		if all.iter().any(|v| !safe_integer(*v) || *v <= 0.0) {
 			return Err(type_error("invalid router budget"));
 		}
-		Ok(RouterController { env, router_id: router_id.to_owned(), authority_id: authority_id.to_owned(), limits, ready: false, seen: HashMap::new() })
+		Ok(RouterController { env, router_id: router_id.to_owned(), authority_id: authority_id.to_owned(), limits, ready: false })
 	}
 	pub fn journal_id(&self) -> &str { &self.router_id }
 	fn key(&self, id: &str) -> R<String> { command_key(&self.router_id, id) }
@@ -169,45 +181,29 @@ impl<E: RouterEnv> RouterController<E> {
 	}
 	async fn change_inner<T>(&mut self, f: impl FnOnce(&mut Json, &mut Tx<'_>) -> R<T>) -> R<T> {
 		let limits = self.limits.to_json();
-		let (result, docs) = {
-			let mut tx = Tx { env: &self.env, seen: &self.seen, docs: vec![] };
-			let at = tx.doc(JOURNAL, &self.router_id, empty_index)?;
-			let mut index = std::mem::replace(&mut tx.docs[at].2, Json::Null);
-			if text(&index, "authorityId").is_some_and(|a| a != self.authority_id) {
-				return Err(blocked("journal authority changed; explicit restore reconciliation required"));
-			}
-			set(&mut index, "authorityId", self.authority_id.as_str());
-			if index.get("limits").is_some_and(|l| !l.is_null()) && hash(index.get("limits").unwrap_or(&Json::Null))? != hash(&limits)? {
-				return Err(blocked("persisted budget configuration differs"));
-			}
-			set(&mut index, "limits", limits);
-			let result = f(&mut index, &mut tx)?;
-			if bytes(&index) > self.limits.max_index_bytes {
-				return Err(budget("router index exceeds budget"));
-			}
-			tx.docs[at].2 = index;
-			(result, tx.docs)
-		};
+		let mut tx = Tx::new(&self.env);
+		let at = tx.doc(JOURNAL, &self.router_id, empty_index)?;
+		let mut index = std::mem::replace(tx.at(at), Json::Null);
+		if text(&index, "authorityId").is_some_and(|a| a != self.authority_id) {
+			return Err(blocked("journal authority changed; explicit restore reconciliation required"));
+		}
+		set(&mut index, "authorityId", self.authority_id.as_str());
+		if index.get("limits").is_some_and(|l| !l.is_null()) && hash(index.get("limits").unwrap_or(&Json::Null))? != hash(&limits)? {
+			return Err(blocked("persisted budget configuration differs"));
+		}
+		set(&mut index, "limits", limits);
+		let result = f(&mut index, &mut tx)?;
+		if bytes(&index) > self.limits.max_index_bytes {
+			return Err(budget("router index exceeds budget"));
+		}
+		*tx.at(at) = index;
 		self.env.assert_authority().await?;
-		let mut writes = vec![];
-		for (kind, key, value, was) in docs {
-			if was.as_ref() != Some(&value) {
-				self.seen.insert((kind.clone(), key.clone()), value.clone());
-				writes.push((kind, key, value));
-			}
-		}
-		if !writes.is_empty() {
-			self.env.commit(writes)?;
-		}
+		tx.commit()?;
 		Ok(result)
 	}
 
 	fn command_now(&self, id: &str) -> R<Option<Json>> {
-		let key = self.key(id)?;
-		let doc = match self.seen.get(&(COMMANDS.to_owned(), key.clone())) {
-			Some(d) => Some(d.clone()),
-			None => self.env.read(COMMANDS, &key)?,
-		};
+		let doc = self.env.read(COMMANDS, &self.key(id)?)?;
 		Ok(doc.and_then(|d| d.get("command").filter(|c| !c.is_null()).cloned()))
 	}
 	/// `get`.
@@ -217,12 +213,7 @@ impl<E: RouterEnv> RouterController<E> {
 		self.command_now(id)
 	}
 	/// The journal index as committed.
-	pub fn index(&self) -> R<Option<Json>> {
-		match self.seen.get(&(JOURNAL.to_owned(), self.router_id.clone())) {
-			Some(d) => Ok(Some(d.clone())),
-			None => self.env.read(JOURNAL, &self.router_id),
-		}
-	}
+	pub fn index(&self) -> R<Option<Json>> { self.env.read(JOURNAL, &self.router_id) }
 
 	fn normalize(&self, spec: &Json) -> R<Json> {
 		let (id, area) = (text(spec, "id").unwrap_or(""), text(spec, "area").unwrap_or(""));
@@ -310,6 +301,16 @@ impl<E: RouterEnv> RouterController<E> {
 		let (limits, per_slot) = (self.limits, per_slot.unwrap_or(self.limits.max_command_bytes));
 		self.change(|i, _| Self::reserve_future_value(&limits, i, id, count, per_slot)).await
 	}
+	/// `reserveFutureIn`: inside a commit of the caller, who asks the authority around it.
+	pub fn reserve_future_in(&self, tx: &mut Tx<'_>, id: &str, count: f64, per_slot: f64) -> R<()> {
+		self.must_be_ready()?;
+		let at = tx.doc(JOURNAL, &self.router_id, empty_index)?;
+		let i = tx.at(at);
+		if text(i, "mode") != Some("ready") || text(i, "authorityId") != Some(&self.authority_id) || hash(i.get("limits").unwrap_or(&Json::Null))? != hash(&self.limits.to_json())? {
+			return Err(blocked("reservation owner or budget changed"));
+		}
+		Self::reserve_future_value(&self.limits, i, id, count, per_slot)
+	}
 	/// `releaseFuture`: gives back what was reserved and not used.
 	pub async fn release_future(&mut self, id: &str) -> R<()> {
 		ident(id)?;
@@ -321,22 +322,16 @@ impl<E: RouterEnv> RouterController<E> {
 		if current.as_ref().and_then(|i| i.get("future")?.get(id)).is_none() {
 			return Ok(());
 		}
-		self.change(|i, _| {
-			let held = i.as_object_mut().and_then(|o| o.get_mut("future")).and_then(Json::as_object_mut).and_then(|f| f.remove(id));
-			if let Some(r) = held {
-				add_reserved(i, -(num_of(&r, "slots").unwrap_or(0.0) * num_of(&r, "bytesPerSlot").unwrap_or(0.0)));
-			}
-			Ok(())
-		}).await
+		self.change(|i, _| release_future_in(i, id)).await
 	}
 	/// `submit`: a command in the journal, or the one already there under this id.
-	pub async fn submit(&mut self, spec: &Json, future_id: Option<&str>) -> R<Json> {
+	pub async fn submit(&mut self, spec: &Json, future_id: Option<&str>, admitted: Option<CommitHook<'_, '_>>) -> R<Json> {
 		let c = self.normalize(spec)?;
 		self.must_be_ready()?;
 		let (key, limits) = (self.key(text(&c, "id").unwrap_or(""))?, self.limits);
 		self.change(|i, tx| {
 			let at = tx.doc(COMMANDS, &key, empty_command)?;
-			if let Some(old) = tx.docs[at].2.get("command").filter(|o| !o.is_null()) {
+			if let Some(old) = tx.at(at).get("command").filter(|o| !o.is_null()) {
 				if old.get("hash") != c.get("hash") {
 					return Err(conflict("command ID already binds different arguments"));
 				}
@@ -363,26 +358,31 @@ impl<E: RouterEnv> RouterController<E> {
 			if refs(i).len() as f64 + slots(i) >= limits.max_commands || num_of(i, "reservedBytes").unwrap_or(0.0) + reserved + limits.max_index_bytes > limits.max_journal_bytes {
 				return Err(budget("journal full; historical IDs must not be evicted for reuse"));
 			}
-			set(&mut tx.docs[at].2, "command", c.clone());
+			set(tx.at(at), "command", c.clone());
 			let id = text(&c, "id").unwrap_or("");
 			refs_mut(i).insert(id, obj! { "hash" => c.get("hash").cloned().unwrap_or(Json::Null), "state" => c.get("state").cloned().unwrap_or(Json::Null), "area" => area.cloned().unwrap_or(Json::Null), "blocksArea" => c.get("blocksArea").cloned().unwrap_or(Json::Null), "released" => false, "reservedBytes" => reserved });
 			add_reserved(i, reserved);
+			if let Some(hook) = admitted {
+				let room = limits.max_commit_bytes - bytes(i) - bytes(&c) - 8192.0;
+				hook(&c, tx, i, room)?;
+			}
 			Ok(c.clone())
 		}).await
 	}
 
 	/// `update`: a change of a command, within what it reserved.
-	async fn update(&mut self, id: &str, f: impl FnOnce(&mut Json, &mut Json) -> R<()>) -> R<Json> {
+	async fn update(&mut self, id: &str, f: impl FnOnce(&mut Json, &mut Tx<'_>, &mut Json) -> R<()>) -> R<Json> {
 		let key = self.key(id)?;
 		self.change(|i, tx| {
 			let at = tx.doc(COMMANDS, &key, empty_command)?;
-			let command = tx.docs[at].2.as_object_mut().and_then(|o| o.get_mut("command")).filter(|c| !c.is_null());
-			let Some(c) = command.filter(|_| refs(i).contains_key(id)) else { return Err(blocked("missing command history")) };
-			f(c, i)?;
-			if bytes(c) > num_of(c, "reservedBytes").unwrap_or(0.0) {
+			let doc = tx.at(at).get("command").filter(|c| !c.is_null()).filter(|_| refs(i).contains_key(id)).cloned();
+			let Some(mut c) = doc else { return Err(blocked("missing command history")) };
+			f(&mut c, tx, i)?;
+			if bytes(&c) > num_of(&c, "reservedBytes").unwrap_or(0.0) {
 				return Err(budget("reserved command bytes exceeded"));
 			}
 			let (state, out) = (c.get("state").cloned().unwrap_or(Json::Null), c.clone());
+			set(tx.at(at), "command", c);
 			if let Some(r) = refs_mut(i).get_mut(id) {
 				set(r, "state", state);
 			}
@@ -410,8 +410,9 @@ impl<E: RouterEnv> RouterController<E> {
 		Ok(())
 	}
 
-	async fn apply_receipt(&mut self, id: &str, n: usize, r: Json) -> R<Json> {
-		self.update(id, |c, _| {
+	async fn apply_receipt(&mut self, id: &str, n: usize, r: Json, completed: Option<CommitHook<'_, '_>>) -> R<Json> {
+		let limits = self.limits;
+		self.update(id, |c, tx, i| {
 			let review = |c: &mut Json, why: String| {
 				let s = step_mut(c, n);
 				set(s, "state", "needsReview");
@@ -456,16 +457,20 @@ impl<E: RouterEnv> RouterController<E> {
 			if steps(c).iter().all(|x| text(x, "state") == Some("done")) {
 				set(c, "state", "completed");
 			}
+			if let (Some(hook), Some("completed")) = (completed, text(c, "state")) {
+				let room = limits.max_commit_bytes - bytes(i) - bytes(c) - 8192.0;
+				hook(c, tx, i, room)?;
+			}
 			Ok(())
 		}).await
 	}
 
-	async fn resolve(&mut self, c: &Json, n: usize) -> R<Json> {
+	async fn resolve(&mut self, c: &Json, n: usize, completed: Option<CommitHook<'_, '_>>) -> R<Json> {
 		self.env.assert_authority().await?;
 		let id = text(c, "id").unwrap_or("").to_owned();
 		match self.env.resolve(steps(c)[n].clone()).await {
-			Ok(receipt) => self.apply_receipt(&id, n, receipt).await,
-			Err(()) => self.update(&id, |d, _| {
+			Ok(receipt) => self.apply_receipt(&id, n, receipt, completed).await,
+			Err(()) => self.update(&id, |d, _, _| {
 				let s = step_mut(d, n);
 				set(s, "state", "unknown");
 				set(s, "evidence", "resolution transport unavailable");
@@ -489,7 +494,7 @@ impl<E: RouterEnv> RouterController<E> {
 			sum += num_of(&c, "reservedBytes").unwrap_or(0.0);
 			if !terminal(text(&c, "state")) {
 				if let Some(n) = first_open(&c).filter(|n| step_state(&c, *n) != Some("prepared")) {
-					self.resolve(&c, n).await?;
+					self.resolve(&c, n, None).await?;
 				}
 			}
 		}
@@ -516,6 +521,51 @@ impl<E: RouterEnv> RouterController<E> {
 		Ok(())
 	}
 
+	/// `recoverMany`: empty journals start in one bounded commit per 16, what holds work recovers on its own.
+	pub async fn recover_many(all: &mut [&mut Self]) -> R<()> {
+		if all.iter().any(|r| r.ready) {
+			return Err(blocked("batched recovery requires one inactive, fenced owner"));
+		}
+		let mut retained = vec![];
+		for (n, batch) in all.chunks_mut(16).enumerate() {
+			let env = &batch[0].env;
+			env.assert_authority().await?;
+			let mut tx = Tx::new(env);
+			let mut empty = vec![];
+			for (m, r) in batch.iter().enumerate() {
+				let limits = r.limits.to_json();
+				let at = tx.doc(JOURNAL, &r.router_id, empty_index)?;
+				let i = tx.at(at);
+				if text(i, "authorityId").is_some_and(|a| a != r.authority_id) || (i.get("limits").is_some_and(|l| !l.is_null()) && hash(i.get("limits").unwrap_or(&Json::Null))? != hash(&limits)?) {
+					return Err(blocked("journal authority or budget changed"));
+				}
+				if !refs(i).is_empty() || i.get("future").and_then(Json::as_object).is_some_and(|f| !f.is_empty()) {
+					retained.push(n * 16 + m);
+					continue;
+				}
+				if num_of(i, "reservedBytes") != Some(0.0) {
+					return Err(blocked("empty journal reservation mismatch"));
+				}
+				set(i, "authorityId", r.authority_id.as_str());
+				set(i, "limits", limits);
+				set(i, "mode", "ready");
+				if bytes(i) > r.limits.max_index_bytes {
+					return Err(budget("router index exceeds budget"));
+				}
+				empty.push(m);
+			}
+			env.assert_authority().await?;
+			tx.commit()?;
+			for m in empty {
+				batch[m].ready = true;
+			}
+		}
+		for at in retained {
+			all[at].recover().await?;
+		}
+		Ok(())
+	}
+
 	async fn checkpoint(&mut self, point: &'static str, c: &Json) -> R<()> {
 		let done = self.env.checkpoint(point, c).await;
 		if done.is_err() {
@@ -525,7 +575,7 @@ impl<E: RouterEnv> RouterController<E> {
 	}
 
 	/// `advance`: runs a command as far as it goes now.
-	pub async fn advance(&mut self, id: &str) -> R<Json> {
+	pub async fn advance(&mut self, id: &str, mut completed: Option<CommitHook<'_, '_>>) -> R<Json> {
 		ident(id)?;
 		self.must_be_ready()?;
 		let mut c = self.get(id).await?.ok_or_else(|| blocked("unknown command"))?;
@@ -537,7 +587,7 @@ impl<E: RouterEnv> RouterController<E> {
 		while !terminal(text(&c, "state")) {
 			let n = first_open(&c).ok_or_else(|| blocked("inconsistent command state"))?;
 			if step_state(&c, n) != Some("prepared") {
-				c = self.resolve(&c, n).await?;
+				c = self.resolve(&c, n, completed.as_deref_mut()).await?;
 				if terminal(text(&c, "state")) {
 					break;
 				}
@@ -549,13 +599,13 @@ impl<E: RouterEnv> RouterController<E> {
 			if refused_before_admission(&steps(&c)[n]) {
 				match self.env.reprepare(steps(&c)[n].clone()).await {
 					Err(()) | Ok(Reprepared::Wait) => return Ok(c),
-					Ok(Reprepared::Refuse) => return self.update(id, |d, _| {
+					Ok(Reprepared::Refuse) => return self.update(id, |d, _, _| {
 						set(step_mut(d, n), "state", "needsReview");
 						set(d, "state", "needsReview");
 						Ok(())
 					}).await,
 					Ok(Reprepared::Spec(spec)) => {
-						self.update(id, |d, i| {
+						self.update(id, |d, _, i| {
 							let s = step_mut(d, n);
 							let Json::Object(o) = s else { unreachable!("a step is an object") };
 							o.insert("target", spec.get("target").cloned().unwrap_or(Json::Null));
@@ -580,7 +630,7 @@ impl<E: RouterEnv> RouterController<E> {
 					}
 				}
 			}
-			c = self.update(id, |d, _| {
+			c = self.update(id, |d, _, _| {
 				set(d, "state", "applying");
 				set(step_mut(d, n), "state", "inflight");
 				Ok(())
@@ -589,7 +639,7 @@ impl<E: RouterEnv> RouterController<E> {
 			self.env.assert_authority().await?;
 			let receipt = match self.env.invoke(steps(&c)[n].clone()).await {
 				Ok(r) => r,
-				Err(()) => return self.update(id, |d, _| {
+				Err(()) => return self.update(id, |d, _, _| {
 					let s = step_mut(d, n);
 					set(s, "state", "unknown");
 					set(s, "evidence", "effect outcome unknown; resolve same request");
@@ -597,7 +647,7 @@ impl<E: RouterEnv> RouterController<E> {
 				}).await,
 			};
 			self.checkpoint("afterReply", &c).await?;
-			c = self.apply_receipt(id, n, receipt).await?;
+			c = self.apply_receipt(id, n, receipt, completed.as_deref_mut()).await?;
 			// Refused before admission: prepare it again at once (once per call), see above.
 			if step_state(&c, n) == Some("prepared") && refused_before_admission(&steps(&c)[n]) && !reprepared.contains(&n) {
 				reprepared.push(n);
@@ -621,7 +671,7 @@ impl<E: RouterEnv> RouterController<E> {
 		let (key, at) = (self.key(id)?, self.env.now());
 		self.change(|i, tx| {
 			let doc = tx.doc(COMMANDS, &key, empty_command)?;
-			let command = tx.docs[doc].2.as_object_mut().and_then(|o| o.get_mut("command")).filter(|c| text(c, "state") == Some("needsReview"));
+			let command = tx.at(doc).as_object_mut().and_then(|o| o.get_mut("command")).filter(|c| text(c, "state") == Some("needsReview"));
 			let Some(c) = command.filter(|c| refs(i).contains_key(id) && c.get("reviews").and_then(Json::as_array).is_some_and(|r| r.len() < 4)) else {
 				return Err(blocked("review requires retained needsReview history"));
 			};

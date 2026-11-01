@@ -932,6 +932,8 @@ Not ported with the Root, because it is R6b: `replicas` per Member, `ReplicaNoti
 
 **R6a, the Root's wire adapter (2026-11-01).** `phi-host::federation_rpc` is `FederationRpc`: proof, grant and signed delegation per call, and the check of claims and witnesses. `test/support/rpc-driver.ts` and `phi-host/tests/federation_rpc.rs` run both over a scripted line and compare every frame with its signature and every receipt. A successor of a replicated Member and a policy raised by a replica notice are refused here; they come with R6b.
 
+**R6a, `FederatedSpace` (2026-11-01).** `phi-host::federated_space` holds writes, reads, transactions and races, with the router's commit hooks and `recoverMany`. `test/support/federated-driver.ts` and `phi-host/tests/federated_space.rs` walk both over real routers and scripted Members, in one and in three partitions, and compare every answer, every call to a Member and every journal document. Where TypeScript stumbles with a `TypeError` over a shape it never gets in operation (a write retried under the id of a read, a race whose registration came back null), Rust refuses by name. Not covered by the walk: the branch where a parent does not fit into the commit of its child, which needs a parent larger than a child may be. `reconcileDataRestore` stays R6b.
+
 **R6b, acceptance in TypeScript in the local federation (R-D3).** Before any port, each with kills and cut-offs: primary/sync with the primary killed, promotion with the container fencing adapter, `degradeToSingle` and `setStandby`, a control host change, a control and a data restore, entry replication with a Member cut off. Each scenario holds what clients were answered and what the stores contain afterwards.
 
 **Content:**

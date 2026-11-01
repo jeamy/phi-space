@@ -190,8 +190,8 @@ async fn run(c: &mut Option<RouterController<Env>>, env: &Env, l: &Json) -> Resu
 	let r = c.as_mut().expect("opened");
 	match text(l, "op").unwrap_or("") {
 		"recover" => r.recover().await.map(|()| Json::Null),
-		"submit" => r.submit(l.get("spec").unwrap(), text(l, "future")).await,
-		"advance" => r.advance(id).await,
+		"submit" => r.submit(l.get("spec").unwrap(), text(l, "future"), None).await,
+		"advance" => r.advance(id, None).await,
 		"review" => r.review(id, text(l, "admin").unwrap(), text(l, "note").unwrap(), l.get("release") == Some(&Json::Bool(true))).await,
 		"reserve" => r.reserve_future(id, number("slots"), Some(number("bytes"))).await.map(|()| Json::Null),
 		"release" => r.release_future(id).await.map(|()| Json::Null),
