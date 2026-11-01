@@ -159,7 +159,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.plan === "huehnerstall" || o.plan === "gehege") {
 				entries.push({ label: "Tiere ansehen", line: "stall" }, { label: "Füttern", line: "füttere" });
 				if (o.ownerId === me) {
-					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", gans: "Daunen" };
+					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", rind: "Milch", gans: "Daunen" };
 					if (o.herd) entries.push({ label: `${yields[o.herd] ?? "Ertrag"} einsammeln`, line: "einsammeln" });
 					const fits = o.plan === "huehnerstall" ? ["Huhn"] : ["Schaf", "Ziege", "Ente", "Gans"];
 					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && fits.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} einstallen`, line: `einstallen ${n}` });

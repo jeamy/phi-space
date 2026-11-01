@@ -1057,6 +1057,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      The settlers of the world take part from their home rooms, count as participants and tend parks; one that wins takes the honour and no coins.
      Deviations: the prize comes from the world, not a board; the harvest festival needs no autumn, as seasons are not there yet; the park holds no beds, tending is a flower given to the building. The regatta waits for boats, the fire chain and the rank across regions for the board. Goods turnover still does not count in the rank.
    - **Wind (built, `server/engine/commands/wind.ts`):** Each island has a level, a lull, a breeze, a fresh wind or a gale, that moves a step every six world hours; a storm surge makes it a gale at once. `wetter` tells it. A mill grinds at half to twice its pace by the wind that blows when the load comes, on top of what a surge grinds ahead. A load keeps the pace it started with. Hedges do not break it yet.
+   - **Sizes settled (built):** A room grows by a strip of 4 cells of grass, east or south, once 70 % of its land is taken, up to 36×24 (`server/engine/commands/growth.ts`, job "epoch"); east and south only, so nothing has to move, and not where an exit is near or the edge is no grass, so of the 37 rooms 15 cannot grow and wait for new ones. A fire carries 20 points and 5 more for each registered player who built there in the last seven days, at most 40; figures fill the light without widening it. One account owns at most 2 coops and pens. Cattle come with the town (epoch 3) in the pen: milk at twice a goat's pace, breeding slow. Deviation: no leather yet.
 7. **Department store** (shop with stock), **counting house**, **lighthouse**, **brewery**, **glassworks and greenhouse**,
    fishing (net recipe, jetty) and boats; **food** (being sated), when bread and smoked fish exist.
 8. **Roads, carts, timetable ferries**, then the **island railway** as automaton.
@@ -1079,10 +1080,5 @@ looking stay in the menu.
 ## Open questions
 
 Decided: rooms grow **and** new ones arise; churches are voluntary (the gods work without them); competition is
-nonviolent (festivals, reputation, regatta); animals come early. Still open:
+nonviolent (festivals, reputation, regatta); animals come early. All open questions are settled; the sizes stand under step 6.
 
-- How far does a room grow before a new one arises — and does it grow in whole cell strips or graduated?
-- How much livestock does the tone bear — chickens, sheep and goats on the farm, or also cattle trade and breeding as a
-  chain of its own?
-- How many light points does a fire carry, and does a fixed number suffice, or does it grow with the number of players of
-  an island (like the flotsam, `flood.perPlayers`)?

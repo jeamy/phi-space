@@ -18,6 +18,7 @@ import { resolvePrototype, spawn } from "../prototypes.ts";
 import type { AnimalKindDef, AnimalsDef, KeeperDef, WorldDef } from "../world.ts";
 import { ARTICLE, distTo, giveBack, planOf, putBack, takeNear } from "./build.ts";
 import { protoName } from "./garden.ts";
+import { needEpoch } from "./epoch.ts";
 
 const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : `${Math.max(1, Math.round(ms / 60_000))} Minuten`; };
 const few = (k: AnimalKindDef, n: number) => `${n} ${n === 1 ? k.name : k.plural}`;
@@ -94,6 +95,7 @@ const einstallen: Command = {
 		const k = d.kinds.find((x) => x.proto === it.proto)!;
 		const { b, k: has, n, max, now } = await houseHere(c, d);
 		if (!mine(c, b)) throw new CommandError(`Der Stall gehört ${b.ownerName}; einstallen darf nur der Besitzer.`);
+		await needEpoch(c, k.epoch, k.plural);
 		if (b.plan !== k.plan) throw new CommandError(`${k.plural} wohnen im ${planOf(c.world, k.plan)?.name ?? k.plan}, nicht im ${b.name}.`);
 		if (has && n && has.key !== k.key) throw new CommandError(`Hier stehen schon ${has.plural}; eine Art je Stall.`);
 		if (n >= max) throw new CommandError(`Der Stall ist voll (${max}).`);

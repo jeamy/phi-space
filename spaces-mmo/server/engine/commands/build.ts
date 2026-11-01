@@ -19,7 +19,7 @@ import { zoneRefusal } from "./townhall.ts";
 import { closeOrders, keptUntil, orderLine, ordersOfSite, payFor } from "./siteorder.ts";
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type EstateFields, type FireBuilderFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
 import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
@@ -106,12 +106,28 @@ export function besides(c: CommandCtx, plan: Pick<PlanDef, "w" | "h">): Rect[] {
 	return out.sort((a, b) => side(a) - side(b));
 }
 
+/** What a fire's light carries: more with each registered player who built here lately, so a busy island is not stuck and a
+ *  deserted one holds no place. */
+async function lightOf(c: CommandCtx, beaconId: string): Promise<number> {
+	const def = c.world.building, base = def?.lightPoints ?? 0, more = def?.lightGrowth;
+	if (!more) return base;
+	const now = await decayNowOf(c.space, c.txn), active = (await c.space.readAll({ type: "FireBuilder", fields: { beaconId } }, { txn: c.txn })).filter((e) => fieldsOf<FireBuilderFields>(e).atWorldMs + more.activeMs > now).length;
+	return Math.min(more.max, base + active * more.perPlayer);
+}
+/** The actor counts as building at this fire. Figures fill the light, they do not widen it. */
+async function noteBuilder(c: CommandCtx, beaconId: string): Promise<void> {
+	if (!c.world.building?.lightGrowth || !c.account || c.account.guest || c.account.settler) return;
+	const key = { beaconId, accountId: c.account.accountId };
+	await c.space.takeIfExists({ type: "FireBuilder", fields: key }, NO_WAIT, { txn: c.txn });
+	await c.space.write({ type: "FireBuilder", fields: { ...key, atWorldMs: await decayNowOf(c.space, c.txn) } satisfies FireBuilderFields as never }, c.txn, FOREVER);
+}
+
 /** A burning fire that covers the room and has light left for `points` (its LightUse taken in the transaction); null with
  *  the reason. */
 export async function lightFor(c: CommandCtx, points: number): Promise<{ beaconId: string; use: LightUseFields; fresh: boolean } | string> {
 	const now = await worldNowOf(c.space, c.txn);
 	// a settler leaves part of the light free for the people who come (world settlers.reserve)
-	const max = (c.world.building?.lightPoints ?? 0) * (c.account?.settler ? 1 - (c.world.settlers?.reserve ?? 0.25) : 1);
+	const share = c.account?.settler ? 1 - (c.world.settlers?.reserve ?? 0.25) : 1;
 	const fires = c.world.beacons.filter((b) => b.covers.includes(c.actor.room)).sort((a, b) => Number(b.room === c.actor.room) - Number(a.room === c.actor.room));
 	if (!fires.length) return "Hier hält kein Feuer den Nebel fern; gebaut wird nur im Licht.";
 	let lit = false;
@@ -121,7 +137,7 @@ export async function lightFor(c: CommandCtx, points: number): Promise<{ beaconI
 		const e = await c.space.takeIfExists({ type: "LightUse", fields: { beaconId: b.beaconId } }, NO_WAIT, { txn: c.txn });
 		if (!e && (await c.space.count({ type: "LightUse", fields: { beaconId: b.beaconId } }))) throw new CommandError("Gerade baut jemand anderes im Licht dieses Feuers; bitte gleich noch einmal.");
 		const use = e ? fieldsOf<LightUseFields>(e) : { beaconId: b.beaconId, used: 0 };
-		if (use.used + points <= max) return { beaconId: b.beaconId, use, fresh: !e };
+		if (use.used + points <= (await lightOf(c, b.beaconId)) * share) return { beaconId: b.beaconId, use, fresh: !e };
 		if (e) await c.space.write({ type: "LightUse", fields: use as never }, c.txn, FOREVER); // unchanged, back
 	}
 	return lit ? "Das Licht des Feuers reicht für keinen weiteren Bau; ein Leuchtturm oder ein zweites Feuer würde helfen." : "Das Feuer, das hier Licht gibt, ist aus; gebaut wird nur im Licht.";
@@ -218,8 +234,14 @@ export const bau: Command = {
 		await needRank(c, "siedler", "Bauen");
 		if ((await c.space.count({ type: "Site", fields: { accountId: c.account.accountId } })) >= def.maxSites) throw new CommandError("Du hast schon eine offene Baustelle; bau sie erst fertig.");
 		if ((await c.space.count({ type: "Site", fields: { accountId: c.account.accountId } })) + (await c.space.count({ type: "Building", fields: { accountId: c.account.accountId } })) >= def.maxBuildings) throw new CommandError(`Mehr als ${def.maxBuildings} Bauten hat niemand.`);
+		const herds = c.world.animals;
+		if (herds?.maxHouses && herds.houses[plan.key]) {
+			const mine = [...(await c.space.readAll({ type: "Building", fields: { accountId: c.account.accountId } })), ...(await c.space.readAll({ type: "Site", fields: { accountId: c.account.accountId } }))];
+			if (mine.filter((e) => herds.houses[String(e.fields.plan)]).length >= herds.maxHouses) throw new CommandError(`Mehr als ${herds.maxHouses} Ställe und Gehege hält niemand im Blick.`);
+		}
 		const light = await lightFor(c, plan.points);
 		if (typeof light === "string") throw new CommandError(light);
+		await noteBuilder(c, light.beaconId);
 		const room = await roomOf(c);
 		const tries = m[2] !== undefined ? [{ x: Number(m[2]), y: Number(m[3]), w: plan.w, h: plan.h }] : besides(c, plan);
 		let rect: Rect | null = null, why = "";

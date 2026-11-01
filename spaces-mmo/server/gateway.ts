@@ -473,7 +473,11 @@ export class Gateway {
 	/** Applies a put; a message is collected in `msgs` to be sent after the batch. */
 	#put(id: string, type: string, types: string[], fields: Record<string, unknown>, msgs: MsgFields[]): void {
 		if (type === "WorldClock") this.#clock = fields as unknown as WorldClockFields;
-		else if (type === "Room") { const r = fields as unknown as RoomFields; this.#rooms.set(r.roomId, r); }
+		else if (type === "Room") {
+			const r = fields as unknown as RoomFields, was = this.#rooms.get(r.roomId);
+			this.#rooms.set(r.roomId, r);
+			if (was && (was.ground.length !== r.ground.length || was.ground[0]!.length !== r.ground[0]!.length)) for (const c of this.#clients) if (c.room === r.roomId) this.#hello(c); // it grew
+		}
 		else if (type === "Character") {
 			const c = fields as unknown as CharacterFields;
 			const prev = this.#charEntry.get(c.charId), before = this.#chars.get(c.charId)?.name;

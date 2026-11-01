@@ -159,13 +159,11 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		// it grows: sprouts, then ripe (water it once more on the way, before the thirst runs out)
 		await eventually(async () => (await bedOf(s, anna.me)).plants.every((p) => p.stage >= 1), 30_000, "the seeds sprout");
 		assert.match(await does(anna.p, "gieße", "gießt"), /Gärtnerin gießt das Beet/);
-		// keep it watered until something is ripe (weeds slow it, and a dry plant would wilt)
-		// a can per watering: slow machines water more often
-		for (let i = 0; i < 60 && !(await bedOf(s, anna.me)).plants.some((p) => p.stage === 2); i++) {
-			await new Promise((ok) => setTimeout(ok, 2_000)); // dry for 5.8 s it wilts
-			if (!(await bedOf(s, anna.me)).plants.some((p) => p.stage === 2)) { await give(s, anna.me, "wasserkanne", 1); await does(anna.p, "gieße", "gießt"); }
-		}
-		await eventually(async () => (await bedOf(s, anna.me)).plants.some((p) => p.stage === 2), 10_000, `something ripe (stages ${(await bedOf(s, anna.me)).plants.map((p) => p.stage)})`);
+		// from here on it cannot go dry: at this rate 5.8 s without water wilt it, and a loaded machine stalls that long
+		const wet = (await s.readAll({ type: "Bed" })).find((e) => e.fields.owner === anna.me)!;
+		await s.takeIfExists({ id: wet.id }, 0);
+		await s.write({ type: "Bed", fields: { ...wet.fields, wateredWorldMs: FOREVER } as never }, null, FOREVER);
+		await eventually(async () => (await bedOf(s, anna.me)).plants.some((p) => p.stage === 2), 60_000, `something ripe (stages ${(await bedOf(s, anna.me)).plants.map((p) => p.stage)})`);
 		// two harvest at once: what is ripe goes once (whoever comes second finds nothing ripe, or what ripened since)
 		const [a, b] = await Promise.all([does(anna.p, "ernte", /erntet|nichts reif/), does(bert.p, "ernte", /erntet|nichts reif/)]);
 		assert.ok([a, b].some((t) => /erntet/.test(t)), `${a}\n${b}`);

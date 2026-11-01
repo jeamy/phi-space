@@ -886,7 +886,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	openLineRef.current = openLine;
 
 	const mapView = mapMode === "text" ? null : hello ? (
-		<MapRenderer mode={mapMode} world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog} onTurn={onTurn}
+		<MapRenderer key={`${hello.room.ground[0]?.length}x${hello.room.ground.length}`} mode={mapMode} world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog} onTurn={onTurn}
 			fill goal={walkGoal} insetBottom={detent === "peek" ? detentPx("peek", window.innerHeight) : Math.min(sheetPx ?? detentPx("half", window.innerHeight), window.innerHeight * 0.7)}
 			controls={pad !== "off" ? <TouchPad hold={(d) => { input.current?.blur(); stopWalk.current(); setMenu(null); hold(d); }} release={release} action={action} noAction /> : undefined}
 			onCell={(x, y) => { input.current?.blur(); setMenu(null); if (detent !== "peek") setDetent("peek"); else onTap(x, y); }}

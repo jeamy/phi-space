@@ -234,8 +234,8 @@ const NPCS: NpcDef[] = [
 	{ npcId: "gesa", name: "Gesa", skin: 1, room: "hafenviertel", ...near("hafenviertel", 4, 10), script: "gaertnerin", home: ["kupferhafen-markt", "hafenviertel", "kupferhafen-kai"], market: "kupferhafen-markt",
 		prices: { "samen-strandnelke": [1, 3], "samen-strandkohl": [1, 2], "samen-moehre": [1, 2], "samen-duenenrose": [2, 4], "samen-nebelblume": [4, 8], strandnelke: [2, 4], duenenrose: [3, 5], nebelblume: [6, 10], kohl: [1, 2], moehre: [1, 2],
 			weizen: [1, 2], gerste: [1, 2], hafer: [1, 2], kartoffel: [1, 2], ruebe: [1, 2], "samen-ruebe": [1, 2], leinsamen: [1, 2], flachs: [1, 3],
-			huhn: [2, 5], schaf: [5, 10], ziege: [4, 8], ei: [1, 2], wolle: [2, 4], milch: [1, 2], ente: [3, 6], gans: [4, 8], daunen: [2, 4], hund: [6, 12], katze: [3, 6] },
-		carry: [{ proto: "muenze", count: 10 }, { proto: "samen-strandnelke", count: 2 }, { proto: "samen-strandkohl", count: 1 }, { proto: "weizen", count: 8 }, { proto: "kartoffel", count: 8 }, { proto: "huhn", count: 4 }, { proto: "schaf", count: 2 }, { proto: "ziege", count: 2 }, { proto: "ente", count: 3 }, { proto: "gans", count: 2 }, { proto: "hund", count: 2 }, { proto: "katze", count: 2 }],
+			huhn: [2, 5], schaf: [5, 10], ziege: [4, 8], rind: [12, 24], ei: [1, 2], wolle: [2, 4], milch: [1, 2], ente: [3, 6], gans: [4, 8], daunen: [2, 4], hund: [6, 12], katze: [3, 6] },
+		carry: [{ proto: "muenze", count: 10 }, { proto: "samen-strandnelke", count: 2 }, { proto: "samen-strandkohl", count: 1 }, { proto: "weizen", count: 8 }, { proto: "kartoffel", count: 8 }, { proto: "huhn", count: 4 }, { proto: "schaf", count: 2 }, { proto: "ziege", count: 2 }, { proto: "rind", count: 1 }, { proto: "ente", count: 3 }, { proto: "gans", count: 2 }, { proto: "hund", count: 2 }, { proto: "katze", count: 2 }],
 		lines: ["Wer Samen will, muss erst Blumen wachsen lassen.", "Zwei Blumen nebeneinander im Zierbeet, und manchmal kommt etwas ganz Neues heraus.", "Auf Nebelholm blüht, was nirgends sonst wächst."] },
 	{ npcId: "lotte", name: "Lotte", skin: 2, room: "hafenviertel", ...near("hafenviertel", 16, 6), script: "plauderer", home: ["hafenviertel", "kupferhafen-markt", "speicher"],
 		lines: ["In der Schenke erzählen sie, der Fremde sei von einer versunkenen Insel.", "Wer die Alte Warte entzündet, dem winken die Schiffe.", "Mein Vetter hat einmal drei Perlen an einem Tag gefunden."] },
@@ -312,7 +312,7 @@ const NPCS: NpcDef[] = [
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 40,
+	version: 41,
 	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.en.md)
 	evening: { hour: 20 }, // a daily evening event
 	tileSize: 32,
@@ -395,6 +395,7 @@ export const world: WorldDef = {
 		// animals on the farm (docs/siedeln.en.md "Tiere auf dem Hof"): carried as things, kept in a coop or pen, and what they give
 		{ key: "huhn", parent: "ding", typeclass: "Livestock", name: "Huhn", desc: "Ein braunes Huhn, das empört gluckst, wenn man es trägt. Im Hühnerstall legt es jeden Tag ein Ei.", aliases: ["henne", "hühner", "huehner", "hen", "chicken"], glyph: { shape: "circle", color: "#b0703a" }, icon: "items/huhn.png", locks: ITEM_LOCKS },
 		{ key: "schaf", parent: "ding", typeclass: "Livestock", name: "Schaf", desc: "Ein Inselschaf mit dichter Wolle. Es frisst sogar Tang vom Strand.", aliases: ["schafe", "sheep"], glyph: { shape: "circle", color: "#e8e4d8" }, icon: "items/schaf.png", locks: ITEM_LOCKS },
+		{ key: "rind", parent: "ding", typeclass: "Livestock", name: "Rind", desc: "Ein ruhiges, schweres Rind. Es gibt viel Milch und will gut gefüttert sein.", aliases: ["rinder", "kuh", "kühe", "cow", "cattle"], glyph: { shape: "circle", color: "#7a5a3a" }, icon: "items/ziege.png", locks: ITEM_LOCKS },
 		{ key: "ziege", parent: "ding", typeclass: "Livestock", name: "Ziege", desc: "Eine neugierige Ziege mit Bart. Sie gibt jeden Tag Milch und frisst fast alles.", aliases: ["ziegen", "geiß", "geiss", "goat"], glyph: { shape: "circle", color: "#a89a80" }, icon: "items/ziege.png", locks: ITEM_LOCKS },
 		{ key: "ei", parent: "ding", typeclass: "Produce", name: "Ei", desc: "Ein braunes Ei, noch warm aus dem Nest.", aliases: ["eier", "egg", "eggs"], glyph: { shape: "circle", color: "#e8d0a8" }, icon: "items/ei.png", locks: ITEM_LOCKS },
 		{ key: "wolle", parent: "ding", typeclass: "Produce", name: "Wolle", desc: "Ein Knäuel geschorener Wolle, fettig und warm.", aliases: ["schafwolle", "wool"], glyph: { shape: "circle", color: "#f0ece0" }, icon: "items/wolle.png", locks: ITEM_LOCKS },
@@ -511,7 +512,7 @@ export const world: WorldDef = {
 	// docs/siedeln.en.md: building, first the hut (step 1)
 	building: {
 		store: { quota: { fremder: 2, helfer: 5, siedler: 20 }, logKeepMs: 3 * 24 * 3600_000, logShow: 12 },
-		lightPoints: 20, siteWorldMs: 2 * 24 * 3600_000, restWorldMs: 30 * 60_000, maxSites: 1, maxBuildings: 5, ruinWorldMs: 10 * 24 * 3600_000, estateWorldMs: 30 * 24 * 3600_000,
+		lightPoints: 20, lightGrowth: { perPlayer: 5, max: 40, activeMs: 7 * 24 * 3600_000 }, siteWorldMs: 2 * 24 * 3600_000, restWorldMs: 30 * 60_000, maxSites: 1, maxBuildings: 5, ruinWorldMs: 10 * 24 * 3600_000, estateWorldMs: 30 * 24 * 3600_000,
 		plans: [
 			{ key: "huette", name: "Hütte", dative: "einer Hütte", aliases: ["hütte", "hut"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "tangseil", count: 2 }], work: 20, points: 1, keepWorldMs: 30 * 24 * 3600_000, keepSetting: "keep.bau", color: "#8a6a44", chest: 12, repair: [{ proto: "treibholz", count: 1 }] },
 			// water for the beds (garden below): it gains a can every eight world hours, up to six, and is full after a storm surge
@@ -602,6 +603,7 @@ export const world: WorldDef = {
 	quarry: { plan: "steinbruch", tool: "spitzhacke", makes: "stein", count: 3 },
 	clay: { plan: "lehmgrube", tool: "spaten", makes: "lehm", count: 3 },
 	townhall: { plan: "rathaus", voteWorldMs: 24 * 3600_000, zoneRadius: 3, maxTax: 5 },
+	growth: { strip: 4, fullShare: 0.7, maxW: 36, maxH: 24, tile: "," },
 	wind: { stepMs: 6 * 3600_000, names: ["Flaute", "Eine leichte Brise", "Frischer Wind", "Sturm"], mill: [0.5, 1, 1.5, 2] },
 	festival: { plan: "park", showWorldMs: 2 * 24 * 3600_000, restWorldMs: 7 * 24 * 3600_000, prize: 10, careWorldMs: 24 * 3600_000, tendedWorldMs: 7 * 24 * 3600_000 },
 	chapel: { plan: "kapelle", offerings: ["perle", "bernstein", "brot", "strandnelke", "duenenrose", "nebelblume"], blessWorldMs: 24 * 3600_000 },
@@ -609,13 +611,15 @@ export const world: WorldDef = {
 	// docs/siedeln.en.md "Tiere auf dem Hof", step 3 part 3: one thing of feed keeps one animal a day; fed, a hen lays an egg a
 	// day, a sheep gives wool every other day, a goat milk a day; two fed ones now and then get a young one
 	animals: {
-		houses: { huehnerstall: 6, gehege: 4 }, feedWorldMs: 24 * 3600_000, fedMaxWorldMs: 3 * 24 * 3600_000, nestMax: 3,
+		maxHouses: 2, houses: { huehnerstall: 6, gehege: 4 }, feedWorldMs: 24 * 3600_000, fedMaxWorldMs: 3 * 24 * 3600_000, nestMax: 3,
 		kinds: [
 			{ key: "huhn", proto: "huhn", name: "Huhn", plural: "Hühner", plan: "huehnerstall", yields: "ei", everyWorldMs: 24 * 3600_000, feed: ["tang", "kohl", "moehre", "weizen", "gerste", "hafer"], breedWorldMs: 4 * 24 * 3600_000 },
 			{ key: "schaf", proto: "schaf", name: "Schaf", plural: "Schafe", plan: "gehege", yields: "wolle", everyWorldMs: 2 * 24 * 3600_000, feed: ["ruebe", "hafer", "gerste", "kohl", "tang"], breedWorldMs: 6 * 24 * 3600_000 },
 			{ key: "ente", proto: "ente", name: "Ente", plural: "Enten", plan: "gehege", yields: "ei", everyWorldMs: 24 * 3600_000, feed: ["tang", "kohl", "weizen", "gerste", "hafer"], breedWorldMs: 4 * 24 * 3600_000 },
 			// the geese keep watch: fed, they keep the hares from every bed of their room (wild.guard)
 			{ key: "gans", proto: "gans", name: "Gans", plural: "Gänse", plan: "gehege", yields: "daunen", everyWorldMs: 3 * 24 * 3600_000, feed: ["gerste", "hafer", "kohl", "ruebe", "tang"], breedWorldMs: 6 * 24 * 3600_000 },
+			// cattle come with the town: milk by the day like a goat's but twice over, and no breeding worth a chain of its own
+			{ key: "rind", epoch: 3, proto: "rind", name: "Rind", plural: "Rinder", plan: "gehege", yields: "milch", everyWorldMs: 12 * 3600_000, feed: ["hafer", "gerste", "ruebe", "kohl"], breedWorldMs: 30 * 24 * 3600_000 },
 			{ key: "ziege", proto: "ziege", name: "Ziege", plural: "Ziegen", plan: "gehege", yields: "milch", everyWorldMs: 24 * 3600_000, feed: ["ruebe", "hafer", "gerste", "kohl", "moehre", "tang"], breedWorldMs: 5 * 24 * 3600_000 },
 		],
 	},

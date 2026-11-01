@@ -1804,4 +1804,11 @@ export const EN: Record<string, string> = {
 	"die Mühlen mahlen in ihrem Takt": "the mills grind at their pace",
 	"die Mühlen mahlen nur langsam": "the mills grind only slowly",
 	"die Mühlen mahlen {0}-mal so schnell": "the mills grind {0} times as fast",
+	"Rind": "Cow",
+	"Rinder": "Cows",
+	"Ein ruhiges, schweres Rind. Es gibt viel Milch und will gut gefüttert sein.": "A calm, heavy cow. It gives a lot of milk and wants feeding well.",
+	"Mehr als {0} Ställe und Gehege hält niemand im Blick.": "Nobody keeps an eye on more than {0} coops and pens.",
+	"{0} wächst: Im {1} ist neues Land frei.": "{0} grows: new land lies free in the {1}.",
+	"Osten": "east",
+	"Süden": "south",
 };

@@ -55,6 +55,10 @@ export type SettlementMember = { accountId: string; name: string; rank: "helfer"
 export type SettlementFields = { settlementId: string; name: string; nameKey: string; room: string; founder: string; founderName: string; members: SettlementMember[]; closed: boolean; at: number; /** Coins per thing taken from the warehouse, set by a town hall; they go into it. */ tax?: number; /** Before this world time no new festival (engine/commands/festival.ts). */ showRestWorldMs?: number };
 /** A festival of a settlement, one per room (`unique`), ending at `endsWorldMs`. */
 /** The wind of an island: an index into `WorldDef.wind.names`. */
+/** What a room grew by (engine/commands/growth.ts), so that a new version of the world file keeps it. */
+export type RoomGrowthFields = { roomId: string; east: number; south: number };
+/** A registered player who built in a fire's light: the light grows with them (engine/commands/build.ts lightFor). */
+export type FireBuilderFields = { beaconId: string; accountId: string; atWorldMs: number };
 export type WindFields = { island: string; level: number };
 export type ShowKind = "blumen" | "ernte";
 export type ShowFields = { showId: string; room: string; settlementId: string; settlementName: string; kind: ShowKind; byName: string; endsWorldMs: number };

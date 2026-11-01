@@ -1064,6 +1064,7 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      Die Figuren der Welt machen aus ihren Heimaträumen mit, zählen als Teilnehmer und pflegen Parks; gewinnt eine, bleibt es bei der Ehre, ohne Münzen.
      Abweichungen: Der Preis kommt von der Welt, nicht von einer Tafel; das Erntefest braucht keinen Herbst, weil es noch keine Jahreszeiten gibt; der Park hat keine Beete, Pflege ist eine Blume für den Bau. Die Regatta wartet auf Boote, Feuerkette und regionsübergreifender Rang auf die Tafel. Der Warenumsatz zählt im Rang weiter nicht.
    - **Wind (gebaut, `server/engine/commands/wind.ts`):** Jede Insel hat eine Stufe, Flaute, Brise, frischer Wind oder Sturm, die sich alle sechs Weltstunden um einen Schritt bewegt; eine Sturmflut bringt sofort Sturm. `wetter` sagt, wie er steht. Eine Mühle mahlt mit dem Wind, der weht, wenn die Ladung kommt, halb bis doppelt so schnell, dazu kommt, was eine Sturmflut vorausmahlt. Eine Ladung behält das Tempo, mit dem sie begann. Hecken brechen ihn noch nicht.
+   - **Größen festgelegt (gebaut):** Ein Raum wächst um einen Streifen von 4 Feldern Gras nach Osten oder Süden, sobald 70 % seines Landes belegt sind, bis 36×24 (`server/engine/commands/growth.ts`, Job „epoch“); nur Osten und Süden, damit nichts verschoben wird, und nicht, wo ein Ausgang nah ist oder der Rand kein Gras hat, von den 37 Räumen können also 15 nicht wachsen und warten auf neue Räume. Ein Feuer trägt 20 Punkte und 5 mehr je registriertem Spieler, der dort in den letzten sieben Tagen gebaut hat, höchstens 40; Figuren füllen das Licht, ohne es zu erweitern. Ein Konto besitzt höchstens 2 Ställe und Gehege. Rinder kommen mit der Stadt (Epoche 3) ins Gehege: Milch doppelt so schnell wie die Ziege, die Zucht langsam. Abweichung: noch kein Leder.
 7. **Kaufhaus** (Laden mit Vorrat), **Kontor**, **Leuchtturm**, **Brauhaus**, **Glashütte und Gewächshaus**,
    Fischerei (Netz-Rezept, Steg) und Boote; **Nahrung** (Sattsein), wenn Brot und Räucherfisch da sind.
 8. **Straßen, Karren, Fahrplan-Fähren**, dann die **Inselbahn** als Automat.
@@ -1086,10 +1087,5 @@ scrollt. „Mein Ruf“ und das Ansehen bleiben im Menü.
 ## Offene Fragen
 
 Entschieden: Räume wachsen **und** neue entstehen; Kirchen sind freiwillig (die Götter wirken ohne sie); Wettbewerb
-ist gewaltfrei (Feste, Ruf, Regatta); Tiere kommen früh. Offen bleibt:
+ist gewaltfrei (Feste, Ruf, Regatta); Tiere kommen früh. Alle offenen Fragen sind entschieden; die Größen stehen unter Schritt 6.
 
-- Wie weit wächst ein Raum, bevor ein neuer entsteht — und wächst er in ganzen Zellstreifen oder abgestuft?
-- Wie viel Vieh verträgt der Ton — Hühner, Schafe und Ziegen auf dem Hof, oder auch Viehhandel und Zucht als eigene
-  Kette?
-- Wie viele Lichtpunkte trägt ein Feuer, und reicht eine feste Zahl, oder wächst sie mit der Zahl der Spieler einer
-  Insel (wie das Strandgut, `flood.perPlayers`)?

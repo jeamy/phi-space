@@ -114,6 +114,8 @@ export type WorldDef = {
 	chapel?: { plan: string; offerings: string[]; blessWorldMs: number };
 	/** Wind (engine/commands/wind.ts): each `stepMs` an island's level moves a step; `names` by level, the last a gale, `mill` how fast a mill grinds at it. */
 	wind?: { stepMs: number; names: string[]; mill: number[] };
+	/** Rooms grow (engine/commands/growth.ts): by `strip` cells of `tile` once `fullShare` of the land is taken, up to `maxW`×`maxH`. */
+	growth?: { strip: number; fullShare: number; maxW: number; maxH: number; tile: string };
 	festival?: FestivalDef;
 	/** Animals on the farm (docs/siedeln.en.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
 	animals?: AnimalsDef;
@@ -188,15 +190,15 @@ export type FieldDef = { epoch?: number; w: number; h: number; points: number; m
 export type MillDef = { plan: string; grinds: Array<{ from: string; to: string }>; unitWorldMs: number; maxLoad: number; maxLoads: number; stormWorldMs: number; keepWorldMs: number };
 /** A kind of animal: the prototype it is as a thing (bought, carried, put in), the plan that houses it, what one gives
  *  every `everyWorldMs` while fed (`yields`, a prototype), what it eats, and how often two fed ones get a young one. */
-export type AnimalKindDef = { key: string; proto: string; name: string; plural: string; plan: string; yields: string; everyWorldMs: number; feed: string[]; breedWorldMs: number };
+export type AnimalKindDef = { /** From this epoch of the island on. */ epoch?: number; key: string; proto: string; name: string; plural: string; plan: string; yields: string; everyWorldMs: number; feed: string[]; breedWorldMs: number };
 /** `houses`: how many a building of each plan holds (one kind at a time); one thing of feed keeps one animal fed for
  *  `feedWorldMs`, up to `fedMaxWorldMs` ahead; yields wait in the house, at most `nestMax` per animal. */
-export type AnimalsDef = { kinds: AnimalKindDef[]; houses: Record<string, number>; feedWorldMs: number; fedMaxWorldMs: number; nestMax: number };
+export type AnimalsDef = { /** Buildings of `houses` one account may own. */ maxHouses?: number; kinds: AnimalKindDef[]; houses: Record<string, number>; feedWorldMs: number; fedMaxWorldMs: number; nestMax: number };
 /** `store` (a plan whose chest a settlement shares, docs/siedeln.en.md "Siedlungen und Besitz"): `quota`: how many things a rank
  *  may take per world day; `logKeepMs`: how long a line of the log stays (real time, it must outlast the quota's day);
  *  `logShow`: how many lines `lager log` shows. */
 export type StoreDef = { quota: { fremder: number; helfer: number; siedler: number }; logKeepMs: number; logShow: number };
-export type BuildingDef = { store?: StoreDef; plans: PlanDef[]; lightPoints: number; siteWorldMs: number; restWorldMs: number; maxSites: number; maxBuildings: number; ruinWorldMs: number; estateWorldMs: number };
+export type BuildingDef = { store?: StoreDef; plans: PlanDef[]; lightPoints: number; /** `perPlayer` more points for each registered player who built here within `activeMs` (of the second clock), up to `max` in all. */ lightGrowth?: { perPlayer: number; max: number; activeMs: number }; siteWorldMs: number; restWorldMs: number; maxSites: number; maxBuildings: number; ruinWorldMs: number; estateWorldMs: number };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
 	/** In world hours: the NPC is there from `presentFromHour` to `presentUntilHour` (over midnight too), else away. */

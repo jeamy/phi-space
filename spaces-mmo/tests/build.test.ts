@@ -112,7 +112,7 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 
 		// the light is full: the fire carries no further building
 		await s.takeIfExists({ type: "LightUse", fields: { beaconId: "feuer-bucht" } }, 0);
-		await s.write({ type: "LightUse", fields: { beaconId: "feuer-bucht", used: 20 } }, null, FOREVER);
+		await s.write({ type: "LightUse", fields: { beaconId: "feuer-bucht", used: 40 } }, null, FOREVER);
 		const other = crew[0]!;
 		await walk(other, s, 20, 12);
 		assert.match(await does(other.p, "bau hütte", /Licht|passt keine/), /Licht des Feuers reicht/);
