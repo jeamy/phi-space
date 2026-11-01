@@ -17,6 +17,7 @@
 // traders and keepers offer people coins for what they want.
 import { randomInt } from "node:crypto";
 import { clockOf } from "../engine/clockcache.ts";
+import { counted } from "../engine/commands/trade.ts";
 import { stem } from "../engine/context.ts";
 import { flameOf } from "../engine/fire.ts";
 import { wayTo, type WorldDef } from "../engine/world.ts";
@@ -135,7 +136,11 @@ async function answerOffers(n: Npc, l: Look): Promise<boolean> {
 		return true;
 	}
 	await n.act(`decline ${o.fromName}`);
-	const fair = gets.length ? `Für ${gets.map((i) => i.name).join(", ")} gebe ich höchstens ${plural(worth, "Münze", "Münzen")}` : "Davon halte ich nichts";
+	// coins asked for things given: what they are worth to it; things asked for coins or things: what it asks, and what is offered
+	const coinsAsked = o.want.every((x) => protoOf(n.world, x.name) === n.world.currency);
+	const fair = !gets.length ? "Davon halte ich nichts"
+		: coinsAsked ? `Für ${counted(gets.map((i) => i.name))} gebe ich höchstens ${plural(worth, "Münze", "Münzen")}`
+		: `Für ${counted(o.want)} verlange ich ${plural(asked, "Münze", "Münzen")}, du bietest ${gets.every((i) => i.proto === n.world.currency) ? plural(worth, "Münze", "Münzen") : `${counted(gets.map((i) => i.name))}, mir höchstens ${plural(worth, "Münze", "Münzen")} wert`}`;
 	await n.act(`say ${o.fromName}, das ist mir zu wenig. ${fair}.`);
 	return true;
 }

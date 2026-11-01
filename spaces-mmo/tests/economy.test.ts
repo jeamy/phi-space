@@ -52,7 +52,12 @@ test("a trader offers coins for what one carries, takes a fair offer, turns down
 		await give(s, a.me, "muschel");
 		let from = a.p.frames.length;
 		a.p.send("offer muscheln an Kalle für 5 münzen"); // plurals: the shell, the coins
-		await msg(a.p, (t) => t.startsWith("Kalle: Fischerin, das ist mir zu wenig."), from);
+		await msg(a.p, (t) => t.startsWith("Kalle: Fischerin, das ist mir zu wenig. Für Muschel gebe ich höchstens 1 Münze."), from);
+		// coins for a thing it sells dear: it says what it asks and what is offered, not what the coins are worth
+		await give(s, "npc-kalle", "netz");
+		from = a.p.frames.length;
+		a.p.send("offer 2 münzen an Kalle für netz");
+		await msg(a.p, (t) => /^Kalle: Fischerin, das ist mir zu wenig\. Für Netz verlange ich \d+ Münzen, du bietest 2 Münzen\.$/.test(t), from);
 		// a fair one: the shell for one coin
 		from = a.p.frames.length;
 		a.p.send("offer muscheln an kalle für 1 münze");
