@@ -339,6 +339,7 @@ Below that the **limits**:
 | Beaming: coins per field of distance on the world map | `SPACES_MMO_BEAM_COST` | 1 |
 | Beaming: pause afterwards (world minutes) | `SPACES_MMO_BEAM_COOLDOWN` | 10 |
 | Beaming from this epoch of the island one stands on | `SPACES_MMO_BEAM_EPOCH` | 4 |
+| Force the epoch of every island (test; 0: the stock decides) | `SPACES_MMO_EPOCH_FORCE` | 0 |
 
 Beaming (`beam [place]`, `server/engine/commands/beam.ts`): from wherever one stands to the room of a burning fire, for coins by the
 distance of the rooms on the world map; a dark fire cannot be reached (checked within a region; the world map offers only burning ones),

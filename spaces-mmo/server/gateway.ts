@@ -147,6 +147,7 @@ export class Gateway {
 	readonly #winds = new Map<string, number>();
 	#yearDays = 0;
 	#beamCost = 1;
+	#epochForce = 0;
 	/** The name of the wind in a room; an island nobody counted yet has the breeze. */
 	#windIn(room: string): string { return this.w.wind?.names[this.#winds.get(this.#rooms.get(room)?.island ?? "") ?? 1] ?? ""; }
 	readonly #objs = new Map<string, ObjView>(); // by itemId / exitId
@@ -676,7 +677,8 @@ export class Gateway {
 		}
 		const lit = this.w.beacons.filter((b) => this.#burns(this.#flames.get(b.beaconId) ?? 0)).map((b) => b.room);
 		void setting(this.space, "beam.cost").then((n) => { this.#beamCost = n; }, () => {}); // the next state carries it
-		return { here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people, mine: owned.get(c.me.charId) ?? [], epochs: this.w.epochs ? Object.fromEntries([...this.#epochs.values()].map((e) => [e.island, e.epoch])) : null, beamCost: this.#beamCost };
+		void setting(this.space, "epoch.force").then((n) => { this.#epochForce = n; }, () => {});
+		return { here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people, mine: owned.get(c.me.charId) ?? [], epochs: !this.w.epochs ? null : this.#epochForce > 0 ? Object.fromEntries([...new Set(this.w.rooms.map((r) => r.island ?? ""))].map((i) => [i, this.#epochForce])) : Object.fromEntries([...this.#epochs.values()].map((e) => [e.island, e.epoch])), beamCost: this.#beamCost };
 	}
 
 	/** Something on the overview changed: its state goes out to every client once the short pause is over. */

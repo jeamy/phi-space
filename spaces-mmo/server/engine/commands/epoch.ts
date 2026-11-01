@@ -42,17 +42,25 @@ export async function islandPoints(space: SpaceLike, w: WorldDef, now: number): 
 /** An island's epoch as written (1 without an entry). */
 export async function epochOf(space: SpaceLike, island: string | undefined, txn: string | null = null): Promise<number> {
 	if (!island) return 1;
+	const forced = await setting(space, "epoch.force"); // the admin's test setting (0: the stock decides)
+	if (forced > 0) return forced;
 	const e = await peek(space, { type: "Epoch", fields: { island } }, { txn });
+	return e ? fieldsOf<EpochFields>(e).epoch : 1;
+}
+
+/** The epoch as the count wrote it (what the admin's forcing leaves aside). */
+async function writtenEpoch(space: SpaceLike, island: string): Promise<number> {
+	const e = await peek(space, { type: "Epoch", fields: { island } }, { txn: null });
 	return e ? fieldsOf<EpochFields>(e).epoch : 1;
 }
 
 /** The count (job "epoch"): each island of the region whose epoch changed gets its entry written anew and is told. */
 export async function epochTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<Array<{ island: string; epoch: number }>> {
 	if (!w.epochs) return [];
-	const now = await decayNowOf(space), limits = await thresholds(space), changed: Array<{ island: string; epoch: number }> = [];
+	const now = await decayNowOf(space), limits = await thresholds(space), force = await setting(space, "epoch.force"), changed: Array<{ island: string; epoch: number }> = [];
 	for (const [island, t] of await islandPoints(space, w, now)) {
-		const epoch = epochFor(t.points, limits, w.epochs.names.length);
-		if (epoch === (await epochOf(space, island))) continue;
+		const epoch = force > 0 ? Math.min(force, w.epochs.names.length) : epochFor(t.points, limits, w.epochs.names.length);
+		if (epoch === (await writtenEpoch(space, island))) continue;
 		const txn = (await space.createTransaction(10_000)).id;
 		try {
 			const old = await space.takeIfExists({ type: "Epoch", fields: { island } }, NO_WAIT, { txn });
@@ -105,7 +113,8 @@ const epoche: Command = {
 		const epoch = await epochOf(c.space, island, c.txn), last = c.world.epochs.names.length;
 		const parts = `Bauten ${t.buildings}, Beete ${t.beds}, Äcker ${t.fields}`;
 		const next = epoch < last ? ` ${cap(a(c.world, epoch + 1))} braucht ${limits[epoch - 1]} Punkte${unlocks(c.world, epoch + 1) ? `; dann gibt es ${unlocks(c.world, epoch + 1)}` : ""}.` : "";
-		const due = epochFor(t.points, limits, last) !== epoch ? " (Die Zählung holt das bald nach.)" : "";
+		const forced = (await setting(c.space, "epoch.force")) > 0;
+		const due = forced ? " (Zum Testen festgesetzt: Einstellung „Epoche erzwingen“.)" : epochFor(t.points, limits, last) !== epoch ? " (Die Zählung holt das bald nach.)" : "";
 		await msg(c, c.actor.charId, "info", `${island} ist ${a(c.world, epoch)} (Epoche ${epoch}): ${t.points} Punkte gehaltener Bestand (${parts}).${next}${due}`);
 	},
 };
