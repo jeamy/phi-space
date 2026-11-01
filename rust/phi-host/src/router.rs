@@ -100,6 +100,8 @@ pub trait RouterEnv {
 	fn read(&self, kind: &str, key: &str) -> R<Option<Json>>;
 	/// Writes `(kind, key, value)` as one commit.
 	fn commit(&self, writes: Vec<(String, String, Json)>) -> R<()>;
+	/// `commit`, and the Space's counters take this policy version in the same commit.
+	fn commit_policy(&self, writes: Vec<(String, String, Json)>, _version: f64) -> R<()> { self.commit(writes) }
 	fn assert_authority(&self) -> Local<R<()>>;
 	/// A receipt, or `Err` when the transport says nothing about the outcome.
 	fn invoke(&self, step: Json) -> Local<Result<Json, ()>>;
@@ -113,9 +115,11 @@ pub trait RouterEnv {
 pub struct Tx<'a> {
 	env: &'a dyn RouterEnv,
 	docs: Vec<(String, String, Json, Option<Json>)>,
+	/// The policy version this commit installs.
+	pub policy_version: Option<f64>,
 }
 impl<'a> Tx<'a> {
-	pub fn new(env: &'a dyn RouterEnv) -> Self { Tx { env, docs: vec![] } }
+	pub fn new(env: &'a dyn RouterEnv) -> Self { Tx { env, docs: vec![], policy_version: None } }
 	/// The place of a document in this commit, read the first time.
 	pub fn doc(&mut self, kind: &str, key: &str, initial: fn() -> Json) -> R<usize> {
 		if let Some(at) = self.docs.iter().position(|(k, x, _, _)| k == kind && x == key) {
@@ -129,7 +133,11 @@ impl<'a> Tx<'a> {
 	/// Writes what changed, as one commit.
 	pub fn commit(self) -> R<()> {
 		let writes: Vec<_> = self.docs.into_iter().filter(|(_, _, value, was)| was.as_ref() != Some(value)).map(|(kind, key, value, _)| (kind, key, value)).collect();
-		if writes.is_empty() { Ok(()) } else { self.env.commit(writes) }
+		match self.policy_version {
+			Some(v) => self.env.commit_policy(writes, v),
+			None if writes.is_empty() => Ok(()),
+			None => self.env.commit(writes),
+		}
 	}
 }
 /// A hook inside the commit that admits or completes a command: the command, the commit, the journal index and the bytes left.

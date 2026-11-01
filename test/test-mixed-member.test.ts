@@ -217,6 +217,49 @@ test("a control host with a Root serves federated work to its own agents, also a
 	assert.equal(refused.ok, false);
 });
 
+test("an admin adds and drains a Member by command, and the Root works by what that decided", async (tc) => {
+	const g = await setup(tc);
+	const dir = dirname(g.controlStore), sid = g.jobs.spaceId;
+	const routerKey = provisionFileSigner(join(dir, "root-router.json")), hostKey = provisionFileSigner(join(dir, "root-host.json"));
+	const config = JSON.parse(readFileSync(g.config, "utf8")), memberKey = loadFileSigner(join(dir, "member.json"));
+	const target = { authorityId: "authority", hostId: "data-host", spaceId: sid, dataIncarnation: g.jobs.incarnation, primaryEpoch: 1 };
+	await g.controlDown(async () => {
+		const host = await openSqliteHost(g.controlStore), now = Date.now();
+		await host.commit(async (tx) => {
+			const s = await spaceDoc(tx, g.space.spaceId, now);
+			for (const [k, roles] of [[routerKey, ["host", "router", "member"]], [hostKey, ["host", "member"]]] as const) core.write(s, now, { type: "PeerKey", fields: { peerId: "control-peer", keyId: k.keyId, principal: "control-peer", algorithm: k.algorithm, publicKey: k.publicKey!, roles: [...roles], scope: ["*"], state: "active" } }, null, FOREVER);
+			const d = await tx.doc(FederationRouting, g.space.spaceId, null);
+			d.policy = null; d.members = {};
+		}, ctx);
+		await host.close(ctx);
+		const file = JSON.parse(readFileSync(g.controlConfig, "utf8"));
+		file.root = { id: "root", keyFile: join(dir, "root-router.json"), hostKeyFile: join(dir, "root-host.json"), leaseFile: join(dir, "root-lease"), journalPartitions: 1, allowMembershipCommands: true, adminPeer: { peerId: "boss", address: g.ADMIN_IP }, members: { a: { target, peerId: "member-peer", keyId: memberKey.keyId, algorithm: memberKey.algorithm, publicKey: memberKey.publicKey, address: { host: config.listen.host, port: config.listen.port } } } };
+		writeFileSync(g.controlConfig, JSON.stringify(file), { mode: 0o600 });
+	});
+	const t = socketTransport({ host: CONTROL_IP, port: g.controlPort }, { localAddress: g.ADMIN_IP });
+	tc.after(() => t.close());
+	const admin: RemoteSpace = new RemoteSpace(t, { space: "control", attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 8_000, signer: g.adminKey.signer, expectedGateHostId: "control-host", ownPeerId: "boss", grantProvider: () => admin.requestGrant() });
+	await admin.authenticate();
+	const command = async (commandId: string, kind: string, args: Record<string, unknown>) => {
+		await admin.write({ type: "Command", fields: { commandId, kind, args: args as never } }, null, 3_600_000);
+		for (let i = 0; i < 400; i++) { const r = (await admin.readAll({ type: "Result", fields: { commandId } }))[0]?.fields as Record<string, any> | undefined; if (r) return r; await new Promise((r2) => setTimeout(r2, 25)); }
+		throw new Error("no result");
+	};
+	const line = socketTransport({ host: CONTROL_IP, port: g.controlPort }, { localAddress: CONTROL_IP });
+	tc.after(() => line.close());
+	await new RemoteSpace(line, { attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 8_000, signer: hostKey, expectedGateHostId: "control-host", ownPeerId: "control-peer" }).authenticate();
+	const root = (method: string, args: Record<string, unknown>) => line.request(JSON.stringify({ method, args })).then((r) => JSON.parse(r) as { ok: boolean; result?: any; error?: { code: string; message: string } });
+	const member = { id: "a", state: "adding", target };
+	const added = await command("add-1", "addMember", { member });
+	assert.deepEqual([added.state, added.result?.phase, added.result?.policyVersion], ["completed", "completed", 1], JSON.stringify(added));
+	const wrote = await root("rootWrite", { id: "w1", entry: { type: "Job", fields: { n: 1 } }, leaseMs: 60_000 });
+	assert.equal(wrote.ok, true, JSON.stringify(wrote));
+	const drained = await command("drain-1", "drain", { member });
+	assert.equal(drained.result?.phase, "completed", JSON.stringify(drained));
+	assert.equal((await root("rootWrite", { id: "w2", entry: { type: "Job", fields: { n: 2 } }, leaseMs: 60_000 })).error?.code, "MemberDrained", "a drained Member takes no new work");
+	assert.equal((await command("add-1", "addMember", { member })).result?.phase, "completed", "a command seen before keeps its result");
+});
+
 test("a Member serves on the grants of its control host and follows its keys and its fence", async (tc) => {
 	const g = await setup(tc);
 	await g.toControl.authenticate();

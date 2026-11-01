@@ -156,7 +156,7 @@ fn gate(g: &Json, policy: &phi_service::Policy) -> Result<Gated, String> {
 		o.enrolling = Some(Enrolling::new(on(&events)));
 	}
 	if flag("controlAccess") {
-		o.control = Some(Control { supervisor: flag("supervisor").then(|| Supervisor { on_event: on(&events), routing: None }) });
+		o.control = Some(Control { supervisor: flag("supervisor").then(|| Supervisor { commands: None, jobs: Default::default(), on_event: on(&events), routing: None }) });
 	}
 	if let Some(g) = g.get("grants") {
 		let part = |k: &str| g.get(k).and_then(Json::as_str).map(str::to_owned).ok_or(format!("grants without {k}"));

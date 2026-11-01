@@ -10,6 +10,7 @@ use phi_service::{Identity, Service};
 use phi_store::system_random;
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::collections::HashMap;
 
 pub const CONTROL_SPACE: &str = "control";
@@ -165,7 +166,7 @@ pub fn revoke_peer_key(service: &mut Service, now: f64, peer_id: &str, key_id: &
 	})
 }
 
-fn has_admin_key(s: &Space, now: f64, peer_id: &str) -> R<bool> {
+pub(crate) fn has_admin_key(s: &Space, now: f64, peer_id: &str) -> R<bool> {
 	Ok(listed(s, now, &obj! { "type" => "PeerKey", "fields" => obj! { "peerId" => peer_id } })?.iter().map(fields).any(|f| {
 		text(&f, "state") == "active" && f.get("roles").and_then(Json::as_array).is_some_and(|r| r.iter().any(|x| x.as_str() == Some("admin")))
 	}))
@@ -405,8 +406,8 @@ fn peer_of(owner: &str) -> String {
 pub struct Routing {
 	pub control_space: String,
 	pub authority_id: String,
-	/// What the file says, and what this process wrote since.
-	pub state: RefCell<Option<Json>>,
+	/// What the file says, and what this process wrote since; the Root on this host works on the same.
+	pub state: Rc<RefCell<Option<Json>>>,
 }
 
 const ROUTING: &str = "phi-spaces.federation-routing";
@@ -433,10 +434,21 @@ impl Routing {
 	}
 }
 
+/// Commands with effects on other hosts: they run outside the Control commits, and a transport error proves nothing, so they run again.
+pub trait AsyncCommands {
+	fn kinds(&self) -> &[&'static str];
+	fn run(&self, owner: phi_wire::Owner, kind: &str, command_id: &str, args: &Json, requested_by: &str) -> phi_wire::Local<Result<Json, String>>;
+}
+
+const JOBS: &str = "phi-spaces.supervisor-jobs";
+
 pub struct Supervisor {
 	pub on_event: Box<dyn Fn(&Json)>,
 	/// `None` where the host has no routing state: `setPolicy` is then an unknown command.
 	pub routing: Option<Routing>,
+	pub commands: Option<Rc<dyn AsyncCommands>>,
+	/// The jobs: what the file says, and what this process wrote since.
+	pub jobs: RefCell<Option<Json>>,
 }
 
 impl Supervisor {
@@ -446,14 +458,77 @@ impl Supervisor {
 		let mut n = 0;
 		loop {
 			let routing = self.routing_state(service)?;
-			let wrote = RefCell::new(None);
-			let done = service.commit_on(Some(&id), |s, _| self.next(s, now, &routing, &wrote))?;
+			let jobs = self.jobs_doc(service, &id)?;
+			let (wrote, wrote_jobs) = (RefCell::new(None), RefCell::new(None));
+			let done = service.commit_on(Some(&id), |s, _| self.next(s, now, &routing, &wrote, (&id, &jobs, &wrote_jobs)))?;
 			if let (Some(r), Some(next)) = (&self.routing, wrote.into_inner()) {
 				*r.state.borrow_mut() = Some(next);
 			}
+			if let Some(next) = wrote_jobs.into_inner() {
+				*self.jobs.borrow_mut() = Some(next);
+			}
 			let Some(done) = done else { return Ok(n) };
 			n += 1;
+			if done.get("async").is_some() {
+				return Ok(n);
+			}
 			(self.on_event)(&done);
+		}
+	}
+
+	fn jobs_doc(&self, service: &Service, id: &str) -> R<Json> { held_document(&self.jobs, &service.store, JOBS, Some(id), |d| d.unwrap_or(obj! { "jobs" => Object::new() })) }
+
+	/// `resumeJobs`: each job while its admin still is one; a job that fails stays for the next pass.
+	pub async fn resume_jobs(&self, owner: &phi_wire::Owner, now: &crate::gate::Now) {
+		let Some(commands) = self.commands.clone() else { return };
+		let read = owner.with(|service| control_id(service, (now)()).and_then(|id| self.jobs_doc(service, &id).map(|d| (id, d))));
+		let Ok((id, doc)) = read else { return };
+		let jobs: Vec<Json> = doc.get("jobs").and_then(Json::as_object).map_or(vec![], |j| j.iter().map(|(_, v)| v.clone()).collect());
+		for job in jobs {
+			let (command_id, kind, requested_by) = (text(&job, "commandId").to_owned(), text(&job, "kind").to_owned(), text(&job, "requestedBy").to_owned());
+			if !commands.kinds().contains(&kind.as_str()) {
+				continue;
+			}
+			let active = owner.with(|service| {
+				let t = (now)();
+				service.commit_on(Some(&id), |s, _| has_admin_key(s, t, &requested_by))
+			});
+			if !active.unwrap_or(false) {
+				continue;
+			}
+			let result = match commands.run(owner.clone(), &kind, &command_id, job.get("args").unwrap_or(&Json::Null), &requested_by).await {
+				Ok(r) => r,
+				Err(e) => {
+					eprintln!("phi-spaces supervisor: {e}");
+					continue;
+				}
+			};
+			let state = if text(&result, "phase") == "failed" { "failed" } else { "completed" };
+			let t = (now)();
+			let done = owner.with(|service| {
+				let current = self.jobs_doc(service, &id)?;
+				let mut next = current.as_object().cloned().unwrap_or_default();
+				let mut table = current.get("jobs").and_then(Json::as_object).cloned().unwrap_or_default();
+				if table.get(&command_id).map(|j| text(j, "hash")) != Some(text(&job, "hash")) {
+					return Err(illegal("remote command binding changed"));
+				}
+				table.remove(&command_id);
+				next.insert("jobs", Json::Object(table));
+				let doc = Json::Object(next);
+				service.commit_on(Some(&id), |s, _| {
+					if listed(s, t, &obj! { "type" => "Result", "fields" => obj! { "commandId" => command_id.as_str() } })?.is_empty() {
+						put(s, t, "Result", obj! { "commandId" => command_id.as_str(), "kind" => kind.as_str(), "state" => state, "requestedBy" => requested_by.as_str(), "at" => t, "result" => result.clone() }, RESULT_RETENTION_MS)?;
+					}
+					s.doc_writes.push((JOBS.to_owned(), id.clone(), 1, doc.to_json_text()));
+					Ok(())
+				})?;
+				*self.jobs.borrow_mut() = Some(doc);
+				Ok::<(), CoreError>(())
+			});
+			match done {
+				Ok(()) => (self.on_event)(&obj! { "commandId" => command_id.as_str(), "kind" => kind.as_str(), "state" => state, "requestedBy" => requested_by.as_str() }),
+				Err(e) => eprintln!("phi-spaces supervisor: {}", e.message),
+			}
 		}
 	}
 
@@ -465,7 +540,7 @@ impl Supervisor {
 		Ok(Some((state, open)))
 	}
 
-	fn next(&self, s: &mut Space, now: f64, routing: &Option<(Json, bool)>, wrote: &RefCell<Option<Json>>) -> R<Option<Json>> {
+	fn next(&self, s: &mut Space, now: f64, routing: &Option<(Json, bool)>, wrote: &RefCell<Option<Json>>, (id, jobs, wrote_jobs): (&str, &Json, &RefCell<Option<Json>>)) -> R<Option<Json>> {
 		let Some(first) = listed(s, now, &obj! { "type" => "Command" })?.into_iter().next() else { return Ok(None) };
 		let Some(taken) = take(s, now, &obj! { "id" => text(&first, "id") })? else { return Ok(None) };
 		let f = fields(&taken);
@@ -499,6 +574,22 @@ impl Supervisor {
 		}
 		let empty = Json::Object(Object::new());
 		let args = f.get("args").filter(|a| a.as_object().is_some()).unwrap_or(&empty);
+		if self.commands.as_ref().is_some_and(|c| c.kinds().contains(&kind.as_str())) {
+			let hash = Json::Array(vec![kind.as_str().into(), args.clone(), requested_by.as_str().into()]).canonical().map_err(|_| illegal("a command that cannot be hashed"))?;
+			let mut table = jobs.get("jobs").and_then(Json::as_object).cloned().unwrap_or_default();
+			match table.get(&command_id) {
+				Some(old) if text(old, "hash") != hash => return finish(s, Err("command ID changed remote arguments".to_owned())),
+				None if table.len() >= 64 => return Err(error("ResourceExhausted", "remote command admission full")),
+				_ => {}
+			}
+			table.insert(&command_id, obj! { "commandId" => command_id.as_str(), "kind" => kind.as_str(), "args" => args.clone(), "requestedBy" => requested_by.as_str(), "hash" => hash });
+			let mut next = jobs.as_object().cloned().unwrap_or_default();
+			next.insert("jobs", Json::Object(table));
+			let doc = Json::Object(next);
+			s.doc_writes.push((JOBS.to_owned(), id.to_owned(), 1, doc.to_json_text()));
+			*wrote_jobs.borrow_mut() = Some(doc);
+			return Ok(Some(with(&event("applying", None), &[("async", Json::Bool(true))])));
+		}
 		let effect = match kind.as_str() {
 			"createEnroll" => {
 				let scope = args.get("scope").and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect());

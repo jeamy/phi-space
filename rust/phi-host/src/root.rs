@@ -1,19 +1,21 @@
 //! The Root on a control host (src/configured-root.ts, src/root-wire.ts): the journals in the control store, the Members over proven
 //! lines, and the operations on the wire for the hosted agents of this very peer. Replicated Members, a router change, the status
 //! heartbeat and epoch notices are not carried; `check_start` refuses what would rely on them.
-use crate::auth::{KeyDirectory, PeerKey, Proof, Signer};
+use crate::auth::{Algorithm, KeyDirectory, PeerKey, Proof, Signer};
 use crate::boot::BootGuard;
-use crate::control::{peer_key, CONTROL_SPACE};
+use crate::control::{has_admin_key, held_document, peer_key, AsyncCommands, CONTROL_SPACE};
 use crate::control_host::ControlHost;
-use crate::federated_space::{failure, FederatedSpace, FederationIo, LAYOUT};
-use crate::federation_rpc::{FederationRpc, RootIo};
-use crate::gate::Now;
+use crate::federated_space::{failure, FederatedSpace, FederationIo, LAYOUT, OPERATIONS};
+use crate::federation_rpc::{Failure, FederationRpc, RootIo};
+use crate::gate::{roles_of, GroupRoles, Netbird, Now};
 use crate::grants::GrantAuthority;
+use crate::membership_control::{MembershipController, MembershipEnv};
 use crate::remote::ControlClient;
-use crate::router::{Reprepared, RouterController, RouterEnv, DEFAULT_LIMITS, JOURNAL};
-use phi_core::routing::{partition_router_id, validate_journal_partitions};
+use crate::router::{Reprepared, RouterController, RouterEnv, COMMANDS, DEFAULT_LIMITS, JOURNAL};
+use crate::run_member::Pin;
+use phi_core::routing::{parent_journal_key, partition_router_id, validate_journal_partitions};
 use phi_core::space::{error, CoreError};
-use phi_json::{num_of, obj, text, Json};
+use phi_json::{digest_json, num_of, obj, text, Json};
 use phi_service::{Identity, Service};
 use phi_wire::{Local, Owner};
 use std::cell::RefCell;
@@ -40,10 +42,15 @@ impl KeyDirectory for StoreKeys<'_> {
 	fn find(&self, peer_id: &str, key_id: &str) -> Option<PeerKey> { PeerKey::from_json(&peer_key(&mut self.store.borrow_mut(), self.now, peer_id, key_id)?) }
 }
 
-/// What is provisioned of a Member: the line to it.
+/// What is provisioned of a Member: the line to it, and the key its proofs stand on.
 pub struct MemberEnd {
 	pub host: String,
 	pub port: u16,
+	pub peer_id: String,
+	pub key_id: String,
+	pub algorithm: Algorithm,
+	pub public_key: String,
+	pub target: Json,
 }
 
 pub struct RootConfig {
@@ -64,6 +71,13 @@ pub struct RootConfig {
 	pub control: ControlHost,
 	pub guard: Rc<BootGuard>,
 	pub now: Now,
+	/// The routing, as the supervisor of this host holds it.
+	pub routing: Rc<RefCell<Option<Json>>>,
+	/// `adminPeer`: `peerId`, `address`; membership commands need it.
+	pub admin: Option<(String, String)>,
+	pub directory: Rc<Netbird>,
+	pub group_roles: GroupRoles,
+	pub control_signer: Rc<Signer>,
 }
 
 struct Inner {
@@ -72,6 +86,8 @@ struct Inner {
 	docs: RefCell<HashMap<(String, String), Json>>,
 	lease: RefCell<Option<Json>>,
 	lines: RefCell<HashMap<String, Rc<ControlClient>>>,
+	/// Who stands behind the membership command that runs now.
+	acting: RefCell<Option<String>>,
 }
 #[derive(Clone)]
 struct Env(Rc<Inner>);
@@ -111,6 +127,54 @@ impl Env {
 		*self.0.lease.borrow_mut() = Some(token.clone());
 		Ok(token)
 	}
+	fn write_docs(&self, writes: Vec<(String, String, Json)>, version: Option<f64>) -> R<()> {
+		let space = self.0.c.control_space.clone();
+		let lines: Vec<_> = writes.iter().map(|(k, x, v)| (k.clone(), x.clone(), 1, v.to_json_text())).collect();
+		self.with(|s| -> R<()> {
+			s.commit_on(Some(&space), |d, now| {
+				if let Some(v) = version {
+					let counters = d.state.rest.get("authorityCounters").and_then(Json::as_object).cloned();
+					let mut next = counters.unwrap_or_else(|| obj! { "routerEpoch" => 0.0 }.as_object().cloned().expect("an object"));
+					next.insert("policyVersion", v.into());
+					d.state.rest.insert("authorityCounters", Json::Object(next));
+					d.touch(now);
+				}
+				d.doc_writes.extend(lines);
+				Ok(())
+			})?;
+			s.store.drain().map_err(|e| error("Unavailable", e.to_string()))
+		})??;
+		let mut docs = self.0.docs.borrow_mut();
+		for (kind, key, value) in writes {
+			if kind == ROUTING {
+				*self.0.c.routing.borrow_mut() = Some(value);
+			} else {
+				docs.insert((kind, key), value);
+			}
+		}
+		Ok(())
+	}
+	/// The line to a Member by its binding, also one the routing does not hold yet.
+	fn line_to(&self, member: &Json) -> R<Rc<ControlClient>> {
+		let c = &self.0.c;
+		let id = text(member, "id").unwrap_or("");
+		let end = c.members.get(id).filter(|e| e.target.canonical().ok() == member.get("target").and_then(|t| t.canonical().ok())).ok_or_else(|| blocked("membership target is not provisioned"))?;
+		let host = member.get("target").and_then(|t| text(t, "hostId")).unwrap_or("");
+		if let Some(l) = self.0.lines.borrow().get(id) {
+			return Ok(Rc::clone(l));
+		}
+		let line = Rc::new(ControlClient::new((end.host.clone(), end.port), &c.own_address, &c.peer_id, host, (c.line_signer)(), &c.router_key.1));
+		self.0.lines.borrow_mut().insert(id.to_owned(), Rc::clone(&line));
+		Ok(line)
+	}
+	fn control_entries(&self) -> R<Vec<Json>> {
+		let (space, now) = (self.0.c.control_space.clone(), (self.0.c.now)());
+		self.with(|s| -> R<Vec<Json>> {
+			let host = s.store.reader(Some(&space))?;
+			Ok(host.space.state.entries.iter().filter(|e| e.expires > now).map(|e| obj! { "type" => e.type_.as_str(), "fields" => e.fields.clone() }).collect())
+		})?
+	}
+
 	/// The guard of `createFederationController`: the host stands, and the lease is the one Control knows.
 	fn authorize(&self) -> R<()> {
 		let c = &self.0.c;
@@ -132,28 +196,18 @@ fn read_lease(file: &Path) -> Option<Json> { phi_json::parse(&std::fs::read_to_s
 
 impl RouterEnv for Env {
 	fn read(&self, kind: &str, key: &str) -> R<Option<Json>> {
+		if kind == ROUTING {
+			let c = &self.0.c;
+			return self.with(|s| held_document(&c.routing, &s.store, ROUTING, Some(&c.control_space), |d| d.unwrap_or_else(empty_routing)).map(Some))?;
+		}
 		if let Some(d) = self.0.docs.borrow().get(&(kind.to_owned(), key.to_owned())) {
 			return Ok(Some(d.clone()));
 		}
 		self.with(|s| s.store.stored_document(kind, Some(key)))?.map_err(|e| error("Unavailable", e.to_string()))
 	}
 	/// One commit of the control Space, on the disk before any Member hears of it.
-	fn commit(&self, writes: Vec<(String, String, Json)>) -> R<()> {
-		let space = self.0.c.control_space.clone();
-		let lines: Vec<_> = writes.iter().map(|(k, x, v)| (k.clone(), x.clone(), 1, v.to_json_text())).collect();
-		self.with(|s| -> R<()> {
-			s.commit_on(Some(&space), |d, _| {
-				d.doc_writes.extend(lines);
-				Ok(())
-			})?;
-			s.store.drain().map_err(|e| error("Unavailable", e.to_string()))
-		})??;
-		let mut docs = self.0.docs.borrow_mut();
-		for (kind, key, value) in writes {
-			docs.insert((kind, key), value);
-		}
-		Ok(())
-	}
+	fn commit(&self, writes: Vec<(String, String, Json)>) -> R<()> { self.write_docs(writes, None) }
+	fn commit_policy(&self, writes: Vec<(String, String, Json)>, version: f64) -> R<()> { self.write_docs(writes, Some(version)) }
 	fn assert_authority(&self) -> Local<R<()>> {
 		let done = self.authorize();
 		Box::pin(async move { done })
@@ -241,15 +295,155 @@ impl FederationIo for Env {
 	}
 }
 
+impl MembershipEnv for Env {
+	fn apply(&self, member: &Json, signed: Json) -> Local<R<Json>> {
+		let line = self.line_to(member);
+		Box::pin(async move {
+			let line = line?;
+			let unreachable = |e: String| error("TransportFailure", e);
+			ControlClient::prove(&line).await.map_err(unreachable)?;
+			let reply = ControlClient::reply(&line, &obj! { "method" => "membershipInstruction", "args" => obj! { "instruction" => signed } }).await.map_err(unreachable)?;
+			if reply.get("ok") == Some(&Json::Bool(true)) {
+				return Ok(reply.get("result").cloned().unwrap_or(Json::Null));
+			}
+			let e = reply.get("error");
+			Err(failure(Failure::Refused { code: e.and_then(|e| text(e, "code")).unwrap_or("Error").to_owned(), message: e.and_then(|e| text(e, "message")).unwrap_or("refused").to_owned() }))
+		})
+	}
+	fn pin(&self, member: &Json) -> Local<R<Pin>> {
+		let c = &self.0.c;
+		let id = text(member, "id").unwrap_or("");
+		let end = c.members.get(id).filter(|e| e.target.canonical().ok() == member.get("target").and_then(|t| t.canonical().ok()));
+		let done = match end {
+			None => Err(blocked("membership target is not provisioned")),
+			Some(e) => {
+				let now = (c.now)();
+				let key = self.with(|s| peer_key(&mut s.store, now, &e.peer_id, &e.key_id));
+				match key.map(|k| k.and_then(|k| PeerKey::from_json(&k))) {
+					Ok(Some(k)) if k.active && k.algorithm == e.algorithm && k.public_key == e.public_key && k.roles.iter().any(|r| r == "host") => Ok(Pin { issuer: e.peer_id.clone(), algorithm: e.algorithm, public_key: e.public_key.clone() }),
+					Ok(_) => Err(blocked("Member key pin is not active")),
+					Err(e) => Err(e),
+				}
+			}
+		};
+		Box::pin(async move { done })
+	}
+	/// `authorizeAdmin`: the command stands on the provisioned administrator, as the directory and the keys know it now.
+	fn authorize(&self) -> Local<R<()>> {
+		let env = self.clone();
+		Box::pin(async move {
+			let c = &env.0.c;
+			let refused = || blocked("native Root requires a provisioned Supervisor administrator context");
+			let Some((peer, address)) = c.admin.as_ref().filter(|(p, _)| env.0.acting.borrow().as_deref() == Some(p)) else { return Err(refused()) };
+			c.directory.refresh().await.map_err(|e| error("Error", e))?;
+			let found = c.directory.lookup(address).await.map_err(|e| error("Error", e))?;
+			if !found.is_some_and(|p| p.id == *peer && roles_of(&p.groups, &c.group_roles).iter().any(|r| r == "admin")) {
+				return Err(refused());
+			}
+			let (space, now) = (c.control_space.clone(), (c.now)());
+			let active = env.with(|s| s.commit_on(Some(&space), |d, _| has_admin_key(d, now, peer)))??;
+			if active { Ok(()) } else { Err(refused()) }
+		})
+	}
+	/// `memberReferencesIn`: every journal in one look; what is open and names the Member holds it.
+	fn has_references(&self, member_id: &str, space_id: &str) -> R<bool> {
+		let c = &self.0.c;
+		let layout = self.read(LAYOUT, &c.id)?;
+		let partitions = layout.as_ref().and_then(|l| num_of(l, "partitions")).unwrap_or(1.0);
+		if layout.as_ref().is_some_and(|l| l.get("reconciliation").is_some()) {
+			return Ok(true);
+		}
+		let mut routers = vec![c.id.clone()];
+		routers.extend(layout.as_ref().and_then(|l| l.get("routerIds")).and_then(Json::as_array).into_iter().flatten().filter_map(Json::as_str).map(str::to_owned));
+		routers.sort();
+		routers.dedup();
+		for r in routers {
+			let index = self.read(JOURNAL, &r)?;
+			for (id, row) in index.as_ref().and_then(|i| i.get("refs")).and_then(Json::as_object).map_or(vec![], |x| x.iter().collect()) {
+				if matches!(text(row, "state"), Some("completed" | "failed")) || row.get("released") == Some(&Json::Bool(true)) {
+					continue;
+				}
+				let key = digest_json(&Json::Array(vec![r.as_str().into(), id.into()])).map_err(|_| blocked("a key that cannot be hashed"))?;
+				let doc = self.read(COMMANDS, &key)?;
+				let command = doc.as_ref().and_then(|d| d.get("command")).filter(|c| !c.is_null()).ok_or_else(|| error("Error", "incomplete Router reference reconstruction"))?;
+				if command.get("steps").and_then(Json::as_array).is_some_and(|s| s.iter().any(|x| x.get("target").and_then(|t| text(t, "spaceId")) == Some(space_id))) {
+					return Ok(true);
+				}
+			}
+		}
+		let mut ops = phi_json::Object::new();
+		for p in 0..partitions as u64 {
+			let doc = self.read(OPERATIONS, &parent_journal_key(&c.id, partitions, p as f64)?)?;
+			for (k, v) in doc.as_ref().and_then(|d| d.get("operations")).and_then(Json::as_object).map_or(vec![], |o| o.iter().collect()) {
+				ops.insert(k, v.clone());
+			}
+		}
+		for (_, op) in ops.iter() {
+			if !op.get("members").and_then(Json::as_array).is_some_and(|m| m.iter().any(|x| x.as_str() == Some(member_id))) {
+				continue;
+			}
+			if text(op, "phase") != Some("done") {
+				return Ok(true);
+			}
+			let id = text(op, "id");
+			let args = op.get("args");
+			if text(op, "kind") == Some("txn") && args.and_then(|a| text(a, "action")) == Some("begin") {
+				let closed = ops.iter().any(|(_, d)| text(d, "kind") == Some("txn") && text(d, "phase") == Some("done") && d.get("args").is_some_and(|a| text(a, "originId") == id && matches!(text(a, "action"), Some("commit" | "abort"))));
+				if !closed {
+					return Ok(true);
+				}
+			}
+		}
+		const QUIET: [&str; 7] = ["Command", "Result", "PeerKey", "Enroll", "RouterLease", "Capability", "MemberStatus"];
+		Ok(self.control_entries()?.iter().any(|e| {
+			let f = e.get("fields");
+			let field = |k: &str| f.and_then(|f| text(f, k));
+			!text(e, "type").is_some_and(|t| QUIET.contains(&t)) && !matches!(field("state"), Some("completed" | "failed" | "stopped" | "cancelled"))
+				&& (field("memberId") == Some(member_id) || field("spaceId") == Some(space_id) || f.and_then(|f| f.get("members")).and_then(Json::as_array).is_some_and(|m| m.iter().any(|x| x.as_str() == Some(member_id))))
+		}))
+	}
+}
+
 pub struct Root {
 	env: Env,
 	space: Mutex<Option<FederatedSpace<Env, Env>>>,
+	/// One transition at a time.
+	membership: Mutex<()>,
+}
+
+/// The membership commands of the supervisor.
+pub const COMMANDS_OF_ROOT: [&str; 3] = ["addMember", "drain", "removeMember"];
+impl AsyncCommands for Rc<Root> {
+	fn kinds(&self) -> &[&'static str] { if self.env.0.c.admin.is_some() { &COMMANDS_OF_ROOT } else { &[] } }
+	fn run(&self, owner: Owner, kind: &str, command_id: &str, args: &Json, requested_by: &str) -> Local<Result<Json, String>> {
+		let (root, kind, id, args, by) = (Rc::clone(self), kind.to_owned(), command_id.to_owned(), args.clone(), requested_by.to_owned());
+		Box::pin(async move {
+			let _one = root.membership.lock().await;
+			*root.env.0.owner.borrow_mut() = Some(owner);
+			*root.env.0.acting.borrow_mut() = Some(by);
+			let c = &root.env.0.c;
+			let controller = MembershipController { env: root.env.clone(), control_space: c.control_space.clone(), authority_id: c.authority_id.clone(), peer_id: c.peer_id.clone(), signer: Rc::clone(&c.control_signer) };
+			let short = match kind.as_str() { "addMember" => "add", "drain" => "drain", _ => "remove" };
+			let member = args.get("member").cloned().unwrap_or(Json::Null);
+			let r = controller.execute(&id, short, &member, text(&args, "newDefault")).await;
+			*root.env.0.acting.borrow_mut() = None;
+			let r = r.map_err(|e| e.message)?;
+			let mut out = obj! { "phase" => r.get("phase").cloned().unwrap_or(Json::Null), "memberId" => member.get("id").cloned().unwrap_or(Json::Null) };
+			if let Some(e) = r.get("error") {
+				out.as_object_mut().expect("an object").insert("error", e.clone());
+			}
+			if let Some(v) = r.get("policy").and_then(|p| p.get("policyVersion")) {
+				out.as_object_mut().expect("an object").insert("policyVersion", v.clone());
+			}
+			Ok(out)
+		})
+	}
 }
 
 impl Root {
 	pub fn new(c: RootConfig) -> R<Rc<Root>> {
 		validate_journal_partitions(c.partitions).map_err(|e| blocked(e.message))?;
-		Ok(Rc::new(Root { env: Env(Rc::new(Inner { c, owner: RefCell::new(None), docs: RefCell::default(), lease: RefCell::new(None), lines: RefCell::default() })), space: Mutex::new(None) }))
+		Ok(Rc::new(Root { env: Env(Rc::new(Inner { c, owner: RefCell::new(None), docs: RefCell::default(), lease: RefCell::new(None), lines: RefCell::default(), acting: RefCell::new(None) })), space: Mutex::new(None), membership: Mutex::new(()) }))
 	}
 	pub fn peer_id(&self) -> &str { &self.env.0.c.peer_id }
 

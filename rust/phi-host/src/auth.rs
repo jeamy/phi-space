@@ -119,7 +119,7 @@ pub(crate) fn verify_value<'a>(token: &'a Json, name: &str, issuer: &str, algori
 }
 
 /// A signed envelope: the value under `field`, issuer, algorithm and signature, in the order the TypeScript side writes them.
-pub(crate) fn seal(field: &str, value: Json, name: &str, issuer: &str, signer: &Signer) -> Option<Json> {
+pub fn seal(field: &str, value: Json, name: &str, issuer: &str, signer: &Signer) -> Option<Json> {
 	let signature = to_base64(&signer.sign(domain_text(name, &value)?.as_bytes()));
 	let mut o = Object::new();
 	o.insert(field, value);

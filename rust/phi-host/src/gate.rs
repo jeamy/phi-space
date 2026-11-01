@@ -174,7 +174,7 @@ pub fn default_group_roles() -> GroupRoles {
 	[("space-hosts", "member"), ("space-admin", "admin"), ("space-observer", "observer"), ("space-enroll", "unpaired")].map(|(g, r)| (g.to_owned(), vec![r.to_owned()])).into()
 }
 
-fn roles_of(groups: &[String], map: &GroupRoles) -> Vec<String> {
+pub(crate) fn roles_of(groups: &[String], map: &GroupRoles) -> Vec<String> {
 	groups.iter().filter_map(|g| map.get(g)).flatten().cloned().collect::<BTreeSet<_>>().into_iter().collect()
 }
 
@@ -455,6 +455,8 @@ async fn supervise(gate: Rc<Gate>, owner: Owner) {
 			}
 			seen = Some(owner.handed());
 		}
+		let supervisor = gate.o.control.as_ref().and_then(|c| c.supervisor.as_ref()).expect("started with one");
+		supervisor.resume_jobs(&owner, &gate.o.now).await;
 		tokio::select! {
 			_ = owner.commit() => {}
 			_ = sleep(Duration::from_millis(100)) => {}

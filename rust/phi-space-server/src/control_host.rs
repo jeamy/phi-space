@@ -14,6 +14,7 @@ use phi_host::grants::GrantVerifier;
 use phi_host::rotation::Rotating;
 use phi_json::Json;
 use phi_service::Options;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 const REFUSED: [&str; 9] = ["syncSpaces", "entryReplication", "recovery", "recoveryAdmin", "registerSshTarget", "registerReadSocket", "membership", "runGates", "spaceLifecycle"];
@@ -66,10 +67,11 @@ pub fn run(config: &str, store: &str) {
 
 	let mut o = GateOptions::new(directory, Rc::clone(&now));
 	set_group_roles(&mut o, &c);
+	let routing = Rc::new(RefCell::new(None));
 	let keys: Rc<dyn Keys> = Rc::new(SpaceKeys { now: Rc::clone(&now) });
 	o.proving = Some((Proving::new(host_id), keys));
 	o.enrolling = Some(Enrolling::new(Box::new(|_| ())));
-	o.control = Some(Control { supervisor: Some(Supervisor { on_event: Box::new(|_| ()), routing: Some(Routing { control_space: control_space.to_owned(), authority_id: authority_id.to_owned(), state: Default::default() }) }) });
+	o.control = Some(Control { supervisor: Some(Supervisor { on_event: Box::new(|_| ()), commands: None, jobs: Default::default(), routing: Some(Routing { control_space: control_space.to_owned(), authority_id: authority_id.to_owned(), state: Rc::clone(&routing) }) }) });
 	let mut rotating = Rotating::new(authority_id, host_id, signer, control_key);
 	// configured-runtime's allowAOnly. A recovery writes the policy under the new authority before that authority runs,
 	// so what stood at the start stands while this host runs. Without a policy TS asks the control Space's restore; a Space
@@ -86,9 +88,13 @@ pub fn run(config: &str, store: &str) {
 		o.capabilities = Some(Rc::new(Capabilities { host_id: host_id.to_owned(), tools: names("tools"), models: names("models"), data_spaces: spaces, client: None }));
 	}
 	if let Some(r) = c.get("root").filter(|r| !r.is_null()) {
-		let root = root_of(&c, r, control_key, listen_host, &guard, &now, algorithm);
+		let root = root_of(&c, r, control_key, listen_host, &guard, &now, algorithm, (&routing, &o));
 		Root::check_start(&root, &mut opened).unwrap_or_else(|e| fail(e));
-		o.root = Some(Root::new(root).unwrap_or_else(|e| fail(e.message)));
+		let root = Root::new(root).unwrap_or_else(|e| fail(e.message));
+		if let Some(s) = o.control.as_mut().and_then(|c| c.supervisor.as_mut()) {
+			s.commands = Some(Rc::new(Rc::clone(&root)));
+		}
+		o.root = Some(root);
 	}
 	o.boot = Some(guard);
 	let gate = Gate::new(listen_host, o).unwrap_or_else(|e| fail(e));
@@ -98,8 +104,8 @@ pub fn run(config: &str, store: &str) {
 
 /// `root` of the config: what is not carried yet stops the start.
 #[allow(clippy::too_many_arguments)]
-fn root_of(c: &Json, r: &Json, control_key: &str, listen_host: &str, guard: &Rc<BootGuard>, now: &Now, algorithm: Algorithm) -> RootConfig {
-	for k in ["takeover", "allowMembershipCommands", "adminPeer", "statusIntervalMs"] {
+fn root_of(c: &Json, r: &Json, control_key: &str, listen_host: &str, guard: &Rc<BootGuard>, now: &Now, algorithm: Algorithm, (routing, o): (&Rc<RefCell<Option<Json>>>, &GateOptions)) -> RootConfig {
+	for k in ["takeover", "statusIntervalMs"] {
 		if r.get(k).is_some_and(|v| !v.is_null() && v != &Json::Bool(false)) {
 			fail(format!("root.{k} is not served by this host"));
 		}
@@ -115,7 +121,8 @@ fn root_of(c: &Json, r: &Json, control_key: &str, listen_host: &str, guard: &Rc<
 	let line_key = r.clone();
 	let ends = members.iter().map(|(id, m)| {
 		let (host, port) = address_of(m.get("address").unwrap_or_else(|| fail("incomplete native Root configuration")));
-		(id.to_owned(), MemberEnd { host: host.to_owned(), port })
+		let algorithm = Algorithm::parse(field(m, "algorithm")).unwrap_or_else(|| fail("invalid Member key algorithm"));
+		(id.to_owned(), MemberEnd { host: host.to_owned(), port, peer_id: field(m, "peerId").to_owned(), key_id: field(m, "keyId").to_owned(), algorithm, public_key: field(m, "publicKey").to_owned(), target: m.get("target").cloned().unwrap_or_else(|| fail("incomplete native Root configuration")) })
 	}).collect();
 	let (peer_id, control_space, host_id, authority) = (field(c, "peerId"), field(c, "controlSpaceId"), field(c, "hostId"), field(c, "authorityId"));
 	let grants = GrantVerifier { authority_id: authority.to_owned(), issuer_host_id: host_id.to_owned(), public_key: control_key.to_owned(), algorithm, uncertainty_ms: 2000.0 };
@@ -124,6 +131,8 @@ fn root_of(c: &Json, r: &Json, control_key: &str, listen_host: &str, guard: &Rc<
 		lease_file: field(r, "leaseFile").into(), partitions: r.get("journalPartitions").and_then(Json::as_f64).unwrap_or(f64::NAN),
 		router_key: (Rc::new(router), key_id), host_key_id, members: ends, line_signer: Box::new(move || key_of(&line_key, "keyFile").0), grant_signer: Rc::new(grant_signer),
 		control: ControlHost { peer_id: peer_id.to_owned(), control_space: control_space.to_owned(), signer: control, public_key: control_key.to_owned(), grants, hosts: Default::default(), now: Rc::clone(now) },
-		guard: Rc::clone(guard), now: Rc::clone(now),
+		guard: Rc::clone(guard), now: Rc::clone(now), routing: Rc::clone(routing),
+		admin: r.get("adminPeer").filter(|_| r.get("allowMembershipCommands") == Some(&Json::Bool(true))).map(|a| (field(a, "peerId").to_owned(), field(a, "address").to_owned())),
+		directory: Rc::clone(&o.directory), group_roles: o.group_roles.clone(), control_signer: Rc::new(key_of(c, "keyFile").0),
 	}
 }
