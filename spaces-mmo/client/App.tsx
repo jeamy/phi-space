@@ -341,7 +341,7 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 			))}</ul> : <p className="muted">Das Brett ist leer.</p>}
 			{!guest && carried.length > 0 && (
 				<form className="row" onSubmit={(e) => { e.preventDefault(); if (sell) send(`markt biete ${sell} für ${price}`); setSell(""); }}>
-					<select value={sell} onChange={(e) => setSell(e.target.value)} aria-label="Was verkaufen"><option value="">verkaufen …</option>{[...new Set(carried.map((o) => o.name))].map((n) => <option key={n} value={n}>{n}</option>)}</select>
+					<select value={sell} onChange={(e) => setSell(e.target.value)} aria-label="Was verkaufen"><option value="">verkaufen …</option>{[...new Set(carried.map((o) => o.name))].filter((n) => n !== "Münze").map((n) => <option key={n} value={n}>{n}</option>)}</select>
 					<input type="number" min={1} max={1000} value={price} onChange={(e) => setPrice(e.target.value)} aria-label="Preis in Münzen" style={{ width: 70 }} />
 					<button disabled={!sell}>Einstellen</button>
 				</form>

@@ -165,6 +165,7 @@ const market: Command = {
 			const got = pick(await inventory(c), parseSpec(m[1]!).slice(0, 1).map((s) => ({ ...s, count: 1 })), c.world);
 			if ("missing" in got) throw new (got.unknown ? NotUnderstood : CommandError)(`Du hast nicht: ${got.missing}.`);
 			const item = got.items[0]!.f, listingId = `l-${randomBytes(5).toString("hex")}`;
+			if (item.proto === "muenze") throw new CommandError("Münzen gegen Münzen zu tauschen ergibt nichts; stelle etwas anderes ans Marktbrett.");
 			await move(c, item, c.actor.charId, "market", { listing: listingId, seller: c.actor.charId });
 			await c.space.write({ type: "Listing", fields: { listingId, seller: c.actor.charId, sellerName: c.actor.name, itemId: item.itemId, itemName: item.name, price, room: c.actor.room, at: Date.now(), expiresWorldMs: (await decayNowOf(c.space, c.txn)) + c.world.market.listMs } satisfies ListingFields as never }, c.txn, FOREVER);
 			return msg(c, "*", "info", `$you() $conj(hängst|hängt) ${item.name} für ${price} Münze${price === 1 ? "" : "n"} ans Marktbrett.`, { templ: true });

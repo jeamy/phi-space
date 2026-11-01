@@ -1,5 +1,6 @@
 // The English of the game, by its German (scripts/i18n-extract.ts lists the German; {0}, {1} … are values, {9} a name).
 export const EN: Record<string, string> = {
+	"Münzen gegen Münzen zu tauschen ergibt nichts; stelle etwas anderes ans Marktbrett.": "Swapping coins for coins gets you nothing; put something else on the board.",
 	"Tippe oben auf die Person, der du es anbietest.": "Tap the person above you want to offer it to.",
 	"Tippe auf etwas, das du gibst.": "Tap something you give.",
 	"Hier ist niemand.": "Nobody is here.",

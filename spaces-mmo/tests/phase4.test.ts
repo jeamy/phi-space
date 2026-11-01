@@ -69,6 +69,7 @@ test("market: a listing waits in escrow; a purchase moves listing, coins and ite
 		const a = await player(srv.url, "Haendlerin"), b = await player(srv.url, "Kaeufer");
 		const [shell] = await give(s, a.me, "muschel", 1);
 		await give(s, b.me, "muenze", 3);
+		assert.match(await does(b.p, "markt biete münze für 2", "nichts"), /Münzen gegen Münzen/);
 		await does(a.p, "markt biete muschel für 2", "Du hängst Muschel für 2 Münzen ans Marktbrett.");
 		assert.equal((await s.readIfExists({ type: "Item", fields: { itemId: shell } }, 2_000))!.fields.location, "market");
 		assert.match(await does(b.p, "markt", "Marktbrett:"), /1\. Muschel für 2 Münzen \(von Haendlerin\)/);
