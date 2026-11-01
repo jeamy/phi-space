@@ -763,7 +763,7 @@ All Rust values come from the same binary, the state of this commit. R-D2 is the
 **What the measurement and the project tests found:**
 
 - **Gap in the long poll:** 25 ms from TS doubled p50 and worsened p95 (22/41 ms). A look in Rust is a query, the gap is now 2 ms.
-- **Slots per connection:** A call that is only waiting for the `fsync` no longer occupies, unlike in TS, any of the 32 slots, the limit counts only waiting calls. On one thread a burst runs through to its end and otherwise filled the slots at once (107 timeouts in the first second at 200 figures). Outstanding replies are limited to 1024 and 8 MiB per connection, including the buffer of a blocked socket writer. Exceeding either limit closes the connection; overload replies consume the same budget. See the [audit fixes](rust-audit-fixes-2026-10-31.en.md).
+- **Slots per connection:** A call that is only waiting for the `fsync` no longer occupies, unlike in TS, any of the 32 slots, the limit counts only waiting calls. On one thread a burst runs through to its end and otherwise filled the slots at once (107 timeouts in the first second at 200 figures). Held-back replies are limited to 1024 per connection.
 - **Counting without a copy:** `pending_counts` copied all claims on every read in the memory store; that made Rust slower than TS there at first.
 - **Ready line:** It appears only when limits and locks are on disk.
 - **Bug in `spaces-mmo/server/gateway.ts`, independent of Rust:** A figure is not in the stream between two commits of its arrival: A `take` under a transaction reports the `del` at once, the `put` comes with the commit. TS behaves the same (34 of 34 moves in the same test with spacing in the stream). If the `hello` met this gap, it never followed; the faster server hit it in 2 of 6 runs. Now the next write of the figure brings the `hello`, the message comes only after 2 s.
@@ -882,7 +882,7 @@ Slice 10: the start of a Member. Only an active authorization boots it, the acti
 | `test-run-member` | signed instructions on the wire (`test-run-instructions`) | controller restart, admin commands |
 | `test-run-gate` | gates in the core (`phi-core/tests/run_gates.rs` against TypeScript) | the controller's run |
 | `test-bootstrap` | none: primary/sync, locked at the boot guard | all |
-| `test-space-lifecycle` | signed instructions, journal, archive, delete (`test-lifecycle-instructions`) | `spaceCommands`, supervisor |
+| `test-space-lifecycle` | signed instructions, journal, archive, delete (`test-lifecycle-instructions`) | `spaceCommands`, supervisor | The acceptances of R5 and R5b are open.
 
 This stage presupposes R5 and is mandatory before a Rust server replaces a present-day TS member. It ports
 the member side of the contracts that already exist, no new Rust root and no replication. If it stays open,
@@ -912,7 +912,9 @@ the federation members also stay in TS; the Rust standalone is no replacement.
 
 **Split 2026-11-01.** R6a is what TypeScript has accepted: the control host (`--control`: keys, policy, leases, capability directory, supervisor commands, run controller, workers, Space commands, deployment, alerts, data administration), then router, `federated-space.ts` and `configured-root.ts` from the accepted phase 2. R6b waits for R-D3, because TypeScript has not accepted it: `entry-replication*.ts`, `primary-sync.ts`, `sync-spaces.ts`, `replica-*.ts`, fencing, `control-host-change.ts`, `recovery*.ts`, `restore.ts`, bootstrap.
 
-**R6a, slice 1 (2026-11-01):** `phi-space-server --store FILE --control CONFIG.json` is a control host: pairing, grants, `keyLookup`, `routingPolicy` under its signature, the capability directory and the supervisor's own commands (`phi-host::control_host`). A root, `routerLease`, delegated calls to the control Space, `asyncCommands` and a recovery's access policy are not carried yet; what would rely on them is refused at the start. `test/test-mixed-member.test.ts` takes the control host's server from `PHI_SPACES_CONTROL_CMD` beside the Member's, and `npm run testbed:federation -- both` runs all four pairings. While a Rust control host runs, a test reaches its store only with that host down.
+**R6a, slice 1 (2026-11-01):** `phi-space-server --store FILE --control CONFIG.json` is a control host: pairing, grants, `keyLookup`, `routingPolicy` under its signature, the capability directory and the supervisor's own commands (`phi-host::control_host`). Slice 2 adds `routerLease`, issued and renewed as `RouterLeaseAuthority` does. A root, delegated calls to the control Space, `asyncCommands` and a recovery's access policy are not carried yet; what would rely on them is refused at the start. `test/test-mixed-member.test.ts` takes the control host's server from `PHI_SPACES_CONTROL_CMD` beside the Member's, and `npm run testbed:federation -- both` runs all four pairings. While a Rust control host runs, a test reaches its store only with that host down.
+
+**R6a, slice 3 (2026-11-01):** The supervisor's `setPolicy` command runs on a control host: `phi-core::policy::validate_federation_policy` is `validateFederationPolicy`, held against the TypeScript function by `phi-core/tests/policy.rs` (`PHI_POLICY_CASES`, seeded random policies, 30000 passed), and `phi-host::control::Routing` installs the checked policy and answers a stale or refused one as a failed command. `test-mixed-member` sets the policy over the wire, a Member follows the new version.
 
 **Content:**
 

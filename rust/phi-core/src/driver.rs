@@ -151,6 +151,10 @@ pub fn apply_line(s: &mut Space, snapshots: &mut crate::snapshot::Snapshots, now
 				}
 				Ok(Json::Null)
 			}
+			"validatePolicy" => {
+				let allow: Vec<String> = l.get("allow").and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect());
+				crate::policy::validate_federation_policy(l.get("policy").unwrap_or(&Json::Null), l.get("table").unwrap_or(&Json::Null), l.get("old").filter(|o| !o.is_null()), &allow, l.get("future") == Some(&Json::Bool(true))).map(|()| Json::Null)
+			}
 			"permitRoutedWrite" => {
 				s.router_permit = l.get("proven") == Some(&Json::Bool(true));
 				Ok(Json::Null)

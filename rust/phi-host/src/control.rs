@@ -387,8 +387,42 @@ fn peer_of(owner: &str) -> String {
 
 /// The only writer of the control space apart from admins' `Command`s. Each command is one commit: it is taken, its effect
 /// applied and its `Result` written together.
+/// The routing state of the control Space: what `setPolicy` works on.
+pub struct Routing {
+	pub control_space: String,
+	pub authority_id: String,
+	/// What the file says, and what this process wrote since.
+	pub state: RefCell<Option<Json>>,
+}
+
+const ROUTING: &str = "phi-spaces.federation-routing";
+const PROFILE_TRANSITIONS: &str = "phi-spaces.profile-transitions";
+
+impl Routing {
+	/// `applyFederationPolicyIn`: the next document, written with this commit; the counters of the Space go with it.
+	fn apply(&self, s: &mut Space, now: f64, routing_state: &Json, args: &Json) -> R<(Json, Json)> {
+		let conflict = |m: &str| error("RoutingConflict", m);
+		let p = args.get("policy").cloned().unwrap_or(Json::Null);
+		let installed = routing_state.get("policy").filter(|p| !p.is_null());
+		let version = installed.and_then(|o| o.get("policyVersion")).and_then(Json::as_f64).unwrap_or(0.0);
+		if args.get("expectedVersion").and_then(Json::as_f64) != Some(version) || text(&p, "authorityId") != self.authority_id {
+			return Err(conflict("stale policy command"));
+		}
+		let empty = Json::Object(Object::new());
+		phi_core::policy::validate_federation_policy(&p, routing_state.get("members").unwrap_or(&empty), installed, &[], false)?;
+		let counters = s.state.rest.get("authorityCounters").cloned().unwrap_or(obj! { "routerEpoch" => 0.0, "policyVersion" => 0.0 });
+		s.state.rest.insert("authorityCounters", with(&counters, &[("policyVersion", p.get("policyVersion").cloned().unwrap_or(Json::Null))]));
+		s.touch(now);
+		let next = with(routing_state, &[("policy", p.clone())]);
+		s.doc_writes.push((ROUTING.to_owned(), self.control_space.clone(), 1, next.to_json_text()));
+		Ok((obj! { "policyVersion" => p.get("policyVersion").cloned().unwrap_or(Json::Null) }, next))
+	}
+}
+
 pub struct Supervisor {
 	pub on_event: Box<dyn Fn(&Json)>,
+	/// `None` where the host has no routing state: `setPolicy` is then an unknown command.
+	pub routing: Option<Routing>,
 }
 
 impl Supervisor {
@@ -397,14 +431,36 @@ impl Supervisor {
 		let id = control_id(service, now)?;
 		let mut n = 0;
 		loop {
-			let done = service.commit_on(Some(&id), |s, _| self.next(s, now))?;
+			let routing = self.routing_state(service)?;
+			let wrote = RefCell::new(None);
+			let done = service.commit_on(Some(&id), |s, _| self.next(s, now, &routing, &wrote))?;
+			if let (Some(r), Some(next)) = (&self.routing, wrote.into_inner()) {
+				*r.state.borrow_mut() = Some(next);
+			}
 			let Some(done) = done else { return Ok(n) };
 			n += 1;
 			(self.on_event)(&done);
 		}
 	}
 
-	fn next(&self, s: &mut Space, now: f64) -> R<Option<Json>> {
+	/// The document, once from the file, with the check of profile transitions, which only the Root starts.
+	fn routing_state(&self, service: &Service) -> R<Option<(Json, bool)>> {
+		let Some(r) = &self.routing else { return Ok(None) };
+		let unavailable = |e: phi_store::StoreError| error("Unavailable", e.to_string());
+		let held = r.state.borrow().clone();
+		let state = match held {
+			Some(s) => s,
+			None => {
+				let s = service.store.stored_document(ROUTING, Some(&r.control_space)).map_err(unavailable)?.unwrap_or(obj! { "policy" => Json::Null, "members" => Object::new() });
+				*r.state.borrow_mut() = Some(s.clone());
+				s
+			}
+		};
+		let open = service.store.stored_document(PROFILE_TRANSITIONS, Some(&r.control_space)).map_err(unavailable)?.and_then(|d| d.get("operations").and_then(Json::as_object).map(|o| o.iter().any(|(_, op)| op.get("phase").and_then(Json::as_str) != Some("completed")))).unwrap_or(false);
+		Ok(Some((state, open)))
+	}
+
+	fn next(&self, s: &mut Space, now: f64, routing: &Option<(Json, bool)>, wrote: &RefCell<Option<Json>>) -> R<Option<Json>> {
 		let Some(first) = listed(s, now, &obj! { "type" => "Command" })?.into_iter().next() else { return Ok(None) };
 		let Some(taken) = take(s, now, &obj! { "id" => text(&first, "id") })? else { return Ok(None) };
 		let f = fields(&taken);
@@ -449,6 +505,14 @@ impl Supervisor {
 				Some(peer) => revoke_peer_keys_in(s, now, peer).map(|n| obj! { "peerId" => peer, "revoked" => n }),
 			},
 			"rotateKey" => crate::rotation::rotate_key_in(s, now, args, &requested_by),
+			"setPolicy" if self.routing.is_some() => match (&self.routing, routing) {
+				(Some(_), Some((_, true))) => Err(error("RoutingConflict", "profile transition blocks ordinary policy changes")),
+				(Some(r), Some((state, false))) => r.apply(s, now, state, args).map(|(result, next)| {
+					*wrote.borrow_mut() = Some(next);
+					result
+				}),
+				_ => unreachable!("the state is read when the supervisor has routing"),
+			},
 			other => return finish(s, Err(format!("unknown command {other}"))),
 		};
 		match effect {

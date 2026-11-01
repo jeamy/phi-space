@@ -152,7 +152,7 @@ export async function startFederationHost(host: ClosableStoreHost, ctx: Context,
 					}
 
 					if((c as any)?.method==="routerLease") {
-					 try { const id=await identity.authenticate(conn),proof=(conn.state as any)?.proof;if(!id||!proof||!id.roles.includes("router")||!o.control!.leases)throw new Error("lease requires proven router and configured control authority");o.verifier.check((c as any).frame?.grant,id,{method:"generation",space:"control"},conn).check();return{ok:true,result:await o.control!.leases.issue(id.principal.peerId,proof.keyId,(c as any).args?.renew) as any}; } catch(e){return{ok:false,error:{code:"PermissionDenied",message:e instanceof Error?e.message:String(e)}};}
+					 try { const id=await identity.authenticate(conn),proof=(conn.state as any)?.proof;if(!id||!proof||!id.roles.includes("router")||!o.control!.leases)throw new Error("lease requires proven router and configured control authority");o.verifier.check((c as any).frame?.grant,id,{method:"generation",space:"control"},conn).check();return{ok:true,result:await o.control!.leases.issue(id.principal.peerId,proof.keyId,(c as any).args?.renew) as any}; } catch(e){return{ok:false,error:{code:(conn.state as any)?.proof?"PermissionDenied":"ProofRequired",message:e instanceof Error?e.message:String(e)}};}
 					}
 
 					if ((c as { method?: string } | null)?.method === "grant") {

@@ -12,6 +12,7 @@
 // line's `now`, Date.now included (parkOperation and the mailbox ack read it). Randomness is a counter stream from the
 // seed: crypto.randomBytes(n) gives the next n bytes of SHA-256("phi-spaces/driver/v1\n<seed>\n<block>") blocks, so
 // generation nonces, signing keys and mailbox epochs are the same on both sides.
+import { validateFederationPolicy } from "../../src/routing-semantics.ts";
 import crypto, { createHash } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
 import { createInterface } from "node:readline";
@@ -75,6 +76,7 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 		case "setLimits": return core.setLimits(s, l.limits, now);
 		case "setCompletionProfiles": core.setCompletionProfiles(s, l.profiles, now); return null;
 		case "setMembership": s.membership = l.membership; return null;
+		case "validatePolicy": validateFederationPolicy(l.policy, l.table, l.old ?? undefined, new Set(l.allow ?? []), l.future === true); return null;
 		case "setArchived": if (l.archived) s.archived = l.archived; else delete s.archived; return null;
 		case "permitRoutedWrite": permitRoutedWrite(s, l.proven === true); return null;
 		case "recoverRunGate": return core.recoverRunGate(s, now, l.o);

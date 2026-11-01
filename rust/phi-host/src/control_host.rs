@@ -1,6 +1,6 @@
 //! What a control host answers its Members and routers (src/runtime.ts): their keys, the routing policy under its signature, and the
 //! capability directory. Grants, pairing and the supervisor have their own modules.
-use crate::auth::{to_base64, Signer};
+use crate::auth::{to_base64, verify_detached, Signer};
 use crate::capability::publish;
 use crate::control::{answered, fields, listed, refuse, CONTROL_SPACE};
 use crate::gate::Now;
@@ -9,11 +9,15 @@ use crate::run_member::algorithm_name;
 use phi_core::space::{error, CoreError};
 use phi_json::{obj, Json, Object};
 use phi_service::{Identity, Service};
+use phi_store::{random_uuid, system_random};
 use std::collections::HashMap;
 
 type R<T> = Result<T, CoreError>;
 const ROUTING: &str = "phi-spaces.federation-routing";
 const MAX_REPORT: usize = 16384;
+const LEASE_MS: f64 = 60_000.0;
+/// A different router starts only after the previous lease expired plus this clock uncertainty.
+const ROUTER_CHANGE_SKEW_MS: f64 = 5_000.0;
 fn denied(m: impl Into<String>) -> CoreError { error("PermissionError", m) }
 fn text<'a>(v: &'a Json, k: &str) -> Option<&'a str> { v.get(k).and_then(Json::as_str) }
 
@@ -21,6 +25,7 @@ pub struct ControlHost {
 	pub peer_id: String,
 	pub control_space: String,
 	pub signer: Signer,
+	pub public_key: String,
 	pub grants: GrantVerifier,
 	/// `hostForPeer`: which host a peer publishes for.
 	pub hosts: HashMap<String, String>,
@@ -43,6 +48,7 @@ impl ControlHost {
 		let done = match method {
 			"keyLookup" => return self.key_lookup(service, call, id, key, proven),
 			"routingPolicy" => self.policy(service, call, id, key),
+			"routerLease" => self.lease(service, call, id, key),
 			_ => self.heartbeat(service, call, id, key),
 		};
 		// a connection that lost its proof with a restart proves again on this answer
@@ -77,13 +83,73 @@ impl ControlHost {
 		self.checked(call, id, "hello", Some(key_id))?;
 		let state = service.store.stored_document(ROUTING, Some(&self.control_space)).map_err(|e| error("Unavailable", e.to_string()))?;
 		let policy = state.as_ref().and_then(|s| s.get("policy")).filter(|p| !p.is_null()).ok_or_else(|| error("RoutingConflict", "no federation policy installed"))?;
-		let bytes = format!("phi-spaces/federation-policy/v1\n{}", policy.canonical().map_err(|_| denied("a policy that cannot be signed"))?);
+		self.signed("federation-policy", policy.clone(), "policy")
+	}
+
+	fn signed(&self, kind: &str, value: Json, field: &str) -> R<Json> {
+		let bytes = format!("phi-spaces/{kind}/v1\n{}", value.canonical().map_err(|_| denied("a value that cannot be signed"))?);
 		let mut o = Object::new();
-		o.insert("policy", policy.clone());
+		o.insert(field, value);
 		o.insert("issuer", self.peer_id.as_str().into());
 		o.insert("algorithm", algorithm_name(self.signer.algorithm()).into());
 		o.insert("signature", to_base64(&self.signer.sign(bytes.as_bytes())).into());
 		Ok(Json::Object(o))
+	}
+
+	/// `RouterLeaseAuthority.issue`: the epoch rises with a new lease, a renewal keeps it. A lease from before a replica transition
+	/// does not renew here: replication is R6b.
+	fn lease(&self, service: &mut Service, call: &Json, id: &Identity, key: Option<(&str, &[String])>) -> R<Json> {
+		let Some((key_id, roles)) = key.filter(|_| has(id, &["router"])) else { return Err(denied("lease requires proven router and configured control authority")) };
+		self.checked(call, id, "generation", Some(key_id))?;
+		if !roles.iter().any(|r| r == "router") {
+			return Err(denied("lease requires an active router key"));
+		}
+		let peer = text(&id.principal, "peerId").unwrap_or("").to_owned();
+		let renew = call.get("args").and_then(|a| a.get("renew")).filter(|r| !r.is_null());
+		let authority = self.grants.authority_id.clone();
+		let lease = service.commit_on(Some(&self.control_space), |s, now| {
+			let counters = s.state.rest.get("authorityCounters").cloned().unwrap_or(obj! { "routerEpoch" => 0.0, "policyVersion" => 1.0 });
+			let live = listed(s, now, &obj! { "type" => "RouterLease" })?.first().cloned();
+			let held = live.as_ref().map(fields);
+			let current = s.state.rest.get("primaryEpoch").and_then(Json::as_f64).unwrap_or(1.0);
+			let mut epoch = counters.get("routerEpoch").and_then(Json::as_f64).unwrap_or(0.0);
+			if let Some(r) = renew {
+				let names = |l: &Json| text(l, "id").is_some() && l.get("id") == r.get("id") && text(l, "routerPeerId") == Some(&peer) && text(l, "routerKeyId") == Some(key_id) && l.get("routerEpoch") == r.get("routerEpoch") && l.get("controlPrimaryEpoch").and_then(Json::as_f64) == Some(current);
+				let retained = r.get("token").filter(|t| {
+					let Some(l) = t.get("lease") else { return false };
+					let message = l.canonical().map(|c| format!("phi-spaces/router-lease/v1\n{c}"));
+					text(t, "issuer") == Some(&self.peer_id) && text(t, "algorithm") == Some(algorithm_name(self.signer.algorithm())) && message.is_ok_and(|m| verify_detached(self.signer.algorithm(), &self.public_key, m.as_bytes(), text(t, "signature").unwrap_or(""))) && names(l) && text(l, "authorityId") == Some(&authority) && text(l, "controlSpaceId") == Some(&self.control_space)
+				});
+				if r.get("routerEpoch").and_then(Json::as_f64) != Some(epoch) || !(retained.is_some() || held.as_ref().is_some_and(names)) {
+					return Err(denied("lease renewal no longer owns current epoch"));
+				}
+			} else {
+				if let Some(h) = held.as_ref().filter(|h| text(h, "routerPeerId") != Some(&peer) || text(h, "routerKeyId") != Some(key_id)) {
+					let until = h.get("expiresAt").and_then(Json::as_f64).unwrap_or(0.0) + ROUTER_CHANGE_SKEW_MS;
+					if now < until {
+						return Err(denied(format!("previous router lease is live until {until}")));
+					}
+				}
+				if epoch.fract() != 0.0 || !(0.0..phi_json::FOREVER).contains(&epoch) {
+					return Err(denied("router epoch overflow/corruption"));
+				}
+				epoch += 1.0;
+			}
+			let mut next = counters.as_object().cloned().unwrap_or_default();
+			next.insert("routerEpoch", epoch.into());
+			s.state.rest.insert("authorityCounters", Json::Object(next));
+			let lease_id = match renew.and_then(|r| r.get("id")) {
+				Some(i) => i.clone(),
+				None => random_uuid(&mut system_random()).into(),
+			};
+			let result = obj! { "id" => lease_id, "routerPeerId" => peer.as_str(), "routerKeyId" => key_id, "routerEpoch" => epoch, "controlSpaceId" => self.control_space.as_str(), "authorityId" => authority.as_str(), "controlPrimaryEpoch" => current, "issuedAt" => now, "expiresAt" => now + LEASE_MS };
+			if let Some(l) = &live {
+				s.probe(now, &phi_core::space::Template::from_json(Some(&obj! { "id" => l.get("id").cloned().unwrap_or(Json::Null) }))?, None, true, None)?;
+			}
+			s.write(now, &obj! { "type" => "RouterLease", "fields" => result.clone() }, None, Some(&Json::Number(LEASE_MS)), None)?;
+			Ok(result)
+		})?;
+		self.signed("router-lease", lease, "lease")
 	}
 
 	/// `capabilityHeartbeat`: peer and roles come from the connection, never from the report.

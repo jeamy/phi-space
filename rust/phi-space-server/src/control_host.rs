@@ -5,7 +5,7 @@ use crate::member::{clock, field, register_client};
 use phi_host::auth::{Proving, Signer};
 use phi_host::boot::{BootGuard, External};
 use phi_host::capability::Capabilities;
-use phi_host::control::{key_fingerprint, Control, Enrolling, SpaceKeys, Supervisor, CONTROL_SPACE};
+use phi_host::control::{key_fingerprint, Control, Enrolling, Routing, SpaceKeys, Supervisor, CONTROL_SPACE};
 use phi_host::control_host::ControlHost;
 use phi_host::delegation::grants_only;
 use phi_host::gate::{default_group_roles, Gate, GateOptions, Keys, Netbird};
@@ -101,11 +101,11 @@ pub fn run(config: &str, store: &str) {
 	let keys: Rc<dyn Keys> = Rc::new(SpaceKeys { now: Rc::clone(&now) });
 	o.proving = Some((Proving::new(host_id), keys));
 	o.enrolling = Some(Enrolling::new(Box::new(|_| ())));
-	o.control = Some(Control { supervisor: Some(Supervisor { on_event: Box::new(|_| ()) }) });
+	o.control = Some(Control { supervisor: Some(Supervisor { on_event: Box::new(|_| ()), routing: Some(Routing { control_space: control_space.to_owned(), authority_id: authority_id.to_owned(), state: Default::default() }) }) });
 	o.rotating = Some(Rotating::new(authority_id, host_id, signer, control_key));
 	let capabilities = c.get("capabilities").filter(|k| !k.is_null());
 	let hosts = capabilities.and_then(|k| k.get("hostBindings")).and_then(Json::as_object).map_or_else(Default::default, |b| b.iter().filter_map(|(k, v)| Some((k.to_owned(), v.as_str()?.to_owned()))).collect());
-	o.control_host = Some(ControlHost { peer_id: peer_id.to_owned(), control_space: control_space.to_owned(), signer: key_of().0, grants, hosts, now: Rc::clone(&now) });
+	o.control_host = Some(ControlHost { peer_id: peer_id.to_owned(), control_space: control_space.to_owned(), signer: key_of().0, public_key: control_key.to_owned(), grants, hosts, now: Rc::clone(&now) });
 	if let Some(k) = capabilities {
 		let names = |key: &str| k.get(key).and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect::<Vec<_>>());
 		let mut spaces = names("dataSpaces");

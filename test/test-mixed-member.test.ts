@@ -10,7 +10,9 @@ import net from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONTROL_SPACE, FOREVER, GrantAuthority, createEnroll, hashToken, newEnrollToken, RemoteSpace, SqliteRecoveryRegister, SpaceKeyDirectory, core, createSpace, generateKey, listSpaces, snapshotSpace, provisionFileSigner, serveTlsRegister, socketTransport, spaceDoc, startConfiguredFederation, type Signer } from "../src/index.ts";
-import { RouterLeaseAuthority, delegationForCall, signDelegation } from "../src/delegation.ts";
+import { delegationForCall, signDelegation } from "../src/delegation.ts";
+import { verifyDetached } from "../src/grants.ts";
+import { canonicalJson } from "../src/canonical.ts";
 import { FederationRouting, applyFederationPolicyIn, verifyFederationPolicy } from "../src/federation-policy.ts";
 import { signMembership } from "../src/membership.ts";
 import { signRun } from "../src/run-member.ts";
@@ -22,7 +24,7 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CMD = process.env.PHI_SPACES_SERVER_CMD?.trim() ? process.env.PHI_SPACES_SERVER_CMD.trim().split(/\s+/) : null;
 const CONTROL = process.env.PHI_SPACES_CONTROL_CMD?.trim() ? process.env.PHI_SPACES_CONTROL_CMD.trim().split(/\s+/) : null; // the control host's server; the Member's is the other
 const peer = (id: string, ip: string, groups: string[]) => ({ id, name: id, ip, connected: true, groups: groups.map((g) => ({ id: `g-${g}`, name: g })) });
-const CONTROL_IP = "127.0.0.5", MEMBER_IP = "127.0.0.1", USER_IP = "127.0.0.3", ROUTER_IP = "127.0.0.4", PHONE_IP = "127.0.0.6", PAIRED_IP = "127.0.0.7"; // a host reaches its control host from the Member address: on loopback that is 127.0.0.1
+const CONTROL_IP = "127.0.0.5", MEMBER_IP = "127.0.0.1", USER_IP = "127.0.0.3", ROUTER_IP = "127.0.0.4", PHONE_IP = "127.0.0.6", PAIRED_IP = "127.0.0.7", SECOND_ROUTER_IP = "127.0.0.8", ADMIN_IP = "127.0.0.9"; // a host reaches its control host from the Member address: on loopback that is 127.0.0.1
 const GATED = { taskType: "Gated", resultTypes: ["GatedDone"], equalFields: ["runId", "n"], maxResultCount: 1, maxResultBytes: 1024, maxLeaseMs: 60_000, gateField: "runId" };
 const freePort = () => new Promise<number>((r) => { const s = net.createServer(); s.listen(0, "127.0.0.1", () => { const { port } = s.address() as net.AddressInfo; s.close(() => r(port)); }); });
 
@@ -58,13 +60,13 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}) {
 	tc.after(() => external.close());
 	const register = await serveTlsRegister(external, { ...certs.identity("server"), host: "127.0.0.1", port: 0, peers: { [certs.print("control")]: {}, [certs.print("member")]: {} } });
 	tc.after(() => register.close());
-	const peers = [peer("control-peer", CONTROL_IP, ["space-hosts"]), peer("member-peer", MEMBER_IP, ["space-hosts"]), peer("user", USER_IP, ["space-hosts"]), peer("router-peer", ROUTER_IP, ["space-hosts"]), peer("phone", PHONE_IP, ["space-enroll"]), peer("phone", PAIRED_IP, ["space-hosts"])]; // before and after pairing: the directory is cached for a minute
+	const peers = [peer("control-peer", CONTROL_IP, ["space-hosts"]), peer("member-peer", MEMBER_IP, ["space-hosts"]), peer("user", USER_IP, ["space-hosts"]), peer("router-peer", ROUTER_IP, ["space-hosts"]), peer("phone", PHONE_IP, ["space-enroll"]), peer("phone", PAIRED_IP, ["space-hosts"]), peer("router-two", SECOND_ROUTER_IP, ["space-hosts"]), peer("boss", ADMIN_IP, ["space-admin"])]; // before and after pairing: the directory is cached for a minute
 	const management = http.createServer((_req, res) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(peers)); });
 	await new Promise<void>((r) => management.listen(0, "127.0.0.1", r));
 	tc.after(() => { management.closeAllConnections(); management.close(); });
 	writeFileSync(join(dir, "token"), "t", { mode: 0o600 });
 	const controlKey = provisionFileSigner(join(dir, "control.json")), memberKey = provisionFileSigner(join(dir, "member.json"));
-	const userKey = generateKey("ed25519", "user-key"), routerKey = generateKey("ed25519", "router-key");
+	const userKey = generateKey("ed25519", "user-key"), routerKey = generateKey("ed25519", "router-key"), pairKey = generateKey("ed25519", "router-two-key"), adminKey = generateKey("ed25519", "admin-key");
 	const now = Date.now();
 	// the control host's store: its Space, its keys, its permit
 	let control = await openSqliteHost(join(dir, "control.sqlite"));
@@ -75,6 +77,8 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}) {
 		put("member-peer", memberKey, memberKey.publicKey, ["host"]);
 		put("user", userKey.signer, userKey.publicKey, ["member"]);
 		put("router-peer", routerKey.signer, routerKey.publicKey, ["host", "router", "member"]);
+		put("boss", adminKey.signer, adminKey.publicKey, ["admin"]);
+		put("router-two", pairKey.signer, pairKey.publicKey, ["host", "router", "member"]);
 	}, ctx);
 	await control.commit((tx) => spaceDoc(tx, undefined, now).then(() => {}), ctx);
 	const routing = (version: number, rules: unknown[] = []) => ({ authorityId: "authority", policyVersion: version, rules, completionProfiles: [GATED], default: { mode: "local", member: "a" } }) as never;
@@ -138,7 +142,6 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}) {
 		await remote.authenticate();
 		return { t, remote };
 	};
-	const leases = (host: Awaited<ReturnType<typeof openSqliteHost>>) => new RouterLeaseAuthority({ host, ctx, controlSpaceId: space.spaceId, authorityId: "authority", peerId: "control-peer", signer: controlKey, keys: new SpaceKeyDirectory(host, ctx), assertAuthority: async () => {} });
 	/** A user's line to the Member, proven, without a client's retries. */
 	const user = async () => {
 		const t = socketTransport({ host: MEMBER_IP, port: memberPort }, { localAddress: USER_IP });
@@ -161,8 +164,8 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}) {
 		return new RemoteSpace(line({ host: MEMBER_IP, port: memberPort }, PAIRED_IP), { ...options, space: jobs.spaceId, signer, expectedGateHostId: "data-host", grantProvider: () => home.requestGrant() });
 	};
 	/** A line to the control host from an address, not yet proven. */
-	const atControl = (ip: string, signer: Signer, ownPeerId: string) => { const t = socketTransport({ host: CONTROL_IP, port: controlPort }, { localAddress: ip }); transports.push(t); return { t, remote: new RemoteSpace(t, { space: "control", attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 8_000, signer, expectedGateHostId: "control-host", ownPeerId }) }; };
-	return { controlDown: async (f: () => Promise<void>) => { await stopControl(); try { await f(); } finally { stopControl = await startControl(); } }, controlStore: join(dir, "control.sqlite"), atControl, controlConfig, ROUTER_IP, USER_IP, withControl, notes, user, phone, toMember, get toControl() { return toControl; }, external, jobs, space, userKey, routerKey, controlKey, authority, config, storeFile, router, leases, routing, restart };
+	const atControl = (ip: string, signer: Signer, ownPeerId: string) => { const t = socketTransport({ host: CONTROL_IP, port: controlPort }, { localAddress: ip }); transports.push(t); const remote: RemoteSpace = new RemoteSpace(t, { space: "control", attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 8_000, signer, expectedGateHostId: "control-host", ownPeerId, grantProvider: (call) => (call.method as string) === "routerLease" ? remote.requestGrant() : Promise.resolve(undefined as never) }); return { t, remote }; };
+	return { controlPort, adminKey, ADMIN_IP, PAIR_IP: SECOND_ROUTER_IP, pairKey, controlDown: async (f: () => Promise<void>) => { await stopControl(); try { await f(); } finally { stopControl = await startControl(); } }, controlStore: join(dir, "control.sqlite"), atControl, controlConfig, ROUTER_IP, USER_IP, withControl, notes, user, phone, toMember, get toControl() { return toControl; }, external, jobs, space, userKey, routerKey, controlKey, authority, config, storeFile, router, routing, restart };
 }
 
 test("a Member serves on the grants of its control host and follows its keys and its fence", async (tc) => {
@@ -300,6 +303,7 @@ test("a control host hands keys, policy and the directory only to who may have t
 	assert.equal((await ask(router.t, { method: "routingPolicy", space: "control" })).error?.code, "ProofRequired");
 	assert.equal((await ask(router.t, { method: "capabilityHeartbeat", space: "control", args: {} })).error?.code, "ProofRequired");
 	await user.remote.authenticate();
+	const admin0 = await user.remote.requestGrant();
 	assert.match((await ask(user.t, lookup)).error?.message ?? "", /key lookup requires/, "a member is no service peer");
 	assert.match((await ask(user.t, { method: "routingPolicy", space: "control", frame: { grant: await user.remote.requestGrant() } })).error?.message ?? "", /policy requires proven service peer/);
 	assert.match((await ask(user.t, { method: "capabilityHeartbeat", space: "control", args: {} })).error?.message ?? "", /capability requires a currently proven host/);
@@ -317,6 +321,27 @@ test("a control host hands keys, policy and the directory only to who may have t
 	for (const bad of [{ ...report, tools: [""] }, { ...report, resources: [] }, { ...report, hostId: "" }, { ...report, metrics: { pad: "x".repeat(16_385) } }]) assert.equal((await beat(bad)).ok, false, JSON.stringify(bad).slice(0, 60));
 	assert.equal((await beat(report, undefined)).ok, true);
 	assert.match((await ask(router.t, { method: "capabilityHeartbeat", space: "control", args: { report } })).error?.message ?? "", /grant/, "a heartbeat needs a grant");
+	// leases
+	assert.match((await ask(user.t, { method: "routerLease", space: "control", frame: { grant: admin0 } })).error?.message ?? "", /lease requires proven router/, "a member is no router");
+	assert.match((await ask(router.t, { method: "routerLease", space: "control" })).error?.message ?? "", /grant/, "a lease needs a grant");
+	const first = await router.remote.requestRouterLease();
+	const check = (l: typeof first) => verifyDetached("ed25519", g.controlKey.publicKey, Buffer.from("phi-spaces/router-lease/v1\n" + canonicalJson(l.lease as never)), l.signature);
+	assert.ok(check(first)); assert.deepEqual([first.issuer, first.lease.routerPeerId, first.lease.routerEpoch, first.lease.expiresAt - first.lease.issuedAt, first.lease.controlPrimaryEpoch], ["control-peer", "router-peer", 1, 60_000, 1]);
+	const renewed = await router.remote.requestRouterLease({ id: first.lease.id, routerEpoch: 1 });
+	assert.deepEqual([renewed.lease.id, renewed.lease.routerEpoch, check(renewed)], [first.lease.id, 1, true], "a renewal keeps id and epoch");
+	await assert.rejects(router.remote.requestRouterLease({ id: "other", routerEpoch: 1 }), /no longer owns current epoch/);
+	await assert.rejects(router.remote.requestRouterLease({ id: first.lease.id, routerEpoch: 2 }), /no longer owns current epoch/);
+	const third = await router.remote.requestRouterLease({ id: "other", routerEpoch: 1, token: renewed } as never).then((l) => l, (e: Error) => e.message);
+	assert.match(String(third), /no longer owns/, "a token of another id");
+	const forged = await router.remote.requestRouterLease({ id: "other", routerEpoch: 1, token: { ...renewed, lease: { ...renewed.lease, id: "other" } } } as never).then((l) => l, (e: Error) => e.message);
+	assert.match(String(forged), /no longer owns/, "a token whose signature does not cover it");
+	assert.equal((await router.remote.requestRouterLease({ id: first.lease.id, routerEpoch: 1, token: { ...renewed, signature: "AAAA" } } as never)).lease.routerEpoch, 1, "the live record still names it");
+	const after = await router.remote.requestRouterLease();
+	assert.equal(after.lease.routerEpoch, 2, "a new lease raises the epoch");
+	await assert.rejects(router.remote.requestRouterLease({ id: first.lease.id, routerEpoch: 1 }), /no longer owns current epoch/, "the old one is out");
+	const rival = g.atControl(g.PAIR_IP, g.pairKey.signer, "router-two");
+	await rival.remote.authenticate();
+	await assert.rejects(rival.remote.requestRouterLease(), /previous router lease is live/, "a second router waits for the first");
 	// the control Space itself
 	const nothing = await ask(router.t, { method: "count", space: "control", args: { template: { type: "Job" } } });
 	assert.match(nothing.error?.message ?? "", /for admins who proved their key/, "the control Space stays the admins'");
@@ -336,6 +361,41 @@ test("a control host hands keys, policy and the directory only to who may have t
 	await g.external.compareAndSet("boot:control-host", boot.version, { ...boot.value, state: "fenced" });
 	assert.equal((await ask(next.t, { method: "generation", frame: { grant: held } })).ok, false, "a fenced host serves nothing");
 	await g.external.compareAndSet("boot:control-host", boot.version + 1, boot.value);
+});
+
+test("an admin sets the policy by command: the control host checks it and Members follow", async (tc) => {
+	const g = await setup(tc);
+	const t = socketTransport({ host: "127.0.0.5", port: g.controlPort }, { localAddress: g.ADMIN_IP });
+	tc.after(() => t.close());
+	const admin: RemoteSpace = new RemoteSpace(t, { space: "control", attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 8_000, signer: g.adminKey.signer, expectedGateHostId: "control-host", ownPeerId: "boss", grantProvider: () => admin.requestGrant() });
+	await admin.authenticate();
+	const leasing = g.atControl(g.ROUTER_IP, g.routerKey.signer, "router-peer");
+	await leasing.remote.authenticate();
+	const held = await leasing.remote.requestRouterLease();
+	await leasing.remote.requestRouterLease({ id: held.lease.id, routerEpoch: held.lease.routerEpoch });
+	assert.equal(await g.withControl((host) => host.commit(async (tx) => (await spaceDoc(tx, g.space.spaceId, Date.now())).entries.filter((e) => e.type === "RouterLease").length, ctx)), 1, "a renewal replaces the lease");
+	await admin.authenticate(); // the store was in the test's hands
+	const command = async (commandId: string, args: Record<string, unknown>) => {
+		await admin.write({ type: "Command", fields: { commandId, kind: "setPolicy", args: args as never } }, null, 3_600_000);
+		for (let i = 0; i < 200; i++) { const r = (await admin.readAll({ type: "Result", fields: { commandId } }))[0]?.fields as Record<string, any> | undefined; if (r) return r; await new Promise((r2) => setTimeout(r2, 25)); }
+		throw new Error("no result");
+	};
+	const failed = async (id: string, args: Record<string, unknown>, part: RegExp) => { const r = await command(id, args); assert.equal(r.state, "failed", JSON.stringify(r)); assert.match(r.error, part); };
+	await failed("c1", { policy: g.routing(3), expectedVersion: 2 }, /stale policy command/);
+	await failed("c2", { policy: g.routing(3), expectedVersion: 1 }, /policy version must advance/);
+	await failed("c3", { policy: { ...(g.routing(2) as object), authorityId: "other" }, expectedVersion: 1 }, /stale policy command/);
+	await failed("c4", { policy: g.routing(2, [{ type: "Capability", mode: "local", member: "a" }]), expectedVersion: 1 }, /directory types are protected/);
+	await failed("c5", { policy: g.routing(2, [{ type: "Far", mode: "local", member: "nobody" }]), expectedVersion: 1 }, /unregistered rule member/);
+	const done = await command("c6", { policy: g.routing(2, [{ type: "Far", mode: "local", member: "b" }]), expectedVersion: 1 });
+	assert.deepEqual([done.state, done.result], ["completed", { policyVersion: 2 }]);
+	await failed("c7", { policy: g.routing(2), expectedVersion: 1 }, /stale policy command/);
+	await failed("c8", { policy: g.routing(3), expectedVersion: 2 }, /existing type rule may only disappear/);
+	assert.equal((await command("c9", { policy: g.routing(3, [{ type: "Far", mode: "local", member: "b" }, { type: "Next", mode: "local", member: "a" }]), expectedVersion: 2 })).state, "completed");
+	const router = g.atControl(g.ROUTER_IP, g.routerKey.signer, "router-peer");
+	await router.remote.authenticate();
+	const read = JSON.parse(await router.t.request(JSON.stringify({ method: "routingPolicy", space: "control", frame: { grant: await router.remote.requestGrant() } }))) as { result: { policy: { policyVersion: number } } };
+	assert.equal(read.result.policy.policyVersion, 3, "the signed policy is the new one");
+	await g.withControl((host) => host.snapshot(FederationRouting, g.space.spaceId, ctx).then((d) => assert.equal(d?.policy?.policyVersion, 3, "and the file says so for the other server")));
 });
 
 test("what a control host does not carry stops it at the start", { skip: CONTROL ? false : "the refusals of the other server" }, async (tc) => {
@@ -401,7 +461,9 @@ test("what a Member does not carry stops it at the start instead of being ignore
 test("a router's delegated call follows the policy the control host signs now, and old versions stop", async (tc) => {
 	const g = await setup(tc);
 	const { t } = await g.router();
-	const lease = await g.withControl((host) => g.leases(host).issue("router-peer", g.routerKey.signer.keyId));
+	const home = g.atControl(g.ROUTER_IP, g.routerKey.signer, "router-peer");
+	await home.remote.authenticate();
+	const lease = await home.remote.requestRouterLease();
 	const grant = await g.authority().issue({ peerId: "user", state: { proof: { keyId: g.userKey.signer.keyId } } });
 	const send = async (c: Record<string, unknown>, policyVersion: number) => {
 		const call = { ...c, space: g.jobs.spaceId };
