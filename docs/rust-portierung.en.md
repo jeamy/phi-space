@@ -1075,7 +1075,7 @@ Choice b) does not automatically end the TS reference or the in-process API (R-D
 | R-D0 | Approval of the crates from section 4 | **decided 2026-10-29:** approved |
 | R-D1 | Same SQLite file or own format | **decided 2026-10-29:** same file |
 | R-D2 | Continue after R3? | **decided 2026-10-29:** only if the CPU per command in the Space process falls clearly (goal: at least a factor of 2) or the memory need falls; corrected measurement procedure in "Status R0", finding 3; open quantitative addition R-D11 to be clarified before acceptance |
-| R-D3 | Port federation, redesign or leave in TS | **decided 2026-10-29:** decide only after its acceptance |
+| R-D3 | Port federation, redesign or leave in TS | **decided 2026-11-01:** R6b is accepted in TypeScript first, in the local federation (kills, cut-offs, fencing), and ported afterwards |
 | R-D4 | Space on the phone | **decided 2026-10-29:** a), later b) |
 | R-D5 | Does the TS server stay permanently? | **decided 2026-10-29:** TS stays as reference and for in-process use (`PhiSpaces`), at least until R-D4 b). The phone switch alone does not end these two tasks; a later removal needs R-D13 |
 | R-D6 | World definition as JSON instead of TS | **decided 2026-10-29:** JSON (R8.0) |
