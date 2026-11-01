@@ -9,7 +9,7 @@ import { canonicalJson } from "./canonical.ts";
 import { RegisterConflict, type RecoveryRegister } from "./recovery-register.ts";
 import type { HostBootState, SpaceBootPermit } from "./boot.ts";
 import type { Json } from "./core.ts";
-import { PrimarySyncBlocked, applyConfigTransition, durabilityOf, materializeSyncHistory, recoverSealedWithoutStandby, type PrimaryIntent, type PrimarySyncAck, type PrimarySyncConfig, type PrimarySyncJournal } from "./primary-sync.ts";
+import { PrimarySyncBlocked, permitMatches, applyConfigTransition, durabilityOf, materializeSyncHistory, recoverSealedWithoutStandby, type PrimaryIntent, type PrimarySyncAck, type PrimarySyncConfig, type PrimarySyncJournal } from "./primary-sync.ts";
 
 export type FenceProof = { hostId: string; kind: string; observedAt: number; evidence: Json; restartLocked: boolean };
 /** v3 5.5. Boot states are not part of the adapter: they stay in the independent recovery register. */
@@ -77,7 +77,7 @@ const permitFor = (c: PrimarySyncConfig, role: "primary" | "standby", dataIncarn
 async function assertPermit(register: RecoveryRegister, hostId: string, c: PrimarySyncConfig, role: "primary" | "standby") {
 	const b = (await register.get<Boot & Json>(`boot:${hostId}`))?.value, p = b?.spaces[c.spaceId];
 	if ((role === "primary" ? c.primaryReplica : c.standbyReplica) !== hostId) throw new PrimarySyncBlocked(`${hostId} is not the ${role} of this configuration`);
-	if (!b || b.state !== "active" || !p || p.state !== "active" || p.role !== role || p.authorityId !== c.authorityId || p.primaryEpoch !== c.primaryEpoch || p.replicaConfigVersion !== c.replicaConfigVersion || p.durability !== durabilityOf(c)) throw new PrimarySyncBlocked(`${role === "primary" ? "external" : "standby"} boot permit does not match the ${role === "primary" ? "local replica" : "expected"} configuration`);
+	if (!b || b.state !== "active" || !permitMatches(p, role, c, durabilityOf(c))) throw new PrimarySyncBlocked(`${role === "primary" ? "external" : "standby"} boot permit does not match the ${role === "primary" ? "local replica" : "expected"} configuration`);
 }
 /** assertPrimary for primarySyncStorage: host active and an active primary permit matching the journal configuration exactly. */
 export function assertSyncPrimary(register: RecoveryRegister, hostId: string, journal: PrimarySyncJournal): () => Promise<void> {

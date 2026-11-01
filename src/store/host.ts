@@ -258,7 +258,7 @@ export class OwnStoreHost implements ClosableStoreHost {
 		for (const r of records) deepFreeze(r);
 		// so is a part array: the next commit copies it on its first write, and a published one may be indexed (core.ts)
 		for (const d of set.put) for (const part of d.parts ?? []) if (part.kind === "array") {
-			const arr = part.path.reduce<unknown>((v, k) => (typeof v === "object" && v !== null ? (v as Record<string, unknown>)[k] : undefined), d.value);
+			const arr = partAt(d.value, part.path);
 			if (Array.isArray(arr)) markCommitted(arr);
 		}
 		// the next commit builds on this one at once; readers and watches see it once it is durable

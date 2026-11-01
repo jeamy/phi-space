@@ -142,18 +142,18 @@ of section 9 in [rust-portierung.en.md](rust-portierung.en.md), security and fed
   and `configured-root.ts:544`, which neither dedupe nor sort.
 - teilweise (`proven` und `isHost` ersetzen die Kopien; die abweichenden Rollenmengen und Fehlercodes bleiben absichtlich): `runtime.ts:119-151`: five copies of "authenticate + proof + keys.find + active + role check" with divergent role sets and
   error codes.
-- The placement rule three times: `member-admission.ts:62-76`, `membership.ts:451-463`, `routing-semantics.ts:289-301`;
+- offen (die drei Stellen weichen in Fehlermeldungen und Auswahl-Regeln ab; Zusammenlegen ändert Verhalten): The placement rule three times: `member-admission.ts:62-76`, `membership.ts:451-463`, `routing-semantics.ts:289-301`;
   `membership.ts:433-448` and `:480-495` build the policy with stock rules twice verbatim.
-- `announce` and `write` repeat the type/fields/limits validation (`core.ts:625-635` vs `:648-658`); `service.ts:312-318`
+- offen (die Reihenfolge der Prüfungen unterscheidet sich und damit der Fehler, den ein Aufruf bekommt; Rust ist daran gebunden): `announce` and `write` repeat the type/fields/limits validation (`core.ts:625-635` vs `:648-658`); `service.ts:312-318`
   vs `:384-391` for `write` and the batch step. The `registrationClosed` literal four times; the miss/locked decision four
   times.
 - teilweise (`openEnroll` und `signedChallenge` erledigt; Revoke-a-PeerKey bleibt, die drei Stellen schreiben verschieden): `EnrollRec` built three times (`enroll.ts:106,134,160`); revoke-a-PeerKey three times (`enroll.ts:116,190`,
   `rotation.ts:40`). `remote.ts:256-260` vs `:278-282` challenge fetch and signing copied between `authenticate()` and
   `enroll()`.
-- teilweise (`releaseLock` erledigt, `partAt` und `isDiskMap` offen): Store: `host.ts:261` re-implements `partAt` inline while it is imported at `:12`; the owner-lock release
+- erledigt: Store: `host.ts:261` re-implements `partAt` inline while it is imported at `:12`; the owner-lock release
   (`ROLLBACK` + `close()`) four times (`sqlite.ts:366,374`, `sync-sqlite.ts:109`, `erasure-own.ts:29`);
   `disk-map.ts:161` `isDiskMap` equals `diskMapOf(v) !== undefined`.
-- Replication: boot-permit-matches-config in `replica-notice.ts:52` and `replica-control.ts:81`; the "install the external
+- teilweise (`permitMatches` erledigt; der Register-CAS, der doppelte Notice-Scan, die zwei Fence-Dateien, Recovery-Controller und `deployment.ts` offen): Replication: boot-permit-matches-config in `replica-notice.ts:52` and `replica-control.ts:81`; the "install the external
   permit if it differs" CAS three times; `latestReplicaConfigNotice` scans the chain twice; fence state files twice
   (`netcup-fencing.ts:59-67`, `container-fencing.ts:47-86`); `recovery-controller.ts` and `control-recovery.ts` share the
   job snapshot, restore loop and per-key CAS; `deployment.ts:159-160` validates twice.

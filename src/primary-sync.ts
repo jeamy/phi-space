@@ -32,6 +32,9 @@ export type PrimaryIntent=PrimaryCommitIntent|PrimaryConfigIntent|PrimaryBootstr
 export type PrimarySyncAck={revision:number;hash:string;configHash:string};
 export interface PrimarySyncPeer{accept(intent:PrimaryIntent):Promise<PrimarySyncAck>}
 export class PrimarySyncBlocked extends Error{}
+/** Whether an external boot permit is active for this role and configuration, to the letter. */
+export const permitMatches=(p:{state:string;role?:string;authorityId?:string;primaryEpoch?:number;replicaConfigVersion?:number;durability?:string}|undefined,role:string,c:{authorityId:string;primaryEpoch:number;replicaConfigVersion:number},durability:string):boolean=>
+ !!p&&p.state==='active'&&p.role===role&&p.authorityId===c.authorityId&&p.primaryEpoch===c.primaryEpoch&&p.replicaConfigVersion===c.replicaConfigVersion&&p.durability===durability;
 /** The journal's per-commit or history budget is used up; nothing was sealed. */
 export class SyncJournalFull extends PrimarySyncBlocked{}
 export {CommitSealed};

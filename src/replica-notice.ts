@@ -13,7 +13,7 @@ import * as core from "./core.ts";
 import { touch } from "./core.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import type { HostBootState } from "./boot.ts";
-import { durabilityOf, PrimarySyncBlocked, type PrimarySyncJournal } from "./primary-sync.ts";
+import { durabilityOf, permitMatches, PrimarySyncBlocked, type PrimarySyncJournal } from "./primary-sync.ts";
 import { FederationRouting, RoutingConflict } from "./federation-policy.ts";
 import { ProfileTransitions } from "./profile-transition-doc.ts";
 import { snapshotSpace, spaceDoc } from "./spaces.ts";
@@ -49,7 +49,7 @@ const sameNotice = (n: ReplicaConfigNotice, r: { recoveryId?: string; primaryRep
 	r.recoveryId === n.recoveryId && r.primaryReplica === n.primaryReplica && (r.standbyReplica ?? null) === n.standbyReplica && r.durability === n.durability && t.hostId === n.primaryReplica && t.primaryEpoch === n.primaryEpoch && t.dataIncarnation === n.dataIncarnation;
 async function permitFor(register: RecoveryRegister, n: ReplicaConfigNotice) {
 	const rec = await register.get<HostBootState & Json>(`boot:${n.primaryReplica}`), b = rec?.value, p = b?.spaces[n.spaceId];
-	if (!b || b.state !== "active" || b.hostId !== n.primaryReplica || !p || p.state !== "active" || p.role !== "primary" || p.authorityId !== n.authorityId || p.primaryEpoch !== n.primaryEpoch || p.replicaConfigVersion !== n.replicaConfigVersion || p.durability !== n.durability || p.dataIncarnation !== n.dataIncarnation)
+	if (!b || b.state !== "active" || b.hostId !== n.primaryReplica || !permitMatches(p, "primary", n, n.durability) || p!.dataIncarnation !== n.dataIncarnation)
 		throw new RoutingConflict("the register does not admit the notice's primary with this configuration");
 	return rec!.version;
 }
