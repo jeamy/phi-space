@@ -157,6 +157,11 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		f = (await theField(s))!;
 		assert.deepEqual(f.yields, [{ proto: "hafer", count: Math.floor(16 * d.tired[1]!) }]);
 		assert.match(await does(boss.p, "flur", "Acker von Bäuerin"), /Hafer wächst/);
+		// a second field in the room: the whole listing shows both, the map's "ansehen" only the one at its cell
+		await s.write({ type: "Field", fields: { ...f, fieldId: "field-zweiter", ownerName: "Nachbar", x: 0, y: 0 } as never }, null, FOREVER);
+		assert.equal((await does(boss.p, "flur", "Acker von Bäuerin")).split("\n").length, 2);
+		const one = await does(boss.p, `flur ansehen ${f.x} ${f.y}`, "Acker von Bäuerin");
+		assert.equal(one.split("\n").length, 1, one);
 		for (const a of crew) await a.p.leave();
 	} finally { await srv.close(); }
 });

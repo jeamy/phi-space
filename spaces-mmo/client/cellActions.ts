@@ -128,7 +128,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 		if (o.kind === "field") {
 			// a field is sown and harvested from two cells away, by its owner, or by everyone when it is open (server: field.ts)
 			const mine = o.ownerId === me, may = mine || !!o.open;
-			entries.push({ label: `Acker von ${o.owner ?? ""} ansehen`, line: "flur" });
+			entries.push({ label: `Acker von ${o.owner ?? ""} ansehen`, line: `flur ansehen ${o.x} ${o.y}` });
 			if (nearSite && may) {
 				if (o.fieldStage === "brach" && mine) {
 					const seeds = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && SOWN[i.name]).map((i) => i.name))];

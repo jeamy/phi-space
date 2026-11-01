@@ -160,7 +160,10 @@ const flur: Command = {
 			await releaseLight(c.space, c.txn, f.beaconId, f.points);
 			return msg(c, "*", "info", `${c.actor.name} gibt den Acker auf; dort wächst wieder Gras.`);
 		}
-		const all = (await c.space.readAll({ type: "Field", fields: { room: c.actor.room } })).map((e) => fieldsOf<FieldFields>(e));
+		// "flur ansehen x y": the one field at that cell (the map's menu), else all of the room
+		const [x, y] = /^(?:ansehen|look)$/i.test(word) ? rest.map(Number) : [];
+		const one = (f: FieldFields) => x === undefined || y === undefined || (x >= f.x && y >= f.y && x < f.x + f.w && y < f.y + f.h);
+		const all = (await c.space.readAll({ type: "Field", fields: { room: c.actor.room } })).map((e) => fieldsOf<FieldFields>(e)).filter(one);
 		if (!all.length) return msg(c, c.actor.charId, "info", "Hier ist kein Acker. Mit einem Spaten bricht „flur anlegen“ eine um (im Licht eines Feuers).");
 		const now = await worldNowOf(c.space, c.txn);
 		await msg(c, c.actor.charId, "look", all.map((f) => describe(d, f, now)).join("\n"));
