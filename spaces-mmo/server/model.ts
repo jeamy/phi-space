@@ -64,7 +64,7 @@ export type SatedFields = { charId: string; untilWorldMs: number };
 /** A loan of a counting house (engine/commands/shop.ts): its pledge lies at `loanId`; `untilWorldMs` in the second clock. */
 export type LoanFields = { loanId: string; buildId: string; room: string; accountId: string; charId: string; charName: string; owed: number; untilWorldMs: number };
 export type WindFields = { island: string; level: number };
-export type ShowKind = "blumen" | "ernte";
+export type ShowKind = "blumen" | "ernte" | "regatta";
 export type ShowFields = { showId: string; room: string; settlementId: string; settlementName: string; kind: ShowKind; byName: string; endsWorldMs: number };
 /** What one account shows at a festival; `score`: the worth of the flower, or the count of the crops. */
 export type ShowEntryFields = { showId: string; accountId: string; charName: string; name: string; score: number; at: number; /** A settler of the world (npc/settlers.ts): wins no coins. */ figure?: boolean };

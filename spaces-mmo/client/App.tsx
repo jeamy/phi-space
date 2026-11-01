@@ -40,7 +40,7 @@ const FETCH_MS = 15_000;
 /** How long after a command what arrives counts as its answer. */
 const ANSWER_MS = 4_000;
 /** The sheet with the log open on a command's answer: half the device, with a mouse about ten lines (and the tabs and buttons around them). */
-const logOpenPx = () => Math.round(isTouch() ? window.innerHeight / 2 : Math.min(window.innerHeight, 10 * 19 + 170));
+const logOpenPx = () => Math.round(isTouch() ? window.innerHeight / 2 : Math.min(window.innerHeight, 10 * 21 + 170));
 type Account = { name: string; guest: boolean; admin: boolean; /** The name shown in the game, when it is not the login name. */ alias?: string };
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 /** The names of what burns in a fire, cheapest first (from the hello): what the space key and the buttons feed. */

@@ -26,7 +26,7 @@ export type ExitDef = Omit<ExitFields, "location" | "locks"> & { room: string; l
 export type PlacedDef = { itemId: string; proto: string; room: string; x: number; y: number };
 export type SceneryDef = Omit<SceneryFields, "left">;
 /** Festivals at the plan `plan` (engine/commands/festival.ts): each lasts `showWorldMs`, the settlement then rests `restWorldMs`, the winner gets `prize` coins. A figure tends once per `careWorldMs` and counts in the rank for `tendedWorldMs` after. */
-export type FestivalDef = { plan: string; showWorldMs: number; restWorldMs: number; prize: number; careWorldMs: number; tendedWorldMs: number };
+export type FestivalDef = { /** A regatta starts at this plan, not at `plan`. */ regatta?: string; plan: string; showWorldMs: number; restWorldMs: number; prize: number; careWorldMs: number; tendedWorldMs: number };
 /** What `look` and the map say about a piece of scenery: what it is, and whether and how it can be cleared. */
 export function sceneryText(w: WorldDef, s: Pick<SceneryFields, "name" | "fixed" | "yields"> & { left: number }): string {
 	const about = w.sceneryAbout?.[s.name] ?? "";
@@ -125,7 +125,7 @@ export type WorldDef = {
 	/** A counting house: a loan is up to `pledgeShare` of the pledge's base price, runs `termWorldMs` of the second clock, at `interest`. */
 	bank?: { plan: string; pledgeShare: number; termWorldMs: number; interest: number };
 	/** A rowing boat (engine/commands/fishing.ts) goes between the jetties of an island; `sand` is dug with `tool` on `tile`. */
-	boat?: { proto: string };
+	boat?: { proto: string; sail?: string };
 	sand?: { tool: string; makes: string; count: number; tile: string };
 	festival?: FestivalDef;
 	/** Animals on the farm (docs/siedeln.en.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */

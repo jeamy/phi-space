@@ -3,9 +3,11 @@
 import { randomInt } from "node:crypto";
 import { fieldsOf, type BuildingFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
-import { CommandError, inventory, msg, NotUnderstood, roomOf } from "../context.ts";
+import { CommandError, inventory, msg, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
+import { handOff } from "../handover.ts";
+import { regionOfRoom } from "../regions.ts";
 import { distTo, giveBack, planOf, rested, tire } from "./build.ts";
-import { placeIn, relocate } from "./default.ts";
+import { dropOffers, placeIn, relocate } from "./default.ts";
 
 const weighted = (xs: Array<{ proto: string; weight: number }>) => { let r = randomInt(0, xs.reduce((n, x) => n + x.weight, 0)); return xs.find((x) => (r -= x.weight) < 0)!; };
 
@@ -65,4 +67,30 @@ const schaufle: Command = {
 	},
 };
 
-export const FISHING_COMMANDS: Command[] = [wirf, rudere, schaufle];
+const segle: Command = {
+	key: "segle", aliases: ["segeln", "sail"],
+	help: "segle <insel> – mit einem Segelboot vom Steg neben dir zu einer anderen Insel; „segle“ allein zeigt, wohin",
+	async func(c, arg) {
+		const d = c.world.boat, plan = c.world.fishing?.plan;
+		if (!d?.sail || !plan) throw new CommandError("In dieser Welt gibt es keine Segelboote.");
+		if (!(await inventory(c)).some((i) => i.f.proto === d.sail)) throw new CommandError("Dafür brauchst du ein Segelboot.");
+		const here = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
+		if (!here) throw new CommandError(`Abgelegt wird direkt neben ${planOf(c.world, plan)?.dative ?? "einem Steg"}.`);
+		const rooms = c.world.allRooms ?? c.world.rooms, mine = rooms.find((r) => r.roomId === c.actor.room)?.island;
+		const islands = [...new Set(rooms.flatMap((r) => (r.island && r.island !== mine ? [r.island] : [])))];
+		const word = arg.trim().toLowerCase(), to = islands.find((i) => i.toLowerCase() === word);
+		if (!to) { if (word) throw new NotUnderstood(`Eine Insel „${arg.trim().slice(0, 30)}“ kennt niemand. Es gibt: ${islands.join(", ")}.`); return msg(c, c.actor.charId, "info", `Du kannst segeln nach: ${islands.join(", ")}.`); }
+		// the first room of the island that has a spawn: a bay; the world's bays are written first
+		const bay = rooms.find((r) => r.island === to && r.spawn)!, at = bay.spawn!;
+		await msg(c, "*", "info", `$you() $conj(setzt|setzt) Segel nach ${to}.`, { templ: true });
+		await tire(c, ...(await restOf(c)));
+		const toRegion = c.world.region && !c.world.rooms.some((r) => r.roomId === bay.roomId) ? regionOfRoom({ ...c.world, rooms }, bay.roomId) : null;
+		if (toRegion) { await dropOffers(c); return handOff(c, c.world.region!, toRegion, { room: bay.roomId, ...at }); }
+		const dest = await roomOf(c, bay.roomId), cell = await placeIn(c, dest, at);
+		await relocate(c, { room: dest.roomId, x: cell.x, y: cell.y }, { spot: false });
+		await msg(c, "*", "info", `$you() $conj(legst|legt) in ${to} an.`, { templ: true, room: dest.roomId });
+	},
+};
+const restOf = async (c: CommandCtx) => { const { now, rest } = await rested(c); return [now, rest] as const; };
+
+export const FISHING_COMMANDS: Command[] = [wirf, rudere, segle, schaufle];

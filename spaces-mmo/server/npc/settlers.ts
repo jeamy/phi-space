@@ -133,6 +133,9 @@ export function siedler(): Script {
 			}
 		}
 		if (await festive(n, l, w, homes)) return;
+		// a figure eats like anyone: sated it rests less
+		const meal = l.pack.find((i) => w.food?.foods[i.proto]);
+		if (meal && may("essen")) { later("essen", 40); await n.act(`iss ${meal.name}`); return; }
 		const rested = await n.space.readIfExists({ type: "WorkRest", fields: { charId: me.charId } }, 0).then((e) => (e ? fieldsOf<WorkRestFields>(e).untilWorldMs : 0)).catch(() => 0);
 		const tired = rested > now;
 		const sites = homes.length ? (await n.space.readAll({ type: "Site" })).map((e) => fieldsOf<SiteFields>(e)).filter((s) => homes.includes(s.room)) : [];

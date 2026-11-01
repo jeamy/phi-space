@@ -6,7 +6,7 @@
 // The settlers of the world take part and count as a second; one of them that wins takes the honour and no coins.
 // `pflege` gives a flower to the park once a world day: reputation for whoever tends it, and in the rank of the settlements
 // each who tended lately counts a point.
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type ParkCareFields, type SettlementFields, type ShowEntryFields, type ShowFields, type ShowKind } from "../../model.ts";
 import { decayNowOf } from "../clock.ts";
@@ -19,13 +19,15 @@ import { distTo, planOf } from "./build.ts";
 import { hutsIn, rankOf, settlementIn } from "./settlement.ts";
 import { consume } from "./trade.ts";
 
-const NAME: Record<ShowKind, string> = { blumen: "Blumenschau", ernte: "Erntefest" };
+const NAME: Record<ShowKind, string> = { blumen: "Blumenschau", ernte: "Erntefest", regatta: "Regatta" };
+const REGATTA_CREW = 2; // a boat is worth twice its rower: the sailing boat over the rowing boat, then the wind and the crew
 const defOf = (c: CommandCtx): FestivalDef => { const d = c.world.festival; if (!d) throw new CommandError("In dieser Welt gibt es keine Feste."); return d; };
 export const flowers = (w: WorldDef) => (w.garden?.sorts ?? []).filter((s) => s.kind === "zier").map((s) => s.yields.proto);
 export const crops = (w: WorldDef) => (w.fields?.crops ?? []).flatMap((x) => x.yields.map((y) => y.proto)).filter((p) => !p.startsWith("samen-"));
 const members = (c: CommandCtx) => { if (!c.account || c.account.guest) throw new CommandError("Gäste machen hier nicht mit; registriere dich dafür."); return c.account; };
-const parkBeside = async (c: CommandCtx, d: FestivalDef) => (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: d.plan } }, { txn: c.txn })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
-const atPark = (c: CommandCtx, d: FestivalDef) => `direkt neben ${planOf(c.world, d.plan)?.dative ?? "einem Park"}`;
+const placeOf = (d: FestivalDef, kind: ShowKind) => (kind === "regatta" ? d.regatta ?? d.plan : d.plan);
+const parkBeside = async (c: CommandCtx, d: FestivalDef, plan = d.plan) => (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan } }, { txn: c.txn })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
+const atPark = (c: CommandCtx, d: FestivalDef, plan = d.plan) => `direkt neben ${planOf(c.world, plan)?.dative ?? "einem Park"}`;
 /** What a flower is worth at the show: a named sort over a bred one over a wild one. */
 const bloom = (f: ItemFields) => (f.variety ? (f.variety.name ? 3 : 2) : 1);
 const ending = (d: FestivalDef) => `${Math.round(d.showWorldMs / (24 * 3600_000))} Tage`;
@@ -44,10 +46,10 @@ const fest: Command = {
 			const s = fieldsOf<ShowFields>(open), first = ranked(await entriesOf(c.space, s.showId, c.txn));
 			return msg(c, c.actor.charId, "info", `${NAME[s.kind]} von ${s.settlementName}: ${first.length ? first.map((x) => `${x.charName} mit ${x.name}${s.kind === "ernte" ? ` (${x.score})` : ""}`).join(", ") : "noch hat niemand etwas gezeigt"}. „zeige <ding>“ macht mit.`);
 		}
-		const kind: ShowKind | null = /^(?:blumen|blumenschau|flowers)$/.test(word) ? "blumen" : /^(?:ernte|erntefest|harvest)$/.test(word) ? "ernte" : null;
-		if (!kind) throw new NotUnderstood("So eröffnest du eines: fest blumen, oder fest ernte.");
+		const kind: ShowKind | null = /^(?:blumen|blumenschau|flowers)$/.test(word) ? "blumen" : /^(?:ernte|erntefest|harvest)$/.test(word) ? "ernte" : d.regatta && /^(?:regatta|race)$/.test(word) ? "regatta" : null;
+		if (!kind) throw new NotUnderstood("So eröffnest du eines: fest blumen, fest ernte oder fest regatta.");
 		const account = members(c);
-		if (!(await parkBeside(c, d))) throw new CommandError(`Feste eröffnet man ${atPark(c, d)}.`);
+		if (!(await parkBeside(c, d, placeOf(d, kind)))) throw new CommandError(`${kind === "regatta" ? "Eine Regatta" : "Dieses Fest"} eröffnet man ${atPark(c, d, placeOf(d, kind))}.`);
 		const s = await settlementIn(c.space, c.actor.room, c.txn);
 		if (!s) throw new CommandError("Feste feiert eine Siedlung; hier ist keine.");
 		if (rankOf(s, await hutsIn(c.space, c.world, s.room, c.txn), account) !== "siedler") throw new CommandError(`Feste eröffnen die Siedler von ${s.name}.`);
@@ -57,7 +59,7 @@ const fest: Command = {
 		const show: ShowFields = { showId: randomBytes(6).toString("hex"), room: s.room, settlementId: s.settlementId, settlementName: s.name, kind, byName: c.actor.name, endsWorldMs: now + d.showWorldMs };
 		try { await c.space.write({ type: "Show", fields: show as never }, c.txn, FOREVER, { unique: ["room"] }); }
 		catch (e) { if (/unique entry already exists/.test((e as Error).message)) throw new CommandError("Hier läuft schon ein Fest."); throw e; }
-		await msg(c, "*", "world", `${c.actor.name} eröffnet in ${s.name} ${kind === "blumen" ? "eine Blumenschau" : "ein Erntefest"}! ${ending(d)} lang zeigt am Park, wer mag, ${kind === "blumen" ? "seine schönste Blume" : "seine Ernte"} („zeige <ding>“).`);
+		await msg(c, "*", "world", `${c.actor.name} eröffnet in ${s.name} ${kind === "blumen" ? "eine Blumenschau" : kind === "ernte" ? "ein Erntefest" : "eine Regatta"}! ${ending(d)} lang ${kind === "regatta" ? "meldet am Steg, wer mag, sein Boot" : `zeigt am Park, wer mag, ${kind === "blumen" ? "seine schönste Blume" : "seine Ernte"}`} („zeige <ding>“).`);
 	},
 };
 
@@ -68,20 +70,20 @@ const zeige: Command = {
 		const d = defOf(c), account = members(c);
 		const open = await peek(c.space, { type: "Show", fields: { room: c.actor.room } }, { txn: c.txn });
 		if (!open) throw new CommandError("Hier läuft kein Fest.");
-		if (!(await parkBeside(c, d))) throw new CommandError(`Gezeigt wird ${atPark(c, d)}.`);
-		const s = fieldsOf<ShowFields>(open), allowed = s.kind === "blumen" ? flowers(c.world) : crops(c.world);
+		const s = fieldsOf<ShowFields>(open), boats = [c.world.boat?.proto, c.world.boat?.sail].filter((b): b is string => !!b), allowed = s.kind === "blumen" ? flowers(c.world) : s.kind === "ernte" ? crops(c.world) : boats;
+		if (!(await parkBeside(c, d, placeOf(d, s.kind)))) throw new CommandError(`Gezeigt wird ${atPark(c, d, placeOf(d, s.kind))}.`);
 		const thing = arg.trim();
-		if (!thing) throw new NotUnderstood(`Was zeigst du? ${s.kind === "blumen" ? "Eine Blume." : "Etwas von deiner Ernte."}`);
+		if (!thing) throw new NotUnderstood(`Was zeigst du? ${s.kind === "blumen" ? "Eine Blume." : s.kind === "ernte" ? "Etwas von deiner Ernte." : "Dein Boot."}`);
 		const it = itemsNamed(c.world, await inventory(c), thing)[0];
 		if (!it) throw new NotUnderstood(`Du trägst nichts, was „${thing.slice(0, 30)}“ heißt.`);
-		if (!allowed.includes(it.f.proto)) throw new CommandError(`${it.f.name} gehört nicht ${s.kind === "blumen" ? "zur Blumenschau" : "zum Erntefest"}.`);
+		if (!allowed.includes(it.f.proto)) throw new CommandError(`${it.f.name} gehört nicht ${s.kind === "blumen" ? "zur Blumenschau" : s.kind === "ernte" ? "zum Erntefest" : "zur Regatta"}.`);
 		const mine = await c.space.takeIfExists({ type: "ShowEntry", fields: { showId: s.showId, accountId: account.accountId } }, NO_WAIT, { txn: c.txn });
 		const had = mine && fieldsOf<ShowEntryFields>(mine);
-		if (had && s.kind === "blumen") throw new CommandError(`Du zeigst schon ${had.name}.`);
-		await consume(c, it.f, c.actor.charId);
-		const entry: ShowEntryFields = { showId: s.showId, accountId: account.accountId, charName: c.actor.name, name: had?.name ?? (it.f.variety?.name || it.f.name), ...(account.settler ? { figure: true } : {}), score: s.kind === "blumen" ? bloom(it.f) : (had?.score ?? 0) + 1, at: had?.at ?? Date.now() };
+		if (had && s.kind !== "ernte") throw new CommandError(`Du zeigst schon ${had.name}.`);
+		if (s.kind !== "regatta") await consume(c, it.f, c.actor.charId); // a boat stays with its owner
+		const entry: ShowEntryFields = { showId: s.showId, accountId: account.accountId, charName: c.actor.name, name: had?.name ?? (it.f.variety?.name || it.f.name), ...(account.settler ? { figure: true } : {}), score: s.kind === "blumen" ? bloom(it.f) : s.kind === "regatta" ? (boats.indexOf(it.f.proto) + 1) * REGATTA_CREW + randomInt(0, REGATTA_CREW + 1) : (had?.score ?? 0) + 1, at: had?.at ?? Date.now() };
 		await c.space.write({ type: "ShowEntry", fields: entry as never }, c.txn, FOREVER);
-		await msg(c, "*", "info", s.kind === "blumen" ? `$you() $conj(zeigst|zeigt) ${entry.name} auf der Blumenschau.` : `$you() $conj(legst|legt) ${it.f.name} zum Erntefest (${entry.score}).`, { templ: true });
+		await msg(c, "*", "info", s.kind === "regatta" ? `$you() $conj(meldest|meldet) ${entry.name} zur Regatta.` : s.kind === "blumen" ? `$you() $conj(zeigst|zeigt) ${entry.name} auf der Blumenschau.` : `$you() $conj(legst|legt) ${it.f.name} zum Erntefest (${entry.score}).`, { templ: true });
 	},
 };
 

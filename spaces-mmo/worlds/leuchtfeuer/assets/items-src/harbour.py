@@ -79,6 +79,15 @@ def boat():
     return img
 
 
+def sailboat():
+    img, d = new()
+    d.polygon([(4, 21), (28, 21), (24, 28), (8, 28)], fill=rgb("#8a6a44"), outline=OUT)
+    d.line([15, 4, 15, 21], fill=OUT, width=2)
+    d.polygon([(17, 5), (27, 19), (17, 19)], fill=rgb("#e8e0c8"), outline=OUT)
+    d.polygon([(13, 8), (13, 19), (6, 19)], fill=rgb("#d8d0b8"), outline=OUT)
+    return img
+
+
 out = sys.argv[1]
-for key, img in {"rind": cow(), "leder": leather(), "fisch": fish("#7f9fb0", "#d8e4e8"), "raeucherfisch": fish("#b0702a", "#d8a860", True), "bier": beer(), "sand": heap(), "glas": pane(), "ruderboot": boat()}.items():
+for key, img in {"rind": cow(), "leder": leather(), "fisch": fish("#7f9fb0", "#d8e4e8"), "raeucherfisch": fish("#b0702a", "#d8a860", True), "bier": beer(), "sand": heap(), "glas": pane(), "ruderboot": boat(), "segelboot": sailboat()}.items():
     img.save(f"{out}/{key}.png")

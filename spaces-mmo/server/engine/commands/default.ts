@@ -89,7 +89,7 @@ export async function placeIn(c: CommandCtx, room: RoomFields, at: { x: number; 
 
 /** Leaving a room ends the trade offers made there: one's own are withdrawn, those made to one lapse; the other side
  *  hears it. An offer being accepted right now (held) is left to that acceptance, which finds the actor gone. */
-async function dropOffers(c: CommandCtx): Promise<void> {
+export async function dropOffers(c: CommandCtx): Promise<void> {
 	for (const side of ["from", "to"] as const) for (const e of await c.space.readAll({ type: "Offer", fields: { [side]: c.actor.charId } })) {
 		const taken = await c.space.takeIfExists({ type: "Offer", id: e.id }, NO_WAIT, { txn: c.txn });
 		if (!taken) continue;

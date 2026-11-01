@@ -497,12 +497,13 @@ Eine Insel wächst durch das, was auf ihr steht. Ausführlich unter [Dorf und Si
 | \`laden\` | \`shop\` | Regal und Preise des Kaufhauses; \`laden kaufe\`, \`laden verkaufe\`, \`laden einlegen\`, \`laden entnehme\` |
 | \`kredit <n> gegen <ding>\`, \`tilge\` | \`credit\`, \`repay\` | Am Kontor gegen ein Pfand leihen und zurückzahlen |
 | \`rudere <ort>\` | \`row\` | Mit dem Ruderboot von Steg zu Steg einer Insel |
+| \`segle <insel>\` | \`sail\` | Mit dem Segelboot vom Steg zu einer anderen Insel |
 | \`schaufle\` | | Am Strand Sand graben |
 | \`iss <ding>\` | \`eat\` | Etwas essen: Satt ruhst du nach der Arbeit kürzer |
 | \`wirf netz\` | \`fish\` | An einem Steg das Netz auswerfen |
 | \`wetter\` | \`weather\`, \`wind\` | Wie der Wind steht und wie dicht der Nebel ist; der Wind treibt die Mühlen |
 | \`pflege\` | \`tend\` | Einmal am Tag eine Blume in den Park neben dir setzen: Ruf für dich, Rang für die Siedlung |
-| \`fest blumen\`, \`fest ernte\` | \`festival\` | Als Siedler am Park eine Blumenschau oder ein Erntefest eröffnen; allein: das laufende zeigen |
+| \`fest blumen\`, \`fest ernte\`, \`fest regatta\` | \`festival\` | Als Siedler am Park eine Blumenschau oder ein Erntefest, am Steg eine Regatta eröffnen; allein: das laufende zeigen |
 | \`zeige <ding>\` | \`exhibit\` | Am Park eine Blume zur Schau oder Ernte zum Fest geben; der Preis wartet im \`nachlass\` |
 | \`siedlung\` | \`settlement\` | Die Siedlung hier; \`siedlung gründen <name>\`, \`aufnehmen <name> [helfer]\`, \`entlassen <name>\`, \`zu\`, \`offen\` |
 | \`epoche\` | \`stufe\` | Auf welcher Stufe die Insel steht (Fischerdorf, Dorf, Stadt, Netz), ihre Punkte und was die nächste freischaltet |
@@ -671,6 +672,7 @@ An island grows by what stands on it. In detail under [Village and settlement](h
 | \`laden\` | \`shop\` | Shelf and prices of the department store; \`laden kaufe\`, \`laden verkaufe\`, \`laden einlegen\`, \`laden entnehme\` |
 | \`kredit <n> gegen <ding>\`, \`tilge\` | \`credit\`, \`repay\` | Borrow against a pledge at a counting house and pay it back |
 | \`rudere <ort>\` | \`row\` | By rowing boat from jetty to jetty of an island |
+| \`segle <insel>\` | \`sail\` | By sailing boat from a jetty to another island |
 | \`schaufle\` | | Dig sand on the beach |
 | \`iss <ding>\` | \`eat\` | Eat something: sated, you rest less after work |
 | \`wirf netz\` | \`fish\` | Cast the net at a jetty |

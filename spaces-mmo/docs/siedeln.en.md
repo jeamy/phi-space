@@ -1065,8 +1065,8 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
    - **Department store, counting house (built, `shop.ts`):** `laden` trades with a shop at prices led by its shelf, from twice the base price empty to half of it at ten pieces; it pays 70 % from its own till, which the owner fills, so it mints nothing, and its turnover counts in the rank at a point per 20 coins. `kredit <n> gegen <ding>` lends from the house's till against a pledge in escrow, up to twice its base price, for seven days at a tenth; `tilge` frees it, else it goes to the house (job "epoch"). Deviations: no delivery orders on the board, no tax on sales, no exchange.
    - **Brewery, glassworks (built, plans and recipes):** Beer from barley, no hops yet; sand dug with a spade on the beach (`schaufle`), glass from sand and wood. Nothing uses glass yet: the greenhouse waits for the seasons.
    - **Rowing boat (built, `fishing.ts`):** A workshop recipe; `rudere <ort>` goes from a jetty to a jetty of the island. It stays a thing in the pack, with no hatch, and the owner needs one. Open: the shipyard, sailing boats to other regions, the regatta.
-   - **Open in this step:** (shop with stock), **counting house**, **lighthouse**, **brewery**, **glassworks and greenhouse**,
-   fishing (net recipe, jetty) and boats; **food** (being sated), when bread and smoked fish exist.
+   - **Shipyard, sailing boat, regatta (built):** The shipyard is a plan at the shore with a recipe for the sailing boat; `segle <insel>` goes from a jetty to the bay of any island, across regions by the handover. `fest regatta` opens a regatta at a jetty, `zeige <boot>` enters a boat, which stays with its owner; a sailing boat beats a rowing boat, and luck decides among equals. Deviations: no buoys and no course, the race is counted at the end; a boat has no hatch.
+   - **Open in this step:** the greenhouse (with the seasons), hops, a boat's cargo hatch, delivery orders and tax of the store.
 8. **Roads, carts, timetable ferries**, then the **island railway** as automaton.
 
 ### Later settings and views

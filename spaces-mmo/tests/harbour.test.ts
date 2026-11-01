@@ -11,6 +11,7 @@ import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
 import { loanTick, shopPrice } from "../server/engine/commands/shop.ts";
+import { showTick } from "../server/engine/commands/festival.ts";
 
 const w = await loadWorld();
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -133,5 +134,41 @@ test("a shop prices by its shelf, pays from its till and mints nothing; a loan f
 		await give(s, me, "ruderboot");
 		await does(p, `rudere ${other.name}`, "am Steg an");
 		await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0]?.fields.room === other.roomId, 10_000, "rowed over");
+	} finally { await srv.close(); }
+});
+
+test("a regatta starts at a jetty, a boat stays with its owner and the sailing boat beats the rowing boat; a sailing boat crosses to another island", { timeout: 240_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const [a, b] = [new Player(srv.url), new Player(srv.url)];
+		assert.equal((await a.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
+		assert.equal((await b.post("/api/register", { name: "Ute", password: "geheim-123" })).status, 200);
+		const [ma, mb] = [(await a.play()).me.charId, (await b.play()).me.charId];
+		const char = async (id: string) => (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: id } }))[0], 10_000, id))!.fields as unknown as CharacterFields & { accountId: string };
+		const [ca, cb] = [await char(ma), await char(mb)];
+		const accounts = (await s.readAll({ type: "Account" })).map((e) => e.fields as { accountId: string; name: string });
+		const id = (n: string) => accounts.find((x) => x.name === n)!.accountId;
+		const put = (bid: string, plan: string, x: number, y: number, acc: string) => s.write({ type: "Building", fields: house(bid, plan, plan, ca.room, x, y, acc) as never }, null, FOREVER);
+		for (const [i, acc] of [id("Ole"), id("Ole"), id("Ute")].entries()) await put(`hut${i}`, "huette", 1 + i, 15, acc);
+		await does(a, "siedlung gründen Neuhafen", "gründet die Siedlung");
+		await put("ja", "steg", ca.x + 1, ca.y, "o");
+		await put("jb", "steg", cb.x + 1, cb.y, "o");
+		await does(a, "fest regatta", "eine Regatta");
+		await give(s, ma, "segelboot");
+		await give(s, mb, "ruderboot");
+		await does(a, "zeige segelboot", "zur Regatta");
+		await does(b, "zeige ruderboot", "zur Regatta");
+		assert.equal(await s.count({ type: "Item", fields: { location: ma, proto: "segelboot" } }), 1, "the boat stays");
+		const e = (await s.readAll({ type: "Show" }))[0]!;
+		await s.takeIfExists({ id: e.id }, 0);
+		await s.write({ type: "Show", fields: { ...e.fields, endsWorldMs: 1 } as never }, null, FOREVER, { unique: ["room"] });
+		const from = a.frames.length;
+		assert.equal(await showTick(s, w, 60_000), 1);
+		await a.until((f) => f.t === "msg" && /Regatta von Neuhafen ist zu Ende: Ole gewinnt mit Segelboot/.test(f.m.text), 10_000, from);
+		assert.match(await does(a, "segle", "segeln"), /segeln nach/);
+		const island = w.rooms.find((r) => r.island && r.island !== w.rooms.find((x) => x.roomId === ca.room)!.island)!.island!;
+		await does(a, `segle ${island}`, /legst in .* an/);
+		await eventually(async () => (await char(ma)).room !== ca.room, 10_000, "sailed");
 	} finally { await srv.close(); }
 });

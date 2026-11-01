@@ -1072,8 +1072,8 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
    - **Kaufhaus, Kontor (gebaut, `shop.ts`):** `laden` handelt mit einem Laden zu Preisen, die sein Regal lenkt, vom Doppelten des Grundpreises leer bis zur Hälfte bei zehn Stück; es zahlt 70 % aus eigener Kasse, die der Besitzer füllt, prägt also nichts, und sein Umsatz zählt im Rang mit einem Punkt je 20 Münzen. `kredit <n> gegen <ding>` leiht aus der Kasse des Hauses gegen ein Pfand, bis zum Doppelten des Grundpreises, sieben Tage zu einem Zehntel; `tilge` löst es aus, sonst fällt es ans Haus (Job „epoch“). Abweichungen: keine Lieferaufträge an der Tafel, keine Umsatzsteuer, kein Wechsel.
    - **Brauerei, Glashütte (gebaut, Pläne und Rezepte):** Bier aus Gerste, noch ohne Hopfen; Sand mit dem Spaten am Strand (`schaufle`), Glas aus Sand und Holz. Noch verwendet nichts Glas: Das Gewächshaus wartet auf die Jahreszeiten.
    - **Ruderboot (gebaut, `fishing.ts`):** Ein Rezept der Werkstatt; `rudere <ort>` fährt von Steg zu Steg der Insel. Es bleibt ein Ding im Gepäck, ohne Luke. Offen: Werft, Segelboote in andere Regionen, Regatta.
-   - **Offen in diesem Schritt:** (Laden mit Vorrat), **Kontor**, **Leuchtturm**, **Brauhaus**, **Glashütte und Gewächshaus**,
-   Fischerei (Netz-Rezept, Steg) und Boote; **Nahrung** (Sattsein), wenn Brot und Räucherfisch da sind.
+   - **Werft, Segelboot, Regatta (gebaut):** Die Werft ist ein Plan am Ufer mit dem Rezept für das Segelboot; `segle <insel>` fährt vom Steg in die Bucht jeder Insel, über Regionen hinweg per Übergabe. `fest regatta` eröffnet am Steg eine Regatta, `zeige <boot>` meldet ein Boot, das bei seinem Besitzer bleibt; ein Segelboot schlägt ein Ruderboot, unter Gleichen entscheidet das Glück. Abweichungen: keine Bojen und kein Kurs, das Rennen wird am Ende gezählt; ein Boot hat keine Luke.
+   - **Offen in diesem Schritt:** Gewächshaus (mit den Jahreszeiten), Hopfen, die Luke eines Boots, Lieferaufträge und Steuer des Kaufhauses.
 8. **Straßen, Karren, Fahrplan-Fähren**, dann die **Inselbahn** als Automat.
 
 ### Spätere Einstellungen und Ansichten
