@@ -145,10 +145,10 @@ export async function startFederationHost(host: ClosableStoreHost, ctx: Context,
                       const auth=o.verifier.check((c as any).frame?.grant,id,{method:"write",space:"control"},conn);auth.check();
                       if(!auth.roles.includes("host"))throw Error("capability grant does not authorize host publication");
                       const lease=await o.control!.directory.heartbeat((c as any).args?.report,{peerId:id.principal.peerId,roles:auth.roles,check:async()=>{auth.check();const current=await o.keys.find(id.principal.peerId,proof.keyId);if(!current||current.state!=="active"||!current.roles.includes("host"))throw Error("host key no longer authorized");}});return{ok:true,result:lease as any};
-                     }catch(e){return{ok:false,error:{code:"PermissionDenied",message:e instanceof Error?e.message:String(e)}};}
+                     }catch(e){return{ok:false,error:{code:(conn.state as any)?.proof?"PermissionDenied":"ProofRequired",message:e instanceof Error?e.message:String(e)}};}
                     }
 					if((c as any)?.method==="routingPolicy") {
-					 try{const id=await identity.authenticate(conn),proof=(conn.state as any)?.proof,key=proof&&conn.peerId?await o.keys.find(conn.peerId,proof.keyId):null;if(!key||key.state!=="active"||!id?.roles.some(r=>["host","router","admin"].includes(r))||!o.control!.routing)throw new Error("policy requires proven service peer");o.verifier.check((c as any).frame?.grant,id,{method:"hello",space:"control"},conn).check();return{ok:true,result:await o.control!.routing.signed() as any};}catch(e){return{ok:false,error:{code:"PermissionDenied",message:e instanceof Error?e.message:String(e)}};}
+					 try{const id=await identity.authenticate(conn),proof=(conn.state as any)?.proof,key=proof&&conn.peerId?await o.keys.find(conn.peerId,proof.keyId):null;if(!key||key.state!=="active"||!id?.roles.some(r=>["host","router","admin"].includes(r))||!o.control!.routing)throw new Error("policy requires proven service peer");o.verifier.check((c as any).frame?.grant,id,{method:"hello",space:"control"},conn).check();return{ok:true,result:await o.control!.routing.signed() as any};}catch(e){return{ok:false,error:{code:(conn.state as any)?.proof?"PermissionDenied":"ProofRequired",message:e instanceof Error?e.message:String(e)}};}
 					}
 
 					if((c as any)?.method==="routerLease") {

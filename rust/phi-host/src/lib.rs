@@ -3,6 +3,7 @@ pub mod auth;
 pub mod capability;
 pub mod boot;
 pub mod control;
+pub mod control_host;
 pub mod delegation;
 pub mod gate;
 pub mod grants;

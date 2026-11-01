@@ -17,7 +17,8 @@ pub struct Capabilities {
 	pub tools: Vec<String>,
 	pub models: Vec<String>,
 	pub data_spaces: Vec<String>,
-	pub client: Rc<ControlClient>,
+	/// The control host; `None` on the control host itself, whose directory is among its `data_spaces`.
+	pub client: Option<Rc<ControlClient>>,
 }
 
 fn memory() -> (f64, f64) {
@@ -27,7 +28,7 @@ fn memory() -> (f64, f64) {
 }
 
 /// `replace`: a bounded record, not one more for each heartbeat.
-pub fn publish(service: &mut Service, space: &str, fields: &Json) -> Result<(), CoreError> {
+pub fn publish(service: &mut Service, space: &str, fields: &Json) -> Result<Json, CoreError> {
 	let host = fields.get("hostId").cloned().unwrap_or(Json::Null);
 	service.commit_on(Some(space), |s, now| {
 		let old = s.list(now, &Template::from_json(Some(&obj! { "type" => "Capability", "fields" => obj! { "hostId" => host } }))?, None, None, None)?;
@@ -41,8 +42,7 @@ pub fn publish(service: &mut Service, space: &str, fields: &Json) -> Result<(), 
 		let mut stamped = fields.as_object().cloned().unwrap_or_default();
 		stamped.insert("at", now.into());
 		s.write(now, &obj! { "type" => "Capability", "fields" => Json::Object(stamped) }, None, Some(&Json::Number(LEASE_MS)), None)
-	})?;
-	Ok(())
+	})
 }
 
 impl Capabilities {
@@ -58,8 +58,9 @@ impl Capabilities {
 		for space in &self.data_spaces {
 			owner.with(|service| publish(service, space, &report)).map_err(|e| e.message)?;
 		}
-		let grant = self.client.grant().await?;
-		self.client.call(&obj! { "method" => "capabilityHeartbeat", "space" => "control", "args" => obj! { "report" => report }, "frame" => obj! { "grant" => grant } }).await?;
+		let Some(client) = &self.client else { return Ok(()) };
+		let grant = client.grant().await?;
+		client.call(&obj! { "method" => "capabilityHeartbeat", "space" => "control", "args" => obj! { "report" => report }, "frame" => obj! { "grant" => grant } }).await?;
 		Ok(())
 	}
 

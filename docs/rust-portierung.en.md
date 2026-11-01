@@ -912,6 +912,8 @@ the federation members also stay in TS; the Rust standalone is no replacement.
 
 **Split 2026-11-01.** R6a is what TypeScript has accepted: the control host (`--control`: keys, policy, leases, capability directory, supervisor commands, run controller, workers, Space commands, deployment, alerts, data administration), then router, `federated-space.ts` and `configured-root.ts` from the accepted phase 2. R6b waits for R-D3, because TypeScript has not accepted it: `entry-replication*.ts`, `primary-sync.ts`, `sync-spaces.ts`, `replica-*.ts`, fencing, `control-host-change.ts`, `recovery*.ts`, `restore.ts`, bootstrap.
 
+**R6a, slice 1 (2026-11-01):** `phi-space-server --store FILE --control CONFIG.json` is a control host: pairing, grants, `keyLookup`, `routingPolicy` under its signature, the capability directory and the supervisor's own commands (`phi-host::control_host`). A root, `routerLease`, delegated calls to the control Space, `asyncCommands` and a recovery's access policy are not carried yet; what would rely on them is refused at the start. `test/test-mixed-member.test.ts` takes the control host's server from `PHI_SPACES_CONTROL_CMD` beside the Member's, and `npm run testbed:federation -- both` runs all four pairings. While a Rust control host runs, a test reaches its store only with that host down.
+
 **Content:**
 
 - `router.ts`, `federated-space.ts` and the root/controller sides of delegation and membership; the member contracts

@@ -9,6 +9,7 @@
 // Prints "[phi-spaces] ready on <listen> (store <file|memory>)" once it serves; SIGINT/SIGTERM close it. A panic ends the
 // process: what was acknowledged is on the disk, and a half-done commit is not left running.
 mod hooks;
+mod control_host;
 mod member;
 mod profiles;
 mod register;
@@ -43,6 +44,9 @@ fn main() {
 	}
 	if let Some(config) = arg("--tls-register") {
 		return register(&config);
+	}
+	if let Some(config) = arg("--control") {
+		return control_host::run(&config, &arg("--store").unwrap_or_else(|| fail("--control needs --store")));
 	}
 	if let Some(config) = arg("--member") {
 		return member::run(&config, &arg("--store").unwrap_or_else(|| fail("--member needs --store")));

@@ -542,6 +542,7 @@ impl Space {
 				"membership" => v.as_object().is_some(),
 				"acceptedAuthorityId" => v.as_str().is_some(),
 				"archived" => v.as_object().is_some(),
+				"authorityCounters" => v.as_object().is_some(),
 				"erasureEpoch" | "primaryEpoch" => v.as_f64().is_some(),
 				_ => false,
 			};
@@ -674,7 +675,7 @@ impl Space {
 		let membership = self.rest_bytes("membership", 2.0);
 		let completion = self.completion_bytes();
 		let authority_transition = 2.0;
-		let authority_counters = 2.0;
+		let authority_counters = self.rest_bytes("authorityCounters", 2.0);
 		let restore = 0.0;
 		let claims = self.claim_bytes();
 		let stream = self.state.stream.as_ref().map_or(0.0, |s| s.bytes);

@@ -42,11 +42,11 @@ pub(crate) fn known_id(service: &Service) -> Option<String> {
 	service.store.spaces().into_iter().find(|i| i.get("alias").and_then(Json::as_str) == Some(CONTROL_SPACE))?.get("spaceId")?.as_str().map(str::to_owned)
 }
 
-pub(crate) fn listed(s: &Space, now: f64, tmpl: &Json) -> R<Vec<Json>> {
+pub fn listed(s: &Space, now: f64, tmpl: &Json) -> R<Vec<Json>> {
 	let t = Template::from_json(Some(tmpl))?;
 	Ok(s.list(now, &t, None, None, None)?.as_array().cloned().unwrap_or_default())
 }
-pub(crate) fn fields(e: &Json) -> Json { e.get("fields").cloned().unwrap_or(Json::Null) }
+pub fn fields(e: &Json) -> Json { e.get("fields").cloned().unwrap_or(Json::Null) }
 pub(crate) fn text<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or("") }
 pub(crate) fn put(s: &mut Space, now: f64, type_name: &str, f: Json, lease: f64) -> R<()> {
 	s.write(now, &obj! { "type" => type_name, "fields" => f }, None, Some(&Json::Number(lease)), None).map(|_| ())
@@ -195,8 +195,8 @@ fn valid_key(algorithm: Algorithm, public_key: &str) -> bool {
 	}
 }
 
-pub(crate) fn refuse(message: &str) -> Json { obj! { "ok" => false, "error" => obj! { "code" => "PermissionDenied", "message" => message } } }
-pub(crate) fn answered(result: Json) -> Json { obj! { "ok" => true, "result" => result } }
+pub fn refuse(message: &str) -> Json { obj! { "ok" => false, "error" => obj! { "code" => "PermissionDenied", "message" => message } } }
+pub fn answered(result: Json) -> Json { obj! { "ok" => true, "result" => result } }
 
 /// `enroll` and `enrollStatus`, for peers whose roles contain "unpaired" and for a proven key resolving its own request.
 pub struct Enrolling {

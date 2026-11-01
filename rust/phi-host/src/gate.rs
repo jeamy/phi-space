@@ -209,6 +209,7 @@ pub struct GateOptions {
 	pub lifecycle: Option<crate::membership::MemberLifecycle>,
 	pub spaces: Option<crate::space_lifecycle::SpaceLifecycleService>,
 	pub capabilities: Option<Rc<crate::capability::Capabilities>>,
+	pub control_host: Option<crate::control_host::ControlHost>,
 	/// Who takes the epoch notices of the supervisor.
 	pub delegation: Option<Rc<crate::delegation::DelegationVerifier>>,
 	/// The boot guard, read before each call.
@@ -226,7 +227,7 @@ pub struct GateOptions {
 
 impl GateOptions {
 	pub fn new(directory: Rc<Netbird>, now: Now) -> GateOptions {
-		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, spaces: None, capabilities: None, delegation: None, boot: None, remote_keys: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
+		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, spaces: None, capabilities: None, control_host: None, delegation: None, boot: None, remote_keys: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
 	}
 }
 
@@ -547,6 +548,14 @@ impl Session for GateSession {
 			let active = proof.as_ref().and_then(|p| found.find(&self.peer_id, &p.key_id)).is_some_and(|k| k.active);
 			let key_id = proof.filter(|_| active).map(|p| p.key_id);
 			return Some(rotating.handle(service, &call, &self.identity(), proven, key_id.as_deref(), now).to_json_text());
+		}
+		if let (Some(host), "keyLookup" | "routingPolicy" | "capabilityHeartbeat") = (&self.gate.o.control_host, method) {
+			let found = InService { keys: keys.as_ref(), service: RefCell::new(service) };
+			let proof = self.state.borrow().proof.clone();
+			let proven = proof.is_some();
+			let key = proof.as_ref().and_then(|p| found.find(&self.peer_id, &p.key_id)).filter(|k| k.active);
+			let held = proof.as_ref().map(|p| p.key_id.clone()).zip(key.map(|k| k.roles));
+			return Some(host.handle(service, method, &call, &self.identity(), held.as_ref().map(|(k, r)| (k.as_str(), r.as_slice())), proven).to_json_text());
 		}
 		if method == "epochNotice" {
 			if let Some(verifier) = &self.gate.o.delegation {

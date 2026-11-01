@@ -91,6 +91,7 @@ impl GrantAuthority<'_> {
 	}
 }
 
+#[derive(Clone)]
 pub struct GrantVerifier {
 	pub authority_id: String,
 	pub issuer_host_id: String,

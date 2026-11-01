@@ -1,5 +1,5 @@
-# A federation on this machine, a project of its own beside the other local containers: register, directory, a TypeScript control
-# host, one Member (MEMBER_IMPL: rust or ts) and a client. Each has its own address on its own network, and the gate knows a
+# A federation on this machine, a project of its own beside the other local containers: register, directory, a control host
+# (CONTROL_IMPL: rust or ts), one Member (MEMBER_IMPL: rust or ts) and a client. Each has its own address on its own network, and the gate knows a
 # peer by that address. `npm run testbed:federation` provisions FED_DIR, starts this, and breaks it on purpose.
 name: phi-federation
 
@@ -22,7 +22,7 @@ services:
     networks: {fed: {ipv4_address: 172.30.7.3}}
   control:
     <<: *host
-    command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/host.ts", "control"]
+    command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/host.ts", "control", "${CONTROL_IMPL:-ts}"]
     depends_on: [register, management]
     restart: on-failure:20
     ports: ["${FED_PHONE_BIND:-127.0.0.1}:7431:7431"]

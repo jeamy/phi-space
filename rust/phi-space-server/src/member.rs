@@ -25,11 +25,11 @@ use tokio::signal::unix::{signal, SignalKind};
 
 const REFUSED: [&str; 7] = ["root", "syncSpaces", "entryReplication", "recovery", "recoveryAdmin", "registerSshTarget", "registerReadSocket"];
 
-fn field<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or_else(|| fail(format!("the config has no {k}"))) }
+pub(crate) fn field<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or_else(|| fail(format!("the config has no {k}"))) }
 
-fn clock() -> Now { Rc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("after 1970").as_millis() as f64) }
+pub(crate) fn clock() -> Now { Rc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("after 1970").as_millis() as f64) }
 
-fn register_client(r: &Json) -> RegisterClient {
+pub(crate) fn register_client(r: &Json) -> RegisterClient {
 	let identity = TlsIdentity { ca_file: field(r, "caFile").into(), cert_file: field(r, "certFile").into(), key_file: field(r, "keyFile").into() };
 	RegisterClient::new(RegisterClient { identity, host: field(r, "host").into(), port: r.get("port").and_then(Json::as_f64).unwrap_or(0.0) as u16, server_name: r.get("serverName").and_then(Json::as_str).map(str::to_owned), timeout_ms: r.get("timeoutMs").and_then(Json::as_f64).unwrap_or(6000.0) as u64, batch_reads: r.get("batchReads") == Some(&Json::Bool(true)), unix_path: r.get("unixPath").and_then(Json::as_str).map(str::to_owned) }).unwrap_or_else(|e| fail(e))
 }
@@ -139,7 +139,7 @@ pub fn run(config: &str, store: &str) {
 		if tools.iter().chain(&models).any(|n| n.is_empty() || n.len() > 128) || host_id.len() > 128 {
 			fail("invalid capability report");
 		}
-		o.capabilities = Some(Rc::new(Capabilities { host_id: host_id.to_owned(), tools, models, data_spaces: names("dataSpaces"), client: Rc::clone(&client) }));
+		o.capabilities = Some(Rc::new(Capabilities { host_id: host_id.to_owned(), tools, models, data_spaces: names("dataSpaces"), client: Some(Rc::clone(&client)) }));
 	}
 	let pin = Pin { issuer: supervisor.clone(), algorithm, public_key: control_key.to_owned() };
 	let assert_host = || -> phi_host::run_member::AuthorityCheck {

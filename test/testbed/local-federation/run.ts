@@ -1,5 +1,5 @@
 // `npm run testbed:federation [-- rust|ts|both]`: the local federation in containers, with a Member killed, the control host and the
-// register cut off and the host fenced, and what each Member answered held against the other. Changes containers on this machine.
+// register cut off and the host fenced, and what each pairing of control host and Member answered held against the others. Changes containers on this machine.
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,12 +16,12 @@ const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const COMPOSE = join(ROOT, "test/testbed/local-federation/compose.yml"), NET = "phi-federation_fed";
 const sh = (cmd: string, args: string[], env: NodeJS.ProcessEnv = {}) => execFileSync(cmd, args, { cwd: ROOT, env: { ...process.env, ...env }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
-async function scenario(impl: string) {
+async function scenario(impl: string, control: string) {
 	const dir = mkdtempSync(join(tmpdir(), "phi-fed-"));
-	const env = { FED_DIR: dir, FED_UID: String(process.getuid!()), FED_GID: String(process.getgid!()), MEMBER_IMPL: impl };
+	const env = { FED_DIR: dir, FED_UID: String(process.getuid!()), FED_GID: String(process.getgid!()), MEMBER_IMPL: impl, CONTROL_IMPL: control };
 	const compose = (...a: string[]) => sh("docker", ["compose", "-f", COMPOSE, ...a], env);
 	const seen: string[] = [];
-	const step = (name: string, service = "client") => { const out = compose("exec", "-T", service, "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/driver.ts", name).trim().split("\n").at(-1)!; console.log(`  ${impl} ${out}`); seen.push(out); };
+	const step = (name: string, service = "client") => { const out = compose("exec", "-T", service, "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/driver.ts", name).trim().split("\n").at(-1)!; console.log(`  ${control}/${impl} ${out}`); seen.push(out); };
 	const cut = (service: string) => sh("docker", ["network", "disconnect", NET, `phi-federation-${service}-1`]);
 	const heal = (service: string) => sh("docker", ["network", "connect", "--ip", (IP as Record<string, string>)[service]!, NET, `phi-federation-${service}-1`]);
 	try {
@@ -40,7 +40,7 @@ async function scenario(impl: string) {
 		console.error((e as { stderr?: string }).stderr ?? e);
 		for (const s of ["member", "control"]) console.error(compose("logs", "--tail", "12", s));
 		process.exitCode = 1;
-		throw new Error(`the scenario of the ${impl} Member failed`);
+		throw new Error(`the scenario of ${control}/${impl} failed`);
 	} finally {
 		compose("down", "-v", "--remove-orphans");
 		rmSync(dir, { recursive: true, force: true });
@@ -50,7 +50,7 @@ async function scenario(impl: string) {
 /** `phone PHONE-IP BIND-IP [rust|ts]`: stays up for a real device on the LAN, which pairs at the control host and works on the Member. */
 async function phone(ip: string, bind: string, impl: string) {
 	const dir = mkdtempSync(join(tmpdir(), "phi-fed-"));
-	const env = { FED_DIR: dir, FED_UID: String(process.getuid!()), FED_GID: String(process.getgid!()), MEMBER_IMPL: impl, FED_PHONE_BIND: bind };
+	const env = { FED_DIR: dir, FED_UID: String(process.getuid!()), FED_GID: String(process.getgid!()), MEMBER_IMPL: impl, CONTROL_IMPL: "ts", FED_PHONE_BIND: bind };
 	const compose = (...a: string[]) => sh("docker", ["compose", "-f", COMPOSE, ...a], env);
 	const done = () => { compose("down", "-v", "--remove-orphans"); rmSync(dir, { recursive: true, force: true }); process.exit(0); };
 	process.on("SIGINT", done); process.on("SIGTERM", done);
@@ -78,7 +78,8 @@ async function phone(ip: string, bind: string, impl: string) {
 const which = process.argv[2] ?? "both";
 sh("docker", ["build", "--network", "host", "-f", "test/testbed/local-federation/Dockerfile", "-t", "phi-federation:local", "."]);
 if (which === "phone") await phone(process.argv[3]!, process.argv[4]!, process.argv[5] ?? "rust");
-const runs = which === "both" ? ["ts", "rust"] : [which];
+const runs = which === "both" ? [["ts", "ts"], ["ts", "rust"], ["rust", "ts"], ["rust", "rust"]] : [["ts", which]];
 const results = [];
-for (const impl of runs) results.push(await scenario(impl));
-if (results.length === 2) { assert.deepEqual(results[1], results[0], "both Members answer alike"); console.log("both Members answered alike"); }
+for (const [control, member] of runs) results.push(await scenario(member!, control!));
+for (const r of results.slice(1)) assert.deepEqual(r, results[0], "every pairing answers alike");
+if (results.length > 1) console.log("every pairing of control host and Member answered alike");
