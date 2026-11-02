@@ -59,6 +59,21 @@ services:
     command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "run", "control-b"]
     restart: on-failure:20
     networks: {fed: {ipv4_address: 172.30.7.12}}
+  # `run.ts restore`: sshd as the independent fence status endpoint (one login per fenced host, docker read through its socket), and a restore target
+  fence-ssh:
+    <<: *host
+    profiles: [restore]
+    user: "0:0"
+    volumes: ["${FED_DIR}:/fed", "/var/run/docker.sock:/var/run/docker.sock"]
+    command: ["sh", "-c", "groupadd -g $$(stat -c %g /var/run/docker.sock) dockerhost && for u in data-host control-host; do useradd -M -o -u ${FED_UID} -s /bin/sh -G dockerhost $$u && usermod -p '*' $$u; done && mkdir -p /run/sshd && exec /usr/sbin/sshd -D -e -f /fed/ssh/sshd_config"]
+    networks: {fed: {ipv4_address: 172.30.7.13}}
+  data-b:
+    <<: *host
+    profiles: [restore]
+    volumes: ["${FED_DIR}:/fed", "${FED_DIR}/passwd:/etc/passwd:ro"]
+    command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/host.ts", "member", "ts", "data-b"]
+    restart: on-failure:20
+    networks: {fed: {ipv4_address: 172.30.7.14}}
   client:
     <<: *host
     command: ["sleep", "infinity"]

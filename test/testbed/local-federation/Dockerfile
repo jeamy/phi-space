@@ -8,6 +8,8 @@ COPY rust ./
 RUN cargo build --release --locked -p phi-space-server
 
 FROM ${NODE_IMAGE}
+# ssh for the fence status of a data restore (src/fencing.ts): the client on the hosts, the server in `fence-ssh`
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-client openssh-server && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/phi-spaces
 COPY package.json ./
 COPY src ./src

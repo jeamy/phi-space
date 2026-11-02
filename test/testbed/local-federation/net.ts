@@ -5,5 +5,7 @@ export const peer = (id: string, ip: string, groups: string[]) => ({ id, name: i
 export const POLICY = (version: number, rules: unknown[] = []) => ({ authorityId: "authority", policyVersion: version, rules, completionProfiles: [{ taskType: "Gated", resultTypes: ["GatedDone"], equalFields: ["runId", "n"], maxResultCount: 1, maxResultBytes: 1024, maxLeaseMs: 60_000, gateField: "runId" }], default: { mode: "local", member: "a" } }) as never;
 // The replica hosts of `run.ts replica`, and the host's bridge address, where the fencing service runs outside every fenced container.
 export const REPLICA = { "replica-a": "172.30.7.9", "replica-b": "172.30.7.10" }, RPORT = { gate: 7433, sync: 7434, fencing: 7435 }, GATEWAY = "172.30.7.1";
-// The second control host of `run.ts change`, and which compose service each fenced host ID runs in.
-export const CONTROL_B = "172.30.7.12", FENCED: Record<string, string> = { "replica-a": "replica-a", "replica-b": "replica-b", "control-host": "control-a", "control-host-b": "control-b" };
+// The second control host of `run.ts change`, and which compose service each fenced host ID runs in (also the logins of `fence-ssh`).
+export const CONTROL_B = "172.30.7.12", FENCED: Record<string, string> = { "replica-a": "replica-a", "replica-b": "replica-b", "control-host": "control-a", "control-host-b": "control-b", "data-host": "member" };
+// `run.ts restore`: the ssh fence status endpoint, and the host a data Space is restored to
+export const FENCE_SSH = "172.30.7.13", DATA_B = "172.30.7.14";
