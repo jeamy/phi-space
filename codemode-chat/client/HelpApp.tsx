@@ -9,8 +9,8 @@ import { renderMarkdownToHtml } from "./lib/markdown.ts";
 import { useTheme, type Lang } from "./lib/theme.ts";
 
 const T = {
-	de: { chat: "← Chat", search: "Hilfe durchsuchen …", nav: "NAVIGATION", toc: "AUF DIESER SEITE", results: "Treffer", none: "Keine Treffer.", brand: "HILFE", home: "Alle Hilfethemen", eyebrow: "CODEMODE-CHAT · HILFE" },
-	en: { chat: "← Chat", search: "Search the help …", nav: "NAVIGATION", toc: "ON THIS PAGE", results: "results", none: "No results.", brand: "HELP", home: "All help topics", eyebrow: "CODEMODE CHAT · HELP" },
+	de: { chat: "← Chat", search: "Hilfe durchsuchen …", nav: "NAVIGATION", toc: "AUF DIESER SEITE", results: "Treffer", none: "Keine Treffer.", brand: "HILFE", home: "Alle Hilfethemen", eyebrow: "CODEMODE-CHAT · HILFE", notice: "Testversion – Nutzung auf eigene Gefahr. Der Chat ist in Entwicklung: Aufgaben, Beiträge, Läufe und Chats können jederzeit verschwinden oder zurückgesetzt werden. Es gibt keine Gewähr für Verfügbarkeit oder Richtigkeit." },
+	en: { chat: "← Chat", search: "Search the help …", nav: "NAVIGATION", toc: "ON THIS PAGE", results: "results", none: "No results.", brand: "HELP", home: "All help topics", eyebrow: "CODEMODE CHAT · HELP", notice: "Test version – use at your own risk. The chat is under development: tasks, contributions, runs and chats can disappear or be reset at any time. No guarantee of availability or correctness." },
 } as const;
 
 const textOf = (a: Article, lang: Lang) => `${a.title[lang]} ${a.short[lang]} ${a.body[lang]}`.toLowerCase();
@@ -91,6 +91,7 @@ export function HelpApp() {
 					)) : <div className="empty">{t.none}</div>}
 				</aside>
 				<article className="article" ref={articleRef} onClick={onArticleClick}>
+					<p className="help__notice" role="note">{t.notice}</p>
 					<span className="eyebrow">{t.eyebrow}</span>
 					<h1>{article.title[lang]}</h1>
 					<p className="lead">{article.short[lang]}</p>

@@ -198,6 +198,7 @@ details > summary { cursor: pointer; padding: 5px 10px; color: var(--muted); fon
 .help__toc { border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
 .help__toc a { color: var(--muted); text-decoration: none; font-size: 13px; padding: 3px 0; }
 .help__toc a:hover { color: var(--accent); }
+.help__notice { margin: 0 0 16px; padding: 10px 12px; border: 1px solid #c9962b; border-left-width: 4px; border-radius: 8px; background: color-mix(in srgb, #c9962b 14%, transparent); font-size: 14px; line-height: 1.45; }
 .help__label, .help__sectionlabel { display: block; font-size: 11px; letter-spacing: .1em; color: var(--muted); margin-bottom: 6px; }
 .help__sectionlabel { margin-top: 14px; color: var(--accent); }
 .help__count { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
