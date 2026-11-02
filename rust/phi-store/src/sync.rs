@@ -11,17 +11,21 @@ use std::path::Path;
 pub enum SyncError {
 	Blocked(String),
 	Full(String),
+	/// `CommitSealed`: the entry is durably sealed but not confirmed or not applied; its candidate must be resolved.
+	Sealed { revision: f64, hash: String },
 }
+pub const SEALED: &str = "commit is durably sealed; resolve this candidate before admitting new work";
 impl SyncError {
-	pub fn message(&self) -> &str { match self { SyncError::Blocked(m) | SyncError::Full(m) => m } }
-	pub fn name(&self) -> &'static str { match self { SyncError::Blocked(_) => "PrimarySyncBlocked", SyncError::Full(_) => "SyncJournalFull" } }
+	pub fn message(&self) -> &str { match self { SyncError::Blocked(m) | SyncError::Full(m) => m, SyncError::Sealed { .. } => SEALED } }
+	pub fn name(&self) -> &'static str { match self { SyncError::Blocked(_) => "PrimarySyncBlocked", SyncError::Full(_) => "SyncJournalFull", SyncError::Sealed { .. } => "CommitSealed" } }
+	pub fn sealed(intent: &Json) -> SyncError { SyncError::Sealed { revision: num(intent, "revision"), hash: text(intent, "hash").to_string() } }
 }
 impl std::fmt::Display for SyncError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(self.message()) }
 }
 pub type Result<T> = std::result::Result<T, SyncError>;
-fn blocked<T>(m: impl Into<String>) -> Result<T> { Err(SyncError::Blocked(m.into())) }
-fn sql<T>(r: rusqlite::Result<T>) -> Result<T> { r.map_err(|e| SyncError::Blocked(e.to_string())) }
+pub(crate) fn blocked<T>(m: impl Into<String>) -> Result<T> { Err(SyncError::Blocked(m.into())) }
+pub(crate) fn sql<T>(r: rusqlite::Result<T>) -> Result<T> { r.map_err(|e| SyncError::Blocked(e.to_string())) }
 
 pub const ZERO: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 const MARKER_PREFIX: &str = "sync-marker:";
@@ -53,8 +57,8 @@ fn reason_like(s: &str) -> bool {
 fn integer(v: Option<&Json>) -> Option<f64> {
 	v.and_then(Json::as_f64).filter(|x| x.fract() == 0.0 && (0.0..=9_007_199_254_740_991.0).contains(x))
 }
-fn num(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
-fn text<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or("") }
+pub(crate) fn num(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
+pub(crate) fn text<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or("") }
 
 /// `durability` absent means sync.
 pub fn durability_of(c: &Json) -> &str { c.get("durability").and_then(Json::as_str).unwrap_or("sync") }
