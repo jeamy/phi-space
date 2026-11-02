@@ -30,7 +30,6 @@ import { gardenTick, stormFillsBarrels } from "./engine/commands/garden.ts";
 import { stormTurnsMills } from "./engine/commands/mill.ts";
 import { wildTick } from "./engine/commands/wild.ts";
 import { epochTick } from "./engine/commands/epoch.ts";
-import { onePerRoomOnce } from "./engine/commands/build.ts";
 import { settlementTick } from "./engine/commands/settlement.ts";
 import { motionTick } from "./engine/commands/townhall.ts";
 import { showTick } from "./engine/commands/festival.ts";
@@ -97,8 +96,6 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 	const proc = announce(space, "world");
 	const delivering = region ? deliver(space, others, full, halt.signal) : Promise.resolve();
 	if (loaded.loaded) console.log(`[world] loaded ${w.id} version ${w.version}${loaded.spawned.length ? `, placed ${loaded.spawned.join(", ")}` : ""}`);
-	// once per space: a second station in a room from before `bau` refused it comes down (engine/commands/build.ts)
-	await onePerRoomOnce(space, w).then((n) => { if (n) console.log(`[world] took down ${n} building(s) of one per room`); }).catch((e) => console.error("[world] one per room", e));
 	// the islands count at once: one that qualified before the epochs came need not wait for the job's first date
 	await epochTick(space, w, msgLeaseMs).catch((e) => console.error("[world] epoch count", e));
 	const tokens = await ensureTokens(space);

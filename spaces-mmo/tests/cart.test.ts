@@ -5,7 +5,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER, type SpaceLike } from "phi-spaces";
 import { cartTick, roadLinks, roadPath } from "../server/engine/commands/cart.ts";
-import { onePerRoomOnce } from "../server/engine/commands/build.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { CartFields, CharacterFields, ExitFields } from "../server/model.ts";
@@ -67,25 +66,6 @@ test("a room holds one station: a second is refused, built or staked", { timeout
 		assert.match(await does(p, "bau bahnhof", /höchstens einen|Baustelle ab|passt keine/), /höchstens einen Bau „Bahnhof“/);
 		await s.take({ type: "Building", fields: { buildId: "st" } }, 5_000);
 		assert.doesNotMatch(await does(p, "bau bahnhof", /höchstens einen|Baustelle ab|passt keine/), /höchstens einen/, "the room is free again");
-	} finally { await srv.close(); }
-});
-
-test("two stations in a room from before the rule: the one-time cleanup takes the newer, its owner finds half of it as an estate, and it runs once", { timeout: 60_000 }, async () => {
-	const srv = await startServer();
-	try {
-		const s = srv.stack.space;
-		const station = (id: string, room: string, builtAt: number) => s.write({ type: "Building", fields: { buildId: id, plan: "bahnhof", name: "Bahnhof", room, x: builtAt, y: 0, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt } as never }, null, FOREVER);
-		await station("neu", "graue-bucht", 2);
-		await station("alt", "graue-bucht", 1);
-		await station("anders", "klippenpfad", 3);
-		await s.takeIfExists({ type: "Migrated", fields: { key: "one-per-room" } }, 5_000); // the world ran it at its start, on an empty room
-		assert.equal(await onePerRoomOnce(s, w), 1);
-		const left = (await s.readAll({ type: "Building", fields: { plan: "bahnhof" } })).map((e) => String(e.fields.buildId)).sort();
-		assert.deepEqual(left, ["alt", "anders"]);
-		assert.ok(await s.readIfExists({ type: "Estate", fields: { estateId: "est-neu" } }, 1_000), "the owner's estate");
-		assert.ok((await s.readAll({ type: "Item", fields: { location: "est-neu" } })).length > 0, "half of the material");
-		await station("spaet", "graue-bucht", 4);
-		assert.equal(await onePerRoomOnce(s, w), 0, "it does not run again");
 	} finally { await srv.close(); }
 });
 
