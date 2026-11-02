@@ -160,3 +160,14 @@ test("Tran burns an hour: put in the fire it keeps it six times as long as a pie
 		await a.p.leave();
 	} finally { await srv.close(); }
 });
+
+test("a trader taken up by a region's process heads for the stop of that region: it came there on the way to it", async () => {
+	await import("../server/npc/scripts.ts"); // the order the npc process loads them in (economy.ts and settlers.ts import each other)
+	const { stopFor } = await import("../server/npc/economy.ts");
+	const kalle = w.npcs.find((n) => n.npcId === "kalle")!, route = kalle.route!;
+	assert.deepEqual(route, ["graue-bucht", "kupferhafen-markt"]);
+	assert.equal(stopFor(w, route, "graue-bucht"), 0, "at a stop: that one");
+	assert.equal(stopFor(w, route, "kupferhafen-markt"), 1);
+	assert.equal(stopFor(w, route, "kupferhafen-kai"), 1, "over the ferry into the east: Kupferhafen");
+	assert.equal(stopFor(w, route, "klippenkopf"), 0, "back over the ferry into the west: the bay");
+});

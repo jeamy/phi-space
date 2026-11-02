@@ -21,6 +21,7 @@ import { counted } from "../engine/commands/trade.ts";
 import { stem } from "../engine/context.ts";
 import { flameOf } from "../engine/fire.ts";
 import { baysOf, shipIn } from "../engine/liner.ts";
+import { regionOfRoom } from "../engine/regions.ts";
 import { wayTo, type WorldDef } from "../engine/world.ts";
 import { fieldsOf, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type MsgFields, type OfferFields, type OrderFields } from "../model.ts";
 import { deliverer } from "./settlers.ts";
@@ -353,13 +354,25 @@ export async function nextTo(n: Npc, l: Look, at: { x: number; y: number }): Pro
 /** The rounds a trader on its way stays where people are. */
 const LINGER = 3;
 
+/** The stop of its route a trader heads for when a process takes it up (at its start, or as it comes into this process's
+ *  region): the stop it stands at, else the nearest stop of the region it is in, since it came here on the way to one;
+ *  without regions the nearest stop. Each region's npc process plays it while it stands there, so the stop cannot be a
+ *  count kept in one process: the other would send it back. */
+export function stopFor(w: WorldDef, route: string[], room: string): number {
+	if (route.includes(room)) return route.indexOf(room);
+	const here = regionOfRoom(w, room), mine = route.map((r, i) => ({ r, i })).filter((x) => regionOfRoom(w, x.r) === here);
+	return (mine.length ? mine : route.map((r, i) => ({ r, i }))).sort((a, b) => hops(w, room, a.r) - hops(w, room, b.r))[0]?.i ?? 0;
+}
+
 function haendler(): Script {
 	const talk = social(), say = chatter(3 * 60_000), offer = pitcher();
-	let at = 0, rounds = 0, stay = { room: "", rounds: 0 };
+	let at: number | null = null, rounds = 0, stay = { room: "", rounds: 0 };
 	return async (n) => {
 		const l = await look(n);
-		if (!l) { await n.sleep(1000); return; }
+		// gone to another region: the process there plays it; when it comes back, it is taken up anew
+		if (!l) { at = null; await n.sleep(1000); return; }
 		const route = n.def.route ?? [l.me.room];
+		if (at === null) { at = stopFor(n.world, route, l.me.room); rounds = 0; }
 		const target = route[at % route.length]!;
 		if (l.me.room !== target) {
 			// on its way it stays a few rounds where people are (and again after it answered), so one can speak to it
