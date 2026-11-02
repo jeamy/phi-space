@@ -1,0 +1,120 @@
+{
+	"about": "signed texts of R6b (docs/rust-portierung.en.md): the ed25519 key of crypto.json; each text is the exact byte string signed",
+	"publicKey": "6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw=",
+	"replicaTransport": {
+		"body": {
+			"version": 1,
+			"revision": 7,
+			"hash": "abababababababababababababababababababababababababababababababab"
+		},
+		"request": {
+			"value": {
+				"from": "replica-a",
+				"to": "replica-b",
+				"method": "accept",
+				"nonce": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+				"ts": 1767225600000,
+				"bodyHash": "70c9288165b87f208ac91b51e294b7e22b334864df56ebfc40ea246adc4c2dd2"
+			},
+			"text": "phi-spaces/replica-sync/v1/request\n{\"bodyHash\":\"70c9288165b87f208ac91b51e294b7e22b334864df56ebfc40ea246adc4c2dd2\",\"from\":\"replica-a\",\"method\":\"accept\",\"nonce\":\"0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a\",\"to\":\"replica-b\",\"ts\":1767225600000}",
+			"signature": "o/80zLjNG+LiTIdULktpD994tCqRF91eLMzzYi5UK6v6peKHXQEvIuwLIUWF8bqRA3NA7a3o8WWvNfQ1xq4yBg=="
+		},
+		"response": {
+			"value": {
+				"from": "replica-b",
+				"to": "replica-a",
+				"nonce": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+				"method": "accept",
+				"ok": true,
+				"result": {
+					"revision": 7,
+					"hash": "abababababababababababababababababababababababababababababababab",
+					"configHash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+				},
+				"error": null
+			},
+			"text": "phi-spaces/replica-sync/v1/response\n{\"error\":null,\"from\":\"replica-b\",\"method\":\"accept\",\"nonce\":\"0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a\",\"ok\":true,\"result\":{\"configHash\":\"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\"hash\":\"abababababababababababababababababababababababababababababababab\",\"revision\":7},\"to\":\"replica-a\"}",
+			"signature": "QmhdPKOGB5f4z6LF42wh7sxO4gzSnTlbs9KKeiB8nuN3AZhGGE/+EO0wvQvxRVpB/WX5ZDWgnOzsvR6ghQOLCw=="
+		},
+		"refusal": {
+			"value": {
+				"from": "replica-b",
+				"to": "replica-a",
+				"nonce": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+				"method": "accept",
+				"ok": false,
+				"result": null,
+				"error": "standby refused"
+			},
+			"text": "phi-spaces/replica-sync/v1/response\n{\"error\":\"standby refused\",\"from\":\"replica-b\",\"method\":\"accept\",\"nonce\":\"0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a\",\"ok\":false,\"result\":null,\"to\":\"replica-a\"}",
+			"signature": "x9TyW4A60BQB2E5qIrwekwfQBAj4Z7P6TdP1oL3ehr64H95b9zn5hfj74M7fJDeFGJ9bLheijjXIscnPbLOJBA=="
+		}
+	},
+	"replicaConfigNotice": {
+		"notice": {
+			"authorityId": "authority",
+			"spaceId": "sp-0d7f3a52-6c1e-4b8a-9f21-3e5a7c9b1d04",
+			"recoveryId": "promote-1",
+			"primaryReplica": "replica-b",
+			"standbyReplica": "replica-a",
+			"primaryEpoch": 2,
+			"replicaConfigVersion": 2,
+			"durability": "sync",
+			"dataIncarnation": "1ed6e700"
+		},
+		"issuer": "replica-b",
+		"algorithm": "ed25519",
+		"signature": "OkQEPhHb8MLlQytkdZS2gUBqGaVOktbUgY24Te4ARyGUKuAJ5AVk0FQ9rsquiFfSYbnSAYGA65B6kYgdA5NzBQ=="
+	},
+	"replicaConfigNoticeText": "phi-spaces/replica-config-notice/v1\n{\"authorityId\":\"authority\",\"dataIncarnation\":\"1ed6e700\",\"durability\":\"sync\",\"primaryEpoch\":2,\"primaryReplica\":\"replica-b\",\"recoveryId\":\"promote-1\",\"replicaConfigVersion\":2,\"spaceId\":\"sp-0d7f3a52-6c1e-4b8a-9f21-3e5a7c9b1d04\",\"standbyReplica\":\"replica-a\"}",
+	"controlHostChange": {
+		"change": {
+			"recoveryId": "change-1",
+			"authorityId": "authority",
+			"controlSpaceId": "sp-0d7f3a52-6c1e-4b8a-9f21-3e5a7c9b1d04",
+			"fromHostId": "control-host",
+			"targetHostId": "control-host-b",
+			"primaryEpoch": 3,
+			"supervisorKey": "6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw=",
+			"algorithm": "ed25519",
+			"address": {
+				"host": "172.30.7.12",
+				"port": 7431
+			}
+		},
+		"algorithm": "ed25519",
+		"signature": "p62shz36uo4RVr5Z+7Wtgs9SMkH1rAtbjHMHixNPRoDgEIHlx/KUg4vsLFSpe6a7mIVy8TlkYKsCl0Ki8OY5Dw=="
+	},
+	"controlHostChangeText": "phi-spaces/control-host-change/v1\n{\"address\":{\"host\":\"172.30.7.12\",\"port\":7431},\"algorithm\":\"ed25519\",\"authorityId\":\"authority\",\"controlSpaceId\":\"sp-0d7f3a52-6c1e-4b8a-9f21-3e5a7c9b1d04\",\"fromHostId\":\"control-host\",\"primaryEpoch\":3,\"recoveryId\":\"change-1\",\"supervisorKey\":\"6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw=\",\"targetHostId\":\"control-host-b\"}",
+	"authorityTransition": {
+		"transition": {
+			"recoveryId": "control-restore-1",
+			"expectedAuthorityId": "authority",
+			"newAuthorityId": "a-00000000-0000-4000-8000-000000000001",
+			"controlSpaceId": "sp-0d7f3a52-6c1e-4b8a-9f21-3e5a7c9b1d04",
+			"targetHostId": "control-host-b",
+			"supervisorKey": "6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw="
+		},
+		"text": "phi-spaces/recovery-authority/v1\n{\"controlSpaceId\":\"sp-0d7f3a52-6c1e-4b8a-9f21-3e5a7c9b1d04\",\"expectedAuthorityId\":\"authority\",\"newAuthorityId\":\"a-00000000-0000-4000-8000-000000000001\",\"recoveryId\":\"control-restore-1\",\"supervisorKey\":\"6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw=\",\"targetHostId\":\"control-host-b\"}",
+		"signature": "dkdBGmgwCvX7SVWyXz6ErZHmbir+rQEHLhG6XLkPDSNYYRQK3iINT2pQapxX49viY+FKYfvL3wyyMmXKCJaMDQ=="
+	},
+	"recoveryCall": {
+		"call": {
+			"hostId": "data-host-b",
+			"requestId": "00000000-0000-4000-8000-000000000002",
+			"method": "restoreDataSpace",
+			"args": {
+				"recoveryId": "restore-notes-1",
+				"space": "sp-0d7f3a52-6c1e-4b8a-9f21-3e5a7c9b1d04",
+				"snapshotRef": "notes.json",
+				"targetHostId": "data-host-b",
+				"expectedDataIncarnation": "1ed6e700",
+				"expectedPrimaryEpoch": 1
+			},
+			"issuedAt": 1767225600000,
+			"expiresAt": 1767225660000
+		},
+		"text": "phi-spaces/recovery-rpc/v1\n{\"args\":{\"expectedDataIncarnation\":\"1ed6e700\",\"expectedPrimaryEpoch\":1,\"recoveryId\":\"restore-notes-1\",\"snapshotRef\":\"notes.json\",\"space\":\"sp-0d7f3a52-6c1e-4b8a-9f21-3e5a7c9b1d04\",\"targetHostId\":\"data-host-b\"},\"expiresAt\":1767225660000,\"hostId\":\"data-host-b\",\"issuedAt\":1767225600000,\"method\":\"restoreDataSpace\",\"requestId\":\"00000000-0000-4000-8000-000000000002\"}",
+		"signature": "Cd5W8BqOL+o4hRhE0YpD00GqCykpxT38TXldVjRhsqM9PgPZJks9C9YbwkamgvMM+mpe07241baoI4HL/mnVBg=="
+	}
+}

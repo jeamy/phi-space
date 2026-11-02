@@ -65,3 +65,19 @@ test("a store file loaded from store.sql opens and answers as store.expected.jso
 	assert.deepEqual(await readStore(join(d, "old.sqlite")), file("store.expected.json").steps);
 	assert.deepEqual(await currentSchema(), schemaOf(sql));
 });
+
+test("the signed texts of R6b match replication.json", async () => {
+	const { replicationVectors } = await import("./vectors/replication.ts");
+	assert.deepEqual(JSON.parse(JSON.stringify(await replicationVectors())), file("replication.json"));
+});
+
+test("the primary/sync journal files open and answer as journal.expected.json; their schema is the current one", async () => {
+	const { JOURNAL_FILES, loadSqlite, readJournals, dumpSqlite, JOURNAL_SPACE } = await import("./vectors/replication.ts");
+	const { PrimarySyncJournal } = await import("../src/primary-sync.ts");
+	const d = tmp();
+	for (const f of JOURNAL_FILES) loadSqlite(readVector(`${f}.sql`), join(d, `${f}.sqlite`));
+	assert.deepEqual(await readJournals(d), file("journal.expected.json"));
+	const fresh = new PrimarySyncJournal(join(d, "fresh.sqlite"), { spaceId: JOURNAL_SPACE, authorityId: "authority", primaryEpoch: 1, replicaConfigVersion: 1, primaryReplica: "replica-a", standbyReplica: null, durability: "single" });
+	fresh.close();
+	assert.deepEqual(schemaOf(dumpSqlite(join(d, "fresh.sqlite"), "")), schemaOf(readVector("primary.journal.sql")));
+});

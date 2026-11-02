@@ -1,0 +1,70 @@
+{
+	"primary": {
+		"head": {
+			"revision": 5,
+			"hash": "a4009a25b1474cfdc50abd2246ee62ae155cd4f7cc146cb52742756fa15a2572",
+			"configHash": "0f9be78e6054e3ff48af19c5858c004309fce99062df20cb82fef8d19cf6d0c2"
+		},
+		"applied": 5,
+		"config": {
+			"authorityId": "authority",
+			"durability": "sync",
+			"primaryEpoch": 1,
+			"primaryReplica": "replica-a",
+			"replicaConfigVersion": 2,
+			"spaceId": "sp-6f1c2b3a-4d5e-4f60-8a71-92b3c4d5e6f7",
+			"standbyReplica": "replica-b"
+		},
+		"recoveredCommitted": [],
+		"versions": [
+			3,
+			1,
+			1,
+			2,
+			1
+		]
+	},
+	"standby": {
+		"head": {
+			"revision": 5,
+			"hash": "a4009a25b1474cfdc50abd2246ee62ae155cd4f7cc146cb52742756fa15a2572",
+			"configHash": "0f9be78e6054e3ff48af19c5858c004309fce99062df20cb82fef8d19cf6d0c2"
+		},
+		"applied": 5,
+		"config": {
+			"authorityId": "authority",
+			"durability": "sync",
+			"primaryEpoch": 1,
+			"primaryReplica": "replica-a",
+			"replicaConfigVersion": 2,
+			"spaceId": "sp-6f1c2b3a-4d5e-4f60-8a71-92b3c4d5e6f7",
+			"standbyReplica": "replica-b"
+		},
+		"recoveredCommitted": [],
+		"versions": [
+			3,
+			1,
+			1,
+			2,
+			1
+		]
+	},
+	"materialized": {
+		"entries": [
+			{
+				"n": 0,
+				"label": "seeded"
+			},
+			{
+				"label": "single-1"
+			},
+			{
+				"label": "single-2"
+			},
+			{
+				"label": "sync-1"
+			}
+		],
+		"spaceHash": "cffde7540a0140c62e73d556da1a94b606d0d4187fcd11710390d32f61be8e0a"
+	}
+}

@@ -10,7 +10,9 @@ import { RegisterConflict } from "./recovery-register.ts";
 export type AuthorityTransition = { recoveryId: string; expectedAuthorityId: string; newAuthorityId: string; controlSpaceId: string; targetHostId: string; supervisorKey: string };
 export type SignedAuthorityTransition = { transition: AuthorityTransition; algorithm: Signer["algorithm"]; signature: string };
 export type AuthorityRecord = { authorityId: string; hostId: string; supervisorKey: string; state: "active" | "transitioning"; lineage: Record<string, AuthorityTransition> };
-const signed = (t: AuthorityTransition) => Buffer.from("phi-spaces/recovery-authority/v1\n" + canonicalJson(t as unknown as Json));
+/** The bytes the recovery operator signs for an authority transition (test/vectors/replication.json). */
+export const authorityTransitionBytes = (t: AuthorityTransition) => Buffer.from("phi-spaces/recovery-authority/v1\n" + canonicalJson(t as unknown as Json));
+const signed = authorityTransitionBytes;
 export class RecoveryBlocked extends Error {}
 /** This service belongs on the independent recovery-admin system. All admins use the same CAS register. */
 function lineageOf(a: { lineage?: unknown }): Record<string, AuthorityTransition> {

@@ -13,6 +13,7 @@
 // new random ids); --store writes the store files anew, and so does a change of the store's schema.
 import { createECDH, createHmac, createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { JOURNAL_FILES, dumpSqlite, loadSqlite, readJournals, replicationVectors, writeJournals } from "./replication.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -364,5 +365,15 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 		writeFileSync(join(DIR, "store.sql"), store.sql);
 		writeFileSync(join(DIR, "store.expected.json"), json(store.expected));
 	}
-	console.log(`wrote canonical.json, crypto.json, wire.json${renew ? ", store.sql, store.expected.json" : " (store files kept; --store writes them anew)"}`);
+	writeFileSync(join(DIR, "replication.json"), json(await replicationVectors()));
+	const journals = renew || JOURNAL_FILES.some((f) => { try { readVector(`${f}.sql`); return false; } catch { return true; } });
+	if (journals) {
+		const made = mkdtempSync(join(tmpdir(), "phi-vec-journal-")), fresh = mkdtempSync(join(tmpdir(), "phi-vec-journal-"));
+		try {
+			await writeJournals(made);
+			for (const f of JOURNAL_FILES) { const sql = dumpSqlite(join(made, `${f}.sqlite`), `${f} of the primary/sync history (test/vectors/replication.ts)`); writeFileSync(join(DIR, `${f}.sql`), sql); loadSqlite(sql, join(fresh, `${f}.sqlite`)); }
+			writeFileSync(join(DIR, "journal.expected.json"), json(await readJournals(fresh)));
+		} finally { rmSync(made, { recursive: true, force: true }); rmSync(fresh, { recursive: true, force: true }); }
+	}
+	console.log(`wrote canonical.json, crypto.json, wire.json, replication.json${renew ? ", store.sql, store.expected.json" : " (store files kept; --store writes them anew)"}${journals ? ", the journal files" : ""}`);
 }
