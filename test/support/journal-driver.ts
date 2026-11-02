@@ -1,7 +1,8 @@
 // PrimarySyncJournal (src/primary-sync.ts) and the own store under it (OwnSyncStore) as a line-driven process, for
 // rust/phi-store/tests/sync_journal.rs and sync_store.rs: each line is one operation on a named journal or store file, each
 // answer its result or its refusal by name, and `rows`/`storeRows` the files' rows, so both sides can be held against each
-// other entry for entry.
+// other entry for entry. `listen`, `peer` and `peerCall` put the signed replica transport (src/replica-transport.ts) on a
+// real socket, as listener over a journal and as client, for rust/phi-host/tests/replica_transport.rs.
 //
 //   node --experimental-strip-types --no-warnings test/support/journal-driver.ts
 import { createInterface } from "node:readline";
@@ -9,9 +10,15 @@ import { DatabaseSync } from "node:sqlite";
 import { PrimarySyncJournal, PrimarySyncBlocked, SyncJournalFull, CommitSealed, applyConfigTransition, bootstrapPrimarySync, materializeSyncHistory, recoverPrimarySync, recoverSealedWithoutStandby } from "../../src/primary-sync.ts";
 import { OwnSyncStore } from "../../src/store/sync-sqlite.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
+import { existsSync } from "node:fs";
+import { loadFileSigner, provisionFileSigner } from "../../src/keys.ts";
+import { replicaSyncHandler, signedReplicaPeer, ReplicaTransportRefused, StandbyRefused } from "../../src/replica-transport.ts";
+import { serveSpace, socketTransport } from "../../src/socket.ts";
+import type { AddressInfo } from "node:net";
 
 type Line = Record<string, any>;
 const journals = new Map<string, PrimarySyncJournal>(), paths = new Map<string, string>(), stores = new Map<string, OwnSyncStore>();
+const peers = new Map<string, ReturnType<typeof signedReplicaPeer>>(), listeners: Array<{ close(): Promise<void> }> = [];
 const store = (name: string) => { const s = stores.get(name); if (!s) throw new Error(`no store ${name}`); return s; };
 const journal = (name: string) => { const j = journals.get(name); if (!j) throw new Error(`no journal ${name}`); return j; };
 const refuse = (why: unknown) => async () => { if (typeof why === "string") throw new PrimarySyncBlocked(why); };
@@ -63,6 +70,23 @@ async function handle(q: Line): Promise<unknown> {
 		case "recover": await recoverPrimarySync(store(q.store), journal(q.name), q.peer ? journal(q.peer) : null, ctx, refuse(q.why)); return null;
 		case "recoverSealed": return recoverSealedWithoutStandby(store(q.store), journal(q.name), ctx, refuse(q.why));
 		case "transitionApply": return applyConfigTransition(store(q.store), journal(q.name), q.next, { reason: q.reason, peer: q.peer ? journal(q.peer) : null, ctx, assert: refuse(q.why), now: () => q.now });
+		// the replica transport: a key file's pin, a listener over a journal, a client and its calls
+		case "pin": return { algorithm: "ed25519", publicKey: (existsSync(q.key) ? loadFileSigner(q.key) : provisionFileSigner(q.key)).publicKey };
+		case "listen": {
+			const handleText = replicaSyncHandler({ journal: () => journal(q.name), signer: loadFileSigner(q.key), self: q.self, remotes: q.remotes, assertQuarantine: refuse(q.why), ...(q.windowMs ? { windowMs: q.windowMs } : {}) });
+			const server = await serveSpace({ handleText }, { listen: { host: "127.0.0.1", port: 0 }, maxConnections: 4, maxFrameBytes: 1 << 20 });
+			listeners.push(server);
+			return (server.address() as AddressInfo).port;
+		}
+		case "peer": {
+			const transport = socketTransport({ host: "127.0.0.1", port: q.port }, { connectTimeoutMs: 8000, requestTimeoutMs: 15_000, maxFrameBytes: 1 << 20 });
+			peers.set(q.peer, signedReplicaPeer({ transport, signer: loadFileSigner(q.key), self: q.self, remote: q.remote }));
+			return null;
+		}
+		case "peerCall": {
+			const p = peers.get(q.peer)!;
+			return q.method === "head" ? p.head() : q.method === "accept" ? p.accept(q.intent) : p.catchUp(q.intent);
+		}
 		default: throw new Error(`unknown op ${q.op}`);
 	}
 }
@@ -72,6 +96,7 @@ for await (const text of createInterface({ input: process.stdin, crlfDelay: Infi
 	const q = JSON.parse(text) as Line;
 	let out: unknown;
 	try { out = { ok: true, result: (await handle(q)) ?? null }; }
-	catch (e) { out = { ok: false, error: { name: e instanceof SyncJournalFull ? "SyncJournalFull" : e instanceof PrimarySyncBlocked ? "PrimarySyncBlocked" : e instanceof CommitSealed ? "CommitSealed" : (e as Error).constructor.name, message: (e as Error).message } }; }
+	catch (e) { out = { ok: false, error: { name: e instanceof StandbyRefused ? "StandbyRefused" : e instanceof ReplicaTransportRefused ? "ReplicaTransportRefused" : e instanceof SyncJournalFull ? "SyncJournalFull" : e instanceof PrimarySyncBlocked ? "PrimarySyncBlocked" : e instanceof CommitSealed ? "CommitSealed" : (e as Error).constructor.name, message: (e as Error).message } }; }
 	console.log(JSON.stringify(out));
 }
+process.exit(0);

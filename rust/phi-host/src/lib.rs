@@ -12,6 +12,7 @@ pub mod gate;
 pub mod grants;
 pub mod register;
 pub mod remote;
+pub mod replica_transport;
 pub mod membership;
 pub mod member_status;
 pub mod membership_control;
