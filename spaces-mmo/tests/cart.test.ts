@@ -9,7 +9,7 @@ import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { CartFields, CharacterFields, ExitFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, Player, startServer } from "./stack.ts";
+import { eventually, lightFire, Player, startServer } from "./stack.ts";
 
 const w = await loadWorld();
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -25,6 +25,32 @@ test("a way through the roads, or none", () => {
 	assert.deepEqual(roadPath(links, "a", "c"), ["b", "c"]);
 	assert.deepEqual(roadPath(links, "a", "b"), ["b"]);
 	assert.equal(roadPath(links, "a", "z"), null);
+});
+
+test("a road as a player types it: two cells from an exit, not beside it, not far from it", { timeout: 120_000 }, async () => {
+	const srv = await startServer({ worldEnv: { SPACES_MMO_EPOCH_FORCE: "2" } });
+	try {
+		const s = srv.stack.space;
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		await lightFire(s, 600_000, "feuer-bucht");
+		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const x = (await s.readAll({ type: "Exit", fields: { location: c.room } })).map((e) => e.fields as unknown as ExitFields).find((e) => w.rooms.some((r) => r.roomId === e.destination))!;
+		const ground = w.rooms.find((r) => r.roomId === c.room)!.ground;
+		const cells: Array<{ x: number; y: number }> = [];
+		for (let y = 0; y < ground.length; y++) for (let cx = 0; cx < ground[0]!.length; cx++) if (",.".includes(ground[y]![cx]!)) cells.push({ x: cx, y });
+		const off = (a: { x: number; y: number }) => Math.max(Math.abs(a.x - x.x), Math.abs(a.y - x.y));
+		const far = cells.find((a) => off(a) > 6 && !w.exits.some((e) => e.room === c.room && Math.max(Math.abs(e.x - a.x), Math.abs(e.y - a.y)) <= 3) && !w.beacons.some((b) => b.room === c.room && Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y)) <= 1))!;
+		assert.match(await does(p, `bau straße ${far.x} ${far.y}`, "passt keine"), /beginnt neben einem Ausgang/);
+		const near = cells.filter((a) => off(a) === 2);
+		assert.ok(near.length);
+		assert.match(await does(p, `bau straße ${near[0]!.x} ${near[0]!.y}`, /Baustelle ab|passt keine/), /Baustelle ab/);
+		const site = (await s.readAll({ type: "Site" }))[0]!.fields as unknown as { plan: string; x: number; y: number };
+		assert.equal(site.plan, "strasse");
+		await s.write({ type: "Building", fields: { buildId: "road", plan: "strasse", name: "Straße", room: c.room, x: site.x, y: site.y, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
+		assert.ok((await roadLinks(s, w)).get(c.room)?.has(x.destination), "from there it links the rooms of the exit");
+	} finally { await srv.close(); }
 });
 
 test("a cart goes only by road, alone, with its cargo; its owner unloads it there", { timeout: 180_000 }, async () => {

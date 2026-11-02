@@ -8,7 +8,7 @@ import { worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import type { WorldDef } from "../world.ts";
-import { ARTICLE, distTo, giveBack } from "./build.ts";
+import { ARTICLE, distTo, EXIT_REACH, giveBack } from "./build.ts";
 import { placeIn, relocate } from "./default.ts";
 import { consume, move } from "./trade.ts";
 
@@ -21,7 +21,7 @@ export async function roadLinks(space: SpaceLike, w: WorldDef, txn: string | nul
 	const link = (a: string, b: string) => { if (!links.has(a)) links.set(a, new Set()); links.get(a)!.add(b); };
 	for (const e of await space.readAll({ type: "Exit" }, o)) {
 		const x = fieldsOf<ExitFields>(e);
-		if (roads.some((r) => r.room === x.location && distTo(x, r) <= 1)) { link(x.location, x.destination); link(x.destination, x.location); }
+		if (roads.some((r) => r.room === x.location && distTo(x, r) <= EXIT_REACH)) { link(x.location, x.destination); link(x.destination, x.location); }
 	}
 	return links;
 }

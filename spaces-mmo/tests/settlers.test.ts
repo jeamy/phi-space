@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { FOREVER } from "phi-spaces";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
+import { roadLinks } from "../server/engine/commands/cart.ts";
 import type { BuildingFields, SiteFields } from "../server/model.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
 
@@ -51,6 +52,30 @@ test("settlers: two play while nobody does, one builds its hut by the commands; 
 		p.send("who");
 		const who = await p.until((f) => f.t === "msg" && f.m.kind === "who", 10_000);
 		assert.match((who as { m: { text: string } }).m.text, new RegExp(`${first.name}, Siedler`));
+	} finally { await srv.close(); }
+});
+
+test("a settler of a village joins the rooms of its home by road, through the same commands; the stone it lacks it gathers", { timeout: 300_000 }, async () => {
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001", SPACES_MMO_NPCS: first.npcId, SPACES_MMO_SETTLERS_MIN: "1", SPACES_MMO_EPOCH_FORCE: "2" } });
+	try {
+		const s = srv.stack.space, me = `npc-${first.npcId}`, homes = first.home ?? [first.room];
+		assert.ok(w.exits.some((e) => homes.includes(e.room) && homes.includes(e.destination)), "two rooms of its home touch");
+		await lightFire(s, 3_600_000, first.beacon);
+		// what it builds first stands already
+		for (const plan of ["huette", "regentonne", "huehnerstall"]) {
+			const b: BuildingFields = { buildId: `own-${plan}`, plan, name: plan, room: first.room, x: 0, y: 0, w: 1, h: 1, owner: me, ownerName: first.name, accountId: me, beaconId: first.beacon!, points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 };
+			await s.write({ type: "Building", fields: b as never }, null, FOREVER);
+		}
+		for (const [proto, n] of [["stein", 4], ["treibholz", 2]] as const) {
+			const p = (await resolvePrototype(s, proto))!;
+			for (let i = 0; i < n; i++) await spawn(s, null, w, p, { location: me, x: -1, y: -1 });
+		}
+		await srv.stack.npcProcess();
+		const site = await eventually(async () => (await s.readAll({ type: "Site", fields: { accountId: me } }))[0]?.fields as SiteFields | undefined, 120_000, "a road staked out");
+		assert.equal(site.plan, "strasse");
+		const road = await eventually(async () => (await s.readAll({ type: "Building", fields: { accountId: me, plan: "strasse" } }))[0]?.fields as BuildingFields | undefined, 200_000, "the road built");
+		assert.ok(homes.includes(road.room));
+		assert.ok((await roadLinks(s, w)).get(road.room)?.size, "it links a room");
 	} finally { await srv.close(); }
 });
 

@@ -2,8 +2,8 @@
 // few people play. Each lives on one fire's island (its rooms are its `home`, it takes no ferry) and plays through the
 // commands a player types: it gathers driftwood, kelp and shells, twists rope, stakes out a hut and a rain barrel,
 // builds them and a coop, helps at the sites of others, digs a bed or two, looks for seeds, plants, waters, weeds and
-// harvests, sells what it does not need at its island's market and buys what its site lacks, repairs what it built, and
-// feeds its fire when it burns low. No model calls: its account is an NPC's.
+// harvests, sells what it does not need at its island's market and buys what its site lacks, repairs what it built, joins
+// the rooms of its island by road once it is a village, and feeds its fire when it burns low. No model calls: its account is an NPC's.
 //
 // - How many play: the setting settlers.min, spread over the regions by how many settlers live there, less the people
 //   online in the region; the settlers of a region go online in a fixed order and leave in the reverse one, so the
@@ -12,7 +12,9 @@
 //   people who come still find building land.
 // - One command a round, then a rest at the pace of economy.ts (slower while no person is on the island).
 import { randomInt } from "node:crypto";
-import { PATH } from "../engine/commands/build.ts";
+import { EXIT_REACH, PATH } from "../engine/commands/build.ts";
+import { roadLinks } from "../engine/commands/cart.ts";
+import { epochOf } from "../engine/commands/epoch.ts";
 import { enoughHuts, settlementIn } from "../engine/commands/settlement.ts";
 import { regionWorld } from "../engine/regions.ts";
 import { flameOf } from "../engine/fire.ts";
@@ -170,6 +172,7 @@ export function siedler(): Script {
 			if (at) { await n.act(`bau ${def.name.toLowerCase()} ${at.x} ${at.y}`); return; }
 			continue;
 		}
+		if (!own && PLANS.every(has) && (await road(n, l, w, homes, sites))) return;
 		// three huts of two owners in its room and no settlement yet: it founds one, named after the place
 		if (has("huette") && w.settlement && may("siedlung")) {
 			later("siedlung", 40);
@@ -189,15 +192,37 @@ export function siedler(): Script {
 		// rope from kelp when it has kelp to spare
 		if (count(l, "tang") >= 3 && count(l, "tangseil") < 2) { await n.act("craft tangseil"); return; }
 		// what it does not need goes to the market of its island, when it has one; what it lacks for a site it buys there
-		const heap = l.pack.filter((i) => !RAW.includes(i.proto) && i.proto !== "tangseil" && i.proto !== g?.spade && i.proto !== g?.can && i.proto !== w.currency && n.world.prototypes.find((p) => p.key === i.proto)?.typeclass !== "Seed");
+		const roadNeeds = w.building?.plans.find((p) => p.key === w.cart?.road)?.needs ?? [];
+		const heap = l.pack.filter((i) => !RAW.includes(i.proto) && !roadNeeds.some((x) => x.proto === i.proto) && i.proto !== "tangseil" && i.proto !== g?.spade && i.proto !== g?.can && i.proto !== w.currency && n.world.prototypes.find((p) => p.key === i.proto)?.typeclass !== "Seed");
 		if (await trade(n, l, w, homes, heap, own)) return;
 		// the hut's chest takes what piles up
 		const hut = buildings.find((b) => b.plan === "huette");
 		if (hut && heap.length > 6 && may("chest")) { later("chest", 10); if (!(await besideOf(n, l, hut))) await n.act(`verstaue alle ${heap[0]!.name}`); return; }
 		// gather: what lies on the beaches of its rooms, moving on to the next room when nothing is left here
-		if (await gather(n, l, RAW.filter((p) => count(l, p) < RAW_MAX))) return;
+		// and what a site of its island lacks beyond that, stone for a road
+		const short = sites.flatMap((s) => s.needs.filter((x) => x.have < x.count && !RAW.includes(x.proto)).map((x) => x.proto));
+		if (await gather(n, l, [...RAW.filter((p) => count(l, p) < RAW_MAX), ...short])) return;
 		homeAt = (homeAt + 1) % homes.length;
 		if (homes.length > 1 && round % 4 === 0) await travel(n, l, homes[homeAt]!);
+	}
+
+	/** A village joins its rooms: beside the first exit between two rooms of its home that no road links, unless a road is
+	 *  being built here already. False when there is nothing to do. */
+	async function road(n: Npc, l: Look, w: WorldDef, homes: string[], sites: SiteFields[]): Promise<boolean> {
+		const def = w.building?.plans.find((p) => p.key === w.cart?.road);
+		if (!def || !may("road")) return false;
+		const exit = sites.some((s) => s.plan === def.key) || (await epochOf(n.space, w.rooms.find((r) => r.roomId === l.me.room)?.island)) < (def.epoch ?? 1) ? undefined
+			: await roadLinks(n.space, w).then((links) => w.exits.find((e) => homes.includes(e.room) && homes.includes(e.destination) && !links.get(e.room)?.has(e.destination)));
+		if (!exit) { later("road", 30); return false; }
+		if (!(await travel(n, l, exit.room))) return true;
+		// tried again soon: something may lie on the cell it picked
+		later("road", 3);
+		const ground = w.rooms.find((r) => r.roomId === exit.room)?.ground ?? [], cells: Array<{ x: number; y: number }> = [];
+		for (let y = exit.y - EXIT_REACH; y <= exit.y + EXIT_REACH; y++) for (let x = exit.x - EXIT_REACH; x <= exit.x + EXIT_REACH; x++) if (dist({ x, y }, { ...exit, w: 1, h: 1 }) === EXIT_REACH && ",.".includes(ground[y]?.[x] ?? "~")) cells.push({ x, y });
+		if (!cells.length) return false;
+		const at = cells[randomInt(0, cells.length)]!;
+		await n.act(`bau ${def.name.toLowerCase()} ${at.x} ${at.y}`);
+		return true;
 	}
 
 	/** At the island's market: one thing it does not need on the board, or the first thing its site lacks off it. */
