@@ -9,6 +9,8 @@ export type CellInput = {
 	offer?: (name: string) => void;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] };
 	/** Whether wild plants grow in the room (wildHere); without it seeds are offered anyway and the command answers. */ wild?: boolean;
+	/** The rooms of the world and where a boat, a train and a cart can go (the overview's state); without it the commands list their places. */ travel?: { rooms: Array<{ roomId: string; name: string; island: string }>; stops: { jetties: string[]; stations: string[]; trainFare: number; roads: Array<[string, string]> } };
+	/** The islands a sailing boat goes to from here (the others, with the large ship's routes). */ sail?: string[];
 	/** "Bauen …" was chosen: the caller shows the plans. */ onPlans: () => void;
 	/** "Aushang" of a site: the caller shows the bag's list of them; without it the command answers. */ onOrders?: () => void;
 };
@@ -88,10 +90,10 @@ export const HERE_SHOWN = 5;
 
 /** What a field is sown with, and the crop's word for `bestelle` (server: world.fields.crops). */
 const SOWN: Record<string, string> = { Weizen: "weizen", Gerste: "gerste", Hafer: "hafer", Kartoffel: "kartoffel", "Rübensamen": "rüben", Leinsamen: "flachs" };
-const AREA = new Set(["site", "building", "ruin", "bed", "field", "scenery"]);
+const AREA = new Set(["site", "building", "ruin", "bed", "field", "scenery", "liner"]);
 const covers = (o: ObjView, c: { x: number; y: number }) => c.x >= o.x && c.y >= o.y && c.x < o.x + (o.w ?? 1) && c.y < o.y + (o.h ?? 1);
 
-export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, chat, wild, onPlans, onOrders }: CellInput): CellEntry[] {
+export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, chat, wild, sail, travel, onPlans, onOrders }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: Array<{ label: string; line: string; run?: () => void }> = [];
 	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
@@ -104,6 +106,34 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 	}
 	// a site or building covers more than one cell: its entries on every one of them
 	for (const o of objs.values()) {
+		// the large ship lying in the bay: its timetable, and a ride to each other island (server: fishing.ts)
+		if (o.kind === "liner") {
+			if (o.location === room && covers(o, at)) {
+				entries.push({ label: "Fahrplan", line: "fahrplan" });
+				for (const r of o.routes ?? []) entries.push({ label: `Mitfahren nach ${r.island} · ${o.fare ?? 1} ${o.fare === 1 ? "Münze" : "Münzen"}`, line: `einschiffen ${r.island}` });
+			}
+			continue;
+		}
+		// a cart: its owner loads and unloads it beside it, or takes it back (server: cart.ts)
+		if (o.kind === "cart") {
+			if (o.location === room && o.x === at.x && o.y === at.y && o.ownerId === me && !guest) {
+				const near = !!self && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
+				entries.push({ label: "Karren ansehen", line: "karren" });
+				if (near) {
+					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && i.name !== "Karren").map((i) => i.name))].slice(0, 6)) entries.push({ label: `${n} auf den Karren laden`, line: `karren lade ${n}` });
+					entries.push({ label: "Karren entladen", line: "karren entlade" }, { label: "Karren wieder mitnehmen", line: "karren nimm" });
+					// the rooms the roads reach from the cart's room, nearest first
+					if (travel) {
+						const near = new Map<string, string[]>();
+						for (const [a, b] of travel.stops.roads) { (near.get(a) ?? near.set(a, []).get(a)!).push(b); (near.get(b) ?? near.set(b, []).get(b)!).push(a); }
+						const seen = new Set([o.location]), queue = [o.location];
+						for (let i = 0; i < queue.length; i++) for (const n of near.get(queue[i]!) ?? []) if (!seen.has(n)) { seen.add(n); queue.push(n); }
+						for (const id of queue.slice(1, 7)) entries.push({ label: `Karren nach ${travel.rooms.find((r) => r.roomId === id)?.name ?? id} schicken`, line: `karren fahre ${travel.rooms.find((r) => r.roomId === id)?.name ?? id}` });
+					}
+				}
+			}
+			continue;
+		}
 		if (o.kind === "scenery" && o.location === room && !o.through && !o.fixed && covers(o, at) && self && Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) <= 2) entries.push({ label: `${o.name} abräumen (noch ${o.left ?? 1})`, line: `räume ${o.x} ${o.y}` });
 		if ((o.kind !== "site" && o.kind !== "building" && o.kind !== "ruin" && o.kind !== "bed" && o.kind !== "field") || o.location !== room || at.x < o.x || at.y < o.y || at.x >= o.x + (o.w ?? 1) || at.y >= o.y + (o.h ?? 1)) continue;
 		const dist = self ? Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) : Infinity;
@@ -157,7 +187,9 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.plan === "huette") entries.push({ label: "Käse machen (3 Milch, 1 Treibholz)", line: "craft käse" });
 			// a coop or pen: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
 			if (o.plan === "huehnerstall" || o.plan === "gehege") {
-				entries.push({ label: "Tiere ansehen", line: "stall" }, { label: "Füttern", line: "füttere" });
+				entries.push({ label: o.herd ? "Tiere ansehen" : "Stall ansehen", line: "stall" });
+				// the house carries its herd while an animal is in it: nothing to feed in an empty one
+				if (o.herd) entries.push({ label: "Füttern", line: "füttere" });
 				if (o.ownerId === me) {
 					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", rind: "Milch", gans: "Daunen" };
 					if (o.herd) entries.push({ label: `${yields[o.herd] ?? "Ertrag"} einsammeln`, line: "einsammeln" });
@@ -175,7 +207,22 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				else for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && ["Hund", "Katze"].includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} hier wachen lassen`, line: `einstallen ${n}` });
 			}
 			entries.push({ label: "Ausbessern", line: "repariere" });
-			if (o.plan === "steinbruch") entries.push({ label: "Stein brechen", line: "breche" });
+			if (o.plan === "bahnhof" && beside) {
+			const island = travel?.rooms.find((r) => r.roomId === room)?.island, to = travel ? travel.rooms.filter((r) => r.island === island && r.roomId !== room && travel.stops.stations.includes(r.roomId)) : [];
+			if (to.length) for (const r of to) entries.push({ label: `Mit dem Zug nach ${r.name} · ${travel!.stops.trainFare} ${travel!.stops.trainFare === 1 ? "Münze" : "Münzen"}`, line: `zug ${r.name}` });
+			else entries.push({ label: "Mit dem Zug fahren: wohin?", line: "zug" });
+		}
+		if (o.plan === "steg" && beside) {
+			const boats = new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me).map((i) => i.name));
+			if (boats.has("Ruderboot")) {
+				const island = travel?.rooms.find((r) => r.roomId === room)?.island, to = travel ? travel.rooms.filter((r) => r.island === island && r.roomId !== room && travel.stops.jetties.includes(r.roomId)) : [];
+				if (to.length) for (const r of to) entries.push({ label: `Nach ${r.name} rudern`, line: `rudere ${r.name}` });
+				else entries.push({ label: "Rudern: wohin?", line: "rudere" });
+			}
+			if (boats.has("Segelboot")) for (const island of sail ?? []) entries.push({ label: `Nach ${island} segeln`, line: `segle ${island}` });
+			if (boats.has("Ruderboot") || boats.has("Segelboot")) entries.push({ label: "Was liegt in der Luke?", line: "luke" }, { label: "Luke leeren", line: "luke entlade alle" });
+		}
+		if (o.plan === "steinbruch") entries.push({ label: "Stein brechen", line: "breche" });
 			if (o.plan === "kapelle") entries.push({ label: "Was man opfern kann", line: "opfere" });
 			if (o.plan === "rathaus") entries.push({ label: "Laufender Antrag", line: "antrag" });
 			if (o.plan === "park") entries.push({ label: "Park pflegen", line: "pflege" }, { label: "Laufendes Fest", line: "fest" });
@@ -227,8 +274,8 @@ export function tapTarget(at: { x: number; y: number }, chars: Map<string, CharV
 }
 
 /** The help article (with its section) for a kind of thing; a building has its plan's article first (HELP_OF_PLAN). */
-export const HELP_OF_KIND: Record<string, string> = { site: "help.game.build#stake", building: "help.game.build", ruin: "help.game.build#decay", bed: "help.game.garden#bed", field: "help.game.fields#fields", beacon: "help.game.fire#beacon", animal: "help.game.wild#hares", exit: "help.game.controls#map" };
-export const HELP_OF_PLAN: Record<string, string> = { windmuehle: "help.game.fields#mill", backhaus: "help.game.fields#mill", gehege: "help.game.animals#house", huehnerstall: "help.game.animals#house", rathaus: "help.game.village#townhall", kaufhaus: "help.game.village#store", kontor: "help.game.village#store", lagerhaus: "help.game.village#store", bahnhof: "help.game.village#travel", werft: "help.game.village#travel", park: "help.game.village#ranks" };
+export const HELP_OF_KIND: Record<string, string> = { site: "help.game.build#stake", building: "help.game.build", ruin: "help.game.build#decay", bed: "help.game.garden#bed", field: "help.game.fields#fields", beacon: "help.game.fire#beacon", animal: "help.game.wild#hares", exit: "help.game.controls#map", liner: "help.game.village#travel", cart: "help.game.village#travel" };
+export const HELP_OF_PLAN: Record<string, string> = { windmuehle: "help.game.fields#mill", backhaus: "help.game.fields#mill", gehege: "help.game.animals#house", huehnerstall: "help.game.animals#house", rathaus: "help.game.village#townhall", steg: "help.game.village#travel", strasse: "help.game.village#travel", kaufhaus: "help.game.village#store", kontor: "help.game.village#store", lagerhaus: "help.game.village#store", bahnhof: "help.game.village#travel", werft: "help.game.village#travel", park: "help.game.village#ranks" };
 
 /** A name for the sheet's head and the help article about what stands on a cell (help/articles.ts). */
 export function cellAbout(at: { x: number; y: number }, chars: Map<string, CharView>, objs: Map<string, ObjView>, room: string): { title?: string; article?: string; desc?: string } {

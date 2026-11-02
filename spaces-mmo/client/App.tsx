@@ -18,7 +18,7 @@ import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.t
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
 import { forgetDeviceKeys, useChat } from "./useChat.ts";
 import { MAX_AHEAD, nextStep, screenToGrid, WALK_MS, Walker } from "./walk.ts";
-import { cellAbout, cellEntries, HERE_SHOWN, hereEntries, itemEntries, tapTarget, wildHere } from "./cellActions.ts";
+import { cellAbout, cellEntries, type CellInput, HERE_SHOWN, hereEntries, itemEntries, tapTarget, wildHere } from "./cellActions.ts";
 import { canFullscreen, enterFullscreen, homeSteps, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
 import { useBack } from "./useBack.ts";
 import { detentPx, Sheet, type Detent } from "./Sheet.tsx";
@@ -192,7 +192,7 @@ function useDismiss(close: () => void): () => void {
 
 /** The menu of a long press or a right click on a cell: what stands, lies or burns there, and what one can do with it.
  *  Every entry is a text command. */
-function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, send, close, offer, chat, sheet = false, onHelp, onWalk, onOrders }: { wild?: boolean; at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; send: (line: string) => void; close: () => void; offer?: (name: string) => void; sheet?: boolean; onHelp?: (article: string) => void; /** A phone walks there step by step, to the free cell nearest it. */ onWalk?: (at: { x: number; y: number }) => void; onOrders?: () => void;
+function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, sail, travel, send, close, offer, chat, sheet = false, onHelp, onWalk, onOrders }: { wild?: boolean; sail?: string[]; travel?: CellInput["travel"]; at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; send: (line: string) => void; close: () => void; offer?: (name: string) => void; sheet?: boolean; onHelp?: (article: string) => void; /** A phone walks there step by step, to the free cell nearest it. */ onWalk?: (at: { x: number; y: number }) => void; onOrders?: () => void;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] } }) {
 	useEffect(() => {
 		const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
@@ -203,7 +203,7 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, send, c
 	const [step, setStep] = useState<"plans" | PlanView | null>(null);
 	useEffect(() => setStep(null), [at]);
 	const fuel = fuelIn(objs, me);
-	const entries = cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, chat, wild, onPlans: () => setStep("plans"), onOrders });
+	const entries = cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, chat, wild, sail, travel, onPlans: () => setStep("plans"), onOrders });
 	if (step === "plans") {
 		entries.length = 0;
 		for (const p of plans) entries.push({ label: `${p.name} (${p.w}×${p.h}${p.epoch ? `, ab ${p.epoch}` : ""})`, line: `#plan ${p.key}`, run: () => setStep(p) });
@@ -823,10 +823,16 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		const item = [...objs.values()].find((o) => o.kind === "item" && o.location === hello.room.roomId && o.x === x && o.y === y);
 		if (item) fetching.current = { id: item.id, until: now + FETCH_MS };
 	}, [step, objs, hello]);
+	// the large ship lies in this bay by the timetable (the world time the page shows): a thing on the water, for the eye
+	const liner = hello?.world.liner, bay = !!liner && !!hello && liner.bays.includes(hello.room.roomId);
+	const berthAt = useMemo(() => (bay && hello?.room.spawn ? berth(hello.room.ground, hello.room.spawn) : null), [bay, hello?.room]);
+	const shipLies = !!berthAt && !!worldTime && shipIn(shownWorldMs(worldTime.v, worldTime.at, Date.now()), liner!.everyWorldMs) === 0;
+	const shownObjs = useMemo(() => (shipLies && berthAt && hello ? new Map(objs).set("liner", { id: "liner", kind: "liner", name: "Großes Schiff", location: hello.room.roomId, fare: liner!.fare, routes: liner!.routes.filter((r) => r.room !== hello.room.roomId), x: berthAt.x, y: berthAt.y, w: berthAt.along === "x" ? SHIP_LENGTH : 1, h: berthAt.along === "y" ? SHIP_LENGTH : 1 } as ObjView) : objs), [objs, shipLies, berthAt, hello]);
+
 	/** A tap of a finger: on a thing lying there, go and pick it up; on what stands there, its actions (a phone); else walk. */
 	const onTap = useCallback((x: number, y: number) => {
 		if (!isTouch() || !hello) return onCell(x, y);
-		const room = hello.room.roomId, hit = tapTarget({ x, y }, chars, objs, room, me), at = hit ?? { x, y };
+		const room = hello.room.roomId, hit = tapTarget({ x, y }, chars, shownObjs, room, me), at = hit ?? { x, y };
 		const item = [...objs.values()].find((o) => o.kind === "item" && o.location === room && o.x === at.x && o.y === at.y);
 		if (item) { fetching.current = { id: item.id, until: Date.now() + FETCH_MS }; walkTo(at); return; }
 		// a fire out of reach: to it, "Hier möglich" then offers to feed it
@@ -834,7 +840,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		if (fire && own && Math.max(Math.abs(fire.x - own.x), Math.abs(fire.y - own.y)) > 1) { walkTo(at); return; }
 		if (hit) { stopWalk.current(); setMenu({ x: at.x, y: at.y, left: 0, top: 0 }); return; }
 		walkTo({ x, y });
-	}, [hello, chars, objs, me, onCell, walkTo]);
+	}, [hello, chars, objs, shownObjs, me, onCell, walkTo]);
 	useEffect(() => {
 		const f = fetching.current, self = chars.get(me);
 		if (!f || !self || !hello) return;
@@ -906,12 +912,6 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const shownLog = comings ? log : log.filter((l) => !isComing(l));
 	const lastLine = shownLog.at(-1);
 
-	// the large ship lies in this bay by the timetable (the world time the page shows): a thing on the water, for the eye
-	const liner = hello?.world.liner, bay = !!liner && !!hello && liner.bays.includes(hello.room.roomId);
-	const berthAt = useMemo(() => (bay && hello?.room.spawn ? berth(hello.room.ground, hello.room.spawn) : null), [bay, hello?.room]);
-	const shipLies = !!berthAt && !!worldTime && shipIn(shownWorldMs(worldTime.v, worldTime.at, Date.now()), liner!.everyWorldMs) === 0;
-	const shownObjs = useMemo(() => (shipLies && berthAt && hello ? new Map(objs).set("liner", { id: "liner", kind: "liner", name: "Großes Schiff", location: hello.room.roomId, x: berthAt.x, y: berthAt.y, w: berthAt.along === "x" ? SHIP_LENGTH : 1, h: berthAt.along === "y" ? SHIP_LENGTH : 1 } as ObjView) : objs), [objs, shipLies, berthAt, hello]);
-
 	const self = chars.get(me);
 	const openLine = () => { if (input.current) return input.current.focus(); setBag(true); setBagPart("mine"); setDetent("half"); requestAnimationFrame(() => input.current?.focus()); };
 	openLineRef.current = openLine;
@@ -931,7 +931,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const islandHere = atlas?.rooms.find((r) => r.roomId === hello?.room.roomId)?.island;
 	const epochHere = islandHere && atlasState?.epochs ? atlasState.epochs[islandHere] ?? 1 : null;
 	const menus = <>
-		{menu && hello && <CellMenu at={menu} wild={wildNow(hello.world.decor, hello.room.decor)} sheet onWalk={walkTo} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
+		{menu && hello && <CellMenu at={menu} wild={wildNow(hello.world.decor, hello.room.decor)} travel={atlas && atlasState ? { rooms: atlas.rooms, stops: atlasState.stops } : undefined} sail={[...new Set((hello.world.liner?.routes ?? []).map((r) => r.island))].filter((i) => i !== hello.world.liner?.island)} sheet onWalk={walkTo} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={shownObjs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
 			chat={{ talk: (name) => send(`chat ${name}`, false), invite: (name, g) => send(`gruppe lade ${name} in ${g}`), groups: account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? []) }} />}
 		{nameMenu && <NameMenu at={nameMenu} sheet name={nameMenu.name} groups={account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? [])} close={() => setNameMenu(null)}
 			talk={() => send(`chat ${nameMenu.name}`, false)} invite={(g) => send(`gruppe lade ${nameMenu.name} in ${g}`)} ignore={() => send(`ignoriere ${nameMenu.name}`)} />}

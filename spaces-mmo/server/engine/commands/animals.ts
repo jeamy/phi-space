@@ -142,8 +142,8 @@ const fuettere: Command = {
 		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
 		if (!near.some((b) => d.houses[b.plan]) && near.some((b) => b.keeper)) return feedKeeper(c, null, arg);
 		const m = /^(?:(\d+|alle?)\s+)?(.*)$/i.exec(arg.trim().replace(/^(?:die|den)\s+(?:tiere|hühner|huehner|schafe|ziegen)(?:\s+mit)?\s*/i, "").replace(/^mit\s+/i, ""))!;
-		const { b, k, n, now } = await houseHere(c, d);
-		if (!k || !n || !b.herd) throw new CommandError("Im Stall ist kein Tier zu füttern.");
+		const { b, k, n, max, now } = await houseHere(c, d);
+		if (!k || !n || !b.herd) throw new CommandError(`${b.name} von ${b.ownerName} ist leer (Platz für ${max}), da ist nichts zu füttern. ${mine(c, b) ? "„einstallen <tier>“ bringt ein Tier hinein; Tiere verkauft Gesa am Markt von Kupferhafen." : ""}`.trim());
 		const feed = (await inventory(c)).filter((i) => k.feed.includes(i.f.proto));
 		const named = m[2] ? itemsNamed(c.world, await inventory(c), m[2].replace(ARTICLE, "")) : feed;
 		if (m[2] && named.length && !k.feed.includes(named[0]!.f.proto)) throw new CommandError(`${named[0]!.f.name} mögen ${k.plural} nicht; sie fressen ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);

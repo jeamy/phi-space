@@ -17,6 +17,7 @@ import { asFields, type EpochFields, type SeedRestFields, type AnimalFields, typ
 import { bedPlantsView } from "./engine/commands/garden.ts";
 import { fieldView } from "./engine/commands/field.ts";
 import { wildKinds } from "./engine/commands/wild.ts";
+import { distTo, EXIT_REACH } from "./engine/commands/build.ts";
 import { envMs } from "./space.ts";
 import { RegionSpaces } from "./region-spaces.ts";
 import { setting } from "./settings.ts";
@@ -33,7 +34,7 @@ export type PlanView = { key: string; name: string; w: number; h: number; needs:
 /** A site or building (docs/siedeln.en.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
 export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed" | "field" | "animal" | "scenery" | "zone" | "cart" | "liner"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
-	w?: number; h?: number; /** Scenery: what it is. */ desc?: string; /** Scenery: its picture, how much work it still takes, whether it stays or is walked over. */ model?: string; left?: number; fixed?: boolean; through?: boolean; /** An exit: the place it leads to (its `name` is what `go` takes). */ to?: string; /** The owner's name as shown and their character (a name can change, an alias; the id cannot). */ owner?: string; ownerId?: string; sponsorIds?: string[]; /** What a site has hung out, with a wage per piece (`proto` "": work). */ orders?: Array<{ proto: string; name: string; left: number; pay: number }>; progress?: number; missing?: string; color?: string; /** the plan of a site, building or ruin (the 3D map draws each its own) */ plan?: string; /** the kind of animal a coop or pen houses */ herd?: string; /** a building's dog or cat on guard */ keeper?: string; /** an animal from the fog: hase, reh, fuchs, maus */ animal?: string;
+	w?: number; h?: number; /** Scenery: what it is. */ desc?: string; /** Scenery: its picture, how much work it still takes, whether it stays or is walked over. */ model?: string; left?: number; fixed?: boolean; through?: boolean; /** An exit: the place it leads to (its `name` is what `go` takes). */ to?: string; /** The owner's name as shown and their character (a name can change, an alias; the id cannot). */ owner?: string; ownerId?: string; sponsorIds?: string[]; /** What a site has hung out, with a wage per piece (`proto` "": work). */ orders?: Array<{ proto: string; name: string; left: number; pay: number }>; progress?: number; missing?: string; color?: string; /** The large ship (made by the client from the timetable): its fare and the islands it goes to. */ fare?: number; routes?: Array<{ island: string; room: string }>; /** the plan of a site, building or ruin (the 3D map draws each its own) */ plan?: string; /** the kind of animal a coop or pen houses */ herd?: string; /** a building's dog or cat on guard */ keeper?: string; /** an animal from the fog: hase, reh, fuchs, maus */ animal?: string;
 	/** A bed: its plants at their cells (relative to the bed), when it was watered and how long its plants go without
 	 *  water, whether weeds grow in it, and who may tend it besides the owner; `bedKind`: a flower bed or a community bed; `fenced`: hares keep out. An animal: the bed it came to (`target`). */
 	bedKind?: "zier" | "gemein"; fenced?: boolean; plants?: Array<{ x: number; y: number; stage: number; color: string; model?: SortDef["model"] }>; wateredWorldMs?: number; thirstMs?: number; weedy?: boolean; sponsors?: string[]; target?: string;
@@ -53,7 +54,7 @@ export type AtlasView = { rooms: Array<{ roomId: string; name: string; island: s
  *  people and NPCs are online in each room. */
 /** What a player owns, for the marks on the overview. */
 export type AtlasOwned = { id: string; kind: "site" | "building" | "bed" | "field" | "ruin"; name: string; room: string; x: number; y: number };
-export type AtlasState = { here: string; fog: Record<string, number>; lit: string[]; people: Record<string, [number, number]>; mine: AtlasOwned[]; /** The epoch of each island that has left the first (the header shows the one the player stands on); null in a world without epochs. */ epochs: Record<string, number> | null; /** Coins per field of distance for beaming (the admin's setting), for the price on the map. */ beamCost: number };
+export type AtlasState = { here: string; fog: Record<string, number>; lit: string[]; people: Record<string, [number, number]>; mine: AtlasOwned[]; /** The epoch of each island that has left the first (the header shows the one the player stands on); null in a world without epochs. */ epochs: Record<string, number> | null; /** Coins per field of distance for beaming (the admin's setting), for the price on the map. */ beamCost: number; /** Where a boat, a train and a cart can go in this region: the rooms with a jetty or a station (and the fare), the rooms a road joins. */ stops: { jetties: string[]; stations: string[]; trainFare: number; roads: Array<[string, string]> } };
 export type TradeView = {
 	offersIn: Array<Pick<OfferFields, "offerId" | "fromName" | "giveNames" | "want">>;
 	offersOut: Array<Pick<OfferFields, "offerId" | "toName" | "giveNames" | "want">>;
@@ -66,7 +67,7 @@ export type TradeView = {
 };
 /** Frames to the browser. */
 export type ServerFrame =
-	| { t: "hello"; wind: string; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins" | "decor"> & { fuels: string[]; icons: string[]; plans: PlanView[]; uses: ItemUses; /** The large ship's period and the rooms it lies in (engine/liner.ts). */ liner?: { everyWorldMs: number; bays: string[] } }; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number; worldTime: WorldTimeView | null }
+	| { t: "hello"; wind: string; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins" | "decor"> & { fuels: string[]; icons: string[]; plans: PlanView[]; uses: ItemUses; /** The large ship's period and the rooms it lies in (engine/liner.ts). */ liner?: { everyWorldMs: number; bays: string[]; /** What the ride costs and where it goes: the island and the bay room of each. */ fare: number; routes: Array<{ island: string; room: string }>; /** The island of the room the page opens in (a sailing boat goes to the others). */ island: string } }; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number; worldTime: WorldTimeView | null }
 	| { t: "fog"; level: number }
 	| { t: "wind"; wind: string }
 	/** The world clock changed (or the regular reminder): the browser interpolates from it; it decides nothing by it. */
@@ -398,7 +399,7 @@ export class Gateway {
 			if (!c.atlas) { c.atlas = true; c.ws.send({ t: "atlas", atlas: this.#atlas() } satisfies ServerFrame); }
 			c.ws.send({ t: "atlasState", state: this.#atlasState(c) } satisfies ServerFrame);
 		});
-		c.ws.send({ t: "hello", wind: this.#windIn(self.room), build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set([...this.#protoIcons.values(), ...(this.w.wild ? [`/assets/${this.w.id}/${this.w.wild.hare.icon}`] : [])])], plans: this.#plans(), uses: this.#uses(), ...(this.w.liner ? { liner: { everyWorldMs: this.w.liner.everyWorldMs, bays: [...baysOf(this.w.rooms).values()].map((r) => r.roomId) } } : {}) }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
+		c.ws.send({ t: "hello", wind: this.#windIn(self.room), build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set([...this.#protoIcons.values(), ...(this.w.wild ? [`/assets/${this.w.id}/${this.w.wild.hare.icon}`] : [])])], plans: this.#plans(), uses: this.#uses(), ...(this.w.liner ? { liner: { everyWorldMs: this.w.liner.everyWorldMs, bays: [...baysOf(this.w.rooms).values()].map((r) => r.roomId), island: this.#rooms.get(self.room)?.island ?? "", fare: this.w.liner.fare, routes: [...baysOf(this.w.allRooms ?? this.w.rooms)].map(([island, r]) => ({ island, room: r.roomId })) } } : {}) }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
 	}
 
 	/** Puts every entry `tmpl` matches, read in pages of bounded size (one snapshot: the pages share its token). */
@@ -528,7 +529,7 @@ export class Gateway {
 		}
 		else if (type === "Cart") {
 			const f = fields as unknown as CartFields;
-			this.#setObj(id, { id: f.cartId, kind: "cart", name: `Karren von ${this.#shownName(f.charId, f.ownerName)}`, location: f.room, x: f.x, y: f.y, glyph: { shape: "square", color: "#8a6a44" }, icon: "items/karren.png" });
+			this.#setObj(id, { id: f.cartId, kind: "cart", name: `Karren von ${this.#shownName(f.charId, f.ownerName)}`, ownerId: f.charId, location: f.room, x: f.x, y: f.y, glyph: { shape: "square", color: "#8a6a44" }, icon: "items/karren.png" });
 		}
 		else if (type === "Zone") {
 			const z = fields as unknown as ZoneFields;
@@ -669,6 +670,15 @@ export class Gateway {
 		return out;
 	}
 
+	/** The rooms with a jetty or a station and the rooms the roads join (a road beside an exit links its two ends, as the cart's own search sees it). */
+	#stops(): AtlasState["stops"] {
+		const built = (plan: string | undefined) => [...this.#objs.values()].filter((o) => o.kind === "building" && !!plan && o.plan === plan);
+		const jetties = [...new Set(built(this.w.fishing?.plan).map((o) => o.location))], stations = [...new Set(built(this.w.rail?.plan).map((o) => o.location))];
+		const roads = built(this.w.cart?.road), links: Array<[string, string]> = [];
+		for (const e of this.w.exits) if (roads.some((r) => r.location === e.room && distTo(e, { x: r.x, y: r.y, w: r.w ?? 1, h: r.h ?? 1 }) <= EXIT_REACH)) links.push([e.room, e.destination]);
+		return { jetties, stations, trainFare: this.w.rail?.fare ?? 1, roads: links };
+	}
+
 	#atlasState(c: Client, owned = this.#owned()): AtlasState {
 		const people: Record<string, [number, number]> = {};
 		for (const ch of this.#chars.values()) {
@@ -679,7 +689,7 @@ export class Gateway {
 		const lit = this.w.beacons.filter((b) => this.#burns(this.#flames.get(b.beaconId) ?? 0)).map((b) => b.room);
 		void setting(this.space, "beam.cost").then((n) => { this.#beamCost = n; }, () => {}); // the next state carries it
 		void setting(this.space, "epoch.force").then((n) => { this.#epochForce = n; }, () => {});
-		return { here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people, mine: owned.get(c.me.charId) ?? [], epochs: !this.w.epochs ? null : this.#epochForce > 0 ? Object.fromEntries([...new Set(this.w.rooms.map((r) => r.island ?? ""))].map((i) => [i, this.#epochForce])) : Object.fromEntries([...this.#epochs.values()].map((e) => [e.island, e.epoch])), beamCost: this.#beamCost };
+		return { here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people, mine: owned.get(c.me.charId) ?? [], epochs: !this.w.epochs ? null : this.#epochForce > 0 ? Object.fromEntries([...new Set(this.w.rooms.map((r) => r.island ?? ""))].map((i) => [i, this.#epochForce])) : Object.fromEntries([...this.#epochs.values()].map((e) => [e.island, e.epoch])), beamCost: this.#beamCost, stops: this.#stops() };
 	}
 
 	/** Something on the overview changed: its state goes out to every client once the short pause is over. */

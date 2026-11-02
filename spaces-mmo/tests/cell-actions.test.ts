@@ -98,3 +98,42 @@ test("the bar offers a field once, for the cell one stands on, not for every cel
 test("a long text falls into sentences, an abbreviation does not end one", () => {
 	assert.deepEqual(sentences("Eins, z. B. dies. Zwei „look“. Drei."), ["Eins, z. B. dies.", "Zwei „look“.", "Drei."]);
 });
+
+test("feeding is offered at a coop only while animals live in it", () => {
+	const coop = (herd?: string) => new Map<string, ObjView>([["c", obj({ id: "c", kind: "building", name: "Hühnerstall", plan: "huehnerstall", ownerId: "me", ...(herd ? { herd } : {}), x: 6, y: 5, w: 2, h: 1 })]]);
+	const lines = (o: Map<string, ObjView>) => cellEntries({ ...input, at: { x: 6, y: 5 }, objs: o }).map((e) => e.line);
+	const labels = (o: Map<string, ObjView>) => cellEntries({ ...input, at: { x: 6, y: 5 }, objs: o }).map((e) => e.label);
+	assert.ok(labels(coop("huhn")).includes("Tiere ansehen") && labels(coop()).includes("Stall ansehen") && !labels(coop()).includes("Tiere ansehen"), "no animals to look at in an empty coop");
+	assert.ok(lines(coop("huhn")).includes("füttere"));
+	assert.ok(!lines(coop()).includes("füttere") && lines(coop()).includes("stall"), "an empty coop can only be looked at");
+});
+
+test("the large ship offers its timetable and a ride to every other island", () => {
+	const ship = new Map<string, ObjView>([["liner", obj({ id: "liner", kind: "liner", name: "Großes Schiff", fare: 3, routes: [{ island: "Nord", room: "n" }, { island: "Ost", room: "o" }], x: 6, y: 5, w: 5, h: 1 })]]);
+	const es = cellEntries({ ...input, at: { x: 8, y: 5 }, objs: ship });
+	assert.ok(es.some((e) => e.line === "fahrplan") && es.some((e) => e.line === "einschiffen Nord" && /3 Münzen/.test(e.label)) && es.some((e) => e.line === "einschiffen Ost"));
+	assert.deepEqual(cellAbout({ x: 8, y: 5 }, new Map(), ship, "r"), { title: "Großes Schiff", article: "help.game.village#travel" });
+	assert.equal(tapTarget({ x: 8, y: 5 }, new Map(), ship, "r", "me")?.x, 8, "a tap on the ship opens its menu");
+});
+
+test("a jetty, a station and an own cart offer what they are for", () => {
+	const item = (n: string): [string, ObjView] => [n, obj({ id: n, kind: "item", name: n, location: "me", x: 0, y: 0 })];
+	const at = (o: ObjView, ...more: Array<[string, ObjView]>) => cellEntries({ ...input, at: { x: o.x, y: o.y }, objs: new Map<string, ObjView>([[o.id, o], ...more]), sail: ["Nord"] }).map((e) => e.line);
+	const jetty = obj({ id: "j", kind: "building", name: "Steg", plan: "steg", x: 6, y: 5, w: 2, h: 1 });
+	assert.ok(!at(jetty).includes("rudere"), "no boat, no rowing");
+	assert.deepEqual(at(jetty, item("Ruderboot"), item("Segelboot")).filter((l) => /^(rudere|segle|luke)/.test(l)), ["rudere", "segle Nord", "luke", "luke entlade alle"]);
+	assert.ok(at(obj({ id: "b", kind: "building", name: "Bahnhof", plan: "bahnhof", x: 6, y: 5, w: 3, h: 2 })).includes("zug"));
+	const cart = obj({ id: "k", kind: "cart", name: "Karren von Mira", ownerId: "me", x: 6, y: 5 });
+	assert.deepEqual(at(cart, item("Tang")).filter((l) => l.startsWith("karren")), ["karren", "karren lade Tang", "karren entlade", "karren nimm"]);
+	assert.ok(!at({ ...cart, ownerId: "other" }).includes("karren"), "only the owner's cart");
+});
+
+test("with the world's places, boats, trains and carts get one entry per place", () => {
+	const rooms = [{ roomId: "a", name: "Anlegestelle", island: "I" }, { roomId: "b", name: "Bucht", island: "I" }, { roomId: "c", name: "Cairn", island: "I" }, { roomId: "r", name: "Rand", island: "J" }];
+	const travel = { rooms, stops: { jetties: ["r", "b", "c"], stations: ["b", "r"], trainFare: 1, roads: [["r", "b"], ["b", "c"]] as Array<[string, string]> } };
+	const item = (n: string): [string, ObjView] => [n, obj({ id: n, kind: "item", name: n, location: "me", x: 0, y: 0 })];
+	const lines = (o: ObjView, room: string, ...more: Array<[string, ObjView]>) => cellEntries({ ...input, room, at: { x: o.x, y: o.y }, objs: new Map<string, ObjView>([[o.id, { ...o, location: room }], ...more]), travel, sail: [] }).map((e) => e.line);
+	assert.deepEqual(lines(obj({ id: "j", kind: "building", name: "Steg", plan: "steg", x: 6, y: 5, w: 2, h: 1 }), "a", item("Ruderboot")).filter((l) => l.startsWith("rudere")), ["rudere Bucht", "rudere Cairn"], "this island's jetties, not this room, not another island");
+	assert.deepEqual(lines(obj({ id: "b", kind: "building", name: "Bahnhof", plan: "bahnhof", x: 6, y: 5, w: 3, h: 2 }), "a").filter((l) => l.startsWith("zug")), ["zug Bucht"]);
+	assert.deepEqual(lines(obj({ id: "k", kind: "cart", name: "Karren", ownerId: "me", x: 6, y: 5 }), "r").filter((l) => l.startsWith("karren fahre")), ["karren fahre Bucht", "karren fahre Cairn"], "the rooms the roads reach, nearest first");
+});
