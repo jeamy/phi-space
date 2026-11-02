@@ -763,7 +763,7 @@ All Rust values come from the same binary, the state of this commit. R-D2 is the
 **What the measurement and the project tests found:**
 
 - **Gap in the long poll:** 25 ms from TS doubled p50 and worsened p95 (22/41 ms). A look in Rust is a query, the gap is now 2 ms.
-- **Slots per connection:** A call that is only waiting for the `fsync` no longer occupies, unlike in TS, any of the 32 slots, the limit counts only waiting calls. On one thread a burst runs through to its end and otherwise filled the slots at once (107 timeouts in the first second at 200 figures). Held-back replies are limited to 1024 per connection.
+- **Slots per connection:** A call that is only waiting for the `fsync` no longer occupies, unlike in TS, any of the 32 slots, the limit counts only waiting calls. On one thread a burst runs through to its end and otherwise filled the slots at once (107 timeouts in the first second at 200 figures). Outstanding replies are limited to 1024 and 8 MiB per connection, including the buffer of a blocked socket writer. Exceeding either limit closes the connection; overload replies consume the same budget. See the [audit fixes](rust-audit-fixes-2026-10-31.en.md).
 - **Counting without a copy:** `pending_counts` copied all claims on every read in the memory store; that made Rust slower than TS there at first.
 - **Ready line:** It appears only when limits and locks are on disk.
 - **Bug in `spaces-mmo/server/gateway.ts`, independent of Rust:** A figure is not in the stream between two commits of its arrival: A `take` under a transaction reports the `del` at once, the `put` comes with the commit. TS behaves the same (34 of 34 moves in the same test with spacing in the stream). If the `hello` met this gap, it never followed; the faster server hit it in 2 of 6 runs. Now the next write of the figure brings the `hello`, the message comes only after 2 s.
@@ -882,7 +882,7 @@ Slice 10: the start of a Member. Only an active authorization boots it, the acti
 | `test-run-member` | signed instructions on the wire (`test-run-instructions`) | controller restart, admin commands |
 | `test-run-gate` | gates in the core (`phi-core/tests/run_gates.rs` against TypeScript) | the controller's run |
 | `test-bootstrap` | none: primary/sync, locked at the boot guard | all |
-| `test-space-lifecycle` | signed instructions, journal, archive, delete (`test-lifecycle-instructions`) | `spaceCommands`, supervisor | The acceptances of R5 and R5b are open.
+| `test-space-lifecycle` | signed instructions, journal, archive, delete (`test-lifecycle-instructions`) | `spaceCommands`, supervisor |
 
 This stage presupposes R5 and is mandatory before a Rust server replaces a present-day TS member. It ports
 the member side of the contracts that already exist, no new Rust root and no replication. If it stays open,
@@ -1167,3 +1167,19 @@ Choice b) does not automatically end the TS reference or the in-process API (R-D
 | R-D11 | Quantitative addition to R-D2 | **decided 2026-10-30:** if the CPU misses the factor of 2, the RSS must fall by at least 50 %; p95 and p99 per load profile not worse than TS; no additional errors or timeouts |
 | R-D12 | Rollback window and compatible version pairs | **open, before R4 and again before R8.3:** set duration, TS/Rust versions, supported schemas/features and downgrade limits; check switching back with running work |
 | R-D13 | Later removal of the TS reference/in-process implementation | **open, no part of the phone approval:** only with a replacement for reference tests and `PhiSpaces` in-process use or an explicitly decided API change; until then TS is kept |
+
+Security and federation decisions from the reviews of 2026-11-01 (`review-typescript-2026-11-01.en.md`, `review-rust-2026-11-01.en.md`). They bind both servers; "open" names what is still to be built.
+
+| No. | Question | Decision |
+|---|---|---|
+| S-D1 | A signed `recover` instruction could be replayed: no expiry, no nonce, and every differing `recoveryId` fenced the gate anew | **decided 2026-11-01:** the instruction carries `expiresAt`, 60 s after issue, and a Member host refuses an expired one; no nonce list, the gate's history already dedupes gate commands. Done in TS and Rust (f5a553d) |
+| S-D2 | Grant scope checked against the raw `call.space` on direct calls, against the alias on delegated calls | **decided 2026-11-01:** always against the alias; the gate resolves `call.space` before the check, as the delegated path does. Open: TS and Rust together, with the next R6a slice |
+| S-D3 | `createEnroll` without `scope` gives a key with `scope: []` that passes no Space and says nothing | **decided 2026-11-01:** refused with `IllegalArgumentError`; no silent default. Open: TS and Rust together |
+| S-D4 | Two defaults for the group `space-hosts`: `["member"]` in `gate.ts`, `["member","host","router"]` in `configured-runtime.ts` | **decided 2026-11-01:** one default, exported from `gate.ts`, with the deployment's roles `["member","host","router"]` (that is what the local federation runs); `configured-runtime.ts` and `profiles.rs` take it from there. Open |
+| S-D5 | `enroll` answered every failure as "enrollment refused" without audit; `rotation` mapped `IllegalArgumentError` to `PermissionDenied` | **decided 2026-11-01:** the device's answer stays the generic refusal (it learns nothing about tokens), the audit event `failed` carries the error's name; `rotation` answers `BadRequest` for `IllegalArgumentError` and `PermissionDenied` otherwise, the wire has no code for `BootBlocked`. Done |
+| S-D6 | Asynchronous supervisor commands produced no audit event and handler errors were swallowed and retried forever | **decided 2026-11-01:** `onEvent` fires for an asynchronous command when its result is written; a handler's exception goes to `onError`; the retry stays unbounded, because no transport error proves that the remote effect did not happen. Done (f5a553d) |
+| S-D7 | The server-side run loop dropped every error | **decided 2026-11-01:** logged. Done (f5a553d) |
+| S-D8 | A Space deleted between `listSpaces` and `snapshotSpace` made a delegated call fail with a TypeError | **decided 2026-11-01:** `DelegationDenied`. Done (f5a553d) |
+| S-D9 | A revoked key keeps working on an open connection until the next revalidation | **decided 2026-11-01:** kept, as plan 4.4 says: revalidation every 15 s, the grant TTL of 60 s is the bound; recorded here as the contract |
+| S-D10 | The one-attempt-per-minute enrollment limit is per process and not durable | **decided 2026-11-01:** kept; the durable bound is the `attempts` counter (3 per token). A durable limit would cost a commit per failed attempt |
+| S-D11 | A `commandId` re-submitted after `RESULT_RETENTION_MS` (7 days) acts twice | **decided 2026-11-01:** that window is the contract; callers use ids that do not recur after it, as `rotate:<peer>:<nonce>` does |
