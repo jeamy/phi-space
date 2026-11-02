@@ -282,8 +282,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	for (let tries = 0; !world; tries++) {
 		try { world = await startWorld(); }
 		catch (e) {
-			if (tries >= 30 || !/ENOENT|ECONNREFUSED/.test((e as Error).message)) throw e;
-			if (!tries) console.log("[world] waiting for the space …");
+			// a job of a process that was killed pins the terrain until its lease ends (stableTerrain): the next start waits
+			const locked = /world lock stayed taken/.test((e as Error).message);
+			if (tries >= 30 || !(locked || /ENOENT|ECONNREFUSED/.test((e as Error).message))) throw e;
+			if (!tries) console.log(`[world] waiting for the ${locked ? "world lock" : "space"} …`);
 			await new Promise((r) => setTimeout(r, 1000));
 		}
 	}

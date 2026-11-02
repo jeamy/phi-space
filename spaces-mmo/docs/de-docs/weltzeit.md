@@ -180,7 +180,7 @@ type WorldScheduleFields = {
 
 Der Weltzeit-Scheduler liest Uhr und Termine. Für jeden fälligen Eintrag eröffnet er eine Transaktion und nimmt den
 `WorldSchedule`-Entry. Nur der Worker, dem das gelingt, führt die Zustandsänderung aus und schreibt gegebenenfalls den
-nächsten Termin in derselben Transaktion. Deterministische fachliche Schlüssel wie `evening:tag-183` verhindern
+nächsten Termin in derselben Transaktion. Ein wiederkehrender Job mit eigenen Transaktionen läuft stattdessen nach diesem Commit (`after`): Er darf eine Transaktion überdauern, und ein Worker, der darin stirbt, lässt diesen Lauf aus. Deterministische fachliche Schlüssel wie `evening:tag-183` verhindern
 Duplikate auch nach verlorenen Antworten.
 
 Wiederkehrende Termine werden vom bisherigen Solltermin aus weitergerechnet, damit langsame Ausführung nicht driftet.

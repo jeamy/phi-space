@@ -1,7 +1,8 @@
 // Dates in world time (docs/weltzeit.en.md, "Termine und Ablauf"). A WorldSchedule entry says when, by the world clock, a
 // kind of event is due. Every world worker looks; the one that takes a due entry in a transaction runs its handler and
 // writes the next date in the same transaction, so a date is served once however many workers there are, and a worker
-// that dies before the commit lets the date come back. The wake-up from a real-time wait is only an estimate: whether a
+// that dies before the commit lets the date come back. A job that takes longer than a transaction lives (and keeps its own
+// transactions) runs in `after`, once the next date is committed; a worker that dies in it skips that run. The wake-up from a real-time wait is only an estimate: whether a
 // date is due is always decided by the world time.
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type WorldClockFields, type WorldScheduleFields } from "../model.ts";
@@ -11,7 +12,9 @@ import { peek, readExisting, StillHeld } from "../space.ts";
 export type ScheduleContext = { space: SpaceLike; txn: string; clock: WorldClockFields; schedule: WorldScheduleFields; worldMs: number };
 export type ScheduleHandler = {
 	/** Serves one due date, inside its transaction (what it writes commits with the date). */
-	run: (c: ScheduleContext) => Promise<void>;
+	run?: (c: ScheduleContext) => Promise<void>;
+	/** Serves it after the commit, outside the date's transaction (`txn` is over): however long it takes, the date stands. */
+	after?: (c: ScheduleContext) => Promise<void>;
 	/** The next date strictly after `afterWorldMs`; absent: a date that happens once. */
 	next?: (afterWorldMs: number, s: WorldScheduleFields, clock: WorldClockFields) => number;
 };
@@ -77,7 +80,8 @@ export async function runSchedules(space: SpaceLike, handlers: Record<string, Sc
 		try {
 			if (!(await space.takeIfExists({ type: "WorldSchedule", id: e.id }, NO_WAIT, { txn }))) { await space.abort(txn); continue; } // another worker serves it
 			const worldMs = worldNow(clock, now());
-			try { await handler.run({ space, txn, clock, schedule: s, worldMs }); }
+			const c = { space, txn, clock, schedule: s, worldMs };
+			try { await handler.run?.(c); }
 			catch (err) { console.error(`[world] schedule ${s.scheduleId}:`, (err as Error).message); await space.abort(txn).catch(() => {}); next = Math.min(next, 1000); continue; }
 			if (handler.next) {
 				// late: `once` goes on from the date it missed, `coalesce` from now (one event for all the periods missed)
@@ -85,6 +89,7 @@ export async function runSchedules(space: SpaceLike, handlers: Record<string, Sc
 				await space.write({ type: "WorldSchedule", fields: { ...s, dueWorldMs: handler.next(after, s, clock) } as never }, txn, FOREVER);
 			}
 			await space.commit(txn);
+			await handler.after?.(c).catch((err) => console.error(`[world] schedule ${s.scheduleId}:`, (err as Error).message));
 			next = Math.min(next, 20);
 		} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
 	}

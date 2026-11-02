@@ -109,10 +109,10 @@ test("the game: the clock is made with the world, shown in the hello and by `tim
 
 // ---- step 3: the dates of the world (engine/schedule.ts), the evening, and the NPC plans ----
 import { runSchedules, ClockGuard, ensureSchedule } from "../server/engine/schedule.ts";
-import { SCHEDULE_HANDLERS } from "../server/engine/worldevents.ts";
+import { SCHEDULE_HANDLERS, tickHandler } from "../server/engine/worldevents.ts";
 import { msUntilWorld, nextAtHour } from "../server/engine/worldtime.ts";
 
-import type { WorldEventFields, WorldScheduleFields } from "../server/model.ts";
+import { WORLD_LOCK, type WorldEventFields, type WorldScheduleFields } from "../server/model.ts";
 import { FOREVER } from "phi-spaces";
 
 test("the next date at an hour of the day is strictly after the moment, and a wait is real time at the clock's rate", () => {
@@ -176,6 +176,37 @@ test("a late date: `once` goes on from the date it missed, `coalesce` makes one 
 		await run();
 		assert.equal(await due("once"), day(5, 20), "paused at 10:00 of day 5: the evening stays ahead");
 		assert.equal((await events()).length, 2);
+	} finally { await stack.close(); }
+});
+
+test("a recurring job that outlives a date's transaction: its next date stands, it runs once, and a failure does not stop the others", { timeout: 60_000 }, async () => {
+	const stack = await startStack({ worlds: 0 });
+	try {
+		const s = stack.space, real0 = 1_000_000;
+		await s.write({ type: "WorldClock", fields: { worldId: "t", epoch: 1, realAnchorMs: real0, worldAnchorMs: 0, rate: 1, paused: false, version: 1 } as never }, null, FOREVER);
+		const tick = (job: string) => ({ scheduleId: `tick.${job}`, clockEpoch: 1, dueWorldMs: 10, kind: "tick", payload: { job, everyMs: 1000 }, missed: "coalesce" as const });
+		await ensureSchedule(s, null, tick("slow"));
+		await ensureSchedule(s, null, tick("broken"));
+		let slow = 0, broken = 0;
+		const handlers = { tick: tickHandler({ slow: async () => { slow++; await new Promise((r) => setTimeout(r, 1500)); }, broken: async () => { broken++; throw new Error("on purpose"); } }) };
+		const run = () => runSchedules(s, handlers, { txnMs: 500, maxWaitMs: 100, now: () => real0 + 100 });
+		await run();
+		assert.deepEqual([slow, broken], [1, 1]);
+		await run();
+		assert.deepEqual([slow, broken], [1, 1], "both dates moved on, though the job took three times the transaction's life");
+		const due = (await s.readAll({ type: "WorldSchedule" })).map((e) => (e.fields as unknown as WorldScheduleFields).dueWorldMs);
+		assert.ok(due.every((d) => d > 100));
+	} finally { await stack.close(); }
+});
+
+test("a world that starts while the lock stays taken (a killed job's pin) waits for it and does not die", { timeout: 90_000 }, async () => {
+	const stack = await startStack({ worlds: 0 });
+	try {
+		await eventually(() => stack.space.count(WORLD_LOCK), 10_000, "the lock");
+		const held = (await stack.space.createTransaction(23_000)).id;
+		assert.ok(await stack.space.take(WORLD_LOCK, 5_000, { txn: held }));
+		const c = await stack.worldProcess();
+		assert.equal(c.exitCode, null, "it came up in its first process");
 	} finally { await stack.close(); }
 });
 

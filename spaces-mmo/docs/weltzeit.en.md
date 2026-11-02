@@ -180,7 +180,7 @@ type WorldScheduleFields = {
 
 The world-time scheduler reads clock and appointments. For each due entry it opens a transaction and takes the
 `WorldSchedule` entry. Only the worker that succeeds performs the state change and, where applicable, writes the
-next appointment in the same transaction. Deterministic business keys such as `evening:tag-183` prevent
+next appointment in the same transaction. A recurring job with transactions of its own runs after that commit instead (`after`): it may outlast a transaction, and a worker that dies in it skips that run. Deterministic business keys such as `evening:tag-183` prevent
 duplicates even after lost replies.
 
 Recurring appointments are computed onward from the previous due time so that slow execution does not drift.

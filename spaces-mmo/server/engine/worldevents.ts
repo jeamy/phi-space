@@ -39,13 +39,20 @@ export function tickJobs(w: { fog: { stepMs: number }; flood: { everyMs: number 
 	];
 }
 
+/** A recurring job that takes longer than this is logged. */
+const SLOW_JOB_MS = 10_000;
+
 /** The least real time between two runs of a recurring job: a world that runs fast does not turn every job into a busy loop. */
 export const MIN_TICK_REAL_MS = 100;
 
 /** The handler of the recurring jobs: `kind: "tick"`, `payload: { job, everyMs }`; the next date is one period after the
  *  one that was served (after now, for a date served late: `coalesce`), a period of at least MIN_TICK_REAL_MS of real time. */
 export const tickHandler = (runs: Record<string, () => Promise<void>>): ScheduleHandler => ({
-	run: async ({ schedule }) => { await runs[String(schedule.payload.job)]?.(); },
+	after: async ({ schedule }) => {
+		const job = String(schedule.payload.job), t0 = Date.now();
+		await runs[job]?.();
+		if (Date.now() - t0 > SLOW_JOB_MS) console.warn(`[world] job ${job} took ${Math.round((Date.now() - t0) / 1000)} s`);
+	},
 	next: (after, s, clock) => after + Math.max(Number(s.payload.everyMs), MIN_TICK_REAL_MS * clock.rate),
 });
 
