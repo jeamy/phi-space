@@ -640,6 +640,30 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 	// flour (or grain back) nobody fetched
 	for (const e of await space.readAll({ type: "MillLoad" })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
 }
+/** Once per space (a `Migrated` marker remembers it): a plan of one per room (a station) built twice in a room before the
+ *  rule held keeps its oldest; the newer ones come down as by a vote, half of their material with what lay in them waiting
+ *  for the owner as an estate. From then on `bau` refuses a second one. How many came down. */
+export async function onePerRoomOnce(space: SpaceLike, w: WorldDef): Promise<number> {
+	const marker = { type: "Migrated", fields: { key: "one-per-room" } };
+	if (await space.readIfExists(marker, 2_000)) return 0;
+	const txn = (await space.createTransaction(60_000)).id;
+	try {
+		const now = await decayNowOf(space, txn);
+		let n = 0;
+		for (const plan of (w.building?.plans ?? []).filter((p) => p.onePerRoom)) {
+			const byRoom = new Map<string, BuildingFields[]>();
+			for (const e of await space.readAll({ type: "Building", fields: { plan: plan.key } }, { txn })) { const b = fieldsOf<BuildingFields>(e); byRoom.set(b.room, [...(byRoom.get(b.room) ?? []), b]); }
+			for (const all of byRoom.values()) for (const b of all.sort((a, b) => a.builtAt - b.builtAt || a.buildId.localeCompare(b.buildId)).slice(1)) {
+				if (!(await space.takeIfExists({ type: "Building", fields: { buildId: b.buildId } }, NO_WAIT, { txn }))) continue;
+				await demolishByVote(space, txn, w, b, now);
+				n++;
+			}
+		}
+		await space.write(marker as never, txn, FOREVER);
+		await space.commit(txn);
+		return n;
+	} catch (e) { await space.abort(txn).catch(() => {}); throw e; }
+}
 /** A building a town hall voted away, in the transaction of the count: the area and the light are free at once, and half of
  *  the material with what lay in the chest waits for the owner as an estate on the spot. */
 export async function demolishByVote(space: SpaceLike, txn: string, w: WorldDef, b: BuildingFields, now: number): Promise<void> {
