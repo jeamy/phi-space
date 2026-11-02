@@ -59,7 +59,7 @@ fn assert_ordinary_profiles(old: &Json, next: &Json) -> R<()> {
 }
 
 /// `validateProfileOnlyChange`: the task types it touches. A controlled transition changes nothing but the profiles.
-fn validate_profile_only_change(old: &Json, next: &Json) -> R<Vec<String>> {
+pub fn validate_profile_only_change(old: &Json, next: &Json) -> R<Vec<String>> {
 	let mut expected = old.as_object().cloned().unwrap_or_default();
 	expected.insert("policyVersion", next.get("policyVersion").cloned().unwrap_or(Json::Null));
 	expected.insert("completionProfiles", next.get("completionProfiles").cloned().unwrap_or(Json::Null));

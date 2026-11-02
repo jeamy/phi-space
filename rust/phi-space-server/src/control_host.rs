@@ -2,6 +2,8 @@
 // not carry yet is refused at the start, never ignored: a root, replication and recovery (R6b).
 use crate::{fail, stopping};
 use crate::member::{address_of, boot_guard, clock, config_of, field, key_of, netbird, open_store, own_peer, register_client, serve_gate, set_group_roles};
+use phi_host::alerts::ControlCommands;
+use phi_host::control::AsyncCommands;
 use phi_host::auth::{Algorithm, Proving};
 use phi_host::boot::BootGuard;
 use phi_host::root::{MemberEnd, Root, RootConfig};
@@ -87,14 +89,16 @@ pub fn run(config: &str, store: &str) {
 		spaces.push(control_space.to_owned());
 		o.capabilities = Some(Rc::new(Capabilities { host_id: host_id.to_owned(), tools: names("tools"), models: names("models"), data_spaces: spaces, client: None }));
 	}
+	let mut held: Option<Rc<dyn AsyncCommands>> = None;
 	if let Some(r) = c.get("root").filter(|r| !r.is_null()) {
 		let root = root_of(&c, r, control_key, listen_host, &guard, &now, algorithm, (&routing, &o));
 		let found = Root::check_start(&root, &mut opened).unwrap_or_else(|e| fail(e));
 		let root = Root::new(root, found).unwrap_or_else(|e| fail(e.message));
-		if let Some(s) = o.control.as_mut().and_then(|c| c.supervisor.as_mut()) {
-			s.commands = Some(Rc::new(Rc::clone(&root)));
-		}
+		held = Some(Rc::new(Rc::clone(&root)));
 		o.root = Some(root);
+	}
+	if let Some(s) = o.control.as_mut().and_then(|c| c.supervisor.as_mut()) {
+		s.commands = Some(Rc::new(ControlCommands::new(held, Rc::clone(&now))));
 	}
 	o.boot = Some(guard);
 	let gate = Gate::new(listen_host, o).unwrap_or_else(|e| fail(e));

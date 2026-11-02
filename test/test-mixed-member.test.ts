@@ -327,10 +327,24 @@ test("an admin adds and drains a Member by command, and the Root works by what t
 	assert.deepEqual([added.state, added.result?.phase, added.result?.policyVersion], ["completed", "completed", 1], JSON.stringify(added));
 	const wrote = await root("rootWrite", { id: "w1", entry: { type: "Job", fields: { n: 1 } }, leaseMs: 60_000 });
 	assert.equal(wrote.ok, true, JSON.stringify(wrote));
+	// profiles go through a transition of their own: the Member freezes, installs and resumes under signed instructions
+	const installed = await admin.requestRoutingPolicy();
+	const extra = { taskType: "Extra", resultTypes: ["ExtraDone"], equalFields: ["n"], maxResultCount: 1, maxResultBytes: 1024, maxLeaseMs: 60_000 };
+	const moved = await command("profiles-1", "migrateProfiles", { policy: { ...installed.policy, policyVersion: installed.policy.policyVersion + 1, completionProfiles: [...installed.policy.completionProfiles, extra] } });
+	assert.deepEqual([moved.state, moved.result?.phase], ["completed", "completed"], JSON.stringify(moved));
+	await g.withMember(async (host) => {
+		const s = await snapshotSpace(host, sid, ctx);
+		assert.ok(s!.completionProfiles?.some((p) => p.taskType === "Extra"), JSON.stringify(s!.completionProfiles));
+	});
 	const drained = await command("drain-1", "drain", { member });
 	assert.equal(drained.result?.phase, "completed", JSON.stringify(drained));
 	assert.equal((await root("rootWrite", { id: "w2", entry: { type: "Job", fields: { n: 2 } }, leaseMs: 60_000 })).error?.code, "MemberDrained", "a drained Member takes no new work");
 	assert.equal((await command("add-1", "addMember", { member })).result?.phase, "completed", "a command seen before keeps its result");
+	// the read-only views need no Root work: what was done, who asked, and no payloads
+	const audit = await command("audit-1", "auditLog", { limit: 2 });
+	assert.equal(audit.result.length, 2, JSON.stringify(audit));
+	for (const r of audit.result) { assert.equal(r.requestedBy, "boss"); assert.equal(r.state, "completed"); assert.equal(r.result, undefined); }
+	assert.ok(Array.isArray((await command("alerts-1", "listAlerts", {})).result));
 });
 
 test("a Member serves on the grants of its control host and follows its keys and its fence", async (tc) => {

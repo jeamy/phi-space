@@ -11,6 +11,7 @@ use crate::gate::{roles_of, GroupRoles, Netbird, Now};
 use crate::grants::GrantAuthority;
 use crate::member_status::{self, Probed, StatusEnv};
 use crate::membership_control::{MembershipController, MembershipEnv};
+use crate::profile_transition::ProfileTransitionController;
 use crate::remote::ControlClient;
 use crate::router::{Reprepared, RouterController, RouterEnv, COMMANDS, DEFAULT_LIMITS, JOURNAL};
 use crate::run_member::Pin;
@@ -457,7 +458,7 @@ pub struct Root {
 }
 
 /// The membership commands of the supervisor.
-pub const COMMANDS_OF_ROOT: [&str; 3] = ["addMember", "drain", "removeMember"];
+pub const COMMANDS_OF_ROOT: [&str; 4] = ["addMember", "drain", "removeMember", "migrateProfiles"];
 impl AsyncCommands for Rc<Root> {
 	fn kinds(&self) -> &[&'static str] { if self.env.0.c.admin.is_some() { &COMMANDS_OF_ROOT } else { &[] } }
 	fn run(&self, owner: Owner, kind: &str, command_id: &str, args: &Json, requested_by: &str) -> Local<Result<Json, String>> {
@@ -467,6 +468,12 @@ impl AsyncCommands for Rc<Root> {
 			*root.env.0.owner.borrow_mut() = Some(owner);
 			*root.env.0.acting.borrow_mut() = Some(by);
 			let c = &root.env.0.c;
+			if kind == "migrateProfiles" {
+				let profiles = ProfileTransitionController { env: root.env.clone(), control_space: c.control_space.clone(), authority_id: c.authority_id.clone(), federation_id: c.id.clone(), partitions: c.partitions, peer_id: c.peer_id.clone(), signer: Rc::clone(&c.control_signer) };
+				let r = profiles.execute(&id, args.get("policy").unwrap_or(&Json::Null)).await;
+				*root.env.0.acting.borrow_mut() = None;
+				return r.map_err(|e| e.message);
+			}
 			let controller = MembershipController { env: root.env.clone(), control_space: c.control_space.clone(), authority_id: c.authority_id.clone(), peer_id: c.peer_id.clone(), signer: Rc::clone(&c.control_signer) };
 			let short = match kind.as_str() { "addMember" => "add", "drain" => "drain", _ => "remove" };
 			let member = args.get("member").cloned().unwrap_or(Json::Null);

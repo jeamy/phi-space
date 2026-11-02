@@ -1,4 +1,5 @@
 //! The secure host around the space service (docs/rust-portierung.en.md, R5): `auth` is layer B of the identity (src/auth.ts), `grants` the short-lived control grants (src/grants.ts).
+pub mod alerts;
 pub mod auth;
 pub mod capability;
 pub mod boot;
@@ -14,6 +15,7 @@ pub mod remote;
 pub mod membership;
 pub mod member_status;
 pub mod membership_control;
+pub mod profile_transition;
 pub mod root;
 pub mod rotation;
 pub mod router;

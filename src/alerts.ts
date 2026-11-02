@@ -41,7 +41,7 @@ export async function collectAlerts(o: { runs?: RunController; workers?: WorkerA
 		if (typeof fetchError === "string") out.push({ key: `host:${hostId}:fetch`, severity: "warning", source: "host", subject: hostId, message: `Zuweisungen nicht abrufbar: ${fetchError}` });
 		if (now - at > stale) out.push({ key: `host:${hostId}:stale`, severity: "warning", source: "host", subject: hostId, message: `letzter Heartbeat vor ${Math.round((now - at) / 1000)} s` });
 	}
-	return out.sort((a, b) => (a.severity === b.severity ? a.key.localeCompare(b.key) : a.severity === "critical" ? -1 : 1));
+	return out.sort((a, b) => (a.severity === b.severity ? (a.key < b.key ? -1 : a.key > b.key ? 1 : 0) : a.severity === "critical" ? -1 : 1));
 }
 
 /** Calls `collect` periodically and `publish` only with changes; a failing publish is retried with the next pass. */
