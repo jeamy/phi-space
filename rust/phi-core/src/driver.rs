@@ -24,13 +24,15 @@ pub fn seeded(seed: &str) -> Random {
 
 pub struct Driver {
 	pub space: Space,
+	/// The state `keepSource` kept: the snapshot a later restore installs.
+	pub kept: Option<Json>,
 	/// The host's entry snapshots (a new host with every init).
 	pub snapshots: crate::snapshot::Snapshots,
 	clock: f64,
 }
 
 impl Default for Driver {
-	fn default() -> Self { Driver { space: Space::new(SpaceState::initial(), seeded("")), snapshots: Default::default(), clock: 0.0 } }
+	fn default() -> Self { Driver { space: Space::new(SpaceState::initial(), seeded("")), kept: None, snapshots: Default::default(), clock: 0.0 } }
 }
 
 /// What the TypeScript driver's `core.plain` makes of a result: a JSON copy, where a number that is not finite is `null`.
@@ -76,6 +78,7 @@ impl Driver {
 			self.space = Space::new(s, seeded(&seed));
 			self.space.clock = self.clock;
 			self.snapshots = Default::default();
+			self.kept = None;
 			return Ok(Json::Null);
 		}
 		if let Some(now) = l.get("now").and_then(Json::as_f64) {
@@ -84,7 +87,19 @@ impl Driver {
 		let now = self.clock;
 		self.space.clock = now; // Date.now() in the TypeScript driver
 		self.space.begin_commit();
-		apply_line(&mut self.space, &mut self.snapshots, now, l)
+		match l.get("op").and_then(Json::as_str) {
+			Some("keepSource") => {
+				let kept = self.space.state.to_json();
+				let hash = phi_json::digest_json(&kept).expect("a state is finite");
+				self.kept = Some(kept);
+				Ok(Json::String(hash))
+			}
+			Some("restoreBatch") => match &self.kept {
+				Some(k) => self.space.restore_batch(now, k).map(plain),
+				None => Err(crate::space::error("PermissionError", "no kept snapshot")),
+			},
+			_ => apply_line(&mut self.space, &mut self.snapshots, now, l),
+		}
 	}
 }
 
@@ -169,6 +184,18 @@ pub fn apply_line(s: &mut Space, snapshots: &mut crate::snapshot::Snapshots, now
 			"stats" => s.stats(now),
 			"changes" => s.changes(l.get("afterRev"), o),
 			"revision" => s.revision(),
+			"beginRestore" => s.begin_restore(now, l),
+			"completeRestore" => s.complete_restore(now, l.get("recoveryId").and_then(Json::as_str).unwrap_or("")).map(|()| Json::Null),
+			"releaseRestored" => s.release_restored(now, l.get("recoveryId").and_then(Json::as_str).unwrap_or(""), l.get("scope").unwrap_or(&empty)).map(Json::Number),
+			"setAuthorityTransition" => {
+				match l.get("transition").filter(|t| crate::space::truthy(Some(t))) {
+					Some(t) => s.state.rest.insert("authorityTransition", t.clone()),
+					None => {
+						s.state.rest.remove("authorityTransition");
+					}
+				}
+				Ok(Json::Null)
+			}
 			other => Err(not_ported(format!("op {other}"))),
 		};
 		result.map(plain)

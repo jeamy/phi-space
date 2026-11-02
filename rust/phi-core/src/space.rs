@@ -12,8 +12,8 @@
 //! running commit, its byte budget and the expiry watermark. The watermark is not only a speed-up: `nextExpiry` answers
 //! from it, and it can be stale low.
 //!
-//! Unsupported document fields (including unported restore/replication state) are refused with `NotPorted` before
-//! operations change them. Member admission, completion profiles and RunGates are supported.
+//! Unsupported document fields (negative claims, for one) are refused with `NotPorted` before operations change them.
+//! Member admission, completion profiles, RunGates and what a restore leaves (`restore.rs`) are supported.
 use phi_json::num_of;
 use crate::state::{EntryRec, RegRec, SpaceState, TxnRec, WaiterRec};
 use crate::stream::{self, Collected, Open};
@@ -298,7 +298,7 @@ pub fn view(e: &EntryRec, space_id: Option<&str>) -> Json {
 	}
 	Json::Object(o)
 }
-fn put_op(e: &EntryRec) -> Json {
+pub(crate) fn put_op(e: &EntryRec) -> Json {
 	let mut o = Object::new();
 	o.insert("op", "put".into());
 	o.insert("id", e.id.as_str().into());
@@ -358,7 +358,7 @@ enum Standing {
 
 /// A subscription or wait about to be added, counted as if it were there.
 #[derive(Clone, Copy)]
-enum Extra<'a> {
+pub(crate) enum Extra<'a> {
 	None,
 	Waiter(&'a WaiterRec),
 	Reg(&'a RegRec),
@@ -625,6 +625,11 @@ impl Space {
 				"archived" => v.as_object().is_some(),
 				"authorityCounters" => v.as_object().is_some(),
 				"erasureEpoch" | "primaryEpoch" => v.as_f64().is_some(),
+				// a restore and what it leaves (src/restore.ts), an authority transition's mark (its stages run on the host)
+				"restore" | "authorityTransition" => v.as_object().is_some(),
+				"restoredClaims" => v.as_object().is_some_and(|m| m.iter().all(|(_, c)| c.as_object().is_some() && c.get("notCommitted").is_none())),
+				"invalidGenerations" => v.as_object().is_some(),
+				"restoredBytes" => v.as_f64().is_some(),
 				_ => false,
 			};
 			if !fine {
@@ -675,7 +680,7 @@ impl Space {
 		let e = self.state.entries[i].clone();
 		self.log_put_rec(now, &e);
 	}
-	fn log_put_rec(&mut self, now: f64, e: &EntryRec) { self.record(now, &e.id, put_op(e)); }
+	pub(crate) fn log_put_rec(&mut self, now: f64, e: &EntryRec) { self.record(now, &e.id, put_op(e)); }
 	fn log_del(&mut self, now: f64, id: &str) { self.record(now, id, obj! { "op" => "del", "id" => id }); }
 
 	pub(crate) fn charge(&mut self, cost: f64) -> Result<()> {
@@ -688,7 +693,7 @@ impl Space {
 		Ok(())
 	}
 	pub(crate) fn can_charge(&self, cost: f64) -> bool { self.budget.is_none_or(|used| used + cost + COMMIT_FIXED <= self.limits().max_commit_bytes) }
-	fn defer_maintenance(&mut self, at: f64, cursor: &str) { self.state.rest.insert("maintenance", obj! { "at" => at, "cursor" => cursor }); }
+	pub(crate) fn defer_maintenance(&mut self, at: f64, cursor: &str) { self.state.rest.insert("maintenance", obj! { "at" => at, "cursor" => cursor }); }
 	/// Reserve one bounded maintenance mutation; persist where to go on when the commit is full.
 	pub(crate) fn maintenance_step(&mut self, cost: f64, now: f64, cursor: &str) -> bool {
 		if !self.can_charge(cost) {
@@ -711,7 +716,7 @@ impl Space {
 			None => format!("{p}{}", n(self.state.next_id)),
 		}
 	}
-	fn note_expiry(&mut self, expires: f64) {
+	pub(crate) fn note_expiry(&mut self, expires: f64) {
 		if let Some(known) = self.watermark {
 			if expires < known {
 				self.watermark = Some(expires);
@@ -763,9 +768,9 @@ impl Space {
 		let admin_maintenance = 2.0;
 		let membership = self.rest_bytes("membership", 2.0);
 		let completion = self.completion_bytes();
-		let authority_transition = 2.0;
+		let authority_transition = self.state.rest.get("authorityTransition").filter(|t| !t.is_null()).map_or(2.0, bytes);
 		let authority_counters = self.rest_bytes("authorityCounters", 2.0);
-		let restore = 0.0;
+		let restore = self.state.rest.get("restore").filter(|r| !r.is_null()).map_or(0.0, bytes);
 		let claims = self.claim_bytes();
 		let stream = self.state.stream.as_ref().map_or(0.0, |s| s.bytes);
 		let jobs = self.jobs_bytes();
@@ -789,7 +794,7 @@ impl Space {
 
 	/// Reserve room for the commit that makes an entry visible (`txn` none: this very commit) or for completing `txn`
 	/// either way, before the mutation; over the budget nothing has changed.
-	fn reserve(&mut self, txn: Option<usize>, cost: f64, lim: &Limits) -> Result<()> {
+	pub(crate) fn reserve(&mut self, txn: Option<usize>, cost: f64, lim: &Limits) -> Result<()> {
 		let have = txn.and_then(|i| self.state.txns[i].reserved).unwrap_or(0.0);
 		if have + cost + COMMIT_FIXED > lim.max_commit_bytes {
 			let what = match txn { None => "this commit".to_owned(), Some(i) => format!("completing transaction {}", self.state.txns[i].id) };
@@ -811,7 +816,7 @@ impl Space {
 
 	/// `publishCost`: a bound of what making `e` visible writes, its put and an event for every subscription and wait
 	/// that matches it now. `extra`: one about to be added.
-	fn publish_cost(&self, e: &EntryRec, extra: Extra) -> f64 {
+	pub(crate) fn publish_cost(&self, e: &EntryRec, extra: Extra) -> f64 {
 		let v = bytes(&view(e, self.state.space_id.as_deref()));
 		let mut cost = bytes(&put_op(e)) + 1.0;
 		let reg = if let Extra::Reg(r) = extra { Some(r) } else { None };
@@ -982,7 +987,7 @@ impl Space {
 
 	/// Registrations fire for committed writes (txn none) and, for one made under transaction T, also for writes under
 	/// T. Too soon after the last event, a write is counted and sent bundled later.
-	fn notify_write(&mut self, e: &EntryRec, txn: Option<&str>, now: f64, completing: bool) -> Result<()> {
+	pub(crate) fn notify_write(&mut self, e: &EntryRec, txn: Option<&str>, now: f64, completing: bool) -> Result<()> {
 		let entry = view(e, self.state.space_id.as_deref());
 		for ri in 0..self.state.regs.len() {
 			let r = &self.state.regs[ri];
@@ -1808,7 +1813,7 @@ impl Space {
 
 	/// An event carries the entry, a handback and metadata: a bound with the largest handback of any wait is checked
 	/// before a write is accepted, so no event can exceed `maxEventBytes`.
-	fn check_event_size(&self, view_bytes: f64, lim: &Limits) -> Result<()> {
+	pub(crate) fn check_event_size(&self, view_bytes: f64, lim: &Limits) -> Result<()> {
 		if self.state.regs.is_empty() && self.state.waiters.is_empty() {
 			return Ok(());
 		}

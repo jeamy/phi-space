@@ -186,6 +186,15 @@ fn random_walks_agree_with_the_typescript_core() {
 		"renew CompletionViolation",
 		"probe CompletionViolation",
 		"a task committed",
+		// restore (src/restore.ts)
+		"beginRestore at entries",
+		"beginRestore PermissionError",
+		"restoreBatch at claims",
+		"restoreBatch at waiting",
+		"a restore completed",
+		"restored entries released",
+		"lookup of restored history",
+		"admit IncarnationChanged",
 	]
 	.into_iter()
 	.filter(|k| !seen.contains_key(k))

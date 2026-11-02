@@ -345,3 +345,58 @@ impl Space {
 		if active && lost { Err(conflict("gated profiles cannot change while a run is not stopped")) } else { Ok(()) }
 	}
 }
+
+fn or_null(v: Option<&Json>) -> Json { v.filter(|x| !x.is_null()).cloned().unwrap_or(Json::Null) }
+
+impl Space {
+	/// `fenceGatesForRestore`: every gate of the replaced data becomes historical evidence under the restore's fence.
+	pub(crate) fn fence_gates_for_restore(&mut self, now: f64, recovery_id: &str) {
+		let Some(Json::Object(gates)) = self.state.rest.get_mut("runGates") else { return };
+		let runs: Vec<String> = gates.keys().map(str::to_owned).collect();
+		for run in runs {
+			if let Some(Json::Object(g)) = gates.get_mut(&run) {
+				g.insert("recovery", obj! { "id" => recovery_id, "at" => now });
+				g.insert("historical", Json::Bool(true));
+			}
+		}
+		self.touch(now);
+	}
+
+	/// `importRestoredGate`: compact evidence of one snapshot gate; a fenced historical gate if the run is unknown here.
+	pub(crate) fn import_restored_gate(&mut self, now: f64, source: &Json, recovery_id: &str) -> crate::space::Result<()> {
+		let history = source.get("history").and_then(Json::as_array).cloned().unwrap_or_default();
+		let fence = source.get("fence").filter(|f| !f.is_null());
+		let top = history.iter().map(|h| number(h, "revision")).fold(number(source, "revision").max(fence.map_or(0.0, |f| number(f, "revision"))), f64::max);
+		let mut ev = obj! { "revision" => or_null(source.get("revision")), "state" => or_null(source.get("state")), "commandId" => or_null(source.get("commandId")), "kind" => or_null(source.get("kind")), "maxRevision" => top };
+		if let (Some(f), Json::Object(o)) = (fence, &mut ev) {
+			o.insert("fence", obj! { "revision" => or_null(f.get("revision")), "commandId" => or_null(f.get("commandId")), "kind" => or_null(f.get("kind")) });
+		}
+		let run = text(source, "runId").unwrap_or("").to_owned();
+		if !self.state.rest.contains_key("runGates") {
+			self.state.rest.insert("runGates", Json::Object(Object::new()));
+		}
+		let recovery = obj! { "id" => recovery_id, "at" => now };
+		let Some(Json::Object(gates)) = self.state.rest.get_mut("runGates") else { unreachable!("just made") };
+		if let Some(Json::Object(local)) = gates.get_mut(&run) {
+			local.insert("restored", ev);
+			local.insert("recovery", recovery);
+			local.insert("historical", Json::Bool(true));
+			self.touch(now);
+			return Ok(());
+		}
+		if gates.len() >= MAX_RUN_GATES {
+			return Err(exhausted(format!("at most {MAX_RUN_GATES} run gates per Space")));
+		}
+		let entry = obj! { "revision" => or_null(source.get("revision")), "commandId" => or_null(source.get("commandId")), "kind" => or_null(source.get("kind")), "state" => or_null(source.get("state")) };
+		let mut g = obj! {
+			"runId" => run.as_str(), "revision" => or_null(source.get("revision")), "state" => or_null(source.get("state")), "commandId" => or_null(source.get("commandId")), "kind" => or_null(source.get("kind")), "at" => now,
+			"history" => Json::Array(vec![entry]), "recovery" => recovery, "historical" => true, "restored" => ev
+		};
+		if let (Some(f), Json::Object(o)) = (fence, &mut g) {
+			o.insert("fence", obj! { "revision" => or_null(f.get("revision")), "commandId" => or_null(f.get("commandId")), "kind" => or_null(f.get("kind")), "at" => now });
+		}
+		gates.insert(&run, g);
+		self.touch(now);
+		Ok(())
+	}
+}

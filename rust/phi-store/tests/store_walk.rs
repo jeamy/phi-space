@@ -110,6 +110,7 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 	let d = dir(&format!("store-walk-{seed}"));
 	let (ts_file, rust_file) = (d.join("ts.sqlite"), d.join("rust.sqlite"));
 	let mut w = Walk::new(seed);
+	w.without_restores = true; // the store does not keep restored history yet (R6b step 3)
 	let init = w.init();
 	let mut rust = RustSide::open(&rust_file, &init);
 	rust.overlap = seed % 2 == 1;
@@ -266,6 +267,7 @@ fn show_walk_state() {
 	let upto: usize = std::env::var("UPTO").unwrap().parse().unwrap();
 	let d = dir("show-walk-state");
 	let mut w = Walk::new(seed);
+	w.without_restores = true; // the store does not keep restored history yet (R6b step 3)
 	let init = w.init();
 	eprintln!("init {}", init.to_json_text());
 	let mut rust = RustSide::open(&d.join("rust.sqlite"), &init);

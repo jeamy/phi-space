@@ -49,6 +49,17 @@ pub struct Walk {
 	/// The space is a Member under a policy, whose state moves.
 	member: bool,
 	archived: bool,
+	/// The hash of the state `keepSource` kept, and what the space is now: a restore names them.
+	kept: Option<String>,
+	incarnation: Option<String>,
+	epoch: f64,
+	/// A restore installed and not yet completed; its id, and how many restores there were.
+	restoring: Option<String>,
+	/// Its stage as the last step left it.
+	restore_stage: Option<String>,
+	restores: usize,
+	/// No restores: a walk through a store, whose Rust side does not keep restored history yet.
+	pub without_restores: bool,
 }
 
 const TYPES: [&str; 3] = ["Task", "Job", "Note"];
@@ -531,12 +542,87 @@ impl Walk {
 		self.episode.extend(lines);
 	}
 	/// Fills in `$gen`, `$key` and `$txn` from what the walk has seen.
+	/// A restore's life (src/restore.ts): the state kept as the snapshot, a restore of it begun (now and then with the
+	/// wrong hash, incarnation or epoch), its batches until it waits, a minute later its completion and the release of
+	/// some restored entries. An authority transition's mark comes and goes. True when it queued lines.
+	fn restore_step(&mut self) -> bool {
+		if self.without_restores {
+			return false;
+		}
+		let r = &mut self.rng;
+		if r.chance(0.003) {
+			let t = if r.chance(0.6) { obj! { "recoveryId" => "rec-1", "authorityId" => "b", "stage" => r.pick(&["clearing", "history", "completed"]) } } else { Json::Null };
+			self.episode.push_back(obj! { "op" => "setAuthorityTransition", "transition" => t });
+			return true;
+		}
+		if let Some(id) = self.restoring.clone() {
+			if r.chance(0.35) {
+				self.episode.push_back(obj! { "op" => "restoreBatch" });
+				return true;
+			}
+			let waiting = self.restore_stage.as_deref() == Some("waiting");
+			if r.chance(if waiting { 0.3 } else { 0.01 }) {
+				// a minute and more later: the old grants have expired
+				self.now += 62_000.0 + 1000.0 * r.below(5) as f64;
+				self.episode.push_back(obj! { "op" => "completeRestore", "recoveryId" => if r.chance(0.9) { id.clone() } else { "other".into() } });
+				let scope = match r.below(5) {
+					0 => obj! {},
+					1 => obj! { "entryIds" => vec![Json::from("$id")] },
+					2 => obj! { "runId" => "r1" },
+					_ => obj! { "type" => r.pick(&TYPES) },
+				};
+				self.episode.push_back(obj! { "op" => "releaseRestored", "recoveryId" => id, "scope" => scope });
+				// the requests of before: a poll finds their history, a retry is refused, their generation is gone
+				for _ in 0..3 {
+					let request = self.request();
+					self.episode.push_back(obj! { "op" => "lookup", "request" => request.clone() });
+					self.episode.push_back(obj! { "op" => "admit", "request" => request, "method" => "write", "args" => obj! { "a" => 1.0 } });
+				}
+				return true;
+			}
+			return false;
+		}
+		if r.chance(0.006) {
+			// a snapshot with something in it: entries, a request or two, then kept
+			for n in 0..(3 + r.below(10)) {
+				let pad = "x".repeat(r.below(120));
+				self.episode.push_back(obj! { "op" => "write", "entry" => obj! { "type" => "Task", "fields" => obj! { "n" => n as f64, "pad" => pad, "runId" => "r1" } }, "lease" => 3_600_000_000.0 });
+			}
+			let p = self.principal();
+			self.episode.push_back(obj! { "op" => "issueGeneration", "principal" => p.clone() });
+			for id in ["r1", "r2"] {
+				let request = obj! { "principal" => p.clone(), "generation" => "$gen", "requestId" => id };
+				self.episode.push_back(obj! { "op" => "admit", "request" => request, "method" => "write", "args" => obj! { "a" => 1.0 } });
+			}
+			self.episode.push_back(obj! { "op" => "keepSource" });
+			return true;
+		}
+		if self.kept.is_some() && r.chance(0.03) {
+			self.restores += 1;
+			let id = if r.chance(0.1) { format!("restore with spaces {}", self.restores) } else { format!("rec-{}", self.restores) };
+			let wrong = r.below(12);
+			let line = obj! {
+				"op" => "beginRestore", "recoveryId" => id.as_str(),
+				"expectedDataIncarnation" => if wrong == 0 { "beef".into() } else { Json::from("$inc") },
+				"expectedPrimaryEpoch" => if wrong == 1 { Json::Number(7.0) } else { Json::from("$epoch") },
+				"snapshotHash" => if wrong == 2 { Json::from("1".repeat(64)) } else { Json::from("$kept") },
+				"kind" => if r.chance(0.2) { "control" } else { "data" }
+			};
+			self.episode.push_back(line);
+			return true;
+		}
+		false
+	}
+
 	fn fill(&self, v: &Json) -> Json {
 		match v {
 			Json::String(s) if s == "$txn" => self.txns.last().map_or("t-bogus".into(), |t| t.as_str().into()),
 			Json::String(s) if s == "$gen" => self.generations.last().map_or("gnone.0".into(), |g| g.0.as_str().into()),
 			Json::String(s) if s == "$id" => self.ids.last().map_or("n-bogus".into(), |i| i.as_str().into()),
 			Json::String(s) if s == "$key" => self.keys.last().map_or("[]".into(), |k| k.as_str().into()),
+			Json::String(s) if s == "$kept" => self.kept.as_deref().map_or("0".repeat(64).into(), Json::from),
+			Json::String(s) if s == "$inc" => self.incarnation.as_deref().map_or(Json::Null, Json::from),
+			Json::String(s) if s == "$epoch" => Json::Number(self.epoch),
 			Json::String(s) if s == "$next" => self.snapshot.as_ref().map_or("ssnone.0".into(), |n| n.0.as_str().into()),
 			Json::Array(a) => Json::Array(a.iter().map(|x| self.fill(x)).collect()),
 			Json::Object(o) => Json::Object(o.iter().map(|(k, x)| (k, self.fill(x))).collect()),
@@ -572,6 +658,9 @@ impl Walk {
 		}
 		if self.rng.chance(0.01) {
 			self.locked();
+			return self.line(rev);
+		}
+		if self.restore_step() {
 			return self.line(rev);
 		}
 		if self.rng.chance(0.02) {
@@ -977,6 +1066,25 @@ pub fn diff(a: &Json, b: &Json, path: &str, out: &mut Vec<String>) {
 pub fn observe(w: &mut Walk, line: &Json, r: &Result<Json, phi_core::CoreError>, space: &phi_core::Space, seen: &mut BTreeMap<&'static str, usize>) {
 	let note = |k: &'static str, seen: &mut BTreeMap<&'static str, usize>| *seen.entry(k).or_default() += 1;
 		let op = line.get("op").and_then(Json::as_str).unwrap().to_owned();
+		// what a restore needs to know of the space, and how far one has come
+		w.incarnation = space.state.incarnation.clone();
+		w.epoch = space.state.rest.get("primaryEpoch").and_then(Json::as_f64).unwrap_or(1.0);
+		let restore = space.state.rest.get("restore");
+		let stage = restore.and_then(|r| r.get("stage")).and_then(Json::as_str);
+		w.restore_stage = stage.map(str::to_owned);
+		w.restoring = restore.filter(|_| stage != Some("completed")).and_then(|r| r.get("recoveryId")).and_then(Json::as_str).map(str::to_owned);
+		if op == "keepSource" {
+			if let Ok(Json::String(h)) = r { w.kept = Some(h.clone()); }
+		}
+		if let (Ok(v), true) = (r, matches!(op.as_str(), "beginRestore" | "restoreBatch")) {
+			note(Box::leak(format!("{op} at {}", v.get("stage").and_then(Json::as_str).unwrap_or("?")).into_boxed_str()), seen);
+		}
+		if op == "releaseRestored" {
+			if let Ok(v) = r { note(if v.as_f64().is_some_and(|n| n > 0.0) { "restored entries released" } else { "a release found nothing" }, seen); }
+		}
+		if op == "completeRestore" && r.is_ok() { note("a restore completed", seen); }
+		if op == "lookup" && r.as_ref().is_ok_and(|v| v.get("restoredHistory").is_some()) { note("lookup of restored history", seen); }
+		if space.state.entries.iter().any(|e| e.restored_unverified) { note("restored entries unverified", seen); }
 		match r {
 			Ok(v) => {
 				note("ok", seen);

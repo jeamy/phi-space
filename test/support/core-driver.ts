@@ -25,6 +25,7 @@ import * as mailbox from "../../src/mailbox.ts";
 import { snapshotPage } from "../../src/snapshot.ts";
 import { readChain } from "../../src/read-chain.ts";
 import { digestJson } from "../../src/canonical.ts";
+import { beginRestore, completeRestore, releaseRestored, restoreBatch, snapshotHash } from "../../src/restore.ts";
 import type { Json } from "../../src/core.ts";
 
 let seed = "", block = 0, pool = Buffer.alloc(0);
@@ -50,6 +51,8 @@ type Line = Record<string, any> & { op: string; now?: number };
 let s: core.SpaceState = core.initialState();
 /** The host whose entry snapshots (snapshot.ts) the line `snapshotPage` uses; a new one with every init. */
 let host = {};
+/** The state `keepSource` kept: the snapshot a later restore installs (a new one with every init). */
+let kept: core.SpaceState | undefined;
 const opt = <T,>(v: T | undefined, d: T): T => (v === undefined ? d : v);
 
 /** One operation on `s`; its result (the caller makes it plain JSON). `host`: whose entry snapshots it reads. */
@@ -113,6 +116,13 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 		case "events": return mailbox.mailboxPage(s, l.principal, now, l.o ?? {});
 		case "appendMail": mailbox.appendMail(s, l.principal, l.event, now); return null;
 		case "ack": return mailbox.ackMailbox(s, l.principal, l.mailboxEpoch, l.upTo);
+		// ---- restore (src/restore.ts): the kept state is the snapshot
+		case "keepSource": kept = core.plain(s); return snapshotHash(kept);
+		case "beginRestore": return beginRestore(s, now, { recoveryId: l.recoveryId, expectedDataIncarnation: l.expectedDataIncarnation, expectedPrimaryEpoch: l.expectedPrimaryEpoch, snapshotHash: l.snapshotHash, kind: l.kind });
+		case "restoreBatch": if (!kept) throw new core.PermissionError("no kept snapshot"); return restoreBatch(s, now, kept);
+		case "completeRestore": completeRestore(s, now, l.recoveryId); return null;
+		case "releaseRestored": return releaseRestored(s, now, l.recoveryId, l.scope ?? {});
+		case "setAuthorityTransition": if (l.transition) s.authorityTransition = l.transition; else delete s.authorityTransition; return null;
 		default: throw new TypeError(`core-driver: unknown op ${l.op}`);
 	}
 }
@@ -123,6 +133,7 @@ export function step(l: Line, dumpAll = false): Record<string, unknown> {
 		seed = String(l.seed ?? ""); block = 0; pool = Buffer.alloc(0); clock = l.now ?? 0;
 		s = core.initialState();
 		host = {};
+		kept = undefined;
 		if (l.spaceId !== undefined) s.spaceId = l.spaceId;
 		if (l.incarnation !== undefined) s.incarnation = l.incarnation;
 		if (l.primaryEpoch !== undefined) s.primaryEpoch = l.primaryEpoch;

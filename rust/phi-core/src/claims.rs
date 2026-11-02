@@ -2,8 +2,9 @@
 //! request id); its domain arguments are kept as a hash, its result until its retention ends. The functions run inside
 //! the commit that performs the operation, so effect, claim and result are one write.
 //!
-//! Claims and generations stay the JSON records the TypeScript code writes. Historical (restored) claims, invalid
-//! generations, negative claims and claims kept on the disk are not ported; `assert_ported` refuses spaces with them.
+//! Claims and generations stay the JSON records the TypeScript code writes. Historical (restored) claims and invalid
+//! generations, which a restore leaves (`restore.rs`), answer a poll and refuse a replay; negative claims (`notCommitted`)
+//! are not ported, and `assert_ported` refuses spaces with them.
 use phi_json::{num_of, text as str_of};
 use crate::space::{bytes, error, js_cmp, Result, Space};
 use crate::state::RpcState;
@@ -69,7 +70,7 @@ impl Space {
 	}
 	/// `claimBytes`: claims and generations by their running tally, with the reserved result bytes.
 	pub(crate) fn claim_bytes(&self) -> f64 {
-		let history = 0.0; // restored claims and invalid generations: not ported
+		let history = self.restored_bytes() + self.state.rest.get("invalidGenerations").filter(|g| !g.is_null()).map_or(0.0, bytes);
 		match &self.state.rpc {
 			None => history,
 			Some(r) => match r.bytes {
@@ -149,6 +150,9 @@ impl Space {
 		let key = self.key_of(&r);
 		let hash = digest_json(&obj! { "method" => method.clone(), "args" => args.clone() }).map_err(|_| type_error("canonical JSON: non-finite number"))?;
 		let keep = self.limits().claim_result_ms;
+		if self.restored_claim(&key).is_some() {
+			return Err(error("IncarnationChanged", "request belongs to historical restored data; replay is forbidden"));
+		}
 		if let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)) {
 			let c = &c;
 			if c.get("method") != Some(method) || str_of(c, "argHash") != Some(hash.as_str()) {
@@ -195,6 +199,9 @@ impl Space {
 		check_principal(r.principal)?;
 		let expired = |m: String| error("RequestExpired", m);
 		let Some(st) = &self.state.rpc else { return Err(expired("generation is unknown".into())) };
+		if r.generation.and_then(Json::as_str).is_some_and(|g| self.invalid_generation(g)) {
+			return Err(error("IncarnationChanged", "generation belongs to restored data"));
+		}
 		let gen_text = r.generation.map_or_else(|| "undefined".into(), crate::space::js_string);
 		let Some(g) = r.generation.and_then(Json::as_str).and_then(|id| st.generations.get(id)) else {
 			return Err(expired(format!("generation {gen_text} is unknown or expired")));
@@ -301,7 +308,8 @@ impl Space {
 		self.assert_ported()?;
 		let r = RequestRef::of(request);
 		let key = self.key_of(&r);
-		let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)) else {
+		let historical = self.restored_claim(&key).cloned();
+		let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)).or_else(|| historical.clone()) else {
 			return Err(error("RequestExpired", format!("request {} is unknown", r.request_id())));
 		};
 		let c = &c;
@@ -309,10 +317,19 @@ impl Space {
 		let keep = self.limits().claim_result_ms;
 		let expired = c.get("resultExpired").is_some() || (!pending && num_of(c, "decidedAt").is_some_and(|d| d + keep <= now));
 		let mut o = Object::new();
-		for k in ["state", "deadline", "method", "orphanedAfterRestore", "error"] {
+		for k in ["state", "deadline", "method", "orphanedAfterRestore"] {
 			if let Some(v) = c.get(k) {
 				o.insert(k, v.clone());
 			}
+		}
+		if historical.is_some() {
+			o.insert("restoredHistory", Json::Bool(true));
+			if pending {
+				o.insert("unknownOutcome", Json::Bool(true));
+			}
+		}
+		if let Some(v) = c.get("error") {
+			o.insert("error", v.clone());
 		}
 		if expired {
 			o.insert("resultExpired", Json::Bool(true));
@@ -366,7 +383,7 @@ impl Space {
 			return Err(type_error("invalid admission resolution binding"));
 		}
 		let key = self.key_of(&r);
-		if let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)) {
+		if let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)).or_else(|| self.restored_claim(&key).cloned()) {
 			if c.get("method") != Some(method) || c.get("argHash") != Some(hash) {
 				return Err(error("RequestConflict", "resolution changed original method/arguments"));
 			}
@@ -377,7 +394,7 @@ impl Space {
 			return Err(error("IncarnationChanged", "missing request cannot be resolved across epochs or legacy generations"));
 		}
 		let of = |v: Option<&str>| v.map_or(Json::Null, Json::from);
-		if self.member_state() == Some("recoveryBlocked") {
+		if self.interrupted_history() {
 			return Err(error("IncarnationChanged", "missing request requires uninterrupted current history"));
 		}
 		Ok(obj! {

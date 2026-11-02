@@ -6,6 +6,7 @@ pub mod driver;
 pub mod mailbox;
 pub mod member;
 pub mod policy;
+pub mod restore;
 pub mod routing;
 pub mod run_gates;
 pub mod snapshot;
