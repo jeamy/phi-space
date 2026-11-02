@@ -1007,6 +1007,7 @@ With this, the R6b acceptances of R-D3 have run in TypeScript: primary/sync with
 - **Not yet:**
   - Rust emits no `partClear`, so a TypeScript-built and a Rust-built entry of the same commit can differ while materializing to the same rows; the cross test compares rows, not ops.
   - The service does not yet call a resolver when the candidate is named (`onSealed`), and nothing serves a primary/sync Space. Both are step 2.
+  - Nothing yet holds `phi-wire` sending the sealed text for a held reply over a socket. Its first end-to-end check is `run.ts replica` with a TypeScript client on a Rust primary whose standby is cut off.
 
 **R6b, acceptance in TypeScript in the local federation (R-D3).** Before any port, each with kills and cut-offs: primary/sync with the primary killed, promotion with the container fencing adapter, `degradeToSingle` and `setStandby`, a control host change, a control and a data restore, entry replication with a Member cut off. Each scenario holds what clients were answered and what the stores contain afterwards.
 
