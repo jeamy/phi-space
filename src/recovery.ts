@@ -13,6 +13,11 @@ export type AuthorityRecord = { authorityId: string; hostId: string; supervisorK
 const signed = (t: AuthorityTransition) => Buffer.from("phi-spaces/recovery-authority/v1\n" + canonicalJson(t as unknown as Json));
 export class RecoveryBlocked extends Error {}
 /** This service belongs on the independent recovery-admin system. All admins use the same CAS register. */
+function lineageOf(a: { lineage?: unknown }): Record<string, AuthorityTransition> {
+	if (a.lineage === undefined) return {};
+	if (!a.lineage || typeof a.lineage !== "object" || Array.isArray(a.lineage)) throw new RecoveryBlocked("authority record carries an invalid lineage");
+	return a.lineage as Record<string, AuthorityTransition>;
+}
 export class RecoveryCoordinator {
 	private register: RecoveryRegister; private signer: Signer;
 	constructor(register: RecoveryRegister, signer: Signer) { this.register = register; this.signer = signer; }
@@ -20,7 +25,9 @@ export class RecoveryCoordinator {
 		const key = `authority:${o.controlSpaceId}`;
 		const current = await this.register.get<AuthorityRecord & Record<string, Json>>(key);
 		if (!current) throw new RecoveryBlocked("authority register has not been provisioned");
-		const known = current.value.lineage[o.expectedAuthorityId];
+		// An authority that never had a successor may carry no lineage yet; anything but an object is refused by name.
+		const lineage = lineageOf(current.value);
+		const known = lineage[o.expectedAuthorityId];
 		let transition: AuthorityTransition;
 		if (known) {
 			if (Object.keys(o).some(k => (known as any)[k] !== (o as any)[k])) throw new RegisterConflict("another successor decision already exists for this authority");
@@ -30,7 +37,7 @@ export class RecoveryCoordinator {
 			const proof = await verifyFence(current.value.hostId);
 			if (!proof.restartLocked || proof.hostId !== current.value.hostId) throw new RecoveryBlocked("independently verified fencing with restart lock is required");
 			transition = { ...o, newAuthorityId: `a-${randomUUID()}` };
-			await this.register.compareAndSet(key, current.version, { authorityId: transition.newAuthorityId, hostId: transition.targetHostId, supervisorKey: transition.supervisorKey, state: "transitioning", lineage: { ...current.value.lineage, [o.expectedAuthorityId]: transition } } as unknown as AuthorityRecord & Record<string, Json>);
+			await this.register.compareAndSet(key, current.version, { authorityId: transition.newAuthorityId, hostId: transition.targetHostId, supervisorKey: transition.supervisorKey, state: "transitioning", lineage: { ...lineage, [o.expectedAuthorityId]: transition } } as unknown as AuthorityRecord & Record<string, Json>);
 		}
 		return { transition, algorithm: this.signer.algorithm, signature: Buffer.from(await this.signer.sign(signed(transition))).toString("base64") };
 	}
@@ -49,7 +56,7 @@ export async function verifyAuthorityTransition(external: RecoveryRegister, proo
 	if (!t || ![t.recoveryId,t.expectedAuthorityId,t.newAuthorityId,t.controlSpaceId,t.targetHostId,t.supervisorKey].every(v => typeof v === "string" && v.length > 0 && v.length <= 1024) || t.expectedAuthorityId === t.newAuthorityId) throw new RecoveryBlocked("invalid authority transition identity");
 	if (proof.algorithm !== pinned.algorithm || !verifyDetached(pinned.algorithm, pinned.publicKey, signed(t), proof.signature)) throw new RecoveryBlocked("invalid recovery signature");
 	const authority = await external.get<AuthorityRecord & Record<string, Json>>(`authority:${t.controlSpaceId}`);
-	if (!authority || canonicalJson(authority.value.lineage[t.expectedAuthorityId] as unknown as Json) !== canonicalJson(t as unknown as Json)) throw new RecoveryBlocked("transition is not the unique external successor decision");
+	if (!authority || canonicalJson(lineageOf(authority.value)[t.expectedAuthorityId] as unknown as Json) !== canonicalJson(t as unknown as Json)) throw new RecoveryBlocked("transition is not the unique external successor decision");
 	if (authority.value.authorityId !== t.newAuthorityId) throw new RecoveryBlocked("transition is no longer the current external successor");
 	return t;
 }

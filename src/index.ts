@@ -335,7 +335,7 @@ export { startConfiguredRecovery, type PrivateRecoveryConfig } from "./configure
 export { MemberTransitionInstaller, type MemberAuthorityAck, type MemberTransitionOptions } from "./member-transition.ts";
 
 export { TlsRecoveryRegister, serveTlsRegister, type RegisterTlsClient, type RegisterTlsIdentity } from "./tls-register.ts";
-export { ControlRecoveryController, ControlRecoveryJobs, controlRecoveryHandler, type ControlRestoreRequest, type ControlRestoreJob, type ControlRecoveryOptions, type ReauthorizeKey } from "./control-recovery.ts";
+export { ControlRecoveryController, ControlRecoveryJobs, controlRecoveryHandler, controlBackup, type ControlBackup, type ControlRestoreRequest, type ControlRestoreJob, type ControlRecoveryOptions, type ReauthorizeKey } from "./control-recovery.ts";
 export { startRecoveryOnly, startMemberRecoveryOnly, type MemberRecoveryOnlyConfig, type RecoveryOnlyConfig } from "./recovery-only.ts";
 
 export { RouterController, RouterBlocked, RouterConflict, RouterBudgetExceeded, DEFAULT_ROUTER_LIMITS } from "./router.ts";

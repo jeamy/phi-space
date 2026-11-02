@@ -12,6 +12,8 @@ import { beginRestore, restoreBatch, completeRestore, snapshotHash } from "./res
 import { canonicalJson, digestJson } from "./canonical.ts";
 import { keyFingerprint } from "./enroll.ts";
 import * as core from "./core.ts";
+import { FederationRouting } from "./federation-policy.ts";
+import type { FederationMember } from "./routing-semantics.ts";
 export type ControlRestoreRequest = { recoveryId:string; controlSpaceId:string; snapshotRef:string; expectedAuthorityId:string; expectedDataIncarnation:string; expectedPrimaryEpoch:number; targetHostId:string; confirmedMembers:string[] };
 export type ControlRestoreJob = { request:ControlRestoreRequest; argsHash:string; snapshotHash:string; proof:SignedAuthorityTransition; sourceHostId:string; state:"importing"|"members"|"waiting"|"completed" };
 export const ControlRecoveryJobs=defineDoc<{jobs:Record<string,ControlRestoreJob>}>({kind:"phi-spaces.control-recovery-jobs",version:1,scope:"session",initial:()=>({jobs:{}})});
@@ -47,7 +49,7 @@ export class ControlRecoveryController {
   if(job.state==="importing"){
    const source=await o.loadSnapshot(r.snapshotRef);if(snapshotHash(source)!==job.snapshotHash)throw new RecoveryBlocked("control snapshot changed");
    await o.host.commit(async tx=>{const s=await spaceDoc(tx,r.controlSpaceId,this.now());if(!s.restore||s.restore.recoveryId!==id){const restoration=beginRestore(s,this.now(),{recoveryId:id,expectedDataIncarnation:r.expectedDataIncarnation,expectedPrimaryEpoch:r.expectedPrimaryEpoch,snapshotHash:job.snapshotHash,kind:"control"});(await tx.doc(Registry)).spaces[r.controlSpaceId]!.incarnation=restoration.incarnation;}
-    if(s.restore!.stage!=="waiting")restoreBatch(s,this.now(),source);if(s.restore!.stage==="waiting"){s.authorityCounters={routerEpoch:1,policyVersion:1};(await tx.doc(ControlRecoveryJobs)).jobs[id]!.state="members";}},o.ctx);return this.job(id);
+    if(s.restore!.stage!=="waiting")restoreBatch(s,this.now(),source);if(s.restore!.stage==="waiting"){s.authorityCounters={routerEpoch:1,policyVersion:1};const routing=await tx.doc(FederationRouting,r.controlSpaceId,null);routing.policy=null;routing.members=restoredMembers(source,t.newAuthorityId,r.confirmedMembers);delete routing.noticePolicyVersions;(await tx.doc(ControlRecoveryJobs)).jobs[id]!.state="members";}},o.ctx);return this.job(id);
   }
   const control=(await snapshotSpace(o.host,r.controlSpaceId,o.ctx))!;
   // The target's boot tuple follows the freshly installed snapshot, while admission stays quarantined.
@@ -72,5 +74,25 @@ export class ControlRecoveryController {
   const keyId=keyFingerprint(key.publicKey),record={...key,keyId,principal:`enrolled:${key.peerId}`,state:"active"};await this.o.host.commit(async tx=>{const s=await spaceDoc(tx,job.request.controlSpaceId,this.now()),known=core.list(s,this.now(),{type:"PeerKey",fields:{peerId:key.peerId,keyId}})[0];if(known){if(known.fields.state==="active"&&canonicalJson(known.fields)===canonicalJson(record as any))return;throw new RegisterConflict("old or conflicting key cannot be revived through recovery");}core.write(s,this.now(),{type:"PeerKey",fields:record},null,core.FOREVER);},this.o.ctx);return{keyId,peerId:key.peerId};
  }
  async status(id:string){return this.job(id);}
+}
+/** The control Space's backup: its snapshot and the routing table's Members, which live beside the Space in the same store. */
+export type ControlBackup=core.SpaceState&{routing?:{members:Record<string,FederationMember>}};
+export async function controlBackup(host:Pick<StoreHost,"snapshot">,controlSpaceId:string,ctx:Context):Promise<ControlBackup>{
+ const space=await snapshotSpace(host,controlSpaceId,ctx);if(!space)throw new RecoveryBlocked("no control Space to back up");
+ const members=core.plain((await host.snapshot(FederationRouting,controlSpaceId,ctx))?.members??{});
+ // capacity and capabilities are status, refreshed by the heartbeat; they are not restored
+ for(const m of Object.values(members)){delete m.capacity;delete m.capabilities;}
+ return {...core.plain(space),routing:{members}};
+}
+/** The backup's Members under the new authority: confirmed hosts installed it at epoch 1, the others wait as recoveryBlocked. */
+function restoredMembers(source:ControlBackup,authorityId:string,confirmed:string[]):Record<string,FederationMember>{
+ const members=source.routing?.members??{},text=(v:unknown)=>typeof v==="string"&&v.length>0&&v.length<=256,out:Record<string,FederationMember>={};
+ if(!members||typeof members!=="object"||Array.isArray(members)||Object.keys(members).length>1024)throw new RecoveryBlocked("invalid routing table in the control backup");
+ for(const [id,m] of Object.entries(members)){
+  if(!m||m.id!==id||!text(id)||!m.target||![m.target.hostId,m.target.spaceId,m.target.dataIncarnation].every(text))throw new RecoveryBlocked("invalid routing table in the control backup");
+  const member=core.plain(m);delete member.capacity;delete member.capabilities;
+  out[id]=confirmed.includes(m.target.hostId)?{...member,target:{...member.target,authorityId,primaryEpoch:1}}:{...member,state:"recoveryBlocked"};
+ }
+ return out;
 }
 export function controlRecoveryHandler(controller:ControlRecoveryController,member:MemberTransitionInstaller):import("./recovery-service.ts").RecoveryHandler{return async(call,role)=>{if(role!=="operator")throw new RecoveryBlocked("control authority recovery requires the pinned operator");const a=call.args as any;if(!a||typeof a!=="object"||Array.isArray(a))throw new RecoveryBlocked("control recovery arguments must be an object");if(call.method==="restoreControlSpace")return await controller.submit(a) as any;if(call.method==="advanceControlRestore")return await controller.advance(a.recoveryId) as any;if(call.method==="controlRestoreStatus")return await controller.status(a.recoveryId) as any;if(call.method==="authorizeRecoveryKey")return await controller.authorizeKey(a.recoveryId,a.key) as any;if(call.method==="installAuthority")return await member.advance(a.proof) as any;throw new RecoveryBlocked("unsupported control recovery method");};}

@@ -1,17 +1,16 @@
 // `npm run testbed:federation -- control-restore`: the control Space restored from its backup onto another host under a new authority, while the
 // control host is lost. The old control host is fenced; the target and the Member are stopped and restart-locked by the fencing service and run their
-// recovery-only services, quiesced by what the ssh fence status says. The target imports the backup, the Member installs the new authority, the first
-// admin key is authorized, and after the old grants have expired both come back on it. A client is answered under it; a grant of the old one is refused.
+// recovery-only services, quiesced by what the ssh fence status says. The target imports the backup (`controlBackup`: the Space and its routing
+// Members), the Member installs the new authority, the first admin key is authorized, and after the old grants have expired both come back on it. A client is answered under it; a grant of the old one is refused.
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
-import { SqliteRecoveryRegister, createSpace, listSpaces, provisionFileSigner, spaceDoc } from "../../../src/index.ts";
+import { SqliteRecoveryRegister, controlBackup, createSpace, listSpaces, provisionFileSigner, spaceDoc } from "../../../src/index.ts";
 import { createHash, X509Certificate } from "node:crypto";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { openSqliteHost } from "../../../src/store/sqlite.ts";
-import { FederationRouting } from "../../../src/federation-policy.ts";
 import { provision } from "./provision.ts";
 import { CONTROL_B, FENCE_SSH, IP, PORT, peer } from "./net.ts";
 import { certify, harness } from "./replica.ts";
@@ -39,9 +38,8 @@ async function provisionControlRestore(dir: string) {
 	await target.commit((tx) => spaceDoc(tx, undefined, now).then(() => {}), ctx);
 	const spaces = Object.fromEntries((await listSpaces(target, ctx)).map((i) => [i.spaceId, { state: "active", authorityId: "authority", dataIncarnation: i.incarnation, role: "local", transitionId: "t1" }]));
 	await target.close(ctx);
-	// a provisioned authority record carries its (empty) lineage of successor decisions
-	const external = new SqliteRecoveryRegister(join(dir, "external.sqlite")), authority = (await external.get<Record<string, never>>(`authority:${control.controlSpaceId}`))!;
-	await external.compareAndSet(`authority:${control.controlSpaceId}`, authority.version, { ...authority.value, lineage: {} } as never);
+	// the authority record stays as provision.ts writes it, without a lineage of successor decisions yet
+	const external = new SqliteRecoveryRegister(join(dir, "external.sqlite"));
 	await external.compareAndSet("boot:control-host-b", null, { hostId: "control-host-b", state: "active", spaces } as never);
 	external.close();
 	// each host knows the authority it was provisioned under, which a successor decision replaces
@@ -61,18 +59,6 @@ async function provisionControlRestore(dir: string) {
 	provisionSsh(dir);
 }
 
-/** The Member `a` in the new control host's routing table, as provision.ts writes it, under the authority the restore installed. */
-async function registerMember(dir: string) {
-	const state = JSON.parse(readFileSync(join(dir, "state.json"), "utf8")), installed = new SqliteRecoveryRegister(join(dir, "installed-control-b.sqlite"));
-	const authorityId = (await installed.get<{ authorityId: string }>(`installed-authority:${state.controlSpace}`))!.value.authorityId;
-	installed.close();
-	const member = await openSqliteHost(join(dir, "member.sqlite")), jobs = (await listSpaces(member, ctx)).find((i) => i.spaceId === state.jobs)!;
-	await member.close(ctx);
-	const host = await openSqliteHost(join(dir, "control-b.sqlite"));
-	await host.commit(async (tx) => { const d = await tx.doc(FederationRouting, state.controlSpace, null); d.members = { a: { id: "a", state: "active", target: { hostId: "data-host", spaceId: jobs.spaceId, authorityId, dataIncarnation: jobs.incarnation, primaryEpoch: 1 } } } as never; }, ctx);
-	await host.close(ctx);
-}
-
 export async function controlRestoreScenario() {
 	const { dir, compose, drive, started, docker } = harness("restore", "change-driver.ts");
 	const recovery = (service: string, name: string) => compose("run", "-d", "--no-deps", "--name", `phi-federation-recovery-${name}-1`, "-v", `${dir}/passwd:/etc/passwd:ro`, service, "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "recovery", name);
@@ -85,7 +71,7 @@ export async function controlRestoreScenario() {
 		await new Promise((resolve, reject) => { fencing!.stdout!.once("data", resolve); fencing!.once("exit", reject); });
 		started("control", "control ready"); started("member", "member ready");
 		assert.equal(drive("job", "control-host", "first").write, "answered");
-		await backup(dir, JSON.parse(readFileSync(join(dir, "state.json"), "utf8")).controlSpace, "control", "control.json");
+		await backup(dir, JSON.parse(readFileSync(join(dir, "state.json"), "utf8")).controlSpace, "control", "control.json", controlBackup);
 		drive("hold", "control-host");
 		// the control host lost and fenced; the target and the Member stopped and locked for their part of the transition
 		docker("kill", "-s", "KILL", container("control"));
@@ -107,13 +93,8 @@ export async function controlRestoreScenario() {
 		writeFileSync(join(dir, "member.config.json"), JSON.stringify({ ...member, controlHostId: "control-host-b", control: b.control, keyFile: "/fed/member-key-2.json" }), { mode: 0o600 });
 		assert.equal(drive("release", "control-host-b").release, true);
 		started("control-b", "ready");
-		// the routing table is not part of the control Space's backup: on the new host no Member is registered, and no policy can name one
-		assert.deepEqual(drive("policy", "control-host-b", "1").policy, { state: "failed", error: "default member is not registered" });
-		// a configured control host takes no addMember command, so the operator registers the Member in its store, as a provisioning does
-		docker("stop", container("control-b"));
-		await registerMember(dir);
-		docker("start", container("control-b")); started("control-b", "ready", 90_000, 2);
-		assert.deepEqual(drive("policy", "control-host-b", "1", "registered").policy, { state: "completed", error: null }, "the first admin sets the policy under the new authority");
+		// the routing table came back with the backup: the first admin sets the policy, naming the restored Member
+		assert.deepEqual(drive("policy", "control-host-b", "1").policy, { state: "completed", error: null }, "the first admin sets the policy under the new authority");
 		assert.equal(drive("release", "data-host").release, true);
 		started("member", "member ready", 90_000, 2);
 		const after = drive("job", "control-host-b", "second", "user-key-2");

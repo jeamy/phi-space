@@ -372,7 +372,13 @@ Distributed live data/control restores with confirmed member ACKs are evidenced
 - `ControlRecoveryController.submit(request)`, `advance(recoveryId)`,
   `authorizeKey(recoveryId, key)` and `status(recoveryId)`: import with new
   authority, closed old rights, first explicit admin release,
-  confirmed member ACKs and expiry of the old grant/lease deadline.
+  confirmed member ACKs and expiry of the old grant/lease deadline. The routing
+  table's Members come back from the backup: confirmed hosts under the new
+  authority at epoch 1, the others as `recoveryBlocked`; the policy stays empty
+  until the first admin sets it.
+- `controlBackup(host, controlSpaceId, ctx)`: the control Space's backup for
+  a control restore, its snapshot with the routing table's Members, which live
+  beside the Space in the same store. A backup without them restores no Member.
 - `controlRecoveryHandler(controller, member)` accepts only the pinned
   recovery operator. `startRecoveryOnly(host, ctx, configFile, assertQuiesced)`
   starts exclusively the private socket for this.

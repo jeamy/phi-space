@@ -66,11 +66,11 @@ async function provisionRestore(dir: string) {
 }
 
 /** The backup: the Space as the source's store holds it now, read from a copy while the host runs. */
-export async function backup(dir: string, spaceId: string, store = "member", file = "notes.json") {
+export async function backup(dir: string, spaceId: string, store = "member", file = "notes.json", take: (host: Awaited<ReturnType<typeof openSqliteHost>>, spaceId: string, c: typeof ctx) => Promise<unknown> = snapshotSpace) {
 	const copy = mkdtempSync(join(tmpdir(), "phi-fed-copy-"));
 	for (const f of readdirSync(dir).filter((n) => n.startsWith(`${store}.sqlite`))) copyFileSync(join(dir, f), join(copy, f));
 	const host = await openSqliteHost(join(copy, `${store}.sqlite`));
-	writeFileSync(join(dir, "snapshots", file), JSON.stringify(await snapshotSpace(host, spaceId, ctx)), { mode: 0o600 });
+	writeFileSync(join(dir, "snapshots", file), JSON.stringify(await take(host, spaceId, ctx)), { mode: 0o600 });
 	await host.close(ctx);
 	rmSync(copy, { recursive: true, force: true });
 }
