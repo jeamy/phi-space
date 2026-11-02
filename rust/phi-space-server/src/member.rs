@@ -1,5 +1,6 @@
 // `--member CONFIG.json`: a federation Member, what `startConfiguredFederation` (src/configured-runtime.ts) makes of a config of
-// mode "member". What this host does not carry yet is refused at the start, never ignored: a root, primary/sync Spaces, entry
+// mode "member", with its primary/sync Spaces (`syncSpaces`, src/sync-spaces.ts) and their quarantine start
+// (`startQuarantineReplicas`). What this host does not carry yet is refused at the start, never ignored: a root, entry
 // replication and recovery stay on TypeScript hosts (R6).
 use crate::{fail, stopping};
 use phi_host::auth::{Algorithm, Proving, Signer};
@@ -13,6 +14,9 @@ use phi_host::register::{RegisterClient, SqliteRegister};
 use phi_host::remote::{ControlClient, RemoteKeys};
 use phi_host::run_member::{tasks_preparer, Pin, RunGates};
 use phi_host::space_lifecycle::SpaceLifecycleService;
+use phi_host::sync_space::{resolver, start, Started, SyncContext, SyncSpace, SyncSpaceConfig};
+use phi_host::replica_control::RegisterLine;
+use phi_wire::{Owner, Route};
 use phi_core::space::error;
 use phi_host::tls::{private_file, TlsIdentity};
 use phi_json::{parse, Json};
@@ -22,7 +26,7 @@ use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
 use std::rc::Rc;
 
-const REFUSED: [&str; 7] = ["root", "syncSpaces", "entryReplication", "recovery", "recoveryAdmin", "registerSshTarget", "registerReadSocket"];
+const REFUSED: [&str; 6] = ["root", "entryReplication", "recovery", "recoveryAdmin", "registerSshTarget", "registerReadSocket"];
 
 pub(crate) fn field<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or_else(|| fail(format!("the config has no {k}"))) }
 
@@ -87,14 +91,16 @@ pub(crate) fn set_group_roles(o: &mut GateOptions, c: &Json) {
 	}
 }
 
-/// Serves `gate` until the host is stopped, then closes the store.
-pub(crate) fn serve_gate(runtime: &tokio::runtime::Runtime, opened: Store, options: Options, gate: Rc<Gate>, peer_id: &str, (host, port): (&str, u16), name: &str) {
+/// Serves `gate` until the host is stopped, then closes the store; `tasks` run beside it (a Member's primary/sync Spaces).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn serve_gate(runtime: &tokio::runtime::Runtime, opened: Store, options: Options, gate: Rc<Gate>, peer_id: &str, (host, port): (&str, u16), name: &str, tasks: Vec<Box<dyn FnOnce(Owner) -> phi_wire::Local<()>>>) {
 	let mut service = Service::new(opened, options);
 	service.start_background().unwrap_or_else(|e| fail(e.message));
 	service.store.drain().unwrap_or_else(|e| fail(e));
 	let mut serving = ServeOptions::new(Listen::Tcp { host: host.to_owned(), port: 0 }, peer_id);
 	serving.endpoints.clear();
 	serving.gates.push((Listen::Tcp { host: host.to_owned(), port }, gate));
+	serving.tasks = tasks;
 	let served = runtime.block_on(async {
 		let stop = stopping::stop();
 		serve(service, serving, |address: Vec<String>| println!("[phi-spaces] {name} ready on {}", address[0]), stop).await
@@ -112,9 +118,64 @@ pub(crate) fn register_client(r: &Json) -> RegisterClient {
 	RegisterClient::new(RegisterClient { identity, host: field(r, "host").into(), port: r.get("port").and_then(Json::as_f64).unwrap_or(0.0) as u16, server_name: r.get("serverName").and_then(Json::as_str).map(str::to_owned), timeout_ms: r.get("timeoutMs").and_then(Json::as_f64).unwrap_or(6000.0) as u64, batch_reads: r.get("batchReads") == Some(&Json::Bool(true)), unix_path: r.get("unixPath").and_then(Json::as_str).map(str::to_owned) }).unwrap_or_else(|e| fail(e))
 }
 
+/// The primary/sync Spaces of the config.
+fn sync_configs(c: &Json) -> Vec<SyncSpaceConfig> {
+	c.get("syncSpaces").and_then(Json::as_array).map_or(vec![], |a| a.iter().map(|s| SyncSpaceConfig::from_json(s).unwrap_or_else(|e| fail(e))).collect())
+}
+fn sync_context(c: &Json, now: &Now) -> Rc<SyncContext> {
+	let register = register_client(c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint")));
+	let key = parse(&String::from_utf8_lossy(&private_file(Path::new(field(c, "keyFile"))).unwrap_or_else(|e| fail(e)))).unwrap_or_else(|e| fail(e));
+	let bind_ip = address_of(c.get("listen").unwrap_or_else(|| fail("the config has no listen"))).0.parse().unwrap_or_else(|_| fail("the listen host is not an address"));
+	let now = Rc::clone(now);
+	Rc::new(SyncContext { host_id: field(c, "hostId").into(), authority_id: field(c, "authorityId").into(), bind_ip, key, register: RegisterLine::spawn(move || External::Tls(Box::new(register))), installed: Rc::new(SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e))), now: Rc::new(move || now()) })
+}
+
+/// The quarantine start: a host released into quarantine serves nothing; it opens only the journals and listeners of its
+/// primary/sync Spaces, so a primary can run setStandby against it, and ends once the host is active again.
+fn quarantine(c: &Json, now: &Now, configs: Vec<SyncSpaceConfig>) {
+	let runtime = stopping::runtime();
+	let cx = sync_context(c, now);
+	let boot = format!("boot:{}", field(c, "hostId"));
+	tokio::task::LocalSet::new().block_on(&runtime, async move {
+		let mut open = vec![];
+		for config in configs {
+			let alias = config.alias.clone();
+			match SyncSpace::open(config, Rc::clone(&cx), true).await {
+				Ok(sp) => open.push(sp),
+				Err(e) => eprintln!("primary/sync Space {alias} has no quarantine listener: {e}"),
+			}
+		}
+		println!(r#"{{"quarantine":true}}"#);
+		let stop = stopping::stop();
+		tokio::pin!(stop);
+		loop {
+			match cx.register.get(&boot).await {
+				Ok(r) if r.get("value").and_then(|v| v.get("state")).and_then(Json::as_str) == Some("active") => break,
+				Ok(_) => {}
+				Err(e) => eprintln!("quarantine boot check: {e}"),
+			}
+			tokio::select! {
+				_ = &mut stop => return,
+				_ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {}
+			}
+		}
+		for sp in &open { sp.close(); }
+		println!(r#"{{"leftQuarantine":true}}"#);
+	});
+}
+
 pub fn run(config: &str, store: &str) {
 	let c = config_of(config, "member", "this host runs as a member; a control host stays on TypeScript", &REFUSED);
 	let now = clock();
+	let syncs = sync_configs(&c);
+	if !syncs.is_empty() {
+		let register = register_client(c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint")));
+		let boot = format!("boot:{}", field(&c, "hostId"));
+		let read = stopping::runtime().block_on(register.get(&boot)).unwrap_or_else(|e| fail(e));
+		if read.get("value").and_then(|v| v.get("state")).and_then(Json::as_str) == Some("quarantine") {
+			return quarantine(&c, &now, syncs);
+		}
+	}
 	let (host_id, peer_id, authority_id) = (field(&c, "hostId"), field(&c, "peerId"), field(&c, "authorityId"));
 	let (control_host, control_space) = (field(&c, "controlHostId"), field(&c, "controlSpaceId"));
 	let control = c.get("control").unwrap_or_else(|| fail("the config has no control"));
@@ -131,7 +192,7 @@ pub fn run(config: &str, store: &str) {
 	let runtime = stopping::runtime();
 	let address = c.get("control").and_then(|x| x.get("address")).unwrap_or_else(|| fail("the config has no control address"));
 	let peers = tokio::task::LocalSet::new().block_on(&runtime, async {
-		guard.admit_at_start(&opened.spaces()).await?;
+		guard.admit_at_start(&opened.spaces()).await.map_err(|e| if e.starts_with("configured host is not authorized") { format!("BootBlocked: {e}") } else { e })?;
 		guard.refresh(vec![]).await;
 		guard.assert_active().map_err(|e| e.message)?;
 		directory.refresh().await?;
@@ -141,11 +202,18 @@ pub fn run(config: &str, store: &str) {
 	own_peer(own, peer_id);
 	let supervisor = control_peer.unwrap_or_else(|| fail("control peer unavailable in provisioned directory")).id;
 
-	let mut options = Options::single_peer(peer_id);
-	options.identity.clear();
-	options.host_id = Some(host_id.to_owned());
-	options.authority_id = authority_id.to_owned();
-	options.primary_epoch = 1.0;
+	let base = {
+		let (peer_id, host_id, authority_id) = (peer_id.to_owned(), host_id.to_owned(), authority_id.to_owned());
+		move |epoch: f64| {
+			let mut options = Options::single_peer(&peer_id);
+			options.identity.clear();
+			options.host_id = Some(host_id.clone());
+			options.authority_id = authority_id.clone();
+			options.primary_epoch = epoch;
+			options
+		}
+	};
+	let options = base(1.0);
 	let (signer, key_id) = key_of(&c, "keyFile");
 	let client = Rc::new(ControlClient::new((field(address, "host").to_owned(), address_of(address).1), listen_host, peer_id, control_host, signer, &key_id));
 	let keys = Rc::new(RemoteKeys::new(Rc::clone(&client), Rc::clone(&now)));
@@ -162,14 +230,23 @@ pub fn run(config: &str, store: &str) {
 	});
 	let grants = GrantVerifier { authority_id: authority_id.to_owned(), issuer_host_id: control_host.to_owned(), public_key: control_key.to_owned(), algorithm, uncertainty_ms: 2000.0 };
 	let verifier = DelegationVerifier::new(DelegationOptions { authority_id: authority_id.to_owned(), control_space_id: control_space.to_owned(), supervisor_peer_id: supervisor.clone(), supervisor: (algorithm, control_key.to_owned()), keys: Rc::clone(&keys) as _, grants, policy, rules: Rc::new(options.policy.clone()), uncertainty_ms: 2000.0 }).unwrap_or_else(|e| fail(e.message));
-	let (checked, held) = (authorize(Rc::clone(&verifier), Rc::clone(&now)), Rc::clone(&keys));
-	options.authorize = Some(Box::new(move |store, call, identity, conn| {
-		if let Some(why) = held.policy_failed.borrow().clone() {
-			return Err(error("PermissionError", why));
+	// the Space's own service and that of every primary/sync Space: the same checks, each Space's own epoch
+	let options_for = {
+		let (verifier, keys, now, guard) = (Rc::clone(&verifier), Rc::clone(&keys), Rc::clone(&now), Rc::clone(&guard));
+		move |epoch: f64| {
+			let mut options = base(epoch);
+			let (checked, held) = (authorize(Rc::clone(&verifier), Rc::clone(&now)), Rc::clone(&keys));
+			options.authorize = Some(Box::new(move |store, call, identity, conn| {
+				if let Some(why) = held.policy_failed.borrow().clone() {
+					return Err(error("PermissionError", why));
+				}
+				checked(store, call, identity, conn)
+			}));
+			options.guard = Some(Rc::clone(&guard) as _);
+			options
 		}
-		checked(store, call, identity, conn)
-	}));
-	options.guard = Some(Rc::clone(&guard) as _);
+	};
+	let options = options_for(1.0);
 
 	let mut o = GateOptions::new(directory, Rc::clone(&now));
 	set_group_roles(&mut o, &c);
@@ -205,5 +282,65 @@ pub fn run(config: &str, store: &str) {
 		o.spaces = Some(SpaceLifecycleService::new(host_id, authority_id, peer_id, key_of(&c, "keyFile").0, pin, assert_host()));
 	}
 	let gate = Gate::new(listen_host, o).unwrap_or_else(|e| fail(e));
-	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "member");
+	let mut tasks: Vec<Box<dyn FnOnce(Owner) -> phi_wire::Local<()>>> = vec![];
+	if !syncs.is_empty() {
+		let cx = sync_context(&c, &now);
+		let make: Rc<dyn Fn(Store, f64) -> Service> = Rc::new(move |store, epoch| {
+			let mut service = Service::new(store, options_for(epoch));
+			if let Err(e) = service.start_background() {
+				eprintln!("a primary/sync Space's background work: {}", e.message);
+			}
+			service
+		});
+		let guard = Rc::clone(&o_boot);
+		tasks.push(Box::new(move |owner: Owner| Box::pin(sync_spaces(owner, syncs, cx, make, guard))));
+	}
+	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "member", tasks);
+}
+
+/// Opens every primary/sync Space on its own (`openSyncSpaces`): one that cannot open stays unserved and does not take the
+/// host and its other Spaces down. A served one is routed by its names, and each is followed by its resolver.
+async fn sync_spaces(owner: Owner, configs: Vec<SyncSpaceConfig>, cx: Rc<SyncContext>, make: Rc<dyn Fn(Store, f64) -> Service>, guard: Rc<BootGuard>) {
+	let mut resolvers = vec![];
+	for config in configs {
+		let alias = config.alias.clone();
+		let sp = match SyncSpace::open(config, Rc::clone(&cx), false).await {
+			Ok(sp) => sp,
+			Err(e) => {
+				eprintln!("primary/sync Space {alias} stays unserved: {e}");
+				continue;
+			}
+		};
+		let read = Rc::clone(&sp);
+		guard.replica.borrow_mut().insert(sp.config.space_id.clone(), Box::new(move || read.config_now()));
+		match start(&sp).await {
+			Ok(Started::Served(store)) => {
+				owner.route(&sp.names(), Some(Route::Served(Box::new(make(*store, sp.primary_epoch())))));
+				resolvers.push((sp, false));
+			}
+			Ok(Started::Unresolved) => {
+				let revision = sp.sealed().map_or(0.0, |(r, _)| r);
+				owner.route(&sp.names(), Some(SyncSpace::sealed_answer(revision)));
+				resolvers.push((sp, true));
+			}
+			Ok(Started::Listening) => resolvers.push((sp, false)),
+			Err(e) => {
+				eprintln!("primary/sync Space {alias} stays unserved: {e}");
+				sp.close();
+			}
+		}
+	}
+	println!(r#"{{"ready":true}}"#);
+	let mut running = vec![];
+	for (sp, unresolved) in resolvers {
+		if sp.role() == "primary" {
+			running.push(tokio::task::spawn_local(resolver(owner.clone(), Rc::clone(&sp), Rc::clone(&make), unresolved)));
+		}
+		running.push(tokio::task::spawn_local(async move {
+			// the Space lives as long as the host serves
+			std::future::pending::<()>().await;
+			drop(sp);
+		}));
+	}
+	for r in running { let _ = r.await; }
 }

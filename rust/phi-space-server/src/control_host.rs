@@ -103,7 +103,7 @@ pub fn run(config: &str, store: &str) {
 	o.boot = Some(guard);
 	let gate = Gate::new(listen_host, o).unwrap_or_else(|e| fail(e));
 
-	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "control");
+	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "control", vec![]);
 }
 
 /// `root` of the config: what is not carried yet stops the start.

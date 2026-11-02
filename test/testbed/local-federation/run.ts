@@ -94,7 +94,13 @@ if (which === "control-restore") { await (await import("./control-restore.ts")).
 if (which === "restore") { await (await import("./restore.ts")).restoreScenario(); process.exit(process.exitCode ?? 0); }
 if (which === "change") { await (await import("./change.ts")).changeScenario(); process.exit(process.exitCode ?? 0); }
 if (which === "entry") { await (await import("./entry.ts")).entryScenario(); process.exit(process.exitCode ?? 0); }
-if (which === "replica") { await (await import("./replica.ts")).replicaScenario(); process.exit(process.exitCode ?? 0); }
+if (which === "replica") {
+	// `-- replica A-B`: the runtime of replica-a and of replica-b (ts or rust each; default ts-ts)
+	const [a, b] = (process.argv[3] ?? "ts-ts").split("-");
+	if (![a, b].every((i) => i === "ts" || i === "rust")) throw new Error("replica takes ts-ts, ts-rust, rust-ts or rust-rust");
+	Object.assign(process.env, { REPLICA_A_IMPL: a, REPLICA_B_IMPL: b });
+	await (await import("./replica.ts")).replicaScenario(); process.exit(process.exitCode ?? 0);
+}
 const runs = which === "both" ? [["ts", "ts"], ["ts", "rust"], ["rust", "ts"], ["rust", "rust"]] : [["ts", which]];
 const results = [];
 for (const [control, member] of runs) results.push(await scenario(member!, control!));

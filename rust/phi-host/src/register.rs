@@ -271,6 +271,8 @@ impl RegisterClient {
 	async fn call(&self, call: Json) -> R<Json> { timeout(Duration::from_millis(self.timeout_ms), self.exchange(call)).await.map_err(|_| failed("independent TLS register timed out"))? }
 
 	pub async fn get(&self, key: &str) -> R<Json> { self.call(obj! { "method" => "get", "key" => key }).await }
+	/// Any call of the same protocol, one JSON line each way (the fencing service speaks it too).
+	pub async fn request(&self, call: Json) -> R<Json> { self.call(call).await }
 
 	pub async fn compare_and_set(&self, key: &str, expected: Option<f64>, value: &Json) -> R<Json> {
 		self.call(obj! { "method" => "compareAndSet", "key" => key, "expectedVersion" => expected.map_or(Json::Null, Json::Number), "value" => value.clone() }).await

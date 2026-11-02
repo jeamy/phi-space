@@ -2,7 +2,7 @@
 // `run.ts control-restore` (`recovery NAME`), on the configured runtime: `run NAME` is the daemon, or its quarantine start; `tool NAME JSON` is
 // the operator's tool for one primary/sync Space, with the daemon stopped (test/testbed/federation-host.ts, mode sync).
 import { renameSync, readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { EntryReplicationController, startMemberRecoveryOnly, startRecoveryOnly, OWN_SYNC_FACTORIES, OwnSyncStore, SqliteRecoveryRegister, assertSyncPrimary, lastConfigTransition, openSyncSpace, primarySyncStorage, promotionEvidence, recoverPrimarySync, PrimarySyncJournal, TlsFencing, TlsRecoveryRegister, assertSyncStandby, canonicalJson, degradeToSingle, loadFileSigner, materializeSyncHistory, promote, setStandby, signedReplicaPeer, snapshotSpace, socketTransport, startConfiguredFederation, startQuarantineReplicas } from "../../../src/index.ts";
@@ -43,6 +43,11 @@ if (mode === "recovery") {
 		stopOn(async () => { await runtime.close(); await host.close(ctx); transport?.close(); journal.close(); external.close(); });
 		console.log(JSON.stringify({ ready: true }));
 	}
+} else if (mode === "run" && process.env[`${name!.replace("-", "_").toUpperCase()}_IMPL`] === "rust") {
+	// the Rust host (phi-space-server --member with syncSpaces): the same lines, its quarantine start included
+	const child = spawn("phi-space-server", ["--store", `/fed/${name}.sqlite`, "--member", file], { stdio: "inherit" });
+	child.on("exit", (code) => process.exit(code ?? 1));
+	for (const s of ["SIGTERM", "SIGINT"] as const) process.on(s, () => child.kill(s));
 } else if (mode === "run") {
 	const register = new TlsRecoveryRegister(cfg.registerTls), state = (await register.get<{ state: string }>(`boot:${cfg.hostId}`))?.value.state;
 	register.close();
@@ -63,6 +68,10 @@ if (mode === "recovery") {
 	const entries = (await controller.read()).map((v) => JSON.stringify({ type: v.type, fields: v.fields })).sort().map((e) => JSON.parse(e));
 	await host.close(ctx);
 	console.log(JSON.stringify({ entries }));
+	process.exit(0);
+} else if (!cfg.mainSync && process.env[`${name!.replace("-", "_").toUpperCase()}_IMPL`] === "rust" && !JSON.parse(input!).materialize) {
+	// the Rust tool (phi-space-server --replica-tool); what the stores hold is read by the TypeScript one below
+	console.log(execFileSync("phi-space-server", ["--replica-tool", file, input!], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim().split("\n").at(-1));
 	process.exit(0);
 } else {
 	// the main store (its harness is the host's store, its sibling Spaces follow) or the primary/sync Space
