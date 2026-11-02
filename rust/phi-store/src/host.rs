@@ -56,6 +56,16 @@ pub struct SpaceHost {
 
 /// A commit run but perhaps not durable yet: the next commit builds on it at once; an acknowledgement waits for
 /// `SpaceHost::durable(seq)`.
+/// A commit's rows before they are handed to the store, and what the host learns from them once they are.
+struct Plan {
+	ops: Vec<WriteOp>,
+	new_ords: Vec<(&'static str, String, i64)>,
+	gone: Vec<(&'static str, String)>,
+	max_ord: Vec<(&'static str, i64)>,
+	head: String,
+	admitted: usize,
+}
+
 pub struct Committed<T> {
 	pub value: T,
 	pub seq: u64,
@@ -154,9 +164,31 @@ impl SpaceHost {
 				for (kind, key, version, value) in self.space.doc_writes.drain(..) {
 					self.also.push(WriteOp::Doc { kind, key, version, value });
 				}
-				let changes = self.space.end_commit();
-				self.space.seal();
-				if let Err(e) = self.write(changes) {
+				// a primary/sync primary checks its journal's budget before the commit is published: a refusal leaves no trace
+				let gated = matches!(&*self.ledger.borrow(), Ledger::Sqlite(l) if l.gate().is_some());
+				let written = if gated {
+					let plan = self.plan(&self.space.pending_changes());
+					let admitted = match &plan {
+						None => Ok(0),
+						Some(p) => match &*self.ledger.borrow() {
+							Ledger::Sqlite(l) => l.admit(&p.ops),
+							Ledger::Memory(_) => Ok(0),
+						},
+					};
+					if let Err(e) = admitted {
+						self.space.rollback();
+						self.also.clear();
+						return Ok(Err(phi_core::space::error(e.name(), e.message())));
+					}
+					self.space.end_commit();
+					self.space.seal();
+					self.apply(plan.map(|p| Plan { admitted: admitted.unwrap_or(0), ..p }))
+				} else {
+					let changes = self.space.end_commit();
+					self.space.seal();
+					self.write(changes)
+				};
+				if let Err(e) = written {
 					self.fail(&e);
 					return Err(e);
 				}
@@ -184,6 +216,13 @@ impl SpaceHost {
 	pub(crate) fn set_waker(&self, waker: crate::writer::Waker) {
 		if let Ledger::Sqlite(l) = &*self.ledger.borrow() {
 			l.set_waker(waker);
+		}
+	}
+	/// A primary/sync primary's sealed candidate that poisoned the store: `(revision, hash)`.
+	pub fn sealed_candidate(&self) -> Option<(f64, String)> {
+		match &*self.ledger.borrow() {
+			Ledger::Sqlite(l) => l.gate().and_then(|g| g.sealed()),
+			Ledger::Memory(_) => None,
 		}
 	}
 	pub fn handed_count(&self) -> u64 { self.handed }
@@ -287,21 +326,30 @@ impl SpaceHost {
 
 	fn write(&mut self, c: Changes) -> Result<()> {
 		let shared = self.ledger.clone();
-		let mut guard = shared.borrow_mut();
-		let Ledger::Sqlite(ledger) = &mut *guard else {
-			let Ledger::Memory(ledger) = &mut *guard else { unreachable!() };
+		if let Ledger::Memory(ledger) = &mut *shared.borrow_mut() {
 			ledger.write_documents(std::mem::take(&mut self.also))?;
 			self.exists = true;
 			self.handed += 1;
 			self.durable = self.handed; // memory: the host holds the only copy
 			self.publish_watches();
 			return Ok(());
-		};
+		}
+		let plan = self.plan(&c);
+		self.apply(plan)
+	}
+
+	/// The rows of a commit, without changing anything yet (a primary's store may still refuse them); `None`: nothing
+	/// changed, nothing is written.
+	fn plan(&mut self, c: &Changes) -> Option<Plan> {
+		let shared = self.ledger.clone();
+		let mut guard = shared.borrow_mut();
+		let Ledger::Sqlite(ledger) = &mut *guard else { return None };
 		let kind = self.kind.clone();
 		let key = self.key.clone().unwrap_or_default();
 		let ords = ledger.ords(&kind, self.key.as_deref());
 		let mut parts: Vec<WriteOp> = vec![];
 		let state = &self.space.state;
+		let mut max_ord: Vec<(&'static str, i64)> = vec![];
 
 		// entries: what the log names, written as the final array has it
 		let touched: HashSet<&str> = c
@@ -312,21 +360,22 @@ impl SpaceHost {
 				EntryUndo::Removed(_, e) | EntryUndo::Set(_, e) => e.id.as_str(),
 			})
 			.collect();
-		let mut new_ords: Vec<(&str, String, i64)> = vec![];
-		let mut gone: Vec<(&str, String)> = vec![];
+		let mut new_ords: Vec<(&'static str, String, i64)> = vec![];
+		let mut gone: Vec<(&'static str, String)> = vec![];
 		if !touched.is_empty() {
 			let part = "entries";
-			let ord = ords.entry(part.into()).or_default();
-			let max = self.max_ord.entry(part.into()).or_insert_with(|| ord.values().copied().max().unwrap_or(-1));
+			let empty = HashMap::new();
+			let ord = ords.get(part).unwrap_or(&empty);
+			let mut max = *self.max_ord.get(part).unwrap_or(&ord.values().copied().max().unwrap_or(-1));
 			let mut present = HashSet::new();
 			for e in state.entries.iter().filter(|e| touched.contains(e.id.as_str())) {
 				present.insert(e.id.as_str());
 				let o = match ord.get(&e.id) {
 					Some(o) => *o,
 					None => {
-						*max += 1;
-						new_ords.push((part, e.id.clone(), *max));
-						*max
+						max += 1;
+						new_ords.push((part, e.id.clone(), max));
+						max
 					}
 				};
 				parts.push(WriteOp::Part { kind: kind.clone(), key: key.clone(), part: part.into(), id: e.id.clone(), ord: o, value: e.to_json().to_json_text(), at: None, grp: None, flag: None });
@@ -335,12 +384,14 @@ impl SpaceHost {
 				parts.push(WriteOp::PartDel { kind: kind.clone(), key: key.clone(), part: part.into(), id: id.to_string() });
 				gone.push((part, id.to_string()));
 			}
+			max_ord.push((part, max));
 		}
 		// the stream log: batches after the revision the commit began with are new; dropped ones go
 		if let Some(st) = &state.stream {
 			let part = "stream.log";
-			let ord = ords.entry(part.into()).or_default();
-			let max = self.max_ord.entry(part.into()).or_insert_with(|| ord.values().copied().max().unwrap_or(-1));
+			let empty = HashMap::new();
+			let ord = ords.get(part).unwrap_or(&empty);
+			let mut max = *self.max_ord.get(part).unwrap_or(&ord.values().copied().max().unwrap_or(-1));
 			for rev in &c.dropped_revs {
 				let id = id_of(&phi_json::obj! { "rev" => *rev });
 				if ord.contains_key(&id) {
@@ -354,13 +405,14 @@ impl SpaceHost {
 				let o = match ord.get(&id) {
 					Some(o) => *o,
 					None => {
-						*max += 1;
-						new_ords.push((part, id.clone(), *max));
-						*max
+						max += 1;
+						new_ords.push((part, id.clone(), max));
+						max
 					}
 				};
 				parts.push(WriteOp::Part { kind: kind.clone(), key: key.clone(), part: part.into(), id, ord: o, value: value.to_json_text(), at: None, grp: None, flag: None });
 			}
+			max_ord.push((part, max));
 		}
 		// claims and generations by key
 		if let Some(r) = &state.rpc {
@@ -382,7 +434,25 @@ impl SpaceHost {
 		}
 		let head = state.to_json_head().to_json_text();
 		if self.exists && parts.is_empty() && self.also.is_empty() && self.head_text.as_deref() == Some(head.as_str()) {
-			return Ok(()); // nothing changed: nothing is written
+			return None; // nothing changed: nothing is written
+		}
+		let mut ops = vec![WriteOp::Doc { kind, key, version: SPACE_VERSION, value: head.clone() }];
+		ops.extend(self.also.iter().cloned());
+		ops.extend(parts);
+		Some(Plan { ops, new_ords, gone, max_ord, head, admitted: 0 })
+	}
+
+	/// Hands a planned commit to the store; the orders it learnt are kept from now on.
+	fn apply(&mut self, plan: Option<Plan>) -> Result<()> {
+		self.also.clear();
+		let Some(Plan { ops, new_ords, gone, max_ord, head, admitted }) = plan else { return Ok(()) };
+		let shared = self.ledger.clone();
+		let mut guard = shared.borrow_mut();
+		let Ledger::Sqlite(ledger) = &mut *guard else { unreachable!("a plan is made for a SQLite store") };
+		let kind = self.kind.clone();
+		let ords = ledger.ords(&kind, self.key.as_deref());
+		for (part, max) in max_ord {
+			self.max_ord.insert(part.into(), max);
 		}
 		for (part, id, o) in new_ords {
 			ords.entry(part.into()).or_default().insert(id, o);
@@ -392,10 +462,7 @@ impl SpaceHost {
 				m.remove(&id);
 			}
 		}
-		let mut ops = vec![WriteOp::Doc { kind: kind.clone(), key, version: SPACE_VERSION, value: head.clone() }];
-		ops.append(&mut self.also);
-		ops.extend(parts);
-		let durable = ledger.persist(ops);
+		let durable = ledger.persist_admitted(ops, admitted);
 		self.handed += 1;
 		self.unsettled.push_back((self.handed, durable));
 		self.head_text = Some(head);

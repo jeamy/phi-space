@@ -217,6 +217,8 @@ impl Entries {
 	pub fn track(&mut self) { self.log = Some(vec![]); }
 	/// The changes since `track`, oldest first; tracking ends.
 	pub fn untrack(&mut self) -> Vec<EntryUndo> { self.log.take().unwrap_or_default() }
+	/// The changes since `track`, oldest first; tracking goes on.
+	pub fn tracked(&self) -> &[EntryUndo] { self.log.as_deref().unwrap_or_default() }
 	/// Undoes `changes` (as `untrack` handed them over).
 	pub fn undo(&mut self, changes: Vec<EntryUndo>) {
 		self.changed();

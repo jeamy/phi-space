@@ -31,7 +31,6 @@ const ACCEPT_PAUSE_MS: u64 = 100;
 const MAX_HELD_REPLIES: usize = 1024;
 /// Includes replies already handed to a blocked socket writer.
 const MAX_HELD_REPLY_BYTES: usize = 8 * 1024 * 1024;
-const INTERNAL: &str = r#"{"ok":false,"error":{"code":"Internal","message":"internal error"}}"#;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Listen {
@@ -656,13 +655,15 @@ async fn replies<W: AsyncWrite + Unpin>(hub: Rc<Hub>, link: Rc<Link>, mut write:
 		let (mut sent, mut charged) = (0, 0);
 		let upto = *durable.borrow_and_update();
 		let failed = hub.failed.get();
+		// a reply whose commit will not become durable: CommitSealed while a primary's candidate is unresolved
+		let lost = if failed { hub.service.borrow().failed_reply() } else { String::new() };
 		{
 			let mut queue = link.queue.borrow_mut();
 			while queue.front().is_some_and(|r| r.mark <= upto || failed) {
 				let r = queue.pop_front().expect("looked at");
 				sent += 1;
 				charged += HEADER + r.text.len();
-				put(&mut out, r.id, if r.mark > upto { INTERNAL } else { &r.text });
+				put(&mut out, r.id, if r.mark > upto { &lost } else { &r.text });
 				if r.counted {
 					link.inflight.set(link.inflight.get() - 1);
 				}

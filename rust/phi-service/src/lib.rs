@@ -319,6 +319,11 @@ fn fail(code: &str, message: &str, required: Option<f64>) -> String {
 }
 /// The last check of any reply, a refusal too.
 fn carried(text: String, max_frame: f64) -> String { if text.len() as f64 > max_frame { fail("ResourceExhausted", "the transport frame cannot carry this response", None) } else { text } }
+/// A primary/sync commit was sealed and not confirmed (src/service.ts `sealedReply`): the caller keeps resolving the same
+/// request, its outcome may be in the sealed candidate.
+pub fn sealed_reply(revision: f64) -> String {
+	fail("CommitSealed", &format!("a commit of this Space is sealed but not confirmed (revision {}); the outcome is pending, poll or retry the same request", phi_json::number_text(revision)), None)
+}
 fn store_failed(e: phi_store::StoreError) -> CoreError { error("StoreFailed", e.to_string()) }
 /// `rpcDomain`'s durations: absent the default, null -1.
 fn domain_duration(v: Option<&Json>, d: f64) -> Json {
@@ -485,6 +490,10 @@ impl Service {
 		let Some(mut id) = conn.identity.clone().or_else(|| conn.peer_id.as_ref().and_then(|p| self.o.identity.get(p)).cloned()) else {
 			return Ok(HandledCall::Reply(fail("Unauthenticated", "the connection has no known identity", None)));
 		};
+		// primary/sync: a commit of this store is sealed but not confirmed; every call waits for its resolution
+		if let Some((revision, _)) = self.store.sealed_candidate() {
+			return Ok(HandledCall::Reply(sealed_reply(revision)));
+		}
 		let peer = id.principal.get("peerId").and_then(Json::as_str).unwrap_or("").to_owned();
 		self.rate(&peer)?;
 		let auth = match &self.o.authorize {
@@ -1389,8 +1398,21 @@ impl Service {
 
 	// ---- errors
 
+	/// What a reply held for a commit that will not become durable answers: `CommitSealed` while a primary's sealed
+	/// candidate is unresolved, otherwise an internal error.
+	pub fn failed_reply(&self) -> String {
+		match self.store.sealed_candidate() {
+			Some((revision, _)) => sealed_reply(revision),
+			None => fail("Internal", "internal error", None),
+		}
+	}
+
 	fn error(&self, e: CoreError, response_frame: f64) -> String {
+		if let Some((revision, _)) = self.store.sealed_candidate() {
+			return sealed_reply(revision);
+		}
 		let code = match e.class {
+			"SyncJournalFull" => return fail("ResourceExhausted", &format!("primary/sync journal: {}", e.message), None),
 			"ResponseBudgetTooSmall" => {
 				if e.required.is_some_and(|r| r > response_frame - 21.0) {
 					return fail("ResourceExhausted", "the configured frame cannot hold the next whole element", None);

@@ -485,6 +485,11 @@ impl Space {
 		let stream_rev = stream::revision_of(&self.state.stream);
 		self.tracking = Some(Tracking { head, watermark, stream_rev, dropped: vec![], claims: vec![], claims_seen: Default::default(), generations: vec![], boxes_at_begin, boxes: vec![], rest: vec![] });
 	}
+	/// What the tracked commit changed so far; tracking goes on (a store may still refuse the commit and roll it back).
+	pub fn pending_changes(&self) -> Changes {
+		let t = self.tracking.as_ref().expect("a tracked commit");
+		Changes { entries: self.state.entries.tracked().to_vec(), dropped_revs: t.dropped.iter().map(|b| b.rev).collect(), stream_rev: t.stream_rev, claims: t.claims.iter().map(|(k, _)| k.clone()).collect(), generations: t.generations.iter().map(|(k, _)| k.clone()).collect() }
+	}
 	/// What the tracked commit changed; tracking ends.
 	pub fn end_commit(&mut self) -> Changes {
 		let t = self.tracking.take().expect("a tracked commit");

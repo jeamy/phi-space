@@ -7,6 +7,7 @@ pub mod host;
 pub mod ledger;
 pub mod ops;
 pub mod parts;
+pub mod primary;
 pub mod store;
 pub mod sync;
 pub mod sync_store;

@@ -39,6 +39,7 @@ async function handle(q: Line): Promise<unknown> {
 		case "transition": return journal(q.name).transition(q.id);
 		case "markApplied": journal(q.name).markApplied(q.intent, q.recovered === true); return null;
 		case "intent": return journal(q.name).intent(q.revision);
+		case "bytes": return Buffer.byteLength(JSON.stringify(q.value)); // what a primary's budget counts of its rows
 		case "state": {
 			const j = journal(q.name);
 			return { head: j.head(), applied: j.appliedRevision, config: j.config, configHash: j.configHash, recoveredCommitted: j.recoveredCommitted, open: j.openTransitionIds(), historyBytes: j.historyBytes, format: j.format ?? null };

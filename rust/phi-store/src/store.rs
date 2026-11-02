@@ -84,6 +84,8 @@ impl Store {
 	}
 
 	pub fn registry(&self) -> Option<&Json> { self.registry.as_ref() }
+	/// A primary/sync primary's sealed candidate that poisoned the store (every Space of it shares the ledger).
+	pub fn sealed_candidate(&self) -> Option<(f64, String)> { self.default.sealed_candidate() }
 	fn registry_copy(&self) -> Object { self.registry.as_ref().and_then(Json::as_object).cloned().unwrap_or_default() }
 	fn default_id(&self) -> Option<&str> { self.registry.as_ref()?.get("defaultSpaceId")?.as_str() }
 	/// `hostId` of the registry.

@@ -13,7 +13,8 @@ use std::time::Duration;
 pub type Durable = Receiver<std::result::Result<(), String>>;
 
 enum Msg {
-	Write(Vec<WriteOp>, Sender<std::result::Result<(), String>>),
+	/// A commit's rows and the bytes it was admitted with (a replicated store's budget).
+	Write(Vec<WriteOp>, usize, Sender<std::result::Result<(), String>>),
 	Compact(Sender<Compaction>),
 	Close(Sender<()>),
 }
@@ -81,7 +82,9 @@ fn pause_point() -> Option<(String, u64, String)> {
 }
 
 impl Writer {
-	pub fn open(path: &Path, o: WriterOptions) -> std::result::Result<Writer, String> {
+	pub fn open(path: &Path, o: WriterOptions) -> std::result::Result<Writer, String> { Writer::open_replicated(path, o, None) }
+	/// The writer of a primary/sync primary: every batch goes through `replication` before it is written.
+	pub fn open_replicated(path: &Path, o: WriterOptions, replication: Option<Box<dyn Replication>>) -> std::result::Result<Writer, String> {
 		let db = Connection::open(path).map_err(|e| e.to_string())?;
 		db.busy_timeout(Duration::from_secs(10)).map_err(|e| e.to_string())?;
 		let _: String = db.query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0)).map_err(|e| e.to_string())?;
@@ -99,16 +102,18 @@ impl Writer {
 		let wakes = Arc::clone(&waker);
 		let failure = Arc::new(Mutex::new(None));
 		let told = Arc::clone(&failure);
-		let thread = std::thread::Builder::new().name("phi-store-writer".into()).spawn(move || run(db, rx, fault, wakes, told)).map_err(|e| e.to_string())?;
+		let thread = std::thread::Builder::new().name("phi-store-writer".into()).spawn(move || run(db, rx, fault, wakes, told, replication)).map_err(|e| e.to_string())?;
 		Ok(Writer { tx, thread: Some(thread), waker, failure })
 	}
 	/// What failed the store: every document of it stops at this.
 	pub fn failure(&self) -> Option<String> { self.failure.lock().expect("the writer does not panic holding it").clone() }
 	pub fn set_waker(&self, waker: Waker) { *self.waker.lock().expect("the writer does not panic holding it") = Some(waker); }
 	/// Hands a commit's rows over; the receiver settles when they are durable.
-	pub fn write(&self, ops: Vec<WriteOp>) -> Durable {
+	pub fn write(&self, ops: Vec<WriteOp>) -> Durable { self.write_admitted(ops, 0) }
+	/// The same, with the bytes a replicated store admitted the commit with (`PrimaryGate::admit`).
+	pub fn write_admitted(&self, ops: Vec<WriteOp>, bytes: usize) -> Durable {
 		let (done, rx) = channel();
-		if self.tx.send(Msg::Write(ops, done.clone())).is_err() {
+		if self.tx.send(Msg::Write(ops, bytes, done.clone())).is_err() {
 			let _ = done.send(Err("the store is closed".into()));
 		}
 		rx
@@ -132,7 +137,21 @@ impl Writer {
 	}
 }
 
-fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>, waker: Arc<Mutex<Option<Waker>>>, failure: Arc<Mutex<Option<String>>>) {
+/// A primary/sync replication of every batch (src/store/sqlite.ts `LedgerReplication`), on the writer's thread: a batch is
+/// sealed in the journal and confirmed by the standby before it is written, its rows and the marker in one transaction.
+pub trait Replication: Send {
+	/// Bytes of rows one batch may carry (a journal entry's budget).
+	fn max_batch_bytes(&self) -> usize;
+	/// Seals a batch (`admitted`: the bytes its commits were admitted with) and waits for its standby; the rows to write
+	/// after the batch's (the marker). `db` is the writer's connection, to read the store's marker.
+	fn seal(&mut self, db: &Connection, rows: &[WriteOp], admitted: usize) -> std::result::Result<Vec<WriteOp>, String>;
+	/// The sealed batch is on the disk.
+	fn applied(&mut self) -> std::result::Result<(), String>;
+	/// A batch failed: the error its commits get, and the refusal of everything after it if that differs.
+	fn failed(&mut self, cause: String) -> (String, Option<String>);
+}
+
+fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>, waker: Arc<Mutex<Option<Waker>>>, failure: Arc<Mutex<Option<String>>>, mut replication: Option<Box<dyn Replication>>) {
 	let pause = pause_point();
 	let hold = |at: &str, batch: u64| {
 		if let Some((p, b, file)) = &pause {
@@ -144,17 +163,28 @@ fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>, waker: Ar
 			}
 		}
 	};
+	let limit = replication.as_ref().map_or(usize::MAX, |r| r.max_batch_bytes());
 	let mut batch = 0u64;
 	let mut failed: Option<String> = None;
+	// a commit that did not fit the batch before it (a replicated batch is cut at its journal entry's budget)
+	let mut held: Option<Msg> = None;
 	loop {
-		let Ok(first) = rx.recv() else { return };
-		// the batch: this commit and whatever else is waiting, up to a compaction or the close
+		let Some(first) = held.take().or_else(|| rx.recv().ok()) else { return };
+		// the batch: this commit and whatever else is waiting, up to a compaction, the close or the budget
 		let mut commits = vec![];
+		let mut admitted = 0usize;
 		let mut other = None;
 		let mut m = Some(first);
 		while let Some(msg) = m {
 			match msg {
-				Msg::Write(ops, done) => commits.push((ops, done)),
+				Msg::Write(ops, bytes, done) => {
+					if !commits.is_empty() && admitted + bytes > limit {
+						held = Some(Msg::Write(ops, bytes, done));
+						break;
+					}
+					admitted += bytes;
+					commits.push((ops, done));
+				}
 				stop => {
 					other = Some(stop);
 					break;
@@ -171,41 +201,61 @@ fn run(db: Connection, rx: Receiver<Msg>, fault: Option<(u64, Fault)>, waker: Ar
 			if let Some(Fault::Slow(d)) = fault {
 				std::thread::sleep(d);
 			}
-			let result = match (&failed, fault) {
-				(Some(e), _) => Err(e.clone()),
-				(None, Some(Fault::FailBeforeCommit)) => {
-					failed = Some("an injected fault before the commit".into());
-					Err("an injected fault before the commit".into())
-				}
-				(None, _) => {
-					let r = (|| -> rusqlite::Result<()> {
-						db.execute_batch("BEGIN IMMEDIATE")?;
-						for (ops, _) in &commits { apply_rows(&db, ops)?; }
-						db.prepare_cached(SEQ)?.execute([])?;
-						hold("before-commit", batch);
-						db.execute_batch("COMMIT")?;
-						hold("after-commit", batch);
-						Ok(())
-					})();
-					let r = r.map_err(|e| {
-						let _ = db.execute_batch("ROLLBACK");
-						let m = e.to_string();
-						failed = Some(m.clone()); // a failed write: everything after it fails too (reopen the store)
-						m
-					});
-					match (r, fault) {
-						(Ok(()), Some(Fault::LoseAnswer)) => {
-							failed = Some("the answer was lost (an injected fault)".into());
-							Err("the answer was lost (an injected fault)".into())
+			let (rows, dones): (Vec<Vec<WriteOp>>, Vec<_>) = commits.into_iter().unzip();
+			let rows: Vec<WriteOp> = rows.into_iter().flatten().collect();
+			let result = match &failed {
+				Some(e) => Err(e.clone()),
+				None => {
+					// a failure after sealing poisons the store: the replication names what its commits and the later ones get
+					let fail = |e: String, replication: &mut Option<Box<dyn Replication>>, failed: &mut Option<String>| {
+						let (now, later) = match replication.as_mut() {
+							Some(r) => r.failed(e),
+							None => (e, None),
+						};
+						*failed = Some(later.unwrap_or_else(|| now.clone())); // everything after it fails too (reopen the store)
+						Err(now)
+					};
+					let sealed = match replication.as_mut() {
+						Some(r) => r.seal(&db, &rows, admitted),
+						None => Ok(vec![]),
+					};
+					match sealed {
+						Err(e) => fail(e, &mut replication, &mut failed),
+						Ok(_) if fault == Some(Fault::FailBeforeCommit) => fail("an injected fault before the commit".into(), &mut replication, &mut failed),
+						Ok(mark) => {
+							let r = (|| -> rusqlite::Result<()> {
+								db.execute_batch("BEGIN IMMEDIATE")?;
+								apply_rows(&db, &rows)?;
+								apply_rows(&db, &mark)?;
+								db.prepare_cached(SEQ)?.execute([])?;
+								hold("before-commit", batch);
+								db.execute_batch("COMMIT")?;
+								hold("after-commit", batch);
+								Ok(())
+							})();
+							match r {
+								Err(e) => {
+									let _ = db.execute_batch("ROLLBACK");
+									fail(e.to_string(), &mut replication, &mut failed)
+								}
+								Ok(()) if fault == Some(Fault::LoseAnswer) => fail("the answer was lost (an injected fault)".into(), &mut replication, &mut failed),
+								// TypeScript leaves the batch's commits unanswered when this throws; here they fail with the store
+								Ok(()) => match replication.as_mut().map_or(Ok(()), |r| r.applied()) {
+									Ok(()) => Ok(()),
+									Err(e) => {
+										failed = Some(e.clone());
+										Err(e)
+									}
+								},
+							}
 						}
-						(r, _) => r,
 					}
 				}
 			};
 			if failed.is_some() {
 				failure.lock().expect("no one panics holding it").clone_from(&failed);
 			}
-			for (_, done) in commits {
+			for done in dones {
 				let _ = done.send(result.clone());
 			}
 			if let Some(wake) = waker.lock().expect("set_waker does not panic holding it").as_ref() {

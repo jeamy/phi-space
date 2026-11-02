@@ -1,6 +1,8 @@
 //! Where committed documents live (src/store/host.ts `Ledger`): a SQLite file (src/store/sqlite.ts) or memory.
 use crate::files::{open_files, Result, StoreError, StoreFiles};
 use crate::ops::WriteOp;
+use crate::primary::{primary_replication, PrimaryGate, PrimaryOptions};
+use crate::sync::{SyncError, SyncJournal};
 use crate::parts::{head_of, id_of, join_parts, part_at, PartDef, PartKind, PartRow};
 use crate::writer::{Compaction, Durable, Synchronous, Waker, Writer, WriterOptions};
 use phi_json::{parse, Json};
@@ -85,6 +87,8 @@ pub struct SqliteLedger {
 	writer: Option<Writer>,
 	/// Per document with parts: the order of each array part's records.
 	ords: HashMap<String, Ords>,
+	/// A primary/sync primary: its journal's budget, checked per commit before the commit is published.
+	gate: Option<PrimaryGate>,
 }
 
 impl SqliteLedger {
@@ -92,8 +96,19 @@ impl SqliteLedger {
 	pub fn open_with(path: &Path, o: WriterOptions) -> Result<SqliteLedger> {
 		let files = open_files(path)?;
 		let writer = Writer::open(path, o).map_err(|e| StoreError::Unavailable(format!("the store writer could not open {}: {e}", path.display())))?;
-		Ok(SqliteLedger { files, writer: Some(writer), ords: HashMap::new() })
+		Ok(SqliteLedger { files, writer: Some(writer), ords: HashMap::new(), gate: None })
 	}
+	/// The store of a primary/sync primary under `journal`: every batch is sealed and confirmed before it is written.
+	pub fn open_primary(path: &Path, o: WriterOptions, journal: SyncJournal, p: PrimaryOptions) -> Result<SqliteLedger> {
+		let files = open_files(path)?;
+		let (replication, gate) = primary_replication(journal, p);
+		let writer = Writer::open_replicated(path, o, Some(replication)).map_err(|e| StoreError::Unavailable(format!("the store writer could not open {}: {e}", path.display())))?;
+		Ok(SqliteLedger { files, writer: Some(writer), ords: HashMap::new(), gate: Some(gate) })
+	}
+	/// A primary's gate: its budget, its sealed candidate and its journal.
+	pub fn gate(&self) -> Option<&PrimaryGate> { self.gate.as_ref() }
+	/// Checks a commit's rows before it is published (a primary's journal budget): the bytes it is admitted with.
+	pub fn admit(&self, ops: &[WriteOp]) -> std::result::Result<usize, SyncError> { self.gate.as_ref().map_or(Ok(0), |g| g.admit(ops)) }
 
 	/// The orders this ledger knows of a document's array parts (from its load or its writes).
 	pub fn ords(&mut self, kind: &str, key: Option<&str>) -> &mut Ords { self.ords.entry(doc_id(kind, key)).or_default() }
@@ -204,7 +219,9 @@ impl SqliteLedger {
 	/// What failed the store, whichever document it was a commit of.
 	pub fn failure(&self) -> Option<String> { self.writer.as_ref().and_then(Writer::failure) }
 	/// Hands a commit's rows to the writer; the receiver settles when they are durable.
-	pub fn persist(&mut self, ops: Vec<WriteOp>) -> Durable { self.writer.as_ref().expect("open").write(ops) }
+	pub fn persist(&mut self, ops: Vec<WriteOp>) -> Durable { self.persist_admitted(ops, 0) }
+	/// The same, with the bytes a primary's gate admitted the commit with (`admit`).
+	pub fn persist_admitted(&mut self, ops: Vec<WriteOp>, admitted: usize) -> Durable { self.writer.as_ref().expect("open").write_admitted(ops, admitted) }
 
 	/// Writes what was handed over, closes the writer and releases the owner lock.
 	pub fn close(mut self) {
