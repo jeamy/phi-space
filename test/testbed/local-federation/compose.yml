@@ -34,6 +34,18 @@ services:
     restart: on-failure:20
     ports: ["${FED_PHONE_BIND:-127.0.0.1}:7432:7432"]
     networks: {fed: {ipv4_address: 172.30.7.5}}
+  replica-a:
+    <<: *host
+    profiles: [replica]
+    command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "run", "replica-a"]
+    restart: on-failure:20
+    networks: {fed: {ipv4_address: 172.30.7.9}}
+  replica-b:
+    <<: *host
+    profiles: [replica]
+    command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "run", "replica-b"]
+    restart: on-failure:20
+    networks: {fed: {ipv4_address: 172.30.7.10}}
   client:
     <<: *host
     command: ["sleep", "infinity"]
