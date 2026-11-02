@@ -1,8 +1,8 @@
 //! The heartbeat of a Member (src/configured-runtime.ts, src/capability-directory.ts): what this host offers, at the control host
 //! and in its own data Spaces. A directory entry adds no routing Member, and a failed heartbeat is reported and tried again.
 use crate::remote::ControlClient;
-use phi_core::space::{error, CoreError, Template};
-use phi_json::{obj, Json};
+use phi_core::space::{error, CoreError, Space, Template};
+use phi_json::{obj, Json, Object};
 use phi_service::Service;
 use phi_wire::Owner;
 use std::rc::Rc;
@@ -27,21 +27,27 @@ fn memory() -> (f64, f64) {
 	(of("MemTotal:"), of("MemAvailable:"))
 }
 
-/// `replace`: a bounded record, not one more for each heartbeat.
+/// `replace`: a bounded directory record, not one more for each heartbeat.
+pub fn replace(s: &mut Space, now: f64, kind: &str, key: &str, value: Json, fields: Json, lease: f64) -> Result<Json, CoreError> {
+	let mut wanted = Object::new();
+	wanted.insert(key, value);
+	let old = s.list(now, &Template::from_json(Some(&obj! { "type" => kind, "fields" => Json::Object(wanted) }))?, None, None, None)?;
+	let old = old.as_array().map_or(&[][..], Vec::as_slice);
+	if old.len() > MAX_RECORDS {
+		return Err(error("ResourceExhausted", "duplicate directory records"));
+	}
+	for e in old {
+		s.probe(now, &Template::from_json(Some(&obj! { "type" => kind, "id" => e.get("id").cloned().unwrap_or(Json::Null) }))?, None, true, None)?;
+	}
+	s.write(now, &obj! { "type" => kind, "fields" => fields }, None, Some(&Json::Number(lease)), None)
+}
+
 pub fn publish(service: &mut Service, space: &str, fields: &Json) -> Result<Json, CoreError> {
 	let host = fields.get("hostId").cloned().unwrap_or(Json::Null);
 	service.commit_on(Some(space), |s, now| {
-		let old = s.list(now, &Template::from_json(Some(&obj! { "type" => "Capability", "fields" => obj! { "hostId" => host } }))?, None, None, None)?;
-		let old = old.as_array().map_or(&[][..], Vec::as_slice);
-		if old.len() > MAX_RECORDS {
-			return Err(error("ResourceExhausted", "duplicate directory records"));
-		}
-		for e in old {
-			s.probe(now, &Template::from_json(Some(&obj! { "type" => "Capability", "id" => e.get("id").cloned().unwrap_or(Json::Null) }))?, None, true, None)?;
-		}
 		let mut stamped = fields.as_object().cloned().unwrap_or_default();
 		stamped.insert("at", now.into());
-		s.write(now, &obj! { "type" => "Capability", "fields" => Json::Object(stamped) }, None, Some(&Json::Number(LEASE_MS)), None)
+		replace(s, now, "Capability", "hostId", host, Json::Object(stamped), LEASE_MS)
 	})
 }
 

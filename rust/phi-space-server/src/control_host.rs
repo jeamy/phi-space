@@ -89,8 +89,8 @@ pub fn run(config: &str, store: &str) {
 	}
 	if let Some(r) = c.get("root").filter(|r| !r.is_null()) {
 		let root = root_of(&c, r, control_key, listen_host, &guard, &now, algorithm, (&routing, &o));
-		Root::check_start(&root, &mut opened).unwrap_or_else(|e| fail(e));
-		let root = Root::new(root).unwrap_or_else(|e| fail(e.message));
+		let found = Root::check_start(&root, &mut opened).unwrap_or_else(|e| fail(e));
+		let root = Root::new(root, found).unwrap_or_else(|e| fail(e.message));
 		if let Some(s) = o.control.as_mut().and_then(|c| c.supervisor.as_mut()) {
 			s.commands = Some(Rc::new(Rc::clone(&root)));
 		}
@@ -105,11 +105,8 @@ pub fn run(config: &str, store: &str) {
 /// `root` of the config: what is not carried yet stops the start.
 #[allow(clippy::too_many_arguments)]
 fn root_of(c: &Json, r: &Json, control_key: &str, listen_host: &str, guard: &Rc<BootGuard>, now: &Now, algorithm: Algorithm, (routing, o): (&Rc<RefCell<Option<Json>>>, &GateOptions)) -> RootConfig {
-	for k in ["takeover", "statusIntervalMs"] {
-		if r.get(k).is_some_and(|v| !v.is_null() && v != &Json::Bool(false)) {
-			fail(format!("root.{k} is not served by this host"));
-		}
-	}
+	let interval = r.get("statusIntervalMs").filter(|v| !v.is_null()).map_or(Some(10_000.0), Json::as_f64).filter(|v| v.fract() == 0.0 && (1000.0..=15_000.0).contains(v)).unwrap_or_else(|| fail("Root status interval must be 1000..15000 ms"));
+	let takeover = (r.get("takeover") == Some(&Json::Bool(true))).then(|| r.get("takeoverWaitMs").and_then(Json::as_f64).unwrap_or(90_000.0));
 	let members = r.get("members").and_then(Json::as_object).filter(|m| m.len() <= 32).unwrap_or_else(|| fail("incomplete native Root configuration"));
 	if field(r, "id").is_empty() || members.iter().any(|(_, m)| m.get("replicas").is_some_and(|x| !x.is_null())) {
 		fail("incomplete native Root configuration, or replicas, which are not served by this host");
@@ -134,5 +131,6 @@ fn root_of(c: &Json, r: &Json, control_key: &str, listen_host: &str, guard: &Rc<
 		guard: Rc::clone(guard), now: Rc::clone(now), routing: Rc::clone(routing),
 		admin: r.get("adminPeer").filter(|_| r.get("allowMembershipCommands") == Some(&Json::Bool(true))).map(|a| (field(a, "peerId").to_owned(), field(a, "address").to_owned())),
 		directory: Rc::clone(&o.directory), group_roles: o.group_roles.clone(), control_signer: Rc::new(key_of(c, "keyFile").0),
+		status_interval_ms: interval as u64, takeover,
 	}
 }

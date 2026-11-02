@@ -9,6 +9,7 @@ use crate::federated_space::{failure, FederatedSpace, FederationIo, LAYOUT, OPER
 use crate::federation_rpc::{Failure, FederationRpc, RootIo};
 use crate::gate::{roles_of, GroupRoles, Netbird, Now};
 use crate::grants::GrantAuthority;
+use crate::member_status::{self, Probed, StatusEnv};
 use crate::membership_control::{MembershipController, MembershipEnv};
 use crate::remote::ControlClient;
 use crate::router::{Reprepared, RouterController, RouterEnv, COMMANDS, DEFAULT_LIMITS, JOURNAL};
@@ -18,14 +19,18 @@ use phi_core::space::{error, CoreError};
 use phi_json::{digest_json, num_of, obj, text, Json};
 use phi_service::{Identity, Service};
 use phi_wire::{Local, Owner};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 
 type R<T> = Result<T, CoreError>;
 const ROUTING: &str = "phi-spaces.federation-routing";
+const REPLICA_MARKER: &str = "phi-spaces.control-replica-marker";
+const STATUS_AGENT: &str = "root-status";
+const LIVE_LEASE: &str = "previous router lease is live";
 const RENEW_BEFORE_MS: f64 = 45_000.0;
 pub const METHODS: [&str; 10] = ["rootWrite", "rootRead", "rootTake", "rootBegin", "rootFinish", "rootTakeWaiting", "rootReadWaiting", "rootResume", "rootReadAll", "rootCount"];
 /// What a refusal of the journal keeps as its code, so that a client knows to `rootResume`.
@@ -78,6 +83,10 @@ pub struct RootConfig {
 	pub directory: Rc<Netbird>,
 	pub group_roles: GroupRoles,
 	pub control_signer: Rc<Signer>,
+	/// `statusIntervalMs`.
+	pub status_interval_ms: u64,
+	/// `takeover`: may adopt the journal of an earlier router, waiting this long for its lease to end.
+	pub takeover: Option<f64>,
 }
 
 struct Inner {
@@ -88,6 +97,8 @@ struct Inner {
 	lines: RefCell<HashMap<String, Rc<ControlClient>>>,
 	/// Who stands behind the membership command that runs now.
 	acting: RefCell<Option<String>>,
+	/// The retained lease is another router's past: it does not count.
+	superseded: Cell<bool>,
 }
 #[derive(Clone)]
 struct Env(Rc<Inner>);
@@ -115,7 +126,7 @@ impl Env {
 		if let Some(t) = held.as_ref().filter(|t| t.get("lease").and_then(|l| num_of(l, "expiresAt")).is_some_and(|e| now + RENEW_BEFORE_MS < e)) {
 			return Ok(t.clone());
 		}
-		let retained = held.or_else(|| read_lease(&c.lease_file));
+		let retained = held.or_else(|| read_lease(&c.lease_file).filter(|_| !self.0.superseded.get()));
 		let renew = retained.as_ref().map(|t| {
 			let l = t.get("lease").cloned().unwrap_or(Json::Null);
 			obj! { "id" => l.get("id").cloned().unwrap_or(Json::Null), "routerEpoch" => l.get("routerEpoch").cloned().unwrap_or(Json::Null), "token" => t.clone() }
@@ -295,6 +306,38 @@ impl FederationIo for Env {
 	}
 }
 
+impl StatusEnv for Env {
+	fn authorized(&self) -> R<()> { self.authorize() }
+	fn routing(&self) -> R<Json> { RootIo::state(self) }
+	fn probe(&self, id: &str, target: &Json) -> Local<Result<Probed, String>> {
+		let (env, id, target) = (self.clone(), id.to_owned(), target.clone());
+		Box::pin(async move {
+			if env.0.c.members.get(&id).is_none_or(|e| e.target.canonical().ok() != target.canonical().ok()) {
+				return Err("status target is not provisioned".to_owned());
+			}
+			let principal = obj! { "peerId" => env.0.c.peer_id.as_str(), "agentId" => STATUS_AGENT };
+			let info = env.rpc().hello(&id, &principal).await.map_err(|e| format!("{e:?}"))?;
+			let same = [("spaceId", "spaceId"), ("hostId", "hostId"), ("incarnation", "dataIncarnation"), ("authorityId", "authorityId"), ("primaryEpoch", "primaryEpoch")];
+			if same.iter().any(|(a, b)| info.get(a) != target.get(b)) {
+				return Err("Member status target identity changed".to_owned());
+			}
+			Ok(Probed { revision: info.get("rev").cloned().unwrap_or(Json::Null), free: Json::Null, lag: Json::Null })
+		})
+	}
+	fn record(&self, id: &str, target: &Json, status: Option<&Probed>, at: f64) -> R<()> {
+		let c = &self.0.c;
+		self.with(|s| -> R<()> {
+			let routing = held_document(&c.routing, &s.store, ROUTING, Some(&c.control_space), |d| d.unwrap_or_else(empty_routing))?;
+			if let Some(next) = member_status::record_on(s, &c.control_space, routing, id, target, status, at)? {
+				s.store.drain().map_err(|e| error("Unavailable", e.to_string()))?;
+				*c.routing.borrow_mut() = Some(next);
+			}
+			Ok(())
+		})?
+	}
+	fn now(&self) -> f64 { (self.0.c.now)() }
+}
+
 impl MembershipEnv for Env {
 	fn apply(&self, member: &Json, signed: Json) -> Local<R<Json>> {
 		let line = self.line_to(member);
@@ -409,6 +452,8 @@ pub struct Root {
 	space: Mutex<Option<FederatedSpace<Env, Env>>>,
 	/// One transition at a time.
 	membership: Mutex<()>,
+	/// The journal waits to be taken over.
+	takeover: Cell<bool>,
 }
 
 /// The membership commands of the supervisor.
@@ -440,15 +485,24 @@ impl AsyncCommands for Rc<Root> {
 	}
 }
 
+/// What the start found of the lease.
+#[derive(Clone, Copy, Default)]
+pub struct Found {
+	/// The journal stands and this router takes it over.
+	pub takeover: bool,
+	/// The retained lease was overtaken by another router.
+	pub superseded: bool,
+}
+
 impl Root {
-	pub fn new(c: RootConfig) -> R<Rc<Root>> {
+	pub fn new(c: RootConfig, found: Found) -> R<Rc<Root>> {
 		validate_journal_partitions(c.partitions).map_err(|e| blocked(e.message))?;
-		Ok(Rc::new(Root { env: Env(Rc::new(Inner { c, owner: RefCell::new(None), docs: RefCell::default(), lease: RefCell::new(None), lines: RefCell::default(), acting: RefCell::new(None) })), space: Mutex::new(None), membership: Mutex::new(()) }))
+		Ok(Rc::new(Root { env: Env(Rc::new(Inner { c, owner: RefCell::new(None), docs: RefCell::default(), lease: RefCell::new(None), lines: RefCell::default(), acting: RefCell::new(None), superseded: Cell::new(found.superseded) })), space: Mutex::new(None), membership: Mutex::new(()), takeover: Cell::new(found.takeover) }))
 	}
 	pub fn peer_id(&self) -> &str { &self.env.0.c.peer_id }
 
-	/// `check_start`: what must stand before this host serves. A journal without its lease needs a router change, which is R6b.
-	pub fn check_start(c: &RootConfig, store: &mut phi_store::Store) -> Result<(), String> {
+	/// `check_start`: what must stand before this host serves. A journal without its lease needs a router change.
+	pub fn check_start(c: &RootConfig, store: &mut phi_store::Store) -> Result<Found, String> {
 		let now = (c.now)();
 		let key = |store: &mut phi_store::Store, id: &str, role: &str| peer_key(store, now, &c.peer_id, id).and_then(|k| PeerKey::from_json(&k)).is_some_and(|k| k.active && k.roles.iter().any(|r| r == role));
 		if !key(store, &c.router_key.1, "router") {
@@ -468,9 +522,36 @@ impl Root {
 			return Err("the Root stands beside its control Space".into());
 		}
 		let journal = store.stored_document(LAYOUT, Some(&c.id)).map_err(unavailable)?.is_some() || store.stored_document(JOURNAL, Some(&c.id)).map_err(unavailable)?.is_some();
-		if journal && !c.lease_file.exists() {
+		let epoch = store.reader(Some(&c.control_space)).ok().and_then(|h| num_of(h.space.state.rest.get("authorityCounters")?, "routerEpoch")).unwrap_or(0.0);
+		let retained = read_lease(&c.lease_file);
+		let overtaken = retained.as_ref().and_then(|t| num_of(t.get("lease")?, "routerEpoch")).is_some_and(|e| epoch > e);
+		if overtaken && journal && c.takeover.is_none() {
+			return Err("Root lease no longer owns current epoch".into());
+		}
+		let superseded = overtaken && c.takeover.is_some();
+		let takeover = (retained.is_none() || superseded) && journal;
+		if takeover && c.takeover.is_none() {
 			return Err("existing Root journal has lost its lease record".into());
 		}
+		Ok(Found { takeover, superseded })
+	}
+
+	/// A router change: waits, bounded, until the previous router's lease expired. `Err` ends the start.
+	pub async fn take_over(&self, owner: Owner) -> R<()> {
+		*self.env.0.owner.borrow_mut() = Some(owner);
+		if !self.takeover.get() {
+			return Ok(());
+		}
+		let c = &self.env.0.c;
+		let end = (c.now)() + c.takeover.unwrap_or(0.0);
+		loop {
+			match self.env.retain_lease() {
+				Ok(_) => break,
+				Err(e) if e.message.contains(LIVE_LEASE) && (c.now)() < end => tokio::time::sleep(Duration::from_millis(1000)).await,
+				Err(e) => return Err(blocked(e.message)),
+			}
+		}
+		self.takeover.set(false);
 		Ok(())
 	}
 
@@ -492,6 +573,53 @@ impl Root {
 
 	/// Recovers the journals.
 	pub async fn start(&self, owner: Owner) -> R<()> { self.open(owner).await.map(drop) }
+
+	/// v3 5.3.1 step 6: every active Member hears once per transition or router change what is current; again after a restart,
+	/// the Member keeps the maximum.
+	async fn epoch_notices(&self, delivered: &mut HashMap<String, String>) -> R<()> {
+		let env = &self.env;
+		let c = &env.0.c;
+		let space = c.control_space.clone();
+		let marker = env.with(|s| s.store.stored_document(REPLICA_MARKER, Some(&space)))?.map_err(|e| error("Unavailable", e.to_string()))?;
+		let transition = marker.as_ref().and_then(|m| text(m, "transitionId")).unwrap_or("").to_owned();
+		let state = RootIo::state(env)?;
+		let (epoch, _) = env.counters()?;
+		let Some(version) = state.get("policy").and_then(|p| num_of(p, "policyVersion")).filter(|_| !transition.is_empty() || epoch > 1.0) else { return Ok(()) };
+		let key = format!("{transition}#{epoch}");
+		let table = state.get("members").and_then(Json::as_object);
+		let pending: Vec<&str> = table.map_or(vec![], |t| t.iter().filter(|(id, m)| matches!(text(m, "state"), Some("active" | "draining")) && delivered.get(*id) != Some(&key)).map(|(id, _)| id).collect());
+		if pending.is_empty() {
+			return Ok(());
+		}
+		env.authorize()?;
+		let signed = env.with(|s| c.control.epoch_notice(s, version))??;
+		let principal = obj! { "peerId" => c.peer_id.as_str(), "agentId" => STATUS_AGENT };
+		for id in pending {
+			match env.rpc().epoch_notice(id, &principal, &signed).await {
+				Ok(_) => {
+					delivered.insert(id.to_owned(), key.clone());
+					let n = signed.get("notice").cloned().unwrap_or(Json::Null);
+					println!("{}", obj! { "epochNotice" => id, "routerEpoch" => n.get("routerEpoch").cloned().unwrap_or(Json::Null), "controlPrimaryEpoch" => n.get("controlPrimaryEpoch").cloned().unwrap_or(Json::Null), "policyVersion" => version }.to_json_text());
+				}
+				Err(e) => eprintln!("Root epoch notice: {id} {e:?}"),
+			}
+		}
+		Ok(())
+	}
+
+	/// The Root's heartbeat. Runs after the start; a failed pass is reported and tried again.
+	pub async fn heartbeat(&self) {
+		let mut delivered = HashMap::new();
+		loop {
+			if let Err(e) = self.epoch_notices(&mut delivered).await {
+				eprintln!("Root epoch notices: {}", e.message);
+			}
+			if let Err(e) = member_status::refresh(&self.env).await {
+				eprintln!("Root Member status: {}", e.message);
+			}
+			tokio::time::sleep(Duration::from_millis(self.env.0.c.status_interval_ms)).await;
+		}
+	}
 
 	/// One call of a proven local peer (`rootCall`).
 	pub async fn call(&self, owner: Owner, call: &Json) -> Json {

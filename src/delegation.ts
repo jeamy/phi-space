@@ -62,7 +62,7 @@ export class DelegationDenied extends core.PermissionError {}
 /** v3 5.3.1 step 5: the Member changed its replica configuration and the router has not adopted the notice yet. */
 export { ReplicaConfigPending } from "./core.ts";
 import { ReplicaConfigPending } from "./core.ts";
-const DelegationEpochs =
+export const DelegationEpochs =
     defineDocFamily<{routerEpoch : number; controlPrimaryEpoch : number; policyVersion : number},
                     null>({
         kind : "phi-spaces.delegation-epochs",

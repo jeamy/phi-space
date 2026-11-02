@@ -282,6 +282,18 @@ impl<I: RootIo> FederationRpc<I> {
 		}
 	}
 
+	/// `info`: what the Member says it is, for the status of the Root.
+	pub async fn hello(&self, id: &str, principal: &Json) -> Result<Json, Failure> {
+		let r = self.remote(id, principal, None, None).await?;
+		self.result(&r, obj! { "method" => "hello", "args" => obj! { "protocol" => 1.0 } }).await
+	}
+
+	/// `sendEpochNotice`: under a grant, without a delegation.
+	pub async fn epoch_notice(&self, id: &str, principal: &Json, signed: &Json) -> Result<Json, Failure> {
+		let r = self.remote(id, principal, None, None).await?;
+		self.result(&r, obj! { "method" => "epochNotice", "args" => obj! { "signedNotice" => signed.clone() } }).await
+	}
+
 	/// `invoke`: the step's effect under its journalled identity. `Err`: nothing is known.
 	#[allow(clippy::result_unit_err)]
 	pub async fn invoke(&self, s: Json) -> Result<Json, ()> {

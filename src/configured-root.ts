@@ -40,6 +40,8 @@ export async function createConfiguredRoot(o:{host:SpaceHost;ctx:Context;hostId:
  const signer=loadFileSigner(cfg.keyFile),hostSigner=loadFileSigner(cfg.hostKeyFile),sockets=new Map<string,ReturnType<typeof socketTransport>>();
  const controlState=()=>o.host.snapshot(NamedSpace,o.controlSpaceId,o.ctx);
  const assertRoot=async()=>{
+  // Closing fails a running probe by its connection; that must not read as a Member gone.
+  if(stopped)throw new BootBlocked('native Root is closing');
   const requests=[{peerId:o.peerId,keyId:signer.keyId},{peerId:o.peerId,keyId:hostSigner.keyId}],readControl=async()=>o.keys instanceof SpaceKeyDirectory?o.keys.inspect(requests):{state:await controlState(),keys:o.keys.findMany?await o.keys.findMany(requests):await Promise.all(requests.map(k=>o.keys.find(k.peerId,k.keyId)))};
   let b:any,view:Awaited<ReturnType<typeof readControl>>,local:any,records:Record<string,RegisterRecord|null>|undefined;
   if(o.checkControlAuthority){
@@ -73,7 +75,9 @@ export async function createConfiguredRoot(o:{host:SpaceHost;ctx:Context;hostId:
  const lease=async()=>{await assertRoot();return retainLease();};
  // The endpoint follows the current routing target: after an adopted ReplicaConfigNotice calls go to the new primary.
  const socketFor=(id:string,hostId:string)=>{const m=cfg.members[id],e=m&&endpointOf(m,hostId);if(!e)throw new BootBlocked('Member endpoint is not provisioned');const key=id+'@'+hostId;let socket=sockets.get(key);if(!socket){if(stopped)throw new BootBlocked('native Root is closing');socket=socketTransport(e.address,{localAddress:o.ownAddress});sockets.set(key,socket);}return socket;};
- const transport=(id:string)=>{if(!cfg.members[id])throw new BootBlocked('Member endpoint is not provisioned');return{request:async(text:string)=>{const st=await o.host.snapshot(FederationRouting,o.controlSpaceId,o.ctx),hostId=st?.members[id]?.target.hostId??cfg.members[id]!.target.hostId;return socketFor(id,hostId).request(text);}};};
+ // One object per Member: `orderedProof` keys on it, so that the heartbeat and a journal call on one connection do not overwrite each other's challenge.
+ const lines=new Map<string,{request:(text:string)=>Promise<string>}>();
+ const transport=(id:string)=>{if(!cfg.members[id])throw new BootBlocked('Member endpoint is not provisioned');let line=lines.get(id);if(!line){line={request:async(text:string)=>{const st=await o.host.snapshot(FederationRouting,o.controlSpaceId,o.ctx),hostId=st?.members[id]?.target.hostId??cfg.members[id]!.target.hostId;return socketFor(id,hostId).request(text);}};lines.set(id,line);}return line;};
  let timer:ReturnType<typeof setTimeout>|undefined,stopped=false,active:Promise<void>=Promise.resolve();
  try{
   // Router change: wait (bounded) until the previous router's lease expired, then take the journal over with a fresh lease.

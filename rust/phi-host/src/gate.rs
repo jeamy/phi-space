@@ -400,10 +400,15 @@ impl Front for Gate {
 				// the journals recover at the start: what a crash left open does not wait for the next call
 				let owner = owner.clone();
 				spawn_local(async move {
+					if let Err(e) = root.take_over(owner.clone()).await {
+						eprintln!("phi-spaces root: {}", e.message);
+						std::process::exit(1);
+					}
 					while let Err(e) = root.start(owner.clone()).await {
 						eprintln!("phi-spaces root: {}", e.message);
 						sleep(Duration::from_millis(1000)).await;
 					}
+					root.heartbeat().await;
 				});
 			}
 			if let Some(boot) = self.o.boot.clone() {

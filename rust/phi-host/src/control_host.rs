@@ -143,6 +143,16 @@ impl ControlHost {
 		self.signed("router-lease", lease, "lease")
 	}
 
+	/// `notice`: what is current, under the supervisor's signature; only for the policy installed now.
+	pub fn epoch_notice(&self, service: &mut Service, policy_version: f64) -> R<Json> {
+		let host = service.store.reader(Some(&self.control_space))?;
+		let rest = &host.space.state.rest;
+		let counters = rest.get("authorityCounters").filter(|c| c.get("policyVersion").and_then(Json::as_f64) == Some(policy_version) && policy_version > 0.0).ok_or_else(|| denied("no authoritative epoch state"))?;
+		let now = (self.now)();
+		let notice = obj! { "authorityId" => self.grants.authority_id.as_str(), "controlSpaceId" => self.control_space.as_str(), "routerEpoch" => counters.get("routerEpoch").cloned().unwrap_or(Json::Null), "controlPrimaryEpoch" => rest.get("primaryEpoch").and_then(Json::as_f64).unwrap_or(1.0), "policyVersion" => policy_version, "issuedAt" => now, "expiresAt" => now + LEASE_MS };
+		self.signed("epoch-notice", notice, "notice")
+	}
+
 	/// `capabilityHeartbeat`: peer and roles come from the connection, never from the report.
 	fn heartbeat(&self, service: &mut Service, call: &Json, id: &Identity, key: Option<(&str, &[String])>) -> R<Json> {
 		let Some((key_id, _)) = key.filter(|(_, roles)| roles.iter().any(|r| r == "host") && has(id, &["host"])) else { return Err(denied("capability requires a currently proven host")) };
