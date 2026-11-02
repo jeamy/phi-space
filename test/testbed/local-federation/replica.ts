@@ -19,14 +19,19 @@ const sh = (cmd: string, args: string[], env: NodeJS.ProcessEnv = {}) => execFil
 const A = "replica-a", B = "replica-b", SPACE = "sp-0d7f3a52-6c1e-4b8a-9f21-3e5a7c9b1d04", INCARNATION = "1ed6e700";
 const container = (host: string) => `phi-federation-${host}-1`;
 
-export async function provisionReplicas(dir: string, mode: "sync" | "entry") {
+/** Client certificates of the CA that `provision` made, and the fencing service's server certificate on the bridge address. */
+export function certify(dir: string, names: string[]) {
 	const openssl = (args: string[]) => execFileSync("openssl", args, { cwd: dir, stdio: "ignore" });
-	for (const name of [A, B, "fencing"]) {
+	for (const name of names) {
 		openssl(["req", "-newkey", "rsa:2048", "-nodes", "-keyout", `${name}.key`, "-out", `${name}.csr`, "-subj", `/CN=${name}`]);
 		writeFileSync(join(dir, `${name}.ext`), name === "fencing" ? `subjectAltName=IP:${GATEWAY}\nextendedKeyUsage=serverAuth\n` : "extendedKeyUsage=clientAuth\n");
 		openssl(["x509", "-req", "-in", `${name}.csr`, "-CA", "ca.crt", "-CAkey", "ca.key", "-CAcreateserial", "-out", `${name}.crt`, "-days", "2", "-extfile", `${name}.ext`]);
 		chmodSync(join(dir, `${name}.key`), 0o600); chmodSync(join(dir, `${name}.crt`), 0o600);
 	}
+}
+
+export async function provisionReplicas(dir: string, mode: "sync" | "entry") {
+	certify(dir, [A, B, "fencing"]);
 	const read = (name: string) => JSON.parse(readFileSync(join(dir, name), "utf8"));
 	const write = (name: string, v: unknown) => writeFileSync(join(dir, name), JSON.stringify(v), { mode: 0o600 });
 	const print = (name: string) => createHash("sha256").update(new X509Certificate(readFileSync(join(dir, `${name}.crt`))).raw).digest("hex");
@@ -59,13 +64,13 @@ export async function provisionReplicas(dir: string, mode: "sync" | "entry") {
 	external.close();
 }
 
-/** The containers of the `replica` profile and what drives them: the client's steps, the hosts' tool, their log lines. */
-export function harness() {
+/** The containers of a compose profile and what drives them: the client's steps, the hosts' tool, their log lines. */
+export function harness(profile = "replica", driver = "replica-driver.ts") {
 	const dir = mkdtempSync(join(tmpdir(), "phi-fed-")), env = { FED_DIR: dir, FED_UID: String(process.getuid!()), FED_GID: String(process.getgid!()), MEMBER_IMPL: "ts", CONTROL_IMPL: "ts" };
-	const compose = (...a: string[]) => sh("docker", ["compose", "-f", COMPOSE, "--profile", "replica", ...a], env);
+	const compose = (...a: string[]) => sh("docker", ["compose", "-f", COMPOSE, "--profile", profile, ...a], env);
 	const say = (name: string, v: unknown) => console.log(`  ${name} ${JSON.stringify(v)}`);
-	const drive = (...a: string[]) => { const out = JSON.parse(compose("exec", "-T", "client", "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-driver.ts", ...a).trim().split("\n").at(-1)!); say(a.slice(0, 2).join(" "), out); return out; };
-	const tool = (host: string, q: Record<string, unknown>) => { const out = JSON.parse(compose("run", "--rm", "-T", "--no-deps", host, "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "tool", host, JSON.stringify(q)).trim().split("\n").at(-1)!); say(`tool ${host} ${q.op}`, out); return out; };
+	const drive = (...a: string[]) => { const out = JSON.parse(compose("exec", "-T", "client", "node", "--experimental-strip-types", "--no-warnings", `test/testbed/local-federation/${driver}`, ...a).trim().split("\n").at(-1)!); say(a.slice(0, 2).join(" "), out); return out; };
+	const tool = (host: string, q: Record<string, unknown>, name = host) => { const out = JSON.parse(compose("run", "--rm", "-T", "--no-deps", host, "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "tool", name, JSON.stringify(q)).trim().split("\n").at(-1)!); say(`tool ${host} ${q.op}`, out); return out; };
 	const started = (host: string, text: string, ms = 90_000) => { const end = Date.now() + ms; for (;;) { const r = execFileSync("docker", ["logs", container(host)], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); if (r.split("\n").some((l) => l.includes(text))) return; if (Date.now() > end) throw new Error(`${host}: no ${text}`); execFileSync("sleep", ["0.5"]); } };
 	const docker = (...a: string[]) => sh("docker", a);
 	return { dir, env, compose, say, drive, tool, started, docker };

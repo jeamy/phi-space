@@ -46,6 +46,19 @@ services:
     command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "run", "replica-b"]
     restart: on-failure:20
     networks: {fed: {ipv4_address: 172.30.7.10}}
+  # `run.ts change`: the control host on a primary/sync main store, in place of `control` and at its address, and its standby
+  control-a:
+    <<: *host
+    profiles: [change]
+    command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "run", "control"]
+    restart: on-failure:20
+    networks: {fed: {ipv4_address: 172.30.7.4}}
+  control-b:
+    <<: *host
+    profiles: [change]
+    command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "run", "control-b"]
+    restart: on-failure:20
+    networks: {fed: {ipv4_address: 172.30.7.12}}
   client:
     <<: *host
     command: ["sleep", "infinity"]

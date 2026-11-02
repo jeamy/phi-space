@@ -1,9 +1,9 @@
-// The fencing service of `run.ts replica`: a process of this machine, outside every fenced container, behind mutual TLS. Started with FED_DIR.
+// The fencing service of `run.ts replica|change`: a process of this machine, outside every fenced container, behind mutual TLS. Started with FED_DIR.
 import { createHash, X509Certificate } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ContainerFencing, execRunner, serveFencing, type CommandRunner } from "../../../src/index.ts";
-import { GATEWAY, REPLICA, RPORT } from "./net.ts";
+import { FENCED, GATEWAY, RPORT } from "./net.ts";
 
 const dir = process.argv[2]!, unitDir = join(dir, "units");
 const container = (host: string) => `phi-federation-${host}-1`;
@@ -20,7 +20,7 @@ const fenceRunner = (unitDir: string): CommandRunner => async (command, args) =>
 };
 
 mkdirSync(unitDir);
-const pins = Object.fromEntries(Object.keys(REPLICA).map((host) => [host, { container: container(host), unit: `phi-federation-${host}.service` }]));
+const pins = Object.fromEntries(Object.entries(FENCED).map(([host, service]) => [host, { container: container(service), unit: `phi-federation-${service}.service` }]));
 const operator = createHash("sha256").update(new X509Certificate(readFileSync(join(dir, "operator.crt"))).raw).digest("hex");
 await serveFencing(new ContainerFencing({ pins, unitDir, stateFile: join(dir, "fence-state.json"), run: fenceRunner(unitDir) }), { caFile: `${dir}/ca.crt`, certFile: `${dir}/fencing.crt`, keyFile: `${dir}/fencing.key`, host: GATEWAY, port: RPORT.fencing, peers: { [operator]: { operator: true } } });
 console.log("ready");

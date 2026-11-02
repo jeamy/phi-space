@@ -16,6 +16,8 @@ if (role === "management") {
 } else {
 	const name = role === "control" ? "control" : "member";
 	const host = await openSqliteHost(`/fed/${name}.sqlite`);
-	await startConfiguredFederation(host, ctx, `/fed/${name}.config.json`);
+	const runtime = await startConfiguredFederation(host, ctx, `/fed/${name}.config.json`);
+	// a followed control host change: exit as the daemon does, and come back through the restart policy on the new endpoint
+	void runtime.controlChanged.then((c) => { console.log(JSON.stringify({ controlHostChanged: c.targetHostId })); process.exit(75); });
 	console.log(`[phi-spaces] ${name} ready`);
 }
