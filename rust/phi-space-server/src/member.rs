@@ -292,15 +292,15 @@ pub fn run(config: &str, store: &str) {
 			}
 			service
 		});
-		let guard = Rc::clone(&o_boot);
-		tasks.push(Box::new(move |owner: Owner| Box::pin(sync_spaces(owner, syncs, cx, make, guard))));
+		let (guard, client) = (Rc::clone(&o_boot), Rc::clone(&client));
+		tasks.push(Box::new(move |owner: Owner| Box::pin(sync_spaces(owner, syncs, cx, make, guard, client))));
 	}
 	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "member", tasks);
 }
 
 /// Opens every primary/sync Space on its own (`openSyncSpaces`): one that cannot open stays unserved and does not take the
 /// host and its other Spaces down. A served one is routed by its names, and each is followed by its resolver.
-async fn sync_spaces(owner: Owner, configs: Vec<SyncSpaceConfig>, cx: Rc<SyncContext>, make: Rc<dyn Fn(Store, f64) -> Service>, guard: Rc<BootGuard>) {
+async fn sync_spaces(owner: Owner, configs: Vec<SyncSpaceConfig>, cx: Rc<SyncContext>, make: Rc<dyn Fn(Store, f64) -> Service>, guard: Rc<BootGuard>, client: Rc<ControlClient>) {
 	let mut resolvers = vec![];
 	for config in configs {
 		let alias = config.alias.clone();
@@ -332,6 +332,23 @@ async fn sync_spaces(owner: Owner, configs: Vec<SyncSpaceConfig>, cx: Rc<SyncCon
 	}
 	println!(r#"{{"ready":true}}"#);
 	let mut running = vec![];
+	// v3 5.3.1 step 5: a primary keeps offering the notice of its last transition (`publishNotices`)
+	let spaces: Vec<Rc<SyncSpace>> = resolvers.iter().map(|(sp, _)| Rc::clone(sp)).collect();
+	running.push(tokio::task::spawn_local(async move {
+		loop {
+			for sp in &spaces {
+				let Some(notice) = sp.notice().await else { continue };
+				let published = async {
+					let grant = client.grant().await?;
+					client.call(&phi_json::obj! { "method" => "replicaNotice", "space" => "control", "args" => phi_json::obj! { "notice" => notice }, "frame" => phi_json::obj! { "grant" => grant } }).await
+				};
+				if let Err(e) = published.await {
+					eprintln!("Replica notice: {e}");
+				}
+			}
+			tokio::time::sleep(std::time::Duration::from_millis(60_000)).await;
+		}
+	}));
 	for (sp, unresolved) in resolvers {
 		if sp.role() == "primary" {
 			running.push(tokio::task::spawn_local(resolver(owner.clone(), Rc::clone(&sp), Rc::clone(&make), unresolved)));

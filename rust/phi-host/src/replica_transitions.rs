@@ -43,6 +43,8 @@ pub trait Fencing {
 	fn kind(&self) -> &str;
 	fn fence(&self, host_id: &str, reason: &str) -> TR<Json>;
 	fn verify(&self, proof: &Json) -> TR<bool>;
+	/// Lifts the restart lock of a host released into quarantine.
+	fn release(&self, host_id: &str) -> TR<()>;
 }
 /// `TlsFencing`: the fencing service over pinned mutual TLS, one JSON line each way.
 pub struct TlsFencing<'a> {
@@ -63,6 +65,9 @@ impl Fencing for TlsFencing<'_> {
 	fn verify(&self, proof: &Json) -> TR<bool> {
 		let r = self.rt.block_on(self.line.request(obj! { "method" => "verify", "hostId" => text(proof, "hostId").unwrap_or(""), "proof" => proof.clone() })).map_err(|e| e.to_string())?;
 		Ok(r == Json::Bool(true))
+	}
+	fn release(&self, host_id: &str) -> TR<()> {
+		self.rt.block_on(self.line.request(obj! { "method" => "release", "hostId" => host_id })).map(|_| ()).map_err(|e| e.to_string())
 	}
 }
 
@@ -104,6 +109,38 @@ pub fn revoke_space_permit(r: &dyn Boots, host_id: &str, space_id: &str, transit
 		}
 		let mut spaces = spaces_of(&b);
 		spaces.insert(space_id, with(&p, &[("state", "revoked".into())]));
+		Ok(Some(with(&b, &[("spaces", Json::Object(spaces)), ("transitionId", transition_id.into())])))
+	})
+}
+/// `releaseHostToQuarantine`: a fenced host is released only into quarantine; revoked permits stay revoked. The restart lock
+/// is lifted after the boot record changed.
+pub fn release_host_to_quarantine(r: &dyn Boots, host_id: &str, transition_id: &str, adapter: Option<&dyn Fencing>) -> TR<Json> {
+	let boot = cas_boot(r, host_id, &|b| {
+		let b = b.filter(|b| matches!(text(b, "state"), Some("fenced" | "quarantine"))).ok_or_else(|| format!("{host_id} is not fenced; release only leads into quarantine"))?;
+		Ok(Some(with(&b, &[("state", "quarantine".into()), ("transitionId", transition_id.into())])))
+	})?;
+	if let Some(a) = adapter {
+		a.release(host_id)?;
+	}
+	Ok(boot)
+}
+/// `readmitSpace`: after a fence, a Space other than the replicated one comes back with its permit unchanged but active.
+pub fn readmit_space(r: &dyn Boots, host_id: &str, space_id: &str, transition_id: &str, expected_incarnation: &str) -> TR<Json> {
+	cas_boot(r, host_id, &|b| {
+		let b = b.filter(|b| text(b, "state") == Some("active")).ok_or_else(|| format!("{host_id} is not active; re-admit Spaces only after the host left quarantine"))?;
+		let p = b.get("spaces").and_then(|s| s.get(space_id)).cloned().ok_or_else(|| format!("{host_id} has no permit for {space_id}"))?;
+		if matches!(text(&p, "role"), Some("primary" | "standby")) {
+			return refused("replicated Spaces return only through promote, degradeToSingle or setStandby");
+		}
+		let incarnation = text(&p, "dataIncarnation") == Some(expected_incarnation);
+		if text(&p, "state") == Some("active") && incarnation {
+			return Ok(None);
+		}
+		if text(&p, "state") != Some("revoked") || !incarnation {
+			return refused(format!("permit of {space_id} is not a revoked permit of incarnation {expected_incarnation}"));
+		}
+		let mut spaces = spaces_of(&b);
+		spaces.insert(space_id, with(&p, &[("state", "active".into()), ("transitionId", transition_id.into())]));
 		Ok(Some(with(&b, &[("spaces", Json::Object(spaces)), ("transitionId", transition_id.into())])))
 	})
 }

@@ -4,7 +4,8 @@
 // it sealed without one. A transition ID is bound to its transition, a repeat of a completed one changes nothing, and
 // without a verified proof nothing moves.
 use phi_host::register::SqliteRegister;
-use phi_host::replica_transitions::{degrade_to_single, promote, Common, Excluded, Fencing, TR};
+use phi_host::replica_notice::latest_notice;
+use phi_host::replica_transitions::{degrade_to_single, promote, readmit_space, release_host_to_quarantine, Common, Excluded, Fencing, TR};
 use phi_json::{obj, Json};
 use phi_store::sync::{hash, own, JournalOptions, SyncJournal};
 use phi_store::sync_store::SyncStoreFile;
@@ -38,6 +39,7 @@ impl Fencing for Fence {
 		Ok(p)
 	}
 	fn verify(&self, proof: &Json) -> TR<bool> { Ok(self.0.borrow().contains(&proof.canonical().unwrap())) }
+	fn release(&self, _: &str) -> TR<()> { Ok(()) }
 }
 
 /// Entries sealed on a's journal and accepted by b's, the last one left a candidate on a only.
@@ -93,6 +95,9 @@ fn promote_and_degrade_move_the_space_behind_verified_proofs() {
 	let b_permit = value(&register, "boot:b").get("spaces").unwrap().get(SPACE).cloned().unwrap();
 	assert_eq!((text(&b_permit, "role"), b_permit.get("primaryEpoch").and_then(Json::as_f64)), ("primary".into(), Some(2.0)));
 	assert_eq!(value(&installed, &format!("installed:b:{SPACE}")), b_permit, "the local installation follows");
+	// the notice the new primary offers its control host
+	let notice = latest_notice(o.journal, "1ed6e700").unwrap().expect("a completed transition has its notice");
+	assert_eq!(notice, obj! { "authorityId" => "authority", "spaceId" => SPACE, "recoveryId" => "promote-2", "primaryReplica" => "b", "standbyReplica" => "a", "primaryEpoch" => 2.0, "replicaConfigVersion" => 2.0, "durability" => "sync", "dataIncarnation" => "1ed6e700" });
 	// a completed transition repeated changes nothing; its ID is bound to it
 	let version = register.get("boot:b").unwrap().get("version").cloned();
 	assert_eq!(promote(&mut o, "promote-2", 1.0, 1.0, &fence, &proof).unwrap(), r);
@@ -109,4 +114,23 @@ fn promote_and_degrade_move_the_space_behind_verified_proofs() {
 	let b_permit = value(&register, "boot:b").get("spaces").unwrap().get(SPACE).cloned().unwrap();
 	assert_eq!((text(&b_permit, "durability"), b_permit.get("primaryEpoch").and_then(Json::as_f64)), ("single".into(), Some(3.0)));
 	assert_eq!(o.journal.applied_revision().unwrap(), o.journal.head_revision().unwrap(), "nothing left unresolved");
+	let notice = latest_notice(o.journal, "1ed6e700").unwrap().unwrap();
+	assert_eq!((text(&notice, "recoveryId"), notice.get("standbyReplica").cloned(), text(&notice, "durability")), ("degrade-1".into(), Some(Json::Null), "single".into()));
+
+	// the fenced old primary: released only into quarantine, and a Space of its own re-admitted once it is active again
+	assert_eq!(text(&release_host_to_quarantine(&register, "a", "release-1", Some(&fence)).unwrap(), "state"), "quarantine");
+	assert_eq!(release_host_to_quarantine(&register, "b", "release-2", None), Err("b is not fenced; release only leads into quarantine".into()));
+	let mut a = value(&register, "boot:a");
+	let local = obj! { "state" => "revoked", "authorityId" => "authority", "dataIncarnation" => "aa000001", "role" => "local", "transitionId" => "t1" };
+	let mut spaces = a.get("spaces").and_then(Json::as_object).cloned().unwrap();
+	spaces.insert("sp-local", local);
+	a.as_object_mut().unwrap().insert("state", "active".into());
+	a.as_object_mut().unwrap().insert("spaces", Json::Object(spaces));
+	let version = register.get("boot:a").unwrap().get("version").and_then(Json::as_f64);
+	register.compare_and_set("boot:a", version, &a).unwrap();
+	assert_eq!(readmit_space(&register, "a", SPACE, "readmit-0", "1ed6e700"), Err("replicated Spaces return only through promote, degradeToSingle or setStandby".into()));
+	assert_eq!(readmit_space(&register, "a", "sp-local", "readmit-0", "aa000002"), Err("permit of sp-local is not a revoked permit of incarnation aa000002".into()));
+	let back = readmit_space(&register, "a", "sp-local", "readmit-1", "aa000001").unwrap();
+	assert_eq!(text(back.get("spaces").unwrap().get("sp-local").unwrap(), "state"), "active");
+	assert_eq!(readmit_space(&register, "a", "sp-local", "readmit-1", "aa000001").unwrap(), back, "once is enough");
 }

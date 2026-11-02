@@ -13,6 +13,7 @@ pub mod grants;
 pub mod register;
 pub mod remote;
 pub mod replica_control;
+pub mod replica_notice;
 pub mod replica_transitions;
 pub mod replica_transport;
 pub mod membership;

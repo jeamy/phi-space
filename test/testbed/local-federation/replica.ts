@@ -153,6 +153,11 @@ export async function replicaScenario() {
 		assert.equal(a.snapshot, b.snapshot); assert.deepEqual(a.head, b.head); assert.deepEqual(a.entries, b.entries);
 		assert.equal(b.entries.length, 12); assert.equal(b.entries.filter((e: { label: string }) => e.label === "fork").length, 0);
 		assert.notEqual(b.atRevision, forked.head.hash, "the fork is not in the promoted history");
+		// every primary left the notice of its transitions in the control Space (5.3.1 step 5): no host reported a refusal
+		for (const host of [A, B]) {
+			const refused = execFileSync("sh", ["-c", `docker logs ${container(host)} 2>&1`], { encoding: "utf8" }).split("\n").filter((l) => l.startsWith("Replica notice:"));
+			assert.deepEqual(refused, [], `${host} could not leave its replica notice`);
+		}
 		console.log("replica scenario passed");
 	} catch (e) {
 		console.error((e as { stderr?: string }).stderr ?? e);

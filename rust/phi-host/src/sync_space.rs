@@ -270,6 +270,15 @@ impl SyncSpace {
 		Ok(store)
 	}
 
+	/// `notice`: the signed ReplicaConfigNotice of the last completed transition, on the primary only.
+	pub async fn notice(&self) -> Option<Json> {
+		if self.role() != "primary" {
+			return None;
+		}
+		let n = crate::replica_notice::latest_notice(&*journal_of(&self.journal).await, &self.config.incarnation).ok()??;
+		Some(crate::replica_notice::sign_notice(&n, &self.cx.signer()))
+	}
+
 	/// The Space's store is no longer served (its sealed candidate is resolved anew, or the host closes).
 	pub fn unserved(&self) { *self.gate.borrow_mut() = None; }
 

@@ -48,3 +48,11 @@ fn notices_changes_transitions_and_recovery_calls() {
 	let call = v.get("recoveryCall").unwrap();
 	holds("recovery call", "phi-spaces/recovery-rpc/v1\n", call.get("call").unwrap(), &text(call, "text"), &text(call, "signature"));
 }
+
+#[test]
+fn a_notice_is_signed_as_typescript_signs_it() {
+	let v = vectors();
+	let signed = v.get("replicaConfigNotice").unwrap();
+	let ours = phi_host::replica_notice::sign_notice(signed.get("notice").unwrap(), &signer());
+	assert_eq!(ours.canonical().unwrap(), signed.canonical().unwrap());
+}
