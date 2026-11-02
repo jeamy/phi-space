@@ -21,7 +21,7 @@ import { counted } from "../engine/commands/trade.ts";
 import { stem } from "../engine/context.ts";
 import { flameOf } from "../engine/fire.ts";
 import { wayTo, type WorldDef } from "../engine/world.ts";
-import { fieldsOf, type CharacterFields, type ItemFields, type ListingFields, type MsgFields, type OfferFields, type OrderFields } from "../model.ts";
+import { fieldsOf, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type MsgFields, type OfferFields, type OrderFields } from "../model.ts";
 import { deliverer } from "./settlers.ts";
 import { byPerson, humansIn, newHeard, self, type Npc, type Script } from "./scripts.ts";
 
@@ -67,9 +67,61 @@ const islandOf = (w: WorldDef, roomId: string) => w.rooms.find((r) => r.roomId =
 /** One step of the way to `room`: true when the NPC is there already. */
 export async function travel(n: Npc, l: Look, room: string): Promise<boolean> {
 	if (l.me.room === room) return true;
+	if (await byTrain(n, l, room)) return false;
 	const exit = wayTo(n.world, l.me.room, room);
 	if (exit) await n.act(`go ${exit}`);
 	return !exit;
+}
+
+/** Rooms on foot from which a figure rather takes the train. */
+const TRAIN_FROM = 2;
+
+/** Rooms on the shortest way over the exits, or Infinity. */
+function hops(w: WorldDef, from: string, to: string): number {
+	let at = from, k = 0;
+	while (at !== to) {
+		const name = wayTo(w, at, to), e = name ? w.exits.find((x) => x.room === at && x.name === name) : undefined;
+		if (!e || ++k > w.rooms.length) return Infinity;
+		at = e.destination;
+	}
+	return k;
+}
+
+/** The island railway on a long way: with a station here and one in `room`, the fare in its pack and at least TRAIN_FROM
+ *  rooms to walk, it steps beside the station and rides. True when it did something. */
+async function byTrain(n: Npc, l: Look, room: string): Promise<boolean> {
+	const d = n.world.rail, island = (r: string) => n.world.rooms.find((x) => x.roomId === r)?.island;
+	const tried = boarding.get(n);
+	if (tried && tried.room !== l.me.room) boarding.delete(n);
+	// a ride refused twice in this room (a station that fell, a full platform): it walks from here
+	if (!d || (tried?.room === l.me.room && tried.times >= 2) || island(l.me.room) !== island(room) || coinsOf(n, l).length < d.fare || hops(n.world, l.me.room, room) < TRAIN_FROM) return false;
+	const station = (r: string) => n.space.readAll({ type: "Building", fields: { plan: d.plan, room: r } }).then((xs) => xs.map((e) => fieldsOf<BuildingFields>(e))[0]);
+	const here = await station(l.me.room);
+	if (!here || !(await station(room))) return false;
+	if (await stepBeside(n, l, here)) return true;
+	boarding.set(n, { room: l.me.room, times: (boarding.get(n)?.times ?? 0) + 1 });
+	await n.act(`zug ${n.world.rooms.find((x) => x.roomId === room)?.name ?? room}`);
+	return true;
+}
+/** Where a figure last typed `zug` and how often: one that is still there did not ride. */
+const boarding = new WeakMap<Npc, { room: string; times: number }>();
+
+type Rect = { x: number; y: number; w: number; h: number };
+/** Cells from `p` to the nearest cell of `r` (0 inside it). */
+export const distTo = (p: { x: number; y: number }, r: Rect) => Math.max(Math.max(r.x - p.x, 0, p.x - (r.x + r.w - 1)), Math.max(r.y - p.y, 0, p.y - (r.y + r.h - 1)));
+
+/** In its room, walks to a free cell right beside `r` (a building, a site, a bed): false when it stands within `reach`
+ *  of it already (or finds no free cell). */
+export async function stepBeside(n: Npc, l: Look, r: Rect, reach = 1): Promise<boolean> {
+	if (distTo(l.me, r) <= reach && distTo(l.me, r) > 0) return false;
+	const ground = n.world.rooms.find((x) => x.roomId === l.me.room)?.ground ?? [];
+	const busy = new Set([...(await n.space.readAll({ type: "Character", fields: { room: l.me.room } })), ...(await n.space.readAll({ type: "Plot", fields: { room: l.me.room } }))].map((e) => `${e.fields.x},${e.fields.y}`));
+	for (let y = r.y - 1; y <= r.y + r.h; y++) for (let x = r.x - 1; x <= r.x + r.w; x++) {
+		if (distTo({ x, y }, r) !== 1 || busy.has(`${x},${y}`) || !",.:".includes(ground[y]?.[x] ?? "~")) continue;
+		await n.act(`move ${x} ${y}`);
+		return true;
+	}
+	return false;
 }
 
 /** Picks up the nearest thing of `protos` lying here (walks to it first): true when it did something. */

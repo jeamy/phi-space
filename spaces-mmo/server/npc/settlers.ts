@@ -23,7 +23,7 @@ import { setting } from "../settings.ts";
 import type { NpcDef, WorldDef } from "../engine/world.ts";
 import { fieldsOf, type BedFields, type BuildingFields, type ListingFields, type SiteFields, type ShowFields, type SiteOrderFields, type WorkRestFields } from "../model.ts";
 import { crops, flowers } from "../engine/commands/festival.ts";
-import { gather, look, nextTo, rest, social, travel, type Look } from "./economy.ts";
+import { gather, look, nextTo, rest, social, stepBeside, travel, type Look } from "./economy.ts";
 import type { Npc, Script } from "./scripts.ts";
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -62,15 +62,7 @@ export async function wanted(n: Npc): Promise<boolean> {
 /** Walks to a free cell beside `r` (a site, a building, a bed): false when it stands there already. */
 async function besideOf(n: Npc, l: Look, r: Rect & { room: string }, reach = 1): Promise<boolean> {
 	if (!(await travel(n, l, r.room))) return true;
-	if (dist(l.me, r) <= reach && dist(l.me, r) > 0) return false;
-	const ground = n.world.rooms.find((x) => x.roomId === r.room)?.ground ?? [];
-	const busy = new Set([...(await n.space.readAll({ type: "Character", fields: { room: r.room } })), ...(await n.space.readAll({ type: "Plot", fields: { room: r.room } }))].map((e) => `${e.fields.x},${e.fields.y}`));
-	for (let y = r.y - 1; y <= r.y + r.h; y++) for (let x = r.x - 1; x <= r.x + r.w; x++) {
-		if (dist({ x, y }, r) !== 1 || busy.has(`${x},${y}`) || !",.:".includes(ground[y]?.[x] ?? "~")) continue;
-		await n.act(`move ${x} ${y}`);
-		return true;
-	}
-	return false;
+	return stepBeside(n, l, r, reach);
 }
 
 const onPath = (w: WorldDef, r: Rect & { room: string }) => {

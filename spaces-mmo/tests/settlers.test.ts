@@ -79,6 +79,43 @@ test("a settler of a village joins the rooms of its home by road, through the sa
 	} finally { await srv.close(); }
 });
 
+test("a figure two rooms from home takes the island railway when stations stand at both ends and it has the fare", { timeout: 240_000 }, async () => {
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001", SPACES_MMO_NPCS: first.npcId, SPACES_MMO_SETTLERS_MIN: "1" } });
+	try {
+		const s = srv.stack.space, me = `npc-${first.npcId}`, island = (r: string) => w.rooms.find((x) => x.roomId === r)?.island;
+		// a room of its island at least two rooms away on foot (most islands are no wider)
+		const far = new Map([[first.room, 0]]);
+		for (let frontier = [first.room]; frontier.length;) frontier = frontier.flatMap((r) => w.exits.filter((e) => e.room === r && island(e.destination) === island(r) && !far.has(e.destination)).map((e) => (far.set(e.destination, far.get(r)! + 1), e.destination)));
+		const start = [...far].find(([, k]) => k >= 2)?.[0];
+		assert.ok(start, "a room two away on its island");
+		// a station on open ground with a free ring around it, in both rooms
+		const station = async (roomId: string) => {
+			const g = w.rooms.find((r) => r.roomId === roomId)!.ground;
+			for (let y = 1; y < g.length - 3; y++) for (let x = 1; x < (g[0]?.length ?? 0) - 4; x++) {
+				let ok = true;
+				for (let yy = y - 1; yy <= y + 2 && ok; yy++) for (let xx = x - 1; xx <= x + 3 && ok; xx++) ok = ",.".includes(g[yy]?.[xx] ?? "~");
+				if (!ok) continue;
+				const b: BuildingFields = { buildId: `bahnhof-${roomId}`, plan: "bahnhof", name: "Bahnhof", room: roomId, x, y, w: 3, h: 2, owner: "o", ownerName: "O", accountId: "o", beaconId: first.beacon!, points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 };
+				await s.write({ type: "Building", fields: b as never }, null, FOREVER);
+				return;
+			}
+			assert.fail(`no place for a station in ${roomId}`);
+		};
+		await station(start!);
+		await station(first.room);
+		// the settler stands in that room with a coin
+		const c = (await s.take({ type: "Character", fields: { charId: me } }, 5_000))!;
+		const spawnAt = w.rooms.find((r) => r.roomId === start)!.spawn!;
+		await s.write({ type: "Character", fields: { ...c.fields, room: start, x: spawnAt.x, y: spawnAt.y } }, null, FOREVER);
+		await spawn(s, null, w, (await resolvePrototype(s, w.currency))!, { location: me, x: -1, y: -1 });
+		const coins = () => s.count({ type: "Item", fields: { location: me, proto: w.currency } });
+		const before = await coins();
+		await srv.stack.npcProcess();
+		await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0]?.fields.room === first.room, 120_000, "home");
+		assert.equal(await coins(), before - w.rail!.fare, "it paid the fare: it rode");
+	} finally { await srv.close(); }
+});
+
 test("villagers: one comes when a settlement has five buildings, keeps the fire and leaves when the settlement goes", { timeout: 240_000 }, async () => {
 	const v = w.npcs.find((n) => n.villager === 1)!, fire = w.beacons.find((b) => b.beaconId === v.beacon)!;
 	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001", SPACES_MMO_NPCS: v.npcId } });
