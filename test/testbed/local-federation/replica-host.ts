@@ -1,9 +1,11 @@
-// One replica host of `run.ts replica|entry`, or a control host of `run.ts change` whose main store runs on primary/sync, on the configured runtime: `run NAME` is the daemon, or its quarantine start; `tool NAME JSON` is
+// One replica host of `run.ts replica|entry`, a control host of `run.ts change` whose main store runs on primary/sync, or the recovery-only service of
+// `run.ts control-restore` (`recovery NAME`), on the configured runtime: `run NAME` is the daemon, or its quarantine start; `tool NAME JSON` is
 // the operator's tool for one primary/sync Space, with the daemon stopped (test/testbed/federation-host.ts, mode sync).
 import { renameSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { EntryReplicationController, OWN_SYNC_FACTORIES, OwnSyncStore, SqliteRecoveryRegister, assertSyncPrimary, lastConfigTransition, openSyncSpace, primarySyncStorage, promotionEvidence, recoverPrimarySync, PrimarySyncJournal, TlsFencing, TlsRecoveryRegister, assertSyncStandby, canonicalJson, degradeToSingle, loadFileSigner, materializeSyncHistory, promote, setStandby, signedReplicaPeer, snapshotSpace, socketTransport, startConfiguredFederation, startQuarantineReplicas } from "../../../src/index.ts";
+import { EntryReplicationController, startMemberRecoveryOnly, startRecoveryOnly, OWN_SYNC_FACTORIES, OwnSyncStore, SqliteRecoveryRegister, assertSyncPrimary, lastConfigTransition, openSyncSpace, primarySyncStorage, promotionEvidence, recoverPrimarySync, PrimarySyncJournal, TlsFencing, TlsRecoveryRegister, assertSyncStandby, canonicalJson, degradeToSingle, loadFileSigner, materializeSyncHistory, promote, setStandby, signedReplicaPeer, snapshotSpace, socketTransport, startConfiguredFederation, startQuarantineReplicas } from "../../../src/index.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { openSqliteHost } from "../../../src/store/sqlite.ts";
 
@@ -11,7 +13,15 @@ const [mode, name, input] = process.argv.slice(2);
 const file = `/fed/${name}.config.json`, cfg = JSON.parse(readFileSync(file, "utf8"));
 const stopOn = (close: () => Promise<unknown>) => { for (const s of ["SIGTERM", "SIGINT"] as const) process.on(s, () => void close().finally(() => process.exit(0))); };
 
-if (mode === "run" && cfg.mainSync) {
+if (mode === "recovery") {
+	// the recovery-only service of a stopped, restart-locked host (federation-host.ts, modes recovery and member-recovery): quiesced is what the
+	// independent fence status says over ssh, the same answer the restore itself asks for
+	const recoveryFile = `/fed/${name}.recovery.json`, rc = JSON.parse(readFileSync(recoveryFile, "utf8")), host = await openSqliteHost(`/fed/${name}.sqlite`);
+	const assertQuiesced = async () => { const status = JSON.parse(execFileSync("ssh", ["-T", "-oBatchMode=yes", "-oStrictHostKeyChecking=yes", rc.fenceStatus, "phi-spaces-fence-status"], { encoding: "utf8" })); return { hostId: status.hostId, normalStopped: status.stopped === true, restartLocked: status.restartLocked === true }; };
+	const recovery = await (cfg.mode === "control" ? startRecoveryOnly : startMemberRecoveryOnly)(host, ctx, recoveryFile, assertQuiesced);
+	stopOn(async () => { await recovery.close(); await host.close(ctx); });
+	console.log(JSON.stringify({ recoveryReady: true }));
+} else if (mode === "run" && cfg.mainSync) {
 	// a host whose main store runs on primary/sync (test/testbed/federation-host.ts): not its primary, or in quarantine, it only listens
 	const m = cfg.mainSync, external = new TlsRecoveryRegister(cfg.registerTls), probe = new PrimarySyncJournal(join(m.dir, "journal.sqlite"), m.genesis, { self: cfg.hostId }), primary = probe.config.primaryReplica;
 	probe.close();

@@ -9,3 +9,5 @@ export const REPLICA = { "replica-a": "172.30.7.9", "replica-b": "172.30.7.10" }
 export const CONTROL_B = "172.30.7.12", FENCED: Record<string, string> = { "replica-a": "replica-a", "replica-b": "replica-b", "control-host": "control-a", "control-host-b": "control-b", "data-host": "member" };
 // `run.ts restore`: the ssh fence status endpoint, and the host a data Space is restored to
 export const FENCE_SSH = "172.30.7.13", DATA_B = "172.30.7.14";
+/** FENCED with the overrides a scenario writes to FED_DIR/fenced.json (`run.ts control-restore` fences the control host in `control`). */
+export const fencedIn = async (dir: string): Promise<Record<string, string>> => { const { existsSync, readFileSync } = await import("node:fs"); const f = `${dir}/fenced.json`; return { ...FENCED, ...(existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {}) }; };

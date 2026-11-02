@@ -71,7 +71,7 @@ export function harness(profile = "replica", driver = "replica-driver.ts") {
 	const say = (name: string, v: unknown) => console.log(`  ${name} ${JSON.stringify(v)}`);
 	const drive = (...a: string[]) => { const out = JSON.parse(compose("exec", "-T", "client", "node", "--experimental-strip-types", "--no-warnings", `test/testbed/local-federation/${driver}`, ...a).trim().split("\n").at(-1)!); say(a.slice(0, 2).join(" "), out); return out; };
 	const tool = (host: string, q: Record<string, unknown>, name = host) => { const out = JSON.parse(compose("run", "--rm", "-T", "--no-deps", host, "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "tool", name, JSON.stringify(q)).trim().split("\n").at(-1)!); say(`tool ${host} ${q.op}`, out); return out; };
-	const started = (host: string, text: string, ms = 90_000) => { const end = Date.now() + ms; for (;;) { const r = execFileSync("docker", ["logs", container(host)], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); if (r.split("\n").some((l) => l.includes(text))) return; if (Date.now() > end) throw new Error(`${host}: no ${text}`); execFileSync("sleep", ["0.5"]); } };
+	const started = (host: string, text: string, ms = 90_000, times = 1) => { const end = Date.now() + ms; for (;;) { const r = execFileSync("docker", ["logs", container(host)], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); if (r.split("\n").filter((l) => l.includes(text)).length >= times) return; if (Date.now() > end) throw new Error(`${host}: no ${text}`); execFileSync("sleep", ["0.5"]); } };
 	const docker = (...a: string[]) => sh("docker", a);
 	return { dir, env, compose, say, drive, tool, started, docker };
 }

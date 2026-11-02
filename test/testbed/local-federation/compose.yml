@@ -55,7 +55,7 @@ services:
     networks: {fed: {ipv4_address: 172.30.7.4}}
   control-b:
     <<: *host
-    profiles: [change]
+    profiles: [change, restore]
     command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "run", "control-b"]
     restart: on-failure:20
     networks: {fed: {ipv4_address: 172.30.7.12}}
@@ -65,7 +65,7 @@ services:
     profiles: [restore]
     user: "0:0"
     volumes: ["${FED_DIR}:/fed", "/var/run/docker.sock:/var/run/docker.sock"]
-    command: ["sh", "-c", "groupadd -g $$(stat -c %g /var/run/docker.sock) dockerhost && for u in data-host control-host; do useradd -M -o -u ${FED_UID} -s /bin/sh -G dockerhost $$u && usermod -p '*' $$u; done && mkdir -p /run/sshd && exec /usr/sbin/sshd -D -e -f /fed/ssh/sshd_config"]
+    command: ["sh", "-c", "groupadd -g $$(stat -c %g /var/run/docker.sock) dockerhost && for u in data-host control-host control-host-b; do useradd -M -o -u ${FED_UID} -s /bin/sh -G dockerhost $$u && usermod -p '*' $$u; done && mkdir -p /run/sshd && exec /usr/sbin/sshd -D -e -f /fed/ssh/sshd_config"]
     networks: {fed: {ipv4_address: 172.30.7.13}}
   data-b:
     <<: *host

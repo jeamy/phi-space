@@ -90,6 +90,7 @@ async function phone(ip: string, bind: string, impl: string) {
 const which = process.argv[2] ?? "both";
 sh("docker", ["build", "--network", "host", "-f", "test/testbed/local-federation/Dockerfile", "-t", "phi-federation:local", "."]);
 if (which === "phone") await phone(process.argv[3]!, process.argv[4]!, process.argv[5] ?? "rust");
+if (which === "control-restore") { await (await import("./control-restore.ts")).controlRestoreScenario(); process.exit(process.exitCode ?? 0); }
 if (which === "restore") { await (await import("./restore.ts")).restoreScenario(); process.exit(process.exitCode ?? 0); }
 if (which === "change") { await (await import("./change.ts")).changeScenario(); process.exit(process.exitCode ?? 0); }
 if (which === "entry") { await (await import("./entry.ts")).entryScenario(); process.exit(process.exitCode ?? 0); }

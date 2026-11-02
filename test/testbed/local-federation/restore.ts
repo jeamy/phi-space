@@ -18,6 +18,20 @@ import { certify, harness } from "./replica.ts";
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const container = (service: string) => `phi-federation-${service}-1`;
 
+/** ssh: the server's host key, the hosts' client key, each side knowing the other, and a passwd entry so that the client runs under FED_UID. */
+export function provisionSsh(dir: string) {
+	// ssh: the server's host key, the target's client key, each side knowing the other
+	const ssh = join(dir, "ssh"), home = join(dir, "ssh-client"), keygen = (file: string) => execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", file]);
+	mkdirSync(ssh, { mode: 0o700 }); mkdirSync(join(home, ".ssh"), { recursive: true, mode: 0o700 });
+	keygen(join(ssh, "host_ed25519")); keygen(join(home, ".ssh", "id_ed25519"));
+	writeFileSync(join(ssh, "authorized_keys"), readFileSync(join(home, ".ssh", "id_ed25519.pub")), { mode: 0o600 });
+	writeFileSync(join(home, ".ssh", "known_hosts"), `${FENCE_SSH} ${readFileSync(join(ssh, "host_ed25519.pub"), "utf8")}`, { mode: 0o600 });
+	writeFileSync(join(ssh, "sshd_config"), ["Port 22", "HostKey /fed/ssh/host_ed25519", "AuthorizedKeysFile /fed/ssh/authorized_keys", "StrictModes no", "PasswordAuthentication no", "KbdInteractiveAuthentication no", "UsePAM no", "PermitRootLogin no", "AllowTcpForwarding no", "X11Forwarding no", "PermitTTY no", "PidFile /run/sshd.pid",
+		"ForceCommand /usr/local/bin/node --experimental-strip-types --no-warnings /opt/phi-spaces/test/testbed/local-federation/fence-status.ts", ""].join("\n"), { mode: 0o600 });
+	writeFileSync(join(dir, "passwd"), `root:x:0:0::/root:/bin/sh\nfed:x:${process.getuid!()}:${process.getgid!()}::/fed/ssh-client:/bin/sh\n`, { mode: 0o644 });
+	mkdirSync(join(dir, "snapshots"), { mode: 0o700 });
+}
+
 async function provisionRestore(dir: string) {
 	certify(dir, ["data-b", "fencing"]);
 	const read = (name: string) => JSON.parse(readFileSync(join(dir, name), "utf8"));
@@ -48,25 +62,16 @@ async function provisionRestore(dir: string) {
 		registerTls: { ...member.registerTls, certFile: "/fed/data-b.crt", keyFile: "/fed/data-b.key" },
 		recovery: { path: "/fed/recovery-data-b.sock", operator: pinned, writerTls: { ...member.registerTls, certFile: "/fed/operator.crt", keyFile: "/fed/operator.key" }, snapshotDirectory: "/fed/snapshots", fenceTargets: { "data-host": `data-host@${FENCE_SSH}` }, controlEndpoint: { path: "/fed/recovery-control.sock" } } });
 	write("state.json", { ...state, notesIncarnation: notes.incarnation });
-	// ssh: the server's host key, the target's client key, each side knowing the other
-	const ssh = join(dir, "ssh"), home = join(dir, "ssh-client"), keygen = (file: string) => execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", file]);
-	mkdirSync(ssh, { mode: 0o700 }); mkdirSync(join(home, ".ssh"), { recursive: true, mode: 0o700 });
-	keygen(join(ssh, "host_ed25519")); keygen(join(home, ".ssh", "id_ed25519"));
-	writeFileSync(join(ssh, "authorized_keys"), readFileSync(join(home, ".ssh", "id_ed25519.pub")), { mode: 0o600 });
-	writeFileSync(join(home, ".ssh", "known_hosts"), `${FENCE_SSH} ${readFileSync(join(ssh, "host_ed25519.pub"), "utf8")}`, { mode: 0o600 });
-	writeFileSync(join(ssh, "sshd_config"), ["Port 22", "HostKey /fed/ssh/host_ed25519", "AuthorizedKeysFile /fed/ssh/authorized_keys", "StrictModes no", "PasswordAuthentication no", "KbdInteractiveAuthentication no", "UsePAM no", "PermitRootLogin no", "AllowTcpForwarding no", "X11Forwarding no", "PermitTTY no", "PidFile /run/sshd.pid",
-		"ForceCommand /usr/local/bin/node --experimental-strip-types --no-warnings /opt/phi-spaces/test/testbed/local-federation/fence-status.ts", ""].join("\n"), { mode: 0o600 });
-	writeFileSync(join(dir, "passwd"), `root:x:0:0::/root:/bin/sh\nfed:x:${process.getuid!()}:${process.getgid!()}::/fed/ssh-client:/bin/sh\n`, { mode: 0o644 });
-	mkdirSync(join(dir, "snapshots"), { mode: 0o700 });
+	provisionSsh(dir);
 }
 
 /** The backup: the Space as the source's store holds it now, read from a copy while the host runs. */
-async function backup(dir: string, spaceId: string) {
+export async function backup(dir: string, spaceId: string, store = "member", file = "notes.json") {
 	const copy = mkdtempSync(join(tmpdir(), "phi-fed-copy-"));
-	for (const f of readdirSync(dir).filter((n) => n.startsWith("member.sqlite"))) copyFileSync(join(dir, f), join(copy, f));
-	const store = await openSqliteHost(join(copy, "member.sqlite"));
-	writeFileSync(join(dir, "snapshots", "notes.json"), JSON.stringify(await snapshotSpace(store, spaceId, ctx)), { mode: 0o600 });
-	await store.close(ctx);
+	for (const f of readdirSync(dir).filter((n) => n.startsWith(`${store}.sqlite`))) copyFileSync(join(dir, f), join(copy, f));
+	const host = await openSqliteHost(join(copy, `${store}.sqlite`));
+	writeFileSync(join(dir, "snapshots", file), JSON.stringify(await snapshotSpace(host, spaceId, ctx)), { mode: 0o600 });
+	await host.close(ctx);
 	rmSync(copy, { recursive: true, force: true });
 }
 
