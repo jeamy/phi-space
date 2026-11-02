@@ -30,7 +30,7 @@ phi-spaces: a space library with its own store; the optional `agent/` package co
 - Remote test bed (docker on the server `big`; verifies the BUILT artifacts, no source goes to the server;
   `npm run testbed -- check|up|test|status|down`, `--dry-run` first): `test/testbed/`,
   docs in `docs/testumgebung-big.en.md`; `scenario sieve-mobile create|run|evaluate|all` is the phone-simulating sieve test. Starting containers or shipping artifacts changes a shared server: ask before the first real run.
-- Local federation (docker on this machine, project `phi-federation`): `npm run testbed:federation -- both|rust|ts`: a control host, the TLS register and one Member in containers of their own (`test/testbed/local-federation/`); the Member is killed, the control host and the register are cut off, the host is fenced, and all four pairings of TS and Rust are held against each other. Builds `phi-federation:local`; changes no other containers.
+- Local federation (docker on this machine, project `phi-federation`): `npm run testbed:federation -- both|rust|ts`: a control host, the TLS register and one Member in containers of their own (`test/testbed/local-federation/`); the Member is killed, the control host and the register are cut off, the host is fenced, and all four pairings of TS and Rust are held against each other; `-- replica` runs a primary/sync Space on two replica hosts with the primary killed, promotion and degradeToSingle behind the container fencing adapter (its service runs on this machine, `fencing-service.ts`), quarantine and setStandby, and compares both stores. Builds `phi-federation:local`; changes no other containers.
 - TUI: `npm run tui` (read-only spaces/objects and test-bed controls); `--dry-run` previews without server access, `--local-dir DIR` inspects local store files. Docs: `docs/tui.en.md`.
 - Dashboard (read-only live UI): `npm run dashboard -- --dir <store>` in the foreground;
   `npm run dashboard:start|stop|status` (via `scripts/dashboard.sh`) in the background; it also shows the projects'
@@ -92,5 +92,6 @@ Run typecheck and tests after every change (root: `npm run typecheck`, `npm test
   `phi-spaces/core`, `phi-spaces/store/*` (root `exports`, pointing at the `.ts` sources); `agent/` keeps relative imports.
 - Scripted model tests: filter out system messages before checking the last message (see `docs/examples.en.md`, „Testumfang").
 - Documentation is English: code comments, READMEs and all docs. A document is `name.en.md`; its German version, where one exists, sits in `de-docs/` beside it, and links point to the English document. New documents are English only. The German help corpus (`help-site/corpus/de`) is a language version of the help site, not an old document.
+- Commits and pushes carry no `Co-Authored-By: Claude …` line (the user's decision, 2026-11-02).
 - Call this project's library and spaces phi-spaces; the local client class is `PhiSpaces`.
   JavaSpaces names the historical reference only.

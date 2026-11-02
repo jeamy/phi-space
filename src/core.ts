@@ -777,7 +777,8 @@ export const view = (e: EntryRec, spaceId?: string): EntryView => ({ id: e.id, .
 
 function find(s: SpaceState, tmpl: Template, txn: string | null, take: boolean): { status: "found"; rec: EntryRec } | { status: "none" } | { status: "locked" } {
 	let locked = false;
-	for (const e of candidates(s, tmpl, false)) {
+	const pool = candidates(s, tmpl, false);
+	for (const e of pool) {
 		if (!matches(tmpl, e) || (e.restoredUnverified && (take || txn !== null))) continue;
 		if (take) { const run = runOf(s, e.types, e.fields); if (run !== undefined && !takeableRun(s, run)) continue; } // gated: invisible to takes, not a conflict
 		const mine = txn !== null && e.writtenUnder === txn;
@@ -789,6 +790,8 @@ function find(s: SpaceState, tmpl: Template, txn: string | null, take: boolean):
 		if (take && e.readBy.some((t) => t !== txn)) { locked = true; continue; }
 		return { status: "found", rec: e };
 	}
+	// a look that found nothing walked every entry, and a waiter asks it again on every operation: the next one has a bucket
+	if (pool === s.entries) candidates(s, tmpl, true);
 	return locked ? { status: "locked" } : { status: "none" };
 }
 
