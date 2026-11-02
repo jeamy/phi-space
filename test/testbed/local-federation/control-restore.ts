@@ -118,7 +118,10 @@ export async function controlRestoreScenario() {
 		started("member", "member ready", 90_000, 2);
 		const after = drive("job", "control-host-b", "second", "user-key-2");
 		assert.equal(after.write, "answered"); assert.deepEqual(after.jobs, ["first", "second"]);
-		assert.ok(drive("gap", "control-host-b").held.refused, "a grant of the old authority is refused");
+		// the grant held from before the loss, presented with the client's new key, and the old key itself
+		const held = drive("gap", "control-host-b", "-", "user-key-2").held;
+		assert.match(held.message, /invalid grant signature/, "a grant of the old authority is refused by its signature");
+		assert.match(drive("gap", "control-host-b").held.message, /the key is revoked/, "the old key is refused");
 		// the old control host started by hand is refused
 		docker("start", container("control"));
 		assert.notEqual(execFileSync("timeout", ["60", "docker", "wait", container("control")], { encoding: "utf8" }).trim(), "0", "the old control host does not boot");
