@@ -207,22 +207,43 @@ impl Store {
 
 	/// `create_space` with `op` in the commit that makes the Space, so what it sets exists with the Space or not at all. `op`
 	/// does not run for an alias that exists: the caller finds that Space in the result.
-	pub fn create_space_with(&mut self, alias: &str, now: f64, random: Random, op: impl FnOnce(&mut Space) -> std::result::Result<(), CoreError>) -> Result<std::result::Result<Json, CoreError>> {
+	pub fn create_space_with(&mut self, alias: &str, now: f64, random: Random, op: impl FnOnce(&mut Space) -> std::result::Result<(), CoreError>) -> Result<std::result::Result<Json, CoreError>> { self.create_space_as(alias, None, now, random, op) }
+
+	/// `createSpace` with `{spaceId, incarnation}` given (`identity`): a Space whose identity comes from elsewhere, such as a
+	/// primary/sync Space, whose replicas all hold the same one.
+	pub fn create_space_as(&mut self, alias: &str, identity: Option<(&str, &str)>, now: f64, random: Random, op: impl FnOnce(&mut Space) -> std::result::Result<(), CoreError>) -> Result<std::result::Result<Json, CoreError>> {
 		let fine = alias.len() <= 64 && alias.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit()) && alias.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || ".-_".contains(c));
 		if !fine {
 			return Ok(Err(error("IllegalArgumentError", "alias: 1-64 of a-z 0-9 . _ - (starting with a letter or digit)")));
 		}
+		let hex_of = |t: &str, n: usize| t.len() == n && t.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+		let uuid = |t: &str| t.strip_prefix("sp-").is_some_and(|u| { let p: Vec<&str> = u.split('-').collect(); p.len() == 5 && [8, 4, 4, 4, 12].iter().zip(&p).all(|(n, x)| hex_of(x, *n)) });
+		if let Some((id, incarnation)) = identity {
+			if !uuid(id) || !hex_of(incarnation, 8) {
+				return Ok(Err(error("IllegalArgumentError", "a fixed Space identity needs an sp-<uuid> ID and an 8-hex incarnation")));
+			}
+		}
 		if let Some(id) = self.registry.as_ref().and_then(|r| r.get("aliases")?.get(alias)?.as_str()) {
 			let info = self.registry.as_ref().and_then(|r| r.get("spaces")?.get(id)).cloned().unwrap_or(Json::Null);
+			if identity.is_some_and(|(fixed, incarnation)| fixed != id || info.get("incarnation").and_then(Json::as_str) != Some(incarnation)) {
+				return Ok(Err(error("IllegalArgumentError", "alias names another Space identity")));
+			}
 			return Ok(Ok(info));
+		}
+		if let Some((id, _)) = identity {
+			if self.registry.as_ref().and_then(|r| r.get("spaces")?.get(id)).is_some() {
+				return Ok(Err(error("IllegalArgumentError", "Space ID already registered under another alias")));
+			}
 		}
 		if self.default_id().is_none() {
 			if let Err(e) = self.commit(None, now, |_| Ok(()))? {
 				return Ok(Err(e));
 			}
 		}
-		let id = format!("sp-{}", random_uuid(&mut self.random));
-		let incarnation = hex(&(self.random)(4));
+		let (id, incarnation) = match identity {
+			Some((id, incarnation)) => (id.to_owned(), incarnation.to_owned()),
+			None => (format!("sp-{}", random_uuid(&mut self.random)), hex(&(self.random)(4))),
+		};
 		let info = obj! { "spaceId" => id.as_str(), "alias" => alias, "incarnation" => incarnation.as_str(), "createdAt" => now };
 		let mut registry = self.registry_copy();
 		if let Some(Json::Object(s)) = registry.get_mut("spaces") {

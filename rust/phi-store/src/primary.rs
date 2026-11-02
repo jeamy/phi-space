@@ -26,8 +26,14 @@ pub struct PrimaryOptions {
 	pub now: Box<dyn FnMut() -> f64 + Send>,
 }
 
+/// A Space's journal, shared by its primary's writer, the host's replica listener and the resolver of its candidate.
+pub type SharedJournal = Arc<Mutex<SyncJournal>>;
+impl From<SyncJournal> for SharedJournal {
+	fn from(j: SyncJournal) -> SharedJournal { Arc::new(Mutex::new(j)) }
+}
+pub fn lock_journal(j: &Mutex<SyncJournal>) -> MutexGuard<'_, SyncJournal> { j.lock().unwrap_or_else(std::sync::PoisonError::into_inner) }
+
 struct Shared {
-	journal: SyncJournal,
 	/// Bytes admitted and not yet sealed, twice (an entry encodes its rows once more).
 	pending: usize,
 	/// The candidate that poisoned the store.
@@ -36,7 +42,7 @@ struct Shared {
 
 /// The owner thread's side: the budget, and the candidate that poisoned the store.
 #[derive(Clone)]
-pub struct PrimaryGate(Arc<Mutex<Shared>>);
+pub struct PrimaryGate(Arc<Mutex<Shared>>, SharedJournal);
 
 fn lock(s: &Mutex<Shared>) -> MutexGuard<'_, Shared> { s.lock().unwrap_or_else(std::sync::PoisonError::into_inner) }
 /// An entry carries its rows, the marker and its frame; a commit must fit one entry with room for that.
@@ -47,12 +53,13 @@ impl PrimaryGate {
 	/// admitted with go to the writer with it.
 	pub fn admit(&self, ops: &[WriteOp]) -> crate::sync::Result<usize> {
 		let mut s = lock(&self.0);
+		let mut j = lock_journal(&self.1);
 		let bytes = delta_bytes(ops);
-		let (most, max) = (max_batch(&s.journal), s.journal.max_intent_bytes);
+		let (most, max) = (max_batch(&j), j.max_intent_bytes);
 		if bytes > most {
 			return Err(SyncError::Full(format!("the commit's rows ({bytes} bytes) do not fit one sync journal entry (at most {max} bytes)")));
 		}
-		if s.journal.history_bytes()? + s.pending + bytes * 2 > s.journal.max_history_bytes {
+		if j.history_bytes()? + s.pending + bytes * 2 > j.max_history_bytes {
 			return Err(SyncError::Full("sync history is full; no committed result was discarded".into()));
 		}
 		s.pending += bytes * 2;
@@ -61,22 +68,24 @@ impl PrimaryGate {
 	/// The sealed candidate that poisoned the store: `{revision, hash}`.
 	pub fn sealed(&self) -> Option<(f64, String)> { lock(&self.0).poisoned.clone() }
 	/// The journal, for what the owner reads of it while the store is open (its head, the promotion evidence).
-	pub fn journal<T>(&self, f: impl FnOnce(&mut SyncJournal) -> T) -> T { f(&mut lock(&self.0).journal) }
-	/// The journal back, once the store is closed.
+	pub fn journal<T>(&self, f: impl FnOnce(&mut SyncJournal) -> T) -> T { f(&mut lock_journal(&self.1)) }
+	/// The journal back, once the store is closed and nothing else holds it.
 	pub fn into_journal(self) -> Result<SyncJournal, PrimaryGate> {
-		Arc::try_unwrap(self.0).map(|m| m.into_inner().unwrap_or_else(std::sync::PoisonError::into_inner).journal).map_err(PrimaryGate)
+		let PrimaryGate(shared, journal) = self;
+		Arc::try_unwrap(journal).map(|m| m.into_inner().unwrap_or_else(std::sync::PoisonError::into_inner)).map_err(|j| PrimaryGate(shared, j))
 	}
 }
 
 /// The writer's side (`Replication`) and the owner's (`PrimaryGate`) of a primary over `journal`.
-pub fn primary_replication(journal: SyncJournal, o: PrimaryOptions) -> (Box<dyn Replication>, PrimaryGate) {
-	let shared = Arc::new(Mutex::new(Shared { journal, pending: 0, poisoned: None }));
-	let max_batch_bytes = max_batch(&lock(&shared).journal);
-	(Box::new(Primary { shared: Arc::clone(&shared), o, sealed: None, max_batch_bytes }), PrimaryGate(shared))
+pub fn primary_replication(journal: SharedJournal, o: PrimaryOptions) -> (Box<dyn Replication>, PrimaryGate) {
+	let shared = Arc::new(Mutex::new(Shared { pending: 0, poisoned: None }));
+	let max_batch_bytes = max_batch(&lock_journal(&journal));
+	(Box::new(Primary { shared: Arc::clone(&shared), journal: Arc::clone(&journal), o, sealed: None, max_batch_bytes }), PrimaryGate(shared, journal))
 }
 
 struct Primary {
 	shared: Arc<Mutex<Shared>>,
+	journal: SharedJournal,
 	o: PrimaryOptions,
 	/// The sealed entry of the batch being written.
 	sealed: Option<Json>,
@@ -92,44 +101,49 @@ impl Primary {
 	fn seal_batch(&mut self, db: &Connection, rows: &[WriteOp], admitted: usize) -> crate::sync::Result<Vec<WriteOp>> {
 		let mut s = lock(&self.shared);
 		s.pending = s.pending.saturating_sub(admitted * 2); // exactly what admit counted for this batch's commits
-		if s.poisoned.is_some() || s.journal.head_revision()? != s.journal.applied_revision()? {
-			return Err(SyncError::Blocked(POISONED.into()));
-		}
+		let poisoned = s.poisoned.is_some();
 		drop(s);
+		{
+			let j = lock_journal(&self.journal);
+			if poisoned || j.head_revision()? != j.applied_revision()? {
+				return Err(SyncError::Blocked(POISONED.into()));
+			}
+		}
 		(self.o.assert_primary)()?;
-		let mut s = lock(&self.shared);
-		let j = &mut s.journal;
-		let config = j.config();
-		let space_id = text(&config, "spaceId").to_owned();
-		let head = j.head()?;
-		let revision = num(&head, "revision");
-		let m = marker(db, &space_id)?;
-		// the file's marker is the journal's head: nothing was written past the journal, nothing is missing
-		let fits = match (&m, revision == 0.0) {
-			(None, true) => true,
-			(Some(_), true) => false,
-			(None, false) => false,
-			(Some(m), false) => num(m, "revision") == revision && text(m, "configHash") == j.config_hash() && j.intent(revision)?.is_some_and(|i| text(&i, "batchHash") == text(m, "batchHash")),
+		let (rows, mark, sync) = {
+			let j = lock_journal(&self.journal);
+			let config = j.config();
+			let space_id = text(&config, "spaceId").to_owned();
+			let head = j.head()?;
+			let revision = num(&head, "revision");
+			let m = marker(db, &space_id)?;
+			// the file's marker is the journal's head: nothing was written past the journal, nothing is missing
+			let fits = match (&m, revision == 0.0) {
+				(None, true) => true,
+				(Some(_), true) => false,
+				(None, false) => false,
+				(Some(m), false) => num(m, "revision") == revision && text(m, "configHash") == j.config_hash() && j.intent(revision)?.is_some_and(|i| text(&i, "batchHash") == text(m, "batchHash")),
+			};
+			if !fits {
+				return Err(SyncError::Blocked("replication data marker differs from local history".into()));
+			}
+			let sync = durability_of(&config) == "sync";
+			if sync && self.o.peer.is_none() {
+				return Err(SyncError::Blocked("sync writes need a confirming standby".into()));
+			}
+			let rows = deltas(rows);
+			let value = obj! { "configHash" => j.config_hash(), "revision" => revision + 1.0, "batchHash" => hash(&rows), "previousHash" => text(&head, "hash") };
+			(rows, own::marker_write(&space_id, &value), sync)
 		};
-		if !fits {
-			return Err(SyncError::Blocked("replication data marker differs from local history".into()));
-		}
-		let sync = durability_of(&config) == "sync";
-		if sync && self.o.peer.is_none() {
-			return Err(SyncError::Blocked("sync writes need a confirming standby".into()));
-		}
-		let rows = deltas(rows);
-		let value = obj! { "configHash" => j.config_hash(), "revision" => revision + 1.0, "batchHash" => hash(&rows), "previousHash" => text(&head, "hash") };
-		let mark = own::marker_write(&space_id, &value);
-		drop(s);
 		let now = (self.o.now)();
 		(self.o.assert_primary)()?;
-		let mut s = lock(&self.shared);
 		let mut all = rows.as_array().cloned().unwrap_or_default();
 		all.push(mark.clone());
-		let sealed = s.journal.seal(&all, now)?;
-		let config_hash = s.journal.config_hash();
-		drop(s); // the standby is waited for without the journal: the owner reads it meanwhile
+		let (sealed, config_hash) = {
+			// the standby is waited for without the journal: the owner and the listener read it meanwhile
+			let mut j = lock_journal(&self.journal);
+			(j.seal(&all, now)?, j.config_hash())
+		};
 		self.sealed = Some(sealed.clone());
 		if sync {
 			let ack = self.o.peer.as_mut().expect("checked above").accept(&copy(&sealed))?;
@@ -147,7 +161,7 @@ impl Replication for Primary {
 	fn seal(&mut self, db: &Connection, rows: &[WriteOp], admitted: usize) -> Result<Vec<WriteOp>, String> { self.seal_batch(db, rows, admitted).map_err(|e| e.to_string()) }
 	fn applied(&mut self) -> Result<(), String> {
 		let Some(i) = self.sealed.take() else { return Err("no sealed batch to apply".into()) };
-		lock(&self.shared).journal.mark_applied(&i, false).map_err(|e| e.to_string())
+		lock_journal(&self.journal).mark_applied(&i, false).map_err(|e| e.to_string())
 	}
 	fn failed(&mut self, cause: String) -> (String, Option<String>) {
 		let Some(i) = self.sealed.take() else { return (cause, None) };

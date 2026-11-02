@@ -2,7 +2,8 @@
 //! the Space's own identity agreeing. TypeScript asks the register around each commit; here the service runs on the owner
 //! thread and must not wait, so the gate reads the register before a call and the commit checks against what that read
 //! found. A read that fails or has grown old blocks the host: nothing is served on an authorization that cannot be seen.
-//! A primary/sync or standby permit stays blocked: replication is not served here (R6).
+//! A standby permit admits no business work; a primary permit only for a primary/sync Space this host serves from its
+//! journal (`replica`), and only as the primary of the journal's configuration.
 use phi_json::text;
 use crate::register::{RegisterClient, RegisterError, SqliteRegister};
 use phi_core::space::{error, CoreError, Space};
@@ -22,6 +23,13 @@ pub enum External {
 }
 
 impl External {
+	/// One record (`null` if there is none).
+	pub async fn get(&self, key: &str) -> Result<Json, RegisterError> {
+		match self {
+			External::Tls(c) => c.get(key).await,
+			External::File(f) => f.get(key),
+		}
+	}
 	async fn read(&self, keys: &[String]) -> Result<Json, RegisterError> {
 		let mut all = phi_json::Object::new();
 		for batch in keys.chunks(32) {
@@ -58,6 +66,21 @@ pub struct BootGuard {
 	reads: Cell<(u64, u64)>,
 	/// The control authority this host follows: its space, host and key, read with the rest.
 	pub authority: Option<(String, String, String)>,
+	/// The primary/sync Spaces this host serves from stores of their own: their IDs, read with the rest, and the
+	/// configuration of each one's journal now (`replicaConfig` of `installBootGuard`).
+	pub replica: RefCell<HashMap<String, Box<dyn Fn() -> Json>>>,
+}
+
+/// `replicaMismatch`: a primary/sync Space admits work only as the primary of its current configuration.
+fn replica_mismatch(host_id: &str, permit: &Json, config: &Json) -> Option<&'static str> {
+	if text(permit, "role") != Some("primary") || text(config, "primaryReplica") != Some(host_id) {
+		return Some("this host is not the primary of the replica configuration");
+	}
+	let same = |k: &str| permit.get(k).and_then(Json::as_f64) == config.get(k).and_then(Json::as_f64);
+	if text(permit, "authorityId") != text(config, "authorityId") || !same("primaryEpoch") || !same("replicaConfigVersion") || text(permit, "durability") != Some(phi_store::sync::durability_of(config)) {
+		return Some("boot permit disagrees with the local replica configuration");
+	}
+	None
 }
 
 /// `validateErasureBarrier`, on a record read just now.
@@ -80,12 +103,13 @@ fn check_barrier(record: &Json, id: &str, s: &Space, now: f64) -> R<()> {
 
 impl BootGuard {
 	pub fn new(host_id: &str, authority_id: &str, external: External, installed: SqliteRegister, now: crate::gate::Now, max_age_ms: f64) -> BootGuard {
-		BootGuard { host_id: host_id.to_owned(), authority_id: authority_id.to_owned(), external, installed, now, max_age_ms, seen: RefCell::new(None), reads: Cell::new((0, 0)), authority: None }
+		BootGuard { host_id: host_id.to_owned(), authority_id: authority_id.to_owned(), external, installed, now, max_age_ms, seen: RefCell::new(None), reads: Cell::new((0, 0)), authority: None, replica: RefCell::new(HashMap::new()) }
 	}
 
 	/// Reads the register for these Spaces. A failed read forgets the last one. What was read stays while another call's
 	/// read is under way: emptied before the answer, it would block a call that overlaps this one.
-	pub async fn refresh(&self, spaces: Vec<String>) {
+	pub async fn refresh(&self, mut spaces: Vec<String>) {
+		spaces.extend(self.replica.borrow().keys().cloned());
 		let boot = format!("boot:{}", self.host_id);
 		let mut keys = vec![boot.clone()];
 		keys.extend(spaces.iter().map(|s| format!("erasure:{s}")));
@@ -170,7 +194,14 @@ impl Guard for BootGuard {
 		match text(permit, "role") {
 			Some("local") => {}
 			Some("standby") => return Err(blocked(format!("space {id}: a standby permit admits no business work"))),
-			Some("primary") => return Err(blocked(format!("space {id}: primary/sync is not served by this host"))),
+			Some("primary") => match self.replica.borrow().get(id) {
+				Some(config) => {
+					if let Some(why) = replica_mismatch(&self.host_id, permit, &config()) {
+						return Err(blocked(format!("space {id}: {why}")));
+					}
+				}
+				None => return Err(blocked(format!("space {id}: primary/sync is not served by this host"))),
+			},
 			_ => return Err(lacks()),
 		}
 		let number = |v: Option<&Json>| v.and_then(Json::as_f64).unwrap_or(0.0);

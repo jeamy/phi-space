@@ -2,7 +2,7 @@
 use crate::files::{open_files, Result, StoreError, StoreFiles};
 use crate::ops::WriteOp;
 use crate::primary::{primary_replication, PrimaryGate, PrimaryOptions};
-use crate::sync::{SyncError, SyncJournal};
+use crate::sync::SyncError;
 use crate::parts::{head_of, id_of, join_parts, part_at, PartDef, PartKind, PartRow};
 use crate::writer::{Compaction, Durable, Synchronous, Waker, Writer, WriterOptions};
 use phi_json::{parse, Json};
@@ -99,9 +99,9 @@ impl SqliteLedger {
 		Ok(SqliteLedger { files, writer: Some(writer), ords: HashMap::new(), gate: None })
 	}
 	/// The store of a primary/sync primary under `journal`: every batch is sealed and confirmed before it is written.
-	pub fn open_primary(path: &Path, o: WriterOptions, journal: SyncJournal, p: PrimaryOptions) -> Result<SqliteLedger> {
+	pub fn open_primary(path: &Path, o: WriterOptions, journal: impl Into<crate::primary::SharedJournal>, p: PrimaryOptions) -> Result<SqliteLedger> {
 		let files = open_files(path)?;
-		let (replication, gate) = primary_replication(journal, p);
+		let (replication, gate) = primary_replication(journal.into(), p);
 		let writer = Writer::open_replicated(path, o, Some(replication)).map_err(|e| StoreError::Unavailable(format!("the store writer could not open {}: {e}", path.display())))?;
 		Ok(SqliteLedger { files, writer: Some(writer), ords: HashMap::new(), gate: Some(gate) })
 	}

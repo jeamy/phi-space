@@ -252,7 +252,7 @@ fn admitted_commits_count_against_the_history_before_they_are_sealed() {
 	let d = dir("primary-admit");
 	let o = JournalOptions { max_intent_bytes: Some(32_768.0), max_history_bytes: Some(32_768.0), format: Some("own".into()), ..Default::default() };
 	let journal = SyncJournal::open(&d.join("a.sqlite"), &genesis(), o).unwrap();
-	let (_writer_side, gate) = phi_store::primary::primary_replication(journal, PrimaryOptions { peer: None, assert_primary: Box::new(|| Ok(())), now: Box::new(|| 0.0) });
+	let (_writer_side, gate) = phi_store::primary::primary_replication(journal.into(), PrimaryOptions { peer: None, assert_primary: Box::new(|| Ok(())), now: Box::new(|| 0.0) });
 	let ops = vec![WriteOp::Doc { kind: "k".into(), key: "x".into(), version: 1, value: "y".repeat(6_000) }];
 	let bytes = delta_bytes(&ops);
 	assert_eq!(gate.admit(&ops), Ok(bytes));
