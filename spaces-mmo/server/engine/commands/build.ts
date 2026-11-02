@@ -247,6 +247,7 @@ export const bau: Command = {
 			const mine = [...(await c.space.readAll({ type: "Building", fields: { accountId: c.account.accountId } })), ...(await c.space.readAll({ type: "Site", fields: { accountId: c.account.accountId } }))];
 			if (mine.filter((e) => herds.houses[String(e.fields.plan)]).length >= herds.maxHouses) throw new CommandError(`Mehr als ${herds.maxHouses} Ställe und Gehege hält niemand im Blick.`);
 		}
+		if (plan.onePerRoom && ((await c.space.count({ type: "Building", fields: { room: c.actor.room, plan: plan.key } })) || (await c.space.count({ type: "Site", fields: { room: c.actor.room, plan: plan.key } })))) throw new CommandError(`Ein Raum hat höchstens einen Bau „${plan.name}“, und hier steht er schon (oder seine Baustelle).`);
 		const light = await lightFor(c, plan.points);
 		if (typeof light === "string") throw new CommandError(light);
 		await noteBuilder(c, light.beaconId);
@@ -369,7 +370,7 @@ async function moveItem(space: SpaceLike, txn: string | null, itemId: string, fr
 	return true;
 }
 /** "3 holz", "alle muscheln", "tang": how many (null: all) and what. */
-const amount = (arg: string): { n: number | null; name: string } => {
+export const amount = (arg: string): { n: number | null; name: string } => {
 	const m = /^(?:(\d+|alle?|all)\s+)?(.+)$/i.exec(arg.trim().replace(/\s+(?:in|aus|from|into)\s+(?:die\s+|der\s+)?(?:truhe|kiste|chest|lager|lagerhaus|warehouse)$/i, ""));
 	if (!m) return { n: 1, name: "" };
 	return { n: !m[1] ? 1 : /^\d+$/.test(m[1]) ? Number(m[1]) : null, name: m[2]!.replace(ARTICLE, "") };

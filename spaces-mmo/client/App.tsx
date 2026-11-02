@@ -2,7 +2,7 @@
 // spaces-mmo in the browser: a welcome page (play as a guest, log in, register) and the game: the PixiJS map of the
 // room, the text log and the command line. Everything the player does is a text command sent over the WebSocket; a
 // tap on the map or an arrow key becomes `move x y` for one step. All text from the world is rendered as React text nodes.
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ThemeControls } from "./ThemeControls.tsx";
 import { tr } from "./i18n/index.ts";
 import { AdminPanel } from "./AdminPanel.tsx";
@@ -25,6 +25,7 @@ import { detentPx, Sheet, type Detent } from "./Sheet.tsx";
 import { Rich } from "./RichText.tsx";
 import { language, setLanguage, watchPage } from "./i18n/index.ts";
 import { formatWorldTime, seasonIndex, SEASONS, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
+import { berth, SHIP_LENGTH, shipIn } from "../server/engine/liner.ts";
 
 /** How long a "gone" waits for the "char" that follows it when a character is only being moved (see the handler). */
 const GONE_GRACE_MS = 2500;
@@ -905,12 +906,18 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const shownLog = comings ? log : log.filter((l) => !isComing(l));
 	const lastLine = shownLog.at(-1);
 
+	// the large ship lies in this bay by the timetable (the world time the page shows): a thing on the water, for the eye
+	const liner = hello?.world.liner, bay = !!liner && !!hello && liner.bays.includes(hello.room.roomId);
+	const berthAt = useMemo(() => (bay && hello?.room.spawn ? berth(hello.room.ground, hello.room.spawn) : null), [bay, hello?.room]);
+	const shipLies = !!berthAt && !!worldTime && shipIn(shownWorldMs(worldTime.v, worldTime.at, Date.now()), liner!.everyWorldMs) === 0;
+	const shownObjs = useMemo(() => (shipLies && berthAt && hello ? new Map(objs).set("liner", { id: "liner", kind: "liner", name: "Großes Schiff", location: hello.room.roomId, x: berthAt.x, y: berthAt.y, w: berthAt.along === "x" ? SHIP_LENGTH : 1, h: berthAt.along === "y" ? SHIP_LENGTH : 1 } as ObjView) : objs), [objs, shipLies, berthAt, hello]);
+
 	const self = chars.get(me);
 	const openLine = () => { if (input.current) return input.current.focus(); setBag(true); setBagPart("mine"); setDetent("half"); requestAnimationFrame(() => input.current?.focus()); };
 	openLineRef.current = openLine;
 
 	const mapView = mapMode === "text" ? null : hello ? (
-		<MapRenderer key={`${hello.room.ground[0]?.length}x${hello.room.ground.length}`} mode={mapMode} world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog} onTurn={onTurn}
+		<MapRenderer key={`${hello.room.ground[0]?.length}x${hello.room.ground.length}`} mode={mapMode} world={hello.world} room={hello.room} chars={chars} objs={shownObjs} me={me} fog={fog} onTurn={onTurn}
 			fill goal={walkGoal} insetBottom={detent === "peek" ? detentPx("peek", window.innerHeight) : Math.min(sheetPx ?? detentPx("half", window.innerHeight), window.innerHeight * 0.7)}
 			controls={pad !== "off" ? <TouchPad hold={(d) => { input.current?.blur(); stopWalk.current(); setMenu(null); hold(d); }} release={release} action={action} noAction /> : undefined}
 			onCell={(x, y) => { input.current?.blur(); setMenu(null); if (detent !== "peek") setDetent("peek"); else onTap(x, y); }}

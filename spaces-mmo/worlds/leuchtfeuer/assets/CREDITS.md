@@ -64,8 +64,8 @@ border cut off (34 → 32 px).
 `items/netz.png` was drawn for this world in the style and with the colours of the pack above, by the script
 `items-src/net.py` (same license as this project).
 
-The garden's things (`items/spaten.png`, `items/wasserkanne.png`, the five `items/samen-*.png`, `items/strandnelke.png`,
-`items/duenenrose.png`, `items/nebelblume.png`, `items/kohl.png`, `items/moehre.png`), the hare (`items/hase.png`) and the field crops
+The garden's things (`items/spaten.png`, `items/wasserkanne.png`, the six `items/samen-*.png`, `items/strandnelke.png`,
+`items/duenenrose.png`, `items/nebelblume.png`, `items/kohl.png`, `items/moehre.png`, `items/hopfen.png`), the hare (`items/hase.png`) and the field crops
 (`items/weizen.png`, `items/gerste.png`, `items/hafer.png`, `items/kartoffel.png`, `items/ruebe.png`,
 `items/samen-ruebe.png`, `items/flachs.png`, `items/leinsamen.png`) and what mill, bakery and spindle make of them
 (`items/mehl.png`, `items/brot.png`, `items/spindel.png`, `items/leinen.png`), the farm's animals and what they give

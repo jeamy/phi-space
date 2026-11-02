@@ -4,7 +4,7 @@
 // or lost however many trades race each other.
 import { randomBytes, randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
-import { fieldsOf, type AccountFields, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type OfferFields, type OrderFields } from "../../model.ts";
+import { fieldsOf, type AccountFields, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type OfferFields, type OrderFields, type ShopOrderFields } from "../../model.ts";
 import { readExisting, StillHeld, peek } from "../../space.ts";
 import type { Command } from "../cmdsets.ts";
 import { byName, CommandError, NotUnderstood, inventory, msg, stem, type CommandCtx, itemsNamed } from "../context.ts";
@@ -54,6 +54,8 @@ export async function move(c: CommandCtx, item: ItemFields, from: string, to: st
 }
 /** Takes an item for good (used up). */
 export async function consume(c: CommandCtx, item: ItemFields, from: string): Promise<void> {
+	// a boat with cargo in its hatch (fishing.ts) is not used up: the cargo would be left without a place
+	if (c.world.boat?.hatch?.[item.proto] && (await c.space.count({ type: "Item", fields: { location: item.itemId } }, c.txn))) throw new CommandError(`In der Luke von ${item.name} liegt noch etwas; entlade sie erst („luke entlade alle“).`);
 	if (!(await c.space.take({ type: "Item", fields: { itemId: item.itemId, location: from } }, NO_WAIT, { txn: c.txn }))) throw new CommandError(`${item.name} ist nicht mehr da.`);
 }
 
@@ -289,7 +291,11 @@ const order: Command = {
 		if (!verb) {
 			const lines = open.map((o, i) => `  ${i + 1}. ${o.f.text} Lohn: ${reward(o.f)}`);
 			const sites = await boardLines(c.space, c.world);
-			return msg(c, c.actor.charId, "info", [open.length ? "Auftragstafel:" : "Die Auftragstafel ist leer; bald kommen neue Aufträge.", ...lines, ...(sites.length ? ["Baustellen zahlen vor Ort beim Liefern und Mitarbeiten:", ...sites] : []), ...(mine ? [`Dein Auftrag: ${mine.f.text} („order liefere“, sobald du alles hast)`] : [])].join("\n"));
+			// the department stores' delivery orders of this region (shop.ts), delivered at the store
+			// only orders of stores that still stand (one that fell leaves its orders behind, unseen)
+			const standing = new Set((await c.space.readAll({ type: "Building", fields: { plan: c.world.shop?.plan ?? "" } })).map((e) => String(e.fields.buildId)));
+			const stores = (await c.space.readAll({ type: "ShopOrder" })).map((e) => fieldsOf<ShopOrderFields>(e)).filter((o) => standing.has(o.buildId)).map((o) => `  ${o.storeName} von ${o.ownerName} (${roomNames(c.world, [o.room])}): ${o.count}× ${o.protoName} zu ${o.reward} Münze${o.reward === 1 ? "" : "n"}`);
+			return msg(c, c.actor.charId, "info", [open.length ? "Auftragstafel:" : "Die Auftragstafel ist leer; bald kommen neue Aufträge.", ...lines, ...(sites.length ? ["Baustellen zahlen vor Ort beim Liefern und Mitarbeiten:", ...sites] : []), ...(stores.length ? ["Kaufhäuser bestellen („laden liefere <ding>“ dort):", ...stores] : []), ...(mine ? [`Dein Auftrag: ${mine.f.text} („order liefere“, sobald du alles hast)`] : [])].join("\n"));
 		}
 		noGuest(c);
 		if (/^(nimm|take)$/i.test(verb)) {

@@ -279,8 +279,146 @@ export function buildingModel(t: T, plan: string | undefined, w: number, d: numb
 		case "werft": return shipyard(t, w, d);
 		case "gewaechshaus": return greenhouse(t, w, d);
 		case "leuchtturm": return lighthouse(t, w);
+		case "bahnhof": return station(t, w, d);
 		default: return null;
 	}
+}
+
+/** The railway station w×d: a brick house in the back half with a pitched slate roof, a stone platform before it under
+ *  a canopy on posts, a clock over the door, and a short track of two rails on sleepers along the front (+z). */
+function station(t: T, w: number, d: number): Geo {
+	return cached(`station:${w}x${d}`, () => {
+		const RAIL = 0x9aa0a8, hw = w * 0.8, hd = d * 0.38, hz = -d * 0.22, wh = 0.8, top = 0.12 + wh;
+		const parts: Part[] = [
+			{ g: new t.BoxGeometry(w * 0.94, 0.12, d * 0.9), c: STONE, p: [0, 0.06, 0] },
+			{ g: new t.BoxGeometry(hw, wh, hd), c: BRICK, p: [0, 0.12 + wh / 2, hz] },
+			{ g: new t.BoxGeometry(hw + 0.04, 0.05, hd + 0.04), c: STONE_DARK, p: [0, 0.12 + wh * 0.62, hz] },
+			{ g: new t.BoxGeometry(0.34, 0.52, 0.04), c: 0x3a2a18, p: [0, 0.12 + 0.26, hz + hd / 2 + 0.015] },
+			...[-1, 1].map((sx) => ({ g: new t.BoxGeometry(0.26, 0.24, 0.04), c: 0xf2c46a, p: [sx * hw * 0.3, 0.12 + 0.46, hz + hd / 2 + 0.015] as V3 })),
+			// the clock over the door
+			{ g: new t.CylinderGeometry(0.11, 0.11, 0.04, 12), c: 0xf4f0e2, p: [0, top - 0.12, hz + hd / 2 + 0.03], r: [Math.PI / 2, 0, 0] },
+			{ g: new t.BoxGeometry(0.015, 0.08, 0.01), c: 0x222222, p: [0, top - 0.09, hz + hd / 2 + 0.055] },
+			// the platform and its canopy
+			{ g: new t.BoxGeometry(w * 0.92, 0.1, d * 0.22), c: STONE_DARK, p: [0, 0.17, d * 0.08] },
+			{ g: new t.BoxGeometry(w * 0.9, 0.05, d * 0.3), c: SLATE, p: [0, top - 0.05, d * 0.04], r: [-0.12, 0, 0] },
+			...[-1, 0, 1].map((i) => ({ g: new t.BoxGeometry(0.06, top - 0.2, 0.06), c: WOOD_DARK, p: [i * w * 0.38, 0.22 + (top - 0.2) / 2 - 0.05, d * 0.16] as V3 })),
+			// the track: two rails on sleepers
+			...[-1, 1].map((sz) => ({ g: new t.BoxGeometry(w * 0.96, 0.04, 0.04), c: RAIL, p: [0, 0.18, d * 0.34 + sz * 0.1] as V3 })),
+		];
+		// the roof: two slate planes over the house, the ridge along x
+		const rise = 0.42, slope = Math.atan2(rise, hd / 2), len = Math.hypot(rise, hd / 2) + 0.12;
+		const tri = new t.Shape(); tri.moveTo(-hd / 2, 0); tri.lineTo(hd / 2, 0); tri.lineTo(0, rise); tri.closePath();
+		parts.push({ g: new t.ExtrudeGeometry(tri, { depth: hw, bevelEnabled: false }), c: BRICK, p: [-hw / 2, top, hz], r: [0, Math.PI / 2, 0] });
+		for (const side of [-1, 1]) parts.push({ g: new t.BoxGeometry(hw + 0.14, 0.06, len), c: SLATE, p: [0, top + rise / 2 + 0.03, hz + side * (hd / 4 + 0.03)], r: [side * slope, 0, 0] });
+		for (let i = 0; i < Math.round(w * 4); i++) parts.push({ g: new t.BoxGeometry(0.08, 0.03, 0.34), c: WOOD_DARK, p: [-w * 0.45 + (i + 0.5) * (w * 0.9) / Math.round(w * 4), 0.135, d * 0.34] });
+		return merge(t, parts, "station");
+	});
+}
+
+/** The large ship of the timetable, `len` cells long along x (engine/liner.ts): a coastal steamer that still carries sail.
+ *  The hull is lofted from one plan (shipHull): a sharp bow (+x) that rises a little, a round cruiser stern, red below the
+ *  waterline, dark above, a white sheer strake; the deck lies inside the bulwark. On it a white deckhouse with lit windows
+ *  and the bridge, a raked black funnel with a red band, two masts with furled sails, lifeboats, a flag astern. Its
+ *  waterline at 0. */
+export function linerGeometry(t: T, len: number): Geo {
+	return cached(`liner:${len}`, () => {
+		const RED = 0x8e2a22, HULL = 0x23272e, WHITE = 0xece6d6, DECK = 0xa88456, LINEN = 0xe8e0cc, BEAM = 0.5, L = len * 0.96;
+		const hull = shipHull(L, BEAM, 0.42), mid = hull.deck(0.45), parts: Part[] = [
+			...hull.bands(t, [[-0.26, -0.01, RED], [-0.01, 0.3, HULL], [0.3, 0.42, WHITE]], DECK),
+			// the deckhouse with two rows of windows, the bridge with its wings on top
+			b(t, L * 0.3, 0.28, BEAM * 1.2, WHITE, -L * 0.04, mid + 0.14, 0),
+			b(t, L * 0.31, 0.03, BEAM * 1.28, DECK, -L * 0.04, mid + 0.295, 0),
+			b(t, L * 0.11, 0.2, BEAM * 1.0, WHITE, L * 0.06, mid + 0.41, 0),
+			b(t, L * 0.03, 0.03, BEAM * 1.7, WHITE, L * 0.1, mid + 0.42, 0),
+			b(t, L * 0.012, 0.08, BEAM * 0.9, 0x3a4a5a, L * 0.115, mid + 0.45, 0),
+			...[-3, -2, -1, 0, 1, 2, 3].flatMap((i) => [-1, 1].map((sz) => b(t, 0.07, 0.07, 0.02, LAMP, -L * 0.04 + i * L * 0.038, mid + 0.15, sz * BEAM * 0.6))),
+			// the funnel, raked aft, with its red band and black top
+			cy(t, 0.11, 0.1, 0.62, 0x1c1d21, -L * 0.07, mid + 0.25, 0, 12, [0, 0, 0.12]),
+			// the band sits on the leaning funnel: its middle 0.17 above the funnel's, so sin(0.12) × 0.17 further aft
+			cy(t, 0.125, 0.12, 0.1, RED, -L * 0.07 - Math.sin(0.12) * 0.17, mid + 0.68, 0, 12, [0, 0, 0.12]),
+			// ventilators beside the funnel
+			...[-1, 1].map((sz) => cy(t, 0.03, 0.04, 0.16, WHITE, -L * 0.16, mid + 0.29, sz * BEAM * 0.35, 6)),
+			// the masts, their yards and the furled sails; a boom over the hatch forward
+			...[L * 0.3, -L * 0.33].flatMap((x, i) => {
+				const y = hull.deck(0.5 + x / L), top = i ? 1.35 : 1.55;
+				return [
+					cy(t, 0.032, 0.02, top, WOOD_DARK, x, y, 0, 6),
+					b(t, 0.035, 0.035, BEAM * 1.5, WOOD_DARK, x, y + top * 0.78, 0),
+					{ g: new t.CylinderGeometry(0.045, 0.045, BEAM * 1.35, 6), c: LINEN, p: [x + 0.03, y + top * 0.78 - 0.05, 0] as V3, r: [Math.PI / 2, 0, 0] as V3 },
+					{ g: new t.CylinderGeometry(0.02, 0.02, L * 0.16, 5), c: WOOD_DARK, p: [x - L * 0.08, y + 0.25, 0] as V3, r: [0, 0, Math.PI / 2 - 0.08] as V3 },
+				];
+			}),
+			// a cargo hatch forward and aft
+			b(t, L * 0.08, 0.06, BEAM * 0.8, WOOD_DARK, L * 0.22, hull.deck(0.72) + 0.03, 0),
+			b(t, L * 0.07, 0.06, BEAM * 0.8, WOOD_DARK, -L * 0.25, hull.deck(0.25) + 0.03, 0),
+			// two lifeboats on the deckhouse roof, the flag astern on its staff
+			...[-1, 1].map((sz): Part => ({ g: new t.SphereGeometry(1, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), c: WHITE, p: [-L * 0.13, mid + 0.4, sz * BEAM * 0.5], r: [Math.PI, 0, 0], s: [L * 0.06, 0.06, 0.07] })),
+			cy(t, 0.012, 0.012, 0.45, WOOD_DARK, -L * 0.47, hull.deck(0.03), 0, 5),
+			b(t, 0.2, 0.12, 0.01, RED, -L * 0.47 - 0.1, hull.deck(0.03) + 0.38, 0),
+		];
+		return merge(t, parts, "liner");
+	});
+}
+
+/** A ship's hull lofted from its plan, `L` long along x (bow +x), `beam` half wide, the deck amidships at `deckY`. `deck(u)`
+ *  is the deck's height at u (0 stern, 1 bow); `bands` gives one part per [from, to, colour] height band of the sides (the
+ *  last one reaches up to the rail: its height is measured amidships and follows the sheer) and the deck in its colour, set
+ *  below the rail with the bulwark's inner side. Closed at both ends, so nothing shows through. */
+function shipHull(L: number, beam: number, deckY: number) {
+	const N = 28;
+	// half the width in plan: a round stern, the straight middle, the bow narrowing to a point
+	const plan = (u: number) => u < 0.16 ? Math.sqrt(1 - ((0.16 - u) / 0.16) ** 2) : u < 0.58 ? 1 : Math.cos(((u - 0.58) / 0.42) * Math.PI / 2) ** 0.75;
+	// the sheer: the bow rises, the stern a little
+	const sheer = (u: number) => 0.14 * Math.max(0, (u - 0.55) / 0.45) ** 2 + 0.04 * Math.max(0, (0.25 - u) / 0.25) ** 2;
+	// the sides draw in below the waterline (the bilge)
+	const draw = (y: number) => y >= 0 ? 1 : 1 - 0.38 * (y / -0.26) ** 1.6;
+	const deck = (u: number) => deckY + sheer(u);
+	const xOf = (u: number) => (u - 0.5) * L;
+	// a band's height at u: the top band follows the sheer, the lower ones stay level
+	const yAt = (y: number, u: number) => y > deckY - 0.13 ? y + sheer(u) : y;
+	const half = (u: number, y: number) => beam * plan(u) * draw(y);
+	const quad = (out: number[], a: V3, b2: V3, c: V3, d: V3) => out.push(...a, ...b2, ...c, ...a, ...c, ...d);
+	const geo = (t: T, pos: number[]) => { const g = new t.BufferGeometry(); g.setAttribute("position", new t.Float32BufferAttribute(pos, 3)); return g; };
+	function bands(t: T, list: Array<[number, number, number]>, deckColor: number): Part[] {
+		const parts: Part[] = [];
+		const bottom = list[0]![0];
+		list.forEach(([y0, y1, c], k) => {
+			const pos: number[] = [], rows = y0 < 0 ? 3 : 1;
+			for (let i = 0; i < N; i++) {
+				const u0 = i / N, u1 = (i + 1) / N;
+				for (let r = 0; r < rows; r++) {
+					const ya = y0 + ((y1 - y0) * r) / rows, yb = y0 + ((y1 - y0) * (r + 1)) / rows;
+					const p = (u: number, y: number, s: number): V3 => [xOf(u), yAt(y, u), s * half(u, y)];
+					// starboard (+z) faces out along +z, port mirrored with the winding turned
+					quad(pos, p(u0, ya, 1), p(u1, ya, 1), p(u1, yb, 1), p(u0, yb, 1));
+					quad(pos, p(u1, ya, -1), p(u0, ya, -1), p(u0, yb, -1), p(u1, yb, -1));
+				}
+			}
+			if (k === 0) for (let i = 0; i < N; i++) {
+				// the flat of the bottom
+				const u0 = i / N, u1 = (i + 1) / N, p = (u: number, s: number): V3 => [xOf(u), bottom, s * half(u, bottom)];
+				quad(pos, p(u0, -1), p(u1, -1), p(u1, 1), p(u0, 1));
+			}
+			parts.push({ g: geo(t, pos), c });
+		});
+		// the deck, 0.07 below the rail, and the bulwark's inner side from it up to the rail
+		const top = list.at(-1)![1], pos: number[] = [], wall: number[] = [];
+		for (let i = 0; i < N; i++) {
+			const u0 = i / N, u1 = (i + 1) / N, inset = 0.035;
+			const d = (u: number, s: number): V3 => [xOf(u), deck(u) - 0.07, s * Math.max(0, half(u, 0) - inset)];
+			const r = (u: number, s: number): V3 => [xOf(u), yAt(top, u), s * Math.max(0, half(u, 0) - inset)];
+			quad(pos, d(u0, 1), d(u1, 1), d(u1, -1), d(u0, -1));
+			quad(wall, d(u1, 1), d(u0, 1), r(u0, 1), r(u1, 1));
+			quad(wall, d(u0, -1), d(u1, -1), r(u1, -1), r(u0, -1));
+			// the rail's cap between the outer and the inner side
+			const o = (u: number, s: number): V3 => [xOf(u), yAt(top, u), s * half(u, 0)];
+			quad(wall, o(u0, 1), o(u1, 1), r(u1, 1), r(u0, 1));
+			quad(wall, r(u0, -1), r(u1, -1), o(u1, -1), o(u0, -1));
+		}
+		parts.push({ g: geo(t, pos), c: deckColor }, { g: geo(t, wall), c: 0x4a3a2a });
+		return parts;
+	}
+	return { deck: (u: number) => deck(u) - 0.07, bands };
 }
 
 // ---- what lies about ----

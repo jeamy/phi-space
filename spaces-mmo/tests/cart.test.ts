@@ -53,6 +53,22 @@ test("a road as a player types it: two cells from an exit, not beside it, not fa
 	} finally { await srv.close(); }
 });
 
+test("a room holds one station: a second is refused, built or staked", { timeout: 120_000 }, async () => {
+	const srv = await startServer({ worldEnv: { SPACES_MMO_EPOCH_FORCE: "4" } });
+	try {
+		const s = srv.stack.space;
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		await lightFire(s, 600_000, "feuer-bucht");
+		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		await s.write({ type: "Building", fields: { buildId: "st", plan: "bahnhof", name: "Bahnhof", room: c.room, x: 0, y: 0, w: 3, h: 2, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
+		assert.match(await does(p, "bau bahnhof", /höchstens einen|Baustelle ab|passt keine/), /höchstens einen Bau „Bahnhof“/);
+		await s.take({ type: "Building", fields: { buildId: "st" } }, 5_000);
+		assert.doesNotMatch(await does(p, "bau bahnhof", /höchstens einen|Baustelle ab|passt keine/), /höchstens einen/, "the room is free again");
+	} finally { await srv.close(); }
+});
+
 test("a cart goes only by road, alone, with its cargo; its owner unloads it there", { timeout: 180_000 }, async () => {
 	const srv = await startServer();
 	try {
@@ -98,7 +114,9 @@ test("the island railway: from station to station of an island, for its fare", {
 		assert.match(await does(p, "zug", "Bahnh"), /nur an Bahnhöfen/);
 		await station("a", c.room, c.x + 1, c.y);
 		await station("b", there.roomId, there.spawn.x, there.spawn.y);
-		assert.match(await does(p, "zug", "fährt nach"), new RegExp(there.name));
+		await station("b2", there.roomId, there.spawn.x + 2, there.spawn.y);
+		// two stations in a room are one stop
+		assert.match(await does(p, "zug", "fährt nach"), new RegExp(`fährt nach: ${there.name}, für`));
 		assert.match(await does(p, `zug ${there.name}`, "kostet"), /kostet 1 Münze/);
 		await give(s, me, w.currency);
 		await does(p, `zug ${there.name}`, "aus dem Zug");

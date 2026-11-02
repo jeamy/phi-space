@@ -12,7 +12,7 @@ import { eventually, lightFire, Player, startServer } from "./stack.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
 import { loanTick, shopPrice } from "../server/engine/commands/shop.ts";
 import { showTick } from "../server/engine/commands/festival.ts";
-import { shipIn } from "../server/engine/commands/fishing.ts";
+import { baysOf, berth, SHIP_LENGTH, shipIn } from "../server/engine/liner.ts";
 
 const w = await loadWorld();
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -105,7 +105,46 @@ test("a shop prices by its shelf, pays from its till and mints nothing; a loan f
 		await does(p, "laden kaufe fisch", "kaufst");
 		assert.equal(await s.count({ type: "Item", fields: { location: "shop", proto: "fisch" } }), 0);
 		assert.ok(Number((await s.readAll({ type: "Building", fields: { buildId: "shop" } }))[0]!.fields.turnover) > 0);
+		// a settlement's tax: on top of the price, into its warehouse
+		await s.write({ type: "Settlement", fields: { settlementId: "st", name: "Ort", nameKey: "ort", room: c.room, founder: "o", founderName: "O", members: [], closed: false, at: 0, tax: 2 } as never }, null, FOREVER);
+		await s.write({ type: "Building", fields: house("lager", "lagerhaus", "Lagerhaus", c.room, c.x + 3, c.y, "o") as never }, null, FOREVER);
+		await give(s, "shop", "fisch", 1); await give(s, me, w.currency, 10);
+		const purse = await coins(me);
+		assert.match(await does(p, "laden kaufe fisch", "Steuer"), /^2 Münzen Steuer gehen ins Lager der Siedlung\.$/);
+		assert.equal(await coins("lager"), 2, "the tax lies in the warehouse");
+		assert.equal(purse - (await coins(me)), shopPrice(w.shop!.prices.fisch!, 1, w.shop!.full) + 2, "price and tax");
+		for (const e of [...await s.readAll({ type: "Settlement", fields: { settlementId: "st" } }), ...await s.readAll({ type: "Building", fields: { buildId: "lager" } })]) await s.takeIfExists({ id: e.id }, 0);
+		// a delivery order: the owner posts it, the board shows it, anyone delivers and is paid from the till; promised coins
+		// are spoken for
+		const q = new Player(srv.url);
+		assert.equal((await q.post("/api/register", { name: "Wirtin", password: "geheim-123" })).status, 200);
+		const owner = (await q.play()).me.charId;
+		const oc = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: owner } }))[0], 10_000, owner))!.fields as unknown as CharacterFields;
+		const acc = String((await s.readAll({ type: "Character", fields: { charId: owner } }))[0]!.fields.accountId);
+		for (const e of await s.readAll({ type: "Building", fields: { buildId: "shop" } })) await s.takeIfExists({ id: e.id }, 0);
+		await s.write({ type: "Building", fields: house("shop", "kaufhaus", "Kaufhaus", c.room, c.x + 1, c.y, acc) as never }, null, FOREVER);
+		assert.equal(oc.room, c.room);
+		await s.write({ type: "Character", fields: { ...(await s.take({ type: "Character", fields: { charId: owner } }, 5_000))!.fields, x: c.x + 1, y: c.y + 1 } }, null, FOREVER);
+		const till0 = await coins("shop");
+		assert.match(await does(q, `laden bestelle 3 fisch für ${till0 + 1}`, "frei"), /müssen \d+ Münzen frei/);
+		assert.match(await does(q, "laden bestelle 3 fisch für 1", "bestellt"), /bestellt 3× Fisch zu 1 Münze/);
+		assert.match(await does(p, "laden", "Bestellt"), /Bestellt .*: 3× Fisch zu 1 Münze/);
+		assert.ok(w.orders.rooms.includes(c.room), "a board hangs at the start");
+		assert.match(await does(p, "order", "Kaufhäuser"), /Kaufhaus von O \(.+\): 3× Fisch zu 1 Münze/);
+		if (till0 > 3) assert.match(await does(q, `laden entnehme ${till0}`, "versprochen"), /3 Münzen für Bestellungen versprochen/);
+		assert.match(await does(q, "laden liefere fisch", "eigene"), /Die eigene Bestellung beliefert man nicht/);
+		await give(s, me, "fisch", 4);
+		const had = await coins(me);
+		assert.match(await does(p, "laden liefere fisch", "lieferst"), /lieferst 3× Fisch ans Kaufhaus und bekommst 3 Münzen/);
+		assert.equal((await coins(me)) - had, 3);
+		assert.equal(await s.count({ type: "ShopOrder" }), 0, "the order is filled");
+		assert.match(await does(p, "laden liefere fisch", "bestellt"), /hat Kaufhaus nicht bestellt/);
 		assert.match(await does(p, "laden einlegen 1", "gehört"), /gehört dem Besitzer/);
+		// an order of a store that fell is not shown on the board
+		assert.match(await does(q, "laden bestelle 2 tang für 1", "bestellt"), /bestellt 2× Tang/);
+		for (const e of await s.readAll({ type: "Building", fields: { buildId: "shop" } })) await s.takeIfExists({ id: e.id }, 0);
+		assert.doesNotMatch(await does(p, "order", "Auftrag"), /Kaufhäuser/);
+		await q.leave();
 		for (const e of await s.readAll({ type: "Building", fields: { buildId: "shop" } })) await s.takeIfExists({ id: e.id }, 0);
 
 		await s.write({ type: "Building", fields: house("bank", "kontor", "Kontor", c.room, c.x + 1, c.y, "o") as never }, null, FOREVER);
@@ -133,8 +172,17 @@ test("a shop prices by its shelf, pays from its till and mints nothing; a loan f
 		await s.write({ type: "Building", fields: house("j2", "steg", "Steg", other.roomId, other.spawn.x, other.spawn.y, "o") as never }, null, FOREVER);
 		assert.match(await does(p, `rudere ${other.name}`, "Ruderboot"), /brauchst du ein Ruderboot/);
 		await give(s, me, "ruderboot");
+		// the hatch: beside the jetty, up to 8 things in a rowing boat; they go with it
+		const boat = String((await s.readAll({ type: "Item", fields: { location: me, proto: "ruderboot" } }))[0]!.fields.itemId);
+		await give(s, me, "tang", 10);
+		assert.match(await does(p, "luke lade 9 tang", "Luke"), /^Du lädst 8× Tang in die Luke von Ruderboot\. Mehr passt nicht hinein\.$/);
+		assert.match(await does(p, "luke", "(8/8)"), /8× Tang/);
+		assert.match(await does(p, "luke entlade 3 tang", "aus der Luke"), /Du holst 3× Tang/);
+		assert.equal(await s.count({ type: "Item", fields: { location: boat } }), 5);
 		await does(p, `rudere ${other.name}`, "am Steg an");
 		await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0]?.fields.room === other.roomId, 10_000, "rowed over");
+		assert.equal(await s.count({ type: "Item", fields: { location: boat } }), 5, "the cargo came along");
+		assert.match(await does(p, "luke entlade alle", "aus der Luke"), /Du holst 5× Tang/);
 	} finally { await srv.close(); }
 });
 
@@ -172,6 +220,16 @@ test("a regatta starts at a jetty, a boat stays with its owner and the sailing b
 		await does(a, `segle ${island}`, /legst in .* an/);
 		await eventually(async () => (await char(ma)).room !== ca.room, 10_000, "sailed");
 	} finally { await srv.close(); }
+});
+
+test("the large ship has a berth in every bay: open water clear of the shore, near where newcomers start", () => {
+	const bays = [...baysOf(w.rooms).values()];
+	assert.equal(bays.length, new Set(w.rooms.map((r) => r.island)).size, "a bay on every island");
+	for (const bay of bays) {
+		const b = berth(bay.ground, bay.spawn!);
+		if (!b) assert.fail(`a berth in ${bay.roomId}`);
+		for (let i = 0; i < SHIP_LENGTH; i++) { const x: number = b.x + (b.along === "x" ? i : 0), y: number = b.y + (b.along === "y" ? i : 0); assert.equal(bay.ground[y]![x], "~", `${bay.roomId} ${x},${y} is water`); }
+	}
 });
 
 test("the large ship keeps its timetable: half of the time it lies in the bays, and a crossing costs its fare", { timeout: 180_000 }, async () => {

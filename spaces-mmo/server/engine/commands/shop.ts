@@ -4,15 +4,21 @@
 // it mints nothing: its owner fills that with `laden einlegen` and takes the profit with `laden entnehme`. What it turned
 // over counts in the rank of the settlements. In a counting house `kredit` lends coins from its till against a pledge kept in
 // escrow; `tilge` pays them back with interest and frees it; when the time runs out, the pledge goes to the house.
+// A settlement's tax (`antrag steuer`, townhall.ts) is paid on each thing bought at its store, on top of the price, into the
+// settlement's warehouse, like the tax on what is taken from it; without a warehouse in the room there is nowhere to keep it.
+// Delivery orders fill the shelf: the owner posts `laden bestelle <n> <ding> für <m>`, the order boards of the region show
+// it (trade.ts), and anyone brings the things with `laden liefere`, paid from the till. The coins promised stay in the till
+// but are spoken for: neither the owner nor a sale to the store takes them, so a delivery is always paid.
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type ItemFields, type LoanFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type ItemFields, type LoanFields, type ShopOrderFields } from "../../model.ts";
 import { decayNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, type CommandCtx } from "../context.ts";
 import { peek } from "../../space.ts";
 import type { WorldDef } from "../world.ts";
 import { ARTICLE, distTo, planOf, putBack, takeNear } from "./build.ts";
+import { settlementIn } from "./settlement.ts";
 import { consume, move } from "./trade.ts";
 
 const coinsWord = (n: number) => `${n} Münze${n === 1 ? "" : "n"}`;
@@ -22,55 +28,110 @@ const inside = async (space: SpaceLike, where: string, txn: string | null) => (a
 export const shopPrice = (base: number, stock: number, full: number) => Math.max(1, Math.round(base * Math.max(0.5, 2 - (1.5 * stock) / full)));
 
 const shopOf = (c: CommandCtx) => { const d = c.world.shop; if (!d) throw new CommandError("In dieser Welt gibt es keine Kaufhäuser."); return d; };
+/** The tax on a thing bought at a store and the warehouse it goes to: none without a settlement tax or a warehouse here. */
+async function salesTax(c: CommandCtx): Promise<{ tax: number; store: string } | null> {
+	const tax = (await settlementIn(c.space, c.actor.room, c.txn))?.tax ?? 0;
+	if (!tax) return null;
+	const store = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } }, c.txn ? { txn: c.txn } : {})).map((e) => fieldsOf<BuildingFields>(e)).find((b) => planOf(c.world, b.plan)?.store);
+	return store ? { tax, store: store.buildId } : null;
+}
 const take = async (c: CommandCtx, plan: string) => { const r = await takeNear<BuildingFields>(c, "Building", "buildId", 1, (b) => b.plan === plan); return "f" in r ? r.f : null; };
 
 const laden: Command = {
 	key: "laden", aliases: ["kaufhaus", "shop"],
-	help: "laden – was das Kaufhaus neben dir führt und zu welchem Preis (laden kaufe <ding>; laden verkaufe <ding>; der Besitzer: laden einlegen <n>, laden entnehme <n>)",
+	help: "laden – was das Kaufhaus neben dir führt und zu welchem Preis (laden kaufe <ding>; laden verkaufe <ding>; laden liefere <ding> für eine Bestellung; der Besitzer: laden einlegen <n>, laden entnehme <n>, laden bestelle <n> <ding> für <m>, laden storniere <ding>)",
 	async func(c, arg) {
 		const d = shopOf(c), [word = "", ...rest] = arg.trim().split(/\s+/), tail = rest.join(" ").replace(ARTICLE, "");
 		const b = await take(c, d.plan);
 		if (!b) throw new CommandError(`Das geht nur direkt neben ${planOf(c.world, d.plan)?.dative ?? "einem Kaufhaus"}.`);
 		const held = await inside(c.space, b.buildId, c.txn), coin = c.world.currency, till = held.filter((i) => i.proto === coin), shelf = held.filter((i) => i.proto !== coin);
 		const count = (proto: string) => shelf.filter((i) => i.proto === proto).length;
+		const orders = (await c.space.readAll({ type: "ShopOrder", fields: { buildId: b.buildId } }, c.txn ? { txn: c.txn } : {})).map((e) => ({ e, f: fieldsOf<ShopOrderFields>(e) }));
+		const promised = orders.reduce((n, o) => n + o.f.count * o.f.reward, 0), free = till.length - promised;
 		const askFor = (proto: string) => shopPrice(d.prices[proto]!, count(proto), d.full), bid = (proto: string) => Math.max(1, Math.floor(shopPrice(d.prices[proto]!, count(proto) + 1, d.full) * d.buyShare));
 		if (!word) {
 			await putBack(c, b);
 			const lines = [...new Set(shelf.map((i) => i.proto))].filter((p) => d.prices[p]).map((p) => `${protoName(c.world, p)} (${count(p)}): ${coinsWord(askFor(p))}`);
-			return msg(c, c.actor.charId, "info", `${b.name} von ${b.ownerName}, in der Kasse ${coinsWord(till.length)}. ${lines.length ? `Im Regal: ${lines.join("; ")}.` : "Das Regal ist leer."} Es kauft: ${Object.keys(d.prices).map((p) => protoName(c.world, p)).join(", ")}.`);
+			const wanted = orders.map((o) => `${o.f.count}× ${o.f.protoName} zu ${coinsWord(o.f.reward)}`);
+			return msg(c, c.actor.charId, "info", `${b.name} von ${b.ownerName}, in der Kasse ${coinsWord(till.length)}. ${lines.length ? `Im Regal: ${lines.join("; ")}.` : "Das Regal ist leer."} Es kauft: ${Object.keys(d.prices).map((p) => protoName(c.world, p)).join(", ")}.${wanted.length ? ` Bestellt („laden liefere <ding>“): ${wanted.join("; ")}.` : ""}`);
 		}
 		if (/^(?:kaufe|buy)$/i.test(word)) {
 			const it = itemsNamed(c.world, shelf.map((f) => ({ f })) as never as Awaited<ReturnType<typeof inventory>>, tail)[0];
 			if (!it || !d.prices[it.f.proto]) throw new CommandError(`Im Regal liegt kein ${tail.slice(0, 30)}.`);
-			const price = askFor(it.f.proto), purse = (await inventory(c)).filter((i) => i.f.proto === coin);
-			if (purse.length < price) throw new CommandError(`Dafür brauchst du ${coinsWord(price)}.`);
+			const price = askFor(it.f.proto), taxed = await salesTax(c), tax = taxed?.tax ?? 0, purse = (await inventory(c)).filter((i) => i.f.proto === coin);
+			if (purse.length < price + tax) throw new CommandError(`Dafür brauchst du ${coinsWord(price + tax)}.`);
 			for (const m of purse.slice(0, price)) await move(c, m.f, c.actor.charId, b.buildId);
+			for (const m of purse.slice(price, price + tax)) await move(c, m.f, c.actor.charId, taxed!.store);
 			await move(c, it.f, b.buildId, c.actor.charId);
 			await putBack(c, { ...b, turnover: (b.turnover ?? 0) + price });
-			return msg(c, "*", "info", `$you() $conj(kaufst|kauft) ${it.f.name} für ${coinsWord(price)} im ${b.name}.`, { templ: true });
+			await msg(c, "*", "info", `$you() $conj(kaufst|kauft) ${it.f.name} für ${coinsWord(price)} im ${b.name}.`, { templ: true });
+			if (tax) await msg(c, c.actor.charId, "info", `${coinsWord(tax)} Steuer gehen ins Lager der Siedlung.`);
+			return;
 		}
 		if (/^(?:verkaufe|sell)$/i.test(word)) {
 			const it = itemsNamed(c.world, await inventory(c), tail)[0];
 			if (!it) throw new NotUnderstood(`Du trägst nichts, was „${tail.slice(0, 30)}“ heißt.`);
 			if (!d.prices[it.f.proto]) throw new CommandError(`${it.f.name} führt das Kaufhaus nicht.`);
 			const price = bid(it.f.proto);
-			if (till.length < price) throw new CommandError("Die Kasse des Kaufhauses ist zu leer dafür.");
+			if (free < price) throw new CommandError("Die Kasse des Kaufhauses ist zu leer dafür.");
 			await move(c, it.f, c.actor.charId, b.buildId);
 			for (const m of till.slice(0, price)) await move(c, m, b.buildId, c.actor.charId);
 			await putBack(c, { ...b, turnover: (b.turnover ?? 0) + price });
 			return msg(c, "*", "info", `$you() $conj(verkaufst|verkauft) ${it.f.name} für ${coinsWord(price)} ans ${b.name}.`, { templ: true });
 		}
+		if (/^(?:bestelle|bestellen|order)$/i.test(word)) {
+			// laden bestelle <n> <ding> für <m>: the owner's delivery order, m coins each from the till
+			if (b.accountId !== c.account?.accountId) throw new CommandError("Bestellen darf nur der Besitzer.");
+			const m = /^(\d+)\s+(.+?)\s+(?:für|fuer|for)\s+(\d+)$/i.exec(tail);
+			if (!m) throw new NotUnderstood("So geht es: laden bestelle 5 fisch für 2 (Münzen je Stück).");
+			const n = Number(m[1]), reward = Number(m[3]), p = c.world.prototypes.find((x) => d.prices[x.key] && (x.key === m[2]!.toLowerCase() || x.name.toLowerCase() === m[2]!.toLowerCase() || x.aliases?.some((a) => a.toLowerCase() === m[2]!.toLowerCase())));
+			if (!p) throw new CommandError(`${m[2]!.slice(0, 30)} führt das Kaufhaus nicht.`);
+			if (n < 1 || n > d.orderMax || reward < 1) throw new CommandError(`Bestellt werden 1 bis ${d.orderMax} Stück für mindestens 1 Münze.`);
+			if (orders.length >= d.orders) throw new CommandError(`Ein Kaufhaus hat höchstens ${d.orders} Bestellungen offen; „laden storniere <ding>“ nimmt eine zurück.`);
+			if (orders.some((o) => o.f.proto === p.key)) throw new CommandError(`${p.name} ist schon bestellt.`);
+			if (free < n * reward) throw new CommandError(`Dafür müssen ${coinsWord(n * reward)} frei in der Kasse liegen; frei sind ${coinsWord(Math.max(0, free))}.`);
+			const o: ShopOrderFields = { orderId: `so-${randomBytes(6).toString("hex")}`, buildId: b.buildId, room: b.room, storeName: b.name, ownerName: b.ownerName, proto: p.key, protoName: p.name, count: n, reward };
+			await c.space.write({ type: "ShopOrder", fields: o as never }, c.txn, FOREVER);
+			await putBack(c, b);
+			return msg(c, c.actor.charId, "info", `${b.name} bestellt ${n}× ${p.name} zu ${coinsWord(reward)}; die Auftragstafeln zeigen es.`);
+		}
+		if (/^(?:storniere|stornieren|cancel)$/i.test(word)) {
+			if (b.accountId !== c.account?.accountId) throw new CommandError("Stornieren darf nur der Besitzer.");
+			const o = orders.find((x) => x.f.proto === tail.toLowerCase() || x.f.protoName.toLowerCase() === tail.toLowerCase());
+			if (!o) throw new CommandError(`${tail.slice(0, 30) || "Das"} ist nicht bestellt.`);
+			if (!(await c.space.takeIfExists({ id: o.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Die Bestellung ist gerade nicht greifbar; bitte noch einmal.");
+			await putBack(c, b);
+			return msg(c, c.actor.charId, "info", `Die Bestellung von ${o.f.protoName} ist zurückgenommen.`);
+		}
+		if (/^(?:liefere|liefern|deliver)$/i.test(word)) {
+			// anyone but the owner brings what is ordered (the owner would pay itself and count it as turnover), up to what is
+			// still wanted, paid piece by piece from the till
+			if (b.accountId === c.account?.accountId) throw new CommandError("Die eigene Bestellung beliefert man nicht; leg es mit „laden“ ins Regal oder storniere sie.");
+			const am = /^(\d+|alle?|all)\s+(.+)$/i.exec(tail), name = am ? am[2]! : tail, k0 = am && /^\d+$/.test(am[1]!) ? Number(am[1]) : null;
+			const it = itemsNamed(c.world, await inventory(c), name)[0];
+			if (!it) throw new NotUnderstood(`Du trägst nichts, was „${name.slice(0, 30)}“ heißt.`);
+			const o = orders.find((x) => x.f.proto === it.f.proto);
+			if (!o) throw new CommandError(`${it.f.name} hat ${b.name} nicht bestellt.`);
+			const mine = (await inventory(c)).filter((i) => i.f.proto === it.f.proto), k = Math.min(k0 ?? mine.length, mine.length, o.f.count);
+			if (till.length < k * o.f.reward) throw new CommandError("Die Kasse des Kaufhauses ist zu leer dafür.");
+			for (const i of mine.slice(0, k)) await move(c, i.f, c.actor.charId, b.buildId);
+			for (const m of till.slice(0, k * o.f.reward)) await move(c, m, b.buildId, c.actor.charId);
+			if (!(await c.space.takeIfExists({ id: o.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Die Bestellung ist gerade nicht greifbar; bitte noch einmal.");
+			if (o.f.count > k) await c.space.write({ type: "ShopOrder", fields: { ...o.f, count: o.f.count - k } as never }, c.txn, FOREVER);
+			await putBack(c, { ...b, turnover: (b.turnover ?? 0) + k * o.f.reward });
+			return msg(c, "*", "info", `$you() $conj(lieferst|liefert) ${k}× ${it.f.name} ans ${b.name} und $conj(bekommst|bekommt) ${coinsWord(k * o.f.reward)}.`, { templ: true });
+		}
 		const n = Number(tail);
 		if (/^(?:einlegen|deposit|entnehme|entnehmen|withdraw)$/i.test(word) && Number.isInteger(n) && n > 0) {
 			if (b.accountId !== c.account?.accountId) throw new CommandError("Die Kasse gehört dem Besitzer.");
 			const put = /^(?:einlegen|deposit)$/i.test(word), purse = (await inventory(c)).filter((i) => i.f.proto === coin);
-			if ((put ? purse.length : till.length) < n) throw new CommandError(`Dort sind keine ${coinsWord(n)}.`);
+			if ((put ? purse.length : free) < n) throw new CommandError(put || till.length < n ? `Dort sind keine ${coinsWord(n)}.` : `Davon sind ${coinsWord(promised)} für Bestellungen versprochen; frei sind ${coinsWord(Math.max(0, free))}.`);
 			if (put) for (const m of purse.slice(0, n)) await move(c, m.f, c.actor.charId, b.buildId);
 			else for (const m of till.slice(0, n)) await move(c, m, b.buildId, c.actor.charId);
 			await putBack(c, b);
 			return msg(c, c.actor.charId, "info", `In der Kasse sind jetzt ${coinsWord(till.length + (put ? n : -n))}.`);
 		}
-		throw new NotUnderstood("So geht es: laden, laden kaufe <ding>, laden verkaufe <ding>, laden einlegen <n>, laden entnehme <n>.");
+		throw new NotUnderstood("So geht es: laden, laden kaufe <ding>, laden verkaufe <ding>, laden liefere <ding>, laden einlegen <n>, laden entnehme <n>, laden bestelle <n> <ding> für <m>, laden storniere <ding>.");
 	},
 };
 

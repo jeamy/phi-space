@@ -1,5 +1,5 @@
 # The garden's things in the style of Shikashi's icons (32x32, dark outline, a light edge on top, shade below):
-# spade, can of water, seed bags in the colour of their sort, three flowers, a cabbage and a carrot; and the hare that
+# spade, can of water, seed bags in the colour of their sort, three flowers, a cabbage, a carrot and hops; and the hare that
 # comes from the fog for them (wild.ts). The field crops (field.ts): three ears of grain, a potato, a beet and a bundle
 # of flax. What the mill and the bakery make of them (mill.ts): a sack of flour and a loaf; and the spindle and the
 # linen spun from the flax. The farm's animals (animals.ts): a hen, a sheep and a goat, and what they give: an egg, a
@@ -159,6 +159,21 @@ def carrot():
     for (x1, y1) in ((24, 2), (28, 5), (19, 1)):   # the green top
         line(px, 21, 8, x1, y1, STEM, 2)
     line(px, 21, 8, 26, 3, STEMD)
+    return outline(img)
+
+
+def hops():
+    img = new(); px = img.load()
+    VINE, VINED = rgb("#6f9a3a"), rgb("#2f5a2a")
+    line(px, 4, 4, 27, 10, VINE, 2)         # the bine the cones hang from
+    line(px, 4, 5, 27, 11, VINED)
+    G, GD, GL = rgb("#a8d070"), rgb("#4f7a2a"), rgb("#e0f4b0")
+    for (cx, cy, r) in ((9, 18, 4.2), (17, 21, 4.8), (24, 17, 3.8)):  # three cones of overlapping scales
+        line(px, int(cx), int(cy - r - 3), int(cx), int(cy - r), VINED)
+        disc(px, cx, cy, r, G)
+        for k in range(-1, 2):
+            line(px, int(cx - r + 1), int(cy + k * 2), int(cx + r - 1), int(cy + k * 2 + 1), GD)
+        disc(px, cx - 1, cy - r * 0.5, 1.2, GL, light=False)
     return outline(img)
 
 
@@ -596,7 +611,7 @@ out = sys.argv[1]
 things = {
     "spaten": spade(), "wasserkanne": can(),
     "samen-strandnelke": seeds("#e88fb0"), "samen-duenenrose": seeds("#d9476b"), "samen-nebelblume": seeds("#9fb6e8"),
-    "samen-strandkohl": seeds("#7fae6a"), "samen-moehre": seeds("#e8902c"),
+    "samen-strandkohl": seeds("#7fae6a"), "samen-moehre": seeds("#e8902c"), "samen-hopfen": seeds("#a8d070"), "hopfen": hops(),
     "strandnelke": flower("#e88fb0", 6), "duenenrose": flower("#d9476b", 5), "nebelblume": flower("#9fb6e8", 4),
     "kohl": cabbage(), "moehre": carrot(), "hase": hare(),
     "weizen": ears("#d9b44a"), "gerste": ears("#c8b06a", awns=True), "hafer": ears("#cdbf8a", loose=True),

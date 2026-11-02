@@ -143,7 +143,7 @@ function small(t: T, model: PlantModel, parts: Part[], r: () => number, variant:
 }
 
 /** What grows in a bed: its form, by the sort (world.garden.sorts[].model). */
-export type CropModel = "flower" | "rose" | "mist" | "cabbage" | "carrot";
+export type CropModel = "flower" | "rose" | "mist" | "cabbage" | "carrot" | "hops";
 /** A plant in a bed by its stage: seed (a mound), sprout, grown, wilted; `color` that of the sort or the variety. */
 export function cropGeometry(t: T, model: CropModel, stage: number, color: number): Geo {
 	return cached(`crop:${model}:${stage}:${color}`, () => {
@@ -160,6 +160,11 @@ export function cropGeometry(t: T, model: CropModel, stage: number, color: numbe
 		} else if (model === "carrot") {
 			parts.push({ g: new t.ConeGeometry(0.075, 0.16, 6), c: color, p: [0, 0.05, 0], r: [Math.PI, 0, 0] });
 			for (let i = 0; i < 6; i++) stem(t, parts, 0, 0, 0.26 + r() * 0.1, (i / 6) * 6.28 + r(), 0.09, 0x5c9c42, 0.016);
+		} else if (model === "hops") {
+			// a bine climbing its pole, the green cones hanging from it
+			parts.push({ g: new t.CylinderGeometry(0.015, 0.02, 0.62, 5), c: 0x8a6a44, p: [0, 0.31, 0] });
+			for (let i = 0; i < 6; i++) { const a = i * 2.1 + r(), y = 0.1 + i * 0.08; leaf(t, parts, [Math.cos(a) * 0.03, y, Math.sin(a) * 0.03], a, 0.11, green, 0.4); }
+			for (let i = 0; i < 4; i++) { const a = i * 1.7 + r(); parts.push({ g: new t.ConeGeometry(0.035, 0.08, 6), c: color, p: [Math.cos(a) * 0.07, 0.24 + i * 0.09, Math.sin(a) * 0.07], r: [Math.PI, 0, 0] }); }
 		} else if (model === "rose") {
 			for (let i = 0; i < 5; i++) { const a = (i / 5) * 6.28 + r(); leaf(t, parts, [0, 0.1 + r() * 0.15, 0], a, 0.15, 0x3f7d3a); }
 			for (let i = 0; i < 3; i++) {

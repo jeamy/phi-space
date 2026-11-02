@@ -92,6 +92,16 @@ test("every thing but the plain one has a picture, a 32x32 PNG in the world's as
 	}
 });
 
+test("beer needs hops: a bed sort of its own, its seed found in the wild flora of islands the world has", () => {
+	const beer = w.recipes.find((r) => r.key === "bier")!;
+	assert.ok(beer.needs.some((n) => n.proto === "hopfen"), "the brewery's recipe takes hops");
+	const hops = w.garden!.sorts.find((s) => s.key === "hopfen")!;
+	assert.equal(hops.yields.proto, "hopfen");
+	assert.ok(w.prototypes.some((p) => p.key === hops.seed && p.typeclass === "Seed"), "its seed is a thing");
+	const islands = new Set(w.rooms.map((r) => r.island));
+	assert.ok(hops.wild?.islands?.length && hops.wild.islands.every((i) => islands.has(i)), "it grows wild where islands are");
+});
+
 test("the first two rooms stay as they were (the tests of earlier phases stand on their cells)", () => {
 	assert.equal(roomOf("graue-bucht").ground[10], ",,,.....:..:....,,,,,,,,");
 	assert.deepEqual(roomOf("graue-bucht").spawn, { x: 10, y: 8 });

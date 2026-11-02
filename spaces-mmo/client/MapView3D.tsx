@@ -11,7 +11,7 @@ import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
-import { buildingModel, sceneryModel } from "./buildings3d.ts";
+import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
 import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
 import { tile3d } from "./terrain3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
@@ -314,6 +314,13 @@ function object(t: T, obj: ObjView, me: string): Entry {
 			const shaft = new t.Mesh(new t.BoxGeometry(0.42, 0.04, 0.04), dark); shaft.position.set(0.52, 0.16, z * 0.8); shaft.rotation.z = -0.35; group.add(shaft);
 		}
 		group.add(propShadow(t, 0.7, 0.5));
+		return e;
+	}
+	if (obj.kind === "liner") {
+		// the large ship lying in the bay by its timetable (App, engine/liner.ts), its bow to +x, turned when it lies along y
+		const ship = propMesh(t, linerGeometry(t, Math.max(obj.w ?? 1, obj.h ?? 1)));
+		if ((obj.h ?? 1) > 1) ship.rotation.y = -Math.PI / 2;
+		group.add(ship);
 		return e;
 	}
 	if (obj.kind === "zone") {

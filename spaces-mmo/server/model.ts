@@ -52,7 +52,7 @@ export type FogFields = { room: string; level: number };
 /** A settlement (engine/commands/settlement.ts), one per room: `members` lists who was taken in (hut owners are settlers
  *  without it), `closed`: the ranks count. */
 export type SettlementMember = { accountId: string; name: string; rank: "helfer" | "siedler" };
-export type SettlementFields = { settlementId: string; name: string; nameKey: string; room: string; founder: string; founderName: string; members: SettlementMember[]; closed: boolean; at: number; /** Coins per thing taken from the warehouse, set by a town hall; they go into it. */ tax?: number; /** Before this world time no new festival (engine/commands/festival.ts). */ showRestWorldMs?: number };
+export type SettlementFields = { settlementId: string; name: string; nameKey: string; room: string; founder: string; founderName: string; members: SettlementMember[]; closed: boolean; at: number; /** Coins per thing taken from the warehouse or bought at a store here, set by a town hall; they go into the warehouse. */ tax?: number; /** Before this world time no new festival (engine/commands/festival.ts). */ showRestWorldMs?: number };
 /** A festival of a settlement, one per room (`unique`), ending at `endsWorldMs`. */
 /** The wind of an island: an index into `WorldDef.wind.names`. */
 /** What a room grew by (engine/commands/growth.ts), so that a new version of the world file keeps it. */
@@ -63,6 +63,8 @@ export type FireBuilderFields = { beaconId: string; accountId: string; atWorldMs
 /** A figure that has eaten, until when (engine/commands/food.ts). */
 export type SatedFields = { charId: string; untilWorldMs: number };
 /** A loan of a counting house (engine/commands/shop.ts): its pledge lies at `loanId`; `untilWorldMs` in the second clock. */
+/** A delivery order of a department store (shop.ts): `count` more of `proto` wanted, `reward` coins each from its till. */
+export type ShopOrderFields = { orderId: string; buildId: string; room: string; storeName: string; ownerName: string; proto: string; protoName: string; count: number; reward: number };
 export type LoanFields = { loanId: string; buildId: string; room: string; accountId: string; charId: string; charName: string; owed: number; untilWorldMs: number };
 /** A cart (engine/commands/cart.ts): its cargo lies at `cartId`, `path` the rooms still ahead, the next at `dueWorldMs`. */
 export type CartFields = { cartId: string; accountId: string; charId: string; ownerName: string; room: string; x: number; y: number; path: string[]; dueWorldMs: number };

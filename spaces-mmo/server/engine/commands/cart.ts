@@ -134,7 +134,8 @@ const zug: Command = {
 		const island = c.world.rooms.find((r) => r.roomId === c.actor.room)?.island;
 		const stations = (await c.space.readAll({ type: "Building", fields: { plan: d.plan } }, { txn: c.txn })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => c.world.rooms.find((r) => r.roomId === b.room)?.island === island);
 		if (!stations.some((b) => b.room === c.actor.room && distTo(c.actor, b) <= 1)) throw new CommandError("Der Zug hält nur an Bahnhöfen; stell dich neben einen.");
-		const others = stations.filter((b) => b.room !== c.actor.room), word = arg.trim().toLowerCase();
+		// one stop a room, however many stations stand in it
+		const others = stations.filter((b, i) => b.room !== c.actor.room && stations.findIndex((x) => x.room === b.room) === i), word = arg.trim().toLowerCase();
 		const names = others.map((b) => nameOf(c, b.room)).join(", ");
 		if (!word) return msg(c, c.actor.charId, "info", names ? `Der Zug fährt nach: ${names}, für ${d.fare} Münze${d.fare === 1 ? "" : "n"}.` : "Auf dieser Insel gibt es keinen anderen Bahnhof.");
 		const to = others.find((b) => nameOf(c, b.room).toLowerCase() === word || b.room === word);

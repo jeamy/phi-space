@@ -1,14 +1,15 @@
 // Fishing, step 7 (docs/siedeln.en.md "Boats and fishing"): beside a jetty, anyone's, `wirf netz` brings a catch, now and then a
 // find, and costs the rest that work costs; the net holds. A smokehouse turns fish into smoked fish by a recipe.
 import { randomInt } from "node:crypto";
-import { fieldsOf, type BuildingFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type ItemFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
-import { CommandError, inventory, msg, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
+import { CommandError, inventory, itemsNamed, msg, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import { handOff } from "../handover.ts";
+import { baysOf, shipIn } from "../liner.ts";
 import { regionOfRoom } from "../regions.ts";
-import { distTo, giveBack, planOf, rested, tire } from "./build.ts";
+import { amount, distTo, giveBack, planOf, rested, tire } from "./build.ts";
 import { worldNowOf } from "../clock.ts";
-import { consume } from "./trade.ts";
+import { consume, move } from "./trade.ts";
 import { dropOffers, placeIn, relocate } from "./default.ts";
 
 const weighted = (xs: Array<{ proto: string; weight: number }>) => { let r = randomInt(0, xs.reduce((n, x) => n + x.weight, 0)); return xs.find((x) => (r -= x.weight) < 0)!; };
@@ -93,11 +94,45 @@ const segle: Command = {
 		await msg(c, "*", "info", `$you() $conj(legst|legt) in ${to} an.`, { templ: true, room: dest.roomId });
 	},
 };
+// A boat's hatch: things lie in the boat (their location is its itemId) and go wherever it goes, across regions with the
+// handover (handover.ts carries them first). Loaded and unloaded beside a jetty; the sailing boat holds more.
+const luke: Command = {
+	key: "luke", aliases: ["laderaum", "hatch"],
+	help: "luke – was in der Luke deines Boots liegt; am Steg „luke lade [n|alle] <ding>“ und „luke entlade [n|alle] <ding>“ (oder „luke entlade alle“)",
+	async func(c, arg) {
+		const hatch = c.world.boat?.hatch, plan = c.world.fishing?.plan;
+		if (!hatch || !plan) throw new CommandError("In dieser Welt haben Boote keine Luke.");
+		const pack = await inventory(c);
+		// the larger hatch first: a sailing boat before a rowing boat
+		const boat = pack.filter((i) => hatch[i.f.proto]).sort((a, b) => hatch[b.f.proto]! - hatch[a.f.proto]!)[0];
+		if (!boat) throw new CommandError("Dafür brauchst du ein Boot.");
+		const cap = hatch[boat.f.proto]!, held = (await c.space.readAll({ type: "Item", fields: { location: boat.f.itemId } }, c.txn ? { txn: c.txn } : {})).map((e) => ({ e, f: fieldsOf<ItemFields>(e) }));
+		const [word = "", ...rest] = arg.trim().split(/\s+/), what = rest.join(" ");
+		if (!word) {
+			const names = new Map<string, number>();
+			for (const i of held) names.set(i.f.name, (names.get(i.f.name) ?? 0) + 1);
+			return msg(c, c.actor.charId, "info", `In der Luke von ${boat.f.name} (${held.length}/${cap}): ${held.length ? [...names].map(([n, k]) => (k > 1 ? `${k}× ${n}` : n)).join(", ") : "nichts"}.`);
+		}
+		const load = /^(?:lade|laden|load)$/i.test(word);
+		if (load && !what) throw new NotUnderstood("Was soll in die Luke? luke lade [n|alle] <ding>");
+		if (!load && !/^(?:entlade|entladen|unload)$/i.test(word)) throw new NotUnderstood("So geht es: luke, luke lade <ding>, luke entlade <ding>.");
+		const atJetty = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
+		if (!atJetty) throw new CommandError(`Be- und entladen wird direkt neben ${planOf(c.world, plan)?.dative ?? "einem Steg"}.`);
+		// „alle“ alone: everything (unloading, also without a word); else as with a chest: [n|alle] <ding>
+		const everything = /^(?:alle?|all)$/i.test(what) || (!load && !what), { n, name } = everything ? { n: null, name: "" } : amount(what);
+		const from = load ? pack.filter((i) => !hatch[i.f.proto]) : held;
+		const hits = everything ? from : (() => { const h = itemsNamed(c.world, from, name); return h.length ? from.filter((i) => i.f.proto === h[0]!.f.proto) : []; })();
+		if (!hits.length) throw new NotUnderstood(load ? `Du trägst nichts, was „${name.slice(0, 30)}“ heißt (ein Boot passt in keine Luke).` : `In der Luke ist nichts, was „${name.slice(0, 30)}“ heißt.`);
+		const k = Math.min(n ?? hits.length, hits.length, load ? cap - held.length : hits.length);
+		if (k <= 0) throw new CommandError(`Die Luke ist voll (${cap}).`);
+		for (const i of hits.slice(0, k)) await move(c, i.f, load ? c.actor.charId : boat.f.itemId, load ? boat.f.itemId : c.actor.charId);
+		const kinds = [...new Set(hits.slice(0, k).map((i) => i.f.name))].join(", ");
+		await msg(c, c.actor.charId, "info", load ? `Du lädst ${k}× ${kinds} in die Luke von ${boat.f.name}.${(n ?? hits.length) > k ? " Mehr passt nicht hinein." : ""}` : `Du holst ${k}× ${kinds} aus der Luke von ${boat.f.name}.`);
+	},
+};
 const restOf = async (c: CommandCtx) => { const { now, rest } = await rested(c); return [now, rest] as const; };
 
-/** When the line's ship lies in a bay: the first half of every period. The time to it, 0 while it lies there. */
-export const shipIn = (now: number, everyWorldMs: number) => { const at = now % everyWorldMs; return at < everyWorldMs / 2 ? 0 : everyWorldMs - at; };
-const bays = (c: CommandCtx) => { const rooms = c.world.allRooms ?? c.world.rooms, seen = new Map<string, (typeof rooms)[number]>(); for (const r of rooms) if (r.island && r.spawn && !seen.has(r.island)) seen.set(r.island, r); return seen; };
+const bays = (c: CommandCtx) => baysOf(c.world.allRooms ?? c.world.rooms);
 
 const fahrplan: Command = {
 	key: "fahrplan", aliases: ["timetable", "schiff"],
@@ -135,4 +170,4 @@ const einschiffen: Command = {
 	},
 };
 
-export const FISHING_COMMANDS: Command[] = [wirf, rudere, segle, fahrplan, einschiffen, schaufle];
+export const FISHING_COMMANDS: Command[] = [wirf, rudere, segle, luke, fahrplan, einschiffen, schaufle];

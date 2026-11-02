@@ -453,6 +453,18 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 		if (o.location !== roomId) continue;
 		const x = o.x * ts, y = o.y * ts, cx = x + ts / 2, cy = y + ts / 2;
 		if (o.kind === "scenery") { s.objs.addChild(sceneryView(p, o, ts)); continue; }
+		if (o.kind === "liner") {
+			// the large ship in the bay (App, engine/liner.ts): a dark hull with a white deckhouse and a funnel
+			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts, along = w > h, inset = ts * 0.15;
+			const g = new p.Graphics().roundRect(x + inset, y + inset, w - 2 * inset, h - 2 * inset, ts * 0.35).fill({ color: "#2a2f38" }).stroke({ width: 2, color: "#9a2a22" });
+			g.rect(along ? x + w * 0.35 : x + ts * 0.3, along ? y + ts * 0.3 : y + h * 0.35, along ? w * 0.25 : ts * 0.4, along ? ts * 0.4 : h * 0.25).fill({ color: "#ece6d6" });
+			g.circle(along ? x + w * 0.55 : cx, along ? cy : y + h * 0.55, ts * 0.12).fill({ color: "#3a3d44" }).stroke({ width: 2, color: "#9a2a22" });
+			const label = new p.Text({ text: tr(o.name), resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
+			label.anchor.set(0.5, 0);
+			label.position.set(x + w / 2, y + h);
+			s.objs.addChild(g, label);
+			continue;
+		}
 		if (o.kind === "beacon") {
 			const lit = (o.until ?? 0) > Date.now();
 			const ring = new p.Graphics().circle(cx, cy, 13).fill({ color: lit ? "#3a2412" : "#2b2f33" }).stroke({ width: 2, color: lit ? "#8a5a2b" : "#5a6068" });
