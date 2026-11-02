@@ -110,7 +110,6 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 	let d = dir(&format!("store-walk-{seed}"));
 	let (ts_file, rust_file) = (d.join("ts.sqlite"), d.join("rust.sqlite"));
 	let mut w = Walk::new(seed);
-	w.without_restores = true; // the store does not keep restored history yet (R6b step 3)
 	let init = w.init();
 	let mut rust = RustSide::open(&rust_file, &init);
 	rust.overlap = seed % 2 == 1;
@@ -258,6 +257,23 @@ fn a_served_wait_with_its_claim_on_the_disk() {
 	compare("store-served-wait", &init, &lines);
 }
 
+#[test]
+fn the_watermark_a_commit_leaves_on_unchanged_entries() {
+	// core.ts keeps the expiry watermark on the published entries array: a later commit that finds them unchanged
+	// starts from it (here Infinity, after the last entry expired), so `nextExpiry` answers null, not FOREVER
+	let init = obj! { "op" => "init", "seed" => "walk", "now" => 1000.0, "spaceId" => "sp-2", "incarnation" => "f00d", "limits" => obj! { "notifyIntervalMs" => 1000.0 } };
+	let lines = vec![
+		obj! { "op" => "write", "now" => 2500.0, "entry" => obj! { "type" => "Note", "fields" => obj! { "n" => 2.0 } }, "lease" => 100.0, "as" => "1" },
+		obj! { "op" => "probe", "now" => 3_602_500.0, "tmpl" => obj! { "fields" => obj! { "n" => 3.0 } }, "take" => false, "as" => "a" },
+		obj! { "op" => "notify", "now" => 7_202_500.0, "tmpl" => obj! { "fields" => obj! { "n" => 3.0 } }, "lease" => 400.0, "handback" => 1.0, "target" => "b" },
+		obj! { "op" => "write", "now" => 7_203_700.0, "entry" => obj! { "type" => "Note", "fields" => obj! { "n" => 2.0 } }, "lease" => 0.0 },
+		obj! { "op" => "nextExpiry", "now" => 7_203_900.0 },
+		obj! { "op" => "pendingClaims", "now" => 7_204_900.0 },
+		obj! { "op" => "nextExpiry", "now" => 7_205_900.0 },
+	];
+	compare("unchanged-watermark", &init, &lines);
+}
+
 /// A debugging aid for a divergence: the generations and claims of both hosts after UPTO steps of the walk with seed
 /// PHI_STORE_WALK_SEED (`cargo test -p phi-store --test store_walk show_walk_state -- --ignored --nocapture`).
 #[test]
@@ -267,7 +283,6 @@ fn show_walk_state() {
 	let upto: usize = std::env::var("UPTO").unwrap().parse().unwrap();
 	let d = dir("show-walk-state");
 	let mut w = Walk::new(seed);
-	w.without_restores = true; // the store does not keep restored history yet (R6b step 3)
 	let init = w.init();
 	eprintln!("init {}", init.to_json_text());
 	let mut rust = RustSide::open(&d.join("rust.sqlite"), &init);

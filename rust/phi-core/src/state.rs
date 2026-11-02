@@ -561,6 +561,9 @@ pub struct DiskClaims {
 	pub stamp: u64,
 	/// How often the whole map was read (`entries`): code that scans a day of claims shows here.
 	pub enumerations: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+	/// An adopted map reads the disk only once the commit that writes it is durable (`DiskMap.adopt`): until then the
+	/// rows there are none yet, or those of the map it replaces.
+	blind_until: Option<u64>,
 }
 impl std::fmt::Debug for DiskClaims {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "DiskClaims {{ held: {} }}", self.held.len()) }
@@ -588,15 +591,14 @@ impl DiskClaims {
 	/// Over the rows of `source`: the open requests are held from the start.
 	pub fn new(source: std::sync::Arc<dyn ClaimSource>) -> DiskClaims {
 		let held = source.unindexed().into_iter().map(|(k, v)| (k, Some(v), 0)).collect();
-		let mut claims = DiskClaims { source, held, held_index: HashMap::new(), stamp: 0, enumerations: Default::default() };
+		let mut claims = DiskClaims { source, held, held_index: HashMap::new(), stamp: 0, enumerations: Default::default(), blind_until: None };
 		claims.index_held();
 		claims
 	}
 	/// From a map in memory that commit `written` is writing to the disk now (`DiskMap.adopt`): every record held until
 	/// that commit is durable.
 	pub fn adopt(source: std::sync::Arc<dyn ClaimSource>, from: &MemoryClaims, written: u64) -> DiskClaims {
-		let mut d = DiskClaims::new(source);
-		d.stamp = written;
+		let mut d = DiskClaims { source, held: vec![], held_index: HashMap::new(), stamp: written, enumerations: Default::default(), blind_until: Some(written) };
 		for (k, v) in from.iter() {
 			d.write(k, Some(v.clone()));
 		}
@@ -609,6 +611,7 @@ impl DiskClaims {
 	pub fn get(&self, k: &str) -> Option<Json> {
 		match self.held_at(k) {
 			Some(v) => v.clone(),
+			None if self.blind() => None,
 			None => self.source.get(k),
 		}
 	}
@@ -627,6 +630,9 @@ impl DiskClaims {
 	}
 	/// The commits up to `durable` are on the disk: what they wrote is read from there from now on (open requests stay held).
 	pub fn settle(&mut self, durable: u64) {
+		if self.blind_until.is_some_and(|w| w <= durable) {
+			self.blind_until = None;
+		}
 		let before = self.held.len();
 		self.held.retain(|(_, v, stamp)| *stamp > durable || v.as_ref().is_some_and(|v| claim_at(v).is_none()));
 		if self.held.len() != before {
@@ -639,11 +645,12 @@ impl DiskClaims {
 	pub fn held(&self) -> usize { self.held.len() }
 	/// Every record: reads the whole map (counted in `enumerations`).
 	/// `any`: a look at the first keys, not an enumeration.
-	pub fn any(&self) -> bool { self.held.iter().any(|(_, v, _)| v.is_some()) || self.source.first_ids(self.held.len() + 1).iter().any(|k| self.held_at(k).is_none()) }
+	pub fn any(&self) -> bool { self.held.iter().any(|(_, v, _)| v.is_some()) || (!self.blind() && self.source.first_ids(self.held.len() + 1).iter().any(|k| self.held_at(k).is_none())) }
+	fn blind(&self) -> bool { self.blind_until.is_some() }
 	pub fn entries(&self) -> Object {
 		self.enumerations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 		let mut out = Object::new();
-		for k in self.source.ids() {
+		for k in if self.blind() { vec![] } else { self.source.ids() } {
 			if self.held_at(&k).is_none() {
 				if let Some(v) = self.source.get(&k) {
 					out.insert(k, v);
@@ -661,7 +668,7 @@ impl DiskClaims {
 	/// `known`; in JavaScript's string order, at most `limit`.
 	pub fn due(&self, t: f64, limit: usize, in_groups: &[String], known: &[String], pick: impl Fn(&Json) -> bool) -> Vec<String> {
 		let mut out: Vec<String> = vec![];
-		for (k, v) in self.source.due(t, limit + self.held.len(), in_groups, known) {
+		for (k, v) in if self.blind() { vec![] } else { self.source.due(t, limit + self.held.len(), in_groups, known) } {
 			if self.held_at(&k).is_none() && pick(&v) && !out.contains(&k) {
 				out.push(k);
 			}
@@ -686,7 +693,7 @@ impl DiskClaims {
 	}
 	/// `nextAt`: the smallest `at` above `t` among records without flag.
 	pub fn next_at(&self, t: f64) -> Option<f64> {
-		let mut min = self.source.next_at(t);
+		let mut min = if self.blind() { None } else { self.source.next_at(t) };
 		for v in self.held.iter().filter_map(|(_, v, _)| v.as_ref()) {
 			if claim_flag(v) {
 				continue;
@@ -704,7 +711,7 @@ impl DiskClaims {
 		if self.held.iter().any(|(_, v, _)| v.as_ref().is_some_and(|v| v.get("generation").and_then(Json::as_str) == Some(g))) {
 			return true;
 		}
-		self.source.group(g, self.held.len() + 1).iter().any(|k| self.held_at(k).is_none())
+		!self.blind() && self.source.group(g, self.held.len() + 1).iter().any(|k| self.held_at(k).is_none())
 	}
 }
 
@@ -956,7 +963,12 @@ impl SpaceState {
 		if let Some(r) = &self.rpc { o.insert("rpc", r.to_json_parts(head, head || no_claims)); }
 		if let Some(m) = &self.mailboxes { o.insert("mailboxes", obj_boxes(m)); }
 		if let Some(s) = &self.stream { o.insert("stream", s.to_json_with(head)); }
-		for (k, v) in self.rest.iter() { if !o.contains_key(k) { o.insert(k, v.clone()); } }
+		for (k, v) in self.rest.iter() {
+			if !o.contains_key(k) {
+				// the historical claims are a part of their own (rows): the head keeps an empty map
+				o.insert(k, if head && k == "restoredClaims" { Json::Object(Object::new()) } else { v.clone() });
+			}
+		}
 		Json::Object(o)
 	}
 }

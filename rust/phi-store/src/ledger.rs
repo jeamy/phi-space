@@ -198,9 +198,9 @@ impl SqliteLedger {
 		Ok(out.into_iter().map(|(k, key)| (k, Some(key).filter(|s| !s.is_empty()))).collect())
 	}
 
-	/// Whether a stored claim is of a kind not ported (a negative claim, a claim from a restore).
+	/// Whether a stored claim is of a kind not ported (a negative claim).
 	pub fn unported_claims(&self, kind: &str, key: Option<&str>) -> Result<bool> {
-		let sql = "SELECT 1 FROM parts WHERE kind = ? AND key = ? AND ((part = 'rpc.claims' AND json_extract(value, '$.notCommitted') IS NOT NULL) OR part = 'restoredClaims') LIMIT 1";
+		let sql = "SELECT 1 FROM parts WHERE kind = ? AND key = ? AND part IN ('rpc.claims', 'restoredClaims') AND json_extract(value, '$.notCommitted') IS NOT NULL LIMIT 1";
 		match self.files.read.query_row(sql, params![kind, doc_key(key)], |_| Ok(())) {
 			Ok(()) => Ok(true),
 			Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),

@@ -35,8 +35,15 @@ impl Space {
 	pub(crate) fn invalid_generation(&self, id: &str) -> bool { self.state.rest.get("invalidGenerations").and_then(|g| g.get(id)).is_some_and(|v| !v.is_null() && v != &Json::Bool(false)) }
 	/// A restore or an authority transition was installed, or the Member is recovery-blocked: history is not uninterrupted.
 	pub(crate) fn interrupted_history(&self) -> bool { self.restore_state().is_some() || self.state.rest.get("authorityTransition").is_some_and(|t| !t.is_null()) || self.member_state() == Some("recoveryBlocked") }
-	/// `restoredBytes`: the JSON size of the historical claims in memory (`restoredClaims` on the disk: its tally).
-	pub(crate) fn restored_bytes(&self) -> f64 { self.restored_claims().map_or(0.0, |m| bytes(&Json::Object(m.clone()))) }
+	/// `restoredBytes`: the JSON size of the historical claims in memory; on the disk the tally kept beside them (from
+	/// before the tally: counted once).
+	pub(crate) fn restored_bytes(&self) -> f64 {
+		let Some(m) = self.restored_claims() else { return 0.0 };
+		if !self.restored_on_disk {
+			return bytes(&Json::Object(m.clone()));
+		}
+		self.state.rest.get("restoredBytes").and_then(Json::as_f64).unwrap_or_else(|| m.iter().fold(2.0, |n, (k, c)| n + bytes(c) + bytes(&Json::String(k.into())) + 2.0))
+	}
 	/// `setRestored`: a historical claim, and the tally kept beside it.
 	fn set_restored(&mut self, key: &str, next: Json) {
 		if !self.state.rest.contains_key("restoredClaims") {
@@ -48,6 +55,9 @@ impl Space {
 		self.state.rest.insert("restoredBytes", Json::Number(tally + after - before));
 		if let Some(Json::Object(m)) = self.state.rest.get_mut("restoredClaims") {
 			m.insert(key, next);
+		}
+		if let Some(t) = self.tracking.as_mut() {
+			if !t.restored.iter().any(|k| k == key) { t.restored.push(key.to_owned()); }
 		}
 	}
 	/// Bytes of every entry, as the restore's document check counts them.
@@ -91,9 +101,25 @@ impl Space {
 			"recoveryId" => id, "argumentHash" => argument.as_str(), "snapshotHash" => hash, "incarnation" => incarnation.as_str(), "primaryEpoch" => primary_epoch,
 			"startedAt" => now, "waitUntil" => now + 62_000.0, "stage" => "entries", "cursor" => 0.0, "kind" => kind
 		};
-		// clearing a collection records one empty assignment, not a rewrite of the old values
+		// clearing a collection records one empty assignment, not a rewrite of the old values; a store clears the parts
+		// replaced as a whole, and a failed commit gets the claims and the stream back
+		if let Some(t) = self.tracking.as_mut() {
+			// the maps on the disk are cleared; the generations go key by key, the log batch by batch (as TypeScript's store
+			// writes a map in memory and an array replaced as a whole)
+			t.cleared.extend(["rpc.claims", "restoredClaims"]);
+			t.log_replaced = true;
+			for (k, v) in self.state.rpc.as_ref().map(|r| r.generations.iter().map(|(k, v)| (k.to_owned(), v.clone())).collect::<Vec<_>>()).unwrap_or_default() {
+				if !t.generations.iter().any(|(g, _)| *g == k) {
+					t.generations.push((k, Some(v)));
+				}
+			}
+			if t.replaced.is_none() {
+				t.replaced = Some((self.state.rpc.clone(), self.state.stream.clone()));
+			}
+		}
+		self.restored_on_disk = false; // a new map, in memory until a store takes it
 		let s = &mut self.state;
-		s.entries = Default::default();
+		s.entries.retain(|_| false);
 		s.txns.clear();
 		s.regs.clear();
 		s.waiters.clear();

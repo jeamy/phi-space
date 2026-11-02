@@ -25,6 +25,8 @@ struct Record {
 /// One host's snapshots, in order of use (a Map in TypeScript: a page read moves its snapshot to the end).
 #[derive(Default)]
 pub struct Snapshots {
+	/// The state `keepSource` kept: the snapshot a later restore installs (the driver's line, not the host's).
+	pub kept: Option<phi_json::Json>,
 	cache: Vec<Record>,
 }
 

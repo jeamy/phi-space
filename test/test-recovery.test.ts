@@ -79,3 +79,40 @@ test("restore imports in bounded crash-resumable batches, keeps history read-onl
 		assert.equal((await local.take({ id: snapshot.entries[0]!.id }, 0))?.fields.i, 0); assert.equal(await local.take({ type: "Task" }, 0), null, "unreleased tasks remain quarantined");
 	});
 });
+
+test("a restore over a stored Space clears its open requests and its earlier history, before and after a reopen", async () => {
+	// the own store keeps both claim maps on the disk; a map replaced as a whole must not take over the rows it replaces
+	// (the second restore once kept the historical claims of the first, the first the open requests of before)
+	const { beginRestore, restoreBatch, snapshotHash, completeRestore, claims } = await import("../src/index.ts");
+	const { openSqliteHost } = await import("../src/store/sqlite.ts");
+	const dir = mkdtempSync(join(tmpdir(), "restore-twice-")), file = join(dir, "s.sqlite");
+	try {
+		let h = await openSqliteHost(file), now = 1000;
+		const p = { peerId: "p1" };
+		const pending = () => h.commit(async (t) => {
+			const s = await spaceDoc(t, undefined, now), g = claims.issueGeneration(s, now, p);
+			claims.admit(s, now, { generation: g.generation, requestId: `r${now}`, principal: p }, "write", { a: 1 }, core.FOREVER);
+		}, ctx);
+		const restore = async (id: string) => {
+			const source = core.plain((await h.snapshot((await import("../src/index.ts")).Space, ctx))!) as core.SpaceState;
+			await h.commit(async (t) => { const s = await spaceDoc(t, undefined, now); beginRestore(s, now, { recoveryId: id, expectedDataIncarnation: s.incarnation!, expectedPrimaryEpoch: s.primaryEpoch ?? 1, snapshotHash: snapshotHash(source), kind: "data" }); }, ctx);
+			const seen = core.plain((await h.snapshot((await import("../src/index.ts")).Space, ctx))!) as core.SpaceState;
+			for (let i = 0; i < 6; i++) await h.commit(async (t) => { restoreBatch(await spaceDoc(t, undefined, now), now, source); }, ctx);
+			now += 70_000;
+			await h.commit(async (t) => { completeRestore(await spaceDoc(t, undefined, now), now, id); }, ctx);
+			return { seen, source };
+		};
+		await pending();
+		const first = await restore("rec-1");
+		assert.deepEqual(Object.keys(first.seen.rpc!.claims), [], "the open request of before is gone from the restored Space");
+		await pending();
+		const second = await restore("rec-2");
+		assert.deepEqual(Object.keys(second.seen.restoredClaims ?? {}), [], "the history of the first restore is gone when the second begins");
+		assert.deepEqual(Object.keys(second.seen.rpc!.claims), []);
+		const done = core.plain((await h.snapshot((await import("../src/index.ts")).Space, ctx))!) as core.SpaceState;
+		await h.close(ctx);
+		h = await openSqliteHost(file);
+		assert.deepEqual(core.plain((await h.snapshot((await import("../src/index.ts")).Space, ctx))!), done, "what a reopened store reads is what the running one showed");
+		await h.close(ctx);
+	} finally { rmSync(dir, { recursive: true, force: true }); }
+});

@@ -125,7 +125,6 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 	ok(opened).unwrap();
 	let journal = SyncJournal::open(&d.join("a.sqlite"), &genesis(), options()).unwrap();
 	let mut w = Walk::new(seed);
-	w.without_restores = true; // the store does not keep restored history yet (R6b step 3)
 	let init = w.init();
 	let mut p = open_primary(&store, journal, &standby, Some(&init), seed);
 	let overlap = seed % 2 == 1;

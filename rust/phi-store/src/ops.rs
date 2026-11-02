@@ -11,6 +11,8 @@ pub enum WriteOp {
 	Retire { kind: String, key: String },
 	Part { kind: String, key: String, part: String, id: String, ord: i64, value: String, at: Option<f64>, grp: Option<String>, flag: Option<i64> },
 	PartDel { kind: String, key: String, part: String, id: String },
+	/// Every row of a part: one replaced as a whole (a restore), whose records are written after it.
+	PartClear { kind: String, key: String, part: String },
 	/// A `store_meta` value: the replication marker, written in the same transaction as the data it marks.
 	Meta { key: String, value: String },
 }
@@ -24,6 +26,7 @@ impl WriteOp {
 			WriteOp::Retire { kind, key } => obj! { "t" => "retire", "kind" => kind.as_str(), "key" => key.as_str() },
 			WriteOp::Part { kind, key, part, id, ord, value, at, grp, flag } => obj! { "t" => "part", "kind" => kind.as_str(), "key" => key.as_str(), "part" => part.as_str(), "id" => id.as_str(), "ord" => *ord as f64, "value" => value.as_str(), "at" => n(*at), "grp" => grp.as_deref().map_or(Json::Null, |g| Json::String(g.to_owned())), "flag" => n(flag.map(|f| f as f64)) },
 			WriteOp::PartDel { kind, key, part, id } => obj! { "t" => "partDel", "kind" => kind.as_str(), "key" => key.as_str(), "part" => part.as_str(), "id" => id.as_str() },
+			WriteOp::PartClear { kind, key, part } => obj! { "t" => "partClear", "kind" => kind.as_str(), "key" => key.as_str(), "part" => part.as_str() },
 			WriteOp::Meta { key, value } => obj! { "t" => "meta", "key" => key.as_str(), "value" => value.as_str() },
 		}
 	}
@@ -39,6 +42,7 @@ pub const RETIRE: &str = "DELETE FROM documents WHERE kind = ? AND key = ?";
 pub const RETIRE_PARTS: &str = "DELETE FROM parts WHERE kind = ? AND key = ?";
 pub const PART: &str = "INSERT INTO parts (kind, key, part, id, ord, value, at, grp, flag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (kind, key, part, id) DO UPDATE SET ord = excluded.ord, value = excluded.value, at = excluded.at, grp = excluded.grp, flag = excluded.flag";
 pub const PART_DEL: &str = "DELETE FROM parts WHERE kind = ? AND key = ? AND part = ? AND id = ?";
+pub const PART_CLEAR: &str = "DELETE FROM parts WHERE kind = ? AND key = ? AND part = ?";
 pub const META: &str = "INSERT INTO store_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value";
 pub const SEQ: &str = "UPDATE store_meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'commit_seq'";
 
@@ -68,6 +72,9 @@ pub(crate) fn apply_rows(db: &Connection, ops: &[WriteOp]) -> rusqlite::Result<(
 			}
 			WriteOp::PartDel { kind, key, part, id } => {
 				db.prepare_cached(PART_DEL)?.execute(params![kind, key, part, id])?;
+			}
+			WriteOp::PartClear { kind, key, part } => {
+				db.prepare_cached(PART_CLEAR)?.execute(params![kind, key, part])?;
 			}
 			WriteOp::Meta { key, value } => {
 				db.prepare_cached(META)?.execute(params![key, value])?;

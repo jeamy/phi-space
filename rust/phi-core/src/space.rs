@@ -401,6 +401,13 @@ pub struct Space {
 	pub doc_writes: Vec<(String, String, i64, String)>,
 	/// The document came with claims of a kind not ported (looked for once: a space holds a day of claims).
 	unported_claims: bool,
+	/// The historical claims are on the disk (a store's map part): their bytes are the tally kept beside them.
+	pub restored_on_disk: bool,
+	/// The watermark a store's next commit starts from: core.ts keeps it on the published entries array
+	/// (`committedWatermarks`), so a commit that leaves the entries as they were passes on what it set.
+	committed_watermark: Option<f64>,
+	/// What a tracked commit set as the watermark of the entries it began with (`setWatermark`).
+	marked: Option<f64>,
 	/// What the running commit changed, while a host tracks it.
 	pub(crate) tracking: Option<Tracking>,
 }
@@ -423,12 +430,19 @@ pub(crate) struct Tracking {
 	/// back at the end of its map, not where it was (later sweeps go by that order).
 	claims: Vec<(String, Option<Json>)>,
 	claims_seen: std::collections::HashSet<String>,
-	generations: Vec<(String, Option<Json>)>,
+	pub(crate) generations: Vec<(String, Option<Json>)>,
 	/// How many mailboxes there were (`None`: no map yet), and each one as it was before the commit changed it.
 	boxes_at_begin: Option<usize>,
 	boxes: Vec<(usize, crate::state::Mailbox)>,
 	/// Each of `UNDONE_REST` as it was before the commit changed it.
 	rest: Vec<(&'static str, Option<Json>)>,
+	/// Parts the commit replaced as a whole (a restore), and the claims and stream as they were before it.
+	pub(crate) cleared: Vec<&'static str>,
+	pub(crate) replaced: Option<(Option<crate::state::RpcState>, Option<crate::state::StreamState>)>,
+	/// The stream's log was replaced as a whole: every batch it held goes, the new ones follow in order.
+	pub(crate) log_replaced: bool,
+	/// Keys of the historical claims it changed.
+	pub(crate) restored: Vec<String>,
 }
 
 /// What a tracked commit changed, for the rows a store writes (`Space::end_commit`).
@@ -442,12 +456,18 @@ pub struct Changes {
 	/// Keys of the claims and generations it changed (each present now, or deleted).
 	pub claims: Vec<String>,
 	pub generations: Vec<String>,
+	/// Map parts on the disk replaced as a whole (`partClear`, then every record they hold now), and the historical
+	/// claims changed.
+	pub cleared: Vec<&'static str>,
+	pub restored: Vec<String>,
+	/// The stream's log replaced as a whole (its old batches go row by row, as an array part does).
+	pub log_replaced: bool,
 }
 
 impl Space {
 	pub fn new(state: SpaceState, random: Random) -> Space {
 		let unported_claims = state.rpc.as_ref().and_then(|r| r.claims.memory()).is_some_and(|m| m.iter().any(|(_, c)| c.get("notCommitted").is_some() || c.as_object().is_none()));
-		Space { unported_claims, state, clock: 0.0, random, open: None, budget: None, watermark: None, router_permit: false, doc_writes: vec![], tracking: None }
+		Space { unported_claims, restored_on_disk: false, committed_watermark: None, marked: None, state, clock: 0.0, random, open: None, budget: None, watermark: None, router_permit: false, doc_writes: vec![], tracking: None }
 	}
 
 	/// A commit as the TypeScript host runs one: on a fresh draft (the watermark, the budget and the open batch start
@@ -456,6 +476,8 @@ impl Space {
 	pub fn begin_tracked_commit(&mut self) {
 		self.begin_commit();
 		let watermark = self.watermark.take();
+		self.watermark = self.committed_watermark;
+		self.marked = None;
 		let entries = std::mem::take(&mut self.state.entries);
 		let log = self.state.stream.as_mut().map(|s| std::mem::take(&mut s.log));
 		let claims = self.state.rpc.as_mut().map(|r| std::mem::take(&mut r.claims));
@@ -483,23 +505,27 @@ impl Space {
 		}
 		self.state.entries.track();
 		let stream_rev = stream::revision_of(&self.state.stream);
-		self.tracking = Some(Tracking { head, watermark, stream_rev, dropped: vec![], claims: vec![], claims_seen: Default::default(), generations: vec![], boxes_at_begin, boxes: vec![], rest: vec![] });
+		self.tracking = Some(Tracking { head, watermark, stream_rev, dropped: vec![], claims: vec![], claims_seen: Default::default(), generations: vec![], boxes_at_begin, boxes: vec![], rest: vec![], cleared: vec![], replaced: None, restored: vec![], log_replaced: false });
 	}
 	/// What the tracked commit changed so far; tracking goes on (a store may still refuse the commit and roll it back).
 	pub fn pending_changes(&self) -> Changes {
 		let t = self.tracking.as_ref().expect("a tracked commit");
-		Changes { entries: self.state.entries.tracked().to_vec(), dropped_revs: t.dropped.iter().map(|b| b.rev).collect(), stream_rev: t.stream_rev, claims: t.claims.iter().map(|(k, _)| k.clone()).collect(), generations: t.generations.iter().map(|(k, _)| k.clone()).collect() }
+		Changes { entries: self.state.entries.tracked().to_vec(), dropped_revs: t.dropped.iter().map(|b| b.rev).collect(), stream_rev: t.stream_rev, claims: t.claims.iter().map(|(k, _)| k.clone()).collect(), generations: t.generations.iter().map(|(k, _)| k.clone()).collect(), cleared: t.cleared.clone(), restored: t.restored.clone(), log_replaced: t.log_replaced }
 	}
 	/// What the tracked commit changed; tracking ends.
 	pub fn end_commit(&mut self) -> Changes {
 		let t = self.tracking.take().expect("a tracked commit");
 		let entries = self.state.entries.untrack();
-		Changes { entries, dropped_revs: t.dropped.iter().map(|b| b.rev).collect(), stream_rev: t.stream_rev, claims: t.claims.into_iter().map(|(k, _)| k).collect(), generations: t.generations.into_iter().map(|(k, _)| k).collect() }
+		// entries changed: the published array is a new one, which has no watermark yet
+		self.committed_watermark = if entries.is_empty() { self.marked.or(self.committed_watermark) } else { None };
+		Changes { entries, dropped_revs: t.dropped.iter().map(|b| b.rev).collect(), stream_rev: t.stream_rev, claims: t.claims.into_iter().map(|(k, _)| k).collect(), generations: t.generations.into_iter().map(|(k, _)| k).collect(), cleared: t.cleared, restored: t.restored, log_replaced: t.log_replaced }
 	}
 	/// Undoes the tracked commit: the state is what it was when the commit began.
 	pub fn rollback(&mut self) {
 		let t = self.tracking.take().expect("a tracked commit");
 		self.watermark = t.watermark;
+		// the mark was set on the entries the commit began with, which stay published
+		if self.marked.is_some() { self.committed_watermark = self.marked; }
 		let mut entries = std::mem::take(&mut self.state.entries);
 		let log = entries.untrack();
 		entries.undo(log);
@@ -546,6 +572,11 @@ impl Space {
 			r.generations = generations;
 		}
 		self.state = head;
+		// a restore replaced the claims and the stream as a whole: they come back as they were
+		if let Some((rpc, stream)) = t.replaced {
+			self.state.rpc = rpc;
+			self.state.stream = stream;
+		}
 		self.open = None;
 		self.budget = None;
 	}
@@ -716,10 +747,15 @@ impl Space {
 			None => format!("{p}{}", n(self.state.next_id)),
 		}
 	}
+	/// `setWatermark`: on the draft, and in a tracked commit on the entries it began with.
+	fn set_watermark(&mut self, min: f64) {
+		self.watermark = Some(min);
+		if self.tracking.is_some() { self.marked = Some(min); }
+	}
 	pub(crate) fn note_expiry(&mut self, expires: f64) {
 		if let Some(known) = self.watermark {
 			if expires < known {
-				self.watermark = Some(expires);
+				self.set_watermark(expires);
 			}
 		}
 	}
@@ -1567,7 +1603,8 @@ impl Space {
 					min = e.expires;
 				}
 			}
-			self.watermark = Some(min);
+			// with dead entries it holds for this draft only (core.ts sets it on the draft, not the published array)
+			if dead.is_empty() { self.set_watermark(min) } else { self.watermark = Some(min) }
 			// core.ts orders ids with localeCompare; for ids of one incarnation (hex, a dash, digits) that is byte order
 			let entries = &self.state.entries;
 			dead.sort_by(|&a, &b| entries[a].expires.total_cmp(&entries[b].expires).then_with(|| entries[a].id.cmp(&entries[b].id)));
@@ -1682,7 +1719,7 @@ impl Space {
 						min = e.expires;
 					}
 				}
-				self.watermark = Some(min);
+				self.set_watermark(min);
 				min
 			}
 		};

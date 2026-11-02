@@ -99,6 +99,7 @@ impl SpaceHost {
 			Ledger::Sqlite(l) => l.load(kind, key, SPACE_PARTS)?,
 			Ledger::Memory(l) => l.load(kind, key),
 		};
+		let mut on_disk = false;
 		let (state, exists, head_text) = match stored {
 			None => (SpaceState::initial(), false, None),
 			Some(doc) => {
@@ -107,6 +108,7 @@ impl SpaceHost {
 					return Err(StoreError::Unavailable(format!("the document {kind} has version {}; the Rust store reads version {SPACE_VERSION} only", doc.version)));
 				}
 				let mut state = SpaceState::from_json(&doc.value).map_err(|e| StoreError::Unavailable(e.to_string()))?;
+				on_disk = matches!(ledger, Ledger::Sqlite(_)) && state.rest.contains_key("restoredClaims");
 				let head = state.to_json_head().to_json_text();
 				// the claims stay on the disk: a map over their rows takes their place
 				if let (Ledger::Sqlite(l), Some(r)) = (&ledger, state.rpc.as_mut()) {
@@ -119,7 +121,9 @@ impl SpaceHost {
 			}
 		};
 		drop(guard);
-		Ok(SpaceHost { ledger: shared, kind: kind.to_owned(), key: key.map(str::to_owned), space: Space::new(state, random), exists, head_text, max_ord: HashMap::new(), failure: None, handed: 0, durable: 0, unsettled: VecDeque::new(), watches: vec![], also: vec![] })
+		let mut space = Space::new(state, random);
+		space.restored_on_disk = on_disk;
+		Ok(SpaceHost { ledger: shared, kind: kind.to_owned(), key: key.map(str::to_owned), space, exists, head_text, max_ord: HashMap::new(), failure: None, handed: 0, durable: 0, unsettled: VecDeque::new(), watches: vec![], also: vec![] })
 	}
 
 	/// Runs `op` as one commit and waits until it is durable: its result, or its error with nothing of it kept. A store
@@ -350,6 +354,19 @@ impl SpaceHost {
 		let mut parts: Vec<WriteOp> = vec![];
 		let state = &self.space.state;
 		let mut max_ord: Vec<(&'static str, i64)> = vec![];
+		let mut new_ords: Vec<(&'static str, String, i64)> = vec![];
+		let mut gone: Vec<(&'static str, String)> = vec![];
+		let cleared = |part: &str| c.cleared.contains(&part);
+		// parts replaced as a whole: all their rows go first, then every record they hold now is written (below)
+		for part in &c.cleared {
+			parts.push(WriteOp::PartClear { kind: kind.clone(), key: key.clone(), part: (*part).into() });
+			if let Some(m) = ords.get(*part) {
+				for id in m.keys() {
+					gone.push((part, id.clone()));
+				}
+			}
+		}
+		let ords_now = |part: &str, ords: &HashMap<String, HashMap<String, i64>>| if cleared(part) { HashMap::new() } else { ords.get(part).cloned().unwrap_or_default() };
 
 		// entries: what the log names, written as the final array has it
 		let touched: HashSet<&str> = c
@@ -360,8 +377,6 @@ impl SpaceHost {
 				EntryUndo::Removed(_, e) | EntryUndo::Set(_, e) => e.id.as_str(),
 			})
 			.collect();
-		let mut new_ords: Vec<(&'static str, String, i64)> = vec![];
-		let mut gone: Vec<(&'static str, String)> = vec![];
 		if !touched.is_empty() {
 			let part = "entries";
 			let empty = HashMap::new();
@@ -389,34 +404,81 @@ impl SpaceHost {
 		// the stream log: batches after the revision the commit began with are new; dropped ones go
 		if let Some(st) = &state.stream {
 			let part = "stream.log";
-			let empty = HashMap::new();
-			let ord = ords.get(part).unwrap_or(&empty);
+			let fresh = c.log_replaced;
+			let ord = &ords_now(part, ords);
 			let mut max = *self.max_ord.get(part).unwrap_or(&ord.values().copied().max().unwrap_or(-1));
-			for rev in &c.dropped_revs {
-				let id = id_of(&phi_json::obj! { "rev" => *rev });
-				if ord.contains_key(&id) {
-					parts.push(WriteOp::PartDel { kind: kind.clone(), key: key.clone(), part: part.into(), id: id.clone() });
-					gone.push((part, id));
+			if fresh {
+				// replaced as a whole (a restore): compared with what the rows hold, as store/parts.ts compares an array
+				let mut was: Vec<(&String, i64)> = ord.iter().map(|(k, o)| (k, *o)).collect();
+				was.sort_by_key(|(_, o)| *o);
+				let now: Vec<(String, phi_json::Json)> = st.log.iter().map(|b| { let v = b.to_json(); (id_of(&v), v) }).collect();
+				let (mut j, mut changed, mut gone_ids) = (0usize, vec![], vec![]);
+				for (id, _) in &was {
+					if j < now.len() && now[j].0 == **id {
+						changed.push(j);
+						j += 1;
+					} else {
+						gone_ids.push((*id).clone());
+					}
 				}
-			}
-			for b in st.log.iter().filter(|b| b.rev > c.stream_rev) {
-				let value = b.to_json();
-				let id = id_of(&value);
-				let o = match ord.get(&id) {
-					Some(o) => *o,
-					None => {
+				let added = &now[j..];
+				let moved = added.iter().any(|(id, _)| ord.contains_key(id));
+				if !moved {
+					for id in gone_ids {
+						parts.push(WriteOp::PartDel { kind: kind.clone(), key: key.clone(), part: part.into(), id: id.clone() });
+						gone.push((part, id));
+					}
+					for i in changed {
+						parts.push(WriteOp::Part { kind: kind.clone(), key: key.clone(), part: part.into(), id: now[i].0.clone(), ord: ord[&now[i].0], value: now[i].1.to_json_text(), at: None, grp: None, flag: None });
+					}
+					for (id, v) in added {
 						max += 1;
 						new_ords.push((part, id.clone(), max));
-						max
+						parts.push(WriteOp::Part { kind: kind.clone(), key: key.clone(), part: part.into(), id: id.clone(), ord: max, value: v.to_json_text(), at: None, grp: None, flag: None });
 					}
-				};
-				parts.push(WriteOp::Part { kind: kind.clone(), key: key.clone(), part: part.into(), id, ord: o, value: value.to_json_text(), at: None, grp: None, flag: None });
+				} else {
+					// a batch that only moved: the part is numbered anew
+					for (id, _) in &was {
+						if !now.iter().any(|(n, _)| n == *id) {
+							parts.push(WriteOp::PartDel { kind: kind.clone(), key: key.clone(), part: part.into(), id: (*id).clone() });
+							gone.push((part, (*id).clone()));
+						}
+					}
+					for (i, (id, v)) in now.iter().enumerate() {
+						new_ords.push((part, id.clone(), i as i64));
+						parts.push(WriteOp::Part { kind: kind.clone(), key: key.clone(), part: part.into(), id: id.clone(), ord: i as i64, value: v.to_json_text(), at: None, grp: None, flag: None });
+					}
+					max = now.len() as i64 - 1;
+				}
+			} else {
+				for rev in &c.dropped_revs {
+					let id = id_of(&phi_json::obj! { "rev" => *rev });
+					if ord.contains_key(&id) {
+						parts.push(WriteOp::PartDel { kind: kind.clone(), key: key.clone(), part: part.into(), id: id.clone() });
+						gone.push((part, id));
+					}
+				}
+				for b in st.log.iter().filter(|b| b.rev > c.stream_rev) {
+					let value = b.to_json();
+					let id = id_of(&value);
+					let o = match ord.get(&id) {
+						Some(o) => *o,
+						None => {
+							max += 1;
+							new_ords.push((part, id.clone(), max));
+							max
+						}
+					};
+					parts.push(WriteOp::Part { kind: kind.clone(), key: key.clone(), part: part.into(), id, ord: o, value: value.to_json_text(), at: None, grp: None, flag: None });
+				}
 			}
 			max_ord.push((part, max));
 		}
-		// claims and generations by key
+		// claims and generations by key (all of a map replaced as a whole)
 		if let Some(r) = &state.rpc {
-			for k in &c.claims {
+			let claim_keys: Vec<String> = if cleared("rpc.claims") { r.claims.entries().keys().map(str::to_owned).collect() } else { c.claims.clone() };
+			let generation_keys = c.generations.clone();
+			for k in &claim_keys {
 				parts.push(match r.claims.get(k) {
 					Some(v) => {
 						let (at, grp, flag) = CLAIM_INDEX.values(&v);
@@ -425,12 +487,23 @@ impl SpaceHost {
 					None => WriteOp::PartDel { kind: kind.clone(), key: key.clone(), part: "rpc.claims".into(), id: k.clone() },
 				});
 			}
-			for k in &c.generations {
+			for k in &generation_keys {
 				parts.push(match r.generations.get(k) {
 					Some(v) => WriteOp::Part { kind: kind.clone(), key: key.clone(), part: "rpc.generations".into(), id: k.clone(), ord: 0, value: v.to_json_text(), at: None, grp: None, flag: None },
 					None => WriteOp::PartDel { kind: kind.clone(), key: key.clone(), part: "rpc.generations".into(), id: k.clone() },
 				});
 			}
+		}
+		// the historical claims a restore leaves, by key
+		let restored = state.rest.get("restoredClaims").and_then(phi_json::Json::as_object);
+		for k in &c.restored {
+			parts.push(match restored.and_then(|m| m.get(k)) {
+				Some(v) => {
+					let (at, grp, flag) = CLAIM_INDEX.values(v);
+					WriteOp::Part { kind: kind.clone(), key: key.clone(), part: "restoredClaims".into(), id: k.clone(), ord: 0, value: v.to_json_text(), at, grp, flag }
+				}
+				None => WriteOp::PartDel { kind: kind.clone(), key: key.clone(), part: "restoredClaims".into(), id: k.clone() },
+			});
 		}
 		let head = state.to_json_head().to_json_text();
 		if self.exists && parts.is_empty() && self.also.is_empty() && self.head_text.as_deref() == Some(head.as_str()) {
@@ -467,6 +540,10 @@ impl SpaceHost {
 		self.unsettled.push_back((self.handed, durable));
 		self.head_text = Some(head);
 		self.exists = true;
+		// the historical claims are a map part on the disk from now on: their bytes are the tally (restoredBytes)
+		if self.space.state.rest.contains_key("restoredClaims") {
+			self.space.restored_on_disk = true;
+		}
 		// a map still in memory goes on the disk from now on (DiskMap.adopt): held until this commit is durable
 		if let Some(Claims::Memory(m)) = self.space.state.rpc.as_ref().map(|r| &r.claims) {
 			let adopted = DiskClaims::adopt(claim_source(ledger, &kind, self.key.as_deref())?, m, self.handed);

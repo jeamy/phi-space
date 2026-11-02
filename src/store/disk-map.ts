@@ -65,13 +65,22 @@ export class DiskMap {
 		});
 	}
 
-	/** Builds one from a map in memory (a document that was new in this process): every record is held until the commit
-	 *  that writes it (`stamp`) is durable. */
+	/** Builds one from a map in memory (a document that was new in this process, or a part replaced as a whole): every
+	 *  record is held until the commit that writes it (`written`) is durable. Until then the rows of the disk are not this
+	 *  map's: none yet, or those of the map it replaces, which that commit clears (`partClear`) after this is built. */
 	static adopt(src: DiskMapSource, fields: { at: string; group: string; flag: string }, stamp: () => number, strict: boolean, from: Record<string, unknown>, written: number): DiskMap {
-		const m = new DiskMap(src, fields, stamp, strict);
+		let blind = true;
+		const view: DiskMapSource = {
+			get: (k) => (blind ? undefined : src.get(k)), ids: () => (blind ? [] : src.ids()), due: (t, l, g, k) => (blind ? [] : src.due(t, l, g, k)), nextAt: (t) => (blind ? undefined : src.nextAt(t)),
+			group: (g, l) => (blind ? [] : src.group(g, l)), unindexed: () => (blind ? [] : src.unindexed()), firstIds: (l) => (blind ? [] : src.firstIds(l)), after: (a, l) => (blind ? [] : src.after(a, l)),
+		};
+		const m = new DiskMap(view, fields, stamp, strict);
+		m.#sight = { written, open: () => { blind = false; } };
 		for (const [k, v] of Object.entries(from)) m.#held.set(k, { v, stamp: written });
 		return m;
 	}
+	/** An adopted map reads the disk once the commit that wrote it is durable. */
+	#sight: { written: number; open: () => void } | undefined;
 
 	read(k: string): unknown {
 		const h = this.#held.get(k);
@@ -90,6 +99,7 @@ export class DiskMap {
 
 	/** Commits up to `durable` are on the disk: what they wrote is read from there from now on. */
 	settle(durable: number): void {
+		if (this.#sight && durable >= this.#sight.written) { this.#sight.open(); this.#sight = undefined; }
 		for (const [k, h] of this.#held) if (h.stamp <= durable && (h.v === GONE || this.#at(h.v) !== undefined)) this.#held.delete(k);
 	}
 
