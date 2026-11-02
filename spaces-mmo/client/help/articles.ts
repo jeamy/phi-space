@@ -207,8 +207,10 @@ Das Menü bietet an, was zum Feld passt:
 - **Figur:** ansehen, „Chat mit …“, Tausch anbieten.
 - **Baustelle:** liefern und mitarbeiten. Deine eigene ist auf der Karte hervorgehoben und heißt „Deine Baustelle“.
 - **Freies Feld:** **Bauen …** (Plan wählen, dann OK: die Baustelle beginnt an diesem Feld nach rechts unten), mit Spaten ein Beet umgraben.
-- **Beet:** was du dort tun kannst.
-- **Eigene Figur:** Umsehen, Inventar, wer spielt, Uhrzeit, Ruf, Baupläne, Samen sammeln.
+- **Beet oder Acker:** **ansehen** zeigt nur dieses eine Beet oder diesen einen Acker (nicht die der Nachbarn), dazu gießen, jäten, ernten, pflanzen, bestellen und zäunen, je nachdem, was gerade geht.
+- **Eigene Figur:** Umsehen, Inventar, wer spielt, Uhrzeit, Ruf, Baupläne, Samen sammeln (nur, wo etwas Wildes wächst, und nicht, solange du ruhst).
+
+Am Handy steht im Blatt zu einem Bau, Beet, Acker, Feuer oder Ausgang **Was ist das?**: Das öffnet den passenden Hilfeartikel.
 
 ## Kulissen abräumen {#scenery}
 
@@ -234,6 +236,12 @@ Unten liegt ein **Blatt** mit [Aktionen, Ereignisse und Chats](help.game.control
 
 Ein Tipp auf den **Raumnamen** oben öffnet die Weltkarte. Dort zeigt der grüne Punkt, wo du bist, und farbige Quadrate zeigen, wo deine Bauten, Baustellen, Beete und Äcker liegen. Auf dem Home-Bildschirm wird das Spiel zu einer eigenen App ohne Adressleiste: am iPhone **Teilen → Zum Home-Bildschirm**, am Android-Handy **Browser-Menü ⋮ → Zum Startbildschirm hinzufügen**. Dann öffnest du es von dort.
 
+## Weltkarte {#atlas}
+
+Die Weltkarte zeigt alle Orte des Archipels. Am Rechner liegt sie klein am Rand; ein Klick vergrößert sie, dann wählst du einen Ort mit einem Klick. Am Handy öffnet ein Tipp auf den Raumnamen sie als Seite. Der grüne Punkt bist du, farbige Quadrate sind deine Bauten, Baustellen, Beete und Äcker, brennende Feuer sind markiert.
+
+Wählst du einen Ort, zieht die Karte eine gestrichelte Linie von dir dorthin und zeigt, ob sein Feuer brennt. Brennt es und erlaubt deine Insel das Beamen, steht dort **Hierher beamen** mit dem Preis ([Beamen](help.game.village#travel)).
+
 ## Tastatur {#keys}
 
 Mit der Tastatur geht vieles schneller. Die Pfeiltasten laufen, die Leertaste hebt auf oder legt nach.
@@ -253,7 +261,7 @@ Die Tasten gelten, solange die Befehlszeile nicht den Fokus hat.
 
 Das Seitenfeld zeigt, was gerade wichtig ist: was neben dir liegt, was du trägst und wie lange das Feuer noch brennt. Darunter steht alles, was du siehst und hörst.
 
-Rechts (auf dem Handy und dem Tablet im Hochformat im Blatt, dort im Reiter **Aktionen**) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen; ein Tipp auf etwas, das du trägst, zeigt, was du gerade damit tun kannst. Unter **Du trägst** die **Befehlszeile** mit der letzten Antwort. Darunter (am Handy: Reiter **Ereignisse**) die **Ereignisse** mit allem, was du siehst und hörst, daneben die Reiter des [Chats](help.game.chat) (je Gespräch einer, „Chats“ als Übersicht). „Kommen und Gehen“ blendet die Meldungen ein, wer kommt und geht.
+Rechts (auf dem Handy und dem Tablet im Hochformat im Blatt, dort im Reiter **Aktionen**) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen; ein Tipp auf etwas, das du trägst, zeigt, was du gerade damit tun kannst. Unter **Du trägst** die **Befehlszeile** mit der letzten Antwort. Darunter (am Handy: Reiter **Ereignisse**) die **Ereignisse** mit allem, was du siehst und hörst, daneben die Reiter des [Chats](help.game.chat) (je Gespräch einer, „Chats“ als Übersicht). „Kommen und Gehen“ blendet die Meldungen ein, wer kommt und geht. Gibt ein Befehl etwas aus, öffnet sich das Ereignisfenster zwei Zeilen hoch, damit du die Antwort siehst (nicht beim Aufheben von Dingen).
 
 ## Kopfzeile {#bar}
 
@@ -261,7 +269,7 @@ Die Kopfzeile zeigt, wo du bist und wie spät es in der Welt ist. Dort stellst d
 
 - **?** öffnet diese Hilfe.
 - Der Punkt zeigt, ob du verbunden bist (grün) oder nicht (rot).
-- Daneben stehen der **Raum**, in dem du bist, und die **Weltzeit** (Tag und Uhrzeit; ⏸, wenn die Welt angehalten ist), rechts dein Name.
+- Daneben stehen der **Raum**, in dem du bist, und die **Weltzeit** (Tag und Uhrzeit; ⏸, wenn die Welt angehalten ist), rechts dein Name. Zwischen Raum und Weltzeit steht **Epoche: x**, die Stufe deiner Insel (1 Fischerdorf bis 4 Netz, siehe [Epochen](help.game.village#epochs)).
 - **Text / 2D / 3D** wählt die Darstellung. **Text** blendet die Karte aus: für Screenreader, schwache Geräte oder wer es lieber wie ein MUD mag; alles bleibt spielbar. **2D** ist die Kachelkarte, **3D** eine Ansicht derselben Welt von schräg oben.
 - **Admin** (nur für Admins) öffnet das Fenster für Modelle und Grenzen.
 - **Abmelden** beendet die Sitzung.
@@ -290,8 +298,10 @@ The menu offers what fits the cell:
 - **Figure:** look, “Chat with …”, offer a swap.
 - **Site:** deliver and help. Your own is highlighted on the map and called “Deine Baustelle”.
 - **Free cell:** **Build …** (pick a plan, then OK: the site starts at that cell towards the bottom right), dig a bed with a spade.
-- **Bed:** what you can do there.
-- **Your own figure:** look, inventory, who plays, time, reputation, plans, gather seeds.
+- **Bed or field:** **look** shows only that one bed or field (not those of the neighbours), plus water, weed, harvest, plant, sow and fence, whatever is possible right now.
+- **Your own figure:** look, inventory, who plays, time, reputation, plans, gather seeds (only where something wild grows, and not while you rest).
+
+On a phone the sheet for a building, bed, field, fire or exit has **Was ist das?**: it opens the fitting help article.
 
 ## Clearing scenery {#scenery}
 
@@ -316,6 +326,12 @@ The **D-pad** walks step by step while you hold a direction. Under **⋯** you s
 At the bottom lies a **sheet** with [actions, events and chats](help.game.controls#side). Drag its handle to the height you like and, where it is narrower than the page, left or right, and it stays there; a tap on the handle or the map closes it, the next tap opens it at that height again. On its side it lies at the bottom just the same, and the game goes to full screen at the first tap, without the address bar (off under **⋯**; on an iPhone only from the home screen). The back button always closes the topmost layer.
 
 A tap on the **room name** at the top opens the world map. The green dot shows where you are, coloured squares where your buildings, sites, beds and fields lie. On the home screen the game becomes an app of its own without an address bar: on an iPhone **Share → Add to Home Screen**, on an Android phone **browser menu ⋮ → Add to Home screen**. Then open it from there.
+
+## World map {#atlas}
+
+The world map shows every place of the archipelago. On a desktop it sits small at the edge; a click enlarges it, and then a click picks a place. On a phone a tap on the room name opens it as a page. The green dot is you, coloured squares are your buildings, sites, beds and fields, burning fires are marked.
+
+If you pick a place, the map draws a dashed line from you to it and shows whether its fire burns. If it burns and your island allows beaming, **Hierher beamen** appears there with the price ([Beaming](help.game.village#travel)).
 
 ## Keyboard {#keys}
 
@@ -344,7 +360,7 @@ The header bar shows where you are and what time it is in the world. You also sw
 
 - **?** opens this help.
 - The dot shows whether you are connected (green) or not (red).
-- Next to it the **room** you are in and the **world time** (day and hour; ⏸ while the world is paused), on the right your name.
+- Next to it the **room** you are in and the **world time** (day and hour; ⏸ while the world is paused), on the right your name. Between the room and the world time stands **Epoche: x**, the stage of your island (1 fishing village to 4 network, see [Epochs](help.game.village#epochs)).
 - **Text / 2D / 3D** picks the view. **Text** hides the map: for screen readers, weak devices or if you prefer a MUD feel; everything stays playable. **2D** is the tile map, **3D** a view of the same world from above at an angle.
 - **Admin** (admins only) opens the window for models and limits.
 - **Log out** ends the session.
@@ -422,7 +438,7 @@ Bauen geht nur im Licht eines Feuers. Ausführlich unter [Bauen](help.game.build
 | \`opfere <ding>\` | \`sacrifice\` | An einer Kapelle opfern: einen Tag lang kürzere Ruhe |
 | \`antrag <zu\|offen\|text>\` | \`motion\` | Am Rathaus einen Antrag stellen; allein: den laufenden zeigen |
 | \`antrag grünzone\`, \`antrag wegerecht\`, \`antrag zone frei\` | | Über die Fläche um dich abstimmen lassen |
-| \`antrag steuer <n>\` | | Münzen je Stück für Entnahmen aus dem Lager |
+| \`antrag steuer <n>\` | | Münzen je Stück für Entnahmen aus dem Lager und Käufe im Kaufhaus |
 | \`antrag abriss\` | | Über den Abriss des Baus neben dir abstimmen lassen; was bleibt, gehört dem Besitzer als Nachlass |
 | \`stimme ja\|nein\` | \`vote\` | Als Siedler über den Antrag abstimmen |
 | \`repariere\` | \`repair\` | Einen Bau ausbessern |
@@ -494,13 +510,15 @@ Eine Insel wächst durch das, was auf ihr steht. Ausführlich unter [Dorf und Si
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
 | \`siedlung rang\` | | Die Siedlungen der Gegend nach ihrem Bestand; ein Park wiegt am meisten, wer ihn zuletzt pflegte, zählt dazu |
-| \`laden\` | \`shop\` | Regal und Preise des Kaufhauses; \`laden kaufe\`, \`laden verkaufe\`, \`laden einlegen\`, \`laden entnehme\` |
+| \`laden\` | \`shop\` | Regal und Preise des Kaufhauses; \`laden kaufe\`, \`laden verkaufe\`, \`laden einlegen\`, \`laden entnehme\`; Lieferaufträge mit \`laden bestelle\`, \`laden liefere\`, \`laden storniere\` |
 | \`kredit <n> gegen <ding>\`, \`tilge\` | \`credit\`, \`repay\` | Am Kontor gegen ein Pfand leihen und zurückzahlen |
-| \`zug <ort>\` | \`train\` | Mit der Inselbahn von Bahnhof zu Bahnhof |
+| \`zug <ort>\` | \`train\` | Mit der Inselbahn von Bahnhof zu Bahnhof derselben Insel |
+| \`beam [ort]\` | \`beame\`, \`beamen\` | Ab Netz zu einem brennenden Feuer springen (kostet Münzen, danach Pause); allein: die Ziele zeigen |
 | \`karren\` | \`cart\` | Deine Karren; \`karren stelle\`, \`karren lade\`, \`karren entlade\`, \`karren fahre <ort>\`, \`karren nimm\` |
 | \`rudere <ort>\` | \`row\` | Mit dem Ruderboot von Steg zu Steg einer Insel |
 | \`fahrplan\`, \`einschiffen <insel>\` | \`timetable\`, \`board\` | Das große Schiff nach Fahrplan, ab den Buchten |
 | \`segle <insel>\` | \`sail\` | Mit dem Segelboot vom Steg zu einer anderen Insel |
+| \`luke\` | \`hatch\` | Was in der Luke deines Boots liegt; am Steg \`luke lade [n\|alle] <ding>\`, \`luke entlade alle\` |
 | \`schaufle\` | | Am Strand Sand graben |
 | \`iss <ding>\` | \`eat\` | Etwas essen: Satt ruhst du nach der Arbeit kürzer |
 | \`wirf netz\` | \`fish\` | An einem Steg das Netz auswerfen |
@@ -600,7 +618,7 @@ Building works only in a fire's light. In detail under [Building](help.game.buil
 | \`opfere <ding>\` | \`sacrifice\` | Make an offering at a chapel: shorter rest for a day |
 | \`antrag <zu\|offen\|text>\` | \`motion\` | Put a motion at a town hall; alone: show the open one |
 | \`antrag grünzone\`, \`antrag wegerecht\`, \`antrag zone frei\` | | Put the ground around you to a vote |
-| \`antrag steuer <n>\` | | Coins per thing taken from the warehouse |
+| \`antrag steuer <n>\` | | Coins per thing taken from the warehouse or bought at the department store |
 | \`antrag abriss\` | | Put the building beside you to a vote; what is left is the owner's estate |
 | \`stimme ja\|nein\` | \`vote\` | Vote on the motion as a settler |
 | \`repariere\` | \`repair\` | Repair a building |
@@ -672,19 +690,21 @@ An island grows by what stands on it. In detail under [Village and settlement](h
 | Command | Also | Effect |
 | --- | --- | --- |
 | \`siedlung rang\` | | The settlements of the region by what they hold; a park weighs most, and whoever tended it lately counts too |
-| \`laden\` | \`shop\` | Shelf and prices of the department store; \`laden kaufe\`, \`laden verkaufe\`, \`laden einlegen\`, \`laden entnehme\` |
+| \`laden\` | \`shop\` | Shelf and prices of the department store; \`laden kaufe\`, \`laden verkaufe\`, \`laden einlegen\`, \`laden entnehme\`; delivery orders with \`laden bestelle\`, \`laden liefere\`, \`laden storniere\` |
 | \`kredit <n> gegen <ding>\`, \`tilge\` | \`credit\`, \`repay\` | Borrow against a pledge at a counting house and pay it back |
-| \`zug <ort>\` | \`train\` | By island railway from station to station |
+| \`zug <ort>\` | \`train\` | By island railway from station to station of the same island |
+| \`beam [place]\` | \`beame\`, \`beamen\` | From the network on, jump to a burning fire (costs coins, then a rest); alone: list the destinations |
 | \`karren\` | \`cart\` | Your carts; \`karren stelle\`, \`karren lade\`, \`karren entlade\`, \`karren fahre <ort>\`, \`karren nimm\` |
 | \`rudere <ort>\` | \`row\` | By rowing boat from jetty to jetty of an island |
 | \`fahrplan\`, \`einschiffen <insel>\` | \`timetable\`, \`board\` | The large ship on its timetable, from the bays |
 | \`segle <insel>\` | \`sail\` | By sailing boat from a jetty to another island |
+| \`luke\` | \`hatch\` | What lies in your boat's hatch; at a jetty \`luke lade [n\|alle] <ding>\`, \`luke entlade alle\` |
 | \`schaufle\` | | Dig sand on the beach |
 | \`iss <ding>\` | \`eat\` | Eat something: sated, you rest less after work |
 | \`wirf netz\` | \`fish\` | Cast the net at a jetty |
 | \`wetter\` | \`weather\`, \`wind\` | How the wind stands and how thick the fog is; the wind drives the mills |
 | \`pflege\` | \`tend\` | Once a day set a flower in the park beside you: reputation for you, rank for the settlement |
-| \`fest blumen\`, \`fest ernte\` | \`festival\` | As a settler at a park, open a flower show or a harvest festival; alone: show the running one |
+| \`fest blumen\`, \`fest ernte\`, \`fest regatta\` | \`festival\` | As a settler at a park, open a flower show or a harvest festival, at a jetty a regatta; alone: show the running one |
 | \`zeige <ding>\` | \`exhibit\` | Give a flower to the show or crops to the festival at the park; the prize waits in \`nachlass\` |
 | \`siedlung\` | \`settlement\` | The settlement here; \`siedlung gründen <name>\`, \`aufnehmen <name> [helfer]\`, \`entlassen <name>\`, \`zu\`, \`offen\` |
 | \`epoche\` | \`stufe\` | The island's epoch (fishing village, village, town, net), its points and what the next unlocks |
@@ -978,7 +998,7 @@ Jeder darf an einer Baustelle mithelfen, auch ohne Konto. Du bringst Material od
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
 | \`liefere [n] <ding>\` | \`deliver\` | Liefern, was die Baustelle braucht; zu viel bleibt bei dir |
-| \`arbeite\` | \`work\` | Einen Arbeitspunkt beitragen; danach ruhst du eine Weile |
+| \`arbeite\` | \`work\` | Einen Arbeitspunkt beitragen; danach ruhst du eine Weile (standardmäßig 15 Weltminuten; Essen und Segen kürzen es, der Betreiber stellt es ein) |
 | \`baustelle\` | \`site\` | Was hier gebaut wird und was noch fehlt |
 
 Liefern und arbeiten geht **aus bis zu zwei Feldern Abstand**, so haben viele um eine Baustelle Platz. Das Menü der rechten Maustaste auf einer Baustelle bietet Liefern und Mitarbeiten an. Höchstens die Hälfte darf von NPCs oder Automaten kommen. Fehlt nichts mehr, steht der Bau; an ihm steht, wer mitgebaut hat. Eine Baustelle ohne Fortschritt verfällt nach zwei Welttagen.
@@ -1032,7 +1052,7 @@ Anyone may help at a site, even without an account. You bring material or work o
 | Command | Also | Effect |
 | --- | --- | --- |
 | \`liefere [n] <thing>\` | \`deliver\` | Deliver what the site needs; anything extra stays with you |
-| \`arbeite\` | \`work\` | Add one point of work; afterwards you rest for half a world hour |
+| \`arbeite\` | \`work\` | Add one point of work; afterwards you rest a while (by default 15 world minutes; food and a blessing shorten it, the operator sets it) |
 | \`baustelle\` | \`site\` | What is being built here and what is still missing |
 
 Delivering and working work **from up to two cells away**, so many fit around a site. The right-click menu on a site offers delivering and helping. At most half may come from NPCs or automata. When nothing is missing, the building stands, naming who helped. A site without progress lapses after two world days.
@@ -1230,7 +1250,7 @@ Der **Acker** hat 4×4 Felder, einerr je Konto, im Licht eines Feuers (zwei Lich
 
 Zuerst wird der Acker bestellt. Wer ihn angelegt hat, wählt die Frucht, dann bringen alle Saatgut und Arbeit.
 
-Wer den Acker anlegte, wählt die Frucht mit \`bestelle gerste\`. Dann braucht sie **4 Saatgut und 2 Arbeit**: Jedes \`bestelle\` bringt, was du an Saatgut trägst, und einen Arbeitspunkt; danach ruhst du eine Weltstunde, wie an der Baustelle.
+Wer den Acker anlegte, wählt die Frucht mit \`bestelle gerste\`. Dann braucht sie **4 Saatgut und 2 Arbeit**: Jedes \`bestelle\` bringt, was du an Saatgut trägst, und einen Arbeitspunkt; danach ruhst du wie an der Baustelle (standardmäßig 15 Weltminuten).
 
 | Frucht | Saatgut | Woher | Art | Ertrag |
 | --- | --- | --- | --- | --- |
@@ -1280,7 +1300,7 @@ The **field** has 4×4 cells, one per account, in a fire's light (two light poin
 
 First the field is sown. Whoever made it chooses the crop, then everyone brings seed and work.
 
-Whoever made the field chooses the crop with \`plough gerste\` (\`plough\`). Then it needs **4 seed and 2 work**: every \`plough\` brings what seed you carry and one work point; then you rest a world hour, as at a building site.
+Whoever made the field chooses the crop with \`plough gerste\` (\`plough\`). Then it needs **4 seed and 2 work**: every \`plough\` brings what seed you carry and one work point; then you rest as at a building site (by default 15 world minutes).
 
 | Crop | Seed | From | Kind | Yield |
 | --- | --- | --- | --- | --- |
@@ -1499,24 +1519,24 @@ Gesa sells **dogs and cats**. \`stable hund\` leaves one on guard at a building 
 		section: "play",
 		title: { de: "Dorf und Siedlung", en: "Village and settlement" },
 		short: {
-			de: "Wie eine Insel zum Dorf wird und wie Nachbarn eine Siedlung gründen.",
-			en: "How an island becomes a village and how neighbours found a settlement.",
+			de: "Wie eine Insel zum Dorf und zur Stadt wird, wie Nachbarn eine Siedlung gründen und wie man reist.",
+			en: "How an island becomes a village and a town, how neighbours found a settlement and how to travel.",
 		},
 		body: {
 			de: `Eine Insel wächst durch das, was auf ihr steht. Sind genug Hütten, Beete und Felder da, wird aus dem Fischerdorf ein Dorf, und neue Baupläne öffnen sich. Nachbarn können außerdem eine Siedlung gründen. Sie bestimmen dann gemeinsam, wer an ihrem Ort bauen darf.
 
 ## Epochen {#epochs}
 
-Jede Insel hat eine eigene Stufe. Es zählt, was noch steht und gepflegt wird. Du siehst die Stufe mit \`epoche\`.
+Jede Insel hat eine eigene Stufe. Es zählt, was noch steht und gepflegt wird. Du siehst die Stufe mit \`epoche\` und in der Kopfzeile als „Epoche: x“.
 
 Jede Insel steht auf einer Stufe: **Fischerdorf**, **Dorf**, **Stadt**, **Netz**. Sie zählt ihren gehaltenen Bestand, jeden Bau, jedes Beet und jeden Acker, die noch stehen, mit so vielen Punkten, wie sie vom Licht eines Feuers nehmen. Beete zählen so viel wie Bauten: Hütte, Beet, Hühnerstall, Regentonne, Vogelscheuche und Webstuhl je 1 Punkt, Acker, Gemeinschaftsbeet, Windmühle, Backhaus und Gehege je 2.
 
 | Stufe | ab Punkten | neu |
 | --- | --- | --- |
-| Fischerdorf | 0 | Hütte, Hühnerstall, Regentonne, Vogelscheuche, Beete |
-| Dorf | 15 | Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Werkstatt, Äcker |
-| Stadt | 40 | (noch keine Pläne) |
-| Netz | 80 | (noch keine Pläne) |
+| Fischerdorf | 0 | Hütte, Hühnerstall, Regentonne, Vogelscheuche, Steg, Räucherei, Beete |
+| Dorf | 15 | Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Werkstatt, Kapelle, Straße, Äcker |
+| Stadt | 40 | Rathaus, Park, Kaufhaus, Kontor, Leuchtturm, Brauerei, Glashütte, Werft, Gewächshaus, Rinder |
+| Netz | 80 | Bahnhof, Beamen |
 
 Die Schwellen kann der Betreiber ändern, etwa für einen Server mit wenigen Spielern. Gezählt wird jede Weltstunde; ändert sich die Stufe, hören es alle Räume der Insel. Verfällt zu viel, fällt die Insel zurück: was steht, arbeitet weiter (die Mühle mahlt, das Backhaus backt), nur neue Pläne der höheren Stufe warten, bis der Bestand wieder reicht. \`epoche\` zeigt Stufe und Punkte der Insel, auf der du stehst.
 
@@ -1544,21 +1564,47 @@ In einer Siedlung hat jeder einen Rang. Wer dort eine Hütte hat, ist von selbst
 
 Eine neue Siedlung ist offen, jeder darf dort bauen und helfen. Sie kann ihre Tür aber schließen. Dann gelten die Ränge.
 
-\`siedlung zu\` schließt die Siedlung, \`siedlung offen\` öffnet sie wieder; beides dürfen nur Siedler. Was schon steht, bleibt, wem es gehört, und betreten darf den Ort jeder. Die Regeln betreffen neue Baustellen, Beete und Äcker sowie Liefern und Mitarbeiten an Baustellen.`,
+\`siedlung zu\` schließt die Siedlung, \`siedlung offen\` öffnet sie wieder; beides dürfen nur Siedler. Was schon steht, bleibt, wem es gehört, und betreten darf den Ort jeder. Die Regeln betreffen neue Baustellen, Beete und Äcker sowie Liefern und Mitarbeiten an Baustellen.
+
+## Rathaus und Steuer {#townhall}
+
+Steht ein Rathaus (ab Stadt) in der Siedlung, entscheiden die Siedler gemeinsam. Am Rathaus stellt ein Siedler mit \`antrag\` einen Antrag, je Raum einer auf einmal; jeder Siedler stimmt mit \`stimme ja\` oder \`stimme nein\`, die letzte Stimme zählt. Nach einem Welttag gilt der Antrag, wenn mehr Ja als Nein kamen. Mit Rathaus gehen \`siedlung zu\` und \`offen\` nur noch über einen Antrag.
+
+\`antrag grünzone\` und \`antrag wegerecht\` gelten für 7×7 Felder um dich: In einer Grünzone stehen nur Beete und Parks, auf einem Wegerecht nichts Neues. \`antrag abriss\` stimmt über den Bau neben dir ab; die Hälfte des Materials wartet als Nachlass auf den Besitzer. \`antrag steuer <n>\` (höchstens 5) setzt die Münzen je Stück, die man aus dem Lagerhaus nimmt und im Kaufhaus der Siedlung kauft; sie gehen ins Lagerhaus.
+
+## Kaufhaus und Kontor {#store}
+
+Ein Kaufhaus (ab Stadt) handelt auch, wenn niemand am Marktbrett steht. \`laden\` zeigt Regal und Preise: Leeres ist teuer, bei zehn Stück kostet es die Hälfte. \`laden kaufe <ding>\` und \`laden verkaufe <ding>\` handeln, das Kaufhaus zahlt 70 % aus seiner Kasse. Der Besitzer füllt sie mit \`laden einlegen <n>\` und nimmt mit \`laden entnehme <n>\`. Sein Umsatz zählt im Rang der Siedlung, ein Punkt je 20 Münzen.
+
+Mit \`laden bestelle <n> <ding> für <m>\` bestellt der Besitzer Ware, höchstens 3 Bestellungen zu je 20 Stück. Sie stehen auf allen Auftragstafeln der Gegend. Jeder andere bringt sie mit \`laden liefere <ding>\` und bekommt m Münzen je Stück aus der Kasse; \`laden storniere <ding>\` zieht eine Bestellung zurück. Die versprochenen Münzen sind reserviert.
+
+Im Kontor leiht \`kredit <n> gegen <ding>\` Münzen gegen ein Pfand, bis zum doppelten Grundpreis. \`tilge\` zahlt binnen sieben Tagen mit einem Zehntel Zinsen zurück, sonst gehört das Pfand dem Kontor.
+
+## Boote, Schiff, Bahn, Karren, Beamen {#travel}
+
+- **Ruderboot** (Werkstatt): \`rudere <ort>\` fährt von Steg zu Steg einer Insel.
+- **Segelboot** (Werft, ab Stadt): \`segle <insel>\` fährt vom Steg in die Bucht jeder Insel, auch in eine andere Gegend.
+- **Luke**: Jedes Boot hat eine. Am Steg lädt \`luke lade [n|alle] <ding>\` ein, 8 Dinge im Ruderboot, 20 im Segelboot; \`luke entlade alle\` holt sie heraus. Die Ladung fährt mit dem Boot.
+- **Großes Schiff**: Es fährt nur von Insel zu Insel, von Bucht zu Bucht. Jede zweite Weltstunde liegt es eine Stunde in den Buchten, dann siehst du es auf dem Wasser. \`fahrplan\` sagt wann, \`einschiffen <insel>\` fährt für 3 Münzen mit.
+- **Inselbahn** (ab Netz): Ein Raum hat höchstens einen Bahnhof. Neben ihm fährt \`zug <ort>\` für eine Münze zu jedem anderen Bahnhof derselben Insel. Die Bahn verlässt ihre Insel nicht.
+- **Straße und Karren** (ab Dorf): Eine Straße nahe einem Ausgang verbindet seine beiden Räume. Ein Karren fährt auf Straßen allein mit bis zu 20 Stück, einen Raum je Weltstunde: \`karren lade\`, \`karren fahre <ort>\`, \`karren entlade\`.
+- **Beamen** (ab Netz): \`beam <ort>\` springt von jedem Ort zu einem brennenden Feuer, ohne die Wege zu laufen. Nur das Ziel braucht ein brennendes Feuer, dein Standort nicht. Es kostet Münzen nach der Entfernung auf der [Weltkarte](help.game.controls#atlas), standardmäßig eine je Feld (mindestens eine); danach ruhst du 10 Weltminuten, bevor du wieder beamst. \`beam\` allein zeigt die Ziele und die Pause. Auf der Weltkarte tippst du das Feuer an, die Linie und der Preis erscheinen, **Hierher beamen** springt. Betreiber ändern Preis, Pause und Stufe.
+
+Ein **Leuchtturm** (ab Stadt) gibt seinem Feuer 20 Lichtpunkte mehr, über die Grenze von 40 hinaus.`,
 			en: `An island grows by what stands on it. With enough huts, beds and fields the fishing village becomes a village, and new building plans open up. Neighbours can also found a settlement. Together they then decide who may build in their place.
 
 ## Epochs {#epochs}
 
-Every island has a stage of its own. What counts is what still stands and is looked after. \`epoche\` shows the stage.
+Every island has a stage of its own. What counts is what still stands and is looked after. \`epoche\` and the header (“Epoche: x”) show the stage.
 
 Every island stands at a stage: **fishing village**, **village**, **town**, **net**. It counts its held stock, every building, bed and field still standing, with as many points as each takes of a fire's light. Beds count as much as buildings: hut, bed, hen house, rain barrel, scarecrow and loom 1 point each, field, community bed, windmill, bakery and pen 2 each.
 
 | Stage | from points | new |
 | --- | --- | --- |
-| Fishing village | 0 | hut, coop, rain barrel, scarecrow, beds |
-| Village | 15 | windmill, bakery, pen, loom, fields |
-| Town | 40 | (no plans yet) |
-| Net | 80 | (no plans yet) |
+| Fishing village | 0 | hut, coop, rain barrel, scarecrow, jetty, smokehouse, beds |
+| Village | 15 | windmill, bakery, pen, loom, warehouse, quarry, clay pit, brickworks, workshop, chapel, road, fields |
+| Town | 40 | town hall, park, department store, counting house, lighthouse, brewery, glassworks, shipyard, greenhouse, cattle |
+| Net | 80 | station, beaming |
 
 The operator can change the thresholds, say for a server with few players. The count runs every world hour; when the stage changes, every room of the island hears it. If too much decays, the island falls back: what stands goes on working (the mill grinds, the bakery bakes), only new plans of the higher stage wait until the stock is enough again. \`epoche\` shows the stage and points of the island you stand on.
 
@@ -1586,7 +1632,33 @@ In a settlement everyone has a rank. Whoever has a hut there is a settler by the
 
 A new settlement is open: anyone may build and help there. But it can close its door. Then the ranks count.
 
-\`settlement zu\` closes the settlement, \`settlement offen\` opens it again; only settlers may do either. What already stands stays with its owner, and anyone may enter the place. The rules cover new sites, beds and fields, and delivering and working at sites.`,
+\`settlement zu\` closes the settlement, \`settlement offen\` opens it again; only settlers may do either. What already stands stays with its owner, and anyone may enter the place. The rules cover new sites, beds and fields, and delivering and working at sites.
+
+## Town hall and tax {#townhall}
+
+When a town hall (from the town on) stands in the settlement, the settlers decide together. At the town hall a settler puts a motion with \`antrag\`, one per room at a time; every settler votes with \`stimme ja\` or \`stimme nein\`, and the last vote counts. After a world day the motion carries if there were more yes than no. With a town hall, \`siedlung zu\` and \`offen\` go only through a motion.
+
+\`antrag grünzone\` and \`antrag wegerecht\` cover 7×7 cells around you: a green zone holds only beds and parks, a right of way nothing new. \`antrag abriss\` puts the building beside you to the vote; half of its material waits for the owner as an estate. \`antrag steuer <n>\` (5 at most) sets the coins per piece taken from the warehouse and bought at the settlement's department store; they go into the warehouse.
+
+## Department store and counting house {#store}
+
+A department store (from the town on) trades even when nobody stands at the market board. \`laden\` shows shelf and prices: what is scarce is dear, at ten pieces a thing costs half. \`laden kaufe <ding>\` and \`laden verkaufe <ding>\` trade, and the store pays 70 % from its till. The owner fills it with \`laden einlegen <n>\` and takes from it with \`laden entnehme <n>\`. Its turnover counts in the settlement's rank, a point per 20 coins.
+
+With \`laden bestelle <n> <ding> für <m>\` the owner orders goods, 3 orders of up to 20 pieces at most. They appear on every order board of the region. Anyone else brings them with \`laden liefere <ding>\` and gets m coins a piece from the till; \`laden storniere <ding>\` withdraws an order. The coins promised are reserved.
+
+In a counting house \`kredit <n> gegen <ding>\` lends coins against a pledge, up to twice its base price. \`tilge\` pays back within seven days with a tenth of interest; otherwise the pledge goes to the house.
+
+## Boats, ship, railway, carts, beaming {#travel}
+
+- **Rowing boat** (workshop): \`rudere <ort>\` goes from jetty to jetty of an island.
+- **Sailing boat** (shipyard, from the town on): \`segle <insel>\` goes from a jetty to the bay of any island, to another region too.
+- **Hatch**: every boat has one. At a jetty \`luke lade [n|alle] <ding>\` loads it, 8 things in a rowing boat, 20 in a sailing boat; \`luke entlade alle\` takes them out. The cargo goes with the boat.
+- **Large ship**: it sails only from island to island, from bay to bay. Every second world hour it lies in the bays for an hour, and then you see it on the water. \`fahrplan\` says when, \`einschiffen <insel>\` sails along for 3 coins.
+- **Island railway** (from the network on): a room has one station at most. Beside it \`zug <ort>\` goes for a coin to any other station of the same island. The railway does not leave its island.
+- **Road and cart** (from the village on): a road near an exit links its two rooms. A cart goes alone on roads with up to 20 pieces, a room per world hour: \`karren lade\`, \`karren fahre <ort>\`, \`karren entlade\`.
+- **Beaming** (from the network on): \`beam <place>\` jumps from anywhere to a burning fire without walking the paths. Only the destination needs a burning fire, not where you stand. It costs coins by the distance on the [world map](help.game.controls#atlas), by default one per cell (at least one); afterwards you rest 10 world minutes before you beam again. \`beam\` alone lists the destinations and the rest. On the world map you tap the fire, the line and the price appear, **Hierher beamen** jumps. Operators change price, rest and stage.
+
+A **lighthouse** (from the town on) gives its fire 20 more light points, above the limit of 40.`,
 		},
 	},
 	{

@@ -226,15 +226,18 @@ export function tapTarget(at: { x: number; y: number }, chars: Map<string, CharV
 	return here ? at : null;
 }
 
+/** The help article (with its section) for a kind of thing; a building has its plan's article first (HELP_OF_PLAN). */
+export const HELP_OF_KIND: Record<string, string> = { site: "help.game.build#stake", building: "help.game.build", ruin: "help.game.build#decay", bed: "help.game.garden#bed", field: "help.game.fields#fields", beacon: "help.game.fire#beacon", animal: "help.game.wild#hares", exit: "help.game.controls#map" };
+export const HELP_OF_PLAN: Record<string, string> = { windmuehle: "help.game.fields#mill", backhaus: "help.game.fields#mill", gehege: "help.game.animals#house", huehnerstall: "help.game.animals#house", rathaus: "help.game.village#townhall", kaufhaus: "help.game.village#store", kontor: "help.game.village#store", lagerhaus: "help.game.village#store", bahnhof: "help.game.village#travel", werft: "help.game.village#travel", park: "help.game.village#ranks" };
+
 /** A name for the sheet's head and the help article about what stands on a cell (help/articles.ts). */
 export function cellAbout(at: { x: number; y: number }, chars: Map<string, CharView>, objs: Map<string, ObjView>, room: string): { title?: string; article?: string; desc?: string } {
-	const articles: Record<string, string> = { site: "help.game.build", building: "help.game.build", ruin: "help.game.build", bed: "help.game.garden", field: "help.game.fields", beacon: "help.game.fire", animal: "help.game.wild", exit: "help.game.controls" };
 	const area = [...objs.values()].find((o) => o.location === room && AREA.has(o.kind) && !o.through && covers(o, at));
 	// a piece of scenery says itself what it is; the rest has its article
 	if (area?.kind === "scenery") return { title: area.name, ...(area.desc ? { desc: area.desc } : {}) };
-	if (area) return { title: area.owner ? `${area.name} von ${area.owner}` : area.name, article: articles[area.kind] };
+	if (area) return { title: area.owner ? `${area.name} von ${area.owner}` : area.name, article: (area.plan && HELP_OF_PLAN[area.plan]) || HELP_OF_KIND[area.kind] };
 	const figure = [...chars.values()].find((c) => c.x === at.x && c.y === at.y);
 	if (figure) return { title: figure.name };
 	const o = [...objs.values()].find((o) => o.location === room && o.x === at.x && o.y === at.y);
-	return o ? { title: o.name, article: articles[o.kind] } : {};
+	return o ? { title: o.name, article: HELP_OF_KIND[o.kind] } : {};
 }

@@ -23,8 +23,10 @@ import { FIELD_COMMANDS } from "../server/engine/commands/field.ts";
 import { MILL_COMMANDS } from "../server/engine/commands/mill.ts";
 import { QUARRY_COMMANDS } from "../server/engine/commands/quarry.ts";
 import { ANIMAL_COMMANDS } from "../server/engine/commands/animals.ts";
+import { BEAM_COMMANDS } from "../server/engine/commands/beam.ts";
 import { EPOCH_COMMANDS } from "../server/engine/commands/epoch.ts";
 import { SETTLEMENT_COMMANDS } from "../server/engine/commands/settlement.ts";
+import { HELP_OF_KIND, HELP_OF_PLAN } from "../client/cellActions.ts";
 import { LINE as CHAT_LINE } from "../server/chat.ts";
 
 const LANGS = ["de", "en"] as const;
@@ -57,7 +59,7 @@ test("help links point at existing articles and anchors", () => {
 });
 
 test("every command in the command tables exists in the engine, under its English and German names", () => {
-	const known = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...FESTIVAL_COMMANDS, ...WIND_COMMANDS, ...CART_COMMANDS, ...FOOD_COMMANDS, ...SHOP_COMMANDS, ...FISHING_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...SETTLEMENT_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
+	const known = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...FESTIVAL_COMMANDS, ...WIND_COMMANDS, ...CART_COMMANDS, ...FOOD_COMMANDS, ...SHOP_COMMANDS, ...FISHING_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...BEAM_COMMANDS, ...SETTLEMENT_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
 	known.add("help"); known.add("hilfe"); known.add("?"); // helpCommand is built per room
 	// the chat's words never reach the engine: the gateway catches them (server/chat.ts)
 	for (const w of /\^\(([^)]+)\)/.exec(CHAT_LINE.source)![1]!.split("|")) known.add(w);
@@ -81,6 +83,15 @@ test("every command in the command tables exists in the engine, under its Englis
 test("no help topic of the world is named like a command (help <topic> would answer with the command)", async () => {
 	const { loadWorld } = await import("../server/engine/world.ts");
 	const w = await loadWorld();
-	const words = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...SETTLEMENT_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
+	const words = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...BEAM_COMMANDS, ...SETTLEMENT_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
 	for (const t of w.help) assert.ok(!words.has(t.key.toLowerCase()), `help topic ${t.key} is also a command word`);
+});
+
+test("the articles the map menu opens (\"Was ist das?\") and their sections exist", () => {
+	for (const ref of [...Object.values(HELP_OF_KIND), ...Object.values(HELP_OF_PLAN)]) {
+		const [id, anchor] = ref.split("#");
+		const a = articleById(id!);
+		assert.ok(a, `unknown article ${ref}`);
+		if (anchor) for (const l of LANGS) assert.ok(tocOf(a.body[l]).some((h) => h.id === anchor), `${ref}: no section in ${l}`);
+	}
 });

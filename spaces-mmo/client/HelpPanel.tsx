@@ -10,8 +10,8 @@ import { setLanguage } from "./i18n/index.ts";
 import { isTouch } from "./useShell.ts";
 
 const T = {
-	de: { title: "Hilfe", close: "Hilfe schließen", search: "Hilfe durchsuchen …", topics: "Alle Themen", toc: "Auf dieser Seite", none: "Keine Treffer.", lang: "Sprache" },
-	en: { title: "Help", close: "Close help", search: "Search the help …", topics: "All topics", toc: "On this page", none: "No results.", lang: "Language" },
+	de: { title: "Hilfe", close: "Hilfe schließen", search: "Hilfe durchsuchen …", topics: "Alle Themen", toc: "Auf dieser Seite", none: "Keine Treffer.", lang: "Sprache", notice: "Testversion – Nutzung auf eigene Gefahr. Das Spiel ist in Entwicklung: Figuren, Bauten, Gärten und Spielstände können jederzeit verschwinden oder zurückgesetzt werden. Es gibt keine Gewähr für Verfügbarkeit oder Richtigkeit." },
+	en: { title: "Help", close: "Close help", search: "Search the help …", topics: "All topics", toc: "On this page", none: "No results.", lang: "Language", notice: "Test version – use at your own risk. The game is under development: characters, buildings, gardens and saved progress can disappear or be reset at any time. No guarantee of availability or correctness." },
 } as const;
 
 const LANG_KEY = "mmo-help-lang";
@@ -24,7 +24,7 @@ const textOf = (a: Article, lang: Lang) => `${a.title[lang]} ${a.short[lang]} ${
 
 export function HelpPanel({ onClose, article: first = null, onCommands }: { onClose: () => void; /** The article to open on. */ article?: string | null; /** The tab with the commands: asks the world for them. */ onCommands?: () => void }) {
 	const [lang, setLang] = useState<Lang>(initialLang);
-	const [articleId, setArticleId] = useState<string | null>(first); // null: the topic list
+	const [articleId, setArticleId] = useState<string | null>(first?.split("#")[0] ?? null); // null: the topic list; `first` may name a section (id#anchor)
 	// on a phone the back gesture leads from an article to the list before it closes the help
 	useBack(isTouch() && articleId !== null, () => setArticleId(null));
 	const [query, setQuery] = useState("");
@@ -39,6 +39,9 @@ export function HelpPanel({ onClose, article: first = null, onCommands }: { onCl
 			if (el) el.scrollIntoView({ block: "start" }); else scroller.current?.scrollTo({ top: 0 });
 		});
 	}, []);
+
+	// an article named with a section ("help.game.fields#mill") opens scrolled to it
+	useEffect(() => { const [id, anchor] = (first ?? "").split("#"); if (id && anchor) open(id, anchor); }, [first, open]);
 
 	useEffect(() => {
 		const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -76,6 +79,7 @@ export function HelpPanel({ onClose, article: first = null, onCommands }: { onCl
 				<input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.search} aria-label={t.search} autoFocus={!isTouch()} />
 			</div>
 			<div className="help-scroll" ref={scroller}>
+				<p className="help-notice" role="note">{t.notice}</p>
 				{article && !q ? (
 					<>
 						<button className="help-back" onClick={() => setArticleId(null)}>← {t.topics}</button>
