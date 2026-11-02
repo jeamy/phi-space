@@ -8,6 +8,7 @@ pub mod ledger;
 pub mod ops;
 pub mod parts;
 pub mod store;
+pub mod sync;
 pub mod writer;
 
 pub use files::{open_files, StoreError, FORMAT_VERSION};
