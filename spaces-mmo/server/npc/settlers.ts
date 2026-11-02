@@ -13,7 +13,7 @@
 // - One command a round, then a rest at the pace of economy.ts (slower while no person is on the island).
 import { randomInt } from "node:crypto";
 import { EXIT_REACH, PATH } from "../engine/commands/build.ts";
-import { roadLinks } from "../engine/commands/cart.ts";
+import { roadLinks, roadPath } from "../engine/commands/cart.ts";
 import { epochOf } from "../engine/commands/epoch.ts";
 import { enoughHuts, settlementIn } from "../engine/commands/settlement.ts";
 import { regionWorld } from "../engine/regions.ts";
@@ -21,7 +21,7 @@ import { flameOf } from "../engine/fire.ts";
 import { clockOf } from "../engine/clockcache.ts";
 import { setting } from "../settings.ts";
 import type { NpcDef, WorldDef } from "../engine/world.ts";
-import { fieldsOf, type BedFields, type BuildingFields, type ListingFields, type SiteFields, type ShowFields, type SiteOrderFields, type WorkRestFields } from "../model.ts";
+import { fieldsOf, type BedFields, type CartFields, type BuildingFields, type ListingFields, type SiteFields, type ShowFields, type SiteOrderFields, type WorkRestFields } from "../model.ts";
 import { crops, flowers } from "../engine/commands/festival.ts";
 import { gather, look, nextTo, rest, social, stepBeside, travel, type Look } from "./economy.ts";
 import type { Npc, Script } from "./scripts.ts";
@@ -34,6 +34,8 @@ const nameOf = (w: WorldDef, proto: string) => w.prototypes.find((p) => p.key ==
 const RAW = ["treibholz", "tang", "muschel"];
 /** What a settler builds, one after the other: with two beds five points towards its island's epoch each. */
 const PLANS = ["huette", "regentonne", "huehnerstall"];
+/** Things to sell from which it sends them to the market by cart, when a road goes there. */
+const CART_FROM = 6;
 /** How much of each raw thing it carries at most: enough for a site, and one kind never crowds out the others. */
 const RAW_MAX = 8;
 
@@ -185,7 +187,8 @@ export function siedler(): Script {
 		if (count(l, "tang") >= 3 && count(l, "tangseil") < 2) { await n.act("craft tangseil"); return; }
 		// what it does not need goes to the market of its island, when it has one; what it lacks for a site it buys there
 		const roadNeeds = w.building?.plans.find((p) => p.key === w.cart?.road)?.needs ?? [];
-		const heap = l.pack.filter((i) => !RAW.includes(i.proto) && !roadNeeds.some((x) => x.proto === i.proto) && i.proto !== "tangseil" && i.proto !== g?.spade && i.proto !== g?.can && i.proto !== w.currency && n.world.prototypes.find((p) => p.key === i.proto)?.typeclass !== "Seed");
+		const heap = l.pack.filter((i) => !RAW.includes(i.proto) && !roadNeeds.some((x) => x.proto === i.proto) && i.proto !== "tangseil" && i.proto !== g?.spade && i.proto !== g?.can && i.proto !== w.cart?.proto && i.proto !== w.currency && n.world.prototypes.find((p) => p.key === i.proto)?.typeclass !== "Seed");
+		if (await haul(n, l, w, homes, heap)) return;
 		if (await trade(n, l, w, homes, heap, own)) return;
 		// the hut's chest takes what piles up
 		const hut = buildings.find((b) => b.plan === "huette");
@@ -214,6 +217,40 @@ export function siedler(): Script {
 		if (!cells.length) return false;
 		const at = cells[randomInt(0, cells.length)]!;
 		await n.act(`bau ${def.name.toLowerCase()} ${at.x} ${at.y}`);
+		return true;
+	}
+
+	/** A cart to the market: with CART_FROM things to sell and a road from here to its island's market, it sets its cart down,
+	 *  loads the heap, sends the cart off and goes on with its day; a cart that has arrived with cargo it walks to, unloads
+	 *  and, empty at the market, takes along again. One command a round. False when there is nothing to do. */
+	async function haul(n: Npc, l: Look, w: WorldDef, homes: string[], heap: Look["pack"]): Promise<boolean> {
+		const d = w.cart, market = homes.find((r) => w.market.rooms.includes(r));
+		if (!d || !market) return false;
+		const mine = (await n.space.readAll({ type: "Cart" })).map((e) => fieldsOf<CartFields>(e)).find((c) => c.accountId === l.me.charId);
+		const at = (c: CartFields) => ({ x: c.x, y: c.y, w: 1, h: 1 });
+		if (mine?.path.length) return false; // under way: its day goes on
+		if (mine) {
+			const cargo = await n.space.count({ type: "Item", fields: { location: mine.cartId } });
+			const loading = mine.room === l.me.room && mine.room !== market && cargo < d.capacity && heap.length > 0 && may("karren");
+			if (!cargo && !loading) {
+				// empty where it stands: it takes it along (at the market after unloading, or a load it gave up on)
+				if (!(await travel(n, l, mine.room))) return true;
+				if (!(await besideOf(n, l, { ...at(mine), room: mine.room }))) await n.act("karren nimm");
+				return true;
+			}
+			if (mine.room !== l.me.room) { await travel(n, l, mine.room); return true; }
+			if (await besideOf(n, l, { ...at(mine), room: mine.room })) return true;
+			if (mine.room === market) { await n.act("karren entlade"); later("karren", 30); return true; }
+			if (loading) { await n.act(`karren lade ${heap[0]!.name}`); return true; }
+			// a road that fell since it set the cart down: it takes the load back
+			if (!roadPath(await roadLinks(n.space, w), mine.room, market)) { await n.act("karren entlade"); later("karren", 20); return true; }
+			await n.act(`karren fahre ${market}`);
+			return true;
+		}
+		// the unsold rest comes home in the pack: no new load for a while after one went
+		if (heap.length < CART_FROM || l.me.room === market || !may("karren") || !l.pack.some((i) => i.proto === d.proto)) return false;
+		if (!roadPath(await roadLinks(n.space, w), l.me.room, market)) { later("karren", 20); return false; }
+		await n.act("karren stelle");
 		return true;
 	}
 

@@ -66,6 +66,10 @@ test("regions: a trader on his way stays a while where people are and answers wh
 	const r = await startRegions({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.1", SPACES_MMO_NPCS: "kalle" } });
 	const srv = await startWeb({ port: 0, space: "unix:/nowhere", accounts: r.accounts, regions: r.list });
 	try {
+		// too few coins for the large ship (economy.ts byShip): he walks to the ferry, by the cliff head
+		const west = r.space("west");
+		await eventually(() => west.readIfExists({ type: "Character", fields: { charId: "npc-kalle" } }, 1_000), 20_000, "Kalle");
+		for (const e of (await west.readAll({ type: "Item", fields: { location: "npc-kalle", proto: "muenze" } })).slice(2)) await west.takeIfExists({ id: e.id }, 1_000);
 		await r.npcProcess("west");
 		await r.npcProcess("ost");
 		const { p } = await guest(srv.url);

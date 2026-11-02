@@ -122,7 +122,7 @@ test("a storm surge leaves things on a beach and the harbour channel says where"
 	} finally { await srv.close(); await stack.close(); }
 });
 
-test("the whole archipelago lives: every NPC plays at once, they trade, and no coin appears or vanishes", async () => {
+test("the whole archipelago lives: every NPC plays at once, they trade, and no coin appears; coins go only as ship fares", async () => {
 	const stack = await startStack({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.02", SPACES_MMO_NPCS: w.npcs.filter((n) => !n.settler && !n.villager).map((n) => n.npcId).filter((id) => id !== "fremder").join(",") } });
 	try {
 		const s = stack.space;
@@ -135,9 +135,11 @@ test("the whole archipelago lives: every NPC plays at once, they trade, and no c
 		await eventually(async () => (await s.count({ type: "Listing" })) >= 1, 120_000, "something on a board"); // slow under the load of the whole suite
 		await new Promise((r) => setTimeout(r, 5_000));
 		assert.ok((await s.count({ type: "Intent" })) <= w.npcs.length, "no intents pile up");
-		// coins only change hands here (no orders are delivered, nothing is crafted from coins); a coin a trade holds
-		// right now is invisible to a read, so wait for a quiet moment
-		await eventually(async () => (await coins()) === before, 20_000, `still ${before} coins`);
+		// coins only change hands here (no orders are delivered, nothing is crafted from coins), but for the large ship's
+		// fare, which a trader bound for another island pays (economy.ts byShip): they go only by whole fares. A coin a
+		// trade holds right now is invisible to a read, so wait for a quiet moment
+		const fare = w.liner?.fare ?? 1;
+		await eventually(async () => { const now = await coins(); return now <= before && (before - now) % fare === 0; }, 20_000, `${before} coins less whole fares`);
 	} finally { await stack.close(); }
 });
 

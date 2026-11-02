@@ -20,6 +20,7 @@ import { clockOf } from "../engine/clockcache.ts";
 import { counted } from "../engine/commands/trade.ts";
 import { stem } from "../engine/context.ts";
 import { flameOf } from "../engine/fire.ts";
+import { baysOf, shipIn } from "../engine/liner.ts";
 import { wayTo, type WorldDef } from "../engine/world.ts";
 import { fieldsOf, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type MsgFields, type OfferFields, type OrderFields } from "../model.ts";
 import { deliverer } from "./settlers.ts";
@@ -67,10 +68,30 @@ const islandOf = (w: WorldDef, roomId: string) => w.rooms.find((r) => r.roomId =
 /** One step of the way to `room`: true when the NPC is there already. */
 export async function travel(n: Npc, l: Look, room: string): Promise<boolean> {
 	if (l.me.room === room) return true;
-	if (await byTrain(n, l, room)) return false;
+	if ((await byShip(n, l, room)) || (await byTrain(n, l, room))) return false;
 	const exit = wayTo(n.world, l.me.room, room);
 	if (exit) await n.act(`go ${exit}`);
 	return !exit;
+}
+
+/** Rooms the large ship must save on foot (with the ferries) before a figure pays for it, and the coins it keeps beyond the fare. */
+const SHIP_SAVES = 2, SHIP_PURSE = 3;
+
+/** The large ship on a way to another island: standing in its island's bay while the ship lies there, with the fare and a
+ *  purse to spare, it boards for the bay of the target's island when that saves SHIP_SAVES rooms. It never waits for the
+ *  ship: the ferries go any time. True when it did something. */
+async function byShip(n: Npc, l: Look, room: string): Promise<boolean> {
+	const d = n.world.liner, island = (r: string) => n.world.rooms.find((x) => x.roomId === r)?.island;
+	if (!d || island(l.me.room) === island(room) || coinsOf(n, l).length < d.fare + SHIP_PURSE) return false;
+	const bays = baysOf(n.world.rooms), to = island(room), bay = to ? bays.get(to) : undefined;
+	if (!bay || bays.get(island(l.me.room) ?? "")?.roomId !== l.me.room) return false;
+	const tried = boarding.get(n);
+	if (tried && tried.room !== l.me.room) boarding.delete(n);
+	if (tried?.room === l.me.room && tried.times >= 2) return false;
+	if (shipIn((await clockOf(n.space).now()) ?? 0, d.everyWorldMs) || hops(n.world, bay.roomId, room) + SHIP_SAVES > hops(n.world, l.me.room, room)) return false;
+	boarding.set(n, { room: l.me.room, times: (boarding.get(n)?.times ?? 0) + 1 });
+	await n.act(`einschiffen ${to}`);
+	return true;
 }
 
 /** Rooms on foot from which a figure rather takes the train. */
@@ -103,7 +124,7 @@ async function byTrain(n: Npc, l: Look, room: string): Promise<boolean> {
 	await n.act(`zug ${n.world.rooms.find((x) => x.roomId === room)?.name ?? room}`);
 	return true;
 }
-/** Where a figure last typed `zug` and how often: one that is still there did not ride. */
+/** Where a figure last typed `zug` or `einschiffen` and how often: one that is still there did not ride. */
 const boarding = new WeakMap<Npc, { room: string; times: number }>();
 
 type Rect = { x: number; y: number; w: number; h: number };

@@ -312,7 +312,7 @@ const NPCS: NpcDef[] = [
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 50,
+	version: 51,
 	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.en.md)
 	evening: { hour: 20 }, // a daily evening event
 	tileSize: 32,
@@ -769,7 +769,9 @@ world.npcs.push(...SETTLER_NAMES.map((name, i): NpcDef => {
 	const taken = new Set([...world.npcs, ...settlers, ...world.objects, ...world.beacons, ...world.exits, r.spawn].filter((o) => !("room" in o) || o.room === room).map((o) => `${o.x},${o.y}`));
 	let at = near(room, r.spawn.x, r.spawn.y + 1);
 	for (let d = 1; taken.has(`${at.x},${at.y}`); d++) at = near(room, r.spawn.x + (d % 7) - 3, r.spawn.y + 1 + Math.floor(d / 7));
-	const s: NpcDef = { npcId: `siedler-${i + 1}`, name, skin: i % 5, room, ...at, script: "siedler", beacon: fire.beaconId, home: fire.covers, settler: true };
+	// a cart for the way to the market, where its island has one (server/npc/settlers.ts haul)
+	const cart = world.market.rooms.some((m) => fire.covers.includes(m)) ? { carry: [{ proto: "karren", count: 1 }] } : {};
+	const s: NpcDef = { npcId: `siedler-${i + 1}`, name, skin: i % 5, room, ...at, script: "siedler", beacon: fire.beaconId, home: fire.covers, settler: true, ...cart };
 	settlers.push(s);
 	return s;
 }));

@@ -8,7 +8,7 @@ import { FOREVER } from "phi-spaces";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import { roadLinks } from "../server/engine/commands/cart.ts";
-import type { BuildingFields, SiteFields } from "../server/model.ts";
+import type { BuildingFields, CartFields, SiteFields } from "../server/model.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
 
 const w = await loadWorld();
@@ -113,6 +113,55 @@ test("a figure two rooms from home takes the island railway when stations stand 
 		await srv.stack.npcProcess();
 		await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0]?.fields.room === first.room, 120_000, "home");
 		assert.equal(await coins(), before - w.rail!.fare, "it paid the fare: it rode");
+	} finally { await srv.close(); }
+});
+
+test("a settler with things to sell and a road to its market sends them by cart, unloads it there and takes the cart along", { timeout: 300_000 }, async () => {
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001", SPACES_MMO_NPCS: first.npcId, SPACES_MMO_SETTLERS_MIN: "1" } });
+	try {
+		const s = srv.stack.space, me = `npc-${first.npcId}`, homes = first.home ?? [first.room];
+		const market = homes.find((r) => w.market.rooms.includes(r))!, exit = w.exits.find((e) => homes.includes(e.room) && e.room !== market && e.destination === market)!;
+		assert.ok(market && exit, "a room of its home beside its market");
+		await lightFire(s, 3_600_000, first.beacon);
+		for (const plan of ["huette", "regentonne", "huehnerstall"]) {
+			const b: BuildingFields = { buildId: `own-${plan}`, plan, name: plan, room: first.room, x: 0, y: 0, w: 1, h: 1, owner: me, ownerName: first.name, accountId: me, beaconId: first.beacon!, points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 };
+			await s.write({ type: "Building", fields: b as never }, null, FOREVER);
+		}
+		// a road beside the exit to the market, two cells in
+		const road: BuildingFields = { buildId: "strasse-1", plan: "strasse", name: "Straße", room: exit.room, x: exit.x + (exit.x === 0 ? 2 : -2), y: exit.y, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: first.beacon!, points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 };
+		await s.write({ type: "Building", fields: road as never }, null, FOREVER);
+		const c = (await s.take({ type: "Character", fields: { charId: me } }, 5_000))!;
+		const spawnAt = w.rooms.find((r) => r.roomId === exit.room)!.spawn!;
+		await s.write({ type: "Character", fields: { ...c.fields, room: exit.room, x: spawnAt.x, y: spawnAt.y } }, null, FOREVER);
+		const pearl = (await resolvePrototype(s, "perle"))!;
+		for (let i = 0; i < 6; i++) await spawn(s, null, w, pearl, { location: me, x: -1, y: -1 });
+		if (!(await s.count({ type: "Item", fields: { location: me, proto: "karren" } }))) await spawn(s, null, w, (await resolvePrototype(s, "karren"))!, { location: me, x: -1, y: -1 });
+		await srv.stack.npcProcess();
+		const sent = await eventually(async () => (await s.readAll({ type: "Cart", fields: { accountId: me } })).map((e) => e.fields as unknown as CartFields).find((x) => x.path.length), 150_000, "the cart sent");
+		assert.deepEqual(sent.path, [market]);
+		assert.equal(await s.count({ type: "Item", fields: { location: sent.cartId } }), 6, "the pearls on it");
+		await eventually(async () => !(await s.count({ type: "Cart", fields: { accountId: me } })) && (await s.count({ type: "Item", fields: { location: me, proto: "karren" } })) > 0, 150_000, "unloaded at the market and taken along");
+		const pearls = (await s.count({ type: "Item", fields: { location: me, proto: "perle" } })) + (await s.readAll({ type: "Listing", fields: { seller: me } })).length;
+		assert.equal(pearls, 6, "nothing lost: in its pack or on the board");
+	} finally { await srv.close(); }
+});
+
+test("a trader bound for another island boards the large ship in the bay while it lies there, instead of the ferries", { timeout: 240_000 }, async () => {
+	const kalle = w.npcs.find((n) => n.npcId === "kalle")!, to = kalle.route![1]!, island = (r: string) => w.rooms.find((x) => x.roomId === r)?.island;
+	assert.notEqual(island(kalle.room), island(to), "its route crosses the water");
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001", SPACES_MMO_NPCS: kalle.npcId } });
+	try {
+		const s = srv.stack.space, me = `npc-${kalle.npcId}`;
+		await eventually(() => s.readIfExists({ type: "Character", fields: { charId: me } }, 1_000), 10_000, me);
+		await srv.stack.npcProcess();
+		// the rooms it stands in, in order, until it is on the other island
+		const seen: string[] = [];
+		await eventually(async () => {
+			const room = String((await s.readAll({ type: "Character", fields: { charId: me } }))[0]?.fields.room);
+			if (seen.at(-1) !== room) seen.push(room);
+			return island(room) === island(to);
+		}, 200_000, "on the other island");
+		assert.deepEqual(seen.filter((r) => island(r) === island(kalle.room)), [kalle.room], `no ferry walk: ${seen.join(" > ")}`);
 	} finally { await srv.close(); }
 });
 
