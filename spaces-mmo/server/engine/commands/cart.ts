@@ -6,9 +6,10 @@ import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type CartFields, type ExitFields, type ItemFields } from "../../model.ts";
 import { worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
-import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, type CommandCtx } from "../context.ts";
+import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import type { WorldDef } from "../world.ts";
 import { ARTICLE, distTo, giveBack } from "./build.ts";
+import { placeIn, relocate } from "./default.ts";
 import { consume, move } from "./trade.ts";
 
 /** Room to rooms the roads join: a road beside an exit links its two ends, both ways. */
@@ -124,4 +125,28 @@ export async function cartTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 	return moved;
 }
 
-export const CART_COMMANDS: Command[] = [karren];
+const zug: Command = {
+	key: "zug", aliases: ["bahn", "train"],
+	help: "zug <ort> – neben einem Bahnhof mit der Inselbahn zu einem anderen Bahnhof dieser Insel fahren; „zug“ allein zeigt die Bahnhöfe",
+	async func(c, arg) {
+		const d = c.world.rail;
+		if (!d) throw new CommandError("In dieser Welt fährt keine Bahn.");
+		const island = c.world.rooms.find((r) => r.roomId === c.actor.room)?.island;
+		const stations = (await c.space.readAll({ type: "Building", fields: { plan: d.plan } }, { txn: c.txn })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => c.world.rooms.find((r) => r.roomId === b.room)?.island === island);
+		if (!stations.some((b) => b.room === c.actor.room && distTo(c.actor, b) <= 1)) throw new CommandError("Der Zug hält nur an Bahnhöfen; stell dich neben einen.");
+		const others = stations.filter((b) => b.room !== c.actor.room), word = arg.trim().toLowerCase();
+		const names = others.map((b) => nameOf(c, b.room)).join(", ");
+		if (!word) return msg(c, c.actor.charId, "info", names ? `Der Zug fährt nach: ${names}, für ${d.fare} Münze${d.fare === 1 ? "" : "n"}.` : "Auf dieser Insel gibt es keinen anderen Bahnhof.");
+		const to = others.find((b) => nameOf(c, b.room).toLowerCase() === word || b.room === word);
+		if (!to) throw new NotUnderstood(`Dorthin fährt kein Zug.${names ? ` Er fährt nach: ${names}.` : ""}`);
+		const purse = (await inventory(c)).filter((i) => i.f.proto === c.world.currency);
+		if (purse.length < d.fare) throw new CommandError(`Die Fahrt kostet ${d.fare} Münze${d.fare === 1 ? "" : "n"}.`);
+		for (const m of purse.slice(0, d.fare)) await consume(c, m.f, c.actor.charId);
+		await msg(c, "*", "info", `$you() $conj(steigst|steigt) in den Zug nach ${nameOf(c, to.room)}.`, { templ: true });
+		const dest = await roomOf(c, to.room), at = await placeIn(c, dest, { x: to.x, y: to.y + to.h });
+		await relocate(c, { room: dest.roomId, x: at.x, y: at.y }, { spot: false });
+		await msg(c, "*", "info", "$you() $conj(steigst|steigt) aus dem Zug.", { templ: true, room: dest.roomId });
+	},
+};
+
+export const CART_COMMANDS: Command[] = [karren, zug];

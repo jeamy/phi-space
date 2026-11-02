@@ -106,7 +106,8 @@ async function clear(space: SpaceLike, cells: Array<[number, number]>): Promise<
 test("a bed with a spade in the light; seeds grow when watered; a sponsor waters without owning; the barrel fills cans; one harvest takes the ripe once", { timeout: 300_000 }, async () => {
 	// 0.0001: a world hour is 1.44 s, the thirst (16 h) 23 s, a strandnelke ripe after 24 h, 35 s; faster, one stall of the
 	// machine longer than the thirst wilts the whole bed, and nothing ever ripens
-	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.0001" } });
+	// it lives fast and does not lapse: at 10 000 alone a stall of the machine wilts a bed in seconds and ends it in two minutes
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.0001", SPACES_MMO_CLOCK_DECAY: "1" } });
 	try {
 		const s = srv.stack.space;
 		const anna = await player(srv.url, "Gärtnerin"), bert = await player(srv.url, "Bert");
@@ -159,10 +160,6 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		// it grows: sprouts, then ripe (water it once more on the way, before the thirst runs out)
 		await eventually(async () => (await bedOf(s, anna.me)).plants.every((p) => p.stage >= 1), 30_000, "the seeds sprout");
 		assert.match(await does(anna.p, "gieße", "gießt"), /Gärtnerin gießt das Beet/);
-		// from here on it cannot go dry: at this rate 5.8 s without water wilt it, and a loaded machine stalls that long
-		const wet = (await s.readAll({ type: "Bed" })).find((e) => e.fields.owner === anna.me)!;
-		await s.takeIfExists({ id: wet.id }, 0);
-		await s.write({ type: "Bed", fields: { ...wet.fields, wateredWorldMs: FOREVER, untilWorldMs: FOREVER } as never }, null, FOREVER);
 		await eventually(async () => (await bedOf(s, anna.me)).plants.some((p) => p.stage === 2), 60_000, `something ripe (stages ${(await bedOf(s, anna.me)).plants.map((p) => p.stage)})`);
 		// two harvest at once: what is ripe goes once (whoever comes second finds nothing ripe, or what ripened since)
 		const [a, b] = await Promise.all([does(anna.p, "ernte", /erntet|nichts reif/), does(bert.p, "ernte", /erntet|nichts reif/)]);
@@ -178,7 +175,10 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		assert.match(await does(anna.p, "pate weg Bert", "beendet"), /beendet die Patenschaft von Bert/);
 		assert.match(await does(bert.p, "gieße", "Beet von"), /gießen dürfen der Besitzer/);
 
-		// left dry, what still grows wilts; weeding pulls it
+		// left dry, what still grows wilts; weeding pulls it (long dry by now, and due: thirst waits for people, here a real time)
+		const dried = await eventually(async () => (await s.readAll({ type: "Bed" })).find((e) => e.fields.owner === anna.me), 15_000, "the bed");
+		await s.takeIfExists({ id: dried!.id }, 0);
+		await s.write({ type: "Bed", fields: { ...dried!.fields, wateredWorldMs: -1e15, dueWorldMs: 0, plants: (dried!.fields.plants as unknown as BedFields["plants"]).map((p) => ({ ...p, dueWorldMs: 0 })) } as never }, null, FOREVER);
 		await eventually(async () => (await bedOf(s, anna.me)).plants.some((p) => p.stage === 3), 90_000, "something wilts");
 		assert.match(await does(anna.p, "jäte", "jätet"), /welke Pflanze/);
 		assert.ok((await bedOf(s, anna.me)).plants.every((p) => p.stage !== 3));

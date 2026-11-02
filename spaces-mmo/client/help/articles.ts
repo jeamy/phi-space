@@ -496,6 +496,7 @@ Eine Insel wächst durch das, was auf ihr steht. Ausführlich unter [Dorf und Si
 | \`siedlung rang\` | | Die Siedlungen der Gegend nach ihrem Bestand; ein Park wiegt am meisten, wer ihn zuletzt pflegte, zählt dazu |
 | \`laden\` | \`shop\` | Regal und Preise des Kaufhauses; \`laden kaufe\`, \`laden verkaufe\`, \`laden einlegen\`, \`laden entnehme\` |
 | \`kredit <n> gegen <ding>\`, \`tilge\` | \`credit\`, \`repay\` | Am Kontor gegen ein Pfand leihen und zurückzahlen |
+| \`zug <ort>\` | \`train\` | Mit der Inselbahn von Bahnhof zu Bahnhof |
 | \`karren\` | \`cart\` | Deine Karren; \`karren stelle\`, \`karren lade\`, \`karren entlade\`, \`karren fahre <ort>\`, \`karren nimm\` |
 | \`rudere <ort>\` | \`row\` | Mit dem Ruderboot von Steg zu Steg einer Insel |
 | \`fahrplan\`, \`einschiffen <insel>\` | \`timetable\`, \`board\` | Das große Schiff nach Fahrplan, ab den Buchten |
@@ -673,6 +674,7 @@ An island grows by what stands on it. In detail under [Village and settlement](h
 | \`siedlung rang\` | | The settlements of the region by what they hold; a park weighs most, and whoever tended it lately counts too |
 | \`laden\` | \`shop\` | Shelf and prices of the department store; \`laden kaufe\`, \`laden verkaufe\`, \`laden einlegen\`, \`laden entnehme\` |
 | \`kredit <n> gegen <ding>\`, \`tilge\` | \`credit\`, \`repay\` | Borrow against a pledge at a counting house and pay it back |
+| \`zug <ort>\` | \`train\` | By island railway from station to station |
 | \`karren\` | \`cart\` | Your carts; \`karren stelle\`, \`karren lade\`, \`karren entlade\`, \`karren fahre <ort>\`, \`karren nimm\` |
 | \`rudere <ort>\` | \`row\` | By rowing boat from jetty to jetty of an island |
 | \`fahrplan\`, \`einschiffen <insel>\` | \`timetable\`, \`board\` | The large ship on its timetable, from the bays |

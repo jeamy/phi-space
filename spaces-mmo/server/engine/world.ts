@@ -131,6 +131,8 @@ export type WorldDef = {
 	cart?: { road: string; proto: string; capacity: number; hopWorldMs: number };
 	/** The large ship on a timetable (engine/commands/fishing.ts): it lies in every bay for the first half of `everyWorldMs`; ferries stay on demand. */
 	liner?: { everyWorldMs: number; fare: number };
+	/** The island railway (engine/commands/cart.ts): between the buildings of `plan` on an island, for `fare` coins. */
+	rail?: { plan: string; fare: number };
 	festival?: FestivalDef;
 	/** Animals on the farm (docs/siedeln.en.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
 	animals?: AnimalsDef;

@@ -58,3 +58,25 @@ test("a cart goes only by road, alone, with its cargo; its owner unloads it ther
 		await p.until((f) => f.t === "obj" && f.o.kind === "cart" && f.o.location === c.room, 10_000, 0); // a page saw it in its room
 	} finally { await srv.close(); }
 });
+
+test("the island railway: from station to station of an island, for its fare", { timeout: 180_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const here = w.rooms.find((r) => r.roomId === c.room)!, there = w.rooms.find((r) => r.island === here.island && r.roomId !== c.room)!;
+		const station = (id: string, room: string, x: number, y: number) => s.write({ type: "Building", fields: { buildId: id, plan: "bahnhof", name: "Bahnhof", room, x, y, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
+		assert.match(await does(p, "zug", "Bahnh"), /nur an Bahnhöfen/);
+		await station("a", c.room, c.x + 1, c.y);
+		await station("b", there.roomId, there.spawn.x, there.spawn.y);
+		assert.match(await does(p, "zug", "fährt nach"), new RegExp(there.name));
+		assert.match(await does(p, `zug ${there.name}`, "kostet"), /kostet 1 Münze/);
+		await give(s, me, w.currency);
+		await does(p, `zug ${there.name}`, "aus dem Zug");
+		assert.equal(((await s.readAll({ type: "Character", fields: { charId: me } }))[0]!.fields as unknown as CharacterFields).room, there.roomId);
+		assert.equal(await s.count({ type: "Item", fields: { location: me, proto: w.currency } }), 0);
+	} finally { await srv.close(); }
+});
