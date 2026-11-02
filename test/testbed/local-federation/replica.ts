@@ -19,7 +19,7 @@ const sh = (cmd: string, args: string[], env: NodeJS.ProcessEnv = {}) => execFil
 const A = "replica-a", B = "replica-b", SPACE = "sp-0d7f3a52-6c1e-4b8a-9f21-3e5a7c9b1d04", INCARNATION = "1ed6e700";
 const container = (host: string) => `phi-federation-${host}-1`;
 
-async function provisionReplicas(dir: string) {
+export async function provisionReplicas(dir: string, mode: "sync" | "entry") {
 	const openssl = (args: string[]) => execFileSync("openssl", args, { cwd: dir, stdio: "ignore" });
 	for (const name of [A, B, "fencing"]) {
 		openssl(["req", "-newkey", "rsa:2048", "-nodes", "-keyout", `${name}.key`, "-out", `${name}.csr`, "-subj", `/CN=${name}`]);
@@ -44,18 +44,23 @@ async function provisionReplicas(dir: string) {
 	for (const host of [A, B]) {
 		const store = await openSqliteHost(join(dir, `${host}.sqlite`));
 		await store.commit((tx) => spaceDoc(tx, undefined, now).then(() => {}), ctx);
-		const spaces: Record<string, unknown> = { [SPACE]: { state: "active", authorityId: "authority", dataIncarnation: INCARNATION, role: host === A ? "primary" : "standby", primaryEpoch: 1, replicaConfigVersion: 1, durability: "sync", transitionId: "setup" } };
+		const spaces: Record<string, unknown> = mode === "sync" ? { [SPACE]: { state: "active", authorityId: "authority", dataIncarnation: INCARNATION, role: host === A ? "primary" : "standby", primaryEpoch: 1, replicaConfigVersion: 1, durability: "sync", transitionId: "setup" } } : {};
 		for (const i of await listSpaces(store, ctx)) spaces[i.spaceId] = { state: "active", authorityId: "authority", dataIncarnation: i.incarnation, role: "local", transitionId: "t1" };
 		await store.close(ctx);
 		await external.compareAndSet(`boot:${host}`, null, { hostId: host, state: "active", spaces } as never);
 		const other = host === A ? B : A, identity = { caFile: "/fed/ca.crt", certFile: `/fed/${host}.crt`, keyFile: `/fed/${host}.key` };
+		const syncSpaces = [{ alias: "ledger", spaceId: SPACE, incarnation: INCARNATION, dir: `/fed/sync-${host}`, genesis, port: RPORT.sync, peers: [{ hostId: other, algorithm: keys[other as typeof A].algorithm, publicKey: keys[other as typeof A].publicKey, ip: REPLICA[other as typeof A] }] }];
+		// lww and set types of the default Space, each host a replica that pulls the other's stream over its gate
+		const entryReplication = { space: "default", spaceId: "logical-board", replicaId: host, incarnation: `e-${host}`, members: [A, B].map((r) => ({ replicaId: r, incarnation: `e-${r}` })), rules: [{ type: "Sensor", variant: "lww", keyFields: ["sensorId"] }, { type: "Tag", variant: "set" }], pollMs: 500,
+			peers: [{ replicaId: other, hostId: other, peerId: `${other}-peer`, address: { host: REPLICA[other as typeof A], port: RPORT.gate } }] };
 		write(`${host}.config.json`, { ...base, membership: undefined, capabilities: undefined, runGates: undefined, spaceLifecycle: undefined, hostId: host, peerId: `${host}-peer`, listen: { host: REPLICA[host as typeof A], port: RPORT.gate }, keyFile: `/fed/${host}-key.json`, installedRegisterFile: `/fed/installed-${host}.sqlite`, registerTls: { ...base.registerTls, ...identity },
-			syncSpaces: [{ alias: "ledger", spaceId: SPACE, incarnation: INCARNATION, dir: `/fed/sync-${host}`, genesis, port: RPORT.sync, peers: [{ hostId: other, algorithm: keys[other as typeof A].algorithm, publicKey: keys[other as typeof A].publicKey, ip: REPLICA[other as typeof A] }] }] });
+			...(mode === "sync" ? { syncSpaces } : { entryReplication }) });
 	}
 	external.close();
 }
 
-export async function replicaScenario() {
+/** The containers of the `replica` profile and what drives them: the client's steps, the hosts' tool, their log lines. */
+export function harness() {
 	const dir = mkdtempSync(join(tmpdir(), "phi-fed-")), env = { FED_DIR: dir, FED_UID: String(process.getuid!()), FED_GID: String(process.getgid!()), MEMBER_IMPL: "ts", CONTROL_IMPL: "ts" };
 	const compose = (...a: string[]) => sh("docker", ["compose", "-f", COMPOSE, "--profile", "replica", ...a], env);
 	const say = (name: string, v: unknown) => console.log(`  ${name} ${JSON.stringify(v)}`);
@@ -63,10 +68,15 @@ export async function replicaScenario() {
 	const tool = (host: string, q: Record<string, unknown>) => { const out = JSON.parse(compose("run", "--rm", "-T", "--no-deps", host, "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "tool", host, JSON.stringify(q)).trim().split("\n").at(-1)!); say(`tool ${host} ${q.op}`, out); return out; };
 	const started = (host: string, text: string, ms = 90_000) => { const end = Date.now() + ms; for (;;) { const r = execFileSync("docker", ["logs", container(host)], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); if (r.split("\n").some((l) => l.includes(text))) return; if (Date.now() > end) throw new Error(`${host}: no ${text}`); execFileSync("sleep", ["0.5"]); } };
 	const docker = (...a: string[]) => sh("docker", a);
+	return { dir, env, compose, say, drive, tool, started, docker };
+}
+
+export async function replicaScenario() {
+	const { dir, env, compose, say, drive, tool, started, docker } = harness();
 	let fencing: ChildProcess | undefined;
 	try {
 		await provision(dir);
-		await provisionReplicas(dir);
+		await provisionReplicas(dir, "sync");
 		const remote = { register: { caFile: "/fed/ca.crt", certFile: "/fed/operator.crt", keyFile: "/fed/operator.key", host: IP.register, port: 7430 }, fencing: { caFile: "/fed/ca.crt", certFile: "/fed/operator.crt", keyFile: "/fed/operator.key", host: GATEWAY, port: RPORT.fencing } };
 		compose("up", "-d", "--no-build", "register", "management", "control", "client");
 		fencing = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", join(ROOT, "test/testbed/local-federation/fencing-service.ts"), dir], { stdio: ["ignore", "pipe", "inherit"] });

@@ -3,7 +3,7 @@
 import { renameSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { OwnSyncStore, PrimarySyncJournal, TlsFencing, TlsRecoveryRegister, assertSyncStandby, canonicalJson, degradeToSingle, loadFileSigner, materializeSyncHistory, promote, setStandby, signedReplicaPeer, snapshotSpace, socketTransport, startConfiguredFederation, startQuarantineReplicas } from "../../../src/index.ts";
+import { EntryReplicationController, OwnSyncStore, PrimarySyncJournal, TlsFencing, TlsRecoveryRegister, assertSyncStandby, canonicalJson, degradeToSingle, loadFileSigner, materializeSyncHistory, promote, setStandby, signedReplicaPeer, snapshotSpace, socketTransport, startConfiguredFederation, startQuarantineReplicas } from "../../../src/index.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { openSqliteHost } from "../../../src/store/sqlite.ts";
 
@@ -24,6 +24,14 @@ if (mode === "run") {
 	const host = await openSqliteHost(`/fed/${name}.sqlite`), runtime = await startConfiguredFederation(host, ctx, file);
 	stopOn(async () => { await runtime.close(); await host.close(ctx); });
 	console.log(JSON.stringify({ ready: true }));
+} else if (cfg.entryReplication) {
+	// what the store holds of the replicated types, read with the daemon stopped
+	const er = cfg.entryReplication, host = await openSqliteHost(`/fed/${name}.sqlite`);
+	const controller = new EntryReplicationController({ host, ctx, config: { spaceId: er.spaceId, authorityId: cfg.authorityId, replicaId: er.replicaId, incarnation: er.incarnation, members: er.members, rules: er.rules }, authorize: async () => {}, assertActive: async () => {}, clockUncertaintyMs: () => 1000 });
+	const entries = (await controller.read()).map((v) => JSON.stringify({ type: v.type, fields: v.fields })).sort().map((e) => JSON.parse(e));
+	await host.close(ctx);
+	console.log(JSON.stringify({ entries }));
+	process.exit(0);
 } else {
 	const q = JSON.parse(input!), c = cfg.syncSpaces[0], reader = new TlsRecoveryRegister(cfg.registerTls);
 	const journal = new PrimarySyncJournal(join(c.dir, "journal.sqlite"), c.genesis, { ...c.journal, self: cfg.hostId, assertStandby: assertSyncStandby(reader, cfg.hostId) });

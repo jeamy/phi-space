@@ -90,6 +90,7 @@ async function phone(ip: string, bind: string, impl: string) {
 const which = process.argv[2] ?? "both";
 sh("docker", ["build", "--network", "host", "-f", "test/testbed/local-federation/Dockerfile", "-t", "phi-federation:local", "."]);
 if (which === "phone") await phone(process.argv[3]!, process.argv[4]!, process.argv[5] ?? "rust");
+if (which === "entry") { await (await import("./entry.ts")).entryScenario(); process.exit(process.exitCode ?? 0); }
 if (which === "replica") { await (await import("./replica.ts")).replicaScenario(); process.exit(process.exitCode ?? 0); }
 const runs = which === "both" ? [["ts", "ts"], ["ts", "rust"], ["rust", "ts"], ["rust", "rust"]] : [["ts", which]];
 const results = [];

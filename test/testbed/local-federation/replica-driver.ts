@@ -9,16 +9,18 @@ const options = { attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, cal
 const signer = () => loadFileSigner("/fed/user-key.json"), line = (host: string, port: number) => socketTransport({ host, port }, { localAddress: IP.client, connectTimeoutMs: 8000 });
 const tls = { caFile: "/fed/ca.crt", certFile: "/fed/operator.crt", keyFile: "/fed/operator.key" };
 const operator = () => new TlsRecoveryRegister({ ...tls, host: IP.register, port: PORT.register });
-async function ledger(host: string) {
+async function ledger(host: string, name: string | null = "ledger") {
 	const home = new RemoteSpace(line(IP.control, PORT.control), { ...options, space: "control", signer: signer(), expectedGateHostId: "control-host", ownPeerId: "user" });
 	await home.authenticate();
-	const space = new RemoteSpace(line(REPLICA[host as keyof typeof REPLICA], RPORT.gate), { ...options, space: "ledger", signer: signer(), expectedGateHostId: host, ownPeerId: "user", grantProvider: () => home.requestGrant() });
+	const space = new RemoteSpace(line(REPLICA[host as keyof typeof REPLICA], RPORT.gate), { ...options, space: name ?? undefined, signer: signer(), expectedGateHostId: host, ownPeerId: "user", grantProvider: () => home.requestGrant() });
 	await space.authenticate();
 	return space;
 }
 const until = async <T>(f: () => Promise<T>, ms = 60_000): Promise<T> => { const end = Date.now() + ms; for (;;) { try { return await f(); } catch (e) { if (Date.now() > end) throw e; await new Promise((r) => setTimeout(r, 500)); } } };
 const refusal = (e: unknown) => ({ refused: (e as Error).constructor.name, code: (e as { code?: string }).code ?? null, message: (e as Error).message.slice(0, 80) });
 
+/** Entries as type and fields, in one order, so that two hosts' views compare as text. */
+export const boardView = (items: Array<{ type?: string; types?: string[]; fields: unknown }>) => items.map((e) => ({ type: e.type ?? e.types![0], fields: e.fields })).map((e) => JSON.stringify(e)).sort().map((e) => JSON.parse(e));
 const seen: Record<string, unknown> = {};
 if (step === "write") {
 	const space = await until(() => ledger(name!)), out: unknown[] = [];
@@ -35,6 +37,23 @@ if (step === "write") {
 	while (!existsSync("/fed/go")) await new Promise((r) => setTimeout(r, 200));
 	try { await space.write({ type: "Ledger", fields: { label: "fork", n: 0 } }, null, FOREVER); out.push("answered"); } catch (e) { out.push(refusal(e)); }
 	seen.writes = out;
+} else if (step === "put" || step === "tag") {
+	// a write of a merge type: Sensor is lww by sensorId, Tag a set
+	const board = await until(() => ledger(name!, null));
+	const entry: { type: string; fields: Record<string, string | number> } = step === "put" ? { type: "Sensor", fields: { sensorId: label, v: Number(count) } } : { type: "Tag", fields: { tag: label } };
+	seen.write = await board.write(entry, null, FOREVER).then(() => "answered", refusal);
+} else if (step === "untag") {
+	const board = await until(() => ledger(name!, null)), found = (await board.readAll({ type: "Tag", fields: { tag: label } }))[0];
+	seen.untag = found ? await board.cancel(found.id).then(() => "answered", refusal) : "absent";
+} else if (step === "take") {
+	seen.take = await (await until(() => ledger(name!, null))).take({ type: "Sensor" }, 0).then(() => "answered", refusal);
+} else if (step === "view") {
+	// what this host's gate shows; with an expected view, waits until it shows that
+	const board = await until(() => ledger(name!, null)), want = label;
+	const view = async () => JSON.stringify(boardView([...await board.readAll({ type: "Sensor" }), ...await board.readAll({ type: "Tag" })]));
+	let shown = await view();
+	for (const end = Date.now() + 60_000; want !== undefined && shown !== want && Date.now() < end; shown = await view()) await new Promise((r) => setTimeout(r, 500));
+	seen.view = JSON.parse(shown);
 } else if (step === "count") {
 	const space = await until(() => ledger(name!));
 	seen.count = await until(() => space.count({ type: "Ledger" }));
