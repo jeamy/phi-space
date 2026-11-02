@@ -103,6 +103,10 @@ export async function replicaScenario() {
 		// an operator starts the fenced host anyway: it refuses to boot, and the client is not served
 		docker("start", container(A));
 		assert.notEqual(sh("timeout", ["60", "docker", "wait", container(A)]).trim(), "0", "a fenced host does not boot");
+		const refusedBoot = execFileSync("sh", ["-c", `docker logs ${container(A)} 2>&1`], { encoding: "utf8" }).split("\n").filter((l) => l.startsWith("BootBlocked")).at(-1);
+		say("fenced start", refusedBoot);
+		assert.ok(refusedBoot, "the fenced host is refused by a boot check, not by a crash");
+		assert.ok(drive("gone", A).gone.refused, "and the client is not served");
 		// the promoted host serves; without a standby a write stays sealed, and degradeToSingle completes it
 		docker("start", container(B)); started(B, '"ready":true');
 		assert.equal(drive("count", B).count, 5);
