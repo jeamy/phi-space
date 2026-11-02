@@ -5,8 +5,8 @@
 //! Everything here runs on one thread, the one that owns the store: a call is handled to its end before the next is
 //! looked at, and only the disk is another thread. A reply leaves once the store has made durable what it rests on.
 use phi_service::{Conn, Outcome, Parked, Service};
-use std::cell::{Cell, RefCell};
-use std::collections::VecDeque;
+use std::cell::{Cell, RefCell, RefMut};
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::io;
 use std::net::IpAddr;
@@ -96,15 +96,46 @@ pub trait Front {
 #[derive(Clone)]
 pub struct Owner(Rc<Hub>);
 impl Owner {
+	/// The host's own service.
 	pub fn with<T>(&self, f: impl FnOnce(&mut Service) -> T) -> T {
-		let out = f(&mut self.0.service.borrow_mut());
-		self.0.committed();
+		let out = f(&mut self.0.main.service());
+		self.0.main.committed();
 		out
 	}
 	/// Commits handed to the store so far.
-	pub fn handed(&self) -> u64 { self.0.service.borrow().store.handed() }
+	pub fn handed(&self) -> u64 { self.0.main.service().store.handed() }
 	/// Resolves after the next commit.
-	pub async fn commit(&self) { self.0.commits.notified().await }
+	pub async fn commit(&self) { self.0.main.commits.notified().await }
+	/// Routes the calls that name one of `names` as their `space` (`None`: to the host's own service again). A service it
+	/// takes out is given back once what it made durable has left; its store is the caller's to close.
+	pub fn route(&self, names: &[String], to: Option<Route>) -> Option<Service> { route(&self.0, names, to) }
+	/// The service of a routed Space.
+	pub fn with_space<T>(&self, name: &str, f: impl FnOnce(&mut Service) -> T) -> Option<T> {
+		let Some(Space::Served(served)) = self.0.spaces.borrow().get(name).cloned() else { return None };
+		let out = f(&mut served.service());
+		served.committed();
+		Some(out)
+	}
+	/// Resolves once the store of a routed Space has failed (a primary's sealed candidate), or the Space is no longer served.
+	pub async fn failed(&self, name: &str) {
+		let Some(Space::Served(served)) = self.0.spaces.borrow().get(name).cloned() else { return };
+		let mut durable = served.durable.subscribe();
+		while !served.failed.get() && !served.gone.get() {
+			if durable.changed().await.is_err() { return; }
+		}
+	}
+}
+
+/// Where the calls naming a Space go: its own service over a store of its own, or an answer that stands for it (a
+/// primary/sync Space whose sealed candidate is being resolved answers `CommitSealed`).
+pub enum Route {
+	Served(Box<Service>),
+	Answer(Rc<dyn Fn(&Conn) -> String>),
+}
+#[derive(Clone)]
+enum Space {
+	Served(Rc<Served>),
+	Answer(Rc<dyn Fn(&Conn) -> String>),
 }
 
 /// What the test hooks do with a line (`--test-hooks`): the service, how many connections are open, the text.
@@ -123,6 +154,10 @@ pub struct ServeOptions {
 	pub gates: Vec<(Listen, Rc<dyn Front>)>,
 	/// A socket apart from the service's own, for tests only.
 	pub hooks: Option<(PathBuf, Hook)>,
+	/// Spaces with a store of their own, reached by naming one of the names as `space` (`Owner::route`).
+	pub spaces: Vec<(Vec<String>, Route)>,
+	/// Host work that runs for as long as the server does, on the owner thread.
+	pub tasks: Vec<Box<dyn FnOnce(Owner) -> Local<()>>>,
 	pub max_frame_bytes: usize,
 	pub max_connections: usize,
 	pub max_inflight_per_connection: usize,
@@ -133,29 +168,46 @@ pub struct ServeOptions {
 }
 impl ServeOptions {
 	pub fn new(listen: Listen, peer: &str) -> ServeOptions {
-		ServeOptions { periodic: vec![], endpoints: vec![Endpoint { listen, peer: Some(peer.to_owned()) }], gates: vec![], hooks: None, max_frame_bytes: 256 * 1024, max_connections: 64, max_inflight_per_connection: 32, idle_ms: 5 * 60_000, watch_debounce_ms: 20 }
+		ServeOptions { periodic: vec![], endpoints: vec![Endpoint { listen, peer: Some(peer.to_owned()) }], gates: vec![], hooks: None, spaces: vec![], tasks: vec![], max_frame_bytes: 256 * 1024, max_connections: 64, max_inflight_per_connection: 32, idle_ms: 5 * 60_000, watch_debounce_ms: 20 }
 	}
 }
 
 /// What all connections of a server share. It stays on the owner thread.
 struct Hub {
-	service: RefCell<Service>,
-	/// Commits handed to the store so far, as last seen.
-	handed: Cell<u64>,
-	commits: Notify,
-	due: Notify,
-	durable: watch::Sender<u64>,
-	/// The store failed: what was not durable by then never will be.
-	failed: Cell<bool>,
+	main: Rc<Served>,
+	spaces: RefCell<HashMap<String, Space>>,
 	open: Cell<usize>,
 	stop: Notify,
 	hook: RefCell<Option<Hook>>,
 	o: ServeOptions,
 }
-impl Hub {
+
+/// One store behind the transport and what waits on it: the host's own, or a routed Space's.
+struct Served {
+	service: RefCell<Option<Service>>,
+	/// Commits handed to the store so far, as last seen.
+	handed: Cell<u64>,
+	commits: Notify,
+	due: Notify,
+	durable: watch::Sender<u64>,
+	/// The store failed: what was not durable by then never will be, and gets `lost`.
+	failed: Cell<bool>,
+	lost: RefCell<String>,
+	/// Taken out of service: its background work is stopped, a waiting call gets `lost`.
+	gone: Cell<bool>,
+	retired: Notify,
+	tasks: RefCell<Vec<tokio::task::JoinHandle<()>>>,
+}
+impl Served {
+	fn new(service: Service) -> Rc<Served> {
+		let (durable, handed) = (service.store.durable(), service.store.handed());
+		Rc::new(Served { service: RefCell::new(Some(service)), handed: Cell::new(handed), commits: Notify::new(), due: Notify::new(), durable: watch::channel(durable).0, failed: Cell::new(false), lost: RefCell::new(String::new()), gone: Cell::new(false), retired: Notify::new(), tasks: RefCell::new(vec![]) })
+	}
+	fn service(&self) -> RefMut<'_, Service> { RefMut::map(self.service.borrow_mut(), |s| s.as_mut().expect("a service taken out is not called")) }
 	/// After anything that may have committed: long polls look again, due work is asked for, a store in memory is durable.
 	fn committed(&self) {
-		let mut service = self.service.borrow_mut();
+		if self.gone.get() { return; }
+		let mut service = self.service();
 		let handed = service.store.handed();
 		if handed != self.handed.replace(handed) {
 			self.commits.notify_waiters();
@@ -167,6 +219,7 @@ impl Hub {
 		if let Err(e) = service.store.pump() {
 			if !self.failed.replace(true) {
 				eprintln!("phi-spaces socket: store failed: {e}");
+				*self.lost.borrow_mut() = service.failed_reply();
 				self.durable.send_modify(|_| ()); // once: a writer looks at `failed` on every turn
 			}
 		}
@@ -175,8 +228,69 @@ impl Hub {
 	}
 }
 
+/// Its durable marks reach the writers, and its reaper and delivery run.
+fn start_served(served: &Rc<Served>, debounce_ms: u64) {
+	let wake = Arc::new(Notify::new());
+	let woken = Arc::clone(&wake);
+	served.service().store.set_waker(Arc::new(move || woken.notify_one()));
+	let s = Rc::clone(served);
+	let waker = spawn_local(async move {
+		loop {
+			wake.notified().await;
+			if s.gone.get() { return; }
+			s.take_durable(&mut s.service());
+		}
+	});
+	let background = spawn_local(background(Rc::clone(served), debounce_ms));
+	served.tasks.borrow_mut().extend([waker, background]);
+}
+
+/// Takes a Space's store out of service: what it made durable leaves first; its tasks stop.
+fn retire(served: &Rc<Served>) -> Option<Service> {
+	if served.gone.get() { return None; }
+	{
+		let mut service = served.service();
+		let _ = service.store.drain();
+		served.take_durable(&mut service);
+	}
+	served.gone.set(true);
+	served.tasks.borrow_mut().drain(..).for_each(|t| t.abort());
+	if !served.failed.get() {
+		// what was not durable by now is not, as for a failed store
+		served.failed.set(true);
+		*served.lost.borrow_mut() = served.service().failed_reply();
+	}
+	served.durable.send_modify(|_| ());
+	served.retired.notify_waiters();
+	served.service.borrow_mut().take()
+}
+
+fn route(hub: &Rc<Hub>, names: &[String], to: Option<Route>) -> Option<Service> {
+	let mut spaces = hub.spaces.borrow_mut();
+	let old: Vec<Rc<Served>> = names.iter().filter_map(|n| spaces.remove(n)).filter_map(|s| match s { Space::Served(s) => Some(s), Space::Answer(_) => None }).collect();
+	let next = to.map(|to| match to {
+		Route::Served(service) => {
+			let served = Served::new(*service);
+			start_served(&served, hub.o.watch_debounce_ms);
+			Space::Served(served)
+		}
+		Route::Answer(f) => Space::Answer(f),
+	});
+	if let Some(next) = next {
+		for n in names { spaces.insert(n.clone(), next.clone()); }
+	}
+	drop(spaces);
+	let mut out = None;
+	for s in old {
+		if hub.spaces.borrow().values().any(|v| matches!(v, Space::Served(o) if Rc::ptr_eq(o, &s))) { continue; }
+		if let Some(service) = retire(&s) { out.get_or_insert(service); }
+	}
+	out
+}
+
 struct Reply {
-	/// The commits it rests on.
+	/// The store it rests on, and its commits there.
+	served: Rc<Served>,
 	mark: u64,
 	id: u32,
 	text: String,
@@ -252,39 +366,33 @@ pub async fn serve(service: Service, o: ServeOptions, ready: impl FnOnce(Vec<Str
 	let hub = local.run_until(serve_here(service, o, ready, stop)).await?;
 	drop(local); // the tasks go, and what they hold of the hub
 	let hub = Rc::try_unwrap(hub).map_err(|_| io::Error::other("a task outlived the server"))?;
-	Ok(hub.service.into_inner())
+	let main = Rc::try_unwrap(hub.main).map_err(|_| io::Error::other("a task outlived the server"))?;
+	Ok(main.service.into_inner().expect("the host's own service is never taken out"))
 }
 
 async fn serve_here(service: Service, mut o: ServeOptions, ready: impl FnOnce(Vec<String>), stop: impl Future<Output = ()>) -> io::Result<Rc<Hub>> {
 	assert!(o.max_frame_bytes >= 256, "maxFrameBytes must be at least 256");
-	let wake = Arc::new(Notify::new());
-	let woken = Arc::clone(&wake);
-	service.store.set_waker(Arc::new(move || woken.notify_one()));
-	let durable = service.store.durable();
-	let handed = service.store.handed();
 	let periodic = std::mem::take(&mut o.periodic);
+	let (spaces, tasks) = (std::mem::take(&mut o.spaces), std::mem::take(&mut o.tasks));
 	let (hooks, hook) = o.hooks.take().map_or((None, None), |(path, hook)| (Some(path), Some(hook)));
-	let hub = Rc::new(Hub { service: RefCell::new(service), handed: Cell::new(handed), commits: Notify::new(), due: Notify::new(), durable: watch::channel(durable).0, failed: Cell::new(false), open: Cell::new(0), stop: Notify::new(), hook: RefCell::new(hook), o });
-
-	spawn_local({
-		let hub = Rc::clone(&hub);
-		async move {
-			loop {
-				wake.notified().await;
-				hub.take_durable(&mut hub.service.borrow_mut());
-			}
-		}
-	});
-	spawn_local(background(Rc::clone(&hub)));
+	let hub = Rc::new(Hub { main: Served::new(service), spaces: RefCell::new(HashMap::new()), open: Cell::new(0), stop: Notify::new(), hook: RefCell::new(hook), o });
+	start_served(&hub.main, hub.o.watch_debounce_ms);
+	for (names, to) in spaces {
+		route(&hub, &names, Some(to));
+	}
+	let mut running = vec![];
 	for mut p in periodic {
 		let hub = Rc::clone(&hub);
-		spawn_local(async move {
+		running.push(spawn_local(async move {
 			loop {
 				sleep(Duration::from_millis(p.every_ms)).await;
-				(p.run)(&mut hub.service.borrow_mut());
-				hub.committed();
+				(p.run)(&mut hub.main.service());
+				hub.main.committed();
 			}
-		});
+		}));
+	}
+	for t in tasks {
+		running.push(spawn_local(t(Owner(Rc::clone(&hub)))));
 	}
 
 	let mut bound = vec![];
@@ -319,10 +427,18 @@ async fn serve_here(service: Service, mut o: ServeOptions, ready: impl FnOnce(Ve
 		Some(r) = accepting.join_next() => r.map_err(io::Error::other).and_then(|r| r),
 	};
 	accepting.abort_all();
+	running.iter().for_each(|t| t.abort());
 	hub.stop.notify_waiters();
 	bound.iter().for_each(|(b, _)| b.close());
 	tokio::task::yield_now().await;
-	let _ = hub.service.borrow_mut().store.drain();
+	let _ = hub.main.service().store.drain();
+	// the routed Spaces' stores are closed here; only the host's own goes back
+	let names: Vec<String> = hub.spaces.borrow().keys().cloned().collect();
+	if let Some(service) = route(&hub, &names, None) { service.store.close(); }
+	let served: Vec<Rc<Served>> = hub.spaces.borrow_mut().drain().filter_map(|(_, s)| match s { Space::Served(s) => Some(s), Space::Answer(_) => None }).collect();
+	for s in served { if let Some(service) = retire(&s) { service.store.close(); } }
+	hub.main.tasks.borrow_mut().drain(..).for_each(|t| t.abort());
+	tokio::task::yield_now().await;
 	ended.map(|()| hub)
 }
 
@@ -346,14 +462,15 @@ async fn accepts(hub: &Rc<Hub>, bound: &Bound, who: &Who) -> io::Result<()> {
 }
 
 /// The reaper and delivery: at the next due time, and looked at again after commits, which may bring an earlier one.
-async fn background(hub: Rc<Hub>) {
+async fn background(served: Rc<Served>, debounce_ms: u64) {
 	loop {
-		let wake = hub.service.borrow_mut().background();
-		hub.committed();
-		let ms = (wake - hub.service.borrow().now()).clamp(1.0, MAX_TIMER_MS);
+		if served.gone.get() { return; }
+		let wake = served.service().background();
+		served.committed();
+		let ms = (wake - served.service().now()).clamp(1.0, MAX_TIMER_MS);
 		tokio::select! {
 			_ = sleep(Duration::from_millis(ms as u64)) => {}
-			_ = hub.due.notified() => sleep(Duration::from_millis(hub.o.watch_debounce_ms)).await,
+			_ = served.due.notified() => sleep(Duration::from_millis(debounce_ms)).await,
 		}
 	}
 }
@@ -459,7 +576,7 @@ where
 		if !matches!(who, Who::Gate(_)) || session.is_some() {
 			let link = Rc::new(Link { session: session.clone(), ..Link::default() });
 			link.touch();
-			spawn_local(replies(Rc::clone(&hub), Rc::clone(&link), write));
+			spawn_local(replies(Rc::clone(&link), write));
 			tokio::select! {
 				_ = frames(&hub, &link, &who, read) => {}
 				_ = link.closing.notified() => {}
@@ -549,8 +666,8 @@ fn hooked(hub: &Rc<Hub>, link: &Rc<Link>, id: u32, text: &str) {
 			let (hub, link) = (Rc::clone(hub), Rc::clone(link));
 			spawn_local(async move {
 				let text = answer.await;
-				let mark = hub.service.borrow().store.handed();
-				link.reply(Reply { mark, id, text, counted: false });
+				let mark = hub.main.service().store.handed();
+				link.reply(Reply { served: Rc::clone(&hub.main), mark, id, text, counted: false });
 			});
 			return;
 		}
@@ -558,11 +675,11 @@ fn hooked(hub: &Rc<Hub>, link: &Rc<Link>, id: u32, text: &str) {
 	let text = {
 		let mut hook = hub.hook.borrow_mut();
 		let hook = hook.as_mut().expect("the socket exists only with hooks");
-		hook(&mut hub.service.borrow_mut(), hub.open.get(), text)
+		hook(&mut hub.main.service(), hub.open.get(), text)
 	};
-	hub.committed();
-	let mark = hub.service.borrow().store.handed();
-	link.reply(Reply { mark, id, text, counted: false });
+	hub.main.committed();
+	let mark = hub.main.service().store.handed();
+	link.reply(Reply { served: Rc::clone(&hub.main), mark, id, text, counted: false });
 }
 
 /// `parsed`: the frame as JSON, read once for all who look at it.
@@ -570,7 +687,7 @@ fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str, parsed
 	let most = hub.o.max_inflight_per_connection;
 	if link.inflight.get() >= most {
 		let text = format!(r#"{{"ok":false,"error":{{"code":"ResourceExhausted","message":"at most {most} calls at once per connection"}}}}"#);
-		link.reply(Reply { mark: 0, id, text, counted: false });
+		link.reply(Reply { served: Rc::clone(&hub.main), mark: 0, id, text, counted: false });
 		return;
 	}
 	if let Some(answer) = link.session.as_ref().zip(parsed).and_then(|(s, c)| Rc::clone(s).later(Owner(Rc::clone(hub)), c)) {
@@ -578,48 +695,65 @@ fn call(hub: &Rc<Hub>, link: &Rc<Link>, conn: &Conn, id: u32, text: &str, parsed
 		let (hub, link) = (Rc::clone(hub), Rc::clone(link));
 		spawn_local(async move {
 			let text = answer.await;
-			let mark = hub.service.borrow().store.handed();
-			link.reply(Reply { mark, id, text, counted: true });
+			let mark = hub.main.service().store.handed();
+			link.reply(Reply { served: Rc::clone(&hub.main), mark, id, text, counted: true });
 		});
 		return;
 	}
-	let answer = link.session.as_ref().zip(parsed).and_then(|(s, c)| s.call(&mut hub.service.borrow_mut(), c));
+	let answer = link.session.as_ref().zip(parsed).and_then(|(s, c)| s.call(&mut hub.main.service(), c));
 	if let Some(text) = answer {
-		hub.committed();
-		let mark = hub.service.borrow().store.handed();
-		link.reply(Reply { mark, id, text, counted: false });
+		hub.main.committed();
+		let mark = hub.main.service().store.handed();
+		link.reply(Reply { served: Rc::clone(&hub.main), mark, id, text, counted: false });
 		return;
 	}
+	// a Space with a store of its own, named as the call's `space`
+	let routed = parsed.and_then(|c| c.get("space")).and_then(Json::as_str).and_then(|n| hub.spaces.borrow().get(n).cloned());
+	let served = match routed {
+		Some(Space::Answer(f)) => {
+			let text = f(conn);
+			link.reply(Reply { served: Rc::clone(&hub.main), mark: 0, id, text: link.outgoing(text), counted: false });
+			return;
+		}
+		Some(Space::Served(s)) => s,
+		None => Rc::clone(&hub.main),
+	};
 	link.inflight.set(link.inflight.get() + 1);
-	let outcome = hub.service.borrow_mut().handle_call(parsed, text.len() as f64, conn, (hub.o.max_frame_bytes - HEADER) as f64);
-	let seen = hub.handed.get();
-	hub.committed();
+	let outcome = served.service().handle_call(parsed, text.len() as f64, conn, (hub.o.max_frame_bytes - HEADER) as f64);
+	let seen = served.handed.get();
+	served.committed();
 	match outcome {
 		// A call that has its answer is over, only the disk holds that back. On one thread a burst is handled to its end at
 		// once, and what waits for a fsync must not fill the places of the calls that wait for work.
 		Outcome::Done { text, mark } => {
 			link.inflight.set(link.inflight.get() - 1);
-			link.reply(Reply { mark, id, text: link.outgoing(text), counted: false });
+			link.reply(Reply { served, mark, id, text: link.outgoing(text), counted: false });
 		}
 		Outcome::Wait(parked) => {
-			spawn_local(wait(Rc::clone(hub), Rc::clone(link), id, parked, seen));
+			spawn_local(wait(served, Rc::clone(link), id, parked, seen));
 		}
 	}
 }
 
 /// A call that waits: looked at again when the clock or, where the service wakes on commits, a commit gives a reason.
-async fn wait(hub: Rc<Hub>, link: Rc<Link>, id: u32, mut parked: Box<Parked>, mut seen: u64) {
-	let wakes = hub.service.borrow().options().wake_on_commit;
+async fn wait(served: Rc<Served>, link: Rc<Link>, id: u32, mut parked: Box<Parked>, mut seen: u64) {
+	let wakes = served.service().options().wake_on_commit;
 	let mut last = None; // the first look after the call's own has no gap to keep, as commitSignal
 	loop {
 		if link.closed.get() { return; }
-		let ms = parked.sleep_ms(hub.service.borrow().now(), wakes);
+		if served.gone.get() {
+			// its store was taken out of service: the call ends with what such a store answers
+			let text = served.lost.borrow().clone();
+			return link.reply(Reply { served: Rc::clone(&served), mark: 0, id, text: link.outgoing(text), counted: true });
+		}
+		let ms = parked.sleep_ms(served.service().now(), wakes);
 		let pause = sleep(Duration::from_millis(ms.min(MAX_TIMER_MS) as u64));
 		if wakes {
-			if hub.handed.get() == seen {
+			if served.handed.get() == seen {
 				tokio::select! {
 					_ = pause => {}
-					_ = hub.commits.notified() => {}
+					_ = served.commits.notified() => {}
+					_ = served.retired.notified() => {}
 					_ = link.closing.notified() => return,
 				}
 			}
@@ -629,41 +763,44 @@ async fn wait(hub: Rc<Hub>, link: Rc<Link>, id: u32, mut parked: Box<Parked>, mu
 		} else {
 			tokio::select! {
 				_ = pause => {}
+				_ = served.retired.notified() => {}
 				_ = link.closing.notified() => return,
 			}
 		}
 		if link.closed.get() {
 			return;
 		}
-		seen = hub.handed.get();
+		if served.gone.get() { continue; } // answered at the top
+		seen = served.handed.get();
 		last = Some(Instant::now());
-		let looked = hub.service.borrow_mut().resume(parked);
-		hub.committed();
+		let looked = served.service().resume(parked);
+		served.committed();
 		match looked {
-			Ok((text, mark)) => return link.reply(Reply { mark, id, text: link.outgoing(text), counted: true }),
+			Ok((text, mark)) => return link.reply(Reply { served, mark, id, text: link.outgoing(text), counted: true }),
 			Err(p) => parked = p,
 		}
 	}
 }
 
 /// Sends what is durable, in the order the calls ended. Marks of one connection only grow.
-async fn replies<W: AsyncWrite + Unpin>(hub: Rc<Hub>, link: Rc<Link>, mut write: W) {
-	let mut durable = hub.durable.subscribe();
+async fn replies<W: AsyncWrite + Unpin>(link: Rc<Link>, mut write: W) {
 	let mut out = Vec::with_capacity(16 * 1024);
 	loop {
 		if link.closed.get() { return; }
 		let (mut sent, mut charged) = (0, 0);
-		let upto = *durable.borrow_and_update();
-		let failed = hub.failed.get();
-		// a reply whose commit will not become durable: CommitSealed while a primary's candidate is unresolved
-		let lost = if failed { hub.service.borrow().failed_reply() } else { String::new() };
+		// the store the first reply waits on: a change of its durable mark is looked at below
+		let mut durable = link.queue.borrow().front().map(|r| r.served.durable.subscribe());
 		{
 			let mut queue = link.queue.borrow_mut();
-			while queue.front().is_some_and(|r| r.mark <= upto || failed) {
+			while let Some(r) = queue.front() {
+				let upto = *r.served.durable.borrow();
+				// a reply whose commit will not become durable: CommitSealed while a primary's candidate is unresolved
+				let failed = r.served.failed.get();
+				if r.mark > upto && !failed { break; }
 				let r = queue.pop_front().expect("looked at");
 				sent += 1;
 				charged += HEADER + r.text.len();
-				put(&mut out, r.id, if r.mark > upto { &lost } else { &r.text });
+				if r.mark > upto { put(&mut out, r.id, &r.served.lost.borrow()); } else { put(&mut out, r.id, &r.text); }
 				if r.counted {
 					link.inflight.set(link.inflight.get() - 1);
 				}
@@ -685,9 +822,12 @@ async fn replies<W: AsyncWrite + Unpin>(hub: Rc<Hub>, link: Rc<Link>, mut write:
 		if link.closed.get() {
 			return;
 		}
-		tokio::select! {
-			_ = link.ready.notified() => {}
-			_ = durable.changed() => {}
+		match durable.as_mut() {
+			Some(d) => tokio::select! {
+				_ = link.ready.notified() => {}
+				_ = d.changed() => {}
+			},
+			None => link.ready.notified().await,
 		}
 	}
 }
@@ -700,7 +840,7 @@ mod tests {
 
 	fn memory_hub() -> Rc<Hub> {
 		let store = Store::open(Ledger::Memory(MemoryLedger::default()), system_random).unwrap();
-		Rc::new(Hub { service: RefCell::new(Service::new(store, Options::single_peer("local"))), handed: Cell::new(0), commits: Notify::new(), due: Notify::new(), durable: watch::channel(0).0, failed: Cell::new(false), open: Cell::new(0), stop: Notify::new(), hook: RefCell::new(None), o: ServeOptions::new(Listen::Unix("unused".into()), "local") })
+		Rc::new(Hub { main: Served::new(Service::new(store, Options::single_peer("local"))), spaces: RefCell::new(HashMap::new()), open: Cell::new(0), stop: Notify::new(), hook: RefCell::new(None), o: ServeOptions::new(Listen::Unix("unused".into()), "local") })
 	}
 
 	#[test]
@@ -715,13 +855,13 @@ mod tests {
 			let hub = memory_hub();
 			let link = Rc::new(Link::default());
 			let (_read, write) = tokio::io::duplex(1);
-			link.reply(Reply { mark: 0, id: 0, text: "x".repeat(64 * 1024), counted: false });
-			let writer = spawn_local(replies(hub, Rc::clone(&link), write));
+			link.reply(Reply { served: Rc::clone(&hub.main), mark: 0, id: 0, text: "x".repeat(64 * 1024), counted: false });
+			let writer = spawn_local(replies(Rc::clone(&link), write));
 			tokio::task::yield_now().await;
 			assert!(link.queue.borrow().is_empty(), "the first reply is now held by the blocked writer");
 			assert!(link.held_bytes.get() > 0);
 			for id in 1..MAX_HELD_REPLIES as u32 {
-				link.reply(Reply { mark: 0, id, text: "x".repeat(64 * 1024), counted: false });
+				link.reply(Reply { served: Rc::clone(&hub.main), mark: 0, id, text: "x".repeat(64 * 1024), counted: false });
 				if link.closed.get() { break; }
 			}
 			assert!(link.closed.get(), "the byte budget closes the connection before the reply-count limit");
@@ -735,7 +875,7 @@ mod tests {
 		let hub = memory_hub();
 		let conn = Conn { peer_id: Some("local".into()), identity: None, proof_key: None };
 		let parked = {
-			let mut service = hub.service.borrow_mut();
+			let mut service = hub.main.service();
 			let Outcome::Done { text, .. } = service.handle_text(r#"{"method":"generation"}"#, &conn, 262136.0) else { panic!("generation waits") };
 			let value = phi_json::parse(&text).unwrap();
 			let generation = value.get("result").unwrap().get("generation").unwrap().to_json_text();
@@ -743,11 +883,11 @@ mod tests {
 			let Outcome::Wait(parked) = service.handle_text(&call, &conn, 262136.0) else { panic!("take did not park") };
 			parked
 		};
-		hub.committed();
-		let seen = hub.handed.get();
+		hub.main.committed();
+		let seen = hub.main.handed.get();
 		let link = Rc::new(Link::default());
 		link.close();
-		timeout(Duration::from_secs(1), wait(hub, link, 1, parked, seen)).await.unwrap();
+		timeout(Duration::from_secs(1), wait(Rc::clone(&hub.main), link, 1, parked, seen)).await.unwrap();
 	}
 
 }
