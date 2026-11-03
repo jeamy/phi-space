@@ -2,7 +2,7 @@
 //! capability directory. Grants, pairing and the supervisor have their own modules.
 use phi_json::text;
 use phi_core::space::permission as denied;
-use crate::auth::{seal, signed_by, Signer};
+use crate::auth::{seal, signed_by, PeerKey, Signer};
 use crate::capability::publish;
 use crate::control::{peer_key, answered, fields, listed, refuse, CONTROL_SPACE};
 use crate::gate::Now;
@@ -155,6 +155,29 @@ impl ControlHost {
 		let now = (self.now)();
 		let notice = obj! { "authorityId" => self.grants.authority_id.as_str(), "controlSpaceId" => self.control_space.as_str(), "routerEpoch" => counters.get("routerEpoch").cloned().unwrap_or(Json::Null), "controlPrimaryEpoch" => self.control_epoch.as_ref().map_or_else(|| rest.get("primaryEpoch").and_then(Json::as_f64).unwrap_or(1.0), |f| f()), "policyVersion" => policy_version, "issuedAt" => now, "expiresAt" => now + LEASE_MS };
 		self.signed("epoch-notice", notice, "notice")
+	}
+
+	/// `replicaNotice` (v3 5.3.1 step 5): a proven primary host leaves its own signed notice for the router to adopt,
+	/// under a host grant, its key active before the commit and in it; every refusal is `PermissionDenied`.
+	pub fn replica_notice(&self, service: &mut Service, call: &Json, id: &Identity, key: Option<&PeerKey>) -> Json {
+		let done = (|| {
+			let Some(key) = key.filter(|k| k.active && k.roles.iter().any(|r| r == "host") && has(id, &["host"])) else { return Err(denied("replica notices require a currently proven host")) };
+			let decision = self.checked(call, id, "write", Some(&key.key_id))?;
+			if !decision.roles.iter().any(|r| r == "host") {
+				return Err(denied("notice grant does not authorize host publication"));
+			}
+			let peer = text(&id.principal, "peerId").unwrap_or("");
+			let notice = call.get("args").and_then(|a| a.get("notice")).cloned().unwrap_or(Json::Null);
+			let bound = notice.get("issuer").and_then(Json::as_str) == Some(self.hosts.get(peer).map_or(peer, String::as_str));
+			let check = |s: &phi_core::space::Space, now: f64| -> R<()> {
+				decision.check(now).map_err(denied)?;
+				let current = listed(s, now, &obj! { "type" => "PeerKey", "fields" => obj! { "peerId" => peer, "keyId" => key.key_id.as_str() } })?;
+				let active = current.iter().map(fields).any(|f| text(&f, "state") == Some("active") && f.get("roles").and_then(Json::as_array).is_some_and(|r| r.iter().any(|x| x.as_str() == Some("host"))));
+				if active { Ok(()) } else { Err(error("Error", "host key no longer authorized")) }
+			};
+			crate::replica_notice::publish(service, &self.control_space, &notice, crate::replica_notice::Publisher { bound, roles: &decision.roles, key: Some((key.algorithm, &key.public_key)) }, &check)
+		})();
+		done.map_or_else(|e| refuse(&e.message), answered)
 	}
 
 	/// `capabilityHeartbeat`: peer and roles come from the connection, never from the report.

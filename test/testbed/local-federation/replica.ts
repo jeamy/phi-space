@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
-import { FOREVER, SqliteRecoveryRegister, core, listSpaces, provisionFileSigner, spaceDoc } from "../../../src/index.ts";
+import { FOREVER, SqliteRecoveryRegister, core, listSpaces, provisionFileSigner, snapshotSpace, spaceDoc } from "../../../src/index.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { openSqliteHost } from "../../../src/store/sqlite.ts";
 import { provision } from "./provision.ts";
@@ -79,7 +79,7 @@ export function harness(profile = "replica", driver = "replica-driver.ts") {
 }
 
 export async function replicaScenario() {
-	const { dir, env, compose, say, drive, tool, started, docker } = harness();
+	const { dir, env, compose, say, drive, tool, started, docker, runs } = harness();
 	let fencing: ChildProcess | undefined;
 	try {
 		await provision(dir);
@@ -92,6 +92,7 @@ export async function replicaScenario() {
 		started(B, '"ready":true');
 		compose("up", "-d", "--no-build", "--no-deps", A);
 		started(A, '"ready":true');
+		runs(container(A), env.REPLICA_A_IMPL); runs(container(B), env.REPLICA_B_IMPL); runs(container("control"), env.CONTROL_IMPL);
 
 		// five writes the standby confirmed; then, on the same session, the standby cut off: the answer must not claim the write
 		const holding = spawn("docker", ["compose", "-f", COMPOSE, "--profile", "replica", "exec", "-T", "client", "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-driver.ts", "hold", A, "before", "5"], { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "inherit"] });
@@ -156,6 +157,14 @@ export async function replicaScenario() {
 		docker("start", container(A)); started(A, '"ready":true');
 		docker("start", container(B));
 		assert.deepEqual(drive("write", B, "after", "3").writes, Array(3).fill("answered"));
+		// the control Space holds the notice of the last transition, the promoted primary's, once (5.3.1 step 5)
+		docker("stop", container("control"));
+		const controlStore = await openSqliteHost(join(dir, "control.sqlite"));
+		const { controlSpaceId } = JSON.parse(readFileSync(join(dir, "member.config.json"), "utf8"));
+		const notices = core.list((await snapshotSpace(controlStore, controlSpaceId, ctx))!, Date.now(), { type: "ReplicaConfigNotice" }).map((e) => e.fields as Record<string, any>);
+		await controlStore.close(ctx);
+		say("notices", notices.map((f) => ({ spaceId: f.spaceId, issuer: f.issuer, version: f.version })));
+		assert.deepEqual(notices.map((f) => [f.spaceId, f.issuer, f.version, f.signed.notice.primaryEpoch, f.signed.notice.recoveryId]), [[SPACE, B, 4, 3, "standby-1"]]);
 		// what the stores hold
 		docker("stop", container(B)); docker("stop", container(A));
 		const a = tool(A, { op: "status", materialize: true, revision: forked.head.revision }), b = tool(B, { op: "status", materialize: true, revision: forked.head.revision });

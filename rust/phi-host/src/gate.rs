@@ -563,6 +563,11 @@ impl Session for GateSession {
 			let key_id = proof.filter(|_| active).map(|p| p.key_id);
 			return Some(rotating.handle(service, call, &self.identity(), proven, key_id.as_deref(), now).to_json_text());
 		}
+		if let (Some(host), "replicaNotice") = (&self.gate.o.control_host, method) {
+			let found = InService { keys: keys.as_ref(), service: RefCell::new(service) };
+			let key = self.state.borrow().proof.clone().and_then(|p| found.find(&self.peer_id, &p.key_id));
+			return Some(host.replica_notice(service, call, &self.identity(), key.as_ref()).to_json_text());
+		}
 		if let (Some(host), "keyLookup" | "routingPolicy" | "capabilityHeartbeat" | "routerLease") = (&self.gate.o.control_host, method) {
 			let found = InService { keys: keys.as_ref(), service: RefCell::new(service) };
 			let proof = self.state.borrow().proof.clone();
