@@ -5,7 +5,8 @@
 // on its directory, the Rust controller on a copy of the same files; every answer agrees, and in the end every row of
 // every file. Then each side opens the other's files and the walk goes on, so each reads what the other wrote.
 //
-//   PHI_ENTRY_WALK_STEPS (default 1500), PHI_ENTRY_WALK_SEED (default 1), PHI_ENTRY_TRACE=1 prints the calls.
+//   PHI_ENTRY_WALK_STEPS (default 1500), PHI_ENTRY_WALK_SEED (default 1; that walk must reach the states listed at the
+//   end), PHI_ENTRY_TRACE=1 prints the calls.
 use phi_core::driver::seeded;
 use phi_json::{obj, parse, Json, Object};
 use phi_service::entry::{EntryError, EntryOptions, EntryReplication, ER};
@@ -20,6 +21,8 @@ use std::rc::Rc;
 const NAMES: [&str; 3] = ["a", "b", "c"];
 const LIMITS: (f64, f64) = (49152.0, 32768.0);
 const RETENTION: f64 = 20_000.0;
+/// The grace after an entry's deadline before compaction judges it expired (`ENTRY_EXPIRY_GRACE_MS`).
+const ENTRY_GRACE: f64 = 60_000.0;
 
 struct Ts {
 	child: Child,
@@ -299,14 +302,14 @@ impl Walk {
 		};
 		self.now = self.now.max(1.0);
 		let r = self.rng.pick(&NAMES).to_owned();
-		match self.rng.below(31) {
+		match self.rng.below(33) {
 			0..=6 => {
 				// a retry only within the retention of own changes: once its change is compacted away, a request ID used
 				// anew is a new change, and the replicas that still hold the old one refuse it for good (as in TypeScript)
 				let (rid, m) = match self.known.requests.iter().filter(|((x, _), (at, _))| *x == r && self.now - at < RETENTION).map(|((_, k), v)| (k.clone(), v.clone())).collect::<Vec<_>>() {
 					old if !old.is_empty() && self.rng.chance(0.1) => {
 						let (k, (at, v)) = self.rng.pick(&old);
-						(k, if self.now - at > 3000.0 || self.rng.chance(0.7) { v } else { self.mutation(&r) })
+						(k, if self.now - at > 3000.0 || self.rng.chance(0.5) { v } else { self.mutation(&r) })
 					}
 					_ => (format!("r{}", self.n), self.mutation(&r)),
 				};
@@ -339,6 +342,17 @@ impl Walk {
 					}
 				}
 				self.call(&r, "importChanges", vec![Json::Array(batch)]);
+				// a change its origin holds, its content altered and hashed anew: the same ID for another change
+				let held = self.known.events.get(self.rng.below(self.known.events.len().max(1))).cloned().filter(|e| e.get("mutation").and_then(|m| m.get("fields")).is_some());
+				if let Some(mut e) = held.filter(|_| self.rng.chance(0.3)) {
+					let origin = e.get("originReplicaId").and_then(Json::as_str).unwrap().to_owned();
+					let o = e.as_object_mut().unwrap();
+					let mut m = o.get("mutation").cloned().unwrap();
+					m.as_object_mut().unwrap().get_mut("fields").unwrap().as_object_mut().unwrap().insert("altered", Json::Bool(true));
+					o.insert("argumentHash", Json::String(phi_json::digest_json(&m).unwrap()));
+					o.insert("mutation", m);
+					self.call(&origin, "importChanges", vec![Json::Array(vec![e])]);
+				}
 			}
 			10..=14 => self.pump(&r),
 			15 => {
@@ -400,7 +414,13 @@ impl Walk {
 				let mut made = vec![];
 				for (who, v) in [(&x, 1.0), (&y, 2.0)] {
 					let m = obj! { "kind" => "put", "type" => "Sensor", "fields" => obj! { "sensorId" => key, "v" => v }, "owner" => obj! { "peerId" => "p1" }, "expiresAt" => Json::Null };
-					let a = self.call(who, "mutate", vec![Json::from(format!("r{}", self.n).as_str()), m]);
+					let rid = Json::from(format!("r{}", self.n).as_str());
+					let a = self.call(who, "mutate", vec![rid.clone(), m]);
+					// the same request at once with other arguments: a conflict, not a second change
+					if Self::ok(&a).is_some() && who == &x {
+						let other = obj! { "kind" => "put", "type" => "Sensor", "fields" => obj! { "sensorId" => key, "v" => 9.0 }, "owner" => obj! { "peerId" => "p1" }, "expiresAt" => Json::Null };
+						self.call(who, "mutate", vec![rid, other]);
+					}
 					made.extend(Self::ok(&a).cloned());
 				}
 				self.call(&z, "importChanges", vec![Json::Array(made.clone())]);
@@ -412,6 +432,30 @@ impl Walk {
 					}
 				}
 			}
+			27 => {
+				// a tag added on one replica, its owner erased there, and the tag renewed on another that has not seen the
+				// erase yet: the renewal is later than the erase, and only the fixpoint redacts it with its tag
+				let (x, y) = (r.clone(), self.other(&r));
+				let owner = obj! { "peerId" => "p9" };
+				let fields = obj! { "tag" => "t9" };
+				let add = obj! { "kind" => "add", "type" => "Tag", "fields" => fields.clone(), "owner" => owner.clone(), "expiresAt" => Json::Null };
+				let a = self.call(&x, "mutate", vec![Json::from(format!("r{}", self.n).as_str()), add]);
+				let Some(added) = Self::ok(&a).cloned() else { return };
+				self.call(&y, "importChanges", vec![Json::Array(vec![added.clone()])]);
+				self.call(&x, "erasePrincipal", vec![Json::from(format!("e{}", self.n).as_str()), owner.clone(), obj! { "peerId" => "admin" }]);
+				let renew = obj! { "kind" => "renew", "type" => "Tag", "tag" => id_of(&added), "fields" => fields, "owner" => owner, "expiresAt" => Json::Null };
+				let a = self.call(&y, "mutate", vec![Json::from(format!("r{}", self.n).as_str()), renew]);
+				if let Some(renewed) = Self::ok(&a).cloned() {
+					self.known.events.push(renewed.clone());
+					self.call(&x, "importChanges", vec![Json::Array(vec![renewed])]);
+					let a = self.call(&x, "changes", vec![Json::Number(0.0), Json::Number(256.0 * 1024.0)]);
+					if Self::ok(&a).and_then(|c| c.get("events")).and_then(Json::as_array).is_some_and(|e| e.iter().any(|e| e.get("mutation").and_then(|m| m.get("was")).and_then(Json::as_str) == Some("renew"))) {
+						*self.seen.entry("renewal redacted with its tag".into()).or_default() += 1;
+					}
+					self.call(&x, "erasureStatus", vec![]);
+				}
+			}
+			28 if self.rng.chance(0.3) => self.settle(),
 			25 if self.rng.chance(0.3) => {
 				self.rust.replicas.get_mut(&r).unwrap().store.take().unwrap().close();
 				let fresh = self.rust.open(&r);
@@ -427,11 +471,54 @@ impl Walk {
 	/// One round of the pull stream from another replica into `r`.
 	fn pump(&mut self, r: &str) {
 		let src = self.other(r);
+		self.pump_from(r, &src, false);
+	}
+	/// Every stream drained into every replica, the clock past the retention of own changes, every vector recorded
+	/// anew, and a compaction on each replica: what a quiet federation reaches.
+	fn settle(&mut self) {
+		for dst in NAMES {
+			for src in NAMES.iter().filter(|s| **s != dst) {
+				for _ in 0..8 {
+					if !self.pump_from(dst, src, true) {
+						break;
+					}
+				}
+			}
+		}
+		self.now += RETENTION + ENTRY_GRACE;
+		for dst in NAMES {
+			for src in NAMES.iter().filter(|s| **s != dst) {
+				self.pump_from(dst, src, true);
+			}
+		}
+		for r in NAMES {
+			let a = self.call(r, "compact", vec![Json::from(format!("c{}", self.n).as_str())]);
+			if Self::ok(&a).and_then(|x| x.get("dropped")).and_then(Json::as_f64).is_some_and(|d| d > 0.0) {
+				*self.seen.entry("compact dropped".into()).or_default() += 1;
+			}
+		}
+	}
+	/// A peer that advertises less than it did before is regressed for good: compaction stays blocked.
+	fn regress(&mut self, r: &str, src: &str) {
+		let d = self.call(src, "describeStream", vec![]);
+		let Some(mut d) = Self::ok(&d).cloned() else { return };
+		self.call(r, "recordPeerVector", vec![d.clone()]);
+		let v = d.as_object_mut().unwrap().get_mut("vector").unwrap().as_object_mut().unwrap();
+		let keys: Vec<String> = v.keys().map(str::to_owned).collect();
+		for k in keys {
+			v.insert(k, Json::Number(0.0));
+		}
+		self.call(r, "recordPeerVector", vec![d]);
+		self.call(r, "startCompaction", vec![Json::from(format!("m{}", self.n).as_str())]);
+	}
+	/// One round of `src`'s stream into `r`; whether more is waiting.
+	fn pump_from(&mut self, r: &str, src: &str, record: bool) -> bool {
+		let src = src.to_owned();
 		let d = self.call(&src, "describeStream", vec![]);
-		let Some(d) = Self::ok(&d).cloned() else { return };
+		let Some(d) = Self::ok(&d).cloned() else { return false };
 		let source = d.get("source").cloned().unwrap();
 		self.known.sources.insert(src.clone(), source.clone());
-		if self.rng.chance(0.6) {
+		if record || self.rng.chance(0.6) {
 			let mut d = d.clone();
 			if self.hostile && self.rng.chance(0.05) {
 				let v = d.as_object_mut().unwrap().get_mut("vector").unwrap().as_object_mut().unwrap();
@@ -451,7 +538,7 @@ impl Walk {
 		let budget = self.rng.pick(&[Json::Null, Json::Number(1024.0), Json::Number(2048.0), Json::Number(8192.0)]);
 		let args = if budget.is_null() { vec![Json::Number(at)] } else { vec![Json::Number(at), budget] };
 		let page = self.call(&src, "streamChanges", args);
-		let Some(page) = Self::ok(&page).cloned() else { return };
+		let Some(page) = Self::ok(&page).cloned() else { return false };
 		for e in page.get("events").and_then(Json::as_array).into_iter().flatten() {
 			self.known.events.push(e.clone());
 		}
@@ -465,10 +552,12 @@ impl Walk {
 			}
 			_ => page,
 		};
-		self.call(r, "importStreamPage", vec![page]);
+		let more = page.get("more") == Some(&Json::Bool(true));
+		let a = self.call(r, "importStreamPage", vec![page]);
 		if self.rng.chance(0.2) {
 			self.call(r, "streamImportStatus", vec![source]);
 		}
+		more && Self::ok(&a).is_some()
 	}
 	/// A step of a snapshot transfer from another replica into `r`.
 	fn transfer(&mut self, r: &str) {
@@ -563,6 +652,11 @@ impl Walk {
 			self.known.snapshot_pages.entry(id.as_str().unwrap().to_owned()).or_default().push(p.clone());
 			let page = match self.rng.below(25) {
 				0 if i > 0 => fetched[self.rng.below(i)].clone(),
+				2 if i > 0 => {
+					let mut x = fetched[self.rng.below(i)].clone();
+					x.as_object_mut().unwrap().insert("previousHash", Json::from("f".repeat(64)));
+					x
+				}
 				1 => {
 					let mut x = p.clone();
 					x.as_object_mut().unwrap().insert("offset", Json::Number(99.0));
@@ -724,6 +818,7 @@ fn random_entry_replication_agrees_with_typescript() {
 		w.rust.replicas.insert(name.to_owned(), r);
 	}
 	w.hostile = true;
+	w.regress("a", "b");
 	for _ in 0..steps / 4 {
 		w.step();
 	}
@@ -736,4 +831,16 @@ fn random_entry_replication_agrees_with_typescript() {
 		report.insert(k.as_str(), Json::Number(*v as f64));
 	}
 	eprintln!("{} calls; outcomes: {}", w.n, Json::Object(report).to_json_text());
+	// the states the walk of the default seed and length reaches (an outcome's key is cut at 60 characters of its message);
+	// other seeds explore, and may miss one of the rarer ones
+	let must = [
+		"mutate ok", "mutate RequestConflict: replication request changed arguments", "mutate ResourceExhausted: replica history is full",
+		"importChanges ReplicationConflict: immutable change ID reused", "importChanges ReplicationConflict: changed mutation argument hash",
+		"importStreamPage added", "importStreamPage EntryStreamCursorConflict", "streamChanges positions", "streamChanges redacted", "startStreamImport seeded",
+		"finishSnapshotImport ok", "abortSnapshotImport ok", "importSnapshotPage ReplicationConflict: duplicate page changed content", "snapshotPage SnapshotExpired",
+		"compact dropped", "startCompaction completed", "startSnapshotMaintenance completed", "startCompaction ReplicationConflict: compaction blocked: member ",
+		"erasePrincipal ok", "completeErasure ok", "renewal redacted with its tag",
+	];
+	let missing: Vec<&&str> = must.iter().filter(|k| !w.seen.keys().any(|s| s.starts_with(**k))).collect();
+	assert!(missing.is_empty() || steps < 1500 || seed != 1, "the walk reached no {missing:?}");
 }

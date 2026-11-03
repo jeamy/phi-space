@@ -47,6 +47,12 @@ async fn read(client: &ControlClient, call: Json) -> Result<Json, Fail> {
 	}
 }
 fn stop(e: EntryError) -> Fail { Fail::Stop(e.message()) }
+/// A fresh read of the register for the controller's checks, with every Space of the store, as the gate reads it before
+/// a call: the guard's last read is shared with the calls it guards, and their erasure barriers are part of it.
+async fn refresh(owner: &Owner, boot: &BootGuard) {
+	let spaces = owner.with(|s| s.store.spaces().iter().filter_map(|i| i.get("spaceId")?.as_str().map(str::to_owned)).collect());
+	boot.refresh(spaces).await;
+}
 /// The controller of this host's replica, on the owner thread.
 fn on<T>(owner: &Owner, f: impl FnOnce(&phi_service::entry::EntryReplication, &mut phi_store::Store) -> Result<T, EntryError>) -> Result<T, Fail> {
 	owner.with(|s| match s.merge.as_ref() {
@@ -61,7 +67,7 @@ async fn step(owner: &Owner, peer: &EntryPeer, identity: &Json, boot: &BootGuard
 	if description.get("source").map(Json::key_text) != Some(identity.key_text()) || !revision.is_some_and(|r| phi_json::safe_integer(r) && r >= 0.0) {
 		return Err(Fail::Stop("replication source identity changed".into()));
 	}
-	boot.refresh(vec![]).await;
+	refresh(owner, boot).await;
 	if description.get("vector").is_some() {
 		on(owner, |c, st| c.record_peer_vector(st, &description))?;
 	}
@@ -135,7 +141,7 @@ pub async fn pump(owner: Owner, peer: EntryPeer, poll_ms: u64, boot: Rc<BootGuar
 pub async fn compact(owner: Owner, every_ms: u64, boot: Rc<BootGuard>, now: crate::gate::Now) {
 	loop {
 		sleep(Duration::from_millis(every_ms)).await;
-		boot.refresh(vec![]).await;
+		refresh(&owner, &boot).await;
 		let request = Json::String(format!("compact-{}", phi_json::number_text(now())));
 		match on(&owner, |c, st| c.compact(st, &request)) {
 			Ok(r) => {
