@@ -414,6 +414,13 @@ const ROUTING: &str = "phi-spaces.federation-routing";
 const PROFILE_TRANSITIONS: &str = "phi-spaces.profile-transitions";
 
 impl Routing {
+	/// The installed policy's authority and version, as a control host's delegation check asks it (`routing.state()`);
+	/// none installed: no authority and version 0, which admits no new operation.
+	pub fn installed(&self, store: &phi_store::Store) -> (String, f64) {
+		let state = held_document(&self.state, store, ROUTING, Some(&self.control_space), |d| d.unwrap_or(obj! { "policy" => Json::Null, "members" => Object::new() })).ok();
+		let policy = state.as_ref().and_then(|s| s.get("policy")).filter(|p| !p.is_null());
+		policy.map_or((String::new(), 0.0), |p| (text(p, "authorityId").to_owned(), p.get("policyVersion").and_then(Json::as_f64).unwrap_or(0.0)))
+	}
 	/// `applyFederationPolicyIn`: the next document, written with this commit; the counters of the Space go with it.
 	fn apply(&self, s: &mut Space, now: f64, routing_state: &Json, args: &Json) -> R<(Json, Json)> {
 		let conflict = |m: &str| error("RoutingConflict", m);

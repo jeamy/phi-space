@@ -52,7 +52,7 @@ async function spawned(cmd: string[], args: string[]) {
 	return () => new Promise<void>((r) => { proc.removeAllListeners("exit"); proc.once("exit", () => r()); proc.kill("SIGTERM"); });
 }
 
-async function setup(tc: TestContext, more: Record<string, unknown> = {}) {
+async function setup(tc: TestContext, more: Record<string, unknown> = {}, o: { controlMember?: boolean } = {}) {
 	const dir = mkdtempSync("/tmp/phi-mixed-");
 	tc.after(() => rmSync(dir, { recursive: true, force: true }));
 	const certs = pki(dir);
@@ -81,6 +81,9 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}) {
 		put("router-two", pairKey.signer, pairKey.publicKey, ["host", "router", "member"]);
 	}, ctx);
 	await control.commit((tx) => spaceDoc(tx, undefined, now).then(() => {}), ctx);
+	// a control host that is also a Member: a data Space of its own and one to move through its life
+	const work = o.controlMember ? await control.commit((tx) => createSpace(tx, "work", now), ctx) : undefined;
+	const scratch = o.controlMember ? await control.commit((tx) => createSpace(tx, "scratch", now), ctx) : undefined;
 	const routing = (version: number, rules: unknown[] = []) => ({ authorityId: "authority", policyVersion: version, rules, completionProfiles: [GATED], default: { mode: "local", member: "a" } }) as never;
 	await control.commit(async (tx) => { (await tx.doc(FederationRouting, space.spaceId, null)).members.a = { id: "a", state: "active", target: { authorityId: "authority", hostId: "data-host", spaceId: "sp-a", dataIncarnation: "00000000", primaryEpoch: 1 } } as never; (await tx.doc(FederationRouting, space.spaceId, null)).members.b = { id: "b", state: "active", target: { authorityId: "authority", hostId: "other-host", spaceId: "sp-b", dataIncarnation: "00000000", primaryEpoch: 1 } } as never; await applyFederationPolicyIn(tx, space.spaceId, "authority", routing(1), 0); }, ctx);
 	const permit = (incarnation: string) => ({ state: "active", authorityId: "authority", dataIncarnation: incarnation, role: "local", transitionId: "t1" });
@@ -93,7 +96,7 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}) {
 	const [controlPort, memberPort] = [await freePort(), await freePort()];
 	const base = (name: string, host: string, port: number) => ({ authorityId: "authority", controlHostId: "control-host", controlSpaceId: space.spaceId, listen: { host, port }, keyFile: join(dir, `${name}.json`), installedRegisterFile: join(dir, `installed-${name}.sqlite`), registerTls: { ...certs.identity(name), host: "127.0.0.1", port: (register.address() as net.AddressInfo).port, batchReads: true }, management: { url: `http://127.0.0.1:${(management.address() as net.AddressInfo).port}`, tokenFile: join(dir, "token") }, control: { address: { host: CONTROL_IP, port: controlPort }, algorithm: controlKey.algorithm, publicKey: controlKey.publicKey } });
 	const write = (name: string, config: unknown) => { const file = join(dir, `${name}.config.json`); writeFileSync(file, JSON.stringify(config), { mode: 0o600 }); return file; };
-	const controlConfig = write("control", { ...base("control", CONTROL_IP, controlPort), hostId: "control-host", peerId: "control-peer", mode: "control", capabilities: { hostBindings: { "control-peer": "control-host", "member-peer": "data-host" } } });
+	const controlConfig = write("control", { ...base("control", CONTROL_IP, controlPort), hostId: "control-host", peerId: "control-peer", mode: "control", capabilities: { hostBindings: { "control-peer": "control-host", "member-peer": "data-host" } }, ...(work ? { membership: { memberId: "c", spaceId: work.spaceId }, runGates: true, spaceLifecycle: true } : {}) });
 	const startControl = async () => {
 		if (!CONTROL) { control = await openSqliteHost(join(dir, "control.sqlite")); const root = await startConfiguredFederation(control, ctx, controlConfig); return async () => { await root.close(); await control.close(ctx); }; }
 		return spawned(CONTROL, ["--store", join(dir, "control.sqlite"), "--control", controlConfig]);
@@ -173,7 +176,7 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}) {
 		const host = await openSqliteHost(storeFile);
 		try { return await f(host); } finally { await host.close(ctx); stop = await start(); }
 	};
-	return { tryControl, withMember, controlPort, adminKey, ADMIN_IP, PAIR_IP: SECOND_ROUTER_IP, pairKey, controlDown: async (f: () => Promise<void>) => { await stopControl(); try { await f(); } finally { stopControl = await startControl(); } }, controlStore: join(dir, "control.sqlite"), atControl, controlConfig, ROUTER_IP, USER_IP, withControl, notes, user, phone, toMember, get toControl() { return toControl; }, external, jobs, space, userKey, routerKey, controlKey, authority, config, storeFile, router, routing, restart };
+	return { work, scratch, controlPort, tryControl, withMember, adminKey, ADMIN_IP, PAIR_IP: SECOND_ROUTER_IP, pairKey, controlDown: async (f: () => Promise<void>) => { await stopControl(); try { await f(); } finally { stopControl = await startControl(); } }, controlStore: join(dir, "control.sqlite"), atControl, controlConfig, ROUTER_IP, USER_IP, withControl, notes, user, phone, toMember, get toControl() { return toControl; }, external, jobs, space, userKey, routerKey, controlKey, authority, config, storeFile, router, routing, restart };
 }
 
 test("a control host with a Root serves federated work to its own agents, also after a restart", async (tc) => {
@@ -593,7 +596,7 @@ test("what a control host does not carry stops it at the start", { skip: CONTROL
 			assert.equal(code, 1, out);
 			assert.match(out, part);
 		};
-		for (const k of ["syncSpaces", "registerSshTarget", "registerReadSocket", "membership", "runGates", "spaceLifecycle"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
+		for (const k of ["syncSpaces", "registerSshTarget", "registerReadSocket"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
 		await refused({ mode: "member" }, /runs as a control host/);
 		await refused({ peerId: "someone-else" }, /does not belong to the provisioned NetBird peer/);
 		await refused({ hostId: "other" }, /identity disagrees/);
@@ -694,4 +697,51 @@ test("signed instructions reach the Member, a drain holds over a restart, and wh
 	await assert.rejects(remote.requestRunGate(run), /run gates not configured/);
 	const life = await signLifecycle("instruction", { commandId: "c", action: "create", alias: "x", authorityId: "authority", hostId: "data-host" }, "control-peer", g.controlKey) as never;
 	await assert.rejects(remote.requestSpaceLifecycle(life), /space lifecycle not configured/);
+});
+
+test("a control host is also a Member: a router's delegated calls, signed instructions, a run and a Space's life on its own store", async (tc) => {
+	const g = await setup(tc, {}, { controlMember: true });
+	const work = g.work!.spaceId;
+	const home = g.atControl(g.ROUTER_IP, g.routerKey.signer, "router-peer");
+	await home.remote.authenticate();
+	const lease = await home.remote.requestRouterLease();
+	const grant = await g.authority().issue({ peerId: "user", state: { proof: { keyId: g.userKey.signer.keyId } } });
+	const send = async (c: Record<string, unknown>, policyVersion = 1) => {
+		const call = { ...c, space: work };
+		const d = delegationForCall({ call: call as never, principal: { peerId: "user" }, lease, policyVersion, spaceId: work, primaryEpoch: 1, grant: grant as never, now: Date.now() });
+		return JSON.parse(await home.t.request(JSON.stringify({ ...call, frame: { grant, delegation: await signDelegation(g.routerKey.signer, d) } }))) as { ok: boolean; result?: any; error?: { code: string; message: string } };
+	};
+	// a router's delegated calls on the control host's own Space, under the policy it signs
+	const first = await send({ method: "generation" });
+	assert.ok(first.ok, JSON.stringify(first));
+	const write = await send({ method: "write", args: { entry: { type: "Job", fields: { n: 1 } }, txn: null, leaseMs: FOREVER }, request: { generation: first.result.generation, requestId: "r1" } });
+	assert.ok(write.ok, JSON.stringify(write));
+	assert.equal((await send({ method: "count", args: { template: { type: "Job" } } })).result.value, 1);
+	assert.match((await send({ method: "count", args: { template: { type: "Job" } } }, 7)).error?.message ?? "", /policy/i, "a version the control host does not sign");
+	// the signed instructions of the control host to itself, as Member c (outside the control Space)
+	const line = socketTransport({ host: CONTROL_IP, port: g.controlPort }, { localAddress: g.ROUTER_IP });
+	tc.after(() => line.close());
+	const remote = new RemoteSpace(line, { attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 8_000, signer: g.routerKey.signer, expectedGateHostId: "control-host", ownPeerId: "router-peer" });
+	await remote.authenticate();
+	const member = async (id: string, action: string, more = {}) => (await remote.requestMembership(await signMembership("instruction", { authorityId: "authority", memberId: "c", spaceId: work, id, action, ...more } as never, "control-peer", g.controlKey))).value as unknown as Record<string, any>;
+	await assert.rejects(remote.requestMembership(await signMembership("instruction", { authorityId: "authority", memberId: "c", spaceId: work, id: "x", action: "prepareAdd" } as never, "control-peer", generateKey("ed25519", "rogue").signer)), /invalid membership signature/);
+	// the control host adds itself as Member c, with its completion profiles; Far belongs to Member a
+	const policy = { ...(g.routing(1, [{ type: "Far", mode: "local", member: "a" }]) as object), default: { mode: "local", member: "c" } };
+	const added = await member("t1", "prepareAdd");
+	assert.deepEqual(await member("t1", "prepareAdd"), added, "a retry gets the same proof");
+	await member("t1", "activate", { policy });
+	const sign = (v: unknown) => signRun("instruction", v, "control-peer", g.controlKey) as never;
+	const step = async (commandId: string, kind: string, revision: number, more = {}) => (await remote.requestRunGate(await sign({ runId: "r", commandId, kind, revision, authorityId: "authority", spaceId: work, ...more }))).value as unknown as { state: string };
+	const spec = { runId: "r", kind: "tasks", config: { tasks: [{ type: "Gated", fields: { n: 1 } }] }, members: [work] };
+	assert.equal((await step("p", "prepare", 1, { spec })).state, "preparing");
+	assert.equal((await step("go", "release", 2)).state, "running");
+	assert.equal((await step("end", "stop", 3)).state, "stopped");
+	const life = async (q: Record<string, unknown>) => (await remote.requestSpaceLifecycle(await signLifecycle("instruction", { authorityId: "authority", hostId: "control-host", ...q }, "control-peer", g.controlKey) as never)).value;
+	assert.equal((await life({ commandId: "a", action: "archive", spaceId: g.scratch!.spaceId })).state, "archived");
+	assert.equal((await life({ commandId: "b", action: "reactivate", spaceId: g.scratch!.spaceId })).state, "active");
+	await assert.rejects(life({ commandId: "m", action: "archive", spaceId: work }), /federation Member/);
+	await assert.rejects(life({ commandId: "c", action: "create", alias: "unpermitted" }), /boot permission/);
+	assert.equal((await send({ method: "count", args: { template: { type: "Gated" } } })).result.value, 1, "the run's task, written once");
+	// a type the policy routes to Member a is not written here
+	assert.match((await send({ method: "write", args: { entry: { type: "Far", fields: {} }, txn: null, leaseMs: FOREVER }, request: { generation: first.result.generation, requestId: "r2" } })).error?.message ?? "", /another Member/);
 });

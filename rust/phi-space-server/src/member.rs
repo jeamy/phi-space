@@ -7,7 +7,7 @@ use phi_host::auth::{Algorithm, Proving, Signer};
 use phi_host::boot::{BootGuard, External};
 use phi_host::capability::Capabilities;
 use phi_host::control_host_change::follow_control_host_change;
-use phi_host::delegation::{authorize, DelegationOptions, DelegationVerifier, ReplicaConfig};
+use phi_host::delegation::{authorize, DelegationOptions, DelegationVerifier, InstalledPolicy, ReplicaConfig};
 use phi_host::entry_pump;
 use phi_host::gate::{default_group_roles, Gate, GateOptions, Netbird, Now, PeerInfo};
 use phi_host::grants::GrantVerifier;
@@ -316,7 +316,7 @@ pub fn run(config: &str, store: &str) {
 	let pin = Pin { issuer: "".into(), algorithm, public_key: control_key.to_owned() };
 	let authority_of = authority_id.to_owned();
 	// the signature of the policy is checked at each use; the supervisor's name comes with the token
-	let policy: Rc<dyn Fn() -> (String, f64)> = Rc::new(move || {
+	let policy: InstalledPolicy = Rc::new(move |_| {
 		let token = policy_keys.policy.borrow().clone();
 		let issuer = token.as_ref().and_then(|t| t.get("issuer")).and_then(Json::as_str).unwrap_or("").to_owned();
 		let checked = token.and_then(|t| verify_federation_policy(&t, &authority_of, &Pin { issuer, ..pin.clone() }).ok());
@@ -356,12 +356,6 @@ pub fn run(config: &str, store: &str) {
 	let o_boot = Rc::clone(&guard);
 	o.boot = Some(guard);
 	o.remote_keys = Some(keys);
-	if let Some(m) = c.get("membership").filter(|m| !m.is_null()) {
-		let (signer, _) = key_of(&c, "keyFile");
-		let check = o.boot.clone().expect("set above");
-		let pin = Pin { issuer: supervisor.clone(), algorithm, public_key: control_key.to_owned() };
-		o.lifecycle = Some(MemberLifecycle::new(field(m, "memberId"), field(m, "spaceId"), authority_id, peer_id, signer, pin, Box::new(move |_| check.assert_active())));
-	}
 	if let Some(k) = c.get("capabilities").filter(|k| !k.is_null()) {
 		let names = |key: &str| k.get(key).and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect::<Vec<_>>());
 		let (tools, models) = (names("tools"), names("models"));
@@ -370,18 +364,7 @@ pub fn run(config: &str, store: &str) {
 		}
 		o.capabilities = Some(Rc::new(Capabilities { host_id: host_id.to_owned(), tools, models, data_spaces: names("dataSpaces"), client: Some(Rc::clone(&client)) }));
 	}
-	let pin = Pin { issuer: supervisor.clone(), algorithm, public_key: control_key.to_owned() };
-	let assert_host = || -> phi_host::run_member::AuthorityCheck {
-		let check = o_boot.clone();
-		Box::new(move |_| check.assert_active())
-	};
-	if c.get("runGates") == Some(&Json::Bool(true)) {
-		let tasks: phi_host::run_member::RunPreparer = Box::new(tasks_preparer);
-		o.run_gates = Some(RunGates { authority_id: authority_id.to_owned(), peer_id: peer_id.to_owned(), signer: key_of(&c, "keyFile").0, controller: pin.clone(), preparers: [("tasks".to_owned(), tasks)].into_iter().collect(), assert_authority: assert_host() });
-	}
-	if c.get("spaceLifecycle") == Some(&Json::Bool(true)) {
-		o.spaces = Some(SpaceLifecycleService::new(host_id, authority_id, peer_id, key_of(&c, "keyFile").0, pin, assert_host()));
-	}
+	member_instructions(&c, &mut o, (host_id, authority_id, peer_id), Pin { issuer: supervisor.clone(), algorithm, public_key: control_key.to_owned() }, &o_boot);
 	// lww/set: the provisioned entry replication of one Space; its merge types bypass the core
 	let entry = entry_replication(&c, &opened, authority_id, &o_boot, &now);
 	o.entry_export = entry_exported(entry.as_ref());
@@ -408,6 +391,27 @@ pub fn run(config: &str, store: &str) {
 		merge = Some(entry_tasks(e, &o_boot, &now, &mut tasks));
 	}
 	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "member", tasks, merge);
+}
+
+/// What a host takes as a Member of its federation, in either mode (`startConfiguredFederation`): the signed membership,
+/// run gate and Space lifecycle instructions of its control host (`pin`; a control host pins itself), each under the boot
+/// guard.
+pub(crate) fn member_instructions(c: &Json, o: &mut GateOptions, (host_id, authority_id, peer_id): (&str, &str, &str), pin: Pin, guard: &Rc<BootGuard>) {
+	let assert_host = || -> phi_host::run_member::AuthorityCheck {
+		let check = Rc::clone(guard);
+		Box::new(move |_| check.assert_active())
+	};
+	if let Some(m) = c.get("membership").filter(|m| !m.is_null()) {
+		let check = Rc::clone(guard);
+		o.lifecycle = Some(MemberLifecycle::new(field(m, "memberId"), field(m, "spaceId"), authority_id, peer_id, key_of(c, "keyFile").0, pin.clone(), Box::new(move |_| check.assert_active())));
+	}
+	if c.get("runGates") == Some(&Json::Bool(true)) {
+		let tasks: phi_host::run_member::RunPreparer = Box::new(tasks_preparer);
+		o.run_gates = Some(RunGates { authority_id: authority_id.to_owned(), peer_id: peer_id.to_owned(), signer: key_of(c, "keyFile").0, controller: pin.clone(), preparers: [("tasks".to_owned(), tasks)].into_iter().collect(), assert_authority: assert_host() });
+	}
+	if c.get("spaceLifecycle") == Some(&Json::Bool(true)) {
+		o.spaces = Some(SpaceLifecycleService::new(host_id, authority_id, peer_id, key_of(c, "keyFile").0, pin, assert_host()));
+	}
 }
 
 /// The pump of each pinned peer and the compaction timer, beside the gate; the merge types for the service.

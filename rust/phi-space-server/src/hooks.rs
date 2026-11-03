@@ -203,7 +203,7 @@ fn gate(g: &Json, policy: &phi_service::Policy) -> Result<Gated, String> {
 		let keys = o.proving.as_ref().map(|(_, k)| Rc::clone(k)).ok_or("delegation needs keys")?;
 		let (authority, file) = (part("authorityId")?, part("policyFile")?);
 		let held = authority.clone();
-		let installed: Rc<dyn Fn() -> (String, f64)> = Rc::new(move || (held.clone(), std::fs::read_to_string(&file).ok().and_then(|t| t.trim().parse().ok()).unwrap_or(0.0)));
+		let installed: phi_host::delegation::InstalledPolicy = Rc::new(move |_| (held.clone(), std::fs::read_to_string(&file).ok().and_then(|t| t.trim().parse().ok()).unwrap_or(0.0)));
 		let ed = phi_host::auth::Algorithm::Ed25519;
 		let grants = phi_host::grants::GrantVerifier { authority_id: authority.clone(), issuer_host_id: part("issuer")?, public_key: part("grantKey")?, algorithm: ed, uncertainty_ms: 2000.0 };
 		let verifier = phi_host::delegation::DelegationVerifier::new(phi_host::delegation::DelegationOptions { authority_id: authority, control_space_id: part("controlSpaceId")?, supervisor_peer_id: part("supervisor")?, supervisor: (ed, part("supervisorKey")?), keys, grants, policy: installed, rules: Rc::new(policy.clone()), uncertainty_ms: 2000.0, replica_config: replicated(g)?.map(|r| Rc::new(move |_: &str| Some(obj! { "replicaConfigVersion" => (r.version)(), "primaryEpoch" => (r.epoch)() })) as _) }).map_err(|e| e.message)?;

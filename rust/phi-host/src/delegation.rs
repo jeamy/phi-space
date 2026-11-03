@@ -39,14 +39,16 @@ pub struct DelegationOptions {
 	pub supervisor: (Algorithm, String),
 	pub keys: Rc<dyn Keys>,
 	pub grants: GrantVerifier,
-	/// The installed policy: its authority and version.
-	pub policy: Rc<dyn Fn() -> (String, f64)>,
+	/// The installed policy: its authority and version (a control host reads its own from the store).
+	pub policy: InstalledPolicy,
 	pub rules: Rc<Policy>,
 	pub uncertainty_ms: f64,
 	/// The replica configuration of a primary/sync Space by its ID (its journal's `replicaConfigVersion` and
 	/// `primaryEpoch`); `None` for other Spaces.
 	pub replica_config: Option<ReplicaConfig>,
 }
+/// The installed policy's authority and version, read with the store at hand.
+pub type InstalledPolicy = Rc<dyn Fn(&Store) -> (String, f64)>;
 /// A Space's replica configuration by its ID, `None` for a Space that is not replicated.
 pub type ReplicaConfig = Rc<dyn Fn(&str) -> Option<Json>>;
 
@@ -323,7 +325,7 @@ impl DelegationVerifier {
 		if let Some(c) = replica.as_ref().filter(|c| reference.is_none() && !adopted(c)) {
 			return Err(pending(c));
 		}
-		let (authority, installed) = (self.o.policy)();
+		let (authority, installed) = (self.o.policy)(store);
 		if authority != self.o.authority_id || installed.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
 			return Err(denied("new operation must use current installed policy"));
 		}

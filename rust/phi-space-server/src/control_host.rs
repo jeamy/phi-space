@@ -1,8 +1,9 @@
 // `--control CONFIG.json`: a control host, what `startConfiguredFederation` makes of a config of mode "control". What this host does
-// not carry yet is refused at the start, never ignored: replication and following a control host change (R6b). Its `recovery`
-// section is the private endpoint with the control host's receipt.
+// not carry yet is refused at the start, never ignored: `syncSpaces` and the register's ssh and socket lines. It takes what a
+// Member takes, from itself: delegated calls on its own Spaces and its signed instructions. Its `recovery` section is the
+// private endpoint with the control host's receipt.
 use crate::{fail, stopping};
-use crate::member::{address_of, boot_guard, clock, config_of, entry_exported, entry_replication, entry_tasks, field, follow_changes, follow_installed_change, sync_context, followed_authority, key_of, netbird, open_store, own_peer, private_recovery, register_client, serve_gate, set_group_roles};
+use crate::member::{address_of, boot_guard, clock, config_of, entry_exported, entry_replication, entry_tasks, field, follow_changes, follow_installed_change, sync_context, followed_authority, key_of, member_instructions, netbird, open_store, own_peer, private_recovery, register_client, serve_gate, set_group_roles};
 use phi_host::alerts::ControlCommands;
 use phi_host::control::AsyncCommands;
 use phi_host::auth::{Algorithm, Proving};
@@ -12,7 +13,8 @@ use phi_host::capability::Capabilities;
 use phi_host::control::{align_control_replica, key_fingerprint, Control, Enrolling, Routing, SpaceKeys, Supervisor, CONTROL_SPACE};
 use phi_host::sync_space::{start, Started, SyncSpace, SyncSpaceConfig};
 use phi_host::control_host::ControlHost;
-use phi_host::delegation::grants_only;
+use phi_host::delegation::{authorize, DelegationOptions, DelegationVerifier, ReplicaConfig};
+use phi_host::run_member::Pin;
 use phi_host::gate::{Gate, GateOptions, Keys, Now};
 use phi_host::grants::GrantVerifier;
 use phi_host::rotation::Rotating;
@@ -21,7 +23,7 @@ use phi_service::{space_epoch, Options};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const REFUSED: [&str; 6] = ["syncSpaces", "registerSshTarget", "registerReadSocket", "membership", "runGates", "spaceLifecycle"];
+const REFUSED: [&str; 3] = ["syncSpaces", "registerSshTarget", "registerReadSocket"];
 
 pub fn run(config: &str, store: &str) {
 	let mut c = config_of(config, "control", "this host runs as a control host", &REFUSED);
@@ -119,14 +121,25 @@ pub fn run(config: &str, store: &str) {
 		options.promotion_proof = Some(Rc::new(move |_, request_epoch| sp.promotion_proof(request_epoch)));
 	}
 	let grants = GrantVerifier { authority_id: authority_id.to_owned(), issuer_host_id: host_id.to_owned(), public_key: control_key.to_owned(), algorithm, uncertainty_ms: 2000.0 };
-	options.authorize = Some(grants_only(grants.clone(), Rc::new(options.policy.clone()), Rc::clone(&now)));
+	let routing = Rc::new(RefCell::new(None));
+	let keys: Rc<dyn Keys> = Rc::new(SpaceKeys { now: Rc::clone(&now) });
+	// a router's delegated calls on this host's own Spaces: this host is their supervisor, its policy the one it signs,
+	// a Space of a primary/sync main store at the journal's configuration (`verifierFor(host, mainReplica)`)
+	let installed = Routing { control_space: control_space.to_owned(), authority_id: authority_id.to_owned(), state: Rc::clone(&routing) };
+	let replica_config: ReplicaConfig = {
+		let guard = Rc::clone(&guard);
+		Rc::new(move |id| guard.replica.borrow().get(id).map(|config| config()))
+	};
+	let verifier = DelegationVerifier::new(DelegationOptions { authority_id: authority_id.to_owned(), control_space_id: control_space.to_owned(), supervisor_peer_id: peer_id.to_owned(), supervisor: (algorithm, control_key.to_owned()), keys: Rc::clone(&keys), grants: grants.clone(), policy: Rc::new(move |store| installed.installed(store)), rules: Rc::new(options.policy.clone()), uncertainty_ms: 2000.0, replica_config: Some(replica_config) }).unwrap_or_else(|e| fail(e.message));
+	options.authorize = Some(authorize(Rc::clone(&verifier), Rc::clone(&now)));
 	options.guard = Some(Rc::clone(&guard) as _);
 
 	let mut o = GateOptions::new(directory, Rc::clone(&now));
 	set_group_roles(&mut o, &c);
-	let routing = Rc::new(RefCell::new(None));
-	let keys: Rc<dyn Keys> = Rc::new(SpaceKeys { now: Rc::clone(&now) });
 	o.proving = Some((Proving::new(host_id), keys));
+	o.delegation = Some(verifier);
+	// what a Member takes, from this host to itself
+	member_instructions(&c, &mut o, (host_id, authority_id, peer_id), Pin { issuer: peer_id.to_owned(), algorithm, public_key: control_key.to_owned() }, &guard);
 	o.enrolling = Some(Enrolling::new(Box::new(|_| ())));
 	o.control = Some(Control { supervisor: Some(Supervisor { on_event: Box::new(|_| ()), commands: None, jobs: Default::default(), routing: Some(Routing { control_space: control_space.to_owned(), authority_id: authority_id.to_owned(), state: Rc::clone(&routing) }) }) });
 	let mut rotating = Rotating::new(authority_id, host_id, signer, control_key);
