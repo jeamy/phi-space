@@ -1,5 +1,5 @@
 //! Operations over several Members (src/federated-space.ts). An operation is journalled with its routing before any Member hears of
-//! it, its children are commands of the router, and a retry finds them again under the same ids. `reconcileDataRestore` is R6b.
+//! it, its children are commands of the router, and a retry finds them again under the same ids.
 use crate::federation_rpc::Failure;
 use crate::router::{release_future_in, RouterController, RouterEnv, Tx};
 use phi_core::routing::{is_merge_type, normalize_federated_entry, operation_partition, parent_journal_key, search_members, validate_journal_partitions, write_member};
@@ -172,10 +172,11 @@ impl<E: RouterEnv + Clone, I: FederationIo> FederatedSpace<E, I> {
 		self.env.assert_authority().await?;
 		tx.commit()
 	}
-	async fn ensure_layout(&self) -> R<()> {
+	async fn ensure_layout(&self) -> R<()> { self.ensure_layout_with(false).await }
+	async fn ensure_layout_with(&self, allow_reconciliation: bool) -> R<()> {
 		let layout = self.env.read(LAYOUT, &self.layout.id)?;
 		let Some(l) = layout.filter(|l| l.get("partitions").is_some_and(|p| !p.is_null())) else { return self.initialize_journals().await };
-		if l.get("reconciliation").is_some() {
+		if l.get("reconciliation").is_some() && !allow_reconciliation {
 			return Err(unavailable("journal restore reconciliation is incomplete"));
 		}
 		if num_of(&l, "partitions") != Some(self.layout.partitions) || hash(l.get("routerIds").unwrap_or(&Json::Null))? != hash(&self.layout.ids())? {
@@ -184,12 +185,13 @@ impl<E: RouterEnv + Clone, I: FederationIo> FederatedSpace<E, I> {
 		Ok(())
 	}
 
-	async fn change<T>(&self, partition: f64, f: impl FnOnce(&mut Json, &mut Tx<'_>) -> R<T>) -> R<T> {
+	async fn change<T>(&self, partition: f64, f: impl FnOnce(&mut Json, &mut Tx<'_>) -> R<T>) -> R<T> { self.change_with(partition, false, f).await }
+	async fn change_with<T>(&self, partition: f64, allow_reconciliation: bool, f: impl FnOnce(&mut Json, &mut Tx<'_>) -> R<T>) -> R<T> {
 		self.env.assert_authority().await?;
 		self.env.assert_authority().await?;
 		let mut tx = Tx::new(&self.env);
 		let at = self.layout.check_in(&mut tx)?;
-		if tx.at(at).get("reconciliation").is_some() {
+		if tx.at(at).get("reconciliation").is_some() && !allow_reconciliation {
 			return Err(unavailable("journal restore reconciliation is incomplete"));
 		}
 		let doc = tx.doc(OPERATIONS, &self.layout.parent_key(partition)?, empty_operations)?;
@@ -844,6 +846,75 @@ impl<E: RouterEnv + Clone, I: FederationIo> FederatedSpace<E, I> {
 	}
 
 	/// `resume`.
+	/// `reconcileDataRestore`: parents too, completed and not yet sent children included, go to review; nothing is
+	/// replayed. The layout carries the restore while it runs, so a broken reconciliation is retried, not passed by.
+	pub async fn reconcile_data_restore(&mut self, o: &Json) -> R<Vec<String>> {
+		let keys = ["hostId", "spaceId", "oldIncarnation", "recoveryId"];
+		let fine = o.as_object().is_some_and(|m| m.iter().all(|(k, v)| keys.contains(&k) && v.as_str().is_some_and(|v| !v.is_empty() && v.encode_utf16().count() <= 256)));
+		if !fine {
+			return Err(routing("invalid restore journal binding"));
+		}
+		let id = o.get("recoveryId").map_or_else(|| "undefined".to_owned(), phi_core::space::js_string);
+		let b = id.as_bytes();
+		if b.is_empty() || b.len() > 128 || !b[0].is_ascii_alphanumeric() || !b[1..].iter().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b':' | b'-')) || ["constructor", "prototype", "__proto__"].contains(&id.as_str()) {
+			return Err(routing("invalid recovery ID"));
+		}
+		self.ensure_layout_with(true).await?;
+		let wanted = hash(o)?;
+		self.env.assert_authority().await?;
+		let mut tx = Tx::new(&self.env);
+		let at = self.layout.check_in(&mut tx)?;
+		if let Some(r) = tx.at(at).get("reconciliation").filter(|r| !r.is_null()) {
+			if hash(r)? != wanted {
+				return Err(routing("another journal restore reconciliation is incomplete"));
+			}
+		}
+		set(tx.at(at), "reconciliation", o.clone());
+		self.env.assert_authority().await?;
+		tx.commit()?;
+		let mut children = std::collections::HashSet::new();
+		children.extend(self.router.reconcile_data_restore(o).await?);
+		for r in self.partition_routers.iter_mut() {
+			children.extend(r.reconcile_data_restore(o).await?);
+		}
+		let st = self.io.state()?;
+		let bound = |t: &Json| t.get("hostId") == o.get("hostId") && t.get("spaceId") == o.get("spaceId") && t.get("dataIncarnation") == o.get("oldIncarnation");
+		let affected_members: Vec<String> = st.get("members").and_then(Json::as_object).map_or(vec![], |m| m.iter().filter(|(_, m)| m.get("target").is_some_and(bound)).filter_map(|(_, m)| text(m, "id").map(str::to_owned)).collect());
+		let mut affected = vec![];
+		// one bounded parent document per commit; a partial reconciliation is retried
+		for partition in 0..self.layout.partitions as u64 {
+			let ids = self.change_with(partition as f64, true, |d, _| {
+				let mut ids = vec![];
+				let keys: Vec<String> = operations(d).iter().map(|(k, _)| (*k).to_owned()).collect();
+				for k in keys {
+					let op = operations_mut(d).get_mut(&k).expect("listed");
+					let targets = op.get("targets").and_then(Json::as_array).is_some_and(|t| t.iter().any(bound));
+					let named = members(op).iter().any(|m| affected_members.contains(m));
+					let child = op.get("children").and_then(Json::as_object).is_some_and(|c| c.iter().any(|(_, v)| v.as_str().is_some_and(|v| children.contains(v))));
+					if !targets && !named && !child {
+						continue;
+					}
+					set(op, "phase", "needsReview");
+					ids.push(text(op, "id").unwrap_or("").to_owned());
+				}
+				Ok(ids)
+			}).await?;
+			affected.extend(ids);
+		}
+		self.env.assert_authority().await?;
+		let mut tx = Tx::new(&self.env);
+		let at = self.layout.check_in(&mut tx)?;
+		if hash(tx.at(at).get("reconciliation").unwrap_or(&Json::Null))? != wanted {
+			return Err(routing("restore reconciliation changed"));
+		}
+		if let Some(l) = tx.at(at).as_object_mut() {
+			l.remove("reconciliation");
+		}
+		self.env.assert_authority().await?;
+		tx.commit()?;
+		Ok(affected)
+	}
+
 	pub async fn resume(&mut self, id: &str) -> R<Json> {
 		self.assert_no_erasure()?;
 		let op = self.get(id).await?.ok_or_else(|| routing("unknown federation operation"))?;

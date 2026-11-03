@@ -132,9 +132,11 @@ fn outcome(r: &mut Rng) -> Json {
 	}
 }
 fn spec_again() -> Json { obj! { "target" => target(2.0), "generation" => "g2", "policyVersion" => 2.0 } }
-fn line(r: &mut Rng) -> Json {
+/// A line of the walk; `late`: data restores may be reconciled, which sends their commands to review for good.
+fn line(r: &mut Rng, late: bool) -> Json {
 	let id = format!("c{}", r.below(12));
 	let mut l = match r.below(16) {
+		15 if late => obj! { "op" => "reconcile", "restore" => obj! { "hostId" => r.pick(&["h", "h", "x"]), "spaceId" => "s", "oldIncarnation" => r.pick(&["i", "i", "j"]), "recoveryId" => r.pick(&["rec-1", "rec-1", "bad id!"]) } },
 		0 => obj! { "op" => "open", "router" => "r1", "authority" => "a" },
 		1 => obj! { "op" => "recover" },
 		2..=5 => {
@@ -195,6 +197,7 @@ async fn run(c: &mut Option<RouterController<Env>>, env: &Env, l: &Json) -> Resu
 		"review" => r.review(id, text(l, "admin").unwrap(), text(l, "note").unwrap(), l.get("release") == Some(&Json::Bool(true))).await,
 		"reserve" => r.reserve_future(id, number("slots"), Some(number("bytes"))).await.map(|()| Json::Null),
 		"release" => r.release_future(id).await.map(|()| Json::Null),
+		"reconcile" => r.reconcile_data_restore(l.get("restore").unwrap()).await.map(|ids| Json::Array(ids.into_iter().map(Json::String).collect())),
 		_ => r.get(id).await.map(|c| c.unwrap_or(Json::Null)),
 	}
 }
@@ -223,7 +226,7 @@ fn a_walk_of_commands_leaves_the_same_journal() {
 	let mut counts: HashMap<String, usize> = HashMap::new();
 	let first = [obj! { "op" => "open", "router" => "r1", "authority" => "a" }, obj! { "op" => "recover" }];
 	for n in 0..steps as usize + 2 {
-		let l = first.get(n).cloned().unwrap_or_else(|| line(&mut r));
+		let l = first.get(n).cloned().unwrap_or_else(|| line(&mut r, n as u64 > steps * 9 / 10));
 		let got = runtime.block_on(run(&mut c, &env, &l));
 		let t = ts.step(&l);
 		let context = l.to_json_text();
@@ -231,6 +234,9 @@ fn a_walk_of_commands_leaves_the_same_journal() {
 			(Ok(v), true) => {
 				assert_eq!(Some(v), t.get("result"), "answer of step {n}: {context}");
 				*counts.entry(text(v, "state").unwrap_or("-").to_owned()).or_default() += 1;
+				if text(&l, "op") == Some("reconcile") && v.as_array().is_some_and(|a| !a.is_empty()) {
+					*counts.entry("reconciled".into()).or_default() += 1;
+				}
 			}
 			(Err(e), false) => {
 				assert_eq!((e.class, e.message.as_str()), (text(&t, "error").unwrap_or(""), text(&t, "message").unwrap_or("")), "refusal of step {n}: {context}");
@@ -243,7 +249,7 @@ fn a_walk_of_commands_leaves_the_same_journal() {
 		assert_eq!(Some(&index), t.get("index"), "index after step {n}: {context}");
 		assert_eq!(Some(&commands), t.get("commands"), "commands after step {n}: {context}");
 	}
-	for wanted in ["completed", "failed", "needsReview", "applying", "RouterBlocked", "RouterConflict", "RouterBudgetExceeded", "TypeError"] {
+	for wanted in ["completed", "failed", "needsReview", "applying", "RouterBlocked", "RouterConflict", "RouterBudgetExceeded", "TypeError", "reconciled"] {
 		assert!(counts.contains_key(wanted), "the walk never reached {wanted}: {counts:?}");
 	}
 }

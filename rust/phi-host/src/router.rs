@@ -2,7 +2,7 @@
 //! lost reply is resolved under that id, never sent as new work: transport errors do not prove failure. Everything lives in two
 //! document families of the control store, written by TypeScript and Rust alike, so either can take over the other's journal.
 //!
-//! One controller owns a journal; `&mut self` is what `serial` is there. `reconcileDataRestore` belongs to recovery (R6b).
+//! One controller owns a journal; `&mut self` is what `serial` is there.
 use phi_core::space::{bytes, error, CoreError};
 use phi_json::{digest_json, num_of, obj, safe_integer, text, Json, Object};
 use phi_wire::Local;
@@ -666,6 +666,37 @@ impl<E: RouterEnv> RouterController<E> {
 			}
 		}
 		Ok(c)
+	}
+
+	/// `reconcileDataRestore` (data restore step 5): every command with a step on the restored binding (`hostId`,
+	/// `spaceId`, `oldIncarnation`) goes to review, its retained outcomes kept; nothing is sent again.
+	pub async fn reconcile_data_restore(&mut self, o: &Json) -> R<Vec<String>> {
+		let field = |k: &str| o.get(k).map_or_else(|| "undefined".to_owned(), phi_core::space::js_string);
+		ident(&field("recoveryId"))?;
+		self.must_be_ready()?;
+		let ids: Vec<String> = self.index()?.as_ref().map_or(vec![], |i| refs(i).keys().map(str::to_owned).collect());
+		let hit = |s: &Json| s.get("target").is_some_and(|t| t.get("hostId") == o.get("hostId") && t.get("spaceId") == o.get("spaceId") && t.get("dataIncarnation") == o.get("oldIncarnation"));
+		let evidence = format!("data restore {}: historical outcome retained; recovery views require review", field("recoveryId"));
+		let mut affected = vec![];
+		for id in ids {
+			let Some(c) = self.get(&id).await? else { return Err(blocked("missing restore journal history")) };
+			if !steps(&c).iter().any(hit) {
+				continue;
+			}
+			self.update(&id, |d, _, _| {
+				for n in 0..steps(d).len() {
+					if hit(&steps(d)[n]) {
+						let s = step_mut(d, n);
+						set(s, "state", "needsReview");
+						set(s, "evidence", evidence.as_str());
+					}
+				}
+				set(d, "state", "needsReview");
+				Ok(())
+			}).await?;
+			affected.push(id);
+		}
+		Ok(affected)
 	}
 
 	/// `review`: an admin's note on a command that needs one, which may release its area.

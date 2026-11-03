@@ -72,6 +72,7 @@ async function run(l: Line): Promise<unknown> {
 		case "takeWaiting": return space.takeWaiting(l.template, l.timeoutMs, l.txnLeaseMs, q);
 		case "readWaiting": return space.readWaiting(l.template, l.timeoutMs, q);
 		case "resume": return space.resume(l.id);
+		case "reconcile": return space.reconcileDataRestore(l.restore);
 		case "readAll": return space.readAll(l.template, l.principal, { allowPartial: l.partial === true });
 		case "count": return space.count(l.template, l.principal, { allowPartial: l.partial === true });
 		default: throw new Error(`unknown line ${l.op}`);

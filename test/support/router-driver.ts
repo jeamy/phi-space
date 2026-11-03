@@ -41,6 +41,7 @@ async function run(l: Line): Promise<unknown> {
 		case "reserve": return await router!.reserveFuture(l.id, l.slots, l.bytes ?? undefined) ?? null;
 		case "release": return await router!.releaseFuture(l.id) ?? null;
 		case "get": return await router!.get(l.id) ?? null;
+		case "reconcile": return await router!.reconcileDataRestore(l.restore);
 		default: throw new Error(`unknown line ${l.op}`);
 	}
 }

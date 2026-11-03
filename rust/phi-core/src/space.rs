@@ -63,7 +63,7 @@ pub type Result<T> = std::result::Result<T, CoreError>;
 /// A number as a JavaScript template literal writes it.
 fn n(x: f64) -> String { number_text(x) }
 /// A value as `${v}` writes it (ids and transaction ids in messages).
-pub(crate) fn js_string(v: &Json) -> String {
+pub fn js_string(v: &Json) -> String {
 	match v {
 		Json::String(s) => s.clone(),
 		Json::Number(x) => n(*x),

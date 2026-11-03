@@ -184,10 +184,18 @@ fn template(r: &mut Rng) -> Json {
 		_ => obj! { "type" => t },
 	}
 }
-fn line(r: &mut Rng, ops: u64) -> Json {
+/// A line of the walk; `late` in a season: a data restore may be reconciled, which sends its operations to review.
+fn line(r: &mut Rng, ops: u64, late: bool) -> Json {
 	let id = format!("o{}", r.below(ops));
 	let who = principal(r);
 	let mut l = match r.below(14) {
+		0 if late => {
+			let mut restore = obj! { "hostId" => r.pick(&["h1", "h2", "h9"]), "spaceId" => "s", "oldIncarnation" => r.pick(&["i", "i", "j"]), "recoveryId" => r.pick(&["rec-1", "rec-1", "rec-2", "bad id!"]) };
+			if r.below(8) == 0 {
+				restore.as_object_mut().unwrap().insert("extra", "x".into());
+			}
+			obj! { "op" => "reconcile", "restore" => restore }
+		}
 		0 => obj! { "op" => "restart" },
 		1..=3 => {
 			let type_ = r.pick(&["One", "Two", "Both", "Merged", "Other"]);
@@ -281,6 +289,7 @@ async fn run(s: &mut Space, l: &Json, env: &Env, partitions: u64) -> Result<Json
 		"takeWaiting" => s.take_waiting(arg("template"), number("timeoutMs"), number("txnLeaseMs"), &q).await,
 		"readWaiting" => s.read_waiting(arg("template"), number("timeoutMs"), &q).await,
 		"resume" => s.resume(id).await,
+		"reconcile" => s.reconcile_data_restore(arg("restore")).await.map(|ids| Json::Array(ids.into_iter().map(Json::String).collect())),
 		"readAll" => s.read_all(arg("template"), arg("principal"), partial, None, None).await,
 		_ => s.count(arg("template"), arg("principal"), partial, None, None).await,
 	}
@@ -307,7 +316,7 @@ fn a_walk_of_operations_leaves_the_same_journals() {
 		assert_eq!(dump(&env, partitions).canonical(), t.get("docs").unwrap().canonical(), "after the opening of season {season}");
 		let ops = r.pick(&[6, 12]);
 		for n in 0..40 {
-			let l = line(&mut r, ops);
+			let l = line(&mut r, ops, n >= 34);
 			let w = &env.0;
 			let list = |k: &str| -> VecDeque<Json> { l.get(k).and_then(Json::as_array).map_or(VecDeque::new(), |a| a.iter().cloned().collect()) };
 			*w.plan.borrow_mut() = list("plan");
@@ -325,6 +334,9 @@ fn a_walk_of_operations_leaves_the_same_journals() {
 				(Ok(v), true) => {
 					assert_eq!(v.canonical(), t.get("result").unwrap().canonical(), "answer, {context}");
 					*seen.entry("answered".into()).or_default() += 1;
+					if text(&l, "op") == Some("reconcile") && v.as_array().is_some_and(|a| !a.is_empty()) {
+						*seen.entry("reconciled".into()).or_default() += 1;
+					}
 				}
 				// a shape TypeScript stumbles over (a write retried under the id of a read) is refused here by name
 				(Err(_), false) if text(&t, "error") == Some("TypeError") => {}
@@ -338,7 +350,7 @@ fn a_walk_of_operations_leaves_the_same_journals() {
 			assert_eq!(dump(&env, partitions).canonical(), t.get("docs").unwrap().canonical(), "documents, {context}");
 		}
 	}
-	for wanted in ["answered", "FederationPending", "FederationUnavailable", "RoutingConflict", "MergeTypeNotExclusive"] {
+	for wanted in ["answered", "FederationPending", "FederationUnavailable", "RoutingConflict", "MergeTypeNotExclusive", "reconciled"] {
 		assert!(seen.contains_key(wanted), "never reached {wanted}: {seen:?}");
 	}
 }
