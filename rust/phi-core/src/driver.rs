@@ -128,6 +128,10 @@ pub fn apply_line(s: &mut Space, snapshots: &mut crate::snapshot::Snapshots, now
 			"cancelRequest" => s.cancel_request(now, l.get("target")),
 			"pendingClaims" => Ok(Json::Array(s.pending_claims().into_iter().map(|(k, v)| Json::Array(vec![Json::String(k), v])).collect())),
 			"resolveAdmission" => s.resolve_admission(now, l.get("request"), l.get("method").unwrap_or(&Json::Null), l.get("argumentHash").unwrap_or(&Json::Null), l.get("primaryEpoch").unwrap_or(&Json::Null)),
+			"decideNotCommitted" => {
+				let arg = |k: &str| l.get(k).unwrap_or(&Json::Null);
+				s.decide_not_committed(now, l.get("request"), arg("method"), arg("argumentHash"), arg("requestEpoch"), arg("primaryEpoch"), arg("proofHash"))
+			}
 			"needsMaintenance" => s.needs_maintenance(now).map(Json::Bool),
 			"readChain" => s.read_chain(now, l.get("tmpl").unwrap_or(&Json::Null), o, as_),
 			"releaseTxn" => s.release_txn(now, l.get("id")).map(Json::Bool),

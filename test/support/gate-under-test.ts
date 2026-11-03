@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { SpaceLifecycle, SpaceLifecycleService } from "../../src/space-lifecycle.ts";
 import { BootstrapClosed, CONTROL_SPACE, ControlAccess, EnrollmentService, GateIdentity, MemoryKeyDirectory, NetbirdDirectory, PhiSpaces, ProvingService, SpaceKeyDirectory, SpaceService, Supervisor, bootstrapEnroll, MemberLifecycle, DelegationVerifier, RunGateService, SqliteRecoveryRegister, installBootGuard, createSpace, spaceDoc, core, createEnroll, serveTlsRegister, GrantAuthority, GrantVerifier, RotationService, listSpaces, revokePeerKey, snapshotSpace, socketTransport, startGate, DEFAULT_GROUP_ROLES, rolesOf, type Call, type Connection, type Identity, type RunSpec, type KeyDirectory, type PeerKeyRec, type Policy } from "../../src/index.ts";
 import { plainDoc } from "./host.ts";
+import { digestJson } from "../../src/canonical.ts";
 import { openSqliteHost } from "../../src/store/sqlite.ts";
 import { openTestHost } from "./host.ts";
 import { ctx } from "./persistent.ts";
@@ -21,6 +22,13 @@ export const OTHER_SERVER = CMD !== null;
 
 const scratch = (tc: TestContext) => { const dir = mkdtempSync("/tmp/phi-gut-"); tc.after(() => rmSync(dir, { recursive: true, force: true })); return dir; };
 const put = (file: string, text: string) => { writeFileSync(`${file}.tmp`, text); renameSync(`${file}.tmp`, file); };
+
+/**
+ * Every Space of the host is replicated (primary/sync): its replica configuration version and primary epoch as the
+ * journal says, and the promotion evidence for NotCommitted (`proof` 0: none; else the hash of its value).
+ */
+export type Replicated = { version: TestClock; epoch: TestClock; proof: TestClock };
+const proofHash = (t: number) => digestJson(String(t));
 
 /** The gate's clock. */
 export class TestClock {
@@ -52,7 +60,7 @@ export type GateCase = {
 	runGates?: { controllerKey: string };
 	/** This host is Member `a` with a Space of its own, under the Control host `control` with this key. */
 	/** The authority's public keys, and its installed policy version (a clock's value, so a test can move it). */
-	delegation?: { supervisorKey: string; grantKey: string; controlSpaceId: string; policy: TestClock };
+	delegation?: { supervisorKey: string; grantKey: string; controlSpaceId: string; policy: TestClock; replica?: Replicated };
 	maxPendingPerPeer?: number;
 	/** The boot guard over these register files; in this process it is armed by `armBoot`, once the host has its Spaces. */
 	boot?: { external: string; installed: string };
@@ -89,8 +97,11 @@ async function inProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 	tc.after(() => host.close(ctx));
 	const identity = new GateIdentity();
 	const keys: KeyDirectory | undefined = c.spaceKeys ? new SpaceKeyDirectory(host, ctx, c.clock.now) : c.keys;
-	const verifier = c.delegation && new DelegationVerifier({ host, ctx, authorityId: "authority", controlSpaceId: c.delegation.controlSpaceId, supervisorPeerId: "supervisor", supervisorKey: { algorithm: "ed25519", publicKey: c.delegation.supervisorKey }, keys: keys!, grants: new GrantVerifier({ authorityId: "authority", issuerHostId: "control-host", publicKey: c.delegation.grantKey, algorithm: "ed25519", now: c.clock.now }), policy: async () => ({ authorityId: "authority", policyVersion: c.delegation!.policy.t }), now: c.clock.now });
+	const verifier = c.delegation && new DelegationVerifier({ host, ctx, authorityId: "authority", controlSpaceId: c.delegation.controlSpaceId, supervisorPeerId: "supervisor", supervisorKey: { algorithm: "ed25519", publicKey: c.delegation.supervisorKey }, keys: keys!, grants: new GrantVerifier({ authorityId: "authority", issuerHostId: "control-host", publicKey: c.delegation.grantKey, algorithm: "ed25519", now: c.clock.now }), policy: async () => ({ authorityId: "authority", policyVersion: c.delegation!.policy.t }), now: c.clock.now,
+		...(c.delegation.replica ? { replicaConfig: () => ({ replicaConfigVersion: c.delegation!.replica!.version.t, primaryEpoch: c.delegation!.replica!.epoch.t }) } : {}) });
+	const replica = c.delegation?.replica;
 	const service = new SpaceService({ host, ctx, identity, ...(c.policy ? { policy: c.policy } : {}), ...(c.serviceClock ? { now: c.clock.now } : {}), ...(c.maxPendingPerPeer ? { maxPendingPerPeer: c.maxPendingPerPeer } : {}),
+		...(replica ? { epochForSpace: async () => replica.epoch.t, promotionProof: async () => (replica.proof.t ? { hash: proofHash(replica.proof.t) } : null) } : {}),
 		...(verifier ? { authorize: async (call: Call, id: Identity, conn: Connection) => { const auth = call.frame?.delegation ? await verifier.check(call, id, conn) : new GrantVerifier({ authorityId: "authority", issuerHostId: "control-host", publicKey: c.delegation!.grantKey, algorithm: "ed25519", now: c.clock.now }).check(call.frame?.grant, id, call, conn); auth.check(); return auth; } } : {}) });
 	const proving = c.gateHostId && keys ? new ProvingService(service, { gateHostId: c.gateHostId, keys, now: c.clock.now }) : service;
 	const access = c.controlAccess ? new ControlAccess(proving as ProvingService, { identity, host, ctx }) : proving;
@@ -208,7 +219,7 @@ async function asProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 	}
 	writeFileSync(config, JSON.stringify({
 		hooks: hooksPath, endpoints: [], identities: {}, policy: c.policy?.roles, maxPendingPerPeer: c.maxPendingPerPeer,
-		gate: { host: c.host ?? "127.0.0.1", port: 0, url: c.url, token: c.token ?? "t", cacheMs: c.cacheMs, handshakeMs: c.handshakeMs, maxConnectionsPerPeer: c.maxConnectionsPerPeer, connectionsPerSecondPerPeer: c.connectionsPerSecondPerPeer, clockFile: c.clock.file, eventsFile, keysFile: c.keys?.file, gateHostId: c.gateHostId, spaceKeys: c.spaceKeys, enrollment: c.enrollment, controlAccess: c.controlAccess, supervisor: c.supervisor, serviceClock: c.serviceClock, boot: c.boot ? { hostId: "host-1", authorityId: "authority", ...c.boot } : undefined, delegation: c.delegation ? { authorityId: "authority", controlSpaceId: c.delegation.controlSpaceId, supervisor: "supervisor", supervisorKey: c.delegation.supervisorKey, issuer: "control-host", grantKey: c.delegation.grantKey, policyFile: c.delegation.policy.file } : undefined, membership: c.membership ? { memberId: "a", spaceId: memberSpace, authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.membership.controllerKey } : undefined, runGates: c.runGates ? { authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.runGates.controllerKey } : undefined, spaceLifecycle: c.spaceLifecycle ? { hostId: "host-1", authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.spaceLifecycle.controllerKey } : undefined, grants: c.grants ? (() => { const k = grantKey(); return { authorityId: "authority", hostId: "host-1", seed: k.seed, publicKey: k.publicKey }; })() : undefined },
+		gate: { host: c.host ?? "127.0.0.1", port: 0, url: c.url, token: c.token ?? "t", cacheMs: c.cacheMs, handshakeMs: c.handshakeMs, maxConnectionsPerPeer: c.maxConnectionsPerPeer, connectionsPerSecondPerPeer: c.connectionsPerSecondPerPeer, clockFile: c.clock.file, eventsFile, keysFile: c.keys?.file, gateHostId: c.gateHostId, spaceKeys: c.spaceKeys, enrollment: c.enrollment, controlAccess: c.controlAccess, supervisor: c.supervisor, serviceClock: c.serviceClock, boot: c.boot ? { hostId: "host-1", authorityId: "authority", ...c.boot } : undefined, delegation: c.delegation ? { authorityId: "authority", controlSpaceId: c.delegation.controlSpaceId, supervisor: "supervisor", supervisorKey: c.delegation.supervisorKey, issuer: "control-host", grantKey: c.delegation.grantKey, policyFile: c.delegation.policy.file, ...(c.delegation.replica ? { replica: { versionFile: c.delegation.replica.version.file, epochFile: c.delegation.replica.epoch.file, proofFile: c.delegation.replica.proof.file } } : {}) } : undefined, membership: c.membership ? { memberId: "a", spaceId: memberSpace, authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.membership.controllerKey } : undefined, runGates: c.runGates ? { authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.runGates.controllerKey } : undefined, spaceLifecycle: c.spaceLifecycle ? { hostId: "host-1", authorityId: "authority", peerId: "host-1", seed: member.seed, controller: "control", controllerKey: c.spaceLifecycle.controllerKey } : undefined, grants: c.grants ? (() => { const k = grantKey(); return { authorityId: "authority", hostId: "host-1", seed: k.seed, publicKey: k.publicKey }; })() : undefined },
 	}));
 	const proc = spawn(CMD![0]!, [...CMD!.slice(1), "--store", c.membership || c.spaceLifecycle ? storeFile : "memory", "--listen", `unix:${join(dir, "unused.sock")}`, "--test-hooks", config], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
 	const port = await new Promise<number>((resolve, reject) => {

@@ -464,3 +464,38 @@ impl SyncJournal {
 		})
 	}
 }
+
+/// `promotionEvidence`, the evidence for NotCommitted (v3 6.2): this host is the primary of the current configuration
+/// with no unresolved candidate, and the journal's continuous chain covers `request_epoch` and every configuration change
+/// since. A primary change is only ever a promotion with a verified fencing proof, so no earlier replica can still write.
+/// `None` when the chain does not reach back to that epoch (then the outcome stays unknown).
+pub fn promotion_evidence(journal: &SyncJournal, request_epoch: f64, own: &str) -> Result<Option<Json>> {
+	let c = journal.config();
+	let head = journal.head_revision()?;
+	if integer(Some(&Json::Number(request_epoch))).is_none() || text(&c, "primaryReplica") != own || request_epoch >= num(&c, "primaryEpoch") || head != journal.applied_revision()? {
+		return Ok(None);
+	}
+	let mut covered = num(&journal.config_at(0)?, "primaryEpoch") == request_epoch;
+	let mut transitions = vec![];
+	for r in 1..=head {
+		let Some(i) = journal.intent(r as f64)? else { return Ok(None) };
+		if num(&i, "version") != 2.0 {
+			continue;
+		}
+		let epoch = i.get("config").map_or(f64::NAN, |c| num(c, "primaryEpoch"));
+		if epoch == request_epoch {
+			covered = true;
+		}
+		if epoch > request_epoch {
+			transitions.push(obj! { "revision" => i.get("revision").cloned().unwrap_or(Json::Null), "hash" => i.get("hash").cloned().unwrap_or(Json::Null), "reason" => i.get("reason").cloned().unwrap_or(Json::Null), "config" => copy(i.get("config").unwrap_or(&Json::Null)) });
+		}
+	}
+	if !covered || transitions.is_empty() {
+		return Ok(None);
+	}
+	let body = obj! { "spaceId" => c.get("spaceId").cloned().unwrap_or(Json::Null), "authorityId" => c.get("authorityId").cloned().unwrap_or(Json::Null), "requestEpoch" => request_epoch, "primaryEpoch" => c.get("primaryEpoch").cloned().unwrap_or(Json::Null), "primaryReplica" => own, "transitions" => Json::Array(transitions) };
+	let h = hash(&body);
+	let Json::Object(mut o) = body else { unreachable!() };
+	o.insert("hash", Json::String(h));
+	Ok(Some(Json::Object(o)))
+}

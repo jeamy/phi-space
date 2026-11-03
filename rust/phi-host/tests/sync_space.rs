@@ -6,7 +6,7 @@
 use phi_host::boot::External;
 use phi_host::register::SqliteRegister;
 use phi_host::replica_control::RegisterLine;
-use phi_host::sync_space::{resolver, start, Started, SyncContext, SyncSpace, SyncSpaceConfig};
+use phi_host::sync_space::{resolver, start, MakeService, Started, SyncContext, SyncSpace, SyncSpaceConfig};
 use phi_json::{obj, parse, Json};
 use phi_service::{Options, Service};
 use phi_store::{system_random, Ledger, MemoryLedger, Store};
@@ -122,14 +122,14 @@ fn primary(d: &Path) -> Primary {
 		o.tasks.push(Box::new(move |owner: Owner| {
 			Box::pin(async move {
 				let sp = SyncSpace::open(config(&d, "a"), context(&d, "a"), false).await.unwrap();
-				let make: Rc<dyn Fn(Store, f64) -> Service> = Rc::new(|store, epoch| {
+				let make: MakeService = Rc::new(|store, sp| {
 					let mut o = Options::single_peer("local");
-					o.primary_epoch = epoch;
+					sp.serve_options(&mut o);
 					Service::new(store, o)
 				});
 				let unresolved = match start(&sp).await.unwrap() {
 					Started::Served(store) => {
-						owner.route(&sp.names(), Some(Route::Served(Box::new(make(*store, sp.primary_epoch())))));
+						owner.route(&sp.names(), Some(Route::Served(Box::new(make(*store, &sp)))));
 						false
 					}
 					_ => true,

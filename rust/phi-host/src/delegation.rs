@@ -1,7 +1,8 @@
 //! Double-signed, principal-bound delegation, the Member's side (src/delegation.ts). A router brings a call on a principal's
 //! behalf: its own signature, the supervisor's lease, the principal's grant, each bound to the call. Epochs only go up, in a
 //! document of their own, and a higher one fences the work older leases left waiting. Issuing leases is the control host's
-//! (R6), and so are replicated Members.
+//! (R6). A replicated Space takes its epoch from its replica configuration (its journal), and new work on it waits until the
+//! router adopts that configuration (`ReplicaConfigPending`).
 use phi_json::text;
 use phi_core::space::permission as denied;
 use crate::auth::{signature_holds, signed_by, Algorithm};
@@ -42,7 +43,12 @@ pub struct DelegationOptions {
 	pub policy: Rc<dyn Fn() -> (String, f64)>,
 	pub rules: Rc<Policy>,
 	pub uncertainty_ms: f64,
+	/// The replica configuration of a primary/sync Space by its ID (its journal's `replicaConfigVersion` and
+	/// `primaryEpoch`); `None` for other Spaces.
+	pub replica_config: Option<ReplicaConfig>,
 }
+/// A Space's replica configuration by its ID, `None` for a Space that is not replicated.
+pub type ReplicaConfig = Rc<dyn Fn(&str) -> Option<Json>>;
 
 pub struct DelegationVerifier {
 	o: DelegationOptions,
@@ -243,7 +249,10 @@ impl DelegationVerifier {
 		let known = claim(&reference_of(d.get("requestGeneration"), d.get("requestId")));
 		let policy_of = |c: &Json| c.get("policyVersion").and_then(Json::as_f64).unwrap_or(1.0);
 		let (mut reference, mut missing) = (known.clone(), false);
-		let current_epoch = s.state.rest.get("primaryEpoch").and_then(Json::as_f64).unwrap_or(1.0);
+		// a replicated Space takes its epoch from the replica configuration (journal); its document keeps the epoch it was
+		// created with, transitions only change the configuration
+		let replica = self.o.replica_config.as_ref().and_then(|f| f(&space));
+		let current_epoch = replica.as_ref().and_then(|c| c.get("primaryEpoch")).and_then(Json::as_f64).or_else(|| s.state.rest.get("primaryEpoch").and_then(Json::as_f64)).unwrap_or(1.0);
 		let target = d.get("targetRequest").filter(|t| !t.is_null());
 		let action = args.get("action").and_then(Json::as_str);
 		if let Some(tr) = target {
@@ -298,9 +307,21 @@ impl DelegationVerifier {
 			return Err(denied("follow-up requires targetRequest"));
 		}
 		let target_epoch = number(d, "targetPrimaryEpoch");
+		let pending = |c: &Json| error("ReplicaConfigPending", format!("replica configuration {} is not adopted by the router yet", c.get("replicaConfigVersion").and_then(Json::as_f64).map_or_else(|| "undefined".into(), phi_json::number_text)));
+		let adopted = |c: &Json| d.get("targetReplicaConfigVersion") == c.get("replicaConfigVersion");
+		// a router behind an adopted transition (older epoch, other configuration version) waits for the adoption: new
+		// work is pending, not denied
+		if let Some(c) = replica.as_ref().filter(|c| reference.is_none() && !missing && positive(d.get("targetPrimaryEpoch")) && target_epoch <= current_epoch && !adopted(c)) {
+			return Err(pending(c));
+		}
 		let frame_epoch = frame.and_then(|f| f.get("primaryEpoch"));
 		if !positive(d.get("targetPrimaryEpoch")) || frame_epoch.is_some_and(|e| e.as_f64() != Some(target_epoch)) || target_epoch > current_epoch || (target_epoch < current_epoch && reference.is_none() && !missing) {
 			return Err(denied("target epoch does not match new or known request"));
+		}
+		// new work on a replicated Space needs the router to route under the local replica configuration; follow-ups of
+		// operations admitted before the change continue under their original binding
+		if let Some(c) = replica.as_ref().filter(|c| reference.is_none() && !adopted(c)) {
+			return Err(pending(c));
 		}
 		let (authority, installed) = (self.o.policy)();
 		if authority != self.o.authority_id || installed.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {

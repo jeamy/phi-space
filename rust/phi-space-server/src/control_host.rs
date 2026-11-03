@@ -17,7 +17,7 @@ use phi_host::gate::{Gate, GateOptions, Keys, Now};
 use phi_host::grants::GrantVerifier;
 use phi_host::rotation::Rotating;
 use phi_json::Json;
-use phi_service::Options;
+use phi_service::{space_epoch, Options};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -111,6 +111,13 @@ pub fn run(config: &str, store: &str) {
 	options.host_id = Some(host_id.to_owned());
 	options.authority_id = authority_id.to_owned();
 	options.primary_epoch = 1.0;
+	// epochForSpace: every Space of a primary/sync main store at the journal's epoch, any other at its own; the journal's
+	// evidence makes an unknown request of an earlier epoch NotCommitted (mainPromotionProof)
+	let main_epoch = main.clone();
+	options.epoch_for_space = Some(Rc::new(move |store, space| space_epoch(store, space, &|_| main_epoch.as_ref().map(|sp| sp.primary_epoch()))));
+	if let Some(sp) = main.clone() {
+		options.promotion_proof = Some(Rc::new(move |_, request_epoch| sp.promotion_proof(request_epoch)));
+	}
 	let grants = GrantVerifier { authority_id: authority_id.to_owned(), issuer_host_id: host_id.to_owned(), public_key: control_key.to_owned(), algorithm, uncertainty_ms: 2000.0 };
 	options.authorize = Some(grants_only(grants.clone(), Rc::new(options.policy.clone()), Rc::clone(&now)));
 	options.guard = Some(Rc::clone(&guard) as _);

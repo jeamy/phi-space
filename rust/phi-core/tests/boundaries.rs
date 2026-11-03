@@ -723,3 +723,19 @@ fn a_chain_budget_above_the_frame_is_the_frame() {
 	let chain = |max: Json| obj! { "op" => "readChain", "now" => 1000.0, "tmpl" => obj! { "type" => "Task" }, "o" => obj! { "head" => obj! { "type" => "Task" }, "maxBytes" => max } };
 	compare(&[init(obj! {}), write(4, 60_000.0, 1000.0), chain(1e16.into()), chain(1.5.into()), chain(0.0.into()), chain((-1.0).into()), chain("x".into())], "the chain budget");
 }
+
+#[test]
+fn a_negative_claim_at_its_edges() {
+	let hash = digest_json(&obj! { "method" => "write", "args" => obj! { "a" => 1.0 } }).unwrap();
+	let decide = |now: f64| obj! { "op" => "decideNotCommitted", "now" => now, "request" => request("lost"), "method" => "write", "argumentHash" => hash.as_str(), "requestEpoch" => 1.0, "primaryEpoch" => 2.0, "proofHash" => "b".repeat(64) };
+	let late = |now: f64| obj! { "op" => "admit", "now" => now, "request" => request("lost"), "method" => "write", "args" => obj! { "a" => 1.0 } };
+	// the claim and its key against maxClaimBytes, beside a generation
+	edge("a negative claim at maxClaimBytes", 300, 1500, |max| {
+		resolve(&[init(obj! { "maxClaimBytes" => max as f64 }), obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => obj! { "peerId" => "p1" } }, decide(1000.0), late(1000.0), obj! { "op" => "lookup", "now" => 1000.0, "request" => request("lost") }])
+	});
+	// kept as long as a decided claim: a late call meets it until claimResultMs, and what is left after
+	for at in [1499.0, 1500.0, 1501.0, 1700.0] {
+		let lines = vec![init(obj! { "claimResultMs" => 500.0, "generationAdmitMs" => 600.0 }), obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => obj! { "peerId" => "p1" } }, decide(1000.0), obj! { "op" => "settle", "now" => at }, late(at), obj! { "op" => "lookup", "now" => at, "request" => request("lost") }, decide(at)];
+		compare(&resolve(&lines), &format!("a negative claim at {at}"));
+	}
+}

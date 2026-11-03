@@ -9,9 +9,9 @@ use crate::register::SqliteRegister;
 use crate::replica_control::{assert_permit, assert_quarantine, assert_sync_standby, install_admitted_permit, RegisterLine};
 use crate::replica_transport::{journal_answer, serve_replica, Handle, ReplicaError, ReplicaPin, ReplicaSyncHandler, SignedReplicaPeer, SocketTransport};
 use phi_json::{text, Json};
-use phi_service::{sealed_reply, Conn, Service};
+use phi_service::{sealed_reply, Conn, Options, Service};
 use phi_store::primary::{lock_journal, PrimaryGate, PrimaryOptions, SharedJournal};
-use phi_store::sync::{durability_of, JournalOptions, SyncError, SyncJournal};
+use phi_store::sync::{durability_of, promotion_evidence, JournalOptions, SyncError, SyncJournal};
 use phi_store::sync_store::{recover_primary_sync, SyncStoreFile};
 use phi_store::{system_random, SpaceHost, SqliteLedger, Store, WriterOptions};
 use phi_wire::{Owner, Route};
@@ -180,6 +180,17 @@ impl SyncSpace {
 		if text(&c, "primaryReplica") == Some(self.cx.host_id.as_str()) { "primary" } else if text(&c, "standbyReplica") == Some(self.cx.host_id.as_str()) { "standby" } else { "excluded" }
 	}
 	pub fn primary_epoch(&self) -> f64 { self.config_now.borrow().get("primaryEpoch").and_then(Json::as_f64).unwrap_or(1.0) }
+	/// `promotionEvidence` of this Space's journal as this host (v3 6.2): what makes an unknown request of an earlier
+	/// epoch NotCommitted.
+	pub fn promotion_proof(&self, request_epoch: f64) -> Option<Json> { promotion_evidence(&lock_journal(&self.journal), request_epoch, &self.cx.host_id).ok().flatten() }
+	/// The service options of a served Space (`syncSpaces` of src/runtime.ts): its epoch, read at each call, and its
+	/// evidence for NotCommitted.
+	pub fn serve_options(self: &Rc<Self>, o: &mut Options) {
+		let (epoch, proof) = (Rc::clone(self), Rc::clone(self));
+		o.primary_epoch = self.primary_epoch();
+		o.epoch_for_space = Some(Rc::new(move |_, _| epoch.primary_epoch()));
+		o.promotion_proof = Some(Rc::new(move |_, request_epoch| proof.promotion_proof(request_epoch)));
+	}
 
 	/// The unresolved sealed candidate: the served store was poisoned by an unconfirmed commit, or (none served) the journal
 	/// holds a candidate beyond the applied revision, or the standby refused at the start.
@@ -386,10 +397,13 @@ pub async fn start(sp: &Rc<SyncSpace>) -> Result<Started, String> {
 	}
 }
 
+/// What serves a primary/sync Space's store: its service, made with [`SyncSpace::serve_options`].
+pub type MakeService = Rc<dyn Fn(Store, &Rc<SyncSpace>) -> Service>;
+
 /// `sealedResolver` for one Space, for as long as the host runs: whenever its served store fails after a sealed commit,
 /// the Space answers `CommitSealed`, its store is closed, and `resolve` is tried with backoff (1 s doubling to 30 s) until
 /// it is served again or this host is no longer its primary. `unresolved`: it starts that way.
-pub async fn resolver(owner: Owner, sp: Rc<SyncSpace>, make: Rc<dyn Fn(Store, f64) -> Service>, mut unresolved: bool) {
+pub async fn resolver(owner: Owner, sp: Rc<SyncSpace>, make: MakeService, mut unresolved: bool) {
 	let names = sp.names();
 	loop {
 		if !unresolved {
@@ -405,7 +419,7 @@ pub async fn resolver(owner: Owner, sp: Rc<SyncSpace>, make: Rc<dyn Fn(Store, f6
 		loop {
 			match sp.resolve().await {
 				Resolved::Served(store) => {
-					let service = make(*store, sp.primary_epoch());
+					let service = make(*store, &sp);
 					owner.route(&names, Some(Route::Served(Box::new(service))));
 					eprintln!("primary/sync Space {}: sealed candidate resolved, served again", sp.config.alias);
 					break;

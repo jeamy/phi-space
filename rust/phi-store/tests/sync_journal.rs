@@ -10,7 +10,7 @@
 mod common;
 use common::TsDriver;
 use phi_json::{obj, parse, Json};
-use phi_store::sync::{config_of, hash, marker_of, own, JournalOptions, SyncError, SyncJournal};
+use phi_store::sync::{config_of, hash, marker_of, own, promotion_evidence, JournalOptions, SyncError, SyncJournal};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -71,6 +71,7 @@ impl Pair {
 			"transition" => j.transition(&text(q, "id"))?.unwrap_or(Json::Null),
 			"markApplied" => { j.mark_applied(&g("intent"), q.get("recovered").and_then(Json::as_bool) == Some(true))?; Json::Null }
 			"intent" => j.intent(num(q, "revision"))?.unwrap_or(Json::Null),
+			"promotionEvidence" => promotion_evidence(j, num(q, "requestEpoch"), &text(q, "self"))?.unwrap_or(Json::Null),
 			"state" => {
 				let open = Json::Array(j.open_transition_ids()?.into_iter().map(Json::String).collect());
 				obj! { "head" => j.head()?, "applied" => j.applied_revision()? as f64, "config" => j.config(), "configHash" => j.config_hash(), "recoveredCommitted" => j.recovered_committed()?, "open" => open, "historyBytes" => j.history_bytes()? as f64, "format" => j.format().map_or(Json::Null, |f| Json::String(f.into())) }
@@ -88,6 +89,7 @@ impl Pair {
 		let t = self.ts.step(&q);
 		assert_eq!(canonical(&r), canonical(&t), "seed {} step {}: {}\nrust {}\nts   {}", self.seed, self.steps, q.to_json_text(), r.to_json_text(), t.to_json_text());
 		if r.get("ok") == Some(&Json::Bool(true)) { *self.seen.entry(format!("{op} ok")).or_default() += 1; }
+		if op == "promotionEvidence" && r.get("result").is_some_and(|v| !v.is_null()) { *self.seen.entry("promotionEvidence found".into()).or_default() += 1; }
 		r
 	}
 	fn rows(&mut self, name: &str) {
@@ -236,7 +238,14 @@ fn walk(seed: u64, steps: usize) -> BTreeMap<String, usize> {
 				pair.both(q.clone());
 				q.as_object_mut().unwrap().remove("path");
 			}
-			89..=94 => { let name = if rng.chance(0.5) { "p" } else { "s" }; pair.both(obj! { "op" => "state", "name" => name }); }
+			89..=91 => { let name = if rng.chance(0.5) { "p" } else { "s" }; pair.both(obj! { "op" => "state", "name" => name }); }
+			92..=94 => {
+				// the evidence for NotCommitted of an earlier epoch, asked as either replica
+				let name = if rng.chance(0.7) { "p" } else { "s" };
+				let epoch = num(&pair.rust.get(name).unwrap().config(), "primaryEpoch");
+				let request = [0.0, 1.0, 1.0, epoch - 1.0, epoch - 1.0, epoch - 2.0, epoch, 1.5][rng.below(8)];
+				pair.both(obj! { "op" => "promotionEvidence", "name" => name, "requestEpoch" => request, "self" => ["a", "b"][rng.below(2)] });
+			}
 			_ => {
 				let name = if rng.chance(0.5) { "p" } else { "s" };
 				let rev = [0.0, 1.0, 2.0, 1.5, num(&head, "revision"), num(&head, "revision") + 1.0][rng.below(6)];
@@ -263,6 +272,7 @@ fn the_journal_answers_as_typescript_does() {
 	for s in &seeds { for (k, v) in walk(*s, total / seeds.len()) { *seen.entry(k).or_default() += v; } }
 	eprintln!("journal walk: {seen:?}");
 	for op in ["seal", "accept", "catchUp", "sealTransition", "markApplied", "begin", "open"] { assert!(seen.get(&format!("{op} ok")).copied().unwrap_or(0) > 0, "the walk reached a {op} that succeeds"); }
+	assert!(seen.get("promotionEvidence found").copied().unwrap_or(0) > 0 && seen.get("promotionEvidence").copied().unwrap_or(0) > seen.get("promotionEvidence found").copied().unwrap_or(0), "the walk found evidence for an earlier epoch, and none where there is none");
 }
 
 /// The journals of test/vectors (written by TypeScript) open in Rust and say what journal.expected.json says.

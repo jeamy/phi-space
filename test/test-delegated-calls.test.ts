@@ -7,7 +7,8 @@ import net from "node:net";
 import { RemoteSpace, socketTransport, generateKey, DEFAULT_POLICY, GrantAuthority, createSpace, spaceDoc, type Signer } from "../src/index.ts";
 import { canonicalJson } from "../src/canonical.ts";
 import { RouterLeaseAuthority, delegationForCall, signDelegation, type SignedRouterLease } from "../src/delegation.ts";
-import { TestClock, TestKeys, gateUnderTest } from "./support/gate-under-test.ts";
+import { TestClock, TestKeys, gateUnderTest, type Replicated } from "./support/gate-under-test.ts";
+import { argHash } from "../src/claims.ts";
 import { openTestHost } from "./support/host.ts";
 import { ctx } from "./support/persistent.ts";
 
@@ -16,7 +17,7 @@ const peer = (id: string, ip: string, groups: string[]): Peer => ({ id, name: id
 type Reply = { ok: boolean; result?: any; error?: { code: string; message: string } };
 type Call = { method: string; args?: Record<string, unknown>; request?: { generation: string; requestId: string }; space?: string; frame?: Record<string, unknown> };
 
-async function setup(tc: TestContext, o: { maxPendingPerPeer?: number } = {}) {
+async function setup(tc: TestContext, { replica, ...o }: { maxPendingPerPeer?: number; replica?: Replicated } = {}) {
 	const peers = [peer("router", "127.0.0.3", ["space-admin", "space-hosts"]), peer("other", "127.0.0.4", ["space-admin"])];
 	const server = http.createServer((_req, res) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(peers)); });
 	await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -42,7 +43,7 @@ async function setup(tc: TestContext, o: { maxPendingPerPeer?: number } = {}) {
 	const leases = () => new RouterLeaseAuthority({ host: root, ctx, controlSpaceId: control.spaceId, authorityId: "authority", peerId: "supervisor", signer: supervisor.signer, keys, assertAuthority: async () => {}, now: clock.now });
 	const authority = (p: string) => { const id = { principal: { peerId: p }, roles: ["member"] }; return new GrantAuthority({ authorityId: "authority", hostId: "control-host", signer: supervisor.signer, keys, identity: { authenticate: () => id }, refreshIdentity: async () => id, now: clock.now }); };
 	const grant = (p = "user", k = userKey) => authority(p).issue({ peerId: p, state: { proof: { keyId: k.signer.keyId } } });
-	const gate = await gateUnderTest(tc, { url: `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`, clock, keys, gateHostId: "host-1", serviceClock: true, policy: DEFAULT_POLICY, ...o, delegation: { supervisorKey: supervisor.publicKey, grantKey: supervisor.publicKey, controlSpaceId: control.spaceId, policy } });
+	const gate = await gateUnderTest(tc, { url: `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`, clock, keys, gateHostId: "host-1", serviceClock: true, policy: DEFAULT_POLICY, ...o, delegation: { supervisorKey: supervisor.publicKey, grantKey: supervisor.publicKey, controlSpaceId: control.spaceId, policy, ...(replica ? { replica } : {}) } });
 	const sid = await gate.control.jobsSpace("jobs", []);
 	const transports: Array<{ close(): void }> = [];
 	tc.after(() => transports.forEach((t) => t.close()));
@@ -56,10 +57,10 @@ async function setup(tc: TestContext, o: { maxPendingPerPeer?: number } = {}) {
 	let lease: SignedRouterLease = await leases().issue("router", routerKey.signer.keyId);
 	const raw = async (t: typeof wire, c: Call): Promise<Reply> => JSON.parse(await t.request(JSON.stringify(c)));
 	/** A call as the router sends it; `change` may spoil any part before it is signed or after. */
-	const send = async (c: Call, o: { principal?: { peerId: string }; signer?: Signer; g?: any; targetRequest?: any; version?: number; change?: (d: any) => void; after?: (t: any) => void; epoch?: number; via?: typeof wire; lease?: SignedRouterLease } = {}): Promise<Reply> => {
+	const send = async (c: Call, o: { principal?: { peerId: string }; signer?: Signer; g?: any; targetRequest?: any; version?: number; change?: (d: any) => void; after?: (t: any) => void; epoch?: number; replicaConfigVersion?: number; via?: typeof wire; lease?: SignedRouterLease } = {}): Promise<Reply> => {
 		const call = { ...c, space: c.space ?? sid };
 		const g = o.g ?? await grant(), principal = o.principal ?? { peerId: "user" };
-		const d = delegationForCall({ call: call as never, principal, lease: o.lease ?? lease, policyVersion: o.version ?? policy.t, spaceId: sid, primaryEpoch: o.epoch ?? 1, grant: g as never, ...(o.targetRequest ? { targetRequest: o.targetRequest } : {}), now: clock.now() });
+		const d = delegationForCall({ call: call as never, principal, lease: o.lease ?? lease, policyVersion: o.version ?? policy.t, spaceId: sid, primaryEpoch: o.epoch ?? 1, grant: g as never, ...(o.targetRequest ? { targetRequest: o.targetRequest } : {}), ...(o.replicaConfigVersion === undefined ? {} : { replicaConfigVersion: o.replicaConfigVersion }), now: clock.now() });
 		o.change?.(d);
 		const signed = await signDelegation(o.signer ?? routerKey.signer, d);
 		o.after?.(signed);
@@ -206,4 +207,41 @@ test("the waiting work of a router counts for that router, whoever it is for", a
 	const full = await g.send(take("c", second), other);
 	assert.equal(full.error?.code, "ResourceExhausted", JSON.stringify(full));
 	assert.match(full.error!.message, /for this peer/);
+});
+
+test("a replicated Member: new work waits until the router adopts its configuration, and an unknown older request is NotCommitted only with promotion evidence", async (tc) => {
+	const replica: Replicated = { version: new TestClock(tc, 1), epoch: new TestClock(tc, 1), proof: new TestClock(tc, 0) };
+	const g = await setup(tc, { replica });
+	const pending = (r: Reply) => assert.equal(r.error?.code, "ReplicaConfigPending", JSON.stringify(r));
+	refused(await g.send({ method: "generation" }), "is not adopted by the router yet");
+	const generation = await g.generation({ replicaConfigVersion: 1 });
+	const write = (id: string, n: number) => ({ method: "write", args: { entry: { type: "Job", fields: { n } }, leaseMs: 60_000 }, request: { generation, requestId: id } });
+	pending(await g.send(write("w0", 0)));
+	const done = await g.send(write("w1", 1), { replicaConfigVersion: 1 });
+	assert.ok(done.ok, JSON.stringify(done));
+	const hash = (n: number) => argHash("write", { entry: { type: "Job", fields: { n } }, txn: null, lease: 60_000 } as never);
+	const target = (id: string, n: number) => ({ requestId: id, requestGeneration: generation, method: "write", argumentHash: hash(n), policyVersion: 1 });
+	// promoted: epoch 2, configuration 2
+	replica.version.t = 2; replica.epoch.t = 2;
+	pending(await g.send(write("w2", 2), { replicaConfigVersion: 1 }));
+	pending(await g.send(write("w2", 2), { epoch: 2, replicaConfigVersion: 1 }));
+	refused(await g.send(write("w2", 2), { epoch: 3, replicaConfigVersion: 2 }), "target epoch does not match");
+	const fresh = await g.generation({ epoch: 2, replicaConfigVersion: 2 });
+	assert.ok((await g.send({ ...write("w3", 3), request: { generation: fresh, requestId: "w3" } }, { epoch: 2, replicaConfigVersion: 2 })).ok);
+	// a follow-up of work admitted before the change continues under its original binding
+	const poll = await g.send({ method: "pollOperation", args: { targetRequest: { generation, requestId: "w1" }, waitMs: 0 } }, { targetRequest: target("w1", 1), replicaConfigVersion: 1 });
+	assert.equal(poll.result?.state, "done", JSON.stringify(poll));
+	// the request that never arrived: unknown without evidence, NotCommitted with it, and the late original meets it
+	const resolve = (o: { replicaConfigVersion: number }) => g.send({ method: "resolveOperation", args: { targetRequest: { generation, requestId: "lost" }, method: "write", argumentHash: hash(7), primaryEpoch: 1 } }, { targetRequest: target("lost", 7), ...o });
+	pending(await resolve({ replicaConfigVersion: 1 }));
+	const without = await resolve({ replicaConfigVersion: 2 });
+	assert.equal(without.error?.code, "IncarnationChanged", JSON.stringify(without));
+	replica.proof.t = 7;
+	const decided = await resolve({ replicaConfigVersion: 2 });
+	assert.equal(decided.result?.error?.code, "NotCommitted", JSON.stringify(decided));
+	assert.deepEqual(await resolve({ replicaConfigVersion: 2 }), decided, "repeatable");
+	const late = await g.send(write("lost", 7), { replicaConfigVersion: 2 });
+	assert.equal(late.error?.code, "NotCommitted", JSON.stringify(late));
+	const count = await g.send({ method: "count", args: { template: { type: "Job" } } }, { epoch: 2, replicaConfigVersion: 2 });
+	assert.equal(count.result?.value, 2, JSON.stringify(count));
 });

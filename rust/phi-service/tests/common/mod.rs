@@ -105,7 +105,9 @@ pub struct RustSide {
 	pub auth: Rc<RefCell<Decided>>,
 }
 impl RustSide {
-	pub fn start(o: &Setup) -> RustSide {
+	pub fn start(o: &Setup) -> RustSide { RustSide::start_with(o, |_| {}) }
+	/// The same with options of its own, set last.
+	pub fn start_with(o: &Setup, tune: impl FnOnce(&mut Options)) -> RustSide {
 		let ledger = match &o.store {
 			Some(f) => SpaceHost::sqlite(open(f)),
 			None => Ledger::Memory(MemoryLedger::default()),
@@ -136,6 +138,7 @@ impl RustSide {
 			let a = auth.clone();
 			options.authorize = Some(Box::new(move |_, _, _, _| Ok(Rc::new(a.borrow().clone()) as Rc<dyn Authorization>)));
 		}
+		tune(&mut options);
 		let mut service = Service::new(store, options);
 		if let Some(l) = &o.limits {
 			service.set_limits(l).unwrap();

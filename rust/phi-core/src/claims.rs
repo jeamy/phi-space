@@ -158,6 +158,10 @@ impl Space {
 			if c.get("method") != Some(method) || str_of(c, "argHash") != Some(hash.as_str()) {
 				return Err(error("RequestConflict", format!("request {} was used for different arguments", r.request_id())));
 			}
+			if let Some(n) = c.get("notCommitted") {
+				let epoch = n.get("primaryEpoch").map_or_else(|| "undefined".into(), crate::space::js_string);
+				return Err(error("NotCommitted", format!("request {} was not committed (decided after promotion to epoch {epoch})", r.request_id())));
+			}
 			if str_of(c, "state") == Some("pending") {
 				return Ok(obj! { "kind" => "pending", "key" => key.as_str(), "deadline" => c.get("deadline").cloned().unwrap_or(Json::Null) });
 			}
@@ -411,6 +415,65 @@ impl Space {
 	}
 
 	/// Cancels a pending request. A decided one stays as it is; the view says which.
+	/// `decideNotCommitted` (v3 6.2), an unknown request after a promotion: a terminal negative claim for the original key,
+	/// method and argument hash, in the commit domain of admission, so that a late original call meets it and has no
+	/// effect. Only for a request of an earlier epoch in a retained, still admitting generation of this incarnation and
+	/// authority, with uninterrupted history; `proof_hash` binds the promotion evidence the caller checked. A known claim
+	/// is answered as it is.
+	#[allow(clippy::too_many_arguments)]
+	pub fn decide_not_committed(&mut self, now: f64, request: Option<&Json>, method: &Json, hash: &Json, request_epoch: &Json, primary_epoch: &Json, proof_hash: &Json) -> Result<Json> {
+		self.assert_ported()?;
+		let r = RequestRef::of(request);
+		let hex64 = |v: &Json| v.as_str().is_some_and(phi_json::is_sha256_hex);
+		let integer = |v: &Json| v.as_f64().is_some_and(phi_json::safe_integer);
+		let named = crate::space::truthy(r.request_id) && crate::space::truthy(Some(method));
+		if !named || !hex64(hash) || !hex64(proof_hash) || !integer(request_epoch) || !integer(primary_epoch) || request_epoch.as_f64().is_some_and(|e| e < 1.0) {
+			return Err(type_error("invalid negative claim binding"));
+		}
+		let (request_epoch, primary_epoch) = (request_epoch.as_f64().expect("checked"), primary_epoch.as_f64().expect("checked"));
+		self.sweep(now);
+		self.rpc_mut();
+		let key = self.key_of(&r);
+		if let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)).or_else(|| self.restored_claim(&key).cloned()) {
+			if c.get("method") != Some(method) || c.get("argHash") != Some(hash) {
+				return Err(error("RequestConflict", "resolution changed original method/arguments"));
+			}
+			return self.lookup(now, request);
+		}
+		let g = self.validate_generation(now, &r)?;
+		let generation_epoch = g.get("primaryEpoch").filter(|e| !e.is_null()).and_then(Json::as_f64).unwrap_or(1.0);
+		if request_epoch >= primary_epoch || generation_epoch > request_epoch {
+			return Err(error("IncarnationChanged", "NotCommitted needs a request of an earlier primary epoch than this one"));
+		}
+		if self.interrupted_history() {
+			return Err(error("IncarnationChanged", "missing request requires uninterrupted current history"));
+		}
+		let id = r.request_id();
+		let mut rec = Object::new();
+		rec.insert("method", method.clone());
+		rec.insert("argHash", hash.clone());
+		rec.insert("deadline", Json::Number(now));
+		rec.insert("state", "done".into());
+		rec.insert("result", Json::Null);
+		rec.insert("decidedAt", Json::Number(now));
+		rec.insert("generation", r.generation.cloned().unwrap_or(Json::Null));
+		rec.insert("requestId", r.request_id.cloned().expect("checked"));
+		rec.insert("principal", r.principal.cloned().unwrap_or(Json::Null));
+		rec.insert("error", obj! { "code" => "NotCommitted", "message" => format!("request {id} was not committed before the promotion to epoch {}", phi_json::number_text(primary_epoch)) });
+		rec.insert("notCommitted", obj! { "proofHash" => proof_hash.clone(), "requestEpoch" => request_epoch, "primaryEpoch" => primary_epoch });
+		let rec = Json::Object(rec);
+		let added = bytes(&rec) + bytes(&Json::String(key.clone())) + 2.0;
+		if self.claim_bytes() + added > self.limits().max_claim_bytes {
+			return Err(error("LimitError", "the negative claim exceeds maxClaimBytes"));
+		}
+		self.claim_put(&key, Some(rec));
+		let keep = self.limits().claim_result_ms;
+		self.due_at(now + keep);
+		self.touch(now);
+		*self.rpc_mut().bytes.as_mut().expect("tally") += added;
+		self.lookup(now, request)
+	}
+
 	pub fn cancel_request(&mut self, now: f64, target: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
 		self.sweep(now);

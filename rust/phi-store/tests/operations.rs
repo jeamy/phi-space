@@ -264,7 +264,7 @@ fn format_version_and_what_is_not_read_yet_are_checked() {
 		Err(e) => panic!("{e}"),
 		Ok(_) => panic!("{what}: not refused"),
 	};
-	// an older document (TypeScript migrates it), a part inline in the head, a negative claim: refused, never damaged
+	// an older document (TypeScript migrates it) and a part inline in the head: refused, never damaged
 	let old = d.join("version.sqlite");
 	host(&old, WriterOptions::default()).close();
 	let mut h = host(&old, WriterOptions::default());
@@ -274,8 +274,18 @@ fn format_version_and_what_is_not_read_yet_are_checked() {
 	refused(&old, "has version 4");
 	Connection::open(&old).unwrap().execute_batch("UPDATE documents SET version = 5; DELETE FROM parts; UPDATE documents SET value = json_set(value, '$.entries', json('[{\"id\":\"e1\"}]'));").unwrap();
 	refused(&old, "inline in its head");
-	Connection::open(&file).unwrap().execute("UPDATE parts SET value = json_set(value, '$.notCommitted', json('{}')) WHERE part = 'rpc.claims'", []).unwrap();
-	refused(&file, "claims of a kind");
+	// a negative claim is read from its row: a late original call meets it after a restart
+	let mut h = host(&file, WriterOptions::default());
+	let lost = obj! { "principal" => principal.clone(), "generation" => g.get("generation").unwrap().clone(), "requestId" => "r2" };
+	let hash = phi_json::digest_json(&obj! { "method" => "m", "args" => Json::Null }).unwrap();
+	let decided = h.commit(|s| s.decide_not_committed(1000.0, Some(&lost), &"m".into(), &hash.as_str().into(), &1.0.into(), &2.0.into(), &"b".repeat(64).into())).unwrap().unwrap();
+	assert_eq!(decided.get("error").and_then(|e| e.get("code")).and_then(Json::as_str), Some("NotCommitted"));
+	h.close();
+	let mut h = host(&file, WriterOptions::default());
+	let late = h.commit(|s| s.admit(1000.0, Some(&lost), &"m".into(), &Json::Null, &Json::Number(FOREVER), 1024.0)).unwrap();
+	assert_eq!(late.map_err(|e| e.class).err(), Some("NotCommitted"));
+	assert_eq!(h.commit(|s| s.lookup(1000.0, Some(&lost))).unwrap().unwrap(), decided);
+	h.close();
 }
 
 /// The time of `block` admitted and decided requests, the best of three (a single round may meet a scheduler's pause).

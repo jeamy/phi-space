@@ -135,6 +135,13 @@ export async function replicaScenario() {
 		docker("start", container(B));
 		assert.deepEqual(drive("write", B, "single", "3").writes, Array(3).fill("answered"));
 		assert.equal(drive("count", B).count, 8, "five and three: the sealed write had not run, and the fork is not there");
+		// the fork's request, unknown on the promoted host, is NotCommitted by the journal's promotion evidence (v3 6.2): a
+		// durable negative claim, so the original sent again has no effect
+		const fork = drive("resolve", B, JSON.stringify(hold.writes[5].request));
+		say("fork resolved", fork);
+		assert.equal(fork.resolved.state, "done"); assert.equal(fork.resolved.error?.code, "NotCommitted", JSON.stringify(fork.resolved));
+		assert.equal(fork.again.refused, "NotCommitted", "the late original meets the negative claim");
+		assert.equal(drive("count", B).count, 8, "and it never takes effect");
 		assert.deepEqual(drive("write", B, "retried").writes, ["answered"], "the client writes again after an unknown outcome");
 		// the old primary released into quarantine, its history set aside, and made the standby
 		assert.equal(drive("release", A, "release-1").state, "quarantine");

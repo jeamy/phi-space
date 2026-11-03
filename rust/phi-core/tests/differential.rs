@@ -177,6 +177,13 @@ fn random_walks_agree_with_the_typescript_core() {
 		"resolveAdmission done",
 		"resolveAdmission RequestConflict",
 		"resolveAdmission IncarnationChanged",
+		// negative claims after a promotion (claims.decideNotCommitted)
+		"decideNotCommitted decided",
+		"decideNotCommitted known",
+		"decideNotCommitted TypeError",
+		"decideNotCommitted IncarnationChanged",
+		"decideNotCommitted RequestConflict",
+		"admit NotCommitted",
 		"released a transaction",
 		"releaseTxn found nothing",
 		"setLimits IllegalArgumentError",

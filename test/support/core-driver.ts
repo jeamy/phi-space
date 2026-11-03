@@ -111,6 +111,7 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 		case "cancelRequest": return claims.cancelRequest(s, now, l.target);
 		case "pendingClaims": return claims.pendingClaims(s);
 		case "resolveAdmission": return claims.resolveAdmission(s, now, l.request, l.method, l.argumentHash, l.primaryEpoch);
+		case "decideNotCommitted": return claims.decideNotCommitted(s, now, l.request, l.method, l.argumentHash, l.requestEpoch, l.primaryEpoch, l.proofHash);
 		case "needsMaintenance": return core.needsMaintenance(s, now);
 		case "readChain": return readChain(s, now, opt(l.tmpl, null), l.o ?? {}, l.as);
 		// ---- mailboxes

@@ -144,6 +144,9 @@ pub trait Authorization {
 	/// Inside each commit, with what only the host keeps (`checkTx`).
 	fn check_commit(&self) -> Result<(), String> { Ok(()) }
 }
+pub type EpochForSpace = Rc<dyn Fn(&mut Store, Option<&str>) -> f64>;
+/// The Space by name and the epoch of the request; the evidence with its `hash`.
+pub type PromotionProof = Rc<dyn Fn(Option<&str>, f64) -> Option<Json>>;
 pub type Authorize = Box<dyn Fn(&mut Store, &Json, &Identity, &Conn) -> Result<Rc<dyn Authorization>, CoreError>>;
 
 /// What a host demands of everything served (`installBootGuard`): of the host, and of each Space read or committed.
@@ -188,6 +191,13 @@ pub struct Options {
 	pub host_id: Option<String>,
 	pub authority_id: String,
 	pub primary_epoch: f64,
+	/// `epochForSpace`: the primary epoch of a Space by its name, where it is not `primary_epoch` for all (a federation
+	/// host: [`space_epoch`]).
+	pub epoch_for_space: Option<EpochForSpace>,
+	/// v3 6.2: evidence that every writer of epochs after the request's is fenced and this primary holds their complete
+	/// history (`promotion_evidence` of its journal); `None` when it cannot be shown. Without it an unknown older request
+	/// stays IncarnationChanged (needsReview), never NotCommitted.
+	pub promotion_proof: Option<PromotionProof>,
 	pub max_poll_ms: f64,
 	pub max_pending_per_principal: f64,
 	pub max_pending_per_peer: f64,
@@ -201,7 +211,7 @@ impl Options {
 	pub fn single_peer(peer: &str) -> Options {
 		let identity = Identity { principal: obj! { "peerId" => peer }, roles: vec!["member".into()] };
 		let now = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("after 1970").as_millis() as f64;
-		Options { identity: HashMap::from([(peer.to_owned(), identity)]), policy: default_policy(), authorize: None, guard: None, now: Box::new(now), host_id: None, authority_id: "local".into(), primary_epoch: 0.0, max_poll_ms: 25_000.0, max_pending_per_principal: 32.0, max_pending_per_peer: 128.0, max_calls_per_window: 1024.0, rate_window_ms: 1000.0, wake_on_commit: false }
+		Options { identity: HashMap::from([(peer.to_owned(), identity)]), policy: default_policy(), authorize: None, guard: None, now: Box::new(now), host_id: None, authority_id: "local".into(), primary_epoch: 0.0, epoch_for_space: None, promotion_proof: None, max_poll_ms: 25_000.0, max_pending_per_principal: 32.0, max_pending_per_peer: 128.0, max_calls_per_window: 1024.0, rate_window_ms: 1000.0, wake_on_commit: false }
 	}
 }
 
@@ -440,6 +450,15 @@ impl Merge {
 	fn serves(&self, space: Option<&str>) -> bool { space.unwrap_or(DEFAULT_ALIAS) == self.alias || space == Some(self.space_id.as_str()) }
 }
 /// A refusal of the controller as the service answers it.
+/// `epochForSpace` of a federation host (src/runtime.ts): the Space's replica configuration (its journal) where it has
+/// one, else its own (a restore sets it), else 1; 0 for a Space this store does not hold.
+pub fn space_epoch(store: &mut Store, space: Option<&str>, replica: &dyn Fn(&str) -> Option<f64>) -> f64 {
+	let Some(id) = store.space_info(space.unwrap_or(DEFAULT_ALIAS)).and_then(|i| i.get("spaceId")).and_then(Json::as_str).map(str::to_owned) else { return 0.0 };
+	if let Some(e) = replica(&id) {
+		return e;
+	}
+	store.reader(Some(&id)).ok().and_then(|h| h.space.state.rest.get("primaryEpoch").and_then(Json::as_f64)).unwrap_or(1.0)
+}
 pub fn entry_error(e: entry::EntryError) -> CoreError {
 	use entry::EntryError as E;
 	match e {
@@ -539,7 +558,16 @@ impl Service {
 			if f.get("authorityId").is_some_and(|a| a.as_str() != Some(self.o.authority_id.as_str())) {
 				return Ok(HandledCall::Reply(fail("AuthorityMismatch", &format!("this host is authority {}", self.o.authority_id), None)));
 			}
-			let epoch = self.o.primary_epoch;
+			let epoch = match self.o.epoch_for_space.clone() {
+				None => self.o.primary_epoch,
+				Some(e) => {
+					let space = match call.get("space") {
+						None => None,
+						v => Some(str_of(v, "space")?),
+					};
+					e(&mut self.store, space.as_deref())
+				}
+			};
 			if let Some(p) = f.get("primaryEpoch") {
 				let earlier = (method == "resolveOperation" || auth.as_ref().is_some_and(|a| a.known_request())) && p.as_f64().is_some_and(|x| x.trunc() == x && x.abs() <= 9_007_199_254_740_991.0 && x < epoch);
 				if p.as_f64() != Some(epoch) && !earlier {
@@ -610,7 +638,8 @@ impl Service {
 	fn receipt(&mut self, c: &Ctx, grant: &Grant, domain: &Json, request: &Json) -> Option<Json> {
 		let (method, args) = (domain.as_array()?.first()?, domain.as_array()?.get(1)?);
 		let hash = digest_json(&obj! { "method" => method.clone(), "args" => args.clone() }).ok()?;
-		let (binding, resolution) = self.resolve_record(c, request, method, &hash.into(), &Json::Number(self.o.primary_epoch)).ok()?;
+		let epoch = self.epoch(c.space.as_deref());
+		let (binding, resolution) = self.resolve_record(c, request, method, &hash.into(), &Json::Number(epoch)).ok()?;
 		if let Some(types) = retained_types(&resolution) {
 			self.check_types(grant, Some(&types), "this retained result").ok()?;
 		}
@@ -718,6 +747,13 @@ impl Service {
 			Ok(r) => r.map(|c| c.value),
 		}
 	}
+	/// `epochForSpace`, or the one epoch of all.
+	fn epoch(&mut self, space: Option<&str>) -> f64 {
+		match self.o.epoch_for_space.clone() {
+			Some(e) => e(&mut self.store, space),
+			None => self.o.primary_epoch,
+		}
+	}
 	fn snap(&mut self, c: &Ctx) -> R<&mut Space> { self.snap_of(c.space.as_deref()) }
 	fn snap_of(&mut self, space: Option<&str>) -> R<&mut Space> {
 		let guard = self.o.guard.clone();
@@ -793,7 +829,7 @@ impl Service {
 				"spaceId" => of(s.state.space_id.as_deref()),
 				"authorityId" => authority.as_str(),
 				"dataIncarnation" => of(s.state.incarnation.as_deref()),
-				"primaryEpoch" => epoch.clone(),
+				"primaryEpoch" => s.state.rest.get("primaryEpoch").filter(|e| !e.is_null()).cloned().unwrap_or_else(|| epoch.clone()),
 				"principal" => or_null(target.get("principal")),
 				"generation" => or_null(target.get("generation")),
 				"requestId" => or_null(target.get("requestId")),
@@ -1121,7 +1157,8 @@ impl Service {
 		match method {
 			"hello" => self.hello(a, c).map(Step::Reply),
 			"generation" => {
-				let (now, authority, principal, epoch) = (self.now(), self.o.authority_id.clone(), c.principal.clone(), self.o.primary_epoch);
+				let epoch = self.epoch(c.space.as_deref());
+				let (now, authority, principal) = (self.now(), self.o.authority_id.clone(), c.principal.clone());
 				let (auth, guard) = (c.auth.clone(), self.o.guard.clone());
 				let r = self.store.commit_keyed(c.space.as_deref(), now, |s, key| guarded(&guard, s).and_then(|()| host_checked(s, &auth)).and_then(|()| check(&auth, now)).and_then(|()| s.issue_generation(now, Some(&principal), &obj! { "key" => key, "authorityId" => authority.as_str(), "primaryEpoch" => epoch })));
 				reply(r.map_err(store_failed)??.value)
@@ -1154,13 +1191,25 @@ impl Service {
 				let m = str_of(a.get("method"), "method")?;
 				let hash = str_of(a.get("argumentHash"), "argumentHash")?;
 				let epoch = int(a.get("primaryEpoch"), "primaryEpoch", 0.0)?;
-				if epoch > self.o.primary_epoch {
+				let current = self.epoch(c.space.as_deref());
+				if epoch > current {
 					return Err(error("IncarnationChanged", "resolution epoch is ahead of Member"));
 				}
-				let (_, view) = self.resolve_record(c, &t, &m.into(), &hash.into(), &Json::Number(epoch))?;
-				if view.get("state").and_then(Json::as_str) == Some("notAdmitted") && epoch != self.o.primary_epoch {
-					return Err(error("IncarnationChanged", "missing request requires current Member epoch"));
-				}
+				let (method, hash) = (Json::from(m), Json::from(hash));
+				let miss = match self.resolve_record(c, &t, &method, &hash, &Json::Number(epoch)) {
+					Ok((_, v)) if v.get("state").and_then(Json::as_str) == Some("notAdmitted") && epoch != current => Err(error("IncarnationChanged", "missing request requires current Member epoch")),
+					Err(e) if e.class != "IncarnationChanged" => return Err(e),
+					other => other.map(|(_, v)| v),
+				};
+				let view = match miss {
+					Ok(v) => v,
+					// an unknown request of an earlier epoch: NotCommitted with a durable negative claim, only with promotion evidence
+					Err(miss) => {
+						let Some(proof) = self.o.promotion_proof.clone().filter(|_| epoch < current).and_then(|f| f(c.space.as_deref(), epoch)) else { return Err(miss) };
+						let proof_hash = proof.get("hash").cloned().unwrap_or(Json::Null);
+						self.commit(c, |s, now| s.decide_not_committed(now, Some(&t), &method, &hash, &Json::Number(epoch), &Json::Number(current), &proof_hash))?
+					}
+				};
 				if let Some(types) = retained_types(&view) {
 					self.check_types(&c.grant, Some(&types), "this retained result")?;
 				}
@@ -1291,7 +1340,8 @@ impl Service {
 			info = self.store.space_info(name).cloned();
 		}
 		let Some(info) = info else { return Err(error("UnknownSpaceError", format!("unknown space: {}", c.space.as_deref().unwrap_or("undefined")))) };
-		let (poll, principal_pending, peer_pending, authority, epoch) = (self.o.max_poll_ms, self.o.max_pending_per_principal, self.o.max_pending_per_peer, self.o.authority_id.clone(), self.o.primary_epoch);
+		let epoch = self.epoch(info.get("spaceId").and_then(Json::as_str));
+		let (poll, principal_pending, peer_pending, authority) = (self.o.max_poll_ms, self.o.max_pending_per_principal, self.o.max_pending_per_peer, self.o.authority_id.clone());
 		let host_id = self.o.host_id.as_deref().or(self.store.host_id()).unwrap_or("").to_owned();
 		let s = self.snap(c)?;
 		let lim = s.limits();

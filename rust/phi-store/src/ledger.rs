@@ -198,15 +198,6 @@ impl SqliteLedger {
 		Ok(out.into_iter().map(|(k, key)| (k, Some(key).filter(|s| !s.is_empty()))).collect())
 	}
 
-	/// Whether a stored claim is of a kind not ported (a negative claim).
-	pub fn unported_claims(&self, kind: &str, key: Option<&str>) -> Result<bool> {
-		let sql = "SELECT 1 FROM parts WHERE kind = ? AND key = ? AND part IN ('rpc.claims', 'restoredClaims') AND json_extract(value, '$.notCommitted') IS NOT NULL LIMIT 1";
-		match self.files.read.query_row(sql, params![kind, doc_key(key)], |_| Ok(())) {
-			Ok(()) => Ok(true),
-			Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),
-			Err(e) => Err(e.into()),
-		}
-	}
 	/// Gives the file's free pages back, in the writer's order between two batches.
 	pub fn compact(&self) -> Result<Compaction> {
 		let rx = self.writer.as_ref().expect("open").compact().ok_or_else(|| StoreError::Failed("the writer is gone".into()))?;

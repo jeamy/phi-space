@@ -1,6 +1,6 @@
 // A client and the operator of `run.ts replica`, in the `client` container. Each step prints what it was answered.
 import { existsSync, readFileSync } from "node:fs";
-import { FOREVER, RemoteSpace, TlsFencing, TlsRecoveryRegister, loadFileSigner, readmitSpace, releaseHostToQuarantine, socketTransport } from "../../../src/index.ts";
+import { FOREVER, RemoteSpace, TlsFencing, TlsRecoveryRegister, argHash, loadFileSigner, readmitSpace, releaseHostToQuarantine, rpcDomain, socketTransport } from "../../../src/index.ts";
 import { GATEWAY, IP, PORT, REPLICA, RPORT } from "./net.ts";
 
 const [step, name, label, count] = process.argv.slice(2);
@@ -35,8 +35,14 @@ if (step === "write") {
 	for (let n = 0; n < Number(count); n++) { await space.write({ type: "Ledger", fields: { label, n } }, null, FOREVER); out.push("answered"); }
 	console.log(JSON.stringify({ holding: true }));
 	while (!existsSync("/fed/go")) await new Promise((r) => setTimeout(r, 200));
-	try { await space.write({ type: "Ledger", fields: { label: "fork", n: 0 } }, null, FOREVER); out.push("answered"); } catch (e) { out.push(refusal(e)); }
+	try { await space.write({ type: "Ledger", fields: { label: "fork", n: 0 } }, null, FOREVER); out.push("answered"); } catch (e) { out.push({ ...refusal(e), request: (e as { request?: unknown }).request ?? null }); }
 	seen.writes = out;
+} else if (step === "resolve") {
+	// the fork write of `hold` by its request (`label`): resolved at the epoch it was made in, then sent again as it was
+	const space = await until(() => ledger(name!)), request = JSON.parse(label!) as { generation: string; requestId: string };
+	const args = { entry: { type: "Ledger", fields: { label: "fork", n: 0 } }, txn: null, leaseMs: "forever" }, domain = rpcDomain({ method: "write", args } as never, { peerId: "user" });
+	seen.resolved = await space.resolveOperation(request, "write", argHash(domain.method, domain.args), 1).then((v) => v, refusal);
+	seen.again = await space.write(args.entry, null, FOREVER, { request: { principal: { peerId: "user" }, ...request } }).then(() => "answered", refusal);
 } else if (step === "put" || step === "tag") {
 	// a write of a merge type: Sensor is lww by sensorId, Tag a set
 	const board = await until(() => ledger(name!, null));

@@ -436,6 +436,45 @@ impl Walk {
 		lines.push(admit(1.0));
 		self.episode.extend(lines);
 	}
+	/// A request unknown after a promotion (`decideNotCommitted`): mostly of the epoch before, sometimes of this one, of
+	/// none or with a bad binding; once decided, the same again, other arguments, the late original call, its lookup, a
+	/// resolution and a cancel meet the negative claim.
+	fn negative_claim(&mut self) {
+		let p = self.principal();
+		let r = &mut self.rng;
+		let request = obj! { "principal" => p.clone(), "generation" => "$gen", "requestId" => r.pick(&["n1", "n2", "e1"]) };
+		let method = r.pick(&["write", "take"]);
+		let hash = |a: f64| digest_json(&obj! { "method" => method, "args" => obj! { "a" => a } }).unwrap();
+		let mut lines = vec![obj! { "op" => "issueGeneration", "principal" => p }];
+		if r.chance(0.2) {
+			// it did arrive: the claim answers as it is
+			lines.push(obj! { "op" => "admit", "request" => request.clone(), "method" => method, "args" => obj! { "a" => 1.0 }, "resultBound" => 300.0 });
+			lines.push(obj! { "op" => "decide", "key" => "$key", "outcome" => obj! { "state" => "done", "result" => obj! { "v" => 1.0 } } });
+		}
+		let decide = |r: &mut Rng, hash: String| {
+			let (request_epoch, primary_epoch) = match r.below(10) {
+				0 => (Json::from("$epoch"), Json::from("$epoch")),
+				1 => (Json::Number(0.0), Json::from("$epoch+1")),
+				2 => (Json::from("$epoch+1"), Json::from("$epoch+1")),
+				3 => (Json::Number(1.5), Json::from("$epoch+1")),
+				_ => (Json::from("$epoch"), Json::from(r.pick(&["$epoch+1", "$epoch+1", "$epoch+2"]))),
+			};
+			let proof = if r.chance(0.1) { Json::from("b".repeat(63)) } else { Json::from(r.pick(&["b", "c"]).repeat(64)) };
+			obj! { "op" => "decideNotCommitted", "request" => request.clone(), "method" => method, "argumentHash" => hash, "requestEpoch" => request_epoch, "primaryEpoch" => primary_epoch, "proofHash" => proof }
+		};
+		lines.push(decide(r, hash(1.0)));
+		lines.push(decide(r, hash(1.0)));
+		lines.push(decide(r, hash(2.0)));
+		lines.push(obj! { "op" => "admit", "request" => request.clone(), "method" => method, "args" => obj! { "a" => 1.0 }, "resultBound" => 300.0 });
+		lines.push(obj! { "op" => "admit", "request" => request.clone(), "method" => method, "args" => obj! { "a" => 2.0 }, "resultBound" => 300.0 });
+		lines.push(obj! { "op" => "lookup", "request" => request.clone() });
+		lines.push(obj! { "op" => "resolveAdmission", "request" => request.clone(), "method" => method, "argumentHash" => hash(1.0), "primaryEpoch" => "$epoch" });
+		if r.chance(0.3) {
+			lines.push(obj! { "op" => "cancelRequest", "target" => request.clone() });
+		}
+		lines.push(obj! { "op" => "pendingClaims" });
+		self.episode.extend(lines);
+	}
 	/// A short chain of entries, read from its head or from the middle.
 	fn chain(&mut self) {
 		let r = &mut self.rng;
@@ -638,6 +677,8 @@ impl Walk {
 			Json::String(s) if s == "$kept" => self.kept.as_deref().map_or("0".repeat(64).into(), Json::from),
 			Json::String(s) if s == "$inc" => self.incarnation.as_deref().map_or(Json::Null, Json::from),
 			Json::String(s) if s == "$epoch" => Json::Number(self.epoch),
+			Json::String(s) if s == "$epoch+1" => Json::Number(self.epoch + 1.0),
+			Json::String(s) if s == "$epoch+2" => Json::Number(self.epoch + 2.0),
 			Json::String(s) if s == "$next" => self.snapshot.as_ref().map_or("ssnone.0".into(), |n| n.0.as_str().into()),
 			Json::Array(a) => Json::Array(a.iter().map(|x| self.fill(x)).collect()),
 			Json::Object(o) => Json::Object(o.iter().map(|(k, x)| (k, self.fill(x))).collect()),
@@ -680,6 +721,8 @@ impl Walk {
 		}
 		if self.rng.chance(0.02) {
 			self.episode();
+		} else if self.rng.chance(0.008) {
+			self.negative_claim();
 		} else if self.rng.chance(0.01) {
 			self.subscription();
 		} else if self.rng.chance(0.01) {
@@ -1146,6 +1189,9 @@ pub fn observe(w: &mut Walk, line: &Json, r: &Result<Json, phi_core::CoreError>,
 				}
 				if op == "needsMaintenance" && v == &Json::Bool(true) { note("maintenance due", seen); }
 				if op == "pendingClaims" && v.as_array().is_some_and(|a| !a.is_empty()) { note("pendingClaims found", seen); }
+				if op == "decideNotCommitted" {
+					note(if v.get("error").and_then(|e| e.get("code")).and_then(Json::as_str) == Some("NotCommitted") { "decideNotCommitted decided" } else { "decideNotCommitted known" }, seen);
+				}
 				if op == "resolveAdmission" {
 					note(Box::leak(format!("resolveAdmission {}", v.get("state").and_then(Json::as_str).unwrap_or("?")).into_boxed_str()), seen);
 				}

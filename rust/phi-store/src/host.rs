@@ -112,9 +112,6 @@ impl SpaceHost {
 				let head = state.to_json_head().to_json_text();
 				// the claims stay on the disk: a map over their rows takes their place
 				if let (Ledger::Sqlite(l), Some(r)) = (&ledger, state.rpc.as_mut()) {
-					if l.unported_claims(kind, key)? {
-						return Err(StoreError::Unavailable(format!("the document {kind} holds claims of a kind the Rust store does not read yet")));
-					}
 					r.claims = Claims::Disk(DiskClaims::new(claim_source(l, kind, key)?));
 				}
 				(state, true, Some(head))

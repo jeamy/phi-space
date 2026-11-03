@@ -21,7 +21,7 @@
 use phi_host::auth::{PeerKey, Proving};
 use phi_host::control::{self, Control, CreateEnroll, Enrolling, SpaceKeys, Supervisor, CONTROL_SPACE};
 use phi_host::gate::{Gate, GateOptions, Keys, Netbird, Now};
-use phi_json::{parse, Json};
+use phi_json::{obj, parse, Json};
 use phi_service::{default_policy, Identity, Options, RolePolicy, Service};
 use phi_wire::{Endpoint, Listen, ServeOptions};
 use std::cell::Cell;
@@ -30,6 +30,21 @@ use std::rc::Rc;
 fn seed_signer(seed: &str) -> Result<phi_host::auth::Signer, String> {
 	let seed: [u8; 32] = phi_host::auth::base64(seed).try_into().map_err(|_| "a seed is 32 bytes")?;
 	Ok(phi_host::auth::Signer::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)))
+}
+/// `delegation.replica` of a gate: every Space replicated, its configuration version, epoch and promotion evidence each
+/// read from a file at each use (gate-under-test.ts `Replicated`; evidence 0: none, else the digest of its value).
+struct Replicated {
+	version: Rc<dyn Fn() -> f64>,
+	epoch: Rc<dyn Fn() -> f64>,
+	proof: Rc<dyn Fn() -> f64>,
+}
+fn replicated(g: &Json) -> Result<Option<Replicated>, String> {
+	let Some(r) = g.get("delegation").and_then(|d| d.get("replica")) else { return Ok(None) };
+	let read = |k: &str| -> Result<Rc<dyn Fn() -> f64>, String> {
+		let file = r.get(k).and_then(Json::as_str).ok_or(format!("replica without {k}"))?.to_owned();
+		Ok(Rc::new(move || std::fs::read_to_string(&file).ok().and_then(|t| t.trim().parse().ok()).unwrap_or(0.0)))
+	};
+	Ok(Some(Replicated { version: read("versionFile")?, epoch: read("epochFile")?, proof: read("proofFile")? }))
 }
 fn strings(v: &Json) -> Option<Vec<String>> { v.as_array().map(|a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect()) }
 
@@ -77,6 +92,11 @@ pub fn apply(file: &str, o: &mut Options, serving: &mut ServeOptions) -> Result<
 	if let Some(g) = c.get("gate") {
 		let (listen, front, now, authorize, guard) = gate(g, &o.policy)?;
 		o.authorize = authorize;
+		if let Some(r) = replicated(g)? {
+			let (epoch, proof) = (r.epoch, r.proof);
+			o.epoch_for_space = Some(Rc::new(move |_, _| epoch()));
+			o.promotion_proof = Some(Rc::new(move |_, _| Some(proof()).filter(|t| *t != 0.0).map(|t| obj! { "hash" => phi_json::digest_json(&Json::String(phi_json::number_text(t))).expect("a string") })));
+		}
 		o.guard = guard;
 		serving.gates.push((listen, front));
 		gate_clock = g.get("serviceClock").filter(|v| **v == Json::Bool(true)).map(|_| now);
@@ -186,7 +206,7 @@ fn gate(g: &Json, policy: &phi_service::Policy) -> Result<Gated, String> {
 		let installed: Rc<dyn Fn() -> (String, f64)> = Rc::new(move || (held.clone(), std::fs::read_to_string(&file).ok().and_then(|t| t.trim().parse().ok()).unwrap_or(0.0)));
 		let ed = phi_host::auth::Algorithm::Ed25519;
 		let grants = phi_host::grants::GrantVerifier { authority_id: authority.clone(), issuer_host_id: part("issuer")?, public_key: part("grantKey")?, algorithm: ed, uncertainty_ms: 2000.0 };
-		let verifier = phi_host::delegation::DelegationVerifier::new(phi_host::delegation::DelegationOptions { authority_id: authority, control_space_id: part("controlSpaceId")?, supervisor_peer_id: part("supervisor")?, supervisor: (ed, part("supervisorKey")?), keys, grants, policy: installed, rules: Rc::new(policy.clone()), uncertainty_ms: 2000.0 }).map_err(|e| e.message)?;
+		let verifier = phi_host::delegation::DelegationVerifier::new(phi_host::delegation::DelegationOptions { authority_id: authority, control_space_id: part("controlSpaceId")?, supervisor_peer_id: part("supervisor")?, supervisor: (ed, part("supervisorKey")?), keys, grants, policy: installed, rules: Rc::new(policy.clone()), uncertainty_ms: 2000.0, replica_config: replicated(g)?.map(|r| Rc::new(move |_: &str| Some(obj! { "replicaConfigVersion" => (r.version)(), "primaryEpoch" => (r.epoch)() })) as _) }).map_err(|e| e.message)?;
 		o.delegation = Some(Rc::clone(&verifier));
 		authorize = Some(phi_host::delegation::authorize(verifier, Rc::clone(&o.now)));
 	}

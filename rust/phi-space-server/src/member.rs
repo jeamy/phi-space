@@ -7,7 +7,7 @@ use phi_host::auth::{Algorithm, Proving, Signer};
 use phi_host::boot::{BootGuard, External};
 use phi_host::capability::Capabilities;
 use phi_host::control_host_change::follow_control_host_change;
-use phi_host::delegation::{authorize, DelegationOptions, DelegationVerifier};
+use phi_host::delegation::{authorize, DelegationOptions, DelegationVerifier, ReplicaConfig};
 use phi_host::entry_pump;
 use phi_host::gate::{default_group_roles, Gate, GateOptions, Netbird, Now, PeerInfo};
 use phi_host::grants::GrantVerifier;
@@ -16,14 +16,14 @@ use phi_host::register::{RegisterClient, SqliteRegister};
 use phi_host::remote::{ControlClient, RemoteKeys};
 use phi_host::run_member::{tasks_preparer, Pin, RunGates};
 use phi_host::space_lifecycle::SpaceLifecycleService;
-use phi_host::sync_space::{resolver, start, Started, SyncContext, SyncSpace, SyncSpaceConfig};
+use phi_host::sync_space::{resolver, start, MakeService, Started, SyncContext, SyncSpace, SyncSpaceConfig};
 use phi_host::replica_control::RegisterLine;
 use phi_wire::{Owner, Route};
 use phi_core::space::error;
 use phi_host::tls::{private_file, TlsIdentity};
 use phi_json::{parse, Json};
 use phi_service::entry::{EntryError, EntryOptions, EntryReplication};
-use phi_service::{Options, Service};
+use phi_service::{space_epoch, Options, Service};
 use phi_store::{system_random, SpaceHost, SqliteLedger, Store, Synchronous};
 use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
@@ -323,7 +323,12 @@ pub fn run(config: &str, store: &str) {
 		checked.map_or((String::new(), 0.0), |p| (authority_of.clone(), p.get("policyVersion").and_then(Json::as_f64).unwrap_or(0.0)))
 	});
 	let grants = GrantVerifier { authority_id: authority_id.to_owned(), issuer_host_id: control_host.to_owned(), public_key: control_key.to_owned(), algorithm, uncertainty_ms: 2000.0 };
-	let verifier = DelegationVerifier::new(DelegationOptions { authority_id: authority_id.to_owned(), control_space_id: control_space.to_owned(), supervisor_peer_id: supervisor.clone(), supervisor: (algorithm, control_key.to_owned()), keys: Rc::clone(&keys) as _, grants, policy, rules: Rc::new(options.policy.clone()), uncertainty_ms: 2000.0 }).unwrap_or_else(|e| fail(e.message));
+	// a primary/sync Space's replica configuration, as its journal holds it (the boot guard's view of each served one)
+	let replica_config: ReplicaConfig = {
+		let guard = Rc::clone(&guard);
+		Rc::new(move |id| guard.replica.borrow().get(id).map(|config| config()))
+	};
+	let verifier = DelegationVerifier::new(DelegationOptions { authority_id: authority_id.to_owned(), control_space_id: control_space.to_owned(), supervisor_peer_id: supervisor.clone(), supervisor: (algorithm, control_key.to_owned()), keys: Rc::clone(&keys) as _, grants, policy, rules: Rc::new(options.policy.clone()), uncertainty_ms: 2000.0, replica_config: Some(replica_config) }).unwrap_or_else(|e| fail(e.message));
 	// the Space's own service and that of every primary/sync Space: the same checks, each Space's own epoch
 	let options_for = {
 		let (verifier, keys, now, guard) = (Rc::clone(&verifier), Rc::clone(&keys), Rc::clone(&now), Rc::clone(&guard));
@@ -340,7 +345,9 @@ pub fn run(config: &str, store: &str) {
 			options
 		}
 	};
-	let options = options_for(1.0);
+	let mut options = options_for(1.0);
+	// epochForSpace: a Space's own epoch (a restore sets it)
+	options.epoch_for_space = Some(Rc::new(|store, space| space_epoch(store, space, &|_| None)));
 
 	let mut o = GateOptions::new(directory, Rc::clone(&now));
 	set_group_roles(&mut o, &c);
@@ -383,8 +390,10 @@ pub fn run(config: &str, store: &str) {
 	let mut tasks: Vec<Box<dyn FnOnce(Owner) -> phi_wire::Local<()>>> = vec![];
 	if !syncs.is_empty() {
 		let cx = sync_context(&c, &now);
-		let make: Rc<dyn Fn(Store, f64) -> Service> = Rc::new(move |store, epoch| {
-			let mut service = Service::new(store, options_for(epoch));
+		let make: MakeService = Rc::new(move |store, sp| {
+			let mut options = options_for(sp.primary_epoch());
+			sp.serve_options(&mut options);
+			let mut service = Service::new(store, options);
 			if let Err(e) = service.start_background() {
 				eprintln!("a primary/sync Space's background work: {}", e.message);
 			}
@@ -466,7 +475,7 @@ pub(crate) fn entry_replication(c: &Json, opened: &Store, authority_id: &str, gu
 
 /// Opens every primary/sync Space on its own (`openSyncSpaces`): one that cannot open stays unserved and does not take the
 /// host and its other Spaces down. A served one is routed by its names, and each is followed by its resolver.
-async fn sync_spaces(owner: Owner, configs: Vec<SyncSpaceConfig>, cx: Rc<SyncContext>, make: Rc<dyn Fn(Store, f64) -> Service>, guard: Rc<BootGuard>, client: Rc<ControlClient>) {
+async fn sync_spaces(owner: Owner, configs: Vec<SyncSpaceConfig>, cx: Rc<SyncContext>, make: MakeService, guard: Rc<BootGuard>, client: Rc<ControlClient>) {
 	let mut resolvers = vec![];
 	for config in configs {
 		let alias = config.alias.clone();
@@ -481,7 +490,7 @@ async fn sync_spaces(owner: Owner, configs: Vec<SyncSpaceConfig>, cx: Rc<SyncCon
 		guard.replica.borrow_mut().insert(sp.config.space_id.clone(), Box::new(move || read.config_now()));
 		match start(&sp).await {
 			Ok(Started::Served(store)) => {
-				owner.route(&sp.names(), Some(Route::Served(Box::new(make(*store, sp.primary_epoch())))));
+				owner.route(&sp.names(), Some(Route::Served(Box::new(make(*store, &sp)))));
 				resolvers.push((sp, false));
 			}
 			Ok(Started::Unresolved) => {

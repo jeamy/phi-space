@@ -12,6 +12,9 @@
 //      decided about it (DecisionAuthorization); "can" lists method and type, "*" any type
 //      "merge": true on init: the default Space's lww type Sensor (by sensorId) and set type Tag go to an
 //      EntryReplicationController on the same store (SpaceServiceOptions.merge), as on a host with entry replication
+//      "epochs": true on init: the primary epoch is the one the last {"op": "epoch", "epoch": n, "proof": "<hash>"|null}
+//      set (epochForSpace), and an unknown request of an earlier epoch is NotCommitted when "proof" names evidence
+//      (promotionProof), as on a promoted primary/sync host
 //      {"op": "close"}
 // Out: {"reply": "<text>", "state": "<sha256 of the default space>"} (one line each). Randomness and the clock as in
 // core-driver.ts, randomUUID included: ids of the registry come from the same stream.
@@ -58,6 +61,7 @@ const authorize = async () => {
 			return a.can.includes(`${m}:*`) || (!!template?.type && a.can.includes(`${m}:${template.type}`));
 		} };
 };
+let epoch = 1, proof: string | null = null;
 let host: ClosableStoreHost | undefined, service: SpaceService | undefined, file: string | undefined;
 /** The state's hash; on a file without its claims, which are not enumerated. */
 const state = async (): Promise<string> => {
@@ -83,10 +87,11 @@ for await (const text of rl) {
 		reseed(String(l.seed ?? ""), l.now ?? 0); // what opening a store draws is not part of what is compared
 		const rules = [{ type: "Sensor", variant: "lww" as const, keyFields: ["sensorId"] }, { type: "Tag", variant: "set" as const }];
 		const merge = l.merge ? { controller: new EntryReplicationController({ host, ctx, config: { spaceId: "board", authorityId: "local", replicaId: "a", incarnation: "i-a", members: [{ replicaId: "a", incarnation: "i-a" }, { replicaId: "b", incarnation: "i-b" }], rules }, authorize: async () => {}, assertActive: async () => {}, clockUncertaintyMs: () => 0 }), rules } : undefined;
-		service = new SpaceService({ host, ctx, identity, policy, ...(merge ? { merge: (space: string | undefined) => (space ?? "default") === "default" ? merge : undefined } : {}), ...(l.authorized ? { authorize } : {}), ...(l.maxCallsPerWindow ? { maxCallsPerWindow: l.maxCallsPerWindow } : {}), ...(l.maxPending ? { maxPendingPerPrincipal: l.maxPending, maxPendingPerPeer: l.maxPeer ?? l.maxPending * 2 } : {}) });
+		service = new SpaceService({ host, ctx, identity, policy, ...(merge ? { merge: (space: string | undefined) => (space ?? "default") === "default" ? merge : undefined } : {}), ...(l.authorized ? { authorize } : {}), ...(l.epochs ? { epochForSpace: async () => epoch, promotionProof: async () => (proof === null ? null : { hash: proof }) } : {}), ...(l.maxCallsPerWindow ? { maxCallsPerWindow: l.maxCallsPerWindow } : {}), ...(l.maxPending ? { maxPendingPerPrincipal: l.maxPending, maxPendingPerPeer: l.maxPeer ?? l.maxPending * 2 } : {}) });
 		if (l.limits) await new PhiSpaces(host, ctx).setLimits(l.limits);
 		out = { reply: "" };
 	} else if (l.op === "close") { await host!.close(ctx); out = { reply: "" }; }
+	else if (l.op === "epoch") { epoch = l.epoch; proof = l.proof ?? null; out = { reply: "" }; }
 	else if (l.op === "event") {
 		tick(l);
 		await host!.commit(async (tx) => { const s = await spaceDoc(tx, undefined, Date.now()); s.outbox.push(l.event); delete s.outboxBytes; }, ctx);

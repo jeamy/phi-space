@@ -401,7 +401,7 @@ pub struct Space {
 	pub doc_writes: Vec<(String, String, i64, String)>,
 	/// The registry is to name this incarnation for the Space in the same commit (a restore: `Registry.spaces[id].incarnation`).
 	pub registry_incarnation: Option<String>,
-	/// The document came with claims of a kind not ported (looked for once: a space holds a day of claims).
+	/// The document came with claims that are not records (looked for once: a space holds a day of claims).
 	unported_claims: bool,
 	/// The historical claims are on the disk (a store's map part): their bytes are the tally kept beside them.
 	pub restored_on_disk: bool,
@@ -470,7 +470,7 @@ pub struct Changes {
 
 impl Space {
 	pub fn new(state: SpaceState, random: Random) -> Space {
-		let unported_claims = state.rpc.as_ref().and_then(|r| r.claims.memory()).is_some_and(|m| m.iter().any(|(_, c)| c.get("notCommitted").is_some() || c.as_object().is_none()));
+		let unported_claims = state.rpc.as_ref().and_then(|r| r.claims.memory()).is_some_and(|m| m.iter().any(|(_, c)| c.as_object().is_none()));
 		Space { unported_claims, restored_on_disk: false, committed_watermark: None, marked: None, state, clock: 0.0, random, open: None, budget: None, watermark: None, router_permit: false, doc_writes: vec![], registry_incarnation: None, tracking: None }
 	}
 
@@ -675,7 +675,7 @@ impl Space {
 				"erasureEpoch" | "primaryEpoch" => v.as_f64().is_some(),
 				// a restore and what it leaves (src/restore.ts), an authority transition's mark (its stages run on the host)
 				"restore" | "authorityTransition" => v.as_object().is_some(),
-				"restoredClaims" => v.as_object().is_some_and(|m| m.iter().all(|(_, c)| c.as_object().is_some() && c.get("notCommitted").is_none())),
+				"restoredClaims" => v.as_object().is_some_and(|m| m.iter().all(|(_, c)| c.as_object().is_some())),
 				"invalidGenerations" => v.as_object().is_some(),
 				"restoredBytes" => v.as_f64().is_some(),
 				_ => false,
@@ -700,7 +700,7 @@ impl Space {
 		}
 		if let Some(r) = &self.state.rpc {
 			if r.rest.keys().any(|k| k != "sweepCursor") || self.unported_claims {
-				return Err(not_ported("claims of a kind not ported yet (negative claims)"));
+				return Err(not_ported("claims that are not records"));
 			}
 		}
 		if self.state.limits.as_ref().is_some_and(|l| l.iter().any(|(_, v)| v.as_f64().is_none())) {

@@ -7,7 +7,7 @@
 //   node --experimental-strip-types --no-warnings test/support/journal-driver.ts
 import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
-import { PrimarySyncJournal, PrimarySyncBlocked, SyncJournalFull, CommitSealed, applyConfigTransition, bootstrapPrimarySync, materializeSyncHistory, recoverPrimarySync, recoverSealedWithoutStandby } from "../../src/primary-sync.ts";
+import { PrimarySyncJournal, PrimarySyncBlocked, SyncJournalFull, CommitSealed, applyConfigTransition, bootstrapPrimarySync, materializeSyncHistory, recoverPrimarySync, recoverSealedWithoutStandby, promotionEvidence } from "../../src/primary-sync.ts";
 import { OwnSyncStore } from "../../src/store/sync-sqlite.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { existsSync } from "node:fs";
@@ -46,6 +46,7 @@ async function handle(q: Line): Promise<unknown> {
 		case "transition": return journal(q.name).transition(q.id);
 		case "markApplied": journal(q.name).markApplied(q.intent, q.recovered === true); return null;
 		case "intent": return journal(q.name).intent(q.revision);
+		case "promotionEvidence": return promotionEvidence(journal(q.name), q.requestEpoch, q.self);
 		case "bytes": return Buffer.byteLength(JSON.stringify(q.value)); // what a primary's budget counts of its rows
 		case "state": {
 			const j = journal(q.name);
