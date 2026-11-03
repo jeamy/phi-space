@@ -1,4 +1,4 @@
-// Dashboard Phase 1 (docs/dashboard.md): the HTTP/SSE surface is a read-only projection of
+// Dashboard Phase 1 (docs/dashboard.en.md): the HTTP/SSE surface is a read-only projection of
 // listSpaces/snapshotSpace/core.stats and the process meter — no mutation endpoint exists.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -10,6 +10,8 @@ import { groupSpaces, parseApps, startDashboard } from "../src/dashboard.ts";
 import { StatsHistory, thin } from "../src/dashboard-history.ts";
 import { ctx } from "./support/persistent.ts";
 import { openTestHost } from "./support/host.ts";
+import { underTest } from "./support/service-under-test.ts";
+import { RemoteSpace } from "../src/index.ts";
 
 const memory = () => openTestHost(ctx);
 
@@ -275,4 +277,63 @@ test("dashboard: the history folds the polls into one mean per minute, keeps a w
 	assert.deepEqual(thin(pts, 5).map((p) => p.v), [0.5, 2.5, 4.5, 6.5, 8.5]);
 	const paused = thin([{ at: 0, v: 1 }, { at: 60_000, v: 2 }, { at: 3_600_000, v: 3 }], 10);
 	assert.deepEqual(paused.map((p) => p.v ?? null), [1, 2, null, 3]);
+});
+
+// The same views of an app on the space server under test (PHI_SPACES_SERVER_CMD: the Rust server, R4): stats of the
+// default and a named Space, entry pages, a later write, activity, and the figures of the serving process.
+test("dashboard: an app on the space server under test shows its spaces, pages, activity and process figures", async (t) => {
+	const u = await underTest({ identities: { "peer-app": { principal: { peerId: "peer-app" }, roles: ["member"] } }, named: ["posts"] });
+	t.after(() => u.close());
+	for (let n = 0; n < 3; n++) await u.local.write({ type: "Task", fields: { n } });
+	await u.local.write({ type: "Result", fields: { ok: true } });
+	const posts = new RemoteSpace(u.transport("peer-app"), { space: "posts" });
+	await posts.write({ type: "Post", fields: { text: "hi" } }, null, 60_000);
+	const path = (await u.address("peer-app")).path;
+	const h = await memory();
+	const dash = await startDashboard({ host: h, ctx, port: 0, appPollMs: 40, apps: [{ id: "chat", label: "Chat", addresses: [`unix:${path}`] }, { id: "posts", label: "Posts", addresses: [`unix:${path}`], space: "posts" }] });
+	try {
+		const app = async (id: string) => (await (await fetch(`${dash.url}/api/apps`)).json()).apps.find((a: { id: string }) => a.id === id);
+		let chat = await app("chat");
+		for (let i = 0; i < 100 && !chat?.online; i++) { await new Promise((r) => setTimeout(r, 20)); chat = await app("chat"); }
+		assert.equal(chat.online, true, JSON.stringify(chat));
+		assert.equal(chat.alias, "default");
+		assert.deepEqual(chat.stats.byType, { Task: 3, Result: 1 });
+		assert.deepEqual((await app("posts")).stats.byType, { Post: 1 });
+		const all = await (await fetch(`${dash.url}/api/apps/chat/entries?limit=2`)).json();
+		assert.deepEqual([all.entries.length, all.next], [2, 2]);
+		const rest = await (await fetch(`${dash.url}/api/apps/chat/entries?limit=2&after=2`)).json();
+		assert.deepEqual(rest.entries.map((e: { type: string }) => e.type), ["Task", "Result"]);
+		await u.local.write({ type: "Task", fields: { n: 3 } });
+		for (let i = 0; i < 100 && chat.stats.entries !== 5; i++) { await new Promise((r) => setTimeout(r, 20)); chat = await app("chat"); }
+		assert.equal(chat.stats.entries, 5, "a later write shows with the next poll");
+		assert.ok(chat.activity.some((n: number) => n > 0), JSON.stringify(chat.activity));
+		for (let i = 0; i < 100 && !(chat.series.length >= 3 && chat.series.slice(1).some((p: { cpu: unknown }) => typeof p.cpu === "number")); i++) { await new Promise((r) => setTimeout(r, 30)); chat = await app("chat"); }
+		const last = chat.series.at(-1);
+		assert.ok(typeof last.rssMb === "number" && last.rssMb > 0, "the serving process reports its memory");
+		assert.ok(chat.series.slice(1).some((p: { cpu: unknown }) => typeof p.cpu === "number"), "and its CPU share");
+	} finally {
+		await dash.close();
+		await h.close(ctx);
+	}
+});
+
+test("dashboard: an app of every space on the space server under test, read with a role that lists and counts only", async (t) => {
+	const identities = { dashboard: { principal: { peerId: "dashboard" }, roles: ["stats"] }, writer: { principal: { peerId: "writer" }, roles: ["member"] } };
+	const u = await underTest({ identities, policy: { roles: { stats: { methods: ["hello", "stats", "spaces"] as const }, member: { methods: ["hello", "generation", "write", "read", "count", "stats", "spaces"] as const } } } as never, named: ["control", "chat-session-a", "chat-session-b", "chat-session-c"] });
+	t.after(() => u.close());
+	await u.local.write({ type: "LlmAdmin", fields: {} });
+	for (const alias of ["control", "chat-session-a", "chat-session-b", "chat-session-c"]) await new RemoteSpace(u.transport("writer"), { space: alias }).write({ type: alias === "control" ? "PeerKey" : "Msg", fields: {} }, null, 60_000);
+	const h = await memory();
+	const dash = await startDashboard({ host: h, ctx, port: 0, appPollMs: 40, apps: parseApps(`hub@*=unix:${(await u.address("dashboard")).path}`) });
+	try {
+		let hub = (await (await fetch(`${dash.url}/api/apps`)).json()).apps[0];
+		for (let i = 0; i < 100 && hub.stats?.entries !== 5; i++) { await new Promise((r) => setTimeout(r, 30)); hub = (await (await fetch(`${dash.url}/api/apps`)).json()).apps[0]; }
+		assert.equal(hub.online, true, JSON.stringify(hub));
+		assert.deepEqual(hub.stats.byType, { LlmAdmin: 1, PeerKey: 1, Msg: 3 });
+		assert.deepEqual(hub.spaces.map((s: { alias: string; spaces: number }) => [s.alias, s.spaces]), [["chat-session-*", 3], ["control", 1], ["default", 1]]);
+		assert.equal((await fetch(`${dash.url}/api/apps/hub/entries`)).status, 403);
+	} finally {
+		await dash.close();
+		await h.close(ctx);
+	}
 });

@@ -819,7 +819,9 @@ All Rust values come from the same binary, the state of this commit. R-D2 is the
 - **`codemode-chat`:** Space on Rust, judge and web on TS, start and switching back work. The store was empty, so only the start is proven here; data is proven by the `.local` copies from R3 slice 7.
 - **Build from the working tree:** The image takes over unversioned files. If their typecheck fails, the build fails; this applies to `docker:image` just the same.
 
-**Still open:** R-D12, inventory check and backup on `big` and `nano`, move after asking, test bed `sieve-mobile` (`test-scenario`), a week of operation, switching back with running work in operation, the dashboard against the Rust server.
+**Still open:** R-D12, inventory check and backup on `big` and `nano`, move after asking, test bed `sieve-mobile` (`test-scenario`), a week of operation, switching back with running work in operation.
+
+**The dashboard against the Rust server (2026-11-04).** `test/test-dashboard.test.ts` has two cases on the space server under test (`underTest`, so `PHI_SPACES_SERVER_CMD` runs them on the binary): an app of the default and of a named Space (stats by type, entry pages, a later write with the next poll, activity, the serving process's memory and CPU share), and an app of every Space read with a role that may only list and count (the folded session Spaces, entries refused). Both pass on both servers, the whole suite too.
 
 **Work:**
 
