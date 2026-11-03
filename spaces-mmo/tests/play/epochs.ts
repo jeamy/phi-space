@@ -189,7 +189,20 @@ async function goNear(who: P, x: number, y: number): Promise<void> {
 }
 /** Through an exit into the next room (a fire lit from outside clears the fog only with its next step: asked again). */
 async function through(who: P, exit: string, room: string): Promise<void> {
-	await until(`in ${room}`, async () => { if ((await charOf(who))?.room === room) return true; who.p.send(`go ${exit}`); return false; }, 60_000);
+	const from = who.p.frames.length;
+	// one go at a time, sent again only while the figure is still where it set out from: a second one sent before the first
+	// moved it would take it a room further
+	const start = (await charOf(who))?.room;
+	let sentAt = 0;
+	try {
+		await until(`in ${room}`, async () => {
+			const now = (await charOf(who))?.room;
+			if (now === room) return true;
+			if (now === start && Date.now() - sentAt > 5_000) { who.p.send(`go ${exit}`); sentAt = Date.now(); }
+			return false;
+		}, 60_000);
+	}
+	catch (e) { throw new Error(`${(e as Error).message}; heard: ${texts(who.p, from).slice(-4).join(" | ") || "nothing"}`); }
 }
 /** The rooms a check may go to: the bay, and the cliff path one way east of it (a running world's bay can be full). */
 const ROOMS = ["graue-bucht", "klippenpfad"] as const;
@@ -229,6 +242,14 @@ async function tidyUp(players: P[] = []): Promise<number> {
 		// a cart's load lies at it; a building's or site's cells (Plot `of`) stay taken otherwise
 		if (type === "Cart") for (const item of await west().readAll({ type: "Item", fields: { location: String(e.fields.cartId) } })) await west().takeIfExists({ id: item.id }, 0);
 		else for (const cell of await west().readAll({ type: "Plot", fields: { of: String(e.fields.buildId ?? e.fields.siteId) } })) await west().takeIfExists({ id: cell.id }, 0);
+	}
+	// the settlement it founded (`siedlung gründen Durchspiel…`), with its motions, zones and shows: the next run founds anew
+	for (const e of await west().readAll({ type: "Settlement" })) {
+		if (!String(e.fields.name).startsWith("Durchspiel") && !mine.has(String(e.fields.founder))) continue;
+		if (!(await west().takeIfExists({ id: e.id }, 0))) continue;
+		n++;
+		await west().takeIfExists({ type: "SettlementName", fields: { nameKey: String(e.fields.nameKey) } }, 0); // the name is free again
+		for (const type of ["Motion", "Zone", "Show"]) for (const x of await west().readAll({ type, fields: { settlementId: String(e.fields.settlementId) } })) await west().takeIfExists({ id: x.id }, 0);
 	}
 	return n;
 }
@@ -317,7 +338,9 @@ try {
 		await give(a.me, "muschel", 1); await give(b.me, w.currency, 3);
 		await does(a, "market biete muschel für 2", /Marktbrett|bietet|hängt/);
 		const board = await does(b, "market", /\d+\./);
-		const nr = /(\d+)\.\s*[^;]*Muschel/.exec(board)?.[1] ?? "1";
+		// a running world's board holds other offers too: A's shell, on its own line
+		const nr = new RegExp(`(\\d+)\\. Muschel für 2 Münzen \\(von ${a.name}\\)`).exec(board)?.[1];
+		if (!nr) throw new Error(`the shell is not on the board: ${board.slice(0, 200)}`);
 		await does(b, `market kaufe ${nr}`, /kaufst|gekauft/);
 	});
 	await check("regentonne: wasser schöpfen", async () => {
@@ -647,7 +670,7 @@ try {
 } finally {
 	try {
 		const n = await tidyUp(players);
-		if (REMOTE) { await putSettingsBack(savedSettings); console.log(`Aufgeräumt: ${n} Bauten, Baustellen und Karren weg, die Einstellungen wie vorher.`); }
+		if (REMOTE) { await putSettingsBack(savedSettings); console.log(`Aufgeräumt: ${n} Bauten, Baustellen, Karren und Siedlungen weg, die Einstellungen wie vorher.`); }
 	} catch (e) { console.error("Aufräumen ging nicht:", (e as Error).message); }
 	await world.close();
 }
