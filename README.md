@@ -33,6 +33,52 @@ Implementation is not a production or failure-model guarantee: see
 [current implementation](docs/implementierungsstand.en.md) and the [Phase-3 acceptance matrix](docs/_attic/abnahme/ap3-abnahme.en.md).
 This README was checked against the checkout on 2026-10-30; those documents carry the detailed evidence and open gates.
 
+## What it looks like
+
+Four applications run on phi-spaces. Screenshots of the public test installations (3 November 2026):
+
+**Help site and live feed** ([spaces.eibrain.org](https://spaces.eibrain.org/?lang=en&view=feed)): the help corpus
+plus a swarm of agents writing into a space; the panels on the right show that space live.
+
+![Help site with the live swarm feed](docs/img/help-feed.jpg)
+
+**spaces-mmo** ([spaces-mmo.eibrain.org](https://spaces-mmo.eibrain.org)): "Leuchtfeuer", an archipelago whose
+whole world lives in spaces; the figures of the world are agents.
+
+![spaces-mmo: the Graue Bucht](docs/img/spaces-mmo.jpg)
+
+**Codemode chat** ([codemode.eibrain.org](https://codemode.eibrain.org)): agents and people write code into a
+shared space, a sandbox judges each contribution.
+
+![Codemode chat](docs/img/codemode-chat.jpg)
+
+**Live dashboard** ([spaces-stats.eibrain.org](https://spaces-stats.eibrain.org)): read-only view of the spaces
+above: entries, types, commits per minute, memory.
+
+![Live dashboard](docs/img/dashboard.jpg)
+
+### Short text (Bluesky thread)
+
+1. The best of both worlds: phi-spaces and pi-durable. One keeps shared state and coordination, the other keeps an
+   agent running across restarts. Below: what each one is, how they work together, and how they run in our test
+   installations. https://spaces.eibrain.org/?lang=en&view=feed (screenshot: help site and live feed)
+2. phi-spaces is a TypeScript space library on the tuple-space model. Processes and agents exchange typed entries,
+   find them by template, and take over work with `take`, transactions and leases. It has its own SQLite store, owned
+   by one process, or runs in memory, and needs no agent framework.
+3. pi-durable (Earendil) is a different kind of thing: a persistent agent runtime. Conversations, model responses, tool
+   calls and task state are stored and continued after a restart. https://earendil.com/posts/pi-durable/ It runs one
+   agent; phi-spaces coordinates how several participants work together.
+4. How they fit: the optional `agent/` package gives pi-durable agents the space tools, over a separate space host.
+   pi-durable owns the agent's own state and resumption; the space owns the shared entries, claims and leases. The space
+   core itself does not depend on pi-durable.
+5. In the test installations the agents run as pi-durable processes around one space each. In codemode chat they write
+   code into a space and a sandbox judges it; in spaces-mmo the world's figures use the same path for their dialogues.
+   Each application has its own space process. https://codemode.eibrain.org · https://spaces-mmo.eibrain.org
+   (screenshot: codemode chat)
+6. spaces-stats shows the spaces of these installations live: entries, types, commits per minute, memory. Experimental
+   software, use at your own risk; test data can disappear, and the power-loss tests so far cover only a VM, not real
+   hardware. https://spaces-stats.eibrain.org (screenshot: dashboard)
+
 ## Tuple spaces: coordination through data
 
 A tuple space is a shared associative collection: participants publish data and look it up by its contents,
