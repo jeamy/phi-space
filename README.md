@@ -55,15 +55,21 @@ together in the public test installations (screenshots of 3 November 2026).
 4. How they fit: the optional `agent/` package gives pi-durable agents the space tools, over a separate space host.
    pi-durable owns the agent's own state and resumption; the space owns the shared entries, claims and leases. The space
    core itself does not depend on pi-durable.
-5. In the test installations the agents run as pi-durable processes around one space each. In codemode chat they write
-   code into a space and a sandbox judges it; in spaces-mmo the world's figures use the same path for their dialogues.
-   Each application has its own space process. https://codemode.eibrain.org · https://spaces-mmo.eibrain.org
+5. Codemode chat (https://codemode.eibrain.org): agents and people write code into a shared space. Each task is a
+   block, each contribution an entry; a sandbox runs the code against the test cases and the space ranks the correct
+   ones. Every role (space, judge, agents, model, web) is its own process around one space; the agents run as
+   pi-durable processes.
 
    ![Codemode chat](docs/img/codemode-chat.jpg)
 
+6. spaces-mmo (https://spaces-mmo.eibrain.org): a multiplayer world in which the whole state (islands, characters,
+   objects, trade, the clock) lives in spaces, split by region, with a space process of its own per region and
+   processes for the world, the non-player figures and the web client. The figures' dialogues run through the same
+   pi-durable path as in codemode chat.
+
    ![spaces-mmo: the Graue Bucht in 3D](docs/img/spaces-mmo-3d.jpg)
 
-6. spaces-stats shows the spaces of these installations live: entries, types, commits per minute, memory. Experimental
+7. spaces-stats shows the spaces of these installations live: entries, types, commits per minute, memory. Experimental
    software, use at your own risk; test data can disappear, and the power-loss tests so far cover only a VM, not real
    hardware. https://spaces-stats.eibrain.org
 
