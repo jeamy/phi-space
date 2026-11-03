@@ -7,7 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const script = new URL("./testbed/scenarios/sieve-mobile.ts", import.meta.url).pathname;
-const run = (...args: string[]) => spawnSync(process.execPath, ["--no-warnings", "--experimental-strip-types", script, ...args], { encoding: "utf8", timeout: 90_000 });
+// with PHI_SPACES_SERVER_CMD the host serves through that space server (the Rust one), its restart a hard kill
+const server = process.env.PHI_SPACES_SERVER_CMD?.trim();
+const run = (...args: string[]) => spawnSync(process.execPath, ["--no-warnings", "--experimental-strip-types", script, ...args], { encoding: "utf8", timeout: 90_000, env: { ...process.env, ...(server ? { SIEVE_SERVER: server } : {}) } });
 
 test("sieve-mobile: create, run and evaluate pass with lost calls, dying workers and a host restart", () => {
 	const dir = mkdtempSync(join(tmpdir(), "sieve-mobile-"));

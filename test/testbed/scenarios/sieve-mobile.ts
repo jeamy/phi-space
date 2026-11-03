@@ -12,13 +12,17 @@
 //   all       create, run, evaluate in one go.
 //
 //   node --experimental-strip-types test/testbed/scenarios/sieve-mobile.ts <create|run|evaluate|all> [options]
+//   SIEVE_SERVER=rust/target/release/phi-space-server  the host serves the store through this space server instead of in
+//                 this process: phone and workers are its clients, a host restart kills that process hard (evaluate reads
+//                 the stopped file directly either way)
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { spawn, type ChildProcess } from "node:child_process";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { openSqliteHost, type OwnStoreHost } from "../../../src/index.ts";
-import { createSpace, FOREVER, listSpaces, PhiSpaces, snapshotSpace, type Principal, type RequestRef } from "../../../src/index.ts";
+import { createSpace, FOREVER, listSpaces, PhiSpaces, RemoteSpace, snapshotSpace, socketTransport, type Principal, type RequestRef, type SpaceLike } from "../../../src/index.ts";
 import { collectSieveResults, segmentedSieve, type SieveConfig, type SieveResult, type SieveTask } from "../../../examples/sieve.ts";
 
 const USAGE = `Usage: sieve-mobile.ts <create|run|evaluate|all> [options]
@@ -85,18 +89,46 @@ function parse(argv: string[]): { phase: string; o: Opts } {
 const blocksOf = (c: SieveConfig) => Math.ceil((c.end - c.start) / c.blockSize);
 
 // ---------------------------------------------------------------------------------------------------------- host side
-const ALIAS = "sieve-a";
+const ALIAS = "sieve-a", PHONE: Principal = { peerId: "phone-1" };
+const SERVER = process.env.SIEVE_SERVER?.trim() || null;
+/** What the scenario asks of the space: the same calls in this process and over a server's socket. */
+type SieveSpace = SpaceLike;
 class Host {
 	h: OwnStoreHost;
+	/** The space server process when the host serves through one (SIEVE_SERVER), with its socket. */
+	server?: { process: ChildProcess; path: string; remote: RemoteSpace };
 	constructor(h: OwnStoreHost) { this.h = h; }
-	static async open(dir: string): Promise<Host> {
+	static async open(dir: string, served = SERVER !== null): Promise<Host> {
 		mkdirSync(join(dir, "storage"), { recursive: true });
-		const h = await openSqliteHost(join(dir, "storage", "store.sqlite"));
+		const file = join(dir, "storage", "store.sqlite");
+		const h = await openSqliteHost(file);
 		await h.commit((tx) => createSpace(tx, ALIAS, Date.now()), ctx); // idempotent per alias
-		return new Host(h);
+		const host = new Host(h);
+		if (!served) return host;
+		await h.close(ctx);
+		// the server owns the file now; every connection is the phone's principal (one peer, as on the phone's link)
+		const path = join(dir, "space.sock");
+		const child = spawn(SERVER!, ["--store", file, "--listen", `unix:${path}`, "--peer", PHONE.peerId], { stdio: ["ignore", "ignore", "inherit"] });
+		const remote = new RemoteSpace(socketTransport({ path }), { space: ALIAS, attempts: 1, callTimeoutMs: 10_000 });
+		for (let end = Date.now() + 20_000; ; await sleep(100)) {
+			try { await remote.info(); break; } catch (e) { if (Date.now() > end || child.exitCode !== null) throw new Error(`the space server did not come up: ${(e as Error).message}`); }
+		}
+		host.server = { process: child, path, remote };
+		return host;
 	}
-	space(as?: number): PhiSpaces { return new PhiSpaces(this.h, ctx, Date.now, undefined, as, { space: ALIAS }); }
-	async close(): Promise<void> { await this.h.close(ctx); }
+	space(as?: number): SieveSpace { return this.server ? this.server.remote : new PhiSpaces(this.h, ctx, Date.now, undefined, as, { space: ALIAS }); }
+	async generation(principal: Principal): Promise<{ generation: string }> { return this.server ? this.server.remote.requestGeneration() : new PhiSpaces(this.h, ctx, Date.now, undefined, undefined, { space: ALIAS }).issueGeneration(principal); }
+	/** As a killed process leaves it: nothing flushed, the owner lock free. */
+	async kill(): Promise<void> {
+		if (!this.server) return this.h.abandon();
+		const c = this.server.process;
+		if (c.exitCode === null) await new Promise<void>((r) => { c.once("exit", () => r()); c.kill("SIGKILL"); });
+	}
+	async close(): Promise<void> {
+		if (!this.server) return this.h.close(ctx);
+		const c = this.server.process;
+		if (c.exitCode === null && c.signalCode === null) await new Promise<void>((r) => { c.once("exit", () => r()); c.kill("SIGTERM"); });
+	}
 }
 
 type PhoneState = { principal: Principal; generation: string; config: SieveConfig; createdAt: number };
@@ -170,11 +202,11 @@ async function create(o: Opts): Promise<void> {
 	mkdirSync(o.dir, { recursive: true });
 	const host = await Host.open(o.dir);
 	try {
-		const principal: Principal = { peerId: "phone-1" };
+		const principal: Principal = PHONE;
 		const link = new Link(o.seed, o.drop);
 		// The phone persists its identity BEFORE it sends anything: after a crash of the app it retries the same run.
 		const config: SieveConfig = { runId: `run-${randomUUID().slice(0, 8)}`, start: o.start, end: o.end, blockSize: o.block };
-		const { generation } = await host.space().issueGeneration(principal);
+		const { generation } = await host.generation(principal);
 		const phone: PhoneState = { principal, generation, config, createdAt: Date.now() };
 		writeFileSync(phoneFile(o.dir), JSON.stringify(phone, null, 2));
 		const blocks = blocksOf(config);
@@ -202,7 +234,7 @@ async function run(o: Opts): Promise<void> {
 	const progress = async (host: Host) => host.space().count({ type: "SieveResult", fields: { runId: cfg.runId } });
 	let workers: Promise<void>[] = [];
 
-	const workOne = async (w: PhiSpaces, crash: boolean): Promise<"done" | "empty" | "abandoned"> => {
+	const workOne = async (w: SieveSpace, crash: boolean): Promise<"done" | "empty" | "abandoned"> => {
 		const txn = await w.createTransaction(crash ? o.leaseMs : 30_000);
 		try {
 			const entry = await w.take({ type: "SieveTask", fields: { runId: cfg.runId } }, 0, { txn: txn.id });
@@ -236,7 +268,7 @@ async function run(o: Opts): Promise<void> {
 		let release!: () => void;
 		state.ready = new Promise<void>((r) => { release = r; });
 		await Promise.all(workers);
-		state.host.h.abandon(); // as a killed process leaves it: nothing flushed, the owner lock free
+		await state.host.kill(); // nothing flushed, the owner lock free
 		retired.push(state.host); // closed at the very end (a no-op once abandoned)
 		state.host = await Host.open(o.dir);
 		state.restarts++;
@@ -293,7 +325,7 @@ async function evaluate(o: Opts): Promise<boolean> {
 	const phone = loadPhone(o.dir);
 	const cfg = phone.config;
 	const blocks = blocksOf(cfg);
-	const host = await Host.open(o.dir);
+	const host = await Host.open(o.dir, false); // the stopped file, read directly
 	const checks: Check[] = [];
 	const add = (name: string, ok: boolean, detail: string) => checks.push({ name, ok, detail });
 	try {
@@ -319,7 +351,8 @@ async function evaluate(o: Opts): Promise<boolean> {
 		// Exactly-once evidence: the host stored one claim per request the phone sent (run + one per task), all decided.
 		const info = (await listSpaces(host.h, ctx)).find((i) => i.alias === ALIAS);
 		const doc = info ? await snapshotSpace(host.h, info.spaceId, ctx) : undefined;
-		const claims = Object.values(doc?.rpc?.claims ?? {});
+		// (over a server every call of the workers carries a request of its own as well: only the phone's are counted)
+		const claims = Object.values(doc?.rpc?.claims ?? {}).filter((c) => c.requestId.startsWith(`${cfg.runId}/`));
 		add("one decided claim per request", claims.length === blocks + 1 && claims.every((c) => c.state === "done"), `${claims.length} claims (${blocks + 1} expected), ${claims.filter((c) => c.state !== "done").length} undecided`);
 
 		const stats = (f: string): unknown => { try { return JSON.parse(readFileSync(join(o.dir, f), "utf8")); } catch { return null; } };
