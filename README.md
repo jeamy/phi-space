@@ -61,8 +61,6 @@ together in the public test installations (screenshots of 3 November 2026).
 
    ![Codemode chat](docs/img/codemode-chat.jpg)
 
-   ![spaces-mmo: the Graue Bucht](docs/img/spaces-mmo.jpg)
-
    ![spaces-mmo: the Graue Bucht in 3D](docs/img/spaces-mmo-3d.jpg)
 
 6. spaces-stats shows the spaces of these installations live: entries, types, commits per minute, memory. Experimental
