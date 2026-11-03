@@ -299,7 +299,7 @@ bed, jetty and net, smokehouse, food, craft, chicken coop and the wild; in the v
 bakery, loom, quarry, clay pit, brickworks, chapel, pen, field, settlement, road and cart ride; in the town the town hall's
 motion and vote, department store, counting house (credit, repayment, a bill of exchange passed on and cashed), lighthouse,
 park, brewery, sand and glassworks, shipyard, hatch and rowing; in the network the island railway (timetable, ride, freight),
-a cart on a standing route, the large ship (timetable, boarding and landing in another region) and beaming. A report names
+a cart on a standing route, a signal fire chain, the large ship (timetable, boarding and landing in another region) and beaming. A report names
 each function with ok or the answer that was missing; the exit code is 1 when one failed.
 
 Without variables it starts a world of its own (in memory, the four regions, a web process; a world hour is 36 s) and takes

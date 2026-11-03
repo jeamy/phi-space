@@ -5,13 +5,13 @@ import assert from "node:assert/strict";
 import { FOREVER, type SpaceLike } from "phi-spaces";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
-import type { CharacterFields, SatedFields, WorkRestFields } from "../server/model.ts";
+import type { CharacterFields, FireChainFields, SatedFields, WorkRestFields } from "../server/model.ts";
 import { workRestMs } from "../server/settings.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
 import { loanTick, shopPrice } from "../server/engine/commands/shop.ts";
-import { coversOf, flameOf, fogTick, isLit, roomsAround } from "../server/engine/fire.ts";
+import { chainsOf, chainTick, coversOf, flameOf, fogTick, isLit, roomsAround } from "../server/engine/fire.ts";
 import { showTick } from "../server/engine/commands/festival.ts";
 import { baysOf, berth, linerOf, SHIP_LENGTH, lane, shipComes, shipPlace, shipState, timetable } from "../server/engine/liner.ts";
 
@@ -90,6 +90,54 @@ test("a jetty goes only to the water; a lighthouse adds its light and covers the
 		assert.ok(!isLit(await flameOf(s, "feuer-anleger"), await worldNowOf(s)), "the head's own fire is out");
 		await fogTick(s, w, 60_000);
 		assert.equal(await fog("klippenkopf"), 2, "the bay's fire clears the head through the tower");
+	} finally { await srv.close(); }
+});
+
+test("signal fires in the light of two fires are a chain: while both burn they share their light, and the island's run counts", { timeout: 180_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		await lightFire(s, 600_000, "feuer-bucht");
+		await lightFire(s, 600_000, "feuer-anleger");
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
+		await p.play();
+		const island = w.rooms.find((r) => r.roomId === "graue-bucht")!.island!;
+		const signal = (id: string, room: string, beaconId: string) => s.write({ type: "Building", fields: { ...house(id, "signalfeuer", "Signalfeuer", room, 1, 1, "o"), beaconId } as never }, null, FOREVER);
+		// two in the light of one fire are no chain
+		await signal("sig1", "graue-bucht", "feuer-bucht");
+		await signal("sig2", "klippenpfad", "feuer-bucht");
+		assert.deepEqual(await chainsOf(s, w), []);
+		assert.match(await does(p, "signalfeuer", "Signalfeuer"), /keine Signalfeuer eine Kette/);
+		// one beside them in the light of the other fire links both
+		await signal("sig3", "klippenkopf", "feuer-anleger");
+		const [chain] = await chainsOf(s, w);
+		assert.deepEqual([chain!.fires, chain!.rooms, chain!.lit], [["feuer-anleger", "feuer-bucht"], ["graue-bucht", "klippenkopf", "klippenpfad"], true]);
+		const anleger = w.beacons.find((b) => b.beaconId === "feuer-anleger")!.covers;
+		let cover = await coversOf(s, w);
+		assert.ok(anleger.every((r) => cover.get("feuer-bucht")!.includes(r)) && cover.get("feuer-anleger")!.includes("graue-bucht"), "each fire has the rooms of both");
+		await chainTick(s, w, 60_000);
+		const run = async () => (await s.readAll({ type: "FireChain", fields: { island } }))[0]!.fields as unknown as FireChainFields;
+		assert.ok((await run()).since > 0);
+		await chainTick(s, w, 60_000);
+		assert.equal(await s.count({ type: "FireChain" }), 1, "a tick that finds nothing new writes nothing new");
+		assert.match(await does(p, "signalfeuer", "Kette"), /die Kette brennt/);
+		// the run began two world hours ago; the anleger fire went out one hour ago: it ran one hour
+		const now = await worldNowOf(s);
+		const e = (await s.readAll({ type: "FireChain", fields: { island } }))[0]!;
+		await s.takeIfExists({ id: e.id }, 0);
+		await s.write({ type: "FireChain", fields: { ...e.fields, since: now - 2 * 3600_000 } as never }, null, FOREVER);
+		for (const f of await s.readAll({ type: "Flame", fields: { beaconId: "feuer-anleger" } })) await s.takeIfExists({ id: f.id }, 0);
+		await s.write({ type: "Flame", fields: { beaconId: "feuer-anleger", until: now - 3600_000, litAt: now - 3 * 3600_000 } as never }, null, FOREVER);
+		assert.equal((await chainsOf(s, w))[0]!.lit, false);
+		cover = await coversOf(s, w);
+		assert.ok(!cover.get("feuer-bucht")!.includes("klippenkopf") && !cover.get("feuer-anleger")!.includes("graue-bucht"), "a broken chain shares nothing");
+		await chainTick(s, w, 60_000);
+		const after = await run();
+		assert.equal(after.since, 0);
+		assert.equal(Math.round(after.best / 60_000), 60, `${after.best}`);
+		assert.match(await does(p, "signalfeuer", "Kette"), /unterbrochen; aus: Feuerkorb am Anleger\./);
+		assert.match(await does(p, "signalfeuer", "Am längsten"), /1\. Graue Insel \(1 Weltstunde\)/);
 	} finally { await srv.close(); }
 });
 

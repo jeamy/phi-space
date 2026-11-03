@@ -24,7 +24,7 @@ import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { CommandError, execute } from "./engine/commands.ts";
 import { msg } from "./engine/context.ts";
 import { marketTick, ordersTick } from "./engine/commands/trade.ts";
-import { fireTick, floodTick, fogTick, stormTick } from "./engine/fire.ts";
+import { chainTick, fireTick, floodTick, fogTick, stormTick } from "./engine/fire.ts";
 import { sweepTick } from "./engine/sweep.ts";
 import { gardenTick, stormFillsBarrels } from "./engine/commands/garden.ts";
 import { stormTurnsMills } from "./engine/commands/mill.ts";
@@ -65,7 +65,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 	// takes a due date runs the job, once
 	const job = (fn: (live: WorldDef) => Promise<void>) => () => stableTerrain(space, async () => fn(await spatialWorld(space, w)));
 	const runs: Record<string, () => Promise<void>> = {
-		fire: job((live) => fireTick(space, live, msgLeaseMs)),
+		fire: job(async (live) => { await fireTick(space, live, msgLeaseMs); await chainTick(space, live, msgLeaseMs); }),
 		fog: job((live) => fogTick(space, live, msgLeaseMs)),
 		flood: job(async (live) => { if (await byPeoplesPace(space)) await floodTick(space, live, msgLeaseMs); }),
 		sweep: job(async (live) => { await syncRates(space); await sweepTick(space, live); }),

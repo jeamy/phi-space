@@ -612,6 +612,20 @@ try {
 		await atHome();
 		return `${(await inBay()) - before} Treibholz in die Bucht gebracht`;
 	});
+	await check("signalfeuer: eine kette teilt das licht zweier feuer", async () => {
+		// one in the cliff path in the bay's fire, one on the cliff head in the landing's: a chain of two fires
+		await lightFires();
+		const one = await place(a, "signalfeuer", { room: "klippenpfad", ...(await freeRect("klippenpfad", 1, 1)), buildId: `play-signal-1-${tag}`, beaconId: "feuer-bucht" });
+		const two = await place(a, "signalfeuer", { room: "klippenkopf", ...(await freeRect("klippenkopf", 1, 1)), buildId: `play-signal-2-${tag}`, beaconId: "feuer-anleger" });
+		try {
+			await does(a, "signalfeuer", /die Kette brennt/);
+			if (!(await coversOf(west(), w)).get("feuer-bucht")!.includes("anleger")) throw new Error("the bay's fire does not share the landing's light");
+			// the world's fire job counts the island's run
+			const island = w.rooms.find((r) => r.roomId === "graue-bucht")!.island!;
+			await until("the island's run of the chain", async () => Number((await west().readAll({ type: "FireChain", fields: { island } }))[0]?.fields.since ?? 0) > 0, 60_000);
+		} finally { await unplace(one); await unplace(two); }
+		return "Feuer der Bucht und am Anleger teilen ihr Licht";
+	});
 	await check("großes schiff: fahrplan", async () => (await does(a, "fahrplan", /große Schiff/)).slice(0, 100));
 	await check("großes schiff: einschiffen und ankommen", async () => {
 		const t = linerOf(w)!, here = t.stops.findIndex((x) => x.room === "graue-bucht");

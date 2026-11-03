@@ -296,7 +296,7 @@ Hütte, Truhe, Feuer, Tausch, Marktbrett, Regentonne, Beet, Steg und Netz, Räuc
 im Dorf Werkstatt und Karren, Lagerhaus, Mühle, Backhaus, Webstuhl, Steinbruch, Lehmgrube, Ziegelei, Kapelle, Gehege, Acker,
 Siedlung, Straße und Karrenfahrt; in der Stadt Antrag und Abstimmung im Rathaus, Kaufhaus, Kontor (Kredit, Tilgung, ein
 weitergegebener und eingelöster Wechsel), Leuchtturm, Park, Brauerei, Sand und Glashütte, Werft, Luke und Rudern; im Netz die
-Inselbahn (Fahrplan, Fahrt, Fracht), ein Karren auf fester Route, das große Schiff (Fahrplan, Einschiffen und Ankunft in einer
+Inselbahn (Fahrplan, Fahrt, Fracht), ein Karren auf fester Route, eine Signalfeuer-Kette, das große Schiff (Fahrplan, Einschiffen und Ankunft in einer
 anderen Region) und das Beamen. Ein Bericht nennt jede Funktion mit ok oder der Antwort, die ausblieb; der Exit-Code ist 1,
 wenn eine fehlschlug.
 

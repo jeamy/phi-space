@@ -260,6 +260,16 @@ function lighthouse(t: T, w: number): Geo {
 	});
 }
 
+/** The signal fire: a round stone plinth, an iron basket on three legs and the fire burning in it. */
+function signalFire(t: T): Geo {
+	return cached("signalfeuer", () => {
+		const parts: Part[] = [cy(t, 0.36, 0.4, 0.22, STONE, 0, 0, 0, 10), cy(t, 0.3, 0.34, 0.06, STONE_DARK, 0, 0.22, 0, 10)];
+		for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; parts.push(b(t, 0.04, 0.5, 0.04, IRON, Math.cos(a) * 0.16, 0.53, Math.sin(a) * 0.16)); }
+		parts.push(cy(t, 0.24, 0.14, 0.16, IRON, 0, 0.74, 0, 8), cy(t, 0.18, 0.02, 0.26, GLOW, 0, 0.86, 0, 7), cy(t, 0.1, 0.01, 0.18, LAMP, 0, 0.94, 0, 6));
+		return merge(t, parts, "signalfeuer");
+	});
+}
+
 /** The model of a building by its plan, null for one without its own (it stays a hut). */
 export function buildingModel(t: T, plan: string | undefined, w: number, d: number, variant: number): Geo | null {
 	switch (plan) {
@@ -280,6 +290,7 @@ export function buildingModel(t: T, plan: string | undefined, w: number, d: numb
 		case "gewaechshaus": return greenhouse(t, w, d);
 		case "leuchtturm": return lighthouse(t, w);
 		case "bahnhof": return station(t, w, d);
+		case "signalfeuer": return signalFire(t);
 		default: return null;
 	}
 }

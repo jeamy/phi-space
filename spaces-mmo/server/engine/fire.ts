@@ -6,7 +6,7 @@
 // when its world time is up.
 import { randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
-import { fieldsOf, type BeaconFields, type BuildingFields, type ContributionFields, type FlameFields, type FogFields, type ItemFields } from "../model.ts";
+import { fieldsOf, type BeaconFields, type BuildingFields, type ContributionFields, type FireChainFields, type FlameFields, type FogFields, type ItemFields } from "../model.ts";
 import { CommandError, msg, msgOptions, type CommandCtx } from "./context.ts";
 import { resolvePrototype, spawn } from "./prototypes.ts";
 import { patienceOf, worldNowOf } from "./clock.ts";
@@ -80,7 +80,8 @@ export async function fireTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 
 /** The rooms each fire covers (by beaconId): those of the world file, and around each standing lighthouse (a plan with
  *  `lightRooms`) the rooms up to that many ways from its room, on its island and in this region. The lighthouse widens
- *  the fire whose light it was built in; a room two fires cover has the light of both.*/
+ *  the fire whose light it was built in; a room two fires cover has the light of both. The fires of a burning signal
+ *  fire chain (chainsOf) share their light: each covers the rooms of all of them, and only while every one burns. */
 export async function coversOf(space: SpaceLike, w: WorldDef, txn: string | null = null): Promise<Map<string, string[]>> {
 	const out = new Map(w.beacons.map((b) => [b.beaconId, [...b.covers]]));
 	for (const p of w.building?.plans.filter((x) => x.lightRooms) ?? []) {
@@ -89,9 +90,75 @@ export async function coversOf(space: SpaceLike, w: WorldDef, txn: string | null
 			if (list) for (const room of roomsAround(w, b.room, p.lightRooms!)) if (!list.includes(room)) list.push(room);
 		}
 	}
+	for (const chain of await chainsOf(space, w, txn)) {
+		if (!chain.lit) continue;
+		const all = [...new Set(chain.fires.flatMap((id) => out.get(id) ?? []))];
+		for (const id of chain.fires) out.set(id, all);
+	}
 	return out;
 }
 
+/** A signal fire chain: signal fires (a plan with `signal`) in rooms one way apart, over land or a ferry, in this region,
+ *  that stand in the light of two fires or more. Those are its links; it burns while each of them burns (`out`: those
+ *  that do not). */
+export type Chain = { rooms: string[]; islands: string[]; fires: string[]; lit: boolean; out: Array<{ beaconId: string; until: number }> };
+export async function chainsOf(space: SpaceLike, w: WorldDef, txn: string | null = null): Promise<Chain[]> {
+	const here = new Set(w.rooms.map((r) => r.roomId)), fireIn = new Map<string, Set<string>>();
+	for (const p of w.building?.plans.filter((x) => x.signal) ?? []) {
+		for (const e of await space.readAll({ type: "Building", fields: { plan: p.key } }, txn ? { txn } : {})) {
+			const b = fieldsOf<BuildingFields>(e);
+			if (here.has(b.room) && w.beacons.some((x) => x.beaconId === b.beaconId)) fireIn.set(b.room, (fireIn.get(b.room) ?? new Set()).add(b.beaconId));
+		}
+	}
+	const chains: Chain[] = [], seen = new Set<string>();
+	let now: number | null = null;
+	for (const start of [...fireIn.keys()].sort()) {
+		if (seen.has(start)) continue;
+		const rooms = [start];
+		seen.add(start);
+		for (let i = 0; i < rooms.length; i++) for (const x of w.exits) if (x.room === rooms[i] && fireIn.has(x.destination) && !seen.has(x.destination)) { seen.add(x.destination); rooms.push(x.destination); }
+		const fires = [...new Set(rooms.flatMap((r) => [...fireIn.get(r)!]))].sort();
+		if (fires.length < 2) continue;
+		now ??= await worldNowOf(space, txn);
+		const out: Chain["out"] = [];
+		for (const id of fires) { const f = await flameOf(space, id, txn ?? undefined); if (!isLit(f, now)) out.push({ beaconId: id, until: f?.until ?? 0 }); }
+		const islands = [...new Set(rooms.map((r) => w.rooms.find((x) => x.roomId === r)?.island ?? w.title))].sort();
+		chains.push({ rooms: rooms.sort(), islands, fires, lit: !out.length, out });
+	}
+	return chains;
+}
+
+/** Chain tick: an island is alight while a burning chain links it (`FireChain.since`, in world time); when that ends the
+ *  run counts for its longest (`best`), from the world time the first link went out. Only a change is written, so a
+ *  quiet world writes nothing; the run of the moment is read from the clock. The comparison is that of this region's
+ *  islands: each lies in one region. */
+export async function chainTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<void> {
+	const chains = await chainsOf(space, w);
+	for (const island of [...new Set(w.rooms.map((r) => r.island ?? w.title))]) {
+		const mine = chains.filter((c) => c.islands.includes(island)), lit = mine.some((c) => c.lit);
+		const seen = await peek(space, { type: "FireChain", fields: { island } });
+		const was = seen ? fieldsOf<FireChainFields>(seen) : null;
+		if (lit === !!was?.since) continue;
+		const txn = (await space.createTransaction(10_000)).id;
+		try {
+			const e = await space.takeIfExists({ type: "FireChain", fields: { island } }, NO_WAIT, { txn });
+			if (seen && !e) { await space.abort(txn); continue; }
+			const f = e ? fieldsOf<FireChainFields>(e) : { island, since: 0, best: 0, bestAt: 0 };
+			const now = await worldNowOf(space, txn), rooms = w.rooms.filter((r) => (r.island ?? w.title) === island).map((r) => r.roomId);
+			if (lit && !f.since) {
+				await space.write({ type: "FireChain", fields: { ...f, since: now } satisfies FireChainFields as never }, txn, FOREVER, e ? {} : { unique: ["island"] });
+				await say(space, leaseMs, rooms, "world", "Die Signalfeuer sehen einander; ihre Feuer teilen ihr Licht.", txn);
+			} else if (!lit && f.since) {
+				// it went out when its first link did (the tick comes a little later), or now when a signal fire fell
+				const ends = mine.flatMap((c) => c.out.map((o) => o.until)).filter((t) => t >= f.since);
+				const end = Math.min(now, ...ends), run = end - f.since;
+				await space.write({ type: "FireChain", fields: { ...f, since: 0, ...(run > f.best ? { best: run, bestAt: end } : {}) } satisfies FireChainFields as never }, txn, FOREVER);
+				await say(space, leaseMs, rooms, "world", "Die Kette der Signalfeuer ist unterbrochen; jedes Feuer leuchtet wieder für sich.", txn);
+			} else { await space.abort(txn); continue; }
+			await space.commit(txn);
+		} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
+	}
+}
 /** The rooms up to `ways` exits from `room` on its island (not over a ferry), in this region's world. */
 export function roomsAround(w: WorldDef, room: string, ways: number): string[] {
 	const island = (id: string) => w.rooms.find((r) => r.roomId === id)?.island;

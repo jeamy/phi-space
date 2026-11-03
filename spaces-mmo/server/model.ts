@@ -74,6 +74,9 @@ export type LoanFields = { loanId: string; buildId: string; room: string; accoun
 /** Things the island railway carried for their sender (engine/commands/cart.ts `zug sende`): they lie at `freightId` and
  *  wait beside the station `buildId` in `room` until the sender fetches them (`zug abholen`); left too long, or when that
  *  station is gone, they become the sender's estate there (build.ts buildSweep). */
+/** An island's signal fire chain (engine/fire.ts chainTick): since when a burning chain links it (0: none does), and its
+ *  longest run so far, in world ms, with the world time it ended. */
+export type FireChainFields = { island: string; since: number; best: number; bestAt: number };
 export type FreightFields = { freightId: string; accountId: string; charId: string; ownerName: string; room: string; buildId: string; untilWorldMs: number };
 export type CartFields = { cartId: string; accountId: string; charId: string; ownerName: string; room: string; x: number; y: number; path: string[]; dueWorldMs: number;
 	/** A standing route (`karren pendel`): at `from` it loads from its owner's chests there (only `proto`, if named), at `to` it
