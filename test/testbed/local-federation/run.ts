@@ -99,7 +99,13 @@ const impls = (names: string[]) => {
 };
 if (which === "control-restore") { impls(["CONTROL_IMPL", "MEMBER_IMPL", "CONTROL_B_IMPL"]); await (await import("./control-restore.ts")).controlRestoreScenario(); process.exit(process.exitCode ?? 0); }
 if (which === "restore") { impls(["CONTROL_IMPL", "MEMBER_IMPL", "DATA_B_IMPL"]); await (await import("./restore.ts")).restoreScenario(); process.exit(process.exitCode ?? 0); }
-if (which === "change") { await (await import("./change.ts")).changeScenario(); process.exit(process.exitCode ?? 0); }
+if (which === "change") {
+	// `-- change C-M`: the runtime of both control hosts (control-a, control-b) and of the Member (ts or rust each; default ts-ts)
+	const given = (process.argv[3] ?? "ts-ts").split("-");
+	if (given.length !== 2 || !given.every((i) => i === "ts" || i === "rust")) throw new Error("change takes ts-ts, ts-rust, rust-ts or rust-rust");
+	Object.assign(process.env, { CONTROL_A_IMPL: given[0], CONTROL_B_IMPL: given[0], MEMBER_IMPL: given[1] });
+	await (await import("./change.ts")).changeScenario(); process.exit(process.exitCode ?? 0);
+}
 if (which === "entry") {
 	// `-- entry A-B`: the runtime of replica-a and of replica-b (ts or rust each; default ts-ts)
 	const [a, b] = (process.argv[3] ?? "ts-ts").split("-");

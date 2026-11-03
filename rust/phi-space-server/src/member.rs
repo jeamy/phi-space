@@ -6,6 +6,7 @@ use crate::{fail, stopping};
 use phi_host::auth::{Algorithm, Proving, Signer};
 use phi_host::boot::{BootGuard, External};
 use phi_host::capability::Capabilities;
+use phi_host::control_host_change::follow_control_host_change;
 use phi_host::delegation::{authorize, DelegationOptions, DelegationVerifier};
 use phi_host::entry_pump;
 use phi_host::gate::{default_group_roles, Gate, GateOptions, Netbird, Now, PeerInfo};
@@ -28,7 +29,7 @@ use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
 use std::rc::Rc;
 
-const REFUSED: [&str; 4] = ["root", "recoveryAdmin", "registerSshTarget", "registerReadSocket"];
+const REFUSED: [&str; 3] = ["root", "registerSshTarget", "registerReadSocket"];
 
 pub(crate) fn field<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or_else(|| fail(format!("the config has no {k}"))) }
 
@@ -68,16 +69,65 @@ pub(crate) fn boot_guard(c: &Json, host_id: &str, authority_id: &str, control_sp
 	Rc::new(guard)
 }
 
+/// The recovery admin's key a host pins for control host changes, if it is given one.
+fn recovery_admin(c: &Json) -> Option<(Algorithm, String)> {
+	let a = c.get("recoveryAdmin").filter(|a| !a.is_null())?;
+	let algorithm = Algorithm::parse(field(a, "algorithm")).unwrap_or_else(|| fail("invalid recovery admin algorithm"));
+	Some((algorithm, field(a, "publicKey").to_owned()))
+}
+
+/// Control promotion (configured-runtime): a recorded change of the control host, signed with the pinned recovery admin
+/// key, is installed before anything else; an installed change carries the endpoint, and this host uses the promoted
+/// control host, its key and its address from then on.
+pub(crate) fn follow_installed_change(c: &mut Json, runtime: &tokio::runtime::Runtime) {
+	let installed = SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e));
+	if let Some((algorithm, key)) = recovery_admin(c) {
+		let external = register_client(c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint")));
+		let (space, host, authority) = (field(c, "controlSpaceId").to_owned(), field(c, "controlHostId").to_owned(), field(c, "authorityId").to_owned());
+		runtime.block_on(follow_control_host_change(&external, &installed, &space, (&host, &authority), (algorithm, &key))).unwrap_or_else(|e| fail(format!("{}: {}", e.class(), e.message())));
+	}
+	let record = installed.get(&format!("installed-authority:{}", field(c, "controlSpaceId"))).unwrap_or_else(|e| fail(e));
+	let v = record.get("value").cloned().unwrap_or(Json::Null);
+	let Some(address) = v.get("address").filter(|a| !matches!(a, Json::Null | Json::Bool(false))) else { return };
+	let mut control = c.get("control").and_then(Json::as_object).cloned().unwrap_or_default();
+	control.insert("address", address.clone());
+	control.insert("algorithm", v.get("algorithm").cloned().unwrap_or(Json::Null));
+	control.insert("publicKey", v.get("supervisorKey").cloned().unwrap_or(Json::Null));
+	let o = c.as_object_mut().expect("a config is an object");
+	o.insert("controlHostId", v.get("targetHostId").cloned().unwrap_or(Json::Null));
+	o.insert("control", Json::Object(control));
+}
+
+/// Every 15 s the register is asked for a recorded change of the control host; one followed ends the daemon (75), and
+/// it comes back on the new endpoint through its restart policy.
+pub(crate) fn follow_changes(c: &Json) -> Option<Box<dyn FnOnce(Owner) -> phi_wire::Local<()>>> {
+	let (algorithm, key) = recovery_admin(c)?;
+	let external = register_client(c.get("registerTls")?);
+	let installed = SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e));
+	let (space, host, authority) = (field(c, "controlSpaceId").to_owned(), field(c, "controlHostId").to_owned(), field(c, "authorityId").to_owned());
+	Some(Box::new(move |_owner: Owner| {
+		Box::pin(async move {
+			loop {
+				tokio::time::sleep(std::time::Duration::from_millis(15_000)).await;
+				match follow_control_host_change(&external, &installed, &space, (&host, &authority), (algorithm, &key)).await {
+					Ok(Some(change)) => {
+						println!("{}", phi_json::obj! { "controlHostChanged" => change.get("targetHostId").cloned().unwrap_or(Json::Null) }.to_json_text());
+						std::process::exit(75);
+					}
+					Ok(None) => {}
+					Err(e) => eprintln!("Control host change: {}", e.message()),
+				}
+			}
+		})
+	}))
+}
+
 /// The authority this host follows and its control key (configured-runtime): an installed successor of a control restore
-/// replaces what the config names; one installed for another control host needs this host reprovisioned. A change of the
-/// control host (an installation with its endpoint) is followed by a TypeScript host (R6b step 6): here it stops the start.
+/// replaces what the config names; one installed for another control host needs this host reprovisioned.
 pub(crate) fn followed_authority(c: &Json) -> (String, String) {
 	let installed = SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e));
 	let record = installed.get(&format!("installed-authority:{}", field(c, "controlSpaceId"))).unwrap_or_else(|e| fail(e));
 	let v = record.get("value").cloned().unwrap_or(Json::Null);
-	if v.get("address").is_some() {
-		fail("the control host changed; this host follows no such change");
-	}
 	if v.get("targetHostId").and_then(Json::as_str).is_some_and(|t| t != field(c, "controlHostId")) {
 		fail("control endpoint must be reprovisioned for the installed authority successor");
 	}
@@ -164,7 +214,7 @@ pub(crate) fn register_client(r: &Json) -> RegisterClient {
 fn sync_configs(c: &Json) -> Vec<SyncSpaceConfig> {
 	c.get("syncSpaces").and_then(Json::as_array).map_or(vec![], |a| a.iter().map(|s| SyncSpaceConfig::from_json(s).unwrap_or_else(|e| fail(e))).collect())
 }
-fn sync_context(c: &Json, now: &Now) -> Rc<SyncContext> {
+pub(crate) fn sync_context(c: &Json, now: &Now) -> Rc<SyncContext> {
 	let register = register_client(c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint")));
 	let key = parse(&String::from_utf8_lossy(&private_file(Path::new(field(c, "keyFile"))).unwrap_or_else(|e| fail(e)))).unwrap_or_else(|e| fail(e));
 	let bind_ip = address_of(c.get("listen").unwrap_or_else(|| fail("the config has no listen"))).0.parse().unwrap_or_else(|_| fail("the listen host is not an address"));
@@ -207,7 +257,8 @@ fn quarantine(c: &Json, now: &Now, configs: Vec<SyncSpaceConfig>) {
 }
 
 pub fn run(config: &str, store: &str) {
-	let c = config_of(config, "member", "this host runs as a member; a control host stays on TypeScript", &REFUSED);
+	let mut c = config_of(config, "member", "this host runs as a member; a control host stays on TypeScript", &REFUSED);
+	follow_installed_change(&mut c, &stopping::runtime());
 	let now = clock();
 	let syncs = sync_configs(&c);
 	if !syncs.is_empty() {
@@ -343,6 +394,7 @@ pub fn run(config: &str, store: &str) {
 		tasks.push(Box::new(move |owner: Owner| Box::pin(sync_spaces(owner, syncs, cx, make, guard, client))));
 	}
 	tasks.extend(private_recovery(&c, "member", authority_id, control_key));
+	tasks.extend(follow_changes(&c));
 	if let Some(e) = entry {
 		merge = Some(entry_tasks(e, &o_boot, &now, &mut tasks));
 	}

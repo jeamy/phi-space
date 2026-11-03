@@ -53,6 +53,7 @@ services:
     <<: *host
     profiles: [change]
     command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "run", "control"]
+    environment: {CONTROL_IMPL: "${CONTROL_A_IMPL:-ts}"}
     restart: on-failure:20
     networks: {fed: {ipv4_address: 172.30.7.4}}
   control-b:

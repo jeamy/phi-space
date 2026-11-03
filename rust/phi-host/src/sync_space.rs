@@ -37,6 +37,9 @@ pub struct SyncSpaceConfig {
 	pub peers: Vec<(ReplicaPin, IpAddr)>,
 	pub max_intent_bytes: Option<f64>,
 	pub max_history_bytes: Option<f64>,
+	/// `mainSync`: the host's own store is the one under the journal (every Space in it follows the control Space's
+	/// configuration), in place of a Harness of the Space's own; its primary has no replica listener.
+	pub store: Option<PathBuf>,
 }
 impl SyncSpaceConfig {
 	pub fn from_json(c: &Json) -> Result<SyncSpaceConfig, String> {
@@ -51,7 +54,7 @@ impl SyncSpaceConfig {
 		}
 		let journal = c.get("journal");
 		let bound = |k: &str| journal.and_then(|j| j.get(k)).and_then(Json::as_f64);
-		Ok(SyncSpaceConfig { space_id: s("spaceId")?, incarnation: s("incarnation")?, dir: s("dir")?.into(), genesis: c.get("genesis").cloned().ok_or("a primary/sync Space has no genesis")?, port: port as u16, peers, max_intent_bytes: bound("maxIntentBytes"), max_history_bytes: bound("maxHistoryBytes"), alias })
+		Ok(SyncSpaceConfig { space_id: s("spaceId")?, incarnation: s("incarnation")?, dir: s("dir")?.into(), genesis: c.get("genesis").cloned().ok_or("a primary/sync Space has no genesis")?, port: port as u16, peers, max_intent_bytes: bound("maxIntentBytes"), max_history_bytes: bound("maxHistoryBytes"), store: None, alias })
 	}
 }
 
@@ -127,11 +130,16 @@ impl SyncSpace {
 		let o = JournalOptions { max_intent_bytes: c.max_intent_bytes, max_history_bytes: c.max_history_bytes, self_id: Some(cx.host_id.clone()), format: None };
 		let journal = SyncJournal::open(&c.dir.join("journal.sqlite"), &c.genesis, o).map_err(|e| e.to_string())?;
 		let config_now = RefCell::new(journal.config());
-		let listener = tokio::net::TcpListener::bind((cx.bind_ip, c.port)).await.map_err(|e| format!("replica listener of {}: {e}", c.alias))?;
+		let listener = match listen_only || c.store.is_none() {
+			true => Some(tokio::net::TcpListener::bind((cx.bind_ip, c.port)).await.map_err(|e| format!("replica listener of {}: {e}", c.alias))?),
+			false => None,
+		};
 		let sp = Rc::new(SyncSpace { config, cx, journal: journal.into(), config_now, gate: RefCell::new(None), standby_waits: Cell::new(false), listen_only, listener: RefCell::new(None) });
-		let peers: HashSet<IpAddr> = sp.config.peers.iter().map(|(_, ip)| *ip).collect();
-		let task = tokio::task::spawn_local(serve_replica(listener, peers, sp.handle()));
-		*sp.listener.borrow_mut() = Some(task);
+		if let Some(listener) = listener {
+			let peers: HashSet<IpAddr> = sp.config.peers.iter().map(|(_, ip)| *ip).collect();
+			let task = tokio::task::spawn_local(serve_replica(listener, peers, sp.handle()));
+			*sp.listener.borrow_mut() = Some(task);
+		}
 		Ok(sp)
 	}
 
@@ -223,7 +231,7 @@ impl SyncSpace {
 		let c = &self.config;
 		let record = self.cx.register.get(&format!("boot:{}", self.cx.host_id)).await.map_err(|e| not_served(e, false))?;
 		install_admitted_permit(&record, &self.cx.installed, &self.cx.host_id, &c.space_id, &c.incarnation).map_err(|e| not_served(e, true))?;
-		let harness = c.dir.join("harness.sqlite");
+		let harness = c.store.clone().unwrap_or_else(|| c.dir.join("harness.sqlite"));
 		let mut recovering = self.peer()?;
 		// what kind of failure a recovery ends in: the journal's decision, the standby's refusal, or the line
 		let kind = Arc::new(AtomicU8::new(DECIDED));
@@ -253,7 +261,7 @@ impl SyncSpace {
 		let ledger = SqliteLedger::open_primary(&harness, WriterOptions::default(), Arc::clone(&self.journal), p).map_err(|e| not_served(e.to_string(), false))?;
 		let gate = ledger.gate().cloned().expect("a primary's ledger has its gate");
 		let mut store = Store::open(SpaceHost::sqlite(ledger), system_random).map_err(|e| not_served(e.to_string(), false))?;
-		if !store.spaces().iter().any(|i| text(i, "spaceId") == Some(c.space_id.as_str())) {
+		if c.store.is_none() && !store.spaces().iter().any(|i| text(i, "spaceId") == Some(c.space_id.as_str())) {
 			let made = store.create_space_as(&c.alias, Some((&c.space_id, &c.incarnation)), (self.cx.now)(), system_random(), |_| Ok(()));
 			let failed = match made {
 				Ok(Ok(_)) => store.drain().err().map(|e| e.to_string()),
@@ -278,6 +286,23 @@ impl SyncSpace {
 		let n = crate::replica_notice::latest_notice(&*journal_of(&self.journal).await, &self.config.incarnation).ok()??;
 		Some(crate::replica_notice::sign_notice(&n, &self.cx.signer()))
 	}
+
+	/// `lastConfigTransition`: the journal's last configuration entry, its reason as the transition ID, and the
+	/// configuration before it.
+	pub async fn last_transition(&self) -> Option<Json> {
+		let j = journal_of(&self.journal).await;
+		let head = j.head_revision().ok()?;
+		for r in (1..=head).rev() {
+			let i = j.intent(r as f64).ok()??;
+			if i.get("version").and_then(Json::as_f64) == Some(2.0) {
+				let previous = j.config_at(r as usize - 1).ok()?;
+				return Some(phi_json::obj! { "transitionId" => i.get("reason").cloned().unwrap_or(Json::Null), "config" => i.get("config").cloned().unwrap_or(Json::Null), "previous" => previous });
+			}
+		}
+		None
+	}
+	/// The journal's head (`journal.head()`).
+	pub async fn head(&self) -> Json { journal_of(&self.journal).await.head().unwrap_or(Json::Null) }
 
 	/// The Space's store is no longer served (its sealed candidate is resolved anew, or the host closes).
 	pub fn unserved(&self) { *self.gate.borrow_mut() = None; }

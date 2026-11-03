@@ -1,4 +1,4 @@
-// `npm run testbed:federation -- change`: the control host on a primary/sync main store with a sync standby, killed, and the authority moved to the
+// `npm run testbed:federation -- change [C-M]` (`C`: the runtime of both control hosts, `M`: of the Member): the control host on a primary/sync main store with a sync standby, killed, and the authority moved to the
 // promoted standby by a change the recovery admin signs (src/control-host-change.ts). The Member follows the recorded change and comes back on the new
 // endpoint; a client's grants and Jobs are held across it. Without the Root: its journal on the control host is not part of this change.
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -53,7 +53,7 @@ async function provisionChange(dir: string) {
 }
 
 export async function changeScenario() {
-	const { dir, compose, drive, tool, started, docker } = harness("change", "change-driver.ts");
+	const { dir, env, compose, drive, tool, started, docker, runs } = harness("change", "change-driver.ts");
 	const remote = { register: { caFile: "/fed/ca.crt", certFile: "/fed/operator.crt", keyFile: "/fed/operator.key", host: IP.register, port: PORT.register }, fencing: { caFile: "/fed/ca.crt", certFile: "/fed/operator.crt", keyFile: "/fed/operator.key", host: "172.30.7.1", port: RPORT.fencing } };
 	let fencing: ChildProcess | undefined;
 	try {
@@ -68,6 +68,7 @@ export async function changeScenario() {
 		assert.equal(stood.config.standbyReplica, "control-host-b"); assert.equal(stood.config.durability, "sync");
 		compose("up", "-d", "--no-build", "--no-deps", "control-a"); started("control-a", '"ready":true');
 		compose("up", "-d", "--no-build", "--no-deps", "member"); started("member", "member ready");
+		runs(container("control-a"), env.CONTROL_A_IMPL); runs(container("control-b"), env.CONTROL_B_IMPL); runs(container("member"), env.MEMBER_IMPL);
 		assert.equal(drive("job", "control-host", "first").write, "answered");
 		if (process.env.FED_PASS === "1") { console.log("change pass 1 passed"); return; }
 		drive("hold", "control-host");
@@ -92,6 +93,7 @@ export async function changeScenario() {
 		// the Member follows the recorded change, restarts and works against the new control host
 		started("member", "controlHostChanged");
 		assert.equal(drive("installed", "member").follows, "control-host-b");
+		started("member", "member ready", 90_000, 2); runs(container("member"), env.MEMBER_IMPL);
 		const after = drive("job", "control-host-b", "second");
 		assert.equal(after.write, "answered"); assert.deepEqual(after.jobs, ["first", "second"]);
 		const old = drive("gap", "control-host");

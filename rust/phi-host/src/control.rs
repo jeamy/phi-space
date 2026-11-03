@@ -618,3 +618,88 @@ impl Supervisor {
 		}
 	}
 }
+
+/// `ControlReplicaMarker`: the last control replica transition whose policy step is done.
+pub const REPLICA_MARKER: &str = "phi-spaces.control-replica-marker";
+
+/// `alignControlReplicaIn` (v3 5.3.1 step 6): the replica transition of a primary/sync control store is a journal entry,
+/// not a store commit, so its policy step follows in the first commit after it, before the host serves anything: the
+/// transition goes into the marker and an installed routing policy's `policyVersion` rises, in one commit. Idempotent per
+/// transition ID. `t`: transitionId, primaryEpoch, replicaConfigVersion, primaryReplica; `before`: primaryEpoch and
+/// primaryReplica of the configuration before it. What the commit reads and finds absent is written as it starts, as
+/// `tx.doc` does.
+pub fn align_control_replica(store: &mut phi_store::Store, now: f64, control_space: &str, authority_id: &str, t: &Json, before: &Json) -> R<Json> {
+	let unavailable = |e: phi_store::StoreError| error("Unavailable", e.to_string());
+	let doc = |store: &phi_store::Store, kind: &str| store.stored_document(kind, Some(control_space)).map_err(unavailable);
+	let marker_doc = doc(store, REPLICA_MARKER)?;
+	let routing_doc = doc(store, ROUTING)?;
+	let mut writes: Vec<(String, Json)> = vec![];
+	let mut marker = marker_doc.clone().unwrap_or_else(|| obj! { "transitionId" => Json::Null, "primaryEpoch" => 0.0, "replicaConfigVersion" => 0.0, "fromEpoch" => 0.0, "primaryReplica" => Json::Null, "samePrimary" => false });
+	let mut routing = routing_doc.clone().unwrap_or_else(|| obj! { "policy" => Json::Null, "members" => Object::new() });
+	let installed = routing.get("policy").filter(|p| !p.is_null()).cloned();
+	if marker_doc.is_none() {
+		writes.push((REPLICA_MARKER.into(), marker.clone()));
+	}
+	if routing_doc.is_none() {
+		writes.push((ROUTING.into(), routing.clone()));
+	}
+	let commit_docs = |store: &mut phi_store::Store, writes: Vec<(String, Json)>| -> R<()> {
+		let ops = writes.into_iter().map(|(kind, v)| phi_store::WriteOp::Doc { kind, key: control_space.to_owned(), version: 1, value: v.to_json_text() }).collect::<Vec<_>>();
+		store.commit_documents(Some(control_space), ops).map_err(unavailable)?.map(|_| ())
+	};
+	if marker.get("transitionId") == t.get("transitionId") {
+		commit_docs(store, writes)?;
+		return Ok(obj! { "aligned" => false, "policyVersion" => installed.and_then(|p| p.get("policyVersion").cloned()).unwrap_or(Json::Null) });
+	}
+	// the epoch any outstanding lease can carry: the one of the last alignment, or of the configuration before
+	let aligned_before = !marker.get("transitionId").is_none_or(Json::is_null);
+	let (from_epoch, from_primary) = if aligned_before { (marker.get("primaryEpoch").cloned(), marker.get("primaryReplica").cloned()) } else { (before.get("primaryEpoch").cloned(), before.get("primaryReplica").cloned()) };
+	let set = |m: &mut Json, k: &str, v: Json| {
+		if let Some(o) = m.as_object_mut() {
+			o.insert(k, v);
+		}
+	};
+	set(&mut marker, "transitionId", t.get("transitionId").cloned().unwrap_or(Json::Null));
+	set(&mut marker, "primaryEpoch", t.get("primaryEpoch").cloned().unwrap_or(Json::Null));
+	set(&mut marker, "replicaConfigVersion", t.get("replicaConfigVersion").cloned().unwrap_or(Json::Null));
+	set(&mut marker, "fromEpoch", from_epoch.unwrap_or(Json::Null));
+	set(&mut marker, "primaryReplica", t.get("primaryReplica").cloned().unwrap_or(Json::Null));
+	set(&mut marker, "samePrimary", Json::Bool(from_primary.as_ref() == t.get("primaryReplica")));
+	writes.retain(|(k, _)| k != REPLICA_MARKER);
+	writes.push((REPLICA_MARKER.into(), marker));
+	let Some(policy) = installed else {
+		commit_docs(store, writes)?;
+		return Ok(obj! { "aligned" => true, "policyVersion" => Json::Null });
+	};
+	// applyFederationPolicyIn with the next version
+	let profiles = store.stored_document(PROFILE_TRANSITIONS, Some(control_space)).map_err(unavailable)?;
+	if profiles.is_none() {
+		writes.push((PROFILE_TRANSITIONS.into(), obj! { "operations" => Object::new() }));
+	}
+	if profiles.as_ref().and_then(|p| p.get("operations")).and_then(Json::as_object).is_some_and(|o| o.iter().any(|(_, op)| text(op, "phase") != "completed")) {
+		return Err(error("RoutingConflict", "profile transition blocks ordinary policy changes"));
+	}
+	let version = policy.get("policyVersion").and_then(Json::as_f64).unwrap_or(0.0);
+	let next = with(&policy, &[("policyVersion", Json::Number(version + 1.0))]);
+	if text(&next, "authorityId") != authority_id {
+		return Err(error("RoutingConflict", "stale policy command"));
+	}
+	let empty = Json::Object(Object::new());
+	phi_core::policy::validate_federation_policy(&next, routing.get("members").unwrap_or(&empty), Some(&policy), &[], false)?;
+	routing = with(&routing, &[("policy", next.clone())]);
+	writes.retain(|(k, _)| k != ROUTING);
+	writes.push((ROUTING.into(), routing));
+	let lines: Vec<(String, String, i64, String)> = writes.into_iter().map(|(k, v)| (k, control_space.to_owned(), 1, v.to_json_text())).collect();
+	let next_version = next.get("policyVersion").cloned().unwrap_or(Json::Null);
+	let counters_version = next_version.clone();
+	match store.commit(Some(control_space), now, move |s| {
+		let counters = s.state.rest.get("authorityCounters").cloned().unwrap_or(obj! { "routerEpoch" => 0.0, "policyVersion" => 0.0 });
+		s.state.rest.insert("authorityCounters", with(&counters, &[("policyVersion", counters_version)]));
+		s.touch(now);
+		s.doc_writes.extend(lines);
+		Ok(())
+	}) {
+		Err(e) => Err(unavailable(e)),
+		Ok(r) => r.map(|_| obj! { "aligned" => true, "policyVersion" => next_version }),
+	}
+}

@@ -12,6 +12,7 @@ use phi_json::{obj, Json};
 use phi_service::{Identity, Service};
 use phi_store::{random_uuid, system_random};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 type R<T> = Result<T, CoreError>;
 const ROUTING: &str = "phi-spaces.federation-routing";
@@ -29,6 +30,8 @@ pub struct ControlHost {
 	/// `hostForPeer`: which host a peer publishes for.
 	pub hosts: HashMap<String, String>,
 	pub now: Now,
+	/// `controlEpoch`: the control epoch of a primary/sync main store's configuration, in place of the Space's.
+	pub control_epoch: Option<Rc<dyn Fn() -> f64>>,
 }
 
 fn has(id: &Identity, roles: &[&str]) -> bool { id.roles.iter().any(|r| roles.contains(&r.as_str())) }
@@ -102,11 +105,12 @@ impl ControlHost {
 	/// The lease itself, for a router proven here or for the Root on this host.
 	pub fn issue_lease(&self, service: &mut Service, peer: &str, key_id: &str, renew: Option<&Json>) -> R<Json> {
 		let authority = self.grants.authority_id.clone();
+		let epoch_of = self.control_epoch.clone();
 		let lease = service.commit_on(Some(&self.control_space), |s, now| {
 			let counters = s.state.rest.get("authorityCounters").cloned().unwrap_or(obj! { "routerEpoch" => 0.0, "policyVersion" => 1.0 });
 			let live = listed(s, now, &obj! { "type" => "RouterLease" })?.first().cloned();
 			let held = live.as_ref().map(fields);
-			let current = s.state.rest.get("primaryEpoch").and_then(Json::as_f64).unwrap_or(1.0);
+			let current = epoch_of.as_ref().map_or_else(|| s.state.rest.get("primaryEpoch").and_then(Json::as_f64).unwrap_or(1.0), |f| f());
 			let mut epoch = counters.get("routerEpoch").and_then(Json::as_f64).unwrap_or(0.0);
 			if let Some(r) = renew {
 				let names = |l: &Json| text(l, "id").is_some() && l.get("id") == r.get("id") && text(l, "routerPeerId") == Some(peer) && text(l, "routerKeyId") == Some(key_id) && l.get("routerEpoch") == r.get("routerEpoch") && l.get("controlPrimaryEpoch").and_then(Json::as_f64) == Some(current);
@@ -149,7 +153,7 @@ impl ControlHost {
 		let rest = &host.space.state.rest;
 		let counters = rest.get("authorityCounters").filter(|c| c.get("policyVersion").and_then(Json::as_f64) == Some(policy_version) && policy_version > 0.0).ok_or_else(|| denied("no authoritative epoch state"))?;
 		let now = (self.now)();
-		let notice = obj! { "authorityId" => self.grants.authority_id.as_str(), "controlSpaceId" => self.control_space.as_str(), "routerEpoch" => counters.get("routerEpoch").cloned().unwrap_or(Json::Null), "controlPrimaryEpoch" => rest.get("primaryEpoch").and_then(Json::as_f64).unwrap_or(1.0), "policyVersion" => policy_version, "issuedAt" => now, "expiresAt" => now + LEASE_MS };
+		let notice = obj! { "authorityId" => self.grants.authority_id.as_str(), "controlSpaceId" => self.control_space.as_str(), "routerEpoch" => counters.get("routerEpoch").cloned().unwrap_or(Json::Null), "controlPrimaryEpoch" => self.control_epoch.as_ref().map_or_else(|| rest.get("primaryEpoch").and_then(Json::as_f64).unwrap_or(1.0), |f| f()), "policyVersion" => policy_version, "issuedAt" => now, "expiresAt" => now + LEASE_MS };
 		self.signed("epoch-notice", notice, "notice")
 	}
 

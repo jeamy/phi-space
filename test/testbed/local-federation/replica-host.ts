@@ -30,7 +30,7 @@ if (mode === "recovery") {
 	const recovery = await (cfg.mode === "control" ? startRecoveryOnly : startMemberRecoveryOnly)(host, ctx, recoveryFile, assertQuiesced);
 	stopOn(async () => { await recovery.close(); await host.close(ctx); });
 	console.log(JSON.stringify({ recoveryReady: true }));
-} else if (mode === "run" && cfg.mainSync) {
+} else if (mode === "run" && cfg.mainSync && process.env[`${name!.replace("-", "_").toUpperCase()}_IMPL`] !== "rust") {
 	// a host whose main store runs on primary/sync (test/testbed/federation-host.ts): not its primary, or in quarantine, it only listens
 	const m = cfg.mainSync, external = new TlsRecoveryRegister(cfg.registerTls), probe = new PrimarySyncJournal(join(m.dir, "journal.sqlite"), m.genesis, { self: cfg.hostId }), primary = probe.config.primaryReplica;
 	probe.close();
@@ -53,10 +53,12 @@ if (mode === "recovery") {
 		console.log(JSON.stringify({ ready: true }));
 	}
 } else if (mode === "run" && process.env[`${name!.replace("-", "_").toUpperCase()}_IMPL`] === "rust") {
-	// the Rust host (phi-space-server --member with syncSpaces or entryReplication): the same lines, its quarantine start
-	// included; with entry replication alone the binary has no line of its own for the gate being up, so its ready line is it
-	const child = spawn("phi-space-server", ["--store", `/fed/${name}.sqlite`, `--${cfg.mode}`, file], { stdio: ["inherit", cfg.entryReplication ? "pipe" : "inherit", "inherit"] });
-	if (cfg.entryReplication) createInterface({ input: child.stdout! }).on("line", (line) => { console.log(line); if (line.includes(`${cfg.mode} ready on`)) console.log(JSON.stringify({ ready: true })); });
+	// the Rust host (phi-space-server --member with syncSpaces or entryReplication, --control with mainSync): the same lines,
+	// its quarantine start and a main store's replica included; with entry replication or a main store the binary has no
+	// line of its own for the gate being up, so its ready line is it
+	const piped = cfg.entryReplication || cfg.mainSync;
+	const child = spawn("phi-space-server", ["--store", `/fed/${name}.sqlite`, `--${cfg.mode}`, file], { stdio: ["inherit", piped ? "pipe" : "inherit", "inherit"] });
+	if (piped) createInterface({ input: child.stdout! }).on("line", (line) => { console.log(line); if (line.includes(`${cfg.mode} ready on`)) console.log(JSON.stringify({ ready: true })); });
 	child.on("exit", (code) => process.exit(code ?? 1));
 	for (const s of ["SIGTERM", "SIGINT"] as const) process.on(s, () => child.kill(s));
 } else if (mode === "run") {
