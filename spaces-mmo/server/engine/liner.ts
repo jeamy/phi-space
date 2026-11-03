@@ -41,10 +41,67 @@ export function shipComes(t: Timetable, now: number, i: number): number {
 	return (((start - (((now % t.cycleMs) + t.cycleMs) % t.cycleMs)) % t.cycleMs) + t.cycleMs) % t.cycleMs;
 }
 
-/** Where the ship is on the map (the atlas cells): on its stop, or on the straight way between two. */
-export function shipOnMap(t: Timetable, now: number): { x: number; y: number; from: Stop; to: Stop; lies: boolean } {
-	const s = shipState(t, now), a = t.stops[s.from]!, b = t.stops[s.to]!;
-	return { x: a.x + (b.x - a.x) * s.f, y: a.y + (b.y - a.y) * s.f, from: a, to: b, lies: s.lies !== null };
+type Pt = { x: number; y: number };
+/** The way of each leg over the water of the map, for drawing: `wet(x, y)` says where the map's fine grid (a pixel per
+ *  cell of a room) is water, `at` where a stop's room lies on it. Each way runs from the water nearest one bay to the water
+ *  nearest the next, around the land, and is pulled straight where the water allows; a leg without one is the straight
+ *  line. The timetable stays as it is: the ship only takes this way on the map. */
+export function seaWays(t: Timetable, w: number, h: number, wet: (x: number, y: number) => boolean, at: (s: Stop) => Pt): Pt[][] {
+	const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h;
+	const water = (x: number, y: number) => inside(x, y) && wet(x, y);
+	const key = (x: number, y: number) => y * w + x;
+	// the water nearest a point (a bay's middle is often land)
+	const shore = (p: Pt): Pt | null => {
+		const from = { x: Math.round(p.x), y: Math.round(p.y) };
+		for (let r = 0; r < Math.max(w, h); r++) {
+			let best: Pt | null = null, d = Infinity;
+			for (let y = from.y - r; y <= from.y + r; y++) for (let x = from.x - r; x <= from.x + r; x++) {
+				if ((Math.abs(x - from.x) !== r && Math.abs(y - from.y) !== r) || !water(x, y)) continue;
+				const e = Math.hypot(x - from.x, y - from.y); if (e < d) { d = e; best = { x, y }; }
+			}
+			if (best) return best;
+		}
+		return null;
+	};
+	// a straight line over water only (sampled finely, so no corner of land is cut)
+	const clear = (a: Pt, b: Pt) => { const n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 8); for (let i = 0; i <= n; i++) { const f = n ? i / n : 0; if (!water(Math.round(a.x + (b.x - a.x) * f), Math.round(a.y + (b.y - a.y) * f))) return false; } return true; };
+	const way = (a: Pt, b: Pt): Pt[] | null => {
+		const before = new Map<number, number>([[key(a.x, a.y), -1]]), queue = [a];
+		for (let i = 0; i < queue.length; i++) {
+			const c = queue[i]!;
+			if (c.x === b.x && c.y === b.y) {
+				const path: Pt[] = [];
+				for (let k = key(c.x, c.y); k !== -1; k = before.get(k)!) path.unshift({ x: k % w, y: Math.floor(k / w) });
+				// pulled straight: from each point on to the farthest one in plain sight
+				const out = [path[0]!];
+				for (let j = 0; j < path.length - 1;) { let k = path.length - 1; while (k > j + 1 && !clear(path[j]!, path[k]!)) k--; out.push(path[k]!); j = k; }
+				return out;
+			}
+			for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+				const x = c.x + dx, y = c.y + dy;
+				// no corner cut between two cells of land
+				if (!water(x, y) || before.has(key(x, y)) || (dx && dy && (!water(c.x + dx, c.y) || !water(c.x, c.y + dy)))) continue;
+				before.set(key(x, y), key(c.x, c.y)); queue.push({ x, y });
+			}
+		}
+		return null;
+	};
+	return t.stops.map((st, i) => {
+		const next = t.stops[(i + 1) % t.stops.length]!, a = shore(at(st)), b = shore(at(next));
+		return (a && b && way(a, b)) || [at(st), at(next)];
+	});
+}
+
+/** Where the ship is on a drawn way (seaWays) at `f` of its leg (0 to 1), and the point it heads for. */
+export function alongWay(way: Pt[], f: number): Pt & { ahead: Pt } {
+	const lens = way.slice(1).map((p, i) => Math.hypot(p.x - way[i]!.x, p.y - way[i]!.y)), all = lens.reduce((a, l) => a + l, 0);
+	if (f >= 1 || way.length < 2) return { ...way.at(-1)!, ahead: way.at(-1)! };
+	let left = Math.max(0, f) * all;
+	for (let i = 0; i < lens.length; i++) {
+		if (left <= lens[i]! || i === lens.length - 1) { const a = way[i]!, b = way[i + 1]!, g = lens[i] ? Math.min(1, left / lens[i]!) : 0; return { x: a.x + (b.x - a.x) * g, y: a.y + (b.y - a.y) * g, ahead: b }; }
+		left -= lens[i]!;
+	}
+	return { ...way[0]!, ahead: way[1] ?? way[0]! };
 }
 
 /** How long the ship takes to run into its bay and out of it again (world time): it does not appear and vanish, it comes and goes. */

@@ -5,7 +5,7 @@
 // button folds it away (remembered per browser; on a phone it starts folded). It shows the world, it never changes it.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AtlasState, AtlasView } from "../server/gateway.ts";
-import { shipOnMap, type Timetable } from "../server/engine/liner.ts";
+import { alongWay, seaWays, shipState, type Timetable } from "../server/engine/liner.ts";
 import { tr } from "./i18n/index.ts";
 
 const W = 24, H = 16;
@@ -50,6 +50,16 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 		}
 		return c;
 	}, [atlas, box]);
+	// the ship's way over the water, leg by leg (a pixel per cell, as the ground): not over the islands
+	const ways = useMemo(() => {
+		if (!ship) return null;
+		const wet = new Uint8Array(box.cols * W * box.rows * H).fill(1);
+		for (const r of atlas.rooms) {
+			const { px, py } = at(r);
+			r.ground.forEach((row, y) => [...row].forEach((t, x) => { if (px + x < box.cols * W && py + y < box.rows * H) wet[(py + y) * box.cols * W + px + x] = t === "~" ? 1 : 0; }));
+		}
+		return seaWays(ship.t, box.cols * W, box.rows * H, (x, y) => wet[y * box.cols * W + x] === 1, (st) => ({ x: (st.x - box.x0 + 0.5) * W, y: (st.y - box.y0 + 0.5) * H }));
+	}, [atlas, box, ship?.t]);
 
 	useEffect(() => {
 		const c = canvas.current, src = ground;
@@ -72,13 +82,15 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 		g.restore();
 		// the large ship's route, a loop over the bays, and the ship on it (engine/liner.ts: a function of the world time)
 		if (ship) {
-			const c = (p: { x: number; y: number }) => ({ x: (p.x - box.x0 + 0.5) * W * s, y: (p.y - box.y0 + 0.5) * H * s });
+			// a point of a way (fine cells) on the canvas
+			const c = (p: { x: number; y: number }) => ({ x: (p.x + 0.5) * s, y: (p.y + 0.5) * s });
 			g.save(); g.setLineDash([3, 7]); g.strokeStyle = "rgba(255,224,150,0.5)"; g.lineWidth = 2; g.beginPath();
-			ship.t.stops.forEach((st, i) => { const q = c(st); if (i) g.lineTo(q.x, q.y); else g.moveTo(q.x, q.y); });
-			const first = c(ship.t.stops[0]!); g.lineTo(first.x, first.y); g.stroke(); g.restore();
-			const on = shipOnMap(ship.t, ship.now()), q = c(on), bow = c(on.to);
+			for (const way of ways ?? []) way.forEach((p, i) => { const q = c(p); if (i) g.lineTo(q.x, q.y); else g.moveTo(q.x, q.y); });
+			g.stroke(); g.restore();
+			// lying in a bay it waits at the start of its next leg, sailing it is that far along its way
+			const st = shipState(ship.t, ship.now()), on = alongWay(ways![st.from]!, st.lies !== null ? 0 : st.f), q = c(on), bow = c(on.ahead);
 			const ang = Math.atan2(bow.y - q.y, bow.x - q.x);
-			g.save(); g.translate(q.x, q.y); g.rotate(on.lies ? 0 : ang);
+			g.save(); g.translate(q.x, q.y); g.rotate(st.lies !== null ? 0 : ang);
 			g.fillStyle = "#2a2f38"; g.strokeStyle = "#ece6d6"; g.lineWidth = 3;
 			g.beginPath(); g.moveTo(16, 0); g.lineTo(6, -8); g.lineTo(-14, -8); g.lineTo(-14, 8); g.lineTo(6, 8); g.closePath(); g.fill(); g.stroke();
 			g.fillStyle = "#ece6d6"; g.fillRect(-6, -4, 8, 8);
@@ -134,7 +146,7 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 			const x = ((b.x0 + b.x1) / 2) * s, y = b.y0 * s + 14;
 			g.lineWidth = 3; g.strokeStyle = "rgba(0,0,0,0.75)"; const shown = tr(name); g.strokeText(shown, x, y); g.fillStyle = "#f2efe6"; g.fillText(shown, x, y);
 		}
-	}, [ground, state, open, atlas, me?.x, me?.y, picked, ship?.t, shipTick]);
+	}, [ground, state, open, atlas, me?.x, me?.y, picked, ship?.t, shipTick, ways]);
 	// the page opens on the player
 	useEffect(() => {
 		const b = scroller.current, c = canvas.current, p = pin.current;

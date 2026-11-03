@@ -13,7 +13,7 @@ import { worldNowOf } from "../server/engine/clock.ts";
 import { loanTick, shopPrice } from "../server/engine/commands/shop.ts";
 import { chainsOf, chainTick, coversOf, flameOf, fogTick, isLit, roomsAround } from "../server/engine/fire.ts";
 import { showTick } from "../server/engine/commands/festival.ts";
-import { baysOf, berth, linerOf, SHIP_LENGTH, lane, shipComes, shipPlace, shipState, timetable } from "../server/engine/liner.ts";
+import { alongWay, baysOf, berth, linerOf, seaWays, SHIP_LENGTH, lane, shipComes, shipPlace, shipState, timetable } from "../server/engine/liner.ts";
 
 const w = await loadWorld();
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -327,6 +327,29 @@ test("one large ship sails a loop over the bays: each lies a while, the legs tak
 	const byIsland = new Map<string, typeof w.rooms>();
 	for (const r of w.rooms) byIsland.set(r.island ?? "", [...(byIsland.get(r.island ?? "") ?? []), r]);
 	assert.deepEqual(timetable([...byIsland.values()].reverse().flat(), w.liner!)!.stops.map((x) => x.island), t.stops.map((x) => x.island), "the islands may be listed in any order");
+});
+
+test("on the overview the ship's way goes over the water from bay to bay, never over an island", () => {
+	// the overview's grid (client/Atlas.tsx): a pixel per cell, each room 24×16 at its place, sea between them
+	const t = linerOf(w)!, rooms = (w.allRooms ?? w.rooms).filter((r) => r.map), W = 24, H = 16;
+	const x0 = Math.min(...rooms.map((r) => r.map!.x)), y0 = Math.min(...rooms.map((r) => r.map!.y));
+	const cols = Math.max(...rooms.map((r) => r.map!.x)) - x0 + 1, rows = Math.max(...rooms.map((r) => r.map!.y)) - y0 + 1, gw = cols * W, gh = rows * H;
+	const wet = new Uint8Array(gw * gh).fill(1);
+	for (const r of rooms) r.ground.forEach((row, y) => [...row].forEach((c, x) => { const px = (r.map!.x - x0) * W + x, py = (r.map!.y - y0) * H + y; if (px < gw && py < gh) wet[py * gw + px] = c === "~" ? 1 : 0; }));
+	const water = (x: number, y: number) => wet[Math.round(y) * gw + Math.round(x)] === 1;
+	const ways = seaWays(t, gw, gh, (x, y) => wet[y * gw + x] === 1, (st) => ({ x: (st.x - x0 + 0.5) * W, y: (st.y - y0 + 0.5) * H }));
+	assert.equal(ways.length, t.stops.length, "a way for every leg");
+	ways.forEach((way, i) => {
+		assert.ok(way.length >= 2, `leg ${i} has a way`);
+		for (let j = 1; j < way.length; j++) {
+			const a = way[j - 1]!, b = way[j]!, n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 4);
+			for (let k = 0; k <= n; k++) assert.ok(water(a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n), `leg ${t.stops[i]!.island} → ${t.stops[(i + 1) % t.stops.length]!.island} crosses land`);
+		}
+		// the ship on it: at the start, halfway and at the end, heading along it
+		assert.deepEqual({ x: alongWay(way, 0).x, y: alongWay(way, 0).y }, way[0]);
+		assert.deepEqual({ x: alongWay(way, 1).x, y: alongWay(way, 1).y }, way.at(-1));
+		assert.ok(water(alongWay(way, 0.5).x, alongWay(way, 0.5).y));
+	});
 });
 
 test("a passenger of the large ship sails with it to the island and lands there: fare, hidden aboard, no walking, the landing", { timeout: 180_000 }, async () => {

@@ -40,6 +40,10 @@ test("in a room the track runs from the station's ends to each exit, around what
 	// walled in by what stands: over it rather than not at all
 	const walled = trackCells(ground, station, [{ x: 7, y: 0 }], new Set(["3,0", "3,1", "3,3"]));
 	assert.equal(walled.length, 1);
+	// an end of the station inside what stands (a bed beside it): from the other end
+	const beside = trackCells(ground, { x: 2, y: 0, w: 2, h: 1 }, [{ x: 7, y: 0 }], new Set(["4,0"]));
+	assert.deepEqual(beside[0]![1], { x: 1, y: 0 }, "out of the free end");
+	assert.ok(!beside[0]!.some((c) => c.x === 4 && c.y === 0), "never under the bed");
 	// no station: from the first exit to the others
 	assert.equal(trackCells(ground, null, [{ x: 0, y: 3 }, { x: 7, y: 0 }], new Set())[0]![0]!.x, 0);
 });

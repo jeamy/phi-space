@@ -220,13 +220,15 @@ async function putSettingsBack(saved: Map<string, Array<Record<string, unknown>>
 async function tidyUp(players: P[] = []): Promise<number> {
 	let n = 0;
 	for (const e of await west().readAll({ type: "Building" })) if (String(e.fields.buildId).startsWith("play-") && (await west().takeIfExists({ id: e.id }, 0))) n++;
-	// and what its players built (the hut) or left staked out (a check that failed half-way): a running world's bay fills up
+	// and what its players built (the hut), left staked out (a check that failed half-way) or set down (the carts): a
+	// running world's bay and roads fill up
 	const mine = new Set(players.map((p) => p.account));
-	for (const type of ["Building", "Site"]) for (const e of await west().readAll({ type })) {
+	for (const type of ["Building", "Site", "Cart"]) for (const e of await west().readAll({ type })) {
 		if (!mine.has(String(e.fields.accountId)) || !(await west().takeIfExists({ id: e.id }, 0))) continue;
 		n++;
-		// its cells too (Plot `of`), or they stay taken
-		for (const cell of await west().readAll({ type: "Plot", fields: { of: String(e.fields.buildId ?? e.fields.siteId) } })) await west().takeIfExists({ id: cell.id }, 0);
+		// a cart's load lies at it; a building's or site's cells (Plot `of`) stay taken otherwise
+		if (type === "Cart") for (const item of await west().readAll({ type: "Item", fields: { location: String(e.fields.cartId) } })) await west().takeIfExists({ id: item.id }, 0);
+		else for (const cell of await west().readAll({ type: "Plot", fields: { of: String(e.fields.buildId ?? e.fields.siteId) } })) await west().takeIfExists({ id: cell.id }, 0);
 	}
 	return n;
 }
@@ -645,7 +647,7 @@ try {
 } finally {
 	try {
 		const n = await tidyUp(players);
-		if (REMOTE) { await putSettingsBack(savedSettings); console.log(`Aufgeräumt: ${n} Bauten und Baustellen weg, die Einstellungen wie vorher.`); }
+		if (REMOTE) { await putSettingsBack(savedSettings); console.log(`Aufgeräumt: ${n} Bauten, Baustellen und Karren weg, die Einstellungen wie vorher.`); }
 	} catch (e) { console.error("Aufräumen ging nicht:", (e as Error).message); }
 	await world.close();
 }

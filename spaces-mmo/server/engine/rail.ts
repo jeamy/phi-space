@@ -40,7 +40,8 @@ export function trackCells(ground: string[], station: Rect | null, exits: Cell[]
 	const land = (c: Cell) => c.x >= 0 && c.y >= 0 && c.x < w && c.y < h && ground[c.y]![c.x] !== water;
 	const way = (from: Cell[], to: Cell, around: boolean): Cell[] | null => {
 		const key = (c: Cell) => `${c.x},${c.y}`, before = new Map<string, string>(), queue: Cell[] = [];
-		for (const f of from) if (land(f)) { before.set(key(f), ""); queue.push(f); }
+		// an end of the station inside what stands (a bed beside it) is no start, unless no way around is left
+		for (const f of from) if (land(f) && !(around && blocked.has(key(f)))) { before.set(key(f), ""); queue.push(f); }
 		for (let i = 0; i < queue.length; i++) {
 			const c = queue[i]!;
 			if (c.x === to.x && c.y === to.y) {
