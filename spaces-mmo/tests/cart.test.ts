@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER, type SpaceLike } from "phi-spaces";
 import { cartTick, roadLinks, roadPath } from "../server/engine/commands/cart.ts";
+import { buildSweep } from "../server/engine/commands/build.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { CartFields, CharacterFields, ExitFields } from "../server/model.ts";
@@ -69,6 +70,51 @@ test("a room holds one station: a second is refused, built or staked", { timeout
 	} finally { await srv.close(); }
 });
 
+test("freight by rail: sent while the train stands, for one fare; it waits at the station for its sender, and when the station falls it becomes the sender's estate", { timeout: 180_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const here = w.rooms.find((r) => r.roomId === c.room)!, there = w.rooms.find((r) => r.island === here.island && r.roomId !== c.room)!;
+		const station = (id: string, room: string, x: number, y: number) => s.write({ type: "Building", fields: { buildId: id, plan: "bahnhof", name: "Bahnhof", room, x, y, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
+		await station("a", c.room, c.x + 1, c.y);
+		await station("b", there.roomId, there.spawn.x, there.spawn.y);
+		const every = w.rail!.everyWorldMs!, at = async (m: number) => { const e = (await s.readAll({ type: "WorldClock" }))[0]!; await s.takeIfExists({ id: e.id }, 0); await s.write({ type: "WorldClock", fields: { ...e.fields, worldAnchorMs: m, realAnchorMs: Date.now(), rate: 0.001 } as never }, null, FOREVER); };
+		await at(every * 10);
+		for (let i = 0; i < 5; i++) await give(s, me, "treibholz");
+		const wood = () => s.count({ type: "Item", fields: { proto: "treibholz" } });
+		const all = await wood();
+		assert.match(await does(p, `zug sende 3 treibholz nach ${there.name}`, "kostet"), /Eine Fracht kostet 1 Münze/);
+		await give(s, me, w.currency);
+		assert.match(await does(p, `zug sende 3 treibholz nach ${there.name}`, "als Fracht"), /3× Treibholz als Fracht nach/);
+		assert.equal(await s.count({ type: "Item", fields: { location: me, proto: "treibholz" } }), 2);
+		assert.equal(await s.count({ type: "Item", fields: { location: me, proto: w.currency } }), 0, "the fare is paid");
+		const f = (await s.readAll({ type: "Freight" }))[0]!.fields;
+		assert.equal(f.room, there.roomId);
+		assert.equal(await s.count({ type: "Item", fields: { location: String(f.freightId) } }), 3);
+		// at the other station: fetched into the pack
+		const moveTo = async (room: string, x: number, y: number) => { const e = (await s.take({ type: "Character", fields: { charId: me } }, 5_000))!; await s.write({ type: "Character", fields: { ...e.fields, room, x, y } }, null, FOREVER); };
+		await moveTo(there.roomId, there.spawn.x + 1, there.spawn.y);
+		assert.match(await does(p, "zug", "Fracht für dich"), /3 Stück/);
+		assert.match(await does(p, "zug abholen", "Fracht vom Bahnsteig"), /3 Stück/);
+		assert.equal(await s.count({ type: "Item", fields: { location: me, proto: "treibholz" } }), 5);
+		assert.equal(await s.count({ type: "Freight" }), 0);
+		// sent again, and the station falls: the sender's estate on the spot
+		await give(s, me, w.currency);
+		await moveTo(c.room, c.x, c.y);
+		await does(p, `zug sende alle treibholz nach ${there.name}`, "als Fracht");
+		const g = (await s.readAll({ type: "Freight" }))[0]!.fields;
+		await s.take({ type: "Building", fields: { buildId: "b" } }, 5_000);
+		await buildSweep(s, w);
+		assert.equal(await s.count({ type: "Freight" }), 0);
+		assert.equal(await s.count({ type: "Item", fields: { location: `est-${g.freightId}`, proto: "treibholz" } }), 5, "all of it waits as an estate");
+		assert.equal(await wood(), all, "nothing lost or doubled");
+	} finally { await srv.close(); }
+});
+
 test("a cart goes only by road, alone, with its cargo; its owner unloads it there", { timeout: 180_000 }, async () => {
 	const srv = await startServer();
 	try {
@@ -101,7 +147,7 @@ test("a cart goes only by road, alone, with its cargo; its owner unloads it ther
 	} finally { await srv.close(); }
 });
 
-test("the island railway: from station to station of an island, for its fare", { timeout: 180_000 }, async () => {
+test("the island railway: from station to station of an island, for its fare, while the timetable has the train there", { timeout: 180_000 }, async () => {
 	const srv = await startServer();
 	try {
 		const s = srv.stack.space;
@@ -115,8 +161,14 @@ test("the island railway: from station to station of an island, for its fare", {
 		await station("a", c.room, c.x + 1, c.y);
 		await station("b", there.roomId, there.spawn.x, there.spawn.y);
 		await station("b2", there.roomId, there.spawn.x + 2, there.spawn.y);
+		// the timetable: the train stands at the stations the first half of each period
+		const every = w.rail!.everyWorldMs!, at = async (m: number) => { const e = (await s.readAll({ type: "WorldClock" }))[0]!; await s.takeIfExists({ id: e.id }, 0); await s.write({ type: "WorldClock", fields: { ...e.fields, worldAnchorMs: m, realAnchorMs: Date.now(), rate: 0.001 } as never }, null, FOREVER); };
+		await at(every * 10 + every * 0.75);
+		assert.match(await does(p, "zug", "fährt nach"), /Der Zug kommt in etwa \d+ Weltminuten/);
+		assert.match(await does(p, `zug ${there.name}`, "kommt erst"), /kommt erst in etwa/);
+		await at(every * 10);
 		// two stations in a room are one stop
-		assert.match(await does(p, "zug", "fährt nach"), new RegExp(`fährt nach: ${there.name}, für`));
+		assert.match(await does(p, "zug", "fährt nach"), new RegExp(`fährt nach: ${there.name}, für .*steht am Bahnsteig`));
 		assert.match(await does(p, `zug ${there.name}`, "kostet"), /kostet 1 Münze/);
 		await give(s, me, w.currency);
 		await does(p, `zug ${there.name}`, "aus dem Zug");

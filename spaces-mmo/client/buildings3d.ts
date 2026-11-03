@@ -303,14 +303,14 @@ function station(t: T, w: number, d: number): Geo {
 			{ g: new t.BoxGeometry(w * 0.9, 0.05, d * 0.3), c: SLATE, p: [0, top - 0.05, d * 0.04], r: [-0.12, 0, 0] },
 			...[-1, 0, 1].map((i) => ({ g: new t.BoxGeometry(0.06, top - 0.2, 0.06), c: WOOD_DARK, p: [i * w * 0.38, 0.22 + (top - 0.2) / 2 - 0.05, d * 0.16] as V3 })),
 			// the track: two rails on sleepers
-			...[-1, 1].map((sz) => ({ g: new t.BoxGeometry(w * 0.96, 0.04, 0.04), c: RAIL, p: [0, 0.18, d * 0.34 + sz * 0.1] as V3 })),
+			...[-1, 1].map((sz) => ({ g: new t.BoxGeometry(w * 0.96, 0.04, 0.04), c: RAIL, p: [0, 0.18, d / 2 - 0.5 + sz * 0.12] as V3 })),
 		];
 		// the roof: two slate planes over the house, the ridge along x
 		const rise = 0.42, slope = Math.atan2(rise, hd / 2), len = Math.hypot(rise, hd / 2) + 0.12;
 		const tri = new t.Shape(); tri.moveTo(-hd / 2, 0); tri.lineTo(hd / 2, 0); tri.lineTo(0, rise); tri.closePath();
 		parts.push({ g: new t.ExtrudeGeometry(tri, { depth: hw, bevelEnabled: false }), c: BRICK, p: [-hw / 2, top, hz], r: [0, Math.PI / 2, 0] });
 		for (const side of [-1, 1]) parts.push({ g: new t.BoxGeometry(hw + 0.14, 0.06, len), c: SLATE, p: [0, top + rise / 2 + 0.03, hz + side * (hd / 4 + 0.03)], r: [side * slope, 0, 0] });
-		for (let i = 0; i < Math.round(w * 4); i++) parts.push({ g: new t.BoxGeometry(0.08, 0.03, 0.34), c: WOOD_DARK, p: [-w * 0.45 + (i + 0.5) * (w * 0.9) / Math.round(w * 4), 0.135, d * 0.34] });
+		for (let i = 0; i < Math.round(w * 4); i++) parts.push({ g: new t.BoxGeometry(0.08, 0.03, 0.34), c: WOOD_DARK, p: [-w * 0.45 + (i + 0.5) * (w * 0.9) / Math.round(w * 4), 0.135, d / 2 - 0.5] });
 		return merge(t, parts, "station");
 	});
 }

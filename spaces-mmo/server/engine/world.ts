@@ -129,10 +129,10 @@ export type WorldDef = {
 	sand?: { tool: string; makes: string; count: number; tile: string };
 	/** Roads and carts (engine/commands/cart.ts): `road` the plan, `proto` the cart as a thing, `capacity` its cargo, `hopWorldMs` a room of its way. */
 	cart?: { road: string; proto: string; capacity: number; hopWorldMs: number };
-	/** The large ship on a timetable (engine/commands/fishing.ts): it lies in every bay for the first half of `everyWorldMs`; ferries stay on demand. */
-	liner?: { everyWorldMs: number; fare: number };
+	/** The large ship (engine/liner.ts, engine/commands/fishing.ts): one ship sails a loop over the bays of all islands, lies `stayWorldMs` in each and takes `unitWorldMs` per map cell between two; ferries stay on demand. */
+	liner?: { fare: number; stayWorldMs: number; unitWorldMs: number };
 	/** The island railway (engine/commands/cart.ts): between the buildings of `plan` on an island, for `fare` coins. */
-	rail?: { plan: string; fare: number };
+	rail?: { plan: string; fare: number; /** The timetable: the train stands at every station for the first half of each period (engine/rail.ts trainIn). */ everyWorldMs?: number; /** Freight: things at most per load (for one fare), and how long they wait at the station in world time. */ freight?: { capacity: number; keepWorldMs: number } };
 	festival?: FestivalDef;
 	/** Animals on the farm (docs/siedeln.en.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
 	animals?: AnimalsDef;

@@ -13,6 +13,7 @@ import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
 import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
 import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
+import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
 import { tile3d } from "./terrain3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
@@ -20,7 +21,7 @@ type T = typeof import("three");
 type O3 = import("three").Object3D;
 type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; kind?: string; progress?: number; sig?: string; /** The name on a figure. */ shown?: string };
 /** What a bed shows: rebuilt when its plants or weeds change. */
-const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
+const bedSig = (o: ObjView) => (o.kind === "track" ? (o.runs ?? []).map((r) => r.map((c) => `${c.x},${c.y}`).join(" ")).join("|") : o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
 type Scene3D = {
 	t: T;
 	renderer: import("three").WebGLRenderer;
@@ -280,7 +281,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		let e = s.objs.get(id);
 		// a site that became a building (or got further) is drawn anew
 		if (e && (e.kind !== obj.kind || e.progress !== obj.progress || e.sig !== bedSig(obj))) { remove(s, s.objs, id); e = undefined; }
-		if (!e) { e = object(s.t, obj, me); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); s.scene.add(e.obj); s.objs.set(id, e); }
+		if (!e) { e = obj.kind === "track" ? track(s, obj) : object(s.t, obj, me); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); s.scene.add(e.obj); s.objs.set(id, e); }
 		e.target.copy(placeOf(s, obj));
 		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; e.flame.light.intensity = lit ? 4 : 0; }
 	}
@@ -297,9 +298,35 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 
 /** Where an object stands: its cell, or the middle of the cells a site or building covers. */
 function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
+	if (obj.kind === "track") return new s.t.Vector3(); // its pieces stand where they lie
 	const v = at(s, obj.x, obj.y, 0);
 	v.x += ((obj.w ?? 1) - 1) / 2; v.z += ((obj.h ?? 1) - 1) / 2;
 	return v;
+}
+
+/** The island railway's tracks (App, engine/rail.ts): sleepers on every cell and two rails from cell to cell, on the
+ *  ground of each cell. */
+function track(s: Scene3D, obj: ObjView): Entry {
+	const t = s.t, group = new t.Group(); group.userData.owned = true;
+	const rail = new t.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.6, roughness: 0.4 }), wood = new t.MeshStandardMaterial({ color: 0x4a3522, roughness: 1 });
+	const sleeper = new t.BoxGeometry(0.1, 0.03, 0.42), bars = new Map<string, import("three").BufferGeometry>();
+	for (const run of obj.runs ?? []) run.forEach((c, i) => {
+		const here = at(s, c.x, c.y, 0), { d1, d2 } = stepsAt(run, i);
+		// the piece's points are in cell units (x right, y down = world x, z)
+		if (i > 0 || !obj.fromStation) for (const k of sleeperSpots(d1, d2)) {
+			const m = new t.Mesh(sleeper, wood); m.position.set(here.x + k.x, here.y + 0.02, here.z + k.y); m.rotation.y = Math.atan2(k.ax, k.ay); group.add(m);
+		}
+		for (const side of [0.12, -0.12]) {
+			const pts = railPoints(d1, d2, side);
+			for (let n = 0; n + 1 < pts.length; n++) {
+				const a = pts[n]!, b = pts[n + 1]!, len = Math.hypot(b.x - a.x, b.y - a.y), key = len.toFixed(3);
+				if (!bars.has(key)) bars.set(key, new t.BoxGeometry(len + 0.02, 0.04, 0.04));
+				const m = new t.Mesh(bars.get(key)!, rail);
+				m.position.set(here.x + (a.x + b.x) / 2, here.y + 0.05, here.z + (a.y + b.y) / 2); m.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x); group.add(m);
+			}
+		}
+	});
+	return { obj: group, target: new t.Vector3(), kind: "track", sig: bedSig(obj) };
 }
 
 function object(t: T, obj: ObjView, me: string): Entry {
@@ -314,6 +341,28 @@ function object(t: T, obj: ObjView, me: string): Entry {
 			const shaft = new t.Mesh(new t.BoxGeometry(0.42, 0.04, 0.04), dark); shaft.position.set(0.52, 0.16, z * 0.8); shaft.rotation.z = -0.35; group.add(shaft);
 		}
 		group.add(propShadow(t, 0.7, 0.5));
+		return e;
+	}
+	if (obj.kind === "train") {
+		// the island railway's train at the platform (App, engine/rail.ts): a little engine and a carriage on the station's
+		// own track, which runs along its front (buildings3d.ts station)
+		const mat = (c: number) => new t.MeshStandardMaterial({ color: c, roughness: 0.7 });
+		const green = mat(0x2f5a3a), black = mat(0x222428), red = mat(0x8a2a22), cream = mat(0xe8e0c8);
+		const z = (obj.h ?? 1) * 0.34, len = Math.min(2.6, (obj.w ?? 1) * 0.9), x0 = -len / 2;
+		const box = (w: number, h: number, d: number, m: import("three").Material, x: number, y: number) => { const b = new t.Mesh(new t.BoxGeometry(w, h, d), m); b.position.set(x, y, z); group.add(b); };
+		// the engine: a boiler, a cab, a chimney
+		const engine = len * 0.45;
+		const boiler = new t.Mesh(new t.CylinderGeometry(0.13, 0.13, engine * 0.62, 12), green); boiler.rotation.z = Math.PI / 2; boiler.position.set(x0 + engine * 0.31, 0.38, z); group.add(boiler);
+		box(engine * 0.36, 0.34, 0.3, green, x0 + engine * 0.8, 0.42);
+		box(engine * 0.42, 0.04, 0.34, black, x0 + engine * 0.8, 0.61);
+		const chimney = new t.Mesh(new t.CylinderGeometry(0.05, 0.04, 0.16, 8), black); chimney.position.set(x0 + engine * 0.12, 0.56, z); group.add(chimney);
+		box(engine, 0.08, 0.28, black, x0 + engine / 2, 0.24);
+		// the carriage, cream with a red band and a dark roof
+		const car = len - engine - 0.06, cx = x0 + engine + 0.06 + car / 2;
+		box(car, 0.3, 0.3, cream, cx, 0.42); box(car + 0.01, 0.06, 0.31, red, cx, 0.36); box(car + 0.06, 0.04, 0.34, black, cx, 0.59); box(car, 0.08, 0.28, black, cx, 0.24);
+		for (const wx of [x0 + engine * 0.2, x0 + engine * 0.75, cx - car * 0.3, cx + car * 0.3]) for (const side of [-0.15, 0.15]) {
+			const wheel = new t.Mesh(new t.CylinderGeometry(0.07, 0.07, 0.03, 10), black); wheel.rotation.x = Math.PI / 2; wheel.position.set(wx, 0.2, z + side); group.add(wheel);
+		}
 		return e;
 	}
 	if (obj.kind === "liner") {

@@ -12,7 +12,7 @@ import { eventually, lightFire, Player, startServer } from "./stack.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
 import { loanTick, shopPrice } from "../server/engine/commands/shop.ts";
 import { showTick } from "../server/engine/commands/festival.ts";
-import { baysOf, berth, SHIP_LENGTH, shipIn } from "../server/engine/liner.ts";
+import { baysOf, berth, linerOf, SHIP_LENGTH, lane, shipComes, shipPlace, shipState, timetable } from "../server/engine/liner.ts";
 
 const w = await loadWorld();
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -232,25 +232,73 @@ test("the large ship has a berth in every bay: open water clear of the shore, ne
 	}
 });
 
-test("the large ship keeps its timetable: half of the time it lies in the bays, and a crossing costs its fare", { timeout: 180_000 }, async () => {
-	assert.deepEqual([0, 3599_000, 3600_000, 5400_000].map((t) => shipIn(t, 7200_000)), [0, 0, 3600_000, 1800_000]);
-	const srv = await startServer();
+test("one large ship sails a loop over the bays: each lies a while, the legs take their time, and the order is round the map", () => {
+	const t = linerOf(w)!;
+	assert.equal(t.stops.length, new Set(w.rooms.map((r) => r.island)).size, "a stop on every island");
+	assert.equal(t.cycleMs, t.legMs.reduce((a, l) => a + t.stayMs + l, 0));
+	// at every moment it lies at one stop or sails between two, and only one bay has it
+	for (let m = 0; m < t.cycleMs; m += 7 * 60_000) {
+		const st = shipState(t, m);
+		assert.equal(t.stops.filter((_, i) => shipComes(t, m, i) === 0).length, st.lies === null ? 0 : 1);
+		assert.ok(st.f >= 0 && st.f < 1 && st.leftMs > 0);
+	}
+	// the wait for a bay ends exactly when it lies there
+	for (let i = 0; i < t.stops.length; i++) { const wait = shipComes(t, 3 * t.cycleMs + 1234, i); assert.equal(shipComes(t, 3 * t.cycleMs + 1234 + wait, i), 0); if (wait) assert.ok(shipComes(t, 3 * t.cycleMs + 1234 + wait - 1, i) > 0); }
+	// the same order wherever the rooms are listed from
+	const byIsland = new Map<string, typeof w.rooms>();
+	for (const r of w.rooms) byIsland.set(r.island ?? "", [...(byIsland.get(r.island ?? "") ?? []), r]);
+	assert.deepEqual(timetable([...byIsland.values()].reverse().flat(), w.liner!)!.stops.map((x) => x.island), t.stops.map((x) => x.island), "the islands may be listed in any order");
+});
+
+test("a passenger of the large ship sails with it to the island and lands there: fare, hidden aboard, no walking, the landing", { timeout: 180_000 }, async () => {
+	const t = linerOf(w)!, srv = await startServer();
 	try {
 		const s = srv.stack.space;
 		const p = new Player(srv.url);
 		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
-		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
-		const line = w.liner!, home = w.rooms.find((r) => r.roomId === c.room)!.island!, away = w.rooms.find((r) => r.island && r.island !== home)!.island!;
-		const at = async (m: number) => { const e = (await s.readAll({ type: "WorldClock" }))[0]!; await s.takeIfExists({ id: e.id }, 0); await s.write({ type: "WorldClock", fields: { ...e.fields, worldAnchorMs: m, realAnchorMs: Date.now(), rate: 0.001 } as never }, null, FOREVER); };
-		await at(line.everyWorldMs * 10 + line.everyWorldMs * 0.75);
-		assert.match(await does(p, "fahrplan", "Schiff"), /kommt in etwa/);
-		assert.match(await does(p, `einschiffen ${away}`, "Schiff"), /kommt erst/);
-		await at(line.everyWorldMs * 10);
-		assert.match(await does(p, `einschiffen ${away}`, "kostet"), /kostet 3 Münzen/);
-		await give(s, me, w.currency, line.fare);
-		await does(p, `einschiffen ${away}`, /kommst in .* an/);
-		assert.notEqual((await eventually(async () => { const x = (await s.readAll({ type: "Character", fields: { charId: me } }))[0]; return x; }, 10_000, "me"))!.fields.room, c.room);
+		const read = async () => (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const c = await read(), here = t.stops.findIndex((x) => x.room === c.room);
+		assert.ok(here >= 0, "newcomers start in a bay");
+		const target = t.stops[(here + 2) % t.stops.length]!, startOf = (i: number) => { let m = 0; for (let k = 0; k < i; k++) m += t.stayMs + t.legMs[k]!; return m; };
+		const at = async (m: number) => { const e = (await s.readAll({ type: "WorldClock" }))[0]!; await s.takeIfExists({ id: e.id }, 0); await s.write({ type: "WorldClock", fields: { ...e.fields, worldAnchorMs: m, realAnchorMs: Date.now() } as never }, null, FOREVER); };
+		const base = t.cycleMs * 10;
+		await at(base + startOf(here) + t.stayMs + 60_000); // it has left
+		assert.match(await does(p, "fahrplan", "Schiff"), /Hier liegt es in etwa/);
+		assert.match(await does(p, `einschiffen ${target.island}`, "Schiff"), /liegt nicht hier/);
+		await at(base + startOf(here) + 60_000); // it lies here
+		assert.match(await does(p, `einschiffen ${target.island}`, "kostet"), /kostet 3 Münzen/);
+		await give(s, me, w.currency, w.liner!.fare);
+		await does(p, `einschiffen ${target.island}`, /Das Schiff legt ab/);
+		const aboard = (await read()).aboard!;
+		assert.equal(aboard.to, target.room);
+		assert.equal(aboard.arriveWorldMs, base + startOf((here + 2) % t.stops.length), "it lands when the ship lies at the island");
+		assert.equal(await s.count({ type: "Passage", fields: { charId: me } }), 1);
 		assert.equal(await s.count({ type: "Item", fields: { location: me, proto: w.currency } }), 0, "the fare is paid");
+		assert.match(await does(p, "step 1 0", /Du bist an Bord/), /fährst nach/);
+		assert.match(await does(p, "ausschiffen", /Du bist an Bord/), /Ankunft in etwa/, "not before the ship is there");
+		await at(aboard.arriveWorldMs + 1000);
+		await does(p, "ausschiffen", /kommst in .* an/);
+		const landed = await eventually(async () => { const x = await read(); return x.aboard ? undefined : x; }, 10_000, "landed");
+		assert.equal(landed!.room, target.room);
+		assert.equal(await s.count({ type: "Passage", fields: { charId: me } }), 0);
 	} finally { await srv.close(); }
+});
+
+test("the ship runs into its bay and out again instead of appearing and vanishing", () => {
+	const t = linerOf(w)!, here = 2, start = (() => { let m = 0; for (let k = 0; k < here; k++) m += t.stayMs + t.legMs[k]!; return m; })(), glide = Math.min(10 * 60_000, t.legMs[here]! / 3);
+	assert.deepEqual(shipPlace(t, start + 1000, here), { phase: "lies", away: 0 });
+	const leaving = shipPlace(t, start + t.stayMs + glide / 2, here);
+	assert.ok(leaving.phase === "leaving" && leaving.away > 0 && leaving.away < 1);
+	assert.equal(shipPlace(t, start + t.stayMs + glide + 60_000, here).phase, "away");
+	assert.equal(shipPlace(t, start - glide / 4, here).phase, "arriving");
+	assert.ok(shipPlace(t, start - glide / 4, here).away < 0.5, "close to the berth just before it lies");
+	// it never jumps: the distance changes a little each minute, in and out
+	let last = 0;
+	for (let m = 0; m <= glide; m += 60_000) { const a = shipPlace(t, start + t.stayMs + m, here).away; assert.ok(a >= last && a - last < 0.35); last = a; }
+	// the way out: towards the open edge; water that reaches the edge wins over a longer pond
+	const sea = ["~~~~~~~~~~", "~~~~~~~~~~", "~~~~~~~~~~"];
+	assert.deepEqual(lane(sea, { x: 3, y: 1, along: "x" }), { sx: 1, sy: 0, dist: 3 + 4 });
+	const bay = ["..~~~~~~~~", "..~~~~~~~~", ".......~~~"];
+	assert.equal(lane(bay, { x: 3, y: 0, along: "x" }).sx, 1, "the open end, not the shore");
 });

@@ -5,7 +5,8 @@ import { fieldsOf, type BuildingFields, type ItemFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import { handOff } from "../handover.ts";
-import { baysOf, shipIn } from "../liner.ts";
+import { baysOf, linerOf, shipComes, shipState } from "../liner.ts";
+import { board } from "./passage.ts";
 import { regionOfRoom } from "../regions.ts";
 import { amount, distTo, giveBack, planOf, rested, tire } from "./build.ts";
 import { worldNowOf } from "../clock.ts";
@@ -134,39 +135,40 @@ const restOf = async (c: CommandCtx) => { const { now, rest } = await rested(c);
 
 const bays = (c: CommandCtx) => baysOf(c.world.allRooms ?? c.world.rooms);
 
+/** Whole world minutes, at least one, for what the ship's times say. */
+const mins = (ms: number) => Math.max(1, Math.ceil(ms / 60_000));
+
 const fahrplan: Command = {
 	key: "fahrplan", aliases: ["timetable", "schiff"],
-	help: "fahrplan – wann das große Schiff in dieser Bucht liegt und wohin es fährt; „einschiffen <insel>“ fährt mit",
+	help: "fahrplan – wo das große Schiff gerade fährt, wann es in dieser Bucht liegt und in welcher Reihenfolge es die Inseln anläuft; „einschiffen <insel>“ fährt mit",
 	async func(c) {
-		const d = c.world.liner;
-		if (!d) throw new CommandError("In dieser Welt gibt es keinen Fahrplan.");
-		const wait = shipIn(await worldNowOf(c.space, c.txn), d.everyWorldMs), all = [...bays(c).keys()].join(", ");
-		await msg(c, c.actor.charId, "info", `${wait ? `Das Schiff kommt in etwa ${Math.ceil(wait / 60_000)} Weltminuten.` : "Das Schiff liegt in den Buchten."} Es fährt nach ${all}, für ${d.fare} Münzen; die Fähren fahren jederzeit.`);
+		const d = c.world.liner, t = linerOf(c.world);
+		if (!d || !t) throw new CommandError("In dieser Welt gibt es keinen Fahrplan.");
+		const now = await worldNowOf(c.space, c.txn), s = shipState(t, now), here = t.stops.findIndex((x) => x.room === c.actor.room);
+		const where = s.lies !== null ? `Das große Schiff liegt in ${t.stops[s.lies]!.island}, noch etwa ${mins(s.leftMs)} Weltminuten.` : `Das große Schiff fährt von ${t.stops[s.from]!.island} nach ${t.stops[s.to]!.island} und kommt in etwa ${mins(s.leftMs)} Weltminuten an.`;
+		const mine = here < 0 ? "" : s.lies === here ? " Hier legt es gerade an: „einschiffen <insel>“ fährt mit." : ` Hier liegt es in etwa ${mins(shipComes(t, now, here))} Weltminuten.`;
+		await msg(c, c.actor.charId, "info", `${where}${mine} Es läuft an: ${t.stops.map((x) => x.island).join(" → ")} und wieder von vorn, die Fahrt kostet ${d.fare} Münzen; die Fähren fahren jederzeit.`);
 	},
 };
 
 const einschiffen: Command = {
 	key: "einschiffen", aliases: ["board"],
-	help: "einschiffen <insel> – in der Bucht auf das große Schiff gehen, wenn es da liegt (fahrplan)",
+	help: "einschiffen <insel> – in der Bucht auf das große Schiff gehen, solange es hier liegt (fahrplan); du fährst mit, bis es die Insel erreicht",
 	async func(c, arg) {
-		const d = c.world.liner;
-		if (!d) throw new CommandError("In dieser Welt gibt es keinen Fahrplan.");
-		const all = bays(c), here = [...all.values()].some((r) => r.roomId === c.actor.room), word = arg.trim().toLowerCase();
-		if (!here) throw new CommandError("Das Schiff legt nur in den Buchten an.");
-		const wait = shipIn(await worldNowOf(c.space, c.txn), d.everyWorldMs);
-		if (wait) throw new CommandError(`Das Schiff kommt erst in etwa ${Math.ceil(wait / 60_000)} Weltminuten.`);
-		const to = [...all.entries()].find(([island, r]) => island.toLowerCase() === word && r.roomId !== c.actor.room);
-		if (!to) throw new NotUnderstood(`Das Schiff fährt nach: ${[...all.keys()].join(", ")}.`);
+		const d = c.world.liner, t = linerOf(c.world);
+		if (!d || !t) throw new CommandError("In dieser Welt gibt es keinen Fahrplan.");
+		const here = t.stops.findIndex((x) => x.room === c.actor.room), word = arg.trim().toLowerCase();
+		if (here < 0) throw new CommandError("Das Schiff legt nur in den Buchten an.");
+		const now = await worldNowOf(c.space, c.txn), wait = shipComes(t, now, here);
+		if (wait) throw new CommandError(`Das Schiff liegt nicht hier; es kommt erst in etwa ${mins(wait)} Weltminuten.`);
+		const to = t.stops.findIndex((x, i) => i !== here && x.island.toLowerCase() === word);
+		if (to < 0) throw new NotUnderstood(`Das Schiff fährt nach: ${t.stops.filter((_, i) => i !== here).map((x) => x.island).join(", ")}.`);
 		const purse = (await inventory(c)).filter((i) => i.f.proto === c.world.currency);
 		if (purse.length < d.fare) throw new CommandError(`Die Fahrt kostet ${d.fare} Münzen.`);
 		for (const m of purse.slice(0, d.fare)) await consume(c, m.f, c.actor.charId);
-		const [island, bay] = to, at = bay.spawn!;
-		await msg(c, "*", "info", `$you() $conj(gehst|geht) an Bord, nach ${island}.`, { templ: true });
-		const toRegion = c.world.region && !c.world.rooms.some((r) => r.roomId === bay.roomId) ? regionOfRoom({ ...c.world, rooms: c.world.allRooms ?? c.world.rooms }, bay.roomId) : null;
-		if (toRegion) { await dropOffers(c); return handOff(c, c.world.region!, toRegion, { room: bay.roomId, ...at }); }
-		const dest = await roomOf(c, bay.roomId), cell = await placeIn(c, dest, at);
-		await relocate(c, { room: dest.roomId, x: cell.x, y: cell.y }, { spot: false });
-		await msg(c, "*", "info", `$you() $conj(kommst|kommt) in ${island} an.`, { templ: true, room: dest.roomId });
+		const stop = t.stops[to]!, rooms = c.world.allRooms ?? c.world.rooms, bay = rooms.find((r) => r.roomId === stop.room)!;
+		// the passenger stays aboard until the ship lies at the island: it is the time of the loop, not a jump
+		await board(c, { to: stop.room, island: stop.island, spot: bay.spawn!, arriveWorldMs: now + shipComes(t, now, to) });
 	},
 };
 

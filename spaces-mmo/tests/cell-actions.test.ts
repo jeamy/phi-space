@@ -100,10 +100,11 @@ test("a long text falls into sentences, an abbreviation does not end one", () =>
 });
 
 test("feeding is offered at a coop only while animals live in it", () => {
-	const coop = (herd?: string) => new Map<string, ObjView>([["c", obj({ id: "c", kind: "building", name: "Hühnerstall", plan: "huehnerstall", ownerId: "me", ...(herd ? { herd } : {}), x: 6, y: 5, w: 2, h: 1 })]]);
+	const coop = (herd?: string) => new Map<string, ObjView>([["c", obj({ id: "c", kind: "building", name: "Hühnerstall", plan: "huehnerstall", ownerId: "thees", ...(herd ? { herd } : {}), x: 6, y: 5, w: 2, h: 1 })]]);
 	const lines = (o: Map<string, ObjView>) => cellEntries({ ...input, at: { x: 6, y: 5 }, objs: o }).map((e) => e.line);
 	const labels = (o: Map<string, ObjView>) => cellEntries({ ...input, at: { x: 6, y: 5 }, objs: o }).map((e) => e.label);
-	assert.ok(labels(coop("huhn")).includes("Tiere ansehen") && labels(coop()).includes("Stall ansehen") && !labels(coop()).includes("Tiere ansehen"), "no animals to look at in an empty coop");
+	assert.equal(labels(coop("huhn")).filter((l) => /ansehen/.test(l)).length, 1, "one way to look at a coop, not two with different answers");
+	assert.ok(lines(coop("huhn")).includes("stall") && lines(coop()).includes("stall"));
 	assert.ok(lines(coop("huhn")).includes("füttere"));
 	assert.ok(!lines(coop()).includes("füttere") && lines(coop()).includes("stall"), "an empty coop can only be looked at");
 });

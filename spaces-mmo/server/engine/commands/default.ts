@@ -318,7 +318,7 @@ const give: Command = {
 		const item = itemsNamed(c.world, await inventory(c), m[1]!)[0];
 		if (!item) throw new NotUnderstood(`Du trägst nichts, was „${m[1]!.slice(0, 30)}“ heißt.`);
 		const who = (await c.space.readAll({ type: "Character", fields: { room: c.actor.room } })).map((e) => fieldsOf<CharacterFields>(e))
-			.filter((ch) => ch.charId !== c.actor.charId).find((ch) => ch.name.toLowerCase() === m[2]!.trim().toLowerCase());
+			.filter((ch) => ch.charId !== c.actor.charId && !ch.aboard).find((ch) => ch.name.toLowerCase() === m[2]!.trim().toLowerCase());
 		if (!who) throw new NotUnderstood(`Hier ist niemand namens „${m[2]!.slice(0, 30)}“.`);
 		await check(c, item.f.locks, "give", c.account?.guest ? "Gäste können nichts weitergeben; registriere dich dafür." : `${item.f.name} lässt sich nicht weitergeben.`);
 		const e = await c.space.take({ type: "Item", fields: { itemId: item.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn });

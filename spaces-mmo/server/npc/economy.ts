@@ -20,7 +20,8 @@ import { clockOf } from "../engine/clockcache.ts";
 import { counted } from "../engine/commands/trade.ts";
 import { stem } from "../engine/context.ts";
 import { flameOf } from "../engine/fire.ts";
-import { baysOf, shipIn } from "../engine/liner.ts";
+import { baysOf, linerOf, shipComes } from "../engine/liner.ts";
+import { trainIn } from "../engine/rail.ts";
 import { regionOfRoom } from "../engine/regions.ts";
 import { wayTo, type WorldDef } from "../engine/world.ts";
 import { fieldsOf, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type MsgFields, type OfferFields, type OrderFields } from "../model.ts";
@@ -46,7 +47,8 @@ const pick = <T>(xs: T[]): T | undefined => xs[randomInt(0, Math.max(1, xs.lengt
 export type Look = { me: CharacterFields; pack: ItemFields[]; ground: ItemFields[] };
 export async function look(n: Npc): Promise<Look | null> {
 	const me = await self(n);
-	if (!me) return null;
+	// a figure aboard the large ship does nothing until it lands (engine/commands/passage.ts)
+	if (!me || me.aboard) return null;
 	const pack = (await n.space.readAll({ type: "Item", fields: { location: me.charId } })).map((e) => fieldsOf<ItemFields>(e));
 	const ground = (await n.space.readAll({ type: "Item", fields: { location: me.room } })).map((e) => fieldsOf<ItemFields>(e));
 	return { me, pack, ground };
@@ -89,7 +91,9 @@ async function byShip(n: Npc, l: Look, room: string): Promise<boolean> {
 	const tried = boarding.get(n);
 	if (tried && tried.room !== l.me.room) boarding.delete(n);
 	if (tried?.room === l.me.room && tried.times >= 2) return false;
-	if (shipIn((await clockOf(n.space).now()) ?? 0, d.everyWorldMs) || hops(n.world, bay.roomId, room) + SHIP_SAVES > hops(n.world, l.me.room, room)) return false;
+	const t = linerOf(n.world), here = t?.stops.findIndex((x) => x.room === l.me.room) ?? -1;
+	// the ship takes it only where and while it lies in this bay
+	if (!t || here < 0 || shipComes(t, (await clockOf(n.space).now()) ?? 0, here) || hops(n.world, bay.roomId, room) + SHIP_SAVES > hops(n.world, l.me.room, room)) return false;
 	boarding.set(n, { room: l.me.room, times: (boarding.get(n)?.times ?? 0) + 1 });
 	await n.act(`einschiffen ${to}`);
 	return true;
@@ -117,6 +121,8 @@ async function byTrain(n: Npc, l: Look, room: string): Promise<boolean> {
 	if (tried && tried.room !== l.me.room) boarding.delete(n);
 	// a ride refused twice in this room (a station that fell, a full platform): it walks from here
 	if (!d || (tried?.room === l.me.room && tried.times >= 2) || island(l.me.room) !== island(room) || coinsOf(n, l).length < d.fare || hops(n.world, l.me.room, room) < TRAIN_FROM) return false;
+	// it never waits for the train: on foot instead
+	if (trainIn((await clockOf(n.space).now()) ?? 0, d.everyWorldMs)) return false;
 	const station = (r: string) => n.space.readAll({ type: "Building", fields: { plan: d.plan, room: r } }).then((xs) => xs.map((e) => fieldsOf<BuildingFields>(e))[0]);
 	const here = await station(l.me.room);
 	if (!here || !(await station(room))) return false;

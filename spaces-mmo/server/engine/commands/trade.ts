@@ -84,7 +84,7 @@ const offer: Command = {
 		if (!m) throw new NotUnderstood("So geht es: offer <dinge> an <person> [für <dinge>], z. B. offer treibholz an Bert für münze");
 		const got = pick(await inventory(c), parseSpec(m[1]!), c.world);
 		if ("missing" in got) throw new (got.unknown ? NotUnderstood : CommandError)(`Du hast nicht: ${got.missing}.`);
-		const who = (await c.space.readAll({ type: "Character", fields: { room: c.actor.room } })).map((e) => fieldsOf<CharacterFields>(e)).find((ch) => ch.charId !== c.actor.charId && ch.name.toLowerCase() === m[2]!.toLowerCase());
+		const who = (await c.space.readAll({ type: "Character", fields: { room: c.actor.room } })).map((e) => fieldsOf<CharacterFields>(e)).find((ch) => ch.charId !== c.actor.charId && !ch.aboard && ch.name.toLowerCase() === m[2]!.toLowerCase());
 		if (!who) throw new NotUnderstood(`Hier ist niemand namens „${m[2]!.slice(0, 30)}“.`);
 		const want = m[3] ? parseSpec(m[3]) : [];
 		const o: OfferFields = { offerId: `o-${randomBytes(5).toString("hex")}`, from: c.actor.charId, fromName: c.actor.name, to: who.charId, toName: who.name, give: got.items.map((i) => i.f.itemId), giveNames: got.items.map((i) => i.f.name), want, room: c.actor.room, at: Date.now() };

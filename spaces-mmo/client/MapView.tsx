@@ -11,6 +11,7 @@ import type { CharView, ObjView, ServerFrame } from "../server/gateway.ts";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
 import { WALK_MS } from "./walk.ts";
+import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
 
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 type Px = typeof import("pixi.js");
@@ -453,6 +454,35 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 		if (o.location !== roomId) continue;
 		const x = o.x * ts, y = o.y * ts, cx = x + ts / 2, cy = y + ts / 2;
 		if (o.kind === "scenery") { s.objs.addChild(sceneryView(p, o, ts)); continue; }
+		if (o.kind === "track") {
+			// the island railway (App, engine/rail.ts): sleepers and two rails through every cell, a quarter circle where the way turns
+			const g = new p.Graphics(), off = 0.16;
+			for (const run of o.runs ?? []) run.forEach((c, i) => {
+				const mx = c.x * ts + ts / 2, my = c.y * ts + ts / 2, { d1, d2 } = stepsAt(run, i);
+				if (i > 0 || !o.fromStation) for (const k of sleeperSpots(d1, d2)) {
+					const px = mx + k.x * ts, py = my + k.y * ts, hl = ts * 0.24, hw = ts * 0.05;
+					// a sleeper: long along its axis, short across it
+					g.poly([px - k.ax * hl - k.ay * hw, py - k.ay * hl + k.ax * hw, px + k.ax * hl - k.ay * hw, py + k.ay * hl + k.ax * hw, px + k.ax * hl + k.ay * hw, py + k.ay * hl - k.ax * hw, px - k.ax * hl + k.ay * hw, py - k.ay * hl - k.ax * hw]);
+				}
+			});
+			g.fill({ color: "#5a4128" });
+			for (const run of o.runs ?? []) run.forEach((c, i) => {
+				const mx = c.x * ts + ts / 2, my = c.y * ts + ts / 2, { d1, d2 } = stepsAt(run, i);
+				for (const side of [off, -off]) railPoints(d1, d2, side).forEach((q, n) => (n ? g.lineTo(mx + q.x * ts, my + q.y * ts) : g.moveTo(mx + q.x * ts, my + q.y * ts)));
+			});
+			g.stroke({ width: 2, color: "#9aa0a8" });
+			s.objs.addChild(g);
+			continue;
+		}
+		if (o.kind === "train") {
+			// the train at the platform (App, engine/rail.ts): an engine and a carriage on the station's front row
+			const w = (o.w ?? 1) * ts, ry = (o.y + (o.h ?? 1) - 1) * ts + ts * 0.3, len = w * 0.9, x0 = x + (w - len) / 2;
+			const g = new p.Graphics().roundRect(x0, ry, len * 0.45, ts * 0.4, 3).fill({ color: "#2f5a3a" }).stroke({ width: 1, color: "#16241a" });
+			g.roundRect(x0 + len * 0.48, ry, len * 0.52, ts * 0.4, 3).fill({ color: "#e8e0c8" }).stroke({ width: 1, color: "#8a2a22" });
+			g.circle(x0 + len * 0.08, ry + ts * 0.2, ts * 0.08).fill({ color: "#222428" });
+			s.objs.addChild(g);
+			continue;
+		}
 		if (o.kind === "liner") {
 			// the large ship in the bay (App, engine/liner.ts): a dark hull with a white deckhouse and a funnel
 			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts, along = w > h, inset = ts * 0.15;

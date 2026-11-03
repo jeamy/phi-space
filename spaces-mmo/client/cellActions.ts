@@ -110,7 +110,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 		if (o.kind === "liner") {
 			if (o.location === room && covers(o, at)) {
 				entries.push({ label: "Fahrplan", line: "fahrplan" });
-				for (const r of o.routes ?? []) entries.push({ label: `Mitfahren nach ${r.island} · ${o.fare ?? 1} ${o.fare === 1 ? "Münze" : "Münzen"}`, line: `einschiffen ${r.island}` });
+				if (!o.gliding) for (const r of o.routes ?? []) entries.push({ label: `Mitfahren nach ${r.island} · ${o.fare ?? 1} ${o.fare === 1 ? "Münze" : "Münzen"}`, line: `einschiffen ${r.island}` });
 			}
 			continue;
 		}
@@ -173,7 +173,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			continue;
 		}
 		// this one, not all in the room: the command takes its cell
-		entries.push({ label: o.kind === "site" ? (o.ownerId === me ? `Deine Baustelle ${o.name}: was fehlt?` : `Baustelle ${o.name} von ${o.owner ?? ""}: was fehlt?`) : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: `baustelle ${o.x} ${o.y}` });
+		entries.push({ label: o.kind === "site" ? (o.ownerId === me ? `Deine Baustelle ${o.name}: was fehlt?` : `Baustelle ${o.name} von ${o.owner ?? ""}: was fehlt?`) : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: beside && (o.plan === "huehnerstall" || o.plan === "gehege") ? "stall" : `baustelle ${o.x} ${o.y}` }); // beside a coop or pen, looking at it shows its animals
 		if (o.kind === "building" && beside) {
 			if (o.name === "Regentonne") entries.push({ label: "Wasser schöpfen", line: "schöpfe" });
 			// anyone grinds at a mill and bakes at a bakery (server: mill.ts, the recipes "at" a plan)
@@ -187,7 +187,6 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.plan === "huette") entries.push({ label: "Käse machen (3 Milch, 1 Treibholz)", line: "craft käse" });
 			// a coop or pen: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
 			if (o.plan === "huehnerstall" || o.plan === "gehege") {
-				entries.push({ label: o.herd ? "Tiere ansehen" : "Stall ansehen", line: "stall" });
 				// the house carries its herd while an animal is in it: nothing to feed in an empty one
 				if (o.herd) entries.push({ label: "Füttern", line: "füttere" });
 				if (o.ownerId === me) {

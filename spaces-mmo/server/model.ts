@@ -14,7 +14,11 @@ export type AccountFields = { accountId: string; /** The name one logs in with; 
  *  written with every such step, also one that could not be taken, so the page knows which of its steps are done. */
 export type CharacterFields = { charId: string; accountId: string; name: string; room: string; x: number; y: number; skin: number; guest: boolean; ack?: { conn: string; seq: number };
 	/** Why the last step was not taken (engine/commands/default.ts: told once per reason); gone with the next move. */
-	refused?: string };
+	refused?: string;
+	/** On board of the large ship, on its way to `island` (its bay `to`, landing at `spot`) until the world time `arriveWorldMs`: hidden from the rooms, no walking (engine/commands/passage.ts). */
+	aboard?: { to: string; island: string; spot: { x: number; y: number }; arriveWorldMs: number } };
+/** A passenger of the large ship, scanned by the tick that sends the landing when the time has come. */
+export type PassageFields = { charId: string; to: string; arriveWorldMs: number };
 
 /** How an object looks on the map until it has a sprite (no item graphics are licensed yet). */
 export type Glyph = { shape: "circle" | "square" | "diamond"; color: string };
@@ -67,6 +71,10 @@ export type SatedFields = { charId: string; untilWorldMs: number };
 export type ShopOrderFields = { orderId: string; buildId: string; room: string; storeName: string; ownerName: string; proto: string; protoName: string; count: number; reward: number };
 export type LoanFields = { loanId: string; buildId: string; room: string; accountId: string; charId: string; charName: string; owed: number; untilWorldMs: number };
 /** A cart (engine/commands/cart.ts): its cargo lies at `cartId`, `path` the rooms still ahead, the next at `dueWorldMs`. */
+/** Things the island railway carried for their sender (engine/commands/cart.ts `zug sende`): they lie at `freightId` and
+ *  wait beside the station `buildId` in `room` until the sender fetches them (`zug abholen`); left too long, or when that
+ *  station is gone, they become the sender's estate there (build.ts buildSweep). */
+export type FreightFields = { freightId: string; accountId: string; charId: string; ownerName: string; room: string; buildId: string; untilWorldMs: number };
 export type CartFields = { cartId: string; accountId: string; charId: string; ownerName: string; room: string; x: number; y: number; path: string[]; dueWorldMs: number };
 export type WindFields = { island: string; level: number };
 export type ShowKind = "blumen" | "ernte" | "regatta";

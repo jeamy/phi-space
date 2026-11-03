@@ -8,7 +8,8 @@ import { FOREVER } from "phi-spaces";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import { roadLinks } from "../server/engine/commands/cart.ts";
-import type { BuildingFields, CartFields, SiteFields } from "../server/model.ts";
+import type { BuildingFields, CartFields, SiteFields, WorldClockFields } from "../server/model.ts";
+import { decayNow } from "../server/engine/worldtime.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
 
 const w = await loadWorld();
@@ -110,6 +111,10 @@ test("a figure two rooms from home takes the island railway when stations stand 
 		await spawn(s, null, w, (await resolvePrototype(s, w.currency))!, { location: me, x: -1, y: -1 });
 		const coins = () => s.count({ type: "Item", fields: { location: me, proto: w.currency } });
 		const before = await coins();
+		// the world time held where the timetable has the train at the stations; the figures' pace runs on the decay clock
+		const e = (await s.readAll({ type: "WorldClock" }))[0]!, clock = e.fields as unknown as WorldClockFields, now = Date.now();
+		await s.takeIfExists({ id: e.id }, 0);
+		await s.write({ type: "WorldClock", fields: { ...clock, decayAnchorMs: decayNow(clock, now), decayRate: clock.decayRate ?? clock.rate, realAnchorMs: now, worldAnchorMs: w.rail!.everyWorldMs! * 1000, rate: 0.001 } as never }, null, FOREVER);
 		await srv.stack.npcProcess();
 		await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0]?.fields.room === first.room, 120_000, "home");
 		assert.equal(await coins(), before - w.rail!.fare, "it paid the fare: it rode");

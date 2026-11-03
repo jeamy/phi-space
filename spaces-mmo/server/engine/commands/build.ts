@@ -20,7 +20,7 @@ import { satedFactor } from "./food.ts";
 import { closeOrders, keptUntil, orderLine, ordersOfSite, payFor } from "./siteorder.ts";
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type EstateFields, type FireBuilderFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type EstateFields, type FreightFields, type FireBuilderFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
 import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
@@ -615,6 +615,18 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 				await space.write({ type: "Estate", fields: est as never }, txn, FOREVER);
 				for (const it of inside) await moveItem(space, txn, String(it.fields.itemId), b.buildId, est.estateId);
 			}
+			return true;
+		});
+	}
+	// freight the railway carried and nobody fetched, or whose station fell: the sender's estate on the spot
+	for (const e of await space.readAll({ type: "Freight" })) {
+		const f = fieldsOf<FreightFields>(e);
+		if (f.untilWorldMs > life && (await space.readIfExists({ type: "Building", fields: { buildId: f.buildId } }, 1_000))) continue;
+		await inTxn(async (txn) => {
+			if (!(await space.takeIfExists({ type: "Freight", fields: { freightId: f.freightId } }, NO_WAIT, { txn }))) return false;
+			const est: EstateFields = { estateId: `est-${f.freightId}`, accountId: f.accountId, ownerName: f.ownerName, room: f.room, name: "Fracht", untilWorldMs: now + (w?.building?.estateWorldMs ?? 30 * 24 * 3600_000) };
+			await space.write({ type: "Estate", fields: est as never }, txn, FOREVER);
+			for (const it of await space.readAll({ type: "Item", fields: { location: f.freightId } }, { txn })) await moveItem(space, txn, String(it.fields.itemId), f.freightId, est.estateId);
 			return true;
 		});
 	}

@@ -12,7 +12,7 @@ import { render } from "./engine/funcparser.ts";
 import { sceneryText, type CropDef, type SortDef, type WorldDef } from "./engine/world.ts";
 import { whereTo } from "./engine/context.ts";
 import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
-import { baysOf } from "./engine/liner.ts";
+import { baysOf, linerOf, type Timetable } from "./engine/liner.ts";
 import { asFields, type EpochFields, type SeedRestFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type CartFields, type WindFields, type WorldClockFields, type ZoneFields } from "./model.ts";
 import { bedPlantsView } from "./engine/commands/garden.ts";
 import { fieldView } from "./engine/commands/field.ts";
@@ -24,7 +24,7 @@ import { setting } from "./settings.ts";
 import type { WsConnection } from "phi-spaces/ws";
 
 /** What a client sees of a character. */
-export type CharView = { charId: string; name: string; x: number; y: number; skin: number; ai?: true; /** a settler (npc/settlers.ts): a script plays it, always marked */ settler?: true };
+export type CharView = { charId: string; name: string; x: number; y: number; skin: number; /** on board of the large ship, on its way to this island (only its own page shows it: others do not see it) */ aboard?: { island: string; arriveWorldMs: number }; ai?: true; /** a settler (npc/settlers.ts): a script plays it, always marked */ settler?: true };
 /** What a client sees of a thing or an exit: on the map when `location` is its room, in its pack when it is its charId. */
 /** `icon`: the URL of a thing's picture (from its prototype); the map draws the glyph without one. */
 /** A building plan as the page offers it (key for `bau <key> <x> <y>`, what it needs as text). */
@@ -33,8 +33,8 @@ export type ItemUses = { recipes: Array<{ key: string; name: string; needs: Arra
 export type PlanView = { key: string; name: string; w: number; h: number; needs: string; work: number; /** the island's epoch it needs ("Dorf"; none: the first) */ epoch?: string };
 /** A site or building (docs/siedeln.en.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
-export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed" | "field" | "animal" | "scenery" | "zone" | "cart" | "liner"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
-	w?: number; h?: number; /** Scenery: what it is. */ desc?: string; /** Scenery: its picture, how much work it still takes, whether it stays or is walked over. */ model?: string; left?: number; fixed?: boolean; through?: boolean; /** An exit: the place it leads to (its `name` is what `go` takes). */ to?: string; /** The owner's name as shown and their character (a name can change, an alias; the id cannot). */ owner?: string; ownerId?: string; sponsorIds?: string[]; /** What a site has hung out, with a wage per piece (`proto` "": work). */ orders?: Array<{ proto: string; name: string; left: number; pay: number }>; progress?: number; missing?: string; color?: string; /** The large ship (made by the client from the timetable): its fare and the islands it goes to. */ fare?: number; routes?: Array<{ island: string; room: string }>; /** the plan of a site, building or ruin (the 3D map draws each its own) */ plan?: string; /** the kind of animal a coop or pen houses */ herd?: string; /** a building's dog or cat on guard */ keeper?: string; /** an animal from the fog: hase, reh, fuchs, maus */ animal?: string;
+export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed" | "field" | "animal" | "scenery" | "zone" | "cart" | "liner" | "track" | "train"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
+	w?: number; h?: number; /** Scenery: what it is. */ desc?: string; /** Scenery: its picture, how much work it still takes, whether it stays or is walked over. */ model?: string; left?: number; fixed?: boolean; through?: boolean; /** An exit: the place it leads to (its `name` is what `go` takes), and that room's id. */ to?: string; toRoom?: string; /** Tracks of the island railway (made by the client, engine/rail.ts): the runs of cells, each from a station's own track when `fromStation`. */ runs?: Array<Array<{ x: number; y: number }>>; fromStation?: boolean; /** The owner's name as shown and their character (a name can change, an alias; the id cannot). */ owner?: string; ownerId?: string; sponsorIds?: string[]; /** What a site has hung out, with a wage per piece (`proto` "": work). */ orders?: Array<{ proto: string; name: string; left: number; pay: number }>; progress?: number; missing?: string; color?: string; /** The large ship (made by the client from the timetable): its fare and the islands it goes to. */ fare?: number; /** It is running in or out of the bay: no boarding. */ gliding?: boolean; routes?: Array<{ island: string; room: string }>; /** the plan of a site, building or ruin (the 3D map draws each its own) */ plan?: string; /** the kind of animal a coop or pen houses */ herd?: string; /** a building's dog or cat on guard */ keeper?: string; /** an animal from the fog: hase, reh, fuchs, maus */ animal?: string;
 	/** A bed: its plants at their cells (relative to the bed), when it was watered and how long its plants go without
 	 *  water, whether weeds grow in it, and who may tend it besides the owner; `bedKind`: a flower bed or a community bed; `fenced`: hares keep out. An animal: the bed it came to (`target`). */
 	bedKind?: "zier" | "gemein"; fenced?: boolean; plants?: Array<{ x: number; y: number; stage: number; color: string; model?: SortDef["model"] }>; wateredWorldMs?: number; thirstMs?: number; weedy?: boolean; sponsors?: string[]; target?: string;
@@ -67,7 +67,7 @@ export type TradeView = {
 };
 /** Frames to the browser. */
 export type ServerFrame =
-	| { t: "hello"; wind: string; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins" | "decor"> & { fuels: string[]; icons: string[]; plans: PlanView[]; uses: ItemUses; /** The large ship's period and the rooms it lies in (engine/liner.ts). */ liner?: { everyWorldMs: number; bays: string[]; /** What the ride costs and where it goes: the island and the bay room of each. */ fare: number; routes: Array<{ island: string; room: string }>; /** The island of the room the page opens in (a sailing boat goes to the others). */ island: string } }; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number; worldTime: WorldTimeView | null }
+	| { t: "hello"; wind: string; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins" | "decor"> & { fuels: string[]; icons: string[]; plans: PlanView[]; uses: ItemUses; /** The large ship's period and the rooms it lies in (engine/liner.ts). */ liner?: Timetable & { /** What the ride costs and where it goes: the island and the bay room of each. */ fare: number; routes: Array<{ island: string; room: string }>; /** The island of the room the page opens in (a sailing boat goes to the others). */ island: string }; /** The island railway: the plan of its stations (engine/rail.ts draws the tracks between them) and its timetable. */ rail?: { plan: string; everyWorldMs?: number } }; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number; worldTime: WorldTimeView | null }
 	| { t: "fog"; level: number }
 	| { t: "wind"; wind: string }
 	/** The world clock changed (or the regular reminder): the browser interpolates from it; it decides nothing by it. */
@@ -115,9 +115,9 @@ type Client = { ws: WsConnection; me: Me; lang?: "en"; room: string | null; leas
 const ATLAS_MS = 1_000;
 
 /** The characters a model plays (docs/modell-npcs.en.md: marked as AI wherever they appear). */
-const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(modelChars.has(c.charId) ? { ai: true as const } : {}), ...(c.charId.startsWith("npc-siedler-") ? { settler: true as const } : {}) });
+const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(c.aboard ? { aboard: { island: c.aboard.island, arriveWorldMs: c.aboard.arriveWorldMs } } : {}), ...(modelChars.has(c.charId) ? { ai: true as const } : {}), ...(c.charId.startsWith("npc-siedler-") ? { settler: true as const } : {}) });
 const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}) });
-const exitView = (f: ExitFields, w: WorldDef): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, to: whereTo(w, f), location: f.location, x: f.x, y: f.y });
+const exitView = (f: ExitFields, w: WorldDef): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, to: whereTo(w, f), toRoom: f.destination, location: f.location, x: f.x, y: f.y });
 const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = "", players: ReadonlySet<string> = new Set()): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}),
 	...(["say", "emote", "channel"].includes(m.kind) && m.fromId && !m.fromId.startsWith("npc-") ? { player: true as const } : {}),
 	...(m.kind === "who" ? { players: whoNames(m.text).filter((n) => players.has(n)) } : {}),
@@ -391,7 +391,7 @@ export class Gateway {
 		}
 		c.awaitsHello = false;
 		c.room = self.room;
-		const chars = [...this.#chars.values()].filter((ch) => ch.room === self.room && (ch.charId === self.charId || this.#online.get(ch.charId))).map((ch) => charView(ch, this.#modelChars));
+		const chars = [...this.#chars.values()].filter((ch) => ch.room === self.room && (ch.charId === self.charId || (this.#online.get(ch.charId) && !ch.aboard))).map((ch) => charView(ch, this.#modelChars));
 		const objs = [...this.#objs.values()].filter((o) => o.location === self.room || o.location === self.charId).map((o) => this.#view(o));
 		const log = (this.#recent.get(self.room) ?? []).map((m) => msgView(m, self.charId, this.#modelNames, self.name, this.#playerNames()));
 		queueMicrotask(() => {
@@ -399,7 +399,7 @@ export class Gateway {
 			if (!c.atlas) { c.atlas = true; c.ws.send({ t: "atlas", atlas: this.#atlas() } satisfies ServerFrame); }
 			c.ws.send({ t: "atlasState", state: this.#atlasState(c) } satisfies ServerFrame);
 		});
-		c.ws.send({ t: "hello", wind: this.#windIn(self.room), build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set([...this.#protoIcons.values(), ...(this.w.wild ? [`/assets/${this.w.id}/${this.w.wild.hare.icon}`] : [])])], plans: this.#plans(), uses: this.#uses(), ...(this.w.liner ? { liner: { everyWorldMs: this.w.liner.everyWorldMs, bays: [...baysOf(this.w.rooms).values()].map((r) => r.roomId), island: this.#rooms.get(self.room)?.island ?? "", fare: this.w.liner.fare, routes: [...baysOf(this.w.allRooms ?? this.w.rooms)].map(([island, r]) => ({ island, room: r.roomId })) } } : {}) }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
+		c.ws.send({ t: "hello", wind: this.#windIn(self.room), build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set([...this.#protoIcons.values(), ...(this.w.wild ? [`/assets/${this.w.id}/${this.w.wild.hare.icon}`] : [])])], plans: this.#plans(), uses: this.#uses(), ...(this.w.liner ? { liner: { ...(() => { const t = linerOf(this.w)!; return { stops: t.stops, stayMs: t.stayMs, legMs: t.legMs, cycleMs: t.cycleMs }; })(), island: this.#rooms.get(self.room)?.island ?? "", fare: this.w.liner.fare, routes: [...baysOf(this.w.allRooms ?? this.w.rooms)].map(([island, r]) => ({ island, room: r.roomId })) } } : {}), ...(this.w.rail ? { rail: { plan: this.w.rail.plan, ...(this.w.rail.everyWorldMs ? { everyWorldMs: this.w.rail.everyWorldMs } : {}) } } : {}) }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
 	}
 
 	/** Puts every entry `tmpl` matches, read in pages of bounded size (one snapshot: the pages share its token). */
@@ -626,7 +626,8 @@ export class Gateway {
 		for (const cl of this.#clients) {
 			// its own room changed (a client not greeted yet gets its hello from attach)
 			if (cl.me.charId === charId && c && (cl.awaitsHello || (cl.room !== null && cl.room !== c.room))) { this.#hello(cl); continue; }
-			if (visible && cl.room === c!.room) cl.ws.send({ t: "char", c: charView(c!, this.#modelChars), ...(cl.me.charId === charId && c!.ack?.conn === cl.ws.id ? { ack: c!.ack.seq } : {}) } satisfies ServerFrame);
+			// a passenger of the large ship is gone from the room for the others
+			if (visible && cl.room === c!.room && (!c!.aboard || cl.me.charId === charId)) cl.ws.send({ t: "char", c: charView(c!, this.#modelChars), ...(cl.me.charId === charId && c!.ack?.conn === cl.ws.id ? { ack: c!.ack.seq } : {}) } satisfies ServerFrame);
 			else if (cl.room !== null && (cl.room === roomBefore || cl.room === c?.room)) cl.ws.send({ t: "gone", charId } satisfies ServerFrame);
 		}
 	}

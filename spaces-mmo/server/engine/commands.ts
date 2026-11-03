@@ -10,6 +10,7 @@ import { TOWNHALL_COMMANDS } from "./commands/townhall.ts";
 import { FESTIVAL_COMMANDS } from "./commands/festival.ts";
 import { WIND_COMMANDS } from "./commands/wind.ts";
 import { CART_COMMANDS } from "./commands/cart.ts";
+import { aboardText, mayAboard, PASSAGE_COMMANDS } from "./commands/passage.ts";
 import { FOOD_COMMANDS } from "./commands/food.ts";
 import { SHOP_COMMANDS } from "./commands/shop.ts";
 import { FISHING_COMMANDS } from "./commands/fishing.ts";
@@ -44,7 +45,7 @@ export async function commandsOf(c: CommandCtx): Promise<Map<string, Command>> {
 	// the help lists the commands, not the exits (look names those)
 	const help = helpCommand(() => distinct(all).filter((cmd) => !exits.commands.includes(cmd)));
 	const sets: CmdSet[] = [
-		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...SCENERY_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...FESTIVAL_COMMANDS, ...WIND_COMMANDS, ...CART_COMMANDS, ...FOOD_COMMANDS, ...SHOP_COMMANDS, ...FISHING_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...BEAM_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...SETTLEMENT_COMMANDS, ...CLOCK_COMMANDS, help]) },
+		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...SCENERY_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...FESTIVAL_COMMANDS, ...WIND_COMMANDS, ...CART_COMMANDS, ...FOOD_COMMANDS, ...SHOP_COMMANDS, ...FISHING_COMMANDS, ...PASSAGE_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...BEAM_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...SETTLEMENT_COMMANDS, ...CLOCK_COMMANDS, help]) },
 		{ key: "builder", priority: 1, mergeType: "Union", commands: offered(BUILDER_COMMANDS) },
 		exits,
 	];
@@ -74,6 +75,8 @@ const STEP = DEFAULT_COMMANDS.find((cmd) => cmd.key === "step")!;
 export async function execute(c: CommandCtx, line: string): Promise<void> {
 	line = line.trim();
 	if (!line) return;
+	// aboard the large ship nothing is walked or done until it lands (the arrival is an intent of its own)
+	if (c.actor.aboard && /^(step|move|arrive)\b/.test(line)) throw new CommandError(await aboardText(c));
 	if (/^step\s/.test(line)) return STEP.func(c, line.slice(5).trim());
 	const cmds = await commandsOf(c);
 	// plain language: the rules first (free); a line they rewrite says how it was understood
@@ -94,6 +97,7 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 		}
 		throw new CommandError(c.asked ? `„${c.asked.slice(0, 80)}“ habe ich nicht verstanden. „help“ zeigt die Befehle.` : `Unbekannter Befehl „${verb.slice(0, 20)}“. „help“ zeigt alle Befehle.`);
 	}
+	if (c.actor.aboard && !mayAboard(cmd.key)) throw new CommandError(await aboardText(c));
 	try {
 		if (understood) await msg(c, c.actor.charId, "info", understood);
 		await cmd.func(c, arg);

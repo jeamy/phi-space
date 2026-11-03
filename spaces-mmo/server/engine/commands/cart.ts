@@ -3,12 +3,13 @@
 // room the roads reach, and it goes a room at a time on the world clock, with nobody beside it.
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type CartFields, type ExitFields, type ItemFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type CartFields, type ExitFields, type FreightFields, type ItemFields } from "../../model.ts";
 import { worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import type { WorldDef } from "../world.ts";
-import { ARTICLE, distTo, EXIT_REACH, giveBack } from "./build.ts";
+import { trainIn } from "../rail.ts";
+import { amount, ARTICLE, distTo, EXIT_REACH, giveBack } from "./build.ts";
 import { placeIn, relocate } from "./default.ts";
 import { consume, move } from "./trade.ts";
 
@@ -127,7 +128,7 @@ export async function cartTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 
 const zug: Command = {
 	key: "zug", aliases: ["bahn", "train"],
-	help: "zug <ort> – neben einem Bahnhof mit der Inselbahn zu einem anderen Bahnhof dieser Insel fahren; „zug“ allein zeigt die Bahnhöfe",
+	help: "zug <ort> – neben einem Bahnhof mit der Inselbahn zu einem anderen Bahnhof dieser Insel fahren; „zug“ allein zeigt die Bahnhöfe und den Fahrplan; „zug sende [n|alle] <ding> nach <ort>“ gibt Fracht auf, „zug abholen“ holt sie am Ziel",
 	async func(c, arg) {
 		const d = c.world.rail;
 		if (!d) throw new CommandError("In dieser Welt fährt keine Bahn.");
@@ -135,13 +136,54 @@ const zug: Command = {
 		const stations = (await c.space.readAll({ type: "Building", fields: { plan: d.plan } }, { txn: c.txn })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => c.world.rooms.find((r) => r.roomId === b.room)?.island === island);
 		if (!stations.some((b) => b.room === c.actor.room && distTo(c.actor, b) <= 1)) throw new CommandError("Der Zug hält nur an Bahnhöfen; stell dich neben einen.");
 		// one stop a room, however many stations stand in it
-		const others = stations.filter((b, i) => b.room !== c.actor.room && stations.findIndex((x) => x.room === b.room) === i), word = arg.trim().toLowerCase();
-		const names = others.map((b) => nameOf(c, b.room)).join(", ");
-		if (!word) return msg(c, c.actor.charId, "info", names ? `Der Zug fährt nach: ${names}, für ${d.fare} Münze${d.fare === 1 ? "" : "n"}.` : "Auf dieser Insel gibt es keinen anderen Bahnhof.");
-		const to = others.find((b) => nameOf(c, b.room).toLowerCase() === word || b.room === word);
+		const others = stations.filter((b, i) => b.room !== c.actor.room && stations.findIndex((x) => x.room === b.room) === i);
+		const names = others.map((b) => nameOf(c, b.room)).join(", "), coins = `${d.fare} Münze${d.fare === 1 ? "" : "n"}`;
+		const wait = trainIn(await worldNowOf(c.space, c.txn), d.everyWorldMs), when = wait ? ` Der Zug kommt in etwa ${Math.ceil(wait / 60_000)} Weltminuten.` : " Der Zug steht am Bahnsteig.";
+		const mine = d.freight && c.account ? (await c.space.readAll({ type: "Freight", fields: { room: c.actor.room, accountId: c.account.accountId } }, { txn: c.txn })).map((e) => fieldsOf<FreightFields>(e)) : [];
+		const stopAt = (name: string) => others.find((b) => nameOf(c, b.room).toLowerCase() === name.trim().toLowerCase() || b.room === name.trim().toLowerCase());
+		const word = arg.trim().toLowerCase(), send = /^(?:sende|schicke|send)\s+(.+?)\s+nach\s+(.+)$/i.exec(arg.trim());
+		if (!word) {
+			let waiting = 0;
+			for (const f of mine) waiting += await c.space.count({ type: "Item", fields: { location: f.freightId } }, c.txn);
+			return msg(c, c.actor.charId, "info", (names ? `Der Zug fährt nach: ${names}, für ${coins}.${when}` : "Auf dieser Insel gibt es keinen anderen Bahnhof.") + (waiting ? ` Hier wartet Fracht für dich: ${waiting} Stück („zug abholen“).` : ""));
+		}
+		// what the railway carried for the actor to this station: all of it into the pack
+		if (/^(?:abholen|hole|holen|fetch)$/.test(word)) {
+			if (!mine.length) throw new CommandError("Hier wartet keine Fracht für dich.");
+			let n = 0;
+			for (const f of mine) {
+				if (!(await c.space.takeIfExists({ type: "Freight", fields: { freightId: f.freightId } }, NO_WAIT, { txn: c.txn }))) continue;
+				for (const e of await c.space.readAll({ type: "Item", fields: { location: f.freightId } }, { txn: c.txn })) { await move(c, fieldsOf<ItemFields>(e), f.freightId, c.actor.charId); n++; }
+			}
+			if (!n) throw new CommandError("Die Fracht ist gerade nicht greifbar; bitte noch einmal.");
+			return msg(c, "*", "info", `$you() $conj(holst|holt) ${n} Stück Fracht vom Bahnsteig.`, { templ: true });
+		}
+		if (send) {
+			if (!d.freight) throw new CommandError("Diese Bahn fährt keine Fracht.");
+			if (!c.account || c.account.guest) throw new CommandError("Fracht schicken nur Registrierte; registriere dich dafür.");
+			const dest = stopAt(send[2]!);
+			if (!dest) throw new NotUnderstood(`Dorthin fährt kein Zug.${names ? ` Er fährt nach: ${names}.` : ""}`);
+			if (wait) throw new CommandError(`Der Zug kommt erst in etwa ${Math.ceil(wait / 60_000)} Weltminuten.`);
+			const pack = await inventory(c), what = send[1]!.replace(ARTICLE, "");
+			const everything = /^(?:alle?|all)$/i.test(what), { n, name } = everything ? { n: null, name: "" } : amount(what);
+			const goods = pack.filter((i) => i.f.proto !== c.world.currency);
+			const hits = everything ? goods : (() => { const h = itemsNamed(c.world, goods, name); return h.length ? goods.filter((i) => i.f.proto === h[0]!.f.proto) : []; })();
+			if (!hits.length) throw new NotUnderstood(`Du trägst nichts, was „${(name || what).slice(0, 30)}“ heißt (Münzen schickt man nicht).`);
+			const purse = pack.filter((i) => i.f.proto === c.world.currency);
+			if (purse.length < d.fare) throw new CommandError(`Eine Fracht kostet ${coins}.`);
+			const k = Math.min(n ?? hits.length, hits.length, d.freight.capacity);
+			for (const m of purse.slice(0, d.fare)) await consume(c, m.f, c.actor.charId);
+			const f: FreightFields = { freightId: `freight-${randomBytes(6).toString("hex")}`, accountId: c.account.accountId, charId: c.actor.charId, ownerName: c.actor.name, room: dest.room, buildId: dest.buildId, untilWorldMs: (await worldNowOf(c.space, c.txn)) + d.freight.keepWorldMs };
+			await c.space.write({ type: "Freight", fields: f as never }, c.txn, FOREVER);
+			for (const i of hits.slice(0, k)) await move(c, i.f, c.actor.charId, f.freightId);
+			const kinds = [...new Set(hits.slice(0, k).map((i) => i.f.name))].join(", ");
+			return msg(c, c.actor.charId, "info", `Du gibst ${k}× ${kinds} als Fracht nach ${nameOf(c, dest.room)} auf; dort holst du sie mit „zug abholen“.${(n ?? hits.length) > k ? ` Mehr als ${d.freight.capacity} Stück nimmt der Zug auf einmal nicht.` : ""}`);
+		}
+		const to = stopAt(word);
 		if (!to) throw new NotUnderstood(`Dorthin fährt kein Zug.${names ? ` Er fährt nach: ${names}.` : ""}`);
+		if (wait) throw new CommandError(`Der Zug kommt erst in etwa ${Math.ceil(wait / 60_000)} Weltminuten.`);
 		const purse = (await inventory(c)).filter((i) => i.f.proto === c.world.currency);
-		if (purse.length < d.fare) throw new CommandError(`Die Fahrt kostet ${d.fare} Münze${d.fare === 1 ? "" : "n"}.`);
+		if (purse.length < d.fare) throw new CommandError(`Die Fahrt kostet ${coins}.`);
 		for (const m of purse.slice(0, d.fare)) await consume(c, m.f, c.actor.charId);
 		await msg(c, "*", "info", `$you() $conj(steigst|steigt) in den Zug nach ${nameOf(c, to.room)}.`, { templ: true });
 		const dest = await roomOf(c, to.room), at = await placeIn(c, dest, { x: to.x, y: to.y + to.h });

@@ -5,6 +5,7 @@
 // button folds it away (remembered per browser; on a phone it starts folded). It shows the world, it never changes it.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AtlasState, AtlasView } from "../server/gateway.ts";
+import { shipOnMap, type Timetable } from "../server/engine/liner.ts";
 import { tr } from "./i18n/index.ts";
 
 const W = 24, H = 16;
@@ -19,7 +20,7 @@ const MINE: Record<AtlasState["mine"][number]["kind"], { color: string; label: s
 const stored = (key: string, fallback: boolean) => { try { const v = localStorage.getItem(key); return v === null ? fallback : v === "1"; } catch { return fallback; } };
 const store = (key: string, v: boolean) => { try { localStorage.setItem(key, v ? "1" : "0"); } catch { /* private window */ } };
 
-export function Atlas({ atlas, state, page = false, me = null, onBeam }: { atlas: AtlasView; state: AtlasState | null; /** Where the player stands in their room: the mark on the map. */ me?: { x: number; y: number } | null; /** A page of its own on a phone: it scrolls, and a tap names a room (there is no pointer to hover with). */ page?: boolean; /** Beam to the fire of a room (the page sends `beam`; the server says what it costs and whether it may). */ onBeam?: (room: string) => void }) {
+export function Atlas({ atlas, state, ship = null, page = false, me = null, onBeam }: { atlas: AtlasView; state: AtlasState | null; /** The large ship's timetable and the world time now: its route and where it is on it. */ ship?: { t: Timetable; now: () => number } | null; /** Where the player stands in their room: the mark on the map. */ me?: { x: number; y: number } | null; /** A page of its own on a phone: it scrolls, and a tap names a room (there is no pointer to hover with). */ page?: boolean; /** Beam to the fire of a room (the page sends `beam`; the server says what it costs and whether it may). */ onBeam?: (room: string) => void }) {
 	const canvas = useRef<HTMLCanvasElement>(null);
 	const pin = useRef<{ x: number; y: number } | null>(null);
 	const scroller = useRef<HTMLDivElement>(null);
@@ -28,6 +29,9 @@ export function Atlas({ atlas, state, page = false, me = null, onBeam }: { atlas
 	const [picked, setPicked] = useState<string | null>(null);
 	const [big, setBig] = useState(false);
 	const [hover, setHover] = useState<string | null>(null);
+	// the ship moves on the map: redrawn every few seconds
+	const [shipTick, setShipTick] = useState(0);
+	useEffect(() => { if (!ship || !open) return; const id = setInterval(() => setShipTick((n) => n + 1), 3000); return () => clearInterval(id); }, [!!ship, open]);
 	const box = useMemo(() => {
 		const xs = atlas.rooms.map((r) => r.x), ys = atlas.rooms.map((r) => r.y);
 		return { x0: Math.min(...xs), y0: Math.min(...ys), cols: Math.max(...xs) - Math.min(...xs) + 1, rows: Math.max(...ys) - Math.min(...ys) + 1 };
@@ -66,6 +70,20 @@ export function Atlas({ atlas, state, page = false, me = null, onBeam }: { atlas
 			g.beginPath(); g.moveTo((pa.px + W / 2) * s, (pa.py + H / 2) * s); g.lineTo((pb.px + W / 2) * s, (pb.py + H / 2) * s); g.stroke();
 		}
 		g.restore();
+		// the large ship's route, a loop over the bays, and the ship on it (engine/liner.ts: a function of the world time)
+		if (ship) {
+			const c = (p: { x: number; y: number }) => ({ x: (p.x - box.x0 + 0.5) * W * s, y: (p.y - box.y0 + 0.5) * H * s });
+			g.save(); g.setLineDash([3, 7]); g.strokeStyle = "rgba(255,224,150,0.5)"; g.lineWidth = 2; g.beginPath();
+			ship.t.stops.forEach((st, i) => { const q = c(st); if (i) g.lineTo(q.x, q.y); else g.moveTo(q.x, q.y); });
+			const first = c(ship.t.stops[0]!); g.lineTo(first.x, first.y); g.stroke(); g.restore();
+			const on = shipOnMap(ship.t, ship.now()), q = c(on), bow = c(on.to);
+			const ang = Math.atan2(bow.y - q.y, bow.x - q.x);
+			g.save(); g.translate(q.x, q.y); g.rotate(on.lies ? 0 : ang);
+			g.fillStyle = "#2a2f38"; g.strokeStyle = "#ece6d6"; g.lineWidth = 3;
+			g.beginPath(); g.moveTo(16, 0); g.lineTo(6, -8); g.lineTo(-14, -8); g.lineTo(-14, 8); g.lineTo(6, 8); g.closePath(); g.fill(); g.stroke();
+			g.fillStyle = "#ece6d6"; g.fillRect(-6, -4, 8, 8);
+			g.restore();
+		}
 		for (const r of atlas.rooms) {
 			const { px, py } = at(r);
 			const fog = state?.fog[r.roomId] ?? 0;
@@ -116,7 +134,7 @@ export function Atlas({ atlas, state, page = false, me = null, onBeam }: { atlas
 			const x = ((b.x0 + b.x1) / 2) * s, y = b.y0 * s + 14;
 			g.lineWidth = 3; g.strokeStyle = "rgba(0,0,0,0.75)"; const shown = tr(name); g.strokeText(shown, x, y); g.fillStyle = "#f2efe6"; g.fillText(shown, x, y);
 		}
-	}, [ground, state, open, atlas, me?.x, me?.y, picked]);
+	}, [ground, state, open, atlas, me?.x, me?.y, picked, ship?.t, shipTick]);
 	// the page opens on the player
 	useEffect(() => {
 		const b = scroller.current, c = canvas.current, p = pin.current;

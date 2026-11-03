@@ -25,7 +25,8 @@ import { detentPx, Sheet, type Detent } from "./Sheet.tsx";
 import { Rich } from "./RichText.tsx";
 import { language, setLanguage, watchPage } from "./i18n/index.ts";
 import { formatWorldTime, seasonIndex, SEASONS, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
-import { berth, SHIP_LENGTH, shipIn } from "../server/engine/liner.ts";
+import { berth, lane, SHIP_LENGTH, shipPlace } from "../server/engine/liner.ts";
+import { railLinks, trackCells, trainIn } from "../server/engine/rail.ts";
 
 /** How long a "gone" waits for the "char" that follows it when a character is only being moved (see the handler). */
 const GONE_GRACE_MS = 2500;
@@ -824,10 +825,43 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		if (item) fetching.current = { id: item.id, until: now + FETCH_MS };
 	}, [step, objs, hello]);
 	// the large ship lies in this bay by the timetable (the world time the page shows): a thing on the water, for the eye
-	const liner = hello?.world.liner, bay = !!liner && !!hello && liner.bays.includes(hello.room.roomId);
+	const liner = hello?.world.liner, stopAt = liner && hello ? liner.stops.findIndex((x) => x.room === hello.room.roomId) : -1, bay = stopAt >= 0;
 	const berthAt = useMemo(() => (bay && hello?.room.spawn ? berth(hello.room.ground, hello.room.spawn) : null), [bay, hello?.room]);
-	const shipLies = !!berthAt && !!worldTime && shipIn(shownWorldMs(worldTime.v, worldTime.at, Date.now()), liner!.everyWorldMs) === 0;
-	const shownObjs = useMemo(() => (shipLies && berthAt && hello ? new Map(objs).set("liner", { id: "liner", kind: "liner", name: "Großes Schiff", location: hello.room.roomId, fare: liner!.fare, routes: liner!.routes.filter((r) => r.room !== hello.room.roomId), x: berthAt.x, y: berthAt.y, w: berthAt.along === "x" ? SHIP_LENGTH : 1, h: berthAt.along === "y" ? SHIP_LENGTH : 1 } as ObjView) : objs), [objs, shipLies, berthAt, hello]);
+	// it runs into the bay and out of it over a few world minutes (shipPlace), so it is redrawn every second while it moves
+	const [, setShipTick] = useState(0);
+	const place = berthAt && worldTime ? shipPlace(liner!, shownWorldMs(worldTime.v, worldTime.at, Date.now()), stopAt) : null;
+	const moving = place?.phase === "arriving" || place?.phase === "leaving";
+	useEffect(() => { if (!moving) return; const id = setInterval(() => setShipTick((n) => n + 1), 1000); return () => clearInterval(id); }, [moving]);
+	const shipWay = useMemo(() => (berthAt && hello ? lane(hello.room.ground, berthAt) : null), [berthAt, hello?.room]);
+	const shipShown = !!place && place.phase !== "away" && (place.away < 0.98 || !!shipWay);
+	const shipLies = shipShown;
+	// a passenger of the large ship is hidden from the map (and from the others): its page says where it sails
+	const aboard = chars.get(me)?.aboard ?? null;
+	const mapChars = useMemo(() => (aboard ? new Map([...chars].filter(([id]) => id !== me)) : chars), [chars, me, aboard]);
+	useEffect(() => { if (!aboard) return; const id = setInterval(() => setShipTick((n) => n + 1), 5000); return () => clearInterval(id); }, [aboard]);
+	// the island railway's tracks through this room (engine/rail.ts): from the stations of the region and this room's exits,
+	// first in the map so everything stands on them; they block nothing
+	const railPlan = hello?.world.rail?.plan, stations = atlasState?.stops.stations.join(",") ?? "";
+	const track = useMemo(() => {
+		if (!hello || !atlas || !railPlan || !stations) return null;
+		const room = hello.room.roomId, net = railLinks(atlas.rooms, atlas.links, stations.split(","));
+		const here = [...objs.values()].filter((o) => o.location === room);
+		const exits = here.filter((o) => o.kind === "exit" && !!o.toRoom && net.has(`${room}|${o.toRoom}`)).sort((a, b) => a.id.localeCompare(b.id));
+		const station = here.find((o) => o.kind === "building" && o.plan === railPlan);
+		if (!exits.length || (!station && exits.length < 2)) return null;
+		const blocked = new Set<string>();
+		for (const o of here) if (["building", "site", "ruin", "bed", "field"].includes(o.kind) || (o.kind === "scenery" && !o.through)) for (let y = o.y; y < o.y + (o.h ?? 1); y++) for (let x = o.x; x < o.x + (o.w ?? 1); x++) blocked.add(`${x},${y}`);
+		const runs = trackCells(hello.room.ground, station ? { x: station.x, y: station.y, w: station.w ?? 1, h: station.h ?? 1 } : null, exits, blocked);
+		return runs.length ? ({ id: "track", kind: "track", name: "Gleis", location: room, x: -1, y: -1, through: true, runs, fromStation: !!station } as ObjView) : null; // off the grid: no menu, no "Was ist das?" lands on it
+	}, [hello, atlas, railPlan, stations, objs]);
+	// the train at this room's station while the timetable has it there (engine/rail.ts trainIn), on the station's own track
+	const stationHere = track?.fromStation ? [...objs.values()].find((o) => o.location === track.location && o.kind === "building" && o.plan === railPlan) : undefined;
+	const trainStands = !!stationHere && !!worldTime && trainIn(shownWorldMs(worldTime.v, worldTime.at, Date.now()), hello?.world.rail?.everyWorldMs) === 0;
+	const shownObjs = useMemo(() => {
+		const base = track ? new Map([["track", track], ...objs]) : objs;
+		const all = trainStands && stationHere ? new Map(base).set("train", { id: "train", kind: "train", name: "Zug", location: stationHere.location, x: stationHere.x, y: stationHere.y, w: stationHere.w ?? 1, h: stationHere.h ?? 1, through: true } as ObjView) : base;
+		return shipLies && berthAt && hello ? new Map(all).set("liner", { id: "liner", kind: "liner", name: "Großes Schiff", location: hello.room.roomId, fare: liner!.fare, routes: liner!.routes.filter((r) => r.room !== hello.room.roomId), x: berthAt.x + (shipWay?.sx ?? 0) * (place?.away ?? 0) * (shipWay?.dist ?? 0), y: berthAt.y + (shipWay?.sy ?? 0) * (place?.away ?? 0) * (shipWay?.dist ?? 0), gliding: place?.phase !== "lies", w: berthAt.along === "x" ? SHIP_LENGTH : 1, h: berthAt.along === "y" ? SHIP_LENGTH : 1 } as ObjView) : all;
+	}, [objs, track, trainStands, stationHere, shipLies, berthAt, hello, place?.phase, place?.away, shipWay]);
 
 	/** A tap of a finger: on a thing lying there, go and pick it up; on what stands there, its actions (a phone); else walk. */
 	const onTap = useCallback((x: number, y: number) => {
@@ -917,12 +951,15 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	openLineRef.current = openLine;
 
 	const mapView = mapMode === "text" ? null : hello ? (
-		<MapRenderer key={`${hello.room.ground[0]?.length}x${hello.room.ground.length}`} mode={mapMode} world={hello.world} room={hello.room} chars={chars} objs={shownObjs} me={me} fog={fog} onTurn={onTurn}
+		<>
+		{aboard && worldTime && <div className="aboard" role="status">{tr("An Bord des Großen Schiffs")} → {tr(aboard.island)} · {tr(`Ankunft in etwa ${Math.max(1, Math.ceil((aboard.arriveWorldMs - shownWorldMs(worldTime.v, worldTime.at, Date.now())) / 60_000))} Weltminuten`)}</div>}
+		<MapRenderer key={`${hello.room.ground[0]?.length}x${hello.room.ground.length}`} mode={mapMode} world={hello.world} room={hello.room} chars={mapChars} objs={shownObjs} me={me} fog={fog} onTurn={onTurn}
 			fill goal={walkGoal} insetBottom={detent === "peek" ? detentPx("peek", window.innerHeight) : Math.min(sheetPx ?? detentPx("half", window.innerHeight), window.innerHeight * 0.7)}
 			controls={pad !== "off" ? <TouchPad hold={(d) => { input.current?.blur(); stopWalk.current(); setMenu(null); hold(d); }} release={release} action={action} noAction /> : undefined}
 			onCell={(x, y) => { input.current?.blur(); setMenu(null); if (detent !== "peek") setDetent("peek"); else onTap(x, y); }}
 			onMenu={(x, y, left, top) => { input.current?.blur(); stopWalk.current(); setMenu({ x, y, left, top }); }}
 			onFail={(why) => { setMapMode(mapMode === "3d" ? "2d" : "text"); append({ kind: "error", text: `${why} ${mapMode === "3d" ? "Die 2D-Karte bleibt aktiv." : "Das Spiel läuft als Text weiter."}`, from: "", at: Date.now() }); }} />
+		</>
 	) : <div className="map"><p className="muted">Verbinde …</p></div>;
 	// the search for seeds rests a while in the room it was made (server: garden.ts): the page does not offer it then
 	const searching = trade?.seedRestUntilWorldMs ?? 0, resting = !!worldTime && searching > shownWorldMs(worldTime.v, worldTime.at, Date.now());
@@ -1061,7 +1098,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
 			<div className={`stage${pad === "left" ? " pad-left" : ""}${pad === "off" ? " pad-off" : ""}${detent !== "peek" ? " open" : ""}`}>
 				{mapView}
-				{atlas && atlas.rooms.length > 1 && !isTouch() && mapMode !== "text" && <Atlas atlas={atlas} state={atlasState} me={chars.get(me) ?? null} onBeam={(room) => send(`beam ${room}`)} />}
+				{atlas && atlas.rooms.length > 1 && !isTouch() && mapMode !== "text" && <Atlas atlas={atlas} state={atlasState} ship={liner && worldTime ? { t: liner, now: () => shownWorldMs(worldTime.v, worldTime.at, Date.now()) } : null} me={chars.get(me) ?? null} onBeam={(room) => send(`beam ${room}`)} />}
 				<div className="hud">
 					<button className="hud-pill" onClick={() => setAtlasPage(true)} disabled={!atlas || atlas.rooms.length < 2} aria-label="Weltkarte öffnen">
 						<span className={`live${live ? " on" : ""}`} /><b>{hello?.room.name ?? ""}</b>
@@ -1099,7 +1136,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				</div>
 			</>}
 			{panel && <div className="touch-page"><div className="touch-page-head"><button className="hud-btn" onClick={() => setPanel(null)} aria-label="Schließen">×</button></div>{panels}</div>}
-			{atlasPage && atlas && <div className="touch-page"><div className="touch-page-head"><strong>Weltkarte</strong><span className="spacer" /><button className="hud-btn" onClick={() => setAtlasPage(false)} aria-label="Schließen">×</button></div><Atlas atlas={atlas} state={atlasState} page me={chars.get(me) ?? null} onBeam={(room) => { send(`beam ${room}`); setAtlasPage(false); }} /></div>}
+			{atlasPage && atlas && <div className="touch-page"><div className="touch-page-head"><strong>Weltkarte</strong><span className="spacer" /><button className="hud-btn" onClick={() => setAtlasPage(false)} aria-label="Schließen">×</button></div><Atlas atlas={atlas} state={atlasState} page ship={liner && worldTime ? { t: liner, now: () => shownWorldMs(worldTime.v, worldTime.at, Date.now()) } : null} me={chars.get(me) ?? null} onBeam={(room) => { send(`beam ${room}`); setAtlasPage(false); }} /></div>}
 			{helpView}
 		</div>
 	);
