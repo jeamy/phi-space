@@ -61,17 +61,18 @@ above: entries, types, commits per minute, memory.
 
 ![Live dashboard](docs/img/dashboard.jpg)
 
-### Short text (Bluesky thread)
+### Short text
 
-1. The best of both worlds: phi-spaces and pi-durable. One keeps shared state and coordination, the other keeps an
-   agent running across restarts. Below: what each one is, how they work together, and how they run in our test
-   installations. https://spaces.eibrain.org/?lang=en&view=feed (screenshot: help site and live feed)
+1. The best of both worlds: phi-spaces (https://spaces.eibrain.org) and pi-durable
+   (https://earendil.com/posts/pi-durable/). One keeps shared state and coordination, the other keeps an agent
+   running across restarts. What each is, how they work together and how they run in our tests: below.
+   (screenshot: help site and live feed)
 2. phi-spaces is a TypeScript space library on the tuple-space model. Processes and agents exchange typed entries,
    find them by template, and take over work with `take`, transactions and leases. It has its own SQLite store, owned
    by one process, or runs in memory, and needs no agent framework.
 3. pi-durable (Earendil) is a different kind of thing: a persistent agent runtime. Conversations, model responses, tool
-   calls and task state are stored and continued after a restart. https://earendil.com/posts/pi-durable/ It runs one
-   agent; phi-spaces coordinates how several participants work together.
+   calls and task state are stored and continued after a restart. It runs one agent; phi-spaces coordinates how
+   several participants work together.
 4. How they fit: the optional `agent/` package gives pi-durable agents the space tools, over a separate space host.
    pi-durable owns the agent's own state and resumption; the space owns the shared entries, claims and leases. The space
    core itself does not depend on pi-durable.
