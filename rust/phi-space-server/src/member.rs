@@ -257,7 +257,7 @@ fn quarantine(c: &Json, now: &Now, configs: Vec<SyncSpaceConfig>) {
 }
 
 pub fn run(config: &str, store: &str) {
-	let mut c = config_of(config, "member", "this host runs as a member; a control host stays on TypeScript", &REFUSED);
+	let mut c = config_of(config, "member", "this host runs as a member; a control host starts with --control", &REFUSED);
 	follow_installed_change(&mut c, &stopping::runtime());
 	let now = clock();
 	let syncs = sync_configs(&c);

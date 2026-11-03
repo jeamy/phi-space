@@ -593,7 +593,7 @@ test("what a control host does not carry stops it at the start", { skip: CONTROL
 			assert.equal(code, 1, out);
 			assert.match(out, part);
 		};
-		for (const k of ["syncSpaces", "entryReplication", "recovery", "recoveryAdmin", "membership", "runGates", "spaceLifecycle"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
+		for (const k of ["syncSpaces", "registerSshTarget", "registerReadSocket", "membership", "runGates", "spaceLifecycle"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
 		await refused({ mode: "member" }, /runs as a control host/);
 		await refused({ peerId: "someone-else" }, /does not belong to the provisioned NetBird peer/);
 		await refused({ hostId: "other" }, /identity disagrees/);
@@ -624,10 +624,9 @@ test("what a Member does not carry stops it at the start instead of being ignore
 		assert.equal(code, 1, out);
 		assert.match(out, part);
 	};
-	for (const k of ["syncSpaces", "entryReplication", "recovery"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
-	await refused({ recoveryAdmin: { any: 1 } }, /recoveryAdmin is not served/);
+	for (const k of ["root", "registerSshTarget", "registerReadSocket"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
 	await refused({ capabilities: { tools: [""] } }, /invalid capability report/);
-	await refused({ mode: "control" }, /a control host stays on TypeScript/);
+	await refused({ mode: "control" }, /a control host starts with --control/);
 	await refused({ peerId: "someone-else" }, /does not belong to the provisioned NetBird peer/);
 	const boot = (await g.external.get<any>("boot:data-host"))!;
 	await g.external.compareAndSet("boot:data-host", boot.version, { ...boot.value, state: "fenced" });
@@ -640,7 +639,7 @@ test("what a Member does not carry stops it at the start instead of being ignore
 	const local = new SqliteRecoveryRegister(config.installedRegisterFile as string);
 	tc.after(() => local.close());
 	await local.compareAndSet(`installed-authority:${g.space.spaceId}`, null, { targetHostId: "other" });
-	await refused({}, /the control host changed/);
+	await refused({}, /control endpoint must be reprovisioned for the installed authority successor/);
 });
 
 test("a router's delegated call follows the policy the control host signs now, and old versions stop", async (tc) => {
