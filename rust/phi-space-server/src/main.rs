@@ -5,7 +5,8 @@
 //   phi-space-server --profile mmo|codemode     what the project's server/space-host.ts is, from the same environment
 //   phi-space-server --tls-register CONFIG.json the independent register over pinned mutual TLS (src/tls-register.ts)
 //   phi-space-server --store FILE --member CONFIG.json a federation Member behind a TypeScript control host
-//   phi-space-server --replica-tool CONFIG.json REQUEST the operator's tool for a Member's primary/sync Space, its daemon stopped
+//   phi-space-server [--store FILE] --replica-tool CONFIG.json REQUEST the operator's tool for a primary/sync Space, or with
+//     --store for a control host's main store (`mainSync`), its daemon stopped
 //   phi-space-server --store FILE --recovery-only CONFIG.json RECOVERY.json the recovery service of a stopped, restart-locked host
 //
 // Prints "[phi-spaces] ready on <listen> (store <file|memory>)" once it serves; SIGINT/SIGTERM close it. A panic ends the
@@ -25,7 +26,7 @@ use phi_store::{system_random, Ledger, MemoryLedger, SpaceHost, SqliteLedger, St
 use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
 
-const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode\n       phi-space-server --tls-register CONFIG.json\n       phi-space-server --store FILE --control CONFIG.json\n       phi-space-server --store FILE --member CONFIG.json\n       phi-space-server --replica-tool CONFIG.json REQUEST\n       phi-space-server --store FILE --recovery-only CONFIG.json RECOVERY.json";
+const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode\n       phi-space-server --tls-register CONFIG.json\n       phi-space-server --store FILE --control CONFIG.json\n       phi-space-server --store FILE --member CONFIG.json\n       phi-space-server [--store FILE] --replica-tool CONFIG.json REQUEST\n       phi-space-server --store FILE --recovery-only CONFIG.json RECOVERY.json";
 
 pub(crate) fn fail(message: impl std::fmt::Display) -> ! {
 	eprintln!("{message}");
@@ -53,7 +54,7 @@ fn main() {
 	}
 	if let Some(config) = arg("--replica-tool") {
 		let request = args.iter().position(|a| a == "--replica-tool").and_then(|i| args.get(i + 2)).cloned().unwrap_or_else(|| fail("--replica-tool needs CONFIG.json and a request"));
-		return replica_tool::run(&config, &request);
+		return replica_tool::run(&config, &request, arg("--store").as_deref());
 	}
 	if let Some(config) = arg("--recovery-only") {
 		let recovery = args.iter().position(|a| a == "--recovery-only").and_then(|i| args.get(i + 2)).cloned().unwrap_or_else(|| fail("--recovery-only needs CONFIG.json and RECOVERY.json"));

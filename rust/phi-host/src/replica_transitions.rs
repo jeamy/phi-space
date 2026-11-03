@@ -166,7 +166,7 @@ fn set_permit(r: &dyn Boots, host_id: &str, space_id: &str, permit: &Json, host_
 	})
 }
 
-/// What every transition is given (`Common`, without sibling Spaces: a primary/sync Space has a store of its own).
+/// What every transition is given (`Common`).
 pub struct Common<'a> {
 	pub storage: &'a mut SyncStoreFile,
 	pub journal: &'a mut SyncJournal,
@@ -175,6 +175,9 @@ pub struct Common<'a> {
 	pub host_id: &'a str,
 	pub data_incarnation: &'a str,
 	pub now: f64,
+	/// Other Spaces in the same replicated store (a host's main store): their permits follow on this host. Empty for a
+	/// primary/sync Space, which has a store of its own.
+	pub sibling_spaces: &'a [String],
 }
 
 fn assert_shared_incarnation(o: &Common, space_id: &str) -> TR<()> {
@@ -234,6 +237,25 @@ fn resume_sealed(o: &mut Common, id: &str, assert: &dyn Fn() -> phi_store::sync:
 /// `alignPermit` of `(host, its data incarnation)`: the host's permit follows the configuration.
 fn align_permit(o: &Common, c: &Json, role: &str, id: &str, (host_state, require): (Option<&str>, &[&str]), (host_id, data_incarnation): (&str, &str)) -> TR<()> {
 	let permit = permit_for(c, role, data_incarnation, id);
+	// sibling Spaces of a replicated main store keep their own data incarnation and follow role and versions; another host
+	// (the setStandby target) holds the same store, so it gets their permits with the incarnations of this host
+	for sibling in o.sibling_spaces.iter().filter(|s| Some(s.as_str()) != text(c, "spaceId")) {
+		let own = if host_id == o.host_id { None } else { o.register.get(&format!("boot:{}", o.host_id)).map_err(|e| e.to_string())?.get("value").and_then(|v| v.get("spaces")).and_then(|s| s.get(sibling)).filter(|p| !p.is_null()).cloned() };
+		if host_id != o.host_id && own.is_none() {
+			return refused(format!("{} has no permit for sibling Space {sibling}", o.host_id));
+		}
+		cas_boot(o.register, host_id, &|b| {
+			let held = b.as_ref().and_then(|b| b.get("spaces")).and_then(|s| s.get(sibling)).filter(|p| !p.is_null()).cloned();
+			let (Some(b), Some(p)) = (b, own.clone().or(held.clone())) else { return refused(format!("{host_id} has no permit for sibling Space {sibling}")) };
+			let next = with(&p, &[("state", "active".into()), ("role", role.into()), ("authorityId", c.get("authorityId").cloned().unwrap_or(Json::Null)), ("primaryEpoch", c.get("primaryEpoch").cloned().unwrap_or(Json::Null)), ("replicaConfigVersion", c.get("replicaConfigVersion").cloned().unwrap_or(Json::Null)), ("durability", durability_of(c).into()), ("transitionId", id.into())]);
+			if held.as_ref().is_some_and(|h| canonical(h) == canonical(&next)) {
+				return Ok(None);
+			}
+			let mut spaces = spaces_of(&b);
+			spaces.insert(sibling, next);
+			Ok(Some(with(&b, &[("spaces", Json::Object(spaces)), ("transitionId", id.into())])))
+		})?;
+	}
 	set_permit(o.register, host_id, text(c, "spaceId").unwrap_or(""), &permit, host_state, require)?;
 	if let (Some(installed), true) = (o.installed, host_id == o.host_id) {
 		let key = format!("installed:{host_id}:{}", text(c, "spaceId").unwrap_or(""));

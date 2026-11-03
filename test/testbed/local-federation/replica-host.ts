@@ -82,9 +82,9 @@ if (mode === "recovery") {
 	await host.close(ctx);
 	console.log(JSON.stringify({ entries }));
 	process.exit(0);
-} else if (!cfg.mainSync && process.env[`${name!.replace("-", "_").toUpperCase()}_IMPL`] === "rust" && !JSON.parse(input!).materialize) {
-	// the Rust tool (phi-space-server --replica-tool); what the stores hold is read by the TypeScript one below
-	console.log(execFileSync("phi-space-server", ["--replica-tool", file, input!], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim().split("\n").at(-1));
+} else if (process.env[`${name!.replace("-", "_").toUpperCase()}_IMPL`] === "rust") {
+	// the Rust tool (phi-space-server --replica-tool); a main store's with the host's store file
+	console.log(execFileSync("phi-space-server", [...(cfg.mainSync ? ["--store", `/fed/${name}.sqlite`] : []), "--replica-tool", file, input!], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim().split("\n").at(-1));
 	process.exit(0);
 } else {
 	// the main store (its harness is the host's store, its sibling Spaces follow) or the primary/sync Space

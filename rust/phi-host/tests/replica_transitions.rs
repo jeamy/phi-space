@@ -71,7 +71,7 @@ fn promote_and_degrade_move_the_space_behind_verified_proofs() {
 	let (_a, mut b) = histories(&d);
 	let mut storage = SyncStoreFile::open(&d.join("b.store")).unwrap();
 	let fence = Fence(RefCell::new(vec![]));
-	let mut o = Common { storage: &mut storage, journal: &mut b, register: &register, installed: Some(&installed), host_id: "b", data_incarnation: "1ed6e700", now: 2_000.0 };
+	let mut o = Common { storage: &mut storage, journal: &mut b, register: &register, installed: Some(&installed), host_id: "b", data_incarnation: "1ed6e700", now: 2_000.0, sibling_spaces: &[] };
 
 	// a claim that was never fenced moves nothing
 	let forged = obj! { "hostId" => "a", "kind" => "container", "observedAt" => 1.0, "restartLocked" => true };
@@ -133,4 +133,38 @@ fn promote_and_degrade_move_the_space_behind_verified_proofs() {
 	let back = readmit_space(&register, "a", "sp-local", "readmit-1", "aa000001").unwrap();
 	assert_eq!(text(back.get("spaces").unwrap().get("sp-local").unwrap(), "state"), "active");
 	assert_eq!(readmit_space(&register, "a", "sp-local", "readmit-1", "aa000001").unwrap(), back, "once is enough");
+}
+
+/// A host's main store on primary/sync: the permits of its sibling Spaces follow role and versions on this host, each
+/// keeping its own data incarnation; a sibling this host holds no permit for stops the transition.
+#[test]
+fn the_sibling_spaces_of_a_main_store_follow_a_promotion() {
+	let d = dir("replica-transitions-siblings");
+	let register = SqliteRegister::open(&d.join("external.sqlite")).unwrap();
+	let installed = SqliteRegister::open(&d.join("installed-b.sqlite")).unwrap();
+	let sibling = |role: &str| obj! { "state" => "active", "authorityId" => "authority", "dataIncarnation" => "5ib1ing0", "role" => role, "primaryEpoch" => 1.0, "replicaConfigVersion" => 1.0, "durability" => "sync", "transitionId" => "setup" };
+	let with_sibling = |host: &str, role: &str| {
+		let mut b = boot(host, role, 1.0, 1.0);
+		b.as_object_mut().unwrap().get_mut("spaces").unwrap().as_object_mut().unwrap().insert("sp-sibling", sibling(role));
+		b
+	};
+	register.compare_and_set("boot:a", None, &with_sibling("a", "primary")).unwrap();
+	register.compare_and_set("boot:b", None, &boot("b", "standby", 1.0, 1.0)).unwrap();
+	let (_a, mut b) = histories(&d);
+	let mut storage = SyncStoreFile::open(&d.join("b.store")).unwrap();
+	let fence = Fence(RefCell::new(vec![]));
+	let siblings = vec!["sp-sibling".to_owned(), SPACE.to_owned()];
+	let mut o = Common { storage: &mut storage, journal: &mut b, register: &register, installed: Some(&installed), host_id: "b", data_incarnation: "1ed6e700", now: 2_000.0, sibling_spaces: &siblings };
+	let proof = fence.fence("a", "promote promote-1").unwrap();
+	assert_eq!(promote(&mut o, "promote-1", 1.0, 1.0, &fence, &proof), Err("b has no permit for sibling Space sp-sibling".into()), "a sibling b holds no permit for");
+	// the transition went past its entry: once b holds the sibling's permit, the same ID completes it
+	let v = register.get("boot:b").unwrap().get("version").and_then(Json::as_f64);
+	let mut held = value(&register, "boot:b");
+	held.as_object_mut().unwrap().get_mut("spaces").unwrap().as_object_mut().unwrap().insert("sp-sibling", sibling("standby"));
+	register.compare_and_set("boot:b", v, &held).unwrap();
+	promote(&mut o, "promote-1", 1.0, 1.0, &fence, &proof).unwrap();
+	let spaces = value(&register, "boot:b").get("spaces").cloned().unwrap();
+	let s = spaces.get("sp-sibling").unwrap();
+	assert_eq!((text(s, "role"), s.get("primaryEpoch").and_then(Json::as_f64), text(s, "dataIncarnation"), text(s, "transitionId")), ("primary".into(), Some(2.0), "5ib1ing0".into(), "promote-1".into()));
+	assert_eq!(text(spaces.get(SPACE).unwrap(), "role"), "primary");
 }

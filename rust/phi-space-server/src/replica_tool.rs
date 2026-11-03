@@ -1,6 +1,8 @@
 // `--replica-tool CONFIG.json REQUEST`: the operator's tool for the primary/sync Space of a host whose daemon is stopped, what
-// `replica-host.ts tool` does (test/testbed/federation-host.ts, mode sync): `status`, `wipe` (the Space's directory set aside),
-// `promote` and `degrade` behind the fencing service, `set-standby` with a quarantined target. Prints one JSON line.
+// `replica-host.ts tool` does (test/testbed/federation-host.ts, mode sync): `status` (with `materialize`: what the store holds
+// after the accepted history), `wipe` (the Space's directory set aside), `promote` and `degrade` behind the fencing service,
+// `set-standby` with a quarantined target. A control host's main store (`mainSync`, `--store` its file) works the same,
+// the permits of its sibling Spaces following. Prints one JSON line.
 use crate::member::{config_of, field};
 use crate::fail;
 use phi_host::auth::Signer;
@@ -11,7 +13,8 @@ use phi_host::sync_space::SyncSpaceConfig;
 use phi_host::tls::{private_file, TlsIdentity};
 use phi_json::{obj, parse, text, Json};
 use phi_store::sync::{JournalOptions, SyncJournal};
-use phi_store::sync_store::SyncStoreFile;
+use phi_store::sync_store::{materialize_sync_history, SyncStoreFile};
+use phi_store::{SpaceHost, SqliteLedger, Store, Synchronous};
 use std::path::Path;
 
 fn now() -> f64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("after 1970").as_millis() as f64 }
@@ -22,12 +25,28 @@ fn line(v: &Json, timeout_ms: u64) -> RegisterClient {
 	RegisterClient::new(RegisterClient { identity, host: field(v, "host").into(), port: v.get("port").and_then(Json::as_f64).unwrap_or(0.0) as u16, server_name: text(v, "serverName").map(str::to_owned), timeout_ms: v.get("timeoutMs").and_then(Json::as_f64).map_or(timeout_ms, |t| t as u64), batch_reads: false, unix_path: None }).unwrap_or_else(|e| fail(e))
 }
 
-pub fn run(config: &str, request: &str) {
-	let c = config_of(config, "member", "the replica tool works on a member's config", &[]);
+pub fn run(config: &str, request: &str, store: Option<&str>) {
+	let main = store.is_some();
+	let c = if main { config_of(config, "control", "a main store's tool works on a control host's config", &[]) } else { config_of(config, "member", "the replica tool works on a member's config", &[]) };
 	let q = parse(request).unwrap_or_else(|e| fail(format!("the request: {e}")));
 	let host_id = field(&c, "hostId");
-	let s = c.get("syncSpaces").and_then(Json::as_array).and_then(|a| a.first()).unwrap_or_else(|| fail("the config has no primary/sync Space"));
-	let sc = SyncSpaceConfig::from_json(s).unwrap_or_else(|e| fail(e));
+	let (sc, harness, siblings) = match store {
+		// the main store: its harness is the host's store, its sibling Spaces follow
+		Some(file) => {
+			let m = c.get("mainSync").filter(|m| !m.is_null()).unwrap_or_else(|| fail("the config has no mainSync"));
+			let mut o = m.as_object().cloned().unwrap_or_default();
+			o.insert("alias", Json::from("control-main"));
+			o.insert("spaceId", m.get("genesis").and_then(|g| g.get("spaceId")).cloned().unwrap_or(Json::Null));
+			let siblings: Vec<String> = m.get("siblings").and_then(Json::as_array).map_or(vec![], |s| s.iter().filter_map(Json::as_str).map(str::to_owned).collect());
+			(SyncSpaceConfig::from_json(&Json::Object(o)).unwrap_or_else(|e| fail(e)), std::path::PathBuf::from(file), siblings)
+		}
+		None => {
+			let s = c.get("syncSpaces").and_then(Json::as_array).and_then(|a| a.first()).unwrap_or_else(|| fail("the config has no primary/sync Space"));
+			let sc = SyncSpaceConfig::from_json(s).unwrap_or_else(|e| fail(e));
+			let harness = sc.dir.join("harness.sqlite");
+			(sc, harness, vec![])
+		}
+	};
 	let journal_path = sc.dir.join("journal.sqlite");
 	let o = JournalOptions { max_intent_bytes: sc.max_intent_bytes, max_history_bytes: sc.max_history_bytes, self_id: Some(host_id.into()), format: None };
 	let op = text(&q, "op").unwrap_or("");
@@ -39,9 +58,6 @@ pub fn run(config: &str, request: &str) {
 	let mut journal = SyncJournal::open(&journal_path, &sc.genesis, o).unwrap_or_else(|e| fail(e));
 	let result = match op {
 		"status" => {
-			if q.get("materialize").is_some_and(|m| m != &Json::Bool(false)) {
-				fail("materialize is read by the TypeScript tool");
-			}
 			let head = journal.head().unwrap_or_else(|e| fail(e));
 			let applied = journal.applied_revision().unwrap_or_else(|e| fail(e)) as f64;
 			let mut r = obj! { "head" => head.clone(), "applied" => applied, "config" => journal.config(), "recoveredCommitted" => journal.recovered_committed().unwrap_or_else(|e| fail(e)) };
@@ -55,6 +71,18 @@ pub fn run(config: &str, request: &str) {
 			}
 			let hash = if applied > 0.0 { journal.intent(applied).unwrap_or_else(|e| fail(e)).and_then(|i| i.get("hash").cloned()).unwrap_or(Json::Null) } else { Json::Null };
 			o.insert("appliedHash", hash);
+			if q.get("materialize").is_some_and(|m| phi_core::space::truthy(Some(m))) {
+				let mut st = SyncStoreFile::open(&harness).unwrap_or_else(|e| fail(e));
+				materialize_sync_history(&mut st, &mut journal, None).unwrap_or_else(|e| fail(e));
+				drop(st);
+				let ledger = SqliteLedger::open(&harness, Synchronous::Full).unwrap_or_else(|e| fail(e));
+				let mut view = Store::open(SpaceHost::sqlite(ledger), phi_store::system_random).unwrap_or_else(|e| fail(e));
+				let space = view.reader(Some(&sc.space_id)).ok().map(|h| h.space.state.to_json());
+				let entries: Vec<Json> = space.as_ref().and_then(|s| s.get("entries")).and_then(Json::as_array).map_or(vec![], |e| e.iter().filter(|e| text(e, "type") == Some("Ledger")).map(|e| e.get("fields").cloned().unwrap_or(Json::Null)).collect());
+				o.insert("entries", Json::Array(entries));
+				o.insert("snapshot", space.map_or(Json::Null, |s| Json::String(phi_json::digest_json(&s).unwrap_or_default())));
+				view.close();
+			}
 			r
 		}
 		"promote" | "degrade" | "set-standby" => {
@@ -62,9 +90,9 @@ pub fn run(config: &str, request: &str) {
 			let register = line(q.get("register").unwrap_or_else(|| fail("the request has no register")), 6_000);
 			let boots = BlockingRegister(&rt, &register);
 			let installed = SqliteRegister::open(Path::new(field(&c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e));
-			let mut storage = SyncStoreFile::open(&sc.dir.join("harness.sqlite")).unwrap_or_else(|e| fail(e));
+			let mut storage = SyncStoreFile::open(&harness).unwrap_or_else(|e| fail(e));
 			let tid = text(&q, "tid").unwrap_or_else(|| fail("the request has no tid")).to_owned();
-			let mut o = Common { storage: &mut storage, journal: &mut journal, register: &boots, installed: Some(&installed), host_id, data_incarnation: &sc.incarnation, now: now() };
+			let mut o = Common { storage: &mut storage, journal: &mut journal, register: &boots, installed: Some(&installed), host_id, data_incarnation: &sc.incarnation, now: now(), sibling_spaces: &siblings };
 			if op == "set-standby" {
 				let target = text(&q, "target").unwrap_or_else(|| fail("the request has no target"));
 				let (pin, ip) = sc.peers.iter().find(|(p, _)| p.host_id == target).cloned().unwrap_or_else(|| fail(format!("{target} is not a peer of this Space")));
