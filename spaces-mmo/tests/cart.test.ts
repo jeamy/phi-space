@@ -147,6 +147,50 @@ test("a cart goes only by road, alone, with its cargo; its owner unloads it ther
 	} finally { await srv.close(); }
 });
 
+test("a cart on a standing route loads from its owner's chest at one end, unloads into the chest at the other, comes back and never goes empty", { timeout: 180_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const x = (await s.readAll({ type: "Exit", fields: { location: c.room } })).map((e) => e.fields as unknown as ExitFields).find((e) => w.rooms.some((r) => r.roomId === e.destination))!;
+		const to = w.rooms.find((r) => r.roomId === x.destination)!;
+		const hut = (id: string, room: string, at: { x: number; y: number }) => s.write({ type: "Building", fields: { buildId: id, plan: "huette", name: "Hütte", room, x: at.x, y: at.y, w: 2, h: 2, owner: me, ownerName: "Ole", accountId: c.accountId, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
+		await give(s, me, "karren");
+		await does(p, "karren stelle", "Karren ab");
+		await s.write({ type: "Building", fields: { buildId: "road", plan: "strasse", name: "Straße", room: c.room, x: x.x, y: x.y - 1, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
+		assert.match(await does(p, `karren pendel ${to.name}`, "Truhe"), /an beiden Enden einen Bau mit Truhe/);
+		await hut("hut-a", c.room, { x: 0, y: 0 });
+		await hut("hut-b", to.roomId, { x: 0, y: 0 });
+		for (const proto of ["treibholz", "treibholz", "treibholz", "stein", w.currency]) await give(s, "hut-a", proto);
+		assert.match(await does(p, `karren pendel ${to.name} mit treibholz`, "pendelt"), /pendelt jetzt zwischen .+ und /);
+		const cart = async () => (await s.readAll({ type: "Cart" }))[0]!.fields as unknown as CartFields;
+		const tick = async () => { const e = (await s.readAll({ type: "Cart" }))[0]!; await s.takeIfExists({ id: e.id }, 0); await s.write({ type: "Cart", fields: { ...e.fields, dueWorldMs: 1 } as never }, null, FOREVER); await cartTick(s, w, 60_000); return cart(); };
+		const at = (where: string, proto: string) => s.count({ type: "Item", fields: { location: where, proto } });
+		let f = await tick();
+		assert.deepEqual([f.room, f.path], [c.room, [to.roomId]], "loaded, off it goes");
+		assert.equal(await at(f.cartId, "treibholz"), 3);
+		assert.equal((await at("hut-a", "stein")) + (await at("hut-a", w.currency)), 2, "only what the route names; never coins");
+		f = await tick();
+		assert.deepEqual([f.room, f.path.length], [to.roomId, 0]);
+		assert.ok(f.dueWorldMs < FOREVER, "on a route it works where it arrives");
+		f = await tick();
+		assert.equal(await at("hut-b", "treibholz"), 3, "unloaded into the chest there");
+		assert.deepEqual(f.path, [c.room], "and back");
+		f = await tick();
+		f = await tick();
+		assert.deepEqual([f.room, f.path], [c.room, []], "nothing to carry: it waits");
+		await give(s, "hut-a", "treibholz");
+		f = await tick();
+		assert.deepEqual(f.path, [to.roomId], "something again: it goes");
+		assert.match(await does(p, "karren", "pendelt"), /pendelt zwischen/);
+		assert.match(await does(p, "karren halt", "nicht mehr"), /pendelt nicht mehr/);
+		assert.equal((await cart()).route, undefined);
+	} finally { await srv.close(); }
+});
+
 test("the island railway: from station to station of an island, for its fare, while the timetable has the train there", { timeout: 180_000 }, async () => {
 	const srv = await startServer();
 	try {

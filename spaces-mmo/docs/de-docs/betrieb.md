@@ -285,6 +285,39 @@ Ergebnis eines Laufs mit 100 Figuren: [lasttest-2026-10-28.md](../lasttest-2026-
 Server: `LOAD_BOTS=50 LOAD_SECONDS=60 node --no-warnings --experimental-strip-types --import ./tests/test-env.ts
 tests/perf/space-cost.ts` (ein Stack wie auf den Servern, eine JSON-Zeile mit CPU-ms des Space-Prozesses je Befehl).
 
+## Durchspiel der Epochen 1 bis 4
+
+`npm --prefix spaces-mmo run test:play` (`tests/play/epochs.ts`) spielt jede Funktion der vier Epochen einmal so, wie Spieler es tun: Zwei
+registrierte Spieler schicken ihre Befehle über den Spiel-Socket und warten auf die Antwort, die die Seite zeigen würde. Die
+Welt wird über ihre Regions-Spaces vorbereitet, damit jede Prüfung ihren Befehl prüft und nicht den langen Weg dorthin: die
+Einstellungen des Betreibers (keine Ruhe nach der Arbeit, `epoch.force` je Epoche), Dinge ins Gepäck oder in eine Truhe, ein
+Bau neben einen Spieler gestellt. Eine Hütte wird ganz gebaut (abstecken, liefern, arbeiten). Die Prüfungen: im Fischerdorf
+Hütte, Truhe, Feuer, Tausch, Marktbrett, Regentonne, Beet, Steg und Netz, Räucherei, Essen, Handwerk, Hühnerstall und Wild;
+im Dorf Werkstatt und Karren, Lagerhaus, Mühle, Backhaus, Webstuhl, Steinbruch, Lehmgrube, Ziegelei, Kapelle, Gehege, Acker,
+Siedlung, Straße und Karrenfahrt; in der Stadt Antrag und Abstimmung im Rathaus, Kaufhaus, Kontor (Kredit, Tilgung, ein
+weitergegebener und eingelöster Wechsel), Leuchtturm, Park, Brauerei, Sand und Glashütte, Werft, Luke und Rudern; im Netz die
+Inselbahn (Fahrplan, Fahrt, Fracht), ein Karren auf fester Route, das große Schiff (Fahrplan, Einschiffen und Ankunft in einer
+anderen Region) und das Beamen. Ein Bericht nennt jede Funktion mit ok oder der Antwort, die ausblieb; der Exit-Code ist 1,
+wenn eine fehlschlug.
+
+Ohne Variablen startet es eine eigene Welt (im Speicher, die vier Regionen, ein Web-Prozess; eine Weltstunde dauert 36 s) und
+braucht etwa eine halbe Stunde, das meiste davon Warten auf Zug und Schiff. Gegen eine laufende Welt verändert es diese Welt:
+Es setzt die Einstellungen zurück, die es geändert hat, und nimmt die Bauten weg, die es hingestellt hat, aber seine Spieler
+(jedes Mal zwei registrierte Konten und die Neuen, die in einer anderen Region anfingen) bleiben. Seine Wartezeiten richten
+sich nach der Uhr dieser Welt. Ist die Bucht voll, spielt es im Klippenpfad nebenan, es nutzt Bahnhöfe, die stehen, und eine
+Prüfung, die dort nicht gehen kann (eine Siedlung in beiden Räumen, ein Bahnhof erst abgesteckt), gilt als übersprungen, nicht
+als Fehler:
+
+```sh
+PLAY_URL=http://192.168.8.28:3910 \
+PLAY_SPACES=west=tcp:127.0.0.1:3960,nord=tcp:127.0.0.1:3962,ost=tcp:127.0.0.1:3963,sued=tcp:127.0.0.1:3964 \
+npm --prefix spaces-mmo run test:play
+```
+
+`PLAY_ONLY=kontor,karren` führt nur die Prüfungen aus, deren Name eines der Wörter enthält (eine Prüfung, die auf einer
+früheren aufbaut, sagt das), `PLAY_OUT=<datei>` schreibt den Bericht auch als JSON. Es gehört nicht zu `npm test`: Für jede
+Änderung dauert es zu lange.
+
 ## Nicht enthalten
 
 - Kein Backup-Skript wie `docker:backup` im Chat; der Speicher liegt im Volume, die Sicherung des Verzeichnisses

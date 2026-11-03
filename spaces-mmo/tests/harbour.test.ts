@@ -11,6 +11,7 @@ import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
 import { loanTick, shopPrice } from "../server/engine/commands/shop.ts";
+import { coversOf, flameOf, fogTick, isLit, roomsAround } from "../server/engine/fire.ts";
 import { showTick } from "../server/engine/commands/festival.ts";
 import { baysOf, berth, linerOf, SHIP_LENGTH, lane, shipComes, shipPlace, shipState, timetable } from "../server/engine/liner.ts";
 
@@ -61,7 +62,7 @@ test("eating lasts by the food and shortens the rest; a net at a jetty catches; 
 	} finally { await srv.close(); }
 });
 
-test("a jetty goes only to the water; a lighthouse adds its light", { timeout: 180_000 }, async () => {
+test("a jetty goes only to the water; a lighthouse adds its light and covers the rooms around it", { timeout: 180_000 }, async () => {
 	const srv = await startServer();
 	try {
 		const s = srv.stack.space;
@@ -75,6 +76,20 @@ test("a jetty goes only to the water; a lighthouse adds its light", { timeout: 1
 		assert.match(await does(p, "bau regentonne", "Licht"), /Licht des Feuers reicht/);
 		await s.write({ type: "Building", fields: { buildId: "turm", plan: "leuchtturm", name: "Leuchtturm", room: c.room, x: 1, y: 14, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 3, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
 		assert.doesNotMatch(await does(p, "bau regentonne", /steckt eine Baustelle ab|passt keine/), /Licht/);
+		// it also covers the rooms one way from its own, on its island: the fire there and its fog
+		const around = roomsAround(w, "klippenpfad", 1);
+		assert.ok(around.includes("klippenkopf") && around.every((r) => w.rooms.find((x) => x.roomId === r)?.island === w.rooms.find((x) => x.roomId === "klippenpfad")!.island), around.join());
+		assert.ok(!(await coversOf(s, w)).get("feuer-bucht")!.includes("klippenkopf"), "the tower in the bay reaches the path, which the fire already covers");
+		await s.write({ type: "Building", fields: { buildId: "turm2", plan: "leuchtturm", name: "Leuchtturm", room: "klippenpfad", x: 1, y: 1, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 3, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
+		const cover = await coversOf(s, w);
+		assert.ok(cover.get("feuer-bucht")!.includes("klippenkopf"), "a tower on the path reaches the head");
+		assert.ok(cover.get("feuer-anleger")!.includes("klippenkopf") && !cover.get("feuer-anleger")!.includes("graue-bucht"), "the other fire keeps its rooms");
+		const fog = async (room: string) => Number((await s.readAll({ type: "Fog", fields: { room } }))[0]!.fields.level);
+		for (const e of await s.readAll({ type: "Fog", fields: { room: "klippenkopf" } })) await s.takeIfExists({ id: e.id }, 0);
+		await s.write({ type: "Fog", fields: { room: "klippenkopf", level: 3 } as never }, null, FOREVER);
+		assert.ok(!isLit(await flameOf(s, "feuer-anleger"), await worldNowOf(s)), "the head's own fire is out");
+		await fogTick(s, w, 60_000);
+		assert.equal(await fog("klippenkopf"), 2, "the bay's fire clears the head through the tower");
 	} finally { await srv.close(); }
 });
 
@@ -166,6 +181,22 @@ test("a shop prices by its shelf, pays from its till and mints nothing; a loan f
 		assert.equal(await loanTick(s, w, 60_000), 1);
 		assert.equal(await s.count({ type: "Item", fields: { location: "bank", proto: "perle" } }), 1, "the pledge went to the house");
 		assert.equal(await s.count({ type: "Loan" }), 0);
+		// a bill of exchange: its coins lie at it, the house keeps the fee, any counting house pays it out
+		const bills = () => s.readAll({ type: "Item", fields: { location: me, proto: "wechsel" } });
+		await give(s, me, w.currency, 12);
+		const purse0 = await coins(me), till1 = await coins("bank");
+		assert.match(await does(p, `wechsel ${w.bank!.note!.max + 1}`, "hält"), /hält 1 bis/);
+		assert.match(await does(p, "wechsel 10", "schreibt"), /Wechsel über 10 Münzen; 1 Münze behält es/);
+		const [bill] = await bills();
+		assert.equal(bill!.fields.name, "Wechsel über 10 Münzen");
+		assert.equal(await coins(String(bill!.fields.itemId)), 10, "the coins lie at the bill");
+		assert.equal(purse0 - (await coins(me)), 11);
+		assert.equal((await coins("bank")) - till1, 1, "the fee");
+		assert.match(await does(p, "wechsel", "trägst"), /1 Wechsel über zusammen 10 Münzen/);
+		assert.match(await does(p, "wechsel einlösen", "zahlt"), /zahlt dir den Wechsel aus: 10 Münzen/);
+		assert.equal((await bills()).length, 0);
+		assert.equal(await coins(String(bill!.fields.itemId)), 0);
+		assert.equal(purse0 - (await coins(me)), 1, "only the fee is gone, to the house");
 
 		const other = w.rooms.find((r) => r.island === w.rooms.find((x) => x.roomId === c.room)!.island && r.roomId !== c.room)!;
 		await s.write({ type: "Building", fields: house("j1", "steg", "Steg", c.room, c.x, c.y + 1, "o") as never }, null, FOREVER);

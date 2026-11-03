@@ -3,7 +3,7 @@
 //   1. in region A, in the command's transaction: the character, its cell and its account are taken and a Handover
 //      written (handOff). The character is now in neither region; what it carries stays in A, out of anyone's reach.
 //   2. a world worker of A takes the Handover in a transaction of A and carries the pack over, a few things at a time
-//      (carryPack, a full pack does not fit one transaction; what lies in a boat's hatch first): written in B, then taken in A. A thing already in B means
+//      (carryPack, a full pack does not fit one transaction; what lies in a boat's hatch or backs a bill first): written in B, then taken in A. A thing already in B means
 //      an earlier try got that far: it is not written twice.
 //   3. when the pack is over, the character is written into region B, in one transaction of B: account, character on a
 //      free cell near the ferry's landing, its token. A character already in B: an earlier try got that far.
@@ -61,9 +61,9 @@ const PACK_PER_STEP = 40;
  *  thing there on the next try and only takes it here; nobody touches it, the character is in neither region yet. Each
  *  step is one call to each space: a crossing is a step the player waits for, and a pack has hundreds of things. */
 export async function carryPack(here: SpaceLike, there: SpaceLike, charId: string, holders: readonly string[] = []): Promise<void> {
-	// what lies in a boat's hatch goes first, while the boat is still here to name it: a try that dies in between finds
-	// the boat here again and carries the rest of its cargo
-	for (const proto of holders) for (const boat of await here.readAll({ type: "Item", fields: { location: charId, proto } })) await carryPack(here, there, String(boat.fields.itemId));
+	// what lies in a boat's hatch or backs a bill of exchange goes first, while the holder is still here to name it: a try
+	// that dies in between finds the holder here again and carries the rest of what it holds (a bill in a hatch too)
+	for (const proto of holders) for (const boat of await here.readAll({ type: "Item", fields: { location: charId, proto } })) await carryPack(here, there, String(boat.fields.itemId), holders);
 	for (;;) {
 		const step = await here.readAll({ type: "Item", fields: { location: charId } }, { limit: PACK_PER_STEP });
 		if (!step.length) return;
@@ -129,7 +129,7 @@ async function deliverOne(here: SpaceLike, regions: ReadonlyMap<string, SpaceLik
 		const h = fieldsOf<HandoverFields>(taken);
 		const there = regions.get(h.to);
 		if (!there) throw new Error(`no address for the region ${h.to}`);
-		await carryPack(here, there, h.charId, Object.keys(w.boat?.hatch ?? {}));
+		await carryPack(here, there, h.charId, [...Object.keys(w.boat?.hatch ?? {}), ...(w.bank?.note ? [w.bank.note.proto] : [])]);
 		await arrive(there, w, h);
 		// the old token: a command of this character can no longer run here
 		await here.takeIfExists(actorToken(h.charId), NO_WAIT, { txn });

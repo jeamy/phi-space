@@ -4,8 +4,8 @@
 # of flax. What the mill and the bakery make of them (mill.ts): a sack of flour and a loaf; and the spindle and the
 # linen spun from the flax. The farm's animals (animals.ts): a hen, a sheep and a goat, and what they give: an egg, a
 # ball of wool and a jug of milk; a duck, a goose and its down; cloth woven of the wool, a down blanket and a cheese.
-# The other wild from the fog (wild.ts): a deer, a fox and a mouse; and the guards against it: a dog, a cat, a mousetrap.
-# Stone and what the workshop makes (quarry.ts): a stone, a pickaxe, a plank, a coil of rigging and a casing.
+# The other wild from the fog (wild.ts): a deer, a fox, a mouse and a gull; and the guards against it: a dog, a cat, a mousetrap.
+# The counting house's bill of exchange (shop.ts). Stone and what the workshop makes (quarry.ts): a stone, a pickaxe, a plank, a coil of rigging and a casing.
 # Usage: python3 garden.py <items dir>
 import sys
 from PIL import Image
@@ -494,6 +494,35 @@ def mouse():
     return outline(img)
 
 
+def gull():
+    img = new(); px = img.load()
+    W_, G, T, Y = rgb("#f2f0ea"), rgb("#9aa4ae"), rgb("#2a2a30"), rgb("#e8b830")
+    disc(px, 15, 20, 6.5, W_)               # the white body
+    disc(px, 9, 21, 3.5, W_)                # the tail
+    rect(px, 4, 20, 7, 22, T)               # its black tip
+    disc(px, 21, 14, 3.8, W_)               # the head
+    line(px, 24, 15, 28, 16, Y, 2)          # the yellow beak
+    px[27, 17] = rgb("#c83a2a")             # the red spot on it
+    px[22, 13] = OUT                        # the eye
+    for i in range(8):                      # the grey wing raised behind, black at its tip
+        line(px, 10 + i, 18 - i, 15 + i // 2, 19, G)
+    line(px, 17, 10, 19, 8, T, 2)
+    line(px, 13, 27, 13, 29, Y); line(px, 17, 27, 17, 29, Y)  # the feet
+    return outline(img)
+
+
+def bill():
+    img = new(); px = img.load()
+    P, PD, INK, SEAL = rgb("#e8dcb0"), rgb("#b8a878"), rgb("#5a4a3a"), rgb("#b8302a")
+    rect(px, 5, 8, 26, 24, P)               # the paper
+    rect(px, 5, 23, 26, 24, PD)             # its shaded lower edge
+    for y in (11, 14, 17):                  # the lines of writing
+        line(px, 8, y, 22 if y != 17 else 16, y, INK)
+    disc(px, 21, 20, 3.2, SEAL)             # the red seal
+    px[20, 19] = rgb("#e86a5a")
+    return outline(img)
+
+
 def dog():
     img = new(); px = img.load()
     F, FD = rgb("#8a6a4a"), rgb("#3a2a1a")
@@ -620,7 +649,7 @@ things = {
     "huhn": hen(), "schaf": sheep("#e8e4d8", "#3a3430"), "ziege": goat(), "ei": egg(), "wolle": wool(), "milch": jug(),
     "ente": bird("#8a7a5a", "#2f6a4a", "#e8b030", ring="#f0ece0"), "gans": bird("#f0ece0", "#f0ece0", "#e8902c", neck=3), "daunen": down(),
     "tuch": cloth("#8a6a9a"), "decke": blanket(), "kaese": cheese(),
-    "reh": deer(), "fuchs": fox(), "maus": mouse(), "hund": dog(), "katze": cat(), "mausefalle": trap(),
+    "reh": deer(), "fuchs": fox(), "maus": mouse(), "moewe": gull(), "wechsel": bill(), "hund": dog(), "katze": cat(), "mausefalle": trap(),
     "stein": stone(), "spitzhacke": pickaxe(), "lehm": clay(), "ziegel": brick(), "bohle": plank(), "tauwerk": rigging(), "gehaeuse": casing(),
 }
 for key, img in things.items():

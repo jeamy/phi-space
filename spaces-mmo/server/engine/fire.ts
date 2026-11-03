@@ -6,7 +6,7 @@
 // when its world time is up.
 import { randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
-import { fieldsOf, type BeaconFields, type ContributionFields, type FlameFields, type FogFields, type ItemFields } from "../model.ts";
+import { fieldsOf, type BeaconFields, type BuildingFields, type ContributionFields, type FlameFields, type FogFields, type ItemFields } from "../model.ts";
 import { CommandError, msg, msgOptions, type CommandCtx } from "./context.ts";
 import { resolvePrototype, spawn } from "./prototypes.ts";
 import { patienceOf, worldNowOf } from "./clock.ts";
@@ -78,25 +78,53 @@ export async function fireTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 	}
 }
 
-/** Fog tick: each room a beacon covers gets one step clearer while it burns, one step denser while it is out. A room
- *  whose fog stays (clear and lit, or at its densest and dark) is not written: a world of many rooms would otherwise
- *  rewrite all of them every step. */
+/** The rooms each fire covers (by beaconId): those of the world file, and around each standing lighthouse (a plan with
+ *  `lightRooms`) the rooms up to that many ways from its room, on its island and in this region. The lighthouse widens
+ *  the fire whose light it was built in; a room two fires cover has the light of both.*/
+export async function coversOf(space: SpaceLike, w: WorldDef, txn: string | null = null): Promise<Map<string, string[]>> {
+	const out = new Map(w.beacons.map((b) => [b.beaconId, [...b.covers]]));
+	for (const p of w.building?.plans.filter((x) => x.lightRooms) ?? []) {
+		for (const e of await space.readAll({ type: "Building", fields: { plan: p.key } }, txn ? { txn } : {})) {
+			const b = fieldsOf<BuildingFields>(e), list = out.get(b.beaconId);
+			if (list) for (const room of roomsAround(w, b.room, p.lightRooms!)) if (!list.includes(room)) list.push(room);
+		}
+	}
+	return out;
+}
+
+/** The rooms up to `ways` exits from `room` on its island (not over a ferry), in this region's world. */
+export function roomsAround(w: WorldDef, room: string, ways: number): string[] {
+	const island = (id: string) => w.rooms.find((r) => r.roomId === id)?.island;
+	const home = island(room), seen = new Set([room]);
+	let ring = [room];
+	for (let i = 0; i < ways; i++) {
+		ring = w.exits.filter((x) => ring.includes(x.room) && !seen.has(x.destination) && island(x.destination) === home && home !== undefined).map((x) => x.destination);
+		for (const r of ring) seen.add(r);
+	}
+	return [...seen];
+}
+
+/** Fog tick: each room a beacon covers gets one step clearer while a fire that covers it burns, one step denser while
+ *  none does. A room whose fog stays (clear and lit, or at its densest and dark) is not written: a world of many rooms
+ *  would otherwise rewrite all of them every step. */
 export async function fogTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<void> {
+	const cover = await coversOf(space, w), rooms = new Map<string, boolean>();
 	for (const def of w.beacons) {
 		const lit = isLit(await flameOf(space, def.beaconId), await worldNowOf(space));
-		for (const room of def.covers) {
-			const seen = await peek(space, { type: "Fog", fields: { room } });
-			if (seen && fieldsOf<FogFields>(seen).level === (lit ? 0 : w.fog.max)) continue;
-			const txn = (await space.createTransaction(10_000)).id;
-			try {
-				const e = await space.takeIfExists({ type: "Fog", fields: { room } }, NO_WAIT, { txn });
-				if (!e) { await space.abort(txn); continue; }
-				const was = fieldsOf<FogFields>(e).level, level = Math.max(0, Math.min(w.fog.max, was + (lit ? -1 : 1)));
-				await space.write({ type: "Fog", fields: { room, level } satisfies FogFields as never }, txn, FOREVER);
-				if (level !== was) await say(space, leaseMs, [room], "world", fogText(level, level > was), txn);
-				await space.commit(txn);
-			} catch (e) { await space.abort(txn).catch(() => {}); throw e; }
-		}
+		for (const room of cover.get(def.beaconId) ?? def.covers) rooms.set(room, (rooms.get(room) ?? false) || lit);
+	}
+	for (const [room, lit] of rooms) {
+		const seen = await peek(space, { type: "Fog", fields: { room } });
+		if (seen && fieldsOf<FogFields>(seen).level === (lit ? 0 : w.fog.max)) continue;
+		const txn = (await space.createTransaction(10_000)).id;
+		try {
+			const e = await space.takeIfExists({ type: "Fog", fields: { room } }, NO_WAIT, { txn });
+			if (!e) { await space.abort(txn); continue; }
+			const was = fieldsOf<FogFields>(e).level, level = Math.max(0, Math.min(w.fog.max, was + (lit ? -1 : 1)));
+			await space.write({ type: "Fog", fields: { room, level } satisfies FogFields as never }, txn, FOREVER);
+			if (level !== was) await say(space, leaseMs, [room], "world", fogText(level, level > was), txn);
+			await space.commit(txn);
+		} catch (e) { await space.abort(txn).catch(() => {}); throw e; }
 	}
 }
 

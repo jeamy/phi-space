@@ -288,6 +288,36 @@ Result of a run with 100 figures: [lasttest-2026-10-28.en.md](lasttest-2026-10-2
 `LOAD_BOTS=50 LOAD_SECONDS=60 node --no-warnings --experimental-strip-types --import ./tests/test-env.ts
 tests/perf/space-cost.ts` (a stack as on the servers, one JSON line with CPU ms of the Space process per command).
 
+## Play-through of epochs 1 to 4
+
+`npm --prefix spaces-mmo run test:play` (`tests/play/epochs.ts`) plays every function of the four epochs once, as players do: two
+registered players send their commands over the game socket and wait for the answer the page would show. The world is set up
+through its region spaces, so each check tests its command and not the long way there: the operator's settings (no rest after
+work, `epoch.force` per epoch), things put into a pack or a chest, a building placed beside a player. One hut is built the whole
+way (stake out, deliver, work). The checks: in the fishing village the hut, chest, fire, exchange, market board, rain barrel,
+bed, jetty and net, smokehouse, food, craft, chicken coop and the wild; in the village workshop and cart, warehouse, mill,
+bakery, loom, quarry, clay pit, brickworks, chapel, pen, field, settlement, road and cart ride; in the town the town hall's
+motion and vote, department store, counting house (credit, repayment, a bill of exchange passed on and cashed), lighthouse,
+park, brewery, sand and glassworks, shipyard, hatch and rowing; in the network the island railway (timetable, ride, freight),
+a cart on a standing route, the large ship (timetable, boarding and landing in another region) and beaming. A report names
+each function with ok or the answer that was missing; the exit code is 1 when one failed.
+
+Without variables it starts a world of its own (in memory, the four regions, a web process; a world hour is 36 s) and takes
+about half an hour, most of it waiting for the train and the ship. Against a running world it changes that world: it
+puts back the settings it changed and takes the buildings it placed, but its players (two registered accounts each time,
+and the newcomers that started in another region) stay. Its waits follow that world's clock. Where the bay is full it plays
+in the cliff path next door, it uses stations that stand, and a check that cannot run there (a settlement in both rooms, a
+station still staked out) is reported as skipped, not as failed:
+
+```sh
+PLAY_URL=http://192.168.8.28:3910 \
+PLAY_SPACES=west=tcp:127.0.0.1:3960,nord=tcp:127.0.0.1:3962,ost=tcp:127.0.0.1:3963,sued=tcp:127.0.0.1:3964 \
+npm --prefix spaces-mmo run test:play
+```
+
+`PLAY_ONLY=kontor,karren` runs only the checks whose name contains one of the words (a check that builds on an earlier one says
+so), `PLAY_OUT=<file>` writes the report as JSON. It is not part of `npm test`: it takes too long for every change.
+
 ## Not included
 
 - No backup script like `docker:backup` in the chat; the store lies in the volume, the backup of the directory is taken

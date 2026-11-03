@@ -493,4 +493,4 @@ button.cmd-word { cursor: pointer; display: inline; min-height: 0; }
 .rich-list li { line-height: 1.5; }
 
 /* on board of the large ship: where it sails and when it lands */
-.aboard { position: absolute; z-index: 6; top: 8px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 6px 12px; border-radius: 999px; background: color-mix(in srgb, var(--panel, #1c2530) 88%, transparent); border: 1px solid var(--line, #3a4654); font-size: 13px; text-align: center; pointer-events: none; }
+.aboard { position: absolute; z-index: 6; top: 8px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 6px 12px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 90%, transparent); color: var(--text-strong); border: 1px solid var(--line-strong); box-shadow: 0 2px 8px var(--shadow); font-size: 13px; text-align: center; pointer-events: none; }

@@ -123,7 +123,7 @@ export type WorldDef = {
 	/** A department store (engine/commands/shop.ts): the things it deals in by base price; its price runs from twice that on an empty shelf to half at `full`, it pays `buyShare` of it, and `turnoverPerPoint` coins turned over are a point of rank. */
 	shop?: { plan: string; prices: Record<string, number>; full: number; buyShare: number; turnoverPerPoint: number; /** Delivery orders a store keeps open at once, and pieces in one (`laden bestelle`). */ orders: number; orderMax: number };
 	/** A counting house: a loan is up to `pledgeShare` of the pledge's base price, runs `termWorldMs` of the second clock, at `interest`. */
-	bank?: { plan: string; pledgeShare: number; termWorldMs: number; interest: number };
+	bank?: { plan: string; pledgeShare: number; termWorldMs: number; interest: number; /** The bill of exchange (shop.ts `wechsel`): a thing of `proto` that holds up to `max` coins (they lie at it), written for `fee` coins to the house. */ note?: { proto: string; max: number; fee: number } };
 	/** A rowing boat (engine/commands/fishing.ts) goes between the jetties of an island; `sand` is dug with `tool` on `tile`. */
 	boat?: { proto: string; sail?: string; /** How many things the hatch of each boat holds (`luke`, fishing.ts). */ hatch?: Record<string, number> };
 	sand?: { tool: string; makes: string; count: number; tile: string };
@@ -151,7 +151,7 @@ export type WorldDef = {
 /** `dative`: the plan with its article as one says "neben einer Hütte" (default "einem <name>"). `epoch`: the island's
  *  epoch from which a new one may be staked out (default 1; docs/siedeln.en.md "Epochen"). */
 /** `sparesTools`: a recipe made beside it wears a tool half as fast. */
-export type PlanDef = { /** It must stand beside an exit (a road). */ atExit?: boolean; /** A room holds one of it at most, built or staked (a station). */ onePerRoom?: boolean; /** It must touch water (a jetty). */ shore?: boolean; /** Light points it adds to its fire (a lighthouse). */ lightBonus?: number; /** The admin's setting in world days that replaces `keepWorldMs` (server/settings.ts). */ keepSetting?: string; /** A green zone of a town hall admits it. */ green?: boolean; sparesTools?: boolean; store?: boolean; epoch?: number; dative?: string; key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string; chest?: number; repair: Array<{ proto: string; count: number }> };
+export type PlanDef = { /** It must stand beside an exit (a road). */ atExit?: boolean; /** A room holds one of it at most, built or staked (a station). */ onePerRoom?: boolean; /** It must touch water (a jetty). */ shore?: boolean; /** Light points it adds to its fire (a lighthouse). */ lightBonus?: number; /** A lighthouse: its fire also covers the rooms up to this many ways from its room, on its island (fire.ts coversOf). */ lightRooms?: number; /** The admin's setting in world days that replaces `keepWorldMs` (server/settings.ts). */ keepSetting?: string; /** A green zone of a town hall admits it. */ green?: boolean; sparesTools?: boolean; store?: boolean; epoch?: number; dative?: string; key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string; chest?: number; repair: Array<{ proto: string; count: number }> };
 /** `lightPoints`: what a fire's light carries; `siteWorldMs`: how long a site waits for progress; `maxSites`/`maxBuildings`: per account. */
 /** `ruinWorldMs`: how long a ruin stays; `estateWorldMs`: how long what lay in its chest waits for its owner. */
 /** A sort that grows in a bed: from seed (`seed`, a prototype) to sprout after `grow[0]`, to ripe after `grow[1]`, ripe
@@ -184,7 +184,7 @@ export type WildDef = { checkWorldMs: number; chance: [number, number, number, n
  *  `fuchs` takes an animal from a house of `houses` (never the last), `maus` eats up to `take` of `eats` from a chest
  *  (never the last; a `trap` in the chest catches it). `nom`/`the`/`acc`/`none`: "ein Reh", "das Reh", "das Reh", "kein
  *  Reh"; `goes`: how it moves ("zieht"); `to`: where it goes, `{owner}` for the target's owner. `dayFactor`: its chance by day (the fox comes almost only at night). */
-export type PreyDef = { key: "reh" | "fuchs" | "maus"; name: string; aliases: string[]; nom: string; the: string; acc: string; none: string; goes: string; to: string; icon: string;
+export type PreyDef = { key: "reh" | "fuchs" | "maus" | "moewe"; name: string; aliases: string[]; nom: string; the: string; acc: string; none: string; goes: string; to: string; icon: string;
 	chance: [number, number, number, number]; nightFactor: number; dayFactor?: number; eatAfterWorldMs: number;
 	bite?: number; keep?: number; houses?: string[]; eats?: string[]; take?: number; trap?: string };
 /** `by`: a herd kind or a keeper kind; fed, it keeps `kinds` from its room, and says `says` when one comes. */
@@ -318,7 +318,8 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 		for (const n of [...wd.fence, ...(wd.fieldFence ?? []), ...(wd.coopFence ?? [])]) proto(n.proto, "fence");
 		for (const p of wd.prey ?? []) {
 			[...(p.eats ?? []), ...(p.trap ? [p.trap] : [])].forEach((x) => proto(x, `wild ${p.key}`));
-			for (const h of p.houses ?? []) if (!w.animals?.houses[h]) throw new Error(`wild ${p.key}: no animal house ${h}`);
+			// a fox's houses are animal houses, a gull's plans with a chest (the smokehouse's rack)
+			for (const h of p.houses ?? []) if (p.key === "moewe" ? !w.building?.plans.find((x) => x.key === h)?.chest : !w.animals?.houses[h]) throw new Error(`wild ${p.key}: no ${p.key === "moewe" ? "plan with a chest" : "animal house"} ${h}`);
 		}
 		for (const k of wd.keepers ?? []) [k.proto, ...k.feed].forEach((x) => proto(x, `keeper ${k.key}`));
 		for (const g of wd.guards ?? []) if (!w.animals?.kinds.some((k) => k.key === g.by) && !wd.keepers?.some((k) => k.key === g.by)) throw new Error(`wild guard: unknown animal ${g.by}`);

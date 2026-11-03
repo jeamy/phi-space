@@ -26,7 +26,7 @@ import { peek } from "../../space.ts";
 import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { byName, CommandError, exitsHere, inventory, msg, NotUnderstood, roomOf, type CommandCtx, itemsNamed } from "../context.ts";
-import { flameOf, isLit } from "../fire.ts";
+import { coversOf, flameOf, isLit } from "../fire.ts";
 import { blockedIn, cellKey, isPassage, occupiedIn } from "../occupancy.ts";
 import { walkable, type PlanDef, type WorldDef } from "../world.ts";
 import { setting, workRestMs } from "../../settings.ts";
@@ -136,7 +136,9 @@ export async function lightFor(c: CommandCtx, points: number): Promise<{ beaconI
 	const now = await worldNowOf(c.space, c.txn);
 	// a settler leaves part of the light free for the people who come (world settlers.reserve)
 	const share = c.account?.settler ? 1 - (c.world.settlers?.reserve ?? 0.25) : 1;
-	const fires = c.world.beacons.filter((b) => b.covers.includes(c.actor.room)).sort((a, b) => Number(b.room === c.actor.room) - Number(a.room === c.actor.room));
+	// a lighthouse widens its fire to the rooms around it (fire.ts coversOf): its light is shared there too
+	const cover = await coversOf(c.space, c.world, c.txn);
+	const fires = c.world.beacons.filter((b) => cover.get(b.beaconId)?.includes(c.actor.room)).sort((a, b) => Number(b.room === c.actor.room) - Number(a.room === c.actor.room));
 	if (!fires.length) return "Hier hält kein Feuer den Nebel fern; gebaut wird nur im Licht.";
 	let lit = false;
 	for (const b of fires) {

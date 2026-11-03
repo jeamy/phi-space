@@ -39,7 +39,7 @@ const serve = async (sock: string) => {
 	return { space: conn.space, async close() { conn.close(); await server.close(); await stop(); } };
 };
 
-test("a character crosses to another region with its pack, its boat's cargo and account, exactly once, and a repeated delivery changes nothing", async () => {
+test("a character crosses to another region with its pack, its boat's cargo, the coins of its bills and account, exactly once, and a repeated delivery changes nothing", async () => {
 	const a = await serve(`unix:/tmp/mmo-region-a-${process.pid}.sock`), b = await serve(`unix:/tmp/mmo-region-b-${process.pid}.sock`);
 	const west = regionWorld(world, "west"), nord = regionWorld(world, "nord");
 	const halt = new AbortController();
@@ -56,6 +56,11 @@ test("a character crosses to another region with its pack, its boat's cargo and 
 		await a.space.write({ type: "Item", fields: { itemId: "boot-1", proto: "segelboot", name: "Segelboot", location: "c-1", x: -1, y: -1 } }, null, FOREVER);
 		const cargo = ["fisch-1", "fisch-2", "fisch-3"];
 		for (const itemId of cargo) await a.space.write({ type: "Item", fields: { itemId, proto: "fisch", name: "Fisch", location: "boot-1", x: -1, y: -1 } }, null, FOREVER);
+		// a bill of exchange in the pack and one in the hatch (shop.ts `wechsel`): their coins lie at them and go along
+		const backing = ["w1-m1", "w1-m2", "w2-m1"];
+		await a.space.write({ type: "Item", fields: { itemId: "wechsel-1", proto: "wechsel", name: "Wechsel über 2 Münzen", location: "c-1", x: -1, y: -1 } }, null, FOREVER);
+		await a.space.write({ type: "Item", fields: { itemId: "wechsel-2", proto: "wechsel", name: "Wechsel über 1 Münze", location: "boot-1", x: -1, y: -1 } }, null, FOREVER);
+		for (const itemId of backing) await a.space.write({ type: "Coin", types: ["Item"], fields: { itemId, proto: "muenze", name: "Münze", location: itemId.startsWith("w1") ? "wechsel-1" : "wechsel-2", x: -1, y: -1 } }, null, FOREVER);
 		// another worker got as far as B with one thing and died: it is not written twice
 		await b.space.write({ type: "Coin", types: ["Item"], fields: { itemId: "m-7", proto: "muenze", name: "Münze", location: "c-1", x: -1, y: -1 } }, null, FOREVER);
 		const room = nord.rooms.find((r) => r.roomId === "moewenfels-strand")!;
@@ -65,7 +70,7 @@ test("a character crosses to another region with its pack, its boat's cargo and 
 		await handOff({ space: a.space, txn, world: west, actor: ch, account: null, msgLeaseMs: 60_000, cache: {} } satisfies CommandCtx, "west", "nord", { room: "moewenfels-strand", x: 12, y: 14 });
 		await a.space.commit(txn);
 		assert.equal((await a.space.readAll({ type: "Character" })).length, 0, "in neither region now");
-		assert.equal((await a.space.readAll({ type: "Item" })).length, 304, "the pack waits, it goes after the handover");
+		assert.equal((await a.space.readAll({ type: "Item" })).length, 309, "the pack waits, it goes after the handover");
 		const [h] = await a.space.readAll({ type: "Handover" });
 		// a delivery that got as far as B before its worker died: the next one finds the character there and writes nothing twice
 		assert.equal(await arrive(b.space, nord, h!.fields as unknown as HandoverFields), true);
@@ -78,9 +83,10 @@ test("a character crosses to another region with its pack, its boat's cargo and 
 		const there = await b.space.readAll({ type: "Character" });
 		assert.equal(there.length, 1);
 		assert.equal(there[0]!.fields.room, "moewenfels-strand");
-		assert.deepEqual((await b.space.readAll({ type: "Item" })).map((e) => String(e.fields.itemId)).sort(), [...pack, "boot-1", ...cargo].sort(), "the whole pack, each thing once");
+		assert.deepEqual((await b.space.readAll({ type: "Item" })).map((e) => String(e.fields.itemId)).sort(), [...pack, "boot-1", ...cargo, "wechsel-1", "wechsel-2", ...backing].sort(), "the whole pack, each thing once");
 		assert.ok((await b.space.readAll({ type: "Item", fields: { proto: "muenze" } })).every((e) => e.types.join() === "Coin,Item"), "with its types");
-		assert.deepEqual((await b.space.readAll({ type: "Item", fields: { location: "boot-1" } })).map((e) => String(e.fields.itemId)).sort(), cargo, "the cargo still in its boat");
+		assert.deepEqual((await b.space.readAll({ type: "Item", fields: { location: "boot-1" } })).map((e) => String(e.fields.itemId)).sort(), [...cargo, "wechsel-2"].sort(), "the cargo still in its boat");
+		for (const [bill, n] of [["wechsel-1", 2], ["wechsel-2", 1]] as const) assert.equal(await b.space.count({ type: "Item", fields: { location: bill } }), n, `${bill} still worth its coins`);
 		assert.equal((await a.space.readAll({ type: "Item" })).length, 0);
 		assert.equal((await b.space.readAll({ type: "Account" })).length, 1);
 		assert.ok(await b.space.readIfExists(actorToken("c-1"), NO_WAIT), "a token in B");

@@ -8,7 +8,7 @@ import { fieldsOf, type PlotFields, type SceneryFields, type OfferFields, type B
 import type { CmdSet, Command } from "../cmdsets.ts";
 import { byName, check, CommandError, NotUnderstood, exitsHere, inventory, itemsHere, msg, pluralOf, reach, roomOf, stem, whereTo, type CommandCtx, itemsNamed } from "../context.ts";
 import { worldNowOf } from "../clock.ts";
-import { burnText, feed, flameOf, fogOf } from "../fire.ts";
+import { burnText, coversOf, feed, flameOf, fogOf } from "../fire.ts";
 import { blockedIn, cellKey, claimSpot, freeCellNear, isPassage, occupiedIn, releaseSpot } from "../occupancy.ts";
 import { findPath, sceneryText, walkable, wayTo, type WorldDef } from "../world.ts";
 import { handOff } from "../handover.ts";
@@ -103,7 +103,8 @@ export async function dropOffers(c: CommandCtx): Promise<void> {
  *  room clear stays to be found, so nobody is caught where no fire stands. Any other way is refused, and the refusal
  *  says where that fire is (or that it stands here). */
 async function throughFog(c: CommandCtx, exit: ExitFields): Promise<void> {
-	const fires = c.world.beacons.filter((b) => b.covers.includes(c.actor.room));
+	const cover = await coversOf(c.space, c.world, c.txn);
+	const fires = c.world.beacons.filter((b) => cover.get(b.beaconId)?.includes(c.actor.room));
 	const roomName = (id: string) => c.world.rooms.find((r) => r.roomId === id)?.name ?? id;
 	const here = fires.find((b) => b.room === c.actor.room);
 	if (here) throw new CommandError(`Der Nebel ist zu dicht; den Weg nach ${whereTo(c.world, exit)} findest du nicht. Entzünde das ${here.name} hier, dann lichtet er sich.`);

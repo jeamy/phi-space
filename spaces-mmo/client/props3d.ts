@@ -518,9 +518,30 @@ function mouseGeometry(t: T, variant: number): Geo {
 	});
 }
 
-/** An animal from the fog by its kind (wild.ts): hare, deer, fox or mouse. */
+/** A gull standing, facing +z: white body, grey wings with black tips, a yellow beak. */
+function gullGeometry(t: T, variant: number): Geo {
+	return cached(`gull:${variant}`, () => {
+		const white = 0xf2f0ea, grey = [0x9aa4ae, 0x8a949e, 0xa8b0b8][variant % 3]!, black = 0x2a2a30, yellow = 0xe8b830;
+		const parts: Part[] = [
+			{ g: new t.IcosahedronGeometry(0.11, 0), c: white, p: [0, 0.2, 0], s: [0.85, 0.8, 1.4] },
+			{ g: new t.IcosahedronGeometry(0.065, 0), c: white, p: [0, 0.31, 0.12] },
+			{ g: new t.ConeGeometry(0.018, 0.08, 4), c: yellow, p: [0, 0.3, 0.2], r: [Math.PI / 2, 0, 0] },
+			{ g: new t.IcosahedronGeometry(0.01, 0), c: 0x111111, p: [0.04, 0.33, 0.15] },
+			{ g: new t.IcosahedronGeometry(0.01, 0), c: 0x111111, p: [-0.04, 0.33, 0.15] },
+			{ g: new t.BoxGeometry(0.08, 0.025, 0.1), c: black, p: [0, 0.2, -0.17] },
+		];
+		for (const side of [-1, 1]) {
+			parts.push({ g: new t.BoxGeometry(0.03, 0.08, 0.22), c: grey, p: [side * 0.09, 0.22, -0.02], r: [0, 0, side * 0.2] });
+			parts.push({ g: new t.BoxGeometry(0.025, 0.05, 0.07), c: black, p: [side * 0.09, 0.22, -0.15], r: [0, 0, side * 0.2] });
+			parts.push({ g: new t.CylinderGeometry(0.008, 0.008, 0.11, 4), c: yellow, p: [side * 0.035, 0.055, 0] });
+		}
+		return merge(t, parts, `gull:${variant}`);
+	});
+}
+
+/** An animal from the fog by its kind (wild.ts): hare, deer, fox, mouse or gull. */
 export function wildGeometry(t: T, kind: string | undefined, variant: number): Geo {
-	return kind === "reh" ? deerGeometry(t, variant) : kind === "fuchs" ? foxGeometry(t, variant) : kind === "maus" ? mouseGeometry(t, variant) : hareGeometry(t, variant);
+	return kind === "reh" ? deerGeometry(t, variant) : kind === "fuchs" ? foxGeometry(t, variant) : kind === "maus" ? mouseGeometry(t, variant) : kind === "moewe" ? gullGeometry(t, variant) : hareGeometry(t, variant);
 }
 
 /** A dog or a cat on guard at a building (animals.ts), facing +z: the dog stands with its tail up, the cat sits. */

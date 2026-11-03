@@ -54,8 +54,9 @@ export async function move(c: CommandCtx, item: ItemFields, from: string, to: st
 }
 /** Takes an item for good (used up). */
 export async function consume(c: CommandCtx, item: ItemFields, from: string): Promise<void> {
-	// a boat with cargo in its hatch (fishing.ts) is not used up: the cargo would be left without a place
+	// a boat with cargo in its hatch (fishing.ts) or a bill with its coins (shop.ts) is not used up: what it holds would be left without a place
 	if (c.world.boat?.hatch?.[item.proto] && (await c.space.count({ type: "Item", fields: { location: item.itemId } }, c.txn))) throw new CommandError(`In der Luke von ${item.name} liegt noch etwas; entlade sie erst („luke entlade alle“).`);
+	if (c.world.bank?.note?.proto === item.proto && (await c.space.count({ type: "Item", fields: { location: item.itemId } }, c.txn))) throw new CommandError(`${item.name} wird am Kontor eingelöst („wechsel einlösen“).`);
 	if (!(await c.space.take({ type: "Item", fields: { itemId: item.itemId, location: from } }, NO_WAIT, { txn: c.txn }))) throw new CommandError(`${item.name} ist nicht mehr da.`);
 }
 

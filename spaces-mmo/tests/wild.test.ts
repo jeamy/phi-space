@@ -138,7 +138,7 @@ test("scheuche and zäune as a player types them: the page shows the hare, the o
 		await p.until((f) => f.t === "obj" && f.o.kind === "animal" && f.o.x === 18 && !!f.o.icon, 10_000);
 		assert.match(await does(p, "scheuche den hasen", "scheucht"), /Ida scheucht den Hasen in den Nebel zurück/);
 		assert.equal(await s.count({ type: "Animal" }), 0);
-		assert.match(await does(p, "scheuche die möwe", "Verscheuchen"), /Verscheuchen lässt sich Wild aus dem Nebel: „scheuche hase“/);
+		assert.match(await does(p, "scheuche die robbe", "Verscheuchen"), /Verscheuchen lässt sich Wild aus dem Nebel: „scheuche hase“/);
 		// the fence
 		assert.match(await does(p, "zäune", "Zaun"), /Für diesen Zaun brauchst du 2 Treibholz und 1 Tangseil/);
 		await give(s, a.me, "treibholz", 2);

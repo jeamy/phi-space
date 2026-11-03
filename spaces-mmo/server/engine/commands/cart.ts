@@ -1,6 +1,9 @@
 // Roads and carts, step 8 (docs/siedeln.en.md "Road", "Cart, wagon"). A road is a plan built beside an exit: it links the two
 // rooms of that exit, within an island. A cart stands in a room with its cargo at `cartId`; its owner loads it, sends it to a
-// room the roads reach, and it goes a room at a time on the world clock, with nobody beside it.
+// room the roads reach, and it goes a room at a time on the world clock, with nobody beside it. On a standing route
+// (`karren pendel`) it does so by itself: it loads from its owner's chests at one end, unloads into them at the other and
+// comes back, as long as there is something to carry. Roads stay on their island; a cart crosses the water as a thing
+// (`karren nimm`: in the pack, a boat's hatch or the railway's freight).
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type CartFields, type ExitFields, type FreightFields, type ItemFields } from "../../model.ts";
@@ -9,7 +12,7 @@ import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import type { WorldDef } from "../world.ts";
 import { trainIn } from "../rail.ts";
-import { amount, ARTICLE, distTo, EXIT_REACH, giveBack } from "./build.ts";
+import { amount, ARTICLE, distTo, EXIT_REACH, giveBack, planOf } from "./build.ts";
 import { placeIn, relocate } from "./default.ts";
 import { consume, move } from "./trade.ts";
 
@@ -51,7 +54,7 @@ const put = (c: CommandCtx, f: CartFields) => c.space.write({ type: "Cart", fiel
 
 const karren: Command = {
 	key: "karren", aliases: ["cart", "wagen"],
-	help: "karren – deine Karren; karren stelle, karren lade <ding>, karren entlade, karren fahre <ort> (nur auf Straßen), karren nimm",
+	help: "karren – deine Karren; karren stelle, karren lade <ding>, karren entlade, karren fahre <ort> (nur auf Straßen), karren pendel <ort> [mit <ding>], karren halt, karren nimm",
 	async func(c, arg) {
 		const d = c.world.cart;
 		if (!d) throw new CommandError("In dieser Welt gibt es keine Karren.");
@@ -59,7 +62,7 @@ const karren: Command = {
 		const [word = "", ...rest] = arg.trim().split(/\s+/), tail = rest.join(" ").replace(ARTICLE, "");
 		if (!word) {
 			const carts = (await c.space.readAll({ type: "Cart" }, { txn: c.txn })).map((e) => fieldsOf<CartFields>(e)).filter((x) => x.accountId === c.account!.accountId);
-			const lines = await Promise.all(carts.map(async (x) => `in ${nameOf(c, x.room)}${x.path.length ? `, unterwegs nach ${nameOf(c, x.path.at(-1)!)}` : ""}, ${(await cargoOf(c, x.cartId)).length} von ${d.capacity} Stück geladen`));
+			const lines = await Promise.all(carts.map(async (x) => `in ${nameOf(c, x.room)}${x.path.length ? `, unterwegs nach ${nameOf(c, x.path.at(-1)!)}` : ""}${x.route ? `, pendelt zwischen ${nameOf(c, x.route.from)} und ${nameOf(c, x.route.to)}` : ""}, ${(await cargoOf(c, x.cartId)).length} von ${d.capacity} Stück geladen`));
 			return msg(c, c.actor.charId, "info", lines.length ? `Deine Karren: ${lines.join("; ")}.` : "Du hast keinen Karren draußen. „karren stelle“ stellt einen ab, den du trägst.");
 		}
 		if (/^(?:stelle|abstellen|place)$/i.test(word)) {
@@ -68,6 +71,19 @@ const karren: Command = {
 			await consume(c, it.f, c.actor.charId);
 			await put(c, { cartId: `cart-${randomBytes(6).toString("hex")}`, accountId: c.account.accountId, charId: c.actor.charId, ownerName: c.actor.name, room: c.actor.room, x: c.actor.x, y: c.actor.y, path: [], dueWorldMs: FOREVER });
 			return msg(c, "*", "info", "$you() $conj(stellst|stellt) einen Karren ab.", { templ: true });
+		}
+		// a standing route ends wherever its cart is: it finishes the way it is on and stays
+		if (/^(?:halt|stopp?|stop)$/i.test(word)) {
+			let n = 0;
+			for (const e of await c.space.readAll({ type: "Cart" }, { txn: c.txn })) {
+				const x = fieldsOf<CartFields>(e);
+				if (x.accountId !== c.account.accountId || !x.route || !(await c.space.takeIfExists({ id: e.id }, NO_WAIT, { txn: c.txn }))) continue;
+				const { route: _r, ...rest } = x;
+				await put(c, { ...rest, dueWorldMs: rest.path.length ? rest.dueWorldMs : FOREVER });
+				n++;
+			}
+			if (!n) throw new CommandError("Kein Karren von dir pendelt.");
+			return msg(c, c.actor.charId, "info", n === 1 ? "Dein Karren pendelt nicht mehr; er bleibt, wo er als Nächstes ankommt." : `${n} Karren pendeln nicht mehr.`);
 		}
 		const f = await mine(c);
 		if (f.path.length) throw new CommandError("Der Karren ist unterwegs.");
@@ -99,11 +115,69 @@ const karren: Command = {
 			await put(c, { ...f, path, dueWorldMs: (await worldNowOf(c.space, c.txn)) + d.hopWorldMs });
 			return msg(c, "*", "info", `$you() $conj(schickst|schickt) den Karren nach ${room.name}.`, { templ: true });
 		}
-		throw new NotUnderstood("So geht es: karren, karren stelle, karren lade <ding>, karren entlade, karren fahre <ort>, karren nimm.");
+		if (/^(?:pendel|pendle|pendeln|route|shuttle)$/i.test(word)) {
+			const m = /^(.+?)(?:\s+mit\s+(.+))?$/i.exec(tail)!;
+			const room = c.world.rooms.find((r) => r.name.toLowerCase() === m[1]!.trim().toLowerCase() || r.roomId === m[1]!.trim());
+			if (!room) throw new NotUnderstood(`Einen Ort „${m[1]!.slice(0, 30)}“ kennt der Karren nicht.`);
+			if (room.roomId === f.room) throw new CommandError("Er pendelt zwischen zwei Orten; nenn den anderen.");
+			if (!roadPath(await roadLinks(c.space, c.world, c.txn), f.room, room.roomId)) throw new CommandError(`Nach ${room.name} führt keine Straße.`);
+			let proto: string | undefined;
+			if (m[2]) {
+				const p = c.world.prototypes.find((x) => [x.key, x.name, ...(x.aliases ?? [])].some((n) => n.toLowerCase() === m[2]!.replace(ARTICLE, "").trim().toLowerCase()));
+				if (!p) throw new NotUnderstood(`„${m[2]!.slice(0, 30)}“ kennt der Karren nicht.`);
+				proto = p.key;
+			}
+			const chest = (r: string) => c.space.readAll({ type: "Building", fields: { room: r, accountId: c.account!.accountId } }, { txn: c.txn }).then((xs) => xs.some((e) => { const p = planOf(c.world, String(e.fields.plan)); return !!p?.chest && !p.store; }));
+			if (!(await chest(f.room)) || !(await chest(room.roomId))) throw new CommandError(`Zum Pendeln brauchst du an beiden Enden einen Bau mit Truhe: hier und in ${room.name}.`);
+			await put(c, { ...f, route: { from: f.room, to: room.roomId, ...(proto ? { proto } : {}) }, dueWorldMs: await worldNowOf(c.space, c.txn) });
+			return msg(c, c.actor.charId, "info", `Dein Karren pendelt jetzt zwischen ${nameOf(c, f.room)} und ${room.name}: hier lädt er ${proto ? `${c.world.prototypes.find((x) => x.key === proto)!.name} ` : ""}aus deiner Truhe, dort legt er es in deine Truhe und kommt zurück. Leer fährt er nicht. „karren halt“ beendet es.`);
+		}
+		throw new NotUnderstood("So geht es: karren, karren stelle, karren lade <ding>, karren entlade, karren fahre <ort>, karren pendel <ort> [mit <ding>], karren halt, karren nimm.");
 	},
 };
 
-/** The carts whose date has come go a room on (in the job of the garden). How many moved. */
+/** Moves what lies at `from` to `to` in the tick's transaction. */
+async function shift(space: SpaceLike, txn: string, items: ItemFields[], from: string, to: string): Promise<number> {
+	let n = 0;
+	for (const it of items) {
+		const e = await space.takeIfExists({ type: "Item", fields: { itemId: it.itemId, location: from } }, NO_WAIT, { txn });
+		if (!e) continue;
+		await space.write({ type: e.type, types: e.types.slice(1), fields: { ...e.fields, location: to, x: -1, y: -1 } as never }, txn, FOREVER);
+		n++;
+	}
+	return n;
+}
+/** A cart on its route at one of its ends: at `to` it unloads into its owner's chests there (as far as they hold), at
+ *  `from` it loads from them (what the route names, never coins, carts or a dog or cat on guard). The way it goes on,
+ *  or [] to wait a while (a full chest, nothing to carry, no road). */
+async function routeStop(space: SpaceLike, w: WorldDef, txn: string, f: CartFields): Promise<string[]> {
+	const d = w.cart!, r = f.route!, keepers = new Set((w.wild?.keepers ?? []).map((k) => k.proto));
+	const chests = (await space.readAll({ type: "Building", fields: { room: f.room, accountId: f.accountId } }, { txn })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => planOf(w, b.plan)?.chest && !planOf(w, b.plan)?.store);
+	const inside = async (id: string) => (await space.readAll({ type: "Item", fields: { location: id } }, { txn })).map((e) => fieldsOf<ItemFields>(e));
+	let cargo = await inside(f.cartId);
+	if (f.room === r.to) {
+		for (const b of chests) {
+			const room = planOf(w, b.plan)!.chest! - (await inside(b.buildId)).filter((i) => !keepers.has(i.proto)).length;
+			if (room > 0) cargo = cargo.slice(await shift(space, txn, cargo.slice(0, room), f.cartId, b.buildId));
+		}
+		return cargo.length ? [] : roadPath(await roadLinks(space, w, txn), f.room, r.from) ?? [];
+	}
+	if (f.room === r.from) {
+		for (const b of chests) {
+			const free = d.capacity - cargo.length;
+			if (free <= 0) break;
+			const goods = (await inside(b.buildId)).filter((i) => i.proto !== w.currency && i.proto !== d.proto && !keepers.has(i.proto) && (!r.proto || i.proto === r.proto));
+			const n = await shift(space, txn, goods.slice(0, free), b.buildId, f.cartId);
+			cargo = [...cargo, ...goods.slice(0, n)];
+		}
+		return cargo.length ? roadPath(await roadLinks(space, w, txn), f.room, r.to) ?? [] : [];
+	}
+	// left its route (driven elsewhere before): back to where it loads
+	return roadPath(await roadLinks(space, w, txn), f.room, r.from) ?? [];
+}
+
+/** The carts whose date has come go a room on (in the job of the garden); a cart on a route at one of its ends loads or
+ *  unloads and sets off, or waits a hop's time and looks again. How many moved or worked. */
 export async function cartTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<number> {
 	const d = w.cart;
 	if (!d) return 0;
@@ -115,10 +189,18 @@ export async function cartTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 		try {
 			const t = await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
 			if (!t) { await space.abort(txn); continue; }
-			const f = fieldsOf<CartFields>(t), [next, ...rest] = f.path, target = next ? w.rooms.find((r) => r.roomId === next) : undefined;
-			// a road that fell meanwhile does not stop it: the way was open when it left
-			await space.write({ type: "Cart", fields: { ...f, ...(target ? { room: target.roomId, x: target.spawn?.x ?? f.x, y: target.spawn?.y ?? f.y } : {}), path: rest, dueWorldMs: rest.length ? now + d.hopWorldMs : FOREVER } as never }, txn, FOREVER);
-			if (!rest.length && target) await space.write({ type: "Msg", fields: { room: target.roomId, to: f.charId, kind: "info", text: `Dein Karren ist in ${target.name} angekommen.`, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: f.charId, kind: "info" }));
+			const f = fieldsOf<CartFields>(t);
+			if (!f.path.length && f.route) {
+				const path = await routeStop(space, w, txn, f);
+				await space.write({ type: "Cart", fields: { ...f, path, dueWorldMs: now + d.hopWorldMs } as never }, txn, FOREVER);
+				await space.commit(txn);
+				moved++;
+				continue;
+			}
+			const [next, ...rest] = f.path, target = next ? w.rooms.find((r) => r.roomId === next) : undefined;
+			// a road that fell meanwhile does not stop it: the way was open when it left; on a route it works at the end
+			await space.write({ type: "Cart", fields: { ...f, ...(target ? { room: target.roomId, x: target.spawn?.x ?? f.x, y: target.spawn?.y ?? f.y } : {}), path: rest, dueWorldMs: rest.length || f.route ? now + d.hopWorldMs : FOREVER } as never }, txn, FOREVER);
+			if (!rest.length && target && !f.route) await space.write({ type: "Msg", fields: { room: target.roomId, to: f.charId, kind: "info", text: `Dein Karren ist in ${target.name} angekommen.`, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: f.charId, kind: "info" }));
 			await space.commit(txn);
 			moved++;
 		} catch (err) { await space.abort(txn).catch(() => {}); throw err; }

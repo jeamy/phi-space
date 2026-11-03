@@ -11,6 +11,7 @@
 // - Scaring it off is a take of its entry, so whoever comes first saves the target, and one scared off eats nothing.
 // - Shelter: a fence round a bed, field or coop (`zäune`), a scarecrow near a bed or field, a mousetrap in the chest, and
 //   the guards: fed, the geese keep hares and foxes from their room, a dog hares, deer and foxes, a cat the mice.
+// - Gulls (step 7) come by day to the rack of a smokehouse (its chest) for fish; a net laid on it keeps them off.
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type AnimalFields, type BedFields, type BedPlant, type BuildingFields, type FieldFields, type ItemFields } from "../../model.ts";
@@ -179,19 +180,20 @@ async function eat(space: SpaceLike, w: WorldDef, leaseMs: number, a: AnimalFiel
 					}
 				}
 			}
-		} else if (k.key === "maus") {
+		} else if (k.key === "maus" || k.key === "moewe") {
 			const b = s.buildings.find((x) => x.buildId === a.target);
 			if (b) {
 				text = back;
 				const inside = (await space.readAll({ type: "Item", fields: { location: b.buildId } })).map((e) => fieldsOf<ItemFields>(e));
 				if (fled) text = fled;
-				else if (k.trap && inside.some((i) => i.proto === k.trap)) text = `In der Truhe von ${b.ownerName} schnappt die Mausefalle zu; ${k.the} ist gefangen.`;
+				else if (k.trap && inside.some((i) => i.proto === k.trap)) text = k.key === "moewe" ? `Über dem Gestell von ${b.ownerName} liegt ein Netz; ${k.the} findet nichts und ${k.goes} in den Nebel zurück.` : `In der Truhe von ${b.ownerName} schnappt die Mausefalle zu; ${k.the} ist gefangen.`;
 				else {
 					const food = inside.filter((i) => k.eats?.includes(i.proto));
 					const n = Math.min(k.take ?? 1, food.length - 1);
 					const eaten = new Map<string, number>();
 					for (const i of food.slice(0, Math.max(0, n))) if (await space.takeIfExists({ type: "Item", fields: { itemId: i.itemId, location: b.buildId } }, NO_WAIT, { txn })) eaten.set(i.name, (eaten.get(i.name) ?? 0) + 1);
-					if (eaten.size) { took = true; text = `${cap(k.the)} nagt an der Truhe von ${b.ownerName} und ${k.goes} in den Nebel zurück; es fehlen ${[...eaten].map(([nm, x]) => `${x} ${nm}`).join(" und ")}.`; }
+					const lost = [...eaten].map(([nm, x]) => `${x} ${nm}`).join(" und ");
+					if (eaten.size) { took = true; text = k.key === "moewe" ? `${cap(k.the)} pickt am Gestell von ${b.ownerName} und ${k.goes} in den Nebel zurück; es fehlen ${lost}.` : `${cap(k.the)} nagt an der Truhe von ${b.ownerName} und ${k.goes} in den Nebel zurück; es fehlen ${lost}.`; }
 				}
 			}
 		}
@@ -213,8 +215,8 @@ async function targets(space: SpaceLike, w: WorldDef, k: WildKind, room: string,
 			if (kind && (await space.count({ type: "Item", fields: { location: b.buildId, proto: kind.proto } })) >= 2) out.push({ id: b.buildId, r: b, name: b.ownerName });
 		}
 	}
-	if (k.key === "maus") {
-		for (const b of s.buildings.filter((x) => x.room === room && planOf(w, x.plan)?.chest)) {
+	if (k.key === "maus" || k.key === "moewe") {
+		for (const b of s.buildings.filter((x) => x.room === room && chestFor(w, k, x))) {
 			const food = (await space.readAll({ type: "Item", fields: { location: b.buildId } })).filter((e) => k.eats?.includes(String(e.fields.proto)));
 			if (food.length >= 2) out.push({ id: b.buildId, r: b, name: b.ownerName });
 		}
@@ -226,8 +228,10 @@ function roomsFor(w: WorldDef, k: WildKind, s: Seen): Set<string> {
 	if (k.key === "hase") return new Set(s.beds.map((b) => b.room));
 	if (k.key === "reh") return new Set(s.fields.filter((f) => f.stage === "waechst").map((f) => f.room));
 	if (k.key === "fuchs") return new Set(s.buildings.filter((b) => k.houses?.includes(b.plan) && b.herd).map((b) => b.room));
-	return new Set(s.buildings.filter((b) => planOf(w, b.plan)?.chest).map((b) => b.room));
+	return new Set(s.buildings.filter((b) => chestFor(w, k, b)).map((b) => b.room));
 }
+/** A chest the kind eats from: a mouse any, a gull only those of its houses (the smokehouse's rack). */
+const chestFor = (w: WorldDef, k: WildKind, b: BuildingFields) => !!planOf(w, b.plan)?.chest && (!k.houses || k.houses.includes(b.plan));
 
 /** The wild's recurring job (engine/worldevents.ts, "wild"): animals whose time has come eat and go, then each room with
  *  targets in fog may get a new one of each kind. Writes only when one comes or eats. */
@@ -278,7 +282,7 @@ const GENERIC = /^(?:das\s+)?(?:wild|tiere?|alle)$/i;
 
 const scheuche: Command = {
 	key: "scheuche", aliases: ["verscheuche", "scheuchen", "verscheuchen", "scare", "shoo"],
-	help: "scheuche [hase|reh|fuchs|maus] – ein Tier aus dem Nebel bis drei Schritte von dir zurückjagen, bevor es frisst",
+	help: "scheuche [hase|reh|fuchs|maus|möwe] – ein Tier aus dem Nebel bis drei Schritte von dir zurückjagen, bevor es frisst",
 	async func(c, arg) {
 		const wd = wild(c), kinds = wildKinds(wd);
 		const word = arg.trim().replace(/\s+(?:weg|fort)$/i, "").replace(/^(?:den|die|das|der)\s+/i, "").toLowerCase();

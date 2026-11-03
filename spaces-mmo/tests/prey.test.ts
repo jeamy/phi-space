@@ -130,6 +130,38 @@ test("the wild tick at night: deer, foxes and mice come and take a little; fence
 	} finally { await stack.close(); }
 });
 
+test("gulls by day: they come to a smokehouse's rack for fish and take two, never the last; a net on the rack keeps them off; a hut's chest draws none", { timeout: 120_000 }, async () => {
+	const stack = await startStack({ worlds: 0 });
+	try {
+		const s = stack.space, gull = kind("moewe");
+		// noon: gulls come by day
+		await s.write({ type: "WorldClock", fields: initialClock(w.id, 12, Date.now(), 0.0002) as never }, null, FOREVER);
+		const clock = await readClock(s);
+		const names = ["rack", "netted", "lastFish", "hut"] as const;
+		const at = spots(), room = Object.fromEntries(names.map((n, i) => [n, at[i]!])) as Record<(typeof names)[number], { room: string; x: number; y: number }>;
+		for (const n of names) await s.write({ type: "Fog", fields: { room: room[n].room, level: 3 } as never }, null, FOREVER);
+		const item = (location: string, proto: string, i: number) => s.write({ type: "Item", fields: { itemId: `${location}-${proto}-${i}`, name: proto, aliases: [], desc: "", location, x: -1, y: -1, glyph: { shape: "circle", color: "#fff" }, locks: "", proto } as never }, null, FOREVER);
+		for (const n of names) {
+			await s.write({ type: "Building", fields: house({ buildId: `b-${n}`, ...(n === "hut" ? {} : { plan: "raeucherei", name: "Räucherei" }), ...room[n] }) as never }, null, FOREVER);
+			for (let i = 0; i < (n === "lastFish" ? 1 : 4); i++) await item(`b-${n}`, i % 2 ? "raeucherfisch" : "fisch", i);
+			if (n === "netted") await item(`b-${n}`, "netz", 0);
+		}
+		const gulls = async (n: (typeof names)[number]) => (await s.readAll({ type: "Animal", fields: { room: room[n].room, kind: "moewe" } })).map((e) => e.fields as unknown as AnimalFields);
+		const fish = async (n: string) => (await s.count({ type: "Item", fields: { location: `b-${n}`, proto: "fisch" } })) + (await s.count({ type: "Item", fields: { location: `b-${n}`, proto: "raeucherfisch" } }));
+		await wildTick(s, w, 60_000, () => 0);
+		for (const n of ["rack", "netted"] as const) assert.deepEqual((await gulls(n)).map((a) => a.target), [`b-${n}`]);
+		assert.equal((await gulls("lastFish")).length, 0, "the last fish draws no gull");
+		assert.equal((await gulls("hut")).length, 0, "a gull goes only to a smokehouse");
+		await new Promise((ok) => setTimeout(ok, (gull.eatAfterWorldMs + 60_000) / clock.rate));
+		await wildTick(s, w, 60_000, () => 0);
+		assert.equal(await fish("rack"), 2, "the gull took two");
+		assert.equal(await fish("netted"), 4, "the net kept it off");
+		assert.equal(await fish("lastFish"), 1);
+		assert.equal(await fish("hut"), 4);
+		assert.equal((await gulls("rack")).filter((a) => a.target === "b-rack" && a.eatsAtWorldMs <= worldNow(clock)).length, 0, "it went");
+	} finally { await stack.close(); }
+});
+
 type P = { p: Player; me: string };
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
 	const from = p.frames.length;

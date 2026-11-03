@@ -17,6 +17,7 @@
     "world:load": "node --no-warnings --experimental-strip-types server/world-load.ts",
     "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test --test-concurrency=5 tests/*.test.ts",
     "test:durable": "node --no-warnings --experimental-strip-types tests/run-durable.ts",
+    "test:play": "node --no-warnings --experimental-strip-types tests/play/epochs.ts",
     "test:perf": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test tests/perf/*.test.ts",
     "docker:test": "docker compose --env-file .env -f docker/docker-compose.yml --profile test run --rm --build mmo-test",
     "docker:prod:up": "echo 'one host runs one profile: docker:nano:up on nano, docker:big:up on big, docker:local:up for both on this machine' && exit 1",

@@ -437,9 +437,9 @@ function object(t: T, obj: ObjView, me: string): Entry {
 		return e;
 	}
 	if (obj.kind === "animal") {
-		// a hare, deer, fox or mouse (wild.ts): it hops or trots and looks where it goes (step)
+		// a hare, deer, fox, mouse or gull (wild.ts): it hops or trots and looks where it goes (step)
 		const body = propMesh(t, wildGeometry(t, obj.animal, variant)); body.rotation.y = (variant / 3) * Math.PI * 2; body.name = "body";
-		const size = obj.animal === "reh" ? 0.8 : obj.animal === "maus" ? 0.2 : 0.5;
+		const size = obj.animal === "reh" ? 0.8 : obj.animal === "maus" ? 0.2 : obj.animal === "moewe" ? 0.35 : 0.5;
 		group.add(propShadow(t, size, size), body);
 		return e;
 	}

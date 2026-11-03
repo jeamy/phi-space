@@ -75,7 +75,10 @@ export type LoanFields = { loanId: string; buildId: string; room: string; accoun
  *  wait beside the station `buildId` in `room` until the sender fetches them (`zug abholen`); left too long, or when that
  *  station is gone, they become the sender's estate there (build.ts buildSweep). */
 export type FreightFields = { freightId: string; accountId: string; charId: string; ownerName: string; room: string; buildId: string; untilWorldMs: number };
-export type CartFields = { cartId: string; accountId: string; charId: string; ownerName: string; room: string; x: number; y: number; path: string[]; dueWorldMs: number };
+export type CartFields = { cartId: string; accountId: string; charId: string; ownerName: string; room: string; x: number; y: number; path: string[]; dueWorldMs: number;
+	/** A standing route (`karren pendel`): at `from` it loads from its owner's chests there (only `proto`, if named), at `to` it
+	 *  unloads into its owner's chests there, and goes back; it never goes empty. */
+	route?: { from: string; to: string; proto?: string } };
 export type WindFields = { island: string; level: number };
 export type ShowKind = "blumen" | "ernte" | "regatta";
 export type ShowFields = { showId: string; room: string; settlementId: string; settlementName: string; kind: ShowKind; byName: string; endsWorldMs: number };
@@ -218,7 +221,7 @@ export type FieldFields = { fieldId: string; room: string; x: number; y: number;
 	fenced?: boolean; grazed?: number };
 /** Wild from the fog at a bed, a field, a coop or a chest (engine/commands/wild.ts): it eats at `eatsAtWorldMs` unless someone scares it off
  *  before (a take of this entry: whoever comes first saves the bed). */
-export type AnimalFields = { animalId: string; kind: "hase" | "reh" | "fuchs" | "maus"; name: string; room: string; x: number; y: number; bedId?: string; eatsAtWorldMs: number; at: number;
+export type AnimalFields = { animalId: string; kind: "hase" | "reh" | "fuchs" | "maus" | "moewe"; name: string; room: string; x: number; y: number; bedId?: string; eatsAtWorldMs: number; at: number;
 	/** What the other kinds came for: a field (reh), a coop (fuchs), a building with a chest (maus). */
 	target?: string };
 /** How long a figure waits before it looks for wild seeds in this room again (the sweep removes it). */

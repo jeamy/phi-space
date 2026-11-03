@@ -4,6 +4,9 @@
 // it mints nothing: its owner fills that with `laden einlegen` and takes the profit with `laden entnehme`. What it turned
 // over counts in the rank of the settlements. In a counting house `kredit` lends coins from its till against a pledge kept in
 // escrow; `tilge` pays them back with interest and frees it; when the time runs out, the pledge goes to the house.
+// `wechsel <n>` writes a bill of exchange there: the n coins lie at the bill itself, so it is worth them wherever it goes
+// (passed on, traded, in a hatch, to another region with its holder), and any counting house pays them out against it
+// (`wechsel einlösen`); the house keeps a fee for writing it. Nothing is minted and nothing lost.
 // A settlement's tax (`antrag steuer`, townhall.ts) is paid on each thing bought at its store, on top of the price, into the
 // settlement's warehouse, like the tax on what is taken from it; without a warehouse in the room there is nowhere to keep it.
 // Delivery orders fill the shelf: the owner posts `laden bestelle <n> <ding> für <m>`, the order boards of the region show
@@ -16,6 +19,7 @@ import { decayNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, type CommandCtx } from "../context.ts";
 import { peek } from "../../space.ts";
+import { resolvePrototype, spawn } from "../prototypes.ts";
 import type { WorldDef } from "../world.ts";
 import { ARTICLE, distTo, planOf, putBack, takeNear } from "./build.ts";
 import { settlementIn } from "./settlement.ts";
@@ -206,4 +210,47 @@ export async function loanTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 	return ended;
 }
 
-export const SHOP_COMMANDS: Command[] = [laden, kredit, tilge];
+/** What a bill of exchange is worth: the coins lying at it. */
+const worthOf = async (c: CommandCtx, bill: ItemFields) => (await inside(c.space, bill.itemId, c.txn)).filter((i) => i.proto === c.world.currency);
+
+const wechsel: Command = {
+	key: "wechsel", aliases: ["wechselbrief", "bill", "note"],
+	help: "wechsel <n> – am Kontor neben dir n Münzen in einen Wechsel legen, den du weitergeben kannst; „wechsel einlösen“ zahlt jeden Wechsel, den du trägst, an einem Kontor aus; „wechsel“ allein zeigt deine",
+	async func(c, arg) {
+		const d = c.world.bank, n = d?.note;
+		if (!d || !n) throw new CommandError("In dieser Welt gibt es keine Wechsel.");
+		const word = arg.trim().toLowerCase(), bills = (await inventory(c)).filter((i) => i.f.proto === n.proto);
+		if (!word) {
+			const worth = await Promise.all(bills.map(async (b) => (await worthOf(c, b.f)).length));
+			return msg(c, c.actor.charId, "info", bills.length ? `Du trägst ${bills.length} Wechsel über zusammen ${coinsWord(worth.reduce((a, x) => a + x, 0))}; jedes Kontor löst sie ein („wechsel einlösen“).` : `Du trägst keinen Wechsel. „wechsel <n>“ legt am Kontor n Münzen in einen, für ${coinsWord(n.fee)} Gebühr.`);
+		}
+		const b = await take(c, d.plan);
+		if (!b) throw new CommandError(`Das geht nur direkt neben ${planOf(c.world, d.plan)?.dative ?? "einem Kontor"}.`);
+		if (/^(?:einlösen|einloesen|einlöse|löse|loese|redeem|cash)$/.test(word)) {
+			if (!bills.length) throw new CommandError("Du trägst keinen Wechsel.");
+			let got = 0;
+			for (const bill of bills) {
+				for (const coin of await worthOf(c, bill.f)) { await move(c, coin, bill.f.itemId, c.actor.charId); got++; }
+				await consume(c, bill.f, c.actor.charId);
+			}
+			await putBack(c, b);
+			return msg(c, c.actor.charId, "info", `Das Kontor zahlt dir ${bills.length === 1 ? "den Wechsel" : `${bills.length} Wechsel`} aus: ${coinsWord(got)}.`);
+		}
+		if (!c.account || c.account.guest) throw new CommandError("Gäste schreiben keine Wechsel; registriere dich dafür.");
+		const m = /^(\d+)(?:\s+münzen?|\s+muenzen?)?$/.exec(word);
+		if (!m) throw new NotUnderstood("So geht es: wechsel 20, wechsel einlösen");
+		const k = Number(m[1]);
+		if (k < 1 || k > n.max) throw new CommandError(`Ein Wechsel hält 1 bis ${coinsWord(n.max)}.`);
+		const purse = (await inventory(c)).filter((i) => i.f.proto === c.world.currency);
+		if (purse.length < k + n.fee) throw new CommandError(`Dafür brauchst du ${coinsWord(k + n.fee)} (${coinsWord(n.fee)} nimmt das Kontor).`);
+		const p = await resolvePrototype(c.space, n.proto);
+		if (!p) throw new CommandError("Das Kontor hat gerade kein Papier.");
+		const bill = await spawn(c.space, c.txn, c.world, p, { location: c.actor.charId, x: -1, y: -1 }, { name: `Wechsel über ${coinsWord(k)}` });
+		for (const coin of purse.slice(0, k)) await move(c, coin.f, c.actor.charId, bill.itemId);
+		for (const coin of purse.slice(k, k + n.fee)) await move(c, coin.f, c.actor.charId, b.buildId);
+		await putBack(c, b);
+		await msg(c, c.actor.charId, "info", `Das Kontor schreibt dir einen Wechsel über ${coinsWord(k)}; ${coinsWord(n.fee)} behält es. Jedes Kontor zahlt ihn aus, auch an jemand anderen.`);
+	},
+};
+
+export const SHOP_COMMANDS: Command[] = [laden, kredit, tilge, wechsel];

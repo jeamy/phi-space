@@ -499,7 +499,7 @@ Wo kein Feuer brennt, kommen Tiere aus dem Nebel. Ausführlich unter [Wild](help
 
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
-| \`scheuche hase\` | \`scare\` | Einen Hasen (auch \`reh\`, \`fuchs\`, \`maus\`) bis drei Schritte von dir in den Nebel zurückjagen |
+| \`scheuche hase\` | \`scare\` | Einen Hasen (auch \`reh\`, \`fuchs\`, \`maus\`, \`möwe\`) bis drei Schritte von dir in den Nebel zurückjagen |
 | \`zäune\` | \`fence\` | Einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), deinen Acker (6 Treibholz, 2 Tangseil) oder deinen Hühnerstall (3 Treibholz, 1 Tangseil) neben dir setzen |
 | \`wache\` | \`guards\` | Wer im Raum vor dem Wild wacht (Hund, Katze, Gänse) und ob sie satt sind |
 
@@ -512,9 +512,10 @@ Eine Insel wächst durch das, was auf ihr steht. Ausführlich unter [Dorf und Si
 | \`siedlung rang\` | | Die Siedlungen der Gegend nach ihrem Bestand; ein Park wiegt am meisten, wer ihn zuletzt pflegte, zählt dazu |
 | \`laden\` | \`shop\` | Regal und Preise des Kaufhauses; \`laden kaufe\`, \`laden verkaufe\`, \`laden einlegen\`, \`laden entnehme\`; Lieferaufträge mit \`laden bestelle\`, \`laden liefere\`, \`laden storniere\` |
 | \`kredit <n> gegen <ding>\`, \`tilge\` | \`credit\`, \`repay\` | Am Kontor gegen ein Pfand leihen und zurückzahlen |
+| \`wechsel <n>\`, \`wechsel einlösen\` | \`bill\` | Am Kontor Münzen in einen Wechsel legen, den man weitergeben kann; jedes Kontor zahlt ihn aus |
 | \`zug <ort>\` | \`train\` | Mit der Inselbahn von Bahnhof zu Bahnhof derselben Insel, wenn der Zug laut Fahrplan steht; \`zug sende [n\|alle] <ding> nach <ort>\` gibt Fracht auf, \`zug abholen\` holt sie am Ziel |
 | \`beam [ort]\` | \`beame\`, \`beamen\` | Ab Netz zu einem brennenden Feuer springen (kostet Münzen, danach Pause); allein: die Ziele zeigen |
-| \`karren\` | \`cart\` | Deine Karren; \`karren stelle\`, \`karren lade\`, \`karren entlade\`, \`karren fahre <ort>\`, \`karren nimm\` |
+| \`karren\` | \`cart\` | Deine Karren; \`karren stelle\`, \`karren lade\`, \`karren entlade\`, \`karren fahre <ort>\`, \`karren pendel <ort> [mit <ding>]\`, \`karren halt\`, \`karren nimm\` |
 | \`rudere <ort>\` | \`row\` | Mit dem Ruderboot von Steg zu Steg einer Insel |
 | \`fahrplan\`, \`einschiffen <insel>\` | \`timetable\`, \`board\` | Das große Schiff nach Fahrplan, ab den Buchten |
 | \`segle <insel>\` | \`sail\` | Mit dem Segelboot vom Steg zu einer anderen Insel |
@@ -679,7 +680,7 @@ Where no fire burns, animals come out of the fog. In detail under [Wild animals]
 
 | Command | Also | Effect |
 | --- | --- | --- |
-| \`scheuche hase\` | \`scare\` | Chase a hare (also \`reh\`, \`fuchs\`, \`maus\`) up to three cells from you back into the fog |
+| \`scheuche hase\` | \`scare\` | Chase a hare (also \`reh\`, \`fuchs\`, \`maus\`, \`möwe\`) up to three cells from you back into the fog |
 | \`zäune\` | \`fence\` | Put a fence round a bed (2 driftwood, 1 kelp rope), your field (6 driftwood, 2 kelp rope) or your coop (3 driftwood, 1 kelp rope) beside you |
 | \`wache\` | \`guards\` | Who keeps watch against the wild in this room (dog, cat, geese) and whether they are fed |
 
@@ -692,9 +693,10 @@ An island grows by what stands on it. In detail under [Village and settlement](h
 | \`siedlung rang\` | | The settlements of the region by what they hold; a park weighs most, and whoever tended it lately counts too |
 | \`laden\` | \`shop\` | Shelf and prices of the department store; \`laden kaufe\`, \`laden verkaufe\`, \`laden einlegen\`, \`laden entnehme\`; delivery orders with \`laden bestelle\`, \`laden liefere\`, \`laden storniere\` |
 | \`kredit <n> gegen <ding>\`, \`tilge\` | \`credit\`, \`repay\` | Borrow against a pledge at a counting house and pay it back |
+| \`wechsel <n>\`, \`wechsel einlösen\` | \`bill\` | Put coins into a bill of exchange at a counting house, to pass on; any counting house pays it out |
 | \`zug <ort>\` | \`train\` | By island railway from station to station of the same island, while the timetable has the train there; \`zug sende [n\|alle] <ding> nach <ort>\` sends freight, \`zug abholen\` fetches it at the other end |
 | \`beam [place]\` | \`beame\`, \`beamen\` | From the network on, jump to a burning fire (costs coins, then a rest); alone: list the destinations |
-| \`karren\` | \`cart\` | Your carts; \`karren stelle\`, \`karren lade\`, \`karren entlade\`, \`karren fahre <ort>\`, \`karren nimm\` |
+| \`karren\` | \`cart\` | Your carts; \`karren stelle\`, \`karren lade\`, \`karren entlade\`, \`karren fahre <ort>\`, \`karren pendel <ort> [mit <ding>]\`, \`karren halt\`, \`karren nimm\` |
 | \`rudere <ort>\` | \`row\` | By rowing boat from jetty to jetty of an island |
 | \`fahrplan\`, \`einschiffen <insel>\` | \`timetable\`, \`board\` | The large ship on its timetable, from the bays |
 | \`segle <insel>\` | \`sail\` | By sailing boat from a jetty to another island |
@@ -1451,8 +1453,9 @@ Auch größeres Wild kommt aus dem Nebel. Jedes Tier hat sein eigenes Ziel.
 - **Rehe** fressen sich an einem wachsenden Acker satt. Jeder Besuch kostet einen Teil der Ernte, aber sie gibt immer gut die Hälfte.
 - **Füchse** holen fast nur nachts ein Tier aus dem Hühnerstall, nie das letzte.
 - **Mäuse** nagen an Korn, Mehl, Brot und Käse in der Truhe einer Hütte, nie am letzten Stück.
+- **Möwen** holen sich bei Tag Fisch vom Gestell einer Räucherei (ihrer Truhe), nie den letzten.
 
-Wie die Hasen fressen sie erst nach einer Weile; \`scheuche reh\`, \`scheuche fuchs\` oder \`scheuche maus\` aus bis zu drei Schritten jagt sie fort.
+Wie die Hasen fressen sie erst nach einer Weile; \`scheuche reh\`, \`scheuche fuchs\`, \`scheuche maus\` oder \`scheuche möwe\` aus bis zu drei Schritten jagt sie fort.
 
 ## Schutz {#shelter}
 
@@ -1464,6 +1467,7 @@ Gegen jedes Tier hilft etwas anderes. Die Tabelle zeigt, was wogegen schützt.
 | Zaun mit Tür um den Hühnerstall (\`zäune\`: 3 Treibholz, 1 Tangseil) | Füchse |
 | Vogelscheuche (Beete und Äcker in drei Feldern) | Hasen, Rehe |
 | Mausefalle in der Truhe (\`craft mausefalle\`) | Mäuse |
+| ein Netz auf dem Gestell der Räucherei (\`verstaue netz\`) | Möwen |
 | satte Gänse im Raum | Hasen, Füchse |
 | ein satter Hund im Raum | Hasen, Rehe, Füchse |
 | eine satte Katze im Raum | Mäuse |
@@ -1490,8 +1494,9 @@ Bigger wild animals come out of the fog too. Each has a target of its own.
 - **Deer** graze a growing field. Each visit costs part of the harvest, but it always gives a good half.
 - **Foxes** take an animal from a coop, almost only at night, never the last.
 - **Mice** gnaw at grain, flour, bread and cheese in a hut's chest, never the last piece.
+- **Gulls** take fish from a smokehouse's rack (its chest) by day, never the last.
 
-Like the hares they eat only after a while; \`scheuche reh\`, \`scheuche fuchs\` or \`scheuche maus\` from up to three cells chases them off.
+Like the hares they eat only after a while; \`scheuche reh\`, \`scheuche fuchs\`, \`scheuche maus\` or \`scheuche möwe\` from up to three cells chases them off.
 
 ## Shelter {#shelter}
 
@@ -1503,6 +1508,7 @@ Each animal has its own remedy. The table shows what protects against what.
 | A fence with a door round the coop (\`zäune\`: 3 driftwood, 1 kelp rope) | foxes |
 | A scarecrow (beds and fields within three cells) | hares, deer |
 | A mousetrap in the chest (\`craft mausefalle\`) | mice |
+| A net on the smokehouse's rack (\`verstaue netz\`) | gulls |
 | Fed geese in the room | hares, foxes |
 | A fed dog in the room | hares, deer, foxes |
 | A fed cat in the room | mice |
@@ -1578,7 +1584,7 @@ Ein Kaufhaus (ab Stadt) handelt auch, wenn niemand am Marktbrett steht. \`laden\
 
 Mit \`laden bestelle <n> <ding> für <m>\` bestellt der Besitzer Ware, höchstens 3 Bestellungen zu je 20 Stück. Sie stehen auf allen Auftragstafeln der Gegend. Jeder andere bringt sie mit \`laden liefere <ding>\` und bekommt m Münzen je Stück aus der Kasse; \`laden storniere <ding>\` zieht eine Bestellung zurück. Die versprochenen Münzen sind reserviert.
 
-Im Kontor leiht \`kredit <n> gegen <ding>\` Münzen gegen ein Pfand, bis zum doppelten Grundpreis. \`tilge\` zahlt binnen sieben Tagen mit einem Zehntel Zinsen zurück, sonst gehört das Pfand dem Kontor.
+Im Kontor leiht \`kredit <n> gegen <ding>\` Münzen gegen ein Pfand, bis zum doppelten Grundpreis. \`tilge\` zahlt binnen sieben Tagen mit einem Zehntel Zinsen zurück, sonst gehört das Pfand dem Kontor. \`wechsel <n>\` legt dort n Münzen in einen **Wechsel** (eine Münze behält das Kontor): Die Münzen liegen im Papier selbst, es lässt sich weitergeben, verkaufen und in andere Regionen mitnehmen, und jedes Kontor zahlt es mit \`wechsel einlösen\` aus.
 
 ## Boote, Schiff, Bahn, Karren, Beamen {#travel}
 
@@ -1587,10 +1593,10 @@ Im Kontor leiht \`kredit <n> gegen <ding>\` Münzen gegen ein Pfand, bis zum dop
 - **Luke**: Jedes Boot hat eine. Am Steg lädt \`luke lade [n|alle] <ding>\` ein, 8 Dinge im Ruderboot, 20 im Segelboot; \`luke entlade alle\` holt sie heraus. Die Ladung fährt mit dem Boot.
 - **Großes Schiff**: Es fährt nur von Insel zu Insel, von Bucht zu Bucht, und es ist eines: eine Runde über alle Inseln, in jeder Bucht liegt es eine Weile. Du siehst es einlaufen und ablegen; auf der [Weltkarte](help.game.controls#atlas) zeigen eine gestrichelte Linie seine Route und eine Marke, wo es gerade fährt. \`fahrplan\` sagt, wo es ist und wann es hier liegt. \`einschiffen <insel>\` geht für 3 Münzen an Bord, solange es hier liegt: Du fährst mit, bis es die Insel erreicht hat, und gehst dort von Bord. An Bord gehst du nicht umher, du kannst dich aber umsehen und reden.
 - **Inselbahn** (ab Netz): Ein Raum hat höchstens einen Bahnhof. Neben ihm fährt \`zug <ort>\` für eine Münze zu jedem anderen Bahnhof derselben Insel. Zwischen den Bahnhöfen liegen Gleise, die du auf der Karte siehst; sie versperren niemandem den Weg. Alle 20 Weltminuten steht der Zug zehn Minuten am Bahnsteig, nur dann fährt er. \`zug sende [n|alle] <ding> nach <ort>\` gibt bis zu 20 Dinge für eine Münze als Fracht auf, \`zug abholen\` holt sie am Ziel; was sieben Tage liegt oder dessen Bahnhof fällt, wird dein Nachlass. Die Bahn verlässt ihre Insel nicht.
-- **Straße und Karren** (ab Dorf): Eine Straße nahe einem Ausgang verbindet seine beiden Räume. Ein Karren fährt auf Straßen allein mit bis zu 20 Stück, einen Raum je Weltstunde: \`karren lade\`, \`karren fahre <ort>\`, \`karren entlade\`.
+- **Straße und Karren** (ab Dorf): Eine Straße nahe einem Ausgang verbindet seine beiden Räume. Ein Karren fährt auf Straßen allein mit bis zu 20 Stück, einen Raum je Weltstunde: \`karren lade\`, \`karren fahre <ort>\`, \`karren entlade\`. \`karren pendel <ort> [mit <ding>]\` lässt ihn von selbst zwischen zwei Orten fahren, an denen dir ein Bau mit Truhe gehört: Hier lädt er aus deiner Truhe, dort legt er alles in deine Truhe und kommt zurück, leer fährt er nicht; \`karren halt\` beendet es. Über das Wasser kommt ein Karren nur als Ding (\`karren nimm\`).
 - **Beamen** (ab Netz): \`beam <ort>\` springt von jedem Ort zu einem brennenden Feuer, ohne die Wege zu laufen. Nur das Ziel braucht ein brennendes Feuer, dein Standort nicht. Es kostet Münzen nach der Entfernung auf der [Weltkarte](help.game.controls#atlas), standardmäßig eine je Feld (mindestens eine); danach ruhst du 10 Weltminuten, bevor du wieder beamst. \`beam\` allein zeigt die Ziele und die Pause. Auf der Weltkarte tippst du das Feuer an, die Linie und der Preis erscheinen, **Hierher beamen** springt. Betreiber ändern Preis, Pause und Stufe.
 
-Ein **Leuchtturm** (ab Stadt) gibt seinem Feuer 20 Lichtpunkte mehr, über die Grenze von 40 hinaus.`,
+Ein **Leuchtturm** (ab Stadt) gibt seinem Feuer 20 Lichtpunkte mehr, über die Grenze von 40 hinaus, und trägt dessen Licht in die Räume gleich neben seinem, auf derselben Insel: Dort baut man dann im Licht beider Feuer, und der Nebel weicht, solange eines brennt.`,
 			en: `An island grows by what stands on it. With enough huts, beds and fields the fishing village becomes a village, and new building plans open up. Neighbours can also found a settlement. Together they then decide who may build in their place.
 
 ## Epochs {#epochs}
@@ -1646,7 +1652,7 @@ A department store (from the town on) trades even when nobody stands at the mark
 
 With \`laden bestelle <n> <ding> für <m>\` the owner orders goods, 3 orders of up to 20 pieces at most. They appear on every order board of the region. Anyone else brings them with \`laden liefere <ding>\` and gets m coins a piece from the till; \`laden storniere <ding>\` withdraws an order. The coins promised are reserved.
 
-In a counting house \`kredit <n> gegen <ding>\` lends coins against a pledge, up to twice its base price. \`tilge\` pays back within seven days with a tenth of interest; otherwise the pledge goes to the house.
+In a counting house \`kredit <n> gegen <ding>\` lends coins against a pledge, up to twice its base price. \`tilge\` pays back within seven days with a tenth of interest; otherwise the pledge goes to the house. \`wechsel <n>\` puts n coins into a **bill of exchange** there (the house keeps one coin): the coins lie in the paper itself, it can be passed on, sold and taken to other regions, and any counting house pays it out with \`wechsel einlösen\`.
 
 ## Boats, ship, railway, carts, beaming {#travel}
 
@@ -1655,10 +1661,10 @@ In a counting house \`kredit <n> gegen <ding>\` lends coins against a pledge, up
 - **Hatch**: every boat has one. At a jetty \`luke lade [n|alle] <ding>\` loads it, 8 things in a rowing boat, 20 in a sailing boat; \`luke entlade alle\` takes them out. The cargo goes with the boat.
 - **Large ship**: it sails only from island to island, from bay to bay, and there is one: a loop over all islands, it lies a while in each bay. You see it run in and cast off; on the [world map](help.game.controls#atlas) a dashed line shows its route and a mark where it is now. \`fahrplan\` says where it is and when it lies here. \`einschiffen <island>\` boards for 3 coins while it lies here: you sail with it until it reaches the island and go ashore there. Aboard you do not walk about, but you can look around and talk.
 - **Island railway** (from the network on): a room has one station at most. Beside it \`zug <ort>\` goes for a coin to any other station of the same island. Tracks lie between the stations, and you see them on the map; they block nobody's way. Every 20 world minutes the train stands at the platform for ten minutes, and only then does it go. \`zug sende [n|alle] <ding> nach <ort>\` sends up to 20 things for a coin as freight, \`zug abholen\` fetches them at the other end; what lies seven days, or whose station falls, becomes your estate. The railway does not leave its island.
-- **Road and cart** (from the village on): a road near an exit links its two rooms. A cart goes alone on roads with up to 20 pieces, a room per world hour: \`karren lade\`, \`karren fahre <ort>\`, \`karren entlade\`.
+- **Road and cart** (from the village on): a road near an exit links its two rooms. A cart goes alone on roads with up to 20 pieces, a room per world hour: \`karren lade\`, \`karren fahre <ort>\`, \`karren entlade\`. \`karren pendel <ort> [mit <ding>]\` sends it back and forth by itself between two places where you own a building with a chest: here it loads from your chest, there it puts everything into your chest and comes back, never empty; \`karren halt\` ends it. A cart crosses the water only as a thing (\`karren nimm\`).
 - **Beaming** (from the network on): \`beam <place>\` jumps from anywhere to a burning fire without walking the paths. Only the destination needs a burning fire, not where you stand. It costs coins by the distance on the [world map](help.game.controls#atlas), by default one per cell (at least one); afterwards you rest 10 world minutes before you beam again. \`beam\` alone lists the destinations and the rest. On the world map you tap the fire, the line and the price appear, **Hierher beamen** jumps. Operators change price, rest and stage.
 
-A **lighthouse** (from the town on) gives its fire 20 more light points, above the limit of 40.`,
+A **lighthouse** (from the town on) gives its fire 20 more light points, above the limit of 40, and carries its light into the rooms right beside its own on the same island: there one builds in the light of both fires, and the fog gives way while either burns.`,
 		},
 	},
 	{
