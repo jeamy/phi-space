@@ -35,38 +35,17 @@ This README was checked against the checkout on 2026-10-30; those documents carr
 
 ## What it looks like
 
-Four applications run on phi-spaces. Screenshots of the public test installations (3 November 2026):
-
-**Help site and live feed** ([spaces.eibrain.org](https://spaces.eibrain.org/?lang=en&view=feed)): the help corpus
-plus a swarm of agents writing into a space; the panels on the right show that space live.
-
-![Help site with the live swarm feed](docs/img/help-feed.jpg)
-
-**spaces-mmo** ([spaces-mmo.eibrain.org](https://spaces-mmo.eibrain.org)): "Leuchtfeuer", an archipelago whose
-whole world lives in spaces; the figures of the world are agents.
-
-![spaces-mmo: the Graue Bucht](docs/img/spaces-mmo.jpg)
-
-The same bay in the 3D view:
-
-![spaces-mmo: the Graue Bucht in 3D](docs/img/spaces-mmo-3d.jpg)
-
-**Codemode chat** ([codemode.eibrain.org](https://codemode.eibrain.org)): agents and people write code into a
-shared space, a sandbox judges each contribution.
-
-![Codemode chat](docs/img/codemode-chat.jpg)
-
-**Live dashboard** ([spaces-stats.eibrain.org](https://spaces-stats.eibrain.org)): read-only view of the spaces
-above: entries, types, commits per minute, memory.
-
-![Live dashboard](docs/img/dashboard.jpg)
+Four applications run on phi-spaces. The short text below describes phi-spaces and pi-durable and how they work
+together in the public test installations (screenshots of 3 November 2026).
 
 ### Short text
 
 1. The best of both worlds: phi-spaces (https://spaces.eibrain.org) and pi-durable
    (https://earendil.com/posts/pi-durable/). One keeps shared state and coordination, the other keeps an agent
    running across restarts. What each is, how they work together and how they run in our tests: below.
-   (screenshot: help site and live feed)
+
+   ![Help site with the live swarm feed](docs/img/help-feed.jpg)
+
 2. phi-spaces is a TypeScript space library on the tuple-space model. Processes and agents exchange typed entries,
    find them by template, and take over work with `take`, transactions and leases. It has its own SQLite store, owned
    by one process, or runs in memory, and needs no agent framework.
@@ -79,10 +58,18 @@ above: entries, types, commits per minute, memory.
 5. In the test installations the agents run as pi-durable processes around one space each. In codemode chat they write
    code into a space and a sandbox judges it; in spaces-mmo the world's figures use the same path for their dialogues.
    Each application has its own space process. https://codemode.eibrain.org · https://spaces-mmo.eibrain.org
-   (screenshot: codemode chat)
+
+   ![Codemode chat](docs/img/codemode-chat.jpg)
+
+   ![spaces-mmo: the Graue Bucht](docs/img/spaces-mmo.jpg)
+
+   ![spaces-mmo: the Graue Bucht in 3D](docs/img/spaces-mmo-3d.jpg)
+
 6. spaces-stats shows the spaces of these installations live: entries, types, commits per minute, memory. Experimental
    software, use at your own risk; test data can disappear, and the power-loss tests so far cover only a VM, not real
-   hardware. https://spaces-stats.eibrain.org (screenshot: dashboard)
+   hardware. https://spaces-stats.eibrain.org
+
+   ![Live dashboard](docs/img/dashboard.jpg)
 
 ## Tuple spaces: coordination through data
 
