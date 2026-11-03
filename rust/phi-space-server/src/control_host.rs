@@ -78,9 +78,13 @@ pub fn run(config: &str, store: &str) {
 	o.control = Some(Control { supervisor: Some(Supervisor { on_event: Box::new(|_| ()), commands: None, jobs: Default::default(), routing: Some(Routing { control_space: control_space.to_owned(), authority_id: authority_id.to_owned(), state: Rc::clone(&routing) }) }) });
 	let mut rotating = Rotating::new(authority_id, host_id, signer, control_key);
 	// configured-runtime's allowAOnly. A recovery writes the policy under the new authority before that authority runs,
-	// so what stood at the start stands while this host runs. Without a policy TS asks the control Space's restore; a Space
-	// under a restore does not open in this core at all.
-	rotating.allow_a_only = access_policy.map(|p| p.get("authorityId").and_then(Json::as_str) == Some(authority_id) && p.get("aOnlyAllowed") == Some(&Json::Bool(true)));
+	// so what stood at the start stands while this host runs. Without a policy, a control Space restored under a new
+	// authority (`restore.kind` "control", which stays once completed) allows no A-only grant, any other does.
+	let restored_control = opened.reader(Some(CONTROL_SPACE)).ok().and_then(|h| h.space.state.rest.get("restore").and_then(|r| r.get("kind")).and_then(Json::as_str).map(str::to_owned)).as_deref() == Some("control");
+	rotating.allow_a_only = match access_policy {
+		Some(p) => Some(p.get("authorityId").and_then(Json::as_str) == Some(authority_id) && p.get("aOnlyAllowed") == Some(&Json::Bool(true))),
+		None => restored_control.then_some(false),
+	};
 	o.rotating = Some(rotating);
 	let capabilities = c.get("capabilities").filter(|k| !k.is_null());
 	let hosts = capabilities.and_then(|k| k.get("hostBindings")).and_then(Json::as_object).map_or_else(Default::default, |b| b.iter().filter_map(|(k, v)| Some((k.to_owned(), v.as_str()?.to_owned()))).collect());

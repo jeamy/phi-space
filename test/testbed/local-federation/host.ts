@@ -10,10 +10,10 @@ const [role, impl, file] = process.argv.slice(2);
 if (role === "management") {
 	http.createServer((_req, res) => { res.setHeader("Content-Type", "application/json"); res.end(readFileSync("/fed/peers.json")); }).listen(8080, "0.0.0.0");
 } else if (impl === "rust") {
-	// the Rust host on the same files; its ready line names the store, as the TypeScript one does
+	// the Rust host on the same files; once ready it names the store, as the TypeScript one does (one line per start)
 	const name = file ?? role;
 	const child = spawn("phi-space-server", ["--store", `/fed/${name}.sqlite`, `--${role}`, `/fed/${name}.config.json`], { stdio: ["ignore", "pipe", "inherit"] });
-	child.stdout!.on("data", (d: Buffer) => { process.stdout.write(d); if (String(d).includes("ready on")) console.log(`[phi-spaces] ${name} ready`); });
+	child.stdout!.on("data", (d: Buffer) => { process.stdout.write(d); const t = String(d); if (t.includes("ready on") && !t.includes(`${name} ready`)) console.log(`[phi-spaces] ${name} ready`); });
 	child.on("exit", (code) => process.exit(code ?? 1));
 	for (const s of ["SIGTERM", "SIGINT"] as const) process.on(s, () => child.kill(s));
 } else {

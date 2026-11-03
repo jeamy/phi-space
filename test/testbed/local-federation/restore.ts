@@ -76,7 +76,7 @@ export async function backup(dir: string, spaceId: string, store = "member", fil
 }
 
 export async function restoreScenario() {
-	const { dir, compose, drive, started, docker } = harness("restore", "restore-driver.ts");
+	const { dir, env, compose, drive, started, docker, runs } = harness("restore", "restore-driver.ts");
 	let fencing: ChildProcess | undefined;
 	try {
 		await provision(dir);
@@ -85,6 +85,7 @@ export async function restoreScenario() {
 		fencing = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", join(ROOT, "test/testbed/local-federation/fencing-service.ts"), dir], { stdio: ["ignore", "pipe", "inherit"] });
 		await new Promise((resolve, reject) => { fencing!.stdout!.once("data", resolve); fencing!.once("exit", reject); });
 		started("member", "member ready"); started("data-b", "data-b ready");
+		runs(container("control"), env.CONTROL_IMPL); runs(container("member"), env.MEMBER_IMPL); runs(container("data-b"), env.DATA_B_IMPL);
 		assert.equal(drive("note", "data-host", "n1").write, "answered");
 		assert.deepEqual(drive("note", "data-host", "n2").notes, ["n1", "n2"]);
 		await backup(dir, JSON.parse(readFileSync(join(dir, "state.json"), "utf8")).notes);

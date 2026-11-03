@@ -60,7 +60,7 @@ async function provisionControlRestore(dir: string) {
 }
 
 export async function controlRestoreScenario() {
-	const { dir, compose, drive, started, docker } = harness("restore", "change-driver.ts");
+	const { dir, env, compose, drive, started, docker, runs } = harness("restore", "change-driver.ts");
 	const impl = (name: string) => `${name.replace("-", "_").toUpperCase()}_IMPL`;
 	const recovery = (service: string, name: string) => compose("run", "-d", "--no-deps", "--name", `phi-federation-recovery-${name}-1`, "-v", `${dir}/passwd:/etc/passwd:ro`, "-e", `${impl(name)}=${process.env[impl(name)] ?? "ts"}`, service, "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "recovery", name);
 	let fencing: ChildProcess | undefined;
@@ -71,6 +71,7 @@ export async function controlRestoreScenario() {
 		fencing = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", join(ROOT, "test/testbed/local-federation/fencing-service.ts"), dir], { stdio: ["ignore", "pipe", "inherit"] });
 		await new Promise((resolve, reject) => { fencing!.stdout!.once("data", resolve); fencing!.once("exit", reject); });
 		started("control", "control ready"); started("member", "member ready");
+		runs(container("control"), env.CONTROL_IMPL); runs(container("member"), env.MEMBER_IMPL);
 		assert.equal(drive("job", "control-host", "first").write, "answered");
 		await backup(dir, JSON.parse(readFileSync(join(dir, "state.json"), "utf8")).controlSpace, "control", "control.json", controlBackup);
 		drive("hold", "control-host");
@@ -80,6 +81,7 @@ export async function controlRestoreScenario() {
 		for (const host of ["control-host", "control-host-b", "data-host"]) assert.equal(drive("fence", host).fence, true);
 		recovery("control-b", "control-b"); recovery("member", "member");
 		started("recovery-control-b", '"recoveryReady":true'); started("recovery-member", '"recoveryReady":true');
+		runs("phi-federation-recovery-control-b-1", env.CONTROL_B_IMPL); runs("phi-federation-recovery-member-1", env.MEMBER_IMPL);
 		const imported = drive("restore-control", "control-host-b");
 		assert.equal(imported.states.at(-1), "waiting");
 		assert.equal(drive("install", "data-host").installed, true);
@@ -93,11 +95,11 @@ export async function controlRestoreScenario() {
 		const member = JSON.parse(readFileSync(join(dir, "member.config.json"), "utf8")), b = JSON.parse(readFileSync(join(dir, "control-b.config.json"), "utf8"));
 		writeFileSync(join(dir, "member.config.json"), JSON.stringify({ ...member, controlHostId: "control-host-b", control: b.control, keyFile: "/fed/member-key-2.json" }), { mode: 0o600 });
 		assert.equal(drive("release", "control-host-b").release, true);
-		started("control-b", "ready");
+		started("control-b", "ready"); runs(container("control-b"), env.CONTROL_B_IMPL);
 		// the routing table came back with the backup: the first admin sets the policy, naming the restored Member
 		assert.deepEqual(drive("policy", "control-host-b", "1").policy, { state: "completed", error: null }, "the first admin sets the policy under the new authority");
 		assert.equal(drive("release", "data-host").release, true);
-		started("member", "member ready", 90_000, 2);
+		started("member", "member ready", 90_000, 2); runs(container("member"), env.MEMBER_IMPL);
 		const after = drive("job", "control-host-b", "second", "user-key-2");
 		assert.equal(after.write, "answered"); assert.deepEqual(after.jobs, ["first", "second"]);
 		// the grant held from before the loss, presented with the client's new key, and the old key itself

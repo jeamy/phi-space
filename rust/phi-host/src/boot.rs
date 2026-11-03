@@ -167,11 +167,6 @@ impl BootGuard {
 		Ok(())
 	}
 
-	/// A change of the control host recorded on this host is followed by a TypeScript host (R6): here it stops the start.
-	pub fn control_changed(&self, control_space: &str) -> Result<bool, String> {
-		Ok(!self.installed.get(&format!("installed-authority:{control_space}")).map_err(|e| e.to_string())?.is_null())
-	}
-
 	/// `assertAuthority` of a host with this guard.
 	pub fn assert_active(&self) -> R<()> { self.seen().map(|_| ()) }
 }

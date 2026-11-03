@@ -73,7 +73,9 @@ export function harness(profile = "replica", driver = "replica-driver.ts") {
 	const tool = (host: string, q: Record<string, unknown>, name = host) => { const out = JSON.parse(compose("run", "--rm", "-T", "--no-deps", host, "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "tool", name, JSON.stringify(q)).trim().split("\n").at(-1)!); say(`tool ${host} ${q.op}`, out); return out; };
 	const started = (host: string, text: string, ms = 90_000, times = 1) => { const end = Date.now() + ms; for (;;) { const r = execFileSync("docker", ["logs", container(host)], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); if (r.split("\n").filter((l) => l.includes(text)).length >= times) return; if (Date.now() > end) throw new Error(`${host}: no ${text}`); execFileSync("sleep", ["0.5"]); } };
 	const docker = (...a: string[]) => sh("docker", a);
-	return { dir, env, compose, say, drive, tool, started, docker };
+	// the scenarios answer alike on either runtime: a container is held to run the one it was asked for
+	const runs = (name: string, impl: string) => assert.equal(execFileSync("docker", ["top", name], { encoding: "utf8" }).includes("phi-space-server"), impl === "rust", `${name} runs on ${impl}`);
+	return { dir, env, compose, say, drive, tool, started, docker, runs };
 }
 
 export async function replicaScenario() {
