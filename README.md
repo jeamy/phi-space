@@ -47,6 +47,10 @@ whole world lives in spaces; the figures of the world are agents.
 
 ![spaces-mmo: the Graue Bucht](docs/img/spaces-mmo.jpg)
 
+The same bay in the 3D view:
+
+![spaces-mmo: the Graue Bucht in 3D](docs/img/spaces-mmo-3d.jpg)
+
 **Codemode chat** ([codemode.eibrain.org](https://codemode.eibrain.org)): agents and people write code into a
 shared space, a sandbox judges each contribution.
 
