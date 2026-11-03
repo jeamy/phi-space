@@ -162,6 +162,7 @@ impl SpaceHost {
 				self.space.rollback();
 				self.also.clear();
 				self.space.doc_writes.clear();
+				self.space.registry_incarnation = None;
 				Ok(Err(e))
 			}
 			Ok(value) => {

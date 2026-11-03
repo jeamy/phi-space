@@ -273,6 +273,14 @@ impl Signer {
 	pub fn algorithm(&self) -> Algorithm {
 		match self { Signer::Ed25519(_) => Algorithm::Ed25519, Signer::EcdsaP256(_) => Algorithm::EcdsaP256 }
 	}
+	/// The public half as the key directory keeps it: the raw key (Ed25519) or its SubjectPublicKeyInfo (P-256), base64.
+	pub fn public_key(&self) -> String {
+		use p256::pkcs8::EncodePublicKey as _;
+		match self {
+			Signer::Ed25519(k) => to_base64(&k.verifying_key().to_bytes()),
+			Signer::EcdsaP256(k) => to_base64(k.verifying_key().to_public_key_der().expect("a P-256 key encodes").as_bytes()),
+		}
+	}
 	pub fn sign(&self, data: &[u8]) -> Vec<u8> {
 		use ed25519_dalek::Signer as _;
 		match self {

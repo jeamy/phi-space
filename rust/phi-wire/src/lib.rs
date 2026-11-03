@@ -4,6 +4,8 @@
 //!
 //! Everything here runs on one thread, the one that owns the store: a call is handled to its end before the next is
 //! looked at, and only the disk is another thread. A reply leaves once the store has made durable what it rests on.
+pub mod texts;
+
 use phi_service::{Conn, Outcome, Parked, Service};
 use std::cell::{Cell, RefCell, RefMut};
 use std::collections::{HashMap, VecDeque};
@@ -23,10 +25,10 @@ use tokio::sync::{watch, Notify};
 use tokio::task::spawn_local;
 use tokio::time::{sleep, timeout, Instant};
 
-const HEADER: usize = 8;
+pub(crate) const HEADER: usize = 8;
 /// The longest a timer runs at once (`core.timerDelay`); what is further off is reached in steps.
 const MAX_TIMER_MS: f64 = 2_147_483_647.0;
-const ACCEPT_PAUSE_MS: u64 = 100;
+pub(crate) const ACCEPT_PAUSE_MS: u64 = 100;
 /// Answers of one connection waiting for the disk; a client that outruns a stalled disk by more is refused.
 const MAX_HELD_REPLIES: usize = 1024;
 /// Includes replies already handed to a blocked socket writer.
@@ -106,6 +108,24 @@ impl Owner {
 	pub fn handed(&self) -> u64 { self.0.main.service().store.handed() }
 	/// Resolves after the next commit.
 	pub async fn commit(&self) { self.0.main.commits.notified().await }
+	/// Resolves once every commit handed to the host's own store so far is durable (`await host.commit`); the answer of
+	/// a failed store once it failed.
+	pub async fn durable(&self) -> Result<(), String> {
+		let main = &self.0.main;
+		let handed = main.service().store.handed();
+		let mut durable = main.durable.subscribe();
+		loop {
+			if main.failed.get() || main.gone.get() {
+				return Err(main.lost.borrow().clone());
+			}
+			if *durable.borrow_and_update() >= handed {
+				return Ok(());
+			}
+			if durable.changed().await.is_err() {
+				return Err(main.lost.borrow().clone());
+			}
+		}
+	}
 	/// Routes the calls that name one of `names` as their `space` (`None`: to the host's own service again). A service it
 	/// takes out is given back once what it made durable has left; its store is the caller's to close.
 	pub fn route(&self, names: &[String], to: Option<Route>) -> Option<Service> { route(&self.0, names, to) }
@@ -475,12 +495,12 @@ async fn background(served: Rc<Served>, debounce_ms: u64) {
 	}
 }
 
-enum Bound {
+pub(crate) enum Bound {
 	Unix(UnixListener, PathBuf, (u64, u64)),
 	Tcp(TcpListener, String),
 }
 impl Bound {
-	async fn bind(l: &Listen) -> io::Result<Bound> {
+	pub(crate) async fn bind(l: &Listen) -> io::Result<Bound> {
 		match l {
 			Listen::Unix(path) => {
 				prepare_socket_path(path).await?;
@@ -496,7 +516,7 @@ impl Bound {
 			}
 		}
 	}
-	fn address(&self) -> String {
+	pub(crate) fn address(&self) -> String {
 		match self {
 			Bound::Unix(_, path, _) => format!("unix:{}", path.display()),
 			Bound::Tcp(_, a) => a.clone(),
@@ -519,7 +539,7 @@ impl Bound {
 		Ok(())
 	}
 	/// The socket file goes, unless someone else's stands there by now.
-	fn close(&self) {
+	pub(crate) fn close(&self) {
 		if let Bound::Unix(_, path, (dev, ino)) = self {
 			if std::fs::symlink_metadata(path).is_ok_and(|m| m.dev() == *dev && m.ino() == *ino) {
 				let _ = std::fs::remove_file(path);

@@ -147,10 +147,27 @@ impl Store {
 			Err(e) => return Ok(Err(e)),
 		};
 		if let (Some(_), Some(key)) = (self.default_id(), self.host_key().map(str::to_owned)) {
-			return self.host_of(id.as_deref()).start_commit(|s| {
+			let registry = self.registry_copy();
+			let renamed = std::cell::RefCell::new(None);
+			let done = self.host_of(id.as_deref()).start_commit(|s| {
 				s.clock = now;
-				op(s, &key)
-			});
+				let out = op(s, &key)?;
+				// a restore gave the Space a new incarnation: the registry names it in the same commit (src/recovery-controller.ts)
+				if let (Some(inc), Some(id)) = (s.registry_incarnation.take(), s.state.space_id.clone()) {
+					let mut r = registry;
+					if let Some(Json::Object(info)) = r.get_mut("spaces").and_then(|m| m.as_object_mut()).and_then(|m| m.get_mut(&id)) {
+						info.insert("incarnation", inc.into());
+					}
+					let r = Json::Object(r);
+					s.doc_writes.push((REGISTRY.into(), String::new(), REGISTRY_VERSION, r.to_json_text()));
+					*renamed.borrow_mut() = Some(r);
+				}
+				Ok(out)
+			})?;
+			if let (Ok(_), Some(r)) = (&done, renamed.into_inner()) {
+				self.registry = Some(r);
+			}
+			return Ok(done);
 		}
 		let host_id = format!("host-{}", random_uuid(&mut self.random));
 		let host_key = match self.host_key().map(str::to_owned) {

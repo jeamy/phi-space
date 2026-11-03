@@ -376,3 +376,18 @@ pub async fn serve_register(register: SqliteRegister, identity: &TlsIdentity, li
 		});
 	}
 }
+
+/// The register as recovery code uses it, over TLS or in a file: a future each, so that a controller does not care which.
+pub type Ahead<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = R<T>> + 'a>>;
+pub trait Register {
+	fn get<'a>(&'a self, key: &'a str) -> Ahead<'a, Json>;
+	fn compare_and_set<'a>(&'a self, key: &'a str, expected: Option<f64>, value: &'a Json) -> Ahead<'a, Json>;
+}
+impl Register for RegisterClient {
+	fn get<'a>(&'a self, key: &'a str) -> Ahead<'a, Json> { Box::pin(RegisterClient::get(self, key)) }
+	fn compare_and_set<'a>(&'a self, key: &'a str, expected: Option<f64>, value: &'a Json) -> Ahead<'a, Json> { Box::pin(RegisterClient::compare_and_set(self, key, expected, value)) }
+}
+impl Register for SqliteRegister {
+	fn get<'a>(&'a self, key: &'a str) -> Ahead<'a, Json> { Box::pin(std::future::ready(SqliteRegister::get(self, key))) }
+	fn compare_and_set<'a>(&'a self, key: &'a str, expected: Option<f64>, value: &'a Json) -> Ahead<'a, Json> { Box::pin(std::future::ready(SqliteRegister::compare_and_set(self, key, expected, value))) }
+}

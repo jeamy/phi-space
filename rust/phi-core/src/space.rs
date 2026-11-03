@@ -399,6 +399,8 @@ pub struct Space {
 	pub router_permit: bool,
 	/// Documents to write in the running commit beside this space: kind, key, version, value.
 	pub doc_writes: Vec<(String, String, i64, String)>,
+	/// The registry is to name this incarnation for the Space in the same commit (a restore: `Registry.spaces[id].incarnation`).
+	pub registry_incarnation: Option<String>,
 	/// The document came with claims of a kind not ported (looked for once: a space holds a day of claims).
 	unported_claims: bool,
 	/// The historical claims are on the disk (a store's map part): their bytes are the tally kept beside them.
@@ -469,7 +471,7 @@ pub struct Changes {
 impl Space {
 	pub fn new(state: SpaceState, random: Random) -> Space {
 		let unported_claims = state.rpc.as_ref().and_then(|r| r.claims.memory()).is_some_and(|m| m.iter().any(|(_, c)| c.get("notCommitted").is_some() || c.as_object().is_none()));
-		Space { unported_claims, restored_on_disk: false, committed_watermark: None, marked: None, state, clock: 0.0, random, open: None, budget: None, watermark: None, router_permit: false, doc_writes: vec![], tracking: None }
+		Space { unported_claims, restored_on_disk: false, committed_watermark: None, marked: None, state, clock: 0.0, random, open: None, budget: None, watermark: None, router_permit: false, doc_writes: vec![], registry_incarnation: None, tracking: None }
 	}
 
 	/// A commit as the TypeScript host runs one: on a fresh draft (the watermark, the budget and the open batch start
@@ -741,7 +743,7 @@ impl Space {
 	pub(crate) fn can_charge(&self, cost: f64) -> bool { self.budget.is_none_or(|used| used + cost + COMMIT_FIXED <= self.limits().max_commit_bytes) }
 	pub(crate) fn defer_maintenance(&mut self, at: f64, cursor: &str) { self.state.rest.insert("maintenance", obj! { "at" => at, "cursor" => cursor }); }
 	/// Reserve one bounded maintenance mutation; persist where to go on when the commit is full.
-	pub(crate) fn maintenance_step(&mut self, cost: f64, now: f64, cursor: &str) -> bool {
+	pub fn maintenance_step(&mut self, cost: f64, now: f64, cursor: &str) -> bool {
 		if !self.can_charge(cost) {
 			self.defer_maintenance(now, cursor);
 			return false;

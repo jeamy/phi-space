@@ -10,10 +10,13 @@ pub struct TsDriver { child: Child, input: ChildStdin, output: BufReader<ChildSt
 impl TsDriver {
 	pub fn start() -> TsDriver { TsDriver::script("test/support/core-driver.ts") }
 	/// Another driver of the same protocol (test/support/store-driver.ts).
-	pub fn script(script: &str) -> TsDriver {
+	pub fn script(script: &str) -> TsDriver { TsDriver::script_with(script, &[]) }
+	/// The same with variables of its own in the driver's environment.
+	pub fn script_with(script: &str, env: &[(&str, String)]) -> TsDriver {
 		let root = format!("{}/../..", env!("CARGO_MANIFEST_DIR"));
 		let mut child = Command::new("node")
 			.args(["--experimental-strip-types", "--no-warnings", script])
+			.envs(env.iter().map(|(k, v)| (*k, v.as_str())))
 			.current_dir(root)
 			.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit())
 			.spawn().expect("node must be on PATH for the differential tests");
