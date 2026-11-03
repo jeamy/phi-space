@@ -90,8 +90,15 @@ async function phone(ip: string, bind: string, impl: string) {
 const which = process.argv[2] ?? "both";
 sh("docker", ["build", "--network", "host", "-f", "test/testbed/local-federation/Dockerfile", "-t", "phi-federation:local", "."]);
 if (which === "phone") await phone(process.argv[3]!, process.argv[4]!, process.argv[5] ?? "rust");
-if (which === "control-restore") { await (await import("./control-restore.ts")).controlRestoreScenario(); process.exit(process.exitCode ?? 0); }
-if (which === "restore") { await (await import("./restore.ts")).restoreScenario(); process.exit(process.exitCode ?? 0); }
+// `-- restore C-M-B`: the runtime of the control host, of the Member the Space is lost on and of the restore target data-b;
+// `-- control-restore C-M-B`: of the lost control host, of the Member and of the control target control-b (ts or rust each; default ts-ts-ts)
+const impls = (names: string[]) => {
+	const given = (process.argv[3] ?? "ts-ts-ts").split("-");
+	if (given.length !== names.length || !given.every((i) => i === "ts" || i === "rust")) throw new Error(`${which} takes ${names.map(() => "ts|rust").join("-")}`);
+	names.forEach((n, i) => { process.env[n] = given[i]; });
+};
+if (which === "control-restore") { impls(["CONTROL_IMPL", "MEMBER_IMPL", "CONTROL_B_IMPL"]); await (await import("./control-restore.ts")).controlRestoreScenario(); process.exit(process.exitCode ?? 0); }
+if (which === "restore") { impls(["CONTROL_IMPL", "MEMBER_IMPL", "DATA_B_IMPL"]); await (await import("./restore.ts")).restoreScenario(); process.exit(process.exitCode ?? 0); }
 if (which === "change") { await (await import("./change.ts")).changeScenario(); process.exit(process.exitCode ?? 0); }
 if (which === "entry") { await (await import("./entry.ts")).entryScenario(); process.exit(process.exitCode ?? 0); }
 if (which === "replica") {

@@ -16,7 +16,15 @@ const stopOn = (close: () => Promise<unknown>) => { for (const s of ["SIGTERM", 
 if (mode === "recovery") {
 	// the recovery-only service of a stopped, restart-locked host (federation-host.ts, modes recovery and member-recovery): quiesced is what the
 	// independent fence status says over ssh, the same answer the restore itself asks for
-	const recoveryFile = `/fed/${name}.recovery.json`, rc = JSON.parse(readFileSync(recoveryFile, "utf8")), host = await openSqliteHost(`/fed/${name}.sqlite`);
+	const recoveryFile = `/fed/${name}.recovery.json`, rc = JSON.parse(readFileSync(recoveryFile, "utf8"));
+	if (process.env[`${name!.replace("-", "_").toUpperCase()}_IMPL`] === "rust") {
+		// the Rust recovery-only service (phi-space-server --recovery-only), quiesced by the same fence status
+		const child = spawn("phi-space-server", ["--store", `/fed/${name}.sqlite`, "--recovery-only", file, recoveryFile], { stdio: "inherit" });
+		child.on("exit", (code) => process.exit(code ?? 1));
+		for (const s of ["SIGTERM", "SIGINT"] as const) process.on(s, () => child.kill(s));
+		await new Promise(() => {});
+	}
+	const host = await openSqliteHost(`/fed/${name}.sqlite`);
 	const assertQuiesced = async () => { const status = JSON.parse(execFileSync("ssh", ["-T", "-oBatchMode=yes", "-oStrictHostKeyChecking=yes", rc.fenceStatus, "phi-spaces-fence-status"], { encoding: "utf8" })); return { hostId: status.hostId, normalStopped: status.stopped === true, restartLocked: status.restartLocked === true }; };
 	const recovery = await (cfg.mode === "control" ? startRecoveryOnly : startMemberRecoveryOnly)(host, ctx, recoveryFile, assertQuiesced);
 	stopOn(async () => { await recovery.close(); await host.close(ctx); });
@@ -45,7 +53,7 @@ if (mode === "recovery") {
 	}
 } else if (mode === "run" && process.env[`${name!.replace("-", "_").toUpperCase()}_IMPL`] === "rust") {
 	// the Rust host (phi-space-server --member with syncSpaces): the same lines, its quarantine start included
-	const child = spawn("phi-space-server", ["--store", `/fed/${name}.sqlite`, "--member", file], { stdio: "inherit" });
+	const child = spawn("phi-space-server", ["--store", `/fed/${name}.sqlite`, `--${cfg.mode}`, file], { stdio: "inherit" });
 	child.on("exit", (code) => process.exit(code ?? 1));
 	for (const s of ["SIGTERM", "SIGINT"] as const) process.on(s, () => child.kill(s));
 } else if (mode === "run") {

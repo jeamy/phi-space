@@ -66,7 +66,7 @@ export async function provisionReplicas(dir: string, mode: "sync" | "entry") {
 
 /** The containers of a compose profile and what drives them: the client's steps, the hosts' tool, their log lines. */
 export function harness(profile = "replica", driver = "replica-driver.ts") {
-	const dir = mkdtempSync(join(tmpdir(), "phi-fed-")), env = { FED_DIR: dir, FED_UID: String(process.getuid!()), FED_GID: String(process.getgid!()), MEMBER_IMPL: "ts", CONTROL_IMPL: "ts", REPLICA_A_IMPL: process.env.REPLICA_A_IMPL ?? "ts", REPLICA_B_IMPL: process.env.REPLICA_B_IMPL ?? "ts" };
+	const dir = mkdtempSync(join(tmpdir(), "phi-fed-")), env = { FED_DIR: dir, FED_UID: String(process.getuid!()), FED_GID: String(process.getgid!()), MEMBER_IMPL: process.env.MEMBER_IMPL ?? "ts", CONTROL_IMPL: process.env.CONTROL_IMPL ?? "ts", DATA_B_IMPL: process.env.DATA_B_IMPL ?? "ts", CONTROL_B_IMPL: process.env.CONTROL_B_IMPL ?? "ts", REPLICA_A_IMPL: process.env.REPLICA_A_IMPL ?? "ts", REPLICA_B_IMPL: process.env.REPLICA_B_IMPL ?? "ts" };
 	const compose = (...a: string[]) => sh("docker", ["compose", "-f", COMPOSE, "--profile", profile, ...a], env);
 	const say = (name: string, v: unknown) => console.log(`  ${name} ${JSON.stringify(v)}`);
 	const drive = (...a: string[]) => { const out = JSON.parse(compose("exec", "-T", "client", "node", "--experimental-strip-types", "--no-warnings", `test/testbed/local-federation/${driver}`, ...a).trim().split("\n").at(-1)!); say(a.slice(0, 2).join(" "), out); return out; };

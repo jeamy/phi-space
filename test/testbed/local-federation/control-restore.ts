@@ -61,7 +61,8 @@ async function provisionControlRestore(dir: string) {
 
 export async function controlRestoreScenario() {
 	const { dir, compose, drive, started, docker } = harness("restore", "change-driver.ts");
-	const recovery = (service: string, name: string) => compose("run", "-d", "--no-deps", "--name", `phi-federation-recovery-${name}-1`, "-v", `${dir}/passwd:/etc/passwd:ro`, service, "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "recovery", name);
+	const impl = (name: string) => `${name.replace("-", "_").toUpperCase()}_IMPL`;
+	const recovery = (service: string, name: string) => compose("run", "-d", "--no-deps", "--name", `phi-federation-recovery-${name}-1`, "-v", `${dir}/passwd:/etc/passwd:ro`, "-e", `${impl(name)}=${process.env[impl(name)] ?? "ts"}`, service, "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "recovery", name);
 	let fencing: ChildProcess | undefined;
 	try {
 		await provision(dir);

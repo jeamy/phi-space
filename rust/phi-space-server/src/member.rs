@@ -1,7 +1,7 @@
 // `--member CONFIG.json`: a federation Member, what `startConfiguredFederation` (src/configured-runtime.ts) makes of a config of
 // mode "member", with its primary/sync Spaces (`syncSpaces`, src/sync-spaces.ts) and their quarantine start
-// (`startQuarantineReplicas`). What this host does not carry yet is refused at the start, never ignored: a root, entry
-// replication and recovery stay on TypeScript hosts (R6).
+// (`startQuarantineReplicas`) and its private recovery endpoint (`recovery`). What this host does not carry yet is refused at
+// the start, never ignored: a root, entry replication and following a control host change stay on TypeScript hosts (R6).
 use crate::{fail, stopping};
 use phi_host::auth::{Algorithm, Proving, Signer};
 use phi_host::boot::{BootGuard, External};
@@ -26,7 +26,7 @@ use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
 use std::rc::Rc;
 
-const REFUSED: [&str; 6] = ["root", "entryReplication", "recovery", "recoveryAdmin", "registerSshTarget", "registerReadSocket"];
+const REFUSED: [&str; 5] = ["root", "entryReplication", "recoveryAdmin", "registerSshTarget", "registerReadSocket"];
 
 pub(crate) fn field<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or_else(|| fail(format!("the config has no {k}"))) }
 
@@ -63,10 +63,49 @@ pub(crate) fn boot_guard(c: &Json, host_id: &str, authority_id: &str, control_sp
 	let installed = SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e));
 	let mut guard = BootGuard::new(host_id, authority_id, External::Tls(Box::new(register_client(register))), installed, Rc::clone(now), 60_000.0);
 	guard.authority = Some((control_space.to_owned(), control_host.to_owned(), control_key.to_owned()));
-	if guard.control_changed(control_space).unwrap_or_else(|e| fail(e)) {
+	Rc::new(guard)
+}
+
+/// The authority this host follows and its control key (configured-runtime): an installed successor of a control restore
+/// replaces what the config names; one installed for another control host needs this host reprovisioned. A change of the
+/// control host (an installation with its endpoint) is followed by a TypeScript host (R6b step 6): here it stops the start.
+pub(crate) fn followed_authority(c: &Json) -> (String, String) {
+	let installed = SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e));
+	let record = installed.get(&format!("installed-authority:{}", field(c, "controlSpaceId"))).unwrap_or_else(|e| fail(e));
+	let v = record.get("value").cloned().unwrap_or(Json::Null);
+	if v.get("address").is_some() {
 		fail("the control host changed; this host follows no such change");
 	}
-	Rc::new(guard)
+	if v.get("targetHostId").and_then(Json::as_str).is_some_and(|t| t != field(c, "controlHostId")) {
+		fail("control endpoint must be reprovisioned for the installed authority successor");
+	}
+	let control = c.get("control").unwrap_or_else(|| fail("the config has no control"));
+	let authority = v.get("authorityId").and_then(Json::as_str).unwrap_or_else(|| field(c, "authorityId")).to_owned();
+	let key = v.get("supervisorKey").and_then(Json::as_str).unwrap_or_else(|| field(control, "publicKey")).to_owned();
+	(authority, key)
+}
+
+/// The private recovery endpoint of the config's `recovery` section, if there is one.
+pub(crate) fn private_recovery(c: &Json, mode: &'static str, authority_id: &str, control_key: &str) -> Option<Box<dyn FnOnce(Owner) -> phi_wire::Local<()>>> {
+	let r = c.get("recovery").filter(|r| !r.is_null())?;
+	let control = c.get("control").unwrap_or_else(|| fail("the config has no control"));
+	let pin = phi_host::recovery_rpc::KeyPin::from_json(&phi_json::obj! { "algorithm" => field(control, "algorithm"), "publicKey" => control_key }).unwrap_or_else(|| fail("invalid control algorithm"));
+	let external = register_client(c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint")));
+	Some(
+		crate::recovery::PrivateRecovery {
+			config: r.clone(),
+			mode,
+			host_id: field(c, "hostId").to_owned(),
+			authority_id: authority_id.to_owned(),
+			control_host_id: field(c, "controlHostId").to_owned(),
+			control_space_id: field(c, "controlSpaceId").to_owned(),
+			key_file: field(c, "keyFile").to_owned(),
+			control_key: pin,
+			external: Rc::new(external),
+			installed_file: field(c, "installedRegisterFile").to_owned(),
+		}
+		.task(),
+	)
 }
 
 pub(crate) fn netbird(c: &Json, now: &Now) -> Rc<Netbird> {
@@ -176,10 +215,11 @@ pub fn run(config: &str, store: &str) {
 			return quarantine(&c, &now, syncs);
 		}
 	}
-	let (host_id, peer_id, authority_id) = (field(&c, "hostId"), field(&c, "peerId"), field(&c, "authorityId"));
+	let (host_id, peer_id) = (field(&c, "hostId"), field(&c, "peerId"));
 	let (control_host, control_space) = (field(&c, "controlHostId"), field(&c, "controlSpaceId"));
 	let control = c.get("control").unwrap_or_else(|| fail("the config has no control"));
-	let control_key = field(control, "publicKey");
+	let (authority_id, control_key) = followed_authority(&c);
+	let (authority_id, control_key) = (authority_id.as_str(), control_key.as_str());
 	if field(control, "algorithm") != "ed25519" && field(control, "algorithm") != "ecdsa-p256" {
 		fail("invalid control algorithm");
 	}
@@ -295,6 +335,7 @@ pub fn run(config: &str, store: &str) {
 		let (guard, client) = (Rc::clone(&o_boot), Rc::clone(&client));
 		tasks.push(Box::new(move |owner: Owner| Box::pin(sync_spaces(owner, syncs, cx, make, guard, client))));
 	}
+	tasks.extend(private_recovery(&c, "member", authority_id, control_key));
 	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "member", tasks);
 }
 

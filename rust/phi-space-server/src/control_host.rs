@@ -1,7 +1,8 @@
 // `--control CONFIG.json`: a control host, what `startConfiguredFederation` makes of a config of mode "control". What this host does
-// not carry yet is refused at the start, never ignored: a root, replication and recovery (R6b).
+// not carry yet is refused at the start, never ignored: replication and following a control host change (R6b). Its `recovery`
+// section is the private endpoint with the control host's receipt.
 use crate::{fail, stopping};
-use crate::member::{address_of, boot_guard, clock, config_of, field, key_of, netbird, open_store, own_peer, register_client, serve_gate, set_group_roles};
+use crate::member::{address_of, boot_guard, clock, config_of, field, followed_authority, key_of, netbird, open_store, own_peer, private_recovery, register_client, serve_gate, set_group_roles};
 use phi_host::alerts::ControlCommands;
 use phi_host::control::AsyncCommands;
 use phi_host::auth::{Algorithm, Proving};
@@ -19,11 +20,13 @@ use phi_service::Options;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const REFUSED: [&str; 9] = ["syncSpaces", "entryReplication", "recovery", "recoveryAdmin", "registerSshTarget", "registerReadSocket", "membership", "runGates", "spaceLifecycle"];
+const REFUSED: [&str; 8] = ["syncSpaces", "entryReplication", "recoveryAdmin", "registerSshTarget", "registerReadSocket", "membership", "runGates", "spaceLifecycle"];
 
 pub fn run(config: &str, store: &str) {
 	let c = config_of(config, "control", "this host runs as a control host", &REFUSED);
-	let (host_id, peer_id, authority_id, control_space) = (field(&c, "hostId"), field(&c, "peerId"), field(&c, "authorityId"), field(&c, "controlSpaceId"));
+	let (host_id, peer_id, control_space) = (field(&c, "hostId"), field(&c, "peerId"), field(&c, "controlSpaceId"));
+	let (authority_id, control_key) = followed_authority(&c);
+	let (authority_id, control_key) = (authority_id.as_str(), control_key.as_str());
 	if host_id != field(&c, "controlHostId") {
 		fail("configured control host or space identity disagrees with provisioned state");
 	}
@@ -33,7 +36,6 @@ pub fn run(config: &str, store: &str) {
 		fail("configured control host or space identity disagrees with provisioned state");
 	}
 	let control = c.get("control").unwrap_or_else(|| fail("the config has no control"));
-	let control_key = field(control, "publicKey");
 	let (signer, key_id) = key_of(&c, "keyFile");
 	if signer.algorithm().name() != field(control, "algorithm") || key_fingerprint(control_key) != key_id {
 		fail("provisioned control signer disagrees with installed authority");
@@ -103,7 +105,8 @@ pub fn run(config: &str, store: &str) {
 	o.boot = Some(guard);
 	let gate = Gate::new(listen_host, o).unwrap_or_else(|e| fail(e));
 
-	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "control", vec![]);
+	let tasks = private_recovery(&c, "control", authority_id, control_key).into_iter().collect();
+	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "control", tasks);
 }
 
 /// `root` of the config: what is not carried yet stops the start.

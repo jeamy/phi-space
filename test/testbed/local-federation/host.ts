@@ -1,4 +1,4 @@
-// One process of the local federation: `management` (the directory, from /fed/peers.json), `control rust|ts` or `member rust|ts [NAME]` (store and config NAME, default member).
+// One process of the local federation: `management` (the directory, from /fed/peers.json), `control rust|ts` or `member rust|ts [NAME]` (store and config NAME, default member; the same for both runtimes).
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import http from "node:http";
@@ -10,7 +10,10 @@ const [role, impl, file] = process.argv.slice(2);
 if (role === "management") {
 	http.createServer((_req, res) => { res.setHeader("Content-Type", "application/json"); res.end(readFileSync("/fed/peers.json")); }).listen(8080, "0.0.0.0");
 } else if (impl === "rust") {
-	const child = spawn("phi-space-server", ["--store", `/fed/${role}.sqlite`, `--${role}`, `/fed/${role}.config.json`], { stdio: "inherit" });
+	// the Rust host on the same files; its ready line names the store, as the TypeScript one does
+	const name = file ?? role;
+	const child = spawn("phi-space-server", ["--store", `/fed/${name}.sqlite`, `--${role}`, `/fed/${name}.config.json`], { stdio: ["ignore", "pipe", "inherit"] });
+	child.stdout!.on("data", (d: Buffer) => { process.stdout.write(d); if (String(d).includes("ready on")) console.log(`[phi-spaces] ${name} ready`); });
 	child.on("exit", (code) => process.exit(code ?? 1));
 	for (const s of ["SIGTERM", "SIGINT"] as const) process.on(s, () => child.kill(s));
 } else {

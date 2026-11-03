@@ -391,3 +391,47 @@ impl Register for SqliteRegister {
 	fn get<'a>(&'a self, key: &'a str) -> Ahead<'a, Json> { Box::pin(std::future::ready(SqliteRegister::get(self, key))) }
 	fn compare_and_set<'a>(&'a self, key: &'a str, expected: Option<f64>, value: &'a Json) -> Ahead<'a, Json> { Box::pin(std::future::ready(SqliteRegister::compare_and_set(self, key, expected, value))) }
 }
+
+/// `SshRecoveryRegister`: the register over a pinned ssh forced command, read-only unless provisioned as the operator's.
+pub struct SshRegister {
+	pub target: String,
+	pub timeout_ms: u64,
+	pub operator: bool,
+}
+impl SshRegister {
+	pub fn new(target: &str, timeout_ms: u64, operator: bool) -> R<SshRegister> {
+		if !crate::recovery_rpc::ssh_target(target) {
+			return Err(failed("invalid register SSH target"));
+		}
+		Ok(SshRegister { target: target.to_owned(), timeout_ms, operator })
+	}
+	async fn call(&self, call: Json) -> R<Json> {
+		if call.get("key").and_then(Json::as_str).is_none_or(|k| k.is_empty() || k.len() > 512) {
+			return Err(failed("invalid register key"));
+		}
+		let command = if self.operator { "phi-spaces-register-operator" } else { "phi-spaces-register-read" };
+		let out = crate::recovery_rpc::run_ssh(&self.target, command, call.to_json_text().into_bytes(), self.timeout_ms, MAX_BYTES).await.map_err(|e| {
+			failed(match e.as_str() {
+				"SSH command timed out" => "independent SSH register timed out",
+				"response exceeds budget" => "register response exceeds budget",
+				_ => "register SSH command failed",
+			})
+		})?;
+		let r = parse(&String::from_utf8_lossy(&out)).map_err(failed)?;
+		if r.get("ok").and_then(Json::as_bool) == Some(true) {
+			return Ok(r.get("result").cloned().unwrap_or(Json::Null));
+		}
+		let e = r.get("error").cloned().unwrap_or(Json::Null);
+		let message = e.get("message").and_then(Json::as_str).or_else(|| e.as_str()).unwrap_or("register unavailable").to_owned();
+		Err(if e.get("code").and_then(Json::as_str) == Some("RequestConflict") { conflict(message) } else { failed(message) })
+	}
+}
+impl Register for SshRegister {
+	fn get<'a>(&'a self, key: &'a str) -> Ahead<'a, Json> { Box::pin(self.call(obj! { "method" => "get", "key" => key })) }
+	fn compare_and_set<'a>(&'a self, key: &'a str, expected: Option<f64>, value: &'a Json) -> Ahead<'a, Json> {
+		if !self.operator {
+			return Box::pin(std::future::ready(Err(failed("SSH member register access is read-only"))));
+		}
+		Box::pin(self.call(obj! { "method" => "compareAndSet", "key" => key, "expectedVersion" => expected.map_or(Json::Null, Json::Number), "value" => value.clone() }))
+	}
+}

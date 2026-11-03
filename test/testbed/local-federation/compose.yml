@@ -59,6 +59,7 @@ services:
     <<: *host
     profiles: [change, restore]
     command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/replica-host.ts", "run", "control-b"]
+    environment: {CONTROL_B_IMPL: "${CONTROL_B_IMPL:-ts}"}
     restart: on-failure:20
     networks: {fed: {ipv4_address: 172.30.7.12}}
   # `run.ts restore`: sshd as the independent fence status endpoint (one login per fenced host, docker read through its socket), and a restore target
@@ -73,7 +74,7 @@ services:
     <<: *host
     profiles: [restore]
     volumes: ["${FED_DIR}:/fed", "${FED_DIR}/passwd:/etc/passwd:ro"]
-    command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/host.ts", "member", "ts", "data-b"]
+    command: ["node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/host.ts", "member", "${DATA_B_IMPL:-ts}", "data-b"]
     restart: on-failure:20
     networks: {fed: {ipv4_address: 172.30.7.14}}
   client:
