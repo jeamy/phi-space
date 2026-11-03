@@ -19,6 +19,7 @@ import { signRun } from "../src/run-member.ts";
 import { signLifecycle } from "../src/space-lifecycle.ts";
 import { openSqliteHost } from "../src/store/sqlite.ts";
 import { serveRegister } from "../src/register-service.ts";
+import { PrimarySyncJournal } from "../src/primary-sync.ts";
 import { ctx } from "./support/persistent.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -53,7 +54,7 @@ async function spawned(cmd: string[], args: string[]) {
 	return () => new Promise<void>((r) => { proc.removeAllListeners("exit"); proc.once("exit", () => r()); proc.kill("SIGTERM"); });
 }
 
-async function setup(tc: TestContext, more: Record<string, unknown> = {}, o: { controlMember?: boolean; register?: "socket" | "ssh" } = {}) {
+async function setup(tc: TestContext, more: Record<string, unknown> = {}, o: { controlMember?: boolean; register?: "socket" | "ssh"; synced?: boolean } = {}) {
 	const dir = mkdtempSync("/tmp/phi-mixed-");
 	tc.after(() => rmSync(dir, { recursive: true, force: true }));
 	const certs = pki(dir);
@@ -110,12 +111,17 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}, o: { c
 	tc.after(() => installedControl.close());
 	const spaces: Record<string, unknown> = {};
 	for (const i of await listSpaces(control, ctx)) { spaces[i.spaceId] = permit(i.incarnation); await installedControl.compareAndSet(`installed:control-host:${i.spaceId}`, null, permit(i.incarnation)); }
+	// a primary/sync Space of the control host (primary) and the Member (standby)
+	const SYNC = "sp-5c0d0a7e-1111-4222-8333-944445555aaa", syncPermit = (role: string) => ({ state: "active", authorityId: "authority", dataIncarnation: "5a1c0001", role, primaryEpoch: 1, replicaConfigVersion: 1, durability: "sync", transitionId: "setup" });
+	if (o.synced) spaces[SYNC] = syncPermit("primary");
 	await external.compareAndSet("boot:control-host", null, { hostId: "control-host", state: "active", spaces } as never);
 	await external.compareAndSet(`authority:${space.spaceId}`, null, { state: "active", authorityId: "authority", hostId: "control-host", supervisorKey: controlKey.publicKey });
-	const [controlPort, memberPort] = [await freePort(), await freePort()];
+	const [controlPort, memberPort, syncPort] = [await freePort(), await freePort(), await freePort()];
+	const genesis = { spaceId: SYNC, authorityId: "authority", primaryEpoch: 1, replicaConfigVersion: 1, primaryReplica: "control-host", standbyReplica: "data-host", durability: "sync" };
+	const synced = (name: string, other: { hostId: string; key: Signer & { publicKey?: string }; ip: string }) => o.synced ? { syncSpaces: [{ alias: "shared", spaceId: SYNC, incarnation: "5a1c0001", dir: join(dir, `sync-${name}`), genesis, port: syncPort, peers: [{ hostId: other.hostId, algorithm: other.key.algorithm, publicKey: other.key.publicKey, ip: other.ip }] }] } : {};
 	const base = (name: string, host: string, port: number) => ({ authorityId: "authority", controlHostId: "control-host", controlSpaceId: space.spaceId, listen: { host, port }, keyFile: join(dir, `${name}.json`), installedRegisterFile: join(dir, `installed-${name}.sqlite`), registerTls: { ...certs.identity(name), host: "127.0.0.1", port: (register.address() as net.AddressInfo).port, batchReads: true }, management: { url: `http://127.0.0.1:${(management.address() as net.AddressInfo).port}`, tokenFile: join(dir, "token") }, control: { address: { host: CONTROL_IP, port: controlPort }, algorithm: controlKey.algorithm, publicKey: controlKey.publicKey } });
 	const write = (name: string, config: unknown) => { const file = join(dir, `${name}.config.json`); writeFileSync(file, JSON.stringify(config), { mode: 0o600 }); return file; };
-	const controlConfig = write("control", { ...base("control", CONTROL_IP, controlPort), hostId: "control-host", peerId: "control-peer", mode: "control", capabilities: { hostBindings: { "control-peer": "control-host", "member-peer": "data-host" } }, ...(work ? { membership: { memberId: "c", spaceId: work.spaceId }, runGates: true, spaceLifecycle: true } : {}) });
+	const controlConfig = write("control", { ...base("control", CONTROL_IP, controlPort), hostId: "control-host", peerId: "control-peer", mode: "control", capabilities: { hostBindings: { "control-peer": "control-host", "member-peer": "data-host" } }, ...(work ? { membership: { memberId: "c", spaceId: work.spaceId }, runGates: true, spaceLifecycle: true } : {}), ...synced("control", { hostId: "data-host", key: memberKey, ip: MEMBER_IP }) });
 	const startControl = async () => {
 		if (!CONTROL) { control = await openSqliteHost(join(dir, "control.sqlite")); const root = await startConfiguredFederation(control, ctx, controlConfig); return async () => { await root.close(); await control.close(ctx); }; }
 		return spawned(CONTROL, ["--store", join(dir, "control.sqlite"), "--control", controlConfig]);
@@ -137,8 +143,9 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}, o: { c
 	// the permits are only external: the start installs them where the data is the one they name
 	const memberSpaces: Record<string, unknown> = {};
 	for (const i of await listSpaces(seed, ctx)) memberSpaces[i.spaceId] = permit(i.incarnation);
+	if (o.synced) memberSpaces[SYNC] = syncPermit("standby");
 	await external.compareAndSet("boot:data-host", null, { hostId: "data-host", state: "active", spaces: memberSpaces } as never);
-	const config = write("member", { ...base("member", MEMBER_IP, memberPort), hostId: "data-host", peerId: "member-peer", mode: "member", membership: { memberId: "a", spaceId: jobs.spaceId }, capabilities: { tools: ["sieve"], models: [], dataSpaces: [jobs.spaceId] }, ...line, ...more });
+	const config = write("member", { ...base("member", MEMBER_IP, memberPort), hostId: "data-host", peerId: "member-peer", mode: "member", membership: { memberId: "a", spaceId: jobs.spaceId }, capabilities: { tools: ["sieve"], models: [], dataSpaces: [jobs.spaceId] }, ...line, ...synced("member", { hostId: "control-host", key: controlKey, ip: CONTROL_IP }), ...more });
 	await seed.close(ctx);
 	const start = async () => {
 		if (!CMD) {
@@ -195,7 +202,7 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}, o: { c
 		const host = await openSqliteHost(storeFile);
 		try { return await f(host); } finally { await host.close(ctx); stop = await start(); }
 	};
-	return { work, scratch, controlPort, tryControl, withMember, adminKey, ADMIN_IP, PAIR_IP: SECOND_ROUTER_IP, pairKey, controlDown: async (f: () => Promise<void>) => { await stopControl(); try { await f(); } finally { stopControl = await startControl(); } }, controlStore: join(dir, "control.sqlite"), atControl, controlConfig, ROUTER_IP, USER_IP, withControl, notes, user, phone, toMember, get toControl() { return toControl; }, external, jobs, space, userKey, routerKey, controlKey, authority, config, storeFile, router, routing, restart };
+	return { SYNC, dir, work, scratch, controlPort, tryControl, withMember, adminKey, ADMIN_IP, PAIR_IP: SECOND_ROUTER_IP, pairKey, controlDown: async (f: () => Promise<void>) => { await stopControl(); try { await f(); } finally { stopControl = await startControl(); } }, controlStore: join(dir, "control.sqlite"), atControl, controlConfig, ROUTER_IP, USER_IP, withControl, notes, user, phone, toMember, get toControl() { return toControl; }, external, jobs, space, userKey, routerKey, controlKey, authority, config, storeFile, router, routing, restart };
 }
 
 test("a control host with a Root serves federated work to its own agents, also after a restart", async (tc) => {
@@ -615,7 +622,6 @@ test("what a control host does not carry stops it at the start", { skip: CONTROL
 			assert.equal(code, 1, out);
 			assert.match(out, part);
 		};
-		for (const k of ["syncSpaces"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
 		await refused({ mode: "member" }, /runs as a control host/);
 		await refused({ peerId: "someone-else" }, /does not belong to the provisioned NetBird peer/);
 		await refused({ hostId: "other" }, /identity disagrees/);
@@ -780,4 +786,25 @@ for (const kind of ["socket", "ssh"] as const) test(`a Member reads its register
 	const fenced = (await g.external.get<any>("boot:data-host"))!;
 	await g.external.compareAndSet("boot:data-host", fenced.version, { ...fenced.value, state: "active" });
 	assert.equal(await user.count({ type: "Job" }), 1, "and back");
+});
+
+test("a control host serves a primary/sync Space of its own, the Member its standby", async (tc) => {
+	const g = await setup(tc, {}, { synced: true });
+	const user = g.atControl(g.USER_IP, g.userKey.signer, "user");
+	await user.remote.authenticate();
+	const grant = await user.remote.requestGrant();
+	const call = async (c: Record<string, unknown>) => JSON.parse(await user.t.request(JSON.stringify({ ...c, space: "shared", frame: { grant } }))) as { ok: boolean; result?: any; error?: { code: string; message: string } };
+	// the primary serves the Space once its standby is there to confirm
+	let first = await call({ method: "generation" });
+	for (const end = Date.now() + 30_000; !first.ok && Date.now() < end; first = await call({ method: "generation" })) await new Promise((r) => setTimeout(r, 500));
+	assert.ok(first.ok, JSON.stringify(first));
+	for (const n of [1, 2]) assert.ok((await call({ method: "write", args: { entry: { type: "Job", fields: { n } }, txn: null, leaseMs: FOREVER }, request: { generation: first.result.generation, requestId: `w${n}` } })).ok);
+	assert.equal((await call({ method: "count", args: { template: { type: "Job" } } })).result.value, 2);
+	// the standby confirmed every commit: its journal holds the primary's chain (it applies it once promoted)
+	const genesis = JSON.parse(readFileSync(g.config, "utf8")).syncSpaces[0].genesis;
+	const head = (name: string, self: string) => { const j = new PrimarySyncJournal(join(g.dir, `sync-${name}`, "journal.sqlite"), genesis, { self }); try { return j.head(); } finally { j.close(); } };
+	const standby = await g.withMember(async () => head("member", "data-host"));
+	const primary = await g.withControl(async () => head("control", "control-host"));
+	assert.ok(standby.revision >= 3, JSON.stringify(standby));
+	assert.deepEqual(standby, primary, "the same chain on both");
 });

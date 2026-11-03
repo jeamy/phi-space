@@ -397,7 +397,15 @@ pub fn run(config: &str, store: &str) {
 			service
 		});
 		let (guard, client) = (Rc::clone(&o_boot), Rc::clone(&client));
-		tasks.push(Box::new(move |owner: Owner| Box::pin(sync_spaces(owner, syncs, cx, make, guard, client))));
+		// a primary's notices go to the control host, under a grant of it
+		let publish: PublishNotice = Rc::new(move |_, notice| {
+			let client = Rc::clone(&client);
+			Box::pin(async move {
+				let grant = client.grant().await?;
+				client.call(&phi_json::obj! { "method" => "replicaNotice", "space" => "control", "args" => phi_json::obj! { "notice" => notice }, "frame" => phi_json::obj! { "grant" => grant } }).await.map(|_| ())
+			})
+		});
+		tasks.push(Box::new(move |owner: Owner| Box::pin(sync_spaces(owner, syncs, cx, make, guard, publish))));
 	}
 	tasks.extend(private_recovery(&c, "member", authority_id, control_key));
 	tasks.extend(follow_changes(&c));
@@ -493,7 +501,10 @@ pub(crate) fn entry_replication(c: &Json, opened: &Store, authority_id: &str, gu
 
 /// Opens every primary/sync Space on its own (`openSyncSpaces`): one that cannot open stays unserved and does not take the
 /// host and its other Spaces down. A served one is routed by its names, and each is followed by its resolver.
-async fn sync_spaces(owner: Owner, configs: Vec<SyncSpaceConfig>, cx: Rc<SyncContext>, make: MakeService, guard: Rc<BootGuard>, client: Rc<ControlClient>) {
+/// Where a primary leaves the notice of its last transition: at its control host, or on this host's own board.
+pub(crate) type PublishNotice = Rc<dyn Fn(&Owner, Json) -> phi_wire::Local<Result<(), String>>>;
+
+pub(crate) async fn sync_spaces(owner: Owner, configs: Vec<SyncSpaceConfig>, cx: Rc<SyncContext>, make: MakeService, guard: Rc<BootGuard>, publish: PublishNotice) {
 	let mut resolvers = vec![];
 	for config in configs {
 		let alias = config.alias.clone();
@@ -527,15 +538,12 @@ async fn sync_spaces(owner: Owner, configs: Vec<SyncSpaceConfig>, cx: Rc<SyncCon
 	let mut running = vec![];
 	// v3 5.3.1 step 5: a primary keeps offering the notice of its last transition (`publishNotices`)
 	let spaces: Vec<Rc<SyncSpace>> = resolvers.iter().map(|(sp, _)| Rc::clone(sp)).collect();
+	let at = owner.clone();
 	running.push(tokio::task::spawn_local(async move {
 		loop {
 			for sp in &spaces {
 				let Some(notice) = sp.notice().await else { continue };
-				let published = async {
-					let grant = client.grant().await?;
-					client.call(&phi_json::obj! { "method" => "replicaNotice", "space" => "control", "args" => phi_json::obj! { "notice" => notice }, "frame" => phi_json::obj! { "grant" => grant } }).await
-				};
-				if let Err(e) = published.await {
+				if let Err(e) = publish(&at, notice).await {
 					eprintln!("Replica notice: {e}");
 				}
 			}

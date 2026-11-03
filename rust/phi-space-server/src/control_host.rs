@@ -11,7 +11,7 @@ use phi_host::boot::BootGuard;
 use phi_host::root::{MemberEnd, Root, RootConfig};
 use phi_host::capability::Capabilities;
 use phi_host::control::{align_control_replica, key_fingerprint, Control, Enrolling, Routing, SpaceKeys, Supervisor, CONTROL_SPACE};
-use phi_host::sync_space::{start, Started, SyncSpace, SyncSpaceConfig};
+use phi_host::sync_space::{start, MakeService, Started, SyncSpace, SyncSpaceConfig};
 use phi_host::control_host::ControlHost;
 use phi_host::delegation::{authorize, DelegationOptions, DelegationVerifier, ReplicaConfig};
 use phi_host::run_member::Pin;
@@ -23,7 +23,7 @@ use phi_service::{space_epoch, Options};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const REFUSED: [&str; 1] = ["syncSpaces"];
+const REFUSED: [&str; 0] = [];
 
 pub fn run(config: &str, store: &str) {
 	let mut c = config_of(config, "control", "this host runs as a control host", &REFUSED);
@@ -132,6 +132,24 @@ pub fn run(config: &str, store: &str) {
 	let verifier = DelegationVerifier::new(DelegationOptions { authority_id: authority_id.to_owned(), control_space_id: control_space.to_owned(), supervisor_peer_id: peer_id.to_owned(), supervisor: (algorithm, control_key.to_owned()), keys: Rc::clone(&keys), grants: grants.clone(), policy: Rc::new(move |store| installed.installed(store)), rules: Rc::new(options.policy.clone()), uncertainty_ms: 2000.0, replica_config: Some(replica_config) }).unwrap_or_else(|e| fail(e.message));
 	options.authorize = Some(authorize(Rc::clone(&verifier), Rc::clone(&now)));
 	options.guard = Some(Rc::clone(&guard) as _);
+	// the service of a primary/sync Space of this host: the same checks, the Space's own epoch and evidence
+	let sync_make: MakeService = {
+		let (verifier, now, guard, peer, host, authority) = (Rc::clone(&verifier), Rc::clone(&now), Rc::clone(&guard), peer_id.to_owned(), host_id.to_owned(), authority_id.to_owned());
+		Rc::new(move |store, sp| {
+			let mut o = Options::single_peer(&peer);
+			o.identity.clear();
+			o.host_id = Some(host.clone());
+			o.authority_id = authority.clone();
+			o.authorize = Some(authorize(Rc::clone(&verifier), Rc::clone(&now)));
+			o.guard = Some(Rc::clone(&guard) as _);
+			sp.serve_options(&mut o);
+			let mut service = phi_service::Service::new(store, o);
+			if let Err(e) = service.start_background() {
+				eprintln!("a primary/sync Space's background work: {}", e.message);
+			}
+			service
+		})
+	};
 
 	let mut o = GateOptions::new(directory, Rc::clone(&now));
 	set_group_roles(&mut o, &c);
@@ -195,6 +213,19 @@ pub fn run(config: &str, store: &str) {
 	let gate = Gate::new(listen_host, o).unwrap_or_else(|e| fail(e));
 
 	let mut tasks: Vec<Box<dyn FnOnce(phi_wire::Owner) -> phi_wire::Local<()>>> = private_recovery(&c, "control", authority_id, control_key).into_iter().collect();
+	// primary/sync Spaces of this host: a primary's notices go on this host's own board, as signed by its own key
+	let syncs: Vec<SyncSpaceConfig> = c.get("syncSpaces").and_then(Json::as_array).map_or(vec![], |a| a.iter().map(|s| SyncSpaceConfig::from_json(s).unwrap_or_else(|e| fail(e))).collect());
+	if !syncs.is_empty() {
+		let cx = sync_context(&c, &now);
+		let (space, key) = (control_space.to_owned(), control_key.to_owned());
+		let publish: crate::member::PublishNotice = Rc::new(move |owner, notice| {
+			let roles = vec!["host".to_owned()];
+			let done = owner.with(|s| phi_host::replica_notice::publish(s, &space, &notice, phi_host::replica_notice::Publisher { bound: false, roles: &roles, key: Some((algorithm, &key)) }, &|_, _| Ok(())));
+			Box::pin(async move { done.map(|_| ()).map_err(|e| e.message) })
+		});
+		let (make, guard) = (Rc::clone(&sync_make), Rc::clone(&boot));
+		tasks.push(Box::new(move |owner: phi_wire::Owner| Box::pin(crate::member::sync_spaces(owner, syncs, cx, make, guard, publish))));
+	}
 	let merge = entry.map(|e| entry_tasks(e, &boot, &now, &mut tasks));
 	tasks.extend(follow_changes(&c));
 	let _held = main;
