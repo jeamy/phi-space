@@ -13,6 +13,41 @@ import * as core from "./core.ts";
 export type MemberAuthorityAck = { hostId: string; recoveryId: string; authorityId: string; bootDigest: string; spaces: Record<string,{ incarnation: string; primaryEpoch: number }> };
 export type MemberTransitionOptions = { host: Pick<StoreHost,"commit" | "snapshot">; ctx: Context; hostId: string; external: RecoveryRegister; installed: RecoveryRegister; pinned: { algorithm: Algorithm; publicKey: string }; assertQuiesced: () => Promise<{ hostId: string; normalStopped: boolean; restartLocked: boolean }>; now?: () => number };
 const digest = digestJson;
+/** One bounded stage of a Member's authority transition on one Space, as one commit runs it (the core driver runs it too). */
+export function memberTransitionStep(s: core.SpaceState, now: number, t: { recoveryId: string; newAuthorityId: string }): void {
+ if (!core.maintenanceStep(s,512,now,"member-authority-transition")) throw new core.ResourceExhausted("member transition metadata exceeds commit budget");
+ if (!s.authorityTransition || s.authorityTransition.recoveryId !== t.recoveryId) { s.authorityTransition={recoveryId:t.recoveryId,authorityId:t.newAuthorityId,stage:"clearing"}; s.waiters=[];s.regs=[];s.outbox=[];delete s.outboxBytes;s.jobs=[];s.releaseQueue=[];s.mailboxes={boxes:{}};core.touch(s,now); }
+ const step=s.authorityTransition;
+ if (step.stage === "clearing") {
+  const txn=Object.values(s.txns)[0];
+  if (txn) { if ((txn as any).sealed || (txn as any).prepared) throw new RecoveryBlocked("sealed replica candidates require their separate reconciliation protocol"); core.abortTxn(s,now,txn.id,txn.owner??undefined); return; }
+  step.stage="history";
+ }
+ if (step.stage === "history") {
+  const pending=pendingClaims(s)[0];
+  if (pending) { const [id,c]=pending,copy=core.plain(c);delete copy.reservedResultBytes;const bytes=Buffer.byteLength(JSON.stringify(copy))+Buffer.byteLength(JSON.stringify(id))+256;if (core.overheadBytes(s)+bytes+s.entries.reduce((n,e)=>n+(e.size??Buffer.byteLength(JSON.stringify(e.fields))),0)>core.limitsOf(s).maxDocBytes || !core.maintenanceStep(s,bytes,now,"member-pending-history")) throw new core.ResourceExhausted("pending history cannot fit the transition budget");
+   setRestored(s,id,copy);delete s.rpc!.claims[id];s.rpc!.bytes=Math.max(0,(s.rpc!.bytes??0)-Buffer.byteLength(JSON.stringify(c))-Buffer.byteLength(JSON.stringify(id))-2);s.rpc!.reservedBytes=Math.max(0,(s.rpc!.reservedBytes??0)-(c.reservedResultBytes??0));core.touch(s,now);return;
+  }
+  // claims on the disk are walked in key order from the last one marked (each step marks one; no scan from the start)
+  const disk=diskMapOf<import("./claims.ts").ClaimRec>(s.rpc?.claims),unmarked=(c:import("./claims.ts").ClaimRec)=>c.state!=="pending"&&!c.orphanedAfterRestore;
+  let decidedAt:[string,import("./claims.ts").ClaimRec]|undefined;
+  if(disk){for(let after=step.claimCursor??null;;){const page=disk.page(after,64);decidedAt=page.find(([,c])=>unmarked(c));if(decidedAt||page.length<64)break;after=page.at(-1)![0];}if(decidedAt)step.claimCursor=decidedAt[0];}
+  else decidedAt=Object.entries(s.rpc?.claims??{}).find(([,c])=>unmarked(c));
+  const decided=decidedAt?.[1];
+  if(decided){const before=Buffer.byteLength(JSON.stringify(decided)),mark={recoveryId:t.recoveryId,authorityId:t.newAuthorityId},bytes=Buffer.byteLength(JSON.stringify(mark))+128;if(core.claimBytes(s)+bytes>core.limitsOf(s).maxClaimBytes||core.overheadBytes(s)+bytes+s.entries.reduce((n,e)=>n+(e.size??Buffer.byteLength(JSON.stringify(e.fields))),0)>core.limitsOf(s).maxDocBytes||!core.maintenanceStep(s,bytes,now,"member-orphaned-claim"))throw new core.ResourceExhausted("orphan audit exceeds current limits");const marked={...decided,orphanedAfterRestore:mark};s.rpc!.claims[decidedAt![0]]=marked;s.rpc!.bytes=(s.rpc!.bytes??0)+Buffer.byteLength(JSON.stringify(marked))-before;core.touch(s,now);return;}
+  // the historical claims likewise, in key order from the one marked last (historyCursor)
+  let historicalAt:[string,import("./claims.ts").ClaimRec]|undefined;
+  for(let after=step.historyCursor??null;;){const page=claimPage(s.restoredClaims,after,64);historicalAt=page.find(([,c])=>unmarked(c));if(historicalAt||page.length<64)break;after=page.at(-1)![0];}
+  const historical=historicalAt?.[1];
+  if(historical){const mark={recoveryId:t.recoveryId,authorityId:t.newAuthorityId},bytes=Buffer.byteLength(JSON.stringify(mark))+128;if(core.claimBytes(s)+bytes>core.limitsOf(s).maxClaimBytes||core.overheadBytes(s)+bytes+s.entries.reduce((n,e)=>n+(e.size??Buffer.byteLength(JSON.stringify(e.fields))),0)>core.limitsOf(s).maxDocBytes||!core.maintenanceStep(s,bytes,now,"member-historical-orphan"))throw new core.ResourceExhausted("historical orphan audit exceeds current limits");setRestored(s,historicalAt![0],{...historical,orphanedAfterRestore:mark});step.historyCursor=historicalAt![0];core.touch(s,now);return;}
+  step.stage="generations";
+ }
+ if (step.stage === "generations") {
+  const old=Object.keys(s.rpc?.generations??{}).find(id=>!s.invalidGenerations?.[id]);
+  if (old) { const bytes=Buffer.byteLength(JSON.stringify(old))+64;if (core.claimBytes(s)+bytes>core.limitsOf(s).maxClaimBytes || core.overheadBytes(s)+bytes+s.entries.reduce((n,e)=>n+(e.size??Buffer.byteLength(JSON.stringify(e.fields))),0)>core.limitsOf(s).maxDocBytes || !core.maintenanceStep(s,bytes,now,"member-old-generation")) throw new core.ResourceExhausted("old generation cannot fit the transition budget");s.invalidGenerations??={};s.invalidGenerations[old]=true;core.touch(s,now);return; }
+  if(s.rpc)s.rpc.authorityId=t.newAuthorityId;s.primaryEpoch=1;s.acceptedAuthorityId=t.newAuthorityId;step.stage="completed";core.touch(s,now);
+ }
+}
 export class MemberTransitionInstaller {
  private o: MemberTransitionOptions;
  constructor(o: MemberTransitionOptions) { this.o = o; }
@@ -37,41 +72,7 @@ export class MemberTransitionInstaller {
    if (!state || state.incarnation !== permit.dataIncarnation || state.authorityTransition && state.authorityTransition.stage !== "completed" && (state.authorityTransition.recoveryId !== t.recoveryId || state.authorityTransition.authorityId !== t.newAuthorityId)) throw new RecoveryBlocked("member space state or transition changed");
    if (state.authorityTransition?.stage === "completed" && state.authorityTransition.recoveryId === t.recoveryId && state.acceptedAuthorityId === t.newAuthorityId) continue;
    const now=(o.now??Date.now)();
-   await o.host.commit(async tx => {
-    const s=await spaceDoc(tx,info.spaceId,now);
-    if (!core.maintenanceStep(s,512,now,"member-authority-transition")) throw new core.ResourceExhausted("member transition metadata exceeds commit budget");
-    if (!s.authorityTransition || s.authorityTransition.recoveryId !== t.recoveryId) { s.authorityTransition={recoveryId:t.recoveryId,authorityId:t.newAuthorityId,stage:"clearing"}; s.waiters=[];s.regs=[];s.outbox=[];delete s.outboxBytes;s.jobs=[];s.releaseQueue=[];s.mailboxes={boxes:{}};core.touch(s,now); }
-    const step=s.authorityTransition;
-    if (step.stage === "clearing") {
-     const txn=Object.values(s.txns)[0];
-     if (txn) { if ((txn as any).sealed || (txn as any).prepared) throw new RecoveryBlocked("sealed replica candidates require their separate reconciliation protocol"); core.abortTxn(s,now,txn.id,txn.owner??undefined); return; }
-     step.stage="history";
-    }
-    if (step.stage === "history") {
-     const pending=pendingClaims(s)[0];
-     if (pending) { const [id,c]=pending,copy=core.plain(c);delete copy.reservedResultBytes;const bytes=Buffer.byteLength(JSON.stringify(copy))+Buffer.byteLength(JSON.stringify(id))+256;if (core.overheadBytes(s)+bytes+s.entries.reduce((n,e)=>n+(e.size??Buffer.byteLength(JSON.stringify(e.fields))),0)>core.limitsOf(s).maxDocBytes || !core.maintenanceStep(s,bytes,now,"member-pending-history")) throw new core.ResourceExhausted("pending history cannot fit the transition budget");
-      setRestored(s,id,copy);delete s.rpc!.claims[id];s.rpc!.bytes=Math.max(0,(s.rpc!.bytes??0)-Buffer.byteLength(JSON.stringify(c))-Buffer.byteLength(JSON.stringify(id))-2);s.rpc!.reservedBytes=Math.max(0,(s.rpc!.reservedBytes??0)-(c.reservedResultBytes??0));core.touch(s,now);return;
-     }
-     // claims on the disk are walked in key order from the last one marked (each step marks one; no scan from the start)
-     const disk=diskMapOf<import("./claims.ts").ClaimRec>(s.rpc?.claims),unmarked=(c:import("./claims.ts").ClaimRec)=>c.state!=="pending"&&!c.orphanedAfterRestore;
-     let decidedAt:[string,import("./claims.ts").ClaimRec]|undefined;
-     if(disk){for(let after=step.claimCursor??null;;){const page=disk.page(after,64);decidedAt=page.find(([,c])=>unmarked(c));if(decidedAt||page.length<64)break;after=page.at(-1)![0];}if(decidedAt)step.claimCursor=decidedAt[0];}
-     else decidedAt=Object.entries(s.rpc?.claims??{}).find(([,c])=>unmarked(c));
-     const decided=decidedAt?.[1];
-     if(decided){const before=Buffer.byteLength(JSON.stringify(decided)),mark={recoveryId:t.recoveryId,authorityId:t.newAuthorityId},bytes=Buffer.byteLength(JSON.stringify(mark))+128;if(core.claimBytes(s)+bytes>core.limitsOf(s).maxClaimBytes||core.overheadBytes(s)+bytes+s.entries.reduce((n,e)=>n+(e.size??Buffer.byteLength(JSON.stringify(e.fields))),0)>core.limitsOf(s).maxDocBytes||!core.maintenanceStep(s,bytes,now,"member-orphaned-claim"))throw new core.ResourceExhausted("orphan audit exceeds current limits");const marked={...decided,orphanedAfterRestore:mark};s.rpc!.claims[decidedAt![0]]=marked;s.rpc!.bytes=(s.rpc!.bytes??0)+Buffer.byteLength(JSON.stringify(marked))-before;core.touch(s,now);return;}
-     // the historical claims likewise, in key order from the one marked last (historyCursor)
-     let historicalAt:[string,import("./claims.ts").ClaimRec]|undefined;
-     for(let after=step.historyCursor??null;;){const page=claimPage(s.restoredClaims,after,64);historicalAt=page.find(([,c])=>unmarked(c));if(historicalAt||page.length<64)break;after=page.at(-1)![0];}
-     const historical=historicalAt?.[1];
-     if(historical){const mark={recoveryId:t.recoveryId,authorityId:t.newAuthorityId},bytes=Buffer.byteLength(JSON.stringify(mark))+128;if(core.claimBytes(s)+bytes>core.limitsOf(s).maxClaimBytes||core.overheadBytes(s)+bytes+s.entries.reduce((n,e)=>n+(e.size??Buffer.byteLength(JSON.stringify(e.fields))),0)>core.limitsOf(s).maxDocBytes||!core.maintenanceStep(s,bytes,now,"member-historical-orphan"))throw new core.ResourceExhausted("historical orphan audit exceeds current limits");setRestored(s,historicalAt![0],{...historical,orphanedAfterRestore:mark});step.historyCursor=historicalAt![0];core.touch(s,now);return;}
-     step.stage="generations";
-    }
-    if (step.stage === "generations") {
-     const old=Object.keys(s.rpc?.generations??{}).find(id=>!s.invalidGenerations?.[id]);
-     if (old) { const bytes=Buffer.byteLength(JSON.stringify(old))+64;if (core.claimBytes(s)+bytes>core.limitsOf(s).maxClaimBytes || core.overheadBytes(s)+bytes+s.entries.reduce((n,e)=>n+(e.size??Buffer.byteLength(JSON.stringify(e.fields))),0)>core.limitsOf(s).maxDocBytes || !core.maintenanceStep(s,bytes,now,"member-old-generation")) throw new core.ResourceExhausted("old generation cannot fit the transition budget");s.invalidGenerations??={};s.invalidGenerations[old]=true;core.touch(s,now);return; }
-     if(s.rpc)s.rpc.authorityId=t.newAuthorityId;s.primaryEpoch=1;s.acceptedAuthorityId=t.newAuthorityId;step.stage="completed";core.touch(s,now);
-    }
-   },o.ctx);
+   await o.host.commit(async tx => memberTransitionStep(await spaceDoc(tx,info.spaceId,now),now,t),o.ctx);
    return {completed:false};
   }
   await installAuthorityTransition(o.installed,o.external,proof,o.pinned);

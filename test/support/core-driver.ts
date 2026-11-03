@@ -26,6 +26,7 @@ import { snapshotPage } from "../../src/snapshot.ts";
 import { readChain } from "../../src/read-chain.ts";
 import { digestJson } from "../../src/canonical.ts";
 import { beginRestore, completeRestore, releaseRestored, restoreBatch, snapshotHash } from "../../src/restore.ts";
+import { memberTransitionStep } from "../../src/member-transition.ts";
 import type { Json } from "../../src/core.ts";
 
 let seed = "", block = 0, pool = Buffer.alloc(0);
@@ -123,6 +124,8 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 		case "completeRestore": completeRestore(s, now, l.recoveryId); return null;
 		case "releaseRestored": return releaseRestored(s, now, l.recoveryId, l.scope ?? {});
 		case "setAuthorityTransition": if (l.transition) s.authorityTransition = l.transition; else delete s.authorityTransition; return null;
+		// ---- a Member's authority transition (src/member-transition.ts): one bounded stage per commit
+		case "memberTransitionStep": memberTransitionStep(s, now, { recoveryId: l.recoveryId, newAuthorityId: l.newAuthorityId }); return null;
 		default: throw new TypeError(`core-driver: unknown op ${l.op}`);
 	}
 }

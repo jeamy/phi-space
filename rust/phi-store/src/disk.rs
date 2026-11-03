@@ -69,5 +69,6 @@ impl ClaimSource for SqliteClaims {
 	fn unindexed(&self) -> Vec<(String, Json)> { self.rows(&format!("SELECT id, value {BASE} AND at IS NULL"), vec![]) }
 	fn first_ids(&self, limit: usize) -> Vec<String> { self.ids_of(&format!("SELECT id {BASE} ORDER BY id LIMIT ?"), vec![(limit as i64).into()]) }
 	fn ids(&self) -> Vec<String> { self.ids_of(&format!("SELECT id {BASE}"), vec![]) }
+	fn after(&self, after: Option<&str>, limit: usize) -> Vec<(String, Json)> { self.rows(&format!("SELECT id, value {BASE} AND id > ? ORDER BY id LIMIT ?"), vec![after.unwrap_or("").to_owned().into(), (limit as i64).into()]) }
 	fn take_failure(&self) -> Option<String> { self.failure.lock().unwrap().take() }
 }

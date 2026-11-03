@@ -195,6 +195,16 @@ fn random_walks_agree_with_the_typescript_core() {
 		"restored entries released",
 		"lookup of restored history",
 		"admit IncarnationChanged",
+		// a Member's authority transition (src/member-transition.ts)
+		"memberTransitionStep at clearing",
+		"memberTransitionStep at history",
+		"memberTransitionStep at generations",
+		"memberTransitionStep at completed",
+		"memberTransitionStep ResourceExhausted",
+		"a transition kept an open request as history",
+		"a transition marked a claim",
+		"a transition marked a historical claim",
+		"a transition invalidated a generation",
 	]
 	.into_iter()
 	.filter(|k| !seen.contains_key(k))

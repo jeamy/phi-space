@@ -480,6 +480,8 @@ pub trait ClaimSource: Send + Sync {
 	fn unindexed(&self) -> Vec<(String, Json)>;
 	/// The first keys in key order, at most `limit`.
 	fn first_ids(&self, limit: usize) -> Vec<String>;
+	/// Rows in key order after `after` (none: from the start), at most `limit`.
+	fn after(&self, after: Option<&str>, limit: usize) -> Vec<(String, Json)>;
 	/// Every key: reads the whole map (only what asks for all of it on purpose).
 	fn ids(&self) -> Vec<String>;
 	/// A read that failed since the last look: its answer was empty, so the commit that made it must not stand.
@@ -688,6 +690,19 @@ impl DiskClaims {
 			}
 		}
 		out.sort_by(|a, b| phi_json::utf16_cmp(a, b));
+		out.truncate(limit);
+		out
+	}
+	/// `page`: records in key order after `after` (none: from the start), at most `limit`; a cursor through the map.
+	pub fn page(&self, after: Option<&str>, limit: usize) -> Vec<(String, Json)> {
+		// rows that memory holds are judged by what memory holds: ask the disk for enough to make up for them
+		let mut out: Vec<(String, Json)> = if self.blind() { vec![] } else { self.source.after(after, limit + self.held.len()) }.into_iter().filter(|(k, _)| self.held_at(k).is_none()).collect();
+		for (k, v, _) in &self.held {
+			if let Some(v) = v.as_ref().filter(|_| after.is_none_or(|a| phi_json::utf16_cmp(k, a).is_gt())) {
+				out.push((k.clone(), v.clone()));
+			}
+		}
+		out.sort_by(|(a, _), (b, _)| phi_json::utf16_cmp(a, b));
 		out.truncate(limit);
 		out
 	}

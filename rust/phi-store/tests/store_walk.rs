@@ -159,6 +159,11 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 		}
 		let mut paths = vec![];
 		diff(&again.host.space.state.to_json(), &dump, "state", &mut paths);
+		if std::env::var("PHI_STORE_TRACE").is_ok() {
+			for (n, l) in lines[1..=i].iter().enumerate() {
+				eprintln!("{:>5} {} -> {:?}", n + 1, l.to_json_text(), ts_reply(&ts_answers[n + 1]));
+			}
+		}
 		panic!("seed {seed}, step {i}: {}\n  Rust:       {got:?}\n  TypeScript: {want:?}\n  state differs: {}\n  {}", line.to_json_text(), state != hashes[i], paths.join("\n  "));
 	}
 	let (r, t) = (rows(&rust_file), rows(&ts_file));

@@ -19,7 +19,7 @@ pub fn run_recovery_id_of(recovery_id: &str) -> String {
 }
 
 /// The keys of a claim map in key order after `after`, at most `n`.
-fn page(map: Option<&Object>, after: Option<&str>, n: usize) -> Vec<(String, Json)> {
+pub(crate) fn page(map: Option<&Object>, after: Option<&str>, n: usize) -> Vec<(String, Json)> {
 	let Some(map) = map else { return vec![] };
 	let mut keys: Vec<&str> = map.keys().filter(|k| after.is_none_or(|a| *k > a)).collect();
 	keys.sort_unstable();
@@ -45,7 +45,7 @@ impl Space {
 		self.state.rest.get("restoredBytes").and_then(Json::as_f64).unwrap_or_else(|| m.iter().fold(2.0, |n, (k, c)| n + bytes(c) + bytes(&Json::String(k.into())) + 2.0))
 	}
 	/// `setRestored`: a historical claim, and the tally kept beside it.
-	fn set_restored(&mut self, key: &str, next: Json) {
+	pub(crate) fn set_restored(&mut self, key: &str, next: Json) {
 		if !self.state.rest.contains_key("restoredClaims") {
 			self.state.rest.insert("restoredClaims", Json::Object(Object::new()));
 		}
@@ -118,6 +118,7 @@ impl Space {
 			}
 		}
 		self.restored_on_disk = false; // a new map, in memory until a store takes it
+		self.save_cleared_work();
 		let s = &mut self.state;
 		s.entries.retain(|_| false);
 		s.txns.clear();

@@ -5,6 +5,7 @@ pub mod claims;
 pub mod driver;
 pub mod mailbox;
 pub mod member;
+pub mod member_transition;
 pub mod policy;
 pub mod restore;
 pub mod routing;

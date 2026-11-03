@@ -58,6 +58,9 @@ pub struct Walk {
 	/// Its stage as the last step left it.
 	restore_stage: Option<String>,
 	restores: usize,
+	/// A Member's authority transition not yet completed (its id), and how many there were.
+	transition: Option<String>,
+	transitions: usize,
 	/// No restores: a walk through a store, whose Rust side does not keep restored history yet.
 	pub without_restores: bool,
 }
@@ -550,6 +553,18 @@ impl Walk {
 			return false;
 		}
 		let r = &mut self.rng;
+		// a Member's authority transition: a few of its stages at a time, now and then a new one over an unfinished one
+		if r.chance(if self.transition.is_some() { 0.08 } else { 0.004 }) {
+			if self.transition.is_none() || r.chance(0.1) {
+				self.transitions += 1;
+				self.transition = Some(format!("auth-{}", self.transitions));
+			}
+			let id = self.transition.clone().expect("set");
+			for _ in 0..(1 + r.below(6)) {
+				self.episode.push_back(obj! { "op" => "memberTransitionStep", "recoveryId" => id.as_str(), "newAuthorityId" => format!("a-{id}") });
+			}
+			return true;
+		}
 		if r.chance(0.003) {
 			let t = if r.chance(0.6) { obj! { "recoveryId" => "rec-1", "authorityId" => "b", "stage" => r.pick(&["clearing", "history", "completed"]) } } else { Json::Null };
 			self.episode.push_back(obj! { "op" => "setAuthorityTransition", "transition" => t });
@@ -1083,6 +1098,18 @@ pub fn observe(w: &mut Walk, line: &Json, r: &Result<Json, phi_core::CoreError>,
 			if let Ok(v) = r { note(if v.as_f64().is_some_and(|n| n > 0.0) { "restored entries released" } else { "a release found nothing" }, seen); }
 		}
 		if op == "completeRestore" && r.is_ok() { note("a restore completed", seen); }
+		let transition = space.state.rest.get("authorityTransition").filter(|t| !t.is_null());
+		if op == "memberTransitionStep" {
+			let stage = transition.and_then(|t| t.get("stage")).and_then(Json::as_str);
+			if stage == Some("completed") { w.transition = None; }
+			if r.is_ok() { note(Box::leak(format!("memberTransitionStep at {}", stage.unwrap_or("?")).into_boxed_str()), seen); }
+			let restored = space.state.rest.get("restoredClaims").and_then(Json::as_object);
+			if restored.is_some_and(|m| m.iter().any(|(_, c)| c.get("state").and_then(Json::as_str) == Some("pending") && c.get("orphanedAfterRestore").is_none())) { note("a transition kept an open request as history", seen); }
+			if restored.is_some_and(|m| m.iter().any(|(_, c)| c.get("orphanedAfterRestore").is_some())) { note("a transition marked a historical claim", seen); }
+			if space.state.rpc.as_ref().is_some_and(|rpc| rpc.claims.memory().is_some_and(|m| m.iter().any(|(_, c)| c.get("orphanedAfterRestore").is_some()))) { note("a transition marked a claim", seen); }
+			if transition.is_some_and(|t| t.get("claimCursor").is_some()) { note("a transition walked the claims on the disk", seen); }
+			if space.state.rest.get("invalidGenerations").and_then(Json::as_object).is_some_and(|g| !g.is_empty()) && transition.is_some() { note("a transition invalidated a generation", seen); }
+		}
 		if op == "lookup" && r.as_ref().is_ok_and(|v| v.get("restoredHistory").is_some()) { note("lookup of restored history", seen); }
 		if space.state.entries.iter().any(|e| e.restored_unverified) { note("restored entries unverified", seen); }
 		match r {

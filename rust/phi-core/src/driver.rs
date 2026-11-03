@@ -182,6 +182,7 @@ pub fn apply_line(s: &mut Space, snapshots: &mut crate::snapshot::Snapshots, now
 			"beginRestore" => s.begin_restore(now, l),
 			"completeRestore" => s.complete_restore(now, l.get("recoveryId").and_then(Json::as_str).unwrap_or("")).map(|()| Json::Null),
 			"releaseRestored" => s.release_restored(now, l.get("recoveryId").and_then(Json::as_str).unwrap_or(""), l.get("scope").unwrap_or(&empty)).map(Json::Number),
+			"memberTransitionStep" => s.member_transition_step(now, l.get("recoveryId").and_then(Json::as_str).unwrap_or(""), l.get("newAuthorityId").and_then(Json::as_str).unwrap_or("")).map(|()| Json::Null),
 			"setAuthorityTransition" => {
 				match l.get("transition").filter(|t| crate::space::truthy(Some(t))) {
 					Some(t) => s.state.rest.insert("authorityTransition", t.clone()),

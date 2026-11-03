@@ -434,6 +434,8 @@ pub(crate) struct Tracking {
 	/// How many mailboxes there were (`None`: no map yet), and each one as it was before the commit changed it.
 	boxes_at_begin: Option<usize>,
 	boxes: Vec<(usize, crate::state::Mailbox)>,
+	/// The mailboxes as they were when the commit replaced them as a whole (a restore, an authority transition).
+	boxes_replaced: Option<Option<Vec<(String, crate::state::Mailbox)>>>,
 	/// Each of `UNDONE_REST` as it was before the commit changed it.
 	rest: Vec<(&'static str, Option<Json>)>,
 	/// Parts the commit replaced as a whole (a restore), and the claims and stream as they were before it.
@@ -475,6 +477,8 @@ impl Space {
 	/// it can be written as rows or undone (`rollback`).
 	pub fn begin_tracked_commit(&mut self) {
 		self.begin_commit();
+		// a permit for a routed write belongs to the draft of one commit (member-admission.ts keeps it by the draft)
+		self.router_permit = false;
 		let watermark = self.watermark.take();
 		self.watermark = self.committed_watermark;
 		self.marked = None;
@@ -505,7 +509,7 @@ impl Space {
 		}
 		self.state.entries.track();
 		let stream_rev = stream::revision_of(&self.state.stream);
-		self.tracking = Some(Tracking { head, watermark, stream_rev, dropped: vec![], claims: vec![], claims_seen: Default::default(), generations: vec![], boxes_at_begin, boxes: vec![], rest: vec![], cleared: vec![], replaced: None, restored: vec![], log_replaced: false });
+		self.tracking = Some(Tracking { head, watermark, stream_rev, dropped: vec![], claims: vec![], claims_seen: Default::default(), generations: vec![], boxes_at_begin, boxes: vec![], boxes_replaced: None, rest: vec![], cleared: vec![], replaced: None, restored: vec![], log_replaced: false });
 	}
 	/// What the tracked commit changed so far; tracking goes on (a store may still refuse the commit and roll it back).
 	pub fn pending_changes(&self) -> Changes {
@@ -531,8 +535,9 @@ impl Space {
 		entries.undo(log);
 		let mut head = t.head;
 		head.entries = entries;
+		let replaced = t.boxes_replaced;
 		head.mailboxes = t.boxes_at_begin.and_then(|n| {
-			let mut boxes = self.state.mailboxes.take()?;
+			let mut boxes = match replaced { Some(saved) => saved, None => self.state.mailboxes.take() }?;
 			boxes.truncate(n);
 			for (i, b) in t.boxes.into_iter().rev().filter(|(i, _)| *i < n) {
 				boxes[i].1 = b;
@@ -588,10 +593,20 @@ impl Space {
 			t.rest.push((key, value.cloned()));
 		}
 	}
+	/// The outbox, the jobs and the mailboxes are about to be replaced as a whole: a tracked commit saves them, once.
+	pub(crate) fn save_cleared_work(&mut self) {
+		self.save_rest("outbox");
+		self.save_rest("jobs");
+		let boxes = self.state.mailboxes.clone();
+		if let Some(t) = self.tracking.as_mut().filter(|t| t.boxes_replaced.is_none()) {
+			t.boxes_replaced = Some(boxes);
+		}
+	}
 	/// Mailbox `i` is about to change: a tracked commit saves it, once.
 	pub(crate) fn save_box(&mut self, i: usize) {
 		let Some(b) = self.state.mailboxes.as_ref().and_then(|m| m.get(i)) else { return };
-		if let Some(t) = self.tracking.as_mut().filter(|t| t.boxes.iter().all(|(n, _)| *n != i)) {
+		// once replaced as a whole, the boxes come back as they were then
+		if let Some(t) = self.tracking.as_mut().filter(|t| t.boxes_replaced.is_none() && t.boxes.iter().all(|(n, _)| *n != i)) {
 			t.boxes.push((i, b.1.clone()));
 		}
 	}
