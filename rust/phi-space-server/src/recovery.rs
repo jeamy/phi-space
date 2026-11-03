@@ -63,11 +63,9 @@ impl PrivateRecovery {
 		if given.len() > 1 {
 			fail("configure one operator register endpoint");
 		}
-		if given == ["writerSocket"] {
-			fail("writerSocket is not served by this host");
-		}
 		let writer: Option<Rc<dyn Register>> = match given.first() {
 			Some(&"writerTls") => Some(Rc::new(register_client(c.get("writerTls").expect("given")))),
+			Some(&"writerSocket") => Some(Rc::new(phi_host::register::SocketRegister { path: field(c, "writerSocket").to_owned(), writable: true, timeout_ms: 4000 })),
 			Some(_) => Some(Rc::new(SshRegister::new(field(c, "writerSshTarget"), 10_000, true).unwrap_or_else(|e| fail(e)))),
 			None => None,
 		};

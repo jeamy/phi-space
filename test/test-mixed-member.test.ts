@@ -4,7 +4,7 @@ import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { X509Certificate, createHash } from "node:crypto";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import { dirname, join } from "node:path";
@@ -18,6 +18,7 @@ import { signMembership } from "../src/membership.ts";
 import { signRun } from "../src/run-member.ts";
 import { signLifecycle } from "../src/space-lifecycle.ts";
 import { openSqliteHost } from "../src/store/sqlite.ts";
+import { serveRegister } from "../src/register-service.ts";
 import { ctx } from "./support/persistent.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -52,14 +53,32 @@ async function spawned(cmd: string[], args: string[]) {
 	return () => new Promise<void>((r) => { proc.removeAllListeners("exit"); proc.once("exit", () => r()); proc.kill("SIGTERM"); });
 }
 
-async function setup(tc: TestContext, more: Record<string, unknown> = {}, o: { controlMember?: boolean } = {}) {
+async function setup(tc: TestContext, more: Record<string, unknown> = {}, o: { controlMember?: boolean; register?: "socket" | "ssh" } = {}) {
 	const dir = mkdtempSync("/tmp/phi-mixed-");
 	tc.after(() => rmSync(dir, { recursive: true, force: true }));
 	const certs = pki(dir);
-	const external = new SqliteRecoveryRegister(join(dir, "external.sqlite"));
+	// the ssh stand-in answers on `register.sqlite` of its directory
+	const external = new SqliteRecoveryRegister(join(dir, o.register === "ssh" ? "register.sqlite" : "external.sqlite"));
 	tc.after(() => external.close());
 	const register = await serveTlsRegister(external, { ...certs.identity("server"), host: "127.0.0.1", port: 0, peers: { [certs.print("control")]: {}, [certs.print("member")]: {} } });
 	tc.after(() => register.close());
+	// the Member's line to the register: a private Unix endpoint of this machine, or a pinned ssh forced command (the
+	// stand-in on PATH answers it on the same file)
+	let line: Record<string, unknown> = {};
+	if (o.register === "socket") {
+		const path = join(dir, "register", "read.sock"), served = await serveRegister(external, path);
+		tc.after(() => served.close());
+		line = { registerTls: undefined, registerReadSocket: path };
+	} else if (o.register === "ssh") {
+		const bin = join(dir, "bin"), stand = dir;
+		mkdirSync(bin);
+		writeFileSync(join(bin, "ssh"), `#!/bin/sh\nexec ${process.execPath} --experimental-strip-types --no-warnings ${ROOT}/test/support/ssh-stand-in.ts "$@"\n`, { mode: 0o755 });
+		writeFileSync(join(stand, "target-register@127.0.0.1"), "");
+		const path = process.env.PATH, standIn = process.env.SSH_STAND_IN_DIR;
+		process.env.PATH = `${bin}:${path}`; process.env.SSH_STAND_IN_DIR = stand;
+		tc.after(() => { process.env.PATH = path; if (standIn === undefined) delete process.env.SSH_STAND_IN_DIR; else process.env.SSH_STAND_IN_DIR = standIn; });
+		line = { registerTls: undefined, registerSshTarget: "register@127.0.0.1" };
+	}
 	const peers = [peer("control-peer", CONTROL_IP, ["space-hosts"]), peer("member-peer", MEMBER_IP, ["space-hosts"]), peer("user", USER_IP, ["space-hosts"]), peer("router-peer", ROUTER_IP, ["space-hosts"]), peer("phone", PHONE_IP, ["space-enroll"]), peer("phone", PAIRED_IP, ["space-hosts"]), peer("router-two", SECOND_ROUTER_IP, ["space-hosts"]), peer("boss", ADMIN_IP, ["space-admin"])]; // before and after pairing: the directory is cached for a minute
 	const management = http.createServer((_req, res) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(peers)); });
 	await new Promise<void>((r) => management.listen(0, "127.0.0.1", r));
@@ -119,7 +138,7 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}, o: { c
 	const memberSpaces: Record<string, unknown> = {};
 	for (const i of await listSpaces(seed, ctx)) memberSpaces[i.spaceId] = permit(i.incarnation);
 	await external.compareAndSet("boot:data-host", null, { hostId: "data-host", state: "active", spaces: memberSpaces } as never);
-	const config = write("member", { ...base("member", MEMBER_IP, memberPort), hostId: "data-host", peerId: "member-peer", mode: "member", membership: { memberId: "a", spaceId: jobs.spaceId }, capabilities: { tools: ["sieve"], models: [], dataSpaces: [jobs.spaceId] }, ...more });
+	const config = write("member", { ...base("member", MEMBER_IP, memberPort), hostId: "data-host", peerId: "member-peer", mode: "member", membership: { memberId: "a", spaceId: jobs.spaceId }, capabilities: { tools: ["sieve"], models: [], dataSpaces: [jobs.spaceId] }, ...line, ...more });
 	await seed.close(ctx);
 	const start = async () => {
 		if (!CMD) {
@@ -135,7 +154,7 @@ async function setup(tc: TestContext, more: Record<string, unknown> = {}, o: { c
 	tc.after(() => transports.forEach((t) => t.close()));
 	const homeLine = () => { const t = socketTransport({ host: CONTROL_IP, port: controlPort }, { localAddress: USER_IP }); transports.push(t); return new RemoteSpace(t, { space: "control", attempts: 2, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 5_000, signer: userKey.signer, expectedGateHostId: "control-host", ownPeerId: "user" }); };
 	let toControl = homeLine();
-	const toMember = (grants = true) => { const t = socketTransport({ host: MEMBER_IP, port: memberPort }, { localAddress: USER_IP }); transports.push(t); return new RemoteSpace(t, { space: jobs.spaceId, attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 8_000, signer: userKey.signer, expectedGateHostId: "data-host", ownPeerId: "user", ...(grants ? { grantProvider: () => toControl.requestGrant() } : {}) }); };
+	const toMember = (grants = true, callTimeoutMs = 8_000) => { const t = socketTransport({ host: MEMBER_IP, port: memberPort }, { localAddress: USER_IP }); transports.push(t); return new RemoteSpace(t, { space: jobs.spaceId, attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs, signer: userKey.signer, expectedGateHostId: "data-host", ownPeerId: "user", ...(grants ? { grantProvider: () => toControl.requestGrant() } : {}) }); };
 	const authority = () => new GrantAuthority({ authorityId: "authority", hostId: "control-host", signer: controlKey, keys: { find: async (peerId: string, keyId: string) => ({ peerId, keyId, principal: peerId, algorithm: "ed25519" as const, publicKey: userKey.publicKey, roles: ["member"], scope: ["*"], state: "active" as const }) }, identity: { authenticate: () => ({ principal: { peerId: "user" }, roles: ["member"] }) }, refreshIdentity: async () => ({ principal: { peerId: "user" }, roles: ["member"] }) });
 	/** A router's line to the Member: proven, its role from the directory. */
 	const router = async () => {
@@ -596,7 +615,7 @@ test("what a control host does not carry stops it at the start", { skip: CONTROL
 			assert.equal(code, 1, out);
 			assert.match(out, part);
 		};
-		for (const k of ["syncSpaces", "registerSshTarget", "registerReadSocket"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
+		for (const k of ["syncSpaces"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
 		await refused({ mode: "member" }, /runs as a control host/);
 		await refused({ peerId: "someone-else" }, /does not belong to the provisioned NetBird peer/);
 		await refused({ hostId: "other" }, /identity disagrees/);
@@ -627,7 +646,7 @@ test("what a Member does not carry stops it at the start instead of being ignore
 		assert.equal(code, 1, out);
 		assert.match(out, part);
 	};
-	for (const k of ["root", "registerSshTarget", "registerReadSocket"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
+	for (const k of ["root"]) await refused({ [k]: { any: 1 } }, new RegExp(`${k} is not served`));
 	await refused({ capabilities: { tools: [""] } }, /invalid capability report/);
 	await refused({ mode: "control" }, /a control host starts with --control/);
 	await refused({ peerId: "someone-else" }, /does not belong to the provisioned NetBird peer/);
@@ -744,4 +763,21 @@ test("a control host is also a Member: a router's delegated calls, signed instru
 	assert.equal((await send({ method: "count", args: { template: { type: "Gated" } } })).result.value, 1, "the run's task, written once");
 	// a type the policy routes to Member a is not written here
 	assert.match((await send({ method: "write", args: { entry: { type: "Far", fields: {} }, txn: null, leaseMs: FOREVER }, request: { generation: first.result.generation, requestId: "r2" } })).error?.message ?? "", /another Member/);
+});
+
+// over ssh the stand-in starts a process for every key the TypeScript Member reads in turn (three minutes for this case),
+// so that case runs against the other server only; the TypeScript ssh client is held by rust/phi-host/tests/recovery_ssh.rs
+for (const kind of ["socket", "ssh"] as const) test(`a Member reads its register over ${kind === "socket" ? "a private Unix endpoint" : "a pinned ssh forced command"} and follows its fence`, { skip: kind === "ssh" && !CMD ? "slow on the stand-in; the other server's case" : false }, async (tc) => {
+	const g = await setup(tc, {}, { register: kind });
+	await g.toControl.authenticate();
+	// the stand-in starts a process for every read: a slower line than a real ssh login
+	const user = g.toMember(true, 60_000);
+	await user.authenticate();
+	assert.ok(await user.write({ type: "Job", fields: { n: 1 } }, null, FOREVER));
+	const boot = (await g.external.get<any>("boot:data-host"))!;
+	await g.external.compareAndSet("boot:data-host", boot.version, { ...boot.value, state: "fenced" });
+	await assert.rejects(user.count({ type: "Job" }), Error, "the fence it reads there");
+	const fenced = (await g.external.get<any>("boot:data-host"))!;
+	await g.external.compareAndSet("boot:data-host", fenced.version, { ...fenced.value, state: "active" });
+	assert.equal(await user.count({ type: "Job" }), 1, "and back");
 });

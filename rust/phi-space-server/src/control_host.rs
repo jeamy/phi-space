@@ -3,7 +3,7 @@
 // Member takes, from itself: delegated calls on its own Spaces and its signed instructions. Its `recovery` section is the
 // private endpoint with the control host's receipt.
 use crate::{fail, stopping};
-use crate::member::{address_of, boot_guard, clock, config_of, entry_exported, entry_replication, entry_tasks, field, follow_changes, follow_installed_change, sync_context, followed_authority, key_of, member_instructions, netbird, open_store, own_peer, private_recovery, register_client, serve_gate, set_group_roles};
+use crate::member::{address_of, boot_guard, clock, config_of, entry_exported, entry_replication, entry_tasks, field, follow_changes, follow_installed_change, sync_context, followed_authority, key_of, member_instructions, netbird, open_store, own_peer, private_recovery, serve_gate, set_group_roles};
 use phi_host::alerts::ControlCommands;
 use phi_host::control::AsyncCommands;
 use phi_host::auth::{Algorithm, Proving};
@@ -23,7 +23,7 @@ use phi_service::{space_epoch, Options};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const REFUSED: [&str; 3] = ["syncSpaces", "registerSshTarget", "registerReadSocket"];
+const REFUSED: [&str; 1] = ["syncSpaces"];
 
 pub fn run(config: &str, store: &str) {
 	let mut c = config_of(config, "control", "this host runs as a control host", &REFUSED);
@@ -74,8 +74,7 @@ pub fn run(config: &str, store: &str) {
 		fail("provisioned control signer disagrees with installed authority");
 	}
 	let algorithm = signer.algorithm();
-	let register = c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint"));
-	let client = register_client(register);
+	let client = crate::member::external_of(&c);
 	let access = format!("access:{authority_id}");
 	let guard = boot_guard(&c, host_id, authority_id, control_space, host_id, control_key, &now);
 	if let Some(sp) = &main {

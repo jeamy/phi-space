@@ -29,7 +29,7 @@ use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
 use std::rc::Rc;
 
-const REFUSED: [&str; 3] = ["root", "registerSshTarget", "registerReadSocket"];
+const REFUSED: [&str; 1] = ["root"];
 
 pub(crate) fn field<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or_else(|| fail(format!("the config has no {k}"))) }
 
@@ -61,10 +61,24 @@ pub(crate) fn open_store(store: &str) -> Store {
 }
 
 /// The guard of the Space this host follows, refusing a host that changed.
+/// The independent register, read-only: exactly one of `registerTls`, `registerSshTarget` and `registerReadSocket`.
+pub(crate) fn external_of(c: &Json) -> External {
+	let given = |k: &str| c.get(k).is_some_and(|v| phi_core::space::truthy(Some(v)));
+	if ["registerReadSocket", "registerSshTarget", "registerTls"].iter().filter(|k| given(k)).count() != 1 {
+		fail("configure exactly one independent register endpoint");
+	}
+	if given("registerTls") {
+		return External::Tls(Box::new(register_client(c.get("registerTls").expect("given"))));
+	}
+	if given("registerSshTarget") {
+		return External::Ssh(phi_host::register::SshRegister::new(field(c, "registerSshTarget"), 10_000, false).unwrap_or_else(|e| fail(e)));
+	}
+	External::Socket(phi_host::register::SocketRegister { path: field(c, "registerReadSocket").to_owned(), writable: false, timeout_ms: 4000 })
+}
+
 pub(crate) fn boot_guard(c: &Json, host_id: &str, authority_id: &str, control_space: &str, control_host: &str, control_key: &str, now: &Now) -> Rc<BootGuard> {
-	let register = c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint"));
 	let installed = SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e));
-	let mut guard = BootGuard::new(host_id, authority_id, External::Tls(Box::new(register_client(register))), installed, Rc::clone(now), 60_000.0);
+	let mut guard = BootGuard::new(host_id, authority_id, external_of(c), installed, Rc::clone(now), 60_000.0);
 	guard.authority = Some((control_space.to_owned(), control_host.to_owned(), control_key.to_owned()));
 	Rc::new(guard)
 }
@@ -82,7 +96,7 @@ fn recovery_admin(c: &Json) -> Option<(Algorithm, String)> {
 pub(crate) fn follow_installed_change(c: &mut Json, runtime: &tokio::runtime::Runtime) {
 	let installed = SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e));
 	if let Some((algorithm, key)) = recovery_admin(c) {
-		let external = register_client(c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint")));
+		let external = external_of(c);
 		let (space, host, authority) = (field(c, "controlSpaceId").to_owned(), field(c, "controlHostId").to_owned(), field(c, "authorityId").to_owned());
 		runtime.block_on(follow_control_host_change(&external, &installed, &space, (&host, &authority), (algorithm, &key))).unwrap_or_else(|e| fail(format!("{}: {}", e.class(), e.message())));
 	}
@@ -102,7 +116,7 @@ pub(crate) fn follow_installed_change(c: &mut Json, runtime: &tokio::runtime::Ru
 /// it comes back on the new endpoint through its restart policy.
 pub(crate) fn follow_changes(c: &Json) -> Option<Box<dyn FnOnce(Owner) -> phi_wire::Local<()>>> {
 	let (algorithm, key) = recovery_admin(c)?;
-	let external = register_client(c.get("registerTls")?);
+	let external = external_of(c);
 	let installed = SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e));
 	let (space, host, authority) = (field(c, "controlSpaceId").to_owned(), field(c, "controlHostId").to_owned(), field(c, "authorityId").to_owned());
 	Some(Box::new(move |_owner: Owner| {
@@ -142,7 +156,7 @@ pub(crate) fn private_recovery(c: &Json, mode: &'static str, authority_id: &str,
 	let r = c.get("recovery").filter(|r| !r.is_null())?;
 	let control = c.get("control").unwrap_or_else(|| fail("the config has no control"));
 	let pin = phi_host::recovery_rpc::KeyPin::from_json(&phi_json::obj! { "algorithm" => field(control, "algorithm"), "publicKey" => control_key }).unwrap_or_else(|| fail("invalid control algorithm"));
-	let external = register_client(c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint")));
+	let external = external_of(c);
 	Some(
 		crate::recovery::PrivateRecovery {
 			config: r.clone(),
@@ -215,11 +229,11 @@ fn sync_configs(c: &Json) -> Vec<SyncSpaceConfig> {
 	c.get("syncSpaces").and_then(Json::as_array).map_or(vec![], |a| a.iter().map(|s| SyncSpaceConfig::from_json(s).unwrap_or_else(|e| fail(e))).collect())
 }
 pub(crate) fn sync_context(c: &Json, now: &Now) -> Rc<SyncContext> {
-	let register = register_client(c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint")));
+	let register = external_of(c);
 	let key = parse(&String::from_utf8_lossy(&private_file(Path::new(field(c, "keyFile"))).unwrap_or_else(|e| fail(e)))).unwrap_or_else(|e| fail(e));
 	let bind_ip = address_of(c.get("listen").unwrap_or_else(|| fail("the config has no listen"))).0.parse().unwrap_or_else(|_| fail("the listen host is not an address"));
 	let now = Rc::clone(now);
-	Rc::new(SyncContext { host_id: field(c, "hostId").into(), authority_id: field(c, "authorityId").into(), bind_ip, key, register: RegisterLine::spawn(move || External::Tls(Box::new(register))), installed: Rc::new(SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e))), now: Rc::new(move || now()) })
+	Rc::new(SyncContext { host_id: field(c, "hostId").into(), authority_id: field(c, "authorityId").into(), bind_ip, key, register: RegisterLine::spawn(move || register), installed: Rc::new(SqliteRegister::open(Path::new(field(c, "installedRegisterFile"))).unwrap_or_else(|e| fail(e))), now: Rc::new(move || now()) })
 }
 
 /// The quarantine start: a host released into quarantine serves nothing; it opens only the journals and listeners of its
@@ -262,7 +276,7 @@ pub fn run(config: &str, store: &str) {
 	let now = clock();
 	let syncs = sync_configs(&c);
 	if !syncs.is_empty() {
-		let register = register_client(c.get("registerTls").unwrap_or_else(|| fail("configure exactly one independent register endpoint")));
+		let register = external_of(&c);
 		let boot = format!("boot:{}", field(&c, "hostId"));
 		let read = stopping::runtime().block_on(register.get(&boot)).unwrap_or_else(|e| fail(e));
 		if read.get("value").and_then(|v| v.get("state")).and_then(Json::as_str) == Some("quarantine") {

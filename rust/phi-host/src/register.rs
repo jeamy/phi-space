@@ -392,6 +392,42 @@ impl Register for SqliteRegister {
 	fn compare_and_set<'a>(&'a self, key: &'a str, expected: Option<f64>, value: &'a Json) -> Ahead<'a, Json> { Box::pin(std::future::ready(SqliteRegister::compare_and_set(self, key, expected, value))) }
 }
 
+/// `SocketRecoveryRegister` (src/register-service.ts): the register over a private Unix endpoint of this machine, read-only
+/// unless provisioned as the operator's (`writerSocket`). One frame per call on a fresh connection.
+pub struct SocketRegister {
+	pub path: String,
+	pub writable: bool,
+	pub timeout_ms: u64,
+}
+impl SocketRegister {
+	async fn call(&self, call: Json) -> R<Json> {
+		let ask = async {
+			let mut line = UnixStream::connect(&self.path).await.map_err(failed)?;
+			let mut out = vec![];
+			phi_wire::put(&mut out, 1, &call.to_json_text());
+			line.write_all(&out).await.map_err(failed)?;
+			let body = phi_wire::read_frame(&mut line).await.map_err(failed)?;
+			parse(&String::from_utf8_lossy(&body)).map_err(failed)
+		};
+		let r = timeout(Duration::from_millis(self.timeout_ms), ask).await.map_err(|_| failed("independent register timed out"))??;
+		if r.get("ok").and_then(Json::as_bool) == Some(true) {
+			return Ok(r.get("result").cloned().unwrap_or(Json::Null));
+		}
+		let e = r.get("error").cloned().unwrap_or(Json::Null);
+		let message = e.get("message").and_then(Json::as_str).unwrap_or("register unavailable").to_owned();
+		Err(if e.get("code").and_then(Json::as_str) == Some("RequestConflict") { conflict(message) } else { failed(message) })
+	}
+}
+impl Register for SocketRegister {
+	fn get<'a>(&'a self, key: &'a str) -> Ahead<'a, Json> { Box::pin(self.call(obj! { "method" => "get", "key" => key })) }
+	fn compare_and_set<'a>(&'a self, key: &'a str, expected: Option<f64>, value: &'a Json) -> Ahead<'a, Json> {
+		if !self.writable {
+			return Box::pin(std::future::ready(Err(failed("member register access is read-only"))));
+		}
+		Box::pin(self.call(obj! { "method" => "compareAndSet", "key" => key, "expectedVersion" => expected.map_or(Json::Null, Json::Number), "value" => value.clone() }))
+	}
+}
+
 /// `SshRecoveryRegister`: the register over a pinned ssh forced command, read-only unless provisioned as the operator's.
 pub struct SshRegister {
 	pub target: String,

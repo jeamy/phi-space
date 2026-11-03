@@ -18,6 +18,10 @@ fn blocked(m: impl Into<String>) -> CoreError { error("BootBlocked", m) }
 /// Where the external authorization is read.
 pub enum External {
 	Tls(Box<RegisterClient>),
+	/// `registerSshTarget`: read-only over a pinned ssh forced command.
+	Ssh(crate::register::SshRegister),
+	/// `registerReadSocket`: read-only over a private Unix endpoint.
+	Socket(crate::register::SocketRegister),
 	/// A register on this machine: tests.
 	File(SqliteRegister),
 }
@@ -27,6 +31,8 @@ impl External {
 	pub async fn get(&self, key: &str) -> Result<Json, RegisterError> {
 		match self {
 			External::Tls(c) => c.get(key).await,
+			External::Ssh(r) => crate::register::Register::get(r, key).await,
+			External::Socket(r) => crate::register::Register::get(r, key).await,
 			External::File(f) => f.get(key),
 		}
 	}
@@ -36,12 +42,32 @@ impl External {
 			let part = match self {
 				External::Tls(c) => c.get_many(batch).await?,
 				External::File(f) => f.get_many(batch)?,
+				// without a batch read: key by key (`readRegisterRecords`)
+				_ => {
+					let mut one = phi_json::Object::new();
+					for k in batch {
+						one.insert(k.as_str(), self.get(k).await?);
+					}
+					Json::Object(one)
+				}
 			};
 			for (k, v) in part.as_object().into_iter().flat_map(|o| o.iter()) {
 				all.insert(k, v.clone());
 			}
 		}
 		Ok(Json::Object(all))
+	}
+}
+
+impl crate::register::Register for External {
+	fn get<'a>(&'a self, key: &'a str) -> crate::register::Ahead<'a, Json> { Box::pin(External::get(self, key)) }
+	fn compare_and_set<'a>(&'a self, key: &'a str, expected: Option<f64>, value: &'a Json) -> crate::register::Ahead<'a, Json> {
+		match self {
+			External::Tls(c) => crate::register::Register::compare_and_set(c.as_ref(), key, expected, value),
+			External::Ssh(r) => r.compare_and_set(key, expected, value),
+			External::Socket(r) => r.compare_and_set(key, expected, value),
+			External::File(f) => crate::register::Register::compare_and_set(f, key, expected, value),
+		}
 	}
 }
 
