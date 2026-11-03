@@ -102,6 +102,8 @@ fn check_barrier(record: &Json, id: &str, s: &Space, now: f64) -> R<()> {
 }
 
 impl BootGuard {
+	/// The external register this guard reads (a Root reads boot permits of other hosts from it).
+	pub fn external(&self) -> &External { &self.external }
 	pub fn new(host_id: &str, authority_id: &str, external: External, installed: SqliteRegister, now: crate::gate::Now, max_age_ms: f64) -> BootGuard {
 		BootGuard { host_id: host_id.to_owned(), authority_id: authority_id.to_owned(), external, installed, now, max_age_ms, seen: RefCell::new(None), reads: Cell::new((0, 0)), authority: None, replica: RefCell::new(HashMap::new()) }
 	}

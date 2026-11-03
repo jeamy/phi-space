@@ -167,6 +167,19 @@ pub fn run(config: &str, store: &str) {
 	let mut held: Option<Rc<dyn AsyncCommands>> = None;
 	if let Some(r) = c.get("root").filter(|r| !r.is_null()) {
 		let root = root_of(&c, r, control_key, listen_host, &guard, &now, algorithm, (&routing, &o));
+		// every Member endpoint, its replica hosts' too, is the peer it was provisioned with, of this authority
+		let pinned = tokio::task::LocalSet::new().block_on(&runtime, async {
+			for m in root.members.values() {
+				for e in std::iter::once(m).chain(m.replicas.values()) {
+					let peer = root.directory.lookup(&e.host).await?;
+					if peer.is_none_or(|p| p.id != e.peer_id) || m.target.get("authorityId").and_then(Json::as_str) != Some(authority_id) {
+						return Err("Root Member overlay or authority pin disagrees".to_owned());
+					}
+				}
+			}
+			Ok(())
+		});
+		pinned.unwrap_or_else(|e| fail(format!("BootBlocked: {e}")));
 		let found = Root::check_start(&root, &mut opened).unwrap_or_else(|e| fail(e));
 		let root = Root::new(root, found).unwrap_or_else(|e| fail(e.message));
 		held = Some(Rc::new(Rc::clone(&root)));
@@ -195,18 +208,24 @@ fn root_of(c: &Json, r: &Json, control_key: &str, listen_host: &str, guard: &Rc<
 	let interval = r.get("statusIntervalMs").filter(|v| !v.is_null()).map_or(Some(10_000.0), Json::as_f64).filter(|v| v.fract() == 0.0 && (1000.0..=15_000.0).contains(v)).unwrap_or_else(|| fail("Root status interval must be 1000..15000 ms"));
 	let takeover = (r.get("takeover") == Some(&Json::Bool(true))).then(|| r.get("takeoverWaitMs").and_then(Json::as_f64).unwrap_or(90_000.0));
 	let members = r.get("members").and_then(Json::as_object).filter(|m| m.len() <= 32).unwrap_or_else(|| fail("incomplete native Root configuration"));
-	if field(r, "id").is_empty() || members.iter().any(|(_, m)| m.get("replicas").is_some_and(|x| !x.is_null())) {
-		fail("incomplete native Root configuration, or replicas, which are not served by this host");
+	if field(r, "id").is_empty() {
+		fail("incomplete native Root configuration");
 	}
 	let (router, key_id) = key_of(r, "keyFile");
 	let (_, host_key_id) = key_of(r, "hostKeyFile");
 	let (grant_signer, _) = key_of(c, "keyFile");
 	let (control, _) = key_of(c, "keyFile");
 	let line_key = r.clone();
-	let ends = members.iter().map(|(id, m)| {
+	// an endpoint: the provisioned one of a Member, or one of its replica hosts
+	let end = |m: &Json, target: Json| {
 		let (host, port) = address_of(m.get("address").unwrap_or_else(|| fail("incomplete native Root configuration")));
 		let algorithm = Algorithm::parse(field(m, "algorithm")).unwrap_or_else(|| fail("invalid Member key algorithm"));
-		(id.to_owned(), MemberEnd { host: host.to_owned(), port, peer_id: field(m, "peerId").to_owned(), key_id: field(m, "keyId").to_owned(), algorithm, public_key: field(m, "publicKey").to_owned(), target: m.get("target").cloned().unwrap_or_else(|| fail("incomplete native Root configuration")) })
+		MemberEnd { host: host.to_owned(), port, peer_id: field(m, "peerId").to_owned(), key_id: field(m, "keyId").to_owned(), algorithm, public_key: field(m, "publicKey").to_owned(), target, replicas: Default::default() }
+	};
+	let ends = members.iter().map(|(id, m)| {
+		let mut e = end(m, m.get("target").cloned().unwrap_or_else(|| fail("incomplete native Root configuration")));
+		e.replicas = m.get("replicas").and_then(Json::as_object).map_or_else(Default::default, |r| r.iter().map(|(h, x)| (h.to_owned(), end(x, Json::Null))).collect());
+		(id.to_owned(), e)
 	}).collect();
 	let (peer_id, control_space, host_id, authority) = (field(c, "peerId"), field(c, "controlSpaceId"), field(c, "hostId"), field(c, "authorityId"));
 	let grants = GrantVerifier { authority_id: authority.to_owned(), issuer_host_id: host_id.to_owned(), public_key: control_key.to_owned(), algorithm, uncertainty_ms: 2000.0 };

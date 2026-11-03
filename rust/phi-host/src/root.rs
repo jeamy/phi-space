@@ -57,6 +57,16 @@ pub struct MemberEnd {
 	pub algorithm: Algorithm,
 	pub public_key: String,
 	pub target: Json,
+	/// The other hosts of a replicated Member, by host ID: where its target may move with an adopted notice.
+	pub replicas: HashMap<String, MemberEnd>,
+}
+impl MemberEnd {
+	/// `endpointOf`: the endpoint of this Member on a host, its provisioned one or a replica's.
+	pub fn endpoint(&self, host: &str) -> Option<&MemberEnd> { if Some(host) == text(&self.target, "hostId") { Some(self) } else { self.replicas.get(host) } }
+	/// `provisionedTarget`: the provisioned target, or for a replicated Member the same Space and authority on one of its hosts.
+	pub fn provisioned(&self, t: &Json) -> bool {
+		self.target.canonical().ok() == t.canonical().ok() || (!self.replicas.is_empty() && text(t, "hostId").is_some_and(|h| self.endpoint(h).is_some()) && t.get("spaceId") == self.target.get("spaceId") && t.get("authorityId") == self.target.get("authorityId"))
+	}
 }
 
 pub struct RootConfig {
@@ -170,13 +180,15 @@ impl Env {
 	fn line_to(&self, member: &Json) -> R<Rc<ControlClient>> {
 		let c = &self.0.c;
 		let id = text(member, "id").unwrap_or("");
-		let end = c.members.get(id).filter(|e| e.target.canonical().ok() == member.get("target").and_then(|t| t.canonical().ok())).ok_or_else(|| blocked("membership target is not provisioned"))?;
-		let host = member.get("target").and_then(|t| text(t, "hostId")).unwrap_or("");
-		if let Some(l) = self.0.lines.borrow().get(id) {
+		let target = member.get("target").unwrap_or(&Json::Null);
+		let host = text(target, "hostId").unwrap_or("");
+		let end = c.members.get(id).filter(|e| e.provisioned(target)).and_then(|e| e.endpoint(host)).ok_or_else(|| blocked("membership target is not provisioned"))?;
+		let key = format!("{id}@{host}");
+		if let Some(l) = self.0.lines.borrow().get(&key) {
 			return Ok(Rc::clone(l));
 		}
 		let line = Rc::new(ControlClient::new((end.host.clone(), end.port), &c.own_address, &c.peer_id, host, (c.line_signer)(), &c.router_key.1));
-		self.0.lines.borrow_mut().insert(id.to_owned(), Rc::clone(&line));
+		self.0.lines.borrow_mut().insert(key, Rc::clone(&line));
 		Ok(line)
 	}
 	fn control_entries(&self) -> R<Vec<Json>> {
@@ -242,16 +254,18 @@ impl RouterEnv for Env {
 impl RootIo for Env {
 	type Line = Rc<ControlClient>;
 	fn state(&self) -> R<Json> { Ok(self.read(ROUTING, &self.0.c.control_space)?.unwrap_or_else(empty_routing)) }
+	/// The line follows the current routing target: after an adopted notice calls go to the new primary.
 	fn line(&self, member: &str) -> R<Self::Line> {
-		if let Some(l) = self.0.lines.borrow().get(member) {
+		let c = &self.0.c;
+		let state = RootIo::state(self)?;
+		let host = state.get("members").and_then(|m| m.get(member)).and_then(|m| m.get("target")).and_then(|t| text(t, "hostId")).map(str::to_owned).or_else(|| c.members.get(member).and_then(|e| text(&e.target, "hostId")).map(str::to_owned)).ok_or_else(|| blocked("Member endpoint is not provisioned"))?;
+		let key = format!("{member}@{host}");
+		if let Some(l) = self.0.lines.borrow().get(&key) {
 			return Ok(Rc::clone(l));
 		}
-		let c = &self.0.c;
-		let end = c.members.get(member).ok_or_else(|| blocked("Member endpoint is not provisioned"))?;
-		let state = RootIo::state(self)?;
-		let host = state.get("members").and_then(|m| m.get(member)).and_then(|m| m.get("target")).and_then(|t| text(t, "hostId")).ok_or_else(|| blocked("Member endpoint is not provisioned"))?;
-		let line = Rc::new(ControlClient::new((end.host.clone(), end.port), &c.own_address, &c.peer_id, host, (c.line_signer)(), &c.router_key.1));
-		self.0.lines.borrow_mut().insert(member.to_owned(), Rc::clone(&line));
+		let end = c.members.get(member).and_then(|e| e.endpoint(&host)).ok_or_else(|| blocked("Member endpoint is not provisioned"))?;
+		let line = Rc::new(ControlClient::new((end.host.clone(), end.port), &c.own_address, &c.peer_id, &host, (c.line_signer)(), &c.router_key.1));
+		self.0.lines.borrow_mut().insert(key, Rc::clone(&line));
 		Ok(line)
 	}
 	fn lease(&self) -> Local<R<Json>> {
@@ -313,7 +327,7 @@ impl StatusEnv for Env {
 	fn probe(&self, id: &str, target: &Json) -> Local<Result<Probed, String>> {
 		let (env, id, target) = (self.clone(), id.to_owned(), target.clone());
 		Box::pin(async move {
-			if env.0.c.members.get(&id).is_none_or(|e| e.target.canonical().ok() != target.canonical().ok()) {
+			if env.0.c.members.get(&id).is_none_or(|e| !e.provisioned(&target)) {
 				return Err("status target is not provisioned".to_owned());
 			}
 			let principal = obj! { "peerId" => env.0.c.peer_id.as_str(), "agentId" => STATUS_AGENT };
@@ -357,7 +371,8 @@ impl MembershipEnv for Env {
 	fn pin(&self, member: &Json) -> Local<R<Pin>> {
 		let c = &self.0.c;
 		let id = text(member, "id").unwrap_or("");
-		let end = c.members.get(id).filter(|e| e.target.canonical().ok() == member.get("target").and_then(|t| t.canonical().ok()));
+		let target = member.get("target").unwrap_or(&Json::Null);
+		let end = c.members.get(id).filter(|e| e.provisioned(target)).and_then(|e| e.endpoint(text(target, "hostId").unwrap_or("")));
 		let done = match end {
 			None => Err(blocked("membership target is not provisioned")),
 			Some(e) => {
@@ -521,7 +536,7 @@ impl Root {
 		let unavailable = |e: phi_store::StoreError| e.to_string();
 		let state = store.stored_document(ROUTING, Some(&c.control_space)).map_err(unavailable)?.unwrap_or_else(empty_routing);
 		if let Some(table) = state.get("members").and_then(Json::as_object) {
-			if table.iter().any(|(id, m)| !c.members.contains_key(id) || m.get("replication").is_some_and(|r| !r.is_null())) {
+			if table.iter().any(|(id, m)| c.members.get(id).is_none_or(|e| !e.provisioned(m.get("target").unwrap_or(&Json::Null)))) {
 				return Err("persisted Member target differs from Root provisioning".into());
 			}
 		}
@@ -614,10 +629,63 @@ impl Root {
 		Ok(())
 	}
 
+	/// v3 5.3.1 step 5: adopts every published ReplicaConfigNotice in version order, before the probes; the register
+	/// decides, the signer is the key provisioned for the issuing host. Refusals are reported, not fatal.
+	pub async fn adopt_notices(&self) -> R<(usize, Vec<String>)> {
+		let env = &self.env;
+		let c = &env.0.c;
+		env.authorize()?;
+		let (space, now) = (c.control_space.clone(), (c.now)());
+		let mut published = env.with(|s| -> R<Vec<Json>> { Ok(crate::control::listed(&s.store.reader(Some(&space))?.space, now, &obj! { "type" => "ReplicaConfigNotice" })?.iter().filter_map(|e| e.get("fields").cloned()).collect()) })??;
+		published.sort_by(|a, b| a.get("version").and_then(Json::as_f64).unwrap_or(f64::NAN).total_cmp(&b.get("version").and_then(Json::as_f64).unwrap_or(f64::NAN)));
+		let (mut adopted, mut refused) = (0, vec![]);
+		for f in published {
+			let t = f.get("signed").cloned().unwrap_or(Json::Null);
+			match self.adopt(&t).await {
+				Ok(true) => adopted += 1,
+				Ok(false) => {}
+				Err(e) => {
+					let n = t.get("notice");
+					refused.push(format!("{}@{}: {}", n.and_then(|n| text(n, "spaceId")).unwrap_or("undefined"), n.and_then(|n| n.get("replicaConfigVersion")).map_or_else(|| "undefined".into(), Json::to_json_text), e.message));
+				}
+			}
+		}
+		Ok((adopted, refused))
+	}
+	/// `adoptReplicaConfigNotice`: whether it changed the routing.
+	async fn adopt(&self, t: &Json) -> R<bool> {
+		let env = &self.env;
+		let c = &env.0.c;
+		let issuer = text(t, "issuer").unwrap_or("");
+		let key = c.members.values().find_map(|m| m.endpoint(issuer)).map(|e| (e.algorithm, e.public_key.clone()));
+		let n = crate::replica_notice::verify_adoptable(t, &c.authority_id, key.as_ref().map(|(a, k)| (*a, k.as_str())))?;
+		let permit = format!("boot:{}", text(&n, "primaryReplica").unwrap_or(""));
+		let unreachable = |e: crate::register::RegisterError| error("Error", e.to_string());
+		let version = crate::replica_notice::permit_for(&c.guard.external().get(&permit).await.map_err(unreachable)?, &n)?;
+		let space = c.control_space.clone();
+		let (open, routing) = env.with(|s| -> R<(bool, Json)> {
+			let profiles = s.store.stored_document("phi-spaces.profile-transitions", Some(&space)).map_err(|e| error("Unavailable", e.to_string()))?;
+			let open = profiles.and_then(|d| d.get("operations").and_then(Json::as_object).map(|o| o.iter().any(|(_, op)| text(op, "phase") != Some("completed")))).unwrap_or(false);
+			Ok((open, held_document(&c.routing, &s.store, ROUTING, Some(&space), |d| d.unwrap_or_else(empty_routing))?))
+		})??;
+		let (_, next, policy_version) = crate::replica_notice::adopted_routing(&routing, open, &c.authority_id, &n)?;
+		let Some(next) = next else { return Ok(false) };
+		// the admitting permit must not have changed since it was read
+		if c.guard.external().get(&permit).await.map_err(unreachable)?.get("version") != Some(&version) {
+			return Err(error("RoutingConflict", "boot permit changed during adoption"));
+		}
+		env.write_docs(vec![(ROUTING.to_owned(), space, next)], Some(policy_version))?;
+		Ok(true)
+	}
+
 	/// The Root's heartbeat. Runs after the start; a failed pass is reported and tried again.
 	pub async fn heartbeat(&self) {
 		let mut delivered = HashMap::new();
 		loop {
+			match self.adopt_notices().await {
+				Ok((_, refused)) => refused.iter().for_each(|r| eprintln!("Root replica notice refused: {r}")),
+				Err(e) => eprintln!("Root replica notices: {}", e.message),
+			}
 			if let Err(e) = self.epoch_notices(&mut delivered).await {
 				eprintln!("Root epoch notices: {}", e.message);
 			}

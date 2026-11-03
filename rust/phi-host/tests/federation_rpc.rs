@@ -52,10 +52,28 @@ impl Rng {
 }
 
 fn target() -> Json { obj! { "hostId" => "h1", "spaceId" => "s1", "authorityId" => "a", "dataIncarnation" => "i", "primaryEpoch" => 3.0 } }
-fn state() -> Json {
+/// The routing: a plain Member, or a replicated one, whose installed target may have moved on by an adopted transition
+/// (another host, a higher epoch, sometimes another incarnation) under policy versions that notices may have raised.
+fn state(r: &mut Rng) -> Json {
+	let mut member = obj! { "id" => "m1", "state" => "active", "target" => target() };
+	let mut top = obj! { "policy" => obj! { "policyVersion" => 4.0 } };
+	let o = member.as_object_mut().unwrap();
+	match r.below(4) {
+		0 | 1 => {
+			if r.below(3) > 0 {
+				o.insert("target", obj! { "hostId" => r.pick(&["h2", "h2", "h1"]), "spaceId" => "s1", "authorityId" => "a", "dataIncarnation" => r.pick(&["i", "i", "i", "j"]), "primaryEpoch" => r.pick(&[4.0, 4.0, 3.0, 2.0]) });
+			}
+			o.insert("replication", obj! { "primaryReplica" => "h2", "replicaConfigVersion" => 2.0, "durability" => "single" });
+			let t = top.as_object_mut().unwrap();
+			t.insert("policy", obj! { "policyVersion" => r.pick(&[4.0, 5.0, 5.0, 6.0]) });
+			t.insert("noticePolicyVersions", Json::Array(r.pick(&[vec![5.0], vec![5.0, 6.0], vec![], vec![6.0]]).into_iter().map(Json::Number).collect()));
+		}
+		_ => {}
+	}
 	let mut m = phi_json::Object::new();
-	m.insert("m1", obj! { "id" => "m1", "state" => "active", "target" => target() });
-	obj! { "policy" => obj! { "policyVersion" => 4.0 }, "members" => m }
+	m.insert("m1", member);
+	top.as_object_mut().unwrap().insert("members", Json::Object(m));
+	top
 }
 fn principal() -> Json { obj! { "peerId" => "p", "agentId" => "x" } }
 fn step(r: &mut Rng) -> Json {
@@ -124,7 +142,7 @@ fn line(r: &mut Rng) -> Json {
 	};
 	let o = l.as_object_mut().unwrap();
 	o.insert("replies", Json::Array(replies));
-	o.insert("state", state());
+	o.insert("state", state(r));
 	l
 }
 
@@ -139,7 +157,7 @@ async fn run(rpc: &FederationRpc<Io>, l: &Json) -> Result<Json, ()> {
 		"reprepare" => match rpc.reprepare(s()).await? {
 			Reprepared::Wait => Ok("wait".into()),
 			Reprepared::Refuse => Ok("refuse".into()),
-			Reprepared::Spec(x) => Ok(x),
+			Reprepared::Spec(x) => Ok(obj! { "outcome" => "reprepared", "spec" => x }),
 		},
 		"txnActive" => rpc.txn_active(id, principal, text(l, "txn").unwrap(), l.get("step")).await.map(Json::Bool).map_err(|_| ()),
 		_ => rpc.step(id, principal, text(l, "method").unwrap(), l.get("args").unwrap(), None, l.get("origin")).await.map_err(|_| ()),
@@ -189,7 +207,7 @@ fn frames_and_receipts_are_the_same() {
 			(got, _) => panic!("case {n}: {got:?} against {} on {context}", t.to_json_text()),
 		}
 	}
-	for wanted in ["done", "pending", "failed", "cancelled", "notAdmitted", "needsReview", "unknown"] {
+	for wanted in ["done", "pending", "failed", "cancelled", "notAdmitted", "needsReview", "unknown", "reprepared"] {
 		assert!(outcomes.contains_key(wanted), "never reached {wanted}: {outcomes:?}");
 	}
 }

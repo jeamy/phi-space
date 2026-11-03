@@ -113,6 +113,13 @@ if (which === "entry") {
 	Object.assign(process.env, { REPLICA_A_IMPL: a, REPLICA_B_IMPL: b });
 	await (await import("./entry.ts")).entryScenario(); process.exit(process.exitCode ?? 0);
 }
+if (which === "root-replica") {
+	// `-- root-replica A-B-C`: the runtime of replica-a, of replica-b and of the control host with the Root (default ts-ts-ts)
+	const [a, b, c, ...rest] = (process.argv[3] ?? "ts-ts-ts").split("-");
+	if (rest.length || ![a, b, c].every((i) => i === "ts" || i === "rust")) throw new Error("root-replica takes A-B-C, each ts or rust");
+	Object.assign(process.env, { REPLICA_A_IMPL: a, REPLICA_B_IMPL: b, CONTROL_IMPL: c });
+	await (await import("./root-replica.ts")).rootReplicaScenario(); process.exit(process.exitCode ?? 0);
+}
 if (which === "replica") {
 	// `-- replica A-B[-C]`: the runtime of replica-a, of replica-b and of the control host (ts or rust each; default ts)
 	const [a, b, c = "ts", ...rest] = (process.argv[3] ?? "ts-ts").split("-");

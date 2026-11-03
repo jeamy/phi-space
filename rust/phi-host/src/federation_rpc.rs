@@ -1,6 +1,7 @@
 //! The wire adapter of the Root (src/federation-rpc.ts): each call to a Member carries an app-key proof, the original grant and a
 //! signed delegation of this one call, and what a Member answers is checked against the request the journal bound before it counts.
-//! A successor of a replicated Member belongs to R6b; a binding that is no longer installed is not resolved here.
+//! A replicated Member whose installed target moved on by an adopted transition answers for the binding as its successor,
+//! and only resolves it; a binding that is no longer installed at all is not resolved here.
 use crate::auth::{seal_keyed, Signer};
 use crate::remote::ControlClient;
 use crate::router::Reprepared;
@@ -185,15 +186,30 @@ pub struct FederationRpc<I: RootIo> {
 }
 
 impl<I: RootIo> FederationRpc<I> {
-	/// `bound`: the Member of this binding. Replicated Members move on through R6b.
-	fn member_of(&self, target: &Json) -> R<String> {
+	/// `bound`: the Member of a step's target binding. With `successor`, a replicated Member whose installed target moved
+	/// on by an adopted transition (degrade: same host, higher epoch; promotion: another host) also answers for it: same
+	/// Space, authority and data incarnation, installed epoch at least the bound one (v3 5.3.1). Such a Member only
+	/// resolves the bound request; it never receives its effect.
+	fn bound(&self, target: &Json, successor: bool) -> R<(String, bool)> {
 		let state = self.io.state()?;
-		let found = members(&state).into_iter().find(|m| m.get("target").is_some_and(|t| t.get("spaceId") == target.get("spaceId") && t.get("hostId") == target.get("hostId")));
-		found.filter(|m| canonical(m.get("target")) == canonical(Some(target))).and_then(|m| text(m, "id")).map(str::to_owned).ok_or_else(|| error("Error", "target binding no longer installed"))
+		let all = members(&state);
+		let found = all.iter().find(|m| m.get("target").is_some_and(|t| t.get("spaceId") == target.get("spaceId") && t.get("hostId") == target.get("hostId")));
+		if let Some(id) = found.filter(|m| canonical(m.get("target")) == canonical(Some(target))).and_then(|m| text(m, "id")) {
+			return Ok((id.to_owned(), false));
+		}
+		let epoch = |t: &Json| t.get("primaryEpoch").and_then(Json::as_f64);
+		let next = all.iter().filter(|_| successor).find(|m| {
+			let t = m.get("target").unwrap_or(&Json::Null);
+			m.get("replication").is_some_and(|r| !r.is_null()) && t.get("spaceId") == target.get("spaceId") && t.get("authorityId") == target.get("authorityId") && t.get("dataIncarnation") == target.get("dataIncarnation") && epoch(t).zip(epoch(target)).is_some_and(|(a, b)| a >= b)
+		});
+		next.and_then(|m| text(m, "id")).map(|id| (id.to_owned(), true)).ok_or_else(|| error("Error", "target binding no longer installed"))
 	}
+	fn member_of(&self, target: &Json) -> R<String> { self.bound(target, false).map(|(id, _)| id) }
 
 	/// `remote`: a line, its key proven afresh.
-	async fn remote(&self, id: &str, principal: &Json, policy_version: Option<&Json>, reference: Option<Json>) -> Result<Remote<I::Line>, Failure> {
+	async fn remote(&self, id: &str, principal: &Json, policy_version: Option<&Json>, reference: Option<Json>) -> Result<Remote<I::Line>, Failure> { self.remote_at(id, principal, policy_version, reference, None).await }
+	/// `remote` with the epoch of a bound request, where a successor decides it.
+	async fn remote_at(&self, id: &str, principal: &Json, policy_version: Option<&Json>, reference: Option<Json>, bound_epoch: Option<Json>) -> Result<Remote<I::Line>, Failure> {
 		let state = self.io.state().map_err(failed)?;
 		let m = state.get("members").and_then(|t| t.get(id)).filter(|_| state.get("policy").is_some_and(|p| !p.is_null())).ok_or_else(|| Failure::Transport("Member or policy unavailable".into()))?;
 		let target = m.get("target").cloned().unwrap_or(Json::Null);
@@ -201,7 +217,7 @@ impl<I: RootIo> FederationRpc<I> {
 		let policy_version = reference.as_ref().and_then(|r| r.get("policyVersion")).or(policy_version).cloned().unwrap_or(installed);
 		let line = self.io.line(id).map_err(|e| Failure::Transport(e.message))?;
 		line.prove().await.map_err(Failure::Transport)?;
-		Ok(Remote { line, principal: principal.clone(), space: text(&target, "spaceId").unwrap_or("").to_owned(), policy_version, primary_epoch: target.get("primaryEpoch").cloned().unwrap_or(Json::Null), reference, replica_config_version: m.get("replication").and_then(|r| r.get("replicaConfigVersion")).cloned() })
+		Ok(Remote { line, principal: principal.clone(), space: text(&target, "spaceId").unwrap_or("").to_owned(), policy_version, primary_epoch: bound_epoch.unwrap_or_else(|| target.get("primaryEpoch").cloned().unwrap_or(Json::Null)), reference, replica_config_version: m.get("replication").and_then(|r| r.get("replicaConfigVersion")).cloned() })
 	}
 
 	/// `send`: a call under a fresh grant and its own delegation; the reply whole.
@@ -298,6 +314,10 @@ impl<I: RootIo> FederationRpc<I> {
 	#[allow(clippy::result_unit_err)]
 	pub async fn invoke(&self, s: Json) -> Result<Json, ()> {
 		let null = Json::Null;
+		// a successor of the binding only resolves: the request may have reached the earlier primary
+		if self.bound(s.get("target").unwrap_or(&null), true).map_err(|_| ())?.1 {
+			return Box::pin(self.resolve(s)).await;
+		}
 		let id = self.member_of(s.get("target").unwrap_or(&null)).map_err(|_| ())?;
 		let r = self.remote(&id, s.get("principal").unwrap_or(&null), s.get("policyVersion"), s.get("targetRequest").cloned()).await.map_err(|_| ())?;
 		let target = s.get("target").unwrap_or(&null);
@@ -318,9 +338,11 @@ impl<I: RootIo> FederationRpc<I> {
 	#[allow(clippy::result_unit_err)]
 	pub async fn resolve(&self, s: Json) -> Result<Json, ()> {
 		let null = Json::Null;
-		let id = self.member_of(s.get("target").unwrap_or(&null)).map_err(|_| ())?;
+		// at a successor the delegation keeps the bound epoch: the Member decides the earlier request (v3 6.2)
+		let (id, successor) = self.bound(s.get("target").unwrap_or(&null), true).map_err(|_| ())?;
 		let reference_of = reference(&s).map_err(|_| ())?;
-		let r = self.remote(&id, s.get("principal").unwrap_or(&null), s.get("policyVersion"), Some(reference_of.clone())).await.map_err(|_| ())?;
+		let bound_epoch = successor.then(|| s.get("target").and_then(|t| t.get("primaryEpoch")).cloned().unwrap_or(Json::Null));
+		let r = self.remote_at(&id, s.get("principal").unwrap_or(&null), s.get("policyVersion"), Some(reference_of.clone()), bound_epoch).await.map_err(|_| ())?;
 		let targeted = obj! { "generation" => s.get("generation").cloned().unwrap_or(Json::Null), "requestId" => s.get("requestId").cloned().unwrap_or(Json::Null) };
 		let asked = obj! { "method" => "resolveOperation", "args" => obj! { "targetRequest" => targeted.clone(), "method" => reference_of.get("method").cloned().unwrap_or(Json::Null), "argumentHash" => reference_of.get("argumentHash").cloned().unwrap_or(Json::Null), "primaryEpoch" => s.get("target").and_then(|t| t.get("primaryEpoch")).cloned().unwrap_or(Json::Null) } };
 		let answer = match self.result(&r, asked).await {
@@ -343,14 +365,22 @@ impl<I: RootIo> FederationRpc<I> {
 		if !current.as_f64().is_some_and(|c| c != 0.0) || !s.get("policyVersion").and_then(Json::as_f64).is_some_and(|v| v != 0.0) || s.get("targetRequest").is_some() || !plain {
 			return Ok(Reprepared::Refuse);
 		}
-		if s.get("target").and_then(|t| self.member_of(t).ok()).is_none() {
-			return Ok(Reprepared::Refuse);
-		}
-		if s.get("policyVersion") == Some(&current) {
+		let Some((id, successor)) = s.get("target").and_then(|t| self.bound(t, true).ok()) else { return Ok(Reprepared::Refuse) };
+		if s.get("policyVersion") == Some(&current) && !successor {
 			return Ok(if text(&s, "evidence") == Some("ReplicaConfigPending") { Reprepared::Wait } else { Reprepared::Refuse });
 		}
-		// a newer policy from an adopted replica notice is R6b; any other change refuses
-		Ok(Reprepared::Refuse)
+		// only when every policy version since the step's own came from an adopted replica notice
+		let notices: Vec<f64> = state.get("noticePolicyVersions").and_then(Json::as_array).map_or(vec![], |v| v.iter().filter_map(Json::as_f64).collect());
+		let (from, to) = (s.get("policyVersion").and_then(Json::as_f64).unwrap_or(0.0), current.as_f64().unwrap_or(0.0));
+		let mut v = from + 1.0;
+		while v <= to {
+			if !notices.contains(&v) {
+				return Ok(Reprepared::Refuse);
+			}
+			v += 1.0;
+		}
+		let null = Json::Null;
+		self.step(&id, s.get("principal").unwrap_or(&null), text(&s, "method").unwrap_or(""), s.get("args").unwrap_or(&null), Some(&current), None).await.map(Reprepared::Spec).map_err(|_| ())
 	}
 
 	/// `snapshot`: every entry of a template on a Member, page by page.
