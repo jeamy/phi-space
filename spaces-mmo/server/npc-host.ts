@@ -21,6 +21,7 @@ import { claimRole } from "./npc/minds.ts";
 import { closeDurableNpcs } from "./npc/durable.ts";
 import { scriptFor, type Npc } from "./npc/scripts.ts";
 import { actorToken, asFields, type IntentFields, type SessionFields } from "./model.ts";
+import { abortableSleep } from "./abort-sleep.ts";
 import { announce, connectSpace, DEFAULT_SPACE } from "./space.ts";
 
 const SESSION_LEASE_MS = 30_000;
@@ -32,7 +33,7 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 	const conn = connectSpace(o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE));
 	const space = conn.space;
 	const halt = new AbortController();
-	const sleep = (ms: number) => new Promise<void>((r) => { const t = setTimeout(r, ms); halt.signal.addEventListener("abort", () => { clearTimeout(t); r(); }, { once: true }); });
+	const sleep = (ms: number) => abortableSleep(halt.signal, ms);
 	const runs: Promise<void>[] = [];
 	const starting: Promise<void>[] = [];
 	const owner = `npc-proc-${randomBytes(4).toString("hex")}`;

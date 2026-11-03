@@ -162,7 +162,9 @@ test("a trader bound for another island boards the large ship in the bay while i
 		// the rooms it stands in, in order, until it is on the other island
 		const seen: string[] = [];
 		await eventually(async () => {
-			const room = String((await s.readAll({ type: "Character", fields: { charId: me } }))[0]?.fields.room);
+			// while the figure is handed over to the other region it is in neither space for a moment: no room to note
+			const room = (await s.readAll({ type: "Character", fields: { charId: me } }))[0]?.fields.room;
+			if (typeof room !== "string") return false;
 			if (seen.at(-1) !== room) seen.push(room);
 			return island(room) === island(to);
 		}, 200_000, "on the other island");

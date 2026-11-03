@@ -46,6 +46,7 @@ import { sweepSpots } from "./engine/occupancy.ts";
 import { SCHEDULE_HANDLERS, tickHandler } from "./engine/worldevents.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { regionAddresses, regionWorld } from "./engine/regions.ts";
+import { abortableSleep } from "./abort-sleep.ts";
 import { deliver } from "./engine/handover.ts";
 import { WORLD_LOCK, actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields } from "./model.ts";
 import { announce, awaitWork, batching, bufferedTxn, connectSpace, DEFAULT_SPACE, envMs, Mirror, readExisting, StillHeld } from "./space.ts";
@@ -243,7 +244,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 			let wait = 1000;
 			try { wait = await runSchedules(space, handlers, { txnMs: TXN_MS, maxWaitMs: 1000, guard }); }
 			catch (e) { if (!halt.signal.aborted) console.error("[world] schedules:", (e as Error).message); }
-			await new Promise<void>((r) => { const t = setTimeout(r, wait); halt.signal.addEventListener("abort", () => { clearTimeout(t); r(); }, { once: true }); });
+			await abortableSleep(halt.signal, wait);
 		}
 	})();
 
