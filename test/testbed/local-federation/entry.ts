@@ -1,4 +1,5 @@
-// `npm run testbed:federation -- entry`: lww and set types of one Space replicated between two hosts of the configured runtime, each pulling the other's
+// `npm run testbed:federation -- entry [A-B]`: lww and set types of one Space replicated between two hosts of the configured runtime (`A-B`: the
+// runtime of replica-a and replica-b, ts or rust each), each pulling the other's
 // stream over its gate. A client writes through the gates while one host is cut off and killed, then while the other is cut off, and once on both at
 // nearly the same time; both gates and both stores must end with the same entries.
 import { rmSync } from "node:fs";
@@ -12,7 +13,7 @@ const container = (host: string) => `phi-federation-${host}-1`;
 const sensor = (sensorId: string, v: number) => ({ type: "Sensor", fields: { sensorId, v } }), tag = (name: string) => ({ type: "Tag", fields: { tag: name } });
 
 export async function entryScenario() {
-	const { dir, compose, drive, tool, started, docker } = harness();
+	const { dir, env, compose, drive, tool, started, docker, runs } = harness();
 	const cut = (host: string) => docker("network", "disconnect", NET, container(host)), heal = (host: string) => docker("network", "connect", "--ip", REPLICA[host as typeof A], NET, container(host));
 	/** Waits until the host's gate shows `want`, and holds that it does. */
 	const shows = (host: string, want: unknown[]) => assert.deepEqual(drive("view", host, JSON.stringify(want)).view, want, `${host} shows the merged entries`);
@@ -22,6 +23,7 @@ export async function entryScenario() {
 		compose("up", "-d", "--no-build", "register", "management", "control", "client");
 		compose("up", "-d", "--no-build", "--no-deps", A, B);
 		started(A, '"ready":true'); started(B, '"ready":true');
+		runs(container(A), env.REPLICA_A_IMPL); runs(container(B), env.REPLICA_B_IMPL);
 		assert.equal(drive("put", A, "s1", "1").write, "answered");
 		shows(B, [sensor("s1", 1)]);
 		assert.equal(drive("take", A).take.refused, "MergeTypeNotExclusive", "a merge type has no exclusive take");
@@ -33,7 +35,8 @@ export async function entryScenario() {
 		assert.ok(drive("gone", B).gone.refused, "the cut-off host serves no client");
 		docker("kill", "-s", "KILL", container(B));
 		heal(B);
-		docker("start", container(B)); started(B, '"ready":true');
+		docker("start", container(B)); started(B, '"ready":true', 90_000, 2);
+		runs(container(B), env.REPLICA_B_IMPL);
 		shows(B, [sensor("s1", 2), sensor("s2", 1), tag("x-a")]);
 		// a cut off while b is written, a tag removed among them
 		cut(A);

@@ -5,6 +5,7 @@ import { renameSync, readFileSync } from "node:fs";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
 import { EntryReplicationController, startMemberRecoveryOnly, startRecoveryOnly, OWN_SYNC_FACTORIES, OwnSyncStore, SqliteRecoveryRegister, assertSyncPrimary, lastConfigTransition, openSyncSpace, primarySyncStorage, promotionEvidence, recoverPrimarySync, PrimarySyncJournal, TlsFencing, TlsRecoveryRegister, assertSyncStandby, canonicalJson, degradeToSingle, loadFileSigner, materializeSyncHistory, promote, setStandby, signedReplicaPeer, snapshotSpace, socketTransport, startConfiguredFederation, startQuarantineReplicas } from "../../../src/index.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { openSqliteHost } from "../../../src/store/sqlite.ts";
@@ -52,8 +53,10 @@ if (mode === "recovery") {
 		console.log(JSON.stringify({ ready: true }));
 	}
 } else if (mode === "run" && process.env[`${name!.replace("-", "_").toUpperCase()}_IMPL`] === "rust") {
-	// the Rust host (phi-space-server --member with syncSpaces): the same lines, its quarantine start included
-	const child = spawn("phi-space-server", ["--store", `/fed/${name}.sqlite`, `--${cfg.mode}`, file], { stdio: "inherit" });
+	// the Rust host (phi-space-server --member with syncSpaces or entryReplication): the same lines, its quarantine start
+	// included; with entry replication alone the binary has no line of its own for the gate being up, so its ready line is it
+	const child = spawn("phi-space-server", ["--store", `/fed/${name}.sqlite`, `--${cfg.mode}`, file], { stdio: ["inherit", cfg.entryReplication ? "pipe" : "inherit", "inherit"] });
+	if (cfg.entryReplication) createInterface({ input: child.stdout! }).on("line", (line) => { console.log(line); if (line.includes(`${cfg.mode} ready on`)) console.log(JSON.stringify({ ready: true })); });
 	child.on("exit", (code) => process.exit(code ?? 1));
 	for (const s of ["SIGTERM", "SIGINT"] as const) process.on(s, () => child.kill(s));
 } else if (mode === "run") {

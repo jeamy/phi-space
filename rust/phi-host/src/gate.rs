@@ -215,6 +215,8 @@ pub struct GateOptions {
 	pub delegation: Option<Rc<crate::delegation::DelegationVerifier>>,
 	/// The boot guard, read before each call.
 	pub boot: Option<Rc<crate::boot::BootGuard>>,
+	/// The peers that may read this host's entry stream (`entryExport`): the pinned replicas of its replication.
+	pub entry_export: Option<std::collections::HashSet<String>>,
 	/// Keys asked of the control host, before the call that needs them.
 	pub remote_keys: Option<Rc<crate::remote::RemoteKeys>>,
 	pub handshake_ms: u64,
@@ -228,7 +230,7 @@ pub struct GateOptions {
 
 impl GateOptions {
 	pub fn new(directory: Rc<Netbird>, now: Now) -> GateOptions {
-		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, spaces: None, capabilities: None, control_host: None, root: None, delegation: None, boot: None, remote_keys: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
+		GateOptions { directory, group_roles: default_group_roles(), proving: None, enrolling: None, control: None, rotating: None, run_gates: None, lifecycle: None, spaces: None, capabilities: None, control_host: None, root: None, delegation: None, boot: None, entry_export: None, remote_keys: None, handshake_ms: 5_000, max_per_peer: 32, connections_per_second: 32.0, revalidate_ms: 15_000, now, on_event: Box::new(|_| ()) }
 	}
 }
 
@@ -581,6 +583,26 @@ impl Session for GateSession {
 				let notice = self.notice("signedNotice", |q| verifier.epoch_notice(&mut service.store, q, space.as_deref(), now).map(|()| obj! { "installed" => true }), call);
 				return Some(notice.to_json_text());
 			}
+		}
+		// lww/set: the entry stream of this host's replica, only for the pinned peers of the same replication
+		if (method == "entryDescribe" || method == "entryChanges") && (self.gate.o.delegation.is_some() || self.gate.o.entry_export.is_some()) {
+			let export = self.gate.o.entry_export.as_ref();
+			let peer = self.peer_id.clone();
+			let notice = self.notice("args", |a| {
+				let Some(peers) = export else { return Err(phi_core::space::error("Error", "entry replication not configured")) };
+				if !peers.contains(&peer) {
+					return Err(phi_core::space::error("Error", "peer is not a replica of this entry replication"));
+				}
+				let Some(m) = service.merge.as_ref() else { return Err(phi_core::space::error("Error", "entry replication not configured")) };
+				let done = if method == "entryDescribe" {
+					m.controller.describe_stream(&service.store)
+				} else {
+					let n = |k: &str| Json::Number(crate::entry_pump::js_number(a.get(k)));
+					m.controller.stream_changes(&service.store, Some(&n("after")), Some(&n("maxBytes")))
+				};
+				done.map_err(|e| phi_core::space::error("Error", e.message()))
+			}, &obj! { "args" => obj! { "args" => call.get("args").cloned().unwrap_or(Json::Null) } });
+			return Some(notice.to_json_text());
 		}
 		if method == "membershipInstruction" {
 			if let Some(lifecycle) = &self.gate.o.lifecycle {

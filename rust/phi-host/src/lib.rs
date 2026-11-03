@@ -8,6 +8,7 @@ pub mod control_ack;
 pub mod control_recovery;
 pub mod control_host;
 pub mod delegation;
+pub mod entry_pump;
 pub mod federated_space;
 pub mod federation_rpc;
 pub mod gate;

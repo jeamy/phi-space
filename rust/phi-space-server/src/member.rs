@@ -7,6 +7,7 @@ use phi_host::auth::{Algorithm, Proving, Signer};
 use phi_host::boot::{BootGuard, External};
 use phi_host::capability::Capabilities;
 use phi_host::delegation::{authorize, DelegationOptions, DelegationVerifier};
+use phi_host::entry_pump;
 use phi_host::gate::{default_group_roles, Gate, GateOptions, Netbird, Now, PeerInfo};
 use phi_host::grants::GrantVerifier;
 use phi_host::membership::{verify_federation_policy, MemberLifecycle};
@@ -20,13 +21,14 @@ use phi_wire::{Owner, Route};
 use phi_core::space::error;
 use phi_host::tls::{private_file, TlsIdentity};
 use phi_json::{parse, Json};
+use phi_service::entry::{EntryError, EntryOptions, EntryReplication};
 use phi_service::{Options, Service};
 use phi_store::{system_random, SpaceHost, SqliteLedger, Store, Synchronous};
 use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
 use std::rc::Rc;
 
-const REFUSED: [&str; 5] = ["root", "entryReplication", "recoveryAdmin", "registerSshTarget", "registerReadSocket"];
+const REFUSED: [&str; 4] = ["root", "recoveryAdmin", "registerSshTarget", "registerReadSocket"];
 
 pub(crate) fn field<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or_else(|| fail(format!("the config has no {k}"))) }
 
@@ -132,8 +134,9 @@ pub(crate) fn set_group_roles(o: &mut GateOptions, c: &Json) {
 
 /// Serves `gate` until the host is stopped, then closes the store; `tasks` run beside it (a Member's primary/sync Spaces).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn serve_gate(runtime: &tokio::runtime::Runtime, opened: Store, options: Options, gate: Rc<Gate>, peer_id: &str, (host, port): (&str, u16), name: &str, tasks: Vec<Box<dyn FnOnce(Owner) -> phi_wire::Local<()>>>) {
+pub(crate) fn serve_gate(runtime: &tokio::runtime::Runtime, opened: Store, options: Options, gate: Rc<Gate>, peer_id: &str, (host, port): (&str, u16), name: &str, tasks: Vec<Box<dyn FnOnce(Owner) -> phi_wire::Local<()>>>, merge: Option<phi_service::Merge>) {
 	let mut service = Service::new(opened, options);
+	service.merge = merge;
 	service.start_background().unwrap_or_else(|e| fail(e.message));
 	service.store.drain().unwrap_or_else(|e| fail(e));
 	let mut serving = ServeOptions::new(Listen::Tcp { host: host.to_owned(), port: 0 }, peer_id);
@@ -321,6 +324,10 @@ pub fn run(config: &str, store: &str) {
 	if c.get("spaceLifecycle") == Some(&Json::Bool(true)) {
 		o.spaces = Some(SpaceLifecycleService::new(host_id, authority_id, peer_id, key_of(&c, "keyFile").0, pin, assert_host()));
 	}
+	// lww/set: the provisioned entry replication of one Space; its merge types bypass the core
+	let entry = entry_replication(&c, &opened, authority_id, &o_boot, &now);
+	o.entry_export = entry_exported(entry.as_ref());
+	let mut merge = None;
 	let gate = Gate::new(listen_host, o).unwrap_or_else(|e| fail(e));
 	let mut tasks: Vec<Box<dyn FnOnce(Owner) -> phi_wire::Local<()>>> = vec![];
 	if !syncs.is_empty() {
@@ -336,7 +343,73 @@ pub fn run(config: &str, store: &str) {
 		tasks.push(Box::new(move |owner: Owner| Box::pin(sync_spaces(owner, syncs, cx, make, guard, client))));
 	}
 	tasks.extend(private_recovery(&c, "member", authority_id, control_key));
-	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "member", tasks);
+	if let Some(e) = entry {
+		merge = Some(entry_tasks(e, &o_boot, &now, &mut tasks));
+	}
+	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "member", tasks, merge);
+}
+
+/// The pump of each pinned peer and the compaction timer, beside the gate; the merge types for the service.
+pub(crate) fn entry_tasks(e: EntryConfigured, guard: &Rc<BootGuard>, now: &Now, tasks: &mut Vec<Box<dyn FnOnce(Owner) -> phi_wire::Local<()>>>) -> phi_service::Merge {
+	for peer in e.peers {
+		let guard = Rc::clone(guard);
+		tasks.push(Box::new(move |owner: Owner| Box::pin(entry_pump::pump(owner, peer, e.poll_ms, guard))));
+	}
+	if let Some(every) = e.compact_every_ms {
+		let (guard, now) = (Rc::clone(guard), Rc::clone(now));
+		tasks.push(Box::new(move |owner: Owner| Box::pin(entry_pump::compact(owner, every, guard, now))));
+	}
+	e.merge
+}
+/// The peers that may read this host's entry stream, if any.
+pub(crate) fn entry_exported(e: Option<&EntryConfigured>) -> Option<std::collections::HashSet<String>> {
+	let peers: std::collections::HashSet<String> = e.map_or_else(Default::default, |e| e.peers.iter().map(|p| p.peer_id.clone()).collect());
+	(!peers.is_empty()).then_some(peers)
+}
+
+/// What `entryReplication` configures: the merge types of one Space, its export to the pinned peers, their pumps.
+pub(crate) struct EntryConfigured {
+	merge: phi_service::Merge,
+	peers: Vec<entry_pump::EntryPeer>,
+	poll_ms: u64,
+	compact_every_ms: Option<u64>,
+}
+pub(crate) fn entry_replication(c: &Json, opened: &Store, authority_id: &str, guard: &Rc<BootGuard>, now: &Now) -> Option<EntryConfigured> {
+	let er = c.get("entryReplication").filter(|e| !e.is_null())?;
+	let compact = er.get("compactEveryMs");
+	if compact.is_some_and(|v| !v.as_f64().is_some_and(|n| phi_json::safe_integer(n) && n >= 1000.0)) {
+		fail("BootBlocked: entryReplication.compactEveryMs must be an integer of at least 1000");
+	}
+	let space = field(er, "space");
+	let Some(info) = opened.spaces().into_iter().find(|i| i.get("spaceId").and_then(Json::as_str) == Some(space) || i.get("alias").and_then(Json::as_str) == Some(space)) else {
+		fail(format!("BootBlocked: entry replication names an unknown Space {space}"))
+	};
+	let (alias, space_id) = (field(&info, "alias").to_owned(), field(&info, "spaceId").to_owned());
+	let config = phi_json::obj! { "spaceId" => er.get("spaceId").cloned().unwrap_or(Json::Null), "authorityId" => authority_id, "replicaId" => er.get("replicaId").cloned().unwrap_or(Json::Null), "incarnation" => er.get("incarnation").cloned().unwrap_or(Json::Null), "members" => er.get("members").cloned().unwrap_or(Json::Null), "rules" => er.get("rules").cloned().unwrap_or(Json::Null) };
+	let uncertainty = er.get("clockUncertaintyMs").and_then(Json::as_f64).unwrap_or(1000.0);
+	let (check_guard, admitted) = (Rc::clone(guard), space_id.clone());
+	let controller = EntryReplication::new(EntryOptions {
+		config,
+		space: (alias != phi_store::DEFAULT_ALIAS).then(|| alias.clone()),
+		// local calls are authorized by the space service, export by the gate (pinned, proven peers), import by this host
+		check: Rc::new(move |_| if check_guard.space_active(&admitted) { Ok(()) } else { Err(EntryError::Other { class: "BootBlocked".into(), message: "entry replica Space is not admitted".into() }) }),
+		now: Rc::clone(now),
+		clock_uncertainty_ms: Rc::new(move || uncertainty),
+		random: phi_store::system_random(),
+		max_history_bytes: None,
+		max_batch_bytes: None,
+		request_retention_ms: None,
+	})
+	.unwrap_or_else(|e| fail(format!("{}: {}", e.class(), e.message())));
+	let key_id = key_of(c, "keyFile").1;
+	let listen = field(c.get("listen").unwrap_or(&Json::Null), "host").to_owned();
+	let peers = er.get("peers").and_then(Json::as_array).map_or(vec![], |p| p.clone()).iter().map(|p| {
+		let (host, port) = address_of(p.get("address").unwrap_or_else(|| fail("an entry replication peer has no address")));
+		let client = Rc::new(ControlClient::new((host.to_owned(), port), &listen, field(c, "peerId"), field(p, "hostId"), key_of(c, "keyFile").0, &key_id));
+		entry_pump::EntryPeer { replica_id: field(p, "replicaId").to_owned(), peer_id: field(p, "peerId").to_owned(), client }
+	}).collect();
+	let poll_ms = er.get("pollMs").and_then(Json::as_f64).unwrap_or(2000.0) as u64;
+	Some(EntryConfigured { merge: phi_service::Merge { controller, alias, space_id }, peers, poll_ms, compact_every_ms: compact.and_then(Json::as_f64).map(|n| n as u64) })
 }
 
 /// Opens every primary/sync Space on its own (`openSyncSpaces`): one that cannot open stays unserved and does not take the

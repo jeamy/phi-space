@@ -2,7 +2,7 @@
 // not carry yet is refused at the start, never ignored: replication and following a control host change (R6b). Its `recovery`
 // section is the private endpoint with the control host's receipt.
 use crate::{fail, stopping};
-use crate::member::{address_of, boot_guard, clock, config_of, field, followed_authority, key_of, netbird, open_store, own_peer, private_recovery, register_client, serve_gate, set_group_roles};
+use crate::member::{address_of, boot_guard, clock, config_of, entry_exported, entry_replication, entry_tasks, field, followed_authority, key_of, netbird, open_store, own_peer, private_recovery, register_client, serve_gate, set_group_roles};
 use phi_host::alerts::ControlCommands;
 use phi_host::control::AsyncCommands;
 use phi_host::auth::{Algorithm, Proving};
@@ -20,7 +20,7 @@ use phi_service::Options;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const REFUSED: [&str; 8] = ["syncSpaces", "entryReplication", "recoveryAdmin", "registerSshTarget", "registerReadSocket", "membership", "runGates", "spaceLifecycle"];
+const REFUSED: [&str; 7] = ["syncSpaces", "recoveryAdmin", "registerSshTarget", "registerReadSocket", "membership", "runGates", "spaceLifecycle"];
 
 pub fn run(config: &str, store: &str) {
 	let c = config_of(config, "control", "this host runs as a control host", &REFUSED);
@@ -106,11 +106,16 @@ pub fn run(config: &str, store: &str) {
 	if let Some(s) = o.control.as_mut().and_then(|c| c.supervisor.as_mut()) {
 		s.commands = Some(Rc::new(ControlCommands::new(held, Rc::clone(&now))));
 	}
+	// lww/set: the provisioned entry replication of one Space; its merge types bypass the core
+	let entry = entry_replication(&c, &opened, authority_id, &guard, &now);
+	o.entry_export = entry_exported(entry.as_ref());
+	let boot = Rc::clone(&guard);
 	o.boot = Some(guard);
 	let gate = Gate::new(listen_host, o).unwrap_or_else(|e| fail(e));
 
-	let tasks = private_recovery(&c, "control", authority_id, control_key).into_iter().collect();
-	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "control", tasks);
+	let mut tasks: Vec<Box<dyn FnOnce(phi_wire::Owner) -> phi_wire::Local<()>>> = private_recovery(&c, "control", authority_id, control_key).into_iter().collect();
+	let merge = entry.map(|e| entry_tasks(e, &boot, &now, &mut tasks));
+	serve_gate(&runtime, opened, options, gate, peer_id, (listen_host, listen_port), "control", tasks, merge);
 }
 
 /// `root` of the config: what is not carried yet stops the start.

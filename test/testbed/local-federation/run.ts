@@ -100,7 +100,13 @@ const impls = (names: string[]) => {
 if (which === "control-restore") { impls(["CONTROL_IMPL", "MEMBER_IMPL", "CONTROL_B_IMPL"]); await (await import("./control-restore.ts")).controlRestoreScenario(); process.exit(process.exitCode ?? 0); }
 if (which === "restore") { impls(["CONTROL_IMPL", "MEMBER_IMPL", "DATA_B_IMPL"]); await (await import("./restore.ts")).restoreScenario(); process.exit(process.exitCode ?? 0); }
 if (which === "change") { await (await import("./change.ts")).changeScenario(); process.exit(process.exitCode ?? 0); }
-if (which === "entry") { await (await import("./entry.ts")).entryScenario(); process.exit(process.exitCode ?? 0); }
+if (which === "entry") {
+	// `-- entry A-B`: the runtime of replica-a and of replica-b (ts or rust each; default ts-ts)
+	const [a, b] = (process.argv[3] ?? "ts-ts").split("-");
+	if (![a, b].every((i) => i === "ts" || i === "rust")) throw new Error("entry takes ts-ts, ts-rust, rust-ts or rust-rust");
+	Object.assign(process.env, { REPLICA_A_IMPL: a, REPLICA_B_IMPL: b });
+	await (await import("./entry.ts")).entryScenario(); process.exit(process.exitCode ?? 0);
+}
 if (which === "replica") {
 	// `-- replica A-B`: the runtime of replica-a and of replica-b (ts or rust each; default ts-ts)
 	const [a, b] = (process.argv[3] ?? "ts-ts").split("-");

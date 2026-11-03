@@ -10,6 +10,8 @@
 //      {"op": "event", "now": <ms>, "event": {...}} an event in the outbox, as an agent host leaves it in the file
 //      "auth" on a call: {"validUntil": n, "roles": [...], "can": ["take:Task", "read:*", ...], "expired": bool}: what a host
 //      decided about it (DecisionAuthorization); "can" lists method and type, "*" any type
+//      "merge": true on init: the default Space's lww type Sensor (by sensorId) and set type Tag go to an
+//      EntryReplicationController on the same store (SpaceServiceOptions.merge), as on a host with entry replication
 //      {"op": "close"}
 // Out: {"reply": "<text>", "state": "<sha256 of the default space>"} (one line each). Randomness and the clock as in
 // core-driver.ts, randomUUID included: ids of the registry come from the same stream.
@@ -27,6 +29,7 @@ import { openSqliteHost } from "../../src/store/sqlite.ts";
 import { digestJson } from "../../src/canonical.ts";
 import * as core from "../../src/core.ts";
 import type { ClosableStoreHost } from "../../src/store/types.ts";
+import { EntryReplicationController } from "../../src/entry-replication.ts";
 
 install();
 (crypto as unknown as { randomUUID: () => string }).randomUUID = () => {
@@ -78,7 +81,9 @@ for await (const text of rl) {
 		file = l.store;
 		host = file ? await openSqliteHost(file) : openOwnMemoryHost();
 		reseed(String(l.seed ?? ""), l.now ?? 0); // what opening a store draws is not part of what is compared
-		service = new SpaceService({ host, ctx, identity, policy, ...(l.authorized ? { authorize } : {}), ...(l.maxCallsPerWindow ? { maxCallsPerWindow: l.maxCallsPerWindow } : {}), ...(l.maxPending ? { maxPendingPerPrincipal: l.maxPending, maxPendingPerPeer: l.maxPeer ?? l.maxPending * 2 } : {}) });
+		const rules = [{ type: "Sensor", variant: "lww" as const, keyFields: ["sensorId"] }, { type: "Tag", variant: "set" as const }];
+		const merge = l.merge ? { controller: new EntryReplicationController({ host, ctx, config: { spaceId: "board", authorityId: "local", replicaId: "a", incarnation: "i-a", members: [{ replicaId: "a", incarnation: "i-a" }, { replicaId: "b", incarnation: "i-b" }], rules }, authorize: async () => {}, assertActive: async () => {}, clockUncertaintyMs: () => 0 }), rules } : undefined;
+		service = new SpaceService({ host, ctx, identity, policy, ...(merge ? { merge: (space: string | undefined) => (space ?? "default") === "default" ? merge : undefined } : {}), ...(l.authorized ? { authorize } : {}), ...(l.maxCallsPerWindow ? { maxCallsPerWindow: l.maxCallsPerWindow } : {}), ...(l.maxPending ? { maxPendingPerPrincipal: l.maxPending, maxPendingPerPeer: l.maxPeer ?? l.maxPending * 2 } : {}) });
 		if (l.limits) await new PhiSpaces(host, ctx).setLimits(l.limits);
 		out = { reply: "" };
 	} else if (l.op === "close") { await host!.close(ctx); out = { reply: "" }; }

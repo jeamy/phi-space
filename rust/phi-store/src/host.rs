@@ -204,6 +204,37 @@ impl SpaceHost {
 		}
 	}
 
+	/// A commit of documents beside the Spaces alone (`host.commit` of a step that touches no Space): its rows go to the
+	/// store as one batch behind every commit handed before, without the Space's document. A primary's journal may refuse
+	/// it before anything is written, as it refuses a commit of a Space.
+	pub fn commit_documents(&mut self, ops: Vec<WriteOp>) -> Result<std::result::Result<u64, CoreError>> {
+		self.pump()?;
+		if ops.is_empty() {
+			return Ok(Ok(self.handed));
+		}
+		let shared = self.ledger.clone();
+		let mut guard = shared.borrow_mut();
+		match &mut *guard {
+			Ledger::Memory(l) => {
+				l.write_documents(ops)?;
+				self.handed += 1;
+				self.durable = self.handed;
+			}
+			Ledger::Sqlite(l) => {
+				let admitted = match l.admit(&ops) {
+					Ok(n) => n,
+					Err(e) => return Ok(Err(phi_core::space::error(e.name(), e.message()))),
+				};
+				let durable = l.persist_admitted(ops, admitted);
+				self.handed += 1;
+				self.unsettled.push_back((self.handed, durable));
+			}
+		}
+		drop(guard);
+		let _ = self.pump();
+		Ok(Ok(self.handed))
+	}
+
 	fn claim_failure(&self) -> Option<String> {
 		match self.space.state.rpc.as_ref().map(|r| &r.claims) {
 			Some(Claims::Disk(d)) => d.take_failure(),

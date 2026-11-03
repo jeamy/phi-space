@@ -7,6 +7,7 @@
 //! Commit boundaries are those of the TypeScript client: every maintenance round is a commit of its own, a snapshot read
 //! is none. Revisions and the change stream show them, so they are part of the contract.
 mod background;
+pub mod entry;
 
 use phi_core::claims::RequestRef;
 use phi_core::mailbox::principal_id;
@@ -424,12 +425,37 @@ pub struct Service {
 	rate_sweep_at: f64,
 	/// Entry snapshots by Space (`None`: the default).
 	snapshots: HashMap<Option<String>, Snapshots>,
+	/// The provisioned entry replication of one Space: its merge types bypass the core (`SpaceServiceOptions.merge`).
+	pub merge: Option<Merge>,
+}
+
+/// The entry replication of one Space and the names it is called by.
+pub struct Merge {
+	pub controller: entry::EntryReplication,
+	/// The Space's alias and id: a call names one of them, or none for the default alias.
+	pub alias: String,
+	pub space_id: String,
+}
+impl Merge {
+	fn serves(&self, space: Option<&str>) -> bool { space.unwrap_or(DEFAULT_ALIAS) == self.alias || space == Some(self.space_id.as_str()) }
+}
+/// A refusal of the controller as the service answers it.
+pub fn entry_error(e: entry::EntryError) -> CoreError {
+	use entry::EntryError as E;
+	match e {
+		E::Conflict(m) => error("IllegalArgumentError", m),
+		E::Clock(m) => error("ResourceExhausted", format!("replication clock: {m}")),
+		E::Exhausted(m) => error("ResourceExhausted", m),
+		E::Request(m) => error("RequestConflict", m),
+		E::Expired(m) => error("SnapshotExpired", m),
+		other => error("EntryReplicationError", other.message()),
+	}
 }
 
 impl Service {
 	pub fn new(store: Store, mut o: Options) -> Service {
 		o.max_poll_ms = o.max_poll_ms.min(25_000.0);
-		Service { store, o, rates: HashMap::new(), rate_sweep_at: f64::NEG_INFINITY, snapshots: HashMap::new() }
+		Service { store, o, rates: HashMap::new(), rate_sweep_at: f64::NEG_INFINITY, snapshots: HashMap::new(), merge: None }
 	}
 	pub fn options(&self) -> &Options { &self.o }
 	/// Quotas for the default Space (`PhiSpaces.setLimits`: host code).
@@ -975,7 +1001,121 @@ impl Service {
 		Ok(obj! { "principal" => c.principal.clone(), "generation" => generation, "requestId" => request_id })
 	}
 
+	/// Calls on a merge type of the replicated Space go to its controller (`mergeCall`); `None` for everything else.
+	/// Reads see the converging view and are marked `replicated`; exclusive operations are refused.
+	fn merge_call(&mut self, method: &str, a: &Object, c: &Ctx) -> R<Option<Json>> {
+		let Some(m) = self.merge.as_ref().filter(|m| m.serves(c.space.as_deref())) else { return Ok(None) };
+		let rule = |t: Option<&Json>| t.and_then(Json::as_str).and_then(|t| m.controller.rule(t)).cloned();
+		let refuse = |what: &str| Err(error("MergeTypeNotExclusive", format!("{what} is not available for merge types (lww/set)")));
+		let view = |v: &Json| obj! { "id" => v.get("id").cloned().unwrap(), "type" => v.get("type").cloned().unwrap(), "types" => vec![v.get("type").cloned().unwrap()], "fields" => v.get("fields").cloned().unwrap(), "owner" => v.get("owner").cloned().unwrap(), "expires" => v.get("expiresAt").and_then(Json::as_f64).unwrap_or(FOREVER), "replicated" => true };
+		let txn = |a: &Object| a.get("txn").is_some_and(|t| !t.is_null());
+		let request_hash = |c: &Ctx| c.request.as_ref().map(|r| entry::change_request_hash(&c.principal, r.get("generation").and_then(Json::as_str).unwrap_or(""), r.get("requestId").and_then(Json::as_str).unwrap_or("")));
+		let owner = || c.principal.clone();
+		let now = self.now();
+		let expires_at = |ms: f64| if ms == ANY || ms >= FOREVER { Json::Null } else { Json::Number(now + ms) };
+		match method {
+			"write" => {
+				let Some(entry) = a.get("entry").filter(|e| is_obj(Some(e))) else { return Ok(None) };
+				let Some(r) = rule(entry.get("type")) else { return Ok(None) };
+				let type_ = r.get("type").and_then(Json::as_str).unwrap_or("").to_owned();
+				if !is_obj(entry.get("fields")) {
+					return Err(bad("entry.fields must be an object"));
+				}
+				if entry.get("types").is_some() {
+					return Err(bad("a merge type takes no supertypes"));
+				}
+				if txn(a) {
+					return refuse("a transaction");
+				}
+				self.check_types(&c.grant, Some(std::slice::from_ref(&type_)), &format!("type {type_}"))?;
+				let Some(change_request) = request_hash(c) else { return Err(bad("a merge write needs a request ID")) };
+				let ms = duration(a.get("leaseMs"), "leaseMs", ANY)?;
+				let expires = expires_at(ms);
+				let kind = if r.get("variant").and_then(Json::as_str) == Some("lww") { "put" } else { "add" };
+				let m = self.merge.as_ref().unwrap();
+				let change = m.controller.mutate(&mut self.store, &Json::String(change_request), &obj! { "kind" => kind, "type" => type_.as_str(), "fields" => entry.get("fields").cloned().unwrap(), "owner" => owner(), "expiresAt" => expires.clone() }).map_err(entry_error)?;
+				Ok(Some(obj! { "id" => entry::entry_change_id(&change), "expires" => expires.as_f64().unwrap_or(FOREVER), "replicated" => true }))
+			}
+			"read" | "take" | "readAll" | "count" | "wait" => {
+				let (t, _) = template(a.get("template"))?;
+				let Some(_) = rule(t.get("type")) else { return Ok(None) };
+				if method == "take" || method == "wait" {
+					return refuse(method);
+				}
+				if txn(a) {
+					return refuse("a transaction");
+				}
+				let type_ = t.get("type").and_then(Json::as_str).unwrap_or("").to_owned();
+				self.check_types(&c.grant, Some(std::slice::from_ref(&type_)), "this template")?;
+				let m = self.merge.as_ref().unwrap();
+				let fields = t.get("fields").and_then(Json::as_object).cloned().unwrap_or_default();
+				let found: Vec<Json> = m.controller.read(&self.store).map_err(entry_error)?.into_iter().filter(|v| {
+					v.get("type") == t.get("type") && fields.iter().all(|(k, x)| v.get("fields").and_then(|f| f.get(k)).map(Json::to_json_text) == Some(x.to_json_text()))
+				}).collect();
+				let stream = format!("merge:{}", m.controller.document_key);
+				Ok(Some(match method {
+					"read" => obj! { "state" => "done", "entry" => found.first().map_or(Json::Null, view), "replicated" => true },
+					"count" => obj! { "value" => found.len() as f64, "rev" => 0.0, "streamId" => stream, "replicated" => true },
+					_ => obj! { "items" => found.iter().take(100).map(view).collect::<Vec<_>>(), "next" => Json::Null, "rev" => 0.0, "streamId" => stream, "replicated" => true },
+				}))
+			}
+			"lease" if a.get("id").and_then(Json::as_str).is_some_and(|i| i.starts_with('[')) => {
+				// the lease of a merge entry is its visible version: cancel deletes it (lww: tombstone, set: remove of the
+				// tag), renew writes a new version with the new deadline (lww: put, set: renew); only its owner may do either
+				let action = str_of(a.get("action"), "action")?;
+				let id = a.get("id").and_then(Json::as_str).unwrap().to_owned();
+				if action != "renew" && action != "cancel" {
+					return Err(bad("action must be renew or cancel"));
+				}
+				let Some(change_request) = request_hash(c) else { return Err(bad("a merge lease change needs a request ID")) };
+				let m = self.merge.as_ref().unwrap();
+				// a retried request answers from its stored change (the entry it changed may no longer be visible)
+				let prior = m.controller.change_for_request(&self.store, &change_request).map_err(entry_error)?;
+				if !prior.is_null() {
+					let pm = prior.get("mutation").cloned().unwrap_or(Json::Null);
+					let kind = pm.get("kind").and_then(Json::as_str).unwrap_or("");
+					let target = match kind {
+						"remove" => pm.get("tags").and_then(Json::as_array).and_then(|t| t.first()).and_then(Json::as_str).map(str::to_owned),
+						"renew" => pm.get("tag").and_then(Json::as_str).map(str::to_owned),
+						_ => None,
+					};
+					if action == "cancel" && (kind == "delete" || kind == "remove" && target.as_deref() == Some(id.as_str())) {
+						return Ok(Some(obj! { "state" => "cancelled", "replicated" => true }));
+					}
+					if action == "renew" && (kind == "put" || kind == "renew" && target.as_deref() == Some(id.as_str())) {
+						return Ok(Some(obj! { "expires" => pm.get("expiresAt").and_then(Json::as_f64).unwrap_or(FOREVER), "id" => entry::entry_change_id(&prior), "replicated" => true }));
+					}
+					return Err(error("RequestConflict", "the request ID was used for another merge change"));
+				}
+				let visible = m.controller.read(&self.store).map_err(entry_error)?.into_iter().find(|x| x.get("id").and_then(Json::as_str) == Some(id.as_str()));
+				let r = visible.as_ref().and_then(|v| rule(v.get("type")));
+				let (Some(v), Some(r)) = (visible, r) else { return Err(error("UnknownLeaseError", format!("no visible merge entry {id}"))) };
+				let type_ = v.get("type").and_then(Json::as_str).unwrap_or("").to_owned();
+				self.check_types(&c.grant, Some(std::slice::from_ref(&type_)), &format!("type {type_}"))?;
+				if v.get("owner").map(Json::key_text) != Some(c.principal.key_text()) {
+					return Err(error("PermissionError", "only the owner may change the lease of a merge entry"));
+				}
+				let lww = r.get("variant").and_then(Json::as_str) == Some("lww");
+				let fields = v.get("fields").cloned().unwrap();
+				if action == "cancel" {
+					let change = if lww { obj! { "kind" => "delete", "type" => type_.as_str(), "fields" => fields, "owner" => owner() } } else { obj! { "kind" => "remove", "type" => type_.as_str(), "tags" => vec![Json::String(id.clone())], "owner" => owner() } };
+					m.controller.mutate(&mut self.store, &Json::String(change_request), &change).map_err(entry_error)?;
+					return Ok(Some(obj! { "state" => "cancelled", "replicated" => true }));
+				}
+				let ms = duration(a.get("ms"), "ms", ANY)?;
+				let expires = expires_at(ms);
+				let change = if lww { obj! { "kind" => "put", "type" => type_.as_str(), "fields" => fields, "owner" => owner(), "expiresAt" => expires.clone() } } else { obj! { "kind" => "renew", "type" => type_.as_str(), "tag" => id.as_str(), "fields" => fields, "owner" => owner(), "expiresAt" => expires.clone() } };
+				let change = m.controller.mutate(&mut self.store, &Json::String(change_request), &change).map_err(entry_error)?;
+				Ok(Some(obj! { "expires" => expires.as_f64().unwrap_or(FOREVER), "id" => entry::entry_change_id(&change), "replicated" => true }))
+			}
+			_ => Ok(None),
+		}
+	}
+
 	fn dispatch(&mut self, method: &str, a: &Object, c: &Ctx) -> R<Step> {
+		if let Some(merged) = self.merge_call(method, a, c)? {
+			return Ok(Step::Reply(merged));
+		}
 		let reply = |v: Json| Ok(Step::Reply(v));
 		let as_ = c.as_.clone();
 		match method {
@@ -1302,6 +1442,9 @@ impl Service {
 
 	/// Every step needs the right its own call would need, with the same type checks.
 	fn batch(&mut self, a: &Object, c: &Ctx) -> R<Json> {
+		if self.merge.as_ref().is_some_and(|m| m.serves(c.space.as_deref())) {
+			return Err(bad("batch is not offered on a space with merged entry types (each write is merged on its own)"));
+		}
 		let list = a.get("ops").and_then(Json::as_array).filter(|l| (1..=64).contains(&l.len())).ok_or_else(|| bad("ops must be 1 to 64 steps"))?;
 		let mut ops = vec![];
 		for x in list {
@@ -1430,6 +1573,7 @@ impl Service {
 			"RoutingConflict" => "RoutingConflict",
 			"MemberDrained" => "MemberDrained",
 			"TransactionError" | "UnknownLeaseError" | "RunGateConflict" => "TransactionError",
+			"MergeTypeNotExclusive" => "MergeTypeNotExclusive",
 			"IllegalArgumentError" | "TypeError" => "BadRequest",
 			_ => {
 				// unclassified errors stay on this host: their text can name local paths and internal identifiers

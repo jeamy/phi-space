@@ -167,6 +167,12 @@ impl BootGuard {
 		Ok(())
 	}
 
+	/// `assertActive` of a host's entry replication: the host's boot record, read last, is active and admits the Space.
+	pub fn space_active(&self, id: &str) -> bool {
+		let Ok(seen) = self.seen() else { return false };
+		seen.boot.get("value").and_then(|v| v.get("spaces")).and_then(|p| p.get(id)).and_then(|p| text(p, "state")) == Some("active")
+	}
+
 	/// `assertAuthority` of a host with this guard.
 	pub fn assert_active(&self) -> R<()> { self.seen().map(|_| ()) }
 }

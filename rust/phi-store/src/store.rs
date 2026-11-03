@@ -226,6 +226,22 @@ impl Store {
 		})
 	}
 
+	/// Documents beside the Spaces written in one commit that touches no Space (`host.commit` of such a step), behind the
+	/// commits of `space`'s host.
+	pub fn commit_documents(&mut self, space: Option<&str>, ops: Vec<crate::WriteOp>) -> Result<std::result::Result<u64, CoreError>> {
+		match self.reader(space) {
+			Err(e) => Ok(Err(e)),
+			Ok(host) => host.commit_documents(ops),
+		}
+	}
+	/// The same with the version it was written in (a document of an older version is migrated on reading).
+	pub fn stored_document_versioned(&self, kind: &str, key: Option<&str>) -> Result<Option<(i64, Json)>> {
+		Ok(match &*self.default.ledger.borrow() {
+			Ledger::Sqlite(l) => l.document(kind, key)?.map(|d| (d.version, d.value)),
+			Ledger::Memory(l) => l.load(kind, key).map(|d| (d.version, d.value)),
+		})
+	}
+
 	/// `createSpace`: a named Space, or the one with this alias. `random` is the new document's source.
 	pub fn create_space(&mut self, alias: &str, now: f64, random: Random) -> Result<std::result::Result<Json, CoreError>> { self.create_space_with(alias, now, random, |_| Ok(())) }
 
