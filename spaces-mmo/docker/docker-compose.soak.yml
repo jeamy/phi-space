@@ -1,0 +1,30 @@
+# The soak on this machine (tests/perf/soak.sh), over docker-compose.yml and docker-compose.rust.yml: no model calls
+# whatever .env says, guests lapse after SOAK_GUEST_TTL_MS (default 2 h) so the world's cleanup runs during the soak and
+# the data reaches a steady state, and web takes the guests and requests of the load figures from one address.
+x-soak: &soak
+  SPACES_MMO_LLM: "0"
+  SPACES_MMO_GUEST_TTL_MS: "${SOAK_GUEST_TTL_MS:-7200000}"
+
+services:
+  space: { environment: *soak }
+  web:
+    environment:
+      <<: *soak
+      SPACES_MMO_GUESTS_PER_HOUR: "10000"
+      SPACES_MMO_REQ_PER_MIN: "100000"
+  space-west: { environment: *soak }
+  world-west: { environment: *soak }
+  model-west: { environment: *soak }
+  npc-west: { environment: *soak }
+  space-nord: { environment: *soak }
+  world-nord: { environment: *soak }
+  model-nord: { environment: *soak }
+  npc-nord: { environment: *soak }
+  space-ost: { environment: *soak }
+  world-ost: { environment: *soak }
+  model-ost: { environment: *soak }
+  npc-ost: { environment: *soak }
+  space-sued: { environment: *soak }
+  world-sued: { environment: *soak }
+  model-sued: { environment: *soak }
+  npc-sued: { environment: *soak }

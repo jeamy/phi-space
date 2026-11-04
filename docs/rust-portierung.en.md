@@ -833,7 +833,7 @@ All Rust values come from the same binary, the state of this commit. R-D2 is the
 - *Memory.* The Rust server opening the stopped store has the RSS of the end of the run, while its live heap was 22.5 MB (about 1.9 KB per entry; TypeScript about 2.5 KB). The rest was the peak of the load (58 MB: the parsed document and a copy of the state beside it), which glibc keeps. The load now moves the rows into the document and each entry out of it into the state (`SpaceState::from_value`, `EntryRec::from_value`, `join_parts` takes its rows), compacting each record as it goes: on that store the peak falls to 32 MB, the state to 17.5 MB and the RSS after opening from 80 MB to 46 MB.
 - *CPU.* `tests/perf/space-cost.ts` with `SPACE_COST_SEED` (20 figures, 60 s) on the store with and without the shells: Rust 16.7 and 8.3 ms of space CPU per command, TypeScript 26.0 and 17.8. Both servers grow by the same 8 ms, so the cost scales with the world's reads (its sweeps read every `Item`), not with the port.
 
-The next soak sets `SPACES_MMO_GUEST_TTL_MS` to 2 h, so the cleanup runs during it and the data reaches a steady state, and keeps its scripts and logs outside `/tmp`.
+The next soak sets `SPACES_MMO_GUEST_TTL_MS` to 2 h, so the cleanup runs during it and the data reaches a steady state, and keeps its scripts and logs outside `/tmp`: `spaces-mmo/tests/perf/soak.sh start|status|stop` with `docker/docker-compose.soak.yml` (spaces-mmo/docs/betrieb.en.md, „Soak on this machine“). It runs since 2026-11-04 15:23 UTC.
 
 **Work:**
 

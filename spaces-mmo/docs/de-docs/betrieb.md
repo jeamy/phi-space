@@ -284,6 +284,20 @@ docker exec phi-spaces-mmo-web-1 rm -f /opt/phi-spaces/spaces-mmo/live-load-clea
 Ergebnis eines Laufs mit 100 Figuren: [lasttest-2026-10-28.md](../lasttest-2026-10-28.en.md). Die Kosten je Befehl ohne
 Server: `LOAD_BOTS=50 LOAD_SECONDS=60 node --no-warnings --experimental-strip-types --import ./tests/test-env.ts
 tests/perf/space-cost.ts` (ein Stack wie auf den Servern, eine JSON-Zeile mit CPU-ms des Space-Prozesses je Befehl).
+`SPACE_COST_SEED=<dir>` startet diesen Stack von der `world.sqlite` in diesem Verzeichnis (kopiert), um eine Welt zu
+messen, die schon viel enthält.
+
+## Dauertest auf diesem Rechner
+
+`tests/perf/soak.sh start|status|stop` lässt die Rust-Space-Server über Tage laufen (docs/rust-portierung.en.md, R4): den
+`docker:rust`-Stack mit `docker/docker-compose.soak.yml` als Compose-Projekt `phi-soak-rust` (Port 3910), 20
+`live-load.ts`-Figuren in Runden von einer Stunde ohne Ende und einen Monitor, der alle 10 Minuten Speicher und CPU
+jedes Containers, Neustarts und Fehlerzeilen schreibt und jede Stunde die Zahl der Einträge, Muscheln und Figuren je
+Region. Die Ergänzung schaltet Modellaufrufe ab, was auch immer `.env` sagt, und lässt Gäste nach 2 h ablaufen
+(`SOAK_GUEST_TTL_MS`), damit das Aufräumen der Welt während des Tests läuft; mit den vorgegebenen 7 Tagen behalten die
+Gäste jeder Runde, was sie gesammelt haben, und die Daten wachsen nur. Logs und Runden liegen in `SOAK_DIR` (vorgegeben
+`~/phi-soak/<Datum>-rust`), nie in `/tmp`; `stop` beendet Last und Monitor über die PIDs in `SOAK_DIR/pids` und fährt den
+Stack herunter, seine Volumes bleiben. Das Image kommt vorher aus `npm run docker:image:rust`.
 
 ## Durchspiel der Epochen 1 bis 4
 
