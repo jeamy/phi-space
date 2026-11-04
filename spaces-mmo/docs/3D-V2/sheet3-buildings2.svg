@@ -1,0 +1,242 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" font-family="DejaVu Sans, Segoe UI, sans-serif">
+<defs>
+<filter id="s"><feGaussianBlur stdDeviation="3"/></filter>
+<symbol id="cell" viewBox="0 0 220 240"><rect x="4" y="4" width="212" height="232" rx="12" fill="#1f2229"/><polygon points="110,170 170,140 110,110 50,140" fill="#79a44a"/><polygon points="50,140 110,170 110,178 50,148" fill="#5a8338"/><polygon points="110,170 170,140 170,148 110,178" fill="#476b2c"/></symbol>
+<symbol id="cellsand" viewBox="0 0 220 240"><rect x="4" y="4" width="212" height="232" rx="12" fill="#1f2229"/><polygon points="110,170 170,140 110,110 50,140" fill="#d9bd82"/><polygon points="50,140 110,170 110,178 50,148" fill="#a98a52"/><polygon points="110,170 170,140 170,148 110,178" fill="#8d7142"/></symbol>
+<symbol id="cellstone" viewBox="0 0 220 240"><rect x="4" y="4" width="212" height="232" rx="12" fill="#1f2229"/><polygon points="110,170 170,140 110,110 50,140" fill="#8a8d94"/><polygon points="50,140 110,170 110,178 50,148" fill="#6a6d74"/><polygon points="110,170 170,140 170,148 110,178" fill="#5a5d64"/></symbol>
+<!-- closed houses: left wall, gable wall, front slab, ridge, overhang edge -->
+<symbol id="houseBrick" viewBox="-50 -105 100 110" overflow="visible">
+<polygon points="0,0 -40,-20 -40,-60 0,-40" fill="#7f3d2c"/><polygon points="0,0 40,-20 40,-60 0,-40" fill="#a5503a"/>
+<g stroke="#6b2f22" stroke-width="0.8" opacity="0.6"><line x1="-40" y1="-30" x2="0" y2="-10"/><line x1="-40" y1="-40" x2="0" y2="-20"/><line x1="-40" y1="-50" x2="0" y2="-30"/><line x1="0" y1="-10" x2="40" y2="-30"/><line x1="0" y1="-20" x2="40" y2="-40"/><line x1="0" y1="-30" x2="40" y2="-50"/></g>
+<polygon points="0,-40 40,-60 20,-78" fill="#b45a44"/>
+<polygon points="24,-80 -20,-98 -44,-60 0,-42" fill="#5a5f70"/><polygon points="24,-80 -20,-98 -16,-92 24,-76" fill="#474b5a"/>
+<path d="M0 -42 L24 -80 L44 -62" fill="none" stroke="#3a3d48" stroke-width="2.5"/>
+<rect x="14" y="-34" width="8" height="18" fill="#3a2a18" transform="skewY(-26.6)"/><rect x="28" y="-46" width="6" height="7" fill="#f2c46a" transform="skewY(-26.6)"/><rect x="6" y="-42" width="6" height="7" fill="#f2c46a" transform="skewY(-26.6)"/>
+</symbol>
+<symbol id="housePlaster" viewBox="-50 -105 100 110" overflow="visible">
+<polygon points="0,0 -40,-20 -40,-60 0,-40" fill="#b8ae94"/><polygon points="0,0 40,-20 40,-60 0,-40" fill="#d9cfb5"/>
+<polygon points="0,-40 40,-60 20,-78" fill="#e4dcc4"/>
+<polygon points="24,-80 -20,-98 -44,-60 0,-42" fill="#5a5f70"/><polygon points="24,-80 -20,-98 -16,-92 24,-76" fill="#474b5a"/>
+<path d="M0 -42 L24 -80 L44 -62" fill="none" stroke="#3a3d48" stroke-width="2.5"/>
+<rect x="14" y="-34" width="8" height="18" fill="#3a2a18" transform="skewY(-26.6)"/><rect x="28" y="-46" width="6" height="7" fill="#6fa8e0" transform="skewY(-26.6)"/><rect x="6" y="-42" width="6" height="7" fill="#6fa8e0" transform="skewY(-26.6)"/>
+</symbol>
+<symbol id="houseStone" viewBox="-50 -105 100 110" overflow="visible">
+<polygon points="0,0 -40,-20 -40,-60 0,-40" fill="#a8997b"/><polygon points="0,0 40,-20 40,-60 0,-40" fill="#cfc1a3"/>
+<polygon points="0,-40 40,-60 20,-78" fill="#d8ccb0"/>
+<polygon points="24,-80 -20,-98 -44,-60 0,-42" fill="#8f3e2e"/><polygon points="24,-80 -20,-98 -16,-92 24,-76" fill="#7a3426"/>
+<path d="M0 -42 L24 -80 L44 -62" fill="none" stroke="#5a2a20" stroke-width="2.5"/>
+<rect x="14" y="-34" width="8" height="18" fill="#3a2a18" transform="skewY(-26.6)"/><rect x="28" y="-46" width="6" height="7" fill="#f2c46a" transform="skewY(-26.6)"/>
+</symbol>
+<symbol id="housePlank" viewBox="-50 -105 100 110" overflow="visible">
+<polygon points="0,0 -40,-20 -40,-60 0,-40" fill="#5b4a3a"/><polygon points="0,0 40,-20 40,-60 0,-40" fill="#7e5f3f"/>
+<g stroke="#4a3522" stroke-width="1"><line x1="-40" y1="-30" x2="0" y2="-10"/><line x1="-40" y1="-40" x2="0" y2="-20"/><line x1="-40" y1="-50" x2="0" y2="-30"/></g>
+<polygon points="0,-40 40,-60 20,-78" fill="#8a6a44"/>
+<polygon points="24,-80 -20,-98 -44,-60 0,-42" fill="#4a3a2c"/><polygon points="24,-80 -20,-98 -16,-92 24,-76" fill="#3e3025"/>
+<path d="M0 -42 L24 -80 L44 -62" fill="none" stroke="#2a1f14" stroke-width="2.5"/>
+<rect x="14" y="-34" width="8" height="18" fill="#2a1c12" transform="skewY(-26.6)"/>
+</symbol>
+<symbol id="chimney" viewBox="-6 -40 12 40" overflow="visible"><rect x="-4" y="-30" width="8" height="30" fill="#55545a"/><rect x="-5" y="-32" width="10" height="3" fill="#8a8d94"/><path d="M0 -34 c -3 -6, 4 -8, 1 -14 c -3 -6, 4 -8, 1 -14" stroke="#dcdcdc" stroke-width="2.5" fill="none" opacity="0.7" stroke-linecap="round"/></symbol>
+<symbol id="barrel" viewBox="-12 -34 24 36" overflow="visible"><path d="M-10 0 c -3 -10, -3 -20, 0 -28 h20 c 3 8, 3 18, 0 28 z" fill="#8a6a44"/><ellipse cx="0" cy="-28" rx="10" ry="3.5" fill="#a88a5c"/><rect x="-11" y="-22" width="22" height="2.5" fill="#3a3d44"/><rect x="-11" y="-8" width="22" height="2.5" fill="#3a3d44"/></symbol>
+<symbol id="crate" viewBox="-12 -24 24 24" overflow="visible"><polygon points="0,0 -12,-6 -12,-20 0,-14" fill="#7e5f3f"/><polygon points="0,0 12,-6 12,-20 0,-14" fill="#a88a5c"/><polygon points="0,-14 12,-20 0,-26 -12,-20" fill="#c4a25c"/></symbol>
+<symbol id="tree" viewBox="-24 -70 48 72" overflow="visible"><rect x="-3" y="-24" width="6" height="26" fill="#6b4a2e"/><circle cx="-9" cy="-34" r="13" fill="#437d33"/><circle cx="10" cy="-36" r="14" fill="#4f8f3a"/><circle cx="0" cy="-48" r="14" fill="#5c9c42"/></symbol>
+</defs>
+<rect width="1600" height="900" fill="#16181d"/>
+<text x="30" y="46" font-size="24" font-weight="bold" fill="#e6e3dc">Catalogue 3 · Buildings of the later epochs, the site, the ruin and the signpost</text>
+<text x="30" y="72" font-size="14" fill="#b5b1a8">buildings3d.ts buildingModel (17 plans) · props3d.ts siteGeometry, ruinGeometry, signGeometry · each merged into one geometry per kind, colours in the vertices</text>
+
+<!-- ROW 1 -->
+<g transform="translate(30 90)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(104 152)"><ellipse cx="6" cy="0" rx="56" ry="16" fill="#000" opacity="0.3" filter="url(#s)"/><g transform="scale(1.15 1)"><use href="#housePlank" width="100" height="110" x="-50" y="-105"/></g>
+<rect x="14" y="-36" width="18" height="24" fill="#2a1c12" transform="skewY(-26.6)"/><line x1="23" y1="-36" x2="23" y2="-12" stroke="#5b3a22" stroke-width="1" transform="skewY(-26.6)"/>
+<ellipse cx="50" cy="-4" rx="8" ry="5" fill="#d8c9a0"/><ellipse cx="58" cy="-10" rx="7" ry="4.5" fill="#d8c9a0"/><g transform="translate(44 -16)"><use href="#crate" width="24" height="24" x="-12" y="-24"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">storehouse</text></g>
+
+<g transform="translate(250 90)"><use href="#cellstone" width="220" height="240"/>
+<g transform="translate(110 150)">
+<polygon points="-40,-2 -10,-46 40,-50 40,-22 10,-2" fill="#7c7f86"/><polygon points="-40,-2 -10,-46 -10,-30 -40,10" fill="#5a5d64"/><polygon points="-10,-30 40,-36 40,-22 10,-2 -10,-10" fill="#9a9da4"/><polygon points="-10,-46 40,-50 40,-36 -10,-30" fill="#6a6d74"/>
+<polygon points="-24,-22 0,-34 0,-24 -24,-12" fill="#8a8d94"/>
+<g><polygon points="-30,4 -18,-2 -18,-10 -30,-4" fill="#9a9da4"/><polygon points="-18,-2 -8,-7 -8,-15 -18,-10" fill="#b4b7bd"/><polygon points="-30,-4 -18,-10 -8,-15 -20,-9" fill="#c4c7cd"/></g>
+<g stroke="#5b3a22" stroke-width="3"><line x1="30" y1="0" x2="30" y2="-50"/><line x1="30" y1="-50" x2="56" y2="-40"/></g><line x1="52" y1="-42" x2="52" y2="-24" stroke="#3a3d44" stroke-width="1.5"/><rect x="48" y="-24" width="8" height="6" fill="#9a9da4"/>
+<line x1="-6" y1="2" x2="4" y2="-14" stroke="#5b3a22" stroke-width="2.5"/><path d="M0 -16 l8 -2 l-2 6 z" fill="#3a3d44"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">quarry</text></g>
+
+<g transform="translate(470 90)"><use href="#cellsand" width="220" height="240"/>
+<g transform="translate(110 150)">
+<ellipse cx="0" cy="-8" rx="30" ry="14" fill="#7a5a3a"/><ellipse cx="0" cy="-10" rx="22" ry="10" fill="#5e4028"/>
+<g fill="#b08a62"><ellipse cx="-30" cy="-16" rx="10" ry="6"/><ellipse cx="-10" cy="-26" rx="12" ry="7"/><ellipse cx="18" cy="-26" rx="11" ry="6"/><ellipse cx="34" cy="-12" rx="10" ry="6"/><ellipse cx="22" cy="4" rx="10" ry="5"/><ellipse cx="-20" cy="4" rx="10" ry="5"/></g>
+<g fill="#c9a07a"><ellipse cx="-30" cy="-19" rx="7" ry="3"/><ellipse cx="-10" cy="-29" rx="8" ry="3.5"/><ellipse cx="18" cy="-29" rx="8" ry="3"/><ellipse cx="34" cy="-15" rx="7" ry="3"/></g>
+<line x1="-36" y1="0" x2="-24" y2="-22" stroke="#5b3a22" stroke-width="2.5"/><path d="M-26 -26 l6 2 l-2 8 l-6 -2 z" fill="#8a8d94"/>
+<ellipse cx="34" cy="2" rx="7" ry="4" fill="#5a5d64"/><path d="M27 2 v-10 a7 4 0 0 1 14 0 v10" fill="#7c7f86"/><path d="M28 -8 q6 -8 12 0" stroke="#3a3d44" stroke-width="1.5" fill="none"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">clay pit</text></g>
+
+<g transform="translate(690 90)"><use href="#cellsand" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="40" ry="12" fill="#000" opacity="0.3" filter="url(#s)"/>
+<path d="M-26 0 a26 30 0 0 1 52 0 z" fill="#a5503a"/><path d="M-26 0 a26 30 0 0 1 26 -30 v30 z" fill="#7f3d2c"/><ellipse cx="0" cy="0" rx="26" ry="8" fill="#7f3d2c"/>
+<path d="M-8 2 a8 10 0 0 1 16 0 z" fill="#2a1c12"/><path d="M-5 2 a5 7 0 0 1 10 0 z" fill="#ff8a2a"/>
+<g transform="translate(14 -28) scale(1.6)"><use href="#chimney" width="12" height="40" x="-6" y="-40"/></g>
+<g fill="#b45a44"><rect x="32" y="-10" width="12" height="5"/><rect x="34" y="-15" width="12" height="5"/><rect x="32" y="-20" width="12" height="5"/><rect x="-46" y="-4" width="12" height="5"/><rect x="-44" y="-9" width="12" height="5"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">brickworks</text></g>
+
+<g transform="translate(910 90)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(104 152)"><ellipse cx="6" cy="0" rx="52" ry="16" fill="#000" opacity="0.3" filter="url(#s)"/><use href="#housePlaster" width="100" height="110" x="-50" y="-105"/>
+<polygon points="-40,-20 -22,-29 -22,-96 -40,-87" fill="#b8ae94"/><polygon points="-22,-29 -8,-36 -8,-103 -22,-96" fill="#d9cfb5"/><polygon points="-40,-87 -22,-96 -8,-103 -26,-94" fill="#e4dcc4"/>
+<polygon points="-40,-87 -24,-120 -8,-103 -22,-96" fill="#5a5f70"/><polygon points="-24,-120 -8,-103 -8,-110" fill="#474b5a"/>
+<line x1="-24" y1="-120" x2="-24" y2="-134" stroke="#f2c46a" stroke-width="2.5"/><line x1="-29" y1="-128" x2="-19" y2="-128" stroke="#f2c46a" stroke-width="2.5"/>
+<path d="M-32 -60 a5 6 0 0 1 10 0 v8 h-10 z" fill="#6fa8e0"/>
+<path d="M14 -20 a6 8 0 0 1 12 -6 v14 h-12 z" fill="#3a2a18" transform="skewY(-26.6)"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">chapel</text></g>
+
+<g transform="translate(1130 90)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)">
+<polygon points="0,20 60,-10 0,-40 -60,-10" fill="#8cb45c"/>
+<g stroke="#c9ad73" stroke-width="5"><line x1="-50" y1="-5" x2="50" y2="-15"/><line x1="-6" y1="-36" x2="6" y2="14"/></g>
+<ellipse cx="0" cy="-10" rx="12" ry="6" fill="#8a8d94"/><ellipse cx="0" cy="-12" rx="9" ry="4" fill="#3d7fa0"/><rect x="-2" y="-26" width="4" height="14" fill="#8a8d94"/><path d="M0 -26 q-6 6 -8 12 M0 -26 q6 6 8 12" stroke="#9ad6ee" stroke-width="1.5" fill="none"/>
+<g fill="#2f6b3a"><rect x="-58" y="-16" width="14" height="8" rx="2"/><rect x="44" y="-20" width="14" height="8" rx="2"/><rect x="-8" y="-46" width="16" height="8" rx="2"/><rect x="-8" y="14" width="16" height="8" rx="2"/></g>
+<g transform="translate(-50 -8) scale(0.7)"><use href="#tree" width="48" height="72" x="-24" y="-70"/></g><g transform="translate(50 -12) scale(0.7)"><use href="#tree" width="48" height="72" x="-24" y="-70"/></g>
+<g fill="#8a6a44"><rect x="-32" y="-24" width="12" height="3"/><rect x="20" y="-26" width="12" height="3"/><rect x="-30" y="6" width="12" height="3"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">park</text></g>
+
+<g transform="translate(1350 90)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(104 152)"><ellipse cx="6" cy="0" rx="56" ry="16" fill="#000" opacity="0.3" filter="url(#s)"/><g transform="scale(1.2 1.05)"><use href="#houseStone" width="100" height="110" x="-50" y="-105"/></g>
+<g stroke="#e4dcc4" stroke-width="3"><line x1="26" y1="-14" x2="26" y2="-38"/><line x1="40" y1="-21" x2="40" y2="-45"/></g><polygon points="22,-40 46,-52 46,-48 22,-36" fill="#d8ccb0"/><polygon points="20,-8 48,-22 48,-18 20,-4" fill="#9a9da4"/><polygon points="20,-4 48,-18 48,-14 20,0" fill="#8a8d94"/>
+<polygon points="-30,-30 -16,-37 -16,-110 -30,-103" fill="#a8997b"/><polygon points="-16,-37 -4,-43 -4,-116 -16,-110" fill="#cfc1a3"/><polygon points="-30,-103 -16,-110 -4,-116 -18,-109" fill="#d8ccb0"/><polygon points="-30,-103 -17,-128 -4,-116 -16,-110" fill="#5a5f70"/>
+<circle cx="-10" cy="-96" r="5" fill="#f4f0e2"/><line x1="-10" y1="-96" x2="-10" y2="-100" stroke="#222" stroke-width="1"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">town hall</text></g>
+
+<!-- ROW 2 -->
+<g transform="translate(30 340)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(100 152)"><ellipse cx="10" cy="0" rx="54" ry="16" fill="#000" opacity="0.3" filter="url(#s)"/><g transform="scale(0.9)"><use href="#housePlank" width="100" height="110" x="-50" y="-105"/></g><g transform="translate(-22 -84)"><use href="#chimney" width="12" height="40" x="-6" y="-40"/></g>
+<rect x="38" y="-10" width="12" height="12" fill="#6b4a2e"/><ellipse cx="44" cy="-10" rx="6" ry="3" fill="#8a6a44"/><path d="M38 -16 h12 l3 -4 h-18 z" fill="#3a3d44"/><rect x="42" y="-14" width="4" height="4" fill="#3a3d44"/>
+<circle cx="56" cy="-22" r="8" fill="#8a8d94" stroke="#5a5d64" stroke-width="2"/><circle cx="56" cy="-22" r="2" fill="#5a5d64"/><line x1="56" y1="-14" x2="56" y2="-4" stroke="#5b3a22" stroke-width="3"/>
+<g fill="#a88a5c"><rect x="26" y="4" width="26" height="3"/><rect x="28" y="1" width="24" height="3"/><rect x="26" y="-2" width="26" height="3"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">workshop</text></g>
+
+<g transform="translate(250 340)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(100 152)"><ellipse cx="10" cy="0" rx="54" ry="16" fill="#000" opacity="0.3" filter="url(#s)"/><g transform="scale(0.9)"><use href="#housePlank" width="100" height="110" x="-50" y="-105"/></g>
+<g stroke="#2a1f14" stroke-width="1.5"><line x1="-30" y1="-50" x2="-30" y2="-30"/><line x1="-22" y1="-46" x2="-22" y2="-26"/><line x1="-14" y1="-42" x2="-14" y2="-22"/></g>
+<g transform="translate(-20 -82) scale(1.4)"><use href="#chimney" width="12" height="40" x="-6" y="-40"/></g>
+<g stroke="#5b3a22" stroke-width="3"><line x1="38" y1="0" x2="38" y2="-36"/><line x1="58" y1="-10" x2="58" y2="-46"/><line x1="38" y1="-36" x2="58" y2="-46"/><line x1="38" y1="-24" x2="58" y2="-34"/></g>
+<g fill="#8fb0c8"><path d="M42 -38 l4 -2 v10 l-4 2 z"/><path d="M50 -42 l4 -2 v10 l-4 2 z"/><path d="M44 -26 l4 -2 v10 l-4 2 z"/><path d="M52 -30 l4 -2 v10 l-4 2 z"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">smokehouse</text></g>
+
+<g transform="translate(470 340)"><use href="#cellstone" width="220" height="240"/>
+<g transform="translate(104 156)"><ellipse cx="6" cy="0" rx="56" ry="16" fill="#000" opacity="0.3" filter="url(#s)"/>
+<polygon points="0,0 -44,-22 -44,-92 0,-70" fill="#b8ae94"/><polygon points="0,0 44,-22 44,-92 0,-70" fill="#d9cfb5"/><polygon points="0,-70 44,-92 0,-114 -44,-92" fill="#9a9280"/>
+<g fill="#6fa8e0"><rect x="6" y="-56" width="12" height="16" transform="skewY(-26.6)"/><rect x="24" y="-65" width="12" height="16" transform="skewY(-26.6)"/><rect x="6" y="-30" width="12" height="16" transform="skewY(-26.6)"/><rect x="24" y="-39" width="12" height="16" transform="skewY(-26.6)"/><rect x="-18" y="-56" width="10" height="14" transform="skewY(26.6)"/><rect x="-34" y="-64" width="10" height="14" transform="skewY(26.6)"/></g>
+<polygon points="2,-32 48,-55 48,-47 2,-24" fill="#e8e0c8"/><g fill="#b5533c"><polygon points="8,-35 14,-38 14,-30 8,-27"/><polygon points="20,-41 26,-44 26,-36 20,-33"/><polygon points="32,-47 38,-50 38,-42 32,-39"/></g>
+<rect x="-30" y="-118" width="30" height="10" fill="#f2c46a" transform="skewY(26.6)"/><text x="-26" y="-100" font-size="7" fill="#2b2418" font-weight="bold" transform="skewY(26.6)">KAUFHAUS</text>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">department store</text></g>
+
+<g transform="translate(690 340)"><use href="#cellstone" width="220" height="240"/>
+<g transform="translate(104 156)"><ellipse cx="6" cy="0" rx="54" ry="16" fill="#000" opacity="0.3" filter="url(#s)"/><g transform="scale(1 1.35)"><use href="#houseBrick" width="100" height="110" x="-50" y="-105"/></g>
+<line x1="22" y1="-76" x2="22" y2="-96" stroke="#3a2a18" stroke-width="2.5"/><line x1="22" y1="-96" x2="40" y2="-90" stroke="#3a2a18" stroke-width="2.5"/><line x1="36" y1="-92" x2="36" y2="-60" stroke="#8a8d94" stroke-width="1"/><g transform="translate(36 -40)"><use href="#crate" width="24" height="24" x="-12" y="-24"/></g>
+<rect x="10" y="-62" width="12" height="14" fill="#3a2a18" transform="skewY(-26.6)"/>
+<g transform="translate(46 -6)"><use href="#crate" width="24" height="24" x="-12" y="-24"/></g><ellipse cx="60" cy="-14" rx="7" ry="4.5" fill="#d8c9a0"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">counting house</text></g>
+
+<g transform="translate(910 340)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(98 152)"><ellipse cx="12" cy="0" rx="56" ry="16" fill="#000" opacity="0.3" filter="url(#s)"/><g transform="scale(0.95)"><use href="#houseStone" width="100" height="110" x="-50" y="-105"/></g><g transform="translate(-24 -84) scale(1.5)"><use href="#chimney" width="12" height="40" x="-6" y="-40"/></g>
+<g transform="translate(50 -2)"><g stroke="#5a5d64" stroke-width="2"><line x1="-8" y1="0" x2="-8" y2="-14"/><line x1="8" y1="0" x2="8" y2="-14"/></g><path d="M-12 -14 a12 10 0 0 1 24 0 a12 6 0 0 1 -24 0 z" fill="#b87333"/><ellipse cx="0" cy="-24" rx="10" ry="3" fill="#d08a4a"/></g>
+<g transform="translate(34 6) scale(0.9)"><use href="#barrel" width="24" height="36" x="-12" y="-34"/></g><g transform="translate(52 12) scale(0.9)"><use href="#barrel" width="24" height="36" x="-12" y="-34"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">brewery</text></g>
+
+<g transform="translate(1130 340)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(100 152)"><ellipse cx="10" cy="0" rx="56" ry="16" fill="#000" opacity="0.3" filter="url(#s)"/>
+<path d="M-28 -34 a22 24 0 0 1 44 0 z" fill="#8a8577"/><path d="M-28 -34 a22 24 0 0 1 22 -24 v24 z" fill="#6a675e"/><g transform="translate(-14 -56) scale(1.8)"><use href="#chimney" width="12" height="40" x="-6" y="-40"/></g>
+<g transform="scale(0.95)"><use href="#houseStone" width="100" height="110" x="-50" y="-105"/></g>
+<polygon points="30,0 60,-15 60,-11 30,4" fill="#8a6a44"/><g stroke="#5b3a22" stroke-width="2"><line x1="34" y1="2" x2="34" y2="10"/><line x1="56" y1="-10" x2="56" y2="-2"/></g>
+<g fill="#7fc4b0" opacity="0.9"><rect x="36" y="-10" width="4" height="8" rx="1.5"/><rect x="43" y="-13" width="4" height="9" rx="1.5"/><rect x="50" y="-17" width="4" height="8" rx="1.5"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">glassworks</text></g>
+
+<g transform="translate(1350 340)"><use href="#cellsand" width="220" height="240"/>
+<g transform="translate(110 152)"><ellipse cx="0" cy="0" rx="54" ry="16" fill="#000" opacity="0.3" filter="url(#s)"/>
+<polygon points="0,6 -56,-22 0,-50 56,-22" fill="#8a6a44"/><polygon points="-56,-22 0,6 0,12 -56,-16" fill="#5b3a22"/><polygon points="0,6 56,-22 56,-16 0,12" fill="#4a3522"/>
+<g fill="#5b3a22"><rect x="-30" y="-30" width="6" height="8"/><rect x="18" y="-46" width="6" height="8"/></g>
+<path d="M-40 -28 Q 0 -22 40 -46" stroke="#5b3a22" stroke-width="4" fill="none" stroke-linecap="round"/>
+<g stroke="#8a6a44" stroke-width="2.5" fill="none" stroke-linecap="round"><path d="M-28 -30 c -10 -8, -10 -20, -4 -28 M-28 -30 c 10 -8, 10 -20, 4 -28"/><path d="M-12 -34 c -10 -8, -10 -22, -4 -30 M-12 -34 c 10 -8, 10 -22, 4 -30"/><path d="M4 -38 c -10 -8, -10 -22, -4 -30 M4 -38 c 10 -8, 10 -22, 4 -30"/><path d="M20 -44 c -10 -8, -10 -20, -4 -28 M20 -44 c 10 -8, 10 -20, 4 -28"/></g>
+<g stroke="#5b3a22" stroke-width="3"><line x1="46" y1="-14" x2="46" y2="-70"/><line x1="46" y1="-70" x2="70" y2="-56"/></g><line x1="64" y1="-60" x2="64" y2="-42" stroke="#3a3d44" stroke-width="1.5"/>
+<g fill="#a88a5c"><rect x="-54" y="-46" width="28" height="3" transform="skewY(-26.6)"/><rect x="-52" y="-50" width="28" height="3" transform="skewY(-26.6)"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">shipyard</text></g>
+
+<!-- ROW 3 -->
+<g transform="translate(30 590)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 152)"><ellipse cx="0" cy="0" rx="48" ry="16" fill="#000" opacity="0.3" filter="url(#s)"/>
+<polygon points="0,0 -40,-20 -40,-50 0,-30" fill="#bfe0ee" opacity="0.7"/><polygon points="0,0 40,-20 40,-50 0,-30" fill="#d8ecf4" opacity="0.7"/><polygon points="0,-30 40,-50 20,-66" fill="#d8ecf4" opacity="0.7"/>
+<polygon points="22,-68 -18,-88 -40,-52 0,-32" fill="#bfe0ee" opacity="0.65"/>
+<g stroke="#3a3d44" stroke-width="2"><path d="M0 0 v-30 M-40 -20 v-30 M40 -20 v-30 M0 -30 l20 -36 l20 16 M0 -30 l-40 -20 M0 -30 l40 -20 M22 -68 l-40 -20 l-22 36 M-18 -88 l-22 36"/><path d="M-30 -45 l22 -36 M-20 -40 l22 -36 M-10 -36 l22 -36"/></g>
+<g fill="#6fae52"><circle cx="-24" cy="-32" r="6"/><circle cx="-10" cy="-24" r="6"/><circle cx="12" cy="-30" r="6"/><circle cx="26" cy="-38" r="5"/></g><g fill="#b5533c"><rect x="-28" y="-28" width="8" height="6"/><rect x="8" y="-26" width="8" height="6"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">greenhouse</text></g>
+
+<g transform="translate(250 590)"><use href="#cellstone" width="220" height="240"/>
+<g transform="translate(110 152)"><ellipse cx="0" cy="0" rx="24" ry="9" fill="#000" opacity="0.3" filter="url(#s)"/>
+<polygon points="-16,-2 16,-2 11,-100 -11,-100" fill="#eae4d4"/><polygon points="0,-2 16,-2 11,-100 0,-100" fill="#d6cfbe"/>
+<g fill="#b5533c"><polygon points="-15,-20 15,-20 14,-34 -14,-34"/><polygon points="-13,-52 13,-52 12,-66 -12,-66"/><polygon points="-11.5,-84 11.5,-84 11,-96 -11,-96"/></g>
+<polygon points="0,-20 15,-20 14,-34 0,-34" fill="#9a4536"/><polygon points="0,-52 13,-52 12,-66 0,-66" fill="#9a4536"/><polygon points="0,-84 11.5,-84 11,-96 0,-96" fill="#9a4536"/>
+<rect x="-16" y="-104" width="32" height="4" fill="#3a3d44"/><g stroke="#3a3d44" stroke-width="1.5"><line x1="-14" y1="-104" x2="-14" y2="-110"/><line x1="0" y1="-104" x2="0" y2="-110"/><line x1="14" y1="-104" x2="14" y2="-110"/></g><rect x="-16" y="-111" width="32" height="1.5" fill="#3a3d44"/>
+<rect x="-9" y="-124" width="18" height="14" fill="#3a3d44"/><rect x="-7" y="-122" width="14" height="10" fill="#ffd27a"/><polygon points="-11,-124 11,-124 0,-134" fill="#55545a"/>
+<path d="M7 -117 L70 -140 L70 -94 Z" fill="#ffd27a" opacity="0.18"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">lighthouse</text></g>
+
+<g transform="translate(470 590)"><use href="#cellstone" width="220" height="240"/>
+<g transform="translate(100 150)"><ellipse cx="10" cy="0" rx="58" ry="16" fill="#000" opacity="0.3" filter="url(#s)"/>
+<g transform="translate(-14 -16) scale(0.95)"><use href="#houseBrick" width="100" height="110" x="-50" y="-105"/></g>
+<circle cx="14" cy="-70" r="5" fill="#f4f0e2"/><line x1="14" y1="-70" x2="14" y2="-74" stroke="#222" stroke-width="1"/>
+<polygon points="-10,-10 50,-40 50,-34 -10,-4" fill="#6a6d74"/><polygon points="-10,-4 50,-34 50,-30 -10,0" fill="#5a5d64"/>
+<g stroke="#3a2a18" stroke-width="2.5"><line x1="0" y1="-8" x2="0" y2="-40"/><line x1="24" y1="-20" x2="24" y2="-52"/><line x1="48" y1="-32" x2="48" y2="-64"/></g><polygon points="-6,-42 54,-72 54,-66 -6,-36" fill="#5a5f70"/>
+<g stroke="#5b3a22" stroke-width="2"><line x1="-20" y1="6" x2="-16" y2="0"/><line x1="-6" y1="-1" x2="-2" y2="-7"/><line x1="8" y1="-8" x2="12" y2="-14"/><line x1="22" y1="-15" x2="26" y2="-21"/><line x1="36" y1="-22" x2="40" y2="-28"/><line x1="50" y1="-29" x2="54" y2="-35"/></g>
+<g stroke="#9aa0a8" stroke-width="2"><line x1="-24" y1="2" x2="56" y2="-38"/><line x1="-20" y1="7" x2="60" y2="-33"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">station</text></g>
+
+<g transform="translate(690 590)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)">
+<polygon points="0,4 -40,-16 0,-36 40,-16" fill="#8a8577"/>
+<g stroke="#5b3a22" stroke-width="3"><line x1="-40" y1="-16" x2="-40" y2="-56"/><line x1="0" y1="4" x2="0" y2="-36"/><line x1="40" y1="-16" x2="40" y2="-56"/><line x1="0" y1="-36" x2="0" y2="-76"/></g>
+<polygon points="0,-2 -34,-19 -34,-40 0,-23" fill="#7e5f3f"/><polygon points="0,-2 34,-19 34,-40 0,-23" fill="#a8835a"/>
+<g stroke="#5b3a22" stroke-width="1"><line x1="-34" y1="-26" x2="0" y2="-9"/><line x1="-34" y1="-33" x2="0" y2="-16"/><line x1="0" y1="-9" x2="34" y2="-26"/><line x1="0" y1="-16" x2="34" y2="-33"/></g>
+<g stroke="#a88a5c" stroke-width="2.5"><line x1="48" y1="-10" x2="48" y2="-70"/><line x1="48" y1="-30" x2="20" y2="-44"/><line x1="48" y1="-50" x2="20" y2="-64"/><line x1="-48" y1="-10" x2="-48" y2="-70"/><line x1="-48" y1="-30" x2="-20" y2="-44"/><line x1="-48" y1="-50" x2="-20" y2="-64"/></g>
+<g fill="#a88a5c"><rect x="30" y="-6" width="28" height="3" transform="skewY(-26.6)"/><rect x="32" y="-10" width="28" height="3" transform="skewY(-26.6)"/></g>
+<rect x="-30" y="-70" width="60" height="6" rx="3" fill="#2c3038"/><rect x="-30" y="-70" width="36" height="6" rx="3" fill="#e0a45a"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">site (scaffold, 60 %)</text></g>
+
+<g transform="translate(910 590)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)">
+<polygon points="0,4 -40,-16 0,-36 40,-16" fill="#8a8577"/><path d="M-20 -26 l10 6 M8 -14 l6 8" stroke="#5a574e" stroke-width="1.5"/>
+<polygon points="-36,-18 -36,-48 -30,-52 -26,-44 -20,-50 -14,-40 -14,-7" fill="#a8997b"/><polygon points="-14,-7 -14,-40 -8,-36 -8,-4" fill="#8a7a60"/>
+<polygon points="36,-18 36,-40 30,-46 24,-36 18,-42 12,-30 12,-6" fill="#cfc1a3"/>
+<g stroke="#5b3a22" stroke-width="3.5" stroke-linecap="round"><line x1="-30" y1="-46" x2="22" y2="-8"/><line x1="30" y1="-42" x2="-6" y2="-18"/></g>
+<g fill="#9a9da4"><ellipse cx="26" cy="2" rx="5" ry="3"/><ellipse cx="-30" cy="-2" rx="5" ry="3"/><ellipse cx="0" cy="8" rx="4" ry="2.5"/></g>
+<g stroke="#6aa84a" stroke-width="1.5" fill="none"><path d="M-10 -2 l-2 -8 M-6 -1 l2 -7"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">ruin</text></g>
+
+<g transform="translate(1130 590)"><use href="#cellsand" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="10" ry="4" fill="#000" opacity="0.3"/>
+<rect x="-3" y="-80" width="6" height="82" fill="#8a7a60"/>
+<polygon points="-2,-70 34,-74 42,-66 34,-58 -2,-54" fill="#c4a25c"/><text x="4" y="-60" font-size="8" fill="#2b2418" font-weight="bold">Dünen</text>
+<polygon points="2,-50 -30,-54 -38,-46 -30,-38 2,-34" fill="#c4a25c"/><text x="-26" y="-42" font-size="8" fill="#2b2418" font-weight="bold">Hafen</text>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">signpost (at an exit)</text></g>
+
+<g transform="translate(1350 590)"><rect x="4" y="4" width="212" height="232" rx="12" fill="#1f2229"/>
+<text x="20" y="40" font-size="14" font-weight="bold" fill="#e6e3dc">How they are built</text>
+<g font-size="12" fill="#b5b1a8"><text x="20" y="66">primitives merged into one</text><text x="20" y="84">geometry per kind, colours in</text><text x="20" y="102">the vertices, flat shading, one</text><text x="20" y="120">shared material; cached by key</text><text x="20" y="146">v2 adds: bevelled edges, a</text><text x="20" y="164">dark and a lit tone per face,</text><text x="20" y="182">closed roofs with overhang,</text><text x="20" y="200">windows as emissive, smoke</text><text x="20" y="218">and lanterns as particles/lights</text></g>
+</g>
+</svg>

@@ -837,6 +837,8 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const shipLies = shipShown;
 	// a passenger of the large ship is hidden from the map (and from the others): its page says where it sails
 	const aboard = chars.get(me)?.aboard ?? null;
+	// what was said lately, for the speech bubbles of the 3D view's close level (the log stays the record)
+	const said = useMemo(() => log.filter((l): l is MsgView => l.kind === "say" && !!l.from).slice(-8).map((l) => ({ from: l.from, text: l.text, at: l.at })), [log]);
 	const mapChars = useMemo(() => (aboard ? new Map([...chars].filter(([id]) => id !== me)) : chars), [chars, me, aboard]);
 	useEffect(() => { if (!aboard) return; const id = setInterval(() => setShipTick((n) => n + 1), 5000); return () => clearInterval(id); }, [aboard]);
 	// the island railway's tracks through this room (engine/rail.ts): from the stations of the region and this room's exits,
@@ -953,7 +955,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const mapView = mapMode === "text" ? null : hello ? (
 		<>
 		{aboard && worldTime && <div className="aboard" role="status">{tr("An Bord des Großen Schiffs")} → {tr(aboard.island)} · {tr(`Ankunft in etwa ${Math.max(1, Math.ceil((aboard.arriveWorldMs - shownWorldMs(worldTime.v, worldTime.at, Date.now())) / 60_000))} Weltminuten`)}</div>}
-		<MapRenderer key={`${hello.room.ground[0]?.length}x${hello.room.ground.length}`} mode={mapMode} world={hello.world} room={hello.room} chars={mapChars} objs={shownObjs} me={me} fog={fog} onTurn={onTurn}
+		<MapRenderer key={`${hello.room.ground[0]?.length}x${hello.room.ground.length}`} mode={mapMode} world={hello.world} room={hello.room} chars={mapChars} objs={shownObjs} me={me} fog={fog} atlas={atlas} atlasState={atlasState} said={said} worldTime={worldTime} onTurn={onTurn}
 			fill goal={walkGoal} insetBottom={detent === "peek" ? detentPx("peek", window.innerHeight) : Math.min(sheetPx ?? detentPx("half", window.innerHeight), window.innerHeight * 0.7)}
 			controls={pad !== "off" ? <TouchPad hold={(d) => { input.current?.blur(); stopWalk.current(); setMenu(null); hold(d); }} release={release} action={action} noAction /> : undefined}
 			onCell={(x, y) => { input.current?.blur(); setMenu(null); if (detent !== "peek") setDetent("peek"); else onTap(x, y); }}

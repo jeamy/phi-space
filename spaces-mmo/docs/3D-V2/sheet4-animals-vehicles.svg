@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" font-family="DejaVu Sans, Segoe UI, sans-serif">
+<defs>
+<filter id="s"><feGaussianBlur stdDeviation="3"/></filter>
+<symbol id="cell" viewBox="0 0 220 240"><rect x="4" y="4" width="212" height="232" rx="12" fill="#1f2229"/><polygon points="110,170 170,140 110,110 50,140" fill="#79a44a"/><polygon points="50,140 110,170 110,178 50,148" fill="#5a8338"/><polygon points="110,170 170,140 170,148 110,178" fill="#476b2c"/></symbol>
+<symbol id="cellsand" viewBox="0 0 220 240"><rect x="4" y="4" width="212" height="232" rx="12" fill="#1f2229"/><polygon points="110,170 170,140 110,110 50,140" fill="#d9bd82"/><polygon points="50,140 110,170 110,178 50,148" fill="#a98a52"/><polygon points="110,170 170,140 170,148 110,178" fill="#8d7142"/></symbol>
+<symbol id="cellwide" viewBox="0 0 440 240"><rect x="4" y="4" width="432" height="232" rx="12" fill="#1f2229"/><polygon points="220,180 380,120 220,80 60,140" fill="#d9bd82"/><polygon points="60,140 220,180 220,188 60,148" fill="#a98a52"/><polygon points="220,180 380,120 380,128 220,188" fill="#8d7142"/></symbol>
+<symbol id="cellsea" viewBox="0 0 440 240"><rect x="4" y="4" width="432" height="232" rx="12" fill="#1f2229"/><polygon points="220,180 380,120 220,80 60,140" fill="#2d6a8a"/><polygon points="60,140 220,180 220,188 60,148" fill="#1f4f68"/><polygon points="220,180 380,120 380,128 220,188" fill="#173f54"/><g stroke="#bfe4f2" stroke-width="1.5" fill="none" opacity="0.5"><path d="M100 140 q10 -5 20 0 t20 0"/><path d="M300 150 q10 -5 20 0 t20 0"/><path d="M230 100 q10 -5 20 0 t20 0"/></g></symbol>
+</defs>
+<rect width="1600" height="900" fill="#16181d"/>
+<text x="30" y="46" font-size="24" font-weight="bold" fill="#e6e3dc">Catalogue 4 · Animals, figures and vehicles</text>
+<text x="30" y="72" font-size="14" fill="#b5b1a8">props3d.ts wildGeometry (hare, deer, fox, mouse, gull), keeperGeometry (dog, cat), pen herds and hens · figure3d.ts · MapView3D.tsx cart, train, track · buildings3d.ts linerGeometry</text>
+
+<!-- ROW 1: wild animals and keepers -->
+<g transform="translate(30 90)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 146)"><ellipse cx="0" cy="0" rx="18" ry="6" fill="#000" opacity="0.3" filter="url(#s)"/>
+<ellipse cx="-4" cy="-12" rx="16" ry="11" fill="#a88a5c"/><ellipse cx="-14" cy="-10" rx="9" ry="9" fill="#8a7046"/><circle cx="12" cy="-24" r="8" fill="#a88a5c"/><ellipse cx="8" cy="-40" rx="3" ry="10" fill="#a88a5c" transform="rotate(-10 8 -40)"/><ellipse cx="15" cy="-40" rx="3" ry="10" fill="#c9a87a" transform="rotate(10 15 -40)"/><circle cx="15" cy="-26" r="1.5" fill="#2a1c12"/><circle cx="-20" cy="-8" r="3" fill="#f4f0e6"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">hare</text></g>
+
+<g transform="translate(250 90)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="26" ry="8" fill="#000" opacity="0.3" filter="url(#s)"/>
+<ellipse cx="-2" cy="-40" rx="22" ry="11" fill="#b08a5c"/><g stroke="#8a6a44" stroke-width="3.5" stroke-linecap="round"><line x1="-16" y1="-34" x2="-18" y2="-4"/><line x1="-8" y1="-32" x2="-8" y2="-2"/><line x1="8" y1="-32" x2="8" y2="-2"/><line x1="16" y1="-34" x2="18" y2="-4"/></g>
+<path d="M16 -44 l10 -20" stroke="#b08a5c" stroke-width="7" stroke-linecap="round"/><ellipse cx="30" cy="-68" rx="7" ry="5" fill="#b08a5c"/><ellipse cx="24" cy="-76" rx="2.5" ry="5" fill="#b08a5c"/><ellipse cx="34" cy="-76" rx="2.5" ry="5" fill="#b08a5c"/><circle cx="35" cy="-68" r="1.5" fill="#2a1c12"/><circle cx="-24" cy="-40" r="3" fill="#f4f0e6"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">deer</text></g>
+
+<g transform="translate(470 90)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="26" ry="7" fill="#000" opacity="0.3" filter="url(#s)"/>
+<ellipse cx="-2" cy="-16" rx="22" ry="9" fill="#c8602a"/><ellipse cx="14" cy="-18" rx="8" ry="6" fill="#f4f0e6"/><g stroke="#2a1c12" stroke-width="3.5" stroke-linecap="round"><line x1="-14" y1="-10" x2="-14" y2="-2"/><line x1="-6" y1="-9" x2="-6" y2="-1"/><line x1="6" y1="-9" x2="6" y2="-1"/><line x1="14" y1="-10" x2="14" y2="-2"/></g>
+<circle cx="22" cy="-26" r="7" fill="#c8602a"/><polygon points="18,-30 16,-40 23,-33" fill="#c8602a"/><polygon points="26,-30 28,-40 22,-33" fill="#c8602a"/><circle cx="26" cy="-25" r="1.3" fill="#2a1c12"/>
+<path d="M-22 -16 c -14 -2, -22 6, -24 12" stroke="#c8602a" stroke-width="8" stroke-linecap="round" fill="none"/><circle cx="-45" cy="-3" r="4" fill="#f4f0e6"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">fox</text></g>
+
+<g transform="translate(690 90)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="12" ry="4" fill="#000" opacity="0.3" filter="url(#s)"/>
+<ellipse cx="0" cy="-7" rx="10" ry="6" fill="#8a8d94"/><circle cx="8" cy="-10" r="4.5" fill="#8a8d94"/><circle cx="6" cy="-15" r="2.5" fill="#a9acb4"/><circle cx="11" cy="-15" r="2.5" fill="#a9acb4"/><circle cx="11" cy="-10" r="1" fill="#2a1c12"/><path d="M-10 -6 c -10 0, -14 6, -20 4" stroke="#8a8d94" stroke-width="1.5" fill="none"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">mouse</text></g>
+
+<g transform="translate(910 90)"><use href="#cellsand" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="14" ry="5" fill="#000" opacity="0.3" filter="url(#s)"/>
+<g stroke="#f2c46a" stroke-width="2" stroke-linecap="round"><line x1="-3" y1="-10" x2="-4" y2="0"/><line x1="4" y1="-10" x2="5" y2="0"/></g>
+<ellipse cx="0" cy="-18" rx="14" ry="8" fill="#f4f0e6"/><ellipse cx="-4" cy="-22" rx="12" ry="5" fill="#9a9da4"/><polygon points="-16,-22 -22,-20 -14,-18" fill="#2a2420"/><circle cx="12" cy="-26" r="6" fill="#f4f0e6"/><path d="M17 -26 l8 1 l-8 2 z" fill="#f2c46a"/><circle cx="13" cy="-28" r="1.2" fill="#2a1c12"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">gull</text></g>
+
+<g transform="translate(1130 90)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="22" ry="7" fill="#000" opacity="0.3" filter="url(#s)"/>
+<ellipse cx="-2" cy="-18" rx="18" ry="9" fill="#8a6a4a"/><g stroke="#6a4a2a" stroke-width="4" stroke-linecap="round"><line x1="-12" y1="-12" x2="-12" y2="-2"/><line x1="-4" y1="-11" x2="-4" y2="-1"/><line x1="6" y1="-11" x2="6" y2="-1"/><line x1="13" y1="-12" x2="13" y2="-2"/></g>
+<circle cx="18" cy="-28" r="8" fill="#8a6a4a"/><ellipse cx="25" cy="-26" rx="5" ry="3" fill="#6a4a2a"/><polygon points="12,-34 10,-42 17,-36" fill="#6a4a2a"/><polygon points="22,-35 24,-43 18,-37" fill="#6a4a2a"/><circle cx="21" cy="-29" r="1.3" fill="#2a1c12"/>
+<path d="M-20 -20 c -6 -8, -4 -16, 2 -20" stroke="#8a6a4a" stroke-width="5" stroke-linecap="round" fill="none"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">dog (guard, tail up)</text></g>
+
+<g transform="translate(1350 90)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="16" ry="6" fill="#000" opacity="0.3" filter="url(#s)"/>
+<ellipse cx="0" cy="-14" rx="12" ry="12" fill="#c8904a"/><circle cx="4" cy="-32" r="8" fill="#c8904a"/><polygon points="-2,-38 -4,-46 3,-40" fill="#c8904a"/><polygon points="10,-38 12,-46 5,-40" fill="#c8904a"/><circle cx="2" cy="-33" r="1.5" fill="#6aa04a"/><circle cx="8" cy="-33" r="1.5" fill="#6aa04a"/>
+<path d="M-10 -8 c -12 2, -14 10, -8 14" stroke="#c8904a" stroke-width="4" stroke-linecap="round" fill="none"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">cat (sits)</text></g>
+
+<!-- ROW 2: herds, hens, figures -->
+<g transform="translate(30 340)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="22" ry="7" fill="#000" opacity="0.3" filter="url(#s)"/>
+<ellipse cx="0" cy="-16" rx="20" ry="12" fill="#e8e4d8"/><circle cx="-8" cy="-24" r="7" fill="#f0ece0"/><circle cx="8" cy="-26" r="7" fill="#f0ece0"/><circle cx="18" cy="-20" r="6" fill="#3a3430"/><g stroke="#3a3430" stroke-width="3" stroke-linecap="round"><line x1="-12" y1="-6" x2="-12" y2="0"/><line x1="-4" y1="-5" x2="-4" y2="1"/><line x1="6" y1="-5" x2="6" y2="1"/><line x1="12" y1="-6" x2="12" y2="0"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">sheep</text></g>
+
+<g transform="translate(250 340)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="22" ry="7" fill="#000" opacity="0.3" filter="url(#s)"/>
+<ellipse cx="0" cy="-18" rx="20" ry="10" fill="#a89a80"/><g stroke="#5e5240" stroke-width="3.5" stroke-linecap="round"><line x1="-12" y1="-10" x2="-12" y2="0"/><line x1="-4" y1="-9" x2="-4" y2="1"/><line x1="6" y1="-9" x2="6" y2="1"/><line x1="12" y1="-10" x2="12" y2="0"/></g>
+<circle cx="20" cy="-28" r="7" fill="#a89a80"/><path d="M16 -34 l-4 -10 M24 -34 l4 -10" stroke="#5e5240" stroke-width="2.5" stroke-linecap="round"/><path d="M22 -22 l0 6" stroke="#5e5240" stroke-width="2"/><circle cx="23" cy="-29" r="1.3" fill="#2a1c12"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">goat</text></g>
+
+<g transform="translate(470 340)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="28" ry="8" fill="#000" opacity="0.3" filter="url(#s)"/>
+<ellipse cx="0" cy="-22" rx="26" ry="13" fill="#7a5a3a"/><ellipse cx="-8" cy="-20" rx="8" ry="6" fill="#f0ece0"/><g stroke="#4a3522" stroke-width="4.5" stroke-linecap="round"><line x1="-16" y1="-12" x2="-16" y2="0"/><line x1="-6" y1="-11" x2="-6" y2="1"/><line x1="8" y1="-11" x2="8" y2="1"/><line x1="18" y1="-12" x2="18" y2="0"/></g>
+<rect x="18" y="-42" width="16" height="14" rx="5" fill="#7a5a3a"/><rect x="22" y="-32" width="12" height="6" rx="2" fill="#d8c9a0"/><path d="M18 -42 l-5 -5 M34 -42 l5 -5" stroke="#f0ece0" stroke-width="2.5" stroke-linecap="round"/><circle cx="30" cy="-37" r="1.3" fill="#2a1c12"/>
+<path d="M-26 -22 c -4 6, -2 12, 0 16" stroke="#4a3522" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">cattle</text></g>
+
+<g transform="translate(690 340)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="-2" rx="22" ry="7" fill="#3d7fa0"/>
+<ellipse cx="0" cy="-10" rx="12" ry="6" fill="#8a7a5a"/><circle cx="10" cy="-18" r="5" fill="#2f6a4a"/><path d="M14 -18 l7 1 l-7 2 z" fill="#f2c46a"/><circle cx="11" cy="-19" r="1" fill="#2a1c12"/><path d="M-12 -10 l-6 -3 l2 4 z" fill="#8a7a5a"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">duck (on its puddle)</text></g>
+
+<g transform="translate(910 340)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="16" ry="5" fill="#000" opacity="0.3" filter="url(#s)"/>
+<g stroke="#e0803a" stroke-width="2" stroke-linecap="round"><line x1="-3" y1="-10" x2="-4" y2="0"/><line x1="4" y1="-10" x2="5" y2="0"/></g>
+<ellipse cx="0" cy="-18" rx="14" ry="8" fill="#f0ece0"/><path d="M8 -22 c 4 -8, 6 -16, 8 -22" stroke="#f0ece0" stroke-width="6" stroke-linecap="round" fill="none"/><circle cx="17" cy="-44" r="5" fill="#f0ece0"/><path d="M21 -44 l8 1 l-8 2 z" fill="#e0803a"/><circle cx="18" cy="-45" r="1" fill="#2a1c12"/><path d="M-14 -18 l-6 -5 l2 6 z" fill="#f0ece0"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">goose</text></g>
+
+<g transform="translate(1130 340)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="12" ry="4" fill="#000" opacity="0.3" filter="url(#s)"/>
+<g stroke="#e0803a" stroke-width="1.5" stroke-linecap="round"><line x1="-2" y1="-8" x2="-3" y2="0"/><line x1="3" y1="-8" x2="4" y2="0"/></g>
+<ellipse cx="0" cy="-13" rx="9" ry="6" fill="#b08a62"/><circle cx="7" cy="-20" r="4" fill="#b08a62"/><path d="M6 -24 l1 -3 l2 3 z" fill="#b5233c"/><path d="M10 -20 l4 1 l-4 1 z" fill="#e0803a"/><path d="M-9 -14 l-5 -6 l-1 6 z" fill="#8a6a44"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">hen (at the hen house)</text></g>
+
+<g transform="translate(1350 340)"><use href="#cell" width="220" height="240"/>
+<g transform="translate(80 150)"><ellipse cx="0" cy="0" rx="14" ry="5" fill="#000" opacity="0.3" filter="url(#s)"/>
+<rect x="-9" y="-30" width="7" height="26" rx="3" fill="#3a3f4d"/><rect x="2" y="-30" width="7" height="26" rx="3" fill="#33384a"/><rect x="-10" y="-6" width="9" height="6" rx="2" fill="#2a1f14"/><rect x="1" y="-6" width="9" height="6" rx="2" fill="#2a1f14"/>
+<path d="M-12 -62 h24 a4 4 0 0 1 4 4 v26 a3 3 0 0 1 -3 3 h-26 a3 3 0 0 1 -3 -3 v-26 a4 4 0 0 1 4 -4 z" fill="#9bc92f"/><rect x="-14" y="-44" width="28" height="3" fill="#5a3f27"/>
+<rect x="-20" y="-60" width="6" height="22" rx="3" fill="#9bc92f"/><rect x="14" y="-60" width="6" height="22" rx="3" fill="#7fa826"/>
+<circle cx="0" cy="-72" r="10" fill="#e8b894"/><path d="M-10 -74 a10 10 0 0 1 20 0 v2 c -6 -3, -14 -3, -20 0 z" fill="#5b3a1e"/><path d="M-12 -80 h24 l-3 -4 h-18 z" fill="#4a3a2c"/><rect x="-7" y="-88" width="14" height="6" rx="2" fill="#4a3a2c"/>
+<circle cx="-3" cy="-71" r="1" fill="#2a1c12"/><circle cx="3" cy="-71" r="1" fill="#2a1c12"/>
+<circle cx="0" cy="0" r="16" fill="none" stroke="#aed83c" stroke-width="2.5" opacity="0.85"/>
+</g>
+<g transform="translate(140 150)"><ellipse cx="0" cy="0" rx="14" ry="5" fill="#000" opacity="0.3" filter="url(#s)"/>
+<rect x="-9" y="-30" width="7" height="26" rx="3" fill="#4a3a2c"/><rect x="2" y="-30" width="7" height="26" rx="3" fill="#3e3024"/><rect x="-10" y="-6" width="9" height="6" rx="2" fill="#2a1f14"/><rect x="1" y="-6" width="9" height="6" rx="2" fill="#2a1f14"/>
+<path d="M-12 -62 h24 a4 4 0 0 1 4 4 v26 a3 3 0 0 1 -3 3 h-26 a3 3 0 0 1 -3 -3 v-26 a4 4 0 0 1 4 -4 z" fill="#4aa3d8"/><rect x="-14" y="-44" width="28" height="3" fill="#5a3f27"/>
+<rect x="-20" y="-60" width="6" height="22" rx="3" fill="#4aa3d8"/><rect x="14" y="-60" width="6" height="22" rx="3" fill="#3a8ab8"/>
+<circle cx="0" cy="-72" r="10" fill="#c08a5c"/><path d="M-10 -74 a10 10 0 0 1 20 0 v2 c -6 -3, -14 -3, -20 0 z" fill="#2a1c12"/>
+<circle cx="-3" cy="-71" r="1" fill="#2a1c12"/><circle cx="3" cy="-71" r="1" fill="#2a1c12"/>
+<path d="M16 -58 l8 6 v16 l-8 -4 z" fill="#8a6a44"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">figure: own (ring), npc (blue)</text></g>
+
+<!-- ROW 3: vehicles -->
+<g transform="translate(30 590)"><use href="#cellsand" width="220" height="240"/>
+<g transform="translate(110 150)"><ellipse cx="0" cy="0" rx="34" ry="10" fill="#000" opacity="0.3" filter="url(#s)"/>
+<polygon points="-26,-14 10,4 10,-14 -26,-32" fill="#7e5f3f"/><polygon points="10,4 34,-8 34,-26 10,-14" fill="#a8835a"/><polygon points="-26,-32 10,-14 34,-26 -2,-44" fill="#5b3a22"/>
+<g stroke="#5b3a22" stroke-width="1.2"><line x1="-20" y1="-26" x2="10" y2="-10"/><line x1="-20" y1="-20" x2="10" y2="-5"/></g>
+<ellipse cx="-14" cy="-6" rx="5" ry="12" fill="#3a3d44" transform="rotate(-26 -14 -6)"/><ellipse cx="-14" cy="-6" rx="2" ry="5" fill="#8a8d94" transform="rotate(-26 -14 -6)"/>
+<ellipse cx="26" cy="-24" rx="5" ry="12" fill="#3a3d44" transform="rotate(-26 26 -24)"/>
+<g stroke="#5b3a22" stroke-width="3" stroke-linecap="round"><line x1="30" y1="-12" x2="60" y2="-2"/><line x1="34" y1="-24" x2="64" y2="-14"/></g>
+<ellipse cx="-4" cy="-42" rx="8" ry="4" fill="#d8c9a0"/><ellipse cx="10" cy="-44" rx="7" ry="4" fill="#d8c9a0"/>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">cart (two wheels, shafts)</text></g>
+
+<g transform="translate(250 590)"><rect x="4" y="4" width="432" height="232" rx="12" fill="#1f2229"/>
+<rect x="30" y="150" width="380" height="30" fill="#8a8d94"/><rect x="30" y="180" width="380" height="8" fill="#6a6d74"/>
+<g transform="translate(220 150)">
+<!-- the station track in profile: sleepers, rails -->
+<g fill="#5b3a22"><rect x="-190" y="4" width="380" height="5"/></g><g fill="#4a3522"><rect x="-184" y="2" width="6" height="9"/><rect x="-160" y="2" width="6" height="9"/><rect x="-136" y="2" width="6" height="9"/><rect x="-112" y="2" width="6" height="9"/><rect x="-88" y="2" width="6" height="9"/><rect x="-64" y="2" width="6" height="9"/><rect x="-40" y="2" width="6" height="9"/><rect x="-16" y="2" width="6" height="9"/><rect x="8" y="2" width="6" height="9"/><rect x="32" y="2" width="6" height="9"/><rect x="56" y="2" width="6" height="9"/><rect x="80" y="2" width="6" height="9"/><rect x="104" y="2" width="6" height="9"/><rect x="128" y="2" width="6" height="9"/><rect x="152" y="2" width="6" height="9"/><rect x="176" y="2" width="6" height="9"/></g>
+<rect x="-190" y="0" width="380" height="3" fill="#9aa0a8"/>
+<!-- engine, bow to the right -->
+<g transform="translate(40 7)">
+<rect x="-10" y="-14" width="110" height="10" fill="#222428"/>
+<rect x="30" y="-46" width="60" height="32" rx="16" fill="#2f5a3a"/><rect x="30" y="-46" width="60" height="10" rx="5" fill="#3d7a4a"/><rect x="84" y="-50" width="10" height="40" rx="2" fill="#2f5a3a"/>
+<rect x="-6" y="-62" width="40" height="48" rx="3" fill="#2f5a3a"/><rect x="-8" y="-66" width="44" height="6" rx="2" fill="#222428"/><rect x="2" y="-56" width="12" height="14" fill="#ffd27a"/><rect x="18" y="-56" width="10" height="14" fill="#ffd27a"/>
+<rect x="66" y="-70" width="12" height="26" fill="#222428"/><rect x="63" y="-74" width="18" height="5" fill="#222428"/>
+<path d="M72 -76 c -5 -10, 8 -14, 2 -26 c -5 -10, 8 -14, 2 -22" stroke="#dcdcdc" stroke-width="5" fill="none" opacity="0.6" stroke-linecap="round"/>
+<circle cx="8" cy="-4" r="10" fill="#222428"/><circle cx="8" cy="-4" r="4" fill="#8a2a22"/><circle cx="40" cy="-4" r="10" fill="#222428"/><circle cx="40" cy="-4" r="4" fill="#8a2a22"/><circle cx="74" cy="-4" r="8" fill="#222428"/><circle cx="74" cy="-4" r="3" fill="#8a2a22"/>
+<line x1="8" y1="-4" x2="40" y2="-4" stroke="#8a8d94" stroke-width="2.5"/>
+<rect x="94" y="-8" width="10" height="6" fill="#8a2a22"/>
+</g>
+<!-- carriage -->
+<g transform="translate(-170 7)">
+<rect x="0" y="-14" width="150" height="10" fill="#222428"/>
+<rect x="4" y="-54" width="142" height="40" rx="4" fill="#e8e0c8"/><rect x="4" y="-24" width="142" height="6" fill="#8a2a22"/><rect x="0" y="-60" width="150" height="7" rx="3" fill="#222428"/>
+<g fill="#6fa8e0"><rect x="12" y="-48" width="16" height="16"/><rect x="36" y="-48" width="16" height="16"/><rect x="60" y="-48" width="16" height="16"/><rect x="84" y="-48" width="16" height="16"/><rect x="108" y="-48" width="16" height="16"/><rect x="130" y="-48" width="10" height="16"/></g>
+<circle cx="24" cy="-4" r="8" fill="#222428"/><circle cx="48" cy="-4" r="8" fill="#222428"/><circle cx="102" cy="-4" r="8" fill="#222428"/><circle cx="126" cy="-4" r="8" fill="#222428"/>
+<rect x="150" y="-12" width="14" height="4" fill="#3a3d44"/>
+</g>
+</g>
+<text x="220" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">train: engine and carriage on the station track</text></g>
+
+<g transform="translate(710 590)"><rect x="4" y="4" width="432" height="232" rx="12" fill="#1f2229"/>
+<rect x="30" y="150" width="380" height="40" fill="#2d6a8a"/><rect x="30" y="150" width="380" height="4" fill="#4fa3c9" opacity="0.6"/>
+<g transform="translate(220 150)">
+<!-- hull in profile, bow right -->
+<path d="M-170 0 L -160 -22 L 150 -22 Q 178 -24 186 -40 L 176 0 Z" fill="#2a2e38"/>
+<path d="M-170 0 L -162 12 L 170 12 L 176 0 Z" fill="#8a2a22"/>
+<path d="M-160 -22 L 150 -22 Q 178 -24 186 -40" stroke="#f4f0e6" stroke-width="3" fill="none"/>
+<rect x="-150" y="-30" width="296" height="8" fill="#8a6a44"/><rect x="-150" y="-34" width="300" height="4" fill="#3a3d44"/>
+<!-- deckhouse and bridge -->
+<rect x="-70" y="-60" width="120" height="26" fill="#f4f0e6"/><rect x="-50" y="-78" width="70" height="18" fill="#f4f0e6"/><rect x="-54" y="-80" width="78" height="4" fill="#3a3d44"/>
+<g fill="#ffd27a"><rect x="-62" y="-54" width="10" height="10"/><rect x="-46" y="-54" width="10" height="10"/><rect x="-30" y="-54" width="10" height="10"/><rect x="-14" y="-54" width="10" height="10"/><rect x="2" y="-54" width="10" height="10"/><rect x="18" y="-54" width="10" height="10"/><rect x="34" y="-54" width="10" height="10"/><rect x="-44" y="-72" width="10" height="10"/><rect x="-28" y="-72" width="10" height="10"/><rect x="-12" y="-72" width="10" height="10"/><rect x="4" y="-72" width="10" height="10"/></g>
+<!-- funnel, raked -->
+<polygon points="-8,-80 16,-80 24,-124 4,-124" fill="#222428"/><polygon points="-6,-90 18,-90 20,-100 -4,-100" fill="#8a2a22"/>
+<path d="M14 -126 c -6 -12, 10 -16, 4 -30 c -6 -12, 10 -16, 4 -28" stroke="#bbb" stroke-width="6" fill="none" opacity="0.55" stroke-linecap="round"/>
+<!-- masts with furled sails -->
+<g stroke="#5b3a22" stroke-width="3.5" stroke-linecap="round"><line x1="100" y1="-34" x2="100" y2="-140"/><line x1="-120" y1="-34" x2="-120" y2="-126"/><line x1="70" y1="-104" x2="130" y2="-104"/><line x1="-146" y1="-94" x2="-94" y2="-94"/></g>
+<rect x="72" y="-106" width="56" height="8" rx="4" fill="#eee6d2"/><rect x="-144" y="-96" width="48" height="8" rx="4" fill="#eee6d2"/>
+<g stroke="#8a8d94" stroke-width="1"><line x1="100" y1="-140" x2="180" y2="-40"/><line x1="100" y1="-140" x2="20" y2="-80"/><line x1="-120" y1="-126" x2="-160" y2="-30"/><line x1="-120" y1="-126" x2="-50" y2="-78"/></g>
+<!-- lifeboats -->
+<g fill="#eee6d2" stroke="#3a3d44" stroke-width="1"><path d="M54 -42 q12 10 24 0 l-2 -4 h-20 z"/><path d="M-100 -42 q12 10 24 0 l-2 -4 h-20 z"/></g>
+<!-- flag astern -->
+<line x1="-156" y1="-34" x2="-156" y2="-60" stroke="#5b3a22" stroke-width="2"/><polygon points="-156,-60 -138,-55 -156,-50" fill="#b5233c"/>
+<!-- bow wave and wake -->
+<path d="M176 4 q10 -6 20 0" stroke="#eef6f8" stroke-width="3" fill="none" opacity="0.7"/><path d="M-200 8 q12 -6 24 0 t24 0" stroke="#eef6f8" stroke-width="2.5" fill="none" opacity="0.5"/>
+</g>
+<text x="220" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">liner: coastal steamer with sail</text></g>
+
+<g transform="translate(1170 590)"><rect x="4" y="4" width="212" height="232" rx="12" fill="#1f2229"/>
+<polygon points="110,170 170,140 110,110 50,140" fill="#79a44a"/><polygon points="50,140 110,170 110,178 50,148" fill="#5a8338"/><polygon points="110,170 170,140 170,148 110,178" fill="#476b2c"/>
+<g transform="translate(110 150)">
+<g stroke="#5b3a22" stroke-width="3"><line x1="-44" y1="8" x2="-36" y2="4"/><line x1="-30" y1="1" x2="-22" y2="-3"/><line x1="-16" y1="-6" x2="-8" y2="-10"/><line x1="-2" y1="-13" x2="6" y2="-17"/><line x1="12" y1="-20" x2="20" y2="-24"/><line x1="26" y1="-27" x2="34" y2="-31"/><line x1="40" y1="-34" x2="48" y2="-38"/></g>
+<g stroke="#9aa0a8" stroke-width="2.5"><line x1="-52" y1="6" x2="52" y2="-46"/><line x1="-46" y1="12" x2="58" y2="-40"/></g>
+<g stroke="#5b3a22" stroke-width="3"><line x1="-4" y1="20" x2="4" y2="16"/><line x1="-18" y1="34" x2="-10" y2="30"/></g><g stroke="#9aa0a8" stroke-width="2.5" fill="none"><path d="M-52 6 q 20 6, 30 20 M-46 12 q 16 6, 24 20"/></g>
+</g>
+<text x="110" y="222" text-anchor="middle" font-size="14" fill="#e6e3dc">track (sleepers, rails, a bend)</text></g>
+</svg>

@@ -14,6 +14,8 @@ const TROUSERS = [0x3a3f4d, 0x4a3a2c, 0x33402f, 0x2f2a3a, 0x4a4436];
 /** a person a little larger than life, so that they read from the whole-room view */
 const FIGURE_SCALE = 1.3;
 const AI_TUNIC = 0x4aa3d8, OWN_TUNIC = 0x9bc92f;
+/** felt and wool for hats and caps */
+const HAT = [0x4a3a2c, 0x5a4a3a, 0x2f3a4a, 0x7a3426, 0x3f4f3a];
 
 export type Look = { id: string; skin: number; own: boolean; ai: boolean };
 export type Figure = {
@@ -73,6 +75,22 @@ export function makeFigure(t: T, look: Look): Figure {
 	const cap = mesh(new t.SphereGeometry(0.1, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.58), mat(hair, 0.9), 0, 0.03, -0.008); cap.rotation.x = -0.18; head.add(cap);
 	head.add(mesh(new t.SphereGeometry(0.014, 8, 6), mat(0x1c1612, 0.4), -0.034, 0.03, 0.085), mesh(new t.SphereGeometry(0.014, 8, 6), mat(0x1c1612, 0.4), 0.034, 0.03, 0.085));
 	head.add(mesh(new t.SphereGeometry(0.016, 8, 6), mat(skin, 0.7), 0, 0.005, 0.094)); // nose
+	// v2 (docs/3D-V2, catalogue sheet 4): a mouth, and from the figure's id a hat or a cap and a satchel, so that a crowd
+	// up close is not a row of twins
+	const mouth = mesh(new t.BoxGeometry(0.036, 0.008, 0.006), mat(0x7a3f2c, 0.6), 0, -0.028, 0.09); mouth.rotation.x = -0.25; head.add(mouth);
+	const wear = (h >>> 11) % 4, felt = HAT[(h >>> 13) % HAT.length]!;
+	if (wear === 0) { // a brimmed hat
+		head.add(mesh(new t.CylinderGeometry(0.15, 0.15, 0.012, 20), mat(felt, 0.95), 0, 0.085, -0.004));
+		head.add(mesh(new t.CylinderGeometry(0.075, 0.088, 0.075, 16), mat(felt, 0.95), 0, 0.125, -0.006));
+		head.add(mesh(new t.CylinderGeometry(0.089, 0.089, 0.014, 16), mat(0x3a2a1c, 0.9), 0, 0.097, -0.006));
+	} else if (wear === 1) { // a knitted cap
+		const cap2 = mesh(new t.SphereGeometry(0.104, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), mat(felt, 0.95), 0, 0.045, -0.01); head.add(cap2);
+		head.add(mesh(new t.TorusGeometry(0.098, 0.016, 6, 18), mat(felt, 0.95), 0, 0.05, -0.01).rotateX(Math.PI / 2));
+	}
+	if ((h >>> 17) % 3 !== 0) { // a satchel on the left hip, its strap across the chest
+		torso.add(mesh(new t.BoxGeometry(0.05, 0.11, 0.12), mat(0x8a6a44, 0.9), -0.17, 0.47, 0.02));
+		const strap = mesh(new t.BoxGeometry(0.018, 0.36, 0.012), mat(0x5b3a22, 0.9), 0, 0.6, 0.095); strap.rotation.z = -0.62; torso.add(strap);
+	}
 	return { group, body, legL, legR, armL, armR, head, heading: 0, phase: 0, swing: 0, last: { x: 0, z: 0 } };
 }
 

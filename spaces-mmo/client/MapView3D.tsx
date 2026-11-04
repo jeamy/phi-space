@@ -6,15 +6,18 @@
 // at the middle of the room and stays there (it moves only when the player drags, turns or zooms the view), so a step moves
 // the figure and nothing else: no sliding ground, no rebuilt scene.
 import { useEffect, useRef, useState } from "react";
-import type { CharView, ObjView } from "../server/gateway.ts";
+import type { AtlasState, AtlasView, CharView, ObjView } from "../server/gateway.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
 import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
-import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
+import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, setNight, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
-import { tile3d } from "./terrain3d.ts";
+import { stableHash, tile3d } from "./terrain3d.ts";
+import { clampZoom, daylightAt, elevationAt, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./camera3d.ts";
+import { calendar, shownWorldMs, WORLD_HOUR_MS } from "../server/engine/worldtime.ts";
+import { blockUnder, fishFor, islandBlock, nameCard, swimFish, type Fish, type SeaEdge } from "./block3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
 type T = typeof import("three");
@@ -28,11 +31,31 @@ type Scene3D = {
 	scene: import("three").Scene;
 	camera: import("three").PerspectiveCamera;
 	fog: import("three").FogExp2;
+	/** the sun: its shadow map is fitted to the room (lightRoom) */
+	sun: import("three").DirectionalLight;
+	/** the sky's light, dimmed with the sun at night (daylight) */
+	hemi: import("three").HemisphereLight;
+	/** the daylight last applied (1 day, 0 night) and when it was last worked out */
+	light: number;
+	lightAt: number;
+	/** the fish behind the room's sea sides (block3d.ts) */
+	fish: Fish[];
+	/** dev only: a world hour that overrides the clock for the light (probeHour) */
+	hourProbe?: number | null;
 	host: HTMLDivElement;
 	canvas: HTMLCanvasElement;
 	room: MapRendererProps["room"];
 	world: MapRendererProps["world"];
 	ground: import("three").Group | null;
+	/** the other rooms of the island as blocks round this one, and what they were built for */
+	island: import("three").Group | null;
+	islandFor: string;
+	/** the middle of the island and how far its blocks reach from it: the camera turns to it on the island level */
+	islandMid: { x: number; z: number; reach: number };
+	/** whether the names of figures and things show (not on the island level) */
+	named: boolean;
+	/** the speech bubbles over figures: who, the sprite, when it goes */
+	bubbles: Map<string, { sprite: import("three").Sprite; until: number; key: string }>;
 	/** the plants on the ground (built again when a building, site, ruin or bed comes onto them or goes), their pictures,
 	 *  and the covered cells they were built for */
 	plants: import("three").Group | null;
@@ -56,8 +79,6 @@ type Scene3D = {
 
 const LONG_PRESS_MS = 500;
 const DRAG_PX = 12;
-const ZOOM_MIN = 0.5, ZOOM_MAX = 3;
-const ELEVATION = (52 * Math.PI) / 180;
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
 
 export function MapView3D(props: MapRendererProps) {
@@ -69,8 +90,8 @@ export function MapView3D(props: MapRendererProps) {
 	// what the mouse and fingers do to the view: the wheel and a pinch zoom, dragging turns (the pointer code reads these through a ref)
 	const view = useRef({ zoomBy: (_f: number) => {}, turned: (_a: number) => {} });
 	const [angle, setAngle] = useState(() => stored("mmo.3d.angle", Math.PI / 4));
-	const [zoom, setZoom] = useState(() => stored("mmo.3d.zoom", 1));
-	view.current = { zoomBy: (f) => setZoom((z) => clamp(z * f, ZOOM_MIN, ZOOM_MAX)), turned: (a) => setAngle(a) };
+	const [zoom, setZoom] = useState(() => clampZoom(stored("mmo.3d.zoom", 1)));
+	view.current = { zoomBy: (f) => setZoom((z) => clampZoom(z * f)), turned: (a) => setAngle(a) };
 
 	// once: the renderer, the lights, the camera and the loop
 	useEffect(() => {
@@ -89,11 +110,16 @@ export function MapView3D(props: MapRendererProps) {
 				const scene = new t.Scene();
 				const fog = new t.FogExp2(0xb8c1c7, 0); scene.fog = fog;
 				const camera = new t.PerspectiveCamera(38, 1, 0.1, 160);
-				scene.add(new t.HemisphereLight(0xd9edff, 0x3a4a2a, 1.7));
+				const hemi = new t.HemisphereLight(0xd9edff, 0x3a4a2a, 1.7); scene.add(hemi);
 				const sun = new t.DirectionalLight(0xfff1cf, 2.2);
-				sun.position.set(-6, 12, 8); scene.add(sun);
+				sun.position.set(-6, 12, 8); scene.add(sun); scene.add(sun.target);
+				// the sun casts shadows (v2): one map fitted to the room, smaller on a phone (lightRoom)
+				const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+				renderer.shadowMap.enabled = true; renderer.shadowMap.type = t.PCFSoftShadowMap;
+				sun.castShadow = true; sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
+				scene.background = skyTexture(t);
 
-				const s: Scene3D = { t, renderer, scene, camera, fog, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, plants: null, plantLooks: new Map(), plantsFor: "-", water: [], chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", Math.PI / 4), zoom: stored("mmo.3d.zoom", 1), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				const s: Scene3D = { t, renderer, scene, camera, fog, sun, hemi, light: -1, lightAt: 0, fish: [], host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", water: [], chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", Math.PI / 4), zoom: clampZoom(stored("mmo.3d.zoom", 1)), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				s.resize = new ResizeObserver(() => resize(s));
 				s.resize.observe(host.current);
 				pointer(s, latest, view);
@@ -105,6 +131,9 @@ export function MapView3D(props: MapRendererProps) {
 					if (dead) return;
 					const dt = Math.min(0.05, (now - before) / 1000); before = now;
 					step(s, dt, now / 1000, latest.current.me);
+					bubbleTick(s);
+					if (s.fish.length && s.zoom > 0.3) swimFish(s.fish, now / 1000);
+					if (now - s.lightAt > 500) { s.lightAt = now; daylight(s, latest.current.worldTime ?? null); }
 					s.renderer.render(s.scene, s.camera);
 					s.frame = requestAnimationFrame(frame);
 				};
@@ -138,7 +167,9 @@ export function MapView3D(props: MapRendererProps) {
 			if (s.ground) { s.scene.remove(s.ground); dispose(s.ground); }
 			s.water = [];
 			s.ground = buildTerrain(s, looks);
+			shade(s.ground, true);
 			s.scene.add(s.ground);
+			lightRoom(s);
 			s.plantLooks = plants; s.plantsFor = "-"; // sync builds the plants
 			sync(s, latest.current.chars, latest.current.objs, latest.current.me, true);
 			resize(s);
@@ -148,6 +179,25 @@ export function MapView3D(props: MapRendererProps) {
 
 	useEffect(() => { if (state.current) sync(state.current, props.chars, props.objs, props.me, false); }, [props.chars, props.objs, props.me]);
 	useEffect(() => { if (state.current) applyFog(state.current, props.fog); }, [props.fog, ready]);
+	// what was said: a bubble over the speaker for a few seconds, shown up close (zoom ≥ 1.6)
+	useEffect(() => { if (state.current && ready) speak(state.current, props.said ?? []); }, [props.said, props.chars, ready]);
+	// the island round the room: rebuilt when the room, the map, the fog or the people on it change
+	// (the blocks only for the room, the map and the fog; the people only redraw the name cards, which is cheap)
+	const islandKey = props.atlas && props.atlasState ? `${props.room.roomId}|${props.atlas.rooms.length}|${JSON.stringify(props.atlasState.fog)}` : "";
+	const cardsKey = props.atlasState ? `${islandKey}|${JSON.stringify(props.atlasState.people)}` : "";
+	useEffect(() => {
+		const s = state.current;
+		if (!ready || !s || s.islandFor === islandKey) return;
+		if (s.island) { s.scene.remove(s.island); dispose(s.island); s.island = null; }
+		s.islandFor = islandKey;
+		if (!props.atlas || !props.atlasState) return;
+		s.island = buildIsland(s, props.atlas, props.atlasState);
+		shade(s.island, true); s.scene.add(s.island); positionCamera(s);
+	}, [ready, islandKey]);
+	useEffect(() => {
+		const s = state.current;
+		if (ready && s?.island && props.atlas && props.atlasState) { islandCards(s, props.atlas, props.atlasState); positionCamera(s); }
+	}, [ready, cardsKey]);
 	useEffect(() => {
 		store("mmo.3d.angle", angle); store("mmo.3d.zoom", zoom);
 		if (state.current) { state.current.angle = angle; state.current.zoom = zoom; positionCamera(state.current); }
@@ -159,11 +209,13 @@ export function MapView3D(props: MapRendererProps) {
 	return (
 		<div className="map map-3d" ref={host}>
 			<div className="map-canvas" />
+			{/* close up the edges darken and the fog becomes a vignette (v2, close level) */}
+			<div className="map-3d-vignette" aria-hidden="true" style={{ opacity: clamp((zoom - 1) / 2.5, 0, 0.85) }} />
 			<div className="map-zoom map-3d-controls" role="group" aria-label="3D-Ansicht">
 				<button onClick={() => setAngle((a) => a - Math.PI / 4)} aria-label="Karte links drehen">↶</button>
 				<button onClick={() => setAngle((a) => a + Math.PI / 4)} aria-label="Karte rechts drehen">↷</button>
-				<button onClick={() => setZoom((z) => clamp(z + 0.2, ZOOM_MIN, ZOOM_MAX))} aria-label="Vergrößern">+</button>
-				<button onClick={() => setZoom((z) => clamp(z - 0.2, ZOOM_MIN, ZOOM_MAX))} aria-label="Verkleinern">−</button>
+				<button onClick={() => setZoom((z) => clampZoom(z * ZOOM_STEP))} disabled={zoom >= ZOOM_MAX} aria-label="Vergrößern">+</button>
+				<button onClick={() => setZoom((z) => clampZoom(z / ZOOM_STEP))} disabled={zoom <= ZOOM_MIN} aria-label="Verkleinern">−</button>
 			</div>
 			{props.controls}
 			<span className="map-mode-label">3D · Darstellung, Spielregeln bleiben 2D</span>
@@ -186,15 +238,24 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 		const top = new t.MeshStandardMaterial({ color: look ? 0xffffff : visual.color, map: look?.frames[0] ?? null, roughness: visual.water ? 0.3 : 0.95, metalness: visual.water ? 0.1 : 0 });
 		const side = new t.MeshStandardMaterial({ color: new t.Color(visual.color).multiplyScalar(visual.water ? 0.6 : 0.72), roughness: 1 });
 		const mesh = new t.InstancedMesh(geometry, [side, side, top, side, side, side], cells.length);
+		// which cell each instance is: a click hits the column it lands on (pointer, cell)
+		mesh.userData.cells = cells;
 		const matrix = new t.Matrix4();
 		cells.forEach((c, i) => {
 			const height = surface(room, world, c.x, c.y);
 			matrix.compose(new t.Vector3(c.x - w / 2 + 0.5, height / 2, c.y - h / 2 + 0.5), new t.Quaternion(), new t.Vector3(1, Math.max(0.04, height), 1));
 			mesh.setMatrixAt(i, matrix);
 		});
-		mesh.instanceMatrix.needsUpdate = true; group.add(mesh);
+		mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); group.add(mesh);
 		if (look && look.frames.length > 1) s.water.push({ material: top, look });
 	}
+	// the room as a diorama block: strata and sea under the tiles, its shadow on the void (block3d.ts)
+	const block = blockUnder(t, room.ground, world.tiles);
+	block.userData.block = true;
+	s.fish = fishFor(t, block.userData.seaEdges as SeaEdge[], w, h, stableHash(room.roomId));
+	for (const f of s.fish) block.add(f.mesh);
+	swimFish(s.fish, 0);
+	group.add(block);
 	return group;
 }
 
@@ -266,7 +327,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		if (!e) {
 			const fig = makeFigure(s.t, { id, skin: c.skin, own: id === me, ai: !!c.ai });
 			fig.group.add(label(s.t, c.settler ? `${c.name} (Siedler)` : c.name, id === me ? "#dfff73" : c.ai ? "#9fd3ff" : "#ffffff"));
-			e = { obj: fig.group, target: at(s, c.x, c.y, 0), fig, shown: c.name }; e.obj.position.copy(e.target); s.scene.add(e.obj); s.chars.set(id, e);
+			e = { obj: fig.group, target: at(s, c.x, c.y, 0), fig, shown: c.name }; e.obj.position.copy(e.target); shade(e.obj, false); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.chars.set(id, e);
 		}
 		e.target.copy(at(s, c.x, c.y, 0));
 		if (snap) e.obj.position.copy(e.target);
@@ -281,7 +342,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		let e = s.objs.get(id);
 		// a site that became a building (or got further) is drawn anew
 		if (e && (e.kind !== obj.kind || e.progress !== obj.progress || e.sig !== bedSig(obj))) { remove(s, s.objs, id); e = undefined; }
-		if (!e) { e = obj.kind === "track" ? track(s, obj) : object(s.t, obj, me); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); s.scene.add(e.obj); s.objs.set(id, e); }
+		if (!e) { e = obj.kind === "track" ? track(s, obj) : object(s.t, obj, me); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); shade(e.obj, true); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.objs.set(id, e); }
 		e.target.copy(placeOf(s, obj));
 		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; e.flame.light.intensity = lit ? 4 : 0; }
 	}
@@ -292,7 +353,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 	const key = [...covered].sort().join(";");
 	if (key !== s.plantsFor) {
 		if (s.plants) { s.scene.remove(s.plants); dispose(s.plants); }
-		s.plants = buildPlants(s, covered); s.scene.add(s.plants); s.plantsFor = key;
+		s.plants = buildPlants(s, covered); shade(s.plants, false); s.scene.add(s.plants); s.plantsFor = key;
 	}
 }
 
@@ -483,8 +544,9 @@ function label(t: T, text: string, color: string): import("three").Sprite {
 	canvas.width = 256; canvas.height = 48; ctx.font = "600 22px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
 	ctx.lineWidth = 5; ctx.strokeStyle = "rgba(0,0,0,.8)"; ctx.strokeText(text.slice(0, 24), 128, 24); ctx.fillStyle = color; ctx.fillText(text.slice(0, 24), 128, 24);
 	const texture = new t.CanvasTexture(canvas); texture.colorSpace = t.SRGBColorSpace;
-	const sprite = new t.Sprite(new t.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
-	sprite.position.y = 1.4; sprite.scale.set(1.8, 0.34, 1); sprite.renderOrder = 10; return sprite;
+	// the same size on the screen at every zoom (v2): close up a name no longer covers the figure
+	const sprite = new t.Sprite(new t.SpriteMaterial({ map: texture, transparent: true, depthTest: false, sizeAttenuation: false }));
+	sprite.position.y = 1.4; sprite.userData.px = [180, 34]; sprite.renderOrder = 10; sprite.userData.label = true; return sprite;
 }
 
 /** The visual height of a cell: the tile's own height. (terrain3d's small per-cell variation is left out here: even a
@@ -500,17 +562,171 @@ function at(s: Scene3D, x: number, y: number, above: number): import("three").Ve
 	return new s.t.Vector3(x - w / 2 + 0.5, surface(s.room, s.world, x, y) + above, y - h / 2 + 0.5);
 }
 
-/** The camera looks at the middle of the room (moved by the drag) from a distance that shows all of it; only dragging,
- *  turning and zooming move it. */
+/** The cells between two blocks on the island level. */
+const ISLAND_GAP = 5;
+/** The other rooms of the island this one lies on, as blocks round it at their places on the world map (AtlasView x, y:
+ *  one step per room), each with a lid of flat tile colours greyed by its fog, and a name card with how many are there.
+ *  The room's own name card floats over its own block. Tapping a block does nothing: changing rooms stays a command. */
+function buildIsland(s: Scene3D, atlas: AtlasView, state: AtlasState): import("three").Group {
+	const { t, room, world } = s, group = new t.Group(); group.userData.owned = true;
+	const here = atlas.rooms.find((r) => r.roomId === room.roomId);
+	if (!here) return group;
+	const { w, h } = dims(room), cards = new t.Group(); cards.userData.cards = true;
+	const mids: Array<{ x: number; z: number }> = [];
+	for (const r of atlas.rooms) {
+		if (r.island !== here.island) continue;
+		const x = (r.x - here.x) * (w + ISLAND_GAP), z = (r.y - here.y) * (h + ISLAND_GAP);
+		if (r.roomId !== room.roomId) {
+			const block = islandBlock(t, r.ground, world.tiles, (state.fog[r.roomId] ?? 0) / 3.5);
+			block.position.set(x, 0, z); group.add(block);
+		}
+		mids.push({ x, z });
+	}
+	group.add(cards);
+	islandCards(s, atlas, state, group);
+	const mx = mids.reduce((a, m) => a + m.x, 0) / mids.length, mz = mids.reduce((a, m) => a + m.z, 0) / mids.length;
+	s.islandMid = { x: mx, z: mz, reach: Math.max(...mids.map((m) => Math.hypot(m.x - mx, m.z - mz))) + Math.hypot(w, h) / 2 };
+	return group;
+}
+
+const BUBBLE_MS = 8000, BUBBLE_ZOOM = 1.6;
+/** A speech bubble: the speaker's words on a light card with a tail, the same size on the screen. */
+function bubble(t: T, text: string): import("three").Sprite {
+	const canvas = document.createElement("canvas"), g = canvas.getContext("2d")!;
+	canvas.width = 512; canvas.height = 160; g.font = "500 30px sans-serif"; g.textBaseline = "middle";
+	const words = text.split(/\s+/), lines: string[] = [];
+	for (const word of words) { const last = lines[lines.length - 1]; if (last !== undefined && g.measureText(`${last} ${word}`).width < 440) lines[lines.length - 1] = `${last} ${word}`; else lines.push(word); }
+	const shown = lines.slice(0, 2); if (lines.length > 2) shown[1] = `${shown[1]!.slice(0, 26)}…`;
+	const wide = Math.min(500, Math.max(...shown.map((l) => g.measureText(l).width)) + 40), high = 24 + shown.length * 38;
+	g.fillStyle = "rgba(244,234,208,.96)"; g.beginPath(); g.roundRect((512 - wide) / 2, 4, wide, high, 18); g.fill();
+	g.beginPath(); g.moveTo(240, 4 + high); g.lineTo(256, 4 + high + 22); g.lineTo(272, 4 + high); g.fill();
+	g.fillStyle = "#2b2418"; shown.forEach((l, i) => g.fillText(l, (512 - wide) / 2 + 20, 4 + 12 + 19 + i * 38));
+	const texture = new t.CanvasTexture(canvas); texture.colorSpace = t.SRGBColorSpace;
+	const sprite = new t.Sprite(new t.SpriteMaterial({ map: texture, transparent: true, depthTest: false, sizeAttenuation: false, fog: false }));
+	sprite.center.set(0.5, 0); sprite.userData.px = [290, 91]; sprite.position.y = 1.85; sprite.renderOrder = 11;
+	return sprite;
+}
+/** Puts a bubble over each figure whose name said something in the last seconds (the latest line wins), and takes off the
+ *  ones that are over. */
+function speak(s: Scene3D, said: Array<{ from: string; text: string; at: number }>): void {
+	const now = Date.now(), latest = new Map<string, { text: string; at: number }>();
+	for (const m of said) if (now - m.at < BUBBLE_MS) latest.set(m.from, m);
+	for (const [id, e] of s.chars) {
+		const m = e.shown ? latest.get(e.shown) : undefined, had = s.bubbles.get(id), key = m ? `${m.at}:${m.text}` : "";
+		if (had && had.key === key) continue;
+		if (had) { e.obj.remove(had.sprite); dispose(had.sprite); s.bubbles.delete(id); }
+		if (!m) continue;
+		// the log line names the speaker first ("Name: text"); the bubble stands over them already
+		const words = m.text.startsWith(`${e.shown}:`) ? m.text.slice(e.shown!.length + 1).trim() : m.text;
+		const sprite = bubble(s.t, words); sprite.visible = s.zoom >= BUBBLE_ZOOM; fitSprites(s, sprite);
+		e.obj.add(sprite); s.bubbles.set(id, { sprite, until: m.at + BUBBLE_MS, key });
+	}
+}
+/** Every frame: bubbles show only up close and go when their time is over. */
+function bubbleTick(s: Scene3D): void {
+	if (!s.bubbles.size) return;
+	const now = Date.now(), near = s.zoom >= BUBBLE_ZOOM;
+	for (const [id, b] of s.bubbles) {
+		if (now > b.until) { b.sprite.parent?.remove(b.sprite); dispose(b.sprite); s.bubbles.delete(id); continue; }
+		b.sprite.visible = near;
+	}
+}
+
+/** The name cards over the island's blocks: each room's name and how many are there, drawn again when the counts change. */
+function islandCards(s: Scene3D, atlas: AtlasView, state: AtlasState, group = s.island): void {
+	const cards = group?.children.find((o) => o.userData.cards);
+	const here = atlas.rooms.find((r) => r.roomId === s.room.roomId);
+	if (!cards || !here) return;
+	for (const c of [...cards.children]) { cards.remove(c); dispose(c); }
+	const { w, h } = dims(s.room);
+	for (const r of atlas.rooms) {
+		if (r.island !== here.island) continue;
+		const [humans = 0, npcs = 0] = state.people[r.roomId] ?? [];
+		const card = nameCard(s.t, r.name, humans + npcs, r.roomId === s.room.roomId);
+		card.position.set((r.x - here.x) * (w + ISLAND_GAP), 1.2, (r.y - here.y) * (h + ISLAND_GAP) - r.ground.length / 2 - 1);
+		cards.add(card);
+	}
+	fitSprites(s, cards);
+}
+
+/** Names, cards and bubbles keep a size in screen pixels (`userData.px`, width and height): a sprite without size
+ *  attenuation is measured in parts of the view's height, so the same name would be tiny on a phone held sideways and
+ *  large on one held upright. */
+function fitSprites(s: Scene3D, root: O3): void {
+	const perPx = (2 * Math.tan((s.camera.fov * Math.PI) / 360)) / Math.max(1, s.size.h || 900);
+	root.traverse((o) => { const px = o.userData.px as [number, number] | undefined; if (px) o.scale.set(px[0] * perPx, px[1] * perPx, 1); });
+}
+
+/** Every mesh of `root` casts a shadow; the ground and the things lying on it also take them (`receive`). Sprites and the
+ *  soft blobs under things neither cast nor take one. */
+function shade(root: O3, receive: boolean): void {
+	root.traverse((o) => {
+		const m = o as import("three").Mesh;
+		if (!m.isMesh) return;
+		// under water nothing casts or takes the sun's shadow (block3d.ts: the sea side, the seabed, the fish)
+		if (m.userData.unshaded) { m.castShadow = m.receiveShadow = false; return; }
+		const basic = (Array.isArray(m.material) ? m.material[0] : m.material)?.type === "MeshBasicMaterial";
+		m.castShadow = !basic; m.receiveShadow = receive && !basic;
+	});
+}
+/** Fits the sun's shadow map to the room: an orthographic box round the block, the sun high in the south-west. */
+function lightRoom(s: Scene3D): void {
+	const { w, h } = dims(s.room), r = Math.hypot(w, h) / 2 + 2, cam = s.sun.shadow.camera;
+	s.sun.position.set(-r * 0.55, r * 1.1, r * 0.75); s.sun.target.position.set(0, 0, 0);
+	cam.left = -r; cam.right = r; cam.top = r; cam.bottom = -r; cam.near = 0.5; cam.far = r * 4; cam.updateProjectionMatrix();
+}
+/** Day and night from the world's clock: the sun sinks to a pale moonlight, warm at dawn and dusk, the sky darkens, and
+ *  the lamplit faces of the models glow (props3d.ts, setNight). Visual only; without a clock it stays day. */
+const NOON = 0xfff1cf, MOON = 0x8fa6d8, DUSK = 0xffa25a;
+function daylight(s: Scene3D, clock: { v: import("../server/engine/worldtime.ts").WorldTimeView; at: number } | null): void {
+	const hour = s.hourProbe != null ? s.hourProbe : clock ? calendar(shownWorldMs(clock.v, clock.at, Date.now())).millisOfDay / WORLD_HOUR_MS : 12;
+	const d = Math.round(daylightAt(hour) * 100) / 100;
+	if (d === s.light) return;
+	s.light = d;
+	const dusk = 4 * d * (1 - d);
+	s.sun.intensity = 2.2 * (0.14 + 0.86 * d);
+	s.sun.color.setHex(MOON).lerp(new s.t.Color(NOON), d).lerp(new s.t.Color(DUSK), dusk * 0.55);
+	s.hemi.intensity = 1.7 * (0.32 + 0.68 * d);
+	s.hemi.color.setHex(0x5a6c9e).lerp(new s.t.Color(0xd9edff), d);
+	s.scene.backgroundIntensity = 0.4 + 0.6 * d;
+	setNight(Math.min(1, (1 - d) * 1.3));
+}
+let sky: import("three").CanvasTexture | null = null;
+/** The void round the block: a dusk gradient instead of black, lighter towards the horizon. */
+function skyTexture(t: T): import("three").CanvasTexture {
+	if (sky) return sky;
+	const c = document.createElement("canvas"); c.width = 2; c.height = 256;
+	const g = c.getContext("2d")!, grad = g.createLinearGradient(0, 0, 0, 256);
+	grad.addColorStop(0, "#141a26"); grad.addColorStop(0.55, "#26324a"); grad.addColorStop(1, "#3c4d66");
+	g.fillStyle = grad; g.fillRect(0, 0, 2, 256);
+	sky = new t.CanvasTexture(c); sky.colorSpace = t.SRGBColorSpace; sky.userData.shared = true;
+	return sky;
+}
+
+/** The camera looks at the middle of the room (moved by the drag) from a distance that shows all of it at zoom 1; only
+ *  dragging, turning and zooming move it. Its elevation follows the zoom (camera3d.ts): steep from afar, flat up close.
+ *  The far plane follows the distance, so the room stays in view at the island's end of the slider. */
 function positionCamera(s: Scene3D): void {
-	const { w, h } = dims(s.room), aspect = s.camera.aspect || 1;
-	s.panX = clamp(s.panX, -w / 2, w / 2); s.panZ = clamp(s.panZ, -h / 2, h / 2);
+	const { w, h } = dims(s.room), aspect = s.camera.aspect || 1, elevation = elevationAt(s.zoom);
+	// from the approach outwards the view turns from the room to the middle of the island, and may be dragged over all of it
+	const toIsland = s.island && s.islandMid.reach > 0 ? clamp((0.6 - s.zoom) / 0.3, 0, 1) : 0, reach = s.islandMid.reach * toIsland;
+	s.panX = clamp(s.panX, -w / 2 - reach, w / 2 + reach); s.panZ = clamp(s.panZ, -h / 2 - reach, h / 2 + reach);
+	const lookX = s.panX + s.islandMid.x * toIsland, lookZ = s.panZ + s.islandMid.z * toIsland;
 	const radius = Math.hypot(w, h) / 2;
 	const half = Math.min(Math.atan(Math.tan((s.camera.fov * Math.PI) / 360) * aspect), (s.camera.fov * Math.PI) / 360);
 	const d = (radius / Math.sin(half)) * 0.74 / s.zoom;
-	s.camera.position.set(s.panX + Math.cos(s.angle) * Math.cos(ELEVATION) * d, 0.2 + Math.sin(ELEVATION) * d, s.panZ + Math.sin(s.angle) * Math.cos(ELEVATION) * d);
-	s.camera.lookAt(s.panX, 0.2, s.panZ);
+	s.camera.position.set(lookX + Math.cos(s.angle) * Math.cos(elevation) * d, 0.2 + Math.sin(elevation) * d, lookZ + Math.sin(s.angle) * Math.cos(elevation) * d);
+	s.camera.lookAt(lookX, 0.2, lookZ);
+	const far = d + radius * 4 + 60;
+	if (Math.abs(s.camera.far - far) > 1) { s.camera.far = far; s.camera.updateProjectionMatrix(); }
 	s.dist = d; applyFog(s, s.level);
+	const cards = s.island?.children.find((o) => o.userData.cards);
+	if (cards) cards.visible = s.zoom <= 0.6;
+	// the neighbours stand round the room up to the room level; closer in they would only crowd the edges
+	for (const o of s.island?.children ?? []) if (!o.userData.cards) o.visible = s.zoom <= 1.2;
+	// on the island level the rooms' cards speak; the names of figures and things would only crowd them
+	const named = s.zoom > 0.6;
+	if (named !== s.named) { s.named = named; for (const m of [s.chars, s.objs]) for (const e of m.values()) e.obj.traverse((o) => { if (o.userData.label) o.visible = named; }); }
 }
 /** How much of the middle of the room the fog hides, by level (the haze at the camera's distance): 0, 20 %, 35 %, 50 %.
  *  FogExp2 hides 1 − e^−(density·distance)², so the density follows from the distance: a fixed density would drown the
@@ -524,7 +740,7 @@ function applyFog(s: Scene3D, level: number): void {
 /** Sets the drawing size only when it really changed: setSize clears the picture, and a clear that nothing needs is a flicker. */
 function resize(s: Scene3D): void {
 	const box = s.host.getBoundingClientRect(), w = Math.max(1, Math.round(box.width)), h = Math.max(260, Math.round(box.height || box.width * 0.62));
-	if (w !== s.size.w || h !== s.size.h) { s.size = { w, h }; s.renderer.setSize(w, h, false); s.camera.aspect = w / h; s.camera.updateProjectionMatrix(); }
+	if (w !== s.size.w || h !== s.size.h) { s.size = { w, h }; s.renderer.setSize(w, h, false); s.camera.aspect = w / h; s.camera.updateProjectionMatrix(); fitSprites(s, s.scene); }
 	positionCamera(s);
 }
 
@@ -536,11 +752,26 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		s.camera.updateMatrixWorld(); ray.setFromCamera(mouse, s.camera);
 		return ray.ray.intersectPlane(plane, hit);
 	};
+	/** The cell under the pointer: the column of the terrain the ray meets first (the terraces stand at different heights,
+	 *  so a flat plane would name the cell behind a raised one); off the terrain, none. */
 	const cell = (e: PointerEvent) => {
+		const r = s.canvas.getBoundingClientRect(); mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+		s.camera.updateMatrixWorld(); ray.setFromCamera(mouse, s.camera);
+		const columns = s.ground?.children.filter((o) => (o as import("three").InstancedMesh).isInstancedMesh && o.userData.cells) ?? [];
+		const first = ray.intersectObjects(columns, false)[0];
+		const cells = first?.object.userData.cells as Array<{ x: number; y: number }> | undefined;
+		if (first && cells && first.instanceId !== undefined) return cells[first.instanceId] ?? null;
 		if (!ground(e.clientX, e.clientY)) return null;
 		const { w, h } = dims(s.room), x = Math.floor(hit.x + w / 2), y = Math.floor(hit.z + h / 2);
 		return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
 	};
+	// for automated checks in development only: the cell a screen point names, and where a point of a cell is on the screen
+	if (process.env.NODE_ENV !== "production") Object.assign(s.canvas, {
+		probeCell: (clientX: number, clientY: number) => cell({ clientX, clientY } as PointerEvent),
+		/** a world hour for the light instead of the clock (screenshots of the night) */
+		probeHour: (hour: number | null) => { s.hourProbe = hour; s.lightAt = 0; },
+		probeScreen: (x: number, y: number, dx = 0, dz = 0) => { const p = at(s, x, y, 0).add(new t.Vector3(dx, 0, dz)).project(s.camera), r = s.canvas.getBoundingClientRect(); return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height }; },
+	});
 	let down: { x: number; y: number; at: { x: number; y: number } | null; long: boolean; turn: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
 	const fingers = pinch();
 	const onDown = (e: PointerEvent) => {
@@ -561,7 +792,7 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		// two fingers zoom and turn at once: the room turns with them (the state too: its effect would set the old angle back)
 		if (spread !== null) {
 			// what lies between the fingers stays there: the view moves over the ground by what the zoom and the turn shifted
-			const c = fingers.center!, before = ground(c.x, c.y)?.clone(), a = s.angle - fingers.twist, z = clamp(s.zoom * spread, ZOOM_MIN, ZOOM_MAX);
+			const c = fingers.center!, before = ground(c.x, c.y)?.clone(), a = s.angle - fingers.twist, z = clampZoom(s.zoom * spread);
 			view.current.zoomBy(spread); view.current.turned(a);
 			s.angle = a; s.zoom = z; positionCamera(s);
 			const after = ground(c.x, c.y);
@@ -578,7 +809,7 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 			// world units per pixel at the point looked at; the ground is foreshortened in depth by the camera's elevation
 			const unit = (2 * s.dist * Math.tan((s.camera.fov * Math.PI) / 360)) / Math.max(1, s.size.h);
 			const fx = -Math.cos(s.angle), fz = -Math.sin(s.angle); // forward on the ground; right is (-fz, fx)
-			const side = dx * unit, depth = (dy * unit) / Math.sin(ELEVATION);
+			const side = dx * unit, depth = (dy * unit) / Math.sin(elevationAt(s.zoom));
 			s.panX += fz * side + fx * depth; s.panZ += -fx * side + fz * depth;
 		}
 		positionCamera(s);

@@ -19,7 +19,11 @@ function gable(t: T, parts: Part[], ww: number, dd: number, y: number, rise: num
 	const tri = new t.Shape(); tri.moveTo(-dd / 2, 0); tri.lineTo(dd / 2, 0); tri.lineTo(0, rise); tri.closePath();
 	parts.push({ g: new t.ExtrudeGeometry(tri, { depth: ww, bevelEnabled: false }), c: wall, p: [-ww / 2, y, 0], r: [0, Math.PI / 2, 0] });
 	const slope = Math.atan2(rise, dd / 2), len = Math.hypot(rise, dd / 2) + 0.14;
-	for (const side of [-1, 1]) parts.push(b(t, ww + 2 * over, 0.06, len, roof, 0, y + rise / 2 + 0.04, side * (dd / 4 + 0.04), [side * slope, 0, 0]));
+	for (const side of [-1, 1]) {
+		parts.push(b(t, ww + 2 * over, 0.06, len, roof, 0, y + rise / 2 + 0.04, side * (dd / 4 + 0.04), [side * slope, 0, 0]));
+		// v2: a fascia board along the eave, so the roof shows an edge and a thickness from below
+		parts.push(b(t, ww + 2 * over + 0.02, 0.08, 0.05, WOOD_DARK, 0, y + rise / 2 + 0.03 - (len / 2) * Math.sin(slope), side * (dd / 4 + 0.04 + (len / 2) * Math.cos(slope)), [side * slope, 0, 0]));
+	}
 	parts.push(b(t, ww + 2 * over, 0.07, 0.1, WOOD_DARK, 0, y + rise + 0.05, 0));
 }
 /** A plain house: a plinth, walls with corner posts, a gable roof. The door and the rest are the caller's. */

@@ -290,8 +290,30 @@ cells change. All this is only presentation; rules, paths and occupancy stay 2D.
 
 The user can switch between text, 2D and 3D independently of the server; the choice remains stored in the browser. If
 Three.js or WebGL cannot start, the client falls back to 2D. If the 2D map also fails, text mode remains. Drawn are
-instanced tile cuboids, simple geometries and name billboards; low-poly models, water shader, decor, measured phone
-budgets and WFC-generated rooms are not yet an implemented 3D acceptance.
+instanced tile cuboids on their block, the low-poly models below, name billboards and the island's blocks; a water
+shader, measured phone budgets (frame times on a real phone) and WFC-generated rooms are not yet an implemented 3D
+acceptance.
+
+**Zoom ladder and diorama (v2, `docs/3D-V2/`):** One slider from the island to a face (`client/camera3d.ts`: zoom 0.2
+to 5). The camera's elevation is a function of the zoom (60° on the island, 52° on the approach, 44° at zoom 1, 22° up
+close), so a pinch both comes closer and flattens the view; the far plane follows the distance. The levels: **island**
+(zoom ≤ 0.3) shows every room of the island as a block at its place on the world map (`AtlasView` x, y; no server change),
+with a lid of flat tile colours greyed by that room's fog and a name card with how many are there; the camera turns to
+the island's middle. **Approach** (to 0.6) the own block fills the frame, the neighbours at the edge. **Room** (to 2) the
+play view. **Close** (2 to 5) a vignette darkens the edges and what was said shows as a bubble over the speaker
+(`MapRendererProps.said`, from the log's `say` lines, 8 s). Tapping a neighbour's block does nothing: changing rooms stays
+a command. The room stands on a block (`client/block3d.ts`): rock strata on the land sides, the sea as a volume on the
+sea sides, a soft shadow on the void below, a dusk gradient instead of black. The tile kinds stand on terraces
+(`terrain3d.ts` version 2: water 0.06, sand 0.2, paving 0.36, grass 0.5), one height per kind, never per cell, so
+neighbours of a kind still meet flush; a click therefore hits the terrain's columns (a raycast on the instanced tiles),
+not a flat plane. The sun casts shadows (one shadow map fitted to the room, 1024 on a touch screen, 2048 otherwise).
+Names of figures and things keep their size on the screen and hide on the island level. Figures wear a hat or a cap and
+a satchel by their id; roofs have fascia boards along the eaves. Behind a sea side the water is clear enough to show a
+sand slope and a few fish swimming along it (`fishFor`, `swimFish`). Day and night follow the world's clock as the
+client shows it (`WorldTimeView`, `daylightAt` in `camera3d.ts`: full light from 7 to 19, dark from 21 to 5): the sun
+sinks to a pale moonlight, warm at dawn and dusk, the sky and the hemisphere light dim, and the lamplit faces of every
+model (windows, lanterns, kiln mouths: the colours in `LAMPLIGHT`, marked per vertex by `merge`) glow through one
+uniform of the shared model material, without a light per house. The game's rules keep their own hours.
 
 **Calm image:** Renderer, camera and render loop arise **once**; a room change replaces only ground and things
 (`MapView3D`, effect per `roomId`). The camera looks at the **center of the room** from a distance that shows the whole

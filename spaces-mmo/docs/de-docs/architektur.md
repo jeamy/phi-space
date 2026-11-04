@@ -277,9 +277,31 @@ neu entsteht, wenn sich diese Zellen ändern. Alles das ist nur Darstellung; Reg
 
 Der Nutzer kann unabhängig vom Server zwischen Text, 2D und 3D wechseln; die Auswahl bleibt im Browser gespeichert.
 Kann Three.js oder WebGL nicht starten, fällt der Client auf 2D zurück. Scheitert auch die 2D-Karte, bleibt der
-Textmodus. Gezeichnet werden instanziierte Kachelquader, einfache Geometrien und Namens-Billboards; Low-Poly-
-Modelle, Wasser-Shader, Deko, gemessene Telefonbudgets und WFC-generierte Räume sind noch keine implementierte
-3D-Abnahme.
+Textmodus. Gezeichnet werden instanziierte Kachelquader auf ihrem Block, die Low-Poly-Modelle
+unten, Namens-Billboards und die Blöcke der Insel; ein Wasser-Shader, gemessene Telefonbudgets (Bildzeiten auf einem
+echten Telefon) und WFC-generierte Räume sind noch keine implementierte 3D-Abnahme.
+
+**Zoomleiter und Diorama (v2, `docs/3D-V2/`):** Ein Regler von der Insel bis zum Gesicht (`client/camera3d.ts`: Zoom 0,2
+bis 5). Die Höhe der Kamera folgt dem Zoom (60° auf der Insel, 52° im Anflug, 44° bei Zoom 1, 22° ganz nah), ein Pinch
+kommt also näher und flacht zugleich ab; die Sichtweite folgt dem Abstand. Die Stufen: **Insel** (Zoom ≤ 0,3) zeigt jeden
+Raum der Insel als Block an seinem Platz der Weltkarte (`AtlasView` x, y; keine Serveränderung), mit einem Deckel aus
+flachen Kachelfarben, ergraut nach dem Nebel des Raums, und einer Namenskarte mit der Zahl der Anwesenden; die Kamera
+wendet sich zur Inselmitte. **Anflug** (bis 0,6) der eigene Block füllt das Bild, die Nachbarn am Rand. **Raum** (bis 2)
+die Spielansicht. **Nah** (2 bis 5) eine Vignette dunkelt die Ränder ab, und Gesagtes erscheint als Sprechblase über dem
+Sprecher (`MapRendererProps.said`, aus den `say`-Zeilen des Protokolls, 8 s). Ein Tipp auf einen Nachbarblock tut nichts:
+Raumwechsel bleiben Befehle. Der Raum steht auf einem Block (`client/block3d.ts`): Gesteinsschichten an den Landseiten,
+das Meer als Volumen an den Seeseiten, ein weicher Schatten darunter, ein Abendverlauf statt Schwarz. Die Kachelarten
+stehen auf Terrassen (`terrain3d.ts` Version 2: Wasser 0,06, Sand 0,2, Pflaster 0,36, Gras 0,5), eine Höhe je Art, nie
+je Zelle, damit Nachbarn einer Art weiter bündig stoßen; ein Klick trifft deshalb die Säulen des Geländes (Raycast auf
+die instanzierten Kacheln), keine flache Ebene. Die Sonne wirft Schatten (eine Schattenkarte auf den Raum zugeschnitten,
+1024 auf Touchgeräten, sonst 2048). Namen von Figuren und Dingen behalten ihre Bildschirmgröße und verschwinden auf der
+Inselstufe. Figuren tragen nach ihrer ID Hut oder Mütze und eine Umhängetasche; Dächer haben Traufbretter. Hinter einer
+Seeseite ist das Wasser klar genug für einen Sandhang und ein paar Fische, die an ihm entlangschwimmen (`fishFor`,
+`swimFish`). Tag und Nacht folgen der Weltuhr, wie der Client sie zeigt (`WorldTimeView`, `daylightAt` in `camera3d.ts`:
+volles Licht von 7 bis 19, dunkel von 21 bis 5): Die Sonne sinkt zu blassem Mondlicht, warm in Morgen- und Abenddämmerung,
+Himmel und Himmelslicht werden dunkler, und die lampenhellen Flächen jedes Modells (Fenster, Laternen, Ofenlöcher: die
+Farben in `LAMPLIGHT`, von `merge` je Ecke markiert) leuchten über eine Uniform des gemeinsamen Modellmaterials, ohne
+ein Licht je Haus. Die Spielregeln behalten ihre eigenen Stunden.
 
 **Ruhiges Bild:** Renderer, Kamera und Renderloop entstehen **einmal**; ein Raumwechsel tauscht nur Boden und Dinge aus
 (`MapView3D`, Effekt je `roomId`). Die Kamera blickt auf die **Mitte des Raums** aus einem Abstand, der den ganzen Raum

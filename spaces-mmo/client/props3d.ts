@@ -11,6 +11,8 @@ export type Geo = import("three").BufferGeometry;
 export type V3 = [number, number, number];
 /** One primitive of a model: its geometry, colour, place, turn and size. */
 export type Part = { g: Geo; c: number; p?: V3; r?: V3; s?: V3 };
+/** The colours of lamplight and embers: such faces glow when it gets dark (merge marks them, propMaterial lights them). */
+export const LAMPLIGHT = new Set([0xf2c46a, 0xff8a2a]);
 
 export type PlantModel = "tree" | "conifer" | "bush" | "berrybush" | "flower" | "herb" | "grass" | "fern";
 /** How many shapes of each plant there are; a place picks one. */
@@ -33,7 +35,7 @@ export function rand(seed: string): () => number {
 
 /** The parts merged into one geometry: positions, flat normals and a colour per face (a little lighter or darker). */
 export function merge(t: T, parts: Part[], seed: string): Geo {
-	const pos: number[] = [], col: number[] = [], r = rand(`${seed}:shade`);
+	const pos: number[] = [], col: number[] = [], glow: number[] = [], r = rand(`${seed}:shade`);
 	const m = new t.Matrix4(), q = new t.Quaternion(), e = new t.Euler(), c = new t.Color();
 	for (const part of parts) {
 		const g = part.g.index ? part.g.toNonIndexed() : part.g;
@@ -42,13 +44,15 @@ export function merge(t: T, parts: Part[], seed: string): Geo {
 		const a = g.getAttribute("position");
 		for (let i = 0; i < a.count; i += 3) {
 			c.setHex(part.c).multiplyScalar(0.9 + r() * 0.18);
-			for (let k = 0; k < 3; k++) { pos.push(a.getX(i + k), a.getY(i + k), a.getZ(i + k)); col.push(c.r, c.g, c.b); }
+			const lit = LAMPLIGHT.has(part.c) ? 1 : 0;
+			for (let k = 0; k < 3; k++) { pos.push(a.getX(i + k), a.getY(i + k), a.getZ(i + k)); col.push(c.r, c.g, c.b); glow.push(lit); }
 		}
 		g.dispose(); if (g !== part.g) part.g.dispose();
 	}
 	const out = new t.BufferGeometry();
 	out.setAttribute("position", new t.Float32BufferAttribute(pos, 3));
 	out.setAttribute("color", new t.Float32BufferAttribute(col, 3));
+	out.setAttribute("glow", new t.Float32BufferAttribute(glow, 1));
 	out.computeVertexNormals(); // not indexed: every face keeps its own normal (faceted)
 	out.computeBoundingSphere();
 	out.userData.shared = true;
@@ -56,11 +60,24 @@ export function merge(t: T, parts: Part[], seed: string): Geo {
 }
 
 let material: import("three").MeshStandardMaterial | null = null;
-/** The one material of every model: the colours are in the vertices. */
+/** How dark it is, 0 by day to 1 at night: the lamplit faces of every model glow by it (setNight). */
+const night = { value: 0 };
+/** The one material of every model: the colours are in the vertices, and faces marked `glow` (merge) shine at night with
+ *  their own colour, so windows, lanterns and kiln mouths light up without a light per house. */
 export function propMaterial(t: T): import("three").MeshStandardMaterial {
-	if (!material) { material = new t.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.88, metalness: 0 }); material.userData.shared = true; }
+	if (!material) {
+		material = new t.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.88, metalness: 0 });
+		material.onBeforeCompile = (shader) => {
+			shader.uniforms.uNight = night;
+			shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nattribute float glow;\nvarying float vGlow;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow;");
+			shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uNight;\nvarying float vGlow;").replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * vGlow * uNight * 1.8;");
+		};
+		material.userData.shared = true;
+	}
 	return material;
 }
+/** Sets how dark it is for every model's lamplight (0 day, 1 night). */
+export function setNight(n: number): void { night.value = Math.max(0, Math.min(1, n)); }
 
 const cache = new Map<string, Geo>();
 export function cached(key: string, make: () => Geo): Geo {
@@ -226,7 +243,11 @@ export function hut(t: T, w: number, d: number, wall: number, variant: number): 
 		const tri = new t.Shape(); tri.moveTo(-dd / 2, 0); tri.lineTo(dd / 2, 0); tri.lineTo(0, rise); tri.closePath();
 		parts.push({ g: new t.ExtrudeGeometry(tri, { depth: ww, bevelEnabled: false }), c: wall, p: [-ww / 2, top, 0], r: [0, Math.PI / 2, 0] });
 		const slope = Math.atan2(rise, dd / 2), len = Math.hypot(rise, dd / 2) + 0.16;
-		for (const side of [-1, 1]) parts.push({ g: new t.BoxGeometry(w * 0.98, 0.07, len), c: roofC, p: [0, top + rise / 2 + 0.04, side * (dd / 4 + 0.04)], r: [side * slope, 0, 0] });
+		for (const side of [-1, 1]) {
+			parts.push({ g: new t.BoxGeometry(w * 0.98, 0.07, len), c: roofC, p: [0, top + rise / 2 + 0.04, side * (dd / 4 + 0.04)], r: [side * slope, 0, 0] });
+			// v2: the thatch's eave as a darker, thicker edge
+			parts.push({ g: new t.BoxGeometry(w * 1.0, 0.1, 0.07), c: WOOD_DARK, p: [0, top + rise / 2 + 0.02 - (len / 2) * Math.sin(slope), side * (dd / 4 + 0.04 + (len / 2) * Math.cos(slope))], r: [side * slope, 0, 0] });
+		}
 		parts.push({ g: new t.BoxGeometry(w * 1.0, 0.08, 0.1), c: WOOD_DARK, p: [0, top + rise + 0.05, 0] });
 		// door and window on the front (+z), the chimney on one side of the ridge
 		const front = dd / 2 + 0.015;
