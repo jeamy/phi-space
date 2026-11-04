@@ -1,4 +1,4 @@
-// The core over the own store (docs/rust-portierung.md, R2): the lines of core-driver.ts, each one a commit of a Space
+// The core over the own store (docs/rust-portierung.en.md, R2): the lines of core-driver.ts, each one a commit of a Space
 // document through the TypeScript store host, as the service runs operations (a fresh draft per commit, rolled back
 // when the operation throws, the claims a map part on the disk once the document is stored). rust/phi-store's tests
 // run the same lines through the Rust host and compare answers, state hashes and the rows of both files.

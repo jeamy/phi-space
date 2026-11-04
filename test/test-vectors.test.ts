@@ -1,6 +1,6 @@
-// R0 of docs/rust-portierung.md: the vectors in test/vectors/ are what a second implementation must reproduce. This test
+// R0 of docs/rust-portierung.en.md: the vectors in test/vectors/ are what a second implementation must reproduce. This test
 // keeps them true of this one; when it fails, either the code broke the contract or the contract changed on purpose
-// (then: node --experimental-strip-types test/vectors/build.ts --write, and docs/wire-protokoll.md follows).
+// (then: node --experimental-strip-types test/vectors/build.ts --write, and docs/wire-protokoll.en.md follows).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";

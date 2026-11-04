@@ -1,4 +1,4 @@
-// Operating the own SQLite store (docs/umstellung-ohne-pi-durable.md, U7): a full disk, and a backup taken while the
+// Operating the own SQLite store (docs/umstellung-ohne-pi-durable.en.md, U7): a full disk, and a backup taken while the
 // store writes. Each commit writes a pair of entries, so a torn commit shows as an odd number of them.
 import test from "node:test";
 import assert from "node:assert/strict";

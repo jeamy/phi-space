@@ -1,4 +1,4 @@
-// A run in the shared space, carried out by agent processes without any coordinator (docs/codemode-space-architektur.md).
+// A run in the shared space, carried out by agent processes without any coordinator (docs/codemode-space-architektur.en.md).
 //
 //   CodeRun     the run: its parameters, what it shows (info), its progress per generation or the work board's state;
 //               `unique` per room. It is also the run's lock: whoever changes it takes it under its own transaction and

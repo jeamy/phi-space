@@ -1,4 +1,4 @@
-// Worker control (docs/betrieb-und-mobile-steuerung.md §7.3, §8 B6): desired state on the control host, signed
+// Worker control (docs/betrieb-und-mobile-steuerung.en.md §7.3, §8 B6): desired state on the control host, signed
 // per-host lists, local reconciliation of registered worker kinds, backoff, persistence and composition with runs.
 import test from "node:test";
 import assert from "node:assert/strict";

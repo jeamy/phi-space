@@ -1,7 +1,7 @@
-// Persistent stores for crash/reopen tests (AP 0.1, docs/implementierungsplan-v3.md): phi-spaces' own SQLite store
+// Persistent stores for crash/reopen tests (AP 0.1, docs/_attic/implementierungsplan-v3.en.md): phi-spaces' own SQLite store
 // (store/sqlite.ts) in a directory that outlives its hosts. A store in memory proves nothing about durability; every
 // recovery acceptance case runs through these helpers. pi-durable's storage is gone (decision D6,
-// docs/umstellung-u0-bestand.md).
+// docs/umstellung-u0-bestand.en.md).
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lifecycle helper for the read-only dashboard daemon (docs/dashboard.md): start, stop, status, logs.
+# Lifecycle helper for the read-only dashboard daemon (docs/dashboard.en.md): start, stop, status, logs.
 # The daemon runs in the background; its stdout/stderr go to a log file; readiness is probed via /api/spaces.
 #
 # Usage:  scripts/dashboard.sh start|stop|status|logs [extra flags for src/dashboard.ts]

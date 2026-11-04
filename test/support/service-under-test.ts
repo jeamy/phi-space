@@ -1,4 +1,4 @@
-// The space service a test runs against (docs/rust-portierung.md, section 5, B3). Without PHI_SPACES_SERVER_CMD: a
+// The space service a test runs against (docs/rust-portierung.en.md, section 5, B3). Without PHI_SPACES_SERVER_CMD: a
 // SpaceService in this process on a test host. With it: that server as a process, on a store file of its own, one socket per
 // peer and the test hooks of `--test-hooks`, so the same test holds another implementation to the same behaviour. A
 // missing binary fails the test; it never falls back to the TypeScript service.

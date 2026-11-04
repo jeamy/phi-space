@@ -19,7 +19,7 @@ Remote server/settings: test/testbed/testbed.env (same as npm run testbed).
 --dry-run previews actions; no remote connection or command is executed.
 --allow-remote explicitly authorizes the selected remote mutation (including any reset in that action).
 Without it, the interactive TUI asks before its first remote mutation and destructive actions.
---local-dir enables read-only inspection of JSONL state; no remote controls.
+--local-dir enables read-only inspection of local store files; no remote controls.
 Keys: 1-4 views, Tab, arrows, s host, r refresh, / filter, i item kind,
       PgUp/PgDn details/log, Enter action/report, x cancel call, q quit.
 Remote cancellation has an unknown outcome: server-side work may continue.

@@ -1,4 +1,4 @@
-// The one space every process of the codemode chat shares (docs/codemode-space-architektur.md): how a process connects
+// The one space every process of the codemode chat shares (docs/codemode-space-architektur.en.md): how a process connects
 // to it, how long a room's entries live, and the Process entry each process keeps there while it runs.
 import os from "node:os";
 import { randomBytes } from "node:crypto";
@@ -76,7 +76,7 @@ export const IDLE_WAIT_MS = Math.max(1000, Number(process.env.CODEMODE_IDLE_WAIT
 
 /** Waits until an entry of `tmpl` is there, holding nothing: a read without a transaction. An idle role so costs one
  *  request (one claim, kept for a day) per wait, not a transaction begun, a take and an abort every few seconds
- *  (docs/umstellung-ohne-pi-durable.md, U2d). True when one is there to take; false when the wait ran out or `halt`
+ *  (docs/umstellung-ohne-pi-durable.en.md, U2d). True when one is there to take; false when the wait ran out or `halt`
  *  ended it (a role that stops does not wait for the read; the space drops it at its deadline). */
 export function awaitWork(space: SpaceLike, tmpl: Template, halt?: AbortSignal, waitMs = IDLE_WAIT_MS): Promise<boolean> {
 	return awaitWorkFor(space, tmpl, waitMs, halt);

@@ -1,4 +1,4 @@
-// Capacity probe of the own store (docs/umstellung-ohne-pi-durable.md, U7, decision D2): SPACES named spaces with
+// Capacity probe of the own store (docs/umstellung-ohne-pi-durable.en.md, U7, decision D2): SPACES named spaces with
 // ENTRIES entries each in one SQLite store; reports write time, file size, reopen time and the RSS of a process that
 // opens it and touches every space once.
 //   node --experimental-strip-types scripts/capacity-probe.ts [spaces=100] [entries=10000] [dir]

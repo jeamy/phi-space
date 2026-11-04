@@ -8,7 +8,7 @@ export type Action = {
 export function actions(service: Service): Action[] {
 	const remote = (id: string, group: string, label: string, args: string[], extra: Partial<Action> = {}): Action => ({ id, group, label, scope: "remote", args, ...extra });
 	const local = (id: string, label: string, args: string[], test = true): Action => ({ id, group: "Quelltests (lokal)", label, scope: "local", args, test });
-	const future = (id: string, label: string, why = "Backend-Vertrag geplant, noch nicht implementiert"): Action => remote(id, "Geplante Steuerung", label, [], { unavailable: why });
+	const future = (id: string, label: string, why = "Baustein der Bibliothek vorhanden, im TUI nicht angebunden"): Action => remote(id, "Geplante Steuerung", label, [], { unavailable: why });
 	return [
 		remote("check", "Testumgebung", "Server und Docker prüfen", ["check"]),
 		remote("status", "Testumgebung", "Containerstatus anzeigen", ["status"]),

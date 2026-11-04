@@ -1,4 +1,4 @@
-// A sealed, unconfirmed primary/sync commit (docs/abnahme/ap3-primary-sync.md, v3 6.2/7.2): clients see CommitSealed and keep
+// A sealed, unconfirmed primary/sync commit (docs/_attic/abnahme/ap3-primary-sync.en.md, v3 6.2/7.2): clients see CommitSealed and keep
 // asking about the same request; the host resolves the candidate with the standby and serves the Space again.
 import test from 'node:test';
 import {OWN_SYNC_FACTORIES,OwnSyncStore} from '../src/store/sync-sqlite.ts';

@@ -43,7 +43,7 @@ export function segmentedSieve(start: number, end: number): number[] {
 }
 
 export const SIEVE_COMPLETION_PROFILE = { taskType: "SieveTask", resultTypes: ["SieveResult"], equalFields: ["runId", "taskId", "rangeStart", "rangeEnd"], maxResultCount: 1 };
-/** With a RunGate: tasks are takeable only while their run is running (docs/betrieb-und-mobile-steuerung.md §6). */
+/** With a RunGate: tasks are takeable only while their run is running (docs/betrieb-und-mobile-steuerung.en.md §6). */
 export const SIEVE_GATED_PROFILE = { ...SIEVE_COMPLETION_PROFILE, gateField: "runId", maxLeaseMs: 60_000 };
 
 /** Configure a Space for gated sieve runs once, before workers open transactions. */

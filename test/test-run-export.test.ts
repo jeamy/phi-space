@@ -1,4 +1,4 @@
-// Run result export with manifest hash and scheduled pause/resume (docs/betrieb-und-mobile-steuerung.md §7.2, §7.5).
+// Run result export with manifest hash and scheduled pause/resume (docs/betrieb-und-mobile-steuerung.en.md §7.2, §7.5).
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as c from "../src/core.ts";

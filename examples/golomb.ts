@@ -1,4 +1,4 @@
-// Golomb ruler search coordinated through the space. Spec: docs/examples/golomb.md.
+// Golomb ruler search coordinated through the space. Spec: docs/examples/golomb.en.md.
 //
 //   Master ──write──► GolombSearchTask (a2 ranges, status "pending")
 //   Worker ──take──► DFS with branch-and-bound (bound = GolombBestKnown)
@@ -130,7 +130,7 @@ export class GolombRuler {
 	}
 }
 
-// Space entry field schemas (see docs/examples/golomb.md §4)
+// Space entry field schemas (see docs/examples/golomb.en.md §4)
 export type GolombSearchTask = {
 	runId?: string;
 	taskId: string;

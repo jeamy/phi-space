@@ -1,4 +1,4 @@
-// Run recovery after restores (docs/betrieb-und-mobile-steuerung.md §6 Abgleich nach Restore, §7.4 cases 9, 11-13,
+// Run recovery after restores (docs/betrieb-und-mobile-steuerung.en.md §6 Abgleich nach Restore, §7.4 cases 9, 11-13,
 // §8 B5): recovery entry fences, RunRecoveryView, reconcile, resolveRunRecovery and the control identity binding.
 import test from "node:test";
 import assert from "node:assert/strict";

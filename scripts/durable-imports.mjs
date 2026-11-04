@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Which files depend on @earendil-works/pi-durable (and @earendil-works/chord, which comes with it, and pi-ai, which
 // only agents need): directly, with the names they import, and transitively through the files they import. The
-// inventory of work package U0 in docs/umstellung-ohne-pi-durable.md, now also its guard; read-only, no dependencies.
+// inventory of work package U0 in docs/umstellung-ohne-pi-durable.en.md, now also its guard; read-only, no dependencies.
 //
 //   node scripts/durable-imports.mjs            a markdown report
 //   node scripts/durable-imports.mjs --json     the same as JSON

@@ -1,5 +1,5 @@
 # Docker Compose for PHI-SPACES / CODEMODE CHAT: one container per role, all from the one `production` image, talking
-# only through the space over TCP (docs/codemode-space-architektur.md).
+# only through the space over TCP (docs/codemode-space-architektur.en.md).
 #
 #   profile nano:  space (SQLite in a volume) and a judge            — the host that keeps the state
 #   profile big:   web, a judge, agents and the model process        — the host that does most of the work

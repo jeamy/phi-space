@@ -1,6 +1,6 @@
 // The host a test runs on: phi-spaces' own store host on a SQLite file (a temporary one per host), strict about
 // enumerating map parts on the disk; PHI_SPACES_STORE=own keeps it in memory instead. pi-durable's host is gone
-// (decision D6, docs/umstellung-u0-bestand.md).
+// (decision D6, docs/umstellung-u0-bestand.en.md).
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

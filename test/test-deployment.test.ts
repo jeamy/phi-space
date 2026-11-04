@@ -1,4 +1,4 @@
-// Deployment bootstrap (docs/betrieb-und-mobile-steuerung.md §4, §8 B8): config validation, alias bindings, plan,
+// Deployment bootstrap (docs/betrieb-und-mobile-steuerung.en.md §4, §8 B8): config validation, alias bindings, plan,
 // idempotent apply across two stores, resume after failures, conflicts, worker start, export, admin commands, CLI.
 import test from "node:test";
 import assert from "node:assert/strict";

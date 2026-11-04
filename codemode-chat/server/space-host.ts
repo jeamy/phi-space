@@ -6,7 +6,7 @@
 //   CODEMODE_SQLITE=…/codemode-space.sqlite          (default: codemode-chat/.local/codemode-space.sqlite)
 //   CODEMODE_MEM=1                                  in memory, throwaway (tests)
 // A store file of the earlier pi-durable format is refused, not taken over (its import is step U5 of
-// docs/umstellung-ohne-pi-durable.md); the default file name changed with the format for that reason.
+// docs/umstellung-ohne-pi-durable.en.md); the default file name changed with the format for that reason.
 import { ROOT } from "./env.ts";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";

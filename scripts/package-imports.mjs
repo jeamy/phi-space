@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Projects built on phi-spaces (every top-level directory with its own package.json, except the agent package) import
 // the library as the package `phi-spaces` and its exported subpaths, never relative paths into src/. Read-only, no
-// dependencies; spaces-mmo/docs/paket.md (Phase P) explains the decision.
+// dependencies; spaces-mmo/docs/paket.en.md (Phase P) explains the decision.
 //
 //   node scripts/package-imports.mjs --check    exit 1 on a relative src/ import, an unexported subpath, a missing
 //                                               export target, or a linked phi-spaces that is not this checkout

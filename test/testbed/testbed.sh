@@ -2,7 +2,7 @@
 # Remote docker test bed for phi-spaces: builds the production artifacts here (the phi-spaces.mjs bundle, compiled
 # examples and scenarios), ships ONLY those to a server over ssh, builds a production-like image from them there and
 # runs scenarios, and later the federation hosts, in docker containers. No source code reaches the server.
-# Docs: docs/testumgebung-big.md (German), test/testbed/README.md. Usage: testbed.sh --help
+# Docs: docs/testumgebung-big.en.md (German), test/testbed/README.md. Usage: testbed.sh --help
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -39,7 +39,7 @@ Commands:
                                  production checks in the runner container (default: all): the shipped bundle loads,
                                  no sources on the server, the compiled examples run, the sieve-mobile scenario passes
   scenario <name> [args]         ship, start the runner and run the compiled scenarios/<name>.mjs in it
-                                 (sieve-mobile create|run|evaluate|all: simulated phone, see docs/testumgebung-big.md)
+                                 (sieve-mobile create|run|evaluate|all: simulated phone, see docs/testumgebung-big.en.md)
   purge-sources                  remove a leftover source copy (<dir>/repo) from earlier versions of this script
   exec <service> <command...>    run a command in a running container (tty if available)
   logs <service> [lines]         last log lines of a container (default 200)
@@ -50,7 +50,7 @@ Commands:
   down                           remove containers and network, keep volumes and the shipped artifacts
   destroy --yes                  down + remove volumes and the image (the directory and <dir>/build stay)
   netbird <init|up|setup|status|down|logs|nginx [bootstrap]|destroy --yes>
-                                 NetBird management stack (own compose project in <dir>/netbird, docs/testumgebung-big.md);
+                                 NetBird management stack (own compose project in <dir>/netbird, docs/testumgebung-big.en.md);
                                  `nginx` prints the site for the host's nginx (root installs it, the script never does)
   config                         show the effective settings
 

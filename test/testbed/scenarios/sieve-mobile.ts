@@ -1,4 +1,4 @@
-// Prime sieve driven by a simulated mobile client (docs/betrieb-und-mobile-steuerung.md section 6, docs/testumgebung-big.md).
+// Prime sieve driven by a simulated mobile client (docs/betrieb-und-mobile-steuerung.en.md section 6, docs/testumgebung-big.en.md).
 //
 // Three separate invocations over persistent storage, like a phone that starts a run, comes back later and looks at
 // the outcome:

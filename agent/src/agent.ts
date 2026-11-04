@@ -1,5 +1,5 @@
 // The agent side of phi-spaces: the space tools of a pi-durable agent (space_write, space_take, …) and their prompt
-// section. The space is not the agent's store (docs/umstellung-ohne-pi-durable.md, section 6 and U6): the tools act on
+// section. The space is not the agent's store (docs/umstellung-ohne-pi-durable.en.md, section 6 and U6): the tools act on
 // a separate space host (the own store, in this process or behind a service), so the space outlives an agent restart
 // and the agent outlives a space restart.
 //

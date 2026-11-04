@@ -1,4 +1,4 @@
-// AP 1.1/1.2: named spaces, registry, identities and global ids (docs/implementierungsplan-v3.md).
+// AP 1.1/1.2: named spaces, registry, identities and global ids (docs/_attic/implementierungsplan-v3.en.md).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PhiSpaces, FOREVER, Space, createSpace, listSpaces, UnknownSpaceError, startService, core, DEFAULT_ALIAS } from "../src/index.ts";

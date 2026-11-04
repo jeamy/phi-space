@@ -1,4 +1,4 @@
-// RunGate and RunController (docs/betrieb-und-mobile-steuerung.md §6, §7.4 cases 2, 4, 8, 10; §8 B2/B3).
+// RunGate and RunController (docs/betrieb-und-mobile-steuerung.en.md §6, §7.4 cases 2, 4, 8, 10; §8 B2/B3).
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as c from "../src/core.ts";

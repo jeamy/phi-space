@@ -1,4 +1,4 @@
-// Alerts, audit and run previews (docs/betrieb-und-mobile-steuerung.md §7.5, §8 B10).
+// Alerts, audit and run previews (docs/betrieb-und-mobile-steuerung.en.md §7.5, §8 B10).
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";

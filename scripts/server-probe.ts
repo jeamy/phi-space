@@ -1,4 +1,4 @@
-// What a call costs the space process (docs/rust-portierung.md, R0 baseline and decision R-D2): the standalone service as
+// What a call costs the space process (docs/rust-portierung.en.md, R0 baseline and decision R-D2): the standalone service as
 // a process of its own, CLIENTS clients in this process over a unix socket, each OPS rounds of write, read and take
 // one after another, RATE calls per second together (the service allows one peer 1024 per second); then the CPU time the service spent meanwhile (/proc/<pid>/stat, Linux) per call, its peak RSS and
 // the answer times. The same probe measures another implementation with --cmd (as PHI_SPACES_SERVER_CMD in the tests).

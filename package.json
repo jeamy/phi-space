@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "license": "MIT",
   "type": "module",
-  "description": "JavaSpaces-style space for @earendil-works/pi-durable",
+  "description": "JavaSpaces-style data space with its own store; the optional agent package connects pi-durable agents",
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",

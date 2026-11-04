@@ -1,4 +1,4 @@
-// Deployment bootstrap CLI (docs/betrieb-und-mobile-steuerung.md §4, §8 B8).
+// Deployment bootstrap CLI (docs/betrieb-und-mobile-steuerung.en.md §4, §8 B8).
 //   --check  --config deployment.json                              offline validation, prints the config hash
 //   --plan | --apply | --start-workers | --export  --config deployment.json  <admin connection>
 //   --bind <hostAlias>=<hostId>                                     <admin connection>

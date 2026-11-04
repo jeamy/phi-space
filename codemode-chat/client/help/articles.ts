@@ -707,7 +707,7 @@ Technische Einzelheiten:
 - **Abbruch:** Ein Stopp verhindert weitere Versuche. Eine schon gesendete Modellanfrage kann trotzdem Kosten verursachen.
 - **Notizen:** Eine \`NOTE:\`-Zeile nach dem Code wird wie beim einzelnen Modellaufruf zur Notiz für das Team.
 
-Der Agent läuft als Kindprozess des model-Prozesses. Nur dieser Worker lädt pi-durable und Chord; der Chat selbst spricht über IPC mit ihm. Sein Speicher ist eine eigene SQLite-Datei und liegt nicht im Space, siehe [Speicher](help.topic.big_and_nano#stores). Mehr dazu: \`docs/codemode-space-architektur.md\`, Abschnitt „Dauerhafte Code-Agenten“.
+Der Agent läuft als Kindprozess des model-Prozesses. Nur dieser Worker lädt pi-durable und Chord; der Chat selbst spricht über IPC mit ihm. Sein Speicher ist eine eigene SQLite-Datei und liegt nicht im Space, siehe [Speicher](help.topic.big_and_nano#stores). Mehr dazu: \`docs/codemode-space-architektur.en.md\`, Abschnitt „Dauerhafte Code-Agenten“.
 
 ## Kosten {#cost}
 
@@ -764,7 +764,7 @@ Technical details:
 - **Stop:** a stop prevents further attempts. A model request already sent may still cost money.
 - **Notes:** a \`NOTE:\` line after the code becomes a note for the team, as with a single model call.
 
-The agent runs as a child process of the model process. Only this worker loads pi-durable and Chord; the chat itself talks to it over IPC. Its store is an SQLite file of its own and is not part of the space, see [Stores](help.topic.big_and_nano#stores). More: \`docs/codemode-space-architektur.md\`, section "Dauerhafte Code-Agenten".
+The agent runs as a child process of the model process. Only this worker loads pi-durable and Chord; the chat itself talks to it over IPC. Its store is an SQLite file of its own and is not part of the space, see [Stores](help.topic.big_and_nano#stores). More: \`docs/codemode-space-architektur.en.md\`, section "Dauerhafte Code-Agenten".
 
 ## Cost {#cost}
 

@@ -68,7 +68,7 @@ WORKDIR /opt/phi-spaces/codemode-chat
 # docker-compose.yml, since a role container has no web page)
 CMD ["node", "--no-warnings", "--experimental-strip-types", "server/launch.ts"]
 
-# ---- Stage 5: production-rust: the production image with the Rust space server (docs/rust-portierung.md, R4) ----
+# ---- Stage 5: production-rust: the production image with the Rust space server (docs/rust-portierung.en.md, R4) ----
 # docker-compose.rust.yml gives it to the space containers; the other roles and every other command stay as they are.
 # The builder is Debian bookworm like the Node image, so the binary finds the same libc.
 FROM ${RUST_IMAGE} AS rust-builder

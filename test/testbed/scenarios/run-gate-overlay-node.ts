@@ -1,4 +1,4 @@
-// Case 3 of docs/betrieb-und-mobile-steuerung.md §7.4 over the real NetBird overlay (§8 B4). Operator-driven fixture,
+// Case 3 of docs/betrieb-und-mobile-steuerung.en.md §7.4 over the real NetBird overlay (§8 B4). Operator-driven fixture,
 import { openSqliteHost } from "../../../src/index.ts";
 // one JSON command per stdin line. `member` runs on big behind the composed Gate (layer B key proof, signed run gate
 // instructions) on its NetBird address; `controller` runs on the operator host with a second, local Member.

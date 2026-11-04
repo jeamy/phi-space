@@ -94,7 +94,7 @@ Die Tests prüfen diese Programme mit geskripteten Modellen. Die Qualität echte
 
 ## Weiterlesen {#further}
 
-- Ausführliche Nachweise und Grenzen je Beispiel stehen im Repository in \`docs/examples.md\` und \`docs/examples/\`.
+- Ausführliche Nachweise und Grenzen je Beispiel stehen im Repository in \`docs/examples.en.md\` und \`docs/examples/\`.
 - Eine eigene erste Anwendung baut [Ein vollständiger erster Space](help.topic.first_running_space#overview) Schritt für Schritt auf.
 - Fertige Anwendungen stehen unter [Apps auf phi-spaces](help.topic.apps#overview).`,
 		},
@@ -183,7 +183,7 @@ The tests check these programs with scripted models. They do not prove the quali
 
 ## Further reading {#further}
 
-- Detailed evidence and limits per example are in the repository in \`docs/examples.md\` and \`docs/examples/\`.
+- Detailed evidence and limits per example are in the repository in \`docs/examples.en.md\` and \`docs/examples/\`.
 - [A complete first space](help.topic.first_running_space#overview) builds your own first application step by step.
 - Finished applications are under [Apps on phi-spaces](help.topic.apps#overview).`,
 		},

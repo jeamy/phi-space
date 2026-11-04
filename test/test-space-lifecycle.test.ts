@@ -1,4 +1,4 @@
-// Space lifecycle (docs/betrieb-und-mobile-steuerung.md §5, §8 B7): idempotent creation with reuse, archiving,
+// Space lifecycle (docs/betrieb-und-mobile-steuerung.en.md §5, §8 B7): idempotent creation with reuse, archiving,
 // checked deletion with reserved ids, signed instructions, admin commands and the composed Gate over TCP.
 import test from "node:test";
 import assert from "node:assert/strict";

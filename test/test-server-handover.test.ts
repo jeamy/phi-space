@@ -1,4 +1,4 @@
-// R3, slice 7 (docs/rust-portierung.md): a store goes from the TypeScript server to the Rust server and back with work
+// R3, slice 7 (docs/rust-portierung.en.md): a store goes from the TypeScript server to the Rust server and back with work
 // open, each killed hard: a held transaction, a blocked take, a registration and its events, decided results. The same
 // request ids are answered the same on every server. It needs the Rust server: PHI_SPACES_SERVER_CMD.
 import test from "node:test";

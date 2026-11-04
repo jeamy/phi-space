@@ -298,7 +298,7 @@ JSONL ist kein Speicher des Space mehr. pi-durable-Stores werden nicht importier
 
 ### Rust-Portierung {#rust-port}
 
-Das laufende System ist TypeScript. Im Ordner \`rust/\` entstehen \`phi-json\`, \`phi-core\` und \`phi-store\` (\`docs/rust-portierung.md\`). R0 (Verträge festschreiben) ist umgesetzt, die Scheiben von R1 (Kern) und die Scheiben 0–4 von R2 (Speicher) sind erledigt. Speicherbudget und mehrere Spaces sind auf R3 verschoben. Einen Rust-Server gibt es noch nicht: Er ist R3.
+Das laufende System ist TypeScript. Im Ordner \`rust/\` entstehen \`phi-json\`, \`phi-core\` und \`phi-store\` (\`docs/rust-portierung.en.md\`). R0 (Verträge festschreiben) ist umgesetzt, die Scheiben von R1 (Kern) und die Scheiben 0–4 von R2 (Speicher) sind erledigt. Speicherbudget und mehrere Spaces sind auf R3 verschoben. Einen Rust-Server gibt es noch nicht: Er ist R3.
 
 ## Technische Referenz {#technical-reference}
 
@@ -379,7 +379,7 @@ JSONL is no longer a store of the space. pi-durable stores are not imported (dec
 
 ### Rust Port {#rust-port}
 
-The running system is TypeScript. The \`rust/\` folder is growing \`phi-json\`, \`phi-core\` and \`phi-store\` (\`docs/rust-portierung.md\`). R0 (fixing the contracts) is done, and the slices of R1 (core) and slices 0–4 of R2 (store) are finished. The memory budget and several spaces are deferred to R3. There is no Rust server yet: that is R3.
+The running system is TypeScript. The \`rust/\` folder is growing \`phi-json\`, \`phi-core\` and \`phi-store\` (\`docs/rust-portierung.en.md\`). R0 (fixing the contracts) is done, and the slices of R1 (core) and slices 0–4 of R2 (store) are finished. The memory budget and several spaces are deferred to R3. There is no Rust server yet: that is R3.
 
 ## Technical Reference {#technical-reference}
 
@@ -414,7 +414,7 @@ Dieser Artikel sagt, worauf du dich verlassen kannst und worauf nicht. Ein einma
 
 ### Technische Details {#technical-details}
 
-Die Garantien und Grenzen sind ausdrücklich benannt und durch Tests auf dem eigenen Speicher belegt (SQLite und im Arbeitsspeicher). Tests decken bestimmte Szenarien ab, nicht jede Art von Ausfall. Maßgeblich sind die öffentliche API (\`docs/api.md\`) und der Vertragsrahmen (\`docs/federation-plan-v3.md\`).
+Die Garantien und Grenzen sind ausdrücklich benannt und durch Tests auf dem eigenen Speicher belegt (SQLite und im Arbeitsspeicher). Tests decken bestimmte Szenarien ab, nicht jede Art von Ausfall. Maßgeblich sind die öffentliche API (\`docs/api.en.md\`) und der Vertragsrahmen (\`docs/federation-plan-v3.en.md\`).
 
 ## Regeln, Garantien und Grenzen {#rules-and-boundaries}
 
@@ -461,7 +461,7 @@ This article says what you can rely on and what you cannot. An entry that was ac
 
 ### Technical Details {#technical-details}
 
-The guarantees and boundaries are named explicitly and backed by tests on the own store (SQLite and memory). Tests cover specific scenarios, not every kind of failure. The public API (\`docs/api.md\`) and the contract (\`docs/federation-plan-v3.md\`) are authoritative.
+The guarantees and boundaries are named explicitly and backed by tests on the own store (SQLite and memory). Tests cover specific scenarios, not every kind of failure. The public API (\`docs/api.en.md\`) and the contract (\`docs/federation-plan-v3.en.md\`) are authoritative.
 
 ## Rules, Guarantees And Boundaries {#rules-and-boundaries}
 
@@ -1529,7 +1529,7 @@ Space und Agent teilen sich keinen Commit. Die Zusage „einmal“ entsteht desh
 Der Space liegt im eigenen Speicher, der Agent im Speicher von pi-durable. Beide dürfen im selben Prozess laufen, haben aber getrennte Commit-Grenzen. So überlebt der Space einen Neustart des Agenten und umgekehrt.
 
 - **Agentenspeicher**: Der Worker und die mobile Laufzeit nutzen SQLite mit \`synchronous=FULL\`. Nur die Rechercheläufe der Beispiele nutzen JSONL mit \`{ fsync: true }\` und zusätzlichem Flush von Commit-Marker und Verzeichniseinträgen (\`agent/src/storage.ts\`). JSONL ist kein Speicher des Space.
-- **Grenze**: Die Zusage setzt voraus, dass das Memo den Ausfall überlebt. Stabile Identitäten ersetzen keinen gemeinsamen Commit. Prozessabstürze sind getestet, ein echter Stromausfall nicht (\`docs/agenten-stromausfalltest.md\`).
+- **Grenze**: Die Zusage setzt voraus, dass das Memo den Ausfall überlebt. Stabile Identitäten ersetzen keinen gemeinsamen Commit. Prozessabstürze sind getestet, ein echter Stromausfall nicht (\`docs/agenten-stromausfalltest.en.md\`).
 - **Externe Dienste**: Ein nach einem Absturz wiederholter Modellaufruf kann erneut ausgeführt und berechnet werden.
 
 ### Getrennter Agentenprozess {#agent-process}
@@ -1542,7 +1542,7 @@ Der Space liegt im eigenen Speicher, der Agent im Speicher von pi-durable. Beide
 - pi-durable 1.4.0 migriert seine SQLite-Datenbank automatisch auf Schema 2. Danach lässt sie sich mit 1.3.0 oder älter nicht mehr öffnen. **Agentendatenbanken vorher sichern**, einschließlich WAL-Zustand.
 - Das betrifft nur den Agentenspeicher. Format 2 des eigenen phi-spaces-Speichers ist davon unabhängig.
 
-Details stehen in \`docs/upgrade-pi-1.4.0.md\`.
+Details stehen in \`docs/upgrade-pi-1.4.0.en.md\`.
 
 ## Siehe auch {#see-also}
 
@@ -1589,7 +1589,7 @@ The space and the agent share no commit. The promise of "once" therefore comes f
 The space lives in the own store, the agent in pi-durable's store. Both may run in one process, but their commit boundaries are separate. So the space survives an agent restart and the other way round.
 
 - **Agent store**: The worker and the mobile runtime use SQLite with \`synchronous=FULL\`. Only the research runs of the examples use JSONL with \`{ fsync: true }\` plus an extra flush of commit marker and directory entries (\`agent/src/storage.ts\`). JSONL is not a store of the space.
-- **Boundary**: The promise assumes the memo survives the failure. Stable identities do not replace a shared commit. Process crashes are tested; a real power loss is not (\`docs/agenten-stromausfalltest.md\`).
+- **Boundary**: The promise assumes the memo survives the failure. Stable identities do not replace a shared commit. Process crashes are tested; a real power loss is not (\`docs/agenten-stromausfalltest.en.md\`).
 - **External services**: A model call repeated after a crash can run and be billed again.
 
 ### Separate Agent Process {#agent-process}
@@ -1602,7 +1602,7 @@ The space lives in the own store, the agent in pi-durable's store. Both may run 
 - pi-durable 1.4.0 migrates its SQLite database to schema 2 automatically. After that, 1.3.0 or older can no longer open it. **Back up agent databases first**, including their WAL state.
 - This concerns the agent store only. Format 2 of the own phi-spaces store has nothing to do with it.
 
-Details are in \`docs/upgrade-pi-1.4.0.md\`.
+Details are in \`docs/upgrade-pi-1.4.0.en.md\`.
 
 ## See Also {#see-also}
 
@@ -1942,7 +1942,7 @@ Wenn viele Rechner an einer großen Aufgabe arbeiten, will man sie anhalten, for
 
 ### Technische Details {#technical-details}
 
-Die Betriebserweiterung (Schritte B1–B10 in \`docs/betrieb-und-mobile-steuerung.md\`) ergänzt über dem Federation-Kern die operative Steuerung für **Rechenläufe (\`RunGate\` / \`RunController\`)**, **Host-Worker (\`WorkerSupervisor\`)**, **Space-Lebenszyklen (\`SpaceLifecycle\`)**, **Deployment-Bootstrap (\`DeploymentController\`)** und **Alarmierung/Audit (\`collectAlerts\` / \`auditLog\`)**. Alle Funktionen sind sowohl über die Android-App (\`pi-termux-mobile\`) als auch über den login-geschützten Web-Bereich **\`AdminSpaces\`** auf \`https://spaces.eibrain.org\` bedienbar.
+Die Betriebserweiterung (Schritte B1–B10 in \`docs/betrieb-und-mobile-steuerung.en.md\`) ergänzt über dem Federation-Kern die operative Steuerung für **Rechenläufe (\`RunGate\` / \`RunController\`)**, **Host-Worker (\`WorkerSupervisor\`)**, **Space-Lebenszyklen (\`SpaceLifecycle\`)**, **Deployment-Bootstrap (\`DeploymentController\`)** und **Alarmierung/Audit (\`collectAlerts\` / \`auditLog\`)**. Alle Funktionen sind sowohl über die Android-App (\`pi-termux-mobile\`) als auch über den login-geschützten Web-Bereich **\`AdminSpaces\`** auf \`https://spaces.eibrain.org\` bedienbar.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -1964,7 +1964,7 @@ Sowohl \`MobileSpaces\` (\`pi-termux-mobile/runtime/spaces-mobile.mjs\`) als auc
 
 1. **Vorab persistierte \`commandId\`**: Vor jedem Senden wird \`commandId = m-<kind>-<hex>\` bzw. \`w-<kind>-<hex>\` lokal gespeichert. Bei Timeout oder Doppeltippen wird exakt dieselbe \`commandId\` erneut gesendet („Ausgang wird geprüft“ statt doppelter Ausführung).
 2. **Schlüsselbeweis & 60s-Grants**: Jede Verbindung beweist ihren \`Ed25519\`/\`P-256\`-Schlüssel am Gate und nutzt kurzlebige Grants.
-3. **Phase-3-Replikationsbausteine**: Für verzögerungstolerante Metadaten und Präsenz steht \`EntryReplicationController\` (persistenter HLC, Last-Writer-Wins mit versionierten Tombstones und Add-Wins-Sets) bereit. Er nutzt ein eigenes Dokument und repliziert bestehende \`PhiSpaces\`-Entries nicht automatisch. Primary/Sync, Fencing und Promotion sind implementiert, Phase 3 ist aber nicht vollständig abgenommen (\`docs/abnahme/ap3-abnahme.md\`).
+3. **Phase-3-Replikationsbausteine**: Für verzögerungstolerante Metadaten und Präsenz steht \`EntryReplicationController\` (persistenter HLC, Last-Writer-Wins mit versionierten Tombstones und Add-Wins-Sets) bereit. Er nutzt ein eigenes Dokument und repliziert bestehende \`PhiSpaces\`-Entries nicht automatisch. Primary/Sync, Fencing und Promotion sind implementiert, Phase 3 ist aber nicht vollständig abgenommen (\`docs/_attic/abnahme/ap3-abnahme.en.md\`).
 
 ## Siehe auch {#see-also}
 
@@ -1980,7 +1980,7 @@ When many machines work on one big task, you want to pause it, resume it and kee
 
 ### Technical Details {#technical-details}
 
-The operations extension (steps B1–B10 in \`docs/betrieb-und-mobile-steuerung.md\`) adds operational control on top of the federation core for **runs (\`RunGate\` / \`RunController\`)**, **host workers (\`WorkerSupervisor\`)**, **space lifecycles (\`SpaceLifecycle\`)**, **deployment bootstrap (\`DeploymentController\`)**, and **alerting/audit (\`collectAlerts\` / \`auditLog\`)**. All capabilities are accessible both from the Android app (\`pi-termux-mobile\`) and from the login-protected **\`AdminSpaces\`** web area on \`https://spaces.eibrain.org\`.
+The operations extension (steps B1–B10 in \`docs/betrieb-und-mobile-steuerung.en.md\`) adds operational control on top of the federation core for **runs (\`RunGate\` / \`RunController\`)**, **host workers (\`WorkerSupervisor\`)**, **space lifecycles (\`SpaceLifecycle\`)**, **deployment bootstrap (\`DeploymentController\`)**, and **alerting/audit (\`collectAlerts\` / \`auditLog\`)**. All capabilities are accessible both from the Android app (\`pi-termux-mobile\`) and from the login-protected **\`AdminSpaces\`** web area on \`https://spaces.eibrain.org\`.
 
 ## Concept And System Model {#concept-model}
 
@@ -2002,7 +2002,7 @@ Both \`MobileSpaces\` (\`pi-termux-mobile/runtime/spaces-mobile.mjs\`) and our w
 
 1. **Pre-persisted \`commandId\`**: Before sending any admin command, \`commandId = m-<kind>-<hex>\` or \`w-<kind>-<hex>\` is saved locally. On timeout or double-click, the exact same \`commandId\` is reused ("checking outcome" rather than duplicate execution).
 2. **Key Proof & 60s Grants**: Every connection proves its \`Ed25519\`/\`P-256\` key at the gate and uses short-lived grants.
-3. **Phase 3 Replication Building Blocks**: For delay-tolerant metadata and presence, \`EntryReplicationController\` provides persistent HLC ordering, Last-Writer-Wins with versioned tombstones, and Add-Wins sets. It uses a document of its own and does not replicate existing \`PhiSpaces\` entries automatically. Primary/sync, fencing and promotion are implemented, but Phase 3 is not fully accepted (\`docs/abnahme/ap3-abnahme.md\`).
+3. **Phase 3 Replication Building Blocks**: For delay-tolerant metadata and presence, \`EntryReplicationController\` provides persistent HLC ordering, Last-Writer-Wins with versioned tombstones, and Add-Wins sets. It uses a document of its own and does not replicate existing \`PhiSpaces\` entries automatically. Primary/sync, fencing and promotion are implemented, but Phase 3 is not fully accepted (\`docs/_attic/abnahme/ap3-abnahme.en.md\`).
 
 ## See Also {#see-also}
 
@@ -2046,7 +2046,7 @@ Zwei Dinge sind zu trennen: die Vorlage [Pi Durable on Cloudflare](https://earen
 
 ### phi-spaces und pi-durable 1.4.0 {#pi-durable-today}
 
-Stand 30.10.2026, verglichen mit dem veröffentlichten Release 1.4.0 (\`docs/vergleich-pi-durable.md\`):
+Stand 30.10.2026, verglichen mit dem veröffentlichten Release 1.4.0 (\`docs/vergleich-pi-durable.en.md\`):
 
 | Bereich | \`phi-spaces\` | pi-durable 1.4.0 |
 |---|---|---|
@@ -2118,7 +2118,7 @@ Two things have to be kept apart: the [Pi Durable on Cloudflare](https://earendi
 
 ### phi-spaces And pi-durable 1.4.0 {#pi-durable-today}
 
-As of 2026-10-30, compared with the published release 1.4.0 (\`docs/vergleich-pi-durable.md\`):
+As of 2026-10-30, compared with the published release 1.4.0 (\`docs/vergleich-pi-durable.en.md\`):
 
 | Area | \`phi-spaces\` | pi-durable 1.4.0 |
 |---|---|---|

@@ -2,7 +2,7 @@
 # Runs ON THE SERVER (shipped over ssh by `testbed.sh netbird setup`): creates the groups, setup keys and policies of the test
 # bed through the NetBird management API. Idempotent: existing objects are kept. Uses NB_PAT from secrets.env next to this
 # script's working directory; the token is passed to curl through a config pipe and is never printed or put on a command line.
-# Names follow docs/federation-plan-v3.md 4.1: groups space-hosts, space-admin, space-observer.
+# Names follow docs/federation-plan-v3.en.md 4.1: groups space-hosts, space-admin, space-observer.
 # Environment: NB_URL (https://...), NB_SPACE_PORT (TCP port of the space service, placeholder until space-gate exists),
 #              NB_PRUNE_STALE=1 (delete disconnected peers whose name equals a connected peer's: left over from a re-enrolled container),
 #              NB_ROTATE_KEYS=1 (create new setup keys even if the old ones exist; old ones are revoked).

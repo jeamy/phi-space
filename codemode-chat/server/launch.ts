@@ -1,5 +1,5 @@
 // Starts the processes of the codemode chat on this machine, each as its own OS process, and stops them together (the
-// local counterpart of the docker services; docs/codemode-space-architektur.md). The space process comes first; the
+// local counterpart of the docker services; docs/codemode-space-architektur.en.md). The space process comes first; the
 // others connect to it over CODEMODE_SPACE. A process that ends on its own is started again after a second.
 //
 //   node --experimental-strip-types server/launch.ts [--dev]

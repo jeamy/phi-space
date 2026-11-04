@@ -1,6 +1,6 @@
 // Prime sieve over the network protocol: the space service in one process (the host), a phone and workers as clients of
 import { openSqliteHost } from "../../../src/index.ts";
-// that service through sockets (docs/testumgebung-big.md). Unlike sieve-mobile, nothing here touches the host's storage
+// that service through sockets (docs/testumgebung-big.en.md). Unlike sieve-mobile, nothing here touches the host's storage
 // directly: every effect goes through RemoteSpace -> socket -> SpaceService, with request identities, claims, polls and
 // retries. The host process is killed with SIGKILL in the middle of the run and started again; the clients keep retrying.
 //

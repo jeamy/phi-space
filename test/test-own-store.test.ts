@@ -1,4 +1,4 @@
-// phi-spaces' own SQLite store (docs/umstellung-ohne-pi-durable.md, U2): what survives a reopen, one owner per store,
+// phi-spaces' own SQLite store (docs/umstellung-ohne-pi-durable.en.md, U2): what survives a reopen, one owner per store,
 // format checks, and commits that arrive together being written together.
 import test from "node:test";
 import assert from "node:assert/strict";

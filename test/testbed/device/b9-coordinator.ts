@@ -1,4 +1,4 @@
-// Device acceptance coordinator for the mobile Spaces control page (docs/betrieb-und-mobile-steuerung.md §8 B9).
+// Device acceptance coordinator for the mobile Spaces control page (docs/betrieb-und-mobile-steuerung.en.md §8 B9).
 import { openSqliteHost } from "../../../src/index.ts";
 // The production composition (startFederationHost with grants, enrollment, control access, supervisor, run and worker
 // commands) on a LAN address; the phone is pinned by its LAN IP (layer A fixture). State persists in <dir>, so a

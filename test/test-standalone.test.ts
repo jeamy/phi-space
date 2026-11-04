@@ -1,4 +1,4 @@
-// U3 (docs/umstellung-ohne-pi-durable.md): phi-spaces as a service of its own. The standalone service (src/standalone.ts)
+// U3 (docs/umstellung-ohne-pi-durable.en.md): phi-spaces as a service of its own. The standalone service (src/standalone.ts)
 // and the examples run as processes in which pi-durable, chord and pi-ai cannot be imported (test/support/no-durable.mjs):
 // the sieve and the cache work through it over a unix socket and TCP, and a hard restart of the service keeps waiting
 // calls, deadlines and decided results.
@@ -33,7 +33,7 @@ function run(args: string[]): Promise<{ code: number | null; out: string; err: s
 	});
 }
 
-/** Another implementation of the service (docs/rust-portierung.md, R0/R3): PHI_SPACES_SERVER_CMD is its command line (split
+/** Another implementation of the service (docs/rust-portierung.en.md, R0/R3): PHI_SPACES_SERVER_CMD is its command line (split
  *  at whitespace), started with the same --store and --listen and expected to print the same ready line. */
 const SERVER_CMD = process.env.PHI_SPACES_SERVER_CMD?.trim() ? process.env.PHI_SPACES_SERVER_CMD.trim().split(/\s+/) : null;
 

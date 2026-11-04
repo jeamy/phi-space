@@ -1,4 +1,4 @@
-// Endurance probe of the own store (docs/umstellung-ohne-pi-durable.md, U7): producers and takers on several named
+// Endurance probe of the own store (docs/umstellung-ohne-pi-durable.en.md, U7): producers and takers on several named
 // spaces for a time, the store closed and reopened now and then, and at the end every produced item taken exactly once.
 // Reports throughput, latency, RSS and file growth per interval, so a leak or a growing WAL shows.
 //   node --experimental-strip-types --no-warnings scripts/endurance-probe.ts [seconds=600] [spaces=5] [reopenEverySeconds=60]
