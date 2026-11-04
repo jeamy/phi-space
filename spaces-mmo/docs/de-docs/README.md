@@ -10,7 +10,7 @@ und eine 3D-Ansicht mit Three.js. Die Struktur der Spielwelt folgt
 `codemode-chat/` (siehe `docs/codemode-space-architektur.en.md` im Root). Engine (`server/`) und Welt
 (`worlds/leuchtfeuer/`) sind getrennt, damit weitere Welten auf derselben Engine laufen können.
 
-## Stand 2026-10-30
+## Stand 2026-11-04
 
 Das Spiel ist spielbar, von der ersten Anmeldung bis zum Dorf. Es fehlen noch Automaten, Götter und die großen Bauten
 der späteren Epochen. Für den Betrieb ist es auf die Rechner big und nano ausgelegt ([betrieb.md](../betrieb.en.md)).
@@ -18,7 +18,7 @@ der späteren Epochen. Für den Betrieb ist es auf die Rechner big und nano ausg
 | Bereich | Stand |
 | --- | --- |
 | Phasen P bis 4b ([phasen.md](../phasen.en.md)) | gebaut: Konten, Weltkern, Feuer und Nebel, Grafik, Handel, Archipel und Bewohner |
-| Phase 3b, 3D-Ansicht | gebaut, ohne Abnahme auf einem Zieltelefon; eigene Low-Poly-Modelle sind dazugekommen (`client/props3d.ts`) |
+| Phase 3b, 3D-Ansicht ([3D-V2](../3D-V2/README.md)) | Version 2 gebaut: Zoomleiter von der Insel bis zum Gesicht, Diorama-Block, Fern-/Raum-/Nahvarianten der Modelle, Alt+Mausrad-Neigung, FPS-Messung; die Abnahme auf einem Zieltelefon steht noch aus |
 | Phase 5, Modell-NPCs ([modell-npcs.md](../modell-npcs.en.md)) | gebaut, mit geskripteten Modellen getestet; Modellaufrufe nur mit `SPACES_MMO_LLM=1` |
 | Welt | acht Inseln, 37 Räume, neun Feuer (`worlds/leuchtfeuer/world.ts`); dazu 40 Siedler, von denen standardmäßig mindestens 30 Figuren spielen |
 | Chat ([siedeln.md](../siedeln.en.md), Schritt 0) | gebaut: zu zweit und in Gruppen, Ende-zu-Ende verschlüsselt |
@@ -54,6 +54,7 @@ nicht hier, sondern in `client/help/articles.ts` (im Spiel unter „?“) und al
 | --- | --- |
 | [spielidee.md](../spielidee.en.md) | Die Spielwelt „Leuchtfeuer“ und warum sie zu einem Space passt |
 | [architektur.md](../architektur.en.md) | Prozesse, Datenfluss, Konten und Login, Grafik (PixiJS), Verzeichnisaufbau |
+| [3D-V2/README.md](../3D-V2/README.md) | Die 3D-Ansicht, Version 2: Zoomleiter, Diorama, Detailstufen der Modelle, Steuerung und Leistungsmessung |
 | [betrieb.md](../betrieb.en.md) | Docker: Image, Profile nano/big/dev, lokaler Testaufbau, Produktion, Last und Latenz |
 | [phasen.md](../phasen.en.md) | Umsetzung in Phasen mit Abnahmekriterien |
 | [siedeln.md](../siedeln.en.md) | Siedeln, Bauen und Gärtnern: Entwurf und Reihenfolge; die Schritte 0 bis 4 sind gebaut, der Rest ist Plan |

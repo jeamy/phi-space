@@ -1,5 +1,7 @@
 # spaces-mmo
 
+> **Experimental — v0.1.0.** Use at your own risk; behaviour may still change.
+
 A multiplayer game in the browser and the engine behind it, built on [phi-spaces](../README.md). The whole world lives in
 Spaces; no game state is kept in the browser. The first world is **Leuchtfeuer**: an archipelago in the fog where the
 players tend fires together, gather, trade, build and lay out gardens, with text, a 2D map (PixiJS) or a 3D view.
@@ -19,6 +21,7 @@ Engine (`server/`) and world (`worlds/leuchtfeuer/`) are separate so that furthe
 | --- | --- |
 | [docs/spielidee.en.md](docs/spielidee.en.md) | The game world Leuchtfeuer and why it fits a Space |
 | [docs/architektur.en.md](docs/architektur.en.md) | Processes, data flow, accounts and login, graphics, directory layout |
+| [docs/3D-V2/README.md](docs/3D-V2/README.md) | The 3D view, version 2: zoom ladder, diorama, detail levels, controls, FPS measuring |
 | [docs/phasen.en.md](docs/phasen.en.md) | The implementation plan in phases with acceptance criteria |
 | [docs/betrieb.en.md](docs/betrieb.en.md) | Operation with Docker: image, profiles nano/big/dev, local test setup, production |
 | [docs/welt.en.md](docs/welt.en.md) | How the world grows: the archipelago, the inhabitants and their trade |

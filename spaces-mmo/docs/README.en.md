@@ -10,7 +10,7 @@ and a 3D view using Three.js on top. The structure of the game world follows
 `codemode-chat/` (see `docs/codemode-space-architektur.en.md` in the root). Engine (`server/`) and world
 (`worlds/leuchtfeuer/`) are separate so that further worlds can run on the same engine.
 
-## Status 2026-10-30
+## Status 2026-11-04
 
 The game is playable, from the first login to the village. Automata, gods and the large buildings of the later epochs
 are still missing. For operation it is laid out for the machines big and nano ([betrieb.en.md](betrieb.en.md)).
@@ -18,7 +18,7 @@ are still missing. For operation it is laid out for the machines big and nano ([
 | Area | Status |
 | --- | --- |
 | Phases P to 4b ([phasen.en.md](phasen.en.md)) | built: accounts, world core, fire and fog, graphics, trade, archipelago and inhabitants |
-| Phase 3b, 3D view | built, without acceptance on a target phone; own low-poly models have been added (`client/props3d.ts`) |
+| Phase 3b, 3D view ([3D-V2](3D-V2/README.md)) | version 2 built: zoom ladder from the island to a face, diorama block, far/room/near detail variants, Alt+wheel tilt, FPS measuring; acceptance on a target phone still open |
 | Phase 5, model NPCs ([modell-npcs.en.md](modell-npcs.en.md)) | built, tested with scripted models; model calls only with `SPACES_MMO_LLM=1` |
 | World | eight islands, 37 rooms, nine fires (`worlds/leuchtfeuer/world.ts`); plus 40 settlers, of whom at least 30 figures play by default |
 | Chat ([siedeln.en.md](siedeln.en.md), step 0) | built: one-to-one and in groups, end-to-end encrypted |
@@ -54,6 +54,7 @@ not kept here but in `client/help/articles.ts` (in the game under "?") and as to
 | --- | --- |
 | [spielidee.en.md](spielidee.en.md) | The game world "Leuchtfeuer" and why it fits a Space |
 | [architektur.en.md](architektur.en.md) | Processes, data flow, accounts and login, graphics (PixiJS), directory layout |
+| [3D-V2/README.md](3D-V2/README.md) | The 3D view, version 2: zoom ladder, diorama, model detail levels, controls and performance measuring |
 | [betrieb.en.md](betrieb.en.md) | Docker: image, profiles nano/big/dev, local test setup, production, load and latency |
 | [phasen.en.md](phasen.en.md) | Implementation in phases with acceptance criteria |
 | [siedeln.en.md](siedeln.en.md) | Settling, building and gardening: design and order; steps 0 to 4 are built, the rest is a plan |
