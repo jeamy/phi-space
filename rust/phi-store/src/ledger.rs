@@ -153,7 +153,7 @@ impl SqliteLedger {
 					return Err(StoreError::Unavailable(format!("the document {kind} keeps {} inline in its head; the Rust store reads parts as rows only", p.name())));
 				}
 			}
-			join_parts(&mut value, parts, &rows);
+			join_parts(&mut value, parts, rows);
 			self.ords.insert(doc_id(kind, key), ords);
 		}
 		Ok(Some(StoredDoc { kind: kind.to_owned(), key: key.map(str::to_owned), version, value }))

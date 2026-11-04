@@ -27,6 +27,10 @@ impl Fields {
 	fn of(v: &Json, what: &str) -> Result<Self, ShapeError> {
 		v.as_object().cloned().map(Fields).ok_or_else(|| ShapeError(format!("{what} is not an object")))
 	}
+	/// The same over a value taken as it is, not copied.
+	fn of_value(v: Json, what: &str) -> Result<Self, ShapeError> {
+		match v { Json::Object(o) => Ok(Fields(o)), _ => Err(ShapeError(format!("{what} is not an object"))) }
+	}
 	fn take(&mut self, key: &str) -> Option<Json> { self.0.remove(key) }
 	fn need(&mut self, key: &str, what: &str) -> Result<Json, ShapeError> { self.take(key).ok_or_else(|| ShapeError(format!("{what}.{key} is missing"))) }
 	fn string(&mut self, key: &str, what: &str) -> Result<String, ShapeError> {
@@ -89,22 +93,28 @@ pub struct EntryRec {
 }
 
 impl EntryRec {
-	pub fn from_json(v: &Json) -> Result<Self, ShapeError> {
+	pub fn from_json(v: &Json) -> Result<Self, ShapeError> { EntryRec::from_value(v.clone()) }
+	/// The record from a value it takes over.
+	pub fn from_value(v: Json) -> Result<Self, ShapeError> {
 		let w = "entry";
-		let mut f = Fields::of(v, w)?;
+		let mut f = Fields::of_value(v, w)?;
+		// a parsed value carries the spare capacity of its parse: a copy of each record holds only what it needs, and
+		// one record at a time is held twice
+		#[allow(clippy::redundant_clone)]
+		let compact = |o: Object| o.clone();
 		Ok(EntryRec {
 			restored_unverified: f.flag("restoredUnverified", w)?,
 			id: f.string("id", w)?,
 			type_: f.string("type", w)?,
 			types: f.strings("types", w)?,
-			fields: f.object("fields", w)?,
+			fields: compact(f.object("fields", w)?),
 			expires: f.number("expires", w)?,
 			written_under: f.nullable_string("writtenUnder", w)?,
 			taken_by: f.nullable_string("takenBy", w)?,
 			read_by: f.strings("readBy", w)?,
-			owner: f.need("owner", w)?,
+			owner: f.need("owner", w)?.clone(),
 			size: f.opt_number("size", w)?,
-			rest: f.rest(),
+			rest: compact(f.rest()),
 		})
 	}
 	/// The record as core.ts writes it (its key order: `restoredUnverified` first when set, then as in `write`).
@@ -916,11 +926,14 @@ impl SpaceState {
 		SpaceState { next_id: 1.0, entries: Entries::default(), txns: vec![], regs: vec![], waiters: vec![], mailboxes: None, rpc: None, returned: 0.0, outbox_bytes: Some(2.0), space_id: None, incarnation: None, limits: None, stream: None, rest }
 	}
 
-	pub fn from_json(v: &Json) -> Result<Self, ShapeError> {
+	pub fn from_json(v: &Json) -> Result<Self, ShapeError> { SpaceState::from_value(v.clone()) }
+	/// The state from a document it takes over: each entry is moved out of it, so a large Space is held about once while
+	/// it loads, not twice.
+	pub fn from_value(v: Json) -> Result<Self, ShapeError> {
 		let w = "space";
-		let mut f = Fields::of(v, w)?;
+		let mut f = Fields::of_value(v, w)?;
 		let next_id = f.number("nextId", w)?;
-		let entries = match f.need("entries", w)? { Json::Array(a) => Entries::from(a.iter().map(EntryRec::from_json).collect::<Result<Vec<_>, _>>()?), _ => return Err(ShapeError("space.entries is not an array".into())) };
+		let entries = match f.need("entries", w)? { Json::Array(a) => Entries::from(a.into_iter().map(EntryRec::from_value).collect::<Result<Vec<_>, _>>()?), _ => return Err(ShapeError("space.entries is not an array".into())) };
 		let txns = match f.need("txns", w)? {
 			Json::Object(o) => o.iter().map(|(_, t)| TxnRec::from_json(t)).collect::<Result<_, _>>()?,
 			_ => return Err(ShapeError("space.txns is not an object".into())),

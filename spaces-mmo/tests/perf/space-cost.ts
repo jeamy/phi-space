@@ -5,12 +5,14 @@
 //
 //   LOAD_BOTS=50 LOAD_SECONDS=60 node --no-warnings --experimental-strip-types --import ./tests/test-env.ts tests/perf/space-cost.ts
 //   SPACES_MMO_SPACE_SERVER=<binary> measures the Rust server the same way.
+//   SPACE_COST_SEED=<dir> starts from the world.sqlite (and accounts.sqlite) in that directory, copied: what a command
+//   costs in a world that holds that much.
 //
 // Prints one JSON line: commands, commands per second, p50/p95 answer, space CPU ms per command, the CPU share of the
 // space process, of the world workers and of the web part (this process).
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { readdirSync, readFileSync } from "node:fs";
+import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startServer, startStack } from "../stack.ts";
@@ -37,6 +39,8 @@ function cpuOf(script: string): number {
 const ownCpu = () => { const u = process.cpuUsage(); return (u.user + u.system) / 1000; };
 
 const data = await mkdtemp(join(tmpdir(), "mmo-cost-")), out = await mkdtemp(join(tmpdir(), "mmo-cost-out-"));
+const SEED = process.env.SPACE_COST_SEED;
+if (SEED) for (const f of ["world.sqlite", "accounts.sqlite"]) if (existsSync(join(SEED, f))) await copyFile(join(SEED, f), join(data, f));
 const stack = await startStack({ dataDir: data });
 await stack.npcProcess();
 const srv = await startServer({ stack });

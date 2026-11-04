@@ -107,7 +107,7 @@ impl SpaceHost {
 					// core.migrate brings older versions up to date in TypeScript; not ported
 					return Err(StoreError::Unavailable(format!("the document {kind} has version {}; the Rust store reads version {SPACE_VERSION} only", doc.version)));
 				}
-				let mut state = SpaceState::from_json(&doc.value).map_err(|e| StoreError::Unavailable(e.to_string()))?;
+				let mut state = SpaceState::from_value(doc.value).map_err(|e| StoreError::Unavailable(e.to_string()))?;
 				on_disk = matches!(ledger, Ledger::Sqlite(_)) && state.rest.contains_key("restoredClaims");
 				let head = state.to_json_head().to_json_text();
 				// the claims stay on the disk: a map over their rows takes their place

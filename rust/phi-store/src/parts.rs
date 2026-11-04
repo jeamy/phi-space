@@ -86,18 +86,18 @@ pub fn head_of(value: &Json, parts: &[PartDef]) -> Json {
 
 /// `joinParts`: the head with the rows of its parts put in (arrays in `ord` order; maps in row order). A part without
 /// rows keeps the head's own value.
-pub fn join_parts(head: &mut Json, parts: &[PartDef], rows: &std::collections::HashMap<String, Vec<PartRow>>) {
+/// The rows are moved into the head, not copied: a large Space is held once while it loads.
+pub fn join_parts(head: &mut Json, parts: &[PartDef], mut rows: std::collections::HashMap<String, Vec<PartRow>>) {
 	for p in parts {
-		let Some(list) = rows.get(&p.name()).filter(|l| !l.is_empty()) else { continue };
+		let Some(mut list) = rows.remove(&p.name()).filter(|l| !l.is_empty()) else { continue };
 		let (last, parent) = p.path.split_last().expect("a part has a path");
 		let Some(m) = object_at_mut(head, parent) else { continue };
 		let value = match p.kind {
 			PartKind::Array => {
-				let mut sorted = list.clone();
-				sorted.sort_by_key(|r| r.ord); // stable, as Array.prototype.sort
-				Json::Array(sorted.into_iter().map(|r| r.value).collect())
+				list.sort_by_key(|r| r.ord); // stable, as Array.prototype.sort
+				Json::Array(list.into_iter().map(|r| r.value).collect())
 			}
-			PartKind::Map => Json::Object(list.iter().map(|r| (r.id.clone(), r.value.clone())).collect()),
+			PartKind::Map => Json::Object(list.into_iter().map(|r| (r.id, r.value)).collect()),
 		};
 		m.insert(*last, value);
 	}

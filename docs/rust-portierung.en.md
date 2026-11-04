@@ -827,6 +827,14 @@ All Rust values come from the same binary, the state of this commit. R-D2 is the
 
 **The dashboard against the Rust server (2026-11-04).** `test/test-dashboard.test.ts` has two cases on the space server under test (`underTest`, so `PHI_SPACES_SERVER_CMD` runs them on the binary): an app of the default and of a named Space (stats by type, entry pages, a later write with the next poll, activity, the serving process's memory and CPU share), and an app of every Space read with a role that may only list and count (the folded session Spaces, entries refused). Both pass on both servers, the whole suite too.
 
+**The first local soak (2026-11-03/04).** `docker:rust` (Rust in the five space containers, world, npc, web and model on TypeScript, model calls off) ran on this machine with 20 `live-load.ts` figures in rounds of an hour, from 21:30 UTC until the machine went down at about 08:10 UTC (about 10.7 h; the journal shows no OOM or kernel error, the logs of the run were in `/tmp` and are lost). Up to 04:50 UTC no container restarted and no log line showed an error. The region spaces grew steadily: `space-ost` from 14 MB to 88 MB RSS, its CPU from about 30 % to 55 %. Read from the stopped files, this is data, not a leak:
+
+- *Data.* Every round brings 20 new guests; the old ones keep what they gathered until their account lapses (7 days), so `world-ost` held 4,274 `Shell` entries, about 70 in each character's pockets. The world's lapsed-guest cleanup never ran in 11 h.
+- *Memory.* The Rust server opening the stopped store has the RSS of the end of the run, while its live heap was 22.5 MB (about 1.9 KB per entry; TypeScript about 2.5 KB). The rest was the peak of the load (58 MB: the parsed document and a copy of the state beside it), which glibc keeps. The load now moves the rows into the document and each entry out of it into the state (`SpaceState::from_value`, `EntryRec::from_value`, `join_parts` takes its rows), compacting each record as it goes: on that store the peak falls to 32 MB, the state to 17.5 MB and the RSS after opening from 80 MB to 46 MB.
+- *CPU.* `tests/perf/space-cost.ts` with `SPACE_COST_SEED` (20 figures, 60 s) on the store with and without the shells: Rust 16.7 and 8.3 ms of space CPU per command, TypeScript 26.0 and 17.8. Both servers grow by the same 8 ms, so the cost scales with the world's reads (its sweeps read every `Item`), not with the port.
+
+The next soak sets `SPACES_MMO_GUEST_TTL_MS` to 2 h, so the cleanup runs during it and the data reaches a steady state, and keeps its scripts and logs outside `/tmp`.
+
 **Work:**
 
 - Docker images of spaces-mmo and codemode-chat get the Rust binary as the Space role.
