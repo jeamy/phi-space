@@ -90,6 +90,9 @@ export async function bedHere(c: CommandCtx, o: { own?: boolean; may?: (b: BedFi
 	if ("f" in r) return r.f;
 	throw new NotUnderstood(r.far ? (o.own ? "Geh näher an dein Beet heran." : "Geh näher an das Beet heran (höchstens zwei Schritte entfernt).") : "Hier ist kein Beet. „umgraben“ legt eins an (mit einem Spaten).");
 }
+/** The bed one waters, weeds or harvests: one near that the actor may tend before any other, so one's own bed counts
+ *  though a stranger's lies behind the figure too; with none such, the nearest bed (its command then says whose it is). */
+const tendedBed = (c: CommandCtx): Promise<BedFields> => bedHere(c, { may: (b) => mayTend(c, b) }).catch((e) => { if (e instanceof NotUnderstood) return bedHere(c); throw e; });
 export const writeBed = (c: CommandCtx, b: BedFields) => c.space.write({ type: "Bed", fields: b as never }, c.txn, FOREVER);
 const describe = async (c: CommandCtx, g: GardenDef, b: BedFields, now: number) => {
 	const count = new Map<string, number>();
@@ -220,7 +223,7 @@ const giesse: Command = {
 		const g = garden(c);
 		const can = (await inventory(c)).find((i) => i.f.proto === g.can);
 		if (!can) throw new CommandError(`Du hast keine ${protoName(c, g.can)}. An einer Regentonne füllt „schöpfe“ eine.`);
-		const b = await bedHere(c);
+		const b = await tendedBed(c);
 		if (!mayTend(c, b)) throw new CommandError(`Das ist das ${bedName(b)}; gießen dürfen der Besitzer und seine Paten.`);
 		if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: can.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Die Kanne ist gerade nicht greifbar; bitte noch einmal.");
 		const now = await worldNowOf(c.space, c.txn);
@@ -236,7 +239,7 @@ const jaete: Command = {
 	help: "jäte – Unkraut und Welkes aus einem Beet neben dir ziehen (deins oder als Pate)",
 	async func(c) {
 		const g = garden(c);
-		const b = await bedHere(c);
+		const b = await tendedBed(c);
 		if (!mayTend(c, b)) throw new CommandError(`Das ist das ${bedName(b)}; jäten dürfen der Besitzer und seine Paten.`);
 		const wilted = b.plants.filter((p) => p.stage === 3).length;
 		if (!b.weedy && !wilted) throw new CommandError("Das Beet ist sauber; hier gibt es nichts zu jäten.");
@@ -310,7 +313,7 @@ const ernte: Command = {
 			throw new NotUnderstood("Hier ist kein Acker. „flur anlegen“ legt eine an (mit einem Spaten, im Licht eines Feuers).");
 		}
 		// no bed near, but a field: its harvest (field.ts)
-		const b = await bedHere(c).catch(async (e) => { if (e instanceof NotUnderstood && (await harvestField(c))) return null; throw e; });
+		const b = await tendedBed(c).catch(async (e) => { if (e instanceof NotUnderstood && (await harvestField(c))) return null; throw e; });
 		if (!b) return;
 		if (!mayTend(c, b)) throw new CommandError(`Das ist das ${bedName(b)}; ernten dürfen der Besitzer und seine Paten.`);
 		const ripe = b.plants.filter((p) => p.stage === 2);

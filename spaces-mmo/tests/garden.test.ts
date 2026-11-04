@@ -364,3 +364,26 @@ test("a bed is dug under people's feet, and they walk off over it", { timeout: 1
 		assert.notDeepEqual([again.x, again.y], [19, 12]);
 	} finally { await srv.close(); }
 });
+
+test("one's own bed is watered though a stranger's lies within reach too, and the stranger's stays dry", { timeout: 120_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const anna = await player(srv.url, "Nachbarin"), bert = await player(srv.url, "Giesser");
+		const account = async (who: P) => String((await s.readAll({ type: "Character", fields: { charId: who.me } }))[0]!.fields.accountId);
+		const bed = async (id: string, owner: P, y: number): Promise<BedFields> => ({ bedId: id, room: "graue-bucht", x: 16, y, w: 2, h: 2, owner: owner.me, ownerName: owner.name, accountId: await account(owner), beaconId: "feuer-bucht", points: 1, sponsors: [], plants: [], wateredWorldMs: 0, weedy: false, dueWorldMs: Number.MAX_SAFE_INTEGER, untilWorldMs: Number.MAX_SAFE_INTEGER, at: Date.now() });
+		// the stranger's first: the space hands it out first, and it is two steps behind the figure
+		await s.write({ type: "Bed", fields: (await bed("bed-anna", anna, 10)) as never }, null, FOREVER);
+		await s.write({ type: "Bed", fields: (await bed("bed-bert", bert, 14)) as never }, null, FOREVER);
+		await walk(bert, s, 16, 13);
+		await give(s, bert.me, "wasserkanne", 1);
+		assert.match(await does(bert.p, "gieße", /gießt|dürfen/), /Giesser gießt das Beet\./);
+		const beds = (await s.readAll({ type: "Bed" })).map((e) => e.fields as unknown as BedFields);
+		assert.ok(beds.find((b) => b.bedId === "bed-bert")!.wateredWorldMs > 0, "his own bed is watered");
+		assert.equal(beds.find((b) => b.bedId === "bed-anna")!.wateredWorldMs, 0, "the stranger's is not");
+		// with no bed of his own near, the stranger's names its owner
+		await walk(bert, s, 16, 9);
+		await give(s, bert.me, "wasserkanne", 1);
+		assert.match(await does(bert.p, "gieße", /gießt|dürfen/), /Beet von Nachbarin; gießen dürfen der Besitzer/);
+	} finally { await srv.close(); }
+});

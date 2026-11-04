@@ -167,7 +167,8 @@ export const SITE_REACH = 2;
  *  transaction), but its cells are: it is waited for through them. Null: none within reach (`far`: one in the room). */
 export async function takeNear<F extends Rect>(c: CommandCtx, type: string, idKey: keyof F & string, reach: number, named: (f: F) => boolean = () => true): Promise<{ f: F } | { far: boolean }> {
 	const all = (await c.space.readAll({ type, fields: { room: c.actor.room } })).map((e) => fieldsOf<F>(e));
-	const near = all.filter((f) => distTo(c.actor, f) <= reach && named(f));
+	// the nearest first: what the figure stands at, not what lies two steps behind it
+	const near = all.filter((f) => distTo(c.actor, f) <= reach && named(f)).sort((a, b) => distTo(c.actor, a) - distTo(c.actor, b));
 	if (near.length) {
 		const e = await c.space.take({ type, fields: { [idKey]: near[0]![idKey] as never } }, 5_000, { txn: c.txn });
 		if (!e) throw new CommandError("Das ist gerade nicht greifbar; bitte noch einmal.");
