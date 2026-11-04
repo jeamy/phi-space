@@ -61,15 +61,21 @@ if (mode === "verify") {
   const count = Number(arg("--commits") ?? 100_000);
   assert.ok(Number.isSafeInteger(count) && count > 0 && count <= 1_000_000, "invalid --commits");
   const root = await harness.root(ctx);
-  for (let n = 1; n <= count; n++) {
-    const start = performance.now();
-    await root.commit(async tx => {
-      const value = await tx.doc(State);
-      value.id = id; value.n = n; value.digest = digest(n);
-    }, ctx);
-    const line = JSON.stringify({ kind: "ack", id, backend, profile, n, ms: performance.now() - start });
-    if (!process.stdout.write(`${line}\n`)) await once(process.stdout, "drain");
-  }
+  const writers = Number(arg("--writers") ?? 1);
+  let next = 0, acknowledged = 0;
+  await Promise.all(Array.from({ length: writers }, async () => {
+    while (next < count) {
+      const start = performance.now();
+      let n = 0;
+      await root.commit(async tx => {
+        const value = await tx.doc(State);
+        n = value.n + 1; value.id = id; value.n = n; value.digest = digest(n);
+      }, ctx);
+      next = n; acknowledged = Math.max(acknowledged, n);
+      const line = JSON.stringify({ kind: "ack", id, backend, profile, n: acknowledged, ms: performance.now() - start, t: Date.now() });
+      if (!process.stdout.write(`${line}\n`)) await once(process.stdout, "drain");
+    }
+  }));
   // Do not turn the power-loss scenario into a graceful database close.
   setInterval(() => {}, 60_000);
   await new Promise(() => {});

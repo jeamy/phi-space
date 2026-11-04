@@ -3,7 +3,10 @@
 // can hand it a fake model team; it reaches the space over the socket like in production. close() stops them all.
 import { spaceServer } from "../server/space-server.ts";
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtempSync } from "node:fs";
 import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer as startWeb } from "../server/index.ts";
 import { connectSpace } from "../server/space.ts";
@@ -46,6 +49,16 @@ export async function startStack(o: { dbPath?: string; judges?: Array<{ host?: s
 	const space = await run("server/space-host.ts", { CODEMODE_LISTEN: spec, ...(o.dbPath ? { CODEMODE_SQLITE: o.dbPath, CODEMODE_MEM: "" } : { CODEMODE_MEM: "1" }) }, (l) => l.startsWith("[space] ready"));
 	const conn = connectSpace(spec);
 	const judges: ChildProcess[] = [], others: ChildProcess[] = [];
+	// `npm run test:durable`: an agent store per model process, kept for the process that takes its place (the store has
+	// an owner lock); beside a space file it lasts as long as that file. A test that names a store keeps it.
+	const matrix = !!process.env.CODEMODE_DURABLE_MODELS_MODULE && !process.env.CODEMODE_DURABLE_STORE;
+	const stores = matrix && !o.dbPath ? mkdtempSync(join(tmpdir(), "cm-durable-")) : null;
+	const modelSlots: Array<ChildProcess | null> = [];
+	const agentStore = (): { slot: number; env: Record<string, string> } => {
+		const free = modelSlots.findIndex((c) => !c || c.exitCode !== null || c.signalCode !== null);
+		const slot = free < 0 ? modelSlots.length : free;
+		return { slot, env: matrix ? { CODEMODE_DURABLE_STORE: stores ? join(stores, `agent-${slot}.sqlite`) : `${o.dbPath}.agent-${slot}.sqlite` } : {} };
+	};
 	const stack: Stack = {
 		spec, space: conn.space,
 		async judge(j = {}) {
@@ -54,7 +67,10 @@ export async function startStack(o: { dbPath?: string; judges?: Array<{ host?: s
 			return c;
 		},
 		async model(m = {}) {
-			const c = await run("server/model-host.ts", { CODEMODE_SPACE: spec, CODEMODE_HOST_NAME: "", ...(m.fakes ? { CODEMODE_TEST: "1", CODEMODE_LLM_MODULE: "tests/fakes.ts", CODEMODE_FAKE_MODELS: Array.isArray(m.fakes) ? m.fakes.join(",") : "" } : {}) }, (l) => l.startsWith("[model]"));
+			const store = agentStore();
+			modelSlots[store.slot] = null;
+			const c = await run("server/model-host.ts", { CODEMODE_SPACE: spec, CODEMODE_HOST_NAME: "", ...store.env, ...(m.fakes ? { CODEMODE_TEST: "1", CODEMODE_LLM_MODULE: "tests/fakes.ts", CODEMODE_FAKE_MODELS: Array.isArray(m.fakes) ? m.fakes.join(",") : "" } : {}) }, (l) => l.startsWith("[model]"));
+			modelSlots[store.slot] = c;
 			others.push(c);
 			return c;
 		},
@@ -64,7 +80,7 @@ export async function startStack(o: { dbPath?: string; judges?: Array<{ host?: s
 			return c;
 		},
 		kill: (c, sig) => stop(c, sig),
-		async close() { await Promise.all([...judges, ...others].map((c) => stop(c))); conn.close(); await stop(space); await rm(sock, { force: true }); },
+		async close() { await Promise.all([...judges, ...others].map((c) => stop(c))); conn.close(); await stop(space); await rm(sock, { force: true }); if (stores) await rm(stores, { recursive: true, force: true }); },
 	};
 	for (const j of o.judges ?? [{}]) await stack.judge(j);
 	if (o.agents !== false) await stack.agents();

@@ -15,6 +15,7 @@
     "model": "node --no-warnings --experimental-strip-types server/model-host.ts",
     "web": "node --no-warnings --experimental-strip-types server/index.ts",
     "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test tests/*.test.ts",
+    "test:durable": "node --no-warnings --experimental-strip-types tests/run-durable.ts",
     "docker:test": "docker compose --env-file .env -f docker/docker-compose.yml --profile test run --rm --build codemode-chat-test",
     "docker:prod:up": "echo 'one host runs one profile: docker:nano:up on nano, docker:big:up on big, docker:local:up for both on this machine' && exit 1",
     "docker:prod:down": "echo 'use docker:nano:down on nano, docker:big:down on big, docker:local:down locally' && exit 1",

@@ -1,0 +1,12 @@
+{"backend":"sqlite","profile":"weak","round":1,"delayMs":11444,"ack":5489,"status":"pass","kind":"verified","id":"hard-sqlite-weak-1","acknowledged":5489,"persisted":5739}
+{"backend":"sqlite","profile":"strong","round":1,"delayMs":14740,"ack":96,"status":"pass","kind":"verified","id":"hard-sqlite-strong-1","acknowledged":96,"persisted":97}
+{"backend":"jsonl","profile":"weak","round":1,"delayMs":12693,"ack":3795,"status":"lost","reason":"the acknowledged document was lost"}
+{"backend":"jsonl","profile":"strong","round":1,"delayMs":13885,"ack":23,"status":"pass","kind":"verified","id":"hard-jsonl-strong-1","acknowledged":23,"persisted":24}
+{"backend":"sqlite","profile":"weak","round":2,"delayMs":8996,"ack":3295,"status":"pass","kind":"verified","id":"hard-sqlite-weak-2","acknowledged":3295,"persisted":3489}
+{"backend":"sqlite","profile":"strong","round":2,"delayMs":19992,"ack":116,"status":"pass","kind":"verified","id":"hard-sqlite-strong-2","acknowledged":116,"persisted":117}
+{"backend":"jsonl","profile":"weak","round":2,"delayMs":18693,"ack":13056,"status":"lost","reason":"the acknowledged document was lost"}
+{"backend":"jsonl","profile":"strong","round":2,"delayMs":17154,"ack":26,"status":"pass","kind":"verified","id":"hard-jsonl-strong-2","acknowledged":26,"persisted":27}
+{"backend":"sqlite","profile":"weak","round":3,"delayMs":14516,"ack":6738,"status":"pass","kind":"verified","id":"hard-sqlite-weak-3","acknowledged":6738,"persisted":6739}
+{"backend":"sqlite","profile":"strong","round":3,"delayMs":12121,"ack":84,"status":"pass","kind":"verified","id":"hard-sqlite-strong-3","acknowledged":84,"persisted":85}
+{"backend":"jsonl","profile":"weak","round":3,"delayMs":10952,"ack":9588,"status":"lost","reason":"the acknowledged document was lost"}
+{"backend":"jsonl","profile":"strong","round":3,"delayMs":12930,"ack":18,"status":"pass","kind":"verified","id":"hard-jsonl-strong-3","acknowledged":18,"persisted":19}

@@ -1,0 +1,9 @@
+{"backend":"sqlite","profile":"weak","writers":1,"rate":415,"round":1,"delayMs":15723,"ack":6075,"status":"lost","reason":"lost acknowledged commits: durable=5989, acknowledged=6075"}
+{"backend":"sqlite","profile":"weak","writers":1,"rate":470,"round":2,"delayMs":10422,"ack":4353,"status":"lost","reason":"lost acknowledged commits: durable=4239, acknowledged=4353"}
+{"backend":"sqlite","profile":"weak","writers":1,"rate":462,"round":3,"delayMs":17134,"ack":7472,"status":"lost","reason":"lost acknowledged commits: durable=7239, acknowledged=7472"}
+{"backend":"sqlite","profile":"weak","writers":1,"rate":463,"round":4,"delayMs":10957,"ack":4488,"status":"pass","kind":"verified","id":"hard-sqlite-weak-4","acknowledged":4488,"persisted":4489}
+{"backend":"sqlite","profile":"weak","writers":1,"rate":425,"round":5,"delayMs":18235,"ack":7369,"status":"lost","reason":"lost acknowledged commits: durable=7239, acknowledged=7369"}
+{"backend":"sqlite","profile":"weak","writers":1,"rate":406,"round":6,"delayMs":16567,"ack":6238,"status":"pass","kind":"verified","id":"hard-sqlite-weak-6","acknowledged":6238,"persisted":6239}
+{"backend":"sqlite","profile":"weak","writers":1,"rate":529,"round":7,"delayMs":6457,"ack":2489,"status":"pass","kind":"verified","id":"hard-sqlite-weak-7","acknowledged":2489,"persisted":2489}
+{"backend":"sqlite","profile":"weak","writers":1,"rate":423,"round":8,"delayMs":7542,"ack":2738,"status":"pass","kind":"verified","id":"hard-sqlite-weak-8","acknowledged":2738,"persisted":2739}
+{"backend":"sqlite","profile":"weak","writers":1,"rate":449,"round":9,"delayMs":17333,"ack":7239,"status":"pass","kind":"verified","id":"hard-sqlite-weak-9","acknowledged":7239,"persisted":7239}

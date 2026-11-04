@@ -8,6 +8,9 @@ import { judge, loadCodemode, verdictFields } from "./judge.ts";
 import type { LlmCall } from "./context.ts";
 import type { Task } from "./tasks.ts";
 
+/** Only with model fixtures (tests): a system line that tells the worker's scripted model which call it answers. */
+export const FAKE_CALL = "[fake-call] ";
+
 type Controls = {
   model: (call: LlmCall, requested?: string) => Promise<string>;
   permit: (call: LlmCall, model: string, usage: AgentUsage, signal: AbortSignal) => Promise<void>;
@@ -16,8 +19,10 @@ type Controls = {
 export class DurableContributions {
   private readonly client: DurableAgentClient;
   private readonly controls: Controls;
+  private readonly fixtures: boolean;
 
   constructor(store: string, controls: Controls, modelsModule?: string) {
+    this.fixtures = !!modelsModule;
     this.client = new DurableAgentClient(store, { modelsModule, maxTokens: 1500 });
     this.controls = controls;
   }
@@ -27,7 +32,7 @@ export class DurableContributions {
     const model = await this.controls.model(call, context.model);
     const answer = await this.client.run({
       session: `code:${call.session}:${call.callId}`, requestId: call.callId, model,
-      system: `${prompt.system}\n[durable-code] You can use verify_code to test your function in an isolated sandbox. Check and repair it before the final answer.`,
+      system: `${prompt.system}\n[durable-code] You can use verify_code to test your function in an isolated sandbox. Check and repair it before the final answer.${this.fixtures ? `\n${FAKE_CALL}${JSON.stringify({ session: call.session, args: context })}` : ""}`,
       prompt: prompt.user, mode: "code", maxRequests: 4, maxTokens: 1500,
       metadata: { task: context.task }, resumeExisting: true,
     }, {

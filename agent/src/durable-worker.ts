@@ -1,4 +1,5 @@
 // Agent-only process. Models run only after the application reattaches and admits each attempt.
+import { existsSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -101,7 +102,10 @@ const boundedModels = new Proxy(models, {
           const stream = target.streamSimple(model, { ...context, messages: context.messages.filter(message => !tagged.has(message)) },
             { ...options, signal, maxTokens: Math.min(admitted.request.maxTokens ?? maxTokens, options?.maxTokens ?? maxTokens, maxTokens) });
           for await (const event of stream) output.push(event);
-          output.end(await stream.result());
+          const result = await stream.result();
+          // a provider's failure arrives as a message, not a throw: without this the caller only learns "unanswered"
+          if (result.stopReason === "error" && result.errorMessage) failures.set(marker.id, result.errorMessage);
+          output.end(result);
         } catch (error) {
           if (marker) failures.set(marker.id, (error as Error).message);
           const message: AssistantMessage = {
@@ -219,6 +223,9 @@ async function run(id: number, supplied: AgentRequest, signal: AbortSignal): Pro
     const text = entry?.model?.flatMap(message => typeof message.content === "string" ? [message.content]
       : message.content.filter(part => part.type === "text").map(part => part.text)).join("\n") ?? "";
     if (!text.trim()) throw new Error("Empty durable agent answer");
+    // Test only (with a models fixture): dies once between the conversation's last answer and the job's stored answer.
+    const crash = process.env.PHI_DURABLE_MODELS_MODULE ? process.env.PHI_TEST_MODEL_CRASH_BEFORE_ANSWER : undefined;
+    if (crash && !existsSync(crash)) { writeFileSync(crash, "crashed once"); process.kill(process.pid, "SIGKILL"); await new Promise<void>(() => {}); }
     return await conversation.commit(async tx => {
       const job = await tx.doc(Jobs, key, null);
       const answer = { text, model: request.model, usage: { ...job.usage } };

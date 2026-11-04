@@ -1,0 +1,6 @@
+{"backend":"space","profile":"strong","writers":1,"rate":4,"round":1,"delayMs":18779,"ack":56,"status":"pass","kind":"verified","id":"hard-space-strong-1","acknowledged":56,"persisted":56}
+{"backend":"space","profile":"weak","writers":1,"rate":118,"round":1,"delayMs":11337,"ack":1105,"status":"pass","kind":"verified","id":"hard-space-weak-1","acknowledged":1105,"persisted":1106}
+{"backend":"space","profile":"strong","writers":1,"rate":6,"round":2,"delayMs":10306,"ack":51,"status":"pass","kind":"verified","id":"hard-space-strong-2","acknowledged":51,"persisted":52}
+{"backend":"space","profile":"weak","writers":1,"rate":67,"round":2,"delayMs":12865,"ack":751,"status":"pass","kind":"verified","id":"hard-space-weak-2","acknowledged":751,"persisted":752}
+{"backend":"space","profile":"strong","writers":1,"rate":4,"round":3,"delayMs":6834,"ack":20,"status":"pass","kind":"verified","id":"hard-space-strong-3","acknowledged":20,"persisted":20}
+{"backend":"space","profile":"weak","writers":1,"rate":134,"round":3,"delayMs":14121,"ack":1452,"status":"pass","kind":"verified","id":"hard-space-weak-3","acknowledged":1452,"persisted":1453}

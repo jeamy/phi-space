@@ -57,8 +57,7 @@ test("durable bridge resumes a killed model attempt, but enforces per-job model 
   try {
     const job = request({ prompt: `crash:${join(dir, "once")}` });
     await assert.rejects(client.run(job, callbacks), /worker exited/);
-    await client.close(); client = new DurableAgentClient(file, { modelsModule });
-    assert.match((await client.run(job, callbacks)).text, /answer:crash/);
+    assert.match((await client.run(job, callbacks)).text, /answer:crash/, "the same client starts a new worker");
     calls = 0;
     const log = join(dir, "calls");
     await assert.rejects(client.run(request({ session: "loop", mode: "code", prompt: `loop:${log}`, maxRequests: 2 }), callbacks), /submission|budget/i);
@@ -101,4 +100,35 @@ test("the provider receives the smaller of request and worker output-token ceili
     }
     await assert.rejects(client.run(request({ maxTokens: 0 }), { permit: async () => {} }), /Invalid durable agent request/);
   } finally { await client.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a provider's failure reaches the caller with its own words, not as an unanswered submission", { timeout: 15_000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "durable-failure-"));
+  const client = new DurableAgentClient(join(dir, "agent.sqlite"), { modelsModule });
+  try {
+    await assert.rejects(client.run(request({ prompt: "fail:request timed out" }), { permit: async () => {} }), /^Error: request timed out$/);
+  } finally { await client.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a worker that cannot be forked fails its request, is tried again by the next one, and closes without an error", { timeout: 10_000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "durable-fork-")), real = process.execPath;
+  process.execPath = join(dir, "no-such-node");
+  const client = new DurableAgentClient(join(dir, "agent.sqlite"), { modelsModule });
+  const callbacks = { permit: async () => {} };
+  try {
+    await assert.rejects(client.run(request({}), callbacks), /ENOENT/);
+    await assert.rejects(client.run(request({}), callbacks), /ENOENT/);
+    process.execPath = real;
+    assert.match((await client.run(request({ prompt: "back" }), callbacks)).text, /answer:back/, "the third try forks again");
+  } finally { process.execPath = real; await client.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("closing a client whose fork failed ends at once", { timeout: 10_000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "durable-fork-close-")), real = process.execPath;
+  process.execPath = join(dir, "no-such-node");
+  const client = new DurableAgentClient(join(dir, "agent.sqlite"), { modelsModule });
+  try {
+    await assert.rejects(client.run(request({}), { permit: async () => {} }), /ENOENT/);
+    await client.close();
+  } finally { process.execPath = real; rmSync(dir, { recursive: true, force: true }); }
 });

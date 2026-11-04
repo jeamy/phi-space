@@ -8,6 +8,7 @@
 //   CODEMODE_MODEL_PARALLEL=2                      model calls this process makes at once
 //   CODEMODE_LLM_MODULE=tests/fakes.ts            tests only (CODEMODE_TEST=1): fake model teams instead of real models
 import { ROOT } from "./env.ts";
+import { existsSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
@@ -35,6 +36,15 @@ const RUN_WATCH_MS = 2_000;
 /** How long an answer waits to be fetched (an agent that died leaves it behind). */
 const RESULT_LEASE_MS = 10 * 60_000;
 const SPEND_LEASE_MS = 26 * 3600_000;
+
+/** Test only (CODEMODE_TEST=1): the first answered call of PHI_TEST_RESULT_PAUSE writes that file and holds here, between
+ *  the last model answer and its LlmResult, until the test kills the process. */
+async function holdBeforeResult(): Promise<void> {
+	const marker = process.env.PHI_TEST_RESULT_PAUSE;
+	if (process.env.CODEMODE_TEST !== "1" || !marker || existsSync(marker)) return;
+	writeFileSync(marker, "holding");
+	await new Promise<void>(() => {});
+}
 
 const real: ModelApi = { models: llmModels, contribute: llmContribution, critique: llmCritique, propose: llmPropose, vote: llmVote, judge: llmJudge, research: llmResearch, verify: llmVerifier, criteria: llmCriteria, reviewCriteria: llmReviewCriteria };
 
@@ -173,6 +183,7 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 				if (m.error !== undefined) throw stop.signal.aborted ? new Error("the run is over") : m.error;
 				result = { ok: true, value: { ...m.value!.value, ...(usage ? { usage } : {}) } };
 			} catch (err) { result = { ok: false, error: String((err as Error).message ?? err).slice(0, 300) }; }
+			await holdBeforeResult();
 			// the usage rides along on a failure too: the agent books it when it takes the result
 			await space.write({ type: "LlmResult", fields: { callId: call.callId, session: call.session, ...result, ...(usage && !result.ok ? { usage } : {}), ts: Date.now() } as never }, t.id, RESULT_LEASE_MS);
 			if (usage && usage.total > 0 && call.client && !call.client.admin) await space.write({ type: "Spend", fields: { ip: call.client.ip, day: today(), tokens: usage.total, ts: Date.now() } }, t.id, SPEND_LEASE_MS);

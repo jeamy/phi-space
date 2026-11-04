@@ -1,0 +1,6 @@
+{"backend":"jsonl","profile":"weak","round":1,"delayMs":13278,"ack":14006,"status":"lost","reason":"the acknowledged document was lost"}
+{"backend":"jsonl","profile":"weak","round":2,"delayMs":6890,"ack":4889,"status":"lost","reason":"the acknowledged document was lost"}
+{"backend":"jsonl","profile":"weak","round":3,"delayMs":8597,"ack":7814,"status":"lost","reason":"the acknowledged document was lost"}
+{"backend":"jsonl","profile":"weak","round":4,"delayMs":6630,"ack":6514,"status":"lost","reason":"the acknowledged document was lost"}
+{"backend":"jsonl","profile":"weak","round":5,"delayMs":18955,"ack":11902,"status":"lost","reason":"the acknowledged document was lost"}
+{"backend":"jsonl","profile":"weak","round":6,"delayMs":18524,"ack":16135,"status":"lost","reason":"the acknowledged document was lost"}

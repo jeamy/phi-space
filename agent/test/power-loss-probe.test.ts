@@ -2,11 +2,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { BACKGROUND_CONTEXT as ctx, FOREVER, PhiSpaces, openSqliteHost } from "../../src/index.ts";
 
 const probe = fileURLToPath(new URL("./power-loss-probe.ts", import.meta.url));
 for (const backend of ["sqlite", "jsonl"]) {
@@ -46,3 +47,25 @@ for (const backend of ["sqlite", "jsonl"]) {
     }
   });
 }
+
+test("the space probe refuses a lost entry that an unacknowledged one covers, and a wrong digest", { timeout: 25_000 }, async () => {
+  const own = fileURLToPath(new URL("./power-loss-own-probe.ts", import.meta.url));
+  const dir = mkdtempSync(join(tmpdir(), "agent-power-own-")), id = randomUUID();
+  const digest = (n: number) => createHash("sha256").update(`${id}:${n}:${"probe".repeat(1024)}`).digest("hex");
+  const args = ["--dir", dir, "--backend", "space", "--profile", "strong", "--run-id", id];
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, ".power-loss-probe.json"), JSON.stringify({ version: 1, id, backend: "space", profile: "strong" }));
+    const host = await openSqliteHost(join(dir, "space.sqlite")), space = new PhiSpaces(host, ctx);
+    for (const n of [2, 3, 4, 5, 6]) await space.write({ type: "Probe", fields: { n, digest: digest(n) } }, null, FOREVER);
+    await host.close(ctx);
+    const verify = (ack: number) => spawnSync(process.execPath, ["--experimental-strip-types", own, "verify", ...args, "--ack", String(ack)], { encoding: "utf8", timeout: 10_000 });
+    const lost = verify(5);
+    assert.notEqual(lost.status, 0, "five entries, but entry 1 of the five acknowledged is gone");
+    assert.match(lost.stderr, /lost acknowledged commits: entry 1 is missing/);
+    const again = await openSqliteHost(join(dir, "space.sqlite")), repaired = new PhiSpaces(again, ctx);
+    await repaired.write({ type: "Probe", fields: { n: 1, digest: "wrong" } }, null, FOREVER);
+    await again.close(ctx);
+    assert.match(verify(5).stderr, /entry contents are inconsistent/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

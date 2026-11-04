@@ -45,8 +45,24 @@ test("SIGKILL during analysis resumes the same research team and finishes its re
     const exited = once(child, "exit");
     child.kill("SIGKILL");
     await exited;
+    const look = async () => {
+      const run = await ResearchRun.open("arxiv", "ignored default", { dir, resume: true });
+      try {
+        await run.connect([], { modelBundle: scriptedModels() });
+        const phases = await run.host.readAll({ type: "ResearchPhase" });
+        return { status: await run.status(), phases: phases.map(e => e.fields.phase), analysis: await run.host.count({ type: "AnalyzeTask" }), present: await run.host.count({ type: "PresentTask" }), reports: await run.host.count({ type: "Report" }) };
+      } finally { await run.close(); }
+    };
+    const before = await look();
+    assert.deepEqual(before.phases.filter(p => p === "analysis"), ["analysis"]);
+    assert.ok(Object.keys(before.status!.agents).length > 0);
+    assert.equal(before.reports, 0);
     await runArxivResearch({ dir, resume: true, modelBundle: scriptedModels(), pollMs: 20, phaseTimeoutMs: 3000 });
     assert.equal(readFileSync(join(dir, "report.md"), "utf8"), "# Scripted report");
+    const after = await look();
+    assert.deepEqual(after.status!.agents, before.status!.agents, "the same team, no conversation added");
+    assert.deepEqual(after.phases.filter(p => p === "analysis"), ["analysis"], "the phase was not started twice");
+    assert.deepEqual([after.analysis, after.present, after.reports], [0, 0, 1], "no second task, one report");
   } finally {
     if (child.exitCode === null && child.signalCode === null) {
       const exited = once(child, "exit"); child.kill("SIGKILL"); await exited;

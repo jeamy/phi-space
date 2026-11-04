@@ -1,0 +1,6 @@
+{"backend":"own","profile":"strong","writers":1,"rate":7,"round":1,"delayMs":15723,"ack":100,"status":"pass","kind":"verified","id":"hard-own-strong-1","acknowledged":100,"persisted":101}
+{"backend":"own","profile":"weak","writers":1,"rate":605,"round":1,"delayMs":10422,"ack":2987,"status":"pass","kind":"verified","id":"hard-own-weak-1","acknowledged":2987,"persisted":2988}
+{"backend":"own","profile":"strong","writers":1,"rate":3,"round":2,"delayMs":18235,"ack":37,"status":"pass","kind":"verified","id":"hard-own-strong-2","acknowledged":37,"persisted":38}
+{"backend":"own","profile":"weak","writers":1,"rate":251,"round":2,"delayMs":16567,"ack":2988,"status":"pass","kind":"verified","id":"hard-own-weak-2","acknowledged":2988,"persisted":2988}
+{"backend":"own","profile":"strong","writers":1,"rate":2,"round":3,"delayMs":17333,"ack":11,"status":"pass","kind":"verified","id":"hard-own-strong-3","acknowledged":11,"persisted":12}
+{"backend":"own","profile":"weak","writers":1,"rate":903,"round":3,"delayMs":8074,"ack":987,"status":"pass","kind":"verified","id":"hard-own-weak-3","acknowledged":987,"persisted":988}

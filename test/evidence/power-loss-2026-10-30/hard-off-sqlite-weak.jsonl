@@ -1,0 +1,6 @@
+{"backend":"sqlite","profile":"weak","round":1,"delayMs":12666,"ack":6239,"status":"pass","kind":"verified","id":"hard-sqlite-weak-1","acknowledged":6239,"persisted":6239}
+{"backend":"sqlite","profile":"weak","round":2,"delayMs":9506,"ack":4738,"status":"pass","kind":"verified","id":"hard-sqlite-weak-2","acknowledged":4738,"persisted":4739}
+{"backend":"sqlite","profile":"weak","round":3,"delayMs":9962,"ack":5239,"status":"pass","kind":"verified","id":"hard-sqlite-weak-3","acknowledged":5239,"persisted":5239}
+{"backend":"sqlite","profile":"weak","round":4,"delayMs":9049,"ack":4989,"status":"pass","kind":"verified","id":"hard-sqlite-weak-4","acknowledged":4989,"persisted":4989}
+{"backend":"sqlite","profile":"weak","round":5,"delayMs":15636,"ack":7988,"status":"pass","kind":"verified","id":"hard-sqlite-weak-5","acknowledged":7988,"persisted":7989}
+{"backend":"sqlite","profile":"weak","round":6,"delayMs":19014,"ack":8489,"status":"pass","kind":"verified","id":"hard-sqlite-weak-6","acknowledged":8489,"persisted":8489}

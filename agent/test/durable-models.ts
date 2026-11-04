@@ -14,7 +14,18 @@ export function modelBundle() {
       process.kill(process.pid, "SIGKILL");
       await new Promise<void>(() => {});
     }
+    if (typeof user === "string" && user.startsWith("fail:")) throw new Error(user.slice(5));
     const last = messages.at(-1);
+    // Tests of an interruption between two model answers: PHI_TEST_MODEL_LOG logs each attempt; at the attempt after the
+    // tool, PHI_TEST_MODEL_CRASH kills the worker once, and PHI_TEST_MODEL_PAUSE holds until its ".go" file exists.
+    const after = last?.role === "toolResult", { PHI_TEST_MODEL_LOG: log, PHI_TEST_MODEL_CRASH: crash, PHI_TEST_MODEL_PAUSE: pause } = process.env;
+    if (log) appendFileSync(log, `${after ? "after-tool" : "first"}\n`);
+    if (after && crash && !existsSync(crash)) {
+      writeFileSync(crash, "crashed once");
+      process.kill(process.pid, "SIGKILL");
+      await new Promise<void>(() => {});
+    }
+    while (after && pause && !existsSync(`${pause}.go`)) await new Promise(resolve => setTimeout(resolve, 20));
     const code = user === "repair" || JSON.stringify(context.messages.filter((m: any) => m.role === "system")).includes("[durable-code]");
     const message = user === "loop" || String(user).startsWith("loop:") || code && last?.role !== "toolResult"
       ? fauxAssistantMessage(fauxToolCall("verify_code", { source: "(a, b) => a + b" }), { stopReason: "toolUse" })
