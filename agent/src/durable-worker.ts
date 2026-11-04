@@ -3,7 +3,8 @@ import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
-import { Type, createAssistantMessageEventStream, type AssistantMessage, type Models } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, type AssistantMessage, type Models } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import {
   AssistantEntry, createRegistry, defineDoc, defineDocFamily, defineExtension, defineTool,
   GenerationTask, Harness, hook, type ConversationId, type JsonObject,
@@ -122,7 +123,7 @@ let harness: Harness;
 const root = async () => harness.root(ctx);
 const verify = defineTool({
   name: "verify_code", description: "Test a JavaScript function in the application's isolated sandbox. Fix failures before answering.",
-  parameters: Type.Object({ source: Type.String({ maxLength: 16000 }) }),
+  parameters: obj({ source: str({ maxLength: 16000 }) }),
   replay: "safe",
   execute: async ({ source }, api, context) => {
     const key = (await api.snapshot(Current, String(api.conversationId), context))?.key;
@@ -158,7 +159,7 @@ const bridge = defineExtension({
 const registry = createRegistry(); registry.install(bridge);
 harness = await Harness.open(await openDurableSqliteStorage(file), {
   models: boundedModels, registry,
-  settings: { stream: { timeoutMs: 30_000, maxRetries: 0 }, retry: { maxRetries: 0 }, compaction: { enabled: false } },
+  settings: { stream: { timeoutMs: 30_000, maxRetries: 0 }, retry: { maxRetries: 1 }, compaction: { enabled: false } },
 }, ctx);
 
 const queued = new Map<string, Promise<unknown>>();

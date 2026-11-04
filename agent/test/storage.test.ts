@@ -7,7 +7,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { FileError, type FileSystem } from "@earendil-works/pi-durable/env";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { JsonlStorage } from "@earendil-works/pi-durable/storage/jsonl";
-import { createRegistry, defineDoc, Harness } from "@earendil-works/pi-durable";
+import { createRegistry, defineDoc, Harness, type ConversationId } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { durableJsonlFileSystem, openDurableJsonlStorage, openDurableSqliteDatabase } from "../src/storage.ts";
 
@@ -78,7 +78,7 @@ test("JSONL marker and namespace barriers precede acknowledgement; a file-cache-
     finally { await copy.close(ctx); }
     fail = true;
     await assert.rejects(root.commit(async tx => { (await tx.doc(Counter)).n = 8; }, ctx), /flush|poison|barrier/i);
-    await assert.rejects(storage.commit([], ctx), /poison/i);
+    await assert.rejects(storage.commit([], () => {}, ctx), /poison|closed/i);
   } finally {
     try { await harness?.close(ctx); } catch { /* The injected barrier failure poisons this store. */ }
     rmSync(dir, { recursive: true, force: true });
@@ -93,6 +93,11 @@ test("upstream JSONL fsync alone does not flush a marker-only commit", async () 
   const original = fs.flushFile.bind(fs);
   fs.flushFile = async (path, context) => { if (basename(path) === "main.jsonl") flushed = true; return original(path, context); };
   const storage = await JsonlStorage.open(dir, fs, ctx, { fsync: true });
-  try { await storage.commit([], ctx); assert.equal(flushed, false); }
+  try {
+    const id = await storage.mintId<ConversationId>();
+    const result = await storage.commit([[{ type: "conversation", value: { id } }]], () => {}, ctx);
+    assert.equal(result.stored, 1);
+    assert.equal(flushed, false);
+  }
   finally { await storage.close(ctx); rmSync(dir, { recursive: true, force: true }); }
 });

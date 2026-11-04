@@ -90,6 +90,9 @@ Run typecheck and tests after every change (root: `npm run typecheck`, `npm test
 - No new dependencies without asking; nothing is installed locally.
 - Projects built on phi-spaces depend on it as `"phi-spaces": "file:.."` and import `phi-spaces`, `phi-spaces/context`,
   `phi-spaces/core`, `phi-spaces/store/*` (root `exports`, pointing at the `.ts` sources); `agent/` keeps relative imports.
+- Agent packages use Pi 1.5.0; schema builders come from `@earendil-works/pi-schema`, not `Type` from `pi-ai`.
+  Pi 1.5 counts an in-flight model request interrupted by a crash against the retry policy; the durable worker allows
+  one retry to preserve crash recovery, still bounded by the persisted per-job model admission budget.
 - Scripted model tests: filter out system messages before checking the last message (see `docs/examples.en.md`, „Testumfang").
 - Documentation is English: code comments, READMEs and all docs. A document is `name.en.md`; its German version, where one exists, sits in `de-docs/` beside it, and links point to the English document. New documents are English only. The German help corpus (`help-site/corpus/de`) is a language version of the help site, not an old document.
 - Commits and pushes carry no `Co-Authored-By: Claude …` line (the user's decision, 2026-11-02).
