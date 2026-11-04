@@ -296,8 +296,11 @@ je Zelle, damit Nachbarn einer Art weiter bündig stoßen; ein Klick trifft desh
 die instanzierten Kacheln), keine flache Ebene. Die Sonne wirft Schatten (eine Schattenkarte auf den Raum zugeschnitten,
 1024 auf Touchgeräten, sonst 2048). Namen von Figuren und Dingen behalten ihre Bildschirmgröße und verschwinden auf der
 Inselstufe. Figuren tragen nach ihrer ID Hut oder Mütze und eine Umhängetasche; Dächer haben Traufbretter. Hinter einer
-Seeseite ist das Wasser klar genug für einen Sandhang und ein paar Fische, die an ihm entlangschwimmen (`fishFor`,
-`swimFish`). Tag und Nacht folgen der Weltuhr, wie der Client sie zeigt (`WorldTimeView`, `daylightAt` in `camera3d.ts`:
+Seeseite ist das Wasser klar genug für einen Sandhang und Fische, die an ihm entlangschwimmen (`fishFor`, `swimFish`):
+Heringe im Schwarm, einzelne Dorsche, Schollen, die über den Sand gleiten, jeder ein Modell aus `client/fish3d.ts`
+(Körper und Schwanz getrennt, damit der Schwanz schlägt; Fern-, Raum- und Nahvariante über `cached`, nah kommen
+Seitenlinie, Kiemendeckel und der Bartfaden des Dorschs dazu). Die Gegenstände „Fisch“ und „Räucherfisch“ liegen als
+solcher Fisch auf dem Boden statt als Bild. Tag und Nacht folgen der Weltuhr, wie der Client sie zeigt (`WorldTimeView`, `daylightAt` in `camera3d.ts`:
 volles Licht von 7 bis 19, dunkel von 21 bis 5): Die Sonne sinkt zu blassem Mondlicht, warm in Morgen- und Abenddämmerung,
 Himmel und Himmelslicht werden dunkler, und die lampenhellen Flächen jedes Modells (Fenster, Laternen, Ofenlöcher: die
 Farben in `LAMPLIGHT`, von `merge` je Ecke markiert) leuchten über eine Uniform des gemeinsamen Modellmaterials, ohne

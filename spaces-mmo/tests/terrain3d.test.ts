@@ -152,6 +152,27 @@ test("the room's block shows a seabed behind its sea sides and fish that stay in
 	assert.ok(fish.length >= 3);
 	for (const time of [0, 3.3, 17, 99]) {
 		swimFish(fish, time);
-		for (const f of fish) assert.ok(Math.abs(f.mesh.position.x) <= 2 && Math.abs(f.mesh.position.z) <= 2 && f.mesh.position.y < 0, "inside the block, under the water");
+		for (const f of fish) assert.ok(Math.abs(f.group.position.x) <= 2 && Math.abs(f.group.position.z) <= 2 && f.group.position.y < 0, "inside the block, under the water");
 	}
+});
+
+test("fish: three kinds with a body and a tail at every detail level, finer up close; fish items lie as models", async () => {
+	const t = await import("three");
+	const { FISH_KINDS, fishBody, fishTail, fishItem } = await import("../client/fish3d.ts");
+	const { atModelLevel } = await import("../client/modelDetail3d.ts");
+	const tris = (g: import("three").BufferGeometry) => g.getAttribute("position").count / 3;
+	for (const kind of FISH_KINDS) for (const smoked of [false, true]) {
+		const [far, room, near] = (["far", "room", "near"] as const).map((level) => atModelLevel(level, () => fishBody(t, kind, smoked)));
+		assert.ok(tris(far!) < tris(room!) && tris(room!) < tris(near!), `${kind} ${smoked}: ${tris(far!)} < ${tris(room!)} < ${tris(near!)}`);
+		assert.equal(fishBody(t, kind, smoked), fishBody(t, kind, smoked), "made once and shared");
+		const tail = fishTail(t, kind, smoked);
+		tail.computeBoundingBox();
+		assert.ok(tail.boundingBox!.max.x <= 0.01 && tail.boundingBox!.min.x < -0.04, `${kind}: the tail reaches back from its root`);
+		room!.computeBoundingBox();
+		assert.ok(room!.boundingBox!.max.x > 0.1 && room!.boundingBox!.max.x < 0.2, `${kind}: nose towards +x`);
+	}
+	assert.deepEqual(fishItem("/assets/leuchtfeuer/items/fisch.png"), { kind: "dorsch", smoked: false });
+	assert.deepEqual(fishItem("items/raeucherfisch.png"), { kind: "hering", smoked: true });
+	assert.equal(fishItem("items/brot.png"), null);
+	assert.equal(fishItem(undefined), null);
 });

@@ -20,6 +20,7 @@ import { atModelLevel, updateModelDetails, type ModelLevel } from "./modelDetail
 import { stableHash, tile3d } from "./terrain3d.ts";
 import { cameraElevation, clampTilt, clampZoom, daylightAt, wheelView, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./camera3d.ts";
 import { calendar, shownWorldMs, WORLD_HOUR_MS } from "../server/engine/worldtime.ts";
+import { fishItem, fishModel, type FishKind } from "./fish3d.ts";
 import { blockUnder, fishFor, islandBlock, nameCard, swimFish, type Fish, type SeaEdge } from "./block3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
@@ -306,7 +307,7 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 	const block = blockUnder(t, room.ground, world.tiles);
 	block.userData.block = true;
 	s.fish = fishFor(t, block.userData.seaEdges as SeaEdge[], w, h, stableHash(room.roomId));
-	for (const f of s.fish) block.add(f.mesh);
+	for (const f of s.fish) block.add(f.group);
 	swimFish(s.fish, 0);
 	group.add(block);
 	return group;
@@ -597,6 +598,12 @@ function object(t: T, obj: ObjView, me: string): Entry {
 	} else if (obj.kind === "exit") {
 		const sign = propMesh(t, signGeometry(t)); sign.rotation.y = (variant / 3) * Math.PI * 2; group.add(sign);
 		const mark = label(t, tr(obj.to ?? obj.name), "#AED83C"); mark.position.y = 1.1; group.add(mark);
+	} else if (fishItem(obj.icon)) {
+		// a fish (fresh or smoked) lies on its side on the ground instead of its picture (fish3d.ts)
+		const f = fishItem(obj.icon)!, fish = fishModel(t, f.kind, propMaterial(t), f.smoked);
+		fish.group.rotation.x = Math.PI / 2; fish.group.position.y = 0.03; fish.group.scale.setScalar(1.4); fish.tail.rotation.y = 0.25;
+		const turn = new t.Group(); turn.rotation.y = (variant / 3) * Math.PI * 2; turn.add(fish.group);
+		group.add(propShadow(t, 0.45, 0.2), turn);
 	} else if (obj.icon) {
 		// the thing's picture as a small sign that always faces the camera
 		const sprite = new t.Sprite(new t.SpriteMaterial({ map: iconTexture(t, obj.icon), transparent: true, alphaTest: 0.1 }));
@@ -853,13 +860,14 @@ function showCatalogue(s: Scene3D, names: string[], level: ModelLevel): void {
 			else if (kind === "ruin") geometry = ruinGeometry(t, 2, 2, 0);
 			else if (kind === "sign") geometry = signGeometry(t);
 			else if (kind === "fire") geometry = fireGeometry(t);
+			else if (kind === "fish" || kind === "smoked") { const f = fishModel(t, model as FishKind, propMaterial(t), kind === "smoked"); f.tail.rotation.y = 0.3; group.add(f.group); }
 			else if (kind === "fence") geometry = fenceGeometry(t, 2, 2);
 			else geometry = buildingModel(t, name, 2, 2, 0) ?? buildingGeometry(t, name, 2, 2, 0x9a7a4a, 0);
 			if (geometry) group.add(propMesh(t, geometry));
 			prepareModelDetails(t, group);
 			group.traverse((o) => { const mesh = o as import("three").Mesh; if (mesh.geometry?.userData.modelVariant) { mesh.geometry = mesh.geometry.userData.modelVariant(level); mesh.userData.modelLevel = level; } if (o.userData.detailOnly) o.visible = level === "near"; });
 		});
-		const bounds = new t.Box3().setFromObject(group), size = bounds.getSize(new t.Vector3()), factor = Math.min(1, 2.8 / Math.max(size.x, size.z), 2.7 / size.y);
+		const bounds = new t.Box3().setFromObject(group), size = bounds.getSize(new t.Vector3()), factor = Math.min(kind === "fish" || kind === "smoked" ? 9 : 1, 2.8 / Math.max(size.x, size.z), 2.7 / size.y);
 		group.scale.setScalar(factor); group.position.set((index % columns - 2) * 3.5, -bounds.min.y * factor, (Math.floor(index / columns) - (rows - 1) / 2) * 4);
 		gallery.add(group);
 		const plate = new t.Mesh(new t.BoxGeometry(3.1, 0.06, 3.1), new t.MeshStandardMaterial({ color: 0x668e45, roughness: 1 })); plate.position.set(group.position.x, -0.07, group.position.z); gallery.add(plate);

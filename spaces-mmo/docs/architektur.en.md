@@ -309,7 +309,10 @@ neighbours of a kind still meet flush; a click therefore hits the terrain's colu
 not a flat plane. The sun casts shadows (one shadow map fitted to the room, 1024 on a touch screen, 2048 otherwise).
 Names of figures and things keep their size on the screen and hide on the island level. Figures wear a hat or a cap and
 a satchel by their id; roofs have fascia boards along the eaves. Behind a sea side the water is clear enough to show a
-sand slope and a few fish swimming along it (`fishFor`, `swimFish`). Day and night follow the world's clock as the
+sand slope and fish swimming along it (`fishFor`, `swimFish`): herring in schools, single cod, plaice gliding over the
+sand, each a model of `client/fish3d.ts` (body and tail apart, so the tail beats; far, room and near variants through
+`cached`, near adds the lateral line, the gill cover and the cod's barbel). The items "fisch" and "raeucherfisch" lie
+on the ground as such a fish instead of their picture. Day and night follow the world's clock as the
 client shows it (`WorldTimeView`, `daylightAt` in `camera3d.ts`: full light from 7 to 19, dark from 21 to 5): the sun
 sinks to a pale moonlight, warm at dawn and dusk, the sky and the hemisphere light dim, and the lamplit faces of every
 model (windows, lanterns, kiln mouths: the colours in `LAMPLIGHT`, marked per vertex by `merge`) glow through one

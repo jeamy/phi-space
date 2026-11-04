@@ -2,6 +2,8 @@
 // whose sea sides show the water as a volume, with a soft shadow below it on the void. The island level draws every room
 // of the atlas as such a block, with a plain lid of tile colours instead of the tile art. Visual only.
 import { tile3d } from "./terrain3d.ts";
+import { fishModel, type FishKind } from "./fish3d.ts";
+import { propMaterial } from "./props3d.ts";
 
 type T = typeof import("three");
 type Geo = import("three").BufferGeometry;
@@ -142,40 +144,43 @@ export function nameCard(t: T, name: string, people: number, here: boolean): imp
 	return sprite;
 }
 
-/** A fish behind the sea side, and where it swims: along its edge, to and fro, at its own depth. */
-export type Fish = { mesh: import("three").Mesh; x: number; z: number; dx: number; dz: number; span: number; y: number; ix: number; iz: number; phase: number; speed: number; hx: number; hz: number };
-let fishGeo: Geo | null = null;
-/** A few small fish for the sea sides of the room's block (one geometry, one material each colour); `swimFish` moves them. */
+/** A fish behind the sea side, and where it swims: along its edge, to and fro, at its own depth. A herring swims in a
+ *  school (the members share one path, each a little offset); the plaice glides over the sand slope. */
+export type Fish = { group: import("three").Group; tail: import("three").Mesh; kind: FishKind; x: number; z: number; dx: number; dz: number; span: number; y: number; ix: number; iz: number; phase: number; speed: number; hx: number; hz: number; along: number; inward: number };
+/** Fish for the sea sides of the room's block (fish3d.ts models, the shared model material); `swimFish` moves them. */
 export function fishFor(t: T, edges: SeaEdge[], w: number, h0: number, seed: number, depth = BLOCK_DEPTH): Fish[] {
 	if (!edges.length) return [];
-	if (!fishGeo) {
-		// a body (a stretched cone, nose towards +x) and a tail fin, merged
-		const body = new t.ConeGeometry(0.07, 0.26, 6); body.rotateZ(-Math.PI / 2);
-		const tail = new t.ConeGeometry(0.06, 0.1, 3); tail.rotateZ(Math.PI / 2); tail.translate(-0.16, 0, 0); tail.scale(1, 1, 0.3);
-		const a = body.toNonIndexed(), b = tail.toNonIndexed(), pos = [...a.getAttribute("position").array, ...b.getAttribute("position").array];
-		fishGeo = new t.BufferGeometry(); fishGeo.setAttribute("position", new t.Float32BufferAttribute(pos, 3)); fishGeo.computeVertexNormals(); fishGeo.userData.shared = true;
-		body.dispose(); tail.dispose(); a.dispose(); b.dispose();
-	}
-	const colours = [0xd8a24a, 0x9fb6c4, 0xc8673a, 0x6f9fb0];
 	let h = seed || 1;
 	const rnd = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) % 10_000) / 10_000; };
-	const n = Math.min(14, Math.max(3, Math.round(edges.length / 4))), out: Fish[] = [];
-	for (let i = 0; i < n; i++) {
-		const e = edges[Math.floor(rnd() * edges.length)]!, k = rnd();
-		const mesh = new t.Mesh(fishGeo, new t.MeshStandardMaterial({ color: colours[i % colours.length], roughness: 0.5, metalness: 0.2, flatShading: true }));
-		mesh.scale.setScalar(1.7 + rnd() * 0.9); mesh.renderOrder = 2; mesh.userData.unshaded = true;
-		out.push({ mesh, x: e.ax + (e.bx - e.ax) * k, z: e.az + (e.bz - e.az) * k, dx: e.bx - e.ax, dz: e.bz - e.az, span: 1 + rnd() * 2.5, y: -0.45 - rnd() * (depth - 1.2), ix: e.ix, iz: e.iz, phase: rnd() * Math.PI * 2, speed: 0.25 + rnd() * 0.35, hx: w / 2 - 0.25, hz: h0 / 2 - 0.25 });
+	const units = Math.min(8, Math.max(2, Math.round(edges.length / 6))), out: Fish[] = [], material = propMaterial(t);
+	const bed = (inward: number) => -depth + 0.15 + (-0.3 + depth - 0.15) * (inward / 1.6);
+	for (let u = 0; u < units; u++) {
+		const e = edges[Math.floor(rnd() * edges.length)]!, k = rnd(), r = rnd();
+		const kind: FishKind = r < 0.45 ? "hering" : r < 0.78 ? "dorsch" : "scholle";
+		const members = kind === "hering" ? 4 + Math.floor(rnd() * 4) : 1;
+		const base = { kind, x: e.ax + (e.bx - e.ax) * k, z: e.az + (e.bz - e.az) * k, dx: e.bx - e.ax, dz: e.bz - e.az, span: 1 + rnd() * 2.5, ix: e.ix, iz: e.iz, phase: rnd() * Math.PI * 2, speed: (kind === "scholle" ? 0.12 : 0.25) + rnd() * 0.3, hx: w / 2 - 0.25, hz: h0 / 2 - 0.25 };
+		const y = kind === "scholle" ? bed(0.32) + 0.03 : -0.4 - rnd() * (depth - 1.3);
+		for (let m = 0; m < members; m++) {
+			const { group, tail } = fishModel(t, kind, material);
+			group.scale.setScalar(kind === "hering" ? 1.3 + rnd() * 0.3 : 1.4 + rnd() * 0.5);
+			group.traverse((o) => { o.userData.unshaded = true; });
+			group.renderOrder = 2;
+			out.push({ ...base, group, tail, y: y + (m ? (rnd() - 0.5) * 0.25 : 0), along: m ? (rnd() - 0.5) * 0.7 : 0, inward: kind === "scholle" ? 0.32 : 0.3 + (m ? rnd() * 0.25 : 0.05) });
+		}
 	}
 	return out;
 }
-/** Moves the fish to time `time` (seconds): each swims to and fro along its edge and turns at the ends. */
+/** Moves the fish to time `time` (seconds): each swims to and fro along its edge, turns at the ends and beats its tail. */
 export function swimFish(fish: Fish[], time: number): void {
 	for (const f of fish) {
-		const a = time * f.speed + f.phase, along = Math.sin(a) * f.span, dir = Math.cos(a) >= 0 ? 1 : -1;
-		const inward = 0.35 + 0.12 * Math.sin(a * 1.7);
+		const a = time * f.speed + f.phase, along = Math.sin(a) * f.span + f.along, dir = Math.cos(a) >= 0 ? 1 : -1;
+		const inward = f.inward + (f.kind === "scholle" ? 0 : 0.08 * Math.sin(a * 1.7 + f.along * 5));
 		// never past the block's corners: there it would hang in the air
 		const x = Math.max(-f.hx, Math.min(f.hx, f.x + f.dx * along + f.ix * inward)), z = Math.max(-f.hz, Math.min(f.hz, f.z + f.dz * along + f.iz * inward));
-		f.mesh.position.set(x, f.y + Math.sin(a * 2.3) * 0.05, z);
-		f.mesh.rotation.y = Math.atan2(-f.dz * dir, f.dx * dir);
+		f.group.position.set(x, f.y + (f.kind === "scholle" ? 0 : Math.sin(a * 2.3 + f.along * 3) * 0.05), z);
+		f.group.rotation.y = Math.atan2(-f.dz * dir, f.dx * dir);
+		// the tail beats faster the faster the fish goes (sideways; the flat plaice's up and down)
+		const beat = Math.sin(time * (9 + f.speed * 14) + f.phase * 3 + f.along * 7) * 0.45;
+		if (f.kind === "scholle") f.tail.rotation.z = beat * 0.6; else f.tail.rotation.y = beat;
 	}
 }
