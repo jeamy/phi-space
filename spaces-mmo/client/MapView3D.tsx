@@ -367,7 +367,13 @@ function step(s: Scene3D, dt: number, time: number, me: string): void {
 			else if (body) body.position.y = 0;
 		}
 		e.obj.position.lerp(e.target, k);
-		if (e.flame) { const on = e.flame.light.userData.lit as boolean; e.flame.cone.visible = on; e.flame.cone.scale.y = on ? 1 + Math.sin(time * 9 + e.obj.id) * 0.07 : 1; }
+		if (e.flame) {
+			// the fire's light flickers, and reaches further in the dark (daylight sets s.light)
+			const on = e.flame.light.userData.lit as boolean, dark = 1 - Math.max(0, s.light), id = e.obj.id;
+			const flicker = 1 + Math.sin(time * 9 + id) * 0.06 + Math.sin(time * 23.7 + id * 3) * 0.05 + Math.sin(time * 5.3 + id * 7) * 0.04;
+			e.flame.cone.visible = on; e.flame.cone.scale.y = on ? 1 + Math.sin(time * 9 + id) * 0.07 : 1;
+			e.flame.light.intensity = on ? (4 + 6 * dark) * flicker : 0; e.flame.light.distance = 4 + 3 * dark;
+		}
 	}
 }
 
@@ -418,7 +424,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		if (e && (e.kind !== obj.kind || e.progress !== obj.progress || e.sig !== bedSig(obj))) { remove(s, s.objs, id); e = undefined; }
 		if (!e) { e = obj.kind === "track" ? track(s, obj) : object(s.t, obj, me); prepareModelDetails(s.t, e.obj); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); shade(e.obj, true); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.objs.set(id, e); }
 		e.target.copy(placeOf(s, obj));
-		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; e.flame.light.intensity = lit ? 4 : 0; }
+		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; }
 	}
 	// nothing grows where something is built or dug
 	const covered = new Set<string>();

@@ -301,7 +301,7 @@ Seeseite ist das Wasser klar genug für einen Sandhang und ein paar Fische, die 
 volles Licht von 7 bis 19, dunkel von 21 bis 5): Die Sonne sinkt zu blassem Mondlicht, warm in Morgen- und Abenddämmerung,
 Himmel und Himmelslicht werden dunkler, und die lampenhellen Flächen jedes Modells (Fenster, Laternen, Ofenlöcher: die
 Farben in `LAMPLIGHT`, von `merge` je Ecke markiert) leuchten über eine Uniform des gemeinsamen Modellmaterials, ohne
-ein Licht je Haus. Die Spielregeln behalten ihre eigenen Stunden.
+ein Licht je Haus. Ein brennendes Feuer ist ein Punktlicht, das flackert und im Dunkeln heller brennt und weiter reicht. Die Spielregeln behalten ihre eigenen Stunden.
 
 **Ruhiges Bild:** Renderer, Kamera und Renderloop entstehen **einmal**; ein Raumwechsel tauscht nur Boden und Dinge aus
 (`MapView3D`, Effekt je `roomId`). Die Kamera blickt auf die **Mitte des Raums** aus einem Abstand, der den ganzen Raum
