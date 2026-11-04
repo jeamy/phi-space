@@ -5,6 +5,7 @@
 // stands, how it is turned and how large it is come from the place, so a room looks the same every time it is drawn.
 // Everything here is visual only (docs/architektur.en.md, "3D-Ansicht").
 import { stableHash } from "./terrain3d.ts";
+import { atModelLevel, modelLevel, modelPrimitive, type ModelLevel } from "./modelDetail3d.ts";
 
 export type T = typeof import("three");
 export type Geo = import("three").BufferGeometry;
@@ -35,19 +36,20 @@ export function rand(seed: string): () => number {
 
 /** The parts merged into one geometry: positions, flat normals and a colour per face (a little lighter or darker). */
 export function merge(t: T, parts: Part[], seed: string): Geo {
-	const pos: number[] = [], col: number[] = [], glow: number[] = [], r = rand(`${seed}:shade`);
-	const m = new t.Matrix4(), q = new t.Quaternion(), e = new t.Euler(), c = new t.Color();
+	const pos: number[] = [], col: number[] = [], glow: number[] = [];
+	const m = new t.Matrix4(), q = new t.Quaternion(), e = new t.Euler(), c = new t.Color(), edgeA = new t.Vector3(), edgeB = new t.Vector3(), origin = new t.Vector3(), normal = new t.Vector3();
 	for (const part of parts) {
-		const g = part.g.index ? part.g.toNonIndexed() : part.g;
+		const primitive = modelPrimitive(t, part.g), g = primitive.index ? primitive.toNonIndexed() : primitive;
 		m.compose(new t.Vector3(...(part.p ?? [0, 0, 0])), q.setFromEuler(e.set(...(part.r ?? [0, 0, 0]))), new t.Vector3(...(part.s ?? [1, 1, 1])));
 		g.applyMatrix4(m);
 		const a = g.getAttribute("position");
 		for (let i = 0; i < a.count; i += 3) {
-			c.setHex(part.c).multiplyScalar(0.9 + r() * 0.18);
+			origin.fromBufferAttribute(a, i); edgeA.fromBufferAttribute(a, i + 1).sub(origin); edgeB.fromBufferAttribute(a, i + 2).sub(origin); normal.crossVectors(edgeA, edgeB).normalize();
+			c.setHex(part.c).multiplyScalar(normal.y + normal.x * 0.4 + normal.z * 0.2 > 0.1 ? 1.04 : 0.82);
 			const lit = LAMPLIGHT.has(part.c) ? 1 : 0;
 			for (let k = 0; k < 3; k++) { pos.push(a.getX(i + k), a.getY(i + k), a.getZ(i + k)); col.push(c.r, c.g, c.b); glow.push(lit); }
 		}
-		g.dispose(); if (g !== part.g) part.g.dispose();
+		g.dispose(); if (g !== primitive) primitive.dispose();
 	}
 	const out = new t.BufferGeometry();
 	out.setAttribute("position", new t.Float32BufferAttribute(pos, 3));
@@ -55,7 +57,7 @@ export function merge(t: T, parts: Part[], seed: string): Geo {
 	out.setAttribute("glow", new t.Float32BufferAttribute(glow, 1));
 	out.computeVertexNormals(); // not indexed: every face keeps its own normal (faceted)
 	out.computeBoundingSphere();
-	out.userData.shared = true;
+	out.userData.shared = true; out.userData.model = seed;
 	return out;
 }
 
@@ -81,9 +83,24 @@ export function setNight(n: number): void { night.value = Math.max(0, Math.min(1
 
 const cache = new Map<string, Geo>();
 export function cached(key: string, make: () => Geo): Geo {
-	let g = cache.get(key);
-	if (!g) { g = make(); cache.set(key, g); }
+	const id = `${key}@${modelLevel()}`;
+	let g = cache.get(id);
+	if (!g) { g = make(); g.userData.modelVariant = (level: ModelLevel) => atModelLevel(level, () => cached(key, make)); cache.set(id, g); }
 	return g;
+}
+
+export function detailGeometry(t: T, source: Geo): Geo {
+	const parameters = (source as Geo & { parameters?: Record<string, unknown> }).parameters;
+	if (!parameters) return source;
+	const geometry = cached(`shape:${source.type}:${JSON.stringify(parameters)}`, () => merge(t, [{ g: source.clone(), c: 0xffffff }], `shape:${source.type}`));
+	source.dispose(); return geometry;
+}
+
+export function prepareModelDetails(t: T, root: import("three").Object3D): void {
+	root.traverse((object) => {
+		const mesh = object as import("three").Mesh;
+		if (mesh.isMesh && !mesh.geometry.userData.modelVariant && mesh.material instanceof t.MeshStandardMaterial && !mesh.material.map) mesh.geometry = detailGeometry(t, mesh.geometry);
+	});
 }
 
 // ---- plants ----
@@ -94,6 +111,10 @@ export function plantGeometry(t: T, model: PlantModel, variant: number, color = 
 		const r = rand(`${model}:${variant}`), parts: Part[] = [];
 		if (model === "flower" || model === "herb" || model === "grass" || model === "fern") {
 			small(t, model, parts, r, variant, color);
+			if (modelLevel() === "near" && model === "fern") for (let frond = 0; frond < 6; frond++) {
+				const angle = frond * Math.PI / 3;
+				for (let i = 1; i < 5; i++) for (const side of [-1, 1]) leaf(t, parts, [Math.cos(angle) * i * 0.065, 0.04 + i * 0.024, Math.sin(angle) * i * 0.065], angle + side * 0.8, 0.12 - i * 0.015, LEAF[variant % 3]!, 0.2);
+			}
 			return merge(t, parts, `${model}:${variant}`);
 		}
 		const blob = (radius: number, c: number, p: V3) => parts.push({ g: new t.IcosahedronGeometry(radius, 0), c, p, r: [r() * 3, r() * 3, r() * 3] });
@@ -119,6 +140,7 @@ export function plantGeometry(t: T, model: PlantModel, variant: number, color = 
 				parts.push({ g: new t.IcosahedronGeometry(0.045, 0), c: 0xc8323a, p: [Math.cos(a) * 0.3, up, Math.sin(a) * 0.3] });
 			}
 		}
+		if (modelLevel() === "near" && (model === "tree" || model === "conifer")) for (let i = 0; i < 5; i++) parts.push({ g: new t.BoxGeometry(0.1, 0.009, 0.012), c: WOOD_DARK, p: [0, 0.1 + i * 0.085, 0.078], r: [0, i * 0.2, -0.1] });
 		return merge(t, parts, `${model}:${variant}`);
 	});
 }
@@ -139,6 +161,7 @@ function blossom(t: T, parts: Part[], p: V3, size: number, c: number, turn: numb
 /** A leaf: a flat lens from `p` towards `a`. */
 function leaf(t: T, parts: Part[], p: V3, a: number, len: number, c: number, tilt = 0.5): void {
 	parts.push({ g: new t.IcosahedronGeometry(0.5, 0), c, p: [p[0] + (Math.cos(a) * len) / 2, p[1] + (tilt * len) / 2, p[2] + (Math.sin(a) * len) / 2], r: [0, -a, tilt], s: [len, 0.03, len * 0.4] });
+	if (modelLevel() === "near") parts.push({ g: new t.BoxGeometry(len * 0.78, 0.004, 0.006), c: 0x386b2e, p: [p[0] + Math.cos(a) * len / 2, p[1] + tilt * len / 2 + 0.012, p[2] + Math.sin(a) * len / 2], r: [0, -a, Math.atan(tilt)] });
 }
 /** The small plants of the ground, about 0.3 units high, a few to a cell. */
 function small(t: T, model: PlantModel, parts: Part[], r: () => number, variant: number, color: number): void {
@@ -179,7 +202,8 @@ export function cropGeometry(t: T, model: CropModel, stage: number, color: numbe
 			for (let i = 0; i < 6; i++) stem(t, parts, 0, 0, 0.26 + r() * 0.1, (i / 6) * 6.28 + r(), 0.09, 0x5c9c42, 0.016);
 		} else if (model === "hops") {
 			// a bine climbing its pole, the green cones hanging from it
-			parts.push({ g: new t.CylinderGeometry(0.015, 0.02, 0.62, 5), c: 0x8a6a44, p: [0, 0.31, 0] });
+			for (const side of [-1, 1]) parts.push({ g: new t.BoxGeometry(0.024, 0.65, 0.024), c: WOOD_DARK, p: [side * 0.16, 0.325, 0] });
+			parts.push({ g: new t.BoxGeometry(0.36, 0.022, 0.022), c: WOOD, p: [0, 0.64, 0] }, { g: new t.CylinderGeometry(0.006, 0.006, 0.55, 4), c: 0x69734b, p: [0, 0.29, 0] });
 			for (let i = 0; i < 6; i++) { const a = i * 2.1 + r(), y = 0.1 + i * 0.08; leaf(t, parts, [Math.cos(a) * 0.03, y, Math.sin(a) * 0.03], a, 0.11, green, 0.4); }
 			for (let i = 0; i < 4; i++) { const a = i * 1.7 + r(); parts.push({ g: new t.ConeGeometry(0.035, 0.08, 6), c: color, p: [Math.cos(a) * 0.07, 0.24 + i * 0.09, Math.sin(a) * 0.07], r: [Math.PI, 0, 0] }); }
 		} else if (model === "rose") {
@@ -190,9 +214,13 @@ export function cropGeometry(t: T, model: CropModel, stage: number, color: numbe
 				parts.push({ g: new t.IcosahedronGeometry(0.04, 0), c: 0xffffff, p: [tip[0], tip[1] + 0.05, tip[2]] });
 			}
 		} else if (model === "mist") {
-			const tip = stem(t, parts, 0, 0, 0.42, r() * 6.28, 0.08, 0x7fa89a, 0.016);
-			for (let i = 0; i < 4; i++) parts.push({ g: new t.ConeGeometry(0.06, 0.12, 5), c: color, p: [tip[0] + (i - 1.5) * 0.02, tip[1] - i * 0.075, tip[2]], r: [Math.PI, 0, 0] });
-			leaf(t, parts, [0, 0.05, 0], 1, 0.2, 0x7fa89a); leaf(t, parts, [0, 0.05, 0], 4, 0.2, 0x7fa89a);
+			const count = modelLevel() === "near" ? 14 : modelLevel() === "far" ? 4 : 8;
+			for (let i = 0; i < count; i++) {
+				const angle = i * 2.4, radius = 0.04 + (i % 3) * 0.035;
+				const tip = stem(t, parts, Math.cos(angle) * radius, Math.sin(angle) * radius, 0.25 + r() * 0.14, angle, 0.025, 0x7fa89a, 0.007);
+				parts.push({ g: new t.IcosahedronGeometry(0.021, 0), c: color, p: tip });
+			}
+			leaf(t, parts, [0, 0.05, 0], 1, 0.16, 0x7fa89a); leaf(t, parts, [0, 0.05, 0], 4, 0.16, 0x7fa89a);
 		} else {
 			for (let i = 0; i < 3; i++) {
 				const tip = stem(t, parts, (i - 1) * 0.08, r() * 0.12 - 0.06, 0.26 + r() * 0.12, r() * 6.28, 0.05, green);
@@ -216,7 +244,11 @@ export function fieldCropGeometry(t: T, model: FieldModel, w: number, d: number,
 			if (model === "grain" || model === "flax") {
 				const tip = stem(t, parts, x, z, high * (0.85 + r() * 0.3), r() * 6.28, limp ? 0.16 : 0.04, c, 0.012);
 				if (grown === 1 && model === "grain") parts.push({ g: new t.IcosahedronGeometry(0.03, 0), c, p: tip, s: [0.8, 2, 0.8] });
-				if (grown === 1 && model === "flax") parts.push({ g: new t.IcosahedronGeometry(0.03, 0), c: limp ? c : 0x6f8fe0, p: tip });
+				if (grown === 1 && model === "flax") {
+					if (modelLevel() === "near") blossom(t, parts, tip, 0.022, limp ? c : 0x6f8fe0, r() * Math.PI * 2);
+					else parts.push({ g: new t.IcosahedronGeometry(0.03, 0), c: limp ? c : 0x6f8fe0, p: tip });
+				}
+				if (grown === 1 && model === "grain" && modelLevel() === "near") for (const side of [-1, 1]) parts.push({ g: new t.BoxGeometry(0.006, 0.07, 0.005), c: 0xe4c26e, p: [tip[0] + side * 0.018, tip[1] + 0.035, tip[2]], r: [0, 0, side * -0.4] });
 			} else {
 				for (let k = 0; k < 4; k++) leaf(t, parts, [x, 0.01, z], (k / 4) * 6.28 + r(), high * 1.1, c, limp ? 0.1 : 0.8);
 				if (model === "beet" && grown === 1) parts.push({ g: new t.IcosahedronGeometry(0.06, 0), c: 0xb8486a, p: [x, 0.03, z] });
@@ -266,8 +298,26 @@ export function hut(t: T, w: number, d: number, wall: number, variant: number): 
 }
 
 /** The rain barrel: staves, two iron hoops, rainwater at the top, on a flat stone. */
-function barrel(t: T): Geo {
-	return cached("barrel", () => merge(t, [
+export function barrel(t: T, detailed = false): Geo {
+	if (detailed) return cached("barrel:near", () => {
+		const parts: Part[] = [
+			{ g: new t.CylinderGeometry(0.36, 0.38, 0.08, 12), c: STONE, p: [0, 0.04, 0] },
+			{ g: new t.CylinderGeometry(0.24, 0.24, 0.02, 24), c: 0x3d7fa0, p: [0, 0.68, 0] },
+		];
+		for (let i = 0; i < 20; i++) {
+			const angle = i * Math.PI * 2 / 20;
+			parts.push({ g: new t.BoxGeometry(0.077, 0.61, 0.035), c: i % 2 ? WOOD : WOOD_DARK, p: [Math.sin(angle) * 0.25, 0.39, Math.cos(angle) * 0.25], r: [0, angle, 0] });
+		}
+		for (const y of [0.22, 0.58]) {
+			parts.push({ g: new t.TorusGeometry(0.272, 0.027, 6, 32), c: 0x44464a, p: [0, y, 0], r: [Math.PI / 2, 0, 0] });
+			for (let i = 0; i < 8; i++) {
+				const angle = i * Math.PI / 4;
+				parts.push({ g: new t.IcosahedronGeometry(0.013, 0), c: 0x89909a, p: [Math.sin(angle) * 0.297, y, Math.cos(angle) * 0.297] });
+			}
+		}
+		return merge(t, parts, "barrel:near");
+	});
+	return cached("barrel", () => modelLevel() === "near" ? barrel(t, true) : merge(t, [
 		{ g: new t.CylinderGeometry(0.36, 0.38, 0.08, 8), c: STONE, p: [0, 0.04, 0] },
 		{ g: new t.CylinderGeometry(0.27, 0.24, 0.62, 12), c: WOOD, p: [0, 0.39, 0] },
 		{ g: new t.TorusGeometry(0.265, 0.025, 4, 14), c: 0x44464a, p: [0, 0.22, 0], r: [Math.PI / 2, 0, 0] },
@@ -387,6 +437,11 @@ function pen(t: T, w: number, d: number, variant: number, herd: string | undefin
 		const four = (fur: number, legs: number, head: number, x: number, horns: boolean) => {
 			parts.push({ g: new t.IcosahedronGeometry(0.2, 0), c: fur, p: [x, 0.28, 0], s: [1.3, 0.9, 1] });
 			parts.push({ g: new t.IcosahedronGeometry(0.09, 0), c: head, p: [x + 0.27, 0.34, 0] });
+			if (modelLevel() === "near") {
+				for (const side of [-1, 1]) parts.push({ g: new t.IcosahedronGeometry(0.012, 0), c: 0x171410, p: [x + 0.32, 0.36, side * 0.066] });
+				if (herd === "schaf") for (let i = 0; i < 6; i++) parts.push({ g: new t.IcosahedronGeometry(0.065, 0), c: i % 2 ? fur : 0xf0ece0, p: [x - 0.13 + (i % 3) * 0.13, 0.4, i < 3 ? -0.08 : 0.08] });
+				if (herd === "rind") for (const side of [-1, 1]) parts.push({ g: new t.IcosahedronGeometry(0.085, 0), c: 0xe5d9bc, p: [x - 0.04, 0.29, side * 0.17], s: [1.4, 1, 0.25] });
+			}
 			if (horns) for (const dz of [-0.04, 0.04]) parts.push({ g: new t.ConeGeometry(0.02, 0.12, 4), c: 0x5e5240, p: [x + 0.24, 0.46, dz], r: [0, 0, 0.5] });
 			for (const [dx, dz] of [[-0.12, -0.08], [-0.12, 0.08], [0.14, -0.08], [0.14, 0.08]] as const) parts.push({ g: new t.BoxGeometry(0.04, 0.16, 0.04), c: legs, p: [x + dx, 0.08, dz] });
 		};
@@ -395,6 +450,7 @@ function pen(t: T, w: number, d: number, variant: number, herd: string | undefin
 			parts.push({ g: new t.BoxGeometry(0.04, neck, 0.04), c: body, p: [x + 0.11, 0.12 + neck / 2, z] });
 			parts.push({ g: new t.IcosahedronGeometry(0.05, 0), c: head, p: [x + 0.12, 0.14 + neck, z] });
 			parts.push({ g: new t.BoxGeometry(0.06, 0.02, 0.03), c: 0xe8902c, p: [x + 0.18, 0.14 + neck, z] });
+			if (modelLevel() === "near") for (const side of [-1, 1]) parts.push({ g: new t.IcosahedronGeometry(0.008, 0), c: 0x171410, p: [x + 0.145, 0.15 + neck, z + side * 0.036] }, { g: new t.BoxGeometry(0.018, 0.045, 0.026), c: 0xd99a38, p: [x, 0.023, z + side * 0.03] });
 		};
 		if (herd === "schaf") four([0xe8e4d8, 0xd8d0c0, 0xf0ece0][variant % 3]!, 0x3a3430, 0x3a3430, ww * 0.1, false);
 		if (herd === "ziege") four(0xa89a80, 0x5e5240, 0xa89a80, ww * 0.1, true);
@@ -486,6 +542,18 @@ export function hareGeometry(t: T, variant: number): Geo {
 	});
 }
 
+function closeEyes(t: T, parts: Part[], width: number, y: number, z: number): void {
+	if (modelLevel() !== "near") return;
+	for (const side of [-1, 1]) parts.push({ g: new t.IcosahedronGeometry(0.012, 0), c: 0x16120f, p: [side * width, y, z] });
+}
+
+function whiskers(t: T, y: number, z: number): Part[] {
+	if (modelLevel() !== "near") return [];
+	const parts: Part[] = [];
+	for (const side of [-1, 1]) for (let i = -1; i <= 1; i++) parts.push({ g: new t.BoxGeometry(0.065, 0.002, 0.002), c: 0xd8cbb8, p: [side * 0.04, y + i * 0.008, z], r: [0, 0, side * i * 0.12] });
+	return parts;
+}
+
 /** A deer, slender on four long legs, facing +z: body, neck and head, big ears, a white scut. */
 function deerGeometry(t: T, variant: number): Geo {
 	return cached(`deer:${variant}`, () => {
@@ -500,6 +568,7 @@ function deerGeometry(t: T, variant: number): Geo {
 			{ g: new t.IcosahedronGeometry(0.045, 0), c: 0xf2efe8, p: [0, 0.52, -0.28] },
 		];
 		for (const [dx, dz] of [[-0.07, -0.18], [0.07, -0.18], [-0.07, 0.18], [0.07, 0.18]] as const) parts.push({ g: new t.BoxGeometry(0.035, 0.4, 0.035), c: dark, p: [dx, 0.2, dz] });
+		closeEyes(t, parts, 0.056, 0.82, 0.385);
 		return merge(t, parts, `deer:${variant}`);
 	});
 }
@@ -520,6 +589,7 @@ function foxGeometry(t: T, variant: number): Geo {
 			{ g: new t.IcosahedronGeometry(0.04, 0), c: 0xf2efe8, p: [0, 0.2, -0.42] },
 		];
 		for (const [dx, dz] of [[-0.06, -0.12], [0.06, -0.12], [-0.06, 0.12], [0.06, 0.12]] as const) parts.push({ g: new t.BoxGeometry(0.035, 0.16, 0.035), c: 0x2a1a12, p: [dx, 0.08, dz] });
+		closeEyes(t, parts, 0.055, 0.33, 0.29); parts.push(...whiskers(t, 0.275, 0.36));
 		return merge(t, parts, `fox:${variant}`);
 	});
 }
@@ -578,6 +648,7 @@ export function keeperGeometry(t: T, kind: string, variant: number): Geo {
 				{ g: new t.IcosahedronGeometry(0.012, 0), c: 0x6aa04a, p: [0.025, 0.28, 0.09] },
 				{ g: new t.IcosahedronGeometry(0.012, 0), c: 0x6aa04a, p: [-0.025, 0.28, 0.09] },
 				{ g: new t.BoxGeometry(0.025, 0.025, 0.2), c: fur, p: [0.06, 0.03, -0.06], r: [0, 0.7, 0] },
+				...whiskers(t, 0.255, 0.095),
 			], `keeper:${kind}`);
 		}
 		const fur = [0x8a6a4a, 0x4a3a2a, 0xc8b08a][variant % 3]!;
@@ -591,6 +662,8 @@ export function keeperGeometry(t: T, kind: string, variant: number): Geo {
 			{ g: new t.BoxGeometry(0.03, 0.03, 0.14), c: fur, p: [0, 0.34, -0.22], r: [-0.8, 0, 0] },
 		];
 		for (const [dx, dz] of [[-0.06, -0.1], [0.06, -0.1], [-0.06, 0.1], [0.06, 0.1]] as const) parts.push({ g: new t.BoxGeometry(0.04, 0.18, 0.04), c: fur, p: [dx, 0.09, dz] });
+		closeEyes(t, parts, 0.055, 0.4, 0.255);
+		if (modelLevel() === "near") parts.push({ g: new t.TorusGeometry(0.066, 0.008, 4, 12), c: 0xa34c31, p: [0, 0.34, 0.18], r: [Math.PI / 2, 0, 0] });
 		return merge(t, parts, `keeper:${kind}`);
 	});
 }

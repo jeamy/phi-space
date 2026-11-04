@@ -32,6 +32,7 @@ import { railLinks, trackCells, trainIn } from "../server/engine/rail.ts";
 const GONE_GRACE_MS = 2500;
 import { MapRenderer, type MapMode } from "./MapRenderer.tsx";
 import { TouchPad } from "./TouchPad.tsx";
+import { readMapMode, resetStartView } from "./viewPreferences.ts";
 
 /** A thing picked up shows in the pack at once; without word from the server for this long it lies there again. */
 const PICKUP_MS = 3_000;
@@ -91,20 +92,22 @@ function SystemBar() {
 export function MmoApp() {
 	useEffect(() => watchPage(), []);
 	const [account, setAccount] = useState<Account | null | undefined>(undefined);
+	const [arrival, setArrival] = useState(0);
+	const enter = useCallback((a: Account | null, fresh = false) => { if (fresh) { resetStartView(); setArrival((n) => n + 1); } setAccount(a); }, []);
 	const theme = useTheme();
 	const controls = <ThemeControls {...theme} />;
 	useEffect(() => { void fetch("/api/me").then((r) => r.json()).then((d) => { pageBuild ??= d.build ?? null; setAccount(d.account ?? null); }, () => setAccount(null)); }, []);
 	if (account === undefined) return <main className="welcome"><p className="muted">Lädt …</p></main>;
-	if (!account) return <Welcome onIn={setAccount} controls={controls} />;
-	return <Game account={account} onAccount={setAccount} controls={controls} />;
+	if (!account) return <Welcome onIn={enter} controls={controls} />;
+	return <Game account={account} onAccount={enter} controls={controls} startView={arrival} />;
 }
 
-function Welcome({ onIn, controls }: { onIn: (a: Account) => void; controls: ReactNode }) {
+function Welcome({ onIn, controls }: { onIn: (a: Account, fresh?: boolean) => void; controls: ReactNode }) {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState("");
 	const guest = async () => {
 		setBusy(true); setError("");
-		try { onIn((await post("/api/guest")).account!); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+		try { onIn((await post("/api/guest")).account!, true); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
 	};
 	return (
 		<main className="welcome">
@@ -124,14 +127,14 @@ function Welcome({ onIn, controls }: { onIn: (a: Account) => void; controls: Rea
 
 /** Log in or register. `guest`: shown inside the game of a guest (registering keeps the guest's progress; logging in
  *  to another account does not). */
-function AccountForm({ onDone, guest = false }: { onDone: (a: Account) => void; guest?: boolean }) {
+function AccountForm({ onDone, guest = false }: { onDone: (a: Account, fresh?: boolean) => void; guest?: boolean }) {
 	const [mode, setMode] = useState<"login" | "register">(guest ? "register" : "login");
 	const [name, setName] = useState(""), [password, setPassword] = useState(""), [token, setToken] = useState("");
 	const [busy, setBusy] = useState(false), [error, setError] = useState("");
 	const submit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setBusy(true); setError("");
-		try { onDone((await post(mode === "login" ? "/api/login" : "/api/register", { name, password, ...(token ? { setupToken: token } : {}) })).account!); }
+		try { onDone((await post(mode === "login" ? "/api/login" : "/api/register", { name, password, ...(token ? { setupToken: token } : {}) })).account!, mode === "register"); }
 		catch (err) { setError((err as Error).message); } finally { setBusy(false); }
 	};
 	return (
@@ -464,7 +467,7 @@ function SiteOrders({ objs, self, room, me, send, walk }: { objs: Map<string, Ob
 	);
 }
 
-function Game({ account, onAccount, controls }: { account: Account; onAccount: (a: Account | null) => void; controls: ReactNode }) {
+function Game({ account, onAccount, controls, startView }: { account: Account; onAccount: (a: Account | null, fresh?: boolean) => void; controls: ReactNode; startView: number }) {
 	const [hello, setHello] = useState<Hello | null>(null);
 	const [chars, setChars] = useState<Map<string, CharView>>(new Map());
 	const [objs, setObjs] = useState<Map<string, ObjView>>(new Map());
@@ -525,10 +528,9 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	// coming and going in the log ("… geht nach ost.", "… kommt an."): hidden unless asked for, remembered in the browser
 	const [comings, setComingsState] = useState(() => { try { return localStorage.getItem("mmo.comings") === "1"; } catch { return false; } });
 	const setComings = (on: boolean) => { setComingsState(on); try { localStorage.setItem("mmo.comings", on ? "1" : "0"); } catch { /* private window */ } };
-	const [mapMode, setMapModeState] = useState<MapMode>(() => {
-		try { const saved = localStorage.getItem("mmo.renderer"); return saved === "text" || saved === "2d" || saved === "3d" ? saved : localStorage.getItem("mmo.textOnly") === "1" ? "text" : "2d"; }
-		catch { return "2d"; }
-	});
+	const [mapMode, setMapModeState] = useState<MapMode>(() => readMapMode());
+	const previousStart = useRef(startView);
+	useEffect(() => { if (previousStart.current !== startView) { previousStart.current = startView; setMapModeState("3d"); } }, [startView]);
 	const [menu, setMenu] = useState<null | { x: number; y: number; left: number; top: number }>(null);
 	const [nameMenu, setNameMenu] = useState<null | { name: string; left: number; top: number }>(null);
 	const setMapMode = (mode: MapMode) => { setMenu(null); setMapModeState(mode); try { localStorage.setItem("mmo.renderer", mode); localStorage.setItem("mmo.textOnly", mode === "text" ? "1" : "0"); } catch { /* private window */ } };
@@ -955,7 +957,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const mapView = mapMode === "text" ? null : hello ? (
 		<>
 		{aboard && worldTime && <div className="aboard" role="status">{tr("An Bord des Großen Schiffs")} → {tr(aboard.island)} · {tr(`Ankunft in etwa ${Math.max(1, Math.ceil((aboard.arriveWorldMs - shownWorldMs(worldTime.v, worldTime.at, Date.now())) / 60_000))} Weltminuten`)}</div>}
-		<MapRenderer key={`${hello.room.ground[0]?.length}x${hello.room.ground.length}`} mode={mapMode} world={hello.world} room={hello.room} chars={mapChars} objs={shownObjs} me={me} fog={fog} atlas={atlas} atlasState={atlasState} said={said} worldTime={worldTime} onTurn={onTurn}
+		<MapRenderer key={`${hello.room.ground[0]?.length}x${hello.room.ground.length}`} mode={mapMode} viewReset={startView} world={hello.world} room={hello.room} chars={mapChars} objs={shownObjs} me={me} fog={fog} atlas={atlas} atlasState={atlasState} said={said} worldTime={worldTime} onTurn={onTurn}
 			fill goal={walkGoal} insetBottom={detent === "peek" ? detentPx("peek", window.innerHeight) : Math.min(sheetPx ?? detentPx("half", window.innerHeight), window.innerHeight * 0.7)}
 			controls={pad !== "off" ? <TouchPad hold={(d) => { input.current?.blur(); stopWalk.current(); setMenu(null); hold(d); }} release={release} action={action} noAction /> : undefined}
 			onCell={(x, y) => { input.current?.blur(); setMenu(null); if (detent !== "peek") setDetent("peek"); else onTap(x, y); }}
@@ -977,7 +979,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	</>;
 	const panels = <>
 		{panel === "account" && (
-			<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a) => { setPanel(null); onAccount(a); }} /></div>
+			<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a, fresh) => { setPanel(null); onAccount(a, fresh); }} /></div>
 		)}
 		{panel === "admin" && <AdminPanel onClose={() => setPanel(null)} />}
 		{panel === "alias" && <div className="panel"><h2>Name im Spiel</h2><AliasForm account={account} onDone={(a) => { setPanel(null); onAccount(a); }} /></div>}

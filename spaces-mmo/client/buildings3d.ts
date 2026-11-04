@@ -4,6 +4,7 @@
 // without a model here keeps the one it had (a hut, the scaffold), so a new plan or scenery piece is drawn from the start.
 // Everything here is visual only (docs/architektur.en.md, "3D-Ansicht").
 import { BARK, cached, hut, merge, rand, STONE, STONE_DARK, THATCH, WOOD, WOOD_DARK, type Geo, type Part, type T, type V3 } from "./props3d.ts";
+import { modelLevel } from "./modelDetail3d.ts";
 
 const SLATE = 0x5a5f70, BRICK = 0xa5503a, COPPER = 0xb87333, PLASTER = 0xd9cfb5, LAMP = 0xf2c46a, GLOW = 0xff8a2a, IRON = 0x3a3d44, SACK = 0xd8c9a0;
 
@@ -21,6 +22,10 @@ function gable(t: T, parts: Part[], ww: number, dd: number, y: number, rise: num
 	const slope = Math.atan2(rise, dd / 2), len = Math.hypot(rise, dd / 2) + 0.14;
 	for (const side of [-1, 1]) {
 		parts.push(b(t, ww + 2 * over, 0.06, len, roof, 0, y + rise / 2 + 0.04, side * (dd / 4 + 0.04), [side * slope, 0, 0]));
+		if (modelLevel() === "near") for (let row = 0; row < 5; row++) {
+			const offset = (row / 4 - 0.5) * len * 0.88;
+			parts.push(b(t, ww + 2 * over, 0.012, 0.014, WOOD_DARK, 0, y + rise / 2 + 0.04 - Math.sin(side * slope) * offset + Math.cos(slope) * 0.036, side * (dd / 4 + 0.04) + Math.cos(slope) * offset + Math.sin(side * slope) * 0.036, [side * slope, 0, 0]));
+		}
 		// v2: a fascia board along the eave, so the roof shows an edge and a thickness from below
 		parts.push(b(t, ww + 2 * over + 0.02, 0.08, 0.05, WOOD_DARK, 0, y + rise / 2 + 0.03 - (len / 2) * Math.sin(slope), side * (dd / 4 + 0.04 + (len / 2) * Math.cos(slope)), [side * slope, 0, 0]));
 	}
@@ -34,15 +39,32 @@ function house(t: T, parts: Part[], w: number, d: number, o: { wall: number; roo
 	gable(t, parts, ww, dd, top, o.rise, o.wall, o.roof);
 	return { ww, dd, top };
 }
-const door = (t: T, parts: Part[], x: number, z: number, wide = 0.3, high = 0.48): void => { parts.push(b(t, wide, high, 0.04, 0x3a2a18, x, 0.1 + high / 2, z + 0.015)); };
-const lit = (t: T, parts: Part[], x: number, y: number, z: number): void => { parts.push(b(t, 0.26, 0.22, 0.04, WOOD_DARK, x, y, z + 0.015), b(t, 0.18, 0.14, 0.05, LAMP, x, y, z + 0.02)); };
-const chimney = (t: T, parts: Part[], x: number, y: number, z: number, h: number, c = STONE_DARK): void => { parts.push(b(t, 0.16, h, 0.16, c, x, y + h / 2, z), b(t, 0.21, 0.04, 0.21, STONE, x, y + h + 0.02, z)); };
+const door = (t: T, parts: Part[], x: number, z: number, wide = 0.3, high = 0.48): void => {
+	parts.push(b(t, wide, high, 0.04, 0x3a2a18, x, 0.1 + high / 2, z + 0.015));
+	if (modelLevel() === "near") {
+		for (let i = 1; i < 4; i++) parts.push(b(t, 0.007, high * 0.95, 0.006, WOOD_DARK, x - wide / 2 + i * wide / 4, 0.1 + high / 2, z + 0.039));
+		parts.push(ball(t, 0.015, COPPER, x + wide * 0.3, 0.1 + high * 0.48, z + 0.05));
+	}
+};
+const lit = (t: T, parts: Part[], x: number, y: number, z: number): void => {
+	parts.push(b(t, 0.26, 0.22, 0.04, WOOD_DARK, x, y, z + 0.015), b(t, 0.18, 0.14, 0.05, LAMP, x, y, z + 0.02));
+	if (modelLevel() === "near") parts.push(b(t, 0.014, 0.15, 0.012, WOOD_DARK, x, y, z + 0.05), b(t, 0.19, 0.014, 0.012, WOOD_DARK, x, y, z + 0.05), b(t, 0.3, 0.025, 0.08, STONE, x, y - 0.12, z + 0.025));
+};
+const chimney = (t: T, parts: Part[], x: number, y: number, z: number, h: number, c = STONE_DARK): void => {
+	parts.push(b(t, 0.16, h, 0.16, c, x, y + h / 2, z), b(t, 0.21, 0.04, 0.21, STONE, x, y + h + 0.02, z));
+	if (modelLevel() === "near") for (let row = 1; row * 0.12 < h; row++) parts.push(b(t, 0.163, 0.009, 0.163, STONE, x, y + row * 0.12, z));
+};
 /** An upright barrel: staves bulging in the middle, two hoops, a lid. */
 const barrelAt = (t: T, parts: Part[], x: number, y: number, z: number): void => {
 	parts.push(cy(t, 0.17, 0.2, 0.2, WOOD, x, y, z, 8), cy(t, 0.2, 0.17, 0.2, WOOD, x, y + 0.2, z, 8), cy(t, 0.185, 0.185, 0.03, WOOD_DARK, x, y + 0.06, z, 8), cy(t, 0.185, 0.185, 0.03, WOOD_DARK, x, y + 0.31, z, 8), cy(t, 0.165, 0.165, 0.015, 0xa88a5c, x, y + 0.4, z, 8));
+	if (modelLevel() === "near") {
+		for (let i = 0; i < 12; i++) { const angle = i * Math.PI / 6; parts.push(b(t, 0.006, 0.3, 0.006, WOOD_DARK, x + Math.sin(angle) * 0.197, y + 0.2, z + Math.cos(angle) * 0.197, [0, angle, 0])); }
+		for (const up of [0.075, 0.325]) parts.push({ g: new t.TorusGeometry(0.192, 0.01, 6, 24), c: IRON, p: [x, y + up, z], r: [Math.PI / 2, 0, 0] });
+	}
 };
 const crateAt = (t: T, parts: Part[], x: number, y: number, z: number, s: number, turn = 0): void => {
 	parts.push({ g: new t.BoxGeometry(s, s, s), c: WOOD, p: [x, y + s / 2, z], r: [0, turn, 0] }, { g: new t.BoxGeometry(s * 1.04, s * 0.14, s * 1.04), c: 0xa88a5c, p: [x, y + s * 0.93, z], r: [0, turn, 0] }, { g: new t.BoxGeometry(s * 1.04, s * 0.14, s * 1.04), c: WOOD_DARK, p: [x, y + s * 0.07, z], r: [0, turn, 0] });
+	if (modelLevel() === "near") for (const diagonal of [-1, 1]) parts.push(b(t, s * 1.2, s * 0.06, s * 0.035, WOOD_DARK, x + Math.sin(turn) * s * 0.53, y + s / 2, z + Math.cos(turn) * s * 0.53, [0, turn, diagonal * Math.PI / 4]));
 };
 const sackAt = (t: T, parts: Part[], x: number, y: number, z: number): void => { parts.push(ball(t, 0.1, SACK, x, y + 0.11, z, [1, 1.2, 0.9])); };
 /** The bare hull of a ship on a keel along x: stem and stern posts, ribs leaning out, a few planks at the stern. */
@@ -380,9 +402,9 @@ export function linerGeometry(t: T, len: number): Geo {
  *  last one reaches up to the rail: its height is measured amidships and follows the sheer) and the deck in its colour, set
  *  below the rail with the bulwark's inner side. Closed at both ends, so nothing shows through. */
 function shipHull(L: number, beam: number, deckY: number) {
-	const N = 28;
+	const N = modelLevel() === "far" ? 12 : modelLevel() === "near" ? 40 : 28;
 	// half the width in plan: a round stern, the straight middle, the bow narrowing to a point
-	const plan = (u: number) => u < 0.16 ? Math.sqrt(1 - ((0.16 - u) / 0.16) ** 2) : u < 0.58 ? 1 : Math.cos(((u - 0.58) / 0.42) * Math.PI / 2) ** 0.75;
+	const plan = (u: number) => u < 0.16 ? Math.sqrt(1 - ((0.16 - u) / 0.16) ** 2) : u < 0.58 ? 1 : Math.max(0, Math.cos(((u - 0.58) / 0.42) * Math.PI / 2)) ** 0.75;
 	// the sheer: the bow rises, the stern a little
 	const sheer = (u: number) => 0.14 * Math.max(0, (u - 0.55) / 0.45) ** 2 + 0.04 * Math.max(0, (0.25 - u) / 0.25) ** 2;
 	// the sides draw in below the waterline (the bilge)

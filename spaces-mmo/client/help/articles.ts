@@ -200,6 +200,7 @@ Die Karte zeigt den Ort, an dem du gerade bist. Ein Klick lässt deine Figur dor
 | 3D: Mausrad oder zwei Finger | Näher heran und weiter weg (Zoom): ganz weit draußen die ganze Insel als Blöcke mit Namen, ganz nah die Figuren mit Sprechblasen. Nachts wird es dunkel, und die Fenster leuchten |
 | 3D: Ziehen mit Maus oder Finger | Die Ansicht verschieben (links, rechts, hoch, runter) |
 | 3D: Ziehen mit gedrücktem Mausrad oder mit Umschalttaste, Knöpfe ↶ ↷ | Die Ansicht drehen (die Knöpfe in Achtelschritten) |
+| 3D: Alt+Mausrad | Die Kamera neigen, ohne zu zoomen oder zu drehen (siehe [Ansicht in 3D](help.game.controls#view3d)) |
 
 Das Menü bietet an, was zum Feld passt:
 
@@ -211,6 +212,14 @@ Das Menü bietet an, was zum Feld passt:
 - **Eigene Figur:** Umsehen, Inventar, wer spielt, Uhrzeit, Ruf, Baupläne, Samen sammeln (nur, wo etwas Wildes wächst, und nicht, solange du ruhst).
 
 Am Handy steht im Blatt zu einem Bau, Beet, Acker, Feuer oder Ausgang **Was ist das?**: Das öffnet den passenden Hilfeartikel.
+
+## Ansicht in 3D {#view3d}
+
+Neue Gäste und frisch registrierte Konten starten in **3D** mit einem Blick von vorn auf den ganzen Raum. Wer schon einmal gespielt hat, behält die zuletzt gewählte Ansicht: Text, 2D oder 3D samt Zoom, Drehung und Neigung sind beim nächsten Mal so, wie sie verlassen wurden.
+
+**Neigen:** Beim Zoomen legt sich die Kamera von selbst flacher oder steiler. **Alt+Mausrad** neigt zusätzlich von Hand, höchstens ±25°, ohne Zoom und Drehung zu verändern. Sobald die Kamera von Hand geneigt ist, erscheint unten der Knopf **Neigung +…°** – ein Klick setzt die Neigung auf 0 zurück. Mausrad und zwei Finger zoomen weiterhin, Ziehen dreht oder verschiebt wie oben.
+
+**FPS messen:** Der Knopf **FPS messen** unten in der 3D-Ansicht misst die Bildrate: 2 Sekunden Anlauf, dann 30 Sekunden Messung, mit Countdown. Das Ergebnis steht darunter als **FPS und p95-Framezeit**, mit **JSON herunterladen** für den ganzen Bericht (Gerät, Zoomstufen, Bildpunkte) und **Schließen** zum Ausblenden. Wird der Tab versteckt oder die 3D-Ansicht neu gestartet, bricht die Messung ab und sagt das auch. Nichts wird hochgeladen; das Ergebnis bleibt auf deinem Gerät. Für ein ehrliches Ergebnis misst du auf dem Gerät selbst – die Handy-Nachbildung im Browser zählt nicht.
 
 ## Kulissen abräumen {#scenery}
 
@@ -291,6 +300,7 @@ The map shows the place you are in. A click sends your figure there. The right m
 | 3D: mouse wheel or two fingers | Zoom in and out: far out the whole island as blocks with names, close up the figures with speech bubbles. At night it gets dark and the windows light up |
 | 3D: drag with mouse or finger | Move the view (left, right, up, down) |
 | 3D: drag with the mouse wheel held down or with Shift, ↶ ↷ buttons | Turn the view (the buttons in eighths) |
+| 3D: Alt+mouse wheel | Tilt the camera without zooming or turning (see [The 3D view](help.game.controls#view3d)) |
 
 The menu offers what fits the cell:
 
@@ -302,6 +312,14 @@ The menu offers what fits the cell:
 - **Your own figure:** look, inventory, who plays, time, reputation, plans, gather seeds (only where something wild grows, and not while you rest).
 
 On a phone the sheet for a building, bed, field, fire or exit has **Was ist das?**: it opens the fitting help article.
+
+## The 3D view {#view3d}
+
+New guests and freshly registered accounts start in **3D** with a front view of the whole room. Anyone who has played before keeps the view they last chose: text, 2D or 3D, with zoom, turn and tilt as they left them.
+
+**Tilting:** While you zoom, the camera flattens or steepens on its own. **Alt+mouse wheel** tilts it by hand on top, up to ±25°, without changing zoom or turn. Once the camera is tilted by hand, a **Neigung +…°** button appears below – a click sets the tilt back to 0. Wheel and two fingers still zoom, dragging turns or moves as above.
+
+**FPS messen:** The **FPS messen** button below the 3D view measures the frame rate: 2 seconds of warm-up, then 30 seconds of measuring, with a countdown. The result stands underneath as **FPS and p95 frame time**, with **JSON herunterladen** for the full report (device, zoom steps, pixels) and **Schließen** to dismiss it. If the tab is hidden or the 3D view restarts, the measurement stops and says so. Nothing is uploaded; the result stays on your device. For an honest number measure on the device itself – browser phone emulation does not count.
 
 ## Clearing scenery {#scenery}
 

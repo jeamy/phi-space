@@ -2,6 +2,7 @@
 // a shadow on the ground. Built from primitives, so it needs no model file; the look comes from the character's skin number
 // and id (the same skin number picks the sprite in the 2D map). Everything here is visual only.
 import { stableHash } from "./terrain3d.ts";
+import { prepareModelDetails } from "./props3d.ts";
 
 type T = typeof import("three");
 type G = import("three").Group;
@@ -39,7 +40,7 @@ export function makeFigure(t: T, look: Look): Figure {
 	const skin = SKIN[(h >>> 3) % SKIN.length]!, hair = HAIR[(h >>> 7) % HAIR.length]!;
 	const tunic = look.own ? OWN_TUNIC : look.ai ? AI_TUNIC : TUNIC[s % TUNIC.length]!;
 	const trousers = TROUSERS[s % TROUSERS.length]!;
-	const mat = (color: number, roughness = 0.82) => new t.MeshStandardMaterial({ color, roughness });
+	const mat = (color: number, roughness = 0.82) => new t.MeshStandardMaterial({ color, roughness, flatShading: true });
 	const mesh = (geo: import("three").BufferGeometry, m: import("three").Material, x = 0, y = 0, z = 0) => { const o = new t.Mesh(geo, m); o.position.set(x, y, z); return o; };
 	const group = new t.Group(); group.userData.owned = true;
 	const blob = mesh(new t.CircleGeometry(0.34, 20), new t.MeshBasicMaterial({ map: shadow(t), transparent: true, depthWrite: false }), 0, 0.012);
@@ -91,6 +92,15 @@ export function makeFigure(t: T, look: Look): Figure {
 		torso.add(mesh(new t.BoxGeometry(0.05, 0.11, 0.12), mat(0x8a6a44, 0.9), -0.17, 0.47, 0.02));
 		const strap = mesh(new t.BoxGeometry(0.018, 0.36, 0.012), mat(0x5b3a22, 0.9), 0, 0.6, 0.095); strap.rotation.z = -0.62; torso.add(strap);
 	}
+	const close = (parent: G, geo: import("three").BufferGeometry, color: number, x: number, y: number, z: number) => { const part = mesh(geo, mat(color), x, y, z); part.userData.detailOnly = true; part.visible = false; parent.add(part); };
+	for (const side of [-1, 1]) {
+		close(head, new t.BoxGeometry(0.033, 0.007, 0.008), hair, side * 0.035, 0.052, 0.083);
+		close(head, new t.SphereGeometry(0.02, 8, 4), skin, side * 0.092, 0.008, 0);
+	}
+	close(torso, new t.BoxGeometry(0.035, 0.03, 0.012), 0xc49c49, 0, 0.46, 0.13);
+	close(torso, new t.BoxGeometry(0.005, 0.15, 0.005), 0xd4c6a7, 0.025, 0.59, 0.105);
+	if ((h >>> 17) % 3 !== 0) close(torso, new t.BoxGeometry(0.009, 0.027, 0.019), 0xb9a16c, -0.198, 0.49, 0.02);
+	prepareModelDetails(t, group);
 	return { group, body, legL, legR, armL, armR, head, heading: 0, phase: 0, swing: 0, last: { x: 0, z: 0 } };
 }
 

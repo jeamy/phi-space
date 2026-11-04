@@ -13,6 +13,7 @@ export type MapRendererProps = {
 	objs: Map<string, ObjView>;
 	me: string;
 	fog: number;
+	viewReset?: number;
 	onCell: (x: number, y: number) => void;
 	onMenu: (x: number, y: number, clientX: number, clientY: number) => void;
 	onFail: (why: string) => void;

@@ -288,7 +288,7 @@ rotation and size come from the place (`stableHash`), so a room looks the same o
 occupied by a building, a building site, a ruin or a bed: the plants are a group of their own that is recreated when these
 cells change. All this is only presentation; rules, paths and occupancy stay 2D.
 
-The user can switch between text, 2D and 3D independently of the server; the choice remains stored in the browser. If
+The user can switch between text, 2D and 3D independently of the server; the choice remains stored in the browser. Without a saved preference the default is 3D (the legacy text-only preference is still respected). Creating a guest or completing registration resets the view to the frontal room overview: 3D, zoom 1.4, camera angle 90°, centred on the room. This also applies when a guest registers in place; gameplay progress stays on the server. Ordinary logins, reloads and alias changes retain the saved view. If
 Three.js or WebGL cannot start, the client falls back to 2D. If the 2D map also fails, text mode remains. Drawn are
 instanced tile cuboids on their block, the low-poly models below, name billboards and the island's blocks; a water
 shader, measured phone budgets (frame times on a real phone) and WFC-generated rooms are not yet an implemented 3D
@@ -313,11 +313,15 @@ sand slope and a few fish swimming along it (`fishFor`, `swimFish`). Day and nig
 client shows it (`WorldTimeView`, `daylightAt` in `camera3d.ts`: full light from 7 to 19, dark from 21 to 5): the sun
 sinks to a pale moonlight, warm at dawn and dusk, the sky and the hemisphere light dim, and the lamplit faces of every
 model (windows, lanterns, kiln mouths: the colours in `LAMPLIGHT`, marked per vertex by `merge`) glow through one
-uniform of the shared model material, without a light per house. The game's rules keep their own hours.
+uniform of the shared model material, without a light per house. The signal fire already has a `PointLight` (intensity 4 while lit); this is separate from the emissive windows and kiln mouths. The game's rules keep their own hours.
+
+Model detail (`client/modelDetail3d.ts`): all catalogue families, including figures, vehicles and track pieces, use shared procedural far/room/near variants. Far detail enters below zoom 0.55 and returns above 0.65. At zoom 2 and above, near models enter within 16 camera units and return beyond 18. A distance-prioritized selector runs at most every 150 ms and caps near detail at 48 meshes and 120,000 triangles including instances. Plant instancing is partitioned into 4×4-cell batches. Room models have bevelled edges and consistent two-tone faces; near geometry adds family-specific plant, building, animal and clothing details. Barrel staves, hoops and rivets use the same selector. The figures' existing mouth, hats and satchels remain on; new fine details appear close up. Alt+wheel adds a persisted manual offset of ±25° to the zoom ladder in 3° steps (actual elevation 14°–75°). Wheel and pinch still zoom, ground dragging uses actual elevation, and fresh arrivals start with an offset of +15°.
+
+Close-up additions (`client/closeup3d.ts`, `closeuppost3d.ts`): geometric paving is bounded to the nearest 24 path cells around the look centre, with 16 instanced stones per cell. Depth-aware background blur fades in from zoom 2 to 5, focused at figure height at the look centre; text sprites are drawn separately afterwards so they stay sharp. Other zoom levels render directly without postprocessing. Speech bubbles start at zoom 1.6, and the vignette gradually appears above zoom 1. The 3D controls offer a local 30-second frame measurement after two seconds of warm-up and a JSON download (FPS, frame-time percentiles, draw calls, triangles, geometries, zoom, viewport and browser). A real-phone measurement is still outstanding; see `docs/3D-V2/README.md`.
 
 **Calm image:** Renderer, camera and render loop arise **once**; a room change replaces only ground and things
 (`MapView3D`, effect per `roomId`). The camera looks at the **center of the room** from a distance that shows the whole
-room, and stays there: A step moves only the figure, not the ground. Only rotating and zooming move the camera. `setSize`
+room, and stays there: A step moves only the figure, not the ground. Only rotating, zooming, manual tilting and ground dragging move the camera. `setSize`
 runs only when the size really changes (it clears the image), and the fog is a single `FogExp2` whose density changes.
 Measured with Chromium and SwiftShader: after six steps the ground is unchanged pixel for pixel, there is one WebGL
 context and two size adjustments in total.

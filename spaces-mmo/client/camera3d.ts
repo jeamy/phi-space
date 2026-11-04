@@ -31,6 +31,9 @@ export function levelAt(zoom: number): ZoomLevel {
 /** One click of a zoom button: a fixed factor, so the slider takes as many clicks per level at either end. */
 export const ZOOM_STEP = 1.25;
 export const clampZoom = (z: number): number => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+export const clampTilt = (degrees: number): number => Number.isFinite(degrees) ? Math.max(-25, Math.min(25, degrees)) : 0;
+export const cameraElevation = (zoom: number, tilt: number): number => Math.max(14 * Math.PI / 180, Math.min(75 * Math.PI / 180, elevationAt(zoom) + clampTilt(tilt) * Math.PI / 180));
+export const wheelView = (deltaY: number, alt: boolean) => ({ zoomFactor: alt ? 1 : Math.exp(-Math.sign(deltaY) * 0.12), tiltDelta: alt && deltaY !== 0 ? -Math.sign(deltaY) * 3 : 0 });
 
 /** How light it is at a world hour (0 to 24): full from 7 to 19, dark from 21 to 5, a smooth dawn and dusk between. The
  *  3D view dims its sun and sky by it and lights the windows; the game's rules keep their own hours (wild.ts). */

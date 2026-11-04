@@ -12,10 +12,13 @@ import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
 import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
-import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, setNight, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
+import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, prepareModelDetails, propMaterial, propMesh, propShadow, setNight, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
+import { closeBlur, detailCells, frameSummary } from "./closeup3d.ts";
+import { START_VIEW } from "./viewPreferences.ts";
+import { atModelLevel, updateModelDetails, type ModelLevel } from "./modelDetail3d.ts";
 import { stableHash, tile3d } from "./terrain3d.ts";
-import { clampZoom, daylightAt, elevationAt, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./camera3d.ts";
+import { cameraElevation, clampTilt, clampZoom, daylightAt, wheelView, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./camera3d.ts";
 import { calendar, shownWorldMs, WORLD_HOUR_MS } from "../server/engine/worldtime.ts";
 import { blockUnder, fishFor, islandBlock, nameCard, swimFish, type Fish, type SeaEdge } from "./block3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
@@ -28,6 +31,10 @@ const bedSig = (o: ObjView) => (o.kind === "track" ? (o.runs ?? []).map((r) => r
 type Scene3D = {
 	t: T;
 	renderer: import("three").WebGLRenderer;
+	post: ReturnType<typeof import("./closeuppost3d.ts").createClosePost>;
+	measurement: { at: number; times: number[]; calls: number[]; zooms: number[]; remaining: number } | null;
+	detailAt: number;
+	catalogue?: boolean;
 	scene: import("three").Scene;
 	camera: import("three").PerspectiveCamera;
 	fog: import("three").FogExp2;
@@ -62,10 +69,13 @@ type Scene3D = {
 	plantLooks: Map<string, import("three").Texture>;
 	plantsFor: string;
 	water: Array<{ material: import("three").MeshStandardMaterial; look: TileLook }>;
+	paving: import("three").InstancedMesh | null;
+	pavingFor: string;
 	chars: Map<string, Entry>;
 	objs: Map<string, Entry>;
 	angle: number;
 	zoom: number;
+	tilt: number;
 	/** how far the player dragged the view from the middle of the room, on the ground (world x and z) */
 	panX: number;
 	panZ: number;
@@ -87,18 +97,33 @@ export function MapView3D(props: MapRendererProps) {
 	const latest = useRef(props);
 	latest.current = props;
 	const [ready, setReady] = useState(false);
+	const [measuring, setMeasuring] = useState(false);
+	const [remaining, setRemaining] = useState(32);
+	const [measurementNote, setMeasurementNote] = useState("");
+	const [report, setReport] = useState<(ReturnType<typeof frameSummary> & { zoom: number[]; viewport: number[]; userAgent: string }) | null>(null);
 	// what the mouse and fingers do to the view: the wheel and a pinch zoom, dragging turns (the pointer code reads these through a ref)
-	const view = useRef({ zoomBy: (_f: number) => {}, turned: (_a: number) => {} });
-	const [angle, setAngle] = useState(() => stored("mmo.3d.angle", Math.PI / 4));
-	const [zoom, setZoom] = useState(() => clampZoom(stored("mmo.3d.zoom", 1)));
-	view.current = { zoomBy: (f) => setZoom((z) => clampZoom(z * f)), turned: (a) => setAngle(a) };
+	const view = useRef({ zoomBy: (_f: number) => {}, turned: (_a: number) => {}, tiltBy: (_d: number) => {} });
+	const [angle, setAngle] = useState(() => stored("mmo.3d.angle", START_VIEW.angle));
+	const [zoom, setZoom] = useState(() => clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)));
+	const [tilt, setTilt] = useState(() => clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)));
+	view.current = { zoomBy: (f) => setZoom((z) => clampZoom(z * f)), turned: (a) => setAngle(a), tiltBy: (d) => setTilt((v) => clampTilt(v + d)) };
+	const previousReset = useRef(props.viewReset);
+	useEffect(() => {
+		if (previousReset.current === props.viewReset) return;
+		previousReset.current = props.viewReset;
+		setAngle(START_VIEW.angle); setZoom(START_VIEW.zoom); setTilt(START_VIEW.tilt);
+		const s = state.current;
+		if (s) { s.angle = START_VIEW.angle; s.zoom = START_VIEW.zoom; s.tilt = START_VIEW.tilt; s.panX = s.panZ = 0; positionCamera(s); }
+	}, [props.viewReset]);
 
 	// once: the renderer, the lights, the camera and the loop
 	useEffect(() => {
 		let dead = false;
+		const visibility = () => { if (document.hidden && state.current?.measurement) { state.current.measurement = null; setMeasuring(false); setMeasurementNote("Messung abgebrochen: Tab war im Hintergrund. Bitte erneut messen."); } };
+		document.addEventListener("visibilitychange", visibility);
 		void (async () => {
 			try {
-				const t = await import("three");
+				const [t, { createClosePost }] = await Promise.all([import("three"), import("./closeuppost3d.ts")]);
 				if (dead || !host.current) return;
 				const renderer = new t.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
 				renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -109,7 +134,8 @@ export function MapView3D(props: MapRendererProps) {
 
 				const scene = new t.Scene();
 				const fog = new t.FogExp2(0xb8c1c7, 0); scene.fog = fog;
-				const camera = new t.PerspectiveCamera(38, 1, 0.1, 160);
+				const camera = new t.PerspectiveCamera(38, 1, 0.1, 160); camera.layers.enable(1);
+				const post = createClosePost(renderer, scene, camera); renderer.info.autoReset = false;
 				const hemi = new t.HemisphereLight(0xd9edff, 0x3a4a2a, 1.7); scene.add(hemi);
 				const sun = new t.DirectionalLight(0xfff1cf, 2.2);
 				sun.position.set(-6, 12, 8); scene.add(sun); scene.add(sun.target);
@@ -119,7 +145,7 @@ export function MapView3D(props: MapRendererProps) {
 				sun.castShadow = true; sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
 				scene.background = skyTexture(t);
 
-				const s: Scene3D = { t, renderer, scene, camera, fog, sun, hemi, light: -1, lightAt: 0, fish: [], host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", water: [], chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", Math.PI / 4), zoom: clampZoom(stored("mmo.3d.zoom", 1)), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, scene, camera, fog, sun, hemi, light: -1, lightAt: 0, fish: [], host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", water: [], paving: null, pavingFor: "", chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				s.resize = new ResizeObserver(() => resize(s));
 				s.resize.observe(host.current);
 				pointer(s, latest, view);
@@ -129,12 +155,27 @@ export function MapView3D(props: MapRendererProps) {
 				let before = performance.now();
 				const frame = (now: number) => {
 					if (dead) return;
-					const dt = Math.min(0.05, (now - before) / 1000); before = now;
+					const elapsed = now - before, dt = Math.min(0.05, elapsed / 1000); before = now;
+					if (document.hidden) {
+						if (s.measurement) { s.measurement = null; setMeasuring(false); setMeasurementNote("Messung abgebrochen: Tab war im Hintergrund. Bitte erneut messen."); }
+						s.frame = requestAnimationFrame(frame); return;
+					}
+					s.renderer.info.reset();
 					step(s, dt, now / 1000, latest.current.me);
 					bubbleTick(s);
 					if (s.fish.length && s.zoom > 0.3) swimFish(s.fish, now / 1000);
 					if (now - s.lightAt > 500) { s.lightAt = now; daylight(s, latest.current.worldTime ?? null); }
-					s.renderer.render(s.scene, s.camera);
+					if (now - s.detailAt >= 150) { updateModelDetails(t, s.scene, s.camera, s.zoom); s.detailAt = now; }
+					s.post.render(closeBlur(s.zoom));
+					if (s.measurement) {
+						const m = s.measurement, seconds = Math.max(0, 32 - Math.floor((now - m.at) / 1000));
+						if (seconds !== m.remaining) { m.remaining = seconds; setRemaining(seconds); }
+						if (now - m.at >= 2000) { m.times.push(elapsed); m.calls.push(renderer.info.render.calls); m.zooms.push(s.zoom); }
+						if (now - m.at >= 32000) {
+							setReport({ ...frameSummary(m.times, m.calls, renderer.info.render.triangles, renderer.info.memory.geometries), zoom: [Math.min(...m.zooms), Math.max(...m.zooms)], viewport: [s.size.w, s.size.h, renderer.getPixelRatio()], userAgent: navigator.userAgent });
+							s.measurement = null; setMeasuring(false);
+						}
+					}
 					s.frame = requestAnimationFrame(frame);
 				};
 				s.frame = requestAnimationFrame(frame);
@@ -144,10 +185,11 @@ export function MapView3D(props: MapRendererProps) {
 			}
 		})();
 		return () => {
-			dead = true;
+			dead = true; document.removeEventListener("visibilitychange", visibility);
 			const s = state.current;
 			if (!s) return;
-			cancelAnimationFrame(s.frame); s.resize.disconnect(); unpointer(s); dispose(s.scene); s.renderer.dispose(); s.canvas.remove(); state.current = null;
+			if (s.measurement) { s.measurement = null; setMeasuring(false); setMeasurementNote("Messung abgebrochen: 3D-Ansicht wurde neu gestartet. Bitte erneut messen."); }
+			cancelAnimationFrame(s.frame); s.resize.disconnect(); unpointer(s); s.post.dispose(); dispose(s.scene); s.renderer.dispose(); s.canvas.remove(); state.current = null;
 		};
 	}, []);
 
@@ -165,7 +207,7 @@ export function MapView3D(props: MapRendererProps) {
 			try { plants = await loadDecorLooks(s.t, props.world); } catch { /* a bare room */ }
 			if (dead || state.current !== s) return;
 			if (s.ground) { s.scene.remove(s.ground); dispose(s.ground); }
-			s.water = [];
+			s.water = []; s.paving = null; s.pavingFor = "";
 			s.ground = buildTerrain(s, looks);
 			shade(s.ground, true);
 			s.scene.add(s.ground);
@@ -199,9 +241,9 @@ export function MapView3D(props: MapRendererProps) {
 		if (ready && s?.island && props.atlas && props.atlasState) { islandCards(s, props.atlas, props.atlasState); positionCamera(s); }
 	}, [ready, cardsKey]);
 	useEffect(() => {
-		store("mmo.3d.angle", angle); store("mmo.3d.zoom", zoom);
-		if (state.current) { state.current.angle = angle; state.current.zoom = zoom; positionCamera(state.current); }
-	}, [angle, zoom, ready]);
+		store("mmo.3d.angle", angle); store("mmo.3d.zoom", zoom); store("mmo.3d.tilt", tilt);
+		if (state.current) { state.current.angle = angle; state.current.zoom = zoom; state.current.tilt = tilt; positionCamera(state.current); }
+	}, [angle, zoom, tilt, ready]);
 	// where the camera stands, for the arrows (they follow the view)
 	const onTurn = props.onTurn;
 	useEffect(() => { onTurn?.(angle); }, [angle, onTurn]);
@@ -216,6 +258,17 @@ export function MapView3D(props: MapRendererProps) {
 				<button onClick={() => setAngle((a) => a + Math.PI / 4)} aria-label="Karte rechts drehen">↷</button>
 				<button onClick={() => setZoom((z) => clampZoom(z * ZOOM_STEP))} disabled={zoom >= ZOOM_MAX} aria-label="Vergrößern">+</button>
 				<button onClick={() => setZoom((z) => clampZoom(z / ZOOM_STEP))} disabled={zoom <= ZOOM_MIN} aria-label="Verkleinern">−</button>
+			</div>
+			<div className={`map-performance${report || measurementNote ? " has-result" : ""}`} role="group" aria-label="3D-Leistungsmessung">
+				{tilt !== 0 && <button onClick={() => setTilt(0)} title="Alt+Mausrad neigt die Kamera; klicken setzt die Neigung zurück" aria-label="Manuelle Kameraneigung zurücksetzen">Neigung {tilt > 0 ? "+" : ""}{tilt}°</button>}
+				<button disabled={!ready || measuring} title="2 Sekunden aufwärmen, dann 30 Sekunden messen. Tab geöffnet lassen. Das Ergebnis erscheint hier." onClick={() => { if (state.current) { state.current.measurement = { at: performance.now(), times: [], calls: [], zooms: [], remaining: 32 }; setRemaining(32); setMeasurementNote(""); setReport(null); setMeasuring(true); } }} aria-label="3D-Leistung 30 Sekunden messen">{measuring ? `Messung läuft … ${remaining} s` : "FPS messen"}</button>
+				{measurementNote && <output className="map-performance-result" role="status">{measurementNote}</output>}
+				{report && <output className="map-performance-result" role="status">Ergebnis: {report.fps.toFixed(1)} FPS · p95 {report.p95Ms.toFixed(1)} ms</output>}
+				{report && <button title={JSON.stringify(report, null, 2)} onClick={() => {
+					const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" })), link = document.createElement("a");
+					link.href = url; link.download = "spaces-mmo-3d-performance.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+				}} aria-label="3D-Messung als JSON herunterladen">JSON herunterladen ↓</button>}
+				{(report || measurementNote) && <button onClick={() => { setReport(null); setMeasurementNote(""); }} aria-label="FPS-Ergebnis schließen">Schließen</button>}
 			</div>
 			{props.controls}
 			<span className="map-mode-label">3D · Darstellung, Spielregeln bleiben 2D</span>
@@ -270,7 +323,7 @@ function buildPlants(s: Scene3D, covered: Set<string>): import("three").Group {
 	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
 		const key = room.decor?.[y]?.[x] ?? " ", d = world.decor?.[key];
 		if (!d?.model || covered.has(`${x},${y}`)) continue;
-		const look = placeLook(`${room.roomId}:${x}:${y}`), at = `${d.model}:${look.variant}:${d.tint ?? ""}`;
+		const look = placeLook(`${room.roomId}:${x}:${y}`), at = `${d.model}:${look.variant}:${d.tint ?? ""}:${Math.floor(x / 4)},${Math.floor(y / 4)}`;
 		const list = models.get(at) ?? []; list.push({ x, y, turn: look.turn, size: look.size }); models.set(at, list);
 	}
 	for (const [at, cells] of models) {
@@ -299,6 +352,7 @@ function buildPlants(s: Scene3D, covered: Set<string>): import("three").Group {
 /** Every frame: the water moves, figures and things glide to their cell and the figures walk; the camera does not follow. */
 function step(s: Scene3D, dt: number, time: number, me: string): void {
 	for (const w of s.water) w.material.map = w.look.frames[Math.floor((time * 1000) / w.look.frameMs) % w.look.frames.length]!;
+	pavingDetail(s);
 	const k = 1 - Math.exp(-12 * dt);
 	for (const [id, e] of s.chars) {
 		const x0 = e.obj.position.x, z0 = e.obj.position.z;
@@ -315,6 +369,26 @@ function step(s: Scene3D, dt: number, time: number, me: string): void {
 		e.obj.position.lerp(e.target, k);
 		if (e.flame) { const on = e.flame.light.userData.lit as boolean; e.flame.cone.visible = on; e.flame.cone.scale.y = on ? 1 + Math.sin(time * 9 + e.obj.id) * 0.07 : 1; }
 	}
+}
+
+function pavingDetail(s: Scene3D): void {
+	if (!s.ground) return;
+	if (s.zoom < 2) { if (s.paving) s.paving.visible = false; return; }
+	const { w, h } = dims(s.room), x = Math.floor(s.panX + w / 2), y = Math.floor(s.panZ + h / 2), key = `${x},${y}`;
+	if (s.paving && s.pavingFor === key) { s.paving.visible = true; return; }
+	if (s.paving) { s.ground.remove(s.paving); dispose(s.paving); }
+	const cells = detailCells(s.room.ground, x, y), t = s.t;
+	const stones = new t.InstancedMesh(new t.BoxGeometry(0.225, 0.018, 0.225), new t.MeshStandardMaterial({ roughness: 1 }), Math.max(1, cells.length * 16));
+	const matrix = new t.Matrix4(), colour = new t.Color();
+	let i = 0;
+	for (const cell of cells) for (let row = 0; row < 4; row++) for (let col = 0; col < 4; col++) {
+		matrix.makeTranslation(cell.x - w / 2 + 0.125 + col / 4, surface(s.room, s.world, cell.x, cell.y) + 0.01, cell.y - h / 2 + 0.125 + row / 4);
+		stones.setMatrixAt(i, matrix);
+		stones.setColorAt(i++, colour.setHex(0x9a9ea6).multiplyScalar(0.85 + (stableHash(`${s.room.roomId}:${cell.x}:${cell.y}:${row}:${col}`) % 25) / 100));
+	}
+	stones.count = i; stones.instanceMatrix.needsUpdate = true; if (stones.instanceColor) stones.instanceColor.needsUpdate = true;
+	stones.computeBoundingSphere(); stones.receiveShadow = true;
+	s.ground.add(stones); s.paving = stones; s.pavingFor = key;
 }
 
 function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjView>, me: string, snap: boolean): void {
@@ -342,7 +416,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		let e = s.objs.get(id);
 		// a site that became a building (or got further) is drawn anew
 		if (e && (e.kind !== obj.kind || e.progress !== obj.progress || e.sig !== bedSig(obj))) { remove(s, s.objs, id); e = undefined; }
-		if (!e) { e = obj.kind === "track" ? track(s, obj) : object(s.t, obj, me); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); shade(e.obj, true); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.objs.set(id, e); }
+		if (!e) { e = obj.kind === "track" ? track(s, obj) : object(s.t, obj, me); prepareModelDetails(s.t, e.obj); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); shade(e.obj, true); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.objs.set(id, e); }
 		e.target.copy(placeOf(s, obj));
 		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; e.flame.light.intensity = lit ? 4 : 0; }
 	}
@@ -489,7 +563,8 @@ function object(t: T, obj: ObjView, me: string): Entry {
 	if (obj.kind === "building" || obj.kind === "site") {
 		const color = Number.parseInt((obj.color ?? "#8a6a44").slice(1), 16);
 		group.add(propShadow(t, w * 1.15, d * 1.15));
-		group.add(propMesh(t, obj.kind === "building" ? (buildingModel(t, obj.plan, w, d, variant) ?? buildingGeometry(t, obj.plan, w, d, color, variant, obj.herd)) : siteGeometry(t, obj.plan, w, d, color, obj.progress ?? 0)));
+		const body = propMesh(t, obj.kind === "building" ? (buildingModel(t, obj.plan, w, d, variant) ?? buildingGeometry(t, obj.plan, w, d, color, variant, obj.herd)) : siteGeometry(t, obj.plan, w, d, color, obj.progress ?? 0));
+		group.add(body);
 		// one's own site says so above it
 		if (obj.kind === "site" && obj.ownerId === me) { const mark = label(t, "Deine Baustelle", "#dfff73"); mark.position.y = 1.3; group.add(mark); }
 		// a coop with a fence round it (foxes keep out), a dog or cat on guard at its front corner (wild.ts, animals.ts)
@@ -654,7 +729,7 @@ function islandCards(s: Scene3D, atlas: AtlasView, state: AtlasState, group = s.
  *  large on one held upright. */
 function fitSprites(s: Scene3D, root: O3): void {
 	const perPx = (2 * Math.tan((s.camera.fov * Math.PI) / 360)) / Math.max(1, s.size.h || 900);
-	root.traverse((o) => { const px = o.userData.px as [number, number] | undefined; if (px) o.scale.set(px[0] * perPx, px[1] * perPx, 1); });
+	root.traverse((o) => { const px = o.userData.px as [number, number] | undefined; if (px) { o.layers.set(1); o.scale.set(px[0] * perPx, px[1] * perPx, 1); } });
 }
 
 /** Every mesh of `root` casts a shadow; the ground and the things lying on it also take them (`receive`). Sprites and the
@@ -707,7 +782,8 @@ function skyTexture(t: T): import("three").CanvasTexture {
  *  dragging, turning and zooming move it. Its elevation follows the zoom (camera3d.ts): steep from afar, flat up close.
  *  The far plane follows the distance, so the room stays in view at the island's end of the slider. */
 function positionCamera(s: Scene3D): void {
-	const { w, h } = dims(s.room), aspect = s.camera.aspect || 1, elevation = elevationAt(s.zoom);
+	if (s.catalogue) return;
+	const { w, h } = dims(s.room), aspect = s.camera.aspect || 1, elevation = cameraElevation(s.zoom, s.tilt);
 	// from the approach outwards the view turns from the room to the middle of the island, and may be dragged over all of it
 	const toIsland = s.island && s.islandMid.reach > 0 ? clamp((0.6 - s.zoom) / 0.3, 0, 1) : 0, reach = s.islandMid.reach * toIsland;
 	s.panX = clamp(s.panX, -w / 2 - reach, w / 2 + reach); s.panZ = clamp(s.panZ, -h / 2 - reach, h / 2 + reach);
@@ -740,11 +816,54 @@ function applyFog(s: Scene3D, level: number): void {
 /** Sets the drawing size only when it really changed: setSize clears the picture, and a clear that nothing needs is a flicker. */
 function resize(s: Scene3D): void {
 	const box = s.host.getBoundingClientRect(), w = Math.max(1, Math.round(box.width)), h = Math.max(260, Math.round(box.height || box.width * 0.62));
-	if (w !== s.size.w || h !== s.size.h) { s.size = { w, h }; s.renderer.setSize(w, h, false); s.camera.aspect = w / h; s.camera.updateProjectionMatrix(); fitSprites(s, s.scene); }
+	if (w !== s.size.w || h !== s.size.h) { s.size = { w, h }; s.renderer.setSize(w, h, false); s.post.resize(w, h); s.camera.aspect = w / h; s.camera.updateProjectionMatrix(); fitSprites(s, s.scene); }
 	positionCamera(s);
 }
 
-function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { current: { zoomBy: (f: number) => void; turned: (angle: number) => void } }): void {
+function showCatalogue(s: Scene3D, names: string[], level: ModelLevel): void {
+	const { t } = s, previous = s.scene.getObjectByName("model-catalogue");
+	if (previous) { s.scene.remove(previous); dispose(previous); }
+	for (const child of s.scene.children) if (!(child instanceof t.Light) && child !== s.sun.target) child.visible = false;
+	const gallery = new t.Group(); gallery.name = "model-catalogue"; gallery.userData.modelCatalogue = true; gallery.userData.owned = true;
+	const columns = 5, rows = Math.ceil(names.length / columns);
+	for (const [index, name] of names.entries()) {
+		const [kind, model] = name.split(":"), group = new t.Group();
+		atModelLevel(level, () => {
+			let geometry: import("three").BufferGeometry | null = null;
+			if (kind === "plant") geometry = plantGeometry(t, model as PlantModel, 0);
+			else if (kind === "crop") geometry = cropGeometry(t, model as Parameters<typeof cropGeometry>[1], 2, 0xd2a181);
+			else if (kind === "field") geometry = fieldCropGeometry(t, model as Parameters<typeof fieldCropGeometry>[1], 2, 2, 1, 0xd3b963, false);
+			else if (kind === "scenery") geometry = sceneryModel(t, model, 2, 2, 0);
+			else if (kind === "wild") geometry = wildGeometry(t, model, 0);
+			else if (kind === "keeper") geometry = keeperGeometry(t, model!, 0);
+			else if (kind === "pen") geometry = buildingGeometry(t, "gehege", 2, 2, 0x9a7a4a, 0, model);
+			else if (kind === "figure") group.add(makeFigure(t, { id: "catalogue", skin: 0, own: true, ai: false }).group);
+			else if (kind === "cart" || kind === "train") group.add(object(t, { id: name, kind, name, location: s.room.roomId, x: 0, y: 0 } as ObjView, "").obj);
+			else if (kind === "track") {
+				const { w, h } = dims(s.room);
+				group.add(track(s, { id: name, kind: "track", name, location: s.room.roomId, x: 0, y: 0, runs: [[{ x: w / 2 - 1, y: h / 2 }, { x: w / 2, y: h / 2 }, { x: w / 2 + 1, y: h / 2 + 1 }]] } as ObjView).obj);
+			} else if (kind === "liner") geometry = linerGeometry(t, 8);
+			else if (kind === "site") geometry = siteGeometry(t, "huette", 2, 2, 0x9a7a4a, 0.6);
+			else if (kind === "ruin") geometry = ruinGeometry(t, 2, 2, 0);
+			else if (kind === "sign") geometry = signGeometry(t);
+			else if (kind === "fire") geometry = fireGeometry(t);
+			else if (kind === "fence") geometry = fenceGeometry(t, 2, 2);
+			else geometry = buildingModel(t, name, 2, 2, 0) ?? buildingGeometry(t, name, 2, 2, 0x9a7a4a, 0);
+			if (geometry) group.add(propMesh(t, geometry));
+			prepareModelDetails(t, group);
+			group.traverse((o) => { const mesh = o as import("three").Mesh; if (mesh.geometry?.userData.modelVariant) { mesh.geometry = mesh.geometry.userData.modelVariant(level); mesh.userData.modelLevel = level; } if (o.userData.detailOnly) o.visible = level === "near"; });
+		});
+		const bounds = new t.Box3().setFromObject(group), size = bounds.getSize(new t.Vector3()), factor = Math.min(1, 2.8 / Math.max(size.x, size.z), 2.7 / size.y);
+		group.scale.setScalar(factor); group.position.set((index % columns - 2) * 3.5, -bounds.min.y * factor, (Math.floor(index / columns) - (rows - 1) / 2) * 4);
+		gallery.add(group);
+		const plate = new t.Mesh(new t.BoxGeometry(3.1, 0.06, 3.1), new t.MeshStandardMaterial({ color: 0x668e45, roughness: 1 })); plate.position.set(group.position.x, -0.07, group.position.z); gallery.add(plate);
+		const caption = label(t, name, "#e5e9ed"); caption.position.set(group.position.x, -0.1, group.position.z + 1.7); gallery.add(caption);
+	}
+	s.catalogue = true; s.zoom = 1.4; s.scene.add(gallery); shade(gallery, true);
+	s.camera.position.set(0, 22, 27); s.camera.lookAt(0, 0, 0); s.camera.updateProjectionMatrix(); fitSprites(s, gallery);
+}
+
+function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { current: { zoomBy: (f: number) => void; turned: (angle: number) => void; tiltBy: (degrees: number) => void } }): void {
 	const t = s.t, ray = new t.Raycaster(), mouse = new t.Vector2(), plane = new t.Plane(new t.Vector3(0, 1, 0), -0.25), hit = new t.Vector3();
 	/** The point of the ground at a place on the screen. */
 	const ground = (x: number, y: number) => {
@@ -768,6 +887,18 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 	// for automated checks in development only: the cell a screen point names, and where a point of a cell is on the screen
 	if (process.env.NODE_ENV !== "production") Object.assign(s.canvas, {
 		probeCell: (clientX: number, clientY: number) => cell({ clientX, clientY } as PointerEvent),
+		probeDetail: () => {
+			const barrels: Array<{ near: boolean; distance: number }> = [];
+			s.scene.traverse((o) => { const mesh = o as import("three").Mesh; if (String(mesh.geometry?.userData.model ?? "").startsWith("barrel")) barrels.push({ near: mesh.userData.modelLevel === "near", distance: s.camera.position.distanceTo(mesh.getWorldPosition(new t.Vector3())) }); });
+			return { barrels, cobblestones: s.paving?.visible ? s.paving.count : 0, blur: closeBlur(s.zoom) };
+		},
+		probeView: () => ({ zoom: s.zoom, angle: s.angle, tilt: s.tilt, elevation: cameraElevation(s.zoom, s.tilt) }),
+		probeCatalogue: (names: string[], level: ModelLevel = "room") => showCatalogue(s, names, level),
+		probeModels: () => {
+			const models: Array<{ name: string; level: string; triangles: number }> = [];
+			s.scene.traverse((o) => { const mesh = o as import("three").Mesh; if (mesh.geometry?.userData.modelVariant) models.push({ name: mesh.geometry.userData.model, level: mesh.userData.modelLevel ?? "room", triangles: mesh.geometry.getAttribute("position").count / 3 }); });
+			return models;
+		},
 		/** a world hour for the light instead of the clock (screenshots of the night) */
 		probeHour: (hour: number | null) => { s.hourProbe = hour; s.lightAt = 0; },
 		probeScreen: (x: number, y: number, dx = 0, dz = 0) => { const p = at(s, x, y, 0).add(new t.Vector3(dx, 0, dz)).project(s.camera), r = s.canvas.getBoundingClientRect(); return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height }; },
@@ -809,7 +940,7 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 			// world units per pixel at the point looked at; the ground is foreshortened in depth by the camera's elevation
 			const unit = (2 * s.dist * Math.tan((s.camera.fov * Math.PI) / 360)) / Math.max(1, s.size.h);
 			const fx = -Math.cos(s.angle), fz = -Math.sin(s.angle); // forward on the ground; right is (-fz, fx)
-			const side = dx * unit, depth = (dy * unit) / Math.sin(elevationAt(s.zoom));
+			const side = dx * unit, depth = (dy * unit) / Math.sin(cameraElevation(s.zoom, s.tilt));
 			s.panX += fz * side + fx * depth; s.panZ += -fx * side + fz * depth;
 		}
 		positionCamera(s);
@@ -817,10 +948,18 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 	const onUp = (e: PointerEvent) => { fingers.up(e.pointerId); if (!down) return; clearTimeout(down.timer); if (down.at && !down.long) latest.current.onCell(down.at.x, down.at.y); if (dragged) view.current.turned(s.angle); dragged = false; down = null; };
 	// a click of the wheel scrolls the page by itself in some browsers: not on the map
 	const onMouseDown = (e: MouseEvent) => { if (e.button === 1) e.preventDefault(); };
-	const onWheel = (e: WheelEvent) => { e.preventDefault(); view.current.zoomBy(Math.exp(-Math.sign(e.deltaY) * 0.12)); };
+	let mapAlt = false;
+	const onMapAlt = (e: KeyboardEvent) => {
+		if (e.key !== "Alt") return;
+		if (e.type === "keyup" && mapAlt) { e.preventDefault(); mapAlt = false; return; }
+		if (s.canvas.matches(":hover") && !e.ctrlKey && !e.metaKey) { e.preventDefault(); mapAlt = e.type === "keydown"; }
+	};
+	const onBlur = () => { mapAlt = false; };
+	window.addEventListener("keydown", onMapAlt, true); window.addEventListener("keyup", onMapAlt, true); window.addEventListener("blur", onBlur);
+	const onWheel = (e: WheelEvent) => { e.preventDefault(); const action = wheelView(e.deltaY, e.altKey); if (e.altKey) { mapAlt = true; view.current.tiltBy(action.tiltDelta); } else view.current.zoomBy(action.zoomFactor); };
 	const onContext = (e: MouseEvent) => { e.preventDefault(); const at = cell(e as PointerEvent); if (at) latest.current.onMenu(at.x, at.y, e.clientX, e.clientY); };
 	Object.assign(s.canvas.dataset, { map3d: "1" }); s.canvas.addEventListener("pointerdown", onDown); s.canvas.addEventListener("pointermove", onMove); s.canvas.addEventListener("pointerup", onUp); s.canvas.addEventListener("pointercancel", onUp); s.canvas.addEventListener("contextmenu", onContext); s.canvas.addEventListener("wheel", onWheel, { passive: false }); s.canvas.addEventListener("mousedown", onMouseDown);
-	(s.canvas as HTMLCanvasElement & { mapCleanup?: () => void }).mapCleanup = () => { s.canvas.removeEventListener("pointerdown", onDown); s.canvas.removeEventListener("pointermove", onMove); s.canvas.removeEventListener("pointerup", onUp); s.canvas.removeEventListener("pointercancel", onUp); s.canvas.removeEventListener("contextmenu", onContext); s.canvas.removeEventListener("wheel", onWheel); s.canvas.removeEventListener("mousedown", onMouseDown); };
+	(s.canvas as HTMLCanvasElement & { mapCleanup?: () => void }).mapCleanup = () => { window.removeEventListener("keydown", onMapAlt, true); window.removeEventListener("keyup", onMapAlt, true); window.removeEventListener("blur", onBlur); s.canvas.removeEventListener("pointerdown", onDown); s.canvas.removeEventListener("pointermove", onMove); s.canvas.removeEventListener("pointerup", onUp); s.canvas.removeEventListener("pointercancel", onUp); s.canvas.removeEventListener("contextmenu", onContext); s.canvas.removeEventListener("wheel", onWheel); s.canvas.removeEventListener("mousedown", onMouseDown); };
 }
 function fadeOut(s: Scene3D, obj: O3): void {
 	const from = performance.now();
