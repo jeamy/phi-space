@@ -196,7 +196,7 @@ function useDismiss(close: () => void): () => void {
 
 /** The menu of a long press or a right click on a cell: what stands, lies or burns there, and what one can do with it.
  *  Every entry is a text command. */
-function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, sail, travel, send, close, offer, chat, sheet = false, onHelp, onWalk, onOrders }: { wild?: boolean; sail?: string[]; travel?: CellInput["travel"]; at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; send: (line: string) => void; close: () => void; offer?: (name: string) => void; sheet?: boolean; onHelp?: (article: string) => void; /** A phone walks there step by step, to the free cell nearest it. */ onWalk?: (at: { x: number; y: number }) => void; onOrders?: () => void;
+function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, sail, travel, send, close, offer, offersIn, chat, sheet = false, onHelp, onWalk, onOrders }: { offersIn?: CellInput["offersIn"]; wild?: boolean; sail?: string[]; travel?: CellInput["travel"]; at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; send: (line: string) => void; close: () => void; offer?: (name: string) => void; sheet?: boolean; onHelp?: (article: string) => void; /** A phone walks there step by step, to the free cell nearest it. */ onWalk?: (at: { x: number; y: number }) => void; onOrders?: () => void;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] } }) {
 	useEffect(() => {
 		const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
@@ -207,7 +207,7 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, sail, t
 	const [step, setStep] = useState<"plans" | PlanView | null>(null);
 	useEffect(() => setStep(null), [at]);
 	const fuel = fuelIn(objs, me);
-	const entries = cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, chat, wild, sail, travel, onPlans: () => setStep("plans"), onOrders });
+	const entries = cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, sail, travel, onPlans: () => setStep("plans"), onOrders });
 	if (step === "plans") {
 		entries.length = 0;
 		for (const p of plans) entries.push({ label: `${p.name} (${p.w}×${p.h}${p.epoch ? `, ab ${p.epoch}` : ""})`, line: `#plan ${p.key}`, run: () => setStep(p) });
@@ -972,7 +972,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const islandHere = atlas?.rooms.find((r) => r.roomId === hello?.room.roomId)?.island;
 	const epochHere = islandHere && atlasState?.epochs ? atlasState.epochs[islandHere] ?? 1 : null;
 	const menus = <>
-		{menu && hello && <CellMenu at={menu} wild={wildNow(hello.world.decor, hello.room.decor)} travel={atlas && atlasState ? { rooms: atlas.rooms, stops: atlasState.stops } : undefined} sail={[...new Set((hello.world.liner?.routes ?? []).map((r) => r.island))].filter((i) => i !== hello.world.liner?.island)} sheet onWalk={walkTo} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={shownObjs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
+		{menu && hello && <CellMenu at={menu} wild={wildNow(hello.world.decor, hello.room.decor)} travel={atlas && atlasState ? { rooms: atlas.rooms, stops: atlasState.stops } : undefined} sail={[...new Set((hello.world.liner?.routes ?? []).map((r) => r.island))].filter((i) => i !== hello.world.liner?.island)} sheet onWalk={walkTo} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={shownObjs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offersIn={trade?.offersIn} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
 			chat={{ talk: (name) => send(`chat ${name}`, false), invite: (name, g) => send(`gruppe lade ${name} in ${g}`), groups: account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? []) }} />}
 		{nameMenu && <NameMenu at={nameMenu} sheet name={nameMenu.name} groups={account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? [])} close={() => setNameMenu(null)}
 			talk={() => send(`chat ${nameMenu.name}`, false)} invite={(g) => send(`gruppe lade ${nameMenu.name} in ${g}`)} ignore={() => send(`ignoriere ${nameMenu.name}`)} />}

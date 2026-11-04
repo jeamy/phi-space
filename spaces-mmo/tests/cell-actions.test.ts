@@ -25,6 +25,15 @@ test("a tap opens what stands on that cell; the cell beside it stays free ground
 	assert.deepEqual(tapTarget({ x: 5, y: 5 }, chars, objs, "r", "me"), { x: 5, y: 5 });
 });
 
+test("a figure that offers a trade has accept and decline first (a tap on its speech bubble opens this menu)", () => {
+	const offersIn = [{ fromName: "Ines", giveNames: ["Münze"], want: [{ name: "Muschel", count: 1 }] }];
+	const lines = cellEntries({ ...input, offersIn, at: { x: 8, y: 5 } });
+	assert.deepEqual(lines.slice(0, 2).map((e) => e.line), ["accept Ines", "decline Ines"]);
+	assert.equal(lines[0]!.label, "accept Ines – 1 Münze für 1 Muschel");
+	assert.ok(!cellEntries({ ...input, at: { x: 8, y: 5 } }).some((e) => e.line.startsWith("accept")), "no offer, no accept");
+	assert.ok(!cellEntries({ ...input, offersIn: [{ ...offersIn[0]!, fromName: "Bente" }], at: { x: 8, y: 5 } }).some((e) => e.line.startsWith("accept")), "only the one who offered");
+});
+
 test("an exit under the finger is walked to, not taken for what stands beside it", () => {
 	const near = new Map([...chars, ["b", char("b", "Bo", 22, 8)]]);
 	assert.equal(tapTarget({ x: 23, y: 8 }, near, objs, "r", "me"), null);

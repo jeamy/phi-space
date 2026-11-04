@@ -197,7 +197,7 @@ Die Karte zeigt den Ort, an dem du gerade bist. Ein Klick lässt deine Figur dor
 | Klick auf ein Ausgangsfeld | Zum Ausgang gehen; im Menü des Feldes steht „Nach … gehen“ (\`go\`, von überall im Raum) |
 | 2D: Ziehen (gezoomt) | Die Ansicht verschieben |
 | 2D: zwei Finger auseinander oder zusammen | Eine Zoomstufe vor oder zurück (1×, 2×, 3×) |
-| 3D: Mausrad oder zwei Finger | Näher heran und weiter weg (Zoom): ganz weit draußen die ganze Insel als Blöcke mit Namen, ganz nah die Figuren mit Sprechblasen. Nachts wird es dunkel, und die Fenster leuchten |
+| 3D: Mausrad oder zwei Finger | Näher heran und weiter weg (Zoom): ganz weit draußen die ganze Insel als Blöcke mit Namen, ganz nah die Figuren mit Sprechblasen; ein Tipp auf eine Sprechblase öffnet die Aktionen der Figur, bei einem Tauschangebot mit „accept“ und „decline“. Nachts wird es dunkel, und die Fenster leuchten |
 | 3D: Ziehen mit Maus oder Finger | Die Ansicht verschieben (links, rechts, hoch, runter) |
 | 3D: Ziehen mit gedrücktem Mausrad oder mit Umschalttaste, Knöpfe ↶ ↷ | Die Ansicht drehen (die Knöpfe in Achtelschritten) |
 | 3D: Alt+Mausrad | Die Kamera neigen, ohne zu zoomen oder zu drehen (siehe [Ansicht in 3D](help.game.controls#view3d)) |
@@ -297,7 +297,7 @@ The map shows the place you are in. A click sends your figure there. The right m
 | Click an exit cell | Walk to the exit; the cell's menu has “Go to …” (\`go\`, from anywhere in the room) |
 | 2D: drag (zoomed in) | Move the view |
 | 2D: two fingers apart or together | One zoom step in or out (1×, 2×, 3×) |
-| 3D: mouse wheel or two fingers | Zoom in and out: far out the whole island as blocks with names, close up the figures with speech bubbles. At night it gets dark and the windows light up |
+| 3D: mouse wheel or two fingers | Zoom in and out: far out the whole island as blocks with names, close up the figures with speech bubbles; a tap on a bubble opens the figure's actions, with „accept“ and „decline“ when it offers a trade. At night it gets dark and the windows light up |
 | 3D: drag with mouse or finger | Move the view (left, right, up, down) |
 | 3D: drag with the mouse wheel held down or with Shift, ↶ ↷ buttons | Turn the view (the buttons in eighths) |
 | 3D: Alt+mouse wheel | Tilt the camera without zooming or turning (see [The 3D view](help.game.controls#view3d)) |

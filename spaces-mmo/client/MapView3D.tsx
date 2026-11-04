@@ -898,15 +898,29 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		const { w, h } = dims(s.room), x = Math.floor(hit.x + w / 2), y = Math.floor(hit.z + h / 2);
 		return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
 	};
+	/** The cell of the figure whose speech bubble is under the pointer (a tap there opens that figure's menu: accept an
+	 *  offer it made, look at it, chat), or none. */
+	// sprites live on layer 1 (fitSprites): a ray of its own sees them
+	const talkRay = new t.Raycaster(); talkRay.layers.set(1);
+	const bubbleAt = (x: number, y: number) => {
+		const shown = [...s.bubbles].filter(([, b]) => b.sprite.visible);
+		if (!shown.length) return null;
+		const r = s.canvas.getBoundingClientRect(); mouse.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+		s.camera.updateMatrixWorld(); talkRay.setFromCamera(mouse, s.camera);
+		const first = talkRay.intersectObjects(shown.map(([, b]) => b.sprite), false)[0];
+		const id = first && shown.find(([, b]) => b.sprite === first.object)?.[0], c = id ? latest.current.chars.get(id) : undefined;
+		return c ? { x: c.x, y: c.y } : null;
+	};
 	// for automated checks in development only: the cell a screen point names, and where a point of a cell is on the screen
 	if (process.env.NODE_ENV !== "production") Object.assign(s.canvas, {
 		probeCell: (clientX: number, clientY: number) => cell({ clientX, clientY } as PointerEvent),
+		probeBubble: (clientX: number, clientY: number) => bubbleAt(clientX, clientY),
 		probeDetail: () => {
 			const barrels: Array<{ near: boolean; distance: number }> = [];
 			s.scene.traverse((o) => { const mesh = o as import("three").Mesh; if (String(mesh.geometry?.userData.model ?? "").startsWith("barrel")) barrels.push({ near: mesh.userData.modelLevel === "near", distance: s.camera.position.distanceTo(mesh.getWorldPosition(new t.Vector3())) }); });
 			return { barrels, cobblestones: s.paving?.visible ? s.paving.count : 0, blur: closeBlur(s.zoom) };
 		},
-		probeView: () => ({ zoom: s.zoom, angle: s.angle, tilt: s.tilt, elevation: cameraElevation(s.zoom, s.tilt) }),
+		probeView: () => ({ zoom: s.zoom, angle: s.angle, tilt: s.tilt, elevation: cameraElevation(s.zoom, s.tilt), bubbles: s.bubbles.size }),
 		probeCatalogue: (names: string[], level: ModelLevel = "room") => showCatalogue(s, names, level),
 		probeModels: () => {
 			const models: Array<{ name: string; level: string; triangles: number }> = [];
@@ -917,7 +931,7 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		probeHour: (hour: number | null) => { s.hourProbe = hour; s.lightAt = 0; },
 		probeScreen: (x: number, y: number, dx = 0, dz = 0) => { const p = at(s, x, y, 0).add(new t.Vector3(dx, 0, dz)).project(s.camera), r = s.canvas.getBoundingClientRect(); return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height }; },
 	});
-	let down: { x: number; y: number; at: { x: number; y: number } | null; long: boolean; turn: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
+	let down: { x: number; y: number; at: { x: number; y: number } | null; talk?: boolean; long: boolean; turn: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
 	const fingers = pinch();
 	const onDown = (e: PointerEvent) => {
 		if (e.button === 2) return;
@@ -926,7 +940,8 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		if (fingers.active) return;
 		// the wheel held down turns the view (no tap, no menu)
 		if (e.button === 1) { e.preventDefault(); down = { x: e.clientX, y: e.clientY, at: null, long: false, turn: true, timer: setTimeout(() => {}, 0) }; return; }
-		const at = cell(e); down = { x: e.clientX, y: e.clientY, at, long: false, turn: false, timer: setTimeout(() => { if (down?.at) { down.long = true; latest.current.onMenu(down.at.x, down.at.y, e.clientX, e.clientY); } }, LONG_PRESS_MS) };
+		// a speech bubble stands over its speaker (also over the sea): a tap on it is a tap on the speaker's menu
+		const talk = bubbleAt(e.clientX, e.clientY), at = talk ?? cell(e); down = { x: e.clientX, y: e.clientY, at, talk: !!talk, long: false, turn: false, timer: setTimeout(() => { if (down?.at) { down.long = true; latest.current.onMenu(down.at.x, down.at.y, e.clientX, e.clientY); } }, LONG_PRESS_MS) };
 	};
 	// dragging moves the view over the ground as in 2D, the ground stays under the pointer; with the wheel held down or
 	// with Shift it turns the view
@@ -959,7 +974,7 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		}
 		positionCamera(s);
 	};
-	const onUp = (e: PointerEvent) => { fingers.up(e.pointerId); if (!down) return; clearTimeout(down.timer); if (down.at && !down.long) latest.current.onCell(down.at.x, down.at.y); if (dragged) view.current.turned(s.angle); dragged = false; down = null; };
+	const onUp = (e: PointerEvent) => { fingers.up(e.pointerId); if (!down) return; clearTimeout(down.timer); if (down.at && !down.long) { if (down.talk) latest.current.onMenu(down.at.x, down.at.y, e.clientX, e.clientY); else latest.current.onCell(down.at.x, down.at.y); } if (dragged) view.current.turned(s.angle); dragged = false; down = null; };
 	// a click of the wheel scrolls the page by itself in some browsers: not on the map
 	const onMouseDown = (e: MouseEvent) => { if (e.button === 1) e.preventDefault(); };
 	let mapAlt = false;

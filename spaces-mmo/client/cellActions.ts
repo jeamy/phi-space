@@ -7,6 +7,7 @@ export type CellInput = {
 	at: { x: number; y: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean;
 	/** What burns, cheapest carried first (a fire's "nachlegen"). */ fuel: ObjView | undefined;
 	offer?: (name: string) => void;
+	/** The trade offers made to the player (TradeView.offersIn): a figure with one gets "accept" and "decline" first. */ offersIn?: Array<{ fromName: string; giveNames: string[]; want: Array<{ name: string; count: number }> }>;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] };
 	/** Whether wild plants grow in the room (wildHere); without it seeds are offered anyway and the command answers. */ wild?: boolean;
 	/** The rooms of the world and where a boat, a train and a cart can go (the overview's state); without it the commands list their places. */ travel?: { rooms: Array<{ roomId: string; name: string; island: string }>; stops: { jetties: string[]; stations: string[]; trainFare: number; roads: Array<[string, string]> } };
@@ -93,10 +94,23 @@ const SOWN: Record<string, string> = { Weizen: "weizen", Gerste: "gerste", Hafer
 const AREA = new Set(["site", "building", "ruin", "bed", "field", "scenery", "liner"]);
 const covers = (o: ObjView, c: { x: number; y: number }) => c.x >= o.x && c.y >= o.y && c.x < o.x + (o.w ?? 1) && c.y < o.y + (o.h ?? 1);
 
-export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, chat, wild, sail, travel, onPlans, onOrders }: CellInput): CellEntry[] {
+/** An offer in words, as the trade panel says it: "1 Münze für Muschel", "2× Treibholz als Geschenk". */
+export function offerWords(o: { giveNames: string[]; want: Array<{ name: string; count: number }> }): string {
+	const counted = (xs: Array<{ name: string; count: number }>) => {
+		const m = new Map<string, number>();
+		for (const x of xs) { const n = x.name.charAt(0).toUpperCase() + x.name.slice(1); m.set(n, (m.get(n) ?? 0) + x.count); }
+		return [...m].map(([n, k]) => `${k} ${n}`).join(", ");
+	};
+	return `${counted(o.giveNames.map((name) => ({ name, count: 1 })))}${o.want.length ? ` für ${counted(o.want)}` : " als Geschenk"}`;
+}
+
+export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, sail, travel, onPlans, onOrders }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: Array<{ label: string; line: string; run?: () => void }> = [];
 	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
+		// what the figure offers the player comes first: a tap on its speech bubble opens this menu (MapView3D)
+		const offered = offersIn?.find((o) => o.fromName === c.name);
+		if (offered) entries.push({ label: `accept ${c.name} – ${offerWords(offered)}`, line: `accept ${c.name}` }, { label: `decline ${c.name}`, line: `decline ${c.name}` });
 		entries.push({ label: `${c.name} ansehen`, line: `look ${c.name}` });
 		if (offer) entries.push({ label: `${c.name} einen Tausch anbieten …`, line: `#offer ${c.name}`, run: () => offer(c.name) });
 		if (chat && !c.charId.startsWith("npc-")) {
