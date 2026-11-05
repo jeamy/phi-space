@@ -15,7 +15,7 @@ export type Part = { g: Geo; c: number; p?: V3; r?: V3; s?: V3 };
 /** The colours of lamplight and embers: such faces glow when it gets dark (merge marks them, propMaterial lights them). */
 export const LAMPLIGHT = new Set([0xf2c46a, 0xff8a2a]);
 
-export type PlantModel = "tree" | "conifer" | "bush" | "berrybush" | "flower" | "herb" | "grass" | "fern";
+export type PlantModel = "tree" | "conifer" | "bush" | "berrybush" | "flower" | "herb" | "grass" | "fern" | "palm";
 /** How many shapes of each plant there are; a place picks one. */
 export const PLANT_VARIANTS = 3;
 
@@ -118,6 +118,25 @@ export function plantGeometry(t: T, model: PlantModel, variant: number, color = 
 			return merge(t, parts, `${model}:${variant}`);
 		}
 		const blob = (radius: number, c: number, p: V3) => parts.push({ g: new t.IcosahedronGeometry(radius, 0), c, p, r: [r() * 3, r() * 3, r() * 3] });
+		if (model === "palm") {
+			// a trunk of rings that bends to one side, a crown of long drooping fronds and a few coconuts
+			const bend = 0.18 + r() * 0.14, rings = 7, high = 1.45 + r() * 0.3;
+			let top: V3 = [0, 0, 0];
+			for (let i = 0; i < rings; i++) {
+				const k = (i + 0.5) / rings, x = bend * k * k, y = high * k, rad = 0.075 - k * 0.025;
+				parts.push({ g: new t.CylinderGeometry(rad * 0.9, rad, high / rings + 0.02, 7), c: i % 2 ? 0x8a6a44 : 0x7a5c3a, p: [x, y, 0], r: [0, 0, -2 * bend * k / high] });
+				top = [bend, high, 0];
+			}
+			const fronds = 7 + (variant % 2);
+			for (let i = 0; i < fronds; i++) {
+				const a = (i / fronds) * Math.PI * 2 + r() * 0.3, len = 0.62 + r() * 0.16, c = [0x4f8f3a, 0x5c9c42, 0x3f7d33][(variant + i) % 3]!;
+				// two pieces per frond: up and out, then hanging down
+				leaf(t, parts, [top[0], top[1], top[2]], a, len * 0.55, c, 0.25);
+				leaf(t, parts, [top[0] + Math.cos(a) * len * 0.5, top[1] + 0.06, top[2] + Math.sin(a) * len * 0.5], a, len * 0.55, c, -0.55);
+			}
+			for (let i = 0; i < 3; i++) { const a = i * 2.1 + r(); parts.push({ g: new t.IcosahedronGeometry(0.05, 0), c: 0x5b3f22, p: [top[0] + Math.cos(a) * 0.07, top[1] - 0.06, top[2] + Math.sin(a) * 0.07] }); }
+			return merge(t, parts, `${model}:${variant}`);
+		}
 		if (model === "tree") {
 			const trunk = 0.62 + r() * 0.18;
 			parts.push({ g: new t.CylinderGeometry(0.07, 0.11, trunk, 6), c: BARK, p: [0, trunk / 2, 0] });

@@ -311,7 +311,11 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 
 /** The plants of the room, never on a cell a building, site, ruin or bed covers: trees and bushes as models, flowers and
  *  herbs as pictures that face the camera (flat ones smaller). */
-function buildPlants(s: Scene3D, covered: Set<string>): import("three").Group {
+/** The wild flowers the 3D map adds on free grass: their forms (props3d.ts) and colours. */
+const WILD_SORTS = ["flower", "flower", "rose", "mist"] as const;
+const BLOOM = [0xe8443a, 0xf08a24, 0xf2d23a, 0xf4f0e6, 0xe86aa8, 0xb04ad0, 0x5a6ee8, 0x4ab0e8, 0xd8344a, 0xffb0c8, 0x9a3ad0, 0xffe680];
+
+function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): import("three").Group {
 	const { t, room, world } = s, { w, h } = dims(room), plants = s.plantLooks;
 	const group = new t.Group(); group.userData.owned = true;
 	const materials = new Map<string, import("three").SpriteMaterial>();
@@ -322,6 +326,32 @@ function buildPlants(s: Scene3D, covered: Set<string>): import("three").Group {
 		if (!d?.model || covered.has(`${x},${y}`)) continue;
 		const look = placeLook(`${room.roomId}:${x}:${y}`), at = `${d.model}:${look.variant}:${d.tint ?? ""}:${Math.floor(x / 4)},${Math.floor(y / 4)}`;
 		const list = models.get(at) ?? []; list.push({ x, y, turn: look.turn, size: look.size }); models.set(at, list);
+	}
+	// v3: on free grass flowers of every sort and colour, on the beach palms; only for the eye (the world's decor, which
+	// the game counts, stays as it is), placed by the cell so that everyone sees the same
+	const extra = new Map<string, Array<{ x: number; y: number; turn: number; size: number; dx: number; dz: number }>>();
+	const add = (key: string, c: { x: number; y: number; turn: number; size: number; dx: number; dz: number }) => { const l = extra.get(key) ?? []; l.push(c); extra.set(key, l); };
+	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+		const ground = room.ground[y]?.[x], decor = room.decor?.[y]?.[x] ?? " ";
+		if ((decor !== " " && world.decor?.[decor]) || covered.has(`${x},${y}`)) continue;
+		const roll = stableHash(`${room.roomId}:${x}:${y}:bloom`);
+		if (ground === "," && roll % 100 < 28) {
+			for (let k = 0; k < 1 + ((roll >>> 8) % 2); k++) {
+				const r = stableHash(`${room.roomId}:${x}:${y}:${k}`), sort = WILD_SORTS[(r >>> 4) % WILD_SORTS.length]!, colour = BLOOM[(r >>> 9) % BLOOM.length]!;
+				add(`${sort}:${colour}:${(r >>> 14) % PLANT_VARIANTS}`, { x, y, turn: ((r >>> 17) % 628) / 100, size: 0.75 + ((r >>> 21) % 40) / 100, dx: (((r >>> 24) % 60) - 30) / 100, dz: (((r >>> 3) % 60) - 30) / 100 });
+			}
+		} else if (ground === "." && !free.has(`${x},${y}`) && roll % 100 < 7) {
+			add(`palm:0:${(roll >>> 8) % PLANT_VARIANTS}`, { x, y, turn: ((roll >>> 11) % 628) / 100, size: 0.85 + ((roll >>> 20) % 30) / 100, dx: 0, dz: 0 });
+		}
+	}
+	for (const [key, cells] of extra) {
+		const [sort, colour, variant] = key.split(":") as [string, string, string];
+		const geo = sort === "palm" ? plantGeometry(t, "palm", Number(variant)) : sort === "flower" ? plantGeometry(t, "flower", Number(variant), Number(colour)) : cropGeometry(t, sort as "rose" | "mist", 2, Number(colour));
+		const mesh = new t.InstancedMesh(geo, propMaterial(t), cells.length);
+		const matrix = new t.Matrix4(), q = new t.Quaternion(), up = new t.Vector3(0, 1, 0);
+		cells.forEach((c, i) => { matrix.compose(new t.Vector3(c.x - w / 2 + 0.5 + c.dx, surface(room, world, c.x, c.y), c.y - h / 2 + 0.5 + c.dz), q.setFromAxisAngle(up, c.turn), new t.Vector3(c.size, c.size, c.size)); mesh.setMatrixAt(i, matrix); });
+		mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); group.add(mesh);
+		if (sort === "palm") for (const c of cells) { const sh = propShadow(t, 1, 1); sh.position.set(c.x - w / 2 + 0.5, surface(room, world, c.x, c.y) + 0.012, c.y - h / 2 + 0.5); group.add(sh); }
 	}
 	for (const [at, cells] of models) {
 		const [model, variant, tint] = at.split(":") as [PlantModel, string, string];
@@ -438,10 +468,14 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 	const covered = new Set<string>();
 	for (const o of objs.values()) if (o.location === s.room.roomId && (o.kind === "building" || o.kind === "site" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field"))
 		for (let y = o.y; y < o.y + (o.h ?? 1); y++) for (let x = o.x; x < o.x + (o.w ?? 1); x++) covered.add(`${x},${y}`);
-	const key = [...covered].sort().join(";");
+	// where the paths of the room run: no palm stands in a way out, on a fire or at the spawn
+	const free = new Set<string>(s.room.spawn ? [`${s.room.spawn.x},${s.room.spawn.y}`] : []);
+	for (const o of objs.values()) if (o.location === s.room.roomId && (o.kind === "exit" || o.kind === "beacon" || o.kind === "scenery"))
+		for (let y = o.y - (o.kind === "exit" ? 1 : 0); y < o.y + (o.h ?? 1) + (o.kind === "exit" ? 1 : 0); y++) for (let x = o.x - (o.kind === "exit" ? 1 : 0); x < o.x + (o.w ?? 1) + (o.kind === "exit" ? 1 : 0); x++) free.add(`${x},${y}`);
+	const key = `${[...covered].sort().join(";")}|${[...free].sort().join(";")}`;
 	if (key !== s.plantsFor) {
 		if (s.plants) { s.scene.remove(s.plants); dispose(s.plants); }
-		s.plants = buildPlants(s, covered); shade(s.plants, false); s.scene.add(s.plants); s.plantsFor = key;
+		s.plants = buildPlants(s, covered, free); shade(s.plants, false); s.scene.add(s.plants); s.plantsFor = key;
 	}
 }
 
