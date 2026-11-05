@@ -7,6 +7,8 @@ import type { Appearance } from "./engine/appearance.ts";
 /** World space. `guest` accounts carry a lease (renewed on activity); registered ones live until deleted. `perms`:
  *  levels granted on top (Builder); an admin has every level. */
 export type AccountFields = { accountId: string; /** The name one logs in with; what others see is the character's name, which an alias changes. */ name: string; guest: boolean; admin: boolean; createdAt: number; touchedAt: number; perms?: string[]; npc?: boolean;
+	/** When it was registered (a guest that registers keeps its `createdAt`); older accounts lack it: `createdAt` then. */
+	registeredAt?: number;
 	/** An NPC that plays like a person (server/npc/settlers.ts): it may build and sow like one. */
 	settler?: boolean };
 /** One character per account; `guest` mirrors the account so the cleanup can find orphans. A character's location is

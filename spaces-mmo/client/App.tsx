@@ -11,6 +11,7 @@ import type { AtlasState, AtlasView, CharView, ClientFrame, ItemUses, MsgView, O
 import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
 import { AvatarPanel } from "./AvatarPanel.tsx";
+import { StatsPanel } from "./StatsPanel.tsx";
 import { CommandHelp } from "./CommandHelp.tsx";
 import type { HelpView } from "../server/model.ts";
 import { appendLine, isComing } from "./log.ts";
@@ -488,7 +489,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const setTab = useCallback((k: string) => { tabRef.current = k; setTabState(k); if (k !== "log" && k !== "chats") setTalks((t) => readTalk(t, k)); }, []);
 	const [live, setLive] = useState(false);
 	const [line, setLine] = useState("");
-	const [panel, setPanel] = useState<null | "account" | "leave" | "admin" | "alias" | "look">(null);
+	const [panel, setPanel] = useState<null | "account" | "leave" | "admin" | "alias" | "look" | "stats">(null);
 	const [help, setHelp] = useState(false);
 	// the answer of `help` laid out in a window like the help (CommandHelp); a topic keeps the list it came from
 	const [cmdHelp, setCmdHelp] = useState<HelpView | null>(null);
@@ -983,6 +984,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 			<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a, fresh) => { setPanel(null); onAccount(a, fresh); }} /></div>
 		)}
 		{panel === "admin" && <AdminPanel onClose={() => setPanel(null)} />}
+		{panel === "stats" && <StatsPanel me={me} />}
 		{panel === "look" && <AvatarPanel charId={me} look={chars.get(me)?.look} send={send} onDone={() => setPanel(null)} />}
 		{panel === "alias" && <div className="panel"><h2>Name im Spiel</h2><AliasForm account={account} onDone={(a) => { setPanel(null); onAccount(a); }} /></div>}
 		{panel === "leave" && (
@@ -1112,6 +1114,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 						{worldTime && <small>{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}{(() => { const i = seasonIndex(shownWorldMs(worldTime.v, worldTime.at, Date.now()), worldTime.v.yearDays ?? 0); return i === null ? "" : ` · ${tr(SEASONS[i]!)}`; })()}{wind ? ` · ${tr(wind)}` : ""}</small>}
 					</button>
 					<span className="spacer" />
+					<button className="hud-btn" onClick={() => setPanel("stats")} aria-label="Statistik"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><rect x="2" y="8" width="3" height="6" rx="1" /><rect x="6.5" y="4" width="3" height="10" rx="1" /><rect x="11" y="1" width="3" height="13" rx="1" /></svg></button>
 					<button className="hud-btn" onClick={() => { setCmdHelp(null); setHelp(true); }} aria-label="Hilfe / Help">?</button>
 					<button className="hud-btn" onClick={() => setMore(true)} aria-label="Darstellung und Abmelden">⋯</button>
 				</div>

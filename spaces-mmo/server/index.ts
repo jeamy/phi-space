@@ -25,6 +25,7 @@ import { upgradeWebSocket } from "phi-spaces/ws";
 import { chosen } from "./llm.ts";
 import { llmStatus } from "./llm-status.ts";
 import { saveModelChoice, saveSettings, SETTINGS, settingsOf, type ModelInfoFields } from "./settings.ts";
+import { statsCache } from "./stats.ts";
 
 const COOKIE = "mmo_sid";
 
@@ -59,6 +60,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	// settings, the model's entries and the system bar; the settings are written to every region
 	const regions = RegionSpaces.connect(w, o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE), o.regions);
 	const world = { space: regions.homeSpace, close: () => regions.close() };
+	const stats = statsCache(regions, w);
 	const store = connectSpace(o.accounts ?? (process.env.SPACES_MMO_ACCOUNTS || DEFAULT_ACCOUNTS));
 	const accounts = new Accounts(regions, store.space, w, o.accountOptions);
 	// the build of the pages (Next writes .next/BUILD_ID): a page from an older build reloads when it meets a newer one
@@ -171,6 +173,10 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				if (!allowed(ip)) return json(res, 429, { error: "Zu viele Anfragen; bitte in einer Minute noch einmal" });
 				if (p === "/api/me" && req.method === "GET") return json(res, 200, meView(await accounts.resolve(cookieOf(req, COOKIE))));
 				if (p === "/api/system" && req.method === "GET") return json(res, 200, await system());
+				if (p === "/api/stats" && req.method === "GET") {
+					if (!(await accounts.resolve(cookieOf(req, COOKIE)))) throw new AuthError(401, "Bitte erst anmelden");
+					return json(res, 200, await stats());
+				}
 				if (p === "/api/admin/settings" && req.method === "GET") return json(res, 200, await adminSettings(await accounts.resolve(cookieOf(req, COOKIE)), null));
 				if (p === "/api/admin/reports" && req.method === "GET") {
 					if (!(await accounts.resolve(cookieOf(req, COOKIE)))?.admin) return json(res, 403, { error: "Nur für Admins" });

@@ -259,7 +259,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 			} catch (e) { if (e instanceof StillHeld) continue; throw e; }
 			await space.takeIfExists({ type: "Character", id: c.id }, NO_WAIT);
 			await space.takeIfExists(actorToken(ch.charId), NO_WAIT);
-			for (const type of ["Item", "Spot", "Contribution"]) {
+			for (const type of ["Item", "Spot", "Contribution", "Travel"]) {
 				const key: Record<string, string> = type === "Item" ? { location: ch.charId } : { charId: ch.charId };
 				for (const e of await space.readAll({ type, fields: key })) await space.takeIfExists({ type, id: e.id }, NO_WAIT);
 			}

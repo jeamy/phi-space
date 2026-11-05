@@ -237,6 +237,10 @@ Mit **Alias** (am Handy unter **⋯**) wählst du, unter welchem Namen dich alle
 
 Unter **Figur** (am Handy unter **⋯**) wählst du, wie deine Figur auf der 3D-Karte aussieht: eine von vier Figuren (Wanderer, Seefahrerin, Kräftig, Schlaksig), die Farbe der Kleidung, Haarfarbe und Haut, dazu Hut, Mütze oder Kapitänsmütze, Brille und Handschuhe. Eine Vorschau dreht sich dabei; **Übernehmen** zeigt sie allen. Getippt geht es auch: \`avatar figur 2 farbe 5 hut 4 brille ja\` (Zahlen ab 1, nur was sich ändern soll), \`avatar\` allein sagt, wie die Figur jetzt aussieht, \`avatar zurück\` macht sie wieder wie zu Beginn. Die 2D-Karte zeigt weiter das Bild der Figur.
 
+## Statistik {#stats}
+
+Der Knopf mit den drei Balken links neben **?** öffnet die Statistik: wie viele spielen (registriert, Gäste, gerade online), wie oft gebeamt und mit dem Großen Schiff, dem Segelboot, dem Ruderboot und dem Zug gefahren wurde, und wie viele Häuser, Bauten, Felder, Beete, Baustellen und Siedlungen es gibt. Darunter stehen alle Spieler; ein Tipp auf einen Namen zeigt, wo die Figur steht (wer gerade nicht spielt: wo sie zuletzt stand; wer auf dem Großen Schiff fährt: nur „an Bord“), seit wann sie registriert ist, ihren Ruf über alle Leuchtfeuer, ihre Reisen und was ihr gehört. Gezählt werden Reisen seit Einführung der Statistik; die Zahlen sind höchstens eine halbe Minute alt.
+
 ## Am Handy und Tablet {#touch}
 
 Am Handy steuerst du alles mit dem Finger. Das Spiel braucht dafür keine App.
@@ -340,6 +344,10 @@ An order ("Aushang") always belongs to a site. Its owner offers a wage there for
 ## Figure {#avatar}
 
 **Figure** (on a phone under **⋯**) sets how your figure looks on the 3D map: one of four figures (Wanderer, Seafarer, Sturdy, Lanky), the colour of the clothes, hair and skin, and a hat, cap or captain's cap, glasses and gloves. A preview turns while you choose; **Apply** shows it to everyone. Typed it works too: \`avatar figure 2 color 5 hat 4 glasses yes\` (numbers from 1, only what should change), \`avatar\` alone says how the figure looks now, \`avatar reset\` makes it as at the start again. The 2D map keeps showing the figure's picture.
+
+## Statistics {#stats}
+
+The button with three bars left of **?** opens the statistics: how many play (registered, guests, online now), how often people beamed and rode the large ship, a sailing boat, a rowing boat and the train, and how many houses, buildings, fields, beds, sites and settlements there are. Below are all players; tapping a name shows where the figure stands (someone not playing right now: where it last stood; someone on the large ship: only "aboard"), since when it is registered, its reputation over all beacons, its journeys and what it owns. Journeys count from when the statistics were introduced; the numbers are at most half a minute old.
 
 ## On a phone or tablet {#touch}
 

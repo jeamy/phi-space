@@ -15,6 +15,7 @@ import { trainIn } from "../rail.ts";
 import { amount, ARTICLE, distTo, EXIT_REACH, giveBack, planOf } from "./build.ts";
 import { placeIn, relocate } from "./default.ts";
 import { consume, move } from "./trade.ts";
+import { countTrip } from "../travel.ts";
 
 /** Room to rooms the roads join: a road beside an exit links its two ends, both ways. */
 export async function roadLinks(space: SpaceLike, w: WorldDef, txn: string | null = null): Promise<Map<string, Set<string>>> {
@@ -267,6 +268,7 @@ const zug: Command = {
 		const purse = (await inventory(c)).filter((i) => i.f.proto === c.world.currency);
 		if (purse.length < d.fare) throw new CommandError(`Die Fahrt kostet ${coins}.`);
 		for (const m of purse.slice(0, d.fare)) await consume(c, m.f, c.actor.charId);
+		await countTrip(c, "train");
 		await msg(c, "*", "info", `$you() $conj(steigst|steigt) in den Zug nach ${nameOf(c, to.room)}.`, { templ: true });
 		const dest = await roomOf(c, to.room), at = await placeIn(c, dest, { x: to.x, y: to.y + to.h });
 		await relocate(c, { room: dest.roomId, x: at.x, y: at.y }, { spot: false });

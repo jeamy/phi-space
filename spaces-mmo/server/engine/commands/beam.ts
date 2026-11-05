@@ -18,6 +18,7 @@ import { human, plural } from "./build.ts";
 import { crossing, describeRoom, dropOffers, placeIn, relocate } from "./default.ts";
 import { needEpoch } from "./epoch.ts";
 import { consume } from "./trade.ts";
+import { countTrip } from "../travel.ts";
 
 type Fire = WorldDef["beacons"][number];
 type Target = { fire: Fire; room: RoomDef; cost: number; lit: boolean | null };
@@ -71,6 +72,7 @@ const beam: Command = {
 		const pause = (await setting(c.space, "beam.cooldown")) * 60_000;
 		if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
 		if (pause > 0) await c.space.write({ type: "BeamRest", fields: { charId: c.actor.charId, untilWorldMs: now + pause } satisfies BeamRestFields as never }, c.txn, FOREVER);
+		await countTrip(c, "beam");
 		await msg(c, "*", "info", `$you() $conj(löst|löst) $conj(dich|sich) auf.`, { templ: true });
 		const landing = { x: t.fire.x, y: t.fire.y + 1 }, toRegion = crossing(c.world, t.room.roomId);
 		await dropOffers(c);

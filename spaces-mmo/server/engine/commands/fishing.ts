@@ -12,6 +12,7 @@ import { amount, distTo, giveBack, planOf, rested, tire } from "./build.ts";
 import { worldNowOf } from "../clock.ts";
 import { consume, move } from "./trade.ts";
 import { dropOffers, placeIn, relocate } from "./default.ts";
+import { countTrip } from "../travel.ts";
 
 const weighted = (xs: Array<{ proto: string; weight: number }>) => { let r = randomInt(0, xs.reduce((n, x) => n + x.weight, 0)); return xs.find((x) => (r -= x.weight) < 0)!; };
 
@@ -49,6 +50,7 @@ const rudere: Command = {
 		const to = there.find((r) => r.name.toLowerCase() === word || r.roomId === word);
 		if (!to) throw new NotUnderstood(`Dorthin führt kein Steg.${there.length ? ` Stege gibt es in: ${there.map((r) => r.name).join(", ")}.` : ""}`);
 		const jetty = jetties.find((b) => b.room === to.roomId)!, dest = await roomOf(c, to.roomId), at = await placeIn(c, dest, { x: jetty.x, y: jetty.y + 1 });
+		await countTrip(c, "row");
 		await msg(c, "*", "info", `$you() $conj(ruderst|rudert) nach ${to.name}.`, { templ: true });
 		await relocate(c, { room: dest.roomId, x: at.x, y: at.y }, { spot: false });
 		await msg(c, "*", "info", `$you() $conj(legst|legt) am Steg an.`, { templ: true, room: dest.roomId });
@@ -86,6 +88,7 @@ const segle: Command = {
 		if (!to) { if (word) throw new NotUnderstood(`Eine Insel „${arg.trim().slice(0, 30)}“ kennt niemand. Es gibt: ${islands.join(", ")}.`); return msg(c, c.actor.charId, "info", `Du kannst segeln nach: ${islands.join(", ")}.`); }
 		// the first room of the island that has a spawn: a bay; the world's bays are written first
 		const bay = rooms.find((r) => r.island === to && r.spawn)!, at = bay.spawn!;
+		await countTrip(c, "sail");
 		await msg(c, "*", "info", `$you() $conj(setzt|setzt) Segel nach ${to}.`, { templ: true });
 		await tire(c, ...(await restOf(c)));
 		const toRegion = c.world.region && !c.world.rooms.some((r) => r.roomId === bay.roomId) ? regionOfRoom({ ...c.world, rooms }, bay.roomId) : null;

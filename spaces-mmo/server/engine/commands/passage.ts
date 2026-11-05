@@ -11,11 +11,13 @@ import { worldNowOf } from "../clock.ts";
 import { releaseSpot } from "../occupancy.ts";
 import { dropOffers, placeIn, relocate } from "./default.ts";
 import { randomBytes } from "node:crypto";
+import { countTrip } from "../travel.ts";
 
 const mins = (ms: number) => Math.max(1, Math.ceil(ms / 60_000));
 
 /** Goes aboard: the figure is hidden from the room and walks no more until the ship has reached `p.to`. */
 export async function board(c: CommandCtx, p: { to: string; island: string; spot: { x: number; y: number }; arriveWorldMs: number }): Promise<void> {
+	await countTrip(c, "ship");
 	const now = await worldNowOf(c.space, c.txn);
 	await msg(c, "*", "info", `$you() $conj(gehst|geht) an Bord, nach ${p.island}.`, { templ: true });
 	const e = await c.space.take({ type: "Character", fields: { charId: c.actor.charId } }, 5_000, { txn: c.txn });

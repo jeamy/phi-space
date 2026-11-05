@@ -134,7 +134,7 @@ export class Accounts {
 			if (guest) {
 				const a = await world.take({ type: "Account", fields: { accountId, guest: true } }, 5_000, { txn: t2 });
 				if (!a) throw new AuthError(409, "Dieses Gastkonto gibt es nicht mehr");
-				await world.write({ type: "Account", fields: asFields<AccountFields>({ ...fieldsOf<AccountFields>(a), name, guest: false, admin, touchedAt: Date.now() }) }, t2, FOREVER);
+				await world.write({ type: "Account", fields: asFields<AccountFields>({ ...fieldsOf<AccountFields>(a), name, guest: false, admin, touchedAt: Date.now(), registeredAt: Date.now() }) }, t2, FOREVER);
 				const c = await world.take({ type: "Character", fields: { accountId } }, 5_000, { txn: t2 });
 				if (!c) throw new AuthError(409, "Zu diesem Gastkonto gibt es keine Figur mehr");
 				const char = { ...fieldsOf<CharacterFields>(c), name, guest: false };
@@ -142,7 +142,7 @@ export class Accounts {
 				charId = char.charId;
 			} else {
 				const now = Date.now();
-				const account: AccountFields = { accountId, name, guest: false, admin, createdAt: now, touchedAt: now };
+				const account: AccountFields = { accountId, name, guest: false, admin, createdAt: now, touchedAt: now, registeredAt: now };
 				const { char, release } = await this.#newCharacter(account, start!.room, world);
 				await release();
 				await world.write({ type: "Account", fields: asFields(account) }, t2, FOREVER);
