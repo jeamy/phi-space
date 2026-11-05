@@ -147,3 +147,12 @@ test("with the world's places, boats, trains and carts get one entry per place",
 	assert.deepEqual(lines(obj({ id: "b", kind: "building", name: "Bahnhof", plan: "bahnhof", x: 6, y: 5, w: 3, h: 2 }), "a").filter((l) => l.startsWith("zug")), ["zug Bucht"]);
 	assert.deepEqual(lines(obj({ id: "k", kind: "cart", name: "Karren", ownerId: "me", x: 6, y: 5 }), "r").filter((l) => l.startsWith("karren fahre")), ["karren fahre Bucht", "karren fahre Cairn"], "the rooms the roads reach, nearest first");
 });
+
+test("beside a coop that is still a site, \"what is missing?\" asks the site, not the animals", () => {
+	const site = obj({ id: "s", kind: "site", name: "Hühnerstall", owner: "Keno", ownerId: "k", plan: "huehnerstall", x: 6, y: 5, w: 2, h: 1 });
+	const lines = cellEntries({ ...input, objs: new Map([["s", site]]), at: { x: 6, y: 5 } }).map((e) => e.line);
+	assert.ok(lines.includes("baustelle 6 5"), lines.join(" | "));
+	assert.ok(!lines.includes("stall"));
+	const coop = obj({ id: "c", kind: "building", name: "Hühnerstall", owner: "Keno", ownerId: "k", plan: "huehnerstall", x: 6, y: 5, w: 2, h: 1 });
+	assert.ok(cellEntries({ ...input, objs: new Map([["c", coop]]), at: { x: 6, y: 5 } }).some((e) => e.line === "stall"), "a finished coop shows its animals");
+});

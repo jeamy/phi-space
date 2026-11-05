@@ -187,7 +187,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			continue;
 		}
 		// this one, not all in the room: the command takes its cell
-		entries.push({ label: o.kind === "site" ? (o.ownerId === me ? `Deine Baustelle ${o.name}: was fehlt?` : `Baustelle ${o.name} von ${o.owner ?? ""}: was fehlt?`) : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: beside && (o.plan === "huehnerstall" || o.plan === "gehege") ? "stall" : `baustelle ${o.x} ${o.y}` }); // beside a coop or pen, looking at it shows its animals
+		entries.push({ label: o.kind === "site" ? (o.ownerId === me ? `Deine Baustelle ${o.name}: was fehlt?` : `Baustelle ${o.name} von ${o.owner ?? ""}: was fehlt?`) : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: o.kind === "building" && beside && (o.plan === "huehnerstall" || o.plan === "gehege") ? "stall" : `baustelle ${o.x} ${o.y}` }); // beside a coop or pen, looking at it shows its animals
 		if (o.kind === "building" && beside) {
 			if (o.name === "Regentonne") entries.push({ label: "Wasser schöpfen", line: "schöpfe" });
 			// anyone grinds at a mill and bakes at a bakery (server: mill.ts, the recipes "at" a plan)
