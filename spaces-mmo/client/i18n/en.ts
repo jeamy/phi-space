@@ -2190,4 +2190,6 @@ export const EN: Record<string, string> = {
 	"{0} Scheite in {1} Leuchtfeuern": "{0} logs in {1} beacons",
 	"{0}× gepflegt": "tended {0}×",
 	"{0}, Feld {1}/{2}": "{0}, cell {1}/{2}",
+	"KI-Figuren": "AI figures",
+	"Im Spiel seit": "In the game since",
 };

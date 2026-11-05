@@ -1,5 +1,5 @@
 // The statistics page (client/StatsPanel.tsx, GET /api/stats): the players and what the world holds, read from every
-// region and added up. Only players: NPCs and settlers are left out. What others see of a player is what the game
+// region and added up: the players, the settlers and the figures a model plays (each marked); scripted NPCs are left out. What others see of a player is what the game
 // shows anyway: the figure's name (never the login name), where it stands (a passenger of the large ship only as
 // "aboard", not where it goes), since when it plays, its reputation and how often it travelled.
 import type { SpaceLike } from "phi-spaces";
@@ -11,6 +11,7 @@ import type { WorldDef } from "./engine/world.ts";
 export type Trips = Record<Trip, number>;
 export type PlayerStat = {
 	charId: string; name: string; guest: boolean; online: boolean;
+	/** a person, a settler (an NPC that plays like one) or a figure a model plays */ kind: "player" | "settler" | "ai";
 	/** registered (a guest: since when it plays), ms since 1970 */ since: number;
 	/** where it stands (offline: where it last stood); `aboard`: on the large ship, nothing more */
 	at: { room: string; roomName: string; island: string | null; x: number; y: number } | { aboard: true } | null;
@@ -20,7 +21,7 @@ export type PlayerStat = {
 };
 export type WorldStats = {
 	at: number;
-	players: { total: number; registered: number; guests: number; online: number };
+	players: { total: number; registered: number; guests: number; online: number; settlers: number; ai: number };
 	trips: Trips;
 	buildings: { total: number; houses: number; byPlan: Array<{ plan: string; name: string; count: number }> };
 	beds: number; fields: number; sites: number; settlements: number;
@@ -28,8 +29,8 @@ export type WorldStats = {
 	/** regions that could not be read: the numbers are without them */ missing: string[];
 };
 
+const KIND_ORDER = { player: 0, settler: 1, ai: 2 } as const;
 const noTrips = (): Trips => Object.fromEntries(TRIPS.map((k) => [k, 0])) as Trips;
-const isNpc = (charId: string) => charId.startsWith("npc-");
 
 async function all(space: SpaceLike, type: string): Promise<Array<Record<string, unknown>>> {
 	const out: Array<Record<string, unknown>> = [];
@@ -54,10 +55,18 @@ export async function collectStats(regions: RegionSpaces, w: WorldDef): Promise<
 		} catch { missing.push(region); }
 	}));
 	// one account and one figure per id (a crossing may show one twice for a moment)
+	const ai = new Set(w.npcs.filter((n) => n.model).map((n) => `npc-${n.npcId}`));
 	const accounts = new Map<string, AccountFields>();
-	for (const a of read.Account as AccountFields[]) if (!a.npc && !a.settler) accounts.set(a.accountId, a);
-	const chars = new Map<string, CharacterFields>();
-	for (const c of read.Character as CharacterFields[]) if (!isNpc(c.charId) && accounts.has(c.accountId)) chars.set(c.charId, c);
+	for (const a of read.Account as AccountFields[]) accounts.set(a.accountId, a);
+	const kindOf = (c: CharacterFields): PlayerStat["kind"] | null => {
+		const a = accounts.get(c.accountId);
+		if (!a) return null;
+		if (a.settler || c.charId.startsWith("npc-siedler-")) return "settler";
+		if (ai.has(c.charId)) return "ai";
+		return a.npc || c.charId.startsWith("npc-") ? null : "player";
+	};
+	const chars = new Map<string, CharacterFields & { kind: PlayerStat["kind"] }>();
+	for (const c of read.Character as CharacterFields[]) { const kind = kindOf(c); if (kind) chars.set(c.charId, { ...c, kind }); }
 	const live = new Set((read.Session as SessionFields[]).map((s) => s.charId));
 	const rooms = new Map((w.allRooms ?? w.rooms).map((r) => [r.roomId, r]));
 	const pieces = new Map<string, { pieces: number; beacons: Set<string> }>();
@@ -80,20 +89,21 @@ export async function collectStats(regions: RegionSpaces, w: WorldDef): Promise<
 	const list: PlayerStat[] = [...chars.values()].map((c) => {
 		const a = accounts.get(c.accountId)!, room = rooms.get(c.room), p = pieces.get(c.charId);
 		return {
-			charId: c.charId, name: c.name, guest: a.guest, online: live.has(c.charId),
+			charId: c.charId, name: c.name, kind: c.kind, guest: a.guest, online: live.has(c.charId),
 			since: a.guest ? a.createdAt : (a.registeredAt ?? a.createdAt),
 			at: c.aboard ? { aboard: true as const } : { room: c.room, roomName: room?.name ?? c.room, island: room?.island ?? null, x: c.x, y: c.y },
 			reputation: { pieces: p?.pieces ?? 0, beacons: p?.beacons.size ?? 0, parks: parks.get(c.accountId) ?? 0 },
 			trips: trips.get(c.charId) ?? noTrips(),
 			owns: { buildings: ownB.get(c.accountId) ?? 0, beds: ownBeds.get(c.accountId) ?? 0, fields: ownF.get(c.accountId) ?? 0 },
 		};
-	}).sort((x, y) => Number(y.online) - Number(x.online) || Number(x.guest) - Number(y.guest) || x.name.localeCompare(y.name, "de"));
+	}).sort((x, y) => KIND_ORDER[x.kind] - KIND_ORDER[y.kind] || Number(y.online) - Number(x.online) || Number(x.guest) - Number(y.guest) || x.name.localeCompare(y.name, "de"));
+	const people = list.filter((p) => p.kind === "player");
 	const byPlan = new Map<string, number>();
 	for (const b of buildings) byPlan.set(b.plan, (byPlan.get(b.plan) ?? 0) + 1);
 	const planName = (key: string) => w.building?.plans.find((p) => p.key === key)?.name ?? key;
 	return {
 		at: Date.now(),
-		players: { total: list.length, registered: list.filter((p) => !p.guest).length, guests: list.filter((p) => p.guest).length, online: list.filter((p) => p.online).length },
+		players: { total: people.length, registered: people.filter((p) => !p.guest).length, guests: people.filter((p) => p.guest).length, online: people.filter((p) => p.online).length, settlers: list.filter((p) => p.kind === "settler").length, ai: list.filter((p) => p.kind === "ai").length },
 		trips: total,
 		buildings: { total: buildings.length, houses: byPlan.get("huette") ?? 0, byPlan: [...byPlan].map(([plan, count]) => ({ plan, name: planName(plan), count })).sort((x, y) => y.count - x.count) },
 		beds: beds.length, fields: fields.length, sites: read.Site.length,

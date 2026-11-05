@@ -239,7 +239,7 @@ Unter **Figur** (am Handy unter **⋯**) wählst du, wie deine Figur auf der 3D-
 
 ## Statistik {#stats}
 
-Der Knopf mit den drei Balken links neben **?** öffnet die Statistik: wie viele spielen (registriert, Gäste, gerade online), wie oft gebeamt und mit dem Großen Schiff, dem Segelboot, dem Ruderboot und dem Zug gefahren wurde, und wie viele Häuser, Bauten, Felder, Beete, Baustellen und Siedlungen es gibt. Darunter stehen alle Spieler; ein Tipp auf einen Namen zeigt, wo die Figur steht (wer gerade nicht spielt: wo sie zuletzt stand; wer auf dem Großen Schiff fährt: nur „an Bord“), seit wann sie registriert ist, ihren Ruf über alle Leuchtfeuer, ihre Reisen und was ihr gehört. Gezählt werden Reisen seit Einführung der Statistik; die Zahlen sind höchstens eine halbe Minute alt.
+Der Knopf mit den drei Balken links neben **?** öffnet die Statistik: wie viele spielen (registriert, Gäste, gerade online), wie oft gebeamt und mit dem Großen Schiff, dem Segelboot, dem Ruderboot und dem Zug gefahren wurde, und wie viele Häuser, Bauten, Felder, Beete, Baustellen und Siedlungen es gibt. Darunter stehen alle Spieler, dann die Siedler und die Figuren, die ein Sprachmodell spielt (KI-Figuren); ein Tipp auf einen Namen zeigt, wo die Figur steht (wer gerade nicht spielt: wo sie zuletzt stand; wer auf dem Großen Schiff fährt: nur „an Bord“), seit wann sie registriert ist, ihren Ruf über alle Leuchtfeuer, ihre Reisen und was ihr gehört. Gezählt werden Reisen seit Einführung der Statistik; die Zahlen sind höchstens eine halbe Minute alt.
 
 ## Am Handy und Tablet {#touch}
 
@@ -347,7 +347,7 @@ An order ("Aushang") always belongs to a site. Its owner offers a wage there for
 
 ## Statistics {#stats}
 
-The button with three bars left of **?** opens the statistics: how many play (registered, guests, online now), how often people beamed and rode the large ship, a sailing boat, a rowing boat and the train, and how many houses, buildings, fields, beds, sites and settlements there are. Below are all players; tapping a name shows where the figure stands (someone not playing right now: where it last stood; someone on the large ship: only "aboard"), since when it is registered, its reputation over all beacons, its journeys and what it owns. Journeys count from when the statistics were introduced; the numbers are at most half a minute old.
+The button with three bars left of **?** opens the statistics: how many play (registered, guests, online now), how often people beamed and rode the large ship, a sailing boat, a rowing boat and the train, and how many houses, buildings, fields, beds, sites and settlements there are. Below are all players, then the settlers and the figures a language model plays (AI figures); tapping a name shows where the figure stands (someone not playing right now: where it last stood; someone on the large ship: only "aboard"), since when it is registered, its reputation over all beacons, its journeys and what it owns. Journeys count from when the statistics were introduced; the numbers are at most half a minute old.
 
 ## On a phone or tablet {#touch}
 

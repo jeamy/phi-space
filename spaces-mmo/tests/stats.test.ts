@@ -1,5 +1,5 @@
 // The statistics (server/stats.ts, GET /api/stats): only for a signed-in page; players by the name the game shows (an
-// alias, never the login), no NPCs; a real beam is counted, and every Travel entry of a figure adds up.
+// alias, never the login), the settlers and the figures a model plays marked, no scripted NPCs; a real beam is counted, and every Travel entry of a figure adds up.
 import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -51,7 +51,12 @@ test("statistics: players by their shown name, a counted beam, positions and the
 		assert.deepEqual(body.trips, { beam: 1, ship: 1, sail: 0, row: 0, train: 2 });
 		assert.ok(!JSON.stringify(body).includes("loginname"), "the login name is never shown");
 		assert.ok(!JSON.stringify(body).includes("accountId"), "no account ids");
-		assert.ok(body.list.every((x) => !x.charId.startsWith("npc-")), "no NPCs");
+		// the figures a model plays and the settlers are listed and marked, the scripted NPCs are not
+		const ai = new Set(w.npcs.filter((n) => n.model).map((n) => `npc-${n.npcId}`));
+		for (const x of body.list) assert.equal(x.kind, x.charId.startsWith("npc-siedler-") ? "settler" : ai.has(x.charId) ? "ai" : "player", x.charId);
+		assert.ok(body.list.every((x) => !x.charId.startsWith("npc-") || x.kind !== "player"), "no scripted NPC");
+		assert.ok(body.list.some((x) => x.kind === "ai"), "the model's figures are there");
+		assert.equal(body.players.ai, body.list.filter((x) => x.kind === "ai").length);
 		const mine = body.list.find((x) => x.charId === me)!;
 		assert.equal(mine.name, "Wanderin");
 		assert.equal(mine.guest, false);
