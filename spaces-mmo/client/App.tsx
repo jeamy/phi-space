@@ -10,6 +10,7 @@ import { useTheme } from "./lib/theme.ts";
 import type { AtlasState, AtlasView, CharView, ClientFrame, ItemUses, MsgView, ObjView, PlanView, ServerFrame, TradeView } from "../server/gateway.ts";
 import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
+import { AvatarPanel } from "./AvatarPanel.tsx";
 import { CommandHelp } from "./CommandHelp.tsx";
 import type { HelpView } from "../server/model.ts";
 import { appendLine, isComing } from "./log.ts";
@@ -487,7 +488,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const setTab = useCallback((k: string) => { tabRef.current = k; setTabState(k); if (k !== "log" && k !== "chats") setTalks((t) => readTalk(t, k)); }, []);
 	const [live, setLive] = useState(false);
 	const [line, setLine] = useState("");
-	const [panel, setPanel] = useState<null | "account" | "leave" | "admin" | "alias">(null);
+	const [panel, setPanel] = useState<null | "account" | "leave" | "admin" | "alias" | "look">(null);
 	const [help, setHelp] = useState(false);
 	// the answer of `help` laid out in a window like the help (CommandHelp); a topic keeps the list it came from
 	const [cmdHelp, setCmdHelp] = useState<HelpView | null>(null);
@@ -982,6 +983,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 			<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a, fresh) => { setPanel(null); onAccount(a, fresh); }} /></div>
 		)}
 		{panel === "admin" && <AdminPanel onClose={() => setPanel(null)} />}
+		{panel === "look" && <AvatarPanel charId={me} look={chars.get(me)?.look} send={send} onDone={() => setPanel(null)} />}
 		{panel === "alias" && <div className="panel"><h2>Name im Spiel</h2><AliasForm account={account} onDone={(a) => { setPanel(null); onAccount(a); }} /></div>}
 		{panel === "leave" && (
 			<div className="panel">
@@ -1130,6 +1132,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 					{canFullscreen() && <div className="more-row"><span>Vollbild im Querformat</span><div className="renderer-tabs" role="group" aria-label="Vollbild">{([true, false] as const).map((v) => <button key={String(v)} aria-pressed={fullscreen === v} onClick={() => setFullscreen(v)}>{v ? "An" : "Aus"}</button>)}</div></div>}
 					{steps && <div className="more-row"><span>Ohne Adressleiste: <b>{steps.first}</b>, dann <b>{steps.then}</b></span>{install && <button onClick={() => void install.prompt()}>Installieren</button>}</div>}
 					<div className="more-row"><span>{account.alias ?? account.name}{account.guest ? " · Gast" : ""}</span><span className="more-acts">
+						<button onClick={() => { setMore(false); setPanel("look"); }}>Figur</button>
 						{!account.guest && <button onClick={() => { setMore(false); setPanel("alias"); }}>Alias</button>}
 						{account.guest && <button onClick={() => { setMore(false); setPanel("account"); }}>Registrieren</button>}
 						{account.admin && <button onClick={() => { setMore(false); setPanel("admin"); }}>Systemeinstellungen</button>}

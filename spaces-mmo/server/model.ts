@@ -2,6 +2,7 @@
 // credentials, the web sessions and the lock that keeps names unique. Every entry has its own id field (accountId,
 // charId, …): a change is a take and a write, which gives the entry a new space id, so nothing refers to space ids.
 import type { Fields } from "phi-spaces";
+import type { Appearance } from "./engine/appearance.ts";
 
 /** World space. `guest` accounts carry a lease (renewed on activity); registered ones live until deleted. `perms`:
  *  levels granted on top (Builder); an admin has every level. */
@@ -13,6 +14,8 @@ export type AccountFields = { accountId: string; /** The name one logs in with; 
 /** `ack`: the last numbered step of a page this character took (client/walk.ts): the connection and its step number,
  *  written with every such step, also one that could not be taken, so the page knows which of its steps are done. */
 export type CharacterFields = { charId: string; accountId: string; name: string; room: string; x: number; y: number; skin: number; guest: boolean; ack?: { conn: string; seq: number };
+	/** What the player chose for the figure in 3D (engine/appearance.ts, the `avatar` command); none: drawn from its id. */
+	look?: Appearance;
 	/** Why the last step was not taken (engine/commands/default.ts: told once per reason); gone with the next move. */
 	refused?: string;
 	/** On board of the large ship, on its way to `island` (its bay `to`, landing at `spot`) until the world time `arriveWorldMs`: hidden from the rooms, no walking (engine/commands/passage.ts). */

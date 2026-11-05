@@ -13,6 +13,7 @@ import { blockedIn, cellKey, claimSpot, freeCellNear, isPassage, occupiedIn, rel
 import { findPath, sceneryText, walkable, wayTo, type WorldDef } from "../world.ts";
 import { handOff } from "../handover.ts";
 import { regionOfRoom } from "../regions.ts";
+import { DEFAULT_APPEARANCE, describeAppearance, parseAppearance } from "../appearance.ts";
 
 const MAX_SAY = 300;
 
@@ -454,11 +455,29 @@ const reputation: Command = {
 	},
 };
 
+/** The look of one's own figure in 3D (engine/appearance.ts): the page's "Figur" panel sends the whole line. */
+const avatar: Command = {
+	key: "avatar", aliases: ["aussehen", "appearance"],
+	help: "avatar figur <1–4> farbe <1–8> haar <1–8> haut <1–5> hut <1–4> brille ja|nein handschuhe ja|nein – wie deine Figur in 3D aussieht (avatar allein: wie jetzt; avatar zurück: wie zu Beginn)",
+	async func(c, arg) {
+		const was = c.actor.look;
+		if (!arg.trim()) return msg(c, c.actor.charId, "info", was ? `Deine Figur: ${describeAppearance(was)}` : "Deine Figur sieht noch aus wie bei ihrer Ankunft. Im Menü unter „Figur“ (oder mit avatar figur 2 farbe 3 …) wählst du ihr Aussehen.");
+		const reset = /^(?:zurück|zurueck|reset)$/i.test(arg.trim());
+		const look = reset ? undefined : parseAppearance(arg, was ?? DEFAULT_APPEARANCE);
+		if (look && "error" in look) throw new CommandError(look.error);
+		const e = await c.space.take({ type: "Character", fields: { charId: c.actor.charId } }, 5_000, { txn: c.txn });
+		if (!e) throw new CommandError("Deine Figur ist gerade nicht greifbar; bitte noch einmal.");
+		const { look: _old, ...ch } = fieldsOf<CharacterFields>(e);
+		await c.space.write({ type: "Character", fields: { ...ch, ...(look ? { look } : {}) } as never }, c.txn, FOREVER);
+		await msg(c, c.actor.charId, "info", look ? `Deine Figur: ${describeAppearance(look)}` : "Deine Figur sieht wieder aus wie bei ihrer Ankunft.");
+	},
+};
+
 export async function beaconsIn(c: CommandCtx, roomId: string): Promise<Array<{ e: Taken; f: BeaconFields }>> {
 	return (await c.space.readAll({ type: "Beacon", fields: { room: roomId } })).map((e) => ({ e, f: fieldsOf<BeaconFields>(e) }));
 }
 
-export const DEFAULT_COMMANDS: Command[] = [look, say, emote, who, move, step, arrive, go, get, drop, put, give, inv, channel, reputation];
+export const DEFAULT_COMMANDS: Command[] = [look, say, emote, who, move, step, arrive, go, get, drop, put, give, inv, channel, reputation, avatar];
 
 /** One command per exit of the room (its name and aliases), above the defaults: typing "ost" takes the exit. */
 export async function exitCmdSet(c: CommandCtx): Promise<CmdSet> {

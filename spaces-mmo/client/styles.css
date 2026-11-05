@@ -500,3 +500,12 @@ button.cmd-word { cursor: pointer; display: inline; min-height: 0; }
 
 /* on board of the large ship: where it sails and when it lands */
 .aboard { position: absolute; z-index: 6; top: 8px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 6px 12px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 90%, transparent); color: var(--text-strong); border: 1px solid var(--line-strong); box-shadow: 0 2px 8px var(--shadow); font-size: 13px; text-align: center; pointer-events: none; }
+/* the "Figur" panel (client/AvatarPanel.tsx) */
+.panel.avatar { border-color: var(--line); display: grid; gap: 8px; max-height: 80vh; overflow-y: auto; }
+.avatar-preview { width: 100%; height: 220px; display: block; border-radius: 10px; background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--accent) 14%, var(--surface)), var(--surface)); }
+.avatar-row { display: grid; gap: 4px; font-size: 12px; }
+.avatar-row > span { font: 700 10px/1.4 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.avatar-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.avatar-choices button[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
+.avatar-swatch { width: 30px; height: 30px; min-height: 30px; padding: 0; border-radius: 999px; border: 2px solid var(--line); }
+.avatar-choices .avatar-swatch[aria-pressed="true"] { border: 3px solid var(--accent); box-shadow: 0 0 0 2px var(--surface) inset; }

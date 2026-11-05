@@ -403,12 +403,15 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 	for (const id of [...s.chars.keys()]) if (!chars.has(id)) remove(s, s.chars, id);
 	for (const [id, c] of chars) {
 		let e = s.chars.get(id);
-		// an alias shows at once: the figure is made anew under its new name
-		if (e && e.shown !== c.name) { remove(s, s.chars, id); e = undefined; }
+		// an alias or a new look shows at once: the figure is made anew
+		const sig = c.look ? JSON.stringify(c.look) : "";
+		let heading: number | undefined; // a figure made anew keeps facing where it faced
+		if (e && (e.shown !== c.name || (e.sig ?? "") !== sig)) { heading = e.fig?.heading; remove(s, s.chars, id); e = undefined; }
 		if (!e) {
-			const fig = makeFigure(s.t, { id, skin: c.skin, own: id === me, ai: !!c.ai });
+			const fig = makeFigure(s.t, { id, skin: c.skin, own: id === me, ai: !!c.ai, ...(c.look ? { style: c.look } : {}) });
+			if (heading !== undefined) fig.heading = heading;
 			fig.group.add(label(s.t, c.settler ? `${c.name} (Siedler)` : c.name, id === me ? "#dfff73" : c.ai ? "#9fd3ff" : "#ffffff"));
-			e = { obj: fig.group, target: at(s, c.x, c.y, 0), fig, shown: c.name }; e.obj.position.copy(e.target); shade(e.obj, false); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.chars.set(id, e);
+			e = { obj: fig.group, target: at(s, c.x, c.y, 0), fig, shown: c.name, sig }; e.obj.position.copy(e.target); shade(e.obj, false); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.chars.set(id, e);
 		}
 		e.target.copy(at(s, c.x, c.y, 0));
 		if (snap) e.obj.position.copy(e.target);

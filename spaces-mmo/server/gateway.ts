@@ -22,9 +22,10 @@ import { envMs } from "./space.ts";
 import { RegionSpaces } from "./region-spaces.ts";
 import { setting } from "./settings.ts";
 import type { WsConnection } from "phi-spaces/ws";
+import type { Appearance } from "./engine/appearance.ts";
 
 /** What a client sees of a character. */
-export type CharView = { charId: string; name: string; x: number; y: number; skin: number; /** on board of the large ship, on its way to this island (only its own page shows it: others do not see it) */ aboard?: { island: string; arriveWorldMs: number }; ai?: true; /** a settler (npc/settlers.ts): a script plays it, always marked */ settler?: true };
+export type CharView = { charId: string; name: string; x: number; y: number; skin: number; /** the chosen look of the figure in 3D (engine/appearance.ts) */ look?: Appearance; /** on board of the large ship, on its way to this island (only its own page shows it: others do not see it) */ aboard?: { island: string; arriveWorldMs: number }; ai?: true; /** a settler (npc/settlers.ts): a script plays it, always marked */ settler?: true };
 /** What a client sees of a thing or an exit: on the map when `location` is its room, in its pack when it is its charId. */
 /** `icon`: the URL of a thing's picture (from its prototype); the map draws the glyph without one. */
 /** A building plan as the page offers it (key for `bau <key> <x> <y>`, what it needs as text). */
@@ -115,7 +116,7 @@ type Client = { ws: WsConnection; me: Me; lang?: "en"; room: string | null; leas
 const ATLAS_MS = 1_000;
 
 /** The characters a model plays (docs/modell-npcs.en.md: marked as AI wherever they appear). */
-const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(c.aboard ? { aboard: { island: c.aboard.island, arriveWorldMs: c.aboard.arriveWorldMs } } : {}), ...(modelChars.has(c.charId) ? { ai: true as const } : {}), ...(c.charId.startsWith("npc-siedler-") ? { settler: true as const } : {}) });
+const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(c.look ? { look: c.look } : {}), ...(c.aboard ? { aboard: { island: c.aboard.island, arriveWorldMs: c.aboard.arriveWorldMs } } : {}), ...(modelChars.has(c.charId) ? { ai: true as const } : {}), ...(c.charId.startsWith("npc-siedler-") ? { settler: true as const } : {}) });
 const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}) });
 const exitView = (f: ExitFields, w: WorldDef): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, to: whereTo(w, f), toRoom: f.destination, location: f.location, x: f.x, y: f.y });
 const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = "", players: ReadonlySet<string> = new Set()): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}),

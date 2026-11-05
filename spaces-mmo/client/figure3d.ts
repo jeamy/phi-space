@@ -1,8 +1,10 @@
 // A person for the 3D map: head, neck, torso, two arms and two legs that swing while the figure walks, hair, eyes, boots,
-// a shadow on the ground. Built from primitives, so it needs no model file; the look comes from the character's skin number
-// and id (the same skin number picks the sprite in the 2D map). Everything here is visual only.
+// a shadow on the ground. Built from primitives, so it needs no model file. A player's chosen look (server/engine/appearance.ts:
+// figure type, colours, hat, glasses, gloves) decides it; without one it comes from the character's skin number and id (the
+// same skin number picks the sprite in the 2D map). Everything here is visual only.
 import { stableHash } from "./terrain3d.ts";
 import { prepareModelDetails } from "./props3d.ts";
+import { COATS, HAIRS, SKINS, type Appearance } from "../server/engine/appearance.ts";
 
 type T = typeof import("three");
 type G = import("three").Group;
@@ -18,7 +20,16 @@ const AI_TUNIC = 0x4aa3d8, OWN_TUNIC = 0x9bc92f;
 /** felt and wool for hats and caps */
 const HAT = [0x4a3a2c, 0x5a4a3a, 0x2f3a4a, 0x7a3426, 0x3f4f3a];
 
-export type Look = { id: string; skin: number; own: boolean; ai: boolean };
+/** `style`: what the player chose (none: from the id and skin number). */
+export type Look = { id: string; skin: number; own: boolean; ai: boolean; style?: Appearance };
+/** Proportions of the figure types (appearance.ts FIGURES): width, height, dress (a long skirt instead of trousers), long hair. */
+const BUILD = [
+	{ wide: 1, tall: 1, dress: false, long: false },
+	{ wide: 0.94, tall: 0.98, dress: true, long: true },
+	{ wide: 1.18, tall: 0.95, dress: false, long: false },
+	{ wide: 0.88, tall: 1.1, dress: false, long: false },
+];
+const GLOVE = 0x5a3a22, RIM = 0x2a2a2e;
 export type Figure = {
 	group: G; body: G; legL: G; legR: G; armL: G; armR: G; head: G;
 	heading: number; phase: number; swing: number; last: { x: number; z: number };
@@ -36,10 +47,12 @@ function shadow(t: T): import("three").CanvasTexture {
 }
 
 export function makeFigure(t: T, look: Look): Figure {
-	const h = stableHash(look.id), s = Math.abs(look.skin);
-	const skin = SKIN[(h >>> 3) % SKIN.length]!, hair = HAIR[(h >>> 7) % HAIR.length]!;
-	const tunic = look.own ? OWN_TUNIC : look.ai ? AI_TUNIC : TUNIC[s % TUNIC.length]!;
-	const trousers = TROUSERS[s % TROUSERS.length]!;
+	const h = stableHash(look.id), s = Math.abs(look.skin), st = look.style;
+	const skin = st ? SKINS[st.skin]!.color : SKIN[(h >>> 3) % SKIN.length]!, hair = st ? HAIRS[st.hair]!.color : HAIR[(h >>> 7) % HAIR.length]!;
+	// a chosen colour shows on one's own figure too (the ring and the label mark it); a figure a model plays stays blue
+	const tunic = look.ai ? AI_TUNIC : st ? COATS[st.coat]!.color : look.own ? OWN_TUNIC : TUNIC[s % TUNIC.length]!;
+	const trousers = TROUSERS[(st ? st.coat : s) % TROUSERS.length]!;
+	const build = BUILD[st?.body ?? 0]!;
 	const mat = (color: number, roughness = 0.82) => new t.MeshStandardMaterial({ color, roughness, flatShading: true });
 	const mesh = (geo: import("three").BufferGeometry, m: import("three").Material, x = 0, y = 0, z = 0) => { const o = new t.Mesh(geo, m); o.position.set(x, y, z); return o; };
 	const group = new t.Group(); group.userData.owned = true;
@@ -51,7 +64,7 @@ export function makeFigure(t: T, look: Look): Figure {
 		ring.rotation.x = -Math.PI / 2; ring.renderOrder = 2; group.add(ring);
 	}
 	// the body stands on y = 0 and faces +z; everything inside `body` is in metres of the cell (a person ≈ 0.9 high)
-	const body = new t.Group(); body.scale.setScalar(FIGURE_SCALE); group.add(body);
+	const body = new t.Group(); body.scale.set(FIGURE_SCALE * build.wide, FIGURE_SCALE * build.tall, FIGURE_SCALE * build.wide); group.add(body);
 	const leg = (side: number) => {
 		const g = new t.Group(); g.position.set(side * 0.075, 0.4, 0);
 		g.add(mesh(new t.CapsuleGeometry(0.052, 0.27, 4, 8), mat(trousers), 0, -0.2));
@@ -62,11 +75,15 @@ export function makeFigure(t: T, look: Look): Figure {
 	const torso = new t.Group(); body.add(torso);
 	const chest = mesh(new t.CapsuleGeometry(0.115, 0.17, 6, 12), mat(tunic), 0, 0.58); chest.scale.set(1.12, 1, 0.78); torso.add(chest);
 	torso.add(mesh(new t.CylinderGeometry(0.128, 0.134, 0.035, 14), mat(0x3a2a1c, 0.9), 0, 0.46)); // belt
-	const hem = mesh(new t.CylinderGeometry(0.135, 0.15, 0.1, 14, 1, true), mat(tunic), 0, 0.42); hem.material.side = t.DoubleSide; torso.add(hem); // tunic skirt
+	const hem = build.dress
+		? mesh(new t.CylinderGeometry(0.135, 0.19, 0.34, 14, 1, true), mat(tunic), 0, 0.3) // a long skirt down to the boots
+		: mesh(new t.CylinderGeometry(0.135, 0.15, 0.1, 14, 1, true), mat(tunic), 0, 0.42); // tunic skirt
+	hem.material.side = t.DoubleSide; torso.add(hem);
 	const arm = (side: number) => {
 		const g = new t.Group(); g.position.set(side * 0.172, 0.69, 0);
 		g.add(mesh(new t.CapsuleGeometry(0.038, 0.2, 4, 8), mat(tunic), 0, -0.13));
-		g.add(mesh(new t.SphereGeometry(0.04, 10, 8), mat(skin, 0.7), 0, -0.275));
+		g.add(st?.gloves ? mesh(new t.SphereGeometry(0.046, 10, 8), mat(GLOVE, 0.9), 0, -0.275) : mesh(new t.SphereGeometry(0.04, 10, 8), mat(skin, 0.7), 0, -0.275));
+		if (st?.gloves) g.add(mesh(new t.CylinderGeometry(0.045, 0.042, 0.05, 10), mat(GLOVE, 0.9), 0, -0.235)); // the cuff
 		body.add(g); return g;
 	};
 	const armL = arm(-1), armR = arm(1);
@@ -76,10 +93,19 @@ export function makeFigure(t: T, look: Look): Figure {
 	const cap = mesh(new t.SphereGeometry(0.1, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.58), mat(hair, 0.9), 0, 0.03, -0.008); cap.rotation.x = -0.18; head.add(cap);
 	head.add(mesh(new t.SphereGeometry(0.014, 8, 6), mat(0x1c1612, 0.4), -0.034, 0.03, 0.085), mesh(new t.SphereGeometry(0.014, 8, 6), mat(0x1c1612, 0.4), 0.034, 0.03, 0.085));
 	head.add(mesh(new t.SphereGeometry(0.016, 8, 6), mat(skin, 0.7), 0, 0.005, 0.094)); // nose
+	if (build.long) { // long hair down the back
+		const back = mesh(new t.CapsuleGeometry(0.075, 0.13, 4, 10), mat(hair, 0.9), 0, -0.05, -0.05); back.scale.set(1.15, 1, 0.6); head.add(back);
+	}
+	if (st?.glasses) { // two round rims and a bridge, before the eyes
+		for (const side of [-1, 1]) head.add(mesh(new t.TorusGeometry(0.024, 0.0045, 6, 16), mat(RIM, 0.4), side * 0.036, 0.03, 0.094));
+		head.add(mesh(new t.BoxGeometry(0.026, 0.005, 0.005), mat(RIM, 0.4), 0, 0.034, 0.098));
+		for (const side of [-1, 1]) head.add(mesh(new t.BoxGeometry(0.005, 0.005, 0.09), mat(RIM, 0.4), side * 0.088, 0.032, 0.05));
+	}
 	// v2 (docs/3D-V2, catalogue sheet 4): a mouth, and from the figure's id a hat or a cap and a satchel, so that a crowd
 	// up close is not a row of twins
 	const mouth = mesh(new t.BoxGeometry(0.036, 0.008, 0.006), mat(0x7a3f2c, 0.6), 0, -0.028, 0.09); mouth.rotation.x = -0.25; head.add(mouth);
-	const wear = (h >>> 11) % 4, felt = HAT[(h >>> 13) % HAT.length]!;
+	// the hat: the chosen one (appearance.ts HATS: none, hat, cap, captain's cap), else from the id
+	const wear = st ? [-1, 0, 1, 2][st.hat]! : [0, 1, -1, -1][(h >>> 11) % 4]!, felt = HAT[(st ? st.coat : h >>> 13) % HAT.length]!;
 	if (wear === 0) { // a brimmed hat
 		head.add(mesh(new t.CylinderGeometry(0.15, 0.15, 0.012, 20), mat(felt, 0.95), 0, 0.085, -0.004));
 		head.add(mesh(new t.CylinderGeometry(0.075, 0.088, 0.075, 16), mat(felt, 0.95), 0, 0.125, -0.006));
@@ -87,6 +113,11 @@ export function makeFigure(t: T, look: Look): Figure {
 	} else if (wear === 1) { // a knitted cap
 		const cap2 = mesh(new t.SphereGeometry(0.104, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), mat(felt, 0.95), 0, 0.045, -0.01); head.add(cap2);
 		head.add(mesh(new t.TorusGeometry(0.098, 0.016, 6, 18), mat(felt, 0.95), 0, 0.05, -0.01).rotateX(Math.PI / 2));
+	} else if (wear === 2) { // a captain's cap: a flat crown, a band and a visor over the eyes
+		head.add(mesh(new t.CylinderGeometry(0.112, 0.098, 0.05, 18), mat(0x1f2a3e, 0.8), 0, 0.105, -0.008));
+		head.add(mesh(new t.CylinderGeometry(0.099, 0.099, 0.02, 18), mat(0x111111, 0.7), 0, 0.083, -0.008));
+		const visor = mesh(new t.CylinderGeometry(0.07, 0.07, 0.008, 16, 1, false, -Math.PI / 2, Math.PI), mat(0x111111, 0.5), 0, 0.078, 0.05); visor.rotation.x = 0.18; head.add(visor);
+		head.add(mesh(new t.BoxGeometry(0.03, 0.02, 0.006), mat(0xc49c49, 0.4), 0, 0.1, 0.1)); // the badge
 	}
 	if ((h >>> 17) % 3 !== 0) { // a satchel on the left hip, its strap across the chest
 		torso.add(mesh(new t.BoxGeometry(0.05, 0.11, 0.12), mat(0x8a6a44, 0.9), -0.17, 0.47, 0.02));

@@ -233,6 +233,10 @@ Ein Aushang gehört immer zu einer Baustelle. Ihr Besitzer bietet dort Lohn für
 
 Mit **Alias** (am Handy unter **⋯**) wählst du, unter welchem Namen dich alle im Spiel sehen. Angemeldet wirst du weiter mit deinem bisherigen Namen und Passwort. Was dir gehört, bleibt deins. Ein Alias ist einmalig: Einen Namen, den schon jemand nutzt oder zum Anmelden hat, gibt es kein zweites Mal.
 
+## Figur {#avatar}
+
+Unter **Figur** (am Handy unter **⋯**) wählst du, wie deine Figur auf der 3D-Karte aussieht: eine von vier Figuren (Wanderer, Seefahrerin, Kräftig, Schlaksig), die Farbe der Kleidung, Haarfarbe und Haut, dazu Hut, Mütze oder Kapitänsmütze, Brille und Handschuhe. Eine Vorschau dreht sich dabei; **Übernehmen** zeigt sie allen. Getippt geht es auch: \`avatar figur 2 farbe 5 hut 4 brille ja\` (Zahlen ab 1, nur was sich ändern soll), \`avatar\` allein sagt, wie die Figur jetzt aussieht, \`avatar zurück\` macht sie wieder wie zu Beginn. Die 2D-Karte zeigt weiter das Bild der Figur.
+
 ## Am Handy und Tablet {#touch}
 
 Am Handy steuerst du alles mit dem Finger. Das Spiel braucht dafür keine App.
@@ -332,6 +336,10 @@ An order ("Aushang") always belongs to a site. Its owner offers a wage there for
 ## Alias {#alias}
 
 **Alias** (on a phone under **⋯**) sets the name everyone sees in the game. You keep logging in with your name and password as before, and what you own stays yours. An alias is unique: a name someone already uses or logs in with cannot be taken.
+
+## Figure {#avatar}
+
+**Figure** (on a phone under **⋯**) sets how your figure looks on the 3D map: one of four figures (Wanderer, Seafarer, Sturdy, Lanky), the colour of the clothes, hair and skin, and a hat, cap or captain's cap, glasses and gloves. A preview turns while you choose; **Apply** shows it to everyone. Typed it works too: \`avatar figure 2 color 5 hat 4 glasses yes\` (numbers from 1, only what should change), \`avatar\` alone says how the figure looks now, \`avatar reset\` makes it as at the start again. The 2D map keeps showing the figure's picture.
 
 ## On a phone or tablet {#touch}
 
@@ -561,6 +569,7 @@ Handel braucht ein Konto. Ausführlich unter [Handel und Handwerk](help.game.tra
 | \`craft [rezept]\` | \`baue\`, \`herstellen\` | Etwas herstellen; ohne Rezept die Liste |
 | \`order\` | \`auftrag\`, \`aufträge\` | Auftragstafel: ansehen, nehmen, liefern, zurückgeben |
 | \`reputation\` | \`ruf\` | Was du in die Leuchtfeuer gelegt hast |
+| \`avatar\` | \`aussehen\` | Wie deine Figur in 3D aussieht (siehe Figur) |
 
 ## Hilfe {#helpcmds}
 
@@ -743,6 +752,7 @@ Trade needs an account. In detail under [Trade and crafting](help.game.trade).
 | \`craft [recipe]\` | \`baue\`, \`herstellen\` | Make something; without a recipe the list |
 | \`order\` | \`auftrag\`, \`aufträge\` | Job board: see, take, deliver, give back |
 | \`reputation\` | \`ruf\` | What you put into the beacons |
+| \`avatar\` | \`aussehen\` | How your figure looks in 3D (see Figure) |
 
 ## Help {#helpcmds}
 
