@@ -132,11 +132,6 @@ a { color: var(--accent); }
 .renderer-tabs button[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent-fill); }
 .map-3d canvas { height: 100%; min-height: 300px; image-rendering: auto; cursor: pointer; touch-action: none; }
 .map-3d-controls { z-index: 2; }
-.map-performance { position: absolute; z-index: 2; right: 10px; top: 60px; max-width: calc(100% - 20px); display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
-.map-performance button { min-height: 44px; padding: 4px 10px; font-size: 12px; background: color-mix(in srgb, var(--surface) 90%, transparent); }
-.map-performance.has-result { z-index: 6; }
-.map-performance-result { flex-basis: 100%; padding: 8px 10px; border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px; text-align: right; }
-.stage .map-performance { top: calc(112px + env(safe-area-inset-top)); }
 .map-3d-vignette { position: absolute; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(ellipse at 50% 55%, transparent 52%, rgba(0, 0, 0, .55) 100%); transition: opacity .3s; }
 .map-mode-label { position: absolute; left: 8px; bottom: 8px; padding: 3px 8px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 80%, transparent); color: var(--text); font: 600 10px/1.3 var(--font-mono); pointer-events: none; }
 .main.text-only { grid-template-columns: minmax(0, 1fr); max-width: 900px; margin: 0 auto; width: 100%; }
@@ -525,3 +520,4 @@ button.cmd-word { cursor: pointer; display: inline; min-height: 0; }
 .stat-detail dt { color: var(--muted); }
 .stat-detail dd { margin: 0; }
 .stat-players .live:not(.on) { background: var(--line-strong); }
+.hud-btn.hud-fps { width: auto; min-width: 44px; padding: 0 8px; font: 600 12px/1 var(--font-mono); font-variant-numeric: tabular-nums; }

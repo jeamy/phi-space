@@ -217,9 +217,9 @@ Am Handy steht im Blatt zu einem Bau, Beet, Acker, Feuer oder Ausgang **Was ist 
 
 Neue Gäste und frisch registrierte Konten starten in **3D** mit einem Blick von vorn auf den ganzen Raum. Wer schon einmal gespielt hat, behält die zuletzt gewählte Ansicht: Text, 2D oder 3D samt Zoom, Drehung und Neigung sind beim nächsten Mal so, wie sie verlassen wurden.
 
-**Neigen:** Beim Zoomen legt sich die Kamera von selbst flacher oder steiler. **Alt+Mausrad** neigt zusätzlich von Hand, höchstens ±25°, ohne Zoom und Drehung zu verändern. Sobald die Kamera von Hand geneigt ist, erscheint unten der Knopf **Neigung +…°** – ein Klick setzt die Neigung auf 0 zurück. Mausrad und zwei Finger zoomen weiterhin, Ziehen dreht oder verschiebt wie oben.
+**Neigen:** Beim Zoomen legt sich die Kamera von selbst flacher oder steiler. **Alt+Mausrad** neigt zusätzlich von Hand, höchstens ±25°, ohne Zoom und Drehung zu verändern. Mausrad und zwei Finger zoomen weiterhin, Ziehen dreht oder verschiebt wie oben.
 
-**FPS messen:** Der Knopf **FPS messen** unten in der 3D-Ansicht misst die Bildrate: 2 Sekunden Anlauf, dann 30 Sekunden Messung, mit Countdown. Das Ergebnis steht darunter als **FPS und p95-Framezeit**, mit **JSON herunterladen** für den ganzen Bericht (Gerät, Zoomstufen, Bildpunkte) und **Schließen** zum Ausblenden. Wird der Tab versteckt oder die 3D-Ansicht neu gestartet, bricht die Messung ab und sagt das auch. Nichts wird hochgeladen; das Ergebnis bleibt auf deinem Gerät. Für ein ehrliches Ergebnis misst du auf dem Gerät selbst – die Handy-Nachbildung im Browser zählt nicht.
+**FPS messen:** In 3D steht oben links neben der Statistik der Knopf **FPS**. Er misst die Bildrate: 2 Sekunden Anlauf, dann 30 Sekunden Messung; der Knopf zählt die Sekunden herunter und zeigt danach das Ergebnis, etwa **58 FPS**. Ein weiterer Tipp misst neu. Wird der Tab versteckt oder die 3D-Ansicht neu gestartet, bricht die Messung ab. Nichts wird hochgeladen. Für ein ehrliches Ergebnis misst du auf dem Gerät selbst – die Handy-Nachbildung im Browser zählt nicht.
 
 ## Kulissen abräumen {#scenery}
 
@@ -325,9 +325,9 @@ On a phone the sheet for a building, bed, field, fire or exit has **Was ist das?
 
 New guests and freshly registered accounts start in **3D** with a front view of the whole room. Anyone who has played before keeps the view they last chose: text, 2D or 3D, with zoom, turn and tilt as they left them.
 
-**Tilting:** While you zoom, the camera flattens or steepens on its own. **Alt+mouse wheel** tilts it by hand on top, up to ±25°, without changing zoom or turn. Once the camera is tilted by hand, a **Neigung +…°** button appears below – a click sets the tilt back to 0. Wheel and two fingers still zoom, dragging turns or moves as above.
+**Tilting:** While you zoom, the camera flattens or steepens on its own. **Alt+mouse wheel** tilts it by hand on top, up to ±25°, without changing zoom or turn. Wheel and two fingers still zoom, dragging turns or moves as above.
 
-**FPS messen:** The **FPS messen** button below the 3D view measures the frame rate: 2 seconds of warm-up, then 30 seconds of measuring, with a countdown. The result stands underneath as **FPS and p95 frame time**, with **JSON herunterladen** for the full report (device, zoom steps, pixels) and **Schließen** to dismiss it. If the tab is hidden or the 3D view restarts, the measurement stops and says so. Nothing is uploaded; the result stays on your device. For an honest number measure on the device itself – browser phone emulation does not count.
+**FPS messen:** In 3D the top bar has an **FPS** button left of the statistics. It measures the frame rate: 2 seconds of warm-up, then 30 seconds of measuring; the button counts the seconds down and then shows the result, such as **58 FPS**. Another tap measures again. If the tab is hidden or the 3D view restarts, the measurement stops. Nothing is uploaded. For an honest number measure on the device itself – browser phone emulation does not count.
 
 ## Clearing scenery {#scenery}
 

@@ -2192,4 +2192,7 @@ export const EN: Record<string, string> = {
 	"{0}, Feld {1}/{2}": "{0}, cell {1}/{2}",
 	"KI-Figuren": "AI figures",
 	"Im Spiel seit": "In the game since",
+	"Bildrate der 3D-Karte messen (2 s Anlauf, 30 s Messung)": "Measure the 3D map's frame rate (2 s warm-up, 30 s measuring)",
+	"Messung abgebrochen: Tab war im Hintergrund.": "Measurement stopped: the tab was in the background.",
+	"Messung abgebrochen: 3D-Ansicht wurde neu gestartet.": "Measurement stopped: the 3D view restarted.",
 };

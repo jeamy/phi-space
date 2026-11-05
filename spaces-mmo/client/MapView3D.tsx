@@ -8,13 +8,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { AtlasState, AtlasView, CharView, ObjView } from "../server/gateway.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
+import { onFpsStart, sayFps } from "./fps.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
 import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
 import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, prepareModelDetails, propMaterial, propMesh, propShadow, setNight, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
-import { closeBlur, detailCells, frameSummary } from "./closeup3d.ts";
+import { closeBlur, frameSummary } from "./closeup3d.ts";
 import { START_VIEW } from "./viewPreferences.ts";
 import { atModelLevel, updateModelDetails, type ModelLevel } from "./modelDetail3d.ts";
 import { stableHash, tile3d } from "./terrain3d.ts";
@@ -77,6 +78,8 @@ type Scene3D = {
 	angle: number;
 	zoom: number;
 	tilt: number;
+	/** cells under a field, bed or building: they stand at its top (the highest ground it covers), not their own */
+	raised: Map<string, number>;
 	/** how far the player dragged the view from the middle of the room, on the ground (world x and z) */
 	panX: number;
 	panZ: number;
@@ -98,10 +101,6 @@ export function MapView3D(props: MapRendererProps) {
 	const latest = useRef(props);
 	latest.current = props;
 	const [ready, setReady] = useState(false);
-	const [measuring, setMeasuring] = useState(false);
-	const [remaining, setRemaining] = useState(32);
-	const [measurementNote, setMeasurementNote] = useState("");
-	const [report, setReport] = useState<(ReturnType<typeof frameSummary> & { zoom: number[]; viewport: number[]; userAgent: string }) | null>(null);
 	// what the mouse and fingers do to the view: the wheel and a pinch zoom, dragging turns (the pointer code reads these through a ref)
 	const view = useRef({ zoomBy: (_f: number) => {}, turned: (_a: number) => {}, tiltBy: (_d: number) => {} });
 	const [angle, setAngle] = useState(() => stored("mmo.3d.angle", START_VIEW.angle));
@@ -117,10 +116,18 @@ export function MapView3D(props: MapRendererProps) {
 		if (s) { s.angle = START_VIEW.angle; s.zoom = START_VIEW.zoom; s.tilt = START_VIEW.tilt; s.panX = s.panZ = 0; positionCamera(s); }
 	}, [props.viewReset]);
 
+	// the top bar's "FPS" button: 2 seconds of warm-up, then 30 seconds of frames (client/fps.ts)
+	useEffect(() => onFpsStart(() => {
+		const s = state.current;
+		if (!s || s.measurement) return;
+		s.measurement = { at: performance.now(), times: [], calls: [], zooms: [], remaining: 32 };
+		sayFps({ running: true, remaining: 32 });
+	}), []);
+
 	// once: the renderer, the lights, the camera and the loop
 	useEffect(() => {
 		let dead = false;
-		const visibility = () => { if (document.hidden && state.current?.measurement) { state.current.measurement = null; setMeasuring(false); setMeasurementNote("Messung abgebrochen: Tab war im Hintergrund. Bitte erneut messen."); } };
+		const visibility = () => { if (document.hidden && state.current?.measurement) { state.current.measurement = null; sayFps({ running: false, fps: null, note: "Messung abgebrochen: Tab war im Hintergrund." }); } };
 		document.addEventListener("visibilitychange", visibility);
 		void (async () => {
 			try {
@@ -146,7 +153,7 @@ export function MapView3D(props: MapRendererProps) {
 				sun.castShadow = true; sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
 				scene.background = skyTexture(t);
 
-				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, scene, camera, fog, sun, hemi, light: -1, lightAt: 0, fish: [], host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", water: [], paving: null, pavingFor: "", chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, scene, camera, fog, sun, hemi, light: -1, lightAt: 0, fish: [], host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", water: [], paving: null, pavingFor: "", chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				s.resize = new ResizeObserver(() => resize(s));
 				s.resize.observe(host.current);
 				pointer(s, latest, view);
@@ -158,7 +165,7 @@ export function MapView3D(props: MapRendererProps) {
 					if (dead) return;
 					const elapsed = now - before, dt = Math.min(0.05, elapsed / 1000); before = now;
 					if (document.hidden) {
-						if (s.measurement) { s.measurement = null; setMeasuring(false); setMeasurementNote("Messung abgebrochen: Tab war im Hintergrund. Bitte erneut messen."); }
+						if (s.measurement) { s.measurement = null; sayFps({ running: false, fps: null, note: "Messung abgebrochen: Tab war im Hintergrund." }); }
 						s.frame = requestAnimationFrame(frame); return;
 					}
 					s.renderer.info.reset();
@@ -170,11 +177,11 @@ export function MapView3D(props: MapRendererProps) {
 					s.post.render(closeBlur(s.zoom));
 					if (s.measurement) {
 						const m = s.measurement, seconds = Math.max(0, 32 - Math.floor((now - m.at) / 1000));
-						if (seconds !== m.remaining) { m.remaining = seconds; setRemaining(seconds); }
+						if (seconds !== m.remaining) { m.remaining = seconds; sayFps({ running: true, remaining: seconds }); }
 						if (now - m.at >= 2000) { m.times.push(elapsed); m.calls.push(renderer.info.render.calls); m.zooms.push(s.zoom); }
 						if (now - m.at >= 32000) {
-							setReport({ ...frameSummary(m.times, m.calls, renderer.info.render.triangles, renderer.info.memory.geometries), zoom: [Math.min(...m.zooms), Math.max(...m.zooms)], viewport: [s.size.w, s.size.h, renderer.getPixelRatio()], userAgent: navigator.userAgent });
-							s.measurement = null; setMeasuring(false);
+							sayFps({ running: false, fps: frameSummary(m.times, m.calls, renderer.info.render.triangles, renderer.info.memory.geometries).fps });
+							s.measurement = null;
 						}
 					}
 					s.frame = requestAnimationFrame(frame);
@@ -189,7 +196,7 @@ export function MapView3D(props: MapRendererProps) {
 			dead = true; document.removeEventListener("visibilitychange", visibility);
 			const s = state.current;
 			if (!s) return;
-			if (s.measurement) { s.measurement = null; setMeasuring(false); setMeasurementNote("Messung abgebrochen: 3D-Ansicht wurde neu gestartet. Bitte erneut messen."); }
+			if (s.measurement) { s.measurement = null; sayFps({ running: false, fps: null, note: "Messung abgebrochen: 3D-Ansicht wurde neu gestartet." }); }
 			cancelAnimationFrame(s.frame); s.resize.disconnect(); unpointer(s); s.post.dispose(); dispose(s.scene); s.renderer.dispose(); s.canvas.remove(); state.current = null;
 		};
 	}, []);
@@ -259,17 +266,6 @@ export function MapView3D(props: MapRendererProps) {
 				<button onClick={() => setAngle((a) => a + Math.PI / 4)} aria-label="Karte rechts drehen">↷</button>
 				<button onClick={() => setZoom((z) => clampZoom(z * ZOOM_STEP))} disabled={zoom >= ZOOM_MAX} aria-label="Vergrößern">+</button>
 				<button onClick={() => setZoom((z) => clampZoom(z / ZOOM_STEP))} disabled={zoom <= ZOOM_MIN} aria-label="Verkleinern">−</button>
-			</div>
-			<div className={`map-performance${report || measurementNote ? " has-result" : ""}`} role="group" aria-label="3D-Leistungsmessung">
-				{tilt !== 0 && <button onClick={() => setTilt(0)} title="Alt+Mausrad neigt die Kamera; klicken setzt die Neigung zurück" aria-label="Manuelle Kameraneigung zurücksetzen">Neigung {tilt > 0 ? "+" : ""}{tilt}°</button>}
-				<button disabled={!ready || measuring} title="2 Sekunden aufwärmen, dann 30 Sekunden messen. Tab geöffnet lassen. Das Ergebnis erscheint hier." onClick={() => { if (state.current) { state.current.measurement = { at: performance.now(), times: [], calls: [], zooms: [], remaining: 32 }; setRemaining(32); setMeasurementNote(""); setReport(null); setMeasuring(true); } }} aria-label="3D-Leistung 30 Sekunden messen">{measuring ? `Messung läuft … ${remaining} s` : "FPS messen"}</button>
-				{measurementNote && <output className="map-performance-result" role="status">{measurementNote}</output>}
-				{report && <output className="map-performance-result" role="status">Ergebnis: {report.fps.toFixed(1)} FPS · p95 {report.p95Ms.toFixed(1)} ms</output>}
-				{report && <button title={JSON.stringify(report, null, 2)} onClick={() => {
-					const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" })), link = document.createElement("a");
-					link.href = url; link.download = "spaces-mmo-3d-performance.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-				}} aria-label="3D-Messung als JSON herunterladen">JSON herunterladen ↓</button>}
-				{(report || measurementNote) && <button onClick={() => { setReport(null); setMeasurementNote(""); }} aria-label="FPS-Ergebnis schließen">Schließen</button>}
 			</div>
 			{props.controls}
 			<span className="map-mode-label">3D · Darstellung, Spielregeln bleiben 2D</span>
@@ -381,10 +377,13 @@ function step(s: Scene3D, dt: number, time: number, me: string): void {
 function pavingDetail(s: Scene3D): void {
 	if (!s.ground) return;
 	if (s.zoom < 2) { if (s.paving) s.paving.visible = false; return; }
-	const { w, h } = dims(s.room), x = Math.floor(s.panX + w / 2), y = Math.floor(s.panZ + h / 2), key = `${x},${y}`;
+	// every paved cell of the room (at most a few hundred: one instanced mesh), built once per room and ground; before,
+	// only the cells round the middle of the view had stones and the rest of the paving stayed smooth
+	const { w, h } = dims(s.room), key = `${s.room.roomId}:${stableHash(s.room.ground.join("\n"))}`;
 	if (s.paving && s.pavingFor === key) { s.paving.visible = true; return; }
 	if (s.paving) { s.ground.remove(s.paving); dispose(s.paving); }
-	const cells = detailCells(s.room.ground, x, y), t = s.t;
+	const cells: Array<{ x: number; y: number }> = [], t = s.t;
+	s.room.ground.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (row[x] === ":") cells.push({ x, y }); });
 	const stones = new t.InstancedMesh(new t.BoxGeometry(0.225, 0.018, 0.225), new t.MeshStandardMaterial({ roughness: 1 }), Math.max(1, cells.length * 16));
 	const matrix = new t.Matrix4(), colour = new t.Color();
 	let i = 0;
@@ -400,6 +399,11 @@ function pavingDetail(s: Scene3D): void {
 
 function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjView>, me: string, snap: boolean): void {
 	if (!s.ground) return; // the room's ground is not built yet: the build calls this when it is
+	s.raised = new Map();
+	for (const o of objs.values()) if (o.location === s.room.roomId && AREA.has(o.kind)) {
+		const { top } = areaGround(s, o);
+		for (let y = o.y; y < o.y + (o.h ?? 1); y++) for (let x = o.x; x < o.x + (o.w ?? 1); x++) s.raised.set(`${x},${y}`, top);
+	}
 	for (const id of [...s.chars.keys()]) if (!chars.has(id)) remove(s, s.chars, id);
 	for (const [id, c] of chars) {
 		let e = s.chars.get(id);
@@ -426,7 +430,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		let e = s.objs.get(id);
 		// a site that became a building (or got further) is drawn anew
 		if (e && (e.kind !== obj.kind || e.progress !== obj.progress || e.sig !== bedSig(obj))) { remove(s, s.objs, id); e = undefined; }
-		if (!e) { e = obj.kind === "track" ? track(s, obj) : object(s.t, obj, me); prepareModelDetails(s.t, e.obj); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); shade(e.obj, true); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.objs.set(id, e); }
+		if (!e) { e = obj.kind === "track" ? track(s, obj) : object(s.t, obj, me); plinth(s, obj, e.obj); prepareModelDetails(s.t, e.obj); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); shade(e.obj, true); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.objs.set(id, e); }
 		e.target.copy(placeOf(s, obj));
 		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; }
 	}
@@ -442,6 +446,16 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 }
 
 /** Where an object stands: its cell, or the middle of the cells a site or building covers. */
+/** Earth under a field, bed or building that reaches over a lower terrace, down to that terrace. */
+function plinth(s: Scene3D, obj: ObjView, group: O3): void {
+	if (!AREA.has(obj.kind)) return;
+	const { top, bottom } = areaGround(s, obj), drop = top - bottom;
+	if (drop < 0.01) return;
+	const w = obj.w ?? 1, d = obj.h ?? 1;
+	const earth = new s.t.Mesh(new s.t.BoxGeometry(w * 0.98, drop, d * 0.98), new s.t.MeshStandardMaterial({ color: 0x6b5236, roughness: 1, flatShading: true }));
+	earth.position.y = -drop / 2; group.add(earth);
+}
+
 function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
 	if (obj.kind === "track") return new s.t.Vector3(); // its pieces stand where they lie
 	const v = at(s, obj.x, obj.y, 0);
@@ -647,10 +661,19 @@ function surface(room: MapRendererProps["room"], world: MapRendererProps["world"
 	return tile3d(key, !!world.tiles[key]?.walk).height;
 }
 
-/** The world position of a cell, standing on its ground. */
+const AREA = new Set(["building", "site", "ruin", "bed", "field"]);
+/** The highest and the lowest ground under a field, bed or building: it stands on the highest (else the higher terrace
+ *  next to it would cover it), with a plinth of earth down to the lowest. */
+function areaGround(s: Scene3D, o: ObjView): { top: number; bottom: number } {
+	let top = -Infinity, bottom = Infinity;
+	for (let y = o.y; y < o.y + (o.h ?? 1); y++) for (let x = o.x; x < o.x + (o.w ?? 1); x++) { const g = surface(s.room, s.world, x, y); top = Math.max(top, g); bottom = Math.min(bottom, g); }
+	return { top, bottom };
+}
+
+/** The world position of a cell, standing on its ground (or on the field, bed or building over it). */
 function at(s: Scene3D, x: number, y: number, above: number): import("three").Vector3 {
 	const { w, h } = dims(s.room);
-	return new s.t.Vector3(x - w / 2 + 0.5, surface(s.room, s.world, x, y) + above, y - h / 2 + 0.5);
+	return new s.t.Vector3(x - w / 2 + 0.5, (s.raised.get(`${x},${y}`) ?? surface(s.room, s.world, x, y)) + above, y - h / 2 + 0.5);
 }
 
 /** The cells between two blocks on the island level. */

@@ -12,6 +12,7 @@ import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
 import { AvatarPanel } from "./AvatarPanel.tsx";
 import { StatsPanel } from "./StatsPanel.tsx";
+import { onFps, startFps, type FpsState } from "./fps.ts";
 import { CommandHelp } from "./CommandHelp.tsx";
 import type { HelpView } from "../server/model.ts";
 import { appendLine, isComing } from "./log.ts";
@@ -559,6 +560,9 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const [behind, setBehind] = useState(false);
 	const input = useRef<HTMLInputElement>(null);
 	const me = hello?.me.charId ?? "";
+	// the 3D map's frame rate (client/fps.ts): the bar's button starts a measurement and shows its result
+	const [fps, setFps] = useState<FpsState>({ running: false, fps: null });
+	useEffect(() => onFps(setFps), []);
 	// the own figure's walk: drawn ahead of the server, matched by step numbers (client/walk.ts)
 	const walker = useRef(new Walker());
 	// the world's clock as the server last told it; shown by interpolation, nothing is decided by it
@@ -1114,6 +1118,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 						{worldTime && <small>{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}{(() => { const i = seasonIndex(shownWorldMs(worldTime.v, worldTime.at, Date.now()), worldTime.v.yearDays ?? 0); return i === null ? "" : ` · ${tr(SEASONS[i]!)}`; })()}{wind ? ` · ${tr(wind)}` : ""}</small>}
 					</button>
 					<span className="spacer" />
+					{mapMode === "3d" && <button className="hud-btn hud-fps" disabled={fps.running} onClick={startFps} title={!fps.running && fps.note ? fps.note : "Bildrate der 3D-Karte messen (2 s Anlauf, 30 s Messung)"} aria-label="FPS messen">{fps.running ? `${fps.remaining} s` : fps.fps !== null ? `${Math.round(fps.fps)} FPS` : "FPS"}</button>}
 					<button className="hud-btn" onClick={() => setPanel("stats")} aria-label="Statistik"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><rect x="2" y="8" width="3" height="6" rx="1" /><rect x="6.5" y="4" width="3" height="10" rx="1" /><rect x="11" y="1" width="3" height="13" rx="1" /></svg></button>
 					<button className="hud-btn" onClick={() => { setCmdHelp(null); setHelp(true); }} aria-label="Hilfe / Help">?</button>
 					<button className="hud-btn" onClick={() => setMore(true)} aria-label="Darstellung und Abmelden">⋯</button>
