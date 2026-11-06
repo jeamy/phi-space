@@ -22,6 +22,7 @@ import { ChatOverview, TalkView } from "./ChatPanel.tsx";
 import { forgetDeviceKeys, useChat } from "./useChat.ts";
 import { MAX_AHEAD, nextStep, screenToGrid, WALK_MS, Walker } from "./walk.ts";
 import { cellAbout, cellEntries, type CellInput, HERE_SHOWN, hereEntries, itemEntries, tapTarget, wildHere } from "./cellActions.ts";
+import { hintsFor, type Hint } from "./hints.ts";
 import { canFullscreen, enterFullscreen, homeSteps, isShort, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
 import { useBack } from "./useBack.ts";
 import { detentPx, Sheet, type Detent } from "./Sheet.tsx";
@@ -57,7 +58,7 @@ const fuelIn = (objs: Map<string, ObjView>, me: string) => {
 	const mine = [...objs.values()].filter((o) => o.kind === "item" && o.location === me);
 	return fuels.map((n) => mine.find((o) => o.name === n)).find(Boolean);
 };
-type Line = MsgView | { kind: "echo"; text: string; from: string; at: number };
+type Line = MsgView | { kind: "echo" | "hint"; text: string; from: string; at: number };
 
 /** The build this page was loaded with (from the first /api/me); a hello from another build means a newer version. */
 let pageBuild: string | null | undefined;
@@ -378,7 +379,7 @@ function Glyph({ o, size = 16 }: { o: ObjView; size?: number }) {
 }
 
 /** What the player carries and what lies within reach, as buttons (on a phone there is no keyboard to type with). */
-function Things({ objs, chars, self, room, me, plans, guest, wild, uses, market, offer, send, pick }: { uses: ItemUses | undefined; /** a market board stands here: sell the thing there */ market?: (name: string) => void; offer?: (to: string, name: string) => void; objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string) => void; pick: (o: ObjView) => void }) {
+function Things({ objs, chars, self, room, me, plans, guest, wild, uses, hints = [], market, offer, send, pick }: { uses: ItemUses | undefined; /** the hints of the pack (client/hints.ts): a chosen thing shows its own */ hints?: Hint[]; /** a market board stands here: sell the thing there */ market?: (name: string) => void; offer?: (to: string, name: string) => void; objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string) => void; pick: (o: ObjView) => void }) {
 	const all = [...objs.values()].filter((o) => o.kind === "item");
 	const carried = all.filter((o) => o.location === me);
 	const close = (o: ObjView) => !!self && o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
@@ -426,6 +427,7 @@ function Things({ objs, chars, self, room, me, plans, guest, wild, uses, market,
 						const can = itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) });
 						return can.length > 0 && <div className="pack-can">{can.map((e) => <button key={e.line} onClick={() => (e.run ? e.run() : send(e.line))}>{e.label}</button>)}</div>;
 					})()}
+					{hints.filter((h) => h.about.includes(chosen[0])).slice(0, 3).map((h) => <p key={h.id} className="pack-hint">{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>)}
 				</div>}
 				<div className="pack">{kinds.map(([name, os]) => (
 					<button key={name} className={`chip${picked === name ? " on" : ""}`} onClick={() => setPicked(picked === name ? null : name)} title={name} aria-label={`${name}: ${os.length}`} aria-pressed={picked === name}>
@@ -970,6 +972,31 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	useBack(atlasPage, () => setAtlasPage(false));
 	useBack(!!panel, () => setPanel(null));
 
+	// hints from what one carries (client/hints.ts): each new one once as a line of the log, all of a thing beside it in
+	// the pack; off under "⋯"
+	const [hintsOn, setHintsOnState] = useState(() => { try { return localStorage.getItem("mmo.hints") !== "0"; } catch { return true; } });
+	const setHintsOn = (on: boolean) => { setHintsOnState(on); try { localStorage.setItem("mmo.hints", on ? "1" : "0"); } catch { /* private window */ } };
+	const hints = useMemo(() => {
+		const uses = hello?.world.uses;
+		if (!uses || !me || !hintsOn) return [];
+		const carried = new Map<string, number>(), owned = new Set<string>();
+		for (const o of objs.values()) {
+			if (o.kind === "item" && o.location === me) carried.set(o.name, (carried.get(o.name) ?? 0) + 1);
+			else if (o.kind === "building" && o.ownerId === me && o.plan) owned.add(o.plan);
+		}
+		return hintsFor(carried, uses, hello.world.plans, owned);
+	}, [objs, hello, me, hintsOn]);
+	useEffect(() => {
+		if (!hints.length) return;
+		let seen: string[] = [];
+		try { seen = JSON.parse(localStorage.getItem("mmo.hints.seen") ?? "[]") as string[]; } catch { /* private window: shown again next time */ }
+		// one new hint at a time: the next one comes with the next change of the pack
+		const next = hints.find((h) => !seen.includes(h.id));
+		if (!next) return;
+		append({ kind: "hint", text: `Tipp: ${next.text}`, from: "", at: Date.now() });
+		try { localStorage.setItem("mmo.hints.seen", JSON.stringify([...seen, next.id].slice(-400))); } catch { /* private window */ }
+	}, [hints, append]);
+
 	/** The sheet's tabs: Aktionen (`bag`: what one has and can do, with the command line), the log, the chats. */
 	const pane: "bag" | "log" | "chats" = bag ? "bag" : tab === "log" ? "log" : "chats";
 	const openPane = (k: "bag" | "log" | "chats") => {
@@ -1033,7 +1060,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		)}
 	</>;
 	const hereBar = hereEntries({ chars, objs, self: chars.get(me), room: hello?.room.roomId ?? "", me, plans: hello?.world.plans ?? [], guest: account.guest, fuel: fuelIn(objs, me), wild: hello ? wildNow(hello.world.decor, hello.room.decor) : false });
-	const mineView = <Things objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildNow(hello?.world.decor, hello?.room.decor)} uses={hello?.world.uses} send={send} pick={pickUp}
+	const mineView = <Things objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildNow(hello?.world.decor, hello?.room.decor)} uses={hello?.world.uses} hints={hints} send={send} pick={pickUp}
 		{...(trade?.listings && !account.guest ? { market: (name: string) => { setTradeItem({ name }); setBagPart("market"); } } : {})}
 		{...(account.guest ? {} : { offer: (to: string, name: string) => { setTradeItem({ name }); setOfferTo(to); setBagPart("market"); } })} />;
 	const marketView = <>
@@ -1175,6 +1202,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 					<div className="more-row"><span>Sprache</span><div className="renderer-tabs" role="group" aria-label="Sprache" data-no-tr>{(["de", "en"] as const).map((l) => <button key={l} aria-pressed={language() === l} onClick={() => setLanguage(l)}>{l.toUpperCase()}</button>)}</div></div>
 						<div className="more-row"><span>Aussehen</span>{controls}</div>
 					{mapMode !== "text" && <div className="more-row"><span>Steuerung</span><div className="renderer-tabs" role="group" aria-label="Steuerkreuz, Zoom und Drehen">{(["off", "left", "right"] as const).map((v) => <button key={v} aria-pressed={pad === v} onClick={() => setPad(v)}>{v === "off" ? "Aus" : v === "left" ? "Links" : "Rechts"}</button>)}</div></div>}
+					<div className="more-row"><span>Tipps</span><div className="renderer-tabs" role="group" aria-label="Tipps">{([true, false] as const).map((v) => <button key={String(v)} aria-pressed={hintsOn === v} onClick={() => setHintsOn(v)}>{v ? "An" : "Aus"}</button>)}</div></div>
 					{canFullscreen() && <div className="more-row"><span>Vollbild im Querformat</span><div className="renderer-tabs" role="group" aria-label="Vollbild">{([true, false] as const).map((v) => <button key={String(v)} aria-pressed={fullscreen === v} onClick={() => setFullscreen(v)}>{v ? "An" : "Aus"}</button>)}</div></div>}
 					{steps && <div className="more-row"><span>Ohne Adressleiste: <b>{steps.first}</b>, dann <b>{steps.then}</b></span>{install && <button onClick={() => void install.prompt()}>Installieren</button>}</div>}
 					<div className="more-row"><span>{account.alias ?? account.name}{account.guest ? " · Gast" : ""}</span><span className="more-acts">

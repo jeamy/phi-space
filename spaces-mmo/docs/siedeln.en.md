@@ -204,6 +204,17 @@ interlocked with exploring:
 What is scarce travels through trade: Kupferhafen stays poor in wood, a mining island poor in food — goods chains run
 via markets and ferries, not via storage out of nothing.
 
+### Hints
+
+The page tells a player what their things can become (`client/hints.ts`, from the world's recipes and the steps the
+gateway sends with them, `ItemUses.steps`: what the mill grinds, what an animal yields in its house): what can be made
+now (3 kelp: a kelp rope, with `craft tangseil`), which tool is missing (the shell knife for wood bundles, and what the
+knife takes), what is made at a building (bread at the bakehouse; `bau …` when the player owns none), what lacks a single
+piece, and where a thing goes on (wheat: the windmill grinds it to flour, flour goes on into bread; a goat gives milk in a
+pen, milk goes on into cheese). Each new hint shows once as a "Tipp:" line of the log (the page keeps what it showed in
+the browser), a tapped thing in the pack shows its own, "⋯ → Tipps" turns them off. They are computed in the page and
+cost the space nothing.
+
 ### Boats and fishing
 
 - Fishing is done at the **jetty** (`wirf netz`): the net (recipe above) brings fish in world-time beats, rarely a find —

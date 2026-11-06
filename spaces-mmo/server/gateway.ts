@@ -30,7 +30,28 @@ export type CharView = { charId: string; name: string; x: number; y: number; ski
 /** `icon`: the URL of a thing's picture (from its prototype); the map draws the glyph without one. */
 /** A building plan as the page offers it (key for `bau <key> <x> <y>`, what it needs as text). */
 /** What the page needs to say what a carried thing can do (client/cellActions.ts itemEntries), by the names shown. */
-export type ItemUses = { recipes: Array<{ key: string; name: string; needs: Array<{ name: string; count: number }>; tool?: string; at?: string }>; /** by herd or keeper */ feed: Record<string, string[]>; offerings: string[]; flowers: string[]; /** plans with a chest of one's own, plans of a store for all */ chests: string[]; stores: string[] };
+export type ItemUses = { recipes: Array<{ key: string; name: string; needs: Array<{ name: string; count: number }>; tool?: string; at?: string }>; /** by herd or keeper */ feed: Record<string, string[]>; offerings: string[]; flowers: string[]; /** plans with a chest of one's own, plans of a store for all */ chests: string[]; stores: string[];
+	/** What turns one thing into another outside the recipes (client/hints.ts): a mill grinds corn, a pen or coop keeps
+	 *  an animal that yields; `at` the plan, `line` the command. */
+	steps: Array<{ kind: "grind" | "keep"; from: string; to: string; at: string; line: string }> };
+/** What things are good for in world `w`, sent with the page (the pack's buttons, client/hints.ts). */
+export function usesOf(w: WorldDef): ItemUses {
+	const name = (k: string) => w.prototypes.find((p) => p.key === k)?.name ?? k;
+	const plans = w.building?.plans ?? [];
+	return {
+		recipes: w.recipes.map((r) => ({ key: r.key, name: r.name, needs: r.needs.map((n) => ({ name: name(n.proto), count: n.count })), ...(r.tool ? { tool: name(r.tool) } : {}), ...(r.at ? { at: r.at } : {}) })),
+		feed: Object.fromEntries([...(w.animals?.kinds ?? []), ...(w.wild?.keepers ?? [])].map((k) => [k.key, k.feed.map(name)])),
+		offerings: (w.chapel?.offerings ?? []).map(name),
+		flowers: (w.garden?.sorts ?? []).filter((s) => s.kind === "zier").map((s) => name(s.yields.proto)),
+		chests: plans.filter((p) => p.chest && !p.store).map((p) => p.key),
+		stores: plans.filter((p) => p.store).map((p) => p.key),
+		steps: [
+			...(w.mill ? w.mill.grinds.map((g) => ({ kind: "grind" as const, from: name(g.from), to: name(g.to), at: w.mill!.plan, line: `mahle alle ${name(g.from).toLowerCase()}` })) : []),
+			...(w.animals?.kinds ?? []).map((k) => ({ kind: "keep" as const, from: k.name, to: name(k.yields), at: k.plan, line: `einstallen ${k.name.toLowerCase()}` })),
+		],
+	};
+}
+
 export type PlanView = { key: string; name: string; w: number; h: number; needs: string; work: number; /** the island's epoch it needs ("Dorf"; none: the first) */ epoch?: string; /** a chest of its owner's own (not a store for all): "truhe" opens it */ chest?: true };
 /** A site or building (docs/siedeln.en.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
@@ -363,18 +384,7 @@ export class Gateway {
 	}
 
 	/** The building plans for the page's cell menu, with what each needs as text. */
-	#uses(): ItemUses {
-		const w = this.w, name = (k: string) => w.prototypes.find((p) => p.key === k)?.name ?? k;
-		const plans = w.building?.plans ?? [];
-		return {
-			recipes: w.recipes.map((r) => ({ key: r.key, name: r.name, needs: r.needs.map((n) => ({ name: name(n.proto), count: n.count })), ...(r.tool ? { tool: name(r.tool) } : {}), ...(r.at ? { at: r.at } : {}) })),
-			feed: Object.fromEntries([...(w.animals?.kinds ?? []), ...(w.wild?.keepers ?? [])].map((k) => [k.key, k.feed.map(name)])),
-			offerings: (w.chapel?.offerings ?? []).map(name),
-			flowers: (w.garden?.sorts ?? []).filter((s) => s.kind === "zier").map((s) => name(s.yields.proto)),
-			chests: plans.filter((p) => p.chest && !p.store).map((p) => p.key),
-			stores: plans.filter((p) => p.store).map((p) => p.key),
-		};
-	}
+	#uses(): ItemUses { return usesOf(this.w); }
 
 	#plans(): PlanView[] {
 		const name = (k: string) => this.w.prototypes.find((p) => p.key === k)?.name ?? k;

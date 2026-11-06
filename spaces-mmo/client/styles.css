@@ -101,6 +101,7 @@ a { color: var(--accent); }
 .log .say { color: var(--text-strong); }
 .log .error { color: var(--danger); }
 .log .echo { color: var(--muted); }
+.log .hint { color: var(--text); border-left: 3px solid var(--warning); padding-left: 6px; }
 .log .system, .log .who, .log .help { color: var(--muted); }
 .log .look { color: var(--text); }
 .cmd { display: flex; gap: 6px; }
@@ -233,6 +234,8 @@ button.link:hover { transform: none; text-decoration: underline; }
 .pack-can { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .pack-do span, .pack-do b { flex: 1; color: var(--text-strong); }
 .pack-do b { font-weight: 700; }
+.pack-hint { margin: 6px 0 0; padding-left: 8px; border-left: 3px solid var(--warning); font-size: 12px; line-height: 1.4; color: var(--text); }
+.pack-hint button { margin-left: 8px; }
 /* the chosen thing stands above the pack; scrolled to, it keeps a little room above it */
 .pack-chosen { scroll-margin-top: 8px; padding: 6px 8px; margin: 0 0 6px; border-radius: 10px; background: var(--raised); }
 /* what someone else says to the player, or about them: stands out in the log */
