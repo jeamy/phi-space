@@ -70,6 +70,10 @@ test("a wage: held by the order, paid in the command, the rest goes back", { tim
 
 		await does(a.p, "aushang 2 arbeit je 2", "hängt");
 		assert.equal(await coins(s, a.me), 5);
+		// the owner may work on its own site, but its order is for the others: it stays, and nothing is paid
+		assert.doesNotMatch(await does(a.p, "arbeite", "arbeitet"), /Lohn/);
+		assert.equal(await coins(s, a.me), 5);
+		assert.match(await does(a.p, "aushang", "Ausgehängt"), /2 Arbeit, je 2 Münzen/);
 		await does(a.p, "abriss baustelle", "gibt die Baustelle");
 		await eventually(async () => (await coins(s, a.me)) === 9, 10_000, "the wage is back");
 		assert.equal(await s.count({ type: "SiteOrder" }), 0);

@@ -303,7 +303,8 @@ const liefere: Command = {
 		n = credit(c, s, n);
 		for (const it of mine.slice(0, n)) if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError(`${it.f.name} ist gerade nicht greifbar; bitte noch einmal.`);
 		need.have += n;
-		const wage = await payFor(c, s.buildId, proto, n);
+		// the owner pays nobody for its own share: its order stays for the others (and its wage goes back when the site stands)
+		const wage = s.owner === c.actor.charId ? 0 : await payFor(c, s.buildId, proto, n);
 		await msg(c, c.actor.charId, "info", `Du lieferst ${plural(n, `Stück ${need.name}`, `Stück ${need.name}`)} an die ${s.name}.${wage ? ` Lohn: ${plural(wage, "Münze", "Münzen")}.` : ""}${mine.length > n && m[1] && Number(m[1]) > n ? " Den Rest braucht sie nicht; er bleibt bei dir." : ""}${missing(s).length ? ` Es fehlen noch ${missing(s).join(", ")}.` : ""}`);
 		await settle(c, s);
 	},
@@ -335,7 +336,7 @@ const arbeite: Command = {
 		credit(c, s, 1);
 		s.work += 1;
 		await tire(c, now, rest);
-		const wage = await payFor(c, s.buildId, "", 1);
+		const wage = s.owner === c.actor.charId ? 0 : await payFor(c, s.buildId, "", 1);
 		await msg(c, "*", "emote", `${c.actor.name} arbeitet an der ${s.name} (${s.work}/${s.workNeed}).`);
 		if (wage) await msg(c, c.actor.charId, "info", `Lohn: ${plural(wage, "Münze", "Münzen")}.`);
 		await settle(c, s);
