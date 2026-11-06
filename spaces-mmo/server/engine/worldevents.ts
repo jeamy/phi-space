@@ -45,15 +45,25 @@ const SLOW_JOB_MS = 10_000;
 /** The least real time between two runs of a recurring job: a world that runs fast does not turn every job into a busy loop. */
 export const MIN_TICK_REAL_MS = 100;
 
+/** The least real time between two runs of the jobs that only serve what has come due by a date (a fire that went out,
+ *  flotsam, orders and listings that lapsed, beds, fields, carts and passages): at the world's rate (24 world seconds a
+ *  second) `sweep` and `fire` ran about twice a second in every region, each with transactions of its own and reads over
+ *  the whole space, and kept the spaces busy with nobody playing. A later run serves all that came due meanwhile, so
+ *  nothing is lost, it comes at most this much later. `fog`, `flood`, `storm` (one step or one batch a run) and the slow
+ *  ones keep their period. SPACES_MMO_TICK_FLOORS=0 turns this off (the tests run clocks thousands of times faster). */
+export const REAL_FLOOR_MS: Readonly<Record<string, number>> = { fire: 5_000, sweep: 15_000, market: 15_000, garden: 5_000 };
+const realFloor = (job: string) => (process.env.SPACES_MMO_TICK_FLOORS === "0" ? 0 : REAL_FLOOR_MS[job] ?? 0);
+
 /** The handler of the recurring jobs: `kind: "tick"`, `payload: { job, everyMs }`; the next date is one period after the
- *  one that was served (after now, for a date served late: `coalesce`), a period of at least MIN_TICK_REAL_MS of real time. */
+ *  one that was served (after now, for a date served late: `coalesce`), a period of at least MIN_TICK_REAL_MS of real time,
+ *  and for a job in REAL_FLOOR_MS at least that much. */
 export const tickHandler = (runs: Record<string, () => Promise<void>>): ScheduleHandler => ({
 	after: async ({ schedule }) => {
 		const job = String(schedule.payload.job), t0 = Date.now();
 		await runs[job]?.();
 		if (Date.now() - t0 > SLOW_JOB_MS) console.warn(`[world] job ${job} took ${Math.round((Date.now() - t0) / 1000)} s`);
 	},
-	next: (after, s, clock) => after + Math.max(Number(s.payload.everyMs), MIN_TICK_REAL_MS * clock.rate),
+	next: (after, s, clock) => after + Math.max(Number(s.payload.everyMs), Math.max(MIN_TICK_REAL_MS, realFloor(String(s.payload.job))) * clock.rate),
 });
 
 /** The dates a world defines: made once, under the world lock (engine/loader.ts); `refresh` names those whose period may

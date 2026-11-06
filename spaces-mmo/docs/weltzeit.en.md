@@ -184,6 +184,15 @@ next appointment in the same transaction. A recurring job with transactions of i
 duplicates even after lost replies.
 
 Recurring appointments are computed onward from the previous due time so that slow execution does not drift.
+
+A recurring job runs at most every `MIN_TICK_REAL_MS` (100 ms) of real time; the jobs that only serve what has come due
+by a date keep a longer least real period (`REAL_FLOOR_MS` in `engine/worldevents.ts`: `fire` and `garden` 5 s, `sweep`
+and `market` 15 s). At the world's rate of 24, `sweep` (10 world s) and `fire` (15 world s) otherwise ran about twice a
+second in every region, each with transactions of its own and reads over the whole space, and kept the spaces of big busy
+with nobody playing (measured 2026-11-06: ost one core, west about 115 revisions a second, most of them without a
+change). A later run serves everything that came due meanwhile; it only comes up to that much later. `fog`, `flood`,
+`storm` and the slower jobs keep their periods: they take one step or bring one batch a run. `SPACES_MMO_TICK_FLOORS=0`
+turns the floors off (the tests, whose clocks run thousands of times faster).
 The catch-up rule is on the appointment:
 
 - `once`: a one-off appointment is caught up at the next start.

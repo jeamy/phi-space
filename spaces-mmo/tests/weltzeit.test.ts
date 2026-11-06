@@ -371,3 +371,21 @@ test("the rhythm of a role follows the clock's rate, and no duration is scaled b
 		assert.equal(/export const gameMs|export function gameMs/.test(readFileSync(new URL("../server/engine/time.ts", import.meta.url), "utf8")), false, "gameMs is gone");
 	} finally { await stack.close(); }
 });
+
+test("the jobs that serve what has come due keep a least real period at a fast world, the stepping ones keep theirs", () => {
+	const floors = process.env.SPACES_MMO_TICK_FLOORS;
+	process.env.SPACES_MMO_TICK_FLOORS = "";
+	try {
+		const clock = { worldId: "t", epoch: 1, realAnchorMs: 0, worldAnchorMs: 0, rate: 24, paused: false, version: 1 };
+		const next = (job: string, everyMs: number) => tickHandler({}).next!(0, { scheduleId: `tick.${job}`, clockEpoch: 1, dueWorldMs: 0, kind: "tick", payload: { job, everyMs }, missed: "coalesce" }, clock as never) / clock.rate;
+		assert.equal(next("sweep", 10_000), 15_000, "sweep: every 15 real s, not every 0.42 s");
+		assert.equal(next("fire", 15_000), 5_000, "fire: every 5 real s, not every 0.63 s");
+		assert.equal(next("market", 60_000), 15_000);
+		assert.equal(next("garden", 60_000), 5_000);
+		assert.equal(next("fog", 120_000), 5_000, "fog steps by its world period");
+		assert.equal(next("flood", 60_000), 2_500, "flood keeps its period (it brings one batch a run, at the people's pace)");
+		assert.equal(next("orders", 300_000), 12_500, "a period longer than the floor stays as it is");
+		process.env.SPACES_MMO_TICK_FLOORS = "0";
+		assert.equal(next("sweep", 10_000), 10_000 / 24, "off: the world's period, at least MIN_TICK_REAL_MS");
+	} finally { process.env.SPACES_MMO_TICK_FLOORS = floors; }
+});
