@@ -122,7 +122,10 @@ Implemented in `server/npc/minds.ts`, `server/npc/scripts.ts`, `server/npc-host.
   not; if someone offers her wood, she accepts it.
 - **Awake and roles:** `NpcAwake` (lease 5 game minutes, renewed on every address) and `NpcOwner` (lease per role,
   `SPACES_MMO_NPC_ROLE_LEASE_MS`) are written under `Lock{name:"npc"}`; this way never more than
-  `SPACES_MMO_NPC_MAX` are awake and no role runs twice. A role taken over starts with a fresh script.
+  `SPACES_MMO_NPC_MAX` are awake and no role runs twice. A role taken over starts with a fresh script. Role and session
+  leases last 60 s and are renewed every 30 s (each renewal is a commit, for every role). With regions a process claims
+  only the roles whose figure stands in its region; whether one has come, it looks every 3 s by a snapshot read, which
+  commits nothing, and a role whose figure left is given up for the region it went to.
 - **Budget empty:** a dozing line of the role ("Ines flickt ein Netz.") instead of the answer; full NPC_MAX: "ist in
   Gedanken."
 - **Combining several players** into one call: Everything said since the last round goes into one

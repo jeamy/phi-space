@@ -33,7 +33,7 @@ export type Script = (npc: Npc) => Promise<void>;
 const AWAKE_WORLD_MS = 5 * 60_000;
 
 /** The NPC's character, or null while the world has not created it yet (the npc process may start first). */
-export const self = async (n: Npc) => { const e = await n.space.readIfExists({ type: "Character", fields: { charId: n.charId } }, 5_000); return e ? fieldsOf<CharacterFields>(e) : null; };
+export const self = async (n: Npc) => { const e = await peek(n.space, { type: "Character", fields: { charId: n.charId } }); return e ? fieldsOf<CharacterFields>(e) : null; };
 
 /** The beacon keeper: watches its fire, who comes and what is said. As a model role (docs/modell-npcs.en.md) the events of
  *  its wake list wake it and it answers with the model while awake; asleep, without model calls or with its budget used

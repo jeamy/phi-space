@@ -8,8 +8,9 @@
 //   SPACES_MMO_SPACE        the world space (default unix:/tmp/spaces-mmo-world.sock)
 //   (the rhythm of the scripts and their timers follow the world clock's rate, not an environment variable)
 //   SPACES_MMO_NPCS         the roles this process plays, by npcId with commas (default: all of the world)
-//   SPACES_MMO_REGION       this process plays in that region's space (SPACES_MMO_SPACE): every role, but each only while
-//                           its NPC stands there (it walks by the whole world's map, also across a ferry)
+//   SPACES_MMO_REGION       this process plays in that region's space (SPACES_MMO_SPACE): a role only while its NPC stands
+//                           there (it walks by the whole world's map, also across a ferry). An NPC that is not here costs
+//                           nothing: its role is not claimed, and whether it has come is a snapshot read every few seconds
 import { spatialWorld } from "./engine/room-growth.ts";
 import "./env.ts";
 import { randomBytes } from "node:crypto";
@@ -22,11 +23,15 @@ import { closeDurableNpcs } from "./npc/durable.ts";
 import { scriptFor, type Npc } from "./npc/scripts.ts";
 import { actorToken, asFields, type IntentFields, type SessionFields } from "./model.ts";
 import { abortableSleep } from "./abort-sleep.ts";
-import { announce, connectSpace, DEFAULT_SPACE } from "./space.ts";
+import { announce, connectSpace, DEFAULT_SPACE, peek } from "./space.ts";
 
-const SESSION_LEASE_MS = 30_000;
+/** An NPC's session and role leases: each renewal is a commit for every role, so they are long (a dead process's NPCs stay
+ *  online and its roles taken for up to a minute). */
+const SESSION_LEASE_MS = 60_000;
 /** How long a role stays with a process that stopped renewing it (SPACES_MMO_NPC_ROLE_LEASE_MS): then another takes over. */
-const roleLeaseMs = () => Number(process.env.SPACES_MMO_NPC_ROLE_LEASE_MS ?? 30_000);
+const roleLeaseMs = () => Number(process.env.SPACES_MMO_NPC_ROLE_LEASE_MS ?? 60_000);
+/** How often a regional process looks whether an NPC that is elsewhere has come (real ms; a snapshot read, no commit). */
+const ARRIVAL_LOOK_MS = 3_000;
 
 export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 	const w = o.world ?? (await loadWorld());
@@ -64,8 +69,8 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 		const ready = () => { if (!startingDone) { startingDone = true; started(); } };
 		const keep = async () => {
 			try {
-				// with regions every region's npc process plays every role, and an NPC is online only in the region it stands in
-				const here = !regional || (await space.count({ type: "Character", fields: { charId } })) > 0;
+				// with regions an NPC is online only in the region it stands in
+				const here = !regional || !!(await peek(space, { type: "Character", fields: { charId } }));
 				if (!online || !here) { if (lease) { await space.cancel(lease).catch(() => {}); lease = null; } return; }
 				if (lease) { try { await space.renew(lease, SESSION_LEASE_MS); return; } catch { lease = null; } }
 				lease = (await space.write({ type: "Session", fields: asFields<SessionFields>({ sessionId: `npc-${randomBytes(4).toString("hex")}`, charId, accountId: charId }) }, null, SESSION_LEASE_MS)).id;
@@ -99,6 +104,8 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 		};
 		runs.push((async () => {
 			while (!halt.signal.aborted) {
+				// with regions a role is claimed only where its NPC stands: elsewhere neither a claim nor its renewals
+				if (regional && !(await peek(space, { type: "Character", fields: { charId } }).catch(() => null))) { ready(); await sleep(ARRIVAL_LOOK_MS); continue; }
 				// a fresh script for every claim: what it has seen starts here, not at the process's start. It is made before
 				// the claim: the claim is visible to everyone once committed, but its answer may come back here seconds later
 				// under load, and what was said meanwhile belongs to this role already
@@ -109,13 +116,17 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 				let lost = false;
 				await keep();
 				ready();
-				const beat = setInterval(() => {
+				// every lease renewal is a commit, for every role: renewed at half its time, and a role whose NPC left the region
+				// is given up (the region it went to claims it)
+				let gone = false;
+				const beat = setInterval(() => void (async () => {
+					if (regional && !(await peek(space, { type: "Character", fields: { charId } }).catch(() => true))) { gone = true; return; }
 					void keep();
 					void space.renew(role, roleLeaseMs()).catch(() => { lost = true; });
-				}, Math.min(SESSION_LEASE_MS, roleLeaseMs()) / 3);
+				})(), Math.min(SESSION_LEASE_MS, roleLeaseMs()) / 2);
 				beat.unref?.();
 				try {
-					while (!halt.signal.aborted && !lost) {
+					while (!halt.signal.aborted && !lost && !gone) {
 						try { npc.world = await spatialWorld(space, w); npc.def = npc.world.npcs.find((n) => n.npcId === def.npcId) ?? def; if (await atPlan(npc)) await script(npc); else await sleep(paceMs(space, 5_000, 200)); } catch (e) { if (!halt.signal.aborted) { console.error(`[npc] ${def.npcId}:`, (e as Error).message); await sleep(1000); } }
 					}
 				} finally {
