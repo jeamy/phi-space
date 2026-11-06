@@ -107,7 +107,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			const url = new URL(req.url ?? "/", "http://localhost");
 			const p = url.pathname;
 			if (p === "/healthz") return json(res, 200, { ok: true });
-			if (p === "/api/tasks" && req.method === "GET") return json(res, 200, TASKS.map(({ id, title, fn, prompt }) => ({ id, title, fn, prompt })));
+			if (p === "/api/tasks" && req.method === "GET") return json(res, 200, TASKS.map(({ id, title, fn, prompt, about }) => ({ id, title, fn, prompt, ...(about ? { about } : {}) })));
 			if (p.startsWith("/api/") && !allowed(clientIp(req))) return json(res, 429, { error: "Too many requests; retry in a minute" });
 			if (p === "/api/system") return json(res, 200, await hub.systemInfo()); // a shard call each time: under the quota
 			if (p === "/api/llm") {

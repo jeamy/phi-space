@@ -99,7 +99,7 @@ const windowsAnswered = (w: World) => w.issues
 	.filter((i) => `${i.title}\n${i.body ?? ""}`.toLowerCase().includes("windows") && i.comments.some((c) => c.by !== "bot"))
 	.map((i) => i.id).sort(byId);
 
-export const PI_SOURCE = { url: PI.source, fetched: PI.fetched, jevModel: PI.jev!.model, jevLabelled: PI.jev!.labelled };
+export const PI_SOURCE = { url: PI.source, fetched: PI.fetched, issues: PI.issues.length, jevModel: PI.jev!.model, jevLabelled: PI.jev!.labelled };
 const PI_SAMPLE = piSplit("sample"), PI_HOLDOUT = piSplit("holdout");
 export const PI_WINDOWS: ToolSpec = {
 	tools: ["list", "get", "search"],
@@ -164,8 +164,16 @@ export function worldTools(spec: ToolSpec, w: World, m: Meter): CodemodeTool[] {
 	}));
 }
 
-/** The tools as the agents read them in the task text. */
-export const describeTools = (spec: ToolSpec): string => spec.tools.map((n) => `- tools.${n}(args): ${DESCRIPTIONS[n]}`).join("\n");
+const DESCRIPTIONS_DE: Record<ToolName, string> = {
+	list: "listet Issues seitenweise: { after?: string (eine id), limit?: number (1..50, Standard 20) } → { items: Array<{ id, title, comments: number }>, next: string | null }. 1 Punkt je Aufruf.",
+	get: "ein Issue mit seinen Kommentaren: { id: string } → { id, title, body?, comments: Array<{ by, text }> } oder null. 1 Punkt.",
+	search: "die ids der Issues, deren Titel, body oder Kommentare den Text enthalten (Groß-/Kleinschreibung egal): { q: string, limit?: number (Standard 50) } → string[]. 2 Punkte.",
+	classify: `die stärkste Frustration, die ein Text zeigt: { text: string (höchstens ${MAX_CLASSIFY_CHARS} Zeichen) } → "none" | "mild" | "high". 3 Punkte.`,
+	jev: `was Jev (typesafe/jev-1.13, ein Entscheidungsmodell) auf die Frage geantwortet hat, welche Art Issue das ist; einmal aufgezeichnet und hier nur abgespielt: { id: string } → { kind: "bug" | "feature" | "question" | "other", confidence: number (0..1) } oder null. 3 Punkte.`,
+};
+
+/** The tools as the agents read them in the task text, one line each. */
+export const describeTools = (spec: ToolSpec, lang: "de" | "en" = "en"): string => spec.tools.map((n) => `- tools.${n}(args): ${(lang === "de" ? DESCRIPTIONS_DE : DESCRIPTIONS)[n]}`).join("\n");
 
 /** The calls of a meter in words: "list 3, get 120, classify 120 = 483 points". */
 export const meterText = (m: Meter): string => `${Object.entries(m.calls).map(([k, n]) => `${k} ${n}`).join(", ") || "no calls"} = ${m.cost} points`;

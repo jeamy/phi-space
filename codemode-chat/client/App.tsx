@@ -30,7 +30,7 @@ type Details = { source: string; cases: CaseResult[]; passed?: number; total?: n
 type TeamNote = { author: string; via: string; gen: number; text: string; ts: number; human?: boolean; rejected?: boolean; candidateId?: string };
 type Message = { author: string; text: string; ts: number; blockId?: string };
 type Best = { candidateId: string; ms: number; source?: string; sourceOmitted?: true };
-type Block = { blockId: string; ts: number; active: boolean; until?: number; task: { id: string; fn: string; title: L; prompt: L; cases?: number; check?: string; checkBy?: string; timeoutS?: number; kind?: "text"; criteria?: string[]; criteriaBy?: string }; contributions: Contribution[]; best: Best | null; messages: Message[]; notes?: TeamNote[]; usage?: Spent; plans?: Plan[]; findings?: Finding[]; trace?: TraceEvent[] };
+type Block = { blockId: string; ts: number; active: boolean; until?: number; task: { id: string; fn: string; title: L; prompt: L; about?: L; cases?: number; check?: string; checkBy?: string; timeoutS?: number; kind?: "text"; criteria?: string[]; criteriaBy?: string }; contributions: Contribution[]; best: Best | null; messages: Message[]; notes?: TeamNote[]; usage?: Spent; plans?: Plan[]; findings?: Finding[]; trace?: TraceEvent[] };
 /** One step of the team's work in a block, as the trace shows it. */
 type TraceEvent = { t: number; agent: string; via: string; kind: "research" | "propose" | "vote" | "implement" | "revise" | "merge" | "improve" | "critique" | "judge"; ref?: string; to?: string; ok?: boolean | null };
 const TRACE_ICON: Record<TraceEvent["kind"], string> = { research: "🔎", propose: "📝", vote: "⭐", implement: "🧭", revise: "✍️", merge: "🔀", improve: "⚡", critique: "🗨", judge: "⚖️" };
@@ -126,6 +126,34 @@ function PlanItem({ sid, p, t }: { sid: string; p: Plan; t: Tr }) {
 		</details>
 	);
 }
+/** A task text: paragraphs (blank lines), a short "Label:" at a paragraph's start in bold, "- " lines as a list with
+ *  their call (`tools.get(args)`) as code. Plain text without any of it stays one paragraph. */
+function TaskText({ text }: { text: string }) {
+	return (
+		<>
+			{text.split(/\n{2,}/).map((para, i) => {
+				const lines = para.split("\n"), items = lines.filter((l) => l.startsWith("- ")), head = lines.filter((l) => !l.startsWith("- ")).join("\n");
+				const m = /^([^:\n]{1,40}[^\s:]):(\s|$)/.exec(head);
+				return (
+					<div key={i} className="tasktext__p">
+						{head ? (m && !/[.!?()]/.test(m[1]!) ? <><b>{m[1]}:</b> {head.slice(m[0].length)}</> : head) : null}
+						{items.length ? <ul className="tasktext__list">{items.map((l, j) => { const k = /^- (\S+\([^)]*\)):\s*/.exec(l); return <li key={j}>{k ? <><code>{k[1]}</code> {l.slice(k[0].length)}</> : l.slice(2)}</li>; })}</ul> : null}
+					</div>
+				);
+			})}
+		</>
+	);
+}
+/** What happens behind a task (Task.about): for the people on the page, folded, never in an agent's prompt. */
+function About({ text, lang }: { text?: L; lang: Lang }) {
+	if (!text) return null;
+	return (
+		<details className="about">
+			<summary>{lang === "de" ? "So läuft es: Modelle, Daten, Hintergrund" : "How it runs: models, data, background"}</summary>
+			<div className="about__text"><TaskText text={text[lang]} /></div>
+		</details>
+	);
+}
 /** The run in the sidebar: who plays, where the run stands, what it has spent of its budget. */
 const RUNCARD = {
 	de: { running: "Lauf läuft", ended: "Lauf beendet", gen: "Generation", research: "Recherchen", plans: "Pläne", votes: "Bewertungen", items: "Aufträge", open: "offen", done: "erledigt", critiques: "Kritiken", spent: "Verbrauch", of: "von" },
@@ -162,7 +190,7 @@ function RunCard({ run, lang }: { run: NonNullable<Snapshot["run"]>; lang: Lang 
 	);
 }
 type Snapshot = {
-	session: string; current: string; tasks: { id: string; title: L; fn: string; prompt: L }[]; blocks: Block[]; messages: Message[];
+	session: string; current: string; tasks: { id: string; title: L; fn: string; prompt: L; about?: L }[]; blocks: Block[]; messages: Message[];
 	currentCustom?: { fn: string; prompt: string; cases: unknown[] };
 	limits?: { maxTimeoutS: number; runBudgetTokens?: number };
 	run: { active: boolean; blockId: string; mode: string; contenders?: string[]; gen: number; gens: number; agents: number; perAgent: number; note?: string; usage?: Spent; board?: { open: number; done: number; critiques: number; proposals?: number; votes?: number; findings?: number }; budget?: { tokens?: number; usd?: number }; research?: true } | null;
@@ -434,7 +462,8 @@ function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, on
 			</div>
 			{open ? (
 				<div className="block__body" onClick={onFocus}>
-					<p className="lead">{b.task.prompt[lang]}{b.task.timeoutS ? <span className="chip chip--time">{t.timeLimitShort(b.task.timeoutS)}</span> : null}</p>
+					<div className="taskdesc" tabIndex={0}><TaskText text={b.task.prompt[lang]} />{b.task.timeoutS ? <span className="chip chip--time">{t.timeLimitShort(b.task.timeoutS)}</span> : null}</div>
+					<About text={b.task.about} lang={lang} />
 					{b.task.kind === "text" && b.task.criteria?.length ? (
 						<div className="rule">
 							<span>{t.criteriaTitle}{b.task.criteriaBy === "verifier" ? ` (${t.criteriaByAgent})` : ""}:</span>
@@ -704,7 +733,7 @@ export function CodemodeChat() {
 								<option value="text">{t.textTask}</option>
 							</select>
 						</div>
-						{!customChosen && catalog ? <p className="lead">{catalog.prompt[lang]} <code>{catalog.fn}</code></p> : null}
+						{!customChosen && catalog ? <><div className="taskdesc taskdesc--side" tabIndex={0}><TaskText text={catalog.prompt[lang]} /></div><About text={catalog.about} lang={lang} /></> : null}
 						{textChosen ? (
 							<div className="customtask">
 								<div className="fieldlabel"><label htmlFor="tq">{t.questionLabel}</label></div>

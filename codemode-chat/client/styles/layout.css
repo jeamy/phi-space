@@ -350,3 +350,17 @@ main > * { min-width: 0; }
 .runcard .budgetbar { margin-top: 6px; }
 /* a tools task's tile: the points large, the time small below (both on one line overflowed the tile) */
 .tile__sub { display: block; font-size: 12px; font-weight: 400; color: var(--muted); line-height: 1.2; }
+/* a task's description: line breaks kept, scrolls inside a bounded box so the panel stays short */
+.taskdesc { color: var(--muted); white-space: pre-line; overflow-wrap: anywhere; max-height: 260px; overflow-y: auto; margin: 0 0 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: 13px; line-height: 1.5; }
+.taskdesc--side { max-height: 220px; margin-top: 8px; }
+.about { margin: 0 0 10px; font-size: 13px; }
+.about summary { cursor: pointer; color: var(--accent); }
+.about__text { white-space: pre-line; color: var(--muted); padding: 6px 10px; border-left: 2px solid var(--line-strong); margin-top: 6px; line-height: 1.5; }
+/* the task picker: as wide as its panel, a long title is cut, never wider */
+aside .row select { width: 100%; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+.tasktext__p + .tasktext__p { margin-top: 8px; }
+.tasktext__p b { color: var(--text); font-weight: 600; }
+.tasktext__list { margin: 4px 0 0; padding-left: 18px; }
+.tasktext__list li + li { margin-top: 4px; }
+.tasktext__list code { color: var(--text); font-size: 12px; }
+aside .about__text { max-height: 240px; overflow-y: auto; }
