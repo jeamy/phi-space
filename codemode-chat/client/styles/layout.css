@@ -334,3 +334,19 @@ main > * { min-width: 0; }
 .diff__add { color: var(--success); }
 .diff__del { color: var(--danger); }
 
+
+/* the run in the sidebar (RunCard): contenders one per line, the counts as a two-column list, the budget bar below */
+.runcard { margin-top: 10px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; background: var(--surface); font-size: 12px; color: var(--muted); }
+.runcard--active { border-color: var(--accent); }
+.runcard__head { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 4px; }
+.runcard--active .runcard__head { color: var(--accent); }
+.runcard__models { list-style: none; margin: 0 0 6px; padding: 0; }
+.runcard__models li { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.45; }
+.runcard__provider { color: var(--muted); }
+.runcard__stats { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; padding-top: 6px; border-top: 1px solid var(--line); }
+.runcard__stats dt { margin: 0; }
+.runcard__stats dd { margin: 0; color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+.runcard__budget { color: var(--muted); }
+.runcard .budgetbar { margin-top: 6px; }
+/* a tools task's tile: the points large, the time small below (both on one line overflowed the tile) */
+.tile__sub { display: block; font-size: 12px; font-weight: 400; color: var(--muted); line-height: 1.2; }

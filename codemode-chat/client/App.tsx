@@ -4,7 +4,7 @@
 // collapsible block in the conversation: its agents are square tiles, their code unfolds on a click, and the
 // ranking and best code on the right follow the block that is open or clicked. All text is rendered as React text
 // nodes: agent code is untrusted data and never becomes markup.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { AdminPanel } from "./AdminPanel.tsx";
 import { HelpTip } from "./HelpTip.tsx";
 import { ThemeControls } from "./ThemeControls.tsx";
@@ -124,6 +124,41 @@ function PlanItem({ sid, p, t }: { sid: string; p: Plan; t: Tr }) {
 			<summary><b>{p.author}</b> <span className="muted">({shortVia(p.via)})</span> · {t.planScore(p.score, p.votes)} · <span className="muted">{t.planUsed(p.used)}</span></summary>
 			<div className="plan__text">{p.textOmitted ? (text ?? "…") : p.text}</div>
 		</details>
+	);
+}
+/** The run in the sidebar: who plays, where the run stands, what it has spent of its budget. */
+const RUNCARD = {
+	de: { running: "Lauf läuft", ended: "Lauf beendet", gen: "Generation", research: "Recherchen", plans: "Pläne", votes: "Bewertungen", items: "Aufträge", open: "offen", done: "erledigt", critiques: "Kritiken", spent: "Verbrauch", of: "von" },
+	en: { running: "Run in progress", ended: "Run ended", gen: "Generation", research: "Research", plans: "Plans", votes: "Ratings", items: "Items", open: "open", done: "done", critiques: "Critiques", spent: "Spent", of: "of" },
+};
+function RunCard({ run, lang }: { run: NonNullable<Snapshot["run"]>; lang: Lang }) {
+	const r = RUNCARD[lang], b = run.board, n = (x: number) => x.toLocaleString(lang === "de" ? "de-DE" : "en-US");
+	const stats: Array<[string, string]> = b
+		? [
+			...(b.findings !== undefined ? [[r.research, n(b.findings)] as [string, string]] : []),
+			...(b.proposals !== undefined ? [[r.plans, n(b.proposals)], [r.votes, n(b.votes ?? 0)]] as Array<[string, string]> : []),
+			[r.items, `${n(b.open)} ${r.open} · ${n(b.done)} ${r.done}`],
+			[r.critiques, n(b.critiques)],
+		]
+		: [[r.gen, `${run.gen} ${r.of} ${run.gens}`]];
+	const budget = run.budget ? [run.budget.tokens ? fmtTok(run.budget.tokens, lang) : "", run.budget.usd ? fmtUsd(run.budget.usd, lang) : ""].filter(Boolean).join(" · ") : "";
+	const f = run.budget && run.usage ? Math.min(1, Math.max(run.budget.tokens ? run.usage.tokens / run.budget.tokens : 0, run.budget.usd ? run.usage.costUsd / run.budget.usd : 0)) : null;
+	const pct = f === null ? 0 : Math.round(f * 100);
+	return (
+		<div className={"runcard" + (run.active ? " runcard--active" : "")}>
+			<div className="runcard__head">{run.active ? r.running : r.ended}</div>
+			<ul className="runcard__models">
+				{(run.contenders ?? [run.mode]).map((c) => {
+					const k = c.indexOf("/");
+					return <li key={c} title={c}>{k > 0 ? <><span className="runcard__provider">{c.slice(0, k + 1)}</span>{c.slice(k + 1)}</> : c}</li>;
+				})}
+			</ul>
+			<dl className="runcard__stats">
+				{stats.map(([k, v]) => <Fragment key={k}><dt>{k}</dt><dd>{v}</dd></Fragment>)}
+				{run.usage?.tokens ? <><dt>{r.spent}</dt><dd>{fmtSpent(run.usage.tokens, run.usage.costUsd, lang)}{budget ? <span className="runcard__budget"> / {budget}</span> : null}</dd></> : null}
+			</dl>
+			{f !== null ? <div className="budgetbar" title={T[lang].budgetUsed(pct)} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={T[lang].budgetUsed(pct)}><span style={{ width: `${f * 100}%` }} className={f >= 0.9 ? "budgetbar--hot" : ""} /></div> : null}
+		</div>
 	);
 }
 type Snapshot = {
@@ -331,7 +366,7 @@ function Tile({ c, isBest, open, onClick, t, lang, basedOn }: { c: Contribution;
 		<button type="button" className={`tile tile--${state}${isBest ? " tile--best" : ""}${open ? " tile--open" : ""}`} aria-expanded={open} onClick={onClick} title={c.note ?? c.error}>
 			<span className="tile__who">{c.author}</span>
 			<span className="tile__via">{shortVia(c.via)}</span>
-			<span className="tile__result" title={c.total ? `${c.passed ?? 0}/${c.total} ${t.passedN}` : undefined}>{c.ok === null ? "…" : c.vetoed ? "👎" : c.hardcoded ? "✗" : c.ok ? (isAnswer(c) ? "✓" : fmtResult(c)) : c.total ? `${c.passed ?? 0}/${c.total}` : "✗"}</span>
+			<span className="tile__result" title={c.total ? `${c.passed ?? 0}/${c.total} ${t.passedN}` : undefined}>{c.ok === null ? "…" : c.vetoed ? "👎" : c.hardcoded ? "✗" : c.ok ? (isAnswer(c) ? "✓" : c.cost !== undefined ? <>{c.cost} P<span className="tile__sub">{fmtMs(c.ms)}</span></> : fmtResult(c)) : c.total ? `${c.passed ?? 0}/${c.total}` : "✗"}</span>
 			{c.vetoed || c.hardcoded ? <span className="tile__flag">{c.vetoed ? t.vetoedShort : t.hardcodedShort}</span> : null}
 			{c.role ? <span className="tile__lineage" title={`${t.roles[c.role] ?? c.role}${basedOn ? ` ↳ ${basedOn}` : ""}`}>{t.roles[c.role] ?? c.role}{basedOn ? ` ↳ ${basedOn}` : ""}{c.critiques?.length ? ` · 🗨${c.critiques.length}` : ""}</span> : null}
 			{c.usage ? <span className="tile__usage" title={t.usageHint}>{fmtSpent(c.usage.total, c.usage.costUsd, lang)}</span> : null}
@@ -747,8 +782,7 @@ export function CodemodeChat() {
 							<button className="btn" disabled={!run?.active} onClick={() => void act("/stop", {})}>{t.stop}</button>
 								<HelpTip id="start" lang={lang} label={t.startLabel} />
 						</div>
-						{run ? <div className={"pill" + (run.active ? " pill--accent" : "")}>{(run.contenders ?? [run.mode]).join(` ${t.versus} `)} · {run.board ? `${run.board.findings !== undefined ? t.boardResearch(run.board.findings) : ""}${run.board.proposals !== undefined ? t.boardPlan(run.board.proposals, run.board.votes ?? 0) : ""}${t.boardInfo(run.board.open, run.board.done, run.board.critiques)}` : `${run.gen}/${run.gens}`}{run.usage?.tokens ? ` · ${fmtSpent(run.usage.tokens, run.usage.costUsd, lang)}` : ""}{run.budget ? ` / ${[run.budget.tokens ? fmtTok(run.budget.tokens, lang) : "", run.budget.usd ? fmtUsd(run.budget.usd, lang) : ""].filter(Boolean).join(" · ")}` : ""}</div> : null}
-						{run?.budget && run.usage ? (() => { const f = Math.min(1, Math.max(run.budget.tokens ? run.usage.tokens / run.budget.tokens : 0, run.budget.usd ? run.usage.costUsd / run.budget.usd : 0)); return <div className="budgetbar" title={t.budgetUsed(Math.round(f * 100))} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(f * 100)} aria-label={t.budgetUsed(Math.round(f * 100))}><span style={{ width: `${f * 100}%` }} className={f >= 0.9 ? "budgetbar--hot" : ""} /></div>; })() : null}
+						{run ? <RunCard run={run} lang={lang} /> : null}
 						{run?.note ? <div className="notice">{run.note}</div> : null}
 					</div>
 					{textActive ? null : <div className="panel">
