@@ -13,9 +13,15 @@
 //   act { world, line }             → { said: string[], at }        the line as a player types it, done when the
 //                                                                    world worker has carried it out
 //   wait { world, minutes }         → { time }                      the clock moves on (it stands still otherwise)
-//   score { world, goal }           → { done, detail }              goal "beacon:<beaconId>": the figure lit it
+//   score { world, goal }           → { done, detail }              goal "beacon:<beaconId>": the figure lit it;
+//                                                                    "feed:<beaconId>:<n>": it put n pieces into it
 //   close { world }                 → {}
 // A world is closed when its connection ends or nobody asks it anything for SPACES_MMO_ARENA_IDLE_MS (default 5 min).
+// A durable run (codemode-chat, docs/codemode-anwendungen.en.md D) opens with `keep: true`: its world outlives the
+// connection, so a judge that takes over after a crash finds it again by its id. It names how long the world must
+// wait for that judge (`idleMs`, its transaction lease and a margin; at most an hour), else the idle time applies. Such a judge replays the calls it
+// has logged and sends the rest anew; a `key` on look/act/wait makes that safe: a key the world has seen gets the
+// answer it got then, the command is not carried out twice (the call that was on its way when the judge died).
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
@@ -45,7 +51,13 @@ const MAX_LINE = 300, MAX_THINGS = 30;
 type World = {
 	id: string; dir: string; procs: ChildProcess[]; conns: Array<{ close(): void }>;
 	space: SpaceLike; charId: string; name: string; waited: number; touched: number; owner: Socket | null;
+	/** A kept world's own idle time (`open { keep, idleMs }`). */
+	idleMs?: number;
+	/** Answers by key (look/act/wait with a `key`), so a repeated call is not carried out twice. */
+	done: Map<string, Promise<Record<string, unknown>>>;
 };
+/** The most keyed answers a world keeps. */
+const MAX_KEYS = 5000;
 
 // ---- starting and stopping a world ----------------------------------------------------------------------------
 function run(file: string, env: Record<string, string>, ready: string): Promise<ChildProcess> {
@@ -75,7 +87,7 @@ async function openWorld(w: WorldDef, owner: Socket | null): Promise<World> {
 		await pauseClock(ws.space);
 		await toSpawn(w, ws.space, me.charId);
 		const ch = await character(ws.space, me.charId);
-		return { id: randomBytes(6).toString("hex"), dir, procs, conns, space: ws.space, charId: me.charId, name: ch.name, waited: 0, touched: Date.now(), owner };
+		return { id: randomBytes(6).toString("hex"), dir, procs, conns, space: ws.space, charId: me.charId, name: ch.name, waited: 0, touched: Date.now(), owner, done: new Map() };
 	} catch (e) {
 		for (const c of conns) c.close();
 		await Promise.all(procs.map(stop));
@@ -188,6 +200,12 @@ export async function wait(x: World, minutes: number): Promise<{ time: string }>
 
 /** Whether the figure reached `goal`. "beacon:<beaconId>": the fire burns now and the figure fed it. */
 export async function score(x: World, goal: string): Promise<{ done: boolean; detail: string }> {
+	const f = /^feed:([\w-]+):(\d+)$/.exec(String(goal));
+	if (f) {
+		const c = await x.space.readIfExists({ type: "Contribution", fields: { beaconId: f[1]!, charId: x.charId } as never }, NO_WAIT);
+		const pieces = c ? Number((c.fields as Record<string, unknown>).pieces ?? 0) : 0, want = Number(f[2]);
+		return { done: pieces >= want, detail: `${pieces} of ${want} pieces put into ${f[1]}, ${x.waited} world minutes waited` };
+	}
 	const m = /^beacon:([\w-]+)$/.exec(String(goal));
 	if (!m) throw new Error(`unknown goal ${goal}`);
 	const clock = await readClockOf(x.space), lit = isLit(await flameOf(x.space, m[1]!), worldNow(clock));
@@ -196,7 +214,11 @@ export async function score(x: World, goal: string): Promise<{ done: boolean; de
 }
 
 // ---- the server -------------------------------------------------------------------------------------------------
-export async function startArena(o: { listen?: string; worlds?: number } = {}) {
+/** The longest a kept world waits for its judge. */
+const MAX_KEEP_MS = 3600_000;
+
+export async function startArena(o: { listen?: string; worlds?: number; /** tests: the idle time */ idleMs?: number } = {}) {
+	const idle = o.idleMs ?? IDLE_MS;
 	const w = await loadWorld();
 	const worlds = new Map<string, World>(), max = o.worlds ?? MAX_WORLDS;
 	let starting = 0;
@@ -209,14 +231,15 @@ export async function startArena(o: { listen?: string; worlds?: number } = {}) {
 		waiting.push(go);
 	});
 	const close = async (id: string) => { const x = worlds.get(id); if (!x) return; worlds.delete(id); await closeWorld(x).catch(() => {}); free(); };
-	const sweep = setInterval(() => { for (const [id, x] of worlds) if (Date.now() - x.touched > IDLE_MS) void close(id); }, 10_000);
+	const sweep = setInterval(() => { for (const [id, x] of worlds) if (Date.now() - x.touched > (x.idleMs ?? idle)) void close(id); }, Math.min(10_000, Math.max(100, idle / 2)));
 	sweep.unref();
 
 	const handle = async (sock: Socket, r: Record<string, unknown>): Promise<Record<string, unknown>> => {
 		if (r.op === "open") {
 			await slot();
 			try {
-				const x = await openWorld(w, sock);
+				const x = await openWorld(w, r.keep === true ? null : sock);
+				if (r.keep === true && typeof r.idleMs === "number" && Number.isFinite(r.idleMs)) x.idleMs = Math.min(MAX_KEEP_MS, Math.max(idle, r.idleMs));
 				worlds.set(x.id, x);
 				return { world: x.id, charId: x.charId, name: x.name };
 			} finally { starting--; if (worlds.size + starting < max) free(); }
@@ -224,10 +247,19 @@ export async function startArena(o: { listen?: string; worlds?: number } = {}) {
 		const x = worlds.get(String(r.world));
 		if (!x) throw new Error("no such world");
 		x.touched = Date.now();
+		const once = (run: () => Promise<Record<string, unknown>>): Promise<Record<string, unknown>> => {
+			if (typeof r.key !== "string" || !r.key) return run();
+			const had = x.done.get(r.key);
+			if (had) return had;
+			if (x.done.size >= MAX_KEYS) x.done.delete(x.done.keys().next().value!);
+			const p = run();
+			x.done.set(r.key, p);
+			return p;
+		};
 		switch (r.op) {
-			case "look": return await look(w, x);
-			case "act": return await act(x, String(r.line ?? ""));
-			case "wait": return await wait(x, Number(r.minutes));
+			case "look": return await once(() => look(w, x));
+			case "act": return await once(() => act(x, String(r.line ?? "")));
+			case "wait": return await once(() => wait(x, Number(r.minutes)));
 			case "score": return await score(x, String(r.goal ?? ""));
 			case "close": await close(x.id); return {};
 			default: throw new Error(`unknown op ${String(r.op)}`);

@@ -58,6 +58,13 @@ the goal the fewest points win. A candidate carries a lane: `bot` candidates go 
 port 3990), and `codemode-chat/.env` there sets `CODEMODE_ARENA=tcp:127.0.0.1:3990` for web and judge. The tests use `tests/fake-arena.ts`, which speaks the same lines; the real arena has its own test
 in spaces-mmo (`tests/arena.test.ts`).
 
+A durable bot task ("Tide bot", `durable: true`) survives its judge (`server/durable-run.ts`): the bot runs with
+pi-codemode's deterministic `start()`, every answer of the arena is written to the space (`BotRun`, `BotCall`) before
+the bot gets it, and a judge that takes the candidate over replays the log with the same seed and start time and goes
+on live in the same world (opened with `keep`, so it outlives the judge). Each call carries a key (the VM's call id),
+and the arena answers a key it has seen from memory: a command on its way when the judge died is not carried out twice.
+`tests/durable-bots.test.ts` kills a judge process in the middle of a run.
+
 ### Eval harnesses
 
 A harness task (`server/harnesstask.ts`; the catalog's "Eval harness: rate sort functions") asks for a judging script,

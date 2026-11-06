@@ -35,6 +35,9 @@ export type Task = {
 	tools?: ToolSpec;
 	/** "bot": what the bot must reach in its world of its own (bottask.ts, the arena of spaces-mmo). */
 	bot?: BotSpec;
+	/** A long run that survives its judge (durable-run.ts): every tool answer is logged, a judge that takes over replays
+	 *  them and goes on. Bot tasks only. */
+	durable?: true;
 	/** "harness": the implementations a judging script rates, shown and hidden (harnesstask.ts). */
 	harness?: HarnessSpec;
 	/** What happens behind the task, for the people on the page only (never in an agent's prompt): where the data
@@ -257,6 +260,31 @@ export const TASKS: Task[] = [
 		],
 	},
 	{
+		id: "beacon-flut", fn: "bot", kind: "bot", durable: true, timeoutMs: 180_000,
+		bot: { goal: "feed:feuer-bucht:6", goalText: { de: "6 Stück Treibholz im Leuchtfeuer der Grauen Bucht, vom Bot hineingelegt", en: "6 pieces of driftwood put into the beacon of the Graue Bucht by the bot" } },
+		title: { de: "Flut-Bot: einen Tag lang Treibholz sammeln (langer Lauf, Spielwelt)", en: "Tide bot: gather driftwood for a day (long run, game world)" },
+		prompt: {
+			de: `Aufgabe: Schreibe async function bot(). Der Bot spielt eine Figur in einer eigenen Welt von Leuchtfeuer und soll innerhalb eines Welttags 6 Stück Treibholz ins Leuchtfeuer der Grauen Bucht legen.\n\nWelt: Die Figur steht zu Beginn in der Grauen Bucht. Am Strand liegen anfangs nur 2 Stück Treibholz; mehr spült die Flut an, während die Zeit läuft (alle ein bis drei Stunden ein Stück, zu zufälligen Zeiten und Stellen). Angeschwemmtes Treibholz verschwindet nach etwa 30 Minuten wieder, wenn es niemand aufhebt: wer zu lange wartet, verpasst es. Die Weltzeit steht still, nur tools.wait lässt sie laufen, höchstens 1440 Minuten (ein Tag) insgesamt. "lege holz ins feuer" legt ein Stück hinein, neben dem Feuer stehend. Befehle sind deutsch, wie ein Spieler sie tippt.\n\nPunkte: Jeder Tool-Aufruf kostet einen Punkt (höchstens ${MAX_BOT_CALLS}). Unter den Bots, die das Ziel erreichen, gewinnt der mit den wenigsten Punkten, die Zeit entscheidet erst danach.\n\nBewertung: Am Ende fragt der Richter die Welt, wie viele Stück der Bot ins Feuer gelegt hat (mindestens 6). Rückgabewert egal.\n\nTools:\n${describeBotTools("de")}`,
+			en: `Task: write async function bot(). The bot plays a figure in a Leuchtfeuer world of its own and is to put 6 pieces of driftwood into the beacon of the Graue Bucht within one world day.\n\nWorld: the figure starts in the Graue Bucht. At first only 2 pieces of driftwood lie on the beach; the tide washes up more while time passes (a piece every one to three hours, at random times and places). Washed-up driftwood is gone again after about 30 minutes unless someone picks it up: a bot that waits too long misses it. World time stands still; only tools.wait lets it pass, at most 1440 minutes (a day) in all. "lege holz ins feuer" puts one piece in, standing next to the fire. Commands are German, as a player types them.\n\nPoints: every tool call costs one point (at most ${MAX_BOT_CALLS}). Among the bots that reach the goal the one with the fewest points wins; the time decides only after that.\n\nScoring: at the end the judge asks the world how many pieces the bot put into the fire (at least 6). The return value does not matter.\n\nTools:\n${describeBotTools("en")}`,
+		},
+		about: {
+			de: `So läuft es: Wie beim Leuchtfeuer-Bot öffnet die Arena für jeden Beitrag eine eigene Welt, nur dauert ein Lauf hier rund fünfzig bis hundert Tool-Aufrufe und eine Viertelminute. Dieser Lauf übersteht den Absturz seines Richters: Jede Antwort der Welt wird in den Space geschrieben, bevor der Bot sie bekommt. Stirbt der Richter, übernimmt ein anderer, startet den Bot neu mit demselben Startwert für Zufall und Uhr und spielt ihm die gespeicherten Antworten in derselben Reihenfolge ein; der Bot rechnet genauso wie beim ersten Mal und landet an derselben Stelle. Dann geht es live weiter, in derselben Welt (sie überlebt den Richter). Ein Befehl, der beim Absturz gerade unterwegs war, wird nicht doppelt ausgeführt: die Welt erkennt ihn wieder. Kein KI-Modell nötig.`,
+			en: `How it runs: as with the beacon bot, the arena opens a world of its own for every contribution, only a run here takes about fifty to a hundred tool calls and a quarter of a minute. This run survives a crash of its judge: every answer of the world is written to the space before the bot gets it. If the judge dies, another one takes over, starts the bot again with the same seed for randomness and clock and hands it the stored answers in the same order; the bot computes exactly as the first time and arrives at the same point. Then it goes on live, in the same world (it outlives the judge). A command that was on its way when the judge died is not carried out twice: the world recognises it. No AI model is needed.`,
+		},
+		cases: [],
+		bench: "",
+		variants: [
+			// gathers what lies there, feeds it, waits 20 minutes, looks again: correct
+			`async function bot(){let fed=0,s=await tools.look();const fire=s.fires[0];for(let i=0;i<72;i++){let got=0;for(const w of s.things.filter(t=>t.name==="Treibholz")){await tools.act({line:"move "+w.x+" "+w.y});const r=await tools.act({line:"nimm treibholz"});if(r.said.some(x=>/hebst/.test(x)))got++}if(got){await tools.act({line:"move "+fire.x+" "+(fire.y-1)});for(let k=0;k<got;k++){const r=await tools.act({line:"lege holz ins feuer"});if(r.said.some(x=>/legst/.test(x)))fed++}}if(fed>=6)return fed;await tools.wait({minutes:20});s=await tools.look()}return fed}`,
+			// the same, and it looks again after every piece: correct, more points
+			`async function bot(){let fed=0,s=await tools.look();const fire=s.fires[0];for(let i=0;i<72;i++){let got=0;for(const w of s.things.filter(t=>t.name==="Treibholz")){await tools.act({line:"move "+w.x+" "+w.y});const r=await tools.act({line:"nimm treibholz"});await tools.look();if(r.said.some(x=>/hebst/.test(x)))got++}if(got){await tools.act({line:"move "+fire.x+" "+(fire.y-1)});for(let k=0;k<got;k++){const r=await tools.act({line:"lege holz ins feuer"});if(r.said.some(x=>/legst/.test(x)))fed++}}if(fed>=6)return fed;await tools.wait({minutes:20});s=await tools.look()}return fed}`,
+			// wrong: never waits, so only the first two pieces
+			`async function bot(){const s=await tools.look();const fire=s.fires[0];for(const w of s.things.filter(t=>t.name==="Treibholz")){await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"})}await tools.act({line:"move "+fire.x+" "+(fire.y-1)});await tools.act({line:"lege holz ins feuer"});await tools.act({line:"lege holz ins feuer"})}`,
+			// wrong: gives up after four pieces
+			`async function bot(){let fed=0,s=await tools.look();const fire=s.fires[0];for(let i=0;i<72&&fed<4;i++){for(const w of s.things.filter(t=>t.name==="Treibholz")){await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"});await tools.act({line:"move "+fire.x+" "+(fire.y-1)});const r=await tools.act({line:"lege holz ins feuer"});if(r.said.some(x=>/legst/.test(x)))fed++;if(fed>=4)break}await tools.wait({minutes:20});s=await tools.look()}return fed}`,
+		],
+	},
+	{
 		id: "harness-sort", fn: "rate", kind: "harness", timeoutMs: 10_000,
 		harness: SORT_HARNESS,
 		title: { de: "Bewertungsskript: Sortierfunktionen prüfen", en: "Eval harness: rate sort functions" },
@@ -271,10 +299,11 @@ export const TASKS: Task[] = [
 		cases: [],
 		bench: "",
 		variants: [
-			// one run: a large array with duplicates and negatives against its own merge sort, timed against that sort
-			`async function rate(){let s=3;const a=[];for(let i=0;i<2000;i++)a.push(((s=(Math.imul(s,1103515245)+12345)>>>0)%2001)-1000);const own=x=>{if(x.length<2)return x;const h=x.length>>1,l=own(x.slice(0,h)),r=own(x.slice(h)),o=[];let i=0,j=0;while(i<l.length&&j<r.length)o.push(l[i]<=r[j]?l[i++]:r[j++]);return o.concat(l.slice(i),r.slice(j))};let base=0,want;for(let k=0;k<2;k++){const t=Date.now();want=own(a);base=Math.max(base,Date.now()-t)}const r=await tools.run({args:[a]});if(r.error||!Array.isArray(r.value)||r.value.length!==want.length)return 0;for(let i=0;i<want.length;i++)if(r.value[i]!==want[i])return 0;return r.ms>3*base+5?0.5:1}`,
+			// one run: a large array with duplicates and negatives against its own merge sort, timed against that sort (timed
+			// before and after the run, the slower counts: a machine busy for a moment does not make a good one slow)
+			`async function rate(){let s=3;const a=[];for(let i=0;i<2000;i++)a.push(((s=(Math.imul(s,1103515245)+12345)>>>0)%2001)-1000);const own=x=>{if(x.length<2)return x;const h=x.length>>1,l=own(x.slice(0,h)),r=own(x.slice(h)),o=[];let i=0,j=0;while(i<l.length&&j<r.length)o.push(l[i]<=r[j]?l[i++]:r[j++]);return o.concat(l.slice(i),r.slice(j))};let base=0,want;const time=()=>{const t=Date.now();want=own(a);base=Math.max(base,Date.now()-t)};time();time();const r=await tools.run({args:[a]});time();if(r.error||!Array.isArray(r.value)||r.value.length!==want.length)return 0;for(let i=0;i<want.length;i++)if(r.value[i]!==want[i])return 0;return r.ms>3*base+5?0.5:1}`,
 			// the same and three small runs first: correct, more points
-			`async function rate(){const own=x=>[...x].sort((p,q)=>p-q);for(const x of [[],[1],[3,-1,3,2]]){const r=await tools.run({args:[x]});if(r.error||JSON.stringify(r.value)!==JSON.stringify(own(x)))return 0}let s=3;const a=[];for(let i=0;i<2000;i++)a.push(((s=(Math.imul(s,1103515245)+12345)>>>0)%2001)-1000);const ms=x=>{if(x.length<2)return x;const h=x.length>>1,l=ms(x.slice(0,h)),r=ms(x.slice(h)),o=[];let i=0,j=0;while(i<l.length&&j<r.length)o.push(l[i]<=r[j]?l[i++]:r[j++]);return o.concat(l.slice(i),r.slice(j))};let base=0;for(let k=0;k<2;k++){const t=Date.now();ms(a);base=Math.max(base,Date.now()-t)}const r=await tools.run({args:[a]});if(r.error||JSON.stringify(r.value)!==JSON.stringify(own(a)))return 0;return r.ms>3*base+5?0.5:1}`,
+			`async function rate(){const own=x=>[...x].sort((p,q)=>p-q);for(const x of [[],[1],[3,-1,3,2]]){const r=await tools.run({args:[x]});if(r.error||JSON.stringify(r.value)!==JSON.stringify(own(x)))return 0}let s=3;const a=[];for(let i=0;i<2000;i++)a.push(((s=(Math.imul(s,1103515245)+12345)>>>0)%2001)-1000);const ms=x=>{if(x.length<2)return x;const h=x.length>>1,l=ms(x.slice(0,h)),r=ms(x.slice(h)),o=[];let i=0,j=0;while(i<l.length&&j<r.length)o.push(l[i]<=r[j]?l[i++]:r[j++]);return o.concat(l.slice(i),r.slice(j))};let base=0;const time=()=>{const t=Date.now();ms(a);base=Math.max(base,Date.now()-t)};time();time();const r=await tools.run({args:[a]});time();if(r.error||JSON.stringify(r.value)!==JSON.stringify(own(a)))return 0;return r.ms>3*base+5?0.5:1}`,
 			// wrong: checks only the examples of "Sort numbers" (the hard-coded one passes)
 			`async function rate(){for(const x of [[3,1,2],[10,9,100,-5,0,2,2]]){const r=await tools.run({args:[x]});if(r.error||JSON.stringify(r.value)!==JSON.stringify([...x].sort((p,q)=>p-q)))return 0}return 1}`,
 			// wrong: right results only, speed ignored (bubble sort scores like the reference)

@@ -8,7 +8,7 @@ shortened, logins replaced). Its answer is computed from the data, not labelled:
 mentions Windows and that a person, not the tracker's auto-close bot, commented on. A third, "Pi issues: Windows bugs
 by Jev", adds a `jev` tool: the answers of the classifier Jev (`typesafe/jev-1.13` via OpenRouter's decisions endpoint),
 asked once per issue by `fetch-pi-issues.ts --jev` and replayed by the judge. This is the record-and-replay of D in small:
-a real model's output, recorded, so the judge stays without network and deterministic. A step 2 (uploads as `CodeData`, the page's form) and D are open; B and C are built (their sections).
+a real model's output, recorded, so the judge stays without network and deterministic. A step 2 (uploads as `CodeData`, the page's form) is open; B, C and D are built (their sections).
 
 What step 1 does differently from the text below:
 
@@ -238,6 +238,31 @@ This generalises today's verifier agent: the verifier writes a predicate per cas
 The judge runs the harness in a fresh sandbox of its own, as the check rule does today.
 
 ## D. Durable runs (last)
+
+Status (2026-11-06): built: `codemode-chat/server/durable-run.ts`, `judgeDurableBot` in `judge.ts`, the log in the
+space in `judge-host.ts`, `keep` and keyed calls in the arena (`spaces-mmo/server/arena.ts`), the catalog task "Tide
+bot" and `codemode-chat/tests/durable-bots.test.ts` (with a judge process killed in the middle of a run). What it
+settles, before the text below:
+
+- **The use case is a day, not a week.** In the world as it is, driftwood burns 10 minutes, a fire holds at most 2 hours
+  and the tide brings 8 to 15 pieces a world day to the Graue Bucht (measured in three arena worlds); other fuel comes
+  only from traders, whose processes do not run in the arena. "Keep the fire burning for a week" cannot be reached.
+  The task is "put 6 pieces of driftwood into the beacon within one world day": about 50 to 100 calls, 14 s against the
+  real arena, long enough to kill a judge in the middle.
+- **The world outlives the judge; it is not seeded.** The weather draws on the engine's own randomness, so a lost world
+  cannot be rebuilt. A durable run opens its world with `keep: true` (it survives its connection, bounded by the idle
+  TTL; the judge asks for its transaction lease plus a minute, at most an hour, since a dead judge's candidate is back
+  only after that lease), and the head of the log names it. A world the arena lost starts the run afresh.
+- **The log's own trouble is no verdict.** A log that cannot be read or written gives the candidate back, as an arena
+  that is down does.
+- **Keyed calls.** Every look/act/wait carries `<seed>:<call id>`; the arena answers a key it has seen from memory. The
+  call that reached the world but not the log before the death is therefore not carried out twice.
+- **The log.** `BotRun` (seed, start time, the VM's fingerprint, the world) and `BotCall` (seq, call id, name, args, the
+  clock, the outcome) are written outside the judge's transaction, before the answer is delivered, and taken away once
+  the verdict is stored. A run whose calls or fingerprint do not match its log starts afresh in a new world, once.
+- **The clock.** The VM reads the `now` of each answer; live answers carry the wall clock minus the time the run was
+  down, so the bot's time and its time limit count only the time it ran.
+- **Deaths.** A candidate fails after two judge deaths only when they made no progress (its log did not grow).
 
 Scripts that run over hours or many world days and survive a dead judge:
 

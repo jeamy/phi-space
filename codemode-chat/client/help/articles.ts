@@ -154,6 +154,7 @@ Es gibt sechs Arten von Aufgaben: fertige [Katalogaufgaben](#catalog), [Aufgaben
 | Pi-Issues: Windows mit Antwort (echte Daten, mit Tools) | \`async solve()\` | die ids aller echten Pi-Issues, die im Titel oder Text Windows nennen und auf die eine Person geantwortet hat; siehe [Aufgaben mit Tools](#tools) |
 | Pi-Issues: Windows-Bugs nach Jev (echte Daten, mit Tools) | \`async solve()\` | dieselben, aber nur die, die der Klassifizierer Jev als Bug einstuft; siehe [Aufgaben mit Tools](#tools) |
 | Leuchtfeuer-Bot: das Feuer der Grauen Bucht entzünden (Spielwelt) | \`async bot()\` | eine Figur in einer eigenen Welt von Leuchtfeuer spielen, bis das Leuchtfeuer brennt; nur mit Arena, siehe [Bot-Aufgaben](#bots) |
+| Flut-Bot: einen Tag lang Treibholz sammeln (langer Lauf, Spielwelt) | \`async bot()\` | einen Welttag lang angeschwemmtes Treibholz sammeln, bis 6 Stück im Feuer liegen; übersteht den Absturz des Richters, siehe [Bot-Aufgaben](#bots) |
 | Bewertungsskript: Sortierfunktionen prüfen | \`async rate()\` | Sortierfunktionen bewerten, ohne ihren Code zu sehen: jede gute höher als jede schlechte, siehe [Bewertungsskripte](#harness) |
 
 ## Aufgaben mit Tools {#tools}
@@ -174,6 +175,7 @@ Hier schreibt das Team einen **Bot**: \`async function bot()\` spielt eine Figur
 - **Gleiche Welt für jeden:** Die Figur startet immer auf derselben Zelle, und die Weltzeit steht still, bis der Bot \`wait\` aufruft (Laufen und Befehle kosten keine). Ohne Warten findet jeder Bot dieselbe Welt vor. Wer wartet, erlebt Gezeiten, Stürme und Wind, und die fallen zufällig aus.
 - **Punkte:** Jeder Tool-Aufruf kostet einen Punkt (höchstens 300). Unter den Bots, die ihr Ziel erreichen, gewinnt der mit den wenigsten Punkten, die Zeit entscheidet erst danach.
 - **Kein ▶:** Ein Bot braucht eine eigene Welt; er wird nur beim Einreichen bewertet.
+- **Lange Läufe:** Der Flut-Bot braucht rund hundert Tool-Aufrufe. Sein Lauf übersteht den Absturz des Richters: Jede Antwort der Welt wird im Space gespeichert, bevor der Bot sie bekommt. Ein anderer Richter startet den Bot dann mit demselben Startwert für Zufall und Uhr neu, spielt ihm die gespeicherten Antworten ein und macht in derselben Welt weiter. Ein Befehl, der beim Absturz unterwegs war, wird nicht doppelt ausgeführt.
 - **Nur mit Arena:** Bot-Aufgaben erscheinen im Katalog nur, wenn der Server eine Arena hat (\`CODEMODE_ARENA\`), und nur Richter mit Arena nehmen Bot-Beiträge.
 
 ## Bewertungsskripte {#harness}
@@ -277,6 +279,7 @@ There are six kinds of task: ready-made [catalog tasks](#catalog), [tasks with t
 | Pi issues: Windows with a reply (real data, with tools) | \`async solve()\` | the ids of all real pi issues that name Windows in their title or text and that a person answered; see [Tasks with tools](#tools) |
 | Pi issues: Windows bugs by Jev (real data, with tools) | \`async solve()\` | the same, but only those the classifier Jev rates a bug; see [Tasks with tools](#tools) |
 | Beacon bot: light the fire of the Graue Bucht (game world) | \`async bot()\` | play a figure in a Leuchtfeuer world of its own until the beacon burns; only with an arena, see [Bot tasks](#bots) |
+| Tide bot: gather driftwood for a day (long run, game world) | \`async bot()\` | gather washed-up driftwood for a world day until 6 pieces are in the fire; survives a crash of its judge, see [Bot tasks](#bots) |
 | Eval harness: rate sort functions | \`async rate()\` | rate sort functions without seeing their code: every good one above every bad one, see [Eval harnesses](#harness) |
 
 ## Tasks with tools {#tools}
@@ -297,6 +300,7 @@ Here the team writes a **bot**: \`async function bot()\` plays a figure in a wor
 - **The same world for everyone:** the figure always starts on the same cell, and world time stands still until the bot calls \`wait\` (walking and commands take none). Without waiting every bot finds the same world. A bot that waits meets tides, storms and wind, and those come at random.
 - **Points:** every tool call costs one point (at most 300). Among the bots that reach their goal the one with the fewest points wins; the time decides only after that.
 - **No ▶:** a bot needs a world of its own; it is judged only when handed in.
+- **Long runs:** the tide bot takes about a hundred tool calls. Its run survives a crash of its judge: every answer of the world is stored in the space before the bot gets it. Another judge then starts the bot again with the same seed for randomness and clock, hands it the stored answers and goes on in the same world. A command that was on its way during the crash is not carried out twice.
 - **Only with an arena:** bot tasks appear in the catalog only when the server has an arena (\`CODEMODE_ARENA\`), and only judges with an arena take bot contributions.
 
 ## Eval harnesses {#harness}

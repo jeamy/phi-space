@@ -33,7 +33,7 @@ import { entryLeaseMs, HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeAll
 import type { WsConnection } from "phi-spaces/ws";
 
 /** The entry types that belong to a task block besides its CodeTask (deleted and extended with it). */
-const BLOCK_TYPES = ["CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "ChatMessage"];
+const BLOCK_TYPES = ["CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "BotRun", "BotCall", "ChatMessage"];
 const LIMITS = { agents: 8, gens: 10, perAgent: 3, polish: 3, boardDepth: 12, plans: 500, sessions: 50, messages: 500, contributions: 1000, blocks: 60, notes: 300 };
 /** Code a snapshot carries at most, counted as encoded JSON (escapes included); the rest is fetched per contribution
  *  (`source()`), so a frame stays far below the 1 MiB WebSocket limit however many contributions a room holds. */
@@ -847,8 +847,8 @@ export class CodeChatHub {
 		if (!this.allow(s, "extend", 20)) throw new Error("Too many extensions, slow down");
 		const out = await this.#exclusive(s, async () => {
 			if (!(await this.#taskEntries(id)).some((f) => f.blockId === blockId)) throw new Error("Unknown task block");
-			// CodeEarlier keeps its own lease (CODEMODE_EARLIER_DAYS)
-			for (const type of BLOCK_TYPES.filter((x) => x !== "CodeEarlier"))
+			// CodeEarlier keeps its own lease (CODEMODE_EARLIER_DAYS), and so does a durable run's log
+			for (const type of BLOCK_TYPES.filter((x) => x !== "CodeEarlier" && x !== "BotRun" && x !== "BotCall"))
 				for (const e of await this.host.readAll({ type, fields: { session: id, blockId } }, { limit: LIMITS.contributions * 2 }))
 					await this.host.renew(e.id, this.#ttl).catch(() => {});
 			// the CodeTask is rewritten with its new end (in one transaction: a judge checking the block waits)

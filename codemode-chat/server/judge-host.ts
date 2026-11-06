@@ -10,6 +10,7 @@ import "./env.ts";
 import { pathToFileURL } from "node:url";
 import { NO_WAIT, peek, TransactionError, type SpaceLike } from "phi-spaces";
 import { judgeInSlot, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
+import { LogDown, type CallLog, type LoggedCall, type RunHead } from "./durable-run.ts";
 import { setBest, trimArchive } from "./results.ts";
 import { serveExec } from "./exec.ts";
 import { ArenaDown, arenaAddress } from "./bottask.ts";
@@ -26,6 +27,22 @@ const TXN_LEASE_MS = process.env.CODEMODE_JUDGE_LEASE_MS ? Math.max(1000, Number
 const MAX_DEATHS = 2;
 /** How long a JudgeStart marker counts. */
 const START_LEASE_MS = 3600_000;
+
+/** How long a durable run's log lasts without its verdict (a judge that took it over renews nothing: the run is short). */
+const LOG_LEASE_MS = 6 * 3600_000;
+
+/** A durable run's log in the space (durable-run.ts): BotRun (its head) and BotCall (one per answer), written outside
+ *  the judge's transaction so that they outlive the judge; taken away once the verdict is stored. */
+export function spaceLog(space: SpaceLike, key: { session: string; blockId?: string; candidateId: string }): CallLog {
+	const k = { session: key.session, candidateId: key.candidateId };
+	return {
+		head: async () => ((await peek(space, { type: "BotRun", fields: k }))?.fields as unknown as RunHead | undefined) ?? null,
+		calls: async () => (await space.readAll({ type: "BotCall", fields: k }, { limit: 5000 })).map((e) => e.fields as unknown as LoggedCall).sort((a, b) => a.seq - b.seq),
+		begin: async (h) => { await space.write({ type: "BotRun", fields: { ...key, ...h } as never }, null, LOG_LEASE_MS); },
+		append: async (c) => { await space.write({ type: "BotCall", fields: { ...key, ...c } as never }, null, LOG_LEASE_MS); },
+		clear: async () => { await takeAll(space, { type: "BotCall", fields: k }); await takeAll(space, { type: "BotRun", fields: k }); },
+	};
+}
 
 /** What a verdict carries over from its candidate besides the verdict: the run, the lineage, the usage. */
 const lineageOf = (f: Record<string, any>) => Object.fromEntries(["role", "basedOn", "partner", "critiqueId", "proposalId", "usage", "runId"].filter((k) => f[k]).map((k) => [k, f[k]]));
@@ -56,21 +73,25 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 		// candidate goes back)
 		const taskEntry = async () => typeof blockId !== "string" ? null : (await readExisting(space, { type: "CodeTask", fields: { session, blockId } }, { txn: t.id }))?.fields as Record<string, unknown> | undefined ?? false;
 		const alive = async () => (await taskEntry()) !== false;
-		const deaths = await space.count({ type: "JudgeStart", fields: { session, candidateId } });
+		// a judge that died after a durable run moved on (its log grew) made progress: only deaths without it count
+		const logged = await space.count({ type: "BotCall", fields: { session, candidateId } });
+		const deaths = (await space.readAll({ type: "JudgeStart", fields: { session, candidateId } }, { limit: 50 })).filter((e) => Number((e.fields as { calls?: unknown }).calls ?? 0) >= logged).length;
 		if (deaths >= MAX_DEATHS) {
 			if (await alive()) await space.write({ type: "CodeScore", fields: failedVerdict(f, host, `the judge stopped ${deaths} times while judging it`) as never }, t.id, ttl);
 			await space.commit(t.id);
 			await takeAll(space, { type: "JudgeStart", fields: { session, candidateId } });
+			await spaceLog(space, { session, candidateId }).clear();
 			return true;
 		}
 		// cancelled when this round ends in any way but a hard death of this process
-		start = (await space.write({ type: "JudgeStart", fields: { session, candidateId } }, null, START_LEASE_MS)).id;
+		start = (await space.write({ type: "JudgeStart", fields: { session, candidateId, calls: logged } }, null, START_LEASE_MS)).id;
 		// the task: its block's CodeTask (a candidate from before carries its own spec; one without a block names a catalog task).
 		// Read without the transaction: a read under it would hold the CodeTask for the whole time limit, and deleting or
 		// extending the block would wait that long; whether the block still stands is asked under it after the judging
 		const spec = f.custom !== undefined || typeof blockId !== "string" ? f : ((await peek(space, { type: "CodeTask", fields: { session, blockId } }))?.fields as Record<string, unknown> | undefined ?? false);
 		const task = spec ? taskFromSpec(spec) : null;
-		const v: Verdict | null = spec === false ? null : task ? await judgeInSlot(cm, task, String(f.source ?? "")) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
+		const log = task?.durable ? spaceLog(space, { session, ...(typeof blockId === "string" ? { blockId } : {}), candidateId }) : undefined;
+		const v: Verdict | null = spec === false ? null : task ? await judgeInSlot(cm, task, String(f.source ?? ""), log ? { log, leaseMs: TXN_LEASE_MS } : {}) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
 		if (v && (await alive())) {
 			await space.write({ type: "CodeScore", fields: { session, blockId, candidateId, author: f.author, via: f.via, host, gen: f.gen, ...lineageOf(f), ...verdictFields(v), source: f.source, ts: f.ts } as never }, t.id, ttl);
 			// a correct verdict that beats the block's best (and no person rejected it) becomes the new best
@@ -78,12 +99,14 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 				await setBest(space, t.id, session, blockId, task, ttl, { offer: { candidateId, ms: v.ms, source: String(f.source ?? ""), ...(v.cost !== undefined ? { cost: v.cost } : {}) } });
 		}
 		await space.commit(t.id);
+		// the verdict is stored: the run's log has served (a judge dying here leaves it to its lease)
+		if (log) await log.clear().catch(() => {});
 		return true;
 	} catch (e) {
 		await space.abort(t.id).catch(() => {});
 		if (e instanceof StillHeld) return true; // the block's task stayed held: the candidate is back for a later round
 		// the arena failed, not the bot: the candidate is back; a pause, so a dead arena is not asked in a tight loop
-		if (e instanceof ArenaDown) { console.error("[judge] arena:", e.message); await new Promise((r) => setTimeout(r, ARENA_RETRY_MS)); return true; }
+		if (e instanceof ArenaDown || e instanceof LogDown) { console.error(`[judge] ${e instanceof LogDown ? "log" : "arena"}:`, e.message); await new Promise((r) => setTimeout(r, ARENA_RETRY_MS)); return true; }
 		// the transaction lapsed: the candidate is back for another try. A commit over the space's limits fails
 		// with ResourceExhausted and would fail every time: that one goes to the failed verdict below
 		if (e instanceof TransactionError) return true; // a limit of the space is ResourceExhausted, not a TransactionError

@@ -77,3 +77,57 @@ test("a bot lights the fire of the Graue Bucht in a world of its own; the clock 
 		rmSync(dir, { recursive: true, force: true });
 	}
 });
+
+test("a durable run's world outlives its connection, and a keyed call is carried out once", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "arena-test-")), path = join(dir, "a.sock");
+	const arena = await startArena({ listen: `unix:${path}`, worlds: 1 });
+	try {
+		const c = await client(path);
+		const { world } = await c.ask("open", { keep: true });
+		await c.ask("act", { world, line: "move 5 7", key: "k1" });
+		const took = await c.ask("act", { world, line: "nimm treibholz", key: "k2" });
+		assert.ok(took.said.some((s: string) => s.includes("Treibholz")), JSON.stringify(took.said));
+		// the judge dies: the world stays
+		await c.end();
+		await new Promise((r) => setTimeout(r, 300));
+		assert.equal(arena.worlds(), 1);
+		const d = await client(path);
+		// the call on its way when the judge died comes again with its key: the same answer, nothing picked up twice
+		const again = await d.ask("act", { world, line: "nimm treibholz", key: "k2" });
+		assert.deepEqual(again.said, took.said);
+		assert.deepEqual((await d.ask("look", { world })).pack, [{ name: "Treibholz", count: 1 }]);
+		assert.deepEqual((await d.ask("score", { world, goal: "feed:feuer-bucht:1" })).done, false);
+		await d.ask("act", { world, line: "move 9 9", key: "k3" });
+		await d.ask("act", { world, line: "lege holz ins feuer", key: "k4" });
+		const s = await d.ask("score", { world, goal: "feed:feuer-bucht:1" });
+		assert.equal(s.done, true, s.detail);
+		assert.match(s.detail, /^1 of 1 pieces/);
+		await d.ask("close", { world });
+		assert.equal(arena.worlds(), 0);
+		await d.end();
+	} finally {
+		await arena.close();
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("a kept world waits as long as its judge asked, a plain one only the idle time", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "arena-test-")), path = join(dir, "a.sock");
+	const arena = await startArena({ listen: `unix:${path}`, worlds: 2, idleMs: 1000 });
+	try {
+		const c = await client(path);
+		// both at once: opening a world takes seconds, and each one's idle time starts when it is open
+		const [k, p] = await Promise.all([c.ask("open", { keep: true, idleMs: 4000 }), c.ask("open", { keep: true })]);
+		assert.equal(k.ok && p.ok, true);
+		const kept = k.world;
+		await new Promise((r) => setTimeout(r, 2000));
+		assert.equal(arena.worlds(), 1, "the one without its own idle time is gone, the other waits");
+		assert.equal((await c.ask("look", { world: kept })).ok, true);
+		for (let i = 0; i < 80 && arena.worlds() > 0; i++) await new Promise((r) => setTimeout(r, 100));
+		assert.equal(arena.worlds(), 0, "and then it goes too");
+		await c.end();
+	} finally {
+		await arena.close();
+		rmSync(dir, { recursive: true, force: true });
+	}
+});

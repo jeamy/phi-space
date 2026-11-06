@@ -95,7 +95,7 @@ One machine runs exactly one profile. On both: `git pull --ff-only`, then the sc
 | --- | --- | --- | --- |
 | nano | accounts Space (credentials, web sessions) | `docker:nano:up` | `SPACES_MMO_SPACE_BIND=<internal address of nano>` |
 | big | the four regions (Space, world worker, NPCs, model per region) and web | `docker:big:up` | `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, `SPACES_MMO_WEB_REGIONS` (below), `PI_AUTH_DIR` |
-| big | the arena for the codemode chat's bot tasks (`server/arena.ts`; a compose project of its own, `phi-spaces-mmo-arena`, so the world's up/down leaves it alone) | `docker:arena:up` | none: it reads no `.env` (its worlds must not see the game's spaces); loopback port 3990, `SPACES_MMO_ARENA_WORLDS` (default 2) |
+| big | the arena for the codemode chat's bot tasks (`server/arena.ts`; a compose project of its own, `phi-spaces-mmo-arena`, so the world's up/down leaves it alone) | `docker:arena:up` | none: it reads no `.env` (its worlds must not see the game's spaces); loopback port 3990, `SPACES_MMO_ARENA_WORLDS` (default 2); a durable run's world waits for the next judge as long as the dead one's lease (about 11 min with `CODEMODE_MAX_TIMEOUT_S=600`) and holds a slot meanwhile |
 
 Every region Space needs a fast core; on nano (small VM) one core computed about three times as long as on big
 ([lasttest-2026-10-28.en.md](lasttest-2026-10-28.en.md)). Therefore the world lies on big and only the accounts Space on nano.

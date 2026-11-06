@@ -85,8 +85,9 @@ const DESCRIPTIONS: Record<BotTool, { de: string; en: string }> = {
 export const describeBotTools = (lang: "de" | "en"): string => (["look", "act", "wait"] as const).map((n) => `- tools.${n}(args): ${DESCRIPTIONS[n][lang]}`).join("\n");
 
 /** The tools of one world; every call is counted on `m`, and a call beyond MAX_BOT_CALLS throws. */
+export const botArg = (a: unknown): Record<string, unknown> => (a && typeof a === "object" ? (a as Record<string, unknown>) : {});
 export function botTools(arena: Arena, world: string, m: Meter): CodemodeTool[] {
-	const arg = (a: unknown) => (a && typeof a === "object" ? (a as Record<string, unknown>) : {});
+	const arg = botArg;
 	const call = (name: BotTool, run: (a: Record<string, unknown>) => Promise<unknown>) => ({
 		name, description: DESCRIPTIONS[name].en,
 		execute: async (a: unknown) => {
@@ -95,10 +96,15 @@ export function botTools(arena: Arena, world: string, m: Meter): CodemodeTool[] 
 			return run(arg(a));
 		},
 	});
+	return (["look", "act", "wait"] as const).map((name) => call(name, (a) => botCall(arena, world, name, a)));
+}
+
+/** One bot call in a world: what the arena answers, without its envelope. A `key` makes it safe to send again (the
+ *  arena answers a key it has seen from memory): durable runs use it (durable-run.ts). */
+export async function botCall(arena: Arena, world: string, name: BotTool, a: Record<string, unknown>, key?: string): Promise<Record<string, unknown>> {
 	const strip = ({ id: _id, ok: _ok, ...rest }: Record<string, any>) => rest;
-	return [
-		call("look", async () => strip(await arena.ask("look", { world }))),
-		call("act", async (a) => { if (typeof a.line !== "string") throw new Error("act needs { line: string }"); return strip(await arena.ask("act", { world, line: a.line })); }),
-		call("wait", async (a) => strip(await arena.ask("wait", { world, minutes: Number(a.minutes) }))),
-	];
+	const k = key ? { key } : {};
+	if (name === "look") return strip(await arena.ask("look", { world, ...k }));
+	if (name === "act") { if (typeof a.line !== "string") throw new Error("act needs { line: string }"); return strip(await arena.ask("act", { world, line: a.line, ...k })); }
+	return strip(await arena.ask("wait", { world, minutes: Number(a.minutes), ...k }));
 }

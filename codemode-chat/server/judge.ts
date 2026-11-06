@@ -13,7 +13,8 @@
 // contribution's reach: patched builtins cannot make the rule pass.
 import { pathToFileURL } from "node:url";
 import type { Task } from "./tasks.ts";
-import { ArenaDown, arenaAddress, arenaClient, botTools, type BotSpec } from "./bottask.ts";
+import { ArenaDown, arenaAddress, arenaClient, botArg, botCall, BOT_COST, botTools, MAX_BOT_CALLS, type BotSpec, type BotTool } from "./bottask.ts";
+import { Diverged, LogDown, runDurable, type CallLog, type LoggedCall, type RunHead } from "./durable-run.ts";
 import { harnessTools, type HarnessSpec, type Impl } from "./harnesstask.ts";
 import { meterText, newMeter, toolProgram, worldCase, worldTools, type Meter, type ToolSpec, type World, type WorldResult } from "./tooltask.ts";
 
@@ -357,7 +358,81 @@ async function judgeBot(cm: Codemode, task: Task & { bot: BotSpec }, source: str
 	}
 }
 
-export async function judgeInSlot(cm: Codemode, task: Task, source: string): Promise<Verdict> {
+/** What a judge hands along for a durable task: the candidate's call log in the space (judge-host.ts). Without it a
+ *  durable task keeps its log in memory (it then survives nothing, but runs the same way). */
+export type JudgeContext = { log?: CallLog; /** the judge's transaction lease: a dead judge's candidate is back within it, and its world must wait that long */ leaseMs?: number };
+
+/** An in-memory call log. */
+export function memoryLog(): CallLog {
+	let head: RunHead | null = null, calls: LoggedCall[] = [];
+	return { head: async () => head, calls: async () => [...calls], begin: async (h) => { head = h; }, append: async (c) => { calls.push(c); }, clear: async () => { head = null; calls = []; } };
+}
+
+/** A durable bot task (durable-run.ts): the world is opened to outlive this judge (`keep`), every answer is logged
+ *  before the bot gets it, and a judge that finds a log replays it and goes on in the same world. A world that is gone
+ *  (the arena restarted) or a run that does not match its log starts afresh, once. */
+async function judgeDurableBot(cm: Codemode, task: Task & { bot: BotSpec }, source: string, given: CallLog, leaseMs?: number): Promise<Verdict> {
+	// the space's trouble with the log is no verdict: the candidate goes back (judge-host.ts)
+	const down = (e: unknown) => new LogDown(`the run's log: ${(e as Error).message}`);
+	const log: CallLog = { head: () => given.head().catch((e) => { throw down(e); }), calls: () => given.calls().catch((e) => { throw down(e); }), begin: (h) => given.begin(h), append: (c) => given.append(c), clear: () => given.clear().catch((e) => { throw down(e); }) };
+	const limit = limitOf(task), goal = task.bot.goalText.en, call = `${task.fn}() in a world of its own`;
+	const fail = (error: string, meter?: Meter): Verdict => ({ ok: false, ms: limit, error: plain(error), passed: 0, total: 1, cases: [{ call, ok: false, error: plain(error), expect: goal }], ...(meter ? { cost: meter.cost, calls: { ...meter.calls } as Record<string, number>, score: 0 } : {}) });
+	const address = arenaAddress();
+	if (!address) return fail("this judge has no arena (CODEMODE_ARENA)");
+	const arena = await arenaClient(address);
+	try {
+		for (let attempt = 0; ; attempt++) {
+			let head = await log.head(), logged = head ? await log.calls() : [];
+			// a world left by a judge before: still there?
+			if (head) {
+				try { await arena.ask("look", { world: head.world }); }
+				catch (e) { if (e instanceof ArenaDown) throw e; await log.clear(); head = null; logged = []; }
+			}
+			let world = head?.world;
+			if (!world) {
+				// the world waits for the judge that takes over: as long as a dead judge's candidate takes to come back
+				try { world = String((await arena.ask("open", { keep: true, ...(leaseMs ? { idleMs: leaseMs + 60_000 } : {}) })).world); }
+				catch (e) { throw e instanceof ArenaDown ? e : new ArenaDown(`the arena could not open a world: ${(e as Error).message}`); }
+			}
+			const meter: Meter = newMeter();
+			const seen = (name: string) => { meter.total++; meter.calls[name] = (meter.calls[name] ?? 0) + 1; meter.cost += BOT_COST[name as BotTool] ?? 1; };
+			try {
+				const r = await runDurable(cm, {
+					code: toolProgram(CAPTURED, task.fn, source), limitMs: limit, log, head, logged, world, seen,
+					tools: (["look", "act", "wait"] as const).map((name) => ({ name })),
+					call: async (name, args, key) => {
+						if (meter.total > MAX_BOT_CALLS) return { ok: false, message: `more than ${MAX_BOT_CALLS} tool calls` };
+						if (!["look", "act", "wait"].includes(name)) return { ok: false, message: `no tool ${name}` };
+						try { return { ok: true, value: await botCall(arena, world!, name as BotTool, botArg(args), key) }; }
+						catch (e) { if (e instanceof ArenaDown) throw e; return { ok: false, message: plain((e as Error).message) }; }
+					},
+				});
+				if (arena.broken()) throw new ArenaDown("the arena went away while the bot played");
+				const v = (r.ok ? r.value ?? {} : {}) as { ms?: unknown; error?: unknown };
+				const error = !r.ok ? r.error ?? "failed" : typeof v.error === "string" ? v.error : null;
+				const ms = typeof v.ms === "number" && Number.isFinite(v.ms) && v.ms >= 0 ? v.ms : limit;
+				const s = await arena.ask("score", { world, goal: task.bot.goal });
+				await arena.ask("close", { world }).catch(() => {});
+				const calls = `calls: ${meterText(meter)}${r.replayed ? `, ${r.replayed} of them replayed from the log` : ""}`;
+				if (error) return fail(`${error} (${calls})`, meter);
+				if (s.done !== true) return fail(`goal not reached: ${String(s.detail ?? "")} (${calls})`, meter);
+				return { ok: true, ms: Math.round(ms * 100) / 100, passed: 1, total: 1, cases: [{ call, ok: true, got: `reached (${calls})`, expect: goal }], cost: meter.cost, calls: { ...meter.calls } as Record<string, number>, score: 1 };
+			} catch (e) {
+				if (!(e instanceof Diverged)) throw e;
+				// another script, VM or order than the log: start afresh in a new world, once
+				await arena.ask("close", { world }).catch(() => {});
+				await log.clear();
+				if (attempt >= 1) return fail(`the run does not match its log: ${e.message}`);
+			}
+		}
+	} catch (e) {
+		if (e instanceof ArenaDown || e instanceof LogDown) throw e;
+		return fail((e as Error).message);
+	} finally { arena.close(); }
+}
+
+export async function judgeInSlot(cm: Codemode, task: Task, source: string, ctx: JudgeContext = {}): Promise<Verdict> {
+	if (task.kind === "bot" && task.bot && task.durable) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 1, cases: [] } : judgeDurableBot(cm, task as Task & { bot: BotSpec }, source, ctx.log ?? memoryLog(), ctx.leaseMs);
 	if (task.kind === "bot" && task.bot) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 1, cases: [] } : judgeBot(cm, task as Task & { bot: BotSpec }, source);
 	if (task.kind === "harness" && task.harness) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 1, cases: [] } : judgeHarness(cm, task as Task & { harness: HarnessSpec }, source);
 	if (task.kind === "tools" && task.tools) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 2, cases: [] } : judgeTools(cm, task as Task & { tools: ToolSpec }, source);
@@ -402,4 +477,4 @@ export async function judgeInSlot(cm: Codemode, task: Task, source: string): Pro
 /** The score fields of a verdict, as hub and shard write them: the case results failing ones first, at most 10. */
 export const verdictFields = (v: Verdict) => ({ ok: v.ok, ms: v.ms, passed: v.passed, total: v.total, cases: [...v.cases.filter((c) => !c.ok), ...v.cases.filter((c) => c.ok)].slice(0, 10), ...(v.error ? { error: v.error } : {}), ...(v.hardcoded ? { hardcoded: true } : {}), ...(v.cost !== undefined ? { cost: v.cost, calls: v.calls ?? {}, score: v.score ?? 0 } : {}) });
 
-export const judge = (cm: Codemode, task: Task, source: string): Promise<Verdict> => sandboxSlot(() => judgeInSlot(cm, task, source));
+export const judge = (cm: Codemode, task: Task, source: string, ctx: JudgeContext = {}): Promise<Verdict> => sandboxSlot(() => judgeInSlot(cm, task, source, ctx));
