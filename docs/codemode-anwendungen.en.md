@@ -8,7 +8,7 @@ shortened, logins replaced). Its answer is computed from the data, not labelled:
 mentions Windows and that a person, not the tracker's auto-close bot, commented on. A third, "Pi issues: Windows bugs
 by Jev", adds a `jev` tool: the answers of the classifier Jev (`typesafe/jev-1.13` via OpenRouter's decisions endpoint),
 asked once per issue by `fetch-pi-issues.ts --jev` and replayed by the judge. This is the record-and-replay of D in small:
-a real model's output, recorded, so the judge stays without network and deterministic. A step 2 (uploads as `CodeData`, the page's form), B, C and D are open.
+a real model's output, recorded, so the judge stays without network and deterministic. A step 2 (uploads as `CodeData`, the page's form) and D are open; B and C are built (their sections).
 
 What step 1 does differently from the text below:
 
@@ -130,7 +130,7 @@ Examples:
 
 ## B. Leuchtfeuer bots
 
-Status (2026-11-06): step 3 is built: the arena (`spaces-mmo/server/arena.ts`, `tests/arena.test.ts`), the bot tools and the judge (`codemode-chat/server/bottask.ts`, `judge.ts`), lanes, the catalog task "Beacon bot" and `codemode-chat/tests/bots.test.ts` with `tests/fake-arena.ts`. An arena container on big is not set up (a separate decision). What it settles, before the text below:
+Status (2026-11-06): step 3 is built: the arena (`spaces-mmo/server/arena.ts`, `tests/arena.test.ts`), the bot tools and the judge (`codemode-chat/server/bottask.ts`, `judge.ts`), lanes, the catalog task "Beacon bot" and `codemode-chat/tests/bots.test.ts` with `tests/fake-arena.ts`. On big the arena runs as a container of its own (`npm --prefix spaces-mmo run docker:arena:up`, loopback port 3990; since 2026-11-06), and the chat there reaches it with `CODEMODE_ARENA=tcp:127.0.0.1:3990`. What it settles, before the text below:
 
 - **The arena is a spaces-mmo process** (`spaces-mmo/server/arena.ts`, `npm --prefix spaces-mmo run arena`). It listens
   on a socket and speaks JSON lines: `open` (a world of its own: a space process and a world worker in memory, no NPC
@@ -207,6 +207,26 @@ A finished best bot could later play as a KI-Figur on the test bed (port 3910) u
 without asking.
 
 ## C. Eval harnesses as tasks
+
+Status (2026-11-06): built: `codemode-chat/server/harnesstask.ts`, `judgeHarness` in `judge.ts`, the catalog task
+"Eval harness: rate sort functions" with scripted variants, `codemode-chat/tests/harness.test.ts`. What it settles,
+before the text below:
+
+- **The harness never holds the candidate.** It is `async function rate()` with one tool, `tools.run({ args })`, which
+  runs the implementation under test in a fresh sandbox of its own and returns `{ value, ms }` or `{ error }`. A
+  candidate cannot patch the harness's globals, and the harness cannot recognise a variant by its source text.
+- **Good and bad, shown and hidden.** The task brings good implementations (the reference first) and bad ones (sorts
+  as text, knows the examples by heart, bubble sort); further good and bad ones are hidden like a tools task's holdout
+  (`portableTask` strips them, `restoreTask` brings them back). Of a hidden one the verdict says only whether it was
+  ordered right: no score, no runs, no error text, since a harness could encode what it saw in the number it returns. The hidden ones are
+  rated only when the shown ones are ordered right. Correct: every good one scores strictly higher than every bad one.
+- **Fixed before it grades.** The implementations are part of the task, written before any harness: the second rule
+  below holds by construction. Using a winning harness as the judge of another task is not part of this step.
+- **Speed without a clock of the judge's.** Times differ by machine, so a slow variant is told apart by comparison
+  with something the harness times itself (the scripted harness times its own merge sort; the quadratic variants take
+  8 to 20 times as long at 2000 numbers). A test judges it repeatedly, two at a time, and expects the same verdict.
+- **Points.** Every run costs one point (at most 40 per implementation); points and time count the shown
+  implementations only (the hidden ones would be a channel too). The fewest points win, then rate()'s own time. ▶ runs a harness against the reference only.
 
 The result of the task is a judging script `(candidate, tools) => score` for a stated goal. It counts only if:
 

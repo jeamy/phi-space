@@ -14,6 +14,7 @@
 import { pathToFileURL } from "node:url";
 import type { Task } from "./tasks.ts";
 import { ArenaDown, arenaAddress, arenaClient, botTools, type BotSpec } from "./bottask.ts";
+import { harnessTools, type HarnessSpec, type Impl } from "./harnesstask.ts";
 import { meterText, newMeter, toolProgram, worldCase, worldTools, type Meter, type ToolSpec, type World, type WorldResult } from "./tooltask.ts";
 
 /** One case as the judge saw it: the call, whether it passed, what came out (or the error), what was expected. */
@@ -223,7 +224,7 @@ export function hardcodedLiteral(task: Task, source: string): string | null {
 
 /** A holdout run's error as the page and the agents see it: only what the judge itself says (a script could otherwise
  *  throw the hidden data out in its message). */
-const OWN_ERRORS = [/^more than \d+ tool calls$/, /^classify needs \{ text: string \}$/, /^classify takes at most \d+ characters$/, /^no function [\w$]+$/, /^Execution timed out after \d+ ms$/, /^out of memory$/];
+const OWN_ERRORS = [/^more than \d+ tool calls$/, /^more than \d+ runs$/, /^run needs \{ args: \[\.\.\.\] \}$/, /^run takes at most \d+ bytes of arguments$/, /^[\w$]+\(\) returned no finite number$/, /^classify needs \{ text: string \}$/, /^classify takes at most \d+ characters$/, /^no function [\w$]+$/, /^Execution timed out after \d+ ms$/, /^out of memory$/];
 const hideError = (r: WorldResult, limit: number): WorldResult => (r.error && !OWN_ERRORS.some((x) => x.test(r.error!))
 	? { ...r, error: `threw on the holdout; its message stays hidden like its data (limit ${limit / 1000} s)` } : r);
 
@@ -255,6 +256,67 @@ async function judgeTools(cm: Codemode, task: Task & { tools: ToolSpec }, source
 	const literal = hardcodedLiteral(task, source);
 	if (literal) return { ok: false, ms: limit, error: plain(`hard-coded: the code returns the expected result ${literal} as a literal instead of computing it`), passed, total, cases, hardcoded: true, ...metered };
 	return { ok: true, ms: Math.round(last.ms * 100) / 100, passed, total, cases, ...metered };
+}
+
+/** Judges a harness task (harnesstask.ts): rate() once per implementation, `run` bound to it. The shown ones first; the
+ *  hidden ones only when the shown ones are ordered right. Correct when every good implementation scores strictly
+ *  higher than every bad one; the cost is the runs on the shown ones, the time rate()'s own on them. */
+async function judgeHarness(cm: Codemode, task: Task & { harness: HarnessSpec }, source: string): Promise<Verdict> {
+	const limit = limitOf(task), spec = task.harness;
+	const make = (o: { timeoutMs: number; tools: SandboxTool[]; memoryLimitBytes?: number }) => new cm.CodemodeSandbox(o);
+	type Rated = { impl: Impl; good: boolean; hidden: boolean; score: number | null; ms: number; meter: Meter; error?: string };
+	const rate = async (impl: Impl, good: boolean, hidden: boolean): Promise<Rated> => {
+		const meter: Meter = newMeter();
+		const sandbox = new cm.CodemodeSandbox({ timeoutMs: limit, tools: harnessTools(make, CAPTURED, spec, impl, meter), memoryLimitBytes: 64 * 1024 * 1024 });
+		const out = (score: number | null, ms: number, error?: string): Rated => ({ impl, good, hidden, score, ms, meter, ...(error ? { error: hidden && !OWN_ERRORS.some((x) => x.test(error)) ? `threw on a hidden implementation; its message stays hidden (limit ${limit / 1000} s)` : plain(error) } : {}) });
+		try {
+			const r = await sandbox.execute(toolProgram(CAPTURED, task.fn, source));
+			if (!r.ok) return out(null, limit, r.error?.message ?? "failed");
+			const v = (r.value ?? {}) as { ms?: unknown; got?: unknown; error?: unknown };
+			if (typeof v.error === "string") return out(null, limit, v.error);
+			if (typeof v.got !== "number" || !Number.isFinite(v.got)) return out(null, limit, `${task.fn}() returned no finite number`);
+			return out(v.got, typeof v.ms === "number" && Number.isFinite(v.ms) && v.ms >= 0 ? v.ms : limit);
+		} catch (e) {
+			return out(null, limit, (e as Error).message);
+		} finally { await sandbox.close().catch(() => {}); }
+	};
+	const all: Rated[] = [];
+	for (const [impls, good, hidden] of [[spec.good, true, false], [spec.bad, false, false], [spec.hiddenGood, true, true], [spec.hiddenBad, false, true]] as const) {
+		if (hidden && !all.length) continue;
+		if (hidden && !ordered(all)) break;
+		for (const impl of impls) all.push(await rate(impl, good, hidden));
+	}
+	function ordered(xs: Rated[]): boolean {
+		if (xs.some((x) => x.score === null)) return false;
+		const goods = xs.filter((x) => x.good).map((x) => x.score!), bads = xs.filter((x) => !x.good).map((x) => x.score!);
+		return !goods.length || !bads.length || Math.min(...goods) > Math.max(...bads);
+	}
+	// A hidden implementation shows only whether it was ordered right: its score, its runs and its time would be a
+	// channel out of it (a harness can encode what it returned in the number it gives back). The shown ones are measured
+	// against the shown ones, with the numbers; points and time count the shown ones only.
+	const shown = all.filter((x) => !x.hidden), num = (n: number) => String(Math.round(n * 1000) / 1000);
+	const bounds = (xs: Rated[]) => { const s = xs.filter((x) => x.score !== null); return { minGood: Math.min(...s.filter((x) => x.good).map((x) => x.score!)), maxBad: Math.max(...s.filter((x) => !x.good).map((x) => x.score!)) }; };
+	const seen = bounds(shown), every = bounds(all);
+	const cases: CaseResult[] = all.map((x) => {
+		const call = `${task.fn}() on ${x.impl.label}`;
+		if (x.hidden) {
+			if (x.score === null) return { call, ok: false, error: x.error ?? "failed" };
+			const ok = x.good ? x.score > every.maxBad : x.score < every.minGood;
+			return { call, ok, got: ok ? "ordered right" : "ordered wrong", ...(ok ? {} : { expect: x.good ? "more than every bad one" : "less than every good one" }) };
+		}
+		const runs = `runs: ${x.meter.total}`;
+		if (x.score === null) return { call, ok: false, error: `${x.error ?? "failed"} (${runs})` };
+		const ok = x.good ? x.score > seen.maxBad : x.score < seen.minGood;
+		return { call, ok, got: `${num(x.score)} (${runs})`, ...(ok ? {} : { expect: x.good ? `more than every bad one (highest shown bad: ${num(seen.maxBad)})` : `less than every good one (lowest shown good: ${num(seen.minGood)})` }) };
+	});
+	const passed = cases.filter((c) => c.ok).length, total = spec.good.length + spec.bad.length + spec.hiddenGood.length + spec.hiddenBad.length;
+	const runs = shown.reduce((a, x) => a + x.meter.total, 0), cost = shown.reduce((a, x) => a + x.meter.cost, 0);
+	const metered = { cost, calls: { run: runs }, score: total ? Math.round((passed / total) * 1000) / 1000 : 0 };
+	if (passed < total) {
+		const bad = cases.find((c) => !c.ok);
+		return { ok: false, ms: limit, error: plain(bad ? (bad.error ? `${bad.call}: ${bad.error}` : `${bad.call}: ${bad.got}, expected ${bad.expect}`) : "not every implementation was rated"), passed, total, cases, ...metered };
+	}
+	return { ok: true, ms: Math.round(shown.reduce((a, x) => a + x.ms, 0) * 100) / 100, passed, total, cases, ...metered };
 }
 
 /** Judges one contribution; the caller already holds a sandbox slot. */
@@ -297,6 +359,7 @@ async function judgeBot(cm: Codemode, task: Task & { bot: BotSpec }, source: str
 
 export async function judgeInSlot(cm: Codemode, task: Task, source: string): Promise<Verdict> {
 	if (task.kind === "bot" && task.bot) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 1, cases: [] } : judgeBot(cm, task as Task & { bot: BotSpec }, source);
+	if (task.kind === "harness" && task.harness) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 1, cases: [] } : judgeHarness(cm, task as Task & { harness: HarnessSpec }, source);
 	if (task.kind === "tools" && task.tools) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 2, cases: [] } : judgeTools(cm, task as Task & { tools: ToolSpec }, source);
 	const total = task.cases.length;
 	const limit = limitOf(task);

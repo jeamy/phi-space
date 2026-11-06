@@ -58,6 +58,17 @@ the goal the fewest points win. A candidate carries a lane: `bot` candidates go 
 port 3990), and `codemode-chat/.env` there sets `CODEMODE_ARENA=tcp:127.0.0.1:3990` for web and judge. The tests use `tests/fake-arena.ts`, which speaks the same lines; the real arena has its own test
 in spaces-mmo (`tests/arena.test.ts`).
 
+### Eval harnesses
+
+A harness task (`server/harnesstask.ts`; the catalog's "Eval harness: rate sort functions") asks for a judging script,
+`async function rate()`, that rates one implementation with a number. It never sees the implementation's code:
+`tools.run({ args })` calls it in a fresh sandbox of its own and returns `{ value, ms }` or `{ error }` (1 point per
+run, at most 40 per implementation). The judge calls `rate()` once per implementation the task brings, good ones and
+bad ones (wrong, hard-coded, slow), some of each hidden (of those the verdict says only whether they were ordered
+right: no score, no runs, no error text); the harness is correct only when every good one scores
+strictly higher than every bad one. The implementations are fixed by the task, so no team grades its own work. ▶ runs
+the harness against the reference only.
+
 ### Custom tasks
 
 Choose "Custom task …" in the dropdown. You give a function name, a description, a time limit and test cases. The test

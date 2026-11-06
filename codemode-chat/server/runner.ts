@@ -3,7 +3,8 @@
 // function runs against the task's cases and, optionally, one call the person typed; every case result, console line
 // and the call's value stream out as they happen (a host global the sandbox calls, so a busy loop still reports live).
 // Stop is an abort signal. Bounded: 60 s, two runs per process, at most 1000 lines / 256 KiB of output.
-import { limitOf, type Codemode } from "./judge.ts";
+import { CAPTURED, limitOf, type Codemode } from "./judge.ts";
+import { harnessTools } from "./harnesstask.ts";
 import type { Task } from "./tasks.ts";
 import { meterText, newMeter, worldTools } from "./tooltask.ts";
 
@@ -109,7 +110,9 @@ export async function execute(cm: Codemode, task: Task, source: string, call: st
 	const onAbort = () => stop.abort();
 	signal.addEventListener("abort", onAbort);
 	// a tools task runs on its sample world only (the holdout is never reached from here)
-	const meter = newMeter(), tools = task.kind === "tools" && task.tools ? worldTools(task.tools, task.tools.sample, meter) : [];
+	// a harness task runs against its reference only (the hidden implementations are never reached from here)
+	const meter = newMeter(), tools = task.kind === "tools" && task.tools ? worldTools(task.tools, task.tools.sample, meter)
+		: task.kind === "harness" && task.harness ? harnessTools((o) => new cm.CodemodeSandbox(o), CAPTURED, task.harness, task.harness.good[0]!, meter) : [];
 	const sandbox = new (cm as unknown as RunCodemode).CodemodeSandbox({
 		timeoutMs, tools, memoryLimitBytes: 64 * 1024 * 1024,
 		globals: [{ name: "__out", execute: (raw) => {
@@ -131,7 +134,7 @@ export async function execute(cm: Codemode, task: Task, source: string, call: st
 			const e: ExecEvent = { t: "log", level: "log", text: String(o.text ?? "").slice(0, 4000) };
 			if (++lines > MAX_LINES || (bytes += Buffer.byteLength(JSON.stringify(e))) > MAX_OUTPUT_BYTES) limited = true; else emit(e);
 		}
-		if (tools.length && !limited) emit({ t: "log", level: "info", text: `tool calls on the sample: ${meterText(meter)}` });
+		if (tools.length && !limited) emit({ t: "log", level: "info", text: task.kind === "harness" ? `runs of ${task.harness!.good[0]!.label}: ${meterText(meter)}` : `tool calls on the sample: ${meterText(meter)}` });
 		if (limited) return { t: "end", status: "limit", ms };
 		if (r.ok) return { t: "end", status: "ok", ms };
 		if (signal.aborted || r.error?.kind === "aborted") return { t: "end", status: "aborted", ms };

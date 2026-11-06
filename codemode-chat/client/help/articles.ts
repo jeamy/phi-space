@@ -140,7 +140,7 @@ Eine Aufgabe sagt, was entstehen soll: eine Funktion oder die Antwort auf eine F
 
 Ein **Raum** ist die Adresse nach dem \`#\` in der URL, zum Beispiel \`/#lobby\`. Er enthält höchstens 60 Blöcke. Ein neuer Raum hat noch keinen Block: Der erste entsteht, wenn du eine Aufgabe anlegst oder einen Lauf startest.
 
-Es gibt fünf Arten von Aufgaben: fertige [Katalogaufgaben](#catalog), [Aufgaben mit Tools](#tools), [Bot-Aufgaben](#bots) in einer Spielwelt, [eigene Aufgaben](#custom) mit deinen Testfällen und [Textaufgaben](#text).
+Es gibt sechs Arten von Aufgaben: fertige [Katalogaufgaben](#catalog), [Aufgaben mit Tools](#tools), [Bot-Aufgaben](#bots) in einer Spielwelt, [Bewertungsskripte](#harness), [eigene Aufgaben](#custom) mit deinen Testfällen und [Textaufgaben](#text).
 
 ## Katalogaufgaben {#catalog}
 
@@ -154,6 +154,7 @@ Es gibt fünf Arten von Aufgaben: fertige [Katalogaufgaben](#catalog), [Aufgaben
 | Pi-Issues: Windows mit Antwort (echte Daten, mit Tools) | \`async solve()\` | die ids aller echten Pi-Issues, die im Titel oder Text Windows nennen und auf die eine Person geantwortet hat; siehe [Aufgaben mit Tools](#tools) |
 | Pi-Issues: Windows-Bugs nach Jev (echte Daten, mit Tools) | \`async solve()\` | dieselben, aber nur die, die der Klassifizierer Jev als Bug einstuft; siehe [Aufgaben mit Tools](#tools) |
 | Leuchtfeuer-Bot: das Feuer der Grauen Bucht entzünden (Spielwelt) | \`async bot()\` | eine Figur in einer eigenen Welt von Leuchtfeuer spielen, bis das Leuchtfeuer brennt; nur mit Arena, siehe [Bot-Aufgaben](#bots) |
+| Bewertungsskript: Sortierfunktionen prüfen | \`async rate()\` | Sortierfunktionen bewerten, ohne ihren Code zu sehen: jede gute höher als jede schlechte, siehe [Bewertungsskripte](#harness) |
 
 ## Aufgaben mit Tools {#tools}
 
@@ -174,6 +175,17 @@ Hier schreibt das Team einen **Bot**: \`async function bot()\` spielt eine Figur
 - **Punkte:** Jeder Tool-Aufruf kostet einen Punkt (höchstens 300). Unter den Bots, die ihr Ziel erreichen, gewinnt der mit den wenigsten Punkten, die Zeit entscheidet erst danach.
 - **Kein ▶:** Ein Bot braucht eine eigene Welt; er wird nur beim Einreichen bewertet.
 - **Nur mit Arena:** Bot-Aufgaben erscheinen im Katalog nur, wenn der Server eine Arena hat (\`CODEMODE_ARENA\`), und nur Richter mit Arena nehmen Bot-Beiträge.
+
+## Bewertungsskripte {#harness}
+
+Hier schreibt das Team keine Lösung, sondern ein **Prüfskript**: \`async function rate()\` bewertet eine Implementierung mit einer Zahl, höher ist besser. Im Katalog sind es Sortierfunktionen.
+
+- **Kein Code zu sehen:** \`tools.run({ args })\` ruft die Implementierung, die gerade bewertet wird, in einer eigenen, frischen Sandbox auf und gibt \`{ value, ms }\` zurück (was herauskam, wie lange es dauerte) oder \`{ error }\`. Das Skript sieht ihren Code nie, und sie kann das Skript nicht täuschen.
+- **Gute und schlechte:** Der Richter ruft \`rate()\` einmal pro Implementierung auf: die Referenz und weitere gute, dazu schlechte (falsch, nur die Beispiele auswendig, zu langsam). Ein Teil ist **versteckt** wie das Holdout der Tools-Aufgaben: von ihnen zeigt die Seite nur, ob sie richtig eingeordnet wurden, nicht ihre Zahl und nicht ihre Fehlermeldung (sonst könnte ein Skript in der Zahl verraten, was es gesehen hat).
+- **Wann es zählt:** nur wenn jede gute Implementierung eine echt höhere Zahl bekommt als jede schlechte. Die Implementierungen stehen in der Aufgabe fest, bevor ein Skript geschrieben wird: niemand bewertet seine eigene Arbeit.
+- **Zeit messen:** Zeiten hängen von der Maschine ab. Ein gutes Skript vergleicht eine gemessene Zeit mit etwas, das es selbst misst.
+- **Punkte:** Jeder \`run\` kostet einen Punkt (höchstens 40 je Implementierung), gezählt bei den gezeigten Implementierungen. Unter den richtigen Skripten gewinnt das mit den wenigsten Punkten, danach das schnellste.
+- **▶** führt das Skript nur gegen die Referenz aus.
 
 ## Eigene Aufgabe {#custom}
 
@@ -251,7 +263,7 @@ A task says what should come out: a function or the answer to a question. Every 
 
 A **room** is the address after the \`#\` in the URL, for example \`/#lobby\`. It holds at most 60 blocks. A new room has no block yet: the first one opens when you create a task or start a run.
 
-There are five kinds of task: ready-made [catalog tasks](#catalog), [tasks with tools](#tools), [bot tasks](#bots) in a game world, [custom tasks](#custom) with your own test cases, and [text tasks](#text).
+There are six kinds of task: ready-made [catalog tasks](#catalog), [tasks with tools](#tools), [bot tasks](#bots) in a game world, [eval harnesses](#harness), [custom tasks](#custom) with your own test cases, and [text tasks](#text).
 
 ## Catalog tasks {#catalog}
 
@@ -265,6 +277,7 @@ There are five kinds of task: ready-made [catalog tasks](#catalog), [tasks with 
 | Pi issues: Windows with a reply (real data, with tools) | \`async solve()\` | the ids of all real pi issues that name Windows in their title or text and that a person answered; see [Tasks with tools](#tools) |
 | Pi issues: Windows bugs by Jev (real data, with tools) | \`async solve()\` | the same, but only those the classifier Jev rates a bug; see [Tasks with tools](#tools) |
 | Beacon bot: light the fire of the Graue Bucht (game world) | \`async bot()\` | play a figure in a Leuchtfeuer world of its own until the beacon burns; only with an arena, see [Bot tasks](#bots) |
+| Eval harness: rate sort functions | \`async rate()\` | rate sort functions without seeing their code: every good one above every bad one, see [Eval harnesses](#harness) |
 
 ## Tasks with tools {#tools}
 
@@ -285,6 +298,17 @@ Here the team writes a **bot**: \`async function bot()\` plays a figure in a wor
 - **Points:** every tool call costs one point (at most 300). Among the bots that reach their goal the one with the fewest points wins; the time decides only after that.
 - **No ▶:** a bot needs a world of its own; it is judged only when handed in.
 - **Only with an arena:** bot tasks appear in the catalog only when the server has an arena (\`CODEMODE_ARENA\`), and only judges with an arena take bot contributions.
+
+## Eval harnesses {#harness}
+
+Here the team writes no solution but a **test script**: \`async function rate()\` rates an implementation with a number, higher is better. In the catalog they are sort functions.
+
+- **No code to see:** \`tools.run({ args })\` calls the implementation being rated in a fresh sandbox of its own and returns \`{ value, ms }\` (what came out, how long it took) or \`{ error }\`. The script never sees its code, and it cannot fool the script.
+- **Good and bad:** the judge calls \`rate()\` once per implementation: the reference and other good ones, and bad ones (wrong, only the examples by heart, too slow). Some are **hidden** like the holdout of the tools tasks: of them the page shows only whether they were ordered right, not their number and not their error message (a script could otherwise give away in the number what it saw).
+- **When it counts:** only when every good implementation gets a strictly higher number than every bad one. The implementations are fixed in the task before any script is written: nobody grades their own work.
+- **Timing:** times depend on the machine. A good script compares a measured time with something it times itself.
+- **Points:** every \`run\` costs one point (at most 40 per implementation), counted on the shown implementations. Among the correct scripts the one with the fewest points wins, then the fastest.
+- **▶** runs the script against the reference only.
 
 ## Custom task {#custom}
 

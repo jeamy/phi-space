@@ -2,6 +2,7 @@
 // hand-written variants that the scripted (model-free) agents hand in. All code here runs only in the sandbox.
 import { MAX_CHECK_CHARS, maxTimeoutMs } from "./judge.ts";
 import { arenaAddress, describeBotTools, MAX_BOT_CALLS, type BotSpec } from "./bottask.ts";
+import { describeHarnessTools, type HarnessSpec } from "./harnesstask.ts";
 import { describeTools, FRUSTRATION, MAX_CALLS, PI_SOURCE, PI_WINDOWS, PI_WINDOWS_BUGS, type ToolSpec } from "./tooltask.ts";
 
 /** One test call. `expect` is the exact result, `expectAny` several results that are all right ("[0,1,4,9,11] oder
@@ -29,11 +30,13 @@ export type Task = {
 	/** Custom tasks: the time a contribution has for its cases and the bench (default: the judge's 5 s). */
 	timeoutMs?: number;
 	/** "text": a question whose answer is a text, judged by agents against `criteria` (no code, no sandbox). */
-	kind?: "code" | "text" | "tools" | "bot";
+	kind?: "code" | "text" | "tools" | "bot" | "harness";
 	/** "tools": the tools and data of the sandbox (tooltask.ts); the one case is the sample world's answer. */
 	tools?: ToolSpec;
 	/** "bot": what the bot must reach in its world of its own (bottask.ts, the arena of spaces-mmo). */
 	bot?: BotSpec;
+	/** "harness": the implementations a judging script rates, shown and hidden (harnesstask.ts). */
+	harness?: HarnessSpec;
 	/** What happens behind the task, for the people on the page only (never in an agent's prompt): where the data
 	 *  comes from, whether models are needed, what a tool does in the background. */
 	about?: { de: string; en: string };
@@ -44,6 +47,7 @@ export type Task = {
 
 export const isText = (t: Task): boolean => t.kind === "text";
 export const isBot = (t: Task): t is Task & { bot: BotSpec } => t.kind === "bot" && !!t.bot;
+export const isHarness = (t: Task): t is Task & { harness: HarnessSpec } => t.kind === "harness" && !!t.harness;
 export const isTools = (t: Task): t is Task & { tools: ToolSpec } => t.kind === "tools" && !!t.tools;
 
 /** A text task: a question (up to 2000 characters) and 0 to 12 criteria of a good answer (one line each). */
@@ -66,6 +70,28 @@ const lcg = (seed: number) => () => (seed = (Math.imul(seed, 1103515245) + 12345
 const sampleArrays = (() => { const r = lcg(7); return [[], [1], [3, 1, 2], [10, 9, 100, -5, 0, 2, 2], Array.from({ length: 40 }, r)]; })();
 const sortInput = (() => { const r = lcg(11); return Array.from({ length: 4000 }, r); })(); // the sandbox builds the same numbers
 const gcdSum = (() => { let x = 0; for (let i = 1; i < 3000; i++) x += gcd(1000003 * i, 999983 * (i + 7)); return x; })();
+
+/** The sort functions the harness task rates: good and bad, some hidden. The hard-coded ones know the cases of "Sort
+ *  numbers" by heart; the slow ones are right but quadratic (hundreds of ms for 2000 numbers in QuickJS, against 5 to 30). */
+const SORT_HARNESS: HarnessSpec = {
+	target: "sortNumbers", runMs: 3000,
+	good: [{ label: "the reference (built-in sort)", source: `function sortNumbers(a){return [...a].sort((x,y)=>x-y)}` }],
+	bad: [
+		{ label: "sorts as text", source: `function sortNumbers(a){return [...a].sort()}` },
+		{ label: "knows the examples by heart", source: `const T=${JSON.stringify(Object.fromEntries(sampleArrays.map((a) => [JSON.stringify(a), [...a].sort((x, y) => x - y)])))};function sortNumbers(a){return T[JSON.stringify(a)]??[...a]}` },
+		{ label: "bubble sort", source: `function sortNumbers(a){const b=[...a];for(let i=0;i<b.length;i++)for(let j=0;j<b.length-1-i;j++)if(b[j]>b[j+1]){const t=b[j];b[j]=b[j+1];b[j+1]=t}return b}` },
+	],
+	hiddenGood: [
+		{ label: "hidden good 1", source: `function sortNumbers(a){const m=x=>{if(x.length<2)return x;const h=x.length>>1,l=m(x.slice(0,h)),r=m(x.slice(h)),o=[];let i=0,j=0;while(i<l.length&&j<r.length)o.push(l[i]<=r[j]?l[i++]:r[j++]);return o.concat(l.slice(i),r.slice(j))};return m(a)}` },
+		{ label: "hidden good 2", source: `function sortNumbers(a){return Array.from(Float64Array.from(a).sort())}` },
+	],
+	hiddenBad: [
+		{ label: "hidden bad 1", source: `function sortNumbers(a){return [...new Set(a)].sort((x,y)=>x-y)}` },
+		{ label: "hidden bad 2", source: `function sortNumbers(a){return [...a].sort((x,y)=>Math.abs(x)-Math.abs(y))}` },
+		{ label: "hidden bad 3", source: `function sortNumbers(a){return a.length<=50?[...a].sort((x,y)=>x-y):[...a]}` },
+		{ label: "hidden bad 4", source: `function sortNumbers(a){const b=[...a];for(let i=1;i<b.length;i++){const v=b[i];let j=i-1;while(j>=0&&b[j]>v){b[j+1]=b[j];j--}b[j+1]=v}return b}` },
+	],
+};
 
 export const TASKS: Task[] = [
 	{
@@ -230,6 +256,33 @@ export const TASKS: Task[] = [
 			`async function bot(){const s=await tools.look();const wood=s.things.find(t=>t.name==="Treibholz");await tools.act({line:"move "+wood.x+" "+wood.y});await tools.act({line:"nimm treibholz"});await tools.act({line:"lege holz ins feuer"})}`,
 		],
 	},
+	{
+		id: "harness-sort", fn: "rate", kind: "harness", timeoutMs: 10_000,
+		harness: SORT_HARNESS,
+		title: { de: "Bewertungsskript: Sortierfunktionen prüfen", en: "Eval harness: rate sort functions" },
+		prompt: {
+			de: `Aufgabe: Schreibe async function rate(). Sie bewertet eine Implementierung von sortNumbers(arr) mit einer Zahl: höher ist besser. Gefordert ist von sortNumbers: die Zahlen aufsteigend sortiert als neues Array, alle Zahlen (auch doppelte und negative), und schnell (O(n log n), nicht quadratisch).\n\nDen Code der Implementierung siehst du nicht. Du rufst sie über ein Werkzeug auf:\n${describeHarnessTools(SORT_HARNESS, "de")}\n\nWertung: Der Richter ruft rate() einmal pro Implementierung auf. Gute Implementierungen sind die Referenz (eingebautes sort) und versteckte weitere. Schlechte sind diese drei und versteckte weitere: eine sortiert als Text ("10" vor "9"), eine kennt nur die Beispiele der Aufgabe "Zahlen sortieren" auswendig, eine ist Bubblesort (richtig, aber quadratisch). rate() zählt nur, wenn jede gute Implementierung eine echt höhere Zahl bekommt als jede schlechte. Zeiten hängen von der Maschine ab: vergleiche eine gemessene Zeit mit etwas, das rate() selbst misst (2000 Zahlen sortiert ein O(n log n)-Verfahren in rund 5 bis 30 ms, Bubblesort braucht hunderte).\n\nPunkte: Jeder run kostet 1 Punkt; gezählt werden die Aufrufe bei den gezeigten Implementierungen. Unter den richtigen Bewertungsskripten gewinnt das mit den wenigsten Punkten, danach das schnellste.`,
+			en: `Task: write async function rate(). It rates an implementation of sortNumbers(arr) with a number: higher is better. What sortNumbers must do: return the numbers in ascending order as a new array, all of them (duplicates and negatives too), and fast (O(n log n), not quadratic).\n\nYou do not see the implementation's code. You call it through a tool:\n${describeHarnessTools(SORT_HARNESS, "en")}\n\nScoring: the judge calls rate() once per implementation. The good ones are the reference (built-in sort) and hidden others. The bad ones are these three and hidden others: one sorts as text ("10" before "9"), one knows only the examples of the task "Sort numbers" by heart, one is bubble sort (right, but quadratic). rate() counts only when every good implementation gets a strictly higher number than every bad one. Times depend on the machine: compare a measured time with something rate() times itself (an O(n log n) sort takes about 5 to 30 ms for 2000 numbers, bubble sort hundreds).\n\nPoints: every run costs 1 point, counted on the shown implementations. Among correct harnesses the one with the fewest points wins, then the fastest.`,
+		},
+		about: {
+			de: `So läuft es: Der Beitrag ist kein Sortierverfahren, sondern ein Prüfskript. Der Richter ruft rate() für jede Implementierung einmal in einer eigenen Sandbox auf; jeder tools.run startet die Implementierung in einer weiteren, frischen Sandbox, so dass sie das Prüfskript nicht täuschen kann und es ihren Code nie sieht. Die Implementierungen liegen in der Aufgabe fest, bevor ein Skript geschrieben wird: niemand bewertet seine eigene Arbeit. Ein Teil davon ist versteckt wie das Holdout der Tools-Aufgaben; von ihnen zeigt die Seite nur, ob sie richtig eingeordnet wurden, nicht ihre Zahl und nicht ihre Fehlermeldung. Kein KI-Modell nötig: nur Modell-Agenten, die das Skript schreiben, brauchen eines.`,
+			en: `How it runs: the contribution is not a sort but a test script. The judge calls rate() once per implementation in a sandbox of its own; every tools.run starts the implementation in another, fresh sandbox, so it cannot fool the script, and the script never sees its code. The implementations are fixed in the task before any script is written: nobody grades their own work. Some of them are hidden like the holdout of the tools tasks; the page shows of them only whether they were ordered right, not their number and not their error message. No AI model is needed: only model agents writing the script use one.`,
+		},
+		cases: [],
+		bench: "",
+		variants: [
+			// one run: a large array with duplicates and negatives against its own merge sort, timed against that sort
+			`async function rate(){let s=3;const a=[];for(let i=0;i<2000;i++)a.push(((s=(Math.imul(s,1103515245)+12345)>>>0)%2001)-1000);const own=x=>{if(x.length<2)return x;const h=x.length>>1,l=own(x.slice(0,h)),r=own(x.slice(h)),o=[];let i=0,j=0;while(i<l.length&&j<r.length)o.push(l[i]<=r[j]?l[i++]:r[j++]);return o.concat(l.slice(i),r.slice(j))};let base=0,want;for(let k=0;k<2;k++){const t=Date.now();want=own(a);base=Math.max(base,Date.now()-t)}const r=await tools.run({args:[a]});if(r.error||!Array.isArray(r.value)||r.value.length!==want.length)return 0;for(let i=0;i<want.length;i++)if(r.value[i]!==want[i])return 0;return r.ms>3*base+5?0.5:1}`,
+			// the same and three small runs first: correct, more points
+			`async function rate(){const own=x=>[...x].sort((p,q)=>p-q);for(const x of [[],[1],[3,-1,3,2]]){const r=await tools.run({args:[x]});if(r.error||JSON.stringify(r.value)!==JSON.stringify(own(x)))return 0}let s=3;const a=[];for(let i=0;i<2000;i++)a.push(((s=(Math.imul(s,1103515245)+12345)>>>0)%2001)-1000);const ms=x=>{if(x.length<2)return x;const h=x.length>>1,l=ms(x.slice(0,h)),r=ms(x.slice(h)),o=[];let i=0,j=0;while(i<l.length&&j<r.length)o.push(l[i]<=r[j]?l[i++]:r[j++]);return o.concat(l.slice(i),r.slice(j))};let base=0;for(let k=0;k<2;k++){const t=Date.now();ms(a);base=Math.max(base,Date.now()-t)}const r=await tools.run({args:[a]});if(r.error||JSON.stringify(r.value)!==JSON.stringify(own(a)))return 0;return r.ms>3*base+5?0.5:1}`,
+			// wrong: checks only the examples of "Sort numbers" (the hard-coded one passes)
+			`async function rate(){for(const x of [[3,1,2],[10,9,100,-5,0,2,2]]){const r=await tools.run({args:[x]});if(r.error||JSON.stringify(r.value)!==JSON.stringify([...x].sort((p,q)=>p-q)))return 0}return 1}`,
+			// wrong: right results only, speed ignored (bubble sort scores like the reference)
+			`async function rate(){let s=3;const a=[];for(let i=0;i<2000;i++)a.push(((s=(Math.imul(s,1103515245)+12345)>>>0)%2001)-1000);const r=await tools.run({args:[a]});return !r.error&&JSON.stringify(r.value)===JSON.stringify([...a].sort((p,q)=>p-q))?1:0}`,
+			// wrong: rates everything the same
+			`async function rate(){return 1}`,
+		],
+	},
 ];
 
 export const taskById = (id: string): Task | undefined => TASKS.find((t) => t.id === id);
@@ -238,8 +291,8 @@ export const offeredTasks = (): Task[] => TASKS.filter((t) => t.kind !== "bot" |
 
 /** A task as it may be stored or handed to another process: a tools task without its data and functions (the holdout
  *  must never leave the judge), and `restoreTask` brings them back from the catalog. */
-export const portableTask = (t: Task): Task => (t.kind === "tools" ? (({ tools: _tools, ...rest }) => rest)(t) : t);
-export const restoreTask = (t: Task): Task => (t.kind === "tools" && !t.tools ? taskById(t.id) ?? t : t);
+export const portableTask = (t: Task): Task => (t.kind === "tools" ? (({ tools: _tools, ...rest }) => rest)(t) : t.kind === "harness" ? (({ harness: _harness, ...rest }) => rest)(t) : t);
+export const restoreTask = (t: Task): Task => ((t.kind === "tools" && !t.tools) || (t.kind === "harness" && !t.harness) ? taskById(t.id) ?? t : t);
 
 /** A user-defined task: the function name and the cases are the oracle; the bench runs every case 300 times. */
 // Names a custom task cannot use as its function: reserved words, and the `__` prefix the judge keeps for itself.
