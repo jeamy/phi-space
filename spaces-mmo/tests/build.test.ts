@@ -224,3 +224,26 @@ test("every plan names the admin's setting for how long it stands, and the setti
 	}
 	assert.deepEqual([keeps.get("vogelscheuche"), keeps.get("huette"), keeps.get("lagerhaus"), keeps.get("kapelle"), keeps.get("park")], ["keep.scheuche", "keep.bau", "keep.lager", "keep.kapelle", "keep.park"]);
 });
+
+test("the builder is not in the way of its own site: it stakes it out where it stands and steps off beside it; someone else still is", { timeout: 180_000 }, async () => {
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001" } });
+	try {
+		const s = srv.stack.space;
+		await lightFire(s, 600_000, "feuer-bucht");
+		const boss = await player(srv.url, "Baumeister"), other = await player(srv.url, "Zaungast");
+		const foot: Array<[number, number]> = [[16, 12], [17, 12], [16, 13], [17, 13]];
+		// someone else on the plot: refused
+		await walk(other, s, 17, 13);
+		await walk(boss, s, 16, 12);
+		await clear(s, foot);
+		assert.match(await does(boss.p, "bau hütte 16 12", "passt keine Hütte"), /Dort steht jemand/);
+		await walk(other, s, 20, 10);
+		// only the builder on it: staked out, and the builder stands beside it, not on it
+		let staked = "";
+		for (let i = 0; i < 5 && !staked.includes("steckt"); i++) { await clear(s, foot); staked = await does(boss.p, "bau hütte 16 12", /steckt eine Baustelle ab|passt keine/); }
+		assert.match(staked, /Baumeister steckt eine Baustelle ab: Hütte/);
+		const me = (await s.readAll({ type: "Character", fields: { charId: boss.me } }))[0]!.fields as { x: number; y: number };
+		assert.ok(!foot.some(([x, y]) => x === me.x && y === me.y), `the builder stepped off the site (${me.x},${me.y})`);
+		assert.ok(Math.max(Math.abs(me.x - 16.5) - 0.5, Math.abs(me.y - 12.5) - 0.5) <= 1, "right beside it");
+	} finally { await srv.close(); }
+});

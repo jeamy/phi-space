@@ -71,15 +71,16 @@ export async function relocate(c: CommandCtx, to: { room: string; x: number; y: 
 
 /** Onto a free cell of `room`, starting at `at`: the nearest cell no online character holds, no exit and no fire is on,
  *  claimed with the space's unique check (a few tries: someone may take one meanwhile). */
-export async function placeIn(c: CommandCtx, room: RoomFields, at: { x: number; y: number }, o: { exits?: boolean } = {}): Promise<{ x: number; y: number }> {
+export async function placeIn(c: CommandCtx, room: RoomFields, at: { x: number; y: number }, o: { exits?: boolean; /** cells not to land on (a site just staked out) */ avoid?: Iterable<string> } = {}): Promise<{ x: number; y: number }> {
 	// arriving through a door: its landing is a passage, free whoever stands there
 	const exits = (await exitsHere(c, room.roomId)).map((x) => x.f);
 	const blocked = await blockedIn(c.space, c.world, room.roomId);
-	if (o.exits !== false && isPassage(exits, at) && !exits.some((x) => x.x === at.x && x.y === at.y) && walkable(c.world, room.ground, at.x, at.y) && !blocked.has(cellKey(at))) {
+	const keepOff = new Set(o.avoid ?? []);
+	if (o.exits !== false && !keepOff.has(cellKey(at)) && isPassage(exits, at) && !exits.some((x) => x.x === at.x && x.y === at.y) && walkable(c.world, room.ground, at.x, at.y) && !blocked.has(cellKey(at))) {
 		await releaseSpot(c.space, c.txn, c.actor.charId);
 		return at;
 	}
-	const avoid = new Set([...(await occupiedIn(c.space, room.roomId, c.actor.charId)).keys(), ...blocked, ...(o.exits === false ? [] : (await exitsHere(c, room.roomId)).map((x) => cellKey(x.f)))]);
+	const avoid = new Set([...(await occupiedIn(c.space, room.roomId, c.actor.charId)).keys(), ...blocked, ...(o.exits === false ? [] : (await exitsHere(c, room.roomId)).map((x) => cellKey(x.f))), ...keepOff]);
 	for (let tries = 0; tries < 4; tries++) {
 		const cell = freeCellNear(c.world, room.ground, at, avoid);
 		if (!cell) break;

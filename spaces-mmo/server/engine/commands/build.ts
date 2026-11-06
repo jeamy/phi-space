@@ -28,6 +28,7 @@ import type { Command } from "../cmdsets.ts";
 import { byName, CommandError, exitsHere, inventory, msg, NotUnderstood, roomOf, type CommandCtx, itemsNamed } from "../context.ts";
 import { coversOf, flameOf, isLit } from "../fire.ts";
 import { blockedIn, cellKey, isPassage, occupiedIn } from "../occupancy.ts";
+import { placeIn, relocate } from "./default.ts";
 import { walkable, type PlanDef, type WorldDef } from "../world.ts";
 import { setting, workRestMs } from "../../settings.ts";
 
@@ -76,7 +77,8 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green
 	if (zoned) return zoned;
 	const exits = (await exitsHere(c, room.roomId)).map((x) => x.f);
 	const blocked = await blockedIn(c.space, c.world, room.roomId);
-	const people = await occupiedIn(c.space, room.roomId);
+	// the builder is no one in the way: it steps off the site it staked out (bau); beds and fields are dug under anyone's feet
+	const people = await occupiedIn(c.space, room.roomId, c.actor.charId);
 	const things = new Set((await c.space.readAll({ type: "Item", fields: { location: room.roomId } })).map((e) => cellKey(e.fields as never)));
 	const fires = c.world.beacons.filter((b) => b.room === room.roomId);
 	for (const p of cells(rect)) {
@@ -86,7 +88,7 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green
 		if (isPassage(exits, p)) return "Dort ist ein Weg hinaus; den baut niemand zu.";
 		if (fires.some((b) => Math.max(Math.abs(b.x - p.x), Math.abs(b.y - p.y)) <= 1)) return "So nah am Feuer baut man nicht.";
 		if (blocked.has(k)) { const piece = (await c.space.readAll({ type: "Scenery", fields: { room: room.roomId } })).map((e) => fieldsOf<SceneryFields>(e)).find((s) => distTo(p, s) === 0); return piece && !piece.fixed ? `Dort steht ${piece.name}; erst abräumen (räume).` : "Dort steht schon etwas oder wird gebaut."; }
-		if (!onPeople && (people.has(k) || (p.x === c.actor.x && p.y === c.actor.y))) return "Dort steht jemand.";
+		if (!onPeople && people.has(k)) return "Dort steht jemand.";
 		if (things.has(k)) return "Dort liegt etwas; räum es erst weg.";
 	}
 	// nothing may close a way: from the room's spawn every exit, every fire's side and the builder stay reachable
@@ -94,7 +96,7 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green
 	const start = room.spawn && !after.has(cellKey(room.spawn)) ? room.spawn : exits[0] ? { x: exits[0].x, y: exits[0].y } : { x: c.actor.x, y: c.actor.y };
 	const reach = reachable(c.world, room.ground, start, after);
 	const ok = (p: { x: number; y: number }) => reach.has(cellKey(p));
-	if (!exits.every((x) => ok(x)) || (room.spawn && !ok(room.spawn)) || !(ok(c.actor) || (onPeople && distTo(c.actor, rect) === 0))) return "Damit wäre ein Weg zugebaut.";
+	if (!exits.every((x) => ok(x)) || (room.spawn && !ok(room.spawn)) || !(ok(c.actor) || distTo(c.actor, rect) === 0)) return "Damit wäre ein Weg zugebaut.";
 	if (!fires.every((b) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => ok({ x: b.x + dx!, y: b.y + dy! })))) return "Damit käme niemand mehr ans Feuer.";
 	return null;
 }
@@ -270,6 +272,8 @@ export const bau: Command = {
 			needs: plan.needs.map((n) => ({ proto: n.proto, name: c.world.prototypes.find((x) => x.key === n.proto)?.name ?? n.proto, count: n.count, have: 0 })), work: 0, workNeed: plan.work, human: 0, other: 0, beaconId: light.beaconId, points: plan.points, by: {},
 			untilWorldMs: (await decayNowOf(c.space, c.txn)) + def.siteWorldMs, at: now };
 		await c.space.write({ type: "Site", fields: s as never }, c.txn, FOREVER);
+		// standing on it, the builder steps off onto the nearest free cell beside it
+		if (distTo(c.actor, rect) === 0) { const off = await placeIn(c, room, c.actor, { avoid: cells(rect).map(cellKey), exits: false }); await relocate(c, { room: room.roomId, ...off }, { spot: false }); }
 		await msg(c, "*", "info", `${c.actor.name} steckt eine Baustelle ab: ${plan.name}. Es fehlen ${missing(s).join(", ")} – liefern („liefere <ding>“) und mitarbeiten („arbeite“) können alle.`);
 	},
 };
