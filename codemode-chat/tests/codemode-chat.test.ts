@@ -4,6 +4,15 @@ import assert from "node:assert/strict";
 import { startServer, startStack } from "./stack.ts";
 import { judge, loadCodemode } from "../server/judge.ts";
 import { customTask, taskById, TASKS } from "../server/tasks.ts";
+import { startFakeArena } from "./fake-arena.ts";
+
+/** Judges every variant of `task`; a bot task in a fake arena (tests/fake-arena.ts), the others as they are. */
+async function judgeVariants(task: (typeof TASKS)[number]) {
+	if (task.kind !== "bot") return Promise.all(task.variants.map((v) => judge(cm!, task, v)));
+	const arena = await startFakeArena(), was = process.env.CODEMODE_ARENA;
+	process.env.CODEMODE_ARENA = arena.address;
+	try { return await Promise.all(task.variants.map((v) => judge(cm!, task, v))); } finally { process.env.CODEMODE_ARENA = was ?? ""; await arena.close(); }
+}
 
 const cm = await loadCodemode();
 /** The room snapshot with the fields of the current task block lifted to the top level. */
@@ -23,7 +32,7 @@ const until = async <T>(fn: () => Promise<T | null | false>, ms = 20_000, state?
 
 t("every catalog task: its scripted variants are either correct or rejected, and at least one is correct", async () => {
 	for (const task of TASKS) {
-		const verdicts = await Promise.all(task.variants.map((v) => judge(cm!, task, v)));
+		const verdicts = await judgeVariants(task);
 		assert.ok(verdicts.some((v) => v.ok), `${task.id}: no correct variant`);
 		assert.ok(verdicts.some((v) => !v.ok), `${task.id}: no wrong variant to reject`);
 	}
@@ -391,7 +400,7 @@ t("code that is right only on the small cases does not win the bench", async () 
 	const custom = customTask({ fn: "double", prompt: "", cases: [{ args: [2], expect: 4 }, { args: [3], expect: 6 }] });
 	assert.equal((await judge(cm!, custom, "let calls = 0; function double(x){ return ++calls <= 2 ? x * 2 : 0 }")).ok, false);
 	// every catalog task still accepts its fastest honest variant
-	for (const task of TASKS) assert.ok((await Promise.all(task.variants.map((v) => judge(cm!, task, v)))).some((v) => v.ok), task.id);
+	for (const task of TASKS) assert.ok((await judgeVariants(task)).some((v) => v.ok), task.id);
 });
 
 t("code full of control characters does not blow the frame up (JSON escapes count)", async () => {

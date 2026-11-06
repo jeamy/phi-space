@@ -44,6 +44,19 @@ by `server/data/fetch-pi-issues.ts --jev` (ten issues per call, `JEV_OPENROUTER_
 issues are 100 calls, about 0.013 $), and its answers are stored beside the issues in `pi-issues.json`. The judge only replays them:
 no contribution reaches Jev, and every host scores the same. `--fetch N` takes new issues and drops the old answers.
 
+### Bot tasks
+
+A bot task (`server/bottask.ts`; the catalog's "Beacon bot") is `async function bot()`, which plays one guest in a
+Leuchtfeuer world of its own through `tools.look()`, `tools.act({ line })` and `tools.wait({ minutes })`. The worlds come
+from the arena, a spaces-mmo process (`npm --prefix spaces-mmo run arena`, `spaces-mmo/server/arena.ts`), which this
+project reaches only by its socket: `CODEMODE_ARENA=unix:/tmp/spaces-mmo-arena.sock` (or `tcp:host:port`). Per
+contribution the judge opens a fresh world (in memory, no NPCs, no model calls, the clock stopped until `wait`), runs the
+bot, asks the arena whether the goal was reached and closes the world. Every call costs a point; among bots that reach
+the goal the fewest points win. A candidate carries a lane: `bot` candidates go only to judges with `CODEMODE_ARENA`
+(`CODEMODE_BOT_JUDGES` of them per process, default 1), and the page offers bot tasks only when its process has one.
+▶ does not run bots. The tests use `tests/fake-arena.ts`, which speaks the same lines; the real arena has its own test
+in spaces-mmo (`tests/arena.test.ts`).
+
 ### Custom tasks
 
 Choose "Custom task …" in the dropdown. You give a function name, a description, a time limit and test cases. The test

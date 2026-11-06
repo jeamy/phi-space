@@ -130,6 +130,38 @@ Examples:
 
 ## B. Leuchtfeuer bots
 
+Status (2026-11-06): step 3 is built: the arena (`spaces-mmo/server/arena.ts`, `tests/arena.test.ts`), the bot tools and the judge (`codemode-chat/server/bottask.ts`, `judge.ts`), lanes, the catalog task "Beacon bot" and `codemode-chat/tests/bots.test.ts` with `tests/fake-arena.ts`. An arena container on big is not set up (a separate decision). What it settles, before the text below:
+
+- **The arena is a spaces-mmo process** (`spaces-mmo/server/arena.ts`, `npm --prefix spaces-mmo run arena`). It listens
+  on a socket and speaks JSON lines: `open` (a world of its own: a space process and a world worker in memory, no NPC
+  and no model process, one guest), `look`, `act`, `wait`, `score`, `close`. It talks to the world's space directly, not
+  through a web process: `act` writes the line as an `Intent` entry, as the gateway does, and is done when the world
+  worker has taken it (its transaction committed); it returns the messages the figure got meanwhile. `move x y` walks
+  the whole way in that one command. At most two worlds at a time; a world nobody asks for a while is closed.
+- **The codemode judge reaches it by `CODEMODE_ARENA`** (`unix:…` or `tcp:host:port`), and only by that socket: no
+  TypeScript import across the two projects. The codemode image has no spaces-mmo, so an arena in production is a
+  container of the spaces-mmo image; that is a separate decision (not part of this step).
+- **Lanes.** A `CodeCandidate` carries `lane: "code"` or `lane: "bot"`. Every judge takes `code`; only a judge with
+  `CODEMODE_ARENA` also takes `bot`. A judge without an arena never sees a bot contribution, and the page offers bot
+  tasks only when its own process has `CODEMODE_ARENA`. A candidate written before lanes existed is moved to `code` when
+  a judge starts.
+- **The clock stands still.** The arena pauses the world clock when it opens a world; only `wait({ minutes })` moves it
+  on. So the world time a bot used is the sum of its waits, the same on every host. Walking and commands take no world
+  time. The arena puts the guest on its room's spawn cell (a new figure is otherwise scattered at random), so without
+  waiting every bot finds the same world. The world's jobs (tide, storm, wind) are dates in world time: none falls due
+  while the clock stands still, and after a wait they come at random. The judge opens the world before the bot's time
+  limit starts.
+- **Arena trouble is no verdict.** Unreachable, busy, or gone in the middle: the judge gives the candidate back and tries
+  again after a pause; only what the bot did becomes a verdict. Candidates without a lane (from a process of an older
+  version) are moved to `code` every few seconds.
+- **Ranking:** goal reached, then points (`look`, `act` and `wait` 1 each), then ms. Points are whole numbers, so the
+  tiles and the ranking stay as for tools tasks. (World minutes do not rank: the first task needs no waiting.)
+- **No sample/holdout and no literal check:** the world is the test, and a bot writes coordinates and lines on purpose.
+- **▶ does not run a bot** (it would need an arena in the web process); the page says so.
+- **First task:** light the beacon of the Graue Bucht from the spawn (driftwood lies fixed at 5,7 and 17,9; walk,
+  `nimm treibholz`, walk beside the fire, `lege holz ins feuer`). The fire of Anleger, behind fog, comes next.
+
+
 The team writes a bot: `async function bot()`, a loop over `look()` and `act(line)`, run for a fixed number of world
 ticks. Examples:
 
@@ -161,7 +193,7 @@ ticks. Examples:
 | `act(line)` | sends one command line as a player would type it; returns the messages it got |
 | `wait(ticks)` | lets the world run; only allowed tick by tick within the task's budget |
 
-`act` costs 1 point, `look` 0.5, `wait` 0. Ranking: task condition met → fewest world ticks → fewest calls.
+(Superseded above: every call costs 1 point; points rank before the time.)
 
 ### One world per contribution (decided 2026-11-05)
 

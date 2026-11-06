@@ -30,7 +30,7 @@ type Details = { source: string; cases: CaseResult[]; passed?: number; total?: n
 type TeamNote = { author: string; via: string; gen: number; text: string; ts: number; human?: boolean; rejected?: boolean; candidateId?: string };
 type Message = { author: string; text: string; ts: number; blockId?: string };
 type Best = { candidateId: string; ms: number; source?: string; sourceOmitted?: true };
-type Block = { blockId: string; ts: number; active: boolean; until?: number; task: { id: string; fn: string; title: L; prompt: L; about?: L; cases?: number; check?: string; checkBy?: string; timeoutS?: number; kind?: "text"; criteria?: string[]; criteriaBy?: string }; contributions: Contribution[]; best: Best | null; messages: Message[]; notes?: TeamNote[]; usage?: Spent; plans?: Plan[]; findings?: Finding[]; trace?: TraceEvent[] };
+type Block = { blockId: string; ts: number; active: boolean; until?: number; task: { id: string; fn: string; title: L; prompt: L; about?: L; cases?: number; check?: string; checkBy?: string; timeoutS?: number; kind?: "text" | "bot"; criteria?: string[]; criteriaBy?: string }; contributions: Contribution[]; best: Best | null; messages: Message[]; notes?: TeamNote[]; usage?: Spent; plans?: Plan[]; findings?: Finding[]; trace?: TraceEvent[] };
 /** One step of the team's work in a block, as the trace shows it. */
 type TraceEvent = { t: number; agent: string; via: string; kind: "research" | "propose" | "vote" | "implement" | "revise" | "merge" | "improve" | "critique" | "judge"; ref?: string; to?: string; ok?: boolean | null };
 const TRACE_ICON: Record<TraceEvent["kind"], string> = { research: "🔎", propose: "📝", vote: "⭐", implement: "🧭", revise: "✍️", merge: "🔀", improve: "⚡", critique: "🗨", judge: "⚖️" };
@@ -334,7 +334,7 @@ function RunConsole({ sid, candidateId, fn, t }: { sid: string; candidateId: str
 }
 
 /** Code of a contribution with its case results and its ▶: the console opens below the code. */
-function CodeBlock({ sid, c, fn, t }: { sid: string; c: { candidateId: string; source?: string; sourceOmitted?: true; ok?: boolean | null }; fn: string; t: Tr }) {
+function CodeBlock({ sid, c, fn, t, noRun }: { sid: string; c: { candidateId: string; source?: string; sourceOmitted?: true; ok?: boolean | null }; fn: string; t: Tr; /** a bot task: ▶ cannot run it (it needs a world of its own) */ noRun?: boolean }) {
 	const [open, setOpen] = useState(false);
 	const d = useDetails(sid, c.candidateId, c.ok);
 	return (
@@ -348,8 +348,8 @@ function CodeBlock({ sid, c, fn, t }: { sid: string; c: { candidateId: string; s
 					{d.critiques.map((k, i) => <div key={i} className="critique"><b>{t.critiqueOf(k.author, shortVia(k.via))}</b>{"\n"}{k.text}</div>)}
 				</div>
 			) : null}
-			<div className="runrow"><button type="button" className="btn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? t.runClose : t.runCode}</button></div>
-			{open ? <RunConsole sid={sid} candidateId={c.candidateId} fn={fn} t={t} /> : null}
+			{noRun ? null : <div className="runrow"><button type="button" className="btn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? t.runClose : t.runCode}</button></div>}
+			{open && !noRun ? <RunConsole sid={sid} candidateId={c.candidateId} fn={fn} t={t} /> : null}
 		</>
 	);
 }
@@ -546,7 +546,7 @@ function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, on
 							{c.note ? <div className={`attempt-note${c.vetoed || c.hardcoded ? " note--rejected" : ""}`} title={c.vetoed || c.hardcoded ? t.noteRejected : undefined}>💡 {c.note}</div> : null}
 							{c.vetoed?.reason ? <div className="err">👎 {c.vetoed.reason}</div> : null}
 							{c.error ? <div className="err">{c.error}</div> : null}
-							{isAnswer(c) ? <AnswerBlock key={c.candidateId} sid={sid} c={c} t={t} /> : <CodeBlock key={c.candidateId} sid={sid} c={c} fn={b.task.fn} t={t} />}
+							{isAnswer(c) ? <AnswerBlock key={c.candidateId} sid={sid} c={c} t={t} /> : <CodeBlock key={c.candidateId} sid={sid} c={c} fn={b.task.fn} t={t} noRun={b.task.kind === "bot"} />}
 						</div>
 					))}
 				</div>
@@ -867,7 +867,7 @@ export function CodemodeChat() {
 					<div className="panel">
 						<h2>{t.best} <HelpTip id="best" lang={lang} label={t.best} /></h2>
 						{blockLabel ? <div className="forblock">{t.forBlock} {blockLabel}</div> : null}
-						{focusBlock?.best ? <CodeBlock key={focusBlock.best.candidateId} sid={sid} c={focusBlock.best} fn={focusBlock.task.fn} t={t} /> : <div className="empty">{t.nobest}</div>}
+						{focusBlock?.best ? <CodeBlock key={focusBlock.best.candidateId} sid={sid} c={focusBlock.best} fn={focusBlock.task.fn} t={t} noRun={focusBlock.task.kind === "bot"} /> : <div className="empty">{t.nobest}</div>}
 					</div>
 					</>)}
 				</aside>

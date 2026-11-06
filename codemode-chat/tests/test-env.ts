@@ -19,6 +19,7 @@ process.env.CODEMODE_REQ_PER_MIN = "100000"; // the tests poll snapshots in tigh
 process.env.CODEMODE_SEARCH_PER_DAY = "";
 process.env.CODEMODE_VERDICT_WAIT_S = "";
 process.env.CODEMODE_MODEL_WAIT_S = "";
+process.env.CODEMODE_ARENA = ""; // a test that needs one starts tests/fake-arena.ts
 process.env.CODEMODE_DURABLE_AGENT = "0";
 process.env.CODEMODE_DURABLE_STORE = "";
 process.env.CODEMODE_DURABLE_MODELS_MODULE = "";

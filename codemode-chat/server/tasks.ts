@@ -1,6 +1,7 @@
 // Task catalog: what the agents are asked to write, how a contribution is checked (cases) and timed (bench), and a few
 // hand-written variants that the scripted (model-free) agents hand in. All code here runs only in the sandbox.
 import { MAX_CHECK_CHARS, maxTimeoutMs } from "./judge.ts";
+import { arenaAddress, describeBotTools, MAX_BOT_CALLS, type BotSpec } from "./bottask.ts";
 import { describeTools, FRUSTRATION, MAX_CALLS, PI_SOURCE, PI_WINDOWS, PI_WINDOWS_BUGS, type ToolSpec } from "./tooltask.ts";
 
 /** One test call. `expect` is the exact result, `expectAny` several results that are all right ("[0,1,4,9,11] oder
@@ -28,9 +29,11 @@ export type Task = {
 	/** Custom tasks: the time a contribution has for its cases and the bench (default: the judge's 5 s). */
 	timeoutMs?: number;
 	/** "text": a question whose answer is a text, judged by agents against `criteria` (no code, no sandbox). */
-	kind?: "code" | "text" | "tools";
+	kind?: "code" | "text" | "tools" | "bot";
 	/** "tools": the tools and data of the sandbox (tooltask.ts); the one case is the sample world's answer. */
 	tools?: ToolSpec;
+	/** "bot": what the bot must reach in its world of its own (bottask.ts, the arena of spaces-mmo). */
+	bot?: BotSpec;
 	/** What happens behind the task, for the people on the page only (never in an agent's prompt): where the data
 	 *  comes from, whether models are needed, what a tool does in the background. */
 	about?: { de: string; en: string };
@@ -40,6 +43,7 @@ export type Task = {
 };
 
 export const isText = (t: Task): boolean => t.kind === "text";
+export const isBot = (t: Task): t is Task & { bot: BotSpec } => t.kind === "bot" && !!t.bot;
 export const isTools = (t: Task): t is Task & { tools: ToolSpec } => t.kind === "tools" && !!t.tools;
 
 /** A text task: a question (up to 2000 characters) and 0 to 12 criteria of a good answer (one line each). */
@@ -201,9 +205,36 @@ export const TASKS: Task[] = [
 			`async function solve(){const out=[];for(const id of await tools.search({q:"windows",limit:200}))if((await tools.jev({id})).kind==="bug")out.push(id);return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
 		],
 	},
+	{
+		id: "beacon-bucht", fn: "bot", kind: "bot", timeoutMs: 60_000,
+		bot: { goal: "beacon:feuer-bucht", goalText: { de: "das Leuchtfeuer der Grauen Bucht brennt, von dem Bot entzündet", en: "the beacon of the Graue Bucht burns, lit by the bot" } },
+		title: { de: "Leuchtfeuer-Bot: das Feuer der Grauen Bucht entzünden (Spielwelt)", en: "Beacon bot: light the fire of the Graue Bucht (game world)" },
+		prompt: {
+			de: `Aufgabe: Schreibe async function bot(). Der Bot spielt eine Figur in einer eigenen Welt von Leuchtfeuer und soll das Leuchtfeuer der Grauen Bucht entzünden: ein Stück Treibholz aufheben, sich neben das Feuer stellen und es hineinlegen.\n\nWelt: Die Figur steht zu Beginn in der Grauen Bucht. Das Feuer ist aus; Treibholz liegt am Strand. Die Weltzeit steht still, nur tools.wait lässt sie laufen. Befehle sind deutsch, wie ein Spieler sie tippt.\n\nPunkte: Jeder Tool-Aufruf kostet einen Punkt (höchstens ${MAX_BOT_CALLS}). Unter den Bots, die das Ziel erreichen, gewinnt der mit den wenigsten Punkten, die Zeit entscheidet erst danach.\n\nBewertung: Am Ende fragt der Richter die Welt, ob das Feuer brennt und ob der Bot es genährt hat. Rückgabewert egal.\n\nTools:\n${describeBotTools("de")}`,
+			en: `Task: write async function bot(). The bot plays a figure in a Leuchtfeuer world of its own and is to light the beacon of the Graue Bucht: pick up a piece of driftwood, stand next to the fire and put it in.\n\nWorld: the figure starts in the Graue Bucht. The fire is out; driftwood lies on the beach. World time stands still; only tools.wait lets it pass. Commands are German, as a player types them.\n\nPoints: every tool call costs one point (at most ${MAX_BOT_CALLS}). Among the bots that reach the goal the one with the fewest points wins; the time decides only after that.\n\nScoring: at the end the judge asks the world whether the fire burns and whether the bot fed it. The return value does not matter.\n\nTools:\n${describeBotTools("en")}`,
+		},
+		about: {
+			de: `So läuft es: Für jeden Beitrag startet die Arena (ein Prozess von spaces-mmo) eine eigene, frische Welt im Speicher: Space, Weltprozess und eine Gastfigur, ohne NPCs und ohne Modellaufrufe. Der Richter öffnet sie, bevor das Zeitlimit des Bots beginnt, führt bot() in der Codemode-Sandbox aus und beantwortet jeden Tool-Aufruf über die Arena. Am Ende fragt er, ob das Ziel erreicht ist, und schließt die Welt. Kein Bot beeinflusst einen anderen.\n\nKI-Modelle: Für die Bewertung braucht es keine. Die Welt läuft nach ihren eigenen Regeln, die Befehle führt der Weltprozess aus wie bei einem Spieler. Modelle braucht nur, wer Modell-Agenten den Bot schreiben lässt; Skript-Agenten und eigener Code kommen ohne aus.\n\nGleiche Welt für jeden: Die Figur startet immer auf derselben Zelle, und die Weltzeit steht still, solange der Bot nicht tools.wait aufruft; Laufen und Befehle kosten keine Weltzeit. Ohne Warten findet jeder Bot also dieselbe Welt vor, und derselbe Bot kommt auf jedem Richter auf dieselben Punkte. Wer wartet, erlebt die Gezeiten, Stürme und den Wind der Welt, und die fallen zufällig aus.\n\n▶ Ausführen: läuft für Bots nicht (es bräuchte eine Welt im Webprozess). Bewertet wird nur beim Einreichen.`,
+			en: `How it runs: for every contribution the arena (a spaces-mmo process) starts a fresh world of its own in memory: a space, a world process and one guest figure, no NPCs and no model calls. The judge opens it before the bot's time limit starts, runs bot() in the codemode sandbox and answers every tool call through the arena. At the end it asks whether the goal was reached and closes the world. No bot affects another.\n\nAI models: the scoring needs none. The world runs by its own rules; the world process carries out the commands as for a player. Models are needed only if model agents write the bot; scripted agents and your own code need none.\n\nThe same world for everyone: the figure always starts on the same cell, and world time stands still unless the bot calls tools.wait; walking and commands take no world time. So without waiting every bot finds the same world, and the same bot gets the same points on every judge. A bot that waits meets the world's tides, storms and wind, and those come at random.\n\n▶ Run: does not run bots (it would need a world in the web process). Bots are judged only when handed in.`,
+		},
+		cases: [],
+		bench: "",
+		variants: [
+			// look once, then go straight: correct, cheap
+			`async function bot(){const s=await tools.look();const wood=s.things.find(t=>t.name==="Treibholz");const fire=s.fires[0];await tools.act({line:"move "+wood.x+" "+wood.y});await tools.act({line:"nimm treibholz"});await tools.act({line:"move "+fire.x+" "+(fire.y-1)});const r=await tools.act({line:"lege holz ins feuer"});return r.said}`,
+			// looks again after every step: correct, more points
+			`async function bot(){let s=await tools.look();const wood=s.things.find(t=>t.name==="Treibholz");await tools.act({line:"move "+wood.x+" "+wood.y});s=await tools.look();await tools.act({line:"nimm treibholz"});s=await tools.look();const fire=s.fires[0];await tools.act({line:"move "+fire.x+" "+(fire.y-1)});s=await tools.look();await tools.act({line:"lege holz ins feuer"});s=await tools.look();return s.fires[0].lit}`,
+			// wrong: never picks the wood up
+			`async function bot(){const s=await tools.look();const fire=s.fires[0];await tools.act({line:"move "+fire.x+" "+(fire.y-1)});await tools.act({line:"lege holz ins feuer"})}`,
+			// wrong: tries to feed the fire from where it picked the wood up
+			`async function bot(){const s=await tools.look();const wood=s.things.find(t=>t.name==="Treibholz");await tools.act({line:"move "+wood.x+" "+wood.y});await tools.act({line:"nimm treibholz"});await tools.act({line:"lege holz ins feuer"})}`,
+		],
+	},
 ];
 
 export const taskById = (id: string): Task | undefined => TASKS.find((t) => t.id === id);
+/** The catalog this process offers: bot tasks only with an arena (CODEMODE_ARENA), since no judge could judge them otherwise. */
+export const offeredTasks = (): Task[] => TASKS.filter((t) => t.kind !== "bot" || !!arenaAddress());
 
 /** A task as it may be stored or handed to another process: a tools task without its data and functions (the holdout
  *  must never leave the judge), and `restoreTask` brings them back from the catalog. */

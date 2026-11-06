@@ -13,7 +13,8 @@
 // contribution's reach: patched builtins cannot make the rule pass.
 import { pathToFileURL } from "node:url";
 import type { Task } from "./tasks.ts";
-import { newMeter, toolProgram, worldCase, worldTools, type Meter, type ToolSpec, type World, type WorldResult } from "./tooltask.ts";
+import { ArenaDown, arenaAddress, arenaClient, botTools, type BotSpec } from "./bottask.ts";
+import { meterText, newMeter, toolProgram, worldCase, worldTools, type Meter, type ToolSpec, type World, type WorldResult } from "./tooltask.ts";
 
 /** One case as the judge saw it: the call, whether it passed, what came out (or the error), what was expected. */
 export type CaseResult = { call: string; ok: boolean; got?: string; expect?: string; error?: string };
@@ -257,7 +258,45 @@ async function judgeTools(cm: Codemode, task: Task & { tools: ToolSpec }, source
 }
 
 /** Judges one contribution; the caller already holds a sandbox slot. */
+/** A bot task (bottask.ts): a world of its own from the arena, opened before the bot's time limit starts; the bot plays
+ *  it through look/act/wait, the arena says whether the goal was reached, and the world is closed. One case. */
+async function judgeBot(cm: Codemode, task: Task & { bot: BotSpec }, source: string): Promise<Verdict> {
+	const limit = limitOf(task), goal = task.bot.goalText.en, call = `${task.fn}() in a world of its own`;
+	const fail = (error: string, meter?: Meter): Verdict => ({ ok: false, ms: limit, error: plain(error), passed: 0, total: 1, cases: [{ call, ok: false, error: plain(error), expect: goal }], ...(meter ? { cost: meter.cost, calls: { ...meter.calls } as Record<string, number>, score: 0 } : {}) });
+	const address = arenaAddress();
+	if (!address) return fail("this judge has no arena (CODEMODE_ARENA)");
+	// the arena's own trouble (unreachable, busy, gone) throws ArenaDown: the judge gives the candidate back
+	const arena = await arenaClient(address);
+	let world: string | null = null;
+	try {
+		try { world = String((await arena.ask("open")).world); } catch (e) { throw e instanceof ArenaDown ? e : new ArenaDown(`the arena could not open a world: ${(e as Error).message}`); }
+		const meter: Meter = newMeter();
+		const sandbox = new cm.CodemodeSandbox({ timeoutMs: limit, tools: botTools(arena, world, meter), memoryLimitBytes: 64 * 1024 * 1024 });
+		let error: string | null = null, ms = limit;
+		try {
+			const r = await sandbox.execute(toolProgram(CAPTURED, task.fn, source));
+			const v = (r.ok ? r.value ?? {} : {}) as { ms?: unknown; error?: unknown };
+			if (!r.ok) error = r.error?.message ?? "failed";
+			else if (typeof v.error === "string") error = v.error;
+			else if (typeof v.ms === "number" && Number.isFinite(v.ms) && v.ms >= 0) ms = v.ms;
+		} catch (e) { error = (e as Error).message; } finally { await sandbox.close().catch(() => {}); }
+		if (arena.broken()) throw new ArenaDown("the arena went away while the bot played");
+		const s = await arena.ask("score", { world, goal: task.bot.goal });
+		const done = s.done === true, calls = `calls: ${meterText(meter)}`;
+		if (error) return fail(`${error} (${calls})`, meter);
+		if (!done) return fail(`goal not reached: ${String(s.detail ?? "")} (${calls})`, meter);
+		return { ok: true, ms: Math.round(ms * 100) / 100, passed: 1, total: 1, cases: [{ call, ok: true, got: `reached (${calls})`, expect: goal }], cost: meter.cost, calls: { ...meter.calls } as Record<string, number>, score: 1 };
+	} catch (e) {
+		if (e instanceof ArenaDown) throw e;
+		return fail((e as Error).message);
+	} finally {
+		if (world && !arena.broken()) await arena.ask("close", { world }).catch(() => {});
+		arena.close();
+	}
+}
+
 export async function judgeInSlot(cm: Codemode, task: Task, source: string): Promise<Verdict> {
+	if (task.kind === "bot" && task.bot) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 1, cases: [] } : judgeBot(cm, task as Task & { bot: BotSpec }, source);
 	if (task.kind === "tools" && task.tools) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 2, cases: [] } : judgeTools(cm, task as Task & { tools: ToolSpec }, source);
 	const total = task.cases.length;
 	const limit = limitOf(task);

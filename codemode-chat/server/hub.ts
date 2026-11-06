@@ -22,7 +22,8 @@ import { limitOf, maxTimeoutMs, plain, sandboxSlot, sourceProblem, testRule, typ
 import { archive, earlierLeaseMs, EARLIER_CAP, setBest, validMs } from "./results.ts";
 import { endRun, readRun, startSpaceRun, type RunEntry, type RunInfo, type RunMode, type RunParams } from "./run.ts";
 import { addNote, answersOf, bestOf, enqueueCandidate, execTarget, modelInfoOf, isSolved, planTurn, rid, scoresOf, systemLine, taskEntries, vetoesOf, type Contribution } from "./room.ts";
-import { customSpec, customTask, expectedOf, isText, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
+import { arenaAddress } from "./bottask.ts";
+import { customSpec, customTask, expectedOf, isText, offeredTasks, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
 import { clipWords, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
 import { taskWaitMs } from "./limits.ts";
 import { spentToday } from "./model-host.ts";
@@ -40,6 +41,9 @@ const SNAPSHOT_SOURCE_BYTES = 384 * 1024;
 /** A snapshot above this size (counted as sent) goes out without any code at all. */
 const SNAPSHOT_MAX_BYTES = 900 * 1024;
 import { crossWaitMs, FATAL_LLM, ipTokensPerDay, runBudgetTokens } from "./limits.ts";
+
+/** A bot task without an arena: no judge would take its candidates (bottask.ts, the lanes). */
+const NO_ARENA = "Bot tasks need an arena (CODEMODE_ARENA); this server has none";
 export { crossWaitMs, ipTokensPerDay, runBudgetTokens };
 export { earlierLeaseMs };
 export type { RunInfo, RunMode };
@@ -445,7 +449,7 @@ export class CodeChatHub {
 			const slim = <T extends { candidateId: string; source?: string; cases?: unknown }>(c: T): T => { const { cases: _cases, ...rest } = c; return (withCode && keep.has(c.candidateId) ? rest : { ...rest, source: undefined, sourceOmitted: true }) as T; };
 			const blocks = raw.map(({ f, task, blockId, contributions, best, spent }) => ({
 				blockId, ts: f.ts as number, active: blockId === s.blockId, ...(typeof f.until === "number" ? { until: f.until } : {}),
-				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, ...(task.about ? { about: task.about } : {}), cases: task.id === "custom" ? task.cases.length : undefined, ...(isText(task) ? { kind: "text", criteria: task.criteria, criteriaBy: task.criteriaBy } : {}), ...(task.check !== undefined ? { check: task.check, checkBy: task.checkBy ?? "user" } : {}), ...(task.id === "custom" ? { timeoutS: limitOf(task) / 1000 } : {}) },
+				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, ...(task.about ? { about: task.about } : {}), cases: task.id === "custom" ? task.cases.length : undefined, ...(isText(task) ? { kind: "text", criteria: task.criteria, criteriaBy: task.criteriaBy } : {}), ...(task.kind === "bot" ? { kind: "bot" } : {}), ...(task.check !== undefined ? { check: task.check, checkBy: task.checkBy ?? "user" } : {}), ...(task.id === "custom" ? { timeoutS: limitOf(task) / 1000 } : {}) },
 				...(spent.tokens > 0 ? { usage: spent } : {}),
 				contributions: contributions.map(slim), best: best ? slim<Best>(best) : null, messages: messages.filter((m) => m.blockId === blockId),
 				// plan texts ride along for the active block only (and not in the code-less fallback); others come with plan()
@@ -455,7 +459,7 @@ export class CodeChatHub {
 				notes: notes.filter((n) => n.blockId === blockId).slice(-20).map(({ author, via, gen, text, ts, human, candidateId }) => ({ author, via, gen, text, ts, ...(human ? { human: true } : {}), ...(candidateId ? { candidateId } : {}), ...(candidateId && rejectedIds.has(candidateId) ? { rejected: true } : {}) })),
 			}));
 			return {
-				session: id, current: s.blockId, tasks: TASKS.map((t) => ({ id: t.id, title: t.title, fn: t.fn, prompt: t.prompt, ...(t.about ? { about: t.about } : {}) })),
+				session: id, current: s.blockId, tasks: offeredTasks().map((t) => ({ id: t.id, title: t.title, fn: t.fn, prompt: t.prompt, ...(t.about ? { about: t.about } : {}) })),
 				// what the time-limit field may offer (CODEMODE_MAX_TIMEOUT_S), and a visitor's token budget (default and most)
 				limits: { maxTimeoutS: maxTimeoutMs() / 1000, ...(runBudgetTokens() ? { runBudgetTokens: runBudgetTokens() } : {}) },
 				// the active custom task in full, so the page can fill its form again (after a reload) and continue it
@@ -624,6 +628,7 @@ export class CodeChatHub {
 		if (o.text) return this.#setTextTask(s, o.text, o.client);
 		let task = o.custom ? customTask({ fn: clip(o.custom.fn, 41), prompt: clip(o.custom.prompt, 600), cases: o.custom.cases, timeoutS: o.custom.timeoutS, ...(typeof o.custom.check === "string" ? { check: o.custom.check } : {}) }) : taskById(String(o.taskId));
 		if (!task) throw new Error("Unknown task");
+		if (task.kind === "bot" && !arenaAddress()) throw new Error(NO_ARENA);
 		if (await this.#runNow(s)) throw new Error("A run is active; stop it first");
 		// the active custom task once more with only another time limit: change it in place, the attempts stay
 		const t = task;
@@ -733,6 +738,7 @@ export class CodeChatHub {
 	async submitCode(id: string, author: string, source: string): Promise<string> {
 		const s = await this.session(id);
 		if (isText(s.task)) throw new Error("This block is a text task: answers come from the agents on the work board");
+		if (s.task.kind === "bot" && !arenaAddress()) throw new Error(NO_ARENA);
 		if (!this.allow(s, "code", 20)) throw new Error("Too many submissions, slow down");
 		const src = String(source ?? ""), problem = sourceProblem(src);
 		if (problem) throw new Error(problem);
@@ -780,6 +786,7 @@ export class CodeChatHub {
 		 *  counts against the day's allowance of their address. Without it (tests, scripts in-process) it counts as admin. */
 		client?: { ip: string; admin: boolean } }): Promise<void> {
 		const s = await this.session(id);
+		if (s.task.kind === "bot" && !arenaAddress()) throw new Error(NO_ARENA);
 		if (!this.allow(s, "run", 6)) throw new Error("Too many runs, slow down");
 		const int = (v: unknown, dflt: number, min: number, max: number) => Math.min(max, Math.max(min, Math.floor(Number(v ?? dflt)) || (min > 0 ? min : 0)));
 		const agents = int(o.agents, 4, 1, LIMITS.agents), gens = int(o.gens, 3, 1, LIMITS.gens), perAgent = int(o.perAgent, 1, 1, LIMITS.perAgent), polish = int(o.polish, 1, 0, LIMITS.polish);

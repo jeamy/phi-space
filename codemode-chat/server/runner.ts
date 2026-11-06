@@ -100,6 +100,7 @@ ${call ? `try {
 
 /** Runs `source` (a contribution of `task`) and streams its events; resolves with the closing `end` event. */
 export async function execute(cm: Codemode, task: Task, source: string, call: string, emit: (e: ExecEvent) => void, signal: AbortSignal): Promise<Extract<ExecEvent, { t: "end" }>> {
+	if (task.kind === "bot") throw new Error("A bot runs only when it is judged, in a world of its own (▶ does not run bots); hand it in");
 	if (running >= EXEC_PARALLEL) throw new Error("All runners are busy; try again in a moment");
 	if (call.length > MAX_CALL_CHARS) throw new Error(`A call has at most ${MAX_CALL_CHARS} characters`);
 	running++;

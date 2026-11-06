@@ -13,6 +13,7 @@
     "world": "node --no-warnings --experimental-strip-types server/world-host.ts",
     "npc": "node --no-warnings --experimental-strip-types server/npc-host.ts",
     "model": "node --no-warnings --experimental-strip-types server/model-host.ts",
+    "arena": "node --no-warnings --experimental-strip-types server/arena.ts",
     "web": "node --no-warnings --experimental-strip-types server/index.ts",
     "world:load": "node --no-warnings --experimental-strip-types server/world-load.ts",
     "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test --test-concurrency=5 tests/*.test.ts",

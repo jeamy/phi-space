@@ -7,7 +7,7 @@ import { sourceProblem, type Verdict } from "./judge.ts";
 import { clipWords, type Attempt, type Earlier, type Finding, type Note, type Role, type Usage } from "./llm.ts";
 import { EARLIER_CAP, rankCmp, validMs } from "./results.ts";
 import { HELD_WAIT_MS, readExisting } from "./space.ts";
-import { isText, taskFromSpec, type Task } from "./tasks.ts";
+import { isText, taskById, taskFromSpec, type Task } from "./tasks.ts";
 
 /** What a room may hold at most: every read of it stays complete (a read limit never cuts entries off). */
 export const ROOM_LIMITS = { contributions: 1000, notes: 300, blocks: 60, messages: 500 };
@@ -126,6 +126,9 @@ export async function contributionCount(space: SpaceLike, session: string): Prom
 	return (await n("CodeScore")) + (await n("CodeCandidate")) + (await n("CodeJudging"));
 }
 
+/** Which judges take a task's contributions: "bot" only those with an arena (judge-host.ts), "code" every judge. */
+export const laneOf = (taskId: string): "code" | "bot" => (taskById(taskId)?.kind === "bot" ? "bot" : "code");
+
 /** Hands a contribution to the judges: a CodeCandidate in the space (in `txn`, it becomes visible with its commit).
  *  The candidate names its task by the block (judges read the CodeTask): a custom task's cases next to the source
  *  would push the entry past the space's limit. Returns its id. */
@@ -136,7 +139,7 @@ export async function enqueueCandidate(space: SpaceLike, txn: string | null, ttl
 	if ((await contributionCount(space, c.session)) >= ROOM_LIMITS.contributions) throw new Error("This room holds the maximum number of contributions; delete a task block");
 	const candidateId = `${Date.now().toString(36)}-${rid()}`;
 	const l = c.lineage ?? {};
-	await space.write({ type: "CodeCandidate", fields: { session: c.session, blockId: c.blockId, taskId: c.taskId, candidateId, author: c.author, via: c.via, gen: c.gen, ...(c.runId ? { runId: c.runId } : {}), ...(l.role ? { role: l.role } : {}), ...(l.basedOn ? { basedOn: l.basedOn } : {}), ...(l.partner ? { partner: l.partner } : {}), ...(l.critiqueId ? { critiqueId: l.critiqueId } : {}), ...(l.proposalId ? { proposalId: l.proposalId } : {}), ...(l.usage ? { usage: l.usage } : {}), source: c.source, ts: Date.now() } as never }, txn, ttl);
+	await space.write({ type: "CodeCandidate", fields: { lane: laneOf(c.taskId), session: c.session, blockId: c.blockId, taskId: c.taskId, candidateId, author: c.author, via: c.via, gen: c.gen, ...(c.runId ? { runId: c.runId } : {}), ...(l.role ? { role: l.role } : {}), ...(l.basedOn ? { basedOn: l.basedOn } : {}), ...(l.partner ? { partner: l.partner } : {}), ...(l.critiqueId ? { critiqueId: l.critiqueId } : {}), ...(l.proposalId ? { proposalId: l.proposalId } : {}), ...(l.usage ? { usage: l.usage } : {}), source: c.source, ts: Date.now() } as never }, txn, ttl);
 	return candidateId;
 }
 

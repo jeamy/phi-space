@@ -12,6 +12,7 @@ import { NO_WAIT, peek, TransactionError, type SpaceLike } from "phi-spaces";
 import { judgeInSlot, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { setBest, trimArchive } from "./results.ts";
 import { serveExec } from "./exec.ts";
+import { ArenaDown, arenaAddress } from "./bottask.ts";
 import { announce, awaitWork, connectSpace, entryLeaseMs, hostFacts, keepAlive, readExisting, StillHeld, takeAll } from "./space.ts";
 import { taskFromSpec } from "./tasks.ts";
 
@@ -32,15 +33,17 @@ const lineageOf = (f: Record<string, any>) => Object.fromEntries(["role", "based
 /** One round: wait for a candidate, judge it, write the verdict. False when none came. `open` holds the transactions
  *  in progress, so a judge that is shut down can abort them: a waiting take is kept in the space (it outlives the
  *  process, even a restart of the space) and would otherwise catch the next candidate for a judge that is gone. */
-export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl: number, open = new Set<string>(), halt?: AbortSignal): Promise<boolean> {
-	// idle, the judge waits holding nothing; the transaction begins when there is a candidate (another judge may be first)
-	if (!(await awaitWork(space, { type: "CodeCandidate" }, halt))) return false;
+export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl: number, open = new Set<string>(), halt?: AbortSignal, lane: "code" | "bot" = "code"): Promise<boolean> {
+	// idle, the judge waits holding nothing; the transaction begins when there is a candidate (another judge may be first).
+	// A lane: "bot" candidates go only to judges with an arena (bottask.ts), "code" to every judge
+	const want = { type: "CodeCandidate", fields: { lane } };
+	if (!(await awaitWork(space, want, halt))) return false;
 	const t = await space.createTransaction(TXN_LEASE_MS);
 	open.add(t.id);
 	const stop = keepAlive(space, t.id, TXN_LEASE_MS);
 	let marker: string | null = null, stopMarker = () => {}, start: string | null = null, f: Record<string, any> | null = null;
 	try {
-		const c = await space.take({ type: "CodeCandidate" }, NO_WAIT, { txn: t.id });
+		const c = await space.take(want, NO_WAIT, { txn: t.id });
 		if (!c) { await space.abort(t.id); return false; }
 		f = c.fields as Record<string, any>;
 		const { session, blockId, candidateId } = f as { session: string; blockId?: string; candidateId: string };
@@ -79,6 +82,8 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 	} catch (e) {
 		await space.abort(t.id).catch(() => {});
 		if (e instanceof StillHeld) return true; // the block's task stayed held: the candidate is back for a later round
+		// the arena failed, not the bot: the candidate is back; a pause, so a dead arena is not asked in a tight loop
+		if (e instanceof ArenaDown) { console.error("[judge] arena:", e.message); await new Promise((r) => setTimeout(r, ARENA_RETRY_MS)); return true; }
 		// the transaction lapsed: the candidate is back for another try. A commit over the space's limits fails
 		// with ResourceExhausted and would fail every time: that one goes to the failed verdict below
 		if (e instanceof TransactionError) return true; // a limit of the space is ResourceExhausted, not a TransactionError
@@ -109,6 +114,25 @@ async function failed(space: SpaceLike, f: Record<string, any>, host: string, tt
 	} catch (e) { await space.abort(t.id).catch(() => {}); throw e; }
 }
 
+/** How long a bot judge waits after the arena failed before it takes a candidate again. */
+const ARENA_RETRY_MS = Number(process.env.CODEMODE_ARENA_RETRY_MS ?? 5_000);
+/** How often a judge moves candidates without a lane to "code" (a process of an older version may still write them). */
+const LANE_SWEEP_MS = Number(process.env.CODEMODE_LANE_SWEEP_MS ?? 5_000);
+
+/** Moves candidates written before the lanes existed (no `lane`) to the "code" lane, which every judge takes. */
+async function laneOldCandidates(space: SpaceLike): Promise<void> {
+	for (const e of await space.readAll({ type: "CodeCandidate" }, { limit: 500 })) {
+		const f = e.fields as Record<string, unknown>;
+		if (f.lane !== undefined) continue;
+		const t = await space.createTransaction(10_000);
+		try {
+			const c = await space.takeIfExists({ type: "CodeCandidate", id: e.id } as never, NO_WAIT, { txn: t.id });
+			if (c) await space.write({ type: "CodeCandidate", fields: { ...(c.fields as Record<string, unknown>), lane: "code" } as never }, t.id, entryLeaseMs());
+			await space.commit(t.id);
+		} catch (err) { await space.abort(t.id).catch(() => {}); throw err; }
+	}
+}
+
 export async function startJudgeHost(o: { space?: string; judges?: number; cm?: Codemode } = {}) {
 	const cm = o.cm ?? (await loadCodemode());
 	if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded");
@@ -119,10 +143,13 @@ export async function startJudgeHost(o: { space?: string; judges?: number; cm?: 
 	const open = new Set<string>(), halt = new AbortController();
 	const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 	/** A judge: the sandbox slot first, then the transaction. A failing round is logged and retried after a pause. */
-	const worker = async () => {
+	const worker = async (lane: "code" | "bot") => {
 		while (!stopping) {
 			try {
-				await sandboxSlot(() => judgeOne(space, cm, host, ttl, open, halt.signal));
+				// a bot judge takes no shared sandbox slot: the code judges hold theirs while they wait for work, and a bot's
+				// sandbox mostly waits for the arena, which caps its worlds itself
+				const round = () => judgeOne(space, cm, host, ttl, open, halt.signal, lane);
+				await (lane === "bot" ? round() : sandboxSlot(round));
 				if (++rounds % 50 === 0) await trimArchive(space).catch(() => {});
 			} catch (e) {
 				if (stopping) return;
@@ -131,14 +158,21 @@ export async function startJudgeHost(o: { space?: string; judges?: number; cm?: 
 			}
 		}
 	};
-	const loops = Array.from({ length: Math.max(1, o.judges ?? Number(process.env.CODEMODE_JUDGES ?? 2)) }, () => worker());
+	// candidates without a lane (from before the lanes, or written by a process of an older version during a deploy) go to
+	// "code": at the start and then every few seconds
+	await laneOldCandidates(space).catch((e) => console.error("[judge] lanes", (e as Error).message));
+	const sweepLanes = setInterval(() => { void laneOldCandidates(space).catch(() => {}); }, LANE_SWEEP_MS);
+	sweepLanes.unref();
+	const loops = Array.from({ length: Math.max(1, o.judges ?? Number(process.env.CODEMODE_JUDGES ?? 2)) }, () => worker("code"));
+	// with an arena, judges for bots too (each holds a world while it judges; the arena allows a few at a time)
+	if (arenaAddress()) for (let i = 0; i < Math.max(1, Number(process.env.CODEMODE_BOT_JUDGES ?? 1)); i++) loops.push(worker("bot"));
 	// ▶ of the page: runs of contributions, apart from the judging (exec.ts)
 	const runs = serveExec(space, cm, host);
 	return {
 		/** Stops the judges: their transactions are aborted (a candidate in judgement comes back at once, a waiting take
 		 *  ends), then the process leaves the space. */
 		async close() {
-			stopping = true; halt.abort();
+			stopping = true; halt.abort(); clearInterval(sweepLanes);
 			await Promise.allSettled([...open].map((id) => space.abort(id)));
 			await runs.close();
 			await Promise.race([Promise.allSettled(loops), new Promise((r) => setTimeout(r, 2000))]);

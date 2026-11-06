@@ -119,7 +119,8 @@ export const PI_WINDOWS_BUGS: ToolSpec = {
 
 // ---- the tools of one world, metered --------------------------------------------------------------------------
 type CodemodeTool = { name: string; description?: string; inputSchema?: unknown; execute(args: unknown): unknown };
-export type Meter = { calls: Partial<Record<ToolName, number>>; cost: number; total: number };
+/** The calls of one execution by tool name (also the bot tools of bottask.ts), their points and their number. */
+export type Meter = { calls: Partial<Record<string, number>>; cost: number; total: number };
 export const newMeter = (): Meter => ({ calls: {}, cost: 0, total: 0 });
 
 const DESCRIPTIONS: Record<ToolName, string> = {

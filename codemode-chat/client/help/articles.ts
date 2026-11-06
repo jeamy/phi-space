@@ -140,7 +140,7 @@ Eine Aufgabe sagt, was entstehen soll: eine Funktion oder die Antwort auf eine F
 
 Ein **Raum** ist die Adresse nach dem \`#\` in der URL, zum Beispiel \`/#lobby\`. Er enthält höchstens 60 Blöcke. Ein neuer Raum hat noch keinen Block: Der erste entsteht, wenn du eine Aufgabe anlegst oder einen Lauf startest.
 
-Es gibt vier Arten von Aufgaben: fertige [Katalogaufgaben](#catalog), [Aufgaben mit Tools](#tools), [eigene Aufgaben](#custom) mit deinen Testfällen und [Textaufgaben](#text).
+Es gibt fünf Arten von Aufgaben: fertige [Katalogaufgaben](#catalog), [Aufgaben mit Tools](#tools), [Bot-Aufgaben](#bots) in einer Spielwelt, [eigene Aufgaben](#custom) mit deinen Testfällen und [Textaufgaben](#text).
 
 ## Katalogaufgaben {#catalog}
 
@@ -153,6 +153,7 @@ Es gibt vier Arten von Aufgaben: fertige [Katalogaufgaben](#catalog), [Aufgaben 
 | Frust in Issues (mit Tools) | \`async solve()\` | die ids aller Issues mit einem Kommentar, den der Klassifizierer „high“ nennt; siehe [Aufgaben mit Tools](#tools) |
 | Pi-Issues: Windows mit Antwort (echte Daten, mit Tools) | \`async solve()\` | die ids aller echten Pi-Issues, die im Titel oder Text Windows nennen und auf die eine Person geantwortet hat; siehe [Aufgaben mit Tools](#tools) |
 | Pi-Issues: Windows-Bugs nach Jev (echte Daten, mit Tools) | \`async solve()\` | dieselben, aber nur die, die der Klassifizierer Jev als Bug einstuft; siehe [Aufgaben mit Tools](#tools) |
+| Leuchtfeuer-Bot: das Feuer der Grauen Bucht entzünden (Spielwelt) | \`async bot()\` | eine Figur in einer eigenen Welt von Leuchtfeuer spielen, bis das Leuchtfeuer brennt; nur mit Arena, siehe [Bot-Aufgaben](#bots) |
 
 ## Aufgaben mit Tools {#tools}
 
@@ -162,6 +163,17 @@ Hier rechnet der Code nicht nur, er **holt sich die Daten über Tools**: \`await
 - **Zwei Datensätze:** die Stichprobe (16 Issues, ihr Ergebnis ist der sichtbare Testfall, ▶ läuft nur auf ihr) und ein verdeckter, größerer Datensatz mit anderen Texten, auf dem gewertet wird. Seine Issues und sein Ergebnis zeigt keine Seite; man sieht nur den Treffer in Prozent und die Aufrufe. Code, der die Wörter der Stichprobe nachbaut oder ihr Ergebnis einträgt, fällt dort durch.
 - **Echte Daten:** „Pi-Issues: Windows mit Antwort“ nimmt 1000 echte Issues von [github.com/earendil-works/pi](https://github.com/earendil-works/pi/issues), einmal abgerufen, gekürzt und ohne Namen (Personen heißen u1, u2, …, der Bot des Trackers „bot“). Jedes zehnte Issue ist die Stichprobe, die übrigen sind verdeckt. Hier gibt es kein \`classify\`: Billig ist, wer erst sucht und nur die Treffer holt; wer jedes Issue holt, zahlt mehr als das Zehnfache.
 - **Jev:** „Pi-Issues: Windows-Bugs nach Jev“ hat zusätzlich \`tools.jev({ id })\` (3 Punkte): was der Klassifizierer Jev (typesafe/jev-1.13) zu dem Issue gesagt hat, Bug, Feature-Wunsch, Frage oder anderes. Jev wurde **einmal** beim Abrufen der Daten gefragt; das Tool spielt diese Antworten ab. So erreicht der Code auch hier kein Netz und kein Modell, und jeder Beitrag zählt überall gleich. Am billigsten ist, wer Jev nur dort fragt, wo die billigen Bedingungen schon erfüllt sind.
+
+## Bot-Aufgaben {#bots}
+
+Hier schreibt das Team einen **Bot**: \`async function bot()\` spielt eine Figur in einer eigenen Welt von [Leuchtfeuer](https://github.com/jeamy/phi-space/tree/master/spaces-mmo), dem Spiel dieses Projekts. Er sieht sich um, gibt Befehle wie ein Spieler und lässt die Zeit laufen, bis er sein Ziel erreicht hat, zum Beispiel ein Leuchtfeuer zu entzünden.
+
+- **Drei Tools:** \`tools.look()\` (was die Figur sieht: Ort, Ausgänge, Dinge, Feuer, Gepäck, Uhrzeit), \`tools.act({ line })\` (eine Befehlszeile wie \`move 5 7\` oder \`nimm treibholz\`; zurück kommt, was die Figur dabei gehört hat und wo sie steht) und \`tools.wait({ minutes })\`.
+- **Eine Welt je Beitrag:** Die **Arena**, ein Prozess von spaces-mmo, startet für jeden Beitrag eine frische Welt im Speicher, ohne NPCs und ohne Modellaufrufe. Kein Bot stört einen anderen. Der Start dauert ein paar Sekunden und zählt nicht zum Zeitlimit des Bots.
+- **Gleiche Welt für jeden:** Die Figur startet immer auf derselben Zelle, und die Weltzeit steht still, bis der Bot \`wait\` aufruft (Laufen und Befehle kosten keine). Ohne Warten findet jeder Bot dieselbe Welt vor. Wer wartet, erlebt Gezeiten, Stürme und Wind, und die fallen zufällig aus.
+- **Punkte:** Jeder Tool-Aufruf kostet einen Punkt (höchstens 300). Unter den Bots, die ihr Ziel erreichen, gewinnt der mit den wenigsten Punkten, die Zeit entscheidet erst danach.
+- **Kein ▶:** Ein Bot braucht eine eigene Welt; er wird nur beim Einreichen bewertet.
+- **Nur mit Arena:** Bot-Aufgaben erscheinen im Katalog nur, wenn der Server eine Arena hat (\`CODEMODE_ARENA\`), und nur Richter mit Arena nehmen Bot-Beiträge.
 
 ## Eigene Aufgabe {#custom}
 
@@ -239,7 +251,7 @@ A task says what should come out: a function or the answer to a question. Every 
 
 A **room** is the address after the \`#\` in the URL, for example \`/#lobby\`. It holds at most 60 blocks. A new room has no block yet: the first one opens when you create a task or start a run.
 
-There are four kinds of task: ready-made [catalog tasks](#catalog), [tasks with tools](#tools), [custom tasks](#custom) with your own test cases, and [text tasks](#text).
+There are five kinds of task: ready-made [catalog tasks](#catalog), [tasks with tools](#tools), [bot tasks](#bots) in a game world, [custom tasks](#custom) with your own test cases, and [text tasks](#text).
 
 ## Catalog tasks {#catalog}
 
@@ -252,6 +264,7 @@ There are four kinds of task: ready-made [catalog tasks](#catalog), [tasks with 
 | Frustrated issues (with tools) | \`async solve()\` | the ids of all issues with a comment the classifier calls "high"; see [Tasks with tools](#tools) |
 | Pi issues: Windows with a reply (real data, with tools) | \`async solve()\` | the ids of all real pi issues that name Windows in their title or text and that a person answered; see [Tasks with tools](#tools) |
 | Pi issues: Windows bugs by Jev (real data, with tools) | \`async solve()\` | the same, but only those the classifier Jev rates a bug; see [Tasks with tools](#tools) |
+| Beacon bot: light the fire of the Graue Bucht (game world) | \`async bot()\` | play a figure in a Leuchtfeuer world of its own until the beacon burns; only with an arena, see [Bot tasks](#bots) |
 
 ## Tasks with tools {#tools}
 
@@ -261,6 +274,17 @@ Here the code does not only compute, it **fetches its data through tools**: \`aw
 - **Two datasets:** the sample (16 issues; its result is the visible test case, and ▶ runs on it only) and a hidden, larger dataset with other texts, on which it is scored. No page shows its issues or its result; you see only the score in percent and the calls. Code that copies the sample's words or writes in its result fails there.
 - **Real data:** "Pi issues: Windows with a reply" takes 1000 real issues of [github.com/earendil-works/pi](https://github.com/earendil-works/pi/issues), fetched once, shortened and without names (people are u1, u2, …, the tracker's bot is "bot"). Every tenth issue is the sample, the rest is hidden. There is no \`classify\` here: cheap is who searches first and fetches only the hits; fetching every issue costs more than ten times as much.
 - **Jev:** "Pi issues: Windows bugs by Jev" also has \`tools.jev({ id })\` (3 points): what the classifier Jev (typesafe/jev-1.13) said about the issue: bug, feature request, question or other. Jev was asked **once**, when the data was fetched; the tool replays those answers. So here too the code reaches no network and no model, and a contribution scores the same everywhere. Cheapest is who asks Jev only where the cheap conditions already hold.
+
+## Bot tasks {#bots}
+
+Here the team writes a **bot**: \`async function bot()\` plays a figure in a world of its own of [Leuchtfeuer](https://github.com/jeamy/phi-space/tree/master/spaces-mmo), this project's game. It looks around, gives commands as a player does and lets time pass until it reaches its goal, for example lighting a beacon.
+
+- **Three tools:** \`tools.look()\` (what the figure sees: place, exits, things, fires, pack, time), \`tools.act({ line })\` (a command line such as \`move 5 7\` or \`nimm treibholz\`; it returns what the figure heard meanwhile and where it stands) and \`tools.wait({ minutes })\`.
+- **A world per contribution:** the **arena**, a spaces-mmo process, starts a fresh world in memory for every contribution, without NPCs and without model calls. No bot disturbs another. The start takes a few seconds and does not count against the bot's time limit.
+- **The same world for everyone:** the figure always starts on the same cell, and world time stands still until the bot calls \`wait\` (walking and commands take none). Without waiting every bot finds the same world. A bot that waits meets tides, storms and wind, and those come at random.
+- **Points:** every tool call costs one point (at most 300). Among the bots that reach their goal the one with the fewest points wins; the time decides only after that.
+- **No ▶:** a bot needs a world of its own; it is judged only when handed in.
+- **Only with an arena:** bot tasks appear in the catalog only when the server has an arena (\`CODEMODE_ARENA\`), and only judges with an arena take bot contributions.
 
 ## Custom task {#custom}
 
@@ -966,6 +990,8 @@ Die Prozesse lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben
 | \`CODEMODE_TOKENS_PER_IP_DAY\` | Tokens aller Besucher-Läufe einer Adresse am Tag, Standard 1 000 000; \`0\` = keine Grenze |
 | \`CODEMODE_EARLIER_DAYS\` | wie lange angenommene Ergebnisse Material bleiben, Standard 30; \`0\` = immer |
 | \`CODEMODE_CROSS_WAIT_S\` | Textaufgaben: Wartezeit auf einen Prüfer mit anderem Modell, Standard 300 |
+| \`CODEMODE_ARENA\` | Bot-Aufgaben: Adresse der Arena (\`unix:/pfad\` oder \`tcp:host:port\`, \`npm --prefix spaces-mmo run arena\`); ohne sie keine Bot-Aufgaben |
+| \`CODEMODE_BOT_JUDGES\` | Richter für Bots je Richterprozess mit Arena, Standard 1 |
 | \`CODEMODE_JUDGES\` | judge: parallele Bewerter je Prozess, Standard 2 |
 | \`CODEMODE_JUDGE_LEASE_MS\` | judge: Lease der Transaktion eines Bewerters; stirbt er, ist sein Beitrag danach wieder frei, Standard \`CODEMODE_MAX_TIMEOUT_S\` + 30 s (630 000) |
 | \`CODEMODE_VERDICT_WAIT_S\` | wie lange ein Lauf auf ein Urteil wartet; ohne Angabe die längste Dauer eines Bewerters, bei Text 600 |
@@ -1060,6 +1086,8 @@ The processes read \`codemode-chat/.env\` themselves; real environment variables
 | \`CODEMODE_TOKENS_PER_IP_DAY\` | tokens of all visitor runs of one address per day, default 1,000,000; \`0\` = no limit |
 | \`CODEMODE_EARLIER_DAYS\` | how long accepted results stay as material, default 30; \`0\` = always |
 | \`CODEMODE_CROSS_WAIT_S\` | text tasks: wait for a judge of another model, default 300 |
+| \`CODEMODE_ARENA\` | bot tasks: the arena's address (\`unix:/path\` or \`tcp:host:port\`, \`npm --prefix spaces-mmo run arena\`); without it no bot tasks |
+| \`CODEMODE_BOT_JUDGES\` | judges for bots per judge process with an arena, default 1 |
 | \`CODEMODE_JUDGES\` | judge: parallel judges per process, default 2 |
 | \`CODEMODE_JUDGE_LEASE_MS\` | judge: lease of a judge's transaction; when it dies, its contribution is free again after it, default \`CODEMODE_MAX_TIMEOUT_S\` + 30 s (630,000) |
 | \`CODEMODE_VERDICT_WAIT_S\` | how long a run waits for a verdict; unset: a judge's worst case, text 600 |
