@@ -387,6 +387,11 @@ const chestOf = async (c: CommandCtx, buildId: string) => (await c.space.readAll
 
 
 /** The chest beside the actor: one's own first, else a warehouse (it need not be one's own: `storeRight` decides). */
+/** Beside a building without a chest (a scarecrow, a coop): which plans have one. */
+function noChest(c: CommandCtx, b: BuildingFields): CommandError {
+	const have = (c.world.building?.plans ?? []).filter((p) => p.chest && !p.store).map((p) => p.name);
+	return new CommandError(have.length ? `Die ${b.name} hat keine Truhe (eine haben: ${have.join(", ")}).` : `Die ${b.name} hat keine Truhe.`);
+}
 async function chestHere(c: CommandCtx): Promise<BuildingFields> {
 	const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
 	const own = near.find((b) => b.accountId === c.account?.accountId && planOf(c.world, b.plan)?.chest && !planOf(c.world, b.plan)?.store);
@@ -442,7 +447,7 @@ const truhe: Command = {
 		await putBack(c, b);
 		if (planOf(c.world, b.plan)?.store) return lager.func(c, "");
 		const cap = planOf(c.world, b.plan)?.chest ?? 0;
-		if (!cap) throw new CommandError(`Die ${b.name} hat keine Truhe.`);
+		if (!cap) throw noChest(c, b);
 		const items = (await chestOf(c, b.buildId)).map((e) => fieldsOf<ItemFields>(e).name);
 		const count = new Map<string, number>(); for (const n of items) count.set(n, (count.get(n) ?? 0) + 1);
 		await msg(c, c.actor.charId, "look", items.length ? `In der Truhe (${items.length}/${cap}): ${[...count].map(([n, k]) => `${k} ${n}`).join(", ")}.` : `Die Truhe ist leer (Platz für ${cap}).`);
@@ -457,7 +462,7 @@ const verstaue: Command = {
 		if (!hits.length) throw new NotUnderstood(`Du trägst nichts, was „${name.slice(0, 30)}“ heißt.`);
 		const b = await chestHere(c);
 		const cap = planOf(c.world, b.plan)?.chest ?? 0;
-		if (!cap) throw new CommandError(`Die ${b.name} hat keine Truhe.`);
+		if (!cap) throw noChest(c, b);
 		const shared = !!planOf(c.world, b.plan)?.store;
 		if (shared) await storeRight(c, b);
 		const room = cap - (await chestOf(c, b.buildId)).length;

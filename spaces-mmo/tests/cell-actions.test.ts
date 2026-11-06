@@ -156,3 +156,15 @@ test("beside a coop that is still a site, \"what is missing?\" asks the site, no
 	const coop = obj({ id: "c", kind: "building", name: "Hühnerstall", owner: "Keno", ownerId: "k", plan: "huehnerstall", x: 6, y: 5, w: 2, h: 1 });
 	assert.ok(cellEntries({ ...input, objs: new Map([["c", coop]]), at: { x: 6, y: 5 } }).some((e) => e.line === "stall"), "a finished coop shows its animals");
 });
+
+test("\"Truhe ansehen\" only at an own building whose plan has a chest: a hut yes, a scarecrow or a coop no", () => {
+	const plans = [{ key: "huette", name: "Hütte", w: 2, h: 2, needs: "", work: 1, chest: true as const }, { key: "vogelscheuche", name: "Vogelscheuche", w: 1, h: 1, needs: "", work: 1 }, { key: "huehnerstall", name: "Hühnerstall", w: 2, h: 1, needs: "", work: 1 }];
+	const self = char("me", "Ich", 5, 5);
+	const at = (plan: string) => {
+		const b = obj({ id: "b", kind: "building", name: plan, x: 6, y: 5, w: 1, h: 1, plan, ownerId: "me", owner: "Ich" });
+		return cellEntries({ at: { x: 6, y: 5 }, chars: new Map([["me", self]]), objs: new Map([["b", b]]), self, room: "r", me: "me", plans, guest: false, fuel: undefined, onPlans: () => {} }).map((e) => e.line);
+	};
+	assert.ok(at("huette").includes("truhe"));
+	assert.ok(!at("vogelscheuche").includes("truhe"));
+	assert.ok(!at("huehnerstall").includes("truhe"));
+});

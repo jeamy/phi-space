@@ -443,6 +443,7 @@ export const EN: Record<string, string> = {
 	"Die {0} braucht kein {1}. Es fehlen {2}.": "The {0} needs no {1}. Still missing: {2}.",
 	"Die {0} des {1} ist eingebracht! Geerntet haben {2}.": "The {0} of the {1} is in! Harvested by {2}.",
 	"Die {0} hat keine Truhe.": "The {0} has no chest.",
+	"Die {0} hat keine Truhe (eine haben: {1}).": "The {0} has no chest (these have one: {1}).",
 	"Die {0} hat noch {1} zu mahlen.": "The {0} still has {1} to grind.",
 	"Die {0} ist leer; in etwa {1} hat sie wieder eine Kanne (bei Sturmflut ist sie voll).": "The {0} is empty; in about {1} it will hold another can (a storm tide fills it).",
 	"Die {0} sind satt (noch {1}).": "The {0} are fed ({1} left).",

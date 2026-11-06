@@ -31,7 +31,7 @@ export type CharView = { charId: string; name: string; x: number; y: number; ski
 /** A building plan as the page offers it (key for `bau <key> <x> <y>`, what it needs as text). */
 /** What the page needs to say what a carried thing can do (client/cellActions.ts itemEntries), by the names shown. */
 export type ItemUses = { recipes: Array<{ key: string; name: string; needs: Array<{ name: string; count: number }>; tool?: string; at?: string }>; /** by herd or keeper */ feed: Record<string, string[]>; offerings: string[]; flowers: string[]; /** plans with a chest of one's own, plans of a store for all */ chests: string[]; stores: string[] };
-export type PlanView = { key: string; name: string; w: number; h: number; needs: string; work: number; /** the island's epoch it needs ("Dorf"; none: the first) */ epoch?: string };
+export type PlanView = { key: string; name: string; w: number; h: number; needs: string; work: number; /** the island's epoch it needs ("Dorf"; none: the first) */ epoch?: string; /** a chest of its owner's own (not a store for all): "truhe" opens it */ chest?: true };
 /** A site or building (docs/siedeln.en.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
 export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed" | "field" | "animal" | "scenery" | "zone" | "cart" | "liner" | "track" | "train"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
@@ -378,7 +378,7 @@ export class Gateway {
 
 	#plans(): PlanView[] {
 		const name = (k: string) => this.w.prototypes.find((p) => p.key === k)?.name ?? k;
-		return (this.w.building?.plans ?? []).map((p) => ({ key: p.key, name: p.name, w: p.w, h: p.h, needs: p.needs.map((n) => `${n.count} ${name(n.proto)}`).join(", "), work: p.work, ...((p.epoch ?? 1) > 1 ? { epoch: this.w.epochs?.names[p.epoch! - 1] ?? `Epoche ${p.epoch}` } : {}) }));
+		return (this.w.building?.plans ?? []).map((p) => ({ key: p.key, name: p.name, w: p.w, h: p.h, needs: p.needs.map((n) => `${n.count} ${name(n.proto)}`).join(", "), work: p.work, ...(p.chest && !p.store ? { chest: true as const } : {}), ...((p.epoch ?? 1) > 1 ? { epoch: this.w.epochs?.names[p.epoch! - 1] ?? `Epoche ${p.epoch}` } : {}) }));
 	}
 	#hello(c: Client): void {
 		const self = this.#chars.get(c.me.charId);

@@ -242,7 +242,8 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.plan === "lehmgrube") entries.push({ label: "Lehm stechen", line: "steche" });
 			if (o.plan === "ziegelei") entries.push({ label: "Ziegel brennen", line: "craft ziegel" });
 			if (o.plan === "lagerhaus") entries.push({ label: "Lager ansehen", line: "lager" });
-			else if (o.ownerId === me) entries.push({ label: "Truhe ansehen", line: "truhe" });
+			// only a plan with a chest of its own has one (a hut, a smokehouse); a scarecrow, a coop or a mill has none
+			else if (o.ownerId === me && plans.some((p) => p.key === o.plan && p.chest)) entries.push({ label: "Truhe ansehen", line: "truhe" });
 		}
 		if (o.kind === "ruin" && o.ownerId === me) entries.push({ label: "Nachlass abholen", line: "nachlass" });
 		if ((o.kind === "building" || o.kind === "ruin") && o.plan === "windmuehle" && nearSite) entries.push({ label: "Mehl abholen", line: "abholen" });
