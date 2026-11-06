@@ -392,6 +392,8 @@ function Things({ objs, chars, self, room, me, plans, guest, wild, uses, market,
 	const [picked, setPicked] = useState<string | null>(null);
 	const kinds = [...carried.reduce((m, o) => m.set(o.name, [...(m.get(o.name) ?? []), o]), new Map<string, ObjView[]>())].sort(([a], [b]) => a.localeCompare(b));
 	const chosen = kinds.find(([name]) => name === picked);
+	const chosenBox = useRef<HTMLDivElement>(null);
+	useEffect(() => { if (picked) chosenBox.current?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }, [picked]);
 	const here = hereEntries({ chars, objs, self, room, me, plans, guest, fuel, wild });
 	const [allHere, setAllHere] = useState(false);
 	if (!carried.length && !near.length && !fire && !here.length) return <div />;
@@ -413,20 +415,23 @@ function Things({ objs, chars, self, room, me, plans, guest, wild, uses, market,
 			{near.length > 0 && <><h3>Neben dir</h3><ul>{near.map((o) => row(o, "get", "Aufheben"))}</ul></>}
 			{carried.length > 0 && <>
 				<h3>Du trägst</h3>
+				{/* a tap on a thing: its name and what it can do come first, above the pack, scrolled into view */}
+				{chosen && <div className="pack-chosen" ref={chosenBox}>
+					<div className="pack-do"><b>{chosen[0]}{chosen[1].length > 1 ? ` ×${chosen[1].length}` : ""}</b>
+						<button onClick={() => send(`drop ${chosen[0]}`)}>Ablegen</button>
+						<button onClick={() => send(`look ${chosen[0]}`)}>Ansehen</button>
+					</div>
+					{uses && (() => {
+						// what it can do here and now; the rest of the world's uses stay in the help
+						const can = itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) });
+						return can.length > 0 && <div className="pack-can">{can.map((e) => <button key={e.line} onClick={() => (e.run ? e.run() : send(e.line))}>{e.label}</button>)}</div>;
+					})()}
+				</div>}
 				<div className="pack">{kinds.map(([name, os]) => (
 					<button key={name} className={`chip${picked === name ? " on" : ""}`} onClick={() => setPicked(picked === name ? null : name)} title={name} aria-label={`${name}: ${os.length}`} aria-pressed={picked === name}>
 						<Glyph o={os[0]!} size={24} /><span className="n">{os.length}</span>
 					</button>
 				))}</div>
-				{chosen && <div className="pack-do"><span>{chosen[0]}{chosen[1].length > 1 ? ` ×${chosen[1].length}` : ""}</span>
-					<button onClick={() => send(`drop ${chosen[0]}`)}>Ablegen</button>
-					<button onClick={() => send(`look ${chosen[0]}`)}>Ansehen</button>
-				</div>}
-				{chosen && uses && (() => {
-					// what it can do here and now; the rest of the world's uses stay in the help
-					const can = itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) });
-					return can.length > 0 && <div className="pack-can">{can.map((e) => <button key={e.line} onClick={() => (e.run ? e.run() : send(e.line))}>{e.label}</button>)}</div>;
-				})()}
 			</>}
 		</div>
 	);

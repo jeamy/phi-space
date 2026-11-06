@@ -231,7 +231,10 @@ button.link:hover { transform: none; text-decoration: underline; }
 .chip .n { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-strong); }
 .pack-do { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .pack-can { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
-.pack-do span { flex: 1; color: var(--text-strong); }
+.pack-do span, .pack-do b { flex: 1; color: var(--text-strong); }
+.pack-do b { font-weight: 700; }
+/* the chosen thing stands above the pack; scrolled to, it keeps a little room above it */
+.pack-chosen { scroll-margin-top: 8px; padding: 6px 8px; margin: 0 0 6px; border-radius: 10px; background: var(--raised); }
 /* what someone else says to the player, or about them: stands out in the log */
 .log .to-me { background: color-mix(in srgb, var(--accent) 16%, transparent); border-left: 3px solid var(--accent); padding: 1px 0 1px 6px; margin: 1px 0; border-radius: 3px; color: var(--text-strong); font-weight: 600; }
 
