@@ -54,7 +54,8 @@ contribution the judge opens a fresh world (in memory, no NPCs, no model calls, 
 bot, asks the arena whether the goal was reached and closes the world. Every call costs a point; among bots that reach
 the goal the fewest points win. A candidate carries a lane: `bot` candidates go only to judges with `CODEMODE_ARENA`
 (`CODEMODE_BOT_JUDGES` of them per process, default 1), and the page offers bot tasks only when its process has one.
-▶ does not run bots. The tests use `tests/fake-arena.ts`, which speaks the same lines; the real arena has its own test
+▶ does not run bots. On big the arena is a container of its own (`npm --prefix spaces-mmo run docker:arena:up`, loopback
+port 3990), and `codemode-chat/.env` there sets `CODEMODE_ARENA=tcp:127.0.0.1:3990` for web and judge. The tests use `tests/fake-arena.ts`, which speaks the same lines; the real arena has its own test
 in spaces-mmo (`tests/arena.test.ts`).
 
 ### Custom tasks

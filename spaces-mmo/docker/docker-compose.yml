@@ -7,6 +7,7 @@
 #                  its own; and the web process — on big. npc and model are the only roles with model credentials
 #                  (the host's pi CLI login)
 #   both at once:  the pair on one machine (local test bed, docker:local:up)
+#   profile arena: the arena for the codemode chat's bot tasks, a compose project of its own (docker:arena:up) — on big
 #   profile dev:   all roles in one container with the checkout mounted, recompiled and restarted on every change
 #   profile test:  the test suite
 #
@@ -14,7 +15,7 @@
 # on big's loopback, docker-compose.hostnet.yml), and nano publishes it on SPACES_MMO_SPACE_BIND (its internal address). The space sockets
 # have no TLS and treat every connection as a process of the game (the accounts space holds the credentials): never publish
 # them on a public interface.
-# Ports: 3900 (web), 3950/3952/3953/3954 (the spaces of west, nord, ost, sued), 3951 (accounts space) — codemode-chat uses 3700/3800, the help system 3500/3600.
+# Ports: 3900 (web), 3950/3952/3953/3954 (the spaces of west, nord, ost, sued), 3951 (accounts space), 3990 (arena) — codemode-chat uses 3700/3800, the help system 3500/3600.
 
 name: phi-spaces-mmo
 
@@ -380,6 +381,42 @@ services:
     volumes:
       - mmo-agent-data:/data
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+  # ---- the arena: worlds of their own for the bots of the codemode chat (server/arena.ts) ----
+  # A compose project of its own (docker:arena:up, -p phi-spaces-mmo-arena), so the world's up/down never touches it.
+  # Every bot gets a fresh world in memory (a space process and a world worker in this container, no NPC, no model);
+  # nothing is kept. Not the game's .env: the arena's worlds must not see the game's spaces or credentials. The codemode
+  # judge and web on big reach it on the loopback (CODEMODE_ARENA=tcp:127.0.0.1:3990 in codemode-chat/.env).
+  arena:
+    image: phi-spaces-mmo:prod
+    profiles: [arena]
+    init: true
+    restart: unless-stopped
+    user: "node"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    networks:
+      - mmo
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/arena.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_ARENA_LISTEN: tcp:0.0.0.0:3990
+      SPACES_MMO_ARENA_WORLDS: "${SPACES_MMO_ARENA_WORLDS:-2}"
+      SPACES_MMO_LLM: "0"
+    cpus: "${ARENA_CPUS:-2}"
+    ports:
+      # loopback only: the socket has no TLS and opens worlds for anyone who asks
+      - "127.0.0.1:${SPACES_MMO_ARENA_PORT:-3990}:3990"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('net').connect(3990,'127.0.0.1');s.once('connect',()=>{s.end();process.exit(0)});s.once('error',()=>process.exit(1));setTimeout(()=>process.exit(1),4000)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
   # ---- tests in Docker ----
   mmo-test:

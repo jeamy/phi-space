@@ -39,7 +39,7 @@ phi-spaces: a space library with its own store; the optional `agent/` package co
 - Codemode chat (`codemode-chat/`: Next.js; every role its own process around one space, see
   `docs/codemode-space-architektur.en.md` and its README): `npm --prefix codemode-chat run dev` (space, judge, agents, model, web; port 3700),
   `npm run codemode-chat` (after `npm --prefix codemode-chat run build`), tests `npm run test:codemode-chat` (they start
-  the processes; `npm --prefix codemode-chat run test:durable` runs the same suites with the durable agent path on, the fake teams answering inside the agent worker: `tests/test-env-durable.ts`, `tests/durable-deviations.ts`), typecheck `npm --prefix codemode-chat run typecheck` (own tsconfig, not part of the root `tsc`), bot tasks need the arena of spaces-mmo (`npm --prefix spaces-mmo run arena`, a world of its own per bot; the judge reaches it by `CODEMODE_ARENA`, docs/codemode-anwendungen.en.md B),
+  the processes; `npm --prefix codemode-chat run test:durable` runs the same suites with the durable agent path on, the fake teams answering inside the agent worker: `tests/test-env-durable.ts`, `tests/durable-deviations.ts`), typecheck `npm --prefix codemode-chat run typecheck` (own tsconfig, not part of the root `tsc`), bot tasks need the arena of spaces-mmo (`npm --prefix spaces-mmo run arena`, in Docker `docker:arena:up`, a world of its own per bot; the judge reaches it by `CODEMODE_ARENA`, docs/codemode-anwendungen.en.md B),
   Docker `npm --prefix codemode-chat run docker:*` (one container per role; `docker:local:up` runs big and nano together on
   this machine as a test bed, port 3710)
   (changes containers on this machine; never on a shared server without asking).
