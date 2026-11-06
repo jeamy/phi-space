@@ -992,6 +992,8 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		probeScreen: (x: number, y: number, dx = 0, dz = 0) => { const p = at(s, x, y, 0).add(new t.Vector3(dx, 0, dz)).project(s.camera), r = s.canvas.getBoundingClientRect(); return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height }; },
 	});
 	let down: { x: number; y: number; at: { x: number; y: number } | null; talk?: boolean; long: boolean; turn: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
+	/** Degrees of tilt per px the two fingers move up or down together. */
+	const TILT_PER_PX = 0.15;
 	const fingers = pinch();
 	const onDown = (e: PointerEvent) => {
 		if (e.button === 2) return;
@@ -1011,6 +1013,15 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		const spread = fingers.move(e.pointerId, e.clientX, e.clientY);
 		// two fingers zoom and turn at once: the room turns with them (the state too: its effect would set the old angle back)
 		if (spread !== null) {
+			// two fingers up or down together tilt the camera (as Alt+wheel does), the rest of the gesture only that; a finger
+			// up makes the view flatter, down steeper
+			if (fingers.gesture === "tilt") {
+				const d = fingers.lift * TILT_PER_PX;
+				if (d) { view.current.tiltBy(d); s.tilt = clampTilt(s.tilt + d); positionCamera(s); }
+				fingers.rebase();
+				return;
+			}
+			if (fingers.gesture === null) return; // not clear yet: neither zoom nor turn for the first few px
 			// what lies between the fingers stays there: the view moves over the ground by what the zoom and the turn shifted
 			const c = fingers.center!, before = ground(c.x, c.y)?.clone(), a = s.angle - fingers.twist, z = clampZoom(s.zoom * spread);
 			view.current.zoomBy(spread); view.current.turned(a);

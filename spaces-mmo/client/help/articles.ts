@@ -200,7 +200,7 @@ Die Karte zeigt den Ort, an dem du gerade bist. Ein Klick lässt deine Figur dor
 | 3D: Mausrad oder zwei Finger | Näher heran und weiter weg (Zoom): ganz weit draußen die ganze Insel als Blöcke mit Namen, ganz nah die Figuren mit Sprechblasen; ein Tipp auf eine Sprechblase öffnet die Aktionen der Figur, bei einem Tauschangebot mit „accept“ und „decline“. Nachts wird es dunkel, und die Fenster leuchten |
 | 3D: Ziehen mit Maus oder Finger | Die Ansicht verschieben (links, rechts, hoch, runter) |
 | 3D: Ziehen mit gedrücktem Mausrad oder mit Umschalttaste, Knöpfe ↶ ↷ | Die Ansicht drehen (die Knöpfe in Achtelschritten) |
-| 3D: Alt+Mausrad | Die Kamera neigen, ohne zu zoomen oder zu drehen (siehe [Ansicht in 3D](help.game.controls#view3d)) |
+| 3D: Alt+Mausrad, am Handy zwei Finger hoch/runter | Die Kamera neigen, ohne zu zoomen oder zu drehen (siehe [Ansicht in 3D](help.game.controls#view3d)) |
 
 Das Menü bietet an, was zum Feld passt:
 
@@ -217,7 +217,7 @@ Am Handy steht im Blatt zu einem Bau, Beet, Acker, Feuer oder Ausgang **Was ist 
 
 Neue Gäste und frisch registrierte Konten starten in **3D** mit einem Blick von vorn auf den ganzen Raum. Wer schon einmal gespielt hat, behält die zuletzt gewählte Ansicht: Text, 2D oder 3D samt Zoom, Drehung und Neigung sind beim nächsten Mal so, wie sie verlassen wurden.
 
-**Neigen:** Beim Zoomen legt sich die Kamera von selbst flacher oder steiler. **Alt+Mausrad** neigt zusätzlich von Hand, höchstens ±25°, ohne Zoom und Drehung zu verändern. Mausrad und zwei Finger zoomen weiterhin, Ziehen dreht oder verschiebt wie oben.
+**Neigen:** Beim Zoomen legt sich die Kamera von selbst flacher oder steiler. **Alt+Mausrad** neigt zusätzlich von Hand, höchstens ±25°, ohne Zoom und Drehung zu verändern; am Handy und Tablet **zwei Finger gemeinsam nach oben** (flacher) **oder unten** (steiler) ziehen. Mausrad und zwei Finger zoomen weiterhin, Ziehen dreht oder verschiebt wie oben.
 
 **FPS messen:** In 3D steht oben links neben der Statistik der Knopf **FPS**. Er misst die Bildrate: 2 Sekunden Anlauf, dann 30 Sekunden Messung; der Knopf zählt die Sekunden herunter und zeigt danach das Ergebnis, etwa **58 FPS**. Ein weiterer Tipp misst neu. Wird der Tab versteckt oder die 3D-Ansicht neu gestartet, bricht die Messung ab. Nichts wird hochgeladen. Für ein ehrliches Ergebnis misst du auf dem Gerät selbst – die Handy-Nachbildung im Browser zählt nicht.
 
@@ -308,7 +308,7 @@ The map shows the place you are in. A click sends your figure there. The right m
 | 3D: mouse wheel or two fingers | Zoom in and out: far out the whole island as blocks with names, close up the figures with speech bubbles; a tap on a bubble opens the figure's actions, with „accept“ and „decline“ when it offers a trade. At night it gets dark and the windows light up |
 | 3D: drag with mouse or finger | Move the view (left, right, up, down) |
 | 3D: drag with the mouse wheel held down or with Shift, ↶ ↷ buttons | Turn the view (the buttons in eighths) |
-| 3D: Alt+mouse wheel | Tilt the camera without zooming or turning (see [The 3D view](help.game.controls#view3d)) |
+| 3D: Alt+mouse wheel, on a phone two fingers up/down | Tilt the camera without zooming or turning (see [The 3D view](help.game.controls#view3d)) |
 
 The menu offers what fits the cell:
 
@@ -325,7 +325,7 @@ On a phone the sheet for a building, bed, field, fire or exit has **Was ist das?
 
 New guests and freshly registered accounts start in **3D** with a front view of the whole room. Anyone who has played before keeps the view they last chose: text, 2D or 3D, with zoom, turn and tilt as they left them.
 
-**Tilting:** While you zoom, the camera flattens or steepens on its own. **Alt+mouse wheel** tilts it by hand on top, up to ±25°, without changing zoom or turn. Wheel and two fingers still zoom, dragging turns or moves as above.
+**Tilting:** While you zoom, the camera flattens or steepens on its own. **Alt+mouse wheel** tilts it by hand on top, up to ±25°, without changing zoom or turn; on a phone or tablet **drag two fingers up together** (flatter) **or down** (steeper). Wheel and two fingers still zoom, dragging turns or moves as above.
 
 **FPS messen:** In 3D the top bar has an **FPS** button left of the statistics. It measures the frame rate: 2 seconds of warm-up, then 30 seconds of measuring; the button counts the seconds down and then shows the result, such as **58 FPS**. Another tap measures again. If the tab is hidden or the 3D view restarts, the measurement stops. Nothing is uploaded. For an honest number measure on the device itself – browser phone emulation does not count.
 
