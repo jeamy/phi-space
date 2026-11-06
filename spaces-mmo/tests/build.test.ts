@@ -68,7 +68,7 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		for (let i = 0; i < 5 && !staked.includes("steckt"); i++) { await clear(s, foot); staked = await does(boss.p, "baue eine hütte 16 12", /steckt eine Baustelle ab|passt keine/); }
 		assert.match(staked, /Baumeisterin steckt eine Baustelle ab: Hütte\. Es fehlen 6 Treibholz, 2 Tangseil, 20 Arbeit/);
 		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => !String(e.fields.of).startsWith("bucht-")).length, 4);
-		assert.match(await does(boss.p, "bau hütte", "offene Baustelle"), /bau sie erst fertig/);
+		assert.match(await does(boss.p, "bau hütte", "offene Baustelle"), /offene Baustelle: Hütte in .+ \(16 12\); bau sie erst fertig/);
 		// nobody walks into it
 		assert.match(await does(boss.p, "step 0 1", "Bau"), /Dort steht ein Bau/);
 

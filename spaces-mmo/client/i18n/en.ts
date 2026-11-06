@@ -526,7 +526,7 @@ export const EN: Record<string, string> = {
 	"Du hast keinen Samen, der „{0}“ heißt. Du trägst: {1}.": "You have no seed called „{0}“. You carry: {1}.",
 	"Du hast nicht: {0}.": "You don't have: {0}.",
 	"Du hast noch in kein Leuchtfeuer nachgelegt.": "You haven't fed any beacon yet.",
-	"Du hast schon eine offene Baustelle; bau sie erst fertig.": "You already have an open site; finish it first.",
+	"Du hast schon eine offene Baustelle: {0}; bau sie erst fertig.": "You already have an open site: {0}; finish it first.",
 	"Du hast schon einen Auftrag; liefere ihn erst oder gib ihn auf.": "You already have an order; deliver it or abandon it first.",
 	"Du hast „{0}“ verlassen.": "You left „{0}“.",
 	"Du hast „{0}“ verlassen; die Gruppe ist aufgelöst.": "You left „{0}“; the group is disbanded.",

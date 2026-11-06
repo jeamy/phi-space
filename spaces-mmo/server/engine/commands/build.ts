@@ -245,8 +245,12 @@ export const bau: Command = {
 		if (!human(c)) throw new CommandError("Baustellen stecken nur Menschen ab.");
 		await needEpoch(c, plan.epoch, `Der Bauplan „${plan.name}“`);
 		await needRank(c, "siedler", "Bauen");
-		if ((await c.space.count({ type: "Site", fields: { accountId: c.account.accountId } })) >= def.maxSites) throw new CommandError("Du hast schon eine offene Baustelle; bau sie erst fertig.");
-		if ((await c.space.count({ type: "Site", fields: { accountId: c.account.accountId } })) + (await c.space.count({ type: "Building", fields: { accountId: c.account.accountId } })) >= def.maxBuildings) throw new CommandError(`Mehr als ${def.maxBuildings} Bauten hat niemand.`);
+		const open = (await c.space.readAll({ type: "Site", fields: { accountId: c.account.accountId } }, { txn: c.txn })).map((e) => fieldsOf<SiteFields>(e));
+		if (open.length >= def.maxSites) {
+			const where = open.map((s) => `${s.name} in ${c.world.rooms.find((r) => r.roomId === s.room)?.name ?? s.room} (${s.x} ${s.y})`).join(", ");
+			throw new CommandError(`Du hast schon eine offene Baustelle: ${where}; bau sie erst fertig.`);
+		}
+		if (open.length + (await c.space.count({ type: "Building", fields: { accountId: c.account.accountId } })) >= def.maxBuildings) throw new CommandError(`Mehr als ${def.maxBuildings} Bauten hat niemand.`);
 		const herds = c.world.animals;
 		if (herds?.maxHouses && herds.houses[plan.key]) {
 			const mine = [...(await c.space.readAll({ type: "Building", fields: { accountId: c.account.accountId } })), ...(await c.space.readAll({ type: "Site", fields: { accountId: c.account.accountId } }))];
