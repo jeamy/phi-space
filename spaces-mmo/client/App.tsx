@@ -28,7 +28,7 @@ import { detentPx, Sheet, type Detent } from "./Sheet.tsx";
 import { Rich } from "./RichText.tsx";
 import { language, setLanguage, watchPage } from "./i18n/index.ts";
 import { formatWorldTime, seasonIndex, SEASONS, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
-import { berth, lane, SHIP_LENGTH, shipPlace } from "../server/engine/liner.ts";
+import { berth, lane, nextStop, SHIP_LENGTH, shipPlace } from "../server/engine/liner.ts";
 import { railLinks, trackCells, trainIn } from "../server/engine/rail.ts";
 
 /** How long a "gone" waits for the "char" that follows it when a character is only being moved (see the handler). */
@@ -990,7 +990,11 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 
 	const mapView = mapMode === "text" ? null : hello ? (
 		<>
-		{aboard && worldTime && <div className="aboard" role="status">{tr("An Bord des Großen Schiffs")} → {tr(aboard.island)} · {tr(`Ankunft in etwa ${Math.max(1, Math.ceil((aboard.arriveWorldMs - shownWorldMs(worldTime.v, worldTime.at, Date.now())) / 60_000))} Weltminuten`)}</div>}
+		{aboard && worldTime && <div className="aboard" role="status"><span>{tr("An Bord des Großen Schiffs")} → {tr(aboard.island)} · {tr(`Ankunft in etwa ${Math.max(1, Math.ceil((aboard.arriveWorldMs - shownWorldMs(worldTime.v, worldTime.at, Date.now())) / 60_000))} Weltminuten`)}</span>
+			{/* a passenger need not sail to the end: the next stop on the way, with when the ship lies there */}
+			{(() => { const now = shownWorldMs(worldTime.v, worldTime.at, Date.now()), next = liner && aboard.to ? nextStop(liner, now, aboard.from, aboard.to) : null;
+				return next && <button className="aboard-leave" onClick={() => send("ausschiffen nächster")}>{next.inMs > 0 ? `${tr("Beim nächsten Halt aussteigen")}: ${tr(next.stop.island)} · ${tr(`in etwa ${Math.max(1, Math.ceil(next.inMs / 60_000))} Weltminuten`)}` : `${tr("Hier aussteigen")}: ${tr(next.stop.island)}`}</button>; })()}
+		</div>}
 		<MapRenderer key={`${hello.room.ground[0]?.length}x${hello.room.ground.length}`} mode={mapMode} viewReset={startView} world={hello.world} room={hello.room} chars={mapChars} objs={shownObjs} me={me} fog={fog} atlas={atlas} atlasState={atlasState} said={said} worldTime={worldTime} onTurn={onTurn}
 			fill goal={walkGoal} insetBottom={isShort() ? 0 : detent === "peek" ? detentPx("peek", window.innerHeight) : Math.min(sheetPx ?? detentPx("half", window.innerHeight), window.innerHeight * 0.7)}
 			controls={pad !== "off" ? <TouchPad hold={(d) => { input.current?.blur(); stopWalk.current(); setMenu(null); hold(d); }} release={release} action={action} noAction /> : undefined}

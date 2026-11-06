@@ -41,6 +41,17 @@ export function shipComes(t: Timetable, now: number, i: number): number {
 	return (((start - (((now % t.cycleMs) + t.cycleMs) % t.cycleMs)) % t.cycleMs) + t.cycleMs) % t.cycleMs;
 }
 
+/** The stop a passenger aboard (boarded in room `from`, bound for room `to`) can leave the ship at next, and how long until
+ *  the ship lies there (0: it lies there now); null when that stop is the destination itself. While the ship still lies in
+ *  the bay it was boarded in, the next is the one after. A passenger of an older entry has no `from`: a stop the ship lies at
+ *  counts as the next. */
+export function nextStop(t: Timetable, now: number, from: string | undefined, to: string): { i: number; stop: Stop; inMs: number } | null {
+	const s = shipState(t, now), n = t.stops.length;
+	const i = s.lies !== null ? (t.stops[s.lies]!.room === from ? (s.lies + 1) % n : s.lies) : s.to;
+	const stop = t.stops[i]!;
+	return stop.room === to ? null : { i, stop, inMs: shipComes(t, now, i) };
+}
+
 type Pt = { x: number; y: number };
 /** The way of each leg over the water of the map, for drawing: `wet(x, y)` says where the map's fine grid (a pixel per
  *  cell of a room) is water, `at` where a stop's room lies on it. Each way runs from the water nearest one bay to the water

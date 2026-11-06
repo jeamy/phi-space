@@ -13,7 +13,7 @@ import { worldNowOf } from "../server/engine/clock.ts";
 import { loanTick, shopPrice } from "../server/engine/commands/shop.ts";
 import { chainsOf, chainTick, coversOf, flameOf, fogTick, isLit, roomsAround } from "../server/engine/fire.ts";
 import { showTick } from "../server/engine/commands/festival.ts";
-import { alongWay, baysOf, berth, linerOf, seaWays, SHIP_LENGTH, lane, shipComes, shipPlace, shipState, timetable } from "../server/engine/liner.ts";
+import { alongWay, baysOf, berth, linerOf, nextStop, seaWays, SHIP_LENGTH, lane, shipComes, shipPlace, shipState, timetable } from "../server/engine/liner.ts";
 
 const w = await loadWorld();
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -384,6 +384,48 @@ test("a passenger of the large ship sails with it to the island and lands there:
 		const landed = await eventually(async () => { const x = await read(); return x.aboard ? undefined : x; }, 10_000, "landed");
 		assert.equal(landed!.room, target.room);
 		assert.equal(await s.count({ type: "Passage", fields: { charId: me } }), 0);
+	} finally { await srv.close(); }
+});
+
+test("the next stop a passenger can leave at: the one after the bay boarded in while it still lies there, then each on the way, never the destination", () => {
+	const t = linerOf(w)!, n = t.stops.length, startOf = (i: number) => { let m = 0; for (let k = 0; k < i; k++) m += t.stayMs + t.legMs[k]!; return m; };
+	const base = t.cycleMs * 10, from = t.stops[0]!.room, to = t.stops[3 % n]!.room;
+	const lying = nextStop(t, base + 60_000, from, to)!;
+	assert.equal(lying.i, 1 % n, "lying in the bay boarded in: the next one");
+	assert.equal(lying.inMs, startOf(1) - 60_000);
+	const sailing = nextStop(t, base + startOf(1) + t.stayMs + 1_000, from, to)!;
+	assert.equal(sailing.i, 2 % n, "past stop 1: stop 2");
+	const there = nextStop(t, base + startOf(2) + 1_000, from, to)!;
+	assert.deepEqual([there.i, there.inMs], [2 % n, 0], "lying at stop 2 now: leave at once");
+	assert.equal(nextStop(t, base + startOf(2) + t.stayMs + 1_000, from, to), null, "the next is the destination itself");
+});
+
+test("a passenger can leave the large ship at the next stop on the way instead of sailing to the end", { timeout: 180_000 }, async () => {
+	const t = linerOf(w)!, srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Ina", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		const read = async () => (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const c = await read(), here = t.stops.findIndex((x) => x.room === c.room), n = t.stops.length;
+		const target = t.stops[(here + 2) % n]!, next = t.stops[(here + 1) % n]!, startOf = (i: number) => { let m = 0; for (let k = 0; k < i; k++) m += t.stayMs + t.legMs[k]!; return m; };
+		const at = async (m: number) => { const e = (await s.readAll({ type: "WorldClock" }))[0]!; await s.takeIfExists({ id: e.id }, 0); await s.write({ type: "WorldClock", fields: { ...e.fields, worldAnchorMs: m, realAnchorMs: Date.now() } as never }, null, FOREVER); };
+		const base = t.cycleMs * 10;
+		await at(base + startOf(here) + 60_000); // it lies here
+		await give(s, me, w.currency, w.liner!.fare);
+		await does(p, `einschiffen ${target.island}`, /Das Schiff legt ab/);
+		assert.equal((await read()).aboard!.from, c.room, "the bay it was boarded in is kept");
+		assert.match(await does(p, "ausschiffen nächster", /nächsten Halt/), new RegExp(`beim nächsten Halt aus: ${next.island}`));
+		const aboard = (await read()).aboard!;
+		assert.equal(aboard.to, next.room);
+		assert.equal(aboard.arriveWorldMs, base + startOf((here + 1) % n), "it leaves when the ship lies at that stop");
+		assert.equal((await s.readAll({ type: "Passage", fields: { charId: me } }))[0]!.fields.to, next.room, "the landing comes there by itself");
+		assert.match(await does(p, "ausschiffen nächster", /Ziel/), /schon dein Ziel/, "the next stop is the destination now");
+		await at(aboard.arriveWorldMs + 1000);
+		await does(p, "ausschiffen", /kommst in .* an/);
+		const landed = await eventually(async () => { const x = await read(); return x.aboard ? undefined : x; }, 10_000, "landed");
+		assert.equal(landed!.room, next.room);
 	} finally { await srv.close(); }
 });
 

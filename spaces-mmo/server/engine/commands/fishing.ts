@@ -171,7 +171,7 @@ const einschiffen: Command = {
 		for (const m of purse.slice(0, d.fare)) await consume(c, m.f, c.actor.charId);
 		const stop = t.stops[to]!, rooms = c.world.allRooms ?? c.world.rooms, bay = rooms.find((r) => r.roomId === stop.room)!;
 		// the passenger stays aboard until the ship lies at the island: it is the time of the loop, not a jump
-		await board(c, { to: stop.room, island: stop.island, spot: bay.spawn!, arriveWorldMs: now + shipComes(t, now, to) });
+		await board(c, { to: stop.room, island: stop.island, spot: bay.spawn!, arriveWorldMs: now + shipComes(t, now, to), from: c.actor.room });
 	},
 };
 

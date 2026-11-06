@@ -21,7 +21,7 @@ export type CharacterFields = { charId: string; accountId: string; name: string;
 	/** Why the last step was not taken (engine/commands/default.ts: told once per reason); gone with the next move. */
 	refused?: string;
 	/** On board of the large ship, on its way to `island` (its bay `to`, landing at `spot`) until the world time `arriveWorldMs`: hidden from the rooms, no walking (engine/commands/passage.ts). */
-	aboard?: { to: string; island: string; spot: { x: number; y: number }; arriveWorldMs: number } };
+	aboard?: { to: string; island: string; spot: { x: number; y: number }; arriveWorldMs: number; /** the bay it was boarded in (older entries: none) */ from?: string } };
 /** A passenger of the large ship, scanned by the tick that sends the landing when the time has come. */
 export type PassageFields = { charId: string; to: string; arriveWorldMs: number };
 

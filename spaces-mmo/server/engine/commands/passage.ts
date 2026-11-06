@@ -12,18 +12,19 @@ import { releaseSpot } from "../occupancy.ts";
 import { dropOffers, placeIn, relocate } from "./default.ts";
 import { randomBytes } from "node:crypto";
 import { countTrip } from "../travel.ts";
+import { linerOf, nextStop } from "../liner.ts";
 
 const mins = (ms: number) => Math.max(1, Math.ceil(ms / 60_000));
 
 /** Goes aboard: the figure is hidden from the room and walks no more until the ship has reached `p.to`. */
-export async function board(c: CommandCtx, p: { to: string; island: string; spot: { x: number; y: number }; arriveWorldMs: number }): Promise<void> {
+export async function board(c: CommandCtx, p: { to: string; island: string; spot: { x: number; y: number }; arriveWorldMs: number; from?: string }): Promise<void> {
 	await countTrip(c, "ship");
 	const now = await worldNowOf(c.space, c.txn);
 	await msg(c, "*", "info", `$you() $conj(gehst|geht) an Bord, nach ${p.island}.`, { templ: true });
 	const e = await c.space.take({ type: "Character", fields: { charId: c.actor.charId } }, 5_000, { txn: c.txn });
 	if (!e) throw new CommandError("Deine Figur ist gerade nicht greifbar; bitte noch einmal.");
 	const ch = fieldsOf<CharacterFields>(e);
-	await c.space.write({ type: "Character", fields: { ...ch, aboard: { to: p.to, island: p.island, spot: p.spot, arriveWorldMs: p.arriveWorldMs }, ...(c.step ? { ack: c.step } : {}) } as never }, c.txn, FOREVER);
+	await c.space.write({ type: "Character", fields: { ...ch, aboard: { to: p.to, island: p.island, spot: p.spot, arriveWorldMs: p.arriveWorldMs, ...(p.from ? { from: p.from } : {}) }, ...(c.step ? { ack: c.step } : {}) } as never }, c.txn, FOREVER);
 	await releaseSpot(c.space, c.txn, c.actor.charId);
 	await c.space.write({ type: "Passage", fields: { charId: c.actor.charId, to: p.to, arriveWorldMs: p.arriveWorldMs } satisfies PassageFields as never }, c.txn, FOREVER);
 	await msg(c, c.actor.charId, "info", `Das Schiff legt ab. Du fährst nach ${p.island}, Ankunft in etwa ${mins(p.arriveWorldMs - now)} Weltminuten.`);
@@ -39,13 +40,34 @@ export async function aboardText(c: CommandCtx): Promise<string> {
 	return `Du bist an Bord und fährst nach ${a.island}, Ankunft in etwa ${mins(a.arriveWorldMs - (await worldNowOf(c.space, c.txn)))} Weltminuten.`;
 }
 
+/** A passenger leaves at the next stop on the way instead (`ausschiffen nächster`): its destination becomes that stop. */
+async function toNextStop(c: CommandCtx, a: NonNullable<CharacterFields["aboard"]>, now: number): Promise<NonNullable<CharacterFields["aboard"]>> {
+	const t = linerOf(c.world);
+	if (!t) throw new CommandError("In dieser Welt gibt es keinen Fahrplan.");
+	const next = nextStop(t, now, a.from, a.to);
+	if (!next) throw new CommandError(`Der nächste Halt ist schon dein Ziel: ${a.island}, in etwa ${mins(a.arriveWorldMs - now)} Weltminuten.`);
+	const bay = (c.world.allRooms ?? c.world.rooms).find((r) => r.roomId === next.stop.room);
+	const to = { ...a, to: next.stop.room, island: next.stop.island, spot: bay?.spawn ?? a.spot, arriveWorldMs: now + next.inMs };
+	if (next.inMs > 0) {
+		const e = await c.space.take({ type: "Character", fields: { charId: c.actor.charId } }, 5_000, { txn: c.txn });
+		if (!e) throw new CommandError("Deine Figur ist gerade nicht greifbar; bitte noch einmal.");
+		await c.space.write({ type: "Character", fields: { ...fieldsOf<CharacterFields>(e), aboard: to } as never }, c.txn, FOREVER);
+		await c.space.takeIfExists({ type: "Passage", fields: { charId: c.actor.charId } }, NO_WAIT, { txn: c.txn });
+		await c.space.write({ type: "Passage", fields: { charId: c.actor.charId, to: to.to, arriveWorldMs: to.arriveWorldMs } satisfies PassageFields as never }, c.txn, FOREVER);
+		await msg(c, c.actor.charId, "info", `Du steigst beim nächsten Halt aus: ${to.island}, in etwa ${mins(next.inMs)} Weltminuten.`);
+	}
+	return to;
+}
+
 const ausschiffen: Command = {
-	key: "ausschiffen", aliases: ["disembark", "landen"],
-	help: "ausschiffen – an Bord des großen Schiffs: von Bord gehen, sobald es die Insel erreicht hat (das geschieht von selbst)",
-	async func(c) {
-		const a = c.actor.aboard;
+	key: "ausschiffen", aliases: ["disembark", "landen", "aussteigen"],
+	help: "ausschiffen – an Bord des großen Schiffs: von Bord gehen, sobald es die Insel erreicht hat (das geschieht von selbst); „ausschiffen nächster“ steigt schon beim nächsten Halt auf der Fahrt aus",
+	async func(c, arg) {
+		let a = c.actor.aboard;
 		if (!a) throw new CommandError("Du bist nicht an Bord eines Schiffs.");
 		const now = await worldNowOf(c.space, c.txn);
+		// the next stop on the way: the destination moves there; lying there now, the figure lands at once
+		if (/^(n(ä|ae|a)chste[rnm]?|next|halt|hier)\b/i.test(arg.trim())) { a = await toNextStop(c, a, now); if (now < a.arriveWorldMs) return; }
 		if (now < a.arriveWorldMs) throw new CommandError(await aboardText(c));
 		// the figure is free again: no longer aboard, the passage entry gone, then to the bay (across regions by the handover)
 		const e = await c.space.take({ type: "Character", fields: { charId: c.actor.charId } }, 5_000, { txn: c.txn });
