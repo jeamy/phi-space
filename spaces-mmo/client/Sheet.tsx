@@ -6,8 +6,9 @@ import { useBack } from "./useBack.ts";
 import { isShort } from "./useShell.ts";
 
 export type Detent = "peek" | "half" | "full";
-/** The height of a detent in the space of `room` px; the peek shows the tabs and one line, on a phone on its side the tabs. */
-export const detentPx = (d: Detent, room: number) => (d === "peek" ? (isShort() ? 64 : 116) : d === "half" ? Math.round(room * (isShort() ? 0.64 : 0.52)) : room);
+/** The height of a detent in the space of `room` px (styles.css has the same numbers); the peek shows the handle and one line,
+ *  on a phone on its side the open sheet stands beside the map over the whole height. */
+export const detentPx = (d: Detent, room: number) => (d === "peek" ? (isShort() ? 40 : 58) : d === "half" ? Math.round(room * (isShort() ? 1 : 0.52)) : room);
 
 export function Sheet({ detent, setDetent, height, setHeight, place, setPlace, children }: { detent: Detent; setDetent: (d: Detent) => void; /** The height it was pulled to, null: the default. */ height: number | null; setHeight: (h: number) => void;
 	/** Where it stands between the page's left (0) and right edge (1), null: the default. A share, so it holds when the page changes size. */ place: number | null; setPlace: (x: number) => void; children: ReactNode }) {

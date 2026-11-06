@@ -22,7 +22,7 @@ import { ChatOverview, TalkView } from "./ChatPanel.tsx";
 import { forgetDeviceKeys, useChat } from "./useChat.ts";
 import { MAX_AHEAD, nextStep, screenToGrid, WALK_MS, Walker } from "./walk.ts";
 import { cellAbout, cellEntries, type CellInput, HERE_SHOWN, hereEntries, itemEntries, tapTarget, wildHere } from "./cellActions.ts";
-import { canFullscreen, enterFullscreen, homeSteps, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
+import { canFullscreen, enterFullscreen, homeSteps, isShort, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
 import { useBack } from "./useBack.ts";
 import { detentPx, Sheet, type Detent } from "./Sheet.tsx";
 import { Rich } from "./RichText.tsx";
@@ -45,6 +45,8 @@ const DOUBLE_MS = 400;
 const FETCH_MS = 15_000;
 /** How long after a command what arrives counts as its answer. */
 const ANSWER_MS = 4_000;
+/** Without a touch for this long the HUD, the chip of actions and the pad fade over the map. */
+const CALM_MS = 3_000;
 /** The sheet with the log open on a command's answer: two lines of it above the tabs and buttons, on every device. */
 const logOpenPx = () => Math.min(240, Math.round(window.innerHeight * 0.8));
 type Account = { name: string; guest: boolean; admin: boolean; /** The name shown in the game, when it is not the login name. */ alias?: string };
@@ -512,6 +514,17 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	useEffect(() => { const on = (e: Event) => { e.preventDefault(); setInstall(e as Event & { prompt: () => Promise<void> }); }; window.addEventListener("beforeinstallprompt", on); return () => window.removeEventListener("beforeinstallprompt", on); }, []);
 	const hideHomeHint = () => { setHomeHint(false); try { localStorage.setItem("mmo.homeHint", "1"); } catch { /* private window */ } };
 	const [detent, setDetent] = useState<Detent>("peek");
+	// what can be done here lies folded in one chip; a tap opens the list, the next tap on the map or an action closes it
+	const [hereOpen, setHereOpen] = useState(false);
+	// the HUD, the chip and the pad fade after a few seconds without a touch; any touch brings them back (other games call it immersive)
+	const [calm, setCalm] = useState(false);
+	const calmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const wake = useCallback(() => {
+		setCalm(false);
+		if (calmTimer.current) clearTimeout(calmTimer.current);
+		calmTimer.current = setTimeout(() => setCalm(true), CALM_MS);
+	}, []);
+	useEffect(() => { wake(); return () => { if (calmTimer.current) clearTimeout(calmTimer.current); }; }, [wake]);
 	// the height the sheet was pulled to, remembered per browser
 	const [sheetPx, setSheetPxState] = useState<number | null>(() => { try { const v = Number(localStorage.getItem("mmo.sheet")); return v > 0 ? v : null; } catch { return null; } });
 	const [sheetAt, setSheetAtState] = useState<number | null>(() => { try { const v = localStorage.getItem("mmo.sheet.x"); return v === null ? null : Number(v); } catch { return null; } });
@@ -964,9 +977,9 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		<>
 		{aboard && worldTime && <div className="aboard" role="status">{tr("An Bord des Großen Schiffs")} → {tr(aboard.island)} · {tr(`Ankunft in etwa ${Math.max(1, Math.ceil((aboard.arriveWorldMs - shownWorldMs(worldTime.v, worldTime.at, Date.now())) / 60_000))} Weltminuten`)}</div>}
 		<MapRenderer key={`${hello.room.ground[0]?.length}x${hello.room.ground.length}`} mode={mapMode} viewReset={startView} world={hello.world} room={hello.room} chars={mapChars} objs={shownObjs} me={me} fog={fog} atlas={atlas} atlasState={atlasState} said={said} worldTime={worldTime} onTurn={onTurn}
-			fill goal={walkGoal} insetBottom={detent === "peek" ? detentPx("peek", window.innerHeight) : Math.min(sheetPx ?? detentPx("half", window.innerHeight), window.innerHeight * 0.7)}
+			fill goal={walkGoal} insetBottom={isShort() ? 0 : detent === "peek" ? detentPx("peek", window.innerHeight) : Math.min(sheetPx ?? detentPx("half", window.innerHeight), window.innerHeight * 0.7)}
 			controls={pad !== "off" ? <TouchPad hold={(d) => { input.current?.blur(); stopWalk.current(); setMenu(null); hold(d); }} release={release} action={action} noAction /> : undefined}
-			onCell={(x, y) => { input.current?.blur(); setMenu(null); if (detent !== "peek") setDetent("peek"); else onTap(x, y); }}
+			onCell={(x, y) => { input.current?.blur(); setMenu(null); if (hereOpen) setHereOpen(false); if (detent !== "peek") setDetent("peek"); else onTap(x, y); }}
 			onMenu={(x, y, left, top) => { input.current?.blur(); stopWalk.current(); setMenu({ x, y, left, top }); }}
 			onFail={(why) => { setMapMode(mapMode === "3d" ? "2d" : "text"); append({ kind: "error", text: `${why} ${mapMode === "3d" ? "Die 2D-Karte bleibt aktiv." : "Das Spiel läuft als Text weiter."}`, from: "", at: Date.now() }); }} />
 		</>
@@ -977,6 +990,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	// the epoch of the island the player stands on (the world map's state names each island's), for the header
 	const islandHere = atlas?.rooms.find((r) => r.roomId === hello?.room.roomId)?.island;
 	const epochHere = islandHere && atlasState?.epochs ? atlasState.epochs[islandHere] ?? 1 : null;
+	const seasonWind = (() => { const i = worldTime ? seasonIndex(shownWorldMs(worldTime.v, worldTime.at, Date.now()), worldTime.v.yearDays ?? 0) : null; return [i === null ? "" : tr(SEASONS[i]!), wind ? tr(wind) : ""].filter(Boolean).join(" · "); })();
 	const menus = <>
 		{menu && hello && <CellMenu at={menu} wild={wildNow(hello.world.decor, hello.room.decor)} travel={atlas && atlasState ? { rooms: atlas.rooms, stops: atlasState.stops } : undefined} sail={[...new Set((hello.world.liner?.routes ?? []).map((r) => r.island))].filter((i) => i !== hello.world.liner?.island)} sheet onWalk={walkTo} onOrders={() => { setBag(true); setBagPart("orders"); setDetent("half"); }} onHelp={(a) => { setCmdHelp(null); setHelpArticle(a); setHelp(true); }} chars={chars} objs={shownObjs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offersIn={trade?.offersIn} offer={account.guest ? undefined : (name) => { setPanel(null); setBag(true); setBagPart("market"); setDetent("half"); setOfferTo(name); }}
 			chat={{ talk: (name) => send(`chat ${name}`, false), invite: (name, g) => send(`gruppe lade ${name} in ${g}`), groups: account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? []) }} />}
@@ -1064,16 +1078,17 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	useEffect(() => { if (detent === "peek") setLogFit(null); }, [detent]);
 	const sheetBody = (
 		<>
+			{/* closed, the sheet is its handle and the last line alone: the tabs come with the opening */}
 			{talkTab && detent !== "peek" ? (
 				<div className="talk-head"><button className="talk-back" onClick={() => setTab("chats")} aria-label="Zurück zu den Chats">←</button><strong>{talkHere!.conv.kind === "group" ? `# ${talkHere!.conv.title}` : talkHere!.conv.title}</strong></div>
-			) : (
+			) : detent === "peek" && mapMode !== "text" ? null : (
 				<div className="sheet-tabs" role="tablist" aria-label="Aktionen, Ereignisse und Chats">
 					<button role="tab" aria-selected={pane === "bag"} onClick={() => openPane("bag")}>Aktionen</button>
 					<button role="tab" aria-selected={pane === "log"} onClick={() => openPane("log")}>Ereignisse</button>
 					<button role="tab" aria-selected={pane === "chats"} onClick={() => openPane("chats")}>Chats{unreadAll ? <span className="chat-count">{unreadAll}</span> : null}</button>
 				</div>
 			)}
-			{detent === "peek" && mapMode !== "text" ? <button className="sheet-peek" onClick={() => openPane("log")}>{lastLine?.text ?? ""}</button> : (
+			{detent === "peek" && mapMode !== "text" ? <button className="sheet-peek" onClick={() => openPane("log")}>{unreadAll ? <span className="chat-count">{unreadAll}</span> : null}{lastLine?.text ?? ""}</button> : (
 				<div className="sheet-body">
 					{pane === "bag" ? (
 						<>
@@ -1106,16 +1121,17 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		</>
 	);
 	return (
-		<div className="game-touch sheet" onPointerDownCapture={tapStart} onPointerUpCapture={tapBeside}>
+		<div className="game-touch sheet" onPointerDownCapture={(e) => { wake(); tapStart(e); }} onPointerMoveCapture={wake} onKeyDownCapture={wake} onPointerUpCapture={tapBeside}>
 			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
-			<div className={`stage${pad === "left" ? " pad-left" : ""}${pad === "off" ? " pad-off" : ""}${detent !== "peek" ? " open" : ""}`}>
+			<div className={`stage${pad === "left" ? " pad-left" : ""}${pad === "off" ? " pad-off" : ""}${detent !== "peek" ? " open" : ""}${calm && detent === "peek" && !menu && !nameMenu && !hereOpen && !more ? " calm" : ""}`}>
 				{mapView}
 				{atlas && atlas.rooms.length > 1 && !isTouch() && mapMode !== "text" && <Atlas atlas={atlas} state={atlasState} ship={liner && worldTime ? { t: liner, now: () => shownWorldMs(worldTime.v, worldTime.at, Date.now()) } : null} me={chars.get(me) ?? null} onBeam={(room) => send(`beam ${room}`)} />}
 				<div className="hud">
 					<button className="hud-pill" onClick={() => setAtlasPage(true)} disabled={!atlas || atlas.rooms.length < 2} aria-label="Weltkarte öffnen">
 						<span className={`live${live ? " on" : ""}`} /><b>{hello?.room.name ?? ""}</b>
-						{epochHere !== null && <small className="epoch">Epoche: {epochHere}</small>}
-						{worldTime && <small>{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}{(() => { const i = seasonIndex(shownWorldMs(worldTime.v, worldTime.at, Date.now()), worldTime.v.yearDays ?? 0); return i === null ? "" : ` · ${tr(SEASONS[i]!)}`; })()}{wind ? ` · ${tr(wind)}` : ""}</small>}
+						{/* on a phone only the name and the time stay; epoch, season and wind show on the world map's page */}
+						{epochHere !== null && <small className="epoch hud-detail">Epoche: {epochHere}</small>}
+						{worldTime && <small>{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}{seasonWind && <span className="hud-detail"> · {seasonWind}</span>}</small>}
 					</button>
 					<span className="spacer" />
 					{mapMode === "3d" && <button className="hud-btn hud-fps" disabled={fps.running} onClick={startFps} title={!fps.running && fps.note ? fps.note : "Bildrate der 3D-Karte messen (2 s Anlauf, 30 s Messung)"} aria-label="FPS messen">{fps.running ? `${fps.remaining} s` : fps.fps !== null ? `${Math.round(fps.fps)} FPS` : "FPS"}</button>}
@@ -1123,7 +1139,10 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 					<button className="hud-btn" onClick={() => { setCmdHelp(null); setHelp(true); }} aria-label="Hilfe / Help">?</button>
 					<button className="hud-btn" onClick={() => setMore(true)} aria-label="Darstellung und Abmelden">⋯</button>
 				</div>
-				{hereBar.length > 0 && mapMode !== "text" && <div className="here-bar" role="group" aria-label="Hier möglich">{hereBar.map((e) => <button key={e.line} onClick={() => send(e.line)}>{e.label}</button>)}</div>}
+				{/* one chip: a single action runs on a tap, several open as a list; a tap on the map or an action folds it again */}
+				{hereBar.length > 0 && mapMode !== "text" && (hereOpen && hereBar.length > 1
+					? <div className="here-bar open" role="group" aria-label="Hier möglich">{hereBar.map((e) => <button key={e.line} onClick={() => { setHereOpen(false); send(e.line); }}>{e.label}</button>)}</div>
+					: <div className="here-bar" role="group" aria-label="Hier möglich"><button className="here-chip" aria-expanded={hereBar.length > 1 ? false : undefined} onClick={() => (hereBar.length > 1 ? setHereOpen(true) : send(hereBar[0]!.line))}><span>{hereBar[0]!.label}</span>{hereBar.length > 1 && <b>+{hereBar.length - 1}</b>}</button></div>)}
 				{homeHint && steps && <div className="home-hint"><span>Ohne Adressleiste spielen: <b>{steps.first}</b>, dann <b>{steps.then}</b>, und das Spiel von dort öffnen.</span>{install && <button className="primary home-install" onClick={() => { void install.prompt(); hideHomeHint(); }}>Installieren</button>}<button onClick={hideHomeHint} aria-label="Hinweis schließen">×</button></div>}
 				{toast && <button className="chat-toast" onClick={() => { setToast(null); setTab(toast.key); }}><b>{toast.from}</b><small>Neue Nachricht</small></button>}
 			</div>
@@ -1151,7 +1170,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 				</div>
 			</>}
 			{panel && <div className="touch-page"><div className="touch-page-head"><button className="hud-btn" onClick={() => setPanel(null)} aria-label="Schließen">×</button></div>{panels}</div>}
-			{atlasPage && atlas && <div className="touch-page"><div className="touch-page-head"><strong>Weltkarte</strong><span className="spacer" /><button className="hud-btn" onClick={() => setAtlasPage(false)} aria-label="Schließen">×</button></div><Atlas atlas={atlas} state={atlasState} page ship={liner && worldTime ? { t: liner, now: () => shownWorldMs(worldTime.v, worldTime.at, Date.now()) } : null} me={chars.get(me) ?? null} onBeam={(room) => { send(`beam ${room}`); setAtlasPage(false); }} /></div>}
+			{atlasPage && atlas && <div className="touch-page"><div className="touch-page-head"><strong>Weltkarte</strong>{(epochHere !== null || seasonWind) && <small className="atlas-now">{[epochHere !== null ? `Epoche ${epochHere}` : "", seasonWind].filter(Boolean).join(" · ")}</small>}<span className="spacer" /><button className="hud-btn" onClick={() => setAtlasPage(false)} aria-label="Schließen">×</button></div><Atlas atlas={atlas} state={atlasState} page ship={liner && worldTime ? { t: liner, now: () => shownWorldMs(worldTime.v, worldTime.at, Date.now()) } : null} me={chars.get(me) ?? null} onBeam={(room) => { send(`beam ${room}`); setAtlasPage(false); }} /></div>}
 			{helpView}
 		</div>
 	);

@@ -1109,8 +1109,16 @@ and fields by their sort (`model` on the sort and the crop), merged vertex-colou
 
 **The bar "Hier möglich"** (`hereEntries` in `client/cellActions.ts`) shows what the menus of the cells around the figure
 offer, each once, one below the other: first the harvest, then the care of what grows, the work on what is begun, the
-rest, and looking for seeds last. Five entries show; "Mehr" unfolds the others, and a long list scrolls. "Mein Ruf" and
-looking stay in the menu.
+rest, and looking for seeds last. In the sheet's tab "Aktionen" five entries show; "Mehr" unfolds the others, and a long
+list scrolls. Over the map it lies folded in one chip (the first entry and "+n"): a single entry runs on a tap, more open
+as the list, and a tap on the map or on an entry folds it again. "Mein Ruf" and looking stay in the menu.
+
+**The mobile frame** keeps the world in view: the sheet closed is its handle and the last message (58 px, on a phone on
+its side 40 px; `client/Sheet.tsx` and `styles.css` share the numbers), the tabs come with the opening; on a phone on its
+side the open sheet is a drawer over the whole height beside the map. The pill at the top carries the room's name and the
+time, epoch, season and wind only on wider screens (`.hud-detail`) and on the world map's page. After three seconds
+without a touch (`CALM_MS`) the HUD, the chip and the D-pad fade to a third (`.stage.calm`); a touch, a pointer move or a
+key brings them back, and they never fade while the sheet or a menu is open.
 
 ## Open questions
 

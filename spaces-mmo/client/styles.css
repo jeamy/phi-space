@@ -326,16 +326,19 @@ img.icon { image-rendering: pixelated; display: inline-block; vertical-align: mi
 html { -webkit-tap-highlight-color: transparent; }
 html.page-held, html.page-held body { overflow: hidden; overscroll-behavior: none; height: 100%; }
 html.page-held body { position: fixed; inset: 0; width: 100%; touch-action: manipulation; }
-.game-touch { --sheet-peek: 116px; position: fixed; left: 0; right: 0; top: var(--vv-top, 0px); height: var(--vv-h, 100%); overflow: hidden; display: flex; background: var(--map-bg); overscroll-behavior: none; }
+.game-touch { --sheet-peek: 58px; position: fixed; left: 0; right: 0; top: var(--vv-top, 0px); height: var(--vv-h, 100%); overflow: hidden; display: flex; background: var(--map-bg); overscroll-behavior: none; }
+/* a phone on its side is low but wide: closed, the sheet is a strip at the bottom right; open, it stands beside the map over the
+   whole height, a drawer (client/Sheet.tsx detentPx has the same numbers) */
 @media (max-height: 500px) and (orientation: landscape) {
-  .game-touch { --sheet-peek: 64px; }
-  .game-touch.sheet > section.sheet-peek { height: calc(64px + env(safe-area-inset-bottom)); }
-  .game-touch.sheet > section.sheet-half { height: 64%; }
+  .game-touch { --sheet-peek: 40px; }
+  .game-touch.sheet > section.sheet-peek { height: calc(40px + env(safe-area-inset-bottom)); }
+  .game-touch.sheet > section.sheet-half { height: 100%; }
   .game-touch.sheet > section.sheet { --sheet-w: min(380px, 46vw); left: calc(var(--sheet-x, 1) * (100% - var(--sheet-w))); border-radius: 16px 16px 0 0; }
+  .game-touch.sheet > section.sheet-half, .game-touch.sheet > section.sheet-full { border-radius: 0; border-top: 0; border-left: 1px solid var(--line-strong); border-right: 1px solid var(--line-strong); }
   .stage.open .map-edge { display: revert; }
   .stage.open .touchpad { display: grid; }
   .sheet-grab { height: 16px; }
-  button.sheet-peek { display: none; }
+  button.sheet-peek { padding-bottom: 4px; font-size: 12.5px; }
   .sheet-tabs { padding-bottom: 4px; }
   .stage .map-zoom { top: calc(8px + env(safe-area-inset-top)); right: 106px; }
 }
@@ -349,7 +352,15 @@ html.page-held body { position: fixed; inset: 0; width: 100%; touch-action: mani
 .hud { position: absolute; z-index: 5; top: calc(8px + env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); right: 10px; display: flex; gap: 6px; align-items: center; pointer-events: none; }
 .hud > * { pointer-events: auto; }
 .hud .spacer { flex: 1; pointer-events: none; }
-.hud-pill, .hud-btn { height: 44px; border-radius: 14px; background: color-mix(in srgb, var(--header-bg) 88%, transparent); border: 1px solid var(--line-strong); color: var(--text-strong); backdrop-filter: blur(10px); font: 650 14px/1 var(--font-sans); }
+/* the world shows through: translucent, a faint border, and after a few seconds without a touch (.stage.calm) the HUD,
+   the chip of actions and the pad fade; any touch brings them back */
+.hud-pill, .hud-btn { height: 44px; border-radius: 14px; background: color-mix(in srgb, var(--header-bg) 70%, transparent); border: 1px solid color-mix(in srgb, var(--line-strong) 60%, transparent); color: var(--text-strong); backdrop-filter: blur(10px); font: 650 14px/1 var(--font-sans); }
+.stage .hud, .stage .here-bar, .stage .touchpad, .stage .map-zoom { transition: opacity .5s ease; }
+.stage.calm .hud, .stage.calm .here-bar, .stage.calm .touchpad, .stage.calm .map-zoom { opacity: .35; }
+@media (prefers-reduced-motion: reduce) { .stage .hud, .stage .here-bar, .stage .touchpad, .stage .map-zoom { transition: none; } }
+/* a phone keeps the room's name and the time on the pill; epoch, season and wind stand on the world map's page */
+@media (pointer: coarse), (max-width: 640px) { .hud-detail { display: none; } }
+.atlas-now { margin-left: 10px; color: var(--muted); font: 500 12px/1.3 var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .hud-pill { display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; min-width: 0; max-width: 72%; }
 .hud-pill:disabled { opacity: 1; }
 .hud-pill b { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -373,7 +384,11 @@ html.page-held body { position: fixed; inset: 0; width: 100%; touch-action: mani
 .map-edge.bottom { bottom: calc(var(--sheet-peek) + 72px); left: var(--pos); transform: translateX(-50%); border-radius: 14px; } .map-edge.bottom::before { content: "↓ "; }
 /* what can be done here, always in view above the sheet; on a phone on its side the sheet stays to the right of it */
 .here-bar { position: absolute; z-index: 11; left: max(10px, env(safe-area-inset-left)); bottom: calc(var(--sheet-peek) + 10px + env(safe-area-inset-bottom)); max-width: min(62%, 300px); max-height: calc(100% - var(--sheet-peek) - 80px); display: flex; flex-direction: column; align-items: flex-start; gap: 5px; overflow-y: auto; scrollbar-width: none; }
-.here-bar button { flex: none; min-height: 40px; max-width: 100%; text-align: left; line-height: 1.2; background: color-mix(in srgb, var(--raised) 90%, transparent); color: var(--text-strong); border-color: var(--line-strong); border-radius: 12px; }
+.here-bar button { flex: none; min-height: 40px; max-width: 100%; text-align: left; line-height: 1.2; background: color-mix(in srgb, var(--raised) 75%, transparent); color: var(--text-strong); border-color: color-mix(in srgb, var(--line-strong) 60%, transparent); border-radius: 12px; backdrop-filter: blur(8px); }
+/* folded: one chip, the first action and how many more; the list opens on a tap */
+.here-chip { display: inline-flex; align-items: center; gap: 8px; }
+.here-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.here-chip b { flex: none; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; display: grid; place-items: center; background: var(--accent-fill); color: var(--accent-ink); font: 700 12px/1 var(--font-sans); }
 /* a finger: from the top, so an open sheet does not cover it */
 @media (pointer: coarse) { .here-bar { top: calc(60px + env(safe-area-inset-top)); bottom: auto; } }
 .chat-toast { position: absolute; z-index: 6; left: 10px; right: 10px; top: calc(60px + env(safe-area-inset-top)); min-height: 52px; border-radius: 14px; text-align: left; background: var(--raised); border: 1px solid var(--line-strong); box-shadow: 0 6px 20px var(--shadow); padding: 8px 12px; font: 600 14px/1.3 var(--font-sans); color: var(--text-strong); }
@@ -387,7 +402,7 @@ html.page-held body { position: fixed; inset: 0; width: 100%; touch-action: mani
 .game-touch.sheet .stage { position: absolute; inset: 0; }
 .game-touch.sheet > section.sheet { position: absolute; z-index: 10; --sheet-w: min(100%, 720px); width: var(--sheet-w); left: calc(var(--sheet-x, 0.5) * (100% - var(--sheet-w))); bottom: 0; max-height: 100%; border-radius: 20px 20px 0 0; border-top: 1px solid var(--line-strong); box-shadow: 0 -8px 28px var(--shadow); padding-bottom: env(safe-area-inset-bottom); transition: height .22s ease; }
 @media (prefers-reduced-motion: reduce) { .game-touch.sheet > section.sheet { transition: none; } }
-.game-touch.sheet > section.sheet-peek { height: calc(116px + env(safe-area-inset-bottom)); }
+.game-touch.sheet > section.sheet-peek { height: calc(58px + env(safe-area-inset-bottom)); }
 .game-touch.sheet > section.sheet-half { height: 52%; }
 .game-touch.sheet > section.sheet-full { height: calc(100% - env(safe-area-inset-top) - 8px); }
 .game-touch > section.text-page { position: absolute; left: 0; right: 0; max-width: 720px; margin-inline: auto; top: calc(60px + env(safe-area-inset-top)); bottom: 0; z-index: 4; padding-bottom: env(safe-area-inset-bottom); }
@@ -397,7 +412,8 @@ html.page-held body { position: fixed; inset: 0; width: 100%; touch-action: mani
 .sheet-tabs button { height: 44px; padding: 0; border: 0; background: transparent; color: var(--muted); border-radius: 12px; font-size: 13px; }
 .sheet-tabs button[aria-selected="true"] { background: var(--raised); color: var(--text-strong); }
 .sheet-tabs .chat-count { margin-left: 5px; }
-button.sheet-peek { flex: none; height: auto; border: 0; background: none; border-radius: 0; padding: 0 16px 8px; text-align: left; color: var(--text); font: 400 13.5px/1.4 var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+button.sheet-peek { flex: 1; min-height: 0; height: auto; border: 0; background: none; border-radius: 0; padding: 0 16px 8px; text-align: left; color: var(--text); font: 400 13.5px/1.4 var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+button.sheet-peek .chat-count { margin-right: 8px; vertical-align: 1px; }
 .sheet-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 2px 12px 10px; }
 .sheet-scroll { flex: 1; min-height: 0; overflow-y: auto; display: grid; gap: 8px; align-content: start; overscroll-behavior: contain; }
 .last-line { flex: none; min-height: 0; padding: 2px 0; border: 0; background: none; border-radius: 0; color: var(--muted); text-align: left; font: 400 12.5px/1.4 var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
