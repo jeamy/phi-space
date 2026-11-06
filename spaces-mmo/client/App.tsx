@@ -47,7 +47,7 @@ const FETCH_MS = 15_000;
 const ANSWER_MS = 4_000;
 /** Without a touch for this long the HUD, the chip of actions and the pad fade over the map. */
 const CALM_MS = 3_000;
-/** The sheet with the log open on a command's answer: two lines of it above the tabs and buttons, on every device. */
+/** The sheet with the log open on a command's answer: two lines of it above the tabs and buttons (a mouse; a finger keeps it closed). */
 const logOpenPx = () => Math.min(240, Math.round(window.innerHeight * 0.8));
 type Account = { name: string; guest: boolean; admin: boolean; /** The name shown in the game, when it is not the login name. */ alias?: string };
 type Hello = Extract<ServerFrame, { t: "hello" }>;
@@ -594,6 +594,8 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		if (Date.now() - awaited.current > ANSWER_MS) return;
 		awaited.current = 0;
 		if (!bagRef.current && tabRef.current !== "log") return;
+		// a phone keeps the sheet closed: the answer stands in its strip, a tap on it opens the log
+		if (detentRef.current === "peek" && isTouch()) return;
 		if (tabRef.current !== "log") setTab("log");
 		atEnd.current = true;
 		setBehind(false);
