@@ -457,6 +457,7 @@ button.sheet-peek .chat-count { margin-right: 8px; vertical-align: 1px; }
   .action-sheet .action-title { padding: 4px 10px 6px; font-size: 14px; }
   .action-sheet li button { min-height: 40px; font-size: 14px; }
   .action-sheet .menu-note { font-size: 12px; padding: 4px 10px 6px; }
+  .cell-menu.action-sheet.on-left:not(.more-sheet) { right: auto; left: max(10px, env(safe-area-inset-left)); }
 }
 /* one column no wider than the screen; what does not fit beside its label goes below it */
 .more-sheet { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; overflow-x: hidden; }

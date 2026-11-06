@@ -227,10 +227,16 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, sail, t
 	const left = Math.min(at.left, window.innerWidth - 220), top = Math.max(8, Math.min(at.top, window.innerHeight - 40 * (entries.length + 1)));
 	const about = sheet ? cellAbout(at, chars, objs, room) : {};
 	const [told, setTold] = useState(false);
+	// the tap that opened it ends with a click on what now lies under the finger: a button counts only after a press inside
+	// the menu (a key's click has detail 0)
+	const pressed = useRef(false);
+	const mayClick = (e: React.MouseEvent) => e.detail === 0 || pressed.current;
+	// on a phone on its side the card stands on the half of the screen away from the finger, so the tapped thing stays in view
+	const side = sheet && at.left > window.innerWidth / 2 ? " on-left" : "";
 	return (
 		<>
 			<div className={`menu-backdrop${sheet ? " dim" : ""}`} onClick={dismiss} onContextMenu={(e) => { e.preventDefault(); dismiss(); }} />
-			<ul className={sheet ? "cell-menu action-sheet" : "cell-menu"} role="menu" style={sheet ? undefined : { left, top }}>
+			<ul className={sheet ? `cell-menu action-sheet${side}` : "cell-menu"} role="menu" style={sheet ? undefined : { left, top }} onPointerDown={() => { pressed.current = true; }} onClickCapture={(e) => { if (!mayClick(e)) { e.preventDefault(); e.stopPropagation(); } }}>
 				{sheet && about.title && <li className="action-title">{about.title}</li>}
 				{step && typeof step === "object" && <li className="menu-note">{step.name} ({step.w}×{step.h}) ab hier nach rechts unten: {step.needs}, {step.work} Arbeit</li>}
 				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (onWalk && e.line.startsWith("move ")) { onWalk(at); close(); } else if (e.run) { e.run(); if (!e.line.startsWith("#bau") && !e.line.startsWith("#plan") && !e.line.startsWith("#zurück")) close(); } else { send(e.line); close(); } }}>{e.label}</button></li>)}
@@ -516,6 +522,8 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const [detent, setDetent] = useState<Detent>("peek");
 	// what can be done here lies folded in one chip; a tap opens the list, the next tap on the map or an action closes it
 	const [hereOpen, setHereOpen] = useState(false);
+	/** Where the last finger or mouse went down: a tap's action card opens on the other side of the screen. */
+	const lastPress = useRef({ x: 0, y: 0 });
 	// the HUD, the chip and the pad fade after a few seconds without a touch; any touch brings them back (other games call it immersive)
 	const [calm, setCalm] = useState(false);
 	const calmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -897,7 +905,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		// a fire out of reach: to it, "Hier möglich" then offers to feed it
 		const fire = [...objs.values()].find((o) => o.kind === "beacon" && o.location === room && o.x === at.x && o.y === at.y), own = chars.get(me);
 		if (fire && own && Math.max(Math.abs(fire.x - own.x), Math.abs(fire.y - own.y)) > 1) { walkTo(at); return; }
-		if (hit) { stopWalk.current(); setMenu({ x: at.x, y: at.y, left: 0, top: 0 }); return; }
+		if (hit) { stopWalk.current(); setMenu({ x: at.x, y: at.y, left: lastPress.current.x, top: lastPress.current.y }); return; }
 		walkTo({ x, y });
 	}, [hello, chars, objs, shownObjs, me, onCell, walkTo]);
 	useEffect(() => {
@@ -1123,7 +1131,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		</>
 	);
 	return (
-		<div className="game-touch sheet" onPointerDownCapture={(e) => { wake(); tapStart(e); }} onPointerMoveCapture={wake} onKeyDownCapture={wake} onPointerUpCapture={tapBeside}>
+		<div className="game-touch sheet" onPointerDownCapture={(e) => { wake(); lastPress.current = { x: e.clientX, y: e.clientY }; tapStart(e); }} onPointerMoveCapture={wake} onKeyDownCapture={wake} onPointerUpCapture={tapBeside}>
 			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
 			<div className={`stage${pad === "left" ? " pad-left" : ""}${pad === "off" ? " pad-off" : ""}${detent !== "peek" ? " open" : ""}${calm && detent === "peek" && !menu && !nameMenu && !hereOpen && !more ? " calm" : ""}`}>
 				{mapView}

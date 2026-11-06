@@ -1118,7 +1118,10 @@ its side 40 px; `client/Sheet.tsx` and `styles.css` share the numbers), the tabs
 side the open sheet is a drawer over the whole height beside the map. The pill at the top carries the room's name and the
 time, epoch, season and wind only on wider screens (`.hud-detail`) and on the world map's page. After three seconds
 without a touch (`CALM_MS`) the HUD, the chip and the D-pad fade to a third (`.stage.calm`); a touch, a pointer move or a
-key brings them back, and they never fade while the sheet or a menu is open.
+key brings them back, and they never fade while the sheet or a menu is open. A tap's action card (`CellMenu` as a sheet)
+stands, on a phone on its side, on the half of the screen away from the finger (`.on-left`), and its buttons take a click
+only after a press inside it: the click that ends the opening tap lands on whatever lies under the finger then and used to
+run that entry and close the card.
 
 ## Open questions
 
