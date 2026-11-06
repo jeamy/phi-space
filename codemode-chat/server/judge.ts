@@ -248,9 +248,11 @@ async function judgeTools(cm: Codemode, task: Task & { tools: ToolSpec }, source
 		} finally { await sandbox.close().catch(() => {}); }
 	};
 	const sample = await runWorld(spec.sample);
-	const holdout = sample.error ? null : hideError(await runWorld(spec.holdout), limit);
+	// an uploaded dataset whose holdout was not loaded (an agent checking its code): the sample only, and no verdict of
+	// a judge comes from it (judge-host.ts loads the holdout)
+	const holdout = sample.error || spec.holdoutMissing ? null : hideError(await runWorld(spec.holdout), limit);
 	const cases = [worldCase(task.fn, spec.sample, sample, spec.answer(spec.sample), show), ...(holdout ? [worldCase(task.fn, spec.holdout, holdout, null, show)] : [])];
-	const passed = cases.filter((c) => c.ok).length, total = 2;
+	const passed = cases.filter((c) => c.ok).length, total = spec.holdoutMissing ? 1 : 2;
 	const last = holdout ?? sample;
 	const metered = { cost: last.meter.cost, calls: { ...last.meter.calls } as Record<string, number>, score: Math.round(last.score * 1000) / 1000 };
 	if (passed < total) return { ok: false, ms: limit, error: cases.find((c) => !c.ok)?.error ?? `wrong on ${cases.find((c) => !c.ok)?.call ?? "the holdout"}`, passed, total, cases, ...metered };

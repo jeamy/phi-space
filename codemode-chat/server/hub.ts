@@ -23,7 +23,8 @@ import { archive, earlierLeaseMs, EARLIER_CAP, setBest, validMs } from "./result
 import { endRun, readRun, startSpaceRun, type RunEntry, type RunInfo, type RunMode, type RunParams } from "./run.ts";
 import { addNote, answersOf, bestOf, enqueueCandidate, execTarget, modelInfoOf, isSolved, planTurn, rid, scoresOf, systemLine, taskEntries, vetoesOf, type Contribution } from "./room.ts";
 import { arenaAddress } from "./bottask.ts";
-import { customSpec, customTask, expectedOf, isText, offeredTasks, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
+import { customSpec, customTask, dataTask, expectedOf, isText, offeredTasks, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
+import { readUpload, storeHoldout } from "./datatask.ts";
 import { clipWords, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
 import { taskWaitMs } from "./limits.ts";
 import { spentToday } from "./model-host.ts";
@@ -33,14 +34,15 @@ import { entryLeaseMs, HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeAll
 import type { WsConnection } from "phi-spaces/ws";
 
 /** The entry types that belong to a task block besides its CodeTask (deleted and extended with it). */
-const BLOCK_TYPES = ["CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "BotRun", "BotCall", "ChatMessage"];
+const BLOCK_TYPES = ["CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "BotRun", "BotCall", "CodeData", "ChatMessage"];
 const LIMITS = { agents: 8, gens: 10, perAgent: 3, polish: 3, boardDepth: 12, plans: 500, sessions: 50, messages: 500, contributions: 1000, blocks: 60, notes: 300 };
 /** Code a snapshot carries at most, counted as encoded JSON (escapes included); the rest is fetched per contribution
  *  (`source()`), so a frame stays far below the 1 MiB WebSocket limit however many contributions a room holds. */
 const SNAPSHOT_SOURCE_BYTES = 384 * 1024;
 /** A snapshot above this size (counted as sent) goes out without any code at all. */
 const SNAPSHOT_MAX_BYTES = 900 * 1024;
-import { crossWaitMs, FATAL_LLM, ipTokensPerDay, runBudgetTokens } from "./limits.ts";
+import { crossWaitMs, FATAL_LLM, ipDataPerDay, ipTokensPerDay, runBudgetTokens } from "./limits.ts";
+import { takeQuota } from "./quota.ts";
 
 /** A bot task without an arena: no judge would take its candidates (bottask.ts, the lanes). */
 const NO_ARENA = "Bot tasks need an arena (CODEMODE_ARENA); this server has none";
@@ -326,9 +328,11 @@ export class CodeChatHub {
 	}
 
 	/** Opens a new task block: from now on candidates, scores and the best code belong to it. */
-	async #openBlock(s: Session, task: Task, announce: boolean, extra: Record<string, unknown> = {}): Promise<void> {
+	async #openBlock(s: Session, task: Task, announce: boolean, extra: Record<string, unknown> = {}, before?: (blockId: string) => Promise<void>): Promise<void> {
 		const blockId = `b${Date.now().toString(36)}${rid()}`;
-		await this.host.write({ type: "CodeTask", fields: { session: s.id, blockId, taskId: task.id, ts: Date.now(), ...this.#until(), ...(task.id === "custom" ? { custom: customSpec(task) } : {}), ...(isText(task) ? { text: textSpec(task) } : {}), ...extra } as never }, null, this.#ttl);
+		// what the block needs before its task stands (an uploaded dataset's hidden part): a judge finds it complete
+		if (before) await before(blockId);
+		await this.host.write({ type: "CodeTask", fields: { session: s.id, blockId, taskId: task.id, ts: Date.now(), ...this.#until(), ...(task.id === "custom" ? { custom: customSpec(task) } : {}), ...(isText(task) ? { text: textSpec(task) } : {}), ...(task.data ? { data: task.data } : {}), ...extra } as never }, null, this.#ttl);
 		s.task = task; s.blockId = blockId; // only once the block exists
 		if (announce) await this.#write(s, "system", `Task: ${task.title.en} (${task.fn})`, s.blockId);
 	}
@@ -621,11 +625,14 @@ export class CodeChatHub {
 	/** Every call opens a new task block, also when the same task is chosen again. A custom task with `verify` (the
 	 *  default) gets a check rule from the verifier agent, so other right results than the examples count too. */
 	async setTask(id: string, o: { taskId?: string; custom?: { fn: string; prompt: string; cases: any; check?: string; verify?: boolean; timeoutS?: unknown }; text?: { prompt: unknown; criteria?: unknown };
+		/** An uploaded dataset (datatask.ts): { question, rows | csv, answer, tools?, timeoutS? }. */
+		data?: Record<string, unknown>;
 		/** Who asks (set by the server): a visitor's calls for the rule or the criteria count against their address. */
 		client?: { ip: string; admin: boolean } }): Promise<void> {
 		const s = await this.session(id);
 		if (!this.allow(s, "task", 30)) throw new Error("Too many tasks, slow down");
 		if (o.text) return this.#setTextTask(s, o.text, o.client);
+		if (o.data) return this.#setDataTask(s, o.data, o.client);
 		let task = o.custom ? customTask({ fn: clip(o.custom.fn, 41), prompt: clip(o.custom.prompt, 600), cases: o.custom.cases, timeoutS: o.custom.timeoutS, ...(typeof o.custom.check === "string" ? { check: o.custom.check } : {}) }) : taskById(String(o.taskId));
 		if (!task) throw new Error("Unknown task");
 		if (task.kind === "bot" && !arenaAddress()) throw new Error(NO_ARENA);
@@ -649,6 +656,25 @@ export class CodeChatHub {
 			if ((await this.#taskEntries(id)).length >= LIMITS.blocks) throw new Error("This room holds the maximum number of tasks");
 			await this.#openBlock(s, chosen, true, verifierUsage);
 			if (verdict) await this.#write(s, "system", verdict, s.blockId);
+		});
+		this.push(s);
+	}
+
+	/** A task over an uploaded dataset (datatask.ts): the sample goes with the CodeTask, the hidden part into the block's
+	 *  CodeData pages, written before the CodeTask. */
+	async #setDataTask(s: Session, raw: Record<string, unknown>, client?: { ip: string; admin: boolean }): Promise<void> {
+		const up = readUpload(raw as Parameters<typeof readUpload>[0]);
+		const task = dataTask(up.spec);
+		if (await this.#runNow(s)) throw new Error("A run is active; stop it first");
+		// a dataset stays as long as its block: a visitor's uploads per day are counted (an admin's are not)
+		const perDay = ipDataPerDay();
+		if (client && !client.admin && perDay && !(await takeQuota(this.host, `data:${client.ip}`, { perDay })).ok) throw new Error(`The uploads of today for your address are used up (${perDay}, CODEMODE_DATA_PER_IP_DAY); try again tomorrow`);
+		await this.#exclusive(s, async () => {
+			if (await this.#runNow(s)) throw new Error("A run is active; stop it first");
+			if ((await this.#taskEntries(s.id)).length >= LIMITS.blocks) throw new Error("This room holds the maximum number of tasks");
+			let pageCount = 0;
+			await this.#openBlock(s, task, true, {}, async (blockId) => { pageCount = await storeHoldout(this.host, { session: s.id, blockId }, up.holdout, up.holdoutAnswer, this.#ttl); });
+			await this.#write(s, "system", `Dataset: ${up.spec.sample.length + up.holdout.length} items (sample ${up.spec.sample.length}, hidden ${up.holdout.length} in ${pageCount} pages), question: ${up.spec.question.slice(0, 200)}`, s.blockId);
 		});
 		this.push(s);
 	}

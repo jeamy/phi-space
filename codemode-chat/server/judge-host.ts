@@ -15,7 +15,8 @@ import { setBest, trimArchive } from "./results.ts";
 import { serveExec } from "./exec.ts";
 import { ArenaDown, arenaAddress } from "./bottask.ts";
 import { announce, awaitWork, connectSpace, entryLeaseMs, hostFacts, keepAlive, readExisting, StillHeld, takeAll } from "./space.ts";
-import { taskFromSpec } from "./tasks.ts";
+import { dataTask, taskFromSpec } from "./tasks.ts";
+import { loadHoldout } from "./datatask.ts";
 
 /** A judge's transaction lease, renewed while it judges: a dead judge's candidate is back within this time
  *  (CODEMODE_JUDGE_LEASE_MS). The sandbox holds the judge's thread while the code runs, so no renewal comes during a
@@ -89,9 +90,15 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 		// Read without the transaction: a read under it would hold the CodeTask for the whole time limit, and deleting or
 		// extending the block would wait that long; whether the block still stands is asked under it after the judging
 		const spec = f.custom !== undefined || typeof blockId !== "string" ? f : ((await peek(space, { type: "CodeTask", fields: { session, blockId } }))?.fields as Record<string, unknown> | undefined ?? false);
-		const task = spec ? taskFromSpec(spec) : null;
+		let task = spec ? taskFromSpec(spec) : null;
+		// an uploaded dataset: its hidden part lies in the block's CodeData, and only a judge reads it
+		let missing: string | null = null;
+		if (task?.id === "data" && task.data) {
+			const holdout = typeof blockId === "string" ? await loadHoldout(space, { session, blockId }) : null;
+			if (holdout) task = dataTask(task.data, holdout); else missing = "the hidden part of the dataset is missing (the block was deleted, or its upload did not complete)";
+		}
 		const log = task?.durable ? spaceLog(space, { session, ...(typeof blockId === "string" ? { blockId } : {}), candidateId }) : undefined;
-		const v: Verdict | null = spec === false ? null : task ? await judgeInSlot(cm, task, String(f.source ?? ""), log ? { log, leaseMs: TXN_LEASE_MS } : {}) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
+		const v: Verdict | null = spec === false ? null : missing ? { ok: false, ms: TIMEOUT_MS, error: missing, passed: 0, total: 2, cases: [] } : task ? await judgeInSlot(cm, task, String(f.source ?? ""), log ? { log, leaseMs: TXN_LEASE_MS } : {}) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
 		if (v && (await alive())) {
 			await space.write({ type: "CodeScore", fields: { session, blockId, candidateId, author: f.author, via: f.via, host, gen: f.gen, ...lineageOf(f), ...verdictFields(v), source: f.source, ts: f.ts } as never }, t.id, ttl);
 			// a correct verdict that beats the block's best (and no person rejected it) becomes the new best

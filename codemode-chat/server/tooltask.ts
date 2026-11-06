@@ -23,7 +23,8 @@ export const MAX_CLASSIFY_CHARS = 20_000;
 /** Jev's recorded answer for one issue (server/data/fetch-pi-issues.ts --jev). */
 export type JevAnswer = { kind: "bug" | "feature" | "question" | "other"; confidence: number };
 /** `jev`: Jev's answers by issue id, kept beside the issues (never in what `get` returns). */
-export type World = { name: "sample" | "holdout"; issues: Issue[]; jev?: Record<string, JevAnswer> };
+/** `items`: the entries of an uploaded dataset (datatask.ts) instead of issues. */
+export type World = { name: "sample" | "holdout"; issues: Issue[]; jev?: Record<string, JevAnswer>; items?: Array<{ id: string } & Record<string, unknown>> };
 export type ToolSpec = {
 	tools: ToolName[];
 	sample: World;
@@ -32,6 +33,10 @@ export type ToolSpec = {
 	answer: (w: World) => unknown;
 	/** 0..1, how close `got` is to `want`; 1 counts as solved. */
 	score: (got: unknown, want: unknown) => number;
+	/** The tools of a world, when they are not the issue tools below (an uploaded dataset, datatask.ts). */
+	toolsFor?: (w: World, m: Meter) => CodemodeTool[];
+	/** The holdout was not loaded (only the judge loads an uploaded one): only the sample can be judged. */
+	holdoutMissing?: true;
 };
 
 // ---- the stand-in classifier: the strongest frustration a text shows, by fixed phrases --------------------------
@@ -118,7 +123,7 @@ export const PI_WINDOWS_BUGS: ToolSpec = {
 };
 
 // ---- the tools of one world, metered --------------------------------------------------------------------------
-type CodemodeTool = { name: string; description?: string; inputSchema?: unknown; execute(args: unknown): unknown };
+export type CodemodeTool = { name: string; description?: string; inputSchema?: unknown; execute(args: unknown): unknown };
 /** The calls of one execution by tool name (also the bot tools of bottask.ts), their points and their number. */
 export type Meter = { calls: Partial<Record<string, number>>; cost: number; total: number };
 export const newMeter = (): Meter => ({ calls: {}, cost: 0, total: 0 });
@@ -133,6 +138,7 @@ const DESCRIPTIONS: Record<ToolName, string> = {
 
 /** The tools of `w` for one execution; every call is counted on `m`, and a call beyond MAX_CALLS throws. */
 export function worldTools(spec: ToolSpec, w: World, m: Meter): CodemodeTool[] {
+	if (spec.toolsFor) return spec.toolsFor(w, m);
 	const byIdMap = new Map(w.issues.map((i) => [i.id, i]));
 	const text = (i: Issue) => `${i.title}\n${i.body ?? ""}\n${i.comments.map((c) => c.text).join("\n")}`.toLowerCase();
 	const arg = (a: unknown) => (a && typeof a === "object" ? (a as Record<string, unknown>) : {});
@@ -195,7 +201,7 @@ export type WorldResult = { score: number; meter: Meter; ms: number; got?: unkno
 /** A world's result as a case line; the holdout shows only its score and calls, never its items or answer. */
 export function worldCase(fn: string, w: World, r: WorldResult, want: unknown, show: (v: unknown) => string): CaseResult {
 	// the call stays the same for every contribution (the runs compare cases by it); what it cost goes with the result
-	const call = `${fn}() on the ${w.name} (${w.issues.length} issues)`, cost = `calls: ${meterText(r.meter)}`;
+	const call = `${fn}() on the ${w.name} (${w.items ? `${w.items.length} items` : `${w.issues.length} issues`})`, cost = `calls: ${meterText(r.meter)}`;
 	if (r.error) return { call, ok: false, error: `${r.error} (${cost})`, ...(w.name === "sample" ? { expect: show(want) } : {}) };
 	const ok = r.score >= 1;
 	return w.name === "sample"

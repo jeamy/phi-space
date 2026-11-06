@@ -46,6 +46,11 @@ test("dashboard: spaces, detail, entries and metrics over HTTP; GET only", async
 		assert.equal(metrics.totals.writes, 1);
 		assert.equal(metrics.connections, 0);
 		assert.ok(metrics.uptimeMs >= 0);
+
+		// an entry that marks itself hidden (an app's secret) shows no fields
+		const secret = await client.write({ type: "Secret", fields: { hidden: true, answer: ["a", "b"] } }, null, 10_000);
+		const shown = (await (await fetch(`${dash.url}/api/spaces/default/entries?limit=10`)).json()).entries.find((e: { id: string }) => e.id === secret.id);
+		assert.deepEqual(shown.fields, { hidden: true });
 	} finally {
 		await dash.close();
 		await h.close(ctx);

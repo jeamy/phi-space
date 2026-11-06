@@ -8,7 +8,7 @@ shortened, logins replaced). Its answer is computed from the data, not labelled:
 mentions Windows and that a person, not the tracker's auto-close bot, commented on. A third, "Pi issues: Windows bugs
 by Jev", adds a `jev` tool: the answers of the classifier Jev (`typesafe/jev-1.13` via OpenRouter's decisions endpoint),
 asked once per issue by `fetch-pi-issues.ts --jev` and replayed by the judge. This is the record-and-replay of D in small:
-a real model's output, recorded, so the judge stays without network and deterministic. A step 2 (uploads as `CodeData`, the page's form) is open; B, C and D are built (their sections).
+a real model's output, recorded, so the judge stays without network and deterministic. A step 2 is built too (below); B, C and D are built (their sections).
 
 What step 1 does differently from the text below:
 
@@ -50,6 +50,25 @@ Durable runs (D) come last.
 - One verdict per contribution, in the candidate's transaction. `CodeBest` is still updated in the same transaction.
 
 ## A. Data tasks (tools over a dataset)
+
+Status of step 2 (2026-11-06): built: `codemode-chat/server/datatask.ts`, the form "Custom data task" on the page,
+`tests/data.test.ts` with `tests/fake-tickets.ts`. What it settles, before the text below:
+
+- **One kind of question.** An upload has an answer column (yes/no); `solve()` returns the ids of the marked items, and
+  the score is their F1 as sets (any order). Other answer shapes (counts per key, rankings) are not part of this step.
+- **The tools are `list`, `get`, `search`** over the items without the answer column (`label` and `classify` from the
+  table below are not offered for uploads: a stand-in classifier would need a keyword table of the uploader).
+- **Sample in the task, holdout in CodeData.** Every tenth item, at most 40 and 20 KB, is the sample: it is stored in
+  the CodeTask (`data`) and so reaches the agents and the page. The rest is written as CodeData pages of the block
+  (40 KB each) before the CodeTask, and only the judge reads them; an agent's own check judges the sample only.
+  Deleting the block takes them along.
+- **`execute()`, as step 1.** The tools answer deterministically, so `start()` with a seed is not needed here.
+- **Limits:** 2000 items, 800 KB as JSON (below the 1 MB nginx takes by default), 20 columns, 2000 characters per value; the web process takes 1.5 MB for a
+  new task, 64 KB for everything else.
+- **A daily limit per address.** A visitor's address may upload `CODEMODE_DATA_PER_IP_DAY` datasets a day (default 5,
+  counted with the shared quota of `quota.ts`); the admin is not counted. A dataset stays as long as its block.
+- **Hidden from the dashboard.** CodeData pages carry `hidden: true`, and the dashboard (`src/dashboard.ts`, public on
+  big) shows no fields of such an entry: the hidden part and its answer would otherwise be readable there.
 
 ### The task
 

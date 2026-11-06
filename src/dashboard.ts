@@ -39,6 +39,11 @@ const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".cs
 /** A space served by another process. `addresses` (`unix:/path` or `tcp:host:port`, parseTarget) are tried in order
  *  until one answers; the one that answered is tried first next time. `space` names a space of that service by id or
  *  alias (omitted: its default space); `*` takes every space the service lists (`spaces`), each with its stats. */
+
+/** The fields of an entry as the dashboard shows them: an entry that marks itself `hidden: true` (a secret of its app,
+ *  e.g. the hidden part of an uploaded dataset in the codemode chat) shows only that mark. */
+export const shownFields = (f: unknown): unknown => (f && typeof f === "object" && (f as Record<string, unknown>).hidden === true ? { hidden: true } : f);
+
 export type AppSource = { id: string; label: string; addresses: string[]; space?: string };
 
 /** The default addresses of the projects' space processes: the unix socket of a plain start (`npm start`, `dev`), the
@@ -428,7 +433,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 				const p = await (await connectApp(a)).readPage(type ? { type } : null, { limit: after + limit + 1 });
 				const items = p.items.slice(after, after + limit);
 				const more = p.next !== null || p.items.length > after + limit;
-				return send(res, 200, { app: appView(a, false), after, next: more && after + limit <= APP_PAGE_CEILING ? after + limit : null, entries: items.map((e) => ({ id: e.id, type: e.type, types: e.types, fields: e.fields, owner: e.owner })) });
+				return send(res, 200, { app: appView(a, false), after, next: more && after + limit <= APP_PAGE_CEILING ? after + limit : null, entries: items.map((e) => ({ id: e.id, type: e.type, types: e.types, fields: shownFields(e.fields), owner: e.owner })) });
 			} catch (e) {
 				// a service that allows no reads is still online
 				if (/not allowed|PermissionDenied/.test(String(e))) return send(res, 403, { error: "Einträge nicht freigegeben", app: appView(a, false) });
@@ -463,7 +468,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 				total: s.entries.length,
 				after,
 				next: after + limit < newest.length ? after + limit : null,
-				entries: newest.slice(after, after + limit).map((e) => ({ id: e.id, type: e.type, types: e.types, fields: e.fields, expires: e.expires, takenBy: e.takenBy, writtenUnder: e.writtenUnder, owner: e.owner })),
+				entries: newest.slice(after, after + limit).map((e) => ({ id: e.id, type: e.type, types: e.types, fields: shownFields(e.fields), expires: e.expires, takenBy: e.takenBy, writtenUnder: e.writtenUnder, owner: e.owner })),
 			});
 		}
 		return send(res, 404, { error: "not found" });

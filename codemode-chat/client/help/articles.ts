@@ -140,7 +140,7 @@ Eine Aufgabe sagt, was entstehen soll: eine Funktion oder die Antwort auf eine F
 
 Ein **Raum** ist die Adresse nach dem \`#\` in der URL, zum Beispiel \`/#lobby\`. Er enthält höchstens 60 Blöcke. Ein neuer Raum hat noch keinen Block: Der erste entsteht, wenn du eine Aufgabe anlegst oder einen Lauf startest.
 
-Es gibt sechs Arten von Aufgaben: fertige [Katalogaufgaben](#catalog), [Aufgaben mit Tools](#tools), [Bot-Aufgaben](#bots) in einer Spielwelt, [Bewertungsskripte](#harness), [eigene Aufgaben](#custom) mit deinen Testfällen und [Textaufgaben](#text).
+Es gibt sieben Arten von Aufgaben: fertige [Katalogaufgaben](#catalog), [Aufgaben mit Tools](#tools), [eigene Datenaufgaben](#data) mit hochgeladenem Datensatz, [Bot-Aufgaben](#bots) in einer Spielwelt, [Bewertungsskripte](#harness), [eigene Aufgaben](#custom) mit deinen Testfällen und [Textaufgaben](#text).
 
 ## Katalogaufgaben {#catalog}
 
@@ -188,6 +188,18 @@ Hier schreibt das Team keine Lösung, sondern ein **Prüfskript**: \`async funct
 - **Zeit messen:** Zeiten hängen von der Maschine ab. Ein gutes Skript vergleicht eine gemessene Zeit mit etwas, das es selbst misst.
 - **Punkte:** Jeder \`run\` kostet einen Punkt (höchstens 40 je Implementierung), gezählt bei den gezeigten Implementierungen. Unter den richtigen Skripten gewinnt das mit den wenigsten Punkten, danach das schnellste.
 - **▶** führt das Skript nur gegen die Referenz aus.
+
+## Eigene Datenaufgabe {#data}
+
+Wähle im Dropdown **„Eigene Datenaufgabe …"** und lade einen eigenen Datensatz hoch. Das Team schreibt dann \`async function solve()\`, die über Tools auf die Daten zugreift und die ids der passenden Einträge zurückgibt.
+
+- **Datei:** ein JSON-Array von Objekten oder CSV mit Kopfzeile (Komma oder Semikolon, Text in Anführungszeichen). Eine Zeile ist ein Eintrag, mit \`id\` (fehlt sie, vergibt der Server \`R-1\`, \`R-2\` …). Höchstens 2000 Einträge, 800 KB (als JSON) und 20 Spalten.
+- **Frage und Antwortspalte:** Die Frage sagt, welche Einträge gesucht sind, zum Beispiel „Welche Tickets betreffen eine Rückerstattung?". Die Antwortspalte markiert sie mit ja/nein, 1/0 oder true/false. Sie wird aus den Einträgen entfernt; der Code sieht sie nie.
+- **Tools:** \`list\` (seitenweise, 1 Punkt), \`get\` (ein Eintrag mit allen Feldern, 1 Punkt) und \`search\` (Volltext, 2 Punkte); \`get\` ist Pflicht.
+- **Probe und verborgener Teil:** Jeder zehnte Eintrag (höchstens 40) ist die Probe; Agenten und Seite sehen sie mit Antwort. Der Rest liegt verborgen im Space, und nur der Richter liest ihn. Richtig ist ein Beitrag mit 100 % auf beiden, gemessen als Übereinstimmung der ids (F1, Reihenfolge egal). Wer die Antwort der Probe hineinschreibt, fällt am verborgenen Teil durch.
+- **Punkte:** Unter den richtigen Beiträgen gewinnt der mit den wenigsten Punkten.
+- **Tageslimit:** Eine Adresse darf pro Tag 5 Datensätze hochladen (\`CODEMODE_DATA_PER_IP_DAY\`); für den Admin gilt das nicht.
+- **Modelle:** Für eine Datenaufgabe gibt es keine Skript-Agenten; sie läuft mit Modell-Agenten oder mit Code, den du selbst einreichst.
 
 ## Eigene Aufgabe {#custom}
 
@@ -265,7 +277,7 @@ A task says what should come out: a function or the answer to a question. Every 
 
 A **room** is the address after the \`#\` in the URL, for example \`/#lobby\`. It holds at most 60 blocks. A new room has no block yet: the first one opens when you create a task or start a run.
 
-There are six kinds of task: ready-made [catalog tasks](#catalog), [tasks with tools](#tools), [bot tasks](#bots) in a game world, [eval harnesses](#harness), [custom tasks](#custom) with your own test cases, and [text tasks](#text).
+There are seven kinds of task: ready-made [catalog tasks](#catalog), [tasks with tools](#tools), [custom data tasks](#data) over an uploaded dataset, [bot tasks](#bots) in a game world, [eval harnesses](#harness), [custom tasks](#custom) with your own test cases, and [text tasks](#text).
 
 ## Catalog tasks {#catalog}
 
@@ -313,6 +325,18 @@ Here the team writes no solution but a **test script**: \`async function rate()\
 - **Timing:** times depend on the machine. A good script compares a measured time with something it times itself.
 - **Points:** every \`run\` costs one point (at most 40 per implementation), counted on the shown implementations. Among the correct scripts the one with the fewest points wins, then the fastest.
 - **▶** runs the script against the reference only.
+
+## Custom data task {#data}
+
+Choose **"Custom data task …"** in the dropdown and upload a dataset of your own. The team then writes \`async function solve()\`, which reaches the data through tools and returns the ids of the items asked for.
+
+- **File:** a JSON array of objects, or CSV with a header row (comma or semicolon, text in quotes). A row is an item, with \`id\` (without one the server numbers them \`R-1\`, \`R-2\` …). At most 2000 items, 800 KB (as JSON) and 20 columns.
+- **Question and answer column:** the question says which items are wanted, for example "Which tickets are about a refund?". The answer column marks them with yes/no, 1/0 or true/false. It is taken out of the items; the code never sees it.
+- **Tools:** \`list\` (a page at a time, 1 point), \`get\` (one item with all its fields, 1 point) and \`search\` (full text, 2 points); \`get\` is required.
+- **Sample and hidden part:** every tenth item (at most 40) is the sample; agents and page see it with its answer. The rest lies hidden in the space, and only the judge reads it. A contribution is correct with 100 % on both, measured as agreement of the ids (F1, any order). Code that writes the sample's answer in fails on the hidden part.
+- **Points:** among correct contributions the one with the fewest points wins.
+- **Daily limit:** an address may upload 5 datasets a day (\`CODEMODE_DATA_PER_IP_DAY\`); the admin is not limited.
+- **Models:** a data task has no scripted agents; it runs with model agents or with code you hand in yourself.
 
 ## Custom task {#custom}
 
@@ -1016,6 +1040,7 @@ Die Prozesse lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben
 | \`CODEMODE_SEARCH_PER_DAY\` | Websuchen pro Tag, Standard 100 |
 | \`CODEMODE_RUN_BUDGET_TOKENS\` | Token-Budget eines Besucher-Laufs, Standard 300 000; \`0\` = keines |
 | \`CODEMODE_TOKENS_PER_IP_DAY\` | Tokens aller Besucher-Läufe einer Adresse am Tag, Standard 1 000 000; \`0\` = keine Grenze |
+| \`CODEMODE_DATA_PER_IP_DAY\` | hochgeladene Datensätze einer Adresse am Tag (Admin ausgenommen), Standard 5; \`0\` = keine Grenze |
 | \`CODEMODE_EARLIER_DAYS\` | wie lange angenommene Ergebnisse Material bleiben, Standard 30; \`0\` = immer |
 | \`CODEMODE_CROSS_WAIT_S\` | Textaufgaben: Wartezeit auf einen Prüfer mit anderem Modell, Standard 300 |
 | \`CODEMODE_ARENA\` | Bot-Aufgaben: Adresse der Arena (\`unix:/pfad\` oder \`tcp:host:port\`, \`npm --prefix spaces-mmo run arena\`); ohne sie keine Bot-Aufgaben |
@@ -1112,6 +1137,7 @@ The processes read \`codemode-chat/.env\` themselves; real environment variables
 | \`CODEMODE_SEARCH_PER_DAY\` | web searches per day, default 100 |
 | \`CODEMODE_RUN_BUDGET_TOKENS\` | token budget of a visitor's run, default 300,000; \`0\` = none |
 | \`CODEMODE_TOKENS_PER_IP_DAY\` | tokens of all visitor runs of one address per day, default 1,000,000; \`0\` = no limit |
+| \`CODEMODE_DATA_PER_IP_DAY\` | datasets one address may upload per day (not the admin), default 5; \`0\` = no limit |
 | \`CODEMODE_EARLIER_DAYS\` | how long accepted results stay as material, default 30; \`0\` = always |
 | \`CODEMODE_CROSS_WAIT_S\` | text tasks: wait for a judge of another model, default 300 |
 | \`CODEMODE_ARENA\` | bot tasks: the arena's address (\`unix:/path\` or \`tcp:host:port\`, \`npm --prefix spaces-mmo run arena\`); without it no bot tasks |

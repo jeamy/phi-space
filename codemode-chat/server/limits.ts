@@ -6,6 +6,9 @@ export const runBudgetTokens = () => Math.floor(envNumber("CODEMODE_RUN_BUDGET_T
 /** Tokens the runs one client (IP) starts may use per day together (CODEMODE_TOKENS_PER_IP_DAY, default 1 000 000;
  *  0 = no limit), so one visitor cannot use up the day's model calls of everyone. Admin runs do not count. */
 export const ipTokensPerDay = () => Math.floor(envNumber("CODEMODE_TOKENS_PER_IP_DAY", 1_000_000));
+/** Datasets one client (IP) may upload per day (CODEMODE_DATA_PER_IP_DAY, default 5; 0 = no limit): each stays in the
+ *  space as long as its block. An admin's uploads do not count. */
+export const ipDataPerDay = () => Math.floor(envNumber("CODEMODE_DATA_PER_IP_DAY", 5));
 /** How long a text answer's judgement waits for an agent of another model than the author's before the author's model
  *  may judge it (CODEMODE_CROSS_WAIT_S, default 300 s; 0 = no wait). */
 export const crossWaitMs = () => Math.round(envNumber("CODEMODE_CROSS_WAIT_S", 300) * 1000);

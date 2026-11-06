@@ -44,6 +44,18 @@ by `server/data/fetch-pi-issues.ts --jev` (ten issues per call, `JEV_OPENROUTER_
 issues are 100 calls, about 0.013 $), and its answers are stored beside the issues in `pi-issues.json`. The judge only replays them:
 no contribution reaches Jev, and every host scores the same. `--fetch N` takes new issues and drops the old answers.
 
+### Custom data tasks
+
+A person uploads a dataset (`server/datatask.ts`): a JSON array of objects or CSV with a header row, at most 2000 items
+and 800 KB as JSON, an `id` per item and an answer column (yes/no) that marks the items the question asks for. The task is
+`async function solve()`, which returns those ids through `list`, `get` and `search`; the answer column is taken out.
+Every tenth item (at most 40) is the sample: it travels with the task (the CodeTask's `data`, the agents' prompt) with
+its answer. The rest is the hidden part, stored as `CodeData` pages of the block and read only by the judge
+(`loadHoldout` in `judge-host.ts`); an agent checking its own code judges the sample only. The score is the F1 of the
+ids as sets. `tests/fake-tickets.ts` makes a made-up dataset (support tickets, some about a refund), `tests/data.test.ts`
+uploads it as JSON and as CSV. A visitor's address may upload `CODEMODE_DATA_PER_IP_DAY` datasets a day (default 5;
+the admin is not counted).
+
 ### Bot tasks
 
 A bot task (`server/bottask.ts`; the catalog's "Beacon bot") is `async function bot()`, which plays one guest in a

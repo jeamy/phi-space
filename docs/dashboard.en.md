@@ -105,7 +105,9 @@ production address: the local end of the SSH tunnel to nano or the loopback port
 shared) to `127.0.0.1:8787`, with a Let's Encrypt certificate (webroot `/var/www/acme`, like spaces-mmo), without
 login (since 2026-10-28; the dashboard has only GET endpoints, the hub of the help site returns only figures, the
 accounts store of spaces-mmo is missing). The entries of codemode chat, spaces-mmo world and swarm shard are thereby
-publicly readable, also account names and messages to individual figures. `/api/live` without buffering. Site:
+publicly readable, also account names and messages to individual figures. An entry whose fields say
+`hidden: true` shows only that mark (`shownFields`): the codemode chat marks the hidden part of an uploaded dataset
+so (`CodeData`). `/api/live` without buffering. Site:
 `/etc/nginx/sites-available/spaces-stats.eibrain.org`; the help site links the page with an introduction.
 
 Deliberately not included: the accounts Space of spaces-mmo (credentials, sessions). The store of the help site lies in the

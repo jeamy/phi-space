@@ -3,6 +3,7 @@
 import { MAX_CHECK_CHARS, maxTimeoutMs } from "./judge.ts";
 import { arenaAddress, describeBotTools, MAX_BOT_CALLS, type BotSpec } from "./bottask.ts";
 import { describeHarnessTools, type HarnessSpec } from "./harnesstask.ts";
+import { checkSpec, dataToolSpec, describeDataTools, type DataItem, type DataSpec } from "./datatask.ts";
 import { describeTools, FRUSTRATION, MAX_CALLS, PI_SOURCE, PI_WINDOWS, PI_WINDOWS_BUGS, type ToolSpec } from "./tooltask.ts";
 
 /** One test call. `expect` is the exact result, `expectAny` several results that are all right ("[0,1,4,9,11] oder
@@ -38,6 +39,8 @@ export type Task = {
 	/** A long run that survives its judge (durable-run.ts): every tool answer is logged, a judge that takes over replays
 	 *  them and goes on. Bot tasks only. */
 	durable?: true;
+	/** An uploaded data task (datatask.ts): its spec without the holdout, so it can be stored and handed on. */
+	data?: DataSpec;
 	/** "harness": the implementations a judging script rates, shown and hidden (harnesstask.ts). */
 	harness?: HarnessSpec;
 	/** What happens behind the task, for the people on the page only (never in an agent's prompt): where the data
@@ -320,8 +323,28 @@ export const offeredTasks = (): Task[] => TASKS.filter((t) => t.kind !== "bot" |
 
 /** A task as it may be stored or handed to another process: a tools task without its data and functions (the holdout
  *  must never leave the judge), and `restoreTask` brings them back from the catalog. */
+/** A data task from its spec; `holdout` only in the judge (judge-host.ts loads it), else only the sample is judged. */
+export function dataTask(spec: DataSpec, holdout?: { items: DataItem[]; answer: string[] }): Task {
+	const s = checkSpec(spec), n = s.sample.length, h = s.holdoutSize;
+	return {
+		id: "data", fn: "solve", kind: "tools", data: s, tools: dataToolSpec(s, holdout), ...(s.timeoutS !== undefined ? { timeoutMs: Math.round(s.timeoutS * 1000) } : { timeoutMs: 20_000 }),
+		title: { de: "Eigene Datenaufgabe", en: "Custom data task" },
+		prompt: {
+			de: `Aufgabe: Schreibe async function solve(). Sie gibt die ids aller Einträge zurück, auf die diese Frage zutrifft (als Array, Reihenfolge egal):\n${s.question}\n\nDaten: ein hochgeladener Datensatz, nur über die Tools (await tools.<name>(args)). Felder eines Eintrags: id, ${s.fields.join(", ")}. Die Probe (${n} Einträge) ist der sichtbare Testfall; bewertet wird außerdem auf ${h} verborgenen Einträgen mit denselben Tools.\n\nPunkte: Jeder Tool-Aufruf kostet Punkte. Unter den richtigen Beiträgen gewinnt der mit den wenigsten Punkten, die Zeit entscheidet erst danach.\n\nBewertung: Übereinstimmung der ids mit der Antwort (F1), auf der Probe und den verborgenen Einträgen je 100 %.\n\nTools:\n${describeDataTools(s, "de")}`,
+			en: `Task: write async function solve(). It returns the ids of all items this question applies to (an array, any order):\n${s.question}\n\nData: an uploaded dataset, only through the tools (await tools.<name>(args)). Fields of an item: id, ${s.fields.join(", ")}. The sample (${n} items) is the visible test case; it is also scored on ${h} hidden items with the same tools.\n\nPoints: every tool call costs points. Among the correct contributions the one with the fewest points wins; the time decides only after that.\n\nScoring: agreement of the ids with the answer (F1), 100 % on the sample and on the hidden items.\n\nTools:\n${describeDataTools(s, "en")}`,
+		},
+		about: {
+			de: `So läuft es: Der Datensatz wurde auf dieser Seite hochgeladen. Jeder zehnte Eintrag (höchstens ${40}) ist die Probe, die Agenten und Seite mit Antwort sehen; der Rest liegt verborgen im Space und nur der Richter liest ihn. Kein KI-Modell nötig: nur Modell-Agenten, die den Code schreiben, brauchen eines.`,
+			en: `How it runs: the dataset was uploaded on this page. Every tenth item (at most 40) is the sample, which agents and page see with its answer; the rest lies hidden in the space, and only the judge reads it. No AI model is needed: only model agents writing the code use one.`,
+		},
+		cases: [{ args: [], expect: s.sampleAnswer }],
+		bench: "",
+		variants: [],
+	};
+}
+
 export const portableTask = (t: Task): Task => (t.kind === "tools" ? (({ tools: _tools, ...rest }) => rest)(t) : t.kind === "harness" ? (({ harness: _harness, ...rest }) => rest)(t) : t);
-export const restoreTask = (t: Task): Task => ((t.kind === "tools" && !t.tools) || (t.kind === "harness" && !t.harness) ? taskById(t.id) ?? t : t);
+export const restoreTask = (t: Task): Task => (t.id === "data" && t.data && !t.tools ? dataTask(t.data) : (t.kind === "tools" && !t.tools) || (t.kind === "harness" && !t.harness) ? taskById(t.id) ?? t : t);
 
 /** A user-defined task: the function name and the cases are the oracle; the bench runs every case 300 times. */
 // Names a custom task cannot use as its function: reserved words, and the `__` prefix the judge keeps for itself.
@@ -365,7 +388,8 @@ export const customSpec = (t: Task) => ({ fn: t.fn, prompt: t.prompt.en, cases: 
 export const expectedOf = (c: Case): unknown[] => (Object.hasOwn(c, "expectAny") ? c.expectAny! : Object.hasOwn(c, "expect") ? [c.expect] : []);
 
 /** The task a CodeTask / CodeCandidate entry stands for: a catalog id, or a custom spec (fn, prompt, cases). */
-export function taskFromSpec(f: { taskId?: unknown; custom?: unknown; text?: unknown; fn?: unknown; prompt?: unknown; cases?: unknown }): Task | null {
+export function taskFromSpec(f: { taskId?: unknown; custom?: unknown; text?: unknown; data?: unknown; fn?: unknown; prompt?: unknown; cases?: unknown }): Task | null {
+	if (f.taskId === "data") { try { return dataTask(f.data as DataSpec); } catch { return null; } }
 	if (f.taskId === "text") { try { return textTask((f.text ?? {}) as { prompt: unknown }); } catch { return null; } }
 	if (f.taskId === "custom") {
 		const c = (f.custom ?? { fn: f.fn, prompt: f.prompt, cases: f.cases }) as { fn: string; prompt: string; cases: Case[]; check?: string; checkBy?: "verifier" | "user"; timeoutS?: number };

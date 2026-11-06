@@ -95,9 +95,10 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 		return req.method === "GET" || req.headers["x-codemode-admin"] === "1";
 	};
 	const json = (res: http.ServerResponse, status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
-	const readBody = (req: http.IncomingMessage) => new Promise<Record<string, any>>((ok, fail) => {
+	// a task with an uploaded dataset may take more (datatask.ts: at most 800 KB as JSON, a CSV a little more)
+	const readBody = (req: http.IncomingMessage, max = 64_000) => new Promise<Record<string, any>>((ok, fail) => {
 		let n = 0; const parts: Buffer[] = [];
-		req.on("data", (c: Buffer) => { n += c.length; if (n > 64_000) { fail(new Error("Body too large")); req.destroy(); } else parts.push(c); });
+		req.on("data", (c: Buffer) => { n += c.length; if (n > max) { fail(new Error("Body too large")); req.destroy(); } else parts.push(c); });
 		req.on("end", () => { try { ok(parts.length ? JSON.parse(Buffer.concat(parts).toString("utf8")) : {}); } catch { fail(new Error("Invalid JSON")); } });
 		req.on("error", fail);
 	});
@@ -210,9 +211,9 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				if (!ID.test(id)) return json(res, 400, { error: "Invalid session id" });
 				if (!action && req.method === "GET") return json(res, 200, await hub.snapshot(id));
 				if (req.method !== "POST") return json(res, 405, { error: "POST expected" });
-				const b = await readBody(req);
+				const b = await readBody(req, action === "task" ? 1_500_000 : 64_000);
 				// a new task's model calls (its check rule, its criteria) count against a visitor's day allowance too
-				if (action === "task") await hub.setTask(id, { ...(b.text ? { text: b.text } : b.custom ? { custom: b.custom } : { taskId: b.taskId }), client: { ip: clientIp(req), admin: (await isAdmin(req)) } });
+				if (action === "task") await hub.setTask(id, { ...(b.text ? { text: b.text } : b.custom ? { custom: b.custom } : b.data ? { data: b.data } : { taskId: b.taskId }), client: { ip: clientIp(req), admin: (await isAdmin(req)) } });
 				else if (action === "code") return json(res, 200, { candidateId: await hub.submitCode(id, b.author, b.source) });
 				else if (action === "run") {
 					// web research sends task text to a search engine: only an admin may start it
