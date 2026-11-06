@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { sourceProblem, type Verdict } from "./judge.ts";
 import { clipWords, type Attempt, type Earlier, type Finding, type Note, type Role, type Usage } from "./llm.ts";
-import { EARLIER_CAP, validMs } from "./results.ts";
+import { EARLIER_CAP, rankCmp, validMs } from "./results.ts";
 import { HELD_WAIT_MS, readExisting } from "./space.ts";
 import { isText, taskFromSpec, type Task } from "./tasks.ts";
 
@@ -16,20 +16,20 @@ export const rid = () => randomBytes(4).toString("hex");
 
 /** `source` is left out of a snapshot when its byte budget is spent (`sourceOmitted`); `details()` returns it with the
  *  case results. `passed`/`total`: cases passed; `role`/`basedOn`: what an agent did and whose attempt it built on. */
-export type Contribution = { candidateId: string; blockId?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: Role; basedOn?: string; cases?: Verdict["cases"]; hardcoded?: true; note?: string; usage?: Usage; partner?: string; judges?: number; acceptedBy?: "judges" | "human"; critiqueId?: string; critiques?: Array<{ author: string; via: string; text: string }>; critiqueBy?: string; proposalId?: string; planBy?: string; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; runId?: string; ts: number };
+export type Contribution = { candidateId: string; blockId?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: Role; basedOn?: string; cases?: Verdict["cases"]; hardcoded?: true; cost?: number; calls?: Record<string, number>; score?: number; note?: string; usage?: Usage; partner?: string; judges?: number; acceptedBy?: "judges" | "human"; critiqueId?: string; critiques?: Array<{ author: string; via: string; text: string }>; critiqueBy?: string; proposalId?: string; planBy?: string; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; runId?: string; ts: number };
 
 /** Correct and not rejected by a person. */
 export const counts = (c: Contribution) => !!c.ok && !c.vetoed;
 /** A contribution as the agents see it. */
-export const attemptOf = (c: Contribution): Attempt => ({ candidateId: c.candidateId, author: c.author, via: c.via, gen: c.gen, ok: counts(c), ms: c.ms, ...(c.vetoed ? { rejected: `rejected by ${c.vetoed.by}${c.vetoed.reason ? `: ${c.vetoed.reason}` : ""}` } : c.hardcoded ? { rejected: "rejected: it hard-codes the expected result instead of computing it" } : {}), passed: c.passed, total: c.total, error: c.error, cases: c.cases, source: c.source ?? "" });
-/** The fastest contribution that counts (ties: the earlier one). */
-export const bestOf = (cs: Contribution[]): { candidateId: string; ms: number; source: string } | null => {
-	const ok = cs.filter((c) => counts(c) && validMs(c.ms)).sort((a, b) => a.ms! - b.ms! || a.ts - b.ts)[0];
-	return ok ? { candidateId: ok.candidateId, ms: ok.ms!, source: ok.source ?? "" } : null;
+export const attemptOf = (c: Contribution): Attempt => ({ candidateId: c.candidateId, author: c.author, via: c.via, gen: c.gen, ok: counts(c), ms: c.ms, ...(c.cost !== undefined ? { cost: c.cost } : {}), ...(c.vetoed ? { rejected: `rejected by ${c.vetoed.by}${c.vetoed.reason ? `: ${c.vetoed.reason}` : ""}` } : c.hardcoded ? { rejected: "rejected: it hard-codes the expected result instead of computing it" } : {}), passed: c.passed, total: c.total, error: c.error, cases: c.cases, source: c.source ?? "" });
+/** The best contribution that counts: the cheapest in tool points (tools tasks), then the fastest; ties: the earlier one. */
+export const bestOf = (cs: Contribution[]): { candidateId: string; ms: number; source: string; cost?: number } | null => {
+	const ok = cs.filter((c) => counts(c) && validMs(c.ms)).sort((a, b) => rankCmp({ ms: a.ms!, cost: a.cost }, { ms: b.ms!, cost: b.cost }) || a.ts - b.ts)[0];
+	return ok ? { candidateId: ok.candidateId, ms: ok.ms!, source: ok.source ?? "", ...(ok.cost !== undefined ? { cost: ok.cost } : {}) } : null;
 };
 /** How close an attempt got: correct first (fastest), then most cases passed, then the newest. */
 const rejectedRank = (c: Contribution) => Number(!!c.vetoed || !!c.hardcoded);
-export const closeness = (a: Contribution, b: Contribution) => rejectedRank(a) - rejectedRank(b) || Number(counts(b)) - Number(counts(a)) || (counts(a) && counts(b) ? a.ms! - b.ms! : 0) || (b.passed ?? 0) / (b.total || 1) - (a.passed ?? 0) / (a.total || 1) || b.ts - a.ts;
+export const closeness = (a: Contribution, b: Contribution) => rejectedRank(a) - rejectedRank(b) || Number(counts(b)) - Number(counts(a)) || (counts(a) && counts(b) ? rankCmp({ ms: a.ms!, cost: a.cost }, { ms: b.ms!, cost: b.cost }) : 0) || (b.passed ?? 0) / (b.total || 1) - (a.passed ?? 0) / (a.total || 1) || b.ts - a.ts;
 
 /** The task blocks of a room (CodeTask entries), oldest first. */
 export async function taskEntries(space: SpaceLike, session: string): Promise<Array<Record<string, any>>> {

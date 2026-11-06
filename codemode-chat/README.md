@@ -24,6 +24,26 @@ A block **stays for a year** (`CODEMODE_TTL_HOURS`, default 8760). Its header sh
 time again from now, and 🗑 deletes it, after a yes/no dialog, with its contributions, verdicts, best code and log lines.
 A block with a running run cannot be deleted. Deleting the active block makes the newest remaining one active.
 
+### Tasks with tools
+
+A task with tools (`server/tooltask.ts`; the catalog's "Find frustrated issues") is `async function solve()` whose only
+inputs are tools: `tools.list`, `tools.get`, `tools.search`, `tools.classify`. The judge answers them from the task's
+dataset; there is still no network and no model (the classifier is a fixed stand-in). Every call costs points, and among
+correct contributions the one with the fewest points wins, the time only after that. The sample's result is the visible
+case (▶ runs on the sample); the verdict comes from a hidden, larger dataset with other texts, of which only the score and
+the calls are shown. Plan and next steps: `docs/codemode-anwendungen.en.md`.
+
+"Pi issues: Windows with a reply" runs on real data: 1000 issues of github.com/earendil-works/pi in
+`server/data/pi-issues.json`, shortened and without names (logins become u1, u2, …, the tracker's bot "bot"). Every
+tenth issue is the sample. `node --experimental-strip-types server/data/fetch-pi-issues.ts [count]` fetches them anew
+(needs `gh`; the answers are computed from the data, so nothing is labelled by hand).
+
+"Pi issues: Windows bugs by Jev" adds the tool `jev({ id })`: what the classifier Jev (`typesafe/jev-1.13`, a decisions
+model behind OpenRouter's `/api/alpha/decisions`) said about the issue (bug, feature, question, other). Jev is asked once,
+by `server/data/fetch-pi-issues.ts --jev` (ten issues per call, `JEV_OPENROUTER_API_KEY` in `codemode-chat/.env`; 1000
+issues are 100 calls, about 0.013 $), and its answers are stored beside the issues in `pi-issues.json`. The judge only replays them:
+no contribution reaches Jev, and every host scores the same. `--fetch N` takes new issues and drops the old answers.
+
 ### Custom tasks
 
 Choose "Custom task …" in the dropdown. You give a function name, a description, a time limit and test cases. The test
@@ -55,7 +75,7 @@ agents are assigned to them in turn, and all of them work in one team.
 
 - You can **hand in code yourself**. It takes the same path and always goes to the active block.
 - Every contribution is a `CodeCandidate` entry. A judge takes it under a transaction, reads the block's `CodeTask`
-  without that transaction, and runs the code in a QuickJS sandbox (`@earendil-works/pi-codemode`: no tools, 64 MiB
+  without that transaction, and runs the code in a QuickJS sandbox (`@earendil-works/pi-codemode`: no tools but a tools task's own, 64 MiB
   heap, at most 2 sandboxes at a time per process).
 - Before it writes, the judge asks under the transaction whether the block still stands. A block deleted meanwhile gets
   no verdict.

@@ -6,7 +6,7 @@ import { ROOT } from "./env.ts";
 import { extractCode, extractNote, teamPrompt, type llmContribution } from "./llm.ts";
 import { judge, loadCodemode, verdictFields } from "./judge.ts";
 import type { LlmCall } from "./context.ts";
-import type { Task } from "./tasks.ts";
+import { portableTask, restoreTask, type Task } from "./tasks.ts";
 
 /** Only with model fixtures (tests): a system line that tells the worker's scripted model which call it answers. */
 export const FAKE_CALL = "[fake-call] ";
@@ -32,16 +32,16 @@ export class DurableContributions {
     const model = await this.controls.model(call, context.model);
     const answer = await this.client.run({
       session: `code:${call.session}:${call.callId}`, requestId: call.callId, model,
-      system: `${prompt.system}\n[durable-code] You can use verify_code to test your function in an isolated sandbox. Check and repair it before the final answer.${this.fixtures ? `\n${FAKE_CALL}${JSON.stringify({ session: call.session, args: context })}` : ""}`,
+      system: `${prompt.system}\n[durable-code] You can use verify_code to test your function in an isolated sandbox. Check and repair it before the final answer.${this.fixtures ? `\n${FAKE_CALL}${JSON.stringify({ session: call.session, args: { ...context, task: portableTask(context.task) } })}` : ""}`,
       prompt: prompt.user, mode: "code", maxRequests: 4, maxTokens: 1500,
-      metadata: { task: context.task }, resumeExisting: true,
+      metadata: { task: portableTask(context.task) }, resumeExisting: true,
     }, {
       permit: async (request, usage) => this.controls.permit(call, request.model, usage, signal),
       verify: async (source, metadata) => {
         signal.throwIfAborted();
         const cm = await loadCodemode();
         if (!cm) throw new Error("The verification sandbox is unavailable");
-        return verdictFields(await judge(cm, metadata.task as Task, source));
+        return verdictFields(await judge(cm, restoreTask(metadata.task as Task), source));
       },
     }, signal);
     const note = extractNote(answer.text);

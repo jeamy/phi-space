@@ -13,13 +13,16 @@
 // contribution's reach: patched builtins cannot make the rule pass.
 import { pathToFileURL } from "node:url";
 import type { Task } from "./tasks.ts";
+import { newMeter, toolProgram, worldCase, worldTools, type Meter, type ToolSpec, type World, type WorldResult } from "./tooltask.ts";
 
 /** One case as the judge saw it: the call, whether it passed, what came out (or the error), what was expected. */
 export type CaseResult = { call: string; ok: boolean; got?: string; expect?: string; error?: string };
 /** `hardcoded`: the code passed, but only by returning an expected result written into it (not computed). */
-export type Verdict = { ok: boolean; ms: number; error?: string; passed: number; total: number; cases: CaseResult[]; hardcoded?: true };
+/** A tools task (tooltask.ts) adds what the holdout's run cost: `cost` in points, `calls` per tool, `score` 0..1. */
+export type Verdict = { ok: boolean; ms: number; error?: string; passed: number; total: number; cases: CaseResult[]; hardcoded?: true; cost?: number; calls?: Record<string, number>; score?: number };
 type Sandbox = { execute(code: string): Promise<{ ok: boolean; value?: unknown; error?: { message: string } }>; close(): Promise<void> };
-export type Codemode = { CodemodeSandbox: new (o: { timeoutMs: number; tools: []; memoryLimitBytes?: number }) => Sandbox };
+type SandboxTool = { name: string; description?: string; execute(args: unknown): unknown };
+export type Codemode = { CodemodeSandbox: new (o: { timeoutMs: number; tools: SandboxTool[]; memoryLimitBytes?: number }) => Sandbox };
 
 /** The default time a contribution has for all its cases and the bench; a custom task may set its own (timeoutMs). */
 export const TIMEOUT_MS = 5000;
@@ -217,8 +220,45 @@ export function hardcodedLiteral(task: Task, source: string): string | null {
 	return null;
 }
 
+/** A holdout run's error as the page and the agents see it: only what the judge itself says (a script could otherwise
+ *  throw the hidden data out in its message). */
+const OWN_ERRORS = [/^more than \d+ tool calls$/, /^classify needs \{ text: string \}$/, /^classify takes at most \d+ characters$/, /^no function [\w$]+$/, /^Execution timed out after \d+ ms$/, /^out of memory$/];
+const hideError = (r: WorldResult, limit: number): WorldResult => (r.error && !OWN_ERRORS.some((x) => x.test(r.error!))
+	? { ...r, error: `threw on the holdout; its message stays hidden like its data (limit ${limit / 1000} s)` } : r);
+
+/** Judges a tools task: `solve()` runs once in the sample world and once in the holdout, each with that world's tools.
+ *  Solved when both score 100 %; the cost, calls and time are the holdout's (the scale it is meant for). */
+async function judgeTools(cm: Codemode, task: Task & { tools: ToolSpec }, source: string): Promise<Verdict> {
+	const limit = limitOf(task), spec = task.tools, show = (v: unknown) => plain(JSON.stringify(v) ?? String(v));
+	const runWorld = async (w: World): Promise<WorldResult> => {
+		const meter: Meter = newMeter();
+		const sandbox = new cm.CodemodeSandbox({ timeoutMs: limit, tools: worldTools(spec, w, meter), memoryLimitBytes: 64 * 1024 * 1024 });
+		try {
+			const r = await sandbox.execute(toolProgram(CAPTURED, task.fn, source));
+			if (!r.ok) return { score: 0, meter, ms: limit, error: plain(r.error?.message ?? "failed") };
+			const v = (r.value ?? {}) as { ms?: unknown; got?: unknown; error?: unknown };
+			if (typeof v.error === "string") return { score: 0, meter, ms: limit, error: plain(v.error) };
+			// the answer crossed the sandbox as JSON: a patched toJSON fools only the contribution
+			return { score: spec.score(v.got, spec.answer(w)), meter, ms: typeof v.ms === "number" && Number.isFinite(v.ms) && v.ms >= 0 ? v.ms : limit, got: v.got };
+		} catch (e) {
+			return { score: 0, meter, ms: limit, error: plain((e as Error).message) };
+		} finally { await sandbox.close().catch(() => {}); }
+	};
+	const sample = await runWorld(spec.sample);
+	const holdout = sample.error ? null : hideError(await runWorld(spec.holdout), limit);
+	const cases = [worldCase(task.fn, spec.sample, sample, spec.answer(spec.sample), show), ...(holdout ? [worldCase(task.fn, spec.holdout, holdout, null, show)] : [])];
+	const passed = cases.filter((c) => c.ok).length, total = 2;
+	const last = holdout ?? sample;
+	const metered = { cost: last.meter.cost, calls: { ...last.meter.calls } as Record<string, number>, score: Math.round(last.score * 1000) / 1000 };
+	if (passed < total) return { ok: false, ms: limit, error: cases.find((c) => !c.ok)?.error ?? `wrong on ${cases.find((c) => !c.ok)?.call ?? "the holdout"}`, passed, total, cases, ...metered };
+	const literal = hardcodedLiteral(task, source);
+	if (literal) return { ok: false, ms: limit, error: plain(`hard-coded: the code returns the expected result ${literal} as a literal instead of computing it`), passed, total, cases, hardcoded: true, ...metered };
+	return { ok: true, ms: Math.round(last.ms * 100) / 100, passed, total, cases, ...metered };
+}
+
 /** Judges one contribution; the caller already holds a sandbox slot. */
 export async function judgeInSlot(cm: Codemode, task: Task, source: string): Promise<Verdict> {
+	if (task.kind === "tools" && task.tools) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 2, cases: [] } : judgeTools(cm, task as Task & { tools: ToolSpec }, source);
 	const total = task.cases.length;
 	const limit = limitOf(task);
 	const fail = (error: string, cases: CaseResult[] = [], passed = 0): Verdict => ({ ok: false, ms: limit, error: plain(error), passed, total, cases });
@@ -258,6 +298,6 @@ export async function judgeInSlot(cm: Codemode, task: Task, source: string): Pro
 }
 
 /** The score fields of a verdict, as hub and shard write them: the case results failing ones first, at most 10. */
-export const verdictFields = (v: Verdict) => ({ ok: v.ok, ms: v.ms, passed: v.passed, total: v.total, cases: [...v.cases.filter((c) => !c.ok), ...v.cases.filter((c) => c.ok)].slice(0, 10), ...(v.error ? { error: v.error } : {}), ...(v.hardcoded ? { hardcoded: true } : {}) });
+export const verdictFields = (v: Verdict) => ({ ok: v.ok, ms: v.ms, passed: v.passed, total: v.total, cases: [...v.cases.filter((c) => !c.ok), ...v.cases.filter((c) => c.ok)].slice(0, 10), ...(v.error ? { error: v.error } : {}), ...(v.hardcoded ? { hardcoded: true } : {}), ...(v.cost !== undefined ? { cost: v.cost, calls: v.calls ?? {}, score: v.score ?? 0 } : {}) });
 
 export const judge = (cm: Codemode, task: Task, source: string): Promise<Verdict> => sandboxSlot(() => judgeInSlot(cm, task, source));

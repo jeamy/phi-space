@@ -111,7 +111,7 @@ export type Role = "repair" | "explore" | "improve" | "revise" | "merge";
 /** A teammate's critique of an attempt: who wrote it and what it says. */
 export type CritiqueRef = { author: string; via: string; text: string };
 /** An earlier contribution as the team sees it: who, how far it got, what went wrong, its code. */
-export type Attempt = { candidateId: string; author: string; via: string; gen: number; ok: boolean; ms: number | null; passed?: number; total?: number; error?: string; cases?: Array<{ call: string; ok: boolean; got?: string; expect?: string; error?: string }>; rejected?: string; source: string };
+export type Attempt = { candidateId: string; author: string; via: string; gen: number; ok: boolean; ms: number | null; cost?: number; passed?: number; total?: number; error?: string; cases?: Array<{ call: string; ok: boolean; got?: string; expect?: string; error?: string }>; rejected?: string; source: string };
 /** `human`: a person's hint, which the agents follow before their own notes. */
 export type Note = { author: string; gen: number; text: string; human?: boolean };
 /** Everything an agent gets: the task with its cases, its role, the attempt to work on, others for reference, notes. */
@@ -143,8 +143,11 @@ export function describeCases(task: Task): string {
 	return lines.join("\n");
 }
 
+/** What a task with tools (tooltask.ts) adds to the rules. */
+const TOOLS_RULE = "Tools: the only I/O are the tools of the task, called as `await tools.<name>(args)`; they are described in the task. Every call costs points: among correct solutions the one with the fewest points wins, the time decides only after that. Batch and combine calls (Promise.all, fewer and larger requests) where the tools allow it. The solution is scored on a hidden, larger dataset with other texts and ids: never rely on words, ids or counts you saw in the sample.";
+
 const describeAttempt = (a: Attempt, full: boolean) => {
-	const head = `${a.author} (${a.via}, generation ${a.gen}): ${a.ok ? `correct, ${a.ms} ms` : `${a.passed ?? 0} of ${a.total ?? "?"} cases passed`}${a.error && !a.ok ? `; first problem: ${a.error}` : ""}`;
+	const head = `${a.author} (${a.via}, generation ${a.gen}): ${a.ok ? `correct, ${a.cost !== undefined ? `${a.cost} tool points, ` : ""}${a.ms} ms` : `${a.passed ?? 0} of ${a.total ?? "?"} cases passed`}${a.error && !a.ok ? `; first problem: ${a.error}` : ""}`;
 	const cases = full && a.cases?.length ? "\nCase results:\n" + a.cases.slice(0, 8).map((c) => `  ${c.ok ? "✓" : "✗"} ${c.call} → ${c.error ? `throws ${c.error}` : c.got}${!c.ok && c.expect !== undefined ? ` (expected ${c.expect})` : ""}`).join("\n") : "";
 	return `${head}${cases}\n\`\`\`js\n${clipText(a.source, full ? 4000 : 1500)}\n\`\`\``;
 };
@@ -227,6 +230,7 @@ export function teamPrompt(c: TeamContext): { system: string; user: string } {
 		...(t.check !== undefined ? [`A result passes when this check rule returns true for it (any result that satisfies the rule is right):\n\`\`\`js\n${t.check}\n\`\`\``] : []),
 		`Time limit: all test cases together must finish within ${(t.timeoutMs ?? 5000) / 1000} seconds in a QuickJS interpreter (much slower than V8), so the algorithm must be efficient.`,
 		"Rules: plain JavaScript (QuickJS), no imports, no I/O, no timers. Results must be plain JSON values. COMPUTE the result: never write an example result (or any expected answer) into the code as a literal, also when the function takes no arguments. Code that returns hard-coded answers is rejected.",
+		...(t.kind === "tools" ? [TOOLS_RULE] : []),
 	];
 	parts.push(...describeEarlier(c.earlier, false), ...describeFindings(c.findings));
 	if (c.rejected?.length) parts.push("NOT like this. These attempts were rejected; do not repeat their approach:\n" + c.rejected.map((a) => `- ${a.author} (${a.via}, generation ${a.gen}), ${a.rejected}:\n\`\`\`js\n${clipText(a.source, 800)}\n\`\`\``).join("\n"));
@@ -234,7 +238,7 @@ export function teamPrompt(c: TeamContext): { system: string; user: string } {
 	if (hints.length) parts.push("Guidance from the people you work for. FOLLOW it; it outranks everything else here:\n" + hints.map((n) => `- ${n.author}: ${n.text}`).join("\n"));
 	if (notes.length) parts.push("Notes from your team (insights so far):\n" + notes.map((n) => `- ${n.author} (gen ${n.gen}): ${n.text}`).join("\n"));
 	if (role === "repair" && c.target) parts.push(`Your job: REPAIR this attempt. Keep what works, fix what fails; the case results show where it goes wrong.\n${describeAttempt(c.target, true)}`);
-	else if (role === "improve" && c.target) parts.push(`Your job: IMPROVE this correct solution: make it faster or simpler. It must stay correct on every case.\n${describeAttempt(c.target, true)}`);
+	else if (role === "improve" && c.target) parts.push(`Your job: IMPROVE this correct solution: make it ${t.kind === "tools" ? "cheaper in tool points, then faster" : "faster or simpler"}. It must stay correct on every case.\n${describeAttempt(c.target, true)}`);
 	else if (role === "revise" && c.target && c.critique) parts.push(`Your job: REVISE this attempt using the critique a teammate wrote about it. Take the critique seriously, but check it: if a point is wrong, say so in your NOTE.\n${describeAttempt(c.target, true)}\nCritique by ${c.critique.author} (${c.critique.via}):\n${c.critique.text}`);
 	else if (role === "merge" && c.target && c.partner) parts.push(`Your job: MERGE these two attempts into one that keeps what each does right; together they pass more cases than either alone.\nAttempt A: ${describeAttempt(c.target, true)}\nAttempt B: ${describeAttempt(c.partner, true)}`);
 	else if (c.plan) parts.push(`Your job: IMPLEMENT the plan the team chose in its planning round (proposed by ${c.plan.author}, ${c.plan.via}${c.plan.score !== null ? `, rated ${c.plan.score.toFixed(1)} of 5` : ""}). Follow it; where it is wrong or vague, decide sensibly and say so in your NOTE.\nPlan:\n${c.plan.text}`);
@@ -273,7 +277,7 @@ export function critiquePrompt(c: { task: Task; agent: number; target: Attempt; 
 			`The attempt to critique, by ${c.target.author}:\n${describeAttempt(c.target, true)}`,
 			...(c.others?.length ? ["Other attempts of the team, for comparison:\n" + c.others.map((a) => describeAttempt(a, false)).join("\n\n")] : []),
 			c.target.ok
-				? `This attempt PASSED every test case${t.check !== undefined ? " and the check rule" : ""}: it is correct by the team's standard. Do not claim it is wrong. Critique only what would make it faster or simpler (it took ${c.target.ms} ms), with a precise change for each point.`
+				? `This attempt PASSED every test case${t.check !== undefined ? " and the check rule" : ""}: it is correct by the team's standard. Do not claim it is wrong. Critique only what would make it ${t.kind === "tools" ? `cheaper in tool points or faster (it took ${c.target.cost ?? "?"} points, ${c.target.ms} ms)` : `faster or simpler (it took ${c.target.ms} ms)`}, with a precise change for each point.`
 				: `The test results above are the ground truth: base every claim of a bug on a failing case or an error shown there, and do not invent bugs the tests do not show.`,
 			`Write your critique to ${c.target.author}: the concrete bugs or wrong ideas (with the line or construct), why the failing cases fail, what is too slow and why, and a precise fix for each point. If the approach cannot work, say so and name a better one. At most 12 short points, no code blocks longer than 5 lines. Plain text.`,
 		].join("\n\n"),

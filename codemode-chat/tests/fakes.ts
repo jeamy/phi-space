@@ -3,7 +3,7 @@
 // FakeCall entries (`log`), and a team that must hang until the test says so waits for a FakeGate entry.
 import type { SpaceLike } from "phi-spaces";
 import { taskById } from "../server/tasks.ts";
-import { callSignal } from "../server/llm.ts";
+import { callSignal, teamPrompt } from "../server/llm.ts";
 
 type Log = (e: Record<string, unknown>) => Promise<void>;
 /** A fake team: any of the model process's call kinds (the arguments are what llm.ts would get). */
@@ -25,6 +25,8 @@ const gate = async (space: SpaceLike, session: string) => { while (!(await space
 const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) => Team> = {
 	// several models compete: each answers with another variant
 	vs: (_s, _space, log) => ({ contribute: async (c) => { await log({ model: c.model }); const t = taskById("gcd")!; return { source: c.model === "fake/fast" ? t.variants[2]! : t.variants[1]!, model: c.model! }; } }),
+	// a task with tools: the fast model hands in the cheapest variant, the slow one a dearer one (tests/tools.test.ts)
+	tool1: (_s, _space, log) => ({ contribute: async (c) => { await log({ model: c.model, kind: c.task.kind, holdout: /fed up with this|we are switching away|I-10\d\d/.test(teamPrompt(c).user) }); const t = taskById("frustration")!; return { source: c.model === "fake/fast" ? t.variants[2]! : t.variants[1]!, model: c.model! }; } }),
 	// a teammate repairs the close attempt and leaves a note
 	team1: (_s, _space, log) => ({ contribute: async (c) => {
 		await log({ role: c.role, target: c.target?.author ?? null, passed: c.target?.passed ?? null, notes: c.notes?.length ?? 0 });

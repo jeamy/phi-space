@@ -1,6 +1,7 @@
 // Task catalog: what the agents are asked to write, how a contribution is checked (cases) and timed (bench), and a few
 // hand-written variants that the scripted (model-free) agents hand in. All code here runs only in the sandbox.
 import { MAX_CHECK_CHARS, maxTimeoutMs } from "./judge.ts";
+import { describeTools, FRUSTRATION, MAX_CALLS, PI_SOURCE, PI_WINDOWS, PI_WINDOWS_BUGS, type ToolSpec } from "./tooltask.ts";
 
 /** One test call. `expect` is the exact result, `expectAny` several results that are all right ("[0,1,4,9,11] oder
  *  [0,2,7,10,11]"); a task with a check rule may give neither (the rule decides). */
@@ -27,13 +28,16 @@ export type Task = {
 	/** Custom tasks: the time a contribution has for its cases and the bench (default: the judge's 5 s). */
 	timeoutMs?: number;
 	/** "text": a question whose answer is a text, judged by agents against `criteria` (no code, no sandbox). */
-	kind?: "code" | "text";
+	kind?: "code" | "text" | "tools";
+	/** "tools": the tools and data of the sandbox (tooltask.ts); the one case is the sample world's answer. */
+	tools?: ToolSpec;
 	criteria?: string[];
 	/** Who wrote the criteria: the person (the optional field) or the verifier agent (when it was empty). */
 	criteriaBy?: "user" | "verifier";
 };
 
 export const isText = (t: Task): boolean => t.kind === "text";
+export const isTools = (t: Task): t is Task & { tools: ToolSpec } => t.kind === "tools" && !!t.tools;
 
 /** A text task: a question (up to 2000 characters) and 0 to 12 criteria of a good answer (one line each). */
 export function textTask(x: { prompt: unknown; criteria?: unknown; criteriaBy?: unknown }): Task {
@@ -118,9 +122,78 @@ export const TASKS: Task[] = [
 			`function gcd(a,b){return b===0?a:gcd(b,a%b)}`,
 		],
 	},
+	{
+		id: "frustration", fn: "solve", kind: "tools", tools: FRUSTRATION, timeoutMs: 20_000,
+		title: { de: "Frust in Issues finden (mit Tools)", en: "Find frustrated issues (with tools)" },
+		prompt: {
+			de: `Schreibe async function solve(): die ids aller Issues, in denen mindestens ein Kommentar als "high" klassifiziert wird, aufsteigend sortiert (I-2 vor I-10). Die Daten erreichst du nur über die Tools (await tools.<name>(args)); jeder Aufruf kostet Punkte, und unter den richtigen Beiträgen gewinnt der billigste, die Zeit entscheidet erst danach. Bewertet wird auf einem verdeckten, größeren Datensatz mit denselben Tools (höchstens ${MAX_CALLS} Aufrufe).\n${describeTools(FRUSTRATION)}`,
+			en: `Write async function solve(): the ids of all issues in which at least one comment is classified "high", in ascending order (I-2 before I-10). The data is reachable only through the tools (await tools.<name>(args)); every call costs points, and among the correct contributions the cheapest wins, the time only after that. It is scored on a hidden, larger dataset with the same tools (at most ${MAX_CALLS} calls).\n${describeTools(FRUSTRATION)}`,
+		},
+		cases: [{ args: [], expect: FRUSTRATION.answer(FRUSTRATION.sample) }],
+		bench: "",
+		variants: [
+			// every comment on its own: correct, expensive
+			`async function solve(){const ids=[];let after;do{const p=await tools.list({after,limit:50});for(const it of p.items)ids.push(it.id);after=p.next}while(after);const out=[];for(const id of ids){const i=await tools.get({id});for(const c of i.comments)if(await tools.classify({text:c.text})==="high"){out.push(id);break}}return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
+			// one call per thread (the classifier reports the strongest phrase in a text): correct, cheaper
+			`async function solve(){const ids=[];let after;do{const p=await tools.list({after,limit:50});for(const it of p.items)ids.push(it.id);after=p.next}while(after);const out=[];for(const id of ids){const i=await tools.get({id});if(await tools.classify({text:i.comments.map(c=>c.text).join("\\n")})==="high")out.push(id)}return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
+			// group testing: classify many threads at once, split only where "high" shows: correct, cheapest
+			`async function solve(){const ids=[];let after;do{const p=await tools.list({after,limit:50});for(const it of p.items)ids.push(it.id);after=p.next}while(after);const text=new Map(await Promise.all(ids.map(async id=>{const i=await tools.get({id});return[id,i.comments.map(c=>c.text).join("\\n")]})));const out=[];const find=async g=>{const t=g.map(id=>text.get(id)).join("\\n");if(t.length<=20000&&await tools.classify({text:t})!=="high")return;if(g.length===1){out.push(g[0]);return}const h=g.length>>1;await find(g.slice(0,h));await find(g.slice(h))};for(let i=0;i<ids.length;i+=40)await find(ids.slice(i,i+40));return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
+			// wrong: guesses the classifier from the sample's words, misses the holdout's
+			`async function solve(){const s=new Set();for(const q of ["completely unusable","still broken","third time i report","wasted my whole day"])for(const id of await tools.search({q,limit:200}))s.add(id);return [...s].sort((a,b)=>a.slice(2)-b.slice(2))}`,
+			// wrong: "mild" counted as well
+			`async function solve(){const ids=[];let after;do{const p=await tools.list({after,limit:50});for(const it of p.items)ids.push(it.id);after=p.next}while(after);const out=[];for(const id of ids){const i=await tools.get({id});if(await tools.classify({text:i.comments.map(c=>c.text).join("\\n")})!=="none")out.push(id)}return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
+		],
+	},
+	{
+		id: "pi-windows", fn: "solve", kind: "tools", tools: PI_WINDOWS, timeoutMs: 20_000,
+		title: { de: "Pi-Issues: Windows mit Antwort (echte Daten, mit Tools)", en: "Pi issues: Windows with a reply (real data, with tools)" },
+		prompt: {
+			de: `Echte Issues von ${PI_SOURCE.url} (Stand ${PI_SOURCE.fetched}; gekürzt, Namen ersetzt: Personen heißen u1, u2, …, der Bot des Trackers, der Issues neuer Mitwirkender automatisch schließt, heißt "bot"). Schreibe async function solve(): die ids aller Issues, deren Titel oder body "windows" enthält (Groß-/Kleinschreibung egal) und die mindestens einen Kommentar von einer Person haben (Kommentare von "bot" zählen nicht), aufsteigend sortiert (I-90 vor I-100). Die Daten erreichst du nur über die Tools (await tools.<name>(args)); jeder Aufruf kostet Punkte, und unter den richtigen Beiträgen gewinnt der billigste, die Zeit entscheidet erst danach. Die Stichprobe ist jedes zehnte Issue; bewertet wird auf den übrigen, verdeckten Issues mit denselben Tools (höchstens ${MAX_CALLS} Aufrufe).\n${describeTools(PI_WINDOWS)}`,
+			en: `Real issues of ${PI_SOURCE.url} (as of ${PI_SOURCE.fetched}; shortened, names replaced: people are u1, u2, …, the tracker's bot, which auto-closes issues of new contributors, is "bot"). Write async function solve(): the ids of all issues whose title or body contains "windows" (any case) and that have at least one comment by a person (comments by "bot" do not count), in ascending order (I-90 before I-100). The data is reachable only through the tools (await tools.<name>(args)); every call costs points, and among the correct contributions the cheapest wins, the time only after that. The sample is every tenth issue; it is scored on the other, hidden issues with the same tools (at most ${MAX_CALLS} calls).\n${describeTools(PI_WINDOWS)}`,
+		},
+		cases: [{ args: [], expect: PI_WINDOWS.answer(PI_WINDOWS.sample) }],
+		bench: "",
+		variants: [
+			// every issue fetched: correct, expensive
+			`async function solve(){const out=[];let after;do{const p=await tools.list({after,limit:50});for(const it of p.items){const i=await tools.get({id:it.id});if((i.title+"\\n"+(i.body||"")).toLowerCase().includes("windows")&&i.comments.some(c=>c.by!=="bot"))out.push(i.id)}after=p.next}while(after);return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
+			// search first, then fetch only the hits: correct, cheap
+			`async function solve(){const out=[];for(const id of await tools.search({q:"windows",limit:200})){const i=await tools.get({id});if((i.title+"\\n"+(i.body||"")).toLowerCase().includes("windows")&&i.comments.some(c=>c.by!=="bot"))out.push(id)}return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
+			// wrong: takes the search's hits as they are (a mention in a comment, or only the bot answered)
+			`async function solve(){return (await tools.search({q:"windows",limit:200})).sort((a,b)=>a.slice(2)-b.slice(2))}`,
+			// wrong: the bot's comment counted as a reply
+			`async function solve(){const out=[];for(const id of await tools.search({q:"windows",limit:200})){const i=await tools.get({id});if((i.title+"\\n"+(i.body||"")).toLowerCase().includes("windows")&&i.comments.length>0)out.push(id)}return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
+		],
+	},
+	{
+		id: "pi-windows-bugs", fn: "solve", kind: "tools", tools: PI_WINDOWS_BUGS, timeoutMs: 20_000,
+		title: { de: "Pi-Issues: Windows-Bugs nach Jev (echte Daten, mit Tools)", en: "Pi issues: Windows bugs by Jev (real data, with tools)" },
+		prompt: {
+			de: `Echte Issues von ${PI_SOURCE.url} (Stand ${PI_SOURCE.fetched}; gekürzt, Namen ersetzt: Personen heißen u1, u2, …, der Bot des Trackers, der Issues neuer Mitwirkender automatisch schließt, heißt "bot"). Jedes Issue hat der Klassifizierer Jev (${PI_SOURCE.jevModel}) einmal eingestuft; tools.jev gibt diese aufgezeichnete Antwort zurück. Schreibe async function solve(): die ids aller Issues, deren Titel oder body "windows" enthält (Groß-/Kleinschreibung egal), die mindestens einen Kommentar von einer Person haben (Kommentare von "bot" zählen nicht) und die Jev als "bug" einstuft, aufsteigend sortiert (I-90 vor I-100). Die Daten erreichst du nur über die Tools (await tools.<name>(args)); jeder Aufruf kostet Punkte, und unter den richtigen Beiträgen gewinnt der billigste, die Zeit entscheidet erst danach. Die Stichprobe ist jedes zehnte Issue; bewertet wird auf den übrigen, verdeckten Issues mit denselben Tools (höchstens ${MAX_CALLS} Aufrufe).\n${describeTools(PI_WINDOWS_BUGS)}`,
+			en: `Real issues of ${PI_SOURCE.url} (as of ${PI_SOURCE.fetched}; shortened, names replaced: people are u1, u2, …, the tracker's bot, which auto-closes issues of new contributors, is "bot"). The classifier Jev (${PI_SOURCE.jevModel}) rated every issue once; tools.jev returns that recorded answer. Write async function solve(): the ids of all issues whose title or body contains "windows" (any case), that have at least one comment by a person (comments by "bot" do not count) and that Jev rates "bug", in ascending order (I-90 before I-100). The data is reachable only through the tools (await tools.<name>(args)); every call costs points, and among the correct contributions the cheapest wins, the time only after that. The sample is every tenth issue; it is scored on the other, hidden issues with the same tools (at most ${MAX_CALLS} calls).\n${describeTools(PI_WINDOWS_BUGS)}`,
+		},
+		cases: [{ args: [], expect: PI_WINDOWS_BUGS.answer(PI_WINDOWS_BUGS.sample) }],
+		bench: "",
+		variants: [
+			// every issue fetched and rated: correct, most expensive
+			`async function solve(){const out=[];let after;do{const p=await tools.list({after,limit:50});for(const it of p.items){const i=await tools.get({id:it.id});const j=await tools.jev({id:it.id});if((i.title+"\\n"+(i.body||"")).toLowerCase().includes("windows")&&i.comments.some(c=>c.by!=="bot")&&j.kind==="bug")out.push(i.id)}after=p.next}while(after);return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
+			// search, then fetch and rate every hit: correct, cheaper
+			`async function solve(){const out=[];for(const id of await tools.search({q:"windows",limit:200})){const i=await tools.get({id});const j=await tools.jev({id});if((i.title+"\\n"+(i.body||"")).toLowerCase().includes("windows")&&i.comments.some(c=>c.by!=="bot")&&j.kind==="bug")out.push(id)}return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
+			// search, fetch, and ask Jev only where the cheap conditions hold: correct, cheapest
+			`async function solve(){const out=[];for(const id of await tools.search({q:"windows",limit:200})){const i=await tools.get({id});if((i.title+"\\n"+(i.body||"")).toLowerCase().includes("windows")&&i.comments.some(c=>c.by!=="bot")&&(await tools.jev({id})).kind==="bug")out.push(id)}return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
+			// wrong: Jev left out (every answered Windows issue counted)
+			`async function solve(){const out=[];for(const id of await tools.search({q:"windows",limit:200})){const i=await tools.get({id});if((i.title+"\\n"+(i.body||"")).toLowerCase().includes("windows")&&i.comments.some(c=>c.by!=="bot"))out.push(id)}return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
+			// wrong: the search's hits rated by Jev, without reading them
+			`async function solve(){const out=[];for(const id of await tools.search({q:"windows",limit:200}))if((await tools.jev({id})).kind==="bug")out.push(id);return out.sort((a,b)=>a.slice(2)-b.slice(2))}`,
+		],
+	},
 ];
 
 export const taskById = (id: string): Task | undefined => TASKS.find((t) => t.id === id);
+
+/** A task as it may be stored or handed to another process: a tools task without its data and functions (the holdout
+ *  must never leave the judge), and `restoreTask` brings them back from the catalog. */
+export const portableTask = (t: Task): Task => (t.kind === "tools" ? (({ tools: _tools, ...rest }) => rest)(t) : t);
+export const restoreTask = (t: Task): Task => (t.kind === "tools" && !t.tools ? taskById(t.id) ?? t : t);
 
 /** A user-defined task: the function name and the cases are the oracle; the bench runs every case 300 times. */
 // Names a custom task cannot use as its function: reserved words, and the `__` prefix the judge keeps for itself.

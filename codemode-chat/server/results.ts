@@ -15,7 +15,10 @@ export const earlierLeaseMs = () => { const d = envNumber("CODEMODE_EARLIER_DAYS
 
 /** A verdict time that can stand in a ranking: finite and not negative. */
 export const validMs = (ms: unknown): ms is number => typeof ms === "number" && Number.isFinite(ms) && ms >= 0;
-export type BestCode = { candidateId: string; ms: number; source: string };
+/** `cost`: the tool points of a tools task's verdict (tooltask.ts); none for other tasks. */
+export type BestCode = { candidateId: string; ms: number; source: string; cost?: number };
+/** Of two correct verdicts, which ranks first (negative: `a`): the cheaper in tool points, then the faster. */
+export const rankCmp = (a: { ms: number; cost?: number | null }, b: { ms: number; cost?: number | null }): number => (a.cost ?? 0) - (b.cost ?? 0) || a.ms - b.ms;
 const WAIT_MS = 10_000;
 const isUnique = (e: unknown) => /unique entry already exists/i.test((e as Error)?.message ?? "");
 
@@ -41,17 +44,17 @@ export async function trimArchive(space: SpaceLike): Promise<void> {
 export async function setBest(space: SpaceLike, txn: string, session: string, blockId: string, task: Task, ttl: number, change: { offer: BestCode } | { replace: BestCode | null }): Promise<boolean> {
 	for (let tries = 0; tries < 5; tries++) {
 		const held = await space.takeIfExists({ type: "CodeBest", fields: { session, blockId } }, WAIT_MS, { txn });
-		const cur = held?.fields as { candidateId?: string; ms?: unknown; source?: string } | undefined;
-		const next = "replace" in change ? change.replace : cur && validMs(cur.ms) && cur.ms <= change.offer.ms ? null : change.offer;
+		const cur = held?.fields as { candidateId?: string; ms?: unknown; cost?: number; source?: string } | undefined;
+		const next = "replace" in change ? change.replace : cur && validMs(cur.ms) && rankCmp({ ms: cur.ms, cost: cur.cost }, change.offer) <= 0 ? null : change.offer;
 		if ("offer" in change && !next) { await space.write({ type: "CodeBest", fields: cur as never }, txn, ttl); return false; } // not faster: put it back
 		if (!next) { await archive(space, txn, session, blockId, task, null); return !!held; }
 		try {
-			await space.write({ type: "CodeBest", fields: { session, blockId, candidateId: next.candidateId, ms: next.ms } }, txn, ttl, held ? {} : { unique: ["session", "blockId"] });
+			await space.write({ type: "CodeBest", fields: { session, blockId, candidateId: next.candidateId, ms: next.ms, ...(next.cost !== undefined ? { cost: next.cost } : {}) } }, txn, ttl, held ? {} : { unique: ["session", "blockId"] });
 		} catch (e) {
 			if (!held && isUnique(e)) continue; // another writer made the first one meanwhile: take that one now
 			throw e;
 		}
-		await archive(space, txn, session, blockId, task, { result: next.source, by: `the best correct code there, ${next.ms} ms` });
+		await archive(space, txn, session, blockId, task, { result: next.source, by: `the best correct code there, ${next.cost !== undefined ? `${next.cost} tool points, ` : ""}${next.ms} ms` });
 		return true;
 	}
 	throw new Error("CodeBest stayed contended");

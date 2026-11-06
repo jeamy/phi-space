@@ -72,7 +72,7 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 			await space.write({ type: "CodeScore", fields: { session, blockId, candidateId, author: f.author, via: f.via, host, gen: f.gen, ...lineageOf(f), ...verdictFields(v), source: f.source, ts: f.ts } as never }, t.id, ttl);
 			// a correct verdict that beats the block's best (and no person rejected it) becomes the new best
 			if (v.ok && task && typeof blockId === "string" && !(await space.readIfExists({ type: "CodeVeto", fields: { session, candidateId } }, NO_WAIT, { txn: t.id })))
-				await setBest(space, t.id, session, blockId, task, ttl, { offer: { candidateId, ms: v.ms, source: String(f.source ?? "") } });
+				await setBest(space, t.id, session, blockId, task, ttl, { offer: { candidateId, ms: v.ms, source: String(f.source ?? ""), ...(v.cost !== undefined ? { cost: v.cost } : {}) } });
 		}
 		await space.commit(t.id);
 		return true;

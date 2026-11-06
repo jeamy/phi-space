@@ -195,9 +195,9 @@ export async function closingLine(space: SpaceLike, r: RunEntry, how: "finished"
 		const closest = accepted ? null : (await teamView(space, r.session, r.blockId, true).catch(() => null))?.attempts[0];
 		result = accepted ? `answered, ${accepted.author}'s answer accepted ${accepted.acceptedBy === "human" ? "by a person" : "by the judges"}` : `no accepted answer yet${closest ? ` (closest: ${closest.author}, ${closest.passed ?? 0}/${closest.total ?? "?"} criteria)` : ""}`;
 	} else {
-		const best = (await space.readIfExists({ type: "CodeBest", fields: { session: r.session, blockId: r.blockId } }, HELD_WAIT_MS))?.fields as { ms?: number } | undefined;
+		const best = (await space.readIfExists({ type: "CodeBest", fields: { session: r.session, blockId: r.blockId } }, HELD_WAIT_MS))?.fields as { ms?: number; cost?: number } | undefined;
 		const closest = best || !task ? null : (await teamView(space, r.session, r.blockId, false).catch(() => null))?.attempts[0];
-		result = best ? `solved${info.solvedGen && !board ? ` in generation ${info.solvedGen}` : info.solvedGen === 0 ? " before the run" : ""}, best ${best.ms} ms` : `not solved yet${closest ? ` (closest: ${closest.author}, ${closest.passed ?? 0}/${closest.total ?? "?"} cases)` : ""}`;
+		result = best ? `solved${info.solvedGen && !board ? ` in generation ${info.solvedGen}` : info.solvedGen === 0 ? " before the run" : ""}, best ${best.cost !== undefined ? `${best.cost} tool points, ` : ""}${best.ms} ms` : `not solved yet${closest ? ` (closest: ${closest.author}, ${closest.passed ?? 0}/${closest.total ?? "?"} cases)` : ""}`;
 	}
 	return `Run ${how === "accepted" ? "ended (an answer was accepted)" : how} after ${span}${why}: ${result}`;
 }

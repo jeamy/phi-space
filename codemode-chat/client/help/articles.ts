@@ -140,7 +140,7 @@ Eine Aufgabe sagt, was entstehen soll: eine Funktion oder die Antwort auf eine F
 
 Ein **Raum** ist die Adresse nach dem \`#\` in der URL, zum Beispiel \`/#lobby\`. Er enthält höchstens 60 Blöcke. Ein neuer Raum hat noch keinen Block: Der erste entsteht, wenn du eine Aufgabe anlegst oder einen Lauf startest.
 
-Es gibt drei Arten von Aufgaben: fertige [Katalogaufgaben](#catalog), [eigene Aufgaben](#custom) mit deinen Testfällen und [Textaufgaben](#text).
+Es gibt vier Arten von Aufgaben: fertige [Katalogaufgaben](#catalog), [Aufgaben mit Tools](#tools), [eigene Aufgaben](#custom) mit deinen Testfällen und [Textaufgaben](#text).
 
 ## Katalogaufgaben {#catalog}
 
@@ -150,6 +150,18 @@ Es gibt drei Arten von Aufgaben: fertige [Katalogaufgaben](#catalog), [eigene Au
 | Fibonacci | \`fib(n)\` | die n-te Fibonacci-Zahl, \`fib(0)=0\`, \`fib(1)=1\` |
 | Sortieren | \`sortNumbers(arr)\` | die Zahlen aufsteigend, als neues Array |
 | ggT | \`gcd(a, b)\` | größter gemeinsamer Teiler nichtnegativer ganzer Zahlen |
+| Frust in Issues (mit Tools) | \`async solve()\` | die ids aller Issues mit einem Kommentar, den der Klassifizierer „high“ nennt; siehe [Aufgaben mit Tools](#tools) |
+| Pi-Issues: Windows mit Antwort (echte Daten, mit Tools) | \`async solve()\` | die ids aller echten Pi-Issues, die im Titel oder Text Windows nennen und auf die eine Person geantwortet hat; siehe [Aufgaben mit Tools](#tools) |
+| Pi-Issues: Windows-Bugs nach Jev (echte Daten, mit Tools) | \`async solve()\` | dieselben, aber nur die, die der Klassifizierer Jev als Bug einstuft; siehe [Aufgaben mit Tools](#tools) |
+
+## Aufgaben mit Tools {#tools}
+
+Hier rechnet der Code nicht nur, er **holt sich die Daten über Tools**: \`await tools.list(...)\`, \`tools.get\`, \`tools.search\`, \`tools.classify\`. Die Tools beantwortet der Richter aus einem Datensatz der Aufgabe; Netz und Modelle erreicht der Code weiterhin nicht, der Klassifizierer ist ein fester Stellvertreter.
+
+- **Jeder Aufruf kostet Punkte** (\`list\` und \`get\` 1, \`search\` 2, \`classify\` 3; höchstens 2000 Aufrufe). Unter den richtigen Beiträgen gewinnt der mit den **wenigsten Punkten**, die Zeit entscheidet erst danach. Kachel und Rangliste zeigen „Punkte P · Zeit“.
+- **Zwei Datensätze:** die Stichprobe (16 Issues, ihr Ergebnis ist der sichtbare Testfall, ▶ läuft nur auf ihr) und ein verdeckter, größerer Datensatz mit anderen Texten, auf dem gewertet wird. Seine Issues und sein Ergebnis zeigt keine Seite; man sieht nur den Treffer in Prozent und die Aufrufe. Code, der die Wörter der Stichprobe nachbaut oder ihr Ergebnis einträgt, fällt dort durch.
+- **Echte Daten:** „Pi-Issues: Windows mit Antwort“ nimmt 1000 echte Issues von [github.com/earendil-works/pi](https://github.com/earendil-works/pi/issues), einmal abgerufen, gekürzt und ohne Namen (Personen heißen u1, u2, …, der Bot des Trackers „bot“). Jedes zehnte Issue ist die Stichprobe, die übrigen sind verdeckt. Hier gibt es kein \`classify\`: Billig ist, wer erst sucht und nur die Treffer holt; wer jedes Issue holt, zahlt mehr als das Zehnfache.
+- **Jev:** „Pi-Issues: Windows-Bugs nach Jev“ hat zusätzlich \`tools.jev({ id })\` (3 Punkte): was der Klassifizierer Jev (typesafe/jev-1.13) zu dem Issue gesagt hat, Bug, Feature-Wunsch, Frage oder anderes. Jev wurde **einmal** beim Abrufen der Daten gefragt; das Tool spielt diese Antworten ab. So erreicht der Code auch hier kein Netz und kein Modell, und jeder Beitrag zählt überall gleich. Am billigsten ist, wer Jev nur dort fragt, wo die billigen Bedingungen schon erfüllt sind.
 
 ## Eigene Aufgabe {#custom}
 
@@ -227,7 +239,7 @@ A task says what should come out: a function or the answer to a question. Every 
 
 A **room** is the address after the \`#\` in the URL, for example \`/#lobby\`. It holds at most 60 blocks. A new room has no block yet: the first one opens when you create a task or start a run.
 
-There are three kinds of task: ready-made [catalog tasks](#catalog), [custom tasks](#custom) with your own test cases, and [text tasks](#text).
+There are four kinds of task: ready-made [catalog tasks](#catalog), [tasks with tools](#tools), [custom tasks](#custom) with your own test cases, and [text tasks](#text).
 
 ## Catalog tasks {#catalog}
 
@@ -237,6 +249,18 @@ There are three kinds of task: ready-made [catalog tasks](#catalog), [custom tas
 | Fibonacci | \`fib(n)\` | the n-th Fibonacci number, \`fib(0)=0\`, \`fib(1)=1\` |
 | Sorting | \`sortNumbers(arr)\` | the numbers ascending, as a new array |
 | gcd | \`gcd(a, b)\` | greatest common divisor of two non-negative integers |
+| Frustrated issues (with tools) | \`async solve()\` | the ids of all issues with a comment the classifier calls "high"; see [Tasks with tools](#tools) |
+| Pi issues: Windows with a reply (real data, with tools) | \`async solve()\` | the ids of all real pi issues that name Windows in their title or text and that a person answered; see [Tasks with tools](#tools) |
+| Pi issues: Windows bugs by Jev (real data, with tools) | \`async solve()\` | the same, but only those the classifier Jev rates a bug; see [Tasks with tools](#tools) |
+
+## Tasks with tools {#tools}
+
+Here the code does not only compute, it **fetches its data through tools**: \`await tools.list(...)\`, \`tools.get\`, \`tools.search\`, \`tools.classify\`. The judge answers the tools from a dataset of the task; the code still reaches no network and no model, the classifier is a fixed stand-in.
+
+- **Every call costs points** (\`list\` and \`get\` 1, \`search\` 2, \`classify\` 3; at most 2000 calls). Among the correct contributions the one with the **fewest points** wins; the time decides only after that. Tiles and the leaderboard show "points P · time".
+- **Two datasets:** the sample (16 issues; its result is the visible test case, and ▶ runs on it only) and a hidden, larger dataset with other texts, on which it is scored. No page shows its issues or its result; you see only the score in percent and the calls. Code that copies the sample's words or writes in its result fails there.
+- **Real data:** "Pi issues: Windows with a reply" takes 1000 real issues of [github.com/earendil-works/pi](https://github.com/earendil-works/pi/issues), fetched once, shortened and without names (people are u1, u2, …, the tracker's bot is "bot"). Every tenth issue is the sample, the rest is hidden. There is no \`classify\` here: cheap is who searches first and fetches only the hits; fetching every issue costs more than ten times as much.
+- **Jev:** "Pi issues: Windows bugs by Jev" also has \`tools.jev({ id })\` (3 points): what the classifier Jev (typesafe/jev-1.13) said about the issue: bug, feature request, question or other. Jev was asked **once**, when the data was fetched; the tool replays those answers. So here too the code reaches no network and no model, and a contribution scores the same everywhere. Cheapest is who asks Jev only where the cheap conditions already hold.
 
 ## Custom task {#custom}
 
@@ -528,7 +552,7 @@ Der Code ist dabei **Daten**: Er wird nie als Anweisung an den Server behandelt,
 
 ## Die Sandbox {#sandbox}
 
-Die Sandbox ist QuickJS (WebAssembly) aus \`@earendil-works/pi-codemode\`. Sie hat **keine Werkzeuge, keine Dateien, kein Netz, keine Timer** und kein Node. Code kann also nichts außerhalb von sich selbst erreichen; es gibt nur reine Berechnung.
+Die Sandbox ist QuickJS (WebAssembly) aus \`@earendil-works/pi-codemode\`. Sie hat **keine Dateien, kein Netz, keine Timer** und kein Node, und keine Werkzeuge außer denen einer [Aufgabe mit Tools](help.topic.tasks_and_blocks#tools), die der Richter aus deren Daten beantwortet. Code kann also nichts außerhalb von sich selbst erreichen; es gibt nur reine Berechnung.
 
 | Limit | Wert |
 |---|---|
@@ -600,7 +624,7 @@ The code is **data** throughout: it is never treated as an instruction to the se
 
 ## The sandbox {#sandbox}
 
-The sandbox is QuickJS (WebAssembly) from \`@earendil-works/pi-codemode\`. It has **no tools, no files, no network, no timers** and no Node. Code cannot reach anything outside itself; there is only pure computation.
+The sandbox is QuickJS (WebAssembly) from \`@earendil-works/pi-codemode\`. It has **no files, no network, no timers** and no Node, and no tools except those of a [task with tools](help.topic.tasks_and_blocks#tools), which the judge answers from that task's data. Code cannot reach anything outside itself; there is only pure computation.
 
 | Limit | Value |
 |---|---|
@@ -1140,7 +1164,7 @@ Stelle die App deshalb nicht ohne Reverse-Proxy (und gegebenenfalls Zugriffsschu
 
 ## Die Sandbox {#sandbox}
 
-Siehe [Bewertung und Sandbox](help.topic.judging_and_sandbox#sandbox): keine Werkzeuge, Dateien, Netz oder Timer; 5 Sekunden (eigene Aufgaben: einstellbar), 64 MiB.
+Siehe [Bewertung und Sandbox](help.topic.judging_and_sandbox#sandbox): keine Dateien, Netz oder Timer, Werkzeuge nur bei Aufgaben mit Tools; 5 Sekunden (eigene Aufgaben: einstellbar), 64 MiB.
 
 ## Siehe auch {#see-also}
 
@@ -1182,7 +1206,7 @@ So do not make the app public without a reverse proxy (and access protection whe
 
 ## The sandbox {#sandbox}
 
-See [Judging and sandbox](help.topic.judging_and_sandbox#sandbox): no tools, files, network or timers; 5 seconds (custom tasks: adjustable), 64 MiB.
+See [Judging and sandbox](help.topic.judging_and_sandbox#sandbox): no files, network or timers, tools only in tasks with tools; 5 seconds (custom tasks: adjustable), 64 MiB.
 
 ## See also {#see-also}
 

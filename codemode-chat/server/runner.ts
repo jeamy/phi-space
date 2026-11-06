@@ -5,6 +5,7 @@
 // Stop is an abort signal. Bounded: 60 s, two runs per process, at most 1000 lines / 256 KiB of output.
 import { limitOf, type Codemode } from "./judge.ts";
 import type { Task } from "./tasks.ts";
+import { meterText, newMeter, worldTools } from "./tooltask.ts";
 
 export const EXEC_TIMEOUT_MS = 60_000;
 export const MAX_CALL_CHARS = 500;
@@ -22,7 +23,7 @@ export type ExecEvent =
 	| { t: "end"; status: "ok" | "timeout" | "aborted" | "limit" | "error"; ms: number };
 
 type RunSandbox = { execute(code: string, o?: { signal?: AbortSignal; timeoutMs?: number }): Promise<{ ok: boolean; error?: { kind?: string; message: string }; output?: Array<{ type: string; text?: string }> }>; close(): Promise<void> };
-type RunCodemode = { CodemodeSandbox: new (o: { timeoutMs: number; tools: []; memoryLimitBytes?: number; globals?: Array<{ name: string; execute: (args: unknown) => unknown }> }) => RunSandbox };
+type RunCodemode = { CodemodeSandbox: new (o: { timeoutMs: number; tools: Array<{ name: string; description?: string; execute: (args: unknown) => unknown }>; memoryLimitBytes?: number; globals?: Array<{ name: string; execute: (args: unknown) => unknown }> }) => RunSandbox };
 
 /** What the sandbox hands `__out`, reduced to a well-formed event (the contribution can call `__out` itself). */
 function clean(e: unknown): ExecEvent | null {
@@ -106,8 +107,10 @@ export async function execute(cm: Codemode, task: Task, source: string, call: st
 	let lines = 0, bytes = 0, limited = false;
 	const onAbort = () => stop.abort();
 	signal.addEventListener("abort", onAbort);
+	// a tools task runs on its sample world only (the holdout is never reached from here)
+	const meter = newMeter(), tools = task.kind === "tools" && task.tools ? worldTools(task.tools, task.tools.sample, meter) : [];
 	const sandbox = new (cm as unknown as RunCodemode).CodemodeSandbox({
-		timeoutMs, tools: [], memoryLimitBytes: 64 * 1024 * 1024,
+		timeoutMs, tools, memoryLimitBytes: 64 * 1024 * 1024,
 		globals: [{ name: "__out", execute: (raw) => {
 			const e = clean(raw);
 			if (!e || limited || stop.signal.aborted) return null;
@@ -127,6 +130,7 @@ export async function execute(cm: Codemode, task: Task, source: string, call: st
 			const e: ExecEvent = { t: "log", level: "log", text: String(o.text ?? "").slice(0, 4000) };
 			if (++lines > MAX_LINES || (bytes += Buffer.byteLength(JSON.stringify(e))) > MAX_OUTPUT_BYTES) limited = true; else emit(e);
 		}
+		if (tools.length && !limited) emit({ t: "log", level: "info", text: `tool calls on the sample: ${meterText(meter)}` });
 		if (limited) return { t: "end", status: "limit", ms };
 		if (r.ok) return { t: "end", status: "ok", ms };
 		if (signal.aborted || r.error?.kind === "aborted") return { t: "end", status: "aborted", ms };

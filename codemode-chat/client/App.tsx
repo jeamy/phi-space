@@ -12,7 +12,7 @@ import { parseCases } from "./lib/cases.ts";
 import { useTheme, type Lang } from "./lib/theme.ts";
 
 type L = { de: string; en: string };
-type Contribution = { candidateId: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: string; basedOn?: string; hardcoded?: true; note?: string; usage?: Usage; critiques?: Array<{ author: string; via: string }>; critiqueBy?: string; planBy?: string; judges?: number; acceptedBy?: "judges" | "human"; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; ts: number };
+type Contribution = { candidateId: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; cost?: number; calls?: Record<string, number>; error?: string; passed?: number; total?: number; role?: string; basedOn?: string; hardcoded?: true; note?: string; usage?: Usage; critiques?: Array<{ author: string; via: string }>; critiqueBy?: string; planBy?: string; judges?: number; acceptedBy?: "judges" | "human"; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; ts: number };
 /** Tokens and list-price cost of one model call (the cost is the model catalog's price in US dollars). */
 type Usage = { input: number; output: number; cacheRead: number; cacheWrite: number; total: number; costUsd: number };
 type Spent = { tokens: number; costUsd: number };
@@ -153,6 +153,10 @@ const shortCpu = (cpu: string) => cpu.replace(/\((R|TM)\)/g, "").replace(/\b(\d+
 /** A judged time: whole ms from 10 on, two decimals below, and "<0.01 ms" for what the clock cannot resolve. */
 /** A day as the page's language writes it (the end of a block's lease). */
 function fmtDay(ms: number, lang: Lang): string { return new Date(ms).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "short", year: "numeric" }); }
+/** Of two correct contributions, which ranks first: fewer tool points (tasks with tools), then faster (server/results.ts rankCmp). */
+const rankCmp = (a: Contribution, b: Contribution) => (a.cost ?? 0) - (b.cost ?? 0) || a.ms! - b.ms!;
+/** A correct contribution's result: its tool points when it has them, then its time. */
+const fmtResult = (c: Contribution) => (c.cost !== undefined ? `${c.cost} P · ${fmtMs(c.ms)}` : fmtMs(c.ms));
 const fmtMs = (ms: number | null | undefined) => (ms == null ? "–" : ms === 0 ? "<0.01 ms" : ms >= 10 ? `${Math.round(ms)} ms` : `${ms.toFixed(2)} ms`);
 const shortVia = (via: string) => via.replace(/^[^/]+\//, "").replace(/-\d{8}$/, "");
 
@@ -327,7 +331,7 @@ function Tile({ c, isBest, open, onClick, t, lang, basedOn }: { c: Contribution;
 		<button type="button" className={`tile tile--${state}${isBest ? " tile--best" : ""}${open ? " tile--open" : ""}`} aria-expanded={open} onClick={onClick} title={c.note ?? c.error}>
 			<span className="tile__who">{c.author}</span>
 			<span className="tile__via">{shortVia(c.via)}</span>
-			<span className="tile__result" title={c.total ? `${c.passed ?? 0}/${c.total} ${t.passedN}` : undefined}>{c.ok === null ? "…" : c.vetoed ? "👎" : c.hardcoded ? "✗" : c.ok ? (isAnswer(c) ? "✓" : fmtMs(c.ms)) : c.total ? `${c.passed ?? 0}/${c.total}` : "✗"}</span>
+			<span className="tile__result" title={c.total ? `${c.passed ?? 0}/${c.total} ${t.passedN}` : undefined}>{c.ok === null ? "…" : c.vetoed ? "👎" : c.hardcoded ? "✗" : c.ok ? (isAnswer(c) ? "✓" : fmtResult(c)) : c.total ? `${c.passed ?? 0}/${c.total}` : "✗"}</span>
 			{c.vetoed || c.hardcoded ? <span className="tile__flag">{c.vetoed ? t.vetoedShort : t.hardcodedShort}</span> : null}
 			{c.role ? <span className="tile__lineage" title={`${t.roles[c.role] ?? c.role}${basedOn ? ` ↳ ${basedOn}` : ""}`}>{t.roles[c.role] ?? c.role}{basedOn ? ` ↳ ${basedOn}` : ""}{c.critiques?.length ? ` · 🗨${c.critiques.length}` : ""}</span> : null}
 			{c.usage ? <span className="tile__usage" title={t.usageHint}>{fmtSpent(c.usage.total, c.usage.costUsd, lang)}</span> : null}
@@ -445,7 +449,7 @@ function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, on
 						<div key={c.candidateId} className="codecard">
 							<div className="codecard__head">
 								<b>{c.author}</b> <span className="chip">{c.via}</span>
-								{c.ok === null ? <span className="chip chip--wait">{isAnswer(c) ? t.judging : t.wait}</span> : c.vetoed ? <span className="chip chip--bad">{t.vetoed(c.vetoed.by)}</span> : c.hardcoded ? <span className="chip chip--bad">{t.hardcoded}</span> : c.ok && isAnswer(c) ? <span className="chip chip--ok">{t.acceptedBy[c.acceptedBy ?? "judges"]}</span> : c.ok ? <span className="chip chip--ok">{t.ok} · {fmtMs(c.ms)}</span> : <span className="chip chip--bad">{t.bad}{c.total ? ` · ${c.passed ?? 0}/${c.total}` : ""}</span>}
+								{c.ok === null ? <span className="chip chip--wait">{isAnswer(c) ? t.judging : t.wait}</span> : c.vetoed ? <span className="chip chip--bad">{t.vetoed(c.vetoed.by)}</span> : c.hardcoded ? <span className="chip chip--bad">{t.hardcoded}</span> : c.ok && isAnswer(c) ? <span className="chip chip--ok">{t.acceptedBy[c.acceptedBy ?? "judges"]}</span> : c.ok ? <span className="chip chip--ok">{t.ok} · {fmtResult(c)}</span> : <span className="chip chip--bad">{t.bad}{c.total ? ` · ${c.passed ?? 0}/${c.total}` : ""}</span>}
 								{c.role ? <button type="button" className={"chip chip--button" + (lineageOf.has(c.candidateId) ? " chip--on" : "")} title={t.lineageHint} aria-expanded={lineageOf.has(c.candidateId)} onClick={() => toggleLineage(c.candidateId)}>{t.roles[c.role] ?? c.role} ▾</button> : null}
 								{c.usage ? <span className="chip" title={t.usageDetail(fmtTok(c.usage.input, lang), fmtTok(c.usage.output, lang), fmtTok(c.usage.cacheRead, lang), fmtTok(c.usage.cacheWrite, lang))}>{fmtSpent(c.usage.total, c.usage.costUsd, lang)}</span> : null}
 								{origin(c) || c.planBy ? <span className="lineage">{[origin(c) ? `${t.basedOn} ${origin(c)}` : "", c.critiqueBy ? t.critiqueBy(c.critiqueBy) : "", c.planBy ? t.planBy(c.planBy) : ""].filter(Boolean).join(", ")}</span> : null}
@@ -639,8 +643,8 @@ export function CodemodeChat() {
 		...(snap?.blocks ?? []).map((b): Item => ({ ts: b.ts, key: b.blockId, b })),
 	].sort((a, b) => a.ts - b.ts);
 	const focusBlock = snap?.blocks.find((b) => b.blockId === focus) ?? current;
-	const board = (focusBlock?.contributions ?? []).filter(counts).sort((a, b) => a.ms! - b.ms!).slice(0, 8);
-	const standings = Object.values((focusBlock?.contributions ?? []).filter((c) => c.via !== "human").reduce<Record<string, { via: string; n: number; ok: number; best: number | null }>>((acc, c) => { const e = (acc[c.via] ??= { via: c.via, n: 0, ok: 0, best: null }); if (c.ok !== null) { e.n++; if (counts(c)) { e.ok++; e.best = e.best === null ? c.ms : Math.min(e.best, c.ms!); } } return acc; }, {})).sort((a, b) => (a.best ?? Infinity) - (b.best ?? Infinity));
+	const board = (focusBlock?.contributions ?? []).filter(counts).sort(rankCmp).slice(0, 8);
+	const standings = Object.values((focusBlock?.contributions ?? []).filter((c) => c.via !== "human").reduce<Record<string, { via: string; n: number; ok: number; best: number | null; top: Contribution | null }>>((acc, c) => { const e = (acc[c.via] ??= { via: c.via, n: 0, ok: 0, best: null, top: null }); if (c.ok !== null) { e.n++; if (counts(c)) { e.ok++; if (!e.top || rankCmp(c, e.top) < 0) { e.top = c; e.best = c.ms; } } } return acc; }, {})).sort((a, b) => (a.top && b.top ? rankCmp(a.top, b.top) : Number(!a.top) - Number(!b.top)));
 	const blockLabel = focusBlock ? taskLabel(focusBlock.task, lang) : "";
 
 	return (
@@ -789,12 +793,12 @@ export function CodemodeChat() {
 					<div className="panel">
 						<h2>{t.board} <HelpTip id="board" lang={lang} label={t.board} /></h2>
 						{blockLabel ? <div className="forblock">{t.forBlock} {blockLabel}</div> : null}
-						{board.length ? <table className="board"><tbody>{board.map((c, i) => <tr key={c.candidateId}><td>{i + 1}. {c.author}</td><td>{fmtMs(c.ms)}</td></tr>)}</tbody></table> : <div className="empty">{t.nobest}</div>}
+						{board.length ? <table className="board"><tbody>{board.map((c, i) => <tr key={c.candidateId}><td>{i + 1}. {c.author}</td><td>{fmtResult(c)}</td></tr>)}</tbody></table> : <div className="empty">{t.nobest}</div>}
 					</div>
 					{standings.length > 1 || (standings.length === 1 && standings[0]!.via !== "scripted") ? (
 						<div className="panel">
 							<h2>{t.standings} <HelpTip id="standings" lang={lang} label={t.standings} /></h2>
-							<table className="board"><tbody>{standings.map((e, i) => <tr key={e.via}><td>{i + 1}. {e.via}</td><td>{e.ok}/{e.n} {t.correctN} · {fmtMs(e.best)}</td></tr>)}</tbody></table>
+							<table className="board"><tbody>{standings.map((e, i) => <tr key={e.via}><td>{i + 1}. {e.via}</td><td>{e.ok}/{e.n} {t.correctN} · {e.top ? fmtResult(e.top) : fmtMs(e.best)}</td></tr>)}</tbody></table>
 						</div>
 					) : null}
 					<div className="panel">
