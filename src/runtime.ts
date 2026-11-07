@@ -74,14 +74,16 @@ export async function startFederationHost(host: ClosableStoreHost, ctx: Context,
 	if (!o.boot && !o.unsafeSkipBootGuardForTests) throw new Error("a federation host requires independent boot authorization and local installation");
 	const stopBoot = o.boot ? installBootGuard(host, ctx, { ...o.boot, hostId: o.hostId, authorityId: o.authorityId }) : undefined;
 	const identity = new GateIdentity();
+	// Decision S-D2: a grant's scope names aliases, so a direct call by Space ID is checked against the alias, as a delegated call is.
+	const aliasOf = async (space?: string) => { const info = (await listSpaces(host, ctx)).find(i => i.spaceId === space || i.alias === (space ?? "default")); return info?.alias ?? space; };
 	const service = new SpaceService({ host, ctx, identity, hostId: o.hostId, authorityId: o.authorityId, now: o.now, ...(o.merge ? { merge: o.merge } : {}), ...(o.promotionProof ? { promotionProof: o.promotionProof } : {}),
 		epochForSpace: async space => { const info = (await listSpaces(host, ctx)).find(i => i.spaceId === space || i.alias === (space ?? "default")); return info ? o.boot?.replicaConfig?.(info.spaceId)?.primaryEpoch ?? (await snapshotSpace(host, info.spaceId, ctx))?.primaryEpoch ?? 1 : 0; },
-		authorize: async (call,id,conn)=>{const auth=call.frame?.delegation?o.delegation?await o.delegation.check(call,id,conn):await Promise.reject(new Error("delegation not configured")):o.verifier.check(call.frame?.grant,id,call,conn);await o.refreshPolicy?.();auth.check();return auth;} });
+		authorize: async (call,id,conn)=>{const auth=call.frame?.delegation?o.delegation?await o.delegation.check(call,id,conn):await Promise.reject(new Error("delegation not configured")):o.verifier.check(call.frame?.grant,id,{...call,space:await aliasOf(call.space)},conn);await o.refreshPolicy?.();auth.check();return auth;} });
 	const syncServices = new Map<string, SpaceService | { handle: (c: unknown, conn: Connection) => Promise<Reply>; handleText: (t: string, conn: Connection) => Promise<string> }>(), mainSpaces = await listSpaces(host, ctx);
 	// The current entry of every primary/sync Space: served, or unresolved after a sealed commit (setSyncSpace swaps them).
 	const syncEntries: Array<SyncEntry | UnresolvedSyncSpace> = [];
 	const makeSyncService = (sp: SyncEntry) => new SpaceService({ host: sp.host, ctx, identity, hostId: o.hostId, authorityId: o.authorityId, now: o.now, epochForSpace: async () => sp.primaryEpoch(), ...(sp.onSealed ? { onSealed: sp.onSealed } : {}), ...(sp.sealedCandidate ? { sealedCandidate: sp.sealedCandidate } : {}), ...(sp.promotionProof ? { promotionProof: sp.promotionProof } : {}),
-			authorize: async (call,id,conn)=>{const auth=call.frame?.delegation?sp.delegation?await sp.delegation.check(call,id,conn):await Promise.reject(new Error("delegation not configured")):o.verifier.check(call.frame?.grant,id,call,conn);await (sp.refreshPolicy ?? o.refreshPolicy)?.();auth.check();return auth;} });
+			authorize: async (call,id,conn)=>{const auth=call.frame?.delegation?sp.delegation?await sp.delegation.check(call,id,conn):await Promise.reject(new Error("delegation not configured")):o.verifier.check(call.frame?.grant,id,{...call,space:call.space===sp.spaceId?sp.alias:call.space},conn);await (sp.refreshPolicy ?? o.refreshPolicy)?.();auth.check();return auth;} });
 	const sealedService = (u: UnresolvedSyncSpace) => {
 		const handle = async (_c: unknown, conn: Connection): Promise<Reply> => await identity.authenticate(conn) ? sealedReply(u.sealed) : { ok: false, error: { code: "Unauthenticated", message: "the connection has no known identity" } };
 		return { handle, handleText: async (_t: string, conn: Connection) => JSON.stringify(await handle(undefined, conn)) };

@@ -178,6 +178,20 @@ test("an epoch notice by alias fences the same Space", async (tc) => {
 	refused(await g.send({ method: "write", args: { entry: { type: "Task", fields: {} }, leaseMs: 60_000 }, request: { generation, requestId: "w" } }, { lease: old }), "superseded by higher epoch");
 });
 
+test("a grant whose scope names the alias serves a direct call by Space ID, and no other Space (S-D2)", async (tc) => {
+	const g = await setup(tc);
+	const scopedKey = generateKey("ed25519", "scoped-key");
+	g.keys.add({ peerId: "router", keyId: scopedKey.signer.keyId, principal: "router", algorithm: scopedKey.signer.algorithm, publicKey: scopedKey.publicKey, roles: ["member"], scope: ["jobs"], state: "active" });
+	const via = await g.link("127.0.0.3", "router", scopedKey.signer);
+	const grant = () => g.authority("router").issue({ peerId: "router", state: { proof: { keyId: scopedKey.signer.keyId } } });
+	const as = async (space: string | undefined, c: Call) => g.raw(via, { ...c, ...(space ? { space } : {}), frame: { grant: await grant() } });
+	assert.ok((await as(g.sid, { method: "count", args: { template: { type: "Task" } } })).ok, "the Space ID is checked as its alias");
+	assert.ok((await as("jobs", { method: "count", args: { template: { type: "Task" } } })).ok);
+	refused(await as("control", { method: "count", args: { template: { type: "Task" } } }), "space outside grant scope");
+	refused(await as(undefined, { method: "count", args: { template: { type: "Task" } } }), "space outside grant scope");
+	refused(await as("no-such-space", { method: "count", args: { template: { type: "Task" } } }), "space outside grant scope");
+});
+
 test("a grant that ran out completes no waiting take; a resolution grant looks, an effect grant goes on", async (tc) => {
 	const g = await setup(tc);
 	const issue = (purpose: "effect" | "resolution") => g.authority("router").issue({ peerId: "router", state: { proof: { keyId: g.routerKey.signer.keyId } } }, purpose);

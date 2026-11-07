@@ -45,7 +45,7 @@ test("without a proof only the A-only roles remain: a member works, the withheld
 	const g = await setup(tc);
 	const host = g.client("127.0.0.2");
 	assert.equal(await host.count(), 0, "a member needs no key");
-	await assert.rejects(host.write({ type: "Job", fields: {} }, null, FOREVER), core.PermissionError, "a plain member may not write here");
+	await assert.rejects(host.write({ type: "Job", fields: {} }, null, FOREVER), (e: unknown) => e instanceof RemoteError && e.code === "ProofRequired", "a plain member may not write here; its group also carries host and router (S-D4), so it is told to prove");
 	const a = g.client("127.0.0.3");
 	assert.deepEqual((await a.info()).roles, ["member"], "the admin role of the group is withheld");
 	await assert.rejects(a.write({ type: "Job", fields: {} }, null, FOREVER), (e: unknown) => e instanceof RemoteError && e.code === "ProofRequired");

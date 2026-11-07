@@ -88,6 +88,10 @@ fn validate(o: &CreateEnroll) -> R<()> {
 	if o.allowed_peer_id.is_empty() {
 		return Err(illegal("a token is bound to the peer id of the device (from the management API)"));
 	}
+	// decision S-D3: a key without a scope would pass no Space and say nothing; the admin names the Spaces (aliases) or "*"
+	if o.scope.is_empty() || o.scope.iter().any(String::is_empty) {
+		return Err(illegal("scope names the Spaces the key may use (aliases, or \"*\")"));
+	}
 	Ok(())
 }
 

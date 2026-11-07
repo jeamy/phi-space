@@ -82,13 +82,13 @@ test("a lost bootstrap token is replaced while unused: the old hash is invalid",
 
 test("hosts get bound one-time tokens and only the role host; an admin token only comes through the bootstrap", async (tc) => {
 	const g = await setup(tc);
-	await assert.rejects(g.control.create({ tokenHash: hashToken("x"), role: "admin", allowedPeerId: "p-host" }), core.IllegalArgumentError);
-	await assert.rejects(g.control.create({ tokenHash: "not-a-hash", role: "host", allowedPeerId: "p-host" }), core.IllegalArgumentError);
-	await assert.rejects(g.control.create({ tokenHash: hashToken("x"), role: "host", allowedPeerId: "" }), core.IllegalArgumentError);
+	await assert.rejects(g.control.create({ tokenHash: hashToken("x"), role: "admin", allowedPeerId: "p-host", scope: ["*"] }), core.IllegalArgumentError);
+	await assert.rejects(g.control.create({ tokenHash: "not-a-hash", role: "host", allowedPeerId: "p-host", scope: ["*"] }), core.IllegalArgumentError);
+	await assert.rejects(g.control.create({ tokenHash: hashToken("x"), role: "host", allowedPeerId: "", scope: ["*"] }), core.IllegalArgumentError);
 	const token = newEnrollToken();
 	const a = await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host", scope: ["sieve"], ttlMs: 60 * 60_000 });
 	assert.equal(a.expiresAt - g.clock.now(), 5 * 60_000, "never longer than 5 minutes");
-	assert.deepEqual(await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host" }), a, "idempotent");
+	assert.deepEqual(await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host", scope: ["*"] }), a, "idempotent");
 	const res = await g.device("127.0.0.2", "p-host", generateKey("ecdsa-p256", "k").signer).enroll(token);
 	assert.deepEqual([res.role, res.peerId, res.scope], ["host", "p-host", ["sieve"]]);
 	assert.equal((await g.control.find("p-host", res.keyId))?.algorithm, "ecdsa-p256");
@@ -97,7 +97,7 @@ test("hosts get bound one-time tokens and only the role host; an admin token onl
 test("the token is never stored, logged or shared: only its hash is in the control space, claims and events", async (tc) => {
 	const g = await setup(tc);
 	const token = newEnrollToken();
-	await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host" });
+	await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host", scope: ["*"] });
 	const dev = g.device("127.0.0.2", "p-host", generateKey("ed25519", "k").signer);
 	await dev.enroll(token);
 	const state = await g.control.state();
@@ -111,7 +111,7 @@ test("the token is never stored, logged or shared: only its hash is in the contr
 test("the order of the checks: a wrong peer does not burn the token, wrong signatures do, three end it", async (tc) => {
 	const g = await setup(tc);
 	const token = newEnrollToken();
-	await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host" });
+	await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host", scope: ["*"] });
 	const stranger = g.device("127.0.0.4", "p-stranger", generateKey("ed25519", "k").signer);
 	await assert.rejects(stranger.enroll(token), refused);
 	assert.equal((await g.entries("Enroll"))[0]!.attempts, 0, "another peer cannot burn the token");
@@ -133,7 +133,7 @@ test("the order of the checks: a wrong peer does not burn the token, wrong signa
 test("one attempt per peer and minute, bad keys and unknown tokens are refused alike, expired tokens are dead", async (tc) => {
 	const g = await setup(tc);
 	const token = newEnrollToken();
-	await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host" });
+	await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host", scope: ["*"] });
 	const key = generateKey("ed25519", "k");
 	const unknown = await g.device("127.0.0.2", "p-host", key.signer).enroll(newEnrollToken()).catch((e: Error) => e);
 	assert.ok(refused(unknown));
@@ -154,7 +154,7 @@ test("one attempt per peer and minute, bad keys and unknown tokens are refused a
 test("only unpaired peers may start enrollment; an unproven member cannot resolve it", async (tc) => {
 	const g = await setup(tc);
 	const token = newEnrollToken();
-	await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-member" });
+	await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-member", scope: ["*"] });
 	await assert.rejects(g.device("127.0.0.5", "p-member", generateKey("ed25519", "k").signer).enroll(token), (e: unknown) => e instanceof core.PermissionError && /requires a current app-key proof/.test((e as Error).message));
 	assert.equal((await g.entries("Enroll"))[0]!.state, "open");
 });
@@ -162,12 +162,12 @@ test("only unpaired peers may start enrollment; an unproven member cannot resolv
 test("a paired peer with a proven key resolves its own request but starts no new enrollment", async (tc) => {
 	const g = await setup(tc);
 	const first = newEnrollToken(), second = newEnrollToken();
-	await g.control.create({ tokenHash: hashToken(first), role: "member", allowedPeerId: "p-host" }); // what its group grants: the proof keeps a role
+	await g.control.create({ tokenHash: hashToken(first), role: "member", allowedPeerId: "p-host", scope: ["*"] }); // what its group grants: the proof keeps a role
 	const key = generateKey("ed25519", "k");
 	const res = await g.device("127.0.0.2", "p-host", key.signer).enroll(first);
 	g.peers[1] = peer("p-host", "127.0.0.2", ["space-hosts"]);
 	g.clock.t += 61_000;
-	await g.control.create({ tokenHash: hashToken(second), role: "host", allowedPeerId: "p-host" });
+	await g.control.create({ tokenHash: hashToken(second), role: "host", allowedPeerId: "p-host", scope: ["*"] });
 	const paired = g.device("127.0.0.2", "p-host", { ...key.signer, keyId: res.keyId });
 	await paired.authenticate();
 	await assert.rejects(paired.enroll(second), (e: unknown) => e instanceof core.PermissionError && /only resolve existing/.test((e as Error).message));
@@ -178,7 +178,7 @@ test("a paired peer with a proven key resolves its own request but starts no new
 test("enrollStatus tells a device the fate of its own request and nobody else's", async (tc) => {
 	const g = await setup(tc);
 	const token = newEnrollToken();
-	await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host" });
+	await g.control.create({ tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host", scope: ["*"] });
 	const dev = g.device("127.0.0.2", "p-host", generateKey("ed25519", "k").signer);
 	assert.equal((await dev.enrollStatus({ generation: "g-nothing", requestId: "r" })).state, "unknown");
 	const res = await dev.enroll(token);

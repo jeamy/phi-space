@@ -170,8 +170,12 @@ fn unchunked(mut body: &[u8]) -> Result<Vec<u8>, String> {
 /// Group name -> roles. A peer gets the union over its groups; no mapped group, no access.
 pub type GroupRoles = HashMap<String, Vec<String>>;
 
+/// The deployment's groups (decision S-D4, `DEFAULT_GROUP_ROLES` of src/gate.ts): a host peer is member, host and router
+/// by layer A; admin needs a proven key.
 pub fn default_group_roles() -> GroupRoles {
-	[("space-hosts", "member"), ("space-admin", "admin"), ("space-observer", "observer"), ("space-enroll", "unpaired")].map(|(g, r)| (g.to_owned(), vec![r.to_owned()])).into()
+	[("space-hosts", &["member", "host", "router"][..]), ("space-admin", &["admin"]), ("space-observer", &["observer"]), ("space-enroll", &["unpaired"])]
+		.map(|(g, r)| (g.to_owned(), r.iter().map(|r| (*r).to_owned()).collect()))
+		.into()
 }
 
 pub(crate) fn roles_of(groups: &[String], map: &GroupRoles) -> Vec<String> {
@@ -742,7 +746,7 @@ mod tests {
 	#[test]
 	fn roles_are_the_sorted_union_of_the_mapped_groups() {
 		let map = default_group_roles();
-		assert_eq!(roles_of(&["space-observer".into(), "other".into(), "space-hosts".into()], &map), ["member", "observer"]);
+		assert_eq!(roles_of(&["space-observer".into(), "other".into(), "space-hosts".into()], &map), ["host", "member", "observer", "router"]);
 		assert!(roles_of(&["other".into()], &map).is_empty());
 	}
 }

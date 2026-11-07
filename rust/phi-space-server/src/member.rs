@@ -192,7 +192,6 @@ pub(crate) fn set_group_roles(o: &mut GateOptions, c: &Json) {
 		o.group_roles = g.iter().map(|(k, v)| (k.to_owned(), v.as_array().map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect()))).collect();
 	} else {
 		o.group_roles = default_group_roles();
-		o.group_roles.insert("space-hosts".into(), ["member", "host", "router"].map(String::from).to_vec());
 	}
 }
 

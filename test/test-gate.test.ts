@@ -56,7 +56,7 @@ test("the peer behind the address decides: roles come from its groups, the princ
 	const host = g.as("127.0.0.2");
 	const hello = await host.info();
 	assert.equal(hello.principal, "p-host");
-	assert.deepEqual(hello.roles, ["member"]);
+	assert.deepEqual(hello.roles, ["member"], "host and router of the group space-hosts (S-D4) are withheld until a key is proven");
 	await host.write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
 	assert.equal(await host.count({ type: "Job" }), 1);
 	assert.deepEqual((await g.as("127.0.0.3").info()).roles, ["member"], "admin is withheld until a key is proven (layer B)");

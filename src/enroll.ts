@@ -97,10 +97,12 @@ export async function createEnroll(host: Host, ctx: Context, o: CreateEnrollOpti
 	return writeEnroll(host, ctx, { ...o, bootstrap: false });
 }
 /** The checks of `createEnroll`, before anything is written. */
-function validateCreateEnroll(o: { tokenHash: string; role: string; allowedPeerId: string }): void {
+function validateCreateEnroll(o: { tokenHash: string; role: string; allowedPeerId: string; scope?: string[] }): void {
 	checkHash(o.tokenHash);
 	if (!(ENROLLABLE_ROLES as readonly string[]).includes(o.role)) throw new core.IllegalArgumentError(`createEnroll hands out ${ENROLLABLE_ROLES.join(", ")}; an admin is paired through the bootstrap token`);
 	if (!o.allowedPeerId) throw new core.IllegalArgumentError("a token is bound to the peer id of the device (from the management API)");
+	// decision S-D3: a key without a scope would pass no Space and say nothing; the admin names the Spaces (aliases) or "*"
+	if (!Array.isArray(o.scope) || o.scope.length === 0 || !o.scope.every((s) => typeof s === "string" && s.length > 0)) throw new core.IllegalArgumentError('scope names the Spaces the key may use (aliases, or "*")');
 }
 /** `createEnroll` inside a commit on the control space (the supervisor's command processing); idempotent per hash. */
 export function createEnrollIn(s: core.SpaceState, now: number, o: CreateEnrollOptions): EnrollRec {

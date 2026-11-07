@@ -12,7 +12,7 @@ import { openSyncSpace, openSyncSpaces, sealedCandidateOf, sealedResolver, type 
 import { promotionEvidence } from "./primary-sync.ts";
 import type { Context } from "./context.ts";
 import { privateFile, loadFileSigner } from "./keys.ts";
-import { NetbirdDirectory, GateIdentity, rolesOf, type GroupRoles } from "./gate.ts";
+import { NetbirdDirectory, GateIdentity, rolesOf, DEFAULT_GROUP_ROLES, type GroupRoles } from "./gate.ts";
 import { GrantAuthority, GrantVerifier } from "./grants.ts";
 import { SpaceKeyDirectory } from "./enroll.ts";
 import { RemoteSpace, TransportFailure } from "./remote.ts";
@@ -84,7 +84,7 @@ export async function startConfiguredFederation(host: ClosableStoreHost, ctx: Co
 	if ([config.registerReadSocket,config.registerSshTarget,config.registerTls].filter(Boolean).length !== 1) throw new Error("configure exactly one independent register endpoint");
 	const external = config.registerTls ? new TlsRecoveryRegister(config.registerTls) : config.registerSshTarget ? new SshRecoveryRegister(config.registerSshTarget) : new SocketRecoveryRegister(config.registerReadSocket!), installed = new SqliteRecoveryRegister(config.installedRegisterFile);
 	const directory = new NetbirdDirectory({ url: config.management.url, token: privateFile(config.management.tokenFile).toString("utf8").trim() });
-	const groupRoles = config.groupRoles ?? { "space-hosts": ["member", "host", "router"], "space-admin": ["admin"], "space-observer": ["observer"], "space-enroll": ["unpaired"] };
+	const groupRoles = config.groupRoles ?? DEFAULT_GROUP_ROLES;
 	let controlSocket: ReturnType<typeof socketTransport> | undefined;
 	try {
 		const boot = await external.get<HostBootState & Record<string, Json>>(`boot:${config.hostId}`);

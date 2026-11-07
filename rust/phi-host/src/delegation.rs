@@ -120,8 +120,8 @@ fn fence_pending(s: &mut Space, now: f64, e: Epochs) {
 
 /// `authorize` of a control host so far: the caller's own grant. Delegated calls to it come with the Root (R6a).
 pub fn grants_only(grants: GrantVerifier, rules: Rc<phi_service::Policy>, now: crate::gate::Now) -> phi_service::Authorize {
-	Box::new(move |_, call, id, conn| {
-		let decision = grants.check(call.get("frame").and_then(|f| f.get("grant")), id, call, Some(conn.proof_key.as_deref()), now()).map_err(denied)?;
+	Box::new(move |store, call, id, conn| {
+		let decision = grants.check(call.get("frame").and_then(|f| f.get("grant")), id, &by_alias(store, call), Some(conn.proof_key.as_deref()), now()).map_err(denied)?;
 		decision.check(now()).map_err(denied)?;
 		Ok(Rc::new(Bound { decision, policy: Rc::clone(&rules) }) as Rc<dyn Authorization>)
 	})
@@ -134,10 +134,24 @@ pub fn authorize(verifier: Rc<DelegationVerifier>, now: crate::gate::Now) -> phi
 		if frame.and_then(|f| f.get("delegation")).is_some() {
 			return verifier.check(store, call, id, conn, now());
 		}
-		let decision = verifier.o.grants.check(frame.and_then(|f| f.get("grant")), id, call, Some(conn.proof_key.as_deref()), now()).map_err(denied)?;
+		let decision = verifier.o.grants.check(frame.and_then(|f| f.get("grant")), id, &by_alias(store, call), Some(conn.proof_key.as_deref()), now()).map_err(denied)?;
 		decision.check(now()).map_err(denied)?;
 		Ok(Rc::new(Bound { decision, policy: Rc::clone(&verifier.o.rules) }) as Rc<dyn Authorization>)
 	})
+}
+
+/// Decision S-D2: a grant's scope names aliases, so a direct call by Space ID is checked against the alias, as a delegated
+/// call is (`aliasOf` in src/runtime.ts). A Space the registry does not know keeps its name and fails the scope as before.
+fn by_alias<'a>(store: &phi_store::Store, call: &'a Json) -> std::borrow::Cow<'a, Json> {
+	let Some(space) = call.get("space").and_then(Json::as_str) else { return std::borrow::Cow::Borrowed(call) };
+	match store.space_info(space).and_then(|i| i.get("alias")).and_then(Json::as_str) {
+		Some(alias) if alias != space => {
+			let mut scoped = call.clone();
+			if let Some(o) = scoped.as_object_mut() { o.insert("space".to_owned(), Json::from(alias)); }
+			std::borrow::Cow::Owned(scoped)
+		}
+		_ => std::borrow::Cow::Borrowed(call),
+	}
 }
 
 impl DelegationVerifier {

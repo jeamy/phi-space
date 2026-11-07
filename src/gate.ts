@@ -87,7 +87,8 @@ export class NetbirdDirectory implements PeerDirectory {
 
 /** Group name -> roles. A peer gets the union over its groups; no mapped group, no access. */
 export type GroupRoles = Record<string, readonly string[]>;
-export const DEFAULT_GROUP_ROLES: GroupRoles = { "space-hosts": ["member"], "space-admin": ["admin"], "space-observer": ["observer"], "space-enroll": ["unpaired"] };
+/** The deployment's groups (decision S-D4): a host peer is member, host and router by layer A; admin needs a proven key. */
+export const DEFAULT_GROUP_ROLES: GroupRoles = { "space-hosts": ["member", "host", "router"], "space-admin": ["admin"], "space-observer": ["observer"], "space-enroll": ["unpaired"] };
 export const rolesOf = (groups: readonly string[], map: GroupRoles): string[] => [...new Set(groups.flatMap((g) => map[g] ?? []))].sort();
 
 /**

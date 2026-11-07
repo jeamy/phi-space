@@ -85,7 +85,7 @@ test("a repeated commandId acts once; bad arguments and unknown kinds become fai
 	const g = await setup(tc);
 	const { admin } = await g.pairAdmin();
 	const token = newEnrollToken();
-	const c = g.command("createEnroll", { tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host" }, "same-id");
+	const c = g.command("createEnroll", { tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host", scope: ["*"] }, "same-id");
 	await admin.write({ type: c.type, fields: c.fields }, null, 60 * 60_000);
 	await admin.write({ type: c.type, fields: c.fields }, null, 60 * 60_000); // the admin's retry
 	assert.ok(await until(async () => g.gate.commandEvents.length >= 2));
@@ -95,14 +95,16 @@ test("a repeated commandId acts once; bad arguments and unknown kinds become fai
 	const wrongRole = g.command("createEnroll", { tokenHash: hashToken("x"), role: "admin", allowedPeerId: "p-host" });
 	const unknown = g.command("rebootEverything", {});
 	const noPeer = g.command("revokePeer", {});
-	for (const x of [bad, wrongRole, unknown, noPeer]) await admin.write({ type: x.type, fields: x.fields }, null, 60 * 60_000);
-	assert.ok(await until(async () => (await g.results()).length >= 5));
+	const noScope = g.command("createEnroll", { tokenHash: hashToken("y"), role: "host", allowedPeerId: "p-host" });
+	for (const x of [bad, wrongRole, unknown, noPeer, noScope]) await admin.write({ type: x.type, fields: x.fields }, null, 60 * 60_000);
+	assert.ok(await until(async () => (await g.results()).length >= 6));
 	const byId = (id: string) => g.results(id).then((r) => r[0]!);
 	assert.match((await byId(bad.commandId)).error, /SHA-256/);
 	assert.match((await byId(wrongRole.commandId)).error, /bootstrap/);
 	assert.match((await byId(unknown.commandId)).error, /unknown command/);
 	assert.match((await byId(noPeer.commandId)).error, /peerId/);
-	assert.equal((await g.results()).filter((r) => r.state === "failed").length, 4);
+	assert.match((await byId(noScope.commandId)).error, /scope names the Spaces/, "S-D3: no key without a scope");
+	assert.equal((await g.results()).filter((r) => r.state === "failed").length, 5);
 });
 
 test("only an admin who proved a key writes commands; the control space is closed for everyone else and for everything but Command", async (tc) => {
@@ -149,7 +151,7 @@ test("a command is processed in one commit: a fault before it leaves the command
 		const clock = new Clock();
 		const info = await h.commit((tx) => createSpace(tx, CONTROL_SPACE, clock.now()), ctx);
 		await h.commit(async (tx) => { const s = await spaceDoc(tx, info.spaceId, clock.now()); core.write(s, clock.now(), { type: "PeerKey", fields: { peerId: "p-admin", keyId: "k", principal: "x", algorithm: "ed25519", publicKey: "AA==", roles: ["admin"], state: "active" } }, null, FOREVER); }, ctx);
-		await new PhiSpaces(h, ctx, clock.now, undefined, "p-admin", { space: CONTROL_SPACE }).write({ type: "Command", fields: { commandId: "once", kind: "createEnroll", args: { tokenHash: hashToken("t"), role: "host", allowedPeerId: "p-host" } } }, null, FOREVER);
+		await new PhiSpaces(h, ctx, clock.now, undefined, "p-admin", { space: CONTROL_SPACE }).write({ type: "Command", fields: { commandId: "once", kind: "createEnroll", args: { tokenHash: hashToken("t"), role: "host", allowedPeerId: "p-host", scope: ["*"] } } }, null, FOREVER);
 		home.faults.arm("failBeforeCommit");
 		await assert.rejects(new Supervisor(h, ctx, { now: clock.now }).tick(), InjectedFault);
 		home.crash(h); // a failed commit poisons the session: reopen, as after a crash
