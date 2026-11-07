@@ -11,7 +11,9 @@ const step = process.argv[2]!;
 const state = JSON.parse(readFileSync("/fed/state.json", "utf8")) as Record<string, any>;
 const save = () => writeFileSync("/fed/state.json", JSON.stringify(state));
 const seen: Record<string, unknown> = {};
-const options = { attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 15_000, maxClientWaitMs: 500 };
+// the client gives up on a blocking call after 5 s (OutcomeUnknown): long enough that a call reaches the Member on a loaded machine,
+// so `waiting` leaves a request the Member holds rather than one that never arrived
+const options = { attempts: 1, sleep: () => Promise.resolve(), backoffMs: 1, callTimeoutMs: 15_000, maxClientWaitMs: 5_000 };
 const line = (host: string, port: number, from: string) => socketTransport({ host, port }, { localAddress: from });
 const controlKey = () => loadFileSigner("/fed/control-key.json");
 const toControl = () => new RemoteSpace(line(IP.control, PORT.control, IP.client), { ...options, space: "control", signer: loadFileSigner("/fed/user-key.json"), expectedGateHostId: "control-host", ownPeerId: "user" });
