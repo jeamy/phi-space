@@ -5,6 +5,7 @@ import { FOREVER, OutcomeUnknown, RemoteSpace, TlsRecoveryRegister, loadFileSign
 import { signMembership } from "../../../src/membership.ts";
 import { signRun } from "../../../src/run-member.ts";
 import { signLifecycle } from "../../../src/space-lifecycle.ts";
+import { verifyWorkers } from "../../../src/workers.ts";
 import { IP, PORT, POLICY } from "./net.ts";
 
 const step = process.argv[2]!;
@@ -47,6 +48,16 @@ async function agent() {
 		const r = JSON.parse(await t.request(JSON.stringify({ method, args: { agentId: "worker", ...args } }))) as { ok: boolean; result?: any; error?: { code: string } };
 		if (!r.ok) throw new Error(r.error!.code);
 		return r.result;
+	};
+}
+/** The adminPeer `boss` in the `admin` container: a command written into the control Space and the Result the Root writes back. */
+async function admin() {
+	const remote: RemoteSpace = new RemoteSpace(line(IP.control, PORT.control, IP.admin), { ...options, space: "control", signer: loadFileSigner("/fed/admin-key.json"), expectedGateHostId: "control-host", ownPeerId: "boss", grantProvider: () => remote.requestGrant() });
+	await remote.authenticate();
+	return async (commandId: string, kind: string, args: Record<string, unknown>) => {
+		await remote.write({ type: "Command", fields: { commandId, kind, args: args as never } }, null, 3_600_000);
+		for (let i = 0; i < 1200; i++) { const r = (await remote.readAll({ type: "Result", fields: { commandId } }))[0]?.fields as Record<string, any> | undefined; if (r) return r; await new Promise((r2) => setTimeout(r2, 50)); }
+		throw new Error(`no result for ${commandId}`);
 	};
 }
 const code = (f: () => Promise<unknown>) => f().then(() => "answered", (e: Error) => e.message);
@@ -135,6 +146,55 @@ const steps: Record<string, () => Promise<void>> = {
 		seen.fenced = await refused(bare);
 		await set("active");
 		seen.back = await until(bare);
+	},
+	// in the `router` container: run rx stopped on the Member before the Root ever starts it
+	async adminPrepare() { seen.rxStop = (await run(await router(), "rx-stop", "stop", 1, { runId: "rx" })).state; },
+	// the admin commands of the Root (own result, held against the other pairings apart from the scenario's)
+	async admin() {
+		const command = await until(admin, 60_000);
+		const done = async (id: string, kind: string, args: Record<string, unknown>) => { const r = await command(id, kind, args); if (r.state !== "completed") throw new Error(`${kind}: ${JSON.stringify(r)}`); return r.result as Record<string, any>; };
+		// a reason without the Space IDs each provisioning draws anew, so the pairings can be held against each other
+		const failed = async (id: string, kind: string, args: Record<string, unknown>) => { const r = await command(id, kind, args); if (r.state !== "failed") throw new Error(`${kind} did not fail: ${JSON.stringify(r)}`); return String(r.result?.error ?? r.error).replaceAll(state.jobs, "<jobs>").replace(/sp-[0-9a-f-]{36}/g, "<space>"); };
+		const tasks = (runId: string, ns: number[]) => ({ runId, kind: "tasks", config: { tasks: ns.map((n) => ({ type: "Gated", fields: { n } })) }, members: [state.jobs] });
+		// a Member that refuses: the router stopped run rx there first (step `adminPrepare`), so the Root's prepare meets a
+		// terminal gate of another command; the start fails with the Member's reason and the run loop leaves it
+		seen.refused = await failed("run-0", "startRun", tasks("rx", [0]));
+		seen.refusedPending = (await done("run-0-status", "runStatus", { runId: "rx" })).pending?.refused?.map((x: string) => x === state.jobs ? "<jobs>" : x);
+		// the stop goes to the Member too, which has its own stop of rx from another command: refused as well
+		seen.refusedStop = await failed("run-0-stop", "stopRun", { runId: "rx" });
+		// a run through its gates on the Member: prepare, release, pause, stop
+		seen.dry = await done("run-dry", "startRun", { ...tasks("ra", [10, 11]), dryRun: true });
+		seen.started = (await done("run-1", "startRun", tasks("ra", [10, 11]))).state;
+		seen.paused = (await done("run-2", "pauseRun", { runId: "ra" })).state;
+		seen.stopped = (await done("run-3", "stopRun", { runId: "ra" })).state;
+		seen.revision = (await done("run-4", "runStatus", { runId: "ra" })).revision;
+		seen.runs = (await done("run-5", "listRuns", {})).length;
+		seen.pauseStopped = await failed("run-6", "pauseRun", { runId: "ra" });
+		// worker assignments, pulled by their host in the step `workerPull`
+		const assigned = await done("w-1", "setWorkers", { assignmentId: "w1", hostId: "data-host", kind: "sieve", targetSpace: state.jobs, count: 2 });
+		seen.workers = [assigned.generation, assigned.count, (await done("w-2", "listWorkers", {})).assignments.length];
+		// a Space through its life on the Member, under its permits
+		seen.archive = (await done("s-1", "archiveSpace", { hostId: "data-host", spaceId: state.notes })).state;
+		seen.reactivate = (await done("s-2", "reactivateSpace", { hostId: "data-host", spaceId: state.notes })).state;
+		seen.unpermitted = await failed("s-3", "createSpace", { hostId: "data-host", alias: "unpermitted" });
+		seen.nowhere = await failed("s-4", "archiveSpace", { hostId: "nowhere", spaceId: state.notes });
+		// the deployment: an alias binding and a plan against the hosts' heartbeats
+		seen.bind = await done("d-1", "bindHostAlias", { alias: "data", hostId: "data-host" });
+		const plan = await done("d-2", "planDeployment", { config: { schemaVersion: 1, deployment: "demo", coordinator: "ctl", hosts: [{ alias: "ctl", role: "coordinator" }, { alias: "data", role: "member-host" }], spaces: [{ alias: "control", host: "ctl", purpose: "control" }, { alias: "more", host: "data", purpose: "data" }] } });
+		seen.plan = [plan.ready, plan.steps.map((x: any) => `${x.key}:${x.status}`)];
+		seen.exported = (await done("d-3", "exportDeployment", { deployment: "demo" })).hosts;
+		// data administration: a Space the control host does not carry
+		seen.purgeNowhere = await failed("p-1", "purgeTasks", { spaceId: "sp-nowhere", template: { type: "Task" } });
+		const audit = await done("audit-1", "auditLog", { limit: 50 }) as unknown as { kind: string; state: string; requestedBy: string }[];
+		seen.audit = [...new Set(audit.map((r) => `${r.kind}:${r.state}:${r.requestedBy}`))].sort();
+	},
+	// the Member host pulls its worker assignments under the control key (in the `member` container, from the Member's address)
+	async workerPull() {
+		const t = line(IP.control, PORT.control, IP.member);
+		const remote = new RemoteSpace(t, { ...options, space: "control", signer: loadFileSigner("/fed/member-key.json"), expectedGateHostId: "control-host", ownPeerId: "member-peer" });
+		await remote.authenticate();
+		const key = controlKey(), list = verifyWorkers(await remote.workerAssignments(), { issuer: "control-peer", algorithm: key.algorithm, publicKey: key.publicKey! });
+		seen.pulled = [list.hostId, list.generation, list.assignments.map((a) => a.assignmentId)];
 	},
 	async finish() {
 		const r = await router();

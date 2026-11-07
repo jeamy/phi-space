@@ -86,6 +86,11 @@ services:
     <<: *host
     command: ["sleep", "infinity"]
     networks: {fed: {ipv4_address: 172.30.7.8}}
+  # the peer `boss`, the control host's adminPeer: it writes the admin commands into the control Space
+  admin:
+    <<: *host
+    command: ["sleep", "infinity"]
+    networks: {fed: {ipv4_address: 172.30.7.15}}
 
 networks:
   fed:

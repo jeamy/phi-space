@@ -24,19 +24,19 @@ export async function provision(dir: string, phone?: { ip: string }) {
 	const write = (name: string, v: unknown) => writeFileSync(join(dir, name), JSON.stringify(v), { mode: 0o600 });
 	write("register-peers.json", { [print("control")]: {}, [print("member")]: {}, [print("operator")]: { operator: true } });
 	write("register.json", { host: IP.register, port: PORT.register, ...identity("server"), file: "/fed/external.sqlite", peersFile: "/fed/register-peers.json" });
-	const peers = [peer("control-peer", IP.control, ["space-hosts"]), peer("member-peer", IP.member, ["space-hosts"]), peer("user", IP.client, ["space-hosts"]), peer("router-peer", IP.router, ["space-hosts"])];
+	const peers = [peer("control-peer", IP.control, ["space-hosts"]), peer("member-peer", IP.member, ["space-hosts"]), peer("user", IP.client, ["space-hosts"]), peer("router-peer", IP.router, ["space-hosts"]), peer("boss", IP.admin, ["space-admin"])];
 	if (phone) peers.push(peer("phone", phone.ip, ["space-enroll"]));
 	write("peers.json", peers);
 	write("token", "local");
 	const key = (name: string) => provisionFileSigner(join(dir, `${name}.json`));
-	const controlKey = key("control-key"), memberKey = key("member-key"), userKey = key("user-key"), routerKey = key("router-key"), rootRouter = key("root-router"), rootHost = key("root-host");
+	const controlKey = key("control-key"), memberKey = key("member-key"), userKey = key("user-key"), routerKey = key("router-key"), rootRouter = key("root-router"), rootHost = key("root-host"), adminKey = key("admin-key");
 	const now = Date.now();
 	const control = await openSqliteHost(join(dir, "control.sqlite"));
 	const space = await control.commit((tx) => createSpace(tx, CONTROL_SPACE, now), ctx);
 	await control.commit(async (tx) => {
 		const s = await spaceDoc(tx, space.spaceId, now);
 		const put = (peerId: string, k: typeof memberKey, roles: string[]) => core.write(s, now, { type: "PeerKey", fields: { peerId, keyId: k.keyId, principal: peerId, algorithm: k.algorithm, publicKey: k.publicKey, roles, scope: ["*"], state: "active" } }, null, FOREVER);
-		put("member-peer", memberKey, ["host"]); put("user", userKey, ["member"]); put("router-peer", routerKey, ["host", "router", "member"]); put("control-peer", rootRouter, ["host", "router", "member"]); put("control-peer", rootHost, ["host", "member"]);
+		put("member-peer", memberKey, ["host"]); put("user", userKey, ["member"]); put("router-peer", routerKey, ["host", "router", "member"]); put("control-peer", rootRouter, ["host", "router", "member"]); put("control-peer", rootHost, ["host", "member"]); put("boss", adminKey, ["admin"]);
 	}, ctx);
 	await control.commit((tx) => spaceDoc(tx, undefined, now).then(() => {}), ctx);
 	let token: string | undefined;
@@ -65,7 +65,8 @@ export async function provision(dir: string, phone?: { ip: string }) {
 	await external.compareAndSet("boot:data-host", null, { hostId: "data-host", state: "active", spaces: memberSpaces } as never);
 	external.close();
 	const base = (name: string, host: string, port: number) => ({ authorityId: "authority", controlHostId: "control-host", controlSpaceId: space.spaceId, listen: { host, port }, keyFile: `/fed/${name}-key.json`, installedRegisterFile: `/fed/installed-${name}.sqlite`, registerTls: { ...identity(name), host: IP.register, port: PORT.register, batchReads: true }, management: { url: `http://${IP.management}:8080`, tokenFile: "/fed/token" }, control: { address: { host: IP.control, port: PORT.control }, algorithm: controlKey.algorithm, publicKey: controlKey.publicKey } });
-	const root = { id: "root", keyFile: "/fed/root-router.json", hostKeyFile: "/fed/root-host.json", leaseFile: "/fed/root-lease", journalPartitions: 1, members: { a: { target: jobsInfo, peerId: "member-peer", keyId: memberKey.keyId, algorithm: memberKey.algorithm, publicKey: memberKey.publicKey, address: { host: IP.member, port: PORT.member } } } };
+	// the admin commands of the Root, for the peer `boss` only (driver step `admin`)
+	const root = { id: "root", keyFile: "/fed/root-router.json", hostKeyFile: "/fed/root-host.json", leaseFile: "/fed/root-lease", journalPartitions: 1, adminPeer: { peerId: "boss", address: IP.admin }, commands: { runs: true, workers: true, spaces: true, deployment: true, dataAdmin: true }, members: { a: { target: jobsInfo, peerId: "member-peer", keyId: memberKey.keyId, algorithm: memberKey.algorithm, publicKey: memberKey.publicKey, address: { host: IP.member, port: PORT.member } } } };
 	write("control.config.json", { ...base("control", IP.control, PORT.control), root, hostId: "control-host", peerId: "control-peer", mode: "control", capabilities: { hostBindings: { "control-peer": "control-host", "member-peer": "data-host" } } });
 	write("member.config.json", { ...base("member", IP.member, PORT.member), hostId: "data-host", peerId: "member-peer", mode: "member", membership: { memberId: "a", spaceId: jobs.spaceId }, capabilities: { tools: ["sieve"], models: [], dataSpaces: [jobs.spaceId] }, runGates: true, spaceLifecycle: true });
 	write("state.json", { controlSpace: space.spaceId, jobs: jobs.spaceId, notes: notes.spaceId });

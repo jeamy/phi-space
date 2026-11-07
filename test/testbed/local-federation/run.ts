@@ -20,7 +20,7 @@ async function scenario(impl: string, control: string) {
 	const dir = mkdtempSync(join(tmpdir(), "phi-fed-"));
 	const env = { FED_DIR: dir, FED_UID: String(process.getuid!()), FED_GID: String(process.getgid!()), MEMBER_IMPL: impl, CONTROL_IMPL: control };
 	const compose = (...a: string[]) => sh("docker", ["compose", "-f", COMPOSE, ...a], env);
-	const seen: string[] = [];
+	const seen: string[] = [], admin: string[] = [];
 	const step = (name: string, service = "client") => { const out = compose("exec", "-T", service, "node", "--experimental-strip-types", "--no-warnings", "test/testbed/local-federation/driver.ts", name).trim().split("\n").at(-1)!; console.log(`  ${control}/${impl} ${out}`); seen.push(out); };
 	const cut = (service: string) => sh("docker", ["network", "disconnect", NET, `phi-federation-${service}-1`]);
 	const heal = (service: string) => sh("docker", ["network", "connect", "--ip", (IP as Record<string, string>)[service]!, NET, `phi-federation-${service}-1`]);
@@ -46,8 +46,12 @@ async function scenario(impl: string, control: string) {
 		step("grant"); cut("control"); step("broken"); heal("control"); step("healed");
 		step("grant"); cut("register"); step("broken"); heal("register"); step("healed");
 		step("fence");
+		// the admin commands of the Root; held against the other pairings on their own
+		const before = seen.length;
+		step("adminPrepare", "router"); step("admin", "admin"); step("workerPull", "member");
+		admin.push(...seen.splice(before));
 		step("finish", "router");
-		return seen;
+		return { seen, admin };
 	} catch (e) {
 		console.error((e as { stderr?: string }).stderr ?? e);
 		for (const s of ["member", "control"]) console.error(compose("logs", "--tail", "12", s));
@@ -130,5 +134,6 @@ if (which === "replica") {
 const runs = which === "both" ? [["ts", "ts"], ["ts", "rust"], ["rust", "ts"], ["rust", "rust"]] : [["ts", which]];
 const results = [];
 for (const [control, member] of runs) results.push(await scenario(member!, control!));
-for (const r of results.slice(1)) assert.deepEqual(r, results[0], "every pairing answers alike");
-if (results.length > 1) console.log("every pairing of control host and Member answered alike");
+for (const r of results.slice(1)) assert.deepEqual(r.seen, results[0]!.seen, "every pairing answers alike");
+for (const r of results.slice(1)) assert.deepEqual(r.admin, results[0]!.admin, "every pairing answers the admin commands alike");
+if (results.length > 1) console.log("every pairing of control host and Member answered alike, the admin commands too");
