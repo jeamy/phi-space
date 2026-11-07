@@ -163,6 +163,14 @@ class AppDetail extends HTMLElement {
 		} catch { this._page = null; }
 		defer(this);
 	}
+	/** A click (or Enter) on a live curve opens it large (ChartZoom); an app of every space has them too. */
+	bindZoom() {
+		this.querySelectorAll(".card.live[data-chart]").forEach((c) => {
+			const open = () => this.dispatchEvent(new CustomEvent("zoom-chart", { bubbles: true, detail: { app: this._app.id, chart: Number(c.dataset.chart) } }));
+			c.onclick = open;
+			c.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } };
+		});
+	}
 	render() {
 		const a = this._app;
 		if (!a) { this.innerHTML = ""; return; }
@@ -181,6 +189,7 @@ ${spacesSection(a.spaces)}
 ${charts(st, null)}
 <div class="empty">Einträge nicht freigegeben: dieser Dienst liefert nur Kennzahlen (Spaces, Anzahl je Typ, Speicher).</div>
 </div>`;
+			this.bindZoom();
 			return;
 		}
 		const rows = (p?.entries ?? []).map((x) => `<tr><td title="Entry-ID">${esc(x.id)}</td><td><span class="badge">${esc(x.type)}</span></td>${fieldsCell(x.fields)}</tr>`).join("");
@@ -197,11 +206,7 @@ ${charts(st, this._type)}
 ${table(["ID", "Typ", "Felder"], rows) || `<div class="empty">${p ? "keine Entries" : "lade…"}</div>`}
 </div>`;
 		this.querySelectorAll(".hbar[data-key]").forEach((b) => { b.onclick = () => { this._type = this._type === b.dataset.key ? null : b.dataset.key; this._cursors = [null]; this.load(); defer(this); }; });
-		this.querySelectorAll(".card.live[data-chart]").forEach((c) => {
-			const open = () => this.dispatchEvent(new CustomEvent("zoom-chart", { bubbles: true, detail: { app: this._app.id, chart: Number(c.dataset.chart) } }));
-			c.onclick = open;
-			c.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } };
-		});
+		this.bindZoom();
 		this.querySelector("[data-clear]")?.addEventListener("click", () => { this._type = null; this._cursors = [null]; this.load(); });
 		this.querySelector("button.first").onclick = () => { this._cursors = [null]; this.load(); };
 		this.querySelector("button.next").onclick = () => { if (p?.next != null) { this._cursors.push(p.next); this.load(); } };
