@@ -1,7 +1,7 @@
 // The statistics page (client/StatsPanel.tsx, GET /api/stats): the players and what the world holds, read from every
 // region and added up: the players, the settlers and the figures a model plays (each marked); scripted NPCs are left out. What others see of a player is what the game
 // shows anyway: the figure's name (never the login name), where it stands (a passenger of the large ship only as
-// "aboard", not where it goes), since when it plays, its reputation and how often it travelled.
+// "aboard", not where it goes), since when it plays, its reputation, how often it travelled, what it owns and carries.
 import type { SpaceLike } from "phi-spaces";
 import { fieldsOf, type AccountFields, type BedFields, type BuildingFields, type CharacterFields, type ContributionFields, type FieldFields, type ParkCareFields, type SessionFields } from "./model.ts";
 import type { RegionSpaces } from "./region-spaces.ts";
@@ -17,7 +17,8 @@ export type PlayerStat = {
 	at: { room: string; roomName: string; island: string | null; x: number; y: number } | { aboard: true } | null;
 	reputation: { pieces: number; beacons: number; parks: number };
 	trips: Trips;
-	owns: { buildings: number; beds: number; fields: number; plans: Array<{ plan: string; name: string; count: number }> };
+	owns: { buildings: number; beds: number; fields: number; plans: Array<{ plan: string; name: string; count: number }>;
+		/** what the figure carries: each kind with how many, the most first */ carries: Array<{ name: string; count: number }> };
 };
 export type WorldStats = {
 	at: number;
@@ -48,10 +49,12 @@ const TYPES = ["Account", "Character", "Session", "Contribution", "ParkCare", "T
 export async function collectStats(regions: RegionSpaces, w: WorldDef): Promise<WorldStats> {
 	const read: Record<(typeof TYPES)[number], Array<Record<string, unknown>>> = Object.fromEntries(TYPES.map((t) => [t, []])) as never;
 	const missing: string[] = [];
+	const spaceOf = new Map<string, SpaceLike>(); // charId -> the region it stands in
 	await Promise.all(regions.entries().map(async ([region, space]) => {
 		try {
 			const got = await Promise.all(TYPES.map((t) => all(space, t)));
 			TYPES.forEach((t, i) => read[t].push(...got[i]!));
+			for (const c of got[TYPES.indexOf("Character")]!) spaceOf.set(String(c.charId), space);
 		} catch { missing.push(region); }
 	}));
 	// one account and one figure per id (a crossing may show one twice for a moment)
@@ -92,6 +95,15 @@ export async function collectStats(regions: RegionSpaces, w: WorldDef): Promise<
 		m.set(b.plan, (m.get(b.plan) ?? 0) + 1); ownPlans.set(b.accountId, m);
 	}
 	const planName = (key: string) => w.building?.plans.find((p) => p.key === key)?.name ?? key;
+	// the pack of each figure listed, read where it stands (by its location, not every thing of the world)
+	const packs = new Map<string, Array<{ name: string; count: number }>>();
+	await Promise.all([...chars.keys()].map(async (charId) => {
+		const space = spaceOf.get(charId);
+		if (!space) return;
+		const n = new Map<string, number>();
+		try { for (const e of await space.readAll({ type: "Item", fields: { location: charId } })) { const name = String(e.fields.name); n.set(name, (n.get(name) ?? 0) + 1); } } catch { return; }
+		packs.set(charId, [...n].map(([name, count]) => ({ name, count })).sort((x, y) => y.count - x.count || x.name.localeCompare(y.name, "de")));
+	}));
 	const list: PlayerStat[] = [...chars.values()].map((c) => {
 		const a = accounts.get(c.accountId)!, room = rooms.get(c.room), p = pieces.get(c.charId);
 		return {
@@ -103,6 +115,7 @@ export async function collectStats(regions: RegionSpaces, w: WorldDef): Promise<
 			owns: {
 				buildings: ownB.get(c.accountId) ?? 0, beds: ownBeds.get(c.accountId) ?? 0, fields: ownF.get(c.accountId) ?? 0,
 				plans: [...(ownPlans.get(c.accountId) ?? [])].map(([plan, count]) => ({ plan, name: planName(plan), count })).sort((x, y) => y.count - x.count),
+				carries: packs.get(c.charId) ?? [],
 			},
 		};
 	}).sort((x, y) => KIND_ORDER[x.kind] - KIND_ORDER[y.kind] || Number(y.online) - Number(x.online) || Number(x.guest) - Number(y.guest) || x.name.localeCompare(y.name, "de"));

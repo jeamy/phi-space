@@ -300,7 +300,9 @@ function NameMenu({ at, name, groups, talk, invite, ignore, close, sheet = false
 
 /** Trade as buttons: offers to and from the player, a form for a new offer, the order board and the market board when
  *  standing at them. Every button sends the text command the help names. */
-function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, send }: { /** the thing a tap in the pack brought here */ item: { name: string } | null; trade: TradeView; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; guest: boolean; offerTo: string | null; setOfferTo: (n: string | null) => void; send: (line: string) => void }) {
+function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, send }: { /** the thing a tap in the pack brought here */ item: { name: string } | null; trade: TradeView; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; guest: boolean; offerTo: string | null; setOfferTo: (n: string | null) => void; send: (line: string, echo?: boolean, opensLog?: boolean) => void }) {
+	// the market board's own lines keep the market in front: its lists change in place, the answer shows as the notice and in the log
+	const board = (line: string) => send(line, true, false);
 	const carried = [...objs.values()].filter((o) => o.kind === "item" && o.location === me);
 	const others = [...chars.values()].filter((c) => c.charId !== me);
 	const [give, setGive] = useState("");
@@ -360,10 +362,10 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 				<li key={o.nr}><span>{o.text} ({o.reward} {o.reward === 1 ? "Münze" : "Münzen"})</span>{!guest && !trade.myOrder && <button onClick={() => send(`auftrag nimm ${o.nr}`)}>Nehmen</button>}</li>
 			))}</ul> : <p className="muted">Gerade keine Aufträge.</p>}</>}
 			{trade.listings && <><h3>Marktbrett</h3>{trade.listings.length ? <ul>{trade.listings.map((l) => (
-				<li key={l.nr}><span>{l.count > 1 ? `${l.count}× ` : ""}{l.itemName} – {l.price} {l.price === 1 ? "Münze" : "Münzen"} ({l.mine ? "deins" : l.sellerName})</span>{!guest && (l.mine ? <button onClick={() => send(`markt zurück ${l.nr}`)}>Zurückholen</button> : <button onClick={() => send(`markt kaufe ${l.nr}`)}>Kaufen</button>)}</li>
+				<li key={l.nr}><span>{l.count > 1 ? `${l.count}× ` : ""}{l.itemName} – {l.price} {l.price === 1 ? "Münze" : "Münzen"} ({l.mine ? "deins" : l.sellerName})</span>{!guest && (l.mine ? <button onClick={() => board(`markt zurück ${l.nr}`)}>Zurückholen</button> : <button onClick={() => board(`markt kaufe ${l.nr}`)}>Kaufen</button>)}</li>
 			))}</ul> : <p className="muted">Das Brett ist leer.</p>}
 			{!guest && carried.length > 0 && (
-				<form className="row" onSubmit={(e) => { e.preventDefault(); if (sell) send(`markt biete ${Math.max(1, Number(many) || 1)} ${sell} für ${price}`); setSell(""); setMany("1"); }}>
+				<form className="row" onSubmit={(e) => { e.preventDefault(); if (sell) board(`markt biete ${Math.max(1, Number(many) || 1)} ${sell} für ${price}`); setSell(""); setMany("1"); }}>
 					<input type="number" min={1} max={Math.max(1, carried.filter((o) => o.name === sell).length)} value={many} onChange={(e) => setMany(e.target.value)} aria-label="Wie viele" title="Wie viele (der Preis gilt für alle zusammen)" style={{ width: 56 }} />
 					<select value={sell} onChange={(e) => { setSell(e.target.value); setMany("1"); }} aria-label="Was verkaufen"><option value="">verkaufen …</option>{[...new Set(carried.map((o) => o.name))].filter((n) => n !== "Münze").map((n) => <option key={n} value={n}>{n}</option>)}</select>
 					<input type="number" min={1} max={1000} value={price} onChange={(e) => setPrice(e.target.value)} aria-label="Preis in Münzen" title="Preis in Münzen, für alle zusammen" style={{ width: 70 }} />
@@ -372,10 +374,10 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 			)}</>}
 			{trade.wanted && <><h3>Gesuche</h3>{trade.wanted.length ? <ul>{trade.wanted.map((w) => {
 				const have = carried.filter((o) => o.name === w.protoName).length >= w.count;
-				return <li key={w.nr}><span>{w.mine ? "Du suchst" : `${w.buyerName} sucht`} {w.count > 1 ? `${w.count}× ` : ""}{w.protoName} – {w.price} {w.price === 1 ? "Münze" : "Münzen"}</span>{!guest && (w.mine ? <button onClick={() => send(`markt suche zurück ${w.nr}`)}>Zurücknehmen</button> : <button disabled={!have} title={have ? "" : `Du trägst nicht genug ${w.protoName}`} onClick={() => send(`markt liefere ${w.nr}`)}>Liefern</button>)}</li>;
+				return <li key={w.nr}><span>{w.mine ? "Du suchst" : `${w.buyerName} sucht`} {w.count > 1 ? `${w.count}× ` : ""}{w.protoName} – {w.price} {w.price === 1 ? "Münze" : "Münzen"}</span>{!guest && (w.mine ? <button onClick={() => board(`markt suche zurück ${w.nr}`)}>Zurücknehmen</button> : <button disabled={!have} title={have ? "" : `Du trägst nicht genug ${w.protoName}`} onClick={() => board(`markt liefere ${w.nr}`)}>Liefern</button>)}</li>;
 			})}</ul> : <p className="muted">Niemand sucht gerade etwas.</p>}
 			{!guest && (
-				<form className="row" onSubmit={(e) => { e.preventDefault(); if (seek.trim()) send(`markt suche ${seek.trim()} für ${bid}`); setSeek(""); }}>
+				<form className="row" onSubmit={(e) => { e.preventDefault(); if (seek.trim()) board(`markt suche ${seek.trim()} für ${bid}`); setSeek(""); }}>
 					<input value={seek} onChange={(e) => setSeek(e.target.value)} placeholder="suchen, z. B. Ziege" aria-label="Was suchen" />
 					<input type="number" min={1} max={1000} value={bid} onChange={(e) => setBid(e.target.value)} aria-label="Gebot in Münzen" style={{ width: 70 }} />
 					<button disabled={!seek.trim()}>Suchen</button>
@@ -1212,6 +1214,8 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 								{([["mine", "Bei dir"], ["here", "Hier"], ["market", "Markt"], ["orders", "Aushang"]] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={bagPart === k} onClick={() => setBagPart(k)}>{l}{k === "here" && hereBar.length ? <span className="chat-count">{hereBar.length}</span> : k === "market" && trade?.offersIn.length ? <span className="chat-count">{trade.offersIn.length}</span> : k === "orders" && ordersHere ? <span className="chat-count">{ordersHere}</span> : null}</button>)}
 							</div>
 							<div className="sheet-scroll">{bagPart === "mine" ? mineView : bagPart === "here" ? cloneElement(mineView, { part: "here" }) : bagPart === "market" ? marketView : <SiteOrders objs={objs} self={self} room={hello?.room.roomId ?? ""} me={me} send={send} walk={walkTo} />}</div>
+							{/* the market board's answer stays under its lists, the market in front */}
+							{bagPart === "market" && lastMine && <button className="last-line" onClick={() => { setLogPart("mine"); openPane("log"); }}>{lastMine.text}</button>}
 							{bagPart === "mine" && <>
 								{/* the answers go to the log: the last one shows here, a tap opens the rest */}
 								{lastMine && <button className="last-line" onClick={() => { setLogPart("mine"); openPane("log"); }}>{lastMine.text}</button>}

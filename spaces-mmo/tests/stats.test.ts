@@ -44,6 +44,9 @@ test("statistics: players by their shown name, a counted beam, positions and the
 		await eventually(async () => (await s.readIfExists({ type: "Travel", fields: { charId: me } }, 1_000)) ?? null, 10_000, "the counted beam");
 		// a second entry of the same figure (as another region would hold) adds to it
 		await s.write({ type: "Travel", fields: { charId: me, train: 2, ship: 1 } as never }, null, FOREVER);
+		// what the figure carries, by kind and count
+		await give(s, me, "muschel", 3);
+		await give(s, me, "treibholz", 1);
 
 		const r = await eventually(async () => { const x = await stats(srv.url, p.cookie); return x.body.trips?.beam === 1 ? x : null; }, 40_000, "the statistics with the beam");
 		const body = r.body;
@@ -62,6 +65,11 @@ test("statistics: players by their shown name, a counted beam, positions and the
 		assert.equal(mine.guest, false);
 		assert.ok(Math.abs(mine.since - Date.now()) < 5 * 60_000, "registered just now");
 		assert.deepEqual(mine.trips, { beam: 1, ship: 1, sail: 0, row: 0, train: 2 });
+		const shells = mine.owns.carries.find((i) => i.name === "Muschel"), wood = mine.owns.carries.find((i) => i.name === "Treibholz");
+		assert.equal(shells?.count, 3, JSON.stringify(mine.owns.carries));
+		assert.equal(wood?.count, 1);
+		assert.ok(mine.owns.carries.indexOf(shells!) < mine.owns.carries.indexOf(wood!), "the most first");
+		assert.deepEqual(body.list.find((x) => x.charId === guest)?.owns.carries.filter((i) => i.name === "Muschel"), [], "only its own pack");
 		assert.ok(mine.at && "room" in mine.at && mine.at.room === "anleger", JSON.stringify(mine.at));
 		assert.equal(body.list.find((x) => x.charId === guest)?.guest, true);
 		assert.deepEqual([body.players.registered, body.players.guests], [1, 1]);
