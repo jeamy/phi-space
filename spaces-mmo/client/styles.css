@@ -564,3 +564,9 @@ button.cmd-word { cursor: pointer; display: inline; min-height: 0; }
 @keyframes travel-turn { to { transform: rotate(360deg); } }
 @keyframes travel-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .travel-spin { animation: none; } .travel-note { animation: none; } }
+
+/* the events' tabs „Tipps“ and „Aufgaben“ (App.tsx): a list instead of the log; the tasks to do now marked */
+.task-list p { margin: 0 0 6px; }
+.task { padding: 4px 8px; border-left: 3px solid var(--line-strong); }
+.task.rank-0 { border-left-color: var(--warning); color: var(--text-strong); }
+.task.rank-2 { color: var(--muted); }

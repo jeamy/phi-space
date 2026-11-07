@@ -86,6 +86,11 @@ test("the world map shows a player what is theirs, wherever it stands, and nobod
 		assert.deepEqual(f.state.mine, [{ id: "b-karte", kind: "building", name: "Hütte", room: "duenen", x: 3, y: 3 }]);
 		const other = await b.until((x: ServerFrame) => x.t === "atlasState", 10_000) as Extract<ServerFrame, { t: "atlasState" }>;
 		assert.deepEqual(other.state.mine, []);
+		// its tasks come the same way: grain ground at a mill waits for it, and only for it
+		await s.write({ type: "MillLoad", fields: { loadId: "l-karte", buildId: "m-x", room: "duenen", x: 6, y: 6, w: 2, h: 2, charId: me, name: "Eignerin", from: "weizen", to: "mehl", count: 4, readyWorldMs: 0, untilWorldMs: Number.MAX_SAFE_INTEGER } as never }, null, FOREVER);
+		const t = await a.until((x: ServerFrame) => x.t === "atlasState" && x.state.todos.length > 0, 10_000) as Extract<ServerFrame, { t: "atlasState" }>;
+		assert.match(t.state.todos[0]!.text, /^4 Mehl wartet an der Windmühle in .+ \(6 6\): abholen/);
+		assert.deepEqual((await b.until((x: ServerFrame) => x.t === "atlasState", 10_000) as Extract<ServerFrame, { t: "atlasState" }>).state.todos, []);
 		await a.leave(); await b.leave();
 	} finally { await srv.close(); }
 });

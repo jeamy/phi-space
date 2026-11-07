@@ -215,6 +215,21 @@ pen, milk goes on into cheese). Each new hint shows once as a "Tipp:" line of th
 the browser), a tapped thing in the pack shows its own, "⋯ → Tipps" turns them off. They are computed in the page and
 cost the space nothing.
 
+
+### Tasks
+
+The events' tab "Aufgaben" lists what the player's own things want of it now (`server/todos.ts`). The gateway works
+them out from what it follows anyway, so they cost the space nothing, and sends them with the overview's state
+(`AtlasState.todos`). It works them out again with every change and every 30 s, since time alone makes a bed dry or
+grinds the flour. Each task names its place and cell and is ranked:
+
+- *Now* (counted on the tab): a ripe or overripe field, ripe plants in a bed, a bed that has gone dry, hungry animals or
+  what they have given (eggs, milk, wool), flour waiting at the mill.
+- *Soon*: a bed that will need water soon, weeds, a site with what it still lacks.
+- *When there is time*: a fallow field, wilted plants, an empty bed, grain still being ground (with how long it takes).
+
+A house counts at least one animal for what is ready, so a task may say too little but never too much. The tab "Tipps"
+lists all the hints of the section above.
 ### Boats and fishing
 
 - Fishing is done at the **jetty** (`wirf netz`): the net (recipe above) brings fish in world-time beats, rarely a find —

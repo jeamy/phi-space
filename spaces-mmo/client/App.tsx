@@ -59,6 +59,8 @@ const fuelIn = (objs: Map<string, ObjView>, me: string) => {
 	const mine = [...objs.values()].filter((o) => o.kind === "item" && o.location === me);
 	return fuels.map((n) => mine.find((o) => o.name === n)).find(Boolean);
 };
+/** The tabs of the events: for the own figure, around it, the hints, the tasks of its own things. */
+type LogPart = "mine" | "all" | "tips" | "todo";
 type Line = MsgView | { kind: "echo" | "hint"; text: string; from: string; at: number };
 
 /** The build this page was loaded with (from the first /api/me); a hello from another build means a newer version. */
@@ -562,7 +564,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const setComings = (on: boolean) => { setComingsState(on); try { localStorage.setItem("mmo.comings", on ? "1" : "0"); } catch { /* private window */ } };
 	// the events in two parts: what is for the own figure (its answers, whispers, offers, hints) and what happens around it;
 	// `seen`: the last line of each part when it was last in front (or at the start), for the count of new lines on the other
-	const [logPart, setLogPartState] = useState<"mine" | "all">(() => { try { return localStorage.getItem("mmo.logPart") === "all" ? "all" : "mine"; } catch { return "mine"; } });
+	const [logPart, setLogPartState] = useState<LogPart>(() => { try { const v = localStorage.getItem("mmo.logPart"); return v === "all" || v === "tips" || v === "todo" ? v : "mine"; } catch { return "mine"; } });
 	const [seenLine, setSeenLine] = useState<{ mine?: Line | null; all?: Line | null }>({});
 	// on the way to another place (travel.ts): what the page says when the new place takes longer than a second
 	const [travelNote, setTravelNote] = useState<string | null>(null);
@@ -573,7 +575,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		travel.current.timer = setTimeout(() => setTravelNote(text), TRAVEL_NOTE_MS);
 		travel.current.giveUp = setTimeout(endTravel, TRAVEL_GIVE_UP_MS);
 	}, [endTravel]);
-	const setLogPart = useCallback((k: "mine" | "all") => { setLogPartState(k); try { localStorage.setItem("mmo.logPart", k); } catch { /* private window */ } }, []);
+	const setLogPart = useCallback((k: LogPart) => { setLogPartState(k); try { localStorage.setItem("mmo.logPart", k); } catch { /* private window */ } }, []);
 	const [mapMode, setMapModeState] = useState<MapMode>(() => readMapMode());
 	const previousStart = useRef(startView);
 	useEffect(() => { if (previousStart.current !== startView) { previousStart.current = startView; setMapModeState("3d"); } }, [startView]);
@@ -1042,11 +1044,15 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 			const n = { ...s };
 			if (s.mine === undefined) n.mine = lastOf.mine;
 			if (s.all === undefined) n.all = lastOf.all;
-			if (logShown) n[logPart] = lastOf[logPart];
+			if (logShown && (logPart === "mine" || logPart === "all")) n[logPart] = lastOf[logPart];
 			return n.mine === s.mine && n.all === s.all ? s : n;
 		});
 	});
-	const newIn = (k: "mine" | "all") => {
+	const todos = atlasState?.todos ?? [];
+	const newIn = (k: LogPart) => {
+		// the tasks show how many want doing now; the hints none
+		if (k === "todo") return todos.filter((t) => t.rank === 0).length;
+		if (k === "tips") return 0;
 		if (k === logPart && logShown) return 0;
 		const list = k === "mine" ? mineLog : aroundLog, at = seenLine[k] ? list.lastIndexOf(seenLine[k]!) : -1;
 		return at >= 0 ? list.length - 1 - at : seenLine[k] === undefined ? 0 : list.length;
@@ -1113,7 +1119,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const logFilter = <label className="log-filter"><input type="checkbox" checked={comings} onChange={(e) => setComings(e.target.checked)} /> Kommen und Gehen</label>;
 	const logParts = (
 		<div className="bag-parts" role="tablist" aria-label="Ereignisse">
-			{([["mine", "An dich"], ["all", "Allgemein"]] as const).map(([k, l]) => { const n = newIn(k); return <button key={k} role="tab" aria-selected={logPart === k} onClick={() => { setLogPart(k); atEnd.current = true; setBehind(false); }}>{l}{n ? <span className="chat-count">{n > 99 ? "99+" : n}</span> : null}</button>; })}
+			{([["mine", "An dich"], ["all", "Allgemein"], ["tips", "Tipps"], ["todo", "Aufgaben"]] as const).map(([k, l]) => { const n = newIn(k); return <button key={k} role="tab" aria-selected={logPart === k} onClick={() => { setLogPart(k); atEnd.current = true; setBehind(false); }}>{l}{n ? <span className="chat-count">{n > 99 ? "99+" : n}</span> : null}</button>; })}
 		</div>
 	);
 	const logView = (
@@ -1198,8 +1204,12 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 						<>
 							{logParts}
 							{logPart === "all" && logFilter}
-							{logView}
-							{behind && <button className="log-new" onClick={toLogEnd}>Neue Meldungen</button>}
+							{logPart === "tips" ? (
+								<div className="log task-list">{hints.length ? hints.map((h) => <p key={h.id} className="pack-hint">{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>) : <p className="muted">Gerade kein Tipp: sammle etwas, dann steht hier, was daraus werden kann.</p>}</div>
+							) : logPart === "todo" ? (
+								<div className="log task-list">{todos.length ? todos.map((t) => <p key={t.id} className={`task rank-${t.rank}`}>{t.text}</p>) : <p className="muted">Nichts zu tun: deine Äcker, Beete, Baustellen und Tiere warten auf nichts.</p>}</div>
+							) : logView}
+							{behind && logPart !== "tips" && logPart !== "todo" && <button className="log-new" onClick={toLogEnd}>Neue Meldungen</button>}
 							<div className="quick">{["look", "who", "inventory", "time", "reputation"].map((c) => <button key={c} onClick={() => send(c)}>{c}</button>)}</div>
 						</>
 					) : (

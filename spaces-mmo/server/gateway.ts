@@ -13,7 +13,8 @@ import { sceneryText, type CropDef, type SortDef, type WorldDef } from "./engine
 import { whereTo } from "./engine/context.ts";
 import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
 import { baysOf, linerOf, type Timetable } from "./engine/liner.ts";
-import { asFields, type EpochFields, type SeedRestFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type CartFields, type WindFields, type WorldClockFields, type ZoneFields } from "./model.ts";
+import { todosFor, type Todo } from "./todos.ts";
+import { asFields, type HerdFields, type MillLoadFields, type EpochFields, type SeedRestFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type CartFields, type WindFields, type WorldClockFields, type ZoneFields } from "./model.ts";
 import { bedPlantsView } from "./engine/commands/garden.ts";
 import { fieldView } from "./engine/commands/field.ts";
 import { wildKinds } from "./engine/commands/wild.ts";
@@ -77,7 +78,7 @@ export type AtlasView = { rooms: Array<{ roomId: string; name: string; island: s
  *  people and NPCs are online in each room. */
 /** What a player owns, for the marks on the overview. */
 export type AtlasOwned = { id: string; kind: "site" | "building" | "bed" | "field" | "ruin"; name: string; room: string; x: number; y: number };
-export type AtlasState = { here: string; fog: Record<string, number>; lit: string[]; people: Record<string, [number, number]>; mine: AtlasOwned[]; /** The epoch of each island that has left the first (the header shows the one the player stands on); null in a world without epochs. */ epochs: Record<string, number> | null; /** Coins per field of distance for beaming (the admin's setting), for the price on the map. */ beamCost: number; /** Where a boat, a train and a cart can go in this region: the rooms with a jetty or a station (and the fare), the rooms a road joins. */ stops: { jetties: string[]; stations: string[]; trainFare: number; roads: Array<[string, string]> } };
+export type AtlasState = { /** What the player's own things want of it now (server/todos.ts). */ todos: Todo[]; here: string; fog: Record<string, number>; lit: string[]; people: Record<string, [number, number]>; mine: AtlasOwned[]; /** The epoch of each island that has left the first (the header shows the one the player stands on); null in a world without epochs. */ epochs: Record<string, number> | null; /** Coins per field of distance for beaming (the admin's setting), for the price on the map. */ beamCost: number; /** Where a boat, a train and a cart can go in this region: the rooms with a jetty or a station (and the fare), the rooms a road joins. */ stops: { jetties: string[]; stations: string[]; trainFare: number; roads: Array<[string, string]> } };
 export type TradeView = {
 	offersIn: Array<Pick<OfferFields, "offerId" | "fromName" | "giveNames" | "want">>;
 	offersOut: Array<Pick<OfferFields, "offerId" | "toName" | "giveNames" | "want">>;
@@ -191,6 +192,8 @@ export class Gateway {
 	readonly #seedRests = new Map<string, SeedRestFields>(); // entry id -> the rest of a figure after a search for seeds
 	readonly #epochs = new Map<string, EpochFields>(); // entry id -> the epoch of an island
 	readonly #siteOrders = new Map<string, SiteOrderFields>(); // entry id -> what a site hung out
+	readonly #millLoads = new Map<string, MillLoadFields>(); // entry id -> grain at a mill (the players' tasks, todos.ts)
+	readonly #herds = new Map<string, HerdFields>(); // building id -> its herd (the players' tasks)
 	// the revision of each region's stream the state above reflects; entries are kept by "region:id" (two spaces may
 	// number their entries alike), and each character by the region whose stream showed it last
 	readonly #applied = new Map<string, number>();
@@ -220,7 +223,8 @@ export class Gateway {
 		this.#ready = Promise.all(follows.map((f) => f.p)).then(() => {});
 		this.#watch = Promise.all(follows.map((f) => f.run)).then(() => {});
 		// a regular reminder, so a browser that was hidden or lost frames shows the same hour again
-		this.#clockTimer = setInterval(() => this.#broadcastTime(), 30_000);
+		// the time moves the tasks on (a bed grows dry, flour gets ground) without any entry changing: the overview's state then too
+		this.#clockTimer = setInterval(() => { this.#broadcastTime(); this.#atlasChanged(); }, 30_000);
 		this.#clockTimer.unref?.();
 		this.#chat = chatSpace ? new Chat(chatSpace, {
 			person: (name) => {
@@ -435,7 +439,7 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Wind", "Cart"]) await this.#readPaged(region, space, { type }, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Wind", "Cart", "MillLoad"]) await this.#readPaged(region, space, { type }, msgs);
 					await this.#readPaged(region, space, { type: "Msg", fields: { to: "*" } }, msgs); // #put keeps the last RECENT of each room
 					this.#advance(region, rev);
 					ready();
@@ -492,16 +496,17 @@ export class Gateway {
 	#reset(region: string): void {
 		if (this.#regions.size === 1) {
 			this.#clock = null;
-			for (const m of [this.#chars, this.#charOf, this.#charEntry, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#objEntry, this.#recent, this.#flames, this.#flameOf, this.#fog, this.#offers, this.#orders, this.#listings, this.#seedRests, this.#epochs]) m.clear();
+			for (const m of [this.#chars, this.#charOf, this.#charEntry, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#objEntry, this.#recent, this.#flames, this.#flameOf, this.#fog, this.#offers, this.#orders, this.#listings, this.#seedRests, this.#epochs, this.#millLoads, this.#herds]) m.clear();
 			return;
 		}
 		const mine = (id: string) => id.startsWith(`${region}:`);
-		for (const m of [this.#charOf, this.#objOf, this.#sessions, this.#flameOf, this.#offers, this.#orders, this.#listings, this.#seedRests, this.#epochs, this.#siteOrders] as Array<Map<string, unknown>>) for (const id of [...m.keys()]) if (mine(id)) this.#del(id);
+		for (const m of [this.#charOf, this.#objOf, this.#sessions, this.#flameOf, this.#offers, this.#orders, this.#listings, this.#seedRests, this.#epochs, this.#siteOrders, this.#millLoads] as Array<Map<string, unknown>>) for (const id of [...m.keys()]) if (mine(id)) this.#del(id);
 	}
 
 	/** Applies a put; a message is collected in `msgs` to be sent after the batch. */
 	#put(id: string, type: string, types: string[], fields: Record<string, unknown>, msgs: MsgFields[]): void {
 		if (type === "WorldClock") this.#clock = fields as unknown as WorldClockFields;
+		if (type === "MillLoad") { this.#millLoads.set(id, fields as unknown as MillLoadFields); this.#atlasChanged(); return; }
 		else if (type === "Room") {
 			const r = fields as unknown as RoomFields, was = this.#rooms.get(r.roomId);
 			this.#rooms.set(r.roomId, r);
@@ -571,6 +576,7 @@ export class Gateway {
 			const total = site ? b.needs.reduce((a, n) => a + n.count, 0) + b.workNeed : 0, have = site ? b.needs.reduce((a, n) => a + Math.min(n.have, n.count), 0) + b.work : 0;
 			const missing = site ? [...b.needs.filter((n) => n.have < n.count).map((n) => `${n.count - n.have} ${n.name}`), ...(b.work < b.workNeed ? [`${b.workNeed - b.work} Arbeit`] : [])].join(", ") : undefined;
 			const color = this.w.building?.plans.find((p) => p.key === b.plan)?.color;
+			if (!site && b.herd) this.#herds.set(b.buildId, b.herd); else this.#herds.delete(b.buildId);
 			this.#setObj(id, { id: b.buildId, kind: site ? "site" : "building", name: b.name, location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: this.#shownName(b.owner, b.ownerName), ownerId: b.owner, plan: b.plan, ...(site ? { orders: this.#ordersOf(b.buildId) } : {}), ...(site ? { progress: total ? have / total : 0, missing } : {}), ...(color ? { color } : {}), ...(!site && b.herd ? { herd: b.herd.kind } : {}), ...(!site && b.keeper ? { keeper: b.keeper.kind } : {}), ...(!site && b.fenced ? { fenced: true } : {}) });
 		}
 		else if (type === "Flame") { const f = fields as unknown as FlameFields; this.#flames.set(f.beaconId, f.until); this.#flameOf.set(id, f.beaconId); }
@@ -618,6 +624,7 @@ export class Gateway {
 	}
 
 	#del(id: string): void {
+		if (this.#millLoads.delete(id)) { this.#atlasChanged(); return; }
 		const order = this.#siteOrders.get(id);
 		if (order) { this.#siteOrders.delete(id); this.#showOrders(order.buildId); return; }
 		if (this.#offers.delete(id) || this.#orders.delete(id) || this.#listings.delete(id) || this.#seedRests.delete(id)) return;
@@ -703,7 +710,8 @@ export class Gateway {
 		const lit = this.w.beacons.filter((b) => this.#burns(this.#flames.get(b.beaconId) ?? 0)).map((b) => b.room);
 		void setting(this.space, "beam.cost").then((n) => { this.#beamCost = n; }, () => {}); // the next state carries it
 		void setting(this.space, "epoch.force").then((n) => { this.#epochForce = n; }, () => {});
-		return { here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people, mine: owned.get(c.me.charId) ?? [], epochs: !this.w.epochs ? null : this.#epochForce > 0 ? Object.fromEntries([...new Set(this.w.rooms.map((r) => r.island ?? ""))].map((i) => [i, this.#epochForce])) : Object.fromEntries([...this.#epochs.values()].map((e) => [e.island, e.epoch])), beamCost: this.#beamCost, stops: this.#stops() };
+		const todos = todosFor(c.me.charId, this.#objs.values(), this.#herds, this.#millLoads.values(), this.w, this.#clock ? worldNow(this.#clock, Date.now()) : null);
+		return { todos, here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people, mine: owned.get(c.me.charId) ?? [], epochs: !this.w.epochs ? null : this.#epochForce > 0 ? Object.fromEntries([...new Set(this.w.rooms.map((r) => r.island ?? ""))].map((i) => [i, this.#epochForce])) : Object.fromEntries([...this.#epochs.values()].map((e) => [e.island, e.epoch])), beamCost: this.#beamCost, stops: this.#stops() };
 	}
 
 	/** Something on the overview changed: its state goes out to every client once the short pause is over. */
