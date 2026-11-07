@@ -364,3 +364,4 @@ aside .row select { width: 100%; min-width: 0; max-width: 100%; text-overflow: e
 .tasktext__list li + li { margin-top: 4px; }
 .tasktext__list code { color: var(--text); font-size: 12px; }
 aside .about__text { max-height: 240px; overflow-y: auto; }
+.dataformat { font-size: 12px; margin: 0 0 6px; line-height: 1.4; }

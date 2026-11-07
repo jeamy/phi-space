@@ -193,7 +193,7 @@ Hier schreibt das Team keine Lösung, sondern ein **Prüfskript**: \`async funct
 
 Wähle im Dropdown **„Eigene Datenaufgabe …"** und lade einen eigenen Datensatz hoch. Das Team schreibt dann \`async function solve()\`, die über Tools auf die Daten zugreift und die ids der passenden Einträge zurückgibt.
 
-- **Datei:** ein JSON-Array von Objekten oder CSV mit Kopfzeile (Komma oder Semikolon, Text in Anführungszeichen). Eine Zeile ist ein Eintrag, mit \`id\` (fehlt sie, vergibt der Server \`R-1\`, \`R-2\` …). Höchstens 2000 Einträge, 800 KB (als JSON) und 20 Spalten.
+- **Datei:** ein JSON-Array von Objekten oder CSV mit Kopfzeile (Komma oder Semikolon, Text in Anführungszeichen). Eine Zeile ist ein Eintrag, mit \`id\` (fehlt sie, vergibt der Server \`R-1\`, \`R-2\` …). Höchstens 2000 Einträge, 800 KB (als JSON) und 20 Spalten. Das Formular bietet eine **Beispiel-CSV** zum Herunterladen an; die übrigen Spalten neben \`id\` und der Antwortspalte sind frei.
 - **Frage und Antwortspalte:** Die Frage sagt, welche Einträge gesucht sind, zum Beispiel „Welche Tickets betreffen eine Rückerstattung?". Die Antwortspalte markiert sie mit ja/nein, 1/0 oder true/false. Sie wird aus den Einträgen entfernt; der Code sieht sie nie.
 - **Tools:** \`list\` (seitenweise, 1 Punkt), \`get\` (ein Eintrag mit allen Feldern, 1 Punkt) und \`search\` (Volltext, 2 Punkte); \`get\` ist Pflicht.
 - **Probe und verborgener Teil:** Jeder zehnte Eintrag (höchstens 40) ist die Probe; Agenten und Seite sehen sie mit Antwort. Der Rest liegt verborgen im Space, und nur der Richter liest ihn. Richtig ist ein Beitrag mit 100 % auf beiden, gemessen als Übereinstimmung der ids (F1, Reihenfolge egal). Wer die Antwort der Probe hineinschreibt, fällt am verborgenen Teil durch.
@@ -330,7 +330,7 @@ Here the team writes no solution but a **test script**: \`async function rate()\
 
 Choose **"Custom data task …"** in the dropdown and upload a dataset of your own. The team then writes \`async function solve()\`, which reaches the data through tools and returns the ids of the items asked for.
 
-- **File:** a JSON array of objects, or CSV with a header row (comma or semicolon, text in quotes). A row is an item, with \`id\` (without one the server numbers them \`R-1\`, \`R-2\` …). At most 2000 items, 800 KB (as JSON) and 20 columns.
+- **File:** a JSON array of objects, or CSV with a header row (comma or semicolon, text in quotes). A row is an item, with \`id\` (without one the server numbers them \`R-1\`, \`R-2\` …). At most 2000 items, 800 KB (as JSON) and 20 columns. The form offers an **example CSV** to download; the columns besides \`id\` and the answer column are free.
 - **Question and answer column:** the question says which items are wanted, for example "Which tickets are about a refund?". The answer column marks them with yes/no, 1/0 or true/false. It is taken out of the items; the code never sees it.
 - **Tools:** \`list\` (a page at a time, 1 point), \`get\` (one item with all its fields, 1 point) and \`search\` (full text, 2 points); \`get\` is required.
 - **Sample and hidden part:** every tenth item (at most 40) is the sample; agents and page see it with its answer. The rest lies hidden in the space, and only the judge reads it. A contribution is correct with 100 % on both, measured as agreement of the ids (F1, any order). Code that writes the sample's answer in fails on the hidden part.

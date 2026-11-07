@@ -9,6 +9,7 @@ import { parseCsv, readUpload, setScore } from "../server/datatask.ts";
 import { dataTask, portableTask, restoreTask } from "../server/tasks.ts";
 import { judge, loadCodemode } from "../server/judge.ts";
 import { teamPrompt } from "../server/llm.ts";
+import { exampleCsv, exampleHref } from "../client/lib/data-example.ts";
 
 const cm = await loadCodemode();
 const t = cm ? test : test.skip;
@@ -43,6 +44,16 @@ test("an upload: CSV and JSON read alike, split into a sample with its answer an
 	assert.equal(back.tools?.holdoutMissing, true);
 	assert.match(teamPrompt({ task, lang: "en", agent: 0, gen: 1 }).user, /Which tickets ask for a refund/);
 	assert.doesNotMatch(JSON.stringify(teamPrompt({ task, lang: "en", agent: 0, gen: 1 })), new RegExp(holdout[0]!.id));
+});
+
+test("the form's example CSV: the server takes it in both languages, with a marked item in the sample and in the hidden part", () => {
+	for (const [lang, answer] of [["de", "rueckerstattung"], ["en", "refund"]] as const) {
+		const up = readUpload({ question: QUESTION, csv: "\uFEFF" + exampleCsv(lang), answer });
+		assert.equal(up.spec.sample.length + up.holdout.length, 20);
+		assert.equal(up.spec.fields.length, 3);
+		assert.ok(up.spec.sampleAnswer.length > 0 && up.holdoutAnswer.length > 0, lang);
+		assert.ok(decodeURIComponent(exampleHref(lang).split(",").slice(1).join(",")).startsWith("\uFEFFid"));
+	}
 });
 
 t("the judge with the hidden part: both correct contributions pass, the cheap one cheaper; the narrow and the hard-coded fail", async () => {
