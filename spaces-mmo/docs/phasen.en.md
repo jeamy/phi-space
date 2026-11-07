@@ -149,7 +149,7 @@ browser E2E comparison of the 2D/3D grid inputs. These points block neither worl
 - **Sinks:** Fuel burns, tools break, orders consume the delivered things. Coins arise
   only as wages from the board.
 
-- Direct exchange (`offer`/`accept`) as one transaction; market board (offers as entries with a lease; wanted notices hold the buyer's coins in the same escrow until someone delivers).
+- Direct exchange (`offer`/`accept`) as one transaction; market board (offers as entries with a lease; wanted notices hold the buyer's coins in the same escrow until someone delivers; a deliverer may take less, `markt liefere <nr> für <n>`, the rest goes back; `markt antworte <nr> ab <n>` answers a notice that pays too little. Traders at a board (`answerWanted` in `server/npc/economy.ts`) deliver what they carry for their own price when a notice pays it, and answer once with their price when it pays less; the page shows the answers, "kein Händler führt es" when no trader deals in the thing, and the time a notice still hangs).
 - Recipes/crafting via prototypes; order board as master worker.
 - Sinks against inflation: fuel burns, tools wear out (on demand).
 

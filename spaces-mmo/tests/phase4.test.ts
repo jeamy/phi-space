@@ -9,6 +9,10 @@ import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
+import "../server/npc/scripts.ts"; // first: it and the economy import each other, scripts.ts is the entry
+import { answerWanted, type Look } from "../server/npc/economy.ts";
+import type { Npc } from "../server/npc/scripts.ts";
+import type { CharacterFields, ItemFields } from "../server/model.ts";
 
 const w = await loadWorld();
 type P = { p: Player; me: string; name: string };
@@ -160,6 +164,58 @@ test("market: a wanted notice holds the buyer's coins; delivering moves thing an
 		const wn = (await s.readAll({ type: "Wanted" }))[0]!;
 		await s.take({ type: "Wanted", id: wn.id }, 2_000); // as if it had lapsed
 		await eventually(async () => (await pack(s, b.me, "muenze")).length === 2, 10_000, "the coins back with the buyer");
+		await a.p.leave(); await b.p.leave();
+	} finally { await srv.close(); }
+});
+
+test("market: a notice is answered with a price, delivered for less with the rest back; a trader delivers for its price or answers once", async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const a = await player(srv.url, "Imkerin"), b = await player(srv.url, "Honigsucher");
+		await give(s, b.me, "muenze", 10);
+		await does(b.p, "markt suche bienenvolk für 3", "Du suchst am Marktbrett Bienenvolk");
+		// an answer: the one who seeks hears it, the page shows it under the notice
+		assert.match(await does(a.p, "markt antworte 1 ab 2", "gleich liefern"), /markt liefere 1/);
+		const from = b.p.frames.length;
+		await does(a.p, "markt antworte 1 ab 8", "Du antwortest Honigsucher: Bienenvolk ab 8 Münzen.");
+		await b.p.until((f) => f.t === "msg" && f.m.text.includes("Imkerin antwortet auf dein Gesuch nach Bienenvolk") && f.m.text.includes("ab 8 Münzen liefert Imkerin"), 10_000, from);
+		const t = await b.p.until((f) => f.t === "trade" && !!f.trade.wanted?.[0]?.replies.length, 10_000);
+		const wv = (t as Extract<ServerFrame, { t: "trade" }>).trade.wanted![0]!;
+		assert.deepEqual(wv.replies, [{ name: "Imkerin", ask: 8 }]);
+		assert.equal(wv.traded, true, "Gesa deals in bee colonies");
+		assert.ok(wv.until === null || wv.until > Date.now(), "it still hangs");
+		assert.match(await does(a.p, "markt", "Gesuche"), /zahlt 3 Münzen \(Imkerin: ab 8\)/);
+		// delivered for less: the rest goes back
+		await give(s, a.me, "bienenvolk", 1);
+		const before = b.p.frames.length;
+		await does(a.p, "markt liefere 1 für 2", "Du lieferst Honigsucher Bienenvolk und bekommst 2 Münzen.");
+		await b.p.until((f) => f.t === "msg" && f.m.text.includes("1 Münze bekommst du zurück"), 10_000, before);
+		assert.equal((await pack(s, a.me, "muenze")).length, 2);
+		assert.equal((await pack(s, b.me, "muenze")).length, 8);
+		assert.equal((await pack(s, b.me, "bienenvolk")).length, 1);
+
+		// a trader at the board: the notices it deals in, by its price list
+		const acts: string[] = [];
+		const me = { charId: "npc-test-gesa", room: "graue-bucht" } as CharacterFields;
+		const n = { def: { npcId: "test-gesa", name: "Gesa", prices: { bienenvolk: [4, 8], honig: [2, 4] } }, charId: me.charId, space: s, world: w, act: async (l: string) => { acts.push(l); } } as unknown as Npc;
+		await give(s, b.me, "muenze", 10);
+		const look = (pack: string[]): Look => ({ me, pack: pack.map((proto, i) => ({ itemId: `x${i}`, proto, name: proto } as ItemFields)), ground: [] });
+		await does(b.p, "markt suche bienenvolk für 3", "Du suchst");
+		await does(b.p, "markt suche tang für 1", "Du suchst");
+		assert.equal(await answerWanted(n, look([])), true);
+		assert.deepEqual(acts, ["market antworte 1 ab 8"], "too little: its price");
+		// answered once: not again (the answer stands on the notice)
+		acts.length = 0;
+		const wn = (await s.readAll({ type: "Wanted", fields: { proto: "bienenvolk" } }))[0]!;
+		await s.take({ id: wn.id }, 2_000);
+		await s.write({ type: "Wanted", fields: { ...wn.fields, replies: [{ charId: me.charId, name: "Gesa", ask: 8 }] } }, null, Number.MAX_SAFE_INTEGER);
+		assert.equal(await answerWanted(n, look(["bienenvolk"])), false, "tang it does not deal in, bienenvolk it answered");
+		// enough offered and in stock: it delivers for its price
+		await does(b.p, "markt suche 2 honig für 9", "Du suchst");
+		assert.equal(await answerWanted(n, look(["honig"])), false, "only one in stock");
+		assert.equal(await answerWanted(n, look(["honig", "honig"])), true);
+		assert.deepEqual(acts, ["market liefere 3 für 8"]);
 		await a.p.leave(); await b.p.leave();
 	} finally { await srv.close(); }
 });

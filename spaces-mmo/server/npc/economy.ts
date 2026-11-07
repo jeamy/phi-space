@@ -24,7 +24,7 @@ import { baysOf, linerOf, shipComes } from "../engine/liner.ts";
 import { trainIn } from "../engine/rail.ts";
 import { regionOfRoom } from "../engine/regions.ts";
 import { wayTo, type WorldDef } from "../engine/world.ts";
-import { fieldsOf, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type MsgFields, type OfferFields, type OrderFields } from "../model.ts";
+import { fieldsOf, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type MsgFields, type OfferFields, type OrderFields, type WantedFields } from "../model.ts";
 import { deliverer } from "./settlers.ts";
 import { byPerson, humansIn, newHeard, self, type Npc, type Script } from "./scripts.ts";
 
@@ -186,6 +186,29 @@ async function buy(n: Npc, l: Look, only?: string[]): Promise<boolean> {
 	if (i < 0) return false;
 	await n.act(`market kaufe ${i + 1}`);
 	return true;
+}
+
+/** At a market: answers the board's wanted notices of what it sells. One that pays at least its price (for as many as
+ *  sought) it delivers if it carries them, taking its price only (the rest goes back to the one who seeks); one that pays
+ *  less it answers once with its price, so the one who seeks knows. True when it did something. */
+export async function answerWanted(n: Npc, l: Look): Promise<boolean> {
+	if (!n.world.market.rooms.includes(l.me.room)) return false;
+	const sought = (await n.space.readAll({ type: "Wanted", fields: { room: l.me.room } })).map((e) => fieldsOf<WantedFields>(e)).sort((a, b) => a.at - b.at || a.wantedId.localeCompare(b.wantedId));
+	for (const [i, w] of sought.entries()) {
+		if (w.buyer === l.me.charId) continue;
+		const each = w.proto === n.world.currency ? 0 : sellPrice(n, w.proto);
+		if (!each) continue;
+		const count = w.count ?? 1, ask = each * count;
+		if (w.price >= ask) {
+			if (l.pack.filter((it) => it.proto === w.proto).length < count) continue;
+			await n.act(`market liefere ${i + 1} für ${ask}`);
+			return true;
+		}
+		if (w.replies?.some((r) => r.charId === l.me.charId)) continue;
+		await n.act(`market antworte ${i + 1} ab ${ask}`);
+		return true;
+	}
+	return false;
 }
 
 /** Answers the oldest trade offer made to it by its price list: what it gets is worth what it would pay, what it gives
@@ -390,7 +413,7 @@ function haendler(): Script {
 			return;
 		}
 		// at a market of its route: buys below its price, asks more than it paid; after a while it moves on
-		const acted = (await talk(n, l)) || (await buy(n, l)) || (await sell(n, l)) || (await offer(n, l)) || (await say(n, l));
+		const acted = (await talk(n, l)) || (await answerWanted(n, l)) || (await buy(n, l)) || (await sell(n, l)) || (await offer(n, l)) || (await say(n, l));
 		rounds++;
 		if (route.length > 1 && (rounds > 12 || (!acted && rounds > 4))) { at++; rounds = 0; }
 		await n.sleep(await rest(n, l.me.room));
@@ -415,6 +438,7 @@ function handwerker(): Script {
 		if (!acted && (toolRecipe || can)) { await n.act(`craft ${(toolRecipe ?? can)!.key}`); acted = true; }
 		// its last tool it keeps
 		const keep = recipes.flatMap((r) => (r.tool && !has(r.tool, 2) ? [r.tool] : []));
+		if (!acted && n.def.market === l.me.room) acted = await answerWanted(n, l);
 		if (!acted && products.length >= 2 && n.def.market) { if (await travel(n, l, n.def.market)) acted = await sell(n, l, keep); else acted = true; }
 		if (!acted) acted = (await buy(n, l, inputs)) || (await offer(n, l, inputs));
 		if (!acted && homes.includes(l.me.room)) acted = await gather(n, l, inputs);
@@ -431,7 +455,7 @@ function gaertnerin(): Script {
 		const l = await look(n);
 		if (!l) { await n.sleep(1000); return; }
 		const homes = n.def.home ?? [l.me.room];
-		let acted = (await talk(n, l)) || (l.me.room === n.def.market && ((await buy(n, l)) || (await sell(n, l))));
+		let acted = (await talk(n, l)) || (l.me.room === n.def.market && ((await answerWanted(n, l)) || (await buy(n, l)) || (await sell(n, l))));
 		if (!acted) {
 			// it looks where it is when its rest is over (the garden's sweep removes the rest), then moves on to the next room
 			const resting = !!(await n.space.readIfExists({ type: "SeedRest", fields: { charId: l.me.charId } }, 1_000));

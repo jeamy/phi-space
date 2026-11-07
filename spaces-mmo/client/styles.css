@@ -580,3 +580,6 @@ button.cmd-word { cursor: pointer; display: inline; min-height: 0; }
 .task.rank-0 { border-left-color: var(--warning); color: var(--text-strong); }
 .task.rank-2 { color: var(--muted); }
 .task-list .pack-hint.new { border-left: 3px solid var(--warning); padding-left: 8px; }
+
+/* a wanted notice's answers and its time (TradePanel) */
+.wanted-note { display: block; color: var(--muted); font-size: max(12px, var(--min-font)); }

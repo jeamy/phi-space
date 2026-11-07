@@ -922,9 +922,13 @@ Suchst du etwas, das gerade niemand anbietet, hängst du ein **Gesuch** aus. Dei
 
 - \`markt suche <ding> für <n>\`: zum Beispiel \`markt suche ziege für 5\` (auch einfach „suche ziege für 5“); \`markt suche 3 ziegen für 12\` sucht drei zusammen
 - \`markt liefere <nr>\`: ein Gesuch erfüllen; das Ding geht an den Suchenden, die Münzen an dich
+- \`markt liefere <nr> für <n>\`: für weniger liefern, als geboten ist; den Rest bekommt der Suchende zurück
+- \`markt antworte <nr> ab <n>\`: einem Gesuch, das zu wenig bietet, sagen, ab wie viel du lieferst
 - \`markt suche zurück <nr>\`: dein Gesuch zurücknehmen, die Münzen kommen zurück
 
-Unter **Aktionen → Markt** stehen die Gesuche mit „Liefern“ und ein Feld zum Suchen. Ein Gesuch bleibt wie ein Angebot einen Tag stehen; danach bekommst du deine Münzen zurück. Du kannst an jedem Brett bis zu fünf Gesuche aushängen.
+Auch die **Händler** lesen die Gesuche, wenn sie am Brett stehen (Gesa in Kupferhafen, die Händler auf ihren Wegen). Bietet ein Gesuch mindestens ihren Preis und haben sie das Ding dabei, liefern sie und nehmen nur ihren Preis; den Rest bekommst du zurück. Bietet es zu wenig, antworten sie einmal mit ihrem Preis, etwa „Gesa: ab 8“. Das steht dann unter dem Gesuch, und du bekommst es als Nachricht. Führt kein Händler das Ding, steht dort „kein Händler führt es“: dann kann nur ein Spieler liefern.
+
+Unter **Aktionen → Markt** stehen die Gesuche mit „Liefern“, den Antworten und der Zeit, die sie noch hängen, und ein Feld zum Suchen. Ein Gesuch bleibt wie ein Angebot einen Tag stehen; danach bekommst du deine Münzen zurück. Du kannst an jedem Brett bis zu fünf Gesuche aushängen.
 
 ## Handwerk {#craft}
 
@@ -980,9 +984,13 @@ If you are looking for something nobody offers right now, post a **wanted notice
 
 - \`market want <thing> for <n>\`: for example \`market want goat for 5\` (also just „want goat for 5“); \`market want 3 goats for 12\` seeks three together
 - \`market deliver <nr>\`: fill a notice; the thing goes to the one who seeks it, the coins to you
+- \`market deliver <nr> for <n>\`: deliver for less than offered; the one who seeks gets the rest back
+- \`market answer <nr> from <n>\`: tell a notice that offers too little from how much you would deliver
 - \`market want withdraw <nr>\`: take your notice back, the coins come back
 
-Under **Actions → Market** the notices stand with „Deliver“, and a field to seek something. A notice stays up for a day like an offer; then your coins come back. You can post up to five notices at each board.
+The **traders** read the notices too when they stand at the board (Gesa in Kupferhafen, the traders on their routes). If a notice offers at least their price and they carry the thing, they deliver and take only their price; you get the rest back. If it offers too little, they answer once with their price, say „Gesa: ab 8“. That stands under the notice, and you get it as a message. If no trader deals in the thing, it says „kein Händler führt es“: then only a player can deliver.
+
+Under **Actions → Market** the notices stand with „Deliver“, their answers and the time they still hang, and a field to seek something. A notice stays up for a day like an offer; then your coins come back. You can post up to five notices at each board.
 
 ## Crafting {#craft}
 
@@ -1067,7 +1075,7 @@ Die Hütte hat eine Truhe, die **nur dir** gehört: \`truhe\` zeigt sie, \`verst
 
 ## Last {#load}
 
-Eine Figur trägt höchstens **40 Last** (der Betreiber stellt es ein). Jedes Ding wiegt nach seiner Art:
+Eine Figur trägt höchstens **1000 Last** (der Betreiber stellt es ein). Jedes Ding wiegt nach seiner Art:
 
 | Last | Dinge |
 |---|---|
@@ -1136,7 +1144,7 @@ The hut has a chest that is **yours alone**: \`truhe\` (\`chest\`) shows it, \`v
 
 ## Load {#load}
 
-A figure carries at most **40 load** (the operator sets it). Each thing weighs by its kind:
+A figure carries at most **1000 load** (the operator sets it). Each thing weighs by its kind:
 
 | Load | Things |
 |---|---|

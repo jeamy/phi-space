@@ -740,7 +740,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      abandoned building site gives back everything delivered. The map shows the ruin, the cell menu offers repair, chest
      and estate. Not yet: faster decay in fog (comes with the game), rebuilding a ruin, the hut as return point.
    - **Part 3, built 2026-11-07: load** (`server/engine/pack.ts`, `server/engine/courier.ts`, test `tests/pack.test.ts`).
-     A figure carries at most 40 load (setting `pack.max`, `SPACES_MMO_PACK_MAX`, the admin window). Each thing weighs by
+     A figure carries at most 1000 load (40 at first, raised on the user's word; setting `pack.max`, `SPACES_MMO_PACK_MAX`, the admin window). Each thing weighs by
      its kind (`world.pack.load`, 1 where it names none): coins and bills 0; shells, seeds, pearls, amber, wax, candles,
      down ½; driftwood, kelp rope, stone, cabbage, bricks, planks, rope, clay, dog, cat 2; bundle of wood, hen, duck,
      goose, sheep, goat, bee colony, rowing boat, cart 4; cow and sailing boat 8. The check sits once around every command
@@ -758,7 +758,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      region is filled in the command's transaction; one in another region by a **courier**: the things move to the
      courier's id and a `Courier` entry is written in the command's transaction, the region's world worker writes them
      into the chest of the other region and then takes them here (idempotent by item id, like a crossing's pack). A chest
-     that became a ruin meanwhile gets them in its estate. The page shows "Last x von 40" under "Bei dir" and, for a
+     that became a ruin meanwhile gets them in its estate. The page shows "Last x von 1000" under "Bei dir" and, for a
      chosen thing, the chest choice with a count ("Stück verstauen") and "Alle … verstauen". The tests run with a limit of 100000
      (`tests/test-env.ts`); `tests/pack.test.ts` sets 40.
 2. **Gardens** (the equal strand, parallel to all buildings): spade, rain barrel, kinds of beds (kitchen, ornamental,

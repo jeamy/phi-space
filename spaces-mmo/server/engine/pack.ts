@@ -1,5 +1,5 @@
 // What a figure can carry (docs/siedeln.en.md "Load"): every thing has a load by its kind (world.pack.load, 1 where it
-// names none; coins weigh nothing), a figure carries up to the setting `pack.max` (40); a chest takes everything, the
+// names none; coins weigh nothing), a figure carries up to the setting `pack.max` (1000); a chest takes everything, the
 // player spreads its things over its chests. The limit is checked once around every command (commands.ts, `guardPack`): a command that leaves the actor's
 // pack heavier than before and over the limit is refused, whatever it did (took, gathered, bought, crafted). What others
 // bring (a delivery, a gift, a purchase from one's listing) arrives anyway: only the actor's own pack is checked, so a
