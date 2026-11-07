@@ -93,6 +93,11 @@ is lost or doubled. A command counts as done when the world worker has completed
   thing at most every ten game minutes). Whoever addresses an NPC learns what it buys and sells.
 - **Starting equipment** (`carry`): coins, wood, a knife; once, when the world creates the figure. Coins otherwise arise
   only as wages from the boards.
+- **Bounded packs**: an NPC keeps at most 24 things of one kind and 50 coins
+  (`SPACES_MMO_NPC_PACK_MAX`, `SPACES_MMO_NPC_COIN_MAX`). The world worker takes the rest every 10 minutes, at most 500
+  things a round (`server/world-host.ts`, `spoil`). Without this bound, the settlers harvested more than they sold and
+  the gardener gathered seeds every world hour, and every thing is an entry that each read of the things reads: one
+  region held 18,000 of them, and its space ran at full CPU. Players keep all they have.
 - **Model roles** listen only to humans: NPC chatter does not wake Ines and costs no call (`fromId` of each
   message, NPCs begin with `npc-`).
 - **Who plays**: `SPACES_MMO_NPCS` names the roles of an npc process (comma list; empty: all). The tests of the

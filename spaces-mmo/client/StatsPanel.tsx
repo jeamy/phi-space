@@ -26,7 +26,7 @@ export function StatsPanel({ me }: { me: string }) {
 	return (
 		<div className="panel stats">
 			<h2>Statistik</h2>
-			{s.missing.length > 0 && <p className="muted" style={{ margin: 0, fontSize: 12 }}>{`Nicht erreichbar: ${s.missing.join(", ")}; die Zahlen sind ohne sie.`}</p>}
+			{s.missing.length > 0 && <p className="muted" style={{ margin: 0, fontSize: "max(12px, var(--min-font))" }}>{`Nicht erreichbar: ${s.missing.join(", ")}; die Zahlen sind ohne sie.`}</p>}
 			<h3>Spieler</h3>
 			<div className="stat-grid">{tile("Spieler", s.players.total)}{tile("Registriert", s.players.registered)}{tile("Gäste", s.players.guests)}{tile("Gerade online", s.players.online)}{tile("Siedler", s.players.settlers)}{tile("KI-Figuren", s.players.ai)}</div>
 			<h3>Reisen</h3>
@@ -49,7 +49,7 @@ export function StatsPanel({ me }: { me: string }) {
 					</ul>
 				</div>;
 			})}
-			<p className="muted" style={{ margin: 0, fontSize: 11 }}>{`Stand: ${new Date(s.at).toLocaleTimeString(language() === "en" ? "en-GB" : "de-DE", { hour: "2-digit", minute: "2-digit" })}`}</p>
+			<p className="muted" style={{ margin: 0, fontSize: "max(11px, var(--min-font))" }}>{`Stand: ${new Date(s.at).toLocaleTimeString(language() === "en" ? "en-GB" : "de-DE", { hour: "2-digit", minute: "2-digit" })}`}</p>
 		</div>
 	);
 }

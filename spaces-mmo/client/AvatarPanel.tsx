@@ -76,7 +76,7 @@ export function AvatarPanel({ charId, look, send, onDone }: { charId: string; lo
 	return (
 		<div className="panel avatar">
 			<h2>Deine Figur</h2>
-			{failed ? <p className="muted" style={{ margin: 0, fontSize: 13 }}>Die Vorschau braucht WebGL; die Wahl gilt trotzdem.</p> : <canvas ref={canvas} className="avatar-preview" aria-label="Vorschau der Figur" />}
+			{failed ? <p className="muted" style={{ margin: 0, fontSize: "max(13px, var(--min-font))" }}>Die Vorschau braucht WebGL; die Wahl gilt trotzdem.</p> : <canvas ref={canvas} className="avatar-preview" aria-label="Vorschau der Figur" />}
 			{row("Figur", FIGURES, a.body, (i) => set("body", i))}
 			{row("Kleidung", COATS.map((c) => c.name), a.coat, (i) => set("coat", i), COATS.map((c) => c.color))}
 			{row("Haarfarbe", HAIRS.map((c) => c.name), a.hair, (i) => set("hair", i), HAIRS.map((c) => c.color))}
@@ -84,7 +84,7 @@ export function AvatarPanel({ charId, look, send, onDone }: { charId: string; lo
 			{row("Kopf", HATS.map((h, i) => (i === 0 ? "Ohne" : h)), a.hat, (i) => set("hat", i))}
 			{toggle("Brille", a.glasses, (v) => set("glasses", v))}
 			{toggle("Handschuhe", a.gloves, (v) => set("gloves", v))}
-			<p className="muted" style={{ margin: 0, fontSize: 12 }}>So sehen dich alle auf der 3D-Karte.</p>
+			<p className="muted" style={{ margin: 0, fontSize: "max(12px, var(--min-font))" }}>So sehen dich alle auf der 3D-Karte.</p>
 			<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
 				<button className="primary" onClick={() => { send(`avatar ${appearanceLine(a)}`, false); onDone(); }}>Übernehmen</button>
 				{look && <button onClick={() => { send("avatar zurück", false); onDone(); }}>Wie zu Beginn</button>}

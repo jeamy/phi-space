@@ -99,6 +99,8 @@ test("craft with a count: forms of the name and of the number, as many as the pa
 		const a = await player(srv.url, "Seiler");
 		await give(s, a.me, "tang", 15);
 		await does(a.p, "craft 2 tangseile", "Du stellst 2 Tangseil her.");
+		// what the figure itself did is for it (the events' „An dich“), though the room is told too
+		assert.equal((a.p.frames.findLast((f) => f.t === "msg" && f.m.text === "Du stellst 2 Tangseil her.") as Extract<ServerFrame, { t: "msg" }>).m.mine, true);
 		await does(a.p, "craft zwei seile", "Du stellst 2 Tangseil her.");
 		assert.equal((await pack(s, a.me, "tangseil")).length, 4);
 		const from = a.p.frames.length;

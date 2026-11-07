@@ -2,7 +2,7 @@
 // spaces-mmo in the browser: a welcome page (play as a guest, log in, register) and the game: the PixiJS map of the
 // room, the text log and the command line. Everything the player does is a text command sent over the WebSocket; a
 // tap on the map or an arrow key becomes `move x y` for one step. All text from the world is rendered as React text nodes.
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { cloneElement, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ThemeControls } from "./ThemeControls.tsx";
 import { tr } from "./i18n/index.ts";
 import { AdminPanel } from "./AdminPanel.tsx";
@@ -22,7 +22,7 @@ import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.t
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
 import { forgetDeviceKeys, useChat } from "./useChat.ts";
 import { MAX_AHEAD, nextStep, screenToGrid, WALK_MS, Walker } from "./walk.ts";
-import { cellAbout, cellEntries, type CellInput, HERE_SHOWN, hereEntries, itemEntries, tapTarget, wildHere } from "./cellActions.ts";
+import { cellAbout, cellEntries, type CellInput, hereEntries, itemEntries, tapTarget, wildHere } from "./cellActions.ts";
 import { hintsFor, type Hint } from "./hints.ts";
 import { canFullscreen, enterFullscreen, homeSteps, isShort, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
 import { useBack } from "./useBack.ts";
@@ -125,7 +125,7 @@ function Welcome({ onIn, controls }: { onIn: (a: Account, fresh?: boolean) => vo
 			<p className="pitch muted">Ein Archipel im Nebel. Wo ein Leuchtfeuer brennt, wird es licht – und keines brennt lange allein.</p>
 			<div className="card">
 				<button className="primary" onClick={guest} disabled={busy}>Als Gast spielen</button>
-				<p className="muted" style={{ fontSize: 13, margin: "10px 0 0" }}>Sofort los, ohne Anmeldung. Wer sich später registriert, behält alles, was er als Gast erreicht hat.</p>
+				<p className="muted" style={{ fontSize: "max(13px, var(--min-font))", margin: "10px 0 0" }}>Sofort los, ohne Anmeldung. Wer sich später registriert, behält alles, was er als Gast erreicht hat.</p>
 				{error && <p className="error">{error}</p>}
 			</div>
 			<div className="card"><AccountForm onDone={onIn} /></div>
@@ -152,8 +152,8 @@ function AccountForm({ onDone, guest = false }: { onDone: (a: Account, fresh?: b
 				<button type="button" role="tab" aria-selected={mode === "register"} onClick={() => setMode("register")}>Registrieren</button>
 				<button type="button" role="tab" aria-selected={mode === "login"} onClick={() => setMode("login")}>Anmelden</button>
 			</div>
-			{guest && mode === "register" && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Deine Figur, ihr Platz und alles Weitere bleiben erhalten.</p>}
-			{guest && mode === "login" && <p className="warning" style={{ margin: 0, fontSize: 13 }}>Mit einem bestehenden Konto anmelden: Der Fortschritt dieses Gastes wird nicht übernommen und verfällt.</p>}
+			{guest && mode === "register" && <p className="muted" style={{ margin: 0, fontSize: "max(13px, var(--min-font))" }}>Deine Figur, ihr Platz und alles Weitere bleiben erhalten.</p>}
+			{guest && mode === "login" && <p className="warning" style={{ margin: 0, fontSize: "max(13px, var(--min-font))" }}>Mit einem bestehenden Konto anmelden: Der Fortschritt dieses Gastes wird nicht übernommen und verfällt.</p>}
 			<label>Name<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" required minLength={3} maxLength={20} /></label>
 			<label>Passwort<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={mode === "register" ? 8 : 1} /></label>
 			{!guest && (
@@ -175,7 +175,7 @@ function AliasForm({ account, onDone }: { account: Account; onDone: (a: Account)
 	};
 	return (
 		<form className="form" onSubmit={(e) => { e.preventDefault(); void save(alias); }}>
-			<p className="muted" style={{ margin: 0, fontSize: 13 }}>So sehen dich alle im Spiel. Anmelden tust du dich weiter als <b>{account.name}</b>.</p>
+			<p className="muted" style={{ margin: 0, fontSize: "max(13px, var(--min-font))" }}>So sehen dich alle im Spiel. Anmelden tust du dich weiter als <b>{account.name}</b>.</p>
 			<label>Alias<input value={alias} onChange={(e) => setAlias(e.target.value)} placeholder={account.name} autoComplete="off" maxLength={20} /></label>
 			<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
 				<button className="primary" disabled={busy}>Speichern</button>
@@ -382,7 +382,7 @@ function Glyph({ o, size = 16 }: { o: ObjView; size?: number }) {
 }
 
 /** What the player carries and what lies within reach, as buttons (on a phone there is no keyboard to type with). */
-function Things({ objs, chars, self, room, me, plans, guest, wild, uses, hints = [], market, offer, send, pick }: { uses: ItemUses | undefined; /** the hints of the pack (client/hints.ts): a chosen thing shows its own */ hints?: Hint[]; /** a market board stands here: sell the thing there */ market?: (name: string) => void; offer?: (to: string, name: string) => void; objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string) => void; pick: (o: ObjView) => void }) {
+function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild, uses, hints = [], market, offer, send, pick }: { /** "mine": what lies beside the figure and what it carries; "here": the fire within reach and what can be done here */ part?: "mine" | "here"; uses: ItemUses | undefined; /** the hints of the pack (client/hints.ts): a chosen thing shows its own */ hints?: Hint[]; /** a market board stands here: sell the thing there */ market?: (name: string) => void; offer?: (to: string, name: string) => void; objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string) => void; pick: (o: ObjView) => void }) {
 	const all = [...objs.values()].filter((o) => o.kind === "item");
 	const carried = all.filter((o) => o.location === me);
 	const close = (o: ObjView) => !!self && o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
@@ -399,23 +399,26 @@ function Things({ objs, chars, self, room, me, plans, guest, wild, uses, hints =
 	const chosenBox = useRef<HTMLDivElement>(null);
 	useEffect(() => { if (picked) chosenBox.current?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }, [picked]);
 	const here = hereEntries({ chars, objs, self, room, me, plans, guest, fuel, wild });
-	const [allHere, setAllHere] = useState(false);
-	if (!carried.length && !near.length && !fire && !here.length) return <div />;
+	if (part === "here") {
+		if (!fire && !here.length) return <p className="muted bag-note">Hier gibt es gerade nichts zu tun. Geh zu einem Feuer, einem Bau, einem Beet oder zu jemandem, dann steht hier, was geht.</p>;
+		return (
+			<div className="things">
+				{fire && (
+					<><h3>{fire.name}</h3><ul><li>
+						<span>{(fire.until ?? 0) > Date.now() ? `brennt noch ${Math.max(1, Math.round(((fire.until ?? 0) - Date.now()) / 1000))} s` : "ist erloschen"}</span>
+						<button disabled={!fuel} onClick={() => fuel && send(`put ${fuel.name} in ${fire.name}`)} title={fuel ? "" : "Du trägst kein Brennholz"}>Nachlegen</button>
+					</li></ul></>
+				)}
+				{here.length > 0 && <><h3>Hier möglich</h3><div className="here open">{here.map((e) => <button key={e.line} onClick={() => send(e.line)}>{e.label}</button>)}</div></>}
+			</div>
+		);
+	}
+	if (!carried.length && !near.length) return <p className="muted bag-note">Du trägst nichts, und neben dir liegt nichts.</p>;
 	const row = (o: ObjView, verb: string, label: string) => (
 		<li key={o.id}><Glyph o={o} size={20} /><span>{o.name}</span><button onClick={() => (verb === "get" ? pick(o) : send(`${verb} ${o.name}`))}>{label}</button><button onClick={() => send(`look ${o.name}`)}>Ansehen</button></li>
 	);
 	return (
 		<div className="things">
-			{fire && (
-				<><h3>{fire.name}</h3><ul><li>
-					<span>{(fire.until ?? 0) > Date.now() ? `brennt noch ${Math.max(1, Math.round(((fire.until ?? 0) - Date.now()) / 1000))} s` : "ist erloschen"}</span>
-					<button disabled={!fuel} onClick={() => fuel && send(`put ${fuel.name} in ${fire.name}`)} title={fuel ? "" : "Du trägst kein Brennholz"}>Nachlegen</button>
-				</li></ul></>
-			)}
-			{here.length > 0 && <><h3>Hier möglich</h3><div className={`here${allHere ? " open" : ""}`}>
-				{(allHere ? here : here.slice(0, HERE_SHOWN)).map((e) => <button key={e.line} onClick={() => send(e.line)}>{e.label}</button>)}
-				{here.length > HERE_SHOWN && <button className="more" aria-expanded={allHere} onClick={() => setAllHere(!allHere)}>{allHere ? "Weniger" : `Mehr (${here.length - HERE_SHOWN})`}</button>}
-			</div></>}
 			{near.length > 0 && <><h3>Neben dir</h3><ul>{near.map((o) => row(o, "get", "Aufheben"))}</ul></>}
 			{carried.length > 0 && <>
 				<h3>Du trägst</h3>
@@ -549,7 +552,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const setSheetAt = (x: number) => { setSheetAtState(x); try { localStorage.setItem("mmo.sheet.x", x.toFixed(4)); } catch { /* private window */ } };
 	const setSheetPx = (h: number) => { setSheetPxState(h); try { localStorage.setItem("mmo.sheet", String(Math.round(h))); } catch { /* private window */ } };
 	const [bag, setBag] = useState(false);
-	const [bagPart, setBagPart] = useState<"mine" | "market" | "orders">("mine");
+	const [bagPart, setBagPart] = useState<"mine" | "here" | "market" | "orders">("mine");
 	const [tradeItem, setTradeItem] = useState<{ name: string } | null>(null);
 	const tapFrom = useRef<{ id: number; x: number; y: number; at: number } | null>(null);
 	const [atlasPage, setAtlasPage] = useState(false);
@@ -1010,16 +1013,9 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		}
 		return hintsFor(carried, uses, hello.world.plans, owned);
 	}, [objs, hello, me, hintsOn]);
-	useEffect(() => {
-		if (!hints.length) return;
-		let seen: string[] = [];
-		try { seen = JSON.parse(localStorage.getItem("mmo.hints.seen") ?? "[]") as string[]; } catch { /* private window: shown again next time */ }
-		// one new hint at a time: the next one comes with the next change of the pack
-		const next = hints.find((h) => !seen.includes(h.id));
-		if (!next) return;
-		append({ kind: "hint", text: `Tipp: ${next.text}`, from: "", at: Date.now() });
-		try { localStorage.setItem("mmo.hints.seen", JSON.stringify([...seen, next.id].slice(-400))); } catch { /* private window */ }
-	}, [hints, append]);
+	// the hints stay in their tab: the ones not looked at yet are counted on it and marked in it (remembered in the browser)
+	const [hintsSeen, setHintsSeen] = useState<ReadonlySet<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem("mmo.hints.seen") ?? "[]") as string[]); } catch { return new Set(); } });
+	const newHints = hints.filter((h) => !hintsSeen.has(h.id)).length;
 
 	/** The sheet's tabs: Aktionen (`bag`: what one has and can do, with the command line), the log, the chats. */
 	const pane: "bag" | "log" | "chats" = bag ? "bag" : tab === "log" ? "log" : "chats";
@@ -1049,10 +1045,16 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		});
 	});
 	const todos = atlasState?.todos ?? [];
+	// looked at: the hints in the tab count as seen (marked as new until the tab is left)
+	const hintsShown = logShown && logPart === "tips";
+	useEffect(() => {
+		if (hintsShown) return () => setHintsSeen((old) => { const n = new Set([...old, ...hintsRef.current.map((h) => h.id)]); try { localStorage.setItem("mmo.hints.seen", JSON.stringify([...n].slice(-400))); } catch { /* private window */ } return n; });
+	}, [hintsShown]);
+	const hintsRef = useRef(hints); hintsRef.current = hints;
 	const newIn = (k: LogPart) => {
 		// the tasks show how many want doing now; the hints none
 		if (k === "todo") return todos.filter((t) => t.rank === 0).length;
-		if (k === "tips") return 0;
+		if (k === "tips") return k === logPart && logShown ? 0 : newHints;
 		if (k === logPart && logShown) return 0;
 		const list = k === "mine" ? mineLog : aroundLog, at = seenLine[k] ? list.lastIndexOf(seenLine[k]!) : -1;
 		return at >= 0 ? list.length - 1 - at : seenLine[k] === undefined ? 0 : list.length;
@@ -1101,7 +1103,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		{panel === "leave" && (
 			<div className="panel">
 				<h2>Als Gast abmelden?</h2>
-				<p style={{ margin: "0 0 10px", fontSize: 13 }}>Ohne Registrierung kommst du nicht zu dieser Figur zurück; sie verfällt nach einigen Tagen.</p>
+				<p style={{ margin: "0 0 10px", fontSize: "max(13px, var(--min-font))" }}>Ohne Registrierung kommst du nicht zu dieser Figur zurück; sie verfällt nach einigen Tagen.</p>
 				<div style={{ display: "flex", gap: 8 }}><button onClick={() => setPanel("account")}>Erst registrieren</button><button onClick={() => void logout()}>Trotzdem abmelden</button></div>
 			</div>
 		)}
@@ -1191,9 +1193,9 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 					{pane === "bag" ? (
 						<>
 							<div className="bag-parts" role="tablist" aria-label="Aktionen">
-								{([["mine", "Bei dir"], ["market", "Markt"], ["orders", "Aushang"]] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={bagPart === k} onClick={() => setBagPart(k)}>{l}{k === "market" && trade?.offersIn.length ? <span className="chat-count">{trade.offersIn.length}</span> : k === "orders" && ordersHere ? <span className="chat-count">{ordersHere}</span> : null}</button>)}
+								{([["mine", "Bei dir"], ["here", "Hier"], ["market", "Markt"], ["orders", "Aushang"]] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={bagPart === k} onClick={() => setBagPart(k)}>{l}{k === "here" && hereBar.length ? <span className="chat-count">{hereBar.length}</span> : k === "market" && trade?.offersIn.length ? <span className="chat-count">{trade.offersIn.length}</span> : k === "orders" && ordersHere ? <span className="chat-count">{ordersHere}</span> : null}</button>)}
 							</div>
-							<div className="sheet-scroll">{bagPart === "mine" ? mineView : bagPart === "market" ? marketView : <SiteOrders objs={objs} self={self} room={hello?.room.roomId ?? ""} me={me} send={send} walk={walkTo} />}</div>
+							<div className="sheet-scroll">{bagPart === "mine" ? mineView : bagPart === "here" ? cloneElement(mineView, { part: "here" }) : bagPart === "market" ? marketView : <SiteOrders objs={objs} self={self} room={hello?.room.roomId ?? ""} me={me} send={send} walk={walkTo} />}</div>
 							{bagPart === "mine" && <>
 								{/* the answers go to the log: the last one shows here, a tap opens the rest */}
 								{lastMine && <button className="last-line" onClick={() => { setLogPart("mine"); openPane("log"); }}>{lastMine.text}</button>}
@@ -1205,7 +1207,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 							{logParts}
 							{logPart === "all" && logFilter}
 							{logPart === "tips" ? (
-								<div className="log task-list">{hints.length ? hints.map((h) => <p key={h.id} className="pack-hint">{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>) : <p className="muted">Gerade kein Tipp: sammle etwas, dann steht hier, was daraus werden kann.</p>}</div>
+								<div className="log task-list">{hints.length ? hints.map((h) => <p key={h.id} className={`pack-hint${hintsSeen.has(h.id) ? "" : " new"}`}>{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>) : <p className="muted">Gerade kein Tipp: sammle etwas, dann steht hier, was daraus werden kann.</p>}</div>
 							) : logPart === "todo" ? (
 								<div className="log task-list">{todos.length ? todos.map((t) => <p key={t.id} className={`task rank-${t.rank}`}>{t.text}</p>) : <p className="muted">Nichts zu tun: deine Äcker, Beete, Baustellen und Tiere warten auf nichts.</p>}</div>
 							) : logView}

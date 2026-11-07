@@ -86,8 +86,6 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 	return [...out.values()];
 }
 
-/** How many entries the bar shows before "Mehr": it must not push the rest of the panel out of the window. */
-export const HERE_SHOWN = 5;
 
 /** What a field is sown with, and the crop's word for `bestelle` (server: world.fields.crops). */
 const SOWN: Record<string, string> = { Weizen: "weizen", Gerste: "gerste", Hafer: "hafer", Kartoffel: "kartoffel", "Rübensamen": "rüben", Leinsamen: "flachs" };

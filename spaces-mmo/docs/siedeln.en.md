@@ -211,8 +211,9 @@ gateway sends with them, `ItemUses.steps`: what the mill grinds, what an animal 
 now (3 kelp: a kelp rope, with `craft tangseil`), which tool is missing (the shell knife for wood bundles, and what the
 knife takes), what is made at a building (bread at the bakehouse; `bau …` when the player owns none), what lacks a single
 piece, and where a thing goes on (wheat: the windmill grinds it to flour, flour goes on into bread; a goat gives milk in a
-pen, milk goes on into cheese). Each new hint shows once as a "Tipp:" line of the log (the page keeps what it showed in
-the browser), a tapped thing in the pack shows its own, "⋯ → Tipps" turns them off. They are computed in the page and
+pen, milk goes on into cheese). The hints stand in the events' tab "Tipps", not in the log: the tab counts and marks the
+ones not looked at yet (the page keeps what was seen in the browser), a tapped thing in the pack shows its own,
+"⋯ → Tipps" turns them off. They are computed in the page and
 cost the space nothing.
 
 

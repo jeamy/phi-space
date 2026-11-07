@@ -173,3 +173,38 @@ test("a trader taken up by a region's process heads for the stop of that region:
 	assert.equal(stopFor(w, route, "kupferhafen-kai"), 1, "over the ferry into the east: Kupferhafen");
 	assert.equal(stopFor(w, route, "klippenkopf"), 0, "back over the ferry into the west: the bay");
 });
+
+test("a line the model translated acts on nobody the player did not name: a misspelt name is asked about, not guessed", async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const a = await player(srv.url, "Gebende"), b = await player(srv.url, "Zarafine");
+		await give(s, a.me, "muschel");
+		const intent = (asked: string) => s.write({ type: "Intent", fields: { intentId: `i-${asked.length}-${Date.now()}`, charId: a.me, line: "offer 1 muschel an Zarafine", at: Date.now(), asked } as never }, null, 30_000);
+		let from = a.p.frames.length;
+		await intent("biete 1 muschel an z4rafine");
+		const refused = await msg(a.p, (t) => t.includes("Meinst du Zarafine?"), from);
+		assert.equal(refused.m.kind, "error");
+		assert.equal(await s.count({ type: "Offer" }), 0, "no offer to whom she did not name");
+		// named as she is, the same translation goes through
+		from = a.p.frames.length;
+		await intent("biete 1 muschel an zarafine");
+		await msg(a.p, (t) => /^Du bietest Zarafine/.test(t), from);
+		assert.equal(await s.count({ type: "Offer" }), 1);
+		await a.p.leave(); await b.p.leave();
+	} finally { await srv.close(); }
+});
+
+test("an NPC keeps at most 24 things of a kind and 50 coins, the rest goes; a player keeps all", async () => {
+	const stack = await startStack({ worldEnv: { SPACES_MMO_NPCS: "mats", SPACES_MMO_NPC_PACK_MS: "300" } });
+	const srv = await startServer({ stack });
+	try {
+		const s = stack.space;
+		const a = await player(srv.url, "Sammlerin");
+		for (let i = 0; i < 30; i++) { await give(s, "npc-mats", "treibholz"); await give(s, a.me, "treibholz"); }
+		for (let i = 0; i < 60; i++) await give(s, "npc-mats", w.currency);
+		await eventually(async () => (await pack(s, "npc-mats", "treibholz")) === 24 && (await pack(s, "npc-mats", w.currency)) === 50, 20_000, "the NPC's heap spoiled down to its limits");
+		assert.equal(await pack(s, a.me, "treibholz"), 30, "a player keeps all");
+		await a.p.leave();
+	} finally { await srv.close(); await stack.close(); }
+});

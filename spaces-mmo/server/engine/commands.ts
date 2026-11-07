@@ -99,6 +99,12 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 		throw new CommandError(c.asked ? `„${c.asked.slice(0, 80)}“ habe ich nicht verstanden. „help“ zeigt die Befehle.` : `Unbekannter Befehl „${verb.slice(0, 20)}“. „help“ zeigt alle Befehle.`);
 	}
 	if (c.actor.aboard && !mayAboard(cmd.key)) throw new CommandError(await aboardText(c));
+	// the model reads a misspelt name as someone who is there ("mad1ta" as Marta): a translated line acts on nobody the
+	// player did not name itself, it asks instead (an offer, a gift, a sponsor must reach the one that was meant)
+	if (c.asked) {
+		const guessed = (await viewFor(c)).people.find((n) => named(line, n) && !named(c.asked!, n));
+		if (guessed) throw new CommandError(`„${c.asked.slice(0, 80)}“ → ${line}: Meinst du ${guessed}? Ich handle nicht für jemanden, den du nicht genannt hast; schreib den Namen so, wie er heißt.`);
+	}
 	try {
 		if (understood) await msg(c, c.actor.charId, "info", understood);
 		await cmd.func(c, arg);
@@ -115,6 +121,9 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 		throw e;
 	}
 }
+
+/** Whether `line` names `name` as a word of its own (any case). */
+const named = (line: string, name: string) => new RegExp(`(^|[^\\p{L}\\p{N}])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^\\p{L}\\p{N}]|$)`, "iu").test(line);
 
 /** Talk is never translated: "sag ich gehe nach osten" says it. */
 const say = (line: string) => /^(say|sag|sage|'|emote|:|channel|kanal)\b/i.test(line) || line.startsWith("'") || line.startsWith(":");

@@ -9,6 +9,8 @@
 //   SPACES_MMO_MSG_LEASE_MS       how long a message stays (default 2 min: every message is an entry, and every call
 //                                 costs the space time in proportion to its entries; pages get messages at once)
 //   SPACES_MMO_CLEANUP_MS         how often lapsed guests are looked for (default 60 s)
+//   SPACES_MMO_NPC_PACK_MAX       how many things of one kind an NPC keeps (default 24; SPACES_MMO_NPC_COIN_MAX coins, 50); the rest goes every
+//                                 SPACES_MMO_NPC_PACK_MS, default 10 min, at most 500 a round)
 //   SPACES_MMO_TXN_MS             lease of a command's transaction: how soon the work of a dead process returns (15 s)
 //   SPACES_MMO_WORLD_LANES        how many characters this worker serves at once (default 16; each one's commands in order)
 //   SPACES_MMO_WORLD_INTENTS=0    this worker runs no commands, only the world's dates and the sweeps: a command makes about
@@ -284,6 +286,25 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		}
 		orphans = now;
 	};
+	/** What an NPC carries beyond `packMax` of one kind spoils, coins beyond `coinMax` go back into the world's purse: the
+	 *  settlers harvest more than they sell and the gardener gathers seeds every world hour, and every thing is an entry
+	 *  that each read of the things reads (a region held 18,000 of them). Players keep all they have. At most `budget` go
+	 *  a round, so a large heap goes over a few rounds. */
+	const packMax = Number(process.env.SPACES_MMO_NPC_PACK_MAX ?? 24), coinMax = Number(process.env.SPACES_MMO_NPC_COIN_MAX ?? 50);
+	const spoil = async (budget = 500) => {
+		for (const ch of await space.readAll({ type: "Character" })) {
+			const id = String(ch.fields.charId);
+			if (!id.startsWith("npc-")) continue;
+			const kinds = new Map<string, string[]>();
+			for (const e of await space.readAll({ type: "Item", fields: { location: id } })) kinds.set(String(e.fields.proto), [...(kinds.get(String(e.fields.proto)) ?? []), e.id]);
+			for (const [proto, ids] of kinds) for (const e of ids.slice(proto === w.currency ? coinMax : packMax)) {
+				if (budget-- <= 0) return;
+				await space.takeIfExists({ type: "Item", id: e }, NO_WAIT);
+			}
+		}
+	};
+	const spoiling = setInterval(() => void spoil().catch((e) => console.error("[world] npc packs:", (e as Error).message)), envMs("SPACES_MMO_NPC_PACK_MS", 10 * 60_000));
+	spoiling.unref?.();
 	const sweep = setInterval(() => void cleanup().catch((e) => console.error("[world] cleanup:", (e as Error).message)), envMs("SPACES_MMO_CLEANUP_MS", 60_000));
 	sweep.unref?.();
 	// the cells of characters that went offline (engine/occupancy.ts): they block nobody, but every read of a room's cells reads them
@@ -293,7 +314,8 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 	return {
 		space,
 		cleanup,
-		async close() { halt.abort(); clearInterval(sweep); clearInterval(spots); await loop; await scheduling; await delivering; mirror?.close(); await proc.stop(); for (const c of otherConns) c.close(); conn.close(); },
+		spoil,
+		async close() { halt.abort(); clearInterval(sweep); clearInterval(spots); clearInterval(spoiling); await loop; await scheduling; await delivering; mirror?.close(); await proc.stop(); for (const c of otherConns) c.close(); conn.close(); },
 	};
 }
 
