@@ -205,6 +205,7 @@ export class Accounts {
 				...(await space.readAll({ type: "Estate", fields: { accountId } })).map((e) => ({ e, key: "ownerName" })),
 				...(await space.readAll({ type: "SiteOrder", fields: { ownerName: from } })).map((e) => ({ e, key: "ownerName" })),
 				...(await space.readAll({ type: "Listing", fields: { seller: charId } })).map((e) => ({ e, key: "sellerName" })),
+				...(await space.readAll({ type: "Wanted", fields: { buyer: charId } })).map((e) => ({ e, key: "buyerName" })),
 			];
 			for (const { e, key } of owned) {
 				const taken = await space.takeIfExists({ type: e.type, id: e.id }, NO_WAIT);

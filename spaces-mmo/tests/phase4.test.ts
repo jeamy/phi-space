@@ -92,6 +92,45 @@ test("market: a listing waits in escrow; a purchase moves listing, coins and ite
 	} finally { await srv.close(); }
 });
 
+test("market: a wanted notice holds the buyer's coins; delivering moves thing and coins at once; withdrawn or lapsed, the coins go back", async () => {
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.002" } });
+	try {
+		const s = srv.stack.space;
+		const a = await player(srv.url, "Ziegenhirtin"), b = await player(srv.url, "Ziegensucher");
+		await give(s, b.me, "muenze", 5);
+		assert.match(await does(b.p, "markt suche ziege für 9", "brauchst du"), /9 Münzen/);
+		assert.match(await does(b.p, "markt suche münze für 2", "nichts"), /Münzen gegen Münzen/);
+		assert.match(await does(b.p, "markt suche flugdrache für 2", "gibt es nicht"), /Flugdrache/i);
+		await does(b.p, "markt suche ziegen für 5", "Du suchst am Marktbrett Ziege und zahlst 5 Münzen.");
+		assert.equal((await pack(s, b.me, "muenze")).length, 0);
+		assert.equal((await s.readAll({ type: "Item", fields: { location: "market", proto: "muenze" } })).length, 5, "the coins wait at the board");
+		assert.match(await does(a.p, "markt", "Gesuche"), /1\. Ziegensucher sucht Ziege, zahlt 5 Münzen/);
+		await a.p.until((f) => f.t === "trade" && f.trade.wanted?.[0]?.protoName === "Ziege" && !f.trade.wanted[0].mine);
+		assert.match(await does(b.p, "markt liefere 1", "eigenes"), /zurück/);
+		assert.match(await does(a.p, "markt liefere 1", "nicht bei dir"), /Ziege/);
+		await give(s, a.me, "ziege", 1);
+		const from = b.p.frames.length;
+		await does(a.p, "markt liefere 1", "Du lieferst Ziegensucher Ziege und bekommst 5 Münzen.");
+		await b.p.until((f) => f.t === "msg" && f.m.text.includes("Ziegenhirtin liefert dir Ziege"), 10_000, from);
+		assert.equal((await pack(s, b.me, "ziege")).length, 1);
+		assert.equal((await pack(s, a.me, "muenze")).length, 5);
+		assert.equal(await s.count({ type: "Wanted" }), 0);
+		assert.equal((await s.readAll({ type: "Item", fields: { location: "market" } })).length, 0);
+		// withdrawn: the coins come back
+		await give(s, b.me, "muenze", 2);
+		await does(b.p, "suche eine Muschel für 2 Münzen", "Du suchst am Marktbrett Muschel");
+		assert.match(await does(a.p, "markt suche zurück 1", "nicht dein"), /Gesuch/);
+		await does(b.p, "markt suche zurück 1", "deine 2 Münzen hast du wieder");
+		assert.equal((await pack(s, b.me, "muenze")).length, 2);
+		// lapsed: the market ticker gives the coins back
+		await does(b.p, "markt suche muschel für 2", "Du suchst");
+		const wn = (await s.readAll({ type: "Wanted" }))[0]!;
+		await s.take({ type: "Wanted", id: wn.id }, 2_000); // as if it had lapsed
+		await eventually(async () => (await pack(s, b.me, "muenze")).length === 2, 10_000, "the coins back with the buyer");
+		await a.p.leave(); await b.p.leave();
+	} finally { await srv.close(); }
+});
+
 test("craft with a count: forms of the name and of the number, as many as the pack gives, a second tool takes over", async () => {
 	const srv = await startServer();
 	try {

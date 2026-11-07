@@ -149,7 +149,7 @@ browser E2E comparison of the 2D/3D grid inputs. These points block neither worl
 - **Sinks:** Fuel burns, tools break, orders consume the delivered things. Coins arise
   only as wages from the board.
 
-- Direct exchange (`offer`/`accept`) as one transaction; market board (offers as entries with a lease).
+- Direct exchange (`offer`/`accept`) as one transaction; market board (offers as entries with a lease; wanted notices hold the buyer's coins in the same escrow until someone delivers).
 - Recipes/crafting via prototypes; order board as master worker.
 - Sinks against inflation: fuel burns, tools wear out (on demand).
 

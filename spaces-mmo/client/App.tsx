@@ -318,6 +318,7 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 	});
 	const [want, setWant] = useState("");
 	const [sell, setSell] = useState(""), [price, setPrice] = useState("2");
+	const [seek, setSeek] = useState(""), [bid, setBid] = useState("2");
 	// things by kind with their count ("4× Münze für Perle"), as the server's messages say it
 	const counted = (xs: string[] | Array<{ name: string; count: number }>) => {
 		const m = new Map<string, number>();
@@ -326,7 +327,7 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 	};
 	const wants = (w: Array<{ name: string; count: number }>) => (w.length ? ` für ${counted(w)}` : " als Geschenk");
 	// a trade can be offered to anyone in the room, with or without a market here
-	const has = trade.offersIn.length || trade.offersOut.length || trade.orders || trade.myOrder || trade.listings || offerTo !== null || (!guest && others.length > 0 && carried.length > 0);
+	const has = trade.offersIn.length || trade.offersOut.length || trade.orders || trade.myOrder || trade.listings || trade.wanted || offerTo !== null || (!guest && others.length > 0 && carried.length > 0);
 	if (!has) return null;
 	return (
 		<div className="things trade">
@@ -367,6 +368,18 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 					<button disabled={!sell}>Einstellen</button>
 				</form>
 			)}</>}
+			{trade.wanted && <><h3>Gesuche</h3>{trade.wanted.length ? <ul>{trade.wanted.map((w) => {
+				const have = carried.some((o) => o.name === w.protoName);
+				return <li key={w.nr}><span>{w.mine ? "Du suchst" : `${w.buyerName} sucht`} {w.protoName} – {w.price} {w.price === 1 ? "Münze" : "Münzen"}</span>{!guest && (w.mine ? <button onClick={() => send(`markt suche zurück ${w.nr}`)}>Zurücknehmen</button> : <button disabled={!have} title={have ? "" : `Du trägst kein ${w.protoName}`} onClick={() => send(`markt liefere ${w.nr}`)}>Liefern</button>)}</li>;
+			})}</ul> : <p className="muted">Niemand sucht gerade etwas.</p>}
+			{!guest && (
+				<form className="row" onSubmit={(e) => { e.preventDefault(); if (seek.trim()) send(`markt suche ${seek.trim()} für ${bid}`); setSeek(""); }}>
+					<input value={seek} onChange={(e) => setSeek(e.target.value)} placeholder="suchen, z. B. Ziege" aria-label="Was suchen" />
+					<input type="number" min={1} max={1000} value={bid} onChange={(e) => setBid(e.target.value)} aria-label="Gebot in Münzen" style={{ width: 70 }} />
+					<button disabled={!seek.trim()}>Suchen</button>
+				</form>
+			)}
+			{!guest && <p className="muted" style={{ margin: "0 0 4px" }}>Deine Münzen liegen am Brett, bis jemand liefert; zurückgenommen oder abgelaufen bekommst du sie wieder.</p>}</>}
 		</div>
 	);
 }

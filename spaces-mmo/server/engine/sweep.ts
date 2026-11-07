@@ -3,7 +3,7 @@
 // of the order board and listings of the market carry `expiresWorldMs`; the date `tick.sweep` calls this every few world
 // seconds. Each thing is taken in a transaction of its own, so what someone picks up or buys at that moment is theirs.
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type ItemFields, type ListingFields, type OrderFields } from "../model.ts";
+import { fieldsOf, type ItemFields, type ListingFields, type OrderFields, type WantedFields } from "../model.ts";
 import { decayNowOf, worldNowOf } from "./clock.ts";
 import { buildSweep } from "./commands/build.ts";
 import type { WorldDef } from "./world.ts";
@@ -27,5 +27,6 @@ export async function sweepTick(space: SpaceLike, w?: WorldDef): Promise<void> {
 	for (const e of await space.readAll({ type: "NpcAwake" })) if (Number(e.fields.untilWorldMs ?? 0) <= kept) await takeIfLapsed(space, e.id, "NpcAwake"); // a role awake until a world time
 	for (const e of await space.readAll({ type: "Order" })) if ((fieldsOf<OrderFields>(e).expiresWorldMs ?? Infinity) <= now) await takeIfLapsed(space, e.id, "Order");
 	for (const e of await space.readAll({ type: "Listing" })) if ((fieldsOf<ListingFields>(e).expiresWorldMs ?? Infinity) <= kept) await takeIfLapsed(space, e.id, "Listing");
+	for (const e of await space.readAll({ type: "Wanted" })) if ((fieldsOf<WantedFields>(e).expiresWorldMs ?? Infinity) <= kept) await takeIfLapsed(space, e.id, "Wanted"); // its coins go back with the market tick
 	await buildSweep(space, w); // sites without progress, buildings not kept, ruins and estates whose time is up (docs/siedeln.en.md)
 }

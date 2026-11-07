@@ -27,6 +27,8 @@ test("rules: common sentences become commands; commands and talk stay as they ar
 	assert.equal(t("kaufe Kompass am markt"), "market", "not listed: show the board");
 	assert.equal(t("biete Muschel am Markt für 2 an"), "market biete muschel für 2");
 	assert.equal(t("verkaufe das treibholz für 3 münzen"), "market biete treibholz für 3");
+	assert.equal(t("suche eine Ziege für 5 Münzen"), "market suche ziege für 5");
+	assert.equal(t("suche am markt ziege für 5"), "market suche ziege für 5");
 	assert.equal(t("lege holz ins feuer"), "put holz in feuer");
 	assert.equal(t("legeholz ins feuer"), "put holz in feuer");
 	assert.equal(t("wirf das treibholz ins leuchtfeuer"), "put treibholz in leuchtfeuer");

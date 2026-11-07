@@ -4,7 +4,7 @@
 // or lost however many trades race each other.
 import { randomBytes, randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
-import { fieldsOf, type AccountFields, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type OfferFields, type OrderFields, type ShopOrderFields } from "../../model.ts";
+import { fieldsOf, type AccountFields, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type OfferFields, type WantedFields, type OrderFields, type ShopOrderFields } from "../../model.ts";
 import { readExisting, StillHeld, peek } from "../../space.ts";
 import type { Command } from "../cmdsets.ts";
 import { byName, CommandError, NotUnderstood, inventory, msg, stem, type CommandCtx, itemsNamed } from "../context.ts";
@@ -146,20 +146,75 @@ const decline: Command = {
 async function listings(space: SpaceLike, room: string): Promise<Array<{ e: Taken; f: ListingFields }>> {
 	return (await space.readAll({ type: "Listing", fields: { room } })).map((e) => ({ e, f: fieldsOf<ListingFields>(e) })).sort((a, b) => a.f.at - b.f.at || a.f.listingId.localeCompare(b.f.listingId));
 }
+/** The wanted notices of a board, numbered on their own (order of posting). */
+async function wanteds(space: SpaceLike, room: string): Promise<Array<{ e: Taken; f: WantedFields }>> {
+	return (await space.readAll({ type: "Wanted", fields: { room } })).map((e) => ({ e, f: fieldsOf<WantedFields>(e) })).sort((a, b) => a.f.at - b.f.at || a.f.wantedId.localeCompare(b.f.wantedId));
+}
+/** How many wanted notices one may have open on a board. */
+const WANTED_MAX = 5;
+/** A thing of the world by its name, key or alias, also in another form ("ziegen" is the "Ziege"). */
+function protoNamed(w: WorldDef, name: string): WorldDef["prototypes"][number] | undefined {
+	const n = name.trim().toLowerCase().replace(/^(?:eine?n?|eine[rs]?|a|an)\s+/, "");
+	return w.prototypes.find((p) => p.key === n || [p.name, ...(p.aliases ?? [])].some((a) => a.toLowerCase() === n))
+		?? w.prototypes.find((p) => [p.name, ...(p.aliases ?? [])].some((a) => stem(a) === stem(n)));
+}
+const coins = (n: number) => `${n} Münze${n === 1 ? "" : "n"}`;
 
 const market: Command = {
 	key: "market", aliases: ["markt"],
-	help: "market – das Marktbrett: market biete <ding> für <n>, market kaufe <nr>, market zurück <nr> (Preise in Münzen)",
+	help: "market – das Marktbrett: market biete <ding> für <n>, market kaufe <nr>, market zurück <nr>; Gesuche: market suche <ding> für <n>, market liefere <nr>, market suche zurück <nr> (Preise in Münzen)",
 	async func(c, arg) {
 		if (!c.world.market.rooms.includes(c.actor.room)) throw new CommandError(`Hier steht kein Marktbrett. Marktbretter stehen in: ${roomNames(c.world, c.world.market.rooms)}.`);
 		const [verb = "", ...rest] = arg.trim().split(/\s+/);
 		const all = await listings(c.space, c.actor.room);
 		const nr = (s: string | undefined) => { const n = Number(s); if (!Number.isInteger(n) || n < 1 || n > all.length) throw new CommandError("Diese Nummer steht nicht auf dem Brett. „markt“ zeigt es."); return all[n - 1]!; };
 		const coin = c.world.currency;
+		const sought = await wanteds(c.space, c.actor.room);
+		const wnr = (s: string | undefined) => { const n = Number(s); if (!Number.isInteger(n) || n < 1 || n > sought.length) throw new CommandError("Dieses Gesuch steht nicht am Brett. „markt“ zeigt es."); return sought[n - 1]!; };
 		if (!verb) {
-			return msg(c, c.actor.charId, "info", all.length ? ["Marktbrett:", ...all.map((l, i) => `  ${i + 1}. ${l.f.itemName} für ${l.f.price} Münze${l.f.price === 1 ? "" : "n"} (von ${l.f.sellerName})`)].join("\n") : "Das Marktbrett ist leer. „markt biete <ding> für <n>“ stellt etwas ein.");
+			const offered = all.length ? ["Marktbrett:", ...all.map((l, i) => `  ${i + 1}. ${l.f.itemName} für ${l.f.price} Münze${l.f.price === 1 ? "" : "n"} (von ${l.f.sellerName})`)] : ["Das Marktbrett ist leer. „markt biete <ding> für <n>“ stellt etwas ein."];
+			const wanted = sought.length ? ["Gesuche („markt liefere <nr>“):", ...sought.map((w, i) => `  ${i + 1}. ${w.f.buyerName} sucht ${w.f.protoName}, zahlt ${coins(w.f.price)}`)] : [];
+			return msg(c, c.actor.charId, "info", [...offered, ...wanted].join("\n"));
 		}
 		noGuest(c);
+		// a wanted notice: "markt suche ziege für 5" puts the coins in escrow; "markt suche zurück <nr>" takes them back
+		if (/^(suche|gesuch|want)$/i.test(verb)) {
+			if (/^(zurück|zurueck|withdraw)$/i.test(rest[0] ?? "")) {
+				const w = wnr(rest[1]);
+				if (w.f.buyer !== c.actor.charId) throw new CommandError("Das ist nicht dein Gesuch.");
+				if (!(await c.space.take({ type: "Wanted", id: w.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Zu spät – jemand liefert gerade.");
+				for (const e of await c.space.readAll({ type: "Item", fields: { location: "market", listing: w.f.wantedId } }, { txn: c.txn })) await move(c, fieldsOf<ItemFields>(e), "market", c.actor.charId);
+				return msg(c, c.actor.charId, "info", `Du nimmst dein Gesuch nach ${w.f.protoName} zurück; deine ${coins(w.f.price)} hast du wieder.`);
+			}
+			const m = /^(.+?)\s+(?:für|fuer|for)\s+(\d+)$/i.exec(rest.join(" "));
+			if (!m) throw new NotUnderstood("So geht es: markt suche <ding> für <n>, z. B. markt suche ziege für 5");
+			const price = Number(m[2]);
+			if (price < 1 || price > 1000) throw new CommandError("Ein Preis liegt zwischen 1 und 1000 Münzen.");
+			const p = protoNamed(c.world, m[1]!);
+			if (!p) throw new NotUnderstood(`Ein Ding namens „${m[1]!.slice(0, 30)}“ gibt es nicht.`);
+			if (p.key === coin) throw new CommandError("Münzen gegen Münzen zu tauschen ergibt nichts; suche etwas anderes.");
+			if (sought.filter((w) => w.f.buyer === c.actor.charId).length >= WANTED_MAX) throw new CommandError(`Du hast schon ${WANTED_MAX} Gesuche an diesem Brett; nimm erst eines zurück („markt suche zurück <nr>“).`);
+			const pay = byProto(await inventory(c), coin, price);
+			if (!pay) throw new CommandError(`Dafür brauchst du ${coins(price)}; sie liegen am Brett, bis jemand liefert.`);
+			const wantedId = `w-${randomBytes(5).toString("hex")}`;
+			for (const i of pay) await move(c, i.f, c.actor.charId, "market", { listing: wantedId, seller: c.actor.charId });
+			await c.space.write({ type: "Wanted", fields: { wantedId, buyer: c.actor.charId, buyerName: c.actor.name, proto: p.key, protoName: p.name, price, room: c.actor.room, at: Date.now(), expiresWorldMs: (await decayNowOf(c.space, c.txn)) + c.world.market.listMs } satisfies WantedFields as never }, c.txn, FOREVER);
+			return msg(c, "*", "info", `$you() $conj(suchst|sucht) am Marktbrett ${p.name} und $conj(zahlst|zahlt) ${coins(price)}.`, { templ: true });
+		}
+		// delivering what a notice seeks: the thing goes to the one who seeks it, the coins in escrow to the one who brings it
+		if (/^(liefere|deliver)$/i.test(verb)) {
+			const w = wnr(rest[0]);
+			if (w.f.buyer === c.actor.charId) throw new CommandError("Das ist dein eigenes Gesuch; „markt suche zurück“ nimmt es zurück.");
+			const inv = await inventory(c);
+			const thing = (await Promise.all(inv.filter((i) => i.f.proto === w.f.proto).map(async (i) => ({ i, full: (await c.space.count({ type: "Item", fields: { location: i.f.itemId } }, c.txn)) > 0 })))).find((x) => !x.full)?.i;
+			if (!thing) throw new CommandError(inv.some((i) => i.f.proto === w.f.proto) ? `Leere erst, was in ${w.f.protoName} liegt.` : `${w.f.protoName} trägst du nicht bei dir.`);
+			if (!(await c.space.take({ type: "Wanted", id: w.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Zu spät – jemand anderes liefert gerade.");
+			const paid = await c.space.readAll({ type: "Item", fields: { location: "market", listing: w.f.wantedId } }, { txn: c.txn });
+			for (const e of paid) await move(c, fieldsOf<ItemFields>(e), "market", c.actor.charId);
+			await move(c, thing.f, c.actor.charId, w.f.buyer);
+			await msg(c, w.f.buyer, "info", `${c.actor.name} liefert dir ${thing.f.name} für dein Gesuch am Marktbrett.`);
+			return msg(c, "*", "info", `$you() $conj(lieferst|liefert) ${w.f.buyerName} ${thing.f.name} und $conj(bekommst|bekommt) ${coins(paid.length)}.`, { templ: true });
+		}
 		if (/^(biete|sell|verkaufe)$/i.test(verb)) {
 			const m = /^(.+?)\s+(?:für|fuer|for)\s+(\d+)$/i.exec(rest.join(" "));
 			if (!m) throw new NotUnderstood("So geht es: markt biete <ding> für <n>");
@@ -194,7 +249,7 @@ const market: Command = {
 			if (item) await move(c, fieldsOf<ItemFields>(item), "market", c.actor.charId);
 			return msg(c, c.actor.charId, "info", `Du holst ${l.f.itemName} vom Marktbrett zurück.`);
 		}
-		throw new NotUnderstood("Am Marktbrett: markt, markt biete <ding> für <n>, markt kaufe <nr>, markt zurück <nr>.");
+		throw new NotUnderstood("Am Marktbrett: markt, markt biete <ding> für <n>, markt kaufe <nr>, markt zurück <nr>, markt suche <ding> für <n>, markt liefere <nr>, markt suche zurück <nr>.");
 	},
 };
 
@@ -346,12 +401,12 @@ export async function ordersTick(space: SpaceLike, w: WorldDef): Promise<void> {
 	}
 }
 
-/** Market ticker: an item in escrow whose listing lapsed goes back to its seller. A listing held right now (a
- *  purchase in progress) counts as alive. */
+/** Market ticker: an item in escrow whose listing lapsed goes back to its seller, the coins of a wanted notice that lapsed
+ *  to its buyer. A listing or notice held right now (a purchase or delivery in progress) counts as alive. */
 export async function marketTick(space: SpaceLike): Promise<void> {
 	for (const e of await space.readAll({ type: "Item", fields: { location: "market" } })) {
 		const f = fieldsOf<ItemFields>(e);
-		try { if (f.listing && (await readExisting(space, { type: "Listing", fields: { listingId: f.listing } }))) continue; } catch (err) { if (err instanceof StillHeld) continue; throw err; }
+		try { if (f.listing && (await readExisting(space, f.listing.startsWith("w-") ? { type: "Wanted", fields: { wantedId: f.listing } } : { type: "Listing", fields: { listingId: f.listing } }))) continue; } catch (err) { if (err instanceof StillHeld) continue; throw err; }
 		const txn = (await space.createTransaction(10_000)).id;
 		try {
 			const t = await space.takeIfExists({ type: "Item", id: e.id }, NO_WAIT, { txn });

@@ -127,6 +127,10 @@ export type OfferFields = { offerId: string; from: string; fromName: string; to:
 /** A listing on the market board: the item waits in escrow (location "market") until bought, withdrawn or the lease
  *  ends (then the market ticker gives it back). Prices are counted in coins (prototype `currency` of the world). */
 export type ListingFields = { listingId: string; seller: string; sellerName: string; itemId: string; itemName: string; price: number; room: string; at: number; expiresWorldMs?: number };
+/** A wanted notice on the market board: the buyer's coins wait in escrow (location "market", `listing` = `wantedId`,
+ *  `seller` = the buyer) until someone delivers a thing of `proto`, the buyer withdraws it or it lapses like a listing
+ *  (then the market ticker gives the coins back). */
+export type WantedFields = { wantedId: string; buyer: string; buyerName: string; proto: string; protoName: string; price: number; room: string; at: number; expiresWorldMs?: number };
 /** A job on the order board (master–worker): posted by the world, taken by one player, delivered for a reward. */
 export type OrderFields = { orderId: string; kind: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; takenBy: string; room: string; expiresWorldMs?: number };
 /** A help topic of the world. */
