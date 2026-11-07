@@ -86,7 +86,7 @@ export type TradeView = {
 	orders: Array<{ nr: number; text: string; reward: number }> | null;
 	/** The player's order; `here`: a board stands in this room (only there it is delivered or given up); `boards`: where. */
 	myOrder: { text: string; needs: OrderFields["needs"]; here: boolean; boards: string[] } | null;
-	listings: Array<{ nr: number; itemName: string; price: number; sellerName: string; mine: boolean }> | null;
+	listings: Array<{ nr: number; itemName: string; /** how many for the price together */ count: number; price: number; sellerName: string; mine: boolean }> | null;
 	/** The board's wanted notices (numbered on their own), null where no board stands. */
 	wanted: Array<{ nr: number; protoName: string; price: number; buyerName: string; mine: boolean }> | null;
 	/** Until when (world time) the figure rests from searching for seeds in this room, null: it does not (the page then offers the search). */
@@ -674,7 +674,7 @@ export class Gateway {
 			orders: c.room && this.w.orders.rooms.includes(c.room) ? open.filter((o) => o.room === c.room).map((o, i) => ({ nr: i + 1, text: o.text, reward: o.reward.count })) : null,
 			myOrder: mine ? { text: mine.text, needs: mine.needs, here: !!c.room && this.w.orders.rooms.includes(c.room), boards: this.w.orders.rooms.map((r) => this.#rooms.get(r)?.name ?? r) } : null,
 			seedRestUntilWorldMs: c.room ? Math.max(0, ...[...this.#seedRests.values()].filter((r) => r.charId === me && r.room === c.room).map((r) => r.untilWorldMs)) || null : null,
-			listings: c.room && this.w.market.rooms.includes(c.room) ? listings.filter((l) => l.room === c.room).map((l, i) => ({ nr: i + 1, itemName: l.itemName, price: l.price, sellerName: l.sellerName, mine: l.seller === me })) : null,
+			listings: c.room && this.w.market.rooms.includes(c.room) ? listings.filter((l) => l.room === c.room).map((l, i) => ({ nr: i + 1, itemName: l.itemName, count: l.count ?? 1, price: l.price, sellerName: l.sellerName, mine: l.seller === me })) : null,
 			wanted: c.room && this.w.market.rooms.includes(c.room) ? [...this.#wanted.values()].filter((w) => w.room === c.room).sort((a, b) => a.at - b.at || a.wantedId.localeCompare(b.wantedId)).map((w, i) => ({ nr: i + 1, protoName: w.protoName, price: w.price, buyerName: w.buyerName, mine: w.buyer === me })) : null,
 		};
 	}

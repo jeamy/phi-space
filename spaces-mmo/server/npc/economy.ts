@@ -181,7 +181,7 @@ async function buy(n: Npc, l: Look, only?: string[]): Promise<boolean> {
 	const coins = coinsOf(n, l).length;
 	const i = listings.findIndex((x) => {
 		const p = protoOf(n.world, x.itemName);
-		return !!p && x.seller !== l.me.charId && (!only || only.includes(p)) && x.price <= buyPrice(n, p) && x.price <= coins && l.pack.filter((it) => it.proto === p).length < 4;
+		return !!p && x.seller !== l.me.charId && (!only || only.includes(p)) && x.price <= buyPrice(n, p) * (x.count ?? 1) && x.price <= coins && l.pack.filter((it) => it.proto === p).length < 4;
 	});
 	if (i < 0) return false;
 	await n.act(`market kaufe ${i + 1}`);
@@ -478,7 +478,7 @@ async function gossip(n: Npc): Promise<string | null> {
 	const w = n.world;
 	const told: string[] = [];
 	const listing = pick((await n.space.readAll({ type: "Listing" })).map((e) => fieldsOf<ListingFields>(e)));
-	if (listing) told.push(`Am Marktbrett in ${roomName(w, listing.room)} gibt es ${listing.itemName} für ${plural(listing.price, "Münze", "Münzen")}.`);
+	if (listing) told.push(`Am Marktbrett in ${roomName(w, listing.room)} gibt es ${(listing.count ?? 1) > 1 ? `${listing.count}× ` : ""}${listing.itemName} für ${plural(listing.price, "Münze", "Münzen")}.`);
 	for (const b of w.beacons) {
 		const f = await flameOf(n.space, b.beaconId);
 		if (!f || f.until <= ((await clockOf(n.space).now()) ?? 0)) told.push(`Das ${b.name} auf ${islandOf(w, b.room)} ist aus – dort steigt der Nebel.`);

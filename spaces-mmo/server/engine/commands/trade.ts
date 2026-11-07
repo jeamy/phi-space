@@ -159,6 +159,8 @@ function protoNamed(w: WorldDef, name: string): WorldDef["prototypes"][number] |
 		?? w.prototypes.find((p) => [p.name, ...(p.aliases ?? [])].some((a) => stem(a) === stem(n)));
 }
 const coins = (n: number) => `${n} Münze${n === 1 ? "" : "n"}`;
+/** A listing's goods as said: "Muschel", "10× Muschel". */
+export const lotOf = (l: Pick<ListingFields, "itemName" | "count">) => ((l.count ?? 1) > 1 ? `${l.count}× ${l.itemName}` : l.itemName);
 
 const market: Command = {
 	key: "market", aliases: ["markt"],
@@ -172,7 +174,7 @@ const market: Command = {
 		const sought = await wanteds(c.space, c.actor.room);
 		const wnr = (s: string | undefined) => { const n = Number(s); if (!Number.isInteger(n) || n < 1 || n > sought.length) throw new CommandError("Dieses Gesuch steht nicht am Brett. „markt“ zeigt es."); return sought[n - 1]!; };
 		if (!verb) {
-			const offered = all.length ? ["Marktbrett:", ...all.map((l, i) => `  ${i + 1}. ${l.f.itemName} für ${l.f.price} Münze${l.f.price === 1 ? "" : "n"} (von ${l.f.sellerName})`)] : ["Das Marktbrett ist leer. „markt biete <ding> für <n>“ stellt etwas ein."];
+			const offered = all.length ? ["Marktbrett:", ...all.map((l, i) => `  ${i + 1}. ${lotOf(l.f)} für ${l.f.price} Münze${l.f.price === 1 ? "" : "n"} (von ${l.f.sellerName})`)] : ["Das Marktbrett ist leer. „markt biete <ding> für <n>“ stellt etwas ein."];
 			const wanted = sought.length ? ["Gesuche („markt liefere <nr>“):", ...sought.map((w, i) => `  ${i + 1}. ${w.f.buyerName} sucht ${w.f.protoName}, zahlt ${coins(w.f.price)}`)] : [];
 			return msg(c, c.actor.charId, "info", [...offered, ...wanted].join("\n"));
 		}
@@ -186,7 +188,7 @@ const market: Command = {
 				for (const e of await c.space.readAll({ type: "Item", fields: { location: "market", listing: w.f.wantedId } }, { txn: c.txn })) await move(c, fieldsOf<ItemFields>(e), "market", c.actor.charId);
 				return msg(c, c.actor.charId, "info", `Du nimmst dein Gesuch nach ${w.f.protoName} zurück; deine ${coins(w.f.price)} hast du wieder.`);
 			}
-			const m = /^(.+?)\s+(?:für|fuer|for)\s+(\d+)$/i.exec(rest.join(" "));
+			const m = /^(.+?)\s+(?:für|fuer|for|um)\s+(\d+)(?:\s+(?:münzen?|muenzen?|coins?))?$/i.exec(rest.join(" "));
 			if (!m) throw new NotUnderstood("So geht es: markt suche <ding> für <n>, z. B. markt suche ziege für 5");
 			const price = Number(m[2]);
 			if (price < 1 || price > 1000) throw new CommandError("Ein Preis liegt zwischen 1 und 1000 Münzen.");
@@ -216,17 +218,19 @@ const market: Command = {
 			return msg(c, "*", "info", `$you() $conj(lieferst|liefert) ${w.f.buyerName} ${thing.f.name} und $conj(bekommst|bekommt) ${coins(paid.length)}.`, { templ: true });
 		}
 		if (/^(biete|sell|verkaufe)$/i.test(verb)) {
-			const m = /^(.+?)\s+(?:für|fuer|for)\s+(\d+)$/i.exec(rest.join(" "));
-			if (!m) throw new NotUnderstood("So geht es: markt biete <ding> für <n>");
+			// one thing or a lot of one kind, for one price together: "markt biete 10 muscheln für 15", "… um 15 münzen"
+			const m = /^(.+?)\s+(?:für|fuer|for|um)\s+(\d+)(?:\s+(?:münzen?|muenzen?|coins?))?$/i.exec(rest.join(" "));
+			if (!m) throw new NotUnderstood("So geht es: markt biete <ding> für <n>, auch markt biete 10 muscheln für 15");
 			const price = Number(m[2]);
 			if (price < 1 || price > 1000) throw new CommandError("Ein Preis liegt zwischen 1 und 1000 Münzen.");
-			const got = pick(await inventory(c), parseSpec(m[1]!).slice(0, 1).map((s) => ({ ...s, count: 1 })), c.world);
+			const got = pick(await inventory(c), parseSpec(m[1]!).slice(0, 1), c.world);
 			if ("missing" in got) throw new (got.unknown ? NotUnderstood : CommandError)(`Du hast nicht: ${got.missing}.`);
 			const item = got.items[0]!.f, listingId = `l-${randomBytes(5).toString("hex")}`;
 			if (item.proto === "muenze") throw new CommandError("Münzen gegen Münzen zu tauschen ergibt nichts; stelle etwas anderes ans Marktbrett.");
-			await move(c, item, c.actor.charId, "market", { listing: listingId, seller: c.actor.charId });
-			await c.space.write({ type: "Listing", fields: { listingId, seller: c.actor.charId, sellerName: c.actor.name, itemId: item.itemId, itemName: item.name, price, room: c.actor.room, at: Date.now(), expiresWorldMs: (await decayNowOf(c.space, c.txn)) + c.world.market.listMs } satisfies ListingFields as never }, c.txn, FOREVER);
-			return msg(c, "*", "info", `$you() $conj(hängst|hängt) ${item.name} für ${price} Münze${price === 1 ? "" : "n"} ans Marktbrett.`, { templ: true });
+			for (const i of got.items) await move(c, i.f, c.actor.charId, "market", { listing: listingId, seller: c.actor.charId });
+			const lot: ListingFields = { listingId, seller: c.actor.charId, sellerName: c.actor.name, itemId: item.itemId, itemName: item.name, ...(got.items.length > 1 ? { count: got.items.length } : {}), price, room: c.actor.room, at: Date.now(), expiresWorldMs: (await decayNowOf(c.space, c.txn)) + c.world.market.listMs };
+			await c.space.write({ type: "Listing", fields: lot as never }, c.txn, FOREVER);
+			return msg(c, "*", "info", `$you() $conj(hängst|hängt) ${lotOf(lot)} für ${price} Münze${price === 1 ? "" : "n"} ans Marktbrett.`, { templ: true });
 		}
 		if (/^(kaufe|buy)$/i.test(verb)) {
 			const l = nr(rest[0]);
@@ -235,19 +239,18 @@ const market: Command = {
 			const coins = byProto(await inventory(c), coin, l.f.price);
 			if (!coins) throw new CommandError(`Dafür brauchst du ${l.f.price} Münze${l.f.price === 1 ? "" : "n"}.`);
 			for (const m of coins) await move(c, m.f, c.actor.charId, l.f.seller);
-			const item = await peek(c.space, { type: "Item", fields: { itemId: l.f.itemId, location: "market" } });
-			if (!item) throw new CommandError("Die Ware ist nicht mehr am Brett.");
-			await move(c, fieldsOf<ItemFields>(item), "market", c.actor.charId);
-			await msg(c, l.f.seller, "info", `${c.actor.name} kauft dein ${l.f.itemName} für ${l.f.price} Münze${l.f.price === 1 ? "" : "n"}.`);
-			return msg(c, "*", "info", `$you() $conj(kaufst|kauft) ${l.f.itemName} vom Marktbrett.`, { templ: true });
+			const goods = await c.space.readAll({ type: "Item", fields: { location: "market", listing: l.f.listingId } }, { txn: c.txn });
+			if (!goods.length) throw new CommandError("Die Ware ist nicht mehr am Brett.");
+			for (const g of goods) await move(c, fieldsOf<ItemFields>(g), "market", c.actor.charId);
+			await msg(c, l.f.seller, "info", `${c.actor.name} kauft dein ${lotOf(l.f)} für ${l.f.price} Münze${l.f.price === 1 ? "" : "n"}.`);
+			return msg(c, "*", "info", `$you() $conj(kaufst|kauft) ${lotOf(l.f)} vom Marktbrett.`, { templ: true });
 		}
 		if (/^(zurück|zurueck|withdraw)$/i.test(verb)) {
 			const l = nr(rest[0]);
 			if (l.f.seller !== c.actor.charId) throw new CommandError("Das ist nicht dein Angebot.");
 			if (!(await c.space.take({ type: "Listing", id: l.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Zu spät – jemand kauft es gerade.");
-			const item = await peek(c.space, { type: "Item", fields: { itemId: l.f.itemId, location: "market" } });
-			if (item) await move(c, fieldsOf<ItemFields>(item), "market", c.actor.charId);
-			return msg(c, c.actor.charId, "info", `Du holst ${l.f.itemName} vom Marktbrett zurück.`);
+			for (const g of await c.space.readAll({ type: "Item", fields: { location: "market", listing: l.f.listingId } }, { txn: c.txn })) await move(c, fieldsOf<ItemFields>(g), "market", c.actor.charId);
+			return msg(c, c.actor.charId, "info", `Du holst ${lotOf(l.f)} vom Marktbrett zurück.`);
 		}
 		throw new NotUnderstood("Am Marktbrett: markt, markt biete <ding> für <n>, markt kaufe <nr>, markt zurück <nr>, markt suche <ding> für <n>, markt liefere <nr>, markt suche zurück <nr>.");
 	},

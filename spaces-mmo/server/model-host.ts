@@ -30,7 +30,7 @@ export async function translatePrompt(space: SpaceLike, w: WorldDef, t: Translat
 	const here = await space.readAll({ type: "Item", fields: { location: t.room } });
 	const carried = await space.readAll({ type: "Item", fields: { location: t.charId } });
 	const people = (await space.readAll({ type: "Character", fields: { room: t.room } })).filter((e) => fieldsOf<CharacterFields>(e).charId !== t.charId);
-	const listings = w.market.rooms.includes(t.room) ? (await space.readAll({ type: "Listing", fields: { room: t.room } })).map((e) => fieldsOf<ListingFields>(e)).sort((a, b) => a.at - b.at).map((l, i) => `${i + 1}. ${l.itemName} for ${l.price}`) : [];
+	const listings = w.market.rooms.includes(t.room) ? (await space.readAll({ type: "Listing", fields: { room: t.room } })).map((e) => fieldsOf<ListingFields>(e)).sort((a, b) => a.at - b.at).map((l, i) => `${i + 1}. ${(l.count ?? 1) > 1 ? `${l.count}× ` : ""}${l.itemName} for ${l.price}`) : [];
 	return [
 		"Commands:", ...COMMANDS.map((c) => `  ${helpLine(c)}`),
 		`Recipes for craft: ${w.recipes.map((r) => r.key).join(", ")}`,

@@ -124,9 +124,9 @@ export type WorldEventFields = { eventId: string; kind: string; worldMs: number;
 /** A direct trade: `from` offers the items `give` (still in its pack until accepted) to `to`, for `want` (names and
  *  counts, taken from `to`'s pack on accept). Accepting moves all of it in one transaction or nothing. */
 export type OfferFields = { offerId: string; from: string; fromName: string; to: string; toName: string; give: string[]; giveNames: string[]; want: Array<{ name: string; count: number }>; room: string; at: number };
-/** A listing on the market board: the item waits in escrow (location "market") until bought, withdrawn or the lease
+/** A listing on the market board (one thing, or a lot of one kind: „markt biete 10 muscheln für 15“): the items wait in escrow (location "market") until bought, withdrawn or the lease
  *  ends (then the market ticker gives it back). Prices are counted in coins (prototype `currency` of the world). */
-export type ListingFields = { listingId: string; seller: string; sellerName: string; itemId: string; itemName: string; price: number; room: string; at: number; expiresWorldMs?: number };
+export type ListingFields = { listingId: string; seller: string; sellerName: string; /** the first of the lot (all of it carries `listing`) */ itemId: string; itemName: string; /** how many of the thing, for `price` together (absent: one) */ count?: number; price: number; room: string; at: number; expiresWorldMs?: number };
 /** A wanted notice on the market board: the buyer's coins wait in escrow (location "market", `listing` = `wantedId`,
  *  `seller` = the buyer) until someone delivers a thing of `proto`, the buyer withdraws it or it lapses like a listing
  *  (then the market ticker gives the coins back). */

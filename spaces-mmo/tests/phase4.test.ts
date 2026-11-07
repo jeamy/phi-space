@@ -79,6 +79,21 @@ test("market: a listing waits in escrow; a purchase moves listing, coins and ite
 		assert.equal((await pack(s, b.me, "muenze")).length, 1);
 		assert.equal((await pack(s, a.me, "muenze")).length, 2);
 		assert.equal(await s.count({ type: "Listing" }), 0);
+		// a lot of one kind for one price together, said as one says it
+		await give(s, a.me, "muschel", 10);
+		await give(s, b.me, "muenze", 14);
+		await does(a.p, "verkaufe 10 muscheln um 15 münzen", "Du hängst 10× Muschel für 15 Münzen ans Marktbrett.");
+		assert.equal((await s.readAll({ type: "Item", fields: { location: "market", proto: "muschel" } })).length, 10);
+		await b.p.until((f) => f.t === "trade" && f.trade.listings?.[0]?.count === 10);
+		assert.match(await does(b.p, "markt", "Marktbrett:"), /1\. 10× Muschel für 15 Münzen \(von Haendlerin\)/);
+		await does(b.p, "markt kaufe 1", "Du kaufst 10× Muschel vom Marktbrett.");
+		assert.equal((await pack(s, b.me, "muschel")).length, 11);
+		assert.equal((await pack(s, a.me, "muenze")).length, 17);
+		assert.equal((await s.readAll({ type: "Item", fields: { location: "market" } })).length, 0);
+		await does(b.p, "markt biete 3 muscheln für 4", "Du hängst 3× Muschel");
+		await does(b.p, "markt zurück 1", "Du holst 3× Muschel vom Marktbrett zurück.");
+		assert.equal((await pack(s, b.me, "muschel")).length, 11);
+		for (const e of (await s.readAll({ type: "Item", fields: { location: b.me, proto: "muschel" } })).slice(1)) await s.take({ id: e.id }, 2_000);
 		// withdraw
 		await does(b.p, "markt biete muschel für 5", "ans Marktbrett");
 		await does(b.p, "markt zurück 1", "Du holst Muschel vom Marktbrett zurück.");

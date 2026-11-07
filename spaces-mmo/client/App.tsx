@@ -317,7 +317,7 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 		return parts.join(", ");
 	});
 	const [want, setWant] = useState("");
-	const [sell, setSell] = useState(""), [price, setPrice] = useState("2");
+	const [sell, setSell] = useState(""), [price, setPrice] = useState("2"), [many, setMany] = useState("1");
 	const [seek, setSeek] = useState(""), [bid, setBid] = useState("2");
 	// things by kind with their count ("4× Münze für Perle"), as the server's messages say it
 	const counted = (xs: string[] | Array<{ name: string; count: number }>) => {
@@ -359,12 +359,13 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 				<li key={o.nr}><span>{o.text} ({o.reward} {o.reward === 1 ? "Münze" : "Münzen"})</span>{!guest && !trade.myOrder && <button onClick={() => send(`auftrag nimm ${o.nr}`)}>Nehmen</button>}</li>
 			))}</ul> : <p className="muted">Gerade keine Aufträge.</p>}</>}
 			{trade.listings && <><h3>Marktbrett</h3>{trade.listings.length ? <ul>{trade.listings.map((l) => (
-				<li key={l.nr}><span>{l.itemName} – {l.price} {l.price === 1 ? "Münze" : "Münzen"} ({l.mine ? "deins" : l.sellerName})</span>{!guest && (l.mine ? <button onClick={() => send(`markt zurück ${l.nr}`)}>Zurückholen</button> : <button onClick={() => send(`markt kaufe ${l.nr}`)}>Kaufen</button>)}</li>
+				<li key={l.nr}><span>{l.count > 1 ? `${l.count}× ` : ""}{l.itemName} – {l.price} {l.price === 1 ? "Münze" : "Münzen"} ({l.mine ? "deins" : l.sellerName})</span>{!guest && (l.mine ? <button onClick={() => send(`markt zurück ${l.nr}`)}>Zurückholen</button> : <button onClick={() => send(`markt kaufe ${l.nr}`)}>Kaufen</button>)}</li>
 			))}</ul> : <p className="muted">Das Brett ist leer.</p>}
 			{!guest && carried.length > 0 && (
-				<form className="row" onSubmit={(e) => { e.preventDefault(); if (sell) send(`markt biete ${sell} für ${price}`); setSell(""); }}>
-					<select value={sell} onChange={(e) => setSell(e.target.value)} aria-label="Was verkaufen"><option value="">verkaufen …</option>{[...new Set(carried.map((o) => o.name))].filter((n) => n !== "Münze").map((n) => <option key={n} value={n}>{n}</option>)}</select>
-					<input type="number" min={1} max={1000} value={price} onChange={(e) => setPrice(e.target.value)} aria-label="Preis in Münzen" style={{ width: 70 }} />
+				<form className="row" onSubmit={(e) => { e.preventDefault(); if (sell) send(`markt biete ${Math.max(1, Number(many) || 1)} ${sell} für ${price}`); setSell(""); setMany("1"); }}>
+					<input type="number" min={1} max={Math.max(1, carried.filter((o) => o.name === sell).length)} value={many} onChange={(e) => setMany(e.target.value)} aria-label="Wie viele" title="Wie viele (der Preis gilt für alle zusammen)" style={{ width: 56 }} />
+					<select value={sell} onChange={(e) => { setSell(e.target.value); setMany("1"); }} aria-label="Was verkaufen"><option value="">verkaufen …</option>{[...new Set(carried.map((o) => o.name))].filter((n) => n !== "Münze").map((n) => <option key={n} value={n}>{n}</option>)}</select>
+					<input type="number" min={1} max={1000} value={price} onChange={(e) => setPrice(e.target.value)} aria-label="Preis in Münzen" title="Preis in Münzen, für alle zusammen" style={{ width: 70 }} />
 					<button disabled={!sell}>Einstellen</button>
 				</form>
 			)}</>}

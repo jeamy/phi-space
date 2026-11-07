@@ -912,7 +912,7 @@ Am Marktbrett kaufst und verkaufst du, auch wenn der andere gerade nicht da ist.
 Marktbretter stehen an sechs Orten: Graue Bucht, Markt von Kupferhafen, Riffdorf, Schärenhafen, Rauchhafen und Krabbenbucht. Preise in **Münzen**:
 
 - \`markt\`: Angebote ansehen
-- \`markt biete <ding> für <n>\`: etwas für n Münzen einstellen
+- \`markt biete <ding> für <n>\`: etwas für n Münzen einstellen; \`markt biete 10 muscheln für 15\` stellt zehn Muscheln zusammen für 15 Münzen ein (auch „verkaufe 10 muscheln um 15 münzen“), wer kauft, bekommt alle zehn
 - \`markt kaufe <nr>\`: Angebot Nummer nr kaufen
 - \`markt zurück <nr>\`: eigenes Angebot zurücknehmen
 
@@ -970,7 +970,7 @@ At the market board you buy and sell even when the other person is away. The goo
 Market boards stand in six places: Graue Bucht, the market of Kupferhafen, Riffdorf, Schärenhafen, Rauchhafen and Krabbenbucht. Prices in **coins**:
 
 - \`market\`: see the offers
-- \`market sell <thing> for <n>\`: post something for n coins
+- \`market sell <thing> for <n>\`: post something for n coins; \`market sell 10 shells for 15\` posts ten shells together for 15 coins, and whoever buys gets all ten
 - \`market buy <nr>\`: buy offer number nr
 - \`market withdraw <nr>\`: take your own offer back
 

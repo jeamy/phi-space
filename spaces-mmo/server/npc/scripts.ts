@@ -235,7 +235,7 @@ async function surroundings(n: Npc, me: CharacterFields) {
 	const things = (await n.space.readAll({ type: "Item", fields: { location: me.room } })).map((e) => ({ name: String(e.fields.name), x: Number(e.fields.x), y: Number(e.fields.y) }));
 	const exits = (await n.space.readAll({ type: "Exit", fields: { location: me.room } })).map((e) => fieldsOf<ExitFields>(e).name);
 	const offers = (await n.space.readAll({ type: "Offer", fields: { to: me.charId } })).map((e) => fieldsOf<OfferFields>(e)).map((o) => `${o.fromName} offers ${o.giveNames.join(", ")}${o.want.length ? ` for ${o.want.map((w) => `${w.count}× ${w.name}`).join(", ")}` : " as a gift"} (accept ${o.fromName} / decline ${o.fromName})`);
-	const board = n.world.market.rooms.includes(me.room) ? (await n.space.readAll({ type: "Listing", fields: { room: me.room } })).map((e) => fieldsOf<ListingFields>(e)).sort((a, b) => a.at - b.at || a.listingId.localeCompare(b.listingId)).map((l, i) => `${i + 1}: ${l.itemName} for ${l.price} by ${l.sellerName}`) : undefined;
+	const board = n.world.market.rooms.includes(me.room) ? (await n.space.readAll({ type: "Listing", fields: { room: me.room } })).map((e) => fieldsOf<ListingFields>(e)).sort((a, b) => a.at - b.at || a.listingId.localeCompare(b.listingId)).map((l, i) => `${i + 1}: ${(l.count ?? 1) > 1 ? `${l.count}× ` : ""}${l.itemName} for ${l.price} by ${l.sellerName}`) : undefined;
 	return { me: { x: me.x, y: me.y }, carried, things, exits, offers, ...(board ? { board } : {}) };
 }
 
