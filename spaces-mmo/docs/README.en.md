@@ -17,15 +17,15 @@ are still missing. For operation it is laid out for the machines big and nano ([
 
 | Area | Status |
 | --- | --- |
-| Phases P to 4b ([phasen.en.md](phasen.en.md)) | built: accounts, world core, fire and fog, graphics, trade, archipelago and inhabitants |
+| Phases P to 4b ([phasen.en.md](phasen.en.md)) | built: accounts, world core, fire and fog, graphics, trade (market lots, wanted notices that traders answer), archipelago and inhabitants |
 | Phase 3b, 3D view ([3D-V2](3D-V2/README.md)) | version 2 built: zoom ladder from the island to a face, diorama block, far/room/near detail variants, Alt+wheel tilt, FPS measuring; acceptance on a target phone still open |
 | Phase 5, model NPCs ([modell-npcs.en.md](modell-npcs.en.md)) | built, tested with scripted models; model calls only with `SPACES_MMO_LLM=1` |
 | World | eight islands, 37 rooms, nine fires (`worlds/leuchtfeuer/world.ts`); plus 40 settlers, of whom at least 30 figures play by default |
 | Chat ([siedeln.en.md](siedeln.en.md), step 0) | built: one-to-one and in groups, end-to-end encrypted |
-| Building and gardens (steps 1 and 2) | built: hut, chest, decay; beds, crossbreeding, hares, fence, scarecrow |
+| Building and gardens (steps 1 and 2) | built: hut, chest (without a limit, filled from anywhere; a figure carries up to 1000 load), decay; beds, crossbreeding, hares, fence, scarecrow |
 | Fields and farm (step 3) | built: fields with crop rotation, mill, bakehouse, animals, loom, game, guards |
 | Epochs and settlements (step 4) | built: islands become a village; settlements with ranks and a door. Town and network have no plans yet |
-| Regions ([welt-aufteilen.en.md](welt-aufteilen.en.md)) | built: four regions on big, accounts space on nano ([betrieb.en.md](betrieb.en.md)) |
+| Regions ([welt-aufteilen.en.md](welt-aufteilen.en.md)) | built: four regions on big, accounts space on nano, their Space containers on the Rust server since 2026-11-07 ([betrieb.en.md](betrieb.en.md)) |
 | Planned | gods ([goetter.en.md](goetter.en.md)), automata ([automaten.en.md](automaten.en.md)), zones and combat ([phasen.en.md](phasen.en.md)), from step 5 in [siedeln.en.md](siedeln.en.md) workshops up to the island railway |
 
 ## Starting
@@ -41,7 +41,7 @@ npm --prefix spaces-mmo run typecheck
 
 With Docker there are `docker:local:up` (big and nano together on this machine, port 3910, image built beforehand with
 `docker:image`) and `docker:dev:up` (one container with the source mounted, recompiles on every change,
-port 3920). Production: `docker:nano:up` and `docker:big:up` on the respective machine (`docker:nano:rust:up`, `docker:big:rust:up` with the Rust Space server). Details are in
+port 3920). Production runs the Rust Space server since 2026-11-07: a deploy is `docker:nano:rust:up` on nano and `docker:big:rust:up` on big (plain `docker:nano:up` / `docker:big:up` would bring the TypeScript Space server back). Details are in
 [betrieb.en.md](betrieb.en.md).
 
 ## Documents

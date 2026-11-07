@@ -198,7 +198,7 @@ aus und nutzt flüchtigen Arbeitsspeicher: Es zeigt Koordination, **keine** Pers
 | `help-site/` | Zweisprachige Hilfe, Social Swarm, Space-Chat-Stufen und authentifiziertes Web Admin |
 | `codemode-chat/` | Agenten und Menschen lösen Programmieraufgaben gemeinsam um einen Space; jede Rolle ist ein eigener Prozess |
 | `spaces-mmo/` | Online-Rollenspiel-Engine auf Spaces, erste Welt Leuchtfeuer |
-| `rust/` | Rust-Portierung von Kern, Store und Dienst, in Arbeit ([docs/rust-portierung.en.md](../docs/rust-portierung.en.md)); maßgeblich bleibt der TypeScript-Code |
+| `rust/` | Rust-Portierung von Kern, Store, Dienst und sicherem Host ([docs/rust-portierung.en.md](../docs/rust-portierung.en.md)); die Space-Container von spaces-mmo auf nano und big laufen seit 2026-11-07 auf ihrem `phi-space-server`, überall sonst bleibt der TypeScript-Code maßgeblich |
 
 Ein Space ist ein Dokument; Commits des eigenen Stores (`src/store/`) sorgen für atomare Zustandsänderungen. Das Überstehen
 von Neustarts setzt den SQLite-Store voraus,

@@ -232,7 +232,7 @@ survival and `RemoteSpace` for a separate worker process; see [examples](docs/ex
 | `help-site/` | bilingual help, Social Swarm, Space-Chat stages and authenticated Web Admin |
 | `codemode-chat/` | agents and people solve coding tasks together around one space; every role is its own process |
 | `spaces-mmo/` | online role-playing engine on spaces, first world Leuchtfeuer |
-| `rust/` | Rust port of core, store and service, in progress ([docs/rust-portierung.en.md](docs/rust-portierung.en.md)); the TypeScript code stays authoritative |
+| `rust/` | Rust port of core, store, service and secure host ([docs/rust-portierung.en.md](docs/rust-portierung.en.md)); the Space containers of spaces-mmo on nano and big run its `phi-space-server` since 2026-11-07, everywhere else the TypeScript code stays authoritative |
 
 A Space is one document; commits of the own store (`src/store/`) provide atomic state changes. Restart survival requires
 the SQLite store,
