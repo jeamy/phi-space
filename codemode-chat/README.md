@@ -252,7 +252,8 @@ The build context is the repository root. One image, one container per role (`do
 need `codemode-chat/.env`.
 
 ```bash
-npm --prefix codemode-chat run docker:nano:up    # on nano: space (SQLite in a volume) and a judge
+npm --prefix codemode-chat run docker:nano:rust:up  # on nano: space (Rust phi-space-server, SQLite in a volume) and a judge
+npm --prefix codemode-chat run docker:nano:up    # the same with the TypeScript space server (the way back)
 npm --prefix codemode-chat run docker:big:up     # on big: web, a judge, agents, the model process
 npm --prefix codemode-chat run docker:image      # build the image; needed before docker:local:up
 npm --prefix codemode-chat run docker:local:up   # both on one machine as a test bed: http://localhost:3710
@@ -260,7 +261,8 @@ npm --prefix codemode-chat run docker:dev:up     # every role in one container, 
 npm --prefix codemode-chat run docker:test       # the tests in a container
 ```
 
-- `docker:nano:up` and `docker:big:up` build the image themselves. `docker:prod:up` is refused: one host runs one profile.
+- Since 2026-11-07 nano's space runs the Rust `phi-space-server --profile codemode` (`docker/docker-compose.rust.yml`, same project and volume); `docker:nano:up` brings the TypeScript space server back on the same files.
+- `docker:nano:up` and `docker:big:up` build the image themselves (`docker:nano:rust:up` also the Rust image). `docker:prod:up` is refused: one host runs one profile.
 - `docker:big:up` always adds `docker/docker-compose.hostnet.yml`: the big roles share the host network, reach the space
   through an SSH tunnel on the loopback (`CODEMODE_SPACE=tcp:127.0.0.1:3800`), and the web process listens on `127.0.0.1`.
 - The test bed runs big and nano as on two hosts: every role talks to the space over TCP, the system bar shows both, and

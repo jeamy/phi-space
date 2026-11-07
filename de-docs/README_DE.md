@@ -14,7 +14,7 @@
 
 phi-spaces ist eine Space-Bibliothek in TypeScript und Rust mit eigenem Speicher (SQLite im Besitz eines Prozesses oder Arbeitsspeicher).
 Die Rust-Portierung (`rust/`) liest und schreibt dieselben Store-Dateien und spricht dasselbe Protokoll; ihr `phi-space-server`
-bedient die Spaces von spaces-mmo in der Produktion.
+bedient die Spaces von spaces-mmo und codemode-chat in der Produktion.
 Sie braucht kein Agenten-Framework; das optionale Paket `agent/` gibt
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable)-Agenten die Space-Werkzeuge.
 Stores, die ältere Versionen über pi-durable geschrieben haben, werden verworfen, nicht übernommen. Es ist ein
@@ -200,7 +200,7 @@ aus und nutzt flüchtigen Arbeitsspeicher: Es zeigt Koordination, **keine** Pers
 | `help-site/` | Zweisprachige Hilfe, Social Swarm, Space-Chat-Stufen und authentifiziertes Web Admin |
 | `codemode-chat/` | Agenten und Menschen lösen Programmieraufgaben gemeinsam um einen Space; jede Rolle ist ein eigener Prozess |
 | `spaces-mmo/` | Online-Rollenspiel-Engine auf Spaces, erste Welt Leuchtfeuer |
-| `rust/` | Rust-Portierung von Kern, Store, Dienst und sicherem Host ([docs/rust-portierung.en.md](../docs/rust-portierung.en.md)); die Space-Container von spaces-mmo auf nano und big laufen seit 2026-11-07 auf ihrem `phi-space-server`, überall sonst bleibt der TypeScript-Code maßgeblich |
+| `rust/` | Rust-Portierung von Kern, Store, Dienst und sicherem Host ([docs/rust-portierung.en.md](../docs/rust-portierung.en.md)); die Space-Container von spaces-mmo auf nano und big und der Space von codemode-chat auf nano laufen seit 2026-11-07 auf ihrem `phi-space-server`, überall sonst bleibt der TypeScript-Code maßgeblich |
 
 Ein Space ist ein Dokument; Commits des eigenen Stores (`src/store/`) sorgen für atomare Zustandsänderungen. Das Überstehen
 von Neustarts setzt den SQLite-Store voraus,
