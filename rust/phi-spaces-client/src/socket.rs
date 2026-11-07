@@ -131,6 +131,8 @@ impl SocketTransport {
 		SocketTransport { target, o, conn: RefCell::new(None), connecting: Mutex::new(()), closed: Cell::new(false), next_id: Cell::new(1) }
 	}
 
+	pub fn options(&self) -> &SocketOptions { &self.o }
+
 	fn live(&self) -> Option<Rc<Conn>> { self.conn.borrow().as_ref().filter(|c| c.alive.get()).cloned() }
 
 	async fn open(&self) -> Result<Halves, String> {

@@ -155,6 +155,106 @@ pub fn cut_text(text: &str, max: usize) -> &str {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::{LocalFuture, Transport};
+	use phi_json::{obj, parse};
+	use std::cell::RefCell;
+
+	/// A host that answers hello, generation and lease at once, and a read after `read_ms` (None: never).
+	struct Script {
+		methods: RefCell<Vec<(String, Json)>>,
+		read_ms: Option<u64>,
+	}
+
+	impl Transport for Script {
+		fn request(&self, text: String) -> LocalFuture<'_, Result<String, String>> {
+			Box::pin(async move {
+				let call = parse(&text).map_err(|e| e.to_string())?;
+				let method = call.get("method").and_then(Json::as_str).unwrap_or("").to_owned();
+				self.methods.borrow_mut().push((method.clone(), call.get("args").cloned().unwrap_or(Json::Null)));
+				let result = match method.as_str() {
+					"hello" => obj! { "principal" => "p", "features" => Json::Array(vec![Json::from("read.locked")]), "limits" => obj! { "maxFrameBytes" => 262_144.0 } },
+					"generation" => obj! { "generation" => "g1", "admitUntil" => 9e15 },
+					"lease" => obj! { "expires" => 1.0 },
+					"read" => match self.read_ms {
+						Some(ms) => {
+							tokio::time::sleep(Duration::from_millis(ms)).await;
+							obj! { "state" => "done", "entry" => obj! { "type" => "Work", "fields" => obj! {} } }
+						}
+						None => std::future::pending().await,
+					},
+					other => return Err(format!("unscripted {other}")),
+				};
+				Ok(obj! { "ok" => true, "result" => result }.to_json_text())
+			})
+		}
+	}
+
+	fn space(read_ms: Option<u64>) -> (Rc<Script>, Rc<RemoteSpace>) {
+		let s = Rc::new(Script { methods: RefCell::new(Vec::new()), read_ms });
+		(Rc::clone(&s), Rc::new(RemoteSpace::new(s, Options::default())))
+	}
+
+	fn run<F: std::future::Future<Output = ()>>(f: F) {
+		let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+		tokio::task::LocalSet::new().block_on(&rt, f);
+	}
+
+	#[test]
+	fn keep_alive_renews_every_third_until_stopped_or_dropped() {
+		run(async {
+			let renewals = |s: &Script| s.methods.borrow().iter().filter(|(m, a)| m == "lease" && a.get("action").and_then(Json::as_str) == Some("renew")).map(|(_, a)| a.clone()).collect::<Vec<_>>();
+			let (s, r) = space(None);
+			let k = keep_alive(Rc::clone(&r), "txn-1", 3000.0); // every 1000 ms
+			tokio::time::sleep(Duration::from_millis(900)).await;
+			assert!(renewals(&s).is_empty(), "nothing before the first third");
+			tokio::time::sleep(Duration::from_millis(1250)).await;
+			let got = renewals(&s);
+			assert_eq!(got.len(), 2, "at 1000 and 2000 ms: {got:?}");
+			assert!(got.iter().all(|a| a.get("id").and_then(Json::as_str) == Some("txn-1") && a.get("ms").and_then(Json::as_f64) == Some(3000.0)));
+			k.stop();
+			tokio::time::sleep(Duration::from_millis(1200)).await;
+			assert_eq!(renewals(&s).len(), 2, "nothing after stop");
+			let (s2, r2) = space(None);
+			drop(keep_alive(r2, "txn-2", 3000.0));
+			tokio::time::sleep(Duration::from_millis(1200)).await;
+			assert!(renewals(&s2).is_empty(), "nothing after drop");
+		});
+	}
+
+	#[test]
+	fn await_work_true_for_work_false_after_a_halt() {
+		run(async {
+			let tmpl = obj! { "type" => "Work" };
+			let (s, r) = space(Some(20));
+			assert!(await_work(&r, &tmpl, 1000.0, None).await.unwrap(), "an entry is there");
+			assert!(s.methods.borrow().iter().any(|(m, a)| m == "read" && a.get("txn") == Some(&Json::Null)), "a read without a transaction, nothing taken");
+			let (tx, rx) = watch::channel(true);
+			let (s, r) = space(None);
+			assert!(!await_work(&r, &tmpl, 60_000.0, Some(rx)).await.unwrap(), "halted before: false at once");
+			assert!(!s.methods.borrow().iter().any(|(m, _)| m == "read"), "and no read was sent");
+			drop(tx);
+			let (tx, rx) = watch::channel(false);
+			let (_, r) = space(None);
+			let halt = async move {
+				tokio::time::sleep(Duration::from_millis(30)).await;
+				tx.send(true).unwrap();
+				tx
+			};
+			let (got, _tx) = tokio::join!(await_work(&r, &tmpl, 60_000.0, Some(rx)), halt);
+			assert!(!got.unwrap(), "halted while the read waits: false");
+		});
+	}
+
+	#[test]
+	fn connect_space_hands_its_timeouts_on() {
+		let (r, t) = connect_space("unix:/nowhere.sock", ConnectOptions { call_timeout_ms: 1_000.0, attempts: 7, ..ConnectOptions::default() }).unwrap();
+		assert_eq!(t.options().request_timeout_ms, Some(6_000), "a call's time plus 5 s");
+		assert_eq!(t.options().connect_timeout_ms, 5_000);
+		assert_eq!((r.options().attempts, r.options().call_timeout_ms), (7, 1_000.0));
+		let (r, t) = connect_space("tcp:127.0.0.1:3600", ConnectOptions::default()).unwrap();
+		assert_eq!((r.options().attempts, r.options().call_timeout_ms, t.options().request_timeout_ms), (3, 30_000.0, Some(35_000)));
+		assert!(connect_space("tcp:nohost", ConnectOptions::default()).is_err());
+	}
 
 	#[test]
 	fn targets_as_in_typescript() {
