@@ -1,7 +1,7 @@
-// `--control CONFIG.json`: a control host, what `startConfiguredFederation` makes of a config of mode "control". What this host does
-// not carry yet is refused at the start, never ignored: `syncSpaces` and the register's ssh and socket lines. It takes what a
-// Member takes, from itself: delegated calls on its own Spaces and its signed instructions. Its `recovery` section is the
-// private endpoint with the control host's receipt.
+// `--control CONFIG.json`: a control host, what `startConfiguredFederation` makes of a config of mode "control": the Root,
+// its primary/sync Spaces (`syncSpaces`), a primary/sync main store (`mainSync`), entry replication and the register over
+// TLS, ssh or a Unix endpoint. It takes what a Member takes, from itself: delegated calls on its own Spaces and its signed
+// instructions. Its `recovery` section is the private endpoint with the control host's receipt.
 use crate::{fail, stopping};
 use crate::member::{address_of, boot_guard, clock, config_of, entry_exported, entry_replication, entry_tasks, field, follow_changes, follow_installed_change, sync_context, followed_authority, key_of, member_instructions, netbird, open_store, own_peer, private_recovery, serve_gate, set_group_roles};
 use phi_host::alerts::ControlCommands;
@@ -268,7 +268,15 @@ fn root_of(c: &Json, r: &Json, control_key: &str, listen_host: &str, guard: &Rc<
 		admin: r.get("adminPeer").filter(|_| r.get("allowMembershipCommands") == Some(&Json::Bool(true))).map(|a| (field(a, "peerId").to_owned(), field(a, "address").to_owned())),
 		directory: Rc::clone(&o.directory), group_roles: o.group_roles.clone(), control_signer: Rc::new(key_of(c, "keyFile").0),
 		status_interval_ms: interval as u64, takeover,
+		commands: commands_of(r.get("commands")),
+		admin_peer: r.get("adminPeer").and_then(|a| a.get("peerId")).and_then(Json::as_str).map(str::to_owned),
 	}
+}
+
+/// `root.commands`: each switch on only where the config says `true`.
+fn commands_of(m: Option<&Json>) -> phi_host::root::AdminCommands {
+	let on = |k: &str| m.and_then(|m| m.get(k)) == Some(&Json::Bool(true));
+	phi_host::root::AdminCommands { runs: on("runs"), workers: on("workers"), spaces: on("spaces"), deployment: on("deployment"), data_admin: on("dataAdmin") }
 }
 
 /// `mainSync`: the configuration of the journal the host's main store `store` runs under.

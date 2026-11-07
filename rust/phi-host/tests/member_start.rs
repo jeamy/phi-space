@@ -24,13 +24,13 @@ fn a_heartbeat_replaces_its_record_and_duplicates_stop_it() {
 	let info = s.create_space_with("jobs", system_random(), |_, _| Ok(())).unwrap();
 	let id = info.get("spaceId").and_then(Json::as_str).unwrap().to_owned();
 	let report = obj! { "hostId" => "h", "tools" => Vec::<Json>::new() };
-	publish(&mut s, &id, &report).unwrap();
-	publish(&mut s, &id, &report).unwrap();
+	publish(&mut s, &id, &report, &|_, _| Ok(())).unwrap();
+	publish(&mut s, &id, &report, &|_, _| Ok(())).unwrap();
 	assert_eq!(capabilities(&mut s, &id).len(), 1, "one record, not one per heartbeat");
 	for _ in 0..4 {
 		s.commit_on(Some(&id), |x, now| x.write(now, &obj! { "type" => "Capability", "fields" => obj! { "hostId" => "h" } }, None, Some(&Json::Number(100_000.0)), None)).unwrap();
 	}
-	assert_eq!(publish(&mut s, &id, &report).unwrap_err().message, "duplicate directory records");
+	assert_eq!(publish(&mut s, &id, &report, &|_, _| Ok(())).unwrap_err().message, "duplicate directory records");
 }
 
 #[test]

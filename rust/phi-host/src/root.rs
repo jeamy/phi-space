@@ -14,9 +14,15 @@ use crate::membership_control::{MembershipController, MembershipEnv};
 use crate::profile_transition::ProfileTransitionController;
 use crate::remote::ControlClient;
 use crate::router::{Reprepared, RouterController, RouterEnv, COMMANDS, DEFAULT_LIMITS, JOURNAL};
+use crate::auth::{seal, verify_value};
+use crate::data_admin::DataAdminController;
+use crate::deployment::{capability_host_status, deployment_commands, DeploymentController, DeploymentPorts, DEPLOYMENT_COMMANDS};
+use crate::run_controller::{RunController, RunEnv};
 use crate::run_member::Pin;
+use crate::space_commands::{SpaceCommandPorts, SpaceCommands, SPACE_COMMANDS};
+use crate::workers::{applied_workers, worker_commands, WorkerAssignments, WORKER_COMMANDS};
 use phi_core::routing::{parent_journal_key, partition_router_id, validate_journal_partitions};
-use phi_core::space::{error, CoreError};
+use phi_core::space::{error, illegal, permission, CoreError};
 use phi_json::{digest_json, num_of, obj, text, Json};
 use phi_service::{Identity, Service};
 use phi_wire::{Local, Owner};
@@ -33,6 +39,8 @@ const REPLICA_MARKER: &str = "phi-spaces.control-replica-marker";
 const STATUS_AGENT: &str = "root-status";
 const LIVE_LEASE: &str = "previous router lease is live";
 const RENEW_BEFORE_MS: f64 = 45_000.0;
+/// `RECOVER_TTL_MS`: how long a recovery fence instruction stands.
+const RECOVER_TTL_MS: f64 = 60_000.0;
 pub const METHODS: [&str; 10] = ["rootWrite", "rootRead", "rootTake", "rootBegin", "rootFinish", "rootTakeWaiting", "rootReadWaiting", "rootResume", "rootReadAll", "rootCount"];
 /// What a refusal of the journal keeps as its code, so that a client knows to `rootResume`.
 const KEPT: [&str; 8] = ["FederationPending", "FederationUnavailable", "RoutingConflict", "MemberDrained", "CapacityUnavailable", "NoCapableMember", "MergeTypeNotExclusive", "ResultExpired"];
@@ -98,6 +106,23 @@ pub struct RootConfig {
 	pub status_interval_ms: u64,
 	/// `takeover`: may adopt the journal of an earlier router, waiting this long for its lease to end.
 	pub takeover: Option<f64>,
+	/// `commands`: the admin commands with effects on Members this Root carries; any of them needs `adminPeer`.
+	pub commands: AdminCommands,
+	/// `adminPeer.peerId`, also where membership commands are not allowed: data administration is for it alone.
+	pub admin_peer: Option<String>,
+}
+
+/// `commands` of the Root config (`runs`, `workers`, `spaces`, `deployment`, `dataAdmin`).
+#[derive(Clone, Copy, Default)]
+pub struct AdminCommands {
+	pub runs: bool,
+	pub workers: bool,
+	pub spaces: bool,
+	pub deployment: bool,
+	pub data_admin: bool,
+}
+impl AdminCommands {
+	pub fn any(&self) -> bool { self.runs || self.workers || self.spaces || self.deployment || self.data_admin }
 }
 
 struct Inner {
@@ -191,6 +216,59 @@ impl Env {
 		self.0.lines.borrow_mut().insert(key, Rc::clone(&line));
 		Ok(line)
 	}
+	/// `currentHost`: the host of a Member's routing target, its provisioned one before the routing names it.
+	fn current_host(&self, member: &str) -> R<String> {
+		let state = RootIo::state(self)?;
+		state.get("members").and_then(|m| m.get(member)).and_then(|m| m.get("target")).and_then(|t| text(t, "hostId")).map(str::to_owned)
+			.or_else(|| self.0.c.members.get(member).and_then(|e| text(&e.target, "hostId")).map(str::to_owned)).ok_or_else(|| blocked("Member endpoint is not provisioned"))
+	}
+	/// `remoteOf`: the line to a Member on its current host, and the key that host signs with.
+	fn member_line(&self, member: &str) -> R<(Rc<ControlClient>, Pin)> {
+		let host = self.current_host(member)?;
+		let e = self.0.c.members.get(member).and_then(|e| e.endpoint(&host)).ok_or_else(|| blocked("Member endpoint is not provisioned"))?;
+		let pin = Pin { issuer: e.peer_id.clone(), algorithm: e.algorithm, public_key: e.public_key.clone() };
+		Ok((RootIo::line(self, member)?, pin))
+	}
+	/// `memberBySpace`: the provisioned Member of a Space (the first by id).
+	fn member_by_space(&self, space_id: &str) -> Option<String> {
+		let mut found: Vec<&String> = self.0.c.members.iter().filter(|(_, m)| text(&m.target, "spaceId") == Some(space_id)).map(|(id, _)| id).collect();
+		found.sort();
+		found.first().map(|id| (*id).clone())
+	}
+	/// `memberByHost`: the provisioned Member with an endpoint on a host (the first by id).
+	fn member_by_host(&self, host_id: &str) -> Option<(String, Pin)> {
+		let mut found: Vec<(&String, &MemberEnd)> = self.0.c.members.iter().filter_map(|(id, m)| Some((id, m.endpoint(host_id)?))).collect();
+		found.sort_by(|a, b| a.0.cmp(b.0));
+		found.first().map(|(id, e)| ((*id).clone(), Pin { issuer: e.peer_id.clone(), algorithm: e.algorithm, public_key: e.public_key.clone() }))
+	}
+	/// The control Space as the commands read it, under the Root's owner.
+	fn on_control<T>(&self, f: impl FnOnce(&phi_core::space::Space, f64) -> R<T>) -> R<T> {
+		let (space, now) = (self.0.c.control_space.clone(), (self.0.c.now)());
+		self.with(|s| -> R<T> { f(&s.store.reader(Some(&space))?.space, now) })?
+	}
+	/// `requestRunGate`: one signed run instruction (`{ ...q, authorityId, spaceId, spec? }`) to the Member of the Space; its ACK,
+	/// verified against the key of the host that holds the Space now.
+	fn run_gate(&self, space_id: &str, q: &Json, spec: Option<&Json>) -> Local<R<Json>> {
+		let (env, space_id, q, spec) = (self.clone(), space_id.to_owned(), q.clone(), spec.cloned());
+		Box::pin(async move {
+			let c = &env.0.c;
+			let id = env.member_by_space(&space_id).ok_or_else(|| illegal(format!("Space {space_id} belongs to no provisioned Member")))?;
+			let (line, pin) = env.member_line(&id)?;
+			let mut v = q.as_object().cloned().unwrap_or_default();
+			v.insert("authorityId", c.authority_id.as_str().into());
+			v.insert("spaceId", space_id.as_str().into());
+			if let Some(s) = spec {
+				v.insert("spec", s);
+			}
+			let signed = seal("value", Json::Object(v), "run-gate-instruction", &c.peer_id, &c.control_signer).ok_or_else(|| illegal("a value that cannot be hashed"))?;
+			let reply = instruct(line, "runGateInstruction", signed, from_wire).await?;
+			let ack = verify_value(&reply, "run-gate-ack", &pin.issuer, pin.algorithm, &pin.public_key).cloned().ok_or_else(|| permission("invalid run gate ack signature"))?;
+			if text(&ack, "spaceId") != Some(space_id.as_str()) {
+				return Err(permission("run gate ACK names another Space"));
+			}
+			Ok(ack)
+		})
+	}
 	fn control_entries(&self) -> R<Vec<Json>> {
 		let (space, now) = (self.0.c.control_space.clone(), (self.0.c.now)());
 		self.with(|s| -> R<Vec<Json>> {
@@ -217,6 +295,89 @@ impl Env {
 }
 
 fn read_lease(file: &Path) -> Option<Json> { phi_json::parse(&std::fs::read_to_string(file).ok()?).ok() }
+
+/// One signed instruction over a proven line to a Member: its result, or the refusal as `refused(code, message)` makes it.
+fn instruct(line: Rc<ControlClient>, method: &'static str, signed: Json, refused: fn(String, String) -> CoreError) -> Local<R<Json>> {
+	Box::pin(async move {
+		let unreachable = |e: String| error("TransportFailure", e);
+		ControlClient::prove(&line).await.map_err(unreachable)?;
+		let reply = ControlClient::reply(&line, &obj! { "method" => method, "args" => obj! { "instruction" => signed } }).await.map_err(unreachable)?;
+		if reply.get("ok") == Some(&Json::Bool(true)) {
+			return Ok(reply.get("result").cloned().unwrap_or(Json::Null));
+		}
+		let e = reply.get("error");
+		Err(refused(e.and_then(|e| text(e, "code")).unwrap_or("Error").to_owned(), e.and_then(|e| text(e, "message")).unwrap_or("refused").to_owned()))
+	})
+}
+
+/// `toError` of `RemoteSpace`: the class a wire code stands for, `RemoteError` for the rest.
+fn from_wire(code: String, message: String) -> CoreError {
+	const SAME: [&str; 17] = ["RequestConflict", "RequestExpired", "NotCommitted", "ResultExpired", "IncarnationChanged", "OperationCancelled", "ResourceExhausted", "SnapshotExpired", "RevisionAhead", "ReplicaConfigPending", "StalePolicyVersion", "TransactionError", "CompletionViolation", "MergeTypeNotExclusive", "MailboxEpochMismatch", "InvalidAck", "UniqueConflict"];
+	let class = match code.as_str() {
+		"PermissionDenied" => "PermissionError",
+		"BadRequest" => "IllegalArgumentError",
+		c => SAME.into_iter().find(|s| *s == c).unwrap_or("RemoteError"),
+	};
+	error(class, message)
+}
+
+impl RunEnv for Env {
+	fn prepare(&self, space_id: &str, spec: &Json, command: &Json) -> Local<R<Json>> { self.run_gate(space_id, command, Some(spec)) }
+	fn gate(&self, space_id: &str, command: &Json) -> Local<R<Json>> { self.run_gate(space_id, command, None) }
+	fn recover(&self, space_id: &str, run_id: &str, recovery_id: &str) -> Local<R<Json>> {
+		let q = obj! { "runId" => run_id, "commandId" => recovery_id, "kind" => "recover", "revision" => 0.0, "recoveryId" => recovery_id, "expiresAt" => (self.0.c.now)() + RECOVER_TTL_MS };
+		self.run_gate(space_id, &q, None)
+	}
+	/// `{ authorityId, incarnation }` of the control Space.
+	fn identity(&self) -> Local<R<Option<Json>>> {
+		let done = self.on_control(|s, _| Ok(s.state.incarnation.clone())).map(|i| Some(obj! { "authorityId" => self.0.c.authority_id.as_str(), "incarnation" => i.map_or(Json::Null, Json::String) }));
+		Box::pin(async move { done })
+	}
+}
+
+/// The Space commands' wire: each host by the Member that has an endpoint there, the instruction over that Member's line.
+struct HostLines(Env);
+impl HostLines {
+	fn end(&self, host_id: &str) -> R<(String, Pin)> { self.0.member_by_host(host_id).ok_or_else(|| illegal(format!("invalid hostId: {host_id} is no provisioned Member host"))) }
+}
+impl SpaceCommandPorts for HostLines {
+	fn send(&self, host_id: &str, signed: Json) -> Local<R<Json>> {
+		match self.end(host_id).and_then(|(id, _)| self.0.member_line(&id)) {
+			Ok((line, _)) => instruct(line, "spaceLifecycleInstruction", signed, from_wire),
+			Err(e) => Box::pin(async move { Err(e) }),
+		}
+	}
+	fn host_pin(&self, host_id: &str) -> Local<R<Pin>> {
+		let done = self.end(host_id).map(|(_, pin)| pin);
+		Box::pin(async move { done })
+	}
+}
+
+/// The deployment's ports: host freshness from the Capability heartbeats of the control Space, Spaces by the Space commands.
+struct DeployPorts {
+	env: Env,
+	spaces: Rc<SpaceCommands<HostLines>>,
+}
+impl DeploymentPorts for DeployPorts {
+	fn host_status(&self, host_id: &str) -> Local<R<Json>> {
+		let done = self.env.on_control(|s, now| capability_host_status(s, now, host_id));
+		Box::pin(async move { done })
+	}
+	fn create_space(&self, command_id: &str, args: Json) -> Local<R<Json>> {
+		let (spaces, id) = (Rc::clone(&self.spaces), command_id.to_owned());
+		Box::pin(async move { spaces.command("createSpace", &id, &args).await })
+	}
+}
+
+/// What the Root's `commands` built.
+struct Admin {
+	runs: Option<RunController<Env>>,
+	workers: Option<Rc<WorkerAssignments<Env>>>,
+	/// Built for the deployment too; served as commands only with `spaces`.
+	spaces: Option<Rc<SpaceCommands<HostLines>>>,
+	deployment: Option<DeploymentController<Env, DeployPorts>>,
+	data_admin: Option<DataAdminController>,
+}
 
 impl RouterEnv for Env {
 	fn read(&self, kind: &str, key: &str) -> R<Option<Json>> {
@@ -257,8 +418,7 @@ impl RootIo for Env {
 	/// The line follows the current routing target: after an adopted notice calls go to the new primary.
 	fn line(&self, member: &str) -> R<Self::Line> {
 		let c = &self.0.c;
-		let state = RootIo::state(self)?;
-		let host = state.get("members").and_then(|m| m.get(member)).and_then(|m| m.get("target")).and_then(|t| text(t, "hostId")).map(str::to_owned).or_else(|| c.members.get(member).and_then(|e| text(&e.target, "hostId")).map(str::to_owned)).ok_or_else(|| blocked("Member endpoint is not provisioned"))?;
+		let host = self.current_host(member)?;
 		let key = format!("{member}@{host}");
 		if let Some(l) = self.0.lines.borrow().get(&key) {
 			return Ok(Rc::clone(l));
@@ -355,18 +515,10 @@ impl StatusEnv for Env {
 
 impl MembershipEnv for Env {
 	fn apply(&self, member: &Json, signed: Json) -> Local<R<Json>> {
-		let line = self.line_to(member);
-		Box::pin(async move {
-			let line = line?;
-			let unreachable = |e: String| error("TransportFailure", e);
-			ControlClient::prove(&line).await.map_err(unreachable)?;
-			let reply = ControlClient::reply(&line, &obj! { "method" => "membershipInstruction", "args" => obj! { "instruction" => signed } }).await.map_err(unreachable)?;
-			if reply.get("ok") == Some(&Json::Bool(true)) {
-				return Ok(reply.get("result").cloned().unwrap_or(Json::Null));
-			}
-			let e = reply.get("error");
-			Err(failure(Failure::Refused { code: e.and_then(|e| text(e, "code")).unwrap_or("Error").to_owned(), message: e.and_then(|e| text(e, "message")).unwrap_or("refused").to_owned() }))
-		})
+		match self.line_to(member) {
+			Ok(line) => instruct(line, "membershipInstruction", signed, |code, message| failure(Failure::Refused { code, message })),
+			Err(e) => Box::pin(async move { Err(e) }),
+		}
 	}
 	fn pin(&self, member: &Json) -> Local<R<Pin>> {
 		let c = &self.0.c;
@@ -470,14 +622,33 @@ pub struct Root {
 	membership: Mutex<()>,
 	/// The journal waits to be taken over.
 	takeover: Cell<bool>,
+	admin: Admin,
+	kinds: Vec<&'static str>,
 }
 
+/// The run commands (`runCommands`).
+pub const RUN_COMMANDS: [&str; 10] = ["startRun", "pauseRun", "resumeRun", "stopRun", "reconcileRun", "resolveRunRecovery", "listRuns", "runStatus", "scheduleRun", "exportRun"];
+pub const DATA_ADMIN_COMMANDS: [&str; 2] = ["purgeTasks", "deletePrincipal"];
+/// What a data-admin command answers as a failed result (`IllegalArgumentError | TransactionError | LimitError | PermissionError | UnknownSpaceError`).
+const DATA_ADMIN_REFUSALS: [&str; 10] = ["IllegalArgumentError", "UniqueConflict", "TransactionError", "CompletionViolation", "RunGateConflict", "RunBusy", "LimitError", "ResourceExhausted", "PermissionError", "UnknownSpaceError"];
 /// The membership commands of the supervisor.
 pub const COMMANDS_OF_ROOT: [&str; 4] = ["addMember", "drain", "removeMember", "migrateProfiles"];
 impl AsyncCommands for Rc<Root> {
-	fn kinds(&self) -> &[&'static str] { if self.env.0.c.admin.is_some() { &COMMANDS_OF_ROOT } else { &[] } }
+	fn kinds(&self) -> &[&'static str] { &self.kinds }
+	fn alert_sources(&self) -> R<(Vec<Json>, Vec<Json>)> {
+		let a = &self.admin;
+		let runs = a.runs.as_ref().map(|r| r.list(200.0)).transpose()?.and_then(|l| l.as_array().cloned()).unwrap_or_default();
+		let assigned = a.workers.as_ref().map(|w| w.list()).transpose()?.and_then(|l| l.get("assignments").and_then(Json::as_array).cloned()).unwrap_or_default();
+		Ok((runs, assigned))
+	}
 	fn run(&self, owner: Owner, kind: &str, command_id: &str, args: &Json, requested_by: &str) -> Local<Result<Json, String>> {
 		let (root, kind, id, args, by) = (Rc::clone(self), kind.to_owned(), command_id.to_owned(), args.clone(), requested_by.to_owned());
+		if !COMMANDS_OF_ROOT.contains(&kind.as_str()) {
+			return Box::pin(async move {
+				*root.env.0.owner.borrow_mut() = Some(owner.clone());
+				root.admin_command(owner, &kind, &id, &args, &by).await.map_err(|e| e.message)
+			});
+		}
 		Box::pin(async move {
 			let _one = root.membership.lock().await;
 			*root.env.0.owner.borrow_mut() = Some(owner);
@@ -519,7 +690,127 @@ pub struct Found {
 impl Root {
 	pub fn new(c: RootConfig, found: Found) -> R<Rc<Root>> {
 		validate_journal_partitions(c.partitions).map_err(|e| blocked(e.message))?;
-		Ok(Rc::new(Root { env: Env(Rc::new(Inner { c, owner: RefCell::new(None), docs: RefCell::default(), lease: RefCell::new(None), lines: RefCell::default(), acting: RefCell::new(None), superseded: Cell::new(found.superseded) })), space: Mutex::new(None), membership: Mutex::new(()), takeover: Cell::new(found.takeover) }))
+		let env = Env(Rc::new(Inner { c, owner: RefCell::new(None), docs: RefCell::default(), lease: RefCell::new(None), lines: RefCell::default(), acting: RefCell::new(None), superseded: Cell::new(found.superseded) }));
+		let (admin, kinds) = Root::admin_of(&env)?;
+		Ok(Rc::new(Root { env, space: Mutex::new(None), membership: Mutex::new(()), takeover: Cell::new(found.takeover), admin, kinds }))
+	}
+
+	/// `commands`: the controllers the config asks for, and every command kind the supervisor hands this Root.
+	fn admin_of(env: &Env) -> R<(Admin, Vec<&'static str>)> {
+		let c = &env.0.c;
+		let m = c.commands;
+		let mut kinds: Vec<&'static str> = if c.admin.is_some() { COMMANDS_OF_ROOT.to_vec() } else { vec![] };
+		let mut a = Admin { runs: None, workers: None, spaces: None, deployment: None, data_admin: None };
+		if !m.any() {
+			return Ok((a, kinds));
+		}
+		let Some(admin) = c.admin_peer.clone() else { return Err(blocked("admin commands need the configured adminPeer")) };
+		if m.runs {
+			a.runs = Some(RunController::new(env.clone()));
+			kinds.extend(RUN_COMMANDS);
+		}
+		if m.workers || m.deployment {
+			let e = env.clone();
+			let identity: crate::workers::Identity = Box::new(move || {
+				let done = e.on_control(|s, _| Ok(s.state.incarnation.clone()));
+				Box::pin(async move { done })
+			});
+			a.workers = Some(Rc::new(WorkerAssignments::new(env.clone(), &c.authority_id, &c.peer_id, Rc::clone(&c.control_signer), Some(identity))));
+			if m.workers {
+				kinds.extend(WORKER_COMMANDS);
+			}
+		}
+		if m.spaces || m.deployment {
+			a.spaces = Some(Rc::new(SpaceCommands::new(HostLines(env.clone()), &c.authority_id, &c.peer_id, Rc::clone(&c.control_signer))));
+			if m.spaces {
+				kinds.extend(SPACE_COMMANDS);
+			}
+		}
+		if m.deployment {
+			let ports = DeployPorts { env: env.clone(), spaces: Rc::clone(a.spaces.as_ref().expect("built above")) };
+			a.deployment = Some(DeploymentController::new(env.clone(), ports, a.workers.clone(), &c.control_space));
+			kinds.extend(DEPLOYMENT_COMMANDS);
+		}
+		if m.data_admin {
+			// inside the commits only what needs no store: the host stands and its lease has not run out
+			let (guard, lease, now) = (Rc::clone(&c.guard), Rc::downgrade(&env.0), Rc::clone(&c.now));
+			let held = move || -> R<()> {
+				guard.assert_active()?;
+				let inner = lease.upgrade().ok_or_else(|| error("Error", "the Root is gone"))?;
+				let until = inner.lease.borrow().as_ref().and_then(|t| t.get("lease")).and_then(|l| num_of(l, "expiresAt")).unwrap_or(0.0);
+				if now() >= until - 2000.0 {
+					return Err(error("Error", "RouterLease does not authorize journal owner"));
+				}
+				Ok(())
+			};
+			let now = Rc::clone(&c.now);
+			a.data_admin = Some(DataAdminController {
+				authorize: Box::new(move |peer, _, _| if peer == admin { Ok(()) } else { Err(permission("data administration is for the configured admin peer")) }),
+				assert_authority: Box::new(held),
+				now: Box::new(move || now()),
+			});
+			kinds.extend(DATA_ADMIN_COMMANDS);
+		}
+		Ok((a, kinds))
+	}
+
+	/// The admin commands of `commands`, as the supervisor runs them: refusals are failed results, other errors retry the job.
+	async fn admin_command(&self, owner: Owner, kind: &str, id: &str, args: &Json, by: &str) -> R<Json> {
+		let (a, env) = (&self.admin, &self.env);
+		let missing = || error("TypeError", format!("unknown command {kind}"));
+		if RUN_COMMANDS.contains(&kind) {
+			return a.runs.as_ref().ok_or_else(missing)?.run_command(kind, id, args).await;
+		}
+		if WORKER_COMMANDS.contains(&kind) {
+			let applied = || env.on_control(applied_workers);
+			return worker_commands(a.workers.as_ref().ok_or_else(missing)?, Some(&applied), kind, id, args);
+		}
+		if SPACE_COMMANDS.contains(&kind) {
+			return a.spaces.as_ref().ok_or_else(missing)?.command(kind, id, args).await;
+		}
+		if DEPLOYMENT_COMMANDS.contains(&kind) {
+			return deployment_commands(a.deployment.as_ref().ok_or_else(missing)?, kind, id, args).await;
+		}
+		let d = a.data_admin.as_ref().filter(|_| DATA_ADMIN_COMMANDS.contains(&kind)).ok_or_else(missing)?;
+		let wrap = |r: R<Json>| match r {
+			Err(e) if DATA_ADMIN_REFUSALS.contains(&e.class) => Ok(obj! { "phase" => "failed", "error" => e.message }),
+			other => other,
+		};
+		// the whole check before the store is borrowed, the light one inside each commit
+		if let Err(e) = env.authorize() {
+			return wrap(Err(e));
+		}
+		let space = args.get("spaceId").filter(|v| !v.is_null()).map_or(String::new(), crate::workers::js_text);
+		let input = args.get(if kind == "purgeTasks" { "template" } else { "principal" }).cloned().unwrap_or(Json::Null);
+		wrap(owner.with(|s| d.execute(s, id, kind, &space, by, &input)))
+	}
+
+	/// `runAdvanceMs`: every pending run one step further, once a second; a run that cannot advance waits for the next round.
+	pub async fn advance_runs(&self, owner: Owner) {
+		let Some(runs) = &self.admin.runs else { return };
+		loop {
+			tokio::time::sleep(Duration::from_millis(1000)).await;
+			*self.env.0.owner.borrow_mut() = Some(owner.clone());
+			let pending = match runs.pending() {
+				Ok(p) => p.as_array().cloned().unwrap_or_default(),
+				Err(e) => {
+					eprintln!("phi-spaces runs: {}", e.message);
+					continue;
+				}
+			};
+			for id in pending.iter().filter_map(Json::as_str) {
+				if let Err(e) = runs.advance(id).await {
+					eprintln!("run {id} did not advance: {}", e.message);
+				}
+			}
+		}
+	}
+
+	/// `workerAssignments`: the signed list of one host, `None` where this Root carries no workers.
+	pub async fn worker_assignments(&self, owner: Owner, host_id: &str) -> Option<R<Json>> {
+		let w = self.admin.workers.as_ref()?;
+		*self.env.0.owner.borrow_mut() = Some(owner);
+		Some(w.for_host(host_id).await)
 	}
 	pub fn peer_id(&self) -> &str { &self.env.0.c.peer_id }
 

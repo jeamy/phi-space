@@ -126,16 +126,9 @@ impl Owner {
 			}
 		}
 	}
-	/// Routes the calls that name one of `names` as their `space` (`None`: to the host's own service again). A service it
-	/// takes out is given back once what it made durable has left; its store is the caller's to close.
-	pub fn route(&self, names: &[String], to: Option<Route>) -> Option<Service> { route(&self.0, names, to) }
-	/// The service of a routed Space.
-	pub fn with_space<T>(&self, name: &str, f: impl FnOnce(&mut Service) -> T) -> Option<T> {
-		let Some(Space::Served(served)) = self.0.spaces.borrow().get(name).cloned() else { return None };
-		let out = f(&mut served.service());
-		served.committed();
-		Some(out)
-	}
+	/// Routes the calls that name one of `names` as their `space` (`None`: to the host's own service again). The services it
+	/// takes out are given back once what they made durable has left; their stores are the caller's to close.
+	pub fn route(&self, names: &[String], to: Option<Route>) -> Vec<Service> { route(&self.0, names, to) }
 	/// Resolves once the store of a routed Space has failed (a primary's sealed candidate), or the Space is no longer served.
 	pub async fn failed(&self, name: &str) {
 		let Some(Space::Served(served)) = self.0.spaces.borrow().get(name).cloned() else { return };
@@ -285,7 +278,7 @@ fn retire(served: &Rc<Served>) -> Option<Service> {
 	served.service.borrow_mut().take()
 }
 
-fn route(hub: &Rc<Hub>, names: &[String], to: Option<Route>) -> Option<Service> {
+fn route(hub: &Rc<Hub>, names: &[String], to: Option<Route>) -> Vec<Service> {
 	let mut spaces = hub.spaces.borrow_mut();
 	let old: Vec<Rc<Served>> = names.iter().filter_map(|n| spaces.remove(n)).filter_map(|s| match s { Space::Served(s) => Some(s), Space::Answer(_) => None }).collect();
 	let next = to.map(|to| match to {
@@ -300,10 +293,10 @@ fn route(hub: &Rc<Hub>, names: &[String], to: Option<Route>) -> Option<Service> 
 		for n in names { spaces.insert(n.clone(), next.clone()); }
 	}
 	drop(spaces);
-	let mut out = None;
+	let mut out = vec![];
 	for s in old {
 		if hub.spaces.borrow().values().any(|v| matches!(v, Space::Served(o) if Rc::ptr_eq(o, &s))) { continue; }
-		if let Some(service) = retire(&s) { out.get_or_insert(service); }
+		if let Some(service) = retire(&s) { out.push(service); }
 	}
 	out
 }
@@ -454,9 +447,7 @@ async fn serve_here(service: Service, mut o: ServeOptions, ready: impl FnOnce(Ve
 	let _ = hub.main.service().store.drain();
 	// the routed Spaces' stores are closed here; only the host's own goes back
 	let names: Vec<String> = hub.spaces.borrow().keys().cloned().collect();
-	if let Some(service) = route(&hub, &names, None) { service.store.close(); }
-	let served: Vec<Rc<Served>> = hub.spaces.borrow_mut().drain().filter_map(|(_, s)| match s { Space::Served(s) => Some(s), Space::Answer(_) => None }).collect();
-	for s in served { if let Some(service) = retire(&s) { service.store.close(); } }
+	for service in route(&hub, &names, None) { service.store.close(); }
 	hub.main.tasks.borrow_mut().drain(..).for_each(|t| t.abort());
 	tokio::task::yield_now().await;
 	ended.map(|()| hub)
@@ -767,11 +758,11 @@ async fn wait(served: Rc<Served>, link: Rc<Link>, id: u32, mut parked: Box<Parke
 			return link.reply(Reply { served: Rc::clone(&served), mark: 0, id, text: link.outgoing(text), counted: true });
 		}
 		let ms = parked.sleep_ms(served.service().now(), wakes);
-		let pause = sleep(Duration::from_millis(ms.min(MAX_TIMER_MS) as u64));
+		let pause = || sleep(Duration::from_millis(ms.min(MAX_TIMER_MS) as u64));
 		if wakes {
 			if served.handed.get() == seen {
 				tokio::select! {
-					_ = pause => {}
+					_ = pause() => {}
 					_ = served.commits.notified() => {}
 					_ = served.retired.notified() => {}
 					_ = link.closing.notified() => return,
@@ -782,7 +773,7 @@ async fn wait(served: Rc<Served>, link: Rc<Link>, id: u32, mut parked: Box<Parke
 			}
 		} else {
 			tokio::select! {
-				_ = pause => {}
+				_ = pause() => {}
 				_ = served.retired.notified() => {}
 				_ = link.closing.notified() => return,
 			}

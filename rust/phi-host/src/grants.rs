@@ -83,7 +83,7 @@ impl GrantAuthority<'_> {
 		let text = format!("{DOMAIN}{}", g.canonical().map_err(|_| "grant is not canonical")?);
 		let mut out = Object::new();
 		out.insert("grant", g);
-		out.insert("algorithm", match self.signer.algorithm() { Algorithm::Ed25519 => "ed25519", Algorithm::EcdsaP256 => "ecdsa-p256" }.into());
+		out.insert("algorithm", self.signer.algorithm().name().into());
 		out.insert("signature", to_base64(&self.signer.sign(text.as_bytes())).into());
 		Ok(Json::Object(out))
 	}
@@ -137,8 +137,7 @@ impl GrantVerifier {
 		const NEEDED: &str = "a signed control grant is required";
 		let g = token.and_then(|t| t.get("grant")).filter(|g| !g.is_null()).ok_or(NEEDED)?;
 		let token = token.ok_or(NEEDED)?;
-		let name = match self.algorithm { Algorithm::Ed25519 => "ed25519", Algorithm::EcdsaP256 => "ecdsa-p256" };
-		if token.get("algorithm").and_then(Json::as_str) != Some(name) { return Err(NEEDED.into()); }
+		if token.get("algorithm").and_then(Json::as_str) != Some(self.algorithm.name()) { return Err(NEEDED.into()); }
 		let signature = token.get("signature").and_then(Json::as_str).ok_or(NEEDED)?;
 		let text = g.canonical().map(|c| format!("{DOMAIN}{c}")).map_err(|_| "invalid grant signature")?;
 		if !verify_detached(self.algorithm, &self.public_key, text.as_bytes(), signature) { return Err("invalid grant signature".into()); }

@@ -5,9 +5,10 @@
 //! models keeps the difference between absent and `null` (the byte budgets count `JSON.stringify` output, where an
 //! absent field costs nothing and a `null` one costs its key).
 //!
-//! Modelled so far (R1, slices 1 to 4): the scalars, the entries, the transactions, the registrations, the waiters, the
-//! request claims and generations (`rpc`), the mailboxes and the change stream. The outbox and the fanout jobs are
-//! carried as JSON arrays (the core only appends to them and walks them), and so is the rest of the document.
+//! Modelled: the scalars, the entries, the transactions, the registrations, the waiters, the request claims and
+//! generations (`rpc`), the mailboxes and the change stream. The outbox and the fanout jobs are carried as JSON arrays
+//! (the core only appends to them and walks them), and so is the rest of the document (membership, run gates, restore,
+//! the historical claims), read by the modules that own it.
 use phi_json::{strings, Json, Object};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -616,6 +617,14 @@ impl DiskClaims {
 		}
 		d
 	}
+	/// `adopt` of a map of records in memory (the historical claims a restore left).
+	pub fn adopt_map(source: std::sync::Arc<dyn ClaimSource>, from: &Object, written: u64) -> DiskClaims {
+		let mut d = DiskClaims { source, held: vec![], held_index: HashMap::new(), stamp: written, enumerations: Default::default(), blind_until: Some(written) };
+		for (k, v) in from.iter() {
+			d.write(k, Some(v.clone()));
+		}
+		d
+	}
 	/// `ClaimSource::take_failure`.
 	pub fn take_failure(&self) -> Option<String> { self.source.take_failure() }
 	fn index_held(&mut self) { self.held_index = self.held.iter().enumerate().map(|(i, (k, _, _))| (k.clone(), i)).collect(); }
@@ -680,8 +689,9 @@ impl DiskClaims {
 	/// `known`; in JavaScript's string order, at most `limit`.
 	pub fn due(&self, t: f64, limit: usize, in_groups: &[String], known: &[String], pick: impl Fn(&Json) -> bool) -> Vec<String> {
 		let mut out: Vec<String> = vec![];
+		let mut listed: std::collections::HashSet<String> = std::collections::HashSet::new();
 		for (k, v) in if self.blind() { vec![] } else { self.source.due(t, limit + self.held.len(), in_groups, known) } {
-			if self.held_at(&k).is_none() && pick(&v) && !out.contains(&k) {
+			if self.held_at(&k).is_none() && pick(&v) && listed.insert(k.clone()) {
 				out.push(k);
 			}
 		}
@@ -695,7 +705,7 @@ impl DiskClaims {
 			if claim_flag(v) && !in_groups.contains(&g) && known.contains(&g) {
 				continue;
 			}
-			if pick(v) && !out.contains(k) {
+			if pick(v) && listed.insert(k.clone()) {
 				out.push(k.clone());
 			}
 		}
@@ -872,7 +882,10 @@ impl StreamState {
 		let rev = f.number("rev", w)?;
 		let floor = f.number("floor", w)?;
 		let bytes = f.number("bytes", w)?;
-		let log = match f.need("log", w)? { Json::Array(a) => a.iter().map(Batch::from_json).collect::<Result<_, _>>()?, _ => return Err(ShapeError("stream.log is not an array".into())) };
+		let log: Vec<Batch> = match f.need("log", w)? { Json::Array(a) => a.iter().map(Batch::from_json).collect::<Result<_, _>>()?, _ => return Err(ShapeError("stream.log is not an array".into())) };
+		if log.windows(2).any(|p| p[1].rev != p[0].rev + 1.0) {
+			return Err(ShapeError("stream.log revisions are not consecutive".into()));
+		}
 		Ok(StreamState { rev, floor, bytes, log, rest: f.rest() })
 	}
 	pub fn to_json(&self) -> Json { self.to_json_with(false) }

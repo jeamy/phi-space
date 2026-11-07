@@ -3,7 +3,7 @@
 //! the snapshot in budget-bounded batches, publishes the new tuple, gets the control host's receipt and, after the old
 //! grants expired, installs the permit and the placement; release lets restored entries in an explicit scope go back
 //! to work. Only the private recovery endpoint holds this capability.
-use crate::recovery_rpc::{blocked, conflict, Fut, Role, RecoveryError, RR};
+use crate::recovery_rpc::{blocked, conflict, Fut, RecoveryError, RR};
 use crate::recovery_store::{core, StoreLine};
 use crate::register::Register;
 use phi_core::space::bytes;
@@ -366,5 +366,3 @@ pub async fn data_recovery_call(c: &DataRecovery, call: &Json) -> RR<Json> {
 		_ => Err(blocked("method is not supported by the data recovery endpoint")),
 	}
 }
-/// The roles the data recovery endpoint takes: the operator and the control supervisor, never a host.
-pub fn data_role(role: Role) -> bool { role != Role::Host }

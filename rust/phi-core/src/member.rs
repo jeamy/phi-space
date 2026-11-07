@@ -64,6 +64,9 @@ impl Space {
 	pub(crate) fn draining(&self) -> bool { self.member_state() == Some("draining") }
 
 	pub fn assert_member_admission(&self, method: &str) -> Result<()> {
+		if crate::space::truthy(self.state.rest.get("adminMaintenance")) {
+			return Err(drained("Space has a pending administrative deletion"));
+		}
 		match self.member_state() {
 			Some(state) if STOPPED.contains(&state) && !["ack", "cancelOperation", "txn.abort"].contains(&method) => Err(drained(format!("Member admission is {state}"))),
 			_ => Ok(()),

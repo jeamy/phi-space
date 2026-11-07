@@ -101,7 +101,7 @@ impl Space {
 
 	fn bound_txns(&self, run: &str) -> usize { self.state.txns.iter().filter(|t| t.rest.get("runs").is_some_and(|b| b.get(run).is_some())).count() }
 
-	fn record_gate(&mut self, run: &str, c: &Json, state: &str, now: f64) {
+	fn record_gate(&mut self, run: &str, c: &Json, state: &str, now: f64) -> Result<()> {
 		let g = self.gate_mut(run).expect("the gate exists");
 		let (revision, command, kind) = (c.get("revision").cloned().unwrap_or(Json::Null), c.get("commandId").cloned().unwrap_or(Json::Null), c.get("kind").cloned().unwrap_or(Json::Null));
 		g.insert("revision", revision.clone());
@@ -109,31 +109,32 @@ impl Space {
 		g.insert("kind", kind.clone());
 		g.insert("state", state.into());
 		g.insert("at", Json::Number(now));
-		if let Some(Json::Array(h)) = g.get_mut("history") {
-			h.push(obj! { "revision" => revision, "commandId" => command, "kind" => kind, "state" => state });
-			if h.len() > MAX_GATE_HISTORY {
-				let over = h.len() - MAX_GATE_HISTORY;
-				h.drain(..over);
-			}
+		let Some(Json::Array(h)) = g.get_mut("history") else { return Err(error("TypeError", format!("run gate {run} has no history"))) };
+		h.push(obj! { "revision" => revision, "commandId" => command, "kind" => kind, "state" => state });
+		if h.len() > MAX_GATE_HISTORY {
+			let over = h.len() - MAX_GATE_HISTORY;
+			h.drain(..over);
 		}
+		Ok(())
 	}
 
 	/// Ends a pause/stop barrier once no transaction is bound to the run any more.
-	pub(crate) fn complete_fence(&mut self, run: &str, now: f64) {
-		let Some(fence) = self.gate(run).and_then(|g| g.get("fence")).cloned() else { return };
+	pub(crate) fn complete_fence(&mut self, run: &str, now: f64) -> Result<()> {
+		let Some(fence) = self.gate(run).and_then(|g| g.get("fence")).cloned() else { return Ok(()) };
 		if self.bound_txns(run) > 0 {
-			return;
+			return Ok(());
 		}
 		let g = self.gate_mut(run).expect("just read");
 		g.remove("fence");
 		let state = if text(&fence, "kind") == Some("pause") { "paused" } else { "stopped" };
-		self.record_gate(run, &fence, state, now);
+		self.record_gate(run, &fence, state, now)?;
 		let g = self.gate_mut(run).expect("just read");
 		if fence.get("recoveryId").is_some() && g.get("recovery").and_then(|r| r.get("id")) == fence.get("recoveryId") {
 			g.remove("recovery");
 			g.remove("historical");
 		}
 		self.touch(now);
+		Ok(())
 	}
 
 	fn gate_ack(&self, run: &str, c: &Json, state: &str, phase: &str) -> Json {
@@ -162,6 +163,7 @@ impl Space {
 		if !valid_command(c) {
 			return Err(error("IllegalArgumentError", "invalid RunGate command"));
 		}
+		self.assert_admin_idle()?;
 		self.assert_ported()?;
 		self.settle(now)?;
 		if !self.state.rest.contains_key("runGates") {
@@ -191,7 +193,7 @@ impl Space {
 			if let Some(Json::Object(gates)) = self.state.rest.get_mut("runGates") {
 				gates.insert(run.as_str(), fresh);
 			}
-			self.record_gate(&run, c, state, now);
+			self.record_gate(&run, c, state, now)?;
 			self.touch(now);
 			return Ok(self.gate_ack(&run, c, state, "applied"));
 		};
@@ -214,7 +216,7 @@ impl Space {
 			if !same(f) || f.get("recoveryId") != recovery_id {
 				return Err(other());
 			}
-			self.complete_fence(&run, now);
+			self.complete_fence(&run, now)?;
 			let after = self.gate(&run).expect("still there");
 			let (state, phase) = (text(after, "state").unwrap_or("").to_owned(), if after.get("fence").is_some() { "fenced" } else { "applied" });
 			return Ok(self.gate_ack(&run, c, &state, phase));
@@ -267,13 +269,13 @@ impl Space {
 		}
 		self.spend_gate()?;
 		if kind == "release" || kind == "resume" {
-			self.record_gate(&run, c, "running", now);
+			self.record_gate(&run, c, "running", now)?;
 			self.touch(now);
 			self.serve(now)?; // waiting takes may now match
 			return Ok(self.gate_ack(&run, c, "running", "applied"));
 		}
 		if state != "running" {
-			self.record_gate(&run, c, if kind == "pause" { "paused" } else { "stopped" }, now);
+			self.record_gate(&run, c, if kind == "pause" { "paused" } else { "stopped" }, now)?;
 			if recovering {
 				let g = self.gate_mut(&run).expect("read above");
 				g.remove("recovery");
@@ -289,7 +291,7 @@ impl Space {
 		}
 		self.gate_mut(&run).expect("read above").insert("fence", f);
 		self.touch(now);
-		self.complete_fence(&run, now);
+		self.complete_fence(&run, now)?;
 		let after = self.gate(&run).expect("read above");
 		let (state, phase) = (text(after, "state").unwrap_or("").to_owned(), if after.get("fence").is_some() { "fenced" } else { "applied" });
 		Ok(self.gate_ack(&run, c, &state, phase))
@@ -321,6 +323,7 @@ impl Space {
 		if !valid_id(o.get("runId")) || !valid_id(o.get("recoveryId")) {
 			return Err(error("IllegalArgumentError", "invalid run recovery request"));
 		}
+		self.assert_admin_idle()?;
 		self.assert_ported()?;
 		self.settle(now)?;
 		let (run, recovery) = (text(o, "runId").unwrap_or("").to_owned(), text(o, "recoveryId").unwrap_or("").to_owned());

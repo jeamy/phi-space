@@ -316,9 +316,12 @@ fn quote(s: &str, out: &mut String) {
 	out.push('"');
 }
 
-/// Orders keys by their UTF-16 code units, as JavaScript's default sort does.
-/// JavaScript's string order: by UTF-16 code units.
-pub fn utf16_cmp(a: &str, b: &str) -> std::cmp::Ordering { a.encode_utf16().cmp(b.encode_utf16()) }
+/// JavaScript's string order: by UTF-16 code units. Byte order is the same unless a string has a character above the
+/// basic plane (a surrogate pair sorts below U+E000..U+FFFF in UTF-16, above them in UTF-8), so the common case is a
+/// byte comparison.
+pub fn utf16_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+	if a.bytes().all(|x| x < 0xF0) && b.bytes().all(|x| x < 0xF0) { a.as_bytes().cmp(b.as_bytes()) } else { a.encode_utf16().cmp(b.encode_utf16()) }
+}
 /// `Number.isSafeInteger`.
 pub fn safe_integer(n: f64) -> bool { n.trunc() == n && n.abs() <= FOREVER }
 /// The hex SHA-256 form: 64 lowercase hex digits.

@@ -54,6 +54,7 @@ impl Snapshots {
 	/// a snapshot after `o.after`.
 	pub fn page(&mut self, space: &mut Space, now: f64, tmpl: &Json, o: &Json, owner: Option<&Json>) -> Result<Json> {
 		space.assert_ported()?;
+		space.assert_admin_idle()?;
 		self.cache.retain(|s| s.expires > now);
 		let lim = space.limits();
 		let stream_id = space.stream_id();

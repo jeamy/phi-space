@@ -145,7 +145,7 @@ impl Space {
 		// the historical claims likewise, in key order from the one marked last (historyCursor)
 		let mut after = self.transition_field("historyCursor").and_then(Json::as_str).map(str::to_owned);
 		let historical = loop {
-			let page = crate::restore::page(self.state.rest.get("restoredClaims").and_then(Json::as_object), after.as_deref(), 64);
+			let page = self.restored_page(after.as_deref(), 64);
 			let found = page.iter().find(|(_, c)| unmarked(c)).cloned();
 			if found.is_some() || page.len() < 64 {
 				break found;

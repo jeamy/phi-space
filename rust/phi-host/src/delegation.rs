@@ -118,15 +118,6 @@ fn fence_pending(s: &mut Space, now: f64, e: Epochs) {
 	}
 }
 
-/// `authorize` of a control host so far: the caller's own grant. Delegated calls to it come with the Root (R6a).
-pub fn grants_only(grants: GrantVerifier, rules: Rc<phi_service::Policy>, now: crate::gate::Now) -> phi_service::Authorize {
-	Box::new(move |store, call, id, conn| {
-		let decision = grants.check(call.get("frame").and_then(|f| f.get("grant")), id, &by_alias(store, call), Some(conn.proof_key.as_deref()), now()).map_err(denied)?;
-		decision.check(now()).map_err(denied)?;
-		Ok(Rc::new(Bound { decision, policy: Rc::clone(&rules) }) as Rc<dyn Authorization>)
-	})
-}
-
 /// What a host asks of every call (`authorize` of src/runtime.ts): a router's delegation, or the caller's own grant.
 pub fn authorize(verifier: Rc<DelegationVerifier>, now: crate::gate::Now) -> phi_service::Authorize {
 	Box::new(move |store, call, id, conn| {

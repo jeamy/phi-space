@@ -3,8 +3,8 @@
 //! the commit that performs the operation, so effect, claim and result are one write.
 //!
 //! Claims and generations stay the JSON records the TypeScript code writes. Historical (restored) claims and invalid
-//! generations, which a restore leaves (`restore.rs`), answer a poll and refuse a replay; negative claims (`notCommitted`)
-//! are not ported, and `assert_ported` refuses spaces with them.
+//! generations, which a restore leaves (`restore.rs`), answer a poll and refuse a replay; negative claims (`notCommitted`,
+//! `decide_not_committed`) are a promoted primary's answer for a request its journal never sealed.
 use phi_json::{num_of, text as str_of};
 use crate::space::{bytes, error, js_cmp, Result, Space};
 use crate::state::RpcState;
@@ -99,6 +99,7 @@ impl Space {
 	/// A new generation for `principal`: it admits new request ids until `admitUntil`.
 	pub fn issue_generation(&mut self, now: f64, principal: Option<&Json>, options: &Json) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_admin_idle()?;
 		check_principal(principal)?;
 		self.sweep(now);
 		if self.rpc_mut().signing_key.is_none() {
@@ -127,7 +128,6 @@ impl Space {
 		if self.claim_bytes() + added > lim.max_claim_bytes {
 			return Err(error("LimitError", "the generation exceeds maxClaimBytes"));
 		}
-		self.rpc_mut();
 		self.generation_put(&generation, Some(rec));
 		self.due_at(admit_until + 1.0);
 		self.touch(now);
@@ -139,6 +139,7 @@ impl Space {
 	/// while its generation admits.
 	pub fn admit(&mut self, now: f64, request: Option<&Json>, method: &Json, args: &Json, deadline: &Json, result_bytes: f64) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_admin_idle()?;
 		let r = RequestRef::of(request);
 		check_principal(r.principal)?;
 		let id_fine = r.request_id.and_then(Json::as_str).is_some_and(|s| !s.is_empty());
@@ -312,7 +313,7 @@ impl Space {
 		self.assert_ported()?;
 		let r = RequestRef::of(request);
 		let key = self.key_of(&r);
-		let historical = self.restored_claim(&key).cloned();
+		let historical = self.restored_claim(&key);
 		let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)).or_else(|| historical.clone()) else {
 			return Err(error("RequestExpired", format!("request {} is unknown", r.request_id())));
 		};
@@ -359,7 +360,7 @@ impl Space {
 	/// How many open requests a principal has, and how many its peer has (`beginOperation`'s quotas).
 	pub fn pending_counts(&self, principal: &Json, transport: Option<&str>) -> (usize, usize) {
 		let peer = principal.get("peerId");
-		let who = |p: Option<&Json>| (p.and_then(|p| p.get("peerId")).cloned(), p.and_then(|p| p.get("agentId")).cloned());
+		let who = |p: Option<&Json>| (p.and_then(|p| p.get("peerId")).cloned(), p.and_then(|p| p.get("agentId")).filter(|a| !a.is_null()).cloned());
 		let me = who(Some(principal));
 		let mut mine = (0, 0);
 		let mut count = |c: &Json| {
@@ -379,15 +380,16 @@ impl Space {
 	/// miss says only that this identity may be retried in this epoch.
 	pub fn resolve_admission(&self, now: f64, request: Option<&Json>, method: &Json, hash: &Json, epoch: &Json) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_admin_idle()?;
 		let r = RequestRef::of(request);
 		let hex64 = hash.as_str().is_some_and(phi_json::is_sha256_hex);
 		let fine_epoch = epoch.as_f64().is_some_and(|e| e >= 0.0 && phi_json::safe_integer(e));
-		let named = r.request_id.and_then(Json::as_str).is_some_and(|s| !s.is_empty()) && method.as_str().is_some_and(|m| !m.is_empty());
+		let named = crate::space::truthy(r.request_id) && crate::space::truthy(Some(method));
 		if !named || !hex64 || !fine_epoch {
 			return Err(type_error("invalid admission resolution binding"));
 		}
 		let key = self.key_of(&r);
-		if let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)).or_else(|| self.restored_claim(&key).cloned()) {
+		if let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)).or_else(|| self.restored_claim(&key)) {
 			if c.get("method") != Some(method) || c.get("argHash") != Some(hash) {
 				return Err(error("RequestConflict", "resolution changed original method/arguments"));
 			}
@@ -401,17 +403,21 @@ impl Space {
 		if self.interrupted_history() {
 			return Err(error("IncarnationChanged", "missing request requires uninterrupted current history"));
 		}
-		Ok(obj! {
-			"state" => "notAdmitted",
-			"spaceId" => of(self.state.space_id.as_deref()),
-			"authorityId" => of(self.state.rpc.as_ref().and_then(|st| st.authority_id.as_deref())),
-			"incarnation" => of(self.state.incarnation.as_deref()),
-			"primaryEpoch" => epoch.clone(),
-			"generation" => r.generation.cloned().unwrap_or(Json::Null),
-			"requestId" => r.request_id.cloned().unwrap_or(Json::Null),
-			"method" => method.clone(),
-			"argumentHash" => hash.clone(),
-		})
+		let authority = self.state.rpc.as_ref().and_then(|st| st.authority_id.as_deref());
+		// TypeScript writes `authorityId` second; an undefined one leaves no key
+		let mut out = phi_json::Object::new();
+		out.insert("state", "notAdmitted".into());
+		out.insert("spaceId", of(self.state.space_id.as_deref()));
+		if let Some(a) = authority {
+			out.insert("authorityId", a.into());
+		}
+		out.insert("incarnation", of(self.state.incarnation.as_deref()));
+		out.insert("primaryEpoch", epoch.clone());
+		out.insert("generation", r.generation.cloned().unwrap_or(Json::Null));
+		out.insert("requestId", r.request_id.cloned().unwrap_or(Json::Null));
+		out.insert("method", method.clone());
+		out.insert("argumentHash", hash.clone());
+		Ok(Json::Object(out))
 	}
 
 	/// Cancels a pending request. A decided one stays as it is; the view says which.
@@ -423,6 +429,7 @@ impl Space {
 	#[allow(clippy::too_many_arguments)]
 	pub fn decide_not_committed(&mut self, now: f64, request: Option<&Json>, method: &Json, hash: &Json, request_epoch: &Json, primary_epoch: &Json, proof_hash: &Json) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_admin_idle()?;
 		let r = RequestRef::of(request);
 		let hex64 = |v: &Json| v.as_str().is_some_and(phi_json::is_sha256_hex);
 		let integer = |v: &Json| v.as_f64().is_some_and(phi_json::safe_integer);
@@ -434,7 +441,7 @@ impl Space {
 		self.sweep(now);
 		self.rpc_mut();
 		let key = self.key_of(&r);
-		if let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)).or_else(|| self.restored_claim(&key).cloned()) {
+		if let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)).or_else(|| self.restored_claim(&key)) {
 			if c.get("method") != Some(method) || c.get("argHash") != Some(hash) {
 				return Err(error("RequestConflict", "resolution changed original method/arguments"));
 			}
@@ -547,7 +554,8 @@ impl Space {
 				break;
 			}
 			let st = self.state.rpc.as_mut().expect("swept");
-			let c = st.claims.get(k).expect("eligible");
+			// a claim the disk failed to read: its `take_failure` fails this commit (the host asks it), nothing is swept of it
+			let Some(c) = st.claims.get(k) else { continue };
 			let mut kept = c.clone();
 			if c.get("resultExpired").is_none() {
 				let Json::Object(mut o) = c.clone() else { unreachable!() };

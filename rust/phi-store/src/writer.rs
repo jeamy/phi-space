@@ -108,9 +108,8 @@ impl Writer {
 	/// What failed the store: every document of it stops at this.
 	pub fn failure(&self) -> Option<String> { self.failure.lock().expect("the writer does not panic holding it").clone() }
 	pub fn set_waker(&self, waker: Waker) { *self.waker.lock().expect("the writer does not panic holding it") = Some(waker); }
-	/// Hands a commit's rows over; the receiver settles when they are durable.
-	pub fn write(&self, ops: Vec<WriteOp>) -> Durable { self.write_admitted(ops, 0) }
-	/// The same, with the bytes a replicated store admitted the commit with (`PrimaryGate::admit`).
+	/// Hands a commit's rows over with the bytes a replicated store admitted the commit with (`PrimaryGate::admit`; 0 for
+	/// a store of its own); the receiver settles when they are durable.
 	pub fn write_admitted(&self, ops: Vec<WriteOp>, bytes: usize) -> Durable {
 		let (done, rx) = channel();
 		if self.tx.send(Msg::Write(ops, bytes, done.clone())).is_err() {

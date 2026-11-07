@@ -6,6 +6,7 @@
 //! The controller is synchronous: a step reads its documents and commits them in one call on the owner thread, so
 //! nothing commits between. What it wrote is kept here until the file has it (`stored_document` reads only what is
 //! durable), so the next step reads its own writes as `tx.doc` does.
+use phi_core::space::deep_equal;
 use phi_json::{canonical_key, digest_json, obj, parse, safe_integer, utf16_cmp, Json, Object};
 use phi_store::{Store, WriteOp};
 use std::cell::RefCell;
@@ -227,8 +228,6 @@ const TRANSFERS: Def = Def { kind: "phi-spaces.entry-snapshot-transfers", versio
 const CHUNKS: Def = Def { kind: "phi-spaces.entry-snapshot-chunk", version: 1, initial: || obj! { "page" => Json::Null } };
 const MAINTENANCE: Def = Def { kind: "phi-spaces.entry-snapshot-maintenance", version: 1, initial: || obj! { "job" => Json::Null } };
 const CHECKPOINTS: Def = Def { kind: "phi-spaces.entry-stream-checkpoints", version: 1, initial: || obj! { "links" => Object::new() } };
-/// The six kinds this controller keeps.
-pub const KINDS: [&str; 6] = [REPLICAS, "phi-spaces.entry-replica-peers", "phi-spaces.entry-snapshot-transfers", "phi-spaces.entry-snapshot-chunk", "phi-spaces.entry-snapshot-maintenance", "phi-spaces.entry-stream-checkpoints"];
 
 fn migrate(def: &Def, version: i64, mut v: Json) -> Json {
 	if def.kind == REPLICAS && version < 2 && !matches!(v.get("segments"), Some(x) if !x.is_null()) {
@@ -332,9 +331,9 @@ fn config_of(input: &Json) -> ER<Json> {
 		return conflict("invalid replication rules");
 	}
 	let mut members = members;
-	members.sort_by(|a, b| if lt(s(a, "replicaId"), s(b, "replicaId")) { Ordering::Less } else { Ordering::Greater });
+	members.sort_by(|a, b| utf16_cmp(s(a, "replicaId"), s(b, "replicaId")));
 	let mut rules = rules;
-	rules.sort_by(|a, b| if lt(s(a, "type"), s(b, "type")) { Ordering::Less } else { Ordering::Greater });
+	rules.sort_by(|a, b| utf16_cmp(s(a, "type"), s(b, "type")));
 	put(&mut c, "members", Json::Array(members));
 	put(&mut c, "rules", Json::Array(rules));
 	if bytes(&c) > 8192 {
@@ -443,13 +442,9 @@ impl EntryReplication {
 		}
 		Ok(EntryReplication { config, config_hash, document_key, max_history_bytes: h, max_batch_bytes: b, space: o.space, check_fn: o.check, now_fn: o.now, uncertainty: o.clock_uncertainty_ms, random: RefCell::new(o.random), retention: o.request_retention_ms, cache: RefCell::new(HashMap::new()), exports: RefCell::new(vec![]) })
 	}
-	pub fn config(&self) -> &Json { &self.config }
-	pub fn rules(&self) -> &[Json] { list(&self.config, "rules") }
 	pub fn rule(&self, type_: &str) -> Option<&Json> { rule_of(&self.config, type_) }
 	/// The source of snapshot ids from now on (a walk seeds it for every line).
 	pub fn set_random(&self, r: Box<dyn FnMut(usize) -> Vec<u8>>) { *self.random.borrow_mut() = r; }
-	/// Forgets what was kept of the documents: the next step reads the file.
-	pub fn forget(&self) { self.cache.borrow_mut().clear(); }
 	fn replica_id(&self) -> &str { s(&self.config, "replicaId") }
 	fn incarnation(&self) -> &str { s(&self.config, "incarnation") }
 	fn own(&self, e: &Json) -> bool { s(e, "originReplicaId") == self.replica_id() && s(e, "incarnation") == self.incarnation() && e.get("originReplicaId").is_some_and(is_string) && e.get("incarnation").is_some_and(is_string) }
@@ -833,33 +828,31 @@ impl EntryReplication {
 		let floor = base.get("floor").cloned();
 		let base_events = list(base, "events");
 		let mut events: Vec<Json> = vec![];
-		let mut seen: HashMap<String, String> = HashMap::new();
 		let mut at: HashMap<String, usize> = HashMap::new();
 		let mut floor_active = false;
 		let mut add = |items: &[Json], floor_active: bool, events: &mut Vec<Json>| -> ER<()> {
 			for e in items {
-				let (k, h) = (entry_change_id(e), hash(e));
-				let old = seen.get(&k).cloned();
+				// the hash is taken only where a change ID is met twice (every event hashed made `read` the dearest call)
+				let k = entry_change_id(e);
+				let old = at.get(&k).map(|&i| hash(&events[i]));
 				if old.is_none() && floor_active && n(e, "seq") <= floor.as_ref().and_then(|f| f.get(&origin(e))).and_then(Json::as_f64).unwrap_or(0.0) {
 					continue;
 				}
 				if let Some(old) = old {
-					if old != h {
+					if old != hash(e) {
 						let i = at[&k];
 						match self.equivalent(&events[i], e) {
 							Equivalence::Conflict => return conflict("stored change ID conflict"),
 							Equivalence::Replace => {
 								events[i] = e.clone();
-								seen.insert(k, h);
 							}
 							Equivalence::Same => {}
 						}
 					}
 					continue;
 				}
-				at.insert(k.clone(), events.len());
+				at.insert(k, events.len());
 				events.push(e.clone());
-				seen.insert(k, h);
 			}
 			Ok(())
 		};
@@ -891,7 +884,7 @@ impl EntryReplication {
 		let events = arr_mut(base, "events");
 		for e in events.iter_mut() {
 			if let Some(now) = current.get(&entry_change_id(e)) {
-				if canonical(now) != canonical(e) {
+				if !deep_equal(now, e) {
 					*e = (*now).clone();
 				}
 			}
@@ -1072,7 +1065,7 @@ impl EntryReplication {
 				obj! { "id" => entry_change_id(e), "type" => m.get("type").cloned().unwrap(), "fields" => m.get("fields").cloned().unwrap(), "owner" => m.get("owner").cloned().unwrap(), "expiresAt" => m.get("expiresAt").cloned().unwrap_or(Json::Null), "clock" => e.get("clock").cloned().unwrap(), "originReplicaId" => e.get("originReplicaId").cloned().unwrap() }
 			})
 			.collect();
-		out.sort_by(|a, b| if lt(s(a, "id"), s(b, "id")) { Ordering::Less } else { Ordering::Greater });
+		out.sort_by(|a, b| utf16_cmp(s(a, "id"), s(b, "id")));
 		Ok(out)
 	}
 	/// Byte-bounded changes after stream position `afterRevision`; `positions` only when they are not contiguous.
@@ -2068,7 +2061,7 @@ impl EntryReplication {
 		}
 		// lww: superseded versions go; the winner (tombstone, redacted or expired) only together with every older version
 		for (_, items) in &mut groups {
-			items.sort_by(|x, y| if beats(&events[*x], &events[*y]) { Ordering::Less } else { Ordering::Greater });
+			items.sort_by(|x, y| if beats(&events[*x], &events[*y]) { Ordering::Less } else if beats(&events[*y], &events[*x]) { Ordering::Greater } else { Ordering::Equal });
 			let (w, rest) = (items[0], &items[1..]);
 			let wm = mutation(&events[w]);
 			let going: Vec<usize> = rest.iter().copied().filter(|i| ok(&events[*i])).collect();

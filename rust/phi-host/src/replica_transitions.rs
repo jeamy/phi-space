@@ -409,7 +409,7 @@ pub fn set_standby(o: &mut Common, transition_id: &str, target: &mut SignedRepli
 		rec = with(&rec, &[("catchingUp", Json::Bool(true))]);
 		sync(o.journal.save_transition(transition_id, &rec))?;
 		for r in 1..=sync(o.journal.head_revision())? {
-			let i = sync(o.journal.intent(r as f64))?.expect("a complete chain");
+			let Some(i) = sync(o.journal.intent(r as f64))? else { return Err(format!("journal history has no revision {r}")) };
 			let ack = target.catch_up(&i).map_err(|e| e.to_string())?;
 			if num(&ack, "revision") != num(&i, "revision") || text(&ack, "hash") != text(&i, "hash") {
 				return refused("target history differs; only an empty target is supported");

@@ -111,13 +111,14 @@ impl Store {
 		}
 		if r.get("spaces").and_then(|s| s.get(name)).is_some() { Ok(name.to_owned()) } else { Err(unknown(name)) }
 	}
-	fn host_of(&mut self, id: Option<&str>) -> &mut SpaceHost {
+	fn host_of(&mut self, id: Option<&str>) -> Result<&mut SpaceHost> {
 		match id {
 			Some(id) if Some(id) != self.default_id() => match self.named_at.get(id) {
-				Some(&i) => &mut self.named[i].1,
-				None => &mut self.default, // not reached: the registry and the opened documents agree
+				Some(&i) => Ok(&mut self.named[i].1),
+				// the registry and the opened documents agree; a Space the registry names without its document is an error, never the default's
+				None => Err(StoreError::Unavailable(format!("Space {id} is registered but not opened"))),
 			},
-			_ => &mut self.default,
+			_ => Ok(&mut self.default),
 		}
 	}
 
@@ -133,7 +134,7 @@ impl Store {
 			let host = SpaceHost::open_shared(self.default.ledger.clone(), NAMED_SPACE, Some(id), system_random()).map_err(|e| error("Error", e.to_string()))?;
 			self.keep_named(id.to_owned(), host);
 		}
-		Ok(self.host_of(id.as_deref()))
+		self.host_of(id.as_deref()).map_err(|e| error("Error", e.to_string()))
 	}
 
 	/// Runs `op` as one commit on a Space (`spaceDoc`). The first commit of a new store registers the host and the default
@@ -326,7 +327,7 @@ impl Store {
 			s.insert(id, Json::Object(info));
 		}
 		let registry = Json::Object(registry);
-		let host = self.host_of(Some(id));
+		let host = self.host_of(Some(id))?;
 		host.also.push(registry_doc(&registry));
 		let done = host.start_commit(|s| {
 			s.clock = now;

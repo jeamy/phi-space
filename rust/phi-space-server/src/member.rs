@@ -1,7 +1,8 @@
 // `--member CONFIG.json`: a federation Member, what `startConfiguredFederation` (src/configured-runtime.ts) makes of a config of
 // mode "member", with its primary/sync Spaces (`syncSpaces`, src/sync-spaces.ts) and their quarantine start
-// (`startQuarantineReplicas`) and its private recovery endpoint (`recovery`). What this host does not carry yet is refused at
-// the start, never ignored: a root, entry replication and following a control host change stay on TypeScript hosts (R6).
+// (`startQuarantineReplicas`), its entry replication (`entryReplication`), its private recovery endpoint (`recovery`) and
+// following a recorded control host change (`recoveryAdmin`). What a Member does not carry is refused at the start, never
+// ignored: a root (`--control` carries it).
 use crate::{fail, stopping};
 use phi_host::auth::{Algorithm, Proving, Signer};
 use phi_host::boot::{BootGuard, External};

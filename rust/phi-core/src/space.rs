@@ -1,4 +1,5 @@
-//! The operations of src/core.ts on one space, as far as R1 has come (docs/rust-portierung.en.md, slices 1 to 4):
+//! The operations of src/core.ts on one space (docs/rust-portierung.en.md, R1; member admission, run gates and restore
+//! in modules of their own):
 //! entries, templates, leases, `settle` and expiry, transactions, subscriptions (notify) and waits with their events in
 //! the outbox or a consumer's mailbox (and fanout jobs when they are full), parked requests, the change stream records,
 //! the commit budget, reads, counts, pages and `changes`. Claims and generations are in `claims`, mailboxes in
@@ -404,7 +405,9 @@ pub struct Space {
 	/// The document came with claims that are not records (looked for once: a space holds a day of claims).
 	unported_claims: bool,
 	/// The historical claims are on the disk (a store's map part): their bytes are the tally kept beside them.
-	pub restored_on_disk: bool,
+	/// The historical claims (`restoredClaims`) as a map part on the disk, read through it like `rpc.claims` (TypeScript keeps a
+	/// `DiskMap` for every on-disk part); `None`: the map in `state.rest` is all there is.
+	pub restored_disk: Option<crate::state::DiskClaims>,
 	/// The watermark a store's next commit starts from: core.ts keeps it on the published entries array
 	/// (`committedWatermarks`), so a commit that leaves the entries as they were passes on what it set.
 	committed_watermark: Option<f64>,
@@ -445,8 +448,8 @@ pub(crate) struct Tracking {
 	pub(crate) replaced: Option<(Option<crate::state::RpcState>, Option<crate::state::StreamState>)>,
 	/// The stream's log was replaced as a whole: every batch it held goes, the new ones follow in order.
 	pub(crate) log_replaced: bool,
-	/// Keys of the historical claims it changed.
-	pub(crate) restored: Vec<String>,
+	/// The historical claims it changed, each with how it was before (none: it was not there).
+	pub(crate) restored: Vec<(String, Option<Json>)>,
 }
 
 /// What a tracked commit changed, for the rows a store writes (`Space::end_commit`).
@@ -471,7 +474,7 @@ pub struct Changes {
 impl Space {
 	pub fn new(state: SpaceState, random: Random) -> Space {
 		let unported_claims = state.rpc.as_ref().and_then(|r| r.claims.memory()).is_some_and(|m| m.iter().any(|(_, c)| c.as_object().is_none()));
-		Space { unported_claims, restored_on_disk: false, committed_watermark: None, marked: None, state, clock: 0.0, random, open: None, budget: None, watermark: None, router_permit: false, doc_writes: vec![], registry_incarnation: None, tracking: None }
+		Space { unported_claims, restored_disk: None, committed_watermark: None, marked: None, state, clock: 0.0, random, open: None, budget: None, watermark: None, router_permit: false, doc_writes: vec![], registry_incarnation: None, tracking: None }
 	}
 
 	/// A commit as the TypeScript host runs one: on a fresh draft (the watermark, the budget and the open batch start
@@ -516,7 +519,7 @@ impl Space {
 	/// What the tracked commit changed so far; tracking goes on (a store may still refuse the commit and roll it back).
 	pub fn pending_changes(&self) -> Changes {
 		let t = self.tracking.as_ref().expect("a tracked commit");
-		Changes { entries: self.state.entries.tracked().to_vec(), dropped_revs: t.dropped.iter().map(|b| b.rev).collect(), stream_rev: t.stream_rev, claims: t.claims.iter().map(|(k, _)| k.clone()).collect(), generations: t.generations.iter().map(|(k, _)| k.clone()).collect(), cleared: t.cleared.clone(), restored: t.restored.clone(), log_replaced: t.log_replaced }
+		Changes { entries: self.state.entries.tracked().to_vec(), dropped_revs: t.dropped.iter().map(|b| b.rev).collect(), stream_rev: t.stream_rev, claims: t.claims.iter().map(|(k, _)| k.clone()).collect(), generations: t.generations.iter().map(|(k, _)| k.clone()).collect(), cleared: t.cleared.clone(), restored: t.restored.iter().map(|(k, _)| k.clone()).collect(), log_replaced: t.log_replaced }
 	}
 	/// What the tracked commit changed; tracking ends.
 	pub fn end_commit(&mut self) -> Changes {
@@ -524,7 +527,7 @@ impl Space {
 		let entries = self.state.entries.untrack();
 		// entries changed: the published array is a new one, which has no watermark yet
 		self.committed_watermark = if entries.is_empty() { self.marked.or(self.committed_watermark) } else { None };
-		Changes { entries, dropped_revs: t.dropped.iter().map(|b| b.rev).collect(), stream_rev: t.stream_rev, claims: t.claims.into_iter().map(|(k, _)| k).collect(), generations: t.generations.into_iter().map(|(k, _)| k).collect(), cleared: t.cleared, restored: t.restored, log_replaced: t.log_replaced }
+		Changes { entries, dropped_revs: t.dropped.iter().map(|b| b.rev).collect(), stream_rev: t.stream_rev, claims: t.claims.into_iter().map(|(k, _)| k).collect(), generations: t.generations.into_iter().map(|(k, _)| k).collect(), cleared: t.cleared, restored: t.restored.into_iter().map(|(k, _)| k).collect(), log_replaced: t.log_replaced }
 	}
 	/// Undoes the tracked commit: the state is what it was when the commit began.
 	pub fn rollback(&mut self) {
@@ -559,6 +562,12 @@ impl Space {
 			let mut restored = t.dropped.into_iter().filter(|b| b.rev <= t.stream_rev).collect::<Vec<_>>();
 			restored.append(&mut log);
 			s.log = restored;
+		}
+		// the historical claims on the disk: what the commit wrote there comes back as it was (the map in `head.rest` is a copy)
+		if let Some(d) = self.restored_disk.as_mut() {
+			for (k, before) in t.restored.iter().rev() {
+				d.write(k, before.clone());
+			}
 		}
 		if let Some(r) = head.rpc.as_mut() {
 			let now = self.state.rpc.take().expect("rpc stays once made");
@@ -652,6 +661,8 @@ impl Space {
 		self.open = None;
 		self.budget = None;
 	}
+	/// stream.ts `seal`: ends the current batch alone; the next change gets a new revision, the commit's budget goes on.
+	pub(crate) fn seal_stream(&mut self) { self.open = None; }
 
 	/// `assertNotArchived`: an archived Space keeps its data readable but takes no new work (phi-host::space_lifecycle).
 	fn assert_not_archived(&self) -> Result<()> {
@@ -672,7 +683,9 @@ impl Space {
 				"acceptedAuthorityId" => v.as_str().is_some(),
 				"archived" => v.as_object().is_some(),
 				"authorityCounters" => v.as_object().is_some(),
-				"erasureEpoch" | "primaryEpoch" => v.as_f64().is_some(),
+				"erasureEpoch" | "primaryEpoch" | "snapshotEpoch" => v.as_f64().is_some(),
+				// the fence of a principal deletion (src/data-admin.ts): every operation but the deletion's own refuses under it
+				"adminMaintenance" => v.as_object().is_some(),
 				// a restore and what it leaves (src/restore.ts), an authority transition's mark (its stages run on the host)
 				"restore" | "authorityTransition" => v.as_object().is_some(),
 				"restoredClaims" => v.as_object().is_some_and(|m| m.iter().all(|(_, c)| c.as_object().is_some())),
@@ -719,7 +732,7 @@ impl Space {
 		let dropped = stream::record(&mut self.state.stream, &mut self.open, now, id, op, max);
 		self.dropped(dropped);
 	}
-	fn dropped(&mut self, batches: Vec<crate::state::Batch>) {
+	pub(crate) fn dropped(&mut self, batches: Vec<crate::state::Batch>) {
 		if let Some(t) = &mut self.tracking {
 			t.dropped.extend(batches);
 		}
@@ -729,7 +742,7 @@ impl Space {
 		self.log_put_rec(now, &e);
 	}
 	pub(crate) fn log_put_rec(&mut self, now: f64, e: &EntryRec) { self.record(now, &e.id, put_op(e)); }
-	fn log_del(&mut self, now: f64, id: &str) { self.record(now, id, obj! { "op" => "del", "id" => id }); }
+	pub(crate) fn log_del(&mut self, now: f64, id: &str) { self.record(now, id, obj! { "op" => "del", "id" => id }); }
 
 	pub(crate) fn charge(&mut self, cost: f64) -> Result<()> {
 		let max = self.limits().max_commit_bytes;
@@ -798,11 +811,30 @@ impl Space {
 		}
 	}
 	/// `docBytes`: the JSON bytes of the whole space as stored; claims on the disk by their running tally.
-	fn doc_bytes(&self) -> f64 {
-		match &self.state.rpc {
+	pub fn doc_bytes(&self) -> f64 {
+		let n = match &self.state.rpc {
 			Some(r) if r.claims.on_disk() => bytes(&self.state.to_json_without_claims()) + (r.bytes.unwrap_or(0.0) - bytes(&Json::Object(r.generations.clone()))).max(0.0),
 			_ => bytes(&self.state.to_json()),
+		};
+		n + self.restored_on_disk_bytes()
+	}
+	/// What `docBytes` counts of the historical claims on the disk beyond the copy in memory: TypeScript serializes the whole
+	/// map. Its JSON is the tally less one (each record counts its comma, the last has none), `{}` when it is empty.
+	fn restored_on_disk_bytes(&self) -> f64 {
+		let (Some(d), Some(held)) = (self.restored_disk.as_ref(), self.state.rest.get("restoredClaims")) else { return 0.0 };
+		let whole = if d.any() { self.restored_bytes() - 1.0 } else { 2.0 };
+		whole - bytes(held)
+	}
+	/// The whole state as a snapshot reads it (`plain` of the committed document): the historical claims on the disk read in.
+	/// Reads every one of them; for tests and tools, never on a request's path.
+	pub fn to_json_read(&self) -> Json {
+		let mut v = self.state.to_json();
+		if let (Some(d), Some(o)) = (self.restored_disk.as_ref(), v.as_object_mut()) {
+			if o.contains_key("restoredClaims") {
+				o.insert("restoredClaims", Json::Object(d.entries()));
+			}
 		}
+		v
 	}
 	fn regs_bytes(&self) -> f64 { bytes(&Json::Array(self.state.regs.iter().map(RegRec::to_json).collect())) }
 	fn reg_at(&self, id: &str) -> Option<usize> { self.state.regs.iter().position(|r| r.id == id) }
@@ -818,7 +850,7 @@ impl Space {
 	/// `overheadBytes`: the parts of the document that are not entries. Term by term as core.ts adds them; the parts
 	/// `assert_ported` refuses are their empty values (`{}` or `[]`, 2 bytes), claims and restore none.
 	pub(crate) fn overhead_bytes(&self) -> f64 {
-		let admin_maintenance = 2.0;
+		let admin_maintenance = self.rest_bytes("adminMaintenance", 2.0);
 		let membership = self.rest_bytes("membership", 2.0);
 		let completion = self.completion_bytes();
 		let authority_transition = self.state.rest.get("authorityTransition").filter(|t| !t.is_null()).map_or(2.0, bytes);
@@ -1155,6 +1187,9 @@ impl Space {
 	/// Serve waiters whose match appeared. A take-waiter takes its entry under a fresh transaction, so a lost delivery
 	/// is not a lost job: the entry returns when that transaction lapses unless the receiver commits it.
 	pub(crate) fn serve(&mut self, now: f64) -> Result<()> {
+		if truthy(self.state.rest.get("adminMaintenance")) {
+			return Ok(());
+		}
 		if self.member_state().is_some_and(|m| crate::member::NOT_SERVING.contains(&m)) {
 			return Ok(());
 		}
@@ -1488,6 +1523,9 @@ impl Space {
 
 	/// Drop expired entries (in time order). Every operation starts with this.
 	pub fn settle(&mut self, now: f64) -> Result<()> {
+		if truthy(self.state.rest.get("adminMaintenance")) {
+			return Ok(()); // under the fence of a principal deletion nothing is due until it lifts
+		}
 		let own = self.budget.is_none();
 		if own {
 			self.budget = Some(0.0);
@@ -1553,7 +1591,7 @@ impl Space {
 		let Some(at) = self.txn_at(id) else { return Ok(()) };
 		let t = self.state.txns.remove(at);
 		for (run, _) in t.rest.get("runs").and_then(Json::as_object).map_or(vec![], |r| r.iter().map(|(k, v)| (k.to_owned(), v.clone())).collect()) {
-			self.complete_fence(&run, now);
+			self.complete_fence(&run, now)?;
 		}
 		// registrations under the transaction end with it
 		for ri in 0..self.state.regs.len() {
@@ -1727,6 +1765,9 @@ impl Space {
 	}
 	pub fn next_expiry(&mut self) -> Result<f64> {
 		self.assert_ported()?;
+		if truthy(self.state.rest.get("adminMaintenance")) {
+			return Ok(FOREVER); // settle() stands still under the fence: nothing is due until it lifts
+		}
 		let mut min = match self.watermark {
 			Some(known) => known,
 			None => {
@@ -2258,6 +2299,7 @@ impl Space {
 	/// How many entries match, as a read would see them. Changes nothing.
 	pub fn count(&self, now: f64, tmpl: &Template, txn: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_admin_idle()?;
 		let id = txn.map(|t| self.require_txn(t, as_)).transpose()?.map(|t| self.state.txns[t].id.clone());
 		let txn = id.as_deref();
 		let mine = self.active(txn, now);
@@ -2276,6 +2318,7 @@ impl Space {
 	/// All entries a read could see, oldest first, up to `limit`.
 	pub fn list(&self, now: f64, tmpl: &Template, txn: Option<&Json>, limit: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_admin_idle()?;
 		let limit = match limit {
 			None => FOREVER,
 			l => is_integer(l).filter(|&l| l >= 1.0).ok_or_else(|| illegal("limit must be a positive integer"))?,
@@ -2302,6 +2345,7 @@ impl Space {
 	/// cursor, nextField, limit, maxBytes.
 	pub fn read_chain(&self, now: f64, tmpl: &Json, o: &Json, owner: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_admin_idle()?;
 		let safe = |v: Option<&Json>| v.and_then(Json::as_f64).filter(|x| phi_json::safe_integer(*x));
 		let frame = self.limits().max_frame_bytes;
 		let limit = match o.get("limit").filter(|v| !v.is_null()) {
@@ -2457,6 +2501,7 @@ impl Space {
 
 	pub fn renew(&mut self, now: f64, id: Option<&Json>, ms: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_admin_idle()?;
 		self.settle(now)?;
 		let l = self.leased(id, as_)?;
 		let v = grant(ms, now)?;
@@ -2503,6 +2548,7 @@ impl Space {
 
 	pub fn create_txn(&mut self, now: f64, lease_ms: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_admin_idle()?;
 		self.assert_not_archived()?;
 		self.settle(now)?;
 		let lim = self.limits();
@@ -2560,6 +2606,7 @@ impl Space {
 	/// The commit batches after `after_rev`, limited by encoded bytes like every page.
 	pub fn changes(&self, after_rev: Option<&Json>, o: &Json) -> Result<Json> {
 		self.assert_ported()?;
+		self.assert_admin_idle()?;
 		let frame = self.limits().max_frame_bytes;
 		let budget = match o.get("maxBytes") {
 			None => frame,

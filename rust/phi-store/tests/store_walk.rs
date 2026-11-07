@@ -74,7 +74,7 @@ impl RustSide {
 			self.host.commit(op).expect("the Rust store writes")
 		}
 	}
-	fn hash(&self) -> String { digest_json(&self.host.space.state.to_json()).unwrap() }
+	fn hash(&self) -> String { digest_json(&self.host.space.to_json_read()).unwrap() }
 }
 
 /// The rows of a store file: documents and parts in key order, values canonical.
@@ -158,7 +158,7 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 			let _ = again.step(l);
 		}
 		let mut paths = vec![];
-		diff(&again.host.space.state.to_json(), &dump, "state", &mut paths);
+		diff(&again.host.space.to_json_read(), &dump, "state", &mut paths);
 		if std::env::var("PHI_STORE_TRACE").is_ok() {
 			for (n, l) in lines[1..=i].iter().enumerate() {
 				eprintln!("{:>5} {} -> {:?}", n + 1, l.to_json_text(), ts_reply(&ts_answers[n + 1]));
@@ -314,4 +314,56 @@ fn show_walk_state() {
 	let dump = out.last().unwrap().get("dump").cloned().unwrap();
 	eprintln!("TS   gens {:?}", g(&dump));
 	eprintln!("TS   claims {:?}", c(&dump));
+}
+
+#[test]
+fn historical_claims_answer_after_the_store_is_reopened() {
+	// A restore leaves the source's claims as history (`restoredClaims`, rows on the disk). A request whose key is one of them is
+	// refused as of another incarnation, also after a restart: the history is read back through the disk, not from the head.
+	fn run(name: &str, reopen: bool) -> (Result<Json, phi_core::CoreError>, Json) {
+		let d = dir(name);
+		let file = d.join("rust.sqlite");
+		let init = obj! { "op" => "init", "seed" => "history", "now" => 1000.0, "spaceId" => "sp-1", "incarnation" => "0a0b0c0d" };
+		let mut rust = RustSide::open(&file, &init);
+		let p = obj! { "peerId" => "p1" };
+		let generation = rust.step(&obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => p.clone() }).unwrap();
+		let generation = generation.get("generation").and_then(Json::as_str).unwrap().to_owned();
+		let request = obj! { "principal" => p.clone(), "generation" => generation.as_str(), "requestId" => "r1" };
+		let admit = obj! { "op" => "admit", "now" => 1100.0, "request" => request, "method" => "write", "args" => obj! { "a" => 1.0 } };
+		let key = rust.step(&admit).unwrap();
+		let key = key.get("key").and_then(Json::as_str).unwrap().to_owned();
+		rust.step(&obj! { "op" => "decide", "now" => 1100.0, "key" => key.as_str(), "outcome" => obj! { "state" => "done", "result" => "w1" } }).unwrap();
+		let kept = rust.step(&obj! { "op" => "keepSource", "now" => 1200.0 }).unwrap();
+		let begin = obj! { "op" => "beginRestore", "now" => 1200.0, "recoveryId" => "rec-1", "expectedDataIncarnation" => "0a0b0c0d", "expectedPrimaryEpoch" => 1.0, "snapshotHash" => kept, "kind" => "data" };
+		rust.step(&begin).unwrap();
+		let mut stage = String::new();
+		for n in 0..40 {
+			let r = rust.step(&obj! { "op" => "restoreBatch", "now" => 1300.0 + n as f64 }).unwrap();
+			stage = r.get("stage").and_then(Json::as_str).unwrap_or("").to_owned();
+			if stage == "waiting" || stage == "completed" {
+				break;
+			}
+		}
+		assert!(stage == "waiting" || stage == "completed", "the restore went through its stages, at {stage}");
+		let history = rust.host.space.state.rest.get("restoredClaims").and_then(Json::as_object).map_or(0, |m| m.len()) + usize::from(rust.host.space.restored_on_disk());
+		assert!(history > 0, "the restore left history");
+		if reopen {
+			rust.host.close();
+			rust = RustSide::open(&file, &obj! { "op" => "init", "seed" => "history", "now" => 1400.0 });
+			assert!(rust.host.space.restored_on_disk(), "the history is read through the disk after a reopen");
+		}
+		let mut again = admit.clone();
+		if let Json::Object(o) = &mut again {
+			o.insert("now", Json::Number(1500.0));
+		}
+		let answer = rust.step(&again);
+		let state = rust.host.space.state.to_json();
+		rust.host.close();
+		(answer, state.get("rpc").and_then(|r| r.get("claims")).cloned().unwrap_or(Json::Null))
+	}
+	let (open, _) = run("history-open", false);
+	let (reopened, _) = run("history-reopened", true);
+	assert_eq!(reply(&reopened), reply(&open), "the same answer with and without a restart");
+	let code = open.as_ref().err().map(|e| e.class);
+	assert_eq!(code, Some("IncarnationChanged"), "a historical request is not admitted as new: {:?}", reply(&open));
 }

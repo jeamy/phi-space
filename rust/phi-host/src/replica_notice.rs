@@ -17,7 +17,7 @@ pub fn notice_of(journal: &SyncJournal, transition_id: &str, data_incarnation: &
 		return Ok(None);
 	}
 	for r in (1..=journal.head_revision()?).rev() {
-		let i = journal.intent(r as f64)?.expect("a complete chain");
+		let Some(i) = journal.intent(r as f64)? else { return Err(phi_store::sync::SyncError::Blocked(format!("journal history has no revision {r}"))) };
 		if num(&i, "version") == 2.0 && text(&i, "reason") == Some(transition_id) {
 			let c = i.get("config").cloned().unwrap_or(Json::Null);
 			return Ok(Some(obj! {
@@ -33,7 +33,7 @@ pub fn notice_of(journal: &SyncJournal, transition_id: &str, data_incarnation: &
 /// `latestReplicaConfigNotice`: the notice of the newest transition in the chain, if it is completed.
 pub fn latest_notice(journal: &SyncJournal, data_incarnation: &str) -> phi_store::sync::Result<Option<Json>> {
 	for r in (1..=journal.head_revision()?).rev() {
-		let i = journal.intent(r as f64)?.expect("a complete chain");
+		let Some(i) = journal.intent(r as f64)? else { return Err(phi_store::sync::SyncError::Blocked(format!("journal history has no revision {r}"))) };
 		if num(&i, "version") != 2.0 {
 			continue;
 		}

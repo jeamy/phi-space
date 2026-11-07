@@ -167,6 +167,8 @@ impl RemoteKeys {
 
 	/// Asks the control host for these keys. One it does not answer for is unknown: nothing is served on an old answer.
 	pub async fn fetch(&self, wanted: Vec<(String, String)>) {
+		let now = (self.now)();
+		self.held.borrow_mut().retain(|_, (at, _)| now - *at <= KEEP_MS); // a caller naming fresh keys does not grow the table
 		for (peer, key) in wanted {
 			let reply = self.client.call(&obj! { "method" => "keyLookup", "args" => obj! { "peerId" => peer.as_str(), "keyId" => key.as_str() } }).await;
 			let found = reply.ok().and_then(|v| PeerKey::from_json(&v));

@@ -74,8 +74,8 @@ fn start(d: &Path, spaces: impl FnOnce() -> Vec<(Vec<String>, Route)> + Send + '
 					match ask {
 						Ask::Route(names, to) => {
 							let back = owner.route(&names, to.map(|f| f()));
-							let _ = done.send(back.is_some());
-							if let Some(s) = back { s.store.close(); }
+							let _ = done.send(!back.is_empty());
+							for s in back { s.store.close(); }
 						}
 						Ask::Failed(name) => {
 							let _ = done.send(tokio::time::timeout(Duration::from_secs(5), owner.failed(&name)).await.is_ok());

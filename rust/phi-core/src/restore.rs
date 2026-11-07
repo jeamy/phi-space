@@ -21,16 +21,27 @@ pub fn run_recovery_id_of(recovery_id: &str) -> String {
 /// The keys of a claim map in key order after `after`, at most `n`.
 pub(crate) fn page(map: Option<&Object>, after: Option<&str>, n: usize) -> Vec<(String, Json)> {
 	let Some(map) = map else { return vec![] };
-	let mut keys: Vec<&str> = map.keys().filter(|k| after.is_none_or(|a| *k > a)).collect();
-	keys.sort_unstable();
+	let mut keys: Vec<&str> = map.keys().filter(|k| after.is_none_or(|a| phi_json::utf16_cmp(k, a).is_gt())).collect();
+	keys.sort_unstable_by(|a, b| phi_json::utf16_cmp(a, b));
 	keys.into_iter().take(n).map(|k| (k.to_owned(), map.get(k).cloned().expect("listed"))).collect()
 }
 
 impl Space {
 	fn restore_state(&self) -> Option<&Json> { self.state.rest.get("restore").filter(|r| !r.is_null()) }
 	fn restored_claims(&self) -> Option<&Object> { self.state.rest.get("restoredClaims").and_then(Json::as_object) }
-	/// A historical claim (`restoredClaims[key]`).
-	pub(crate) fn restored_claim(&self, key: &str) -> Option<&Json> { self.restored_claims().and_then(|m| m.get(key)) }
+	/// The historical claims are a map part on the disk (`restored_disk`), as `rpc.claims` are.
+	pub fn restored_on_disk(&self) -> bool { self.restored_disk.is_some() }
+	/// A historical claim (`restoredClaims[key]`): what memory holds of it, else the disk's row.
+	pub(crate) fn restored_claim(&self, key: &str) -> Option<Json> {
+		self.restored_claims().and_then(|m| m.get(key)).cloned().or_else(|| self.restored_disk.as_ref().and_then(|d| d.get(key)))
+	}
+	/// The historical claims in key order after `after`, at most `n` (`claimPage`: the disk's rows, or the map in memory).
+	pub(crate) fn restored_page(&self, after: Option<&str>, n: usize) -> Vec<(String, Json)> {
+		match &self.restored_disk {
+			Some(d) => d.page(after, n),
+			None => page(self.restored_claims(), after, n),
+		}
+	}
 	/// Whether this generation belongs to restored data.
 	pub(crate) fn invalid_generation(&self, id: &str) -> bool { self.state.rest.get("invalidGenerations").and_then(|g| g.get(id)).is_some_and(|v| !v.is_null() && v != &Json::Bool(false)) }
 	/// A restore or an authority transition was installed, or the Member is recovery-blocked: history is not uninterrupted.
@@ -39,7 +50,7 @@ impl Space {
 	/// before the tally: counted once).
 	pub(crate) fn restored_bytes(&self) -> f64 {
 		let Some(m) = self.restored_claims() else { return 0.0 };
-		if !self.restored_on_disk {
+		if !self.restored_on_disk() {
 			return bytes(&Json::Object(m.clone()));
 		}
 		self.state.rest.get("restoredBytes").and_then(Json::as_f64).unwrap_or_else(|| m.iter().fold(2.0, |n, (k, c)| n + bytes(c) + bytes(&Json::String(k.into())) + 2.0))
@@ -50,14 +61,18 @@ impl Space {
 			self.state.rest.insert("restoredClaims", Json::Object(Object::new()));
 		}
 		let tally = match self.state.rest.get("restoredBytes").and_then(Json::as_f64) { Some(t) => t, None => self.restored_bytes() };
-		let before = self.restored_claim(key).map(|b| bytes(b) + bytes(&Json::String(key.into())) + 2.0).unwrap_or(0.0);
+		let was = self.restored_claim(key);
+		let before = was.as_ref().map(|b| bytes(b) + bytes(&Json::String(key.into())) + 2.0).unwrap_or(0.0);
 		let after = bytes(&next) + bytes(&Json::String(key.into())) + 2.0;
 		self.state.rest.insert("restoredBytes", Json::Number(tally + after - before));
+		if let Some(d) = self.restored_disk.as_mut() {
+			d.write(key, Some(next.clone()));
+		}
 		if let Some(Json::Object(m)) = self.state.rest.get_mut("restoredClaims") {
 			m.insert(key, next);
 		}
 		if let Some(t) = self.tracking.as_mut() {
-			if !t.restored.iter().any(|k| k == key) { t.restored.push(key.to_owned()); }
+			if !t.restored.iter().any(|(k, _)| k == key) { t.restored.push((key.to_owned(), was)); }
 		}
 	}
 	/// Bytes of every entry, as the restore's document check counts them.
@@ -117,7 +132,7 @@ impl Space {
 				t.replaced = Some((self.state.rpc.clone(), self.state.stream.clone()));
 			}
 		}
-		self.restored_on_disk = false; // a new map, in memory until a store takes it
+		self.restored_disk = None; // a new map, in memory until a store takes it (the rows on the disk are cleared with this commit)
 		self.save_cleared_work();
 		let s = &mut self.state;
 		s.entries.retain(|_| false);

@@ -24,7 +24,19 @@ import {FederationRouting} from './federation-policy.ts';
 import {ReplicaNoticeBoard,adoptReplicaConfigNotice} from './replica-notice.ts';
 import type {TargetBinding} from './router.ts';
 import type {Principal} from './claims.ts';
+import {RunController,type RunMember,type RunSpec} from './run-controller.ts';
+import {signRun,verifyRun,RECOVER_TTL_MS,type RunGateInstruction} from './run-member.ts';
+import {WorkerAssignments} from './workers.ts';
+import {spaceCommands} from './space-lifecycle.ts';
+import {DeploymentController,capabilityHostStatus} from './deployment.ts';
+import {DataAdminController} from './data-admin.ts';
+import * as core from './core.ts';
 export type RootConfig={id:string;keyFile:string;hostKeyFile:string;adminPeer?:{peerId:string;address:string};leaseFile:string;journalPartitions:number;allowMembershipCommands?:boolean;statusIntervalMs?:number;
+ /** The admin commands with effects on Members, each under the control key over the Root's lines (needs `adminPeer`):
+  * the run controller (`startRun` …), worker assignments (`setWorkers`, `listWorkers`, the hosts' `workerAssignments`),
+  * Space commands (`createSpace` …), the deployment (`planDeployment` …; takes the Space commands and the workers)
+  * and data administration (`purgeTasks`, `deletePrincipal` on this host's own Spaces). */
+ commands?:{runs?:boolean;workers?:boolean;spaces?:boolean;deployment?:boolean;dataAdmin?:boolean};
  /** Router change (v3 5.2): adopt the existing Root journal of this id without an own retained lease (a new router host,
   * e.g. after a control promotion). The fresh lease gets a higher router epoch once the previous router's lease expired. */
  takeover?:boolean;takeoverWaitMs?:number;members:Record<string,{target:TargetBinding;peerId:string;keyId:string;algorithm:Signer['algorithm'];publicKey:string;address:{host:string;port:number};
@@ -36,6 +48,8 @@ const endpointOf=(m:RootConfig['members'][string],hostId:string):Endpoint|undefi
 const provisionedTarget=(m:RootConfig['members'][string]|undefined,t:TargetBinding)=>!!m&&(canonicalJson(m.target as any)===canonicalJson(t as any)||!!m.replicas&&!!endpointOf(m,t.hostId)&&t.spaceId===m.target.spaceId&&t.authorityId===m.target.authorityId);
 export async function createConfiguredRoot(o:{host:SpaceHost;ctx:Context;hostId:string;peerId:string;authorityId:string;controlSpaceId:string;controlSigner:Signer;keys:KeyDirectory;directory:PeerDirectory;ownAddress:string;groupRoles:GroupRoles;external:RecoveryRegister;installed:RecoveryRegister;grants:GrantAuthority;leases:RouterLeaseAuthority;root:RootConfig;assertControl:()=>Promise<void>;controlEpoch?:()=>number;checkControlAuthority?:(record:RegisterRecord|null)=>void}){
  const cfg=o.root;if(!o.controlSigner.publicKey||!cfg.id||!cfg.keyFile||!cfg.hostKeyFile||!cfg.leaseFile||!cfg.members||Object.keys(cfg.members).length>32)throw new BootBlocked('incomplete native Root provisioning');
+ // before anything starts: a refusal here leaves nothing running that the caller could not close
+ if(cfg.commands&&Object.values(cfg.commands).some(Boolean)&&!cfg.adminPeer)throw new BootBlocked('admin commands need the configured adminPeer');
  const interval=cfg.statusIntervalMs??10000;if(!Number.isSafeInteger(interval)||interval<1000||interval>15000)throw new BootBlocked('Root status interval must be 1000..15000 ms');
  const signer=loadFileSigner(cfg.keyFile),hostSigner=loadFileSigner(cfg.hostKeyFile),sockets=new Map<string,ReturnType<typeof socketTransport>>();
  const controlState=()=>o.host.snapshot(NamedSpace,o.controlSpaceId,o.ctx);
@@ -104,7 +118,35 @@ export async function createConfiguredRoot(o:{host:SpaceHost;ctx:Context;hostId:
     try{await remote.authenticate();await remote.sendEpochNotice(signed);delivered.set(x.id,key);console.log(JSON.stringify({epochNotice:x.id,routerEpoch:signed.notice.routerEpoch,controlPrimaryEpoch:signed.notice.controlPrimaryEpoch,policyVersion:signed.notice.policyVersion}));}catch(e){console.error('Root epoch notice:',x.id,e instanceof Error?e.message:String(e));}}
   };
   const heartbeat=()=>{active=adoptNotices().catch(e=>console.error('Root replica notices:',e instanceof Error?e.message:String(e))).then(()=>epochNotices()).catch(e=>console.error('Root epoch notices:',e instanceof Error?e.message:String(e))).then(()=>controller.directory!.refresh()).catch(e=>console.error('Root Member status:',e instanceof Error?e.message:String(e))).then(()=>{if(!stopped)timer=setTimeout(heartbeat,interval);});};heartbeat();
-  return{...controller,adoptReplicaNotices:adoptNotices,withAdmin:<T>(peerId:string,run:()=>Promise<T>)=>adminContext.run(peerId,run),close:async()=>{stopped=true;if(timer)clearTimeout(timer);
+  // `commands`: the admin commands with effects on Members, each signed with the control key and carried over the
+  // Root's line to the Member that holds the Space (the endpoint follows the routing target, as the probes do).
+  const cm=cfg.commands;let runs:RunController|undefined,workers:WorkerAssignments|undefined,spaces:ReturnType<typeof spaceCommands>|undefined,deployment:DeploymentController|undefined,dataAdmin:DataAdminController|undefined;
+  if(cm&&Object.values(cm).some(Boolean)){
+   const identity=async()=>({authorityId:o.authorityId,incarnation:(await controlState())?.incarnation??null});
+   const currentHost=async(id:string)=>(await o.host.snapshot(FederationRouting,o.controlSpaceId,o.ctx))?.members[id]?.target.hostId??cfg.members[id]!.target.hostId;
+   const remoteOf=async(id:string,spaceId:string)=>{const hostId=await currentHost(id),e=endpointOf(cfg.members[id]!,hostId);if(!e)throw new BootBlocked('Member endpoint is not provisioned');const p={peerId:o.peerId,agentId:'root-admin'};const remote=new RemoteSpace(transport(id),{space:spaceId,signer,expectedGateHostId:hostId,ownPeerId:o.peerId,attempts:1,grantProvider:async()=>await grant(p) as any});await remote.authenticate();return{remote,pin:{issuer:e.peerId,algorithm:e.algorithm,publicKey:e.publicKey}};};
+   const memberBySpace=(spaceId:string)=>Object.entries(cfg.members).find(([,m])=>m.target.spaceId===spaceId)?.[0];
+   const memberByHost=(hostId:string)=>Object.entries(cfg.members).find(([,m])=>endpointOf(m,hostId))?.[0];
+   if(cm.runs){
+    const member=(spaceId:string):RunMember=>{
+     const call=async<T extends {spaceId:string|null}>(q:Omit<RunGateInstruction,'authorityId'|'spaceId'|'spec'>,spec?:RunSpec):Promise<T>=>{
+      const id=memberBySpace(spaceId);if(!id)throw new core.IllegalArgumentError(`Space ${spaceId} belongs to no provisioned Member`);
+      const {remote,pin}=await remoteOf(id,spaceId);
+      const ack=verifyRun('ack',await remote.requestRunGate(await signRun('instruction',{...q,authorityId:o.authorityId,spaceId,...(spec?{spec}:{})} as RunGateInstruction,o.peerId,o.controlSigner)) as never,pin) as unknown as T;
+      if(ack.spaceId!==spaceId)throw new core.PermissionError('run gate ACK names another Space');return ack;};
+     return{spaceId,prepare:(run,command)=>call<core.RunGateAck>(command,run),gate:command=>call<core.RunGateAck>(command),recover:(runId,recoveryId)=>call<core.RunRecoveryView>({runId,commandId:recoveryId,kind:'recover',revision:0,recoveryId,expiresAt:Date.now()+RECOVER_TTL_MS} as never)};
+    };
+    runs=new RunController({host:o.host,ctx:o.ctx,member,identity});
+   }
+   if(cm.workers||cm.deployment)workers=new WorkerAssignments({host:o.host,ctx:o.ctx,authorityId:o.authorityId,peerId:o.peerId,signer:o.controlSigner,identity});
+   if(cm.spaces||cm.deployment){
+    const hostEnd=(hostId:string)=>{const id=memberByHost(hostId),e=id?endpointOf(cfg.members[id]!,hostId):undefined;if(!id||!e)throw new core.IllegalArgumentError(`invalid hostId: ${hostId} is no provisioned Member host`);return{id,e};};
+    spaces=spaceCommands({authorityId:o.authorityId,peerId:o.peerId,signer:o.controlSigner,hostPin:async hostId=>{const{e}=hostEnd(hostId);return{issuer:e.peerId,algorithm:e.algorithm,publicKey:e.publicKey};},send:async(hostId,t)=>{const{id}=hostEnd(hostId);return(await remoteOf(id,cfg.members[id]!.target.spaceId)).remote.requestSpaceLifecycle(t);}});
+   }
+   if(cm.deployment)deployment=new DeploymentController({host:o.host,ctx:o.ctx,ports:{hostStatus:capabilityHostStatus(o.host,o.ctx,o.controlSpaceId),createSpace:spaces!.createSpace,workers:workers!,controlSpaceId:o.controlSpaceId}});
+   if(cm.dataAdmin)dataAdmin=new DataAdminController({host:o.host,ctx:o.ctx,assertAuthority:async()=>{await assertRoot();},authorize:async admin=>{if(admin!==cfg.adminPeer!.peerId)throw new core.PermissionError('data administration is for the configured admin peer');}});
+  }
+  return{...controller,adoptReplicaNotices:adoptNotices,...(runs?{runs}:{}),...(cm?.workers&&workers?{workers}:{}),...(cm?.spaces&&spaces?{spaces}:{}),...(deployment?{deployment}:{}),...(dataAdmin?{dataAdmin}:{}),withAdmin:<T>(peerId:string,run:()=>Promise<T>)=>adminContext.run(peerId,run),close:async()=>{stopped=true;if(timer)clearTimeout(timer);
    // Closing the Member connections first fails a probe that hangs on an unreachable Member; the rest of the
    // heartbeat gets a bounded wait, so a stopping daemon never outlives its stop window.
    for(const s of sockets.values())s.close();await Promise.race([active,new Promise(r=>setTimeout(r,5000).unref())]);for(const s of sockets.values())s.close();}};

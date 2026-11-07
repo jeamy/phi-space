@@ -29,7 +29,7 @@ async fn raw(path: &PathBuf, text_: &str) -> Json {
 	s.write_all(&out).await.unwrap();
 	parse(&String::from_utf8_lossy(&phi_wire::read_frame(&mut s).await.unwrap())).unwrap()
 }
-fn envelope(signer: &Signer, call: &Json) -> String { obj! { "call" => call.clone(), "algorithm" => "ed25519", "signature" => to_base64(&signer.sign(&recovery_bytes(call))) }.to_json_text() }
+fn envelope(signer: &Signer, call: &Json) -> String { obj! { "call" => call.clone(), "algorithm" => "ed25519", "signature" => to_base64(&signer.sign(&recovery_bytes(call).unwrap())) }.to_json_text() }
 
 #[test]
 fn the_endpoint_admits_only_pinned_fresh_calls_and_answers_a_replay_once() {

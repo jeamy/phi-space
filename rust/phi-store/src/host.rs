@@ -14,8 +14,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, Weak};
 
-fn claim_source(l: &SqliteLedger, kind: &str, key: Option<&str>) -> Result<Arc<dyn ClaimSource>> {
-	Ok(Arc::new(crate::disk::SqliteClaims::open(l.path(), kind, key.unwrap_or(""), "rpc.claims")?))
+fn claim_source(l: &SqliteLedger, kind: &str, key: Option<&str>) -> Result<Arc<dyn ClaimSource>> { part_source(l, kind, key, "rpc.claims") }
+fn part_source(l: &SqliteLedger, kind: &str, key: Option<&str>, part: &str) -> Result<Arc<dyn ClaimSource>> {
+	Ok(Arc::new(crate::disk::SqliteClaims::open(l.path(), kind, key.unwrap_or(""), part)?))
 }
 
 /// The schema version of a Space document (src/doc.ts, src/spaces.ts).
@@ -99,7 +100,7 @@ impl SpaceHost {
 			Ledger::Sqlite(l) => l.load(kind, key, SPACE_PARTS)?,
 			Ledger::Memory(l) => l.load(kind, key),
 		};
-		let mut on_disk = false;
+		let mut restored: Option<DiskClaims> = None;
 		let (state, exists, head_text) = match stored {
 			None => (SpaceState::initial(), false, None),
 			Some(doc) => {
@@ -108,18 +109,20 @@ impl SpaceHost {
 					return Err(StoreError::Unavailable(format!("the document {kind} has version {}; the Rust store reads version {SPACE_VERSION} only", doc.version)));
 				}
 				let mut state = SpaceState::from_value(doc.value).map_err(|e| StoreError::Unavailable(e.to_string()))?;
-				on_disk = matches!(ledger, Ledger::Sqlite(_)) && state.rest.contains_key("restoredClaims");
 				let head = state.to_json_head().to_json_text();
-				// the claims stay on the disk: a map over their rows takes their place
+				// the claims stay on the disk: a map over their rows takes their place; the historical claims likewise
 				if let (Ledger::Sqlite(l), Some(r)) = (&ledger, state.rpc.as_mut()) {
 					r.claims = Claims::Disk(DiskClaims::new(claim_source(l, kind, key)?));
+				}
+				if let (Ledger::Sqlite(l), true) = (&ledger, state.rest.contains_key("restoredClaims")) {
+					restored = Some(DiskClaims::new(part_source(l, kind, key, "restoredClaims")?));
 				}
 				(state, true, Some(head))
 			}
 		};
 		drop(guard);
 		let mut space = Space::new(state, random);
-		space.restored_on_disk = on_disk;
+		space.restored_disk = restored;
 		Ok(SpaceHost { ledger: shared, kind: kind.to_owned(), key: key.map(str::to_owned), space, exists, head_text, max_ord: HashMap::new(), failure: None, handed: 0, durable: 0, unsettled: VecDeque::new(), watches: vec![], also: vec![] })
 	}
 
@@ -144,6 +147,9 @@ impl SpaceHost {
 		self.pump()?;
 		let stamp = self.handed + 1;
 		if let Some(Claims::Disk(d)) = self.space.state.rpc.as_mut().map(|r| &mut r.claims) {
+			d.stamp = stamp;
+		}
+		if let Some(d) = self.space.restored_disk.as_mut() {
 			d.stamp = stamp;
 		}
 		self.claim_failure(); // a look outside a commit answered for itself
@@ -297,6 +303,9 @@ impl SpaceHost {
 		}
 		if self.durable != before {
 			if let Some(Claims::Disk(d)) = self.space.state.rpc.as_mut().map(|r| &mut r.claims) {
+				d.settle(self.durable);
+			}
+			if let Some(d) = self.space.restored_disk.as_mut() {
 				d.settle(self.durable);
 			}
 			self.publish_watches();
@@ -569,9 +578,13 @@ impl SpaceHost {
 		self.unsettled.push_back((self.handed, durable));
 		self.head_text = Some(head);
 		self.exists = true;
-		// the historical claims are a map part on the disk from now on: their bytes are the tally (restoredBytes)
-		if self.space.state.rest.contains_key("restoredClaims") {
-			self.space.restored_on_disk = true;
+		// the historical claims are a map part on the disk from now on: their bytes are the tally (restoredBytes), and
+		// memory keeps only what this commit wrote until it is durable (`DiskMap.adopt`, as for the claims below)
+		if let Some(phi_json::Json::Object(m)) = self.space.state.rest.get_mut("restoredClaims") {
+			if self.space.restored_disk.is_none() {
+				self.space.restored_disk = Some(DiskClaims::adopt_map(part_source(ledger, &kind, self.key.as_deref(), "restoredClaims")?, m, self.handed));
+			}
+			*m = phi_json::Object::new();
 		}
 		// a map still in memory goes on the disk from now on (DiskMap.adopt): held until this commit is durable
 		if let Some(Claims::Memory(m)) = self.space.state.rpc.as_ref().map(|r| &r.claims) {

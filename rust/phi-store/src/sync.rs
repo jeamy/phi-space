@@ -218,7 +218,13 @@ impl SyncJournal {
 	/// The configuration in force after `revision` (0: the genesis).
 	pub fn config_at(&self, revision: usize) -> Result<Json> { self.configs.get(revision).map(copy).map_or_else(|| blocked("unknown journal revision"), Ok) }
 	pub fn config_hash_at(&self, revision: usize) -> Result<String> { Ok(hash(&self.config_at(revision)?)) }
-	pub fn applied_revision(&self) -> Result<u64> { Ok(self.meta("applied")?.map_or(0.0, |v| v.parse::<f64>().unwrap_or(f64::NAN)) as u64) }
+	/// The applied position of the marker; one that is not a whole number refuses the journal, as TypeScript's constructor does.
+	pub fn applied_revision(&self) -> Result<u64> {
+		match self.meta("applied")? {
+			None => Ok(0),
+			Some(v) => v.parse::<f64>().ok().filter(|n| phi_json::safe_integer(*n) && *n >= 0.0).map_or_else(|| blocked("journal applied position exceeds history"), |n| Ok(n as u64)),
+		}
+	}
 	/// Bytes the sealed history takes.
 	pub fn history_bytes(&mut self) -> Result<usize> {
 		if let Some(n) = self.used_bytes { return Ok(n); }

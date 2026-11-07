@@ -1,5 +1,6 @@
-//! The read-only views of the supervisor (src/alerts.ts): alerts derived from the hosts' reports and the audit of the commands. Alerts
-//! are hints, never proof of a state. Runs and workers are not on a configured control host, so neither is here.
+//! The read-only views of the supervisor (src/alerts.ts): alerts derived from the runs, the worker assignments and the hosts'
+//! reports, and the audit of the commands. Alerts are hints, never proof of a state. The texts are German as in TypeScript; both
+//! change together.
 use crate::control::{control_id, AsyncCommands};
 use phi_core::space::{CoreError, Space, Template};
 use phi_json::{num_of, obj, text, Json};
@@ -25,9 +26,91 @@ fn string(v: Option<&Json>) -> String {
 /// `slice(0, n)` of a JavaScript string.
 fn cut(t: &str, n: usize) -> String { String::from_utf16_lossy(&t.encode_utf16().take(n).collect::<Vec<_>>()) }
 
-/// `collectAlerts` as far as a configured host goes: what the hosts report.
-pub fn collect_alerts(s: &Space, now: f64) -> R<Json> {
-	let mut out: Vec<(String, Json)> = vec![];
+/// `collectAlerts` of the hosts' reports alone (a host without runs or worker assignments).
+pub fn collect_alerts(s: &Space, now: f64) -> R<Json> { collect_alerts_with(s, now, &[], &[]) }
+
+/// `appliedWorkers`: the newest report per host of the Capability entries of the control Space, with its age.
+pub fn applied_workers(s: &Space, now: f64) -> R<Vec<(String, f64, Json)>> {
+	let mut out: Vec<(String, f64, Json)> = vec![];
+	for e in listed(s, now, "Capability")? {
+		let Some(f) = e.get("fields") else { continue };
+		let (Some(host), Some(w)) = (text(f, "hostId"), f.get("metrics").and_then(|m| m.get("workers")).filter(|w| w.as_object().is_some() || w.as_array().is_some())) else { continue };
+		let at = number_of(f.get("at"));
+		match out.iter_mut().find(|(h, _, _)| h == host) {
+			Some(held) if held.1 < at => *held = (host.to_owned(), at, w.clone()),
+			Some(_) => {}
+			None => out.push((host.to_owned(), at, w.clone())),
+		}
+	}
+	Ok(out)
+}
+
+/// `Number(x)` of a field that holds a number (anything else is NaN here; TypeScript's reports carry numbers).
+fn number_of(v: Option<&Json>) -> f64 { v.and_then(Json::as_f64).unwrap_or(f64::NAN) }
+/// `${n}` of a JavaScript number.
+fn js(n: f64) -> String { if n.is_nan() { "NaN".into() } else { phi_json::number_text(n) } }
+/// `Math.round`.
+fn round(x: f64) -> f64 { (x + 0.5).floor() }
+/// JavaScript truthiness.
+fn truthy(v: Option<&Json>) -> bool { phi_core::space::truthy(v) }
+
+/// `collectAlerts`: `runs` are the newest run views (`RunController.list(200)`), `assignments` the desired worker
+/// assignments (`WorkerAssignments.list().assignments`).
+pub fn collect_alerts_with(s: &Space, now: f64, runs: &[Json], assignments: &[Json]) -> R<Json> {
+	let mut out: Vec<(bool, String, Json)> = vec![];
+	let mut push = |critical: bool, key: String, source: &str, subject: &str, message: String| {
+		out.push((critical, key.clone(), obj! { "key" => key, "severity" => if critical { "critical" } else { "warning" }, "source" => source, "subject" => subject, "message" => message }));
+	};
+	for r in runs {
+		let subject = string(r.get("runId"));
+		let state = text(r, "state").unwrap_or("");
+		let recovery = || r.get("recovery").and_then(|q| text(q, "id")).unwrap_or("?").to_owned();
+		let pending = r.get("pending").filter(|p| !p.is_null());
+		match state {
+			"pauseIncomplete" => {
+				let missing: Vec<String> = pending.and_then(|p| p.get("missing")).and_then(Json::as_array).map_or(vec![], |m| m.iter().map(|x| string(Some(x))).collect());
+				let list = missing.join(", ");
+				push(true, format!("run:{subject}:pauseIncomplete"), "run", &subject, format!("Pause unvollständig, fehlende ACKs: {}", if list.is_empty() { "?" } else { &list }));
+			}
+			"needsReview" => push(true, format!("run:{subject}:needsReview"), "run", &subject, format!("Recovery {} wartet auf eine Admin-Entscheidung", recovery())),
+			"reconciling" => push(false, format!("run:{subject}:reconciling"), "run", &subject, format!("Recovery {} sammelt Member-Stände", recovery())),
+			_ => {}
+		}
+		if let Some(p) = pending {
+			let errors = p.get("errors").and_then(Json::as_object).map_or(vec![], |e| e.iter().map(|(m, x)| format!("{m}: {}", string(Some(x)))).collect::<Vec<_>>());
+			if !errors.is_empty() && state != "pauseIncomplete" {
+				let revision = js(number_of(p.get("revision")));
+				push(false, format!("run:{subject}:errors:{revision}"), "run", &subject, format!("{} r{revision}: {}", string(p.get("kind")), cut(&errors.join("; "), 300)));
+			}
+		}
+	}
+	let stale = STALE_MS;
+	let applied = applied_workers(s, now)?;
+	for a in assignments {
+		let subject = string(a.get("assignmentId"));
+		let host = string(a.get("hostId"));
+		let report = applied.iter().find(|(h, _, _)| *h == host);
+		let state = report.and_then(|(_, _, w)| w.get("assignments")).and_then(|x| x.get(&subject));
+		if number_of(a.get("count")) > 0.0 && report.is_none_or(|(_, at, _)| now - at > stale) {
+			let since = report.map_or_else(|| "jeher".to_owned(), |(_, at, _)| format!("{} s", js(round((now - at) / 1000.0))));
+			push(false, format!("worker:{subject}:stale"), "worker", &subject, format!("Host {host} meldet seit {since} nichts; das beweist nicht, dass Worker beendet sind"));
+			continue;
+		}
+		let Some((_, _, workers)) = report else { continue };
+		if truthy(workers.get("blocked")) {
+			push(true, format!("worker:{host}:blocked"), "worker", &host, string(workers.get("blocked")));
+		}
+		let generation = number_of(a.get("generation"));
+		if truthy(state.and_then(|x| x.get("rejected"))) {
+			push(true, format!("worker:{subject}:rejected"), "worker", &subject, string(state.and_then(|x| x.get("rejected"))));
+		} else if number_of(workers.get("generation")) < generation {
+			push(false, format!("worker:{subject}:pending:{}", js(generation)), "worker", &subject, format!("Änderung (Generation {}) von Host {host} noch nicht übernommen", js(generation)));
+		}
+		if truthy(state.and_then(|x| x.get("errors"))) && truthy(state.and_then(|x| x.get("lastError"))) {
+			let errors = state.and_then(|x| x.get("errors")).map_or(String::new(), |e| e.as_f64().map_or_else(|| string(Some(e)), js));
+			push(false, format!("worker:{subject}:error"), "worker", &subject, format!("{errors} Fehler, zuletzt: {}", string(state.and_then(|x| x.get("lastError")))));
+		}
+	}
 	let mut seen: Vec<String> = vec![];
 	for e in listed(s, now, "Capability")? {
 		let Some(f) = e.get("fields") else { continue };
@@ -36,7 +119,7 @@ pub fn collect_alerts(s: &Space, now: f64) -> R<Json> {
 			continue;
 		}
 		seen.push(host.clone());
-		let mut alert = |key: String, message: String| out.push((key.clone(), obj! { "key" => key, "severity" => "warning", "source" => "host", "subject" => host.as_str(), "message" => message }));
+		let mut alert = |key: String, message: String| push(false, key, "host", &host, message);
 		if let Some(error) = f.get("metrics").and_then(|m| m.get("workers")).and_then(|w| text(w, "fetchError")) {
 			alert(format!("host:{host}:fetch"), format!("Zuweisungen nicht abrufbar: {error}"));
 		}
@@ -45,8 +128,9 @@ pub fn collect_alerts(s: &Space, now: f64) -> R<Json> {
 			alert(format!("host:{host}:stale"), format!("letzter Heartbeat vor {} s", (age / 1000.0 + 0.5).floor()));
 		}
 	}
-	out.sort_by(|a, b| a.0.encode_utf16().cmp(b.0.encode_utf16()));
-	Ok(Json::Array(out.into_iter().map(|(_, a)| a).collect()))
+	// critical first, then by key in code units (a stable sort, as TypeScript's)
+	out.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.encode_utf16().cmp(b.1.encode_utf16())));
+	Ok(Json::Array(out.into_iter().map(|(_, _, a)| a).collect()))
 }
 
 /// `auditLog`: who asked what, when, with which outcome; without the payloads.
@@ -102,10 +186,11 @@ impl AsyncCommands for ControlCommands {
 			}
 		}
 		let now = (self.now)();
-		let done = owner.with(|service| {
+		let sources = if kind == "listAlerts" { self.root.as_ref().map_or(Ok((vec![], vec![])), |r| r.alert_sources()) } else { Ok((vec![], vec![])) };
+		let done = sources.and_then(|(runs, assigned)| owner.with(|service| {
 			let id = control_id(service, now)?;
-			service.commit_on(Some(&id), |s, _| if kind == "listAlerts" { collect_alerts(s, now) } else { audit_log(s, now, limit_of(args)) })
-		});
+			service.commit_on(Some(&id), |s, _| if kind == "listAlerts" { collect_alerts_with(s, now, &runs, &assigned) } else { audit_log(s, now, limit_of(args)) })
+		}));
 		Box::pin(async move { done.map_err(|e| e.message) })
 	}
 }

@@ -31,7 +31,6 @@ pub struct TextServer {
 }
 impl TextServer {
 	pub fn address(&self) -> &str { &self.address }
-	pub fn close(self) {}
 }
 impl Drop for TextServer {
 	fn drop(&mut self) {
@@ -99,9 +98,7 @@ async fn connection(mut read: Box<dyn AsyncRead + Unpin>, mut write: Box<dyn Asy
 			break; // a frame over the limit: a protocol violation
 		}
 		let mut body = vec![0u8; n];
-		if read.read_exact(&mut body).await.is_err() {
-			break;
-		}
+		let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(idle_ms), read.read_exact(&mut body)).await else { break };
 		if inflight.get() >= max_inflight {
 			let _ = tx.send((id, format!(r#"{{"ok":false,"error":{{"code":"ResourceExhausted","message":"at most {max_inflight} calls at once per connection"}}}}"#)));
 			continue;

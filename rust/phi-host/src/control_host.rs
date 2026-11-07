@@ -192,6 +192,12 @@ impl ControlHost {
 		if self.hosts.get(peer).map_or(peer, String::as_str) != text(report, "hostId").unwrap_or("") {
 			return Err(denied("only the associated proven host publishes its capability"));
 		}
-		publish(service, &self.control_space, report)
+		let check = |s: &phi_core::space::Space, now: f64| -> R<()> {
+			decision.check(now).map_err(denied)?;
+			let current = listed(s, now, &obj! { "type" => "PeerKey", "fields" => obj! { "peerId" => peer, "keyId" => key_id } })?;
+			let active = current.iter().map(fields).any(|f| text(&f, "state") == Some("active") && f.get("roles").and_then(Json::as_array).is_some_and(|r| r.iter().any(|x| x.as_str() == Some("host"))));
+			if active { Ok(()) } else { Err(error("Error", "host key no longer authorized")) }
+		};
+		publish(service, &self.control_space, report, &check)
 	}
 }

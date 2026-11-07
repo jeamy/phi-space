@@ -52,7 +52,7 @@ pub fn blocked(m: impl Into<String>) -> RecoveryError { RecoveryError::Blocked(m
 pub fn conflict(m: impl Into<String>) -> RecoveryError { RecoveryError::Conflict(m.into()) }
 
 /// The bytes a recovery call is signed over (test/vectors/replication.json `recoveryCall`).
-pub fn recovery_bytes(call: &Json) -> Vec<u8> { format!("{DOMAIN}{}", call.canonical().expect("a call is parsed JSON")).into_bytes() }
+pub fn recovery_bytes(call: &Json) -> Option<Vec<u8>> { Some(format!("{DOMAIN}{}", call.canonical().ok()?).into_bytes()) }
 
 pub fn now_ms() -> f64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_millis() as f64) }
 
@@ -135,7 +135,8 @@ async fn answer(o: &RecoveryServe, replies: &Replies, text_: &str) -> RR<String>
 	}
 	let method = text(&c, "method").expect("checked");
 	let (algorithm, signature) = (text(&signed, "algorithm").unwrap_or(""), text(&signed, "signature").unwrap_or(""));
-	let bytes = recovery_bytes(&c);
+	// `1e999` parses to infinity: canonical JSON has no form for it, so the call is refused before any signature is checked
+	let Some(bytes) = recovery_bytes(&c) else { return Err(blocked("invalid recovery call")) };
 	let mut role = None;
 	if o.operator.verifies(algorithm, &bytes, signature) {
 		role = Some(Role::Operator);
@@ -152,7 +153,7 @@ async fn answer(o: &RecoveryServe, replies: &Replies, text_: &str) -> RR<String>
 		}
 	}
 	let Some(role) = role else { return Err(blocked("recovery signature or method is not authorized")) };
-	let key = digest_json(&Json::Array(vec![algorithm.into(), signature.into(), c.clone()])).expect("parsed JSON is finite");
+	let key = digest_json(&Json::Array(vec![algorithm.into(), signature.into(), c.clone()])).map_err(|_| blocked("invalid recovery call"))?;
 	let mut waiting = {
 		let mut table = replies.borrow_mut();
 		table.retain(|_, (expires_at, _)| *expires_at > now);
@@ -201,7 +202,8 @@ impl RecoveryClient {
 		let now = (self.now)();
 		let request_id = request_id.map_or_else(|| phi_store::store::random_uuid(&mut phi_store::store::system_random()), str::to_owned);
 		let call = obj! { "hostId" => self.host_id.as_str(), "requestId" => request_id, "method" => method, "args" => args, "issuedAt" => now, "expiresAt" => now + 60_000.0 };
-		let envelope = obj! { "call" => call.clone(), "algorithm" => self.signer.algorithm().name(), "signature" => to_base64(&self.signer.sign(&recovery_bytes(&call))) };
+		let bytes = recovery_bytes(&call).ok_or_else(|| blocked("recovery call arguments are not finite JSON"))?;
+		let envelope = obj! { "call" => call.clone(), "algorithm" => self.signer.algorithm().name(), "signature" => to_base64(&self.signer.sign(&bytes)) };
 		let text_ = envelope.to_json_text();
 		let exchange = async {
 			match &self.line {
@@ -273,14 +275,20 @@ pub async fn run_ssh(target: &str, command: &str, input: Vec<u8>, timeout_ms: u6
 				Err(e) => break Err(e.to_string()),
 			}
 		};
-		let code = r.and_then(|()| waited.lock().expect("child").wait().map_err(|e| e.to_string()));
-		let _ = tx.send(code.and_then(|c| if c.success() { Ok(out) } else { Err("SSH command failed".to_owned()) }));
+		// whatever ended the read, the child is reaped: a budget or read error kills it first (a timeout killed it already)
+		let mut c = waited.lock().expect("child");
+		if r.is_err() {
+			let _ = c.kill();
+		}
+		let status = c.wait().map_err(|e| e.to_string());
+		drop(c);
+		let _ = tx.send(r.and(status).and_then(|c| if c.success() { Ok(out) } else { Err("SSH command failed".to_owned()) }));
 	});
 	match tokio::time::timeout(Duration::from_millis(timeout_ms), rx).await {
 		Ok(Ok(r)) => r,
 		Ok(Err(_)) => Err("SSH command failed".to_owned()),
 		Err(_) => {
-			let _ = child.lock().expect("child").kill();
+			let _ = child.lock().expect("child").kill(); // the reader thread reaps it once its stdout closes
 			Err("SSH command timed out".to_owned())
 		}
 	}

@@ -449,6 +449,8 @@ impl Routing {
 pub trait AsyncCommands {
 	fn kinds(&self) -> &[&'static str];
 	fn run(&self, owner: phi_wire::Owner, kind: &str, command_id: &str, args: &Json, requested_by: &str) -> phi_wire::Local<Result<Json, String>>;
+	/// What `listAlerts` reads besides the control Space: the newest runs and every worker assignment.
+	fn alert_sources(&self) -> R<(Vec<Json>, Vec<Json>)> { Ok((vec![], vec![])) }
 }
 
 const JOBS: &str = "phi-spaces.supervisor-jobs";

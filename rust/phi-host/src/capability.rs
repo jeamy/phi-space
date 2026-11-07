@@ -42,9 +42,12 @@ pub fn replace(s: &mut Space, now: f64, kind: &str, key: &str, value: Json, fiel
 	s.write(now, &obj! { "type" => kind, "fields" => fields }, None, Some(&Json::Number(lease)), None)
 }
 
-pub fn publish(service: &mut Service, space: &str, fields: &Json) -> Result<Json, CoreError> {
+/// `CapabilityDirectory.heartbeat`'s commit: `check` runs inside it, as `identity.check` does in TypeScript (the grant and
+/// the host key are checked again before the entry is written).
+pub fn publish(service: &mut Service, space: &str, fields: &Json, check: &dyn Fn(&Space, f64) -> Result<(), CoreError>) -> Result<Json, CoreError> {
 	let host = fields.get("hostId").cloned().unwrap_or(Json::Null);
 	service.commit_on(Some(space), |s, now| {
+		check(s, now)?;
 		let mut stamped = fields.as_object().cloned().unwrap_or_default();
 		stamped.insert("at", now.into());
 		replace(s, now, "Capability", "hostId", host, Json::Object(stamped), LEASE_MS)
@@ -62,7 +65,7 @@ impl Capabilities {
 	async fn beat(&self, owner: &Owner) -> Result<(), String> {
 		let report = self.report();
 		for space in &self.data_spaces {
-			owner.with(|service| publish(service, space, &report)).map_err(|e| e.message)?;
+			owner.with(|service| publish(service, space, &report, &|_, _| Ok(()))).map_err(|e| e.message)?; // the host's own report on its own data Spaces: nothing to check
 		}
 		let Some(client) = &self.client else { return Ok(()) };
 		let grant = client.grant().await?;

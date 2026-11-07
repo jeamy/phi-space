@@ -163,7 +163,7 @@ impl SqliteLedger {
 	fn index(&self, kind: &str, key: &str, p: &PartDef) -> Result<()> {
 		let db = &self.files.read;
 		let mark = format!("indexed\u{0}{kind}\u{0}{key}\u{0}{}", p.name());
-		if db.query_row("SELECT 1 FROM store_meta WHERE key = ?", [&mark], |_| Ok(())).is_ok() {
+		if db.query_row("SELECT 1 FROM store_meta WHERE key = ?", [&mark], |_| Ok(())).optional()?.is_some() {
 			return Ok(());
 		}
 		let ix = p.disk.as_ref().expect("a part on the disk");

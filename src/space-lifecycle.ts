@@ -128,9 +128,10 @@ export function spaceCommands(o: { authorityId: string; peerId: string; signer: 
 		let reply: SignedLifecycle<SpaceLifecycleResult>;
 		try { reply = await o.send(hostId, await signLifecycle("instruction", q, o.peerId, o.signer)); }
 		catch (e) {
-			// Refusals by the host are results; an unreachable host stays "applying" and the supervisor retries.
+			// Refusals by the host are results (a created Space its boot guard refuses is rolled back with the commit); an
+			// unreachable host stays "applying" and the supervisor retries.
 			const m = String((e as Error)?.message ?? e);
-			if (/cannot (archive|delete)|IllegalArgument|invalid|no Space|exists with other|names an archived|have no lifecycle|another authority|was used for another/.test(m)) return { phase: "failed", error: m.slice(0, 512) };
+			if (/cannot (archive|delete)|IllegalArgument|invalid|no Space|exists with other|names an archived|have no lifecycle|another authority|was used for another|boot permission/.test(m)) return { phase: "failed", error: m.slice(0, 512) };
 			throw e;
 		}
 		const result = verifyLifecycle("result", reply, await o.hostPin(hostId));

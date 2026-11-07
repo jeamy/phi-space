@@ -144,6 +144,9 @@ async fn get(url: &str, token: &str, ca: Option<&str>) -> Result<(u16, String), 
 async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(mut socket: S, request: &str) -> Result<Vec<u8>, String> {
 	socket.write_all(request.as_bytes()).await.map_err(|e| e.to_string())?;
 	let mut raw = vec![];
+	// a peer list is kilobytes; a body beyond this is cut, and the head says what was meant
+	const MAX_BODY: u64 = 64 * 1024 * 1024;
+	let mut socket = socket.take(MAX_BODY);
 	match socket.read_to_end(&mut raw).await {
 		Ok(_) => Ok(raw),
 		// servers often end TLS without a close_notify; the head says what was meant
@@ -161,9 +164,10 @@ fn unchunked(mut body: &[u8]) -> Result<Vec<u8>, String> {
 		if size == 0 {
 			return Ok(out);
 		}
-		let data = body.get(line + 2..line + 2 + size).ok_or("a cut chunk")?;
+		let (from, to) = (line + 2, line.checked_add(2 + size).ok_or("a bad chunk size")?);
+		let data = body.get(from..to).ok_or("a cut chunk")?;
 		out.extend_from_slice(data);
-		body = body.get(line + 2 + size + 2..).ok_or("a cut chunk")?;
+		body = body.get(to + 2..).ok_or("a cut chunk")?;
 	}
 }
 
@@ -414,6 +418,10 @@ impl Front for Gate {
 						eprintln!("phi-spaces root: {}", e.message);
 						sleep(Duration::from_millis(1000)).await;
 					}
+					spawn_local({
+						let (root, owner) = (Rc::clone(&root), owner.clone());
+						async move { root.advance_runs(owner).await }
+					});
 					root.heartbeat().await;
 				});
 			}
@@ -696,6 +704,31 @@ impl Session for GateSession {
 					return obj! { "ok" => false, "error" => obj! { "code" => code, "message" => "the Root serves the proven host of its own peer" } }.to_json_text();
 				}
 				root.call(owner, &call).await.to_json_text()
+			}));
+		}
+		// only the own share, for the host proven on this connection (bound as for the capability heartbeat); the request names no host
+		if let Some(root) = self.gate.o.root.clone().filter(|_| call.get("method").and_then(Json::as_str) == Some("workerAssignments")) {
+			return Some(Box::pin(async move {
+				let proof = self.state.borrow().proof.clone();
+				let id = self.identity();
+				let host_key = |owner: &Owner| proof.as_ref().and_then(|p| {
+					let (_, keys) = self.gate.o.proving.as_ref()?;
+					owner.with(|service| keys.find(&mut service.store, &self.peer_id, &p.key_id))
+				}).is_some_and(|k| k.active && k.roles.iter().any(|r| r == "host"));
+				let refuse = |m: &str| crate::control::refuse(m).to_json_text();
+				if !(host_key(&owner) && id.roles.iter().any(|r| r == "host")) {
+					return refuse("worker assignments require a currently proven host");
+				}
+				let host = self.gate.o.control_host.as_ref().and_then(|c| c.hosts.get(&self.peer_id)).cloned().unwrap_or_else(|| self.peer_id.clone());
+				let list = match root.worker_assignments(owner.clone(), &host).await {
+					None => return refuse("worker assignments require a currently proven host"),
+					Some(Err(e)) => return refuse(&e.message),
+					Some(Ok(l)) => l,
+				};
+				if !host_key(&owner) {
+					return refuse("host key no longer authorized");
+				}
+				crate::control::answered(list).to_json_text()
 			}));
 		}
 		self.gate.o.rotating.as_ref()?;

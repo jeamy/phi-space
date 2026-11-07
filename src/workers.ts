@@ -57,7 +57,7 @@ export class WorkerAssignments {
 	async forHost(hostId: string): Promise<SignedWorkers> {
 		const d = await this.o.host.snapshot(WorkerJournal, this.o.ctx);
 		const incarnation = this.o.identity ? (await this.o.identity()).incarnation : null;
-		const value: WorkerList = { authorityId: this.o.authorityId, incarnation, hostId, generation: d?.generation ?? 0, assignments: Object.values(d?.assignments ?? {}).filter(a => a.hostId === hostId).sort((x, y) => x.assignmentId.localeCompare(y.assignmentId)) };
+		const value: WorkerList = { authorityId: this.o.authorityId, incarnation, hostId, generation: d?.generation ?? 0, assignments: Object.values(d?.assignments ?? {}).filter(a => a.hostId === hostId).sort((x, y) => (x.assignmentId < y.assignmentId ? -1 : x.assignmentId > y.assignmentId ? 1 : 0)) };
 		return { value, issuer: this.o.peerId, algorithm: this.o.signer.algorithm, signature: Buffer.from(await this.o.signer.sign(bytes(value))).toString("base64") };
 	}
 	async list(): Promise<{ generation: number; assignments: WorkerSpec[] }> {

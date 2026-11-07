@@ -66,7 +66,7 @@ pub fn open_files(path: &Path) -> Result<StoreFiles> {
 	if let Err(e) = lock.execute_batch("PRAGMA locking_mode = EXCLUSIVE; BEGIN EXCLUSIVE;") {
 		return Err(StoreError::Unavailable(format!("another process owns the store {} ({e})", path.display())));
 	}
-	let read = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)?;
+	let read = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
 	read.busy_timeout(Duration::from_secs(10))?;
 	let _: String = read.query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0))?;
 	// a file of another program is refused, never taken over

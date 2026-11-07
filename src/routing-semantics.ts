@@ -88,12 +88,14 @@ const name = (n: string) => {
 };
 const members = (r: FederationRule): string[] => 'member' in r ? [ r.member ] : r.members;
 const hash = (v: unknown) => digestJson(v as Json);
+/** String order by UTF-16 code units (`<`), not `localeCompare`: ICU collation hangs on a process's data and a second server cannot repeat it. */
+export const byCodeUnits = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 export function hrw(value: Json, ids: readonly string[]): string {
     if (!ids.length)
         throw new RoutingConflict('empty HRW set');
     return [...ids ].sort((a, b) => {
         const x = hash([ value, a ]), y = hash([ value, b ]);
-        return y.localeCompare(x) || a.localeCompare(b);
+        return byCodeUnits(y, x) || byCodeUnits(a, b);
     })[0]!;
 }
 function placement(r: FederationRule): Json {
@@ -307,7 +309,7 @@ export function writeMember(p: FederationPolicy, table: Record<string, Federatio
                 throw new CapacityUnavailable('capacity observations stale/missing');
             const free = candidates.filter(m => m.capacity!.free > 0)
                              .sort((a, b) => b.capacity!.free - a.capacity!.free ||
-                                             a.id.localeCompare(b.id));
+                                             byCodeUnits(a.id, b.id));
             if (!free.length)
                 throw new CapacityUnavailable('no available capacity');
             id = free[0]!.id;
@@ -317,7 +319,7 @@ export function writeMember(p: FederationPolicy, table: Record<string, Federatio
                     .filter(m => m.capabilities && now - m.capabilities.at <= maxAgeMs &&
                                  m.capabilities.at <= now + 2000 &&
                                  m.capabilities.names.includes(r.capability!))
-                    .sort((a, b) => a.id.localeCompare(b.id));
+                    .sort((a, b) => byCodeUnits(a.id, b.id));
             if (!capable.length)
                 throw new NoCapableMember('no fresh capable member');
             id = capable[0]!.id;

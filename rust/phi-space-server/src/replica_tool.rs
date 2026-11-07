@@ -77,7 +77,7 @@ pub fn run(config: &str, request: &str, store: Option<&str>) {
 				drop(st);
 				let ledger = SqliteLedger::open(&harness, Synchronous::Full).unwrap_or_else(|e| fail(e));
 				let mut view = Store::open(SpaceHost::sqlite(ledger), phi_store::system_random).unwrap_or_else(|e| fail(e));
-				let space = view.reader(Some(&sc.space_id)).ok().map(|h| h.space.state.to_json());
+				let space = view.reader(Some(&sc.space_id)).ok().map(|h| h.space.to_json_read());
 				let entries: Vec<Json> = space.as_ref().and_then(|s| s.get("entries")).and_then(Json::as_array).map_or(vec![], |e| e.iter().filter(|e| text(e, "type") == Some("Ledger")).map(|e| e.get("fields").cloned().unwrap_or(Json::Null)).collect());
 				o.insert("entries", Json::Array(entries));
 				o.insert("snapshot", space.map_or(Json::Null, |s| Json::String(phi_json::digest_json(&s).unwrap_or_default())));

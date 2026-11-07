@@ -27,7 +27,7 @@ const POLL_FALLBACK_MS: f64 = 1000.0;
 /// After a look, a waiting call looks no sooner than this however busy the Space is. TypeScript keeps 25 ms because a look
 /// is dear there; here a look is a lookup, and at 25 ms a commit that means nothing to the call made the one that serves it
 /// wait (the steps of `spaces-mmo` under load: p50 22 ms against 11 ms).
-pub const POLL_GAP_MS: f64 = 2.0;
+const POLL_GAP_MS: f64 = 2.0;
 /// Without `wake_on_commit`: look again every 50 ms.
 const SLEEP_MS: f64 = 50.0;
 const NO_WAIT: f64 = 0.0;
@@ -109,7 +109,7 @@ fn check_renewal(s: &Space, id: &str, auth: &Option<Rc<dyn Authorization>>) -> R
 }
 
 /// What a transport knows about a connection.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Conn {
 	pub peer_id: Option<String>,
 	/// What the host in front of the transport made of the connection (`IdentityAdapter`); without it the static table.
@@ -610,7 +610,7 @@ impl Service {
 			claim = Some((self.allowed(&id.roles, "resolveOperation")?, Json::Array(vec![domain.0.into(), domain.1])));
 		}
 		let as_ = Json::String(principal_id(&id.principal));
-		let c = Ctx { principal: id.principal, roles: id.roles, request, space: call.get("space").and(space), as_, grant, auth, frame_bytes, max_frame: transport_frame, claim };
+		let c = Ctx { principal: id.principal, roles: id.roles, request, space, as_, grant, auth, frame_bytes, max_frame: transport_frame, claim };
 		match self.dispatch(method, args, &c)? {
 			Step::Reply(result) => self.finish(&c, result).map(HandledCall::Reply),
 			Step::Wait(p) => Ok(HandledCall::Wait(p)),
@@ -1086,7 +1086,7 @@ impl Service {
 				let m = self.merge.as_ref().unwrap();
 				let fields = t.get("fields").and_then(Json::as_object).cloned().unwrap_or_default();
 				let found: Vec<Json> = m.controller.read(&self.store).map_err(entry_error)?.into_iter().filter(|v| {
-					v.get("type") == t.get("type") && fields.iter().all(|(k, x)| v.get("fields").and_then(|f| f.get(k)).map(Json::to_json_text) == Some(x.to_json_text()))
+					v.get("type") == t.get("type") && fields.iter().all(|(k, x)| v.get("fields").and_then(|f| f.get(k)).is_some_and(|f| deep_equal(f, x)))
 				}).collect();
 				let stream = format!("merge:{}", m.controller.document_key);
 				Ok(Some(match method {
@@ -1657,6 +1657,7 @@ fn admitted(s: &mut Space, now: f64, request: &Json, method: &str, args: &Json, 
 	if s.state.rpc.as_ref().and_then(|r| r.claims.get(&key)).is_none() {
 		s.assert_member_admission(method)?;
 	}
+	// `json_copy` is the JSON round trip of the arguments (a non-finite number becomes null), not a clone
 	let ad = s.admit(now, Some(request), &method.into(), &args.json_copy(), &Json::Number(deadline), bound)?;
 	match ad.get("kind").and_then(Json::as_str) {
 		Some("done") => Ok(Admission::Replay(or_null(ad.get("result")))),

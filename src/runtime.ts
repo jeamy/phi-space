@@ -18,6 +18,7 @@ import { RotationService } from "./rotation.ts";
 import type { ClosableStoreHost } from "./store/types.ts";
 import type { Context } from "./context.ts";
 import type { Json } from "./core.ts";
+import * as core from "./core.ts";
 import { SpaceService, sealedReply, type Call, type Reply, type Connection } from "./service.ts";
 import { GateIdentity, startGate, type GateOptions } from "./gate.ts";
 import { ProvingService, type KeyDirectory } from "./auth.ts";
@@ -25,7 +26,7 @@ import { EnrollmentService } from "./enroll.ts";
 import { ControlAccess, Supervisor } from "./supervisor.ts";
 import { GrantAuthority, GrantVerifier } from "./grants.ts";
 import { startService } from "./index.ts";
-import { listSpaces, snapshotSpace } from "./spaces.ts";
+import { listSpaces, snapshotSpace, UnknownSpaceError } from "./spaces.ts";
 import type { SpaceHost } from "./client.ts";
 import { installBootGuard } from "./boot.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
@@ -67,7 +68,7 @@ export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	entryExport?: { peers: ReadonlySet<string>; describe: () => Promise<Json>; changes: (after: number, maxBytes: number) => Promise<Json> };
 	/** The Root on this host, for its own hosted agents (root-wire.ts). */
 	rootWire?: { peerId: string; space: Parameters<typeof rootCall>[0] };
-	control?: { host: SpaceHost; authority: GrantAuthority; leases?: RouterLeaseAuthority; routing?: FederationPolicyAuthority; directory?: CapabilityDirectory; replicaNotices?: import("./replica-notice.ts").ReplicaNoticeBoard; dataAdmin?:DataAdminController; membership?: MembershipController; profiles?:ProfileTransitionController; runs?: RunController; runAdvanceMs?: number; workers?: WorkerAssignments; spaces?: ReturnType<typeof spaceCommands>; deployment?: DeploymentController; withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> };
+	control?: { host: SpaceHost; authority: GrantAuthority; leases?: RouterLeaseAuthority; routing?: FederationPolicyAuthority; directory?: CapabilityDirectory; replicaNotices?: import("./replica-notice.ts").ReplicaNoticeBoard; dataAdmin?:DataAdminController; /** which host a peer serves for (`capabilities.hostBindings`); the peer itself without one */ hostForPeer?:(peerId:string)=>string|undefined; membership?: MembershipController; profiles?:ProfileTransitionController; runs?: RunController; runAdvanceMs?: number; workers?: WorkerAssignments; spaces?: ReturnType<typeof spaceCommands>; deployment?: DeploymentController; withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> };
 };
 export async function startFederationHost(host: ClosableStoreHost, ctx: Context, o: FederationHostOptions) {
 	if (o.control && o.control.host !== host) throw new Error("the authoritative control runtime must use its own harness");
@@ -132,10 +133,10 @@ export async function startFederationHost(host: ClosableStoreHost, ctx: Context,
 						return { ok: true, result: await o.keys.find(a.peerId, a.keyId) as any };
 					}
                     if((c as any)?.method==="workerAssignments") {
-                     // Only the own share, for the host proven on this connection; the request carries no host.
+                     // Only the own share, for the host proven on this connection (bound as for the capability heartbeat); the request carries no host.
                      try{const {id,proof,key}=await proven(conn);
                       if(!isHost(id,proof,key)||!o.control!.workers)throw Error("worker assignments require a currently proven host");
-                      const list=await o.control!.workers.forHost(id.principal.peerId);const current=await o.keys.find(id.principal.peerId,proof.keyId);if(!current||current.state!=="active"||!current.roles.includes("host"))throw Error("host key no longer authorized");return{ok:true,result:list as any};
+                      const list=await o.control!.workers.forHost(o.control!.hostForPeer?.(id.principal.peerId)??id.principal.peerId);const current=await o.keys.find(id.principal.peerId,proof.keyId);if(!current||current.state!=="active"||!current.roles.includes("host"))throw Error("host key no longer authorized");return{ok:true,result:list as any};
                      }catch(e){return{ok:false,error:{code:"PermissionDenied",message:e instanceof Error?e.message:String(e)}};}
                     }
                     if((c as any)?.method==="replicaNotice") {
@@ -185,7 +186,9 @@ export async function startFederationHost(host: ClosableStoreHost, ctx: Context,
 			};
             const asyncCommands:NonNullable<import("./supervisor.ts").SupervisorOptions["asyncCommands"]>={};
             if(o.control.dataAdmin) for(const kind of ["purgeTasks","deletePrincipal"] as const) {
-                asyncCommands[kind]=(id,args,admin)=>o.control!.dataAdmin!.execute(id,kind,String(args.spaceId??""),admin,(kind==="purgeTasks"?args.template:args.principal) as any) as any;
+                // a refusal (an unknown Space, a changed command, no right) is a failed result; only unexpected errors make the supervisor retry
+                asyncCommands[kind]=async(id,args,admin)=>{try{return await o.control!.dataAdmin!.execute(id,kind,String(args.spaceId??""),admin,(kind==="purgeTasks"?args.template:args.principal) as any) as any;}
+                 catch(e){if(e instanceof core.IllegalArgumentError||e instanceof core.TransactionError||e instanceof core.LimitError||e instanceof core.PermissionError||e instanceof UnknownSpaceError)return{phase:"failed",error:e.message};throw e;}};
             }
             const administer=<T>(peerId:string,run:()=>Promise<T>)=>o.control!.withAdmin?o.control!.withAdmin(peerId,run):run();
             if(o.control.profiles)asyncCommands.migrateProfiles=async(id,args,admin)=>administer(admin,()=>o.control!.profiles!.execute(id,args.policy as any)) as any;
@@ -204,7 +207,7 @@ export async function startFederationHost(host: ClosableStoreHost, ctx: Context,
              asyncCommands.listAlerts=async()=>await collectAlerts({runs,workers,host:ch,ctx,controlSpaceId:await controlId(),now:o.now}) as any;
              asyncCommands.auditLog=async(_id,a)=>await auditLog(ch,ctx,await controlId(),{limit:Number(a.limit??100),now:o.now}) as any;}
             supervisor = new Supervisor(o.control.host, ctx, {
-                now:o.now,...(Object.keys(asyncCommands).length?{asyncCommands}:{}),
+                now:o.now,...(Object.keys(asyncCommands).length?{asyncCommands,onError:(e:unknown)=>console.error("phi-spaces supervisor job:",e instanceof Error?e.message:String(e))}:{}),
                 ...(o.control.routing?{commands:{setPolicy:async(tx,args)=>{
                     const p=await o.control!.routing!.applyIn(tx,args.policy as any,Number(args.expectedVersion));return {policyVersion:p.policyVersion};
                 }}}:{})

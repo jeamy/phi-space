@@ -411,7 +411,7 @@ pub async fn resolver(owner: Owner, sp: Rc<SyncSpace>, make: MakeService, mut un
 		}
 		let sealed = sp.sealed().or_else(|| sp.journal.try_lock().ok().and_then(|j| j.head().ok()).map(|h| (h.get("revision").and_then(Json::as_f64).unwrap_or(0.0), String::new())));
 		let revision = sealed.map_or(0.0, |(r, _)| r);
-		if let Some(service) = owner.route(&names, Some(SyncSpace::sealed_answer(revision))) {
+		for service in owner.route(&names, Some(SyncSpace::sealed_answer(revision))) {
 			service.store.close();
 		}
 		sp.unserved();

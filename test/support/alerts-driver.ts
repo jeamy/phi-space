@@ -1,4 +1,5 @@
-// The views of src/alerts.ts over one control Space, for rust/phi-host/tests/alerts.rs. Runs and workers are not on a configured host.
+// The views of src/alerts.ts over one control Space, for rust/phi-host/tests/alerts.rs: the line's run views and worker assignments
+// stand in for the run controller and the worker directory.
 //
 //   node --experimental-strip-types --no-warnings test/support/alerts-driver.ts
 import { createInterface } from "node:readline";
@@ -14,5 +15,5 @@ for await (const text of createInterface({ input: process.stdin, crlfDelay: Infi
 	if (!text.trim()) continue;
 	const l = JSON.parse(text), now = l.now as number;
 	await host.commit(async (tx) => { const s = await spaceDoc(tx, SPACE, now); for (const [type, fields, lease] of l.write ?? []) core.write(s, now, { type, fields }, null, lease); }, ctx);
-	console.log(JSON.stringify({ alerts: await collectAlerts({ host, ctx, controlSpaceId: SPACE, now: () => now }), audit: await auditLog(host, ctx, SPACE, { limit: l.limit, now: () => now }) }));
+	console.log(JSON.stringify({ alerts: await collectAlerts({ host, ctx, controlSpaceId: SPACE, now: () => now, ...(l.runs ? { runs: { list: async () => l.runs } as never } : {}), ...(l.assignments ? { workers: { list: async () => ({ generation: 0, assignments: l.assignments }) } as never } : {}) }), audit: await auditLog(host, ctx, SPACE, { limit: l.limit, now: () => now }) }));
 }

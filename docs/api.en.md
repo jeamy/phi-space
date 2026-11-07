@@ -546,6 +546,20 @@ the server-side federation controllers as well as `close()`. With
 handlers process membership and profile commands in the authorized admin context.
 This creates no public virtual root Space RPC endpoint.
 
+`root.commands` (2026-11-07) names the admin commands with effects on Members a
+configured control host carries, each needing `adminPeer`: `runs` (`startRun`,
+`pauseRun`, `resumeRun`, `stopRun`, `reconcileRun`, `resolveRunRecovery`,
+`listRuns`, `runStatus`, `scheduleRun`, `exportRun`; the gate commands go signed
+with the control key over the Root's line to the Member that holds the Space,
+the ACK is verified against that Member's provisioned key), `workers`
+(`setWorkers`, `listWorkers`; a host pulls its share with `workerAssignments`,
+bound to its host as the capability heartbeat is), `spaces` (`createSpace`,
+`archiveSpace`, `reactivateSpace`, `deleteSpace`, to the provisioned host of the
+`hostId`), `deployment` (`planDeployment`, `applyDeployment`, `bindHostAlias`,
+`startWorkers`, `exportDeployment`; takes the Space commands and the workers)
+and `dataAdmin` (`purgeTasks`, `deletePrincipal` on this host's own Spaces, for
+the admin peer only). `listAlerts` then covers the runs and the workers.
+
 `ProfileTransitionController.execute(id, nextPolicy)` replaces exclusively
 completion profiles at a policy version raised by one. Open root jobs,
 transactions and membership changes prevent the start. `start` and `advance`

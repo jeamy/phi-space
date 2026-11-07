@@ -91,11 +91,6 @@ impl SyncStoreFile {
 		let part = sql(db.query_row("SELECT 1 FROM parts LIMIT 1", [], |_| Ok(())).optional())?;
 		Ok(doc.is_none() && part.is_none())
 	}
-	/// How many commits the store holds.
-	pub fn commit_seq(&self) -> Result<f64> {
-		let v: Option<String> = sql(self.files.read.query_row("SELECT value FROM store_meta WHERE key = 'commit_seq'", [], |r| r.get(0)).optional())?;
-		Ok(v.and_then(|t| t.parse().ok()).unwrap_or(0.0))
-	}
 }
 
 /// The store's marker against the configuration in force at `revision`.
