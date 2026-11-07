@@ -130,7 +130,7 @@ export type ListingFields = { listingId: string; seller: string; sellerName: str
 /** A message to one player from someone or something else (a purchase from its listing, a delivery, a gift, its cart
  *  arrived): kept 14 days, not leased like a Msg, so it is not lost while the player is away. The web process tells it
  *  the moment the player is online, or when it next comes, and then takes the entry (engine/context.ts toPlayer). */
-export type NoticeFields = MsgFields & { noticeId: string; charId: string };
+export type NoticeFields = MsgFields & { noticeId: string; charId: string; /** shown once already (the page has it in its log; a new page gets it with its first hello) */ told?: boolean };
 /** A wanted notice on the market board: the buyer's coins wait in escrow (location "market", `listing` = `wantedId`,
  *  `seller` = the buyer) until someone delivers a thing of `proto`, the buyer withdraws it or it lapses like a listing
  *  (then the market ticker gives the coins back). */

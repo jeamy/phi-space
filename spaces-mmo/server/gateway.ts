@@ -11,7 +11,7 @@ import { Chat, isChatFrame, isChatLine, type ChatClientFrame, type ChatFrame, ty
 import { render } from "./engine/funcparser.ts";
 import { sceneryText, type CropDef, type SortDef, type WorldDef } from "./engine/world.ts";
 import { loadOf } from "./engine/pack.ts";
-import { whereTo } from "./engine/context.ts";
+import { NOTICE_MS, whereTo } from "./engine/context.ts";
 import { decayNow, msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
 import { baysOf, linerOf, type Timetable } from "./engine/liner.ts";
 import { todosFor, type Todo } from "./todos.ts";
@@ -26,6 +26,8 @@ import { setting } from "./settings.ts";
 import type { WsConnection } from "phi-spaces/ws";
 import type { Appearance } from "./engine/appearance.ts";
 
+/** At most this many kept messages to a player come with its page's first hello. */
+const NOTICES_SHOWN = 200;
 /** What a client sees of a character. */
 export type CharView = { charId: string; name: string; x: number; y: number; skin: number; /** the chosen look of the figure in 3D (engine/appearance.ts) */ look?: Appearance; /** on board of the large ship, on its way to this island (only its own page shows it: others do not see it) */ aboard?: { island: string; arriveWorldMs: number; /** the room of the destination and of the bay it was boarded in: the page shows the next stop to leave at (engine/liner.ts nextStop) */ to?: string; from?: string }; ai?: true; /** a settler (npc/settlers.ts): a script plays it, always marked */ settler?: true };
 /** What a client sees of a thing or an exit: on the map when `location` is its room, in its pack when it is its charId. */
@@ -199,7 +201,7 @@ export class Gateway {
 	readonly #orders = new Map<string, OrderFields>(); // entry id -> order
 	readonly #listings = new Map<string, ListingFields>(); // entry id -> listing
 	readonly #wanted = new Map<string, WantedFields>(); // entry id -> wanted notice
-	readonly #notices = new Map<string, NoticeFields>(); // entry id (region:id) -> word for a player, until told
+	readonly #notices = new Map<string, NoticeFields>(); // entry id (region:id) -> word for a player, kept 14 days (NOTICE_MS)
 	readonly #seedRests = new Map<string, SeedRestFields>(); // entry id -> the rest of a figure after a search for seeds
 	readonly #epochs = new Map<string, EpochFields>(); // entry id -> the epoch of an island
 	readonly #siteOrders = new Map<string, SiteOrderFields>(); // entry id -> what a site hung out
@@ -428,7 +430,11 @@ export class Gateway {
 		c.room = self.room;
 		const chars = [...this.#chars.values()].filter((ch) => ch.room === self.room && (ch.charId === self.charId || (this.#online.get(ch.charId) && !ch.aboard))).map((ch) => charView(ch, this.#modelChars));
 		const objs = [...this.#objs.values()].filter((o) => o.location === self.room || o.location === self.charId).map((o) => this.#view(o));
-		const log = (this.#recent.get(self.room) ?? []).map((m) => msgView(m, self.charId, this.#modelNames, self.name, this.#playerNames()));
+		// the word for this player of the last 14 days that it was told already comes with the room's lines (the page's
+		// first hello fills its log with them; what is new comes right after as a message of its own, #tell)
+		const kept = [...this.#notices.values()].filter((n) => n.charId === self.charId && n.told).map(({ noticeId: _n, charId: _c, told: _t, ...m }) => m as MsgFields);
+		const lines = kept.length ? [...(this.#recent.get(self.room) ?? []), ...kept.sort((a, b) => a.at - b.at).slice(-NOTICES_SHOWN)].sort((a, b) => a.at - b.at) : this.#recent.get(self.room) ?? [];
+		const log = lines.map((m) => msgView(m, self.charId, this.#modelNames, self.name, this.#playerNames()));
 		queueMicrotask(() => {
 			c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
 			this.#tell(c.me.charId); // word that waited while it was away
@@ -438,18 +444,20 @@ export class Gateway {
 		c.ws.send({ t: "hello", wind: this.#windIn(self.room), build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set([...this.#protoIcons.values(), ...(this.w.wild ? [`/assets/${this.w.id}/${this.w.wild.hare.icon}`] : [])])], plans: this.#plans(), uses: this.#uses(), ...(this.w.liner ? { liner: { ...(() => { const t = linerOf(this.w)!; return { stops: t.stops, stayMs: t.stayMs, legMs: t.legMs, cycleMs: t.cycleMs }; })(), island: this.#rooms.get(self.room)?.island ?? "", fare: this.w.liner.fare, routes: [...baysOf(this.w.allRooms ?? this.w.rooms)].map(([island, r]) => ({ island, room: r.roomId })) } } : {}), ...(this.w.rail ? { rail: { plan: this.w.rail.plan, ...(this.w.rail.everyWorldMs ? { everyWorldMs: this.w.rail.everyWorldMs } : {}) } } : {}) }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
 	}
 
-	/** Tells a player the word waiting for it (model.ts NoticeFields), if one of its pages is in the world, and takes it:
- *  told once, on every page open now. */
+	/** Tells a player the word waiting for it (model.ts NoticeFields), if one of its pages is in the world, and marks it
+ *  told: shown once as new, on every page open now; it stays for its 14 days and comes with every later first hello. */
 	#tell(charId: string): void {
 		const pages = [...this.#clients].filter((c) => c.me.charId === charId && c.room !== null);
 		if (!pages.length) return;
 		for (const [id, n] of this.#notices) {
-			if (n.charId !== charId) continue;
-			this.#notices.delete(id);
-			const { noticeId: _n, charId: _c, ...m } = n;
+			if (n.charId !== charId || n.told) continue;
+			this.#notices.set(id, { ...n, told: true });
+			const { noticeId: _n, charId: _c, told: _t, ...m } = n;
 			for (const c of pages) c.ws.send({ t: "msg", m: msgView(m, charId, this.#modelNames, this.#chars.get(charId)?.name) } satisfies ServerFrame);
-			const [region, ...rest] = id.split(":");
-			void this.#regions.get(region!)?.takeIfExists({ type: "Notice", id: rest.join(":") }, NO_WAIT).catch(() => {});
+			const [region, ...rest] = id.split(":"), space = this.#regions.get(region!);
+			// written again as told, for the rest of its 14 days
+			const left = n.at + NOTICE_MS - Date.now();
+			if (space) void space.takeIfExists({ type: "Notice", id: rest.join(":") }, NO_WAIT).then((e) => e && left > 0 ? space.write({ type: "Notice", fields: { ...e.fields, told: true } as never }, null, left) : undefined).catch(() => {});
 		}
 	}
 

@@ -146,10 +146,15 @@ test("market: a wanted notice holds the buyer's coins; delivering moves thing an
 		// the seeker is away: the word waits for it, and comes when it is back (once)
 		await b.p.leave();
 		await does(a.p, "markt liefere 2", "Du lieferst Ziegensucher 2× Ziege und bekommst 3 Münzen.");
-		assert.equal(await s.count({ type: "Notice", fields: { charId: b.me } }), 1);
+		assert.equal((await s.readAll({ type: "Notice", fields: { charId: b.me } })).filter((e) => !e.fields.told).length, 1, "one untold (the first was told while it was there)");
 		await b.p.play();
 		await b.p.until((f) => f.t === "msg" && f.m.text.startsWith("Ziegenhirtin liefert dir 2× Ziege für dein Gesuch am Marktbrett") && f.m.mine === true, 10_000);
-		await eventually(async () => (await s.count({ type: "Notice", fields: { charId: b.me } })) === 0, 10_000, "the word is taken once told");
+		// told once, then kept: marked told, and a new page has it in its log (not as new again)
+		await eventually(async () => (await s.readAll({ type: "Notice", fields: { charId: b.me } })).every((e) => e.fields.told === true), 10_000, "the word marked told");
+		await b.p.leave();
+		const again = await b.p.play();
+		assert.ok(again.log.some((m) => m.text.startsWith("Ziegenhirtin liefert dir 2× Ziege für dein Gesuch")), "kept in the log of a new page");
+		assert.equal(await s.count({ type: "Notice", fields: { charId: b.me } }), 2, "both still kept");
 		assert.equal((await pack(s, b.me, "ziege")).length, 3);
 		await does(b.p, "markt suche zurück 1", "deine 1 Münze hast du wieder");
 		for (const e of await s.readAll({ type: "Item", fields: { location: b.me, proto: "muenze" } })) await s.take({ id: e.id }, 2_000);

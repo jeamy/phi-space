@@ -158,7 +158,8 @@ export async function msgOptions(space: SpaceLike, m: Pick<MsgFields, "to" | "ki
 export const NOTICE_MS = 14 * 24 * 3600_000;
 /** Whether a message to `to` goes to one player (not a room, a channel or an NPC). */
 export const toOnePlayer = (to: string) => to !== "*" && !to.startsWith("#") && !to.startsWith("npc-");
-/** Writes a message to one player as a Notice (model.ts NoticeFields), kept until it is told. */
+/** Writes a message to one player as a Notice (model.ts NoticeFields), kept 14 days: told once as new, then part of
+ *  the log every new page of the player starts with (server/gateway.ts). */
 export async function toPlayer(space: SpaceLike, m: MsgFields, txn: string | null): Promise<void> {
 	const n: NoticeFields = { ...m, noticeId: `n-${randomBytes(6).toString("hex")}`, charId: m.to };
 	await space.write({ type: "Notice", fields: n as never }, txn, NOTICE_MS);
