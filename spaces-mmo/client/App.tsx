@@ -16,6 +16,7 @@ import { onFps, startFps, type FpsState } from "./fps.ts";
 import { CommandHelp } from "./CommandHelp.tsx";
 import type { HelpView } from "../server/model.ts";
 import { appendLine, isComing, isForMe } from "./log.ts";
+import { travelText, TRAVEL_GIVE_UP_MS, TRAVEL_NOTE_MS } from "./travel.ts";
 import type { ChatState } from "../server/chat.ts";
 import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
@@ -563,6 +564,15 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	// `seen`: the last line of each part when it was last in front (or at the start), for the count of new lines on the other
 	const [logPart, setLogPartState] = useState<"mine" | "all">(() => { try { return localStorage.getItem("mmo.logPart") === "all" ? "all" : "mine"; } catch { return "mine"; } });
 	const [seenLine, setSeenLine] = useState<{ mine?: Line | null; all?: Line | null }>({});
+	// on the way to another place (travel.ts): what the page says when the new place takes longer than a second
+	const [travelNote, setTravelNote] = useState<string | null>(null);
+	const travel = useRef<{ timer?: ReturnType<typeof setTimeout>; giveUp?: ReturnType<typeof setTimeout> }>({});
+	const endTravel = useCallback(() => { clearTimeout(travel.current.timer); clearTimeout(travel.current.giveUp); travel.current = {}; setTravelNote(null); }, []);
+	const startTravel = useCallback((text: string) => {
+		endTravel();
+		travel.current.timer = setTimeout(() => setTravelNote(text), TRAVEL_NOTE_MS);
+		travel.current.giveUp = setTimeout(endTravel, TRAVEL_GIVE_UP_MS);
+	}, [endTravel]);
 	const setLogPart = useCallback((k: "mine" | "all") => { setLogPartState(k); try { localStorage.setItem("mmo.logPart", k); } catch { /* private window */ } }, []);
 	const [mapMode, setMapModeState] = useState<MapMode>(() => readMapMode());
 	const previousStart = useRef(startView);
@@ -644,7 +654,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 				if (f.t === "hello") {
 					// the server runs a newer build than this page: reload, so the page understands what it is sent
 					if (pageBuild && f.build && f.build !== pageBuild) { setStale(true); setTimeout(() => location.reload(), 1500); return; }
-					stopWalk.current(); retry = 0; setHello(f); setWind(f.wind); setWorldTime(f.worldTime ? { v: f.worldTime, at: Date.now() } : null);
+					stopWalk.current(); endTravel(); retry = 0; setHello(f); setWind(f.wind); setWorldTime(f.worldTime ? { v: f.worldTime, at: Date.now() } : null);
 					for (const t of goneTimers.values()) clearTimeout(t); goneTimers.clear();
 					meRef.current = f.me.charId;
 					{ const mine = f.chars.find((c) => c.charId === f.me.charId); if (mine) walker.current.reset(mine); } fuels = f.world.fuels;
@@ -659,6 +669,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 					clearTimeout(goneTimers.get(f.c.charId)); goneTimers.delete(f.c.charId);
 					// the own figure: drawn where the walk puts it (the server's place plus the steps still on their way)
 					if (f.c.charId === meRef.current) {
+							endTravel();
 						const at = walker.current.report(f.c, f.ack, Date.now());
 						setChars((m) => { const old = m.get(f.c.charId); return new Map(m).set(f.c.charId, { ...f.c, ...(at ?? (old ? { x: old.x, y: old.y } : {})) }); });
 						return;
@@ -688,7 +699,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 					setHelp(false);
 					append({ ...f.m, text: h.topic ? `Hilfe zu „${h.topic.key}“ ist geöffnet.` : "Die Befehle sind geöffnet (help)." });
 				}
-				else if (f.t === "msg") { if (f.m.kind === "error") putBack(); showAnswer(); append(f.m); if (tabRef.current !== "log" && (f.m.kind === "error" || f.m.kind === "info")) setNotice({ text: f.m.text, error: f.m.kind === "error", at: Date.now() }); }
+				else if (f.t === "msg") { if (f.m.kind === "error") { putBack(); endTravel(); } showAnswer(); append(f.m); if (tabRef.current !== "log" && (f.m.kind === "error" || f.m.kind === "info")) setNotice({ text: f.m.text, error: f.m.kind === "error", at: Date.now() }); }
 				else if (f.t === "chatme" || f.t === "chatkeys") keysRef.current.onFrame(f);
 				else if (f.t === "chatlog") { keysRef.current.onFrame(f); setTalks(fromLog(f.msgs, tabRef.current)); }
 				else if (f.t === "chat") {
@@ -712,7 +723,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		};
 		connect();
 		return () => { dead = true; clearTimeout(timer); for (const t of goneTimers.values()) clearTimeout(t); ws.current?.close(); };
-	}, [append, onAccount, setTab]);
+	}, [append, onAccount, setTab, endTravel]);
 
 	useEffect(() => { const b = logBox.current; if (!b) return; if (atEnd.current) b.scrollTop = b.scrollHeight; else setBehind(true); }, [log, bag, tab, detent, logPart]);
 	const toLogEnd = () => { const b = logBox.current; if (b) b.scrollTop = b.scrollHeight; atEnd.current = true; setBehind(false); };
@@ -721,13 +732,18 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		const s = ws.current;
 		if (!s || s.readyState !== WebSocket.OPEN) { append({ kind: "error", text: "Nicht verbunden; ein Moment …", from: "", at: Date.now() }); return; }
 		s.send(JSON.stringify({ t: "cmd", line: text, ...(language() === "en" ? { lang: "en" } : {}) } satisfies ClientFrame));
+		{ const t = travelText(text, travelExits.current); if (t) startTravel(t); }
 		if (echo) append({ kind: "echo", text: `> ${text}`, from: "", at: Date.now() });
 		awaited.current = opensLog ? Date.now() : 0;
-	}, [append]);
+	}, [append, startTravel]);
 
 	// what the walk looks at between renders (the hold timer runs outside React's render)
 	const seen = useRef({ chars, objs, hello });
 	seen.current = { chars, objs, hello };
+	// the room's exits for the travel note: an exit to a room of another island is a ferry
+	const travelExits = useRef<Array<{ name: string; to?: string; ferry?: boolean }>>([]);
+	{ const island = (id?: string) => atlas?.rooms.find((r) => r.roomId === id)?.island;
+		travelExits.current = [...objs.values()].filter((o) => o.kind === "exit").map((o) => ({ name: o.name, to: o.to, ferry: !!o.toRoom && !!island(hello?.room.roomId) && island(o.toRoom) !== island(hello?.room.roomId) })); }
 
 	/** One step of the own figure: by `d`, or toward a tapped cell (the longer axis first; if that cell is not free, the
 	 *  other axis). It is drawn at once and sent with its number; a cell that is not free is not walked into. */
@@ -1221,6 +1237,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 					? <div className="here-bar open" role="group" aria-label="Hier möglich">{hereBar.map((e) => <button key={e.line} onClick={() => { setHereOpen(false); send(e.line); }}>{e.label}</button>)}</div>
 					: <div className="here-bar" role="group" aria-label="Hier möglich"><button className="here-chip" aria-expanded={hereBar.length > 1 ? false : undefined} onClick={() => (hereBar.length > 1 ? setHereOpen(true) : send(hereBar[0]!.line))}><span>{hereBar[0]!.label}</span>{hereBar.length > 1 && <b>+{hereBar.length - 1}</b>}</button></div>)}
 				{homeHint && steps && <div className="home-hint"><span>Ohne Adressleiste spielen: <b>{steps.first}</b>, dann <b>{steps.then}</b>, und das Spiel von dort öffnen.</span>{install && <button className="primary home-install" onClick={() => { void install.prompt(); hideHomeHint(); }}>Installieren</button>}<button onClick={hideHomeHint} aria-label="Hinweis schließen">×</button></div>}
+				{travelNote && <div className="travel-note" role="status"><span className="travel-spin" aria-hidden="true" />{travelNote}</div>}
 				{toast && <button className="chat-toast" onClick={() => { setToast(null); setTab(toast.key); }}><b>{toast.from}</b><small>Neue Nachricht</small></button>}
 			</div>
 			{mapMode === "text" ? <section className="sheet text-page">{sheetBody}</section>

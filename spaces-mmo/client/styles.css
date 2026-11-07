@@ -557,3 +557,10 @@ button.cmd-word { cursor: pointer; display: inline; min-height: 0; }
 .stat-detail dd { margin: 0; }
 .stat-players .live:not(.on) { background: var(--line-strong); }
 .hud-btn.hud-fps { width: auto; min-width: 44px; padding: 0 8px; font: 600 12px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* on the way to another place (client/travel.ts): over the map while the new place is still to come */
+.travel-note { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 9; display: inline-flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); padding: 10px 16px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--line-strong); box-shadow: 0 6px 20px var(--shadow); color: var(--text-strong); font-size: 15px; pointer-events: none; animation: travel-in 0.25s ease-out; }
+.travel-spin { flex: none; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent, #AED83C); animation: travel-turn 0.9s linear infinite; }
+@keyframes travel-turn { to { transform: rotate(360deg); } }
+@keyframes travel-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .travel-spin { animation: none; } .travel-note { animation: none; } }

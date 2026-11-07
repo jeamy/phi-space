@@ -27,7 +27,7 @@ import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
 type T = typeof import("three");
 type O3 = import("three").Object3D;
-type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; kind?: string; progress?: number; sig?: string; /** The name on a figure. */ shown?: string };
+type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; /** The own figure's lantern, lit in the dark. */ lantern?: { light: import("three").PointLight; glow: import("three").Mesh }; kind?: string; progress?: number; sig?: string; /** The name on a figure. */ shown?: string };
 /** What a bed shows: rebuilt when its plants or weeds change. */
 const bedSig = (o: ObjView) => (o.kind === "track" ? (o.runs ?? []).map((r) => r.map((c) => `${c.x},${c.y}`).join(" ")).join("|") : o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
 type Scene3D = {
@@ -385,6 +385,7 @@ function step(s: Scene3D, dt: number, time: number, me: string): void {
 		const x0 = e.obj.position.x, z0 = e.obj.position.z;
 		e.obj.position.lerp(e.target, id === me ? k : k * 0.9);
 		if (e.fig) animateFigure(e.fig, e.obj.position.x - x0, e.obj.position.z - z0, dt, time);
+		if (id === me) lantern(s, e, time);
 	}
 	for (const e of s.objs.values()) {
 		if (e.kind === "animal") {
@@ -402,6 +403,23 @@ function step(s: Scene3D, dt: number, time: number, me: string): void {
 			e.flame.light.intensity = on ? (4 + 6 * dark) * flicker : 0; e.flame.light.distance = 4 + 3 * dark;
 		}
 	}
+}
+
+/** The own figure carries a lantern: from dusk on it lights the way round it, warm and flickering, brighter the darker it
+ *  is; by day it is out. The light is there from the start (at 0), so lighting it compiles no shader anew. */
+function lantern(s: Scene3D, e: Entry, time: number): void {
+	if (!e.lantern) {
+		const t = s.t, light = new t.PointLight(0xffb45a, 0, 5, 1.6);
+		light.position.set(0.28, 0.75, 0.12);
+		const glow = new t.Mesh(new t.BoxGeometry(0.09, 0.13, 0.09), new t.MeshBasicMaterial({ color: 0xffd08a }));
+		glow.position.set(0.28, 0.5, 0.12); glow.visible = false;
+		e.obj.add(light, glow);
+		e.lantern = { light, glow };
+	}
+	const on = Math.min(1, Math.max(0, (0.7 - Math.max(0, s.light)) / 0.4));
+	const flicker = 1 + Math.sin(time * 11) * 0.05 + Math.sin(time * 27.3) * 0.04;
+	e.lantern.light.intensity = on * 5.5 * flicker; e.lantern.light.distance = 3.5 + 2 * on;
+	e.lantern.glow.visible = on > 0.05;
 }
 
 function pavingDetail(s: Scene3D): void {
