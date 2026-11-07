@@ -65,8 +65,9 @@ export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | 
 	fieldStage?: "brach" | "saat" | "waechst" | "reif" | "spaet"; cropModel?: CropDef["model"]; open?: boolean };
 /** `toMe`: meant for the viewer and from someone else: said to them alone (an offer, a sale), or naming them.
  *  `player`: the speaker is a player (not an NPC: the page offers a chat with them); `players`: in the list of who plays,
- *  the names that are players. */
-export type MsgView = Pick<MsgFields, "kind" | "text" | "from" | "at" | "help"> & { ai?: true; toMe?: true; player?: true; players?: string[] };
+ *  the names that are players. `mine`: addressed to the viewer's figure alone (the answer to its own command, a whisper,
+ *  an offer): the page shows these apart from what happens around it. */
+export type MsgView = Pick<MsgFields, "kind" | "text" | "from" | "at" | "help"> & { ai?: true; toMe?: true; mine?: true; player?: true; players?: string[] };
 /** What a client sees of trade: offers it made or got, the order board and the market board (the boards only in their
  *  room), its own taken order. */
 /** The overview of the world (top left in the page): every room placed on it, with its ground, its fires and the
@@ -141,6 +142,7 @@ const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView
 const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}) });
 const exitView = (f: ExitFields, w: WorldDef): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, to: whereTo(w, f), toRoom: f.destination, location: f.location, x: f.x, y: f.y });
 const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = "", players: ReadonlySet<string> = new Set()): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}),
+	...(m.to === viewer ? { mine: true as const } : {}),
 	...(["say", "emote", "channel"].includes(m.kind) && m.fromId && !m.fromId.startsWith("npc-") ? { player: true as const } : {}),
 	...(m.kind === "who" ? { players: whoNames(m.text).filter((n) => players.has(n)) } : {}),
 	...(m.kind === "help" && m.help ? { help: m.help } : {}) });

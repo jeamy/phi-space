@@ -12,3 +12,9 @@ export function appendLine<T extends { kind: string; text: string }>(old: T[], l
 export function isComing(l: { kind: string; text: string }): boolean {
 	return l.kind === "info" && /^\S.*\s(?:(?:geht|gehst) nach \S.*|(?:kommt|kommst)(?: mit dem Kahn)? an)\.$/.test(l.text);
 }
+
+/** A line for the own figure: the echo of its own command, the answer to it, an error, a whisper or offer to it, a line
+ *  naming it, a hint. The events show these under "An dich", the rest (what happens around it) under "Allgemein". */
+export function isForMe(l: { kind: string; mine?: true; toMe?: true }): boolean {
+	return l.kind === "echo" || l.kind === "hint" || l.kind === "error" || !!l.mine || !!l.toMe;
+}

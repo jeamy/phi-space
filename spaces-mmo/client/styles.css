@@ -489,6 +489,10 @@ button.sheet-peek .chat-count { margin-right: 8px; vertical-align: 1px; }
 .atlas-legend { flex: none; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--muted); }
 .atlas-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .atlas-legend i { width: 11px; height: 11px; border: 1px solid #101010; }
+.atlas-legend i.dot { border-radius: 50%; border-color: rgba(0, 0, 0, 0.5); }
+.atlas-legend .none { opacity: 0.5; }
+.atlas > .atlas-legend { box-sizing: border-box; max-width: min(250px, 44vw); padding: 4px 8px; border-radius: 8px; background: color-mix(in srgb, var(--surface) 90%, transparent); border: 1px solid var(--line-strong); font-size: 11.5px; }
+.atlas.big > .atlas-legend { max-width: none; }
 /* the help is one page with two tabs, whatever opened it */
 .help-seg { display: flex; gap: 3px; margin: 8px 12px 0; border: 1px solid var(--line); border-radius: 12px; padding: 3px; flex: none; }
 .help-seg button { flex: 1; border: 0; border-radius: 9px; background: transparent; color: var(--muted); }

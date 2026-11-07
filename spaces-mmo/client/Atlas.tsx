@@ -17,6 +17,20 @@ const MINE: Record<AtlasState["mine"][number]["kind"], { color: string; label: s
 	building: { color: "#7fd4ff", label: "Bau" }, site: { color: "#ffb02e", label: "Baustelle" }, bed: { color: "#ff7fb5", label: "Beet" }, field: { color: "#ffe066", label: "Acker" }, ruin: { color: "#b8bec6", label: "Ruine" },
 };
 
+/** The round marks of the map, with the colours they are drawn in (below). */
+const DOTS = [["#AED83C", "Du"], ["#ffb02e", "Feuer brennt"], ["#5a3b2a", "Feuer aus"], ["#fff7e0", "Personen"], ["#2c2f36", "NPCs"]] as const;
+
+/** What the colours on the map mean: the round marks (the player, the fires, who is in a room) and the squares of the
+ *  player's own things, each kind with how many it has (dimmed the kinds it has none of yet). */
+function Legend({ mine }: { mine: AtlasState["mine"] }) {
+	return (
+		<div className="atlas-legend" aria-label="Legende">
+			{DOTS.map(([color, label]) => <span key={label}><i className="dot" style={{ background: color }} />{label}</span>)}
+			{(Object.keys(MINE) as Array<keyof typeof MINE>).map((k) => { const n = mine.filter((m) => m.kind === k).length; return <span key={k} className={n ? "" : "none"}><i style={{ background: MINE[k].color }} />{MINE[k].label}{n ? ` (${n})` : null}</span>; })}
+		</div>
+	);
+}
+
 const stored = (key: string, fallback: boolean) => { try { const v = localStorage.getItem(key); return v === null ? fallback : v === "1"; } catch { return fallback; } };
 const store = (key: string, v: boolean) => { try { localStorage.setItem(key, v ? "1" : "0"); } catch { /* private window */ } };
 
@@ -103,11 +117,11 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 			const lit = state?.lit.includes(r.roomId);
 			for (const f of r.fires) {
 				g.beginPath(); g.arc((px + f.x + 0.5) * s, (py + f.y + 0.5) * s, lit ? 7 : 4, 0, Math.PI * 2);
-				g.fillStyle = lit ? "#ffb02e" : "#5a3b2a"; g.fill();
+				g.fillStyle = lit ? DOTS[1][0] : DOTS[2][0]; g.fill();
 				if (lit) { g.beginPath(); g.arc((px + f.x + 0.5) * s, (py + f.y + 0.5) * s, 14, 0, Math.PI * 2); g.fillStyle = "rgba(255,176,46,0.25)"; g.fill(); }
 			}
 			const [humans = 0, npcs = 0] = state?.people[r.roomId] ?? [];
-			const dots = [...Array(Math.min(humans, 6)).fill("#fff7e0"), ...Array(Math.min(npcs, 6)).fill("#2c2f36")];
+			const dots = [...Array(Math.min(humans, 6)).fill(DOTS[3][0]), ...Array(Math.min(npcs, 6)).fill(DOTS[4][0])];
 			dots.forEach((color, i) => { g.beginPath(); g.arc((px + 3 + i * 2.6) * s, (py + H - 3) * s, 3.2, 0, Math.PI * 2); g.fillStyle = color; g.fill(); g.strokeStyle = "rgba(0,0,0,0.5)"; g.lineWidth = 1; g.stroke(); });
 			if (r.roomId === state?.here) {
 				g.strokeStyle = "#ffffff"; g.lineWidth = page ? 6 : 3; g.strokeRect(px * s + 1.5, py * s + 1.5, W * s - 3, H * s - 3);
@@ -134,7 +148,7 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 		// the player: a mark big enough for a small screen, on top of everything but the names
 		if (here) {
 			g.beginPath(); g.arc(here.x, here.y, 26, 0, Math.PI * 2); g.fillStyle = "rgba(174,216,60,0.3)"; g.fill();
-			g.beginPath(); g.arc(here.x, here.y, 13, 0, Math.PI * 2); g.fillStyle = "#AED83C"; g.fill(); g.lineWidth = 4; g.strokeStyle = "#101010"; g.stroke();
+			g.beginPath(); g.arc(here.x, here.y, 13, 0, Math.PI * 2); g.fillStyle = DOTS[0][0]; g.fill(); g.lineWidth = 4; g.strokeStyle = "#101010"; g.stroke();
 			pin.current = here;
 		}
 		// the islands' names, above each island
@@ -175,7 +189,7 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 	if (page) {
 		const shown = atlas.rooms.find((r) => r.roomId === picked) ?? here;
 		const [humans = 0, npcs = 0] = (shown && state?.people[shown.roomId]) || [];
-		const mine = state?.mine ?? [], inRoom = mine.filter((m) => m.room === shown?.roomId), kinds = (Object.keys(MINE) as Array<keyof typeof MINE>).filter((k) => mine.some((m) => m.kind === k));
+		const mine = state?.mine ?? [], inRoom = mine.filter((m) => m.room === shown?.roomId);
 		return (
 			<div className="atlas-page">
 				<div className="atlas-scroll" ref={scroller}>
@@ -188,7 +202,7 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 					<button onClick={() => setBig((b) => !b)}>{big ? "Kleiner" : "Größer"}</button>
 					{shown && beamButton(shown)}
 				</div>
-				{kinds.length > 0 && <div className="atlas-legend">{kinds.map((k) => <span key={k}><i style={{ background: MINE[k].color }} />{MINE[k].label}</span>)}</div>}
+				<Legend mine={mine} />
 			</div>
 		);
 	}
@@ -201,6 +215,7 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 					onClick={(e) => { if (!big) setBig(true); else setPicked(roomAt(e as unknown as React.PointerEvent<HTMLCanvasElement>)?.roomId ?? null); }}
 					onPointerMove={(e) => setHover(roomAt(e)?.roomId ?? null)} onPointerLeave={() => setHover(null)} />
 				{label && !(big && picked) && <div className="atlas-label">{label.name} · {label.island}</div>}
+				{(big || (state?.mine.length ?? 0) > 0) && <Legend mine={state?.mine ?? []} />}
 				{big && picked && (() => { const r = atlas.rooms.find((x) => x.roomId === picked); return r ? <div className="atlas-info"><div><b>{r.name} · {r.island}</b><small>{state?.lit.includes(r.roomId) ? "Feuer brennt" : "Das Feuer ist aus"}</small></div>{beamButton(r)}<button onClick={() => setBig(false)}>Kleiner</button></div> : null; })()}
 			</>}
 		</div>

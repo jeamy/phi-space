@@ -45,6 +45,7 @@ test("a trader offers coins for what one carries, takes a fair offer, turns down
 		// he sees the wood and offers for it
 		// meant for her: the page sets it apart
 		assert.equal((await msg(a.p, (t) => t.startsWith("Kalle bietet dir 2× Münze für Treibholz"), 0, 20_000)).m.toMe, true, "an offer to her");
+		assert.equal((await msg(a.p, (t) => t.startsWith("Kalle bietet dir 2× Münze für Treibholz"), 0, 20_000)).m.mine, true, "said to her alone: under \"An dich\"");
 		a.p.send("accept Kalle");
 		await eventually(async () => (await pack(s, a.me, "muenze")) === 2, 10_000, "two coins for the wood");
 		assert.equal(await pack(s, "npc-kalle", "treibholz"), 1, "the wood is his");
@@ -69,6 +70,7 @@ test("a trader offers coins for what one carries, takes a fair offer, turns down
 		assert.match(answer.text, /Treibholz \(bis 2\).*verkaufe/);
 		assert.equal(answer.toMe, true, "words that name her");
 		assert.equal((await msg(a.p, (t) => t === "Fischerin: Kalle, was kaufst du?", from)).m.toMe, undefined, "not her own words");
+		assert.equal((await msg(a.p, (t) => t === "Fischerin: Kalle, was kaufst du?", from)).m.mine, undefined, "her words to the room: under \"Allgemein\"");
 		await a.p.leave();
 	} finally { await srv.close(); await stack.close(); }
 });

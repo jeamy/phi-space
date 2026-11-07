@@ -15,7 +15,7 @@ import { StatsPanel } from "./StatsPanel.tsx";
 import { onFps, startFps, type FpsState } from "./fps.ts";
 import { CommandHelp } from "./CommandHelp.tsx";
 import type { HelpView } from "../server/model.ts";
-import { appendLine, isComing } from "./log.ts";
+import { appendLine, isComing, isForMe } from "./log.ts";
 import type { ChatState } from "../server/chat.ts";
 import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
@@ -559,6 +559,11 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	// coming and going in the log ("… geht nach ost.", "… kommt an."): hidden unless asked for, remembered in the browser
 	const [comings, setComingsState] = useState(() => { try { return localStorage.getItem("mmo.comings") === "1"; } catch { return false; } });
 	const setComings = (on: boolean) => { setComingsState(on); try { localStorage.setItem("mmo.comings", on ? "1" : "0"); } catch { /* private window */ } };
+	// the events in two parts: what is for the own figure (its answers, whispers, offers, hints) and what happens around it;
+	// `seen`: the last line of each part when it was last in front (or at the start), for the count of new lines on the other
+	const [logPart, setLogPartState] = useState<"mine" | "all">(() => { try { return localStorage.getItem("mmo.logPart") === "all" ? "all" : "mine"; } catch { return "mine"; } });
+	const [seenLine, setSeenLine] = useState<{ mine?: Line | null; all?: Line | null }>({});
+	const setLogPart = useCallback((k: "mine" | "all") => { setLogPartState(k); try { localStorage.setItem("mmo.logPart", k); } catch { /* private window */ } }, []);
 	const [mapMode, setMapModeState] = useState<MapMode>(() => readMapMode());
 	const previousStart = useRef(startView);
 	useEffect(() => { if (previousStart.current !== startView) { previousStart.current = startView; setMapModeState("3d"); } }, [startView]);
@@ -612,11 +617,12 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		// a phone keeps the sheet closed: the answer stands in its strip, a tap on it opens the log
 		if (detentRef.current === "peek" && isTouch()) return;
 		if (tabRef.current !== "log") setTab("log");
+		setLogPart("mine");
 		atEnd.current = true;
 		setBehind(false);
 		setBag(false);
 		if (detentRef.current === "peek") { setLogFit(logOpenPx()); setDetent("half"); }
-	}, [setTab]);
+	}, [setTab, setLogPart]);
 	/** Draws the own figure at `at` (where the walk puts it). */
 	const showOwn = useCallback((at: { x: number; y: number } | null) => {
 		if (!at) return;
@@ -708,7 +714,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		return () => { dead = true; clearTimeout(timer); for (const t of goneTimers.values()) clearTimeout(t); ws.current?.close(); };
 	}, [append, onAccount, setTab]);
 
-	useEffect(() => { const b = logBox.current; if (!b) return; if (atEnd.current) b.scrollTop = b.scrollHeight; else setBehind(true); }, [log, bag, tab, detent]);
+	useEffect(() => { const b = logBox.current; if (!b) return; if (atEnd.current) b.scrollTop = b.scrollHeight; else setBehind(true); }, [log, bag, tab, detent, logPart]);
 	const toLogEnd = () => { const b = logBox.current; if (b) b.scrollTop = b.scrollHeight; atEnd.current = true; setBehind(false); };
 
 	const send = useCallback((text: string, echo = true, opensLog = echo) => {
@@ -1008,8 +1014,27 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	// a talk opens over the whole height: there is a keyboard to make room for
 	useEffect(() => { if (tab !== "log" && tab !== "chats") { setBag(false); setDetent("full"); } }, [tab]);
 	const unreadAll = [...talks.values()].reduce((n, t) => n + t.unread, 0) + (chatState?.invites.length ?? 0) + (chatState?.waiting.reduce((n, w) => n + w.count, 0) ?? 0);
-	const shownLog = comings ? log : log.filter((l) => !isComing(l));
-	const lastLine = shownLog.at(-1);
+	const visible = comings ? log : log.filter((l) => !isComing(l));
+	const mineLog = visible.filter(isForMe), aroundLog = visible.filter((l) => !isForMe(l));
+	const shownLog = logPart === "mine" ? mineLog : aroundLog;
+	const lastLine = visible.at(-1), lastMine = mineLog.at(-1);
+	const logShown = pane === "log" && detent !== "peek";
+	// the part in front counts as seen up to now; the other shows how many lines came since it was
+	const lastOf = { mine: lastMine ?? null, all: aroundLog.at(-1) ?? null };
+	useEffect(() => {
+		setSeenLine((s) => {
+			const n = { ...s };
+			if (s.mine === undefined) n.mine = lastOf.mine;
+			if (s.all === undefined) n.all = lastOf.all;
+			if (logShown) n[logPart] = lastOf[logPart];
+			return n.mine === s.mine && n.all === s.all ? s : n;
+		});
+	});
+	const newIn = (k: "mine" | "all") => {
+		if (k === logPart && logShown) return 0;
+		const list = k === "mine" ? mineLog : aroundLog, at = seenLine[k] ? list.lastIndexOf(seenLine[k]!) : -1;
+		return at >= 0 ? list.length - 1 - at : seenLine[k] === undefined ? 0 : list.length;
+	};
 
 	const self = chars.get(me);
 	const openLine = () => { if (input.current) return input.current.focus(); setBag(true); setBagPart("mine"); setDetent("half"); requestAnimationFrame(() => input.current?.focus()); };
@@ -1070,6 +1095,11 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const ordersHere = [...objs.values()].filter((o) => o.kind === "site" && o.location === hello?.room.roomId).reduce((n, o) => n + (o.orders?.length ?? 0), 0);
 	const insertCommand = (c: string) => { setCmdHelp(null); setLine(`${c} `); setBag(true); setBagPart("mine"); if (detent === "peek") setDetent("half"); requestAnimationFrame(() => input.current?.focus()); };
 	const logFilter = <label className="log-filter"><input type="checkbox" checked={comings} onChange={(e) => setComings(e.target.checked)} /> Kommen und Gehen</label>;
+	const logParts = (
+		<div className="bag-parts" role="tablist" aria-label="Ereignisse">
+			{([["mine", "An dich"], ["all", "Allgemein"]] as const).map(([k, l]) => { const n = newIn(k); return <button key={k} role="tab" aria-selected={logPart === k} onClick={() => { setLogPart(k); atEnd.current = true; setBehind(false); }}>{l}{n ? <span className="chat-count">{n > 99 ? "99+" : n}</span> : null}</button>; })}
+		</div>
+	);
 	const logView = (
 		<div className="log" role="log" aria-live="polite" ref={logBox} onScroll={(e) => { const b = e.currentTarget; atEnd.current = b.scrollHeight - b.scrollTop - b.clientHeight < 24; if (atEnd.current) setBehind(false); }}>
 			{shownLog.map((l, i) => <div key={i} className={`${l.kind}${"toMe" in l && l.toMe ? " to-me" : ""}`}><LogText l={l} self={chars.get(me)?.name ?? account.name} onName={(name, left, top) => setNameMenu({ name, left, top })} onCommand={insertCommand} />{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
@@ -1144,13 +1174,14 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 							<div className="sheet-scroll">{bagPart === "mine" ? mineView : bagPart === "market" ? marketView : <SiteOrders objs={objs} self={self} room={hello?.room.roomId ?? ""} me={me} send={send} walk={walkTo} />}</div>
 							{bagPart === "mine" && <>
 								{/* the answers go to the log: the last one shows here, a tap opens the rest */}
-								{lastLine && <button className="last-line" onClick={() => openPane("log")}>{lastLine.text}</button>}
+								{lastMine && <button className="last-line" onClick={() => { setLogPart("mine"); openPane("log"); }}>{lastMine.text}</button>}
 								{commandForm}
 							</>}
 						</>
 					) : pane === "log" ? (
 						<>
-							{logFilter}
+							{logParts}
+							{logPart === "all" && logFilter}
 							{logView}
 							{behind && <button className="log-new" onClick={toLogEnd}>Neue Meldungen</button>}
 							<div className="quick">{["look", "who", "inventory", "time", "reputation"].map((c) => <button key={c} onClick={() => send(c)}>{c}</button>)}</div>
