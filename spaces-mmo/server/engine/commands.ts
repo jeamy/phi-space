@@ -1,6 +1,7 @@
 // Runs one command line (docs/evennia-abbildung.en.md, "Ablauf eines Befehls"): the actor's command sets are merged
 // (defaults, builder commands, one command per exit of the room), commands whose `cmd` lock the actor fails are
 // dropped, and the command the first word names runs inside the intent's transaction.
+import { packAfter, packBefore } from "./pack.ts";
 import { distinct, merge, type CmdSet, type Command } from "./cmdsets.ts";
 import { BUILDER_COMMANDS } from "./commands/builder.ts";
 import { BUILD_COMMANDS } from "./commands/build.ts";
@@ -107,7 +108,11 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 	}
 	try {
 		if (understood) await msg(c, c.actor.charId, "info", understood);
+		// what a figure carries (pack.ts): a command that leaves its pack heavier and over the limit is refused
+		const before = await packBefore(c.space, c.world, c.actor.charId, cmd.key, !c.account || !!c.account.npc, c.txn);
 		await cmd.func(c, arg);
+		const tooMuch = await packAfter(c.space, c.world, c.actor.charId, before, c.txn);
+		if (tooMuch) throw new CommandError(tooMuch);
 	} catch (e) {
 		// not understood (no thing of that name, a command without what it needs): the model reads the sentence first;
 		// only what it cannot read either is refused (a translation is never sent again, `c.asked`)

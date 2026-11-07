@@ -42,6 +42,7 @@ export const SETTINGS: SettingDef[] = [
 	{ key: "build.max3", env: "SPACES_MMO_BUILD_MAX_3", def: 18, min: 1, max: 1_000, label: "Bauten je Konto in der Stadt", unit: "Bauten", help: "Dasselbe in der Stadt (Epoche 3)." },
 	{ key: "build.max4", env: "SPACES_MMO_BUILD_MAX_4", def: 20, min: 1, max: 1_000, label: "Bauten je Konto im Netz", unit: "Bauten", help: "Dasselbe im Netz (Epoche 4)." },
 	{ key: "animals.houses", env: "SPACES_MMO_ANIMAL_HOUSES", def: 5, min: 0, max: 1_000, label: "Ställe, Gehege und Bienenstöcke je Konto", unit: "Bauten", help: "So viele Häuser für Tiere (Hühnerstall, Gehege, Bienenstock) darf ein Konto zusammen haben, Baustellen eingerechnet. Sie zählen nicht zu den Bauten oben." },
+	{ key: "pack.max", env: "SPACES_MMO_PACK_MAX", def: 40, min: 1, max: 100_000, label: "Gepäck je Figur", unit: "Last", help: "So viel Last trägt eine Figur. Jedes Ding wiegt nach seiner Art (Muschel und Samen ½, Treibholz und Stein 2, Holzbündel und Tiere 4, Rind und Segelboot 8, sonst 1; Münzen nichts). Wer mehr trägt, verliert nichts, nimmt aber nichts mehr auf, bis er etwas in eine Truhe legt." },
 	{ key: "cmd.perSec", env: "SPACES_MMO_CMD_PER_SEC", def: 5, min: 1, max: 100, label: "Befehle je Sekunde je Konto", unit: "je s", help: "Danach so viele je Sekunde." },
 ];
 

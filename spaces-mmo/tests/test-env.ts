@@ -34,3 +34,5 @@ process.env.SPACES_MMO_NPCS = "ines,bo,fremder";
 process.env.SPACES_MMO_SETTLERS_MIN = "0";
 // nor the tide's staples (engine/fire.ts): the tests build on fixed cells and count what the tide brings
 process.env.SPACES_MMO_STAPLES = "0";
+// a pack carries 40 load in the game (engine/pack.ts); the tests hand out dozens of things and then gather more: tests/pack.test.ts tests the limit
+process.env.SPACES_MMO_PACK_MAX = "100000";

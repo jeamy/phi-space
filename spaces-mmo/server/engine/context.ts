@@ -22,6 +22,8 @@ export type CommandCtx = {
 	/** The player reads English (its Intent). */ lang?: "en";
 	/** A numbered step of a page: written on the character with the step, taken or not (CharacterFields.ack). */
 	step?: { conn: string; seq: number };
+	/** The other regions' spaces, by region (a world worker of a region reaches them): one's chests there (verstaue). */
+	elsewhere?: ReadonlyMap<string, SpaceLike>;
 	/** Memo of the actor's inventory for this command (read once, outside the transaction). */
 	cache: { inventory?: Array<{ e: Taken; f: ItemFields }> };
 };

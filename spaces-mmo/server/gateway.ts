@@ -10,6 +10,7 @@ import type { Me } from "./accounts.ts";
 import { Chat, isChatFrame, isChatLine, type ChatClientFrame, type ChatFrame, type ChatUser } from "./chat.ts";
 import { render } from "./engine/funcparser.ts";
 import { sceneryText, type CropDef, type SortDef, type WorldDef } from "./engine/world.ts";
+import { loadOf } from "./engine/pack.ts";
 import { whereTo } from "./engine/context.ts";
 import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
 import { baysOf, linerOf, type Timetable } from "./engine/liner.ts";
@@ -57,7 +58,7 @@ export type PlanView = { key: string; name: string; w: number; h: number; needs:
 /** A site or building (docs/siedeln.en.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
 export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed" | "field" | "animal" | "scenery" | "zone" | "cart" | "liner" | "track" | "train"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
-	w?: number; h?: number; /** Scenery: what it is. */ desc?: string; /** Scenery: its picture, how much work it still takes, whether it stays or is walked over. */ model?: string; left?: number; fixed?: boolean; through?: boolean; /** An exit: the place it leads to (its `name` is what `go` takes), and that room's id. */ to?: string; toRoom?: string; /** Tracks of the island railway (made by the client, engine/rail.ts): the runs of cells, each from a station's own track when `fromStation`. */ runs?: Array<Array<{ x: number; y: number }>>; fromStation?: boolean; /** The owner's name as shown and their character (a name can change, an alias; the id cannot). */ owner?: string; ownerId?: string; sponsorIds?: string[]; /** What a site has hung out, with a wage per piece (`proto` "": work). */ orders?: Array<{ proto: string; name: string; left: number; pay: number }>; progress?: number; missing?: string; color?: string; /** The large ship (made by the client from the timetable): its fare and the islands it goes to. */ fare?: number; /** It is running in or out of the bay: no boarding. */ gliding?: boolean; routes?: Array<{ island: string; room: string }>; /** the plan of a site, building or ruin (the 3D map draws each its own) */ plan?: string; /** the kind of animal a coop or pen houses */ herd?: string; /** a building's dog or cat on guard */ keeper?: string; /** an animal from the fog: hase, reh, fuchs, maus, moewe */ animal?: string;
+	w?: number; h?: number; /** Scenery: what it is. */ desc?: string; /** Scenery: its picture, how much work it still takes, whether it stays or is walked over. */ model?: string; left?: number; fixed?: boolean; through?: boolean; /** An exit: the place it leads to (its `name` is what `go` takes), and that room's id. */ to?: string; toRoom?: string; /** Tracks of the island railway (made by the client, engine/rail.ts): the runs of cells, each from a station's own track when `fromStation`. */ runs?: Array<Array<{ x: number; y: number }>>; fromStation?: boolean; /** The owner's name as shown and their character (a name can change, an alias; the id cannot). */ owner?: string; ownerId?: string; sponsorIds?: string[]; /** What a site has hung out, with a wage per piece (`proto` "": work). */ orders?: Array<{ proto: string; name: string; left: number; pay: number }>; progress?: number; missing?: string; color?: string; /** The large ship (made by the client from the timetable): its fare and the islands it goes to. */ fare?: number; /** It is running in or out of the bay: no boarding. */ gliding?: boolean; routes?: Array<{ island: string; room: string }>; /** the plan of a site, building or ruin (the 3D map draws each its own) */ plan?: string; /** the kind of animal a coop or pen houses */ herd?: string; /** a building's dog or cat on guard */ keeper?: string; /** a thing's load (engine/pack.ts), in a world with loads */ load?: number; /** an animal from the fog: hase, reh, fuchs, maus, moewe */ animal?: string;
 	/** A bed: its plants at their cells (relative to the bed), when it was watered and how long its plants go without
 	 *  water, whether weeds grow in it, and who may tend it besides the owner; `bedKind`: a flower bed or a community bed; `fenced`: hares keep out. An animal: the bed it came to (`target`). */
 	bedKind?: "zier" | "gemein"; fenced?: boolean; plants?: Array<{ x: number; y: number; stage: number; color: string; model?: SortDef["model"] }>; wateredWorldMs?: number; thirstMs?: number; weedy?: boolean; sponsors?: string[]; target?: string;
@@ -78,8 +79,8 @@ export type AtlasView = { rooms: Array<{ roomId: string; name: string; island: s
 /** What changes on the overview: where the player is, the fog of each room, the rooms whose fire burns, and how many
  *  people and NPCs are online in each room. */
 /** What a player owns, for the marks on the overview. */
-export type AtlasOwned = { id: string; kind: "site" | "building" | "bed" | "field" | "ruin"; name: string; room: string; x: number; y: number };
-export type AtlasState = { /** What the player's own things want of it now (server/todos.ts). */ todos: Todo[]; here: string; fog: Record<string, number>; lit: string[]; people: Record<string, [number, number]>; mine: AtlasOwned[]; /** The epoch of each island that has left the first (the header shows the one the player stands on); null in a world without epochs. */ epochs: Record<string, number> | null; /** Coins per field of distance for beaming (the admin's setting), for the price on the map. */ beamCost: number; /** Where a boat, a train and a cart can go in this region: the rooms with a jetty or a station (and the fare), the rooms a road joins. */ stops: { jetties: string[]; stations: string[]; trainFare: number; roads: Array<[string, string]> } };
+export type AtlasOwned = { id: string; kind: "site" | "building" | "bed" | "field" | "ruin"; name: string; room: string; x: number; y: number; /** a site's, building's or ruin's plan (a chest of one's own: ItemUses.chests) */ plan?: string };
+export type AtlasState = { /** What the player's own things want of it now (server/todos.ts). */ todos: Todo[]; here: string; fog: Record<string, number>; lit: string[]; people: Record<string, [number, number]>; mine: AtlasOwned[]; /** The epoch of each island that has left the first (the header shows the one the player stands on); null in a world without epochs. */ epochs: Record<string, number> | null; /** Coins per field of distance for beaming (the admin's setting), for the price on the map. */ beamCost: number; /** The most a figure carries (the setting pack.max); null in a world without loads. */ packMax: number | null; /** Where a boat, a train and a cart can go in this region: the rooms with a jetty or a station (and the fare), the rooms a road joins. */ stops: { jetties: string[]; stations: string[]; trainFare: number; roads: Array<[string, string]> } };
 export type TradeView = {
 	offersIn: Array<Pick<OfferFields, "offerId" | "fromName" | "giveNames" | "want">>;
 	offersOut: Array<Pick<OfferFields, "offerId" | "toName" | "giveNames" | "want">>;
@@ -143,7 +144,7 @@ const ATLAS_MS = 1_000;
 
 /** The characters a model plays (docs/modell-npcs.en.md: marked as AI wherever they appear). */
 const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(c.look ? { look: c.look } : {}), ...(c.aboard ? { aboard: { island: c.aboard.island, arriveWorldMs: c.aboard.arriveWorldMs, to: c.aboard.to, ...(c.aboard.from ? { from: c.aboard.from } : {}) } } : {}), ...(modelChars.has(c.charId) ? { ai: true as const } : {}), ...(c.charId.startsWith("npc-siedler-") ? { settler: true as const } : {}) });
-const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}) });
+const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>, w: WorldDef): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}), ...(w.pack ? { load: loadOf(w, f.proto) } : {}) });
 const exitView = (f: ExitFields, w: WorldDef): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, to: whereTo(w, f), toRoom: f.destination, location: f.location, x: f.x, y: f.y });
 const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = "", players: ReadonlySet<string> = new Set()): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}),
 	// said to the viewer alone, or what its own figure did as the room is told ("$you() stellst 3 Brot her": „Du stellst …“;
@@ -179,6 +180,7 @@ export class Gateway {
 	readonly #winds = new Map<string, number>();
 	#yearDays = 0;
 	#beamCost = 1;
+	#packMax: number | null = null;
 	#epochForce = 0;
 	/** The name of the wind in a room; an island nobody counted yet has the breeze. */
 	#windIn(room: string): string { return this.w.wind?.names[this.#winds.get(this.#rooms.get(room)?.island ?? "") ?? 1] ?? ""; }
@@ -615,7 +617,7 @@ export class Gateway {
 		else if (type === "Scenery") { const s = fields as unknown as SceneryFields; this.#setObj(id, { id: s.sceneryId, kind: "scenery", name: s.name, desc: sceneryText(this.w, s), location: s.room, x: s.x, y: s.y, w: s.w, h: s.h, model: s.model, left: s.left, ...(s.fixed ? { fixed: true } : {}), ...(s.through ? { through: true } : {}) }); }
 		else if (type === "SiteOrder") { const o = fields as unknown as SiteOrderFields; this.#siteOrders.set(id, o); this.#showOrders(o.buildId); }
 		else if (types.includes("Item") || types.includes("Exit")) {
-			const o = types.includes("Item") ? itemView(fields as unknown as ItemFields, this.#protoIcons) : exitView(fields as unknown as ExitFields, this.w);
+			const o = types.includes("Item") ? itemView(fields as unknown as ItemFields, this.#protoIcons, this.w) : exitView(fields as unknown as ExitFields, this.w);
 			this.#setObj(id, o);
 		}
 		else if (type === "Msg") {
@@ -711,7 +713,7 @@ export class Gateway {
 		for (const o of this.#objs.values()) {
 			if (!o.ownerId || (o.kind !== "site" && o.kind !== "building" && o.kind !== "bed" && o.kind !== "field" && o.kind !== "ruin")) continue;
 			const list = out.get(o.ownerId) ?? [];
-			list.push({ id: o.id, kind: o.kind, name: o.name, room: o.location, x: o.x, y: o.y });
+			list.push({ id: o.id, kind: o.kind, name: o.name, room: o.location, x: o.x, y: o.y, ...(o.plan ? { plan: o.plan } : {}) });
 			out.set(o.ownerId, list);
 		}
 		return out;
@@ -736,8 +738,9 @@ export class Gateway {
 		const lit = this.w.beacons.filter((b) => this.#burns(this.#flames.get(b.beaconId) ?? 0)).map((b) => b.room);
 		void setting(this.space, "beam.cost").then((n) => { this.#beamCost = n; }, () => {}); // the next state carries it
 		void setting(this.space, "epoch.force").then((n) => { this.#epochForce = n; }, () => {});
+		if (this.w.pack) void setting(this.space, "pack.max").then((n) => { this.#packMax = n; }, () => {});
 		const todos = todosFor(c.me.charId, this.#objs.values(), this.#herds, this.#millLoads.values(), this.w, this.#clock ? worldNow(this.#clock, Date.now()) : null);
-		return { todos, here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people, mine: owned.get(c.me.charId) ?? [], epochs: !this.w.epochs ? null : this.#epochForce > 0 ? Object.fromEntries([...new Set(this.w.rooms.map((r) => r.island ?? ""))].map((i) => [i, this.#epochForce])) : Object.fromEntries([...this.#epochs.values()].map((e) => [e.island, e.epoch])), beamCost: this.#beamCost, stops: this.#stops() };
+		return { todos, here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people, mine: owned.get(c.me.charId) ?? [], epochs: !this.w.epochs ? null : this.#epochForce > 0 ? Object.fromEntries([...new Set(this.w.rooms.map((r) => r.island ?? ""))].map((i) => [i, this.#epochForce])) : Object.fromEntries([...this.#epochs.values()].map((e) => [e.island, e.epoch])), beamCost: this.#beamCost, packMax: this.w.pack ? this.#packMax ?? this.w.pack.max : null, stops: this.#stops() };
 	}
 
 	/** Something on the overview changed: its state goes out to every client once the short pause is over. */

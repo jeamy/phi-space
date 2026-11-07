@@ -28,6 +28,10 @@ test("rules: common sentences become commands; commands and talk stay as they ar
 	assert.equal(t("biete Muschel am Markt für 2 an"), "market biete muschel für 2");
 	assert.equal(t("verkaufe das treibholz für 3 münzen"), "market biete treibholz für 3");
 	assert.equal(t("suche eine Ziege für 5 Münzen"), "market suche ziege für 5");
+	assert.equal(t("leg 3 muscheln in die truhe 2"), "verstaue 3 muscheln in 2");
+	assert.equal(t("leg die muscheln in die truhe der hütte am anleger"), "verstaue muscheln in hütte am anleger");
+	assert.equal(t("schick 2 tang in meine truhe in den dünen"), "verstaue 2 tang in dünen");
+	assert.equal(t("leg die muscheln in die truhe"), "verstaue muscheln", "the one beside or the only one");
 	assert.equal(t("verkaufe 10 muscheln um 15 münzen"), "market biete 10 muscheln für 15");
 	assert.equal(t("suche am markt ziege für 5"), "market suche ziege für 5");
 	assert.equal(t("lege holz ins feuer"), "put holz in feuer");

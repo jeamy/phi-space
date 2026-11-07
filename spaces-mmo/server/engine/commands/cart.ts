@@ -16,6 +16,7 @@ import { amount, ARTICLE, distTo, EXIT_REACH, giveBack, planOf } from "./build.t
 import { placeIn, relocate } from "./default.ts";
 import { consume, move } from "./trade.ts";
 import { countTrip } from "../travel.ts";
+import { loadOf } from "../pack.ts";
 
 /** Room to rooms the roads join: a road beside an exit links its two ends, both ways. */
 export async function roadLinks(space: SpaceLike, w: WorldDef, txn: string | null = null): Promise<Map<string, Set<string>>> {
@@ -158,8 +159,11 @@ async function routeStop(space: SpaceLike, w: WorldDef, txn: string, f: CartFiel
 	let cargo = await inside(f.cartId);
 	if (f.room === r.to) {
 		for (const b of chests) {
-			const room = planOf(w, b.plan)!.chest! - (await inside(b.buildId)).filter((i) => !keepers.has(i.proto)).length;
-			if (room > 0) cargo = cargo.slice(await shift(space, txn, cargo.slice(0, room), f.cartId, b.buildId));
+			// a chest holds load where the world has it (pack.ts), else things
+			const weigh = (i: ItemFields) => w.pack ? loadOf(w, i.proto) : 1;
+			let room = planOf(w, b.plan)!.chest! - (await inside(b.buildId)).filter((i) => !keepers.has(i.proto)).reduce((n, i) => n + weigh(i), 0), fit = 0;
+			while (fit < cargo.length && weigh(cargo[fit]!) <= room + 1e-9) room -= weigh(cargo[fit++]!);
+			if (fit > 0) cargo = cargo.slice(await shift(space, txn, cargo.slice(0, fit), f.cartId, b.buildId));
 		}
 		return cargo.length ? [] : roadPath(await roadLinks(space, w, txn), f.room, r.from) ?? [];
 	}

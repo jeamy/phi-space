@@ -50,6 +50,7 @@ import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { regionAddresses, regionWorld } from "./engine/regions.ts";
 import { abortableSleep } from "./abort-sleep.ts";
 import { deliver } from "./engine/handover.ts";
+import { carryCouriers } from "./engine/courier.ts";
 import { WORLD_LOCK, actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields } from "./model.ts";
 import { announce, awaitWork, batching, bufferedTxn, connectSpace, DEFAULT_SPACE, envMs, Mirror, readExisting, StillHeld } from "./space.ts";
 
@@ -99,6 +100,8 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 	const loaded = await loadIntoSpace(space, w, region ? { elsewhere } : {}).catch((e) => { conn.close(); for (const c of otherConns) c.close(); throw e; });
 	const proc = announce(space, "world");
 	const delivering = region ? deliver(space, others, full, halt.signal) : Promise.resolve();
+	// what a player sends to a chest in another region (engine/courier.ts)
+	const couriering = region ? carryCouriers(space, others, full, halt.signal) : Promise.resolve();
 	if (loaded.loaded) console.log(`[world] loaded ${w.id} version ${w.version}${loaded.spawned.length ? `, placed ${loaded.spawned.join(", ")}` : ""}`);
 	// the islands count at once: one that qualified before the epochs came need not wait for the job's first date
 	await epochTick(space, w, msgLeaseMs).catch((e) => console.error("[world] epoch count", e));
@@ -178,7 +181,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 				const accountId = actor.accountId;
 				const loadAccount = async () => { const e = await one({ type: "Account", fields: { accountId } }, 2_000); return e ? fieldsOf<AccountFields>(e) : null; };
 				const account = /^step\s/.test(intent.line) ? null : await loadAccount();
-				await execute({ space: end.space, txn, world: await spatialWorld(end.space, w), actor, account, ...(account ? {} : { loadAccount }), msgLeaseMs, cache: {}, ...(intent.asked ? { asked: intent.asked } : {}), ...(intent.lang ? { lang: intent.lang } : {}), ...(intent.step ? { step: intent.step } : {}) }, intent.line);
+				await execute({ space: end.space, txn, world: await spatialWorld(end.space, w), actor, account, ...(account ? {} : { loadAccount }), msgLeaseMs, cache: {}, ...(others.size ? { elsewhere: others } : {}), ...(intent.asked ? { asked: intent.asked } : {}), ...(intent.lang ? { lang: intent.lang } : {}), ...(intent.step ? { step: intent.step } : {}) }, intent.line);
 			}
 			await end.commit();
 			if (SLOW_MS && Date.now() - intent.at > SLOW_MS) console.error(`[world] slow: ${charId} "${intent.line.slice(0, 40)}" ${Date.now() - intent.at} ms after it was typed, ${Date.now() - t0} ms to run`);
@@ -301,7 +304,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		space,
 		cleanup,
 		spoil,
-		async close() { halt.abort(); clearInterval(sweep); clearInterval(spots); clearInterval(spoiling); await loop; await scheduling; await delivering; mirror?.close(); await proc.stop(); for (const c of otherConns) c.close(); conn.close(); },
+		async close() { halt.abort(); clearInterval(sweep); clearInterval(spots); clearInterval(spoiling); await loop; await scheduling; await delivering; await couriering; mirror?.close(); await proc.stop(); for (const c of otherConns) c.close(); conn.close(); },
 	};
 }
 

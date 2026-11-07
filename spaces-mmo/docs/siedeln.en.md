@@ -732,13 +732,34 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      waits for it via its cells instead of reporting "no building site". Acceptance: twenty deliver at the same time,
      exactly six driftwood are taken, the rest stays in the pockets, nobody hears "no building site"; twenty-one hands
      complete it exactly once; from three cells away it says "Geh näher".
-   - **Part 2, built 2026-10-29:** the **chest** of the hut (12 slots, owner only: `truhe`, `verstaue`, `entnimm`, also
+   - **Part 2, built 2026-10-29:** the **chest** of the hut (12 slots then, 60 load since part 3, owner only: `truhe`, `verstaue`, `entnimm`, also
      "leg … in die truhe", "nimm … aus der truhe"); **decay**: a building lasts a week, `repariere` (1 driftwood, anyone)
      resets the deadline; a building that is not held becomes a **ruin** (ten world days, keeps covering its cells, frees
      the light), what lay in the chest waits as **estate** for a month for the owner (`nachlass` at the ruin);
      **demolition** (`abriss`, "reiß die hütte ab"): area and light free, half of the material and the chest back, an
      abandoned building site gives back everything delivered. The map shows the ruin, the cell menu offers repair, chest
      and estate. Not yet: faster decay in fog (comes with the game), rebuilding a ruin, the hut as return point.
+   - **Part 3, built 2026-11-07: load** (`server/engine/pack.ts`, `server/engine/courier.ts`, test `tests/pack.test.ts`).
+     A figure carries at most 40 load (setting `pack.max`, `SPACES_MMO_PACK_MAX`, the admin window). Each thing weighs by
+     its kind (`world.pack.load`, 1 where it names none): coins and bills 0; shells, seeds, pearls, amber, wax, candles,
+     down ½; driftwood, kelp rope, stone, cabbage, bricks, planks, rope, clay, dog, cat 2; bundle of wood, hen, duck,
+     goose, sheep, goat, bee colony, rowing boat, cart 4; cow and sailing boat 8. The check sits once around every command
+     (`execute` in `engine/commands.ts`): a command that leaves the actor's pack heavier than before and over the limit
+     is refused and its transaction aborted, whatever it did (pick up, gather, harvest, buy, accept, craft, take from a
+     chest). What others bring (a delivery, a gift, coins for a listing) runs in their command and arrives anyway; a
+     figure over the limit loses nothing and can still do everything that makes its pack lighter. NPC accounts and the
+     light commands (walking, talk, look) are not checked. `entnimm` and `nachlass` take what fits and leave the rest.
+     Chests hold load: the hut 60, the smokehouse 24, the warehouse 400 (a cart on its route unloads by load too).
+     **Storing from anywhere:** `verstaue [n|alle] <ding> [in <truhe>]` puts things into a chest of one's own wherever
+     the figure stands: the one beside it, else the only one; with several, by number (`in 2`, numbered by place and
+     id, `chestOrder` in `engine/load-format.ts`, the same order on the page) or by words of its name and place
+     (`in die hütte am anleger`); without a choice it lists them. Taking out stays beside the chest. A chest in the same
+     region is filled in the command's transaction; one in another region by a **courier**: the things move to the
+     courier's id and a `Courier` entry is written in the command's transaction, the region's world worker writes them
+     into the chest of the other region and then takes them here (idempotent by item id, like a crossing's pack). A chest
+     that became a ruin meanwhile gets them in its estate. The page shows "Last x von 40" under "Bei dir" and, for a
+     chosen thing, the chest choice with "1 hineinlegen" / "Alle hineinlegen". The tests run with a limit of 100000
+     (`tests/test-env.ts`); `tests/pack.test.ts` sets 40.
 2. **Gardens** (the equal strand, parallel to all buildings): spade, rain barrel, kinds of beds (kitchen, ornamental,
    communal), seeds from the wild flora, plants with growth stages, watering and weeding,
    sponsorship, harvest, crossing and naming, gardener with seed trade and search jobs. Acceptance: 1,000 plants

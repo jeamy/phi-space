@@ -1063,7 +1063,22 @@ Liefern und arbeiten geht **aus bis zu zwei Feldern Abstand**, so haben viele um
 
 Eine Hütte hat eine Truhe für deine Sachen. Was darin liegt, trägst du nicht mehr mit dir herum.
 
-Die Hütte hat eine Truhe mit 12 Plätzen, die **nur dir** gehört: \`truhe\` zeigt sie, \`verstaue 3 muscheln\` (oder „leg die muscheln in die truhe“) legt etwas hinein, \`entnimm 2 muscheln\` (oder „nimm … aus der truhe“) holt es heraus. Dafür stehst du direkt neben der Hütte.
+Die Hütte hat eine Truhe, die **nur dir** gehört: \`truhe\` zeigt sie, \`verstaue 3 muscheln\` (oder „leg die muscheln in die truhe“) legt etwas hinein, \`entnimm 2 muscheln\` (oder „nimm … aus der truhe“) holt es heraus. Herausnehmen kannst du nur direkt neben der Hütte, hineinlegen **von überall**: Neben einer deiner Hütten geht es in diese, sonst in deine einzige. Hast du mehrere, sagst du welche, mit ihrer Nummer oder ihrem Ort: \`verstaue 3 muscheln in 2\`, \`verstaue 3 muscheln in die hütte am anleger\` (oder „leg 3 muscheln in die truhe 2“). Ohne Angabe nennt \`verstaue\` die Nummern. Unter „Bei dir“ legt „1 hineinlegen“ oder „Alle hineinlegen“ ein Ding in die gewählte Truhe. Liegt die Hütte in einer anderen Gegend, bringt ein Bote die Sachen hin, das dauert einen Moment.
+
+## Last {#load}
+
+Eine Figur trägt höchstens **40 Last** (der Betreiber stellt es ein). Jedes Ding wiegt nach seiner Art:
+
+| Last | Dinge |
+|---|---|
+| 0 | Münzen |
+| ½ | Muscheln, Samen, Perlen, Bernstein, Wachs, Kerzen, Daunen |
+| 1 | Tang, Fisch, Eier, Honig, Milch, Werkzeug, Ernte, Brot und alles andere |
+| 2 | Treibholz, Tangseil, Stein, Kohl, Ziegel, Bohlen, Lehm, Hund, Katze |
+| 4 | Holzbündel, Huhn, Ente, Gans, Schaf, Ziege, Bienenvolk, Ruderboot, Karren |
+| 8 | Rind, Segelboot |
+
+Unter „Bei dir“ steht, wie viel du trägst. Was dich über die Grenze brächte (aufheben, sammeln, ernten, kaufen, herstellen, aus der Truhe nehmen), geht nicht, bis du etwas in eine Truhe legst oder ablegst. Was dir andere bringen (eine Lieferung, ein Geschenk, Münzen für dein Angebot), kommt trotzdem an. Wer schon mehr trägt, verliert nichts, nimmt aber nichts mehr auf. Eine Truhe hält Last: die Hütte 60, die Räucherei 24, das Lagerhaus 400.
 
 ## Verfall, Ruine und Nachlass {#decay}
 
@@ -1117,7 +1132,22 @@ Delivering and working work **from up to two cells away**, so many fit around a 
 
 A hut has a chest for your things. What lies in it you no longer carry around.
 
-The hut has a chest with 12 places that is **yours alone**: \`truhe\` (\`chest\`) shows it, \`verstaue 3 muscheln\` (\`store\`, or “leg die muscheln in die truhe”) puts something in, \`entnimm 2 muscheln\` (\`retrieve\`) takes it out. You stand right next to the hut for that.
+The hut has a chest that is **yours alone**: \`truhe\` (\`chest\`) shows it, \`verstaue 3 muscheln\` (\`store\`, or “leg die muscheln in die truhe”) puts something in, \`entnimm 2 muscheln\` (\`retrieve\`) takes it out. You take things out only right next to the hut; you put them in **from anywhere**: beside one of your huts into that one, else into your only one. With several you say which, by its number or its place: \`verstaue 3 muscheln in 2\`, \`verstaue 3 muscheln in die hütte am anleger\` (or “leg 3 muscheln in die truhe 2”). Without it, \`verstaue\` names the numbers. Under “Bei dir”, “1 hineinlegen” or “Alle hineinlegen” puts a thing into the chosen chest. If the hut lies in another region, a courier brings the things there; that takes a moment.
+
+## Load {#load}
+
+A figure carries at most **40 load** (the operator sets it). Each thing weighs by its kind:
+
+| Load | Things |
+|---|---|
+| 0 | coins |
+| ½ | shells, seeds, pearls, amber, wax, candles, down |
+| 1 | kelp, fish, eggs, honey, milk, tools, crops, bread and everything else |
+| 2 | driftwood, kelp rope, stone, cabbage, bricks, planks, clay, dog, cat |
+| 4 | bundle of wood, hen, duck, goose, sheep, goat, bee colony, rowing boat, cart |
+| 8 | cow, sailing boat |
+
+“Bei dir” shows how much you carry. Whatever would take you over the limit (picking up, gathering, harvesting, buying, crafting, taking from a chest) does not work until you put something in a chest or drop it. What others bring you (a delivery, a gift, coins for your listing) arrives anyway. Whoever already carries more loses nothing but takes nothing more. A chest holds load: the hut 60, the smokehouse 24, the warehouse 400.
 
 ## Decay, ruin and estate {#decay}
 

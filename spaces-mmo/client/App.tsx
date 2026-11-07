@@ -32,6 +32,7 @@ import { language, setLanguage, watchPage } from "./i18n/index.ts";
 import { formatWorldTime, seasonIndex, SEASONS, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
 import { berth, lane, nextStop, SHIP_LENGTH, shipPlace } from "../server/engine/liner.ts";
 import { railLinks, trackCells, trainIn } from "../server/engine/rail.ts";
+import { chestOrder, fmtLoad } from "../server/engine/load-format.ts";
 
 /** How long a "gone" waits for the "char" that follows it when a character is only being moved (see the handler). */
 const GONE_GRACE_MS = 2500;
@@ -400,7 +401,9 @@ function Glyph({ o, size = 16 }: { o: ObjView; size?: number }) {
 }
 
 /** What the player carries and what lies within reach, as buttons (on a phone there is no keyboard to type with). */
-function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild, uses, hints = [], market, offer, send, pick }: { /** "mine": what lies beside the figure and what it carries; "here": the fire within reach and what can be done here */ part?: "mine" | "here"; uses: ItemUses | undefined; /** the hints of the pack (client/hints.ts): a chosen thing shows its own */ hints?: Hint[]; /** a market board stands here: sell the thing there */ market?: (name: string) => void; offer?: (to: string, name: string) => void; objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string) => void; pick: (o: ObjView) => void }) {
+/** What the pack weighs against the most a figure carries, and one's chests (numbered as `verstaue … in <nr>` takes them). */
+type PackInfo = { max: number | null; chests: Array<{ nr: number; label: string }> };
+function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild, uses, hints = [], market, offer, send, pick, pack }: { pack?: PackInfo; /** "mine": what lies beside the figure and what it carries; "here": the fire within reach and what can be done here */ part?: "mine" | "here"; uses: ItemUses | undefined; /** the hints of the pack (client/hints.ts): a chosen thing shows its own */ hints?: Hint[]; /** a market board stands here: sell the thing there */ market?: (name: string) => void; offer?: (to: string, name: string) => void; objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string) => void; pick: (o: ObjView) => void }) {
 	const all = [...objs.values()].filter((o) => o.kind === "item");
 	const carried = all.filter((o) => o.location === me);
 	const close = (o: ObjView) => !!self && o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
@@ -414,6 +417,9 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 	const [picked, setPicked] = useState<string | null>(null);
 	const kinds = [...carried.reduce((m, o) => m.set(o.name, [...(m.get(o.name) ?? []), o]), new Map<string, ObjView[]>())].sort(([a], [b]) => a.localeCompare(b));
 	const chosen = kinds.find(([name]) => name === picked);
+	const load = carried.reduce((n, o) => n + (o.load ?? 0), 0), max = pack?.max ?? null;
+	const [chestNr, setChestNr] = useState(1);
+	const chests = pack?.chests ?? [], chestAt = chests.find((x) => x.nr === chestNr) ?? chests[0];
 	const chosenBox = useRef<HTMLDivElement>(null);
 	useEffect(() => { if (picked) chosenBox.current?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }, [picked]);
 	const here = hereEntries({ chars, objs, self, room, me, plans, guest, fuel, wild });
@@ -439,13 +445,19 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 		<div className="things">
 			{near.length > 0 && <><h3>Neben dir</h3><ul>{near.map((o) => row(o, "get", "Aufheben"))}</ul></>}
 			{carried.length > 0 && <>
-				<h3>Du trägst</h3>
+				<h3>Du trägst{max !== null && <span className={`pack-load${load > max ? " over" : ""}`} title={load > max ? "Mehr trägst du nicht: leg etwas in eine Truhe." : ""}>{` · Last ${fmtLoad(load)} von ${fmtLoad(max)}`}</span>}</h3>
 				{/* a tap on a thing: its name and what it can do come first, above the pack, scrolled into view */}
 				{chosen && <div className="pack-chosen" ref={chosenBox}>
 					<div className="pack-do"><b>{chosen[0]}{chosen[1].length > 1 ? ` ×${chosen[1].length}` : ""}</b>
 						<button onClick={() => send(`drop ${chosen[0]}`)}>Ablegen</button>
 						<button onClick={() => send(`look ${chosen[0]}`)}>Ansehen</button>
 					</div>
+					{/* into a chest of one's own, from anywhere (verstaue … in <nr>) */}
+					{!guest && chestAt && <div className="pack-store">
+						{chests.length > 1 ? <select aria-label="Truhe" value={chestAt.nr} onChange={(e) => setChestNr(Number(e.target.value))}>{chests.map((x) => <option key={x.nr} value={x.nr}>{x.label}</option>)}</select> : <span>{`Truhe: ${chestAt.label}`}</span>}
+						<button onClick={() => send(`verstaue ${chosen[0]} in ${chestAt.nr}`)}>1 hineinlegen</button>
+						{chosen[1].length > 1 && <button onClick={() => send(`verstaue alle ${chosen[0]} in ${chestAt.nr}`)}>Alle hineinlegen</button>}
+					</div>}
 					{uses && (() => {
 						// what it can do here and now; the rest of the world's uses stay in the help
 						const can = itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) });
@@ -1127,7 +1139,9 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		)}
 	</>;
 	const hereBar = hereEntries({ chars, objs, self: chars.get(me), room: hello?.room.roomId ?? "", me, plans: hello?.world.plans ?? [], guest: account.guest, fuel: fuelIn(objs, me), wild: hello ? wildNow(hello.world.decor, hello.room.decor) : false });
-	const mineView = <Things objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildNow(hello?.world.decor, hello?.room.decor)} uses={hello?.world.uses} hints={hints} send={send} pick={pickUp}
+	// one's chests, in every region, numbered as the server numbers them (ownChests in engine/commands/build.ts)
+	const packInfo: PackInfo = { max: atlasState?.packMax ?? null, chests: (atlasState?.mine ?? []).filter((o) => o.kind === "building" && !!o.plan && !!hello?.world.uses.chests.includes(o.plan)).map((o) => ({ o, roomName: atlas?.rooms.find((r) => r.roomId === o.room)?.name ?? o.room })).sort((a, b) => chestOrder({ roomName: a.roomName, buildId: a.o.id }, { roomName: b.roomName, buildId: b.o.id })).map((x, i) => ({ nr: i + 1, label: `${x.o.name} (${x.roomName})` })) };
+	const mineView = <Things pack={packInfo} objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildNow(hello?.world.decor, hello?.room.decor)} uses={hello?.world.uses} hints={hints} send={send} pick={pickUp}
 		{...(trade?.listings && !account.guest ? { market: (name: string) => { setTradeItem({ name }); setBagPart("market"); } } : {})}
 		{...(account.guest ? {} : { offer: (to: string, name: string) => { setTradeItem({ name }); setOfferTo(to); setBagPart("market"); } })} />;
 	const marketView = <>

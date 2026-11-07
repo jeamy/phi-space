@@ -60,6 +60,9 @@ export function translateRules(line: string, v: TranslateView): string | null {
 	// the chest of one's building: "leg das holz in die truhe", "nimm 2 muscheln aus der kiste"
 	const store = /^(?:lege|leg|tue|tu|packe|pack|put)\s*(.+?)\s+(?:in die|in das|ins|in|into the|into)\s+(?:truhe|kiste|chest|lager|lagerhaus|warehouse)$/.exec(s);
 	if (store) return `verstaue ${noArticle(store[1]!)}`;
+	// one's chest elsewhere: "leg 3 muscheln in die truhe 2", "… in die truhe der hütte am anleger", "… in meine truhe in den dünen"
+	const storeTo = /^(?:lege|leg|tue|tu|packe|pack|put|schicke|schick|send)\s*(.+?)\s+(?:in die|in meine|in|into the|into my|into|to)\s+(?:truhe|kiste|chest)\s+(?:(?:der|meiner|von der|in der|im|in den|in|am|an der|auf|bei|of the|of my|at|in the)\s+)?(.+)$/.exec(s);
+	if (storeTo) return `verstaue ${noArticle(storeTo[1]!)} in ${storeTo[2]!}`;
 	const fromChest = /^(?:nimm|nehme|hole|hol|take)\s+(.+?)\s+(?:aus der|aus dem|aus|from the|from)\s+(?:truhe|kiste|chest|lager|lagerhaus|warehouse)$/.exec(s);
 	if (fromChest) return `entnimm ${noArticle(fromChest[1]!)}`;
 	// a fire: "wirf das holz ins feuer", "leg holz ins feuer" (also run together: "legeholz ins feuer"); the longer verb first, or "leg" takes the "e" of "lege" for the thing

@@ -80,6 +80,10 @@ export type WorldDef = {
 	npcs: NpcDef[];
 	/** Phase 4. The prototype that counts as money (prices, rewards). */
 	currency: string;
+	/** What a figure carries (engine/pack.ts): `max` load where the setting `pack.max` does not answer, `load` by
+	 *  prototype (1 where it names none; the currency weighs nothing). Without it a pack has no limit. A plan's `chest`
+	 *  is then a load as well. */
+	pack?: { max: number; load: Record<string, number> };
 	/** Where market boards stand (each its own listings) and how long a listing stays. */
 	market: { rooms: string[]; listMs: number };
 	/** Recipes: what goes in (used up), which tool is needed (it wears by one), what comes out (`count` of it, one without);
@@ -147,7 +151,7 @@ export type WorldDef = {
 };
 /** A plan (docs/siedeln.en.md, "Was man baut"): its footprint `w`×`h`, what it needs delivered, the work points, what it
  *  counts towards the epoch and takes of a fire's light (`points`), how long it stands without repair. */
-/** `chest`: how many things its chest holds (none without); `repair`: what a repair costs (it then stands `keepWorldMs` again). */
+/** `chest`: how much its chest holds, in load where the world has `pack` (engine/pack.ts), else in things (none without); `repair`: what a repair costs (it then stands `keepWorldMs` again). */
 /** `dative`: the plan with its article as one says "neben einer Hütte" (default "einem <name>"). `epoch`: the island's
  *  epoch from which a new one may be staked out (default 1; docs/siedeln.en.md "Epochen"). */
 /** `sparesTools`: a recipe made beside it wears a tool half as fast. */

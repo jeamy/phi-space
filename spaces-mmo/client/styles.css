@@ -237,6 +237,10 @@ button.link:hover { transform: none; text-decoration: underline; }
 .pack-can { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .pack-do span, .pack-do b { flex: 1; color: var(--text-strong); }
 .pack-do b { font-weight: 700; }
+.pack-store { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.pack-store select, .pack-store span { flex: 1; min-width: 0; }
+.pack-load { font-weight: 400; color: var(--muted, inherit); }
+.pack-load.over { color: var(--danger, #c0392b); font-weight: 700; }
 .pack-hint { margin: 6px 0 0; padding-left: 8px; border-left: 3px solid var(--warning); font-size: max(12px, var(--min-font)); line-height: 1.4; color: var(--text); }
 .pack-hint button { margin-left: 8px; }
 /* the chosen thing stands above the pack; scrolled to, it keeps a little room above it */
