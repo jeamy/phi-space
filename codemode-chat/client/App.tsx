@@ -10,6 +10,7 @@ import { HelpTip } from "./HelpTip.tsx";
 import { ThemeControls } from "./ThemeControls.tsx";
 import { parseCases } from "./lib/cases.ts";
 import { exampleHref } from "./lib/data-example.ts";
+import { formatCode } from "./lib/format-code.ts";
 import { useTheme, type Lang } from "./lib/theme.ts";
 
 type L = { de: string; en: string };
@@ -342,7 +343,7 @@ function CodeBlock({ sid, c, fn, t, noRun }: { sid: string; c: { candidateId: st
 		<>
 			{d?.followed ? <div className="critique critique--followed"><b>{t.followedTitle(d.followed.author, shortVia(d.followed.via))}</b>{"\n"}{d.followed.text}</div> : null}
 			{d?.cases.length && c.ok !== null ? <CaseList cases={d.cases} t={t} /> : null}
-			<pre className="code">{c.sourceOmitted ? (d?.source ?? "…") : c.source}</pre>
+			<pre className="code">{formatCode((c.sourceOmitted ? d?.source : c.source) ?? "…")}</pre>
 			{d?.critiques?.length ? (
 				<div className="critiques">
 					<div className="notes__title">{t.critiquesTitle}</div>
