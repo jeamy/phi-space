@@ -23,6 +23,17 @@ function barrel(g: Graphics, x: number, y: number, ts: number): void {
 	g.ellipse(cx, top + 1, r - 3, ry - 2).fill({ color: "#4f8fb0" });
 }
 
+/** The hive: a straw skep in rings on a little stand, its dark entrance at the foot. */
+function hive(g: Graphics, x: number, y: number, ts: number): void {
+	const cx = x + ts / 2, r = ts * 0.3, foot = y + ts * 0.78, top = y + ts * 0.22;
+	shadow(g, cx, y + ts - 3, r + 3, ts * 0.08);
+	g.rect(cx - r - 2, foot, r * 2 + 4, ts * 0.08).fill({ color: WOOD_DARK }).stroke(edge);
+	g.ellipse(cx, foot, r, foot - top).fill({ color: "#d8a83a" }).stroke(edge);
+	g.rect(cx - r - 1, foot, r * 2 + 2, 2).fill({ color: WOOD_DARK });
+	for (const t of [0.3, 0.55, 0.8]) g.rect(cx - r * Math.sqrt(1 - (1 - t) ** 2) + 2, foot - (foot - top) * (1 - t), 2 * (r * Math.sqrt(1 - (1 - t) ** 2) - 2), 1.5).fill({ color: "#a87a22" });
+	g.ellipse(cx, foot - 3, 3, 2.5).fill({ color: "#2a1a10" });
+}
+
 function scarecrow(g: Graphics, x: number, y: number, ts: number): void {
 	const cx = x + ts / 2, arm = y + ts * 0.42;
 	shadow(g, cx, y + ts - 3, ts * 0.22, ts * 0.07);
@@ -193,6 +204,7 @@ export function building2d(g: Graphics, plan: string | undefined, x: number, y: 
 	else if (plan === "windmuehle") windmill(g, x, y, w, h);
 	else if (plan === "backhaus") bakery(g, x, y, w, h, ts);
 	else if (plan === "huehnerstall") coop(g, x, y, w, h);
+	else if (plan === "bienenstock") hive(g, x, y, ts);
 	else if (plan === "gehege") pen(g, x, y, w, h, ts);
 	else if (plan === "webstuhl") loom(g, x, y, w, h);
 	else if (plan === "lagerhaus") storehouse(g, x, y, w, h, ts);

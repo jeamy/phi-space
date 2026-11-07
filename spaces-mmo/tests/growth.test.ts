@@ -1,5 +1,5 @@
 // The sizes (docs/siedeln.en.md): a full room grows by a strip on a free side, a fire's light grows with the people who build
-// there, one account keeps two animal houses, cattle come with the town.
+// there, one account keeps three animal houses, cattle come with the town.
 import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -53,7 +53,7 @@ async function does(p: Player, line: string, text: string | RegExp, ms = 30_000)
 }
 const give = async (s: SpaceLike, charId: string, proto: string) => { const p = (await eventually(() => resolvePrototype(s, proto), 10_000, proto))!; await spawn(s, null, w, p, { location: charId, x: -1, y: -1 }); };
 
-test("a fire carries 20 and grows with a builder; two animal houses are the most; cattle wait for the town", { timeout: 180_000 }, async () => {
+test("a fire carries 20 and grows with a builder; three animal houses are the most; cattle wait for the town", { timeout: 180_000 }, async () => {
 	const srv = await startServer();
 	try {
 		const s = srv.stack.space;
@@ -69,8 +69,8 @@ test("a fire carries 20 and grows with a builder; two animal houses are the most
 		await s.write({ type: "FireBuilder", fields: { beaconId: "feuer-bucht", accountId: "someone", atWorldMs: Date.now() * 2 } as never }, null, FOREVER);
 		assert.doesNotMatch(await does(p, "bau regentonne", /steckt eine Baustelle ab|passt keine/), /Licht/, "a builder here widened the light");
 		for (const e of await s.readAll({ type: "Site" })) await s.takeIfExists({ id: e.id }, 0);
-		for (const i of [0, 1]) await s.write({ type: "Building", fields: { buildId: `stall${i}`, plan: "huehnerstall", name: "Hühnerstall", room: c.room, x: 1, y: 1 + i, w: 1, h: 1, owner: me, ownerName: "Ole", accountId: key, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
-		assert.match(await does(p, "bau hühnerstall", "Ställe"), /Mehr als 2 Ställe und Gehege/);
+		for (const i of [0, 1, 2]) await s.write({ type: "Building", fields: { buildId: `stall${i}`, plan: "huehnerstall", name: "Hühnerstall", room: c.room, x: 1, y: 1 + i, w: 1, h: 1, owner: me, ownerName: "Ole", accountId: key, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
+		assert.match(await does(p, "bau hühnerstall", "Ställe"), /Mehr als 3 Ställe, Gehege und Bienenstöcke/);
 		await s.write({ type: "Building", fields: { buildId: "pen", plan: "gehege", name: "Gehege", room: c.room, x: c.x + 1, y: c.y, w: 1, h: 1, owner: me, ownerName: "Ole", accountId: key, beaconId: "feuer-bucht", points: 2, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
 		await give(s, me, "rind");
 		assert.match(await does(p, "einstallen rind", "braucht"), /Rinder braucht/);

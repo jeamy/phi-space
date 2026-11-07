@@ -9,7 +9,7 @@ const catalogue = new Map<string, () => Geo | null>();
 for (const model of ["tree", "conifer", "bush", "berrybush", "flower", "herb", "grass", "fern"] as PlantModel[]) catalogue.set(`plant:${model}`, () => plantGeometry(t, model, 0));
 for (const model of ["flower", "rose", "mist", "cabbage", "carrot", "hops"] as CropModel[]) for (let stage = 0; stage < 4; stage++) catalogue.set(`bed:${model}:${stage}`, () => cropGeometry(t, model, stage, 0xc08c6a));
 for (const model of ["grain", "tuber", "beet", "flax"] as FieldModel[]) for (const grown of [0.4, 1]) for (const limp of [false, true]) catalogue.set(`field:${model}:${grown}:${limp}`, () => fieldCropGeometry(t, model, 2, 2, grown, 0xc9b968, limp));
-for (const plan of ["huette", "regentonne", "vogelscheuche", "windmuehle", "backhaus", "huehnerstall", "webstuhl", "steg"]) catalogue.set(plan, () => buildingGeometry(t, plan, 2, 2, 0x9a7a4a, 0));
+for (const plan of ["huette", "regentonne", "vogelscheuche", "windmuehle", "backhaus", "huehnerstall", "bienenstock", "webstuhl", "steg"]) catalogue.set(plan, () => buildingGeometry(t, plan, 2, 2, 0x9a7a4a, 0));
 for (const plan of ["lagerhaus", "steinbruch", "lehmgrube", "ziegelei", "kapelle", "park", "rathaus", "werkstatt", "raeucherei", "kaufhaus", "kontor", "brauerei", "glashuette", "werft", "gewaechshaus", "leuchtturm", "bahnhof", "signalfeuer"]) catalogue.set(plan, () => buildingModel(t, plan, 2, 2, 0));
 for (const model of ["boot", "faesser", "kisten", "stand", "becken", "rumpf", "felsen", "mauer", "turm", "meiler"]) catalogue.set(`scenery:${model}`, () => sceneryModel(t, model, 2, 2, 0));
 for (const herd of ["schaf", "ziege", "rind", "ente", "gans"]) catalogue.set(`pen:${herd}`, () => buildingGeometry(t, "gehege", 2, 2, 0x9a7a4a, 0, herd));

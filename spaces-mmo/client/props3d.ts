@@ -345,6 +345,23 @@ export function barrel(t: T, detailed = false): Geo {
 	], "barrel"));
 }
 
+/** The hive: a straw skep of coiled rings on a stand of two driftwood boards, its entrance dark at the foot, a few bees
+ *  about it. About 0.8 high. */
+function hive(t: T): Geo {
+	return cached("hive", () => {
+		const straw = 0xd8a83a, parts: Part[] = [
+			{ g: new t.BoxGeometry(0.6, 0.06, 0.6), c: WOOD_DARK, p: [0, 0.3, 0] },
+			...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz]) => ({ g: new t.BoxGeometry(0.06, 0.3, 0.06), c: WOOD_DARK, p: [sx! * 0.24, 0.15, sz! * 0.24] as V3 })),
+			{ g: new t.SphereGeometry(0.27, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), c: straw, p: [0, 0.42, 0], s: [1, 1.45, 1] },
+			{ g: new t.CylinderGeometry(0.27, 0.27, 0.1, 12), c: straw, p: [0, 0.38, 0] },
+			{ g: new t.BoxGeometry(0.1, 0.06, 0.04), c: 0x2a1a10, p: [0, 0.37, 0.265] },
+		];
+		for (const [y, r] of [[0.48, 0.265], [0.6, 0.235], [0.71, 0.17]] as const) parts.push({ g: new t.TorusGeometry(r, 0.018, 4, 16), c: 0xa87a22, p: [0, y, 0], r: [Math.PI / 2, 0, 0] });
+		for (const [x, y, z] of [[0.32, 0.62, 0.1], [-0.25, 0.75, 0.22], [0.12, 0.88, -0.2]] as const) parts.push({ g: new t.IcosahedronGeometry(0.025, 0), c: 0xe8b830, p: [x, y, z] });
+		return merge(t, parts, "hive");
+	});
+}
+
 /** The scarecrow: a driftwood post and crossbar in a patched shirt, a straw head under a wide hat, straw sticking out
  *  of the sleeves, on a little mound. About 1.3 units high. */
 function scarecrow(t: T, variant: number): Geo {
@@ -534,7 +551,7 @@ function loom(t: T, w: number, variant: number): Geo {
 /** A building by its plan: the hut, the rain barrel, the scarecrow, the windmill, the bakery, the coop, the pen (with
  *  its `herd`), the loom, the jetty, any other plan a hut in its colour. */
 export function buildingGeometry(t: T, plan: string | undefined, w: number, d: number, color: number, variant: number, herd?: string): Geo {
-	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : plan === "windmuehle" ? windmill(t, variant % 3) : plan === "backhaus" ? bakery(t, w, d, variant % 3) : plan === "huehnerstall" ? coop(t, w, variant % 3) : plan === "gehege" ? pen(t, w, d, variant % 3, herd) : plan === "webstuhl" ? loom(t, w, variant % 3) : plan === "steg" ? jettyGeometry(t, w, d) : hut(t, w, d, color, variant % 3);
+	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : plan === "windmuehle" ? windmill(t, variant % 3) : plan === "backhaus" ? bakery(t, w, d, variant % 3) : plan === "huehnerstall" ? coop(t, w, variant % 3) : plan === "bienenstock" ? hive(t) : plan === "gehege" ? pen(t, w, d, variant % 3, herd) : plan === "webstuhl" ? loom(t, w, variant % 3) : plan === "steg" ? jettyGeometry(t, w, d) : hut(t, w, d, color, variant % 3);
 }
 
 /** A hare, sitting up a little, its nose towards +z: body, haunches, head, long ears, a white scut. About 0.4 high. */

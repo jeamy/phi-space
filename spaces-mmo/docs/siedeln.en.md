@@ -395,6 +395,10 @@ again — and a yield that one may `take` like a harvest.
 - **Sheep, goats** (epoch 2, pen): wool → cloth at the loom in the workshop, milk → cheese; they eat hay and turnips from
   the fields — the fields feed the farm.
 - **Dog** (epoch 2): follows a figure, warns of fog creatures — company instead of use.
+- **Bees** (epoch 1, hive `bienenstock`, 1×1, up to three colonies): a colony bought from Gesa eats flowers from the
+  ornamental bed (sea pink, dune rose, fog flower, hops), gives a pot of honey every other fed day and a lump of wax with
+  every three pots (`AnimalKindDef.also`); honey is food, wax and linen make candles at a hut. The garden's flowers get a
+  use beyond selling. A hive counts towards `maxHouses` (three now).
 - **Pigeons** (epoch 3, dovecote): carrier pigeons carry small letters between settlements and islands — mail long before
   the timetable ferry. A pigeon always flies home to its cote; whoever wants to write carries it along.
 - **Songbird** (rare, from epoch 3): a thrush or canary in a cage sings in the house — no use except life and reputation;

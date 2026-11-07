@@ -90,6 +90,8 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 
 /** What a field is sown with, and the crop's word for `bestelle` (server: world.fields.crops). */
 const SOWN: Record<string, string> = { Weizen: "weizen", Gerste: "gerste", Hafer: "hafer", Kartoffel: "kartoffel", "Rübensamen": "rüben", Leinsamen: "flachs" };
+/** The houses of animals by plan, with the animals (as their things are named) each takes in (server: world animals). */
+const HOUSES: Record<string, string[]> = { huehnerstall: ["Huhn"], gehege: ["Schaf", "Ziege", "Ente", "Gans", "Rind"], bienenstock: ["Bienenvolk"] };
 const AREA = new Set(["site", "building", "ruin", "bed", "field", "scenery", "liner"]);
 const covers = (o: ObjView, c: { x: number; y: number }) => c.x >= o.x && c.y >= o.y && c.x < o.x + (o.w ?? 1) && c.y < o.y + (o.h ?? 1);
 
@@ -186,7 +188,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			continue;
 		}
 		// this one, not all in the room: the command takes its cell
-		entries.push({ label: o.kind === "site" ? (o.ownerId === me ? `Deine Baustelle ${o.name}: was fehlt?` : `Baustelle ${o.name} von ${o.owner ?? ""}: was fehlt?`) : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: o.kind === "building" && beside && (o.plan === "huehnerstall" || o.plan === "gehege") ? "stall" : `baustelle ${o.x} ${o.y}` }); // beside a coop or pen, looking at it shows its animals
+		entries.push({ label: o.kind === "site" ? (o.ownerId === me ? `Deine Baustelle ${o.name}: was fehlt?` : `Baustelle ${o.name} von ${o.owner ?? ""}: was fehlt?`) : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: o.kind === "building" && beside && HOUSES[o.plan ?? ""] ? "stall" : `baustelle ${o.x} ${o.y}` }); // beside a coop or pen, looking at it shows its animals
 		if (o.kind === "building" && beside) {
 			if (o.name === "Regentonne") entries.push({ label: "Wasser schöpfen", line: "schöpfe" });
 			// anyone grinds at a mill and bakes at a bakery (server: mill.ts, the recipes "at" a plan)
@@ -198,16 +200,16 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.plan === "backhaus") entries.push({ label: "Brot backen (2 Mehl, 1 Kanne Wasser, 1 Treibholz)", line: "backe brot" });
 			if (o.plan === "webstuhl") entries.push({ label: "Tuch weben (3 Wolle, Spindel)", line: "craft tuch" }, { label: "Daunendecke nähen (2 Tuch, 3 Daunen)", line: "craft decke" });
 			if (o.plan === "huette") entries.push({ label: "Käse machen (3 Milch, 1 Treibholz)", line: "craft käse" });
-			// a coop or pen: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
-			if (o.plan === "huehnerstall" || o.plan === "gehege") {
+			// a coop, pen or hive: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
+			if (HOUSES[o.plan ?? ""]) {
 				// the house carries its herd while an animal is in it: nothing to feed in an empty one
 				if (o.herd) entries.push({ label: "Füttern", line: "füttere" });
 				if (o.ownerId === me) {
-					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", rind: "Milch", gans: "Daunen" };
+					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", rind: "Milch", gans: "Daunen", biene: "Honig" };
 					if (o.herd) entries.push({ label: `${yields[o.herd] ?? "Ertrag"} einsammeln`, line: "einsammeln" });
-					const fits = o.plan === "huehnerstall" ? ["Huhn"] : ["Schaf", "Ziege", "Ente", "Gans"];
+					const fits = HOUSES[o.plan ?? ""]!;
 					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && fits.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} einstallen`, line: `einstallen ${n}` });
-					entries.push({ label: "Ein Tier herausnehmen", line: "ausstallen" });
+					entries.push({ label: o.plan === "bienenstock" ? "Ein Volk herausnehmen" : "Ein Tier herausnehmen", line: "ausstallen" });
 					if (o.plan === "huehnerstall" && !o.fenced) entries.push({ label: "Zaun mit Tür setzen (3 Treibholz, 1 Tangseil)", line: "zäune" });
 				}
 			}
@@ -290,7 +292,7 @@ export function tapTarget(at: { x: number; y: number }, chars: Map<string, CharV
 
 /** The help article (with its section) for a kind of thing; a building has its plan's article first (HELP_OF_PLAN). */
 export const HELP_OF_KIND: Record<string, string> = { site: "help.game.build#stake", building: "help.game.build", ruin: "help.game.build#decay", bed: "help.game.garden#bed", field: "help.game.fields#fields", beacon: "help.game.fire#beacon", animal: "help.game.wild#hares", exit: "help.game.controls#map", liner: "help.game.village#travel", cart: "help.game.village#travel" };
-export const HELP_OF_PLAN: Record<string, string> = { windmuehle: "help.game.fields#mill", backhaus: "help.game.fields#mill", gehege: "help.game.animals#house", huehnerstall: "help.game.animals#house", rathaus: "help.game.village#townhall", steg: "help.game.village#travel", strasse: "help.game.village#travel", kaufhaus: "help.game.village#store", kontor: "help.game.village#store", lagerhaus: "help.game.village#store", bahnhof: "help.game.village#travel", werft: "help.game.village#travel", park: "help.game.village#ranks" };
+export const HELP_OF_PLAN: Record<string, string> = { windmuehle: "help.game.fields#mill", backhaus: "help.game.fields#mill", gehege: "help.game.animals#house", huehnerstall: "help.game.animals#house", bienenstock: "help.game.animals#bees", rathaus: "help.game.village#townhall", steg: "help.game.village#travel", strasse: "help.game.village#travel", kaufhaus: "help.game.village#store", kontor: "help.game.village#store", lagerhaus: "help.game.village#store", bahnhof: "help.game.village#travel", werft: "help.game.village#travel", park: "help.game.village#ranks" };
 
 /** A name for the sheet's head and the help article about what stands on a cell (help/articles.ts). */
 export function cellAbout(at: { x: number; y: number }, chars: Map<string, CharView>, objs: Map<string, ObjView>, room: string): { title?: string; article?: string; desc?: string } {

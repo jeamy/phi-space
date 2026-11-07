@@ -235,7 +235,7 @@ export const bau: Command = {
 		if (!def?.plans.length) throw new CommandError("In dieser Welt wird nicht gebaut.");
 		if (!arg.trim()) {
 			const epoch = await epochOf(c.space, islandOf(c.world, c.actor.room), c.txn);
-			const list = def.plans.map((p) => `${p.name}${(p.epoch ?? 1) > epoch ? ` (erst ab ${epochName(c.world, p.epoch!)})` : ""} (${p.w}×${p.h}): ${p.needs.map((n) => `${n.count} ${c.world.prototypes.find((x) => x.key === n.proto)?.name ?? n.proto}`).join(", ")}, ${p.work} Arbeit`);
+			const list = [...def.plans].sort((a, b) => a.name.localeCompare(b.name, "de")).map((p) => `${p.name}${(p.epoch ?? 1) > epoch ? ` (erst ab ${epochName(c.world, p.epoch!)})` : ""} (${p.w}×${p.h}): ${p.needs.map((n) => `${n.count} ${c.world.prototypes.find((x) => x.key === n.proto)?.name ?? n.proto}`).join(", ")}, ${p.work} Arbeit`);
 			return msg(c, c.actor.charId, "info", `Baupläne: ${list.join("; ")}. „bau <plan>“ steckt neben dir eine Baustelle ab; liefern und arbeiten können alle.`);
 		}
 		const m = /^(\S+)(?:\s+(\d+)\s+(\d+))?$/.exec(arg.trim().replace(ARTICLE, ""));
@@ -254,7 +254,7 @@ export const bau: Command = {
 		const herds = c.world.animals;
 		if (herds?.maxHouses && herds.houses[plan.key]) {
 			const mine = [...(await c.space.readAll({ type: "Building", fields: { accountId: c.account.accountId } })), ...(await c.space.readAll({ type: "Site", fields: { accountId: c.account.accountId } }))];
-			if (mine.filter((e) => herds.houses[String(e.fields.plan)]).length >= herds.maxHouses) throw new CommandError(`Mehr als ${herds.maxHouses} Ställe und Gehege hält niemand im Blick.`);
+			if (mine.filter((e) => herds.houses[String(e.fields.plan)]).length >= herds.maxHouses) throw new CommandError(`Mehr als ${herds.maxHouses} Ställe, Gehege und Bienenstöcke hält niemand im Blick.`);
 		}
 		if (plan.onePerRoom && ((await c.space.count({ type: "Building", fields: { room: c.actor.room, plan: plan.key } })) || (await c.space.count({ type: "Site", fields: { room: c.actor.room, plan: plan.key } })))) throw new CommandError(`Ein Raum hat höchstens einen Bau „${plan.name}“, und hier steht er schon (oder seine Baustelle).`);
 		const light = await lightFor(c, plan.points);

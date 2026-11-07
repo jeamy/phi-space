@@ -269,7 +269,7 @@ export async function collect(c: CommandCtx): Promise<void> {
 
 const einsammeln: Command = {
 	key: "einsammeln", aliases: ["melke", "melken", "schere", "scheren", "eier", "collect"],
-	help: "einsammeln – Eier, Wolle oder Milch deiner Tiere im Stall oder Gehege neben dir (auch: sammle eier, melke, schere)",
+	help: "einsammeln – Eier, Wolle, Milch oder Honig deiner Tiere im Stall, Gehege oder Bienenstock neben dir (auch: sammle eier, sammle honig, melke, schere)",
 	async func(c) { await collect(c); },
 };
 

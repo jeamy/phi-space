@@ -82,6 +82,37 @@ async function timePasses(space: SpaceLike, buildId: string, ms: number): Promis
 	await space.write({ type: "Building", fields: { ...b, herd: { ...b.herd!, atWorldMs: now - ms, fedUntilWorldMs: now + DAY } } as never }, null, FOREVER);
 }
 
+test("a hive: bee colonies eat flowers, give honey every other day and wax with every three pots", { timeout: 300_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const ida = await player(srv.url, "Imkerin"), bo = await player(srv.url, "Blumenbo");
+		const accountId = String((await s.readAll({ type: "Character", fields: { charId: ida.me } }))[0]!.fields.accountId);
+		const hive = await building(s, { buildId: "stock-1", plan: "bienenstock", name: "Bienenstock", x: 16, y: 12, w: 1, h: 1, owner: ida.me, ownerName: ida.name, accountId });
+		const taken = new Set<string>();
+		await walkBeside(ida, s, hive, taken);
+		await walkBeside(bo, s, hive, taken);
+		await give(s, ida.me, "bienenvolk", 2);
+		await give(s, ida.me, "huhn", 1);
+		assert.match(await does(ida.p, "einstallen huhn", "wohnen"), /Hühner wohnen im Hühnerstall, nicht im Bienenstock/);
+		await does(ida.p, "einstallen bienenvolk", "(1 Bienenvolk)");
+		await does(ida.p, "einstallen bienen", "(2 Bienenvölker)");
+		// they eat flowers, anyone feeds them
+		await give(s, bo.me, "tang", 1);
+		assert.match(await does(bo.p, "füttere tang", "mögen"), /Tang mögen Bienenvölker nicht; sie fressen Strandnelke, Dünenrose, Nebelblume, Hopfen/);
+		await give(s, bo.me, "strandnelke", 2);
+		assert.match(await does(bo.p, "füttere", "satt für"), /Blumenbo füttert die Bienenvölker von Imkerin mit 2 Strandnelke; satt für etwa 24 Stunden/);
+		// six fed days: three pots per colony (the most that waits), and a lump of wax with every three
+		await timePasses(s, hive.buildId, 6 * DAY);
+		assert.match(await does(ida.p, "sammle honig", "sammelst"), /Du sammelst 6 Honig, 2 Wachs im Stall/);
+		assert.equal(await pack(s, ida.me, "honig"), 6);
+		assert.equal(await pack(s, ida.me, "wachs"), 2);
+		// honey is food; wax and linen make candles at a hut
+		assert.match(await does(ida.p, "iss honig", "Honig"), /Honig/);
+		await ida.p.leave(); await bo.p.leave();
+	} finally { await srv.close(); }
+});
+
 test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner collects; a young one comes; a pen keeps one kind; demolition gives them back", { timeout: 300_000 }, async () => {
 	const srv = await startServer();
 	try {
@@ -89,7 +120,7 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		const anna = await player(srv.url, "Bäuerin"), bert = await player(srv.url, "Nachbar");
 		const accountId = String((await s.readAll({ type: "Character", fields: { charId: anna.me } }))[0]!.fields.accountId);
 		const coop = await building(s, { buildId: "stall-1", plan: "huehnerstall", name: "Hühnerstall", x: 16, y: 12, w: 2, h: 1, owner: anna.me, ownerName: anna.name, accountId });
-		assert.match(await does(anna.p, "stall", "Stall"), /Geh direkt neben einen Stall \(Hühnerstall oder Gehege\)/);
+		assert.match(await does(anna.p, "stall", "Stall"), /Geh direkt neben einen Stall \(Hühnerstall oder Gehege oder Bienenstock\)/);
 		const taken = new Set<string>();
 		await walkBeside(anna, s, coop, taken);
 		await walkBeside(bert, s, coop, taken);

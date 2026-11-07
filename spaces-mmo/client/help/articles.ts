@@ -517,7 +517,7 @@ Aus Korn wird Mehl, aus Mehl wird Brot. Ausführlich unter [Mühle und Backhaus]
 
 ## Tiere {#animalcmds}
 
-Tiere wollen gefüttert werden und geben dafür Eier, Milch, Wolle oder Daunen. Ausführlich unter [Tiere](help.game.animals).
+Tiere wollen gefüttert werden und geben dafür Eier, Milch, Wolle, Daunen oder Honig. Ausführlich unter [Tiere](help.game.animals).
 
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
@@ -700,7 +700,7 @@ Grain becomes flour, flour becomes bread. In detail under [Mill and bakery](help
 
 ## Animals {#animalcmds}
 
-Animals want feeding and give eggs, milk, wool or down for it. In detail under [Animals](help.game.animals).
+Animals want feeding and give eggs, milk, wool, down or honey for it. In detail under [Animals](help.game.animals).
 
 | Command | Also | Effect |
 | --- | --- | --- |
@@ -1401,11 +1401,11 @@ Marta at the Kupferhafen market buys and sells bread, flour and linen, and the j
 		section: "play",
 		title: { de: "Tiere", en: "Animals" },
 		short: {
-			de: "Hühner, Schafe, Ziegen, Enten und Gänse halten, füttern und was sie geben.",
-			en: "Keep hens, sheep, goats, ducks and geese, feed them, and what they give.",
+			de: "Hühner, Schafe, Ziegen, Enten, Gänse und Bienen halten, füttern und was sie geben.",
+			en: "Keep hens, sheep, goats, ducks, geese and bees, feed them, and what they give.",
 		},
 		body: {
-			de: `Tiere leben in einem Stall oder Gehege, das dir gehört. Du fütterst sie, und sie geben dir Eier, Milch, Wolle oder Daunen. Daraus entstehen Waren, die gut bezahlt werden. Hühner gehen von Anfang an, das Gehege erst im [Dorf](help.game.village#epochs).
+			de: `Tiere leben in einem Stall, Gehege oder Bienenstock, der dir gehört. Du fütterst sie, und sie geben dir Eier, Milch, Wolle, Daunen oder Honig. Daraus entstehen Waren, die gut bezahlt werden. Hühner gehen von Anfang an, das Gehege erst im [Dorf](help.game.village#epochs).
 
 ## Stall und Gehege {#house}
 
@@ -1441,8 +1441,18 @@ Satte **Gänse** halten Wache: In ihrem Raum kommt kein Hase an die Beete und ke
 
 Aus Wolle, Daunen und Milch werden teurere Waren. Dafür brauchst du den Webstuhl oder eine Hütte.
 
-Am **Webstuhl** (\`bau webstuhl\`: 2×1 Felder, 6 Treibholz, 2 Tangseil, 8 Arbeit) webt \`craft tuch\` aus 3 Wolle mit einer Spindel ein Tuch, und \`craft decke\` näht aus 2 Tuch und 3 Daunen eine Daunendecke. Am Herd einer **Hütte** macht \`craft käse\` aus 3 Milch und einem Scheit Treibholz einen Käse. Gesa kauft Eier, Wolle, Milch und Daunen, Marta Tuch, Decken und Käse.`,
-			en: `Animals live in a coop or pen that belongs to you. You feed them, and they give you eggs, milk, wool or down. These make goods that sell well. Hens work from the start, a pen only in a [village](help.game.village#epochs).
+Am **Webstuhl** (\`bau webstuhl\`: 2×1 Felder, 6 Treibholz, 2 Tangseil, 8 Arbeit) webt \`craft tuch\` aus 3 Wolle mit einer Spindel ein Tuch, und \`craft decke\` näht aus 2 Tuch und 3 Daunen eine Daunendecke. Am Herd einer **Hütte** macht \`craft käse\` aus 3 Milch und einem Scheit Treibholz einen Käse. Gesa kauft Eier, Wolle, Milch und Daunen, Marta Tuch, Decken und Käse.
+
+## Bienen {#bees}
+
+Bienen leben im **Bienenstock** (\`bau bienenstock\`: 1×1 Feld, 2 Treibholz, 2 Tangseil, 4 Arbeit, bis 3 Völker), von Anfang an. Ein **Bienenvolk** kaufst du bei Gesa am Markt von Kupferhafen; \`einstallen bienenvolk\` setzt es in deinen Stock.
+
+Bienen fressen **Blumen**: Strandnelke, Dünenrose, Nebelblume und Hopfen, die im [Zierbeet](help.game.garden#bed) wachsen. \`füttere\` gibt sie ihnen wie jedem Tier, eine Blume macht ein Volk einen Tag satt. Satt gibt jedes Volk alle zwei Tage einen Topf **Honig**, und auf drei Töpfe kommt ein Klumpen **Wachs** dazu; \`einsammeln\` holt beides. Ein starkes Volk schwärmt ab und zu, dann zieht ein neues ein, bis der Stock voll ist.
+
+Honig macht satt (\`iss honig\`). Am Herd einer **Hütte** zieht \`craft kerze\` aus 2 Wachs und 1 Leinen zwei Kerzen. Gesa kauft Honig und Wachs, Marta Honig und Kerzen, und die Schenke im Hafenviertel fragt an der Auftragstafel nach Honig.
+
+Du hältst bis zu drei Ställe, Gehege und Bienenstöcke zusammen.`,
+			en: `Animals live in a coop, pen or hive that belongs to you. You feed them, and they give you eggs, milk, wool, down or honey. These make goods that sell well. Hens work from the start, a pen only in a [village](help.game.village#epochs).
 
 ## Coop and pen {#house}
 
@@ -1478,7 +1488,17 @@ Fed **geese** keep watch: in their room no hare gets to the beds and no fox into
 
 Wool, down and milk become dearer goods. For that you need the loom or a hut.
 
-at the **loom** (\`bau webstuhl\`: 2×1 cells, 6 driftwood, 2 kelp rope, 8 work) \`craft tuch\` weaves cloth from 3 wool with a spindle, and \`craft decke\` sews a down blanket from 2 cloth and 3 down. At a **hut's** hearth \`craft käse\` makes a cheese from 3 milk and a log of driftwood. Gesa buys eggs, wool, milk and down, Marta cloth, blankets and cheese.`,
+at the **loom** (\`bau webstuhl\`: 2×1 cells, 6 driftwood, 2 kelp rope, 8 work) \`craft tuch\` weaves cloth from 3 wool with a spindle, and \`craft decke\` sews a down blanket from 2 cloth and 3 down. At a **hut's** hearth \`craft käse\` makes a cheese from 3 milk and a log of driftwood. Gesa buys eggs, wool, milk and down, Marta cloth, blankets and cheese.
+
+## Bees {#bees}
+
+Bees live in a **hive** (\`bau bienenstock\`: 1×1 cell, 2 driftwood, 2 kelp rope, 4 work, up to 3 colonies), from the start. You buy a **bee colony** from Gesa at the Kupferhafen market; \`stable bienenvolk\` puts it into your hive.
+
+Bees eat **flowers**: sea pink, dune rose, fog flower and hops, which grow in the [ornamental bed](help.game.garden#bed). \`fodder\` gives them flowers like any animal its feed; one flower keeps a colony fed for a day. Fed, each colony gives a pot of **honey** every other day, and a lump of **wax** comes with every three pots; \`collect\` fetches both. Now and then a strong colony swarms, and a new one moves in until the hive is full.
+
+Honey is food (\`eat honey\`). At a **hut's** hearth \`craft kerze\` makes two candles from 2 wax and 1 linen. Gesa buys honey and wax, Marta honey and candles, and the inn in the harbour quarter asks for honey at the job board.
+
+You keep up to three coops, pens and hives together.`,
 		},
 	},
 	{
