@@ -205,7 +205,7 @@ Die Karte zeigt den Ort, an dem du gerade bist. Ein Klick lässt deine Figur dor
 Das Menü bietet an, was zum Feld passt:
 
 - **Ding oder Feuer:** ansehen, aufheben, nachlegen.
-- **Figur:** ansehen, „Chat mit …“, Tausch anbieten.
+- **Figur:** ansehen, „Chat mit …“, Tausch anbieten. Tauschen geht mit jedem am selben Ort, nicht nur direkt neben dir: auch über ein Ding im Gepäck („… anbieten …“) und unter **Aktionen → Markt** („Tausch anbieten …“).
 - **Baustelle:** liefern und mitarbeiten. Deine eigene ist auf der Karte hervorgehoben und heißt „Deine Baustelle“.
 - **Freies Feld:** **Bauen …** (Plan wählen, dann OK: die Baustelle beginnt an diesem Feld nach rechts unten), mit Spaten ein Beet umgraben.
 - **Beet oder Acker:** **ansehen** zeigt nur dieses eine Beet oder diesen einen Acker (nicht die der Nachbarn), dazu gießen, jäten, ernten, pflanzen, bestellen und zäunen, je nachdem, was gerade geht.
@@ -313,7 +313,7 @@ The map shows the place you are in. A click sends your figure there. The right m
 The menu offers what fits the cell:
 
 - **Thing or fire:** look, pick up, add fuel.
-- **Figure:** look, “Chat with …”, offer a swap.
+- **Figure:** look, “Chat with …”, offer a swap. You can trade with anyone in the same place, not only right next to you: also from a thing in your pack (“… offer …”) and under **Actions → Market** (“Offer a swap …”).
 - **Site:** deliver and help. Your own is highlighted on the map and called “Deine Baustelle”.
 - **Free cell:** **Build …** (pick a plan, then OK: the site starts at that cell towards the bottom right), dig a bed with a spade.
 - **Bed or field:** **look** shows only that one bed or field (not those of the neighbours), plus water, weed, harvest, plant, sow and fence, whatever is possible right now.

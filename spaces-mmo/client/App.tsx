@@ -325,7 +325,8 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 		return [...m].map(([n, k]) => (k > 1 ? `${k}× ${n}` : n)).join(", ");
 	};
 	const wants = (w: Array<{ name: string; count: number }>) => (w.length ? ` für ${counted(w)}` : " als Geschenk");
-	const has = trade.offersIn.length || trade.offersOut.length || trade.orders || trade.myOrder || trade.listings || offerTo;
+	// a trade can be offered to anyone in the room, with or without a market here
+	const has = trade.offersIn.length || trade.offersOut.length || trade.orders || trade.myOrder || trade.listings || offerTo !== null || (!guest && others.length > 0 && carried.length > 0);
 	if (!has) return null;
 	return (
 		<div className="things trade">
@@ -1114,7 +1115,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		{...(account.guest ? {} : { offer: (to: string, name: string) => { setTradeItem({ name }); setOfferTo(to); setBagPart("market"); } })} />;
 	const marketView = <>
 		{trade && hello && <TradePanel trade={trade} chars={chars} objs={objs} me={me} guest={account.guest} offerTo={offerTo} setOfferTo={setOfferTo} item={tradeItem} send={send} />}
-		{!!trade && !trade.orders && !trade.listings && <p className="muted bag-note">Das Marktbrett und die Auftragstafel stehen in den Häfen und Dörfern. Stell dich daneben, dann erscheinen sie hier. Tauschen geht überall, wo jemand neben dir steht.</p>}
+		{!!trade && !trade.orders && !trade.listings && <p className="muted bag-note">Das Marktbrett und die Auftragstafel stehen in den Häfen und Dörfern. Stell dich daneben, dann erscheinen sie hier. Tauschen geht mit jedem, der am selben Ort ist.</p>}
 	</>;
 	const ordersHere = [...objs.values()].filter((o) => o.kind === "site" && o.location === hello?.room.roomId).reduce((n, o) => n + (o.orders?.length ?? 0), 0);
 	const insertCommand = (c: string) => { setCmdHelp(null); setLine(`${c} `); setBag(true); setBagPart("mine"); if (detent === "peek") setDetent("half"); requestAnimationFrame(() => input.current?.focus()); };

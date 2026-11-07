@@ -72,7 +72,8 @@ test("the way goes around what stands in it, and none is none", () => {
 test("a carried thing shows what it can do here and now, nothing it cannot", () => {
 	const uses = { recipes: [{ key: "tangseil", name: "Tangseil", needs: [{ name: "Tang", count: 3 }] }, { key: "tuch", name: "Tuch", needs: [{ name: "Wolle", count: 3 }], tool: "Spindel", at: "webstuhl" }], feed: { huhn: ["Hafer"] }, offerings: ["Perle"], flowers: [], chests: ["huette"], stores: [], steps: [] };
 	const pack = (n: string, k: number) => Array.from({ length: k }, (_, i): [string, ObjView] => [`${n}${i}`, obj({ id: `${n}${i}`, kind: "item", name: n, location: "me", x: 0, y: 0 })]);
-	const at = (...more: Array<[string, ObjView]>) => ({ ...input, objs: new Map<string, ObjView>(more) });
+	// alone in the room: whom to give or offer to is the business of the cases with people below
+	const at = (...more: Array<[string, ObjView]>) => ({ ...input, chars: new Map([["me", me]]), objs: new Map<string, ObjView>(more) });
 	const lines = (n: string, i: ReturnType<typeof at>) => itemEntries(n, i, uses, { fuels: ["Treibholz"] }).map((e) => e.line);
 	assert.deepEqual(lines("Hafer", at(...pack("Hafer", 1))), [], "far from everything: only laying down and looking");
 	assert.deepEqual(lines("Tang", at(...pack("Tang", 2))), [], "two of three");
@@ -88,6 +89,9 @@ test("a carried thing shows what it can do here and now, nothing it cannot", () 
 	const ines = new Map([["me", me], ["o", char("o", "Ines", 6, 5)]]);
 	assert.deepEqual(itemEntries("Hafer", { ...at(...pack("Hafer", 1)), chars: ines, offer: () => {} }, uses, { fuels: [], market: () => {} }).map((e) => e.line), ["give Hafer an Ines", "#offer Ines", "#sell"]);
 	assert.deepEqual(itemEntries("Hafer", { ...at(...pack("Hafer", 1)), chars: ines, guest: true }, uses, { fuels: [] }), [], "a guest gives nothing");
+	// anyone in the room, not only beside one: the nearest first
+	const far = new Map([["me", me], ["f", char("f", "Fern", 18, 12)], ["o", char("o", "Ines", 6, 5)]]);
+	assert.deepEqual(itemEntries("Hafer", { ...at(...pack("Hafer", 1)), chars: far, offer: () => {} }, uses, { fuels: [] }).map((e) => e.line), ["give Hafer an Ines", "#offer Ines", "give Hafer an Fern", "#offer Fern"]);
 });
 
 test("an own fallow field offers what one carries to sow", () => {

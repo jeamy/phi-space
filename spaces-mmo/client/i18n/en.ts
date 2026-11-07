@@ -352,7 +352,7 @@ export const EN: Record<string, string> = {
 	"Das Lagerbuch:": "The warehouse ledger:",
 	"Das Licht des Feuers reicht für keinen weiteren Bau; ein Leuchtturm oder ein zweites Feuer würde helfen.": "The fire's light won't cover another building; a lighthouse or a second fire would help.",
 	"Das Marktbrett ist leer. „markt biete <ding> für <n>“ stellt etwas ein.": "The market board is empty. „market sell <item> for <n>“ lists something.",
-	"Das Marktbrett und die Auftragstafel stehen in den Häfen und Dörfern. Stell dich daneben, dann erscheinen sie hier. Tauschen geht überall, wo jemand neben dir steht.": "The market board and the order board stand in the harbours and villages. Stand next to them and they appear here. You can trade anywhere someone stands next to you.",
+	"Das Marktbrett und die Auftragstafel stehen in den Häfen und Dörfern. Stell dich daneben, dann erscheinen sie hier. Tauschen geht mit jedem, der am selben Ort ist.": "The market board and the order board stand in the harbours and villages. Stand next to them and they appear here. You can trade with anyone in the same place.",
 	"Das Rathaus reißt kein Beschluss ab.": "No resolution tears down the town hall.",
 	"Das Rezept ist kaputt.": "The recipe is broken.",
 	"Das Spiel läuft als Text weiter.": "The game continues as text.",

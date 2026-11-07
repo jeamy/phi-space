@@ -78,7 +78,8 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 		if (r.at && !built.some((b) => b.plan === r.at)) continue;
 		if (![...out.values()].some((e) => e.label.startsWith(`${r.name} `))) add({ label: `${r.name} herstellen`, line: `craft ${r.key}` });
 	}
-	if (!guest) for (const c of chars.values()) if (c.charId !== me && Math.max(Math.abs(c.x - self.x), Math.abs(c.y - self.y)) <= 1) {
+	// to anyone in the room, near or not (the server asks no more): those nearest first
+	if (!guest) for (const c of [...chars.values()].filter((x) => x.charId !== me).sort((x, y) => Math.max(Math.abs(x.x - self.x), Math.abs(x.y - self.y)) - Math.max(Math.abs(y.x - self.x), Math.abs(y.y - self.y)))) {
 		add({ label: `${c.name} geben`, line: `give ${name} an ${c.name}` });
 		if (offer) add({ label: `${c.name} anbieten …`, line: `#offer ${c.name}`, run: () => offer(c.name) });
 	}
