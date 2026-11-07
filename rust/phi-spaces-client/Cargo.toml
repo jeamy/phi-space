@@ -1,0 +1,15 @@
+[package]
+name = "phi-spaces-client"
+description = "The client of the space service (src/remote.ts, src/socket.ts, src/space-client.ts): RemoteSpace with stable request identity, retries and polls, the socket transport and the helpers every project shares (docs/rust-portierung.en.md, R8.1)"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+phi-json = { path = "../phi-json" }
+tokio.workspace = true
+getrandom = "0.2"
+
+[[bin]]
+name = "phi-client-driver"
+path = "src/bin/phi-client-driver.rs"

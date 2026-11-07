@@ -10,6 +10,7 @@ import type {ClosableStoreHost} from '../src/store/types.ts';
 import {openSyncSpace,provisionFileSigner,SpaceService,StaticIdentity,DEFAULT_POLICY,RemoteSpace,inProcessTransport,OutcomeUnknown,PhiSpaces,core,type SyncSpace,type PrimarySyncConfig,type Reply,type Connection} from '../src/index.ts';
 import {SqliteRecoveryRegister} from '../src/recovery-register.ts';
 import {CommitSealedPending} from '../src/remote.ts';
+import {remoteSpace} from './support/client-under-test.ts';
 import {sealedResolver,sealedCandidateOf,type SealedSyncSpace} from '../src/sync-spaces.ts';
 import {sealedReply} from '../src/service.ts';
 import {ctx,freePort} from './support/persistent.ts';
@@ -40,7 +41,7 @@ function host(p:()=>SyncSpace){
  const sealed=(u:SealedSyncSpace):Svc=>({handleText:async(_t,conn)=>JSON.stringify(await ids.authenticate(conn)?sealedReply(u.sealed):{ok:false,error:{code:'Unauthenticated',message:''}} as Reply)});
  const served=(h:ClosableStoreHost):Svc=>new SpaceService({host:h,ctx,identity:ids,policy:DEFAULT_POLICY,onSealed:()=>void resolver.resolve(p()),sealedCandidate:()=>sealedCandidateOf(p())});
  current=served(p().harness!);
- const remote=new RemoteSpace(inProcessTransport({handleText:(t,c)=>current.handleText(t,c)},{peerId:'peer-a'}),{space:'jobs-sync',attempts:1,backoffMs:1,sleep:ms=>new Promise(r=>setTimeout(r,Math.min(ms,30)))});
+ const remote=remoteSpace(inProcessTransport({handleText:(t,c)=>current.handleText(t,c)},{peerId:'peer-a'}),{space:'jobs-sync',attempts:1,backoffMs:1,sleep:ms=>new Promise(r=>setTimeout(r,Math.min(ms,30)))});
  return {remote,resolver};
 }
 const until=async(f:()=>Promise<boolean>,what:string)=>{for(let n=0;n<200;n++){if(await f())return;await new Promise(r=>setTimeout(r,25));}assert.fail(`timed out: ${what}`);};

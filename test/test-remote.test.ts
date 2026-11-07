@@ -9,6 +9,7 @@ import {
 import { forEachBackend, ctx } from "./support/persistent.ts";
 import { openTestHost } from "./support/host.ts";
 import { OTHER_SERVER, underTest, type Case } from "./support/service-under-test.ts";
+import { remoteSpace } from "./support/client-under-test.ts";
 import type { StoreHost } from "../src/store/types.ts";
 
 const ids = new StaticIdentity({ "peer-a": { principal: { peerId: "peer-a", agentId: "w1" }, roles: ["member"] }, "peer-obs": { principal: { peerId: "peer-obs" }, roles: ["observer"] } });
@@ -66,7 +67,7 @@ test("the SpaceLike contract: the same steps give the same results locally and r
 	};
 	const local = await steps(new PhiSpaces(await memory(), ctx, Date.now, undefined, "peer-a/w1"));
 	const u = await under(tc);
-	const remote = await steps(new RemoteSpace(u.transport("peer-a"), fast));
+	const remote = await steps(remoteSpace(u.transport("peer-a"), fast));
 	assert.deepEqual(remote, local);
 });
 
@@ -76,7 +77,7 @@ test("lost requests and lost answers: the retries carry the same identity, every
 		const link = new Flaky(u.transport("peer-a"), seed);
 		link.dropRequest = 0.25;
 		link.dropAnswer = 0.25;
-		const r = new RemoteSpace(link, { ...fast, attempts: 40 });
+		const r = remoteSpace(link, { ...fast, attempts: 40 });
 		for (let i = 0; i < 20; i++) await r.write({ type: "Job", fields: { i } }, null, FOREVER);
 		assert.equal(await r.count({ type: "Job" }), 20, `seed ${seed}: every write once, none twice (${JSON.stringify(link.stats)})`);
 		const got: number[] = [];
@@ -90,7 +91,7 @@ test("lost requests and lost answers: the retries carry the same identity, every
 test("after the attempts are used up the caller gets OutcomeUnknown with the request; retrying that request finds the stored result", async (tc) => {
 	const run = async (inner: Transport) => {
 		const link = new Flaky(inner, 9);
-		const r = new RemoteSpace(link, { ...fast, attempts: 3 });
+		const r = remoteSpace(link, { ...fast, attempts: 3 });
 		await r.write({ type: "Job", fields: { n: 1 } }, null, FOREVER); // establishes hello and the generation
 		link.dropAnswer = 1; // the host acts, but nothing ever comes back
 		let unknown: OutcomeUnknown | undefined;
@@ -110,7 +111,7 @@ test("after the attempts are used up the caller gets OutcomeUnknown with the req
 
 test("a blocked take is polled; the client's own patience ends only the waiting", async (tc) => {
 	const u = await under(tc);
-	const a = new RemoteSpace(u.transport("peer-a"), { ...fast, maxClientWaitMs: 150 });
+	const a = remoteSpace(u.transport("peer-a"), { ...fast, maxClientWaitMs: 150 });
 	let unknown: OutcomeUnknown | undefined;
 	const t0 = Date.now();
 	try { await a.take({ type: "Late" }, 10_000); } catch (e) { unknown = e as OutcomeUnknown; }
@@ -123,7 +124,7 @@ test("a blocked take is polled; the client's own patience ends only the waiting"
 	assert.equal((view.result as { fields: { v: number } }).fields.v, 42, "the entry was not lost although nobody was waiting");
 	assert.equal(await u.local.count({ type: "Late" }), 0);
 	// a patient client simply gets it
-	const patient = new RemoteSpace(u.transport("peer-a"), fast);
+	const patient = remoteSpace(u.transport("peer-a"), fast);
 	const waiting = patient.take({ type: "Soon" }, 5_000);
 	const written = new Promise((r) => setTimeout(r, 100)).then(() => u.local.write({ type: "Soon", fields: { v: 1 } }, null, FOREVER));
 	assert.equal((await waiting)?.fields.v, 1);
@@ -132,7 +133,7 @@ test("a blocked take is polled; the client's own patience ends only the waiting"
 
 test("cancelOperation ends a pending call for its waiter", async (tc) => {
 	const u = await under(tc);
-	const a = new RemoteSpace(u.transport("peer-a"), { ...fast, maxClientWaitMs: 100 });
+	const a = remoteSpace(u.transport("peer-a"), { ...fast, maxClientWaitMs: 100 });
 	let unknown: OutcomeUnknown | undefined;
 	try { await a.read({ type: "Never" }, 10_000); } catch (e) { unknown = e as OutcomeUnknown; }
 	assert.equal((await a.cancelOperation(unknown!.request)).state, "cancelled");
@@ -142,23 +143,23 @@ test("cancelOperation ends a pending call for its waiter", async (tc) => {
 
 test("server answers become the usual error classes; mailbox methods work and local hooks remain local", async (tc) => {
 	const u = await under(tc);
-	const obs = new RemoteSpace(u.transport("peer-obs"), fast);
+	const obs = remoteSpace(u.transport("peer-obs"), fast);
 	await assert.rejects(obs.write({ type: "Job", fields: {} }, null, FOREVER), core.PermissionError);
-	const a = new RemoteSpace(u.transport("peer-a"), fast);
+	const a = remoteSpace(u.transport("peer-a"), fast);
 	await assert.rejects(a.write({ type: "Job", fields: { big: "x".repeat(70_000) } }, null, FOREVER), core.ResourceExhausted);
 	await assert.rejects(a.commit("t-nothing"), core.TransactionError);
 	await assert.rejects(a.take({ type: "X" }, 0, { once: { get: async () => undefined, set: async () => {} } }), core.IllegalArgumentError);
 	assert.ok((await a.notify({ type: "Job" }, { target: "self", lease: FOREVER })).eventId);
 	assert.ok(await a.wait({ type: "Missing" }, { target: "self", timeout: 1, take: false }));
-	const unknownSpace = new RemoteSpace(u.transport("peer-a"), { ...fast, space: "nope" });
+	const unknownSpace = remoteSpace(u.transport("peer-a"), { ...fast, space: "nope" });
 	await assert.rejects(unknownSpace.count(), (e: { code?: string }) => e.code === "UnknownSpace");
-	const nobody = new RemoteSpace(u.transport("stranger"), fast);
+	const nobody = remoteSpace(u.transport("stranger"), fast);
 	await assert.rejects(nobody.count(), (e: { code?: string }) => e.code === "Unauthenticated");
 });
 
 test("the client keeps its calls inside the frame the host announced", async (tc) => {
 	const u = await under(tc);
-	const a = new RemoteSpace(u.transport("peer-a"), fast);
+	const a = remoteSpace(u.transport("peer-a"), fast);
 	const lim = (await a.info()).limits.maxFrameBytes;
 	await assert.rejects(a.readPage({ type: "Job", fields: { pad: "z".repeat(lim) } }), core.ResourceExhausted);
 	assert.equal(await a.count({ type: "Job" }), 0, "and keeps working afterwards");
@@ -166,7 +167,7 @@ test("the client keeps its calls inside the frame the host announced", async (tc
 
 test("changes through the remote client: batches, long poll, and resync as SnapshotExpired", async (tc) => {
 	const u = await under(tc);
-	const a = new RemoteSpace(u.transport("peer-a"), fast);
+	const a = remoteSpace(u.transport("peer-a"), fast);
 	for (let i = 0; i < 3; i++) await a.write({ type: "Job", fields: { i } }, null, FOREVER);
 	const c = await a.changes(0);
 	assert.equal(c.rev, c.batches.length);
@@ -184,7 +185,7 @@ test("generations are renewed before they stop admitting, and a known request is
 	const methods: string[] = [];
 	const counting: Transport = { request: (text) => { methods.push(JSON.parse(text).method); return inner.request(text); } };
 	let t = Date.now();
-	const r = new RemoteSpace(counting, { ...fast, generationMarginMs: 5_000, now: () => t });
+	const r = remoteSpace(counting, { ...fast, generationMarginMs: 5_000, now: () => t });
 	await r.write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
 	await r.write({ type: "Job", fields: { n: 2 } }, null, FOREVER);
 	assert.equal(methods.filter((m) => m === "generation").length, 1, "one generation serves the calls inside its admission time");
@@ -198,20 +199,20 @@ test("spaces lists the host's spaces, also those created at runtime; an observer
 	if (OTHER_SERVER) return tc.skip("createSpace at runtime is a host operation the Rust server does not have yet (R5b)");
 	const h = await memory();
 	const sv = service(h);
-	const obs = new RemoteSpace(inProcessTransport(sv, { peerId: "peer-obs" }), fast);
+	const obs = remoteSpace(inProcessTransport(sv, { peerId: "peer-obs" }), fast);
 	await obs.stats(); // the first hello registers the default space
 	await h.commit((tx) => createSpace(tx, "chat-session-1", Date.now()), ctx);
 	const listed = await obs.spaces();
 	assert.deepEqual(listed.map((s) => s.alias), ["default", "chat-session-1"]);
 	assert.ok(listed.every((s) => typeof s.spaceId === "string" && typeof s.createdAt === "number"));
 	const viewer = new SpaceService({ host: h, ctx, identity: new StaticIdentity({ v: { principal: { peerId: "v" }, roles: ["viewer"] } }), policy: { roles: { viewer: { methods: ["hello", "stats"] } } } });
-	await assert.rejects(new RemoteSpace(inProcessTransport(viewer, { peerId: "v" }), fast).spaces(), /not allowed/);
+	await assert.rejects(remoteSpace(inProcessTransport(viewer, { peerId: "v" }), fast).spaces(), /not allowed/);
 	await h.close(ctx);
 });
 
 test("batch: begin, takes, writes and commit in one call and one commit; all or nothing; a retried request runs once", async (tc) => {
 	const u = await under(tc);
-	const r = new RemoteSpace(u.transport("peer-a"), fast);
+	const r = remoteSpace(u.transport("peer-a"), fast);
 	await r.write({ type: "Token", fields: { c: 1 } }, null, FOREVER);
 	await r.write({ type: "Intent", fields: { c: 1, line: "look" } }, null, FOREVER);
 	const local = u.local;
@@ -239,12 +240,12 @@ test("batch: begin, takes, writes and commit in one call and one commit; all or 
 	assert.equal(await wire.request(call), first);
 	assert.equal(await local.count({ type: "Once" }), 1);
 	// an observer may not batch
-	await assert.rejects(new RemoteSpace(u.transport("peer-obs"), fast).batch([{ op: "write", entry: { type: "X", fields: {} } }]), /not allowed/);
+	await assert.rejects(remoteSpace(u.transport("peer-obs"), fast).batch([{ op: "write", entry: { type: "X", fields: {} } }]), /not allowed/);
 });
 
 test("transient writes: announced in the change stream (a put marked transient), never kept; under a transaction at its commit only", async (tc) => {
 	const u = await under(tc);
-	const r = new RemoteSpace(u.transport("peer-a"), fast);
+	const r = remoteSpace(u.transport("peer-a"), fast);
 	const local = u.local;
 	const ops = async (after: number) => (await local.changes(after)).batches.flatMap((b) => b.ops.map((o) => o.op === "put" ? `put ${o.type}${o.transient ? " transient" : ""}` : "del"));
 	const r0 = (await local.revision()).rev;

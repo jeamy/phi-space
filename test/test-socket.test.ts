@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { SpaceService, StaticIdentity, RemoteSpace, serveSpace, socketTransport, PhiSpaces, FOREVER, core, type Connection } from "../src/index.ts";
 import { ctx } from "./support/persistent.ts";
 import { OTHER_SERVER, underTest, type Case } from "./support/service-under-test.ts";
+import { remoteSpace, clientSocketTransport } from "./support/client-under-test.ts";
 import { openTestHost } from "./support/host.ts";
 
 const ids = new StaticIdentity({ "peer-a": { principal: { peerId: "peer-a", agentId: "w1" }, roles: ["member"] }, "peer-obs": { principal: { peerId: "peer-obs" }, roles: ["observer"] } });
@@ -24,8 +25,8 @@ const asPeer = (peerId: string) => (): Connection => ({ peerId });
 test("RemoteSpace over a unix socket: private file, whole contract, cleaned up on close", async (tc) => {
 	const u = await under(tc); const f = await u.address("peer-a");
 	assert.equal(statSync(f.path).mode & 0o777, 0o600, "only the owner may connect");
-	const t = socketTransport({ path: f.path });
-	const r = new RemoteSpace(t, fast);
+	const t = clientSocketTransport({ path: f.path });
+	const r = remoteSpace(t, fast);
 	assert.equal((await r.info()).principal, "peer-a/w1");
 	await r.write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
 	await r.write({ type: "Job", fields: { n: 2 } }, null, FOREVER);
@@ -41,7 +42,7 @@ test("RemoteSpace over a unix socket: private file, whole contract, cleaned up o
 
 test("many calls at once on one connection are matched to their replies by id", async (tc) => {
 	const u = await under(tc); const f = await u.address("peer-a");
-	const r = new RemoteSpace(socketTransport({ path: f.path }), fast);
+	const r = remoteSpace(clientSocketTransport({ path: f.path }), fast);
 	await r.info();
 	await Promise.all(Array.from({ length: 24 }, (_, i) => r.write({ type: "Job", fields: { i } }, null, FOREVER)));
 	assert.equal(await r.count({ type: "Job" }), 24);
@@ -62,8 +63,8 @@ test("a connection that dies after the host acted: the retry on a fresh connecti
 	});
 	await new Promise<void>((res) => proxy.listen(front.path, res));
 	tc.after(() => { proxy.close(); front.done(); });
-	const t = socketTransport({ path: front.path }); tc.after(() => t.close());
-	const r = new RemoteSpace(t, fast);
+	const t = clientSocketTransport({ path: front.path }); tc.after(() => t.close());
+	const r = remoteSpace(t, fast);
 	await r.info();
 	killNext = 3;
 	for (let i = 0; i < 5; i++) await r.write({ type: "Job", fields: { i } }, null, FOREVER);
@@ -73,11 +74,11 @@ test("a connection that dies after the host acted: the retry on a fresh connecti
 
 test("identity comes from the server's connection callback; unknown peers are refused by the service", async (tc) => {
 	const u = await under(tc); const f = await u.address("peer-obs");
-	const r = new RemoteSpace(socketTransport({ path: f.path }), fast);
+	const r = remoteSpace(clientSocketTransport({ path: f.path }), fast);
 	await assert.rejects(r.write({ type: "Job", fields: {} }, null, FOREVER), core.PermissionError);
 	assert.equal(await r.count(), 0);
 	const f2 = await u.address("somebody-unknown");
-	await assert.rejects(new RemoteSpace(socketTransport({ path: f2.path }), fast).count(), (e: { code?: string }) => e.code === "Unauthenticated");
+	await assert.rejects(remoteSpace(clientSocketTransport({ path: f2.path }), fast).count(), (e: { code?: string }) => e.code === "Unauthenticated");
 });
 
 test("limits: an oversized frame ends the connection, too many connections are refused, idle ones are closed", async (tc) => {
@@ -100,7 +101,7 @@ test("limits: an oversized frame ends the connection, too many connections are r
 	for (let i = 0; i < 50 && await u.connections() > 0; i++) await new Promise((r) => setTimeout(r, 10)); // the server learns of a close a moment later
 	assert.equal(await u.connections(), 0);
 	// a client whose own frame limit is larger than the server's gets the answer ResourceExhausted... or a closed connection, never a hang
-	const r = new RemoteSpace(socketTransport({ path: f.path }, { maxFrameBytes: 1_000_000 }), { ...fast, attempts: 2 });
+	const r = remoteSpace(clientSocketTransport({ path: f.path }, { maxFrameBytes: 1_000_000 }), { ...fast, attempts: 2 });
 	await assert.rejects(r.write({ type: "Job", fields: { pad: "z".repeat(5_000) } }, null, FOREVER));
 });
 
@@ -109,7 +110,7 @@ test("the client reconnects after the host restarted, and a TCP port on loopback
 	const h = await memory(); const f = sock();
 	const svc = new SpaceService({ host: h, ctx, identity: ids });
 	let server = await serve(tc, svc, { listen: { path: f.path }, connection: asPeer("peer-a") });
-	const r = new RemoteSpace(socketTransport({ path: f.path }), { ...fast, sleep: (ms) => new Promise((x) => setTimeout(x, Math.min(ms, 20))) });
+	const r = remoteSpace(clientSocketTransport({ path: f.path }), { ...fast, sleep: (ms) => new Promise((x) => setTimeout(x, Math.min(ms, 20))) });
 	await r.write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
 	await server.close();
 	server = await serve(tc, svc, { listen: { path: f.path }, connection: asPeer("peer-a") });
@@ -118,7 +119,7 @@ test("the client reconnects after the host restarted, and a TCP port on loopback
 	await server.close(); f.done();
 	const tcp = await serve(tc, svc, { listen: { host: "127.0.0.1", port: 0 }, connection: asPeer("peer-a") });
 	const port = (tcp.address() as net.AddressInfo).port;
-	const rt = new RemoteSpace(socketTransport({ host: "127.0.0.1", port }), fast);
+	const rt = remoteSpace(clientSocketTransport({ host: "127.0.0.1", port }), fast);
 	assert.equal(await rt.count({ type: "Job" }), 2);
 	await rt.write({ type: "Job", fields: { n: 3 } }, null, FOREVER);
 	assert.equal(await new PhiSpaces(h, ctx).count({ type: "Job" }), 3);
@@ -129,22 +130,22 @@ test("a call without an answer fails after requestTimeoutMs; the next call gets 
 	const s = sock(); tc.after(s.done);
 	let first = true, release: (v: string) => void = () => {}, connections = 0;
 	await serve(tc, { handleText: (text: string) => first ? (first = false, new Promise<string>(r => { release = r; })) : Promise.resolve("answer:" + text) }, { listen: { path: s.path }, connection: () => { connections++; return {}; } });
-	const t = socketTransport({ path: s.path }, { requestTimeoutMs: 100 }); tc.after(() => t.close());
+	const t = clientSocketTransport({ path: s.path }, { requestTimeoutMs: 100 }); tc.after(() => t.close());
 	const started = Date.now();
 	await assert.rejects(t.request("stuck"), /request timed out/);
 	assert.ok(Date.now() - started < 2000);
 	release("late");
 	assert.equal(await t.request("next"), "answer:next");
 	assert.equal(connections, 2, "the stuck connection was dropped");
-	const unbounded = socketTransport({ path: s.path }); tc.after(() => unbounded.close());
+	const unbounded = clientSocketTransport({ path: s.path }); tc.after(() => unbounded.close());
 	assert.equal(await unbounded.request("plain"), "answer:plain");
 });
 
 test("a blocking call and a change poll end at the commit that serves them, not at a polling interval", async (tc) => {
 	const u = await under(tc, { background: true, service: { wakeOnCommit: true } }); const f = await u.address("peer-a");
-	const t = socketTransport({ path: f.path });
+	const t = clientSocketTransport({ path: f.path });
 	tc.after(() => t.close());
-	const a = new RemoteSpace(t, fast), b = new RemoteSpace(t, fast);
+	const a = remoteSpace(t, fast), b = remoteSpace(t, fast);
 	const median = (xs: number[]) => xs.sort((x, y) => x - y)[Math.floor(xs.length / 2)]!;
 	const takes: number[] = [], polls: number[] = [];
 	for (let i = 0; i < 7; i++) {

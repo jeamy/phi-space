@@ -428,6 +428,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "phi-spaces-client"
+version = "0.0.1"
+dependencies = [
+ "getrandom",
+ "phi-json",
+ "tokio",
+]
+
+[[package]]
 name = "phi-store"
 version = "0.0.1"
 dependencies = [

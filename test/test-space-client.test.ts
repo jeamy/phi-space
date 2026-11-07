@@ -3,16 +3,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-	PhiSpaces, SpaceService, StaticIdentity, RemoteSpace, inProcessTransport, FOREVER, NO_WAIT,
-	parseTarget, readExisting, takeExisting, StillHeld, takeAll, awaitWork, peek, keepAlive, type SpaceLike,
+	PhiSpaces, SpaceService, StaticIdentity, inProcessTransport, FOREVER, NO_WAIT,
+	parseTarget, StillHeld, awaitWork, keepAlive, type SpaceLike,
 } from "../src/index.ts";
+import { remoteSpace, readExisting, takeExisting, takeAll, peek } from "./support/client-under-test.ts";
 import { parseListen } from "../src/standalone.ts";
 import { ctx } from "./support/persistent.ts";
 import { openTestHost } from "./support/host.ts";
 
 const ids = new StaticIdentity({ "peer-a": { principal: { peerId: "peer-a", agentId: "w1" }, roles: ["member"] } });
 const local = async () => new PhiSpaces(await openTestHost(ctx), ctx);
-const remote = async () => new RemoteSpace(inProcessTransport(new SpaceService({ host: await openTestHost(ctx), ctx, identity: ids }), { peerId: "peer-a" }), { sleep: () => Promise.resolve(), backoffMs: 1 });
+const remote = async () => remoteSpace(inProcessTransport(new SpaceService({ host: await openTestHost(ctx), ctx, identity: ids }), { peerId: "peer-a" }), { sleep: () => Promise.resolve(), backoffMs: 1 });
 
 test("parseTarget reads unix, tcp and bare paths, and refuses a broken tcp address; parseListen is the same", () => {
 	assert.deepEqual(parseTarget("unix:/tmp/a.sock"), { path: "/tmp/a.sock" });

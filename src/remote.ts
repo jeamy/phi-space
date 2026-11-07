@@ -108,7 +108,8 @@ const CODE_ERRORS: Partial<Record<ErrorCode, (m: string, r?: number) => Error>> 
 	BadRequest: (m) => new core.IllegalArgumentError(m),
 	UniqueConflict: (m) => new core.UniqueConflict(m),
 };
-const toError = (e: { code: ErrorCode; message: string; requiredBytes?: number }): Error => CODE_ERRORS[e.code]?.(e.message, e.requiredBytes) ?? new RemoteError(e.code, e.message, e.requiredBytes);
+/** The error class of a refusal (`ok:false`): also what another client implementation's refusals become (test/support/client-under-test.ts). */
+export const toError = (e: { code: ErrorCode; message: string; requiredBytes?: number }): Error => CODE_ERRORS[e.code]?.(e.message, e.requiredBytes) ?? new RemoteError(e.code, e.message, e.requiredBytes);
 
 export class TransportFailure extends Error {}
 
