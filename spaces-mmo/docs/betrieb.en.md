@@ -63,8 +63,14 @@ running development instance on 3900 does not interfere; web reaches the Spaces 
 
 The same with the Rust Space server (`phi-space-server --profile mmo`) in the Space containers, as a project of its own
 with volumes of its own (`docker/docker-compose.rust.yml`, [rust-portierung.md](../../docs/rust-portierung.en.md)):
-`npm --prefix spaces-mmo run docker:image:rust`, then `docker:rust:up|down|logs`. The machines continue to use the
-TypeScript server; `docker:nano:up` and `docker:big:up` do not read the file.
+`npm --prefix spaces-mmo run docker:image:rust`, then `docker:rust:up|down|logs`.
+
+On the machines the same file swaps the Space containers of the running project for the Rust server, on the same
+volumes and ports: `docker:nano:rust:up|down|logs` on nano, `docker:big:rust:up|down|logs` on big (with the host network
+override). `up` builds both images on the machine (the Rust server is compiled there, as `docker build --network host`)
+and recreates only what changed; world, NPCs, models and web stay TypeScript. Back to the TypeScript server:
+`docker:nano:up` or `docker:big:up`, which read the store files the Rust server wrote. Before the first switch, keep a
+copy of the volume `mmo-space-data` (`docker run --rm -v phi-spaces-mmo_mmo-space-data:/d:ro -v $PWD:/b alpine tar -C /d -czf /b/mmo-space-data.tgz .`).
 
 ## Development (recompiles on every change)
 
