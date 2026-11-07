@@ -419,6 +419,7 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 	const chosen = kinds.find(([name]) => name === picked);
 	const load = carried.reduce((n, o) => n + (o.load ?? 0), 0), max = pack?.max ?? null;
 	const [chestNr, setChestNr] = useState(1);
+	const [storeN, setStoreN] = useState("");
 	const chests = pack?.chests ?? [], chestAt = chests.find((x) => x.nr === chestNr) ?? chests[0];
 	const chosenBox = useRef<HTMLDivElement>(null);
 	useEffect(() => { if (picked) chosenBox.current?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }, [picked]);
@@ -455,8 +456,12 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 					{/* into a chest of one's own, from anywhere (verstaue … in <nr>) */}
 					{!guest && chestAt && <div className="pack-store">
 						{chests.length > 1 ? <select aria-label="Truhe" value={chestAt.nr} onChange={(e) => setChestNr(Number(e.target.value))}>{chests.map((x) => <option key={x.nr} value={x.nr}>{x.label}</option>)}</select> : <span>{`Truhe: ${chestAt.label}`}</span>}
-						<button onClick={() => send(`verstaue ${chosen[0]} in ${chestAt.nr}`)}>1 hineinlegen</button>
-						{chosen[1].length > 1 && <button onClick={() => send(`verstaue alle ${chosen[0]} in ${chestAt.nr}`)}>Alle hineinlegen</button>}
+						{/* how many: a number (at most what is carried), empty: one */}
+						<form className="pack-store-n" onSubmit={(e) => { e.preventDefault(); const n = Math.min(chosen[1].length, Math.max(1, Math.floor(Number(storeN) || 1))); send(`verstaue ${n} ${chosen[0]} in ${chestAt.nr}`); setStoreN(""); }}>
+							<input type="number" inputMode="numeric" min={1} max={chosen[1].length} value={storeN} placeholder="1" aria-label="Wie viele" onChange={(e) => setStoreN(e.target.value)} />
+							<button type="submit">Stück verstauen</button>
+						</form>
+						{chosen[1].length > 1 && <button onClick={() => send(`verstaue alle ${chosen[0]} in ${chestAt.nr}`)}>{`Alle ${chosen[1].length} verstauen`}</button>}
 					</div>}
 					{uses && (() => {
 						// what it can do here and now; the rest of the world's uses stay in the help

@@ -759,7 +759,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      courier's id and a `Courier` entry is written in the command's transaction, the region's world worker writes them
      into the chest of the other region and then takes them here (idempotent by item id, like a crossing's pack). A chest
      that became a ruin meanwhile gets them in its estate. The page shows "Last x von 40" under "Bei dir" and, for a
-     chosen thing, the chest choice with "1 hineinlegen" / "Alle hineinlegen". The tests run with a limit of 100000
+     chosen thing, the chest choice with a count ("Stück verstauen") and "Alle … verstauen". The tests run with a limit of 100000
      (`tests/test-env.ts`); `tests/pack.test.ts` sets 40.
 2. **Gardens** (the equal strand, parallel to all buildings): spade, rain barrel, kinds of beds (kitchen, ornamental,
    communal), seeds from the wild flora, plants with growth stages, watering and weeding,

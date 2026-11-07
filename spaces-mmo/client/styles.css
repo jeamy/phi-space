@@ -239,6 +239,8 @@ button.link:hover { transform: none; text-decoration: underline; }
 .pack-do b { font-weight: 700; }
 .pack-store { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
 .pack-store select, .pack-store span { flex: 1; min-width: 0; }
+.pack-store-n { display: flex; gap: 6px; align-items: center; }
+.pack-store-n input { width: 5.5em; }
 .pack-load { font-weight: 400; color: var(--muted, inherit); }
 .pack-load.over { color: var(--danger, #c0392b); font-weight: 700; }
 .pack-hint { margin: 6px 0 0; padding-left: 8px; border-left: 3px solid var(--warning); font-size: max(12px, var(--min-font)); line-height: 1.4; color: var(--text); }
