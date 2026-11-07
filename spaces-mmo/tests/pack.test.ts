@@ -66,10 +66,11 @@ test("load: 40 at most, what would go over is refused, what others bring arrives
 		assert.match(await does(p, "leg 5 treibholz in die truhe 2", "Du legst"), new RegExp(`Du legst 5 Treibholz in die Truhe deiner Hütte \\(${w.rooms.find((x) => x.roomId === c.room)!.name}\\)`));
 		assert.equal((await s.readAll({ type: "Item", fields: { location: "h-a", proto: "treibholz" } })).length, 5);
 		assert.match(await does(p, "verstaue alle muscheln in anleger", "Du legst"), /Du legst 3 Muschel in die Truhe deiner Hütte \(Anleger\)/);
-		// a chest holds 60 load: the first has 5 driftwood (10), so 25 more go in, the rest stays in the pack
+		// a chest takes everything: all 34 driftwood go in, and the light pack picks up again
 		await give(s, me, "treibholz", 20);
-		assert.match(await does(p, "verstaue alle treibholz in 2", "Du legst"), /Du legst 25 Treibholz .* Mehr passt nicht hinein/);
-		assert.match(await does(p, "verstaue treibholz in 2", "voll"), /ist voll \(60 Last\)/);
+		assert.match(await does(p, "verstaue alle treibholz in 2", "Du legst"), /^Du legst 34 Treibholz in die Truhe deiner Hütte \([^)]+\)\.$/);
+		assert.equal((await s.readAll({ type: "Item", fields: { location: "h-a", proto: "treibholz" } })).length, 39);
+		assert.match(await does(p, "get treibholz", "hebst"), /hebst/);
 		// the page shows the load
 		const st = await p.until((f) => f.t === "atlasState" && f.state.packMax === 40, 20_000, 0);
 		assert.ok(st);

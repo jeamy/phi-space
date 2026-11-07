@@ -50,7 +50,7 @@ test("a warehouse: its owner's chest alone; in a settlement shared by rank, with
 
 		// no settlement: the owner's chest, without a quota; a stranger may not
 		assert.match(await does(anna.p, "verstaue alle tang", "Lager"), /Du legst 30 Tang in das Lager/);
-		assert.match(await does(anna.p, "lager", "Im Lager"), /^Im Lager \(Last 30 von 400\): 30 Tang\.$/);
+		assert.match(await does(anna.p, "lager", "Im Lager"), /^Im Lager \(Last 30\): 30 Tang\.$/);
 		assert.match(await does(bert.p, "lager", "gehört"), /Dieses Lagerhaus gehört Anna; allen dient es erst in einer Siedlung/);
 		assert.match(await does(bert.p, "entnimm tang", "gehört"), /gehört Anna/);
 		assert.match(await does(anna.p, "entnimm 5 tang", "Du nimmst"), /Du nimmst 5 Tang aus dem Lager\.$/);

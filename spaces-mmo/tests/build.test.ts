@@ -145,7 +145,7 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		await give(s, boss.me, "muschel", 3);
 		// the chest: the owner's alone
 		assert.match(await does(boss.p, "leg 2 muscheln in die truhe", "Truhe"), /Du legst 2 Muschel in die Truhe/);
-		assert.match(await does(boss.p, "truhe", "Truhe"), /In der Truhe \(Last 1 von 60\): 2 Muschel/);
+		assert.match(await does(boss.p, "truhe", "Truhe"), /In der Truhe \(Last 1\): 2 Muschel/);
 		assert.match(await does(other.p, "truhe", /nicht dein Bau|neben deinen Bau/), /nicht dein Bau/);
 		assert.match(await does(boss.p, "nimm 1 muschel aus der truhe", "aus der Truhe"), /Du nimmst 1 Muschel/);
 		assert.equal(await pack(s, boss.me, "muschel"), 2);

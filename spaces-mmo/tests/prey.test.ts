@@ -209,7 +209,7 @@ test("a dog and a cat as a player keeps them; scheuche reh; a fence round the ow
 		const kept = async () => ((await s.readAll({ type: "Building", fields: { buildId: hut.buildId } }))[0]!.fields as unknown as BuildingFields).keeper;
 		assert.equal((await kept())?.kind, "hund");
 		await does(p, "verstaue 2 weizen", "Truhe");
-		assert.match(await does(p, "truhe", "Truhe"), /In der Truhe \(Last 2 von 60\): 2 Weizen\./, "the dog is not in the chest");
+		assert.match(await does(p, "truhe", "Truhe"), /In der Truhe \(Last 2\): 2 Weizen\./, "the dog is not in the chest");
 		assert.match(await does(p, "entnimm hund", "nichts"), /In der Truhe ist nichts, was „hund“ heißt/);
 		assert.match(await does(p, "füttere hund", "Futter"), /Du hast kein Futter für den Hund: Ei, Brot, Käse, Milch/);
 		await give(s, a.me, "ei", 4);

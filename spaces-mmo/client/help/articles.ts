@@ -1078,7 +1078,7 @@ Eine Figur trägt höchstens **40 Last** (der Betreiber stellt es ein). Jedes Di
 | 4 | Holzbündel, Huhn, Ente, Gans, Schaf, Ziege, Bienenvolk, Ruderboot, Karren |
 | 8 | Rind, Segelboot |
 
-Unter „Bei dir“ steht, wie viel du trägst. Was dich über die Grenze brächte (aufheben, sammeln, ernten, kaufen, herstellen, aus der Truhe nehmen), geht nicht, bis du etwas in eine Truhe legst oder ablegst. Was dir andere bringen (eine Lieferung, ein Geschenk, Münzen für dein Angebot), kommt trotzdem an. Wer schon mehr trägt, verliert nichts, nimmt aber nichts mehr auf. Eine Truhe hält Last: die Hütte 60, die Räucherei 24, das Lagerhaus 400.
+Unter „Bei dir“ steht, wie viel du trägst. Was dich über die Grenze brächte (aufheben, sammeln, ernten, kaufen, herstellen, aus der Truhe nehmen), geht nicht, bis du etwas in eine Truhe legst oder ablegst. Was dir andere bringen (eine Lieferung, ein Geschenk, Münzen für dein Angebot), kommt trotzdem an. Wer schon mehr trägt, verliert nichts, nimmt aber nichts mehr auf. Eine Truhe nimmt dagegen alles auf, ohne Grenze: verteile, was du nicht tragen kannst, auf deine Truhen.
 
 ## Verfall, Ruine und Nachlass {#decay}
 
@@ -1147,7 +1147,7 @@ A figure carries at most **40 load** (the operator sets it). Each thing weighs b
 | 4 | bundle of wood, hen, duck, goose, sheep, goat, bee colony, rowing boat, cart |
 | 8 | cow, sailing boat |
 
-“Bei dir” shows how much you carry. Whatever would take you over the limit (picking up, gathering, harvesting, buying, crafting, taking from a chest) does not work until you put something in a chest or drop it. What others bring you (a delivery, a gift, coins for your listing) arrives anyway. Whoever already carries more loses nothing but takes nothing more. A chest holds load: the hut 60, the smokehouse 24, the warehouse 400.
+“Bei dir” shows how much you carry. Whatever would take you over the limit (picking up, gathering, harvesting, buying, crafting, taking from a chest) does not work until you put something in a chest or drop it. What others bring you (a delivery, a gift, coins for your listing) arrives anyway. Whoever already carries more loses nothing but takes nothing more. A chest, on the other hand, takes everything, without a limit: spread what you cannot carry over your chests.
 
 ## Decay, ruin and estate {#decay}
 

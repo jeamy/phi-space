@@ -732,7 +732,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      waits for it via its cells instead of reporting "no building site". Acceptance: twenty deliver at the same time,
      exactly six driftwood are taken, the rest stays in the pockets, nobody hears "no building site"; twenty-one hands
      complete it exactly once; from three cells away it says "Geh näher".
-   - **Part 2, built 2026-10-29:** the **chest** of the hut (12 slots then, 60 load since part 3, owner only: `truhe`, `verstaue`, `entnimm`, also
+   - **Part 2, built 2026-10-29:** the **chest** of the hut (12 slots, without a limit since part 3, owner only: `truhe`, `verstaue`, `entnimm`, also
      "leg … in die truhe", "nimm … aus der truhe"); **decay**: a building lasts a week, `repariere` (1 driftwood, anyone)
      resets the deadline; a building that is not held becomes a **ruin** (ten world days, keeps covering its cells, frees
      the light), what lay in the chest waits as **estate** for a month for the owner (`nachlass` at the ruin);
@@ -749,7 +749,8 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      chest). What others bring (a delivery, a gift, coins for a listing) runs in their command and arrives anyway; a
      figure over the limit loses nothing and can still do everything that makes its pack lighter. NPC accounts and the
      light commands (walking, talk, look) are not checked. `entnimm` and `nachlass` take what fits and leave the rest.
-     Chests hold load: the hut 60, the smokehouse 24, the warehouse 400 (a cart on its route unloads by load too).
+     Chests have no limit (the user's decision: only the pack is limited, the player spreads its things over its
+     chests); a plan's `chest` counts things only in a world without `pack`.
      **Storing from anywhere:** `verstaue [n|alle] <ding> [in <truhe>]` puts things into a chest of one's own wherever
      the figure stands: the one beside it, else the only one; with several, by number (`in 2`, numbered by place and
      id, `chestOrder` in `engine/load-format.ts`, the same order on the page) or by words of its name and place
