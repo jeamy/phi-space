@@ -250,7 +250,12 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 
 	/** Characters of guest accounts that lapsed are removed, with what they carried, their cell and what they gave to
 	 *  the fires (else every guest that ever played would stay in the space, and every read of a type would read them).
-	 *  An account held by a transaction (a registration in progress) is skipped this round. */
+	 *  An account held by a transaction (a registration in progress) is skipped this round. A fire's contributions
+	 *  stay in the fire's region, so with regions they are taken there too; and a contribution whose character is in no
+	 *  region and on no ferry, two rounds in a row (one that lapsed before this was so, or whose region took it while
+	 *  this one was down), goes as well. */
+	const all = [space, ...others.values()];
+	let orphans = new Set<string>();
 	const cleanup = async () => {
 		for (const c of await space.readAll({ type: "Character", fields: { guest: true } })) {
 			const ch = fieldsOf<CharacterFields>(c);
@@ -261,9 +266,23 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 			await space.takeIfExists(actorToken(ch.charId), NO_WAIT);
 			for (const type of ["Item", "Spot", "Contribution", "Travel"]) {
 				const key: Record<string, string> = type === "Item" ? { location: ch.charId } : { charId: ch.charId };
-				for (const e of await space.readAll({ type, fields: key })) await space.takeIfExists({ type, id: e.id }, NO_WAIT);
+				for (const s of type === "Contribution" ? all : [space]) for (const e of await s.readAll({ type, fields: key })) await s.takeIfExists({ type, id: e.id }, NO_WAIT);
 			}
 		}
+		const given = await space.readAll({ type: "Contribution" });
+		if (!given.length) { orphans = new Set(); return; }
+		const present = new Set<string>();
+		for (const s of all) {
+			for (const e of await s.readAll({ type: "Character" })) present.add(String(e.fields.charId));
+			for (const e of await s.readAll({ type: "Handover" })) present.add(String(e.fields.charId));
+		}
+		const now = new Set<string>();
+		for (const e of given) {
+			if (present.has(String(e.fields.charId))) continue;
+			if (orphans.has(e.id)) await space.takeIfExists({ type: "Contribution", id: e.id }, NO_WAIT);
+			else now.add(e.id);
+		}
+		orphans = now;
 	};
 	const sweep = setInterval(() => void cleanup().catch((e) => console.error("[world] cleanup:", (e as Error).message)), envMs("SPACES_MMO_CLEANUP_MS", 60_000));
 	sweep.unref?.();
