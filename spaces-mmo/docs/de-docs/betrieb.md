@@ -68,8 +68,8 @@ spaces-mmo run docker:image:rust`, dann `docker:rust:up|down|logs`.
 Auf den Rechnern tauscht dieselbe Datei die Space-Container des laufenden Projekts gegen den Rust-Server, auf denselben
 Volumes und Ports: `docker:nano:rust:up|down|logs` auf nano, `docker:big:rust:up|down|logs` auf big (mit dem
 Host-Netz-Override). `up` baut beide Images auf dem Rechner (der Rust-Server wird dort kompiliert, als
-`docker build --network host`) und erstellt nur neu, was sich geändert hat; Welt, NPCs, Modelle und Web bleiben
-TypeScript. Zurück zum TypeScript-Server: `docker:nano:up` bzw. `docker:big:up`, die die Store-Dateien des Rust-Servers
+`docker build --network host`) und erstellt neu, was sich geändert hat; Welt, NPCs, Modelle und Web bleiben
+TypeScript. Jeder Web-Build bekommt eine neue Next-Build-ID, daher startet `up` auch Welt, NPCs, Modelle und Web neu; nur die Space-Container tauscht, wer sie mit denselben Dateien beim Namen startet (`docker compose … -f docker/docker-compose.rust.yml --profile big up -d --no-build --no-deps space-west space-nord space-ost space-sued`). Zurück zum TypeScript-Server: `docker:nano:up` bzw. `docker:big:up`, die die Store-Dateien des Rust-Servers
 lesen. Vor dem ersten Wechsel eine Kopie des Volumes `mmo-space-data` aufheben (`docker run --rm -v phi-spaces-mmo_mmo-space-data:/d:ro -v $PWD:/b alpine tar -C /d -czf /b/mmo-space-data.tgz .`).
 
 ## Entwicklung (kompiliert bei jeder Änderung neu)
@@ -99,6 +99,12 @@ Ein Rechner betreibt genau ein Profil. Auf beiden: `git pull --ff-only`, dann da
 eine Variante mit dem Rust-Space-Server, `docker:nano:rust:up|down|logs` und `docker:big:rust:up|down|logs` (dasselbe
 Projekt, dieselben Volumes, nur die Space-Container wechseln; siehe oben). Der Wechsel in beide Richtungen braucht keinen
 weiteren Schritt; vor dem ersten Wechsel eine Kopie von `mmo-space-data` aufheben.
+
+**Seit 2026-11-07 laufen beide Rechner mit dem Rust-Space-Server** (der Accounts-Space auf nano, die vier Regionen auf
+big; Welt, NPCs, Modelle und Web sind TypeScript). Neuer Spielcode wird daher mit `docker:big:rust:up` auf big (und
+`docker:nano:rust:up` auf nano) ausgerollt; ein einfaches `docker:big:up` / `docker:nano:up` brächte den
+TypeScript-Space-Server zurück. Die TypeScript-Volumes von vor dem Wechsel liegen auf jedem Rechner in
+`~/phi-backup/2026-11-07-mmo-<rechner>-rust/mmo-space-data-ts.tgz`.
 
 | Rechner | Prozesse | Skript | `.env` |
 | --- | --- | --- | --- |

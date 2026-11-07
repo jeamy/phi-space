@@ -4,7 +4,7 @@ Stand: 2026-10-31. **Ziel- und Arbeitsplan.** R0 bis R3 sind umgesetzt und abgen
 Cargo-Workspace enthält `phi-json`, `phi-core`, `phi-store`, `phi-service`, `phi-wire`, `phi-host` und `phi-space-server`, und beide
 Projekte laufen auf dem Rust-Server. Von R4 ist der lokale Teil erledigt, R5 ist begonnen (Scheiben 1 bis 3, Abschnitt R5). **Festlegung 2026-10-31:** Zuerst wird die
 Implementierung vollständig, es gibt keine Teilportierung im Betrieb; bis dahin wird nur lokal entwickelt und getestet.
-`big`, `nano` und ihr Zusammenspiel werden lokal simuliert (`docker:local`, mehrere Container und ein Netz dazwischen), jede Abnahme mit mehreren Hosts, Replikation, Fencing oder Handy bekommt so eine Simulation und bleibt nicht offen. Der echte Umstieg auf den Servern, R8.6 auf den Hosts und R-D12 kommen danach. R5b bis R8 und M1 sind nicht begonnen. Die Entscheidungen R-D0 bis R-D11 (Abschnitt 9)
+`big`, `nano` und ihr Zusammenspiel werden lokal simuliert (`docker:local`, mehrere Container und ein Netz dazwischen), jede Abnahme mit mehreren Hosts, Replikation, Fencing oder Handy bekommt so eine Simulation und bleibt nicht offen. Der echte Umstieg auf den Servern, R8.6 auf den Hosts und R-D12 kommen danach. **Festlegung 2026-11-07:** Der Rust-Space-Server wird getrennt ausgeliefert: Die Space-Container von spaces-mmo auf `big` und `nano` steigen jetzt um (R4), die Spielprozesse folgen schrittweise mit R8 (R8.6 auf den Hosts an dessen Ende). R5b bis R8 und M1 sind nicht begonnen. Die Entscheidungen R-D0 bis R-D11 (Abschnitt 9)
 sind getroffen, R-D12 und R-D13 sind offen und keine Freigaben.
 
 ## 1. Ergebnis und Abgrenzung
@@ -815,7 +815,7 @@ Alle Rust-Werte stammen vom selben Binary, dem Stand dieses Commits. R-D2 ist da
 
 ### R4: Betrieb einer Anwendung auf Rust
 
-**Stand 2026-10-31:** Der lokale Teil ist erledigt, der Umstieg auf den Servern nicht begonnen.
+**Stand 2026-11-07:** Der lokale Teil ist erledigt; die Space-Container von spaces-mmo auf nano und big laufen seit 2026-11-07 auf Rust (unten).
 
 - **Image:** Die Stufe `production-rust` der beiden Dockerfiles legt das Binary in das Produktions-Image, `npm run docker:image:rust` baut `:prod` und `:rust`. `docker/docker-compose.rust.yml` (je Projekt) enthält nur die Space-Container. `docker:rust:up|down|logs` läuft als eigenes Compose-Projekt mit eigenen Volumes auf den Ports von `docker:local`. `docker:nano:up` und `docker:big:up` lesen die Datei nicht und bleiben auf TS; in spaces-mmo legen `docker:nano:rust:up|down|logs` und `docker:big:rust:up|down|logs` sie über das Profil des Rechners (dasselbe Projekt und dieselben Volumes, zurück mit `docker:nano:up`/`docker:big:up`; spaces-mmo/docs/betrieb.en.md).
 - **`spaces-mmo`:** Fünf Space-Container auf Rust (je 2–10 MB RSS unter leichter Last), vier World-Worker und Web auf TS, 5 Gäste 60 s über `live-load.ts` ohne Fehler in den Logs. `npc` und `model` liefen nicht mit, weil die lokale `.env` Modellaufrufe einschaltet.
@@ -823,7 +823,9 @@ Alle Rust-Werte stammen vom selben Binary, dem Stand dieses Commits. R-D2 ist da
 - **`codemode-chat`:** Space auf Rust, Judge und Web auf TS, Start und Rückwechsel laufen. Der Store war dabei leer, belegt ist hier also nur der Start; Daten belegen die `.local`-Kopien aus R3 Scheibe 7.
 - **Build aus dem Arbeitsbaum:** Das Image übernimmt unversionierte Dateien. Scheitert ihre Typprüfung, scheitert der Build; das gilt für `docker:image` genauso.
 
-**Noch offen:** R-D12, Bestandsprüfung und Sicherung auf `big` und `nano`, Umstieg nach Rückfrage, Testbett `sieve-mobile` (`test-scenario`), eine Woche Betrieb, Rückwechsel mit laufender Arbeit im Betrieb, das Dashboard gegen den Rust-Server.
+**Noch offen:** R-D12, eine Woche Betrieb (Bestandsprüfung, Sicherung und Umstieg auf `big` und `nano` erledigt, unten).
+
+**Der Umstieg auf den Servern (2026-11-07).** Nach der Festlegung vom 2026-11-07 sind die Space-Container von spaces-mmo umgestiegen: der Accounts-Space auf nano um 21:47 UTC, die vier Regionen auf big um 21:53 UTC, beide auf Commit `324c469`. Welt, NPCs, Modelle und Web bleiben TypeScript. Je Rechner: das Image dort gebaut (`docker:image:rust`); eine Kopie des laufenden Volumes mit `phi-space-server --profile mmo` in einem Container ohne Netz geöffnet (jeder Store erreichte seine Ready-Zeile; eine während eines Schreibens gezogene Kopie von `world-sued` war zerrissen, zwei frische bestanden `integrity_check` und öffneten sich); die TypeScript-Space-Container gestoppt, das Volume gestoppt gesichert (`~/phi-backup/2026-11-07-mmo-<rechner>-rust/mmo-space-data-ts.tgz`), dann der Rust-Server auf denselben Dateien gestartet. Auf big wurden nur die vier Space-Dienste beim Namen gestartet (`--no-deps`), Welt, NPCs und Web liefen weiter; der Wechsel dauerte etwa 6 s, die Verbindungsfehler und `outcome unknown`-Zeilen der Worker fallen in dieses Fenster, danach kam keine. Eine Anmeldung mit falschem Passwort über das Web auf big erreichte den Accounts-Space auf nano und wurde wie zuvor abgewiesen. Rückweg: `docker:nano:up` / `docker:big:up` auf denselben Volumes (der oben geprobte Rückwechsel); weiter zurück die gesicherten Volumes. Offen sind die Woche Betrieb und R-D12 (wie lange der TypeScript-Server erlaubter Rückweg bleibt).
 
 **Arbeit:**
 
