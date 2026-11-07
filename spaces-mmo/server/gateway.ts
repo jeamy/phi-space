@@ -144,8 +144,9 @@ const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView
 const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}) });
 const exitView = (f: ExitFields, w: WorldDef): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, to: whereTo(w, f), toRoom: f.destination, location: f.location, x: f.x, y: f.y });
 const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = "", players: ReadonlySet<string> = new Set()): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}),
-	// said to the viewer alone, or what its own figure did as the room sees it ("$you() stellst 3 Brot her": „Du stellst …“)
-	...(m.to === viewer || m.actor === viewer ? { mine: true as const } : {}),
+	// said to the viewer alone, or what its own figure did as the room is told ("$you() stellst 3 Brot her": „Du stellst …“;
+	// "jeamy erntet auf dem Acker …", told as an emote like most deeds); what it says (talk, channels) stays with the room's talk
+	...(m.to === viewer || m.actor === viewer || (m.fromId === viewer && m.kind !== "say" && m.kind !== "channel") ? { mine: true as const } : {}),
 	...(["say", "emote", "channel"].includes(m.kind) && m.fromId && !m.fromId.startsWith("npc-") ? { player: true as const } : {}),
 	...(m.kind === "who" ? { players: whoNames(m.text).filter((n) => players.has(n)) } : {}),
 	...(m.kind === "help" && m.help ? { help: m.help } : {}) });

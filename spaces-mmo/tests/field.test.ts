@@ -93,6 +93,11 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		assert.match(await does(helper.p, "bestelle", "darf"), /wer ihn angelegt hat/);
 		assert.match(await does(boss.p, "flur offen", "öffnet"), /säen und ernten darf jetzt jeder/);
 		assert.match(await does(helper.p, "bestelle", "bestellt"), /ist mit Gerste bestellt \(Bäuerin \(1\), Knecht \(1\)\)\. Reif in etwa/);
+		// what a figure did is for it (the events' „An dich“), for the others it happened around them
+		const told = (p: Player) => (p.frames.findLast((x) => x.t === "msg" && /ist mit Gerste bestellt/.test(x.m.text)) as Extract<ServerFrame, { t: "msg" }> | undefined)?.m;
+		assert.equal(told(helper.p)?.mine, true);
+		await eventually(async () => told(boss.p) ?? null, 10_000, "the owner hears it too");
+		assert.equal(told(boss.p)!.mine, undefined);
 		let f = (await theField(s))!;
 		assert.equal(f.stage, "waechst");
 		assert.deepEqual(f.yields, [{ proto: "gerste", count: 16 }]);
