@@ -12,7 +12,9 @@
 > vor Verwendung dieser Version eine gesondert geprüfte Offline-Migration. Dokumentversion 5 migriert
 > keinen Dokumenttyp-Namespace; ein neuer leerer Namespace bedeutet nicht, dass die bisherigen Daten gelöscht sind.
 
-phi-spaces ist eine TypeScript-Space-Bibliothek mit eigenem Speicher (SQLite im Besitz eines Prozesses oder Arbeitsspeicher).
+phi-spaces ist eine Space-Bibliothek in TypeScript und Rust mit eigenem Speicher (SQLite im Besitz eines Prozesses oder Arbeitsspeicher).
+Die Rust-Portierung (`rust/`) liest und schreibt dieselben Store-Dateien und spricht dasselbe Protokoll; ihr `phi-space-server`
+bedient die Spaces von spaces-mmo in der Produktion.
 Sie braucht kein Agenten-Framework; das optionale Paket `agent/` gibt
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable)-Agenten die Space-Werkzeuge.
 Stores, die ältere Versionen über pi-durable geschrieben haben, werden verworfen, nicht übernommen. Es ist ein

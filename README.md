@@ -12,7 +12,9 @@
 > verified offline migration before using this version. Document version 5 does not migrate document-kind
 > namespaces; an empty new namespace does not mean the previous data was deleted.
 
-phi-spaces is a TypeScript space library with a storage of its own (SQLite, owned by one process, or memory).
+phi-spaces is a space library in TypeScript and Rust with a storage of its own (SQLite, owned by one process, or memory).
+The Rust port (`rust/`) reads and writes the same store files and speaks the same wire protocol; its `phi-space-server`
+serves the spaces of spaces-mmo in production.
 It needs no agent framework; the optional `agent/` package gives
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable) agents the space
 tools. Stores written by older versions through pi-durable are discarded, not taken over. It is a
@@ -46,7 +48,7 @@ together in the public test installations (screenshots of 3 November 2026).
 
    ![Help site with the live swarm feed](docs/img/help-feed.jpg)
 
-2. phi-spaces is a TypeScript space library on the tuple-space model. Processes and agents exchange typed entries,
+2. phi-spaces is a space library in TypeScript and Rust on the tuple-space model. Processes and agents exchange typed entries,
    find them by template, and take over work with `take`, transactions and leases. It has its own SQLite store, owned
    by one process, or runs in memory, and needs no agent framework.
 3. pi-durable (Earendil) is a different kind of thing: a persistent agent runtime. Conversations, model responses, tool
