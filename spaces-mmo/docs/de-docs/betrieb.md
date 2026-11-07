@@ -63,8 +63,14 @@ Docker: `npm --prefix spaces-mmo run docker:test`.
 
 Dasselbe mit dem Rust-Space-Server (`phi-space-server --profile mmo`) in den Space-Containern, als eigenes Projekt mit
 eigenen Volumes (`docker/docker-compose.rust.yml`, [rust-portierung.md](../../../docs/rust-portierung.en.md)): `npm --prefix
-spaces-mmo run docker:image:rust`, dann `docker:rust:up|down|logs`. Die Rechner nutzen weiter den TypeScript-Server;
-`docker:nano:up` und `docker:big:up` lesen die Datei nicht.
+spaces-mmo run docker:image:rust`, dann `docker:rust:up|down|logs`.
+
+Auf den Rechnern tauscht dieselbe Datei die Space-Container des laufenden Projekts gegen den Rust-Server, auf denselben
+Volumes und Ports: `docker:nano:rust:up|down|logs` auf nano, `docker:big:rust:up|down|logs` auf big (mit dem
+Host-Netz-Override). `up` baut beide Images auf dem Rechner (der Rust-Server wird dort kompiliert, als
+`docker build --network host`) und erstellt nur neu, was sich geändert hat; Welt, NPCs, Modelle und Web bleiben
+TypeScript. Zurück zum TypeScript-Server: `docker:nano:up` bzw. `docker:big:up`, die die Store-Dateien des Rust-Servers
+lesen. Vor dem ersten Wechsel eine Kopie des Volumes `mmo-space-data` aufheben (`docker run --rm -v phi-spaces-mmo_mmo-space-data:/d:ro -v $PWD:/b alpine tar -C /d -czf /b/mmo-space-data.tgz .`).
 
 ## Entwicklung (kompiliert bei jeder Änderung neu)
 
@@ -89,12 +95,15 @@ Grenzen stehen in `.env.example`.
 
 ## Produktion: nano und big
 
-Ein Rechner betreibt genau ein Profil. Auf beiden: `git pull --ff-only`, dann das Skript des Rechners.
+Ein Rechner betreibt genau ein Profil. Auf beiden: `git pull --ff-only`, dann das Skript des Rechners. Jedes Skript hat
+eine Variante mit dem Rust-Space-Server, `docker:nano:rust:up|down|logs` und `docker:big:rust:up|down|logs` (dasselbe
+Projekt, dieselben Volumes, nur die Space-Container wechseln; siehe oben). Der Wechsel in beide Richtungen braucht keinen
+weiteren Schritt; vor dem ersten Wechsel eine Kopie von `mmo-space-data` aufheben.
 
 | Rechner | Prozesse | Skript | `.env` |
 | --- | --- | --- | --- |
-| nano | Konten-Space (Zugangsdaten, Web-Sitzungen) | `docker:nano:up` | `SPACES_MMO_SPACE_BIND=<interne Adresse von nano>` |
-| big | die vier Regionen (Space, Welt-Worker, NPCs, Modell je Region) und web | `docker:big:up` | `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, `SPACES_MMO_WEB_REGIONS` (unten), `PI_AUTH_DIR` |
+| nano | Konten-Space (Zugangsdaten, Web-Sitzungen) | `docker:nano:up` (Rust: `docker:nano:rust:up`) | `SPACES_MMO_SPACE_BIND=<interne Adresse von nano>` |
+| big | die vier Regionen (Space, Welt-Worker, NPCs, Modell je Region) und web | `docker:big:up` (Rust: `docker:big:rust:up`) | `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, `SPACES_MMO_WEB_REGIONS` (unten), `PI_AUTH_DIR` |
 
 Jeder Region-Space braucht einen schnellen Kern; auf nano (kleine VM) rechnete ein Kern etwa dreimal so lange wie auf big
 ([lasttest-2026-10-28.md](../lasttest-2026-10-28.en.md)). Deshalb liegt die Welt auf big und nur der Konten-Space auf nano.

@@ -46,6 +46,6 @@ npm --prefix spaces-mmo run typecheck
 
 Model calls stay off unless `SPACES_MMO_LLM=1` is set; they cost tokens. Docker: `docker:local:up` runs big and nano
 together on this machine (port 3910), `docker:dev:up` one container with the source mounted (port 3920); production is
-`docker:nano:up` and `docker:big:up` on the respective machine. Details in [docs/betrieb.en.md](docs/betrieb.en.md).
+`docker:nano:up` and `docker:big:up` on the respective machine (`docker:nano:rust:up`, `docker:big:rust:up` with the Rust Space server). Details in [docs/betrieb.en.md](docs/betrieb.en.md).
 
 Graphics credits: `worlds/leuchtfeuer/assets/CREDITS.md` (CC BY 4.0).

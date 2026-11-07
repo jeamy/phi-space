@@ -41,7 +41,7 @@ npm --prefix spaces-mmo run typecheck
 
 With Docker there are `docker:local:up` (big and nano together on this machine, port 3910, image built beforehand with
 `docker:image`) and `docker:dev:up` (one container with the source mounted, recompiles on every change,
-port 3920). Production: `docker:nano:up` and `docker:big:up` on the respective machine. Details are in
+port 3920). Production: `docker:nano:up` and `docker:big:up` on the respective machine (`docker:nano:rust:up`, `docker:big:rust:up` with the Rust Space server). Details are in
 [betrieb.en.md](betrieb.en.md).
 
 ## Documents

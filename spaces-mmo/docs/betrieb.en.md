@@ -95,12 +95,15 @@ off). The newest available model whose ID contains `SPACES_MMO_LLM_MODEL` is cho
 
 ## Production: nano and big
 
-One machine runs exactly one profile. On both: `git pull --ff-only`, then the script of the machine.
+One machine runs exactly one profile. On both: `git pull --ff-only`, then the script of the machine. Each script has a
+variant with the Rust Space server, `docker:nano:rust:up|down|logs` and `docker:big:rust:up|down|logs` (same project,
+same volumes, only the Space containers change; see [Testing locally](#testing-locally-both-roles-on-this-machine) above). Switching between the
+two needs no other step; keep a copy of `mmo-space-data` before the first switch.
 
 | Machine | Processes | Script | `.env` |
 | --- | --- | --- | --- |
-| nano | accounts Space (credentials, web sessions) | `docker:nano:up` | `SPACES_MMO_SPACE_BIND=<internal address of nano>` |
-| big | the four regions (Space, world worker, NPCs, model per region) and web | `docker:big:up` | `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, `SPACES_MMO_WEB_REGIONS` (below), `PI_AUTH_DIR` |
+| nano | accounts Space (credentials, web sessions) | `docker:nano:up` (Rust: `docker:nano:rust:up`) | `SPACES_MMO_SPACE_BIND=<internal address of nano>` |
+| big | the four regions (Space, world worker, NPCs, model per region) and web | `docker:big:up` (Rust: `docker:big:rust:up`) | `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, `SPACES_MMO_WEB_REGIONS` (below), `PI_AUTH_DIR` |
 | big | the arena for the codemode chat's bot tasks (`server/arena.ts`; a compose project of its own, `phi-spaces-mmo-arena`, so the world's up/down leaves it alone) | `docker:arena:up` | none: it reads no `.env` (its worlds must not see the game's spaces); loopback port 3990, `SPACES_MMO_ARENA_WORLDS` (default 2); a durable run's world waits for the next judge as long as the dead one's lease (about 11 min with `CODEMODE_MAX_TIMEOUT_S=600`) and holds a slot meanwhile |
 
 Every region Space needs a fast core; on nano (small VM) one core computed about three times as long as on big
