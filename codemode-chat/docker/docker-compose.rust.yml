@@ -1,6 +1,7 @@
 # The Rust space server in the space containers, for a test bed on this machine (docs/rust-portierung.en.md, R4):
-# `npm run docker:rust:up` after `npm run docker:image:rust`, as a project of its own with volumes of its own. The hosts
-# keep the TypeScript server: docker:nano:up and docker:big:up do not read this file.
+# `npm run docker:rust:up` after `npm run docker:image:rust`, as a project of its own with volumes of its own. On nano
+# (the space lives there) `docker:nano:rust:up` lays it over the nano profile (same project, same volume); docker:nano:up
+# does not read it and brings the TypeScript server back. big has no space container.
 services:
   space:
     build:

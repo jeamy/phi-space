@@ -36,6 +36,9 @@
     "docker:rust:up": "NANO_CPUS=${NANO_CPUS:-2} PORT=${PORT:-3710} CODEMODE_SPACE_BIND=127.0.0.1 CODEMODE_SPACE_PORT=3810 docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.rust.yml -p phi-spaces-codemode-rust --profile nano --profile big up -d --no-build",
     "docker:rust:down": "docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.rust.yml -p phi-spaces-codemode-rust --profile nano --profile big down",
     "docker:rust:logs": "docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.rust.yml -p phi-spaces-codemode-rust --profile nano --profile big logs -f",
+    "docker:nano:rust:up": "npm run docker:image:rust && docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano up -d --no-build",
+    "docker:nano:rust:down": "docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano down",
+    "docker:nano:rust:logs": "docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano logs -f",
     "docker:dev:up": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev up -d --build codemode-chat-dev",
     "docker:dev:down": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev down",
     "docker:dev:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev logs -f codemode-chat-dev"
