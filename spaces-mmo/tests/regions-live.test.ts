@@ -51,20 +51,22 @@ test("regions: newcomers start in every region's bay, and a ferry takes a charac
 	} finally { await srv.close(); await r.close(); }
 });
 
-test("regions: a lapsed guest's contributions to a fire in another region go with it, and orphaned ones go too", async () => {
+test("regions: a lapsed guest's contributions to a fire in another region go with it; anything whose owner might be registered stays", async () => {
 	const r = await startRegions({ worldEnv: { SPACES_MMO_CLEANUP_MS: "300" } });
 	try {
 		const gave = (charId: string, name: string) => r.space("west").write({ type: "Contribution", fields: { beaconId: "feuer-bucht", charId, name, pieces: 1, ms: 60_000 } as never }, null, FOREVER);
 		// a guest in the north whose account has lapsed (none was written), with a contribution to a fire in the west
 		await r.space("nord").write({ type: "Character", fields: { charId: "c-lapsed", accountId: "a-lapsed", name: "Strandläufer-1", guest: true, room: "moewenfels-strand", x: 3, y: 3 } as never }, null, FOREVER);
 		await gave("c-lapsed", "Strandläufer-1");
-		// one whose character is in no region any more, and one of a character that plays on in the east
+		// one whose character is in no region any more (a registered player in a transaction looks like that for a
+		// round — it must never lose its reputation), and one of a character that plays on in the east
 		await gave("c-nowhere", "Strandläufer-2");
 		const kept = (await r.space("ost").readAll({ type: "Character" }))[0]!;
 		await gave(String(kept.fields.charId), String(kept.fields.name));
 		const left = async () => (await r.space("west").readAll({ type: "Contribution" })).map((e) => String(e.fields.charId));
-		await eventually(async () => { const l = await left(); return !l.includes("c-lapsed") && !l.includes("c-nowhere"); }, 10_000, "both contributions taken");
-		assert.ok((await left()).includes(String(kept.fields.charId)), "a contribution of a character that is there stays");
+		await eventually(async () => { const l = await left(); return !l.includes("c-lapsed"); }, 10_000, "the lapsed guest's contribution is taken");
+		const l = await left();
+		assert.ok(l.includes("c-nowhere") && l.includes(String(kept.fields.charId)), `no other contribution goes: ${l}`);
 		assert.equal((await r.space("nord").readAll({ type: "Character", fields: { charId: "c-lapsed" } })).length, 0);
 	} finally { await r.close(); }
 });

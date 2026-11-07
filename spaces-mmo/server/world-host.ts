@@ -250,14 +250,14 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		}
 	})();
 
-	/** Characters of guest accounts that lapsed are removed, with what they carried, their cell and what they gave to
-	 *  the fires (else every guest that ever played would stay in the space, and every read of a type would read them).
-	 *  An account held by a transaction (a registration in progress) is skipped this round. A fire's contributions
-	 *  stay in the fire's region, so with regions they are taken there too; and a contribution whose character is in no
-	 *  region and on no ferry, two rounds in a row (one that lapsed before this was so, or whose region took it while
-	 *  this one was down), goes as well. */
+	/** Characters of guest accounts that lapsed are removed, with what they carried, their cell, what they gave to
+	 *  the fires and how they travelled (else every guest that ever played would stay in the space, and every read of
+	 *  a type would read them). A fire's contributions stay in the fire's region, so with regions they are taken
+	 *  there too. Of a registered account nothing is ever deleted — no contribution, no reputation, no trips: its
+	 *  account still exists, so this loop never sees its character, and a character not found for a round (held by a
+	 *  transaction, say) is no reason to take anything of anyone. An account held by a transaction (a registration
+	 *  in progress) is skipped this round. */
 	const all = [space, ...others.values()];
-	let orphans = new Set<string>();
 	const cleanup = async () => {
 		for (const c of await space.readAll({ type: "Character", fields: { guest: true } })) {
 			const ch = fieldsOf<CharacterFields>(c);
@@ -271,20 +271,6 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 				for (const s of type === "Contribution" ? all : [space]) for (const e of await s.readAll({ type, fields: key })) await s.takeIfExists({ type, id: e.id }, NO_WAIT);
 			}
 		}
-		const given = await space.readAll({ type: "Contribution" });
-		if (!given.length) { orphans = new Set(); return; }
-		const present = new Set<string>();
-		for (const s of all) {
-			for (const e of await s.readAll({ type: "Character" })) present.add(String(e.fields.charId));
-			for (const e of await s.readAll({ type: "Handover" })) present.add(String(e.fields.charId));
-		}
-		const now = new Set<string>();
-		for (const e of given) {
-			if (present.has(String(e.fields.charId))) continue;
-			if (orphans.has(e.id)) await space.takeIfExists({ type: "Contribution", id: e.id }, NO_WAIT);
-			else now.add(e.id);
-		}
-		orphans = now;
 	};
 	/** What an NPC carries beyond `packMax` of one kind spoils, coins beyond `coinMax` go back into the world's purse: the
 	 *  settlers harvest more than they sell and the gardener gathers seeds every world hour, and every thing is an entry
