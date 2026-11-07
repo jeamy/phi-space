@@ -67,7 +67,9 @@ Die Docker-Konfiguration liegt in `help-site/docker/Dockerfile` und `help-site/d
 - **`spaces-help-prod`** – gehärteter Produktiv-Container (`NODE_ENV=production`, unprivilegierter User, `cap_drop`, SQLite-Volume `/data/spaces-eibrain.sqlite`, Healthcheck).
 - **`spaces-help-dev`** – Next.js Dev-Mode mit Live-Reload.
 - **`spaces-help-test`** – baut Corpus + Next.js und führt die vollständige Help-Suite einschließlich Regressionen, Corpus-Konsistenz, Batches und aktiviertem SSR-Test aus.
-- **`swarm-nano`** – optionaler Headless-Worker-Shard (Profil `nano`), eigener SQLite-Store und Socket auf Port 3600. `SWARM_REMOTE` verbindet den Hub; rohe TCP-Sockets nur über vertrauenswürdiges Netz/SSH-Tunnel betreiben, nicht öffentlich ohne Schutz.
+- **`swarm-space`** – der Space-Prozess des Swarms auf big (`/data/swarm.sqlite` im selben Volume, Loopback-Port 3610); der Hub erreicht ihn über `SWARM_SPACE`. TypeScript (`server/space-host.ts`) oder Rust (`phi-space-server --profile help`, `docker:prod:rust:up`).
+- **`swarm-space-nano`** – der Space-Prozess des nano-Shards (Profil `nano`, `/data/swarm-b.sqlite`, Port 3600, dort endet der Tunnel des Hubs).
+- **`swarm-nano`** – optionaler Headless-Worker-Shard (Profil `nano`), Client von `swarm-space-nano`. `SWARM_REMOTE` verbindet den Hub; rohe TCP-Sockets nur über vertrauenswürdiges Netz/SSH-Tunnel betreiben, nicht öffentlich ohne Schutz.
 
 ```bash
 # A) Lokale Tests isoliert in der Dev-Docker-Umgebung bauen & ausführen:
@@ -202,7 +204,8 @@ help-site/
 ├── server/                          # Node.js HTTP + WebSocket Server (Custom Server um Next.js)
 │   ├── index.ts                     # Einstieg: Next-Handler, /api/feed/*, /api/llm/*, Admin-API, WS-Routing (Gateway: phi-spaces/ws)
 │   ├── llm.ts                       # pi-ai-Anbindung: Modell-Discovery, Picker-API, ON/OFF-Toggle, Generatoren
-│   ├── nano-host.ts                 # Optionaler Headless-Worker-Shard mit eigenem Store
+│   ├── nano-host.ts                 # Optionaler Headless-Worker-Shard
+│   ├── space-host.ts                # Der Space-Prozess des Swarms (TypeScript; Rust: phi-space-server --profile help)
 │   ├── admin/                       # Login-geschütztes Web-Admin-Backend (analog MobileSpaces)
 │   │   └── admin-controller.ts      # ADMIN_KINDS, QR-Enroll, Objekt-Inspektion, Deployment-Panel
 │   ├── space-chat/                  # Stufen-Orchestrator (wechselt live zwischen v1 bis v6)

@@ -62,8 +62,14 @@ What **phi-spaces actually implements**:
   an external image service. User uploads are stored outside the Space document; Posts contain their URLs.
 - **Inspector:** Entry counts, revision, pending tasks, posts/minute, dispatcher and LLM metrics; feed deltas use `changes(rev)`.
 
-An optional headless second shard runs in `server/nano-host.ts`, selected through `SWARM_REMOTE`.
-It has its own worker and store. This demo wiring is not a general replicated/failover cluster.
+The swarm Space is a store of its own, apart from the help store (chat stages, control space, admin state). The process
+that holds it is `server/space-host.ts` in TypeScript or the Rust `phi-space-server --profile help`. It sets the
+limits and the completion profile, writes the `HostInfo` entry and purges above `SWARM_MAX_ENTRIES`
+(`server/social/space-side.ts`). The swarm engines are only its clients: the hub reaches it through `SWARM_SPACE`, and
+without that variable the store lives in the hub's process (`swarm.sqlite` beside `HELP_SQLITE`, or memory). An
+optional headless second shard runs in `server/nano-host.ts`, selected through `SWARM_REMOTE`; on nano it is the
+engine beside the shard's Space process, and the hub reaches the same process through the tunnel. This demo wiring is
+not a general replicated/failover cluster.
 
 ### Multiplayer Space-Chat: `/?view=space-chat&session=lobby`
 
@@ -126,6 +132,9 @@ node --experimental-strip-types help-site/examples/v6-mobile-control/run.ts
 
 # All help, regression and worker-batch tests; no model calls:
 PHI_SPACES_LLM=0 npm --prefix help-site test
+# The same with the swarm Space in a separate process: the Rust server (started with --profile help) or the TypeScript one
+HELP_SPACE_SERVER=$PWD/rust/target/release/phi-space-server PHI_SPACES_LLM=0 npm --prefix help-site test
+HELP_SPACE_SERVER=server/space-host.ts PHI_SPACES_LLM=0 npm --prefix help-site test
 
 # Fresh production build and separate Next.js SSR check:
 PHI_SPACES_LLM=0 npm --prefix help-site run test:production
@@ -133,14 +142,16 @@ PHI_SPACES_LLM=0 npm --prefix help-site run test:production
 
 ### Docker
 
-Configuration: `help-site/docker/Dockerfile` and `help-site/docker/docker-compose.yml`, with four services:
+Configuration: `help-site/docker/Dockerfile` and `help-site/docker/docker-compose.yml`, with six services:
 
 | Service | Purpose |
 |---|---|
-| `spaces-help-prod` | Production Next.js server, unprivileged user, dropped capabilities, SQLite volume and healthcheck; host networking. |
+| `spaces-help-prod` | Production Next.js server, unprivileged user, dropped capabilities, SQLite volume and healthcheck; host networking. Its swarm Space is `swarm-space` (`SWARM_SPACE`, default `tcp:127.0.0.1:3610`). |
+| `swarm-space` | The hub shard's swarm Space process on big: `/data/swarm.sqlite` on the same volume, served on the loopback (`SWARM_SPACE_PORT`, default 3610); started together with the server. |
 | `spaces-help-dev` | Next.js development mode; published port and separate SQLite volume. |
 | `spaces-help-test` | Fresh corpus/Next.js build and the full help test suite, profile `test`, with SSR enabled. |
-| `swarm-nano` | Optional headless worker shard, profile `nano`, separate SQLite volume and socket port 3600. On the `nano` host (rootless Docker) build containers on the default network cannot reach the internet, so `npm ci` hangs: build there with `docker build --network host -f help-site/docker/Dockerfile --target nano -t phi-spaces-help:nano .` from the repository root. |
+| `swarm-space-nano` | The nano shard's swarm Space process, profile `nano`: `/data/swarm-b.sqlite` on its own volume, socket port 3600 (the hub's tunnel ends here). |
+| `swarm-nano` | Optional headless worker shard engine, profile `nano`, a client of `swarm-space-nano`. On the `nano` host (rootless Docker) build containers on the default network cannot reach the internet, so `npm ci` hangs: build there with `docker build --network host -f help-site/docker/Dockerfile --target nano -t phi-spaces-help:nano .` from the repository root. |
 
 Compose requires a private `PHI_SPACES_ADMIN_PASSWORD` during configuration, including test-profile selection.
 Production uses a prebuilt `.next` output; development compiles with Turbopack.
@@ -150,7 +161,8 @@ Startup time depends on the store and machine; no fixed latency is guaranteed.
 # Full help suite, including integration, regressions, consistency, batches and SSR:
 npm --prefix help-site run docker:test
 
-# Production start, logs, stop:
+# Production start, logs, stop (docker:prod:rust:up / docker:nano:rust:up: the swarm Space on the Rust server,
+# docker/docker-compose.rust.yml; docker:prod:up / docker:nano:up bring the TypeScript one back on the same files):
 npm --prefix help-site run docker:prod:up
 npm --prefix help-site run docker:prod:logs
 npm --prefix help-site run docker:prod:down
@@ -178,10 +190,12 @@ Do not expose raw shard TCP sockets publicly without protection: use a trusted n
 | `HELP_SQLITE` | Direct-start store; default `help-site/.local/spaces-eibrain.sqlite`. Production Compose fixes `/data/spaces-eibrain.sqlite` in its volume. |
 | `SWARM_AGENTS` / `SWARM_RATE` | Simulated identities and intent-generation rate, as described above. |
 | `SWARM_REMOTE` | Optional hub-side shard endpoint, e.g. `tcp:127.0.0.1:3600` through an SSH tunnel. |
+| `SWARM_SPACE` | The swarm Space's process for the hub or a shard engine (`tcp:HOST:PORT`, `unix:/path`); unset, the store lives in that process. |
+| `SWARM_RETENTION_MS` | How often the Space process looks for the purge, default 10000. |
 | `SWARM_LLM_RATE` | Share of new hub-shard posts written by a live model, 0..1, default 0.01 (cost guard; only the hub has model access, so posts routed to the second shard never use it). |
 | `SWARM_MAX_ENTRIES` | Entry cap per shard database, default 20000, `0` disables. Above it the oldest posts (with their likes and history nodes) are purged in bursts down to 95 %; the feed shows a yellow notice. Test-system limit, not a product limit. |
 | `SWARM_HOST_NAME` | Name this host reports in the test-system bar below the live views (default: the machine's hostname; set `big` / `nano` in each host's `.env`). |
-| `SWARM_LISTEN`, `SWARM_DB`, `SWARM_TAG`, `SWARM_PRODUCE` | Headless-shard listener, store, ID prefix and optional local intent generation; see `.env.example`. |
+| `SWARM_LISTEN`, `SWARM_DB`, `SWARM_TAG`, `SWARM_PRODUCE` | The Space process's listener and store (`space-host.ts`, `phi-space-server --profile help`, `SWARM_MEM=1` in memory), the shard's ID prefix and optional local intent generation; see `.env.example`. |
 
 <a id="demo-vertrag-und-wiederanlauf"></a>
 
@@ -294,10 +308,12 @@ help-site/
 │   ├── index.ts                  # HTTP, Next.js, uploads, API and WebSocket routing
 │   ├── llm.ts                    # Optional providers, picker and budget
 │   ├── nano-host.ts              # Optional headless shard
+│   ├── space-host.ts             # The swarm Space's process (TypeScript; Rust: phi-space-server --profile help)
 │   ├── admin/                    # Authenticated administrative control
 │   ├── space-chat/               # Command dispatcher, sessions and stage reports
 │   └── social/
 │       ├── swarm.ts              # Dispatcher, feed, simulated identities and shard routing
+│       ├── space-side.ts         # Host code of the swarm Space: limits, profile, HostInfo, purge
 │       ├── batch.ts              # Actual reserve/finish batches
 │       └── history.ts            # Persistent linked history and cursor paging
 ├── client/                       # React UI, styles and client lifecycles

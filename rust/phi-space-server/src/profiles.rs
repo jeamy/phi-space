@@ -3,7 +3,7 @@
 // a Process entry whose lease is renewed, the store file given back. All of this is host code, which writes as nobody, so
 // it runs on the store's own thread, not through a call. One thread per store: a slow disk under one space holds back
 // no other.
-use crate::{fail, stopping};
+use crate::{fail, help, stopping};
 use phi_json::{obj, Json, FOREVER};
 use phi_service::{Options, Service};
 use phi_store::{system_random, Compaction, Ledger, MemoryLedger, SpaceHost, SqliteLedger, Store, Synchronous};
@@ -33,6 +33,14 @@ struct Instance {
 	/// The host-name variable of the project, when this store carries the process's Process entry.
 	presence: Option<&'static str>,
 	compact_ms: u64,
+	/// The help site's swarm Space in this store (help.rs): the name variable of its HostInfo entry and its purge.
+	swarm: Option<Swarm>,
+}
+
+struct Swarm {
+	name_var: &'static str,
+	retention: Option<help::Retention>,
+	every_ms: u64,
 }
 
 fn env(name: &str) -> Option<String> { std::env::var(name).ok().filter(|v| !v.is_empty()) }
@@ -68,10 +76,10 @@ fn mmo() -> (Vec<Instance>, String) {
 	let mut all = vec![];
 	if world {
 		let name = region.map_or_else(|| "world.sqlite".to_owned(), |r| format!("world-{r}.sqlite"));
-		all.push(Instance { listen: world_listen.clone(), file: data.as_ref().map(|d| d.join(name)), peer: "peer-mmo-world", wake_on_commit: true, max_inflight: 1024, limits: limits(), locks: vec!["world", "npc"], presence: Some("SPACES_MMO_HOST_NAME"), compact_ms });
+		all.push(Instance { listen: world_listen.clone(), file: data.as_ref().map(|d| d.join(name)), peer: "peer-mmo-world", wake_on_commit: true, max_inflight: 1024, limits: limits(), locks: vec!["world", "npc"], presence: Some("SPACES_MMO_HOST_NAME"), compact_ms, swarm: None });
 	}
 	if accounts {
-		all.push(Instance { listen: accounts_listen.clone(), file: data.as_ref().map(|d| d.join("accounts.sqlite")), peer: "peer-mmo-web", wake_on_commit: true, max_inflight: 1024, limits: limits(), locks: vec!["names"], presence: (!world).then_some("SPACES_MMO_HOST_NAME"), compact_ms });
+		all.push(Instance { listen: accounts_listen.clone(), file: data.as_ref().map(|d| d.join("accounts.sqlite")), peer: "peer-mmo-web", wake_on_commit: true, max_inflight: 1024, limits: limits(), locks: vec!["names"], presence: (!world).then_some("SPACES_MMO_HOST_NAME"), compact_ms, swarm: None });
 	}
 	let shown = |served: bool, l: &str| if served { l.to_owned() } else { "-".to_owned() };
 	let line = format!("[space] ready: world on {}, accounts on {} ({})", shown(world, &world_listen), shown(accounts, &accounts_listen), data.as_ref().map_or_else(|| "memory".to_owned(), |d| d.display().to_string()));
@@ -113,7 +121,20 @@ fn codemode() -> (Vec<Instance>, String) {
 	}
 	let listen = env("CODEMODE_LISTEN").unwrap_or_else(|| "unix:/tmp/codemode-space.sock".to_owned());
 	let line = format!("[space] ready on {listen} (db {})", file.as_ref().map_or_else(|| "memory".to_owned(), |f| f.display().to_string()));
-	(vec![Instance { listen, file, peer: "peer-codemode", wake_on_commit: false, max_inflight: 32, limits, locks: vec![], presence: Some("CODEMODE_HOST_NAME"), compact_ms: 0 }], line)
+	(vec![Instance { listen, file, peer: "peer-codemode", wake_on_commit: false, max_inflight: 32, limits, locks: vec![], presence: Some("CODEMODE_HOST_NAME"), compact_ms: 0, swarm: None }], line)
+}
+
+/// help-site/server/space-host.ts: the swarm Space of one shard.
+fn help_site() -> (Vec<Instance>, String) {
+	let file = (env("SWARM_MEM").as_deref() != Some("1")).then(|| env("SWARM_DB").map_or_else(|| local().join("swarm.sqlite"), PathBuf::from));
+	if let Some(d) = file.as_ref().and_then(|f| f.parent()).filter(|d| !d.as_os_str().is_empty()) {
+		std::fs::create_dir_all(d).unwrap_or_else(|e| fail(format!("{}: {e}", d.display())));
+	}
+	let listen = env("SWARM_LISTEN").unwrap_or_else(|| "unix:/tmp/swarm-space.sock".to_owned());
+	let line = format!("[space] ready on {listen} (db {})", file.as_ref().map_or_else(|| "memory".to_owned(), |f| f.display().to_string()));
+	let name_var = if env("SWARM_HOST_NAME").is_some() { "SWARM_HOST_NAME" } else { "HELP_HOST_NAME" };
+	let swarm = Swarm { name_var, retention: help::retention(), every_ms: help::every_ms() };
+	(vec![Instance { listen, file, peer: "peer-swarm", wake_on_commit: true, max_inflight: 1024, limits: help::limits(), locks: vec![], presence: None, compact_ms: 0, swarm: Some(swarm) }], line)
 }
 
 fn text_of(file: &str) -> String { std::fs::read_to_string(file).unwrap_or_default() }
@@ -220,6 +241,10 @@ fn run_instance(i: Instance, ready: mpsc::Sender<()>, mut stop: watch::Receiver<
 			}
 		}
 	}
+	if let Some(sw) = &i.swarm {
+		let facts = host_facts(sw.name_var, service.now());
+		help::prepare(&mut service, facts, sw.retention.map(|r| r.cap)).unwrap_or_else(|e| fail(e.message));
+	}
 	let presence = i.presence.map(|name_var| Rc::new(RefCell::new(Presence::new(name_var, service.now()))));
 	if let Some(p) = &presence {
 		p.borrow_mut().beat(&mut service);
@@ -232,6 +257,16 @@ fn run_instance(i: Instance, ready: mpsc::Sender<()>, mut stop: watch::Receiver<
 	if let Some(p) = &presence {
 		let p = Rc::clone(p);
 		serving.periodic.push(Periodic { every_ms: PROCESS_BEAT_MS, run: Box::new(move |s| p.borrow_mut().beat(s)) });
+	}
+	if let Some(cfg) = i.swarm.as_ref().and_then(|sw| sw.retention) {
+		serving.periodic.push(Periodic {
+			every_ms: i.swarm.as_ref().map_or(10_000, |sw| sw.every_ms),
+			run: Box::new(move |s| match help::purge(s, cfg) {
+				Ok(Some(line)) => println!("{line}"),
+				Ok(None) => {}
+				Err(e) => eprintln!("[swarm] retention purge failed: {}", e.message),
+			}),
+		});
 	}
 	if let (Some(f), true) = (i.file.clone(), i.compact_ms > 0) {
 		serving.periodic.push(Periodic {
@@ -266,7 +301,8 @@ pub fn run(profile: &str) {
 	let (instances, line) = match profile {
 		"mmo" => mmo(),
 		"codemode" => codemode(),
-		other => fail(format!("no profile {other}: mmo or codemode")),
+		"help" => help_site(),
+		other => fail(format!("no profile {other}: mmo, codemode or help")),
 	};
 	let (stop, stopping) = watch::channel(false);
 	let (ready, up) = mpsc::channel();

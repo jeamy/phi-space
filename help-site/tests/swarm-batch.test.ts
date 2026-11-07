@@ -9,6 +9,7 @@ import { core, createSpace, FOREVER, Meter, PhiSpaces, spaceDoc, OwnStoreHost, o
 import { abortBatch, boundedPreparation, finishBatch, reserveBatch } from "../server/social/batch.ts";
 import type { SwarmPost } from "../server/social/swarm.ts";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
+import { swarmSpace } from "./swarm-space.ts";
 
 /** The own host over a ledger that keeps nothing (memory) and counts the commits it is handed; `fail` makes a write
  *  fail, after which the host takes no more work (it must be reopened). */
@@ -31,23 +32,23 @@ async function fixture(n = 4) {
 		for (let i = 0; i < n; i++) core.write(s, now, { type: "SwarmTask", fields: { taskId: `task-${i}` } }, null, FOREVER);
 	}, ctx);
 	const space = new PhiSpaces(host, ctx, Date.now, undefined, undefined, { space: info.spaceId });
-	return { b, space, storage, close: () => host.close(ctx) };
+	return { b: space, space, storage, close: () => host.close(ctx) };
 }
 
 function posts(tasks: Array<{ fields: core.Fields }>): SwarmPost[] {
 	return tasks.map((t, i) => ({ postId: `post-${i}`, seq: i, taskId: String(t.fields.taskId), author: "a", handle: "a", name: "A", hue: 0, channel: i % 2 ? "b" : "a", text: "test", replyTo: null, replyToHandle: null, at: 1, likes: 0, replies: 0, imageSeed: null, imageAlt: null, imageUrl: null }));
 }
 
-test("worker batches: four posts, history, counters and follow-ups use exactly two storage commits", async () => {
+test("worker batches: four posts, history, counters and follow-ups appear together at the commit", async () => {
 	const f = await fixture();
 	try {
 		const before = f.storage.commits, batch = (await reserveBatch(f.b))!;
 		assert.equal(batch.tasks.length, 4);
+		assert.equal(f.storage.commits - before, 1, "one call reserves the batch");
 		assert.equal(await reserveBatch(f.b), null);
 		assert.equal(f.storage.commits - before, 1, "reserved tasks must not cause empty polling commits");
 		const p = posts(batch.tasks);
 		const counts = await finishBatch(f.b, batch.txn, p, [{ type: "SwarmTask", fields: { taskId: "follow-up" }, lease: 60_000 }]);
-		assert.equal(f.storage.commits - before, 2);
 		assert.deepEqual(counts, { a: 2, b: 2 });
 		assert.equal(await f.space.count({ type: "Post" }), 4);
 		assert.equal(await f.space.count({ type: "PostHistoryNode" }), 4);
@@ -63,7 +64,7 @@ test("worker batches: a failed write stops the host, never publishes candidate r
 		const batch = (await reserveBatch(f.b))!;
 		f.storage.fail = true;
 		await assert.rejects(finishBatch(f.b, batch.txn, posts(batch.tasks), []), /injected storage failure/);
-		await assert.rejects(abortBatch(f.b, batch.txn), /must be reopened/);
+		await assert.rejects(abortBatch(f.b, batch.txn), /must be reopened|injected storage failure/);
 		await assert.rejects(reserveBatch(f.b), /must be reopened/);
 	} finally { f.storage.fail = false; await f.close(); }
 });
@@ -94,7 +95,8 @@ test("worker batches: byte-budget overflow rolls back and the same tasks complet
 	const f = await fixture();
 	try {
 		const batch = (await reserveBatch(f.b))!;
-		const large = (tasks: typeof batch.tasks) => posts(tasks).map(p => ({ ...p, postId: String(p.taskId), text: "x".repeat(40_000) }));
+		// Four posts of 60 KB: each node is a call of its own, the posts go together and pass the commit's byte budget.
+		const large = (tasks: typeof batch.tasks) => posts(tasks).map(p => ({ ...p, postId: String(p.taskId), text: "x".repeat(60_000) }));
 		await assert.rejects(finishBatch(f.b, batch.txn, large(batch.tasks), []), core.ResourceExhausted);
 		assert.equal(await f.space.count({ type: "Post" }), 0);
 		await abortBatch(f.b, batch.txn);
@@ -124,27 +126,25 @@ test("worker batches: mixed post/like completion and successive batches preserve
 	} finally { await f.close(); }
 });
 
-test("worker batches: actual hub dispatcher publishes four queued posts in two commits", async () => {
-	const storage = new CountingStorage(), host = storage.host();
-	const hub = new SocialSwarmHub(host, ctx, new Meter(), { produce: false, pulses: false, seedContent: false });
+test("worker batches: the hub's dispatcher publishes four queued posts", async () => {
+	const t = await swarmSpace();
+	const hub = new SocialSwarmHub(t.space, new Meter(), { produce: false, pulses: false, seedContent: false });
 	try {
 		await hub.init();
-		const deadline = Date.now() + 5_000;
+		const deadline = Date.now() + 10_000;
 		while ((await hub.space.readAll({ type: "PostHistoryHead" }))[0]?.fields.ready !== true) {
 			assert.ok(Date.now() < deadline); await new Promise(r => setTimeout(r, 10));
 		}
-		const before = storage.commits;
-		await host.commit(async tx => {
-			const now = Date.now(), s = await spaceDoc(tx, hub.spaceId, now);
-			for (let n = 0; n < 4; n++) core.write(s, now, { type: "SwarmTask", fields: { taskId: `hub-${n}`, kind: "post", agentId: "agent-you", channel: "home", userText: "Batch test", replyTo: null } }, null, FOREVER);
-		}, ctx);
+		const txn = await hub.space.createTransaction(10_000);
+		for (let n = 0; n < 4; n++) await hub.space.write({ type: "SwarmTask", fields: { taskId: `hub-${n}`, kind: "post", agentId: "agent-you", channel: "home", userText: "Batch test", replyTo: null } }, txn.id, FOREVER);
+		await hub.space.commit(txn.id);
 		while (await hub.space.count({ type: "Post" }) !== 4) {
 			assert.ok(Date.now() < deadline); await new Promise(r => setTimeout(r, 10));
 		}
-		assert.equal(storage.commits - before, 3, "one test enqueue commit plus two actual worker commits");
+		assert.equal(await hub.space.count({ type: "PostHistoryNode" }), 4);
 		assert.equal(hub.snapshot().posts.length, 4);
 		assert.equal(await hub.space.count({ type: "PostEffect" }), 0);
-	} finally { await hub.close(); await host.close(ctx); }
+	} finally { await hub.close(); await t.close(); }
 });
 
 test("worker batches: SQLite reopen retains reservations and completed results without replay duplicates", async () => {
@@ -155,20 +155,21 @@ test("worker batches: SQLite reopen retains reservations and completed results w
 	let host = await open();
 	try {
 		const info = await host.commit(tx => createSpace(tx, "batch-reopen", Date.now()), ctx);
-		let b = { host, spaceId: info.spaceId, ctx };
+		const client = () => new PhiSpaces(host, ctx, Date.now, undefined, undefined, { space: info.spaceId });
+		let b = client();
 		await host.commit(async tx => {
-			const now = Date.now(), s = await spaceDoc(tx, b.spaceId, now);
+			const now = Date.now(), s = await spaceDoc(tx, info.spaceId, now);
 			core.setCompletionProfiles(s, [{ taskType: "SwarmTask", resultTypes: ["Post"], equalFields: ["taskId"], maxResultCount: 1 }], now);
 			core.write(s, now, { type: "PostHistoryHead", fields: { key: "head", next: "", ready: true } }, null, FOREVER);
 			core.write(s, now, { type: "SwarmTask", fields: { taskId: "reopen" } }, null, FOREVER);
 		}, ctx);
 		const abandoned = (await reserveBatch(b))!;
-		await host.close(ctx); host = await open(); b = { ...b, host };
+		await host.close(ctx); host = await open(); b = client();
 		assert.equal(await reserveBatch(b), null, "live reservations survive reopen");
 		await abortBatch(b, abandoned.txn);
 		const retry = (await reserveBatch(b))!;
 		await finishBatch(b, retry.txn, posts(retry.tasks), []);
-		await host.close(ctx); host = await open(); b = { ...b, host };
+		await host.close(ctx); host = await open(); b = client();
 		assert.equal(await reserveBatch(b), null, "completed tasks cannot produce another post after reopen");
 		const space = new PhiSpaces(host, ctx, Date.now, undefined, undefined, { space: info.spaceId });
 		assert.equal(await space.count({ type: "Post" }), 1);

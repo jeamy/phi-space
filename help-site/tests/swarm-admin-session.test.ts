@@ -1,18 +1,18 @@
 import "./test-env.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
-import { Meter, openOwnMemoryHost } from "phi-spaces";
+import { Meter } from "phi-spaces";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
+import { swarmSpace } from "./swarm-space.ts";
 
-async function connect(opts: ConstructorParameters<typeof SocialSwarmHub>[3]) {
-	const host = openOwnMemoryHost();
-	const hub = new SocialSwarmHub(host, ctx, new Meter(), { produce: false, pulses: false, seedContent: false, maxEntries: null, ...opts });
+async function connect(opts: ConstructorParameters<typeof SocialSwarmHub>[2]) {
+	const t = await swarmSpace();
+	const hub = new SocialSwarmHub(t.space, new Meter(), { produce: false, pulses: false, seedContent: false, maxEntries: null, ...opts });
 	await hub.init();
 	const sent: any[] = [];
 	let handler!: (raw: string) => Promise<void> | void;
 	await hub.attachWebSocket({ id: "t", send: (d: any) => sent.push(typeof d === "string" ? JSON.parse(d) : d), close() {}, onMessage: (h: typeof handler) => { handler = h; }, onClose() {} } as any);
-	return { sent, say: (m: unknown) => handler(JSON.stringify(m)), close: async () => { await hub.close(); await host.close(ctx); } };
+	return { sent, say: (m: unknown) => handler(JSON.stringify(m)), close: async () => { await hub.close(); await t.close(); } };
 }
 
 test("an open AdminSpaces session makes a feed connection admin; the password still does, and a wrong session does nothing", async () => {

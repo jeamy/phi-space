@@ -2,8 +2,11 @@
 // database. Commit and scan costs are O(live entries) per Space, so the limit is per Space/database. Above the cap the
 // oldest posts go together with their history nodes and likes (ChannelCount totals stay lifetime counters).
 import os from "node:os";
-import { core, FOREVER, NamedSpace, spaceDoc } from "phi-spaces";
-import type { BatchHost } from "./batch.ts";
+import type { Context } from "phi-spaces/context";
+import { core, FOREVER, NamedSpace, spaceDoc, type SpaceHost } from "phi-spaces";
+
+/** The store of the swarm Space, in the process that holds it (host code: space-side.ts). */
+export type BatchHost = { host: SpaceHost; spaceId: string; ctx: Context };
 
 export const DEFAULT_MAX_ENTRIES = 20_000;
 /** How long the swarm spaces keep the result of a finished request (core.Limits.claimResultMs). */
@@ -15,8 +18,11 @@ const BATCH_POSTS = 50;
 const BATCH_LIKES = 200;
 
 export interface RetentionConfig { cap: number; low: number }
-export interface PurgeNotice { at: number; removed: number; posts: number; totalRemoved: number; cap: number; entries: number }
+/** The last purge, one entry per Space. `postIds` (at most `NOTICE_POST_IDS`, the newest of them) tells the swarm which
+ *  posts to drop from its caches. */
+export interface PurgeNotice { at: number; removed: number; posts: number; totalRemoved: number; cap: number; entries: number; postIds?: string[] }
 export interface PurgeResult extends PurgeNotice { postIds: string[] }
+export const NOTICE_POST_IDS = 1000;
 export interface HostFacts { name: string; cpu: string; cores: number; memGiB: number; platform: string; startedAt: number }
 
 /** `SWARM_MAX_ENTRIES` (default 20000, 0 or off disables). The purge stops at `low`, so it runs in bursts, not on every post. */
@@ -37,21 +43,6 @@ export function hostFacts(): HostFacts {
 		platform: `${os.type()} ${os.arch()}`,
 		startedAt: Date.now(),
 	};
-}
-
-/** One HostInfo entry per Space (replaced on every start): readable by the hub through the normal shard connection. */
-export async function writeHostInfo(b: BatchHost, facts: HostFacts, cap: number | null): Promise<void> {
-	await b.host.commit(async (tx) => {
-		const now = Date.now(), s = await spaceDoc(tx, b.spaceId, now);
-		// The swarm writes several calls a second, each with a request claim whose result is kept for `claimResultMs`: at the
-		// default of 24 hours that fills maxClaimBytes within hours and new requests are refused. A repeat of a call comes
-		// within seconds, so a few minutes of kept results is all the idempotence the swarm needs.
-		// A claim's hash is kept until its generation stops admitting request ids (default 1 hour): with results kept only
-		// minutes, thousands of claims would sit expired but kept, and the sweep of every commit would read them again.
-		core.setLimits(s, { claimResultMs: SWARM_CLAIM_RESULT_MS, generationAdmitMs: SWARM_CLAIM_RESULT_MS }, now);
-		while (core.probe(s, now, { type: "HostInfo" }, null, true).status === "found");
-		core.write(s, now, { type: "HostInfo", fields: { ...facts, cap } }, null, FOREVER);
-	}, b.ctx);
 }
 
 /**
@@ -158,7 +149,7 @@ export async function purgeOldest(b: BatchHost, cfg: RetentionConfig): Promise<P
 		const old = core.probe(s, now, { type: "PurgeNotice" }, null, true);
 		const total = Number(old.status === "found" ? old.entry.fields.totalRemoved : 0) || 0;
 		const n: PurgeNotice = { at, removed, posts: postIds.length, totalRemoved: total + removed, cap: cfg.cap, entries: core.stats(s, now).entries };
-		core.write(s, now, { type: "PurgeNotice", fields: { ...n } }, null, FOREVER);
+		core.write(s, now, { type: "PurgeNotice", fields: { ...n, postIds: postIds.slice(-NOTICE_POST_IDS) } }, null, FOREVER);
 		return n;
 	}, b.ctx);
 	return { ...notice, postIds };

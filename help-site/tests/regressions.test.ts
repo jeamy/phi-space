@@ -17,6 +17,7 @@ import { upgradeWebSocket } from "phi-spaces/ws";
 import { appendHistory, initializeHistory, mergedHistory, historyPage } from "../server/social/history.ts";
 import type { SwarmPost } from "../server/social/swarm.ts";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
+import { swarmSpace } from "./swarm-space.ts";
 import { startArticleLoad } from "../client/lib/article-load.ts";
 import { startChatConnection, type ChatSocket } from "../client/lib/chat-connection.ts";
 import { UploadStore } from "../server/uploads.ts";
@@ -351,14 +352,14 @@ test("F11: slow reply generation is aborted and the task completes with bounded 
 });
 
 test("F16: failed post batches release reservations; failed follow-up intents retry atomically", async () => {
-	const h = await memory(), hub = new SocialSwarmHub(h, ctx, new Meter(), { produce: false, pulses: false, seedContent: false });
+	const t = await swarmSpace({ inProcess: true }), h = t.side!.host, hub = new SocialSwarmHub(t.space, new Meter(), { produce: false, pulses: false, seedContent: false });
 	try {
 		await hub.init();
 		const s = hub.space, commit = h.commit.bind(h);
 		let failPost = true, failEffect = true;
 		h.commit = (fn, context) => commit(async tx => {
 			const result = await fn(tx);
-			const state = await spaceDoc(tx, hub.spaceId, Date.now());
+			const state = await spaceDoc(tx, t.side!.spaceId, Date.now());
 			if (state.entries.some(e => e.type === "Post" && e.fields.taskId === "question")) {
 				if (failPost) { failPost = false; assert.equal(hub.snapshot().posts.length, 0); throw new Error("injected Post failure"); }
 				if (failEffect && state.entries.some(e => e.type === "SwarmTask" && String(e.fields.taskId).startsWith("answer-"))) { failEffect = false; throw new Error("injected follow-up failure"); }
@@ -374,7 +375,7 @@ test("F16: failed post batches release reservations; failed follow-up intents re
 		assert.equal(await s.count({ type: "Post", fields: { taskId: "question" } }), 1);
 		assert.equal(await s.count({ type: "PostEffect" }), 0);
 		assert.equal(await s.count({ type: "PostHistoryNode" }), await s.count({ type: "Post" }));
-	} finally { await hub.close(); await h.close(ctx); }
+	} finally { await hub.close(); await t.close(); }
 });
 
 test("F15: interrupted history migration resumes across bounded commits without duplicated nodes", async () => {

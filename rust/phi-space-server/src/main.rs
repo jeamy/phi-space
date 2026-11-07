@@ -2,7 +2,7 @@
 // protocol. Every connection is one peer; whoever can reach the socket uses the space.
 //
 //   phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID]
-//   phi-space-server --profile mmo|codemode     what the project's server/space-host.ts is, from the same environment
+//   phi-space-server --profile mmo|codemode|help     what the project's server/space-host.ts is, from the same environment
 //   phi-space-server --tls-register CONFIG.json the independent register over pinned mutual TLS (src/tls-register.ts)
 //   phi-space-server --store FILE --member CONFIG.json a federation Member behind a TypeScript control host
 //   phi-space-server [--store FILE] --replica-tool CONFIG.json REQUEST the operator's tool for a primary/sync Space, or with
@@ -14,6 +14,7 @@
 mod hooks;
 mod control_host;
 mod member;
+mod help;
 mod profiles;
 mod recovery;
 mod replica_tool;
@@ -26,7 +27,7 @@ use phi_store::{system_random, Ledger, MemoryLedger, SpaceHost, SqliteLedger, St
 use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
 
-const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode\n       phi-space-server --tls-register CONFIG.json\n       phi-space-server --store FILE --control CONFIG.json\n       phi-space-server --store FILE --member CONFIG.json\n       phi-space-server [--store FILE] --replica-tool CONFIG.json REQUEST\n       phi-space-server --store FILE --recovery-only CONFIG.json RECOVERY.json";
+const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode|help\n       phi-space-server --tls-register CONFIG.json\n       phi-space-server --store FILE --control CONFIG.json\n       phi-space-server --store FILE --member CONFIG.json\n       phi-space-server [--store FILE] --replica-tool CONFIG.json REQUEST\n       phi-space-server --store FILE --recovery-only CONFIG.json RECOVERY.json";
 
 pub(crate) fn fail(message: impl std::fmt::Display) -> ! {
 	eprintln!("{message}");

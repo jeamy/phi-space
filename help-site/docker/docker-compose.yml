@@ -3,7 +3,11 @@
 #   1. `spaces-help-prod`: Hardened production container (NODE_ENV=production, Next.js 16 + WebSocket + SQLite in /data)
 #   2. `spaces-help-test`: Local dev/test container running the automated test suite in Docker (profile: test)
 #   3. `spaces-help-dev`:  Local interactive dev container with Next.js dev mode (profile: dev)
-#   4. `swarm-nano`:       Headless swarm shard host for the big/nano two-host setup (profile: nano)
+#   4. `swarm-space`:      The swarm Space's own process on big (store /data/swarm.sqlite beside the hub's, loopback 3610)
+#   5. `swarm-nano`:       Headless swarm shard engine for the big/nano two-host setup (profile: nano)
+#   6. `swarm-space-nano`: The nano shard's Space process (profile: nano; the hub reaches it through the tunnel on 3600)
+# The two Space processes run TypeScript (server/space-host.ts); docker-compose.rust.yml swaps them for the Rust
+# phi-space-server --profile help on the same volumes.
 
 name: phi-spaces-help
 
@@ -42,6 +46,8 @@ services:
       # the store's figures for the dashboard (stats and the list of spaces, no entries); loopback only, never proxied
       HELP_SPACE_LISTEN: "${HELP_SPACE_LISTEN:-tcp:127.0.0.1:3520}"
       SWARM_MAX_ENTRIES: "${SWARM_MAX_ENTRIES:-20000}"
+      # the swarm Space is a process of its own (swarm-space); this one holds no swarm store
+      SWARM_SPACE: "${SWARM_SPACE:-tcp:127.0.0.1:3610}"
       PHI_SPACES_ADMIN_PASSWORD: ${PHI_SPACES_ADMIN_PASSWORD:?Set a private admin password in .env}
     network_mode: host
     volumes:
@@ -49,6 +55,42 @@ services:
       # Optional: mount the host's pi CLI credentials so live LLM replies work
       # (or set ANTHROPIC_API_KEY/OPENAI_API_KEY in .env). Set PI_AUTH_DIR= to skip.
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+    depends_on:
+      swarm-space:
+        condition: service_healthy
+
+  # ---- 1b. The swarm Space of the hub shard (big): its own store, served on the loopback ----
+  swarm-space:
+    image: phi-spaces-help:prod
+    container_name: phi-spaces-help-swarm-space
+    init: true
+    restart: unless-stopped
+    user: "node"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      NODE_ENV: production
+      SWARM_LISTEN: "tcp:127.0.0.1:${SWARM_SPACE_PORT:-3610}"
+      SWARM_DB: /data/swarm.sqlite
+      SWARM_HOST_NAME: "${SWARM_HOST_NAME:-}"
+      SWARM_MAX_ENTRIES: "${SWARM_MAX_ENTRIES:-20000}"
+    network_mode: host
+    volumes:
+      - spaces-help-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('net').connect(Number(process.env.SWARM_SPACE_PORT||3610),'127.0.0.1');s.once('connect',()=>{s.end();process.exit(0)});s.once('error',()=>process.exit(1));setTimeout(()=>process.exit(1),4000)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    command: ["node", "--no-warnings", "--experimental-strip-types", "help-site/server/space-host.ts"]
 
   # ---- 2. Local Dev/Test Runner in Docker ----
   spaces-help-test:
@@ -103,7 +145,7 @@ services:
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
     command: ["node", "--experimental-strip-types", "help-site/server/index.ts", "--dev"]
 
-  # ---- 4. Headless Swarm Shard Host (profile: nano — deploy on the `nano` host) ----
+  # ---- 4. Headless Swarm Shard Engine (profile: nano — deploy on the `nano` host) ----
   swarm-nano:
     build:
       context: ../..
@@ -125,18 +167,53 @@ services:
         required: false
     environment:
       NODE_ENV: production
-      SWARM_LISTEN: "${SWARM_LISTEN:-tcp:0.0.0.0:3600}"
-      SWARM_DB: /data/swarm-b.sqlite
+      # the shard's Space process beside it (swarm-space-nano); the hub on big reaches the same one
+      SWARM_SPACE: "tcp:swarm-space-nano:3600"
       SWARM_TAG: "${SWARM_TAG:-b-}"
       SWARM_PRODUCE: "${SWARM_PRODUCE:-0}"
       SWARM_HOST_NAME: "${SWARM_HOST_NAME:-}"
       SWARM_MAX_ENTRIES: "${SWARM_MAX_ENTRIES:-20000}"
+    healthcheck:
+      disable: true
+    depends_on:
+      swarm-space-nano:
+        condition: service_healthy
+
+  # ---- 5. The nano shard's Space (profile: nano): the store swarm-b.sqlite, the hub's tunnel ends here ----
+  swarm-space-nano:
+    image: phi-spaces-help:nano
+    container_name: phi-spaces-swarm-space-nano
+    profiles:
+      - nano
+    init: true
+    restart: unless-stopped
+    user: "node"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      NODE_ENV: production
+      SWARM_LISTEN: "tcp:0.0.0.0:3600"
+      SWARM_DB: /data/swarm-b.sqlite
+      SWARM_HOST_NAME: "${SWARM_HOST_NAME:-}"
+      SWARM_MAX_ENTRIES: "${SWARM_MAX_ENTRIES:-20000}"
     ports:
-      # Set SWARM_BIND to the host's internal (LAN/NetBird) IP to keep the shard
+      # Set SWARM_BIND to the host's internal (LAN/NetBird) IP or the loopback to keep the shard
       # socket off the public interface — serveSpace has no TLS.
       - "${SWARM_BIND:+$SWARM_BIND:}3600:3600"
     volumes:
       - swarm-nano-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('net').connect(3600,'127.0.0.1');s.once('connect',()=>{s.end();process.exit(0)});s.once('error',()=>process.exit(1));setTimeout(()=>process.exit(1),4000)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    command: ["node", "--no-warnings", "--experimental-strip-types", "help-site/server/space-host.ts"]
 
 volumes:
   spaces-help-data: {}

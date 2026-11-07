@@ -1,6 +1,5 @@
 // Durable newest-first linked index. Nodes are committed with their Post; cursors visit bounded nodes.
-import type { Context } from "phi-spaces/context";
-import { core, FOREVER, ResourceExhausted, spaceDoc, type SpaceHost, type SpaceLike } from "phi-spaces";
+import { FOREVER, ResourceExhausted, type SpaceLike } from "phi-spaces";
 import type { SwarmPost } from "./swarm.ts";
 import { UnsupportedOperation } from "phi-spaces";
 
@@ -46,23 +45,24 @@ export async function ensureHistoryHead(space: SpaceLike, signal?: AbortSignal):
 }
 
 /**
- * Rebuilds the index for posts that predate it. With `bulk` each batch runs in ONE durable
- * commit (head take once, N node writes, head write once) instead of ~3 commits per post –
- * on a 30k-entry store that is the difference between minutes and hours.
+ * Rebuilds the index for posts that predate it: a one-time migration of a store written before the index existed. Each
+ * transaction appends up to 8 posts (the head taken and written again per post); the stores in operation are migrated,
+ * so this runs on old copies only.
  */
-export async function initializeHistory(space: SpaceLike, bulk?: { host: SpaceHost; spaceId: string; ctx: Context; signal?: AbortSignal }): Promise<void> {
-	bulk?.signal?.throwIfAborted();
+export async function initializeHistory(space: SpaceLike, o: { signal?: AbortSignal } = {}): Promise<void> {
+	const signal = o.signal;
+	signal?.throwIfAborted();
 	let head = await space.read({ type: "PostHistoryHead" }, 0);
 	if (head && head.fields.ready !== false) return;
 	if (!head) {
-		await ensureHistoryHead(space, bulk?.signal);
+		await ensureHistoryHead(space, signal);
 		head = await space.read({ type: "PostHistoryHead" }, 0);
 	}
-	// One-time migration before workers start. Snapshot pages bound transport; only this migration sorts all historical posts.
+	// Snapshot pages bound transport; only this migration sorts all historical posts.
 	const posts: SwarmPost[] = [];
 	let after: string | null = null, token: string | undefined;
 	do {
-		bulk?.signal?.throwIfAborted();
+		signal?.throwIfAborted();
 		const page = await space.readPage({ type: "Post" }, { after, token, maxBytes: 64_000 });
 		posts.push(...page.items.map(e => e.fields as unknown as SwarmPost)); after = page.next; token = page.token;
 	} while (after !== null);
@@ -71,33 +71,12 @@ export async function initializeHistory(space: SpaceLike, bulk?: { host: SpaceHo
 	// Each appendHistory is take+write head plus the node: reserve cost exceeds the raw post
 	// JSON several-fold and large posts (e.g. embedded image data) can overflow the commit
 	// budget. On ResourceExhausted the batch shrinks and the same window is retried.
-	let maxBatch = bulk ? 128 : 8;
+	let maxBatch = 8;
 	const retryDeadline = Date.now() + 120_000;
 	for (let i = 0; i < pending.length;) {
-		bulk?.signal?.throwIfAborted();
+		signal?.throwIfAborted();
 		const start = i;
 		try {
-			if (bulk) {
-				await bulk.host.commit(async (tx) => {
-					const now = Date.now();
-					const s = await spaceDoc(tx, bulk.spaceId, now);
-					const head = core.list(s, now, { type: "PostHistoryHead" }, null, 1)[0];
-					if (!head) throw new Error("Post history not initialized");
-					if (core.probe(s, now, { id: head.id }, null, true).status !== "found") throw new Error("Post history head is reserved");
-					let next = String(head.fields.next ?? "");
-					let last: SwarmPost | null = null;
-					for (let n = 0; n < maxBatch && i < pending.length; n++, i++) {
-						const post = pending[i]!;
-						next = core.write(s, now, { type: "PostHistoryNode", fields: { post: JSON.stringify(post), next } }, null, FOREVER).id;
-						last = post;
-					}
-					core.write(s, now, { type: "PostHistoryHead", fields: { ...head.fields, key: "head", next, at: last!.at, lastAt: last!.at, lastId: last!.postId } }, null, FOREVER);
-				}, bulk.ctx);
-				// Breathing room for the event loop: each bulk commit is a heavy synchronous
-				// doc load/serialize on large spaces; yield keeps HTTP/WS responsive.
-				await new Promise((r) => setTimeout(r, 25));
-				continue;
-			}
 			const txn = await space.createTransaction(60_000);
 			try {
 				let bytes = 0, n = 0;
@@ -109,7 +88,7 @@ export async function initializeHistory(space: SpaceLike, bulk?: { host: SpaceHo
 				await space.commit(txn.id);
 			} catch (e) { await space.abort(txn.id).catch(() => {}); throw e; }
 		} catch (e) {
-			bulk?.signal?.throwIfAborted();
+			signal?.throwIfAborted();
 			i = start;
 			if (e instanceof ResourceExhausted && maxBatch > 1) { maxBatch >>= 1; continue; }
 			// Contention with live appends (the head is a hot entry): bounded retry, then fail.
@@ -117,7 +96,7 @@ export async function initializeHistory(space: SpaceLike, bulk?: { host: SpaceHo
 			throw e;
 		}
 	}
-	bulk?.signal?.throwIfAborted();
+	signal?.throwIfAborted();
 	const txn = await space.createTransaction(10_000);
 	try {
 		const last = await space.take({ type: "PostHistoryHead" }, 5_000, { txn: txn.id });

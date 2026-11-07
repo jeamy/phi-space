@@ -95,10 +95,19 @@ Der Swarm-Space wird in zwei durable Spaces gesplittet — wie v5, aber real
 
 ### Umgesetzte Struktur
 
-1. `SocialSwarmHub(host, ctx, meter, { shardTag, produce, pulses, seedContent })`
-   — dieselbe Engine läuft als Hub (`a`) und headless Worker-Shard (`b`).
-2. `help-site/server/nano-host.ts` — eigener `SpaceHost` + SQLite,
-   `SpaceService` + `serveSpace` (Unix/TCP), Shard-Engine ohne Web-Layer.
+1. `SocialSwarmHub(space, meter, { shardTag, produce, pulses, seedContent })`
+   — dieselbe Engine läuft als Hub (`a`) und headless Worker-Shard (`b`). Sie
+   ist seit 2026-11-08 nur Client ihres Space: jeder Schritt ist ein Aufruf,
+   über einen Socket wie im Prozess.
+2. Der Space jedes Shards ist ein eigener Prozess (`server/space-host.ts` oder
+   das Rust-`phi-space-server --profile help`): der Store, Limits und
+   Completion-Profil, der `HostInfo`-Eintrag und die Bereinigung
+   (`server/social/space-side.ts`). Auf big ist das der Container
+   `swarm-space` (`/data/swarm.sqlite`, Loopback 3610), auf nano
+   `swarm-space-nano` (Port 3600, dort endet der Tunnel des Hubs).
+   `help-site/server/nano-host.ts` ist die Shard-Engine ohne Web-Layer, ein
+   Client dieses Prozesses (`SWARM_SPACE`); ohne `SWARM_SPACE` hält sie den
+   Store selbst und bedient ihn.
 3. `server/index.ts` — `SWARM_REMOTE=unix:/path|tcp:host:port` attach't den
    `RemoteSpace` zum Hub.
 4. `SocialSwarmHub.attachRemoteShard(space, prefix)` — Routing, Merge, Fan-out.

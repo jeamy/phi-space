@@ -18,6 +18,7 @@ import type { AddressInfo } from "node:net";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { Meter, startService, SpaceService, StaticIdentity, serveSpace, RemoteSpace, socketTransport, openOwnMemoryHost } from "phi-spaces";
 import { SocialSwarmHub, SWARM_ALIAS } from "../server/social/swarm.ts";
+import { swarmSpace } from "./swarm-space.ts";
 import { ALL_ARTICLES } from "../scripts/corpus.ts";
 
 test("1. Help Corpus, Markdown {#anchor} rendering & token-aware search", async () => {
@@ -293,11 +294,11 @@ test("4. Next.js 16 Production Server (useNext: true) serves SSR App Router & He
 });
 
 test("5. Multi-Shard Social Swarm distribution (big + nano): attachRemoteShard, delta merge, thread routing & fault tolerance", async () => {
-	// 1. Shard B (nano): own host in memory, running headless SocialSwarmHub with shardTag "b-"
-	const harnessB = openOwnMemoryHost();
-	const stopServiceB = await startService(harnessB, ctx, { watchDebounceMs: 20 });
+	// 1. Shard B (nano): its Space in this process (the test cuts its server below), a headless SocialSwarmHub with shardTag "b-"
+	const spaceB = await swarmSpace({ inProcess: true });
+	const harnessB = spaceB.side!.host;
 	const meterB = new Meter();
-	const hubB = new SocialSwarmHub(harnessB, ctx, meterB, {
+	const hubB = new SocialSwarmHub(spaceB.space, meterB, {
 		shardTag: "b-",
 		produce: false,
 		pulses: false,
@@ -317,11 +318,10 @@ test("5. Multi-Shard Social Swarm distribution (big + nano): attachRemoteShard, 
 	const transportB = socketTransport({ host: "127.0.0.1", port: addrB.port });
 	const remoteSpace = new RemoteSpace(transportB, { space: SWARM_ALIAS });
 
-	// 2. Hub A (big): own host in memory, attach remote shard B
-	const harnessA = openOwnMemoryHost();
-	const stopServiceA = await startService(harnessA, ctx, { watchDebounceMs: 20 });
+	// 2. Hub A (big): its own Space (a separate space process with HELP_SPACE_SERVER), attach remote shard B
+	const spaceA = await swarmSpace();
 	const meterA = new Meter();
-	const hubA = new SocialSwarmHub(harnessA, ctx, meterA, {
+	const hubA = new SocialSwarmHub(spaceA.space, meterA, {
 		shardTag: "",
 		produce: false,
 		pulses: false,
@@ -435,18 +435,21 @@ test("5. Multi-Shard Social Swarm distribution (big + nano): attachRemoteShard, 
 			channel: "random",
 		}));
 
-		// The task should have committed to local space (Shard A)
-		const localTasks = await hubA.space.readAll({ type: "SwarmTask" });
-		assert.ok(localTasks.length >= 1, "post was successfully queued on local Shard A during remote outage");
+		// The task should have committed to local space (Shard A): still queued, held by A's worker, or already its post
+		let onA = false;
+		for (let i = 0; i < 100 && !onA; i++) {
+			onA = (await hubA.space.count({ type: "SwarmTask" })) + (await hubA.space.count({ type: "Post", fields: { text: "new post during shard b outage" } })) > 0
+				|| (await hubA.space.probe?.({ type: "SwarmTask" }, 0))?.locked === true;
+			if (!onA) await new Promise((r) => setTimeout(r, 50));
+		}
+		assert.ok(onA, "post was successfully queued on local Shard A during remote outage");
 	} finally {
 		await hubA.close();
 		transportB.close();
 		await hubB.close();
 		await serverB.close().catch(() => {});
-		await stopServiceA().catch(() => {});
-		await stopServiceB().catch(() => {});
-		await harnessA.close(ctx);
-		await harnessB.close(ctx);
+		await spaceA.close();
+		await spaceB.close();
 	}
 });
 

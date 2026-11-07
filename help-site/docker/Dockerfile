@@ -3,8 +3,11 @@
 # Targets:
 #   - dev-test:   Local development & automated test runner in Docker
 #   - production: Hardened production server for https://spaces.eibrain.org
+#   - nano:       the shard engine and the swarm Space process of nano
+#   - production-rust: production with the Rust phi-space-server (the swarm Space containers, docker-compose.rust.yml)
 
 ARG NODE_IMAGE=node:22-bookworm-slim
+ARG RUST_IMAGE=rust:1.99-bookworm
 
 # ---- Stage 1: Base dependencies (root phi-spaces + help-site Next.js/React) ----
 FROM ${NODE_IMAGE} AS deps
@@ -116,6 +119,8 @@ COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/app ./help-site/
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/client ./help-site/client
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/examples ./help-site/examples
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/server ./help-site/server
+# the one-time move of the swarm Space into a store of its own (run with the hub stopped)
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/scripts/split-swarm.ts ./help-site/scripts/split-swarm.ts
 
 RUN mkdir -p /data && chown -R node:node /data
 USER node
@@ -126,9 +131,9 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
 
 CMD ["node", "--no-warnings", "--experimental-strip-types", "help-site/server/index.ts"]
 
-# ---- Stage 5: Headless Swarm Shard Host (`nano`) for the big/nano two-host setup ----
-# Same sources + node_modules as production, but runs only the shard engine
-# (space + workers over phi-spaces socket) — no Next.js, no HTTP layer.
+# ---- Stage 5: Headless Swarm Shard (`nano`) for the big/nano two-host setup ----
+# Same sources + node_modules as production, but runs only the shard engine (its workers over the
+# phi-spaces socket) or the shard's Space process (docker-compose.yml) — no Next.js, no HTTP layer.
 FROM production AS nano
 ENV SWARM_LISTEN=tcp:0.0.0.0:3600 \
     SWARM_DB=/data/swarm-b.sqlite \
@@ -139,3 +144,14 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
   CMD ["node", "-e", "const s=require('net').connect(3600,'127.0.0.1');s.once('connect',()=>{s.end();process.exit(0)});s.once('error',()=>process.exit(1));setTimeout(()=>process.exit(1),4000)"]
 
 CMD ["node", "--no-warnings", "--experimental-strip-types", "help-site/server/nano-host.ts"]
+
+# ---- Stage 6: production-rust: the production image with the Rust space server (docs/rust-portierung.en.md) ----
+# docker-compose.rust.yml gives it to the swarm Space containers; the hub and the shard engine stay as they are.
+# The builder is Debian bookworm like the Node image, so the binary finds the same libc.
+FROM ${RUST_IMAGE} AS rust-builder
+WORKDIR /opt/phi-spaces/rust
+COPY rust ./
+RUN cargo build --release --locked -p phi-space-server
+
+FROM production AS production-rust
+COPY --from=rust-builder /opt/phi-spaces/rust/target/release/phi-space-server /usr/local/bin/phi-space-server

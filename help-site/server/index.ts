@@ -32,10 +32,12 @@ function loadDotEnvIfPresent(): void {
 }
 loadDotEnvIfPresent();
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
-import { FOREVER, Meter, NO_WAIT, PhiSpaces, startService, RemoteSpace, socketTransport, openOwnMemoryHost, openSqliteHost, parseTarget, serveSpace, SpaceService, StaticIdentity } from "phi-spaces";
+import { connectSpace, FOREVER, Meter, NO_WAIT, PhiSpaces, startService, RemoteSpace, socketTransport, openOwnMemoryHost, openSqliteHost, parseTarget, serveSpace, SpaceService, StaticIdentity } from "phi-spaces";
 import { WebAdminController } from "./admin/admin-controller.ts";
 import { SpaceChatHub, type StageId } from "./space-chat/stage-runner.ts";
 import { SocialSwarmHub, SWARM_ALIAS } from "./social/swarm.ts";
+import { openSwarmSide, type SwarmSide } from "./social/space-side.ts";
+import { retentionConfig } from "./social/retention.ts";
 import { adminLlmModels, chatReplyGenerator, isLlmActive, listLlmModels, restoreAllowedModels, setAllowedModels, setLlmActive, setLlmModel, sharedLlm, swarmPostGenerator, swarmReplyGenerator } from "./llm.ts";
 import { upgradeWebSocket } from "phi-spaces/ws";
 import { UploadStore } from "./uploads.ts";
@@ -71,6 +73,11 @@ export interface HelpServerOptions {
 	sqlitePath?: string | null;
 	publicDir?: string;
 	adminPassword?: string;
+	/** The swarm Space's own store file when no `SWARM_SPACE` names its process (default: `swarm.sqlite` beside
+	 *  `sqlitePath`, memory without one). */
+	swarmSqlitePath?: string | null;
+	/** The swarm Space's process (`SWARM_SPACE`): `tcp:HOST:PORT` or `unix:/path`; then this process holds no swarm store. */
+	swarmSpace?: string | null;
 	/** Use full Next.js 16 RequestHandler (enabled by default in CLI / production start). */
 	useNext?: boolean;
 	dev?: boolean;
@@ -82,6 +89,8 @@ export interface RunningHelpServer {
 	admin: WebAdminController;
 	chatHub: SpaceChatHub;
 	swarm: SocialSwarmHub;
+	/** The swarm Space's store when it lives in this process (no `SWARM_SPACE`), else null. */
+	swarmSide: SwarmSide | null;
 	close(): Promise<void>;
 }
 
@@ -176,7 +185,21 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 	const chatHub = new SpaceChatHub(host, ctx, meter, llmChat ?? undefined);
 	await chatHub.initialize();
 	await chatHub.ensureSession("lobby");
-	const swarm = new SocialSwarmHub(host, ctx, meter, {
+	// The swarm Space is a store of its own: a separate space process (`SWARM_SPACE`, TypeScript server/space-host.ts or
+	// `phi-space-server --profile help`), or in this process on a file of its own. The swarm is only its client.
+	const swarmAt = options.swarmSpace !== undefined ? options.swarmSpace : process.env.SWARM_SPACE || null;
+	const swarmSide = swarmAt ? null : await openSwarmSide(ctx, {
+		file: options.swarmSqlitePath !== undefined ? options.swarmSqlitePath : options.sqlitePath ? join(dirname(options.sqlitePath), "swarm.sqlite") : null,
+		retention: retentionConfig(),
+		meter,
+	});
+	const swarmClient = swarmAt ? connectSpace(swarmAt, {
+		space: SWARM_ALIAS,
+		connectTimeoutMs: Number(process.env.SWARM_SPACE_CONNECT_TIMEOUT ?? 5_000),
+		callTimeoutMs: Number(process.env.SWARM_SPACE_CALL_TIMEOUT ?? 30_000),
+	}) : null;
+	if (swarmAt) console.log(`[swarm] space on ${swarmAt} (alias ${SWARM_ALIAS})`);
+	const swarm = new SocialSwarmHub(swarmClient?.space ?? swarmSide!.space, meter, {
 		adminCheck: (password: string) => admin.verifyPassword(password),
 		sessionCheck: (sessionId: string) => admin.getSession(sessionId) !== null,
 	});
@@ -521,9 +544,12 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 		admin,
 		chatHub,
 		swarm,
+		swarmSide,
 		async close() {
 			for (const ws of acceptedSockets) ws?.close();
 			await swarm.close();
+			swarmClient?.close();
+			await swarmSide?.close();
 			await chatHub.close();
 			await admin.close();
 			await new Promise<void>((r) => server.close(() => r()));

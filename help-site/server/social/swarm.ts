@@ -6,26 +6,20 @@
 //     `Post`/`Like` results, enforced by a server-side CompletionProfile
 //   - `AgentPulse` entries with bounded leases model "who is online" (lease reaping)
 //   - The browser feed consumes `readPage` snapshot + `changes(rev)` deltas live
-import type { Context } from "phi-spaces/context";
 import {
-	createSpace,
 	FOREVER,
 	Meter,
-	PhiSpaces,
-	type CompletionProfile,
 	type Principal,
 	type RequestRef,
-	type SpaceHost,
 	type SpaceLike,
 } from "phi-spaces";
 import type { WsConnection } from "phi-spaces/ws";
 import { RemoteShard } from "./remote-shard.ts";
 import { appendHistory, ensureHistoryHead, initializeHistory, mergedHistory, historyRead } from "./history.ts";
 import { ResourceExhausted, SnapshotExpired, RevisionAhead, type Fields } from "phi-spaces/core";
-import { abortBatch, boundedPreparation, finishBatch, reserveBatch, type BatchWrite } from "./batch.ts";
-import { hostFacts, purgeOldest, retentionConfig, writeHostInfo, type HostFacts, type PurgeNotice, type RetentionConfig } from "./retention.ts";
-
-export const SWARM_ALIAS = "social-swarm";
+import { abortBatch, boundedPreparation, finishBatch, reserveBatch, type BatchWrite, type SwarmSpace } from "./batch.ts";
+import { retentionConfig, type HostFacts, type PurgeNotice, type RetentionConfig } from "./retention.ts";
+export { SWARM_ALIAS } from "./space-side.ts";
 export const SWARM_AGENT_COUNT = Math.max(10, Math.min(50_000, Number(process.env.SWARM_AGENTS ?? 100)));
 export const SWARM_AGENT_MAX = 50_000;
 const clampAgents = (n: unknown): number => Math.max(10, Math.min(SWARM_AGENT_MAX, Math.round(Number(n))));
@@ -34,16 +28,6 @@ const LLM_POST_RATE = Math.max(0, Math.min(1, Number(process.env.SWARM_LLM_RATE 
 /** A single dispatcher loop: one waiting take = one doc watch probe per commit; processing pipelines async. */
 const WORKER_COUNT = 1;
 
-const SWARM_COMPLETION_PROFILES: CompletionProfile[] = [
-	{
-		taskType: "SwarmTask",
-		resultTypes: ["Post", "Like"],
-		equalFields: ["taskId"],
-		maxResultCount: 1,
-		maxResultBytes: 64 * 1024,
-		maxLeaseMs: 60_000,
-	} as CompletionProfile,
-];
 
 export interface ChannelDef {
 	channelId: string;
@@ -314,11 +298,10 @@ export interface SwarmShardOptions {
 const historyGone = (e: unknown): boolean => e instanceof SnapshotExpired || e instanceof RevisionAhead;
 
 export class SocialSwarmHub {
-	readonly host: SpaceHost;
-	readonly ctx: Context;
 	readonly meter: Meter;
-	space!: SpaceLike;
-	spaceId = "";
+	/** The swarm Space: a client only (a socket to its space process, or PhiSpaces in-process); space-side.ts holds the store. */
+	readonly space: SwarmSpace;
+	#inited = false;
 	readonly agents: SwarmAgent[] = [];
 	#agentIndex = new Map<string, SwarmAgent>();
 	#agentCount = SWARM_AGENT_COUNT;
@@ -375,9 +358,8 @@ export class SocialSwarmHub {
 	/** Roster writes run one after the other: quick changes on the slider must not race each other. */
 	#rosterSync: Promise<void> = Promise.resolve();
 
-	constructor(host: SpaceHost, ctx: Context, meter: Meter, opts: SwarmShardOptions = {}) {
-		this.host = host;
-		this.ctx = ctx;
+	constructor(space: SwarmSpace, meter: Meter, opts: SwarmShardOptions = {}) {
+		this.space = space;
 		this.meter = meter;
 		this.#shardTag = opts.shardTag ?? "";
 		this.#produce = opts.produce ?? true;
@@ -391,7 +373,7 @@ export class SocialSwarmHub {
 	/** Attach a second shard space (primary hub only): task routing, delta merge and queries fan out to it. */
 	attachRemoteShard(space: SpaceLike, prefix = "b-", label?: string): void {
 		this.#shard = new RemoteShard(space, prefix, label ?? null, (msg, err) => this.#shardWarn(msg, err));
-		if (this.spaceId) {
+		if (this.#inited) {
 			void this.#syncRemoteShard();
 		}
 	}
@@ -499,21 +481,8 @@ export class SocialSwarmHub {
 	}
 
 	async #doInit(): Promise<void> {
-		const info = await this.host.commit((tx) => createSpace(tx, SWARM_ALIAS, Date.now()), this.ctx);
-		this.spaceId = info.spaceId;
-		this.space = new PhiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
-			space: info.spaceId,
-		});
+		this.#inited = true;
 		if (this.#closed) return;
-		const admin = this.space as SpaceLike & { setCompletionProfiles?: (p: CompletionProfile[]) => Promise<void> };
-		if (typeof admin.setCompletionProfiles === "function") {
-			try {
-				await admin.setCompletionProfiles(SWARM_COMPLETION_PROFILES);
-			} catch {
-				// A persisted space keeps its profiles from the first init; open
-				// transactions (left over from a previous run) block reconfiguration.
-			}
-		}
 
 		// The head must exist before workers append; the one-time index migration of large
 		// stores runs in the background – paging falls back to bounded scans until it is ready.
@@ -523,7 +492,7 @@ export class SocialSwarmHub {
 		// batch and would otherwise starve the migrator's head replace for minutes.
 		const wasRunning = this.#running;
 		this.#running = false;
-		this.#historyTask = initializeHistory(this.space, { host: this.host, spaceId: this.spaceId, ctx: this.ctx, signal: this.#historyAbort.signal })
+		this.#historyTask = initializeHistory(this.space, { signal: this.#historyAbort.signal })
 			.then(() => { this.#historyReady = true; })
 			.catch((e) => { if (!this.#closed) this.#shardWarn("history migration failed – scan paging stays active", e); })
 			.finally(() => { this.#running = wasRunning; });
@@ -588,23 +557,28 @@ export class SocialSwarmHub {
 		}
 		this.#timers.push(setInterval(() => void this.#broadcastTick(), 700));
 		this.#timers.push(setInterval(() => void this.#statsTick(), 8_000));
-		await writeHostInfo({ host: this.host, spaceId: this.spaceId, ctx: this.ctx }, hostFacts(), this.#retention?.cap ?? null).catch((e) => this.#shardWarn("host info not written", e));
-		if (this.#retention) this.#timers.push(setInterval(() => void this.#retentionTick(), 10_000));
+		// The purge itself runs where the store is (space-side.ts); the swarm drops what it purged from its caches.
+		this.#lastPurgeAt = await this.#purgeNotice().then((n) => n?.at ?? 0, () => 0);
+		this.#timers.push(setInterval(() => void this.#purgeTick(), 10_000));
 	}
 
-	/** Above the cap: purge the oldest posts (with history nodes and likes) in bursts down to the low-water mark. */
-	async #retentionTick(): Promise<void> {
-		if (!this.#retention || this.#purging || this.#closed || !this.#historyReady) return;
+	#lastPurgeAt = 0;
+	#purgeNotice(): Promise<PurgeNotice | undefined> {
+		return this.space.readAll({ type: "PurgeNotice" }, { limit: 1 }).then((r) => r[0]?.fields as unknown as PurgeNotice | undefined);
+	}
+
+	/** A new PurgeNotice of this shard's Space: the posts it names leave the feed caches. */
+	async #purgeTick(): Promise<void> {
+		if (this.#purging || this.#closed) return;
 		this.#purging = true;
 		try {
-			if (await this.space.count() <= this.#retention.cap) return;
-			const r = await purgeOldest({ host: this.host, spaceId: this.spaceId, ctx: this.ctx }, this.#retention);
-			if (!r) return;
-			this.#forgetPosts(r.postIds);
-			console.log(`[swarm] retention: purged ${r.removed} entries (${r.posts} posts), ${r.entries} left, cap ${r.cap}`);
+			const n = await this.#purgeNotice();
+			if (!n || n.at <= this.#lastPurgeAt) return;
+			this.#lastPurgeAt = n.at;
+			this.#forgetPosts(n.postIds ?? []);
 			void this.#statsTick();
 		} catch (e) {
-			this.#shardWarn("retention purge failed", e);
+			this.#shardWarn("purge notice not read", e);
 		} finally {
 			this.#purging = false;
 		}
@@ -732,7 +706,14 @@ export class SocialSwarmHub {
 		for (const id of [...this.#online]) if (!this.#agentIndex.has(id)) { this.#online.delete(id); this.#pulseLeases.delete(id); }
 	}
 
+	#wireGeneration: { generation: string; admitUntil: number } | null = null;
 	async #requestFor(peerId: string, requestId: string): Promise<RequestRef> {
+		const space = this.space as SwarmSpace & { issueGeneration?: unknown; requestGeneration?: () => Promise<{ generation: string; admitUntil: number }> };
+		if (typeof space.issueGeneration !== "function" && space.requestGeneration) {
+			// Over the wire the connection is the principal; a generation of its own, renewed before its admission ends.
+			if (!this.#wireGeneration || this.#wireGeneration.admitUntil - Date.now() < 60_000) this.#wireGeneration = await space.requestGeneration();
+			return { principal: { peerId }, generation: this.#wireGeneration.generation, requestId };
+		}
 		let generation = this.#generations.get(peerId);
 		if (!generation) {
 			const issued = await (this.space as any).issueGeneration({ peerId } as Principal);
@@ -984,7 +965,7 @@ export class SocialSwarmHub {
 			try {
 				// Compatibility only: new batches include follow-ups in their final commit.
 				if ((await this.space.readAll({ type: "PostEffect" }, { limit: 1 })).length) await this.#drainEffects();
-				const batch = await reserveBatch(this, batchSize);
+				const batch = await reserveBatch(this.space, batchSize);
 				if (!batch) {
 					await new Promise(r => setTimeout(r, 500));
 					continue;
@@ -1004,7 +985,7 @@ export class SocialSwarmHub {
 						await this.#afterPostCommit(String(task.fields.taskId), String(task.fields.agentId), String(task.fields.channel), post, batch.txn, writes);
 					}
 				}
-				const counts = await finishBatch(this, batch.txn, posts, writes);
+				const counts = await finishBatch(this.space, batch.txn, posts, writes);
 				activeTxn = undefined;
 				for (const [channel, count] of Object.entries(counts)) this.#channelTotals.set(channel, count);
 				for (const fn of postCommit) fn();
@@ -1016,7 +997,7 @@ export class SocialSwarmHub {
 				await new Promise(r => setTimeout(r, 25));
 			} catch (e) {
 				if (activeTxn) {
-					try { await abortBatch(this, activeTxn); }
+					try { await abortBatch(this.space, activeTxn); }
 					catch (abortError) { console.error("[swarm] worker stopped; durable session requires recovery", abortError); return; }
 				}
 				if (e instanceof ResourceExhausted) batchSize = Math.max(1, Math.floor(batchSize / 2));

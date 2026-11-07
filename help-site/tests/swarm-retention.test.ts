@@ -2,21 +2,23 @@ import "./test-env.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
-import { FOREVER, Meter, openOwnMemoryHost, SnapshotExpired } from "phi-spaces";
+import { FOREVER, Meter, SnapshotExpired } from "phi-spaces";
+import { swarmSpace } from "./swarm-space.ts";
 import { SocialSwarmHub, type SwarmPost } from "../server/social/swarm.ts";
 import { appendHistory, historyPage } from "../server/social/history.ts";
 import { purgeOldest, retentionConfig, SWARM_CLAIM_RESULT_MS } from "../server/social/retention.ts";
 import { core, NamedSpace } from "phi-spaces";
 
+/** The purge is host code (space-side.ts): these cases call it on a store in this process. */
 async function fixture(maxEntries: number | null) {
-	const host = openOwnMemoryHost();
-	const hub = new SocialSwarmHub(host, ctx, new Meter(), { produce: false, pulses: false, seedContent: false, maxEntries });
+	const t = await swarmSpace({ inProcess: true }), host = t.side!.host;
+	const hub = new SocialSwarmHub(t.space, new Meter(), { produce: false, pulses: false, seedContent: false, maxEntries });
 	await hub.init();
 	const deadline = Date.now() + 5_000;
 	while ((await hub.space.readAll({ type: "PostHistoryHead" }))[0]?.fields.ready !== true) {
 		assert.ok(Date.now() < deadline); await new Promise((r) => setTimeout(r, 10));
 	}
-	return { host, hub, b: { host, spaceId: hub.spaceId, ctx }, close: async () => { await hub.close(); await host.close(ctx); } };
+	return { host, hub, spaceId: t.side!.spaceId, b: { host, spaceId: t.side!.spaceId, ctx }, close: async () => { await hub.close(); await t.close(); } };
 }
 
 async function addPost(hub: SocialSwarmHub, i: number, likes = 1) {
@@ -121,8 +123,8 @@ test("retention: disabled hub reports no cap", async () => {
 });
 
 test("shard down: history queries and thread fetches answer from the local shard, the bar reports the shard unreachable", async () => {
-	const host = openOwnMemoryHost();
-	const hub = new SocialSwarmHub(host, ctx, new Meter(), { produce: false, pulses: false, seedContent: false, maxEntries: null });
+	const t = await swarmSpace();
+	const hub = new SocialSwarmHub(t.space, new Meter(), { produce: false, pulses: false, seedContent: false, maxEntries: null });
 	const dead = new Proxy({}, { get: () => () => Promise.reject(Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" })) }) as any;
 	hub.attachRemoteShard(dead, "b-", "tcp:nano:3600");
 	try {
@@ -148,7 +150,7 @@ test("shard down: history queries and thread fetches answer from the local shard
 		assert.ok(!sent.some((m) => m.type === "feed.error"), "no error frame reaches the client");
 		const sys = await hub.systemInfo();
 		assert.deepEqual(sys.shards.map((s) => [s.shard, s.up]), [["a", true], ["b", false]]);
-	} finally { await hub.close(); await host.close(ctx); }
+	} finally { await hub.close(); await t.close(); }
 });
 
 test("the feed goes on when the change history has moved past the hub's cursor: it starts again from now and sends the state", async () => {
@@ -196,7 +198,7 @@ test("a channel's posts are found however far back they lie (a busy feed): feed.
 test("the swarm space keeps request results for minutes, not the default day (claims would fill maxClaimBytes)", async () => {
 	const f = await fixture(null);
 	try {
-		const s = await f.host.snapshot(NamedSpace, f.hub.spaceId, ctx);
+		const s = await f.host.snapshot(NamedSpace, f.spaceId, ctx);
 		assert.equal(core.limitsOf(s!).claimResultMs, SWARM_CLAIM_RESULT_MS);
 		assert.equal(core.limitsOf(s!).generationAdmitMs, SWARM_CLAIM_RESULT_MS, "a generation admits no longer than the results are kept: no expired claims wait for it");
 		assert.ok(SWARM_CLAIM_RESULT_MS < core.DEFAULT_LIMITS.claimResultMs);
@@ -235,9 +237,9 @@ test("retention keeps the operator's own posts and every reply under them; the h
 test("like tasks run on the shard of their post, and a joining hub sees that shard's likes", async () => {
 	const rate = process.env.SWARM_RATE;
 	process.env.SWARM_RATE = "40";
-	const hostA = openOwnMemoryHost(), hostB = openOwnMemoryHost();
-	const shard = new SocialSwarmHub(hostB, ctx, new Meter(), { produce: false, pulses: false, seedContent: false, shardTag: "b-", maxEntries: null });
-	const hub = new SocialSwarmHub(hostA, ctx, new Meter(), { pulses: false, maxEntries: null });
+	const tA = await swarmSpace(), tB = await swarmSpace();
+	const shard = new SocialSwarmHub(tB.space, new Meter(), { produce: false, pulses: false, seedContent: false, shardTag: "b-", maxEntries: null });
+	const hub = new SocialSwarmHub(tA.space, new Meter(), { pulses: false, maxEntries: null });
 	try {
 		await shard.init();
 		for (let i = 1; i <= 40; i++) await shard.space.write({ type: "Post", fields: { postId: `b-post-${i}`, seq: i, at: Date.now(), handle: "b", name: "B", hue: 0, channel: "home", text: "b", likes: 0, replies: 0 } }, null, FOREVER);
@@ -255,7 +257,72 @@ test("like tasks run on the shard of their post, and a joining hub sees that sha
 		for (const e of await shard.space.readAll({ type: "Like" }, { limit: 5000 })) assert.ok(isRemote(e.fields.postId), "a shard holds only likes of its own posts");
 		for (const e of await hub.space.readAll({ type: "Like" }, { limit: 5000 })) assert.ok(!isRemote(e.fields.postId), "no like on the hub for a post of the shard");
 	} finally {
-		await hub.close(); await shard.close(); await hostA.close(ctx); await hostB.close(ctx);
+		await hub.close(); await shard.close(); await tA.close(); await tB.close();
 		if (rate === undefined) delete process.env.SWARM_RATE; else process.env.SWARM_RATE = rate;
 	}
+});
+
+test("the Space's own process purges above the cap; the swarm drops what the PurgeNotice names, the chain stays whole", async () => {
+	const t = await swarmSpace({ maxEntries: 100, retentionMs: 100 });
+	const hub = new SocialSwarmHub(t.space, new Meter(), { produce: false, pulses: false, seedContent: false, maxEntries: 100 });
+	try {
+		await hub.init();
+		const deadline = Date.now() + 20_000;
+		while ((await hub.space.readAll({ type: "PostHistoryHead" }))[0]?.fields.ready !== true) {
+			assert.ok(Date.now() < deadline); await new Promise((r) => setTimeout(r, 10));
+		}
+		for (let i = 1; i <= 60; i++) await addPost(hub, i, 1);
+		while (await hub.space.count() > 100) { assert.ok(Date.now() < deadline, "the space side purged down to the cap"); await new Promise((r) => setTimeout(r, 50)); }
+		let notice: any;
+		while (!(notice = (await hub.space.readAll({ type: "PurgeNotice" }))[0]?.fields)) { assert.ok(Date.now() < deadline, "the notice follows the purge"); await new Promise((r) => setTimeout(r, 50)); }
+		assert.ok(notice?.totalRemoved > 0 && notice.postIds.length > 0, `the notice names the purged posts: ${JSON.stringify(notice)}`);
+		const gone = (await hub.space.count({ type: "Post", fields: { postId: "post-1" } })) === 0;
+		assert.ok(gone, "the oldest post went");
+		while (hub.snapshot().posts.some((p) => p.postId === "post-1")) {
+			assert.ok(Date.now() < deadline, "the swarm forgot the purged post"); await new Promise((r) => setTimeout(r, 50));
+		}
+		const left = (await hub.space.readAll({ type: "Post" }, { limit: 1000 })).map((e) => String(e.fields.postId));
+		const page = await historyPage(hub.space, { beforeAt: Infinity, beforeId: "", limit: 512 });
+		assert.equal(page.candidates.length, left.length, "paging walks the whole kept chain");
+		assert.equal(page.next, "");
+		const host = (await hub.space.readAll({ type: "HostInfo" }))[0]?.fields;
+		assert.equal(host?.cap, 100, "the HostInfo entry carries the cap");
+	} finally { await hub.close(); await t.close(); }
+});
+
+test("the Space's own process keeps the operator's thread and the likes' strays go first (in either space server)", async () => {
+	const t = await swarmSpace({ maxEntries: 100, retentionMs: 100 });
+	const hub = new SocialSwarmHub(t.space, new Meter(), { produce: false, pulses: false, seedContent: false, maxEntries: 100 });
+	try {
+		await hub.init();
+		const deadline = Date.now() + 20_000;
+		while ((await hub.space.readAll({ type: "PostHistoryHead" }))[0]?.fields.ready !== true) {
+			assert.ok(Date.now() < deadline); await new Promise((r) => setTimeout(r, 10));
+		}
+		const add = async (i: number, over: Partial<SwarmPost> = {}) => {
+			const post: SwarmPost = { postId: `post-${i}`, seq: i, taskId: `t-${i}`, author: "agent-9", handle: "a", name: "A", hue: 0, channel: "home", text: `post ${i}`, replyTo: null, replyToHandle: null, at: 1_000 + i, likes: 0, replies: 0, imageSeed: null, imageAlt: null, imageUrl: null, ...over };
+			const txn = await hub.space.createTransaction(30_000);
+			await appendHistory(hub.space, post, txn.id);
+			await hub.space.write({ type: "Post", fields: { ...post } }, txn.id, FOREVER);
+			await hub.space.commit(txn.id);
+		};
+		// one transaction for all: the purge sees the whole set at once
+		const txn = await hub.space.createTransaction(30_000);
+		for (let i = 0; i < 10; i++) await hub.space.write({ type: "Like", fields: { likeId: `s-${i}`, postId: "b-post-1", agentId: `ag-${i}`, at: 1_000 + i } }, txn.id, FOREVER);
+		await hub.space.commit(txn.id);
+		await add(1);
+		await add(2, { author: "agent-you", channel: "meins" });
+		await add(3, { replyTo: "post-2" });
+		await add(4, { replyTo: "post-3" });
+		for (let i = 5; i <= 70; i++) await add(i);
+		while (await hub.space.count() > 100) { assert.ok(Date.now() < deadline, "purged down to the cap"); await new Promise((r) => setTimeout(r, 50)); }
+		assert.equal(await hub.space.count({ type: "Like" }), 0, "the strays went");
+		const left = (await hub.space.readAll({ type: "Post" }, { limit: 1000 })).map((e) => String(e.fields.postId));
+		for (const id of ["post-2", "post-3", "post-4"]) assert.ok(left.includes(id), `${id} stays`);
+		assert.ok(!left.includes("post-1") && !left.includes("post-5"), "the swarm's own old posts go");
+		const page = await historyPage(hub.space, { beforeAt: Infinity, beforeId: "", limit: 512 });
+		assert.equal(page.candidates.length, left.length, "paging walks the whole kept chain");
+		assert.equal(page.next, "");
+		assert.deepEqual(page.candidates.slice(-3).map((c) => c.post.postId), ["post-4", "post-3", "post-2"], "the kept thread sits at the old end");
+	} finally { await hub.close(); await t.close(); }
 });

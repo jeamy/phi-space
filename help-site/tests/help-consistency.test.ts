@@ -17,6 +17,7 @@ import { SnapshotExpired, type Changes, type Page } from "phi-spaces/core";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FOREVER, Meter, PhiSpaces, openOwnMemoryHost } from "phi-spaces";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
+import { swarmSpace } from "./swarm-space.ts";
 import { previousArticlePaths, retireGeneratedArticles } from "../scripts/generated-articles.ts";
 
 test("local shard defaults select the migrated store after original deletion", async () => {
@@ -114,19 +115,19 @@ test("help tutorial: full model-free program has the documented output", async (
 });
 
 test("help lifecycle: close during background init cannot create orphan intervals", async t => {
-	const host = openOwnMemoryHost();
+	const t0 = await swarmSpace();
 	const realSet = globalThis.setInterval, realClear = globalThis.clearInterval;
 	const live = new Set<ReturnType<typeof setInterval>>();
 	t.mock.method(globalThis, "setInterval", (...args: Parameters<typeof setInterval>) => { const id=realSet(...args); live.add(id); return id; });
 	t.mock.method(globalThis, "clearInterval", (id: ReturnType<typeof setInterval>) => {live.delete(id);realClear(id);});
-	const hub = new SocialSwarmHub(host,ctx,new Meter(),{produce:false,pulses:false,seedContent:false});
+	const hub = new SocialSwarmHub(t0.space,new Meter(),{produce:false,pulses:false,seedContent:false});
 	try {
 		const started = hub.init();
 		await hub.close(); await started;
 		await new Promise(r => setTimeout(r,20));
 		assert.equal(live.size,0);
 		await assert.rejects(hub.init(),/closed/);
-	} finally { for(const id of live)realClear(id); await hub.close(); await host.close(ctx); }
+	} finally { for(const id of live)realClear(id); await hub.close(); await t0.close(); }
 });
 
 const entry = (id: string) => ({id,type:"Job",types:["Job"],fields:{id},owner:null});
