@@ -179,6 +179,15 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		assert.equal(await light(), 0);
 		assert.equal(await pack(s, boss.me, "treibholz"), 3);
 		assert.equal(await pack(s, boss.me, "muschel"), 3);
+		// a ruin need not wait out its days: anyone registered beside it clears it; the owner's estate stays
+		for (const [x, y] of [[16, 12], [17, 12], [16, 13], [17, 13]]) await s.write({ type: "Plot", fields: { room: "graue-bucht", x, y, of: "b3" } }, null, FOREVER);
+		await s.write({ type: "Ruin", fields: { buildId: "b3", plan: "huette", name: "Hütte", room: "graue-bucht", x: 16, y: 12, w: 2, h: 2, owner: boss.me, ownerName: "Siedlerin", accountId, untilWorldMs: (await worldNowOf(s)) + 10 * 24 * 3600_000 } as never }, null, FOREVER);
+		await s.write({ type: "Estate", fields: { estateId: "est-b3", accountId, ownerName: "Siedlerin", room: "graue-bucht", name: "Hütte", untilWorldMs: (await worldNowOf(s)) + 30 * 24 * 3600_000 } as never }, null, FOREVER);
+		assert.match(await does(other.p, "abriss ruine hütte", "Ruine"), /Nachbar räumt die Ruine ab \(Hütte von Siedlerin\); die Fläche ist frei\. Der Nachlass wartet hier weiter auf Siedlerin/);
+		assert.equal((await s.readAll({ type: "Ruin" })).length, 0);
+		assert.equal(await plots(), 0);
+		assert.equal((await s.readAll({ type: "Estate", fields: { estateId: "est-b3" } })).length, 1);
+		await s.takeIfExists({ type: "Estate", fields: { estateId: "est-b3" } }, 0);
 		// a site given up gives back all that was delivered
 		await clear(s, [[16, 12], [17, 12], [16, 13], [17, 13]]);
 		await does(boss.p, "bau hütte 16 12", "steckt eine Baustelle ab");

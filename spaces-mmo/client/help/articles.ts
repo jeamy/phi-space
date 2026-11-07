@@ -1053,7 +1053,7 @@ Die Hütte hat eine Truhe mit 12 Plätzen, die **nur dir** gehört: \`truhe\` ze
 
 Nichts hält ewig. Wer einen Bau nicht ausbessert, verliert ihn, aber nicht seine Sachen.
 
-Ein Bau hält **eine Woche**, die Vogelscheuche drei Tage. \`repariere\` kostet ein Stück Material (meist 1 Treibholz, beim Backhaus 1 Muschel, bei der Vogelscheuche 1 Tang), jeder darf helfen, und die Frist beginnt neu. Wer ihn verfallen lässt, hat eine **Ruine**: Sie steht noch zehn Welttage und gibt das Licht des Feuers frei. Was in der Truhe lag, wartet einen Monat als **Nachlass**; \`nachlass\` an der Ruine holt es ab.
+Ein Bau hält **eine Woche**, die Vogelscheuche drei Tage. \`repariere\` kostet ein Stück Material (meist 1 Treibholz, beim Backhaus 1 Muschel, bei der Vogelscheuche 1 Tang), jeder darf helfen, und die Frist beginnt neu. Wer ihn verfallen lässt, hat eine **Ruine**: Sie steht noch zehn Welttage und gibt das Licht des Feuers frei. Was in der Truhe lag, wartet einen Monat als **Nachlass**; \`nachlass\` an der Ruine holt es ab. Eine Ruine muss nicht stehen bleiben: Jeder registrierte Spieler räumt sie von nebenan ab (\`abriss ruine\` oder „Ruine abräumen“ auf der Karte), die Fläche ist dann frei; der Nachlass wartet trotzdem weiter auf seinen Besitzer.
 
 ## Abriss {#demolish}
 
@@ -1107,7 +1107,7 @@ The hut has a chest with 12 places that is **yours alone**: \`truhe\` (\`chest\`
 
 Nothing lasts for ever. If you do not repair a building you lose it, but not your things.
 
-A building lasts **a week**, a scarecrow three days. \`repariere\` (\`repair\`) costs one piece of material (mostly 1 driftwood, 1 shell for a bakery, 1 kelp for a scarecrow), anyone may help, and the time starts anew. Let it decay and it becomes a **ruin**: it stands ten more world days and frees the fire's light. What lay in the chest waits a month as an **estate**; \`estate\` (\`estate\`) at the ruin collects it.
+A building lasts **a week**, a scarecrow three days. \`repariere\` (\`repair\`) costs one piece of material (mostly 1 driftwood, 1 shell for a bakery, 1 kelp for a scarecrow), anyone may help, and the time starts anew. Let it decay and it becomes a **ruin**: it stands ten more world days and frees the fire's light. What lay in the chest waits a month as an **estate**; \`estate\` (\`estate\`) at the ruin collects it. A ruin need not stay: any registered player clears it from beside it (\`demolish ruin\` or „Clear the ruin“ on the map), and the ground is free; the estate still waits for its owner.
 
 ## Demolition {#demolish}
 

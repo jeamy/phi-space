@@ -245,6 +245,8 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			else if (o.ownerId === me && plans.some((p) => p.key === o.plan && p.chest)) entries.push({ label: "Truhe ansehen", line: "truhe" });
 		}
 		if (o.kind === "ruin" && o.ownerId === me) entries.push({ label: "Nachlass abholen", line: "nachlass" });
+		// anyone registered clears a ruin from beside it (server: build.ts abriss)
+		if (o.kind === "ruin" && beside && !guest) entries.push({ label: "Ruine abräumen", line: `abriss ruine ${o.name}` });
 		if ((o.kind === "building" || o.kind === "ruin") && o.plan === "windmuehle" && nearSite) entries.push({ label: "Mehl abholen", line: "abholen" });
 		if (o.kind === "site" && nearSite) {
 			entries.push({ label: "Aushang ansehen", line: "aushang", ...(onOrders ? { run: onOrders } : {}) });

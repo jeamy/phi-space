@@ -549,7 +549,7 @@ export async function releaseLight(space: SpaceLike, txn: string, beaconId: stri
 
 const abriss: Command = {
 	key: "abriss", aliases: ["reisse", "reiße", "demolish"],
-	help: "abriss – deinen Bau oder deine Baustelle neben dir abreißen (reisse … ab): die Fläche wird frei, ein Teil des Materials kommt zurück",
+	help: "abriss – deinen Bau oder deine Baustelle neben dir abreißen (reisse … ab): die Fläche wird frei, ein Teil des Materials kommt zurück; eine Ruine neben dir räumt jeder ab",
 	async func(c, arg) {
 		const name = arg.replace(/\s+ab$/i, "").replace(/^(?:die|den|das|meine?n?)\s+/i, "").replace(/^baustelle$/i, "");
 		const site = (await c.space.readAll({ type: "Site", fields: { room: c.actor.room } })).map((e) => fieldsOf<SiteFields>(e)).find((s) => distTo(c.actor, s) <= 1 && s.accountId === c.account?.accountId);
@@ -560,6 +560,19 @@ const abriss: Command = {
 			await freeCells(c.space, c.txn, site.room, site.buildId);
 			await releaseLight(c.space, c.txn, site.beaconId, site.points ?? 1);
 			await msg(c, "*", "info", `${c.actor.name} gibt die Baustelle ${site.name} auf.${back.length ? ` Zurück an ${c.actor.name}: ${back.join(", ")}.` : ""}`);
+			return;
+		}
+		// a ruin beside one: anyone may clear it (its light went back already); what lay in its chest stays the owner's estate
+		const ruinName = name.replace(/^ruine?\s*(?:(?:der|des|einer|eines|von|of the|of)\s+)?/i, "");
+		const ownNear = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).some((e) => { const b = fieldsOf<BuildingFields>(e); return b.accountId === c.account?.accountId && distTo(c.actor, b) <= 1; });
+		const ruins = (await c.space.readAll({ type: "Ruin", fields: { room: c.actor.room } })).map((e) => fieldsOf<RuinFields>(e)).filter((r) => distTo(c.actor, r) <= 1 && (!ruinName || planOf(c.world, ruinName)?.key === r.plan || r.name.toLowerCase() === ruinName.toLowerCase()));
+		const ruin = /^ruine?\b/i.test(name) || !ownNear ? (ruins.find((r) => r.accountId === c.account?.accountId) ?? ruins[0]) : undefined;
+		if (ruin) {
+			if (!c.account || c.account.guest) throw new CommandError("Ruinen räumen nur registrierte Spieler.");
+			if (!(await c.space.takeIfExists({ type: "Ruin", fields: { buildId: ruin.buildId } }, 5_000, { txn: c.txn }))) throw new CommandError("Die Ruine ist gerade nicht greifbar; bitte noch einmal.");
+			await freeCells(c.space, c.txn, ruin.room, ruin.buildId);
+			const estate = await c.space.readIfExists({ type: "Estate", fields: { estateId: `est-${ruin.buildId}` } }, NO_WAIT, { txn: c.txn });
+			await msg(c, "*", "info", `${c.actor.name} räumt die Ruine ab (${ruin.name} von ${ruin.ownerName}); die Fläche ist frei.${estate ? ` Der Nachlass wartet hier weiter auf ${ruin.ownerName} („nachlass“).` : ""}`);
 			return;
 		}
 		const b = await buildingHere(c, name, { own: true });
