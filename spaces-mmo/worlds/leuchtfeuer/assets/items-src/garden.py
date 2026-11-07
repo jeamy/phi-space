@@ -371,15 +371,18 @@ def wool():
 
 def jug():
     img = new(); px = img.load()
-    C, CD = rgb("#b0604a"), rgb("#6e3426")
-    for y in range(9, 29):                  # a clay jug, bellied
-        half = 5 + 3.5 * (1 - abs(y - 20) / 10) if y > 11 else 4
-        for x in range(round(15 - half), round(15 + half) + 1):
-            px[x, y] = shade(C, 1.2 if x < 12 and y < 18 else 0.75 if y > 25 or x > 19 else 1.0)
-    rect(px, 11, 6, 19, 8, rgb("#f4f1e8"))  # milk at the brim
-    line(px, 10, 6, 20, 6, CD)
-    for i in range(7):                      # the handle
-        disc(px, 23.5 + (1.5 if 1 < i < 5 else 0), 12.5 + i * 1.6, 1.2, CD, light=False)
+    C, CD, M = rgb("#c8ccd0"), rgb("#6a7076"), rgb("#ffffff")
+    for y in range(11, 29):                 # a tin milk can: a broad body, a shoulder, a narrow neck
+        half = 8 if y > 15 else 8 - (16 - y) * 1.0
+        for x in range(round(15.5 - half), round(15.5 + half) + 1):
+            px[x, y] = shade(C, 1.25 if x < 12 else 0.75 if x > 20 or y > 26 else 1.0)
+    for x in range(8, 24): px[x, 20] = CD    # a band round it
+    rect(px, 12, 6, 19, 10, C)              # the neck
+    rect(px, 13, 5, 18, 7, M)               # milk at the brim
+    line(px, 11, 5, 20, 5, CD)
+    for i in range(6):                      # the handles
+        disc(px, 5.5, 15 + i * 1.2, 1.0, CD, light=False)
+        disc(px, 25.5, 15 + i * 1.2, 1.0, CD, light=False)
     return outline(img)
 
 

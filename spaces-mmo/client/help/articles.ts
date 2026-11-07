@@ -920,7 +920,7 @@ Ein Angebot bleibt einen Tag stehen, dann kommt die Ware zurück.
 
 Suchst du etwas, das gerade niemand anbietet, hängst du ein **Gesuch** aus. Deine Münzen liegen dann am Brett, und wer das Ding bringt, bekommt sie:
 
-- \`markt suche <ding> für <n>\`: zum Beispiel \`markt suche ziege für 5\` (auch einfach „suche ziege für 5“)
+- \`markt suche <ding> für <n>\`: zum Beispiel \`markt suche ziege für 5\` (auch einfach „suche ziege für 5“); \`markt suche 3 ziegen für 12\` sucht drei zusammen
 - \`markt liefere <nr>\`: ein Gesuch erfüllen; das Ding geht an den Suchenden, die Münzen an dich
 - \`markt suche zurück <nr>\`: dein Gesuch zurücknehmen, die Münzen kommen zurück
 
@@ -978,7 +978,7 @@ An offer stays up for a day, then the goods come back.
 
 If you are looking for something nobody offers right now, post a **wanted notice**. Your coins then wait at the board, and whoever brings the thing gets them:
 
-- \`market want <thing> for <n>\`: for example \`market want goat for 5\` (also just „want goat for 5“)
+- \`market want <thing> for <n>\`: for example \`market want goat for 5\` (also just „want goat for 5“); \`market want 3 goats for 12\` seeks three together
 - \`market deliver <nr>\`: fill a notice; the thing goes to the one who seeks it, the coins to you
 - \`market want withdraw <nr>\`: take your notice back, the coins come back
 

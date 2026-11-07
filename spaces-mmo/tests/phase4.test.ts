@@ -131,6 +131,18 @@ test("market: a wanted notice holds the buyer's coins; delivering moves thing an
 		assert.equal((await pack(s, a.me, "muenze")).length, 5);
 		assert.equal(await s.count({ type: "Wanted" }), 0);
 		assert.equal((await s.readAll({ type: "Item", fields: { location: "market" } })).length, 0);
+		// several of one kind, said with a count; delivered only whole
+		await give(s, b.me, "muenze", 4);
+		assert.match(await does(b.p, "markt suche 2 flugdrachen für 2", "gibt es nicht"), /Flugdrache/i);
+		await does(b.p, "markt suche 1 bienenvolk für 1", "Du suchst am Marktbrett Bienenvolk und zahlst 1 Münze.");
+		await does(b.p, "markt suche 2 ziegen für 3", "Du suchst am Marktbrett 2× Ziege und zahlst 3 Münzen.");
+		await give(s, a.me, "ziege", 1);
+		assert.match(await does(a.p, "markt liefere 2", "trägst nur"), /Gesucht sind 2× Ziege; du trägst nur 1/);
+		await give(s, a.me, "ziege", 1);
+		await does(a.p, "markt liefere 2", "Du lieferst Ziegensucher 2× Ziege und bekommst 3 Münzen.");
+		assert.equal((await pack(s, b.me, "ziege")).length, 3);
+		await does(b.p, "markt suche zurück 1", "deine 1 Münze hast du wieder");
+		for (const e of await s.readAll({ type: "Item", fields: { location: b.me, proto: "muenze" } })) await s.take({ id: e.id }, 2_000);
 		// withdrawn: the coins come back
 		await give(s, b.me, "muenze", 2);
 		await does(b.p, "suche eine Muschel für 2 Münzen", "Du suchst am Marktbrett Muschel");

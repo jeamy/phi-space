@@ -410,7 +410,7 @@ export const world: WorldDef = {
 		{ key: "ziege", parent: "ding", typeclass: "Livestock", name: "Ziege", desc: "Eine neugierige Ziege mit Bart. Sie gibt jeden Tag Milch und frisst fast alles.", aliases: ["ziegen", "geiß", "geiss", "goat"], glyph: { shape: "circle", color: "#a89a80" }, icon: "items/ziege.png", locks: ITEM_LOCKS },
 		{ key: "ei", parent: "ding", typeclass: "Produce", name: "Ei", desc: "Ein braunes Ei, noch warm aus dem Nest.", aliases: ["eier", "egg", "eggs"], glyph: { shape: "circle", color: "#e8d0a8" }, icon: "items/ei.png", locks: ITEM_LOCKS },
 		{ key: "wolle", parent: "ding", typeclass: "Produce", name: "Wolle", desc: "Ein Knäuel geschorener Wolle, fettig und warm.", aliases: ["schafwolle", "wool"], glyph: { shape: "circle", color: "#f0ece0" }, icon: "items/wolle.png", locks: ITEM_LOCKS },
-		{ key: "milch", parent: "ding", typeclass: "Produce", name: "Milch", desc: "Ein Krug Ziegenmilch.", aliases: ["ziegenmilch", "krug", "milk"], glyph: { shape: "square", color: "#f4f1e8" }, icon: "items/milch.png", locks: ITEM_LOCKS },
+		{ key: "milch", parent: "ding", typeclass: "Produce", name: "Milch", desc: "Eine Kanne frische Milch.", aliases: ["ziegenmilch", "kanne milch", "krug", "milk"], glyph: { shape: "square", color: "#f4f1e8" }, icon: "items/milch.png", locks: ITEM_LOCKS },
 		{ key: "ente", parent: "ding", typeclass: "Livestock", name: "Ente", desc: "Eine schnatternde Ente mit grünem Spiegel. Sie legt Eier und frisst Tang wie ein Huhn.", aliases: ["enten", "duck"], glyph: { shape: "circle", color: "#6a8a5a" }, icon: "items/ente.png", locks: ITEM_LOCKS },
 		{ key: "gans", parent: "ding", typeclass: "Livestock", name: "Gans", desc: "Eine weiße Gans, wachsam und laut. Wo Gänse sind, kommt kein Hase unbemerkt an die Beete.", aliases: ["gänse", "gaense", "goose"], glyph: { shape: "circle", color: "#f0ece0" }, icon: "items/gans.png", locks: ITEM_LOCKS },
 		// bees (animals below): a colony lives in a hive, eats flowers and gives honey, now and then wax
@@ -739,7 +739,7 @@ export const world: WorldDef = {
 			{ key: "riffbrot", text: "Die Riffischer fahren lange hinaus: 2 Brote für die Fahrt.", needs: [{ proto: "brot", count: 2 }], reward: { proto: "muenze", count: 6 }, rooms: ["riffdorf"] },
 			{ key: "eier", text: "Die Schenke im Hafenviertel braucht 4 Eier.", needs: [{ proto: "ei", count: 4 }], reward: { proto: "muenze", count: 6 }, rooms: ["kupferhafen-markt"] },
 			{ key: "wolle", text: "Für warme Netzhandschuhe: 2 Knäuel Wolle.", needs: [{ proto: "wolle", count: 2 }], reward: { proto: "muenze", count: 6 }, rooms: ["graue-bucht", "riffdorf"] },
-			{ key: "milch", text: "Momme will Milch für die Kinder: 2 Krüge.", needs: [{ proto: "milch", count: 2 }], reward: { proto: "muenze", count: 4 }, rooms: ["krabbenbucht"] },
+			{ key: "milch", text: "Momme will Milch für die Kinder: 2 Kannen.", needs: [{ proto: "milch", count: 2 }], reward: { proto: "muenze", count: 4 }, rooms: ["krabbenbucht"] },
 			{ key: "tuch", text: "Der Schneider am Kai braucht 2 Stück Wolltuch.", needs: [{ proto: "tuch", count: 2 }], reward: { proto: "muenze", count: 16 }, rooms: ["kupferhafen-markt"] },
 			{ key: "decke", text: "Für eine Aussteuer: eine Daunendecke.", needs: [{ proto: "decke", count: 1 }], reward: { proto: "muenze", count: 24 }, rooms: ["kupferhafen-markt"] },
 			{ key: "honig", text: "Die Schenke im Hafenviertel will Honig für ihren Met: 2 Töpfe.", needs: [{ proto: "honig", count: 2 }], reward: { proto: "muenze", count: 7 }, rooms: ["kupferhafen-markt"] },

@@ -371,8 +371,8 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 				</form>
 			)}</>}
 			{trade.wanted && <><h3>Gesuche</h3>{trade.wanted.length ? <ul>{trade.wanted.map((w) => {
-				const have = carried.some((o) => o.name === w.protoName);
-				return <li key={w.nr}><span>{w.mine ? "Du suchst" : `${w.buyerName} sucht`} {w.protoName} – {w.price} {w.price === 1 ? "Münze" : "Münzen"}</span>{!guest && (w.mine ? <button onClick={() => send(`markt suche zurück ${w.nr}`)}>Zurücknehmen</button> : <button disabled={!have} title={have ? "" : `Du trägst kein ${w.protoName}`} onClick={() => send(`markt liefere ${w.nr}`)}>Liefern</button>)}</li>;
+				const have = carried.filter((o) => o.name === w.protoName).length >= w.count;
+				return <li key={w.nr}><span>{w.mine ? "Du suchst" : `${w.buyerName} sucht`} {w.count > 1 ? `${w.count}× ` : ""}{w.protoName} – {w.price} {w.price === 1 ? "Münze" : "Münzen"}</span>{!guest && (w.mine ? <button onClick={() => send(`markt suche zurück ${w.nr}`)}>Zurücknehmen</button> : <button disabled={!have} title={have ? "" : `Du trägst nicht genug ${w.protoName}`} onClick={() => send(`markt liefere ${w.nr}`)}>Liefern</button>)}</li>;
 			})}</ul> : <p className="muted">Niemand sucht gerade etwas.</p>}
 			{!guest && (
 				<form className="row" onSubmit={(e) => { e.preventDefault(); if (seek.trim()) send(`markt suche ${seek.trim()} für ${bid}`); setSeek(""); }}>
