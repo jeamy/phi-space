@@ -1,8 +1,9 @@
 // What a command sees (docs/evennia-abbildung.en.md, "Ablauf eines Befehls"): the space and the transaction its intent
 // is taken in, the world, the actor and its account, and helpers every command needs: finding things by name,
 // asking locks, writing messages.
+import { randomBytes } from "node:crypto";
 import { NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
-import { fieldsOf, type AccountFields, type CharacterFields, type ExitFields, type ItemFields, type MsgFields, type MsgKind, type RoomFields } from "../model.ts";
+import { fieldsOf, type AccountFields, type CharacterFields, type ExitFields, type ItemFields, type MsgFields, type MsgKind, type NoticeFields, type RoomFields } from "../model.ts";
 import { allowed, LEVELS, type Level, type LockCtx } from "./locks.ts";
 import type { WorldDef } from "./world.ts";
 import { peek, supports } from "../space.ts";
@@ -151,10 +152,22 @@ export async function msgOptions(space: SpaceLike, m: Pick<MsgFields, "to" | "ki
 	return (await supports(space, "write.transient")) ? { transient: true } : {};
 }
 
-/** A message from the actor in `room` (default its room). `templ`: the text holds $you()/$conj() and is rendered per
+/** How long a message to a player waits for it (real time). */
+export const NOTICE_MS = 14 * 24 * 3600_000;
+/** Whether a message to `to` goes to one player (not a room, a channel or an NPC). */
+export const toOnePlayer = (to: string) => to !== "*" && !to.startsWith("#") && !to.startsWith("npc-");
+/** Writes a message to one player as a Notice (model.ts NoticeFields), kept until it is told. */
+export async function toPlayer(space: SpaceLike, m: MsgFields, txn: string | null): Promise<void> {
+	const n: NoticeFields = { ...m, noticeId: `n-${randomBytes(6).toString("hex")}`, charId: m.to };
+	await space.write({ type: "Notice", fields: n as never }, txn, NOTICE_MS);
+}
+
+/** A message from the actor in `room` (default its room). A message to another player is kept until it is told
+ *  (toPlayer); the answer to the actor's own command is a message of the moment. `templ`: the text holds $you()/$conj() and is rendered per
  *  reader. `txn` null writes it at once (a refusal after the abort). */
 export async function msg(c: Pick<CommandCtx, "space" | "actor" | "msgLeaseMs" | "lang"> & { txn: string | null }, to: string, kind: MsgKind, text: string, o: { templ?: boolean; room?: string; help?: MsgFields["help"] } = {}): Promise<void> {
 	const m: MsgFields = { room: o.room ?? c.actor.room, to, kind, text, from: c.actor.name, fromId: c.actor.charId, at: Date.now(), ...(c.lang ? { lang: c.lang } : {}), ...(o.templ ? { actor: c.actor.charId } : {}), ...(o.help ? { help: o.help } : {}) };
+	if (to !== c.actor.charId && toOnePlayer(to)) return toPlayer(c.space, m, c.txn);
 	await c.space.write({ type: "Msg", fields: m as never }, c.txn, c.msgLeaseMs, await msgOptions(c.space, m));
 }
 

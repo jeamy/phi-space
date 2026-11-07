@@ -17,7 +17,7 @@ import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type ItemFields, type LoanFields, type ShopOrderFields } from "../../model.ts";
 import { decayNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
-import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, type CommandCtx } from "../context.ts";
+import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, toPlayer, type CommandCtx } from "../context.ts";
 import { peek } from "../../space.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import type { WorldDef } from "../world.ts";
@@ -202,7 +202,7 @@ export async function loanTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 				const it = await space.takeIfExists({ id: i.id }, NO_WAIT, { txn });
 				if (it) await space.write({ type: it.type, types: it.types.slice(1), fields: { ...it.fields, location: to } as never }, txn, FOREVER);
 			}
-			await space.write({ type: "Msg", fields: { room: l.room, to: l.charId, kind: "info", text: standing ? "Dein Kredit ist abgelaufen; das Pfand gehört jetzt dem Kontor." : "Dein Kontor steht nicht mehr; das Pfand ist wieder deins.", from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: l.charId, kind: "info" }));
+			await toPlayer(space, { room: l.room, to: l.charId, kind: "info", text: standing ? "Dein Kredit ist abgelaufen; das Pfand gehört jetzt dem Kontor." : "Dein Kontor steht nicht mehr; das Pfand ist wieder deins.", from: "", at: Date.now() }, txn);
 			await space.commit(txn);
 			ended++;
 		} catch (err) { await space.abort(txn).catch(() => {}); throw err; }

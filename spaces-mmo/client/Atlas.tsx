@@ -122,19 +122,19 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 			}
 			const [humans = 0, npcs = 0] = state?.people[r.roomId] ?? [];
 			const dots = [...Array(Math.min(humans, 6)).fill(DOTS[3][0]), ...Array(Math.min(npcs, 6)).fill(DOTS[4][0])];
-			dots.forEach((color, i) => { g.beginPath(); g.arc((px + 3 + i * 2.6) * s, (py + H - 3) * s, 3.2, 0, Math.PI * 2); g.fillStyle = color; g.fill(); g.strokeStyle = "rgba(0,0,0,0.5)"; g.lineWidth = 1; g.stroke(); });
+			dots.forEach((color, i) => { g.beginPath(); g.arc((px + 3 + i * 2.6) * s, (py + H - 3) * s, 3.2, 0, Math.PI * 2); g.fillStyle = color; g.fill(); });
 			if (r.roomId === state?.here) {
 				g.strokeStyle = "#ffffff"; g.lineWidth = page ? 6 : 3; g.strokeRect(px * s + 1.5, py * s + 1.5, W * s - 3, H * s - 3);
 				here = { x: (px + (me?.x ?? W / 2)) * s, y: (py + (me?.y ?? H / 2)) * s };
 			}
 		}
-		// what the player owns: a square each, on its cell
+		// what the player owns: a small square each, on its cell, without a frame (many side by side stay apart)
 		for (const m of state?.mine ?? []) {
 			const r = byId.get(m.room);
 			if (!r) continue;
 			const { px, py } = at(r);
-			g.fillStyle = MINE[m.kind].color; g.strokeStyle = "#101010"; g.lineWidth = 3;
-			g.fillRect((px + m.x) * s - 9, (py + m.y) * s - 9, 18, 18); g.strokeRect((px + m.x) * s - 9, (py + m.y) * s - 9, 18, 18);
+			g.fillStyle = MINE[m.kind].color;
+			g.fillRect((px + m.x) * s - 5, (py + m.y) * s - 5, 10, 10);
 		}
 		// the picked target: outlined, and a dashed line to it from where the player stands (beaming goes this way)
 		const target = picked ? byId.get(picked) : null;
@@ -147,8 +147,8 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 		}
 		// the player: a mark big enough for a small screen, on top of everything but the names
 		if (here) {
-			g.beginPath(); g.arc(here.x, here.y, 26, 0, Math.PI * 2); g.fillStyle = "rgba(174,216,60,0.3)"; g.fill();
-			g.beginPath(); g.arc(here.x, here.y, 13, 0, Math.PI * 2); g.fillStyle = DOTS[0][0]; g.fill(); g.lineWidth = 4; g.strokeStyle = "#101010"; g.stroke();
+			g.beginPath(); g.arc(here.x, here.y, 16, 0, Math.PI * 2); g.fillStyle = "rgba(174,216,60,0.3)"; g.fill();
+			g.beginPath(); g.arc(here.x, here.y, 8, 0, Math.PI * 2); g.fillStyle = DOTS[0][0]; g.fill();
 			pin.current = here;
 		}
 		// the islands' names, above each island

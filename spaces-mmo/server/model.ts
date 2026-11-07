@@ -127,6 +127,10 @@ export type OfferFields = { offerId: string; from: string; fromName: string; to:
 /** A listing on the market board (one thing, or a lot of one kind: „markt biete 10 muscheln für 15“): the items wait in escrow (location "market") until bought, withdrawn or the lease
  *  ends (then the market ticker gives it back). Prices are counted in coins (prototype `currency` of the world). */
 export type ListingFields = { listingId: string; seller: string; sellerName: string; /** the first of the lot (all of it carries `listing`) */ itemId: string; itemName: string; /** how many of the thing, for `price` together (absent: one) */ count?: number; price: number; room: string; at: number; expiresWorldMs?: number };
+/** A message to one player from someone or something else (a purchase from its listing, a delivery, a gift, its cart
+ *  arrived): kept 14 days, not leased like a Msg, so it is not lost while the player is away. The web process tells it
+ *  the moment the player is online, or when it next comes, and then takes the entry (engine/context.ts toPlayer). */
+export type NoticeFields = MsgFields & { noticeId: string; charId: string };
 /** A wanted notice on the market board: the buyer's coins wait in escrow (location "market", `listing` = `wantedId`,
  *  `seller` = the buyer) until someone delivers a thing of `proto`, the buyer withdraws it or it lapses like a listing
  *  (then the market ticker gives the coins back). */

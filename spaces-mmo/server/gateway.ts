@@ -5,7 +5,7 @@
 // A character is online while a Session entry for it lives; the gateway holds one per open WebSocket and renews its
 // lease, so a web process that dies takes its players offline within the lease.
 import { randomBytes } from "node:crypto";
-import { cutText, RevisionAhead, SnapshotExpired, type SpaceLike } from "phi-spaces";
+import { cutText, NO_WAIT, RevisionAhead, SnapshotExpired, type SpaceLike } from "phi-spaces";
 import type { Me } from "./accounts.ts";
 import { Chat, isChatFrame, isChatLine, type ChatClientFrame, type ChatFrame, type ChatUser } from "./chat.ts";
 import { render } from "./engine/funcparser.ts";
@@ -14,7 +14,7 @@ import { whereTo } from "./engine/context.ts";
 import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
 import { baysOf, linerOf, type Timetable } from "./engine/liner.ts";
 import { todosFor, type Todo } from "./todos.ts";
-import { asFields, type HerdFields, type MillLoadFields, type EpochFields, type SeedRestFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type WantedFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type CartFields, type WindFields, type WorldClockFields, type ZoneFields } from "./model.ts";
+import { asFields, type HerdFields, type MillLoadFields, type EpochFields, type SeedRestFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type WantedFields, type NoticeFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type CartFields, type WindFields, type WorldClockFields, type ZoneFields } from "./model.ts";
 import { bedPlantsView } from "./engine/commands/garden.ts";
 import { fieldView } from "./engine/commands/field.ts";
 import { wildKinds } from "./engine/commands/wild.ts";
@@ -195,6 +195,7 @@ export class Gateway {
 	readonly #orders = new Map<string, OrderFields>(); // entry id -> order
 	readonly #listings = new Map<string, ListingFields>(); // entry id -> listing
 	readonly #wanted = new Map<string, WantedFields>(); // entry id -> wanted notice
+	readonly #notices = new Map<string, NoticeFields>(); // entry id (region:id) -> word for a player, until told
 	readonly #seedRests = new Map<string, SeedRestFields>(); // entry id -> the rest of a figure after a search for seeds
 	readonly #epochs = new Map<string, EpochFields>(); // entry id -> the epoch of an island
 	readonly #siteOrders = new Map<string, SiteOrderFields>(); // entry id -> what a site hung out
@@ -419,10 +420,26 @@ export class Gateway {
 		const log = (this.#recent.get(self.room) ?? []).map((m) => msgView(m, self.charId, this.#modelNames, self.name, this.#playerNames()));
 		queueMicrotask(() => {
 			c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
+			this.#tell(c.me.charId); // word that waited while it was away
 			if (!c.atlas) { c.atlas = true; c.ws.send({ t: "atlas", atlas: this.#atlas() } satisfies ServerFrame); }
 			c.ws.send({ t: "atlasState", state: this.#atlasState(c) } satisfies ServerFrame);
 		});
 		c.ws.send({ t: "hello", wind: this.#windIn(self.room), build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set([...this.#protoIcons.values(), ...(this.w.wild ? [`/assets/${this.w.id}/${this.w.wild.hare.icon}`] : [])])], plans: this.#plans(), uses: this.#uses(), ...(this.w.liner ? { liner: { ...(() => { const t = linerOf(this.w)!; return { stops: t.stops, stayMs: t.stayMs, legMs: t.legMs, cycleMs: t.cycleMs }; })(), island: this.#rooms.get(self.room)?.island ?? "", fare: this.w.liner.fare, routes: [...baysOf(this.w.allRooms ?? this.w.rooms)].map(([island, r]) => ({ island, room: r.roomId })) } } : {}), ...(this.w.rail ? { rail: { plan: this.w.rail.plan, ...(this.w.rail.everyWorldMs ? { everyWorldMs: this.w.rail.everyWorldMs } : {}) } } : {}) }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
+	}
+
+	/** Tells a player the word waiting for it (model.ts NoticeFields), if one of its pages is in the world, and takes it:
+ *  told once, on every page open now. */
+	#tell(charId: string): void {
+		const pages = [...this.#clients].filter((c) => c.me.charId === charId && c.room !== null);
+		if (!pages.length) return;
+		for (const [id, n] of this.#notices) {
+			if (n.charId !== charId) continue;
+			this.#notices.delete(id);
+			const { noticeId: _n, charId: _c, ...m } = n;
+			for (const c of pages) c.ws.send({ t: "msg", m: msgView(m, charId, this.#modelNames, this.#chars.get(charId)?.name) } satisfies ServerFrame);
+			const [region, ...rest] = id.split(":");
+			void this.#regions.get(region!)?.takeIfExists({ type: "Notice", id: rest.join(":") }, NO_WAIT).catch(() => {});
+		}
 	}
 
 	/** Puts every entry `tmpl` matches, read in pages of bounded size (one snapshot: the pages share its token). */
@@ -445,7 +462,7 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Wanted", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Wind", "Cart", "MillLoad"]) await this.#readPaged(region, space, { type }, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Wanted", "Notice", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Wind", "Cart", "MillLoad"]) await this.#readPaged(region, space, { type }, msgs);
 					await this.#readPaged(region, space, { type: "Msg", fields: { to: "*" } }, msgs); // #put keeps the last RECENT of each room
 					this.#advance(region, rev);
 					ready();
@@ -502,11 +519,11 @@ export class Gateway {
 	#reset(region: string): void {
 		if (this.#regions.size === 1) {
 			this.#clock = null;
-			for (const m of [this.#chars, this.#charOf, this.#charEntry, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#objEntry, this.#recent, this.#flames, this.#flameOf, this.#fog, this.#offers, this.#orders, this.#listings, this.#wanted, this.#seedRests, this.#epochs, this.#millLoads, this.#herds]) m.clear();
+			for (const m of [this.#chars, this.#charOf, this.#charEntry, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#objEntry, this.#recent, this.#flames, this.#flameOf, this.#fog, this.#offers, this.#orders, this.#listings, this.#wanted, this.#notices, this.#seedRests, this.#epochs, this.#millLoads, this.#herds]) m.clear();
 			return;
 		}
 		const mine = (id: string) => id.startsWith(`${region}:`);
-		for (const m of [this.#charOf, this.#objOf, this.#sessions, this.#flameOf, this.#offers, this.#orders, this.#listings, this.#wanted, this.#seedRests, this.#epochs, this.#siteOrders, this.#millLoads] as Array<Map<string, unknown>>) for (const id of [...m.keys()]) if (mine(id)) this.#del(id);
+		for (const m of [this.#charOf, this.#objOf, this.#sessions, this.#flameOf, this.#offers, this.#orders, this.#listings, this.#wanted, this.#notices, this.#seedRests, this.#epochs, this.#siteOrders, this.#millLoads] as Array<Map<string, unknown>>) for (const id of [...m.keys()]) if (mine(id)) this.#del(id);
 	}
 
 	/** Applies a put; a message is collected in `msgs` to be sent after the batch. */
@@ -592,6 +609,7 @@ export class Gateway {
 		else if (type === "Order") this.#orders.set(id, fields as unknown as OrderFields);
 		else if (type === "Listing") this.#listings.set(id, fields as unknown as ListingFields);
 		else if (type === "Wanted") this.#wanted.set(id, fields as unknown as WantedFields);
+		else if (type === "Notice") { const n = fields as unknown as NoticeFields; this.#notices.set(id, n); this.#tell(n.charId); }
 		else if (type === "SeedRest") this.#seedRests.set(id, fields as unknown as SeedRestFields);
 		else if (type === "Epoch") { this.#epochs.set(id, fields as unknown as EpochFields); this.#atlasChanged(); }
 		else if (type === "Scenery") { const s = fields as unknown as SceneryFields; this.#setObj(id, { id: s.sceneryId, kind: "scenery", name: s.name, desc: sceneryText(this.w, s), location: s.room, x: s.x, y: s.y, w: s.w, h: s.h, model: s.model, left: s.left, ...(s.fixed ? { fixed: true } : {}), ...(s.through ? { through: true } : {}) }); }
@@ -634,7 +652,7 @@ export class Gateway {
 		if (this.#millLoads.delete(id)) { this.#atlasChanged(); return; }
 		const order = this.#siteOrders.get(id);
 		if (order) { this.#siteOrders.delete(id); this.#showOrders(order.buildId); return; }
-		if (this.#offers.delete(id) || this.#orders.delete(id) || this.#listings.delete(id) || this.#wanted.delete(id) || this.#seedRests.delete(id)) return;
+		if (this.#offers.delete(id) || this.#orders.delete(id) || this.#listings.delete(id) || this.#wanted.delete(id) || this.#notices.delete(id) || this.#seedRests.delete(id)) return;
 		if (this.#epochs.delete(id)) { this.#atlasChanged(); return; }
 		const beaconId = this.#flameOf.get(id);
 		if (beaconId) { this.#flameOf.delete(id); if (![...this.#flameOf.values()].includes(beaconId)) this.#flames.delete(beaconId); return; }

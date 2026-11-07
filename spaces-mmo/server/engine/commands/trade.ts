@@ -217,7 +217,7 @@ const market: Command = {
 			const paid = await c.space.readAll({ type: "Item", fields: { location: "market", listing: w.f.wantedId } }, { txn: c.txn });
 			for (const e of paid) await move(c, fieldsOf<ItemFields>(e), "market", c.actor.charId);
 			for (const t of things) await move(c, t.f, c.actor.charId, w.f.buyer);
-			await msg(c, w.f.buyer, "info", `${c.actor.name} liefert dir ${lot} für dein Gesuch am Marktbrett.`);
+			await msg(c, w.f.buyer, "info", `${c.actor.name} liefert dir ${lot} für dein Gesuch am Marktbrett (${c.world.rooms.find((r) => r.roomId === c.actor.room)?.name ?? c.actor.room}); die ${coins(paid.length)} hat ${c.actor.name}.`);
 			return msg(c, "*", "info", `$you() $conj(lieferst|liefert) ${w.f.buyerName} ${lot} und $conj(bekommst|bekommt) ${coins(paid.length)}.`, { templ: true });
 		}
 		if (/^(biete|sell|verkaufe)$/i.test(verb)) {
@@ -245,7 +245,7 @@ const market: Command = {
 			const goods = await c.space.readAll({ type: "Item", fields: { location: "market", listing: l.f.listingId } }, { txn: c.txn });
 			if (!goods.length) throw new CommandError("Die Ware ist nicht mehr am Brett.");
 			for (const g of goods) await move(c, fieldsOf<ItemFields>(g), "market", c.actor.charId);
-			await msg(c, l.f.seller, "info", `${c.actor.name} kauft dein ${lotOf(l.f)} für ${l.f.price} Münze${l.f.price === 1 ? "" : "n"}.`);
+			await msg(c, l.f.seller, "info", `${c.actor.name} kauft dein ${lotOf(l.f)} am Marktbrett (${c.world.rooms.find((r) => r.roomId === c.actor.room)?.name ?? c.actor.room}) für ${l.f.price} Münze${l.f.price === 1 ? "" : "n"}.`);
 			return msg(c, "*", "info", `$you() $conj(kaufst|kauft) ${lotOf(l.f)} vom Marktbrett.`, { templ: true });
 		}
 		if (/^(zurück|zurueck|withdraw)$/i.test(verb)) {

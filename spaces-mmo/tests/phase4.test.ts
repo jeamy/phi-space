@@ -139,7 +139,13 @@ test("market: a wanted notice holds the buyer's coins; delivering moves thing an
 		await give(s, a.me, "ziege", 1);
 		assert.match(await does(a.p, "markt liefere 2", "trägst nur"), /Gesucht sind 2× Ziege; du trägst nur 1/);
 		await give(s, a.me, "ziege", 1);
+		// the seeker is away: the word waits for it, and comes when it is back (once)
+		await b.p.leave();
 		await does(a.p, "markt liefere 2", "Du lieferst Ziegensucher 2× Ziege und bekommst 3 Münzen.");
+		assert.equal(await s.count({ type: "Notice", fields: { charId: b.me } }), 1);
+		await b.p.play();
+		await b.p.until((f) => f.t === "msg" && f.m.text.startsWith("Ziegenhirtin liefert dir 2× Ziege für dein Gesuch am Marktbrett") && f.m.mine === true, 10_000);
+		await eventually(async () => (await s.count({ type: "Notice", fields: { charId: b.me } })) === 0, 10_000, "the word is taken once told");
 		assert.equal((await pack(s, b.me, "ziege")).length, 3);
 		await does(b.p, "markt suche zurück 1", "deine 1 Münze hast du wieder");
 		for (const e of await s.readAll({ type: "Item", fields: { location: b.me, proto: "muenze" } })) await s.take({ id: e.id }, 2_000);
