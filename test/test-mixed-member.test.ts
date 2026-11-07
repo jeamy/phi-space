@@ -410,6 +410,12 @@ test("an admin runs a run, assigns workers, moves a Space and purges by command;
 	const done = async (commandId: string, kind: string, args: Record<string, unknown>) => { const r = await command(commandId, kind, args); assert.equal(r.state, "completed", JSON.stringify(r)); return r.result as Record<string, any>; };
 	const failed = async (commandId: string, kind: string, args: Record<string, unknown>, part: RegExp) => { const r = await command(commandId, kind, args); assert.equal(r.state, "failed", JSON.stringify(r)); assert.match(String(r.result?.error ?? r.error), part); };
 	assert.equal((await done("add-1", "addMember", { member: { id: "a", state: "adding", target } })).phase, "completed");
+	// a Member that refuses: without a gated profile its Space cannot prepare a run. The command fails with the Member's
+	// reason, the run loop does not send it again, and a stop ends the run
+	const refusedSpec = { runId: "r0", kind: "tasks", config: { tasks: [{ type: "Gated", fields: { n: 0 } }] }, members: [sid] };
+	await failed("run-0", "startRun", refusedSpec, new RegExp(`${sid}: this Space has no gated completion profile`));
+	assert.deepEqual((await done("run-0-status", "runStatus", { runId: "r0" })).pending?.refused, [sid]);
+	assert.equal((await done("run-0-stop", "stopRun", { runId: "r0" })).state, "stopped");
 	// the gated profile the run's tasks need comes with the policy (the membership installed one without profiles)
 	const installed = await admin.requestRoutingPolicy();
 	assert.equal((await done("profiles-1", "migrateProfiles", { policy: { ...installed.policy, policyVersion: installed.policy.policyVersion + 1, completionProfiles: [...installed.policy.completionProfiles, GATED] } })).phase, "completed");
@@ -431,7 +437,7 @@ test("an admin runs a run, assigns workers, moves a Space and purges by command;
 	await user.abort(paused.id);
 	assert.equal((await done("run-3", "stopRun", { runId: "r1" })).state, "stopped");
 	assert.equal((await done("run-4", "runStatus", { runId: "r1" })).revision, 4, "prepare, release, pause, stop");
-	assert.equal((await done("run-5", "listRuns", {})).length, 1);
+	assert.equal((await done("run-5", "listRuns", {})).length, 2);
 	await failed("run-6", "pauseRun", { runId: "r1" }, /cannot pause/);
 	// worker assignments: desired at the control host, pulled by the host they are for under the control key
 	const assigned = await done("w-1", "setWorkers", { assignmentId: "w1", hostId: "data-host", kind: "sieve", targetSpace: sid, count: 2 });

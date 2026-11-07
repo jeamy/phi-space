@@ -58,6 +58,10 @@ test("signed instructions bind authority, Space, run kind and both keys", async 
 	assert.equal((await g.gate.control.jobs(g.sid)).length, 2, "the registered preparer wrote the run's tasks");
 	await g.proven.requestRunGate(await sign(q));
 	assert.equal((await g.gate.control.jobs(g.sid)).length, 2, "a replay writes nothing new");
+	// a refusal keeps its class on the wire, so the run controller can tell it from a lost line
+	await assert.rejects(g.proven.requestRunGate(await sign({ ...q, spaceId: "sp-unknown" })), (e: Error) => e instanceof core.IllegalArgumentError && /no local Space/.test(e.message));
+	await assert.rejects(g.proven.requestRunGate(await sign({ ...q, commandId: "other" })), (e: Error) => e instanceof core.TransactionError && /belongs to another command/.test(e.message));
+	await assert.rejects(g.proven.requestRunGate(await sign({ ...q, authorityId: "other" })), (e: Error) => e instanceof core.PermissionError, "a foreign authority stays a permission refusal");
 	const send = (t: Parameters<typeof g.proven.requestRunGate>[0]) => g.proven.requestRunGate(t);
 	const member = (publicKey: string) => remoteRunMember({ spaceId: g.sid, authorityId: "authority", peerId: "control", signer: controller.signer, memberPin: { issuer: "host-1", algorithm: "ed25519", publicKey }, send });
 	await assert.rejects(member(generateKey("ed25519", "b2").publicKey).prepare(q.spec!, { runId: "r", commandId: "p", kind: "prepare", revision: 1 }), core.PermissionError, "an ACK signed by another key is no confirmation");

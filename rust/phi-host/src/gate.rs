@@ -509,13 +509,15 @@ impl GateSession {
 	}
 
 	/// A notice of the control plane: only a proven service peer brings one.
-	fn notice(&self, key: &str, apply: impl FnOnce(&Json) -> Result<Json, phi_core::space::CoreError>, call: &Json) -> Json {
+	fn notice(&self, key: &str, apply: impl FnOnce(&Json) -> Result<Json, phi_core::space::CoreError>, call: &Json) -> Json { self.notice_as(key, apply, call, |e| crate::control::refuse(&e.message)) }
+	/// A notice whose refusal says more than `PermissionDenied` (`refused` makes the reply).
+	fn notice_as(&self, key: &str, apply: impl FnOnce(&Json) -> Result<Json, phi_core::space::CoreError>, call: &Json, refused: fn(&phi_core::space::CoreError) -> Json) -> Json {
 		let id = self.identity();
 		let proven = self.state.borrow().proof.is_some() && id.roles.iter().any(|r| ["router", "host", "admin"].contains(&r.as_str()));
 		let done = if proven { apply(call.get("args").and_then(|a| a.get(key)).unwrap_or(&Json::Null)) } else { Err(phi_core::space::error("PermissionError", "epoch notice requires proven service peer")) };
 		match done {
 			Ok(ack) => crate::control::answered(ack),
-			Err(e) => crate::control::refuse(&e.message),
+			Err(e) => refused(&e),
 		}
 	}
 
@@ -628,7 +630,7 @@ impl Session for GateSession {
 		}
 		if method == "runGateInstruction" {
 			if let Some(gates) = &self.gate.o.run_gates {
-				return Some(self.notice("instruction", |q| gates.apply(service, q), call).to_json_text());
+				return Some(self.notice_as("instruction", |q| gates.apply(service, q), call, crate::run_member::refusal).to_json_text());
 			}
 		}
 		if method == "spaceLifecycleInstruction" {

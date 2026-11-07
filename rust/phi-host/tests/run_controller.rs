@@ -56,6 +56,7 @@ impl World {
 		match next.as_str() {
 			Some("throw") => return Err(error("Error", "the line broke")),
 			Some("underRecovery") => return Err(error("Error", format!("run {run_id} is under recovery rec-1; only its decision applies"))),
+			Some("refuse") => return Err(error("RunGateConflict", "the Member refuses")),
 			_ => {}
 		}
 		if let Some(id) = text(&next, "underRecovery") {
@@ -160,6 +161,7 @@ fn plan(r: &mut Rng) -> Json {
 		2 => "wrongSpace".into(),
 		3 => "tuple".into(),
 		4 => "underRecovery".into(),
+		5 => "refuse".into(),
 		_ => obj! {},
 	}).collect())
 }

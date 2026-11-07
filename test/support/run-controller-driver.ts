@@ -30,11 +30,12 @@ async function open(): Promise<void> {
 	}
 	identity = DEFAULT_IDENTITY;
 }
-/** The next scripted fault of this line: a thrown transport error (`{throw: message}`, `{underRecovery: id}` name their own), or a change to the genuine answer. */
+/** The next scripted fault of this line: a thrown transport error (`{throw: message}`, `{underRecovery: id}` name their own), a refusal (`refuse`), or a change to the genuine answer. */
 const fault = (runId: string) => {
 	const next = plan.shift();
 	if (next === "throw") throw new Error("the line broke");
 	if (next === "underRecovery") throw new Error(`run ${runId} is under recovery rec-1; only its decision applies`);
+	if (next === "refuse") throw new core.RunGateConflict("the Member refuses"); // a refusal with its class, as the wire keeps it
 	if (typeof next?.underRecovery === "string") throw new Error(`run ${runId} is under recovery ${next.underRecovery}; only its decision applies`);
 	if (typeof next?.throw === "string") throw new Error(next.throw);
 	return next;

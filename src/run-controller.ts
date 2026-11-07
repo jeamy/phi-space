@@ -21,13 +21,13 @@ export interface RunMember {
 }
 /** The control authority and incarnation a transition was issued under; a restore changes it. */
 export type RunIdentity = { authorityId: string | null; incarnation: string | null };
-type Pending = { commandId: string; kind: core.RunGateKind; revision: number; acks: Record<string, core.RunGateAck>; errors: Record<string, string>; identity?: RunIdentity; recoveryId?: string; expect?: Record<string, { revision: number; state: core.RunGateState }>; then?: "resume" };
+type Pending = { commandId: string; kind: core.RunGateKind; revision: number; acks: Record<string, core.RunGateAck>; errors: Record<string, string>; /** Members that refused this command: it is never sent to them again, and the next command may replace it */ refused?: string[]; identity?: RunIdentity; recoveryId?: string; expect?: Record<string, { revision: number; state: core.RunGateState }>; then?: "resume" };
 type Decision = "pause" | "stop" | "resume";
 type Recovery = { id: string; commandId: string; stage: "required" | "gathering" | "review" | "deciding"; reason?: string; identity?: RunIdentity; abandoned?: { commandId: string; kind: core.RunGateKind; revision: number }; views: Record<string, core.RunRecoveryView>; errors: Record<string, string>; changed?: Record<string, string>; viewHash?: string; decision?: { commandId: string; decision: Decision; viewHash: string | null; auto: boolean }; partial?: string[] };
 type RunRec = { spec: RunSpec; revision: number; state: core.RunGateState; pending?: Pending; recovery?: Recovery; issued: string[]; resolved?: Array<{ id: string; decision: Decision; auto: boolean }>; commands: Record<string, { hash: string; kind: string; revision: number }>; tuples: Record<string, { incarnation: string | null; authorityId: string | null }>; at: number; schedules?: Array<{ id: string; kind: "pause" | "resume"; at: number }> };
 export type RunView = {
 	runId: string; kind: string; members: string[]; revision: number; state: RunStatus;
-	pending?: { commandId: string; kind: core.RunGateKind; revision: number; applied: string[]; fenced: string[]; missing: string[]; errors: Record<string, string> };
+	pending?: { commandId: string; kind: core.RunGateKind; revision: number; applied: string[]; fenced: string[]; missing: string[]; errors: Record<string, string>; refused?: string[] };
 	recovery?: { id: string; stage: Recovery["stage"]; reason?: string; viewHash?: string; abandoned?: Recovery["abandoned"]; decision?: Recovery["decision"]; errors: Record<string, string>; changed?: Record<string, string>; partial?: string[]; views: Record<string, core.RunRecoveryView> };
 };
 
@@ -42,6 +42,9 @@ export type RunExporter = (run: RunSpec, space: (spaceId: string) => SpaceLike) 
 const MAX_RUNS = 1024, MAX_MEMBERS = 64, MAX_CONFIG_BYTES = 16 * 1024, MAX_COMMANDS = 256, MAX_ISSUED = 128;
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,95}$/;
 const hashOf = digestJson;
+/** A Member's refusal of a command (its class kept on the wire): final, unlike a lost line. The fence of a data restore is not
+ *  one, it leads to a reconciliation. */
+const refusal = (e: unknown) => (e instanceof core.IllegalArgumentError || e instanceof core.TransactionError || e instanceof core.LimitError) && !/is under recovery /.test((e as Error).message);
 const sameIdentity = (a: RunIdentity, b: RunIdentity) => a.authorityId === b.authorityId && a.incarnation === b.incarnation;
 function validate(spec: RunSpec): void {
 	if (!spec || !ID.test(spec.runId) || typeof spec.kind !== "string" || !ID.test(spec.kind)) throw new core.IllegalArgumentError("a run needs a runId and a kind");
@@ -65,7 +68,7 @@ function viewOf(r: RunRec): RunView {
 		const errors = { ...p.errors };
 		v.state = p.kind === "prepare" || p.kind === "release" ? "preparing" : p.kind === "pause" ? (Object.keys(errors).length ? "pauseIncomplete" : "pausing") : p.kind === "resume" ? "resuming" : "stopping";
 		v.pending = { commandId: p.commandId, kind: p.kind, revision: p.revision, errors,
-			applied: r.spec.members.filter(m => p.acks[m]?.phase === "applied"), fenced: r.spec.members.filter(m => p.acks[m]?.phase === "fenced"), missing: r.spec.members.filter(m => !p.acks[m]) };
+			applied: r.spec.members.filter(m => p.acks[m]?.phase === "applied"), fenced: r.spec.members.filter(m => p.acks[m]?.phase === "fenced"), missing: r.spec.members.filter(m => !p.acks[m]), ...(p.refused?.length ? { refused: [...p.refused] } : {}) };
 	}
 	if (q) v.state = q.stage === "review" || q.stage === "required" ? "needsReview" : "reconciling";
 	return v;
@@ -113,7 +116,8 @@ export class RunController {
 			if (old) { if (old.hash !== hash) throw new core.IllegalArgumentError("command ID was used for another command"); return; }
 			if (r.recovery) throw new RunBusy(`run ${runId} is under recovery ${r.recovery.id}; resolve it first`);
 			// A stop may replace an unfinished preparation (no transaction can be bound yet); anything else waits.
-			const supersede = kind === "stop" && (r.pending?.kind === "prepare" || r.pending?.kind === "release");
+			// A refused command waits for nothing: the next one replaces it.
+			const supersede = (kind === "stop" && (r.pending?.kind === "prepare" || r.pending?.kind === "release")) || !!r.pending?.refused?.length;
 			if (r.pending && !supersede) throw new RunBusy(`run ${runId} is still applying ${r.pending.kind} at revision ${r.pending.revision}`);
 			const from = { pause: ["running"], resume: ["paused"], stop: ["preparing", "running", "paused"] }[kind];
 			if (!from.includes(r.state)) throw new core.RunGateConflict(`cannot ${kind} run ${runId} while it is ${r.state}`);
@@ -241,14 +245,14 @@ export class RunController {
 			const p = r.pending;
 			if (!p) { if ((r.schedules ?? []).some(x => x.at <= this.now())) { await this.dueSchedules(runId); return (await this.status(runId))!; } return viewOf(r); }
 			for (const spaceId of r.spec.members) {
-				if (p.acks[spaceId]?.phase === "applied") continue;
+				if (p.acks[spaceId]?.phase === "applied" || p.refused?.includes(spaceId)) continue;
 				const command: core.RunGateCommand = { runId, commandId: p.commandId, kind: p.kind, revision: p.revision, ...(p.recoveryId ? { recoveryId: p.recoveryId } : {}), ...(p.expect?.[spaceId] ? { expect: p.expect[spaceId] } : {}) };
-				let ack: core.RunGateAck | undefined, error: string | undefined;
+				let ack: core.RunGateAck | undefined, error: string | undefined, refused = false;
 				try {
 					const member = this.o.member(spaceId);
 					ack = p.kind === "prepare" ? await member.prepare(r.spec, command) : await member.gate(command);
 					if (ack.spaceId !== spaceId || ack.runId !== runId || ack.revision !== p.revision || ack.commandId !== p.commandId || ack.kind !== p.kind) throw new core.TransactionError("ACK does not match the command");
-				} catch (e) { ack = undefined; error = String((e as Error)?.message ?? e).slice(0, 256); }
+				} catch (e) { ack = undefined; error = String((e as Error)?.message ?? e).slice(0, 256); refused = refusal(e) && (e as Error).message !== "ACK does not match the command"; }
 				await this.commit(runs => {
 					const cur = runs[runId]!, q = cur.pending;
 					if (!q || q.commandId !== p.commandId) return; // another advance finished it
@@ -262,7 +266,7 @@ export class RunController {
 						cur.recovery.partial = cur.spec.members.filter(m => q.acks[m]?.phase === "applied");
 						cur.recovery.changed = { ...(cur.recovery.changed ?? {}), [spaceId]: error! }; cur.recovery.stage = "gathering"; cur.recovery.views = {};
 						delete cur.recovery.viewHash; delete cur.recovery.decision; delete cur.pending;
-					} else q.errors[spaceId] = error!;
+					} else { q.errors[spaceId] = error!; if (refused && !q.refused?.includes(spaceId)) (q.refused ??= []).push(spaceId); }
 				});
 				if (!(await this.commit(runs => runs[runId]!.pending?.commandId === p.commandId))) break;
 			}
@@ -301,10 +305,12 @@ export class RunController {
 		if (kind === "start") return view ? { allowed: false, reason: `run ${runId} exists (${view.state})`, state: view.state } : { allowed: true, revision: 1 };
 		if (!view) return { allowed: false, reason: `unknown run ${runId}` };
 		if (view.recovery) return { allowed: false, reason: `run is under recovery ${view.recovery.id}`, state: view.state };
-		const supersede = kind === "stop" && (view.pending?.kind === "prepare" || view.pending?.kind === "release");
+		const refused = !!view.pending?.refused?.length;
+		const supersede = (kind === "stop" && (view.pending?.kind === "prepare" || view.pending?.kind === "release")) || refused;
 		if (view.pending && !supersede) return { allowed: false, reason: `still applying ${view.pending.kind} at revision ${view.pending.revision}`, state: view.state };
 		const from = { pause: ["running"], resume: ["paused"], stop: ["preparing", "running", "paused"] }[kind];
-		const confirmed = view.pending ? "preparing" : view.state;
+		// the state the journal confirmed last: a refused command left it as it was
+		const confirmed = refused ? await this.commit(runs => runs[runId]!.state) : view.pending ? "preparing" : view.state;
 		if (!from.includes(confirmed)) return { allowed: false, reason: `cannot ${kind} while ${view.state}`, state: view.state };
 		return { allowed: true, revision: (view.pending?.revision ?? view.revision) + 1, state: view.state };
 	}
@@ -315,7 +321,7 @@ export class RunController {
 	/** Runs with work left for the server-side loop: a transition waiting for ACKs or a recovery gathering views. */
 	async pending(): Promise<string[]> {
 		const now = this.now();
-		return this.commit(runs => Object.values(runs).filter(r => r.pending || r.recovery?.stage === "gathering" || (r.schedules ?? []).some(x => x.at <= now)).map(r => r.spec.runId));
+		return this.commit(runs => Object.values(runs).filter(r => (r.pending && !r.pending.refused?.length) || r.recovery?.stage === "gathering" || (r.schedules ?? []).some(x => x.at <= now)).map(r => r.spec.runId));
 	}
 
 	/**
@@ -390,7 +396,13 @@ export function localRunMember(host: SpaceHost, ctx: Context, spaceId: string, p
  */
 export function runCommands(runs: RunController): Record<"startRun" | "pauseRun" | "resumeRun" | "stopRun" | "reconcileRun" | "resolveRunRecovery" | "listRuns" | "runStatus" | "scheduleRun" | "exportRun", (commandId: string, args: Record<string, core.Json>) => Promise<core.Json>> {
 	const wrap = (f: (id: string, args: Record<string, core.Json>) => Promise<RunView>) => async (id: string, args: Record<string, core.Json>): Promise<core.Json> => {
-		try { return (await f(id, args)) as unknown as core.Json; }
+		try {
+			const v = await f(id, args);
+			// a Member refused the command: it fails, with the Member and its reason (stop the run, or command it anew)
+			const refused = (v as RunView)?.pending?.refused?.[0];
+			if (refused) return { phase: "failed", error: `${refused}: ${(v as RunView).pending!.errors[refused]}` };
+			return v as unknown as core.Json;
+		}
 		catch (e) { if (e instanceof core.IllegalArgumentError || e instanceof core.TransactionError || e instanceof core.LimitError) return { phase: "failed", error: e.message }; throw e; }
 	};
 	const run = (args: Record<string, core.Json>) => String(args.runId ?? "");

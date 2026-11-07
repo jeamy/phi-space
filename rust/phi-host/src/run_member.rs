@@ -33,6 +33,22 @@ fn sign_run(kind: &str, value: Json, issuer: &str, signer: &Signer) -> R<Json> {
 /// Registered host code that writes a run's tasks while its gate is preparing. Never a shell command.
 pub type RunPreparer = Box<dyn Fn(&mut Service, &Json, &str) -> R<()>>;
 
+/// `runGateRefusal`: the wire code of a refused run gate instruction. The class is kept as `RemoteSpace` turns it back (a
+/// conflict stays a `TransactionError`, a bad instruction an `IllegalArgumentError`), so the run controller fails the command
+/// instead of retrying it; what has no class of its own stays `PermissionDenied`.
+pub fn refusal(e: &CoreError) -> Json {
+	let code = match e.class {
+		"PermissionError" | "Denied" => "PermissionDenied",
+		"LimitError" | "ResourceExhausted" => "ResourceExhausted",
+		"CompletionViolation" => "CompletionViolation",
+		"TransactionError" | "RunGateConflict" | "RunBusy" | "UnknownLeaseError" => "TransactionError",
+		"UniqueConflict" => "UniqueConflict",
+		"IllegalArgumentError" | "TypeError" | "Bad" => "BadRequest",
+		_ => "PermissionDenied",
+	};
+	phi_json::obj! { "ok" => false, "error" => phi_json::obj! { "code" => code, "message" => e.message.as_str() } }
+}
+
 /// `tasksPreparer`: the preparer of a configured host, the tasks a run's own manifest names, each bound to the run. Idempotent.
 pub fn tasks_preparer(service: &mut Service, run: &Json, space: &str) -> R<()> {
 	let tasks = run.get("config").and_then(|c| c.get("tasks")).and_then(Json::as_array).filter(|t| t.len() <= 64).ok_or_else(|| illegal("a tasks run names at most 64 tasks"))?;

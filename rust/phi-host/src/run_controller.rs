@@ -34,6 +34,12 @@ pub trait RunEnv: RouterEnv {
 	fn identity(&self) -> Local<R<Option<Json>>>;
 }
 
+/// A Member's refusal of a command (its class kept on the wire): final, unlike a lost line. The fence of a data restore is not
+/// one, it leads to a reconciliation.
+fn refusal(e: &CoreError) -> bool { REFUSALS.contains(&e.class) && !e.message.contains("is under recovery ") }
+/// Whether a Member refused the pending command.
+fn refused_by(p: &Json, space_id: &str) -> bool { p.get("refused").and_then(Json::as_array).is_some_and(|a| a.iter().any(|x| x.as_str() == Some(space_id))) }
+fn refused_any(p: &Json) -> bool { p.get("refused").and_then(Json::as_array).is_some_and(|a| !a.is_empty()) }
 fn busy(m: impl Into<String>) -> CoreError { error("RunBusy", m) }
 fn limit(m: impl Into<String>) -> CoreError { error("LimitError", m) }
 fn hash(v: &Json) -> R<String> { digest_json(v).map_err(|_| illegal("a value that cannot be hashed")) }
@@ -159,6 +165,9 @@ pub fn view_of(r: &Json) -> Json {
 			"commandId" => p.get("commandId").cloned().unwrap_or(Json::Null), "kind" => kind, "revision" => p.get("revision").cloned().unwrap_or(Json::Null), "errors" => errors,
 			"applied" => pick(&|m| ack_phase(p, m) == Some("applied")), "fenced" => pick(&|m| ack_phase(p, m) == Some("fenced")), "missing" => pick(&|m| p.get("acks").and_then(|a| a.get(m)).is_none())
 		});
+		if let Some(refused) = p.get("refused").filter(|x| x.as_array().is_some_and(|a| !a.is_empty())) {
+			set(field(&mut v, "pending"), "refused", refused.clone());
+		}
 	}
 	if let Some(q) = q {
 		set(&mut v, "state", if matches!(text(q, "stage"), Some("review" | "required")) { "needsReview" } else { "reconciling" });
@@ -275,7 +284,8 @@ impl<E: RunEnv> RunController<E> {
 			}
 			// A stop may replace an unfinished preparation (no transaction can be bound yet); anything else waits.
 			let pending = r.get("pending").cloned();
-			let supersede = kind == "stop" && pending.as_ref().is_some_and(|p| matches!(text(p, "kind"), Some("prepare" | "release")));
+			// A refused command waits for nothing: the next one replaces it.
+			let supersede = (kind == "stop" && pending.as_ref().is_some_and(|p| matches!(text(p, "kind"), Some("prepare" | "release")))) || pending.as_ref().is_some_and(refused_any);
 			if let Some(p) = pending.as_ref().filter(|_| !supersede) {
 				return Err(busy(format!("run {run_id} is still applying {} at revision {}", text(p, "kind").unwrap_or(""), number_text(revision(p)))));
 			}
@@ -542,7 +552,7 @@ impl<E: RunEnv> RunController<E> {
 			let p_revision = p.get("revision").cloned().unwrap_or(Json::Null);
 			let recovery_id = p.get("recoveryId").filter(|x| truthy(Some(x))).cloned();
 			for space_id in members_of(&r) {
-				if ack_phase(&p, &space_id) == Some("applied") {
+				if ack_phase(&p, &space_id) == Some("applied") || refused_by(&p, &space_id) {
 					continue;
 				}
 				let mut command = obj! { "runId" => run_id, "commandId" => p_id.as_str(), "kind" => p_kind.as_str(), "revision" => p_revision.clone() };
@@ -553,6 +563,8 @@ impl<E: RunEnv> RunController<E> {
 					set(&mut command, "expect", e.clone());
 				}
 				let sent = if p_kind == "prepare" { self.env.prepare(&space_id, r.get("spec").unwrap_or(&Json::Null), &command).await } else { self.env.gate(&space_id, &command).await };
+				// a Member's refusal is final, a lost line is not; the ACK check of this side is neither
+				let refused = matches!(&sent, Err(e) if refusal(e));
 				let got = match sent {
 					Ok(ack) => {
 						if text(&ack, "spaceId") != Some(&space_id) || text(&ack, "runId") != Some(run_id) || ack.get("revision") != Some(&p_revision) || text(&ack, "commandId") != Some(&p_id) || text(&ack, "kind") != Some(&p_kind) {
@@ -600,7 +612,13 @@ impl<E: RunEnv> RunController<E> {
 								del(rec, "decision");
 								del(cur, "pending");
 							} else {
-								object(field(cur, "pending"), "errors").insert(&space_id, e.as_str().into());
+								let q = field(cur, "pending");
+								object(q, "errors").insert(&space_id, e.as_str().into());
+								if refused && !refused_by(q, &space_id) {
+									let mut list = q.get("refused").and_then(Json::as_array).cloned().unwrap_or_default();
+									list.push(space_id.as_str().into());
+									set(q, "refused", Json::Array(list));
+								}
 							}
 						}
 					}
@@ -693,11 +711,13 @@ impl<E: RunEnv> RunController<E> {
 			return Ok(obj! { "allowed" => false, "reason" => format!("run is under recovery {}", text(q, "id").unwrap_or("")), "state" => state });
 		}
 		let pending = view.get("pending");
-		let supersede = kind == "stop" && pending.is_some_and(|p| matches!(text(p, "kind"), Some("prepare" | "release")));
+		let refused = pending.is_some_and(refused_any);
+		let supersede = (kind == "stop" && pending.is_some_and(|p| matches!(text(p, "kind"), Some("prepare" | "release")))) || refused;
 		if let Some(p) = pending.filter(|_| !supersede) {
 			return Ok(obj! { "allowed" => false, "reason" => format!("still applying {} at revision {}", text(p, "kind").unwrap_or(""), number_text(revision(p))), "state" => state });
 		}
-		let confirmed = if pending.is_some() { "preparing".to_owned() } else { js_string(&state) };
+		// the state the journal confirmed last: a refused command left it as it was
+		let confirmed = if refused { self.run_of(run_id)?.as_ref().map_or(String::new(), |r| js_string(r.get("state").unwrap_or(&Json::Null))) } else if pending.is_some() { "preparing".to_owned() } else { js_string(&state) };
 		if !from(kind).contains(&confirmed.as_str()) {
 			return Ok(obj! { "allowed" => false, "reason" => format!("cannot {kind} while {}", js_string(&state)), "state" => state });
 		}
@@ -716,7 +736,7 @@ impl<E: RunEnv> RunController<E> {
 	pub fn pending(&self) -> R<Json> {
 		let now = self.now();
 		self.commit(|runs| {
-			Ok(Json::Array(runs.iter().filter(|(_, r)| r.get("pending").is_some() || r.get("recovery").and_then(|q| text(q, "stage")) == Some("gathering") || r.get("schedules").and_then(Json::as_array).is_some_and(|s| s.iter().any(|x| num_of(x, "at").unwrap_or(f64::NAN) <= now))).map(|(_, r)| Json::from(run_id_of(r))).collect()))
+			Ok(Json::Array(runs.iter().filter(|(_, r)| r.get("pending").is_some_and(|p| !refused_any(p)) || r.get("recovery").and_then(|q| text(q, "stage")) == Some("gathering") || r.get("schedules").and_then(Json::as_array).is_some_and(|s| s.iter().any(|x| num_of(x, "at").unwrap_or(f64::NAN) <= now))).map(|(_, r)| Json::from(run_id_of(r))).collect()))
 		})
 	}
 
@@ -784,6 +804,11 @@ impl<E: RunEnv> RunController<E> {
 		let spec = || obj! { "runId" => run.as_str(), "kind" => string("kind"), "config" => a("config").cloned().unwrap_or(Json::Null), "members" => args.get("members").cloned().unwrap_or(Json::Null) };
 		let wrap = |r: R<Json>| match r {
 			Err(e) if REFUSALS.contains(&e.class) => Ok(obj! { "phase" => "failed", "error" => e.message }),
+			// a Member refused the command: it fails, with the Member and its reason (stop the run, or command it anew)
+			Ok(v) => match v.get("pending").and_then(|p| p.get("refused")).and_then(Json::as_array).and_then(|r| r.first()).and_then(Json::as_str) {
+				Some(m) => Ok(obj! { "phase" => "failed", "error" => format!("{m}: {}", js_string(v.get("pending").and_then(|p| p.get("errors")).and_then(|e| e.get(m)).unwrap_or(&Json::Null))) }),
+				None => Ok(v),
+			},
 			other => other,
 		};
 		let dry = args.get("dryRun") == Some(&Json::Bool(true));

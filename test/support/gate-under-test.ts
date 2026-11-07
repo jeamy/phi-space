@@ -10,6 +10,7 @@ import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import { SpaceLifecycle, SpaceLifecycleService } from "../../src/space-lifecycle.ts";
 import { BootstrapClosed, CONTROL_SPACE, ControlAccess, EnrollmentService, GateIdentity, MemoryKeyDirectory, NetbirdDirectory, PhiSpaces, ProvingService, SpaceKeyDirectory, SpaceService, Supervisor, bootstrapEnroll, MemberLifecycle, DelegationVerifier, RunGateService, SqliteRecoveryRegister, installBootGuard, createSpace, spaceDoc, core, createEnroll, serveTlsRegister, GrantAuthority, GrantVerifier, RotationService, listSpaces, revokePeerKey, snapshotSpace, socketTransport, startGate, DEFAULT_GROUP_ROLES, rolesOf, type Call, type Connection, type Identity, type RunSpec, type KeyDirectory, type PeerKeyRec, type Policy } from "../../src/index.ts";
+import { runGateRefusal } from "../../src/run-member.ts";
 import { plainDoc } from "./host.ts";
 import { digestJson } from "../../src/canonical.ts";
 import { openSqliteHost } from "../../src/store/sqlite.ts";
@@ -134,8 +135,9 @@ async function inProcess(tc: TestContext, c: GateCase): Promise<GateUnderTest> {
 			try {
 				const id = await identity.authenticate(conn);
 				if (!(conn.state as { proof?: unknown } | undefined)?.proof || !id?.roles.some((r) => ["router", "host", "admin"].includes(r))) throw new Error("epoch notice requires proven service peer");
-				return JSON.stringify({ ok: true, result: await runs.apply(call.args?.instruction as never) });
 			} catch (e) { return JSON.stringify({ ok: false, error: { code: "PermissionDenied", message: (e as Error).message } }); }
+			// as runtime.ts: a refusal of the instruction keeps its class
+			try { return JSON.stringify({ ok: true, result: await runs.apply(call.args?.instruction as never) }); } catch (e) { return JSON.stringify({ ok: false, error: runGateRefusal(e) }); }
 		} } as unknown as ProvingService;
 	}
 	if (verifier) {

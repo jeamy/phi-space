@@ -813,6 +813,10 @@ the last reported state per host).
 `stopped`, `reconciling` or `needsReview`; `pending` names applied, fenced and missing members,
 `recovery` the views, the view hash, parked jobs and reported changes. `RunBusy` reports a still
 open transition or a running recovery. Commands with the same ID and the same content are idempotent.
+A Member that refuses a command (an `IllegalArgumentError`, `TransactionError` or `LimitError`; the Member keeps the
+class as its wire code, `runGateRefusal`) is named in `pending.refused`: the command is not sent to it again, the
+server loop leaves the run alone, the admin command fails with `"<spaceId>: <reason>"`, and the next command (a stop,
+or the same transition anew) replaces it. A lost line or an unreachable Member is still retried (2026-11-07).
 
 Members: `localRunMember(host, ctx, spaceId, prepare)` for own Spaces, `remoteRunMember({spaceId, authorityId,
 peerId, signer, memberPin, send})` for foreign hosts; `send` is for instance `RemoteSpace.requestRunGate`. On the

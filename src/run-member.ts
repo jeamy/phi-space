@@ -11,6 +11,16 @@ import { listSpaces, spaceDoc } from "./spaces.ts";
 import { localRunMember, type RunMember, type RunSpec } from "./run-controller.ts";
 import * as core from "./core.ts";
 
+/** The wire code of a refused run gate instruction: the class kept, as `RemoteSpace` turns it back (a conflict stays a
+ *  `TransactionError`, a bad instruction an `IllegalArgumentError`), so the run controller fails the command instead of
+ *  retrying it. What has no class of its own (no run gates here, a missing proof) stays `PermissionDenied`. */
+export function runGateRefusal(e: unknown): { code: string; message: string } {
+	const message = e instanceof Error ? e.message : String(e);
+	const code = e instanceof core.PermissionError ? "PermissionDenied" : e instanceof core.LimitError ? "ResourceExhausted" : e instanceof core.CompletionViolation ? "CompletionViolation"
+		: e instanceof core.TransactionError ? "TransactionError" : e instanceof core.UniqueConflict ? "UniqueConflict" : e instanceof core.IllegalArgumentError || e instanceof TypeError ? "BadRequest" : "PermissionDenied";
+	return { code, message };
+}
+
 /** How long a signed recovery instruction holds: a fence that a captured one could set again must not outlive its reason. */
 export const RECOVER_TTL_MS = 60_000;
 /** A gate command, or `kind: "recover"` (revision 0, commandId = recoveryId) for the recovery fence and view. */
