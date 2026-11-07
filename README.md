@@ -14,7 +14,7 @@
 
 phi-spaces is a space library in TypeScript and Rust with a storage of its own (SQLite, owned by one process, or memory).
 The Rust port (`rust/`) reads and writes the same store files and speaks the same wire protocol; its `phi-space-server`
-serves the spaces of spaces-mmo and codemode-chat in production.
+serves the spaces of spaces-mmo, codemode-chat and the help site's swarm in production.
 It needs no agent framework; the optional `agent/` package gives
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable) agents the space
 tools. Stores written by older versions through pi-durable are discarded, not taken over. It is a
@@ -234,7 +234,7 @@ survival and `RemoteSpace` for a separate worker process; see [examples](docs/ex
 | `help-site/` | bilingual help, Social Swarm, Space-Chat stages and authenticated Web Admin |
 | `codemode-chat/` | agents and people solve coding tasks together around one space; every role is its own process |
 | `spaces-mmo/` | online role-playing engine on spaces, first world Leuchtfeuer |
-| `rust/` | Rust port of core, store, service and secure host ([docs/rust-portierung.en.md](docs/rust-portierung.en.md)); the Space containers of spaces-mmo on nano and big and the codemode-chat Space on nano run its `phi-space-server` since 2026-11-07, everywhere else the TypeScript code stays authoritative |
+| `rust/` | Rust port of core, store, service and secure host ([docs/rust-portierung.en.md](docs/rust-portierung.en.md)); the Space containers of spaces-mmo on nano and big and the codemode-chat Space on nano run its `phi-space-server` since 2026-11-07, the help site's swarm Spaces since 2026-11-08, everywhere else the TypeScript code stays authoritative |
 
 A Space is one document; commits of the own store (`src/store/`) provide atomic state changes. Restart survival requires
 the SQLite store,
