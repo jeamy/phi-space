@@ -17,7 +17,7 @@ export type PlayerStat = {
 	at: { room: string; roomName: string; island: string | null; x: number; y: number } | { aboard: true } | null;
 	reputation: { pieces: number; beacons: number; parks: number };
 	trips: Trips;
-	owns: { buildings: number; beds: number; fields: number };
+	owns: { buildings: number; beds: number; fields: number; plans: Array<{ plan: string; name: string; count: number }> };
 };
 export type WorldStats = {
 	at: number;
@@ -86,6 +86,12 @@ export async function collectStats(regions: RegionSpaces, w: WorldDef): Promise<
 	const owned = (rows: Array<{ accountId: string }>) => { const m = new Map<string, number>(); for (const r of rows) m.set(r.accountId, (m.get(r.accountId) ?? 0) + 1); return m; };
 	const buildings = read.Building as BuildingFields[], beds = read.Bed as BedFields[], fields = read.Field as FieldFields[];
 	const ownB = owned(buildings), ownBeds = owned(beds), ownF = owned(fields);
+	const ownPlans = new Map<string, Map<string, number>>();
+	for (const b of buildings) {
+		const m = ownPlans.get(b.accountId) ?? new Map<string, number>();
+		m.set(b.plan, (m.get(b.plan) ?? 0) + 1); ownPlans.set(b.accountId, m);
+	}
+	const planName = (key: string) => w.building?.plans.find((p) => p.key === key)?.name ?? key;
 	const list: PlayerStat[] = [...chars.values()].map((c) => {
 		const a = accounts.get(c.accountId)!, room = rooms.get(c.room), p = pieces.get(c.charId);
 		return {
@@ -94,13 +100,15 @@ export async function collectStats(regions: RegionSpaces, w: WorldDef): Promise<
 			at: c.aboard ? { aboard: true as const } : { room: c.room, roomName: room?.name ?? c.room, island: room?.island ?? null, x: c.x, y: c.y },
 			reputation: { pieces: p?.pieces ?? 0, beacons: p?.beacons.size ?? 0, parks: parks.get(c.accountId) ?? 0 },
 			trips: trips.get(c.charId) ?? noTrips(),
-			owns: { buildings: ownB.get(c.accountId) ?? 0, beds: ownBeds.get(c.accountId) ?? 0, fields: ownF.get(c.accountId) ?? 0 },
+			owns: {
+				buildings: ownB.get(c.accountId) ?? 0, beds: ownBeds.get(c.accountId) ?? 0, fields: ownF.get(c.accountId) ?? 0,
+				plans: [...(ownPlans.get(c.accountId) ?? [])].map(([plan, count]) => ({ plan, name: planName(plan), count })).sort((x, y) => y.count - x.count),
+			},
 		};
 	}).sort((x, y) => KIND_ORDER[x.kind] - KIND_ORDER[y.kind] || Number(y.online) - Number(x.online) || Number(x.guest) - Number(y.guest) || x.name.localeCompare(y.name, "de"));
 	const people = list.filter((p) => p.kind === "player");
 	const byPlan = new Map<string, number>();
 	for (const b of buildings) byPlan.set(b.plan, (byPlan.get(b.plan) ?? 0) + 1);
-	const planName = (key: string) => w.building?.plans.find((p) => p.key === key)?.name ?? key;
 	return {
 		at: Date.now(),
 		players: { total: people.length, registered: people.filter((p) => !p.guest).length, guests: people.filter((p) => p.guest).length, online: people.filter((p) => p.online).length, settlers: list.filter((p) => p.kind === "settler").length, ai: list.filter((p) => p.kind === "ai").length },

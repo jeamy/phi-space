@@ -64,7 +64,7 @@ function PlayerDetail({ p }: { p: PlayerStat }) {
 			<dt>Ruf</dt><dd>{`${p.reputation.pieces} Scheite in ${p.reputation.beacons} Leuchtfeuern`}</dd>
 			{p.reputation.parks > 0 && <><dt>Parks</dt><dd>{`${p.reputation.parks}× gepflegt`}</dd></>}
 			<dt>Reisen</dt><dd>{rides.length ? rides.join(", ") : "noch keine"}</dd>
-			<dt>Besitz</dt><dd>{`${p.owns.buildings} Bauten, ${p.owns.fields} Felder, ${p.owns.beds} Beete`}</dd>
+			<dt>Besitz</dt><dd>{`${p.owns.buildings} Bauten${p.owns.plans.length ? ` (${p.owns.plans.map((b) => `${b.count}× ${b.name}`).join(", ")})` : ""}, ${p.owns.fields} Felder, ${p.owns.beds} Beete`}</dd>
 		</dl>
 	);
 }
