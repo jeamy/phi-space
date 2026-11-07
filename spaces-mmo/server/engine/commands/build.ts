@@ -250,11 +250,19 @@ export const bau: Command = {
 			const where = open.map((s) => `${s.name} in ${c.world.rooms.find((r) => r.roomId === s.room)?.name ?? s.room} (${s.x} ${s.y})`).join(", ");
 			throw new CommandError(`Du hast schon eine offene Baustelle: ${where}; bau sie erst fertig.`);
 		}
-		if (open.length + (await c.space.count({ type: "Building", fields: { accountId: c.account.accountId } })) >= def.maxBuildings) throw new CommandError(`Mehr als ${def.maxBuildings} Bauten hat niemand.`);
+		// small things and animal houses do not count; how many count grows with the island's epoch (the operator's settings)
+		const free = new Set(def.uncounted ?? []);
+		if (!free.has(plan.key)) {
+			const epoch = await epochOf(c.space, islandOf(c.world, c.actor.room), c.txn);
+			const max = (await setting(c.space, `build.max${Math.min(4, Math.max(1, epoch))}`).catch(() => undefined)) ?? def.maxBuildings;
+			const held = open.filter((s) => !free.has(s.plan)).length + (await c.space.readAll({ type: "Building", fields: { accountId: c.account.accountId } }, { txn: c.txn })).filter((e) => !free.has(String(e.fields.plan))).length;
+			if (held >= max) throw new CommandError(`Mehr als ${max} Bauten hat hier niemand (${epochName(c.world, epoch)}); Regentonne, Vogelscheuche, Ställe, Gehege, Bienenstock, Straße und Signalfeuer zählen nicht mit.`);
+		}
 		const herds = c.world.animals;
-		if (herds?.maxHouses && herds.houses[plan.key]) {
+		if (herds?.houses[plan.key]) {
+			const maxHouses = (await setting(c.space, "animals.houses").catch(() => undefined)) ?? herds.maxHouses ?? Infinity;
 			const mine = [...(await c.space.readAll({ type: "Building", fields: { accountId: c.account.accountId } })), ...(await c.space.readAll({ type: "Site", fields: { accountId: c.account.accountId } }))];
-			if (mine.filter((e) => herds.houses[String(e.fields.plan)]).length >= herds.maxHouses) throw new CommandError(`Mehr als ${herds.maxHouses} Ställe, Gehege und Bienenstöcke hält niemand im Blick.`);
+			if (mine.filter((e) => herds.houses[String(e.fields.plan)]).length >= maxHouses) throw new CommandError(`Mehr als ${maxHouses} Ställe, Gehege und Bienenstöcke hält niemand im Blick.`);
 		}
 		if (plan.onePerRoom && ((await c.space.count({ type: "Building", fields: { room: c.actor.room, plan: plan.key } })) || (await c.space.count({ type: "Site", fields: { room: c.actor.room, plan: plan.key } })))) throw new CommandError(`Ein Raum hat höchstens einen Bau „${plan.name}“, und hier steht er schon (oder seine Baustelle).`);
 		const light = await lightFor(c, plan.points);

@@ -1030,7 +1030,7 @@ Wo kein Feuer brennt, steckt niemand eine Baustelle ab. Jedes Feuer hat **20 Lic
 
 Du wählst einen Plan und einen freien Platz. Das geht mit einem Befehl oder mit der rechten Maustaste auf einem freien Feld. Danach wartet die Baustelle auf Material und Hände.
 
-\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Du hast höchstens eine offene Baustelle und zusammen fünf Baustellen und Bauten.
+\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Du hast höchstens eine offene Baustelle. Wie viele Bauten und Baustellen du zusammen haben darfst, wächst mit der Insel: 10 im Fischerdorf, 15 im Dorf, 18 in der Stadt, 20 im Netz (der Betreiber kann es ändern). Regentonne, Vogelscheuche, Hühnerstall, Gehege, Bienenstock, Straße und Signalfeuer zählen nicht mit; für Ställe, Gehege und Bienenstöcke gilt eine eigene Grenze von fünf.
 
 | Plan | Felder | Material | Arbeit | Licht | ab Stufe |
 | --- | --- | --- | --- | --- | --- |
@@ -1084,7 +1084,7 @@ Where no fire burns, nobody stakes out a site. Every fire has **20 light points*
 
 You choose a plan and a free spot. You do it with a command or with the right mouse button on a free cell. Then the site waits for material and hands.
 
-\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. You hold at most one open site and five sites and buildings together.
+\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. You hold at most one open site. How many buildings and sites you may have together grows with the island: 10 in the fishing village, 15 in the village, 18 in the town, 20 in the network (the operator can change it). Rain barrel, scarecrow, hen house, pen, hive, road and signal fire do not count; coops, pens and hives have their own limit of five.
 
 | Plan | Cells | Material | Work | Light | from stage |
 | --- | --- | --- | --- | --- | --- |
@@ -1451,7 +1451,7 @@ Bienen fressen **Blumen**: Strandnelke, Dünenrose, Nebelblume und Hopfen, die i
 
 Honig macht satt (\`iss honig\`). Am Herd einer **Hütte** zieht \`craft kerze\` aus 2 Wachs und 1 Leinen zwei Kerzen. Gesa kauft Honig und Wachs, Marta Honig und Kerzen, und die Schenke im Hafenviertel fragt an der Auftragstafel nach Honig.
 
-Du hältst bis zu drei Ställe, Gehege und Bienenstöcke zusammen.`,
+Du hältst bis zu fünf Ställe, Gehege und Bienenstöcke zusammen (der Betreiber kann es ändern).`,
 			en: `Animals live in a coop, pen or hive that belongs to you. You feed them, and they give you eggs, milk, wool, down or honey. These make goods that sell well. Hens work from the start, a pen only in a [village](help.game.village#epochs).
 
 ## Coop and pen {#house}
@@ -1498,7 +1498,7 @@ Bees eat **flowers**: sea pink, dune rose, fog flower and hops, which grow in th
 
 Honey is food (\`eat honey\`). At a **hut's** hearth \`craft kerze\` makes two candles from 2 wax and 1 linen. Gesa buys honey and wax, Marta honey and candles, and the inn in the harbour quarter asks for honey at the job board.
 
-You keep up to three coops, pens and hives together.`,
+You keep up to five coops, pens and hives together (the operator can change it).`,
 		},
 	},
 	{

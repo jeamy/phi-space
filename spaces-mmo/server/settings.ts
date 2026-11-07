@@ -37,6 +37,11 @@ export const SETTINGS: SettingDef[] = [
 	{ key: "keep.lager", env: "SPACES_MMO_KEEP_LAGER", def: 45, min: 1, max: 1_000, label: "Lager, Gruben, Werkstätten, Rathaus stehen", unit: "Tage", help: "Dasselbe für Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Werkstatt und Rathaus." },
 	{ key: "keep.kapelle", env: "SPACES_MMO_KEEP_KAPELLE", def: 60, min: 1, max: 1_000, label: "Kapelle steht", unit: "Tage", help: "Dasselbe für die Kapelle." },
 	{ key: "keep.park", env: "SPACES_MMO_KEEP_PARK", def: 120, min: 1, max: 1_000, label: "Park steht", unit: "Tage", help: "Dasselbe für den Park." },
+	{ key: "build.max1", env: "SPACES_MMO_BUILD_MAX_1", def: 10, min: 1, max: 1_000, label: "Bauten je Konto im Fischerdorf", unit: "Bauten", help: "So viele Bauten und Baustellen darf ein Konto haben, wenn die Insel, auf der es baut, noch Fischerdorf ist (Epoche 1). Kleine Bauten und Tierhäuser zählen nicht mit: Regentonne, Vogelscheuche, Hühnerstall, Gehege, Bienenstock, Straße, Signalfeuer (Tierhäuser haben ihre eigene Grenze, darunter)." },
+	{ key: "build.max2", env: "SPACES_MMO_BUILD_MAX_2", def: 15, min: 1, max: 1_000, label: "Bauten je Konto im Dorf", unit: "Bauten", help: "Dasselbe auf einer Insel, die Dorf ist (Epoche 2)." },
+	{ key: "build.max3", env: "SPACES_MMO_BUILD_MAX_3", def: 18, min: 1, max: 1_000, label: "Bauten je Konto in der Stadt", unit: "Bauten", help: "Dasselbe in der Stadt (Epoche 3)." },
+	{ key: "build.max4", env: "SPACES_MMO_BUILD_MAX_4", def: 20, min: 1, max: 1_000, label: "Bauten je Konto im Netz", unit: "Bauten", help: "Dasselbe im Netz (Epoche 4)." },
+	{ key: "animals.houses", env: "SPACES_MMO_ANIMAL_HOUSES", def: 5, min: 0, max: 1_000, label: "Ställe, Gehege und Bienenstöcke je Konto", unit: "Bauten", help: "So viele Häuser für Tiere (Hühnerstall, Gehege, Bienenstock) darf ein Konto zusammen haben, Baustellen eingerechnet. Sie zählen nicht zu den Bauten oben." },
 	{ key: "cmd.perSec", env: "SPACES_MMO_CMD_PER_SEC", def: 5, min: 1, max: 100, label: "Befehle je Sekunde je Konto", unit: "je s", help: "Danach so viele je Sekunde." },
 ];
 

@@ -152,7 +152,9 @@ export type WorldDef = {
  *  epoch from which a new one may be staked out (default 1; docs/siedeln.en.md "Epochen"). */
 /** `sparesTools`: a recipe made beside it wears a tool half as fast. */
 export type PlanDef = { /** It must stand beside an exit (a road). */ atExit?: boolean; /** A room holds one of it at most, built or staked (a station). */ onePerRoom?: boolean; /** It must touch water (a jetty). */ shore?: boolean; /** Light points it adds to its fire (a lighthouse). */ lightBonus?: number; /** A signal fire: those in rooms one way apart form a chain, and the fires of a burning one share their light (fire.ts chainsOf). */ signal?: boolean; /** A lighthouse: its fire also covers the rooms up to this many ways from its room, on its island (fire.ts coversOf). */ lightRooms?: number; /** The admin's setting in world days that replaces `keepWorldMs` (server/settings.ts). */ keepSetting?: string; /** A green zone of a town hall admits it. */ green?: boolean; sparesTools?: boolean; store?: boolean; epoch?: number; dative?: string; key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string; chest?: number; repair: Array<{ proto: string; count: number }> };
-/** `lightPoints`: what a fire's light carries; `siteWorldMs`: how long a site waits for progress; `maxSites`/`maxBuildings`: per account. */
+/** `lightPoints`: what a fire's light carries; `siteWorldMs`: how long a site waits for progress; `maxSites`: open sites per
+ *  account; `maxBuildings`: buildings and sites per account where no setting `build.max<epoch>` answers (the operator's,
+ *  by the epoch of the island built on); `uncounted`: plans that do not count towards it (small things, animal houses). */
 /** `ruinWorldMs`: how long a ruin stays; `estateWorldMs`: how long what lay in its chest waits for its owner. */
 /** A sort that grows in a bed: from seed (`seed`, a prototype) to sprout after `grow[0]`, to ripe after `grow[1]`, ripe
  *  for `ripeWorldMs`, then it wilts. A harvest gives `yields` and a seed (sometimes two). `wild`: where its seeds are found
@@ -211,12 +213,12 @@ export type MillDef = { plan: string; grinds: Array<{ from: string; to: string }
 export type AnimalKindDef = { /** One of this for every `per` yields, as it comes. */ also?: { proto: string; per: number }; /** From this epoch of the island on. */ epoch?: number; key: string; proto: string; name: string; plural: string; plan: string; yields: string; everyWorldMs: number; feed: string[]; breedWorldMs: number };
 /** `houses`: how many a building of each plan holds (one kind at a time); one thing of feed keeps one animal fed for
  *  `feedWorldMs`, up to `fedMaxWorldMs` ahead; yields wait in the house, at most `nestMax` per animal. */
-export type AnimalsDef = { /** Buildings of `houses` one account may own. */ maxHouses?: number; kinds: AnimalKindDef[]; houses: Record<string, number>; feedWorldMs: number; fedMaxWorldMs: number; nestMax: number };
+export type AnimalsDef = { /** Buildings of `houses` one account may own where the operator's setting `animals.houses` does not answer. */ maxHouses?: number; kinds: AnimalKindDef[]; houses: Record<string, number>; feedWorldMs: number; fedMaxWorldMs: number; nestMax: number };
 /** `store` (a plan whose chest a settlement shares, docs/siedeln.en.md "Siedlungen und Besitz"): `quota`: how many things a rank
  *  may take per world day; `logKeepMs`: how long a line of the log stays (real time, it must outlast the quota's day);
  *  `logShow`: how many lines `lager log` shows. */
 export type StoreDef = { quota: { fremder: number; helfer: number; siedler: number }; logKeepMs: number; logShow: number };
-export type BuildingDef = { store?: StoreDef; plans: PlanDef[]; lightPoints: number; /** `perPlayer` more points for each registered player who built here within `activeMs` (of the second clock), up to `max` in all. */ lightGrowth?: { perPlayer: number; max: number; activeMs: number }; siteWorldMs: number; maxSites: number; maxBuildings: number; ruinWorldMs: number; estateWorldMs: number };
+export type BuildingDef = { store?: StoreDef; plans: PlanDef[]; lightPoints: number; /** `perPlayer` more points for each registered player who built here within `activeMs` (of the second clock), up to `max` in all. */ lightGrowth?: { perPlayer: number; max: number; activeMs: number }; siteWorldMs: number; maxSites: number; maxBuildings: number; uncounted?: string[]; ruinWorldMs: number; estateWorldMs: number };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
 	/** In world hours: the NPC is there from `presentFromHour` to `presentUntilHour` (over midnight too), else away. */

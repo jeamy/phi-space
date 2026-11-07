@@ -398,7 +398,7 @@ again — and a yield that one may `take` like a harvest.
 - **Bees** (epoch 1, hive `bienenstock`, 1×1, up to three colonies): a colony bought from Gesa eats flowers from the
   ornamental bed (sea pink, dune rose, fog flower, hops), gives a pot of honey every other fed day and a lump of wax with
   every three pots (`AnimalKindDef.also`); honey is food, wax and linen make candles at a hut. The garden's flowers get a
-  use beyond selling. A hive counts towards `maxHouses` (three now).
+  use beyond selling. A hive counts towards the animal houses per account (setting `animals.houses`, default five; they do not count among the buildings, settings `build.max1`–`build.max4`: 10, 15, 18, 20 by the island's epoch).
 - **Pigeons** (epoch 3, dovecote): carrier pigeons carry small letters between settlements and islands — mail long before
   the timetable ferry. A pigeon always flies home to its cote; whoever wants to write carries it along.
 - **Songbird** (rare, from epoch 3): a thrush or canary in a cage sings in the house — no use except life and reputation;
