@@ -510,9 +510,12 @@ dependencies = [
 name = "mmo-engine"
 version = "0.0.1"
 dependencies = [
+ "getrandom",
  "icu_collator",
  "phi-json",
+ "phi-spaces-client",
  "regex",
+ "tokio",
  "unicode-normalization",
 ]
 
