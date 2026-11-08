@@ -9,8 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FOREVER } from "phi-spaces";
-import { startServer as startWeb } from "../server/index.ts";
-import { Player, startRegions, startServer, startStack } from "./stack.ts";
+import { Player, startRegions, startServer, startStack, startWeb } from "./stack.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 

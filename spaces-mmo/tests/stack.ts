@@ -1,16 +1,23 @@
 // The processes a test needs, started as real OS processes: the space process (in memory, or on SQLite files to survive
-// a restart) and world workers. The web part runs in the test process (startServer) and reaches the spaces over the
-// sockets like in production. Player is a small client: HTTP with a cookie jar and the game WebSocket.
+// a restart) and world workers. The web part runs in the test process (startServer, startWeb) and reaches the spaces over
+// the sockets like in production. Player is a small client: HTTP with a cookie jar and the game WebSocket.
+//
+// Another implementation of a process (docs/rust-portierung.en.md, R8.0 item 6): SPACES_MMO_WORLD_CMD, SPACES_MMO_NPC_CMD
+// and SPACES_MMO_WEB_CMD name the program and its arguments (split at spaces; a first word with a slash is a path from
+// spaces-mmo/), SPACES_MMO_SPACE_SERVER the space server (server/space-server.ts). With SPACES_MMO_WEB_CMD the web part
+// is a process too: its options go to it as the environment variables they stand for. A program that is not there ends
+// the test; it never falls back to the TypeScript process.
 import { spaceServer } from "../server/space-server.ts";
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import type { ClientFrame, ServerFrame } from "../server/gateway.ts";
-import { startServer as startWeb } from "../server/index.ts";
+import { startServer as startInProcess } from "../server/index.ts";
+import type { Accounts } from "../server/accounts.ts";
 import { connectSpace } from "../server/space.ts";
 import { FOREVER, type SpaceLike } from "phi-spaces";
 import { readClock } from "../server/engine/clock.ts";
@@ -39,10 +46,24 @@ async function withAgentStore(key: string, start: (env: Record<string, string>) 
  *  that is too short only says so. Only a failing test waits them out. */
 const PATIENCE = Number(process.env.STACK_PATIENCE ?? 3);
 
+const COMMANDS: Record<string, string> = { "server/world-host.ts": "SPACES_MMO_WORLD_CMD", "server/npc-host.ts": "SPACES_MMO_NPC_CMD", "server/index.ts": "SPACES_MMO_WEB_CMD" };
+/** The program of a process: the one its variable names, else `file` on this node. */
+export function programOf(file: string, env: Readonly<Record<string, string | undefined>> = process.env): { command: string; args: string[] } {
+	if (file === "server/space-host.ts") return spaceServer(env) ?? { command: process.execPath, args: ["--no-warnings", "--experimental-strip-types", file] };
+	const name = COMMANDS[file], words = name ? (env[name]?.trim().split(/\s+/).filter(Boolean) ?? []) : [];
+	if (!words.length) return { command: process.execPath, args: ["--no-warnings", "--experimental-strip-types", file] };
+	const [first, ...args] = words as [string, ...string[]];
+	const command = first.includes("/") ? resolve(ROOT, first) : first;
+	if (first.includes("/") && !existsSync(command)) throw new Error(`${name}: no such program: ${command}`);
+	return { command, args };
+}
+/** The web part runs as a process of its own (SPACES_MMO_WEB_CMD). */
+export const WEB_PROCESS = !!process.env.SPACES_MMO_WEB_CMD?.trim();
+
 function run(file: string, env: Record<string, string>, ready: (line: string) => boolean): Promise<ChildProcess> {
 	return new Promise((ok, fail) => {
-		const server = file === "server/space-host.ts" ? spaceServer() : null;
-		const child = spawn(server?.command ?? process.execPath, server?.args ?? ["--no-warnings", "--experimental-strip-types", file], { cwd: ROOT, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
+		const program = programOf(file);
+		const child = spawn(program.command, program.args, { cwd: ROOT, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
 		let out = "", done = false;
 		const timer = setTimeout(() => { if (!done) { done = true; child.kill("SIGKILL"); fail(new Error(`${file} did not start:\n${out}`)); } }, 120_000);
 		const seen = (d: Buffer) => { out += d.toString(); if (!done && out.split("\n").some(ready)) { done = true; clearTimeout(timer); ok(child); } };
@@ -146,8 +167,24 @@ export async function startRegions(o: { worldEnv?: Record<string, string>; worke
 	};
 }
 
+type WebOptions = Parameters<typeof startInProcess>[0];
+/** A web part: `server/index.ts`'s startServer in this process, or with SPACES_MMO_WEB_CMD that program as a process
+ *  (only the API, the assets and the game socket, like SPACES_MMO_NO_NEXT=1). `accounts` is there only in this process. */
+export async function startWeb(o: WebOptions = {}): Promise<{ url: string; port: number; accounts?: Accounts; close(): Promise<void> }> {
+	if (!WEB_PROCESS) return startInProcess(o);
+	if (o.useNext || o.dev) throw new Error("SPACES_MMO_WEB_CMD: a web process of a test serves no pages");
+	const a = o.accountOptions ?? {}, port = o.port || await freePort();
+	const env: Record<string, string> = { SPACES_MMO_NO_NEXT: "1", PORT: String(port), ...(o.bind ? { SPACES_MMO_BIND: o.bind } : {}),
+		...(o.space ? { SPACES_MMO_SPACE: o.space } : {}), ...(o.accounts ? { SPACES_MMO_ACCOUNTS: o.accounts } : {}), ...(o.regions ? { SPACES_MMO_REGIONS: o.regions } : {}),
+		...(o.build !== undefined ? { SPACES_MMO_BUILD_ID: o.build ?? "" } : {}), ...(a.setupToken ? { SPACES_MMO_SETUP_TOKEN: a.setupToken } : {}),
+		...(a.guestTtlMs ? { SPACES_MMO_GUEST_TTL_MS: String(a.guestTtlMs) } : {}), ...(a.pendingMs ? { SPACES_MMO_PENDING_MS: String(a.pendingMs) } : {}),
+		...(a.webSessionMs ? { SPACES_MMO_WEB_SESSION_MS: String(a.webSessionMs) } : {}) };
+	const child = await run("server/index.ts", env, (l) => l.startsWith("[web]"));
+	return { url: `http://127.0.0.1:${port}`, port, close: () => stop(child) };
+}
+
 /** The web part on a stack: a stack of its own (closed with it) unless `stack` is given. */
-export async function startServer(o: Parameters<typeof startWeb>[0] & { stack?: Stack; dataDir?: string; worldEnv?: Record<string, string> } = {}) {
+export async function startServer(o: WebOptions & { stack?: Stack; dataDir?: string; worldEnv?: Record<string, string> } = {}) {
 	const { stack: given, dataDir, worldEnv, ...web } = o;
 	const stack = given ?? (await startStack({ ...(dataDir ? { dataDir } : {}), ...(worldEnv ? { worldEnv } : {}) }));
 	const srv = await startWeb({ port: 0, ...web, space: stack.world, accounts: stack.accounts }).catch(async (e) => { if (!given) await stack.close(); throw e; });

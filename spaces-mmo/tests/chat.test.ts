@@ -5,12 +5,11 @@
 import "./test-env.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer as startWeb } from "../server/index.ts";
 import { connectSpace } from "../server/space.ts";
 import type { ChatFrame, ChatView } from "../server/chat.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { aad, newKey, openBox, sealFor, unlock } from "../client/chatcrypto.ts";
-import { Player, startRegions } from "./stack.ts";
+import { Player, startRegions, startWeb } from "./stack.ts";
 
 type Me = { p: Player; name: string; accountId: string; priv: CryptoKey; pub: string };
 const raw = (p: Player, f: unknown) => p.ws!.send(JSON.stringify(f));

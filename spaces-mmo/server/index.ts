@@ -7,6 +7,7 @@
 //   SPACES_MMO_REQ_PER_MIN (API requests and WebSocket connects per client IP and minute, default 120),
 //   SPACES_MMO_GUESTS_PER_HOUR (new guests per client IP and hour, default 5), SPACES_MMO_SETUP_TOKEN (first admin),
 //   SPACES_MMO_NO_NEXT=1 (API, assets and game socket only, no pages: the tests that start the web as a process),
+//   SPACES_MMO_BUILD_ID (the build the pages are told, empty for none; default .next/BUILD_ID),
 //   SPACES_MMO_PUBLIC_URL (where a browser reaches it, when that is not where it listens: in a container, the port
 //   Docker publishes; only for the log line)
 //
@@ -64,7 +65,9 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	const store = connectSpace(o.accounts ?? (process.env.SPACES_MMO_ACCOUNTS || DEFAULT_ACCOUNTS));
 	const accounts = new Accounts(regions, store.space, w, o.accountOptions);
 	// the build of the pages (Next writes .next/BUILD_ID): a page from an older build reloads when it meets a newer one
-	const build = o.build !== undefined ? o.build : (() => { try { return readFileSync(join(ROOT, ".next", "BUILD_ID"), "utf8").trim(); } catch { return null; } })();
+	// (SPACES_MMO_BUILD_ID names it instead, empty for none: a test that starts the web as a process)
+	const fromEnv = process.env.SPACES_MMO_BUILD_ID;
+	const build = o.build !== undefined ? o.build : fromEnv !== undefined ? fromEnv || null : (() => { try { return readFileSync(join(ROOT, ".next", "BUILD_ID"), "utf8").trim(); } catch { return null; } })();
 	// the chat between players keeps its entries in the accounts space: every region shares it, only this process reaches it
 	const gateway = new Gateway(regions, w, (accountId) => void accounts.touchGuest(accountId).catch(() => {}), build, store.space);
 	const proc = announce(world.space, "web");

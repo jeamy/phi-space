@@ -6,8 +6,7 @@ import assert from "node:assert/strict";
 import * as t from "three";
 import { appearanceLine, DEFAULT_APPEARANCE, isAppearance, parseAppearance, type Appearance } from "../server/engine/appearance.ts";
 import type { CharView, ServerFrame } from "../server/gateway.ts";
-import { startServer as startWeb } from "../server/index.ts";
-import { Player, startRegions } from "./stack.ts";
+import { Player, startRegions, startWeb } from "./stack.ts";
 
 test("the avatar line is read strictly and round-trips", () => {
 	const a = parseAppearance("figur 2 farbe 5 haar 4 haut 3 hut 4 brille ja handschuhe ja");

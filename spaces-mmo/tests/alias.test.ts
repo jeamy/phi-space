@@ -3,8 +3,7 @@ import "./test-env.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER } from "phi-spaces";
-import { startServer as startWeb } from "../server/index.ts";
-import { Player, startRegions } from "./stack.ts";
+import { Player, startRegions, startWeb } from "./stack.ts";
 
 test("an alias is what others see: the login name stays and no name exists twice", { timeout: 180_000 }, async () => {
 	const r = await startRegions();

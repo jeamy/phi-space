@@ -8,9 +8,8 @@ import { fieldsBetween } from "../server/engine/commands/beam.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { startServer as startWeb } from "../server/index.ts";
 import { regionOfRoom } from "../server/engine/regions.ts";
-import { eventually, lightFire, Player, startRegions, startServer } from "./stack.ts";
+import { eventually, lightFire, Player, startRegions, startServer, startWeb } from "./stack.ts";
 
 const w = await loadWorld();
 

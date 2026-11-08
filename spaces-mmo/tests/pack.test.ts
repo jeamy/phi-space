@@ -9,8 +9,7 @@ import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
-import { startServer as startWeb } from "../server/index.ts";
-import { eventually, Player, startRegions, startServer } from "./stack.ts";
+import { eventually, Player, startRegions, startServer, startWeb } from "./stack.ts";
 
 // the web part runs in this process and reads the setting too (the other suites carry far more: tests/test-env.ts)
 process.env.SPACES_MMO_PACK_MAX = "40";

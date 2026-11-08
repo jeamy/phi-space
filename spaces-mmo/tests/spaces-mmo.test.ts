@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { eventually, Player, startServer, startStack } from "./stack.ts";
+import { eventually, Player, startServer, startStack, WEB_PROCESS } from "./stack.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import type { SpaceLike } from "phi-spaces";
 
@@ -178,14 +178,15 @@ test("a guest who registers keeps the same character, its place and its account"
 	} finally { await srv.close(); }
 });
 
-test("a registration that breaks off after claiming the name: the guest plays on, and the name is free again", async () => {
+test("a registration that breaks off after claiming the name: the guest plays on, and the name is free again", { skip: WEB_PROCESS && "the fault is set inside this process's Accounts (SPACES_MMO_WEB_CMD)" }, async () => {
 	const srv = await startServer({ accountOptions: { pendingMs: 1500 } });
+	const accounts = srv.accounts!;
 	try {
 		const g = new Player(srv.url);
 		await g.post("/api/guest");
-		srv.accounts.faults.afterPendingCredential = () => { throw new Error("the web process died here"); };
+		accounts.faults.afterPendingCredential = () => { throw new Error("the web process died here"); };
 		assert.equal((await g.post("/api/register", { name: "Tamo", password: "geheim-123" })).status, 500);
-		srv.accounts.faults = {};
+		accounts.faults = {};
 		assert.equal((await g.me()).account.guest, true, "still a guest");
 		const h = await g.play();
 		g.send("look");
@@ -203,9 +204,9 @@ test("a registration that breaks off after claiming the name: the guest plays on
 		// … and an abandoned claim lapses: another broken attempt, then someone else gets the name
 		const g2 = new Player(srv.url);
 		await g2.post("/api/guest");
-		srv.accounts.faults.afterPendingCredential = () => { throw new Error("died again"); };
+		accounts.faults.afterPendingCredential = () => { throw new Error("died again"); };
 		assert.equal((await g2.post("/api/register", { name: "Wim", password: "geheim-123" })).status, 500);
-		srv.accounts.faults = {};
+		accounts.faults = {};
 		await new Promise((r) => setTimeout(r, 2500));
 		assert.equal((await new Player(srv.url).post("/api/register", { name: "Wim", password: "anderes-1" })).status, 200);
 	} finally { await srv.close(); }

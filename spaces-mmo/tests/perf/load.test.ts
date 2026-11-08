@@ -16,9 +16,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startServer as startWeb } from "../../server/index.ts";
 import type { ServerFrame } from "../../server/gateway.ts";
-import { Player, startStack } from "../stack.ts";
+import { Player, startStack, startWeb } from "../stack.ts";
 
 const env = (k: string, d: string) => process.env[k] || d;
 const PLAYERS = Number(env("LOAD_PLAYERS", "10")), SECONDS = Number(env("LOAD_SECONDS", "15")), DELAY = Number(env("LOAD_DELAY_MS", "0"));

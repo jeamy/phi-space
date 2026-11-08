@@ -4,9 +4,8 @@
 import "./test-env.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer as startWeb } from "../server/index.ts";
 import { FOREVER } from "phi-spaces";
-import { eventually, lightFire, Player, startRegions } from "./stack.ts";
+import { eventually, lightFire, Player, startRegions, startWeb } from "./stack.ts";
 
 const guest = async (url: string) => {
 	const p = new Player(url);
