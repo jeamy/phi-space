@@ -21,6 +21,7 @@ import type { Accounts } from "../server/accounts.ts";
 import { connectSpace } from "../server/space.ts";
 import { FOREVER, type SpaceLike } from "phi-spaces";
 import { readClock } from "../server/engine/clock.ts";
+import { loadWorld } from "../server/engine/world.ts";
 import { worldNow } from "../server/engine/worldtime.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -144,7 +145,7 @@ export async function startStack(o: { dataDir?: string; worldEnv?: Record<string
  *  space, and the address list (SPACES_MMO_REGIONS) every process gets. */
 export async function startRegions(o: { worldEnv?: Record<string, string>; workers?: boolean; dataDir?: string } = {}) {
 	const base = `/tmp/mmo-test-${process.pid}-${seq++}`, accounts = `unix:${base}-accounts.sock`;
-	const w = (await import("../worlds/leuchtfeuer/world.ts")).world;
+	const w = await loadWorld("leuchtfeuer");
 	const ids = (w.regions ?? []).map((g) => g.regionId);
 	const addr = (id: string) => `unix:${base}-${id}.sock`;
 	const list = ids.map((id) => `${id}=${addr(id)}`).join(",");

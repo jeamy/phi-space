@@ -26,7 +26,9 @@ const WORLD_ID = /^[a-z0-9-]{1,40}$/;
  *  known, every spawn walkable. */
 export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeuer"): Promise<WorldDef> {
 	if (!WORLD_ID.test(id)) throw new Error(`SPACES_MMO_WORLD: a-z, 0-9 and -, got ${id}`);
-	const w = (await import(join(ROOT, "worlds", id, "world.ts"))).world as WorldDef;
+	// the definition is data (worlds/<id>/world.json, written by npm run world:json from the world's world.ts); the engine
+	// runs nothing a world brings
+	const w = JSON.parse(readFileSync(join(ROOT, "worlds", id, "world.json"), "utf8")) as WorldDef;
 	const grid = (what: string, ground: string[], spawn: { x: number; y: number }) => {
 		const width = ground[0]?.length ?? 0;
 		if (!width || ground.some((row) => row.length !== width)) throw new Error(`${what}: rows of different width`);

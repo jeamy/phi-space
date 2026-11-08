@@ -6,12 +6,14 @@ import assert from "node:assert/strict";
 import { FOREVER, NO_WAIT, serveSpace, SpaceService, startService, StaticIdentity, type SpaceLike } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { openOwnMemoryHost } from "phi-spaces/store/host";
-import { world } from "../worlds/leuchtfeuer/world.ts";
+import { loadWorld } from "../server/engine/world.ts";
 import { checkRegions, regionOfRoom, regionsOf, regionWorld } from "../server/engine/regions.ts";
 import { arrive, deliver, handOff, type HandoverFields } from "../server/engine/handover.ts";
 import { connectSpace, parseTarget } from "../server/space.ts";
 import { WORLD_LOCK, actorToken, type CharacterFields } from "../server/model.ts";
 import type { CommandCtx } from "../server/engine/context.ts";
+
+const world = await loadWorld("leuchtfeuer");
 
 test("every island in exactly one region, each region starts in a bay of its own, and only ferries cross between them", () => {
 	checkRegions(world);
