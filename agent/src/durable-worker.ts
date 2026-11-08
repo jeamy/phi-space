@@ -11,6 +11,7 @@ import {
   GenerationTask, Harness, hook, type ConversationId, type JsonObject,
 } from "@earendil-works/pi-durable";
 import { liveModels } from "./live-models.ts";
+import { dialogueWindow } from "./dialogue-window.ts";
 import { ensureDurableDirectory, openDurableSqliteStorage } from "./storage.ts";
 import type { AgentAnswer, AgentRequest, AgentUsage, ParentMessage, WorkerMessage } from "./durable-protocol.ts";
 
@@ -143,10 +144,14 @@ const verify = defineTool({
 const bridge = defineExtension({
   name: "phi-durable-bridge", tools: [verify],
   hooks: [hook(GenerationTask, {
-    beforeRequest: (request, api, context) => {
+    beforeRequest: async (request, api, context) => {
+      // a dialogue shows the model only its recent answered turns; the conversation keeps all of them (dialogue-window.ts)
+      const key = (await api.snapshot(Current, String(api.conversationId), context))?.key;
+      const job = key ? await api.snapshot(Jobs, key, context) : null;
+      const messages = (job?.request as AgentRequest | null | undefined)?.mode === "code" ? request.messages : dialogueWindow(request.messages);
       const marker = { role: "system" as const, content: "", timestamp: 0 };
       tagged.set(marker, { id: api.conversationId, signal: context.abortSignal });
-      return { messages: [marker, ...request.messages] };
+      return { messages: [marker, ...messages] };
     },
     afterResponse: async (message, api, context) => {
       const key = (await api.snapshot(Current, String(api.conversationId), context))?.key;

@@ -171,8 +171,13 @@ It uses WAL/`synchronous=FULL` instead of the upstream default NORMAL.
 - The result goes through the same line/command check and then as an `Intent` to the world worker. The agent has
   no direct world, shell or file tools. Switching off the model process aborts its agent answer.
 - `NpcMemory` and `NOTE:` remain the business summary in the Space. After 64 completed dialogue answers
-  a new conversation begins with the current situation and this summary. This bounds the active
-  context but deletes no earlier transcripts.
+  a new conversation begins with the current situation and this summary. This deletes no earlier transcripts.
+- Each request shows the model only a window of the dialogue ([agent/src/dialogue-window.ts](../../agent/src/dialogue-window.ts)):
+  the current situation and before it the last answered turns, at most 4 and at most 150,000 characters together. A turn
+  whose call failed is left out. The stored conversation keeps every word; nothing is summarised (no compaction call).
+  Before 2026-11-08 the whole conversation went along: with a situation of about 13k tokens a turn it outgrew the model's
+  200k tokens after some fifteen turns, every call after that failed (`prompt is too long`), and as the 64 counted only
+  answers, no new conversation ever came: Ines on big stayed silent.
 
 The existing quota logic counts **calls, not tokens or euros**. Conversation history raises the input tokens
 and can therefore cost more even with the same number of calls. Transcripts contain player utterances; access,

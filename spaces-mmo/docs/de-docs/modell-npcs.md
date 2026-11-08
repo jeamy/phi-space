@@ -170,8 +170,13 @@ Sie verwendet WAL/`synchronous=FULL` statt des Upstream-Standards NORMAL.
 - Das Ergebnis geht durch dieselbe Zeilen-/Befehlsprüfung und dann als `Intent` zum World-Worker. Der Agent hat
   keine direkten Welt-, Shell- oder Dateiwerkzeuge. Abschalten des Modellprozesses bricht seine Agentenantwort ab.
 - `NpcMemory` und `NOTE:` bleiben die fachliche Zusammenfassung im Space. Nach 64 abgeschlossenen Dialogantworten
-  beginnt eine neue Conversation mit der aktuellen Lage und dieser Zusammenfassung. Das begrenzt den aktiven
-  Kontext, löscht aber keine früheren Transkripte.
+  beginnt eine neue Conversation mit der aktuellen Lage und dieser Zusammenfassung. Das löscht keine früheren Transkripte.
+- Jeder Aufruf zeigt dem Modell nur ein Fenster des Dialogs ([agent/src/dialogue-window.ts](../../../agent/src/dialogue-window.ts)):
+  die aktuelle Lage und davor die letzten beantworteten Runden, höchstens 4 und zusammen höchstens 150.000 Zeichen. Eine
+  Runde, deren Aufruf fehlschlug, bleibt weg. Die gespeicherte Conversation behält jedes Wort; nichts wird
+  zusammengefasst (kein Compaction-Aufruf). Vor dem 2026-11-08 ging die ganze Conversation mit: Bei etwa 13k Tokens
+  Lage je Runde überschritt sie nach rund fünfzehn Runden die 200k Tokens des Modells, jeder weitere Aufruf schlug fehl
+  (`prompt is too long`), und weil die 64 nur Antworten zählten, kam nie eine neue Conversation: Ines auf big blieb stumm.
 
 Die bestehende Quotenlogik zählt **Aufrufe, nicht Tokens oder Euro**. Gesprächshistorie erhöht die Eingabetokens
 und kann deshalb auch bei gleicher Aufrufzahl mehr kosten. Transkripte enthalten Spieleräußerungen; Zugriff,
