@@ -1,5 +1,8 @@
 import type { MetadataRoute } from "next";
 
+// written once by the export (next.config.mjs output "export")
+export const dynamic = "force-static";
+
 // Added to the home screen, the game opens without the browser's bars (a phone or a tablet).
 export default function manifest(): MetadataRoute.Manifest {
 	return {

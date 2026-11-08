@@ -5,7 +5,7 @@
   "type": "module",
   "description": "MMORPG engine on phi-spaces: the world is one space; text first, a PixiJS tile map on top (first world: Leuchtfeuer)",
   "scripts": {
-    "build": "next build",
+    "build": "next build && node -e \"require('node:fs').copyFileSync('.next/BUILD_ID', 'out/BUILD_ID')\"",
     "typecheck": "tsc",
     "dev": "node --no-warnings --experimental-strip-types server/launch.ts --dev",
     "start": "node --no-warnings --experimental-strip-types server/launch.ts",

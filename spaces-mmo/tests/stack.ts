@@ -183,7 +183,8 @@ export async function startWeb(o: WebOptions = {}): Promise<{ url: string; port:
 	if (!WEB_PROCESS) return startInProcess(o);
 	if (o.useNext || o.dev) throw new Error("SPACES_MMO_WEB_CMD: a web process of a test serves no pages");
 	const a = o.accountOptions ?? {}, port = o.port || await freePort();
-	const env: Record<string, string> = { SPACES_MMO_NO_NEXT: "1", PORT: String(port), ...(o.bind ? { SPACES_MMO_BIND: o.bind } : {}),
+	// the exported page (server/pages.ts) as the web process serves it in production; else no page at all
+	const env: Record<string, string> = { ...(o.pages ? { SPACES_MMO_PAGES: o.pages } : { SPACES_MMO_NO_NEXT: "1" }), PORT: String(port), ...(o.bind ? { SPACES_MMO_BIND: o.bind } : {}),
 		...(o.space ? { SPACES_MMO_SPACE: o.space } : {}), ...(o.accounts ? { SPACES_MMO_ACCOUNTS: o.accounts } : {}), ...(o.regions ? { SPACES_MMO_REGIONS: o.regions } : {}),
 		...(o.build !== undefined ? { SPACES_MMO_BUILD_ID: o.build ?? "" } : {}), ...(a.setupToken ? { SPACES_MMO_SETUP_TOKEN: a.setupToken } : {}),
 		...(a.guestTtlMs ? { SPACES_MMO_GUEST_TTL_MS: String(a.guestTtlMs) } : {}), ...(a.pendingMs ? { SPACES_MMO_PENDING_MS: String(a.pendingMs) } : {}),

@@ -55,9 +55,9 @@ COPY --from=builder --chown=node:node /opt/phi-spaces/agent/node_modules ./agent
 COPY --from=builder --chown=node:node /opt/phi-spaces/agent/src ./agent/src
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/package.json /opt/phi-spaces/spaces-mmo/package-lock.json ./spaces-mmo/
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/node_modules ./spaces-mmo/node_modules
-COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/next.config.mjs /opt/phi-spaces/spaces-mmo/tsconfig.json ./spaces-mmo/
-COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/.next ./spaces-mmo/.next
-COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/app ./spaces-mmo/app
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/tsconfig.json ./spaces-mmo/
+# the page as static files with its BUILD_ID (server/pages.ts; no Next server runs in production)
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/out ./spaces-mmo/out
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/public ./spaces-mmo/public
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/client ./spaces-mmo/client
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/server ./spaces-mmo/server

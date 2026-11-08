@@ -1,4 +1,5 @@
-// spaces-mmo, the web process: HTTP + WebSocket server around the Next.js app. Accounts and logins (accounts.ts), the
+// spaces-mmo, the web process: HTTP + WebSocket server around the page (the export of the Next.js app in out/,
+// server/pages.ts; Next's dev server with --dev). Accounts and logins (accounts.ts), the
 // gateway for playing browsers (gateway.ts), the world's graphics. It holds no game state: the world lives in the world
 // space, logins in the accounts space; both are served by the space process (space-host.ts).
 //
@@ -7,15 +8,17 @@
 //   SPACES_MMO_REQ_PER_MIN (API requests and WebSocket connects per client IP and minute, default 120),
 //   SPACES_MMO_GUESTS_PER_HOUR (new guests per client IP and hour, default 5), SPACES_MMO_SETUP_TOKEN (first admin),
 //   SPACES_MMO_NO_NEXT=1 (API, assets and game socket only, no pages: the tests that start the web as a process),
-//   SPACES_MMO_BUILD_ID (the build the pages are told, empty for none; default .next/BUILD_ID),
+//   SPACES_MMO_PAGES (the exported page, default out/), SPACES_MMO_BUILD_ID (the build the pages are told, empty for
+//   none; default out/BUILD_ID, else .next/BUILD_ID),
 //   SPACES_MMO_PUBLIC_URL (where a browser reaches it, when that is not where it listens: in a container, the port
 //   Docker publishes; only for the log line)
 //
 // Every POST must carry the header `x-mmo: 1`: a cross-site form cannot set it, and the cookie is SameSite=Strict.
 import http from "node:http";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { ROOT } from "./env.ts";
+import { exportedBuild, servePage } from "./pages.ts";
 import { pathToFileURL } from "node:url";
 import { Accounts, AuthError, type AccountOptions, type Me } from "./accounts.ts";
 import { loadWorld, worldAsset } from "./engine/world.ts";
@@ -55,7 +58,7 @@ const cookieOf = (req: http.IncomingMessage, name: string): string | undefined =
 	return undefined;
 };
 
-export async function startServer(o: { port?: number; bind?: string; space?: string; accounts?: string; useNext?: boolean; dev?: boolean; accountOptions?: AccountOptions; build?: string | null; regions?: string } = {}) {
+export async function startServer(o: { port?: number; bind?: string; space?: string; accounts?: string; useNext?: boolean; dev?: boolean; pages?: string; accountOptions?: AccountOptions; build?: string | null; regions?: string } = {}) {
 	const w = await loadWorld();
 	// the world's space, or with SPACES_MMO_REGIONS one per region (engine/regions.ts): the first region holds the
 	// settings, the model's entries and the system bar; the settings are written to every region
@@ -64,10 +67,10 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	const stats = statsCache(regions, w);
 	const store = connectSpace(o.accounts ?? (process.env.SPACES_MMO_ACCOUNTS || DEFAULT_ACCOUNTS));
 	const accounts = new Accounts(regions, store.space, w, o.accountOptions);
-	// the build of the pages (Next writes .next/BUILD_ID): a page from an older build reloads when it meets a newer one
-	// (SPACES_MMO_BUILD_ID names it instead, empty for none: a test that starts the web as a process)
+	// the build of the pages (the export writes out/BUILD_ID, Next .next/BUILD_ID): a page from an older build reloads when
+	// it meets a newer one (SPACES_MMO_BUILD_ID names it instead, empty for none: a test that starts the web as a process)
 	const fromEnv = process.env.SPACES_MMO_BUILD_ID;
-	const build = o.build !== undefined ? o.build : fromEnv !== undefined ? fromEnv || null : (() => { try { return readFileSync(join(ROOT, ".next", "BUILD_ID"), "utf8").trim(); } catch { return null; } })();
+	const build = o.build !== undefined ? o.build : fromEnv !== undefined ? fromEnv || null : (o.pages ? exportedBuild(o.pages) : null) ?? (() => { try { return readFileSync(join(ROOT, ".next", "BUILD_ID"), "utf8").trim(); } catch { return null; } })();
 	// the chat between players keeps its entries in the accounts space: every region shares it, only this process reaches it
 	const gateway = new Gateway(regions, w, (accountId) => void accounts.touchGuest(accountId).catch(() => {}), build, store.space);
 	const proc = announce(world.space, "web");
@@ -218,6 +221,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				return json(res, 404, { error: "Unbekannter Aufruf" });
 			}
 			if (nextHandler) return await nextHandler(req, res);
+			if (o.pages && servePage(o.pages, req, res, p)) return;
 			res.writeHead(404, { "content-type": "text/plain" });
 			res.end("Not found");
 		} catch (e) {
@@ -259,7 +263,11 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const dev = process.argv.includes("--dev");
-	const srv = await startServer({ useNext: process.env.SPACES_MMO_NO_NEXT !== "1", dev });
+	// the page: Next's dev server while developing, else the export in out/ (server/pages.ts; SPACES_MMO_PAGES names
+	// another folder); SPACES_MMO_NO_NEXT=1 serves none (the API, the assets and the game socket only)
+	const pages = process.env.SPACES_MMO_NO_NEXT === "1" ? false : dev ? "next" : resolve(ROOT, process.env.SPACES_MMO_PAGES || "out");
+	if (pages && pages !== "next" && !exportedBuild(pages)) console.warn(`[web] no exported page in ${pages} (npm run build writes it)`);
+	const srv = await startServer({ useNext: pages === "next", dev, ...(pages && pages !== "next" ? { pages } : {}) });
 	const pub = process.env.SPACES_MMO_PUBLIC_URL;
 	console.log(`[web] spaces-mmo listening on ${srv.url}${pub && pub !== srv.url ? ` (in the container; open ${pub})` : ""}`);
 	for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => {

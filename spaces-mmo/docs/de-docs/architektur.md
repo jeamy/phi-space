@@ -12,7 +12,7 @@ Wie in codemode-chat ist jede Rolle ein eigener Prozess rund um einen Space (vgl
 | `npc` | Skript-NPCs, später Modell-NPCs; schreiben nur `Intent`s | `codemode-chat/server/agent-host.ts`, `model-host.ts` |
 | `model` | Übersetzt freie Sätze in Befehle, beantwortet, was wache Modell-NPCs fragen (`Think`/`Thought`), und stellt die Modellauswahl bereit (`server/model-host.ts`) | `codemode-chat/server/model-host.ts` |
 | `automaton` | Spielerprogramme im Sandbox (Phase 6, geplant, noch nicht gebaut, [automaten.md](../automaten.en.md)); schreiben nur `Intent`s | `codemode-chat/server/judge-host.ts` |
-| `web` | Next.js-App, HTTP-API, WebSocket-Gateway, Login, Sessions, Kontingente | `codemode-chat/server/index.ts`, `hub.ts`, `quota.ts`, `phi-spaces/ws` |
+| `web` | Die Seite (die nach `out/` exportierte Next.js-App, `server/pages.ts`), HTTP-API, WebSocket-Gateway, Login, Sessions, Kontingente | `codemode-chat/server/index.ts`, `hub.ts`, `quota.ts`, `phi-spaces/ws` |
 
 Alle außer `space` sprechen über `RemoteSpace` + `socketTransport` mit dem Space. `world` und `npc` lassen sich
 mehrfach starten. Der Browser lädt keinen Space-Code; `src/` bleibt reiner Server-Code.
