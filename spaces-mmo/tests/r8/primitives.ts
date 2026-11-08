@@ -119,7 +119,23 @@ const list = things.map((f: unknown, i: number) => ({ e: { fields: f, i }, f }))
 const queries = [...new Set([...names, ...names.map((n) => n.slice(0, 3)), ...names.map((n) => n.toUpperCase() + "n"), ...names.map((n) => n.slice(1)), ...EDGE.slice(0, 60)])];
 const idx = (r: Array<{ e: { i: number } }>) => r.map((x) => x.e.i);
 const lookups = queries.map((q) => [q, idx(ctx.byName(list, q)), idx(ctx.byName(list, q, { x: 4, y: 2 })), idx(ctx.itemsNamed(world, list, q)), idx(ctx.itemsNamed(world, list, q, { x: 9, y: 7 }))]);
-const helpers = { stem: names.map((n) => [n, ctx.stem(n)]), plural: [...names, ...Object.getOwnPropertyNames(Object.prototype)].map((n) => [n, String(ctx.pluralOf(n, world)), String(ctx.pluralOf(n))]), typos: typoPairs, renders, locks, access: ACCESS, lockCtx: LCTX, things, lookups };
+// the translation rules over the corpus and the sentences they are for, in three views
+const tr = await from("server/engine/translate.ts");
+const graue = world.exits.filter((e: { room: string }) => e.room === "graue-bucht").map((e: { name: string; aliases: string[] }) => ({ name: e.name, aliases: e.aliases }));
+const VIEWS = [
+	{ exits: [{ name: "ost", aliases: ["o", "osten"] }, { name: "west", aliases: ["w"] }], listings: [{ nr: 1, itemName: "Muschel" }, { nr: 2, itemName: "Tran" }], carried: ["Treibholz", "Muschel"], people: ["Ines", "Bo", "Hinnerk"] },
+	{ exits: graue, listings: [], carried: [], people: ["Strandläufer-1002", "Wanderer2"] },
+	{ exits: [], listings: [], carried: [], people: [] },
+];
+const SENTENCES = ["kaufe muschel am markt", "kaufe am markt tran", "kauf die mu am markt", "buy the shell at the market", "kaufe zeug am markt", "biete muschel am markt für 2 an", "verkaufe die muschel für 3 münzen", "verkaufe muschel an bo für 3", "sell the shell for 2",
+	"suche ziege für 5", "suche am markt eine ziege für 5 münzen", "want a goat for 5", "brenne 3 ziegel", "brenne ziegelsteine", "burn bricks", "leg das holz in die truhe", "packe 2 muscheln ins lager", "leg 3 muscheln in die truhe der hütte am anleger",
+	"lege holz in meine truhe in den dünen", "schick tang in die truhe 2", "nimm 2 muscheln aus der kiste", "hol das holz aus dem lager", "wirf das holz ins feuer", "legeholz ins feuer", "leg ein stück holz ins leuchtfeuer", "throw the wood into the fire",
+	"gib ines ein stück holz", "gib das holz an ines", "gib holz an ines", "gib bo die muschel", "schenk Hinnerk etwas tang", "gib an ines holz", "hand bo the shell", "gehe nach osten", "geh west", "lauf richtung klippenpfad", "nach Dünen", "go to the east", "zum fischerdorf",
+	"nimm das holz auf", "heb die muschel auf", "pick up the shell", "sammle ein stück tang auf", "schau dich um", "sieh um", "wo bin ich", "where am i", "was trage ich", "what do i carry", "wer ist da", "wer spielt", "who is online", "hilfe", "was kann ich tun",
+	"bitte gib mir mal das holz", "ich möchte jetzt bitte nach osten", "Ines, leg holz ins feuer", "leg holz nach, ines", "ines leg holz ins feuer", "Bo: wie geht's?", "hey Bo, wohin fährst du?", "Hallo Henning!", "moin Bo, wie geht's?", "guten morgen", "guten tag ines.", "servus, du"];
+const translations = [...new Set([...inputs, ...SENTENCES])].map((line) => [line, ...VIEWS.map((v) => tr.translateRules(line, v))]);
+
+const helpers = { stem: names.map((n) => [n, ctx.stem(n)]), plural: [...names, ...Object.getOwnPropertyNames(Object.prototype)].map((n) => [n, String(ctx.pluralOf(n, world)), String(ctx.pluralOf(n))]), typos: typoPairs, renders, locks, access: ACCESS, lockCtx: LCTX, things, lookups, views: VIEWS, translations };
 
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, JSON.stringify({ oracle: { node: process.version, icu: process.versions.icu, unicode: process.versions.unicode }, inputs, patterns: pats, collation: { words, root: root_, de, rootSigns: signs(root_), deSigns: signs(de, "de") }, numbers, strings, helpers }));

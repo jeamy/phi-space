@@ -149,6 +149,19 @@ fn helpers() {
 		let got = [idx(context::by_name(&list, q, None)), idx(context::by_name(&list, q, Some((4.0, 2.0)))), idx(context::items_named(&world, &list, q, None)), idx(context::items_named(&world, &list, q, Some((9.0, 7.0))))];
 		for (k, (g, want)) in got.iter().zip(&r[1..]).enumerate() { out(["byName", "byName near", "itemsNamed", "itemsNamed near"][k], g == want, format!("{q:?} -> {}, oracle {}", g.to_json_text(), want.to_json_text())); }
 	}
+	let views: Vec<mmo_engine::translate::View> = arr(h, "views").iter().map(|v| mmo_engine::translate::View {
+		exits: arr(v, "exits").iter().map(|e| (st(e.get("name").unwrap()).to_owned(), arr(e, "aliases").iter().map(|a| st(a).to_owned()).collect())).collect(),
+		listings: arr(v, "listings").iter().map(|l| st(l.get("itemName").unwrap()).to_owned()).collect(),
+		carried: arr(v, "carried").iter().map(|x| st(x).to_owned()).collect(),
+		people: arr(v, "people").iter().map(|x| st(x).to_owned()).collect(),
+	}).collect();
+	for r in arr(h, "translations") {
+		let r = r.as_array().unwrap();
+		for (k, v) in views.iter().enumerate() {
+			let got = mmo_engine::translate::translate_rules(st(&r[0]), v).map_or(Json::Null, Json::from);
+			out("translateRules", got == r[k + 1], format!("{:?} (view {k}) -> {}, oracle {}", st(&r[0]), got.to_json_text(), r[k + 1].to_json_text()));
+		}
+	}
 	assert!(bad.is_empty(), "{} differences:\n  {}", bad.len(), bad.join("\n  "));
 }
 

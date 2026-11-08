@@ -11,7 +11,9 @@
 //      it (server/world-host.ts `runs`: in stableTerrain, on spatialWorld), its messages kept MSG_LEASE_MS (10 min)
 //      | {"op": "player", "account": {...}, "char": {...}, "session"?: id}: an account, its character and its token as the
 //      accounts write them (server/accounts.ts; given whole, so neither side draws from the source), a Session when online
-//      | {"op": "cmd", "charId", "intentId", "line", "step"?}: an Intent as the gateway writes it, then the character's
+//      | {"op": "write", "entry": {...}, "lease"?: ms}: an entry written as it is (the state a walk needs: a Spot, an Offer)
+//      | {"op": "cmd", "charId", "intentId", "line", "step"?, "asked"?, "lang"?}: an Intent as the gateway (or the model
+//      process, with `asked`) writes it, then the character's
 //      oldest intent served as the world worker does (server/world-host.ts `serve`, copied below): "ran", "held",
 //      "refused: <text>" or "failed: <text>". R8_SERVE=plain|batch|mirror (default mirror, as in production) picks its path.
 // Out: {"ok": true, "result"?: ...} or {"ok": false, "error": "<message>"}; "dump": every entry as the JSON text of
@@ -148,9 +150,10 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 		}
 		case "cmd": {
 			const w = await world(String(line.world ?? "leuchtfeuer"));
-			await space.write({ type: "Intent", fields: { intentId: line.intentId, charId: line.charId, line: line.line, at: clock, ...(line.step ? { step: line.step } : {}) } }, null, 30_000);
+			await space.write({ type: "Intent", fields: { intentId: line.intentId, charId: line.charId, line: line.line, at: clock, ...(line.step ? { step: line.step } : {}), ...(line.asked ? { asked: line.asked } : {}), ...(line.lang ? { lang: line.lang } : {}) } }, null, 30_000);
 			return await serve(w, String(line.charId));
 		}
+		case "write": await space.write(line.entry, null, line.lease ?? FOREVER); return null;
 		case "dump": return (await space.readAll({})).map((e: { type: string; types: string[]; fields: unknown }) => JSON.stringify([e.type, e.types, canon(e.fields)]));
 		default: throw new Error(`unknown op ${String(line.op)}`);
 	}
