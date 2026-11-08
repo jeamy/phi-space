@@ -18,7 +18,7 @@ Until 2026-10-28 the world ran as one Space (profiles `nano` with `world-nano`, 
 plus `single`, `regions` and `accounts` as scripts); these containers no longer exist. `docker:nano:up` and
 `docker:big:up` remove left-over containers of the old split (`--remove-orphans`).
 
-**Model access:** Like codemode-chat and the help system, `npc` and `model` read the login of the pi CLI of the host:
+**Model access:** Like codemode-chat and the help system, `model` reads the login of the pi CLI of the host (since 2026-11-08 only `model`: the npc process asks it, and the NPC dialogues' agent store `mmo-agent-data` moved to the model containers with it):
 `${PI_AUTH_DIR:-$HOME/.pi/agent}` is mounted read-only to `/home/node/.pi/agent` (alternatively API keys such as
 `ANTHROPIC_API_KEY` in `.env`). Model calls cost tokens and run only with `SPACES_MMO_LLM=1` in `.env`; without it the
 model NPCs stay with their scripts and free sentences with the free rules. The message `[llm] no models` means: neither
@@ -299,7 +299,7 @@ docker exec -w /opt/phi-spaces/spaces-mmo phi-spaces-mmo-web-1 node --experiment
 docker exec phi-spaces-mmo-web-1 rm -f /opt/phi-spaces/spaces-mmo/live-load-cleanup.ts /opt/phi-spaces/spaces-mmo/load-bots.json
 ```
 
-Result of a run with 100 figures: [lasttest-2026-10-28.en.md](lasttest-2026-10-28.en.md). The cost per command without a server:
+Results: 100 figures on one world Space on nano, [lasttest-2026-10-28.en.md](lasttest-2026-10-28.en.md); 50 and 100 figures on the four region Spaces on the Rust server, 15 minutes each, [lasttest-2026-11-08.en.md](lasttest-2026-11-08.en.md). The cost per command without a server:
 `LOAD_BOTS=50 LOAD_SECONDS=60 node --no-warnings --experimental-strip-types --import ./tests/test-env.ts
 tests/perf/space-cost.ts` (a stack as on the servers, one JSON line with CPU ms of the Space process per command).
 `SPACE_COST_SEED=<dir>` starts that stack from the `world.sqlite` in that directory (copied), to measure a world that

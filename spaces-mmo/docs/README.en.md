@@ -67,6 +67,7 @@ not kept here but in `client/help/articles.ts` (in the game under "?") and as to
 | [goetter.en.md](goetter.en.md) | Plan: model NPCs that create islands, orders and events by rules; review instead of approval |
 | [automaten.en.md](automaten.en.md) | Phase 6, plan: player programs, example automata, small help system |
 | [lasttest-2026-10-28.en.md](lasttest-2026-10-28.en.md) | Load tests on big and nano: response times, bottleneck, proposals |
+| [lasttest-2026-11-08.en.md](lasttest-2026-11-08.en.md) | Load test on big with 50 and 100 figures, four region Spaces on the Rust server |
 | [messung-vpsc-2026-10-29.en.md](messung-vpsc-2026-10-29.en.md) | Measurement: how much one core on vpsc achieves as a host for regions |
 
 ## Decisions made
