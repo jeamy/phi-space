@@ -71,7 +71,11 @@ JSONL ist kein Speicher des Space mehr. pi-durable-Stores werden nicht importier
 
 ### Rust-Portierung {#rust-port}
 
-Das laufende System ist TypeScript. Im Ordner `rust/` entstehen `phi-json`, `phi-core` und `phi-store` (`docs/rust-portierung.en.md`). R0 (Verträge festschreiben) ist umgesetzt, die Scheiben von R1 (Kern) und die Scheiben 0–4 von R2 (Speicher) sind erledigt. Speicherbudget und mehrere Spaces sind auf R3 verschoben. Einen Rust-Server gibt es noch nicht: Er ist R3.
+Den Space-Server gibt es zweimal: `src/standalone.ts` in TypeScript und `phi-space-server` in Rust (der Cargo-Workspace in `rust/`, `docs/rust-portierung.en.md`). Beide sprechen dasselbe Wire-Protokoll, lesen und schreiben dieselbe SQLite-Datei und haben dieselbe Semantik; dieselben Tests halten die Rust-Crates gegen Kern, Speicher und Dienst in TypeScript, Antwort für Antwort. Die Clients bleiben TypeScript (`RemoteSpace`, `phi-spaces/ws`), eine Anwendung tauscht also nur das Programm hinter der Adresse.
+
+Im Betrieb seit 2026-11-07: Die Space-Prozesse von spaces-mmo (der Accounts-Space auf nano, die vier Regionen auf big), der Space von codemode-chat auf nano und seit 2026-11-08 die Swarm-Spaces dieser Hilfe-Seite auf big und nano laufen auf Rust. Die Spielprozesse, die Rollen des Chats und der Hub bleiben TypeScript-Clients. Gemessen gegen den TypeScript-Server bei gleicher Last: CPU je Befehl 2,8- bis 3,4-mal niedriger (im reinen Dienst 6-mal und mehr), Speicher (RSS) etwa zehnmal niedriger, p95 und p99 in jedem Profil besser. Auf big laufen die vier Regions-Spaces mit 20 bis 85 MB statt 120 bis 175 MB.
+
+Der Rückweg bleibt offen: Der TypeScript-Server öffnet dieselben Dateien. Als Nächstes kommen die Serverprozesse von spaces-mmo (Welt, NPC, Web) nach Rust (R8); das Agenten-Paket, die Modellaufrufe und die Webseiten bleiben TypeScript.
 
 ## Technische Referenz {#technical-reference}
 

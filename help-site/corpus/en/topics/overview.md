@@ -40,7 +40,7 @@ phi-spaces adopts this model in TypeScript and JSON and adds persistence, revisi
 
 ## What Is phi-spaces And Why Was It Built? {#what-is-phi-spaces}
 
-`phi-spaces` is a transactional, persistent **coordination space** in TypeScript, built on the Linda / JavaSpaces model. It has a store of its own: one SQLite file owned by exactly one process, or memory only. The library needs no agent framework. The optional `agent/` package gives `@earendil-works/pi-durable` agents tools for the space; pi-durable is no longer the space's storage, and old pi-durable stores are not taken over. Instead of coupling clients, background workers, AI agents, and administrative tools through point-to-point calls, every participant exchanges immutable, typed JSON objects (**entries**) through shared, versioned data spaces (**spaces**).
+`phi-spaces` is a transactional, persistent **coordination space** in TypeScript, built on the Linda / JavaSpaces model, with a second Space server in Rust (`phi-space-server`, the same wire protocol and store file; see [Rust port](help.topic.architecture_layers#rust-port)). It has a store of its own: one SQLite file owned by exactly one process, or memory only. The library needs no agent framework. The optional `agent/` package gives `@earendil-works/pi-durable` agents tools for the space; pi-durable is no longer the space's storage, and old pi-durable stores are not taken over. Instead of coupling clients, background workers, AI agents, and administrative tools through point-to-point calls, every participant exchanges immutable, typed JSON objects (**entries**) through shared, versioned data spaces (**spaces**).
 
 The library solves four problems in building long-running systems and groups of AI agents:
 
