@@ -7,8 +7,10 @@ import { eventually, Player, startServer, startStack } from "./stack.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import type { SpaceLike } from "phi-spaces";
 import { loadWorld } from "../server/engine/world.ts";
+import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 
 type Hello = Extract<ServerFrame, { t: "hello" }>;
+const w = await loadWorld();
 const items = async (space: SpaceLike, fields: Record<string, unknown>) => (await space.readAll({ type: "Item", fields: fields as never })).map((e) => e.fields as Record<string, any>);
 /** The item's committed state: waits while a transaction holds it. */
 const settled = async (space: SpaceLike, itemId: string) => (await space.readIfExists({ type: "Item", fields: { itemId } }, 8_000))?.fields as Record<string, any> | undefined;
@@ -117,6 +119,23 @@ test("a give whose world worker dies in the middle: the item is never lost or do
 		assert.equal(told.m.toMe, true, "a gift to him: under \"An dich\"");
 		await a.p.leave(); await b.p.leave();
 	} finally { await srv.close(); await stack.close(); }
+});
+
+test("a give with a count hands over that many of a kind, and not more than one carries", { timeout: 60_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const a = await player(srv.url, "Anna"), b = await player(srv.url, "Bert");
+		const coin = (await eventually(() => resolvePrototype(srv.stack.space, "muenze"), 10_000, "muenze"))!;
+		for (let i = 0; i < 8; i++) await spawn(srv.stack.space, null, w, coin, { location: a.h.me.charId, x: -1, y: -1 });
+		const from = b.p.frames.length;
+		assert.equal(await does(a.p, "gib 6 münzen an Bert", "Bert"), "Du gibst Bert 6 Münzen.");
+		const told = await b.p.until((f) => f.t === "msg" && f.m.text === "Anna gibt Bert 6 Münzen.", 10_000, from) as Extract<ServerFrame, { t: "msg" }>;
+		assert.equal(told.m.toMe, true);
+		assert.equal((await items(srv.stack.space, { location: b.h.me.charId, proto: "muenze" })).length, 6);
+		assert.equal(await does(a.p, "give 3 münzen an Bert", "trägst"), "Du trägst nur 2× Münze.");
+		assert.equal((await items(srv.stack.space, { location: a.h.me.charId, proto: "muenze" })).length, 2);
+		await a.p.leave(); await b.p.leave();
+	} finally { await srv.close(); }
 });
 
 test("guests may pick things up and drop them, but not give them away", async () => {

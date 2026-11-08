@@ -64,3 +64,23 @@ test("the tasks go by place: a place where its most urgent task is, its name lef
 	assert.deepEqual(g.map((p) => [p.name, p.todos.length, p.rank]), [["Salzwiesen", 1, 0], ["Klippenpfad", 2, 0], ["Werft", 1, 1]]);
 	assert.deepEqual(g[1]!.todos.map((x) => x.text), ["In deinem Zierbeet (10 11) sind 2 Pflanzen reif.", "Dein Beet (13 11) braucht bald Wasser."]);
 });
+
+test("the pack newest first: what came since the last picture stands first, a full picture brings nothing new", async () => {
+	const { noteArrivals, byArrival } = await import("../client/arrivals.ts");
+	const at = new Map<string, number>();
+	let r = noteArrivals(null, [{ id: "a", name: "Tang" }, { id: "b", name: "Stein" }], at, 1);
+	assert.equal(r.changed, false, "the first picture");
+	r = noteArrivals(r.seen, [{ id: "a", name: "Tang" }, { id: "b", name: "Stein" }, { id: "c", name: "Ziege" }], at, 2);
+	assert.equal(r.changed, true);
+	r = noteArrivals(r.seen, [{ id: "a", name: "Tang" }, { id: "b", name: "Stein" }, { id: "c", name: "Ziege" }, { id: "d", name: "Stein" }], at, 3);
+	assert.deepEqual(["Tang", "Ziege", "Stein", "Muschel"].sort(byArrival(at)), ["Stein", "Ziege", "Muschel", "Tang"]);
+	r = noteArrivals(r.seen, [{ id: "c", name: "Ziege" }], at, 4);
+	assert.equal(r.changed, false, "what leaves the pack changes nothing");
+});
+
+test("in the pack a seed stands right after what grows of it, in its place, whichever of them came last", async () => {
+	const { byArrival } = await import("../client/arrivals.ts");
+	const seeds = { "Dünenrosensamen": "Dünenrose", "Leinsamen": "Flachs" };
+	const at = new Map([["Stein", 5], ["Dünenrosensamen", 9], ["Dünenrose", 1], ["Flachs", 3]]);
+	assert.deepEqual(["Stein", "Leinsamen", "Dünenrose", "Flachs", "Dünenrosensamen", "Tang"].sort(byArrival(at, seeds)), ["Dünenrose", "Dünenrosensamen", "Stein", "Flachs", "Leinsamen", "Tang"]);
+});

@@ -151,7 +151,7 @@ test("what is not understood goes to the model before any refusal: \"lege 2 bren
 		await does(a.p, "dreh mir drei seile", "Du stellst 3 Tangseil her.");
 		assert.equal(await does(a.p, "put kiesel in feuer", /^Du trägst/), "Du trägst nichts, was „kiesel“ heißt. „help“ zeigt die Befehle.");
 		// a command without what it needs goes to the model too; "not now" is refused at once, without the model
-		assert.equal(await does(a.p, "give holz", /^So geht es/), "So geht es: give <ding> an <person> „help“ zeigt die Befehle.");
+		assert.equal(await does(a.p, "give holz", /^So geht es/), "So geht es: give [anzahl] <ding> an <person> „help“ zeigt die Befehle.");
 		const before = a.p.frames.length;
 		assert.equal(await does(a.p, "accept", "Angebot"), "Dir liegt kein Angebot vor.");
 		assert.ok(!a.p.frames.slice(before).some((f) => f.t === "msg" && /einen Moment/.test(f.m.text)), "no model for a refusal of the moment");

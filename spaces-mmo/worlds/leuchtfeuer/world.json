@@ -4612,7 +4612,7 @@
 			"parent": "ding",
 			"typeclass": "Livestock",
 			"name": "Hund",
-			"desc": "Ein zotteliger Hofhund. Satt und an einem Bau gelassen, schlägt er an, wenn Hase, Reh oder Fuchs aus dem Nebel kommen.",
+			"desc": "Ein zotteliger Hofhund. Er wacht über den ganzen Raum: Solange er satt ist, kommen kein Hase an die Beete, kein Reh an die Äcker und kein Fuchs in den Hühnerstall. Neben einem deiner Bauten lässt „einstallen hund“ ihn dort wachen, „ausstallen hund“ nimmt ihn wieder mit. Er frisst Eier, Brot, Käse und Milch; „füttere hund“ (jeder darf) macht ihn einen Tag satt, bis zu drei Tage im Voraus. „wache“ zeigt, wer im Raum wacht.",
 			"aliases": [
 				"hunde",
 				"hofhund",
@@ -4630,7 +4630,7 @@
 			"parent": "ding",
 			"typeclass": "Livestock",
 			"name": "Katze",
-			"desc": "Eine getigerte Katze. Satt und an einem Bau gelassen, hält sie die Mäuse von jeder Truhe im Raum fern.",
+			"desc": "Eine getigerte Katze. Sie hält die Mäuse von jeder Truhe im Raum fern, solange sie satt ist: Korn, Mehl, Brot und Käse bleiben dann ganz. Neben einem deiner Bauten lässt „einstallen katze“ sie dort wachen, „ausstallen katze“ nimmt sie wieder mit. Sie frisst Milch, Eier und Käse; „füttere katze“ (jeder darf) macht sie einen Tag satt, bis zu drei Tage im Voraus. „wache“ zeigt, wer im Raum wacht.",
 			"aliases": [
 				"katzen",
 				"kater",

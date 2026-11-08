@@ -16,6 +16,7 @@ import { onFps, startFps, type FpsState } from "./fps.ts";
 import { CommandHelp } from "./CommandHelp.tsx";
 import type { HelpView } from "../shared/model.ts";
 import { appendLine, isComing, isForMe, newSince, todosByPlace } from "./log.ts";
+import { byArrival, loadArrivals, noteArrivals, saveArrivals, type Arrivals } from "./arrivals.ts";
 import { travelText, TRAVEL_GIVE_UP_MS, TRAVEL_NOTE_MS } from "./travel.ts";
 import type { ChatState } from "../shared/frames.ts";
 import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
@@ -406,7 +407,7 @@ function Glyph({ o, size = 16 }: { o: ObjView; size?: number }) {
 /** What the player carries and what lies within reach, as buttons (on a phone there is no keyboard to type with). */
 /** What the pack weighs against the most a figure carries, and one's chests (numbered as `verstaue … in <nr>` takes them). */
 type PackInfo = { max: number | null; chests: Array<{ nr: number; label: string }> };
-function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild, uses, hints = [], market, offer, send, pick, pack }: { pack?: PackInfo; /** "mine": what lies beside the figure and what it carries; "here": the fire within reach and what can be done here */ part?: "mine" | "here"; uses: ItemUses | undefined; /** the hints of the pack (client/hints.ts): a chosen thing shows its own */ hints?: Hint[]; /** a market board stands here: sell the thing there */ market?: (name: string) => void; offer?: (to: string, name: string) => void; objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string) => void; pick: (o: ObjView) => void }) {
+function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild, uses, hints = [], market, offer, send, pick, pack, arrived }: { pack?: PackInfo; /** when each kind came into the pack: newest first (client/arrivals.ts) */ arrived?: ReadonlyMap<string, number>; /** "mine": what lies beside the figure and what it carries; "here": the fire within reach and what can be done here */ part?: "mine" | "here"; uses: ItemUses | undefined; /** the hints of the pack (client/hints.ts): a chosen thing shows its own */ hints?: Hint[]; /** a market board stands here: sell the thing there */ market?: (name: string) => void; offer?: (to: string, name: string) => void; objs: Map<string, ObjView>; chars: Map<string, CharView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; wild: boolean; send: (line: string) => void; pick: (o: ObjView) => void }) {
 	const all = [...objs.values()].filter((o) => o.kind === "item");
 	const carried = all.filter((o) => o.location === me);
 	const close = (o: ObjView) => !!self && o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
@@ -418,7 +419,8 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 	useEffect(() => { if (!fire) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [fire?.id]);
 	// the pack in short: one icon per kind of thing with how many; a tap shows what can be done with it
 	const [picked, setPicked] = useState<string | null>(null);
-	const kinds = [...carried.reduce((m, o) => m.set(o.name, [...(m.get(o.name) ?? []), o]), new Map<string, ObjView[]>())].sort(([a], [b]) => a.localeCompare(b));
+	const order = byArrival(arrived ?? new Map(), uses?.seeds);
+	const kinds = [...carried.reduce((m, o) => m.set(o.name, [...(m.get(o.name) ?? []), o]), new Map<string, ObjView[]>())].sort(([a], [b]) => order(a, b));
 	const chosen = kinds.find(([name]) => name === picked);
 	const load = carried.reduce((n, o) => n + (o.load ?? 0), 0), max = pack?.max ?? null;
 	const [chestNr, setChestNr] = useState(1);
@@ -646,6 +648,17 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const [behind, setBehind] = useState(false);
 	const input = useRef<HTMLInputElement>(null);
 	const me = hello?.me.charId ?? "";
+	// the pack newest first (client/arrivals.ts): what came into it when, per kind
+	const arrivalsSeen = useRef<Set<string> | null>(null), arrivals = useRef<{ me: string; at: Arrivals }>({ me: "", at: new Map() });
+	const [arrived, setArrived] = useState<ReadonlyMap<string, number>>(new Map());
+	useEffect(() => {
+		if (!me) return;
+		if (arrivals.current.me !== me) { arrivals.current = { me, at: loadArrivals(me) }; setArrived(new Map(arrivals.current.at)); }
+		const carried = [...objs.values()].filter((o) => o.kind === "item" && o.location === me);
+		const r = noteArrivals(arrivalsSeen.current, carried, arrivals.current.at, Date.now());
+		arrivalsSeen.current = r.seen;
+		if (r.changed) { saveArrivals(me, arrivals.current.at); setArrived(new Map(arrivals.current.at)); }
+	}, [objs, me]);
 	// the 3D map's frame rate (client/fps.ts): the bar's button starts a measurement and shows its result
 	const [fps, setFps] = useState<FpsState>({ running: false, fps: null });
 	useEffect(() => onFps(setFps), []);
@@ -703,6 +716,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 					{ const mine = f.chars.find((c) => c.charId === f.me.charId); if (mine) walker.current.reset(mine); } fuels = f.world.fuels;
 					setChars(new Map(f.chars.map((c) => [c.charId, c])));
 					setObjs(new Map(f.objs.map((o) => [o.id, o])));
+					arrivalsSeen.current = null; // a full picture: nothing in it came just now
 					setFog(f.fog);
 					// the first hello brings the room's recent talk; a later one (another room, a reconnect) keeps the log
 					if (!greeted) setLog(f.log); else append({ kind: "echo", text: `— ${f.room.name} —`, from: "", at: Date.now() });
@@ -1150,7 +1164,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const hereBar = hereEntries({ chars, objs, self: chars.get(me), room: hello?.room.roomId ?? "", me, plans: hello?.world.plans ?? [], guest: account.guest, fuel: fuelIn(objs, me), wild: hello ? wildNow(hello.world.decor, hello.room.decor) : false });
 	// one's chests, in every region, numbered as the server numbers them (ownChests in engine/commands/build.ts)
 	const packInfo: PackInfo = { max: atlasState?.packMax ?? null, chests: (atlasState?.mine ?? []).filter((o) => o.kind === "building" && !!o.plan && !!hello?.world.uses.chests.includes(o.plan)).map((o) => ({ o, roomName: atlas?.rooms.find((r) => r.roomId === o.room)?.name ?? o.room })).sort((a, b) => chestOrder({ roomName: a.roomName, buildId: a.o.id }, { roomName: b.roomName, buildId: b.o.id })).map((x, i) => ({ nr: i + 1, label: `${x.o.name} (${x.roomName})` })) };
-	const mineView = <Things pack={packInfo} objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildNow(hello?.world.decor, hello?.room.decor)} uses={hello?.world.uses} hints={hints} send={send} pick={pickUp}
+	const mineView = <Things arrived={arrived} pack={packInfo} objs={objs} chars={chars} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} plans={hello?.world.plans ?? []} guest={account.guest} wild={wildNow(hello?.world.decor, hello?.room.decor)} uses={hello?.world.uses} hints={hints} send={send} pick={pickUp}
 		{...(trade?.listings && !account.guest ? { market: (name: string) => { setTradeItem({ name }); setBagPart("market"); } } : {})}
 		{...(account.guest ? {} : { offer: (to: string, name: string) => { setTradeItem({ name }); setOfferTo(to); setBagPart("market"); } })} />;
 	const marketView = <>

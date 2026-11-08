@@ -39,6 +39,8 @@ export function usesOf(w: WorldDef): ItemUses {
 		feed: Object.fromEntries([...(w.animals?.kinds ?? []), ...(w.wild?.keepers ?? [])].map((k) => [k.key, k.feed.map(name)])),
 		offerings: (w.chapel?.offerings ?? []).map(name),
 		flowers: (w.garden?.sorts ?? []).filter((s) => s.kind === "zier").map((s) => name(s.yields.proto)),
+		// a seed by what grows of it (the pack keeps them side by side); a crop sown from itself (Weizen) is left out
+		seeds: Object.fromEntries([...(w.garden?.sorts ?? []), ...(w.fields?.crops ?? [])].map((s) => [s.seed, (Array.isArray(s.yields) ? s.yields[0] : s.yields)?.proto] as const).filter(([seed, grows]) => seed && grows && seed !== grows).map(([seed, grows]) => [name(seed), name(grows!)])),
 		chests: plans.filter((p) => p.chest && !p.store).map((p) => p.key),
 		stores: plans.filter((p) => p.store).map((p) => p.key),
 		steps: [

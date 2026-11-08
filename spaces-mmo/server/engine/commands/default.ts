@@ -313,23 +313,35 @@ const drop: Command = {
 	},
 };
 
+/** The most things one give hands over: one commit holds them all. */
+const GIVE_MAX = 50;
+
 const give: Command = {
-	key: "give", aliases: ["gib"],
-	help: "give <ding> an <person> – jemandem hier etwas geben (nicht als Gast)",
+	key: "give", aliases: ["gib", "gebe", "gieb"],
+	help: "give [anzahl] <ding> an <person> – jemandem hier etwas geben, z. B. give 6 münzen an Bert (nicht als Gast)",
 	async func(c, arg) {
 		const m = /^(.+?)\s+(?:an|to|zu)\s+(.+)$/i.exec(arg) ?? /^(.+)\s+(\S+)$/.exec(arg);
-		if (!m) throw new NotUnderstood("So geht es: give <ding> an <person>");
-		const item = itemsNamed(c.world, await inventory(c), m[1]!)[0];
-		if (!item) throw new NotUnderstood(`Du trägst nichts, was „${m[1]!.slice(0, 30)}“ heißt.`);
+		if (!m) throw new NotUnderstood("So geht es: give [anzahl] <ding> an <person>");
+		// a count first: "give 6 münzen an Bert"
+		const cm = /^(\d+)\s+(.+)$/.exec(m[1]!.trim()), want = cm ? Number(cm[1]) : 1, what = cm ? cm[2]! : m[1]!;
+		if (want < 1 || want > GIVE_MAX) throw new CommandError(`Du kannst 1 bis ${GIVE_MAX} Stück auf einmal geben.`);
+		const hits = itemsNamed(c.world, await inventory(c), what), item = hits[0];
+		if (!item) throw new NotUnderstood(`Du trägst nichts, was „${what.slice(0, 30)}“ heißt.`);
+		const same = hits.filter((i) => i.f.proto === item.f.proto);
+		if (same.length < want) throw new CommandError(`Du trägst nur ${same.length}× ${item.f.name}.`);
 		const who = (await c.space.readAll({ type: "Character", fields: { room: c.actor.room } })).map((e) => fieldsOf<CharacterFields>(e))
 			.filter((ch) => ch.charId !== c.actor.charId && !ch.aboard).find((ch) => ch.name.toLowerCase() === m[2]!.trim().toLowerCase());
 		if (!who) throw new NotUnderstood(`Hier ist niemand namens „${m[2]!.slice(0, 30)}“.`);
 		await check(c, item.f.locks, "give", c.account?.guest ? "Gäste können nichts weitergeben; registriere dich dafür." : `${item.f.name} lässt sich nicht weitergeben.`);
-		const e = await c.space.take({ type: "Item", fields: { itemId: item.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn });
-		if (!e) throw new CommandError(`${item.f.name} ist gerade nicht greifbar.`);
+		const taken: Taken[] = [];
+		for (const one of same.slice(0, want)) {
+			const e = await c.space.take({ type: "Item", fields: { itemId: one.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn });
+			if (!e) throw new CommandError(`${item.f.name} ist gerade nicht greifbar.`);
+			taken.push(e);
+		}
 		await faultPause("give");
-		await c.space.write({ type: e.type, types: e.types.slice(1), fields: { ...fieldsOf<ItemFields>(e), location: who.charId, x: -1, y: -1 } as never }, c.txn, FOREVER);
-		await msg(c, "*", "info", `$you() $conj(gibst|gibt) ${who.name} ${item.f.name}.`, { templ: true });
+		for (const e of taken) await c.space.write({ type: e.type, types: e.types.slice(1), fields: { ...fieldsOf<ItemFields>(e), location: who.charId, x: -1, y: -1 } as never }, c.txn, FOREVER);
+		await msg(c, "*", "info", `$you() $conj(gibst|gibt) ${who.name} ${want > 1 ? `${want} ${pluralOf(item.f.name, c.world)}` : item.f.name}.`, { templ: true });
 	},
 };
 

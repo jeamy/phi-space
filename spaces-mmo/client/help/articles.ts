@@ -437,7 +437,7 @@ Hiermit nimmst du Dinge auf, gibst sie weiter und nährst das Feuer. Die Leertas
 | --- | --- | --- |
 | \`get <ding>\` | \`nimm\`, \`heb\`, \`take\` | Etwas aufheben, das neben dir liegt |
 | \`drop <ding>\` | \`leg\`, \`lege\`, \`lass\` | Etwas ablegen |
-| \`give <ding> an <person>\` | \`gib\` | Jemandem etwas geben (nicht als Gast) |
+| \`give [anzahl] <ding> an <person>\` | \`gib\` | Jemandem etwas geben, auch mehrere: give 6 münzen an Bert (nicht als Gast) |
 | \`inventory\` | \`inventar\`, \`i\` | Was du trägst |
 | \`put [anzahl] <ding> in <feuer>\` | \`nachlegen\`, \`wirf\`, \`feed\` | Brennholz ins Leuchtfeuer legen (auch: \`lege 3 hölzer ins feuer\`) |
 
@@ -621,7 +621,7 @@ These pick things up, hand them on and feed the fire. The space bar does the mos
 | --- | --- | --- |
 | \`get <thing>\` | \`nimm\`, \`heb\`, \`take\` | Pick up something next to you |
 | \`drop <thing>\` | \`leg\`, \`lege\`, \`lass\` | Put something down |
-| \`give <thing> an <person>\` | \`gib\` | Give someone something (not as a guest) |
+| \`give [count] <thing> an <person>\` | \`gib\` | Give someone something, several too: give 6 münzen an Bert (not as a guest) |
 | \`inventory\` | \`inventar\`, \`i\` | What you carry |
 | \`put [count] <thing> in <fire>\` | \`nachlegen\`, \`wirf\`, \`feed\` | Put fuel into a beacon |
 

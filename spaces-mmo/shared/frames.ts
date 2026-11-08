@@ -20,7 +20,7 @@ export type CharView = { charId: string; name: string; x: number; y: number; ski
 /** `icon`: the URL of a thing's picture (from its prototype); the map draws the glyph without one. */
 /** A building plan as the page offers it (key for `bau <key> <x> <y>`, what it needs as text). */
 /** What the page needs to say what a carried thing can do (client/cellActions.ts itemEntries), by the names shown. */
-export type ItemUses = { recipes: Array<{ key: string; name: string; needs: Array<{ name: string; count: number }>; tool?: string; at?: string }>; /** by herd or keeper */ feed: Record<string, string[]>; offerings: string[]; flowers: string[]; /** plans with a chest of one's own, plans of a store for all */ chests: string[]; stores: string[];
+export type ItemUses = { recipes: Array<{ key: string; name: string; needs: Array<{ name: string; count: number }>; tool?: string; at?: string }>; /** by herd or keeper */ feed: Record<string, string[]>; offerings: string[]; flowers: string[]; /** a seed's name → the name of what grows of it */ seeds?: Record<string, string>; /** plans with a chest of one's own, plans of a store for all */ chests: string[]; stores: string[];
 	/** What turns one thing into another outside the recipes (client/hints.ts): a mill grinds corn, a pen or coop keeps
 	 *  an animal that yields; `at` the plan, `line` the command. */
 	steps: Array<{ kind: "grind" | "keep"; from: string; to: string; at: string; line: string }> };
