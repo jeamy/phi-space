@@ -8,7 +8,7 @@ Status 2026-10-25, world version 9; extended up to world version 13 (2026-10-28)
 There are three ways. All write the same entries (`Room`, `Exit`, `Item`, `Beacon`, …); the engine knows no
 difference.
 
-1. **The world file** (`worlds/<world>/world.ts`): rooms, exits, prototypes, help, fires, NPCs, markets, recipes,
+1. **The world file** (`worlds/<world>/world.ts`, written out as `world.json` by `npm run world:json`: the engine reads only the JSON, docs/rust-portierung.en.md R8.0): rooms, exits, prototypes, help, fires, NPCs, markets, recipes,
    orders. Whoever changes it raises `version`; the first world worker that sees a newer version replaces rooms, exits,
    prototypes and help on loading in one transaction under the world lock (`server/engine/loader.ts`).
    New NPCs and newly placed things are added; what players have picked up does not come back; an NPC figure

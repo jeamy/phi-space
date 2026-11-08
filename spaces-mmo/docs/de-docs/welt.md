@@ -8,7 +8,7 @@ Stand 2026-10-25, Weltversion 9; ergänzt bis Weltversion 13 (2026-10-28), die W
 Es gibt drei Wege. Alle schreiben dieselben Entries (`Room`, `Exit`, `Item`, `Beacon`, …); die Engine kennt keinen
 Unterschied.
 
-1. **Die Weltdatei** (`worlds/<welt>/world.ts`): Räume, Ausgänge, Prototypen, Hilfe, Feuer, NPCs, Märkte, Rezepte,
+1. **Die Weltdatei** (`worlds/<welt>/world.ts`, ausgeschrieben als `world.json` mit `npm run world:json`: die Engine liest nur das JSON, docs/rust-portierung.en.md R8.0): Räume, Ausgänge, Prototypen, Hilfe, Feuer, NPCs, Märkte, Rezepte,
    Aufträge. Wer sie ändert, erhöht `version`; der erste Welt-Worker, der eine neuere Version sieht, ersetzt beim
    Laden Räume, Ausgänge, Prototypen und Hilfe in einer Transaktion unter dem Weltschloss (`server/engine/loader.ts`).
    Neue NPCs und neue platzierte Dinge kommen dazu; was Spieler aufgehoben haben, kommt nicht zurück; eine NPC-Figur,

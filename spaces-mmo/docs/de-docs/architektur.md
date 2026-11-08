@@ -415,6 +415,7 @@ spaces-mmo/
     index.ts            Web-Prozess, Gateway, Login
     engine/             typeclasses/, commands/, cmdsets.ts, locks.ts, prototypes.ts, funcparser.ts, combat/ (optional)
   client/               React-Oberfläche, MapView (PixiJS), Textlog, Login
+  shared/               was die Seite mit dem Server teilt: Entry-Felder, Typen der Weltdefinition, Frames, reine Module (R8.0)
   app/                  Next.js-Routen
   worlds/
     leuchtfeuer/        Räume, Prototypen, Typklassen-Erweiterungen, Hilfe, Automaten-Vorlagen, assets/
