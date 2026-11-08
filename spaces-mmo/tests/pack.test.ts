@@ -96,3 +96,28 @@ test("load: a chest in another region is filled by a courier", { timeout: 240_00
 		await eventually(async () => !(await s.readAll({ type: "Courier" })).length && !(await s.readAll({ type: "Item", fields: { proto: "muschel" } })).some((e) => String(e.fields.location).startsWith("cou-")), 30_000, "the courier done");
 	} finally { await srv.close(); await r.close(); }
 });
+
+test("load: 250 things go into a chest and out again in portions of MOVES_PER_COMMAND, each a commit of its own", { timeout: 240_000 }, async () => {
+	const srv = await startServer({ worldEnv: { SPACES_MMO_PACK_MAX: "2000" } });
+	try {
+		const s = srv.stack.space;
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Trägerin", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		const c = await charOf(s, me);
+		await hut(s, "h-near", me, c.accountId, c.room, c.x + 1, c.y);
+		await give(s, me, "treibholz", 250);
+		// in one command 500 driftwood wrote more than a commit carries, and the command went round and round (2026-11-08)
+		const texts = async (from: number, until: RegExp) => { await p.until((f) => f.t === "msg" && until.test(f.m.text), 60_000, from); return p.frames.slice(from).filter((f) => f.t === "msg" && /^Du (?:legst|nimmst)/.test(f.m.text)).map((f) => (f as Extract<ServerFrame, { t: "msg" }>).m.text); };
+		let from = p.frames.length;
+		p.send("verstaue alle treibholz");
+		assert.deepEqual(await texts(from, /^Du legst 50 /), ["Du legst 100 Treibholz in die Truhe. Den Rest legst du gleich nach.", "Du legst 100 Treibholz in die Truhe. Den Rest legst du gleich nach.", "Du legst 50 Treibholz in die Truhe."]);
+		assert.equal((await s.readAll({ type: "Item", fields: { location: "h-near", proto: "treibholz" } })).length, 250);
+		assert.equal(await pack(s, me, "treibholz"), 0);
+		from = p.frames.length;
+		p.send("entnimm 230 treibholz");
+		assert.deepEqual(await texts(from, /^Du nimmst 30 /), ["Du nimmst 100 Treibholz aus der Truhe. Den Rest nimmst du gleich nach.", "Du nimmst 100 Treibholz aus der Truhe. Den Rest nimmst du gleich nach.", "Du nimmst 30 Treibholz aus der Truhe."]);
+		assert.equal(await pack(s, me, "treibholz"), 230);
+		assert.equal((await s.readAll({ type: "Item", fields: { location: "h-near", proto: "treibholz" } })).length, 20);
+	} finally { await srv.close(); }
+});

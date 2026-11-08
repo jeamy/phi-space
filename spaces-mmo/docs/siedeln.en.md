@@ -760,7 +760,12 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      into the chest of the other region and then takes them here (idempotent by item id, like a crossing's pack). A chest
      that became a ruin meanwhile gets them in its estate. The page shows "Last x von 1000" under "Bei dir" and, for a
      chosen thing, the chest choice with a count ("Stück verstauen") and "Alle … verstauen". The tests run with a limit of 100000
-     (`tests/test-env.ts`); `tests/pack.test.ts` sets 40.
+     (`tests/test-env.ts`); `tests/pack.test.ts` sets 40. One command moves at most 100 things (`MOVES_PER_COMMAND` in
+     `engine/commands/build.ts`, the coins of a store's tax included): each move costs the commit about 700 bytes, and a
+     commit carries at most 192 KiB. More is written as the character's next intent, the same command with the rest
+     ("Den Rest legst du gleich nach."); `verstaue` and `entnimm` do so. A command that still outgrows a commit is refused
+     with a message and its intent consumed, instead of being tried again until its lease lapses (`world-host.ts`;
+     500 driftwood went round and round that way on 2026-11-08).
 2. **Gardens** (the equal strand, parallel to all buildings): spade, rain barrel, kinds of beds (kitchen, ornamental,
    communal), seeds from the wild flora, plants with growth stages, watering and weeding,
    sponsorship, harvest, crossing and naming, gardener with seed trade and search jobs. Acceptance: 1,000 plants

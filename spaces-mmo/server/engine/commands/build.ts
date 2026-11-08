@@ -20,7 +20,7 @@ import { satedFactor } from "./food.ts";
 import { closeOrders, keptUntil, orderLine, ordersOfSite, payFor } from "./siteorder.ts";
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type EstateFields, type FreightFields, type FireBuilderFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type EstateFields, type FreightFields, type FireBuilderFields, type IntentFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
 import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
@@ -526,6 +526,15 @@ const storeArg = (arg: string): { what: string; target: string } => {
 	return m ? { what: m[1]!, target: m[2]! } : { what: arg, target: "" };
 };
 
+/** At most this many things move in one command (coins paid with them included): each move takes the thing and writes
+ *  it anew, which costs a world's thing about 700 bytes of the commit, and a commit carries at most maxCommitBytes
+ *  (192 KiB; 500 driftwood in one went round and round, 2026-11-08). More follows as the same command again. */
+export const MOVES_PER_COMMAND = 100;
+/** The rest of a command that moved MOVES_PER_COMMAND things: the character's next intent, written with this one. */
+const goOn = (c: CommandCtx, line: string) => c.space.write({ type: "Intent", fields: { intentId: randomBytes(8).toString("hex"), charId: c.actor.charId, line, at: Date.now(), ...(c.lang ? { lang: c.lang } : {}) } satisfies IntentFields as never }, c.txn, 30_000);
+const restOf = (n: number | null, left: number) => (n === null ? "alle" : String(left));
+const goingOn = " Den Rest legst du gleich nach.";
+
 const verstaue: Command = {
 	key: "verstaue", aliases: ["einlagern", "store"],
 	help: "verstaue [n|alle] <ding> [in <truhe>] – etwas in eine deiner Truhen legen, von überall (neben dir: diese; „in 2“ oder „in die hütte am anleger“: eine andere; neben einem Lagerhaus: ins Lager)",
@@ -544,13 +553,15 @@ const verstaue: Command = {
 			await storeRight(c, b);
 			const cap = capOf(c, b);
 			const room = cap === Infinity ? Infinity : cap - heldIn(c, (await chestOf(c, b.buildId)).map((e) => fieldsOf<ItemFields>(e)));
-			const k = Math.min(n ?? all.length, all.length, each ? Math.floor(room / each + 1e-9) : all.length);
+			const fit = Math.min(n ?? all.length, all.length, each ? Math.floor(room / each + 1e-9) : all.length), k = Math.min(fit, MOVES_PER_COMMAND);
 			if (k <= 0) throw new CommandError(`Das Lager ist voll (${cap}).`);
 			let moved = 0;
 			for (const it of all.slice(0, k)) if (await moveItem(c.space, c.txn, it.f.itemId, c.actor.charId, b.buildId)) moved++;
 			await putBack(c, b);
 			await logStore(c, b, "ein", hits[0]!.f.name, moved);
-			return msg(c, c.actor.charId, "info", `Du legst ${moved} ${hits[0]!.f.name} in das Lager.${k < Math.min(n ?? all.length, all.length) ? " Mehr passt nicht hinein." : ""}`);
+			const later = k < fit && moved === k;
+			if (later) await goOn(c, `verstaue ${restOf(n, fit - k)} ${name}${target ? ` in ${target}` : ""}`);
+			return msg(c, c.actor.charId, "info", `Du legst ${moved} ${hits[0]!.f.name} in das Lager.${later ? goingOn : fit < Math.min(n ?? all.length, all.length) ? " Mehr passt nicht hinein." : ""}`);
 		}
 		const chest = await chestNamed(c, target);
 		const cap = capOf(c, chest.b);
@@ -562,7 +573,7 @@ const verstaue: Command = {
 			const coming = chest.region === null ? 0 : (await c.space.readAll({ type: "Courier", fields: { buildId: chest.b.buildId } }, { txn: c.txn })).reduce((m, e) => m + Number(e.fields.count), 0);
 			room = cap - heldIn(c, inside) - coming;
 		}
-		const k = Math.min(n ?? all.length, all.length, each ? Math.floor(room / each + 1e-9) : all.length);
+		const fit = Math.min(n ?? all.length, all.length, each ? Math.floor(room / each + 1e-9) : all.length), k = Math.min(fit, MOVES_PER_COMMAND);
 		const where = `die Truhe deiner ${chestLabel(c, chest.b)}`;
 		if (k <= 0) throw new CommandError(`Die Truhe deiner ${chestLabel(c, chest.b)} ist voll (${cap}).`);
 		const beside = chest.region === null && chest.b.room === c.actor.room && distTo(c.actor, chest.b) <= 1;
@@ -576,7 +587,9 @@ const verstaue: Command = {
 			const f: CourierFields = { courierId, to: chest.region, buildId: chest.b.buildId, accountId: chest.b.accountId, ownerName: chest.b.ownerName, room: chest.b.room, name: chest.b.name, proto, count: moved, at: Date.now() };
 			await c.space.write({ type: "Courier", fields: f as never }, c.txn, FOREVER);
 		}
-		const more = k < Math.min(n ?? all.length, all.length) ? " Mehr passt nicht hinein." : "";
+		const later = k < fit && moved === k;
+		if (later) await goOn(c, `verstaue ${restOf(n, fit - k)} ${name}${target ? ` in ${target}` : ""}`);
+		const more = later ? goingOn : fit < Math.min(n ?? all.length, all.length) ? " Mehr passt nicht hinein." : "";
 		await msg(c, c.actor.charId, "info", beside ? `Du legst ${moved} ${hits[0]!.f.name} in die Truhe.${more}` : chest.region === null ? `Du legst ${moved} ${hits[0]!.f.name} in ${where}.${more}` : `Ein Bote bringt ${moved} ${hits[0]!.f.name} in ${where}.${more}`);
 	},
 };
@@ -603,11 +616,14 @@ const entnimm: Command = {
 		const each = c.world.pack ? loadOf(c.world, proto) : 0, free = each ? (await packMax(c.space, c.world)) - (await loadAt(c.space, c.world, c.actor.charId, c.txn)) : Infinity;
 		const fits = each ? Math.max(0, Math.floor(free / each + 1e-9)) : Infinity;
 		if (!fits) throw new CommandError(`Das trägst du nicht mehr: dein Gepäck ist voll (${fmtLoad(await loadAt(c.space, c.world, c.actor.charId, c.txn))} von ${fmtLoad(await packMax(c.space, c.world))} Last).`);
-		for (const it of all.slice(0, Math.min(want, left, payable, fits))) if (await moveItem(c.space, c.txn, it.f.itemId, b.buildId, c.actor.charId)) moved++;
+		const take = Math.min(want, left, payable, fits), k = Math.min(take, Math.max(1, Math.floor(MOVES_PER_COMMAND / (1 + tax))));
+		for (const it of all.slice(0, k)) if (await moveItem(c.space, c.txn, it.f.itemId, b.buildId, c.actor.charId)) moved++;
 		for (const coin of coins.slice(0, moved * tax)) if (!(await moveItem(c.space, c.txn, coin.f.itemId, c.actor.charId, b.buildId))) throw new CommandError("Die Münzen sind gerade nicht greifbar; bitte noch einmal.");
 		await putBack(c, b);
 		if (shared) await logStore(c, b, "aus", hits[0]!.f.name, moved);
-		await msg(c, c.actor.charId, "info", `Du nimmst ${moved} ${hits[0]!.f.name} aus ${shared ? "dem Lager" : "der Truhe"}.${tax ? ` ${moved * tax} Münzen Steuer bleiben im Lager.` : ""}${want > Math.min(left, payable, fits) ? (fits < Math.min(left, payable) ? " Mehr trägst du nicht." : payable < left ? " Für mehr reichen deine Münzen nicht." : " Mehr steht dir heute nicht zu.") : ""}`);
+		const later = k < take && moved === k;
+		if (later) await goOn(c, `entnimm ${restOf(n, take - k)} ${name}`);
+		await msg(c, c.actor.charId, "info", `Du nimmst ${moved} ${hits[0]!.f.name} aus ${shared ? "dem Lager" : "der Truhe"}.${tax ? ` ${moved * tax} Münzen Steuer bleiben im Lager.` : ""}${later ? " Den Rest nimmst du gleich nach." : want > take ? (fits < Math.min(left, payable) ? " Mehr trägst du nicht." : payable < left ? " Für mehr reichen deine Münzen nicht." : " Mehr steht dir heute nicht zu.") : ""}`);
 	},
 };
 

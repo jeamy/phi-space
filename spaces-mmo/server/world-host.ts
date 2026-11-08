@@ -191,6 +191,12 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 			// a refusal is told and its intent consumed (it would only fail again); anything else (the space busy, a
 			// conflict) leaves the intent for another try a moment later, and one that keeps failing lapses with its lease
 			if (e instanceof CommandError) { if (actor) await refuse(actor, e.message); return "ran"; }
+			// a command that would write more than one commit carries fails the same way every time: told, not tried again
+			if (/could write \d+ bytes; the limit is/.test((e as Error).message)) {
+				console.error("[world] command too large:", charId, intent?.line.slice(0, 60), (e as Error).message);
+				if (actor) await refuse(actor, "Das ist zu viel auf einmal. Versuch es mit einer kleineren Menge.");
+				return "ran";
+			}
 			console.error("[world] command failed:", (e as Error).message);
 			await new Promise((r) => setTimeout(r, 500));
 			return "ran";
