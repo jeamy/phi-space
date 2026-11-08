@@ -52,7 +52,7 @@ function textsOf(file: string): string[] {
 export function extract(): Record<"ui" | "game" | "world", string[]> {
 	const group = (dirs: string[]) => [...new Set(dirs.flatMap((d) => walk(join(ROOT, d))).filter((f) => !SKIP.test(f)).flatMap(textsOf))].sort();
 	const ui = group(["client"]), world = group(["worlds"]);
-	const game = group(["server"]).filter((t) => !ui.includes(t) && !world.includes(t));
+	const game = group(["server", "shared"]).filter((t) => !ui.includes(t) && !world.includes(t));
 	return { ui, game, world };
 }
 
