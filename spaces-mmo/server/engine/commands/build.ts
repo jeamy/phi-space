@@ -145,17 +145,35 @@ export async function lightFor(c: CommandCtx, points: number): Promise<{ beaconI
 	const cover = await coversOf(c.space, c.world, c.txn);
 	const fires = c.world.beacons.filter((b) => cover.get(b.beaconId)?.includes(c.actor.room)).sort((a, b) => Number(b.room === c.actor.room) - Number(a.room === c.actor.room));
 	if (!fires.length) return "Hier hält kein Feuer den Nebel fern; gebaut wird nur im Licht.";
-	let lit = false;
+	let lit: (typeof fires)[number] | null = null;
 	for (const b of fires) {
 		if (!isLit(await flameOf(c.space, b.beaconId), now)) continue;
-		lit = true;
+		lit ??= b;
 		const e = await c.space.takeIfExists({ type: "LightUse", fields: { beaconId: b.beaconId } }, NO_WAIT, { txn: c.txn });
 		if (!e && (await c.space.count({ type: "LightUse", fields: { beaconId: b.beaconId } }))) throw new CommandError("Gerade baut jemand anderes im Licht dieses Feuers; bitte gleich noch einmal.");
 		const use = e ? fieldsOf<LightUseFields>(e) : { beaconId: b.beaconId, used: 0 };
 		if (use.used + points <= (await lightOf(c, b.beaconId)) * share) return { beaconId: b.beaconId, use, fresh: !e };
 		if (e) await c.space.write({ type: "LightUse", fields: use as never }, c.txn, FOREVER); // unchanged, back
 	}
-	return lit ? "Das Licht des Feuers reicht für keinen weiteren Bau; ein Leuchtturm oder ein zweites Feuer würde helfen." : "Das Feuer, das hier Licht gibt, ist aus; gebaut wird nur im Licht.";
+	return lit ? `Das Licht des Feuers reicht für keinen weiteren Bau.${await moreLight(c, lit.beaconId)}` : "Das Feuer, das hier Licht gibt, ist aus; gebaut wird nur im Licht.";
+}
+/** What would give the fire more light, as it stands here: more people building at it, a lighthouse (only where the island's
+ *  epoch allows one), another fire of the island; a building that goes frees its light. */
+async function moreLight(c: CommandCtx, beaconId: string): Promise<string> {
+	const def = c.world.building, more = def?.lightGrowth, island = islandOf(c.world, c.actor.room), out: string[] = [];
+	if (more) {
+		const now = await decayNowOf(c.space, c.txn);
+		const active = (await c.space.readAll({ type: "FireBuilder", fields: { beaconId } }, { txn: c.txn })).filter((e) => fieldsOf<FireBuilderFields>(e).atWorldMs + more.activeMs > now).length;
+		if ((def?.lightPoints ?? 0) + active * more.perPlayer < more.max) out.push(` Es wird heller mit jedem, der hier mitbaut (bis ${more.max} Punkte).`);
+	}
+	const tower = def?.plans.find((p) => p.lightBonus);
+	if (tower?.dative) {
+		const need = tower.epoch ?? 1;
+		out.push(need <= (await epochOf(c.space, island, c.txn)) ? ` Mit ${tower.dative} hätte es mehr Licht.` : ` Mit ${tower.dative} hätte es mehr Licht, aber der Bauplan öffnet sich erst, wenn die Insel ${c.world.epochs?.a?.[need - 1] ?? epochName(c.world, need)} ist.`);
+	}
+	if (c.world.beacons.some((b) => b.beaconId !== beaconId && islandOf(c.world, b.room) === island)) out.push(" Im Licht eines anderen Feuers der Insel ist vielleicht noch Platz.");
+	out.push(" Verfällt ein Bau oder wird er abgerissen, wird sein Licht wieder frei.");
+	return out.join("");
 }
 /** Writes the fire's light use back (`fresh`: its first: with the unique check, so two first sites cannot both write one). */
 export async function useLight(c: CommandCtx, beaconId: string, use: LightUseFields, delta: number, fresh: boolean): Promise<void> {

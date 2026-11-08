@@ -189,7 +189,7 @@ async function buy(n: Npc, l: Look, only?: string[]): Promise<boolean> {
 }
 
 /** At a market: answers the board's wanted notices of what it sells. One that pays at least its price (for as many as
- *  sought) it delivers if it carries them, taking its price only (the rest goes back to the one who seeks), and otherwise
+ *  sought) it delivers if it carries them (a lot of its own on the board it takes back first), taking its price only (the rest goes back to the one who seeks), and otherwise
  *  answers once that it has none now; one that pays less it answers once with its price, so the one who seeks knows.
  *  True when it did something. */
 export async function answerWanted(n: Npc, l: Look): Promise<boolean> {
@@ -201,8 +201,16 @@ export async function answerWanted(n: Npc, l: Look): Promise<boolean> {
 		if (!each) continue;
 		const count = w.count ?? 1, ask = each * count;
 		if (w.price >= ask) {
+			const carried = l.pack.filter((it) => it.proto === w.proto).length;
+			// what it offers on this board counts too: it takes its own lot back (the next round delivers), rather than
+			// saying it has none while the board shows it selling one
+			if (carried < count) {
+				const board = (await n.space.readAll({ type: "Listing", fields: { room: l.me.room } })).map((e) => fieldsOf<ListingFields>(e)).sort((a, b) => a.at - b.at || a.listingId.localeCompare(b.listingId));
+				const own = board.findIndex((x) => x.seller === l.me.charId && protoOf(n.world, x.itemName) === w.proto && carried + (x.count ?? 1) >= count);
+				if (own >= 0) { await n.act(`market zurück ${own + 1}`); return true; }
+			}
 			// it would, but has too few: says so once, and delivers when its stock is back (trade.ts restock)
-			if (l.pack.filter((it) => it.proto === w.proto).length < count) {
+			if (carried < count) {
 				if (w.replies?.some((r) => r.charId === l.me.charId && r.ask === 0)) continue;
 				await n.act(`market antworte ${i + 1} keins`);
 				return true;

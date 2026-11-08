@@ -30,7 +30,7 @@ async function moveCoin(space: SpaceLike, txn: string, itemId: string, from: str
 export async function payFor(c: CommandCtx, buildId: string, proto: string, n: number): Promise<number> {
 	const e = await c.space.takeIfExists({ type: "SiteOrder", fields: { buildId, proto } }, NO_WAIT, { txn: c.txn });
 	if (!e) return 0;
-	const o = fieldsOf<SiteOrderFields>(e), paid = Math.min(n, o.left), coins = (await c.space.readAll({ type: "Item", fields: { location: o.orderId } })).map((i) => fieldsOf<ItemFields>(i));
+	const o = fieldsOf<SiteOrderFields>(e), paid = Math.min(n, o.left), coins = (await c.space.readAll({ type: "Item", fields: { location: o.orderId } }, { txn: c.txn })).map((i) => fieldsOf<ItemFields>(i));
 	let got = 0;
 	for (const coin of coins.slice(0, paid * o.pay)) if (await moveCoin(c.space, c.txn, coin.itemId, o.orderId, c.actor.charId)) got++;
 	if (o.left > paid) await c.space.write({ type: "SiteOrder", fields: { ...o, left: o.left - paid } as never }, c.txn, FOREVER);
@@ -40,13 +40,15 @@ export async function payFor(c: CommandCtx, buildId: string, proto: string, n: n
 /** Closes the site's orders: their wages go back to the owner. How many coins. */
 export async function closeOrders(space: SpaceLike, txn: string, s: Pick<SiteFields, "buildId" | "owner" | "ownerName" | "accountId" | "room" | "name">, estateUntil: number): Promise<number> {
 	let back = 0;
-	const here = (await space.count({ type: "Character", fields: { charId: s.owner } })) > 0;
-	for (const e of await space.readAll({ type: "SiteOrder", fields: { buildId: s.buildId } })) {
+	// in the transaction: a delivery that finishes the site has just rewritten its order there (payFor), and a read
+	// without it would miss the rewritten order, so its wages would stay at the order for good
+	const here = (await space.count({ type: "Character", fields: { charId: s.owner } }, txn)) > 0;
+	for (const e of await space.readAll({ type: "SiteOrder", fields: { buildId: s.buildId } }, { txn })) {
 		const o = fieldsOf<SiteOrderFields>(e);
 		if (!(await space.takeIfExists({ type: "SiteOrder", fields: { orderId: o.orderId } }, NO_WAIT, { txn }))) continue;
 		const to = here ? s.owner : `est-${o.orderId}`;
 		let moved = 0;
-		for (const coin of await space.readAll({ type: "Item", fields: { location: o.orderId } })) if (await moveCoin(space, txn, String(coin.fields.itemId), o.orderId, to)) moved++;
+		for (const coin of await space.readAll({ type: "Item", fields: { location: o.orderId } }, { txn })) if (await moveCoin(space, txn, String(coin.fields.itemId), o.orderId, to)) moved++;
 		if (moved && !here) await space.write({ type: "Estate", fields: { estateId: to, accountId: s.accountId, ownerName: s.ownerName, room: s.room, name: s.name, untilWorldMs: estateUntil } satisfies EstateFields as never }, txn, FOREVER);
 		back += moved;
 	}

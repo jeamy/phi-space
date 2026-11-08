@@ -96,3 +96,29 @@ test("the day labourer works for a wage and for nothing else", { timeout: 200_00
 		await eventually(async () => (await coins(s, "npc-wolter")) >= 2, 10_000, "paid");
 	} finally { await srv.close(); }
 });
+
+test("a delivery that finishes the site gives the order's unpaid wages back (the order rewritten in the same transaction)", async () => {
+	const { PhiSpaces, openOwnMemoryHost, FOREVER } = await import("phi-spaces");
+	const { BACKGROUND_CONTEXT } = await import("phi-spaces/context");
+	const { closeOrders } = await import("../server/engine/commands/siteorder.ts");
+	const host = openOwnMemoryHost(), s = new PhiSpaces(host, BACKGROUND_CONTEXT);
+	try {
+		const order = { orderId: "ord-1", buildId: "b-1", siteName: "Hütte", room: "graue-bucht", x: 1, y: 1, w: 2, h: 2, ownerName: "Bauherrin", proto: "treibholz", name: "Treibholz", left: 5, pay: 1, at: 0 };
+		await s.write({ type: "Character", fields: { charId: "c-owner", name: "Bauherrin", room: "graue-bucht", x: 0, y: 0 } }, null, FOREVER);
+		await s.write({ type: "SiteOrder", fields: order }, null, FOREVER);
+		for (let i = 0; i < 5; i++) await s.write({ type: "Item", types: ["Coin"], fields: { itemId: `m-${i}`, proto: "muenze", name: "Münze", location: "ord-1", x: -1, y: -1 } }, null, FOREVER);
+		const txn = (await s.createTransaction(10_000)).id;
+		// what payFor does for a helper's 2 pieces: 2 coins to the helper, the order written back with 3 left
+		for (const i of [0, 1]) { await s.takeIfExists({ type: "Item", fields: { itemId: `m-${i}` } }, 0, { txn }); await s.write({ type: "Item", fields: { itemId: `m-${i}`, proto: "muenze", name: "Münze", location: "c-helper", x: -1, y: -1 } }, txn, FOREVER); }
+		await s.takeIfExists({ type: "SiteOrder", fields: { orderId: "ord-1" } }, 0, { txn });
+		await s.write({ type: "SiteOrder", fields: { ...order, left: 3 } }, txn, FOREVER);
+		// the site is complete: settle closes its orders in the same transaction
+		const back = await closeOrders(s, txn, { buildId: "b-1", owner: "c-owner", ownerName: "Bauherrin", accountId: "a-owner", room: "graue-bucht", name: "Hütte" }, 0);
+		await s.commit(txn);
+		assert.equal(back, 3);
+		assert.equal(await coins(s, "c-owner"), 3, "the unpaid wages are the owner's again");
+		assert.equal(await coins(s, "c-helper"), 2);
+		assert.equal(await coins(s, "ord-1"), 0);
+		assert.equal(await s.count({ type: "SiteOrder" }), 0, "no order stays behind for a building that is no site");
+	} finally { await host.close(BACKGROUND_CONTEXT); }
+});

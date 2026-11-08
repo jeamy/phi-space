@@ -179,8 +179,14 @@ const tilge: Command = {
 		const l = fieldsOf<LoanFields>(e), purse = (await inventory(c)).filter((i) => i.f.proto === c.world.currency);
 		const house = await peek(c.space, { type: "Building", fields: { buildId: l.buildId } }, { txn: c.txn });
 		if (house && (fieldsOf<BuildingFields>(house).room !== c.actor.room || distTo(c.actor, fieldsOf<BuildingFields>(house)) > 1)) throw new CommandError("Getilgt wird am Kontor, bei dem du geliehen hast.");
+		// the house is gone: nobody is owed the coins (the loan's end would give the pledge back as well, loanTick), so
+		// they stay with the debtor; destroyed, they would be lost
+		if (!house) {
+			for (const p of await inside(c.space, l.loanId, c.txn)) await move(c, p, l.loanId, c.actor.charId);
+			return void (await msg(c, c.actor.charId, "info", "Das Kontor steht nicht mehr: niemand nimmt deine Münzen, und du bekommst dein Pfand wieder."));
+		}
 		if (purse.length < l.owed) throw new CommandError(`Dafür brauchst du ${coinsWord(l.owed)}.`);
-		for (const m of purse.slice(0, l.owed)) { if (house) await move(c, m.f, c.actor.charId, l.buildId); else await consume(c, m.f, c.actor.charId); }
+		for (const m of purse.slice(0, l.owed)) await move(c, m.f, c.actor.charId, l.buildId);
 		for (const p of await inside(c.space, l.loanId, c.txn)) await move(c, p, l.loanId, c.actor.charId);
 		await msg(c, c.actor.charId, "info", `Du zahlst ${coinsWord(l.owed)} zurück und bekommst dein Pfand wieder.`);
 	},

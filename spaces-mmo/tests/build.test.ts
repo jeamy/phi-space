@@ -115,7 +115,11 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		await s.write({ type: "LightUse", fields: { beaconId: "feuer-bucht", used: 40 } }, null, FOREVER);
 		const other = crew[0]!;
 		await walk(other, s, 20, 12);
-		assert.match(await does(other.p, "bau hütte", /Licht|passt keine/), /Licht des Feuers reicht/);
+		const dark = await does(other.p, "bau hütte", /Licht|passt keine/);
+		assert.match(dark, /Licht des Feuers reicht/);
+		// what helps as it stands: a fishing village builds no lighthouse yet, and nobody builds a fire
+		assert.match(dark, /Leuchtturm hätte es mehr Licht, aber der Bauplan öffnet sich erst, wenn die Insel eine Stadt ist/);
+		assert.doesNotMatch(dark, /zweites Feuer/);
 		for (const a of [boss, ...crew]) await a.p.leave();
 		await guest.leave();
 	} finally { await srv.close(); }

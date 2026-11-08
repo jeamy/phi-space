@@ -247,6 +247,14 @@ test("market: a notice is answered with a price, delivered for less with the res
 		// its stock back: it delivers for its price
 		assert.equal(await answerWanted(n, look(["honig", "honig"])), true);
 		assert.deepEqual(acts, ["market liefere 3 für 8"]);
+		// what it sells on this board counts as its stock: it takes its own lot back to deliver, rather than saying it has none
+		acts.length = 0;
+		for (const e of await s.readAll({ type: "Wanted" })) await s.take({ id: e.id }, 2_000);
+		await s.write({ type: "Listing", fields: { listingId: "l-gesa-honig", seller: me.charId, sellerName: "Gesa", itemId: "x-honig", itemName: "Honig", price: 4, room: "graue-bucht", at: Date.now() } }, null, Number.MAX_SAFE_INTEGER);
+		await does(b.p, "markt suche honig für 4", "Du suchst");
+		const board = (await s.readAll({ type: "Listing", fields: { room: "graue-bucht" } })).map((e) => e.fields as unknown as { listingId: string; at: number }).sort((x, y) => x.at - y.at || x.listingId.localeCompare(y.listingId));
+		assert.equal(await answerWanted(n, look([])), true);
+		assert.deepEqual(acts, [`market zurück ${board.findIndex((x) => x.listingId === "l-gesa-honig") + 1}`]);
 		await a.p.leave(); await b.p.leave();
 	} finally { await srv.close(); }
 });

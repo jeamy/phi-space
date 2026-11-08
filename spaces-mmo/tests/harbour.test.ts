@@ -229,6 +229,17 @@ test("a shop prices by its shelf, pays from its till and mints nothing; a loan f
 		assert.equal(await loanTick(s, w, 60_000), 1);
 		assert.equal(await s.count({ type: "Item", fields: { location: "bank", proto: "perle" } }), 1, "the pledge went to the house");
 		assert.equal(await s.count({ type: "Loan" }), 0);
+		// the house fell while the loan ran: repaying takes no coins (nobody is owed them), the pledge comes back
+		await give(s, me, "perle", 1);
+		await does(p, "kredit 2 gegen perle", "Du leihst");
+		const bank = (await s.readAll({ type: "Building", fields: { buildId: "bank" } }))[0]!;
+		await s.takeIfExists({ id: bank.id }, 0);
+		const kept = await coins(me);
+		assert.match(await does(p, "tilge", "Pfand wieder"), /Kontor steht nicht mehr/);
+		assert.equal(await coins(me), kept, "no coin is lost");
+		assert.equal(await s.count({ type: "Item", fields: { location: me, proto: "perle" } }), 1);
+		assert.equal(await s.count({ type: "Loan" }), 0);
+		await s.write({ type: bank.type, fields: bank.fields }, null, FOREVER);
 		// a bill of exchange: its coins lie at it, the house keeps the fee, any counting house pays it out
 		const bills = () => s.readAll({ type: "Item", fields: { location: me, proto: "wechsel" } });
 		await give(s, me, w.currency, 12);
