@@ -8,6 +8,7 @@ import { fieldsOf, type WorldClockFields } from "../../model.ts";
 import { seasonNow } from "../clock.ts";
 import { calendar, formatWorldTime, MAX_RATE, MIN_RATE, paused, resumed, SEASONS, withRate, withDecayRate, worldNow } from "../worldtime.ts";
 import { peek } from "../../space.ts";
+import { timeNow } from "../source.ts";
 
 const ADMIN = "cmd:perm(Admin)";
 
@@ -28,8 +29,8 @@ const time: Command = {
 	help: "time – die Zeit in der Welt: Tag und Uhrzeit",
 	async func(c) {
 		const { clock } = await readClock(c);
-		const season = await seasonNow(c.space, worldNow(clock, Date.now()));
-		await msg(c, c.actor.charId, "info", `Es ist ${formatWorldTime(worldNow(clock, Date.now()))} Uhr${season === null ? "" : `, ${SEASONS[season]}`}${clock.paused ? " (die Zeit steht still)" : ""}.`);
+		const season = await seasonNow(c.space, worldNow(clock, timeNow()));
+		await msg(c, c.actor.charId, "info", `Es ist ${formatWorldTime(worldNow(clock, timeNow()))} Uhr${season === null ? "" : `, ${SEASONS[season]}`}${clock.paused ? " (die Zeit steht still)" : ""}.`);
 	},
 };
 
@@ -39,7 +40,7 @@ const clock: Command = {
 	async func(c, arg) {
 		const { e, clock: now } = await readClock(c);
 		const [verb = "", value] = arg.trim().split(/\s+/);
-		const realNow = Date.now();
+		const realNow = timeNow();
 		let next: WorldClockFields | null = null;
 		if (/^(pause|halt|stop|anhalten)$/i.test(verb)) { if (now.paused) throw new CommandError("Die Uhr steht schon still."); next = paused(now, realNow); }
 		else if (/^(weiter|resume|start|fortsetzen)$/i.test(verb)) { if (!now.paused) throw new CommandError("Die Uhr läuft schon."); next = resumed(now, realNow); }

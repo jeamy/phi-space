@@ -6,7 +6,6 @@
 // The settlers of the world take part and count as a second; one of them that wins takes the honour and no coins.
 // `pflege` gives a flower to the park once a world day: reputation for whoever tends it, and in the rank of the settlements
 // each who tended lately counts a point.
-import { randomBytes, randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type ParkCareFields, type SettlementFields, type ShowEntryFields, type ShowFields, type ShowKind } from "../../model.ts";
 import { decayNowOf, seasonNow, worldNowOf } from "../clock.ts";
@@ -19,6 +18,7 @@ import type { FestivalDef, WorldDef } from "../world.ts";
 import { distTo, planOf } from "./build.ts";
 import { hutsIn, rankOf, settlementIn } from "./settlement.ts";
 import { consume } from "./trade.ts";
+import { randomBytes, randomInt, timeNow } from "../source.ts";
 
 const NAME: Record<ShowKind, string> = { blumen: "Blumenschau", ernte: "Erntefest", regatta: "Regatta" };
 /** The seasons of each festival, by `SEASONS`. */
@@ -86,7 +86,7 @@ const zeige: Command = {
 		const had = mine && fieldsOf<ShowEntryFields>(mine);
 		if (had && s.kind !== "ernte") throw new CommandError(`Du zeigst schon ${had.name}.`);
 		if (s.kind !== "regatta") await consume(c, it.f, c.actor.charId); // a boat stays with its owner
-		const entry: ShowEntryFields = { showId: s.showId, accountId: account.accountId, charName: c.actor.name, name: had?.name ?? (it.f.variety?.name || it.f.name), ...(account.settler ? { figure: true } : {}), score: s.kind === "blumen" ? bloom(it.f) : s.kind === "regatta" ? (boats.indexOf(it.f.proto) + 1) * REGATTA_CREW + randomInt(0, REGATTA_CREW + 1) : (had?.score ?? 0) + 1, at: had?.at ?? Date.now() };
+		const entry: ShowEntryFields = { showId: s.showId, accountId: account.accountId, charName: c.actor.name, name: had?.name ?? (it.f.variety?.name || it.f.name), ...(account.settler ? { figure: true } : {}), score: s.kind === "blumen" ? bloom(it.f) : s.kind === "regatta" ? (boats.indexOf(it.f.proto) + 1) * REGATTA_CREW + randomInt(0, REGATTA_CREW + 1) : (had?.score ?? 0) + 1, at: had?.at ?? timeNow() };
 		await c.space.write({ type: "ShowEntry", fields: entry as never }, c.txn, FOREVER);
 		await msg(c, "*", "info", s.kind === "regatta" ? `$you() $conj(meldest|meldet) ${entry.name} zur Regatta.` : s.kind === "blumen" ? `$you() $conj(zeigst|zeigt) ${entry.name} auf der Blumenschau.` : `$you() $conj(legst|legt) ${it.f.name} zum Erntefest (${entry.score}).`, { templ: true });
 	},
@@ -143,7 +143,7 @@ export async function showTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 					if (coin) for (let i = 0; i < d.prize; i++) await spawn(space, txn, w, coin, { location: est.estateId, x: -1, y: -1 });
 				}
 				const text = `${NAME[s.kind]} von ${s.settlementName} ist zu Ende: ${won?.figure ? `Es gewinnt ${won.charName} mit ${won.name}${s.kind === "ernte" ? ` (${won.score})` : ""}, zur Ehre der Siedlung.` : won ? `${won.charName} gewinnt mit ${won.name}${s.kind === "ernte" ? ` (${won.score})` : ""} ${d.prize} Münzen; abzuholen hier mit „nachlass“.` : "zu wenige haben mitgemacht, einen Preis gibt es nicht."}`;
-				await space.write({ type: "Msg", fields: { room: s.room, to: "*", kind: "world", text, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
+				await space.write({ type: "Msg", fields: { room: s.room, to: "*", kind: "world", text, from: "", at: timeNow() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
 			}
 			await space.commit(txn);
 			ended++;

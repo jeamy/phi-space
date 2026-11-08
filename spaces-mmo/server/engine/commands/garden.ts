@@ -18,7 +18,6 @@
 // - A plant that reaches its next stage dry (no water for `thirstWorldMs`) wilts; a ripe plant wilts after its time.
 // - Harvesting takes the bed in the command's transaction: ten at one bed, and every ripe plant goes to exactly one.
 import { needRank } from "./settlement.ts";
-import { randomBytes, randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BedFields, type BedPlant, type BuildingFields, type ItemFields, type SeedRestFields, type Variety, type VarietyFields } from "../../model.ts";
 import { peek } from "../../space.ts";
@@ -31,6 +30,7 @@ import type { GardenDef, SortDef, WorldDef } from "../world.ts";
 import { harvestField, sowOnField } from "./field.ts";
 import { collect, meansYield } from "./animals.ts";
 import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, plural, putBack, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
+import { random, randomBytes, randomInt } from "../source.ts";
 
 const STAGES = ["Saat", "Keim", "reif", "welk"] as const;
 export const garden = (c: CommandCtx): GardenDef => {
@@ -58,7 +58,7 @@ export const nextDue = (plants: BedPlant[]) => plants.reduce((m, p) => Math.min(
 
 /** The plants whose date has come move on (or wilt, dry or past their time); true when anything changed. Each plant that
  *  sprouts or ripens may bring weeds. */
-export function advance(g: GardenDef, b: BedFields, now: number, fog: number, rnd: () => number = Math.random, patient = 1, frozen: number | null = null): boolean {
+export function advance(g: GardenDef, b: BedFields, now: number, fog: number, rnd: () => number = random, patient = 1, frozen: number | null = null): boolean {
 	let changed = false;
 	const weedy = b.weedy; // weeds of this round count from the next: plants that move on together keep one date
 	for (const p of b.plants) {
@@ -255,7 +255,7 @@ const jaete: Command = {
 
 /** The ripe flowers that cross at this harvest, each with the neighbour it crossed with: a flower with another strain
  *  beside it (not across a corner; a wilted one does not count) crosses at `crossChance`. */
-export function crossings(g: GardenDef, b: BedFields, ripe: BedPlant[], rnd: () => number = Math.random): Map<BedPlant, BedPlant> {
+export function crossings(g: GardenDef, b: BedFields, ripe: BedPlant[], rnd: () => number = random): Map<BedPlant, BedPlant> {
 	const out = new Map<BedPlant, BedPlant>();
 	for (const p of ripe) {
 		if (sortOf(g, p.sort)?.kind !== "zier") continue;
@@ -265,7 +265,7 @@ export function crossings(g: GardenDef, b: BedFields, ripe: BedPlant[], rnd: () 
 	return out;
 }
 /** Between two colours, a little off to one side, so two crossings of the same pair differ. */
-export function mixColor(a: string, b: string, rnd: () => number = Math.random): string {
+export function mixColor(a: string, b: string, rnd: () => number = random): string {
 	const ch = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16) || 0;
 	return `#${[0, 1, 2].map((i) => Math.max(0, Math.min(255, Math.round((ch(a, i) + ch(b, i)) / 2 + (rnd() - 0.5) * 48))).toString(16).padStart(2, "0")).join("")}`;
 }
@@ -480,7 +480,7 @@ export async function gardenTick(space: SpaceLike, w: WorldDef): Promise<number>
 			if (bed.dueWorldMs > now && bed.untilWorldMs > kept) { await space.abort(txn); continue; } // the read was older: done already
 			if (bed.untilWorldMs <= kept) await freeBed(space, txn, bed);
 			else {
-				advance(g, bed, now, await fogOf(space, bed.room), Math.random, patient, houses.some((h) => h.room === bed.room && Math.max(h.x - (bed.x + bed.w - 1), bed.x - (h.x + h.w - 1), h.y - (bed.y + bed.h - 1), bed.y - (h.y + h.h - 1)) <= glass!.reach) ? null : winter);
+				advance(g, bed, now, await fogOf(space, bed.room), random, patient, houses.some((h) => h.room === bed.room && Math.max(h.x - (bed.x + bed.w - 1), bed.x - (h.x + h.w - 1), h.y - (bed.y + bed.h - 1), bed.y - (h.y + h.h - 1)) <= glass!.reach) ? null : winter);
 				await space.write({ type: "Bed", fields: bed as never }, txn, FOREVER);
 			}
 			await space.commit(txn);

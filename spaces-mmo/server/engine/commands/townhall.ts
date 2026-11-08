@@ -7,7 +7,6 @@
 // `antrag steuer <n>` sets the coins per thing taken from the warehouse; they stay in it, for the settlement.
 // `antrag abriss` puts the building beside whoever puts it to the vote: carried, it comes down whoever owns it, and half of
 // its material with what lay in its chest waits for the owner as an estate. Not the hall, and no store the settlement filled.
-import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type MotionFields, type MotionKind, type SettlementFields, type VoteFields, type ZoneFields } from "../../model.ts";
 import { decayNowOf } from "../clock.ts";
@@ -17,6 +16,7 @@ import { peek } from "../../space.ts";
 import type { WorldDef } from "../world.ts";
 import { demolishByVote, distTo, planOf } from "./build.ts";
 import { hutsIn, rankOf, settlementIn } from "./settlement.ts";
+import { randomBytes, timeNow } from "../source.ts";
 
 /** Whether a town hall stands in the room. */
 export const hallIn = async (space: SpaceLike, w: WorldDef, room: string, txn: string | null = null) => !!w.townhall && (await space.count({ type: "Building", fields: { room, plan: w.townhall.plan } }, txn)) > 0;
@@ -155,7 +155,7 @@ export async function motionTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 					else { await demolishByVote(space, txn, w, b, now); after = ` Die Fläche ist frei; was blieb, holt ${b.ownerName} hier mit „nachlass“ ab.`; }
 				}
 				const text = `Abstimmung in ${s.name}: ${said(m)} ist ${carried ? "angenommen" : "abgelehnt"}, ${yes(votes)} dafür, ${no(votes)} dagegen.${after}`;
-				await space.write({ type: "Msg", fields: { room: m.room, to: "*", kind: "world", text, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
+				await space.write({ type: "Msg", fields: { room: m.room, to: "*", kind: "world", text, from: "", at: timeNow() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
 			}
 			await space.commit(txn);
 			ended++;

@@ -4,7 +4,6 @@
 // writes a longer one. The world's dates turn what the clock shows into the weather: the fire tick notices a fire that went
 // out or came back, the fog tick moves each covered room's fog one step, the tide spawns flotsam that the sweep takes away
 // when its world time is up.
-import { randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { fieldsOf, type BeaconFields, type BuildingFields, type ContributionFields, type FireChainFields, type FlameFields, type FogFields, type ItemFields } from "../model.ts";
 import { CommandError, msg, msgOptions, type CommandCtx } from "./context.ts";
@@ -12,6 +11,7 @@ import { resolvePrototype, spawn } from "./prototypes.ts";
 import { patienceOf, worldNowOf } from "./clock.ts";
 import { walkable, type WorldDef } from "./world.ts";
 import { peek } from "../space.ts";
+import { randomInt, timeNow } from "./source.ts";
 
 /** The flame of a beacon, or null when it is out. */
 export async function flameOf(space: SpaceLike, beaconId: string, txn?: string): Promise<FlameFields | null> {
@@ -55,7 +55,7 @@ export async function feed(c: CommandCtx, item: { e: Taken; f: ItemFields }, bea
 /** A message from the world itself to everyone in `rooms`. */
 async function say(space: SpaceLike, leaseMs: number, rooms: string[], kind: "world" | "info", text: string, txn: string | null = null): Promise<void> {
 	const o = await msgOptions(space, { to: "*", kind });
-	for (const room of rooms) await space.write({ type: "Msg", fields: { room, to: "*", kind, text, from: "", at: Date.now() } as never }, txn, leaseMs, o);
+	for (const room of rooms) await space.write({ type: "Msg", fields: { room, to: "*", kind, text, from: "", at: timeNow() } as never }, txn, leaseMs, o);
 }
 
 /** Fire tick: a beacon whose flame lapsed (or came back) is marked so, and its rooms hear it. Only a change takes the
@@ -302,7 +302,7 @@ export async function stormTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 	}
 	if (!names.length) return null;
 	const room = w.rooms.find((r) => r.roomId === roomId)!;
-	await space.write({ type: "Msg", fields: { room: roomId, to: `#${w.storm.channel}`, kind: "channel", text: `[${w.storm.channel}] Sturmflut in ${room.name} (${room.island ?? w.title})! Das Meer wirft Strandgut aus.`, from: "", at: Date.now() } as never }, null, leaseMs);
+	await space.write({ type: "Msg", fields: { room: roomId, to: `#${w.storm.channel}`, kind: "channel", text: `[${w.storm.channel}] Sturmflut in ${room.name} (${room.island ?? w.title})! Das Meer wirft Strandgut aus.`, from: "", at: timeNow() } as never }, null, leaseMs);
 	await say(space, leaseMs, [roomId], "world", `Eine Sturmflut rollt heran und lässt ${names.length} Dinge am Strand zurück: ${[...new Set(names)].join(", ")}.`);
 	return roomId;
 }

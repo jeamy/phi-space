@@ -1,12 +1,12 @@
 // What a command sees (docs/evennia-abbildung.en.md, "Ablauf eines Befehls"): the space and the transaction its intent
 // is taken in, the world, the actor and its account, and helpers every command needs: finding things by name,
 // asking locks, writing messages.
-import { randomBytes } from "node:crypto";
 import { NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { fieldsOf, type AccountFields, type CharacterFields, type ExitFields, type ItemFields, type MsgFields, type MsgKind, type NoticeFields, type RoomFields } from "../model.ts";
 import { allowed, LEVELS, type Level, type LockCtx } from "./locks.ts";
 import type { WorldDef } from "./world.ts";
 import { peek, supports } from "../space.ts";
+import { randomBytes, timeNow } from "./source.ts";
 
 export type CommandCtx = {
 	space: SpaceLike;
@@ -169,7 +169,7 @@ export async function toPlayer(space: SpaceLike, m: MsgFields, txn: string | nul
  *  (toPlayer); the answer to the actor's own command is a message of the moment. `templ`: the text holds $you()/$conj() and is rendered per
  *  reader. `txn` null writes it at once (a refusal after the abort). */
 export async function msg(c: Pick<CommandCtx, "space" | "actor" | "msgLeaseMs" | "lang"> & { txn: string | null }, to: string, kind: MsgKind, text: string, o: { templ?: boolean; room?: string; help?: MsgFields["help"] } = {}): Promise<void> {
-	const m: MsgFields = { room: o.room ?? c.actor.room, to, kind, text, from: c.actor.name, fromId: c.actor.charId, at: Date.now(), ...(c.lang ? { lang: c.lang } : {}), ...(o.templ ? { actor: c.actor.charId } : {}), ...(o.help ? { help: o.help } : {}) };
+	const m: MsgFields = { room: o.room ?? c.actor.room, to, kind, text, from: c.actor.name, fromId: c.actor.charId, at: timeNow(), ...(c.lang ? { lang: c.lang } : {}), ...(o.templ ? { actor: c.actor.charId } : {}), ...(o.help ? { help: o.help } : {}) };
 	if (to !== c.actor.charId && toOnePlayer(to)) return toPlayer(c.space, m, c.txn);
 	await c.space.write({ type: "Msg", fields: m as never }, c.txn, c.msgLeaseMs, await msgOptions(c.space, m));
 }

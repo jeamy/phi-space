@@ -4,7 +4,6 @@
 // (`karren pendel`) it does so by itself: it loads from its owner's chests at one end, unloads into them at the other and
 // comes back, as long as there is something to carry. Roads stay on their island; a cart crosses the water as a thing
 // (`karren nimm`: in the pack, a boat's hatch or the railway's freight).
-import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type CartFields, type ExitFields, type FreightFields, type ItemFields } from "../../model.ts";
 import { worldNowOf } from "../clock.ts";
@@ -16,6 +15,7 @@ import { amount, ARTICLE, distTo, EXIT_REACH, giveBack, planOf } from "./build.t
 import { placeIn, relocate } from "./default.ts";
 import { consume, move } from "./trade.ts";
 import { countTrip } from "../travel.ts";
+import { randomBytes, timeNow } from "../source.ts";
 
 /** Room to rooms the roads join: a road beside an exit links its two ends, both ways. */
 export async function roadLinks(space: SpaceLike, w: WorldDef, txn: string | null = null): Promise<Map<string, Set<string>>> {
@@ -203,7 +203,7 @@ export async function cartTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 			const [next, ...rest] = f.path, target = next ? w.rooms.find((r) => r.roomId === next) : undefined;
 			// a road that fell meanwhile does not stop it: the way was open when it left; on a route it works at the end
 			await space.write({ type: "Cart", fields: { ...f, ...(target ? { room: target.roomId, x: target.spawn?.x ?? f.x, y: target.spawn?.y ?? f.y } : {}), path: rest, dueWorldMs: rest.length || f.route ? now + d.hopWorldMs : FOREVER } as never }, txn, FOREVER);
-			if (!rest.length && target && !f.route) await toPlayer(space, { room: target.roomId, to: f.charId, kind: "info", text: `Dein Karren ist in ${target.name} angekommen.`, from: "", at: Date.now() }, txn);
+			if (!rest.length && target && !f.route) await toPlayer(space, { room: target.roomId, to: f.charId, kind: "info", text: `Dein Karren ist in ${target.name} angekommen.`, from: "", at: timeNow() }, txn);
 			await space.commit(txn);
 			moved++;
 		} catch (err) { await space.abort(txn).catch(() => {}); throw err; }

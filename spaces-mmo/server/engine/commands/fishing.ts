@@ -1,6 +1,5 @@
 // Fishing, step 7 (docs/siedeln.en.md "Boats and fishing"): beside a jetty, anyone's, `wirf netz` brings a catch, now and then a
 // find, and costs the rest that work costs; the net holds. A smokehouse turns fish into smoked fish by a recipe.
-import { randomInt } from "node:crypto";
 import { fieldsOf, type BuildingFields, type ItemFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
@@ -13,6 +12,7 @@ import { worldNowOf } from "../clock.ts";
 import { consume, move } from "./trade.ts";
 import { dropOffers, placeIn, relocate } from "./default.ts";
 import { countTrip } from "../travel.ts";
+import { randomInt } from "../source.ts";
 
 const weighted = (xs: Array<{ proto: string; weight: number }>) => { let r = randomInt(0, xs.reduce((n, x) => n + x.weight, 0)); return xs.find((x) => (r -= x.weight) < 0)!; };
 

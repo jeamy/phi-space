@@ -1,7 +1,6 @@
 // Builder and admin commands (docs/phasen.en.md Phase 1): shaping the world from inside it. Each carries a `cmd` lock, so
 // for everyone below the level the command does not exist. Lock strings a builder writes are parsed before they are
 // stored; a string that does not parse is refused with the reason.
-import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type Taken } from "phi-spaces";
 import { fieldsOf, type AccountFields, type ExitFields, type ItemFields, type RoomFields, type TagFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
@@ -11,6 +10,7 @@ import { DEFAULT_ITEM_LOCKS, newItemId, resolvePrototype, spawn as spawnItem } f
 import { draftOf, typeChain } from "../typeclasses.ts";
 import { walkable } from "../world.ts";
 import { peek } from "../../space.ts";
+import { randomBytes } from "../source.ts";
 
 const BUILDER = "cmd:perm(Builder)";
 const ADMIN = "cmd:perm(Admin)";

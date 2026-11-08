@@ -12,7 +12,6 @@
 //   then loses a part), the crop is lost; and a field nobody worked for its time goes back to grass.
 import { needRank } from "./settlement.ts";
 import { needEpoch } from "./epoch.ts";
-import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type FieldFields, type WorkRestFields } from "../../model.ts";
 import { peek } from "../../space.ts";
@@ -25,6 +24,7 @@ import { fogOf } from "../fire.ts";
 import type { CropDef, FieldDef, WorldDef } from "../world.ts";
 import { ARTICLE, besides, cells, freeCells, giveBack, human, lightFor, plural, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
 import { growFactor } from "./garden.ts";
+import { randomBytes, timeNow } from "../source.ts";
 
 const STAGE: Record<FieldFields["stage"], string> = { brach: "brach", saat: "wird bestellt", waechst: "wächst", reif: "reif", spaet: "überreif" };
 const fieldDef = (c: CommandCtx): FieldDef => {
@@ -257,7 +257,7 @@ export const FIELD_COMMANDS: Command[] = [flur, bestelle];
 
 /** A message from the world to everyone in a room. */
 async function tell(space: SpaceLike, leaseMs: number, room: string, text: string, txn: string): Promise<void> {
-	await space.write({ type: "Msg", fields: { room, to: "*", kind: "world", text, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
+	await space.write({ type: "Msg", fields: { room, to: "*", kind: "world", text, from: "", at: timeNow() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
 }
 
 /** The fields whose date has come (in the garden job, engine/worldevents.ts): growing ones ripen, ripe ones go late after

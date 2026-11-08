@@ -6,6 +6,7 @@ import { PATH } from "./build.ts";
 import { isPassage } from "../occupancy.ts";
 import { grownPoint, insertStrip } from "../room-growth.ts";
 import { walkable, type WorldDef } from "../world.ts";
+import { timeNow } from "../source.ts";
 export { grownGround, grownDecor } from "../room-growth.ts";
 
 const POSITIONED = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Plot", "Zone", "Motion", "Animal"];
@@ -125,7 +126,7 @@ export async function growthTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 			await space.write({ type: "RoomGrowth", fields: after as never }, txn, FOREVER);
 			const g = { east: 0, south: 0, steps: [step] };
 			await space.write({ type: e.type, types: e.types.slice(1), fields: { ...e.fields, ground: insertStrip(room.ground, step), ...(room.decor ? { decor: insertStrip(room.decor, step, true) } : {}), ...(room.spawn ? { spawn: grownPoint(room.spawn, g) } : {}) } as never }, txn, FOREVER);
-			await space.write({ type: "Msg", fields: { room: room.roomId, to: "*", kind: "world", text: `${room.name} wächst: Im ${step.axis === "x" ? "Osten" : "Süden"} ist neues Land frei.`, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
+			await space.write({ type: "Msg", fields: { room: room.roomId, to: "*", kind: "world", text: `${room.name} wächst: Im ${step.axis === "x" ? "Osten" : "Süden"} ist neues Land frei.`, from: "", at: timeNow() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
 			await space.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, txn, FOREVER);
 			await space.commit(txn);
 			grew++;

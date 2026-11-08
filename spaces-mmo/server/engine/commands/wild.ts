@@ -12,7 +12,6 @@
 // - Shelter: a fence round a bed, field or coop (`zäune`), a scarecrow near a bed or field, a mousetrap in the chest, and
 //   the guards: fed, the geese keep hares and foxes from their room, a dog hares, deer and foxes, a cat the mice.
 // - Gulls (step 7) come by day to the rack of a smokehouse (its chest) for fish; a net laid on it keeps them off.
-import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type AnimalFields, type BedFields, type BedPlant, type BuildingFields, type FieldFields, type ItemFields } from "../../model.ts";
 import { decayNowOf, worldNowOf } from "../clock.ts";
@@ -25,6 +24,7 @@ import { settleHerd } from "./animals.ts";
 import { distTo, planOf, putBack, takeNear, type Rect } from "./build.ts";
 import { cropOf, fieldName, harvestOf } from "./field.ts";
 import { bedHere, bedName, growFactor, mayTend, nextDue, protoName, sortOf, writeBed } from "./garden.ts";
+import { random, randomBytes, timeNow } from "../source.ts";
 
 const night = (worldMs: number) => { const h = calendar(worldMs).hour; return h >= 20 || h < 6; };
 /** Cells between two rectangles (0: touching or overlapping), as one walks: diagonal steps count one. */
@@ -79,7 +79,7 @@ export function graze(d: FieldDef, p: Pick<PreyDef, "bite" | "keep">, f: FieldFi
 
 /** A hare's bite: one living plant falls back a stage, a seedling is gone; the bed's last living plant it leaves.
  *  Returns the plant it ate at (null: nothing). */
-export function bite(g: GardenDef, b: BedFields, now: number, fog: number, rnd: () => number = Math.random): BedPlant | null {
+export function bite(g: GardenDef, b: BedFields, now: number, fog: number, rnd: () => number = random): BedPlant | null {
 	const living = b.plants.filter((p) => p.stage < 3);
 	if (living.length < 2) return null;
 	const p = living[Math.floor(rnd() * living.length) % living.length]!;
@@ -95,7 +95,7 @@ export function bite(g: GardenDef, b: BedFields, now: number, fog: number, rnd: 
 
 /** A message from the world to everyone in a room. */
 async function tell(space: SpaceLike, leaseMs: number, room: string, text: string, txn: string | null = null): Promise<void> {
-	await space.write({ type: "Msg", fields: { room, to: "*", kind: "world", text, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
+	await space.write({ type: "Msg", fields: { room, to: "*", kind: "world", text, from: "", at: timeNow() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
 }
 
 /** A free cell beside a target where an animal can sit (walkable, no bed, field or building on it). */
@@ -235,7 +235,7 @@ const chestFor = (w: WorldDef, k: WildKind, b: BuildingFields) => !!planOf(w, b.
 
 /** The wild's recurring job (engine/worldevents.ts, "wild"): animals whose time has come eat and go, then each room with
  *  targets in fog may get a new one of each kind. Writes only when one comes or eats. */
-export async function wildTick(space: SpaceLike, w: WorldDef, leaseMs: number, rnd: () => number = Math.random): Promise<{ came: number; ate: number }> {
+export async function wildTick(space: SpaceLike, w: WorldDef, leaseMs: number, rnd: () => number = random): Promise<{ came: number; ate: number }> {
 	const wd = w.wild;
 	if (!wd) return { came: 0, ate: 0 };
 	const now = await worldNowOf(space);

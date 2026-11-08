@@ -17,6 +17,7 @@ import { awaitWork, envMs, peek, readExisting } from "../space.ts";
 import { CommandError, type CommandCtx } from "./context.ts";
 import { blockedIn, claimSpot, freeCellNear, isPassage, occupiedIn } from "./occupancy.ts";
 import type { WorldDef } from "./world.ts";
+import { timeNow } from "./source.ts";
 
 /** A guest account's lease, as the accounts write it (accounts.ts). */
 const GUEST_MS = () => envMs("SPACES_MMO_GUEST_TTL_MS", 7 * 24 * 3600_000);
@@ -45,8 +46,8 @@ export async function handOff(c: CommandCtx, from: string, to: string, dest: { r
 	catch (e) { if (e instanceof StillHeld) throw new Error("the account is held; the crossing is tried again"); throw e; }
 	const handover: HandoverFields = {
 		arrivalGrowthRevision,
-		handoverId: `h-${c.actor.charId}-${Date.now().toString(36)}`, charId: c.actor.charId, from, to,
-		character: { ...ch, ...dest, ...(c.step ? { ack: c.step } : {}) }, account: acc ? fieldsOf<AccountFields>(acc) : null, at: Date.now(),
+		handoverId: `h-${c.actor.charId}-${timeNow().toString(36)}`, charId: c.actor.charId, from, to,
+		character: { ...ch, ...dest, ...(c.step ? { ack: c.step } : {}) }, account: acc ? fieldsOf<AccountFields>(acc) : null, at: timeNow(),
 	};
 	await c.space.write({ type: "Handover", fields: handover as never }, c.txn, FOREVER);
 }
@@ -100,7 +101,7 @@ export async function arrive(space: SpaceLike, w: WorldDef, h: HandoverFields): 
 		await space.write({ type: "Character", fields: { ...h.character, ...at } as never }, txn, FOREVER);
 		for (const it of h.items ?? []) await space.write({ type: it.type, types: it.types.slice(1), fields: it.fields as never }, txn, FOREVER);
 		if (!(await readExisting(space, actorToken(h.charId), { txn }).catch(() => true))) await space.write(actorToken(h.charId), txn, FOREVER);
-		await space.write({ type: "Msg", fields: { room: h.character.room, to: "*", kind: "info", text: `${h.character.name} kommt mit dem Kahn an.`, from: "", at: Date.now() } as never }, txn, 60_000);
+		await space.write({ type: "Msg", fields: { room: h.character.room, to: "*", kind: "info", text: `${h.character.name} kommt mit dem Kahn an.`, from: "", at: timeNow() } as never }, txn, 60_000);
 		await space.commit(txn);
 		return true;
 	} catch (e) { await space.abort(txn).catch(() => {}); throw e; }

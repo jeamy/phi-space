@@ -12,7 +12,6 @@
 // Delivery orders fill the shelf: the owner posts `laden bestelle <n> <ding> für <m>`, the order boards of the region show
 // it (trade.ts), and anyone brings the things with `laden liefere`, paid from the till. The coins promised stay in the till
 // but are spoken for: neither the owner nor a sale to the store takes them, so a delivery is always paid.
-import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type ItemFields, type LoanFields, type ShopOrderFields } from "../../model.ts";
 import { decayNowOf } from "../clock.ts";
@@ -24,6 +23,7 @@ import type { WorldDef } from "../world.ts";
 import { ARTICLE, distTo, planOf, putBack, takeNear } from "./build.ts";
 import { settlementIn } from "./settlement.ts";
 import { consume, move } from "./trade.ts";
+import { randomBytes, timeNow } from "../source.ts";
 
 const coinsWord = (n: number) => `${n} Münze${n === 1 ? "" : "n"}`;
 const protoName = (w: WorldDef, proto: string) => w.prototypes.find((p) => p.key === proto)?.name ?? proto;
@@ -202,7 +202,7 @@ export async function loanTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 				const it = await space.takeIfExists({ id: i.id }, NO_WAIT, { txn });
 				if (it) await space.write({ type: it.type, types: it.types.slice(1), fields: { ...it.fields, location: to } as never }, txn, FOREVER);
 			}
-			await toPlayer(space, { room: l.room, to: l.charId, kind: "info", text: standing ? "Dein Kredit ist abgelaufen; das Pfand gehört jetzt dem Kontor." : "Dein Kontor steht nicht mehr; das Pfand ist wieder deins.", from: "", at: Date.now() }, txn);
+			await toPlayer(space, { room: l.room, to: l.charId, kind: "info", text: standing ? "Dein Kredit ist abgelaufen; das Pfand gehört jetzt dem Kontor." : "Dein Kontor steht nicht mehr; das Pfand ist wieder deins.", from: "", at: timeNow() }, txn);
 			await space.commit(txn);
 			ended++;
 		} catch (err) { await space.abort(txn).catch(() => {}); throw err; }

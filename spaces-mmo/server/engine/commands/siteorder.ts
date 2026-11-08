@@ -6,7 +6,6 @@
 //   paid from nothing and a wage cannot be spent twice. Paying is part of the command's transaction, which holds the site.
 // - What a finished, given up or lapsed site did not pay goes back: into the owner's pack, or as an estate at the site's
 //   room while the owner is in another region.
-import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type EstateFields, type ItemFields, type SiteFields, type SiteOrderFields } from "../../model.ts";
 import { decayNowOf, worldNowOf } from "../clock.ts";
@@ -14,6 +13,7 @@ import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, msg, NotUnderstood, stem, type CommandCtx } from "../context.ts";
 import type { WorldDef } from "../world.ts";
 import { missing, settle, siteHere } from "./build.ts";
+import { randomBytes } from "../source.ts";
 
 /** What an order shows: "5 Treibholz, je 2 Münzen". */
 export const orderLine = (o: SiteOrderFields) => `${o.left} ${o.name}, je ${o.pay} Münze${o.pay === 1 ? "" : "n"}`;

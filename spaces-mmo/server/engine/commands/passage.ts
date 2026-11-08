@@ -10,9 +10,9 @@ import { regionOfRoom } from "../regions.ts";
 import { worldNowOf } from "../clock.ts";
 import { releaseSpot } from "../occupancy.ts";
 import { dropOffers, placeIn, relocate } from "./default.ts";
-import { randomBytes } from "node:crypto";
 import { countTrip } from "../travel.ts";
 import { linerOf, nextStop } from "../liner.ts";
+import { randomBytes, timeNow } from "../source.ts";
 
 const mins = (ms: number) => Math.max(1, Math.ceil(ms / 60_000));
 
@@ -94,7 +94,7 @@ export async function passageTick(space: SpaceLike, _leaseMs: number): Promise<n
 	for (const e of passages) {
 		const p = fieldsOf<PassageFields>(e);
 		if (p.arriveWorldMs > now || (await space.count({ type: "Intent", fields: { charId: p.charId } }))) continue;
-		await space.write({ type: "Intent", fields: { intentId: randomBytes(8).toString("hex"), charId: p.charId, line: "ausschiffen", at: Date.now() } satisfies IntentFields as never }, null, 30_000);
+		await space.write({ type: "Intent", fields: { intentId: randomBytes(8).toString("hex"), charId: p.charId, line: "ausschiffen", at: timeNow() } satisfies IntentFields as never }, null, 30_000);
 		sent++;
 	}
 	return sent;

@@ -15,6 +15,7 @@ import { readExisting, StillHeld, peek } from "../space.ts";
 import { resolveFrom, spawn } from "./prototypes.ts";
 import { draftOf } from "./typeclasses.ts";
 import type { WorldDef } from "./world.ts";
+import { timeNow } from "./source.ts";
 
 export type LoadResult = { loaded: boolean; version: number; spawned: string[] };
 
@@ -106,7 +107,7 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			if (!exists && w.region && (await peek(space, { type: "NpcBorn", fields: { charId } }, { txn }))) continue;
 			if (!exists && w.region) await space.write({ type: "NpcBorn", fields: { charId } }, txn, FOREVER);
 			if (!exists) {
-				const now = Date.now();
+				const now = timeNow();
 				await space.write({ type: "Account", fields: { accountId: charId, name: n.name, guest: false, admin: false, npc: true, ...(n.settler ? { settler: true } : {}), createdAt: now, touchedAt: now } satisfies AccountFields as never }, txn, FOREVER);
 				await space.write({ type: "Character", fields: { charId, accountId: charId, name: n.name, room: n.room, ...await at(txn, n.room, { x: n.x, y: n.y }), skin: n.skin, guest: false } satisfies CharacterFields as never }, txn, FOREVER);
 				await space.write(actorToken(charId), txn, FOREVER);
@@ -173,16 +174,16 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 		}
 		if (replace) {
 			if (marker) await space.take({ type: "WorldLoaded", id: marker.id }, NO_WAIT, { txn });
-			await space.write({ type: "WorldLoaded", fields: { worldId: w.id, version: w.version, at: Date.now() } satisfies WorldLoadedFields as never }, txn, FOREVER);
+			await space.write({ type: "WorldLoaded", fields: { worldId: w.id, version: w.version, at: timeNow() } satisfies WorldLoadedFields as never }, txn, FOREVER);
 		}
 		// the world's clock: made once, with the world (a reload and a restart keep it, so the world goes on where it was)
 		let clock = (await peek(space, { type: "WorldClock", fields: { worldId: w.id } }, { txn }))?.fields as unknown as WorldClockFields | undefined;
-		if (!clock) { clock = initialClock(w.id, w.startHour ?? DEFAULT_START_HOUR, Date.now(), timeScale()); await space.write({ type: "WorldClock", fields: clock as never }, txn, FOREVER); }
+		if (!clock) { clock = initialClock(w.id, w.startHour ?? DEFAULT_START_HOUR, timeNow(), timeScale()); await space.write({ type: "WorldClock", fields: clock as never }, txn, FOREVER); }
 		// a fire from before the world had a clock is dated in real milliseconds, which in world time is far beyond what a fire can
 		// hold (`fire.maxMs`): such a flame goes out (the keepers light it again)
-		for (const f of await space.readAll({ type: "Flame" }, { txn })) if (Number(f.fields.until) > worldNow(clock, Date.now()) + 2 * w.fire.maxMs) await space.takeIfExists({ type: "Flame", id: f.id }, NO_WAIT, { txn });
+		for (const f of await space.readAll({ type: "Flame" }, { txn })) if (Number(f.fields.until) > worldNow(clock, timeNow()) + 2 * w.fire.maxMs) await space.takeIfExists({ type: "Flame", id: f.id }, NO_WAIT, { txn });
 		// and its dates in world time (the evening); a date that exists is left to its schedule
-		for (const { f, refresh } of worldSchedules(w, clock.epoch, worldNow(clock, Date.now()))) await ensureSchedule(space, txn, f, { refresh });
+		for (const { f, refresh } of worldSchedules(w, clock.epoch, worldNow(clock, timeNow()))) await ensureSchedule(space, txn, f, { refresh });
 		await space.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, txn, FOREVER);
 		await space.commit(txn);
 		return { loaded: replace, version: w.version, spawned };

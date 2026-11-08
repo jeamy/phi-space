@@ -14,6 +14,7 @@ import { CommandError, msg, msgOptions, type CommandCtx } from "../context.ts";
 import { peek } from "../../space.ts";
 import { setting } from "../../settings.ts";
 import type { WorldDef } from "../world.ts";
+import { timeNow } from "../source.ts";
 
 /** The island a room belongs to (undefined: none, then it has no epoch). */
 export const islandOf = (w: WorldDef, roomId: string) => (w.allRooms ?? w.rooms).find((r) => r.roomId === roomId)?.island;
@@ -75,7 +76,7 @@ export async function epochTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 				? `${island} ist jetzt ${a(w, epoch)} (Epoche ${epoch}): ${unlocks(w, epoch) || "neue Pläne"} lassen sich jetzt bauen.`
 				: `${island} ist wieder ${a(w, epoch)} (Epoche ${epoch}): zu viel ist verfallen. Was steht, arbeitet weiter; neue Pläne der höheren Stufe warten, bis der Bestand wieder reicht.`;
 			for (const r of w.rooms.filter((x) => x.island === island)) {
-				await space.write({ type: "Msg", fields: { room: r.roomId, to: "*", kind: "world", text, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
+				await space.write({ type: "Msg", fields: { room: r.roomId, to: "*", kind: "world", text, from: "", at: timeNow() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
 			}
 			await space.commit(txn);
 			changed.push({ island, epoch });

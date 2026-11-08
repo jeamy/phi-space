@@ -6,7 +6,6 @@
 // - A settlement starts open: the ranks then bind nobody. `siedlung zu` makes them count, `siedlung offen` lifts it.
 // - It lasts while its huts do: when too few stand (they decay like any building), the count (job "epoch") ends it. What
 //   stands there stays; the land and the buildings never belonged to it.
-import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type SettlementFields, type SettlementMember } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
@@ -16,6 +15,7 @@ import type { WorldDef } from "../world.ts";
 import { hallIn, zonesLine } from "./townhall.ts";
 import { tendersIn } from "./festival.ts";
 import { decayNowOf } from "../clock.ts";
+import { randomBytes, timeNow } from "../source.ts";
 
 export type Rank = "fremder" | "helfer" | "siedler";
 const ORDER: Rank[] = ["fremder", "helfer", "siedler"];
@@ -55,7 +55,7 @@ export async function settlementTick(space: SpaceLike, w: WorldDef, leaseMs: num
 			if (!(await space.takeIfExists({ type: "Settlement", fields: { settlementId: s.settlementId } }, NO_WAIT, { txn }))) { await space.abort(txn); continue; }
 			await space.takeIfExists({ type: "SettlementName", fields: { nameKey: s.nameKey } }, NO_WAIT, { txn }); // the name is free again
 			for (const z of await space.readAll({ type: "Zone", fields: { room: s.room } })) await space.takeIfExists({ id: z.id }, NO_WAIT, { txn }); // its zones go with it
-			await space.write({ type: "Msg", fields: { room: s.room, to: "*", kind: "world", text: `${s.name} gibt es nicht mehr: zu wenige Hütten stehen noch. Was hier steht, bleibt.`, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
+			await space.write({ type: "Msg", fields: { room: s.room, to: "*", kind: "world", text: `${s.name} gibt es nicht mehr: zu wenige Hütten stehen noch. Was hier steht, bleibt.`, from: "", at: timeNow() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
 			await space.commit(txn);
 			gone++;
 		} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
@@ -73,7 +73,7 @@ async function found(c: CommandCtx, name: string): Promise<void> {
 	const huts = await hutsIn(c.space, c.world, c.actor.room, c.txn);
 	if (!huts.some((h) => h.accountId === c.account!.accountId)) throw new CommandError("Eine Siedlung gründet, wer hier eine Hütte hat.");
 	if (!enoughHuts(c.world, huts)) throw new CommandError(`Für eine Siedlung braucht es ${d.huts} Hütten von mindestens ${d.owners} Besitzern in einem Raum; hier stehen ${huts.length}.`);
-	const s: SettlementFields = { settlementId: randomBytes(6).toString("hex"), name: n, nameKey: key(n), room: c.actor.room, founder: c.account.accountId, founderName: c.actor.name, members: [], closed: false, at: Date.now() };
+	const s: SettlementFields = { settlementId: randomBytes(6).toString("hex"), name: n, nameKey: key(n), room: c.actor.room, founder: c.account.accountId, founderName: c.actor.name, members: [], closed: false, at: timeNow() };
 	try {
 		await c.space.write({ type: "Settlement", fields: s as never }, c.txn, FOREVER, { unique: ["room"] });
 		await c.space.write({ type: "SettlementName", fields: { nameKey: s.nameKey } as never }, c.txn, FOREVER, { unique: ["nameKey"] });

@@ -5,6 +5,7 @@ import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type WorldClockFields } from "../model.ts";
 import { calendar, decayNow, patience, worldNow } from "./worldtime.ts";
 import { peek } from "../space.ts";
+import { timeNow } from "./source.ts";
 
 export class ClockCache {
 	#clock: WorldClockFields | null = null;
@@ -16,7 +17,7 @@ export class ClockCache {
 	constructor(space: SpaceLike, worldId?: string, ttlMs = 15_000) { this.#space = space; this.#worldId = worldId; this.#ttlMs = ttlMs; }
 
 	/** The clock as last read (null while the world has none). */
-	async clock(realNow = Date.now()): Promise<WorldClockFields | null> {
+	async clock(realNow = timeNow()): Promise<WorldClockFields | null> {
 		if (!this.#clock || realNow - this.#at > this.#ttlMs) {
 			const e = await peek(this.#space, { type: "WorldClock", ...(this.#worldId ? { fields: { worldId: this.#worldId } } : {}) }).catch(() => null);
 			if (e) { this.#clock = fieldsOf<WorldClockFields>(e); this.#at = realNow; }
@@ -33,13 +34,13 @@ export class ClockCache {
 	decayRate(): number { return this.#clock?.decayRate ?? this.#clock?.rate ?? 1; }
 
 	/** The time of the second clock now, or null while the world has no clock. */
-	async decayNow(realNow = Date.now()): Promise<number | null> {
+	async decayNow(realNow = timeNow()): Promise<number | null> {
 		const c = await this.clock(realNow);
 		return c ? decayNow(c, realNow) : null;
 	}
 
 	/** The world time now, or null while the world has no clock. */
-	async now(realNow = Date.now()): Promise<number | null> {
+	async now(realNow = timeNow()): Promise<number | null> {
 		const c = await this.clock(realNow);
 		return c ? worldNow(c, realNow) : null;
 	}
@@ -50,8 +51,8 @@ const caches = new WeakMap<SpaceLike, ClockCache>();
 export const clockOf = (space: SpaceLike): ClockCache => { let c = caches.get(space); if (!c) { c = new ClockCache(space); caches.set(space, c); } return c; };
 
 /** The world time now (real time while the world has no clock): what an NPC's own timers count in. */
-export const worldNowMs = async (space: SpaceLike, realNow = Date.now()): Promise<number> => (await clockOf(space).now(realNow)) ?? realNow;
-export const decayNowMs = async (space: SpaceLike, realNow = Date.now()): Promise<number> => (await clockOf(space).decayNow(realNow)) ?? realNow;
+export const worldNowMs = async (space: SpaceLike, realNow = timeNow()): Promise<number> => (await clockOf(space).now(realNow)) ?? realNow;
+export const decayNowMs = async (space: SpaceLike, realNow = timeNow()): Promise<number> => (await clockOf(space).decayNow(realNow)) ?? realNow;
 
 /** Real milliseconds for a rhythm of `worldMs` (at least `minMs`): how often a role looks around. A role deals with people,
  *  so it follows the second rate, not the life of the world; it does not stop with a pause (a role still hears what is said
@@ -60,7 +61,7 @@ export const paceMs = (space: SpaceLike, worldMs: number, minMs = 50): number =>
 
 /** The key of the world day, `e1:d183` (clock epoch and day), or null while the world has no clock: what a narrative
  *  budget "per day" counts by (docs/weltzeit.en.md, "Modellbudgets"). */
-export async function worldDayKey(space: SpaceLike, realNow = Date.now()): Promise<string | null> {
+export async function worldDayKey(space: SpaceLike, realNow = timeNow()): Promise<string | null> {
 	const c = await clockOf(space).clock(realNow);
 	return c ? `e${c.epoch}:d${calendar(worldNow(c, realNow)).day}` : null;
 }

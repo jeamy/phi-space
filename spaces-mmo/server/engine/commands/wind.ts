@@ -1,13 +1,13 @@
 // Wind, weather of its own (docs/siedeln.en.md "Weather"): each island has a level that moves a step now and then, from a lull
 // to a gale; a storm surge makes it a gale at once. A mill grinds by the wind that blows when the load comes. `wetter` tells
 // it. An island nobody counted yet has the ordinary breeze, so a world needs nothing written to start.
-import { randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type FogFields, type WindFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, msgOptions, roomOf } from "../context.ts";
 import { peek } from "../../space.ts";
 import type { WorldDef } from "../world.ts";
+import { randomInt, timeNow } from "../source.ts";
 
 const BREEZE = 1;
 const levelOf = async (space: SpaceLike, island: string | undefined, txn: string | null = null) => { const e = island ? await peek(space, { type: "Wind", fields: { island } }, { txn }) : null; return e ? fieldsOf<WindFields>(e).level : BREEZE; };
@@ -24,7 +24,7 @@ async function setLevel(space: SpaceLike, w: WorldDef, island: string, level: nu
 		await space.write({ type: "Wind", fields: { island, level } satisfies WindFields as never }, txn, FOREVER);
 		// the gale comes and goes aloud; the rest one reads with `wetter`
 		const top = w.wind!.names.length - 1, text = level === top ? `Über ${island} frischt der Wind zum Sturm auf.` : before === top ? `Über ${island} lässt der Sturm nach.` : "";
-		if (text) for (const r of w.rooms.filter((x) => x.island === island)) await space.write({ type: "Msg", fields: { room: r.roomId, to: "*", kind: "world", text, from: "", at: Date.now() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
+		if (text) for (const r of w.rooms.filter((x) => x.island === island)) await space.write({ type: "Msg", fields: { room: r.roomId, to: "*", kind: "world", text, from: "", at: timeNow() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));
 		await space.commit(txn);
 		return true;
 	} catch (err) { await space.abort(txn).catch(() => {}); throw err; }

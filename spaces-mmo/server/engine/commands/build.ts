@@ -18,7 +18,6 @@ import { blessed } from "./chapel.ts";
 import { zoneRefusal } from "./townhall.ts";
 import { satedFactor } from "./food.ts";
 import { closeOrders, keptUntil, orderLine, ordersOfSite, payFor } from "./siteorder.ts";
-import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type EstateFields, type FreightFields, type FireBuilderFields, type IntentFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
@@ -33,6 +32,7 @@ import { walkable, type PlanDef, type WorldDef } from "../world.ts";
 import { setting, workRestMs } from "../../settings.ts";
 import { chestOrder, fmtLoad, loadAt, loadOf, loadOfAll, packMax } from "../pack.ts";
 import type { CourierFields } from "../courier.ts";
+import { randomBytes, timeNow } from "../source.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -432,7 +432,7 @@ async function storeRight(c: CommandCtx, b: BuildingFields): Promise<{ left: num
 	return { left: Math.max(0, d.quota[rank] - taken), quota: d.quota[rank] };
 }
 const logStore = async (c: CommandCtx, b: BuildingFields, kind: StoreLogFields["kind"], itemName: string, count: number) => {
-	const line: StoreLogFields = { logId: randomBytes(6).toString("hex"), buildId: b.buildId, accountId: c.account?.accountId ?? "", name: c.actor.name, kind, itemName, count, worldMs: await worldNowOf(c.space, c.txn), at: Date.now() };
+	const line: StoreLogFields = { logId: randomBytes(6).toString("hex"), buildId: b.buildId, accountId: c.account?.accountId ?? "", name: c.actor.name, kind, itemName, count, worldMs: await worldNowOf(c.space, c.txn), at: timeNow() };
 	await c.space.write({ type: "StoreLog", fields: line as never }, c.txn, c.world.building?.store?.logKeepMs ?? WORLD_DAY);
 };
 
@@ -531,7 +531,7 @@ const storeArg = (arg: string): { what: string; target: string } => {
  *  (192 KiB; 500 driftwood in one went round and round, 2026-11-08). More follows as the same command again. */
 export const MOVES_PER_COMMAND = 100;
 /** The rest of a command that moved MOVES_PER_COMMAND things: the character's next intent, written with this one. */
-const goOn = (c: CommandCtx, line: string) => c.space.write({ type: "Intent", fields: { intentId: randomBytes(8).toString("hex"), charId: c.actor.charId, line, at: Date.now(), ...(c.lang ? { lang: c.lang } : {}) } satisfies IntentFields as never }, c.txn, 30_000);
+const goOn = (c: CommandCtx, line: string) => c.space.write({ type: "Intent", fields: { intentId: randomBytes(8).toString("hex"), charId: c.actor.charId, line, at: timeNow(), ...(c.lang ? { lang: c.lang } : {}) } satisfies IntentFields as never }, c.txn, 30_000);
 const restOf = (n: number | null, left: number) => (n === null ? "alle" : String(left));
 const goingOn = " Den Rest legst du gleich nach.";
 
@@ -584,7 +584,7 @@ const verstaue: Command = {
 			// another region: a courier carries them (courier.ts); until then they lie with it, out of anyone's reach
 			const courierId = `cou-${randomBytes(6).toString("hex")}`;
 			for (const it of all.slice(0, k)) if (await moveItem(c.space, c.txn, it.f.itemId, c.actor.charId, courierId)) moved++;
-			const f: CourierFields = { courierId, to: chest.region, buildId: chest.b.buildId, accountId: chest.b.accountId, ownerName: chest.b.ownerName, room: chest.b.room, name: chest.b.name, proto, count: moved, at: Date.now() };
+			const f: CourierFields = { courierId, to: chest.region, buildId: chest.b.buildId, accountId: chest.b.accountId, ownerName: chest.b.ownerName, room: chest.b.room, name: chest.b.name, proto, count: moved, at: timeNow() };
 			await c.space.write({ type: "Courier", fields: f as never }, c.txn, FOREVER);
 		}
 		const later = k < fit && moved === k;

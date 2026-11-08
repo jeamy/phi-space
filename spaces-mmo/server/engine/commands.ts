@@ -29,12 +29,12 @@ import { DEFAULT_COMMANDS, exitCmdSet, helpCommand } from "./commands/default.ts
 import { CLOCK_COMMANDS } from "./commands/clock.ts";
 import { TRADE_COMMANDS } from "./commands/trade.ts";
 import { SCENERY_COMMANDS } from "./commands/scenery.ts";
-import { randomBytes } from "node:crypto";
 import { llmEnabled } from "../llm.ts";
 import { fieldsOf, type ListingFields, type TranslateFields } from "../model.ts";
 import { CommandError, NotUnderstood, exitsHere, inventory, lockCtx, msg, type CommandCtx } from "./context.ts";
 import { translateRules, type TranslateView } from "./translate.ts";
 import { allowed } from "./locks.ts";
+import { randomBytes, timeNow } from "./source.ts";
 
 export { CommandError, type CommandCtx };
 
@@ -93,7 +93,7 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 	if (!cmd) {
 		// nothing understood it: the model process may (once; a translation that is no command is refused)
 		if (llmEnabled() && !c.asked && c.account && !c.account.npc) {
-			const t: TranslateFields = { reqId: randomBytes(6).toString("hex"), charId: c.actor.charId, accountId: c.account.accountId, guest: c.account.guest, line: line.slice(0, 300), room: c.actor.room, at: Date.now(), ...(c.lang ? { lang: c.lang } : {}) };
+			const t: TranslateFields = { reqId: randomBytes(6).toString("hex"), charId: c.actor.charId, accountId: c.account.accountId, guest: c.account.guest, line: line.slice(0, 300), room: c.actor.room, at: timeNow(), ...(c.lang ? { lang: c.lang } : {}) };
 			await c.space.write({ type: "Translate", fields: t as never }, c.txn, 60_000);
 			return msg(c, c.actor.charId, "info", `„${line.slice(0, 80)}“ – einen Moment, ich versuche das zu verstehen …`);
 		}
@@ -117,7 +117,7 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 		// not understood (no thing of that name, a command without what it needs): the model reads the sentence first;
 		// only what it cannot read either is refused (a translation is never sent again, `c.asked`)
 		if (e instanceof NotUnderstood && llmEnabled() && !c.asked && c.account && !c.account.npc) {
-			const t: TranslateFields = { reqId: randomBytes(6).toString("hex"), charId: c.actor.charId, accountId: c.account.accountId, guest: c.account.guest, line: said.slice(0, 300), room: c.actor.room, at: Date.now(), why: e.message.slice(0, 300), ...(c.lang ? { lang: c.lang } : {}) };
+			const t: TranslateFields = { reqId: randomBytes(6).toString("hex"), charId: c.actor.charId, accountId: c.account.accountId, guest: c.account.guest, line: said.slice(0, 300), room: c.actor.room, at: timeNow(), why: e.message.slice(0, 300), ...(c.lang ? { lang: c.lang } : {}) };
 			await c.space.write({ type: "Translate", fields: t as never }, c.txn, 60_000);
 			return msg(c, c.actor.charId, "info", `„${said.slice(0, 80)}“ – einen Moment, ich versuche das zu verstehen …`);
 		}

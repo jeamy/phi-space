@@ -9,7 +9,6 @@
 // - A storm surge on the mill's island grinds ahead (the only write of a tick). A mill that falls (demolished or a ruin)
 //   gives the grain of loads not yet ground back to who brought it (build.ts stopLoads); a load is found at the
 //   mill's place, standing or not.
-import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type MillLoadFields } from "../../model.ts";
 import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
@@ -20,6 +19,7 @@ import type { MillDef, WorldDef } from "../world.ts";
 import { ARTICLE, distTo, giveBack, plural, planOf, putBack, SITE_REACH, takeNear } from "./build.ts";
 import { protoName } from "./garden.ts";
 import { craft } from "./trade.ts";
+import { randomBytes } from "../source.ts";
 
 const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : `${Math.max(1, Math.round(ms / 60_000))} Minuten`; };
 function millOf(c: CommandCtx): MillDef {

@@ -2,7 +2,6 @@
 // both sides and writes them swapped, a purchase takes the listing, the coins and the item, a craft takes the inputs and
 // writes the output. When anything is missing the transaction aborts and nothing has moved, so an item is never doubled
 // or lost however many trades race each other.
-import { randomBytes, randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { fieldsOf, type AccountFields, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type OfferFields, type WantedFields, type OrderFields, type ShopOrderFields } from "../../model.ts";
 import { readExisting, StillHeld, peek } from "../../space.ts";
@@ -13,6 +12,7 @@ import { boardLines } from "./siteorder.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
 import type { WorldDef } from "../world.ts";
+import { randomBytes, randomInt, timeNow } from "../source.ts";
 
 /** How long a trade offer waits for an answer (real time: the other one is at the keyboard now). */
 const OFFER_MS = 120_000;
@@ -88,7 +88,7 @@ const offer: Command = {
 		const who = (await c.space.readAll({ type: "Character", fields: { room: c.actor.room } })).map((e) => fieldsOf<CharacterFields>(e)).find((ch) => ch.charId !== c.actor.charId && !ch.aboard && ch.name.toLowerCase() === m[2]!.toLowerCase());
 		if (!who) throw new NotUnderstood(`Hier ist niemand namens „${m[2]!.slice(0, 30)}“.`);
 		const want = m[3] ? parseSpec(m[3]) : [];
-		const o: OfferFields = { offerId: `o-${randomBytes(5).toString("hex")}`, from: c.actor.charId, fromName: c.actor.name, to: who.charId, toName: who.name, give: got.items.map((i) => i.f.itemId), giveNames: got.items.map((i) => i.f.name), want, room: c.actor.room, at: Date.now() };
+		const o: OfferFields = { offerId: `o-${randomBytes(5).toString("hex")}`, from: c.actor.charId, fromName: c.actor.name, to: who.charId, toName: who.name, give: got.items.map((i) => i.f.itemId), giveNames: got.items.map((i) => i.f.name), want, room: c.actor.room, at: timeNow() };
 		await c.space.write({ type: "Offer", fields: o as never }, c.txn, OFFER_MS);
 		const wants = want.length ? ` für ${counted(want)}` : " als Geschenk";
 		await msg(c, who.charId, "info", `${c.actor.name} bietet dir ${counted(o.giveNames)}${wants} an. „accept ${c.actor.name}“ nimmt an, „decline ${c.actor.name}“ lehnt ab.`);
@@ -202,7 +202,7 @@ const market: Command = {
 			if (!pay) throw new CommandError(`Dafür brauchst du ${coins(price)}; sie liegen am Brett, bis jemand liefert.`);
 			const wantedId = `w-${randomBytes(5).toString("hex")}`;
 			for (const i of pay) await move(c, i.f, c.actor.charId, "market", { listing: wantedId, seller: c.actor.charId });
-			await c.space.write({ type: "Wanted", fields: { wantedId, buyer: c.actor.charId, buyerName: c.actor.name, proto: p.key, protoName: p.name, ...(count > 1 ? { count } : {}), price, room: c.actor.room, at: Date.now(), expiresWorldMs: (await decayNowOf(c.space, c.txn)) + c.world.market.listMs } satisfies WantedFields as never }, c.txn, FOREVER);
+			await c.space.write({ type: "Wanted", fields: { wantedId, buyer: c.actor.charId, buyerName: c.actor.name, proto: p.key, protoName: p.name, ...(count > 1 ? { count } : {}), price, room: c.actor.room, at: timeNow(), expiresWorldMs: (await decayNowOf(c.space, c.txn)) + c.world.market.listMs } satisfies WantedFields as never }, c.txn, FOREVER);
 			return msg(c, "*", "info", `$you() $conj(suchst|sucht) am Marktbrett ${count > 1 ? `${count}× ${p.name}` : p.name} und $conj(zahlst|zahlt) ${coins(price)}.`, { templ: true });
 		}
 		// delivering what a notice seeks: the thing goes to the one who seeks it, the coins in escrow to the one who brings it
@@ -252,7 +252,7 @@ const market: Command = {
 			const item = got.items[0]!.f, listingId = `l-${randomBytes(5).toString("hex")}`;
 			if (item.proto === "muenze") throw new CommandError("Münzen gegen Münzen zu tauschen ergibt nichts; stelle etwas anderes ans Marktbrett.");
 			for (const i of got.items) await move(c, i.f, c.actor.charId, "market", { listing: listingId, seller: c.actor.charId });
-			const lot: ListingFields = { listingId, seller: c.actor.charId, sellerName: c.actor.name, itemId: item.itemId, itemName: item.name, ...(got.items.length > 1 ? { count: got.items.length } : {}), price, room: c.actor.room, at: Date.now(), expiresWorldMs: (await decayNowOf(c.space, c.txn)) + c.world.market.listMs };
+			const lot: ListingFields = { listingId, seller: c.actor.charId, sellerName: c.actor.name, itemId: item.itemId, itemName: item.name, ...(got.items.length > 1 ? { count: got.items.length } : {}), price, room: c.actor.room, at: timeNow(), expiresWorldMs: (await decayNowOf(c.space, c.txn)) + c.world.market.listMs };
 			await c.space.write({ type: "Listing", fields: lot as never }, c.txn, FOREVER);
 			return msg(c, "*", "info", `$you() $conj(hängst|hängt) ${lotOf(lot)} für ${price} Münze${price === 1 ? "" : "n"} ans Marktbrett.`, { templ: true });
 		}
@@ -423,7 +423,7 @@ export async function ordersTick(space: SpaceLike, w: WorldDef): Promise<void> {
 		const kinds = w.orders.kinds.filter((k) => !k.rooms || k.rooms.includes(room));
 		if (!kinds.length || (await space.count({ type: "Order", fields: { room } })) >= w.orders.max) continue;
 		const k = kinds[randomInt(0, kinds.length)]!;
-		const o: OrderFields = { orderId: `j-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`, kind: k.key, text: k.text, needs: k.needs, reward: k.reward, takenBy: "", room, expiresWorldMs: (await worldNowOf(space)) + w.orders.leaseMs * (await patienceOf(space)) };
+		const o: OrderFields = { orderId: `j-${timeNow().toString(36)}-${randomBytes(3).toString("hex")}`, kind: k.key, text: k.text, needs: k.needs, reward: k.reward, takenBy: "", room, expiresWorldMs: (await worldNowOf(space)) + w.orders.leaseMs * (await patienceOf(space)) };
 		await space.write({ type: "Order", fields: o as never }, null, FOREVER);
 	}
 }

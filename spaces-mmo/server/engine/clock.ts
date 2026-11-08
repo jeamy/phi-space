@@ -6,6 +6,7 @@ import { decayNow, nextSpring, patience, seasonIndex, withDecayRate, withRate, w
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { setting } from "../settings.ts";
 import { peek } from "../space.ts";
+import { random, timeNow } from "./source.ts";
 
 export async function readClock(space: SpaceLike, txn?: string | null): Promise<WorldClockFields> {
 	const e = await peek(space, { type: "WorldClock" }, txn ? { txn } : {});
@@ -14,12 +15,12 @@ export async function readClock(space: SpaceLike, txn?: string | null): Promise<
 }
 
 /** The world time now, in world milliseconds. */
-export async function worldNowOf(space: SpaceLike, txn?: string | null, realNow = Date.now()): Promise<number> {
+export async function worldNowOf(space: SpaceLike, txn?: string | null, realNow = timeNow()): Promise<number> {
 	return worldNow(await readClock(space, txn), realNow);
 }
 
 /** The time of the second clock now: what waits for people who are away lapses in it. */
-export async function decayNowOf(space: SpaceLike, txn?: string | null, realNow = Date.now()): Promise<number> {
+export async function decayNowOf(space: SpaceLike, txn?: string | null, realNow = timeNow()): Promise<number> {
 	return decayNow(await readClock(space, txn), realNow);
 }
 /** World milliseconds per millisecond of the second clock, for spans inside a date of the world time. */
@@ -33,7 +34,7 @@ export async function syncRates(space: SpaceLike): Promise<void> {
 	const valid = (r: number) => r >= MIN_RATE && r <= MAX_RATE, now = await readClock(space);
 	const changeLife = valid(life) && life !== now.rate, changeDecay = valid(decay) && decay !== (now.decayRate ?? now.rate);
 	if (!changeLife && !changeDecay) return;
-	const realNow = Date.now();
+	const realNow = timeNow();
 	const txn = (await space.createTransaction(10_000)).id;
 	try {
 		const t = await space.takeIfExists({ type: "WorldClock" }, NO_WAIT, { txn });
@@ -48,7 +49,7 @@ export async function syncRates(space: SpaceLike): Promise<void> {
 
 /** For a job that serves people, not the life of the world: the tide and the surge bring what people fetch and burn, and what
  *  they bring lies by the second rate, so they come about as often as at that rate, however fast the world lives. */
-export const byPeoplesPace = async (space: SpaceLike): Promise<boolean> => Math.random() * (await patienceOf(space)) < 1;
+export const byPeoplesPace = async (space: SpaceLike): Promise<boolean> => random() * (await patienceOf(space)) < 1;
 
 /** Until when things out of doors stand still: the next spring in winter, else null. */
 export async function frozenUntil(space: SpaceLike, now: number): Promise<number | null> {
@@ -67,7 +68,7 @@ export async function seasonTick(space: SpaceLike, w: { rooms: Array<{ roomId: s
 		const was = await space.takeIfExists({ type: "Season" }, NO_WAIT, { txn });
 		if (was && Number(was.fields.season) === season) { await space.abort(txn); return false; }
 		await space.write({ type: "Season", fields: { season } as never }, txn, FOREVER);
-		if (was) for (const r of w.rooms) await space.write({ type: "Msg", fields: { room: r.roomId, to: "*", kind: "world", text: SEASON_TEXT[season]!, from: "", at: Date.now() } as never }, txn, leaseMs);
+		if (was) for (const r of w.rooms) await space.write({ type: "Msg", fields: { room: r.roomId, to: "*", kind: "world", text: SEASON_TEXT[season]!, from: "", at: timeNow() } as never }, txn, leaseMs);
 		await space.commit(txn);
 		return !!was;
 	} catch (err) { await space.abort(txn).catch(() => {}); throw err; }

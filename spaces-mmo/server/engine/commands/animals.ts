@@ -9,7 +9,6 @@
 // - Fed animals give their yield (an egg a day, wool every other day, milk a day), up to a few per animal waiting; hungry
 //   ones give nothing until fed again, and lose nothing. Two fed ones of a kind now and then get a young one, until the
 //   house is full. Anyone may feed (`füttere`), only the owner puts in, takes out and collects.
-import { randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type HerdFields, type ItemFields } from "../../model.ts";
 import { patienceOf, worldNowOf } from "../clock.ts";
@@ -20,6 +19,7 @@ import type { AnimalKindDef, AnimalsDef, KeeperDef, WorldDef } from "../world.ts
 import { ARTICLE, distTo, giveBack, planOf, putBack, takeNear } from "./build.ts";
 import { protoName } from "./garden.ts";
 import { needEpoch } from "./epoch.ts";
+import { randomInt } from "../source.ts";
 
 const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : `${Math.max(1, Math.round(ms / 60_000))} Minuten`; };
 const few = (k: AnimalKindDef, n: number) => `${n} ${n === 1 ? k.name : k.plural}`;

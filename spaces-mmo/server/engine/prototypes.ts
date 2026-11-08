@@ -1,12 +1,12 @@
 // Prototypes and the spawner (Evennia's Spawner and Prototypes): a prototype names a parent whose fields it extends;
 // spawning resolves the chain and writes an item of the prototype's typeclass. Prototypes live in the world space,
 // written by the loader from the world definition.
-import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type ItemFields, type PrototypeFields } from "../model.ts";
 import { draftOf } from "./typeclasses.ts";
 import type { WorldDef } from "./world.ts";
 import { peek } from "../space.ts";
+import { randomBytes } from "./source.ts";
 
 /** The engine's default locks of an item: anyone may pick it up and drop it, only registered players give it away. */
 export const DEFAULT_ITEM_LOCKS = "get:all();drop:all();give:not guest()";
