@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use mmo_engine::loader::{load_into_space, LoadOptions};
 use mmo_engine::model::world_lock;
 use mmo_engine::source::{set_source, Seeded};
+use mmo_engine::execute::Worker;
 use mmo_engine::worker::run_job;
 use mmo_engine::space::{Space, FOREVER};
 use phi_json::{obj, Json};
@@ -73,7 +74,7 @@ fn compare(step: &str, ts: &Json, rust: &[String]) {
 }
 
 /// One comparison: the two spaces, the TypeScript driver, the Rust engine's space and clock.
-struct Walk { _servers: (Kill, Kill), ts: Driver, space: Space, clock: Rc<Cell<f64>>, w: Json, rt: tokio::runtime::Runtime, local: tokio::task::LocalSet }
+struct Walk { _servers: (Kill, Kill), ts: Driver, space: Space, clock: Rc<Cell<f64>>, w: Json, rt: tokio::runtime::Runtime, local: tokio::task::LocalSet, intents: usize }
 
 impl Walk {
 	fn new(name: &str, seed: u32, start: f64) -> Self {
@@ -94,7 +95,7 @@ impl Walk {
 			space.write(&world_lock(), None, FOREVER).await.expect("the lock");
 			space
 		});
-		Self { _servers: (a, b), ts, space, clock, w, rt, local }
+		Self { _servers: (a, b), ts, space, clock, w, rt, local, intents: 0 }
 	}
 	fn run<T>(&self, f: impl std::future::Future<Output = T>) -> T { self.local.block_on(&self.rt, f) }
 	fn at(&mut self, ms: f64) { self.clock.set(ms); self.ts.call(obj! { "op" => "clock", "at" => ms }); }
@@ -110,12 +111,60 @@ impl Walk {
 	}
 	/// How many entries of the Rust space contain `text` (a walk shows that it did something).
 	fn entries_with(&mut self, text: &str) -> usize { self.run(dump(&self.space)).iter().filter(|e| e.contains(text)).count() }
+	/// An account, its character and token (a Session when `online`), written alike on both sides.
+	fn player(&mut self, n: usize, room: &str, at: (f64, f64), online: bool) -> String {
+		let (account_id, char_id, name) = (format!("a-walk{n}"), format!("c-walk{n}"), format!("Strandläufer-{}", 1000 + n));
+		let account = obj! { "accountId" => account_id.as_str(), "name" => name.as_str(), "guest" => true, "admin" => false, "createdAt" => START, "touchedAt" => START };
+		let ch = obj! { "charId" => char_id.as_str(), "accountId" => account_id.as_str(), "name" => name.as_str(), "room" => room, "x" => at.0, "y" => at.1, "skin" => (n % 4) as f64, "guest" => true };
+		let session = online.then(|| format!("s-walk{n}"));
+		let t = self.ts.call(obj! { "op" => "player", "account" => account.clone(), "char" => ch.clone(), "session" => session.clone().map_or(Json::Null, Json::from) });
+		assert_eq!(t.get("ok"), Some(&Json::Bool(true)), "player: {}", t.to_json_text());
+		self.run(async {
+			let txn = self.space.create_transaction(10_000.0).await.unwrap();
+			mmo_engine::room_growth::pin_terrain(&self.space, &txn).await.unwrap();
+			self.space.write(&obj! { "type" => "Account", "fields" => account }, Some(&txn), FOREVER).await.unwrap();
+			self.space.write(&obj! { "type" => "Character", "fields" => ch }, Some(&txn), FOREVER).await.unwrap();
+			self.space.write(&mmo_engine::model::actor_token(&char_id), Some(&txn), FOREVER).await.unwrap();
+			self.space.commit(&txn).await.unwrap();
+			if let Some(s) = session { self.space.write(&obj! { "type" => "Session", "fields" => obj! { "sessionId" => s, "charId" => char_id.as_str(), "accountId" => account_id.as_str() } }, None, FOREVER).await.unwrap(); }
+		});
+		char_id
+	}
+	/// One command line of `char_id` on both sides; what serve said (the same on both).
+	fn cmd(&mut self, char_id: &str, line: &str, step: Option<Json>) -> String {
+		self.intents += 1;
+		let intent_id = format!("i-{}", self.intents);
+		let t = self.ts.call(obj! { "op" => "cmd", "charId" => char_id, "intentId" => intent_id.as_str(), "line" => line, "step" => step.clone().unwrap_or(Json::Null) });
+		assert_eq!(t.get("ok"), Some(&Json::Bool(true)), "cmd {line}: {}", t.to_json_text());
+		let mut f = obj! { "intentId" => intent_id.as_str(), "charId" => char_id, "line" => line, "at" => self.clock.get() };
+		if let Some(s) = step { j_set(&mut f, "step", s); }
+		let worker = Worker { space: self.space.clone(), w: Rc::new(self.w.clone()), msg_lease_ms: 600_000.0, txn_ms: 15_000.0 };
+		let r = self.run(async {
+			self.space.write(&obj! { "type" => "Intent", "fields" => f }, None, 30_000.0).await.expect("the intent");
+			worker.serve(char_id).await
+		}).unwrap_or_else(|e| format!("failed: {e}"));
+		let ts = t.get("result").and_then(Json::as_str).unwrap_or("").to_owned();
+		assert_eq!(ts, r, "{line}: what serve said");
+		r
+	}
+	/// Where a character stands in the Rust space.
+	fn where_is(&mut self, char_id: &str) -> (String, f64, f64) {
+		let e = self.run(self.space.peek(&obj! { "type" => "Character", "fields" => obj! { "charId" => char_id } }, None)).unwrap().expect("the character");
+		let f = e.get("fields").unwrap();
+		(f.get("room").and_then(Json::as_str).unwrap().to_owned(), f.get("x").and_then(Json::as_f64).unwrap(), f.get("y").and_then(Json::as_f64).unwrap())
+	}
 	fn tick(&mut self, job: &str) {
 		let t = self.ts.call(obj! { "op" => "tick", "world" => "leuchtfeuer", "job" => job });
 		let r = self.run(run_job(&self.space, &self.w, job, 600_000.0));
 		assert_eq!(t.get("ok") == Some(&Json::Bool(true)), r.is_ok(), "{job}: TypeScript {}, Rust {:?}", t.to_json_text(), r.err());
 	}
 }
+
+fn j_set(v: &mut Json, k: &str, x: Json) { if let Json::Object(o) = v { o.insert(k, x); } }
+
+/// A small generator of its own for the walk's choices (not the engine's source).
+struct Dice(u64);
+impl Dice { fn next(&mut self, n: u64) -> u64 { self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (self.0 >> 33) % n } }
 
 const START: f64 = 1_794_139_200_000.0; // 2026-11-08 12:00 UTC
 
@@ -144,3 +193,48 @@ fn the_weather() {
 	eprintln!("the weather: {flotsam} pieces of flotsam, {fog} fog messages, {washed} tide messages");
 	assert!(flotsam > 0 && fog > 0 && washed > 0, "the walk did nothing");
 }
+
+/// Walking: a character steps about the world (toward the exits of its room mostly, into walls, onto another one, with
+/// and without a page's step number, a few malformed steps), now and then the fog thickens; every step on both sides.
+#[test]
+fn walking() {
+	let mut w = Walk::new("walking", 13, START);
+	w.load(false);
+	let a = w.player(1, "graue-bucht", (10.0, 8.0), true);
+	let b = w.player(2, "graue-bucht", (11.0, 8.0), true);
+	w.compare("players");
+	let mut dice = Dice(5);
+	let (mut said, mut rooms) = (std::collections::BTreeMap::<String, usize>::new(), std::collections::BTreeSet::<String>::new());
+	for i in 0..320 {
+		w.at(START + i as f64 * 7_000.0);
+		if i % 90 == 60 { w.tick("fog"); w.compare(&format!("fog before step {i}")); }
+		let (room, x, y) = w.where_is(&a);
+		rooms.insert(room.clone());
+		let exits: Vec<(f64, f64)> = w.w.get("exits").and_then(Json::as_array).unwrap().iter().filter(|e| e.get("room").and_then(Json::as_str) == Some(room.as_str())).map(|e| (e.get("x").and_then(Json::as_f64).unwrap(), e.get("y").and_then(Json::as_f64).unwrap())).collect();
+		let line = match dice.next(20) {
+			0 => "step 1 1".to_owned(),
+			1 => "step x".to_owned(),
+			2 => "step  0   -1".to_owned(),
+			n if n < 14 && !exits.is_empty() => {
+				// the first cell of the way to one of the room's exits
+				let target = exits[(i / 45) % exits.len()];
+				let def = w.w.get("rooms").and_then(Json::as_array).unwrap().iter().find(|r| r.get("roomId").and_then(Json::as_str) == Some(room.as_str())).unwrap();
+				let ground = mmo_engine::room_growth::rows(def.get("ground").unwrap());
+				match mmo_engine::world::find_path(&w.w, &ground, (x, y), target, 200, &|_| false).and_then(|p| p.first().copied()) {
+					Some((nx, ny)) => format!("step {} {}", nx - x, ny - y),
+					None => "step 1 0".to_owned(),
+				}
+			}
+			_ => ["step 1 0", "step -1 0", "step 0 1", "step 0 -1"][dice.next(4) as usize].to_owned(),
+		};
+		let step = (dice.next(3) > 0).then(|| obj! { "conn" => "k1", "seq" => i as f64 });
+		let who = if dice.next(6) == 0 { &b } else { &a };
+		let r = w.cmd(who, &line, step);
+		*said.entry(js_cut(&r)).or_default() += 1;
+		w.compare(&format!("step {i}: {line} -> {r}"));
+	}
+	eprintln!("walking: {said:?}, rooms {rooms:?}");
+	assert!(rooms.len() > 1, "the walk never left its room");
+}
+
+fn js_cut(r: &str) -> String { r.chars().take(70).collect() }

@@ -129,7 +129,7 @@ impl Who {
 pub async fn lock_ctx(c: &mut Ctx) -> Result<Who> {
 	ensure_account(c).await?;
 	let inv = inventory(c).await?;
-	Ok(Who { level: level_of(c.account.as_ref()), guest: c.account.as_ref().is_none_or(|a| j::b(a, "guest")), char_id: c.char_id().to_owned(), inv })
+	Ok(Who { level: level_of(c.account.as_ref()), guest: c.account.as_ref().is_none_or(|a| j::opt(a, "guest").is_none_or(j::truthy)), char_id: c.char_id().to_owned(), inv })
 }
 
 /// `check`: the actor passes `access` on `locks`, else a refusal.

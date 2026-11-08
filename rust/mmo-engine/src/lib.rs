@@ -1,7 +1,9 @@
 //! The engine of spaces-mmo in Rust (docs/rust-portierung.en.md, R8.2), ported from the frozen TypeScript engine
 //! (`spaces-mmo/server/engine` at 2698bad) and held against it step by step (`tests/engine_walk.rs`).
 pub mod clock;
+pub mod commands;
 pub mod context;
+pub mod execute;
 pub mod fire;
 pub mod funcparser;
 pub mod j;
@@ -9,6 +11,7 @@ pub mod js;
 pub mod loader;
 pub mod locks;
 pub mod model;
+pub mod occupancy;
 pub mod prototypes;
 pub mod room_growth;
 pub mod schedule;
