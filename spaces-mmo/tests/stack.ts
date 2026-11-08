@@ -27,7 +27,7 @@ import { worldNow } from "../server/engine/worldtime.ts";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 let seq = 0;
 
-/** `npm run test:durable`: an agent store per npc process, kept for the process that takes its place (the store has an
+/** `npm run test:durable`: an agent store per model process (it holds the NPC dialogues), kept for the process that takes its place (the store has an
  *  owner lock); `key` names the stack or region. Removed when the test process ends. */
 const npcStores = new Map<string, Array<ChildProcess | null>>();
 let durableDir: string | null = null;
@@ -88,9 +88,9 @@ export type Stack = {
 	restartSpace(): Promise<void>;
 	/** Starts one more world worker (`env`: e.g. a short cleanup interval). */
 	worldProcess(env?: Record<string, string>): Promise<ChildProcess>;
-	/** Starts the npc process (the world's scripted characters). */
+	/** Starts the npc process (the world's scripted characters); with model calls on, the first one brings a model process. */
 	npcProcess(env?: Record<string, string>): Promise<ChildProcess>;
-	/** Starts the model process (translations; model calls follow SPACES_MMO_LLM in `env` or the stack's worldEnv). */
+	/** Starts the model process (translations and what model NPCs say; model calls follow SPACES_MMO_LLM in `env` or the stack's worldEnv). */
 	modelProcess(env?: Record<string, string>): Promise<ChildProcess>;
 	/** Starts a web process without Next (to kill it in the middle of play); its URL comes with it. */
 	webProcess(env?: Record<string, string>, port?: number): Promise<{ child: ChildProcess; url: string; port: number }>;
@@ -104,7 +104,7 @@ export async function startStack(o: { dataDir?: string; worldEnv?: Record<string
 	const startSpace = () => run("server/space-host.ts", { SPACES_MMO_LISTEN: world, SPACES_MMO_ACCOUNTS_LISTEN: accounts, ...(o.dataDir ? { SPACES_MMO_DATA: o.dataDir, SPACES_MMO_MEM: "" } : { SPACES_MMO_MEM: "1" }) }, (l) => l.startsWith("[space] ready"));
 	let spaceProc = await startSpace();
 	const conn = connectSpace(world);
-	const procs: ChildProcess[] = [];
+	const procs: ChildProcess[] = [], models: ChildProcess[] = [];
 	const stack: Stack = {
 		world, accounts, space: conn.space, worlds: [],
 		async restartSpace() {
@@ -118,13 +118,16 @@ export async function startStack(o: { dataDir?: string; worldEnv?: Record<string
 			return c;
 		},
 		async npcProcess(env = {}) {
-			const c = await withAgentStore(base, (store) => run("server/npc-host.ts", { SPACES_MMO_SPACE: world, ...store, ...o.worldEnv, ...env }, (l) => l.startsWith("[npc] ready")));
+			// a model NPC asks the model process (server/model-npc.ts): the first npc process with model calls on brings one
+			const all: Record<string, string> = { SPACES_MMO_SPACE: world, ...o.worldEnv, ...env };
+			if (all.SPACES_MMO_LLM === "1" && !models.some((m) => m.exitCode === null && m.signalCode === null)) await stack.modelProcess(env);
+			const c = await run("server/npc-host.ts", all, (l) => l.startsWith("[npc] ready"));
 			procs.push(c);
 			return c;
 		},
 		async modelProcess(env = {}) {
-			const c = await run("server/model-host.ts", { SPACES_MMO_SPACE: world, ...o.worldEnv, ...env }, (l) => l.startsWith("[model] ready"));
-			procs.push(c);
+			const c = await withAgentStore(`${base}-model`, (store) => run("server/model-host.ts", { SPACES_MMO_SPACE: world, ...store, ...o.worldEnv, ...env }, (l) => l.startsWith("[model] ready")));
+			procs.push(c); models.push(c);
 			return c;
 		},
 		async webProcess(env = {}, port) {
@@ -149,7 +152,7 @@ export async function startRegions(o: { worldEnv?: Record<string, string>; worke
 	const ids = (w.regions ?? []).map((g) => g.regionId);
 	const addr = (id: string) => `unix:${base}-${id}.sock`;
 	const list = ids.map((id) => `${id}=${addr(id)}`).join(",");
-	const procs: ChildProcess[] = [];
+	const procs: ChildProcess[] = [], models = new Map<string, ChildProcess>();
 	const env = (id: string) => ({ SPACES_MMO_SPACE: addr(id), SPACES_MMO_REGION: id, SPACES_MMO_REGIONS: list, ...o.worldEnv });
 	const workers = async () => { for (const id of ids) procs.push(await run("server/world-host.ts", env(id), (l) => l.startsWith("[world] ready"))); };
 	try {
@@ -163,7 +166,12 @@ export async function startRegions(o: { worldEnv?: Record<string, string>; worke
 		ids, accounts, list, space: (id: string) => conns.get(id)!.space,
 		/** The world workers, one per region (started already unless `workers: false`). */
 		workers,
-		async npcProcess(id: string, extra: Record<string, string> = {}) { const c = await withAgentStore(`${base}-${id}`, (store) => run("server/npc-host.ts", { ...store, ...env(id), ...extra }, (l) => l.startsWith("[npc] ready"))); procs.push(c); return c; },
+		async npcProcess(id: string, extra: Record<string, string> = {}) {
+			// as in startStack: model NPCs ask the region's model process, started with the first of its npc processes
+			const all: Record<string, string> = { ...env(id), ...extra };
+			if (all.SPACES_MMO_LLM === "1" && !models.has(id)) models.set(id, await withAgentStore(`${base}-${id}-model`, (store) => run("server/model-host.ts", { ...store, ...all }, (l) => l.startsWith("[model] ready"))).then((c) => (procs.push(c), c)));
+			const c = await run("server/npc-host.ts", all, (l) => l.startsWith("[npc] ready")); procs.push(c); return c;
+		},
 		async close() { for (const c of conns.values()) c.close(); await Promise.all(procs.reverse().map((c) => stop(c))); for (const id of [...ids, "accounts"]) await rm(`${base}-${id}.sock`, { force: true }); },
 	};
 }

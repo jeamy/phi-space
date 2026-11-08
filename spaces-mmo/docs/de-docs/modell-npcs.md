@@ -86,6 +86,14 @@ Der Prozess `npc` (`server/npc-host.ts`) hält je Rolle einen kleinen Zustandsau
 Skriptzeilen und nur im Zustand *wach* Modellantworten als `Intent`s. Er darf nur `Intent`, `NpcMemory`, `NpcAwake` und
 `NpcLog` schreiben. Er lässt sich mehrfach starten (die Rollen verteilen sich über eine Lease je Rolle).
 
+Er macht selbst keinen Modellaufruf und braucht keinen Modellzugang (R8.0 Punkt 2, [rust-portierung](../../../docs/rust-portierung.en.md)):
+eine wache Rolle schreibt einen `Think`-Eintrag mit den gebauten Prompts, ihrer Tagesgrenze und dem Welttag und wartet
+auf den `Thought` mit derselben `thinkId` (`SPACES_MMO_THINK_WAIT_MS`, Standard 90 s; eine nicht abgeholte Anfrage wird
+dann zurückgenommen, und der NPC döst wie bei leerem Budget). Der Modellprozess (`server/model-host.ts`,
+[model-npc.ts](../../server/model-npc.ts)) beantwortet mehrere nebeneinander (`SPACES_MMO_THINKS_AT_ONCE`, Standard 8),
+unter denselben Grenzen wie zuvor, und hält die dauerhaften Dialoge unten.
+[tests/npc-no-model.test.ts](../../tests/npc-no-model.test.ts) prüft, dass der npc-Prozess nichts von den Modellaufrufen lädt.
+
 ## Abnahme
 
 - Mit `SPACES_MMO_LLM=0` laufen alle Rollen als dösende Skript-NPCs, kein Modellaufruf.
@@ -135,19 +143,19 @@ Umgesetzt in `server/npc/minds.ts`, `server/npc/scripts.ts`, `server/npc-host.ts
 
 ## Dauerhafte Dialoge
 
-Alle Modellrollen behalten standardmäßig ihren Gesprächskontext über einen NPC-Prozessneustart hinweg.
+Alle Modellrollen behalten standardmäßig ihren Gesprächskontext über einen Neustart hinweg.
 `SPACES_MMO_DURABLE_NPCS=0` schaltet zurück auf einzelne Modellaufrufe; eine Liste wie `ines,fremder` beschränkt
 die dauerhaften Dialoge auf diese Rollen. Nicht-Modell-NPCs bleiben reine Skriptrollen.
 `SPACES_MMO_LLM=1`, Zugangsdaten und die Modellfreigabe des Admins bleiben erforderlich.
 
 ```sh
-SPACES_MMO_LLM=1 node --experimental-strip-types spaces-mmo/server/npc-host.ts
+SPACES_MMO_LLM=1 node --experimental-strip-types spaces-mmo/server/model-host.ts
 ```
 
 Die [Anbindung](../../server/npc/durable.ts) startet den getrennten Agentenprozess erst bei einem ausgewählten
 Modell-NPC. Standardpfad ist `<SPACES_MMO_DATA oder .local>/npc-agents/<Welt-ID>/<Region oder world>.sqlite`.
 `SPACES_MMO_DURABLE_STORE` überschreibt ihn. Jede Welt/Region bekommt damit eine eigene Datei;
-weitere NPC-Prozesse derselben Welt/Region brauchen jeweils einen ausdrücklich anderen Pfad.
+weitere Modellprozesse derselben Welt/Region brauchen jeweils einen ausdrücklich anderen Pfad.
 Ein Speicher gehört genau einem Worker. Die Rollenverteilung bleibt die geleaste `NpcOwner`-Verteilung im
 Space; die Agentendatenbank ist keine zweite Rollenverwaltung und wird nicht über Hosts repliziert.
 Sie verwendet WAL/`synchronous=FULL` statt des Upstream-Standards NORMAL.
@@ -160,7 +168,7 @@ Sie verwendet WAL/`synchronous=FULL` statt des Upstream-Standards NORMAL.
 - Die letzte Lage ist maßgeblich. Nach einem Neustart wird bei einer neuen Lage ein noch offener alter Turn
   abgebrochen, statt alte Spielbefehle nachträglich auszuführen.
 - Das Ergebnis geht durch dieselbe Zeilen-/Befehlsprüfung und dann als `Intent` zum World-Worker. Der Agent hat
-  keine direkten Welt-, Shell- oder Dateiwerkzeuge. Abschalten des NPC-Prozesses bricht seine Agentenantwort ab.
+  keine direkten Welt-, Shell- oder Dateiwerkzeuge. Abschalten des Modellprozesses bricht seine Agentenantwort ab.
 - `NpcMemory` und `NOTE:` bleiben die fachliche Zusammenfassung im Space. Nach 64 abgeschlossenen Dialogantworten
   beginnt eine neue Conversation mit der aktuellen Lage und dieser Zusammenfassung. Das begrenzt den aktiven
   Kontext, löscht aber keine früheren Transkripte.
@@ -168,7 +176,7 @@ Sie verwendet WAL/`synchronous=FULL` statt des Upstream-Standards NORMAL.
 Die bestehende Quotenlogik zählt **Aufrufe, nicht Tokens oder Euro**. Gesprächshistorie erhöht die Eingabetokens
 und kann deshalb auch bei gleicher Aufrufzahl mehr kosten. Transkripte enthalten Spieleräußerungen; Zugriff,
 Aufbewahrung und Sicherung des Agentenspeichers sind separat zu planen.
-Die Compose-NPC-Services mounten dafür `mmo-agent-data` unter `/data` und verwenden getrennte Welt-/Regionsdateien;
+Die Compose-Modell-Services mounten dafür `mmo-agent-data` unter `/data` (bis 2026-11-08 taten es die NPC-Services; die Dateien bleiben, wo sie waren) und verwenden getrennte Welt-/Regionsdateien;
 der Dev-Container verwendet sein vorhandenes `/data`-Volume. Eigene abweichende Pfade müssen zusätzlich gemountet
 werden. Kein Deployment erfolgt automatisch.
 

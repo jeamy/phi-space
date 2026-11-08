@@ -18,7 +18,7 @@ Bis 2026-10-28 lief die Welt als ein Space (Profile `nano` mit `world-nano`, `bi
 dazu `single`, `regions` und `accounts` als Skripte); diese Container gibt es nicht mehr. `docker:nano:up` und
 `docker:big:up` entfernen übrig gebliebene Container der alten Aufteilung (`--remove-orphans`).
 
-**Modellzugang:** Wie codemode-chat und das Help-System lesen `npc` und `model` die Anmeldung der pi-CLI des Hosts:
+**Modellzugang:** Wie codemode-chat und das Help-System liest `model` die Anmeldung der pi-CLI des Hosts (seit 2026-11-08 nur `model`: der npc-Prozess fragt ihn, und der Agentenspeicher der NPC-Dialoge `mmo-agent-data` zog mit in die Modell-Container):
 `${PI_AUTH_DIR:-$HOME/.pi/agent}` wird schreibgeschützt nach `/home/node/.pi/agent` eingebunden (alternativ API-Schlüssel
 wie `ANTHROPIC_API_KEY` in `.env`). Modellaufrufe kosten Tokens und laufen nur mit `SPACES_MMO_LLM=1` in `.env`; ohne
 bleiben die Modell-NPCs bei ihren Skripten und freie Sätze bei den kostenlosen Regeln. Die Meldung `[llm] no models`

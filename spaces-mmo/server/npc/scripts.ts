@@ -4,7 +4,7 @@ import { randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { clockOf } from "../engine/clockcache.ts";
 import { burnText, flameOf, fogOf } from "../engine/fire.ts";
-import { llmEnabled } from "../llm.ts";
+import { llmEnabled } from "../llm-switch.ts";
 import { isAwake, keepAwake, remember, sleep, think, tryWake } from "./minds.ts";
 import type { NpcDef, WorldDef } from "../engine/world.ts";
 import { ECONOMY } from "./economy.ts";

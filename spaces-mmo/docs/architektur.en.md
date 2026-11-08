@@ -10,7 +10,7 @@ As in codemode-chat, every role is a process of its own around a Space (cf. `cod
 | `space` | Holds the Space (phi-spaces store `openSqliteHost`, in tests `openOwnMemoryHost`), serves it via `serveSpace` (Unix socket/TCP) | `codemode-chat/server/space-host.ts`, `src/standalone.ts` |
 | `world` | Takes `Intent`s, executes commands, world ticks (tide, fire, fog), spawner | `codemode-chat/server/judge-host.ts` (take under transaction) |
 | `npc` | Script NPCs, later model NPCs; write only `Intent`s | `codemode-chat/server/agent-host.ts`, `model-host.ts` |
-| `model` | Translates free sentences into commands and provides the model choice (`server/model-host.ts`) | `codemode-chat/server/model-host.ts` |
+| `model` | Translates free sentences into commands, answers what awake model NPCs ask (`Think`/`Thought`) and provides the model choice (`server/model-host.ts`) | `codemode-chat/server/model-host.ts` |
 | `automaton` | Player programs in the sandbox (phase 6, planned, not yet built, [automaten.en.md](automaten.en.md)); write only `Intent`s | `codemode-chat/server/judge-host.ts` |
 | `web` | Next.js app, HTTP API, WebSocket gateway, login, sessions, quotas | `codemode-chat/server/index.ts`, `hub.ts`, `quota.ts`, `phi-spaces/ws` |
 
@@ -420,7 +420,7 @@ spaces-mmo/
     space-host.ts       Space-Prozess (Welt-Space oder Region + Space `accounts`)
     world-host.ts       Befehle, Ticks, Spawner
     npc-host.ts         Skript-NPCs (später Agenten)
-    model-host.ts       Übersetzen freier Sätze, Modellauswahl
+    model-host.ts       Übersetzen freier Sätze, Antworten der Modell-NPCs, Modellauswahl
     automaton-host.ts   Automaten im Sandbox (Phase 6, geplant)
     index.ts            Web-Prozess, Gateway, Login
     engine/             typeclasses/, commands/, cmdsets.ts, locks.ts, prototypes.ts, funcparser.ts, combat/ (optional)

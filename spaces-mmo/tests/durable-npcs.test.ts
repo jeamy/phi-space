@@ -9,6 +9,7 @@ import { PhiSpaces, openOwnMemoryHost } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { think } from "../server/npc/minds.ts";
 import { closeDurableNpcs, npcDialogueOptions } from "../server/npc/durable.ts";
+import { serveThinks } from "../server/model-npc.ts";
 import { saveModelChoice, saveSettings } from "../server/settings.ts";
 import { calls } from "./durable-fallback.ts";
 import { ROOT } from "../server/env.ts";
@@ -35,6 +36,7 @@ test("default NPC dialogues retain history after agent reopen, isolated by world
   const dir = mkdtempSync(join(tmpdir(), "durable-npcs-"));
   process.env.SPACES_MMO_DURABLE_STORE = join(dir, "npc.sqlite");
   const host = openOwnMemoryHost(), space = new PhiSpaces(host, ctx);
+  const halt = new AbortController(), serving = serveThinks(space, halt.signal); // the model process's part, in this process
   const npc = { npcId: "ines", name: "Ines", persona: "Keep the beacon.", budgetDay: 20, worldId: "one" };
   const situation = (heard: string) => ({ room: "Hafen", people: ["Anna"], event: "talk", heard: [heard] });
   try {
@@ -66,14 +68,15 @@ test("default NPC dialogues retain history after agent reopen, isolated by world
     await saveModelChoice(space, { on: false, allowed: null, model: null });
     assert.equal(await think(space, { ...npc, npcId: "bo" }, question), "budget");
     assert.equal(await space.count({ type: "Intent" }), 0, "agent replies do not execute world commands");
-  } finally { await closeDurableNpcs(); await host.close(ctx); rmSync(dir, { recursive: true, force: true }); }
+  } finally { halt.abort(); await serving; await closeDurableNpcs(); await host.close(ctx); rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("an NPC's dialogue survives the world process dying by SIGKILL with its agent store open", { timeout: 30_000 }, async () => {
+test("an NPC's dialogue survives the model process dying by SIGKILL with its agent store open", { timeout: 30_000 }, async () => {
   const dir = mkdtempSync(join(tmpdir(), "durable-npcs-kill-"));
   process.env.SPACES_MMO_DURABLE_STORE = join(dir, "npc.sqlite");
   const child = spawnSync(process.execPath, ["--no-warnings", "--experimental-strip-types", fileURLToPath(new URL("./durable-npc-child.ts", import.meta.url))], { encoding: "utf8", timeout: 20_000 });
   const host = openOwnMemoryHost(), space = new PhiSpaces(host, ctx);
+  const halt = new AbortController(), serving = serveThinks(space, halt.signal);
   try {
     assert.equal(child.signal, "SIGKILL", child.stderr);
     assert.match(child.stdout, /say Du heißt Anna\./);
@@ -87,5 +90,5 @@ test("an NPC's dialogue survives the world process dying by SIGKILL with its age
         break;
       } catch (error) { await closeDurableNpcs(); if (Date.now() > end) throw error; await new Promise(resolve => setTimeout(resolve, 100)); }
     }
-  } finally { await closeDurableNpcs(); await host.close(ctx); rmSync(dir, { recursive: true, force: true }); }
+  } finally { halt.abort(); await serving; await closeDurableNpcs(); await host.close(ctx); rmSync(dir, { recursive: true, force: true }); }
 });

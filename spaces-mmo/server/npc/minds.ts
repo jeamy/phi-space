@@ -3,15 +3,17 @@
 //   NpcOwner{npcId, owner}  leased: the process that plays the role (claimed under the NPC lock)
 //   NpcAwake{npcId}         leased: the NPC answers with the model; woken under the NPC lock, at most SPACES_MMO_NPC_MAX
 //   NpcMemory{npcId, text}  what it remembers (≤ 4 KiB), written by its own NOTE lines
+// What an awake NPC says comes from the model process (server/model-npc.ts): `think` writes a Think and waits for its
+// Thought. This process makes no model call and needs no model access.
 import { cutText, FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { DEFAULT_COMMANDS } from "../engine/commands/default.ts";
 import { TRADE_COMMANDS } from "../engine/commands/trade.ts";
 import { decayNowMs, worldDayKey } from "../engine/clockcache.ts";
-import { complete, llmEnabled } from "../llm.ts";
-import { fieldsOf, NPC_LOCK, type NpcAwakeFields, type NpcMemoryFields, type NpcOwnerFields } from "../model.ts";
-import { readExisting, StillHeld } from "../space.ts";
+import { randomBytes } from "../engine/source.ts";
+import { llmEnabled } from "../llm-switch.ts";
+import { fieldsOf, NPC_LOCK, type NpcAwakeFields, type NpcMemoryFields, type NpcOwnerFields, type ThinkFields, type ThoughtFields } from "../model.ts";
+import { envMs, readExisting, StillHeld } from "../space.ts";
 import { setting } from "../settings.ts";
-import { npcDialogue } from "./durable.ts";
 
 const MEMORY_MAX = 4096;
 /** What a model NPC may type: every command of a registered player that changes something (its account is one, see
@@ -122,6 +124,7 @@ export async function think(space: SpaceLike, npc: { npcId: string; name: string
 		`Answer with at most ${MAX_LINES} such lines. Then, if something is worth remembering for later, one line: NOTE: <what>`,
 	].join("\n");
 	const memory = await memoryOf(space, npc.npcId);
+	const day = (await worldDayKey(space)) ?? undefined;
 	const user = [
 		`Memory: ${memory || "–"}`,
 		`Place: ${s.room}`,
@@ -135,17 +138,38 @@ export async function think(space: SpaceLike, npc: { npcId: string; name: string
 		`Event: ${s.event}`,
 		`Heard: ${s.heard.join(" | ")}`,
 	].join("\n");
-	const execute = npcDialogue(npc.npcId, npc.worldId ?? (process.env.SPACES_MMO_WORLD || "leuchtfeuer"), system, user, signal);
-	const res = await complete(space, system, user, { maxTokens: 200, own: { key: `npc:${npc.npcId}`, perDay: budget, day: (await worldDayKey(space)) ?? undefined }, ...(execute ? { execute } : {}) }).catch((e) => { console.error(`[npc] ${npc.npcId} model:`, (e as Error).message); return null; });
+	const text = await ask(space, { thinkId: randomBytes(8).toString("hex"), npcId: npc.npcId, worldId: npc.worldId ?? (process.env.SPACES_MMO_WORLD || "leuchtfeuer"), system, user, maxTokens: 200, perDay: budget, ...(day ? { day } : {}) }, signal);
 	if (signal?.aborted) return "off";
-	if (!res) return "budget";
+	if (text === null) return "budget";
 	const lines: string[] = [];
 	let note: string | undefined;
-	for (const raw of res.text.split("\n").map((l) => l.trim()).filter(Boolean)) {
+	for (const raw of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
 		const n = /^NOTE:\s*(.+)$/i.exec(raw);
 		if (n) { note = n[1]; continue; }
 		const verb = raw.split(/\s+/)[0]!.toLowerCase();
 		if (NPC_VERBS.has(verb) && lines.length < MAX_LINES) lines.push(raw.slice(0, 300));
 	}
 	return { lines, ...(note ? { note } : {}) };
+}
+
+/** How long `think` waits for the model process (SPACES_MMO_THINK_WAIT_MS): a queue, the provider's 30 s and the durable
+ *  dialogue's own steps fit in it. Then the NPC dozes off as when its budget is used up. */
+const thinkWaitMs = () => envMs("SPACES_MMO_THINK_WAIT_MS", 90_000);
+
+/** Asks the model process and waits for its Thought; null when it has none (or none came in time, or `signal` ended the
+ *  wait). A request still untaken then is taken back, so no call is made for an answer nobody reads. */
+async function ask(space: SpaceLike, t: ThinkFields, signal?: AbortSignal): Promise<string | null> {
+	const waitMs = thinkWaitMs(), until = Date.now() + waitMs;
+	await space.write({ type: "Think", fields: t as never }, null, waitMs);
+	try {
+		while (!signal?.aborted) {
+			const left = until - Date.now();
+			if (left <= 0) break;
+			const e = await space.take({ type: "Thought", fields: { thinkId: t.thinkId } }, Math.min(left, 2_000));
+			if (e) return fieldsOf<ThoughtFields>(e).text ?? null;
+		}
+		return null;
+	} finally {
+		await space.takeIfExists({ type: "Think", fields: { thinkId: t.thinkId } }, NO_WAIT).catch(() => null);
+	}
 }

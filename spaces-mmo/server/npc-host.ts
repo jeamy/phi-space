@@ -2,7 +2,8 @@
 // other: it is online while this process keeps its Session entry, and it acts only by writing intents, which a world
 // worker runs like a player's commands (locks, fog and transactions apply to it the same way). Scripts
 // (server/npc/scripts.ts) look at the world through reads and decide what to type next; model roles answer with a
-// model while awake (server/npc/minds.ts). Each role is claimed with a lease, so several npc processes share the roles
+// model while awake (server/npc/minds.ts; the model process makes the call, server/model-npc.ts). Each role is claimed
+// with a lease, so several npc processes share the roles
 // and never play one twice; a process that dies loses its roles to another when the lease runs out.
 //
 //   SPACES_MMO_SPACE        the world space (default unix:/tmp/spaces-mmo-world.sock)
@@ -19,7 +20,6 @@ import { ClockCache, decayNowMs, paceMs } from "./engine/clockcache.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { presentAt } from "./engine/worldtime.ts";
 import { claimRole } from "./npc/minds.ts";
-import { closeDurableNpcs } from "./npc/durable.ts";
 import { scriptFor, type Npc } from "./npc/scripts.ts";
 import { actorToken, asFields, type IntentFields, type SessionFields } from "./model.ts";
 import { abortableSleep } from "./abort-sleep.ts";
@@ -141,7 +141,7 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 	// session or found that another npc process already owns it.
 	await Promise.all(starting);
 	const proc = announce(conn.space, "npc");
-	return { async close() { halt.abort(); await Promise.all(runs); await closeDurableNpcs(); await proc.stop(); conn.close(); } };
+	return { async close() { halt.abort(); await Promise.all(runs); await proc.stop(); conn.close(); } };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

@@ -9,13 +9,15 @@ import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { join } from "node:path";
 import { ROOT } from "./env.ts";
 import { settingsOf, setting, type ModelInfoFields } from "./settings.ts";
+import { llmEnabled } from "./llm-switch.ts";
+
+/** Model calls are allowed at all (server/llm-switch.ts). */
+export { llmEnabled };
 
 export type Completion = { text: string; model: string };
 export type ModelEntry = ModelInfoFields["models"][number];
 type Registry = { available(): Promise<ModelEntry[]>; complete(label: string, system: string, user: string, maxTokens: number): Promise<Completion> };
 
-/** Model calls are allowed at all (the environment's opt-in; the admin can switch them off on top). */
-export const llmEnabled = () => process.env.SPACES_MMO_LLM === "1";
 
 let registry: Promise<Registry | null> | null = null;
 

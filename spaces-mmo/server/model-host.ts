@@ -3,7 +3,8 @@
 // and writes the answer back as an Intent with `asked` (the original sentence), which a world worker runs like any
 // command. An answer that is not a command is refused. Every call is counted (server/llm.ts): per account and day
 // (SPACES_MMO_TRANSLATE_PER_DAY, default 200; guests SPACES_MMO_TRANSLATE_GUEST_PER_DAY, default 20) and shared limits.
-// With SPACES_MMO_LLM unset this process only answers that translating is off.
+// With SPACES_MMO_LLM unset this process only answers that translating is off. It also answers what the awake model NPCs
+// ask (Think entries, server/model-npc.ts): the npc process makes no model call itself.
 import "./env.ts";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
@@ -14,6 +15,8 @@ import { msgOptions } from "./engine/context.ts";
 import { gameFacts, isQuestion } from "./engine/facts.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { availableModels, complete, llmEnabled } from "./llm.ts";
+import { serveThinks } from "./model-npc.ts";
+import { closeDurableNpcs } from "./npc/durable.ts";
 import { setting, type ModelInfoFields } from "./settings.ts";
 import { fieldsOf, type CharacterFields, type ExitFields, type IntentFields, type ItemFields, type ListingFields, type TranslateFields } from "./model.ts";
 import { announce, awaitWork, connectSpace, DEFAULT_SPACE, envMs } from "./space.ts";
@@ -109,8 +112,9 @@ export async function startModel(o: { space?: string; world?: WorldDef } = {}) {
 			catch (e) { if (halt.signal.aborted) break; console.error("[model] loop:", (e as Error).message); await new Promise((r) => setTimeout(r, 1000)); }
 		}
 	})();
+	const thinks = serveThinks(space, halt.signal).catch((e) => console.error("[model] thinks:", (e as Error).message));
 	const proc = announce(conn.space, "model");
-	return { async close() { halt.abort(); clearInterval(beat); await loop; await proc.stop(); conn.close(); } };
+	return { async close() { halt.abort(); clearInterval(beat); await loop; await thinks; await closeDurableNpcs(); await proc.stop(); conn.close(); } };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

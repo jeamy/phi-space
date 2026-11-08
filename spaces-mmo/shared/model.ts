@@ -157,6 +157,12 @@ export type IntentFields = { intentId: string; charId: string; line: string; at:
 /** A sentence no rule understood, for the model process to turn into a command (an Intent with `asked`). */
 /** A line for the model to read; `why`: why the command itself refused it, said when the model cannot read it either. */
 export type TranslateFields = { reqId: string; charId: string; accountId: string; guest: boolean; line: string; room: string; at: number; why?: string; lang?: "en" };
+/** What an awake model NPC asks the model process (server/model-npc.ts; the npc process has no model access): the prompts
+ *  it built, its budget key's day limit and the world day it counts on. Leased as long as the asker waits. */
+export type ThinkFields = { thinkId: string; npcId: string; worldId: string; system: string; user: string; maxTokens: number; perDay: number; day?: string };
+/** The model process's answer to a Think (same `thinkId`): the model's text, or none (calls off, no model, a limit reached,
+ *  a failed call). */
+export type ThoughtFields = { thinkId: string; text?: string };
 /** Output: to one character (`to` = its charId), to everyone in `room` (`to` = "*"), or to everyone on a channel
  *  (`to` = "#hafen"). With `actor` (a charId) the text
  *  holds FuncParser calls ($you(), $conj(a|b)) that the gateway renders for each reader. */

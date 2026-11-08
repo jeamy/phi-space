@@ -139,7 +139,7 @@ services:
       space-west:
         condition: service_healthy
 
-  # a region's translations (its world worker asks in its own space; the counts are per region)
+  # a region's translations and what its model NPCs say (its world worker and npc process ask in its own space; the counts are per region)
   model-west:
     <<: *role
     profiles: [big]
@@ -147,11 +147,15 @@ services:
     environment:
       NODE_ENV: production
       SPACES_MMO_SPACE: tcp:space-west:3950
+      # the NPC dialogues' agent store (server/npc/durable.ts: <data>/npc-agents/<world>/<region>.sqlite) lives with the model calls
+      SPACES_MMO_DATA: /data
+      SPACES_MMO_REGION: west
       SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
     depends_on:
       space-west:
         condition: service_healthy
     volumes:
+      - mmo-agent-data:/data
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   npc-west:
@@ -160,7 +164,6 @@ services:
     command: ["node", "--no-warnings", "--experimental-strip-types", "server/npc-host.ts"]
     environment:
       NODE_ENV: production
-      SPACES_MMO_DATA: /data
       SPACES_MMO_SPACE: tcp:space-west:3950
       SPACES_MMO_REGION: west
       SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
@@ -168,9 +171,6 @@ services:
     depends_on:
       space-west:
         condition: service_healthy
-    volumes:
-      - mmo-agent-data:/data
-      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   space-nord:
     <<: *role
@@ -209,7 +209,7 @@ services:
       space-nord:
         condition: service_healthy
 
-  # a region's translations (its world worker asks in its own space; the counts are per region)
+  # a region's translations and what its model NPCs say (its world worker and npc process ask in its own space; the counts are per region)
   model-nord:
     <<: *role
     profiles: [big]
@@ -217,11 +217,15 @@ services:
     environment:
       NODE_ENV: production
       SPACES_MMO_SPACE: tcp:space-nord:3950
+      # the NPC dialogues' agent store (server/npc/durable.ts: <data>/npc-agents/<world>/<region>.sqlite) lives with the model calls
+      SPACES_MMO_DATA: /data
+      SPACES_MMO_REGION: nord
       SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
     depends_on:
       space-nord:
         condition: service_healthy
     volumes:
+      - mmo-agent-data:/data
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   npc-nord:
@@ -230,7 +234,6 @@ services:
     command: ["node", "--no-warnings", "--experimental-strip-types", "server/npc-host.ts"]
     environment:
       NODE_ENV: production
-      SPACES_MMO_DATA: /data
       SPACES_MMO_SPACE: tcp:space-nord:3950
       SPACES_MMO_REGION: nord
       SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
@@ -238,9 +241,6 @@ services:
     depends_on:
       space-nord:
         condition: service_healthy
-    volumes:
-      - mmo-agent-data:/data
-      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   space-ost:
     <<: *role
@@ -279,7 +279,7 @@ services:
       space-ost:
         condition: service_healthy
 
-  # a region's translations (its world worker asks in its own space; the counts are per region)
+  # a region's translations and what its model NPCs say (its world worker and npc process ask in its own space; the counts are per region)
   model-ost:
     <<: *role
     profiles: [big]
@@ -287,11 +287,15 @@ services:
     environment:
       NODE_ENV: production
       SPACES_MMO_SPACE: tcp:space-ost:3950
+      # the NPC dialogues' agent store (server/npc/durable.ts: <data>/npc-agents/<world>/<region>.sqlite) lives with the model calls
+      SPACES_MMO_DATA: /data
+      SPACES_MMO_REGION: ost
       SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
     depends_on:
       space-ost:
         condition: service_healthy
     volumes:
+      - mmo-agent-data:/data
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   npc-ost:
@@ -300,7 +304,6 @@ services:
     command: ["node", "--no-warnings", "--experimental-strip-types", "server/npc-host.ts"]
     environment:
       NODE_ENV: production
-      SPACES_MMO_DATA: /data
       SPACES_MMO_SPACE: tcp:space-ost:3950
       SPACES_MMO_REGION: ost
       SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
@@ -308,9 +311,6 @@ services:
     depends_on:
       space-ost:
         condition: service_healthy
-    volumes:
-      - mmo-agent-data:/data
-      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   space-sued:
     <<: *role
@@ -349,7 +349,7 @@ services:
       space-sued:
         condition: service_healthy
 
-  # a region's translations (its world worker asks in its own space; the counts are per region)
+  # a region's translations and what its model NPCs say (its world worker and npc process ask in its own space; the counts are per region)
   model-sued:
     <<: *role
     profiles: [big]
@@ -357,11 +357,15 @@ services:
     environment:
       NODE_ENV: production
       SPACES_MMO_SPACE: tcp:space-sued:3950
+      # the NPC dialogues' agent store (server/npc/durable.ts: <data>/npc-agents/<world>/<region>.sqlite) lives with the model calls
+      SPACES_MMO_DATA: /data
+      SPACES_MMO_REGION: sued
       SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
     depends_on:
       space-sued:
         condition: service_healthy
     volumes:
+      - mmo-agent-data:/data
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   npc-sued:
@@ -370,7 +374,6 @@ services:
     command: ["node", "--no-warnings", "--experimental-strip-types", "server/npc-host.ts"]
     environment:
       NODE_ENV: production
-      SPACES_MMO_DATA: /data
       SPACES_MMO_SPACE: tcp:space-sued:3950
       SPACES_MMO_REGION: sued
       SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
@@ -378,9 +381,6 @@ services:
     depends_on:
       space-sued:
         condition: service_healthy
-    volumes:
-      - mmo-agent-data:/data
-      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   # ---- the arena: worlds of their own for the bots of the codemode chat (server/arena.ts) ----
   # A compose project of its own (docker:arena:up, -p phi-spaces-mmo-arena), so the world's up/down never touches it.

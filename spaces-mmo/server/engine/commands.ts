@@ -29,7 +29,7 @@ import { DEFAULT_COMMANDS, exitCmdSet, helpCommand } from "./commands/default.ts
 import { CLOCK_COMMANDS } from "./commands/clock.ts";
 import { TRADE_COMMANDS } from "./commands/trade.ts";
 import { SCENERY_COMMANDS } from "./commands/scenery.ts";
-import { llmEnabled } from "../llm.ts";
+import { llmEnabled } from "../llm-switch.ts";
 import { fieldsOf, type ListingFields, type TranslateFields } from "../model.ts";
 import { CommandError, NotUnderstood, exitsHere, inventory, lockCtx, msg, type CommandCtx } from "./context.ts";
 import { translateRules, type TranslateView } from "./translate.ts";

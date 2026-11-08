@@ -85,6 +85,14 @@ The process `npc` (`server/npc-host.ts`) holds a small state machine per role (a
 script lines and, only in the state *awake*, model answers as `Intent`s. It may write only `Intent`, `NpcMemory`, `NpcAwake` and
 `NpcLog`. It can be started several times (the roles are distributed via a lease per role).
 
+It makes no model call itself and needs no model access (R8.0 item 2, [rust-portierung](../../docs/rust-portierung.en.md)):
+an awake role writes a `Think` entry with the prompts it built, its day limit and the world day, and waits for the
+`Thought` of the same `thinkId` (`SPACES_MMO_THINK_WAIT_MS`, default 90 s; an untaken request is then taken back and the
+NPC dozes as with an empty budget). The model process (`server/model-host.ts`, [model-npc.ts](../server/model-npc.ts))
+answers several of them side by side (`SPACES_MMO_THINKS_AT_ONCE`, default 8), under the same limits as before, and holds
+the durable dialogues below. [tests/npc-no-model.test.ts](../tests/npc-no-model.test.ts) checks that the npc process
+loads nothing of the model calls.
+
 ## Acceptance
 
 - With `SPACES_MMO_LLM=0` all roles run as dozing script NPCs, no model call.
@@ -136,19 +144,19 @@ Implemented in `server/npc/minds.ts`, `server/npc/scripts.ts`, `server/npc-host.
 
 ## Durable dialogues
 
-All model roles keep their conversation context across an NPC process restart by default.
+All model roles keep their conversation context across a restart by default.
 `SPACES_MMO_DURABLE_NPCS=0` switches back to individual model calls; a list such as `ines,fremder` restricts
 the durable dialogues to these roles. Non-model NPCs remain pure script roles.
 `SPACES_MMO_LLM=1`, credentials and the admin's model approval remain required.
 
 ```sh
-SPACES_MMO_LLM=1 node --experimental-strip-types spaces-mmo/server/npc-host.ts
+SPACES_MMO_LLM=1 node --experimental-strip-types spaces-mmo/server/model-host.ts
 ```
 
 The [connection](../server/npc/durable.ts) starts the separate agent process only for a selected
 model NPC. The default path is `<SPACES_MMO_DATA or .local>/npc-agents/<world ID>/<region or world>.sqlite`.
 `SPACES_MMO_DURABLE_STORE` overrides it. Each world/region thus gets a file of its own;
-further NPC processes of the same world/region each need an explicitly different path.
+further model processes of the same world/region each need an explicitly different path.
 A store belongs to exactly one worker. The distribution of roles remains the leased `NpcOwner` distribution in the
 Space; the agent database is not a second role management and is not replicated across hosts.
 It uses WAL/`synchronous=FULL` instead of the upstream default NORMAL.
@@ -161,7 +169,7 @@ It uses WAL/`synchronous=FULL` instead of the upstream default NORMAL.
 - The latest situation is authoritative. After a restart, on a new situation a still-open old turn is
   aborted instead of executing old game commands afterwards.
 - The result goes through the same line/command check and then as an `Intent` to the world worker. The agent has
-  no direct world, shell or file tools. Switching off the NPC process aborts its agent answer.
+  no direct world, shell or file tools. Switching off the model process aborts its agent answer.
 - `NpcMemory` and `NOTE:` remain the business summary in the Space. After 64 completed dialogue answers
   a new conversation begins with the current situation and this summary. This bounds the active
   context but deletes no earlier transcripts.
@@ -169,7 +177,7 @@ It uses WAL/`synchronous=FULL` instead of the upstream default NORMAL.
 The existing quota logic counts **calls, not tokens or euros**. Conversation history raises the input tokens
 and can therefore cost more even with the same number of calls. Transcripts contain player utterances; access,
 retention and backup of the agent store are to be planned separately.
-For this the compose NPC services mount `mmo-agent-data` under `/data` and use separate world/region files;
+For this the compose model services mount `mmo-agent-data` under `/data` (until 2026-11-08 the NPC services did; the files stay where they were) and use separate world/region files;
 the dev container uses its existing `/data` volume. Own differing paths must additionally be mounted. No deployment
 happens automatically.
 
