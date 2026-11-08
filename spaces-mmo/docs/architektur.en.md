@@ -360,8 +360,14 @@ jumps and vertical paths would be a later change of the server model and are exp
   axis; the vertical Y position is delivered by exactly one versioned function
   `terrainHeight(roomId, ground, tiles, x, y)` in `client/terrain3d.ts`. Figures, items, exits and effects use the same
   function.
-- **Terrain:** A world defines the visual base height per tile type. Stepped terrain uses a few `InstancedMesh` groups per
-  geometry and material; smoothed terrain uses a shared height field. Small height deviations may lie only within fixed
+- **Terrain:** A world defines the visual base height per tile type. Since renderer version 3 the land stands on rounded
+  terraces (`client/terrace.ts` the outlines, `client/terraces3d.ts` the meshes): one extruded mesh per land kind, holding
+  its cells and every higher one, so its edge lies only against lower ground. Corners are round in plan (0.42 of a cell),
+  and where lower ground lies beyond, the edge rounds down in height by up to 0.26 within the outer third of the cell; the
+  tile art runs on over the rounding, the wall below is earth. The middle of every cell keeps its height, so figures,
+  buildings and fields stand as before; corners on the room's edge stay square. The commonest water kind is one surface
+  under the whole room, so the rounded coast shows water. A tap names the cell under the point the ray meets. Smoothed
+  slopes between terraces would need a shared height field. Small height deviations may lie only within fixed
   visual limits, so that a tile walkable on the server does not look like an insurmountable wall.
 - **Determinism:** A stable string hash and a fixed PRNG generate noise from `roomId`, tile coordinates and
   `TERRAIN_RENDERER_VERSION`. The prototype uses FNV-1a and no `Math.random()`. A separate world seed or a fixed PRNG is

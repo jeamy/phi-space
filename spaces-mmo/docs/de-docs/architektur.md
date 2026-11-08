@@ -347,8 +347,14 @@ Rasters:
   `y` zur horizontalen Z-Achse; die vertikale Y-Position liefert genau eine versionierte Funktion
   `terrainHeight(roomId, ground, tiles, x, y)` in `client/terrain3d.ts`. Figuren, Gegenstände, Ausgänge und Effekte
   verwenden dieselbe Funktion.
-- **Terrain:** Eine Welt definiert die visuelle Basishöhe je Kacheltyp. Gestuftes Gelände verwendet wenige
-  `InstancedMesh`-Gruppen je Geometrie und Material; geglättetes Gelände verwendet ein gemeinsames Höhenfeld. Kleine
+- **Terrain:** Eine Welt definiert die visuelle Basishöhe je Kacheltyp. Seit Renderer-Version 3 steht das Land
+  auf runden Terrassen (`client/terrace.ts` die Umrisse, `client/terraces3d.ts` die Netze): ein extrudiertes Netz je
+  Landart, das ihre Zellen und alle höheren enthält, sodass seine Kante nur an tieferem Boden liegt. Die Ecken sind im
+  Grundriss rund (0,42 einer Zelle), und wo tieferer Boden anschließt, rundet die Kante im äußeren Drittel der Zelle um
+  bis zu 0,26 nach unten ab; das Kachelbild läuft über die Rundung weiter, die Wand darunter ist Erde. Die Mitte jeder
+  Zelle behält ihre Höhe, Figuren, Bauten und Felder stehen wie zuvor; Ecken am Raumrand bleiben eckig. Die häufigste
+  Wasserart ist eine Fläche unter dem ganzen Raum, sodass die runde Küste Wasser zeigt. Ein Tippen nennt die Zelle unter
+  dem Punkt, den der Strahl trifft. Weiche Hänge zwischen Terrassen bräuchten ein gemeinsames Höhenfeld. Kleine
   Höhenabweichungen dürfen nur innerhalb festgelegter visueller Grenzen liegen, damit eine serverseitig begehbare
   Kachel nicht wie eine unüberwindbare Wand aussieht.
 - **Determinismus:** Ein stabiler String-Hash und ein festgelegter PRNG erzeugen Rauschen aus `roomId`,

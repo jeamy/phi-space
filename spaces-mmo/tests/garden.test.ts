@@ -135,7 +135,12 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		assert.match(await does(anna.p, "pflanze strandnelke", "Samen"), /keine Samen/);
 		await give(s, anna.me, "samen-strandnelke", 3);
 		await give(s, anna.me, "samen-strandkohl", 2);
-		for (const seed of ["strandnelke", "strandnelke", "strandnelke", "kohl"]) await does(anna.p, `pflanze ${seed}`, "setzt");
+		// a count: that many of one kind at once, not more than one carries, not more than the bed has cells free
+		assert.match(await does(anna.p, "pflanze 4 strandnelken", "trägst nur"), /Du trägst nur 3× Strandnelkensamen/);
+		assert.match(await does(anna.p, "pflanze 3 strandnelken", "setzt"), /Gärtnerin setzt 3 Strandnelken ins Beet/);
+		assert.equal(await pack(s, anna.me, "samen-strandnelke"), 0);
+		assert.match(await does(anna.p, "pflanze 2 kohl", "frei"), /Im Beet ist nur eine Zelle frei, nicht genug für 2 Strandkohlsamen/);
+		await does(anna.p, "pflanze kohl", "setzt");
 		assert.match(await does(anna.p, "pflanze kohl", "voll"), /Beet ist voll/);
 		assert.equal((await bedOf(s, anna.me)).plants.length, 4);
 		assert.equal(await pack(s, anna.me, "samen-strandkohl"), 1);

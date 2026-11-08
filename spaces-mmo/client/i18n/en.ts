@@ -1659,7 +1659,7 @@ export const EN: Record<string, string> = {
 	"order – die Auftragstafel: order nimm <nr>, order liefere, order aufgeben (Lohn in Münzen)": "order – the order board: order nimm <nr>, order liefere, order aufgeben (pay in coins)",
 	"pate <name> – jemanden dein Beet neben dir gießen, jäten und ernten lassen (pate weg <name> beendet es; pate allein: wer es darf)": "sponsor <name> – let someone water, weed and harvest your bed next to you (sponsor weg <name> ends it; sponsor alone: who may)",
 	"perm <name> = <stufe> – einem registrierten Konto eine Stufe geben ({0})": "perm <name> = <level> – give a registered account a level ({0})",
-	"pflanze <samen> [x y] – Samen in dein Beet oder ins Gemeinschaftsbeet neben dir setzen (bis zwei Schritte; eine Pflanze je Zelle; ins Zierbeet nur Blumen). Korn, Kartoffeln, Rüben und Flachs wachsen auf dem Acker: „bestelle“": "plant <seed> [x y] – plant seeds in your bed or the community bed next to you (up to two steps; one plant per cell; only flowers in an ornamental bed). Grain, potatoes, beets and flax grow on a field: „plough“",
+	"pflanze [anzahl] <samen> [x y] – Samen in dein Beet oder ins Gemeinschaftsbeet neben dir setzen (bis zwei Schritte; eine Pflanze je Zelle; ins Zierbeet nur Blumen; z. B. pflanze 3 strandnelken). Korn, Kartoffeln, Rüben und Flachs wachsen auf dem Acker: „bestelle“": "plant [count] <seed> [x y] – plant seeds in your bed or the community bed next to you (up to two steps; one plant per cell; only flowers in an ornamental bed; e.g. plant 3 strandnelken). Grain, potatoes, beets and flax grow on a field: „plough“",
 	"pflügt": "ploughs",
 	"put [anzahl|alle] <ding> in <feuer> – Brennholz in ein Leuchtfeuer neben dir legen (auch: lege 3 hölzer ins feuer)": "put [count|alle] <thing> in <fire> – put firewood in a beacon next to you (also: drop 3 driftwood in fire)",
 	"repariere – einen Bau neben dir ausbessern (kostet etwas Material; jeder darf helfen)": "repair – mend a building next to you (costs some material; anyone may help)",
@@ -2386,4 +2386,8 @@ export const EN: Record<string, string> = {
 	"Eine getigerte Katze. Sie hält die Mäuse von jeder Truhe im Raum fern, solange sie satt ist: Korn, Mehl, Brot und Käse bleiben dann ganz. Neben einem deiner Bauten lässt „einstallen katze“ sie dort wachen, „ausstallen katze“ nimmt sie wieder mit. Sie frisst Milch, Eier und Käse; „füttere katze“ (jeder darf) macht sie einen Tag satt, bis zu drei Tage im Voraus. „wache“ zeigt, wer im Raum wacht.": "A tabby cat. While it is fed, it keeps the mice away from every chest in the room: grain, flour, bread and cheese stay whole. Beside one of your buildings, “einstallen katze” leaves it on guard there, “ausstallen katze” takes it along again. It eats milk, eggs and cheese; “füttere katze” (anyone may) feeds it for a day, up to three days ahead. “wache” shows who keeps watch in the room.",
 	"{0}: {1} Aufgaben": "{0}: {1} tasks",
 	", {0} jetzt": ", {0} now",
+	// pflanze with a count
+	"Wie viele? Zum Beispiel: pflanze 3 strandnelken": "How many? For example: plant 3 strandnelken",
+	"Im {0} ist nur eine Zelle frei, nicht genug für {1}.": "Only one cell is free in the {0}, not enough for {1}.",
+	"Im {0} sind nur {1} Zellen frei, nicht genug für {2}.": "Only {1} cells are free in the {0}, not enough for {2}.",
 };

@@ -19,6 +19,8 @@ import { closeBlur, frameSummary } from "./closeup3d.ts";
 import { START_VIEW } from "./viewPreferences.ts";
 import { atModelLevel, updateModelDetails, type ModelLevel } from "./modelDetail3d.ts";
 import { stableHash, tile3d } from "./terrain3d.ts";
+import { edgeSides } from "./terrace.ts";
+import { terraceMeshes, type TerraceLook } from "./terraces3d.ts";
 import { cameraElevation, clampTilt, clampZoom, daylightAt, wheelView, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./camera3d.ts";
 import { calendar, shownWorldMs, WORLD_HOUR_MS } from "../shared/worldtime.ts";
 import { fishItem, fishModel, type FishKind } from "./fish3d.ts";
@@ -275,29 +277,46 @@ export function MapView3D(props: MapRendererProps) {
 
 const dims = (room: MapRendererProps["room"]) => ({ w: room.ground[0]?.length ?? 0, h: room.ground.length });
 
-/** The ground: one instanced box per tile kind, the tile art on top, plain earth on the sides. Boxes touch (no seams).
- *  The plants stand on it as pictures that face the camera (flat ones smaller). */
+/** The ground (terraces3d.ts): the land as rounded terraces, one mesh per kind with the tile art on top and over its
+ *  rounded edge, earth on its wall; the water as one surface under the whole room, so the rounded corners at the coast
+ *  show water. The plants stand on it as pictures that face the camera (flat ones smaller). */
 function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three").Group {
 	const { t, room, world } = s, { w, h } = dims(room);
 	const group = new t.Group(); group.userData.owned = true;
-	const byTile = new Map<string, Array<{ x: number; y: number }>>();
-	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const k = room.ground[y]![x]!; const a = byTile.get(k) ?? []; a.push({ x, y }); byTile.set(k, a); }
-	const geometry = new t.BoxGeometry(1, 1, 1);
-	for (const [key, cells] of byTile) {
-		const visual = tile3d(key, !!world.tiles[key]?.walk), look = looks.get(key);
-		const top = new t.MeshStandardMaterial({ color: look ? 0xffffff : visual.color, map: look?.frames[0] ?? null, roughness: visual.water ? 0.3 : 0.95, metalness: visual.water ? 0.1 : 0 });
-		const side = new t.MeshStandardMaterial({ color: new t.Color(visual.color).multiplyScalar(visual.water ? 0.6 : 0.72), roughness: 1 });
-		const mesh = new t.InstancedMesh(geometry, [side, side, top, side, side, side], cells.length);
-		// which cell each instance is: a click hits the column it lands on (pointer, cell)
-		mesh.userData.cells = cells;
-		const matrix = new t.Matrix4();
-		cells.forEach((c, i) => {
-			const height = surface(room, world, c.x, c.y);
-			matrix.compose(new t.Vector3(c.x - w / 2 + 0.5, height / 2, c.y - h / 2 + 0.5), new t.Quaternion(), new t.Vector3(1, Math.max(0.04, height), 1));
-			mesh.setMatrixAt(i, matrix);
-		});
-		mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); group.add(mesh);
+	const kind = (key: string) => tile3d(key, !!world.tiles[key]?.walk);
+	const earth = new t.MeshStandardMaterial({ color: 0x6b5236, roughness: 1 });
+	const lookOf = (key: string): TerraceLook => {
+		const visual = kind(key), look = looks.get(key);
+		const top = new t.MeshStandardMaterial({ color: look ? 0xffffff : visual.color, map: look?.frames[0] ?? null, roughness: 0.95 });
+		// the rounded edge carries the tile art on, a little darker as it turns away from the sky
+		const flank = new t.MeshStandardMaterial({ color: look ? 0xd4d4d4 : new t.Color(visual.color).multiplyScalar(0.85), map: look?.frames[0] ?? null, roughness: 0.95 });
+		return { top, flank, wall: earth };
+	};
+	for (const mesh of terraceMeshes(t, room.ground, kind, lookOf)) group.add(mesh);
+	// the water: the room's commonest water kind as one surface under everything, any other one in its cells as before
+	const wet = new Map<string, Array<{ x: number; y: number }>>();
+	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const k = room.ground[y]![x]!; if (kind(k).water) { const a = wet.get(k) ?? []; a.push({ x, y }); wet.set(k, a); } }
+	const main = [...wet].sort((a, b) => b[1].length - a[1].length)[0]?.[0];
+	const waterMaterials = (key: string) => {
+		const visual = kind(key), look = looks.get(key);
+		const top = new t.MeshStandardMaterial({ color: look ? 0xffffff : visual.color, map: look?.frames[0] ?? null, roughness: 0.3, metalness: 0.1 });
 		if (look && look.frames.length > 1) s.water.push({ material: top, look });
+		const side = new t.MeshStandardMaterial({ color: new t.Color(visual.color).multiplyScalar(0.6), roughness: 1 });
+		return [side, side, top, side, side, side];
+	};
+	if (main) {
+		const height = kind(main).height, box = new t.BoxGeometry(w - 0.004, height, h - 0.004);
+		// the top face's uvs in cells, so the tile art repeats once a cell
+		const uv = box.getAttribute("uv") as import("three").BufferAttribute;
+		for (let i = 8; i < 12; i++) uv.setXY(i, uv.getX(i) * w, uv.getY(i) * h);
+		const sea = new t.Mesh(box, waterMaterials(main)); sea.position.y = height / 2; sea.userData.pick = true; group.add(sea);
+	}
+	const geometry = new t.BoxGeometry(1, 1, 1);
+	for (const [key, cells] of wet) {
+		if (key === main) continue;
+		const mesh = new t.InstancedMesh(geometry, waterMaterials(key), cells.length), matrix = new t.Matrix4();
+		cells.forEach((c, i) => { const height = surface(room, world, c.x, c.y); matrix.compose(new t.Vector3(c.x - w / 2 + 0.5, height / 2, c.y - h / 2 + 0.5), new t.Quaternion(), new t.Vector3(1, Math.max(0.04, height), 1)); mesh.setMatrixAt(i, matrix); });
+		mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); mesh.userData.pick = true; group.add(mesh);
 	}
 	// the room as a diorama block: strata and sea under the tiles, its shadow on the void (block3d.ts)
 	const block = blockUnder(t, room.ground, world.tiles);
@@ -435,7 +454,11 @@ function pavingDetail(s: Scene3D): void {
 	const stones = new t.InstancedMesh(new t.BoxGeometry(0.225, 0.018, 0.225), new t.MeshStandardMaterial({ roughness: 1 }), Math.max(1, cells.length * 16));
 	const matrix = new t.Matrix4(), colour = new t.Color();
 	let i = 0;
+	const height = (key: string) => tile3d(key, !!s.world.tiles[key]?.walk).height;
 	for (const cell of cells) for (let row = 0; row < 4; row++) for (let col = 0; col < 4; col++) {
+		// not on the terrace's rounded edge: the stones lie on its flat top only
+		const edge = edgeSides(s.room.ground, height, cell.x, cell.y);
+		if ((edge.n && row === 0) || (edge.s && row === 3) || (edge.w && col === 0) || (edge.e && col === 3)) continue;
 		matrix.makeTranslation(cell.x - w / 2 + 0.125 + col / 4, surface(s.room, s.world, cell.x, cell.y) + 0.01, cell.y - h / 2 + 0.125 + row / 4);
 		stones.setMatrixAt(i, matrix);
 		stones.setColorAt(i++, colour.setHex(0x9a9ea6).multiplyScalar(0.85 + (stableHash(`${s.room.roomId}:${cell.x}:${cell.y}:${row}:${col}`) % 25) / 100));
@@ -504,8 +527,11 @@ function plinth(s: Scene3D, obj: ObjView, group: O3): void {
 	const { top, bottom } = areaGround(s, obj), drop = top - bottom;
 	if (drop < 0.01) return;
 	const w = obj.w ?? 1, d = obj.h ?? 1;
-	const earth = new s.t.Mesh(new s.t.BoxGeometry(w * 0.98, drop, d * 0.98), new s.t.MeshStandardMaterial({ color: 0x6b5236, roughness: 1, flatShading: true }));
-	earth.position.y = -drop / 2; group.add(earth);
+	// its top a hair over the highest ground: level with it, the two fought for the same pixels and the grass flickered
+	// through the earth
+	const lift = 0.006;
+	const earth = new s.t.Mesh(new s.t.BoxGeometry(w * 0.98, drop + lift, d * 0.98), new s.t.MeshStandardMaterial({ color: 0x6b5236, roughness: 1, flatShading: true }));
+	earth.position.y = (lift - drop) / 2; group.add(earth);
 }
 
 function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
@@ -963,17 +989,23 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		s.camera.updateMatrixWorld(); ray.setFromCamera(mouse, s.camera);
 		return ray.ray.intersectPlane(plane, hit);
 	};
-	/** The cell under the pointer: the column of the terrain the ray meets first (the terraces stand at different heights,
-	 *  so a flat plane would name the cell behind a raised one); off the terrain, none. */
+	/** The cell under the pointer: where the ray meets the terrain first (the terraces stand at different heights, so a
+	 *  flat plane would name the cell behind a raised one); off the terrain, none. */
 	const cell = (e: PointerEvent) => {
 		const r = s.canvas.getBoundingClientRect(); mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
 		s.camera.updateMatrixWorld(); ray.setFromCamera(mouse, s.camera);
-		const columns = s.ground?.children.filter((o) => (o as import("three").InstancedMesh).isInstancedMesh && o.userData.cells) ?? [];
-		const first = ray.intersectObjects(columns, false)[0];
-		const cells = first?.object.userData.cells as Array<{ x: number; y: number }> | undefined;
-		if (first && cells && first.instanceId !== undefined) return cells[first.instanceId] ?? null;
+		const terrain = s.ground?.children.filter((o) => o.userData.pick) ?? [];
+		const { w, h } = dims(s.room);
+		const first = ray.intersectObjects(terrain, false)[0];
+		if (first) {
+			// a point on a wall lies on the line between two cells: a hair into the face it hit is the cell it belongs to
+			const p = first.point.clone(), n = first.face?.normal;
+			if (n) p.addScaledVector(n, -0.01);
+			const x = Math.floor(p.x + w / 2), y = Math.floor(p.z + h / 2);
+			if (x >= 0 && y >= 0 && x < w && y < h) return { x, y };
+		}
 		if (!ground(e.clientX, e.clientY)) return null;
-		const { w, h } = dims(s.room), x = Math.floor(hit.x + w / 2), y = Math.floor(hit.z + h / 2);
+		const x = Math.floor(hit.x + w / 2), y = Math.floor(hit.z + h / 2);
 		return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
 	};
 	/** The cell of the figure whose speech bubble is under the pointer (a tap there opens that figure's menu: accept an

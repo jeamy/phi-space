@@ -67,7 +67,7 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		let staked = "";
 		for (let i = 0; i < 5 && !staked.includes("steckt"); i++) { await clear(s, foot); staked = await does(boss.p, "baue eine hütte 16 12", /steckt eine Baustelle ab|passt keine/); }
 		assert.match(staked, /Baumeisterin steckt eine Baustelle ab: Hütte\. Es fehlen 6 Treibholz, 2 Tangseil, 20 Arbeit/);
-		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => !String(e.fields.of).startsWith("bucht-")).length, 4);
+		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => !/^(?:graue-)?bucht-/.test(String(e.fields.of))).length, 4);
 		assert.match(await does(boss.p, "bau hütte", "offene Baustelle"), /offene Baustelle: Hütte in .+ \(16 12\); bau sie erst fertig/);
 		// nobody walks into it
 		assert.match(await does(boss.p, "step 0 1", "Bau"), /Dort steht ein Bau/);
@@ -75,7 +75,7 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		// twenty people around it, beside it and two cells away (SITE_REACH: the 12 cells beside a 2×2 hut would not hold
 		// them), each with one piece of driftwood; they deliver at once: exactly six are taken
 		const ring: Array<[number, number]> = [[15, 11], [17, 11], [18, 11], [15, 12], [18, 12], [15, 13], [18, 13], [15, 14], [16, 14], [17, 14], [18, 14],
-			[14, 10], [15, 10], [16, 10], [17, 10], [18, 10], [19, 11], [19, 12], [19, 13], [19, 14]];
+			[16, 15], [17, 15], [16, 10], [17, 10], [18, 10], [19, 11], [19, 12], [19, 13], [19, 14]];
 		const crew: P[] = [];
 		for (let i = 0; i < ring.length; i++) { const a = await player(srv.url, `Helfer${i}`); await walk(a, s, ring[i]![0], ring[i]![1]); await give(s, a.me, "treibholz", 1); crew.push(a); }
 		await give(s, boss.me, "tangseil", 3);
@@ -144,7 +144,7 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 			await s.write({ type: "Building", fields: { buildId, plan: "huette", name: "Hütte", room: "graue-bucht", x: 16, y: 12, w: 2, h: 2, owner: boss.me, ownerName: "Siedlerin", accountId, beaconId: "feuer-bucht", points: 1, by: { Siedlerin: 28 }, untilWorldMs: now + 7 * 24 * 3600_000, builtAt: now } as never }, null, FOREVER);
 		};
 		const light = async () => Number((await s.readAll({ type: "LightUse", fields: { beaconId: "feuer-bucht" } }))[0]?.fields.used ?? 0);
-		const plots = async () => (await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => !String(e.fields.of).startsWith("bucht-")).length;
+		const plots = async () => (await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => !/^(?:graue-)?bucht-/.test(String(e.fields.of))).length;
 		await hut("b1");
 		await give(s, boss.me, "muschel", 3);
 		// the chest: the owner's alone

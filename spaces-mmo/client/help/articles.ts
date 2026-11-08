@@ -488,7 +488,7 @@ Gärten brauchen einen Spaten, Wasser und Licht. Ausführlich unter [Gärten](he
 | \`umgraben [zier/gemeinschaft] [x y]\` | \`beet anlegen\` | Mit einem Spaten im Licht ein Beet anlegen, ein Zierbeet oder ein Gemeinschaftsbeet |
 | \`beet\` | \`bed\`, \`beete\` | Die Beete hier; \`beet aufgeben\` macht deins wieder zu Gras |
 | \`sammle samen\` | \`samen\` | In der wilden Flora nach Samen suchen |
-| \`pflanze <samen> [x y]\` | \`säe\`, \`plant\` | Einen Samen in dein Beet setzen |
+| \`pflanze [anzahl] <samen> [x y]\` | \`säe\`, \`plant\` | Samen in dein Beet setzen, z. B. \`pflanze 3 strandnelken\` |
 | \`schöpfe\` | \`fill\` | An der Regentonne eine Kanne Wasser füllen |
 | \`gieße\` | \`water\` | Ein Beet gießen (deins oder als Pate) |
 | \`jäte\` | \`weed\` | Unkraut und Welkes herausziehen |
@@ -671,7 +671,7 @@ Gardens need a spade, water and light. In detail under [Gardens](help.game.garde
 | \`umgraben [zier/gemeinschaft] [x y]\` | \`beet anlegen\` | Dig a bed in the light with a spade, a flower bed or a community bed |
 | \`beet\` | \`bed\`, \`beete\` | The beds here; \`beet aufgeben\` turns yours back into grass |
 | \`sammle samen\` | \`samen\` | Look for seeds in the wild flora |
-| \`pflanze <seed> [x y]\` | \`säe\`, \`plant\` | Put a seed into your bed |
+| \`pflanze [count] <seed> [x y]\` | \`säe\`, \`plant\` | Put seeds into your bed, e.g. \`pflanze 3 strandnelken\` |
 | \`schöpfe\` | \`fill\` | Fill a can of water at the rain barrel |
 | \`gieße\` | \`water\` | Water a bed (yours or as a sponsor) |
 | \`jäte\` | \`weed\` | Pull weeds and what has wilted |

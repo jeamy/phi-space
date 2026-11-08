@@ -4,7 +4,7 @@ import { stableHash, terrainHeight, tile3d, TERRAIN_RENDERER_VERSION } from "../
 
 test("3D terrain is deterministic, bounded and keeps water flat", () => {
 	const ground = ["~.,", ":::"], tiles = { "~": { walk: false }, ".": { walk: true }, ",": { walk: true }, ":": { walk: true } };
-	assert.equal(TERRAIN_RENDERER_VERSION, 2);
+	assert.equal(TERRAIN_RENDERER_VERSION, 3);
 	assert.equal(stableHash("graue-bucht"), stableHash("graue-bucht"));
 	assert.notEqual(stableHash("graue-bucht"), stableHash("klippenpfad"));
 	assert.equal(terrainHeight("a", ground, tiles, 0, 0), tile3d("~", false).height);

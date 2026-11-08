@@ -23,7 +23,7 @@ import { fieldsOf, type BedFields, type BedPlant, type BuildingFields, type Item
 import { peek } from "../../space.ts";
 import { decayNowOf, frozenUntil, patienceOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
-import { CommandError, inventory, itemsNamed, msg, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
+import { CommandError, inventory, itemsNamed, msg, NotUnderstood, pluralOf, roomOf, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { fogOf } from "../fire.ts";
 import type { GardenDef, SortDef, WorldDef } from "../world.ts";
@@ -185,11 +185,14 @@ const beet: Command = {
 
 const pflanze: Command = {
 	key: "pflanze", aliases: ["pflanz", "pflanzen", "säe", "säen", "saee", "sae", "plant", "sow", "setze-samen"],
-	help: "pflanze <samen> [x y] – Samen in dein Beet oder ins Gemeinschaftsbeet neben dir setzen (bis zwei Schritte; eine Pflanze je Zelle; ins Zierbeet nur Blumen). Korn, Kartoffeln, Rüben und Flachs wachsen auf dem Acker: „bestelle“",
+	help: "pflanze [anzahl] <samen> [x y] – Samen in dein Beet oder ins Gemeinschaftsbeet neben dir setzen (bis zwei Schritte; eine Pflanze je Zelle; ins Zierbeet nur Blumen; z. B. pflanze 3 strandnelken). Korn, Kartoffeln, Rüben und Flachs wachsen auf dem Acker: „bestelle“",
 	async func(c, arg) {
 		const g = garden(c);
-		const m = /^(.+?)(?:\s+(\d+)\s+(\d+))?$/.exec(arg.trim().replace(/\s+(?:in|ins)\s+(?:das\s+|mein\s+)?beet$/i, ""));
+		// "pflanze 3 strandnelken": that many of one kind, each in a free cell of the bed
+		const counted = /^(\d+)\s+(.+)$/.exec(arg.trim()), want = counted ? Number(counted[1]) : 1;
+		const m = /^(.+?)(?:\s+(\d+)\s+(\d+))?$/.exec((counted ? counted[2]! : arg).trim().replace(/\s+(?:in|ins)\s+(?:das\s+|mein\s+)?beet$/i, ""));
 		if (!m || !m[1]) throw new NotUnderstood("Was pflanzt du? Zum Beispiel: pflanze strandnelke");
+		if (want < 1) throw new CommandError("Wie viele? Zum Beispiel: pflanze 3 strandnelken");
 		const seeds = (await inventory(c)).filter((i) => g.sorts.some((s) => s.seed === i.f.proto));
 		// a sort's name means its plain seeds before a crossing of it, unless it is the crossing's own name
 		const said = m[1].replace(ARTICLE, "").trim().toLowerCase(), hits = itemsNamed(c.world, seeds, said);
@@ -203,18 +206,26 @@ const pflanze: Command = {
 		});
 		if (b.kind === "zier" && sort.kind !== "zier") throw new CommandError(`Ins Zierbeet kommen nur Blumen; ${sort.name} gehört in ein Gartenbeet.`);
 		const free = cells(b).filter((p) => !b.plants.some((q) => q.x === p.x && q.y === p.y));
-		const cell = m[2] !== undefined ? free.find((p) => p.x === Number(m[2]) && p.y === Number(m[3])) : free[0];
-		if (!cell) throw new CommandError(free.length ? "Diese Zelle gehört nicht zum Beet oder ist schon bepflanzt." : "Das Beet ist voll; ernte erst oder jäte das Welke aus.");
-		if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: hit.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Der Samen ist gerade nicht greifbar; bitte noch einmal.");
-		const now = await worldNowOf(c.space, c.txn);
-		b.plants.push({ x: cell.x, y: cell.y, sort: sort.key, stage: 0, dueWorldMs: now + sort.grow[0] * growFactor(await fogOf(c.space, b.room), b.weedy), ...(hit.f.variety ? { variety: hit.f.variety } : {}) });
+		const first = m[2] !== undefined ? free.findIndex((p) => p.x === Number(m[2]) && p.y === Number(m[3])) : 0;
+		if (first < 0 || !free.length) throw new CommandError(free.length ? "Diese Zelle gehört nicht zum Beet oder ist schon bepflanzt." : "Das Beet ist voll; ernte erst oder jäte das Welke aus.");
+		// the named cell first, then the next free ones
+		const targets = [...free.slice(first), ...free.slice(0, first)].slice(0, want);
+		const same = hits.filter((i) => i.f.proto === hit.f.proto && (i.f.variety ?? "") === (hit.f.variety ?? ""));
+		const label = want > 1 ? `${want} ${pluralOf(hit.f.name, c.world)}` : hit.f.name;
+		if (same.length < want) throw new CommandError(`Du trägst nur ${same.length}× ${hit.f.name}.`);
+		const bedWord = b.kind === "gemein" ? "Gemeinschaftsbeet" : b.kind === "zier" ? "Zierbeet" : "Beet";
+		if (targets.length < want) throw new CommandError(targets.length === 1 ? `Im ${bedWord} ist nur eine Zelle frei, nicht genug für ${label}.` : `Im ${bedWord} sind nur ${targets.length} Zellen frei, nicht genug für ${label}.`);
+		for (const seed of same.slice(0, want)) if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: seed.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Der Samen ist gerade nicht greifbar; bitte noch einmal.");
+		const now = await worldNowOf(c.space, c.txn), factor = growFactor(await fogOf(c.space, b.room), b.weedy);
+		for (const cell of targets) b.plants.push({ x: cell.x, y: cell.y, sort: sort.key, stage: 0, dueWorldMs: now + sort.grow[0] * factor, ...(hit.f.variety ? { variety: hit.f.variety } : {}) });
 		// planting waters the seed
 		b.wateredWorldMs = now;
 		b.untilWorldMs = (await decayNowOf(c.space, c.txn)) + g.bed.keepWorldMs;
 		b.dueWorldMs = nextDue(b.plants);
 		await writeBed(c, b);
 		if (b.kind === "gemein") await creditDeed(c, "beet");
-		await msg(c, "*", "emote", `${c.actor.name} setzt ${hit.f.variety ? plantName(g, b.plants.at(-1)!) : sort.name} ins ${b.kind === "gemein" ? "Gemeinschaftsbeet" : b.kind === "zier" ? "Zierbeet" : "Beet"}.`);
+		const what = hit.f.variety ? plantName(g, b.plants.at(-1)!) : sort.name;
+		await msg(c, "*", "emote", `${c.actor.name} setzt ${want > 1 ? `${want} ${pluralOf(what, c.world)}` : what} ins ${bedWord}.`);
 	},
 };
 

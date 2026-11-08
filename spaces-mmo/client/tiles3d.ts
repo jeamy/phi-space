@@ -41,6 +41,8 @@ async function build(t: T, world: World, anisotropy: number): Promise<Map<string
 		tex.magFilter = t.NearestFilter; // crisp pixel art up close,
 		tex.minFilter = t.LinearMipmapLinearFilter; // smooth when far away: nothing shimmers when the view moves
 		tex.anisotropy = anisotropy;
+		// the terraces and the sea give their faces uvs in cells: the art repeats once a cell
+		tex.wrapS = tex.wrapT = t.RepeatWrapping;
 		tex.userData.shared = true;
 		return tex;
 	};
