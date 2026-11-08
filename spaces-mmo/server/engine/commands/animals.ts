@@ -20,6 +20,7 @@ import { ARTICLE, distTo, giveBack, planOf, putBack, takeNear } from "./build.ts
 import { protoName } from "./garden.ts";
 import { needEpoch } from "./epoch.ts";
 import { randomInt } from "../source.ts";
+import { creditDeed } from "../deeds.ts";
 
 const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : `${Math.max(1, Math.round(ms / 60_000))} Minuten`; };
 const few = (k: AnimalKindDef, n: number) => `${n} ${n === 1 ? k.name : k.plural}`;
@@ -162,6 +163,7 @@ const fuettere: Command = {
 		if (!count) throw new CommandError("Das Futter ist gerade nicht greifbar; bitte noch einmal.");
 		const until = from + count * per;
 		await putBack(c, { ...b, herd: { ...b.herd, fedUntilWorldMs: until } });
+		if (!mine(c, b)) await creditDeed(c, "tiere");
 		await msg(c, "*", "emote", `${c.actor.name} füttert die ${k.plural} von ${b.ownerName} mit ${[...used].map(([nm, x]) => `${x} ${nm}`).join(" und ")}; satt für etwa ${hours(until - now)}.`);
 	},
 };

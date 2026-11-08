@@ -33,6 +33,7 @@ import { setting, workRestMs } from "../../settings.ts";
 import { chestOrder, fmtLoad, loadAt, loadOf, loadOfAll, packMax } from "../pack.ts";
 import type { CourierFields } from "../courier.ts";
 import { randomBytes, timeNow } from "../source.ts";
+import { creditDeed } from "../deeds.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -640,6 +641,8 @@ const repariere: Command = {
 		for (const r of cost) for (const it of inv.filter((i) => i.f.proto === r.proto).slice(0, r.count)) await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn });
 		const until = (await decayNowOf(c.space, c.txn)) + (await keepOf(c, plan));
 		await putBack(c, { ...b, untilWorldMs: until });
+		// someone else's building: a service to the community (one's own serves oneself)
+		if (b.accountId !== c.account?.accountId) await creditDeed(c, "bau");
 		await msg(c, "*", "emote", `${c.actor.name} bessert die ${b.name} von ${b.ownerName} aus; sie hält wieder ${days(until - now)}.`);
 	},
 };

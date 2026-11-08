@@ -130,7 +130,7 @@ export type PlayerStat = {
 	/** registered (a guest: since when it plays), ms since 1970 */ since: number;
 	/** where it stands (offline: where it last stood); `aboard`: on the large ship, nothing more */
 	at: { room: string; roomName: string; island: string | null; x: number; y: number } | { aboard: true } | null;
-	reputation: { pieces: number; beacons: number; parks: number };
+	reputation: { pieces: number; beacons: number; parks: number; /** services to the community (Deed) */ deeds: number };
 	trips: Trips;
 	owns: { buildings: number; beds: number; fields: number; plans: Array<{ plan: string; name: string; count: number }>;
 		/** what the figure carries: each kind with how many, the most first */ carries: Array<{ name: string; count: number }> };

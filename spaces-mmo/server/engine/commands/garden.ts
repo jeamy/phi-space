@@ -31,6 +31,7 @@ import { harvestField, sowOnField } from "./field.ts";
 import { collect, meansYield } from "./animals.ts";
 import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, plural, putBack, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
 import { random, randomBytes, randomInt } from "../source.ts";
+import { creditDeed } from "../deeds.ts";
 
 const STAGES = ["Saat", "Keim", "reif", "welk"] as const;
 export const garden = (c: CommandCtx): GardenDef => {
@@ -212,6 +213,7 @@ const pflanze: Command = {
 		b.untilWorldMs = (await decayNowOf(c.space, c.txn)) + g.bed.keepWorldMs;
 		b.dueWorldMs = nextDue(b.plants);
 		await writeBed(c, b);
+		if (b.kind === "gemein") await creditDeed(c, "beet");
 		await msg(c, "*", "emote", `${c.actor.name} setzt ${hit.f.variety ? plantName(g, b.plants.at(-1)!) : sort.name} ins ${b.kind === "gemein" ? "Gemeinschaftsbeet" : b.kind === "zier" ? "Zierbeet" : "Beet"}.`);
 	},
 };
@@ -230,6 +232,7 @@ const giesse: Command = {
 		b.wateredWorldMs = now;
 		b.untilWorldMs = (await decayNowOf(c.space, c.txn)) + g.bed.keepWorldMs;
 		await writeBed(c, b);
+		if (b.kind === "gemein") await creditDeed(c, "beet");
 		await msg(c, "*", "emote", mine(c, b) ? `${c.actor.name} gießt das ${b.kind === "gemein" ? "Gemeinschaftsbeet" : "Beet"}.` : `${c.actor.name} gießt das ${bedName(b)}.`);
 	},
 };
@@ -249,6 +252,7 @@ const jaete: Command = {
 		b.dueWorldMs = nextDue(b.plants);
 		b.untilWorldMs = (await decayNowOf(c.space, c.txn)) + g.bed.keepWorldMs;
 		await writeBed(c, b);
+		if (b.kind === "gemein") await creditDeed(c, "beet");
 		await msg(c, "*", "emote", `${c.actor.name} jätet das Beet${wilted ? ` und zieht ${plural(wilted, "welke Pflanze", "welke Pflanzen")} heraus` : ""}.`);
 	},
 };
@@ -337,6 +341,7 @@ const ernte: Command = {
 		b.dueWorldMs = nextDue(b.plants);
 		b.untilWorldMs = (await decayNowOf(c.space, c.txn)) + g.bed.keepWorldMs;
 		await writeBed(c, b);
+		if (b.kind === "gemein") await creditDeed(c, "beet");
 		await msg(c, "*", "emote", `${c.actor.name} erntet ${mine(c, b) && b.kind !== "gemein" ? `das ${b.kind === "zier" ? "Zierbeet" : "Beet"}` : `das ${bedName(b)}`}: ${names.join(", ")}.`);
 		if (news.length) await msg(c, c.actor.charId, "info", `Unter den Samen ${news.length === 1 ? "ist eine Kreuzung" : "sind Kreuzungen"} aus ${news.join("; aus ")}! Was daraus wächst, hat eine eigene Farbe; „benenne <name>“ gibt der neuen Sorte einen Namen.`);
 	},

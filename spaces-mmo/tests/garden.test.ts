@@ -335,6 +335,9 @@ test("a flower bed takes flowers and they cross; the breeder names the crossing 
 		assert.match(await does(guest, "pflanze strandnelke", "Gäste"), /pflanzen darf, wer sich registriert hat/);
 		assert.match(await does(guest, "gieße", "gießt"), /gießt das Gemeinschaftsbeet/);
 		assert.match(await does(guest, "beet", "Gemeinschaftsbeet"), /Gemeinschaftsbeet, angelegt von Bert \(3×3\)/);
+		// work at the community bed is a service to the community: it counts for the reputation (engine/deeds.ts)
+		assert.match(await does(anna.p, "ruf", /Leuchtfeuer nachgelegt|Dein Ruf/), /Für die Gemeinschaft: 1× am Gemeinschaftsbeet\./);
+		assert.match(await does(guest, "ruf", /Leuchtfeuer nachgelegt|Dein Ruf/), /Für die Gemeinschaft: 1× am Gemeinschaftsbeet\./, "a guest's watering counts too");
 		// it does not count to Bert's beds, and only Bert gives it up
 		assert.match(await does(bert.p, "beet aufgeben", "Gras"), /gibt das Gemeinschaftsbeet auf/);
 		assert.equal(await s.count({ type: "BedCommons" }), 0, "the fire has room for one again");

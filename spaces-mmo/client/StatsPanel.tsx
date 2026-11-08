@@ -63,6 +63,7 @@ function PlayerDetail({ p }: { p: PlayerStat }) {
 			<dt>{p.kind !== "player" ? "Im Spiel seit" : p.guest ? "Gast seit" : "Registriert seit"}</dt><dd>{date(p.since)}</dd>
 			<dt>Ruf</dt><dd>{`${p.reputation.pieces} Scheite in ${p.reputation.beacons} Leuchtfeuern`}</dd>
 			{p.reputation.parks > 0 && <><dt>Parks</dt><dd>{`${p.reputation.parks}× gepflegt`}</dd></>}
+			{p.reputation.deeds > 0 && <><dt>Gemeinschaft</dt><dd>{`${p.reputation.deeds}× geholfen`}</dd></>}
 			<dt>Reisen</dt><dd>{rides.length ? rides.join(", ") : "noch keine"}</dd>
 			<dt>Besitz</dt><dd>{`${p.owns.buildings} Bauten${p.owns.plans.length ? ` (${p.owns.plans.map((b) => `${b.count}× ${b.name}`).join(", ")})` : ""}, ${p.owns.fields} Felder, ${p.owns.beds} Beete`}
 				<br />{(p.owns.carries ?? []).length ? `Gepäck: ${p.owns.carries.map((i) => `${i.count}× ${i.name}`).join(", ")}` : "Gepäck: nichts"}</dd>

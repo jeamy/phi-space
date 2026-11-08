@@ -12,6 +12,7 @@ import { burnText, coversOf, feed, flameOf, fogOf } from "../fire.ts";
 import { blockedIn, cellKey, claimSpot, freeCellNear, isPassage, occupiedIn, releaseSpot } from "../occupancy.ts";
 import { findPath, sceneryText, walkable, wayTo, type WorldDef } from "../world.ts";
 import { handOff } from "../handover.ts";
+import { deedsOf, deedText } from "../deeds.ts";
 import { regionOfRoom } from "../regions.ts";
 import { DEFAULT_APPEARANCE, describeAppearance, parseAppearance } from "../appearance.ts";
 
@@ -447,12 +448,13 @@ const channel: Command = {
 
 const reputation: Command = {
 	key: "reputation", aliases: ["ruf"],
-	help: "reputation – was du in die Leuchtfeuer gelegt und an Parks gepflegt hast",
+	help: "reputation – was du in die Leuchtfeuer gelegt, an Parks gepflegt und für die Gemeinschaft getan hast (Gemeinschaftsbeet, fremde Bauten ausgebessert, fremde Tiere gefüttert)",
 	async func(c) {
 		const mine = (await c.space.readAll({ type: "Contribution", fields: { charId: c.actor.charId } })).map((e) => fieldsOf<ContributionFields>(e));
 		const pieces = mine.reduce((s, x) => s + x.pieces, 0);
 		const tended = (await c.space.readAll({ type: "ParkCare", fields: { accountId: c.account?.accountId ?? "" } })).reduce((n, e) => n + Number(e.fields.points), 0);
-		await msg(c, c.actor.charId, "info", `${pieces ? `Dein Ruf: ${pieces} Scheit${pieces === 1 ? "" : "e"} in ${mine.length} Leuchtfeuer${mine.length === 1 ? "" : "n"}.` : "Du hast noch in kein Leuchtfeuer nachgelegt."}${tended ? ` Parks hast du ${tended} Mal gepflegt.` : ""}`);
+		const deeds = c.account ? deedText(await deedsOf([c.space, ...(c.elsewhere?.values() ?? [])], c.account.accountId)) : "";
+		await msg(c, c.actor.charId, "info", `${pieces ? `Dein Ruf: ${pieces} Scheit${pieces === 1 ? "" : "e"} in ${mine.length} Leuchtfeuer${mine.length === 1 ? "" : "n"}.` : "Du hast noch in kein Leuchtfeuer nachgelegt."}${tended ? ` Parks hast du ${tended} Mal gepflegt.` : ""}${deeds ? ` Für die Gemeinschaft: ${deeds}.` : ""}`);
 	},
 };
 

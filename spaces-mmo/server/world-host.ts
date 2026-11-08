@@ -279,6 +279,8 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 				const key: Record<string, string> = type === "Item" ? { location: ch.charId } : { charId: ch.charId };
 				for (const s of type === "Contribution" ? all : [space]) for (const e of await s.readAll({ type, fields: key })) await s.takeIfExists({ type, id: e.id }, NO_WAIT);
 			}
+			// its services to the community (engine/deeds.ts) lie where they were done, by account
+			for (const s of all) for (const e of await s.readAll({ type: "Deed", fields: { accountId: ch.accountId } })) await s.takeIfExists({ type: "Deed", id: e.id }, NO_WAIT);
 		}
 	};
 	/** What an NPC carries beyond `packMax` of one kind spoils, coins beyond `coinMax` go back into the world's purse: the

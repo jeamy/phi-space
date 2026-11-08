@@ -94,6 +94,10 @@ export type ShowFields = { showId: string; room: string; settlementId: string; s
 export type ShowEntryFields = { showId: string; accountId: string; charName: string; name: string; score: number; at: number; /** A settler of the world (npc/settlers.ts): wins no coins. */ figure?: boolean };
 /** The tending of the park of a room by one account: `points` how often, `lastWorldMs` the last time. */
 export type ParkCareFields = { room: string; accountId: string; charName: string; points: number; lastWorldMs: number };
+/** A service to the community (engine/deeds.ts), one per account and kind in the region where it was done: `points` how
+ *  often. "beet": planted, watered, weeded or harvested the community bed; "bau": repaired someone else's building;
+ *  "tiere": fed someone else's animals. They count for the reputation beside the beacons and the parks. */
+export type DeedFields = { accountId: string; kind: "beet" | "bau" | "tiere"; charName: string; points: number; lastAt: number };
 /** A line of a warehouse's log: who laid in or took what (`kind`), counted for the quota by world time. */
 /** What a site pays for (docs/siedeln.en.md, engine/commands/siteorder.ts): `proto` "" is work; the coins lie at `orderId`. */
 export type SiteOrderFields = { orderId: string; buildId: string; siteName: string; room: string; x: number; y: number; w: number; h: number; ownerName: string; proto: string; name: string; left: number; pay: number; at: number };

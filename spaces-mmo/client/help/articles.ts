@@ -95,7 +95,7 @@ The world is divided into **four regions**, each with a space and processes of i
 
 Es gibt keinen Endstand und keine festen Klassen. Dein Ziel: **die Leuchtfeuer am Brennen halten** und damit die Wege, Märkte und Orte, die im Licht liegen. Rolle und Ruf ergeben sich aus dem, was du tust: Strandläufer, Händler, Bootsmann oder Wärter.
 
-Wer viel ins Feuer legt, steht im **Ruf** (\`ruf\` zeigt, was du beigetragen hast). Jedes Feuer zeigt öffentlich, wer wie viel eingebracht hat.
+Wer viel ins Feuer legt, steht im **Ruf** (\`ruf\` zeigt, was du beigetragen hast). Ruf bringt auch, was der Gemeinschaft dient: am Gemeinschaftsbeet pflanzen, gießen, jäten oder ernten, den Bau eines anderen ausbessern, fremde Tiere füttern, einen Park pflegen. Jedes Feuer zeigt öffentlich, wer wie viel eingebracht hat.
 
 ## Die Spielschleife {#loop}
 
@@ -115,7 +115,7 @@ Brennholz kannst du **selbst verbrauchen** (Werkzeug bauen, Handel) oder **ins g
 
 There is no end state and there are no fixed classes. Your goal: **keep the beacons burning**, and with them the paths, markets and places that lie in the light. Role and reputation come from what you do: beachcomber, trader, boatman or keeper.
 
-Whoever puts a lot into the fire gains **reputation** (\`reputation\` shows what you contributed). Every beacon shows publicly who put in how much.
+Whoever puts a lot into the fire gains **reputation** (\`reputation\` shows what you contributed). Whatever serves the community counts as well: planting, watering, weeding or harvesting at the community bed, repairing someone else's building, feeding someone else's animals, tending a park. Every beacon shows publicly who put in how much.
 
 ## The game loop {#loop}
 
@@ -576,7 +576,7 @@ Handel braucht ein Konto. Ausführlich unter [Handel und Handwerk](help.game.tra
 | \`market\` | \`markt\` | Marktbrett: Angebote ansehen, einstellen, kaufen |
 | \`craft [rezept]\` | \`baue\`, \`herstellen\` | Etwas herstellen; ohne Rezept die Liste |
 | \`order\` | \`auftrag\`, \`aufträge\` | Auftragstafel: ansehen, nehmen, liefern, zurückgeben |
-| \`reputation\` | \`ruf\` | Was du in die Leuchtfeuer gelegt hast |
+| \`reputation\` | \`ruf\` | Was du in die Leuchtfeuer gelegt, an Parks gepflegt und für die Gemeinschaft getan hast |
 | \`avatar\` | \`aussehen\` | Wie deine Figur in 3D aussieht (siehe Figur) |
 
 ## Hilfe {#helpcmds}
@@ -759,7 +759,7 @@ Trade needs an account. In detail under [Trade and crafting](help.game.trade).
 | \`market\` | \`markt\` | Market board: see, post and buy offers |
 | \`craft [recipe]\` | \`baue\`, \`herstellen\` | Make something; without a recipe the list |
 | \`order\` | \`auftrag\`, \`aufträge\` | Job board: see, take, deliver, give back |
-| \`reputation\` | \`ruf\` | What you put into the beacons |
+| \`reputation\` | \`ruf\` | What you put into the beacons, the parks you tended and what you did for the community |
 | \`avatar\` | \`aussehen\` | How your figure looks in 3D (see Figure) |
 
 ## Help {#helpcmds}

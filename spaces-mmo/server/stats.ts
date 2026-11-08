@@ -3,7 +3,7 @@
 // shows anyway: the figure's name (never the login name), where it stands (a passenger of the large ship only as
 // "aboard", not where it goes), since when it plays, its reputation, how often it travelled, what it owns and carries.
 import type { SpaceLike } from "phi-spaces";
-import { fieldsOf, type AccountFields, type BedFields, type BuildingFields, type CharacterFields, type ContributionFields, type FieldFields, type ParkCareFields, type SessionFields } from "./model.ts";
+import { fieldsOf, type AccountFields, type BedFields, type BuildingFields, type CharacterFields, type ContributionFields, type DeedFields, type FieldFields, type ParkCareFields, type SessionFields } from "./model.ts";
 import type { RegionSpaces } from "./region-spaces.ts";
 import { TRIPS, type Trip, type TravelFields } from "./engine/travel.ts";
 import type { WorldDef } from "./engine/world.ts";
@@ -25,7 +25,7 @@ async function all(space: SpaceLike, type: string): Promise<Array<Record<string,
 	return out;
 }
 
-const TYPES = ["Account", "Character", "Session", "Contribution", "ParkCare", "Travel", "Building", "Bed", "Field", "Site", "Settlement"] as const;
+const TYPES = ["Account", "Character", "Session", "Contribution", "ParkCare", "Deed", "Travel", "Building", "Bed", "Field", "Site", "Settlement"] as const;
 
 export async function collectStats(regions: RegionSpaces, w: WorldDef): Promise<WorldStats> {
 	const read: Record<(typeof TYPES)[number], Array<Record<string, unknown>>> = Object.fromEntries(TYPES.map((t) => [t, []])) as never;
@@ -60,6 +60,8 @@ export async function collectStats(regions: RegionSpaces, w: WorldDef): Promise<
 	}
 	const parks = new Map<string, number>();
 	for (const p of read.ParkCare as ParkCareFields[]) parks.set(p.accountId, (parks.get(p.accountId) ?? 0) + Number(p.points));
+	const deeds = new Map<string, number>(); // services to the community (engine/deeds.ts), summed over the kinds
+	for (const d of read.Deed as DeedFields[]) deeds.set(d.accountId, (deeds.get(d.accountId) ?? 0) + Number(d.points));
 	const trips = new Map<string, Trips>(), total = noTrips();
 	for (const t of read.Travel as TravelFields[]) {
 		if (!chars.has(t.charId)) continue;
@@ -91,7 +93,7 @@ export async function collectStats(regions: RegionSpaces, w: WorldDef): Promise<
 			charId: c.charId, name: c.name, kind: c.kind, guest: a.guest, online: live.has(c.charId),
 			since: a.guest ? a.createdAt : (a.registeredAt ?? a.createdAt),
 			at: c.aboard ? { aboard: true as const } : { room: c.room, roomName: room?.name ?? c.room, island: room?.island ?? null, x: c.x, y: c.y },
-			reputation: { pieces: p?.pieces ?? 0, beacons: p?.beacons.size ?? 0, parks: parks.get(c.accountId) ?? 0 },
+			reputation: { pieces: p?.pieces ?? 0, beacons: p?.beacons.size ?? 0, parks: parks.get(c.accountId) ?? 0, deeds: deeds.get(c.accountId) ?? 0 },
 			trips: trips.get(c.charId) ?? noTrips(),
 			owns: {
 				buildings: ownB.get(c.accountId) ?? 0, beds: ownBeds.get(c.accountId) ?? 0, fields: ownF.get(c.accountId) ?? 0,
