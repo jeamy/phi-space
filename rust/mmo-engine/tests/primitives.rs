@@ -10,7 +10,7 @@ mod common;
 use common::{oracle, repo};
 
 use mmo_engine::js::{self, JsRegex};
-use phi_json::Json;
+use phi_json::{obj, Json};
 
 fn vectors() -> &'static Json {
 	static V: OnceLock<Json> = OnceLock::new();
@@ -99,4 +99,55 @@ fn numbers() {
 		if js::number_text(n) != st(w.get("text").unwrap()) { bad.push(format!("String({n}): JS {} Rust {}", st(w.get("text").unwrap()), js::number_text(n))); }
 	}
 	assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+/// The helpers every command uses, against the oracle's own functions.
+#[test]
+fn helpers() {
+	use mmo_engine::{context, funcparser, locks};
+	let h = vectors().get("helpers").unwrap();
+	let world = mmo_engine::world::load_world(&common::oracle().join("spaces-mmo"), "leuchtfeuer").expect("the world");
+	let mut bad: Vec<String> = Vec::new();
+	let mut out = |what: &str, ok: bool, detail: String| if !ok && bad.len() < 20 { bad.push(format!("{what}: {detail}")); };
+	for r in arr(h, "stem") { let r = r.as_array().unwrap(); let got = context::stem(st(&r[0])); out("stem", got == st(&r[1]), format!("{:?} -> {got:?}, oracle {:?}", st(&r[0]), st(&r[1]))); }
+	for r in arr(h, "plural") {
+		let r = r.as_array().unwrap();
+		let (a, b) = (context::plural_of(st(&r[0]), Some(&world)), context::plural_of(st(&r[0]), None));
+		out("pluralOf", a == st(&r[1]) && b == st(&r[2]), format!("{:?} -> {a:?}/{b:?}, oracle {:?}/{:?}", st(&r[0]), st(&r[1]), st(&r[2])));
+	}
+	for r in arr(h, "typos") {
+		let r = r.as_array().unwrap();
+		let got = context::typos(st(&r[0]), st(&r[1]), r[2].as_f64().unwrap());
+		out("typos", got == r[3].as_f64().unwrap(), format!("{:?} {:?} {} -> {got}, oracle {}", st(&r[0]), st(&r[1]), r[2].to_json_text(), r[3].to_json_text()));
+	}
+	for r in arr(h, "renders") {
+		let r = r.as_array().unwrap();
+		let me = r[1] == Json::Bool(true);
+		let got = funcparser::render(st(&r[0]), &funcparser::View { viewer: if me { "c1" } else { "c2" }, actor: "c1", actor_name: "Ines" });
+		out("render", got == st(&r[2]), format!("{:?} ({me}) -> {got:?}, oracle {:?}", st(&r[0]), st(&r[2])));
+	}
+	let access: Vec<&str> = arr(h, "access").iter().map(st).collect();
+	for r in arr(h, "locks") {
+		let l = st(r.get("l").unwrap());
+		let parsed = match locks::parse_locks(l) { Ok(p) => Json::Array(p.into_iter().map(|(k, _)| Json::from(k)).collect()), Err(e) => Json::from(e) };
+		out("parseLocks", Some(&parsed) == r.get("parsed"), format!("{l:?} -> {}, oracle {}", parsed.to_json_text(), r.get("parsed").unwrap().to_json_text()));
+		for (c, row) in arr(h, "lockCtx").iter().zip(arr(r, "allowed")) {
+			let held: Vec<&str> = arr(c, "holds").iter().map(st).collect();
+			let holds = |k: &str| held.contains(&k);
+			let lc = locks::LockCtx { level: st(c.get("level").unwrap()), guest: c.get("guest") == Some(&Json::Bool(true)), char_id: st(c.get("charId").unwrap()), holds: &holds };
+			for (a, want) in access.iter().zip(row.as_array().unwrap()) {
+				let got = locks::allowed(l, a, &lc);
+				out("allowed", Json::Bool(got) == *want, format!("{l:?} {a} {} -> {got}", c.to_json_text()));
+			}
+		}
+	}
+	let list: Vec<Json> = arr(h, "things").iter().enumerate().map(|(i, f)| obj! { "fields" => f.clone(), "i" => i as f64 }).collect();
+	let idx = |r: Vec<Json>| Json::Array(r.iter().map(|e| e.get("i").cloned().unwrap()).collect());
+	for r in arr(h, "lookups") {
+		let r = r.as_array().unwrap();
+		let q = st(&r[0]);
+		let got = [idx(context::by_name(&list, q, None)), idx(context::by_name(&list, q, Some((4.0, 2.0)))), idx(context::items_named(&world, &list, q, None)), idx(context::items_named(&world, &list, q, Some((9.0, 7.0))))];
+		for (k, (g, want)) in got.iter().zip(&r[1..]).enumerate() { out(["byName", "byName near", "itemsNamed", "itemsNamed near"][k], g == want, format!("{q:?} -> {}, oracle {}", g.to_json_text(), want.to_json_text())); }
+	}
+	assert!(bad.is_empty(), "{} differences:\n  {}", bad.len(), bad.join("\n  "));
 }

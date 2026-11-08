@@ -3,9 +3,11 @@
 pub mod clock;
 pub mod context;
 pub mod fire;
+pub mod funcparser;
 pub mod j;
 pub mod js;
 pub mod loader;
+pub mod locks;
 pub mod model;
 pub mod prototypes;
 pub mod room_growth;

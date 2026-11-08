@@ -16,3 +16,12 @@ hmac = "0.12"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 tokio = { version = "1", default-features = false, features = ["rt", "net", "io-util", "time", "sync", "signal", "macros"] }
+
+# The engine's tests run every helper over the oracle's vectors and walk whole worlds: optimised in the dev profile too
+# (the regex engine unoptimised is most of their time).
+[profile.dev.package.mmo-engine]
+opt-level = 2
+[profile.dev.package.regex-automata]
+opt-level = 2
+[profile.dev.package.regex-syntax]
+opt-level = 2

@@ -503,6 +503,26 @@ impl Translator<'_> {
 	}
 }
 
+/// What `obj[k]` finds on `Object.prototype` when an object literal used as a table lacks `k`, as text (`String()` of
+/// it): `PLURALS["constructor"]` is a function, not undefined, so `??` keeps it.
+pub fn object_prototype_text(k: &str) -> Option<&'static str> {
+	Some(match k {
+		"constructor" => "function Object() { [native code] }",
+		"__defineGetter__" => "function __defineGetter__() { [native code] }",
+		"__defineSetter__" => "function __defineSetter__() { [native code] }",
+		"hasOwnProperty" => "function hasOwnProperty() { [native code] }",
+		"__lookupGetter__" => "function __lookupGetter__() { [native code] }",
+		"__lookupSetter__" => "function __lookupSetter__() { [native code] }",
+		"isPrototypeOf" => "function isPrototypeOf() { [native code] }",
+		"propertyIsEnumerable" => "function propertyIsEnumerable() { [native code] }",
+		"toString" => "function toString() { [native code] }",
+		"valueOf" => "function valueOf() { [native code] }",
+		"toLocaleString" => "function toLocaleString() { [native code] }",
+		"__proto__" => "[object Object]",
+		_ => return None,
+	})
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
