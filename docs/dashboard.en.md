@@ -99,6 +99,7 @@ production address: the local end of the SSH tunnel to nano or the loopback port
 | Codemode Chat | `unix:/tmp/codemode-space.sock` | `tcp:127.0.0.1:3810` | `tcp:127.0.0.1:3800` (tunnel to nano) |
 | spaces-mmo · Welt | `unix:/tmp/spaces-mmo-world.sock` | `tcp:127.0.0.1:3960` | `tcp:127.0.0.1:3950` (region West on big, no tunnel) |
 | Help · Swarm-Shard | `unix:/tmp/swarm-b.sock` | `tcp:127.0.0.1:3600` | `tcp:127.0.0.1:3600` (tunnel to nano) |
+| Help · Swarm-Hub | `unix:/tmp/swarm-space.sock` | – | `tcp:127.0.0.1:3610` (the hub's swarm Space, its own process on big) |
 | Help · Hub (`@*`) | `unix:/tmp/help-space.sock` | – | `tcp:127.0.0.1:3520` (the hub itself, no tunnel) |
 
 **Public on big:** nginx forwards `https://spaces-stats.eibrain.org` (IPv6 `2a0a:4cc0:c0:62f2:8000::1002`, IPv4
@@ -122,8 +123,8 @@ default ID keeps its name and its Space).
 
 **Named Spaces.** Without a statement the dashboard queries the default Space of the service. If the data lies in a
 named Space, it is attached to the ID with `@`: `id@space=adresse`. The swarm shard of the help site keeps its posts in the Space
-`social-swarm` (`SWARM_ALIAS`, created in `help-site/server/nano-host.ts`), its default Space stays empty;
-the default app `help-swarm` therefore queries `social-swarm`, even if it stands in `DASHBOARD_APPS` without `@`.
+`social-swarm` (`SWARM_ALIAS`, created by its space process, `help-site/server/social/space-side.ts`), its default Space stays empty;
+the default apps `help-swarm` and `help-swarm-hub` therefore query `social-swarm`, even if they stand in `DASHBOARD_APPS` without `@`.
 
 **All Spaces of a service.** `id@*=adresse` queries the list of the service (method `spaces`, [API](api.en.md)) and
 reads the figures of each Space (the 100 newest), summed for the app and individually in the table "Spaces".

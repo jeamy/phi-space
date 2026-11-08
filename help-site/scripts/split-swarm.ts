@@ -8,7 +8,7 @@
 // transactions held is handled as their abort would: taken entries become free again, and entries written under one
 // are dropped. Request claims, change stream and mailboxes start empty in the new store. The limits and the completion
 // profile are set again by the space process on its start. The old store keeps its copy of the Space, which nothing
-// serves anymore; TO must not exist yet.
+// serves anymore (drop-moved-swarm.ts removes it); TO must not exist yet.
 import { access } from "node:fs/promises";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { core, createSpace, listSpaces, NamedSpace, openSqliteHost, spaceDoc } from "phi-spaces";

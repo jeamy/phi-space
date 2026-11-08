@@ -119,8 +119,9 @@ COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/app ./help-site/
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/client ./help-site/client
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/examples ./help-site/examples
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/server ./help-site/server
-# the one-time move of the swarm Space into a store of its own (run with the hub stopped)
+# the one-time move of the swarm Space into a store of its own, and the removal of the old copy (run with the hub stopped)
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/scripts/split-swarm.ts ./help-site/scripts/split-swarm.ts
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/scripts/drop-moved-swarm.ts ./help-site/scripts/drop-moved-swarm.ts
 
 RUN mkdir -p /data && chown -R node:node /data
 USER node

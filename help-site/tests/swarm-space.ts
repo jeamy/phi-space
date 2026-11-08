@@ -20,25 +20,29 @@ export interface TestSwarmSpace {
 	space: SwarmSpace;
 	/** The store, when it is in this process (null against a separate server). */
 	side: SwarmSide | null;
+	/** The socket of the separate process (null in this process). */
+	address: string | null;
 	close(): Promise<void>;
 }
 
-function command(): { cmd: string; args: string[] } {
-	if (SERVER!.endsWith(".ts")) return { cmd: process.execPath, args: ["--experimental-strip-types", "--no-warnings", resolve(ROOT, SERVER!)] };
-	return { cmd: SERVER!, args: ["--profile", "help"] };
+function command(server: string): { cmd: string; args: string[] } {
+	if (server.endsWith(".ts")) return { cmd: process.execPath, args: ["--experimental-strip-types", "--no-warnings", resolve(ROOT, server)] };
+	return { cmd: server, args: ["--profile", "help"] };
 }
 
 /** `maxEntries`: the cap of the space side's purge (null: no purge; the default). `retentionMs`: how often it looks.
- *  `inProcess`: always in this process (a test that serves or cuts the store itself). */
-export async function swarmSpace(o: { maxEntries?: number | null; retentionMs?: number; meter?: Meter; inProcess?: boolean; file?: string } = {}): Promise<TestSwarmSpace> {
+ *  `inProcess`: always in this process (a test that serves or cuts the store itself). `separate`: always a process of
+ *  its own (the TypeScript one without `HELP_SPACE_SERVER`), for a test that needs its address. */
+export async function swarmSpace(o: { maxEntries?: number | null; retentionMs?: number; meter?: Meter; inProcess?: boolean; separate?: boolean; file?: string } = {}): Promise<TestSwarmSpace> {
 	const maxEntries = o.maxEntries ?? null;
-	if (!SERVER || o.inProcess) {
+	const server = SERVER ?? (o.separate ? "server/space-host.ts" : null);
+	if (!server || o.inProcess) {
 		const side = await openSwarmSide(ctx, { file: o.file ?? null, retention: maxEntries === null ? null : retentionConfig(maxEntries), meter: o.meter, retentionMs: o.retentionMs });
-		return { space: side.space, side, close: () => side.close() };
+		return { space: side.space, side, address: null, close: () => side.close() };
 	}
 	const dir = await mkdtemp(join(tmpdir(), "swarm-space-"));
 	const listen = `unix:${join(dir, "s.sock")}`;
-	const { cmd, args } = command();
+	const { cmd, args } = command(server);
 	const child: ChildProcess = spawn(cmd, args, {
 		cwd: ROOT,
 		env: { ...process.env, ...(o.file ? { SWARM_MEM: "0", SWARM_DB: o.file } : { SWARM_MEM: "1" }), SWARM_LISTEN: listen, SWARM_MAX_ENTRIES: String(maxEntries ?? 0), SWARM_RETENTION_MS: String(o.retentionMs ?? 10_000) },
@@ -54,7 +58,7 @@ export async function swarmSpace(o: { maxEntries?: number | null; retentionMs?: 
 	});
 	const c = connectSpace(listen, { space: SWARM_ALIAS, callTimeoutMs: 30_000 });
 	return {
-		space: c.space, side: null,
+		space: c.space, side: null, address: listen,
 		close: async () => {
 			c.close();
 			const gone = new Promise((r) => child.once("exit", r));

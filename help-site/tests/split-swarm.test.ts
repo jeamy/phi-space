@@ -7,7 +7,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
-import { createSpace, FOREVER, Meter, openSqliteHost, PhiSpaces } from "phi-spaces";
+import { createSpace, FOREVER, listSpaces, Meter, openSqliteHost, PhiSpaces } from "phi-spaces";
 import { appendHistory, ensureHistoryHead, historyPage } from "../server/social/history.ts";
 import { SocialSwarmHub, type SwarmPost } from "../server/social/swarm.ts";
 import { SWARM_ALIAS } from "../server/social/space-side.ts";
@@ -46,7 +46,7 @@ test("split-swarm moves the swarm Space into a store of its own: ids and the his
 		await assert.rejects(run(process.execPath, ["--experimental-strip-types", "--no-warnings", "scripts/split-swarm.ts", from, to], { cwd: join(import.meta.dirname, "..") }), /exists/);
 
 		// the new store, opened by the swarm's space process (TypeScript, or the one HELP_SPACE_SERVER names)
-		const t = await swarmSpace({ file: to });
+		const t = await swarmSpace({ file: to, separate: true });
 		const hub = new SocialSwarmHub(t.space, new Meter(), { produce: false, pulses: false, seedContent: false, maxEntries: null });
 		try {
 			assert.deepEqual((await t.space.readAll({ type: "PostHistoryNode" }, { limit: 100 })).map((e) => e.id).sort(), before, "the nodes keep their ids");
@@ -61,6 +61,16 @@ test("split-swarm moves the swarm Space into a store of its own: ids and the his
 			}
 			const id = (await t.space.write({ type: "Probe", fields: {} }, null, 1_000)).id;
 			assert.ok(!before.includes(id), "new ids do not collide with the moved ones");
+
+			// the old copy goes once the moved Space answers; the other Space of the help store stays
+			const drop = await run(process.execPath, ["--experimental-strip-types", "--no-warnings", "scripts/drop-moved-swarm.ts", from, t.address!], { cwd: join(import.meta.dirname, "..") });
+			assert.match(drop.stdout, /dropped social-swarm .*\d+ entries/);
+			const after = await openSqliteHost(from);
+			try { assert.deepEqual((await listSpaces(after, ctx)).map((i) => i.alias).filter((a) => a !== "default"), ["space-chat-lobby"]); }
+			finally { await after.close(ctx); }
+			assert.match((await run(process.execPath, ["--experimental-strip-types", "--no-warnings", "scripts/drop-moved-swarm.ts", from, t.address!], { cwd: join(import.meta.dirname, "..") })).stdout, /already dropped/);
 		} finally { await hub.close(); await t.close(); }
+		// without an answering moved Space nothing is dropped
+		await assert.rejects(run(process.execPath, ["--experimental-strip-types", "--no-warnings", "scripts/drop-moved-swarm.ts", from, `unix:${join(dir, "none.sock")}`], { cwd: join(import.meta.dirname, "..") }));
 	} finally { await rm(dir, { recursive: true, force: true }); }
 });

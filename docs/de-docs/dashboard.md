@@ -99,6 +99,7 @@ Adresse der Produktion: das lokale Ende des SSH-Tunnels nach nano oder der Loopb
 | Codemode Chat | `unix:/tmp/codemode-space.sock` | `tcp:127.0.0.1:3810` | `tcp:127.0.0.1:3800` (Tunnel nach nano) |
 | spaces-mmo · Welt | `unix:/tmp/spaces-mmo-world.sock` | `tcp:127.0.0.1:3960` | `tcp:127.0.0.1:3950` (Region West auf big, kein Tunnel) |
 | Help · Swarm-Shard | `unix:/tmp/swarm-b.sock` | `tcp:127.0.0.1:3600` | `tcp:127.0.0.1:3600` (Tunnel nach nano) |
+| Help · Swarm-Hub | `unix:/tmp/swarm-space.sock` | – | `tcp:127.0.0.1:3610` (der Swarm-Space des Hubs, eigener Prozess auf big) |
 | Help · Hub (`@*`) | `unix:/tmp/help-space.sock` | – | `tcp:127.0.0.1:3520` (der Hub selbst, kein Tunnel) |
 
 **Öffentlich auf big:** nginx leitet `https://spaces-stats.eibrain.org` (IPv6 `2a0a:4cc0:c0:62f2:8000::1002`, IPv4
@@ -120,8 +121,8 @@ Standard-ID behält ihren Namen und ihren Space).
 
 **Benannte Spaces.** Ohne Angabe fragt das Dashboard den Default-Space des Dienstes ab. Liegen die Daten in einem
 benannten Space, kommt er mit `@` an die ID: `id@space=adresse`. Der Swarm-Shard der Hilfeseite hält seine Posts im Space
-`social-swarm` (`SWARM_ALIAS`, angelegt in `help-site/server/nano-host.ts`), sein Default-Space bleibt leer; die
-Standard-App `help-swarm` fragt deshalb `social-swarm` ab, auch wenn sie in `DASHBOARD_APPS` ohne `@` steht.
+`social-swarm` (`SWARM_ALIAS`, angelegt von seinem Space-Prozess, `help-site/server/social/space-side.ts`), sein Default-Space bleibt leer; die
+Standard-Apps `help-swarm` und `help-swarm-hub` fragen deshalb `social-swarm` ab, auch wenn sie in `DASHBOARD_APPS` ohne `@` stehen.
 
 **Alle Spaces eines Dienstes.** `id@*=adresse` fragt die Liste des Dienstes ab (Methode `spaces`, [API](../api.en.md)) und
 liest die Kennzahlen jedes Spaces (die 100 neuesten), summiert für die App und einzeln in der Tabelle „Spaces“.

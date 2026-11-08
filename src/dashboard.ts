@@ -56,6 +56,8 @@ const DEFAULT_APPS: AppSource[] = [
 	{ id: "spaces-mmo", label: "spaces-mmo · Welt", addresses: ["unix:/tmp/spaces-mmo-world.sock", "tcp:127.0.0.1:3960", "tcp:127.0.0.1:3950"] },
 	// the shard keeps its posts in the named space "social-swarm" (help-site SWARM_ALIAS), its default space stays empty
 	{ id: "help-swarm", label: "Help · Swarm-Shard", addresses: ["unix:/tmp/swarm-b.sock", "tcp:127.0.0.1:3600"], space: "social-swarm" },
+	// the hub's swarm Space in its own process (help-site server/space-host.ts or phi-space-server --profile help)
+	{ id: "help-swarm-hub", label: "Help · Swarm-Hub", addresses: ["unix:/tmp/swarm-space.sock", "tcp:127.0.0.1:3610"], space: "social-swarm" },
 	{ id: "help-hub", label: "Help · Hub", addresses: ["unix:/tmp/help-space.sock", "tcp:127.0.0.1:3520"], space: ALL_SPACES },
 ];
 
