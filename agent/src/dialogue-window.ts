@@ -14,17 +14,20 @@ const size = (m: Message) => typeof m.content === "string" ? m.content.length
   : (m.content ?? []).reduce((n, p) => n + (p.text?.length ?? 0), 0);
 const answered = (m: Message | undefined) => !!m && m.role === "assistant" && m.stopReason !== "error" && m.stopReason !== "aborted" && size(m) > 0;
 
-/** The messages of one request: the last user message (the current prompt) always, before it the newest answered turns
- *  within the bounds, oldest first. Messages that are neither user nor assistant are kept with their turn. */
+/** The messages of one request: what precedes the first user message (the instructions) and the last user message (the
+ *  current prompt) always, between them the newest answered turns within the bounds, oldest first. Messages that are neither user nor assistant are kept with their turn. */
 export function dialogueWindow<M extends Message>(messages: readonly M[], o: { turns: number; maxChars: number } = DIALOGUE_WINDOW): M[] {
   let last = messages.length - 1;
   while (last >= 0 && messages[last]!.role !== "user") last--;
   if (last < 0) return [...messages];
+  // what stands before the first user message (the dialogue's instructions, a system message) belongs to every request:
+  // without it the model would answer without its role
+  const first = messages.findIndex((m) => m.role === "user"), head = messages.slice(0, first);
   const keep: M[][] = [];
   let chars = size(messages[last]!);
   // the turns before it, newest first: a user message up to the next user message
   let end = last;
-  for (let i = last - 1; i >= 0 && keep.length < o.turns; i--) {
+  for (let i = last - 1; i >= first && keep.length < o.turns; i--) {
     if (messages[i]!.role !== "user") continue;
     const turn = messages.slice(i, end);
     end = i;
@@ -34,5 +37,5 @@ export function dialogueWindow<M extends Message>(messages: readonly M[], o: { t
     chars += n;
     keep.push(turn);
   }
-  return [...keep.reverse().flat(), ...messages.slice(last)];
+  return [...head, ...keep.reverse().flat(), ...messages.slice(last)];
 }

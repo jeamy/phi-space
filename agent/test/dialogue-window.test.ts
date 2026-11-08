@@ -24,6 +24,9 @@ test("the window: the current prompt, before it the newest answered turns within
   // a turn without an answer at all (cut off) is left out; nothing before a first user message is lost
   assert.deepEqual(dialogueWindow([user("a"), user("b"), said("B"), user("now")], { turns: 4, maxChars: 1000 }).map((m) => m.role === "user" ? m.content : "·"), ["b", "·", "now"]);
   assert.deepEqual(dialogueWindow([said("hi")]), [said("hi")]);
+  // the instructions before the first user message go along with every request, however many turns are left out
+  const system = { role: "system", content: "You are Ines" };
+  assert.deepEqual(dialogueWindow([system, user("a"), said("A"), user("b"), said("B"), user("now")], { turns: 1, maxChars: 1000 }).map((m) => m.role === "assistant" ? "·" : m.content), ["You are Ines", "b", "·", "now"]);
 });
 
 test("a long dialogue sends the model only its last answered turns, a failed one not at all", { timeout: 30_000 }, async () => {
