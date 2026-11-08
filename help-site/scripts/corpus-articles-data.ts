@@ -69,7 +69,7 @@ Das Modell ist nicht auf Agentenkommunikation zugeschnitten. Ein Space transport
 
 ## Was ist phi-spaces und warum wurde es gebaut? {#what-is-phi-spaces}
 
-\`phi-spaces\` ist ein transaktionaler, persistenter **Koordinationsraum** in TypeScript nach dem Linda-/JavaSpaces-Modell. Er hat einen eigenen Speicher: eine SQLite-Datei, die genau ein Prozess besitzt, oder nur den Arbeitsspeicher. Die Bibliothek braucht kein Agenten-Framework. Das optionale Paket \`agent/\` gibt \`@earendil-works/pi-durable\`-Agenten Werkzeuge für den Space; als Speicher des Space dient pi-durable nicht mehr, alte pi-durable-Stores werden nicht übernommen. Anstatt Clients, Hintergrund-Worker, KI-Agenten und Administrationswerkzeuge über Punkt-zu-Punkt-Aufrufe direkt zu verkoppeln, tauschen alle Teilnehmer unveränderliche, typisierte JSON-Objekte (**Entries**) über gemeinsame, versionierte Datenräume (**Spaces**) aus.
+\`phi-spaces\` ist ein transaktionaler, persistenter **Koordinationsraum** in TypeScript nach dem Linda-/JavaSpaces-Modell, mit einem zweiten Space-Server in Rust (\`phi-space-server\`, dasselbe Wire-Protokoll und dieselbe Speicherdatei; siehe [Rust-Portierung](help.topic.architecture_layers#rust-port)). Er hat einen eigenen Speicher: eine SQLite-Datei, die genau ein Prozess besitzt, oder nur den Arbeitsspeicher. Die Bibliothek braucht kein Agenten-Framework. Das optionale Paket \`agent/\` gibt \`@earendil-works/pi-durable\`-Agenten Werkzeuge für den Space; als Speicher des Space dient pi-durable nicht mehr, alte pi-durable-Stores werden nicht übernommen. Anstatt Clients, Hintergrund-Worker, KI-Agenten und Administrationswerkzeuge über Punkt-zu-Punkt-Aufrufe direkt zu verkoppeln, tauschen alle Teilnehmer unveränderliche, typisierte JSON-Objekte (**Entries**) über gemeinsame, versionierte Datenräume (**Spaces**) aus.
 
 Die Bibliothek löst vier Probleme beim Bau langlaufender Systeme und von KI-Agenten-Gruppen:
 
@@ -164,7 +164,7 @@ phi-spaces adopts this model in TypeScript and JSON and adds persistence, revisi
 
 ## What Is phi-spaces And Why Was It Built? {#what-is-phi-spaces}
 
-\`phi-spaces\` is a transactional, persistent **coordination space** in TypeScript, built on the Linda / JavaSpaces model. It has a store of its own: one SQLite file owned by exactly one process, or memory only. The library needs no agent framework. The optional \`agent/\` package gives \`@earendil-works/pi-durable\` agents tools for the space; pi-durable is no longer the space's storage, and old pi-durable stores are not taken over. Instead of coupling clients, background workers, AI agents, and administrative tools through point-to-point calls, every participant exchanges immutable, typed JSON objects (**entries**) through shared, versioned data spaces (**spaces**).
+\`phi-spaces\` is a transactional, persistent **coordination space** in TypeScript, built on the Linda / JavaSpaces model, with a second Space server in Rust (\`phi-space-server\`, the same wire protocol and store file; see [Rust port](help.topic.architecture_layers#rust-port)). It has a store of its own: one SQLite file owned by exactly one process, or memory only. The library needs no agent framework. The optional \`agent/\` package gives \`@earendil-works/pi-durable\` agents tools for the space; pi-durable is no longer the space's storage, and old pi-durable stores are not taken over. Instead of coupling clients, background workers, AI agents, and administrative tools through point-to-point calls, every participant exchanges immutable, typed JSON objects (**entries**) through shared, versioned data spaces (**spaces**).
 
 The library solves four problems in building long-running systems and groups of AI agents:
 
@@ -298,7 +298,11 @@ JSONL ist kein Speicher des Space mehr. pi-durable-Stores werden nicht importier
 
 ### Rust-Portierung {#rust-port}
 
-Das laufende System ist TypeScript. Im Ordner \`rust/\` entstehen \`phi-json\`, \`phi-core\` und \`phi-store\` (\`docs/rust-portierung.en.md\`). R0 (Verträge festschreiben) ist umgesetzt, die Scheiben von R1 (Kern) und die Scheiben 0–4 von R2 (Speicher) sind erledigt. Speicherbudget und mehrere Spaces sind auf R3 verschoben. Einen Rust-Server gibt es noch nicht: Er ist R3.
+Den Space-Server gibt es zweimal: \`src/standalone.ts\` in TypeScript und \`phi-space-server\` in Rust (der Cargo-Workspace in \`rust/\`, \`docs/rust-portierung.en.md\`). Beide sprechen dasselbe Wire-Protokoll, lesen und schreiben dieselbe SQLite-Datei und haben dieselbe Semantik; dieselben Tests halten die Rust-Crates gegen Kern, Speicher und Dienst in TypeScript, Antwort für Antwort. Die Clients bleiben TypeScript (\`RemoteSpace\`, \`phi-spaces/ws\`), eine Anwendung tauscht also nur das Programm hinter der Adresse.
+
+Im Betrieb seit 2026-11-07: Die Space-Prozesse von spaces-mmo (der Accounts-Space auf nano, die vier Regionen auf big), der Space von codemode-chat auf nano und seit 2026-11-08 die Swarm-Spaces dieser Hilfe-Seite auf big und nano laufen auf Rust. Die Spielprozesse, die Rollen des Chats und der Hub bleiben TypeScript-Clients. Gemessen gegen den TypeScript-Server bei gleicher Last: CPU je Befehl 2,8- bis 3,4-mal niedriger (im reinen Dienst 6-mal und mehr), Speicher (RSS) etwa zehnmal niedriger, p95 und p99 in jedem Profil besser. Auf big laufen die vier Regions-Spaces mit 20 bis 85 MB statt 120 bis 175 MB.
+
+Der Rückweg bleibt offen: Der TypeScript-Server öffnet dieselben Dateien. Als Nächstes kommen die Serverprozesse von spaces-mmo (Welt, NPC, Web) nach Rust (R8); das Agenten-Paket, die Modellaufrufe und die Webseiten bleiben TypeScript.
 
 ## Technische Referenz {#technical-reference}
 
@@ -379,7 +383,11 @@ JSONL is no longer a store of the space. pi-durable stores are not imported (dec
 
 ### Rust Port {#rust-port}
 
-The running system is TypeScript. The \`rust/\` folder is growing \`phi-json\`, \`phi-core\` and \`phi-store\` (\`docs/rust-portierung.en.md\`). R0 (fixing the contracts) is done, and the slices of R1 (core) and slices 0–4 of R2 (store) are finished. The memory budget and several spaces are deferred to R3. There is no Rust server yet: that is R3.
+The Space server exists twice: \`src/standalone.ts\` in TypeScript and \`phi-space-server\` in Rust (the cargo workspace in \`rust/\`, \`docs/rust-portierung.en.md\`). Both speak the same wire protocol, read and write the same SQLite file and keep the same semantics; the Rust crates are held against the TypeScript core, store and service by the same tests, reply for reply. The clients stay TypeScript (\`RemoteSpace\`, \`phi-spaces/ws\`), so an application changes only the program behind the address.
+
+In production since 2026-11-07: the Space processes of spaces-mmo (the accounts Space on nano, the four regions on big), the codemode-chat Space on nano and, since 2026-11-08, the swarm Spaces of this help site on big and nano run on Rust. The game processes, the chat roles and the hub stay TypeScript clients. Measured against the TypeScript server under the same load: CPU per command 2.8 to 3.4 times lower (in the bare service 6 times and more), memory (RSS) about ten times lower, p95 and p99 better in every profile. On big the four region Spaces run with 20 to 85 MB instead of 120 to 175 MB.
+
+The way back stays open: the TypeScript server opens the same files. Next come the server processes of spaces-mmo (world, npc, web) in Rust (R8); the agent package, the model calls and the web pages stay TypeScript.
 
 ## Technical Reference {#technical-reference}
 
