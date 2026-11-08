@@ -50,3 +50,17 @@ test("log: the count of a part since the last line looked at; \"An dich\" counts
 	assert.equal(newSince(list, null, { toMe: true }), 2, "looked when the part was empty: all of it");
 	assert.equal(newSince(list, answer()), 5, "a line no longer kept: all of it");
 });
+
+test("the tasks go by place: a place where its most urgent task is, its name left out within it", async () => {
+	const { todosByPlace } = await import("../client/log.ts");
+	const names: Record<string, string> = { kp: "Klippenpfad", w: "Werft", sw: "Salzwiesen" };
+	const t = (room: string, text: string, rank: 0 | 1 | 2) => ({ id: `${room}:${text}`, room, text, rank, x: 0, y: 0 });
+	const g = todosByPlace([
+		t("sw", "In deinem Gehege in Salzwiesen (15 1) liegt Milch bereit.", 0),
+		t("kp", "In deinem Zierbeet in Klippenpfad (10 11) sind 2 Pflanzen reif.", 0),
+		t("w", "In deinem Beet in Werft (8 12) wächst Unkraut.", 1),
+		t("kp", "Dein Beet in Klippenpfad (13 11) braucht bald Wasser.", 1),
+	], (r) => names[r]!);
+	assert.deepEqual(g.map((p) => [p.name, p.todos.length, p.rank]), [["Salzwiesen", 1, 0], ["Klippenpfad", 2, 0], ["Werft", 1, 1]]);
+	assert.deepEqual(g[1]!.todos.map((x) => x.text), ["In deinem Zierbeet (10 11) sind 2 Pflanzen reif.", "Dein Beet (13 11) braucht bald Wasser."]);
+});

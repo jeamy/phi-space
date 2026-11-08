@@ -15,7 +15,7 @@ import { StatsPanel } from "./StatsPanel.tsx";
 import { onFps, startFps, type FpsState } from "./fps.ts";
 import { CommandHelp } from "./CommandHelp.tsx";
 import type { HelpView } from "../shared/model.ts";
-import { appendLine, isComing, isForMe, newSince } from "./log.ts";
+import { appendLine, isComing, isForMe, newSince, todosByPlace } from "./log.ts";
 import { travelText, TRAVEL_GIVE_UP_MS, TRAVEL_NOTE_MS } from "./travel.ts";
 import type { ChatState } from "../shared/frames.ts";
 import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
@@ -1252,7 +1252,9 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 							{logPart === "tips" ? (
 								<div className="log task-list">{hints.length ? hints.map((h) => <p key={h.id} className={`pack-hint${hintsSeen.has(h.id) ? "" : " new"}`}>{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>) : <p className="muted">Gerade kein Tipp: sammle etwas, dann steht hier, was daraus werden kann.</p>}</div>
 							) : logPart === "todo" ? (
-								<div className="log task-list">{todos.length ? todos.map((t) => <p key={t.id} className={`task rank-${t.rank}`}>{t.text}</p>) : <p className="muted">Nichts zu tun: deine Äcker, Beete, Baustellen und Tiere warten auf nichts.</p>}</div>
+								<div className="log task-list">{todos.length ? todosByPlace(todos, (r) => atlas?.rooms.find((x) => x.roomId === r)?.name ?? r).map((g) => g.todos.length === 1 ? <p key={g.room} className={`task rank-${g.rank}`}>{todos.find((t) => t.id === g.todos[0]!.id)!.text}</p> : (
+									<details key={g.room} className={`task-place rank-${g.rank}`}><summary>{g.name}: {g.todos.length} Aufgaben{g.todos.some((t) => t.rank === 0) ? `, ${g.todos.filter((t) => t.rank === 0).length} jetzt` : ""}</summary>{g.todos.map((t) => <p key={t.id} className={`task rank-${t.rank}`}>{t.text}</p>)}</details>
+								)) : <p className="muted">Nichts zu tun: deine Äcker, Beete, Baustellen und Tiere warten auf nichts.</p>}</div>
 							) : logView}
 							{behind && logPart !== "tips" && logPart !== "todo" && <button className="log-new" onClick={toLogEnd}>Neue Meldungen</button>}
 							<div className="quick">{["look", "who", "inventory", "time", "reputation"].map((c) => <button key={c} onClick={() => send(c)}>{c}</button>)}</div>

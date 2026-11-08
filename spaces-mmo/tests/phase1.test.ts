@@ -113,7 +113,8 @@ test("a give whose world worker dies in the middle: the item is never lost or do
 		await stack.worldProcess({ SPACES_MMO_FAULT_PAUSE: "" });
 		await eventually(async () => (await settled(stack.space, "treibholz-1"))?.location === b.h.me.charId, 15_000, "the give completed");
 		assert.equal((await items(stack.space, { itemId: "treibholz-1" })).length, 1, "never two");
-		await b.p.until((f) => f.t === "msg" && f.m.text === "Anna gibt Bert Treibholz.");
+		const told = await b.p.until((f) => f.t === "msg" && f.m.text === "Anna gibt Bert Treibholz.") as Extract<ServerFrame, { t: "msg" }>;
+		assert.equal(told.m.toMe, true, "a gift to him: under \"An dich\"");
 		await a.p.leave(); await b.p.leave();
 	} finally { await srv.close(); await stack.close(); }
 });

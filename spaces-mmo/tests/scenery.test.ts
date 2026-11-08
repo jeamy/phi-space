@@ -16,6 +16,9 @@ test("every piece says what it is and how it can be cleared", () => {
 	assert.match(sceneryText(w, { name: "Hoher Stein", fixed: true, yields: [], left: 0 }), /aufrechter Stein.*bleibt stehen/);
 	assert.match(sceneryText(w, { name: "Felsbrocken", yields: [{ proto: "stein", count: 1 }], left: 3 }), /noch 3 Arbeit\), das bringt 1 Stein\.$/);
 });
+test("every market place shows a stall that stays", () => {
+	for (const room of w.market.rooms) assert.ok((w.scenery ?? []).some((s) => s.room === room && s.model === "stand" && s.fixed), `${room} has no market stall`);
+});
 const cells = (s: { x: number; y: number; w: number; h: number }) => Array.from({ length: s.w * s.h }, (_, i) => ({ x: s.x + (i % s.w), y: s.y + Math.floor(i / s.w) }));
 
 test("no piece stands on a way, a door, a fire, a thing or a person's place, and every exit of a room still reaches the others", () => {

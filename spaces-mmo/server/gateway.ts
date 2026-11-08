@@ -89,11 +89,12 @@ const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, 
 /** The names in the list of who plays ("Gerade spielen 3: Anna (Graue Bucht), Bo (Fischerdorf)"). */
 const whoNames = (text: string) => (text.split(": ").slice(1).join(": ")).split(", ").map((x) => x.replace(/\s*\([^)]*\)\s*$/, "").trim()).filter(Boolean);
 /** Whether a message is meant for the viewer: written to them alone by someone else (not the answer to their own
- *  command, not an error), or someone else's words that name them. */
+ *  command, not an error), someone else's words that name them, or someone else's deed told to the room that names
+ *  them ("Anna gibt Bert Treibholz." for Bert). */
 function forViewer(m: MsgFields, viewer: string, name: string): boolean {
 	if (m.kind === "error" || (m.fromId ?? "") === viewer || (name && m.from === name)) return false;
 	if (m.to === viewer) return !!m.fromId;
-	if (!name || !["say", "emote", "channel"].includes(m.kind)) return false;
+	if (!name || !(["say", "emote", "channel"].includes(m.kind) || (m.kind === "info" && m.actor))) return false;
 	const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 	return new RegExp(`(^|[^\\p{L}\\p{N}])${esc}([^\\p{L}\\p{N}]|$)`, "iu").test(m.text);
 }

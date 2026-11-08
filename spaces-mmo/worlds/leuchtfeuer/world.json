@@ -2178,6 +2178,19 @@
 			]
 		},
 		{
+			"sceneryId": "graue-bucht-1",
+			"room": "graue-bucht",
+			"x": 13,
+			"y": 10,
+			"model": "stand",
+			"name": "Marktstand",
+			"w": 3,
+			"h": 1,
+			"fixed": true,
+			"work": 0,
+			"yields": []
+		},
+		{
 			"sceneryId": "wiesen-boot",
 			"room": "salzwiesen",
 			"x": 5,
@@ -2736,6 +2749,19 @@
 			"yields": []
 		},
 		{
+			"sceneryId": "riffdorf-3",
+			"room": "riffdorf",
+			"x": 14,
+			"y": 12,
+			"model": "stand",
+			"name": "Marktstand",
+			"w": 3,
+			"h": 1,
+			"fixed": true,
+			"work": 0,
+			"yields": []
+		},
+		{
 			"sceneryId": "riffdorf-steg",
 			"room": "riffdorf",
 			"x": 20,
@@ -2965,6 +2991,19 @@
 			]
 		},
 		{
+			"sceneryId": "schaerenhafen-3",
+			"room": "schaerenhafen",
+			"x": 7,
+			"y": 6,
+			"model": "stand",
+			"name": "Marktstand",
+			"w": 3,
+			"h": 1,
+			"fixed": true,
+			"work": 0,
+			"yields": []
+		},
+		{
 			"sceneryId": "schaerenhafen-steg",
 			"room": "schaerenhafen",
 			"x": 0,
@@ -3079,6 +3118,19 @@
 					"count": 1
 				}
 			]
+		},
+		{
+			"sceneryId": "rauchhafen-3",
+			"room": "rauchhafen",
+			"x": 8,
+			"y": 6,
+			"model": "stand",
+			"name": "Marktstand",
+			"w": 3,
+			"h": 1,
+			"fixed": true,
+			"work": 0,
+			"yields": []
 		},
 		{
 			"sceneryId": "rauchhafen-steg",
@@ -3242,6 +3294,19 @@
 					"count": 1
 				}
 			]
+		},
+		{
+			"sceneryId": "krabbenbucht-4",
+			"room": "krabbenbucht",
+			"x": 8,
+			"y": 6,
+			"model": "stand",
+			"name": "Marktstand",
+			"w": 3,
+			"h": 1,
+			"fixed": true,
+			"work": 0,
+			"yields": []
 		},
 		{
 			"sceneryId": "krabbenbucht-steg",

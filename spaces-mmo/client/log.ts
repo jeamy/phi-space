@@ -27,3 +27,17 @@ export function newSince<T extends object>(list: readonly T[], seen: T | null | 
 	const since = at >= 0 ? list.slice(at + 1) : seen === undefined ? [] : list;
 	return o.toMe ? since.filter((l) => "toMe" in l && l.toMe === true).length : since.length;
 }
+
+/** The tasks by the place they are in, each place where its most urgent task stands; within a place the place's name
+ *  is left out of the words ("In deinem Beet in Werft (8 12) …" → "In deinem Beet (8 12) …"). */
+export function todosByPlace<T extends { room: string; text: string; rank: number }>(todos: readonly T[], nameOf: (room: string) => string): Array<{ room: string; name: string; todos: T[]; rank: number }> {
+	const places = new Map<string, { room: string; name: string; todos: T[]; rank: number }>();
+	for (const t of todos) {
+		const name = nameOf(t.room);
+		let p = places.get(t.room);
+		if (!p) places.set(t.room, (p = { room: t.room, name, todos: [], rank: t.rank }));
+		p.rank = Math.min(p.rank, t.rank);
+		p.todos.push({ ...t, text: t.text.replace(` in ${name} (`, " (") });
+	}
+	return [...places.values()];
+}

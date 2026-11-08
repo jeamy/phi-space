@@ -26,7 +26,7 @@ two or three players.
 ## Kulissen (scenery)
 
 Rooms show what their descriptions promise (`worlds/leuchtfeuer/scenery.ts`, Grey Island first). A piece holds its cells with Plot
-entries like a building. Jetties are `fixed`, and those on a way out are `through` (they hold no cell). The rest anyone clears with
+entries like a building. Every market place has at least one market stall (`fixed`), so a market is seen at once. Jetties are `fixed`, and those on a way out are `through` (they hold no cell). The rest anyone clears with
 `räume`: work by work with a rest between, as on a site, in a settlement from the rank of helper. The last stroke frees the cells,
 gives the material to whoever did it and writes `SceneryGone`, so no new world version brings the piece back; a piece also stays
 away where someone built meanwhile. The page shows it going, dust in 2D, sinking in 3D.

@@ -579,6 +579,11 @@ button.cmd-word { cursor: pointer; display: inline; min-height: 0; }
 .task { padding: 4px 8px; border-left: 3px solid var(--line-strong); }
 .task.rank-0 { border-left-color: var(--warning); color: var(--text-strong); }
 .task.rank-2 { color: var(--muted); }
+.task-place { margin: 0 0 6px; }
+.task-place > summary { cursor: pointer; padding: 4px 8px; border-left: 3px solid var(--line-strong); font-weight: 600; }
+.task-place.rank-0 > summary { border-left-color: var(--warning); color: var(--text-strong); }
+.task-place.rank-2 > summary { color: var(--muted); }
+.task-place > .task { margin: 4px 0 4px 12px; }
 .task-list .pack-hint.new { border-left: 3px solid var(--warning); padding-left: 8px; }
 
 /* a wanted notice's answers and its time (TradePanel) */
