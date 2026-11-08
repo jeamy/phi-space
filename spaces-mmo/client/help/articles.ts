@@ -255,7 +255,7 @@ In der 3D-Karte wird es nachts dunkel; deine Figur trägt dann eine Laterne, die
 
 ## Weltkarte {#atlas}
 
-Die Weltkarte zeigt alle Orte des Archipels. Am Rechner liegt sie klein am Rand; ein Klick vergrößert sie, dann wählst du einen Ort mit einem Klick. Am Handy öffnet ein Tipp auf den Raumnamen sie als Seite. Der grüne Punkt bist du, farbige Quadrate sind deine Bauten, Baustellen, Beete und Äcker, brennende Feuer sind markiert. Die Legende unter der Karte sagt, welche Farbe was bedeutet, und wie viele Bauten, Baustellen, Beete, Äcker und Ruinen du hast.
+Die Weltkarte zeigt alle Orte des Archipels. Am Rechner liegt sie klein am Rand; ein Klick vergrößert sie, dann wählst du einen Ort mit einem Klick. Am Handy öffnet ein Tipp auf den Raumnamen sie als Seite. Der grüne Punkt bist du, farbige Quadrate sind deine Bauten, Baustellen, Beete und Äcker, brennende Feuer sind markiert, ein roter Punkt unten rechts in einem Ort zeigt einen Markt mit Marktbrett. Die Legende unter der Karte sagt, welche Farbe was bedeutet, und wie viele Bauten, Baustellen, Beete, Äcker und Ruinen du hast.
 
 Wählst du einen Ort, zieht die Karte eine gestrichelte Linie von dir dorthin und zeigt, ob sein Feuer brennt. Brennt es und erlaubt deine Insel das Beamen, steht dort **Hierher beamen** mit dem Preis ([Beamen](help.game.village#travel)).
 
@@ -363,7 +363,7 @@ In the 3D map it grows dark at night; your figure then carries a lantern that li
 
 ## World map {#atlas}
 
-The world map shows every place of the archipelago. On a desktop it sits small at the edge; a click enlarges it, and then a click picks a place. On a phone a tap on the room name opens it as a page. The green dot is you, coloured squares are your buildings, sites, beds and fields, burning fires are marked. The legend below the map says what each colour means, and how many buildings, sites, beds, fields and ruins you have.
+The world map shows every place of the archipelago. On a desktop it sits small at the edge; a click enlarges it, and then a click picks a place. On a phone a tap on the room name opens it as a page. The green dot is you, coloured squares are your buildings, sites, beds and fields, burning fires are marked, and a red dot in the lower right of a place shows a market with its board. The legend below the map says what each colour means, and how many buildings, sites, beds, fields and ruins you have.
 
 If you pick a place, the map draws a dashed line from you to it and shows whether its fire burns. If it burns and your island allows beaming, **Hierher beamen** appears there with the price ([Beaming](help.game.village#travel)).
 
@@ -913,7 +913,8 @@ Marktbretter stehen an sechs Orten: Graue Bucht, Markt von Kupferhafen, Riffdorf
 
 - \`markt\`: Angebote ansehen
 - \`markt biete <ding> für <n>\`: etwas für n Münzen einstellen; \`markt biete 10 muscheln für 15\` stellt zehn Muscheln zusammen für 15 Münzen ein (auch „verkaufe 10 muscheln um 15 münzen“), wer kauft, bekommt alle zehn
-- \`markt kaufe <nr>\`: Angebot Nummer nr kaufen
+- \`markt biete <ding> aus truhe [nr] für <n>\`: dasselbe direkt aus einer deiner Truhen in dieser Gegend, egal wo sie steht (\`markt biete 10 muscheln aus truhe 2 für 15\`, auch „aus der hütte“); nimmst du es zurück oder läuft es ab, kommt es in deinen Rucksack
+- \`markt kaufe <ding>\`: das billigste Angebot dieser Sache kaufen (\`markt kaufe gans\`); \`markt kaufe 10 muscheln für 15\` nimmt genau diese Menge zu diesem Preis, so schickt es auch der Knopf „Kaufen“; \`markt kaufe <nr>\` kauft Angebot Nummer nr
 - \`markt zurück <nr>\`: eigenes Angebot zurücknehmen
 
 Ein Angebot bleibt einen Tag stehen, dann kommt die Ware zurück.
@@ -976,7 +977,8 @@ Market boards stand in six places: Graue Bucht, the market of Kupferhafen, Riffd
 
 - \`market\`: see the offers
 - \`market sell <thing> for <n>\`: post something for n coins; \`market sell 10 shells for 15\` posts ten shells together for 15 coins, and whoever buys gets all ten
-- \`market buy <nr>\`: buy offer number nr
+- \`market sell <thing> from chest [nr] for <n>\`: the same straight from one of your chests in this region, wherever it stands (\`market sell 10 shells from chest 2 for 15\`); taken back or lapsed, it comes into your pack
+- \`market buy <thing>\`: buy the cheapest offer of that thing (\`market buy gans\`); \`market buy 10 muscheln for 15\` takes exactly that count at that price, which is what the Buy button sends; \`market buy <nr>\` buys offer number nr
 - \`market withdraw <nr>\`: take your own offer back
 
 An offer stays up for a day, then the goods come back.

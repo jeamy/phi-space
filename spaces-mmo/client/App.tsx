@@ -302,7 +302,7 @@ function NameMenu({ at, name, groups, talk, invite, ignore, close, sheet = false
 /** Trade as buttons: offers to and from the player, a form for a new offer, the order board and the market board when
  *  standing at them. Every button sends the text command the help names. */
 function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, send }: { /** the thing a tap in the pack brought here */ item: { name: string } | null; trade: TradeView; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; guest: boolean; offerTo: string | null; setOfferTo: (n: string | null) => void; send: (line: string, echo?: boolean, opensLog?: boolean) => void }) {
-	// the market board's own lines keep the market in front: its lists change in place, the answer shows as the notice and in the log
+	// the market board's and the order board's own lines keep them in front (a taken order is delivered from here): their lists change in place, the answer shows as the notice and in the log
 	const board = (line: string) => send(line, true, false);
 	const carried = [...objs.values()].filter((o) => o.kind === "item" && o.location === me);
 	const others = [...chars.values()].filter((c) => c.charId !== me);
@@ -357,13 +357,13 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 				</form>
 			)}
 			{offerTo === null && !guest && others.length > 0 && carried.length > 0 && <button className="link" onClick={() => setOfferTo("")}>Tausch anbieten …</button>}
-			{trade.myOrder && <><h3>Dein Auftrag</h3><ul><li><span>{trade.myOrder.text}</span>{trade.myOrder.here && <><button onClick={() => send("auftrag liefere")}>Liefern</button><button onClick={() => send("auftrag aufgeben")}>Aufgeben</button></>}</li></ul>
+			{trade.myOrder && <><h3>Dein Auftrag</h3><ul><li><span>{trade.myOrder.text}</span>{trade.myOrder.here && <><button onClick={() => board("auftrag liefere")}>Liefern</button><button onClick={() => board("auftrag aufgeben")}>Aufgeben</button></>}</li></ul>
 				{!trade.myOrder.here && <p className="muted" style={{ margin: "0 0 4px" }}>Abliefern an einer Auftragstafel: {trade.myOrder.boards.join(", ")}.</p>}</>}
 			{trade.orders && <><h3>Auftragstafel</h3>{trade.orders.length ? <ul>{trade.orders.map((o) => (
-				<li key={o.nr}><span>{o.text} ({o.reward} {o.reward === 1 ? "Münze" : "Münzen"})</span>{!guest && !trade.myOrder && <button onClick={() => send(`auftrag nimm ${o.nr}`)}>Nehmen</button>}</li>
+				<li key={o.nr}><span>{o.text} ({o.reward} {o.reward === 1 ? "Münze" : "Münzen"})</span>{!guest && !trade.myOrder && <button onClick={() => board(`auftrag nimm ${o.nr}`)}>Nehmen</button>}</li>
 			))}</ul> : <p className="muted">Gerade keine Aufträge.</p>}</>}
 			{trade.listings && <><h3>Marktbrett</h3>{trade.listings.length ? <ul>{trade.listings.map((l) => (
-				<li key={l.nr}><span>{l.count > 1 ? `${l.count}× ` : ""}{l.itemName} – {l.price} {l.price === 1 ? "Münze" : "Münzen"} ({l.mine ? "deins" : l.sellerName})</span>{!guest && (l.mine ? <button onClick={() => board(`markt zurück ${l.nr}`)}>Zurückholen</button> : <button onClick={() => board(`markt kaufe ${l.nr}`)}>Kaufen</button>)}</li>
+				<li key={l.nr}><span>{l.count > 1 ? `${l.count}× ` : ""}{l.itemName} – {l.price} {l.price === 1 ? "Münze" : "Münzen"} ({l.mine ? "deins" : l.sellerName})</span>{!guest && (l.mine ? <button onClick={() => board(`markt zurück ${l.nr}`)}>Zurückholen</button> : <button onClick={() => board(`markt kaufe ${l.count > 1 ? `${l.count} ` : ""}${l.itemName.toLowerCase()} für ${l.price}`)}>Kaufen</button>)}</li>
 			))}</ul> : <p className="muted">Das Brett ist leer.</p>}
 			{!guest && carried.length > 0 && (
 				<form className="row" onSubmit={(e) => { e.preventDefault(); if (sell) board(`markt biete ${Math.max(1, Number(many) || 1)} ${sell} für ${price}`); setSell(""); setMany("1"); }}>

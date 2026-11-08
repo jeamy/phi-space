@@ -22,8 +22,8 @@ test("rules: common sentences become commands; commands and talk stay as they ar
 	assert.equal(t("lauf richtung klippenpfad"), "go ost");
 	assert.equal(t("go to the east"), "go ost");
 	assert.equal(t("nimm das Treibholz auf"), "get treibholz");
-	assert.equal(t("kaufe die Muschel am Markt"), "market kaufe 1");
-	assert.equal(t("kaufe am markt treibholz"), "market kaufe 2");
+	assert.equal(t("kaufe die Muschel am Markt"), "market kaufe muschel");
+	assert.equal(t("kaufe am markt treibholz"), "market kaufe treibholz");
 	assert.equal(t("kaufe Kompass am markt"), "market", "not listed: show the board");
 	assert.equal(t("biete Muschel am Markt für 2 an"), "market biete muschel für 2");
 	assert.equal(t("verkaufe das treibholz für 3 münzen"), "market biete treibholz für 3");
@@ -33,6 +33,7 @@ test("rules: common sentences become commands; commands and talk stay as they ar
 	assert.equal(t("schick 2 tang in meine truhe in den dünen"), "verstaue 2 tang in dünen");
 	assert.equal(t("leg die muscheln in die truhe"), "verstaue muscheln", "the one beside or the only one");
 	assert.equal(t("verkaufe 10 muscheln um 15 münzen"), "market biete 10 muscheln für 15");
+	assert.equal(t("verkaufe 10 muscheln aus der truhe für 15"), "market biete 10 muscheln aus der truhe für 15");
 	assert.equal(t("suche am markt ziege für 5"), "market suche ziege für 5");
 	assert.equal(t("lege holz ins feuer"), "put holz in feuer");
 	assert.equal(t("legeholz ins feuer"), "put holz in feuer");

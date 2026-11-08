@@ -92,7 +92,11 @@ test("market: a listing waits in escrow; a purchase moves listing, coins and ite
 		assert.equal((await s.readAll({ type: "Item", fields: { location: "market", proto: "muschel" } })).length, 10);
 		await b.p.until((f) => f.t === "trade" && f.trade.listings?.[0]?.count === 10);
 		assert.match(await does(b.p, "markt", "Marktbrett:"), /1\. 10× Muschel für 15 Münzen \(von Haendlerin\)/);
-		await does(b.p, "markt kaufe 1", "Du kaufst 10× Muschel vom Marktbrett.");
+		// by what it is, as the page's button says it: its place on the board moves when another buys first
+		assert.match(await does(b.p, "markt kaufe gans", "Brett"), /nichts, was „gans“ heißt/);
+		assert.match(await does(b.p, "markt kaufe 10 muscheln für 12", "Brett"), /So hängt es nicht mehr/);
+		assert.match(await does(a.p, "markt kaufe muschel", "eigenes"), /zurück/);
+		await does(b.p, "markt kaufe 10 muschel für 15", "Du kaufst 10× Muschel vom Marktbrett.");
 		assert.equal((await pack(s, b.me, "muschel")).length, 11);
 		assert.equal((await pack(s, a.me, "muenze")).length, 17);
 		assert.equal((await s.readAll({ type: "Item", fields: { location: "market" } })).length, 0);

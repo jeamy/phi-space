@@ -1,7 +1,7 @@
 "use client";
 // The overview of the world, top left over the map (docs/architektur.en.md, "Übersichtskarte"): every room of the islands
 // at its place, one pixel per cell, drawn once on a plain 2D canvas; on top what changes: fog, burning fires, people
-// (light dots) and NPCs (dark dots), the ferries as dashed lines, the own room outlined. A tap enlarges it; the
+// (light dots) and NPCs (dark dots), the markets (red dots), the ferries as dashed lines, the own room outlined. A tap enlarges it; the
 // button folds it away (remembered per browser; on a phone it starts folded). It shows the world, it never changes it.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AtlasState, AtlasView } from "../shared/frames.ts";
@@ -18,7 +18,7 @@ const MINE: Record<AtlasState["mine"][number]["kind"], { color: string; label: s
 };
 
 /** The round marks of the map, with the colours they are drawn in (below). */
-const DOTS = [["#AED83C", "Du"], ["#ffb02e", "Feuer brennt"], ["#5a3b2a", "Feuer aus"], ["#fff7e0", "Personen"], ["#2c2f36", "NPCs"]] as const;
+const DOTS = [["#AED83C", "Du"], ["#ffb02e", "Feuer brennt"], ["#5a3b2a", "Feuer aus"], ["#fff7e0", "Personen"], ["#2c2f36", "NPCs"], ["#e0281e", "Markt"]] as const;
 
 /** What the colours on the map mean: the round marks (the player, the fires, who is in a room) and the squares of the
  *  player's own things, each kind with how many it has (dimmed the kinds it has none of yet). */
@@ -120,6 +120,8 @@ export function Atlas({ atlas, state, ship = null, page = false, me = null, onBe
 				g.fillStyle = lit ? DOTS[1][0] : DOTS[2][0]; g.fill();
 				if (lit) { g.beginPath(); g.arc((px + f.x + 0.5) * s, (py + f.y + 0.5) * s, 14, 0, Math.PI * 2); g.fillStyle = "rgba(255,176,46,0.25)"; g.fill(); }
 			}
+			// a market: a red dot in the room's lower right corner (the people's dots are lower left, the island's name over the top), ringed so it holds on any ground
+			if (r.market) { g.beginPath(); g.arc((px + W - 3) * s, (py + H - 3) * s, 5.5, 0, Math.PI * 2); g.fillStyle = DOTS[5][0]; g.fill(); g.lineWidth = 1.5; g.strokeStyle = "#fff7e0"; g.stroke(); }
 			const [humans = 0, npcs = 0] = state?.people[r.roomId] ?? [];
 			const dots = [...Array(Math.min(humans, 6)).fill(DOTS[3][0]), ...Array(Math.min(npcs, 6)).fill(DOTS[4][0])];
 			dots.forEach((color, i) => { g.beginPath(); g.arc((px + 3 + i * 2.6) * s, (py + H - 3) * s, 3.2, 0, Math.PI * 2); g.fillStyle = color; g.fill(); });

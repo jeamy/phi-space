@@ -121,3 +121,24 @@ test("load: 250 things go into a chest and out again in portions of MOVES_PER_CO
 		assert.equal((await s.readAll({ type: "Item", fields: { location: "h-near", proto: "treibholz" } })).length, 20);
 	} finally { await srv.close(); }
 });
+
+test("load: the market takes from one's chest wherever one stands (markt biete … aus truhe …)", { timeout: 180_000 }, async () => {
+	const srv = await startServer({ worldEnv: { SPACES_MMO_PACK_MAX: "40" } });
+	try {
+		const s = srv.stack.space;
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Trägerin", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		const c = await charOf(s, me);
+		await hut(s, "h-far", me, c.accountId, "anleger", 4, 4);
+		await give(s, "h-far", "muschel", 12);
+		assert.match(await does(p, "markt biete 10 muscheln aus truhe für 15", "Marktbrett"), /hängst 10× Muschel für 15 Münzen ans Marktbrett \(aus der Truhe\)/);
+		assert.equal((await s.readAll({ type: "Item", fields: { location: "h-far", proto: "muschel" } })).length, 2);
+		assert.equal((await s.readAll({ type: "Item", fields: { location: "market", proto: "muschel" } })).length, 10);
+		assert.equal(await pack(s, me, "muschel"), 0, "the pack is not touched");
+		assert.match(await does(p, "markt biete 5 muscheln aus truhe 1 für 3", "Truhe"), /In der Truhe ist nicht: 5× Muschel/);
+		assert.match(await does(p, "markt biete muschel aus truhe 2 für 3", "Truhe"), /Eine Truhe 2 hast du nicht/);
+		await does(p, "markt biete muschel aus der hütte für 2", "(aus der Truhe)");
+		assert.equal((await s.readAll({ type: "Item", fields: { location: "h-far", proto: "muschel" } })).length, 1);
+	} finally { await srv.close(); }
+});

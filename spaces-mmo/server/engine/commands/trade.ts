@@ -7,7 +7,7 @@ import { fieldsOf, type AccountFields, type BuildingFields, type CharacterFields
 import { readExisting, StillHeld, peek } from "../../space.ts";
 import type { Command } from "../cmdsets.ts";
 import { byName, CommandError, NotUnderstood, inventory, msg, stem, type CommandCtx, itemsNamed } from "../context.ts";
-import { bau, distTo, planOf } from "./build.ts";
+import { bau, chestForSale, distTo, planOf } from "./build.ts";
 import { boardLines } from "./siteorder.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
@@ -179,12 +179,26 @@ export const lotOf = (l: Pick<ListingFields, "itemName" | "count">) => ((l.count
 
 const market: Command = {
 	key: "market", aliases: ["markt"],
-	help: "market – das Marktbrett: market biete <ding> für <n>, market kaufe <nr>, market zurück <nr>; Gesuche: market suche <ding> für <n>, market liefere <nr> [für <n>], market antworte <nr> ab <n>, market suche zurück <nr> (Preise in Münzen)",
+	help: "market – das Marktbrett: market biete <ding> [aus truhe [nr]] für <n>, market kaufe <ding> [für <n>] oder <nr>, market zurück <nr>; Gesuche: market suche <ding> für <n>, market liefere <nr> [für <n>], market antworte <nr> ab <n>, market suche zurück <nr> (Preise in Münzen)",
 	async func(c, arg) {
 		if (!c.world.market.rooms.includes(c.actor.room)) throw new CommandError(`Hier steht kein Marktbrett. Marktbretter stehen in: ${roomNames(c.world, c.world.market.rooms)}.`);
 		const [verb = "", ...rest] = arg.trim().split(/\s+/);
 		const all = await listings(c.space, c.actor.room);
 		const nr = (s: string | undefined) => { const n = Number(s); if (!Number.isInteger(n) || n < 1 || n > all.length) throw new CommandError("Diese Nummer steht nicht auf dem Brett. „markt“ zeigt es."); return all[n - 1]!; };
+		/** A lot on the board by what it is, not by its place, which moves when another buys first: "markt kaufe gans" (the
+		 *  cheapest), "markt kaufe 10 muscheln für 15" (that count at that price; the page's buttons say it so). */
+		const byLot = (s: string) => {
+			const m = /^(?:(\d+)\s*[x×]?\s+)?(.+?)(?:\s+(?:für|fuer|for|um)\s+(\d+)(?:\s+(?:münzen?|muenzen?|coins?))?)?$/i.exec(s.trim());
+			if (!m) throw new NotUnderstood("So geht es: markt kaufe <ding>, auch markt kaufe 10 muscheln für 15 oder markt kaufe <nr>.");
+			const name = m[2]!.trim(), p = protoNamed(c.world, name), count = m[1] ? Number(m[1]) : null, price = m[3] ? Number(m[3]) : null;
+			const named = (l: ListingFields) => stem(l.itemName) === stem(name) || (!!p && stem(l.itemName) === stem(p.name));
+			const fits = all.filter((l) => named(l.f) && l.f.seller !== c.actor.charId && (count === null || (l.f.count ?? 1) === count) && (price === null || l.f.price === price));
+			if (!fits.length) {
+				const any = all.some((l) => named(l.f));
+				throw new CommandError(!any ? `Am Brett hängt nichts, was „${name.slice(0, 30)}“ heißt. „markt“ zeigt, was da ist.` : all.some((l) => named(l.f) && l.f.seller !== c.actor.charId) ? "So hängt es nicht mehr am Brett (jemand war schneller, oder Menge und Preis sind andere). „markt“ zeigt, was da ist." : "Das ist dein eigenes Angebot; „markt zurück“ holt es zurück.");
+			}
+			return fits.reduce((a, b) => (b.f.price < a.f.price ? b : a));
+		};
 		const coin = c.world.currency;
 		const sought = await wanteds(c.space, c.actor.room);
 		const wnr = (s: string | undefined) => { const n = Number(s); if (!Number.isInteger(n) || n < 1 || n > sought.length) throw new CommandError("Dieses Gesuch steht nicht am Brett. „markt“ zeigt es."); return sought[n - 1]!; };
@@ -272,17 +286,20 @@ const market: Command = {
 			if (!m) throw new NotUnderstood("So geht es: markt biete <ding> für <n>, auch markt biete 10 muscheln für 15");
 			const price = Number(m[2]);
 			if (price < 1 || price > 1000) throw new CommandError("Ein Preis liegt zwischen 1 und 1000 Münzen.");
-			const got = pick(await inventory(c), parseSpec(m[1]!).slice(0, 1), c.world);
-			if ("missing" in got) throw new (got.unknown ? NotUnderstood : CommandError)(`Du hast nicht: ${got.missing}.`);
+			// "… aus truhe 2", "… aus der hütte": from a chest of one's own in this region, wherever one stands
+			const fromChest = /^(.+?)\s+(?:aus|from)\s+(.+)$/i.exec(m[1]!);
+			const chest = fromChest ? await chestForSale(c, fromChest[2]!) : null;
+			const got = pick(chest ? chest.items : await inventory(c), parseSpec(fromChest ? fromChest[1]! : m[1]!).slice(0, 1), c.world);
+			if ("missing" in got) throw new (got.unknown ? NotUnderstood : CommandError)(chest ? `In der Truhe ist nicht: ${got.missing}.` : `Du hast nicht: ${got.missing}.`);
 			const item = got.items[0]!.f, listingId = `l-${randomBytes(5).toString("hex")}`;
 			if (item.proto === "muenze") throw new CommandError("Münzen gegen Münzen zu tauschen ergibt nichts; stelle etwas anderes ans Marktbrett.");
-			for (const i of got.items) await move(c, i.f, c.actor.charId, "market", { listing: listingId, seller: c.actor.charId });
+			for (const i of got.items) await move(c, i.f, chest ? chest.b.buildId : c.actor.charId, "market", { listing: listingId, seller: c.actor.charId });
 			const lot: ListingFields = { listingId, seller: c.actor.charId, sellerName: c.actor.name, itemId: item.itemId, itemName: item.name, ...(got.items.length > 1 ? { count: got.items.length } : {}), price, room: c.actor.room, at: timeNow(), expiresWorldMs: (await decayNowOf(c.space, c.txn)) + c.world.market.listMs };
 			await c.space.write({ type: "Listing", fields: lot as never }, c.txn, FOREVER);
-			return msg(c, "*", "info", `$you() $conj(hängst|hängt) ${lotOf(lot)} für ${price} Münze${price === 1 ? "" : "n"} ans Marktbrett.`, { templ: true });
+			return msg(c, "*", "info", `$you() $conj(hängst|hängt) ${lotOf(lot)} für ${price} Münze${price === 1 ? "" : "n"} ans Marktbrett${chest ? " (aus der Truhe)" : ""}.`, { templ: true });
 		}
 		if (/^(kaufe|buy)$/i.test(verb)) {
-			const l = nr(rest[0]);
+			const l = /^\d+$/.test(rest.join(" ").trim()) ? nr(rest[0]) : byLot(rest.join(" "));
 			if (l.f.seller === c.actor.charId) throw new CommandError("Das ist dein eigenes Angebot; „markt zurück“ holt es zurück.");
 			if (!(await c.space.take({ type: "Listing", id: l.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Zu spät – jemand anderes kauft gerade.");
 			const coins = byProto(await inventory(c), coin, l.f.price);

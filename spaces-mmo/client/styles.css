@@ -415,8 +415,8 @@ html.page-held body { position: fixed; inset: 0; width: 100%; touch-action: mani
 .sheet { background: var(--surface); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .game-touch.sheet { display: block; }
 .game-touch.sheet .stage { position: absolute; inset: 0; }
-.game-touch.sheet > section.sheet { position: absolute; z-index: 10; --sheet-w: min(100%, 720px); width: var(--sheet-w); left: calc(var(--sheet-x, 0.5) * (100% - var(--sheet-w))); bottom: 0; max-height: 100%; border-radius: 20px 20px 0 0; border-top: 1px solid var(--line-strong); box-shadow: 0 -8px 28px var(--shadow); padding-bottom: env(safe-area-inset-bottom); transition: height .22s ease; }
-@media (prefers-reduced-motion: reduce) { .game-touch.sheet > section.sheet { transition: none; } }
+.game-touch.sheet > section.sheet { position: absolute; z-index: 10; --sheet-w: min(100%, 720px); width: var(--sheet-w); left: calc(var(--sheet-x, 0.5) * (100% - var(--sheet-w))); bottom: 0; max-height: 100%; border-radius: 20px 20px 0 0; border-top: 1px solid var(--line-strong); box-shadow: 0 -8px 28px var(--shadow); padding-bottom: env(safe-area-inset-bottom); }
+/* the sheet glides by a transform (Sheet.tsx), not a transition of its height; with reduced motion it goes there at once */
 .game-touch.sheet > section.sheet-peek { height: calc(58px + env(safe-area-inset-bottom)); }
 .game-touch.sheet > section.sheet-half { height: 52%; }
 .game-touch.sheet > section.sheet-full { height: calc(100% - env(safe-area-inset-top) - 8px); }

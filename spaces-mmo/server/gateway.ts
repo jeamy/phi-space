@@ -647,7 +647,7 @@ export class Gateway {
 
 	/** The overview: the rooms with a place on it (rooms builders dug have none) and the ways between them. */
 	#atlas(): AtlasView {
-		const rooms = [...this.#rooms.values()].filter((r) => r.map).map((r) => ({ roomId: r.roomId, name: r.name, island: r.island ?? "", x: r.map!.x, y: r.map!.y, ground: r.ground, fires: [...this.#objs.values()].filter((o) => o.kind === "beacon" && o.location === r.roomId).map(({ x, y }) => ({ x, y })) }));
+		const rooms = [...this.#rooms.values()].filter((r) => r.map).map((r) => ({ roomId: r.roomId, name: r.name, island: r.island ?? "", x: r.map!.x, y: r.map!.y, ground: r.ground, fires: [...this.#objs.values()].filter((o) => o.kind === "beacon" && o.location === r.roomId).map(({ x, y }) => ({ x, y })), ...(this.w.market.rooms.includes(r.roomId) ? { market: true as const } : {}) }));
 		const placed = new Set(rooms.map((r) => r.roomId)), links = new Map<string, [string, string]>();
 		for (const e of this.w.exits) if (placed.has(e.room) && placed.has(e.destination)) links.set([e.room, e.destination].sort().join(" "), [e.room, e.destination].sort() as [string, string]);
 		return { rooms, links: [...links.values()] };

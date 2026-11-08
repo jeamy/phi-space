@@ -45,7 +45,7 @@ export type MsgView = Pick<MsgFields, "kind" | "text" | "from" | "at" | "help"> 
  *  room), its own taken order. */
 /** The overview of the world (top left in the page): every room placed on it, with its ground, its fires and the
  *  ways to other places (ferries are the links between rooms that are not side by side). Sent once per connection. */
-export type AtlasView = { rooms: Array<{ roomId: string; name: string; island: string; x: number; y: number; ground: string[]; fires: Array<{ x: number; y: number }> }>; links: Array<[string, string]> };
+export type AtlasView = { rooms: Array<{ roomId: string; name: string; island: string; x: number; y: number; ground: string[]; fires: Array<{ x: number; y: number }>; /** a market board stands here */ market?: true }>; links: Array<[string, string]> };
 /** What changes on the overview: where the player is, the fog of each room, the rooms whose fire burns, and how many
  *  people and NPCs are online in each room. */
 /** What a player owns, for the marks on the overview. */

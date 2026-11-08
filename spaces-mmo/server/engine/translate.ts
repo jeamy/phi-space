@@ -46,7 +46,7 @@ export function translateRules(line: string, v: TranslateView): string | null {
 	if (buy) {
 		const what = noArticle(buy[1]!);
 		const l = v.listings.find((x) => x.itemName.toLowerCase() === what || x.itemName.toLowerCase().startsWith(what));
-		return l ? `market kaufe ${l.nr}` : "market";
+		return l ? `market kaufe ${l.itemName.toLowerCase()}` : "market";
 	}
 	// selling: "biete muschel am markt für 2 an", "verkaufe die muschel für 3 münzen", "sell the shell for 2"
 	const sell = /^(?:biete|verkaufe|sell)\s+(.+?)\s+(?:(?:am|auf dem|at the)\s+(?:markt|marktbrett|market)\s+)?(?:für|fuer|for|um)\s+(\d+)(?:\s+(?:münzen?|muenzen?|coins?))?(?:\s+an)?$/.exec(s);

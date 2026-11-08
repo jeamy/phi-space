@@ -18,7 +18,7 @@ import { blessed } from "./chapel.ts";
 import { zoneRefusal } from "./townhall.ts";
 import { satedFactor } from "./food.ts";
 import { closeOrders, keptUntil, orderLine, ordersOfSite, payFor } from "./siteorder.ts";
-import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
+import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type EstateFields, type FreightFields, type FireBuilderFields, type IntentFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SceneryFields, type StoreLogFields, type SiteFields, type WorkRestFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
@@ -512,6 +512,13 @@ async function chestNamed(c: CommandCtx, target: string): Promise<OwnChest> {
 		throw new CommandError(`Das passt auf mehrere Truhen: ${fits.map((x) => `${mine.indexOf(x) + 1} ${chestLabel(c, x.b)}`).join(", ")}. Sag die Nummer, etwa „verstaue 3 muscheln in ${mine.indexOf(fits[0]!) + 1}“.`);
 	}
 	throw new CommandError(`Eine Truhe „${target.trim().slice(0, 30)}“ hast du nicht. Deine Truhen: ${mine.map((x, i) => `${i + 1} ${chestLabel(c, x.b)}`).join(", ")}.`);
+}
+/** What a chest of one's own holds, for the market to take from wherever one stands ("markt biete 10 muscheln aus truhe
+ *  2 für 15"): the chest as `chestNamed` finds it; one in another region's space is out of this board's reach. */
+export async function chestForSale(c: CommandCtx, target: string): Promise<{ b: BuildingFields; items: Array<{ e: Taken; f: ItemFields }> }> {
+	const chest = await chestNamed(c, target);
+	if (chest.region !== null) throw new CommandError(`Die Truhe deiner ${chestLabel(c, chest.b)} steht in einer anderen Gegend; was darin liegt, hängst du an ein Marktbrett dort.`);
+	return { b: chest.b, items: (await chestOf(c, chest.b.buildId)).map((e) => ({ e, f: fieldsOf<ItemFields>(e) })) };
 }
 /** What some things weigh in a chest (a world without loads counts them). */
 const heldIn = (c: CommandCtx, items: Array<Pick<ItemFields, "proto">>) => c.world.pack ? loadOfAll(c.world, items) : items.length;
