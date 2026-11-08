@@ -1,21 +1,21 @@
 //! The JavaScript primitives against the frozen TypeScript engine (docs/rust-portierung.en.md, R8.2): node writes the
-//! vectors with `spaces-mmo/tests/r8/primitives.ts` from the oracle (`MMO_ORACLE`, default the worktree
-//! `../phi-oracle-2698bad` beside the checkout) into the target folder, and every pattern, collation, case mapping and
+//! vectors with `spaces-mmo/tests/r8/primitives.ts` from the oracle (tests/common: the frozen commit unpacked into the
+//! target folder) into the target folder, and every pattern, collation, case mapping and
 //! number must come out as JavaScript made it.
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::sync::OnceLock;
+
+mod common;
+use common::{oracle, repo};
 
 use mmo_engine::js::{self, JsRegex};
 use phi_json::Json;
 
-fn repo() -> PathBuf { Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().expect("the checkout") }
-
 fn vectors() -> &'static Json {
 	static V: OnceLock<Json> = OnceLock::new();
 	V.get_or_init(|| {
-		let oracle = std::env::var("MMO_ORACLE").map(PathBuf::from).unwrap_or_else(|_| repo().join("../phi-oracle-2698bad"));
-		assert!(oracle.join("spaces-mmo/server/engine").is_dir(), "no oracle at {} (git worktree add --detach ../phi-oracle-2698bad 2698bad, or MMO_ORACLE)", oracle.display());
+		let oracle = oracle();
 		let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("primitives.json");
 		let st = Command::new("node").args(["--no-warnings", "--experimental-strip-types"]).arg(repo().join("spaces-mmo/tests/r8/primitives.ts")).arg(&oracle).arg(&out).status().expect("node on PATH");
 		assert!(st.success(), "the vector generator failed");
@@ -79,6 +79,9 @@ fn strings() {
 		if js::upper(s) != up { bad.push(format!("upper {s:?}: JS {up:?} Rust {:?}", js::upper(s))); }
 		if js::len16(s) != l16 { bad.push(format!("length {s:?}: JS {l16} Rust {}", js::len16(s))); }
 		if js::nfkd(s) != nf { bad.push(format!("nfkd {s:?}: JS {nf:?} Rust {:?}", js::nfkd(s))); }
+		let n = js::to_number(s);
+		let got = if n.is_nan() { "NaN".to_owned() } else if n == 0.0 && n.is_sign_negative() { "-0".to_owned() } else { js::number_text(n) };
+		if got != st(w.get("number").unwrap()) { bad.push(format!("Number({s:?}): JS {} Rust {got}", st(w.get("number").unwrap()))); }
 	}
 	assert!(bad.is_empty(), "{}", bad.join("\n"));
 }

@@ -31,6 +31,48 @@ pub fn number_text(n: f64) -> String {
 	if n.is_nan() { "NaN".into() } else if n.is_infinite() { if n > 0.0 { "Infinity".into() } else { "-Infinity".into() } } else { phi_json::number_text(n) }
 }
 
+/// `Number(s)` of a string (ECMAScript StringToNumber): JS's blanks trimmed, "" is 0, `Infinity` with a sign, `0x`,
+/// `0o`, `0b` integers without one, else a decimal literal; anything else NaN (`inf`, `nan`, `1_000`, `5e`).
+pub fn to_number(s: &str) -> f64 {
+	let t = s.trim_matches(is_js_space);
+	if t.is_empty() { return 0.0; }
+	match t { "Infinity" | "+Infinity" => return f64::INFINITY, "-Infinity" => return f64::NEG_INFINITY, _ => {} }
+	let b = t.as_bytes();
+	if b.len() > 2 && b[0] == b'0' {
+		let radix = match b[1] { b'x' | b'X' => 16, b'o' | b'O' => 8, b'b' | b'B' => 2, _ => 0 };
+		if radix > 0 {
+			let digits = &t[2..];
+			if digits.chars().all(|c| c.is_digit(radix)) { return digits.chars().fold(0.0, |n, c| n * radix as f64 + c.to_digit(radix).unwrap() as f64); }
+			return f64::NAN;
+		}
+	}
+	// [+-] (digits [. digits?] | . digits) ([eE] [+-] digits)?
+	let mut i = 0;
+	if i < b.len() && (b[i] == b'+' || b[i] == b'-') { i += 1; }
+	let int = b[i..].iter().take_while(|c| c.is_ascii_digit()).count();
+	i += int;
+	let mut frac = 0;
+	if i < b.len() && b[i] == b'.' { i += 1; frac = b[i..].iter().take_while(|c| c.is_ascii_digit()).count(); i += frac; }
+	if int == 0 && frac == 0 { return f64::NAN; }
+	if i < b.len() && (b[i] == b'e' || b[i] == b'E') {
+		i += 1;
+		if i < b.len() && (b[i] == b'+' || b[i] == b'-') { i += 1; }
+		let e = b[i..].iter().take_while(|c| c.is_ascii_digit()).count();
+		if e == 0 { return f64::NAN; }
+		i += e;
+	}
+	if i != b.len() { return f64::NAN; }
+	t.parse().unwrap_or(f64::NAN)
+}
+
+/// JS's `\s` and what `trim` strips: blanks and line terminators.
+pub fn is_js_space(c: char) -> bool {
+	matches!(c, '\t' | '\n' | '\u{B}' | '\u{C}' | '\r' | ' ' | '\u{A0}' | '\u{1680}' | '\u{2000}'..='\u{200A}' | '\u{2028}' | '\u{2029}' | '\u{202F}' | '\u{205F}' | '\u{3000}' | '\u{FEFF}')
+}
+
+/// `s.trim()`.
+pub fn trim(s: &str) -> &str { s.trim_matches(is_js_space) }
+
 // ---------------------------------------------------------------- strings
 
 /// `s.length`.

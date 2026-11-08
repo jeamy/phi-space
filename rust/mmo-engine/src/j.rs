@@ -42,7 +42,7 @@ pub fn number(v: &Json) -> f64 {
 		Json::Null => 0.0,
 		Json::Bool(b) => if *b { 1.0 } else { 0.0 },
 		Json::Number(n) => *n,
-		Json::String(s) => { let t = s.trim(); if t.is_empty() { 0.0 } else { t.parse().unwrap_or(f64::NAN) } }
+		Json::String(s) => crate::js::to_number(s),
 		Json::Array(_) | Json::Object(_) => f64::NAN,
 	}
 }

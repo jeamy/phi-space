@@ -1,10 +1,10 @@
 //! The Rust engine against the frozen TypeScript engine (docs/rust-portierung.en.md, R8.2): two space servers in memory
 //! (`src/standalone.ts`), the TypeScript engine on one through `spaces-mmo/tests/r8/engine-driver.ts` (imported from the
-//! oracle, `MMO_ORACLE`, default the worktree `../phi-oracle-2698bad`), this crate on the other, the same seed and clock;
-//! after every step both spaces hold the same entries (type, types and fields; the ids are the servers' own).
+//! oracle of tests/common), this crate on the other, the same seed and clock; after every step both spaces hold the
+//! same entries in the same order (type, types and fields; the ids are the servers' own).
 use std::cell::Cell;
 use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -16,12 +16,8 @@ use mmo_engine::space::{Space, FOREVER};
 use phi_json::{obj, Json};
 use phi_spaces_client::{connect_space, ConnectOptions};
 
-fn repo() -> PathBuf { Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().expect("the checkout") }
-fn oracle() -> PathBuf {
-	let o = std::env::var("MMO_ORACLE").map(PathBuf::from).unwrap_or_else(|_| repo().join("../phi-oracle-2698bad"));
-	assert!(o.join("spaces-mmo/server/engine").is_dir(), "no oracle at {} (git worktree add --detach ../phi-oracle-2698bad 2698bad, or MMO_ORACLE)", o.display());
-	o
-}
+mod common;
+use common::{oracle, repo};
 
 struct Kill(Child);
 impl Drop for Kill { fn drop(&mut self) { let _ = self.0.kill(); let _ = self.0.wait(); } }
@@ -56,13 +52,12 @@ impl Driver {
 	}
 }
 
-/// Every entry as the JSON text of [type, types, fields] with sorted keys, the list sorted (the driver's `dump`).
+/// Every entry as the JSON text of [type, types, fields] with sorted keys, in the space's order (the driver's `dump`).
 async fn dump(space: &Space) -> Vec<String> {
-	let mut out: Vec<String> = space.read_all(&obj! {}, None).await.expect("readAll").iter().map(|e| {
+	let out: Vec<String> = space.read_all(&obj! {}, None).await.expect("readAll").iter().map(|e| {
 		let row = Json::Array(vec![e.get("type").cloned().unwrap_or(Json::Null), e.get("types").cloned().unwrap_or(Json::Null), e.get("fields").cloned().unwrap_or(Json::Null)]);
 		row.canonical().expect("finite")
 	}).collect();
-	out.sort_by(|a, b| phi_json::utf16_cmp(a, b));
 	out
 }
 
@@ -72,6 +67,8 @@ fn compare(step: &str, ts: &Json, rust: &[String]) {
 	let only = |a: &[String], b: &[String]| -> Vec<String> { let bs: std::collections::HashSet<&String> = b.iter().collect(); a.iter().filter(|x| !bs.contains(x)).take(4).cloned().collect() };
 	let (a, b) = (only(&ts, rust), only(rust, &ts));
 	assert!(a.is_empty() && b.is_empty() && ts.len() == rust.len(), "{step}: {} entries in TypeScript, {} in Rust\nonly in TypeScript:\n  {}\nonly in Rust:\n  {}", ts.len(), rust.len(), a.join("\n  "), b.join("\n  "));
+	// the same order too: what a command finds first (peek, a take of one of several) is the first the space lists
+	if let Some(i) = ts.iter().zip(rust).position(|(x, y)| x != y) { panic!("{step}: the same entries in another order, from entry {i}:\n  TypeScript {}\n  Rust       {}", ts[i], rust[i]); }
 }
 
 #[test]

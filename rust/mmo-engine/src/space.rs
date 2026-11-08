@@ -39,9 +39,10 @@ impl From<SpaceError> for Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// The space of a world (or of the accounts).
+/// The space of a world (or of the accounts). Ported code reaches the space only through these methods, so a buffered
+/// transaction or a copy of the world (`bufferedTxn`, `Mirror` of `server/space.ts`) can come in here.
 #[derive(Clone)]
-pub struct Space(pub Rc<RemoteSpace>);
+pub struct Space(Rc<RemoteSpace>);
 
 fn opts(txn: Option<&str>) -> Opts { Opts { txn: txn.map(str::to_owned), ..Opts::default() } }
 fn some(v: Json) -> Option<Json> { if v.is_null() { None } else { Some(v) } }
@@ -63,6 +64,9 @@ impl Space {
 	pub async fn take_if_exists(&self, tmpl: &Json, timeout: f64, txn: Option<&str>) -> Result<Option<Json>> { Ok(some(self.0.take_if_exists(tmpl, timeout, &opts(txn)).await?)) }
 	pub async fn read_all(&self, tmpl: &Json, txn: Option<&str>) -> Result<Vec<Json>> { Ok(self.0.read_all(tmpl, None, txn).await?) }
 	pub async fn count(&self, tmpl: &Json, txn: Option<&str>) -> Result<f64> { Ok(self.0.count(tmpl, txn).await?) }
+
+	/// Several steps in one call and one commit (`{op, entry, template, txn, lease, unique, transient}`).
+	pub async fn batch(&self, ops: &[Json]) -> Result<Json> { Ok(self.0.batch(ops, &Opts::default()).await?) }
 
 	pub async fn create_transaction(&self, lease: f64) -> Result<String> {
 		let t = self.0.create_transaction(lease, &Opts::default()).await?;

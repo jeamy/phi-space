@@ -8,7 +8,8 @@
 //   per pattern only the inputs it matches, every match as [UTF-16 index, the groups (null when one took no part)];
 // - the collation: the corpus words sorted with localeCompare() and with localeCompare(…, "de") (a stable sort from the
 //   corpus order), and the sign for neighbouring pairs;
-// - toLowerCase / toUpperCase, UTF-16 length, NFKD, the strings Math.round, Math.floor and String() make of edge numbers.
+// - toLowerCase / toUpperCase, UTF-16 length, NFKD and Number() of every input; the strings Math.round, Math.floor and
+//   String() make of edge numbers.
 import ts from "typescript";
 import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -60,6 +61,7 @@ const EDGE = [
 	"Möwenfels", "Ærø", "Øy", "Łódź", "Œuvre", "Ÿ", "ÿ", "Æ", "æ", "Þ", "ð", "Ð",
 	"a", "A", "b", "B", "z", "Z", "_", "-", "'", "a-b", "a_b", "a b", "a'b", "a.b", "a,b", "a!b", "a?b", "...", "!!!", "?", "!", ".", ",", ":", ";",
 	"x".repeat(41), "y".repeat(30), "Z".repeat(31),
+	"inf", "nan", "NaN", "Infinity", "+Infinity", "-Infinity", "infinity", "0b11", "0o7", "0X1f", "-0x10", "1_000", "\ufeff5", "5\u00a0", "5e", ".5", "5.", "+5", "-0", "1e1000", "1e-1000", "00", "0.0", "1.2.3", "٣٣", "５", "12 34", "e5", "-", "+", "1e+5", "1E5",
 ];
 for (const s of EDGE) corpus.add(s);
 const inputs = [...corpus];
@@ -87,7 +89,7 @@ const NUMS = [0, -0, 0.5, -0.5, 1.5, -1.5, 2.5, -2.5, 0.49999999999999994, -0.49
 const num = (n: number) => (Number.isNaN(n) ? "NaN" : n === Infinity ? "Infinity" : n === -Infinity ? "-Infinity" : Object.is(n, -0) ? "-0" : String(n));
 const numbers = NUMS.map((n) => ({ n: num(n), round: num(Math.round(n)), floor: num(Math.floor(n)), ceil: num(Math.ceil(n)), trunc: num(Math.trunc(n)), text: String(n) }));
 
-const strings = inputs.map((s) => ({ lower: s.toLowerCase(), upper: s.toUpperCase(), len16: s.length, nfkd: s.normalize("NFKD") }));
+const strings = inputs.map((s) => ({ lower: s.toLowerCase(), upper: s.toUpperCase(), len16: s.length, nfkd: s.normalize("NFKD"), number: num(Number(s)) }));
 
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, JSON.stringify({ oracle: { node: process.version, icu: process.versions.icu, unicode: process.versions.unicode }, inputs, patterns: pats, collation: { words, root: root_, de, rootSigns: signs(root_), deSigns: signs(de, "de") }, numbers, strings }));
