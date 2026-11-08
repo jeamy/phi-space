@@ -11,6 +11,8 @@ import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
 import "../server/npc/scripts.ts"; // first: it and the economy import each other, scripts.ts is the entry
 import { answerWanted, type Look } from "../server/npc/economy.ts";
+import { marketTick, RESTOCK_WORLD_MS } from "../server/engine/commands/trade.ts";
+import { sweepTick } from "../server/engine/sweep.ts";
 import type { Npc } from "../server/npc/scripts.ts";
 import type { CharacterFields, ItemFields } from "../server/model.ts";
 
@@ -120,7 +122,10 @@ test("market: a wanted notice holds the buyer's coins; delivering moves thing an
 		assert.match(await does(b.p, "markt suche ziege für 9", "brauchst du"), /9 Münzen/);
 		assert.match(await does(b.p, "markt suche münze für 2", "nichts"), /Münzen gegen Münzen/);
 		assert.match(await does(b.p, "markt suche flugdrache für 2", "gibt es nicht"), /Flugdrache/i);
+		const posted = b.p.frames.length;
 		await does(b.p, "markt suche ziegen für 5", "Du suchst am Marktbrett Ziege und zahlst 5 Münzen.");
+		// no trader at this board sells goats: the one who seeks hears at once who does, where and for how much
+		await b.p.until((f) => f.t === "msg" && /^An diesem Brett verkauft kein Händler Ziege; Gesa \([^)]+\) verkauft es für 8 Münzen\./.test(f.m.text), 10_000, posted);
 		assert.equal((await pack(s, b.me, "muenze")).length, 0);
 		assert.equal((await s.readAll({ type: "Item", fields: { location: "market", proto: "muenze" } })).length, 5, "the coins wait at the board");
 		assert.match(await does(a.p, "markt", "Gesuche"), /1\. Ziegensucher sucht Ziege, zahlt 5 Münzen/);
@@ -167,7 +172,12 @@ test("market: a wanted notice holds the buyer's coins; delivering moves thing an
 		// lapsed: the market ticker gives the coins back
 		await does(b.p, "markt suche muschel für 2", "Du suchst");
 		const wn = (await s.readAll({ type: "Wanted" }))[0]!;
-		await s.take({ type: "Wanted", id: wn.id }, 2_000); // as if it had lapsed
+		await s.take({ type: "Wanted", id: wn.id }, 2_000);
+		await s.write({ type: "Wanted", fields: { ...wn.fields, expiresWorldMs: 0 } }, null, Number.MAX_SAFE_INTEGER); // its time is up
+		await b.p.play();
+		const lapsedFrom = b.p.frames.length;
+		await sweepTick(s, w);
+		await b.p.until((f) => f.t === "msg" && f.m.text.startsWith("Dein Gesuch nach Muschel am Marktbrett") && f.m.text.includes("ist abgelaufen; niemand hat geliefert. Deine 2 Münzen bekommst du zurück.") && f.m.toMe === true, 10_000, lapsedFrom);
 		await eventually(async () => (await pack(s, b.me, "muenze")).length === 2, 10_000, "the coins back with the buyer");
 		await a.p.leave(); await b.p.leave();
 	} finally { await srv.close(); }
@@ -218,10 +228,49 @@ test("market: a notice is answered with a price, delivered for less with the res
 		assert.equal(await answerWanted(n, look(["bienenvolk"])), false, "tang it does not deal in, bienenvolk it answered");
 		// enough offered and in stock: it delivers for its price
 		await does(b.p, "markt suche 2 honig für 9", "Du suchst");
-		assert.equal(await answerWanted(n, look(["honig"])), false, "only one in stock");
+		assert.equal(await answerWanted(n, look(["honig"])), true, "only one in stock: it says so");
+		assert.deepEqual(acts, ["market antworte 3 keins"]);
+		acts.length = 0;
+		// the answer as a player gives it: the one who seeks hears it, the board shows it, and the trader says it once
+		const told = b.p.frames.length;
+		await does(a.p, "markt antworte 3 keins", "Du antwortest Honigsucher: 2× Honig hast du gerade nicht.");
+		await b.p.until((f) => f.t === "msg" && f.m.text.includes("Imkerin antwortet auf dein Gesuch nach 2× Honig") && f.m.text.includes("Honig hat Imkerin gerade nicht"), 10_000, told);
+		assert.match(await does(a.p, "markt", "Gesuche"), /2× Honig, zahlt 9 Münzen \(Imkerin: gerade keins\)/);
+		const wh = (await s.readAll({ type: "Wanted", fields: { proto: "honig" } }))[0]!;
+		await s.take({ id: wh.id }, 2_000);
+		await s.write({ type: "Wanted", fields: { ...wh.fields, replies: [{ charId: me.charId, name: "Gesa", ask: 0 }] } }, null, Number.MAX_SAFE_INTEGER);
+		assert.equal(await answerWanted(n, look(["honig"])), false, "said once: not again");
+		// its stock back: it delivers for its price
 		assert.equal(await answerWanted(n, look(["honig", "honig"])), true);
 		assert.deepEqual(acts, ["market liefere 3 für 8"]);
 		await a.p.leave(); await b.p.leave();
+	} finally { await srv.close(); }
+});
+
+test("market: a trader's stock comes back, one a world day, up to what it started with", async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space, gesa = "npc-gesa";
+		const start = w.npcs.find((n) => n.npcId === "gesa")!.carry!.find((c) => c.proto === "bienenvolk")!.count;
+		await eventually(async () => (await pack(s, gesa, "bienenvolk")).length === start, 20_000, "Gesa's bee colonies");
+		for (const e of await s.readAll({ type: "Item", fields: { location: gesa, proto: "bienenvolk" } })) await s.take({ id: e.id }, 2_000); // sold
+		await marketTick(s, w);
+		const due = async () => { const e = (await s.readAll({ type: "Restock", fields: { charId: gesa, proto: "bienenvolk" } }))[0]; return e; };
+		const first = (await due())!;
+		assert.equal((await pack(s, gesa, "bienenvolk")).length, 0, "the clock starts; nothing yet");
+		assert.ok(Number(first.fields.nextWorldMs) > 0 && RESTOCK_WORLD_MS === 24 * 3600_000);
+		await marketTick(s, w);
+		assert.equal((await pack(s, gesa, "bienenvolk")).length, 0, "not before its time");
+		for (let i = 1; i <= start; i++) {
+			const r = (await due())!;
+			await s.take({ id: r.id }, 2_000);
+			await s.write({ type: "Restock", fields: { ...r.fields, nextWorldMs: 0 } }, null, Number.MAX_SAFE_INTEGER); // its time is up
+			await marketTick(s, w);
+			assert.equal((await pack(s, gesa, "bienenvolk")).length, i);
+		}
+		assert.equal(await due(), undefined, "full again: no clock");
+		await marketTick(s, w);
+		assert.equal((await pack(s, gesa, "bienenvolk")).length, start, "never more than it started with");
 	} finally { await srv.close(); }
 });
 

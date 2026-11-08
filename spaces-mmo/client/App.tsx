@@ -377,7 +377,7 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 				const have = carried.filter((o) => o.name === w.protoName).length >= w.count;
 				// what the traders said, or that none deals in it; how long it still hangs
 				const left = w.until === null ? null : Math.max(0, w.until - Date.now()), hours = left === null ? null : Math.ceil(left / 3_600_000);
-				const notes = [...w.replies.map((r) => `${r.name}: ab ${r.ask}`), ...(!w.traded && !w.replies.length ? ["kein Händler führt es"] : []), ...(hours === null ? [] : [hours > 1 ? `noch ${hours} h` : "läuft bald ab"])];
+				const notes = [...w.replies.map((r) => `${r.name}: ${r.ask ? `ab ${r.ask}` : "gerade keins"}`), ...(!w.traded && !w.replies.length ? ["kein Händler führt es"] : []), ...(hours === null ? [] : [hours > 1 ? `noch ${hours} h` : "läuft bald ab"])];
 				return <li key={w.nr}><span>{w.mine ? "Du suchst" : `${w.buyerName} sucht`} {w.count > 1 ? `${w.count}× ` : ""}{w.protoName} – {w.price} {w.price === 1 ? "Münze" : "Münzen"}{notes.length > 0 && <small className="wanted-note">{notes.join(" · ")}</small>}</span>{!guest && (w.mine ? <button onClick={() => board(`markt suche zurück ${w.nr}`)}>Zurücknehmen</button> : <button disabled={!have} title={have ? "" : `Du trägst nicht genug ${w.protoName}`} onClick={() => board(`markt liefere ${w.nr}`)}>Liefern</button>)}</li>;
 			})}</ul> : <p className="muted">Niemand sucht gerade etwas.</p>}
 			{!guest && (

@@ -74,7 +74,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		flood: job(async (live) => { if (await byPeoplesPace(space)) await floodTick(space, live, msgLeaseMs); }),
 		sweep: job(async (live) => { await syncRates(space); await sweepTick(space, live); }),
 		orders: job((live) => ordersTick(space, live)),
-		market: job(() => marketTick(space)),
+		market: job((live) => marketTick(space, live)),
 		storm: job(async (live) => { if (!(await byPeoplesPace(space))) return; const room = await stormTick(space, live, msgLeaseMs); await stormFillsBarrels(space, live, room); await stormTurnsMills(space, live, room); await stormRaisesWind(space, live, room, msgLeaseMs); }),
 		wind: job(async (live) => { if (process.env.SPACES_MMO_WIND !== "0") await windTick(space, live, msgLeaseMs); }),
 		garden: job(async (live) => { await gardenTick(space, live); await fieldTick(space, live, msgLeaseMs); await cartTick(space, live, msgLeaseMs); await passageTick(space, msgLeaseMs); }),

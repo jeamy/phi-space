@@ -139,7 +139,8 @@ export type NoticeFields = MsgFields & { noticeId: string; charId: string; /** s
  *  `seller` = the buyer) until someone delivers a thing of `proto`, the buyer withdraws it or it lapses like a listing
  *  (then the market ticker gives the coins back). */
 export type WantedFields = { wantedId: string; buyer: string; buyerName: string; proto: string; protoName: string; /** how many, for `price` together (absent: one) */ count?: number; price: number; room: string; at: number; expiresWorldMs?: number;
-	/** Who would deliver, and for how much (more than `price`): a trader's or a player's answer („markt antworte <nr> ab <n>“). */ replies?: Array<{ charId: string; name: string; ask: number }> };
+	/** Who would deliver, and for how much (more than `price`): a trader's or a player's answer („markt antworte <nr> ab <n>“);
+	 *  `ask` 0: it sells it but has none right now („markt antworte <nr> keins“). */ replies?: Array<{ charId: string; name: string; ask: number }> };
 /** A job on the order board (master–worker): posted by the world, taken by one player, delivered for a reward. */
 export type OrderFields = { orderId: string; kind: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; takenBy: string; room: string; expiresWorldMs?: number };
 /** A help topic of the world. */

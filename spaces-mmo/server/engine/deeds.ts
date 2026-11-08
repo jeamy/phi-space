@@ -4,6 +4,7 @@
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type DeedFields } from "../model.ts";
 import type { CommandCtx } from "./context.ts";
+import { timeNow } from "./source.ts";
 
 export type DeedKind = DeedFields["kind"];
 
@@ -13,7 +14,7 @@ export async function creditDeed(c: CommandCtx, kind: DeedKind): Promise<void> {
 	const key = { accountId: c.account.accountId, kind };
 	const held = await c.space.takeIfExists({ type: "Deed", fields: key }, NO_WAIT, { txn: c.txn });
 	const had = held ? fieldsOf<DeedFields>(held) : null;
-	const f: DeedFields = { ...key, charName: c.actor.name, points: (had?.points ?? 0) + 1, lastAt: Date.now() };
+	const f: DeedFields = { ...key, charName: c.actor.name, points: (had?.points ?? 0) + 1, lastAt: timeNow() };
 	await c.space.write({ type: "Deed", fields: f as never }, c.txn, FOREVER);
 }
 

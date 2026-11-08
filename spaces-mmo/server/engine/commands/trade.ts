@@ -159,6 +159,21 @@ function protoNamed(w: WorldDef, name: string): WorldDef["prototypes"][number] |
 		?? w.prototypes.find((p) => [p.name, ...(p.aliases ?? [])].some((a) => stem(a) === stem(n)));
 }
 const coins = (n: number) => `${n} Münze${n === 1 ? "" : "n"}`;
+/** An answer to a notice as the board shows it: "Gesa: ab 8", or "Gesa: gerade keins" (ask 0: it sells it, has none now). */
+export const replyText = (r: { name: string; ask: number }) => `${r.name}: ${r.ask ? `ab ${r.ask}` : "gerade keins"}`;
+const roomName = (w: WorldDef, room: string) => (w.allRooms ?? w.rooms).find((r) => r.roomId === room)?.name ?? room;
+/** The traders that sell `proto` (their price list's selling price), with where and for how much each. */
+export function sellersOf(w: WorldDef, proto: string): Array<{ name: string; where: string; market: string | null; each: number }> {
+	return w.npcs.flatMap((n) => { const each = n.prices?.[proto]?.[1] ?? 0; return each > 0 ? [{ name: n.name, where: roomName(w, n.market ?? n.room), market: n.market ?? null, each }] : []; });
+}
+/** What one who seeks `proto` at `room` hears at once when no trader at this board sells it ("" when one does). */
+export function sellerHint(w: WorldDef, proto: string, protoName: string, room: string): string {
+	const all = sellersOf(w, proto);
+	if (all.some((s) => s.market === room)) return "";
+	return all.length
+		? `An diesem Brett verkauft kein Händler ${protoName}; ${all.map((s) => `${s.name} (${s.where}) verkauft es für ${coins(s.each)}`).join(", ")}. Hier kann nur liefern, wer es selbst hat.`
+		: `${protoName} verkauft kein Händler; liefern kann nur, wer es selbst hat oder macht.`;
+}
 /** A listing's goods as said: "Muschel", "10× Muschel". */
 export const lotOf = (l: Pick<ListingFields, "itemName" | "count">) => ((l.count ?? 1) > 1 ? `${l.count}× ${l.itemName}` : l.itemName);
 
@@ -175,7 +190,7 @@ const market: Command = {
 		const wnr = (s: string | undefined) => { const n = Number(s); if (!Number.isInteger(n) || n < 1 || n > sought.length) throw new CommandError("Dieses Gesuch steht nicht am Brett. „markt“ zeigt es."); return sought[n - 1]!; };
 		if (!verb) {
 			const offered = all.length ? ["Marktbrett:", ...all.map((l, i) => `  ${i + 1}. ${lotOf(l.f)} für ${l.f.price} Münze${l.f.price === 1 ? "" : "n"} (von ${l.f.sellerName})`)] : ["Das Marktbrett ist leer. „markt biete <ding> für <n>“ stellt etwas ein."];
-			const wanted = sought.length ? ["Gesuche („markt liefere <nr>“):", ...sought.map((w, i) => `  ${i + 1}. ${w.f.buyerName} sucht ${(w.f.count ?? 1) > 1 ? `${w.f.count}× ` : ""}${w.f.protoName}, zahlt ${coins(w.f.price)}${w.f.replies?.length ? ` (${w.f.replies.map((r) => `${r.name}: ab ${r.ask}`).join(", ")})` : ""}`)] : [];
+			const wanted = sought.length ? ["Gesuche („markt liefere <nr>“):", ...sought.map((w, i) => `  ${i + 1}. ${w.f.buyerName} sucht ${(w.f.count ?? 1) > 1 ? `${w.f.count}× ` : ""}${w.f.protoName}, zahlt ${coins(w.f.price)}${w.f.replies?.length ? ` (${w.f.replies.map(replyText).join(", ")})` : ""}`)] : [];
 			return msg(c, c.actor.charId, "info", [...offered, ...wanted].join("\n"));
 		}
 		noGuest(c);
@@ -203,7 +218,10 @@ const market: Command = {
 			const wantedId = `w-${randomBytes(5).toString("hex")}`;
 			for (const i of pay) await move(c, i.f, c.actor.charId, "market", { listing: wantedId, seller: c.actor.charId });
 			await c.space.write({ type: "Wanted", fields: { wantedId, buyer: c.actor.charId, buyerName: c.actor.name, proto: p.key, protoName: p.name, ...(count > 1 ? { count } : {}), price, room: c.actor.room, at: timeNow(), expiresWorldMs: (await decayNowOf(c.space, c.txn)) + c.world.market.listMs } satisfies WantedFields as never }, c.txn, FOREVER);
-			return msg(c, "*", "info", `$you() $conj(suchst|sucht) am Marktbrett ${count > 1 ? `${count}× ${p.name}` : p.name} und $conj(zahlst|zahlt) ${coins(price)}.`, { templ: true });
+			await msg(c, "*", "info", `$you() $conj(suchst|sucht) am Marktbrett ${count > 1 ? `${count}× ${p.name}` : p.name} und $conj(zahlst|zahlt) ${coins(price)}.`, { templ: true });
+			const hint = sellerHint(c.world, p.key, p.name, c.actor.room);
+			if (hint) await msg(c, c.actor.charId, "info", hint);
+			return;
 		}
 		// delivering what a notice seeks: the thing goes to the one who seeks it, the coins in escrow to the one who brings it
 		if (/^(liefere|deliver)$/i.test(verb)) {
@@ -228,17 +246,24 @@ const market: Command = {
 		// an answer to a notice that pays too little: "markt antworte 2 ab 8" (a trader's, or a player's); the one who seeks hears it
 		if (/^(antworte|answer)$/i.test(verb)) {
 			const w = wnr(rest[0]);
+			// "markt antworte 2 keins": one who sells it has none right now (ask 0)
+			const none = /^(?:keine?s?|keins|nichts|none)$/i.test(rest.slice(1).join(" "));
 			const m = /^(?:ab|für|fuer|for|from|um)\s+(\d+)(?:\s+(?:münzen?|muenzen?|coins?))?$/i.exec(rest.slice(1).join(" "));
-			if (!m) throw new NotUnderstood("So geht es: markt antworte <nr> ab <n> (für wie viel du liefern würdest).");
+			if (!m && !none) throw new NotUnderstood("So geht es: markt antworte <nr> ab <n> (für wie viel du liefern würdest), oder markt antworte <nr> keins.");
 			if (w.f.buyer === c.actor.charId) throw new CommandError("Das ist dein eigenes Gesuch.");
-			const ask = Number(m[1]);
-			if (ask <= w.f.price) throw new CommandError(`Für ${coins(w.f.price)} kannst du gleich liefern: „markt liefere ${rest[0]}“.`);
+			const ask = none ? 0 : Number(m![1]);
+			if (!none && ask <= w.f.price) throw new CommandError(`Für ${coins(w.f.price)} kannst du gleich liefern: „markt liefere ${rest[0]}“.`);
 			if (ask > 1000) throw new CommandError("Ein Preis liegt zwischen 1 und 1000 Münzen.");
 			if (!(await c.space.take({ type: "Wanted", id: w.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Zu spät – jemand liefert gerade.");
 			const replies = [...(w.f.replies ?? []).filter((r) => r.charId !== c.actor.charId), { charId: c.actor.charId, name: c.actor.name, ask }].slice(-5);
 			await c.space.write({ type: "Wanted", fields: { ...w.f, replies } as never }, c.txn, FOREVER);
 			const lot = (w.f.count ?? 1) > 1 ? `${w.f.count}× ${w.f.protoName}` : w.f.protoName;
-			await msg(c, w.f.buyer, "info", `${c.actor.name} antwortet auf dein Gesuch nach ${lot} am Marktbrett (${c.world.rooms.find((r) => r.roomId === c.actor.room)?.name ?? c.actor.room}): Für ${coins(w.f.price)} nicht, ab ${coins(ask)} liefert ${c.actor.name}.`);
+			const board = c.world.rooms.find((r) => r.roomId === c.actor.room)?.name ?? c.actor.room;
+			if (none) {
+				await msg(c, w.f.buyer, "info", `${c.actor.name} antwortet auf dein Gesuch nach ${lot} am Marktbrett (${board}): ${w.f.protoName} hat ${c.actor.name} gerade nicht. Kommt wieder etwas herein, liefert ${c.actor.name}, solange dein Gesuch hängt.`);
+				return msg(c, c.actor.charId, "info", `Du antwortest ${w.f.buyerName}: ${lot} hast du gerade nicht.`);
+			}
+			await msg(c, w.f.buyer, "info", `${c.actor.name} antwortet auf dein Gesuch nach ${lot} am Marktbrett (${board}): Für ${coins(w.f.price)} nicht, ab ${coins(ask)} liefert ${c.actor.name}.`);
 			return msg(c, c.actor.charId, "info", `Du antwortest ${w.f.buyerName}: ${lot} ab ${coins(ask)}.`);
 		}
 		if (/^(biete|sell|verkaufe)$/i.test(verb)) {
@@ -430,7 +455,37 @@ export async function ordersTick(space: SpaceLike, w: WorldDef): Promise<void> {
 
 /** Market ticker: an item in escrow whose listing lapsed goes back to its seller, the coins of a wanted notice that lapsed
  *  to its buyer. A listing or notice held right now (a purchase or delivery in progress) counts as alive. */
-export async function marketTick(space: SpaceLike): Promise<void> {
+/** A trader gets back one thing it sells and started with, every RESTOCK_WORLD_MS of world time, up to what it started
+ *  with (`carry`): what it sold lives on with the buyer, so without this its stock would end for good. */
+export const RESTOCK_WORLD_MS = 24 * 3600_000;
+type RestockFields = { charId: string; proto: string; nextWorldMs: number };
+async function restock(space: SpaceLike, w: WorldDef): Promise<void> {
+	const now = await worldNowOf(space);
+	for (const n of w.npcs) {
+		const sells = (n.carry ?? []).filter((c) => c.proto !== w.currency && (n.prices?.[c.proto]?.[1] ?? 0) > 0);
+		if (!sells.length) continue;
+		const charId = `npc-${n.npcId}`;
+		if (!(await space.readAll({ type: "Character", fields: { charId } }, { limit: 1 })).length) continue; // in another region
+		for (const c of sells) {
+			const have = await space.count({ type: "Item", fields: { location: charId, proto: c.proto } });
+			const e = await peek(space, { type: "Restock", fields: { charId, proto: c.proto } });
+			const r = e ? fieldsOf<RestockFields>(e) : null;
+			if (have >= c.count) { if (e) await space.takeIfExists({ type: "Restock", id: e.id }, NO_WAIT); continue; }
+			if (r && r.nextWorldMs > now) continue;
+			const txn = (await space.createTransaction(10_000)).id;
+			try {
+				if (e && !(await space.takeIfExists({ type: "Restock", id: e.id }, NO_WAIT, { txn }))) { await space.abort(txn); continue; } // another worker
+				// the first time it runs short, the clock starts; one comes back when it is up
+				if (r) { const p = await resolvePrototype(space, c.proto); if (p) await spawn(space, txn, w, p, { location: charId, x: -1, y: -1 }); }
+				if (!r || have + 1 < c.count) await space.write({ type: "Restock", fields: { charId, proto: c.proto, nextWorldMs: now + RESTOCK_WORLD_MS } satisfies RestockFields as never }, txn, FOREVER);
+				await space.commit(txn);
+			} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
+		}
+	}
+}
+
+export async function marketTick(space: SpaceLike, w?: WorldDef): Promise<void> {
+	if (w) await restock(space, w);
 	for (const e of await space.readAll({ type: "Item", fields: { location: "market" } })) {
 		const f = fieldsOf<ItemFields>(e);
 		try { if (f.listing && (await readExisting(space, f.listing.startsWith("w-") ? { type: "Wanted", fields: { wantedId: f.listing } } : { type: "Listing", fields: { listingId: f.listing } }))) continue; } catch (err) { if (err instanceof StillHeld) continue; throw err; }

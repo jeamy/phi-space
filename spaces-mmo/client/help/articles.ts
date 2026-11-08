@@ -924,9 +924,10 @@ Suchst du etwas, das gerade niemand anbietet, hängst du ein **Gesuch** aus. Dei
 - \`markt liefere <nr>\`: ein Gesuch erfüllen; das Ding geht an den Suchenden, die Münzen an dich
 - \`markt liefere <nr> für <n>\`: für weniger liefern, als geboten ist; den Rest bekommt der Suchende zurück
 - \`markt antworte <nr> ab <n>\`: einem Gesuch, das zu wenig bietet, sagen, ab wie viel du lieferst
+- \`markt antworte <nr> keins\`: sagen, dass du das Ding gerade nicht hast
 - \`markt suche zurück <nr>\`: dein Gesuch zurücknehmen, die Münzen kommen zurück
 
-Auch die **Händler** lesen die Gesuche, wenn sie am Brett stehen (Gesa in Kupferhafen, die Händler auf ihren Wegen). Bietet ein Gesuch mindestens ihren Preis und haben sie das Ding dabei, liefern sie und nehmen nur ihren Preis; den Rest bekommst du zurück. Bietet es zu wenig, antworten sie einmal mit ihrem Preis, etwa „Gesa: ab 8“. Das steht dann unter dem Gesuch, und du bekommst es als Nachricht. Führt kein Händler das Ding, steht dort „kein Händler führt es“: dann kann nur ein Spieler liefern.
+Auch die **Händler** lesen die Gesuche, wenn sie am Brett stehen (Gesa in Kupferhafen, die Händler auf ihren Wegen). Bietet ein Gesuch mindestens ihren Preis und haben sie das Ding dabei, liefern sie und nehmen nur ihren Preis; den Rest bekommst du zurück. Bietet es zu wenig, antworten sie einmal mit ihrem Preis, etwa „Gesa: ab 8“. Das steht dann unter dem Gesuch, und du bekommst es als Nachricht. Bietet es genug, haben sie das Ding aber gerade nicht, sagen sie das einmal („Gesa: gerade keins“) und liefern, sobald wieder eins da ist: Händler bekommen jeden Welttag (eine Stunde) ein Stück von dem zurück, womit sie angefangen haben. Führt an diesem Brett kein Händler das Ding, hörst du gleich beim Aushängen, wer es wo verkauft, und am Gesuch steht „kein Händler führt es“: dann kann hier nur ein Spieler liefern. Läuft ein Gesuch ab, ohne dass jemand liefert, bekommst du eine Nachricht und deine Münzen zurück.
 
 Unter **Aktionen → Markt** stehen die Gesuche mit „Liefern“, den Antworten und der Zeit, die sie noch hängen, und ein Feld zum Suchen. Ein Gesuch bleibt wie ein Angebot einen Tag stehen; danach bekommst du deine Münzen zurück. Du kannst an jedem Brett bis zu fünf Gesuche aushängen.
 
@@ -986,9 +987,10 @@ If you are looking for something nobody offers right now, post a **wanted notice
 - \`market deliver <nr>\`: fill a notice; the thing goes to the one who seeks it, the coins to you
 - \`market deliver <nr> for <n>\`: deliver for less than offered; the one who seeks gets the rest back
 - \`market answer <nr> from <n>\`: tell a notice that offers too little from how much you would deliver
+- \`market answer <nr> none\`: say that you have none right now
 - \`market want withdraw <nr>\`: take your notice back, the coins come back
 
-The **traders** read the notices too when they stand at the board (Gesa in Kupferhafen, the traders on their routes). If a notice offers at least their price and they carry the thing, they deliver and take only their price; you get the rest back. If it offers too little, they answer once with their price, say „Gesa: ab 8“. That stands under the notice, and you get it as a message. If no trader deals in the thing, it says „kein Händler führt es“: then only a player can deliver.
+The **traders** read the notices too when they stand at the board (Gesa in Kupferhafen, the traders on their routes). If a notice offers at least their price and they carry the thing, they deliver and take only their price; you get the rest back. If it offers too little, they answer once with their price, say „Gesa: ab 8“. That stands under the notice, and you get it as a message. If it offers enough but they have none right now, they say so once („Gesa: gerade keins“) and deliver as soon as one is back: a trader gets back one piece of what it started with every world day (one hour). If no trader at this board deals in the thing, you hear at once when you post who sells it where, and the notice says „kein Händler führt es“: then only a player can deliver here. If a notice lapses without a delivery, you get a message and your coins back.
 
 Under **Actions → Market** the notices stand with „Deliver“, their answers and the time they still hang, and a field to seek something. A notice stays up for a day like an offer; then your coins come back. You can post up to five notices at each board.
 
