@@ -523,6 +523,17 @@ pub fn object_prototype_text(k: &str) -> Option<&'static str> {
 	})
 }
 
+/// A pattern of the engine, compiled once per thread (`/source/flags` as a literal).
+pub fn re(source: &'static str, flags: &'static str) -> std::rc::Rc<JsRegex> {
+	thread_local! { static CACHE: std::cell::RefCell<std::collections::HashMap<(&'static str, &'static str), std::rc::Rc<JsRegex>>> = Default::default(); }
+	CACHE.with(|c| c.borrow_mut().entry((source, flags)).or_insert_with(|| std::rc::Rc::new(JsRegex::new(source, flags).unwrap_or_else(|e| panic!("/{source}/{flags}: {e}")))).clone())
+}
+
+/// `re.exec(s)` with the groups as owned texts (None: the group took no part); None when nothing matches.
+pub fn caps(r: &JsRegex, s: &str) -> Option<Vec<Option<String>>> {
+	r.exec(s).map(|m| (0..m.groups.len()).map(|i| m.group(s, i).map(str::to_owned)).collect())
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

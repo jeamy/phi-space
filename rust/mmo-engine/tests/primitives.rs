@@ -151,3 +151,13 @@ fn helpers() {
 	}
 	assert!(bad.is_empty(), "{} differences:\n  {}", bad.len(), bad.join("\n  "));
 }
+
+/// The command tables the engine keeps (src/commands.json) are the oracle's.
+#[test]
+fn command_table() {
+	let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("commands.json");
+	let st = Command::new("node").args(["--no-warnings", "--experimental-strip-types"]).arg(repo().join("spaces-mmo/tests/r8/commands.ts")).arg(oracle()).arg(&out).status().expect("node on PATH");
+	assert!(st.success(), "the command table generator failed");
+	let (now, kept) = (std::fs::read_to_string(&out).unwrap(), std::fs::read_to_string(repo().join("rust/mmo-engine/src/commands.json")).unwrap());
+	assert!(now == kept, "src/commands.json is not the oracle's: run spaces-mmo/tests/r8/commands.ts <oracle> rust/mmo-engine/src/commands.json");
+}

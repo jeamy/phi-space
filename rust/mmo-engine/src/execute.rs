@@ -10,20 +10,99 @@ use crate::j;
 use crate::js::{self, JsRegex};
 use crate::model::actor_token;
 use crate::room_growth::{pin_terrain, spatial_world};
-use crate::space::{fields, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
+use crate::space::{fields, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 
 thread_local! {
 	static WALKING: JsRegex = JsRegex::new(r"^(step|move|arrive)\b", "").expect("the walking pattern");
 	static STEP: JsRegex = JsRegex::new(r"^step\s", "").expect("the step pattern");
 }
 
+fn llm_enabled() -> bool { std::env::var("SPACES_MMO_LLM").as_deref() == Ok("1") }
+
+/// `say`: talk is never translated.
+fn is_talk(line: &str) -> bool { js::re(r"^(say|sag|sage|'|emote|:|channel|kanal)\b", "i").test(line) || line.starts_with('\'') || line.starts_with(':') }
+
+/// `split`: the verb and the rest ("'text" and ":text" are say and emote).
+fn split(line: &str) -> (String, String) {
+	if let Some(m) = js::caps(&js::re(r#"^(['":])(.*)$"#, "s"), line) {
+		let rest = m[2].clone().unwrap_or_default();
+		return (if m[1].as_deref() == Some(":") { "emote" } else { "say" }.into(), js::trim(&rest).to_owned());
+	}
+	let verb = crate::commands::default::words(line).into_iter().next().unwrap_or_default();
+	(verb.clone(), js::trim(&line[verb.len()..]).to_owned())
+}
+
+/// `named`: whether `line` names `name` as a word of its own (any case).
+fn named(line: &str, name: &str) -> bool {
+	let escaped = js::re(r"[.*+?^${}()|[\]\\]", "g").replace(name, "\\$&");
+	JsRegex::new(&format!(r"(^|[^\p{{L}}\p{{N}}]){escaped}([^\p{{L}}\p{{N}}]|$)"), "iu").is_ok_and(|r| r.test(line))
+}
+
+/// `viewFor`: what the translation rules may look at.
+async fn view_for(c: &mut Ctx) -> Result<crate::translate::View> {
+	let room = c.room().to_owned();
+	let listings = if j::a(j::at(c.w(), "market"), "rooms").iter().any(|r| r.as_str() == Some(room.as_str())) {
+		let mut l: Vec<Json> = c.space.read_all(&tmpl("Listing", phi_json::obj! { "room" => room.as_str() }), None).await?.iter().map(|e| fields(e).clone()).collect();
+		l.sort_by(|a, b| { let d = j::n(a, "at") - j::n(b, "at"); if d != 0.0 && !d.is_nan() { d.partial_cmp(&0.0).unwrap() } else { js::locale_compare(j::s(a, "listingId"), j::s(b, "listingId")) } });
+		l.iter().map(|x| crate::fire::key_text(j::at(x, "itemName"))).collect()
+	} else { vec![] };
+	let me = crate::fire::key_text(j::at(&c.actor, "name"));
+	let people = c.space.read_all(&tmpl("Character", phi_json::obj! { "room" => room.as_str() }), None).await?.iter().map(|e| crate::fire::key_text(j::at(fields(e), "name"))).filter(|n| *n != me).collect();
+	let exits = crate::context::exits_here(c, None).await?.iter().map(|x| { let f = fields(x); (j::s(f, "name").to_owned(), j::strs(j::a(f, "aliases")).into_iter().map(str::to_owned).collect()) }).collect();
+	let carried = crate::context::inventory(c).await?.iter().map(|i| crate::fire::key_text(j::at(fields(i), "name"))).collect();
+	Ok(crate::translate::View { exits, listings, carried, people })
+}
+
+/// The model reads a line once before it is refused (`Translate`), when model calls are on.
+async fn ask_model(c: &Ctx, line: &str, why: Option<&str>) -> Result<()> {
+	let a = c.account.clone().unwrap_or(Json::Null);
+	let mut t = phi_json::obj! { "reqId" => crate::source::hex(&crate::source::random_bytes(6)), "charId" => c.char_id(), "accountId" => j::at(&a, "accountId").clone(), "guest" => j::at(&a, "guest").clone(), "line" => js::slice16(line, 0, Some(300)), "room" => c.room(), "at" => crate::source::time_now() };
+	if let Some(w) = why { crate::j::set(&mut t, "why", js::slice16(w, 0, Some(300))); }
+	if let Some(l) = &c.lang { crate::j::set(&mut t, "lang", l.as_str()); }
+	c.space.write(&phi_json::obj! { "type" => "Translate", "fields" => t }, c.txn(), 60_000.0).await?;
+	let me = c.char_id().to_owned();
+	msg(c, &me, "info", &format!("„{}“ – einen Moment, ich versuche das zu verstehen …", js::slice16(line, 0, Some(80))), MsgOpts::default()).await
+}
+
 /// `execute(c, line)`.
 pub async fn execute(c: &mut Ctx, line: &str) -> Result<()> {
-	let line = js::trim(line);
+	let mut line = js::trim(line).to_owned();
 	if line.is_empty() { return Ok(()); }
-	if j::b(&c.actor, "aboard") && WALKING.with(|r| r.test(line)) { return Err(Error::Other("unported: aboard".into())); }
-	if STEP.with(|r| r.test(line)) { return crate::commands::default::step(c, js::trim(js::slice16(line, 5, None))).await; }
-	Err(Error::Other(format!("unported: {}", js::slice16(line, 0, Some(40)))))
+	if j::truthy(j::at(&c.actor, "aboard")) && WALKING.with(|r| r.test(&line)) { return refuse(crate::commands::passage::aboard_text(c).await?); }
+	if STEP.with(|r| r.test(&line)) { return crate::commands::default::step(c, js::trim(js::slice16(&line, 5, None))).await; }
+	let (merged, exits) = crate::commands::commands_of(c).await?;
+	let said = c.asked.clone().unwrap_or_else(|| line.clone());
+	let ruled = if is_talk(&line) || WALKING.with(|r| r.test(&line)) { None } else { let v = view_for(c).await?; crate::translate::translate_rules(&line, &v) };
+	if let Some(r) = ruled { line = r; }
+	let understood = (said != line && !is_talk(&line)).then(|| format!("„{}“ → {line}", js::slice16(&said, 0, Some(80))));
+	let (verb, arg) = split(&line);
+	let lower = verb.to_lowercase();
+	let Some(cmd) = merged.iter().find(|(k, _)| *k == lower).map(|(_, c)| c.clone()) else {
+		let model = llm_enabled() && c.asked.is_none() && c.account.as_ref().is_some_and(|a| !j::b(a, "npc"));
+		if model { return ask_model(c, &line, None).await; }
+		return refuse(match &c.asked { Some(a) => format!("„{}“ habe ich nicht verstanden. „help“ zeigt die Befehle.", js::slice16(a, 0, Some(80))), None => format!("Unbekannter Befehl „{}“. „help“ zeigt alle Befehle.", js::slice16(&verb, 0, Some(20))) });
+	};
+	if j::truthy(j::at(&c.actor, "aboard")) && !crate::commands::passage::may_aboard(&cmd.key) { return refuse(crate::commands::passage::aboard_text(c).await?); }
+	if let Some(asked) = c.asked.clone() {
+		let v = view_for(c).await?;
+		if let Some(guessed) = v.people.iter().find(|n| named(&line, n) && !named(&asked, n)) {
+			return refuse(format!("„{}“ → {line}: Meinst du {guessed}? Ich handle nicht für jemanden, den du nicht genannt hast; schreib den Namen so, wie er heißt.", js::slice16(&asked, 0, Some(80))));
+		}
+	}
+	let ran: Result<()> = async {
+		let me = c.char_id().to_owned();
+		if let Some(u) = &understood { msg(c, &me, "info", u, MsgOpts::default()).await?; }
+		let npc = c.account.as_ref().is_none_or(|a| j::b(a, "npc"));
+		let before = crate::pack::pack_before(&c.space, c.w(), &me, &cmd.key, npc, &c.txn).await?;
+		crate::commands::run(c, &cmd, &arg, &merged, &exits).await?;
+		if let Some(too_much) = crate::pack::pack_after(&c.space, c.w(), &me, before, &c.txn).await? { return refuse(too_much); }
+		Ok(())
+	}.await;
+	match ran {
+		Err(Error::NotUnderstood(why)) if llm_enabled() && c.asked.is_none() && c.account.as_ref().is_some_and(|a| !j::b(a, "npc")) => ask_model(c, &said, Some(&why)).await,
+		Err(e) if e.is_command() && understood.is_some() => refuse(format!("{}: {e}", understood.unwrap_or_default())),
+		other => other,
+	}
 }
 
 /// How a world worker serves characters: its space, the world's definition, how long messages and transactions last.

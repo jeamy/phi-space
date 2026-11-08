@@ -112,10 +112,12 @@ impl Walk {
 	/// How many entries of the Rust space contain `text` (a walk shows that it did something).
 	fn entries_with(&mut self, text: &str) -> usize { self.run(dump(&self.space)).iter().filter(|e| e.contains(text)).count() }
 	/// An account, its character and token (a Session when `online`), written alike on both sides.
-	fn player(&mut self, n: usize, room: &str, at: (f64, f64), online: bool) -> String {
-		let (account_id, char_id, name) = (format!("a-walk{n}"), format!("c-walk{n}"), format!("Strandläufer-{}", 1000 + n));
-		let account = obj! { "accountId" => account_id.as_str(), "name" => name.as_str(), "guest" => true, "admin" => false, "createdAt" => START, "touchedAt" => START };
-		let ch = obj! { "charId" => char_id.as_str(), "accountId" => account_id.as_str(), "name" => name.as_str(), "room" => room, "x" => at.0, "y" => at.1, "skin" => (n % 4) as f64, "guest" => true };
+	fn player(&mut self, n: usize, room: &str, at: (f64, f64), online: bool) -> String { self.player_as(n, room, at, online, true) }
+	fn player_as(&mut self, n: usize, room: &str, at: (f64, f64), online: bool, guest: bool) -> String {
+		let (account_id, char_id) = (format!("a-walk{n}"), format!("c-walk{n}"));
+		let name = if guest { format!("Strandläufer-{}", 1000 + n) } else { format!("Wanderer{n}") };
+		let account = obj! { "accountId" => account_id.as_str(), "name" => name.as_str(), "guest" => guest, "admin" => false, "createdAt" => START, "touchedAt" => START };
+		let ch = obj! { "charId" => char_id.as_str(), "accountId" => account_id.as_str(), "name" => name.as_str(), "room" => room, "x" => at.0, "y" => at.1, "skin" => (n % 4) as f64, "guest" => guest };
 		let session = online.then(|| format!("s-walk{n}"));
 		let t = self.ts.call(obj! { "op" => "player", "account" => account.clone(), "char" => ch.clone(), "session" => session.clone().map_or(Json::Null, Json::from) });
 		assert_eq!(t.get("ok"), Some(&Json::Bool(true)), "player: {}", t.to_json_text());
@@ -238,3 +240,39 @@ fn walking() {
 }
 
 fn js_cut(r: &str) -> String { r.chars().take(70).collect() }
+
+/// The commands of default.ts and what every line goes through (the command sets, the exits as commands, help, the
+/// translation rules, the pack): a guest and a registered player look, talk, pick up, put into the fire, drop, give,
+/// walk out and back, and type what is not a command.
+#[test]
+fn talking() {
+	let mut w = Walk::new("talking", 17, START);
+	w.load(false);
+	let a = w.player(1, "graue-bucht", (10.0, 8.0), true);
+	let b = w.player_as(2, "graue-bucht", (11.0, 8.0), true, false);
+	w.compare("players");
+	let script: &[(&str, &str)] = &[
+		("a", "look"), ("a", "schau"), ("a", "l leuchtfeuer"), ("a", "look muschel"), ("a", "look ost"), ("a", "look wander"), ("a", "look niemand"), ("a", "schau dich um"),
+		("a", "say hallo"), ("a", "'moin"), ("a", ":winkt"), ("a", "emote"), ("a", "say"), ("a", "hallo Wanderer2, wie geht's?"), ("a", "moin"), ("b", "Strandläufer-1001: komm her"),
+		("a", "who"), ("a", "wer"), ("a", "wer ist da"), ("a", "help"), ("b", "hilfe"), ("a", "help step"), ("a", "help geh"), ("a", "help gibtsnicht"), ("a", "?"), ("a", "help intro"),
+		("a", "inventory"), ("a", "i"), ("a", "was trage ich"),
+		("a", "move 5 7"), ("a", "get treibholz"), ("a", "nimm das treibholz auf"), ("a", "get muschel"), ("a", "move 14 5"), ("a", "heb muschel"), ("a", "inventar"),
+		("a", "move 9 9"), ("a", "put treibholz in feuer"), ("a", "lege muschel ins feuer"), ("a", "wirf alle hölzer ins feuer"), ("a", "look leuchtfeuer"),
+		("a", "drop muschel"), ("a", "get muschel"), ("a", "give muschel an Wanderer2"), ("a", "move 10 9"), ("b", "move 9 8"),
+		("b", "move 17 9"), ("b", "get treibholz"), ("b", "move 10 8"), ("b", "give treibholz an Strandläufer-1001"), ("b", "gib Strandläufer-1001 das treibholz"), ("a", "give 2 treibholz an Wanderer2"), ("a", "give 99 treibholz an Wanderer2"), ("a", "give treibholz an niemand"), ("a", "give treibholz"),
+		("a", "channel"), ("a", "kanal hafen hallo alle"), ("a", "kanal welt x"), ("a", "kanal hafen"), ("a", "chan HAFEN laut"),
+		("a", "tanze"), ("a", "Tanze wild"), ("a", "step"), ("a", "schritt 1 0"), ("a", "move 99 99"), ("a", "move a b"), ("a", "move 1"), ("a", "arrive"),
+		("a", "gehe nach osten"), ("a", "look"), ("a", "west"), ("a", "go"), ("a", "go nirgendwo"), ("a", "geh süd"), ("a", "nord"), ("a", "lauf richtung klippenpfad"),
+		("b", "inventory"), ("b", "drop treibholz"), ("b", "look treibholz"),
+	];
+	let mut refused = 0;
+	for (i, (who, line)) in script.iter().enumerate() {
+		w.at(START + i as f64 * 11_000.0);
+		let id = if *who == "a" { a.clone() } else { b.clone() };
+		let r = w.cmd(&id, line, None);
+		if r.starts_with("refused") { refused += 1; }
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{i}: {who} {line} -> {r}"));
+	}
+	assert!(refused > 5 && refused < script.len() / 2, "{refused} of {} refused", script.len());
+}

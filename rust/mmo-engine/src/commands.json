@@ -1,0 +1,975 @@
+{
+	"default": [
+		{
+			"module": "default",
+			"key": "look",
+			"aliases": [
+				"schau",
+				"sieh",
+				"l"
+			],
+			"help": "look [ding] – sich umsehen, oder ein Ding, einen Ausgang, eine Person ansehen"
+		},
+		{
+			"module": "default",
+			"key": "say",
+			"aliases": [
+				"sag",
+				"sage",
+				"'"
+			],
+			"help": "say <text> – etwas sagen; alle hier hören es (kurz: '<text>)"
+		},
+		{
+			"module": "default",
+			"key": "emote",
+			"aliases": [
+				"geste",
+				"pose",
+				":"
+			],
+			"help": "emote <tut etwas> – eine Handlung zeigen, z. B. emote winkt (kurz: :winkt)"
+		},
+		{
+			"module": "default",
+			"key": "who",
+			"aliases": [
+				"wer"
+			],
+			"help": "who – wer gerade spielt"
+		},
+		{
+			"module": "default",
+			"key": "move",
+			"aliases": [
+				"laufe",
+				"lauf"
+			],
+			"help": "move <x> <y> – zu einer Stelle gehen, den ganzen Weg"
+		},
+		{
+			"module": "default",
+			"key": "step",
+			"aliases": [
+				"schritt"
+			],
+			"help": "step <dx> <dy> – einen Schritt gehen (das tun Klick und Pfeiltaste)"
+		},
+		{
+			"module": "default",
+			"key": "arrive",
+			"hidden": true,
+			"help": "arrive – auf eine freie Stelle treten, falls die eigene besetzt ist oder ein Feuer ist"
+		},
+		{
+			"module": "default",
+			"key": "go",
+			"aliases": [
+				"geh",
+				"gehe"
+			],
+			"help": "go <richtung> – einen Ausgang nehmen, von überall im Raum (oder nur den Namen tippen, z. B. ost)"
+		},
+		{
+			"module": "default",
+			"key": "get",
+			"aliases": [
+				"nimm",
+				"heb",
+				"take"
+			],
+			"help": "get <ding> – etwas aufheben, das neben dir liegt"
+		},
+		{
+			"module": "default",
+			"key": "drop",
+			"aliases": [
+				"leg",
+				"lege",
+				"lass"
+			],
+			"help": "drop <ding> – etwas ablegen, wo du stehst (lege <ding> ins feuer: nachlegen)"
+		},
+		{
+			"module": "default",
+			"key": "put",
+			"aliases": [
+				"nachlegen",
+				"wirf",
+				"feed"
+			],
+			"help": "put [anzahl|alle] <ding> in <feuer> – Brennholz in ein Leuchtfeuer neben dir legen (auch: lege 3 hölzer ins feuer)"
+		},
+		{
+			"module": "default",
+			"key": "give",
+			"aliases": [
+				"gib",
+				"gebe",
+				"gieb"
+			],
+			"help": "give [anzahl] <ding> an <person> – jemandem hier etwas geben, z. B. give 6 münzen an Bert (nicht als Gast)"
+		},
+		{
+			"module": "default",
+			"key": "inventory",
+			"aliases": [
+				"inventar",
+				"i",
+				"inv"
+			],
+			"help": "inventory – was du trägst"
+		},
+		{
+			"module": "default",
+			"key": "channel",
+			"aliases": [
+				"kanal",
+				"chan"
+			],
+			"help": "channel <name> <text> – auf einem Kanal sprechen, den alle hören (kanal ohne Text listet sie)"
+		},
+		{
+			"module": "default",
+			"key": "reputation",
+			"aliases": [
+				"ruf"
+			],
+			"help": "reputation – was du in die Leuchtfeuer gelegt, an Parks gepflegt und für die Gemeinschaft getan hast (Gemeinschaftsbeet, fremde Bauten ausgebessert, fremde Tiere gefüttert)"
+		},
+		{
+			"module": "default",
+			"key": "avatar",
+			"aliases": [
+				"aussehen",
+				"appearance"
+			],
+			"help": "avatar figur <1–4> farbe <1–8> haar <1–8> haut <1–5> hut <1–4> brille ja|nein handschuhe ja|nein – wie deine Figur in 3D aussieht (avatar allein: wie jetzt; avatar zurück: wie zu Beginn)"
+		},
+		{
+			"module": "trade",
+			"key": "offer",
+			"aliases": [
+				"biete",
+				"tausche"
+			],
+			"help": "offer <dinge> an <person> [für <dinge>] – einen Tausch anbieten (offer zurück nimmt ihn zurück)"
+		},
+		{
+			"module": "trade",
+			"key": "accept",
+			"aliases": [
+				"annehmen",
+				"nimm-an"
+			],
+			"help": "accept [person] – ein Tauschangebot annehmen (alles wechselt auf einmal oder gar nicht)"
+		},
+		{
+			"module": "trade",
+			"key": "decline",
+			"aliases": [
+				"ablehnen"
+			],
+			"help": "decline [person] – ein Tauschangebot ablehnen"
+		},
+		{
+			"module": "trade",
+			"key": "market",
+			"aliases": [
+				"markt"
+			],
+			"help": "market – das Marktbrett: market biete <ding> [aus truhe [nr]] für <n>, market kaufe <ding> [für <n>] oder <nr>, market zurück <nr>; Gesuche: market suche <ding> für <n>, market liefere <nr> [für <n>], market antworte <nr> ab <n>, market suche zurück <nr> (Preise in Münzen)"
+		},
+		{
+			"module": "trade",
+			"key": "craft",
+			"aliases": [
+				"baue",
+				"herstellen",
+				"fertige"
+			],
+			"help": "craft [anzahl] [rezept] – etwas herstellen, auch mehrmals (craft 3 tangseil); ohne Rezept die Liste"
+		},
+		{
+			"module": "trade",
+			"key": "order",
+			"aliases": [
+				"auftrag",
+				"auftraege",
+				"aufträge"
+			],
+			"help": "order – die Auftragstafel: order nimm <nr>, order liefere, order aufgeben (Lohn in Münzen)"
+		},
+		{
+			"module": "scenery",
+			"key": "räume",
+			"aliases": [
+				"raeume",
+				"räumen",
+				"raeumen",
+				"clear"
+			],
+			"help": "räume [x y] – was neben dir (bis zwei Schritte) im Weg steht abräumen, eine alte Hütte, ein Boot: Arbeit für Arbeit, dann ist das Land frei und das Holz deins"
+		},
+		{
+			"module": "build",
+			"key": "bau",
+			"aliases": [
+				"build",
+				"errichte"
+			],
+			"help": "bau <plan> – neben dir eine Baustelle abstecken (bau allein: die Baupläne; bau <plan> <x> <y>: an einer Stelle)"
+		},
+		{
+			"module": "build",
+			"key": "liefere",
+			"aliases": [
+				"deliver"
+			],
+			"help": "liefere [n] <ding> – an die Baustelle neben dir (bis zwei Schritte) liefern, was sie braucht (zu viel bleibt bei dir)"
+		},
+		{
+			"module": "build",
+			"key": "arbeite",
+			"aliases": [
+				"work"
+			],
+			"help": "arbeite – an der Baustelle neben dir (bis zwei Schritte) mitarbeiten (danach ruhst du eine Weile)"
+		},
+		{
+			"module": "build",
+			"key": "baustelle",
+			"aliases": [
+				"baustellen",
+				"site",
+				"sites"
+			],
+			"help": "baustelle [x y] – was hier gebaut wird und was noch fehlt (mit x y: nur das auf dieser Zelle)"
+		},
+		{
+			"module": "build",
+			"key": "truhe",
+			"aliases": [
+				"kiste",
+				"chest"
+			],
+			"help": "truhe – was in der Truhe deines Baus neben dir liegt (verstaue <ding>, entnimm <ding>)"
+		},
+		{
+			"module": "build",
+			"key": "lager",
+			"aliases": [
+				"warehouse",
+				"depot"
+			],
+			"help": "lager [log] – was im Lagerhaus neben dir liegt und was du heute noch nehmen darfst; log: wer zuletzt ein- und ausgelagert hat"
+		},
+		{
+			"module": "build",
+			"key": "verstaue",
+			"aliases": [
+				"einlagern",
+				"store"
+			],
+			"help": "verstaue [n|alle] <ding> [in <truhe>] – etwas in eine deiner Truhen legen, von überall (neben dir: diese; „in 2“ oder „in die hütte am anleger“: eine andere; neben einem Lagerhaus: ins Lager)"
+		},
+		{
+			"module": "build",
+			"key": "entnimm",
+			"aliases": [
+				"hole",
+				"retrieve"
+			],
+			"help": "entnimm [n|alle] <ding> – etwas aus der Truhe deines Baus neben dir nehmen"
+		},
+		{
+			"module": "build",
+			"key": "repariere",
+			"aliases": [
+				"repair",
+				"ausbessern"
+			],
+			"help": "repariere – einen Bau neben dir ausbessern (kostet etwas Material; jeder darf helfen)"
+		},
+		{
+			"module": "build",
+			"key": "abriss",
+			"aliases": [
+				"reisse",
+				"reiße",
+				"demolish"
+			],
+			"help": "abriss – deinen Bau oder deine Baustelle neben dir abreißen (reisse … ab): die Fläche wird frei, ein Teil des Materials kommt zurück; eine Ruine neben dir räumt jeder ab"
+		},
+		{
+			"module": "build",
+			"key": "nachlass",
+			"aliases": [
+				"estate"
+			],
+			"help": "nachlass – was in der Truhe eines verfallenen Baus von dir lag, hier abholen"
+		},
+		{
+			"module": "siteorder",
+			"key": "aushang",
+			"aliases": [
+				"aushaengen",
+				"aushängen",
+				"hire"
+			],
+			"help": "aushang <n> <ding|arbeit> je <münzen> – an deiner Baustelle Lohn für das Fehlende aushängen (aushang allein: was aushängt; aushang ab: Lohn zurück)"
+		},
+		{
+			"module": "chapel",
+			"key": "opfere",
+			"aliases": [
+				"opfern",
+				"sacrifice"
+			],
+			"help": "opfere <ding> – an einer Kapelle neben dir etwas Wertvolles opfern: einen Tag lang ruhst du nach der Arbeit nur halb so lange"
+		},
+		{
+			"module": "townhall",
+			"key": "antrag",
+			"aliases": [
+				"motion",
+				"beantrage"
+			],
+			"help": "antrag <zu|offen|text> – am Rathaus einen Antrag stellen, über den die Siedler einen Tag lang abstimmen; „antrag grünzone“, „antrag wegerecht“, „antrag zone frei“ für die Fläche um dich; „antrag abriss“ für den Bau neben dir; „antrag steuer <n>“ für das Lager; „antrag“ allein zeigt den laufenden"
+		},
+		{
+			"module": "townhall",
+			"key": "stimme",
+			"aliases": [
+				"vote",
+				"abstimmen"
+			],
+			"help": "stimme ja|nein – als Siedler über den laufenden Antrag hier abstimmen; die letzte Stimme zählt"
+		},
+		{
+			"module": "festival",
+			"key": "fest",
+			"aliases": [
+				"festival",
+				"feier"
+			],
+			"help": "fest blumen|ernte – als Siedler an einem Park eine Blumenschau oder ein Erntefest eröffnen; „fest“ allein zeigt das laufende"
+		},
+		{
+			"module": "festival",
+			"key": "zeige",
+			"aliases": [
+				"ausstellen",
+				"exhibit"
+			],
+			"help": "zeige <ding> – am Park eine Blume zur Blumenschau oder Ernte zum Erntefest geben; was gezeigt ist, bleibt beim Fest"
+		},
+		{
+			"module": "festival",
+			"key": "pflege",
+			"aliases": [
+				"pflegen",
+				"tend"
+			],
+			"help": "pflege – einmal am Tag eine Blume in den Park neben dir setzen: das bringt dir Ruf und der Siedlung Rang"
+		},
+		{
+			"module": "wind",
+			"key": "wetter",
+			"aliases": [
+				"weather",
+				"wind"
+			],
+			"help": "wetter – wie der Wind hier steht und wie dicht der Nebel ist; der Wind treibt die Mühlen"
+		},
+		{
+			"module": "cart",
+			"key": "karren",
+			"aliases": [
+				"cart",
+				"wagen"
+			],
+			"help": "karren – deine Karren; karren stelle, karren lade <ding>, karren entlade, karren fahre <ort> (nur auf Straßen), karren pendel <ort> [mit <ding>], karren halt, karren nimm"
+		},
+		{
+			"module": "cart",
+			"key": "zug",
+			"aliases": [
+				"bahn",
+				"train"
+			],
+			"help": "zug <ort> – neben einem Bahnhof mit der Inselbahn zu einem anderen Bahnhof dieser Insel fahren; „zug“ allein zeigt die Bahnhöfe und den Fahrplan; „zug sende [n|alle] <ding> nach <ort>“ gibt Fracht auf, „zug abholen“ holt sie am Ziel"
+		},
+		{
+			"module": "food",
+			"key": "iss",
+			"aliases": [
+				"esse",
+				"essen",
+				"eat"
+			],
+			"help": "iss <ding> – etwas essen: Satt ruhst du nach der Arbeit kürzer; Brot hält länger als ein Ei"
+		},
+		{
+			"module": "shop",
+			"key": "laden",
+			"aliases": [
+				"kaufhaus",
+				"shop"
+			],
+			"help": "laden – was das Kaufhaus neben dir führt und zu welchem Preis (laden kaufe <ding>; laden verkaufe <ding>; laden liefere <ding> für eine Bestellung; der Besitzer: laden einlegen <n>, laden entnehme <n>, laden bestelle <n> <ding> für <m>, laden storniere <ding>)"
+		},
+		{
+			"module": "shop",
+			"key": "kredit",
+			"aliases": [
+				"leihe",
+				"credit",
+				"loan"
+			],
+			"help": "kredit <n> gegen <ding> – am Kontor neben dir Münzen gegen ein Pfand leihen; „tilge“ zahlt sie mit Zinsen zurück, sonst gehört das Pfand dem Kontor"
+		},
+		{
+			"module": "shop",
+			"key": "tilge",
+			"aliases": [
+				"tilgen",
+				"repay"
+			],
+			"help": "tilge – am Kontor deinen Kredit zurückzahlen und das Pfand auslösen"
+		},
+		{
+			"module": "shop",
+			"key": "wechsel",
+			"aliases": [
+				"wechselbrief",
+				"bill",
+				"note"
+			],
+			"help": "wechsel <n> – am Kontor neben dir n Münzen in einen Wechsel legen, den du weitergeben kannst; „wechsel einlösen“ zahlt jeden Wechsel, den du trägst, an einem Kontor aus; „wechsel“ allein zeigt deine"
+		},
+		{
+			"module": "signal",
+			"key": "signalfeuer",
+			"aliases": [
+				"signale",
+				"signalkette",
+				"feuerkette",
+				"signal fires"
+			],
+			"help": "signalfeuer – die Ketten der Signalfeuer dieser Insel: welche Feuer sie verbinden, ob sie brennen, und welche Insel dieser Gegend ihre Kette am längsten brennen ließ"
+		},
+		{
+			"module": "fishing",
+			"key": "wirf",
+			"aliases": [
+				"fische",
+				"fish"
+			],
+			"help": "wirf netz – an einem Steg neben dir das Netz auswerfen: Fisch, manchmal ein Fund; danach ruhst du eine Weile"
+		},
+		{
+			"module": "fishing",
+			"key": "rudere",
+			"aliases": [
+				"rudern",
+				"row"
+			],
+			"help": "rudere <ort> – mit einem Ruderboot vom Steg neben dir zu einem Steg dieser Insel; „rudere“ allein zeigt, wohin"
+		},
+		{
+			"module": "fishing",
+			"key": "segle",
+			"aliases": [
+				"segeln",
+				"sail"
+			],
+			"help": "segle <insel> – mit einem Segelboot vom Steg neben dir zu einer anderen Insel; „segle“ allein zeigt, wohin"
+		},
+		{
+			"module": "fishing",
+			"key": "luke",
+			"aliases": [
+				"laderaum",
+				"hatch"
+			],
+			"help": "luke – was in der Luke deines Boots liegt; am Steg „luke lade [n|alle] <ding>“ und „luke entlade [n|alle] <ding>“ (oder „luke entlade alle“)"
+		},
+		{
+			"module": "fishing",
+			"key": "fahrplan",
+			"aliases": [
+				"timetable",
+				"schiff"
+			],
+			"help": "fahrplan – wo das große Schiff gerade fährt, wann es in dieser Bucht liegt und in welcher Reihenfolge es die Inseln anläuft; „einschiffen <insel>“ fährt mit"
+		},
+		{
+			"module": "fishing",
+			"key": "einschiffen",
+			"aliases": [
+				"board"
+			],
+			"help": "einschiffen <insel> – in der Bucht auf das große Schiff gehen, solange es hier liegt (fahrplan); du fährst mit, bis es die Insel erreicht"
+		},
+		{
+			"module": "fishing",
+			"key": "schaufle",
+			"aliases": [
+				"schaufeln",
+				"dig sand"
+			],
+			"help": "schaufle – am Strand mit dem Spaten Sand graben (danach ruhst du eine Weile)"
+		},
+		{
+			"module": "passage",
+			"key": "ausschiffen",
+			"aliases": [
+				"disembark",
+				"landen",
+				"aussteigen"
+			],
+			"help": "ausschiffen – an Bord des großen Schiffs: von Bord gehen, sobald es die Insel erreicht hat (das geschieht von selbst); „ausschiffen nächster“ steigt schon beim nächsten Halt auf der Fahrt aus"
+		},
+		{
+			"module": "garden",
+			"key": "beet",
+			"aliases": [
+				"beete",
+				"bed",
+				"beds"
+			],
+			"help": "beet – die Beete hier (beet anlegen [zier|gemeinschaft] [x y]: umgraben; beet aufgeben: dein Beet neben dir wieder zu Gras)"
+		},
+		{
+			"module": "garden",
+			"key": "umgraben",
+			"aliases": [
+				"umgrabe",
+				"dig-bed"
+			],
+			"help": "umgraben [zier|gemeinschaft] [x y] – mit einem Spaten neben dir ein Beet anlegen (im Licht eines Feuers): ein Gartenbeet, ein Zierbeet (nur Blumen, sie kreuzen sich) oder ein Gemeinschaftsbeet (3×3, eins je Feuer, für alle)"
+		},
+		{
+			"module": "garden",
+			"key": "pflanze",
+			"aliases": [
+				"pflanz",
+				"pflanzen",
+				"säe",
+				"säen",
+				"saee",
+				"sae",
+				"plant",
+				"sow",
+				"setze-samen"
+			],
+			"help": "pflanze <samen> [x y] – Samen in dein Beet oder ins Gemeinschaftsbeet neben dir setzen (bis zwei Schritte; eine Pflanze je Zelle; ins Zierbeet nur Blumen). Korn, Kartoffeln, Rüben und Flachs wachsen auf dem Acker: „bestelle“"
+		},
+		{
+			"module": "garden",
+			"key": "gieße",
+			"aliases": [
+				"giesse",
+				"gießen",
+				"giessen",
+				"gieß",
+				"giess",
+				"gies",
+				"water"
+			],
+			"help": "gieße – ein Beet neben dir gießen, deins oder eins, dessen Pate du bist (braucht eine Kanne Wasser aus der Regentonne)"
+		},
+		{
+			"module": "garden",
+			"key": "jäte",
+			"aliases": [
+				"jaete",
+				"jäten",
+				"jaeten",
+				"jät",
+				"jaet",
+				"weed"
+			],
+			"help": "jäte – Unkraut und Welkes aus einem Beet neben dir ziehen (deins oder als Pate)"
+		},
+		{
+			"module": "garden",
+			"key": "ernte",
+			"aliases": [
+				"ernten",
+				"pflücke",
+				"pfluecke",
+				"harvest"
+			],
+			"help": "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins oder als Pate; dazu gibt es Samen); an einem reifen Acker (ernte flur, wenn auch ein Beet nah ist) ein Arbeitspunkt der Ernte und dein Anteil"
+		},
+		{
+			"module": "garden",
+			"key": "pate",
+			"aliases": [
+				"paten",
+				"patin",
+				"sponsor"
+			],
+			"help": "pate <name> – jemanden dein Beet neben dir gießen, jäten und ernten lassen (pate weg <name> beendet es; pate allein: wer es darf)"
+		},
+		{
+			"module": "garden",
+			"key": "sammle",
+			"aliases": [
+				"sammeln",
+				"samen",
+				"seeds",
+				"gather"
+			],
+			"help": "sammle samen – in der wilden Flora hier nach Samen suchen (findet nicht immer etwas; an dieser Stelle danach eine kurze Pause)"
+		},
+		{
+			"module": "garden",
+			"key": "schöpfe",
+			"aliases": [
+				"schoepfe",
+				"schöpfen",
+				"schoepfen",
+				"schöpf",
+				"schoepf",
+				"fülle",
+				"fuelle",
+				"fill"
+			],
+			"help": "schöpfe – an einer Regentonne neben dir eine Kanne Wasser füllen"
+		},
+		{
+			"module": "garden",
+			"key": "benenne",
+			"aliases": [
+				"benennen",
+				"taufe",
+				"name-variety"
+			],
+			"help": "benenne [nr] <name> – deiner Kreuzung einen Namen geben (nur wer sie gezogen hat, nur einmal; ihre Samen trägst du bei dir)"
+		},
+		{
+			"module": "field",
+			"key": "flur",
+			"aliases": [
+				"fluren",
+				"acker",
+				"äcker",
+				"aecker",
+				"field",
+				"fields"
+			],
+			"help": "flur – die Äcker hier (flur anlegen [x y]: mit einem Spaten einen Acker umbrechen; flur offen / flur zu: alle mitsäen und -ernten lassen oder nicht; flur aufgeben)"
+		},
+		{
+			"module": "field",
+			"key": "bestelle",
+			"aliases": [
+				"bestellen",
+				"pflüge",
+				"pfluege",
+				"pflügen",
+				"pfluegen",
+				"plough",
+				"plow"
+			],
+			"help": "bestelle [frucht] – den Acker neben dir bestellen: wer sie angelegt hat, wählt die Frucht; dann bringt jeder Saatgut und einen Arbeitspunkt (danach ruhst du eine Weile)"
+		},
+		{
+			"module": "beam",
+			"key": "beam",
+			"aliases": [
+				"beame",
+				"beamen"
+			],
+			"help": "beam [ort] – zu einem brennenden Feuer springen, von wo du stehst (kostet Münzen, danach eine Pause); ohne Ort zeigt es die Ziele"
+		},
+		{
+			"module": "mill",
+			"key": "mahle",
+			"aliases": [
+				"mahlen",
+				"grind",
+				"mühle",
+				"muehle",
+				"windmühle",
+				"windmuehle",
+				"mill"
+			],
+			"help": "mahle [n|alle] <korn> – an einer Windmühle neben dir Korn zu Mehl mahlen lassen (mahle allein: wie lange sie zu tun hat)"
+		},
+		{
+			"module": "mill",
+			"key": "abholen",
+			"aliases": [
+				"abhol",
+				"hol-ab",
+				"pickup"
+			],
+			"help": "abholen – dein gemahlenes Mehl an der Mühle neben dir (bis zwei Schritte) abholen"
+		},
+		{
+			"module": "mill",
+			"key": "backe",
+			"aliases": [
+				"backen",
+				"bake"
+			],
+			"help": "backe [brot] – am Backhaus neben dir backen (ein Rezept am Bau, „craft“ zeigt, was es braucht)"
+		},
+		{
+			"module": "quarry",
+			"key": "breche",
+			"aliases": [
+				"brechen",
+				"quarry"
+			],
+			"help": "breche – am Steinbruch neben dir mit einer Spitzhacke Stein brechen (danach ruhst du eine Weile)"
+		},
+		{
+			"module": "quarry",
+			"key": "steche",
+			"aliases": [
+				"stechen",
+				"clay"
+			],
+			"help": "steche – an der Lehmgrube neben dir mit einem Spaten Lehm stechen (danach ruhst du eine Weile)"
+		},
+		{
+			"module": "animals",
+			"key": "stall",
+			"aliases": [
+				"ställe",
+				"staelle",
+				"gehege",
+				"coop",
+				"pen"
+			],
+			"help": "stall – die Tiere im Hühnerstall oder Gehege neben dir: wie viele, ob sie satt sind, was bereitliegt"
+		},
+		{
+			"module": "animals",
+			"key": "einstallen",
+			"aliases": [
+				"stalle",
+				"einstellen",
+				"stable"
+			],
+			"help": "einstallen <tier> – ein Tier, das du trägst, in deinen Hühnerstall oder dein Gehege neben dir bringen; einen Hund oder eine Katze an einen deiner Bauten, wo sie wachen"
+		},
+		{
+			"module": "animals",
+			"key": "ausstallen",
+			"aliases": [
+				"ausstellen",
+				"unstall"
+			],
+			"help": "ausstallen [tier] – ein Tier aus deinem Hühnerstall oder Gehege neben dir nehmen (auch: ausstallen hund)"
+		},
+		{
+			"module": "animals",
+			"key": "füttere",
+			"aliases": [
+				"fuettere",
+				"füttern",
+				"fuettern",
+				"futter",
+				"fodder"
+			],
+			"help": "füttere [n] [futter] – die Tiere im Stall oder Gehege neben dir füttern (jeder darf; ein Futter macht ein Tier einen Tag satt); füttere hund [futter], füttere katze [futter]"
+		},
+		{
+			"module": "animals",
+			"key": "einsammeln",
+			"aliases": [
+				"melke",
+				"melken",
+				"schere",
+				"scheren",
+				"eier",
+				"collect"
+			],
+			"help": "einsammeln – Eier, Wolle, Milch oder Honig deiner Tiere im Stall, Gehege oder Bienenstock neben dir (auch: sammle eier, sammle honig, melke, schere)"
+		},
+		{
+			"module": "animals",
+			"key": "wache",
+			"aliases": [
+				"wachen",
+				"wächter",
+				"waechter",
+				"guards"
+			],
+			"help": "wache – wer in diesem Raum Hof und Felder vor dem Wild bewacht (Hund, Katze, Gänse) und ob sie satt sind"
+		},
+		{
+			"module": "wild",
+			"key": "scheuche",
+			"aliases": [
+				"verscheuche",
+				"scheuchen",
+				"verscheuchen",
+				"scare",
+				"shoo"
+			],
+			"help": "scheuche [hase|reh|fuchs|maus|möwe] – ein Tier aus dem Nebel bis drei Schritte von dir zurückjagen, bevor es frisst"
+		},
+		{
+			"module": "wild",
+			"key": "zäune",
+			"aliases": [
+				"zaeune",
+				"umzäune",
+				"umzaeune",
+				"zäunen",
+				"zaeunen",
+				"fence"
+			],
+			"help": "zäune – einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), einen Acker oder einen Hühnerstall neben dir setzen: Hasen, Rehe und Füchse kommen nicht mehr hinein"
+		},
+		{
+			"module": "epoch",
+			"key": "epoche",
+			"aliases": [
+				"epoch",
+				"stufe"
+			],
+			"help": "epoche – auf welcher Stufe diese Insel steht, wie viele Punkte ihr Bestand hat und was die nächste freischaltet"
+		},
+		{
+			"module": "settlement",
+			"key": "siedlung",
+			"aliases": [
+				"settlement",
+				"dorfrat"
+			],
+			"help": "siedlung – die Siedlung hier: Name, Hütten, wer dazugehört (siedlung gründen <name>; aufnehmen <name> [helfer]; entlassen <name>; zu; offen; rang)"
+		},
+		{
+			"module": "clock",
+			"key": "time",
+			"aliases": [
+				"zeit",
+				"uhrzeit"
+			],
+			"help": "time – die Zeit in der Welt: Tag und Uhrzeit"
+		},
+		{
+			"module": "clock",
+			"key": "clock",
+			"aliases": [
+				"uhr"
+			],
+			"locks": "cmd:perm(Admin)",
+			"help": "clock [pause|weiter|rate <n>|verfall <n>] – die Weltuhr dieser Region: Stand, anhalten, fortsetzen, Lebenstakt und Verfallstakt (je Sekunde; 1 = Echtzeit). Das Admin-Fenster stellt beide für alle Regionen ein"
+		},
+		{
+			"module": "default",
+			"key": "help",
+			"aliases": [
+				"hilfe",
+				"?"
+			],
+			"help": "help [befehl|thema] – diese Hilfe"
+		}
+	],
+	"builder": [
+		{
+			"module": "builder",
+			"key": "dig",
+			"aliases": [
+				"grabe",
+				"grab"
+			],
+			"locks": "cmd:perm(Builder)",
+			"help": "dig <name> = <richtung>[, <zurück>] – einen neuen Raum anlegen und hier einen Ausgang dorthin öffnen"
+		},
+		{
+			"module": "builder",
+			"key": "open",
+			"aliases": [
+				"öffne",
+				"oeffne"
+			],
+			"locks": "cmd:perm(Builder)",
+			"help": "open <richtung> = <raum> – hier einen Ausgang in einen bestehenden Raum öffnen (Name oder Raum-ID)"
+		},
+		{
+			"module": "builder",
+			"key": "create",
+			"aliases": [
+				"erschaffe"
+			],
+			"locks": "cmd:perm(Builder)",
+			"help": "create <name>[:<typklasse>] – ein neues Ding erschaffen, wo du stehst"
+		},
+		{
+			"module": "builder",
+			"key": "spawn",
+			"aliases": [
+				"erzeuge"
+			],
+			"locks": "cmd:perm(Builder)",
+			"help": "spawn <prototyp> – ein Ding nach einem Prototyp erschaffen, wo du stehst (spawn ohne Namen listet sie)"
+		},
+		{
+			"module": "builder",
+			"key": "set",
+			"aliases": [
+				"setze"
+			],
+			"locks": "cmd:perm(Builder)",
+			"help": "set <ding>/<feld> = <wert> – ein Feld ändern: name, desc, aliases (mit Kommas), locks; „hier“ ist der Raum"
+		},
+		{
+			"module": "builder",
+			"key": "lock",
+			"aliases": [
+				"sperre"
+			],
+			"locks": "cmd:perm(Builder)",
+			"help": "lock <ding> = <lock-string> – Zugriffe regeln, z. B. lock tür = traverse:perm(Builder) (help bauen)"
+		},
+		{
+			"module": "builder",
+			"key": "tag",
+			"aliases": [
+				"markiere"
+			],
+			"locks": "cmd:perm(Builder)",
+			"help": "tag <ding> = <tag>[:<kategorie>] – ein Tag anheften; = -<tag> nimmt es ab; tag <ding> listet sie"
+		},
+		{
+			"module": "builder",
+			"key": "examine",
+			"aliases": [
+				"untersuche",
+				"ex"
+			],
+			"locks": "cmd:perm(Builder)",
+			"help": "examine <ding> – alle Felder, Typklasse und Tags eines Dings, Ausgangs oder des Raums („hier“)"
+		},
+		{
+			"module": "builder",
+			"key": "destroy",
+			"aliases": [
+				"vernichte",
+				"zerstöre",
+				"zerstoere"
+			],
+			"locks": "cmd:perm(Builder)",
+			"help": "destroy <ding> – ein Ding oder einen Ausgang hier vernichten (mit seinen Tags)"
+		},
+		{
+			"module": "builder",
+			"key": "perm",
+			"aliases": [
+				"rechte"
+			],
+			"locks": "cmd:perm(Admin)",
+			"help": "perm <name> = <stufe> – einem registrierten Konto eine Stufe geben (Player, Builder)"
+		}
+	]
+}
