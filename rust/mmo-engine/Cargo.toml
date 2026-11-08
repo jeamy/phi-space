@@ -1,0 +1,12 @@
+[package]
+name = "mmo-engine"
+description = "The engine of spaces-mmo (spaces-mmo/server/engine): its commands and ticks over a Space, against the frozen TypeScript engine as the oracle (docs/rust-portierung.en.md, R8.2)"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+phi-json = { path = "../phi-json" }
+regex = "1.13"
+icu_collator = "2.4"
+unicode-normalization = "0.1.26"
