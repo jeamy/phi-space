@@ -12,13 +12,13 @@ pub const FROZEN: &str = "2698bad";
 
 pub fn repo() -> PathBuf { Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().expect("the checkout") }
 
-/// The engine's environment: messages kept as entries, no model calls, the clock's default rate, the tick floors off,
+/// The engine's environment: messages kept as entries, no model calls, the clock's default rate, the tick floors off, the settings read anew each time (their cache runs on the real clock),
 /// the wind on. Set in this process (the Rust engine reads it) before any node process starts (they inherit it).
 pub fn pin_env() {
 	static ONCE: Once = Once::new();
 	ONCE.call_once(|| {
 		for (k, v) in std::env::vars() { if k.starts_with("SPACES_MMO_") { std::env::remove_var(&k); let _ = v; } }
-		for (k, v) in [("SPACES_MMO_MSG_TRANSIENT", "0"), ("SPACES_MMO_LLM", ""), ("SPACES_MMO_TICK_FLOORS", "0"), ("SPACES_MMO_WORLD", "leuchtfeuer")] { std::env::set_var(k, v); }
+		for (k, v) in [("SPACES_MMO_MSG_TRANSIENT", "0"), ("SPACES_MMO_LLM", ""), ("SPACES_MMO_TICK_FLOORS", "0"), ("SPACES_MMO_WORLD", "leuchtfeuer"), ("SPACES_MMO_SETTINGS_MS", "1")] { std::env::set_var(k, v); }
 	});
 }
 

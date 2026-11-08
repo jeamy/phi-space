@@ -7,6 +7,8 @@
 // (server/engine/source.ts) whose clock is the driver's, moved by the steps. The environment (SPACES_MMO_*) is the
 // caller's: rust/mmo-engine/tests/common sets it for both engines.
 // In:  {"op": "clock", "at": ms} | {"op": "load", "world": "leuchtfeuer", "replace"?: bool} | {"op": "dump"}
+//      | {"op": "tick", "world": "leuchtfeuer", "job": "fire" | "fog" | "flood"}: a recurring job as the world worker runs
+//      it (server/world-host.ts `runs`: in stableTerrain, on spatialWorld), its messages kept MSG_LEASE_MS (10 min)
 // Out: {"ok": true, "result"?: ...} or {"ok": false, "error": "<message>"}; "dump": every entry as the JSON text of
 //      [type, types, fields] with the keys sorted, in the order the space lists them.
 import { createInterface } from "node:readline";
@@ -22,9 +24,13 @@ const { loadWorld } = await from("server/engine/world.ts");
 const { loadIntoSpace } = await from("server/engine/loader.ts");
 const { WORLD_LOCK } = await from("server/model.ts");
 const { connectSpace } = await from("server/space.ts");
+const { stableTerrain, spatialWorld } = await from("server/engine/room-growth.ts");
+const { fireTick, chainTick, fogTick, floodTick } = await from("server/engine/fire.ts");
+const { byPeoplesPace } = await from("server/engine/clock.ts");
 const { FOREVER } = await import("phi-spaces");
 
 let clock = Number(clockText);
+const MSG_LEASE_MS = 600_000;
 const space = connectSpace(address).space;
 
 const canon = (v: unknown): unknown => (Array.isArray(v) ? v.map(canon) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, x]) => [k, canon(x)])) : v);
@@ -38,6 +44,20 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 			const w = await world(String(line.world));
 			if (!(await space.readIfExists(WORLD_LOCK, 0))) await space.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, null, FOREVER); // the space process writes it
 			return await loadIntoSpace(space, w, { replace: !!line.replace });
+		}
+		case "tick": {
+			const w = await world(String(line.world)), msgLeaseMs = MSG_LEASE_MS;
+			const job = (fn: (live: unknown) => Promise<void>) => () => stableTerrain(space, async () => fn(await spatialWorld(space, w)));
+			// server/world-host.ts at the frozen commit, the jobs ported so far
+			const runs: Record<string, () => Promise<void>> = {
+				fire: job(async (live) => { await fireTick(space, live, msgLeaseMs); await chainTick(space, live, msgLeaseMs); }),
+				fog: job((live) => fogTick(space, live, msgLeaseMs)),
+				flood: job(async (live) => { if (await byPeoplesPace(space)) await floodTick(space, live, msgLeaseMs); }),
+			};
+			const run = runs[String(line.job)];
+			if (!run) throw new Error(`unknown job ${String(line.job)}`);
+			await run();
+			return null;
 		}
 		case "dump": return (await space.readAll({})).map((e: { type: string; types: string[]; fields: unknown }) => JSON.stringify([e.type, e.types, canon(e.fields)]));
 		default: throw new Error(`unknown op ${String(line.op)}`);

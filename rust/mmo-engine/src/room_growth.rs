@@ -75,6 +75,16 @@ pub async fn pin_terrain(space: &Space, txn: &str) -> Result<()> {
 	Ok(())
 }
 
+/// `stableTerrain`: the start of a long job: a transaction of its own that pins the terrain (abort it with `end_terrain`
+/// when the job is done, whatever it did).
+pub async fn stable_terrain(space: &Space) -> Result<String> {
+	let txn = space.create_transaction(120_000.0).await?;
+	if let Err(e) = pin_terrain(space, &txn).await { space.abort(&txn).await?; return Err(e); }
+	Ok(txn)
+}
+/// The end of `stable_terrain`.
+pub async fn end_terrain(space: &Space, txn: &str) -> Result<()> { space.abort(txn).await }
+
 /// `spatialWorld`: the definition in the coordinates of the rooms as they grew.
 pub async fn spatial_world(space: &Space, w: &Json) -> Result<Json> {
 	let all = space.read_all(&phi_json::obj! { "type" => "RoomGrowth" }, None).await?;

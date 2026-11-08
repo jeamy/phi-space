@@ -20,6 +20,8 @@ pub enum Error {
 	StillHeld(String),
 	/// A command's refusal to the player (`CommandError`): its text, and no change.
 	Command(String),
+	/// A refusal that means "not understood" (`NotUnderstood`, a `CommandError` too).
+	NotUnderstood(String),
 	/// Anything else (a broken definition, a bug).
 	Other(String),
 }
@@ -28,7 +30,7 @@ impl std::fmt::Display for Error {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Error::Space(e) => write!(f, "{e}"),
-			Error::StillHeld(m) | Error::Command(m) | Error::Other(m) => f.write_str(m),
+			Error::StillHeld(m) | Error::Command(m) | Error::NotUnderstood(m) | Error::Other(m) => f.write_str(m),
 		}
 	}
 }
@@ -36,6 +38,16 @@ impl std::fmt::Display for Error {
 impl From<SpaceError> for Error {
 	fn from(e: SpaceError) -> Self { if let SpaceError::StillHeld(m) = e { Error::StillHeld(m) } else { Error::Space(e) } }
 }
+
+impl Error {
+	/// `e instanceof CommandError` (NotUnderstood included).
+	pub fn is_command(&self) -> bool { matches!(self, Error::Command(_) | Error::NotUnderstood(_)) }
+}
+
+/// `throw new CommandError(text)`.
+pub fn refuse<T>(text: impl Into<String>) -> Result<T> { Err(Error::Command(text.into())) }
+/// `throw new NotUnderstood(text)`.
+pub fn not_understood<T>(text: impl Into<String>) -> Result<T> { Err(Error::NotUnderstood(text.into())) }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -49,6 +61,20 @@ fn some(v: Json) -> Option<Json> { if v.is_null() { None } else { Some(v) } }
 
 impl Space {
 	pub fn new(remote: Rc<RemoteSpace>) -> Self { Self(remote) }
+
+	/// What tells this space from another in a cache (the settings).
+	pub fn key(&self) -> usize { Rc::as_ptr(&self.0) as usize }
+
+	/// `supports(space, feature)`: whether the server's hello names it (false when the hello fails).
+	pub async fn supports(&self, feature: &str) -> bool {
+		self.0.info().await.ok().and_then(|h| h.get("features").and_then(Json::as_array).map(|f| f.iter().any(|x| x.as_str() == Some(feature)))).unwrap_or(false)
+	}
+
+	/// `write(entry, txn, lease, { transient })`.
+	pub async fn write_with(&self, entry: &Json, txn: Option<&str>, lease: f64, transient: bool) -> Result<Json> {
+		let o = Opts { transient, ..opts(txn) };
+		Ok(self.0.write(entry, txn, lease, &o).await?)
+	}
 
 	pub async fn write(&self, entry: &Json, txn: Option<&str>, lease: f64) -> Result<Json> { Ok(self.0.write(entry, txn, lease, &opts(txn)).await?) }
 

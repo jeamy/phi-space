@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use mmo_engine::loader::{load_into_space, LoadOptions};
 use mmo_engine::model::world_lock;
 use mmo_engine::source::{set_source, Seeded};
+use mmo_engine::worker::run_job;
 use mmo_engine::space::{Space, FOREVER};
 use phi_json::{obj, Json};
 use phi_spaces_client::{connect_space, ConnectOptions};
@@ -71,30 +72,75 @@ fn compare(step: &str, ts: &Json, rust: &[String]) {
 	if let Some(i) = ts.iter().zip(rust).position(|(x, y)| x != y) { panic!("{step}: the same entries in another order, from entry {i}:\n  TypeScript {}\n  Rust       {}", ts[i], rust[i]); }
 }
 
+/// One comparison: the two spaces, the TypeScript driver, the Rust engine's space and clock.
+struct Walk { _servers: (Kill, Kill), ts: Driver, space: Space, clock: Rc<Cell<f64>>, w: Json, rt: tokio::runtime::Runtime, local: tokio::task::LocalSet }
+
+impl Walk {
+	fn new(name: &str, seed: u32, start: f64) -> Self {
+		let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("engine-walk-{name}"));
+		std::fs::create_dir_all(&dir).unwrap();
+		let (a, addr_a) = space_server(&dir, "ts");
+		let (b, addr_b) = space_server(&dir, "rust");
+		let ts = Driver::start(&addr_a, seed, start);
+		let clock = Rc::new(Cell::new(start));
+		let c = clock.clone();
+		set_source(Some(Rc::new(Seeded::new(seed, move || c.get()))));
+		let w = mmo_engine::world::load_world(&oracle().join("spaces-mmo"), "leuchtfeuer").expect("the world");
+		let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+		let local = tokio::task::LocalSet::new();
+		let space = local.block_on(&rt, async {
+			let (remote, _t) = connect_space(&addr_b, ConnectOptions::default()).expect("connect");
+			let space = Space::new(remote);
+			space.write(&world_lock(), None, FOREVER).await.expect("the lock");
+			space
+		});
+		Self { _servers: (a, b), ts, space, clock, w, rt, local }
+	}
+	fn run<T>(&self, f: impl std::future::Future<Output = T>) -> T { self.local.block_on(&self.rt, f) }
+	fn at(&mut self, ms: f64) { self.clock.set(ms); self.ts.call(obj! { "op" => "clock", "at" => ms }); }
+	fn compare(&mut self, step: &str) {
+		let ts = self.ts.call(obj! { "op" => "dump" });
+		let rust = self.run(dump(&self.space));
+		compare(step, &ts, &rust);
+	}
+	fn load(&mut self, replace: bool) {
+		let t = self.ts.call(obj! { "op" => "load", "world" => "leuchtfeuer", "replace" => replace });
+		let r = self.run(load_into_space(&self.space, &self.w, LoadOptions { replace, txn_ms: None })).expect("the Rust load");
+		assert_eq!(t.get("result"), Some(&r.to_json()), "load: the result");
+	}
+	/// How many entries of the Rust space contain `text` (a walk shows that it did something).
+	fn entries_with(&mut self, text: &str) -> usize { self.run(dump(&self.space)).iter().filter(|e| e.contains(text)).count() }
+	fn tick(&mut self, job: &str) {
+		let t = self.ts.call(obj! { "op" => "tick", "world" => "leuchtfeuer", "job" => job });
+		let r = self.run(run_job(&self.space, &self.w, job, 600_000.0));
+		assert_eq!(t.get("ok") == Some(&Json::Bool(true)), r.is_ok(), "{job}: TypeScript {}, Rust {:?}", t.to_json_text(), r.err());
+	}
+}
+
+const START: f64 = 1_794_139_200_000.0; // 2026-11-08 12:00 UTC
+
 #[test]
 fn loading_the_world() {
-	let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("engine-walk-load");
-	std::fs::create_dir_all(&dir).unwrap();
-	let (_a, addr_a) = space_server(&dir, "ts");
-	let (_b, addr_b) = space_server(&dir, "rust");
-	let (seed, start) = (7u32, 1_794_139_200_000.0); // 2026-11-08 12:00 UTC
-	let mut ts = Driver::start(&addr_a, seed, start);
-	let clock = Rc::new(Cell::new(start));
-	let c = clock.clone();
-	set_source(Some(Rc::new(Seeded::new(seed, move || c.get()))));
-	let w = mmo_engine::world::load_world(&oracle().join("spaces-mmo"), "leuchtfeuer").expect("the world");
-	let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
-	tokio::task::LocalSet::new().block_on(&rt, async {
-		let (remote, _t) = connect_space(&addr_b, ConnectOptions::default()).expect("connect");
-		let space = Space::new(remote);
-		space.write(&world_lock(), None, FOREVER).await.expect("the lock");
-		for (i, replace) in [false, false, true].into_iter().enumerate() {
-			clock.set(start + i as f64 * 60_000.0);
-			ts.call(obj! { "op" => "clock", "at" => clock.get() });
-			let t = ts.call(obj! { "op" => "load", "world" => "leuchtfeuer", "replace" => replace });
-			let r = load_into_space(&space, &w, LoadOptions { replace, txn_ms: None }).await.expect("the Rust load");
-			assert_eq!(t.get("result"), Some(&r.to_json()), "load {i}: the result");
-			compare(&format!("load {i} (replace {replace})"), &ts.call(obj! { "op" => "dump" }), &dump(&space).await);
+	let mut w = Walk::new("load", 7, START);
+	for (i, replace) in [false, false, true].into_iter().enumerate() {
+		w.at(START + i as f64 * 60_000.0);
+		w.load(replace);
+		w.compare(&format!("load {i} (replace {replace})"));
+	}
+}
+
+#[test]
+fn the_weather() {
+	let mut w = Walk::new("weather", 11, START);
+	w.load(false);
+	for round in 0..8 {
+		w.at(START + (round + 1) as f64 * 20.0 * 60_000.0);
+		for job in ["fire", "fog", "flood"] {
+			w.tick(job);
+			w.compare(&format!("round {round}, {job}"));
 		}
-	});
+	}
+	let (flotsam, fog, washed) = (w.entries_with(r#""flotsam":true"#), w.entries_with("Nebel"), w.entries_with("Die Flut spült"));
+	eprintln!("the weather: {flotsam} pieces of flotsam, {fog} fog messages, {washed} tide messages");
+	assert!(flotsam > 0 && fog > 0 && washed > 0, "the walk did nothing");
 }

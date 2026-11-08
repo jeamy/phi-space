@@ -102,6 +102,9 @@ pub fn slice16(s: &str, start: isize, end: Option<isize>) -> &str {
 	&s[byte_at16(s, a)..byte_at16(s, e)]
 }
 
+/// `list.sort()` of strings: by UTF-16 code units.
+pub fn utf16_sort(list: &mut [String]) { list.sort_by(|a, b| phi_json::utf16_cmp(a, b)); }
+
 /// `s.toLowerCase()` (full mappings, final sigma).
 pub fn lower(s: &str) -> String { s.to_lowercase() }
 /// `s.toUpperCase()` (full mappings: `ß` is `SS`).
