@@ -2,7 +2,7 @@
 // and where it goes on from there (corn to the mill and the flour to the bakehouse, a goat into a pen for its milk). The
 // world's recipes and steps come with the page (ItemUses), so the hints follow the world and cost the space nothing.
 // Pure, so it is tested without a browser. Every text is German with its English in client/i18n/en.ts.
-import type { ItemUses, PlanView } from "../server/gateway.ts";
+import type { ItemUses, PlanView } from "../shared/frames.ts";
 
 export type Hint = { id: string; text: string; /** the command it suggests, as a button */ line?: string; /** the carried things it is about */ about: string[] };
 

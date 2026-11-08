@@ -4,13 +4,8 @@
 // over (handover.ts). Without `regions` in the world definition the whole world is one region, "world".
 import type { RoomDef, WorldDef } from "./world.ts";
 
-export type RegionDef = {
-	regionId: string;
-	/** The islands (RoomDef.island) of this region. */
-	islands: string[];
-	/** Where a new character of this region starts (a room of the region). */
-	start: string;
-};
+export type { RegionDef } from "../../shared/world-def.ts";
+import type { RegionDef } from "../../shared/world-def.ts";
 
 /** The region of a world that has none. */
 export const WHOLE = "world";

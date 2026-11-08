@@ -4,8 +4,8 @@
 // (light dots) and NPCs (dark dots), the ferries as dashed lines, the own room outlined. A tap enlarges it; the
 // button folds it away (remembered per browser; on a phone it starts folded). It shows the world, it never changes it.
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AtlasState, AtlasView } from "../server/gateway.ts";
-import { alongWay, seaWays, shipState, type Timetable } from "../server/engine/liner.ts";
+import type { AtlasState, AtlasView } from "../shared/frames.ts";
+import { alongWay, seaWays, shipState, type Timetable } from "../shared/liner.ts";
 import { tr } from "./i18n/index.ts";
 
 const W = 24, H = 16;

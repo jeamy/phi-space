@@ -1,6 +1,6 @@
 // What can be done on a cell of the map: one function for the mouse's menu and the action sheet of a touch screen. Every
 // entry is a text command; `run` is for what stays on the page. Pure, so it is tested without a browser.
-import type { CharView, ItemUses, ObjView, PlanView } from "../server/gateway.ts";
+import type { CharView, ItemUses, ObjView, PlanView } from "../shared/frames.ts";
 
 export type CellEntry = { label: string; line: string; run?: () => void };
 export type CellInput = {

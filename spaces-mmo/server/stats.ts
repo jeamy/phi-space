@@ -8,27 +8,8 @@ import type { RegionSpaces } from "./region-spaces.ts";
 import { TRIPS, type Trip, type TravelFields } from "./engine/travel.ts";
 import type { WorldDef } from "./engine/world.ts";
 
-export type Trips = Record<Trip, number>;
-export type PlayerStat = {
-	charId: string; name: string; guest: boolean; online: boolean;
-	/** a person, a settler (an NPC that plays like one) or a figure a model plays */ kind: "player" | "settler" | "ai";
-	/** registered (a guest: since when it plays), ms since 1970 */ since: number;
-	/** where it stands (offline: where it last stood); `aboard`: on the large ship, nothing more */
-	at: { room: string; roomName: string; island: string | null; x: number; y: number } | { aboard: true } | null;
-	reputation: { pieces: number; beacons: number; parks: number };
-	trips: Trips;
-	owns: { buildings: number; beds: number; fields: number; plans: Array<{ plan: string; name: string; count: number }>;
-		/** what the figure carries: each kind with how many, the most first */ carries: Array<{ name: string; count: number }> };
-};
-export type WorldStats = {
-	at: number;
-	players: { total: number; registered: number; guests: number; online: number; settlers: number; ai: number };
-	trips: Trips;
-	buildings: { total: number; houses: number; byPlan: Array<{ plan: string; name: string; count: number }> };
-	beds: number; fields: number; sites: number; settlements: number;
-	list: PlayerStat[];
-	/** regions that could not be read: the numbers are without them */ missing: string[];
-};
+export type { Trips, PlayerStat, WorldStats } from "../shared/frames.ts";
+import type { Trips, PlayerStat, WorldStats } from "../shared/frames.ts";
 
 const KIND_ORDER = { player: 0, settler: 1, ai: 2 } as const;
 const noTrips = (): Trips => Object.fromEntries(TRIPS.map((k) => [k, 0])) as Trips;

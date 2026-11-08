@@ -35,7 +35,7 @@ const pipe = (role: Role, stream: NodeJS.ReadableStream | null, out: NodeJS.Writ
 
 function start(role: Role): Promise<void> {
 	return new Promise((ready) => {
-		const args = [...(dev ? ["--watch-path=server", "--watch-path=worlds", "--watch-path=../src"] : []), "--no-warnings", "--experimental-strip-types", ROLES[role], ...(dev && role === "web" ? ["--dev"] : [])];
+		const args = [...(dev ? ["--watch-path=server", "--watch-path=shared", "--watch-path=worlds", "--watch-path=../src"] : []), "--no-warnings", "--experimental-strip-types", ROLES[role], ...(dev && role === "web" ? ["--dev"] : [])];
 		const server = role === "space" ? spaceServer() : null;
 		const child = spawn(server?.command ?? process.execPath, server?.args ?? args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
 		children.set(role, child);

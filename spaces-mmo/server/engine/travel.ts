@@ -6,8 +6,8 @@ import { FOREVER, takeExisting } from "phi-spaces";
 import { fieldsOf } from "../model.ts";
 import type { CommandCtx } from "./context.ts";
 
-export const TRIPS = ["beam", "ship", "sail", "row", "train"] as const;
-export type Trip = (typeof TRIPS)[number];
+import { TRIPS, type Trip } from "../../shared/frames.ts";
+export { TRIPS, type Trip };
 export type TravelFields = { charId: string } & Partial<Record<Trip, number>>;
 
 /** One more `kind` for the actor (nothing for a scripted NPC). */

@@ -3,7 +3,7 @@
 // (every name, the arguments, what it does) with a search, the topics as buttons that ask for them; a topic opens in the
 // same window. The text of the answer stays in the log for text mode; this is the same content, laid out.
 import { useEffect, useState } from "react";
-import type { HelpView } from "../server/model.ts";
+import type { HelpView } from "../shared/model.ts";
 import { isTouch } from "./useShell.ts";
 import { Rich, RichBlock } from "./RichText.tsx";
 

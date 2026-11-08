@@ -2,7 +2,7 @@
 // The statistics (GET /api/stats, server/stats.ts): how many play, what the world holds and how often it was travelled,
 // and the list of players; a tap on a player shows where they stand, since when they play, their reputation and rides.
 import { useEffect, useState } from "react";
-import type { PlayerStat, Trips, WorldStats } from "../server/stats.ts";
+import type { PlayerStat, Trips, WorldStats } from "../shared/frames.ts";
 import { language } from "./i18n/index.ts";
 
 const TRIP_NAMES: Array<[keyof Trips, string]> = [["beam", "Beams"], ["ship", "Großes Schiff"], ["sail", "Segelboot"], ["row", "Ruderboot"], ["train", "Zug"]];

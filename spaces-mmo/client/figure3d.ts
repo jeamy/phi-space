@@ -1,10 +1,10 @@
 // A person for the 3D map: head, neck, torso, two arms and two legs that swing while the figure walks, hair, eyes, boots,
-// a shadow on the ground. Built from primitives, so it needs no model file. A player's chosen look (server/engine/appearance.ts:
+// a shadow on the ground. Built from primitives, so it needs no model file. A player's chosen look (shared/appearance.ts:
 // figure type, colours, hat, glasses, gloves) decides it; without one it comes from the character's skin number and id (the
 // same skin number picks the sprite in the 2D map). Everything here is visual only.
 import { stableHash } from "./terrain3d.ts";
 import { prepareModelDetails } from "./props3d.ts";
-import { COATS, HAIRS, SKINS, type Appearance } from "../server/engine/appearance.ts";
+import { COATS, HAIRS, SKINS, type Appearance } from "../shared/appearance.ts";
 
 type T = typeof import("three");
 type G = import("three").Group;

@@ -6,8 +6,8 @@ import type { HerdFields, MillLoadFields } from "./model.ts";
 import type { WorldDef } from "./engine/world.ts";
 import type { ObjView } from "./gateway.ts";
 
-/** One task: its words, where it is (room and cell), and how urgent (0 now, 1 soon, 2 when there is time). */
-export type Todo = { id: string; text: string; room: string; x: number; y: number; rank: 0 | 1 | 2 };
+export type { Todo } from "../shared/frames.ts";
+import type { Todo } from "../shared/frames.ts";
 
 const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : "weniger als einer Stunde"; };
 

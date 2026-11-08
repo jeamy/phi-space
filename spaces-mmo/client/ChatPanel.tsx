@@ -3,7 +3,7 @@
 // count of what is unread, and the overview of groups, invitations and whom one ignores. Every button sends the text
 // command the help names (chat, gruppe, ignoriere, erlaube, melde); the server answers through the same socket.
 import { useState } from "react";
-import type { ChatState } from "../server/chat.ts";
+import type { ChatState } from "../shared/frames.ts";
 import type { Talks } from "./chat.ts";
 import { keyOf } from "./chat.ts";
 import { MIN_PASSWORD } from "./chatcrypto.ts";

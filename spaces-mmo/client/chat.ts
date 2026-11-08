@@ -1,7 +1,7 @@
 // The page's side of the chat between players (server/chat.ts): the talks by key, what is unread in each, and the line a
 // message in a talk becomes. What was read is remembered in the browser (per talk, the time of the last message seen), so
 // messages that came while one was away count as unread at the next visit.
-import type { ChatConv, ChatView } from "../server/chat.ts";
+import type { ChatConv, ChatView } from "../shared/frames.ts";
 
 export type Talk = { conv: ChatConv; msgs: ChatView[]; unread: number };
 export type Talks = Map<string, Talk>;

@@ -33,6 +33,7 @@
     "client/**/*.tsx",
     "worlds/**/*.ts",
     "server/**/*.ts",
+    "shared/**/*.ts",
     "tests/**/*.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"

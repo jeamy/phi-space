@@ -6,7 +6,7 @@
 // at the middle of the room and stays there (it moves only when the player drags, turns or zooms the view), so a step moves
 // the figure and nothing else: no sliding ground, no rebuilt scene.
 import { useEffect, useRef, useState } from "react";
-import type { AtlasState, AtlasView, CharView, ObjView } from "../server/gateway.ts";
+import type { AtlasState, AtlasView, CharView, ObjView } from "../shared/frames.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import { onFpsStart, sayFps } from "./fps.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
@@ -20,7 +20,7 @@ import { START_VIEW } from "./viewPreferences.ts";
 import { atModelLevel, updateModelDetails, type ModelLevel } from "./modelDetail3d.ts";
 import { stableHash, tile3d } from "./terrain3d.ts";
 import { cameraElevation, clampTilt, clampZoom, daylightAt, wheelView, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./camera3d.ts";
-import { calendar, shownWorldMs, WORLD_HOUR_MS } from "../server/engine/worldtime.ts";
+import { calendar, shownWorldMs, WORLD_HOUR_MS } from "../shared/worldtime.ts";
 import { fishItem, fishModel, type FishKind } from "./fish3d.ts";
 import { blockUnder, fishFor, islandBlock, nameCard, swimFish, type Fish, type SeaEdge } from "./block3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
@@ -844,7 +844,7 @@ function lightRoom(s: Scene3D): void {
 /** Day and night from the world's clock: the sun sinks to a pale moonlight, warm at dawn and dusk, the sky darkens, and
  *  the lamplit faces of the models glow (props3d.ts, setNight). Visual only; without a clock it stays day. */
 const NOON = 0xfff1cf, MOON = 0x8fa6d8, DUSK = 0xffa25a;
-function daylight(s: Scene3D, clock: { v: import("../server/engine/worldtime.ts").WorldTimeView; at: number } | null): void {
+function daylight(s: Scene3D, clock: { v: import("../shared/worldtime.ts").WorldTimeView; at: number } | null): void {
 	const hour = s.hourProbe != null ? s.hourProbe : clock ? calendar(shownWorldMs(clock.v, clock.at, Date.now())).millisOfDay / WORLD_HOUR_MS : 12;
 	const d = Math.round(daylightAt(hour) * 100) / 100;
 	if (d === s.light) return;

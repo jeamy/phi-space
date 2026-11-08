@@ -4,7 +4,7 @@
 // the messages opened with it, and sending: the readers' public keys are asked for, a copy is sealed for each, and only
 // the sealed copies go to the server.
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatConv, ChatFrame, ChatKeyView, ChatView } from "../server/chat.ts";
+import type { ChatConv, ChatFrame, ChatKeyView, ChatView } from "../shared/frames.ts";
 import { aad, fingerprint, newKey, openBox, rewrap, sealFor, unlock, type KeyBackup } from "./chatcrypto.ts";
 import type { Talks } from "./chat.ts";
 

@@ -61,6 +61,7 @@ COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/app ./spaces-mm
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/public ./spaces-mmo/public
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/client ./spaces-mmo/client
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/server ./spaces-mmo/server
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/shared ./spaces-mmo/shared
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/worlds ./spaces-mmo/worlds
 RUN mkdir -p /data && chown -R node:node /data
 USER node

@@ -476,11 +476,12 @@ services:
       - ../app:/opt/phi-spaces/spaces-mmo/app
       - ../client:/opt/phi-spaces/spaces-mmo/client
       - ../server:/opt/phi-spaces/spaces-mmo/server
+      - ../shared:/opt/phi-spaces/spaces-mmo/shared
       - ../worlds:/opt/phi-spaces/spaces-mmo/worlds
       - ../../src:/opt/phi-spaces/src
     working_dir: /opt/phi-spaces/spaces-mmo
     # space, world, npc and web (Next.js dev mode) as processes of their own: Next.js recompiles app/ and client/ on change
-    # (Fast Refresh), and each process restarts when server/, worlds/ or the phi-spaces sources change
+    # (Fast Refresh), and each process restarts when server/, shared/, worlds/ or the phi-spaces sources change
     command: ["node", "--no-warnings", "--experimental-strip-types", "server/launch.ts", "--dev"]
 
 networks:

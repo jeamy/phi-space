@@ -2,7 +2,7 @@
 // The "Figur" panel: the player picks the look of their figure in 3D (server/engine/appearance.ts) and sees it turn in a
 // small preview before it goes out as one `avatar` command (one command, not one per click: the command bucket).
 import { useEffect, useRef, useState } from "react";
-import { appearanceLine, COATS, DEFAULT_APPEARANCE, FIGURES, HAIRS, HATS, SKINS, type Appearance } from "../server/engine/appearance.ts";
+import { appearanceLine, COATS, DEFAULT_APPEARANCE, FIGURES, HAIRS, HATS, SKINS, type Appearance } from "../shared/appearance.ts";
 import { makeFigure, animateFigure, type Figure } from "./figure3d.ts";
 
 type T = typeof import("three");

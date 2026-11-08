@@ -7,7 +7,7 @@
 // `onMenu`; the map never changes the world by itself. pixi.js is imported in the browser only; without WebGL `onFail` says so and the page plays as text.
 import { building2d } from "./buildings2d.ts";
 import { useEffect, useRef, useState } from "react";
-import type { CharView, ObjView, ServerFrame } from "../server/gateway.ts";
+import type { CharView, ObjView, ServerFrame } from "../shared/frames.ts";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
 import { WALK_MS } from "./walk.ts";

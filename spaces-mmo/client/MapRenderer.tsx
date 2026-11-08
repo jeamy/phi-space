@@ -1,6 +1,6 @@
 "use client";
-import type { AtlasState, AtlasView, CharView, ObjView, ServerFrame } from "../server/gateway.ts";
-import type { WorldTimeView } from "../server/engine/worldtime.ts";
+import type { AtlasState, AtlasView, CharView, ObjView, ServerFrame } from "../shared/frames.ts";
+import type { WorldTimeView } from "../shared/worldtime.ts";
 import { MapView } from "./MapView.tsx";
 import { MapView3D } from "./MapView3D.tsx";
 

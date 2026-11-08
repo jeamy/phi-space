@@ -22,45 +22,14 @@ export type ChatMsgFields = { msgId: string; to: string; conv: string; title: st
 /** A message `to` cannot read yet: they have no key. `conv` as `to` will see it; `first`: the first one from this sender. */
 export type ChatWaitFields = { msgId: string; to: string; fromId: string; fromName: string; conv: string; title: string; first: boolean; at: number };
 export type ChatKeyFields = { accountId: string; pub: string; wrapped: string; salt: string; iter: number; at: number };
-type Box = { iv: string; ct: string; pub: string };
+import type { Box, ChatConv, ChatView, ChatKeyView, ChatResealItem, ChatState, ChatFrame, ChatClientFrame } from "../shared/frames.ts";
+export type { ChatConv, ChatView, ChatKeyView, ChatResealItem, ChatState, ChatFrame, ChatClientFrame } from "../shared/frames.ts";
 export type ChatGroupFields = { groupId: string; name: string; key: string; owner: string; at: number };
 export type ChatMemberFields = { groupId: string; accountId: string; at: number };
 export type ChatInviteFields = { inviteId: string; groupId: string; to: string; fromId: string; at: number };
 export type ChatBlockFields = { who: string; whom: string; at: number };
 export type ChatReportFields = { reportId: string; by: string; byName: string; fromId: string; fromName: string; text: string; at: number };
 
-/** A talk as the page shows it: with one person (`id` their account) or a group (`id` the group). */
-export type ChatConv = { kind: "dm" | "group"; id: string; title: string };
-/** A message as the page gets it: sealed (`box`, the page opens it) or a note of the group (`note`, `from` empty). */
-export type ChatView = { id: string; conv: ChatConv; from: string; fromId: string; at: number; mine?: true; box?: Box; note?: string };
-/** A key backup as the page sends and gets it (client/chatcrypto.ts KeyBackup). */
-export type ChatKeyView = { pub: string; wrapped: string; salt: string; iter: number };
-/** A message of the sender's that a reader can get now: `pub` their new key. */
-export type ChatResealItem = { msgId: string; to: string; pub: string; groupId: string };
-/** The player's groups (with the names of their members), the invitations waiting and whom they ignore. */
-export type ChatState = { groups: Array<{ groupId: string; name: string; members: string[]; owner: boolean }>; invites: Array<{ groupId: string; name: string; from: string }>; blocked: string[];
-	/** Who wrote to a player without a chat key, and how many messages wait for it. */ waiting: Array<{ from: string; count: number }> };
-export type ChatFrame =
-	| { t: "chat"; m: ChatView }
-	| { t: "chatlog"; msgs: ChatView[] }
-	| { t: "chats"; state: ChatState }
-	| { t: "chatopen"; conv: ChatConv }
-	/** To the sender's pages: open these of your own copies and seal them for their reader. */
-	| { t: "chatreseal"; items: ChatResealItem[] }
-	/** The player's account and key backup (null: no chat key yet). */
-	| { t: "chatme"; accountId: string; key: ChatKeyView | null }
-	/** The readers of a talk with their public keys (the page seals a copy for each); `missing`: readers without a key. */
-	| { t: "chatkeys"; conv: ChatConv; readers: Array<{ accountId: string; name: string; pub: string }>; missing: string[]; req: number };
-/** Frames of the page for chat (besides the text commands). */
-export type ChatClientFrame =
-	| { t: "chatkey"; key: ChatKeyView; replace?: boolean }
-	| { t: "chatkeys"; conv: { kind: "dm" | "group"; id: string }; req: number }
-	| { t: "chatsend"; msgId: string; conv: { kind: "dm" | "group"; id: string }; copies: Array<{ to: string; box: Box }> }
-	| { t: "chatreport"; msgId: string; text: string }
-	/** An unlocked page asks what it can hand on now. */
-	| { t: "chatwaiting" }
-	/** A message handed on to a reader who has a key now. */
-	| { t: "chatdeliver"; msgId: string; to: string; box: Box };
 type Note = { t: "msg"; m: { kind: "info" | "error"; text: string; from: string; at: number } };
 
 /** Someone chat can address: a player's account and the name of their character. */
