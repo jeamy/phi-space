@@ -18,3 +18,12 @@ export function isComing(l: { kind: string; text: string }): boolean {
 export function isForMe(l: { kind: string; mine?: true; toMe?: true }): boolean {
 	return l.kind === "echo" || l.kind === "hint" || l.kind === "error" || !!l.mine || !!l.toMe;
 }
+
+/** How many lines of a part are new since `seen`, the last line looked at (undefined: never looked, nothing new yet;
+ *  null or a line no longer kept: all). `toMe`: only what others said or offered to the figure, the count of "An dich"
+ *  (the answers to its own commands stand beside the command line already). */
+export function newSince<T extends object>(list: readonly T[], seen: T | null | undefined, o: { toMe?: boolean } = {}): number {
+	const at = seen ? list.lastIndexOf(seen) : -1;
+	const since = at >= 0 ? list.slice(at + 1) : seen === undefined ? [] : list;
+	return o.toMe ? since.filter((l) => "toMe" in l && l.toMe === true).length : since.length;
+}

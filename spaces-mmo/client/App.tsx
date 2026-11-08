@@ -15,7 +15,7 @@ import { StatsPanel } from "./StatsPanel.tsx";
 import { onFps, startFps, type FpsState } from "./fps.ts";
 import { CommandHelp } from "./CommandHelp.tsx";
 import type { HelpView } from "../shared/model.ts";
-import { appendLine, isComing, isForMe } from "./log.ts";
+import { appendLine, isComing, isForMe, newSince } from "./log.ts";
 import { travelText, TRAVEL_GIVE_UP_MS, TRAVEL_NOTE_MS } from "./travel.ts";
 import type { ChatState } from "../shared/frames.ts";
 import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
@@ -1094,9 +1094,10 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		if (k === "todo") return todos.filter((t) => t.rank === 0).length;
 		if (k === "tips") return k === logPart && logShown ? 0 : newHints;
 		if (k === logPart && logShown) return 0;
-		const list = k === "mine" ? mineLog : aroundLog, at = seenLine[k] ? list.lastIndexOf(seenLine[k]!) : -1;
-		return at >= 0 ? list.length - 1 - at : seenLine[k] === undefined ? 0 : list.length;
+		// "An dich" counts what others said or offered to the figure, not the answers to its own commands
+		return newSince<Line>(k === "mine" ? mineLog : aroundLog, seenLine[k], { toMe: k === "mine" });
 	};
+	const newToMe = newIn("mine");
 
 	const self = chars.get(me);
 	const openLine = () => { if (input.current) return input.current.focus(); setBag(true); setBagPart("mine"); setDetent("half"); requestAnimationFrame(() => input.current?.focus()); };
@@ -1224,11 +1225,11 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 			) : detent === "peek" && mapMode !== "text" ? null : (
 				<div className="sheet-tabs" role="tablist" aria-label="Aktionen, Ereignisse und Chats">
 					<button role="tab" aria-selected={pane === "bag"} onClick={() => openPane("bag")}>Aktionen</button>
-					<button role="tab" aria-selected={pane === "log"} onClick={() => openPane("log")}>Ereignisse</button>
+					<button role="tab" aria-selected={pane === "log"} onClick={() => { if (newToMe) setLogPart("mine"); openPane("log"); }}>Ereignisse{newToMe ? <span className="chat-count" title="Neu an dich">{newToMe > 99 ? "99+" : newToMe}</span> : null}</button>
 					<button role="tab" aria-selected={pane === "chats"} onClick={() => openPane("chats")}>Chats{unreadAll ? <span className="chat-count">{unreadAll}</span> : null}</button>
 				</div>
 			)}
-			{detent === "peek" && mapMode !== "text" ? <button className="sheet-peek" onClick={() => openPane("log")}>{unreadAll ? <span className="chat-count">{unreadAll}</span> : null}{lastLine?.text ?? ""}</button> : (
+			{detent === "peek" && mapMode !== "text" ? <button className="sheet-peek" onClick={() => { if (newToMe) setLogPart("mine"); openPane("log"); }}>{unreadAll + newToMe ? <span className="chat-count">{unreadAll + newToMe}</span> : null}{lastLine?.text ?? ""}</button> : (
 				<div className="sheet-body">
 					{pane === "bag" ? (
 						<>

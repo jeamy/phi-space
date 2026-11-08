@@ -38,3 +38,15 @@ test("the events in two parts: what is for the own figure, and what happens arou
 	for (const l of [{ kind: "echo" }, { kind: "hint" }, { kind: "error" }, { kind: "info", mine: true as const }, { kind: "say", toMe: true as const }]) assert.equal(isForMe(l), true, JSON.stringify(l));
 	for (const l of [{ kind: "say" }, { kind: "world" }, { kind: "info" }, { kind: "system" }]) assert.equal(isForMe(l), false, JSON.stringify(l));
 });
+
+test("log: the count of a part since the last line looked at; \"An dich\" counts only what others said or offered", async () => {
+	const { newSince } = await import("../client/log.ts");
+	const answer = () => ({ kind: "info", mine: true as const }), offer = { kind: "info", mine: true as const, toMe: true as const }, whisper = { kind: "say", toMe: true as const };
+	const list = [answer(), offer, answer(), whisper, answer()];
+	assert.equal(newSince(list, undefined), 0, "never looked: nothing new yet");
+	assert.equal(newSince(list, list[0]), 4);
+	assert.equal(newSince(list, list[0], { toMe: true }), 2, "the offer and the whisper, not the answers");
+	assert.equal(newSince(list, list[3], { toMe: true }), 0);
+	assert.equal(newSince(list, null, { toMe: true }), 2, "looked when the part was empty: all of it");
+	assert.equal(newSince(list, answer()), 5, "a line no longer kept: all of it");
+});
