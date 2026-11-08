@@ -67,6 +67,10 @@ therefore a handover in steps, each atomic and repeatable on its own:
 A process that reads the `Handover` entries of A continues a stalled handover (steps 2 and 3 are
 repeatable). What the figure carries moves with it (things with `location = charId` belong to the figure, not to the room).
 
+Since 2026-11-08 every such way (the crossing, the courier into a chest in another region) runs on one helper,
+`server/engine/transfer.ts` (`Carrier`, `carryOut`, `moveThings`); a new one is a `Carrier`. How worlds would go under one
+federation the same way: [welten-foederation.en.md](welten-foederation.en.md).
+
 ## Processes
 
 - **Space processes:** one per region and one for the global Space (`space-host.ts` already serves two stores

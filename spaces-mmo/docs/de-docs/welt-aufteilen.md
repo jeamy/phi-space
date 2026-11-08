@@ -67,6 +67,10 @@ deshalb eine Übergabe in Schritten, jeder für sich atomar und wiederholbar:
 Ein Prozess, der die `Handover`-Entries von A liest, setzt eine liegengebliebene Übergabe fort (Schritt 2 und 3 sind
 wiederholbar). Was die Figur trägt, wandert mit (Dinge mit `location = charId` gehören zur Figur, nicht zum Raum).
 
+Seit 2026-11-08 läuft jeder solche Weg (die Überfahrt, der Bote in eine Truhe einer anderen Region) über einen Helfer,
+`server/engine/transfer.ts` (`Carrier`, `carryOut`, `moveThings`); ein neuer ist ein `Carrier`. Wie Welten auf dieselbe Art
+unter eine Föderation kämen: [welten-foederation.md](../welten-foederation.en.md).
+
 ## Prozesse
 
 - **Space-Prozesse:** einer je Region und einer für den globalen Space (`space-host.ts` bedient heute schon zwei Stores

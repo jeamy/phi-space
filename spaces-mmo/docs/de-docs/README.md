@@ -68,6 +68,7 @@ nicht hier, sondern in `client/help/articles.ts` (im Spiel unter „?“) und al
 | [automaten.md](../automaten.en.md) | Phase 6, Plan: Spielerprogramme, Beispielautomaten, kleines Hilfesystem |
 | [lasttest-2026-10-28.md](../lasttest-2026-10-28.en.md) | Lasttests auf big und nano: Antwortzeiten, Engpass, Vorschläge |
 | [lasttest-2026-11-08.md](../lasttest-2026-11-08.en.md) | Lasttest auf big mit 50 und 100 Figuren, vier Regions-Spaces auf dem Rust-Server |
+| [welten-foederation.md](../welten-foederation.en.md) | Plan: mehrere Welten unter einer Föderation; der Übergabehelfer für Wege zwischen Regionen (gebaut) |
 | [messung-vpsc-2026-10-29.md](../messung-vpsc-2026-10-29.en.md) | Messung: wie viel ein Kern auf vpsc als Host für Regionen leistet |
 
 ## Getroffene Entscheidungen
