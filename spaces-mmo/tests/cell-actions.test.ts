@@ -78,6 +78,11 @@ test("a carried thing shows what it can do here and now, nothing it cannot", () 
 	assert.deepEqual(lines("Hafer", at(...pack("Hafer", 1))), [], "far from everything: only laying down and looking");
 	assert.deepEqual(lines("Tang", at(...pack("Tang", 2))), [], "two of three");
 	assert.deepEqual(lines("Tang", at(...pack("Tang", 3))), ["craft tangseil"]);
+	// something to eat says so, first, with how long it keeps one sated
+	const eat = itemEntries("Brot", at(...pack("Brot", 1)), { ...uses, foods: { Brot: 12 } }, { fuels: [] });
+	assert.deepEqual(eat.map((e) => e.line), ["iss Brot"]);
+	assert.match(eat[0]!.label, /Essen \(satt 12 Std\./);
+	assert.deepEqual(lines("Brot", at(...pack("Brot", 1))), [], "a world without foods offers no eating");
 	const coop: [string, ObjView] = ["c", obj({ id: "c", kind: "building", name: "Hühnerstall", plan: "huehnerstall", herd: "huhn", x: 6, y: 5, w: 2, h: 1 })];
 	assert.ok(lines("Hafer", at(coop, ...pack("Hafer", 1))).includes("füttere Hafer"));
 	assert.ok(!lines("Stein", at(coop, ...pack("Stein", 1))).includes("füttere Stein"));

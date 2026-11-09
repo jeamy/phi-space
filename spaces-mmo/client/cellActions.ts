@@ -72,6 +72,9 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 	const count = new Map<string, number>();
 	for (const i of objs.values()) if (i.kind === "item" && i.location === me) count.set(i.name, (count.get(i.name) ?? 0) + 1);
 	const word = new RegExp(`(?<![\\p{L}])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "iu");
+	// something to eat: sated, one rests less after work (server: food.ts iss); first, it is what the thing is for
+	const sated = uses.foods?.[name];
+	if (sated) add({ label: `Essen (satt ${sated} Std., kürzere Ruhe nach der Arbeit)`, line: `iss ${name}` });
 	const here = hereEntries(input);
 	for (const e of here) {
 		const [head = "", price] = e.label.split(/ \((.*)\)$/);
