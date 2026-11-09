@@ -7,6 +7,7 @@ export type CellInput = {
 	at: { x: number; y: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean;
 	/** What burns, cheapest carried first (a fire's "nachlegen"). */ fuel: ObjView | undefined;
 	offer?: (name: string) => void;
+	/** The world's recipes (ItemUses.recipes): a building beside one offers those made at its plan. */ recipes?: ItemUses["recipes"];
 	/** The trade offers made to the player (TradeView.offersIn): a figure with one gets "accept" and "decline" first. */ offersIn?: Array<{ fromName: string; giveNames: string[]; want: Array<{ name: string; count: number }> }>;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] };
 	/** Whether wild plants grow in the room (wildHere); without it seeds are offered anyway and the command answers. */ wild?: boolean;
@@ -121,7 +122,7 @@ export function offerWords(o: { giveNames: string[]; want: Array<{ name: string;
 	return `${counted(o.giveNames.map((name) => ({ name, count: 1 })))}${o.want.length ? ` für ${counted(o.want)}` : " als Geschenk"}`;
 }
 
-export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders }: CellInput): CellEntry[] {
+export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, recipes }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: Array<{ label: string; line: string; run?: () => void }> = [];
 	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
@@ -215,9 +216,15 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				const grain = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && ["Weizen", "Gerste", "Hafer"].includes(i.name)).map((i) => i.name))];
 				for (const n of grain) entries.push({ label: `${n} mahlen`, line: `mahle alle ${n}` });
 			}
-			if (o.plan === "backhaus") entries.push({ label: "Brot backen (2 Mehl, 1 Kanne Wasser, 1 Treibholz)", line: "backe brot" });
-			if (o.plan === "webstuhl") entries.push({ label: "Tuch weben (3 Wolle, Spindel)", line: "craft tuch" }, { label: "Daunendecke nähen (2 Tuch, 3 Daunen)", line: "craft decke" });
-			if (o.plan === "huette") entries.push({ label: "Käse machen (3 Milch, 1 Treibholz)", line: "craft käse" });
+			// what is made at this building (the recipes "at" its plan, anyone's building): what one carries enough for,
+			// and the whole list (server: trade.ts "craft hier")
+			const here = (recipes ?? []).filter((r) => r.at === o.plan);
+			if (here.length) {
+				const count = new Map<string, number>();
+				for (const i of objs.values()) if (i.kind === "item" && i.location === me) count.set(i.name, (count.get(i.name) ?? 0) + 1);
+				for (const r of here) if (r.needs.every((n) => (count.get(n.name) ?? 0) >= n.count) && (!r.tool || count.has(r.tool))) entries.push({ label: `${r.name} herstellen (${r.needs.map((n) => `${n.count} ${n.name}`).join(", ")})`, line: `craft ${r.key}` });
+				entries.push({ label: "Was man hier herstellen kann", line: "craft hier" });
+			}
 			// a coop, pen or hive: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
 			if (HOUSES[o.plan ?? ""]) {
 				// the house carries its herd while an animal is in it: nothing to feed in an empty one
@@ -262,9 +269,6 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.plan === "park") entries.push({ label: "Park pflegen", line: "pflege" }, { label: "Laufendes Fest", line: "fest" });
 			if (o.plan === "lehmgrube") entries.push({ label: "Lehm stechen", line: "steche" });
 			if (o.plan === "salzgarten") entries.push({ label: "Salz harken", line: "harke" });
-			if (o.plan === "metzgerei") entries.push({ label: "Bratwurst mit Salz machen", line: "craft metzgerwurst" }, { label: "Fleisch pökeln", line: "craft pökelfleisch" });
-			if (o.plan === "gerberei") entries.push({ label: "Leder gerben", line: "craft leder" });
-			if (o.plan === "ziegelei") entries.push({ label: "Ziegel brennen", line: "craft ziegel" });
 			if (o.plan === "lagerhaus") entries.push({ label: "Lager ansehen", line: "lager" });
 			// only a plan with a chest of its own has one (a hut, a smokehouse); a scarecrow, a coop or a mill has none
 			else if (o.ownerId === me && plans.some((p) => p.key === o.plan && p.chest)) entries.push({ label: "Truhe ansehen", line: "truhe" });

@@ -185,3 +185,21 @@ test("\"Truhe ansehen\" only at an own building whose plan has a chest: a hut ye
 	assert.ok(!at("vogelscheuche").includes("truhe"));
 	assert.ok(!at("huehnerstall").includes("truhe"));
 });
+
+test("a building with recipes offers what one carries enough for, and the list of what is made there", () => {
+	const recipes = [
+		{ key: "bohle", name: "Bohle", needs: [{ name: "Treibholz", count: 2 }], tool: "Muschelmesser", at: "werkstatt" },
+		{ key: "tauwerk", name: "Tauwerk", needs: [{ name: "Tangseil", count: 3 }], at: "werkstatt" },
+		{ key: "brot", name: "Brot", needs: [{ name: "Mehl", count: 2 }], at: "backhaus" },
+	];
+	const shop = obj({ id: "w", kind: "building", name: "Werkstatt", owner: "Ines", ownerId: "o", plan: "werkstatt", x: 6, y: 5, w: 3, h: 2 });
+	const carried = (name: string, n: number) => Array.from({ length: n }, (_, i): [string, ObjView] => [`${name}${i}`, obj({ id: `${name}${i}`, kind: "item", name, location: "me", x: -1, y: -1 })]);
+	const at = (...items: Array<[string, ObjView]>) => cellEntries({ ...input, recipes, objs: new Map([["w", shop], ...items]), at: { x: 6, y: 5 } }).map((e) => e.line);
+	assert.ok(at().includes("craft hier"), "anyone's workshop: what is made there");
+	assert.ok(!at().some((l) => l.startsWith("craft bohle")), "nothing carried");
+	assert.ok(!at(...carried("Treibholz", 2)).includes("craft bohle"), "the knife is missing");
+	assert.ok(at(...carried("Treibholz", 2), ...carried("Muschelmesser", 1)).includes("craft bohle"));
+	assert.ok(!at(...carried("Mehl", 2)).includes("craft brot"), "the bakery's recipe is not the workshop's");
+	const hut = cellEntries({ ...input, at: { x: 10, y: 10 } }).map((e) => e.line);
+	assert.ok(!hut.includes("craft hier"), "without the world's recipes nothing is offered");
+});

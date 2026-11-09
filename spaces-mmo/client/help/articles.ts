@@ -577,7 +577,7 @@ Handel braucht ein Konto. Ausführlich unter [Handel und Handwerk](help.game.tra
 | \`offer <dinge> an <person> [für <dinge>]\` | \`biete\`, \`tausche\` | Tausch anbieten |
 | \`accept [person]\` / \`decline [person]\` | \`annehmen\` / \`ablehnen\` | Tausch annehmen oder ablehnen |
 | \`market\` | \`markt\` | Marktbrett: Angebote ansehen, einstellen, kaufen |
-| \`craft [rezept]\` | \`baue\`, \`herstellen\` | Etwas herstellen; ohne Rezept die Liste |
+| \`craft [rezept]\` | \`baue\`, \`herstellen\` | Etwas herstellen; ohne Rezept die Liste; \`craft hier\`: was der Bau neben dir herstellt ([Alle Gebäude](help.game.buildings)) |
 | \`order\` | \`auftrag\`, \`aufträge\` | Auftragstafel: ansehen, nehmen, liefern, zurückgeben |
 | \`reputation\` | \`ruf\` | Was du in die Leuchtfeuer gelegt, an Parks gepflegt und für die Gemeinschaft getan hast |
 | \`avatar\` | \`aussehen\` | Wie deine Figur in 3D aussieht (siehe Figur) |
@@ -763,7 +763,7 @@ Trade needs an account. In detail under [Trade and crafting](help.game.trade).
 | \`offer <things> an <person> [für <things>]\` | \`biete\`, \`tausche\` | Offer a swap |
 | \`accept [person]\` / \`decline [person]\` | \`annehmen\` / \`ablehnen\` | Accept or decline a swap |
 | \`market\` | \`markt\` | Market board: see, post and buy offers |
-| \`craft [recipe]\` | \`baue\`, \`herstellen\` | Make something; without a recipe the list |
+| \`craft [recipe]\` | \`baue\`, \`herstellen\` | Make something; without a recipe the list; \`craft hier\`: what the building beside you makes ([all buildings](help.game.buildings)) |
 | \`order\` | \`auftrag\`, \`aufträge\` | Job board: see, take, deliver, give back |
 | \`reputation\` | \`ruf\` | What you put into the beacons, the parks you tended and what you did for the community |
 | \`avatar\` | \`aussehen\` | How your figure looks in 3D (see Figure) |
@@ -1178,6 +1178,93 @@ A building lasts **40 to 60 days**: hut, coops, pen, hive, rain barrel, scarecro
 You can tear down what is yours at any time. You get part of the material back.
 
 \`abriss\` (\`demolish\`, or “reiß die hütte ab”) at your building frees the land and the light and gives back half the material and the chest's contents. A site given up gives back everything delivered.`,
+		},
+	},
+	{
+		id: "help.game.buildings",
+		section: "play",
+		title: { de: "Alle Gebäude", en: "All buildings" },
+		short: {
+			de: "Jeder Bau auf einen Blick: ab welcher Epoche, was er kostet, wie viel Licht er nimmt, wie lange er hält und was man dort macht.",
+			en: "Every building at a glance: from which epoch, what it costs, how much light it takes, how long it lasts and what one does there.",
+		},
+		body: {
+			de: `Jeder Bau entsteht mit \`bau <name>\` im Licht eines Feuers ([Bauen](help.game.build)). Die rechte Maustaste (am Handy langes Tippen) auf einen Bau zeigt, was du dort tun kannst; neben einem Bau mit Rezepten zeigt **„Was man hier herstellen kann“** (\`craft hier\`) alle seine Rezepte mit dem, was sie brauchen, und bietet an, was du schon dabeihast. Hergestellt wird an jedem Bau dieser Art, auch an dem eines anderen; die Zutaten kommen aus deiner Tasche.
+
+| Bau | ab | Größe und Material | Licht | hält Tage | wozu |
+| --- | --- | --- | --- | --- | --- |
+| Bienenstock (\`bau bienenstock\`) | Fischerdorf | 1×1, 2 Treibholz, 2 Tangseil, 4 Arbeit | 1 | 40 | bis 3 Bienenvölker: Honig und Wachs |
+| Hühnerstall (\`bau hühnerstall\`) | Fischerdorf | 2×1, 4 Treibholz, 1 Tangseil, 6 Arbeit | 1 | 40 | bis 6 Hühner oder Küken |
+| Hütte (\`bau hütte\`) | Fischerdorf | 2×2, 6 Treibholz, 2 Tangseil, 20 Arbeit | 1 | 40 | Truhe für dich; am Herd kochen (Käse, Kerzen, alle Braten und Suppen, Festessen) |
+| Räucherei (\`bau räucherei\`) | Fischerdorf | 2×2, 10 Treibholz, 2 Tangseil, 12 Arbeit | 2 | 40 | räuchert Fisch und Fleisch; Truhe als Räuchergestell |
+| Regentonne (\`bau regentonne\`) | Fischerdorf | 1×1, 3 Treibholz, 1 Tangseil, 4 Arbeit | 1 | 40 | Wasser für die Beete (\`schöpfe\`) |
+| Steg (\`bau steg\`) | Fischerdorf | 2×1, 6 Treibholz, 6 Arbeit | 1 | 40 | Boote legen an, Regatta (\`rudere\`, \`segle\`, \`luke\`) |
+| Vogelscheuche (\`bau vogelscheuche\`) | Fischerdorf | 1×1, 2 Treibholz, 1 Tangseil, 3 Arbeit | 1 | 40 | hält Hasen drei Felder weit von den Beeten |
+| Backhaus (\`bau backhaus\`) | Dorf | 2×2, 6 Treibholz, 6 Muschel, 1 Tangseil, 12 Arbeit | 2 | 40 | backt Brot (\`backe brot\`) |
+| Gehege (\`bau gehege\`) | Dorf | 3×3, 8 Treibholz, 4 Tangseil, 8 Arbeit | 2 | 40 | bis 4 Tiere einer Art (Schafe, Ziegen, Enten, Gänse, Schweine, Ferkel, ab der Stadt Rinder) |
+| Kapelle (\`bau kapelle\`) | Dorf | 3×2, 10 Stein, 12 Ziegel, 4 Bohle, 30 Arbeit | 3 | 60 | opfern für kürzere Ruhe (\`opfere\`) |
+| Lagerhaus (\`bau lagerhaus\`) | Dorf | 3×2, 12 Treibholz, 4 Tangseil, 6 Muschel, 20 Arbeit | 3 | 45 | Lager der Siedlung für alle (\`lager\`) |
+| Lehmgrube (\`bau lehmgrube\`) | Dorf | 2×2, 6 Treibholz, 2 Tangseil, 2 Stein, 12 Arbeit | 2 | 45 | Lehm stechen mit Spaten (\`steche\`) |
+| Metzgerei (\`bau metzgerei\`) | Dorf | 2×2, 6 Stein, 4 Bohle, 4 Treibholz, 20 Arbeit | 2 | 40 | ein Stück Fleisch mehr beim Schlachten im Ort; Bratwurst mit Salz, Pökelfleisch |
+| Salzgarten (\`bau salzgarten\`) | Dorf | 2×2, 4 Stein, 4 Lehm, 2 Treibholz, 12 Arbeit | 2 | 40 | Salz harken (\`harke\`) |
+| Steinbruch (\`bau steinbruch\`) | Dorf | 2×2, 8 Treibholz, 3 Tangseil, 4 Stein, 16 Arbeit | 3 | 45 | Stein brechen mit Spitzhacke (\`breche\`) |
+| Straße (\`bau straße\`) | Dorf | 1×1, 4 Stein, 2 Treibholz, 6 Arbeit | 1 | 45 | verbindet zwei Räume für den Karren |
+| Webstuhl (\`bau webstuhl\`) | Dorf | 2×1, 6 Treibholz, 2 Tangseil, 8 Arbeit | 1 | 40 | webt Tuch, näht Daunendecken |
+| Werkstatt (\`bau werkstatt\`) | Dorf | 3×2, 10 Treibholz, 8 Stein, 4 Tangseil, 24 Arbeit | 3 | 45 | Bohlen, Tauwerk, Gehäuse, Karren, Ruderboot, Schlachtmesser, Ledertasche, Lederstiefel; Werkzeug nutzt sich daneben nur halb so schnell ab |
+| Windmühle (\`bau windmühle\`) | Dorf | 2×2, 8 Treibholz, 2 Tangseil, 2 Leinen, 16 Arbeit | 2 | 40 | mahlt Korn zu Mehl, Knochen zu Knochenmehl (\`mahle\`) |
+| Ziegelei (\`bau ziegelei\`) | Dorf | 2×2, 8 Stein, 6 Treibholz, 6 Lehm, 20 Arbeit | 3 | 45 | brennt Ziegel aus Lehm |
+| Brauerei (\`bau brauerei\`) | Stadt | 3×2, 8 Ziegel, 6 Bohle, 24 Arbeit | 3 | 45 | braut Bier |
+| Gerberei (\`bau gerberei\`) | Stadt | 2×2, 8 Stein, 6 Bohle, 4 Ziegel, 28 Arbeit | 3 | 45 | gerbt Felle mit Salz zu Leder |
+| Gewächshaus (\`bau gewächshaus\`) | Stadt | 3×2, 8 Glas, 6 Bohle, 20 Arbeit | 2 | 45 | Beete bis drei Felder daneben wachsen im Winter durch |
+| Glashütte (\`bau glashütte\`) | Stadt | 3×2, 12 Ziegel, 6 Stein, 28 Arbeit | 3 | 45 | bläst Glas aus Sand |
+| Kaufhaus (\`bau kaufhaus\`) | Stadt | 4×3, 14 Ziegel, 8 Bohle, 6 Stein, 36 Arbeit | 5 | 45 | Laden mit festen Preisen (\`laden\`) |
+| Kontor (\`bau kontor\`) | Stadt | 3×2, 10 Ziegel, 6 Stein, 24 Arbeit | 4 | 45 | leiht gegen ein Pfand, stellt Wechsel aus (\`kredit\`, \`wechsel\`) |
+| Leuchtturm (\`bau leuchtturm\`) | Stadt | 2×2, 16 Stein, 10 Ziegel, 2 Tran, 40 Arbeit | 3 | 60 | 20 Licht mehr für sein Feuer, Licht in die Nachbarräume |
+| Park (\`bau park\`) | Stadt | 4×4, 10 Ziegel, 6 Stein, 6 Strandnelke, 4 Dünenrose, 30 Arbeit | 9 | 120 | pflegen, Feste feiern (\`pflege\`, \`fest\`) |
+| Rathaus (\`bau rathaus\`) | Stadt | 4×3, 16 Ziegel, 10 Stein, 6 Bohle, 40 Arbeit | 6 | 45 | Anträge und Abstimmungen, Steuer (\`antrag\`, \`stimme\`) |
+| Werft (\`bau werft\`) | Stadt | 4×3, 14 Bohle, 4 Tauwerk, 6 Stein, 36 Arbeit | 4 | 45 | baut Segelboote |
+| Bahnhof (\`bau bahnhof\`) | Netz | 3×2, 12 Ziegel, 10 Bohle, 8 Stein, 2 Tauwerk, 32 Arbeit | 4 | 45 | Inselbahn (\`zug\`) |
+| Signalfeuer (\`bau signalfeuer\`) | Netz | 1×1, 6 Stein, 2 Ziegel, 1 Tran, 10 Arbeit | 2 | 45 | ein Feuer der Signalkette |
+
+**Licht** sind die Lichtpunkte, die der Bau seinem Feuer nimmt; **hält** ist die Zeit bis zum Verfall ohne Ausbessern (\`repariere\`). Die **Werkstatt** ist der Bau des Handwerks: Bohlen und Tauwerk für die größeren Bauten, Gehäuse, Karren und Ruderboot, das Schlachtmesser und die Lederwaren; neben ihr nutzt sich Werkzeug nur halb so schnell ab.`,
+			en: `Every building rises with \`bau <name>\` in a fire's light ([building](help.game.build)). The right mouse button (a long tap on a phone) on a building shows what you can do there; beside a building with recipes **"What can be made here"** (\`craft hier\`) lists all its recipes with what they need and offers what you already carry. You make things at any building of that kind, someone else's too; the ingredients come from your pack.
+
+| Building | from | size and material | light | lasts days | what for |
+| --- | --- | --- | --- | --- | --- |
+| Hive (\`bau bienenstock\`) | Fishing Village | 1×1, 2 driftwood, 2 kelp rope, 4 work | 1 | 40 | up to 3 bee colonies: honey and wax |
+| Chicken Coop (\`bau hühnerstall\`) | Fishing Village | 2×1, 4 driftwood, 1 kelp rope, 6 work | 1 | 40 | up to 6 hens or chicks |
+| Hut (\`bau hütte\`) | Fishing Village | 2×2, 6 driftwood, 2 kelp rope, 20 work | 1 | 40 | a chest of your own; cooking at the hearth (cheese, candles, every roast and soup, the feast) |
+| Smokehouse (\`bau räucherei\`) | Fishing Village | 2×2, 10 driftwood, 2 kelp rope, 12 work | 2 | 40 | smokes fish and meat; its chest is the rack |
+| Rain Barrel (\`bau regentonne\`) | Fishing Village | 1×1, 3 driftwood, 1 kelp rope, 4 work | 1 | 40 | water for the beds (\`schöpfe\`) |
+| Jetty (\`bau steg\`) | Fishing Village | 2×1, 6 driftwood, 6 work | 1 | 40 | boats land, regatta (\`rudere\`, \`segle\`, \`luke\`) |
+| Scarecrow (\`bau vogelscheuche\`) | Fishing Village | 1×1, 2 driftwood, 1 kelp rope, 3 work | 1 | 40 | keeps hares three cells away from the beds |
+| Bakehouse (\`bau backhaus\`) | Village | 2×2, 6 driftwood, 6 shell, 1 kelp rope, 12 work | 2 | 40 | bakes bread (\`backe brot\`) |
+| Pen (\`bau gehege\`) | Village | 3×3, 8 driftwood, 4 kelp rope, 8 work | 2 | 40 | up to 4 animals of one kind (sheep, goats, ducks, geese, pigs, piglets, cattle from the town on) |
+| Chapel (\`bau kapelle\`) | Village | 3×2, 10 stone, 12 brick, 4 plank, 30 work | 3 | 60 | offerings for a shorter rest (\`opfere\`) |
+| Warehouse (\`bau lagerhaus\`) | Village | 3×2, 12 driftwood, 4 kelp rope, 6 shell, 20 work | 3 | 45 | the settlement's store for everyone (\`lager\`) |
+| Clay Pit (\`bau lehmgrube\`) | Village | 2×2, 6 driftwood, 2 kelp rope, 2 stone, 12 work | 2 | 45 | cut clay with a spade (\`steche\`) |
+| Butcher's Shop (\`bau metzgerei\`) | Village | 2×2, 6 stone, 4 plank, 4 driftwood, 20 work | 2 | 40 | one more piece of meat when slaughtering in the room; salted sausage, cured meat |
+| Salt Garden (\`bau salzgarten\`) | Village | 2×2, 4 stone, 4 clay, 2 driftwood, 12 work | 2 | 40 | rake salt (\`harke\`) |
+| Quarry (\`bau steinbruch\`) | Village | 2×2, 8 driftwood, 3 kelp rope, 4 stone, 16 work | 3 | 45 | break stone with a pickaxe (\`breche\`) |
+| Road (\`bau straße\`) | Village | 1×1, 4 stone, 2 driftwood, 6 work | 1 | 45 | joins two rooms for the cart |
+| Loom (\`bau webstuhl\`) | Village | 2×1, 6 driftwood, 2 kelp rope, 8 work | 1 | 40 | weaves cloth, sews down quilts |
+| Workshop (\`bau werkstatt\`) | Village | 3×2, 10 driftwood, 8 stone, 4 kelp rope, 24 work | 3 | 45 | planks, rope, casings, cart, rowing boat, butcher's knife, leather bag, leather boots; beside it tools wear only half as fast |
+| Windmill (\`bau windmühle\`) | Village | 2×2, 8 driftwood, 2 kelp rope, 2 linen, 16 work | 2 | 40 | grinds grain to flour, bones to bone meal (\`mahle\`) |
+| Brickworks (\`bau ziegelei\`) | Village | 2×2, 8 stone, 6 driftwood, 6 clay, 20 work | 3 | 45 | fires bricks from clay |
+| Brewery (\`bau brauerei\`) | Town | 3×2, 8 brick, 6 plank, 24 work | 3 | 45 | brews beer |
+| Tannery (\`bau gerberei\`) | Town | 2×2, 8 stone, 6 plank, 4 brick, 28 work | 3 | 45 | tans skins into leather with salt |
+| Greenhouse (\`bau gewächshaus\`) | Town | 3×2, 8 glass, 6 plank, 20 work | 2 | 45 | beds up to three cells beside it grow on through winter |
+| Glassworks (\`bau glashütte\`) | Town | 3×2, 12 brick, 6 stone, 28 work | 3 | 45 | blows glass from sand |
+| Department store (\`bau kaufhaus\`) | Town | 4×3, 14 brick, 8 plank, 6 stone, 36 work | 5 | 45 | a shop with fixed prices (\`laden\`) |
+| Counting house (\`bau kontor\`) | Town | 3×2, 10 brick, 6 stone, 24 work | 4 | 45 | lends against a pledge, issues bills (\`kredit\`, \`wechsel\`) |
+| Lighthouse (\`bau leuchtturm\`) | Town | 2×2, 16 stone, 10 brick, 2 fish oil, 40 work | 3 | 60 | 20 more light for its fire, light in the rooms next to it |
+| Park (\`bau park\`) | Town | 4×4, 10 brick, 6 stone, 6 sea pink, 4 dune rose, 30 work | 9 | 120 | tend it, hold festivals (\`pflege\`, \`fest\`) |
+| Town Hall (\`bau rathaus\`) | Town | 4×3, 16 brick, 10 stone, 6 plank, 40 work | 6 | 45 | motions and votes, tax (\`antrag\`, \`stimme\`) |
+| Shipyard (\`bau werft\`) | Town | 4×3, 14 plank, 4 cordage, 6 stone, 36 work | 4 | 45 | builds sailing boats |
+| Station (\`bau bahnhof\`) | Net | 3×2, 12 brick, 10 plank, 8 stone, 2 cordage, 32 work | 4 | 45 | the island railway (\`zug\`) |
+| Signal fire (\`bau signalfeuer\`) | Net | 1×1, 6 stone, 2 brick, 1 fish oil, 10 work | 2 | 45 | a fire of the signal chain |
+
+**Light** is the light points the building takes from its fire; **lasts** is the time until it decays without repair (\`repariere\`). The **workshop** is the building of the crafts: planks and rope for the larger buildings, casings, the cart and the rowing boat, the butcher's knife and the leather goods; beside it tools wear only half as fast.`,
 		},
 	},
 	{

@@ -343,12 +343,27 @@ function recipeNamed(w: WorldDef, what: string) {
 
 export const craft: Command = {
 	key: "craft", aliases: ["baue", "herstellen", "fertige"],
-	help: "craft [anzahl] [rezept] – etwas herstellen, auch mehrmals (craft 3 tangseil); ohne Rezept die Liste",
+	help: "craft [anzahl] [rezept] – etwas herstellen, auch mehrmals (craft 3 tangseil); ohne Rezept die Liste, „craft hier“ was der Bau neben dir herstellt",
 	async func(c, arg) {
 		const rs = c.world.recipes;
 		if (!arg) {
 			const show = (r: (typeof rs)[number]) => `  ${r.key}: ${list(r.needs.map((n) => `${n.count}× ${n.proto}`))}${r.tool ? `, Werkzeug: ${r.tool}` : ""}${r.at ? `, nur am Bau: ${planOf(c.world, r.at)?.name ?? r.at}` : ""}${(r.count ?? 1) > 1 ? ` (gibt ${r.count})` : ""}`;
 			return msg(c, c.actor.charId, "info", ["Rezepte:", ...rs.map(show)].join("\n"));
+		}
+		// "craft hier": what the buildings beside one make, in names, and whether one carries enough for it
+		if (/^(?:hier|here)$/i.test(arg.trim())) {
+			const beside = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
+			const plans = [...new Set(beside.map((b) => b.plan))].filter((p) => rs.some((r) => r.at === p));
+			if (!plans.length) throw new CommandError(beside.length ? `Neben ${beside[0]!.name} stellt man nichts her; was überall geht, zeigt „craft“.` : "Neben dir steht kein Bau. Was überall geht, zeigt „craft“.");
+			const carried = new Map<string, number>();
+			for (const i of await inventory(c)) carried.set(i.f.proto, (carried.get(i.f.proto) ?? 0) + 1);
+			const pn = (k: string) => c.world.prototypes.find((p) => p.key === k)?.name ?? k;
+			const lines = plans.flatMap((p) => [`${planOf(c.world, p)?.name ?? p}:`, ...rs.filter((r) => r.at === p).map((r) => {
+				const ok = r.needs.every((x) => (carried.get(x.proto) ?? 0) >= x.count) && (!r.tool || carried.has(r.tool));
+				return `  ${(r.count ?? 1) > 1 ? `${r.count}× ` : ""}${r.name} („craft ${r.key}“): ${list(r.needs.map((x) => `${x.count} ${pn(x.proto)}`))}${r.tool ? `, mit ${pn(r.tool)}` : ""}${ok ? " – das hast du dabei" : ""}`;
+			})]);
+			if (beside.some((b) => planOf(c.world, b.plan)?.sparesTools)) lines.push("Neben der Werkstatt nutzt sich Werkzeug nur halb so schnell ab.");
+			return msg(c, c.actor.charId, "info", lines.join("\n"));
 		}
 		const { count: want, what: a } = countOf(arg.trim().toLowerCase());
 		const r = recipeNamed(c.world, a);
