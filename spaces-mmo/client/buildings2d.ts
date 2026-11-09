@@ -209,6 +209,15 @@ function workshop(g: Graphics, x: number, y: number, w: number, h: number, ts: n
 }
 
 /** The picture of a finished building of `plan`; a plan without one of its own is a house in its `color`. */
+/** The road: a patch of cobbles with a kerb, a signpost at one corner pointing on (it joins two rooms for the cart). */
+function road(g: Graphics, x: number, y: number, w: number, h: number, ts: number): void {
+	g.roundRect(x + 1, y + 1, w - 2, h - 2, 3).fill({ color: "#9a8f7a" }).stroke({ width: 1.5, color: "#5f574a" });
+	const n = 4, cw = (w - 6) / n, ch = (h - 6) / n;
+	for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) g.roundRect(x + 3 + i * cw + ((j % 2) * cw) / 2 - (j % 2 && i === n - 1 ? cw / 2 : 0), y + 3 + j * ch, cw - 1.5, ch - 1.5, 1.5).fill({ color: (i + j) % 3 ? "#b3a88f" : "#a59a82" });
+	const px = x + w - ts * 0.22, top = y + ts * 0.12;
+	g.rect(px - 1, top, 2.5, ts * 0.62).fill({ color: WOOD_DARK });
+	g.poly([px - ts * 0.32, top + 2, px + 1, top + 2, px + 1, top + ts * 0.18, px - ts * 0.32, top + ts * 0.18, px - ts * 0.4, top + ts * 0.1]).fill({ color: WOOD }).stroke({ width: 1.2, color: LINE });
+}
 export function building2d(g: Graphics, plan: string | undefined, x: number, y: number, w: number, h: number, ts: number, color: string): void {
 	if (plan === "regentonne") barrel(g, x, y, ts);
 	else if (plan === "vogelscheuche") scarecrow(g, x, y, ts);
@@ -227,5 +236,6 @@ export function building2d(g: Graphics, plan: string | undefined, x: number, y: 
 	else if (plan === "park") park(g, x, y, w, h, ts);
 	else if (plan === "rathaus") townHall(g, x, y, w, h, ts);
 	else if (plan === "werkstatt") workshop(g, x, y, w, h, ts);
+	else if (plan === "strasse") road(g, x, y, w, h, ts);
 	else house(g, x, y, w, h, color, ROOF, ts);
 }

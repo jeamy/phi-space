@@ -252,6 +252,19 @@ function tannery(t: T, w: number, d: number): Geo {
 		return merge(t, parts, "gerberei");
 	});
 }
+/** The road: a flat bed of cobbles with a kerb of darker stone, a signpost at one corner with two arms (it joins two
+ *  rooms for the cart). Low, so it reads as ground one drives over, not as a house. */
+function road(t: T, w: number, d: number): Geo {
+	return cached(`strasse:${w}x${d}`, () => {
+		const r = rand("road"), ww = w * 0.96, dd = d * 0.96, parts: Part[] = [b(t, ww, 0.05, dd, 0x8a7f6a, 0, 0.025, 0)];
+		for (const s of [-1, 1]) parts.push(b(t, ww, 0.07, 0.06, STONE_DARK, 0, 0.035, (s * dd) / 2 - s * 0.03), b(t, 0.06, 0.07, dd, STONE_DARK, (s * ww) / 2 - s * 0.03, 0.035, 0));
+		const n = 4;
+		for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) parts.push(b(t, ww / n - 0.04, 0.03 + r() * 0.015, dd / n - 0.04, [0xb3a88f, 0xa59a82, 0x9c9178][(i + j) % 3]!, -ww / 2 + ww / n / 2 + (i * ww) / n, 0.06, -dd / 2 + dd / n / 2 + (j * dd) / n));
+		const px = ww / 2 - 0.12, pz = -dd / 2 + 0.12;
+		parts.push(b(t, 0.05, 0.62, 0.05, WOOD_DARK, px, 0.36, pz), b(t, 0.3, 0.08, 0.025, WOOD, px - 0.13, 0.58, pz, [0, 0.4, 0]), b(t, 0.26, 0.08, 0.025, WOOD, px - 0.1, 0.46, pz + 0.04, [0, -0.6, 0]));
+		return merge(t, parts, "strasse");
+	});
+}
 /** The department store: two floors, a striped awning over big shop windows, a sign on the roof. */
 function department(t: T, w: number, d: number): Geo {
 	return cached(`kaufhaus:${w}x${d}`, () => {
@@ -374,6 +387,7 @@ export function buildingModel(t: T, plan: string | undefined, w: number, d: numb
 		case "raeucherei": return smokehouse(t, w, d);
 		case "metzgerei": return butcher(t, w, d);
 		case "gerberei": return tannery(t, w, d);
+		case "strasse": return road(t, w, d);
 		case "kaufhaus": return department(t, w, d);
 		case "kontor": return counting(t, w, d);
 		case "brauerei": return brewery(t, w, d);
