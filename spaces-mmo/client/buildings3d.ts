@@ -198,6 +198,60 @@ function smokehouse(t: T, w: number, d: number): Geo {
 		return merge(t, parts, "raeucherei");
 	});
 }
+/** The butcher's shop: white half-timbering under a red tile roof (a hut is plank and thatch), a red and white awning
+ *  over a counter, hams and sausages hanging from a rail beside it, a chopping block with a cleaver, a sign with a pig. */
+function butcher(t: T, w: number, d: number): Geo {
+	return cached(`metzgerei:${w}x${d}`, () => {
+		const parts: Part[] = [], { ww, dd, top } = house(t, parts, w, d, { wall: 0xece4d2, roof: 0xb4442e, wh: 0.66, rise: 0.36, wide: 0.7 }), front = dd / 2;
+		// the timbers on the front: a sill beam, a middle beam and two braces
+		parts.push(b(t, ww, 0.05, 0.02, WOOD_DARK, 0, 0.42, front + 0.012), b(t, ww, 0.05, 0.02, WOOD_DARK, 0, 0.1 + 0.66 - 0.02, front + 0.012));
+		for (const s of [-1, 1]) parts.push(b(t, 0.04, 0.38, 0.02, WOOD_DARK, s * ww * 0.36, 0.6, front + 0.012, [0, 0, s * 0.6]));
+		door(t, parts, -ww * 0.28, front, 0.28, 0.5);
+		// the counter under an awning of red and white stripes
+		const cx = ww * 0.16;
+		parts.push(b(t, 0.56, 0.3, 0.16, WOOD, cx, 0.25, front + 0.1), b(t, 0.6, 0.03, 0.2, 0xd8d2c4, cx, 0.41, front + 0.1));
+		for (let i = 0; i < 6; i++) parts.push(b(t, 0.11, 0.025, 0.34, i % 2 ? 0xf2ede0 : 0xc0392b, cx - 0.275 + i * 0.11, 0.66, front + 0.16, [0.45, 0, 0]));
+		for (let i = 0; i < 3; i++) parts.push(ball(t, 0.06, [0xb5564a, 0xc96a5a, 0x9c3f36][i]!, cx - 0.17 + i * 0.17, 0.47, front + 0.1, [1.1, 0.7, 0.9]));
+		// hams and sausages on a rail at the side
+		const rx = ww / 2 + 0.28;
+		parts.push(b(t, 0.05, 0.75, 0.05, WOOD_DARK, rx, 0.375, 0.32), b(t, 0.05, 0.75, 0.05, WOOD_DARK, rx, 0.375, -0.32), b(t, 0.04, 0.04, 0.7, WOOD_DARK, rx, 0.73, 0));
+		for (let i = 0; i < 3; i++) parts.push(b(t, 0.01, 0.08, 0.01, 0xcdb98d, rx, 0.67, -0.22 + i * 0.22), ball(t, 0.08, 0x9c4a32, rx, 0.55, -0.22 + i * 0.22, [0.8, 1.4, 0.8]));
+		for (let i = 0; i < 4; i++) parts.push(cy(t, 0.025, 0.025, 0.24, 0xa0523a, rx, 0.42, -0.33 + i * 0.22 + 0.11, 6));
+		// a chopping block with a cleaver in it, on the other side
+		const bx = -ww / 2 - 0.25;
+		parts.push(cy(t, 0.16, 0.15, 0.3, BARK, bx, 0.04, 0.15, 8), cy(t, 0.15, 0.15, 0.02, 0xc8a878, bx, 0.34, 0.15, 8), b(t, 0.16, 0.1, 0.015, 0xb8c0c8, bx, 0.41, 0.15), b(t, 0.03, 0.03, 0.14, WOOD_DARK, bx, 0.43, 0.25));
+		// the sign: a board with a pink pig on it, out from the wall on an iron arm
+		parts.push(b(t, 0.03, 0.03, 0.26, IRON, ww * 0.42, top - 0.08, front + 0.13), b(t, 0.24, 0.18, 0.03, WOOD, ww * 0.42, top - 0.2, front + 0.24), ball(t, 0.06, 0xe8a0a0, ww * 0.42, top - 0.2, front + 0.26, [1.3, 0.8, 0.4]));
+		chimney(t, parts, -ww * 0.25, top, -dd * 0.15, 0.4);
+		return merge(t, parts, "metzgerei");
+	});
+}
+/** The tannery: a long open shed of dark timber on posts, round vats of brown and grey liquor sunk before it, hides
+ *  stretched on frames beside it. No walls on the front: it reads as a workplace, not a house. */
+function tannery(t: T, w: number, d: number): Geo {
+	return cached(`gerberei:${w}x${d}`, () => {
+		const ww = w * 0.86, dd = d * 0.42, back = -d * 0.2, wh = 0.62, parts: Part[] = [b(t, w * 0.94, 0.08, d * 0.9, 0x8a7a62, 0, 0.04, 0)];
+		// the shed in the back half: a back wall, posts at the front, a roof of boards sloping to the back
+		parts.push(b(t, ww, wh, 0.06, 0x4e3a28, 0, 0.08 + wh / 2, back - dd / 2));
+		for (const sx of [-1, 1]) parts.push(b(t, 0.06, wh, dd, 0x4e3a28, (sx * ww) / 2, 0.08 + wh / 2, back));
+		for (let i = 0; i <= 3; i++) parts.push(b(t, 0.07, wh + 0.12, 0.07, WOOD_DARK, -ww / 2 + (i * ww) / 3, 0.08 + (wh + 0.12) / 2, back + dd / 2));
+		parts.push(b(t, ww + 0.16, 0.05, dd + 0.24, 0x5a4a3c, 0, 0.08 + wh + 0.1, back, [-0.22, 0, 0]));
+		// hides hung up inside the shed
+		for (let i = 0; i < 3; i++) parts.push(b(t, 0.24, 0.3, 0.02, [0xb08058, 0x9a6a44, 0xc49a70][i]!, -ww * 0.3 + i * ww * 0.3, 0.42, back - dd / 2 + 0.06));
+		// the vats before it, sunk in a stone rim
+		const vat = [0x6a4a2a, 0x7a5a34, 0x9a9488, 0x5a3e22];
+		for (let i = 0; i < 4; i++) {
+			const x = -ww * 0.36 + (i % 2) * 0.42 + (i >= 2 ? ww * 0.4 : 0), z = d * 0.22 + (i % 2 ? 0.06 : -0.06);
+			parts.push(cy(t, 0.19, 0.18, 0.12, STONE_DARK, x, 0.06, z, 10), cy(t, 0.15, 0.15, 0.02, vat[i]!, x, 0.17, z, 10));
+		}
+		parts.push(b(t, 0.03, 0.03, 0.5, WOOD, -ww * 0.36 + 0.1, 0.22, d * 0.22, [0.5, 0, 0.3]));
+		// a hide stretched in a frame at the side
+		const fx = ww / 2 + 0.22;
+		parts.push(b(t, 0.04, 0.62, 0.04, WOOD_DARK, fx, 0.35, -0.24), b(t, 0.04, 0.62, 0.04, WOOD_DARK, fx, 0.35, 0.24), b(t, 0.04, 0.04, 0.52, WOOD_DARK, fx, 0.64, 0), b(t, 0.04, 0.04, 0.52, WOOD_DARK, fx, 0.12, 0));
+		parts.push(b(t, 0.015, 0.44, 0.4, 0xc49a70, fx, 0.38, 0));
+		return merge(t, parts, "gerberei");
+	});
+}
 /** The department store: two floors, a striped awning over big shop windows, a sign on the roof. */
 function department(t: T, w: number, d: number): Geo {
 	return cached(`kaufhaus:${w}x${d}`, () => {
@@ -318,6 +372,8 @@ export function buildingModel(t: T, plan: string | undefined, w: number, d: numb
 		case "rathaus": return townHall(t, w, d);
 		case "werkstatt": return workshop(t, w, d);
 		case "raeucherei": return smokehouse(t, w, d);
+		case "metzgerei": return butcher(t, w, d);
+		case "gerberei": return tannery(t, w, d);
 		case "kaufhaus": return department(t, w, d);
 		case "kontor": return counting(t, w, d);
 		case "brauerei": return brewery(t, w, d);

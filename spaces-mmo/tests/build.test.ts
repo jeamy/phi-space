@@ -163,6 +163,8 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		assert.match(await does(other.p, "repariere", "brauchst du"), /brauchst du 1 Treibholz/);
 		await give(s, other.me, "treibholz", 1);
 		assert.match(await does(other.p, "repariere", "bessert"), /Nachbar bessert die Hütte von Siedlerin aus; sie hält wieder etwa 40 Tage/);
+		// the overview counts the term on the same clock as the repair (it said "etwa 1 Stunden" while the world clock ran ahead)
+		assert.match(await does(other.p, "baustelle", "hält noch"), /Hütte von Siedlerin: hält noch etwa 40 Tage/);
 
 		// not kept: its time runs out, it becomes a ruin; the light goes back, the chest waits as an estate
 		const b = (await s.readAll({ type: "Building" }))[0]!;

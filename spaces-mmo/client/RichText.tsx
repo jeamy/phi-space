@@ -1,7 +1,7 @@
 "use client";
 // The texts of the world made readable, whatever wrote them: a command in „…“ stands out in the theme's colour and, where
 // the page gives `onCommand`, a tap puts it into the command line (it never runs by itself); long help falls into points.
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { sentences } from "./sentences.ts";
 import { tr } from "./i18n/index.ts";
 
@@ -19,14 +19,17 @@ export function setNames(list: Iterable<string>): void {
 }
 /** A piece of text with what is marked **so** and the names of figures in bold. */
 export function emphasized(text: string, key = 0): ReactNode[] {
+	// keys of their own ("e<key>.<n>"): a command's button beside them is "c<n>", a duplicate key made React keep the old
+	// element at every render of the log and add it again ("2× Münze" a hundred times)
 	const out: ReactNode[] = [];
-	let k = key * 1000;
+	let k = 0;
+	const id = () => `e${key}.${k++}`;
 	for (const [i, piece] of text.split(/\*\*(.+?)\*\*/su).entries()) {
-		if (i % 2) { out.push(<strong key={k++}>{piece}</strong>); continue; }
-		if (!names || !piece) { out.push(piece); continue; }
+		if (i % 2) { out.push(<strong key={id()}>{piece}</strong>); continue; }
+		if (!names || !piece) { out.push(<Fragment key={id()}>{piece}</Fragment>); continue; }
 		let at = 0;
-		for (const m of piece.matchAll(names)) { out.push(piece.slice(at, m.index)); out.push(<strong key={k++} className="who">{m[0]}</strong>); at = m.index + m[0].length; }
-		out.push(piece.slice(at));
+		for (const m of piece.matchAll(names)) { out.push(<Fragment key={id()}>{piece.slice(at, m.index)}</Fragment>); out.push(<strong key={id()} className="who">{m[0]}</strong>); at = m.index + m[0].length; }
+		out.push(<Fragment key={id()}>{piece.slice(at)}</Fragment>);
 	}
 	return out;
 }
@@ -39,7 +42,7 @@ export function Rich({ text: german, onCommand }: { text: string; onCommand?: (c
 		const c = m[1]!;
 		if (!isCommand(c)) continue;
 		parts.push(...emphasized(text.slice(at, m.index), k++));
-		parts.push(onCommand ? <button key={k++} type="button" className="cmd-word" onClick={() => onCommand(c.replace(/\s*<[^>]*>.*$/, "").trim())} title="In die Befehlszeile setzen">{c}</button> : <code key={k++} className="cmd-word">{c}</code>);
+		parts.push(onCommand ? <button key={`c${k++}`} type="button" className="cmd-word" onClick={() => onCommand(c.replace(/\s*<[^>]*>.*$/, "").trim())} title="In die Befehlszeile setzen">{c}</button> : <code key={`c${k++}`} className="cmd-word">{c}</code>);
 		at = m.index + m[0].length;
 	}
 	parts.push(...emphasized(text.slice(at), k++));

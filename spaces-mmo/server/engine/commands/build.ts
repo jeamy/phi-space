@@ -393,10 +393,11 @@ const baustelle: Command = {
 		const built = here((await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)));
 		const ruins = here((await c.space.readAll({ type: "Ruin", fields: { room: c.actor.room } })).map((e) => fieldsOf<RuinFields>(e)));
 		if (!sites.length && !built.length && !ruins.length) return msg(c, c.actor.charId, "info", "Hier wird nichts gebaut. „bau“ zeigt die Baupläne.");
-		const now = await worldNowOf(c.space, c.txn);
+		// a building's term is on the second clock (decayNowOf, as `repariere` and the sweep count it), not the world's
+		const kept = await decayNowOf(c.space, c.txn);
 		const wages = new Map<string, string>();
 		for (const s of sites) { const o = await ordersOfSite(c.space, s.buildId); if (o.length) wages.set(s.buildId, ` Lohn: ${o.map(orderLine).join("; ")}.`); }
-		const lines = [...sites.map((s) => `${s.accountId === c.account?.accountId ? `Deine Baustelle ${s.name}` : `Baustelle ${s.name} von ${s.ownerName}`}: es fehlen ${missing(s).join(", ")}.${wages.get(s.buildId) ?? ""}`), ...built.map((b) => `${b.name} von ${b.ownerName}: hält noch ${days(b.untilWorldMs - now)} („repariere“ bessert sie aus).`), ...ruins.map((r) => `Ruine einer ${r.name} von ${r.ownerName}.`)];
+		const lines = [...sites.map((s) => `${s.accountId === c.account?.accountId ? `Deine Baustelle ${s.name}` : `Baustelle ${s.name} von ${s.ownerName}`}: es fehlen ${missing(s).join(", ")}.${wages.get(s.buildId) ?? ""}`), ...built.map((b) => `${b.name} von ${b.ownerName}: hält noch ${days(b.untilWorldMs - kept)} („repariere“ bessert sie aus).`), ...ruins.map((r) => `Ruine einer ${r.name} von ${r.ownerName}.`)];
 		await msg(c, c.actor.charId, "look", lines.join("\n"));
 	},
 };
