@@ -1042,7 +1042,7 @@ Boards hang in the same six places as the market boards. \`order\` shows the boa
 		body: {
 			de: `Im Licht eines Feuers könnt ihr gemeinsam bauen. Einer steckt eine Baustelle ab, alle bringen Material und packen mit an. Was fertig ist, steht auf der Karte und gehört dem, der es begonnen hat. Ein Bau will gepflegt werden, sonst verfällt er.
 
-Wo kein Feuer brennt, steckt niemand eine Baustelle ab. Jedes Feuer hat **20 Lichtpunkte**, und jeder Bau nimmt ihm einen oder zwei davon. Abstecken und besitzen braucht ein Konto; mitbauen dürfen auch Gäste ([Gast und Konto](help.game.account)). Wer hier wen bauen lässt, kann eine [Siedlung](help.game.village#settlement) regeln.
+Wo kein Feuer brennt, steckt niemand eine Baustelle ab. Jedes Feuer hat **20 Lichtpunkte**, und jeder Bau nimmt ihm einen bis drei davon. Jeder, der dort in den letzten sieben Tagen gebaut hat, gibt 5 mehr (bis 40), und mit jeder **Epoche** der Insel trägt jedes Feuer 20 mehr: im Dorf 40, in der Stadt 60, im Netz 80, so reicht es auch mit wenigen Spielern für Werkstatt, Steinbruch und Lehmgrube. Der Betreiber kann beides höher stellen. Abstecken und besitzen braucht ein Konto; mitbauen dürfen auch Gäste ([Gast und Konto](help.game.account)). Wer hier wen bauen lässt, kann eine [Siedlung](help.game.village#settlement) regeln.
 
 ## Baustelle abstecken {#stake}
 
@@ -1111,7 +1111,7 @@ Du kannst jederzeit abreißen, was dir gehört. Einen Teil des Materials bekomms
 \`abriss\` (oder „reiß die hütte ab“) an deinem Bau gibt die Fläche und das Licht frei, die Hälfte des Materials und den Inhalt der Truhe zurück. Eine aufgegebene Baustelle gibt alles Gelieferte zurück.`,
 			en: `In a fire's light you can build together. One person stakes out a site, everyone brings material and lends a hand. What is finished stands on the map and belongs to whoever started it. A building wants looking after, or it decays.
 
-Where no fire burns, nobody stakes out a site. Every fire has **20 light points**, and each building takes one or two of them. Staking out and owning need an account; guests may help build ([Guest and account](help.game.account)). A [settlement](help.game.village#settlement) can rule who builds where.
+Where no fire burns, nobody stakes out a site. Every fire has **20 light points**, and each building takes one to three of them. Everyone who built there in the last seven days adds 5 (up to 40), and with each **epoch** of the island every fire carries 20 more: 40 in the village, 60 in the town, 80 in the net, so even few players have light for a workshop, a quarry and a clay pit. The operator can set both higher. Staking out and owning need an account; guests may help build ([Guest and account](help.game.account)). A [settlement](help.game.village#settlement) can rule who builds where.
 
 ## Staking out a site {#stake}
 

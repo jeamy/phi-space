@@ -212,7 +212,7 @@ export type AnimalsDef = { /** Buildings of `houses` one account may own where t
  *  may take per world day; `logKeepMs`: how long a line of the log stays (real time, it must outlast the quota's day);
  *  `logShow`: how many lines `lager log` shows. */
 export type StoreDef = { quota: { fremder: number; helfer: number; siedler: number }; logKeepMs: number; logShow: number };
-export type BuildingDef = { store?: StoreDef; plans: PlanDef[]; lightPoints: number; /** `perPlayer` more points for each registered player who built here within `activeMs` (of the second clock), up to `max` in all. */ lightGrowth?: { perPlayer: number; max: number; activeMs: number }; siteWorldMs: number; maxSites: number; maxBuildings: number; uncounted?: string[]; ruinWorldMs: number; estateWorldMs: number };
+export type BuildingDef = { store?: StoreDef; plans: PlanDef[]; lightPoints: number; /** What each epoch of the fire's island above the first adds to its light (the setting light.epoch overrides it). */ lightPerEpoch?: number; /** `perPlayer` more points for each registered player who built here within `activeMs` (of the second clock), up to `max` in all. */ lightGrowth?: { perPlayer: number; max: number; activeMs: number }; siteWorldMs: number; maxSites: number; maxBuildings: number; uncounted?: string[]; ruinWorldMs: number; estateWorldMs: number };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
 	/** In world hours: the NPC is there from `presentFromHour` to `presentUntilHour` (over midnight too), else away. */

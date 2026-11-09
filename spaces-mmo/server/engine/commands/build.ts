@@ -115,14 +115,22 @@ export function besides(c: CommandCtx, plan: Pick<PlanDef, "w" | "h">): Rect[] {
 	return out.sort((a, b) => side(a) - side(b));
 }
 
+/** A fire's own light (the setting light.base, else the world's), and what each epoch of its island above the first adds
+ *  (light.epoch): a village carries its workshop and quarry even with few players. */
+async function lightBase(c: CommandCtx, beaconId: string): Promise<{ base: number; epoch: number }> {
+	const def = c.world.building, base: number = (await setting(c.space, "light.base").catch(() => undefined)) ?? def?.lightPoints ?? 0;
+	const per: number = (await setting(c.space, "light.epoch").catch(() => undefined)) ?? def?.lightPerEpoch ?? 0;
+	const room = c.world.beacons.find((b) => b.beaconId === beaconId)?.room ?? c.actor.room;
+	return { base, epoch: per ? per * ((await epochOf(c.space, islandOf(c.world, room), c.txn)) - 1) : 0 };
+}
 /** What a fire's light carries: more with each registered player who built here lately, so a busy island is not stuck and a
- *  deserted one holds no place. */
+ *  deserted one holds no place; more with each epoch of the island. */
 async function lightOf(c: CommandCtx, beaconId: string): Promise<number> {
-	const def = c.world.building, base = def?.lightPoints ?? 0, more = def?.lightGrowth;
-	const bonus = (await c.space.readAll({ type: "Building", fields: { beaconId } }, { txn: c.txn })).reduce((n, e) => n + (planOf(c.world, String(e.fields.plan))?.lightBonus ?? 0), 0); // a lighthouse
+	const more = c.world.building?.lightGrowth, { base, epoch } = await lightBase(c, beaconId);
+	const bonus = (await c.space.readAll({ type: "Building", fields: { beaconId } }, { txn: c.txn })).reduce((n, e) => n + (planOf(c.world, String(e.fields.plan))?.lightBonus ?? 0), 0) + epoch; // a lighthouse, the epoch
 	if (!more) return base + bonus;
 	const now = await decayNowOf(c.space, c.txn), active = (await c.space.readAll({ type: "FireBuilder", fields: { beaconId } }, { txn: c.txn })).filter((e) => fieldsOf<FireBuilderFields>(e).atWorldMs + more.activeMs > now).length;
-	return Math.min(more.max, base + active * more.perPlayer) + bonus;
+	return Math.min(Math.max(more.max, base), base + active * more.perPlayer) + bonus;
 }
 /** The actor counts as building at this fire. Figures fill the light, they do not widen it. */
 async function noteBuilder(c: CommandCtx, beaconId: string): Promise<void> {
@@ -164,8 +172,11 @@ async function moreLight(c: CommandCtx, beaconId: string): Promise<string> {
 	if (more) {
 		const now = await decayNowOf(c.space, c.txn);
 		const active = (await c.space.readAll({ type: "FireBuilder", fields: { beaconId } }, { txn: c.txn })).filter((e) => fieldsOf<FireBuilderFields>(e).atWorldMs + more.activeMs > now).length;
-		if ((def?.lightPoints ?? 0) + active * more.perPlayer < more.max) out.push(` Es wird heller mit jedem, der hier mitbaut (bis ${more.max} Punkte).`);
+		const { base } = await lightBase(c, beaconId);
+		if (base + active * more.perPlayer < more.max) out.push(` Es wird heller mit jedem, der hier mitbaut (bis ${more.max} Punkte).`);
 	}
+	const per: number = (await setting(c.space, "light.epoch").catch(() => undefined)) ?? def?.lightPerEpoch ?? 0;
+	if (per && (await epochOf(c.space, island, c.txn)) < (c.world.epochs?.names.length ?? 1)) out.push(` Mit jeder Epoche der Insel trägt es ${per} Punkte mehr.`);
 	const tower = def?.plans.find((p) => p.lightBonus);
 	if (tower?.dative) {
 		const need = tower.epoch ?? 1;

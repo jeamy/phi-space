@@ -1046,6 +1046,10 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      - **Thresholds** as settings in the operator's window: `epoch.dorf` 15, `epoch.stadt` 40, `epoch.netz` 80
        (`SPACES_MMO_EPOCH_*`). Every island has at least one fire with 20 light points, so the village is reachable
        everywhere, but not by one account alone (at most five buildings, three beds, one plot: about 10 points).
+     - **Light grows with the epoch (2026-11-09):** every fire of an island carries `light.epoch` (20) more light points
+       for each epoch above the fishing village (`lightPerEpoch`, `server/engine/commands/build.ts` lightOf), and its own
+       light is the setting `light.base` (20): with few players a village still has light for its workshop, quarry and
+       clay pit.
      - **Counting:** Job `epoch` every world hour and once at the start of the world worker, per region over the islands of
        its rooms. It writes the `Epoch` entry of an island only when the level changes, and tells all rooms of the island.
      - **Blocked** in the fishing village: new windmills, bakeries, pens, looms (`PlanDef.epoch`) and plots

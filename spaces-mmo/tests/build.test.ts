@@ -120,6 +120,12 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		// what helps as it stands: a fishing village builds no lighthouse yet, and nobody builds a fire
 		assert.match(dark, /Leuchtturm hätte es mehr Licht, aber der Bauplan öffnet sich erst, wenn die Insel eine Stadt ist/);
 		assert.doesNotMatch(dark, /zweites Feuer/);
+		assert.match(dark, /Mit jeder Epoche der Insel trägt es 20 Punkte mehr/);
+		// a village: every fire of the island carries 20 more, the hut fits again
+		await saveSettings(s, { "epoch.force": 2 });
+		await new Promise((ok) => setTimeout(ok, Number(process.env.SPACES_MMO_SETTINGS_MS) || 5_100));
+		assert.doesNotMatch(await does(other.p, "bau hütte", /steckt eine Baustelle ab|passt keine|Licht/), /Licht des Feuers reicht/);
+		await saveSettings(s, { "epoch.force": null });
 		for (const a of [boss, ...crew]) await a.p.leave();
 		await guest.leave();
 	} finally { await srv.close(); }

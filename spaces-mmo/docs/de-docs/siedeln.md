@@ -982,6 +982,10 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      - **Schwellen** als Einstellungen im Fenster des Betreibers: `epoch.dorf` 15, `epoch.stadt` 40, `epoch.netz` 80
        (`SPACES_MMO_EPOCH_*`). Jede Insel hat mindestens ein Feuer mit 20 Lichtpunkten, das Dorf ist also überall
        erreichbar, aber nicht von einem Konto allein (höchstens fünf Bauten, drei Beete, eine Flur: etwa 10 Punkte).
+     - **Licht wächst mit der Epoche (2026-11-09):** Jedes Feuer einer Insel trägt je Epoche über dem Fischerdorf
+       `light.epoch` (20) Lichtpunkte mehr (`lightPerEpoch`, `server/engine/commands/build.ts` lightOf), sein eigenes Licht
+       ist die Einstellung `light.base` (20): Auch mit wenigen Spielern hat ein Dorf Licht für Werkstatt, Steinbruch und
+       Lehmgrube.
      - **Zählung:** Job `epoch` jede Weltstunde und einmal beim Start des Welt-Workers, je Region über die Inseln ihrer
        Räume. Sie schreibt den `Epoch`-Entry einer Insel nur, wenn sich die Stufe ändert, und sagt es allen Räumen der
        Insel.
