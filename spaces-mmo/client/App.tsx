@@ -369,7 +369,7 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 			{!guest && carried.length > 0 && (
 				<form className="row" onSubmit={(e) => { e.preventDefault(); if (sell) board(`markt biete ${Math.max(1, Number(many) || 1)} ${sell} für ${price}`); setSell(""); setMany("1"); }}>
 					<input type="number" min={1} max={Math.max(1, carried.filter((o) => o.name === sell).length)} value={many} onChange={(e) => setMany(e.target.value)} aria-label="Wie viele" title="Wie viele (der Preis gilt für alle zusammen)" style={{ width: 56 }} />
-					<select value={sell} onChange={(e) => { setSell(e.target.value); setMany("1"); }} aria-label="Was verkaufen"><option value="">verkaufen …</option>{[...new Set(carried.map((o) => o.name))].filter((n) => n !== "Münze").map((n) => <option key={n} value={n}>{n}</option>)}</select>
+					<select value={sell} onChange={(e) => { setSell(e.target.value); setMany("1"); }} aria-label="Was verkaufen"><option value="">verkaufen …</option>{[...new Set(carried.map((o) => o.name))].filter((n) => n !== "Münze").sort((a, b) => a.localeCompare(b, "de")).map((n) => <option key={n} value={n}>{n}</option>)}</select>
 					<input type="number" min={1} max={1000} value={price} onChange={(e) => setPrice(e.target.value)} aria-label="Preis in Münzen" title="Preis in Münzen, für alle zusammen" style={{ width: 70 }} />
 					<button disabled={!sell}>Einstellen</button>
 				</form>
