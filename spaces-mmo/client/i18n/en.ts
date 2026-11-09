@@ -636,7 +636,7 @@ export const EN: Record<string, string> = {
 	"Ein Inselschaf mit dichter Wolle. Es frisst sogar Tang vom Strand.": "An island sheep with thick wool. It even eats kelp off the beach.",
 	"Ein Kahn setzt über nach {0} ({1}).": "A barge crosses to {0} ({1}).",
 	"Ein Kapitän will seiner Liebsten 3 Strandnelken mitbringen.": "A captain wants to bring his sweetheart 3 sea pinks.",
-	"Ein Kasten aus Bohlen, an den Ecken mit Stein beschwert. Er wartet darauf, dass jemand etwas hineinbaut.": "A box of planks, weighted with stone at the corners. It is waiting for someone to build something into it.",
+	"Ein Kasten aus Bohlen, an den Ecken mit Stein beschwert. Er ist ein Teil der Automaten, die noch kommen; bis dahin lässt er sich für nichts verwenden.": "A box of planks, weighted with stone at the corners. It is a part of the automatons still to come; until then it is of no use.",
 	"Ein Kaufmann aus dem Süden sucht eine Perle.": "A merchant from the south is looking for a pearl.",
 	"Ein Knäuel geschorener Wolle, fettig und warm.": "A ball of shorn wool, greasy and warm.",
 	"Ein Kreis aus hohen Steinen um eine alte Feuerstelle. Niemand hütet sie; wer sie entzündet, vertreibt den Nebel von ganz Nebelholm.": "A ring of tall stones around an old fireplace. Nobody tends it; whoever lights it drives the fog from all of Fog Holm.",

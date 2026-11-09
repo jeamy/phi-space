@@ -1239,7 +1239,7 @@ You can tear down what is yours at any time. You get part of the material back.
 		body: {
 			de: `Alles, was man herstellt, mit \`craft <rezept>\` (auch \`herstellen\`). Steht ein Ort dabei, geht es nur **direkt neben** einem solchen Bau, egal wem er gehört; die Zutaten kommen aus deiner Tasche. Neben einem Bau zeigt \`craft hier\` (oder „Was man hier herstellen kann“ in seinem Menü) seine Rezepte und bietet an, wofür du schon alles dabeihast. „×3“ heißt: Das Rezept gibt drei Stück. Rohes Fleisch und Fisch isst man nicht, man kocht oder räuchert sie; **satt** sagt, wie lange etwas nach \`iss\` satt macht ([Bauen](help.game.build), [Alle Gebäude](help.game.buildings)).
 
-| Rezept | braucht | wo | Essen |
+| Rezept | braucht | wo | Essen, Hinweis |
 | --- | --- | --- | --- |
 | Bernsteinkette (\`craft kette\`) | 1 Bernstein, 2 Muschel, 1 Tangseil, mit Muschelmesser | überall |  |
 | Holzbündel (\`craft holzbuendel\`) | 3 Treibholz, mit Muschelmesser | überall |  |
@@ -1283,7 +1283,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Glas ×2 (\`craft glas\`) | 3 Sand, 2 Treibholz | Glashütte |  |
 | Segelboot (\`craft segelboot\`) | 10 Bohle, 4 Leinen, 2 Tauwerk | Werft |  |
 | Bohle (\`craft bohle\`) | 2 Treibholz, mit Muschelmesser | Werkstatt |  |
-| Gehäuse (\`craft gehaeuse\`) | 4 Bohle, 2 Stein, 1 Tangseil, mit Muschelmesser | Werkstatt |  |
+| Gehäuse (\`craft gehaeuse\`) | 4 Bohle, 2 Stein, 1 Tangseil, mit Muschelmesser | Werkstatt | noch ohne Nutzen: ein Teil der Automaten, die noch kommen |
 | Karren (\`craft karren\`) | 4 Bohle, 1 Tauwerk | Werkstatt |  |
 | Lederstiefel (\`craft lederstiefel\`) | 3 Leder, mit Muschelmesser | Werkstatt |  |
 | Ledertasche (\`craft ledertasche\`) | 2 Leder, 1 Tangseil, mit Muschelmesser | Werkstatt |  |
@@ -1292,7 +1292,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Tauwerk (\`craft tauwerk\`) | 3 Tangseil | Werkstatt |  |`,
 			en: `Everything one makes, with \`craft <recipe>\`. Where a place is named, only **right beside** such a building, whoever owns it; the ingredients come from your pack. Beside a building \`craft hier\` (or „Was man hier herstellen kann“ in its menu) lists its recipes and offers what you already carry everything for. „×3“ means the recipe gives three. Raw meat and fish are not eaten, they are cooked or smoked; **sated** says how long a thing keeps you sated after \`iss\` ([Building](help.game.build), [All buildings](help.game.buildings)).
 
-| Recipe | needs | where | food |
+| Recipe | needs | where | food, note |
 | --- | --- | --- | --- |
 | Bernsteinkette (amber necklace) (\`craft kette\`) | 1 amber, 2 shell, 1 kelp rope, with shell knife | anywhere |  |
 | Holzbündel (wood bundle) (\`craft holzbuendel\`) | 3 driftwood, with shell knife | anywhere |  |
@@ -1336,7 +1336,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Glas (glass) ×2 (\`craft glas\`) | 3 sand, 2 driftwood | Glassworks |  |
 | Segelboot (sailing boat) (\`craft segelboot\`) | 10 plank, 4 linen, 2 cordage | Shipyard |  |
 | Bohle (plank) (\`craft bohle\`) | 2 driftwood, with shell knife | Workshop |  |
-| Gehäuse (casing) (\`craft gehaeuse\`) | 4 plank, 2 stone, 1 kelp rope, with shell knife | Workshop |  |
+| Gehäuse (casing) (\`craft gehaeuse\`) | 4 plank, 2 stone, 1 kelp rope, with shell knife | Workshop | no use yet: a part of the automatons still to come |
 | Karren (cart) (\`craft karren\`) | 4 plank, 1 cordage | Workshop |  |
 | Lederstiefel (leather boots) (\`craft lederstiefel\`) | 3 leather, with shell knife | Workshop |  |
 | Ledertasche (leather bag) (\`craft ledertasche\`) | 2 leather, 1 kelp rope, with shell knife | Workshop |  |

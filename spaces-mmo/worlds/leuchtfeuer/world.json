@@ -5596,7 +5596,7 @@
 			"parent": "ding",
 			"typeclass": "Gear",
 			"name": "Gehäuse",
-			"desc": "Ein Kasten aus Bohlen, an den Ecken mit Stein beschwert. Er wartet darauf, dass jemand etwas hineinbaut.",
+			"desc": "Ein Kasten aus Bohlen, an den Ecken mit Stein beschwert. Er ist ein Teil der Automaten, die noch kommen; bis dahin lässt er sich für nichts verwenden.",
 			"aliases": [
 				"gehäuse",
 				"kasten",
