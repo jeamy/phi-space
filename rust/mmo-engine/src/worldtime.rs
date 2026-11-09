@@ -50,3 +50,20 @@ pub fn time_scale() -> f64 {
 	let v = std::env::var("SPACES_MMO_TIME_SCALE").map_or(f64::NAN, |s| j::number(&Json::from(s)));
 	if v.is_finite() && v > 0.0 { v } else { 1.0 }
 }
+
+/// `SEASONS`.
+pub const SEASONS: [&str; 4] = ["Frühling", "Sommer", "Herbst", "Winter"];
+
+/// `calendar`: day, hour, minute and the milliseconds of the day of a world time.
+pub fn calendar(world_ms: f64) -> (f64, f64, f64, f64) {
+	let day = (world_ms / WORLD_DAY_MS).floor();
+	let of_day = world_ms - day * WORLD_DAY_MS;
+	(day, (of_day / WORLD_HOUR_MS).floor(), ((of_day % WORLD_HOUR_MS) / WORLD_MINUTE_MS).floor(), of_day)
+}
+
+/// `formatWorldTime`: "Tag 4, 08:12".
+pub fn format_world_time(world_ms: f64) -> String {
+	let (day, hour, minute, _) = calendar(world_ms);
+	let pad = |n: f64| { let s = phi_json::number_text(n); if s.chars().count() < 2 { format!("0{s}") } else { s } };
+	format!("Tag {}, {}:{}", phi_json::number_text(day + 1.0), pad(hour), pad(minute))
+}

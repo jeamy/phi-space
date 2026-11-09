@@ -343,3 +343,79 @@ fn trading() {
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 30 && said.iter().filter(|r| r.starts_with("refused")).count() > 30, "{said:?}");
 	assert!(w.entries_with(r#""Restock""#) == 0 && w.entries_with("t-lapsed") == 1, "the ticks did nothing");
 }
+
+/// The small modules: eating (food.ts), offering at a chapel (chapel.ts), the signal fire chains (signal.ts), clearing
+/// scenery (scenery.ts), breaking stone and cutting clay (quarry.ts), the wind with its tick (wind.ts), and the world's
+/// clock for everyone and for an admin (clock.ts).
+#[test]
+fn small_things() {
+	let mut w = Walk::new("small", 31, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (14.0, 8.0), true, false);
+	let g = w.player(3, "graue-bucht", (4.0, 12.0), true);
+	// b is the admin
+	assert!(w.take(obj! { "type" => "Account", "fields" => obj! { "accountId" => "a-walk2" } }));
+	w.write(obj! { "type" => "Account", "fields" => obj! { "accountId" => "a-walk2", "name" => "Wanderer2", "guest" => false, "admin" => true, "createdAt" => START, "touchedAt" => START } });
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize, wear: Option<f64>| { for _ in 0..k { n += 1; let t = thing(&world, &format!("t-{n}"), proto, to); let t = match wear { Some(x) => { let mut f = t.get("fields").cloned().unwrap(); walk::j_set(&mut f, "wear", Json::from(x)); obj! { "type" => "Item", "fields" => f } } None => t }; w.write(t); } };
+	give(&mut w, &a, "brot", 1, None);
+	give(&mut w, &a, "ei", 1, None);
+	give(&mut w, &a, "treibholz", 1, None);
+	give(&mut w, &a, "perle", 2, None);
+	give(&mut w, &g, "ei", 1, None);
+	w.write(obj! { "type" => "Setting", "fields" => obj! { "key" => "work.rest", "value" => 0.0 } });
+	w.compare("setup");
+	let i = std::cell::Cell::new(0);
+	let mut said = Vec::new();
+	let mut run = |w: &mut Walk, who: &str, line: &str| {
+		i.set(i.get() + 1);
+		let i = i.get();
+		w.at(START + i as f64 * 11_000.0);
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{i}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	let building = |id: &str, plan: &str, name: &str, room: &str, x: f64, y: f64, beacon: &str| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => plan, "name" => name, "room" => room, "x" => x, "y" => y, "w" => 2.0, "h" => 2.0, "owner" => "c-walk9", "ownerName" => "Jemand", "accountId" => "a-walk9", "beaconId" => beacon, "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	// eating and offering
+	for (who, line) in [(&a, "iss"), (&a, "iss stein"), (&a, "iss treibholz"), (&a, "iss brot"), (&a, "iss ei"), (&g, "esse ei"), (&a, "opfere perle")] { run(&mut w, who, line); }
+	w.write(building("k-1", "kapelle", "Kapelle", "graue-bucht", 6.0, 14.0, "feuer-bucht"));
+	for (who, line) in [(&a, "opfere"), (&a, "opfere stein"), (&a, "opfere treibholz"), (&a, "opfere perle"), (&a, "opfere perle")] { run(&mut w, who, line); }
+	// signal fires: none, a chain out, a chain lit, and the runs of the region
+	run(&mut w, &a, "signalfeuer");
+	w.write(building("sf-1", "signalfeuer", "Signalfeuer", "graue-bucht", 2.0, 14.0, "feuer-bucht"));
+	w.write(building("sf-2", "signalfeuer", "Signalfeuer", "duenen", 3.0, 3.0, "feuer-anleger"));
+	w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-bucht", "until" => 9e15, "litAt" => 0.0 } });
+	run(&mut w, &a, "signalfeuer");
+	w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-anleger", "until" => 9e15, "litAt" => 0.0 } });
+	w.write(obj! { "type" => "FireChain", "fields" => obj! { "island" => "Graue Insel", "since" => 1.0, "best" => 5.0 } });
+	w.write(obj! { "type" => "FireChain", "fields" => obj! { "island" => "Nebelholm", "since" => 0.0, "best" => 3_000_000.0 } });
+	w.write(obj! { "type" => "FireChain", "fields" => obj! { "island" => "Kupferinsel", "since" => 0.0, "best" => 72.0 * 3_600_000.0 } });
+	w.write(obj! { "type" => "FireChain", "fields" => obj! { "island" => "Leer", "since" => 0.0, "best" => 0.0 } });
+	for (who, line) in [(&a, "signalfeuer"), (&g, "signale")] { run(&mut w, who, line); }
+	// scenery beside b: the old boat in four works, the market stand stays
+	for (who, line) in [(&a, "räume"), (&b, "räume 13 10"), (&b, "räume 1 1"), (&b, "räume"), (&b, "räume 14 6"), (&b, "räume"), (&b, "räume"), (&b, "räume"), (&b, "inventory")] { run(&mut w, who, line); }
+	// a quarry and a clay pit beside a
+	run(&mut w, &a, "breche");
+	w.write(building("q-1", "steinbruch", "Steinbruch", "graue-bucht", 3.0, 12.0, "feuer-bucht"));
+	w.write(building("q-2", "lehmgrube", "Lehmgrube", "graue-bucht", 5.0, 11.0, "feuer-bucht"));
+	run(&mut w, &a, "breche");
+	give(&mut w, &a, "spitzhacke", 1, Some(2.0));
+	give(&mut w, &a, "spaten", 1, None);
+	for (who, line) in [(&a, "breche"), (&a, "breche"), (&a, "breche"), (&a, "steche"), (&a, "stechen"), (&g, "steche"), (&a, "inventory")] { run(&mut w, who, line); }
+	// the wind, the fog
+	run(&mut w, &a, "wetter");
+	for _ in 0..6 { w.tick("wind"); }
+	run(&mut w, &a, "wetter");
+	w.write(obj! { "type" => "Fog", "fields" => obj! { "room" => "graue-bucht", "level" => 2.0 } });
+	for k in 0..8 { w.tick("wind"); if k % 2 == 1 { run(&mut w, &a, "wind"); } }
+	// the clock
+	for (who, line) in [
+		(&a, "time"), (&a, "clock"), (&b, "clock"), (&b, "clock pause"), (&b, "clock pause"), (&a, "zeit"), (&b, "clock weiter"), (&b, "clock weiter"), (&b, "clock rate 0"),
+		(&b, "clock rate"), (&b, "clock rate 2,5"), (&b, "clock verfall 3"), (&b, "clock verfall x"), (&b, "clock x"), (&b, "clock status"), (&b, "clock rate 1"), (&b, "clock verfall 1"), (&b, "uhr stand"), (&a, "time"),
+	] { run(&mut w, who, line); }
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 15, "{said:?}");
+	assert!(w.entries_with("SceneryGone") == 1 && w.entries_with(r#""Blessing""#) == 1 && w.entries_with(r#""Sated""#) == 2, "nothing happened");
+}

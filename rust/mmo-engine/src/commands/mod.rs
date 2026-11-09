@@ -12,14 +12,19 @@ use crate::space::{fields, Error, Result};
 
 pub mod build;
 pub mod chapel;
+pub mod clock;
 pub mod default;
 pub mod epoch;
 pub mod food;
 pub mod passage;
+pub mod quarry;
+pub mod scenery;
 pub mod settlement;
+pub mod signal;
 pub mod siteorder;
 pub mod townhall;
 pub mod trade;
+pub mod wind;
 
 /// A command (`Command`): an exit's command carries the exit.
 #[derive(Debug, Clone)]
@@ -115,6 +120,14 @@ pub async fn run(c: &mut Ctx, cmd: &Command, arg: &str, merged: &Merged, exits: 
 		("build", key) => build::run(c, key, arg).await,
 		("siteorder", "aushang") => siteorder::aushang(c, arg).await,
 		("trade", key) => trade::run(c, key, arg).await,
+		("food", "iss") => food::iss(c, arg).await,
+		("chapel", "opfere") => chapel::opfere(c, arg).await,
+		("signal", "signalfeuer") => signal::signalfeuer(c, arg).await,
+		("scenery", "räume") => scenery::raeume(c, arg).await,
+		("quarry", key) => quarry::run(c, key, arg).await,
+		("wind", "wetter") => wind::wetter(c, arg).await,
+		("clock", "time") => clock::time(c, arg).await,
+		("clock", "clock") => clock::clock(c, arg).await,
 		(m, k) => Err(Error::Other(format!("unported: {m}/{k}"))),
 	}
 }
