@@ -11,6 +11,7 @@ pub mod j;
 pub mod js;
 pub mod loader;
 pub mod locks;
+pub mod mirror;
 pub mod model;
 pub mod occupancy;
 pub mod pack;

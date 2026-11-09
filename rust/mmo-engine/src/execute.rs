@@ -106,7 +106,9 @@ pub async fn execute(c: &mut Ctx, line: &str) -> Result<()> {
 }
 
 /// How a world worker serves characters: its space, the world's definition, how long messages and transactions last.
-pub struct Worker { pub space: Space, pub w: Rc<Json>, pub msg_lease_ms: f64, pub txn_ms: f64 }
+/// The world worker's serving (`server/world-host.ts`). With `mirror` its commands read their snapshot from the copy, as
+/// in production (the oracle's default); without it every read goes to the space (`R8_SERVE=plain`).
+pub struct Worker { pub space: Space, pub w: Rc<Json>, pub msg_lease_ms: f64, pub txn_ms: f64, pub mirror: Option<Rc<crate::mirror::Mirror>> }
 
 impl Worker {
 	/// `begin`: a new transaction holding the character's token and its oldest intent.
@@ -121,9 +123,11 @@ impl Worker {
 	}
 
 	/// `one`: an entry from the snapshot, else a read that waits while another transaction holds it.
-	async fn one(&self, t: &Json, wait_ms: f64) -> Result<Option<Json>> {
-		match self.space.peek(t, None).await? { Some(e) => Ok(Some(e)), None => self.space.read_if_exists(t, wait_ms, None).await }
+	async fn one(&self, view: &Space, t: &Json, wait_ms: f64) -> Result<Option<Json>> {
+		match view.peek(t, None).await? { Some(e) => Ok(Some(e)), None => self.space.read_if_exists(t, wait_ms, None).await }
 	}
+	/// What a command's reads go to: the copy when there is one.
+	fn view(&self) -> Space { self.mirror.as_ref().map_or_else(|| self.space.clone(), |m| self.space.with_mirror(m.clone())) }
 
 	async fn finish(&self, txn: &str, char_id: &str) -> Result<()> {
 		self.space.write(&actor_token(char_id), Some(txn), FOREVER).await?;
@@ -136,7 +140,7 @@ impl Worker {
 		let Ok((txn, intent)) = self.begin(&char_id).await else { return };
 		let told: Result<()> = async {
 			if intent.is_none() { return self.space.abort(&txn).await; }
-			let c = Ctx { space: self.space.clone(), txn: txn.clone(), world: self.w.clone(), actor: actor.clone(), account: None, load_account: false, msg_lease_ms: self.msg_lease_ms, asked: None, lang: None, step: None, inventory: None };
+			let c = Ctx { space: self.view(), txn: txn.clone(), world: self.w.clone(), actor: actor.clone(), account: None, load_account: false, msg_lease_ms: self.msg_lease_ms, asked: None, lang: None, step: None, inventory: None };
 			msg(&c, &char_id, "error", text, MsgOpts::default()).await?;
 			self.finish(&txn, &char_id).await
 		}.await;
@@ -150,14 +154,16 @@ impl Worker {
 		let Some(intent) = intent else { self.space.abort(&txn).await?; return Ok("held".into()) };
 		let mut actor: Option<Json> = None;
 		let ran: Result<()> = async {
-			if let Some(a) = self.one(&tmpl("Character", phi_json::obj! { "charId" => char_id }), 5_000.0).await? {
+			if let Some(m) = &self.mirror { m.fresh().await?; }
+			let view = self.view();
+			if let Some(a) = self.one(&view, &tmpl("Character", phi_json::obj! { "charId" => char_id }), 5_000.0).await? {
 				let a = fields(&a).clone();
 				actor = Some(a.clone());
 				let line = j::s(&intent, "line").to_owned();
 				let stepping = STEP.with(|r| r.test(&line));
-				let account = if stepping { None } else { self.one(&tmpl("Account", phi_json::obj! { "accountId" => j::at(&a, "accountId").clone() }), 2_000.0).await?.map(|e| fields(&e).clone()) };
-				let world = Rc::new(spatial_world(&self.space, &self.w).await?);
-				let mut c = Ctx { space: self.space.clone(), txn: txn.clone(), world, actor: a, load_account: account.is_none(), account, msg_lease_ms: self.msg_lease_ms, asked: j::so(&intent, "asked").map(str::to_owned), lang: j::so(&intent, "lang").map(str::to_owned), step: j::opt(&intent, "step").cloned(), inventory: None };
+				let account = if stepping { None } else { self.one(&view, &tmpl("Account", phi_json::obj! { "accountId" => j::at(&a, "accountId").clone() }), 2_000.0).await?.map(|e| fields(&e).clone()) };
+				let world = Rc::new(spatial_world(&view, &self.w).await?);
+				let mut c = Ctx { space: view.clone(), txn: txn.clone(), world, actor: a, load_account: account.is_none(), account, msg_lease_ms: self.msg_lease_ms, asked: j::so(&intent, "asked").map(str::to_owned), lang: j::so(&intent, "lang").map(str::to_owned), step: j::opt(&intent, "step").cloned(), inventory: None };
 				execute(&mut c, &line).await?;
 			}
 			self.finish(&txn, char_id).await

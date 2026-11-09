@@ -88,7 +88,7 @@ fn compare(step: &str, ts: &Json, rust: &[String]) {
 }
 
 /// One comparison: the two spaces, the TypeScript driver, the Rust engine's space and clock.
-pub struct Walk { ts: Driver, _servers: (Kill, Kill), pub space: Space, pub clock: Rc<Cell<f64>>, pub w: Json, rt: tokio::runtime::Runtime, local: tokio::task::LocalSet, intents: usize }
+pub struct Walk { ts: Driver, _servers: (Kill, Kill), pub space: Space, pub clock: Rc<Cell<f64>>, pub w: Json, rt: tokio::runtime::Runtime, local: tokio::task::LocalSet, intents: usize, mirror: Option<Rc<mmo_engine::mirror::Mirror>> }
 
 impl Walk {
 	pub fn new(name: &str, seed: u32, start: f64) -> Self {
@@ -109,7 +109,10 @@ impl Walk {
 			space.write(&world_lock(), None, FOREVER).await.expect("the lock");
 			space
 		});
-		Self { ts, _servers: (a, b), space, clock, w, rt, local, intents: 0 }
+		// the copy the commands read their snapshot from, as the driver's (R8_SERVE: mirror by default, as in production)
+		let mirror = matches!(std::env::var("R8_SERVE").as_deref(), Err(_) | Ok("mirror")).then(|| Rc::new(mmo_engine::mirror::Mirror::new(space.remote().clone())));
+		if let Some(m) = &mirror { local.block_on(&rt, m.fresh()).expect("the first copy"); }
+		Self { ts, _servers: (a, b), space, clock, w, rt, local, intents: 0, mirror }
 	}
 	pub fn run<T>(&self, f: impl std::future::Future<Output = T>) -> T { self.local.block_on(&self.rt, f) }
 	pub fn at(&mut self, ms: f64) { self.clock.set(ms); self.ts.call(obj! { "op" => "clock", "at" => ms }); }
@@ -164,7 +167,7 @@ impl Walk {
 		if let Some(s) = step { j_set(&mut f, "step", s); }
 		if let Some(a) = asked { j_set(&mut f, "asked", Json::from(a)); }
 		if let Some(l) = lang { j_set(&mut f, "lang", Json::from(l)); }
-		let worker = Worker { space: self.space.clone(), w: Rc::new(self.w.clone()), msg_lease_ms: 600_000.0, txn_ms: 15_000.0 };
+		let worker = Worker { space: self.space.clone(), w: Rc::new(self.w.clone()), msg_lease_ms: 600_000.0, txn_ms: 15_000.0, mirror: self.mirror.clone() };
 		let r = self.run(async {
 			self.space.write(&obj! { "type" => "Intent", "fields" => f }, None, 30_000.0).await.expect("the intent");
 			worker.serve(char_id).await

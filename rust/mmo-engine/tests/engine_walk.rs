@@ -156,3 +156,99 @@ fn crowding() {
 	assert!(said.iter().any(|r| r.contains("Dort steht schon Wanderer2")), "{said:?}");
 	assert!(w.entries_with(r#""Notice""#) >= 1, "no notice");
 }
+
+/// A thing of the world's prototype `proto` at `location`, as spawn writes it.
+fn thing(w: &Json, id: &str, proto: &str, location: &str) -> Json {
+	let p = w.get("prototypes").and_then(Json::as_array).unwrap().iter().find(|p| p.get("key").and_then(Json::as_str) == Some(proto)).unwrap();
+	let f = obj! { "itemId" => id, "name" => p.get("name").cloned().unwrap(), "aliases" => p.get("aliases").cloned().unwrap_or(Json::Array(vec![])), "desc" => p.get("desc").cloned().unwrap_or(Json::from("")), "location" => location, "x" => -1.0, "y" => -1.0, "locks" => p.get("locks").cloned().unwrap(), "proto" => proto };
+	obj! { "type" => "Item", "fields" => f }
+}
+
+/// Building (build.ts, siteorder.ts): refusals of where and what, a site staked out under one's feet, wages hung out and
+/// paid, delivering and working until the hut stands, its chest, repair, demolition, a ruin cleared with the estate
+/// waiting in it, a warehouse in a closed settlement with its quota and tax, and a fire whose light is out or used up.
+#[test]
+fn building() {
+	let mut w = Walk::new("building", 23, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (7.0, 13.0), true, false);
+	let g = w.player(3, "graue-bucht", (4.0, 12.0), true);
+	let d = w.player_as(4, "anleger", (16.0, 4.0), true, false);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	give(&mut w, &a, "treibholz", 6);
+	give(&mut w, &a, "tangseil", 3);
+	give(&mut w, &a, "muenze", 12);
+	give(&mut w, &a, "muschel", 2);
+	give(&mut w, &b, "treibholz", 4);
+	give(&mut w, &b, "tangseil", 1);
+	give(&mut w, &g, "treibholz", 2);
+	w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-bucht", "until" => 9e15, "litAt" => 0.0 } });
+	w.write(obj! { "type" => "Zone", "fields" => obj! { "zoneId" => "z-1", "room" => "graue-bucht", "kind" => "weg", "x" => 1.0, "y" => 8.0, "w" => 2.0, "h" => 2.0 } });
+	w.compare("setup");
+	let i = std::cell::Cell::new(0);
+	let mut said = Vec::new();
+	let mut run = |w: &mut Walk, who: &str, line: &str| {
+		i.set(i.get() + 1);
+		let i = i.get();
+		w.at(START + i as f64 * 13_000.0);
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{i}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	for (who, line) in [
+		(&d, "bau hütte"), (&a, "bau"), (&g, "bau hütte"), (&a, "bau gibtsnicht"), (&a, "bau strasse"), (&a, "bau hütte 30 30"), (&a, "bau hütte 1 1"), (&a, "bau hütte 1 8"),
+		(&a, "bau hütte 8 9"), (&a, "bau hütte 22 7"), (&a, "bau hütte 4 6"), (&a, "bau hütte 14 10"), (&a, "bau hütte 12 6"), (&a, "bau hütte 5 12"), (&a, "bau steg"), (&a, "baustelle"), (&a, "arbeite"), (&a, "aushang"),
+		(&a, "bau eine hütte 5 13"), (&a, "bau regentonne"), (&a, "baustelle"), (&a, "baustelle 5 13"), (&a, "baustelle 3 3"), (&b, "bau hütte 30 30"),
+		(&a, "aushang"), (&b, "aushang ab"), (&a, "aushang 2 treibholz je 1"), (&a, "aushang 3 arbeit je 1"), (&a, "aushang 2 holz je 1"), (&a, "aushang 3 muscheln je 1"),
+		(&a, "aushang x"), (&a, "aushang 1 arbeit je 0"), (&a, "aushang 50 tangseil je 9"), (&a, "aushang"), (&b, "baustelle"),
+		(&b, "liefere 2 treibholz"), (&a, "aushang 1 tangseil je 1"), (&a, "aushang ab"), (&a, "aushang ab"), (&a, "aushang 2 arbeit je 1"), (&a, "aushang 1 tangseil je 1"), (&b, "liefere muschel"), (&a, "liefere muschel"), (&a, "liefere 6 treibholz an die hütte"), (&a, "liefere treibholz"), (&a, "liefere tangseil zur baustelle"),
+		(&b, "liefere tangseil"), (&a, "liefere"), (&g, "liefere treibholz"),
+		(&a, "arbeite"), (&a, "arbeite"), (&b, "arbeite an der baustelle"), (&g, "arbeite"),
+	] { run(&mut w, who, line); }
+	w.write(obj! { "type" => "Setting", "fields" => obj! { "key" => "work.rest", "value" => 0.0 } });
+	i.set(i.get() + 2_000); // the rest of the first work is over
+	for k in 0..19 { run(&mut w, if k % 3 == 0 { &b } else { &a }, "arbeite"); }
+	let hut = |id: &str, room: &str| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => "huette", "name" => "Hütte", "room" => room, "x" => 3.0, "y" => 3.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk1", "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-anleger", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	w.write(hut("h-2", "duenen"));
+	for (who, line) in [
+		(&a, "arbeite"), (&a, "aushang"), (&a, "baustelle"), (&a, "truhe"), (&a, "verstaue muschel in hütte"), (&a, "verstaue 2 muscheln"), (&a, "kiste"), (&a, "verstaue alle münzen in 1"), (&a, "verstaue holz in 2"),
+		(&a, "verstaue holz in meine hütte"), (&a, "verstaue holz in die hütte am kai"), (&a, "verstaue stein"), (&a, "truhe"), (&a, "entnimm muschel"), (&a, "entnimm 5 muscheln aus der truhe"),
+		(&a, "entnimm stein"), (&a, "entnimm alle münzen"), (&b, "truhe"), (&b, "verstaue treibholz"), (&a, "lager"), (&a, "repariere"), (&b, "repariere hütte"), (&g, "repariere"),
+		(&a, "baustelle"), (&b, "abriss"), (&a, "abriss die hütte"), (&a, "baustelle"), (&a, "inventory"),
+		(&a, "bau hühnerstall"), (&a, "abriss baustelle"), (&a, "abriss"), (&a, "nachlass"), (&a, "verstaue muschel"), (&a, "entnimm muschel"),
+	] { run(&mut w, who, line); }
+	w.write(hut("h-3", "salzwiesen"));
+	give(&mut w, &a, "muschel", 3);
+	for (who, line) in [(&a, "verstaue muschel"), (&a, "verstaue muschel in hütte"), (&a, "verstaue muschel in 2"), (&a, "verstaue muschel in die hütte in den salzwiesen"), (&a, "verstaue muschel in die hütte in den dünen"), (&a, "verstaue muschel in die hütte am kai")] { run(&mut w, who, line); }
+	// a ruin of someone else with its estate, and a warehouse in a closed settlement
+	for x in [3.0, 4.0] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => x, "y" => 9.0, "of" => "r-1" } }); }
+	w.write(obj! { "type" => "Ruin", "fields" => obj! { "buildId" => "r-1", "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => 3.0, "y" => 9.0, "w" => 2.0, "h" => 1.0, "owner" => "c-old", "ownerName" => "Alte", "accountId" => "a-walk1", "untilWorldMs" => 9e15 } });
+	w.write(obj! { "type" => "Estate", "fields" => obj! { "estateId" => "est-r-1", "accountId" => "a-walk1", "ownerName" => "Wanderer1", "room" => "graue-bucht", "name" => "Hütte", "untilWorldMs" => 9e15 } });
+	give(&mut w, "est-r-1", "muschel", 2);
+	for x in [19.0, 20.0, 21.0] { for y in [12.0, 13.0] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => x, "y" => y, "of" => "l-1" } }); } }
+	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "l-1", "plan" => "lagerhaus", "name" => "Lagerhaus", "room" => "graue-bucht", "x" => 19.0, "y" => 12.0, "w" => 3.0, "h" => 2.0, "owner" => b.as_str(), "ownerName" => "Wanderer2", "accountId" => "a-walk2", "beaconId" => "feuer-bucht", "points" => 3.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
+	give(&mut w, &b, "muenze", 3);
+	give(&mut w, &b, "treibholz", 6);
+	w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => 6.0, "y" => 11.0, "of" => "v-1" } });
+	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "v-1", "plan" => "vogelscheuche", "name" => "Vogelscheuche", "room" => "graue-bucht", "x" => 6.0, "y" => 11.0, "w" => 1.0, "h" => 1.0, "owner" => "c-walk1", "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
+	w.compare("ruin and warehouse");
+	for (who, line) in [
+		(&a, "move 5 10"), (&a, "truhe"), (&g, "move 5 8"), (&g, "abriss ruine"), (&a, "abriss ruine der hütte"), (&a, "nachlass"), (&a, "nachlass"),
+		(&b, "move 18 13"), (&a, "move 18 11"), (&a, "lager"), (&b, "lager"), (&b, "verstaue 2 treibholz"), (&b, "verstaue treibholz ins lager"), (&b, "verstaue 3 holz"), (&b, "lager log"), (&b, "lager x"),
+		(&b, "entnimm treibholz"), (&a, "verstaue treibholz"), (&b, "truhe"),
+	] { run(&mut w, who, line); }
+	w.write(obj! { "type" => "Settlement", "fields" => obj! { "room" => "graue-bucht", "name" => "Graubucht", "closed" => true, "members" => Json::Array(vec![obj! { "accountId" => "a-walk2", "rank" => "helfer" }]), "tax" => 1.0 } });
+	for (who, line) in [(&a, "lager"), (&a, "liefere treibholz"), (&b, "lager"), (&b, "entnimm 2 treibholz"), (&b, "entnimm alle treibholz"), (&b, "lager"), (&b, "lager log"), (&b, "abriss lagerhaus"), (&a, "bau hütte")] { run(&mut w, who, line); }
+	// the fire of the landing: out, then lit with its light used up
+	run(&mut w, &d, "bau hütte");
+	w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-anleger", "until" => 9e15, "litAt" => 0.0 } });
+	w.write(obj! { "type" => "LightUse", "fields" => obj! { "beaconId" => "feuer-anleger", "used" => 100.0 } });
+	run(&mut w, &d, "bau hütte");
+	run(&mut w, &d, "bau regentonne");
+	assert!(said.iter().any(|r| r == "ran") && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
+	assert!(w.entries_with("steht! Mitgebaut") >= 1, "the hut never stood");
+}

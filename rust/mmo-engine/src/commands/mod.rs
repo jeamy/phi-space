@@ -10,12 +10,14 @@ use crate::context::{exits_here, lock_ctx, Ctx};
 use crate::j;
 use crate::space::{fields, Error, Result};
 
+pub mod build;
 pub mod chapel;
 pub mod default;
 pub mod epoch;
 pub mod food;
 pub mod passage;
 pub mod settlement;
+pub mod siteorder;
 pub mod townhall;
 
 /// A command (`Command`): an exit's command carries the exit.
@@ -109,6 +111,8 @@ pub async fn run(c: &mut Ctx, cmd: &Command, arg: &str, merged: &Merged, exits: 
 	match (cmd.module.as_str(), cmd.key.as_str()) {
 		("default", "help") => default::help(c, arg, &distinct(merged).into_iter().filter(|x| !exits.iter().any(|e| Rc::ptr_eq(e, x))).collect::<Vec<_>>()).await,
 		("default", key) => default::run(c, key, arg).await,
+		("build", key) => build::run(c, key, arg).await,
+		("siteorder", "aushang") => siteorder::aushang(c, arg).await,
 		(m, k) => Err(Error::Other(format!("unported: {m}/{k}"))),
 	}
 }

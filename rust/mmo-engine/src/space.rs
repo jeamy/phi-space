@@ -54,13 +54,20 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// The space of a world (or of the accounts). Ported code reaches the space only through these methods, so a buffered
 /// transaction or a copy of the world (`bufferedTxn`, `Mirror` of `server/space.ts`) can come in here.
 #[derive(Clone)]
-pub struct Space(Rc<RemoteSpace>);
+pub struct Space(Rc<RemoteSpace>, Option<Rc<crate::mirror::Mirror>>);
 
 fn opts(txn: Option<&str>) -> Opts { Opts { txn: txn.map(str::to_owned), ..Opts::default() } }
 fn some(v: Json) -> Option<Json> { if v.is_null() { None } else { Some(v) } }
 
 impl Space {
-	pub fn new(remote: Rc<RemoteSpace>) -> Self { Self(remote) }
+	pub fn new(remote: Rc<RemoteSpace>) -> Self { Self(remote, None) }
+	/// The space as a command sees it: its snapshot reads (`read_all`, `count` and `peek` without a transaction) from
+	/// the copy (`bufferedTxn(…, mirror)`).
+	pub fn with_mirror(&self, m: Rc<crate::mirror::Mirror>) -> Self { Self(self.0.clone(), Some(m)) }
+	/// The plain space (no copy).
+	pub fn plain(&self) -> Self { Self(self.0.clone(), None) }
+	pub fn remote(&self) -> &Rc<RemoteSpace> { &self.0 }
+	fn copy(&self, txn: Option<&str>) -> Option<&crate::mirror::Mirror> { self.1.as_deref().filter(|_| txn.is_none_or(str::is_empty)) }
 
 	/// What tells this space from another in a cache (the settings).
 	pub fn key(&self) -> usize { Rc::as_ptr(&self.0) as usize }
@@ -88,8 +95,14 @@ impl Space {
 	pub async fn read_if_exists(&self, tmpl: &Json, timeout: f64, txn: Option<&str>) -> Result<Option<Json>> { Ok(some(self.0.read_if_exists(tmpl, timeout, &opts(txn)).await?)) }
 	pub async fn take(&self, tmpl: &Json, timeout: f64, txn: Option<&str>) -> Result<Option<Json>> { Ok(some(self.0.take(tmpl, timeout, &opts(txn)).await?)) }
 	pub async fn take_if_exists(&self, tmpl: &Json, timeout: f64, txn: Option<&str>) -> Result<Option<Json>> { Ok(some(self.0.take_if_exists(tmpl, timeout, &opts(txn)).await?)) }
-	pub async fn read_all(&self, tmpl: &Json, txn: Option<&str>) -> Result<Vec<Json>> { Ok(self.0.read_all(tmpl, None, txn).await?) }
-	pub async fn count(&self, tmpl: &Json, txn: Option<&str>) -> Result<f64> { Ok(self.0.count(tmpl, txn).await?) }
+	pub async fn read_all(&self, tmpl: &Json, txn: Option<&str>) -> Result<Vec<Json>> {
+		if let Some(m) = self.copy(txn) { return Ok(m.read_all(tmpl, None)); }
+		Ok(self.0.read_all(tmpl, None, txn).await?)
+	}
+	pub async fn count(&self, tmpl: &Json, txn: Option<&str>) -> Result<f64> {
+		if let Some(m) = self.copy(txn) { return Ok(m.count(tmpl)); }
+		Ok(self.0.count(tmpl, txn).await?)
+	}
 
 	/// Several steps in one call and one commit (`{op, entry, template, txn, lease, unique, transient}`).
 	pub async fn batch(&self, ops: &[Json]) -> Result<Json> { Ok(self.0.batch(ops, &Opts::default()).await?) }
@@ -102,7 +115,10 @@ impl Space {
 	pub async fn abort(&self, txn: &str) -> Result<()> { Ok(self.0.abort(txn, &Opts::default()).await?) }
 
 	/// `peek`: the first match as the space stands now, holding nothing.
-	pub async fn peek(&self, tmpl: &Json, txn: Option<&str>) -> Result<Option<Json>> { Ok(some(peek(&self.0, tmpl, txn).await?)) }
+	pub async fn peek(&self, tmpl: &Json, txn: Option<&str>) -> Result<Option<Json>> {
+		if let Some(m) = self.copy(txn) { return Ok(m.read_all(tmpl, Some(1)).into_iter().next()); }
+		Ok(some(peek(&self.0, tmpl, txn).await?))
+	}
 
 	/// `readExisting`: null means gone; a match held for all of `wait_ms` is `Error::StillHeld`.
 	pub async fn read_existing(&self, tmpl: &Json, txn: Option<&str>, wait_ms: f64) -> Result<Option<Json>> { Ok(some(read_existing(&self.0, tmpl, wait_ms, txn).await?)) }
