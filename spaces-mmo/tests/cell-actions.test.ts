@@ -214,3 +214,11 @@ test("the butcher's shop offers to slaughter each animal one carries, with a kni
 	assert.ok(both.includes("schlachte huhn") && both.includes("schlachte schwein"));
 	assert.ok(!both.includes("schlachte ferkel"), "the young grow up first");
 });
+
+test("beside a windmill: each thing it grinds that one carries, bones too", () => {
+	const mill = obj({ id: "m", kind: "building", name: "Windmühle", owner: "Ines", ownerId: "o", plan: "windmuehle", x: 6, y: 5, w: 2, h: 2 });
+	const carried = (name: string): [string, ObjView] => [name, obj({ id: name, kind: "item", name, location: "me", x: -1, y: -1 })];
+	const lines = cellEntries({ ...input, grinds: ["Weizen", "Knochen"], objs: new Map([["m", mill], carried("Knochen"), carried("Weizen"), carried("Tang")]), at: { x: 6, y: 5 } }).map((e) => e.line);
+	assert.ok(lines.includes("mahle alle Knochen") && lines.includes("mahle alle Weizen"));
+	assert.ok(!lines.includes("mahle alle Tang"));
+});

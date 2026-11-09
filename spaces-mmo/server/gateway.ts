@@ -36,6 +36,7 @@ export function usesOf(w: WorldDef): ItemUses {
 	const plans = w.building?.plans ?? [];
 	return {
 		npcs: w.npcs.map((n) => n.name),
+		grinds: [...new Set((w.mill?.grinds ?? []).map((g) => name(g.from)))],
 		recipes: w.recipes.map((r) => ({ key: r.key, name: r.name, needs: r.needs.map((n) => ({ name: name(n.proto), count: n.count })), ...(r.tool ? { tool: name(r.tool) } : {}), ...(r.at ? { at: r.at } : {}) })),
 		feed: Object.fromEntries([...(w.animals?.kinds ?? []), ...(w.wild?.keepers ?? [])].map((k) => [k.key, k.feed.map(name)])),
 		offerings: (w.chapel?.offerings ?? []).map(name),

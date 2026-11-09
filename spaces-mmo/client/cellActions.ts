@@ -8,6 +8,7 @@ export type CellInput = {
 	/** What burns, cheapest carried first (a fire's "nachlegen"). */ fuel: ObjView | undefined;
 	offer?: (name: string) => void;
 	/** The world's recipes (ItemUses.recipes): a building beside one offers those made at its plan. */ recipes?: ItemUses["recipes"];
+	/** What the windmill grinds (ItemUses.grinds). */ grinds?: string[];
 	/** The trade offers made to the player (TradeView.offersIn): a figure with one gets "accept" and "decline" first. */ offersIn?: Array<{ fromName: string; giveNames: string[]; want: Array<{ name: string; count: number }> }>;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] };
 	/** Whether wild plants grow in the room (wildHere); without it seeds are offered anyway and the command answers. */ wild?: boolean;
@@ -124,7 +125,7 @@ export function offerWords(o: { giveNames: string[]; want: Array<{ name: string;
 	return `${counted(o.giveNames.map((name) => ({ name, count: 1 })))}${o.want.length ? ` für ${counted(o.want)}` : " als Geschenk"}`;
 }
 
-export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, recipes }: CellInput): CellEntry[] {
+export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, recipes, grinds }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: Array<{ label: string; line: string; run?: () => void }> = [];
 	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
@@ -215,7 +216,9 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			// anyone grinds at a mill and bakes at a bakery (server: mill.ts, the recipes "at" a plan)
 			if (o.plan === "windmuehle") {
 				entries.push({ label: "Mühle: wie lange noch?", line: "mahle" });
-				const grain = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && ["Weizen", "Gerste", "Hafer"].includes(i.name)).map((i) => i.name))];
+				// what the mill grinds (the world's list; grain and bones without it)
+				const ground = grinds ?? ["Weizen", "Gerste", "Hafer", "Knochen"];
+				const grain = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && ground.includes(i.name)).map((i) => i.name))];
 				for (const n of grain) entries.push({ label: `${n} mahlen`, line: `mahle alle ${n}` });
 			}
 			// what is made at this building (the recipes "at" its plan, anyone's building): what one carries enough for,
