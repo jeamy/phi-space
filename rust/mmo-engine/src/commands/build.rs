@@ -178,15 +178,30 @@ async fn active_builders(c: &Ctx, beacon_id: &str, more: &Json) -> Result<f64> {
 	Ok(c.space.read_all(&tmpl("FireBuilder", obj! { "beaconId" => beacon_id }), c.txn()).await?.iter().filter(|e| j::n(fields(e), "atWorldMs") + j::n(more, "activeMs") > now).count() as f64)
 }
 
+/// `lightBase`: a fire's own light (the setting light.base, else the world's), and what each epoch of its island above the
+/// first adds (light.epoch).
+async fn light_base(c: &Ctx, beacon_id: &str) -> Result<(f64, f64)> {
+	let def = j::at(c.w(), "building");
+	let base = match setting(&c.space, "light.base").await { Ok(v) => v, Err(_) => j::no(def, "lightPoints").unwrap_or(0.0) };
+	let per = light_per_epoch(c).await;
+	let room = j::by(j::a(c.w(), "beacons"), "beaconId", beacon_id).map_or_else(|| c.room().to_owned(), |b| j::s(b, "room").to_owned());
+	let epoch = if per != 0.0 { per * (epoch_of(&c.space, island_of(c.w(), &room).as_deref(), c.txn()).await? - 1.0) } else { 0.0 };
+	Ok((base, epoch))
+}
+
+async fn light_per_epoch(c: &Ctx) -> f64 {
+	match setting(&c.space, "light.epoch").await { Ok(v) => v, Err(_) => j::no(j::at(c.w(), "building"), "lightPerEpoch").unwrap_or(0.0) }
+}
+
 /// `lightOf`: what a fire's light carries.
 async fn light_of(c: &Ctx, beacon_id: &str) -> Result<f64> {
 	let def = j::at(c.w(), "building");
-	let base = j::no(def, "lightPoints").unwrap_or(0.0);
-	let mut bonus = 0.0;
+	let (base, epoch) = light_base(c, beacon_id).await?;
+	let mut bonus = epoch;
 	for e in c.space.read_all(&tmpl("Building", obj! { "beaconId" => beacon_id }), c.txn()).await? { bonus += plan_of(c.w(), &txt(j::at(fields(&e), "plan"))).and_then(|p| j::no(p, "lightBonus")).unwrap_or(0.0); }
 	let Some(more) = j::opt(def, "lightGrowth") else { return Ok(base + bonus) };
 	let active = active_builders(c, beacon_id, more).await?;
-	Ok(j::n(more, "max").min(base + active * j::n(more, "perPlayer")) + bonus)
+	Ok(j::n(more, "max").max(base).min(base + active * j::n(more, "perPlayer")) + bonus)
 }
 
 /// `noteBuilder`: the actor counts as building at this fire.
@@ -240,8 +255,11 @@ async fn more_light(c: &Ctx, beacon_id: &str) -> Result<String> {
 	let mut out = String::new();
 	if let Some(more) = j::opt(def, "lightGrowth") {
 		let active = active_builders(c, beacon_id, more).await?;
-		if j::no(def, "lightPoints").unwrap_or(0.0) + active * j::n(more, "perPlayer") < j::n(more, "max") { out += &format!(" Es wird heller mit jedem, der hier mitbaut (bis {} Punkte).", txt(j::at(more, "max"))); }
+		let (base, _) = light_base(c, beacon_id).await?;
+		if base + active * j::n(more, "perPlayer") < j::n(more, "max") { out += &format!(" Es wird heller mit jedem, der hier mitbaut (bis {} Punkte).", txt(j::at(more, "max"))); }
 	}
+	let per = light_per_epoch(c).await;
+	if per != 0.0 && epoch_of(&c.space, island.as_deref(), c.txn()).await? < j::opt(j::at(c.w(), "epochs"), "names").and_then(Json::as_array).map_or(1.0, |n| n.len() as f64) { out += &format!(" Mit jeder Epoche der Insel trägt es {} Punkte mehr.", phi_json::number_text(per)); }
 	if let Some(tower) = j::a(def, "plans").iter().find(|p| j::b(p, "lightBonus")) {
 		if let Some(dative) = j::opt(tower, "dative").filter(|d| j::truthy(d)) {
 			let need = j::no(tower, "epoch").unwrap_or(1.0);
@@ -562,7 +580,8 @@ async fn baustelle(c: &mut Ctx, arg: &str) -> Result<()> {
 	let ruins = here(fields_of(c.space.read_all(&tmpl("Ruin", obj! { "room" => room.as_str() }), None).await?));
 	let me = c.char_id().to_owned();
 	if sites.is_empty() && built.is_empty() && ruins.is_empty() { return msg(c, &me, "info", "Hier wird nichts gebaut. „bau“ zeigt die Baupläne.", info()).await; }
-	let now = world_now_of(&c.space, c.txn()).await?;
+	// a building's term is on the second clock (decayNowOf, as `repariere` and the sweep count it), not the world's
+	let now = decay_now_of(&c.space, c.txn()).await?;
 	let mut lines: Vec<String> = Vec::new();
 	let mut wages: Vec<String> = Vec::new();
 	for s in &sites { let o = orders_of_site(&c.space, j::at(s, "buildId"), None).await?; wages.push(if o.is_empty() { String::new() } else { format!(" Lohn: {}.", o.iter().map(order_line).collect::<Vec<_>>().join("; ")) }); }
@@ -856,9 +875,9 @@ async fn entnimm(c: &mut Ctx, arg: &str) -> Result<()> {
 	if payable == 0.0 { return refuse(format!("Das Lager nimmt {} Münzen Steuer je Stück; so viele hast du nicht.", nt(tax))); }
 	let who = c.char_id().to_owned();
 	let each = if j::opt(c.w(), "pack").is_some() { load_of(c.w(), proto.as_str()) } else { 0.0 };
-	let free = if each != 0.0 { pack_max(&c.space, c.w()).await? - load_at(&c.space, c.w(), &who, c.txn()).await? } else { f64::INFINITY };
+	let free = if each != 0.0 { pack_max(&c.space, c.w(), Some(&who), c.txn()).await? - load_at(&c.space, c.w(), &who, c.txn()).await? } else { f64::INFINITY };
 	let fits = if each != 0.0 { 0f64.max((free / each + 1e-9).floor()) } else { f64::INFINITY };
-	if fits == 0.0 { return refuse(format!("Das trägst du nicht mehr: dein Gepäck ist voll ({} von {} Last).", fmt_load(load_at(&c.space, c.w(), &who, c.txn()).await?), fmt_load(pack_max(&c.space, c.w()).await?))); }
+	if fits == 0.0 { return refuse(format!("Das trägst du nicht mehr: dein Gepäck ist voll ({} von {} Last).", fmt_load(load_at(&c.space, c.w(), &who, c.txn()).await?), fmt_load(pack_max(&c.space, c.w(), Some(&who), c.txn()).await?))); }
 	let take = want.min(left).min(payable).min(fits);
 	let k = take.min(1f64.max((MOVES_PER_COMMAND / (1.0 + tax)).floor()));
 	let mut moved = 0.0;
@@ -879,7 +898,6 @@ async fn repariere(c: &mut Ctx, arg: &str) -> Result<()> {
 	let b = building_here(c, arg, false).await?;
 	let w = c.world.clone();
 	let plan = plan_of(&w, &txt(j::at(&b, "plan")));
-	let now = world_now_of(&c.space, c.txn()).await?;
 	let cost: Vec<Json> = plan.map(|p| j::a(p, "repair").to_vec()).unwrap_or_default();
 	let inv = inventory(c).await?;
 	let of = |proto: &Json| -> Vec<&Json> { inv.iter().filter(|i| j::at(fields(i), "proto") == proto).collect() };
@@ -887,7 +905,8 @@ async fn repariere(c: &mut Ctx, arg: &str) -> Result<()> {
 	for r in &cost {
 		for it in of(j::at(r, "proto")).into_iter().take(j::n(r, "count") as usize) { c.space.take_if_exists(&tmpl("Item", obj! { "itemId" => j::at(fields(it), "itemId").clone(), "location" => c.char_id() }), NO_WAIT, c.txn()).await?; }
 	}
-	let until = decay_now_of(&c.space, c.txn()).await? + keep_of(c, plan).await?;
+	let now = decay_now_of(&c.space, c.txn()).await?;
+	let until = now + keep_of(c, plan).await?;
 	let mut nb = b.clone();
 	j::set(&mut nb, "untilWorldMs", until);
 	put_back(c, &nb).await?;
@@ -966,7 +985,7 @@ async fn nachlass(c: &mut Ctx) -> Result<()> {
 	let who = c.char_id().to_owned();
 	let (mut got, mut left) = (0, 0);
 	let pack = j::opt(c.w(), "pack").is_some();
-	let mut free = if pack { pack_max(&c.space, c.w()).await? - load_at(&c.space, c.w(), &who, c.txn()).await? } else { f64::INFINITY };
+	let mut free = if pack { pack_max(&c.space, c.w(), Some(&who), c.txn()).await? - load_at(&c.space, c.w(), &who, c.txn()).await? } else { f64::INFINITY };
 	for e in mine_e {
 		let Some(est) = c.space.take_if_exists(&obj! { "id" => j::at(e, "id").clone() }, NO_WAIT, c.txn()).await? else { continue };
 		let eid = txt(j::at(fields(&est), "estateId"));

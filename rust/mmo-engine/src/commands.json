@@ -188,7 +188,7 @@
 				"herstellen",
 				"fertige"
 			],
-			"help": "craft [anzahl] [rezept] – etwas herstellen, auch mehrmals (craft 3 tangseil); ohne Rezept die Liste"
+			"help": "craft [anzahl] [rezept] – etwas herstellen, auch mehrmals (craft 3 tangseil); ohne Rezept die Liste, „craft hier“ was der Bau neben dir herstellt"
 		},
 		{
 			"module": "trade",
@@ -564,7 +564,7 @@
 				"sow",
 				"setze-samen"
 			],
-			"help": "pflanze <samen> [x y] – Samen in dein Beet oder ins Gemeinschaftsbeet neben dir setzen (bis zwei Schritte; eine Pflanze je Zelle; ins Zierbeet nur Blumen). Korn, Kartoffeln, Rüben und Flachs wachsen auf dem Acker: „bestelle“"
+			"help": "pflanze [anzahl] <samen> [x y] – Samen in dein Beet oder ins Gemeinschaftsbeet neben dir setzen (bis zwei Schritte; eine Pflanze je Zelle; ins Zierbeet nur Blumen; z. B. pflanze 3 strandnelken). Korn, Kartoffeln, Rüben und Flachs wachsen auf dem Acker: „bestelle“"
 		},
 		{
 			"module": "garden",
@@ -678,6 +678,18 @@
 			"help": "bestelle [frucht] – den Acker neben dir bestellen: wer sie angelegt hat, wählt die Frucht; dann bringt jeder Saatgut und einen Arbeitspunkt (danach ruhst du eine Weile)"
 		},
 		{
+			"module": "field",
+			"key": "dünge",
+			"aliases": [
+				"duenge",
+				"düngen",
+				"duengen",
+				"fertilise",
+				"fertilize"
+			],
+			"help": "dünge – den Acker neben dir düngen, während die Frucht wächst (Knochenmehl aus der Mühle): einmal je Frucht, die Ernte wird größer"
+		},
+		{
 			"module": "beam",
 			"key": "beam",
 			"aliases": [
@@ -736,6 +748,17 @@
 				"clay"
 			],
 			"help": "steche – an der Lehmgrube neben dir mit einem Spaten Lehm stechen (danach ruhst du eine Weile)"
+		},
+		{
+			"module": "quarry",
+			"key": "harke",
+			"aliases": [
+				"harken",
+				"salz",
+				"siede",
+				"salt"
+			],
+			"help": "harke – am Salzgarten neben dir das Salz aus dem Becken harken (danach ruhst du eine Weile)"
 		},
 		{
 			"module": "animals",
@@ -803,6 +826,16 @@
 				"guards"
 			],
 			"help": "wache – wer in diesem Raum Hof und Felder vor dem Wild bewacht (Hund, Katze, Gänse) und ob sie satt sind"
+		},
+		{
+			"module": "animals",
+			"key": "schlachte",
+			"aliases": [
+				"schlachten",
+				"slaughter",
+				"butcher"
+			],
+			"help": "schlachte [tier] – ein Tier aus deinem Stall oder Gehege neben dir schlachten, an der Metzgerei auch eins, das du trägst (mit einem Messer; im Stall bleibt das letzte Paar): es gibt Fleisch und mehr für Herd und Räucherei"
 		},
 		{
 			"module": "wild",

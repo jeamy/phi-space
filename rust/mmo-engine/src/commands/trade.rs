@@ -18,6 +18,8 @@ use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, F
 const OFFER_MS: f64 = 120_000.0;
 
 fn txt(v: &Json) -> String { key_text(v) }
+/// Bold on the page (client/RichText.tsx): a value marked so keeps its template for the translation.
+fn strong(s: &str) -> String { format!("**{s}**") }
 fn nt(n: f64) -> String { phi_json::number_text(n) }
 fn f(e: &Json) -> &Json { fields(e) }
 fn info() -> MsgOpts { MsgOpts::default() }
@@ -142,10 +144,10 @@ async fn offer(c: &mut Ctx, arg: &str) -> Result<()> {
 		"want" => Json::Array(want.iter().map(Want::json).collect()), "room" => c.room(), "at" => time_now()
 	};
 	c.space.write(&tmpl("Offer", o), c.txn(), OFFER_MS).await?;
-	let wants = if want.is_empty() { " als Geschenk".to_owned() } else { format!(" für {}", counted_wants(&want)) };
+	let wants = if want.is_empty() { " als Geschenk".to_owned() } else { format!(" für {}", strong(&counted_wants(&want))) };
 	let name = txt(j::at(&c.actor, "name"));
-	msg(c, j::s(&who, "charId"), "info", &format!("{name} bietet dir {}{wants} an. „accept {name}“ nimmt an, „decline {name}“ lehnt ab.", counted_names(&give_names)), info()).await?;
-	msg(c, &me, "info", &format!("Du bietest {} {}{wants} an.", txt(j::at(&who, "name")), counted_names(&give_names)), info()).await
+	msg(c, j::s(&who, "charId"), "info", &format!("{name} bietet dir {}{wants} an. „accept {name}“ nimmt an, „decline {name}“ lehnt ab.", strong(&counted_names(&give_names))), info()).await?;
+	msg(c, &me, "info", &format!("Du bietest {} {}{wants} an.", txt(j::at(&who, "name")), strong(&counted_names(&give_names))), info()).await
 }
 
 /// `offerFor`: the offer to the actor from `name` (or the newest one).
@@ -471,6 +473,37 @@ fn recipe_named<'a>(w: &'a Json, what: &str) -> Option<&'a Json> {
 	rs.iter().find(|r| own(r).iter().any(is)).or_else(|| rs.iter().find(|r| own(r).iter().any(form))).or_else(|| rs.iter().find(|r| also(r).iter().any(is))).or_else(|| rs.iter().find(|r| also(r).iter().any(form)))
 }
 
+/// `craft hier`.
+async fn craft_here(c: &mut Ctx, w: &Json) -> Result<()> {
+	let me_at = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
+	let beside: Vec<Json> = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| f(e).clone()).filter(|b| dist_to(me_at, Rect::of(b)) <= 1.0).collect();
+	let rs = j::a(w, "recipes");
+	let mut plans: Vec<String> = Vec::new();
+	for b in &beside { let p = txt(j::at(b, "plan")); if !plans.contains(&p) && rs.iter().any(|r| j::so(r, "at") == Some(p.as_str())) { plans.push(p); } }
+	if plans.is_empty() {
+		return refuse(match beside.first() { Some(b) => format!("Neben {} stellt man nichts her; was überall geht, zeigt „craft“.", txt(j::at(b, "name"))), None => "Neben dir steht kein Bau. Was überall geht, zeigt „craft“.".to_owned() });
+	}
+	let mut carried: Vec<(String, f64)> = Vec::new();
+	for i in inventory(c).await? { let p = txt(j::at(f(&i), "proto")); match carried.iter_mut().find(|(k, _)| *k == p) { Some((_, n)) => *n += 1.0, None => carried.push((p, 1.0)) } }
+	let has = |k: &str| carried.iter().find(|(p, _)| p == k).map_or(0.0, |(_, n)| *n);
+	let pn = |k: &str| j::a(w, "prototypes").iter().find(|p| j::s(p, "key") == k).map_or_else(|| k.to_owned(), |p| txt(j::at(p, "name")));
+	let mut lines: Vec<String> = Vec::new();
+	for p in &plans {
+		lines.push(format!("{}:", plan_of(w, p).map_or_else(|| p.clone(), |x| txt(j::at(x, "name")))));
+		for r in rs.iter().filter(|r| j::so(r, "at") == Some(p.as_str())) {
+			let tool = j::so(r, "tool").filter(|t| !t.is_empty());
+			let ok = j::a(r, "needs").iter().all(|x| has(j::s(x, "proto")) >= j::n(x, "count")) && tool.is_none_or(|t| has(t) > 0.0);
+			let n = j::no(r, "count").unwrap_or(1.0);
+			let name = format!("{}{}", if n > 1.0 { format!("{}× ", nt(n)) } else { String::new() }, txt(j::at(r, "name")));
+			let needs = j::a(r, "needs").iter().map(|x| format!("{} {}", txt(j::at(x, "count")), pn(j::s(x, "proto")))).collect::<Vec<_>>().join(", ");
+			lines.push(format!("  {} („craft {}“): {needs}{}{}", strong(&name), txt(j::at(r, "key")), tool.map_or_else(String::new, |t| format!(", mit {}", pn(t))), if ok { " – das hast du dabei" } else { "" }));
+		}
+	}
+	if beside.iter().any(|b| plan_of(w, j::s(b, "plan")).is_some_and(|p| j::b(p, "sparesTools"))) { lines.push("Neben der Werkstatt nutzt sich Werkzeug nur halb so schnell ab.".to_owned()); }
+	let me = c.char_id().to_owned();
+	msg(c, &me, "info", &lines.join("\n"), info()).await
+}
+
 /// `craft`.
 pub async fn craft(c: &mut Ctx, arg: &str) -> Result<()> {
 	let w = c.world.clone();
@@ -481,11 +514,13 @@ pub async fn craft(c: &mut Ctx, arg: &str) -> Result<()> {
 			let tool = j::so(r, "tool").filter(|t| !t.is_empty()).map_or_else(String::new, |t| format!(", Werkzeug: {t}"));
 			let at = j::so(r, "at").filter(|t| !t.is_empty()).map_or_else(String::new, |a| format!(", nur am Bau: {}", plan_of(&w, a).map_or_else(|| a.to_owned(), |p| txt(j::at(p, "name")))));
 			let n = j::no(r, "count").unwrap_or(1.0);
-			format!("  {}: {needs}{tool}{at}{}", txt(j::at(r, "key")), if n > 1.0 { format!(" (gibt {})", nt(n)) } else { String::new() })
+			format!("  {}: {needs}{tool}{at}{}", strong(&txt(j::at(r, "key"))), if n > 1.0 { format!(" (gibt {})", nt(n)) } else { String::new() })
 		};
 		let lines: Vec<String> = std::iter::once("Rezepte:".to_owned()).chain(j::a(&w, "recipes").iter().map(show)).collect();
 		return msg(c, &me, "info", &lines.join("\n"), info()).await;
 	}
+	// "craft hier": what the buildings beside one make, in names, and whether one carries enough for it
+	if js::re(r"^(?:hier|here)$", "i").test(js::trim(arg)) { return craft_here(c, &w).await; }
 	let (want, a) = count_of(&js::trim(arg).to_lowercase());
 	let Some(r) = recipe_named(&w, &a) else {
 		if plan_of(&w, &js::re(r"(?:\s+\d+){2}$", "").replace(&js::trim(arg).to_lowercase(), "")).is_some() { return bau(c, arg).await; }

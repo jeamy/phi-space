@@ -1,6 +1,6 @@
 // The vectors of the JavaScript primitives the Rust engine must reproduce (docs/rust-portierung.en.md, R8.2): run with the
 // root of a checkout of the frozen commit (the oracle) and the file to write, e.g.
-//   node --experimental-strip-types tests/r8/primitives.ts /media/data/programming/phi-oracle-2698bad ../rust/mmo-engine/tests/vectors/primitives.json
+//   node --experimental-strip-types tests/r8/primitives.ts ../rust/target/tmp/mmo-oracle-f618480 ../rust/mmo-engine/tests/vectors/primitives.json
 // What goes in:
 // - every regular expression literal of server/engine and shared (file:line, source, flags), each run as a scan
 //   (matchAll with the pattern made global, so the first match is what exec gives) over a corpus: the string literals of

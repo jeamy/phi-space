@@ -19,10 +19,14 @@ pub async fn load_at(space: &Space, w: &Json, location: &str, txn: Option<&str>)
 	Ok(space.read_all(&tmpl("Item", obj! { "location" => location }), txn).await?.iter().map(|e| load_of(w, j::so(fields(e), "proto"))).sum())
 }
 
-/// `packMax`.
-pub async fn pack_max(space: &Space, w: &Json) -> Result<f64> {
+/// `packMax`: with `char_id`, a bag it carries (world.pack.bags, a leather bag) adds its part, each kind once.
+pub async fn pack_max(space: &Space, w: &Json, char_id: Option<&str>, txn: Option<&str>) -> Result<f64> {
 	let Some(pk) = j::opt(w, "pack") else { return Ok(f64::INFINITY) };
-	Ok(match crate::settings::setting(space, "pack.max").await { Ok(v) => v, Err(_) => j::n(pk, "max") })
+	let base = match crate::settings::setting(space, "pack.max").await { Ok(v) => v, Err(_) => j::n(pk, "max") };
+	let (Some(char_id), Some(bags)) = (char_id, j::opt(pk, "bags")) else { return Ok(base) };
+	let mut more = 0.0;
+	for (proto, n) in j::entries(bags) { if space.count(&tmpl("Item", obj! { "location" => char_id, "proto" => proto }), txn).await? > 0.0 { more += j::number(n); } }
+	Ok(base + more)
 }
 
 /// `fmtLoad`: 31.5 as "31½".
@@ -45,7 +49,7 @@ pub async fn pack_after(space: &Space, w: &Json, char_id: &str, before: Option<f
 	let Some(before) = before else { return Ok(None) };
 	let after = load_at(space, w, char_id, Some(txn)).await?;
 	if after <= before { return Ok(None); }
-	let max = pack_max(space, w).await?;
+	let max = pack_max(space, w, Some(char_id), Some(txn)).await?;
 	if after <= max { return Ok(None); }
 	Ok(Some(format!("Das trägst du nicht mehr: dein Gepäck wöge {} von {}. Leg etwas in eine Truhe („verstaue <ding>“) oder lass es hier.", fmt_load(after), fmt_load(max))))
 }

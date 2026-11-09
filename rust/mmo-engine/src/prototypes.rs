@@ -69,6 +69,14 @@ pub struct At {
 /// prototype's (an object of name, aliases, desc, glyph, variety, or null).
 pub async fn spawn(space: &Space, txn: Option<&str>, w: &Json, p: &Json, at: At, own: &Json) -> Result<Json> {
 	let mut item = Object::new();
+	// a thing that spoils or grows up carries the moment it turns, on the second clock (sweep.ts turns it); what the loader
+	// hands out before the world has its clock (an NPC's stock) keeps
+	if let Some(turns) = j::opt(p, "turns").filter(|t| j::truthy(t)) {
+		if let Ok(kept) = crate::clock::decay_now_of(space, txn).await {
+			item.insert("turns", Json::Bool(true));
+			item.insert("turnsAtMs", Json::from(kept + j::n(turns, "afterMs")));
+		}
+	}
 	item.insert("itemId", Json::from(at.item_id.unwrap_or_else(new_item_id)));
 	item.insert("name", j::at(p, "name").clone());
 	item.insert("aliases", j::opt(p, "aliases").cloned().unwrap_or(Json::Array(vec![])));

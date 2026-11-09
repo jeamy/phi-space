@@ -451,6 +451,20 @@ fn small_things() {
 	give(&mut w, &a, "spitzhacke", 1, Some(2.0));
 	give(&mut w, &a, "spaten", 1, None);
 	for (who, line) in [(&a, "breche"), (&a, "breche"), (&a, "breche"), (&a, "steche"), (&a, "stechen"), (&g, "steche"), (&a, "inventory")] { run(&mut w, who, line); }
+	// a salt garden needs no tool; what the buildings beside one make (craft hier), a steak that spoils, a bag that carries more
+	run(&mut w, &a, "harke");
+	w.write(building("sg-1", "salzgarten", "Salzgarten", "graue-bucht", 4.0, 14.0, "feuer-bucht"));
+	for (who, line) in [(&a, "harke"), (&a, "salz"), (&g, "harke"), (&b, "craft hier"), (&a, "craft hier")] { run(&mut w, who, line); }
+	w.write(building("hu-1", "huette", "Hütte", "graue-bucht", 13.0, 9.0, "feuer-bucht"));
+	w.write(building("ws-1", "werkstatt", "Werkstatt", "graue-bucht", 15.0, 6.0, "feuer-bucht"));
+	run(&mut w, &b, "craft hier");
+	give(&mut w, &b, "rinderfilet", 1, None);
+	give(&mut w, &b, "treibholz", 3, None);
+	give(&mut w, &b, "ledertasche", 1, None);
+	for (who, line) in [(&b, "craft here"), (&b, "craft steak"), (&b, "craft"), (&b, "inventory")] { run(&mut w, who, line); }
+	// a load that grows with the bag carried: the pack's limit counts it
+	w.write(obj! { "type" => "Scenery", "fields" => obj! { "sceneryId" => "s-kiste", "room" => "graue-bucht", "x" => 13.0, "y" => 7.0, "w" => 1.0, "h" => 1.0, "model" => "kiste", "name" => "Kiste", "work" => 1.0, "left" => 1.0, "yields" => Json::Array(vec![obj! { "proto" => "treibholz", "count" => 3.0 }]) } });
+	run(&mut w, &b, "räume");
 	// the wind, the fog
 	run(&mut w, &a, "wetter");
 	for _ in 0..6 { w.tick("wind"); }
@@ -478,7 +492,7 @@ fn small_things() {
 	run(&mut w, &a, "time");
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 15, "{said:?}");
 	let counts = (w.entries_with("SceneryGone"), w.entries_with(r#""Blessing""#), w.entries_with(r#""Sated""#));
-	assert_eq!(counts, (2, 1, 2), "nothing happened");
+	assert_eq!(counts, (3, 1, 2), "nothing happened");
 }
 
 /// Settlements and their hall (settlement.ts, epoch.ts, townhall.ts): founding one with its refusals, taking in and letting

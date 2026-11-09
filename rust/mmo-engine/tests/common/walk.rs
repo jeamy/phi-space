@@ -1,4 +1,4 @@
-//! The walk both engines take (docs/rust-portierung.en.md, R8.2): two space servers in memory (`src/standalone.ts`), the
+//! The walk both engines take (docs/rust-portierung.en.md, R8.2): two space servers in memory (`spaces-mmo/tests/r8/space-server.ts`, the limits of the game's space process), the
 //! TypeScript engine on one through `spaces-mmo/tests/r8/engine-driver.ts` (imported from the oracle of tests/common), this
 //! crate on the other, the same seed and clock; after every step both spaces hold the same entries in the same order.
 //! A test file takes it with `#[path = "common/walk.rs"] mod walk;` (after `mod common;`).
@@ -24,11 +24,12 @@ use crate::common::{oracle, repo};
 struct Kill(Child);
 impl Drop for Kill { fn drop(&mut self) { let _ = self.0.kill(); let _ = self.0.wait(); } }
 
-/// A space server in memory on a unix socket of its own.
+/// A space server in memory on a unix socket of its own, with the limits of the game's space process
+/// (`spaces-mmo/tests/r8/space-server.ts`).
 fn space_server(dir: &Path, name: &str) -> (Kill, String) {
 	let sock = dir.join(format!("{name}.sock"));
 	let _ = std::fs::remove_file(&sock);
-	let child = Command::new("node").current_dir(repo()).args(["--experimental-strip-types", "--no-warnings", "src/standalone.ts", "--store", "memory", "--listen"]).arg(format!("unix:{}", sock.display()))
+	let child = Command::new("node").current_dir(repo().join("spaces-mmo")).args(["--experimental-strip-types", "--no-warnings", "tests/r8/space-server.ts"]).arg(format!("unix:{}", sock.display()))
 		.stdout(Stdio::null()).spawn().expect("node on PATH");
 	let t0 = Instant::now();
 	while !sock.exists() { assert!(t0.elapsed() < Duration::from_secs(30), "the space server did not start"); std::thread::sleep(Duration::from_millis(50)); }
