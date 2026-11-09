@@ -82,7 +82,7 @@ const refuse = async (actor: Record<string, unknown>, text: string) => {
 		const b = await begin(String(actor.charId));
 		txn = b.txn;
 		if (!b.intent) { await space.abort(txn); return; }
-		const end = finishing(txn, String(actor.charId));
+		const end = finishing(txn!, String(actor.charId));
 		await msg({ space: end.space, txn, actor, msgLeaseMs: MSG_LEASE_MS }, actor.charId, "error", text);
 		await end.commit();
 	} catch { if (txn) await space.abort(txn).catch(() => {}); }
@@ -106,7 +106,7 @@ const serve = async (w: unknown, charId: string): Promise<string> => {
 		return "ran";
 	} catch (e) {
 		await space.abort(txn).catch(() => {});
-		if (e instanceof CommandError) { if (actor) await refuse(actor, e.message); return `refused: ${e.message}`; }
+		if (e instanceof CommandError) { const m = (e as Error).message; if (actor) await refuse(actor, m); return `refused: ${m}`; }
 		return `failed: ${(e as Error).message}`;
 	}
 };
