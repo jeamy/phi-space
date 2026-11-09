@@ -419,3 +419,80 @@ fn small_things() {
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 15, "{said:?}");
 	assert!(w.entries_with("SceneryGone") == 1 && w.entries_with(r#""Blessing""#) == 1 && w.entries_with(r#""Sated""#) == 2, "nothing happened");
 }
+
+/// Settlements and their hall (settlement.ts, epoch.ts, townhall.ts): founding one with its refusals, taking in and letting
+/// go, closing and opening, the rank of the region's settlements, the island's epoch, and motions with their votes.
+#[test]
+fn settling() {
+	let mut w = Walk::new("settling", 37, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (7.0, 13.0), true, false);
+	let g = w.player(3, "graue-bucht", (4.0, 12.0), true);
+	let e = w.player_as(4, "graue-bucht", (6.0, 11.0), true, false);
+	let d = w.player_as(5, "anleger", (16.0, 4.0), true, false);
+	let building = |id: &str, plan: &str, name: &str, x: f64, y: f64, wh: (f64, f64), owner: usize| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => plan, "name" => name, "room" => "graue-bucht", "x" => x, "y" => y, "w" => wh.0, "h" => wh.1, "owner" => format!("c-walk{owner}"), "ownerName" => format!("Wanderer{owner}"), "accountId" => format!("a-walk{owner}"), "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	w.write(building("h-1", "huette", "Hütte", 8.0, 15.0, (2.0, 2.0), 1));
+	w.write(building("h-2", "huette", "Hütte", 11.0, 15.0, (2.0, 2.0), 1));
+	w.write(building("h-3", "huette", "Hütte", 20.0, 12.0, (2.0, 2.0), 2));
+	w.write(obj! { "type" => "Field", "fields" => obj! { "fieldId" => "f-1", "room" => "graue-bucht", "points" => 2.0, "untilWorldMs" => 9e15 } });
+	w.write(obj! { "type" => "Bed", "fields" => obj! { "bedId" => "b-1", "room" => "graue-bucht", "untilWorldMs" => 9e15 } });
+	w.write(obj! { "type" => "Bed", "fields" => obj! { "bedId" => "b-2", "room" => "graue-bucht", "untilWorldMs" => 1.0 } });
+	w.compare("setup");
+	let i = std::cell::Cell::new(0);
+	let mut said = Vec::new();
+	let mut run = |w: &mut Walk, who: &str, line: &str| {
+		i.set(i.get() + 1);
+		let i = i.get();
+		w.at(START + i as f64 * 9_000.0);
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{i}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	// one stands somewhere else (taken and written again as the accounts write it)
+	let stand = |w: &mut Walk, n: usize, x: f64, y: f64| {
+		assert!(w.take(obj! { "type" => "Character", "fields" => obj! { "charId" => format!("c-walk{n}") } }));
+		w.write(obj! { "type" => "Character", "fields" => obj! { "charId" => format!("c-walk{n}"), "accountId" => format!("a-walk{n}"), "name" => format!("Wanderer{n}"), "room" => "graue-bucht", "x" => x, "y" => y, "skin" => (n % 4) as f64, "guest" => false } });
+	};
+	for (who, line) in [
+		(&a, "siedlung rang"), (&a, "siedlung"), (&g, "siedlung gründen Graubucht"), (&e, "siedlung gründen Graubucht"), (&a, "siedlung gründen X"), (&a, "siedlung zu"), (&a, "siedlung gründen  Graue   Bucht "),
+		(&b, "siedlung gründen Zweite"), (&a, "siedlung"), (&a, "siedlung rang"), (&a, "siedlung x"), (&e, "siedlung zu"), (&a, "siedlung zu"), (&a, "siedlung schließen"), (&g, "siedlung"),
+		(&a, "siedlung aufnehmen"), (&a, "siedlung aufnehmen Niemand"), (&a, "siedlung aufnehmen wanderer4 als helfer"), (&a, "siedlung aufnehmen Strandläufer-1003 auf"), (&a, "siedlung"), (&e, "siedlung"),
+		(&a, "siedlung aufnehmen Wanderer4 siedler"), (&e, "siedlung"), (&a, "siedlung entlassen Niemand"), (&a, "siedlung entlassen wanderer4"), (&a, "siedlung offen"), (&d, "siedlung"),
+		(&a, "epoche"), (&d, "epoch"),
+	] { run(&mut w, who, line); }
+	w.write(obj! { "type" => "Setting", "fields" => obj! { "key" => "epoch.force", "value" => 3.0 } });
+	for (who, line) in [(&a, "epoche"), (&a, "stufe")] { run(&mut w, who, line); }
+	w.write(obj! { "type" => "Setting", "fields" => obj! { "key" => "epoch.force", "value" => 4.0 } });
+	run(&mut w, &a, "epoche");
+	w.write(obj! { "type" => "Setting", "fields" => obj! { "key" => "epoch.force", "value" => 0.0 } });
+	w.write(obj! { "type" => "ParkCare", "fields" => obj! { "room" => "graue-bucht", "charId" => "c-walk1", "lastWorldMs" => 9e15 } });
+	w.write(building("p-1", "park", "Park", 14.0, 2.0, (4.0, 4.0), 2));
+	w.write(obj! { "type" => "Building", "fields" => { let mut f = building("sh-1", "kaufhaus", "Kaufhaus", 24.0, 2.0, (2.0, 2.0), 2).get("fields").cloned().unwrap(); walk::j_set(&mut f, "turnover", Json::from(45.0)); f } });
+	for (who, line) in [(&a, "siedlung rang"), (&a, "epoche")] { run(&mut w, who, line); }
+	// the hall
+	for (who, line) in [(&a, "antrag"), (&a, "antrag zu"), (&a, "antrag grünzone"), (&a, "antrag abriss")] { run(&mut w, who, line); }
+	w.write(building("r-1", "rathaus", "Rathaus", 1.0, 12.0, (4.0, 3.0), 2));
+	let long = format!("antrag {}", "lang ".repeat(30));
+	for (who, line) in [
+		(&e, "antrag zu"), (&a, "antrag steuer 9"), (&a, "antrag offen"), (&a, long.as_str()), (&a, "antrag abriss"), (&a, "siedlung zu"), (&a, "antrag zu"), (&a, "antrag"),
+		(&a, "antrag offen"), (&b, "stimme ja"), (&b, "stimme nein"), (&b, "stimme vielleicht"), (&e, "stimme ja"), (&g, "stimme ja"), (&a, "antrag"),
+	] { run(&mut w, who, line); }
+	let drop_motion = |w: &mut Walk| { assert!(w.take(obj! { "type" => "Motion", "fields" => obj! { "room" => "graue-bucht" } })); };
+	drop_motion(&mut w);
+	for line in ["antrag grünzone", "antrag zone frei", "antrag steuer 3", "antrag wegerecht", "antrag das Dorf soll blühen"] { run(&mut w, &a, line); run(&mut w, &a, "antrag"); drop_motion(&mut w); }
+	stand(&mut w, 1, 19.0, 11.0);
+	for line in ["antrag zu", "antrag abriss", "antrag", "stimme ja"] { run(&mut w, &a, line); }
+	drop_motion(&mut w);
+	w.write(building("l-1", "lagerhaus", "Lagerhaus", 22.0, 9.0, (3.0, 2.0), 2));
+	stand(&mut w, 1, 21.0, 11.0);
+	run(&mut w, &a, "antrag abriss");
+	w.write(thing(&w.w.clone(), "t-in", "treibholz", "l-1"));
+	stand(&mut w, 1, 23.0, 8.0);
+	run(&mut w, &a, "antrag abriss");
+	stand(&mut w, 4, 2.0, 11.0);
+	run(&mut w, &e, "antrag zu");
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 30 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
+	assert!(w.entries_with(r#""Settlement""#) == 1 && w.entries_with(r#""Vote""#) >= 1, "nothing was founded");
+}
