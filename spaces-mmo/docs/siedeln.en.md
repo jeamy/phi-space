@@ -153,7 +153,7 @@ By epochs; each level presupposes the previous one. Buildings and gardens are in
 | **Fields** | shared plots at the edge of the settlement: grain, maize, potatoes, flax — sowing and harvest in bursts |
 | **Windmill** | grinds grain to flour for the bakery, by the wind of its island |
 | **Communal garden, orchard** | beds for everyone with the right; trees that grow over many game days |
-| **Pen, stable** | sheep (wool → cloth), goats (milk), ducks and geese (eggs, down); they eat hay and turnips from the fields |
+| **Pen, stable** | sheep (wool → cloth), goats (milk), ducks and geese (eggs, down), pigs (truffles), from the town cows (milk, leather); they eat hay and turnips from the fields, pigs potatoes |
 | **Chapel** | visible place of the gods ([goetter.en.md](goetter.en.md)): offerings, blessing (lease), festival — voluntary, the gods work without it too |
 
 ### Epoch 3: town (trade and administration)
@@ -394,6 +394,13 @@ again — and a yield that one may `take` like a harvest.
   belongs to no pen but to the farm: it roams on its own and stays with the figure that feeds it. Company like the dog.
 - **Sheep, goats** (epoch 2, pen): wool → cloth at the loom in the workshop, milk → cheese; they eat hay and turnips from
   the fields — the fields feed the farm.
+- **Pigs** (epoch 2, pen, kind `schwein`): eat potatoes above all, also turnips, carrots, cabbage, oats and barley — the
+  potato field gets an animal that buys it. Fed, a pig roots up a truffle every third day (`trueffel`), which Marta buys
+  dear and the inn in the harbour quarter asks for at the job board; pigs breed every five fed days. Nothing is
+  slaughtered: a pig gives what it finds, not itself. Gesa sells them (she carries two).
+- **Cattle (cows)** (epoch 3, pen, kind `rind`, also typed `kuh`): milk every half day, twice a goat's, and a piece of
+  leather with every four jugs (`AnimalKindDef.also`); they eat oats, barley, turnips and cabbage, weigh 8 and rarely
+  calve (every 30 fed days).
 - **Dog** (epoch 2): follows a figure, warns of fog creatures — company instead of use.
 - **Bees** (epoch 1, hive `bienenstock`, 1×1, up to three colonies): a colony bought from Gesa eats flowers from the
   ornamental bed (sea pink, dune rose, fog flower, hops), gives a pot of honey every other fed day and a lump of wax with
@@ -743,7 +750,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      A figure carries at most 1000 load (40 at first, raised on the user's word; setting `pack.max`, `SPACES_MMO_PACK_MAX`, the admin window). Each thing weighs by
      its kind (`world.pack.load`, 1 where it names none): coins and bills 0; shells, seeds, pearls, amber, wax, candles,
      down ½; driftwood, kelp rope, stone, cabbage, bricks, planks, rope, clay, dog, cat 2; bundle of wood, hen, duck,
-     goose, sheep, goat, bee colony, rowing boat, cart 4; cow and sailing boat 8. The check sits once around every command
+     goose, sheep, goat, pig, bee colony, rowing boat, cart 4; cow and sailing boat 8. The check sits once around every command
      (`execute` in `engine/commands.ts`): a command that leaves the actor's pack heavier than before and over the limit
      is refused and its transaction aborted, whatever it did (pick up, gather, harvest, buy, accept, craft, take from a
      chest). What others bring (a delivery, a gift, coins for a listing) runs in their command and arrives anyway; a

@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ARTICLES, DEFAULT_ARTICLE, SECTIONS, articleById, tocOf, type Article, type Lang } from "./help/articles.ts";
 import { renderMarkdownToHtml } from "./lib/markdown.ts";
+import { searchArticles } from "./help/search.ts";
 import { useBack } from "./useBack.ts";
 import { setLanguage } from "./i18n/index.ts";
 import { isTouch } from "./useShell.ts";
@@ -19,8 +20,6 @@ const initialLang = (): Lang => {
 	try { const v = localStorage.getItem(LANG_KEY); if (v === "de" || v === "en") return v; } catch { /* storage may be blocked */ }
 	return "de";
 };
-
-const textOf = (a: Article, lang: Lang) => `${a.title[lang]} ${a.short[lang]} ${a.body[lang]}`.toLowerCase();
 
 export function HelpPanel({ onClose, article: first = null, onCommands }: { onClose: () => void; /** The article to open on. */ article?: string | null; /** The tab with the commands: asks the world for them. */ onCommands?: () => void }) {
 	const [lang, setLang] = useState<Lang>(initialLang);
@@ -52,8 +51,8 @@ export function HelpPanel({ onClose, article: first = null, onCommands }: { onCl
 	const article = articleId ? articleById(articleId) ?? articleById(DEFAULT_ARTICLE)! : null;
 	const html = useMemo(() => (article ? renderMarkdownToHtml(article.body[lang]) : ""), [article, lang]);
 	const toc = useMemo(() => (article ? tocOf(article.body[lang]) : []), [article, lang]);
-	const q = query.trim().toLowerCase();
-	const matches = q ? ARTICLES.filter((a) => textOf(a, lang).includes(q)) : ARTICLES;
+	const q = query.trim();
+	const matches = useMemo(() => searchArticles(ARTICLES, query, lang), [query, lang]);
 
 	const onBodyClick = (e: React.MouseEvent) => {
 		const a = (e.target as HTMLElement).closest<HTMLElement>("[data-help-link]");

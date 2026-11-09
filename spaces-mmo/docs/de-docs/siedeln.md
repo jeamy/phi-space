@@ -139,7 +139,7 @@ gleichwertig sind — die Gartenzeilen führt der Abschnitt „Gärten“ weiter
 | **Äcker** | gemeinsame Fluren am Siedlungsrand: Getreide, Mais, Kartoffeln, Flachs — Bestellen und Ernte in Stößen |
 | **Windmühle** | mahlt Getreide zu Mehl für das Backhaus, mit dem Wind seiner Insel |
 | **Gemeinschaftsgarten, Obstwiese** | Beete für alle mit Recht; Bäume, die über viele Spieltage wachsen |
-| **Gehege, Stall** | Schafe (Wolle → Tuch), Ziegen (Milch), Enten und Gänse (Eier, Daunen); fressen Heu und Rüben von den Fluren |
+| **Gehege, Stall** | Schafe (Wolle → Tuch), Ziegen (Milch), Enten und Gänse (Eier, Daunen), Schweine (Trüffel), ab der Stadt Rinder (Milch, Leder); fressen Heu und Rüben von den Fluren, Schweine Kartoffeln |
 | **Kapelle** | sichtbarer Ort der Götter ([goetter.md](../goetter.en.md)): Opfergaben, Segen (Lease), Fest — freiwillig, die Götter wirken auch ohne |
 
 ### Epoche 3: Stadt (Handel und Verwaltung)
@@ -350,6 +350,14 @@ Wolle), bis wieder gefüttert wird — und einem Ertrag, den man wie eine Ernte 
   Gesellschaft wie der Hund.
 - **Schafe, Ziegen** (Epoche 2, Gehege): Wolle → Tuch am Webstuhl in der Werkstatt, Milch → Käse; fressen Heu und
   Rüben von den Fluren — die Äcker füttern den Hof.
+- **Schweine** (Epoche 2, Gehege, Art `schwein`): fressen vor allem Kartoffeln, dazu Rüben, Möhren, Kohl, Hafer und
+  Gerste — der Kartoffelacker bekommt ein Tier, das ihn abnimmt. Satt wühlt ein Schwein alle drei Tage eine Trüffel aus
+  dem Boden (`trueffel`), die Marta teuer kauft und nach der die Schenke im Hafenviertel an der Auftragstafel fragt;
+  Schweine vermehren sich alle fünf satten Tage. Geschlachtet wird nichts: ein Schwein gibt, was es findet, nicht sich
+  selbst. Gesa verkauft sie (sie trägt zwei).
+- **Rinder (Kühe)** (Epoche 3, Gehege, Art `rind`, auch `kuh`): Milch jeden halben Tag, doppelt so viel wie eine Ziege,
+  und auf vier Kannen ein Stück Leder (`AnimalKindDef.also`); fressen Hafer, Gerste, Rüben und Kohl, wiegen 8 und kalben
+  selten (alle 30 satten Tage).
 - **Hund** (Epoche 2): folgt einer Figur, warnt vor Nebelwesen — Gesellschaft statt Nutzen.
 - **Tauben** (Epoche 3, Taubenschlag): Brieftauben tragen kleine Briefe zwischen Siedlungen und Inseln — Post lange
   vor der Fahrplan-Fähre. Eine Taube fliegt immer heim zu ihrem Schlag; wer schreiben will, trägt sie mit.

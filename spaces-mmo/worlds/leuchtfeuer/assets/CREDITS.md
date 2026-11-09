@@ -80,3 +80,6 @@ script `items-src/harbour.py` (same license as this project).
 
 The beekeeper's things (`items/bienenvolk.png`, `items/honig.png`, `items/wachs.png`, `items/kerze.png`) were drawn the same way, by the
 script `items-src/bees.py` (same license as this project).
+
+The pig and the truffle it roots up (`items/schwein.png`, `items/trueffel.png`) were drawn the same way, by the
+script `items-src/pigs.py` (same license as this project).

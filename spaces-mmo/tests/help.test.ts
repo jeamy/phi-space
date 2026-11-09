@@ -96,3 +96,18 @@ test("the articles the map menu opens (\"Was ist das?\") and their sections exis
 		if (anchor) for (const l of LANGS) assert.ok(tocOf(a.body[l]).some((h) => h.id === anchor), `${ref}: no section in ${l}`);
 	}
 });
+
+test("the search finds a word in either number, with or without umlauts, the best articles first", async () => {
+	const { searchArticles, stem } = await import("../client/help/search.ts");
+	const ids = (q: string, lang: "de" | "en" = "de") => searchArticles(ARTICLES, q, lang).map((a) => a.id);
+	for (const q of ["hühner", "huhn", "Huehner", "kühe", "kuh", "gänse", "schweine", "schwein", "ziegen", "mäuse", "rinder", "bienenvölker", "trüffeln"]) assert.ok(ids(q).includes("help.game.animals"), q);
+	for (const q of ["geese", "pigs", "cows", "mice", "hens"]) assert.ok(ids(q, "en").includes("help.game.animals"), q);
+	assert.equal(ids("tiere")[0], "help.game.animals", "the article named so comes first");
+	assert.ok(ids("schweine trüffel").includes("help.game.animals"), "every word must be found");
+	assert.deepEqual(ids("schweine quasselstrippe"), []);
+	assert.equal(ids("").length, ARTICLES.length);
+	// a short stem finds only its own word, not every word that begins so
+	assert.equal(stem("Enten"), "ent");
+	const enten = new Set(ids("enten")), entnimm = new Set(ids("entnimm"));
+	assert.ok([...entnimm].some((id) => !enten.has(id)), "\"enten\" does not find every article about \"entnimm\"");
+});

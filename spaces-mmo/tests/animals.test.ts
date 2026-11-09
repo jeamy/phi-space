@@ -113,6 +113,32 @@ test("a hive: bee colonies eat flowers, give honey every other day and wax with 
 	} finally { await srv.close(); }
 });
 
+test("a pen of pigs: they eat potatoes, not kelp, and root up a truffle every third day while fed; two of them soon get a piglet", { timeout: 300_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const ole = await player(srv.url, "Schweineole"), bo = await player(srv.url, "Knollenbo");
+		const accountId = String((await s.readAll({ type: "Character", fields: { charId: ole.me } }))[0]!.fields.accountId);
+		const pen = await building(s, { buildId: "gehege-schwein", plan: "gehege", name: "Gehege", x: 4, y: 4, w: 3, h: 3, owner: ole.me, ownerName: ole.name, accountId, points: 2 });
+		const taken = new Set<string>();
+		await walkBeside(ole, s, pen, taken);
+		await walkBeside(bo, s, pen, taken);
+		await give(s, ole.me, "schwein", 2);
+		await does(ole.p, "einstallen schwein", "(1 Schwein)");
+		await does(ole.p, "einstallen schweine", "(2 Schweine)");
+		await give(s, bo.me, "tang", 1);
+		assert.match(await does(bo.p, "füttere tang", "mögen"), /Tang mögen Schweine nicht; sie fressen Kartoffel/);
+		await give(s, bo.me, "kartoffel", 2);
+		assert.match(await does(bo.p, "füttere", "satt für"), /Knollenbo füttert die Schweine von Schweineole mit 2 Kartoffel/);
+		// six fed days: two truffles per pig, and a piglet (they breed every five days)
+		await timePasses(s, pen.buildId, 6 * DAY);
+		assert.match(await does(ole.p, "einsammeln", "sammelst"), /Du sammelst 4 Trüffel/);
+		assert.equal(await pack(s, ole.me, "trueffel"), 4);
+		assert.match(await does(ole.p, "stall", "Schwein"), /3 Schweine/);
+		await ole.p.leave(); await bo.p.leave();
+	} finally { await srv.close(); }
+});
+
 test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner collects; a young one comes; a pen keeps one kind; demolition gives them back", { timeout: 300_000 }, async () => {
 	const srv = await startServer();
 	try {

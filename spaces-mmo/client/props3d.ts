@@ -456,7 +456,7 @@ function coop(t: T, w: number, variant: number): Geo {
 }
 
 /** The pen w×d: a driftwood fence of posts and two rails, a trough, a little shelter in a corner, and its animals: a
- *  sheep, a goat, two ducks by a puddle or two geese (none while it is empty). */
+ *  sheep, a goat, a cow, a pig, two ducks by a puddle or two geese (none while it is empty). */
 function pen(t: T, w: number, d: number, variant: number, herd: string | undefined): Geo {
 	return cached(`pen:${w}x${d}:${variant}:${herd ?? ""}`, () => {
 		const ww = w * 0.92, dd = d * 0.92, parts: Part[] = [];
@@ -491,6 +491,7 @@ function pen(t: T, w: number, d: number, variant: number, herd: string | undefin
 		if (herd === "schaf") four([0xe8e4d8, 0xd8d0c0, 0xf0ece0][variant % 3]!, 0x3a3430, 0x3a3430, ww * 0.1, false);
 		if (herd === "ziege") four(0xa89a80, 0x5e5240, 0xa89a80, ww * 0.1, true);
 		if (herd === "rind") four(0x7a5a3a, 0x4a3522, 0x7a5a3a, ww * 0.16, true);
+		if (herd === "schwein") four(0xe8a0a0, 0xb06a6e, 0xf0b0ac, ww * 0.1, false);
 		if (herd === "ente" || herd === "gans") {
 			if (herd === "ente") parts.push({ g: new t.CylinderGeometry(0.3, 0.3, 0.02, 10), c: 0x3d7fa0, p: [ww * 0.15, 0.01, -dd * 0.05] }); // a puddle
 			for (const [x, z] of [[ww * 0.05, 0.1], [ww * 0.25, -0.15]] as const) herd === "ente" ? fowl(0x8a7a5a, 0x2f6a4a, x, z, 0.04) : fowl(0xf0ece0, 0xf0ece0, x, z, 0.16);

@@ -12,7 +12,7 @@ for (const model of ["grain", "tuber", "beet", "flax"] as FieldModel[]) for (con
 for (const plan of ["huette", "regentonne", "vogelscheuche", "windmuehle", "backhaus", "huehnerstall", "bienenstock", "webstuhl", "steg"]) catalogue.set(plan, () => buildingGeometry(t, plan, 2, 2, 0x9a7a4a, 0));
 for (const plan of ["lagerhaus", "steinbruch", "lehmgrube", "ziegelei", "kapelle", "park", "rathaus", "werkstatt", "raeucherei", "kaufhaus", "kontor", "brauerei", "glashuette", "werft", "gewaechshaus", "leuchtturm", "bahnhof", "signalfeuer"]) catalogue.set(plan, () => buildingModel(t, plan, 2, 2, 0));
 for (const model of ["boot", "faesser", "kisten", "stand", "becken", "rumpf", "felsen", "mauer", "turm", "meiler"]) catalogue.set(`scenery:${model}`, () => sceneryModel(t, model, 2, 2, 0));
-for (const herd of ["schaf", "ziege", "rind", "ente", "gans"]) catalogue.set(`pen:${herd}`, () => buildingGeometry(t, "gehege", 2, 2, 0x9a7a4a, 0, herd));
+for (const herd of ["schaf", "ziege", "rind", "schwein", "ente", "gans"]) catalogue.set(`pen:${herd}`, () => buildingGeometry(t, "gehege", 2, 2, 0x9a7a4a, 0, herd));
 for (const kind of ["hund", "katze"]) catalogue.set(kind, () => keeperGeometry(t, kind, 0));
 for (const progress of [0, 0.6, 1]) catalogue.set(`site:${progress}`, () => siteGeometry(t, "huette", 2, 2, 0x9a7a4a, progress));
 catalogue.set("ruin", () => ruinGeometry(t, 2, 2, 0)); catalogue.set("sign", () => signGeometry(t)); catalogue.set("fire", () => fireGeometry(t)); catalogue.set("fence", () => fenceGeometry(t, 2, 2)); catalogue.set("liner", () => linerGeometry(t, 8));

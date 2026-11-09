@@ -10,6 +10,7 @@ export type CellInput = {
 	/** The trade offers made to the player (TradeView.offersIn): a figure with one gets "accept" and "decline" first. */ offersIn?: Array<{ fromName: string; giveNames: string[]; want: Array<{ name: string; count: number }> }>;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] };
 	/** Whether wild plants grow in the room (wildHere); without it seeds are offered anyway and the command answers. */ wild?: boolean;
+	/** Which seeds go into which bed (ItemUses.beds); without it a bed offers every carried seed and the command answers. */ beds?: ItemUses["beds"];
 	/** The rooms of the world and where a boat, a train and a cart can go (the overview's state); without it the commands list their places. */ travel?: { rooms: Array<{ roomId: string; name: string; island: string }>; stops: { jetties: string[]; stations: string[]; trainFare: number; roads: Array<[string, string]> } };
 	/** The islands a sailing boat goes to from here (the others, with the large ship's routes). */ sail?: string[];
 	/** "Bauen …" was chosen: the caller shows the plans. */ onPlans: () => void;
@@ -41,6 +42,20 @@ export function hereEntries(input: Omit<CellInput, "at" | "onPlans">): CellEntry
 		}
 	}
 	return [...seen.values()].sort((a, b) => rank(a.line) - rank(b.line));
+}
+
+/** A figure a player gives and offers things to: a registered player's, not a guest's and not an NPC's. */
+export const registered = (c: CharView) => !c.guest && !c.ai && !c.settler && !c.charId.startsWith("npc-");
+
+/** Whether a carried seed `n` goes into a bed of `kind` (server: garden.ts pflanze): flowers into every bed, a garden
+ *  bed's plants not into the flower bed, a field's seed into none. A seed of a crossing (a name of its own, not listed)
+ *  is a flower's. Without `beds` every seed is offered. */
+export function mayPlantIn(kind: ObjView["bedKind"], n: string, beds: ItemUses["beds"]): boolean {
+	if (!/samen$/i.test(n) && !beds?.flowers.includes(n) && !beds?.plants.includes(n)) return false;
+	if (!beds) return true;
+	if (beds.field.includes(n)) return false;
+	if (beds.plants.includes(n)) return kind !== "zier";
+	return true;
 }
 
 /** Bar entries that need a thing without naming it. */
@@ -78,8 +93,8 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 		if (r.at && !built.some((b) => b.plan === r.at)) continue;
 		if (![...out.values()].some((e) => e.label.startsWith(`${r.name} `))) add({ label: `${r.name} herstellen`, line: `craft ${r.key}` });
 	}
-	// to anyone in the room, near or not (the server asks no more): those nearest first
-	if (!guest) for (const c of [...chars.values()].filter((x) => x.charId !== me).sort((x, y) => Math.max(Math.abs(x.x - self.x), Math.abs(x.y - self.y)) - Math.max(Math.abs(y.x - self.x), Math.abs(y.y - self.y)))) {
+	// to the registered players in the room, near or not (the server asks no more): those nearest first; not to guests, nor to NPCs
+	if (!guest) for (const c of [...chars.values()].filter((x) => x.charId !== me && registered(x)).sort((x, y) => Math.max(Math.abs(x.x - self.x), Math.abs(x.y - self.y)) - Math.max(Math.abs(y.x - self.x), Math.abs(y.y - self.y)))) {
 		add({ label: `${c.name} geben`, line: `give ${name} an ${c.name}` });
 		if (offer) add({ label: `${c.name} anbieten …`, line: `#offer ${c.name}`, run: () => offer(c.name) });
 	}
@@ -91,7 +106,7 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 /** What a field is sown with, and the crop's word for `bestelle` (server: world.fields.crops). */
 const SOWN: Record<string, string> = { Weizen: "weizen", Gerste: "gerste", Hafer: "hafer", Kartoffel: "kartoffel", "Rübensamen": "rüben", Leinsamen: "flachs" };
 /** The houses of animals by plan, with the animals (as their things are named) each takes in (server: world animals). */
-const HOUSES: Record<string, string[]> = { huehnerstall: ["Huhn"], gehege: ["Schaf", "Ziege", "Ente", "Gans", "Rind"], bienenstock: ["Bienenvolk"] };
+const HOUSES: Record<string, string[]> = { huehnerstall: ["Huhn"], gehege: ["Schaf", "Ziege", "Ente", "Gans", "Rind", "Schwein"], bienenstock: ["Bienenvolk"] };
 const AREA = new Set(["site", "building", "ruin", "bed", "field", "scenery", "liner"]);
 const covers = (o: ObjView, c: { x: number; y: number }) => c.x >= o.x && c.y >= o.y && c.x < o.x + (o.w ?? 1) && c.y < o.y + (o.h ?? 1);
 
@@ -105,7 +120,7 @@ export function offerWords(o: { giveNames: string[]; want: Array<{ name: string;
 	return `${counted(o.giveNames.map((name) => ({ name, count: 1 })))}${o.want.length ? ` für ${counted(o.want)}` : " als Geschenk"}`;
 }
 
-export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, sail, travel, onPlans, onOrders }: CellInput): CellEntry[] {
+export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: Array<{ label: string; line: string; run?: () => void }> = [];
 	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
@@ -166,7 +181,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				if (o.weedy || (o.plants ?? []).some((pl) => pl.stage === 3)) entries.push({ label: "Jäten", line: "jäte" });
 				if ((o.plants ?? []).some((pl) => pl.stage === 2)) entries.push({ label: "Ernten", line: "ernte" });
 				if (beside && !o.fenced) entries.push({ label: "Zaun setzen (2 Treibholz, 1 Tangseil)", line: "zäune" });
-				if (mine && (o.plants ?? []).length < (o.w ?? 1) * (o.h ?? 1)) for (const n of [...new Set(carried.filter((n) => /samen$/i.test(n)))]) entries.push({ label: `${n} pflanzen`, line: `pflanze ${n}` });
+				if (mine && (o.plants ?? []).length < (o.w ?? 1) * (o.h ?? 1)) for (const n of [...new Set(carried.filter((n) => mayPlantIn(o.bedKind, n, beds)))]) entries.push({ label: `${n} pflanzen`, line: `pflanze ${n}` });
 			}
 			continue;
 		}
@@ -205,7 +220,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				// the house carries its herd while an animal is in it: nothing to feed in an empty one
 				if (o.herd) entries.push({ label: "Füttern", line: "füttere" });
 				if (o.ownerId === me) {
-					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", rind: "Milch", gans: "Daunen", biene: "Honig" };
+					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", rind: "Milch", schwein: "Trüffel", gans: "Daunen", biene: "Honig" };
 					if (o.herd) entries.push({ label: `${yields[o.herd] ?? "Ertrag"} einsammeln`, line: "einsammeln" });
 					const fits = HOUSES[o.plan ?? ""]!;
 					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && fits.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} einstallen`, line: `einstallen ${n}` });

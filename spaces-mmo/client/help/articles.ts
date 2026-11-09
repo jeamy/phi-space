@@ -1087,7 +1087,7 @@ Eine Figur trägt höchstens **1000 Last** (der Betreiber stellt es ein). Jedes 
 | ½ | Muscheln, Samen, Perlen, Bernstein, Wachs, Kerzen, Daunen |
 | 1 | Tang, Fisch, Eier, Honig, Milch, Werkzeug, Ernte, Brot und alles andere |
 | 2 | Treibholz, Tangseil, Stein, Kohl, Ziegel, Bohlen, Lehm, Hund, Katze |
-| 4 | Holzbündel, Huhn, Ente, Gans, Schaf, Ziege, Bienenvolk, Ruderboot, Karren |
+| 4 | Holzbündel, Huhn, Ente, Gans, Schaf, Ziege, Schwein, Bienenvolk, Ruderboot, Karren |
 | 8 | Rind, Segelboot |
 
 Unter „Bei dir“ steht, wie viel du trägst. Was dich über die Grenze brächte (aufheben, sammeln, ernten, kaufen, herstellen, aus der Truhe nehmen), geht nicht, bis du etwas in eine Truhe legst oder ablegst. Was dir andere bringen (eine Lieferung, ein Geschenk, Münzen für dein Angebot), kommt trotzdem an. Wer schon mehr trägt, verliert nichts, nimmt aber nichts mehr auf. Eine Truhe nimmt dagegen alles auf, ohne Grenze: verteile, was du nicht tragen kannst, auf deine Truhen.
@@ -1156,7 +1156,7 @@ A figure carries at most **1000 load** (the operator sets it). Each thing weighs
 | ½ | shells, seeds, pearls, amber, wax, candles, down |
 | 1 | kelp, fish, eggs, honey, milk, tools, crops, bread and everything else |
 | 2 | driftwood, kelp rope, stone, cabbage, bricks, planks, clay, dog, cat |
-| 4 | bundle of wood, hen, duck, goose, sheep, goat, bee colony, rowing boat, cart |
+| 4 | bundle of wood, hen, duck, goose, sheep, goat, pig, bee colony, rowing boat, cart |
 | 8 | cow, sailing boat |
 
 “Bei dir” shows how much you carry. Whatever would take you over the limit (picking up, gathering, harvesting, buying, crafting, taking from a chest) does not work until you put something in a chest or drop it. What others bring you (a delivery, a gift, coins for your listing) arrives anyway. Whoever already carries more loses nothing but takes nothing more. A chest, on the other hand, takes everything, without a limit: spread what you cannot carry over your chests.
@@ -1443,104 +1443,236 @@ Marta at the Kupferhafen market buys and sells bread, flour and linen, and the j
 		section: "play",
 		title: { de: "Tiere", en: "Animals" },
 		short: {
-			de: "Hühner, Schafe, Ziegen, Enten, Gänse und Bienen halten, füttern und was sie geben.",
-			en: "Keep hens, sheep, goats, ducks, geese and bees, feed them, and what they give.",
+			de: "Alle Tiere des Spiels: Hühner, Enten, Gänse, Schafe, Ziegen, Schweine, Rinder (Kühe) und Bienen halten und füttern, Hund und Katze als Wächter, und das Wild aus dem Nebel.",
+			en: "Every animal of the game: keep and feed hens, ducks, geese, sheep, goats, pigs, cows and bees, dogs and cats as guards, and the wild animals from the fog.",
 		},
 		body: {
-			de: `Tiere leben in einem Stall, Gehege oder Bienenstock, der dir gehört. Du fütterst sie, und sie geben dir Eier, Milch, Wolle, Daunen oder Honig. Daraus entstehen Waren, die gut bezahlt werden. Hühner gehen von Anfang an, das Gehege erst im [Dorf](help.game.village#epochs).
+			de: `Tiere leben in einem Stall, Gehege oder Bienenstock, der dir gehört. Du fütterst sie, und sie geben dir Eier, Milch, Wolle, Daunen, Trüffel oder Honig. Daraus entstehen Waren, die gut bezahlt werden. Hühner und Bienen gehen von Anfang an, das Gehege erst im [Dorf](help.game.village#epochs), Rinder erst in der Stadt.
+
+## Alle Tiere {#all}
+
+Es gibt drei Arten von Tieren: Hoftiere, die du hältst, Wächter, die deinen Ort schützen, und Wild, das aus dem Nebel kommt.
+
+| Tier | Art | wo | ab | gibt |
+| --- | --- | --- | --- | --- |
+| [Huhn](help.game.animals#hen) | Hoftier | Hühnerstall | Anfang | Eier |
+| [Ente](help.game.animals#duck) | Hoftier | Gehege | Dorf | Eier |
+| [Gans](help.game.animals#goose) | Hoftier | Gehege | Dorf | Daunen, hält Wache |
+| [Schaf](help.game.animals#sheep) | Hoftier | Gehege | Dorf | Wolle |
+| [Ziege](help.game.animals#goat) | Hoftier | Gehege | Dorf | Milch |
+| [Schwein](help.game.animals#pig) | Hoftier | Gehege | Dorf | Trüffel |
+| [Rind (Kuh)](help.game.animals#cow) | Hoftier | Gehege | Stadt | Milch, Leder |
+| [Bienenvolk](help.game.animals#bees) | Hoftier | Bienenstock | Anfang | Honig, Wachs |
+| [Hund](help.game.animals#guards) | Wächter | an einem deiner Bauten | Anfang | hält Hasen, Rehe und Füchse fern |
+| [Katze](help.game.animals#guards) | Wächter | an einem deiner Bauten | Anfang | hält Mäuse fern |
+| [Hase, Reh, Fuchs, Maus, Möwe](help.game.animals#wild) | Wild | kommen aus dem Nebel | – | fressen, was du anbaust und hältst |
+
+Alle Hoftiere, Hund und Katze verkauft Gesa am Markt von Kupferhafen. Ein Tier trägst du wie ein Ding (Last 4, ein Rind 8, Hund und Katze 2) und kannst es tauschen und handeln.
 
 ## Stall und Gehege {#house}
 
-Jedes Tier braucht ein Zuhause, das dir gehört. Stall und Gehege baust du wie jeden anderen Bau.
+Jedes Hoftier braucht ein Zuhause, das dir gehört. Stall, Gehege und Bienenstock baust du wie jeden anderen Bau.
 
-**Hühner** wohnen im **Hühnerstall** (\`bau hühnerstall\`: 2×1 Felder, 4 Treibholz, 1 Tangseil, 6 Arbeit, bis 6 Hühner), **Schafe**, **Ziegen**, **Enten** oder **Gänse** im **Gehege** (\`bau gehege\`: 3×3 Felder, 8 Treibholz, 4 Tangseil, 8 Arbeit, bis 4 Tiere einer Art).
+| Bau | Befehl | Felder | Material | Arbeit | Platz |
+| --- | --- | --- | --- | --- | --- |
+| Hühnerstall | \`bau hühnerstall\` | 2×1 | 4 Treibholz, 1 Tangseil | 6 | 6 Hühner |
+| Gehege | \`bau gehege\` | 3×3 | 8 Treibholz, 4 Tangseil | 8 | 4 Tiere einer Art |
+| Bienenstock | \`bau bienenstock\` | 1×1 | 2 Treibholz, 2 Tangseil | 4 | 3 Völker |
 
-Tiere verkauft Gesa am Markt von Kupferhafen. \`einstallen huhn\` bringt eines, das du trägst, in deinen Stall, \`ausstallen\` nimmt eins heraus. \`stall\` zeigt, wie es ihnen geht.
+In einem Gehege lebt immer nur eine Art: Schafe, Ziegen, Enten, Gänse, Schweine oder Rinder. \`einstallen huhn\` bringt ein Tier, das du trägst, in deinen Stall, \`ausstallen\` nimmt eins heraus. \`stall\` zeigt, wie es ihnen geht. Du hältst bis zu fünf Ställe, Gehege und Bienenstöcke zusammen (der Betreiber kann es ändern).
 
 ## Füttern {#feed}
 
 Tiere fressen, was auf Feldern und Beeten wächst. Füttern darf jeder, nicht nur der Besitzer.
 
-\`füttere\` gibt Futter aus deiner Tasche, ein Futter macht ein Tier einen Tag satt, bis zu drei Tage im Voraus.
+\`füttere\` gibt Futter aus deiner Tasche (\`füttere 3 hafer\` mehrere auf einmal). Ein Futter macht ein Tier einen Tag satt, bis zu drei Tage im Voraus.
 
 | Tier | frisst | gibt, wenn es satt ist |
 | --- | --- | --- |
 | Huhn | Tang, Kohl, Möhren, Weizen, Gerste, Hafer | ein Ei am Tag |
-| Schaf | Rüben, Hafer, Gerste, Kohl, Tang | Wolle alle zwei Tage |
-| Ziege | Rüben, Hafer, Gerste, Kohl, Möhren, Tang | Milch am Tag |
 | Ente | Tang, Kohl, Weizen, Gerste, Hafer | ein Ei am Tag |
 | Gans | Gerste, Hafer, Kohl, Rüben, Tang | Daunen alle drei Tage |
+| Schaf | Rüben, Hafer, Gerste, Kohl, Tang | Wolle alle zwei Tage |
+| Ziege | Rüben, Hafer, Gerste, Kohl, Möhren, Tang | Milch am Tag |
+| Schwein | Kartoffeln, Rüben, Möhren, Kohl, Hafer, Gerste | eine Trüffel alle drei Tage |
+| Rind | Hafer, Gerste, Rüben, Kohl | Milch zweimal am Tag, auf vier Kannen ein Leder |
+| Bienenvolk | Strandnelke, Dünenrose, Nebelblume, Hopfen | Honig alle zwei Tage, auf drei Töpfe ein Wachs |
 
 ## Was Tiere geben {#yield}
 
 Satte Tiere geben regelmäßig etwas. Abholen darf das nur, wem sie gehören.
 
-Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nichts. Bis zu drei je Tier warten im Stall; \`einsammeln\` (auch \`sammle eier\`, \`melke\`, \`schere\`) holt sie, nur der Besitzer. Zwei satte Tiere einer Art bekommen ab und zu ein Junges, bis der Stall voll ist. Reißt du den Stall ab, kommen die Tiere in deine Tasche zurück; verfällt er, warten sie im Nachlass.
+Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nichts. Bis zu drei je Tier warten im Stall; \`einsammeln\` (auch \`sammle eier\`, \`melke\`, \`schere\`) holt sie, nur der Besitzer. Zwei satte Tiere einer Art bekommen ab und zu ein Junges, bis der Stall voll ist. Reißt du den Stall ab, kommen die Tiere in deine Tasche zurück; verfällt er, warten sie im Nachlass. Kein Tier wird geschlachtet.
 
-Satte **Gänse** halten Wache: In ihrem Raum kommt kein Hase an die Beete und kein Fuchs in den Stall, sie schnattern ihn fort.
+## Huhn {#hen}
 
-## Was daraus wird {#products}
+Das **Huhn** ist das erste Hoftier: Der Hühnerstall geht schon im Fischerdorf. Satt legt jedes Huhn ein **Ei** am Tag. Eier machen satt (\`iss ei\`), Gesa kauft sie, und die Schenke im Hafenviertel fragt an der Auftragstafel nach ihnen. Füchse holen nachts ein Huhn aus dem Stall, nie das letzte; ein Zaun um den Stall, satte Gänse oder ein Hund halten sie fern ([Wild](help.game.wild#shelter)).
 
-Aus Wolle, Daunen und Milch werden teurere Waren. Dafür brauchst du den Webstuhl oder eine Hütte.
+## Ente {#duck}
 
-Am **Webstuhl** (\`bau webstuhl\`: 2×1 Felder, 6 Treibholz, 2 Tangseil, 8 Arbeit) webt \`craft tuch\` aus 3 Wolle mit einer Spindel ein Tuch, und \`craft decke\` näht aus 2 Tuch und 3 Daunen eine Daunendecke. Am Herd einer **Hütte** macht \`craft käse\` aus 3 Milch und einem Scheit Treibholz einen Käse. Gesa kauft Eier, Wolle, Milch und Daunen, Marta Tuch, Decken und Käse.
+Die **Ente** lebt im Gehege und legt wie das Huhn ein **Ei** am Tag. Sie frisst Tang und Korn und ist ein guter Anfang, wenn du kein Getreide für ein Schaf hast.
+
+## Gans {#goose}
+
+Die **Gans** gibt alle drei Tage **Daunen**. Am Webstuhl näht \`craft decke\` aus 2 Tuch und 3 Daunen eine Daunendecke, die Marta gut bezahlt. Satte **Gänse** halten Wache: In ihrem Raum kommt kein Hase an die Beete und kein Fuchs in den Stall, sie schnattern ihn fort.
+
+## Schaf {#sheep}
+
+Das **Schaf** gibt alle zwei Tage **Wolle**. Am **Webstuhl** (\`bau webstuhl\`: 2×1 Felder, 6 Treibholz, 2 Tangseil, 8 Arbeit) webt \`craft tuch\` aus 3 Wolle mit einer Spindel ein Tuch.
+
+## Ziege {#goat}
+
+Die **Ziege** gibt jeden Tag **Milch** und frisst fast alles, auch Möhren und Tang. Am Herd einer **Hütte** macht \`craft käse\` aus 3 Milch und einem Scheit Treibholz einen Käse.
+
+## Schwein {#pig}
+
+Das **Schwein** lebt im Gehege und frisst vor allem **Kartoffeln** und Rüben, dazu Möhren, Kohl und Korn. Es wühlt den Boden um und bringt alle drei Tage eine **Trüffel** heraus. Trüffel sind selten und teuer: Marta kauft sie, und der Koch der Schenke im Hafenviertel fragt an der Auftragstafel danach. Schweine vermehren sich schnell, ein volles Gehege hast du bald.
+
+## Rind (Kuh) {#cow}
+
+Das **Rind** (auch \`kuh\`) kommt erst, wenn deine Insel eine Stadt ist. Es ist schwer (Last 8) und will Hafer, Gerste, Rüben oder Kohl. Dafür gibt es zweimal am Tag **Milch**, doppelt so viel wie eine Ziege, und auf vier Kannen kommt ein Stück **Leder** dazu. Junge bekommt ein Rind nur selten.
 
 ## Bienen {#bees}
 
-Bienen leben im **Bienenstock** (\`bau bienenstock\`: 1×1 Feld, 2 Treibholz, 2 Tangseil, 4 Arbeit, bis 3 Völker), von Anfang an. Ein **Bienenvolk** kaufst du bei Gesa am Markt von Kupferhafen; \`einstallen bienenvolk\` setzt es in deinen Stock.
+Bienen leben im **Bienenstock**, von Anfang an. Ein **Bienenvolk** kaufst du bei Gesa; \`einstallen bienenvolk\` setzt es in deinen Stock.
 
 Bienen fressen **Blumen**: Strandnelke, Dünenrose, Nebelblume und Hopfen, die im [Zierbeet](help.game.garden#bed) wachsen. \`füttere\` gibt sie ihnen wie jedem Tier, eine Blume macht ein Volk einen Tag satt. Satt gibt jedes Volk alle zwei Tage einen Topf **Honig**, und auf drei Töpfe kommt ein Klumpen **Wachs** dazu; \`einsammeln\` holt beides. Ein starkes Volk schwärmt ab und zu, dann zieht ein neues ein, bis der Stock voll ist.
 
 Honig macht satt (\`iss honig\`). Am Herd einer **Hütte** zieht \`craft kerze\` aus 2 Wachs und 1 Leinen zwei Kerzen. Gesa kauft Honig und Wachs, Marta Honig und Kerzen, und die Schenke im Hafenviertel fragt an der Auftragstafel nach Honig.
 
-Du hältst bis zu fünf Ställe, Gehege und Bienenstöcke zusammen (der Betreiber kann es ändern).`,
-			en: `Animals live in a coop, pen or hive that belongs to you. You feed them, and they give you eggs, milk, wool, down or honey. These make goods that sell well. Hens work from the start, a pen only in a [village](help.game.village#epochs).
+## Hund und Katze {#guards}
+
+**Hund** und **Katze** leben nicht im Stall: \`einstallen hund\` lässt ihn an einem deiner Bauten wachen. Satt schützen sie den ganzen Ort, auch die Beete der Nachbarn. Der Hund hält Hasen, Rehe und Füchse fern und frisst Eier, Brot, Käse oder Milch, die Katze hält die Mäuse von den Truhen fern und frisst Milch, Eier oder Käse. Mehr dazu unter [Wild, Zäune und Wächter](help.game.wild#guards).
+
+## Wild aus dem Nebel {#wild}
+
+Wo kein Feuer brennt, kommen **Hasen** an die Beete, **Rehe** an die Äcker, **Füchse** an den Hühnerstall, **Mäuse** an die Truhen und **Möwen** an die Räucherei. \`scheuche hase\` (oder \`reh\`, \`fuchs\`, \`maus\`, \`möwe\`) jagt sie fort, bevor sie fressen. Wie du dich dauerhaft schützt, steht unter [Wild, Zäune und Wächter](help.game.wild).
+
+## Was daraus wird {#products}
+
+Aus Wolle, Daunen, Milch und Wachs werden teurere Waren. Dafür brauchst du den Webstuhl oder eine Hütte.
+
+| Ware | aus | wo |
+| --- | --- | --- |
+| Tuch (\`craft tuch\`) | 3 Wolle, mit einer Spindel | Webstuhl |
+| Daunendecke (\`craft decke\`) | 2 Tuch, 3 Daunen | Webstuhl |
+| Käse (\`craft käse\`) | 3 Milch, 1 Treibholz | Hütte |
+| 2 Kerzen (\`craft kerze\`) | 2 Wachs, 1 Leinen | Hütte |
+
+Gesa kauft Eier, Wolle, Milch, Daunen, Leder, Honig und Wachs, Marta Tuch, Decken, Käse, Honig, Kerzen und Trüffel.`,
+			en: `Animals live in a coop, pen or hive that belongs to you. You feed them, and they give you eggs, milk, wool, down, truffles or honey. These make goods that sell well. Hens and bees work from the start, a pen only in a [village](help.game.village#epochs), cows only in a town.
+
+## All animals {#all}
+
+There are three sorts of animals: farm animals you keep, guards that protect your place, and wild animals that come out of the fog.
+
+| Animal | sort | where | from | gives |
+| --- | --- | --- | --- | --- |
+| [Hen](help.game.animals#hen) | farm animal | hen house | start | eggs |
+| [Duck](help.game.animals#duck) | farm animal | pen | village | eggs |
+| [Goose](help.game.animals#goose) | farm animal | pen | village | down, keeps watch |
+| [Sheep](help.game.animals#sheep) | farm animal | pen | village | wool |
+| [Goat](help.game.animals#goat) | farm animal | pen | village | milk |
+| [Pig](help.game.animals#pig) | farm animal | pen | village | truffles |
+| [Cow](help.game.animals#cow) | farm animal | pen | town | milk, leather |
+| [Bee colony](help.game.animals#bees) | farm animal | hive | start | honey, wax |
+| [Dog](help.game.animals#guards) | guard | at one of your buildings | start | keeps hares, deer and foxes away |
+| [Cat](help.game.animals#guards) | guard | at one of your buildings | start | keeps mice away |
+| [Hare, deer, fox, mouse, gull](help.game.animals#wild) | wild | come out of the fog | – | eat what you grow and keep |
+
+Gesa at the Kupferhafen market sells every farm animal, dogs and cats. You carry an animal like a thing (load 4, a cow 8, dog and cat 2) and can trade it.
 
 ## Coop and pen {#house}
 
-Every animal needs a home that belongs to you. You build a coop or pen like any other building.
+Every farm animal needs a home that belongs to you. You build a coop, pen or hive like any other building.
 
-**Hens** live in the **hen house** (\`bau hühnerstall\`: 2×1 cells, 4 driftwood, 1 kelp rope, 6 work, up to 6 hens), **sheep**, **goats**, **ducks** or **geese** in the **pen** (\`bau gehege\`: 3×3 cells, 8 driftwood, 4 kelp rope, 8 work, up to 4 of one kind).
+| Building | command | cells | material | work | room for |
+| --- | --- | --- | --- | --- | --- |
+| hen house | \`bau hühnerstall\` | 2×1 | 4 driftwood, 1 kelp rope | 6 | 6 hens |
+| pen | \`bau gehege\` | 3×3 | 8 driftwood, 4 kelp rope | 8 | 4 of one kind |
+| hive | \`bau bienenstock\` | 1×1 | 2 driftwood, 2 kelp rope | 4 | 3 colonies |
 
-Gesa at the Kupferhafen market sells animals. \`stable huhn\` puts one you carry into your house, \`unstall\` takes one out. \`stall\` shows how they are.
+A pen holds one kind only: sheep, goats, ducks, geese, pigs or cows. \`stable huhn\` puts an animal you carry into your house, \`unstall\` takes one out. \`stall\` shows how they are. You keep up to five coops, pens and hives together (the operator can change it).
 
 ## Feeding {#feed}
 
 Animals eat what grows on fields and beds. Anyone may feed them, not just the owner.
 
-\`fodder\` gives feed from your pack; one feed keeps one animal fed for a day, up to three days ahead.
+\`fodder\` gives feed from your pack (\`fodder 3 oats\` several at once). One feed keeps one animal fed for a day, up to three days ahead.
 
 | Animal | eats | gives while fed |
 | --- | --- | --- |
 | Hen | kelp, cabbage, carrots, wheat, barley, oats | an egg a day |
-| Sheep | beets, oats, barley, cabbage, kelp | wool every other day |
-| Goat | beets, oats, barley, cabbage, carrots, kelp | milk a day |
 | Duck | kelp, cabbage, wheat, barley, oats | an egg a day |
 | Goose | barley, oats, cabbage, beets, kelp | down every three days |
+| Sheep | beets, oats, barley, cabbage, kelp | wool every other day |
+| Goat | beets, oats, barley, cabbage, carrots, kelp | milk a day |
+| Pig | potatoes, beets, carrots, cabbage, oats, barley | a truffle every three days |
+| Cow | oats, barley, beets, cabbage | milk twice a day, a piece of leather for every four jugs |
+| Bee colony | sea pink, dune rose, fog flower, hops | honey every other day, a lump of wax for every three pots |
 
 ## What animals give {#yield}
 
 Fed animals give something regularly. Only their owner may collect it.
 
-Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`collect\` (also \`sammle eier\`, \`collect\`, \`collect\`) fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate.
+Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`collect\` fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate. No animal is slaughtered.
 
-Fed **geese** keep watch: in their room no hare gets to the beds and no fox into the coop, they cackle it away.
+## Hen {#hen}
 
-## What becomes of it {#products}
+The **hen** is the first farm animal: the hen house is open from the fishing village on. Fed, each hen lays an **egg** a day. Eggs are food (\`eat egg\`), Gesa buys them, and the inn in the harbour quarter asks for them at the job board. Foxes take a hen from the coop at night, never the last; a fence round the coop, fed geese or a dog keep them away ([wild animals](help.game.wild#shelter)).
 
-Wool, down and milk become dearer goods. For that you need the loom or a hut.
+## Duck {#duck}
 
-at the **loom** (\`bau webstuhl\`: 2×1 cells, 6 driftwood, 2 kelp rope, 8 work) \`craft tuch\` weaves cloth from 3 wool with a spindle, and \`craft decke\` sews a down blanket from 2 cloth and 3 down. At a **hut's** hearth \`craft käse\` makes a cheese from 3 milk and a log of driftwood. Gesa buys eggs, wool, milk and down, Marta cloth, blankets and cheese.
+The **duck** lives in the pen and lays an **egg** a day like a hen. It eats kelp and grain, a good start when you have no grain for a sheep.
+
+## Goose {#goose}
+
+The **goose** gives **down** every three days. At the loom \`craft decke\` sews a down blanket from 2 cloth and 3 down, which Marta pays well for. Fed **geese** keep watch: in their room no hare gets to the beds and no fox into the coop, they cackle it away.
+
+## Sheep {#sheep}
+
+The **sheep** gives **wool** every other day. At the **loom** (\`bau webstuhl\`: 2×1 cells, 6 driftwood, 2 kelp rope, 8 work) \`craft tuch\` weaves cloth from 3 wool with a spindle.
+
+## Goat {#goat}
+
+The **goat** gives **milk** every day and eats almost anything, carrots and kelp too. At a **hut's** hearth \`craft käse\` makes a cheese from 3 milk and a log of driftwood.
+
+## Pig {#pig}
+
+The **pig** lives in the pen and eats **potatoes** and beets above all, carrots, cabbage and grain as well. It roots up the ground and turns up a **truffle** every three days. Truffles are rare and dear: Marta buys them, and the cook of the inn in the harbour quarter asks for them at the job board. Pigs breed quickly; your pen is soon full.
+
+## Cow {#cow}
+
+The **cow** (\`rind\` or \`kuh\`) comes only once your island is a town. It is heavy (load 8) and wants oats, barley, beets or cabbage. In return it gives **milk** twice a day, twice as much as a goat, and a piece of **leather** comes with every four jugs. A cow rarely has a calf.
 
 ## Bees {#bees}
 
-Bees live in a **hive** (\`bau bienenstock\`: 1×1 cell, 2 driftwood, 2 kelp rope, 4 work, up to 3 colonies), from the start. You buy a **bee colony** from Gesa at the Kupferhafen market; \`stable bienenvolk\` puts it into your hive.
+Bees live in a **hive**, from the start. You buy a **bee colony** from Gesa; \`stable bienenvolk\` puts it into your hive.
 
 Bees eat **flowers**: sea pink, dune rose, fog flower and hops, which grow in the [ornamental bed](help.game.garden#bed). \`fodder\` gives them flowers like any animal its feed; one flower keeps a colony fed for a day. Fed, each colony gives a pot of **honey** every other day, and a lump of **wax** comes with every three pots; \`collect\` fetches both. Now and then a strong colony swarms, and a new one moves in until the hive is full.
 
 Honey is food (\`eat honey\`). At a **hut's** hearth \`craft kerze\` makes two candles from 2 wax and 1 linen. Gesa buys honey and wax, Marta honey and candles, and the inn in the harbour quarter asks for honey at the job board.
 
-You keep up to five coops, pens and hives together (the operator can change it).`,
+## Dog and cat {#guards}
+
+**Dogs** and **cats** do not live in a coop: \`stable hund\` sets a dog to watch at one of your buildings. Fed, they protect the whole place, the neighbours' beds too. The dog keeps hares, deer and foxes away and eats eggs, bread, cheese or milk; the cat keeps the mice from the chests and eats milk, eggs or cheese. More under [wild animals, fences and guards](help.game.wild#guards).
+
+## Wild animals from the fog {#wild}
+
+Where no fire burns, **hares** come to the beds, **deer** to the fields, **foxes** to the hen house, **mice** to the chests and **gulls** to the smokehouse. \`scare hare\` (or deer, fox, mouse, gull) chases them off before they eat. How to protect yourself for good is under [wild animals, fences and guards](help.game.wild).
+
+## What becomes of it {#products}
+
+Wool, down, milk and wax become dearer goods. For that you need the loom or a hut.
+
+| Good | from | where |
+| --- | --- | --- |
+| cloth (\`craft tuch\`) | 3 wool, with a spindle | loom |
+| down blanket (\`craft decke\`) | 2 cloth, 3 down | loom |
+| cheese (\`craft käse\`) | 3 milk, 1 driftwood | hut |
+| 2 candles (\`craft kerze\`) | 2 wax, 1 linen | hut |
+
+Gesa buys eggs, wool, milk, down, leather, honey and wax, Marta cloth, blankets, cheese, honey, candles and truffles.`,
 		},
 	},
 	{
@@ -1562,7 +1694,7 @@ Wo das Feuer nicht brennt, kommen aus dem Nebel **Hasen** an die Beete: je dicht
 
 \`scheuche hase\` jagt ihn aus bis zu drei Schritten fort, bevor er frisst; das darf jeder, auch ein Gast, und wer zuerst kommt, rettet das Beet. Dauerhaft schützt ein **Zaun**: \`zäune\` setzt neben dem Beet für **2 Treibholz und 1 Tangseil** einen um dein Beet (oder eins, das du pflegen darfst). Auch eine **Vogelscheuche** (\`bau vogelscheuche\`: 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von allen Beeten in bis zu drei Feldern ab; sie steht drei Tage, dann will sie ausgebessert werden (1 Tang).
 
-## Rehe, Füchse, Mäuse {#wild}
+## Rehe, Füchse, Mäuse, Möwen {#wild}
 
 Auch größeres Wild kommt aus dem Nebel. Jedes Tier hat sein eigenes Ziel.
 
@@ -1603,7 +1735,7 @@ Where the fire does not burn, **hares** come out of the fog to the beds: the thi
 
 \`scheuche hase\` (\`scare\`) chases it off from up to three cells before it eats; anyone may, a guest too, and whoever comes first saves the bed. A **fence** protects for good: \`zäune\` (\`fence\`) beside the bed puts one round your bed (or one you may tend) for **2 driftwood and 1 kelp rope**. A **scarecrow** (\`bau vogelscheuche\`: 2 driftwood, 1 kelp rope, 3 work) keeps the hares from every bed within three cells too; it stands three days, then it wants repairing (1 kelp).
 
-## Deer, foxes, mice {#wild}
+## Deer, foxes, mice, gulls {#wild}
 
 Bigger wild animals come out of the fog too. Each has a target of its own.
 

@@ -41,6 +41,11 @@ export function usesOf(w: WorldDef): ItemUses {
 		flowers: (w.garden?.sorts ?? []).filter((s) => s.kind === "zier").map((s) => name(s.yields.proto)),
 		// a seed by what grows of it (the pack keeps them side by side); a crop sown from itself (Weizen) is left out
 		seeds: Object.fromEntries([...(w.garden?.sorts ?? []), ...(w.fields?.crops ?? [])].map((s) => [s.seed, (Array.isArray(s.yields) ? s.yields[0] : s.yields)?.proto] as const).filter(([seed, grows]) => seed && grows && seed !== grows).map(([seed, grows]) => [name(seed), name(grows!)])),
+		beds: {
+			flowers: (w.garden?.sorts ?? []).filter((s) => s.kind === "zier").map((s) => name(s.seed)),
+			plants: (w.garden?.sorts ?? []).filter((s) => s.kind !== "zier").map((s) => name(s.seed)),
+			field: (w.fields?.crops ?? []).map((s) => s.seed).filter((seed) => !(w.garden?.sorts ?? []).some((s) => s.seed === seed)).map(name),
+		},
 		chests: plans.filter((p) => p.chest && !p.store).map((p) => p.key),
 		stores: plans.filter((p) => p.store).map((p) => p.key),
 		steps: [
@@ -78,7 +83,7 @@ type Client = { ws: WsConnection; me: Me; lang?: "en"; room: string | null; leas
 const ATLAS_MS = 1_000;
 
 /** The characters a model plays (docs/modell-npcs.en.md: marked as AI wherever they appear). */
-const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(c.look ? { look: c.look } : {}), ...(c.aboard ? { aboard: { island: c.aboard.island, arriveWorldMs: c.aboard.arriveWorldMs, to: c.aboard.to, ...(c.aboard.from ? { from: c.aboard.from } : {}) } } : {}), ...(modelChars.has(c.charId) ? { ai: true as const } : {}), ...(c.charId.startsWith("npc-siedler-") ? { settler: true as const } : {}) });
+const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(c.look ? { look: c.look } : {}), ...(c.aboard ? { aboard: { island: c.aboard.island, arriveWorldMs: c.aboard.arriveWorldMs, to: c.aboard.to, ...(c.aboard.from ? { from: c.aboard.from } : {}) } } : {}), ...(modelChars.has(c.charId) ? { ai: true as const } : {}), ...(c.charId.startsWith("npc-siedler-") ? { settler: true as const } : {}), ...(c.guest ? { guest: true as const } : {}) });
 const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>, w: WorldDef): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}), ...(w.pack ? { load: loadOf(w, f.proto) } : {}) });
 const exitView = (f: ExitFields, w: WorldDef): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, to: whereTo(w, f), toRoom: f.destination, location: f.location, x: f.x, y: f.y });
 const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = "", players: ReadonlySet<string> = new Set()): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}),

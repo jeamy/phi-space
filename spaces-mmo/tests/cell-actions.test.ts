@@ -92,6 +92,19 @@ test("a carried thing shows what it can do here and now, nothing it cannot", () 
 	// anyone in the room, not only beside one: the nearest first
 	const far = new Map([["me", me], ["f", char("f", "Fern", 18, 12)], ["o", char("o", "Ines", 6, 5)]]);
 	assert.deepEqual(itemEntries("Hafer", { ...at(...pack("Hafer", 1)), chars: far, offer: () => {} }, uses, { fuels: [] }).map((e) => e.line), ["give Hafer an Ines", "#offer Ines", "give Hafer an Fern", "#offer Fern"]);
+	// registered players only: no guest, no NPC, no settler
+	const crowd = new Map<string, CharView>([["me", me], ["o", char("o", "Ines", 6, 5)], ["g", { ...char("g", "Gast-12", 6, 6), guest: true }], ["n", char("npc-marta", "Marta", 7, 5)], ["a", { ...char("x", "Hark", 7, 6), ai: true }], ["s", { ...char("npc-siedler-1", "Ole", 7, 7), settler: true }]]);
+	assert.deepEqual(itemEntries("Hafer", { ...at(...pack("Hafer", 1)), chars: crowd, offer: () => {} }, uses, { fuels: [] }).map((e) => e.line), ["give Hafer an Ines", "#offer Ines"]);
+});
+
+test("a bed offers only the seeds that grow in it: flowers anywhere, vegetables not in the flower bed, a field's seed never", () => {
+	const beds = { flowers: ["Strandnelkensamen"], plants: ["Strandkohlsamen"], field: ["Rübensamen", "Leinsamen", "Weizen"] };
+	const carried = ["Strandnelkensamen", "Strandkohlsamen", "Rübensamen", "Leinsamen", "Abendrot-Samen", "Weizen", "Muschel"].map((n): [string, ObjView] => [n, obj({ id: n, kind: "item", name: n, location: "me", x: 0, y: 0 })]);
+	const lines = (bedKind: ObjView["bedKind"], b?: typeof beds) => cellEntries({ ...input, beds: b, at: { x: 6, y: 5 }, objs: new Map<string, ObjView>([["b", obj({ id: "b", kind: "bed", name: "Beet", ownerId: "me", owner: "Mira", bedKind, plants: [], x: 6, y: 5, w: 2, h: 2 })], ...carried]) }).map((e) => e.line).filter((l) => l.startsWith("pflanze"));
+	assert.deepEqual(lines(undefined, beds), ["pflanze Strandnelkensamen", "pflanze Strandkohlsamen", "pflanze Abendrot-Samen"]);
+	assert.deepEqual(lines("zier", beds), ["pflanze Strandnelkensamen", "pflanze Abendrot-Samen"], "the flower bed takes flowers and their crossings");
+	assert.deepEqual(lines("gemein", beds), ["pflanze Strandnelkensamen", "pflanze Strandkohlsamen", "pflanze Abendrot-Samen"]);
+	assert.ok(lines("zier").includes("pflanze Rübensamen"), "without the world's list every seed is offered");
 });
 
 test("an own fallow field offers what one carries to sow", () => {
