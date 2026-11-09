@@ -1052,16 +1052,40 @@ Du wählst einen Plan und einen freien Platz. Das geht mit einem Befehl oder mit
 
 | Plan | Felder | Material | Arbeit | Licht | ab Stufe |
 | --- | --- | --- | --- | --- | --- |
-| Hütte | 2×2 | 6 Treibholz, 2 Tangseil | 20 | 1 | Fischerdorf |
-| Regentonne | 1×1 | 3 Treibholz, 1 Tangseil | 4 | 1 | Fischerdorf |
-| Vogelscheuche | 1×1 | 2 Treibholz, 1 Tangseil | 3 | 1 | Fischerdorf |
+| Bienenstock | 1×1 | 2 Treibholz, 2 Tangseil | 4 | 1 | Fischerdorf |
 | Hühnerstall | 2×1 | 4 Treibholz, 1 Tangseil | 6 | 1 | Fischerdorf |
-| Windmühle | 2×2 | 8 Treibholz, 2 Tangseil, 2 Leinen | 16 | 2 | Dorf |
-| Backhaus | 2×2 | 6 Treibholz, 6 Muscheln, 1 Tangseil | 12 | 2 | Dorf |
+| Hütte | 2×2 | 6 Treibholz, 2 Tangseil | 20 | 1 | Fischerdorf |
+| Räucherei | 2×2 | 10 Treibholz, 2 Tangseil | 12 | 2 | Fischerdorf |
+| Regentonne | 1×1 | 3 Treibholz, 1 Tangseil | 4 | 1 | Fischerdorf |
+| Steg | 2×1 | 6 Treibholz | 6 | 1 | Fischerdorf |
+| Vogelscheuche | 1×1 | 2 Treibholz, 1 Tangseil | 3 | 1 | Fischerdorf |
+| Backhaus | 2×2 | 6 Treibholz, 6 Muschel, 1 Tangseil | 12 | 2 | Dorf |
 | Gehege | 3×3 | 8 Treibholz, 4 Tangseil | 8 | 2 | Dorf |
+| Kapelle | 3×2 | 10 Stein, 12 Ziegel, 4 Bohle | 30 | 3 | Dorf |
+| Lagerhaus | 3×2 | 12 Treibholz, 4 Tangseil, 6 Muschel | 20 | 3 | Dorf |
+| Lehmgrube | 2×2 | 6 Treibholz, 2 Tangseil, 2 Stein | 12 | 2 | Dorf |
+| Metzgerei | 2×2 | 6 Stein, 4 Bohle, 4 Treibholz | 20 | 2 | Dorf |
+| Salzgarten | 2×2 | 4 Stein, 4 Lehm, 2 Treibholz | 12 | 2 | Dorf |
+| Steinbruch | 2×2 | 8 Treibholz, 3 Tangseil, 4 Stein | 16 | 3 | Dorf |
+| Straße | 1×1 | 4 Stein, 2 Treibholz | 6 | 1 | Dorf |
 | Webstuhl | 2×1 | 6 Treibholz, 2 Tangseil | 8 | 1 | Dorf |
+| Werkstatt | 3×2 | 10 Treibholz, 8 Stein, 4 Tangseil | 24 | 3 | Dorf |
+| Windmühle | 2×2 | 8 Treibholz, 2 Tangseil, 2 Leinen | 16 | 2 | Dorf |
+| Ziegelei | 2×2 | 8 Stein, 6 Treibholz, 6 Lehm | 20 | 3 | Dorf |
+| Brauerei | 3×2 | 8 Ziegel, 6 Bohle | 24 | 3 | Stadt |
+| Gerberei | 2×2 | 8 Stein, 6 Bohle, 4 Ziegel | 28 | 3 | Stadt |
+| Gewächshaus | 3×2 | 8 Glas, 6 Bohle | 20 | 2 | Stadt |
+| Glashütte | 3×2 | 12 Ziegel, 6 Stein | 28 | 3 | Stadt |
+| Kaufhaus | 4×3 | 14 Ziegel, 8 Bohle, 6 Stein | 36 | 5 | Stadt |
+| Kontor | 3×2 | 10 Ziegel, 6 Stein | 24 | 4 | Stadt |
+| Leuchtturm | 2×2 | 16 Stein, 10 Ziegel, 2 Tran | 40 | 3 | Stadt |
+| Park | 4×4 | 10 Ziegel, 6 Stein, 6 Strandnelke, 4 Dünenrose | 30 | 9 | Stadt |
+| Rathaus | 4×3 | 16 Ziegel, 10 Stein, 6 Bohle | 40 | 6 | Stadt |
+| Werft | 4×3 | 14 Bohle, 4 Tauwerk, 6 Stein | 36 | 4 | Stadt |
+| Bahnhof | 3×2 | 12 Ziegel, 10 Bohle, 8 Stein, 2 Tauwerk | 32 | 4 | Netz |
+| Signalfeuer | 1×1 | 6 Stein, 2 Ziegel, 1 Tran | 10 | 2 | Netz |
 
-Die Regentonne gibt Wasser für die [Gärten](help.game.garden), die Vogelscheuche hält [Hasen und Rehe](help.game.wild#shelter) fern. Windmühle und Backhaus machen aus Korn Mehl und Brot ([Mühle und Backhaus](help.game.fields#mill)), Hühnerstall und Gehege halten [Tiere](help.game.animals), am Webstuhl wird aus Wolle [Tuch](help.game.animals#products).
+Die Regentonne gibt Wasser für die [Gärten](help.game.garden), die Vogelscheuche hält [Hasen und Rehe](help.game.wild#shelter) fern. Windmühle und Backhaus machen aus Korn Mehl und Brot ([Mühle und Backhaus](help.game.fields#mill)), Hühnerstall und Gehege halten [Tiere](help.game.animals), am Webstuhl wird aus Wolle [Tuch](help.game.animals#products). Was jeder andere Bau kann und wie lange er hält, steht unter [Alle Gebäude](help.game.buildings).
 
 Nicht gebaut wird auf gepflasterten Wegen und Plätzen, auf Ausgängen und Türen, direkt am Feuer, auf Dingen oder Personen. Ausgänge, der Startplatz und eine Seite jedes Feuers bleiben immer erreichbar. In einen Bau läuft niemand hinein.
 
@@ -1121,16 +1145,40 @@ You choose a plan and a free spot. You do it with a command or with the right mo
 
 | Plan | Cells | Material | Work | Light | from stage |
 | --- | --- | --- | --- | --- | --- |
+| Bienenstock (hive) | 1×1 | 2 driftwood, 2 kelp rope | 4 | 1 | fishing village |
+| Hühnerstall (chicken coop) | 2×1 | 4 driftwood, 1 kelp rope | 6 | 1 | fishing village |
 | Hütte (hut) | 2×2 | 6 driftwood, 2 kelp rope | 20 | 1 | fishing village |
+| Räucherei (smokehouse) | 2×2 | 10 driftwood, 2 kelp rope | 12 | 2 | fishing village |
 | Regentonne (rain barrel) | 1×1 | 3 driftwood, 1 kelp rope | 4 | 1 | fishing village |
+| Steg (jetty) | 2×1 | 6 driftwood | 6 | 1 | fishing village |
 | Vogelscheuche (scarecrow) | 1×1 | 2 driftwood, 1 kelp rope | 3 | 1 | fishing village |
-| Hühnerstall (hen house) | 2×1 | 4 driftwood, 1 kelp rope | 6 | 1 | fishing village |
-| Windmühle (windmill) | 2×2 | 8 driftwood, 2 kelp rope, 2 linen | 16 | 2 | village |
-| Backhaus (bakery) | 2×2 | 6 driftwood, 6 shells, 1 kelp rope | 12 | 2 | village |
+| Backhaus (bakehouse) | 2×2 | 6 driftwood, 6 shell, 1 kelp rope | 12 | 2 | village |
 | Gehege (pen) | 3×3 | 8 driftwood, 4 kelp rope | 8 | 2 | village |
+| Kapelle (chapel) | 3×2 | 10 stone, 12 brick, 4 plank | 30 | 3 | village |
+| Lagerhaus (warehouse) | 3×2 | 12 driftwood, 4 kelp rope, 6 shell | 20 | 3 | village |
+| Lehmgrube (clay pit) | 2×2 | 6 driftwood, 2 kelp rope, 2 stone | 12 | 2 | village |
+| Metzgerei (butcher's shop) | 2×2 | 6 stone, 4 plank, 4 driftwood | 20 | 2 | village |
+| Salzgarten (salt garden) | 2×2 | 4 stone, 4 clay, 2 driftwood | 12 | 2 | village |
+| Steinbruch (quarry) | 2×2 | 8 driftwood, 3 kelp rope, 4 stone | 16 | 3 | village |
+| Straße (road) | 1×1 | 4 stone, 2 driftwood | 6 | 1 | village |
 | Webstuhl (loom) | 2×1 | 6 driftwood, 2 kelp rope | 8 | 1 | village |
+| Werkstatt (workshop) | 3×2 | 10 driftwood, 8 stone, 4 kelp rope | 24 | 3 | village |
+| Windmühle (windmill) | 2×2 | 8 driftwood, 2 kelp rope, 2 linen | 16 | 2 | village |
+| Ziegelei (brickworks) | 2×2 | 8 stone, 6 driftwood, 6 clay | 20 | 3 | village |
+| Brauerei (brewery) | 3×2 | 8 brick, 6 plank | 24 | 3 | town |
+| Gerberei (tannery) | 2×2 | 8 stone, 6 plank, 4 brick | 28 | 3 | town |
+| Gewächshaus (greenhouse) | 3×2 | 8 glass, 6 plank | 20 | 2 | town |
+| Glashütte (glassworks) | 3×2 | 12 brick, 6 stone | 28 | 3 | town |
+| Kaufhaus (department store) | 4×3 | 14 brick, 8 plank, 6 stone | 36 | 5 | town |
+| Kontor (counting house) | 3×2 | 10 brick, 6 stone | 24 | 4 | town |
+| Leuchtturm (lighthouse) | 2×2 | 16 stone, 10 brick, 2 fish oil | 40 | 3 | town |
+| Park (park) | 4×4 | 10 brick, 6 stone, 6 sea pink, 4 dune rose | 30 | 9 | town |
+| Rathaus (town hall) | 4×3 | 16 brick, 10 stone, 6 plank | 40 | 6 | town |
+| Werft (shipyard) | 4×3 | 14 plank, 4 cordage, 6 stone | 36 | 4 | town |
+| Bahnhof (station) | 3×2 | 12 brick, 10 plank, 8 stone, 2 cordage | 32 | 4 | net |
+| Signalfeuer (signal fire) | 1×1 | 6 stone, 2 brick, 1 fish oil | 10 | 2 | net |
 
-The rain barrel gives water for the [gardens](help.game.garden), the scarecrow keeps [hares and deer](help.game.wild#shelter) away. The windmill and the bakery turn grain into flour and bread ([Mill and bakery](help.game.fields#mill)), the hen house and the pen keep [animals](help.game.animals), the loom turns wool into [cloth](help.game.animals#products).
+The rain barrel gives water for the [gardens](help.game.garden), the scarecrow keeps [hares and deer](help.game.wild#shelter) away. The windmill and the bakery turn grain into flour and bread ([Mill and bakery](help.game.fields#mill)), the hen house and the pen keep [animals](help.game.animals), the loom turns wool into [cloth](help.game.animals#products). What every other building does and how long it lasts is under [All buildings](help.game.buildings).
 
 Nothing is built on cobbled paths and squares, on exits and doors, right at a fire, on things or people. Exits, the starting place and one side of every fire always stay reachable. Nobody walks into a building.
 

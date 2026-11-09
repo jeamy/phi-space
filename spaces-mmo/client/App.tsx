@@ -28,7 +28,7 @@ import { hintsFor, type Hint } from "./hints.ts";
 import { canFullscreen, enterFullscreen, homeSteps, isShort, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
 import { useBack } from "./useBack.ts";
 import { detentPx, Sheet, type Detent } from "./Sheet.tsx";
-import { Rich } from "./RichText.tsx";
+import { Rich, setNames } from "./RichText.tsx";
 import { language, setLanguage, watchPage } from "./i18n/index.ts";
 import { formatWorldTime, seasonIndex, SEASONS, shownWorldMs, type WorldTimeView } from "../shared/worldtime.ts";
 import { berth, lane, nextStop, SHIP_LENGTH, shipPlace } from "../shared/liner.ts";
@@ -268,13 +268,13 @@ function LogText({ l, self, onName, onCommand }: { l: Line; self: string; onName
 		const word = /[\p{L}\p{N}_-]/u, whole = (n: string) => { for (let i = rest.indexOf(n); i >= 0; i = rest.indexOf(n, i + 1)) if (!word.test(rest[i - 1] ?? " ") && !word.test(rest[i + n.length] ?? " ")) return i; return -1; };
 		for (const n of wanted) { const i = whole(n); if (i >= 0 && (at < 0 || i < at)) { at = i; hit = n; } }
 		if (at < 0) break;
-		parts.push(rest.slice(0, at));
+		parts.push(<Rich key={k++} text={rest.slice(0, at)} onCommand={onCommand} />);
 		const name = hit;
 		parts.push(<button key={k++} className="name-link" onClick={(e) => onName(name, e.clientX, e.clientY)} title={`${name}: Chat, Gruppe, ignorieren`}>{name}</button>);
 		rest = rest.slice(at + hit.length);
 		if (!("players" in l && l.players)) break; // the speaker once
 	}
-	parts.push(rest);
+	parts.push(<Rich key={k++} text={rest} onCommand={onCommand} />);
 	return <>{parts}</>;
 }
 
@@ -1083,6 +1083,8 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 	const unreadAll = [...talks.values()].reduce((n, t) => n + t.unread, 0) + (chatState?.invites.length ?? 0) + (chatState?.waiting.reduce((n, w) => n + w.count, 0) ?? 0);
 	const visible = comings ? log : log.filter((l) => !isComing(l));
 	const mineLog = visible.filter(isForMe), aroundLog = visible.filter((l) => !isForMe(l));
+	// every figure's name stands out in the texts: the ones in sight, one's own, the islands' people
+	setNames([...[...chars.values()].map((c) => c.name), account.name, ...(hello?.world.uses.npcs ?? [])]);
 	const shownLog = logPart === "mine" ? mineLog : aroundLog;
 	const lastLine = visible.at(-1), lastMine = mineLog.at(-1);
 	const logShown = pane === "log" && detent !== "peek";

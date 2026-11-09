@@ -45,6 +45,22 @@ const cache = new Map<string, string>();
 function translate(text: string, depth: number): string {
 	const exact = EN[text];
 	if (exact !== undefined) return exact;
+	// a value set in bold (client/RichText.tsx) is translated inside its marks
+	const bold = /^\*\*((?:(?!\*\*).)+)\*\*$/su.exec(text);
+	if (bold) return `**${translate(bold[1]!, depth)}**`;
+	// several values in bold with words between ("**3 Treibholz** für **2 Münzen**"): each piece by itself
+	if (!bold && depth >= 1 && depth <= 2 && /\*\*.+?\*\*/su.test(text) && !/\{/.test(text)) {
+		const pieces = text.split(/(\*\*.+?\*\*)/su);
+		if (pieces.length > 3) return pieces.map((p) => {
+			if (/^\*\*.+\*\*$/su.test(p)) return translate(p, depth + 1);
+			const core = p.trim();
+			if (!core) return p;
+			return p.replace(core, core === "für" ? "for" : translate(core, depth + 1));
+		}).join("");
+	}
+	// " für 2 Münzen" of an offer: too short a template for the patterns below
+	const price = /^(\s*)für (.+)$/su.exec(text);
+	if (price && depth <= 2) return `${price[1]!}for ${translate(price[2]!, depth + 1)}`;
 	// "5 Muscheln": the thing, its number stays
 	const counted = /^(\d+×?\s+)(.+)$/.exec(text);
 	if (counted) {

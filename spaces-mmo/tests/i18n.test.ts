@@ -27,6 +27,8 @@ test("the world's sentences come out whole: values, things, plural endings", () 
 	for (const [de, en] of [
 		["Du trägst: 5 Muscheln, 3 Treibholz.", /5 Shells.*3 Driftwood/i],
 		["Graue Bucht", /Grey Bay/],
+		// a value in bold (client/RichText.tsx) keeps its marks and is translated inside them
+		["Gesa bietet dir **3 Treibholz** für **2 Münzen** an. „accept Gesa“ nimmt an, „decline Gesa“ lehnt ab.", /^Gesa offers you \*\*3 Driftwood\*\* for \*\*2 coins\*\*\./i],
 		["Die Luft ist klar.", /air is clear/i],
 		["Dafür brauchst du 3 Münzen.", /3 coins/],
 		["Deine Baustelle Hütte: was fehlt?", /^Your site Hut: what's missing\?$/],

@@ -333,7 +333,7 @@ img.icon { image-rendering: pixelated; display: inline-block; vertical-align: mi
 .chat-key input { flex: 1 1 140px; min-width: 0; }
 .chat-warn { font-size: max(12px, var(--min-font)); }
 .chat-e2e { font-size: max(11px, var(--min-font)); }
-.name-link { border: 0; background: transparent; padding: 0; font: inherit; color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; border-radius: 0; }
+.name-link { border: 0; background: transparent; padding: 0; font: inherit; font-weight: 600; color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; border-radius: 0; }
 .name-link:hover { transform: none; color: var(--accent); }
 
 /* A phone, and a tablet held upright (client/useShell.ts): the page never scrolls. The map fills the screen, a sheet lies over it

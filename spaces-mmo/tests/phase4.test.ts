@@ -46,8 +46,8 @@ test("trade: an offer moves both sides at once on accept; a stale one moves noth
 		const a = await player(srv.url, "Anbieter"), b = await player(srv.url, "Nehmer");
 		const [wood] = await give(s, a.me, "treibholz", 1);
 		const [shell] = await give(s, b.me, "muschel", 1);
-		await does(a.p, "offer treibholz an Nehmer für muschel", "Du bietest Nehmer Treibholz für Muschel an.");
-		await b.p.until((f) => f.t === "msg" && f.m.text.startsWith("Anbieter bietet dir Treibholz für Muschel an."));
+		await does(a.p, "offer treibholz an Nehmer für muschel", "Du bietest Nehmer **Treibholz** für **Muschel** an.");
+		await b.p.until((f) => f.t === "msg" && f.m.text.startsWith("Anbieter bietet dir **Treibholz** für **Muschel** an."));
 		await does(b.p, "accept", "Tausch mit Anbieter");
 		assert.equal((await pack(s, b.me)).map((i) => i.itemId).join(), wood);
 		assert.equal((await pack(s, a.me)).map((i) => i.itemId).join(), shell);
@@ -58,7 +58,7 @@ test("trade: an offer moves both sides at once on accept; a stale one moves noth
 		assert.match(await does(a.p, "annehmen Nehmer", "gilt nicht mehr"), /hat nicht mehr alles/);
 		assert.deepEqual((await pack(s, a.me)).map((i) => i.itemId), [shell], "nothing moved");
 		// decline, and guests
-		await does(a.p, "offer muschel an Nehmer", "Du bietest Nehmer Muschel als Geschenk an.");
+		await does(a.p, "offer muschel an Nehmer", "Du bietest Nehmer **Muschel** als Geschenk an.");
 		await does(b.p, "decline", "Du lehnst das Angebot von Anbieter ab.");
 		const g = new Player(srv.url); await g.post("/api/guest"); await g.play();
 		await give(s, (await g.until((f) => f.t === "hello") as Extract<ServerFrame, { t: "hello" }>).me.charId, "muschel", 1);

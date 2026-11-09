@@ -59,8 +59,8 @@ test("stone: a pickaxe of rubble; a quarry gives three for its wear and a rest; 
 		assert.equal((await pack(s, me, "tauwerk")).length, 1);
 		// what the workshop beside one makes, by name, and what one carries enough for
 		const here = await does(p, "craft hier", "Werkstatt:");
-		assert.match(here, /Bohle \(„craft bohle“\): 2 Treibholz, mit Muschelmesser/);
-		assert.match(here, /Schlachtmesser \(„craft schlachtmesser“\): 2 Stein, 1 Bohle, 1 Tangseil/);
+		assert.match(here, /\*\*Bohle\*\* \(„craft bohle“\): 2 Treibholz, mit Muschelmesser/);
+		assert.match(here, /\*\*Schlachtmesser\*\* \(„craft schlachtmesser“\): 2 Stein, 1 Bohle, 1 Tangseil/);
 		assert.match(here, /nur halb so schnell ab/);
 	} finally { await srv.close(); }
 });
