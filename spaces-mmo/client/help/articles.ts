@@ -1372,7 +1372,7 @@ Es gibt drei Arten von Beeten. Das Gartenbeet nimmt alles, das Zierbeet nur Blum
 
 \`umgraben\` legt ein **Gartenbeet** an, in dem Gemüse und Blumen wachsen. \`umgraben zier\` gräbt ein **Zierbeet** um: Dort wachsen nur Blumen (Strandnelke, Dünenrose, Nebelblume), und nur dort kreuzen sie sich. Es zählt wie jedes Beet zu deinen dreien.
 
-\`umgraben gemeinschaft\` legt ein **Gemeinschaftsbeet** an: 3×3 Felder, zwei Lichtpunkte, **eins je Feuer**. Es zählt nicht zu deinen Beeten. Pflanzen darf darin jeder mit Konto, gießen, jäten und ernten alle, auch Gäste. Was du erntest, kommt in deine Tasche. Aufgeben kann es nur, wer es angelegt hat.
+\`umgraben gemeinschaft\` legt ein **Gemeinschaftsbeet** an: 3×3 Felder, zwei Lichtpunkte, **eins je Feuer**. Es zählt nicht zu deinen Beeten. Pflanzen darf darin jeder mit Konto, gießen, jäten und ernten alle, auch Gäste. Was du erntest, kommt in deine Tasche, aber jeder nimmt nur einen Teil: Wer es nicht angelegt hat, erntet auf einmal **höchstens 2 Pflanzen und höchstens die Hälfte** des Reifen (mit ihren Samen), wer es angelegt hat, höchstens **zwei Drittel**; eine einzelne reife Pflanze darf jeder nehmen. Aufgeben kann es nur, wer es angelegt hat.
 
 ## Kreuzen und Benennen {#breeding}
 
@@ -1443,7 +1443,7 @@ There are three kinds of bed. A garden bed takes everything, a flower bed only f
 
 \`umgraben\` digs a **garden bed**, where vegetables and flowers grow. \`umgraben zier\` digs a **flower bed**: only flowers grow there (thrift, dune rose, fog flower), and only there do they cross. It counts towards your three like any bed.
 
-\`umgraben gemeinschaft\` lays out a **community bed**: 3×3 cells, two light points, **one per fire**. It does not count towards your beds. Everyone with an account may plant in it, and everyone, guests too, may water, weed and harvest. What you harvest goes into your pack. Only whoever laid it out can give it up.
+\`umgraben gemeinschaft\` lays out a **community bed**: 3×3 cells, two light points, **one per fire**. It does not count towards your beds. Everyone with an account may plant in it, and everyone, guests too, may water, weed and harvest. What you harvest goes into your pack, but each takes only a part: whoever did not lay it out harvests **at most 2 plants and at most half** of what is ripe at once (with their seeds), whoever laid it out at most **two thirds**; a single ripe plant anyone may take. Only whoever laid it out can give it up.
 
 ## Crossing and naming {#breeding}
 

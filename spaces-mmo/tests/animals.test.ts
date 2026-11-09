@@ -255,8 +255,16 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		assert.match(await does(anna.p, "einstallen schaf", "wohnen"), /Schafe wohnen im Gehege, nicht im Hühnerstall/);
 		await give(s, bert.me, "huhn", 1);
 		assert.match(await does(bert.p, "einstallen huhn", "Besitzer"), /einstallen darf nur der Besitzer/);
+		// a hive of hers right beside her too: the hen goes into the coop, not "Hühner wohnen im Hühnerstall, nicht im Bienenstock"
+		const annaAt = (await s.readAll({ type: "Character", fields: { charId: anna.me } }))[0]!.fields as { x: number; y: number };
+		const room = w.rooms.find((r) => r.roomId === "graue-bucht")!, bertAt = (await s.readAll({ type: "Character", fields: { charId: bert.me } }))[0]!.fields as { x: number; y: number };
+		const plots = new Set((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).map((e) => `${e.fields.x},${e.fields.y}`));
+		const spot = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]].map(([dx, dy]) => ({ x: annaAt.x + dx!, y: annaAt.y + dy! })).find((p) => walkable(w, room.ground, p.x, p.y) && !plots.has(`${p.x},${p.y}`) && !(p.x === bertAt.x && p.y === bertAt.y))!;
+		const hive = await building(s, { buildId: "stock-neben", plan: "bienenstock", name: "Bienenstock", x: spot.x, y: spot.y, w: 1, h: 1, owner: anna.me, ownerName: anna.name, accountId });
 		for (let i = 1; i <= 3; i++) await does(anna.p, "einstallen huhn", `(${i} ${i === 1 ? "Huhn" : "Hühner"})`);
 		assert.equal(await s.count({ type: "Item", fields: { location: coop.buildId, proto: "huhn" } }), 3, "the hens lie in the coop");
+		await s.takeIfExists({ type: "Building", fields: { buildId: hive.buildId } }, 0);
+		await s.takeIfExists({ type: "Plot", fields: { room: "graue-bucht", x: spot.x, y: spot.y } }, 0);
 		assert.match(await does(anna.p, "stall", "Hühnerstall von"), /3 Hühner \(Platz für 6\), hungrig/);
 		assert.match(await does(anna.p, "einsammeln", "Noch kein"), /Noch kein Ei bereit; sie sind hungrig/);
 

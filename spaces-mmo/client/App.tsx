@@ -422,6 +422,8 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 	const order = byArrival(arrived ?? new Map(), uses?.seeds);
 	const kinds = [...carried.reduce((m, o) => m.set(o.name, [...(m.get(o.name) ?? []), o]), new Map<string, ObjView[]>())].sort(([a], [b]) => order(a, b));
 	const chosen = kinds.find(([name]) => name === picked);
+	/** The hints about the chosen thing (what it makes, with „Herstellen“), shown under its buttons. */
+	const shownHints = chosen ? hints.filter((h) => h.about.includes(chosen[0])).slice(0, 3) : [];
 	// a bag adds to the most one carries, each kind once (engine/pack.ts packMax)
 	const load = carried.reduce((n, o) => n + (o.load ?? 0), 0), bags = new Map(carried.filter((o) => o.bag).map((o) => [o.name, o.bag!])), max = pack?.max == null ? null : pack.max + [...bags.values()].reduce((n, b) => n + b, 0);
 	const [chestNr, setChestNr] = useState(1);
@@ -471,10 +473,12 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 					</div>}
 					{uses && (() => {
 						// what it can do here and now; the rest of the world's uses stay in the help
-						const can = itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, beds: uses.beds, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) });
+						// a recipe its hint below offers (the line that says what it takes, with „Herstellen“) is not a button here too
+						const hinted = new Set(shownHints.flatMap((h) => (h.line ? [h.line] : [])));
+						const can = itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, beds: uses.beds, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) }).filter((e) => !hinted.has(e.line));
 						return can.length > 0 && <div className="pack-can">{can.map((e) => <button key={e.line} onClick={() => (e.run ? e.run() : send(e.line))}>{e.label}</button>)}</div>;
 					})()}
-					{hints.filter((h) => h.about.includes(chosen[0])).slice(0, 3).map((h) => <p key={h.id} className="pack-hint">{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>)}
+					{shownHints.map((h) => <p key={h.id} className="pack-hint">{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>)}
 				</div>}
 				<div className="pack">{kinds.map(([name, os]) => (
 					<button key={name} className={`chip${picked === name ? " on" : ""}`} onClick={() => setPicked(picked === name ? null : name)} title={name} aria-label={`${name}: ${os.length}`} aria-pressed={picked === name}>

@@ -1439,6 +1439,8 @@ export const EN: Record<string, string> = {
 	"{0} im Stall; {1}, damit die Herde weiterlebt. Warte, bis ein Junges dazukommt.": "{0} in the house; {1}, so the herd lives on. Wait until a young one comes.",
 	"{0} werden nicht geschlachtet; sie geben, was sie sammeln.": "{0} are not slaughtered; they give what they gather.",
 	"{0} schlachtet im Stall {1}.": "{0} slaughters {1} in the house.",
+	"Am Gemeinschaftsbeet nimmt jeder nur einen Teil: eine reife Pflanze bleibt für die anderen.": "At a community bed everyone takes only a part: one ripe plant stays for the others.",
+	"Am Gemeinschaftsbeet nimmt jeder nur einen Teil: {0} reife Pflanzen bleiben für die anderen.": "At a community bed everyone takes only a part: {0} ripe plants stay for the others.",
 	"{0} schlachtet in der Metzgerei {1}.": "{0} slaughters {1} at the butcher's shop.",
 	"Du trägst kein Tier zum Schlachten. Hol eins aus deinem Stall („ausstallen“) oder schlachte direkt am Stall.": "You carry no animal to slaughter. Take one out of your coop or pen („unstall“) or slaughter right beside it.",
 	"Du trägst kein Tier, das „{0}“ heißt und geschlachtet wird.": "You carry no animal called „{0}“ that is slaughtered.",

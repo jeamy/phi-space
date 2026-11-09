@@ -42,6 +42,8 @@ export const garden = (c: CommandCtx): GardenDef => {
 export const sortOf = (g: GardenDef, key: string): SortDef | undefined => g.sorts.find((s) => s.key === key);
 export const protoName = (c: CommandCtx, key: string) => c.world.prototypes.find((p) => p.key === key)?.name ?? key;
 const mine = (c: CommandCtx, b: BedFields) => b.accountId === c.account?.accountId;
+/** The most plants one who did not dig a community bed takes from it at one harvest. */
+const COMMONS_TAKE = 2;
 /** Watering, weeding, harvesting: the owner, the sponsors, and everyone at a community bed. */
 export const mayTend = (c: CommandCtx, b: BedFields) => b.kind === "gemein" || mine(c, b) || b.sponsors.some((s) => s.charId === c.actor.charId);
 /** Planting: the owner, and at a community bed everyone with an account. */
@@ -331,8 +333,12 @@ const ernte: Command = {
 		const b = await tendedBed(c).catch(async (e) => { if (e instanceof NotUnderstood && (await harvestField(c))) return null; throw e; });
 		if (!b) return;
 		if (!mayTend(c, b)) throw new CommandError(`Das ist das ${bedName(b)}; ernten dürfen der Besitzer und seine Paten.`);
-		const ripe = b.plants.filter((p) => p.stage === 2);
-		if (!ripe.length) throw new CommandError("Im Beet ist noch nichts reif.");
+		const allRipe = b.plants.filter((p) => p.stage === 2);
+		if (!allRipe.length) throw new CommandError("Im Beet ist noch nichts reif.");
+		// a community bed is shared: one harvest takes a part, the rest stays for the others (its digger at most two thirds,
+		// anyone else at most half and at most two plants; a single ripe plant may be taken)
+		const share = b.kind !== "gemein" ? allRipe.length : mine(c, b) ? Math.max(1, Math.floor((allRipe.length * 2) / 3)) : Math.min(COMMONS_TAKE, Math.max(1, Math.floor(allRipe.length / 2)));
+		const ripe = allRipe.slice(0, share), left = allRipe.length - ripe.length;
 		const now = await worldNowOf(c.space, c.txn);
 		await namesOf(c, ripe);
 		const crossed = b.kind === "zier" ? crossings(g, b, ripe) : new Map<BedPlant, BedPlant>();
@@ -348,12 +354,14 @@ const ernte: Command = {
 			}
 		}
 		const names = await giveOwn(c, got);
-		b.plants = b.plants.filter((p) => p.stage !== 2);
+		const taken = new Set(ripe);
+		b.plants = b.plants.filter((p) => !taken.has(p));
 		b.dueWorldMs = nextDue(b.plants);
 		b.untilWorldMs = (await decayNowOf(c.space, c.txn)) + g.bed.keepWorldMs;
 		await writeBed(c, b);
 		if (b.kind === "gemein") await creditDeed(c, "beet");
 		await msg(c, "*", "emote", `${c.actor.name} erntet ${mine(c, b) && b.kind !== "gemein" ? `das ${b.kind === "zier" ? "Zierbeet" : "Beet"}` : `das ${bedName(b)}`}: ${names.join(", ")}.`);
+		if (left) await msg(c, c.actor.charId, "info", `Am Gemeinschaftsbeet nimmt jeder nur einen Teil: ${left === 1 ? "eine reife Pflanze bleibt" : `${left} reife Pflanzen bleiben`} für die anderen.`);
 		if (news.length) await msg(c, c.actor.charId, "info", `Unter den Samen ${news.length === 1 ? "ist eine Kreuzung" : "sind Kreuzungen"} aus ${news.join("; aus ")}! Was daraus wächst, hat eine eigene Farbe; „benenne <name>“ gibt der neuen Sorte einen Namen.`);
 	},
 };

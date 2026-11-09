@@ -343,6 +343,25 @@ test("a flower bed takes flowers and they cross; the breeder names the crossing 
 		// work at the community bed is a service to the community: it counts for the reputation (engine/deeds.ts)
 		assert.match(await does(anna.p, "ruf", /Leuchtfeuer nachgelegt|Dein Ruf/), /Für die Gemeinschaft: 1× am Gemeinschaftsbeet\./);
 		assert.match(await does(guest, "ruf", /Leuchtfeuer nachgelegt|Dein Ruf/), /Für die Gemeinschaft: 1× am Gemeinschaftsbeet\./, "a guest's watering counts too");
+		// a harvest at the community bed takes a part: anyone else at most half and two plants, its digger two thirds
+		const ripenCommons = async (n: number) => {
+			const e = (await s.readAll({ type: "Bed", fields: { kind: "gemein" } }))[0]!, bed = e.fields as unknown as BedFields, sort = bed.plants[0]!.sort;
+			const plants = Array.from({ length: n }, (_, i) => ({ x: bed.x + (i % 3), y: bed.y + Math.floor(i / 3), sort, stage: 2 as const, dueWorldMs: Date.now() + 1e12 }));
+			await s.takeIfExists({ id: e.id }, 0);
+			await s.write({ type: "Bed", fields: { ...bed, plants, dueWorldMs: Date.now() + 1e12 } as never }, null, FOREVER);
+		};
+		const ripeLeft = async () => ((await s.readAll({ type: "Bed", fields: { kind: "gemein" } }))[0]!.fields as unknown as BedFields).plants.filter((p) => p.stage === 2).length;
+		await ripenCommons(6);
+		await does(anna.p, "ernte", "erntet");
+		assert.equal(await ripeLeft(), 4, "anyone else: two of six");
+		await anna.p.heard("4 reife Pflanzen bleiben für die anderen");
+		await does(guest, "ernte", "erntet");
+		assert.equal(await ripeLeft(), 2, "a guest: two of four");
+		await walk(bert, s, 22, 13);
+		await does(bert.p, "ernte", "erntet");
+		assert.equal(await ripeLeft(), 1, "its digger: two thirds of two, at least one");
+		await does(anna.p, "ernte", "erntet");
+		assert.equal(await ripeLeft(), 0, "a single ripe plant may be taken");
 		// it does not count to Bert's beds, and only Bert gives it up
 		assert.match(await does(bert.p, "beet aufgeben", "Gras"), /gibt das Gemeinschaftsbeet auf/);
 		assert.equal(await s.count({ type: "BedCommons" }), 0, "the fire has room for one again");
