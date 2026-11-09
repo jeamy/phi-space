@@ -249,6 +249,7 @@ pub async fn run(c: &mut Ctx, key: &str, arg: &str) -> Result<()> {
 		"give" => give(c, arg).await,
 		"inventory" => inv(c).await,
 		"channel" => channel(c, arg).await,
+		"reputation" => reputation(c).await,
 		k => Err(Error::Other(format!("unported: default/{k}"))),
 	}
 }
@@ -470,6 +471,22 @@ async fn channel(c: &mut Ctx, arg: &str) -> Result<()> {
 	let Some(ch) = channels.iter().find(|x| **x == low).cloned() else { return not_understood(format!("Einen Kanal „{}“ gibt es nicht. Kanäle: {}", js::slice16(&name, 0, Some(20)), channels.join(", "))) };
 	if text.is_empty() { return refuse(format!("Was möchtest du auf {ch} sagen?")); }
 	msg(c, &format!("#{ch}"), "channel", &format!("[{ch}] {}: {}", key_text(j::at(&c.actor, "name")), js::slice16(&text, 0, Some(MAX_SAY as isize))), MsgOpts::default()).await
+}
+
+async fn reputation(c: &mut Ctx) -> Result<()> {
+	let mine: Vec<Json> = c.space.read_all(&tmpl("Contribution", obj! { "charId" => c.char_id() }), None).await?.iter().map(|e| fields(e).clone()).collect();
+	let pieces: f64 = mine.iter().map(|x| j::n(x, "pieces")).sum();
+	let account_id = c.account.as_ref().map_or(Json::from(""), |a| j::at(a, "accountId").clone());
+	let tended: f64 = c.space.read_all(&tmpl("ParkCare", obj! { "accountId" => account_id }), None).await?.iter().map(|e| j::number(j::at(fields(e), "points"))).sum();
+	let deeds = match &c.account { Some(a) => crate::deeds::deed_text(crate::deeds::deeds_of(&[&c.space], j::s(a, "accountId")).await?), None => String::new() };
+	let truthy = |n: f64| n != 0.0 && !n.is_nan();
+	let n = phi_json::number_text;
+	let text = format!("{}{}{}",
+		if truthy(pieces) { format!("Dein Ruf: {} Scheit{} in {} Leuchtfeuer{}.", n(pieces), if pieces == 1.0 { "" } else { "e" }, mine.len(), if mine.len() == 1 { "" } else { "n" }) } else { "Du hast noch in kein Leuchtfeuer nachgelegt.".into() },
+		if truthy(tended) { format!(" Parks hast du {} Mal gepflegt.", n(tended)) } else { String::new() },
+		if deeds.is_empty() { String::new() } else { format!(" Für die Gemeinschaft: {deeds}.") });
+	let m = me(c);
+	msg(c, &m, "info", &text, MsgOpts::default()).await
 }
 
 /// `helpParts`: every word a command answers to, its arguments and what it does.

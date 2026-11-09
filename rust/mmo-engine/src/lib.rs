@@ -3,6 +3,7 @@
 pub mod clock;
 pub mod commands;
 pub mod context;
+pub mod deeds;
 pub mod execute;
 pub mod fire;
 pub mod funcparser;

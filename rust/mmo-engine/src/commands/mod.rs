@@ -10,9 +10,13 @@ use crate::context::{exits_here, lock_ctx, Ctx};
 use crate::j;
 use crate::space::{fields, Error, Result};
 
+pub mod chapel;
 pub mod default;
+pub mod epoch;
+pub mod food;
 pub mod passage;
 pub mod settlement;
+pub mod townhall;
 
 /// A command (`Command`): an exit's command carries the exit.
 #[derive(Debug, Clone)]
