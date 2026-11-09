@@ -113,6 +113,15 @@ function clayPit(t: T, w: number, d: number): Geo {
 		return merge(t, parts, "lehmgrube");
 	});
 }
+/** The salt garden: a low stone rim round four shallow basins, two of sea water, two white with salt, a rake. */
+function saltGarden(t: T, w: number, d: number): Geo {
+	return cached(`salzgarten:${w}x${d}`, () => {
+		const parts: Part[] = [b(t, w * 0.94, 0.08, d * 0.94, STONE, 0, 0.04, 0)];
+		for (let i = 0; i < 4; i++) parts.push(b(t, w * 0.42, 0.02, d * 0.42, i === 1 || i === 2 ? 0xf2f2ea : 0x7fa8b8, (i % 2 ? 1 : -1) * w * 0.23, 0.09, (i < 2 ? -1 : 1) * d * 0.23));
+		parts.push(b(t, 0.04, 0.04, 0.8, WOOD, w * 0.3, 0.14, 0, [0, 0.6, 0]), b(t, 0.3, 0.04, 0.04, WOOD, w * 0.3 + 0.22, 0.14, -0.3, [0, 0.6, 0]));
+		return merge(t, parts, "salzgarten");
+	});
+}
 /** The brickworks: a brick kiln with a fire in its mouth and a tall chimney, bricks stacked beside it. */
 function brickworks(t: T, w: number, d: number): Geo {
 	return cached(`ziegelei:${w}x${d}`, () => {
@@ -302,6 +311,7 @@ export function buildingModel(t: T, plan: string | undefined, w: number, d: numb
 		case "lagerhaus": return storehouse(t, w, d, variant % 3);
 		case "steinbruch": return quarry(t, w, d);
 		case "lehmgrube": return clayPit(t, w, d);
+		case "salzgarten": return saltGarden(t, w, d);
 		case "ziegelei": return brickworks(t, w, d);
 		case "kapelle": return chapel(t, w, d);
 		case "park": return park(t, w, d);

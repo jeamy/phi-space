@@ -9,7 +9,9 @@ import { herdNow } from "../server/engine/commands/animals.ts";
 import { guardedRooms, sheltered } from "../server/engine/commands/wild.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld, walkable } from "../server/engine/world.ts";
-import { worldNowOf } from "../server/engine/clock.ts";
+import { decayNowOf, worldNowOf } from "../server/engine/clock.ts";
+import { sweepTick } from "../server/engine/sweep.ts";
+import { packMax } from "../server/engine/pack.ts";
 import type { BedFields, BuildingFields, HerdFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, Player, startServer } from "./stack.ts";
@@ -136,6 +138,96 @@ test("a pen of pigs: they eat potatoes, not kelp, and root up a truffle every th
 		assert.equal(await pack(s, ole.me, "trueffel"), 4);
 		assert.match(await does(ole.p, "stall", "Schwein"), /3 Schweine/);
 		await ole.p.leave(); await bo.p.leave();
+	} finally { await srv.close(); }
+});
+
+test("slaughtering: the owner with a knife takes one from the pen and gets what it gives; the last pair stays; bees, dogs and others' animals are not", { timeout: 300_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const ole = await player(srv.url, "Schlachterole"), bo = await player(srv.url, "Nachbarbo");
+		const accountId = String((await s.readAll({ type: "Character", fields: { charId: ole.me } }))[0]!.fields.accountId);
+		const pen = await building(s, { buildId: "gehege-schlacht", plan: "gehege", name: "Gehege", x: 4, y: 4, w: 3, h: 3, owner: ole.me, ownerName: ole.name, accountId, points: 2 });
+		const taken = new Set<string>();
+		await walkBeside(ole, s, pen, taken);
+		await walkBeside(bo, s, pen, taken);
+		await give(s, ole.me, "schwein", 3);
+		for (let i = 1; i <= 3; i++) await does(ole.p, "einstallen schwein", `(${i} Schwein`);
+		assert.match(await does(ole.p, "schlachte", "brauchst"), /Zum Schlachten brauchst du Schlachtmesser oder Muschelmesser/);
+		await give(s, ole.me, "muschelmesser", 1);
+		await give(s, bo.me, "muschelmesser", 1);
+		assert.match(await does(bo.p, "schlachte schwein", "gehören"), /Die Tiere gehören Schlachterole; schlachten darf nur, wem der Stall gehört/);
+		assert.match(await does(ole.p, "schlachte schaf", "leben"), /Im Stall leben Schweine/);
+		assert.match(await does(ole.p, "schlachte hund", "wachen"), /Hund und Katze wachen über den Hof/);
+		assert.match(await does(ole.p, "schlachte schwein", "bekommst"), /Du bekommst 3 Schweinefleisch, 2 Speckseiten, 1 Schmalz, 1 Borsten/);
+		assert.equal(await pack(s, ole.me, "schweinefleisch"), 3);
+		assert.equal(await pack(s, ole.me, "speckseite"), 2);
+		assert.equal((await s.readAll({ type: "Item", fields: { location: pen.buildId, proto: "schwein" } })).length, 2);
+		const knife = (await s.readAll({ type: "Item", fields: { location: ole.me, proto: "muschelmesser" } }))[0]!.fields as { wear?: number };
+		assert.equal(knife.wear, (w.prototypes.find((p) => p.key === "muschelmesser")!.wear ?? 1) - 1, "the knife wears by one");
+		assert.match(await does(ole.p, "schlachte", "Paar"), /Es leben nur 2 Schweine im Stall; das letzte Paar bleibt/);
+		// a hive's colonies are not slaughtered
+		const hive = await building(s, { buildId: "stock-schlacht", plan: "bienenstock", name: "Bienenstock", x: 16, y: 12, w: 1, h: 1, owner: ole.me, ownerName: ole.name, accountId });
+		await walkBeside(ole, s, hive, taken);
+		await give(s, ole.me, "bienenvolk", 3);
+		for (let i = 1; i <= 3; i++) await does(ole.p, "einstallen bienenvolk", "Bienen");
+		assert.match(await does(ole.p, "schlachte", "geschlachtet"), /Bienenvölker werden nicht geschlachtet/);
+		await ole.p.leave(); await bo.p.leave();
+	} finally { await srv.close(); }
+});
+
+test("the butcher's trade (docs/schlachten.en.md): a butcher's knife first, a butcher's shop gives more; young ones grow up in the pen, fresh meat spoils; salt from the salt garden; a leather bag carries more", { timeout: 300_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const ole = await player(srv.url, "Metzgerole");
+		const accountId = String((await s.readAll({ type: "Character", fields: { charId: ole.me } }))[0]!.fields.accountId);
+		const pen = await building(s, { buildId: "gehege-metzger", plan: "gehege", name: "Gehege", x: 4, y: 4, w: 3, h: 3, owner: ole.me, ownerName: ole.name, accountId, points: 2 });
+		await building(s, { buildId: "metzgerei-1", plan: "metzgerei", name: "Metzgerei", x: 18, y: 4, w: 2, h: 2 });
+		const taken = new Set<string>();
+		await walkBeside(ole, s, pen, taken);
+		// a piglet goes in like a pig and grows up there; it takes a place
+		await give(s, ole.me, "schwein", 3);
+		await give(s, ole.me, "ferkel", 2);
+		for (let i = 1; i <= 3; i++) await does(ole.p, "einstallen schwein", `(${i} Schwein`);
+		assert.match(await does(ole.p, "einstallen ferkel", "heran"), /bringt Ferkel in den Stall \(3 Schweine, 1 Jungtier\); es wächst dort heran/);
+		assert.match(await does(ole.p, "einstallen ferkel", "voll"), /Der Stall ist voll \(4\)/);
+		assert.match(await does(ole.p, "stall", "Platz"), /3 Schweine und 1 Jungtier \(Platz für 4\)/);
+		// both knives: the butcher's knife is taken, and the shop in the room gives one more piece of the first yield
+		await give(s, ole.me, "muschelmesser", 1);
+		await give(s, ole.me, "schlachtmesser", 1);
+		assert.match(await does(ole.p, "schlachte", "bekommst"), /Du bekommst 4 Schweinefleisch, 2 Speckseiten, 1 Schmalz, 1 Borsten, 1 Knochen\. Die Metzgerei im Ort zerlegt es gut/);
+		const wearOf = async (proto: string) => ((await s.readAll({ type: "Item", fields: { location: ole.me, proto } }))[0]!.fields as { wear?: number }).wear;
+		assert.equal(await wearOf("schlachtmesser"), w.prototypes.find((p) => p.key === "schlachtmesser")!.wear! - 1);
+		assert.equal(await wearOf("muschelmesser"), w.prototypes.find((p) => p.key === "muschelmesser")!.wear, "the shell knife is spared");
+		// fresh meat carries when it spoils; the piglet when it grows up. Their time come, the sweep turns them
+		const meat = (await s.readAll({ type: "Item", fields: { location: ole.me, proto: "schweinefleisch" } }))[0]!.fields as { itemId: string; turns?: boolean; turnsAtMs?: number };
+		const kept = await decayNowOf(s);
+		assert.equal(meat.turns, true);
+		assert.ok(Math.abs(meat.turnsAtMs! - kept - 3 * DAY) < 60_000, "raw meat keeps three days");
+		assert.equal((await s.readAll({ type: "Item", fields: { location: ole.me, proto: "speck" } })).length, 0);
+		await give(s, ole.me, "speck", 1);
+		assert.equal(((await s.readAll({ type: "Item", fields: { location: ole.me, proto: "speck" } }))[0]!.fields as { turns?: boolean }).turns, undefined, "bacon keeps");
+		const due = async (filter: Record<string, string>) => { for (const e of await s.readAll({ type: "Item", fields: filter })) { await s.takeIfExists({ id: e.id }, 0); await s.write({ type: "Item", fields: { ...e.fields, turnsAtMs: kept - 1 } as never }, null, FOREVER); } };
+		await due({ location: ole.me, proto: "schweinefleisch" });
+		await due({ location: pen.buildId, proto: "ferkel" });
+		const from = ole.p.frames.length;
+		await sweepTick(s, w);
+		assert.equal(await pack(s, ole.me, "schweinefleisch"), 0, "the meat spoiled");
+		assert.equal(await pack(s, ole.me, "speckseite"), 2, "what is not yet due stays");
+		assert.equal((await s.readAll({ type: "Item", fields: { location: pen.buildId, proto: "ferkel" } })).length, 0);
+		assert.equal((await s.readAll({ type: "Item", fields: { location: pen.buildId, proto: "schwein" } })).length, 3, "the piglet is a pig now");
+		await ole.p.until((f) => f.t === "msg" && /Schweinefleisch ist verdorben; du wirfst es weg/.test(f.m.text), 10_000, from);
+		// salt: beside a salt garden, without a tool
+		const salt = await building(s, { buildId: "salzgarten-1", plan: "salzgarten", name: "Salzgarten", x: 16, y: 12, w: 2, h: 2 });
+		await walkBeside(ole, s, salt, taken);
+		assert.match(await does(ole.p, "harke", "Salz"), /harkst 3 Salz aus dem Salzgarten/);
+		assert.equal(await pack(s, ole.me, "salz"), 3);
+		// a leather bag adds to what one carries, once however many
+		const base = await packMax(s, w, ole.me);
+		await give(s, ole.me, "ledertasche", 2);
+		assert.equal(await packMax(s, w, ole.me), base + w.pack!.bags!.ledertasche!);
+		await ole.p.leave();
 	} finally { await srv.close(); }
 });
 

@@ -31,6 +31,7 @@ export type Glyph = { shape: "circle" | "square" | "diamond"; color: string };
  *  type is its typeclass, the supertypes include "Item" and "Object". */
 export type ItemFields = { itemId: string; name: string; aliases: string[]; desc: string; location: string; x: number; y: number; glyph: Glyph; locks: string; proto: string; flotsam?: boolean; expiresWorldMs?: number;
 	/** A tool: uses left (it breaks at 0). */ wear?: number;
+	/** A thing that turns (PrototypeFields.turns): it spoils or grows up when the second clock reaches `turnsAtMs` (engine/sweep.ts); `turns` lets the sweep find it. */ turns?: true; turnsAtMs?: number;
 	/** On the market board: `location` is "market", these name the listing and who gets it back. */ listing?: string; seller?: string;
 	/** A bred sort (garden.ts): seeds and flowers of a crossing carry it, so it travels with them to other regions. */ variety?: Variety };
 /** A crossing of two sorts in a flower bed (docs/siedeln.en.md "Vermehren und züchten"): its own colour and its breeder;
@@ -45,7 +46,7 @@ export type TagFields = { target: string; key: string; category: string };
 /** A template to spawn items from; `parent` names the prototype whose fields it extends. */
 /** `icon`: a picture of the thing, a 32×32 PNG below the world's assets (e.g. "items/tang.png"); without one the map
  *  draws its glyph. */
-export type PrototypeFields = { key: string; parent: string | null; typeclass: string; name: string; desc: string; aliases: string[]; glyph: Glyph; locks: string; wear?: number; icon?: string };
+export type PrototypeFields = { key: string; parent: string | null; typeclass: string; name: string; desc: string; aliases: string[]; glyph: Glyph; locks: string; wear?: number; icon?: string; /** It turns after `afterMs` of the second clock (the decay clock: real days by default): into `into` (a young animal grows up), or into nothing (fresh meat spoils). */ turns?: { afterMs: number; into?: string } };
 /** A beacon: where a fire can burn. It is also the lock every change of its fire takes (feeding, the fire tick), so
  *  two players feeding at once cannot light two flames. `lit` is what the fire tick last saw. */
 export type BeaconFields = { beaconId: string; name: string; aliases: string[]; room: string; x: number; y: number; covers: string[]; lit: boolean };
@@ -244,7 +245,7 @@ export type BedFields = { kind?: "zier" | "gemein"; fenced?: boolean; bedId: str
  *  sow and harvest, not only the owner. `human`/`other`: work points by people and by NPCs or automata. */
 export type FieldFields = { fieldId: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number; open?: boolean;
 	stage: "brach" | "saat" | "waechst" | "reif" | "spaet"; crop: string | null; seeds: number; seedNeed: number; work: number; workNeed: number; yields: Array<{ proto: string; count: number }>; soil: number;
-	by: Record<string, number>; human: number; other: number; lastGroup: string | null; tired: number; lastHarvestWorldMs: number; dueWorldMs: number; untilWorldMs: number; at: number;
+	by: Record<string, number>; human: number; other: number; lastGroup: string | null; tired: number; lastHarvestWorldMs: number; dueWorldMs: number; untilWorldMs: number; at: number; /** Fertilised for the crop growing now (`dünge`). */ dunged?: boolean;
 	/** A fence round the field (the deer stay out); how often deer grazed the crop growing now (each bite costs yield). */
 	fenced?: boolean; grazed?: number };
 /** Wild from the fog at a bed, a field, a coop or a chest (engine/commands/wild.ts): it eats at `eatsAtWorldMs` unless someone scares it off

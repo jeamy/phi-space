@@ -94,7 +94,8 @@ const describe = (d: FieldDef, f: FieldFields, now: number) => {
 		: f.stage === "waechst" ? `${crop?.name ?? f.crop} wächst, reif in etwa ${hours(f.dueWorldMs - now)}`
 		: `${crop?.name ?? f.crop} ist ${STAGE[f.stage]}: Ernte ${f.work}/${f.workNeed}${f.stage === "spaet" ? ", jeder Anteil verliert schon" : `, noch etwa ${hours(f.dueWorldMs - now)}`}`;
 	const grazed = f.grazed && f.stage !== "brach" ? `; Rehe haben daran gefressen (${f.grazed}×)` : "";
-	return `${fieldName(f)} (${f.w}×${f.h}${f.open ? ", offen für alle" : ""}${f.fenced ? ", eingezäunt" : ""}): ${what}${soil}${grazed}.`;
+	const dunged = f.dunged && f.stage !== "brach" ? "; gedüngt" : "";
+	return `${fieldName(f)} (${f.w}×${f.h}${f.open ? ", offen für alle" : ""}${f.fenced ? ", eingezäunt" : ""}): ${what}${soil}${grazed}${dunged}.`;
 };
 
 /** The rectangles that cover the cell (x, y), the one with its corner there first, then those shifted by the fewest cells, so a cell
@@ -234,7 +235,7 @@ export async function harvestField(c: CommandCtx): Promise<boolean> {
 	f.untilWorldMs = (await decayNowOf(c.space, c.txn)) + d.keepWorldMs;
 	if (f.work >= f.workNeed) {
 		const helpers = Object.entries(f.by).sort((a, b) => b[1] - a[1]).map(([n, k]) => `${n} (${k})`).join(", ");
-		await writeField(c, { ...fresh(f), stage: "brach", crop: null, seeds: 0, seedNeed: 0, yields: [], soil: 1, lastGroup: crop?.group ?? null, lastHarvestWorldMs: now, dueWorldMs: FOREVER });
+		await writeField(c, { ...fresh(f), stage: "brach", crop: null, seeds: 0, seedNeed: 0, yields: [], soil: 1, dunged: false, lastGroup: crop?.group ?? null, lastHarvestWorldMs: now, dueWorldMs: FOREVER });
 		await msg(c, "*", "world", `Die ${crop?.name ?? "Ernte"} des ${fieldName(f).replace("Acker", "Ackers")} ist eingebracht! Geerntet haben ${helpers}.`);
 	} else {
 		await writeField(c, f);
@@ -253,7 +254,29 @@ export async function sowOnField(c: CommandCtx, said: string): Promise<boolean> 
 	throw new CommandError(`${crop.name} wächst nicht im Beet, sondern auf einem Acker. Neben deinem Acker sät „bestelle ${crop.key}“ (${Math.ceil(d.w * d.h / d.seedPerCells)}× ${seedName(crop)} als Saatgut). Einen Acker legt „flur anlegen“ an, mit einem Spaten, sobald die Insel ein Dorf ist.`);
 }
 
-export const FIELD_COMMANDS: Command[] = [flur, bestelle];
+/** Fertiliser (docs/schlachten.en.md): `dung.count` of `dung.proto` on a growing field raise its harvest by `dung.factor`, once
+ *  a crop; the next fallow forgets it. No work point, no rest. */
+const duenge: Command = {
+	key: "dünge", aliases: ["duenge", "düngen", "duengen", "fertilise", "fertilize"],
+	help: "dünge – den Acker neben dir düngen, während die Frucht wächst (Knochenmehl aus der Mühle): einmal je Frucht, die Ernte wird größer",
+	async func(c) {
+		const d = fieldDef(c), dung = d.dung;
+		if (!dung) throw new CommandError("In dieser Welt düngt man nicht.");
+		const f = await fieldHere(c);
+		if (!mayWork(c, f)) throw new CommandError(`Das ist der ${fieldName(f)}; düngen darf ihn, wer ihn angelegt hat (oder jeder, wenn er offen ist).`);
+		const crop = cropOf(d, f.crop);
+		if (f.stage !== "waechst") throw new CommandError(f.stage === "brach" ? "Auf dem Acker wächst nichts; gedüngt wird, während eine Frucht wächst." : f.stage === "saat" ? "Der Acker wird erst bestellt; gedüngt wird, wenn die Frucht wächst." : `${crop?.name ?? "Die Frucht"} ist schon reif; jetzt wird geerntet.`);
+		if (f.dunged) throw new CommandError(`Der ${fieldName(f)} ist für diese Frucht schon gedüngt.`);
+		const name = c.world.prototypes.find((p) => p.key === dung.proto)?.name ?? dung.proto;
+		const have = (await inventory(c)).filter((i) => i.f.proto === dung.proto).slice(0, dung.count);
+		if (have.length < dung.count) throw new CommandError(`Zum Düngen brauchst du ${dung.count} ${name}; du trägst ${have.length}.`);
+		for (const it of have) if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError(`${it.f.name} ist gerade nicht greifbar; bitte noch einmal.`);
+		await writeField(c, { ...f, dunged: true, yields: f.yields.map((y) => ({ ...y, count: Math.ceil(y.count * dung.factor) })) });
+		await msg(c, "*", "emote", `${c.actor.name} streut ${dung.count} ${name} über den Acker; ${crop?.name ?? "die Frucht"} wird es danken.`);
+	},
+};
+
+export const FIELD_COMMANDS: Command[] = [flur, bestelle, duenge];
 
 /** A message from the world to everyone in a room. */
 async function tell(space: SpaceLike, leaseMs: number, room: string, text: string, txn: string): Promise<void> {
@@ -290,7 +313,7 @@ export async function fieldTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 				await space.write({ type: "Field", fields: { ...f, stage: "spaet", dueWorldMs: now + d.windowWorldMs * patient } as never }, txn, FOREVER);
 				await tell(space, leaseMs, f.room, `${crop} auf dem ${fieldName(f)} ist überreif; was jetzt noch geerntet wird, ist weniger.`, txn);
 			} else if (f.stage === "spaet") {
-				await space.write({ type: "Field", fields: { ...fresh(f), stage: "brach", crop: null, seeds: 0, seedNeed: 0, yields: [], soil: 1, lastGroup: cropOf(d, f.crop)?.group ?? null, lastHarvestWorldMs: now, dueWorldMs: FOREVER } as never }, txn, FOREVER);
+				await space.write({ type: "Field", fields: { ...fresh(f), stage: "brach", crop: null, seeds: 0, seedNeed: 0, yields: [], soil: 1, dunged: false, lastGroup: cropOf(d, f.crop)?.group ?? null, lastHarvestWorldMs: now, dueWorldMs: FOREVER } as never }, txn, FOREVER);
 				await tell(space, leaseMs, f.room, `${crop} auf dem ${fieldName(f)} ist verdorben; der Acker liegt wieder brach.`, txn);
 			} else await space.write({ type: "Field", fields: { ...f, dueWorldMs: FOREVER } as never }, txn, FOREVER);
 			await space.commit(txn);

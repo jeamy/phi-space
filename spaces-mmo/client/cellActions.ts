@@ -26,7 +26,7 @@ export function wildHere(decor: Record<string, { model?: string }> | undefined, 
 const INFO = /^(?:look|inventory|who|time|reputation|bau)\b/;
 /** The order of the bar, what spoils or waits first: the harvest, then the care of what grows, the work on what is begun,
  *  the rest, and the seeds that can be looked for anytime. A sort keeps the order of equals, nearest cells first. */
-const URGENT = [/^(?:ernte|abholen|einsammeln)\b/, /^(?:gieße|jäte|füttere|repariere|wache)\b/, /^(?:arbeite|liefere|breche|steche|räume)\b/];
+const URGENT = [/^(?:ernte|abholen|einsammeln)\b/, /^(?:gieße|jäte|füttere|repariere|wache)\b/, /^(?:arbeite|liefere|breche|steche|harke|räume)\b/];
 const rank = (line: string) => { const i = URGENT.findIndex((r) => r.test(line)); return line === "sammle samen" ? URGENT.length + 1 : i < 0 ? URGENT.length : i; };
 /** What can be done from where the figure stands, for the bar "Hier möglich": what the menus of the cells around it offer
  *  (a site and a bed are worked from two cells away), each once, without going, looking and the figure's own information. */
@@ -106,7 +106,8 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 /** What a field is sown with, and the crop's word for `bestelle` (server: world.fields.crops). */
 const SOWN: Record<string, string> = { Weizen: "weizen", Gerste: "gerste", Hafer: "hafer", Kartoffel: "kartoffel", "Rübensamen": "rüben", Leinsamen: "flachs" };
 /** The houses of animals by plan, with the animals (as their things are named) each takes in (server: world animals). */
-const HOUSES: Record<string, string[]> = { huehnerstall: ["Huhn"], gehege: ["Schaf", "Ziege", "Ente", "Gans", "Rind", "Schwein"], bienenstock: ["Bienenvolk"] };
+// with the young ones that grow up in them (Küken, Ferkel)
+const HOUSES: Record<string, string[]> = { huehnerstall: ["Huhn", "Küken"], gehege: ["Schaf", "Ziege", "Ente", "Gans", "Rind", "Schwein", "Ferkel"], bienenstock: ["Bienenvolk"] };
 const AREA = new Set(["site", "building", "ruin", "bed", "field", "scenery", "liner"]);
 const covers = (o: ObjView, c: { x: number; y: number }) => c.x >= o.x && c.y >= o.y && c.x < o.x + (o.w ?? 1) && c.y < o.y + (o.h ?? 1);
 
@@ -197,6 +198,8 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				}
 				if (o.fieldStage === "saat") entries.push({ label: "Bestellen (Saatgut, Arbeit)", line: "bestelle" });
 				if (o.fieldStage === "reif" || o.fieldStage === "spaet") entries.push({ label: "Ernten", line: "ernte flur" });
+				// bone meal on a growing field, once a crop (server: field.ts dünge)
+				if (o.fieldStage === "waechst" && [...objs.values()].some((i) => i.kind === "item" && i.location === me && i.name === "Knochenmehl")) entries.push({ label: "Düngen (2 Knochenmehl)", line: "dünge" });
 			}
 			if (nearSite && mine) entries.push(o.open ? { label: "Acker für Fremde schließen", line: "flur zu" } : { label: "Acker für alle öffnen", line: "flur offen" });
 			if (beside && may && !o.fenced) entries.push({ label: "Zaun um den Acker ziehen (6 Treibholz, 2 Tangseil)", line: "zäune" });
@@ -225,6 +228,8 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 					const fits = HOUSES[o.plan ?? ""]!;
 					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && fits.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} einstallen`, line: `einstallen ${n}` });
 					entries.push({ label: o.plan === "bienenstock" ? "Ein Volk herausnehmen" : "Ein Tier herausnehmen", line: "ausstallen" });
+					// slaughtering takes a knife; bees are not slaughtered (server: animals.ts schlachte, which keeps the last pair)
+					if (o.herd && o.herd !== "biene" && [...objs.values()].some((i) => i.kind === "item" && i.location === me && (i.name === "Schlachtmesser" || i.name === "Muschelmesser"))) entries.push({ label: "Ein Tier schlachten", line: "schlachte" });
 					if (o.plan === "huehnerstall" && !o.fenced) entries.push({ label: "Zaun mit Tür setzen (3 Treibholz, 1 Tangseil)", line: "zäune" });
 				}
 			}
@@ -256,6 +261,9 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.plan === "rathaus") entries.push({ label: "Laufender Antrag", line: "antrag" });
 			if (o.plan === "park") entries.push({ label: "Park pflegen", line: "pflege" }, { label: "Laufendes Fest", line: "fest" });
 			if (o.plan === "lehmgrube") entries.push({ label: "Lehm stechen", line: "steche" });
+			if (o.plan === "salzgarten") entries.push({ label: "Salz harken", line: "harke" });
+			if (o.plan === "metzgerei") entries.push({ label: "Bratwurst mit Salz machen", line: "craft metzgerwurst" }, { label: "Fleisch pökeln", line: "craft pökelfleisch" });
+			if (o.plan === "gerberei") entries.push({ label: "Leder gerben", line: "craft leder" });
 			if (o.plan === "ziegelei") entries.push({ label: "Ziegel brennen", line: "craft ziegel" });
 			if (o.plan === "lagerhaus") entries.push({ label: "Lager ansehen", line: "lager" });
 			// only a plan with a chest of its own has one (a hut, a smokehouse); a scarecrow, a coop or a mill has none

@@ -156,7 +156,7 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		// anyone repairs, with material
 		assert.match(await does(other.p, "repariere", "brauchst du"), /brauchst du 1 Treibholz/);
 		await give(s, other.me, "treibholz", 1);
-		assert.match(await does(other.p, "repariere", "bessert"), /Nachbar bessert die Hütte von Siedlerin aus; sie hält wieder etwa 30 Tage/);
+		assert.match(await does(other.p, "repariere", "bessert"), /Nachbar bessert die Hütte von Siedlerin aus; sie hält wieder etwa 40 Tage/);
 
 		// not kept: its time runs out, it becomes a ruin; the light goes back, the chest waits as an estate
 		const b = (await s.readAll({ type: "Building" }))[0]!;
@@ -218,12 +218,12 @@ test("a number saved for a class holds for the next building of that class, and 
 			const b = (await s.readAll({ type: "Building", fields: { buildId } }))[0]!.fields as unknown as BuildingFields;
 			return Math.round((b.untilWorldMs - (await worldNowOf(s))) / (24 * 3600_000));
 		};
-		assert.equal(await standing("vogelscheuche", "a"), 7);
+		assert.equal(await standing("vogelscheuche", "a"), 40);
 		await saveSettings(s, { "keep.scheuche": 2 });
 		assert.equal(await standing("vogelscheuche", "b"), 2, "the saved number");
-		assert.equal(await standing("huette", "c"), 30, "another class keeps its own");
+		assert.equal(await standing("huette", "c"), 40, "another class keeps its own");
 		await saveSettings(s, { "keep.scheuche": null });
-		assert.equal(await standing("vogelscheuche", "d"), 7, "taken back");
+		assert.equal(await standing("vogelscheuche", "d"), 40, "taken back");
 	} finally { await stack.close(); }
 });
 

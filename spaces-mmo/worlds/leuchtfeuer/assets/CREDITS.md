@@ -83,3 +83,8 @@ script `items-src/bees.py` (same license as this project).
 
 The pig and the truffle it roots up (`items/schwein.png`, `items/trueffel.png`) were drawn the same way, by the
 script `items-src/pigs.py` (same license as this project).
+
+What slaughtering gives and what the hearth and the smokehouse make of it (the raw meats, fells, feathers, tallow, lard,
+bristles, roasts, soups, sausages, bacon, ham and bread with lard: `items/huehnchen.png` … `items/schmalzbrot.png`; then
+the butcher's knife, salt, cured and dried meat, bones, bone meal, the leather bag and boots, the chick, the piglet and the
+feast: `items/schlachtmesser.png` … `items/festessen.png`, the keys of the prototypes in `world.ts`) were drawn the same way, by the script `items-src/meat.py` (same license as this project).

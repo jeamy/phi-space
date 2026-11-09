@@ -639,9 +639,9 @@ const entnimm: Command = {
 		const payable = tax ? Math.floor(coins.length / tax) : Infinity;
 		if (!payable) throw new CommandError(`Das Lager nimmt ${tax} Münzen Steuer je Stück; so viele hast du nicht.`);
 		// as much as the pack still takes (pack.ts)
-		const each = c.world.pack ? loadOf(c.world, proto) : 0, free = each ? (await packMax(c.space, c.world)) - (await loadAt(c.space, c.world, c.actor.charId, c.txn)) : Infinity;
+		const each = c.world.pack ? loadOf(c.world, proto) : 0, free = each ? (await packMax(c.space, c.world, c.actor.charId, c.txn)) - (await loadAt(c.space, c.world, c.actor.charId, c.txn)) : Infinity;
 		const fits = each ? Math.max(0, Math.floor(free / each + 1e-9)) : Infinity;
-		if (!fits) throw new CommandError(`Das trägst du nicht mehr: dein Gepäck ist voll (${fmtLoad(await loadAt(c.space, c.world, c.actor.charId, c.txn))} von ${fmtLoad(await packMax(c.space, c.world))} Last).`);
+		if (!fits) throw new CommandError(`Das trägst du nicht mehr: dein Gepäck ist voll (${fmtLoad(await loadAt(c.space, c.world, c.actor.charId, c.txn))} von ${fmtLoad(await packMax(c.space, c.world, c.actor.charId, c.txn))} Last).`);
 		const take = Math.min(want, left, payable, fits), k = Math.min(take, Math.max(1, Math.floor(MOVES_PER_COMMAND / (1 + tax))));
 		for (const it of all.slice(0, k)) if (await moveItem(c.space, c.txn, it.f.itemId, b.buildId, c.actor.charId)) moved++;
 		for (const coin of coins.slice(0, moved * tax)) if (!(await moveItem(c.space, c.txn, coin.f.itemId, c.actor.charId, b.buildId))) throw new CommandError("Die Münzen sind gerade nicht greifbar; bitte noch einmal.");
@@ -659,16 +659,15 @@ const repariere: Command = {
 	async func(c, arg) {
 		const b = await buildingHere(c, arg, { own: false });
 		const plan = planOf(c.world, b.plan);
-		const now = await worldNowOf(c.space, c.txn);
 		const cost = plan?.repair ?? [];
 		const inv = await inventory(c);
 		for (const r of cost) if (inv.filter((i) => i.f.proto === r.proto).length < r.count) throw new CommandError(`Zum Ausbessern brauchst du ${r.count} ${c.world.prototypes.find((p) => p.key === r.proto)?.name ?? r.proto}.`);
 		for (const r of cost) for (const it of inv.filter((i) => i.f.proto === r.proto).slice(0, r.count)) await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn });
-		const until = (await decayNowOf(c.space, c.txn)) + (await keepOf(c, plan));
+		const kept = await decayNowOf(c.space, c.txn), until = kept + (await keepOf(c, plan));
 		await putBack(c, { ...b, untilWorldMs: until });
 		// someone else's building: a service to the community (one's own serves oneself)
 		if (b.accountId !== c.account?.accountId) await creditDeed(c, "bau");
-		await msg(c, "*", "emote", `${c.actor.name} bessert die ${b.name} von ${b.ownerName} aus; sie hält wieder ${days(until - now)}.`);
+		await msg(c, "*", "emote", `${c.actor.name} bessert die ${b.name} von ${b.ownerName} aus; sie hält wieder ${days(until - kept)}.`);
 	},
 };
 
@@ -741,7 +740,7 @@ const nachlass: Command = {
 		if (!mine.length) throw new CommandError("Hier liegt kein Nachlass von dir.");
 		let got = 0, left = 0;
 		// as much as the pack still takes (pack.ts): the rest waits in the estate
-		let free = c.world.pack ? (await packMax(c.space, c.world)) - (await loadAt(c.space, c.world, c.actor.charId, c.txn)) : Infinity;
+		let free = c.world.pack ? (await packMax(c.space, c.world, c.actor.charId, c.txn)) - (await loadAt(c.space, c.world, c.actor.charId, c.txn)) : Infinity;
 		for (const e of mine) {
 			const est = await c.space.takeIfExists({ id: e.id }, NO_WAIT, { txn: c.txn });
 			if (!est) continue;

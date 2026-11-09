@@ -422,7 +422,8 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 	const order = byArrival(arrived ?? new Map(), uses?.seeds);
 	const kinds = [...carried.reduce((m, o) => m.set(o.name, [...(m.get(o.name) ?? []), o]), new Map<string, ObjView[]>())].sort(([a], [b]) => order(a, b));
 	const chosen = kinds.find(([name]) => name === picked);
-	const load = carried.reduce((n, o) => n + (o.load ?? 0), 0), max = pack?.max ?? null;
+	// a bag adds to the most one carries, each kind once (engine/pack.ts packMax)
+	const load = carried.reduce((n, o) => n + (o.load ?? 0), 0), bags = new Map(carried.filter((o) => o.bag).map((o) => [o.name, o.bag!])), max = pack?.max == null ? null : pack.max + [...bags.values()].reduce((n, b) => n + b, 0);
 	const [chestNr, setChestNr] = useState(1);
 	const [storeN, setStoreN] = useState("");
 	const chests = pack?.chests ?? [], chestAt = chests.find((x) => x.nr === chestNr) ?? chests[0];

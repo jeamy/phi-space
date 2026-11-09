@@ -130,6 +130,17 @@ function clayPit(g: Graphics, x: number, y: number, w: number, h: number): void 
 	g.poly([x + w * 0.1, y + h * 0.3, x + w * 0.16, y + h * 0.24, x + w * 0.42, y + h * 0.5, x + w * 0.36, y + h * 0.56]).fill({ color: WOOD }).stroke({ width: 1, color: LINE });
 }
 
+/** The salt garden: a stone rim round four shallow basins of sea water, white salt drying in two, a rake. */
+function saltGarden(g: Graphics, x: number, y: number, w: number, h: number): void {
+	g.rect(x + 2, y + 2, w - 4, h - 4).fill({ color: STONE }).stroke(edge);
+	const bw = (w - 10) / 2, bh = (h - 10) / 2;
+	for (let i = 0; i < 4; i++) {
+		const bx = x + 4 + (i % 2) * (bw + 2), by = y + 4 + Math.floor(i / 2) * (bh + 2);
+		g.rect(bx, by, bw, bh).fill({ color: i === 1 || i === 2 ? "#f2f2ea" : "#7fa8b8" }).stroke({ width: 1, color: STONE_DARK });
+	}
+	g.poly([x + w * 0.2, y + h * 0.85, x + w * 0.24, y + h * 0.8, x + w * 0.7, y + h * 0.2, x + w * 0.66, y + h * 0.16]).fill({ color: WOOD }).stroke({ width: 1, color: LINE });
+}
+
 function brickworks(g: Graphics, x: number, y: number, w: number, h: number): void {
 	g.rect(x + w * 0.66, y + 2, w * 0.2, h * 0.6).fill({ color: "#8a3f2a" }).stroke(edge);
 	for (let i = 1; i < 4; i++) g.rect(x + w * 0.66, y + 2 + (i * h * 0.15), w * 0.2, 1).fill({ color: "#5e2a1c" });
@@ -210,6 +221,7 @@ export function building2d(g: Graphics, plan: string | undefined, x: number, y: 
 	else if (plan === "lagerhaus") storehouse(g, x, y, w, h, ts);
 	else if (plan === "steinbruch") quarry(g, x, y, w, h);
 	else if (plan === "lehmgrube") clayPit(g, x, y, w, h);
+	else if (plan === "salzgarten") saltGarden(g, x, y, w, h);
 	else if (plan === "ziegelei") brickworks(g, x, y, w, h);
 	else if (plan === "kapelle") chapel(g, x, y, w, h, ts);
 	else if (plan === "park") park(g, x, y, w, h, ts);

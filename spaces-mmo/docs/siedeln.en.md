@@ -396,8 +396,8 @@ again — and a yield that one may `take` like a harvest.
   the fields — the fields feed the farm.
 - **Pigs** (epoch 2, pen, kind `schwein`): eat potatoes above all, also turnips, carrots, cabbage, oats and barley — the
   potato field gets an animal that buys it. Fed, a pig roots up a truffle every third day (`trueffel`), which Marta buys
-  dear and the inn in the harbour quarter asks for at the job board; pigs breed every five fed days. Nothing is
-  slaughtered: a pig gives what it finds, not itself. Gesa sells them (she carries two).
+  dear and the inn in the harbour quarter asks for at the job board; pigs breed every five fed days. Gesa sells them (she carries two). Slaughtered (docs/schlachten.en.md),
+  a pig gives pork, pork belly, lard and bristles.
 - **Cattle (cows)** (epoch 3, pen, kind `rind`, also typed `kuh`): milk every half day, twice a goat's, and a piece of
   leather with every four jugs (`AnimalKindDef.also`); they eat oats, barley, turnips and cabbage, weigh 8 and rarely
   calve (every 30 fed days).
@@ -1162,8 +1162,8 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
 ### Later settings and views
 
 **How long a building stands** is set per class, in world days, and the admin can change it in the admin panel; a saved
-number holds for the next building, one that stands keeps its date. Defaults: scarecrow 7 (`keep.scheuche`), huts and the
-like 30 (`keep.bau`), storehouses and the like 45 (`keep.lager`), chapel 60 (`keep.kapelle`), park 120 (`keep.park`). A
+number holds for the next building, one that stands keeps its date. Defaults: scarecrow 40 (`keep.scheuche`), huts and the
+like 40 (`keep.bau`), storehouses and the like 45 (`keep.lager`), chapel 60 (`keep.kapelle`), park 120 (`keep.park`). A
 plan names its class with `keepSetting`.
 
 **The rest after work** is the setting `work.rest`, 15 by default, in world minutes: it runs at the life rate. A blessing and

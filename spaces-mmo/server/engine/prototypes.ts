@@ -7,6 +7,7 @@ import { draftOf } from "./typeclasses.ts";
 import type { WorldDef } from "./world.ts";
 import { peek } from "../space.ts";
 import { randomBytes } from "./source.ts";
+import { decayNowOf } from "./clock.ts";
 
 /** The engine's default locks of an item: anyone may pick it up and drop it, only registered players give it away. */
 export const DEFAULT_ITEM_LOCKS = "get:all();drop:all();give:not guest()";
@@ -49,7 +50,11 @@ export const newItemId = () => `i-${randomBytes(6).toString("hex")}`;
  *  that (flotsam), else it stays; `lease` is a real-time lifetime of the entry itself; `own`: what this thing has of its
  *  own instead of its prototype's (a bred variety: its name, words, colour). */
 export async function spawn(space: SpaceLike, txn: string | null, w: WorldDef, p: PrototypeFields, at: { itemId?: string; location: string; x: number; y: number; flotsam?: boolean; lease?: number; expiresWorldMs?: number }, own?: Partial<Pick<ItemFields, "name" | "aliases" | "desc" | "glyph" | "variety">>): Promise<ItemFields> {
-	const item: ItemFields = { itemId: at.itemId ?? newItemId(), name: p.name, aliases: p.aliases ?? [], desc: p.desc ?? "", location: at.location, x: at.x, y: at.y, glyph: p.glyph, locks: p.locks || DEFAULT_ITEM_LOCKS, proto: p.key, ...(at.flotsam ? { flotsam: true } : {}), ...(at.expiresWorldMs !== undefined ? { expiresWorldMs: at.expiresWorldMs } : {}), ...(p.wear ? { wear: p.wear } : {}), ...own };
+	// a thing that spoils or grows up carries the moment it turns, on the second clock (engine/sweep.ts turns it); what the
+	// loader hands out before the world has its clock (an NPC's stock) keeps
+	const kept = p.turns ? await decayNowOf(space, txn).catch(() => null) : null;
+	const turning = p.turns && kept !== null ? { turns: true as const, turnsAtMs: kept + p.turns.afterMs } : {};
+	const item: ItemFields = { ...turning, itemId: at.itemId ?? newItemId(), name: p.name, aliases: p.aliases ?? [], desc: p.desc ?? "", location: at.location, x: at.x, y: at.y, glyph: p.glyph, locks: p.locks || DEFAULT_ITEM_LOCKS, proto: p.key, ...(at.flotsam ? { flotsam: true } : {}), ...(at.expiresWorldMs !== undefined ? { expiresWorldMs: at.expiresWorldMs } : {}), ...(p.wear ? { wear: p.wear } : {}), ...own };
 	await space.write(draftOf(p.typeclass || "Item", w.typeclasses, item), txn, at.lease ?? FOREVER);
 	return item;
 }

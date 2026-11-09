@@ -71,7 +71,7 @@ export type WorldDef = {
 	/** What a figure carries (engine/pack.ts): `max` load where the setting `pack.max` does not answer, `load` by
 	 *  prototype (1 where it names none; the currency weighs nothing). Without it a pack has no limit. A chest then
 	 *  has no limit (only the pack has one). */
-	pack?: { max: number; load: Record<string, number> };
+	pack?: { max: number; load: Record<string, number>; /** Things that raise what a figure carries while it carries one (each kind once): a leather bag. */ bags?: Record<string, number> };
 	/** Where market boards stand (each its own listings) and how long a listing stays. */
 	market: { rooms: string[]; listMs: number };
 	/** Recipes: what goes in (used up), which tool is needed (it wears by one), what comes out (`count` of it, one without);
@@ -98,6 +98,8 @@ export type WorldDef = {
 	mill?: MillDef;
 	/** A quarry: `plan` beside one, with `tool`, a work gives `count` of `makes` and a rest (docs/siedeln.en.md "Stoffe"). */
 	quarry?: { plan: string; tool: string; makes: string; count: number };
+	/** The salt garden (engine/commands/quarry.ts `harke`): beside a building of `plan`, `count` of `makes` as work, without a tool. */
+	salt?: { plan: string; makes: string; count: number };
 	/** A clay pit, the same with a spade. */
 	clay?: { plan: string; tool: string; makes: string; count: number };
 	/** Town halls: `plan`, and how long a motion is open. */
@@ -195,17 +197,17 @@ export type CropDef = { /** Its form on the 3D map (client/props3d.ts). */ model
  *  that each share loses `lateLoss` to the field for another window, then the crop is lost. `tired`: the yield's
  *  factor by how often its crop's group came before it in a row (rest for `fallowWorldMs` heals the soil). */
 export type FieldDef = { epoch?: number; w: number; h: number; points: number; maxFields: number; keepWorldMs: number; seedPerCells: number; sowPerCells: number; harvestPerCells: number;
-	windowWorldMs: number; lateLoss: number; tired: number[]; fallowWorldMs: number; crops: CropDef[] };
+	windowWorldMs: number; lateLoss: number; tired: number[]; fallowWorldMs: number; crops: CropDef[]; /** Fertiliser (`dünge`, engine/commands/field.ts): `count` of `proto` on a growing field raises its harvest by `factor`, once a crop. */ dung?: { proto: string; count: number; factor: number } };
 /** The mill is the building plan `plan`; it grinds one unit of grain (`grinds`: what becomes what) per `unitWorldMs`, one
  *  load after the other, at most `maxLoad` units a load and `maxLoads` waiting loads per figure; a storm surge on its
  *  island grinds `stormWorldMs` ahead. Flour nobody fetches goes after `keepWorldMs`. */
 export type MillDef = { plan: string; grinds: Array<{ from: string; to: string }>; unitWorldMs: number; maxLoad: number; maxLoads: number; stormWorldMs: number; keepWorldMs: number };
 /** A kind of animal: the prototype it is as a thing (bought, carried, put in), the plan that houses it, what one gives
  *  every `everyWorldMs` while fed (`yields`, a prototype), what it eats, and how often two fed ones get a young one. */
-export type AnimalKindDef = { /** One of this for every `per` yields, as it comes. */ also?: { proto: string; per: number }; /** From this epoch of the island on. */ epoch?: number; key: string; proto: string; name: string; plural: string; plan: string; yields: string; everyWorldMs: number; feed: string[]; breedWorldMs: number };
+export type AnimalKindDef = { /** One of this for every `per` yields, as it comes. */ also?: { proto: string; per: number }; /** From this epoch of the island on. */ epoch?: number; key: string; proto: string; name: string; plural: string; plan: string; yields: string; everyWorldMs: number; feed: string[]; breedWorldMs: number; /** What `schlachte` gives of one (engine/commands/animals.ts); none: it is not slaughtered. */ slaughter?: Array<{ proto: string; count: number }>; /** A young one of the kind (a chick, a piglet): it goes into the house like the kind, and grows up there (PrototypeFields.turns); until then it gives nothing. */ young?: string };
 /** `houses`: how many a building of each plan holds (one kind at a time); one thing of feed keeps one animal fed for
  *  `feedWorldMs`, up to `fedMaxWorldMs` ahead; yields wait in the house, at most `nestMax` per animal. */
-export type AnimalsDef = { /** Buildings of `houses` one account may own where the operator's setting `animals.houses` does not answer. */ maxHouses?: number; kinds: AnimalKindDef[]; houses: Record<string, number>; feedWorldMs: number; fedMaxWorldMs: number; nestMax: number };
+export type AnimalsDef = { /** Buildings of `houses` one account may own where the operator's setting `animals.houses` does not answer. */ maxHouses?: number; kinds: AnimalKindDef[]; houses: Record<string, number>; /** Slaughtering (`schlachte`): the tools it takes, the best first (worn by one each time), how many of a kind stay in the house, and a building of `shop`'s plan in the room that gives `bonus` more of the first thing an animal gives (the butcher's shop). */ butcher?: { tools: string[]; keep: number; shop?: { plan: string; bonus: number } }; feedWorldMs: number; fedMaxWorldMs: number; nestMax: number };
 /** `store` (a plan whose chest a settlement shares, docs/siedeln.en.md "Siedlungen und Besitz"): `quota`: how many things a rank
  *  may take per world day; `logKeepMs`: how long a line of the log stays (real time, it must outlast the quota's day);
  *  `logShow`: how many lines `lager log` shows. */

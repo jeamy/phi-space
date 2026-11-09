@@ -101,6 +101,18 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		let f = (await theField(s))!;
 		assert.equal(f.stage, "waechst");
 		assert.deepEqual(f.yields, [{ proto: "gerste", count: 16 }]);
+		// bone meal on the growing field (docs/schlachten.en.md): two of it, half again as much harvest, once a crop
+		await give(s, boss.me, "knochenmehl", 1);
+		assert.match(await does(boss.p, "dünge", "brauchst"), /Zum Düngen brauchst du 2 Knochenmehl; du trägst 1/);
+		await give(s, boss.me, "knochenmehl", 1);
+		assert.match(await does(boss.p, "dünge", "streut"), /Bäuerin streut 2 Knochenmehl über den Acker/);
+		assert.equal(await pack(s, boss.me, "knochenmehl"), 0);
+		f = (await theField(s))!;
+		assert.deepEqual(f.yields, [{ proto: "gerste", count: 24 }]);
+		assert.equal(f.dunged, true);
+		await give(s, boss.me, "knochenmehl", 2);
+		assert.match(await does(boss.p, "dünge", "schon"), /für diese Frucht schon gedüngt/);
+		assert.match(await does(boss.p, "flur", "gedüngt"), /wächst.*; gedüngt\./);
 		assert.match(await does(boss.p, "ernte", "nicht reif"), /noch nicht reif/);
 		// a bed of the owner's beside her as well as the field: plain "ernte" means the bed, "ernte flur" the field
 		const accountId = String((await s.readAll({ type: "Character", fields: { charId: boss.me } }))[0]!.fields.accountId);
@@ -146,11 +158,12 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		await boss.p.until((x) => x.t === "msg" && /Die Gerste des Ackers von Bäuerin ist eingebracht!/.test(x.m.text), 10_000);
 		let total = 0, hands = 0;
 		for (const a of crew) { const n = (await pack(s, a.me, "gerste")) - (a === boss ? 1 : 0); total += n; if (n) hands++; }
-		assert.equal(total, 16, "every grain in exactly one pack");
+		assert.equal(total, 24, "every grain in exactly one pack (16, and half again for the bone meal)");
 		assert.equal(hands, 8, "eight work points, eight hands, two each");
 		f = (await theField(s))!;
 		assert.equal(f.lastGroup, "Getreide");
 		assert.equal(f.crop, null);
+		assert.equal(f.dunged, false, "the next crop is fertilised anew");
 		assert.match(await does(crew[9]!.p, "ernte", "brach"), /liegt brach/);
 
 		// the same group again: the soil is tired

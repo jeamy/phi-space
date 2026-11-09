@@ -469,6 +469,7 @@ Bauen geht nur im Licht eines Feuers. Ausführlich unter [Bauen](help.game.build
 | \`lager\`, \`lager log\` | \`warehouse\` | Das Lagerhaus neben dir und wer zuletzt etwas bewegt hat |
 | \`breche\` | \`quarry\` | Am Steinbruch mit Spitzhacke Stein brechen |
 | \`steche\` | \`clay\` | An der Lehmgrube mit Spaten Lehm stechen |
+| \`harke\` | \`salz\`, \`salt\` | Am Salzgarten Salz harken, ohne Werkzeug ([Salz](help.game.animals#salt)) |
 | \`opfere <ding>\` | \`sacrifice\` | An einer Kapelle opfern: einen Tag lang kürzere Ruhe |
 | \`antrag <zu\|offen\|text>\` | \`motion\` | Am Rathaus einen Antrag stellen; allein: den laufenden zeigen |
 | \`antrag grünzone\`, \`antrag wegerecht\`, \`antrag zone frei\` | | Über die Fläche um dich abstimmen lassen |
@@ -504,6 +505,7 @@ Ein Acker ist ein großes Feld für viele Hände. Ausführlich unter [Äcker](he
 | --- | --- | --- |
 | \`flur anlegen [x y]\` | \`acker anlegen\`, \`field\` | Mit einem Spaten im Licht einen Acker umbrechen (4×4); \`flur\` zeigt die Äcker hier, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
 | \`bestelle [frucht]\` | \`pflüge\`, \`plough\` | Den Acker bestellen: Frucht wählen, Saatgut und einen Arbeitspunkt bringen |
+| \`dünge\` | \`duenge\`, \`fertilise\` | Den wachsenden Acker neben dir mit 2 Knochenmehl düngen: einmal je Frucht, die Hälfte mehr Ernte ([Knochenmehl](help.game.animals#bonemeal)) |
 
 ## Mühle und Backhaus {#millcmds}
 
@@ -526,6 +528,7 @@ Tiere wollen gefüttert werden und geben dafür Eier, Milch, Wolle, Daunen oder 
 | \`ausstallen [tier]\` | \`ausstellen\` | Ein Tier aus deinem Stall nehmen, auch \`ausstallen hund\` |
 | \`füttere [futter]\` | \`futter\` | Die Tiere neben dir füttern (jeder darf; ein Futter macht ein Tier einen Tag satt) |
 | \`einsammeln\` | \`sammle eier\`, \`melke\`, \`schere\` | Eier, Milch oder Wolle deiner Tiere einsammeln |
+| \`schlachte [tier]\` | \`schlachten\` | Ein Tier aus deinem Stall oder Gehege schlachten, mit einem Schlachtmesser oder Muschelmesser; das letzte Paar bleibt ([Schlachten](help.game.animals#slaughter)) |
 
 ## Wild und Wache {#wildcmds}
 
@@ -652,6 +655,7 @@ Building works only in a fire's light. In detail under [Building](help.game.buil
 | \`lager\`, \`lager log\` | \`warehouse\` | The warehouse beside you and who last moved something |
 | \`breche\` | \`quarry\` | Break stone at a quarry with a pickaxe |
 | \`steche\` | \`clay\` | Cut clay at a clay pit with a spade |
+| \`harke\` | \`salz\`, \`salt\` | Rake salt at a salt garden, without a tool ([salt](help.game.animals#salt)) |
 | \`opfere <ding>\` | \`sacrifice\` | Make an offering at a chapel: shorter rest for a day |
 | \`antrag <zu\|offen\|text>\` | \`motion\` | Put a motion at a town hall; alone: show the open one |
 | \`antrag grünzone\`, \`antrag wegerecht\`, \`antrag zone frei\` | | Put the ground around you to a vote |
@@ -687,6 +691,7 @@ A field is a large plot for many hands. In detail under [Fields](help.game.field
 | --- | --- | --- |
 | \`flur anlegen [x y]\` | \`acker anlegen\`, \`field\` | Break a field (4×4) with a spade in the light; \`flur\` shows the fields here, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
 | \`bestelle [crop]\` | \`pflüge\`, \`plough\` | Sow the field: choose the crop, bring seed and a work point |
+| \`dünge\` | \`duenge\`, \`fertilise\` | Fertilise the growing field beside you with 2 bone meal: once a crop, half again as much harvest ([bone meal](help.game.animals#bonemeal)) |
 
 ## Mill and bakery {#millcmds}
 
@@ -709,6 +714,7 @@ Animals want feeding and give eggs, milk, wool, down or honey for it. In detail 
 | \`ausstallen [animal]\` | \`ausstellen\` | Take an animal out of your coop or pen, also \`ausstallen hund\` |
 | \`füttere [feed]\` | \`futter\` | Feed the animals beside you (anyone may; one feed keeps one animal fed a day) |
 | \`einsammeln\` | \`sammle eier\`, \`melke\`, \`schere\` | Collect your animals' eggs, milk or wool |
+| \`schlachte [animal]\` | \`slaughter\` | Slaughter an animal of your coop or pen, with a butcher's knife or a shell knife; the last pair stays ([slaughtering](help.game.animals#slaughter)) |
 
 ## Wild animals and guards {#wildcmds}
 
@@ -1069,7 +1075,7 @@ Jeder darf an einer Baustelle mithelfen, auch ohne Konto. Du bringst Material od
 | \`arbeite\` | \`work\` | Einen Arbeitspunkt beitragen; danach ruhst du eine Weile (standardmäßig 15 Weltminuten; Essen und Segen kürzen es, der Betreiber stellt es ein) |
 | \`baustelle\` | \`site\` | Was hier gebaut wird und was noch fehlt |
 
-Liefern und arbeiten geht **aus bis zu zwei Feldern Abstand**, so haben viele um eine Baustelle Platz. Das Menü der rechten Maustaste auf einer Baustelle bietet Liefern und Mitarbeiten an. Höchstens die Hälfte darf von NPCs oder Automaten kommen. Fehlt nichts mehr, steht der Bau; an ihm steht, wer mitgebaut hat. Eine Baustelle ohne Fortschritt verfällt nach zwei Welttagen.
+Liefern und arbeiten geht **aus bis zu zwei Feldern Abstand**, so haben viele um eine Baustelle Platz. Das Menü der rechten Maustaste auf einer Baustelle bietet Liefern und Mitarbeiten an. Höchstens die Hälfte darf von NPCs oder Automaten kommen. Fehlt nichts mehr, steht der Bau; an ihm steht, wer mitgebaut hat. Eine Baustelle ohne Fortschritt verfällt nach einer Woche.
 
 ## Die Truhe {#chest}
 
@@ -1096,7 +1102,7 @@ Unter „Bei dir“ steht, wie viel du trägst. Was dich über die Grenze bräch
 
 Nichts hält ewig. Wer einen Bau nicht ausbessert, verliert ihn, aber nicht seine Sachen.
 
-Ein Bau hält **eine Woche**, die Vogelscheuche drei Tage. \`repariere\` kostet ein Stück Material (meist 1 Treibholz, beim Backhaus 1 Muschel, bei der Vogelscheuche 1 Tang), jeder darf helfen, und die Frist beginnt neu. Wer ihn verfallen lässt, hat eine **Ruine**: Sie steht noch zehn Welttage und gibt das Licht des Feuers frei. Was in der Truhe lag, wartet einen Monat als **Nachlass**; \`nachlass\` an der Ruine holt es ab. Eine Ruine muss nicht stehen bleiben: Jeder registrierte Spieler räumt sie von nebenan ab (\`abriss ruine\` oder „Ruine abräumen“ auf der Karte), die Fläche ist dann frei; der Nachlass wartet trotzdem weiter auf seinen Besitzer.
+Ein Bau hält **40 bis 60 Tage**: Hütte, Ställe, Gehege, Bienenstock, Regentonne, Vogelscheuche, Steg, Räucherei und die ersten Bauten des Dorfs 40 Tage, Werkstatt, Lager und die Bauten der Stadt 45, Kapelle und Leuchtturm 60, ein Park sogar 120. Es sind Tage des Verfallstakts, standardmäßig echte Tage (der Betreiber kann ihn ändern). \`repariere\` kostet ein Stück Material (meist 1 Treibholz, beim Backhaus 1 Muschel, bei der Vogelscheuche 1 Tang), jeder darf helfen, und die Frist beginnt neu. Wer ihn verfallen lässt, hat eine **Ruine**: Sie steht noch zehn Tage und gibt das Licht des Feuers frei. Was in der Truhe lag, wartet einen Monat als **Nachlass**; \`nachlass\` an der Ruine holt es ab. Eine Ruine muss nicht stehen bleiben: Jeder registrierte Spieler räumt sie von nebenan ab (\`abriss ruine\` oder „Ruine abräumen“ auf der Karte), die Fläche ist dann frei; der Nachlass wartet trotzdem weiter auf seinen Besitzer.
 
 ## Abriss {#demolish}
 
@@ -1138,7 +1144,7 @@ Anyone may help at a site, even without an account. You bring material or work o
 | \`arbeite\` | \`work\` | Add one point of work; afterwards you rest a while (by default 15 world minutes; food and a blessing shorten it, the operator sets it) |
 | \`baustelle\` | \`site\` | What is being built here and what is still missing |
 
-Delivering and working work **from up to two cells away**, so many fit around a site. The right-click menu on a site offers delivering and helping. At most half may come from NPCs or automata. When nothing is missing, the building stands, naming who helped. A site without progress lapses after two world days.
+Delivering and working work **from up to two cells away**, so many fit around a site. The right-click menu on a site offers delivering and helping. At most half may come from NPCs or automata. When nothing is missing, the building stands, naming who helped. A site without progress lapses after a week.
 
 ## The chest {#chest}
 
@@ -1165,7 +1171,7 @@ A figure carries at most **1000 load** (the operator sets it). Each thing weighs
 
 Nothing lasts for ever. If you do not repair a building you lose it, but not your things.
 
-A building lasts **a week**, a scarecrow three days. \`repariere\` (\`repair\`) costs one piece of material (mostly 1 driftwood, 1 shell for a bakery, 1 kelp for a scarecrow), anyone may help, and the time starts anew. Let it decay and it becomes a **ruin**: it stands ten more world days and frees the fire's light. What lay in the chest waits a month as an **estate**; \`estate\` (\`estate\`) at the ruin collects it. A ruin need not stay: any registered player clears it from beside it (\`demolish ruin\` or „Clear the ruin“ on the map), and the ground is free; the estate still waits for its owner.
+A building lasts **40 to 60 days**: hut, coops, pen, hive, rain barrel, scarecrow, jetty, smokehouse and the village's first buildings 40 days, workshop, warehouse and the town's buildings 45, chapel and lighthouse 60, a park even 120. They are days of the decay rate, real days by default (the operator can change it). \`repariere\` (\`repair\`) costs one piece of material (mostly 1 driftwood, 1 shell for a bakery, 1 kelp for a scarecrow), anyone may help, and the time starts anew. Let it decay and it becomes a **ruin**: it stands ten more days and frees the fire's light. What lay in the chest waits a month as an **estate**; \`estate\` (\`estate\`) at the ruin collects it. A ruin need not stay: any registered player clears it from beside it (\`demolish ruin\` or „Clear the ruin“ on the map), and the ground is free; the estate still waits for its owner.
 
 ## Demolition {#demolish}
 
@@ -1379,7 +1385,7 @@ Aus der Ernte lässt sich mehr machen. Wer Korn mahlt und Brot bäckt, verdient 
 
 Aus der Ernte wird mehr: **Korn → Mehl → Brot** und **Flachs → Leinen**.
 
-**Windmühle** (\`bau windmühle\`: 2×2 Felder, 8 Treibholz, 2 Tangseil, **2 Leinen** für die Flügel, 16 Arbeit). Mahlen darf jeder an jeder Mühle: \`mahle alle weizen\` schüttet dein Korn hinein (Weizen, Gerste oder Hafer, bis 12 auf einmal, höchstens drei Säcke je Figur). Sie mahlt eine Weltstunde je Handvoll, was vor dir kam, zuerst. \`mahle\` allein sagt, wie lange sie noch zu tun hat; ist dein Mehl fertig, holt \`abholen\` es (bis zwei Felder Abstand). Bei **Sturmflut** auf ihrer Insel dreht sie schneller und mahlt sechs Stunden voraus. Fällt die Mühle, bevor dein Korn gemahlen ist, holst du an ihrer Stelle dein Korn zurück. Was zwei Wochen niemand abholt, ist verloren.
+**Windmühle** (\`bau windmühle\`: 2×2 Felder, 8 Treibholz, 2 Tangseil, **2 Leinen** für die Flügel, 16 Arbeit). Mahlen darf jeder an jeder Mühle: \`mahle alle weizen\` schüttet dein Korn hinein (Weizen, Gerste oder Hafer, auch Knochen zu Knochenmehl, bis 12 auf einmal, höchstens drei Säcke je Figur). Sie mahlt eine Weltstunde je Handvoll, was vor dir kam, zuerst. \`mahle\` allein sagt, wie lange sie noch zu tun hat; ist dein Mehl fertig, holt \`abholen\` es (bis zwei Felder Abstand). Bei **Sturmflut** auf ihrer Insel dreht sie schneller und mahlt sechs Stunden voraus. Fällt die Mühle, bevor dein Korn gemahlen ist, holst du an ihrer Stelle dein Korn zurück. Was zwei Wochen niemand abholt, ist verloren.
 
 **Backhaus** (\`bau backhaus\`: 2×2 Felder, 6 Treibholz, 6 Muscheln, 1 Tangseil, 12 Arbeit). Daneben bäckt \`backe brot\` aus **2 Mehl, einer Kanne Wasser und einem Scheit Treibholz** drei Brote, an jedem Backhaus, wem es auch gehört.
 
@@ -1429,7 +1435,7 @@ The harvest can become more. Grinding grain and baking bread earns more than the
 
 The harvest becomes more: **grain → flour → bread** and **flax → linen**.
 
-**Windmill** (\`bau windmühle\`: 2×2 cells, 8 driftwood, 2 kelp rope, **2 linen** for the sails, 16 work). Anyone may grind at any mill: \`mahle alle weizen\` (\`grind\`) pours your grain in (wheat, barley or oats, up to 12 at once, at most three sacks per figure). It grinds a world hour per handful, what came before you first. \`mahle\` alone says how long it still has to go; when your flour is ready, \`abholen\` (\`pickup\`) fetches it (from up to two cells away). In a **storm surge** on its island it turns faster and grinds six hours ahead. If the mill falls before your grain is ground, you fetch your grain back at its place. What nobody fetches in two weeks is lost.
+**Windmill** (\`bau windmühle\`: 2×2 cells, 8 driftwood, 2 kelp rope, **2 linen** for the sails, 16 work). Anyone may grind at any mill: \`mahle alle weizen\` (\`grind\`) pours your grain in (wheat, barley or oats, bones into bone meal too, up to 12 at once, at most three sacks per figure). It grinds a world hour per handful, what came before you first. \`mahle\` alone says how long it still has to go; when your flour is ready, \`abholen\` (\`pickup\`) fetches it (from up to two cells away). In a **storm surge** on its island it turns faster and grinds six hours ahead. If the mill falls before your grain is ground, you fetch your grain back at its place. What nobody fetches in two weeks is lost.
 
 **Bakery** (\`bau backhaus\`: 2×2 cells, 6 driftwood, 6 shells, 1 kelp rope, 12 work). Beside it \`backe brot\` (\`bake\`) bakes three loaves from **2 flour, a can of water and a log of driftwood**, at any bakery, whoever owns it.
 
@@ -1443,8 +1449,8 @@ Marta at the Kupferhafen market buys and sells bread, flour and linen, and the j
 		section: "play",
 		title: { de: "Tiere", en: "Animals" },
 		short: {
-			de: "Alle Tiere des Spiels: Hühner, Enten, Gänse, Schafe, Ziegen, Schweine, Rinder (Kühe) und Bienen halten und füttern, Hund und Katze als Wächter, und das Wild aus dem Nebel.",
-			en: "Every animal of the game: keep and feed hens, ducks, geese, sheep, goats, pigs, cows and bees, dogs and cats as guards, and the wild animals from the fog.",
+			de: "Alle Tiere des Spiels: Hühner, Enten, Gänse, Schafe, Ziegen, Schweine, Rinder (Kühe) und Bienen halten, füttern und schlachten, was Herd, Räucherei, Metzgerei und Gerberei daraus machen, Salz, Verderb, Küken und Ferkel, Hund und Katze als Wächter, und das Wild aus dem Nebel.",
+			en: "Every animal of the game: keep, feed and slaughter hens, ducks, geese, sheep, goats, pigs, cows and bees, what the hearth, the smokehouse, the butcher's shop and the tannery make of them, salt, spoiling, chicks and piglets, dogs and cats as guards, and the wild animals from the fog.",
 		},
 		body: {
 			de: `Tiere leben in einem Stall, Gehege oder Bienenstock, der dir gehört. Du fütterst sie, und sie geben dir Eier, Milch, Wolle, Daunen, Trüffel oder Honig. Daraus entstehen Waren, die gut bezahlt werden. Hühner und Bienen gehen von Anfang an, das Gehege erst im [Dorf](help.game.village#epochs), Rinder erst in der Stadt.
@@ -1502,7 +1508,7 @@ Tiere fressen, was auf Feldern und Beeten wächst. Füttern darf jeder, nicht nu
 
 Satte Tiere geben regelmäßig etwas. Abholen darf das nur, wem sie gehören.
 
-Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nichts. Bis zu drei je Tier warten im Stall; \`einsammeln\` (auch \`sammle eier\`, \`melke\`, \`schere\`) holt sie, nur der Besitzer. Zwei satte Tiere einer Art bekommen ab und zu ein Junges, bis der Stall voll ist. Reißt du den Stall ab, kommen die Tiere in deine Tasche zurück; verfällt er, warten sie im Nachlass. Kein Tier wird geschlachtet.
+Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nichts. Bis zu drei je Tier warten im Stall; \`einsammeln\` (auch \`sammle eier\`, \`melke\`, \`schere\`) holt sie, nur der Besitzer. Zwei satte Tiere einer Art bekommen ab und zu ein Junges, bis der Stall voll ist. Reißt du den Stall ab, kommen die Tiere in deine Tasche zurück; verfällt er, warten sie im Nachlass. Wer Fleisch will, schlachtet ([Schlachten und Küche](help.game.animals#slaughter)).
 
 ## Huhn {#hen}
 
@@ -1539,6 +1545,79 @@ Bienen leben im **Bienenstock**, von Anfang an. Ein **Bienenvolk** kaufst du bei
 Bienen fressen **Blumen**: Strandnelke, Dünenrose, Nebelblume und Hopfen, die im [Zierbeet](help.game.garden#bed) wachsen. \`füttere\` gibt sie ihnen wie jedem Tier, eine Blume macht ein Volk einen Tag satt. Satt gibt jedes Volk alle zwei Tage einen Topf **Honig**, und auf drei Töpfe kommt ein Klumpen **Wachs** dazu; \`einsammeln\` holt beides. Ein starkes Volk schwärmt ab und zu, dann zieht ein neues ein, bis der Stock voll ist.
 
 Honig macht satt (\`iss honig\`). Am Herd einer **Hütte** zieht \`craft kerze\` aus 2 Wachs und 1 Leinen zwei Kerzen. Gesa kauft Honig und Wachs, Marta Honig und Kerzen, und die Schenke im Hafenviertel fragt an der Auftragstafel nach Honig.
+
+## Schlachten und Küche {#slaughter}
+
+Hoftiere kannst du schlachten. Das Fleisch kochst du am Herd einer Hütte oder räucherst es in der Räucherei.
+
+\`schlachte\` (oder \`schlachte schwein\`) schlachtet ein Tier aus deinem Stall oder Gehege neben dir. Das darf nur, wem der Stall gehört, und du brauchst ein Messer, das dabei stumpfer wird: ein **Schlachtmesser** (\`craft schlachtmesser\` in der Werkstatt aus 2 Stein, 1 Bohle und 1 Tangseil, hält 20 Tiere) oder ein **Muschelmesser** (\`craft muschelmesser\`, hält 5); trägst du beide, nimmst du das Schlachtmesser. Steht im Ort eine **Metzgerei** (ab dem Dorf: 6 Stein, 4 Bohlen, 4 Treibholz), gibt jedes Tier ein Stück Fleisch mehr. Das **letzte Paar** einer Art bleibt immer im Stall, damit die Herde weiterlebt: Schlachten kannst du erst, wenn ein Junges dazugekommen ist. Bienen, Hund und Katze werden nicht geschlachtet.
+
+| Tier | gibt beim Schlachten |
+| --- | --- |
+| Huhn | 1 Hähnchen, 2 Federn |
+| Ente | 1 Entenfleisch, 2 Federn |
+| Gans | 2 Gänsefleisch, 2 Daunen, 1 Schmalz |
+| Schaf | 3 Lammfleisch, 1 Schaffell, 1 Talg, 1 Knochen |
+| Ziege | 2 Ziegenfleisch, 1 Ziegenfell, 1 Knochen |
+| Schwein | 3 Schweinefleisch, 2 Speckseiten, 1 Schmalz, 1 Borsten, 1 Knochen |
+| Rind | 4 Rindfleisch, 1 Rinderfilet, 2 Leder, 2 Talg, 2 Knochen |
+
+Was daraus wird (\`craft <name>\`):
+
+| Gericht | aus | wo | macht satt |
+| --- | --- | --- | --- |
+| Grillhähnchen | 1 Hähnchen, 1 Treibholz | Hütte | 8 Stunden |
+| 2 Hühnersuppen | 1 Hähnchen, 1 Möhre, 1 Kohl, 1 Kanne Wasser | Hütte | 8 Stunden |
+| Entenbraten | 1 Entenfleisch, 1 Treibholz | Hütte | 10 Stunden |
+| Gänsebraten | 2 Gänsefleisch, 1 Treibholz | Hütte | 14 Stunden |
+| Lammbraten | 2 Lammfleisch, 1 Treibholz | Hütte | 12 Stunden |
+| 3 Eintöpfe | 1 Ziegenfleisch, 2 Kartoffeln, 1 Rübe, 1 Kanne Wasser | Hütte | 10 Stunden |
+| Schweinebraten | 2 Schweinefleisch, 1 Treibholz | Hütte | 12 Stunden |
+| 3 Bratwürste | 2 Schweinefleisch, mit Muschelmesser | Hütte | 6 Stunden |
+| 2 Steaks | 1 Rinderfilet, 1 Treibholz | Hütte | 10 Stunden |
+| Rinderbraten | 2 Rindfleisch, 1 Treibholz | Hütte | 14 Stunden |
+| 2 Schmalzbrote | 1 Schmalz, 1 Brot | Hütte | 6 Stunden |
+| Speck | 1 Speckseite, 1 Treibholz | Räucherei | 6 Stunden |
+| Schinken | 2 Schweinefleisch, 1 Treibholz | Räucherei | 10 Stunden |
+| 2 Räucherwürste | 2 Bratwürste, 1 Treibholz | Räucherei | 8 Stunden |
+| 5 Bratwürste (\`craft metzgerwurst\`) | 2 Schweinefleisch, 1 Salz, mit Schlachtmesser | Metzgerei | 6 Stunden |
+| 2 Pökelfleisch | 2 Schweinefleisch, 1 Salz | Metzgerei | 8 Stunden |
+| 2 Trockenfleisch | 2 Rindfleisch, 1 Salz, 1 Treibholz | Räucherei | 8 Stunden |
+| Festessen | 1 Gänsebraten, 1 Schweinebraten, 2 Brot, 2 Bier | Hütte | 24 Stunden |
+| 2 Talgkerzen (Kerzen) | 2 Talg, 1 Leinen | Hütte | – |
+
+\`iss grillhähnchen\` isst es; wer satt ist, ruht nach der Arbeit kürzer.
+
+**Wer kauft:** **Wilma**, die Fleischerin am Markt von Kupferhafen, kauft rohes Fleisch, Felle, Leder, Talg, Schmalz und Knochen und verkauft Bratwurst, Speck, Schinken, Räucherwurst, Grillhähnchen, Pökelfleisch und Salz. Marta kauft Schinken, Speck, Räucherwurst, Pökel- und Trockenfleisch, Ledertaschen und Lederstiefel, Gesa Federn, Felle, Borsten und Talg, das Kaufhaus Bratwurst, Speck, Schinken, Grillhähnchen, Salz, Pökel- und Trockenfleisch und Ledertaschen. An den Auftragstafeln fragt die Schenke im Hafenviertel nach Grillhähnchen, Bratwürsten und einem Gänsebraten fürs Fest, die Riffischer nach Schinken und Speck oder Pökelfleisch als Proviant, die Fähre nach Trockenfleisch, ein Lotse nach Lederstiefeln, und fürs Erntefest im Park wird ein Festessen gesucht.
+
+## Verderb {#spoil}
+
+Frisches verdirbt: **rohes Fleisch** nach drei Tagen, **Gekochtes** (Braten, Suppen, Bratwurst, Steak, Schmalzbrot, Festessen) nach fünf, gerechnet in echter Zeit ab dem Schlachten oder Kochen, wo immer es liegt, in der Tasche wie in der Truhe. Dann ist es fort, und wer es trägt, hört es. **Geräuchertes** (Speck, Schinken, Räucherwurst, Trockenfleisch) und **Gepökeltes** hält, ebenso Felle, Leder, Talg und Knochen. Was am Marktbrett hängt, verdirbt nicht.
+
+## Salz und Salzgarten {#salt}
+
+Salz macht Fleisch haltbar und gerbt Felle. Es kommt aus einem **Salzgarten** (ab dem Dorf: 2×2, 4 Stein, 4 Lehm, 2 Treibholz): Daneben harkt \`harke\` (auch \`salz\`) 3 Salz aus den Becken, ohne Werkzeug; danach ruhst du eine Weile wie nach jeder Arbeit. Wilma verkauft auch Salz.
+
+## Gerberei und Lederwaren {#leather}
+
+Die **Gerberei** (ab der Stadt: 2×2, 8 Stein, 6 Bohlen, 4 Ziegel) gerbt Felle mit Salz zu Leder: \`craft leder\` aus 1 Schaffell und 1 Salz, \`craft ziegenleder\` aus 1 Ziegenfell und 1 Salz. Rinder geben ihr Leder schon beim Schlachten und beim Melken. In der Werkstatt wird daraus:
+
+| Ware | aus | wozu |
+| --- | --- | --- |
+| Ledertasche | 2 Leder, 1 Tangseil, mit Muschelmesser | trägst du sie, nimmst du 250 Last mehr mit (eine zählt, auch wenn du mehrere trägst) |
+| Lederstiefel | 3 Leder, mit Muschelmesser | eine Ware für Marta und den Lotsen an der Auftragstafel |
+
+## Knochenmehl als Dünger {#bonemeal}
+
+Knochen vom Schlachten mahlt die **Windmühle** zu **Knochenmehl**, wie Korn zu Mehl (\`mahle knochen\`). \`dünge\` streut 2 Knochenmehl über deinen Acker, solange die Frucht wächst: Die Ernte wird um die Hälfte größer. Einmal je Frucht; nach der Ernte ist der Boden wieder ungedüngt.
+
+## Küken und Ferkel {#young}
+
+Gesa verkauft **Küken** und **Ferkel**, billiger als ausgewachsene Tiere. \`einstallen küken\` bringt eines in deinen Hühnerstall, \`einstallen ferkel\` ins Gehege (zu Schweinen oder in ein leeres). Dort wächst es in **drei Tagen** zu einem Huhn oder Schwein heran und gibt bis dahin nichts; es braucht aber einen Platz im Stall. \`stall\` zeigt, wie viele heranwachsen.
+
+## Festessen und Opfergaben {#feast}
+
+Ein **Festessen** (\`craft festessen\` am Herd einer Hütte aus einem Gänsebraten, einem Schweinebraten, 2 Brot und 2 Bier) macht einen ganzen Tag satt; fürs Erntefest im Park zahlt die Auftragstafel 40 Münzen dafür. An einer **Kapelle** kannst du einen Braten (Gänse-, Lamm-, Schweine- oder Rinderbraten) oder ein Festessen opfern (\`opfere gänsebraten\`), wie eine Perle oder ein Brot: einen Tag lang ruhst du nach der Arbeit nur halb so lange.
 
 ## Hund und Katze {#guards}
 
@@ -1615,7 +1694,7 @@ Animals eat what grows on fields and beds. Anyone may feed them, not just the ow
 
 Fed animals give something regularly. Only their owner may collect it.
 
-Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`collect\` fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate. No animal is slaughtered.
+Hungry animals give nothing until fed again, but they lose nothing. Up to three per animal wait in the house; \`collect\` fetches them, the owner only. Two fed animals of a kind now and then get a young one, until the house is full. If you tear the house down, the animals come back into your pack; if it falls, they wait in the estate. Whoever wants meat slaughters ([slaughtering and cooking](help.game.animals#slaughter)).
 
 ## Hen {#hen}
 
@@ -1652,6 +1731,79 @@ Bees live in a **hive**, from the start. You buy a **bee colony** from Gesa; \`s
 Bees eat **flowers**: sea pink, dune rose, fog flower and hops, which grow in the [ornamental bed](help.game.garden#bed). \`fodder\` gives them flowers like any animal its feed; one flower keeps a colony fed for a day. Fed, each colony gives a pot of **honey** every other day, and a lump of **wax** comes with every three pots; \`collect\` fetches both. Now and then a strong colony swarms, and a new one moves in until the hive is full.
 
 Honey is food (\`eat honey\`). At a **hut's** hearth \`craft kerze\` makes two candles from 2 wax and 1 linen. Gesa buys honey and wax, Marta honey and candles, and the inn in the harbour quarter asks for honey at the job board.
+
+## Slaughtering and cooking {#slaughter}
+
+You can slaughter farm animals. You cook the meat at a hut's hearth or smoke it in the smokehouse.
+
+\`schlachte\` (or \`schlachte schwein\`) slaughters an animal of your coop or pen beside you. Only the owner of the house may, and you need a knife, which gets blunter each time: a **butcher's knife** (\`craft schlachtmesser\` at the workshop from 2 stone, 1 plank and 1 kelp rope, lasts 20 animals) or a **shell knife** (\`craft muschelmesser\`, lasts 5); carrying both, you use the butcher's knife. With a **butcher's shop** in the place (from the village on: 6 stone, 4 planks, 4 driftwood) every animal gives one piece of meat more. The **last pair** of a kind always stays in the house so the herd lives on: you can slaughter only once a young one has come. Bees, dogs and cats are not slaughtered.
+
+| Animal | gives when slaughtered |
+| --- | --- |
+| Hen | 1 chicken meat, 2 feathers |
+| Duck | 1 duck meat, 2 feathers |
+| Goose | 2 goose meat, 2 down, 1 lard |
+| Sheep | 3 lamb, 1 sheepskin, 1 tallow, 1 bones |
+| Goat | 2 goat meat, 1 goatskin, 1 bones |
+| Pig | 3 pork, 2 pork belly, 1 lard, 1 bristles, 1 bones |
+| Cow | 4 beef, 1 beef fillet, 2 leather, 2 tallow, 2 bones |
+
+What becomes of it (\`craft <name>\`):
+
+| Dish | from | where | keeps you fed |
+| --- | --- | --- | --- |
+| roast chicken | 1 chicken meat, 1 driftwood | hut | 8 hours |
+| 2 chicken soups | 1 chicken meat, 1 carrot, 1 cabbage, 1 can of water | hut | 8 hours |
+| roast duck | 1 duck meat, 1 driftwood | hut | 10 hours |
+| roast goose | 2 goose meat, 1 driftwood | hut | 14 hours |
+| roast lamb | 2 lamb, 1 driftwood | hut | 12 hours |
+| 3 stews | 1 goat meat, 2 potatoes, 1 beet, 1 can of water | hut | 10 hours |
+| roast pork | 2 pork, 1 driftwood | hut | 12 hours |
+| 3 sausages | 2 pork, with a shell knife | hut | 6 hours |
+| 2 steaks | 1 beef fillet, 1 driftwood | hut | 10 hours |
+| roast beef | 2 beef, 1 driftwood | hut | 14 hours |
+| 2 dripping breads | 1 lard, 1 bread | hut | 6 hours |
+| bacon | 1 pork belly, 1 driftwood | smokehouse | 6 hours |
+| ham | 2 pork, 1 driftwood | smokehouse | 10 hours |
+| 2 smoked sausages | 2 sausages, 1 driftwood | smokehouse | 8 hours |
+| 5 sausages (\`craft metzgerwurst\`) | 2 pork, 1 salt, with a butcher's knife | butcher's shop | 6 hours |
+| 2 cured meat | 2 pork, 1 salt | butcher's shop | 8 hours |
+| 2 dried meat | 2 beef, 1 salt, 1 driftwood | smokehouse | 8 hours |
+| feast | 1 roast goose, 1 roast pork, 2 bread, 2 beer | hut | 24 hours |
+| 2 tallow candles (candles) | 2 tallow, 1 linen | hut | – |
+
+\`eat roast chicken\` eats it; whoever is fed rests less after work.
+
+**Who buys:** **Wilma**, the butcher at the Kupferhafen market, buys raw meat, skins, leather, tallow, lard and bones and sells sausage, bacon, ham, smoked sausage, roast chicken, cured meat and salt. Marta buys ham, bacon, smoked sausage, cured and dried meat, leather bags and leather boots, Gesa feathers, skins, bristles and tallow, the department store sausage, bacon, ham, roast chicken, salt, cured and dried meat and leather bags. At the job boards the inn in the harbour quarter asks for roast chickens, sausages and a roast goose for a feast, the reef fishers for ham and bacon or cured meat as provisions, the ferry for dried meat, a pilot for leather boots, and the harvest festival in the park wants a feast.
+
+## Spoiling {#spoil}
+
+Fresh food spoils: **raw meat** after three days, **cooked food** (roasts, soups, sausages, steak, dripping bread, the feast) after five, counted in real time from the slaughtering or cooking, wherever it lies, in the pack or in a chest. Then it is gone, and whoever carries it hears so. **Smoked** food (bacon, ham, smoked sausage, dried meat) and **cured** meat keep, and so do skins, leather, tallow and bones. What hangs on a market board does not spoil.
+
+## Salt and the salt garden {#salt}
+
+Salt makes meat keep and tans skins. It comes from a **salt garden** (from the village on: 2×2, 4 stone, 4 clay, 2 driftwood): beside it \`harke\` (also \`salz\`, \`salt\`) rakes 3 salt from the basins, without a tool; then you rest a while as after any work. Wilma sells salt too.
+
+## Tannery and leather goods {#leather}
+
+The **tannery** (from the town on: 2×2, 8 stone, 6 planks, 4 bricks) tans skins with salt into leather: \`craft leder\` from 1 sheepskin and 1 salt, \`craft ziegenleder\` from 1 goatskin and 1 salt. Cows give their leather already when slaughtered and milked. At the workshop it becomes:
+
+| Ware | from | what for |
+| --- | --- | --- |
+| leather bag | 2 leather, 1 kelp rope, with a shell knife | carrying it, you take 250 load more (one counts, however many you carry) |
+| leather boots | 3 leather, with a shell knife | a ware for Marta and the pilot at the job board |
+
+## Bone meal as fertiliser {#bonemeal}
+
+The **windmill** grinds bones from slaughtering into **bone meal**, as it grinds grain into flour (\`mahle knochen\`). \`dünge\` scatters 2 bone meal over your field while its crop grows: the harvest grows by half. Once a crop; after the harvest the soil is unfertilised again.
+
+## Chicks and piglets {#young}
+
+Gesa sells **chicks** and **piglets**, cheaper than grown animals. \`einstallen küken\` puts one in your hen house, \`einstallen ferkel\` in the pen (with pigs or in an empty one). There it grows into a hen or a pig in **three days** and gives nothing until then; but it takes a place in the house. \`stall\` shows how many are growing up.
+
+## Feasts and offerings {#feast}
+
+A **feast** (\`craft festessen\` at a hut's hearth from a roast goose, a roast pork, 2 bread and 2 beer) keeps you fed for a whole day; for the harvest festival in the park the job board pays 40 coins for one. At a **chapel** you can offer a roast (goose, lamb, pork or beef) or a feast (\`opfere gänsebraten\`), like a pearl or a loaf: for one day you rest only half as long after work.
 
 ## Dog and cat {#guards}
 
@@ -1692,7 +1844,7 @@ Hasen knabbern an den Beeten. Sie kommen nur, wenn das Feuer aus ist.
 
 Wo das Feuer nicht brennt, kommen aus dem Nebel **Hasen** an die Beete: je dichter der Nebel, desto öfter, nachts doppelt so oft, nie mehr als zwei auf einmal in einem Ort. Solange das Feuer brennt, bleibt jeder Hase fort. Ein Hase sitzt eine halbe Weltstunde am Beet, dann frisst er: Eine Pflanze fällt eine Stufe zurück, ein Setzling ist weg. Die letzte lebende Pflanze eines Beets lässt er stehen.
 
-\`scheuche hase\` jagt ihn aus bis zu drei Schritten fort, bevor er frisst; das darf jeder, auch ein Gast, und wer zuerst kommt, rettet das Beet. Dauerhaft schützt ein **Zaun**: \`zäune\` setzt neben dem Beet für **2 Treibholz und 1 Tangseil** einen um dein Beet (oder eins, das du pflegen darfst). Auch eine **Vogelscheuche** (\`bau vogelscheuche\`: 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von allen Beeten in bis zu drei Feldern ab; sie steht drei Tage, dann will sie ausgebessert werden (1 Tang).
+\`scheuche hase\` jagt ihn aus bis zu drei Schritten fort, bevor er frisst; das darf jeder, auch ein Gast, und wer zuerst kommt, rettet das Beet. Dauerhaft schützt ein **Zaun**: \`zäune\` setzt neben dem Beet für **2 Treibholz und 1 Tangseil** einen um dein Beet (oder eins, das du pflegen darfst). Auch eine **Vogelscheuche** (\`bau vogelscheuche\`: 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von allen Beeten in bis zu drei Feldern ab; sie steht 40 Tage, dann will sie ausgebessert werden (1 Tang).
 
 ## Rehe, Füchse, Mäuse, Möwen {#wild}
 
@@ -1700,8 +1852,8 @@ Auch größeres Wild kommt aus dem Nebel. Jedes Tier hat sein eigenes Ziel.
 
 - **Rehe** fressen sich an einem wachsenden Acker satt. Jeder Besuch kostet einen Teil der Ernte, aber sie gibt immer gut die Hälfte.
 - **Füchse** holen fast nur nachts ein Tier aus dem Hühnerstall, nie das letzte.
-- **Mäuse** nagen an Korn, Mehl, Brot und Käse in der Truhe einer Hütte, nie am letzten Stück.
-- **Möwen** holen sich bei Tag Fisch vom Gestell einer Räucherei (ihrer Truhe), nie den letzten.
+- **Mäuse** nagen an Korn, Mehl, Brot, Käse, Bratwurst, Speck, Schinken und Räucherwurst in der Truhe einer Hütte, nie am letzten Stück.
+- **Möwen** holen sich bei Tag Fisch, Speck, Schinken, Räucherwurst und Trockenfleisch vom Gestell einer Räucherei (ihrer Truhe), nie das letzte Stück.
 
 Wie die Hasen fressen sie erst nach einer Weile; \`scheuche reh\`, \`scheuche fuchs\`, \`scheuche maus\` oder \`scheuche möwe\` aus bis zu drei Schritten jagt sie fort.
 
@@ -1733,7 +1885,7 @@ Hares nibble at the beds. They come only while the fire is out.
 
 Where the fire does not burn, **hares** come out of the fog to the beds: the thicker the fog, the more often, twice as often at night, never more than two at once in one place. While the fire burns, every hare stays away. A hare sits at the bed for half a world hour, then it eats: one plant falls back a stage, a seedling is gone. It leaves the bed's last living plant standing.
 
-\`scheuche hase\` (\`scare\`) chases it off from up to three cells before it eats; anyone may, a guest too, and whoever comes first saves the bed. A **fence** protects for good: \`zäune\` (\`fence\`) beside the bed puts one round your bed (or one you may tend) for **2 driftwood and 1 kelp rope**. A **scarecrow** (\`bau vogelscheuche\`: 2 driftwood, 1 kelp rope, 3 work) keeps the hares from every bed within three cells too; it stands three days, then it wants repairing (1 kelp).
+\`scheuche hase\` (\`scare\`) chases it off from up to three cells before it eats; anyone may, a guest too, and whoever comes first saves the bed. A **fence** protects for good: \`zäune\` (\`fence\`) beside the bed puts one round your bed (or one you may tend) for **2 driftwood and 1 kelp rope**. A **scarecrow** (\`bau vogelscheuche\`: 2 driftwood, 1 kelp rope, 3 work) keeps the hares from every bed within three cells too; it stands 40 days, then it wants repairing (1 kelp).
 
 ## Deer, foxes, mice, gulls {#wild}
 
@@ -1741,8 +1893,8 @@ Bigger wild animals come out of the fog too. Each has a target of its own.
 
 - **Deer** graze a growing field. Each visit costs part of the harvest, but it always gives a good half.
 - **Foxes** take an animal from a coop, almost only at night, never the last.
-- **Mice** gnaw at grain, flour, bread and cheese in a hut's chest, never the last piece.
-- **Gulls** take fish from a smokehouse's rack (its chest) by day, never the last.
+- **Mice** gnaw at grain, flour, bread, cheese, sausage, bacon, ham and smoked sausage in a hut's chest, never the last piece.
+- **Gulls** take fish, bacon, ham, smoked sausage and dried meat from a smokehouse's rack (its chest) by day, never the last piece.
 
 Like the hares they eat only after a while; \`scheuche reh\`, \`scheuche fuchs\`, \`scheuche maus\` or \`scheuche möwe\` from up to three cells chases them off.
 
@@ -1788,8 +1940,8 @@ Jede Insel steht auf einer Stufe: **Fischerdorf**, **Dorf**, **Stadt**, **Netz**
 | Stufe | ab Punkten | neu |
 | --- | --- | --- |
 | Fischerdorf | 0 | Hütte, Hühnerstall, Regentonne, Vogelscheuche, Steg, Räucherei, Beete |
-| Dorf | 15 | Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Werkstatt, Kapelle, Straße, Äcker |
-| Stadt | 40 | Rathaus, Park, Kaufhaus, Kontor, Leuchtturm, Brauerei, Glashütte, Werft, Gewächshaus, Rinder |
+| Dorf | 15 | Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Werkstatt, Kapelle, Straße, Äcker, Metzgerei, Salzgarten |
+| Stadt | 40 | Rathaus, Park, Kaufhaus, Kontor, Leuchtturm, Brauerei, Glashütte, Werft, Gewächshaus, Gerberei, Rinder |
 | Netz | 80 | Bahnhof, Signalfeuer, Beamen |
 
 Die Schwellen kann der Betreiber ändern, etwa für einen Server mit wenigen Spielern. Gezählt wird jede Weltstunde; ändert sich die Stufe, hören es alle Räume der Insel. Verfällt zu viel, fällt die Insel zurück: was steht, arbeitet weiter (die Mühle mahlt, das Backhaus backt), nur neue Pläne der höheren Stufe warten, bis der Bestand wieder reicht. \`epoche\` zeigt Stufe und Punkte der Insel, auf der du stehst.
@@ -1857,8 +2009,8 @@ Every island stands at a stage: **fishing village**, **village**, **town**, **ne
 | Stage | from points | new |
 | --- | --- | --- |
 | Fishing village | 0 | hut, coop, rain barrel, scarecrow, jetty, smokehouse, beds |
-| Village | 15 | windmill, bakery, pen, loom, warehouse, quarry, clay pit, brickworks, workshop, chapel, road, fields |
-| Town | 40 | town hall, park, department store, counting house, lighthouse, brewery, glassworks, shipyard, greenhouse, cattle |
+| Village | 15 | windmill, bakery, pen, loom, warehouse, quarry, clay pit, brickworks, workshop, chapel, road, fields, butcher's shop, salt garden |
+| Town | 40 | town hall, park, department store, counting house, lighthouse, brewery, glassworks, shipyard, greenhouse, tannery, cattle |
 | Net | 80 | station, signal fire, beaming |
 
 The operator can change the thresholds, say for a server with few players. The count runs every world hour; when the stage changes, every room of the island hears it. If too much decays, the island falls back: what stands goes on working (the mill grinds, the bakery bakes), only new plans of the higher stage wait until the stock is enough again. \`epoche\` shows the stage and points of the island you stand on.

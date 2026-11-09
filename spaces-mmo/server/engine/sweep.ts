@@ -7,6 +7,7 @@ import { fieldsOf, type ItemFields, type ListingFields, type OrderFields, type W
 import { decayNowOf, worldNowOf } from "./clock.ts";
 import { buildSweep } from "./commands/build.ts";
 import { toPlayer } from "./context.ts";
+import { resolvePrototype, spawn } from "./prototypes.ts";
 import { timeNow } from "./source.ts";
 import type { WorldDef } from "./world.ts";
 
@@ -31,6 +32,23 @@ async function wantedLapsed(space: SpaceLike, id: string, w?: WorldDef): Promise
 	} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
 }
 
+/** A thing whose time has come (PrototypeFields.turns): fresh meat spoils and goes, a young animal grows up where it is
+ *  (in a pack, a chest or its house); its owner is told when it was carried. A thing on the market board waits until it is
+ *  back with its seller. */
+async function turnItem(space: SpaceLike, id: string, w?: WorldDef): Promise<void> {
+	const txn = (await space.createTransaction(10_000)).id;
+	try {
+		const e = await space.takeIfExists({ type: "Item", id }, NO_WAIT, { txn });
+		if (!e) { await space.abort(txn); return; } // taken right now
+		const f = fieldsOf<ItemFields>(e), p = await resolvePrototype(space, f.proto);
+		const into = p?.turns?.into ? await resolvePrototype(space, p.turns.into) : null;
+		if (into && w) await spawn(space, txn, w, into, { location: f.location, x: f.x, y: f.y });
+		const room = (await space.readAll({ type: "Character", fields: { charId: f.location } }, { txn }))[0]?.fields.room;
+		if (typeof room === "string") await toPlayer(space, { room, to: f.location, kind: "info", text: into ? `Dein ${f.name} ist herangewachsen: jetzt ${/e$/.test(into.name) ? "eine" : "ein"} ${into.name}.` : `${f.name} ist verdorben; du wirfst es weg. Geräuchert, gepökelt oder gekocht hält es länger.`, from: "", fromId: "", at: timeNow() }, txn);
+		await space.commit(txn);
+	} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
+}
+
 /** Flotsam, open or taken jobs, listings and awake roles whose world time is up are removed (a listing's item goes back to its seller with
  *  the market tick, as when its lease used to end). A thing picked up is stripped of the date (the `get` command), so what is carried stays. */
 export async function sweepTick(space: SpaceLike, w?: WorldDef): Promise<void> {
@@ -43,5 +61,9 @@ export async function sweepTick(space: SpaceLike, w?: WorldDef): Promise<void> {
 	for (const e of await space.readAll({ type: "Order" })) if ((fieldsOf<OrderFields>(e).expiresWorldMs ?? Infinity) <= now) await takeIfLapsed(space, e.id, "Order");
 	for (const e of await space.readAll({ type: "Listing" })) if ((fieldsOf<ListingFields>(e).expiresWorldMs ?? Infinity) <= kept) await takeIfLapsed(space, e.id, "Listing");
 	for (const e of await space.readAll({ type: "Wanted" })) if ((fieldsOf<WantedFields>(e).expiresWorldMs ?? Infinity) <= kept) await wantedLapsed(space, e.id, w); // its coins go back with the market tick
+	for (const e of await space.readAll({ type: "Item", fields: { turns: true } })) {
+		const f = fieldsOf<ItemFields>(e);
+		if (!f.listing && (f.turnsAtMs ?? Infinity) <= kept) await turnItem(space, e.id, w); // spoiled or grown up
+	}
 	await buildSweep(space, w); // sites without progress, buildings not kept, ruins and estates whose time is up (docs/siedeln.en.md)
 }

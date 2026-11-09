@@ -353,8 +353,8 @@ Wolle), bis wieder gefüttert wird — und einem Ertrag, den man wie eine Ernte 
 - **Schweine** (Epoche 2, Gehege, Art `schwein`): fressen vor allem Kartoffeln, dazu Rüben, Möhren, Kohl, Hafer und
   Gerste — der Kartoffelacker bekommt ein Tier, das ihn abnimmt. Satt wühlt ein Schwein alle drei Tage eine Trüffel aus
   dem Boden (`trueffel`), die Marta teuer kauft und nach der die Schenke im Hafenviertel an der Auftragstafel fragt;
-  Schweine vermehren sich alle fünf satten Tage. Geschlachtet wird nichts: ein Schwein gibt, was es findet, nicht sich
-  selbst. Gesa verkauft sie (sie trägt zwei).
+  Schweine vermehren sich alle fünf satten Tage. Gesa verkauft sie (sie trägt zwei). Geschlachtet
+  (docs/schlachten.en.md) gibt ein Schwein Schweinefleisch, Speckseiten, Schmalz und Borsten.
 - **Rinder (Kühe)** (Epoche 3, Gehege, Art `rind`, auch `kuh`): Milch jeden halben Tag, doppelt so viel wie eine Ziege,
   und auf vier Kannen ein Stück Leder (`AnimalKindDef.also`); fressen Hafer, Gerste, Rüben und Kohl, wiegen 8 und kalben
   selten (alle 30 satten Tage).
@@ -1104,8 +1104,8 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
 ### Spätere Einstellungen und Ansichten
 
 **Wie lange ein Bau steht**, gilt je Klasse in Welttagen, und der Admin kann es im Admin-Panel ändern; eine gespeicherte
-Zahl gilt für den nächsten Bau, ein stehender behält sein Datum. Vorgaben: Vogelscheuche 7 (`keep.scheuche`), Hütten und
-Ähnliches 30 (`keep.bau`), Lagerhäuser und Ähnliches 45 (`keep.lager`), Kapelle 60 (`keep.kapelle`), Park 120
+Zahl gilt für den nächsten Bau, ein stehender behält sein Datum. Vorgaben: Vogelscheuche 40 (`keep.scheuche`), Hütten und
+Ähnliches 40 (`keep.bau`), Lagerhäuser und Ähnliches 45 (`keep.lager`), Kapelle 60 (`keep.kapelle`), Park 120
 (`keep.park`). Ein Plan nennt seine Klasse mit `keepSetting`.
 
 **Die Ruhe nach der Arbeit** ist die Einstellung `work.rest`, Vorgabe 15, in Weltminuten: Sie läuft im Lebenstakt. Segen und

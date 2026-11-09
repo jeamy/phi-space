@@ -19,10 +19,16 @@ export const loadOfAll = (w: WorldDef, items: Iterable<Pick<ItemFields, "proto">
 export async function loadAt(space: SpaceLike, w: WorldDef, location: string, txn: string | null): Promise<number> {
 	return loadOfAll(w, (await space.readAll({ type: "Item", fields: { location } }, txn ? { txn } : {})).map((e) => e.fields as unknown as ItemFields));
 }
-/** The most a figure carries; Infinity in a world without loads. */
-export async function packMax(space: SpaceLike, w: WorldDef): Promise<number> {
+/** The most a figure carries; Infinity in a world without loads. With `charId`, a bag it carries (world.pack.bags, a
+ *  leather bag) adds its part, each kind once however many one carries. */
+export async function packMax(space: SpaceLike, w: WorldDef, charId?: string, txn: string | null = null): Promise<number> {
 	if (!w.pack) return Infinity;
-	return (await setting(space, "pack.max").catch(() => undefined)) ?? w.pack.max;
+	const base: number = (await setting(space, "pack.max").catch(() => undefined)) ?? w.pack.max;
+	const bags = w.pack.bags;
+	if (!charId || !bags) return base;
+	let more = 0;
+	for (const [proto, n] of Object.entries(bags)) if (await space.count({ type: "Item", fields: { location: charId, proto } }, txn)) more += n;
+	return base + more;
 }
 
 /** The commands that never add to the pack: no reads around them (walking is the path played most). */
@@ -37,7 +43,7 @@ export async function packAfter(space: SpaceLike, w: WorldDef, charId: string, b
 	if (before === null) return null;
 	const after = await loadAt(space, w, charId, txn);
 	if (after <= before) return null;
-	const max = await packMax(space, w);
+	const max = await packMax(space, w, charId, txn);
 	if (after <= max) return null;
 	return `Das trägst du nicht mehr: dein Gepäck wöge ${fmtLoad(after)} von ${fmtLoad(max)}. Leg etwas in eine Truhe („verstaue <ding>“) oder lass es hier.`;
 }

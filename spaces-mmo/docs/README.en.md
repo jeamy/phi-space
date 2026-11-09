@@ -58,6 +58,7 @@ not kept here but in `client/help/articles.ts` (in the game under "?") and as to
 | [betrieb.en.md](betrieb.en.md) | Docker: image, profiles nano/big/dev, local test setup, production, load and latency |
 | [phasen.en.md](phasen.en.md) | Implementation in phases with acceptance criteria |
 | [siedeln.en.md](siedeln.en.md) | Settling, building and gardening: design and order; steps 0 to 4 are built, the rest is a plan |
+| [schlachten.en.md](schlachten.en.md) | Slaughtering, cooking and the butcher's trade: every option, step 1 built (`schlachte`, dishes, smoking, Wilma), the rest a plan |
 | [paket.en.md](paket.en.md) | Preparatory work in the root: phi-spaces as a package for all projects built on it |
 | [evennia-abbildung.en.md](evennia-abbildung.en.md) | Evennia components → entries, templates, leases, workers |
 | [weltzeit.en.md](weltzeit.en.md) | Persisted world clock, calendar, scheduler, restart and multi-host contract |
