@@ -481,8 +481,10 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 					{shownHints.map((h) => <p key={h.id} className="pack-hint">{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>)}
 				</div>}
 				<div className="pack">{kinds.map(([name, os]) => (
-					<button key={name} className={`chip${picked === name ? " on" : ""}`} onClick={() => setPicked(picked === name ? null : name)} title={name} aria-label={`${name}: ${os.length}`} aria-pressed={picked === name}>
-						<Glyph o={os[0]!} size={24} /><span className="n">{os.length}</span>
+					<button key={name} className={`chip pack-chip${picked === name ? " on" : ""}`} onClick={() => setPicked(picked === name ? null : name)} title={name} aria-label={`${name}: ${os.length}`} aria-pressed={picked === name}>
+						<span className="pack-top"><Glyph o={os[0]!} size={24} /><span className="n">{os.length}</span></span>
+						{/* what it is, under its picture: many things look alike (sacks of seed, a shell and a pebble) */}
+						<span className="pack-name">{name}</span>
 					</button>
 				))}</div>
 			</>}

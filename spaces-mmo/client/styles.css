@@ -233,6 +233,9 @@ button.link:hover { transform: none; text-decoration: underline; }
 .things .chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px 2px 4px; border-radius: 999px; }
 .things .chip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
 .chip .n { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-strong); }
+.things .chip.pack-chip { flex-direction: column; justify-content: center; gap: 1px; padding: 3px 6px; border-radius: 10px; max-width: 88px; }
+.pack-top { display: inline-flex; align-items: center; gap: 3px; }
+.pack-name { max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: max(11px, calc(var(--min-font) - 3px)); line-height: 1.15; color: var(--muted, var(--text)); }
 .pack-do { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .pack-can { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .pack-do span, .pack-do b { flex: 1; color: var(--text-strong); }
@@ -435,6 +438,7 @@ button.sheet-peek .chat-count { margin-right: 8px; vertical-align: 1px; }
 .sheet-scroll .things { border: 0; padding: 0; background: none; }
 .game-touch .things button { min-height: 40px; padding: 0 13px; font-size: max(13px, var(--min-font)); }
 .game-touch .things .chip { min-height: 48px; padding: 0 10px 0 7px; border-radius: 13px; }
+.game-touch .things .chip.pack-chip { min-height: 56px; padding: 4px 8px; border-radius: 13px; }
 .game-touch .things li { min-height: 46px; }
 .sheet-body .log { flex: 1; min-height: 0; border: 0; background: none; padding: 0; overscroll-behavior: contain; font: max(13.5px, var(--min-font))/1.5 var(--font-sans); }
 .sheet-body .log-filter { align-self: flex-end; min-height: 28px; }
