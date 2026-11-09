@@ -577,7 +577,7 @@ Handel braucht ein Konto. Ausführlich unter [Handel und Handwerk](help.game.tra
 | \`offer <dinge> an <person> [für <dinge>]\` | \`biete\`, \`tausche\` | Tausch anbieten |
 | \`accept [person]\` / \`decline [person]\` | \`annehmen\` / \`ablehnen\` | Tausch annehmen oder ablehnen |
 | \`market\` | \`markt\` | Marktbrett: Angebote ansehen, einstellen, kaufen |
-| \`craft [rezept]\` | \`baue\`, \`herstellen\` | Etwas herstellen; ohne Rezept die Liste; \`craft hier\`: was der Bau neben dir herstellt ([Alle Gebäude](help.game.buildings)) |
+| \`craft [rezept]\` | \`baue\`, \`herstellen\` | Etwas herstellen; ohne Rezept die Liste; \`craft hier\`: was der Bau neben dir herstellt ([Alle Rezepte](help.game.recipes), [Alle Gebäude](help.game.buildings)) |
 | \`order\` | \`auftrag\`, \`aufträge\` | Auftragstafel: ansehen, nehmen, liefern, zurückgeben |
 | \`reputation\` | \`ruf\` | Was du in die Leuchtfeuer gelegt, an Parks gepflegt und für die Gemeinschaft getan hast |
 | \`avatar\` | \`aussehen\` | Wie deine Figur in 3D aussieht (siehe Figur) |
@@ -763,7 +763,7 @@ Trade needs an account. In detail under [Trade and crafting](help.game.trade).
 | \`offer <things> an <person> [für <things>]\` | \`biete\`, \`tausche\` | Offer a swap |
 | \`accept [person]\` / \`decline [person]\` | \`annehmen\` / \`ablehnen\` | Accept or decline a swap |
 | \`market\` | \`markt\` | Market board: see, post and buy offers |
-| \`craft [recipe]\` | \`baue\`, \`herstellen\` | Make something; without a recipe the list; \`craft hier\`: what the building beside you makes ([all buildings](help.game.buildings)) |
+| \`craft [recipe]\` | \`baue\`, \`herstellen\` | Make something; without a recipe the list; \`craft hier\`: what the building beside you makes ([all recipes](help.game.recipes), [all buildings](help.game.buildings)) |
 | \`order\` | \`auftrag\`, \`aufträge\` | Job board: see, take, deliver, give back |
 | \`reputation\` | \`ruf\` | What you put into the beacons, the parks you tended and what you did for the community |
 | \`avatar\` | \`aussehen\` | How your figure looks in 3D (see Figure) |
@@ -1226,6 +1226,123 @@ A building lasts **40 to 60 days**: hut, coops, pen, hive, rain barrel, scarecro
 You can tear down what is yours at any time. You get part of the material back.
 
 \`abriss\` (\`demolish\`, or “reiß die hütte ab”) at your building frees the land and the light and gives back half the material and the chest's contents. A site given up gives back everything delivered.`,
+		},
+	},
+	{
+		id: "help.game.recipes",
+		section: "play",
+		title: { de: "Alle Rezepte", en: "All recipes" },
+		short: {
+			de: "Jedes Rezept auf einen Blick: was es braucht, wo man es herstellt und wie lange es satt macht.",
+			en: "Every recipe at a glance: what it needs, where it is made and how long it keeps one sated.",
+		},
+		body: {
+			de: `Alles, was man herstellt, mit \`craft <rezept>\` (auch \`herstellen\`). Steht ein Ort dabei, geht es nur **direkt neben** einem solchen Bau, egal wem er gehört; die Zutaten kommen aus deiner Tasche. Neben einem Bau zeigt \`craft hier\` (oder „Was man hier herstellen kann“ in seinem Menü) seine Rezepte und bietet an, wofür du schon alles dabeihast. „×3“ heißt: Das Rezept gibt drei Stück. Rohes Fleisch und Fisch isst man nicht, man kocht oder räuchert sie; **satt** sagt, wie lange etwas nach \`iss\` satt macht ([Bauen](help.game.build), [Alle Gebäude](help.game.buildings)).
+
+| Rezept | braucht | wo | Essen |
+| --- | --- | --- | --- |
+| Bernsteinkette (\`craft kette\`) | 1 Bernstein, 2 Muschel, 1 Tangseil, mit Muschelmesser | überall |  |
+| Holzbündel (\`craft holzbuendel\`) | 3 Treibholz, mit Muschelmesser | überall |  |
+| Leinen (\`craft leinen\`) | 3 Flachs, mit Spindel | überall |  |
+| Mausefalle (\`craft mausefalle\`) | 1 Treibholz, 2 Muschel, 1 Tangseil | überall |  |
+| Muschelmesser (\`craft muschelmesser\`) | 2 Muschel, 1 Treibholz | überall |  |
+| Netz (\`craft netz\`) | 2 Tangseil, mit Muschelmesser | überall |  |
+| Spaten (\`craft spaten\`) | 2 Treibholz, 1 Tangseil | überall |  |
+| Spindel (\`craft spindel\`) | 1 Treibholz, 1 Muschel | überall |  |
+| Spitzhacke (\`craft spitzhacke\`) | 2 Treibholz, 2 Stein, 1 Tangseil | überall |  |
+| Tangseil (\`craft tangseil\`) | 3 Tang | überall |  |
+| Bratwurst ×3 (\`craft bratwurst\`) | 2 Schweinefleisch, mit Muschelmesser | Hütte | satt 6 Std. |
+| Eintopf ×3 (\`craft eintopf\`) | 1 Ziegenfleisch, 2 Kartoffel, 1 Rübe, 1 Kanne Wasser | Hütte | satt 10 Std. |
+| Entenbraten (\`craft entenbraten\`) | 1 Entenfleisch, 1 Treibholz | Hütte | satt 10 Std. |
+| Festessen (\`craft festessen\`) | 1 Gänsebraten, 1 Schweinebraten, 2 Brot, 2 Bier | Hütte | satt 24 Std. |
+| Gänsebraten (\`craft gaensebraten\`) | 2 Gänsefleisch, 1 Treibholz | Hütte | satt 14 Std. |
+| Grillhähnchen (\`craft grillhaehnchen\`) | 1 Hähnchen, 1 Treibholz | Hütte | satt 8 Std. |
+| Hühnersuppe ×2 (\`craft huehnersuppe\`) | 1 Hähnchen, 1 Möhre, 1 Kohl, 1 Kanne Wasser | Hütte | satt 8 Std. |
+| Käse (\`craft kaese\`) | 3 Milch, 1 Treibholz | Hütte | satt 8 Std. |
+| Kerze ×2 (\`craft kerze\`) | 2 Wachs, 1 Leinen | Hütte |  |
+| Lammbraten (\`craft lammbraten\`) | 2 Lammfleisch, 1 Treibholz | Hütte | satt 12 Std. |
+| Rinderbraten (\`craft rinderbraten\`) | 2 Rindfleisch, 1 Treibholz | Hütte | satt 14 Std. |
+| Schmalzbrot ×2 (\`craft schmalzbrot\`) | 1 Schmalz, 1 Brot | Hütte | satt 6 Std. |
+| Schweinebraten (\`craft schweinebraten\`) | 2 Schweinefleisch, 1 Treibholz | Hütte | satt 12 Std. |
+| Steak ×2 (\`craft steak\`) | 1 Rinderfilet, 1 Treibholz | Hütte | satt 10 Std. |
+| Talgkerze ×2 (\`craft talgkerze\`) | 2 Talg, 1 Leinen | Hütte |  |
+| Brot ×3 (\`craft brot\`) | 2 Mehl, 1 Kanne Wasser, 1 Treibholz | Backhaus | satt 12 Std. |
+| Daunendecke (\`craft decke\`) | 2 Tuch, 3 Daunen | Webstuhl |  |
+| Tuch (\`craft tuch\`) | 3 Wolle, mit Spindel | Webstuhl |  |
+| Ziegel ×3 (\`craft ziegel\`) | 3 Lehm, 1 Treibholz | Ziegelei |  |
+| Räucherfisch ×2 (\`craft raeucherfisch\`) | 2 Fisch, 1 Treibholz | Räucherei | satt 10 Std. |
+| Räucherwurst ×2 (\`craft raeucherwurst\`) | 2 Bratwurst, 1 Treibholz | Räucherei | satt 8 Std. |
+| Schinken (\`craft schinken\`) | 2 Schweinefleisch, 1 Treibholz | Räucherei | satt 10 Std. |
+| Speck (\`craft speck\`) | 1 Speckseite, 1 Treibholz | Räucherei | satt 6 Std. |
+| Trockenfleisch ×2 (\`craft trockenfleisch\`) | 2 Rindfleisch, 1 Salz, 1 Treibholz | Räucherei | satt 8 Std. |
+| Bratwurst mit Salz ×5 (\`craft metzgerwurst\`) | 2 Schweinefleisch, 1 Salz, mit Schlachtmesser | Metzgerei | satt 6 Std. |
+| Pökelfleisch ×2 (\`craft poekelfleisch\`) | 2 Schweinefleisch, 1 Salz | Metzgerei | satt 8 Std. |
+| Leder (\`craft leder\`) | 1 Schaffell, 1 Salz | Gerberei |  |
+| Ziegenleder (\`craft ziegenleder\`) | 1 Ziegenfell, 1 Salz | Gerberei |  |
+| Bier ×2 (\`craft bier\`) | 3 Gerste, 1 Hopfen, 1 Kanne Wasser | Brauerei | satt 2 Std. |
+| Glas ×2 (\`craft glas\`) | 3 Sand, 2 Treibholz | Glashütte |  |
+| Segelboot (\`craft segelboot\`) | 10 Bohle, 4 Leinen, 2 Tauwerk | Werft |  |
+| Bohle (\`craft bohle\`) | 2 Treibholz, mit Muschelmesser | Werkstatt |  |
+| Gehäuse (\`craft gehaeuse\`) | 4 Bohle, 2 Stein, 1 Tangseil, mit Muschelmesser | Werkstatt |  |
+| Karren (\`craft karren\`) | 4 Bohle, 1 Tauwerk | Werkstatt |  |
+| Lederstiefel (\`craft lederstiefel\`) | 3 Leder, mit Muschelmesser | Werkstatt |  |
+| Ledertasche (\`craft ledertasche\`) | 2 Leder, 1 Tangseil, mit Muschelmesser | Werkstatt |  |
+| Ruderboot (\`craft ruderboot\`) | 6 Bohle, 2 Tangseil | Werkstatt |  |
+| Schlachtmesser (\`craft schlachtmesser\`) | 2 Stein, 1 Bohle, 1 Tangseil | Werkstatt |  |
+| Tauwerk (\`craft tauwerk\`) | 3 Tangseil | Werkstatt |  |`,
+			en: `Everything one makes, with \`craft <recipe>\`. Where a place is named, only **right beside** such a building, whoever owns it; the ingredients come from your pack. Beside a building \`craft hier\` (or „Was man hier herstellen kann“ in its menu) lists its recipes and offers what you already carry everything for. „×3“ means the recipe gives three. Raw meat and fish are not eaten, they are cooked or smoked; **sated** says how long a thing keeps you sated after \`iss\` ([Building](help.game.build), [All buildings](help.game.buildings)).
+
+| Recipe | needs | where | food |
+| --- | --- | --- | --- |
+| Bernsteinkette (amber necklace) (\`craft kette\`) | 1 amber, 2 shell, 1 kelp rope, with shell knife | anywhere |  |
+| Holzbündel (wood bundle) (\`craft holzbuendel\`) | 3 driftwood, with shell knife | anywhere |  |
+| Leinen (linen) (\`craft leinen\`) | 3 flax, with spindle | anywhere |  |
+| Mausefalle (mousetrap) (\`craft mausefalle\`) | 1 driftwood, 2 shell, 1 kelp rope | anywhere |  |
+| Muschelmesser (shell knife) (\`craft muschelmesser\`) | 2 shell, 1 driftwood | anywhere |  |
+| Netz (net) (\`craft netz\`) | 2 kelp rope, with shell knife | anywhere |  |
+| Spaten (spade) (\`craft spaten\`) | 2 driftwood, 1 kelp rope | anywhere |  |
+| Spindel (spindle) (\`craft spindel\`) | 1 driftwood, 1 shell | anywhere |  |
+| Spitzhacke (pickaxe) (\`craft spitzhacke\`) | 2 driftwood, 2 stone, 1 kelp rope | anywhere |  |
+| Tangseil (kelp rope) (\`craft tangseil\`) | 3 kelp | anywhere |  |
+| Bratwurst (sausage) ×3 (\`craft bratwurst\`) | 2 pork, with shell knife | Hut | sated 6 h |
+| Eintopf (stew) ×3 (\`craft eintopf\`) | 1 goat meat, 2 potato, 1 turnip, 1 can of water | Hut | sated 10 h |
+| Entenbraten (roast duck) (\`craft entenbraten\`) | 1 duck meat, 1 driftwood | Hut | sated 10 h |
+| Festessen (feast) (\`craft festessen\`) | 1 roast goose, 1 roast pork, 2 bread, 2 beer | Hut | sated 24 h |
+| Gänsebraten (roast goose) (\`craft gaensebraten\`) | 2 goose meat, 1 driftwood | Hut | sated 14 h |
+| Grillhähnchen (roast chicken) (\`craft grillhaehnchen\`) | 1 chicken meat, 1 driftwood | Hut | sated 8 h |
+| Hühnersuppe (chicken soup) ×2 (\`craft huehnersuppe\`) | 1 chicken meat, 1 carrot, 1 cabbage, 1 can of water | Hut | sated 8 h |
+| Käse (cheese) (\`craft kaese\`) | 3 milk, 1 driftwood | Hut | sated 8 h |
+| Kerze (candle) ×2 (\`craft kerze\`) | 2 wax, 1 linen | Hut |  |
+| Lammbraten (roast lamb) (\`craft lammbraten\`) | 2 lamb, 1 driftwood | Hut | sated 12 h |
+| Rinderbraten (roast beef) (\`craft rinderbraten\`) | 2 beef, 1 driftwood | Hut | sated 14 h |
+| Schmalzbrot (dripping bread) ×2 (\`craft schmalzbrot\`) | 1 lard, 1 bread | Hut | sated 6 h |
+| Schweinebraten (roast pork) (\`craft schweinebraten\`) | 2 pork, 1 driftwood | Hut | sated 12 h |
+| Steak (steak) ×2 (\`craft steak\`) | 1 beef fillet, 1 driftwood | Hut | sated 10 h |
+| Talgkerze (tallow candle) ×2 (\`craft talgkerze\`) | 2 tallow, 1 linen | Hut |  |
+| Brot (bread) ×3 (\`craft brot\`) | 2 flour, 1 can of water, 1 driftwood | Bakehouse | sated 12 h |
+| Daunendecke (down quilt) (\`craft decke\`) | 2 cloth, 3 down | Loom |  |
+| Tuch (cloth) (\`craft tuch\`) | 3 wool, with spindle | Loom |  |
+| Ziegel (brick) ×3 (\`craft ziegel\`) | 3 clay, 1 driftwood | Brickworks |  |
+| Räucherfisch (smoked fish) ×2 (\`craft raeucherfisch\`) | 2 fish, 1 driftwood | Smokehouse | sated 10 h |
+| Räucherwurst (smoked sausage) ×2 (\`craft raeucherwurst\`) | 2 sausage, 1 driftwood | Smokehouse | sated 8 h |
+| Schinken (ham) (\`craft schinken\`) | 2 pork, 1 driftwood | Smokehouse | sated 10 h |
+| Speck (bacon) (\`craft speck\`) | 1 pork belly, 1 driftwood | Smokehouse | sated 6 h |
+| Trockenfleisch (dried meat) ×2 (\`craft trockenfleisch\`) | 2 beef, 1 salt, 1 driftwood | Smokehouse | sated 8 h |
+| Bratwurst mit Salz (sausages with salt) ×5 (\`craft metzgerwurst\`) | 2 pork, 1 salt, with butcher's knife | Butcher's Shop | sated 6 h |
+| Pökelfleisch (cured meat) ×2 (\`craft poekelfleisch\`) | 2 pork, 1 salt | Butcher's Shop | sated 8 h |
+| Leder (leather) (\`craft leder\`) | 1 sheepskin, 1 salt | Tannery |  |
+| Ziegenleder (goat leather) (\`craft ziegenleder\`) | 1 goatskin, 1 salt | Tannery |  |
+| Bier (beer) ×2 (\`craft bier\`) | 3 barley, 1 hops, 1 can of water | Brewery | sated 2 h |
+| Glas (glass) ×2 (\`craft glas\`) | 3 sand, 2 driftwood | Glassworks |  |
+| Segelboot (sailing boat) (\`craft segelboot\`) | 10 plank, 4 linen, 2 cordage | Shipyard |  |
+| Bohle (plank) (\`craft bohle\`) | 2 driftwood, with shell knife | Workshop |  |
+| Gehäuse (casing) (\`craft gehaeuse\`) | 4 plank, 2 stone, 1 kelp rope, with shell knife | Workshop |  |
+| Karren (cart) (\`craft karren\`) | 4 plank, 1 cordage | Workshop |  |
+| Lederstiefel (leather boots) (\`craft lederstiefel\`) | 3 leather, with shell knife | Workshop |  |
+| Ledertasche (leather bag) (\`craft ledertasche\`) | 2 leather, 1 kelp rope, with shell knife | Workshop |  |
+| Ruderboot (rowing boat) (\`craft ruderboot\`) | 6 plank, 2 kelp rope | Workshop |  |
+| Schlachtmesser (butcher's knife) (\`craft schlachtmesser\`) | 2 stone, 1 plank, 1 kelp rope | Workshop |  |
+| Tauwerk (cordage) (\`craft tauwerk\`) | 3 kelp rope | Workshop |  |`,
 		},
 	},
 	{

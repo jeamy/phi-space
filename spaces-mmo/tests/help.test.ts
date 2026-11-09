@@ -111,3 +111,10 @@ test("the search finds a word in either number, with or without umlauts, the bes
 	const enten = new Set(ids("enten")), entnimm = new Set(ids("entnimm"));
 	assert.ok([...entnimm].some((id) => !enten.has(id)), "\"enten\" does not find every article about \"entnimm\"");
 });
+
+test("All recipes names every recipe of the world, in both languages (written by a script from world.ts: add a new one there)", async () => {
+	const { loadWorld } = await import("../server/engine/world.ts");
+	const w = await loadWorld();
+	const a = ARTICLES.find((x) => x.id === "help.game.recipes")!;
+	for (const r of w.recipes) for (const lang of ["de", "en"] as const) assert.ok(a.body[lang].includes(`\`craft ${r.key}\``), `${r.key} missing in ${lang}`);
+});
