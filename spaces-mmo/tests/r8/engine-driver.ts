@@ -7,11 +7,12 @@
 // (server/engine/source.ts) whose clock is the driver's, moved by the steps. The environment (SPACES_MMO_*) is the
 // caller's: rust/mmo-engine/tests/common sets it for both engines.
 // In:  {"op": "clock", "at": ms} | {"op": "load", "world": "leuchtfeuer", "replace"?: bool} | {"op": "dump"}
-//      | {"op": "tick", "world": "leuchtfeuer", "job": "fire" | "fog" | "flood"}: a recurring job as the world worker runs
+//      | {"op": "tick", "world": "leuchtfeuer", "job": "fire" | "fog" | "flood" | "orders" | "market"}: a recurring job as the world worker runs
 //      it (server/world-host.ts `runs`: in stableTerrain, on spatialWorld), its messages kept MSG_LEASE_MS (10 min)
 //      | {"op": "player", "account": {...}, "char": {...}, "session"?: id}: an account, its character and its token as the
 //      accounts write them (server/accounts.ts; given whole, so neither side draws from the source), a Session when online
 //      | {"op": "write", "entry": {...}, "lease"?: ms}: an entry written as it is (the state a walk needs: a Spot, an Offer)
+//      | {"op": "take", "template": {...}}: one entry taken away (true when there was one)
 //      | {"op": "cmd", "charId", "intentId", "line", "step"?, "asked"?, "lang"?}: an Intent as the gateway (or the model
 //      process, with `asked`) writes it, then the character's
 //      oldest intent served as the world worker does (server/world-host.ts `serve`, copied below): "ran", "held",
@@ -33,6 +34,7 @@ const { WORLD_LOCK } = await from("server/model.ts");
 const { connectSpace } = await from("server/space.ts");
 const { stableTerrain, spatialWorld } = await from("server/engine/room-growth.ts");
 const { fireTick, chainTick, fogTick, floodTick } = await from("server/engine/fire.ts");
+const { ordersTick, marketTick } = await from("server/engine/commands/trade.ts");
 const { byPeoplesPace } = await from("server/engine/clock.ts");
 const { execute, CommandError } = await from("server/engine/commands.ts");
 const { msg } = await from("server/engine/context.ts");
@@ -130,6 +132,8 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 				fire: job(async (live) => { await fireTick(space, live, msgLeaseMs); await chainTick(space, live, msgLeaseMs); }),
 				fog: job((live) => fogTick(space, live, msgLeaseMs)),
 				flood: job(async (live) => { if (await byPeoplesPace(space)) await floodTick(space, live, msgLeaseMs); }),
+				orders: job((live) => ordersTick(space, live)),
+				market: job((live) => marketTick(space, live)),
 			};
 			const run = runs[String(line.job)];
 			if (!run) throw new Error(`unknown job ${String(line.job)}`);
@@ -154,6 +158,7 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 			return await serve(w, String(line.charId));
 		}
 		case "write": await space.write(line.entry, null, line.lease ?? FOREVER); return null;
+		case "take": return !!(await space.takeIfExists(line.template, NO_WAIT));
 		case "dump": return (await space.readAll({})).map((e: { type: string; types: string[]; fields: unknown }) => JSON.stringify([e.type, e.types, canon(e.fields)]));
 		default: throw new Error(`unknown op ${String(line.op)}`);
 	}

@@ -155,6 +155,13 @@ impl Walk {
 		assert_eq!(t.get("ok"), Some(&Json::Bool(true)), "write: {}", t.to_json_text());
 		self.run(self.space.write(&entry, None, FOREVER)).expect("the write");
 	}
+	/// One entry taken away alike on both sides (whether there was one).
+	pub fn take(&mut self, template: Json) -> bool {
+		let t = self.ts.call(obj! { "op" => "take", "template" => template.clone() });
+		let r = self.run(self.space.take_if_exists(&template, mmo_engine::space::NO_WAIT, None)).expect("the take").is_some();
+		assert_eq!(t.get("result"), Some(&Json::Bool(r)), "take: {}", t.to_json_text());
+		r
+	}
 	/// One command line of `char_id` on both sides; what serve said (the same on both).
 	pub fn cmd(&mut self, char_id: &str, line: &str, step: Option<Json>) -> String { self.cmd_as(char_id, line, step, None, None) }
 	/// `cmd` with what the model process sets: the sentence it translated, the player's language.

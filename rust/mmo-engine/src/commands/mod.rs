@@ -19,6 +19,7 @@ pub mod passage;
 pub mod settlement;
 pub mod siteorder;
 pub mod townhall;
+pub mod trade;
 
 /// A command (`Command`): an exit's command carries the exit.
 #[derive(Debug, Clone)]
@@ -113,6 +114,7 @@ pub async fn run(c: &mut Ctx, cmd: &Command, arg: &str, merged: &Merged, exits: 
 		("default", key) => default::run(c, key, arg).await,
 		("build", key) => build::run(c, key, arg).await,
 		("siteorder", "aushang") => siteorder::aushang(c, arg).await,
+		("trade", key) => trade::run(c, key, arg).await,
 		(m, k) => Err(Error::Other(format!("unported: {m}/{k}"))),
 	}
 }

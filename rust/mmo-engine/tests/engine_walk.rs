@@ -252,3 +252,94 @@ fn building() {
 	assert!(said.iter().any(|r| r == "ran") && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
 	assert!(w.entries_with("steht! Mitgebaut") >= 1, "the hut never stood");
 }
+
+/// Trade (trade.ts): offers between two with their refusals, the market board's listings and wanted notices (answered,
+/// delivered for less, withdrawn), crafting with a tool that wears and breaks, the order board, and the ticks that post
+/// orders, restock a trader and give back what lies in escrow for a listing that lapsed.
+#[test]
+fn trading() {
+	let mut w = Walk::new("trading", 29, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (7.0, 13.0), true, false);
+	let g = w.player(3, "graue-bucht", (4.0, 12.0), true);
+	let d = w.player_as(4, "anleger", (16.0, 4.0), true, false);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	give(&mut w, &a, "treibholz", 14);
+	give(&mut w, &a, "muschel", 8);
+	give(&mut w, &a, "muenze", 10);
+	give(&mut w, &a, "tangseil", 2);
+	give(&mut w, &b, "treibholz", 3);
+	give(&mut w, &b, "muenze", 12);
+	give(&mut w, &g, "treibholz", 1);
+	w.compare("setup");
+	let i = std::cell::Cell::new(0);
+	let mut said = Vec::new();
+	let mut run = |w: &mut Walk, who: &str, line: &str| {
+		i.set(i.get() + 1);
+		let i = i.get();
+		w.at(START + i as f64 * 7_000.0);
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{i}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	// offers
+	for (who, line) in [
+		(&d, "markt"), (&d, "order"), (&g, "offer treibholz an Wanderer1"), (&g, "accept"), (&g, "decline"),
+		(&a, "offer"), (&a, "offer treibholz an Niemand"), (&a, "offer stein an Wanderer2"), (&a, "offer 20 treibholz an Wanderer2"), (&a, "offer treibhol an Wanderer2"),
+		(&a, "offer 2 treibholz an Wanderer2 für 1 münze"), (&b, "decline Wanderer1"), (&b, "decline"), (&a, "offer muschel an Wanderer2"), (&b, "accept Wanderer1"),
+		(&a, "offer 2 treibholz und muschel an Wanderer2 für 2 münzen, muschel"), (&b, "accept"), (&a, "offer treibholz an Wanderer2 für 3 perlen"), (&b, "accept"), (&b, "accept Niemand"),
+		(&a, "offer zurück"), (&a, "offer zurück"), (&a, "offer 2 muscheln an Strandläufer-1003"), (&g, "decline"),
+	] { run(&mut w, who, line); }
+	// the market board: listings
+	for (who, line) in [
+		(&g, "markt"), (&g, "markt biete treibholz für 2"), (&a, "markt"), (&a, "markt biete treibholz für 0"), (&a, "markt biete"), (&a, "markt biete stein für 3"),
+		(&a, "markt biete münze für 3"), (&a, "markt biete 3 treibholz für 5"), (&a, "markt biete muschel für 2 münzen"), (&a, "markt biete 30 muscheln für 9"), (&b, "markt biete treibholz um 1"), (&a, "markt"),
+		(&b, "markt kaufe 9"), (&b, "markt kaufe muschel"), (&b, "markt kaufe gans"), (&a, "markt kaufe treibholz"), (&a, "markt kaufe 3 treibholz für 6"), (&b, "markt kaufe treibholz"),
+		(&b, "markt kaufe 3 treibholz für 5"), (&a, "markt zurück 1"), (&a, "markt zurück 7"), (&b, "markt zurück 1"), (&a, "markt kaufe 1"),
+		(&a, "markt biete 2 muscheln für 4"), (&a, "markt biete treibholz für 900"), (&b, "markt kaufe 2 muscheln für 3"), (&b, "markt kaufe 2"), (&b, "markt zurück 1"), (&a, "markt zurück 1"), (&a, "markt"), (&a, "markt hm"),
+	] { run(&mut w, who, line); }
+	// wanted notices
+	for (who, line) in [
+		(&a, "markt suche ziege für 5"), (&a, "markt suche gibtsnicht für 5"), (&a, "markt suche münze für 3"), (&a, "markt suche ziege"), (&a, "markt suche ziege für 5000"),
+		(&a, "markt suche 2 treibholz für 3"), (&a, "markt suche netz für 2"), (&a, "markt suche spaten für 1"), (&a, "markt suche eine perle für 90"), (&a, "markt suche tang für 1"), (&a, "markt suche tang für 1"),
+		(&a, "markt"), (&b, "markt antworte 1 ab 9"), (&b, "markt antworte 1 ab 3"), (&b, "markt antworte 1 keins"), (&b, "markt antworte 1 x"), (&b, "markt antworte 1 ab 5000"), (&a, "markt antworte 1 ab 9"),
+		(&b, "markt antworte 1 ab 8"), (&a, "markt"), (&b, "markt liefere 1"), (&b, "markt liefere 9"), (&b, "markt liefere 2 x"), (&a, "markt liefere 2"), (&b, "markt liefere 3"),
+		(&b, "markt liefere 2 für 2"), (&b, "markt suche zurück 1"), (&a, "markt suche zurück 9"), (&a, "markt suche zurück 1"), (&a, "markt"), (&a, "inventory"), (&b, "inventory"),
+	] { run(&mut w, who, line); }
+	// crafting, beside a workshop and without one
+	for (who, line) in [
+		(&g, "craft"), (&a, "craft gibtsnicht"), (&a, "craft muschelmesser"), (&a, "craft 25 netz"), (&a, "craft 0 netz"), (&a, "craft tuch"), (&a, "craft kaese"), (&a, "craft spaten"),
+		(&a, "craft 2 netze"), (&a, "craft drei holzbündel"), (&a, "craft muschelmesser"), (&a, "craft 2 holzbuendel"), (&a, "craft tangseil"), (&a, "craft seil"), (&a, "baue hütte 30 30"), (&a, "inventory"),
+	] { run(&mut w, who, line); }
+	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "ws-1", "plan" => "werkstatt", "name" => "Werkstatt", "room" => "graue-bucht", "x" => 5.0, "y" => 14.0, "w" => 2.0, "h" => 1.0, "owner" => b.as_str(), "ownerName" => "Wanderer2", "accountId" => "a-walk2", "beaconId" => "feuer-bucht", "points" => 3.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
+	give(&mut w, &a, "treibholz", 9);
+	give(&mut w, &a, "muschel", 2);
+	for (who, line) in [(&a, "craft muschelmesser"), (&a, "craft 3 holzbuendel"), (&a, "inventory")] { run(&mut w, who, line); }
+	// the order board, with a site's and a store's orders on it
+	for (who, line) in [(&a, "order"), (&a, "order nimm 1"), (&a, "order liefere")] { run(&mut w, who, line); }
+	for _ in 0..4 { w.tick("orders"); }
+	w.write(obj! { "type" => "SiteOrder", "fields" => obj! { "orderId" => "so-1", "buildId" => "s-9", "siteName" => "Hütte", "room" => "graue-bucht", "ownerName" => "Wanderer2", "proto" => "treibholz", "name" => "Treibholz", "left" => 2.0, "pay" => 1.0, "at" => 0.0 } });
+	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "k-1", "plan" => "kaufhaus", "name" => "Kaufhaus", "room" => "graue-bucht", "x" => 20.0, "y" => 12.0, "w" => 2.0, "h" => 2.0, "owner" => b.as_str(), "ownerName" => "Wanderer2", "accountId" => "a-walk2", "beaconId" => "feuer-bucht", "points" => 3.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
+	for (id, at) in [("so-k1", "k-1"), ("so-k2", "k-gone")] { w.write(obj! { "type" => "ShopOrder", "fields" => obj! { "shopOrderId" => id, "buildId" => at, "storeName" => "Kaufhaus", "ownerName" => "Wanderer2", "room" => "graue-bucht", "proto" => "muschel", "protoName" => "Muschel", "count" => 4.0, "reward" => 1.0 } }); }
+	give(&mut w, &a, "muschel", 4);
+	give(&mut w, &a, "treibholz", 4);
+	for (who, line) in [
+		(&a, "order"), (&g, "order nimm 1"), (&a, "order liefere"), (&a, "order nimm 9"), (&a, "order nimm 1"), (&a, "order nimm 2"), (&a, "order"), (&a, "order aufgeben"), (&a, "order aufgeben"),
+		(&a, "order nimm 2"), (&a, "order x"), (&a, "order liefere"), (&b, "order nimm 1"), (&b, "order liefere"), (&a, "order"), (&a, "inventory"),
+	] { run(&mut w, who, line); }
+	// the market's tick: a lot whose listing lapsed goes back, a trader gets back what it sold
+	w.write(obj! { "type" => "Item", "fields" => { let mut t = thing(&w.w, "t-lapsed", "perle", "market").get("fields").cloned().unwrap(); walk::j_set(&mut t, "listing", Json::from("l-gone")); walk::j_set(&mut t, "seller", Json::from(b.as_str())); t } });
+	w.write(obj! { "type" => "Item", "fields" => { let mut t = thing(&w.w, "t-loose", "perle", "market").get("fields").cloned().unwrap(); walk::j_set(&mut t, "listing", Json::from("w-gone")); t } });
+	assert!(w.take(obj! { "type" => "Item", "fields" => obj! { "location" => "npc-jorin", "proto" => "muschelmesser" } }), "Jorin's knife");
+	w.tick("market");
+	w.at(START + 30.0 * 3_600_000.0);
+	w.tick("market");
+	w.tick("market");
+	w.compare("market ticks");
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 30 && said.iter().filter(|r| r.starts_with("refused")).count() > 30, "{said:?}");
+	assert!(w.entries_with(r#""Restock""#) == 0 && w.entries_with("t-lapsed") == 1, "the ticks did nothing");
+}
