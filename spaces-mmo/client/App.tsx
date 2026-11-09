@@ -246,7 +246,7 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, beds, r
 			<ul className={sheet ? `cell-menu action-sheet${side}` : "cell-menu"} role="menu" style={sheet ? undefined : { left, top }} onPointerDown={() => { pressed.current = true; }} onClickCapture={(e) => { if (!mayClick(e)) { e.preventDefault(); e.stopPropagation(); } }}>
 				{sheet && about.title && <li className="action-title">{about.title}</li>}
 				{step && typeof step === "object" && <li className="menu-note">{step.name} ({step.w}×{step.h}) ab hier nach rechts unten: {step.needs}, {step.work} Arbeit</li>}
-				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (onWalk && e.line.startsWith("move ")) { onWalk(at); close(); } else if (e.run) { e.run(); if (!e.line.startsWith("#bau") && !e.line.startsWith("#plan") && !e.line.startsWith("#zurück")) close(); } else { send(e.line); close(); } }}>{e.label}</button></li>)}
+				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (onWalk && e.line.startsWith("move ")) { onWalk(at); close(); } else if (e.run) { e.run(); if (!e.line.startsWith("#bau") && !e.line.startsWith("#plan") && !e.line.startsWith("#zurück")) close(); } else { if (e.confirm && !window.confirm(e.confirm)) return; send(e.line); close(); } }}>{e.label}</button></li>)}
 				{sheet && about.desc && (told ? <li className="menu-note">{about.desc}</li> : <li role="menuitem"><button className="action-help" onClick={() => setTold(true)}>Was ist das?</button></li>)}
 				{sheet && about.article && onHelp && <li role="menuitem"><button className="action-help" onClick={() => { close(); onHelp(about.article!); }}>Was ist das?</button></li>}
 			</ul>

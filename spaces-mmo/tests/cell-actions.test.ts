@@ -222,3 +222,14 @@ test("beside a windmill: each thing it grinds that one carries, bones too", () =
 	assert.ok(lines.includes("mahle alle Knochen") && lines.includes("mahle alle Weizen"));
 	assert.ok(!lines.includes("mahle alle Tang"));
 });
+
+test("one's own field or bed can be given up from the map, after a question; someone else's cannot", () => {
+	const at = (o: ObjView) => cellEntries({ ...input, objs: new Map([["x", o]]), at: { x: 6, y: 5 } });
+	const field = (ownerId: string) => obj({ id: "x", kind: "field", ownerId, owner: "Mira", fieldStage: "brach", x: 6, y: 5, w: 4, h: 4 });
+	const bed = (ownerId: string) => obj({ id: "x", kind: "bed", name: "Beet", ownerId, owner: "Mira", plants: [], x: 6, y: 5, w: 2, h: 2 });
+	const give = at(field("me")).find((e) => e.line === "flur aufgeben");
+	assert.ok(give?.confirm, "asked first: the crop is lost");
+	assert.ok(!at(field("other")).some((e) => e.line === "flur aufgeben"));
+	assert.ok(at(bed("me")).find((e) => e.line === "beet aufgeben")?.confirm);
+	assert.ok(!at(bed("other")).some((e) => e.line === "beet aufgeben"));
+});

@@ -2,7 +2,7 @@
 // entry is a text command; `run` is for what stays on the page. Pure, so it is tested without a browser.
 import type { CharView, ItemUses, ObjView, PlanView } from "../shared/frames.ts";
 
-export type CellEntry = { label: string; line: string; run?: () => void };
+export type CellEntry = { label: string; line: string; run?: () => void; /** asked before the line is sent (what cannot be undone) */ confirm?: string };
 export type CellInput = {
 	at: { x: number; y: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean;
 	/** What burns, cheapest carried first (a fire's "nachlegen"). */ fuel: ObjView | undefined;
@@ -127,7 +127,7 @@ export function offerWords(o: { giveNames: string[]; want: Array<{ name: string;
 
 export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, recipes, grinds }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
-	const entries: Array<{ label: string; line: string; run?: () => void }> = [];
+	const entries: CellEntry[] = [];
 	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
 		// what the figure offers the player comes first: a tap on its speech bubble opens this menu (MapView3D)
 		const offered = offersIn?.find((o) => o.fromName === c.name);
@@ -188,6 +188,8 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				if (beside && !o.fenced) entries.push({ label: "Zaun setzen (2 Treibholz, 1 Tangseil)", line: "zäune" });
 				if (mine && (o.plants ?? []).length < (o.w ?? 1) * (o.h ?? 1)) for (const n of [...new Set(carried.filter((n) => mayPlantIn(o.bedKind, n, beds)))]) entries.push({ label: `${n} pflanzen`, line: `pflanze ${n}` });
 			}
+			// one's own bed (a community bed: who dug it) goes back to grass from beside it (server: garden.ts "beet aufgeben")
+			if (beside && o.ownerId === me) entries.push({ label: "Beet aufgeben (wird wieder Gras)", line: "beet aufgeben", confirm: "Das Beet aufgeben? Was darin wächst, geht verloren, die Fläche wird wieder Gras." });
 			continue;
 		}
 		if (o.kind === "field") {
@@ -206,6 +208,8 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				if (o.fieldStage === "waechst" && [...objs.values()].some((i) => i.kind === "item" && i.location === me && i.name === "Knochenmehl")) entries.push({ label: "Düngen (2 Knochenmehl)", line: "dünge" });
 			}
 			if (nearSite && mine) entries.push(o.open ? { label: "Acker für Fremde schließen", line: "flur zu" } : { label: "Acker für alle öffnen", line: "flur offen" });
+			// one laid out by mistake goes back to grass, its light back to the fire (server: field.ts "flur aufgeben")
+			if (nearSite && mine) entries.push({ label: "Acker aufgeben (wird wieder Gras)", line: "flur aufgeben", confirm: "Den Acker aufgeben? Was darauf wächst, geht verloren, die Fläche wird wieder Gras." });
 			if (beside && may && !o.fenced) entries.push({ label: "Zaun um den Acker ziehen (6 Treibholz, 2 Tangseil)", line: "zäune" });
 			continue;
 		}
