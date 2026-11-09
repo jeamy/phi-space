@@ -218,6 +218,13 @@ test("the butcher's trade (docs/schlachten.en.md): a butcher's knife first, a bu
 		assert.equal((await s.readAll({ type: "Item", fields: { location: pen.buildId, proto: "ferkel" } })).length, 0);
 		assert.equal((await s.readAll({ type: "Item", fields: { location: pen.buildId, proto: "schwein" } })).length, 3, "the piglet is a pig now");
 		await ole.p.until((f) => f.t === "msg" && /Schweinefleisch ist verdorben; du wirfst es weg/.test(f.m.text), 10_000, from);
+		// beside the butcher's shop: an animal one carries, no pair kept; nothing carried, it says where one comes from
+		const shop = (await s.readAll({ type: "Building", fields: { buildId: "metzgerei-1" } }))[0]!.fields as never;
+		await walkBeside(ole, s, shop, taken);
+		assert.match(await does(ole.p, "schlachte", "trägst kein Tier"), /ausstallen/);
+		await give(s, ole.me, "huhn", 1);
+		assert.match(await does(ole.p, "schlachte huhn", "bekommst"), /Du bekommst 2 Hähnchen, 2 Federn\. Die Metzgerei im Ort zerlegt es gut/);
+		assert.equal(await pack(s, ole.me, "huhn"), 0);
 		// salt: beside a salt garden, without a tool
 		const salt = await building(s, { buildId: "salzgarten-1", plan: "salzgarten", name: "Salzgarten", x: 16, y: 12, w: 2, h: 2 });
 		await walkBeside(ole, s, salt, taken);

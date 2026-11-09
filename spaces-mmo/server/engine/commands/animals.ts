@@ -289,7 +289,7 @@ const oneOf = (k: AnimalKindDef) => `${/e$|^Gans$/.test(k.name) ? "eine" : "ein"
  *  last `keep` of a kind stay, so the herd goes on; bees, dogs and cats are not slaughtered. */
 const schlachte: Command = {
 	key: "schlachte", aliases: ["schlachten", "slaughter", "butcher"],
-	help: "schlachte [tier] – ein Tier aus deinem Stall oder Gehege neben dir schlachten (mit einem Muschelmesser; das letzte Paar bleibt): es gibt Fleisch und mehr für Herd und Räucherei",
+	help: "schlachte [tier] – ein Tier aus deinem Stall oder Gehege neben dir schlachten, an der Metzgerei auch eins, das du trägst (mit einem Messer; im Stall bleibt das letzte Paar): es gibt Fleisch und mehr für Herd und Räucherei",
 	async func(c, arg) {
 		const d = animalsOf(c);
 		if (!d.butcher?.tools.length) throw new CommandError("In dieser Welt wird nicht geschlachtet.");
@@ -298,10 +298,25 @@ const schlachte: Command = {
 		// the best tool carried: the butcher's knife before the shell knife
 		const tool = bt.tools.map((t) => inv.find((i) => i.f.proto === t)).find((i) => !!i);
 		if (!tool) throw new CommandError(`Zum Schlachten brauchst du ${bt.tools.map((t) => protoName(c, t)).join(" oder ")} („craft ${protoName(c, bt.tools.at(-1)!).toLowerCase()}“).`);
+		const said = arg.trim().toLowerCase().replace(ARTICLE, "").trim();
+		// beside a butcher's shop and no coop or pen: an animal one carries (taken out of its house, bought); it is one's
+		// own, so no pair has to stay
+		const shopPlan = bt.shop?.plan;
+		const nearShop = !!shopPlan && (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: shopPlan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
+		const nearHouse = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).some((e) => { const f = fieldsOf<BuildingFields>(e); return !!d.houses[f.plan] && distTo(c.actor, f) <= 1; });
+		if (nearShop && !nearHouse) {
+			const kinds = d.kinds.filter((x) => x.slaughter?.length);
+			const named = (x: AnimalKindDef) => { const p = c.world.prototypes.find((y) => y.key === x.proto); return [x.key, x.name, x.plural, ...(p?.aliases ?? [])].some((a) => a.toLowerCase() === said); };
+			const carried = inv.find((i) => kinds.some((x) => x.proto === i.f.proto && (!said || named(x))));
+			if (!carried) throw new CommandError(said ? `Du trägst kein Tier, das „${said.slice(0, 30)}“ heißt und geschlachtet wird.` : `Du trägst kein Tier zum Schlachten. Hol eins aus deinem Stall („ausstallen“) oder schlachte direkt am Stall.`);
+			const k = kinds.find((x) => x.proto === carried.f.proto)!;
+			await consume(c, carried.f, c.actor.charId);
+			await butchered(c, tool, k, bt.shop!.bonus, true);
+			return;
+		}
 		const { b, k, n } = await houseHere(c, d);
 		if (!mine(c, b)) throw new CommandError(`Die Tiere gehören ${b.ownerName}; schlachten darf nur, wem der Stall gehört.`);
 		if (!k || !n) throw new CommandError("Im Stall ist kein Tier.");
-		const said = arg.trim().toLowerCase().replace(ARTICLE, "").trim();
 		const p = c.world.prototypes.find((x) => x.key === k.proto);
 		if (said && ![k.key, k.name, k.plural, ...(p?.aliases ?? [])].some((a) => a.toLowerCase() === said)) throw new CommandError(`Im Stall leben ${k.plural}.`);
 		if (!k.slaughter?.length) throw new CommandError(`${k.plural} werden nicht geschlachtet; sie geben, was sie sammeln.`);
@@ -310,18 +325,23 @@ const schlachte: Command = {
 		const e = one && (await c.space.takeIfExists({ id: one.id }, NO_WAIT, { txn: c.txn }));
 		if (!e) throw new CommandError("Das Tier ist gerade nicht greifbar; bitte noch einmal.");
 		await putBack(c, b);
-		const left = (tool.f.wear ?? 1) - 1;
-		if (left <= 0) await consume(c, tool.f, c.actor.charId);
-		else await move(c, tool.f, c.actor.charId, c.actor.charId, { wear: left });
 		// a butcher's shop in the room: more of the first thing (the meat), cut by one who knows how
 		const shop = bt.shop && (await c.space.count({ type: "Building", fields: { room: c.actor.room, plan: bt.shop.plan } }, c.txn)) ? bt.shop.bonus : 0;
-		const gives = k.slaughter.map((x, i) => ({ proto: x.proto, count: x.count + (i === 0 ? shop : 0) }));
-		await giveBack(c, gives);
-		const got = gives.map((x) => { const name = protoName(c, x.proto); return `${x.count} ${x.count === 1 ? name : pluralOf(name, c.world)}`; });
-		await msg(c, "*", "emote", `${c.actor.name} schlachtet im Stall ${oneOf(k)}.`);
-		await msg(c, c.actor.charId, "info", `Du bekommst ${got.join(", ")}.${shop ? ` Die ${planOf(c.world, bt.shop!.plan)?.name ?? "Metzgerei"} im Ort zerlegt es gut.` : ""}${left <= 0 ? ` Dein ${tool.f.name} ist stumpf geworden und zerbrochen.` : ""}`);
+		await butchered(c, tool, k, shop, false);
 	},
 };
+
+/** After the animal is taken: the knife wears, the yields (the first one `bonus` more) come into the pack, both are told. */
+async function butchered(c: CommandCtx, tool: { f: ItemFields }, k: AnimalKindDef, bonus: number, atShop: boolean): Promise<void> {
+	const left = (tool.f.wear ?? 1) - 1;
+	if (left <= 0) await consume(c, tool.f, c.actor.charId);
+	else await move(c, tool.f, c.actor.charId, c.actor.charId, { wear: left });
+	const gives = k.slaughter!.map((x, i) => ({ proto: x.proto, count: x.count + (i === 0 ? bonus : 0) }));
+	await giveBack(c, gives);
+	const got = gives.map((x) => { const name = protoName(c, x.proto); return `${x.count} ${x.count === 1 ? name : pluralOf(name, c.world)}`; });
+	await msg(c, "*", "emote", atShop ? `${c.actor.name} schlachtet in der Metzgerei ${oneOf(k)}.` : `${c.actor.name} schlachtet im Stall ${oneOf(k)}.`);
+	await msg(c, c.actor.charId, "info", `Du bekommst ${got.join(", ")}.${bonus ? ` Die ${planOf(c.world, animalsOf(c).butcher!.shop!.plan)?.name ?? "Metzgerei"} im Ort zerlegt es gut.` : ""}${left <= 0 ? ` Dein ${tool.f.name} ist stumpf geworden und zerbrochen.` : ""}`);
+}
 
 /** Whether "sammle <arg>" means a yield of the animals ("sammle eier", "die wolle"). */
 export const meansYield = (c: CommandCtx, arg: string) => {

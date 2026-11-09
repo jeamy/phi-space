@@ -109,6 +109,8 @@ const SOWN: Record<string, string> = { Weizen: "weizen", Gerste: "gerste", Hafer
 /** The houses of animals by plan, with the animals (as their things are named) each takes in (server: world animals). */
 // with the young ones that grow up in them (Küken, Ferkel)
 const HOUSES: Record<string, string[]> = { huehnerstall: ["Huhn", "Küken"], gehege: ["Schaf", "Ziege", "Ente", "Gans", "Rind", "Schwein", "Ferkel"], bienenstock: ["Bienenvolk"] };
+/** The animals that are slaughtered, as their things are named (server: world animals with `slaughter`; the young grow up first). */
+const SLAUGHTERED = ["Huhn", "Schaf", "Ziege", "Ente", "Gans", "Rind", "Schwein"];
 const AREA = new Set(["site", "building", "ruin", "bed", "field", "scenery", "liner"]);
 const covers = (o: ObjView, c: { x: number; y: number }) => c.x >= o.x && c.y >= o.y && c.x < o.x + (o.w ?? 1) && c.y < o.y + (o.h ?? 1);
 
@@ -239,6 +241,15 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 					if (o.herd && o.herd !== "biene" && [...objs.values()].some((i) => i.kind === "item" && i.location === me && (i.name === "Schlachtmesser" || i.name === "Muschelmesser"))) entries.push({ label: "Ein Tier schlachten", line: "schlachte" });
 					if (o.plan === "huehnerstall" && !o.fenced) entries.push({ label: "Zaun mit Tür setzen (3 Treibholz, 1 Tangseil)", line: "zäune" });
 				}
+			}
+			// the butcher's shop: an animal one carries is slaughtered here, with a knife (server: animals.ts schlachte); without
+			// one, or with no animal, the command says what is missing
+			if (o.plan === "metzgerei") {
+				const carried = [...objs.values()].filter((i) => i.kind === "item" && i.location === me);
+				const animals = [...new Set(carried.filter((i) => SLAUGHTERED.includes(i.name)).map((i) => i.name))];
+				const knife = carried.some((i) => i.name === "Schlachtmesser" || i.name === "Muschelmesser");
+				if (knife && animals.length) for (const n of animals) entries.push({ label: `${n} schlachten`, line: `schlachte ${n.toLowerCase()}` });
+				else entries.push({ label: "Ein Tier schlachten", line: "schlachte" });
 			}
 			// a dog or cat on guard: anyone feeds it; at an own building one leaves one or takes it along (server: animals.ts)
 			const keeperName: Record<string, string> = { hund: "Hund", katze: "Katze" };

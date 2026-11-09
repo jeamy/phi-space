@@ -203,3 +203,14 @@ test("a building with recipes offers what one carries enough for, and the list o
 	const hut = cellEntries({ ...input, at: { x: 10, y: 10 } }).map((e) => e.line);
 	assert.ok(!hut.includes("craft hier"), "without the world's recipes nothing is offered");
 });
+
+test("the butcher's shop offers to slaughter each animal one carries, with a knife; else the command that says what is missing", () => {
+	const shop = obj({ id: "m", kind: "building", name: "Metzgerei", owner: "Ines", ownerId: "o", plan: "metzgerei", x: 6, y: 5, w: 2, h: 2 });
+	const carried = (name: string): [string, ObjView] => [name, obj({ id: name, kind: "item", name, location: "me", x: -1, y: -1 })];
+	const at = (...items: Array<[string, ObjView]>) => cellEntries({ ...input, objs: new Map([["m", shop], ...items]), at: { x: 6, y: 5 } }).map((e) => e.line);
+	assert.ok(at().includes("schlachte"), "nothing carried: the command explains");
+	assert.ok(at(carried("Huhn")).includes("schlachte"), "no knife: the command explains");
+	const both = at(carried("Huhn"), carried("Schwein"), carried("Ferkel"), carried("Schlachtmesser"));
+	assert.ok(both.includes("schlachte huhn") && both.includes("schlachte schwein"));
+	assert.ok(!both.includes("schlachte ferkel"), "the young grow up first");
+});

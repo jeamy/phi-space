@@ -528,7 +528,7 @@ Tiere wollen gefüttert werden und geben dafür Eier, Milch, Wolle, Daunen oder 
 | \`ausstallen [tier]\` | \`ausstellen\` | Ein Tier aus deinem Stall nehmen, auch \`ausstallen hund\` |
 | \`füttere [futter]\` | \`futter\` | Die Tiere neben dir füttern (jeder darf; ein Futter macht ein Tier einen Tag satt) |
 | \`einsammeln\` | \`sammle eier\`, \`melke\`, \`schere\` | Eier, Milch oder Wolle deiner Tiere einsammeln |
-| \`schlachte [tier]\` | \`schlachten\` | Ein Tier aus deinem Stall oder Gehege schlachten, mit einem Schlachtmesser oder Muschelmesser; das letzte Paar bleibt ([Schlachten](help.game.animals#slaughter)) |
+| \`schlachte [tier]\` | \`schlachten\` | Ein Tier aus deinem Stall oder Gehege schlachten, an der Metzgerei auch eins, das du trägst, mit einem Schlachtmesser oder Muschelmesser; das letzte Paar bleibt ([Schlachten](help.game.animals#slaughter)) |
 
 ## Wild und Wache {#wildcmds}
 
@@ -714,7 +714,7 @@ Animals want feeding and give eggs, milk, wool, down or honey for it. In detail 
 | \`ausstallen [animal]\` | \`ausstellen\` | Take an animal out of your coop or pen, also \`ausstallen hund\` |
 | \`füttere [feed]\` | \`futter\` | Feed the animals beside you (anyone may; one feed keeps one animal fed a day) |
 | \`einsammeln\` | \`sammle eier\`, \`melke\`, \`schere\` | Collect your animals' eggs, milk or wool |
-| \`schlachte [animal]\` | \`slaughter\` | Slaughter an animal of your coop or pen, with a butcher's knife or a shell knife; the last pair stays ([slaughtering](help.game.animals#slaughter)) |
+| \`schlachte [animal]\` | \`slaughter\` | Slaughter an animal of your coop or pen, at the butcher's shop also one you carry, with a butcher's knife or a shell knife; the last pair stays ([slaughtering](help.game.animals#slaughter)) |
 
 ## Wild animals and guards {#wildcmds}
 
@@ -1253,7 +1253,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Kapelle (\`bau kapelle\`) | Dorf | 3×2, 10 Stein, 12 Ziegel, 4 Bohle, 30 Arbeit | 3 | 60 | opfern für kürzere Ruhe (\`opfere\`) |
 | Lagerhaus (\`bau lagerhaus\`) | Dorf | 3×2, 12 Treibholz, 4 Tangseil, 6 Muschel, 20 Arbeit | 3 | 45 | Lager der Siedlung für alle (\`lager\`) |
 | Lehmgrube (\`bau lehmgrube\`) | Dorf | 2×2, 6 Treibholz, 2 Tangseil, 2 Stein, 12 Arbeit | 2 | 45 | Lehm stechen mit Spaten (\`steche\`) |
-| Metzgerei (\`bau metzgerei\`) | Dorf | 2×2, 6 Stein, 4 Bohle, 4 Treibholz, 20 Arbeit | 2 | 40 | ein Stück Fleisch mehr beim Schlachten im Ort; Bratwurst mit Salz, Pökelfleisch |
+| Metzgerei (\`bau metzgerei\`) | Dorf | 2×2, 6 Stein, 4 Bohle, 4 Treibholz, 20 Arbeit | 2 | 40 | schlachtet ein Tier, das du trägst; ein Stück Fleisch mehr beim Schlachten im Ort; Bratwurst mit Salz, Pökelfleisch |
 | Salzgarten (\`bau salzgarten\`) | Dorf | 2×2, 4 Stein, 4 Lehm, 2 Treibholz, 12 Arbeit | 2 | 40 | Salz harken (\`harke\`) |
 | Steinbruch (\`bau steinbruch\`) | Dorf | 2×2, 8 Treibholz, 3 Tangseil, 4 Stein, 16 Arbeit | 3 | 45 | Stein brechen mit Spitzhacke (\`breche\`) |
 | Straße (\`bau straße\`) | Dorf | 1×1, 4 Stein, 2 Treibholz, 6 Arbeit | 1 | 45 | verbindet zwei Räume für den Karren |
@@ -1291,7 +1291,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Chapel (\`bau kapelle\`) | Village | 3×2, 10 stone, 12 brick, 4 plank, 30 work | 3 | 60 | offerings for a shorter rest (\`opfere\`) |
 | Warehouse (\`bau lagerhaus\`) | Village | 3×2, 12 driftwood, 4 kelp rope, 6 shell, 20 work | 3 | 45 | the settlement's store for everyone (\`lager\`) |
 | Clay Pit (\`bau lehmgrube\`) | Village | 2×2, 6 driftwood, 2 kelp rope, 2 stone, 12 work | 2 | 45 | cut clay with a spade (\`steche\`) |
-| Butcher's Shop (\`bau metzgerei\`) | Village | 2×2, 6 stone, 4 plank, 4 driftwood, 20 work | 2 | 40 | one more piece of meat when slaughtering in the room; salted sausage, cured meat |
+| Butcher's Shop (\`bau metzgerei\`) | Village | 2×2, 6 stone, 4 plank, 4 driftwood, 20 work | 2 | 40 | slaughters an animal you carry; one more piece of meat when slaughtering in the room; salted sausage, cured meat |
 | Salt Garden (\`bau salzgarten\`) | Village | 2×2, 4 stone, 4 clay, 2 driftwood, 12 work | 2 | 40 | rake salt (\`harke\`) |
 | Quarry (\`bau steinbruch\`) | Village | 2×2, 8 driftwood, 3 kelp rope, 4 stone, 16 work | 3 | 45 | break stone with a pickaxe (\`breche\`) |
 | Road (\`bau straße\`) | Village | 1×1, 4 stone, 2 driftwood, 6 work | 1 | 45 | joins two rooms for the cart |
@@ -1685,7 +1685,7 @@ Honig macht satt (\`iss honig\`). Am Herd einer **Hütte** zieht \`craft kerze\`
 
 Hoftiere kannst du schlachten. Das Fleisch kochst du am Herd einer Hütte oder räucherst es in der Räucherei.
 
-\`schlachte\` (oder \`schlachte schwein\`) schlachtet ein Tier aus deinem Stall oder Gehege neben dir. Das darf nur, wem der Stall gehört, und du brauchst ein Messer, das dabei stumpfer wird: ein **Schlachtmesser** (\`craft schlachtmesser\` in der Werkstatt aus 2 Stein, 1 Bohle und 1 Tangseil, hält 20 Tiere) oder ein **Muschelmesser** (\`craft muschelmesser\`, hält 5); trägst du beide, nimmst du das Schlachtmesser. Steht im Ort eine **Metzgerei** (ab dem Dorf: 6 Stein, 4 Bohlen, 4 Treibholz), gibt jedes Tier ein Stück Fleisch mehr. Das **letzte Paar** einer Art bleibt immer im Stall, damit die Herde weiterlebt: Schlachten kannst du erst, wenn ein Junges dazugekommen ist. Bienen, Hund und Katze werden nicht geschlachtet.
+\`schlachte\` (oder \`schlachte schwein\`) schlachtet ein Tier aus deinem Stall oder Gehege neben dir. Das darf nur, wem der Stall gehört, und du brauchst ein Messer, das dabei stumpfer wird: ein **Schlachtmesser** (\`craft schlachtmesser\` in der Werkstatt aus 2 Stein, 1 Bohle und 1 Tangseil, hält 20 Tiere) oder ein **Muschelmesser** (\`craft muschelmesser\`, hält 5); trägst du beide, nimmst du das Schlachtmesser. Steht im Ort eine **Metzgerei** (ab dem Dorf: 6 Stein, 4 Bohlen, 4 Treibholz), gibt jedes Tier ein Stück Fleisch mehr. **An der Metzgerei** schlachtest du auch ein Tier, das du trägst (aus dem Stall geholt mit \`ausstallen\` oder gekauft): \`schlachte huhn\` direkt daneben, oder rechte Maustaste auf die Metzgerei; dort bleibt kein Paar zurück, es ist ja schon aus der Herde. Das **letzte Paar** einer Art bleibt immer im Stall, damit die Herde weiterlebt: Schlachten kannst du erst, wenn ein Junges dazugekommen ist. Bienen, Hund und Katze werden nicht geschlachtet.
 
 | Tier | gibt beim Schlachten |
 | --- | --- |
@@ -1871,7 +1871,7 @@ Honey is food (\`eat honey\`). At a **hut's** hearth \`craft kerze\` makes two c
 
 You can slaughter farm animals. You cook the meat at a hut's hearth or smoke it in the smokehouse.
 
-\`schlachte\` (or \`schlachte schwein\`) slaughters an animal of your coop or pen beside you. Only the owner of the house may, and you need a knife, which gets blunter each time: a **butcher's knife** (\`craft schlachtmesser\` at the workshop from 2 stone, 1 plank and 1 kelp rope, lasts 20 animals) or a **shell knife** (\`craft muschelmesser\`, lasts 5); carrying both, you use the butcher's knife. With a **butcher's shop** in the place (from the village on: 6 stone, 4 planks, 4 driftwood) every animal gives one piece of meat more. The **last pair** of a kind always stays in the house so the herd lives on: you can slaughter only once a young one has come. Bees, dogs and cats are not slaughtered.
+\`schlachte\` (or \`schlachte schwein\`) slaughters an animal of your coop or pen beside you. Only the owner of the house may, and you need a knife, which gets blunter each time: a **butcher's knife** (\`craft schlachtmesser\` at the workshop from 2 stone, 1 plank and 1 kelp rope, lasts 20 animals) or a **shell knife** (\`craft muschelmesser\`, lasts 5); carrying both, you use the butcher's knife. With a **butcher's shop** in the place (from the village on: 6 stone, 4 planks, 4 driftwood) every animal gives one piece of meat more. **At the butcher's shop** you also slaughter an animal you carry (taken out with \`unstall\` or bought): \`schlachte huhn\` right beside it, or the right mouse button on the shop; no pair stays there, it has left the herd already. The **last pair** of a kind always stays in the house so the herd lives on: you can slaughter only once a young one has come. Bees, dogs and cats are not slaughtered.
 
 | Animal | gives when slaughtered |
 | --- | --- |

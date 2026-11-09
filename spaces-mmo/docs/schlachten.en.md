@@ -12,7 +12,7 @@ else is a possibility for later steps.
 | Command | `schlachte [tier]` (aliases `schlachten`, `slaughter`, `butcher`) beside one's own coop or pen; the animal named must be the kind living there | **built** (`server/engine/commands/animals.ts`) |
 | Who | only the owner of the house | **built** |
 | Where | (a) directly at the coop or pen | **built** |
-| | (b) a **butcher's shop** (`metzgerei`, from the village) in the room: every animal gives one more of its first yield (`animals.butcher.shop`), and the shop makes salted sausage and cured meat | **built** (step 2) |
+| | (b) a **butcher's shop** (`metzgerei`, from the village) in the room: every animal gives one more of its first yield (`animals.butcher.shop`), and the shop makes salted sausage and cured meat; beside it `schlachte` takes an animal one carries (no pair to keep, it has left its herd), and its map menu offers each carried animal | **built** (step 2) |
 | Tool | the shell knife (`muschelmesser`, wear 5), worn by one each time, breaking at the end of its wear | **built** |
 | | a **butcher's knife** (`schlachtmesser`, workshop: 2 stone, 1 plank, 1 kelp rope; wear 20), taken before the shell knife (`animals.butcher.tools`, the best first) | **built** (step 2) |
 | The herd goes on | the last `keep` animals of a kind stay (`animals.butcher.keep` = 2: the last pair) | **built** |
