@@ -2,16 +2,16 @@
 //! closing or opening it, zones, the warehouse's tax, the demolition of a building, or plain words.
 use phi_json::{obj, Json, Object};
 
-use super::build::{dist_to, plan_of, Rect};
+use super::build::{demolish_by_vote, dist_to, plan_of, Rect};
 use super::settlement::{huts_in, rank_of, settlement_in};
 use crate::clock::decay_now_of;
-use crate::context::{msg, room_of, Ctx, MsgOpts};
+use crate::context::{msg, msg_transient, room_of, Ctx, MsgOpts};
 use crate::fire::key_text;
 use crate::j;
 use crate::js;
 use crate::room_growth::rows;
-use crate::source::{hex, random_bytes};
-use crate::space::{fields, not_understood, refuse, tmpl, Result, Space, FOREVER};
+use crate::source::{hex, random_bytes, time_now};
+use crate::space::{fields, not_understood, refuse, tmpl, Result, Space, FOREVER, NO_WAIT};
 
 /// `hallIn`.
 pub async fn hall_in(space: &Space, w: &Json, room: &str, txn: Option<&str>) -> Result<bool> {
@@ -155,4 +155,70 @@ pub async fn stimme(c: &mut Ctx, arg: &str) -> Result<()> {
 	votes.push(mine);
 	let me = c.char_id().to_owned();
 	msg(c, &me, "info", &format!("Deine Stimme zählt: {}. Bisher {} dafür, {} dagegen.", if ja { "dafür" } else { "dagegen" }, yes(&votes), no(&votes)), MsgOpts::default()).await
+}
+
+/// `applyZone`: what a carried motion of a zone does, in the transaction of the count.
+async fn apply_zone(space: &Space, m: &Json, txn: &str) -> Result<()> {
+	let kind = j::s(m, "kind");
+	let zone = j::at(m, "zone");
+	if kind == "gruen" || kind == "weg" {
+		let mut z = Object::new();
+		z.insert("zoneId", j::at(m, "motionId").clone());
+		z.insert("room", j::at(m, "room").clone());
+		z.insert("settlementId", j::at(m, "settlementId").clone());
+		z.insert("kind", Json::from(kind));
+		for (k, v) in j::object(zone).iter() { z.insert(k, v.clone()); }
+		space.write(&tmpl("Zone", Json::Object(z)), Some(txn), FOREVER).await?;
+		return Ok(());
+	}
+	let p = (j::n(zone, "x"), j::n(zone, "y"));
+	for e in space.read_all(&tmpl("Zone", obj! { "room" => j::at(m, "room").clone() }), None).await? {
+		if is_in(p, fields(&e)) { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, Some(txn)).await?; }
+	}
+	Ok(())
+}
+
+/// `motionTick`: the motions whose day is over are decided; without their settlement they lapse. How many ended.
+pub async fn motion_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> {
+	if j::opt(w, "townhall").is_none() { return Ok(0.0); }
+	let now = decay_now_of(space, None).await?;
+	let mut ended = 0.0;
+	for e in space.read_all(&obj! { "type" => "Motion" }, None).await? {
+		if j::n(fields(&e), "endsWorldMs") > now { continue; }
+		let txn = space.create_transaction(10_000.0).await?;
+		let r: Result<bool> = async {
+			let Some(taken) = space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, Some(&txn)).await? else { return Ok(false) };
+			let m = fields(&taken).clone();
+			let votes = votes_on(space, j::at(&m, "motionId")).await?;
+			let carried = yes(&votes) > no(&votes);
+			if let Some(held) = space.take_if_exists(&tmpl("Settlement", obj! { "settlementId" => j::at(&m, "settlementId").clone() }), NO_WAIT, Some(&txn)).await? {
+				let s = fields(&held).clone();
+				let kind = j::s(&m, "kind");
+				let mut o = j::object(&s);
+				if carried && (kind == "zu" || kind == "offen") { o.insert("closed", Json::Bool(kind == "zu")); }
+				else if carried && kind == "steuer" { o.insert("tax", j::at(&m, "tax").clone()); }
+				space.write(&tmpl("Settlement", Json::Object(o)), Some(&txn), FOREVER).await?;
+				if carried && j::opt(&m, "zone").is_some() { apply_zone(space, &m, &txn).await?; }
+				let mut after = String::new();
+				if let (true, Some(t)) = (carried, j::opt(&m, "target")) {
+					let bid = j::at(t, "buildId").clone();
+					match space.take_if_exists(&tmpl("Building", obj! { "buildId" => bid.clone() }), NO_WAIT, Some(&txn)).await?.map(|e| fields(&e).clone()) {
+						None => after = if space.count(&tmpl("Building", obj! { "buildId" => bid }), None).await? > 0.0 { " Der Bau war gerade in Arbeit und bleibt stehen.".into() } else { " Der Bau steht nicht mehr.".into() },
+						Some(b) if holds_goods(space, w, &b).await? => { space.write(&tmpl("Building", b), Some(&txn), FOREVER).await?; after = " Im Lager liegt inzwischen wieder etwas; es bleibt stehen.".into(); }
+						Some(b) => { demolish_by_vote(space, &txn, w, &b, now).await?; after = format!(" Die Fläche ist frei; was blieb, holt {} hier mit „nachlass“ ab.", key_text(j::at(&b, "ownerName"))); }
+					}
+				}
+				let text = format!("Abstimmung in {}: {} ist {}, {} dafür, {} dagegen.{after}", key_text(j::at(&s, "name")), said(&m), if carried { "angenommen" } else { "abgelehnt" }, yes(&votes), no(&votes));
+				let msg = obj! { "room" => j::at(&m, "room").clone(), "to" => "*", "kind" => "world", "text" => text, "from" => "", "at" => time_now() };
+				space.write_with(&obj! { "type" => "Msg", "fields" => msg }, Some(&txn), lease_ms, msg_transient(space, "*", "world").await).await?;
+			}
+			Ok(true)
+		}.await;
+		match r { Ok(true) => { space.commit(&txn).await?; ended += 1.0; } Ok(false) => space.abort(&txn).await?, Err(err) => { let _ = space.abort(&txn).await; return Err(err); } }
+	}
+	let open: Vec<Json> = space.read_all(&obj! { "type" => "Motion" }, None).await?.iter().map(|e| j::at(fields(e), "motionId").clone()).collect();
+	for e in space.read_all(&obj! { "type" => "Vote" }, None).await? {
+		if !open.contains(j::at(fields(&e), "motionId")) { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, None).await?; }
+	}
+	Ok(ended)
 }

@@ -13,6 +13,8 @@
 //      accounts write them (server/accounts.ts; given whole, so neither side draws from the source), a Session when online
 //      | {"op": "write", "entry": {...}, "lease"?: ms}: an entry written as it is (the state a walk needs: a Spot, an Offer)
 //      | {"op": "take", "template": {...}}: one entry taken away (true when there was one)
+//      | {"op": "call", "fn": "settlementTick" | "epochTick" | "motionTick" | "stormRaisesWind", "room"?}: one tick of a job
+//      alone, in stableTerrain on spatialWorld as the job runs it; what it returned
 //      | {"op": "cmd", "charId", "intentId", "line", "step"?, "asked"?, "lang"?}: an Intent as the gateway (or the model
 //      process, with `asked`) writes it, then the character's
 //      oldest intent served as the world worker does (server/world-host.ts `serve`, copied below): "ran", "held",
@@ -35,7 +37,10 @@ const { connectSpace } = await from("server/space.ts");
 const { stableTerrain, spatialWorld } = await from("server/engine/room-growth.ts");
 const { fireTick, chainTick, fogTick, floodTick } = await from("server/engine/fire.ts");
 const { ordersTick, marketTick } = await from("server/engine/commands/trade.ts");
-const { windTick } = await from("server/engine/commands/wind.ts");
+const { windTick, stormRaisesWind } = await from("server/engine/commands/wind.ts");
+const { settlementTick } = await from("server/engine/commands/settlement.ts");
+const { epochTick } = await from("server/engine/commands/epoch.ts");
+const { motionTick } = await from("server/engine/commands/townhall.ts");
 const { byPeoplesPace } = await from("server/engine/clock.ts");
 const { execute, CommandError } = await from("server/engine/commands.ts");
 const { msg } = await from("server/engine/context.ts");
@@ -161,6 +166,21 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 		}
 		case "write": await space.write(line.entry, null, line.lease ?? FOREVER); return null;
 		case "take": return !!(await space.takeIfExists(line.template, NO_WAIT));
+		case "call": {
+			// one of the ticks a job runs, alone (the walks hold it before its job is ported whole), as the job would
+			const w = await world(String(line.world ?? "leuchtfeuer")), msgLeaseMs = MSG_LEASE_MS;
+			const calls: Record<string, (live: never) => Promise<unknown>> = {
+				settlementTick: (live) => settlementTick(space, live, msgLeaseMs),
+				epochTick: (live) => epochTick(space, live, msgLeaseMs),
+				motionTick: (live) => motionTick(space, live, msgLeaseMs),
+				stormRaisesWind: (live) => stormRaisesWind(space, live, line.room ?? null, msgLeaseMs),
+			};
+			const call = calls[String(line.fn)];
+			if (!call) throw new Error(`unknown call ${String(line.fn)}`);
+			let out: unknown = null;
+			await stableTerrain(space, async () => { out = (await call((await spatialWorld(space, w)) as never)) ?? null; });
+			return out;
+		}
 		case "dump": return (await space.readAll({})).map((e: { type: string; types: string[]; fields: unknown }) => JSON.stringify([e.type, e.types, canon(e.fields)]));
 		default: throw new Error(`unknown op ${String(line.op)}`);
 	}

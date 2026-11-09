@@ -162,6 +162,32 @@ impl Walk {
 		assert_eq!(t.get("result"), Some(&Json::Bool(r)), "take: {}", t.to_json_text());
 		r
 	}
+	/// One tick of a job alone on both sides, as the job runs it (in stableTerrain, on spatialWorld): what it returned.
+	pub fn call(&mut self, f: &str, room: Option<&str>) -> Json {
+		use mmo_engine::commands::{epoch, settlement, townhall, wind};
+		use mmo_engine::room_growth::{end_terrain, spatial_world, stable_terrain};
+		let t = self.ts.call(obj! { "op" => "call", "fn" => f, "room" => room.map_or(Json::Null, Json::from) });
+		assert_eq!(t.get("ok"), Some(&Json::Bool(true)), "call {f}: {}", t.to_json_text());
+		let r = self.run(async {
+			let txn = stable_terrain(&self.space).await?;
+			let r: mmo_engine::space::Result<Json> = async {
+				let live = spatial_world(&self.space, &self.w).await?;
+				Ok(match f {
+					"settlementTick" => Json::from(settlement::settlement_tick(&self.space, &live, 600_000.0).await?),
+					"epochTick" => Json::Array(epoch::epoch_tick(&self.space, &live, 600_000.0).await?.into_iter().map(|(i, e)| obj! { "island" => i, "epoch" => e }).collect()),
+					"motionTick" => Json::from(townhall::motion_tick(&self.space, &live, 600_000.0).await?),
+					"stormRaisesWind" => { wind::storm_raises_wind(&self.space, &live, room, 600_000.0).await?; Json::Null }
+					_ => panic!("unknown call {f}"),
+				})
+			}.await;
+			end_terrain(&self.space, &txn).await?;
+			r
+		}).expect("the Rust call");
+		assert_eq!(t.get("result"), Some(&r), "call {f}: what it returned");
+		r
+	}
+	/// An entry of the Rust space (the walks compare both after every step, so it is the TypeScript one too).
+	pub fn peek(&mut self, template: Json) -> Option<Json> { self.run(self.space.peek(&template, None)).expect("the peek") }
 	/// One command line of `char_id` on both sides; what serve said (the same on both).
 	pub fn cmd(&mut self, char_id: &str, line: &str, step: Option<Json>) -> String { self.cmd_as(char_id, line, step, None, None) }
 	/// `cmd` with what the model process sets: the sentence it translated, the player's language.

@@ -996,6 +996,24 @@ pub async fn stop_loads(space: &Space, txn: &str, build_id: &Json, now: f64) -> 
 	}
 	Ok(n)
 }
+/// `demolishByVote`: a building a motion took down (its cells free, its light back, its loads stopped); half its material
+/// and what lay in its chest wait for the owner as an estate.
+pub async fn demolish_by_vote(space: &Space, txn: &str, w: &Json, b: &Json, now: f64) -> Result<()> {
+	free_cells(space, txn, j::s(b, "room"), j::at(b, "buildId")).await?;
+	release_light(space, txn, j::at(b, "beaconId"), j::no(b, "points").unwrap_or(1.0)).await?;
+	stop_loads(space, txn, j::at(b, "buildId"), world_now_of(space, None).await?).await?;
+	let estate_id = format!("est-{}", key_text(j::at(b, "buildId")));
+	let est = obj! { "estateId" => estate_id.as_str(), "accountId" => j::at(b, "accountId").clone(), "ownerName" => j::at(b, "ownerName").clone(), "room" => j::at(b, "room").clone(), "name" => j::at(b, "name").clone(), "untilWorldMs" => now + j::no(j::at(w, "building"), "estateWorldMs").unwrap_or(30.0 * 24.0 * 3_600_000.0) };
+	space.write(&tmpl("Estate", est), Some(txn), FOREVER).await?;
+	for it in space.read_all(&tmpl("Item", obj! { "location" => j::at(b, "buildId").clone() }), None).await? {
+		move_item(space, Some(txn), &Json::from(key_text(j::at(fields(&it), "itemId"))), &key_text(j::at(b, "buildId")), &estate_id).await?;
+	}
+	for n in plan_of(w, j::s(b, "plan")).map(|p| j::a(p, "needs")).unwrap_or(&[]) {
+		let Some(proto) = resolve_prototype(space, j::s(n, "proto")).await? else { continue };
+		for _ in 0..(j::n(n, "count") / 2.0).floor().max(0.0) as usize { spawn(space, Some(txn), w, &proto, At { location: estate_id.clone(), x: -1.0, y: -1.0, ..Default::default() }, &Json::Null).await?; }
+	}
+	Ok(())
+}
 /// `freeCells`: takes the cells of a site or building.
 pub async fn free_cells(space: &Space, txn: &str, room: &str, of: &Json) -> Result<()> {
 	for p in space.read_all(&tmpl("Plot", obj! { "room" => room, "of" => of.clone() }), None).await? { space.take_if_exists(&obj! { "id" => j::at(&p, "id").clone() }, NO_WAIT, Some(txn)).await?; }
