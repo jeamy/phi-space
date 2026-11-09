@@ -158,6 +158,11 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		assert.match(await does(boss.p, "truhe", "Truhe"), /In der Truhe \(Last 1\): 2 Muschel/);
 		assert.match(await does(other.p, "truhe", /nicht dein Bau|neben deinen Bau/), /nicht dein Bau/);
 		assert.match(await does(boss.p, "nimm 1 muschel aus der truhe", "aus der Truhe"), /Du nimmst 1 Muschel/);
+		// the page of the owner beside it sees what lies in the chest (its „In der Truhe“ panel), nobody else's page does
+		await boss.p.until((f) => f.t === "obj" && f.o.kind === "item" && f.o.location === "b1" && f.o.name === "Muschel");
+		assert.ok(!other.p.frames.some((f) => f.t === "obj" && f.o.kind === "item" && f.o.location === "b1"), "not to a neighbour");
+		assert.match(await does(boss.p, "entnimm 1 muschel aus der true", "aus der Truhe"), /Du nimmst 1 Muschel/);
+		assert.match(await does(boss.p, "leg 1 muschel in die truhe", "Truhe"), /Du legst 1 Muschel in die Truhe/);
 		assert.equal(await pack(s, boss.me, "muschel"), 2);
 		// anyone repairs, with material
 		assert.match(await does(other.p, "repariere", "brauchst du"), /brauchst du 1 Treibholz/);

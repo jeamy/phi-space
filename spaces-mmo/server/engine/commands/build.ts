@@ -635,7 +635,8 @@ const entnimm: Command = {
 	key: "entnimm", aliases: ["hole", "retrieve"],
 	help: "entnimm [n|alle] <ding> – etwas aus der Truhe deines Baus neben dir nehmen",
 	async func(c, arg) {
-		const { n, name } = amount(arg);
+		// „entnimm 5 käse aus der truhe“ (also mistyped „true“): the place is the chest beside one anyway
+		const { n, name } = amount(arg.replace(/\s+aus\s+(?:der\s+|dem\s+)?(?:truhe|true|kiste|lager)\b.*$/i, ""));
 		const b = await chestHere(c);
 		const shared = !!planOf(c.world, b.plan)?.store, left = shared ? (await storeRight(c, b)).left : Infinity;
 		if (left <= 0) throw new CommandError("Für heute hast du aus dem Lager genommen, was dir zusteht.");

@@ -192,7 +192,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				if (mine && (o.plants ?? []).length < (o.w ?? 1) * (o.h ?? 1)) for (const n of [...new Set(carried.filter((n) => mayPlantIn(o.bedKind, n, beds)))]) entries.push({ label: `${n} pflanzen`, line: `pflanze ${n}` });
 			}
 			// one's own bed (a community bed: who dug it) goes back to grass from beside it (server: garden.ts "beet aufgeben")
-			if (beside && o.ownerId === me) entries.push({ label: "Beet aufgeben (wird wieder Gras)", line: "beet aufgeben", confirm: "Das Beet aufgeben? Was darin wächst, geht verloren, die Fläche wird wieder Gras." });
+			if (beside && o.ownerId === me) entries.push({ label: "Beet aufgeben (wird wieder Gras)", line: "beet aufgeben ja", confirm: "Das Beet aufgeben? Was darin wächst, geht verloren, die Fläche wird wieder Gras." });
 			continue;
 		}
 		if (o.kind === "field") {
@@ -212,7 +212,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			}
 			if (nearSite && mine) entries.push(o.open ? { label: "Acker für Fremde schließen", line: "flur zu" } : { label: "Acker für alle öffnen", line: "flur offen" });
 			// one laid out by mistake goes back to grass, its light back to the fire (server: field.ts "flur aufgeben")
-			if (nearSite && mine) entries.push({ label: "Acker aufgeben (wird wieder Gras)", line: "flur aufgeben", confirm: "Den Acker aufgeben? Was darauf wächst, geht verloren, die Fläche wird wieder Gras." });
+			if (nearSite && mine) entries.push({ label: "Acker aufgeben (wird wieder Gras)", line: "flur aufgeben ja", confirm: "Den Acker aufgeben? Was darauf wächst, geht verloren, die Fläche wird wieder Gras." });
 			if (beside && may && !o.fenced) entries.push({ label: "Zaun um den Acker ziehen (6 Treibholz, 2 Tangseil)", line: "zäune" });
 			continue;
 		}

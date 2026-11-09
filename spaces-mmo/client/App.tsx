@@ -430,6 +430,12 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 	const [storeN, setStoreN] = useState("");
 	const chests = pack?.chests ?? [], chestAt = chests.find((x) => x.nr === chestNr) ?? chests[0];
 	const chosenBox = useRef<HTMLDivElement>(null);
+	// one's own chest beside one (the server sends what lies in it): its things to take out, as many as one likes
+	const chestHereB = !guest && self ? [...objs.values()].find((b) => b.kind === "building" && b.ownerId === me && b.location === room && plans.some((p) => p.key === b.plan && p.chest) && self.x >= b.x - 1 && self.y >= b.y - 1 && self.x <= b.x + (b.w ?? 1) && self.y <= b.y + (b.h ?? 1)) : undefined;
+	const inChest = chestHereB ? [...all.filter((o) => o.location === chestHereB.id).reduce((m, o) => m.set(o.name, [...(m.get(o.name) ?? []), o]), new Map<string, ObjView[]>())].sort(([a], [b]) => a.localeCompare(b, "de")) : [];
+	const [takePicked, setTakePicked] = useState<string | null>(null);
+	const [takeN, setTakeN] = useState("");
+	const taking = inChest.find(([n]) => n === takePicked);
 	useEffect(() => { if (picked) chosenBox.current?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }, [picked]);
 	const here = hereEntries({ chars, objs, self, room, me, plans, guest, fuel, wild, beds: uses?.beds });
 	if (part === "here") {
@@ -442,17 +448,37 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 						<button disabled={!fuel} onClick={() => fuel && send(`put ${fuel.name} in ${fire.name}`)} title={fuel ? "" : "Du trägst kein Brennholz"}>Nachlegen</button>
 					</li></ul></>
 				)}
-				{here.length > 0 && <><h3>Hier möglich</h3><div className="here open">{here.map((e) => <button key={e.line} onClick={() => send(e.line)}>{e.label}</button>)}</div></>}
+				{here.length > 0 && <><h3>Hier möglich</h3><div className="here open">{here.map((e) => <button key={e.line} onClick={() => { if (e.confirm && !window.confirm(e.confirm)) return; send(e.line); }}>{e.label}</button>)}</div></>}
 			</div>
 		);
 	}
-	if (!carried.length && !near.length) return <p className="muted bag-note">Du trägst nichts, und neben dir liegt nichts.</p>;
+	if (!carried.length && !near.length && !inChest.length) return <p className="muted bag-note">Du trägst nichts, und neben dir liegt nichts.</p>;
 	const row = (o: ObjView, verb: string, label: string) => (
 		<li key={o.id}><Glyph o={o} size={20} /><span>{o.name}</span><button onClick={() => (verb === "get" ? pick(o) : send(`${verb} ${o.name}`))}>{label}</button><button onClick={() => send(`look ${o.name}`)}>Ansehen</button></li>
 	);
 	return (
 		<div className="things">
 			{near.length > 0 && <><h3>Neben dir</h3><ul>{near.map((o) => row(o, "get", "Aufheben"))}</ul></>}
+			{chestHereB && inChest.length > 0 && <>
+				<h3>{`In der Truhe: ${chestHereB.name}`}</h3>
+				{taking && <div className="pack-chosen">
+					<div className="pack-do"><b>{taking[0]}{taking[1].length > 1 ? ` ×${taking[1].length}` : ""}</b></div>
+					<div className="pack-store">
+						{/* how many: a number (at most what lies there), empty: one */}
+						<form className="pack-store-n" onSubmit={(e) => { e.preventDefault(); const n = Math.min(taking[1].length, Math.max(1, Math.floor(Number(takeN) || 1))); send(`entnimm ${n} ${taking[0]}`); setTakeN(""); }}>
+							<input type="number" min={1} max={taking[1].length} inputMode="numeric" placeholder="1" value={takeN} onChange={(e) => setTakeN(e.target.value)} aria-label="Wie viele entnehmen" />
+							<button type="submit">Stück entnehmen</button>
+						</form>
+						{taking[1].length > 1 && <button onClick={() => send(`entnimm alle ${taking[0]}`)}>{`Alle ${taking[1].length} entnehmen`}</button>}
+					</div>
+				</div>}
+				<div className="pack">{inChest.map(([name, os]) => (
+					<button key={name} className={`chip pack-chip${takePicked === name ? " on" : ""}`} onClick={() => setTakePicked(takePicked === name ? null : name)} title={name} aria-label={`${name}: ${os.length}`} aria-pressed={takePicked === name}>
+						<span className="pack-top"><Glyph o={os[0]!} size={24} /><span className="n">{os.length}</span></span>
+						<span className="pack-name">{name}</span>
+					</button>
+				))}</div>
+			</>}
 			{carried.length > 0 && <>
 				<h3>Du trägst{max !== null && <span className={`pack-load${load > max ? " over" : ""}`} title={load > max ? "Mehr trägst du nicht: leg etwas in eine Truhe." : ""}>{` · Last ${fmtLoad(load)} von ${fmtLoad(max)}`}</span>}</h3>
 				{/* a tap on a thing: its name and what it can do come first, above the pack, scrolled into view */}
@@ -476,7 +502,7 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 						// a recipe its hint below offers (the line that says what it takes, with „Herstellen“) is not a button here too
 						const hinted = new Set(shownHints.flatMap((h) => (h.line ? [h.line] : [])));
 						const can = itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, beds: uses.beds, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) }).filter((e) => !hinted.has(e.line));
-						return can.length > 0 && <div className="pack-can">{can.map((e) => <button key={e.line} onClick={() => (e.run ? e.run() : send(e.line))}>{e.label}</button>)}</div>;
+						return can.length > 0 && <div className="pack-can">{can.map((e) => <button key={e.line} onClick={() => { if (e.confirm && !window.confirm(e.confirm)) return; if (e.run) e.run(); else send(e.line); }}>{e.label}</button>)}</div>;
 					})()}
 					{shownHints.map((h) => <p key={h.id} className="pack-hint">{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>)}
 				</div>}
@@ -1314,7 +1340,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 				</div>
 				{/* one chip: a single action runs on a tap, several open as a list; a tap on the map or an action folds it again */}
 				{hereBar.length > 0 && mapMode !== "text" && (hereOpen && hereBar.length > 1
-					? <div className="here-bar open" role="group" aria-label="Hier möglich">{hereBar.map((e) => <button key={e.line} onClick={() => { setHereOpen(false); send(e.line); }}>{e.label}</button>)}</div>
+					? <div className="here-bar open" role="group" aria-label="Hier möglich">{hereBar.map((e) => <button key={e.line} onClick={() => { if (e.confirm && !window.confirm(e.confirm)) return; setHereOpen(false); send(e.line); }}>{e.label}</button>)}</div>
 					: <div className="here-bar" role="group" aria-label="Hier möglich"><button className="here-chip" aria-expanded={hereBar.length > 1 ? false : undefined} onClick={() => (hereBar.length > 1 ? setHereOpen(true) : send(hereBar[0]!.line))}><span>{hereBar[0]!.label}</span>{hereBar.length > 1 && <b>+{hereBar.length - 1}</b>}</button></div>)}
 				{homeHint && steps && <div className="home-hint"><span>Ohne Adressleiste spielen: <b>{steps.first}</b>, dann <b>{steps.then}</b>, und das Spiel von dort öffnen.</span>{install && <button className="primary home-install" onClick={() => { void install.prompt(); hideHomeHint(); }}>Installieren</button>}<button onClick={hideHomeHint} aria-label="Hinweis schließen">×</button></div>}
 				{travelNote && <div className="travel-note" role="status"><span className="travel-spin" aria-hidden="true" />{travelNote}</div>}

@@ -354,7 +354,7 @@ export class Gateway {
 
 	#plans(): PlanView[] {
 		const name = (k: string) => this.w.prototypes.find((p) => p.key === k)?.name ?? k;
-		return (this.w.building?.plans ?? []).map((p) => ({ key: p.key, name: p.name, w: p.w, h: p.h, needs: p.needs.map((n) => `${n.count} ${name(n.proto)}`).join(", "), work: p.work, ...(p.chest && !p.store ? { chest: true as const } : {}), ...((p.epoch ?? 1) > 1 ? { epoch: this.w.epochs?.names[p.epoch! - 1] ?? `Epoche ${p.epoch}` } : {}) }));
+		return (this.w.building?.plans ?? []).map((p) => ({ key: p.key, name: p.name, ...(p.dative ? { dative: p.dative } : {}), w: p.w, h: p.h, needs: p.needs.map((n) => `${n.count} ${name(n.proto)}`).join(", "), work: p.work, ...(p.chest && !p.store ? { chest: true as const } : {}), ...((p.epoch ?? 1) > 1 ? { epoch: this.w.epochs?.names[p.epoch! - 1] ?? `Epoche ${p.epoch}` } : {}) }));
 	}
 	#hello(c: Client): void {
 		const self = this.#chars.get(c.me.charId);
@@ -369,7 +369,7 @@ export class Gateway {
 		c.awaitsHello = false;
 		c.room = self.room;
 		const chars = [...this.#chars.values()].filter((ch) => ch.room === self.room && (ch.charId === self.charId || (this.#online.get(ch.charId) && !ch.aboard))).map((ch) => charView(ch, this.#modelChars));
-		const objs = [...this.#objs.values()].filter((o) => o.location === self.room || o.location === self.charId).map((o) => this.#view(o));
+		const objs = [...this.#objs.values()].filter((o) => o.location === self.room || o.location === self.charId || this.#inOwnChest(o.location, self.charId, self.room)).map((o) => this.#view(o));
 		// the word for this player of the last 14 days that it was told already comes with the room's lines (the page's
 		// first hello fills its log with them; what is new comes right after as a message of its own, #tell)
 		const kept = [...this.#notices.values()].filter((n) => n.charId === self.charId && n.told).map(({ noticeId: _n, charId: _c, told: _t, ...m }) => m as MsgFields);
@@ -740,9 +740,18 @@ export class Gateway {
 	}
 
 	/** After a batch: the clients that saw the object where it was, or see it where it is now (a room, a pack). */
+	/** Whether `loc` is the chest of one of `charId`'s own buildings in `room`: what lies in it reaches its page, so the
+	 *  page offers to take it out (client/App.tsx, „In der Truhe“). A store for all is not one's chest. */
+	#inOwnChest(loc: string | null | undefined, charId: string, room: string | null): boolean {
+		if (!loc || !room) return false;
+		const b = this.#objs.get(loc);
+		if (!b || b.kind !== "building" || b.ownerId !== charId || b.location !== room) return false;
+		const p = this.w.building?.plans.find((x) => x.key === b.plan);
+		return !!p?.chest && !p.store;
+	}
 	#announceObj(objId: string, before: string | null): void {
 		const base = this.#objs.get(objId), o = base && this.#view(base);
-		const sees = (cl: Client, loc: string | null | undefined) => !!loc && (cl.room === loc || cl.me.charId === loc);
+		const sees = (cl: Client, loc: string | null | undefined) => !!loc && (cl.room === loc || cl.me.charId === loc || this.#inOwnChest(loc, cl.me.charId, cl.room));
 		for (const cl of this.#clients) {
 			if (o && sees(cl, o.location)) cl.ws.send({ t: "obj", o } satisfies ServerFrame);
 			else if (sees(cl, before)) cl.ws.send({ t: "objgone", id: objId } satisfies ServerFrame);

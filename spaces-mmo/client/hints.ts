@@ -10,6 +10,9 @@ type Recipe = ItemUses["recipes"][number];
 const list = (xs: Array<{ name: string; count: number }>) => xs.map((n) => `${n.count} ${n.name}`).join(", ");
 /** The plan's name as one says it ("im Backhaus"), or its key. */
 const planName = (plans: PlanView[], key: string) => plans.find((p) => p.key === key)?.name ?? key;
+/** Where it is made, as one says it: „bei einer Hütte“ (a plan without its dative: „bei einem Bau „X““). */
+const atPlan = (plans: PlanView[], key: string) => { const d = plans.find((p) => p.key === key)?.dative; return d ? `bei ${d}` : `bei einem Bau „${planName(plans, key)}“`; };
+const BUILD = (key: string) => ` Fehlt so ein Bau, kann man ihn bauen („bau ${key}“).`;
 
 /** The hints for a pack (`carried`: how many of each thing by name), most useful first: what can be made now, then
  *  what needs a tool or a building, what lacks a single piece, and where a thing goes on. `owned`: the plans of the
@@ -25,7 +28,7 @@ export function hintsFor(carried: ReadonlyMap<string, number>, uses: ItemUses, p
 		const enough = r.needs.every((n) => has(n.name) >= n.count);
 		const about = r.needs.map((n) => n.name);
 		if (enough && r.at) {
-			at.push({ id: `at:${r.key}`, about, text: `Aus ${list(r.needs)} wird ${r.name}: das geht an einem Bau „${planName(plans, r.at)}“${r.tool ? ` mit ${r.tool}` : ""}.${owned.has(r.at) ? "" : ` Gibt es keinen, kann man einen bauen („bau ${r.at}“).`}` });
+			at.push({ id: `at:${r.key}`, about, text: `Aus ${list(r.needs)} wird ${r.name}: das geht ${atPlan(plans, r.at)}${r.tool ? ` mit ${r.tool}` : ""}.${owned.has(r.at) ? "" : BUILD(r.at)}` });
 		} else if (enough && r.tool && !has(r.tool)) {
 			const tr = uses.recipes.find((x) => x.name === r.tool);
 			tool.push({ id: `tool:${r.key}`, about, text: `Für ${r.name} hast du alles, nur ${r.tool} fehlt dir als Werkzeug.${tr ? ` Das Werkzeug ${r.tool} braucht ${list(tr.needs)}.` : ""}` });
@@ -38,10 +41,10 @@ export function hintsFor(carried: ReadonlyMap<string, number>, uses: ItemUses, p
 	}
 	for (const s of uses.steps ?? []) {
 		if (!has(s.from)) continue;
-		const where = planName(plans, s.at), build = owned.has(s.at) ? "" : ` Gibt es keinen, kann man einen bauen („bau ${s.at}“).`;
+		const where = planName(plans, s.at), build = owned.has(s.at) ? "" : BUILD(s.at);
 		const text = s.kind === "grind"
 			? `Die ${where} mahlt ${s.from} zu ${s.to} („${s.line}“).${build}${then(s.to)}`
-			: `${s.from}: gibt ${s.to} in einem Bau „${where}“ („${s.line}“, dann „einsammeln“).${build}${then(s.to)}`;
+			: `${s.from}: gibt ${s.to} in ${plans.find((p) => p.key === s.at)?.dative ?? `einem Bau „${where}“`} („${s.line}“, dann „einsammeln“).${build}${then(s.to)}`;
 		steps.push({ id: `step:${s.at}:${s.from}`, about: [s.from], text });
 	}
 	return [...make, ...tool, ...at, ...near, ...steps];

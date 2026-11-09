@@ -172,6 +172,8 @@ const beet: Command = {
 		if (/^(?:anlegen|neu|new|umgraben|\d+)$/i.test(word) || KIND_WORD.test(word)) return dig(c, /^\d+$/.test(word) || KIND_WORD.test(word) ? arg : rest.join(" "));
 		if (/^(?:aufgeben|abreissen|abreißen|weg|remove)$/i.test(word)) {
 			const b = await bedHere(c, { own: true, reach: 1 });
+			// what grows in it is lost: asked first, „beet aufgeben ja“ does it (the map's menu asks on the page and sends that)
+			if (!/^(?:ja|yes)$/i.test(rest[0] ?? "")) { await writeBed(c, b); return msg(c, c.actor.charId, "info", "Das Beet wirklich aufgeben? Was darin wächst, geht verloren, und dort wächst wieder Gras. „beet aufgeben ja“ gibt es auf."); }
 			await freeBed(c.space, c.txn, b);
 			return msg(c, "*", "info", `${c.actor.name} gibt das ${b.kind === "gemein" ? "Gemeinschaftsbeet" : b.kind === "zier" ? "Zierbeet" : "Beet"} auf; dort wächst wieder Gras.`);
 		}

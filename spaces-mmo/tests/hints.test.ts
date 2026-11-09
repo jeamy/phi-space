@@ -8,7 +8,7 @@ import { loadWorld } from "../server/engine/world.ts";
 
 const w = await loadWorld("leuchtfeuer");
 const uses = usesOf(w);
-const plans = (w.building?.plans ?? []).map((p) => ({ key: p.key, name: p.name }) as PlanView);
+const plans = (w.building?.plans ?? []).map((p) => ({ key: p.key, name: p.name, ...(p.dative ? { dative: p.dative } : {}) }) as PlanView);
 const hints = (pack: Record<string, number>, owned: string[] = []) => hintsFor(new Map(Object.entries(pack)), uses, plans, new Set(owned));
 const texts = (pack: Record<string, number>, owned: string[] = []) => hints(pack, owned).map((h) => h.text);
 
@@ -35,12 +35,12 @@ test("the parts of a spade, and a tool that is missing (driftwood bundles need a
 
 test("wheat goes to the mill, the flour to the bakehouse; a goat into a pen for its milk", () => {
 	const wheat = hints({ Weizen: 1 }).find((h) => h.id === "step:windmuehle:Weizen")!;
-	assert.match(wheat.text, /^Die Windmühle mahlt Weizen zu Mehl \(„mahle alle weizen“\)\. Gibt es keinen, kann man einen bauen \(„bau windmuehle“\)\. Aus Mehl wird dann Brot \(Backhaus\)/);
+	assert.match(wheat.text, /^Die Windmühle mahlt Weizen zu Mehl \(„mahle alle weizen“\)\. Fehlt so ein Bau, kann man ihn bauen \(„bau windmuehle“\)\. Aus Mehl wird dann Brot \(Backhaus\)/);
 	assert.doesNotMatch(hints({ Weizen: 1 }, ["windmuehle"]).find((h) => h.id === "step:windmuehle:Weizen")!.text, /bau windmuehle/);
 	const goat = hints({ Ziege: 1 }).find((h) => h.id === "step:gehege:Ziege")!;
-	assert.match(goat.text, /^Ziege: gibt Milch in einem Bau „Gehege“ \(„einstallen ziege“, dann „einsammeln“\)\. Gibt es keinen, .* Aus Milch wird dann Käse/);
+	assert.match(goat.text, /^Ziege: gibt Milch in einem Gehege \(„einstallen ziege“, dann „einsammeln“\)\. Fehlt so ein Bau, .* Aus Milch wird dann Käse/);
 	const bread = hints({ Mehl: 2, "Kanne Wasser": 1, Treibholz: 1 }).find((h) => h.id === "at:brot")!;
-	assert.match(bread.text, /wird Brot: das geht an einem Bau „Backhaus“\./);
+	assert.match(bread.text, /wird Brot: das geht bei einem Backhaus\./);
 });
 
 test("what can be made now comes first", () => {

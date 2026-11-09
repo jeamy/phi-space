@@ -12101,6 +12101,7 @@
 			{
 				"key": "vogelscheuche",
 				"name": "Vogelscheuche",
+				"dative": "einer Vogelscheuche",
 				"aliases": [
 					"strohmann",
 					"scarecrow"
@@ -12133,6 +12134,7 @@
 				"key": "windmuehle",
 				"epoch": 2,
 				"name": "Windmühle",
+				"dative": "einer Windmühle",
 				"aliases": [
 					"windmühle",
 					"mühle",
@@ -12172,6 +12174,7 @@
 				"key": "backhaus",
 				"epoch": 2,
 				"name": "Backhaus",
+				"dative": "einem Backhaus",
 				"aliases": [
 					"bäckerei",
 					"baeckerei",
@@ -12210,6 +12213,7 @@
 			{
 				"key": "huehnerstall",
 				"name": "Hühnerstall",
+				"dative": "einem Hühnerstall",
 				"aliases": [
 					"hühnerstall",
 					"stall",
@@ -12243,6 +12247,7 @@
 			{
 				"key": "bienenstock",
 				"name": "Bienenstock",
+				"dative": "einem Bienenstock",
 				"aliases": [
 					"bienenkorb",
 					"imkerei",
@@ -12277,6 +12282,7 @@
 				"key": "gehege",
 				"epoch": 2,
 				"name": "Gehege",
+				"dative": "einem Gehege",
 				"aliases": [
 					"koppel",
 					"pferch",
@@ -12311,6 +12317,7 @@
 				"key": "webstuhl",
 				"epoch": 2,
 				"name": "Webstuhl",
+				"dative": "einem Webstuhl",
 				"aliases": [
 					"webhütte",
 					"webhuette",
@@ -13206,6 +13213,7 @@
 			{
 				"key": "regentonne",
 				"name": "Regentonne",
+				"dative": "einer Regentonne",
 				"aliases": [
 					"tonne",
 					"barrel",

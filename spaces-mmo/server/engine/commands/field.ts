@@ -157,6 +157,8 @@ const flur: Command = {
 		if (/^(?:aufgeben|weg|remove)$/i.test(word)) {
 			const f = await fieldHere(c);
 			if (!mine(c, f)) throw new CommandError(`Das ist der ${fieldName(f)}; aufgeben kann ihn nur, wer ihn angelegt hat.`);
+			// what grows on it is lost: asked first, „flur aufgeben ja“ does it (the map's menu asks on the page and sends that)
+			if (!/^(?:ja|yes)$/i.test(rest[0] ?? "")) { await writeField(c, f); return msg(c, c.actor.charId, "info", "Den Acker wirklich aufgeben? Was darauf wächst, geht verloren, und dort wächst wieder Gras. „flur aufgeben ja“ gibt ihn auf."); }
 			await freeCells(c.space, c.txn, f.room, f.fieldId);
 			await releaseLight(c.space, c.txn, f.beaconId, f.points);
 			return msg(c, "*", "info", `${c.actor.name} gibt den Acker auf; dort wächst wieder Gras.`);

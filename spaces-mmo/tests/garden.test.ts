@@ -188,7 +188,9 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		assert.match(await does(anna.p, "jäte", "jätet"), /welke Pflanze/);
 		assert.ok((await bedOf(s, anna.me)).plants.every((p) => p.stage !== 3));
 		// giving it up frees the land
-		assert.match(await does(anna.p, "beet aufgeben", "Gras"), /gibt das Beet auf/);
+		assert.match(await does(anna.p, "beet aufgeben", "wirklich"), /„beet aufgeben ja“/, "asked first: nothing is given up");
+		assert.equal(await s.count({ type: "Bed", fields: { accountId: String((await s.readAll({ type: "Character", fields: { charId: anna.me } }))[0]!.fields.accountId) } }) > 0, true);
+		assert.match(await does(anna.p, "beet aufgeben ja", "gibt das"), /gibt das Beet auf/);
 		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => String(e.fields.of).startsWith("bed-")).length, 0);
 	} finally { await srv.close(); }
 });
@@ -363,7 +365,7 @@ test("a flower bed takes flowers and they cross; the breeder names the crossing 
 		await does(anna.p, "ernte", "erntet");
 		assert.equal(await ripeLeft(), 0, "a single ripe plant may be taken");
 		// it does not count to Bert's beds, and only Bert gives it up
-		assert.match(await does(bert.p, "beet aufgeben", "Gras"), /gibt das Gemeinschaftsbeet auf/);
+		assert.match(await does(bert.p, "beet aufgeben ja", "gibt das"), /gibt das Gemeinschaftsbeet auf/);
 		assert.equal(await s.count({ type: "BedCommons" }), 0, "the fire has room for one again");
 	} finally { await srv.close(); }
 });
