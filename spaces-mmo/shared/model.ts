@@ -161,7 +161,9 @@ export type HelpEntryFields = { key: string; category: string; text: string };
 /** Which version of a world's definition the space holds (written by the loader). */
 export type WorldLoadedFields = { worldId: string; version: number; at: number };
 /** A room of the loaded world: its grid of tile keys, one string per row. */
-export type RoomFields = { roomId: string; name: string; desc: string; ground: string[]; decor?: string[]; spawn?: { x: number; y: number }; map?: { x: number; y: number }; island?: string };
+export type RoomFields = { roomId: string; name: string; desc: string; ground: string[]; decor?: string[]; spawn?: { x: number; y: number }; map?: { x: number; y: number }; island?: string;
+	/** A building's inside (engine/commands/interior.ts): whose building and where it stood, for when it is gone. */
+	building?: Pick<BuildingFields, "buildId" | "name" | "room" | "x" | "y" | "w" | "h" | "accountId" | "ownerName"> };
 /** A character being played right now: held by the web process with a short lease while the WebSocket is open. */
 export type SessionFields = { sessionId: string; charId: string; accountId: string };
 /** One command line, written by the web process (or later an NPC), taken by a world worker. */
@@ -233,7 +235,7 @@ export type BuildingFields = { buildId: string; plan: string; name: string; room
 	herd?: HerdFields;
 	/** A dog or cat left here as a guard (engine/commands/animals.ts; it lies in it as a thing, like a herd): its kind and
 	 *  how long it is fed. `fenced`: a coop with a fence round it (the foxes do not get in). */
-	keeper?: { kind: string; fedUntilWorldMs: number }; fenced?: boolean; /** Coins a department store turned over (engine/commands/shop.ts). */ turnover?: number };
+	keeper?: { kind: string; fedUntilWorldMs: number }; fenced?: boolean; /** Who the owner let into its inside (`einladen`). */ guests?: Array<{ charId: string; name: string }>; /** Coins a department store turned over (engine/commands/shop.ts). */ turnover?: number };
 export type HerdFields = { kind: string; fedUntilWorldMs: number; atWorldMs: number; goods: number; bred: number };
 /** A load of grain at a mill (`buildId`, its place kept so it is found when the mill is gone): `count` of `from`, ground
  *  to `to` at `readyWorldMs` for the figure that brought it. A load whose mill fell before it was ground gives its grain
@@ -276,7 +278,9 @@ export type RuinFields = { buildId: string; plan: string; name: string; room: st
 export type EstateFields = { estateId: string; accountId: string; ownerName: string; room: string; name: string; untilWorldMs: number };
 /** One cell a site or building stands on, written with the space's `unique` check on room and cell: two never share one. */
 /** A piece of the world's scenery (worlds/<id>/scenery.ts): `left` the work it still takes. */
-export type SceneryFields = { sceneryId: string; room: string; x: number; y: number; w: number; h: number; model: string; name: string; fixed?: boolean; through?: boolean; work: number; left: number; yields: Array<{ proto: string; count: number }> };
+export type SceneryFields = { sceneryId: string; room: string; x: number; y: number; w: number; h: number; model: string; name: string; fixed?: boolean; through?: boolean; work: number; left: number; yields: Array<{ proto: string; count: number }>;
+	/** A furnishing of a building's inside (docs/innenraeume.en.md): the building, what it is for, what it says of itself. */
+	of?: string; plan?: string; owner?: string; use?: "cook" | "chest" | "sleep"; desc?: string };
 export type PlotFields = { room: string; x: number; y: number; of: string };
 /** How much of a fire's light the sites and buildings that use it take (engine/build.ts, "Lichtpunkte"). */
 export type LightUseFields = { beaconId: string; used: number };

@@ -327,6 +327,9 @@ export const world: WorldDef = {
 		".": { sheet: "tilesets/Ground.png", x: 128, y: 224, walk: true }, // sand
 		",": { sheet: "tilesets/Ground.png", x: 32, y: 32, walk: true }, // grass
 		":": { sheet: "tilesets/Ground.png", x: 320, y: 128, walk: true }, // cobbles
+		// a building's inside (docs/innenraeume.en.md): floor planks and a timbered wall
+		"_": { sheet: "tilesets/Interior.png", x: 0, y: 0, walk: true },
+		"#": { sheet: "tilesets/Interior.png", x: 32, y: 0, walk: false },
 	},
 	// plants over the grass (islands.ts `plants`): white flowers, three of them tinted, herbs, two bushes, two small trees
 	decor: {
@@ -609,7 +612,17 @@ export const world: WorldDef = {
 		store: { quota: { fremder: 2, helfer: 5, siedler: 20 }, logKeepMs: 3 * 24 * 3600_000, logShow: 12 },
 		lightPoints: 20, lightPerEpoch: 20, lightGrowth: { perPlayer: 5, max: 40, activeMs: 7 * 24 * 3600_000 }, siteWorldMs: 7 * 24 * 3600_000, maxSites: 1, maxBuildings: 10, uncounted: ["regentonne", "vogelscheuche", "huehnerstall", "gehege", "bienenstock", "signalfeuer"], ruinWorldMs: 10 * 24 * 3600_000, estateWorldMs: 30 * 24 * 3600_000,
 		plans: [
-			{ key: "huette", name: "Hütte", dative: "einer Hütte", aliases: ["hütte", "hut"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "tangseil", count: 2 }], work: 20, points: 1, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.bau", color: "#8a6a44", chest: 12, repair: [{ proto: "treibholz", count: 1 }] },
+			{ key: "huette", name: "Hütte", dative: "einer Hütte", aliases: ["hütte", "hut"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "tangseil", count: 2 }], work: 20, points: 1, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.bau", color: "#8a6a44", chest: 12, repair: [{ proto: "treibholz", count: 1 }],
+				// inside: the hearth cooks the hut's recipes, the chest is the hut's, the bed is for sleep (docs/innenraeume.en.md)
+				interior: {
+					ground: ["#######", "#_____#", "#_____#", "#_____#", "#_____#", "###_###"], spawn: { x: 3, y: 4 }, door: { x: 3, y: 5 },
+					furniture: [
+						{ kind: "herd", name: "Herd", x: 1, y: 1, use: "cook", desc: "Ein gemauerter Herd mit einer Pfanne darauf. Hier kocht man, was man in der Hütte macht." },
+						{ kind: "bett", name: "Bett", x: 5, y: 1, use: "sleep", desc: "Ein Bett aus Treibholz mit einer Decke aus Tang." },
+						{ kind: "tisch", name: "Tisch", x: 1, y: 3, desc: "Ein grober Tisch mit einer Bank." },
+						{ kind: "truhe", name: "Truhe", x: 5, y: 3, use: "chest", desc: "Die Truhe der Hütte." },
+					],
+				} },
 			// water for the beds (garden below): it gains a can every eight world hours, up to six, and is full after a storm surge
 			// keeps the hares from the beds within three cells (wild below); it stands 40 days without repair
 			{ key: "vogelscheuche", name: "Vogelscheuche", dative: "einer Vogelscheuche", aliases: ["strohmann", "scarecrow"], w: 1, h: 1, needs: [{ proto: "treibholz", count: 2 }, { proto: "tangseil", count: 1 }], work: 3, points: 1, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.scheuche", color: "#b08a4a", repair: [{ proto: "tang", count: 1 }] },

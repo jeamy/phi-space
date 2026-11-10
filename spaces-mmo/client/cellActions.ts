@@ -148,6 +148,23 @@ export function offerWords(o: { giveNames: string[]; want: Array<{ name: string;
 export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, recipes, grinds, beachAt, admin }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: CellEntry[] = [];
+	/** The recipes made at a building of `plan`: what one carries enough for, and the whole list (server: trade.ts "craft hier"). */
+	const made = (plan: string | undefined) => {
+		const here = (recipes ?? []).filter((r) => r.at === plan);
+		if (!here.length) return;
+		const count = new Map<string, number>();
+		for (const i of objs.values()) if (i.kind === "item" && i.location === me) count.set(i.name, (count.get(i.name) ?? 0) + 1);
+		for (const r of here) if (r.needs.every((n) => (count.get(n.name) ?? 0) >= n.count) && (!r.tool || count.has(r.tool))) entries.push({ label: `${r.name} herstellen (${r.needs.map((n) => `${n.count} ${n.name}`).join(", ")})`, line: `craft ${r.key}` });
+		entries.push({ label: "Was man hier herstellen kann", line: "craft hier" });
+	};
+	/** One's chest in building `buildId`: look into it, and each kind in it to take out, one or all (the server sends what
+	 *  lies in it while one stands beside or inside; build.ts entnimm). */
+	const chestEntries = (buildId: string) => {
+		entries.push({ label: "Truhe ansehen", line: "truhe" });
+		const held = new Map<string, number>();
+		for (const i of objs.values()) if (i.kind === "item" && i.location === buildId) held.set(i.name, (held.get(i.name) ?? 0) + 1);
+		for (const [n, k] of [...held].sort(([a], [b]) => a.localeCompare(b, "de")).slice(0, 12)) entries.push(k > 1 ? { label: `${n} entnehmen (alle ${k})`, line: `entnimm alle ${n}` } : { label: `${n} entnehmen`, line: `entnimm ${n}` });
+	};
 	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
 		// what the figure offers the player comes first: a tap on its speech bubble opens this menu (MapView3D)
 		const offered = offersIn?.find((o) => o.fromName === c.name);
@@ -210,6 +227,16 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			}
 			continue;
 		}
+		// a furnishing inside a building (server: interior.ts): the hearth cooks the building's recipes, the chest is the
+		// owner's chest, the bed is for sleep; each from beside it
+		if (o.kind === "scenery" && o.use && o.location === room && covers(o, at)) {
+			const beside = !!self && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
+			entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` });
+			if (beside && o.use === "cook") made(o.plan);
+			if (beside && o.use === "chest" && o.ownerId === me) chestEntries(room.slice(3));
+			if (beside && o.use === "sleep") entries.push({ label: "Schlafen", line: "schlafe" });
+			continue;
+		}
 		if (o.kind === "scenery" && o.location === room && !o.through && !o.fixed && covers(o, at) && self && Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) <= 2) entries.push({ label: `${o.name} abräumen (noch ${o.left ?? 1})`, line: `räume ${o.x} ${o.y}` });
 		if ((o.kind !== "site" && o.kind !== "building" && o.kind !== "ruin" && o.kind !== "bed" && o.kind !== "field") || o.location !== room || at.x < o.x || at.y < o.y || at.x >= o.x + (o.w ?? 1) || at.y >= o.y + (o.h ?? 1)) continue;
 		const dist = self ? Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) : Infinity;
@@ -266,15 +293,12 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				const grain = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && ground.includes(i.name)).map((i) => i.name))];
 				for (const n of grain) entries.push({ label: `${n} mahlen`, line: `mahle alle ${n}` });
 			}
-			// what is made at this building (the recipes "at" its plan, anyone's building): what one carries enough for,
-			// and the whole list (server: trade.ts "craft hier")
-			const here = (recipes ?? []).filter((r) => r.at === o.plan);
-			if (here.length) {
-				const count = new Map<string, number>();
-				for (const i of objs.values()) if (i.kind === "item" && i.location === me) count.set(i.name, (count.get(i.name) ?? 0) + 1);
-				for (const r of here) if (r.needs.every((n) => (count.get(n.name) ?? 0) >= n.count) && (!r.tool || count.has(r.tool))) entries.push({ label: `${r.name} herstellen (${r.needs.map((n) => `${n.count} ${n.name}`).join(", ")})`, line: `craft ${r.key}` });
-				entries.push({ label: "Was man hier herstellen kann", line: "craft hier" });
-			}
+			// what is made at this building (the recipes "at" its plan, anyone's building); a building one goes into has its
+			// hearth inside for that, but outside it stays as it was (docs/innenraeume.en.md)
+			made(o.plan);
+			// into one's own building or one invited into (server: interior.ts betrete); its owner sees who is invited
+			if (o.interior && (o.ownerId === me || (o.guestIds ?? []).includes(me))) entries.push({ label: "Hineingehen", line: `betrete ${o.x} ${o.y}` });
+			if (o.interior && o.ownerId === me) entries.push({ label: "Wer darf hinein?", line: "einladen" });
 			// a coop, pen or hive: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
 			if (HOUSES[o.plan ?? ""]) {
 				// the house carries its herd while an animal is in it: nothing to feed in an empty one
@@ -333,11 +357,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.plan === "lagerhaus") entries.push({ label: "Lager ansehen", line: "lager" });
 			// only a plan with a chest of its own has one (a hut, a smokehouse); a scarecrow, a coop or a mill has none
 			else if (o.ownerId === me && plans.some((p) => p.key === o.plan && p.chest)) {
-				entries.push({ label: "Truhe ansehen", line: "truhe" });
-				// what lies in it (the server sends it while one stands beside): each kind to take out, one or all (build.ts entnimm)
-				const held = new Map<string, number>();
-				for (const i of objs.values()) if (i.kind === "item" && i.location === o.id) held.set(i.name, (held.get(i.name) ?? 0) + 1);
-				for (const [n, k] of [...held].sort(([a], [b]) => a.localeCompare(b, "de")).slice(0, 12)) entries.push(k > 1 ? { label: `${n} entnehmen (alle ${k})`, line: `entnimm alle ${n}` } : { label: `${n} entnehmen`, line: `entnimm ${n}` });
+				chestEntries(o.id);
 			}
 		}
 		if (o.kind === "ruin" && o.ownerId === me) entries.push({ label: "Nachlass abholen", line: "nachlass" });

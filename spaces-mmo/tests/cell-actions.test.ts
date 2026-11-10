@@ -256,3 +256,25 @@ test("someone else's bed beside one: only the operator may remove it", () => {
 	assert.equal(lines(false).length, 0);
 	assert.deepEqual(lines(true).map((e) => [e.label, e.line, !!e.confirm]), [["Beet auflösen (als Betreiber)", "beet aufgeben ja 6 5", true]]);
 });
+
+test("a hut one may enter offers „Hineingehen“; inside, the hearth cooks, the chest opens for its owner, the bed sleeps", () => {
+	const self = char("me", "Mira", 9, 10);
+	const house = (o: Partial<ObjView>) => new Map([["hut", obj({ id: "hut", kind: "building", name: "Hütte", owner: "Ines", ownerId: "o", plan: "huette", interior: true, x: 10, y: 10, w: 2, h: 2, ...o })]]);
+	const lines = (objs: Map<string, ObjView>) => cellEntries({ ...input, self, objs, at: { x: 10, y: 10 } }).map((e) => e.line);
+	assert.ok(!lines(house({})).includes("betrete 10 10"), "a stranger's hut stays shut");
+	assert.ok(lines(house({ guestIds: ["me"] })).includes("betrete 10 10"), "invited");
+	assert.ok(lines(house({ ownerId: "me" })).includes("betrete 10 10") && lines(house({ ownerId: "me" })).includes("einladen"), "one's own");
+	const inside = "in-hut", at = char("me", "Mira", 2, 2);
+	const furniture = new Map<string, ObjView>([
+		["herd", obj({ id: "herd", kind: "scenery", name: "Herd", model: "herd", use: "cook", plan: "huette", ownerId: "me", fixed: true, location: inside, x: 1, y: 1 })],
+		["truhe", obj({ id: "truhe", kind: "scenery", name: "Truhe", model: "truhe", use: "chest", plan: "huette", ownerId: "me", fixed: true, location: inside, x: 3, y: 3 })],
+		["bett", obj({ id: "bett", kind: "scenery", name: "Bett", model: "bett", use: "sleep", plan: "huette", ownerId: "me", fixed: true, location: inside, x: 5, y: 1 })],
+		["muschel", obj({ id: "muschel", kind: "item", name: "Muschel", location: "hut", x: -1, y: -1 })],
+	]);
+	const recipes = [{ key: "ruehrei", name: "Rührei", needs: [{ name: "Ei", count: 2 }], at: "huette" }];
+	const there = (x: number, y: number) => cellEntries({ ...input, self: at, objs: furniture, room: inside, recipes, at: { x, y } } as never).map((e) => e.line);
+	assert.ok(there(1, 1).includes("craft hier"), "the hearth");
+	assert.ok(there(3, 3).includes("truhe") && there(3, 3).includes("entnimm Muschel"), "the chest and what lies in it");
+	assert.ok(!there(5, 1).includes("schlafe"), "the bed is two cells away");
+	assert.ok(cellEntries({ ...input, self: char("me", "Mira", 4, 1), objs: furniture, room: inside, at: { x: 5, y: 1 } }).some((e) => e.line === "schlafe"), "beside the bed");
+});

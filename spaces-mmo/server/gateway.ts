@@ -15,6 +15,7 @@ import { NOTICE_MS, whereTo } from "./engine/context.ts";
 import { decayNow, msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
 import { baysOf, linerOf, type Timetable } from "./engine/liner.ts";
 import { todosFor, type Todo } from "./todos.ts";
+import { interiorOf } from "./engine/commands/interior.ts";
 import { asFields, type HerdFields, type MillLoadFields, type EpochFields, type SeedRestFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type WantedFields, type NoticeFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type CartFields, type WindFields, type WorldClockFields, type ZoneFields, type RoadFields } from "./model.ts";
 import { bedPlantsView } from "./engine/commands/garden.ts";
 import { fieldView } from "./engine/commands/field.ts";
@@ -566,7 +567,7 @@ export class Gateway {
 			const missing = site ? [...b.needs.filter((n) => n.have < n.count).map((n) => `${n.count - n.have} ${n.name}`), ...(b.work < b.workNeed ? [`${b.workNeed - b.work} Arbeit`] : [])].join(", ") : undefined;
 			const color = this.w.building?.plans.find((p) => p.key === b.plan)?.color;
 			if (!site && b.herd) this.#herds.set(b.buildId, b.herd); else this.#herds.delete(b.buildId);
-			this.#setObj(id, { id: b.buildId, kind: site ? "site" : "building", name: b.name, location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: this.#shownName(b.owner, b.ownerName), ownerId: b.owner, plan: b.plan, ...(site ? { orders: this.#ordersOf(b.buildId) } : {}), ...(site ? { progress: total ? have / total : 0, missing } : {}), ...(color ? { color } : {}), ...(!site && b.herd ? { herd: b.herd.kind } : {}), ...(!site && b.keeper ? { keeper: b.keeper.kind } : {}), ...(!site && b.fenced ? { fenced: true } : {}) });
+			this.#setObj(id, { id: b.buildId, kind: site ? "site" : "building", name: b.name, location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: this.#shownName(b.owner, b.ownerName), ownerId: b.owner, plan: b.plan, ...(site ? { orders: this.#ordersOf(b.buildId) } : {}), ...(site ? { progress: total ? have / total : 0, missing } : {}), ...(color ? { color } : {}), ...(!site && b.herd ? { herd: b.herd.kind } : {}), ...(!site && b.keeper ? { keeper: b.keeper.kind } : {}), ...(!site && b.fenced ? { fenced: true } : {}), ...(!site && this.w.building?.plans.find((p) => p.key === b.plan)?.interior ? { interior: true, ...(b.guests?.length ? { guestIds: b.guests.map((g) => g.charId) } : {}) } : {}) });
 		}
 		else if (type === "Flame") { const f = fields as unknown as FlameFields; this.#flames.set(f.beaconId, f.until); this.#flameOf.set(id, f.beaconId); }
 		else if (type === "Wind") { const f = fields as unknown as WindFields; this.#winds.set(f.island, f.level); for (const c of this.#clients) if (c.room !== null && this.#rooms.get(c.room)?.island === f.island) c.ws.send({ t: "wind", wind: this.#windIn(c.room) } satisfies ServerFrame); }
@@ -578,7 +579,7 @@ export class Gateway {
 		else if (type === "Notice") { const n = fields as unknown as NoticeFields; this.#notices.set(id, n); this.#tell(n.charId); }
 		else if (type === "SeedRest") this.#seedRests.set(id, fields as unknown as SeedRestFields);
 		else if (type === "Epoch") { this.#epochs.set(id, fields as unknown as EpochFields); this.#atlasChanged(); }
-		else if (type === "Scenery") { const s = fields as unknown as SceneryFields; this.#setObj(id, { id: s.sceneryId, kind: "scenery", name: s.name, desc: sceneryText(this.w, s), location: s.room, x: s.x, y: s.y, w: s.w, h: s.h, model: s.model, left: s.left, ...(s.fixed ? { fixed: true } : {}), ...(s.through ? { through: true } : {}) }); }
+		else if (type === "Scenery") { const s = fields as unknown as SceneryFields; this.#setObj(id, { id: s.sceneryId, kind: "scenery", name: s.name, desc: sceneryText(this.w, s), location: s.room, x: s.x, y: s.y, w: s.w, h: s.h, model: s.model, left: s.left, ...(s.fixed ? { fixed: true } : {}), ...(s.through ? { through: true } : {}), ...(s.use ? { use: s.use } : {}), ...(s.plan ? { plan: s.plan } : {}), ...(s.owner ? { ownerId: s.owner } : {}) }); }
 		else if (type === "SiteOrder") { const o = fields as unknown as SiteOrderFields; this.#siteOrders.set(id, o); this.#showOrders(o.buildId); }
 		else if (types.includes("Item") || types.includes("Exit")) {
 			const o = types.includes("Item") ? itemView(fields as unknown as ItemFields, this.#protoIcons, this.w) : exitView(fields as unknown as ExitFields, this.w);
@@ -752,7 +753,8 @@ export class Gateway {
 	#inOwnChest(loc: string | null | undefined, charId: string, room: string | null): boolean {
 		if (!loc || !room) return false;
 		const b = this.#objs.get(loc);
-		if (!b || b.kind !== "building" || b.ownerId !== charId || b.location !== room) return false;
+		// beside it in its room, or inside it (engine/commands/interior.ts)
+		if (!b || b.kind !== "building" || b.ownerId !== charId || (b.location !== room && room !== interiorOf(b.id))) return false;
 		const p = this.w.building?.plans.find((x) => x.key === b.plan);
 		return !!p?.chest && !p.store;
 	}

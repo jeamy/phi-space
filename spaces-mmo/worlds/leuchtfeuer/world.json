@@ -48,6 +48,18 @@
 			"x": 320,
 			"y": 128,
 			"walk": true
+		},
+		"_": {
+			"sheet": "tilesets/Interior.png",
+			"x": 0,
+			"y": 0,
+			"walk": true
+		},
+		"#": {
+			"sheet": "tilesets/Interior.png",
+			"x": 32,
+			"y": 0,
+			"walk": false
 		}
 	},
 	"decor": {
@@ -12158,7 +12170,58 @@
 						"proto": "treibholz",
 						"count": 1
 					}
-				]
+				],
+				"interior": {
+					"ground": [
+						"#######",
+						"#_____#",
+						"#_____#",
+						"#_____#",
+						"#_____#",
+						"###_###"
+					],
+					"spawn": {
+						"x": 3,
+						"y": 4
+					},
+					"door": {
+						"x": 3,
+						"y": 5
+					},
+					"furniture": [
+						{
+							"kind": "herd",
+							"name": "Herd",
+							"x": 1,
+							"y": 1,
+							"use": "cook",
+							"desc": "Ein gemauerter Herd mit einer Pfanne darauf. Hier kocht man, was man in der Hütte macht."
+						},
+						{
+							"kind": "bett",
+							"name": "Bett",
+							"x": 5,
+							"y": 1,
+							"use": "sleep",
+							"desc": "Ein Bett aus Treibholz mit einer Decke aus Tang."
+						},
+						{
+							"kind": "tisch",
+							"name": "Tisch",
+							"x": 1,
+							"y": 3,
+							"desc": "Ein grober Tisch mit einer Bank."
+						},
+						{
+							"kind": "truhe",
+							"name": "Truhe",
+							"x": 5,
+							"y": 3,
+							"use": "chest",
+							"desc": "Die Truhe der Hütte."
+						}
+					]
+				}
 			},
 			{
 				"key": "vogelscheuche",

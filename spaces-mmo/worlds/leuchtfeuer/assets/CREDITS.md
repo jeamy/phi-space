@@ -91,3 +91,6 @@ feast: `items/schlachtmesser.png` … `items/festessen.png`, the keys of the pro
 
 What the eggs make (scrambled eggs, pancakes and a cake: `items/ruehrei.png`, `items/pfannkuchen.png`, `items/kuchen.png`)
 were drawn the same way, by the script `items-src/eggs.py` (same license as this project).
+
+The tiles of a building's inside (floor planks and a timbered wall: `tilesets/Interior.png`) were drawn by the script
+`items-src/interior.py` (same license as this project).

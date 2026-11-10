@@ -29,6 +29,7 @@ import { DEFAULT_COMMANDS, exitCmdSet, helpCommand } from "./commands/default.ts
 import { CLOCK_COMMANDS } from "./commands/clock.ts";
 import { TRADE_COMMANDS } from "./commands/trade.ts";
 import { SCENERY_COMMANDS } from "./commands/scenery.ts";
+import { INTERIOR_COMMANDS } from "./commands/interior.ts";
 import { llmEnabled } from "../llm-switch.ts";
 import { fieldsOf, type ListingFields, type TranslateFields } from "../model.ts";
 import { CommandError, NotUnderstood, exitsHere, inventory, lockCtx, msg, type CommandCtx } from "./context.ts";
@@ -47,7 +48,7 @@ export async function commandsOf(c: CommandCtx): Promise<Map<string, Command>> {
 	// the help lists the commands, not the exits (look names those)
 	const help = helpCommand(() => distinct(all).filter((cmd) => !exits.commands.includes(cmd)));
 	const sets: CmdSet[] = [
-		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...SCENERY_COMMANDS, ...BUILD_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...FESTIVAL_COMMANDS, ...WIND_COMMANDS, ...CART_COMMANDS, ...FOOD_COMMANDS, ...SHOP_COMMANDS, ...SIGNAL_COMMANDS, ...FISHING_COMMANDS, ...PASSAGE_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...BEAM_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...SETTLEMENT_COMMANDS, ...CLOCK_COMMANDS, help]) },
+		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...SCENERY_COMMANDS, ...BUILD_COMMANDS, ...INTERIOR_COMMANDS, ...SITE_ORDER_COMMANDS, ...CHAPEL_COMMANDS, ...TOWNHALL_COMMANDS, ...FESTIVAL_COMMANDS, ...WIND_COMMANDS, ...CART_COMMANDS, ...FOOD_COMMANDS, ...SHOP_COMMANDS, ...SIGNAL_COMMANDS, ...FISHING_COMMANDS, ...PASSAGE_COMMANDS, ...GARDEN_COMMANDS, ...FIELD_COMMANDS, ...BEAM_COMMANDS, ...MILL_COMMANDS, ...QUARRY_COMMANDS, ...ANIMAL_COMMANDS, ...WILD_COMMANDS, ...EPOCH_COMMANDS, ...SETTLEMENT_COMMANDS, ...CLOCK_COMMANDS, help]) },
 		{ key: "builder", priority: 1, mergeType: "Union", commands: offered(BUILDER_COMMANDS) },
 		exits,
 	];

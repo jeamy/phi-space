@@ -419,6 +419,35 @@ function sceneryView(p: Px, o: ObjView, ts: number): InstanceType<Px["Graphics"]
 	} else if (o.model === "rumpf") {
 		g.poly([x + 2, y + h * 0.3, x + w - 2, y + h * 0.2, x + w - 16, y + h - 3, x + 14, y + h - 3]).fill({ color: "#5e4028", alpha: 0.5 }).stroke({ width: 2, color: "#2a1d10" });
 		for (let i = 1; i < 6; i++) g.rect(x + (i * w) / 6, y + 6, 4, h - 10).fill({ color: "#7a5c3e" });
+	} else if (o.model === "herd") {
+		// the hut's hearth (docs/innenraeume.en.md): field stones, a firebox with embers, a pan on the plate, the flue behind
+		g.roundRect(x + 2, y + 3, w - 4, h - 5, 3).fill({ color: "#8d8a84" }).stroke({ width: 2, color: "#3a3734" });
+		for (const [sx, sy] of [[5, 6], [15, 5], [23, 8], [7, 15], [20, 16]] as const) g.roundRect(x + sx * w / 32, y + sy * h / 32, 6, 4, 1.5).fill({ color: "#6f6b66" });
+		g.rect(x + 3, y + 2, w - 6, 5).fill({ color: "#4a4540" });
+		g.roundRect(x + w * 0.28, y + h * 0.6, w * 0.44, h * 0.3, 2).fill({ color: "#2b2622" });
+		g.ellipse(x + w * 0.5, y + h * 0.8, w * 0.16, 3).fill({ color: "#ff7a1e" }); g.circle(x + w * 0.44, y + h * 0.76, 1.5).fill({ color: "#ffd27a" });
+		g.circle(x + w * 0.36, y + h * 0.36, 5).fill({ color: "#3a3d44" }).stroke({ width: 1, color: "#1d1f23" }); g.circle(x + w * 0.36, y + h * 0.36, 2.5).fill({ color: "#f4d27a" });
+		g.rect(x + w * 0.36 + 4, y + h * 0.36 - 1, 7, 2).fill({ color: "#3a3d44" });
+	} else if (o.model === "bett") {
+		// a bed of boards: the head at the top, a pillow, a green blanket folded back
+		g.rect(x + 4, y + 1, w - 8, h - 2).fill({ color: "#5a3e26" });
+		g.rect(x + 6, y + 3, w - 12, h - 6).fill({ color: "#c9b27a" });
+		g.roundRect(x + 8, y + 5, w - 16, 6, 2).fill({ color: "#e8e0cc" }).stroke({ width: 1, color: "#b9ae96" });
+		g.rect(x + 6, y + 13, w - 12, h - 16).fill({ color: "#5f7f5a" }); g.rect(x + 6, y + 13, w - 12, 3).fill({ color: "#4c6a48" });
+		g.rect(x + 3, y, 3, 4).fill({ color: "#3e2a18" }); g.rect(x + w - 6, y, 3, 4).fill({ color: "#3e2a18" });
+	} else if (o.model === "tisch") {
+		// a table with a jug and a bowl, a bench below it
+		g.rect(x + 3, y + 4, w - 6, h * 0.5).fill({ color: "#8a6440" }).stroke({ width: 2, color: "#3e2a18" });
+		for (let i = 1; i < 3; i++) g.rect(x + 3, y + 4 + (i * h * 0.5) / 3, w - 6, 1).fill({ color: "#6b4a2e" });
+		g.circle(x + w * 0.66, y + h * 0.26, 3).fill({ color: "#b5653c" }).stroke({ width: 1, color: "#5e2e18" });
+		g.ellipse(x + w * 0.34, y + h * 0.3, 4.5, 3).fill({ color: "#9a7a52" }).stroke({ width: 1, color: "#4a3622" });
+		g.rect(x + 4, y + h * 0.72, w - 8, 5).fill({ color: "#8a6440" }).stroke({ width: 1.5, color: "#3e2a18" });
+	} else if (o.model === "truhe") {
+		// a chest with iron bands and a brass lock
+		g.roundRect(x + 4, y + 7, w - 8, h - 11, 2).fill({ color: "#8a6440" }).stroke({ width: 2, color: "#3e2a18" });
+		g.rect(x + 4, y + 7, w - 8, 6).fill({ color: "#9a7450" });
+		for (const fx of [0.3, 0.7]) g.rect(x + w * fx - 1.5, y + 7, 3, h - 11).fill({ color: "#3a3d44" });
+		g.rect(x + w / 2 - 2.5, y + 12, 5, 5).fill({ color: "#c9a640" }).stroke({ width: 1, color: "#6e5a20" });
 	} else if (o.model === "faesser") {
 		for (const dx of [0, 1]) { g.roundRect(x + dx * ts + 5, y + 5, ts - 10, ts - 8, 6).fill({ color: "#4b3626" }).stroke({ width: 2, color: "#1f160e" }); g.rect(x + dx * ts + 5, y + 13, ts - 10, 2).fill({ color: "#8a8f94" }); }
 	} else {

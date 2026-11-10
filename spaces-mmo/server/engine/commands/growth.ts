@@ -7,6 +7,7 @@ import { isPassage } from "../occupancy.ts";
 import { grownPoint, insertStrip } from "../room-growth.ts";
 import { walkable, type WorldDef } from "../world.ts";
 import { timeNow } from "../source.ts";
+import { isInterior } from "./interior.ts";
 export { grownGround, grownDecor } from "../room-growth.ts";
 
 const POSITIONED = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Plot", "Zone", "Motion", "Animal"];
@@ -96,6 +97,7 @@ export async function growthTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 	if (!Number.isInteger(d.strip) || d.strip < 1) throw new RangeError("growth.strip must be a positive integer");
 	let grew = 0;
 	for (const entry of await space.readAll({ type: "Room" })) {
+		if (isInterior(String(entry.fields.roomId))) continue; // a building's inside keeps its walls
 		const txn = (await space.createTransaction(30_000)).id;
 		try {
 			if (!(await space.takeIfExists(WORLD_LOCK, NO_WAIT, { txn }))) { await space.abort(txn); break; }

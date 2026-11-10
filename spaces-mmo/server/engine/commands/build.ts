@@ -36,6 +36,7 @@ import { randomBytes, timeNow } from "../source.ts";
 import { creditDeed } from "../deeds.ts";
 import { baysOf, berth, SHIP_LENGTH } from "../liner.ts";
 import { roadCellsIn, routeDeliver, routeNear, routeWork } from "./road.ts";
+import { interiorOf, interiorSweep, isInterior, makeInterior, nearBuildings } from "./interior.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -304,6 +305,7 @@ export async function settle(c: CommandCtx, s: SiteFields): Promise<void> {
 		const plan = planOf(c.world, s.plan);
 		const b: BuildingFields = { buildId: s.buildId, plan: s.plan, name: s.name, room: s.room, x: s.x, y: s.y, w: s.w, h: s.h, owner: s.owner, ownerName: s.ownerName, accountId: s.accountId, beaconId: s.beaconId, points: s.points, by: s.by, untilWorldMs: kept + (await keepOf(c, plan)), builtAt: now };
 		await c.space.write({ type: "Building", fields: b as never }, c.txn, FOREVER);
+		await makeInterior(c.space, c.txn, c.world, b); // its inside, when its plan has one (interior.ts)
 		await closeOrders(c.space, c.txn, s, kept + (c.world.building?.estateWorldMs ?? 30 * 24 * 3600_000));
 		const helpers = Object.entries(s.by).sort((a, b) => b[1] - a[1]).map(([n, k]) => `${n} (${k})`).join(", ");
 		await msg(c, "*", "world", `Die ${s.name} von ${s.ownerName} steht! Mitgebaut: ${helpers}.`);
@@ -474,10 +476,9 @@ const baustelle: Command = {
 };
 
 /** A building beside the actor (by plan name when given; only one's own with `own`), taken in the transaction. */
-export async function buildingHere(c: CommandCtx, name: string, o: { own: boolean }): Promise<BuildingFields> {
-	const all = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e));
+export async function buildingHere(c: CommandCtx, name: string, o: { own: boolean; /** inside: beside the furnishing for it */ use?: "cook" | "chest" | "sleep" }): Promise<BuildingFields> {
 	const n = name.trim().replace(ARTICLE, "");
-	const near = all.filter((b) => distTo(c.actor, b) <= 1 && (!n || planOf(c.world, n)?.key === b.plan || b.name.toLowerCase() === n.toLowerCase()));
+	const near = (await nearBuildings(c, o.use)).filter((b) => (!n || planOf(c.world, n)?.key === b.plan || b.name.toLowerCase() === n.toLowerCase()));
 	const mine = near.filter((b) => b.accountId === c.account?.accountId);
 	const b = (o.own ? mine : [...mine, ...near])[0];
 	if (!b) throw new NotUnderstood(o.own ? (near.length ? "Das ist nicht dein Bau." : "Geh direkt neben deinen Bau.") : "Geh direkt neben den Bau.");
@@ -514,10 +515,11 @@ function noChest(c: CommandCtx, b: BuildingFields): CommandError {
 	return new CommandError(have.length ? `Die ${b.name} hat keine Truhe (eine haben: ${have.join(", ")}).` : `Die ${b.name} hat keine Truhe.`);
 }
 async function chestHere(c: CommandCtx): Promise<BuildingFields> {
-	const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
+	const near = await nearBuildings(c, "chest");
 	const own = near.find((b) => b.accountId === c.account?.accountId && planOf(c.world, b.plan)?.chest && !planOf(c.world, b.plan)?.store);
 	const store = near.find((b) => planOf(c.world, b.plan)?.store);
-	return own || !store ? buildingHere(c, own?.plan ?? "", { own: true }) : buildingHere(c, store.plan, { own: false });
+	if (!near.length && isInterior(c.actor.room)) throw new NotUnderstood("Geh zur Truhe; an ihr legt man ab und nimmt heraus.");
+	return own || !store ? buildingHere(c, own?.plan ?? "", { own: true, use: "chest" }) : buildingHere(c, store.plan, { own: false, use: "chest" });
 }
 /** Who may use a warehouse and how much they may still take today. Without a settlement it is its owner's chest; in one,
  *  the ranks count, also in an open one: an open settlement lets strangers in, not empty the store. */
@@ -595,7 +597,8 @@ async function chestNamed(c: CommandCtx, target: string): Promise<OwnChest> {
 	const t = target.trim().toLowerCase().replace(ARTICLE, "").replace(/^(?:meine[nm]?|my)\s+/, "");
 	const generic = !t || /^(?:truhe|kiste|chest)$/.test(t);
 	if (generic) {
-		const beside = mine.find((x) => x.region === null && x.b.room === c.actor.room && distTo(c.actor, x.b) <= 1);
+		// inside one's hut: its chest
+		const beside = mine.find((x) => x.region === null && (x.b.room === c.actor.room ? distTo(c.actor, x.b) <= 1 : c.actor.room === interiorOf(x.b.buildId)));
 		if (beside) return beside;
 		if (mine.length === 1) return mine[0]!;
 		throw new CommandError(`In welche Truhe? ${mine.map((x, i) => `${i + 1} ${chestLabel(c, x.b)}`).join(", ")}. Sag zum Beispiel „verstaue 3 muscheln in 2“.`);
@@ -905,6 +908,8 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 			return true;
 		});
 	}
+	// the insides: made for buildings that stood before them, taken with buildings that are gone (interior.ts)
+	await interiorSweep(space, w, inTxn);
 	// freight the railway carried and nobody fetched, or whose station fell: the sender's estate on the spot
 	for (const e of await space.readAll({ type: "Freight" })) {
 		const f = fieldsOf<FreightFields>(e);

@@ -13,6 +13,7 @@ import { resolvePrototype, spawn } from "../prototypes.ts";
 import { decayNowOf, patienceOf, worldNowOf } from "../clock.ts";
 import type { WorldDef } from "../world.ts";
 import { randomBytes, randomInt, timeNow } from "../source.ts";
+import { furnishingFor, nearBuildings } from "./interior.ts";
 
 /** How long a trade offer waits for an answer (real time: the other one is at the keyboard now). */
 const OFFER_MS = 120_000;
@@ -381,7 +382,7 @@ export const craft: Command = {
 		}
 		// "craft hier": what the buildings beside one make, in names, and whether one carries enough for it
 		if (/^(?:hier|here)$/i.test(arg.trim())) {
-			const beside = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
+			const beside = await nearBuildings(c, "cook");
 			const plans = [...new Set(beside.map((b) => b.plan))].filter((p) => rs.some((r) => r.at === p));
 			if (!plans.length) throw new CommandError(beside.length ? `Neben ${beside[0]!.name} stellt man nichts her; was überall geht, zeigt „craft“.` : "Neben dir steht kein Bau. Was überall geht, zeigt „craft“.");
 			const carried = new Map<string, number>();
@@ -400,8 +401,11 @@ export const craft: Command = {
 		if (!r && planOf(c.world, arg.trim().toLowerCase().replace(/(?:\s+\d+){2}$/, ""))) return bau.func(c, arg);
 		if (!r) throw new NotUnderstood(`Ein Rezept „${arg.slice(0, 30)}“ gibt es nicht. „craft“ zeigt die Rezepte.`);
 		// a recipe of a building (the bakery's oven) is made beside one of its plan, anyone's
-		if (r.at && !(await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: r.at } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1))
-			throw new CommandError(`${r.name} macht man nur direkt neben ${planOf(c.world, r.at)?.dative ?? `einem ${planOf(c.world, r.at)?.name ?? r.at}`}.`);
+		if (r.at && !(await nearBuildings(c, "cook")).some((b) => b.plan === r.at)) {
+			// inside the building of the recipe, away from its hearth: go to it
+			const hearth = (await nearBuildings(c)).some((b) => b.plan === r.at) ? await furnishingFor(c, "cook") : null;
+			throw new CommandError(hearth ? `${r.name} macht man am ${hearth.name}; geh zu ihm.` : `${r.name} macht man nur direkt neben ${planOf(c.world, r.at)?.dative ?? `einem ${planOf(c.world, r.at)?.name ?? r.at}`}.`);
+		}
 		if (want < 1) throw new NotUnderstood(`Wie viele? Zum Beispiel: craft 3 ${r.key}`);
 		if (want > MAX_CRAFT) throw new CommandError(`Höchstens ${MAX_CRAFT} auf einmal.`);
 		// as many rounds as the pack gives, up to the count; a tool that breaks hands over to the next of its kind
@@ -409,7 +413,7 @@ export const craft: Command = {
 		const used = new Set<string>(), inputs: Inv = [], wear = new Map<string, number>();
 		const tools = r.tool ? inv.filter((i) => i.f.proto === r.tool) : [];
 		// a workshop beside one: a tool wears half as fast there (docs/siedeln.en.md "Epoche 2")
-		const near = r.tool ? (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1) : [];
+		const near = r.tool ? await nearBuildings(c) : [];
 		const wearing = near.some((b) => planOf(c.world, b.plan)?.sparesTools) ? 0.5 : 1;
 		let made = 0, lack = "";
 		rounds: while (made < want) {

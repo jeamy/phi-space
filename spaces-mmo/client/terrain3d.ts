@@ -11,6 +11,9 @@ const KNOWN: Record<string, Tile3d> = {
 	".": { color: 0xdcc286, height: 0.2, water: false },
 	":": { color: 0x9a9ea6, height: 0.36, water: false },
 	",": { color: 0x8fc25a, height: 0.5, water: false },
+	// a building's inside (docs/innenraeume.en.md): the plank floor, and the walls standing well above it
+	"_": { color: 0x9a7048, height: 0.3, water: false },
+	"#": { color: 0xd8ccb2, height: 1.3, water: false },
 };
 
 /** FNV-1a, kept here instead of relying on a runtime or library-specific string hash. */

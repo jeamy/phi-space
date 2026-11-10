@@ -12,7 +12,8 @@ import { typeChain } from "./typeclasses.ts";
 export type * from "../../shared/world-def.ts";
 
 /** What `look` and the map say about a piece of scenery: what it is, and whether and how it can be cleared. */
-export function sceneryText(w: WorldDef, s: Pick<SceneryFields, "name" | "fixed" | "yields"> & { left: number }): string {
+export function sceneryText(w: WorldDef, s: Pick<SceneryFields, "name" | "fixed" | "yields" | "desc"> & { left: number }): string {
+	if (s.desc) return s.desc; // a furnishing says what it is for (engine/commands/interior.ts)
 	const about = w.sceneryAbout?.[s.name] ?? "";
 	if (s.fixed) return `${about} Das bleibt stehen.`.trim();
 	const gain = s.yields.map((y) => `${y.count} ${w.prototypes.find((p) => p.key === y.proto)?.name ?? y.proto}`).join(", ");
@@ -91,6 +92,13 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 	if (w.mill) {
 		if (!w.building?.plans.some((p) => p.key === w.mill!.plan)) throw new Error(`mill: unknown plan ${w.mill.plan}`);
 		for (const g of w.mill.grinds) { proto(g.from, "mill"); proto(g.to, "mill"); }
+	}
+	for (const p of w.building?.plans ?? []) if (p.interior) {
+		const i = p.interior;
+		grid(`plan ${p.key}: interior`, i.ground, i.spawn);
+		if (!walkable(w, i.ground, i.door.x, i.door.y)) throw new Error(`plan ${p.key}: interior door is not walkable`);
+		for (const f of i.furniture) if (!walkable(w, i.ground, f.x, f.y) || (f.x === i.spawn.x && f.y === i.spawn.y) || (f.x === i.door.x && f.y === i.door.y)) throw new Error(`plan ${p.key}: furnishing ${f.kind} not on a free floor cell`);
+		if (i.furniture.some((f) => f.use === "chest") && !p.chest) throw new Error(`plan ${p.key}: a chest inside, but the plan has none`);
 	}
 	for (const p of w.building?.plans ?? []) if (p.epoch !== undefined && (!w.epochs || p.epoch < 1 || p.epoch > w.epochs.names.length)) throw new Error(`plan ${p.key}: no epoch ${p.epoch}`);
 	if (w.wild) {

@@ -20,6 +20,7 @@ import { ARTICLE, distTo, giveBack, plural, planOf, putBack, SITE_REACH, takeNea
 import { protoName } from "./garden.ts";
 import { craft } from "./trade.ts";
 import { randomBytes } from "../source.ts";
+import { nearBuildings } from "./interior.ts";
 
 const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : `${Math.max(1, Math.round(ms / 60_000))} Minuten`; };
 function millOf(c: CommandCtx): MillDef {
@@ -106,7 +107,7 @@ const backe: Command = {
 	async func(c, arg) {
 		// what an oven makes: recipes at a building that give food, those beside the actor first (not the loom's cloth)
 		const food = c.world.recipes.filter((r) => r.at && c.world.prototypes.find((p) => p.key === r.makes)?.typeclass === "Produce");
-		const beside = new Set((await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1).map((b) => b.plan));
+		const beside = new Set((await nearBuildings(c)).map((b) => b.plan));
 		const ovens = [...food.filter((r) => beside.has(r.at!)), ...food.filter((r) => !beside.has(r.at!))];
 		const n = arg.trim().toLowerCase().replace(ARTICLE, "");
 		const r = n ? ovens.find((x) => x.key === n || x.name.toLowerCase() === n || c.world.prototypes.find((p) => p.key === x.makes)?.aliases.includes(n)) : ovens[0];

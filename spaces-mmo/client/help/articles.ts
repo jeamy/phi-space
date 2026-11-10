@@ -1106,7 +1106,20 @@ Liefern und arbeiten geht **aus bis zu zwei Feldern Abstand**, so haben viele um
 
 Eine Hütte hat eine Truhe für deine Sachen. Was darin liegt, trägst du nicht mehr mit dir herum.
 
-Die Hütte hat eine Truhe, die **nur dir** gehört: \`truhe\` zeigt sie, \`verstaue 3 muscheln\` (oder „leg die muscheln in die truhe“) legt etwas hinein, \`entnimm 2 muscheln\` (oder „nimm … aus der truhe“) holt es heraus. Herausnehmen kannst du nur direkt neben der Hütte, hineinlegen **von überall**: Neben einer deiner Hütten geht es in diese, sonst in deine einzige. Hast du mehrere, sagst du welche, mit ihrer Nummer oder ihrem Ort: \`verstaue 3 muscheln in 2\`, \`verstaue 3 muscheln in die hütte am anleger\` (oder „leg 3 muscheln in die truhe 2“). Ohne Angabe nennt \`verstaue\` die Nummern. Unter „Bei dir“ legst du ein gewähltes Ding in die gewählte Truhe: eine Zahl und „Stück verstauen“ (etwa 300), oder „Alle … verstauen“. Liegt die Hütte in einer anderen Gegend, bringt ein Bote die Sachen hin, das dauert einen Moment.
+Die Hütte hat eine Truhe, die **nur dir** gehört: \`truhe\` zeigt sie, \`verstaue 3 muscheln\` (oder „leg die muscheln in die truhe“) legt etwas hinein, \`entnimm 2 muscheln\` (oder „nimm … aus der truhe“) holt es heraus. Herausnehmen kannst du nur direkt neben der Hütte oder drinnen an der Truhe, hineinlegen **von überall**: Neben einer deiner Hütten geht es in diese, sonst in deine einzige. Hast du mehrere, sagst du welche, mit ihrer Nummer oder ihrem Ort: \`verstaue 3 muscheln in 2\`, \`verstaue 3 muscheln in die hütte am anleger\` (oder „leg 3 muscheln in die truhe 2“). Ohne Angabe nennt \`verstaue\` die Nummern. Unter „Bei dir“ legst du ein gewähltes Ding in die gewählte Truhe: eine Zahl und „Stück verstauen“ (etwa 300), oder „Alle … verstauen“. Liegt die Hütte in einer anderen Gegend, bringt ein Bote die Sachen hin, das dauert einen Moment.
+
+## In der Hütte {#inside}
+
+Eine Hütte kann man betreten: \`betrete\` direkt neben ihr (oder im Menü der Hütte „Hineingehen“). Hinein dürfen nur ihre Besitzerin oder ihr Besitzer und wer eingeladen ist; allen anderen bleibt die Tür zu. Drinnen stehen ein **Herd**, ein **Bett**, ein **Tisch** und die **Truhe**. \`hinaus\` (oder die Tür antippen) führt wieder vor die Hütte.
+
+| Befehl | Englisch | Was es tut |
+| --- | --- | --- |
+| \`betrete\` | \`enter\` | In die eigene Hütte gehen, oder in eine, in die man eingeladen ist |
+| \`einladen <name>\` | \`invite\` | Jemanden in die eigene Hütte einladen; \`einladen\` allein zeigt, wer eingeladen ist |
+| \`ausladen <name>\` | \`uninvite\` | Die Einladung zurücknehmen; wer gerade drinnen ist, steht dann draußen |
+| \`hinaus\` | \`out\` | Wieder vor die Tür |
+
+Am Herd kocht man, was man in der Hütte macht (Rührei, Braten, Käse …): neben ihm stehen, dann \`craft\` oder das Menü des Herds. An der Truhe sieht man hinein und nimmt heraus, \`verstaue\` geht wie immer von überall. Im Bett schläft man bald: wer ausgeschlafen hat, arbeitet danach eine Weile ohne Pause. Von außen geht alles weiter wie bisher. Fällt die Hütte, steht man draußen, und was drinnen auf dem Boden lag, wartet im Nachlass.
 
 ## Last {#load}
 
@@ -1198,7 +1211,20 @@ Delivering and working work **from up to two cells away**, so many fit around a 
 
 A hut has a chest for your things. What lies in it you no longer carry around.
 
-The hut has a chest that is **yours alone**: \`truhe\` (\`chest\`) shows it, \`verstaue 3 muscheln\` (\`store\`, or “leg die muscheln in die truhe”) puts something in, \`entnimm 2 muscheln\` (\`retrieve\`) takes it out. You take things out only right next to the hut; you put them in **from anywhere**: beside one of your huts into that one, else into your only one. With several you say which, by its number or its place: \`verstaue 3 muscheln in 2\`, \`verstaue 3 muscheln in die hütte am anleger\` (or “leg 3 muscheln in die truhe 2”). Without it, \`verstaue\` names the numbers. Under “Bei dir” you put a chosen thing into the chosen chest: a number and “Stück verstauen” (say 300), or “Alle … verstauen”. If the hut lies in another region, a courier brings the things there; that takes a moment.
+The hut has a chest that is **yours alone**: \`truhe\` (\`chest\`) shows it, \`verstaue 3 muscheln\` (\`store\`, or “leg die muscheln in die truhe”) puts something in, \`entnimm 2 muscheln\` (\`retrieve\`) takes it out. You take things out only right next to the hut or inside at the chest; you put them in **from anywhere**: beside one of your huts into that one, else into your only one. With several you say which, by its number or its place: \`verstaue 3 muscheln in 2\`, \`verstaue 3 muscheln in die hütte am anleger\` (or “leg 3 muscheln in die truhe 2”). Without it, \`verstaue\` names the numbers. Under “Bei dir” you put a chosen thing into the chosen chest: a number and “Stück verstauen” (say 300), or “Alle … verstauen”. If the hut lies in another region, a courier brings the things there; that takes a moment.
+
+## Inside the hut {#inside}
+
+A hut can be entered: \`betrete\` (\`enter\`) right next to it (or “Go inside” in the hut's menu). Only its owner and those invited may go in; for everyone else the door stays shut. Inside stand a **hearth**, a **bed**, a **table** and the **chest**. \`hinaus\` (\`out\`, or tapping the door) leads back out in front of the hut.
+
+| Command | English | What it does |
+| --- | --- | --- |
+| \`betrete\` | \`enter\` | Go into your own hut, or into one you are invited into |
+| \`einladen <name>\` | \`invite\` | Invite someone into your own hut; \`einladen\` alone shows who is invited |
+| \`ausladen <name>\` | \`uninvite\` | Take the invitation back; whoever is inside then stands outside |
+| \`hinaus\` | \`out\` | Back out of the door |
+
+At the hearth you cook what is made in the hut (scrambled eggs, roasts, cheese …): stand next to it, then \`craft\` or the hearth's menu. At the chest you look in and take out; \`verstaue\` works from anywhere as always. Soon you will sleep in the bed: whoever has slept works a while without a break afterwards. From outside everything goes on as before. If the hut falls, you stand outside, and what lay on its floor waits in the estate.
 
 ## Load {#load}
 

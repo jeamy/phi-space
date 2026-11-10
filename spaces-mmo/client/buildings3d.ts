@@ -559,6 +559,50 @@ function barrels(t: T, w: number, d: number): Geo {
 		return merge(t, parts, "faesser");
 	});
 }
+// The furnishings of a hut's inside (docs/innenraeume.en.md), each on one cell, the front towards +z (the door).
+const BLANKET = 0x5f7f5a, LINEN = 0xe8e0cc, EMBER = 0xff7a1e, SOOT = 0x2b2622;
+/** A hearth of field stones: a firebox with embers and a log, an iron plate with a pan on it, a hood and a flue. */
+function hearth(t: T): Geo {
+	return cached("herd", () => {
+		const parts: Part[] = [b(t, 0.86, 0.46, 0.7, STONE, 0, 0.23, -0.04)];
+		for (let i = 0; i < 7; i++) parts.push(b(t, 0.2, 0.1, 0.03, i % 2 ? STONE_DARK : 0x8d8a84, -0.33 + i * 0.11, 0.08 + (i % 3) * 0.14, 0.315));
+		parts.push(b(t, 0.42, 0.24, 0.05, SOOT, 0, 0.17, 0.3), b(t, 0.3, 0.05, 0.08, EMBER, 0, 0.08, 0.28), { g: new t.CylinderGeometry(0.035, 0.035, 0.3, 6), c: BARK, p: [0, 0.12, 0.27], r: [0, 0, Math.PI / 2] });
+		parts.push(b(t, 0.9, 0.04, 0.74, IRON, 0, 0.48, -0.04), cy(t, 0.14, 0.15, 0.05, IRON, -0.18, 0.5, 0.04, 10), b(t, 0.22, 0.02, 0.03, IRON, 0.04, 0.53, 0.04), ball(t, 0.06, 0xf4d27a, -0.18, 0.55, 0.04, [1, 0.3, 1]));
+		parts.push(b(t, 0.6, 0.16, 0.36, STONE_DARK, 0.12, 0.58, -0.2), cy(t, 0.12, 0.1, 0.62, STONE_DARK, 0.2, 0.64, -0.24, 8));
+		return merge(t, parts, "herd");
+	});
+}
+/** A bed of driftwood boards: four posts, a raised head, a straw mattress, a pillow and a blanket folded back. */
+function bed(t: T): Geo {
+	return cached("bett", () => {
+		const parts: Part[] = [];
+		for (const [sx, sz, h] of [[-1, -1, 0.5], [1, -1, 0.5], [-1, 1, 0.3], [1, 1, 0.3]] as const) parts.push(b(t, 0.07, h, 0.07, WOOD_DARK, sx * 0.34, h / 2, sz * 0.42));
+		parts.push(b(t, 0.68, 0.08, 0.86, WOOD, 0, 0.18, 0), b(t, 0.66, 0.22, 0.04, WOOD, 0, 0.34, -0.42), b(t, 0.66, 0.08, 0.04, WOOD, 0, 0.24, 0.42));
+		parts.push(b(t, 0.6, 0.08, 0.8, 0xc9b27a, 0, 0.26, 0), b(t, 0.42, 0.07, 0.18, LINEN, 0, 0.33, -0.3));
+		parts.push(b(t, 0.62, 0.05, 0.5, BLANKET, 0, 0.32, 0.14), b(t, 0.62, 0.06, 0.08, 0x4c6a48, 0, 0.36, -0.1));
+		return merge(t, parts, "bett");
+	});
+}
+/** A rough table on four legs with a bench in front, a jug and a bowl on it. */
+function table(t: T): Geo {
+	return cached("tisch", () => {
+		const parts: Part[] = [b(t, 0.8, 0.05, 0.5, WOOD, 0, 0.46, -0.08)];
+		for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) parts.push(b(t, 0.06, 0.44, 0.06, WOOD_DARK, sx * 0.34, 0.22, -0.08 + sz * 0.19));
+		parts.push(b(t, 0.72, 0.04, 0.16, WOOD, 0, 0.26, 0.32), b(t, 0.05, 0.24, 0.12, WOOD_DARK, -0.3, 0.12, 0.32), b(t, 0.05, 0.24, 0.12, WOOD_DARK, 0.3, 0.12, 0.32));
+		parts.push(cy(t, 0.06, 0.05, 0.16, 0xb5653c, 0.2, 0.485, -0.12, 8), cy(t, 0.1, 0.12, 0.05, 0x9a7a52, -0.15, 0.485, -0.05, 10));
+		return merge(t, parts, "tisch");
+	});
+}
+/** A wooden chest with a rounded lid, iron bands and a lock. */
+function chest(t: T): Geo {
+	return cached("truhe", () => {
+		const parts: Part[] = [b(t, 0.72, 0.34, 0.46, WOOD, 0, 0.19, 0), b(t, 0.76, 0.04, 0.5, WOOD_DARK, 0, 0.02, 0)];
+		parts.push({ g: new t.CylinderGeometry(0.23, 0.23, 0.72, 10, 1, false, 0, Math.PI), c: WOOD, p: [0, 0.36, 0], r: [0, 0, Math.PI / 2], s: [1, 0.6, 1] });
+		for (const x of [-0.24, 0.24]) parts.push(b(t, 0.05, 0.36, 0.48, IRON, x, 0.19, 0), { g: new t.CylinderGeometry(0.24, 0.24, 0.05, 10, 1, false, 0, Math.PI), c: IRON, p: [x, 0.36, 0], r: [0, 0, Math.PI / 2], s: [1, 0.6, 1] });
+		parts.push(b(t, 0.09, 0.11, 0.03, 0xc9a640, 0, 0.32, 0.24));
+		return merge(t, parts, "truhe");
+	});
+}
 /** Crates, two below and one on top turned a little, and a crab basket (a cage of rods) beside them. */
 function crates(t: T, w: number, d: number): Geo {
 	return cached(`kisten:${w}x${d}`, () => {
@@ -659,6 +703,10 @@ export function sceneryModel(t: T, model: string | undefined, w: number, d: numb
 		case "turm": return towerStump(t, w, d);
 		case "meiler": return kiln(t, w, d);
 		case "huette": return hut(t, w, d, 0x8c8576, variant % 3);
+		case "herd": return hearth(t);
+		case "bett": return bed(t);
+		case "tisch": return table(t);
+		case "truhe": return chest(t);
 		default: return null;
 	}
 }

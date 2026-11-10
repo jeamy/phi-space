@@ -1,6 +1,6 @@
 # Interiors: going into a house (plan)
 
-Status 2026-11-10: a plan, nothing of it is built. It extends [siedeln.en.md](siedeln.en.md) (buildings, recipes, chests,
+Status 2026-11-10: step 1 (the hut) is built: server/engine/commands/interior.ts, tests/interior.test.ts. It extends [siedeln.en.md](siedeln.en.md) (buildings, recipes, chests,
 the rest after work) and [welt.en.md](welt.en.md) (rooms and exits).
 
 ## What it is for
@@ -17,9 +17,12 @@ butcher's, a bench in the workshop. What a building does becomes visible and has
 
 1. **Who goes in:** the owner and the guests they invite. Nobody else, not even into a bakehouse or a butcher's shop.
    What a building offers from outside stays as it is, so a stranger still bakes at anyone's bakehouse from beside it.
-2. **Sleep replaces the rest after work:** no more waiting out a rest after each work point. Tiredness builds up, and a
-   bed takes it away (see "Sleep").
+2. **Sleep puts the rest off, it does not replace it**: without a bed the rest after work stays as it is. A sleep in a
+   bed makes the figure rested: afterwards it works without a rest for a while, up to 8 works, more the longer it
+   slept (see "Sleep").
 3. **A plan first**, then the hut, then the other buildings one after the other (see "Order").
+4. **An invited guest may sleep in the host's bed.**
+5. **The furnishings are fixed by the plan** for now; placing more furniture may come later.
 
 ## The interior room
 
@@ -30,8 +33,10 @@ butcher's, a bench in the workshop. What a building does becomes visible and has
 - **Its size and layout come from the plan**: `PlanDef.interior = { w, h, ground: string[], furniture: [...] }` in
   world-def.ts, with the layout in world.ts beside the plan (a hut 6×5, a bakehouse 7×5 …). New tiles for the floor
   (`_` planks) and the walls (`#`, not walkable), defined in `world.tiles` like the others.
-- **The door**: an Exit „hinein“ on the cell in front of the building's door side (outside, walkable, free), arriving
-  on the spawn inside, and an Exit „hinaus“ inside, arriving in front of the door. Its locks carry the access (below).
+- **The door**: no exit leads in from outside. `betrete` beside the building (its menu: „Hineingehen“) takes the owner or
+  an invited guest to the spawn inside; an Exit „hinaus“ on the door cell inside leads out in front of the building
+  (a free cell below its middle first). An exit on the map outside would stand on every hut for everyone, stop a
+  stranger's walk at the door and show up in every room description and NPC's way list.
 - **Its life follows the building**: the building decays, falls to a ruin or is voted away (demolishByVote): the room
   goes with it. Figures inside are put in front of the door, and things lying on the floor go to the estate (`nachlass`) as a
   chest's do. A sweep at start gives every standing building of a plan with an interior its room once (as the jetty
@@ -46,10 +51,9 @@ butcher's, a bench in the workshop. What a building does becomes visible and has
 - `einladen <name>` beside or inside one's building: that player may go in (a list on the Building, `guests: string[]`
   of charIds); `ausladen <name>` takes it back; `einladen` alone lists them. In a settlement nothing changes: a
   building belongs to its owner.
-- The exit „hinein“ lets in the owner and the invited (an exit lock as a builder writes them, `traverse:` with a new
-  lock function `host()`/`guest()`, or a check in the move code for exits into `in-` rooms; the check is simpler and
-  does not need the lock language). Everyone else hears „Die Tür ist zu. Nur … und wen sie einlädt.“
-- Uninvited, an invited guest is put outside with a message; leaving the owner's settlement or the game does not
+- `betrete` lets in the owner and the invited; everyone else hears „Die Tür ist zu. Hinein dürfen nur … und wer
+  eingeladen ist.“
+- Uninvited (`ausladen`), a guest inside is put outside with a message; leaving the owner's settlement or the game does not
   matter, the invitation stays until taken back or the building goes.
 - NPCs do not go in. Settler NPCs (settlers.ts) keep working from outside.
 
@@ -90,28 +94,20 @@ The commands keep their words. What changes is where they count as "at the build
 
 Today each work point (`tire` in build.ts and field.ts, quarry.ts, fishing.ts `segle`/`schaufle`) writes a WorkRest
 until which the figure may not work again: 15 world minutes (setting `work.rest`), halved by the chapel's blessing,
-shortened by being sated.
+shortened by being sated. This stays: **without a bed nothing changes.**
 
 New:
 
-- **Tiredness instead of a rest**: each work point adds to the figure's tiredness (`Tired` entry per figure: points and
-  when last changed) what the rest was: `work.rest` minutes, halved blessed, shortened sated. The figure works on while
-  its tiredness stays below a limit (setting `sleep.need`, proposed 8 work points' worth, 120 world minutes);
-  at the limit it is exhausted: „Du bist zu müde; schlaf dich aus.“
 - **Sleeping in a bed**: `schlafe` beside one's bed (or an invited guest beside the host's bed) lays the figure down.
-  It is asleep until its tiredness is gone, at a rate of `sleep.rate` (proposed: 1 world hour of sleep takes 2 hours of
-  tiredness). Asleep it does nothing; any command wakes it (`Du wachst auf`) with what is left of its tiredness.
-  The map shows it lying in the bed.
-- **Without a bed**: tiredness also wears off by itself, slowly (proposed: at a quarter of the bed's rate, the same
-  amount of rest as today spread out), so a guest without a hut and a new player still play. Whether this is wanted or
-  only a bed helps is open (see "Open questions").
-- **Food and blessing** keep their effect: they make each work point tire less, as they shortened the rest.
-- The help and the stats say how tired one is (`ich` / the figure's panel), the menu shows „Schlafen“ at the bed once
-  one is tired at all.
+  Asleep it does nothing; any command wakes it („Du wachst auf“). The map shows it lying in the bed.
+- **Rested**: the sleep gives the figure rested works (a `Rested` entry per figure: how many are left). The longer it
+  slept, the more: proposed 1 work per 30 world minutes of sleep (setting `sleep.rate`), at most 8 (setting
+  `sleep.max`), so 4 world hours of sleep give the full 8. Waking earlier keeps what was slept so far.
+- **A rested work writes no rest**: `tire` takes one rested work instead of writing a WorkRest while any are left;
+  when they are used up, the rest after work comes back as today. So sleep only puts the tiredness off.
+- **Food and blessing** keep their effect on the rest when there is one.
+- The figure's panel and `ich` say how many rested works are left; the bed's menu shows „Schlafen“.
 - NPCs and settlers keep their rest as today (they have no beds; settlers.ts works around WorkRest).
-
-This changes the rhythm of the game for everyone: many short works, then a sleep, instead of a work every quarter
-hour. It is the largest part of this plan in its effect and goes in step 2, after the interiors stand.
 
 ## Client
 
@@ -132,7 +128,7 @@ hour. It is the largest part of this plan in its effect and goes in step 2, afte
 | Room and exits at completion, the sweep for standing buildings, the room's end with the building | server/engine/commands/build.ts (completion, decay, ruin, demolishByVote, buildSweep) |
 | `einladen` / `ausladen`, the door check | build.ts (Building `guests`), server/engine/commands/default.ts or the move code (exits into `in-` rooms) |
 | `atBuilding(c, plan)` and the commands that use it | build.ts, trade.ts craft, mill.ts backe, animals.ts schlachte, the chest commands |
-| Tiredness and sleep | a new server/engine/commands/sleep.ts; `tire` in build.ts, field.ts, fishing.ts, quarry.ts, road.ts; settings `sleep.need`, `sleep.rate` (server/settings.ts) |
+| Sleep and rested works | a new server/engine/commands/sleep.ts; `tire` in build.ts, field.ts, fishing.ts, quarry.ts, road.ts; settings `sleep.rate`, `sleep.max` (server/settings.ts) |
 | Jobs that skip interiors | wild.ts, fire.ts (flood, storm), fog, the atlas in gateway.ts |
 | Furnishings as objects | gateway.ts ObjView kind "furniture" (or fixed scenery with a `use`), shared/frames.ts |
 
@@ -142,8 +138,8 @@ hour. It is the largest part of this plan in its effect and goes in step 2, afte
   vote, figures put outside, things to the estate.
 - The door: owner in, invited in, stranger refused, an uninvited guest put out.
 - Each command at its furnishing inside as beside the building outside, and refused inside at the wrong furnishing.
-- Tiredness: work up to the limit, refused beyond; sleeping takes it at its rate; a command wakes; without a bed it
-  wears off slowly (if kept); food and blessing tire less.
+- Sleep: rested works by the length of the sleep, at most 8; a rested work writes no rest; used up, the rest comes back;
+  a command wakes; a guest sleeps in the host's bed; without a bed nothing changes.
 - Settlers and NPCs unchanged (settlers.test.ts, the economy).
 - cell-actions: the furnishings' menus, „Hineingehen“ only for who may.
 - The play test (`test:play`) through a hut: in, cook, store, sleep, out.
@@ -152,7 +148,7 @@ hour. It is the largest part of this plan in its effect and goes in step 2, afte
 
 1. **The hut**: its interior with hearth, bed, chest and table; the door with invitations; cooking and the chest inside;
    2D tiles and a plain 3D room. Sleep not yet: the bed is there, `schlafe` says what it will do.
-2. **Sleep** replaces the rest (tiredness, the bed, the slow wearing off), with its settings and the help.
+2. **Sleep**: the bed, rested works, their settings and the help.
 3. **Bakehouse and butcher's shop** with their furnishings.
 4. **The other workshops** (smokehouse, workshop, loom, brewery, glassworks, tannery, brickworks, shipyard).
 5. **3D finish**: models of the furnishings, light, the figure lying in its bed.
@@ -167,11 +163,6 @@ here is new engine behaviour after that commit: it is ported after R8 or as a st
 
 ## Open questions
 
-- **Without a bed**: should tiredness wear off by itself (slowly), or only in a bed? Without it a guest (no account,
-  no hut) can only sleep as someone's guest.
-- **The limit and the rates** (`sleep.need`, `sleep.rate`): the numbers above are proposals.
-- **A shared bed for guests**: may an invited guest sleep in the host's bed, or only the owner?
+- **The rate** (`sleep.rate`, 1 work per 30 world minutes): a proposal.
 - **Inns**: a bed for anyone at a fee (a tavern building) would give guests and travellers a place to sleep; not part
   of this plan unless wanted.
-- **Furnishing more**: may an owner place more furniture (a second chest, a table bought from the workshop), or is the
-  interior fixed by the plan? Fixed first.
