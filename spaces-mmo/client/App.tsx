@@ -428,6 +428,7 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 	const load = carried.reduce((n, o) => n + (o.load ?? 0), 0), bags = new Map(carried.filter((o) => o.bag).map((o) => [o.name, o.bag!])), max = pack?.max == null ? null : pack.max + [...bags.values()].reduce((n, b) => n + b, 0);
 	const [chestNr, setChestNr] = useState(1);
 	const [storeN, setStoreN] = useState(""), [sortName, setSortName] = useState("");
+	const [crossId, setCrossId] = useState<string | null>(null);
 	const chests = pack?.chests ?? [], chestAt = chests.find((x) => x.nr === chestNr) ?? chests[0];
 	const chosenBox = useRef<HTMLDivElement>(null);
 	// one's own chest beside one (the server sends what lies in it): its things to take out, as many as one likes
@@ -498,10 +499,19 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 						{chosen[1].length > 1 && <button onClick={() => send(`verstaue alle ${chosen[0]} in ${chestAt.nr}`)}>{`Alle ${chosen[1].length} verstauen`}</button>}
 					</div>}
 					{/* a cross not named yet: its breeder names it here (server: garden.ts benenne; it says when one may not) */}
-					{!guest && chosen[0] === "Kreuzungssamen" && <form className="pack-store-n pack-name-sort" onSubmit={(e) => { e.preventDefault(); const n = sortName.trim(); if (!n) return; send(`benenne ${n}`); setSortName(""); }}>
-						<input type="text" value={sortName} placeholder="Name der Sorte" aria-label="Name der Sorte" maxLength={24} onChange={(e) => setSortName(e.target.value)} />
-						<button type="submit">Benennen</button>
-					</form>}
+					{!guest && chosen[0] === "Kreuzungssamen" && (() => {
+						// several crosses of one's own carried: which one is named, by its colour and the sort it came from
+						const mine = [...new Map(chosen[1].flatMap((o) => (o.cross && o.cross.breeder === me ? [[o.cross.id, { ...o.cross, color: o.glyph?.color, n: chosen[1].filter((x) => x.cross?.id === o.cross!.id).length }] as const] : []))).values()];
+						const pick = mine.find((x) => x.id === crossId) ?? mine[0];
+						return <form className="pack-store-n pack-name-sort" onSubmit={(e) => { e.preventDefault(); const n = sortName.trim(); if (!n) return; send(pick && mine.length > 1 ? `benenne #${pick.id} ${n}` : `benenne ${n}`); setSortName(""); }}>
+							{mine.length > 1 && <div className="pack-crosses" role="radiogroup" aria-label="Welche Kreuzung">{mine.map((x) => (
+								<button type="button" key={x.id} role="radio" aria-checked={x === pick} className={`chip${x === pick ? " on" : ""}`} onClick={() => setCrossId(x.id)}>
+									<span className="cross-dot" style={{ background: x.color ?? "#7fae6a" }} />{`aus ${x.from || "?"} ×${x.n}`}
+								</button>))}</div>}
+							<input type="text" value={sortName} placeholder="Name der Sorte" aria-label="Name der Sorte" maxLength={24} onChange={(e) => setSortName(e.target.value)} />
+							<button type="submit">Benennen</button>
+						</form>;
+					})()}
 					{uses && (() => {
 						// what it can do here and now; the rest of the world's uses stay in the help
 						// a recipe its hint below offers (the line that says what it takes, with „Herstellen“) is not a button here too

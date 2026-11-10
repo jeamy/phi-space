@@ -301,6 +301,13 @@ test("a flower bed takes flowers and they cross; the breeder names the crossing 
 		const p = (await resolvePrototype(s, "samen-duenenrose"))!;
 		await spawn(s, null, w, p, { location: bert.me, x: -1, y: -1 }, { name: "Kreuzungssamen", aliases: ["kreuzung"], variety: { id: "var-bert", name: "", color: "#aa3355", breeder: bert.me, breederName: "Bert" } });
 		assert.match(await does(bert.p, "benenne Abendrot", "gibt es schon"), /Eine Sorte namens „Abendrot“ gibt es schon/);
+		// two crosses carried: a bare name asks which, the pack picks one by its id
+		await spawn(s, null, w, p, { location: bert.me, x: -1, y: -1 }, { name: "Kreuzungssamen", aliases: ["kreuzung"], variety: { id: "var-bert2", name: "", color: "#3355aa", breeder: bert.me, breederName: "Bert" } });
+		assert.match(await does(bert.p, "benenne Blaustern", "mehrere"), /Du trägst mehrere Kreuzungen; welche\? 1: aus Dünenrose/);
+		assert.match(await does(bert.p, "benenne #var-nobody Blaustern", "nicht deine"), /Diese Kreuzung trägst du nicht/);
+		assert.match(await does(bert.p, "benenne #var-bert2 Blaustern", "nennt"), /Bert nennt die neue Sorte aus Dünenrose „Blaustern“/);
+		await eventually(async () => (await s.readAll({ type: "Item", fields: { location: bert.me } })).map((e) => e.fields as unknown as ItemFields).some((i) => i.variety?.id === "var-bert2" && i.variety.name === "Blaustern") , 10_000, "the second cross named");
+		assert.ok((await s.readAll({ type: "Item", fields: { location: bert.me } })).some((e) => (e.fields as unknown as ItemFields).variety?.id === "var-bert" && !(e.fields as unknown as ItemFields).variety!.name), "the first one still unnamed");
 		// it grows as itself and keeps its name in the flower it gives
 		const e0 = await eventually(() => s.takeIfExists({ type: "Bed", fields: { bedId: zier.bedId } }, 1_000), 10_000, "the flower bed");
 		const b0 = e0!.fields as unknown as BedFields;

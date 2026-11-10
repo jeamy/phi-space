@@ -592,3 +592,7 @@ button.cmd-word { cursor: pointer; display: inline; min-height: 0; }
 
 /* a wanted notice's answers and its time (TradePanel) */
 .wanted-note { display: block; color: var(--muted); font-size: max(12px, var(--min-font)); }
+
+/* the crosses to name in the pack: one chip each, its colour as a dot */
+.pack-crosses { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; }
+.pack-crosses .cross-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; border: 1px solid rgba(0, 0, 0, 0.4); }

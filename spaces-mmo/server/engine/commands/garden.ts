@@ -453,19 +453,20 @@ async function nameRefused(c: CommandCtx, name: string): Promise<string | null> 
 
 const benenne: Command = {
 	key: "benenne", aliases: ["benennen", "taufe", "name-variety"],
-	help: "benenne [nr] <name> – deiner Kreuzung einen Namen geben (nur wer sie gezogen hat, nur einmal; ihre Samen trägst du bei dir)",
+	help: "benenne [nr] <name> – deiner Kreuzung einen Namen geben (nur wer sie gezogen hat, nur einmal; ihre Samen trägst du bei dir; die Tasche wählt sie mit #<id>)",
 	async func(c, arg) {
 		garden(c);
-		const m = /^(?:(\d+)\s+)?(.+)$/.exec(arg.trim().replace(/^(?:die\s+)?(?:kreuzung|sorte)\s+(?:als\s+)?/i, ""));
+		const m = /^(?:(?:#(\S+)|(\d+))\s+)?(.+)$/.exec(arg.trim().replace(/^(?:die\s+)?(?:kreuzung|sorte)\s+(?:als\s+)?/i, ""));
 		if (!m) throw new NotUnderstood("Wie soll die neue Sorte heißen? Zum Beispiel: benenne Abendrot");
 		const held = (await inventory(c)).filter((i) => i.f.variety && !i.f.variety.name && i.f.variety.breeder === c.actor.charId);
 		const ids = [...new Set(held.map((i) => i.f.variety!.id))];
 		if (!ids.length) throw new CommandError("Du trägst keine unbenannte Kreuzung, die du gezogen hast. Kreuzungen entstehen im Zierbeet, wenn verschiedene Blumen nebeneinander reifen.");
 		const sortOfSeed = (id: string) => garden(c).sorts.find((s) => held.some((i) => i.f.variety!.id === id && (i.f.proto === s.seed || i.f.proto === s.yields.proto)))?.name ?? "?";
-		if (ids.length > 1 && !m[1]) throw new NotUnderstood(`Du trägst mehrere Kreuzungen; welche? ${ids.map((id, i) => `${i + 1}: aus ${sortOfSeed(id)} (${held.find((x) => x.f.variety!.id === id)!.f.variety!.color})`).join(", ")}. Zum Beispiel: benenne 1 ${m[2]!.slice(0, 24)}`);
-		const id = ids[m[1] ? Number(m[1]) - 1 : 0];
-		if (!id) throw new NotUnderstood(`So viele Kreuzungen trägst du nicht (${ids.length}).`);
-		const name = m[2]!.trim().replace(/\s+/g, " ").replace(/^\p{Ll}/u, (x) => x.toUpperCase());
+		if (ids.length > 1 && !m[1] && !m[2]) throw new NotUnderstood(`Du trägst mehrere Kreuzungen; welche? ${ids.map((id, i) => `${i + 1}: aus ${sortOfSeed(id)} (${held.find((x) => x.f.variety!.id === id)!.f.variety!.color})`).join(", ")}. Zum Beispiel: benenne 1 ${m[3]!.slice(0, 24)}`);
+		// the pack names one by its id (a number counts in the order the server lists them)
+		const id = m[1] ? ids.find((x) => x === m[1]) : ids[m[2] ? Number(m[2]) - 1 : 0];
+		if (!id) throw new NotUnderstood(m[1] ? "Diese Kreuzung trägst du nicht, oder sie ist nicht deine." : `So viele Kreuzungen trägst du nicht (${ids.length}).`);
+		const name = m[3]!.trim().replace(/\s+/g, " ").replace(/^\p{Ll}/u, (x) => x.toUpperCase());
 		const no = await nameRefused(c, name);
 		if (no) throw new CommandError(no);
 		if (await peek(c.space, { type: "Variety", fields: { varietyId: id } })) throw new CommandError("Diese Kreuzung hat schon einen Namen.");

@@ -330,7 +330,13 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.plan === "salzgarten") entries.push({ label: "Salz harken", line: "harke" });
 			if (o.plan === "lagerhaus") entries.push({ label: "Lager ansehen", line: "lager" });
 			// only a plan with a chest of its own has one (a hut, a smokehouse); a scarecrow, a coop or a mill has none
-			else if (o.ownerId === me && plans.some((p) => p.key === o.plan && p.chest)) entries.push({ label: "Truhe ansehen", line: "truhe" });
+			else if (o.ownerId === me && plans.some((p) => p.key === o.plan && p.chest)) {
+				entries.push({ label: "Truhe ansehen", line: "truhe" });
+				// what lies in it (the server sends it while one stands beside): each kind to take out, one or all (build.ts entnimm)
+				const held = new Map<string, number>();
+				for (const i of objs.values()) if (i.kind === "item" && i.location === o.id) held.set(i.name, (held.get(i.name) ?? 0) + 1);
+				for (const [n, k] of [...held].sort(([a], [b]) => a.localeCompare(b, "de")).slice(0, 12)) entries.push(k > 1 ? { label: `${n} entnehmen (alle ${k})`, line: `entnimm alle ${n}` } : { label: `${n} entnehmen`, line: `entnimm ${n}` });
+			}
 		}
 		if (o.kind === "ruin" && o.ownerId === me) entries.push({ label: "Nachlass abholen", line: "nachlass" });
 		// anyone registered clears a ruin from beside it (server: build.ts abriss)
