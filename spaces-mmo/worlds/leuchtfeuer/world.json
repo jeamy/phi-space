@@ -4925,6 +4925,69 @@
 			"locks": "get:all();drop:all();give:not guest()"
 		},
 		{
+			"key": "ruehrei",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Rührei",
+			"desc": "Eine Pfanne Rührei, am Herd der Hütte gemacht.",
+			"aliases": [
+				"rührei",
+				"ruehreier",
+				"scrambled eggs"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#f0d050"
+			},
+			"icon": "items/ruehrei.png",
+			"turns": {
+				"afterMs": 432000000
+			},
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "pfannkuchen",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Pfannkuchen",
+			"desc": "Ein Pfannkuchen aus Ei, Mehl und Milch.",
+			"aliases": [
+				"eierkuchen",
+				"pancake",
+				"pancakes"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#e8b860"
+			},
+			"icon": "items/pfannkuchen.png",
+			"turns": {
+				"afterMs": 432000000
+			},
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "kuchen",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Kuchen",
+			"desc": "Ein runder Honigkuchen aus dem Backhaus. Die Schenke zahlt gut dafür.",
+			"aliases": [
+				"honigkuchen",
+				"torte",
+				"cake"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#d8a060"
+			},
+			"icon": "items/kuchen.png",
+			"turns": {
+				"afterMs": 432000000
+			},
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
 			"key": "schlachtmesser",
 			"parent": "ding",
 			"typeclass": "Tool",
@@ -13890,6 +13953,9 @@
 			"kaese": 28800000,
 			"fisch": 18000000,
 			"ei": 14400000,
+			"ruehrei": 28800000,
+			"pfannkuchen": 21600000,
+			"kuchen": 43200000,
 			"moehre": 10800000,
 			"kartoffel": 10800000
 		},
@@ -13955,6 +14021,9 @@
 			"speck": 5,
 			"schinken": 8,
 			"grillhaehnchen": 5,
+			"ruehrei": 3,
+			"pfannkuchen": 3,
+			"kuchen": 9,
 			"salz": 2,
 			"poekelfleisch": 6,
 			"trockenfleisch": 6,
@@ -14954,6 +15023,71 @@
 			"at": "huette"
 		},
 		{
+			"key": "ruehrei",
+			"name": "Rührei",
+			"needs": [
+				{
+					"proto": "ei",
+					"count": 2
+				},
+				{
+					"proto": "treibholz",
+					"count": 1
+				}
+			],
+			"makes": "ruehrei",
+			"at": "huette"
+		},
+		{
+			"key": "pfannkuchen",
+			"name": "Pfannkuchen",
+			"needs": [
+				{
+					"proto": "ei",
+					"count": 2
+				},
+				{
+					"proto": "mehl",
+					"count": 1
+				},
+				{
+					"proto": "milch",
+					"count": 1
+				},
+				{
+					"proto": "treibholz",
+					"count": 1
+				}
+			],
+			"makes": "pfannkuchen",
+			"count": 2,
+			"at": "huette"
+		},
+		{
+			"key": "kuchen",
+			"name": "Kuchen",
+			"needs": [
+				{
+					"proto": "ei",
+					"count": 3
+				},
+				{
+					"proto": "mehl",
+					"count": 2
+				},
+				{
+					"proto": "milch",
+					"count": 1
+				},
+				{
+					"proto": "honig",
+					"count": 1
+				}
+			],
+			"makes": "kuchen",
+			"at": "backhaus"
+		},
+		{
 			"key": "talgkerze",
 			"name": "Talgkerze",
 			"needs": [
@@ -15639,6 +15773,23 @@
 				"reward": {
 					"proto": "muenze",
 					"count": 6
+				},
+				"rooms": [
+					"kupferhafen-markt"
+				]
+			},
+			{
+				"key": "kuchen",
+				"text": "Die Schenke im Hafenviertel will Kuchen zum Sonntag: 2 Honigkuchen.",
+				"needs": [
+					{
+						"proto": "kuchen",
+						"count": 2
+					}
+				],
+				"reward": {
+					"proto": "muenze",
+					"count": 18
 				},
 				"rooms": [
 					"kupferhafen-markt"

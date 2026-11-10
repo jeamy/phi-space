@@ -1261,12 +1261,15 @@ You can tear down what is yours at any time. You get part of the material back.
 | Käse (\`craft kaese\`) | 3 Milch, 1 Treibholz | Hütte | satt 8 Std. |
 | Kerze ×2 (\`craft kerze\`) | 2 Wachs, 1 Leinen | Hütte |  |
 | Lammbraten (\`craft lammbraten\`) | 2 Lammfleisch, 1 Treibholz | Hütte | satt 12 Std. |
+| Pfannkuchen ×2 (\`craft pfannkuchen\`) | 2 Ei, 1 Mehl, 1 Milch, 1 Treibholz | Hütte | satt 6 Std. |
 | Rinderbraten (\`craft rinderbraten\`) | 2 Rindfleisch, 1 Treibholz | Hütte | satt 14 Std. |
+| Rührei (\`craft ruehrei\`) | 2 Ei, 1 Treibholz | Hütte | satt 8 Std. |
 | Schmalzbrot ×2 (\`craft schmalzbrot\`) | 1 Schmalz, 1 Brot | Hütte | satt 6 Std. |
 | Schweinebraten (\`craft schweinebraten\`) | 2 Schweinefleisch, 1 Treibholz | Hütte | satt 12 Std. |
 | Steak ×2 (\`craft steak\`) | 1 Rinderfilet, 1 Treibholz | Hütte | satt 10 Std. |
 | Talgkerze ×2 (\`craft talgkerze\`) | 2 Talg, 1 Leinen | Hütte |  |
 | Brot ×3 (\`craft brot\`) | 2 Mehl, 1 Kanne Wasser, 1 Treibholz | Backhaus | satt 12 Std. |
+| Kuchen (\`craft kuchen\`) | 3 Ei, 2 Mehl, 1 Milch, 1 Honig | Backhaus | satt 12 Std. |
 | Daunendecke (\`craft decke\`) | 2 Tuch, 3 Daunen | Webstuhl |  |
 | Tuch (\`craft tuch\`) | 3 Wolle, mit Spindel | Webstuhl |  |
 | Ziegel ×3 (\`craft ziegel\`) | 3 Lehm, 1 Treibholz | Ziegelei |  |
@@ -1314,12 +1317,15 @@ You can tear down what is yours at any time. You get part of the material back.
 | Käse (cheese) (\`craft kaese\`) | 3 milk, 1 driftwood | Hut | sated 8 h |
 | Kerze (candle) ×2 (\`craft kerze\`) | 2 wax, 1 linen | Hut |  |
 | Lammbraten (roast lamb) (\`craft lammbraten\`) | 2 lamb, 1 driftwood | Hut | sated 12 h |
+| Pfannkuchen (pancake) ×2 (\`craft pfannkuchen\`) | 2 eggs, 1 flour, 1 milk, 1 driftwood | Hut | sated 6 h |
 | Rinderbraten (roast beef) (\`craft rinderbraten\`) | 2 beef, 1 driftwood | Hut | sated 14 h |
+| Rührei (scrambled eggs) (\`craft ruehrei\`) | 2 eggs, 1 driftwood | Hut | sated 8 h |
 | Schmalzbrot (dripping bread) ×2 (\`craft schmalzbrot\`) | 1 lard, 1 bread | Hut | sated 6 h |
 | Schweinebraten (roast pork) (\`craft schweinebraten\`) | 2 pork, 1 driftwood | Hut | sated 12 h |
 | Steak (steak) ×2 (\`craft steak\`) | 1 beef fillet, 1 driftwood | Hut | sated 10 h |
 | Talgkerze (tallow candle) ×2 (\`craft talgkerze\`) | 2 tallow, 1 linen | Hut |  |
 | Brot (bread) ×3 (\`craft brot\`) | 2 flour, 1 can of water, 1 driftwood | Bakehouse | sated 12 h |
+| Kuchen (cake) (\`craft kuchen\`) | 3 eggs, 2 flour, 1 milk, 1 honey | Bakehouse | sated 12 h |
 | Daunendecke (down quilt) (\`craft decke\`) | 2 cloth, 3 down | Loom |  |
 | Tuch (cloth) (\`craft tuch\`) | 3 wool, with spindle | Loom |  |
 | Ziegel (brick) ×3 (\`craft ziegel\`) | 3 clay, 1 driftwood | Brickworks |  |
@@ -1817,7 +1823,7 @@ Hungrige Tiere geben nichts, bis wieder gefüttert wird, aber sie verlieren nich
 
 ## Huhn {#hen}
 
-Das **Huhn** ist das erste Hoftier: Der Hühnerstall geht schon im Fischerdorf. Satt legt jedes Huhn ein **Ei** am Tag. Eier machen satt (\`iss ei\`), Gesa kauft sie, und die Schenke im Hafenviertel fragt an der Auftragstafel nach ihnen. Füchse holen nachts ein Huhn aus dem Stall, nie das letzte; ein Zaun um den Stall, satte Gänse oder ein Hund halten sie fern ([Wild](help.game.wild#shelter)).
+Das **Huhn** ist das erste Hoftier: Der Hühnerstall geht schon im Fischerdorf. Satt legt jedes Huhn ein **Ei** am Tag. Eier machen satt (\`iss ei\`), Gesa kauft sie, und die Schenke im Hafenviertel fragt an der Auftragstafel nach ihnen. Am Herd einer **Hütte** macht \`craft ruehrei\` aus 2 Eiern ein Rührei (satt 8 Std.) und \`craft pfannkuchen\` aus 2 Eiern, 1 Mehl und 1 Milch zwei Pfannkuchen (je 6 Std.); im **Backhaus** wird aus 3 Eiern, 2 Mehl, 1 Milch und 1 Honig ein Kuchen (\`craft kuchen\`, 12 Std.), den die Schenke gut bezahlt ([Rezepte](help.game.recipes)). Füchse holen nachts ein Huhn aus dem Stall, nie das letzte; ein Zaun um den Stall, satte Gänse oder ein Hund halten sie fern ([Wild](help.game.wild#shelter)).
 
 ## Ente {#duck}
 
@@ -2003,7 +2009,7 @@ Hungry animals give nothing until fed again, but they lose nothing. Up to three 
 
 ## Hen {#hen}
 
-The **hen** is the first farm animal: the hen house is open from the fishing village on. Fed, each hen lays an **egg** a day. Eggs are food (\`eat egg\`), Gesa buys them, and the inn in the harbour quarter asks for them at the job board. Foxes take a hen from the coop at night, never the last; a fence round the coop, fed geese or a dog keep them away ([wild animals](help.game.wild#shelter)).
+The **hen** is the first farm animal: the hen house is open from the fishing village on. Fed, each hen lays an **egg** a day. Eggs are food (\`eat egg\`), Gesa buys them, and the inn in the harbour quarter asks for them at the job board. At the hearth of a **hut** \`craft ruehrei\` makes scrambled eggs from 2 eggs (sated 8 h) and \`craft pfannkuchen\` two pancakes from 2 eggs, 1 flour and 1 milk (6 h each); the **bakehouse** bakes a cake from 3 eggs, 2 flour, 1 milk and 1 honey (\`craft kuchen\`, 12 h), which the inn pays well for ([Recipes](help.game.recipes)). Foxes take a hen from the coop at night, never the last; a fence round the coop, fed geese or a dog keep them away ([wild animals](help.game.wild#shelter)).
 
 ## Duck {#duck}
 
