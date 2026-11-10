@@ -13,7 +13,7 @@
 //      accounts write them (server/accounts.ts; given whole, so neither side draws from the source), a Session when online
 //      | {"op": "write", "entry": {...}, "lease"?: ms}: an entry written as it is (the state a walk needs: a Spot, an Offer)
 //      | {"op": "take", "template": {...}}: one entry taken away (true when there was one)
-//      | {"op": "call", "fn": "settlementTick" | "epochTick" | "motionTick" | "stormRaisesWind" | "stormTurnsMills" | "showTick" | "loanTick", "room"?}: one tick of a job
+//      | {"op": "call", "fn": "settlementTick" | "epochTick" | "motionTick" | "stormRaisesWind" | "stormTurnsMills" | "showTick" | "loanTick" | "gardenTick" | "fieldTick" | "stormFillsBarrels", "room"?}: one tick of a job
 //      alone, in stableTerrain on spatialWorld as the job runs it; what it returned
 //      | {"op": "cmd", "charId", "intentId", "line", "step"?, "asked"?, "lang"?}: an Intent as the gateway (or the model
 //      process, with `asked`) writes it, then the character's
@@ -45,6 +45,8 @@ const { stormTurnsMills } = await from("server/engine/commands/mill.ts");
 const { showTick } = await from("server/engine/commands/festival.ts");
 const { loanTick } = await from("server/engine/commands/shop.ts");
 const { growthTick } = await from("server/engine/commands/growth.ts");
+const { gardenTick, stormFillsBarrels } = await from("server/engine/commands/garden.ts");
+const { fieldTick } = await from("server/engine/commands/field.ts");
 const { seasonTick } = await from("server/engine/clock.ts");
 const { byPeoplesPace } = await from("server/engine/clock.ts");
 const { execute, CommandError } = await from("server/engine/commands.ts");
@@ -186,6 +188,9 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 				stormTurnsMills: (live) => stormTurnsMills(space, live, line.room ?? null),
 				showTick: (live) => showTick(space, live, msgLeaseMs),
 				loanTick: (live) => loanTick(space, live, msgLeaseMs),
+				gardenTick: (live) => gardenTick(space, live),
+				fieldTick: (live) => fieldTick(space, live, msgLeaseMs),
+				stormFillsBarrels: (live) => stormFillsBarrels(space, live, line.room ?? null),
 			};
 			const call = calls[String(line.fn)];
 			if (!call) throw new Error(`unknown call ${String(line.fn)}`);

@@ -1054,3 +1054,212 @@ fn shaping_the_world() {
 	run(&mut w, &a, &format!("set truhe/desc = {}", "x".repeat(1001)));
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 30 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
 }
+
+/// The world's time at real time `real` (the clock's anchor and rate).
+fn world_now(w: &mut Walk, real: f64) -> f64 {
+	let clock = w.peek(obj! { "type" => "WorldClock" }).unwrap();
+	let c = clock.get("fields").unwrap();
+	let n = |k: &str| c.get(k).and_then(Json::as_f64).unwrap();
+	n("worldAnchorMs") + (real - n("realAnchorMs")) * n("rate")
+}
+
+/// Gardens (garden.ts): digging beds of the three kinds with their refusals, planting by count and by cell, a sponsor
+/// watering, the garden tick moving the plants on (and wilting a dry one), the harvest of a flower bed with its crossings,
+/// naming a crossing, the community bed's shares, weeding, seeds from the wild flora, the rain barrel and a storm filling it.
+#[test]
+fn gardening() {
+	let mut w = Walk::new("gardening", 46, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (7.0, 13.0), true, false);
+	let g = w.player(3, "graue-bucht", (6.0, 12.0), true);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	give(&mut w, &a, "spaten", 1);
+	give(&mut w, &a, "samen-strandnelke", 4);
+	give(&mut w, &a, "samen-duenenrose", 3);
+	give(&mut w, &a, "samen-strandkohl", 2);
+	give(&mut w, &a, "wasserkanne", 18);
+	give(&mut w, &b, "wasserkanne", 17);
+	give(&mut w, &b, "samen-moehre", 4);
+	give(&mut w, &g, "samen-moehre", 1);
+	w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-bucht", "until" => 9e15, "litAt" => 0.0 } });
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| {
+		step += 1;
+		at.set(at.get() + 7_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	for (who, line) in [
+		(&g, "umgraben"), (&a, "beet"), (&b, "umgraben"), (&a, "pflanze strandnelke"), (&a, "umgraben zier 30 30"), (&a, "umgraben zier 4 11"), (&a, "beet"), (&a, "beet ansehen 4 11"),
+		(&a, "pflanze 2 strandnelken"), (&a, "pflanze samen-duenenrose 5 12"), (&a, "pflanze samen-strandkohl"), (&a, "pflanze 0 strandnelken"), (&a, "pflanze 5 samen-duenenrose"), (&a, "pflanze rose 9 9"), (&a, "pflanze"),
+		(&a, "pflanze gibtsnicht"), (&a, "pflanze weizen"), (&a, "pflanze samen-duenenrose ins beet"),
+		(&a, "umgraben 7 10"), (&a, "pflanze samen-strandkohl"), (&a, "umgraben gemeinschaft 12 12"), (&a, "beet anlegen gemeinschaft 1 13"), (&a, "umgraben gemeinschaft 10 13"), (&a, "umgraben 11 14"),
+		(&g, "pflanze samen-moehre"), (&b, "pflanze 2 samen-moehre"), (&a, "beet"),
+		(&a, "pate"), (&a, "pate Wanderer2"), (&a, "pate wanderer2"), (&a, "pate Niemand"), (&a, "pate Wanderer1"), (&a, "pate"), (&a, "pate weg Niemand"),
+		(&b, "gieße"), (&g, "gieße"), (&g, "jäte"), (&a, "jäte"), (&a, "ernte"),
+	] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 1, "graue-bucht", 12.0, 13.0);
+	stand(&mut w, 2, "graue-bucht", 2.0, 12.0);
+	for (who, line) in [(&a, "umgraben"), (&a, "pflanze 2 samen-strandkohl"), (&a, "pflanze samen-strandkohl"), (&b, "pflanze 4 samen-moehre"), (&b, "pflanze samen-moehre"), (&b, "beet aufgeben")] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 1, "graue-bucht", 5.0, 13.0);
+	// the plants move on (fog slows them): every four hours both water and the tick looks, until the flowers are ripe
+	assert_eq!(w.call("gardenTick", None), Json::from(0.0));
+	for _ in 0..16 { for (who, line) in [(&a, "gieße"), (&b, "gieße")] { run(&mut w, who, line, 2.0 * 3_600_000.0); } w.call("gardenTick", None); }
+	for (who, line) in [(&a, "beet"), (&a, "ernte"), (&b, "ernte"), (&g, "ernte"), (&a, "jäte"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
+	// the digger's share of the community bed
+	stand(&mut w, 1, "graue-bucht", 0.0, 12.0);
+	for (who, line) in [(&a, "beet"), (&a, "ernte"), (&a, "ernte"), (&a, "gieße"), (&a, "jäte"), (&a, "beet aufgeben")] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 1, "graue-bucht", 5.0, 13.0);
+	// naming crossings (two seeds of one, one of another, in place of what the harvest crossed): one planted before it is
+	// named, then one planted named
+	while let Some(e) = w.peek(obj! { "type" => "Item", "fields" => obj! { "location" => a.as_str(), "name" => "Kreuzungssamen" } }) { assert!(w.take(obj! { "type" => "Item", "fields" => obj! { "itemId" => e.get("fields").unwrap().get("itemId").cloned().unwrap() } })); }
+	for (k, id, color) in [(1, "v-1", "#c0507a"), (2, "v-1", "#c0507a"), (3, "v-2", "#d0a040")] {
+		let mut f = thing(&world, &format!("x-{k}"), "samen-strandnelke", &a).get("fields").cloned().unwrap();
+		for (key, v) in [("name", Json::from("Kreuzungssamen")), ("aliases", Json::Array(vec![Json::from("kreuzung"), Json::from("kreuzungssamen")])), ("variety", obj! { "id" => id, "name" => "", "color" => color, "breeder" => a.as_str(), "breederName" => "Wanderer1" })] { walk::j_set(&mut f, key, v); }
+		w.write(obj! { "type" => "Item", "fields" => f });
+	}
+	give(&mut w, &a, "wasserkanne", 16);
+	for (who, line) in [
+		(&a, "benenne"), (&a, "benenne Abendrot"), (&a, "benenne 9 Abendrot"), (&a, "benenne 0 Abendrot"), (&a, "benenne 1 Kohl"), (&a, "benenne 1 x"), (&a, "benenne 1 look"), (&a, "benenne 1 Ab3nd"),
+		(&a, "pflanze kreuzungssamen"), (&a, "benenne die kreuzung als 1 abendröte"), (&a, "benenne Abendröte"), (&a, "pflanze abendröte-samen"), (&b, "benenne Tau"), (&a, "benenne   morgen   rot"), (&a, "benenne Neu"), (&a, "inventory"), (&a, "beet"),
+	] { run(&mut w, who, line, 0.0); }
+	for _ in 0..16 { run(&mut w, &a, "gieße", 4.0 * 3_600_000.0); w.call("gardenTick", None); }
+	for (who, line) in [(&a, "beet"), (&a, "ernte"), (&a, "inventory"), (&a, "pate weg wanderer2"), (&a, "pate weg Wanderer2")] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 1, "graue-bucht", 9.0, 14.0);
+	for (who, line) in [(&a, "ernte"), (&a, "beet aufgeben"), (&a, "ernte flur")] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 1, "graue-bucht", 5.0, 13.0);
+	// planted again, left dry: the tick wilts it, weeding pulls it
+	for (who, line) in [(&a, "pflanze 2 strandnelken"), (&a, "pflanze 3 samen-duenenrose 4 11")] { run(&mut w, who, line, 0.0); }
+	run(&mut w, &a, "beet", 30.0 * 3_600_000.0);
+	w.call("gardenTick", None);
+	run(&mut w, &a, "beet", 30.0 * 3_600_000.0);
+	w.call("gardenTick", None);
+	for (who, line) in [(&a, "beet"), (&a, "jäte"), (&a, "jäte"), (&a, "beet aufgeben")] { run(&mut w, who, line, 0.0); }
+	// winter: what grows outside stands still until the spring, beside a greenhouse it grows on
+	give(&mut w, &a, "samen-strandnelke", 1);
+	give(&mut w, &a, "samen-strandkohl", 1);
+	run(&mut w, &a, "umgraben zier 4 11", 0.0);
+	run(&mut w, &a, "pflanze strandnelke", 0.0);
+	stand(&mut w, 1, "graue-bucht", 12.0, 13.0);
+	run(&mut w, &a, "pflanze samen-strandkohl", 0.0);
+	stand(&mut w, 1, "graue-bucht", 5.0, 13.0);
+	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "gh-1", "plan" => "gewaechshaus", "name" => "Gewächshaus", "room" => "graue-bucht", "x" => 6.0, "y" => 10.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk9", "ownerName" => "Jemand", "accountId" => "a-walk9", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
+	run(&mut w, &a, "beet", 24.0 * 3_600_000.0);
+	let day = world_now(&mut w, at.get()) / 86_400_000.0;
+	w.write(obj! { "type" => "Setting", "fields" => obj! { "key" => "year.days", "value" => day * 1.1 } });
+	w.call("gardenTick", None);
+	run(&mut w, &a, "beet", 0.0);
+	assert!(w.take(obj! { "type" => "Setting", "fields" => obj! { "key" => "year.days" } }));
+	// seeds from the wild flora, then again too soon
+	for (who, line) in [(&a, "sammle stein"), (&a, "sammle"), (&a, "sammle samen"), (&b, "sammle die samen"), (&b, "sammle saatgut"), (&a, "sammle samen")] { run(&mut w, who, line, 0.0); }
+	for (who, line) in [(&a, "sammle samen"), (&b, "sammle samen"), (&a, "sammle"), (&b, "sammle")] { run(&mut w, who, line, 700_000.0); }
+	stand(&mut w, 2, "duenen", 3.0, 3.0);
+	run(&mut w, &b, "sammle samen", 0.0);
+	stand(&mut w, 2, "graue-bucht", 7.0, 13.0);
+	// the rain barrel
+	let barrel = |water: Option<(f64, f64)>| { let mut f = obj! { "buildId" => "rt-1", "plan" => "regentonne", "name" => "Regentonne", "room" => "graue-bucht", "x" => 8.0, "y" => 14.0, "w" => 1.0, "h" => 1.0, "owner" => "c-walk9", "ownerName" => "Jemand", "accountId" => "a-walk9", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 }; if let Some((x, at)) = water { walk::j_set(&mut f, "water", Json::from(x)); walk::j_set(&mut f, "waterAtWorldMs", Json::from(at)); } obj! { "type" => "Building", "fields" => f } };
+	for (who, line) in [(&b, "schöpfe"), (&a, "schöpfe")] { run(&mut w, who, line, 0.0); }
+	w.write(barrel(None));
+	for (who, line) in [(&b, "schöpfe"), (&b, "schöpfe"), (&b, "schöpfe"), (&b, "inventory")] { run(&mut w, who, line, 0.0); }
+	assert!(w.take(obj! { "type" => "Building", "fields" => obj! { "buildId" => "rt-1" } }));
+	let now = world_now(&mut w, at.get());
+	w.write(barrel(Some((0.0, now - 3_600_000.0))));
+	w.call("stormFillsBarrels", Some("vogelklippen"));
+	w.call("stormFillsBarrels", None);
+	run(&mut w, &b, "schöpfe", 0.0);
+	w.call("stormFillsBarrels", Some("graue-bucht"));
+	for (who, line) in [(&b, "schöpfe"), (&b, "schöpfe")] { run(&mut w, who, line, 0.0); }
+	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "h-1", "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => 6.0, "y" => 14.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk9", "ownerName" => "Jemand", "accountId" => "a-walk9", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
+	run(&mut w, &b, "schöpfe", 0.0);
+	// a bed nobody tends goes back to grass, and the seed rests go
+	run(&mut w, &a, "beet", 15.0 * 86_400_000.0);
+	w.call("gardenTick", None);
+	run(&mut w, &a, "beet", 0.0);
+	assert!(w.take(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-bucht" } }));
+	run(&mut w, &a, "umgraben 11 10", 0.0);
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
+	assert!(w.entries_with(r#""Variety""#) + w.entries_with("Kreuzung") >= 1, "nothing crossed");
+}
+
+/// Fields (field.ts): staking one out with its refusals, choosing the crop, seed and work points with their rests, an open
+/// field with a helper, the field tick ripening it, fertiliser, the harvest's shares over many hands, tired soil after the
+/// same crop again, a crop left too late and lost, sowing from `pflanze`, and giving a field up.
+#[test]
+fn farming() {
+	let mut w = Walk::new("farming", 47, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (4.0, 12.0), true, false);
+	let g = w.player(3, "graue-bucht", (6.0, 12.0), true);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	give(&mut w, &a, "weizen", 6);
+	give(&mut w, &b, "weizen", 2);
+	give(&mut w, &a, "knochenmehl", 3);
+	w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-bucht", "until" => 9e15, "litAt" => 0.0 } });
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| {
+		step += 1;
+		at.set(at.get() + 7_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	for (who, line) in [(&a, "flur"), (&g, "flur anlegen"), (&a, "flur anlegen"), (&a, "bestelle"), (&a, "pflanze weizen"), (&a, "pflanze gerste")] { run(&mut w, who, line, 0.0); }
+	w.write(obj! { "type" => "Epoch", "fields" => obj! { "island" => "Graue Insel", "epoch" => 2.0, "points" => 100.0, "at" => START } });
+	run(&mut w, &a, "flur anlegen", 0.0);
+	give(&mut w, &a, "spaten", 1);
+	for (who, line) in [
+		(&a, "flur anlegen 30 30"), (&a, "flur anlegen 3 12"), (&a, "flur anlegen"), (&a, "flur"), (&a, "flur ansehen 4 13"), (&a, "flur ansehen 20 2"), (&b, "bestelle weizen"), (&b, "flur offen"),
+		(&a, "bestelle"), (&a, "bestelle gibtsnicht"), (&a, "bestelle mit weizen"), (&a, "bestelle gerste"), (&a, "bestelle weizen"), (&a, "flur"), (&a, "flur offen"), (&b, "bestelle weizen"), (&b, "bestelle"),
+		(&a, "dünge"), (&a, "ernte"), (&a, "ernte flur"),
+	] { run(&mut w, who, line, 0.0); }
+	for (who, line) in [(&a, "bestelle"), (&a, "bestelle"), (&a, "flur"), (&a, "dünge"), (&a, "ernte"), (&a, "bestelle")] { run(&mut w, who, line, 3_600_000.0); }
+	// ripening, fertiliser, then the harvest in many hands
+	assert_eq!(w.call("fieldTick", None), Json::from(0.0));
+	run(&mut w, &a, "dünge", 0.0);
+	run(&mut w, &a, "dünge", 0.0);
+	run(&mut w, &a, "flur", 150.0 * 3_600_000.0);
+	w.call("fieldTick", None);
+	for (who, line) in [(&a, "flur"), (&a, "dünge"), (&a, "bestelle"), (&a, "ernte"), (&b, "ernte"), (&g, "ernte"), (&a, "ernte"), (&a, "flur zu"), (&b, "ernte"), (&a, "flur offen")] { run(&mut w, who, line, 0.0); }
+	for _ in 0..4 { for (who, line) in [(&a, "ernte flur"), (&b, "ernte")] { run(&mut w, who, line, 2_000_000.0); } }
+	for (who, line) in [(&a, "flur"), (&a, "inventory"), (&b, "inventory")] { run(&mut w, who, line, 2_000_000.0); }
+	// the same group again (barley after wheat): the soil is tired; then it is left too late and lost
+	give(&mut w, &a, "gerste", 1);
+	for (who, line) in [(&b, "bestelle gerste"), (&a, "dünge"), (&a, "pflanze gerste"), (&a, "ernte"), (&a, "dünge")] { run(&mut w, who, line, 0.0); }
+	for (who, line) in [(&a, "bestelle"), (&a, "bestelle")] { run(&mut w, who, line, 3_600_000.0); }
+	give(&mut w, &a, "gerste", 3);
+	for (who, line) in [(&a, "bestelle"), (&a, "flur"), (&a, "dünge")] { run(&mut w, who, line, 0.0); }
+	run(&mut w, &a, "flur", 150.0 * 3_600_000.0);
+	w.call("fieldTick", None);
+	run(&mut w, &a, "flur", 0.0);
+	run(&mut w, &a, "ernte", 0.0);
+	run(&mut w, &a, "flur", 50.0 * 3_600_000.0);
+	w.call("fieldTick", None);
+	for (who, line) in [(&a, "flur"), (&a, "ernte"), (&b, "ernte")] { run(&mut w, who, line, 2_000_000.0); }
+	run(&mut w, &a, "flur", 50.0 * 3_600_000.0);
+	w.call("fieldTick", None);
+	for (who, line) in [(&a, "flur"), (&b, "flur aufgeben"), (&a, "flur zu"), (&a, "flur aufgeben"), (&a, "flur"), (&a, "pflanze weizen")] { run(&mut w, who, line, 0.0); }
+	// one nobody works goes back to grass
+	run(&mut w, &a, "flur anlegen", 0.0);
+	run(&mut w, &a, "flur", 15.0 * 86_400_000.0);
+	w.call("fieldTick", None);
+	run(&mut w, &a, "flur", 0.0);
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 15, "{said:?}");
+	assert!(w.entries_with("ist eingebracht") >= 1, "nothing was brought in");
+}

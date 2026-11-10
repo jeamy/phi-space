@@ -165,7 +165,7 @@ impl Walk {
 	}
 	/// One tick of a job alone on both sides, as the job runs it (in stableTerrain, on spatialWorld): what it returned.
 	pub fn call(&mut self, f: &str, room: Option<&str>) -> Json {
-		use mmo_engine::commands::{epoch, festival, mill, settlement, shop, townhall, wind};
+		use mmo_engine::commands::{epoch, festival, field, garden, mill, settlement, shop, townhall, wind};
 		use mmo_engine::room_growth::{end_terrain, spatial_world, stable_terrain};
 		let t = self.ts.call(obj! { "op" => "call", "fn" => f, "room" => room.map_or(Json::Null, Json::from) });
 		assert_eq!(t.get("ok"), Some(&Json::Bool(true)), "call {f}: {}", t.to_json_text());
@@ -181,6 +181,9 @@ impl Walk {
 					"loanTick" => Json::from(shop::loan_tick(&self.space, &live, 600_000.0).await?),
 					"showTick" => Json::from(festival::show_tick(&self.space, &live, 600_000.0).await?),
 					"stormTurnsMills" => { mill::storm_turns_mills(&self.space, &live, room).await?; Json::Null }
+					"gardenTick" => Json::from(garden::garden_tick(&self.space, &live).await?),
+					"fieldTick" => Json::from(field::field_tick(&self.space, &live, 600_000.0).await?),
+					"stormFillsBarrels" => { garden::storm_fills_barrels(&self.space, &live, room).await?; Json::Null }
 					_ => panic!("unknown call {f}"),
 				})
 			}.await;

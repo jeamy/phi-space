@@ -17,7 +17,9 @@ pub mod clock;
 pub mod default;
 pub mod epoch;
 pub mod festival;
+pub mod field;
 pub mod food;
+pub mod garden;
 pub mod growth;
 pub mod mill;
 pub mod passage;
@@ -128,6 +130,8 @@ pub async fn run(c: &mut Ctx, cmd: &Command, arg: &str, merged: &Merged, exits: 
 		("food", "iss") => food::iss(c, arg).await,
 		("mill", key) => mill::run(c, key, arg).await,
 		("festival", key) => festival::run(c, key, arg).await,
+		("field", key) => field::run(c, key, arg).await,
+		("garden", key) => garden::run(c, key, arg).await,
 		("shop", key) => shop::run(c, key, arg).await,
 		("builder", key) => builder::run(c, key, arg).await,
 		("settlement", "siedlung") => settlement::siedlung(c, arg).await,
