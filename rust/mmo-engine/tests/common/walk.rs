@@ -266,7 +266,7 @@ impl Walk {
 		if let Some(s) = step { j_set(&mut f, "step", s); }
 		if let Some(a) = asked { j_set(&mut f, "asked", Json::from(a)); }
 		if let Some(l) = lang { j_set(&mut f, "lang", Json::from(l)); }
-		let worker = Worker { space: self.space.clone(), w: Rc::new(self.w.clone()), msg_lease_ms: 600_000.0, txn_ms: 15_000.0, mirror: self.mirror.clone(), elsewhere: self.others() };
+		let worker = Worker { space: self.space.clone(), w: Rc::new(self.w.clone()), msg_lease_ms: 600_000.0, txn_ms: 15_000.0, mirror: self.mirror.clone(), elsewhere: self.others(), batch: self.mirror.is_some() };
 		let r = self.run(async {
 			self.space.write(&obj! { "type" => "Intent", "fields" => f }, None, 30_000.0).await.expect("the intent");
 			worker.serve(char_id).await

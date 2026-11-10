@@ -25,7 +25,12 @@ async function give(space: SpaceLike, location: string, proto: string, count: nu
 	for (let i = 0; i < count; i++) await spawn(space, null, w, p, { location, ...at });
 }
 const pack = async (space: SpaceLike, charId: string, proto: string) => (await space.readAll({ type: "Item", fields: { location: charId, proto } })).length;
-const charOf = async (space: SpaceLike, charId: string) => (await space.readAll({ type: "Character", fields: { charId } }))[0]!.fields as { accountId: string; room: string; x: number; y: number };
+/** The character once it has arrived (its `arrive` has claimed its cell, which may move it): a building written beside
+ *  it before that would make the arrival step aside. */
+const charOf = async (space: SpaceLike, charId: string) => {
+	await eventually(async () => (await space.readAll({ type: "Spot", fields: { charId } })).length > 0, 10_000, "arrived");
+	return (await space.readAll({ type: "Character", fields: { charId } }))[0]!.fields as { accountId: string; room: string; x: number; y: number };
+};
 async function hut(space: SpaceLike, buildId: string, owner: string, accountId: string, room: string, x: number, y: number): Promise<void> {
 	const now = await worldNowOf(space);
 	await space.write({ type: "Building", fields: { buildId, plan: "huette", name: "Hütte", room, x, y, w: 2, h: 2, owner, ownerName: "Trägerin", accountId, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: now + 7 * 24 * 3600_000, builtAt: now } as never }, null, FOREVER);

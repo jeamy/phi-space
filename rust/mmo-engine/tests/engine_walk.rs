@@ -1816,3 +1816,29 @@ fn crossing_regions() {
 	w.compare_all("reloaded");
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 10, "{said:?}");
 }
+
+/// The look of one's figure (`avatar`, shared/appearance.ts): how it looks before any choice, a whole line and a part of
+/// one on top of it, every kind of wrong line, a step that keeps it, and back to the start.
+#[test]
+fn dressing() {
+	let mut w = Walk::new("dressing", 60, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (12.0, 9.0), true, false);
+	let mut at = START;
+	let mut said = Vec::new();
+	for line in [
+		"avatar", "avatar figur 2 farbe 3 hut 4 brille ja", "avatar", "aussehen haar 8 haut 5 handschuhe yes", "appearance figure 4 colour 8 hair 1 skin 1 hat 1 glasses off gloves 0",
+		"avatar hut 9", "avatar hut", "avatar mantel 2", "avatar brille vielleicht", "avatar figur 1.5", "avatar figur 0", "avatar Figur 3 HUT 2",
+		"step 1 0", "avatar", "avatar zurück", "avatar", "avatar reset",
+	] {
+		at += 7_000.0;
+		w.at(at);
+		let step = line.starts_with("step").then(|| obj! { "seq" => 1.0 });
+		let r = w.cmd(&a, line, step);
+		eprintln!("{line} -> {r}");
+		w.compare(&format!("{line} -> {r}"));
+		said.push(r);
+	}
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() >= 8 && said.iter().filter(|r| r.starts_with("refused")).count() >= 5, "{said:?}");
+}
+

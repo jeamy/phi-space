@@ -3,9 +3,9 @@
 //! transaction holds right now is still in the copy (the space would hide it), so this is what the commands of the
 //! frozen engine see in production.
 //!
-//! The TypeScript copy follows the change stream in the background and `fresh()` waits until it has reached the space's
-//! revision; here `fresh()` pulls the changes up to that revision itself (the same contract: the copy holds at least
-//! what was committed when the command began), so a walk stays deterministic.
+//! The copy follows the change stream in the background (`follow`, run by the world host), as the TypeScript one does;
+//! `fresh()` pulls whatever changes it still lacks up to the space's revision itself (the same contract: the copy holds
+//! at least what was committed when the command began), so a walk without `follow` stays deterministic.
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -100,19 +100,49 @@ impl Mirror {
 				Err(e @ SpaceError::Remote { .. }) if matches!(e.code(), Some("SnapshotExpired" | "RevisionAhead")) => { self.copy.borrow_mut().ready = false; continue; }
 				Err(e) => return Err(e.into()),
 			};
-			let mut c = self.copy.borrow_mut();
-			for b in ch.get("batches").and_then(Json::as_array).into_iter().flatten() {
-				for op in b.get("ops").and_then(Json::as_array).into_iter().flatten() {
-					if op.get("op").and_then(Json::as_str) == Some("del") { if let Some(id) = op.get("id").and_then(Json::as_str) { c.del(id); } continue; }
-					if op.get("transient").is_some_and(|t| t.as_bool() == Some(true)) { continue; }
-					let mut e = obj! { "id" => op.get("id").cloned().unwrap_or(Json::Null), "type" => op.get("type").cloned().unwrap_or(Json::Null), "types" => op.get("types").cloned().unwrap_or(Json::Null), "fields" => op.get("fields").cloned().unwrap_or(Json::Null), "owner" => op.get("owner").cloned().unwrap_or(Json::Null) };
-					if let (Json::Object(o), Some(x)) = (&mut e, op.get("expires")) { o.insert("expires", x.clone()); }
-					c.put(e);
-				}
+			let next = self.apply(at, &own, &ch);
+			if next.is_none_or(|n| n <= at) { idle += 1; if idle > 100 { return Err(Error::Other(format!("the copy of the world is behind (revision {at} of {rev})"))); } }
+		}
+	}
+
+	/// The changes after `at` of stream `own`, applied when the copy still stands there (`fresh` and `follow` may both
+	/// have asked); the revision they lead to, or None when the copy had moved on.
+	fn apply(&self, at: f64, own: &str, ch: &Json) -> Option<f64> {
+		let mut c = self.copy.borrow_mut();
+		if !c.ready || c.rev != at || c.stream != own { return None; }
+		// the space follows another stream (restarted) or dropped the history: copy everything again
+		if ch.get("resync").is_some_and(|r| r.as_bool() == Some(true)) { c.ready = false; return None; }
+		for b in ch.get("batches").and_then(Json::as_array).into_iter().flatten() {
+			for op in b.get("ops").and_then(Json::as_array).into_iter().flatten() {
+				if op.get("op").and_then(Json::as_str) == Some("del") { if let Some(id) = op.get("id").and_then(Json::as_str) { c.del(id); } continue; }
+				if op.get("transient").is_some_and(|t| t.as_bool() == Some(true)) { continue; }
+				let mut e = obj! { "id" => op.get("id").cloned().unwrap_or(Json::Null), "type" => op.get("type").cloned().unwrap_or(Json::Null), "types" => op.get("types").cloned().unwrap_or(Json::Null), "fields" => op.get("fields").cloned().unwrap_or(Json::Null), "owner" => op.get("owner").cloned().unwrap_or(Json::Null) };
+				if let (Json::Object(o), Some(x)) = (&mut e, op.get("expires")) { o.insert("expires", x.clone()); }
+				c.put(e);
 			}
-			let next = ch.get("next").and_then(Json::as_f64).unwrap_or(at);
-			if next <= at { idle += 1; if idle > 100 { return Err(Error::Other(format!("the copy of the world is behind (revision {at} of {rev})"))); } }
-			c.rev = next;
+		}
+		let next = ch.get("next").and_then(Json::as_f64).unwrap_or(at);
+		c.rev = next;
+		Some(next)
+	}
+
+	/// The copy following the change stream in the background, as the TypeScript one does, so `fresh` mostly finds it
+	/// there already (the world host runs it; a walk does not, its `fresh` pulls). Ends when `halt` turns true.
+	pub async fn follow(&self, mut halt: tokio::sync::watch::Receiver<bool>, wait_ms: f64) {
+		while !*halt.borrow() {
+			let (ready, at, own) = { let c = self.copy.borrow(); (c.ready, c.rev, c.stream.clone()) };
+			let step: Result<()> = async {
+				if !ready { return self.copy_all().await; }
+				match self.space.changes(at, None, Some(wait_ms), Some(&own)).await {
+					Ok(ch) => { self.apply(at, &own, &ch); Ok(()) }
+					Err(e @ SpaceError::Remote { .. }) if matches!(e.code(), Some("SnapshotExpired" | "RevisionAhead")) => { self.copy.borrow_mut().ready = false; Ok(()) }
+					Err(e) => Err(e.into()),
+				}
+			}.await;
+			if let Err(e) = step {
+				eprintln!("[world] the copy of the world: {e}");
+				tokio::select! { _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}, _ = halt.changed() => {} }
+			}
 		}
 	}
 

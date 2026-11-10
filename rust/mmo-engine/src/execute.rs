@@ -108,18 +108,34 @@ pub async fn execute(c: &mut Ctx, line: &str) -> Result<()> {
 /// How a world worker serves characters: its space, the world's definition, how long messages and transactions last.
 /// The world worker's serving (`server/world-host.ts`). With `mirror` its commands read their snapshot from the copy, as
 /// in production (the oracle's default); without it every read goes to the space (`R8_SERVE=plain`).
-pub struct Worker { pub space: Space, pub w: Rc<Json>, pub msg_lease_ms: f64, pub txn_ms: f64, pub mirror: Option<Rc<crate::mirror::Mirror>>, pub elsewhere: Vec<(String, Space)> }
+pub struct Worker { pub space: Space, pub w: Rc<Json>, pub msg_lease_ms: f64, pub txn_ms: f64, pub mirror: Option<Rc<crate::mirror::Mirror>>, pub elsewhere: Vec<(String, Space)>, pub batch: bool }
 
 impl Worker {
-	/// `begin`: a new transaction holding the character's token and its oldest intent.
+	/// `begin`: a new transaction holding the character's token and its oldest intent; the intent is None when either is
+	/// missing. With batching the transaction, the terrain pin and the token are one call.
 	async fn begin(&self, char_id: &str) -> Result<(String, Option<Json>)> {
-		let txn = self.space.create_transaction(self.txn_ms).await?;
-		let claimed: Result<Option<Json>> = async {
-			pin_terrain(&self.space, &txn).await?;
-			if self.space.take_if_exists(&actor_token(char_id), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(None); }
-			Ok(self.space.take_if_exists(&tmpl("Intent", phi_json::obj! { "charId" => char_id }), NO_WAIT, Some(&txn)).await?.map(|e| fields(&e).clone()))
-		}.await;
-		match claimed { Ok(i) => Ok((txn, i)), Err(e) => { let _ = self.space.abort(&txn).await; Err(e) } }
+		if !self.batch {
+			let txn = self.space.create_transaction(self.txn_ms).await?;
+			let claimed: Result<Option<Json>> = async {
+				pin_terrain(&self.space, &txn).await?;
+				if self.space.take_if_exists(&actor_token(char_id), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(None); }
+				Ok(self.space.take_if_exists(&tmpl("Intent", phi_json::obj! { "charId" => char_id }), NO_WAIT, Some(&txn)).await?.map(|e| fields(&e).clone()))
+			}.await;
+			return match claimed { Ok(i) => Ok((txn, i)), Err(e) => { let _ = self.space.abort(&txn).await; Err(e) } };
+		}
+		let r = self.space.batch(&[
+			phi_json::obj! { "op" => "begin", "lease" => self.txn_ms },
+			phi_json::obj! { "op" => "read", "template" => crate::model::world_lock(), "txn" => "$" },
+			phi_json::obj! { "op" => "take", "template" => actor_token(char_id), "txn" => "$" },
+		]).await?;
+		let step = |i: usize| r.as_array().and_then(|a| a.get(i)).cloned().unwrap_or(Json::Null);
+		let txn = step(0).get("id").and_then(Json::as_str).map(str::to_owned).ok_or_else(|| Error::Other("a begin without id".into()))?;
+		let held = |v: Json| v.get("entry").is_some_and(|e| !e.is_null());
+		if !held(step(1)) || !held(step(2)) { return Ok((txn, None)); }
+		match self.space.take_if_exists(&tmpl("Intent", phi_json::obj! { "charId" => char_id }), NO_WAIT, Some(&txn)).await {
+			Ok(i) => Ok((txn, i.map(|e| fields(&e).clone()))),
+			Err(e) => { let _ = self.space.abort(&txn).await; Err(e) }
+		}
 	}
 
 	/// `one`: an entry from the snapshot, else a read that waits while another transaction holds it.
@@ -128,21 +144,25 @@ impl Worker {
 	}
 	/// What a command's reads go to: the copy when there is one.
 	fn view(&self) -> Space { self.mirror.as_ref().map_or_else(|| self.space.clone(), |m| self.space.with_mirror(m.clone())) }
+	/// `finishing`: the space for the rest of a command under `txn`; with batching its writes go with the commit.
+	fn finishing(&self, txn: &str) -> Space { let v = self.view(); if self.batch { v.buffered(txn) } else { v } }
 
-	async fn finish(&self, txn: &str, char_id: &str) -> Result<()> {
-		self.space.write(&actor_token(char_id), Some(txn), FOREVER).await?;
-		self.space.commit(txn).await
+	/// The character's token written back (last) and the commit, through the command's space.
+	async fn finish(space: &Space, txn: &str, char_id: &str) -> Result<()> {
+		space.write(&actor_token(char_id), Some(txn), FOREVER).await?;
+		space.commit(txn).await
 	}
 
 	/// `refuse`: in a transaction of its own (again holding the token), the intent consumed and the actor told.
-	async fn refuse(&self, actor: &Json, text: &str) {
+	pub async fn refuse(&self, actor: &Json, text: &str) {
 		let char_id = j::s(actor, "charId").to_owned();
 		let Ok((txn, intent)) = self.begin(&char_id).await else { return };
 		let told: Result<()> = async {
 			if intent.is_none() { return self.space.abort(&txn).await; }
-			let c = Ctx { space: self.view(), txn: txn.clone(), world: self.w.clone(), actor: actor.clone(), account: None, load_account: false, msg_lease_ms: self.msg_lease_ms, asked: None, lang: None, step: None, inventory: None, elsewhere: self.elsewhere.clone() };
+			let end = self.finishing(&txn);
+			let c = Ctx { space: end.clone(), txn: txn.clone(), world: self.w.clone(), actor: actor.clone(), account: None, load_account: false, msg_lease_ms: self.msg_lease_ms, asked: None, lang: None, step: None, inventory: None, elsewhere: self.elsewhere.clone() };
 			msg(&c, &char_id, "error", text, MsgOpts::default()).await?;
-			self.finish(&txn, &char_id).await
+			Self::finish(&end, &txn, &char_id).await
 		}.await;
 		if told.is_err() { let _ = self.space.abort(&txn).await; }
 	}
@@ -156,17 +176,18 @@ impl Worker {
 		let ran: Result<()> = async {
 			if let Some(m) = &self.mirror { m.fresh().await?; }
 			let view = self.view();
+			let end = self.finishing(&txn);
 			if let Some(a) = self.one(&view, &tmpl("Character", phi_json::obj! { "charId" => char_id }), 5_000.0).await? {
 				let a = fields(&a).clone();
 				actor = Some(a.clone());
 				let line = j::s(&intent, "line").to_owned();
 				let stepping = STEP.with(|r| r.test(&line));
 				let account = if stepping { None } else { self.one(&view, &tmpl("Account", phi_json::obj! { "accountId" => j::at(&a, "accountId").clone() }), 2_000.0).await?.map(|e| fields(&e).clone()) };
-				let world = Rc::new(spatial_world(&view, &self.w).await?);
-				let mut c = Ctx { space: view.clone(), txn: txn.clone(), world, actor: a, load_account: account.is_none(), account, msg_lease_ms: self.msg_lease_ms, asked: j::so(&intent, "asked").map(str::to_owned), lang: j::so(&intent, "lang").map(str::to_owned), step: j::opt(&intent, "step").cloned(), inventory: None, elsewhere: self.elsewhere.clone() };
+				let world = Rc::new(spatial_world(&end, &self.w).await?);
+				let mut c = Ctx { space: end.clone(), txn: txn.clone(), world, actor: a, load_account: account.is_none(), account, msg_lease_ms: self.msg_lease_ms, asked: j::so(&intent, "asked").map(str::to_owned), lang: j::so(&intent, "lang").map(str::to_owned), step: j::opt(&intent, "step").cloned(), inventory: None, elsewhere: self.elsewhere.clone() };
 				execute(&mut c, &line).await?;
 			}
-			self.finish(&txn, char_id).await
+			Self::finish(&end, &txn, char_id).await
 		}.await;
 		let Err(e) = ran else { return Ok("ran".into()) };
 		let _ = self.space.abort(&txn).await;

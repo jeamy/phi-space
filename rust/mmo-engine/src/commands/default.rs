@@ -125,6 +125,34 @@ async fn through_fog(c: &Ctx, exit: &Json) -> Result<()> {
 	})
 }
 
+/// `avatar`: the look of one's own figure in 3D; alone: how it looks; `zurück`: as at the start.
+async fn avatar(c: &mut Ctx, arg: &str) -> Result<()> {
+	use crate::appearance::{default_appearance, describe_appearance, parse_appearance};
+	let me = c.char_id().to_owned();
+	let was = j::opt(&c.actor, "look").filter(|l| j::truthy(l)).cloned();
+	if js::trim(arg).is_empty() {
+		let text = match &was { Some(l) => format!("Deine Figur: {}", describe_appearance(l)), None => "Deine Figur sieht noch aus wie bei ihrer Ankunft. Im Menü unter „Figur“ (oder mit avatar figur 2 farbe 3 …) wählst du ihr Aussehen.".to_owned() };
+		return msg(c, &me, "info", &text, MsgOpts::default()).await;
+	}
+	let reset = js::re(r"^(?:zurück|zurueck|reset)$", "i").test(js::trim(arg));
+	let look = if reset { None } else { Some(parse_appearance(arg, &was.clone().unwrap_or_else(default_appearance)).or_else(refuse)?) };
+	let Some(e) = c.space.take(&tmpl("Character", obj! { "charId" => me.as_str() }), 5_000.0, c.txn()).await? else { return refuse("Deine Figur ist gerade nicht greifbar; bitte noch einmal.") };
+	let mut ch = j::object(&j::without(fields(&e), "look"));
+	if let Some(l) = &look { ch.insert("look", l.clone()); }
+	c.space.write(&tmpl("Character", Json::Object(ch)), c.txn(), FOREVER).await?;
+	let text = match &look { Some(l) => format!("Deine Figur: {}", describe_appearance(l)), None => "Deine Figur sieht wieder aus wie bei ihrer Ankunft.".to_owned() };
+	msg(c, &me, "info", &text, MsgOpts::default()).await
+}
+
+/// `faultPause`, a test hook: SPACES_MMO_FAULT_PAUSE=give:4000 waits that long inside `give`, between taking the item
+/// and writing it to the receiver, so a test can kill the world worker there.
+async fn fault_pause(at: &str) {
+	let v = std::env::var("SPACES_MMO_FAULT_PAUSE").unwrap_or_default();
+	let mut parts = v.split(':');
+	let (w, ms) = (parts.next().unwrap_or(""), js::to_number(parts.next().unwrap_or("")));
+	if w == at && ms > 0.0 { tokio::time::sleep(std::time::Duration::from_millis(ms as u64)).await; }
+}
+
 /// `crossing`: the region a room of another region lies in; None when it is here or the world runs as one space.
 pub fn crossing(w: &Json, room: &str) -> Result<Option<String>> {
 	if !j::b(w, "region") || j::a(w, "rooms").iter().any(|r| j::s(r, "roomId") == room) { return Ok(None); }
@@ -258,6 +286,7 @@ pub async fn run(c: &mut Ctx, key: &str, arg: &str) -> Result<()> {
 		"inventory" => inv(c).await,
 		"channel" => channel(c, arg).await,
 		"reputation" => reputation(c).await,
+		"avatar" => avatar(c, arg).await,
 		k => Err(Error::Other(format!("unported: default/{k}"))),
 	}
 }
@@ -450,6 +479,7 @@ async fn give(c: &mut Ctx, arg: &str) -> Result<()> {
 		let Some(e) = c.space.take(&tmpl("Item", obj! { "itemId" => j::at(fields(one), "itemId").clone(), "location" => mine.as_str() }), NO_WAIT, c.txn()).await? else { return refuse(format!("{} ist gerade nicht greifbar.", name_of(&item))) };
 		taken.push(e);
 	}
+	fault_pause("give").await;
 	for e in &taken {
 		let mut g = j::object(fields(e));
 		g.insert("location", j::at(&who, "charId").clone());
