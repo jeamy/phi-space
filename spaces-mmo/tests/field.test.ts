@@ -9,6 +9,7 @@ import { around, harvestOf, shareOf, soilFor } from "../server/engine/commands/f
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld, walkable } from "../server/engine/world.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
+import { workRestMs } from "../server/settings.ts";
 import type { FieldFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
@@ -86,7 +87,11 @@ test("a field: staked out with a spade, sown with seed and work, brought in by t
 		// sowing: the owner chooses, seed and work; a stranger may not until the field is open
 		assert.match(await does(boss.p, "bestelle", "Was säst du"), /Gerste/);
 		await give(s, boss.me, "gerste", 5);
+		// blessed at a chapel: the rest after field work is half as long, as at a site (chapel.ts)
+		await s.write({ type: "Blessing", fields: { charId: boss.me, untilWorldMs: (await worldNowOf(s)) + 24 * 3600_000 } }, null, FOREVER);
 		assert.match(await does(boss.p, "bestelle gerste", "pflügt"), /4 Gerste\); es fehlen noch 1 Arbeit/);
+		const restAfter = (await s.readAll({ type: "WorkRest", fields: { charId: boss.me } }))[0]!.fields as unknown as { untilWorldMs: number };
+		assert.ok(restAfter.untilWorldMs - (await worldNowOf(s)) <= (await workRestMs(s)) / 2, "blessed: half the rest");
 		assert.equal(await pack(s, boss.me, "gerste"), 1, "only what it needs is taken");
 		const helper = await player(srv.url, "Knecht");
 		await walk(helper, s, f0.x + 1, f0.y - 1);
