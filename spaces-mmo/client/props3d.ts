@@ -530,6 +530,30 @@ export function jettyGeometry(t: T, w: number, d: number): Geo {
 	});
 }
 
+/** A built jetty: a flat deck of planks across its long side on piles standing in the water, a mooring post at each
+ *  corner and a coiled rope; no arch and no rail (the bridge of jettyGeometry is the crossings' scenery). */
+export function pierGeometry(t: T, w: number, d: number): Geo {
+	return cached(`pier:${w}x${d}`, () => {
+		const along = w >= d, long = (along ? w : d) * 0.98, wide = (along ? d : w) * 0.8, cells = Math.round(along ? w : d), n = cells * 6, deck = 0.14, parts: Part[] = [];
+		const box = (lx: number, h: number, lz: number, at: number, y: number, side: number, c: number): Part => (along
+			? { g: new t.BoxGeometry(lx, h, lz), c, p: [at, y, side] }
+			: { g: new t.BoxGeometry(lz, h, lx), c, p: [side, y, at] });
+		// the planks lie across, with a narrow gap between them
+		for (let i = 0; i < n; i++) parts.push(box((long / n) * 0.88, 0.035, wide, ((i + 0.5) / n - 0.5) * long, deck, 0, i % 4 ? WOOD : 0x7a5c3a));
+		// two stringers under them along the length, the piles down into the water
+		for (const sz of [-1, 1]) {
+			parts.push(box(long, 0.05, 0.06, 0, deck - 0.04, (sz * wide) / 2.6, WOOD_DARK));
+			for (let i = 0; i <= cells; i++) parts.push(box(0.08, 0.6, 0.08, (i / cells - 0.5) * long * 0.96, deck - 0.3, (sz * wide) / 2.2, WOOD_DARK));
+		}
+		// mooring posts at the corners, a little above the deck
+		for (const ex of [-1, 1]) for (const sz of [-1, 1]) parts.push(along
+			? { g: new t.CylinderGeometry(0.05, 0.06, 0.22, 8), c: WOOD_DARK, p: [(ex * long) / 2.1, deck + 0.1, (sz * wide) / 2.2] }
+			: { g: new t.CylinderGeometry(0.05, 0.06, 0.22, 8), c: WOOD_DARK, p: [(sz * wide) / 2.2, deck + 0.1, (ex * long) / 2.1] });
+		parts.push({ g: new t.TorusGeometry(0.08, 0.025, 6, 12), c: 0xc8b48a, p: along ? [long * 0.3, deck + 0.04, wide * 0.15] : [wide * 0.15, deck + 0.04, long * 0.3], r: [Math.PI / 2, 0, 0] });
+		return merge(t, parts, "pier");
+	});
+}
+
 function loom(t: T, w: number, variant: number): Geo {
 	return cached(`loom:${w}:${variant}`, () => {
 		const ww = w * 0.85, cloth = [0x8a6a9a, 0x6a8a9a, 0x9a6a5a][variant % 3]!, parts: Part[] = [
@@ -550,9 +574,9 @@ function loom(t: T, w: number, variant: number): Geo {
 }
 
 /** A building by its plan: the hut, the rain barrel, the scarecrow, the windmill, the bakery, the coop, the pen (with
- *  its `herd`), the loom, the jetty, any other plan a hut in its colour. */
+ *  its `herd`), the loom, the jetty (a pier into the water), any other plan a hut in its colour. */
 export function buildingGeometry(t: T, plan: string | undefined, w: number, d: number, color: number, variant: number, herd?: string): Geo {
-	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : plan === "windmuehle" ? windmill(t, variant % 3) : plan === "backhaus" ? bakery(t, w, d, variant % 3) : plan === "huehnerstall" ? coop(t, w, variant % 3) : plan === "bienenstock" ? hive(t) : plan === "gehege" ? pen(t, w, d, variant % 3, herd) : plan === "webstuhl" ? loom(t, w, variant % 3) : plan === "steg" ? jettyGeometry(t, w, d) : hut(t, w, d, color, variant % 3);
+	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : plan === "windmuehle" ? windmill(t, variant % 3) : plan === "backhaus" ? bakery(t, w, d, variant % 3) : plan === "huehnerstall" ? coop(t, w, variant % 3) : plan === "bienenstock" ? hive(t) : plan === "gehege" ? pen(t, w, d, variant % 3, herd) : plan === "webstuhl" ? loom(t, w, variant % 3) : plan === "steg" ? pierGeometry(t, w, d) : hut(t, w, d, color, variant % 3);
 }
 
 /** A hare, sitting up a little, its nose towards +z: body, haunches, head, long ears, a white scut. About 0.4 high. */

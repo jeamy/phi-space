@@ -42,7 +42,7 @@ export function StatsPanel({ me }: { me: string }) {
 						{rows.map((p) => <li key={p.charId}>
 							<button aria-expanded={open === p.charId} onClick={() => setOpen(open === p.charId ? null : p.charId)}>
 								<span className={`live${p.online ? " on" : ""}`} />
-								<b data-no-tr>{p.name}</b>{p.charId === me && <small>du</small>}{p.guest && <small>Gast</small>}
+								<b data-no-tr>{p.name}</b>{p.charId === me && <small>du</small>}{p.guest && <small>Gast</small>}{p.kind === "player" && (p.ranks ?? []).some((r) => r.rank === "siedler") && <small>Siedler</small>}
 							</button>
 							{open === p.charId && <PlayerDetail p={p} />}
 						</li>)}
@@ -56,9 +56,12 @@ export function StatsPanel({ me }: { me: string }) {
 
 function PlayerDetail({ p }: { p: PlayerStat }) {
 	const where = !p.at ? "unbekannt" : "aboard" in p.at ? "an Bord des Großen Schiffs" : `${p.at.roomName}${p.at.island ? ` (${p.at.island})` : ""}, Feld ${p.at.x}/${p.at.y}`;
+	const rank = (r: PlayerStat["ranks"][number]) => r.rank === "siedler" ? (r.founder ? `Siedler in ${r.settlement}, Gründer` : `Siedler in ${r.settlement}`) : r.founder ? `Helfer in ${r.settlement}, Gründer` : `Helfer in ${r.settlement}`;
 	const rides = TRIP_NAMES.filter(([k]) => p.trips[k] > 0).map(([k, n]) => `${n} ${p.trips[k]}`);
 	return (
 		<dl className="stat-detail">
+			<dt>Stand</dt><dd>{p.kind === "settler" ? "Siedler-Figur, spielt von selbst" : p.kind === "ai" ? "KI-Figur" : p.guest ? "Gast" : "Registriert"}</dd>
+			<dt>Rang</dt><dd>{(p.ranks ?? []).length ? p.ranks.map((r, i) => <span key={r.settlement}>{i > 0 && <br />}{rank(r)}</span>) : "in keiner Siedlung"}</dd>
 			<dt>{p.online ? "Steht in" : "Zuletzt in"}</dt><dd>{where}</dd>
 			<dt>{p.kind !== "player" ? "Im Spiel seit" : p.guest ? "Gast seit" : "Registriert seit"}</dt><dd>{date(p.since)}</dd>
 			<dt>Ruf</dt><dd>{`${p.reputation.pieces} Scheite in ${p.reputation.beacons} Leuchtfeuern`}</dd>

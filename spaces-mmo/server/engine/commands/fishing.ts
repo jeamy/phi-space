@@ -13,6 +13,7 @@ import { consume, move } from "./trade.ts";
 import { dropOffers, placeIn, relocate } from "./default.ts";
 import { countTrip } from "../travel.ts";
 import { randomInt } from "../source.ts";
+import { walkable, type WorldDef } from "../world.ts";
 
 const weighted = (xs: Array<{ proto: string; weight: number }>) => { let r = randomInt(0, xs.reduce((n, x) => n + x.weight, 0)); return xs.find((x) => (r -= x.weight) < 0)!; };
 
@@ -49,7 +50,7 @@ const rudere: Command = {
 		if (!word) return msg(c, c.actor.charId, "info", there.length ? `Stege gibt es in: ${there.map((r) => r.name).join(", ")}.` : "Auf dieser Insel gibt es keinen anderen Steg.");
 		const to = there.find((r) => r.name.toLowerCase() === word || r.roomId === word);
 		if (!to) throw new NotUnderstood(`Dorthin führt kein Steg.${there.length ? ` Stege gibt es in: ${there.map((r) => r.name).join(", ")}.` : ""}`);
-		const jetty = jetties.find((b) => b.room === to.roomId)!, dest = await roomOf(c, to.roomId), at = await placeIn(c, dest, { x: jetty.x, y: jetty.y + 1 });
+		const jetty = jetties.find((b) => b.room === to.roomId)!, dest = await roomOf(c, to.roomId), at = await placeIn(c, dest, shoreOf(c.world, dest.ground, jetty) ?? { x: jetty.x, y: jetty.y + 1 });
 		await countTrip(c, "row");
 		await msg(c, "*", "info", `$you() $conj(ruderst|rudert) nach ${to.name}.`, { templ: true });
 		await relocate(c, { room: dest.roomId, x: at.x, y: at.y }, { spot: false });
@@ -176,3 +177,10 @@ const einschiffen: Command = {
 };
 
 export const FISHING_COMMANDS: Command[] = [wirf, rudere, segle, luke, fahrplan, einschiffen, schaufle];
+
+/** The land beside a jetty that lies on the water (where one steps ashore): its first walkable neighbour; null for a jetty on land. */
+function shoreOf(w: WorldDef, ground: string[], r: { x: number; y: number; w: number; h: number }): { x: number; y: number } | null {
+	if (walkable(w, ground, r.x, r.y)) return null;
+	for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) for (const [dx, dy] of [[0, 1], [1, 0], [-1, 0], [0, -1]] as const) if (walkable(w, ground, x + dx, y + dy)) return { x: x + dx, y: y + dy };
+	return null;
+}

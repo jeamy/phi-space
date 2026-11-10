@@ -3,7 +3,7 @@
 // shows anyway: the figure's name (never the login name), where it stands (a passenger of the large ship only as
 // "aboard", not where it goes), since when it plays, its reputation, how often it travelled, what it owns and carries.
 import type { SpaceLike } from "phi-spaces";
-import { fieldsOf, type AccountFields, type BedFields, type BuildingFields, type CharacterFields, type ContributionFields, type DeedFields, type FieldFields, type ParkCareFields, type SessionFields } from "./model.ts";
+import { fieldsOf, type AccountFields, type BedFields, type BuildingFields, type CharacterFields, type ContributionFields, type DeedFields, type FieldFields, type ParkCareFields, type SessionFields, type SettlementFields } from "./model.ts";
 import type { RegionSpaces } from "./region-spaces.ts";
 import { TRIPS, type Trip, type TravelFields } from "./engine/travel.ts";
 import type { WorldDef } from "./engine/world.ts";
@@ -77,6 +77,14 @@ export async function collectStats(regions: RegionSpaces, w: WorldDef): Promise<
 		const m = ownPlans.get(b.accountId) ?? new Map<string, number>();
 		m.set(b.plan, (m.get(b.plan) ?? 0) + 1); ownPlans.set(b.accountId, m);
 	}
+	// the ranks: a hut in a settlement's room makes a settler, others are members as listed, a guest is a helper at most
+	const hutPlan = w.settlement?.plan;
+	const settlements = (read.Settlement as SettlementFields[]).map((s) => ({ s, huts: new Set(buildings.filter((b) => b.plan === hutPlan && b.room === s.room).map((b) => b.accountId)) }));
+	const ranksOf = (a: AccountFields): PlayerStat["ranks"] => settlements.flatMap(({ s, huts }) => {
+		const r = huts.has(a.accountId) ? "siedler" : s.members.find((m) => m.accountId === a.accountId)?.rank;
+		const rank = r === "siedler" && a.guest ? "helfer" : r;
+		return rank ? [{ settlement: s.name, rank, founder: s.founder === a.accountId }] : [];
+	}).sort((x, y) => Number(y.rank === "siedler") - Number(x.rank === "siedler") || x.settlement.localeCompare(y.settlement, "de"));
 	const planName = (key: string) => w.building?.plans.find((p) => p.key === key)?.name ?? key;
 	// the pack of each figure listed, read where it stands (by its location, not every thing of the world)
 	const packs = new Map<string, Array<{ name: string; count: number }>>();
@@ -95,6 +103,7 @@ export async function collectStats(regions: RegionSpaces, w: WorldDef): Promise<
 			at: c.aboard ? { aboard: true as const } : { room: c.room, roomName: room?.name ?? c.room, island: room?.island ?? null, x: c.x, y: c.y },
 			reputation: { pieces: p?.pieces ?? 0, beacons: p?.beacons.size ?? 0, parks: parks.get(c.accountId) ?? 0, deeds: deeds.get(c.accountId) ?? 0 },
 			trips: trips.get(c.charId) ?? noTrips(),
+			ranks: ranksOf(a),
 			owns: {
 				buildings: ownB.get(c.accountId) ?? 0, beds: ownBeds.get(c.accountId) ?? 0, fields: ownF.get(c.accountId) ?? 0,
 				plans: [...(ownPlans.get(c.accountId) ?? [])].map(([plan, count]) => ({ plan, name: planName(plan), count })).sort((x, y) => y.count - x.count),

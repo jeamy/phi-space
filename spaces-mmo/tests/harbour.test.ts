@@ -93,6 +93,36 @@ test("a jetty goes only to the water; a lighthouse adds its light and covers the
 	} finally { await srv.close(); }
 });
 
+test("a jetty is built on the water from the shore, clear of the ship's berth, and one rows ashore beside it", { timeout: 180_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		await lightFire(s, 600_000, "feuer-bucht");
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Pia", password: "geheim-123" })).status, 200);
+		const me = (await p.play()).me.charId;
+		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
+		const room = w.rooms.find((r) => r.roomId === c.room)!, g = room.ground, wet = (x: number, y: number) => g[y]?.[x] === "~", land = (x: number, y: number) => g[y]?.[x] !== undefined && g[y]![x] !== "~";
+		const b = berth(g, room.spawn)!, ship = { x: b.x - 1, y: b.y - 1, w: (b.along === "x" ? SHIP_LENGTH : 1) + 2, h: (b.along === "y" ? SHIP_LENGTH : 1) + 2 };
+		const inShip = (x: number, y: number) => x >= ship.x && x < ship.x + ship.w && y >= ship.y && y < ship.y + ship.h;
+		// two water cells in a row, the first beside the land; and two out in open water, nowhere near it
+		let pier: { x: number; y: number } | null = null, open: { x: number; y: number } | null = null;
+		for (let y = 0; y < g.length; y++) for (let x = 1; x < g[0]!.length - 1; x++) {
+			if (!wet(x, y) || !wet(x + 1, y) || inShip(x, y) || inShip(x + 1, y)) continue;
+			const near = [[x - 1, y], [x, y - 1], [x, y + 1], [x + 2, y], [x + 1, y - 1], [x + 1, y + 1]].some(([a, z]) => land(a!, z!));
+			if (near && land(x - 1, y)) pier ??= { x, y };
+			if (!near && ![[x, y - 1], [x, y + 1], [x + 1, y - 1], [x + 1, y + 1]].some(([a, z]) => g[z!]?.[a!] === undefined)) open ??= { x, y };
+		}
+		assert.ok(pier && open, "the bay has a shore and open water");
+		assert.match(await does(p, "bau steg 2 12", /Wasser|passt keine|steckt/), /Wasser/, "not on the beach");
+		assert.match(await does(p, `bau steg ${open!.x} ${open!.y}`, /Ufer|passt keine|steckt/), /Ufer/, "not out at sea");
+		assert.match(await does(p, `bau steg ${b.x} ${b.y}`, /Schiff|Ufer|passt keine|steckt/), /Schiff|Ufer/, "not where the ship lies");
+		assert.match(await does(p, `bau steg ${pier!.x} ${pier!.y}`, /steckt|passt keine/), /steckt eine Baustelle ab/);
+		const site = (await s.readAll({ type: "Site", fields: { accountId: (await s.readAll({ type: "Character", fields: { charId: me } }))[0]!.fields.accountId } }))[0]!.fields as unknown as { x: number; y: number; w: number; h: number };
+		for (let y = site.y; y < site.y + site.h; y++) for (let x = site.x; x < site.x + site.w; x++) assert.ok(wet(x, y), `${x} ${y} is water`);
+	} finally { await srv.close(); }
+});
+
 test("signal fires in the light of two fires are a chain: while both burn they share their light, and the island's run counts", { timeout: 180_000 }, async () => {
 	const srv = await startServer();
 	try {

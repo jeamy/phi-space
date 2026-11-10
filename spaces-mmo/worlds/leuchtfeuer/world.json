@@ -8325,7 +8325,7 @@
 		{
 			"key": "fischen",
 			"category": "Allgemein",
-			"text": "An einem Steg (der muss ans Wasser grenzen) wirft „wirf netz“ das Netz aus: meist Fisch, manchmal etwas Treibgut, selten Bernstein. Danach ruhst du wie nach anderer Arbeit. In einer Räucherei macht „craft räucherfisch“ aus zwei Fischen und Holz zwei Räucherfische. Auf ihrem Gestell lagert Fisch („verstaue fisch“ neben ihr); wo kein Feuer den Nebel fernhält, ist er dort nur unter einem Netz sicher vor den Möwen. Mit „iss <ding>“ wirst du satt: Satt ruhst du nach der Arbeit kürzer, Brot hält am längsten. Hunger gibt es nicht."
+			"text": "An einem Steg (er liegt auf dem Wasser, mit einem Ende am Ufer: „bau steg“ am Strand) wirft „wirf netz“ das Netz aus: meist Fisch, manchmal etwas Treibgut, selten Bernstein. Danach ruhst du wie nach anderer Arbeit. In einer Räucherei macht „craft räucherfisch“ aus zwei Fischen und Holz zwei Räucherfische. Auf ihrem Gestell lagert Fisch („verstaue fisch“ neben ihr); wo kein Feuer den Nebel fernhält, ist er dort nur unter einem Netz sicher vor den Möwen. Mit „iss <ding>“ wirst du satt: Satt ruhst du nach der Arbeit kürzer, Brot hält am längsten. Hunger gibt es nicht."
 		},
 		{
 			"key": "jahreszeiten",
@@ -12591,7 +12591,7 @@
 			},
 			{
 				"key": "steg",
-				"shore": true,
+				"water": true,
 				"name": "Steg",
 				"dative": "einem Steg",
 				"aliases": [

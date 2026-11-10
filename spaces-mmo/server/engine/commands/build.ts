@@ -34,6 +34,7 @@ import { chestOrder, fmtLoad, loadAt, loadOf, loadOfAll, packMax } from "../pack
 import type { CourierFields } from "../courier.ts";
 import { randomBytes, timeNow } from "../source.ts";
 import { creditDeed } from "../deeds.ts";
+import { baysOf, berth, SHIP_LENGTH } from "../liner.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -138,6 +139,33 @@ async function noteBuilder(c: CommandCtx, beaconId: string): Promise<void> {
 	const key = { beaconId, accountId: c.account.accountId };
 	await c.space.takeIfExists({ type: "FireBuilder", fields: key }, NO_WAIT, { txn: c.txn });
 	await c.space.write({ type: "FireBuilder", fields: { ...key, atWorldMs: await decayNowOf(c.space, c.txn) } satisfies FireBuilderFields as never }, c.txn, FOREVER);
+}
+
+/** Why a jetty cannot go on `rect` (null: it can): it lies on water only, one of its cells beside the land (where one
+ *  stands to fish, row and load), free of other things built and of the large ship's berth in a bay. */
+async function waterRefusal(c: CommandCtx, room: RoomFields, rect: Rect): Promise<string | null> {
+	const height = room.ground.length, width = room.ground[0]?.length ?? 0;
+	if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > width || rect.y + rect.h > height) return "Dort ist der Raum zu Ende.";
+	const wet = (p: { x: number; y: number }) => room.ground[p.y]?.[p.x] !== undefined && !walkable(c.world, room.ground, p.x, p.y);
+	if (!cells(rect).every(wet)) return "Ein Steg reicht ins Wasser: er liegt ganz auf dem Wasser, mit einem Ende am Ufer.";
+	if (!cells(rect).some((p) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => walkable(c.world, room.ground, p.x + dx!, p.y + dy!)))) return "Ein Steg beginnt am Ufer.";
+	const blocked = await blockedIn(c.space, c.world, room.roomId);
+	if (cells(rect).some((p) => blocked.has(cellKey(p)))) return "Dort liegt schon ein Steg oder wird gebaut.";
+	const island = c.world.rooms.find((r) => r.roomId === room.roomId)?.island;
+	const bay = island && baysOf(c.world.allRooms ?? c.world.rooms).get(island)?.roomId === room.roomId && room.spawn ? berth(room.ground, room.spawn) : null;
+	if (bay) {
+		const ship = { x: bay.x - 1, y: bay.y - 1, w: (bay.along === "x" ? SHIP_LENGTH : 1) + 2, h: (bay.along === "y" ? SHIP_LENGTH : 1) + 2 };
+		if (cells(rect).some((p) => distTo(p, ship) === 0)) return "Dort legt das große Schiff an.";
+	}
+	return null;
+}
+/** The rects for a jetty beside the actor: both ways round, the ones that point away from the actor (it stands at their end) first. */
+function jettyTries(c: CommandCtx, plan: Pick<PlanDef, "w" | "h">, at?: { x: number; y: number }): Rect[] {
+	const long = Math.max(plan.w, plan.h), short = Math.min(plan.w, plan.h), shapes = [{ w: long, h: short }, { w: short, h: long }];
+	if (at) return shapes.map((s) => ({ ...at, ...s }));
+	const all = shapes.flatMap((s) => besides(c, s));
+	const end = (r: Rect) => { const along = r.w >= r.h; return along ? (c.actor.y >= r.y && c.actor.y < r.y + r.h ? 0 : 1) : (c.actor.x >= r.x && c.actor.x < r.x + r.w ? 0 : 1); };
+	return all.sort((a, b) => end(a) - end(b));
 }
 
 /** Whether a cell beside the rect is water. */
@@ -301,10 +329,11 @@ export const bau: Command = {
 		if (typeof light === "string") throw new CommandError(light);
 		await noteBuilder(c, light.beaconId);
 		const room = await roomOf(c);
-		const tries = m[2] !== undefined ? [{ x: Number(m[2]), y: Number(m[3]), w: plan.w, h: plan.h }] : besides(c, plan);
+		const at = m[2] !== undefined ? { x: Number(m[2]), y: Number(m[3]) } : undefined;
+		const tries = plan.water ? jettyTries(c, plan, at) : at ? [{ ...at, w: plan.w, h: plan.h }] : besides(c, plan);
 		let rect: Rect | null = null, why = "";
 		const exits = plan.atExit ? await exitsHere(c) : [];
-		for (const r of tries) { const no = (await refusal(c, room, r, !!plan.green, !!plan.green)) ?? (plan.shore && !touchesWater(c.world, room, r) ? "Das muss ans Wasser grenzen." : plan.atExit && !exits.some((x) => distTo(x.f, r) <= EXIT_REACH) ? "Eine Straße beginnt neben einem Ausgang." : null); if (!no) { rect = r; break; } why ||= no; }
+		for (const r of tries) { const no = plan.water ? await waterRefusal(c, room, r) : (await refusal(c, room, r, !!plan.green, !!plan.green)) ?? (plan.shore && !touchesWater(c.world, room, r) ? "Das muss ans Wasser grenzen." : plan.atExit && !exits.some((x) => distTo(x.f, r) <= EXIT_REACH) ? "Eine Straße beginnt neben einem Ausgang." : null); if (!no) { rect = r; break; } why ||= no; }
 		if (!rect) throw new CommandError(`Hier passt keine ${plan.name} hin: ${why}`);
 		const buildId = randomBytes(6).toString("hex"), now = await worldNowOf(c.space, c.txn);
 		for (const p of cells(rect)) {

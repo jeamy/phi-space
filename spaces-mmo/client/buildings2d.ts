@@ -218,6 +218,17 @@ function road(g: Graphics, x: number, y: number, w: number, h: number, ts: numbe
 	g.rect(px - 1, top, 2.5, ts * 0.62).fill({ color: WOOD_DARK });
 	g.poly([px - ts * 0.32, top + 2, px + 1, top + 2, px + 1, top + ts * 0.18, px - ts * 0.32, top + ts * 0.18, px - ts * 0.4, top + ts * 0.1]).fill({ color: WOOD }).stroke({ width: 1.2, color: LINE });
 }
+/** The jetty: planks across its long side on the water, the piles at its corners showing, a mooring post at each end. */
+function pier(g: Graphics, x: number, y: number, w: number, h: number, ts: number): void {
+	const along = w >= h, n = Math.max(4, Math.round((along ? w : h) / (ts * 0.22))), m = 2;
+	for (let i = 0; i < n; i++) {
+		const f = i / n, step = (along ? w : h - 2 * m) / n;
+		if (along) g.rect(x + 1 + f * (w - 2), y + m + 2, step - 1.5, h - 2 * m - 4).fill({ color: i % 4 ? WOOD : "#7a5c3a" }).stroke({ width: 0.8, color: LINE });
+		else g.rect(x + m + 2, y + 1 + f * (h - 2), w - 2 * m - 4, step - 1.5).fill({ color: i % 4 ? WOOD : "#7a5c3a" }).stroke({ width: 0.8, color: LINE });
+	}
+	const r = Math.max(2, ts * 0.08);
+	for (const [px, py] of [[x + r + 1, y + r + 1], [x + w - r - 1, y + r + 1], [x + r + 1, y + h - r - 1], [x + w - r - 1, y + h - r - 1]] as const) g.circle(px, py, r).fill({ color: WOOD_DARK }).stroke({ width: 1, color: LINE });
+}
 export function building2d(g: Graphics, plan: string | undefined, x: number, y: number, w: number, h: number, ts: number, color: string): void {
 	if (plan === "regentonne") barrel(g, x, y, ts);
 	else if (plan === "vogelscheuche") scarecrow(g, x, y, ts);
@@ -237,5 +248,6 @@ export function building2d(g: Graphics, plan: string | undefined, x: number, y: 
 	else if (plan === "rathaus") townHall(g, x, y, w, h, ts);
 	else if (plan === "werkstatt") workshop(g, x, y, w, h, ts);
 	else if (plan === "strasse") road(g, x, y, w, h, ts);
+	else if (plan === "steg") pier(g, x, y, w, h, ts);
 	else house(g, x, y, w, h, color, ROOF, ts);
 }

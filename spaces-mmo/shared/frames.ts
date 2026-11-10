@@ -132,6 +132,8 @@ export type PlayerStat = {
 	at: { room: string; roomName: string; island: string | null; x: number; y: number } | { aboard: true } | null;
 	reputation: { pieces: number; beacons: number; parks: number; /** services to the community (Deed) */ deeds: number };
 	trips: Trips;
+	/** its rank in each settlement where it is more than a stranger (engine/commands/settlement.ts rankOf); `founder`: it founded it */
+	ranks: Array<{ settlement: string; rank: "siedler" | "helfer"; founder: boolean }>;
 	owns: { buildings: number; beds: number; fields: number; plans: Array<{ plan: string; name: string; count: number }>;
 		/** what the figure carries: each kind with how many, the most first */ carries: Array<{ name: string; count: number }> };
 };

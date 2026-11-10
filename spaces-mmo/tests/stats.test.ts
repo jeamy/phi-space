@@ -48,6 +48,12 @@ test("statistics: players by their shown name, a counted beam, positions and the
 		await give(s, me, "muschel", 3);
 		await give(s, me, "treibholz", 1);
 
+		// a settlement: a hut of its founder makes it a settler there, a guest listed as a settler is a helper
+		const acc = async (charId: string) => String((await s.readAll({ type: "Character", fields: { charId } }))[0]!.fields.accountId);
+		const mineAcc = await acc(me), guestAcc = await acc(guest);
+		await s.write({ type: "Building", fields: { buildId: "h1", plan: w.settlement!.plan, name: "Hütte", room: "fischerdorf", x: 2, y: 2, w: 2, h: 2, owner: me, ownerName: "Wanderin", accountId: mineAcc, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
+		await s.write({ type: "Settlement", fields: { settlementId: "s1", name: "Möwennest", nameKey: "möwennest", room: "fischerdorf", founder: mineAcc, founderName: "Wanderin", members: [{ accountId: guestAcc, name: "Gast", rank: "siedler" }], closed: false, at: 0 } as never }, null, FOREVER);
+
 		const r = await eventually(async () => { const x = await stats(srv.url, p.cookie); return x.body.trips?.beam === 1 ? x : null; }, 40_000, "the statistics with the beam");
 		const body = r.body;
 		assert.equal(r.status, 200);
@@ -63,6 +69,8 @@ test("statistics: players by their shown name, a counted beam, positions and the
 		const mine = body.list.find((x) => x.charId === me)!;
 		assert.equal(mine.name, "Wanderin");
 		assert.equal(mine.guest, false);
+		assert.deepEqual(mine.ranks, [{ settlement: "Möwennest", rank: "siedler", founder: true }]);
+		assert.deepEqual(body.list.find((x) => x.charId === guest)?.ranks, [{ settlement: "Möwennest", rank: "helfer", founder: false }], "a guest is a helper at most");
 		assert.ok(Math.abs(mine.since - Date.now()) < 5 * 60_000, "registered just now");
 		assert.deepEqual(mine.trips, { beam: 1, ship: 1, sail: 0, row: 0, train: 2 });
 		const shells = mine.owns.carries.find((i) => i.name === "Muschel"), wood = mine.owns.carries.find((i) => i.name === "Treibholz");

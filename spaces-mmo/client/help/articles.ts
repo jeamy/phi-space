@@ -1363,7 +1363,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Hütte (\`bau hütte\`) | Fischerdorf | 2×2, 6 Treibholz, 2 Tangseil, 20 Arbeit | 1 | 40 | Truhe für dich; am Herd kochen (Käse, Kerzen, alle Braten und Suppen, Festessen) |
 | Räucherei (\`bau räucherei\`) | Fischerdorf | 2×2, 10 Treibholz, 2 Tangseil, 12 Arbeit | 2 | 40 | räuchert Fisch und Fleisch; Truhe als Räuchergestell |
 | Regentonne (\`bau regentonne\`) | Fischerdorf | 1×1, 3 Treibholz, 1 Tangseil, 4 Arbeit | 1 | 40 | Wasser für die Beete (\`schöpfe\`) |
-| Steg (\`bau steg\`) | Fischerdorf | 2×1, 6 Treibholz, 6 Arbeit | 1 | 40 | Boote legen an, Regatta (\`rudere\`, \`segle\`, \`luke\`) |
+| Steg (\`bau steg\`) | Fischerdorf | 2×1, 6 Treibholz, 6 Arbeit | 1 | 40 | liegt auf dem Wasser, ein Ende am Ufer; Boote legen an, Regatta (\`rudere\`, \`segle\`, \`luke\`) |
 | Vogelscheuche (\`bau vogelscheuche\`) | Fischerdorf | 1×1, 2 Treibholz, 1 Tangseil, 3 Arbeit | 1 | 40 | hält Hasen drei Felder weit von den Beeten |
 | Backhaus (\`bau backhaus\`) | Dorf | 2×2, 6 Treibholz, 6 Muschel, 1 Tangseil, 12 Arbeit | 2 | 40 | backt Brot (\`backe brot\`) |
 | Gehege (\`bau gehege\`) | Dorf | 3×3, 8 Treibholz, 4 Tangseil, 8 Arbeit | 2 | 40 | bis 4 Tiere einer Art (Schafe, Ziegen, Enten, Gänse, Schweine, Ferkel, ab der Stadt Rinder) |
@@ -1401,7 +1401,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Hut (\`bau hütte\`) | Fishing Village | 2×2, 6 driftwood, 2 kelp rope, 20 work | 1 | 40 | a chest of your own; cooking at the hearth (cheese, candles, every roast and soup, the feast) |
 | Smokehouse (\`bau räucherei\`) | Fishing Village | 2×2, 10 driftwood, 2 kelp rope, 12 work | 2 | 40 | smokes fish and meat; its chest is the rack |
 | Rain Barrel (\`bau regentonne\`) | Fishing Village | 1×1, 3 driftwood, 1 kelp rope, 4 work | 1 | 40 | water for the beds (\`schöpfe\`) |
-| Jetty (\`bau steg\`) | Fishing Village | 2×1, 6 driftwood, 6 work | 1 | 40 | boats land, regatta (\`rudere\`, \`segle\`, \`luke\`) |
+| Jetty (\`bau steg\`) | Fishing Village | 2×1, 6 driftwood, 6 work | 1 | 40 | lies on the water, one end at the shore; boats land, regatta (\`rudere\`, \`segle\`, \`luke\`) |
 | Scarecrow (\`bau vogelscheuche\`) | Fishing Village | 1×1, 2 driftwood, 1 kelp rope, 3 work | 1 | 40 | keeps hares three cells away from the beds |
 | Bakehouse (\`bau backhaus\`) | Village | 2×2, 6 driftwood, 6 shell, 1 kelp rope, 12 work | 2 | 40 | bakes bread (\`backe brot\`) |
 | Pen (\`bau gehege\`) | Village | 3×3, 8 driftwood, 4 kelp rope, 8 work | 2 | 40 | up to 4 animals of one kind (sheep, goats, ducks, geese, pigs, piglets, cattle from the town on) |
