@@ -1420,3 +1420,160 @@ fn the_wild() {
 	assert!(got.0 >= 8.0 && got.1 >= 3.0, "{got:?}");
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 15 && said.iter().filter(|r| r.starts_with("refused")).count() > 8, "{said:?}");
 }
+
+/// Roads and carts, the railway (cart.ts) and the garden job whole: a cart set down, loaded and unloaded with its
+/// refusals, driven along two roads a room an hour, put on a route between two chests it loads and unloads by itself,
+/// stopped and taken along; the island railway between stations with its timetable, freight sent and fetched, a ride.
+#[test]
+fn carts_and_trains() {
+	let mut w = Walk::new("carts_and_trains", 55, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (19.0, 8.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (18.0, 9.0), true, false);
+	let g = w.player(3, "graue-bucht", (17.0, 8.0), true);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	for (p, k) in [("karren", 2), ("treibholz", 5), ("muschel", 3), ("tangseil", 2), ("muenze", 4)] { give(&mut w, &a, p, k); }
+	give(&mut w, &b, "muenze", 1);
+	give(&mut w, &b, "treibholz", 1);
+	let building = |id: &str, plan: &str, room: &str, x: f64, y: f64, sz: (f64, f64), owner: usize| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => plan, "name" => plan, "room" => room, "x" => x, "y" => y, "w" => sz.0, "h" => sz.1, "owner" => format!("c-walk{owner}"), "ownerName" => format!("Wanderer{owner}"), "accountId" => format!("a-walk{owner}"), "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	w.write(building("road-1", "strasse", "graue-bucht", 21.0, 8.0, (1.0, 1.0), 1));
+	w.write(building("road-2", "strasse", "klippenpfad", 22.0, 7.0, (1.0, 1.0), 1));
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| {
+		step += 1;
+		at.set(at.get() + 7_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	let hour = 3_600_000.0;
+	for (who, line) in [
+		(&g, "karren"), (&a, "karren"), (&a, "karren lade treibholz"), (&a, "karren halt"), (&a, "karren stelle"), (&b, "karren stelle"), (&a, "karren"), (&a, "karren lade"), (&a, "karren lade gibtsnicht"), (&a, "karren lade karren"),
+		(&a, "karren lade treibholz"), (&a, "karren lade den treibholz"), (&a, "karren entlade"), (&a, "karren entlade"), (&a, "karren lade muschel"), (&a, "karren nimm"), (&a, "karren hüpfe"),
+		(&a, "karren fahre nirgendwo"), (&a, "karren fahre Fischerdorf"), (&a, "karren fahre klippenkopf"), (&a, "karren lade treibholz"), (&a, "karren"),
+	] { run(&mut w, who, line, 0.0); }
+	// a room an hour, then the notice
+	assert_eq!(w.call("cartTick", None), Json::from(0.0));
+	for _ in 0..3 { run(&mut w, &a, "karren", hour); w.call("cartTick", None); }
+	// the other cart on a route between two chests
+	for (who, line) in [(&a, "karren stelle"), (&a, "karren pendel Graue Bucht"), (&a, "karren pendel Fischerdorf"), (&a, "karren pendel nirgendwo"), (&a, "karren pendel Klippenpfad mit gibtsnicht"), (&a, "karren pendel Klippenpfad")] { run(&mut w, who, line, 0.0); }
+	w.write(building("h-1", "huette", "graue-bucht", 15.0, 10.0, (2.0, 2.0), 1));
+	w.write(building("h-2", "huette", "klippenpfad", 14.0, 10.0, (2.0, 2.0), 1));
+	w.write(building("h-3", "huette", "klippenpfad", 4.0, 10.0, (2.0, 2.0), 2));
+	give(&mut w, "h-1", "treibholz", 3);
+	give(&mut w, "h-1", "muschel", 2);
+	give(&mut w, "h-1", "muenze", 2);
+	for (who, line) in [(&a, "karren pendel Klippenpfad mit dem Treibholz"), (&a, "karren")] { run(&mut w, who, line, 0.0); }
+	// the garden job as the worker runs it: load, go, unload, come back, wait with nothing to carry
+	// and a figure aboard whose ship has come (an intent to land), one still on the way
+	w.write(obj! { "type" => "Passage", "fields" => obj! { "charId" => "c-walk8", "to" => "klippenpfad", "arriveWorldMs" => 0.0 } });
+	w.write(obj! { "type" => "Passage", "fields" => obj! { "charId" => "c-walk9", "to" => "klippenpfad", "arriveWorldMs" => 9e15 } });
+	for _ in 0..6 { run(&mut w, &g, "look", hour); w.tick("garden"); }
+	for (who, line) in [(&a, "karren"), (&a, "karren halt"), (&a, "karren halt")] { run(&mut w, who, line, 0.0); }
+	for _ in 0..2 { run(&mut w, &g, "look", hour); w.tick("garden"); }
+	stand(&mut w, 1, "graue-bucht", 10.0, 9.0);
+	for (who, line) in [(&a, "karren"), (&a, "karren entlade"), (&a, "karren nimm"), (&a, "karren nimm")] { run(&mut w, who, line, 0.0); }
+	// the railway: three stations on this island, one on another
+	w.write(building("bf-1", "bahnhof", "graue-bucht", 14.0, 4.0, (3.0, 2.0), 1));
+	w.write(building("bf-2", "bahnhof", "klippenpfad", 9.0, 5.0, (3.0, 2.0), 1));
+	w.write(building("bf-3", "bahnhof", "klippenpfad", 2.0, 12.0, (3.0, 2.0), 2));
+	w.write(building("bf-4", "bahnhof", "fischerdorf", 9.0, 9.0, (3.0, 2.0), 2));
+	w.write(building("bf-5", "bahnhof", "moewenfels-strand", 9.0, 9.0, (3.0, 2.0), 2));
+	run(&mut w, &a, "zug", 0.0);
+	stand(&mut w, 1, "graue-bucht", 13.0, 5.0);
+	stand(&mut w, 2, "graue-bucht", 15.0, 6.0);
+	stand(&mut w, 3, "graue-bucht", 17.0, 5.0);
+	for round in 0..3 {
+		for (who, line) in [
+			(&a, "zug"), (&a, "zug gibtsnicht"), (&a, "zug sende treibholz nach Nirgendwo"), (&a, "zug sende gibtsnicht nach Klippenpfad"), (&g, "zug sende muschel nach klippenpfad"),
+			(&a, "zug sende 2 treibholz nach Klippenpfad"), (&a, "zug sende alle nach fischerdorf"), (&b, "zug sende treibholz nach klippenpfad"), (&b, "zug Fischerdorf"),
+		] { run(&mut w, who, line, 0.0); }
+		run(&mut w, &a, "zug", 11.0 * 60_000.0 * (round + 1) as f64);
+	}
+	give(&mut w, &a, "muenze", 2);
+	give(&mut w, &a, "muschel", 30);
+	for _ in 0..3 { for (who, line) in [(&a, "zug sende 25 muschel nach klippenpfad"), (&a, "zug klippenpfad")] { run(&mut w, who, line, 0.0); } run(&mut w, &a, "zug", 10.0 * 60_000.0); }
+	for (who, line) in [(&a, "zug"), (&a, "zug abholen"), (&a, "zug abholen"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
+	assert!(w.entries_with("angekommen") >= 1, "the cart never arrived");
+}
+
+/// The water (fishing.ts, passage.ts, liner.rs): the net beside a jetty, sand from the beach, a boat's hatch loaded and
+/// unloaded to the full, rowing between the jetties of an island and sailing to another, then the large ship: the
+/// timetable, waiting for it, boarding with the fare, refused aboard, and landing by the intent the garden job sends.
+#[test]
+fn on_the_water() {
+	let mut w = Walk::new("on_the_water", 56, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (12.0, 9.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (6.0, 8.0), true, false);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	for (p, k) in [("netz", 1), ("ruderboot", 1), ("segelboot", 1), ("spaten", 1), ("muenze", 5), ("muschel", 25)] { give(&mut w, &a, p, k); }
+	give(&mut w, &b, "muschel", 1);
+	let building = |id: &str, room: &str, x: f64, y: f64| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => "steg", "name" => "Steg", "room" => room, "x" => x, "y" => y, "w" => 2.0, "h" => 1.0, "owner" => "c-walk9", "ownerName" => "Wanderer9", "accountId" => "a-walk9", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	w.write(building("st-1", "graue-bucht", 5.0, 7.0));
+	w.write(building("st-2", "klippenpfad", 10.0, 6.0));
+	w.write(building("st-3", "moewenfels-strand", 11.0, 7.0));
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| -> String {
+		step += 1;
+		at.set(at.get() + 7_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r.clone());
+		r
+	};
+	let rest = 15.0 * 60_000.0;
+	for (who, line) in [(&a, "wirf netz"), (&a, "wirf ball"), (&a, "luke"), (&b, "luke"), (&a, "luke lade muschel"), (&b, "rudere"), (&a, "rudere"), (&a, "segle"), (&a, "schaufle"), (&b, "wirf netz"), (&b, "schaufle")] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 1, "graue-bucht", 5.0, 8.0);
+	run(&mut w, &a, "wirf das netz", 0.0);
+	run(&mut w, &a, "wirf netz", 0.0);
+	for _ in 0..4 { run(&mut w, &a, "wirf netz", rest); }
+	run(&mut w, &a, "schaufle", rest);
+	run(&mut w, &a, "schaufle", 0.0);
+	for (who, line) in [
+		(&a, "luke"), (&a, "luke lade"), (&a, "luke hüpfe"), (&a, "luke lade 3 muschel"), (&a, "luke lade gibtsnicht"), (&a, "luke lade segelboot"), (&a, "luke"), (&a, "luke entlade 2 muschel"), (&a, "luke entlade gibtsnicht"),
+		(&a, "luke lade alle"), (&a, "luke lade muschel"), (&a, "luke"), (&a, "luke entlade"), (&a, "luke entlade alle"), (&a, "luke lade 4 muschel"),
+		(&a, "rudere"), (&a, "rudere nirgendwo"), (&a, "rudere klippenpfad"), (&a, "schaufle"), (&a, "rudere"), (&a, "rudere graue bucht"),
+		(&a, "segle"), (&a, "segle atlantis"), (&a, "segle möwenfels"),
+	] { run(&mut w, who, line, 0.0); }
+	run(&mut w, &a, "segle möwenfels", rest);
+	run(&mut w, &a, "luke", 0.0);
+	run(&mut w, &a, "segle graue insel", rest);
+	// the large ship
+	for (who, line) in [(&a, "fahrplan"), (&a, "einschiffen möwenfels")] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 1, "graue-bucht", 10.0, 8.0);
+	let mut boarded = false;
+	for _ in 0..60 {
+		run(&mut w, &a, "fahrplan", 0.0);
+		if run(&mut w, &a, "einschiffen gibtsnicht", 0.0) == "ran" { break; }
+		if run(&mut w, &a, "einschiffen tangriff", 0.0) == "ran" { boarded = true; break; }
+		run(&mut w, &a, "look", 25.0 * 60_000.0);
+	}
+	assert!(boarded, "the ship never lay in the bay");
+	for line in ["look", "schaufle", "west", "fahrplan", "ausschiffen", "ausschiffen nächster"] { run(&mut w, &a, line, 0.0); }
+	let mut landed = false;
+	for _ in 0..60 {
+		run(&mut w, &b, "look", 25.0 * 60_000.0);
+		w.tick("garden");
+		run(&mut w, &a, "look", 0.0);
+		if w.where_is(&a).0 != "graue-bucht" { landed = true; break; }
+	}
+	assert!(landed, "never landed");
+	for line in ["ausschiffen", "fahrplan", "inventory"] { run(&mut w, &a, line, 0.0); }
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 20 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
+}

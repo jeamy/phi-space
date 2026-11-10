@@ -13,7 +13,7 @@
 //      accounts write them (server/accounts.ts; given whole, so neither side draws from the source), a Session when online
 //      | {"op": "write", "entry": {...}, "lease"?: ms}: an entry written as it is (the state a walk needs: a Spot, an Offer)
 //      | {"op": "take", "template": {...}}: one entry taken away (true when there was one)
-//      | {"op": "call", "fn": "settlementTick" | "epochTick" | "motionTick" | "stormRaisesWind" | "stormTurnsMills" | "showTick" | "loanTick" | "gardenTick" | "fieldTick" | "stormFillsBarrels" | "wildTick", "room"?}: one tick of a job
+//      | {"op": "call", "fn": "settlementTick" | "epochTick" | "motionTick" | "stormRaisesWind" | "stormTurnsMills" | "showTick" | "loanTick" | "gardenTick" | "fieldTick" | "stormFillsBarrels" | "wildTick" | "cartTick", "room"?}: one tick of a job
 //      alone, in stableTerrain on spatialWorld as the job runs it; what it returned
 //      | {"op": "cmd", "charId", "intentId", "line", "step"?, "asked"?, "lang"?}: an Intent as the gateway (or the model
 //      process, with `asked`) writes it, then the character's
@@ -48,6 +48,8 @@ const { growthTick } = await from("server/engine/commands/growth.ts");
 const { gardenTick, stormFillsBarrels } = await from("server/engine/commands/garden.ts");
 const { fieldTick } = await from("server/engine/commands/field.ts");
 const { wildTick } = await from("server/engine/commands/wild.ts");
+const { cartTick } = await from("server/engine/commands/cart.ts");
+const { passageTick } = await from("server/engine/commands/passage.ts");
 const { seasonTick } = await from("server/engine/clock.ts");
 const { byPeoplesPace } = await from("server/engine/clock.ts");
 const { execute, CommandError } = await from("server/engine/commands.ts");
@@ -149,6 +151,7 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 				orders: job((live) => ordersTick(space, live)),
 				market: job((live) => marketTick(space, live)),
 				wind: job(async (live) => { if (process.env.SPACES_MMO_WIND !== "0") await windTick(space, live, msgLeaseMs); }),
+				garden: job(async (live) => { await gardenTick(space, live); await fieldTick(space, live, msgLeaseMs); await cartTick(space, live, msgLeaseMs); await passageTick(space, msgLeaseMs); }),
 				wild: job(async (live) => { await wildTick(space, live, msgLeaseMs); }),
 				epoch: async () => {
 					await job(async (live) => { await epochTick(space, live, msgLeaseMs); await settlementTick(space, live, msgLeaseMs); await motionTick(space, live, msgLeaseMs); await showTick(space, live, msgLeaseMs); await loanTick(space, live, msgLeaseMs); await seasonTick(space, live, msgLeaseMs); })();
@@ -194,6 +197,7 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 				fieldTick: (live) => fieldTick(space, live, msgLeaseMs),
 				stormFillsBarrels: (live) => stormFillsBarrels(space, live, line.room ?? null),
 				wildTick: (live) => wildTick(space, live, msgLeaseMs),
+				cartTick: (live) => cartTick(space, live, msgLeaseMs),
 			};
 			const call = calls[String(line.fn)];
 			if (!call) throw new Error(`unknown call ${String(line.fn)}`);

@@ -4,7 +4,7 @@
 use std::rc::Rc;
 
 use phi_json::{obj, Json};
-use phi_spaces_client::{peek, read_existing, Error as SpaceError, Opts, RemoteSpace};
+use phi_spaces_client::{peek, read_existing, take_existing, Error as SpaceError, Opts, RemoteSpace};
 
 pub use phi_json::FOREVER;
 pub const NO_WAIT: f64 = 0.0;
@@ -122,6 +122,8 @@ impl Space {
 
 	/// `readExisting`: null means gone; a match held for all of `wait_ms` is `Error::StillHeld`.
 	pub async fn read_existing(&self, tmpl: &Json, txn: Option<&str>, wait_ms: f64) -> Result<Option<Json>> { Ok(some(read_existing(&self.0, tmpl, wait_ms, txn).await?)) }
+	/// `takeExisting`: as `read_existing`, taking it.
+	pub async fn take_existing(&self, tmpl: &Json, txn: Option<&str>, wait_ms: f64) -> Result<Option<Json>> { Ok(some(take_existing(&self.0, tmpl, wait_ms, txn).await?)) }
 }
 
 /// `{ type, fields }`.
