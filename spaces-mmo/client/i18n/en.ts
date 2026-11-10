@@ -2523,7 +2523,7 @@ export const EN: Record<string, string> = {
 	"Straßen planen registrierte Spieler; registriere dich.": "Registered players plan roads; register.",
 	"Wohin? Von hier geht es nach {0}: „straße plane <ort>“.": "Where to? From here the ways lead to {0}: „road plane <place>“.",
 	"Zwischen hier und {0} ist kein freier Weg für eine Straße; etwas ist zugebaut.": "There is no free way for a road between here and {0}; something is built in the way.",
-	"straße – die Straßen hier; straße plane <ort> (eine Straße von hier zur Mitte des Nachbarorts planen), straße ja|nein [ort] (als Siedler abstimmen), straße repariere": "road – the roads here; road plane <place> (plan a road from here to the middle of the next place), road ja|nein [place] (vote as a settler), road repariere",
+	"straße – die Straßen hier; straße plane <ort> (eine Straße von hier zur Mitte des Nachbarorts planen), straße ja|nein [ort] (als Siedler abstimmen, einmal), straße repariere": "road – the roads here; road plane <place> (plan a road from here to the middle of the next place), road ja|nein [place] (vote as a settler, once), road repariere",
 	"{0} bessert die Straße zwischen {1} und {2} aus; sie hält wieder {3}.": "{0} mends the road between {1} and {2}; it lasts {3} again.",
 	"{0} hat die Straße genug. Es fehlen {1}.": "The road has enough {0}. It lacks {1}.",
 	"{0} pflastert an der Straße zwischen {1} und {2} ({3}/{4}).": "{0} paves the road between {1} and {2} ({3}/{4}).",

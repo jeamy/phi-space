@@ -70,11 +70,11 @@ export type SettlementFields = { settlementId: string; name: string; nameKey: st
  *  (one road per pair). */
 export type RouteFields = { routeId: string; pair: string; island: string; rooms: [string, string]; names: [string, string];
 	cells: Array<{ room: string; x: number; y: number }>; state: "vote" | "build" | "built"; planner: string; plannerName: string; accountId: string;
-	voters: string[]; yes: string[]; no: string[]; voteUntil: number; needs: Array<{ proto: string; name: string; count: number; have: number }>;
+	voters: string[]; yes: string[]; no: string[]; /** the figures that voted (a vote is cast once; the page hides it from them) */ votedBy?: string[]; voteUntil: number; needs: Array<{ proto: string; name: string; count: number; have: number }>;
 	work: number; workNeed: number; by: Record<string, number>; untilWorldMs: number; at: number; points: number };
 /** A road's part in one room, what a page draws (written with its Route): its cells in order from the door or to it,
  *  how many are paved, its state and what it lacks. */
-export type RoadFields = { roadId: string; routeId: string; room: string; to: string; name: string; cells: Array<{ x: number; y: number }>; paved: number; state: RouteFields["state"]; missing: string; votes: string };
+export type RoadFields = { roadId: string; routeId: string; room: string; to: string; name: string; cells: Array<{ x: number; y: number }>; paved: number; state: RouteFields["state"]; missing: string; votes: string; votedBy?: string[] };
 /** A festival of a settlement, one per room (`unique`), ending at `endsWorldMs`. */
 /** The wind of an island: an index into `WorldDef.wind.names`. */
 /** What a room grew by (engine/commands/growth.ts), so that a new version of the world file keeps it. */

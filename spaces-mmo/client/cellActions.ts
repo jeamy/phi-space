@@ -175,7 +175,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.location !== room || !(o.runs?.[0] ?? []).some((c) => c.x === at.x && c.y === at.y)) continue;
 			const to = o.name.replace(/^Straße nach /, ""), near = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 2;
 			entries.push({ label: "Straßen ansehen", line: "straße" });
-			if (o.roadState === "vote" && !guest) entries.push({ label: `Für die Straße nach ${to} stimmen`, line: `straße ja ${to}` }, { label: `Gegen die Straße nach ${to} stimmen`, line: `straße nein ${to}` });
+			if (o.roadState === "vote" && !guest && !(o.votedIds ?? []).includes(me)) entries.push({ label: `Für die Straße nach ${to} stimmen`, line: `straße ja ${to}` }, { label: `Gegen die Straße nach ${to} stimmen`, line: `straße nein ${to}` });
 			if (o.roadState === "build" && near) {
 				const carried = new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me).map((i) => i.name));
 				for (const n of (o.missing ?? "").split(",").map((p) => p.trim().replace(/^\d+\s+/, "")).filter((n) => n && carried.has(n))) entries.push({ label: `${n} an die Straße liefern`, line: `liefere ${n} an die straße` });

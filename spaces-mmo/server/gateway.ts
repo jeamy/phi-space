@@ -539,7 +539,7 @@ export class Gateway {
 		else if (type === "Road") {
 			// a road's part in this room (engine/commands/road.ts): its cells in order, how many are paved; walked over
 			const r = fields as unknown as RoadFields, first = r.cells[0] ?? { x: 0, y: 0 };
-			this.#setObj(id, { id: r.roadId, kind: "road", name: r.name, location: r.room, x: first.x, y: first.y, through: true, runs: [r.cells], paved: r.paved, roadState: r.state, roadTo: r.to, ...(r.state === "build" && r.missing ? { missing: r.missing } : {}), ...(r.state === "vote" ? { votes: r.votes } : {}) });
+			this.#setObj(id, { id: r.roadId, kind: "road", name: r.name, location: r.room, x: first.x, y: first.y, through: true, runs: [r.cells], paved: r.paved, roadState: r.state, roadTo: r.to, ...(r.state === "build" && r.missing ? { missing: r.missing } : {}), ...(r.state === "vote" && r.votedBy?.length ? { votedIds: r.votedBy } : {}), ...(r.state === "vote" ? { votes: r.votes } : {}) });
 			this.#atlasChanged();
 		}
 		else if (type === "Ruin") {

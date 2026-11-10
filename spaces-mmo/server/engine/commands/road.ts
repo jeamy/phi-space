@@ -101,7 +101,7 @@ async function roadSave(space: SpaceLike, txn: string, r: RouteFields): Promise<
 	let before = 0;
 	for (const room of r.rooms) {
 		const cells = r.cells.filter((c) => c.room === room).map((c) => ({ x: c.x, y: c.y }));
-		const part: RoadFields = { roadId: `${r.routeId}:${room}`, routeId: r.routeId, room, to: r.rooms[0] === room ? r.rooms[1] : r.rooms[0], name: nameOfRoute(r, room), cells, paved: Math.max(0, Math.min(cells.length, paved - before)), state: r.state, missing, votes };
+		const part: RoadFields = { roadId: `${r.routeId}:${room}`, routeId: r.routeId, room, to: r.rooms[0] === room ? r.rooms[1] : r.rooms[0], name: nameOfRoute(r, room), cells, paved: Math.max(0, Math.min(cells.length, paved - before)), state: r.state, missing, votes, ...(r.state === "vote" && r.votedBy?.length ? { votedBy: r.votedBy } : {}) };
 		await space.write({ type: "Road", fields: part as never }, txn, FOREVER);
 		before += cells.length;
 	}
@@ -255,7 +255,7 @@ async function plan(c: CommandCtx, word: string): Promise<void> {
 	const r: RouteFields = {
 		routeId: `road-${randomBytes(6).toString("hex")}`, pair, island, rooms: [here.roomId, there.roomId], names: [here.name, there.name], cells,
 		state: others.length ? "vote" : "build", planner: c.actor.charId, plannerName: c.actor.name, accountId: me,
-		voters, yes: voters.includes(me) ? [me] : [], no: [], voteUntil: now + def.voteWorldMs,
+		voters, yes: voters.includes(me) ? [me] : [], no: [], ...(voters.includes(me) ? { votedBy: [c.actor.charId] } : {}), voteUntil: now + def.voteWorldMs,
 		needs: [{ proto: def.stone, name: stone, count: Math.ceil(cells.length / def.stonePer), have: 0 }, ...(def.wood ? [{ proto: def.woodProto, name: wood, count: def.wood, have: 0 }] : [])],
 		work: 0, workNeed: Math.max(def.minWork, Math.ceil(cells.length / def.workPer)), by: {}, untilWorldMs: others.length ? now + def.voteWorldMs : now + def.siteWorldMs, at: now, points: def.points,
 	};
@@ -277,8 +277,10 @@ async function vote(c: CommandCtx, yes: boolean, word: string): Promise<void> {
 	if (!e) throw new CommandError("Die Abstimmung ist gerade vorbei; „straße“ zeigt, wie es steht.");
 	const r = fieldsOf<RouteFields>(e), me = c.account?.accountId ?? "";
 	if (!r.voters.includes(me)) throw new CommandError(`Über diese Straße stimmen die Siedler von ${r.names[0]} und ${r.names[1]} ab (wer dort eine Hütte hat oder als Siedler aufgenommen ist).`);
-	r.yes = r.yes.filter((x) => x !== me); r.no = r.no.filter((x) => x !== me);
+	// one vote each, and it stands
+	if (r.yes.includes(me) || r.no.includes(me)) throw new CommandError(`Du hast schon ${r.yes.includes(me) ? "für" : "gegen"} diese Straße gestimmt; jeder stimmt nur einmal (${votesOf(r)}).`);
 	(yes ? r.yes : r.no).push(me);
+	r.votedBy = [...(r.votedBy ?? []), c.actor.charId];
 	await msg(c, c.actor.charId, "info", `Du stimmst ${yes ? "für" : "gegen"} die Straße zwischen ${r.names[0]} und ${r.names[1]} (${votesOf(r)}).`);
 	const now = await decayNowOf(c.space, c.txn);
 	if (!(await decide(c.space, c.world, c.txn!, r, now, true, (room, text) => msg(c, "*", "world", text, { room })))) await roadSave(c.space, c.txn!, r);
@@ -315,7 +317,7 @@ async function show(c: CommandCtx): Promise<void> {
 
 export const strasse: Command = {
 	key: "straße", aliases: ["strasse", "straßen", "strassen", "road", "roads"],
-	help: "straße – die Straßen hier; straße plane <ort> (eine Straße von hier zur Mitte des Nachbarorts planen), straße ja|nein [ort] (als Siedler abstimmen), straße repariere",
+	help: "straße – die Straßen hier; straße plane <ort> (eine Straße von hier zur Mitte des Nachbarorts planen), straße ja|nein [ort] (als Siedler abstimmen, einmal), straße repariere",
 	async func(c, arg) {
 		if (!defOf(c.world)) throw new CommandError("In dieser Welt gibt es keine Straßen.");
 		const m = /^(\S+)\s*(.*)$/.exec(arg.trim());

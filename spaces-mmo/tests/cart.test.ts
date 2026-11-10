@@ -69,6 +69,9 @@ test("a road is planned from plaza to plaza, the settlers of both rooms vote, it
 		// nothing goes on the trace
 		const grass = here.find((q) => w.rooms.find((rr) => rr.roomId === c.room)!.ground[q.y]![q.x] !== ":") ?? here[0]!;
 		assert.match(await does(a, `bau regentonne ${grass.x} ${grass.y}`, "passt keine"), /Straße|Weg/);
+		// one vote each, and it stands: the planner voted yes when planning
+		assert.match(await does(a, "straße nein", "nur einmal"), /Du hast schon für diese Straße gestimmt; jeder stimmt nur einmal/);
+		assert.deepEqual((await route())!.votedBy, [c.charId], "the page hides the vote from who cast it");
 		// the guest has no vote; Mia's yes decides it
 		assert.match(await does(g, "straße nein", "Siedler"), /stimmen die Siedler/);
 		assert.match(await does(b, "straße ja", "beschlossen"), /Jetzt wird gebaut/);
