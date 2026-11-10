@@ -76,7 +76,7 @@ const schaufle: Command = {
 
 const segle: Command = {
 	key: "segle", aliases: ["segeln", "sail"],
-	help: "segle <insel> – mit einem Segelboot vom Steg neben dir zu einer anderen Insel; „segle“ allein zeigt, wohin",
+	help: "segle <insel> – mit einem Segelboot vom Steg neben dir zu einer anderen Insel (danach ruhst du eine Weile); „segle“ allein zeigt, wohin",
 	async func(c, arg) {
 		const d = c.world.boat, plan = c.world.fishing?.plan;
 		if (!d?.sail || !plan) throw new CommandError("In dieser Welt gibt es keine Segelboote.");

@@ -388,7 +388,7 @@ export const bau: Command = {
 
 const liefere: Command = {
 	key: "liefere", aliases: ["deliver"],
-	help: "liefere [n] <ding> – an die Baustelle neben dir (bis zwei Schritte) liefern, was sie braucht (zu viel bleibt bei dir)",
+	help: "liefere [n] <ding> [an straße] – an die Baustelle oder Straßenbaustelle neben dir (bis zwei Schritte) liefern, was sie braucht (zu viel bleibt bei dir)",
 	async func(c, arg) {
 		const m = /^(?:(\d+)\s+)?(.+?)(?:\s+(?:an|zur|zu|to|für|fuer)\s+(?:die\s+|der\s+)?(.+))?$/i.exec(arg.trim());
 		if (!m) throw new NotUnderstood("Was lieferst du? Zum Beispiel: liefere 3 treibholz");
@@ -435,7 +435,7 @@ export async function tire(c: CommandCtx, now: number, rest: Awaited<ReturnType<
 
 const arbeite: Command = {
 	key: "arbeite", aliases: ["work"],
-	help: "arbeite – an der Baustelle neben dir (bis zwei Schritte) mitarbeiten (danach ruhst du eine Weile)",
+	help: "arbeite [an der straße] – an der Baustelle oder Straße neben dir (bis zwei Schritte) mitarbeiten (danach ruhst du eine Weile)",
 	async func(c, arg) {
 		await needRank(c, "helfer", "Mitarbeiten");
 		const toRoad = /^(?:an\s+der\s+)?(?:straße|strasse|road)$/i.test(arg.trim());
@@ -562,7 +562,7 @@ const lager: Command = {
 
 const truhe: Command = {
 	key: "truhe", aliases: ["kiste", "chest"],
-	help: "truhe – was in der Truhe deines Baus neben dir liegt (verstaue <ding>, entnimm <ding>)",
+	help: "truhe – was in der Truhe deines Baus (oder im Lagerhaus) neben dir liegt; hineinlegen von überall: verstaue [n|alle] <ding> [in <truhe>]; herausnehmen nur daneben: entnimm [n|alle] <ding>",
 	async func(c) {
 		const b = await chestHere(c);
 		await putBack(c, b);
@@ -704,7 +704,7 @@ const verstaue: Command = {
 };
 const entnimm: Command = {
 	key: "entnimm", aliases: ["hole", "retrieve"],
-	help: "entnimm [n|alle] <ding> – etwas aus der Truhe deines Baus neben dir nehmen",
+	help: "entnimm [n|alle] <ding> – etwas aus der Truhe deines Baus oder aus dem Lagerhaus neben dir nehmen (im Lager: Tagesmenge und Steuer der Siedlung)",
 	async func(c, arg) {
 		// „entnimm 5 käse aus der truhe“ (also mistyped „true“): the place is the chest beside one anyway
 		const { n, name } = amount(arg.replace(/\s+aus\s+(?:der\s+|dem\s+)?(?:truhe|true|kiste|lager)\b.*$/i, ""));
@@ -818,7 +818,7 @@ const abriss: Command = {
 
 const nachlass: Command = {
 	key: "nachlass", aliases: ["estate"],
-	help: "nachlass – was in der Truhe eines verfallenen Baus von dir lag, hier abholen",
+	help: "nachlass – hier abholen, was auf dich wartet: die Truhe eines verfallenen oder abgewählten Baus, liegengebliebene Fracht, ein Festpreis",
 	async func(c) {
 		const mine = (await c.space.readAll({ type: "Estate", fields: { room: c.actor.room } })).filter((e) => e.fields.accountId === c.account?.accountId);
 		if (!mine.length) throw new CommandError("Hier liegt kein Nachlass von dir.");

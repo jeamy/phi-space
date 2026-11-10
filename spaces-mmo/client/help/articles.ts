@@ -515,7 +515,7 @@ Aus Korn wird Mehl, aus Mehl wird Brot. Ausführlich unter [Mühle und Backhaus]
 | --- | --- | --- |
 | \`mahle [n oder alle] <korn>\` | \`mühle\`, \`grind\` | An einer Windmühle neben dir Korn zu Mehl mahlen lassen; \`mahle\` allein: wie lange sie noch mahlt |
 | \`abholen\` | \`pickup\` | Dein fertiges Mehl an der Mühle abholen |
-| \`backe [brot]\` | \`bake\` | Am Backhaus neben dir Brot backen (2 Mehl, 1 Kanne Wasser, 1 Treibholz) |
+| \`backe [gericht]\` | \`bake\` | Am Backhaus Brot oder Kuchen backen, an der Hütte kochen (\`craft hier\` zeigt, was es braucht) |
 
 ## Tiere {#animalcmds}
 
@@ -702,7 +702,7 @@ Grain becomes flour, flour becomes bread. In detail under [Mill and bakery](help
 | --- | --- | --- |
 | \`mahle [n or alle] <grain>\` | \`mühle\`, \`grind\` | Have grain ground to flour at a windmill beside you; \`mahle\` alone: how long it still grinds |
 | \`abholen\` | \`pickup\` | Fetch your flour at the mill |
-| \`backe [brot]\` | \`bake\` | Bake bread at a bakery beside you (2 flour, 1 can of water, 1 driftwood) |
+| \`backe [gericht]\` | \`bake\` | Bake bread or cake at a bakehouse, cook at a hut (\`craft hier\` shows what it needs) |
 
 ## Animals {#animalcmds}
 

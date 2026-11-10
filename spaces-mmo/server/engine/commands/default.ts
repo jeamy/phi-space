@@ -403,7 +403,7 @@ export function helpCommand(commands: () => Command[]): Command {
 }
 
 const put: Command = {
-	key: "put", aliases: ["nachlegen", "wirf", "feed"],
+	key: "put", aliases: ["nachlegen", "feed"],
 	help: "put [anzahl|alle] <ding> in <feuer> – Brennholz in ein Leuchtfeuer neben dir legen (auch: lege 3 hölzer ins feuer)",
 	async func(c, arg) {
 		const m = /^(.+?)\s+(?:in|ins|into)\s+(.+)$/i.exec(arg);

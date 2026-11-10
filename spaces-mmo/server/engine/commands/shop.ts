@@ -141,7 +141,7 @@ const laden: Command = {
 
 const kredit: Command = {
 	key: "kredit", aliases: ["leihe", "credit", "loan"],
-	help: "kredit <n> gegen <ding> – am Kontor neben dir Münzen gegen ein Pfand leihen; „tilge“ zahlt sie mit Zinsen zurück, sonst gehört das Pfand dem Kontor",
+	help: "kredit <n> gegen <ding> – am Kontor neben dir Münzen gegen ein Pfand leihen; „tilge“ zahlt sie mit Zinsen zurück, sonst gehört das Pfand dem Kontor; „kredit“ allein zeigt deine Schuld",
 	async func(c, arg) {
 		const d = c.world.bank;
 		if (!d) throw new CommandError("In dieser Welt gibt es keine Kontore.");
@@ -170,7 +170,7 @@ const kredit: Command = {
 
 const tilge: Command = {
 	key: "tilge", aliases: ["tilgen", "repay"],
-	help: "tilge – am Kontor deinen Kredit zurückzahlen und das Pfand auslösen",
+	help: "tilge – am Kontor, bei dem du geliehen hast, den Kredit mit Zinsen zurückzahlen und das Pfand auslösen",
 	async func(c) {
 		const d = c.world.bank;
 		if (!d) throw new CommandError("In dieser Welt gibt es keine Kontore.");

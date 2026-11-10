@@ -235,7 +235,7 @@ const pflanze: Command = {
 
 const giesse: Command = {
 	key: "gieße", aliases: ["giesse", "gießen", "giessen", "gieß", "giess", "gies", "water"],
-	help: "gieße – ein Beet neben dir gießen, deins oder eins, dessen Pate du bist (braucht eine Kanne Wasser aus der Regentonne)",
+	help: "gieße – ein Beet neben dir gießen: deins, eins als Pate oder das Gemeinschaftsbeet (braucht eine Kanne Wasser aus der Regentonne)",
 	async func(c) {
 		const g = garden(c);
 		const can = (await inventory(c)).find((i) => i.f.proto === g.can);
@@ -254,7 +254,7 @@ const giesse: Command = {
 
 const jaete: Command = {
 	key: "jäte", aliases: ["jaete", "jäten", "jaeten", "jät", "jaet", "weed"],
-	help: "jäte – Unkraut und Welkes aus einem Beet neben dir ziehen (deins oder als Pate)",
+	help: "jäte – Unkraut und Welkes aus einem Beet neben dir ziehen (deins, als Pate oder das Gemeinschaftsbeet)",
 	async func(c) {
 		const g = garden(c);
 		const b = await tendedBed(c);
@@ -324,7 +324,7 @@ async function giveOwn(c: CommandCtx, what: Array<{ proto: string; count: number
 
 const ernte: Command = {
 	key: "ernte", aliases: ["ernten", "pflücke", "pfluecke", "harvest"],
-	help: "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins oder als Pate; dazu gibt es Samen); an einem reifen Acker (ernte flur, wenn auch ein Beet nah ist) ein Arbeitspunkt der Ernte und dein Anteil",
+	help: "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins, als Pate oder vom Gemeinschaftsbeet ein Teil; dazu gibt es Samen); an einem reifen Acker (ernte flur, wenn auch ein Beet nah ist) ein Arbeitspunkt der Ernte und dein Anteil",
 	async func(c, arg) {
 		const g = garden(c);
 		if (/^(?:die\s+|der\s+|das\s+)?(?:flur|acker|feld|field)$/i.test(arg.trim())) {

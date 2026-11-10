@@ -40,7 +40,7 @@ const ranked = (xs: ShowEntryFields[]) => [...xs].sort((a, b) => b.score - a.sco
 
 const fest: Command = {
 	key: "fest", aliases: ["festival", "feier"],
-	help: "fest blumen|ernte – als Siedler an einem Park eine Blumenschau oder ein Erntefest eröffnen; „fest“ allein zeigt das laufende",
+	help: "fest blumen|ernte|regatta – als Siedler am Park eine Blumenschau oder ein Erntefest, am Steg eine Regatta eröffnen; „fest“ allein zeigt das laufende",
 	async func(c, arg) {
 		const d = defOf(c), word = arg.trim().toLowerCase();
 		const open = await peek(c.space, { type: "Show", fields: { room: c.actor.room } }, { txn: c.txn });
@@ -69,8 +69,8 @@ const fest: Command = {
 };
 
 const zeige: Command = {
-	key: "zeige", aliases: ["ausstellen", "exhibit"],
-	help: "zeige <ding> – am Park eine Blume zur Blumenschau oder Ernte zum Erntefest geben; was gezeigt ist, bleibt beim Fest",
+	key: "zeige", aliases: ["exhibit"],
+	help: "zeige <ding> – am Park eine Blume zur Blumenschau oder Ernte zum Erntefest geben (bleibt beim Fest); am Steg dein Boot zur Regatta melden (es bleibt deins)",
 	async func(c, arg) {
 		const d = defOf(c), account = members(c);
 		const open = await peek(c.space, { type: "Show", fields: { room: c.actor.room } }, { txn: c.txn });

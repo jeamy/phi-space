@@ -175,7 +175,7 @@ const flur: Command = {
 
 const bestelle: Command = {
 	key: "bestelle", aliases: ["bestellen", "pflüge", "pfluege", "pflügen", "pfluegen", "plough", "plow"],
-	help: "bestelle [frucht] – den Acker neben dir bestellen: wer sie angelegt hat, wählt die Frucht; dann bringt jeder Saatgut und einen Arbeitspunkt (danach ruhst du eine Weile)",
+	help: "bestelle [frucht] – den Acker neben dir bestellen: wer sie angelegt hat, wählt die Frucht; dann bringen er (bei offenem Acker jeder) Saatgut und Arbeit (danach ruhst du eine Weile)",
 	async func(c, arg) {
 		const d = fieldDef(c);
 		const said = arg.trim().replace(/^(?:mit\s+)?/i, "");

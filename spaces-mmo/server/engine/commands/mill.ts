@@ -38,7 +38,7 @@ const grainNames = (c: CommandCtx, m: MillDef) => m.grinds.map((g) => protoName(
 
 const mahle: Command = {
 	key: "mahle", aliases: ["mahlen", "grind", "mühle", "muehle", "windmühle", "windmuehle", "mill"],
-	help: "mahle [n|alle] <korn> – an einer Windmühle neben dir Korn zu Mehl mahlen lassen (mahle allein: wie lange sie zu tun hat)",
+	help: "mahle [n|alle] <korn|knochen> – an einer Windmühle neben dir Korn zu Mehl, Knochen zu Knochenmehl mahlen lassen (bis 12 auf einmal; mahle allein: wie lange sie zu tun hat)",
 	async func(c, arg) {
 		const m = millOf(c);
 		const now = await worldNowOf(c.space, c.txn);
@@ -78,7 +78,7 @@ const mahle: Command = {
 
 const abholen: Command = {
 	key: "abholen", aliases: ["abhol", "hol-ab", "pickup"],
-	help: "abholen – dein gemahlenes Mehl an der Mühle neben dir (bis zwei Schritte) abholen",
+	help: "abholen – was die Mühle neben dir (bis zwei Schritte) für dich gemahlen hat, abholen",
 	async func(c) {
 		const m = millOf(c);
 		const now = await worldNowOf(c.space, c.txn);
@@ -102,7 +102,7 @@ const abholen: Command = {
 // the oven of a bakery: its recipes are made with craft beside it; "backe" names them as one says it
 const backe: Command = {
 	key: "backe", aliases: ["backen", "bake"],
-	help: "backe [brot] – am Backhaus neben dir backen (ein Rezept am Bau, „craft“ zeigt, was es braucht)",
+	help: "backe [brot|kuchen|…] – neben Backhaus oder Hütte backen und kochen, was dort gemacht wird („craft hier“ zeigt, was es braucht)",
 	async func(c, arg) {
 		// what an oven makes: recipes at a building that give food, those beside the actor first (not the loom's cloth)
 		const food = c.world.recipes.filter((r) => r.at && c.world.prototypes.find((p) => p.key === r.makes)?.typeclass === "Produce");

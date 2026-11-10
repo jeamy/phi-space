@@ -76,7 +76,7 @@ const fedText = (h: HerdFields | undefined, now: number) => !h || h.fedUntilWorl
 
 const stall: Command = {
 	key: "stall", aliases: ["ställe", "staelle", "gehege", "coop", "pen"],
-	help: "stall – die Tiere im Hühnerstall oder Gehege neben dir: wie viele, ob sie satt sind, was bereitliegt",
+	help: "stall – die Tiere im Hühnerstall, Gehege oder Bienenstock neben dir: wie viele, ob sie satt sind, was bereitliegt",
 	async func(c) {
 		const d = animalsOf(c);
 		const h0 = await houseHere(c, d, (h) => !!h.herd), { b, k, n, max, now } = h0;
@@ -91,7 +91,7 @@ const stall: Command = {
 
 const einstallen: Command = {
 	key: "einstallen", aliases: ["stalle", "einstellen", "stable"],
-	help: "einstallen <tier> – ein Tier, das du trägst, in deinen Hühnerstall oder dein Gehege neben dir bringen; einen Hund oder eine Katze an einen deiner Bauten, wo sie wachen",
+	help: "einstallen <tier> – ein Tier, das du trägst, in deinen Hühnerstall, dein Gehege oder deinen Bienenstock neben dir bringen; einen Hund oder eine Katze an einen deiner Bauten, wo sie wachen",
 	async func(c, arg) {
 		const d = animalsOf(c);
 		const carried = (await inventory(c)).filter((i) => d.kinds.some((k) => k.proto === i.f.proto || k.young === i.f.proto) || keepers(c).some((k) => k.proto === i.f.proto));
