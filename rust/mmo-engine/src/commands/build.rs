@@ -30,8 +30,8 @@ use crate::source::{hex, random_bytes, time_now};
 use crate::space::{fields, not_understood, refuse, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 use crate::world::walkable;
 
-const ARTICLE: &str = r"^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+";
-fn no_article(s: &str) -> String { js::re(ARTICLE, "i").replace(s, "") }
+pub const ARTICLE: &str = r"^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+";
+pub fn no_article(s: &str) -> String { js::re(ARTICLE, "i").replace(s, "") }
 
 /// A rectangle of cells.
 #[derive(Debug, Clone, Copy, PartialEq)]

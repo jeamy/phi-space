@@ -664,3 +664,71 @@ fn settling() {
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 30 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
 	assert!(w.entries_with(r#""Settlement""#) >= 1 && w.entries_with(r#""Epoch""#) >= 1, "nothing was founded or counted");
 }
+
+/// The windmill (mill.ts): grinding with its refusals (no mill, not grain, nothing carried, too many sacks, none left), loads
+/// that queue one after the other, a gale that grinds faster, a storm surge that grinds ahead on its island only, fetching
+/// from too far, too early, in part and in whole, and the oven's recipes named with backe.
+#[test]
+fn milling() {
+	let mut w = Walk::new("milling", 37, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (7.0, 13.0), true, false);
+	let g = w.player(3, "graue-bucht", (12.0, 8.0), true);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	give(&mut w, &a, "weizen", 15);
+	give(&mut w, &a, "gerste", 2);
+	give(&mut w, &a, "knochen", 1);
+	give(&mut w, &a, "treibholz", 2);
+	give(&mut w, &a, "wasserkanne", 1);
+	give(&mut w, &b, "weizen", 3);
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| {
+		step += 1;
+		at.set(at.get() + 11_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	let building = |id: &str, plan: &str, name: &str, room: &str, x: f64, y: f64| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => plan, "name" => name, "room" => room, "x" => x, "y" => y, "w" => 2.0, "h" => 2.0, "owner" => "c-walk9", "ownerName" => "Jemand", "accountId" => "a-walk9", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	for (who, line) in [(&a, "mahle"), (&a, "mahle weizen"), (&a, "abholen"), (&a, "backe"), (&a, "backe kuchen"), (&a, "backe laib")] { run(&mut w, who, line, 0.0); }
+	w.write(building("m-1", "windmuehle", "Windmühle", "graue-bucht", 5.0, 11.0));
+	w.write(building("m-2", "windmuehle", "Windmühle", "duenen", 3.0, 3.0));
+	w.write(building("m-3", "windmuehle", "Windmühle", "kupferhafen-markt", 3.0, 3.0));
+	w.write(obj! { "type" => "MillLoad", "fields" => obj! { "loadId" => "ml-2", "buildId" => "m-2", "room" => "duenen", "x" => 3.0, "y" => 3.0, "w" => 2.0, "h" => 2.0, "charId" => "c-walk9", "name" => "Jemand", "from" => "weizen", "to" => "mehl", "count" => 4.0, "readyWorldMs" => 9e13, "untilWorldMs" => 9e15 } });
+	w.write(obj! { "type" => "MillLoad", "fields" => obj! { "loadId" => "ml-3", "buildId" => "m-3", "room" => "kupferhafen-markt", "x" => 3.0, "y" => 3.0, "w" => 2.0, "h" => 2.0, "charId" => "c-walk9", "name" => "Jemand", "from" => "weizen", "to" => "mehl", "count" => 4.0, "readyWorldMs" => 9e13, "untilWorldMs" => 9e15 } });
+	for (who, line) in [
+		(&g, "mahle"), (&g, "mahle weizen"), (&a, "mahle"), (&a, "mahle treibholz"), (&a, "mahle stein"), (&a, "mahle 3 weizen"), (&a, "mahle"),
+		(&b, "mahle 0 weizen"), (&b, "mühle"), (&b, "mahle das weizen"), (&b, "mahle"), (&a, "abholen"),
+	] { run(&mut w, who, line, 0.0); }
+	w.take(obj! { "type" => "Wind", "fields" => obj! { "island" => "Graue Insel" } });
+	w.write(obj! { "type" => "Wind", "fields" => obj! { "island" => "Graue Insel", "level" => 3.0 } });
+	for (who, line) in [(&a, "mahle 13 weizen"), (&a, "mahle meine gerste"), (&a, "mahle knochen"), (&a, "mahle weizen"), (&a, "mahle")] { run(&mut w, who, line, 0.0); }
+	w.call("stormTurnsMills", Some("graue-bucht"));
+	for (who, line) in [(&a, "mahle"), (&b, "mahle")] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 1, "graue-bucht", 9.0, 14.0);
+	run(&mut w, &a, "abholen", 0.0);
+	stand(&mut w, 1, "graue-bucht", 7.0, 12.0);
+	for (who, line) in [(&a, "abholen"), (&a, "abholen"), (&a, "mahle")] { run(&mut w, who, line, 3_600_000.0); }
+	w.call("stormTurnsMills", Some("klippenpfad"));
+	w.call("stormTurnsMills", None);
+	w.call("stormTurnsMills", Some("werft"));
+	w.call("stormTurnsMills", Some("graue-bucht"));
+	for (who, line) in [(&a, "mahle"), (&b, "abholen"), (&a, "abholen"), (&a, "mahle")] { run(&mut w, who, line, 0.0); }
+	for (who, line) in [(&a, "abholen"), (&a, "abholen"), (&a, "inventory"), (&g, "abholen")] { run(&mut w, who, line, 40_000_000.0); }
+	give(&mut w, &a, "gerste", 2);
+	for (who, line) in [(&a, "mahle 1 gerste"), (&a, "mahle 1 gerste")] { run(&mut w, who, line, 0.0); }
+	run(&mut w, &a, "abholen", 2_400_000.0);
+	run(&mut w, &a, "mahle", 0.0);
+	w.write(building("bh-1", "backhaus", "Backhaus", "graue-bucht", 8.0, 11.0));
+	for (who, line) in [(&b, "backe"), (&a, "backe kuchen"), (&a, "backe das brot"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 10 && said.iter().filter(|r| r.starts_with("refused")).count() > 10, "{said:?}");
+	assert!(w.entries_with("Du holst") >= 1, "nothing was fetched");
+}
