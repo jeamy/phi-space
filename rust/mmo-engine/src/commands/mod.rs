@@ -34,6 +34,7 @@ pub mod townhall;
 pub mod trade;
 pub mod wind;
 pub mod wild;
+pub mod beam;
 pub mod cart;
 pub mod fishing;
 
@@ -137,6 +138,7 @@ pub async fn run(c: &mut Ctx, cmd: &Command, arg: &str, merged: &Merged, exits: 
 		("field", key) => field::run(c, key, arg).await,
 		("animals", key) => animals::run(c, key, arg).await,
 		("wild", key) => wild::run(c, key, arg).await,
+		("beam", key) => beam::run(c, key, arg).await,
 		("cart", key) => cart::run(c, key, arg).await,
 		("fishing", key) => fishing::run(c, key, arg).await,
 		("passage", key) => passage::run(c, key, arg).await,

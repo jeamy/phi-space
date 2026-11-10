@@ -2,8 +2,7 @@
 //! needs and work on it; when nothing is missing it becomes the building, in the same transaction. Its chest, a
 //! settlement's warehouse, repair, demolition and estates.
 //!
-//! Not ported yet: chests in other regions (`c.elsewhere`, the courier) and the sweep's part (`buildSweep`,
-//! `demolishByVote`), which come with regions and the sweep job.
+//! Not ported yet: chests in other regions (`c.elsewhere`, the courier), which come with regions.
 use std::collections::HashSet;
 
 use phi_json::{obj, Json, Object};
@@ -1031,6 +1030,90 @@ pub async fn demolish_by_vote(space: &Space, txn: &str, w: &Json, b: &Json, now:
 		let Some(proto) = resolve_prototype(space, j::s(n, "proto")).await? else { continue };
 		for _ in 0..(j::n(n, "count") / 2.0).floor().max(0.0) as usize { spawn(space, Some(txn), w, &proto, At { location: estate_id.clone(), x: -1.0, y: -1.0, ..Default::default() }, &Json::Null).await?; }
 	}
+	Ok(())
+}
+/// One step of the sweep in a transaction of its own: committed when `run` says so, else aborted.
+async fn in_txn<'a, F, Fut>(space: &'a Space, run: F) -> Result<()> where F: FnOnce(String) -> Fut, Fut: std::future::Future<Output = Result<bool>> + 'a {
+	let txn = space.create_transaction(10_000.0).await?;
+	match run(txn.clone()).await {
+		Ok(true) => space.commit(&txn).await,
+		Ok(false) => space.abort(&txn).await,
+		Err(e) => { let _ = space.abort(&txn).await; Err(e) }
+	}
+}
+/// `Number(e.fields.untilWorldMs)`: NaN when missing.
+fn until_of(e: &Json) -> f64 { fields(e).get("untilWorldMs").map_or(f64::NAN, j::number) }
+fn all_of(es: Vec<Json>) -> Vec<(Json, Json)> { es.into_iter().map(|e| { let f = fields(&e).clone(); (e, f) }).collect() }
+
+/// `buildSweep`: sites without progress, buildings not kept (a ruin, what lay inside an estate), freight nobody fetched,
+/// ruins and estates whose time is up, and the rests and loads that lapsed.
+pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
+	let now = decay_now_of(space, None).await?;
+	let life = world_now_of(space, None).await?;
+	let estate = now + estate_ms(w);
+	for (_, s) in all_of(space.read_all(&obj! { "type" => "Site" }, None).await?) {
+		if j::n(&s, "untilWorldMs") > now { continue; }
+		in_txn(space, |txn| { let s = &s; async move {
+			if space.take_if_exists(&tmpl("Site", obj! { "buildId" => j::at(s, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
+			close_orders(space, &txn, s, estate).await?;
+			free_cells(space, &txn, j::s(s, "room"), j::at(s, "buildId")).await?;
+			release_light(space, &txn, j::at(s, "beaconId"), j::no(s, "points").unwrap_or(1.0)).await?;
+			Ok(true)
+		} }).await?;
+	}
+	for (_, b) in all_of(space.read_all(&obj! { "type" => "Building" }, None).await?) {
+		if j::n(&b, "untilWorldMs") > now { continue; }
+		in_txn(space, |txn| { let b = &b; async move {
+			if space.take_if_exists(&tmpl("Building", obj! { "buildId" => j::at(b, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
+			let mut ruin = Object::new();
+			for k in ["buildId", "plan", "name", "room", "x", "y", "w", "h", "owner", "ownerName", "accountId"] { if let Some(v) = b.get(k) { ruin.insert(k, v.clone()); } }
+			ruin.insert("untilWorldMs", Json::from(now + j::no(j::at(w, "building"), "ruinWorldMs").unwrap_or(10.0 * 24.0 * 3_600_000.0)));
+			space.write(&tmpl("Ruin", Json::Object(ruin)), Some(&txn), FOREVER).await?;
+			release_light(space, &txn, j::at(b, "beaconId"), j::no(b, "points").unwrap_or(1.0)).await?;
+			stop_loads(space, &txn, j::at(b, "buildId"), life).await?;
+			let id = key_text(j::at(b, "buildId"));
+			let inside = space.read_all(&tmpl("Item", obj! { "location" => id.as_str() }), None).await?;
+			if !inside.is_empty() {
+				let estate_id = format!("est-{id}");
+				space.write(&tmpl("Estate", obj! { "estateId" => estate_id.as_str(), "accountId" => j::at(b, "accountId").clone(), "ownerName" => j::at(b, "ownerName").clone(), "room" => j::at(b, "room").clone(), "name" => j::at(b, "name").clone(), "untilWorldMs" => estate }), Some(&txn), FOREVER).await?;
+				for it in &inside { move_item(space, Some(&txn), &Json::from(key_text(j::at(fields(it), "itemId"))), &id, &estate_id).await?; }
+			}
+			Ok(true)
+		} }).await?;
+	}
+	// freight the railway carried and nobody fetched, or whose station fell: the sender's estate on the spot
+	for (_, f) in all_of(space.read_all(&obj! { "type" => "Freight" }, None).await?) {
+		if j::n(&f, "untilWorldMs") > life && space.read_if_exists(&tmpl("Building", obj! { "buildId" => j::at(&f, "buildId").clone() }), 1_000.0, None).await?.is_some() { continue; }
+		in_txn(space, |txn| { let f = &f; async move {
+			let id = key_text(j::at(f, "freightId"));
+			if space.take_if_exists(&tmpl("Freight", obj! { "freightId" => id.as_str() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
+			let estate_id = format!("est-{id}");
+			space.write(&tmpl("Estate", obj! { "estateId" => estate_id.as_str(), "accountId" => j::at(f, "accountId").clone(), "ownerName" => j::at(f, "ownerName").clone(), "room" => j::at(f, "room").clone(), "name" => "Fracht", "untilWorldMs" => estate }), Some(&txn), FOREVER).await?;
+			for it in space.read_all(&tmpl("Item", obj! { "location" => id.as_str() }), Some(&txn)).await? { move_item(space, Some(&txn), &Json::from(key_text(j::at(fields(&it), "itemId"))), &id, &estate_id).await?; }
+			Ok(true)
+		} }).await?;
+	}
+	for (_, r) in all_of(space.read_all(&obj! { "type" => "Ruin" }, None).await?) {
+		if j::n(&r, "untilWorldMs") > now { continue; }
+		in_txn(space, |txn| { let r = &r; async move {
+			if space.take_if_exists(&tmpl("Ruin", obj! { "buildId" => j::at(r, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
+			free_cells(space, &txn, j::s(r, "room"), j::at(r, "buildId")).await?;
+			Ok(true)
+		} }).await?;
+	}
+	for (e, est) in all_of(space.read_all(&obj! { "type" => "Estate" }, None).await?) {
+		if j::n(&est, "untilWorldMs") > now { continue; }
+		in_txn(space, |txn| { let (e, est) = (&e, &est); async move {
+			if space.take_if_exists(&obj! { "id" => j::at(e, "id").clone() }, NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
+			for it in space.read_all(&tmpl("Item", obj! { "location" => j::at(est, "estateId").clone() }), None).await? { space.take_if_exists(&obj! { "id" => j::at(&it, "id").clone() }, NO_WAIT, Some(&txn)).await?; }
+			Ok(true)
+		} }).await?;
+	}
+	for ty in ["WorkRest", "Blessing", "BeamRest"] {
+		for e in space.read_all(&obj! { "type" => ty }, None).await? { if until_of(&e) <= now { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, None).await?; } }
+	}
+	// flour (or grain back) nobody fetched
+	for e in space.read_all(&obj! { "type" => "MillLoad" }, None).await? { if until_of(&e) <= now { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, None).await?; } }
 	Ok(())
 }
 /// `freeCells`: takes the cells of a site or building.

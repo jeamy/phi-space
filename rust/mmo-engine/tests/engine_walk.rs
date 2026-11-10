@@ -1577,3 +1577,110 @@ fn on_the_water() {
 	for line in ["ausschiffen", "fahrplan", "inventory"] { run(&mut w, &a, line, 0.0); }
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 20 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
 }
+
+/// Beaming (beam.ts): refused before the epoch, the list of fires with their costs (one dark), names matched exactly,
+/// by a part and ambiguously, too few coins, a beam with the pause after it, and another once the pause is over.
+#[test]
+fn beaming() {
+	let mut w = Walk::new("beaming", 57, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (12.0, 9.0), true, false);
+	let g = w.player(3, "graue-bucht", (13.0, 9.0), true);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	give(&mut w, &a, "muenze", 2);
+	for b in ["feuer-anleger", "feuer-kai", "feuer-bucht"] { w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => b, "until" => 9e15, "litAt" => 0.0 } }); }
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| {
+		step += 1;
+		at.set(at.get() + 7_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	run(&mut w, &a, "beam", 0.0);
+	w.write(obj! { "type" => "Epoch", "fields" => obj! { "island" => "Graue Insel", "epoch" => 4.0, "points" => 900.0, "at" => START } });
+	w.write(obj! { "type" => "Epoch", "fields" => obj! { "island" => "Kupferhafen", "epoch" => 4.0, "points" => 900.0, "at" => START } });
+	for (who, line) in [
+		(&a, "beam"), (&g, "beam"), (&a, "beam nirgendwo"), (&a, "beam feuer"), (&a, "beam Alte Warte"), (&a, "beam hafenfeuer"), (&a, "beam Feuerkorb am Anleger"), (&a, "beam"), (&a, "beam bucht"),
+	] { run(&mut w, who, line, 0.0); }
+	give(&mut w, &a, "muenze", 12);
+	for (who, line) in [(&a, "beam markt von kupferhafen"), (&a, "beam"), (&a, "beam graue bucht")] { run(&mut w, who, line, 0.0); }
+	run(&mut w, &a, "beam graue-bucht", 11.0 * 60_000.0);
+	for (who, line) in [(&a, "look"), (&a, "beam riffdorf"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() >= 5 && said.iter().filter(|r| r.starts_with("refused")).count() >= 6, "{said:?}");
+}
+
+/// The sweep job whole (sweep.ts with build.ts `buildSweep`) and the storm job: flotsam, awake roles, orders, listings and
+/// wanted notices whose time is up; things that spoil or grow up in a pack and in a chest (one on the market stays); a
+/// site, a building with things inside and a mill load, freight, a ruin and an estate that lapsed; rests and loads; and
+/// what has time left stays. Then storms over many world hours.
+#[test]
+fn sweeping() {
+	let mut w = Walk::new("sweeping", 58, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (12.0, 9.0), true, false);
+	let world = w.w.clone();
+	let item = |id: &str, proto: &str, loc: &str, extra: &[(&str, Json)]| { let mut f = thing(&world, id, proto, loc).get("fields").cloned().unwrap(); for (k, v) in extra { walk::j_set(&mut f, k, v.clone()); } obj! { "type" => "Item", "fields" => f } };
+	let past = Json::from(0.0);
+	let later = Json::from(9e15);
+	for (id, proto, loc, extra) in [
+		("k-1", "kueken", a.as_str(), vec![("turns", Json::Bool(true)), ("turnsAtMs", past.clone())]),
+		("k-2", "huehnchen", a.as_str(), vec![("turns", Json::Bool(true)), ("turnsAtMs", past.clone())]),
+		("k-3", "ferkel", "b-2", vec![("turns", Json::Bool(true)), ("turnsAtMs", past.clone())]),
+		("k-4", "kueken", a.as_str(), vec![("turns", Json::Bool(true)), ("turnsAtMs", later.clone())]),
+		("k-5", "kueken", "escrow", vec![("turns", Json::Bool(true)), ("turnsAtMs", past.clone()), ("listing", Json::from("l-9"))]),
+		("f-1", "treibholz", "graue-bucht", vec![("flotsam", Json::Bool(true)), ("expiresWorldMs", past.clone())]),
+		("f-2", "tang", "graue-bucht", vec![("flotsam", Json::Bool(true)), ("expiresWorldMs", later.clone())]),
+		("f-3", "muschel", "graue-bucht", vec![("flotsam", Json::Bool(true))]),
+		("i-1", "muschel", "b-1", vec![]), ("i-2", "tang", "b-1", vec![]), ("i-3", "muschel", "fr-1", vec![]), ("i-4", "muschel", "est-old", vec![]), ("i-5", "tang", "fr-2", vec![]),
+	] { w.write(item(id, proto, loc, &extra)); }
+	let building = |id: &str, x: f64, until: Json| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => x, "y" => 13.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk1", "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => until, "builtAt" => 0.0 } };
+	w.write(building("b-1", 2.0, past.clone()));
+	w.write(building("b-2", 6.0, later.clone()));
+	w.write(building("b-3", 10.0, later.clone()));
+	for (_, at, of) in [("p-1", (2.0, 13.0), "b-1"), ("p-2", (14.0, 13.0), "site-1"), ("p-3", (18.0, 13.0), "r-1")] { w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => "graue-bucht", "x" => at.0, "y" => at.1, "of" => of } }); }
+	for e in [
+		obj! { "type" => "Site", "fields" => obj! { "buildId" => "site-1", "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => 14.0, "y" => 13.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk1", "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-bucht", "points" => 1.0, "needs" => Json::Array(vec![]), "by" => obj! {}, "workNeed" => 0.0, "work" => 0.0, "human" => 0.0, "other" => 0.0, "untilWorldMs" => 0.0 } },
+		obj! { "type" => "Ruin", "fields" => obj! { "buildId" => "r-1", "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => 18.0, "y" => 13.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk1", "ownerName" => "Wanderer1", "accountId" => "a-walk1", "untilWorldMs" => 0.0 } },
+		obj! { "type" => "Estate", "fields" => obj! { "estateId" => "est-old", "accountId" => "a-walk1", "ownerName" => "Wanderer1", "room" => "graue-bucht", "name" => "Hütte", "untilWorldMs" => 0.0 } },
+		obj! { "type" => "Freight", "fields" => obj! { "freightId" => "fr-1", "accountId" => "a-walk1", "charId" => a.as_str(), "ownerName" => "Wanderer1", "room" => "graue-bucht", "buildId" => "b-3", "untilWorldMs" => 0.0 } },
+		obj! { "type" => "Freight", "fields" => obj! { "freightId" => "fr-2", "accountId" => "a-walk1", "charId" => a.as_str(), "ownerName" => "Wanderer1", "room" => "graue-bucht", "buildId" => "b-gone", "untilWorldMs" => 9e15 } },
+		obj! { "type" => "Freight", "fields" => obj! { "freightId" => "fr-3", "accountId" => "a-walk1", "charId" => a.as_str(), "ownerName" => "Wanderer1", "room" => "graue-bucht", "buildId" => "b-3", "untilWorldMs" => 9e15 } },
+		obj! { "type" => "MillLoad", "fields" => obj! { "loadId" => "ml-1", "buildId" => "b-1", "from" => "c-walk1", "to" => "c-walk1", "proto" => "mehl", "count" => 2.0, "readyWorldMs" => 9e15, "untilWorldMs" => 9e15 } },
+		obj! { "type" => "MillLoad", "fields" => obj! { "loadId" => "ml-2", "buildId" => "b-2", "from" => "c-walk1", "to" => "c-walk1", "proto" => "mehl", "count" => 1.0, "readyWorldMs" => 0.0, "untilWorldMs" => 0.0 } },
+		obj! { "type" => "NpcAwake", "fields" => obj! { "npcId" => "n-1", "untilWorldMs" => 0.0 } },
+		obj! { "type" => "NpcAwake", "fields" => obj! { "npcId" => "n-2" } },
+		obj! { "type" => "NpcAwake", "fields" => obj! { "npcId" => "n-3", "untilWorldMs" => 9e15 } },
+		obj! { "type" => "Order", "fields" => obj! { "orderId" => "o-1", "expiresWorldMs" => 0.0 } },
+		obj! { "type" => "Order", "fields" => obj! { "orderId" => "o-2" } },
+		obj! { "type" => "Listing", "fields" => obj! { "listingId" => "l-1", "expiresWorldMs" => 0.0 } },
+		obj! { "type" => "Wanted", "fields" => obj! { "wantedId" => "w-1", "buyer" => a.as_str(), "room" => "graue-bucht", "proto" => "fisch", "protoName" => "Fisch", "count" => 2.0, "price" => 3.0, "expiresWorldMs" => 0.0 } },
+		obj! { "type" => "Wanted", "fields" => obj! { "wantedId" => "w-2", "buyer" => a.as_str(), "room" => "graue-bucht", "proto" => "tang", "protoName" => "Tang", "price" => 1.0, "expiresWorldMs" => 0.0 } },
+		obj! { "type" => "WorkRest", "fields" => obj! { "charId" => a.as_str(), "untilWorldMs" => 0.0 } },
+		obj! { "type" => "Blessing", "fields" => obj! { "charId" => a.as_str(), "untilWorldMs" => 9e15 } },
+		obj! { "type" => "BeamRest", "fields" => obj! { "charId" => "c-walk7", "untilWorldMs" => 0.0 } },
+	] { w.write(e); }
+	w.compare("setup");
+	w.at(START + 60_000.0);
+	w.tick("sweep");
+	w.compare("swept");
+	assert!(w.peek(obj! { "type" => "Ruin", "fields" => obj! { "buildId" => "b-1" } }).is_some(), "no ruin");
+	assert!(w.peek(obj! { "type" => "Estate", "fields" => obj! { "estateId" => "est-b-1" } }).is_some(), "no estate");
+	assert!(w.peek(obj! { "type" => "Item", "fields" => obj! { "proto" => "huhn", "location" => a.as_str() } }).is_some(), "the chick did not grow up");
+	for line in ["look", "inventory"] { let r = w.cmd(&a, line, None); w.compare(&format!("{line} -> {r}")); }
+	// storms over many world hours, each with the sweep after it
+	for i in 0..30 {
+		w.at(START + 120_000.0 + i as f64 * 20.0 * 60_000.0);
+		w.tick("storm");
+		w.tick("sweep");
+		w.compare(&format!("storm {i}"));
+	}
+	assert!(w.entries_with("Treibholz") + w.entries_with("Tang") + w.entries_with("Muschel") > 3, "no storm brought anything");
+}

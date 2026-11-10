@@ -35,7 +35,7 @@ const { loadIntoSpace } = await from("server/engine/loader.ts");
 const { WORLD_LOCK } = await from("server/model.ts");
 const { connectSpace } = await from("server/space.ts");
 const { stableTerrain, spatialWorld } = await from("server/engine/room-growth.ts");
-const { fireTick, chainTick, fogTick, floodTick } = await from("server/engine/fire.ts");
+const { fireTick, chainTick, fogTick, floodTick, stormTick } = await from("server/engine/fire.ts");
 const { ordersTick, marketTick } = await from("server/engine/commands/trade.ts");
 const { windTick, stormRaisesWind } = await from("server/engine/commands/wind.ts");
 const { settlementTick } = await from("server/engine/commands/settlement.ts");
@@ -50,7 +50,8 @@ const { fieldTick } = await from("server/engine/commands/field.ts");
 const { wildTick } = await from("server/engine/commands/wild.ts");
 const { cartTick } = await from("server/engine/commands/cart.ts");
 const { passageTick } = await from("server/engine/commands/passage.ts");
-const { seasonTick } = await from("server/engine/clock.ts");
+const { seasonTick, syncRates } = await from("server/engine/clock.ts");
+const { sweepTick } = await from("server/engine/sweep.ts");
 const { byPeoplesPace } = await from("server/engine/clock.ts");
 const { execute, CommandError } = await from("server/engine/commands.ts");
 const { msg } = await from("server/engine/context.ts");
@@ -148,8 +149,10 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 				fire: job(async (live) => { await fireTick(space, live, msgLeaseMs); await chainTick(space, live, msgLeaseMs); }),
 				fog: job((live) => fogTick(space, live, msgLeaseMs)),
 				flood: job(async (live) => { if (await byPeoplesPace(space)) await floodTick(space, live, msgLeaseMs); }),
+				sweep: job(async (live) => { await syncRates(space); await sweepTick(space, live); }),
 				orders: job((live) => ordersTick(space, live)),
 				market: job((live) => marketTick(space, live)),
+				storm: job(async (live) => { if (!(await byPeoplesPace(space))) return; const room = await stormTick(space, live, msgLeaseMs); await stormFillsBarrels(space, live, room); await stormTurnsMills(space, live, room); await stormRaisesWind(space, live, room, msgLeaseMs); }),
 				wind: job(async (live) => { if (process.env.SPACES_MMO_WIND !== "0") await windTick(space, live, msgLeaseMs); }),
 				garden: job(async (live) => { await gardenTick(space, live); await fieldTick(space, live, msgLeaseMs); await cartTick(space, live, msgLeaseMs); await passageTick(space, msgLeaseMs); }),
 				wild: job(async (live) => { await wildTick(space, live, msgLeaseMs); }),

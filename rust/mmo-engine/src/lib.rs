@@ -22,6 +22,7 @@ pub mod schedule;
 pub mod settings;
 pub mod source;
 pub mod space;
+pub mod sweep;
 pub mod translate;
 pub mod travel;
 pub mod typeclasses;

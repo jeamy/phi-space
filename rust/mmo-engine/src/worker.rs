@@ -1,12 +1,15 @@
-//! What the world worker runs (`server/world-host.ts`): so far its recurring jobs, as its `runs` table has them (each in
+//! What the world worker runs (`server/world-host.ts`): its recurring jobs, as its `runs` table has them (each in
 //! `stableTerrain`, on the world as the rooms grew).
 use phi_json::Json;
 
-use crate::clock::{by_peoples_pace, season_tick};
+use crate::clock::{by_peoples_pace, season_tick, sync_rates};
+use crate::commands::mill::storm_turns_mills;
+use crate::commands::wind::storm_raises_wind;
+use crate::sweep::sweep_tick;
 use crate::commands::cart::cart_tick;
 use crate::commands::epoch::epoch_tick;
 use crate::commands::field::field_tick;
-use crate::commands::garden::garden_tick;
+use crate::commands::garden::{garden_tick, storm_fills_barrels};
 use crate::commands::passage::passage_tick;
 use crate::commands::festival::show_tick;
 use crate::commands::growth::growth_tick;
@@ -16,12 +19,12 @@ use crate::commands::townhall::motion_tick;
 use crate::commands::trade::{market_tick, orders_tick};
 use crate::commands::wild::wild_tick;
 use crate::commands::wind::wind_tick;
-use crate::fire::{chain_tick, fire_tick, flood_tick, fog_tick};
+use crate::fire::{chain_tick, fire_tick, flood_tick, fog_tick, storm_tick};
 use crate::room_growth::{end_terrain, spatial_world, stable_terrain};
 use crate::space::{Error, Result, Space};
 
-/// The jobs ported so far.
-pub const JOBS: &[&str] = &["fire", "fog", "flood", "orders", "market", "wind", "garden", "wild", "epoch"];
+/// The jobs of `runs`.
+pub const JOBS: &[&str] = &["fire", "fog", "flood", "sweep", "orders", "market", "storm", "wind", "garden", "wild", "epoch"];
 
 /// Runs the recurring job `job` once.
 pub async fn run_job(space: &Space, w: &Json, job: &str, msg_lease_ms: f64) -> Result<()> {
@@ -33,8 +36,16 @@ pub async fn run_job(space: &Space, w: &Json, job: &str, msg_lease_ms: f64) -> R
 			"fire" => { fire_tick(space, &live, msg_lease_ms).await?; chain_tick(space, &live, msg_lease_ms).await }
 			"fog" => fog_tick(space, &live, msg_lease_ms).await,
 			"flood" => { if by_peoples_pace(space).await? { flood_tick(space, &live, msg_lease_ms).await } else { Ok(()) } }
+			"sweep" => { sync_rates(space).await?; sweep_tick(space, &live).await }
 			"orders" => orders_tick(space, &live).await,
 			"market" => market_tick(space, &live).await,
+			"storm" => {
+				if !by_peoples_pace(space).await? { return Ok(()); }
+				let room = storm_tick(space, &live, msg_lease_ms).await?;
+				storm_fills_barrels(space, &live, room.as_deref()).await?;
+				storm_turns_mills(space, &live, room.as_deref()).await?;
+				storm_raises_wind(space, &live, room.as_deref(), msg_lease_ms).await
+			}
 			"wind" => { if std::env::var("SPACES_MMO_WIND").as_deref() != Ok("0") { wind_tick(space, &live, msg_lease_ms).await?; } Ok(()) }
 			"garden" => {
 				garden_tick(space, &live).await?;
