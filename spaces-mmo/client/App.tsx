@@ -427,7 +427,7 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 	// a bag adds to the most one carries, each kind once (engine/pack.ts packMax)
 	const load = carried.reduce((n, o) => n + (o.load ?? 0), 0), bags = new Map(carried.filter((o) => o.bag).map((o) => [o.name, o.bag!])), max = pack?.max == null ? null : pack.max + [...bags.values()].reduce((n, b) => n + b, 0);
 	const [chestNr, setChestNr] = useState(1);
-	const [storeN, setStoreN] = useState("");
+	const [storeN, setStoreN] = useState(""), [sortName, setSortName] = useState("");
 	const chests = pack?.chests ?? [], chestAt = chests.find((x) => x.nr === chestNr) ?? chests[0];
 	const chosenBox = useRef<HTMLDivElement>(null);
 	// one's own chest beside one (the server sends what lies in it): its things to take out, as many as one likes
@@ -497,6 +497,11 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 						</form>
 						{chosen[1].length > 1 && <button onClick={() => send(`verstaue alle ${chosen[0]} in ${chestAt.nr}`)}>{`Alle ${chosen[1].length} verstauen`}</button>}
 					</div>}
+					{/* a cross not named yet: its breeder names it here (server: garden.ts benenne; it says when one may not) */}
+					{!guest && chosen[0] === "Kreuzungssamen" && <form className="pack-store-n pack-name-sort" onSubmit={(e) => { e.preventDefault(); const n = sortName.trim(); if (!n) return; send(`benenne ${n}`); setSortName(""); }}>
+						<input type="text" value={sortName} placeholder="Name der Sorte" aria-label="Name der Sorte" maxLength={24} onChange={(e) => setSortName(e.target.value)} />
+						<button type="submit">Benennen</button>
+					</form>}
 					{uses && (() => {
 						// what it can do here and now; the rest of the world's uses stay in the help
 						// a recipe its hint below offers (the line that says what it takes, with „Herstellen“) is not a button here too

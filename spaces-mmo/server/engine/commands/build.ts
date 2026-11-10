@@ -145,7 +145,7 @@ async function noteBuilder(c: CommandCtx, beaconId: string): Promise<void> {
 
 /** Why a jetty cannot go on `rect` (null: it can): it lies on water only, one of its cells beside the land (where one
  *  stands to fish, row and load), free of other things built and of the large ship's berth in a bay. */
-async function waterRefusal(c: CommandCtx, room: RoomFields, rect: Rect): Promise<string | null> {
+async function waterRefusal(c: Pick<CommandCtx, "space" | "world">, room: RoomFields, rect: Rect): Promise<string | null> {
 	const height = room.ground.length, width = room.ground[0]?.length ?? 0;
 	if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > width || rect.y + rect.h > height) return "Dort ist der Raum zu Ende.";
 	const wet = (p: { x: number; y: number }) => room.ground[p.y]?.[p.x] !== undefined && !walkable(c.world, room.ground, p.x, p.y);
@@ -160,6 +160,35 @@ async function waterRefusal(c: CommandCtx, room: RoomFields, rect: Rect): Promis
 		if (cells(rect).some((p) => distTo(p, ship) === 0)) return "Dort legt das große Schiff an.";
 	}
 	return null;
+}
+/** A jetty of old on the beach is moved onto the water beside it (once: where the water lets it), as `bau steg` places one
+ *  now: two cells out from the shore, the one end at the land; the nearest such place within two cells, the ones that
+ *  stick out (touch the land at one cell only) first. Its plot moves with it. False when there is no place. */
+async function jettyToWater(space: SpaceLike, w: WorldDef, txn: string, type: "Building" | "Site", b: { buildId: string; room: string } & Rect): Promise<boolean> {
+	const roomE = (await space.readAll({ type: "Room", fields: { roomId: b.room } }, { txn }))[0];
+	if (!roomE) return false;
+	const room = fieldsOf<RoomFields>(roomE), g = room.ground;
+	const land = (x: number, y: number) => walkable(w, g, x, y);
+	if (!cells(b).some((p) => land(p.x, p.y))) return false; // on the water already
+	const long = Math.max(b.w, b.h), short = Math.min(b.w, b.h), tries: Rect[] = [];
+	for (const s of [{ w: long, h: short }, { w: short, h: long }]) for (let y = b.y - 2 - s.h; y <= b.y + b.h + 2; y++) for (let x = b.x - 2 - s.w; x <= b.x + b.w + 2; x++) {
+		const r = { x, y, ...s };
+		if (cells(r).every((p) => distTo(p, b) > 3)) continue;
+		tries.push(r);
+	}
+	const touch = (r: Rect) => cells(r).filter((p) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => land(p.x + dx!, p.y + dy!))).length;
+	const far = (r: Rect) => Math.min(...cells(r).map((p) => distTo(p, b)));
+	tries.sort((p, q) => touch(p) - touch(q) || far(p) - far(q));
+	for (const r of tries) {
+		if (await waterRefusal({ space, world: w }, room, r)) continue;
+		const e = await space.takeIfExists({ type, fields: { buildId: b.buildId } }, NO_WAIT, { txn });
+		if (!e) return false;
+		await freeCells(space, txn, b.room, b.buildId);
+		for (const p of cells(r)) await space.write({ type: "Plot", fields: { room: b.room, x: p.x, y: p.y, of: b.buildId } as never }, txn, FOREVER, { unique: ["room", "x", "y"] });
+		await space.write({ type, fields: { ...e.fields, x: r.x, y: r.y, w: r.w, h: r.h } as never }, txn, FOREVER);
+		return true;
+	}
+	return false;
 }
 /** The rects for a jetty beside the actor: both ways round, the ones that point away from the actor (it stands at their end) first. */
 function jettyTries(c: CommandCtx, plan: Pick<PlanDef, "w" | "h">, at?: { x: number; y: number }): Rect[] {
@@ -817,6 +846,8 @@ export const BUILD_COMMANDS: Command[] = [bau, liefere, arbeite, baustelle, truh
  *  cells and give their light back; a building nobody kept becomes a ruin (its light goes back, what lay in its chest
  *  waits as an estate for its owner); a ruin whose time is up goes with its cells; an estate nobody fetched goes with its
  *  things; rests that are over go. */
+/** The spaces whose jetties of old were looked at since the start (buildSweep). */
+const jettiesMoved = new WeakSet<SpaceLike>();
 export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> {
 	const now = await decayNowOf(space), life = await worldNowOf(space);
 	const inTxn = async (run: (txn: string) => Promise<boolean>) => {
@@ -827,6 +858,15 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 	// the single road cells of old (and their sites) go: a road is planned from room to room now (road.ts); the cells and
 	// the fire's light are freed, nothing is left behind
 	const oldRoad = w?.cart?.road && !planOf(w, w.cart.road) ? w.cart.road : null;
+	// the jetties of old on the beach go onto the water (where there is no place they stay; tried once a run)
+	const water = new Set((w?.building?.plans ?? []).filter((p) => p.water).map((p) => p.key));
+	if (w && water.size && !jettiesMoved.has(space)) {
+		jettiesMoved.add(space);
+		for (const type of ["Building", "Site"] as const) for (const e of await space.readAll({ type })) {
+			const b = fieldsOf<BuildingFields>(e);
+			if (water.has(b.plan)) await inTxn((txn) => jettyToWater(space, w, txn, type, b));
+		}
+	}
 	for (const e of await space.readAll({ type: "Site" })) {
 		const s = fieldsOf<SiteFields>(e);
 		if (s.untilWorldMs > now && s.plan !== oldRoad) continue;

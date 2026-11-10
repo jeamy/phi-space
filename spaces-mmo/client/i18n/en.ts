@@ -2524,6 +2524,8 @@ export const EN: Record<string, string> = {
 	"Ein Steg beginnt am Ufer.": "A jetty starts at the shore.",
 	"Dort liegt schon ein Steg oder wird gebaut.": "A jetty already lies there or is being built.",
 	"Das gehört neben einen Ausgang.": "That belongs beside an exit.",
+	"Name der Sorte": "Name of the variety",
+	"Benennen": "Name it",
 	"Stand": "Standing",
 	"Rang": "Rank",
 	"Siedler-Figur, spielt von selbst": "Settler figure, plays by itself",

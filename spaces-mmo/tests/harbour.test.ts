@@ -11,6 +11,7 @@ import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
 import { worldNowOf } from "../server/engine/clock.ts";
 import { loanTick, shopPrice } from "../server/engine/commands/shop.ts";
+import { buildSweep } from "../server/engine/commands/build.ts";
 import { chainsOf, chainTick, coversOf, flameOf, fogTick, isLit, roomsAround } from "../server/engine/fire.ts";
 import { showTick } from "../server/engine/commands/festival.ts";
 import { alongWay, baysOf, berth, linerOf, nextStop, seaWays, SHIP_LENGTH, lane, shipComes, shipPlace, shipState, timetable } from "../server/engine/liner.ts";
@@ -120,6 +121,20 @@ test("a jetty is built on the water from the shore, clear of the ship's berth, a
 		assert.match(await does(p, `bau steg ${pier!.x} ${pier!.y}`, /steckt|passt keine/), /steckt eine Baustelle ab/);
 		const site = (await s.readAll({ type: "Site", fields: { accountId: (await s.readAll({ type: "Character", fields: { charId: me } }))[0]!.fields.accountId } }))[0]!.fields as unknown as { x: number; y: number; w: number; h: number };
 		for (let y = site.y; y < site.y + site.h; y++) for (let x = site.x; x < site.x + site.w; x++) assert.ok(wet(x, y), `${x} ${y} is water`);
+		// a jetty of old on the beach goes onto the water beside it, with its plot
+		const old = { x: pier!.x - 2, y: pier!.y, w: 2, h: 1 };
+		if (land(old.x, old.y) && land(old.x + 1, old.y)) {
+			for (const e of await s.readAll({ type: "Site" })) await s.takeIfExists({ id: e.id }, 0);
+			for (const e of await s.readAll({ type: "Plot", fields: { room: c.room } })) if (e.fields.of !== "old-jetty" && wet(Number(e.fields.x), Number(e.fields.y))) await s.takeIfExists({ id: e.id }, 0);
+			for (const x of [old.x, old.x + 1]) await s.write({ type: "Plot", fields: { room: c.room, x, y: old.y, of: "old-jetty" } as never }, null, FOREVER);
+			await s.write({ type: "Building", fields: { buildId: "old-jetty", plan: "steg", name: "Steg", room: c.room, ...old, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
+			await buildSweep(s, w);
+			const moved = (await s.readAll({ type: "Building", fields: { buildId: "old-jetty" } }))[0]!.fields as unknown as { x: number; y: number; w: number; h: number };
+			for (let y = moved.y; y < moved.y + moved.h; y++) for (let x = moved.x; x < moved.x + moved.w; x++) assert.ok(wet(x, y), `moved: ${x} ${y} is water`);
+			const plots = (await s.readAll({ type: "Plot", fields: { of: "old-jetty" } })).map((e) => `${e.fields.x},${e.fields.y}`).sort();
+			assert.equal(plots.length, 2);
+			assert.ok(plots.every((k) => { const [x, y] = k.split(",").map(Number); return wet(x!, y!); }), plots.join(" "));
+		} else assert.fail("the test wants two cells of beach before the pier");
 	} finally { await srv.close(); }
 });
 
