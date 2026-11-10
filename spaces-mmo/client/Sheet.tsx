@@ -1,6 +1,6 @@
 "use client";
 // The sheet: its handle pulls it to any height and, where it is narrower than the page, to any place left or right, and it stays
-// there (`height`, `place`, kept by the caller). A tap on the handle opens and closes it, so it needs no swipe. Closed it shows the tabs and a line; a talk takes the whole height for the keyboard ("full").
+// there (`height`, `place`, kept by the caller). A tap on the handle opens it to its last height and closes it, so it needs no swipe. Closed it shows the tabs and a line; a talk takes the whole height for the keyboard ("full").
 // Its top edge glides to a new height by a transform the compositor runs (the Web Animations API), not by a transition of
 // the height: the 3D map draws every frame on the main thread, and a height transition moves only as often as the map lets
 // a frame through (on a tablet it stuttered). Growing, the sheet takes its new height and content at once and slides up from
@@ -16,6 +16,8 @@ export type Detent = "peek" | "half" | "full";
 export const detentPx = (d: Detent, room: number) => (d === "peek" ? (isShort() ? 40 : 58) : d === "half" ? Math.round(room * (isShort() ? 1 : 0.52)) : room);
 
 const GLIDE: KeyframeAnimationOptions = { duration: 220, easing: "ease" };
+/** How far a finger may wander on a tap, in px (a phone reports a few px of wobble). */
+const SLOP = 12;
 /** What the sheet showed after a commit: its height and, for a slide down, what it showed at that height. */
 type Shown = { h: number; detent: Detent; children: ReactNode };
 /** Sliding down: the old height and content stay until the edge is at `to` px lower; `from` px is where it starts (an edge
@@ -102,8 +104,8 @@ export function Sheet({ detent, setDetent, height, setHeight, place, setPlace, c
 				}}
 				onPointerMove={(e) => { const s = start.current; if (!s) return;
 					const dy = s.y - e.clientY, dx = e.clientX - s.x, span = spare();
-					if (Math.abs(dy) > 6) s.movedY = true;
-					if (Math.abs(dx) > 6 && span > 0) s.movedX = true;
+					if (Math.abs(dy) > SLOP) s.movedY = true; // a finger wobbles on a tap: only a move past SLOP is a pull
+					if (Math.abs(dx) > SLOP && span > 0) s.movedX = true;
 					soon(s.movedY ? Math.max(s.peek, Math.min(s.room, s.h + dy)) : null, s.movedX ? Math.max(0, Math.min(1, s.place + dx / span)) : null);
 				}}
 				onPointerUp={(e) => {
@@ -112,13 +114,17 @@ export function Sheet({ detent, setDetent, height, setHeight, place, setPlace, c
 					unsoon(); setDrag(null); setDragX(null);
 					if (s.movedX) setPlace(Math.max(0, Math.min(1, s.place + (e.clientX - s.x) / Math.max(1, spare()))));
 					if (s.movedX && !s.movedY) return;
-					if (!s.movedY) { setDetent(detent === "peek" ? "half" : detent === "half" ? "peek" : "half"); return; }
+					// a tap: closed it opens to the height it was last pulled to (kept by the caller, also over a reload), the whole height
+					// before it was ever pulled; open it closes
+					if (!s.movedY) { if (detent === "peek") { if (height === null) setHeight(s.room); setDetent("half"); } else setDetent("peek"); return; }
 					const h = Math.max(s.peek, Math.min(s.room, s.h + s.y - e.clientY));
 					// pulled down to the tabs it is closed; anywhere else it stays where the finger left it
 					if (h <= s.peek + 24) { setDetent("peek"); return; }
 					setHeight(h); setDetent("half");
 				}}
-				onPointerCancel={() => { start.current = null; unsoon(); setDrag(null); setDragX(null); }} />
+				onPointerCancel={() => { start.current = null; unsoon(); setDrag(null); setDragX(null); }}
+				// a browser that takes the capture away without an up or cancel leaves no pull hanging
+				onLostPointerCapture={() => { if (start.current) { start.current = null; unsoon(); setDrag(null); setDragX(null); } }} />
 			{held ? held.children : children}
 		</section>
 	);
