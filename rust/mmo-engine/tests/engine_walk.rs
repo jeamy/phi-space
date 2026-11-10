@@ -1263,3 +1263,66 @@ fn farming() {
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 15, "{said:?}");
 	assert!(w.entries_with("ist eingebracht") >= 1, "nothing was brought in");
 }
+
+/// Animals (animals.ts): a coop with its refusals (the kind, its house, the epoch, full), feeding by anyone, yields
+/// counted on lazily and collected (also through `sammle eier`), a young one born, taking them out, slaughtering in
+/// the coop and at the butcher's shop with the knife wearing, and a dog and a cat keeping watch at a building.
+#[test]
+fn keeping_animals() {
+	let mut w = Walk::new("keeping_animals", 53, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (7.0, 13.0), true, false);
+	let g = w.player(3, "graue-bucht", (6.0, 13.0), true);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	for (p, k) in [("huhn", 4), ("kueken", 1), ("schaf", 1), ("rind", 1), ("hund", 1), ("katze", 1), ("weizen", 12), ("kohl", 4), ("ei", 2), ("stein", 1)] { give(&mut w, &a, p, k); }
+	give(&mut w, &b, "kohl", 3);
+	for p in ["huhn", "schaf", "ziege"] { give(&mut w, &b, p, 1); }
+	give(&mut w, &b, "milch", 2);
+	for (id, to, wear) in [("k-1", &a, 4.0), ("k-2", &b, 2.0)] { let mut f = thing(&world, id, "muschelmesser", to).get("fields").cloned().unwrap(); walk::j_set(&mut f, "wear", Json::from(wear)); w.write(obj! { "type" => "Item", "fields" => f }); }
+	let building = |id: &str, plan: &str, name: &str, x: f64, y: f64, owner: usize| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => plan, "name" => name, "room" => "graue-bucht", "x" => x, "y" => y, "w" => 2.0, "h" => 2.0, "owner" => format!("c-walk{owner}"), "ownerName" => format!("Wanderer{owner}"), "accountId" => format!("a-walk{owner}"), "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| {
+		step += 1;
+		at.set(at.get() + 7_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	for (who, line) in [(&a, "stall"), (&a, "füttere"), (&a, "einsammeln"), (&a, "wache"), (&a, "schlachte")] { run(&mut w, who, line, 0.0); }
+	w.write(building("s-1", "huehnerstall", "Hühnerstall", 5.0, 11.0, 1));
+	w.write(building("h-1", "huette", "Hütte", 2.0, 13.0, 1));
+	w.write(building("p-2", "gehege", "Gehege", 9.0, 12.0, 2));
+	let day = 86_400_000.0;
+	for (who, line) in [
+		(&a, "stall"), (&b, "stall"), (&g, "einstallen"), (&a, "einstallen gibtsnicht"), (&a, "einstallen rind"), (&a, "einstallen schaf"), (&a, "einstallen kueken"), (&a, "stall"), (&a, "einstallen"), (&a, "einstallen ein huhn"), (&a, "einstallen huhn"), (&a, "stall"),
+		(&b, "einstallen huhn"), (&b, "ausstallen"), (&a, "einsammeln"), (&a, "sammle eier"), (&b, "einsammeln"), (&a, "ausstallen"), (&a, "füttere ei"), (&a, "füttere stein"), (&a, "füttere 2 weizen"), (&a, "füttere"), (&a, "füttere kohl"), (&a, "stall"), (&g, "stall"),
+	] { run(&mut w, who, line, 0.0); }
+	for (who, line) in [(&a, "stall"), (&a, "sammle die eier"), (&a, "einsammeln"), (&b, "füttere die hühner mit kohl"), (&a, "stall")] { run(&mut w, who, line, day); }
+	for (who, line) in [(&a, "stall"), (&a, "einsammeln"), (&a, "füttere alle weizen"), (&b, "füttere"), (&a, "stall")] { run(&mut w, who, line, 3.0 * day); }
+	for (who, line) in [(&a, "stall"), (&a, "einsammeln"), (&a, "füttere"), (&a, "stall")] { run(&mut w, who, line, 2.5 * day); }
+	for (who, line) in [(&a, "stall"), (&a, "einsammeln"), (&a, "schlachte hund"), (&a, "schlachte schaf"), (&a, "schlachte das huhn"), (&a, "schlachte"), (&a, "schlachte"), (&a, "schlachte"), (&b, "schlachte"), (&a, "inventory")] { run(&mut w, who, line, 2.0 * day); }
+	for (who, line) in [(&a, "ausstallen kueken"), (&a, "ausstallen"), (&a, "stall"), (&a, "ausstallen"), (&a, "ausstallen"), (&a, "ausstallen"), (&a, "stall"), (&a, "füttere")] { run(&mut w, who, line, 0.0); }
+	give(&mut w, &a, "huhn", 3);
+	for _ in 0..7 { run(&mut w, &a, "einstallen huhn", 0.0); }
+	run(&mut w, &a, "stall", 0.0);
+	// the pen of another and the guards
+	stand(&mut w, 2, "graue-bucht", 8.0, 13.0);
+	for (who, line) in [(&b, "stall"), (&b, "einstallen huhn"), (&b, "einstallen schaf"), (&b, "einstallen ziege"), (&b, "füttere"), (&b, "füttere 1 kohl"), (&b, "stall"), (&b, "wache"), (&a, "wache")] { run(&mut w, who, line, 0.0); }
+	w.write(building("h-2", "huette", "Hütte", 4.0, 15.0, 1));
+	stand(&mut w, 1, "graue-bucht", 3.0, 15.0);
+	stand(&mut w, 2, "graue-bucht", 4.0, 14.0);
+	for (who, line) in [(&a, "ausstallen hund"), (&a, "füttere katze"), (&a, "einstallen hund"), (&a, "einstallen katze"), (&a, "wache"), (&a, "füttere katze stein"), (&b, "füttere katze"), (&a, "füttere hund stein"), (&a, "füttere hund 1 ei"), (&a, "füttere den hund mit 1 ei"), (&a, "füttere hund"), (&a, "füttere hund"), (&a, "füttere"), (&b, "füttere hund"), (&a, "wache"), (&a, "schlachte hund"), (&a, "ausstallen katze"), (&a, "ausstallen hund"), (&a, "ausstallen hund")] { run(&mut w, who, line, 0.0); }
+	// at the butcher's shop with an animal carried
+	w.write(building("m-1", "metzgerei", "Metzgerei", 12.0, 13.0, 9));
+	stand(&mut w, 1, "graue-bucht", 12.0, 12.0);
+	for (who, line) in [(&a, "schlachte hund"), (&a, "schlachte ziege"), (&a, "schlachte"), (&a, "schlachte huhn"), (&a, "schlachte"), (&a, "schlachte"), (&a, "schlachte"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
+}

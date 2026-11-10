@@ -6,6 +6,7 @@ use std::collections::HashSet;
 
 use phi_json::{obj, Json};
 
+use super::animals::{collect, means_yield};
 use super::build::{besides, building_here, cells, free_cells, give_back, human, light_for, no_article, plural, put_back, refusal, release_light, take_near, use_light, Rect, SITE_REACH};
 use super::field::{harvest_field, sow_on_field};
 use super::settlement::need_rank;
@@ -28,7 +29,8 @@ const KIND_WORD: &str = r"^(?:(zier(?:beet)?|blumen(?:beet)?|flowers?)|(gemeinsc
 
 fn garden(c: &Ctx) -> Result<Json> { match j::opt(c.w(), "garden") { Some(g) => Ok(g.clone()), None => refuse("In dieser Welt wächst nichts in Beeten.") } }
 fn sort_of<'a>(g: &'a Json, key: &str) -> Option<&'a Json> { j::by(j::a(g, "sorts"), "key", key) }
-fn proto_name(c: &Ctx, key: &str) -> String { j::by(j::a(c.w(), "prototypes"), "key", key).map_or_else(|| key.to_owned(), |p| txt(j::at(p, "name"))) }
+/// `protoName`.
+pub fn proto_name(c: &Ctx, key: &str) -> String { j::by(j::a(c.w(), "prototypes"), "key", key).map_or_else(|| key.to_owned(), |p| txt(j::at(p, "name"))) }
 fn mine(c: &Ctx, b: &Json) -> bool { c.account.as_ref().is_some_and(|a| j::at(a, "accountId") == j::at(b, "accountId")) }
 fn kind(b: &Json) -> &str { j::s(b, "kind") }
 /// `mayTend`: the owner, the sponsors, and everyone at a community bed.
@@ -496,16 +498,8 @@ async fn pate(c: &mut Ctx, arg: &str) -> Result<()> {
 	msg(c, "*", "info", &format!("{} macht {who_name} zum Paten des Beets: gießen, jäten und ernten darf {who_name} jetzt auch.", txt(j::at(&c.actor, "name"))), MsgOpts::default()).await
 }
 
-/// `meansYield` (animals.ts): whether "sammle <arg>" means a yield of the animals.
-pub fn means_yield(c: &Ctx, arg: &str) -> bool {
-	let n = no_article(&js::lower(js::trim(arg)));
-	!n.is_empty() && j::opt(c.w(), "animals").map_or(&[][..], |a| j::a(a, "kinds")).iter().any(|k| {
-		j::by(j::a(c.w(), "prototypes"), "key", j::s(k, "yields")).is_some_and(|p| std::iter::once(j::s(p, "key")).chain(std::iter::once(j::s(p, "name"))).chain(j::a(p, "aliases").iter().filter_map(Json::as_str)).any(|a| js::lower(a) == n))
-	})
-}
-
 async fn sammle(c: &mut Ctx, arg: &str) -> Result<()> {
-	if means_yield(c, arg) { return Err(Error::Other("unported: animals/collect".into())); }
+	if means_yield(c, arg) { return collect(c).await; }
 	let g = garden(c)?;
 	let t = js::trim(arg);
 	if !t.is_empty() && !js::re(r"^(?:samen|seeds?|saatgut)$", "i").test(&no_article(t)) { return not_understood("Gesammelt werden hier Samen („sammle samen“) und im Stall, was die Tiere geben („sammle eier“); Dinge am Strand hebst du mit „get“ auf."); }
