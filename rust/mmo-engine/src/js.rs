@@ -33,6 +33,16 @@ pub fn number_text(n: f64) -> String {
 
 /// `Number(s)` of a string (ECMAScript StringToNumber): JS's blanks trimmed, "" is 0, `Infinity` with a sign, `0x`,
 /// `0o`, `0b` integers without one, else a decimal literal; anything else NaN (`inf`, `nan`, `1_000`, `5e`).
+/// `n.toString(36)` of a non-negative whole number.
+pub fn base36(n: f64) -> String {
+	let mut n = n.trunc().max(0.0) as u64;
+	if n == 0 { return "0".into(); }
+	let mut out = Vec::new();
+	while n > 0 { out.push(b"0123456789abcdefghijklmnopqrstuvwxyz"[(n % 36) as usize]); n /= 36; }
+	out.reverse();
+	String::from_utf8(out).unwrap()
+}
+
 pub fn to_number(s: &str) -> f64 {
 	let t = s.trim_matches(is_js_space);
 	if t.is_empty() { return 0.0; }

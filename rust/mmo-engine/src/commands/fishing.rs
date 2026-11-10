@@ -132,7 +132,11 @@ async fn segle(c: &mut Ctx, arg: &str) -> Result<()> {
 	let (now, rest) = rested(c).await?;
 	tire(c, now, rest.as_ref()).await?;
 	let bay_id = j::s(&bay, "roomId").to_owned();
-	if crossing(c.w(), &bay_id)?.is_some() { return Err(Error::Other("unported: handOff".into())); }
+	if let Some(to_region) = crossing(c.w(), &bay_id)? {
+		crate::commands::default::drop_offers(c).await?;
+		let from = j::s(c.w(), "region").to_owned();
+		return crate::handover::hand_off(c, &from, &to_region, &bay_id, &j::at(&bay, "spawn").clone(), 0.0).await;
+	}
 	let dest = room_of(c, Some(&bay_id)).await?;
 	let cell = place_in(c, &dest, spawn, false, &[]).await?;
 	let dest_id = j::s(&dest, "roomId").to_owned();

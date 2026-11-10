@@ -93,9 +93,19 @@ async fn at_point(space: &Space, txn: &str, room: &str, p: &Json) -> Result<Json
 
 /// Options of a load.
 #[derive(Default)]
-pub struct LoadOptions { pub replace: bool, pub txn_ms: Option<f64> }
+pub struct LoadOptions { pub replace: bool, pub txn_ms: Option<f64>, pub elsewhere: Option<Vec<Space>> }
 
-/// `loadIntoSpace` (without `elsewhere`: nothing exists in another region's space).
+/// The world host's `elsewhere` for a region: whether a thing exists in another region's space, or on a ferry (in a
+/// Handover, in neither region's things) of any region.
+async fn elsewhere(space: &Space, others: &[Space], item_id: &str) -> Result<bool> {
+	for s in std::iter::once(space).chain(others) {
+		if s.key() != space.key() && !s.read_limit(&tmpl("Item", obj! { "itemId" => item_id }), 1, None).await?.is_empty() { return Ok(true); }
+		if s.read_all(&obj! { "type" => "Handover" }, None).await?.iter().any(|h| j::a(fields(h), "items").iter().any(|i| j::at(j::at(i, "fields"), "itemId").as_str() == Some(item_id))) { return Ok(true); }
+	}
+	Ok(false)
+}
+
+/// `loadIntoSpace`; `elsewhere` the other regions' spaces (None: nothing exists outside this space).
 pub async fn load_into_space(space: &Space, w: &Json, o: LoadOptions) -> Result<LoadResult> {
 	let txn_ms = o.txn_ms.unwrap_or(30_000.0);
 	let wid = j::s(w, "id");
@@ -179,6 +189,7 @@ pub async fn load_into_space(space: &Space, w: &Json, o: LoadOptions) -> Result<
 						for i in 0..j::n(c, "count") as usize {
 							let item_id = format!("{char_id}-{}-{}", j::s(c, "proto"), i + 1);
 							match exists_or_held(space, &tmpl("Item", obj! { "itemId" => item_id.as_str() }), txn).await? { Some(false) => {} _ => continue }
+							if let Some(others) = &o.elsewhere { if elsewhere(space, others, &item_id).await? { continue; } }
 							let p = resolve_from(prototypes, j::s(c, "proto")).ok_or_else(|| Error::Other(format!("unknown prototype {}", j::s(c, "proto"))))?;
 							spawn(space, Some(txn), w, &p, At { item_id: Some(item_id), location: char_id.clone(), x: -1.0, y: -1.0, ..At::default() }, &Json::Null).await?;
 						}
@@ -197,6 +208,7 @@ pub async fn load_into_space(space: &Space, w: &Json, o: LoadOptions) -> Result<
 			for obj in j::a(w, "objects") {
 				let item_id = j::s(obj, "itemId");
 				match exists_or_held(space, &tmpl("Item", obj! { "itemId" => item_id }), txn).await? { Some(false) => {} _ => continue }
+				if let Some(others) = &o.elsewhere { if elsewhere(space, others, item_id).await? { continue; } }
 				let p = resolve_from(prototypes, j::s(obj, "proto")).ok_or_else(|| Error::Other(format!("unknown prototype {}", j::s(obj, "proto"))))?;
 				let room = j::s(obj, "room");
 				let pt = at_point(space, txn, room, &obj! { "x" => j::at(obj, "x").clone(), "y" => j::at(obj, "y").clone() }).await?;

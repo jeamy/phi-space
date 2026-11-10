@@ -99,6 +99,11 @@ impl Space {
 		if let Some(m) = self.copy(txn) { return Ok(m.read_all(tmpl, None)); }
 		Ok(self.0.read_all(tmpl, None, txn).await?)
 	}
+	/// `readAll(tmpl, { limit, txn })`.
+	pub async fn read_limit(&self, tmpl: &Json, limit: usize, txn: Option<&str>) -> Result<Vec<Json>> {
+		if let Some(m) = self.copy(txn) { return Ok(m.read_all(tmpl, Some(limit))); }
+		Ok(self.0.read_all(tmpl, Some(limit as f64), txn).await?)
+	}
 	pub async fn count(&self, tmpl: &Json, txn: Option<&str>) -> Result<f64> {
 		if let Some(m) = self.copy(txn) { return Ok(m.count(tmpl)); }
 		Ok(self.0.count(tmpl, txn).await?)

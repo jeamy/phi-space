@@ -15,12 +15,18 @@
 //      | {"op": "take", "template": {...}}: one entry taken away (true when there was one)
 //      | {"op": "call", "fn": "settlementTick" | "epochTick" | "motionTick" | "stormRaisesWind" | "stormTurnsMills" | "showTick" | "loanTick" | "gardenTick" | "fieldTick" | "stormFillsBarrels" | "wildTick" | "cartTick", "room"?}: one tick of a job
 //      alone, in stableTerrain on spatialWorld as the job runs it; what it returned
+//      | {"op": "region", "id"}: with regions, every later op goes to that region's space and world (regionWorld)
+//      | {"op": "deliver"}: with regions, one round of the region's orders out of it (handovers, then couriers, as
+//      world-host.ts's deliver and carryCouriers carry them: carryOne for each waiting, at most 8 of a kind); how many
 //      | {"op": "cmd", "charId", "intentId", "line", "step"?, "asked"?, "lang"?}: an Intent as the gateway (or the model
 //      process, with `asked`) writes it, then the character's
 //      oldest intent served as the world worker does (server/world-host.ts `serve`, copied below): "ran", "held",
 //      "refused: <text>" or "failed: <text>". R8_SERVE=plain|batch|mirror (default mirror, as in production) picks its path.
 // Out: {"ok": true, "result"?: ...} or {"ok": false, "error": "<message>"}; "dump": every entry as the JSON text of
 //      [type, types, fields] with the keys sorted, in the order the space lists them.
+// With regions the address is a list, "west=unix:/a.sock,nord=unix:/b.sock": a space per region, the first one current;
+// a command runs with the others as `elsewhere`, a load with the world host's `elsewhere` (a thing in another region's
+// space or on a ferry is not placed again). One seeded source serves all of them.
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
@@ -58,11 +64,19 @@ const { msg } = await from("server/engine/context.ts");
 const { pinTerrain } = await from("server/engine/room-growth.ts");
 const { actorToken, fieldsOf } = await from("server/model.ts");
 const { batching, bufferedTxn, Mirror } = await from("server/space.ts");
+const { regionWorld } = await from("server/engine/regions.ts");
+const { handovers } = await from("server/engine/handover.ts");
+const { couriers } = await from("server/engine/courier.ts");
+const { carryOne } = await from("server/engine/transfer.ts");
 const { FOREVER, NO_WAIT } = await import("phi-spaces");
 
 let clock = Number(clockText);
 const MSG_LEASE_MS = 600_000;
-const space = connectSpace(address).space;
+const regional = address.includes("=");
+const addresses: Array<[string, string]> = regional ? address.split(",").map((p) => [p.slice(0, p.indexOf("=")), p.slice(p.indexOf("=") + 1)]) : [["", address]];
+const spaces = new Map<string, { space: any; batch: any; mirror: any }>();
+let cur = addresses[0]![0];
+let space: any = null;
 
 const canon = (v: unknown): unknown => (Array.isArray(v) ? v.map(canon) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, x]) => [k, canon(x)])) : v);
 const SERVE = process.env.R8_SERVE ?? "mirror";
@@ -70,8 +84,25 @@ const TXN_MS = 15_000;
 
 // server/world-host.ts at the frozen commit: begin, finishing, one, refuse and serve, as they are there (`refused` and
 // `failed` returned instead of logged)
-const batch = SERVE === "plain" ? null : await batching(space);
-const mirror = batch && SERVE === "mirror" ? new Mirror(space) : null;
+let batch: any = null;
+let mirror: any = null;
+for (const [id, a] of addresses) {
+	const s = connectSpace(a).space;
+	const b = SERVE === "plain" ? null : await batching(s);
+	spaces.set(id, { space: s, batch: b, mirror: b && SERVE === "mirror" ? new Mirror(s) : null });
+}
+const use = (id: string) => { const s = spaces.get(id); if (!s) throw new Error(`no region ${id}`); cur = id; ({ space, batch, mirror } = s); };
+use(cur);
+/** The other regions' spaces, in the order of the address list (world-host.ts `others`). */
+const others = () => new Map([...spaces].filter(([id]) => id !== cur).map(([id, s]) => [id, s.space]));
+/** world-host.ts `elsewhere`. */
+const elsewhere = async (itemId: string) => {
+	for (const s of [space, ...others().values()]) {
+		if (s !== space && (await s.readAll({ type: "Item", fields: { itemId } }, { limit: 1 })).length) return true;
+		if ((await s.readAll({ type: "Handover" })).some((h: any) => ((h.fields.items ?? []) as Array<{ fields: { itemId?: unknown } }>).some((i) => i.fields.itemId === itemId))) return true;
+	}
+	return false;
+};
 const claim = async (txn: string, charId: string) => {
 	if (!(await space.takeIfExists(actorToken(charId), NO_WAIT, { txn }))) return null;
 	const e = await space.takeIfExists({ type: "Intent", fields: { charId } }, NO_WAIT, { txn });
@@ -119,7 +150,8 @@ const serve = async (w: unknown, charId: string): Promise<string> => {
 			const accountId = actor!.accountId;
 			const loadAccount = async () => { const e = await one({ type: "Account", fields: { accountId } }, 2_000); return e ? fieldsOf(e) : null; };
 			const account = /^step\s/.test(intent.line) ? null : await loadAccount();
-			await execute({ space: end.space, txn, world: await spatialWorld(end.space, w), actor, account, ...(account ? {} : { loadAccount }), msgLeaseMs: MSG_LEASE_MS, cache: {}, ...(intent.asked ? { asked: intent.asked } : {}), ...(intent.lang ? { lang: intent.lang } : {}), ...(intent.step ? { step: intent.step } : {}) }, intent.line);
+			const away = others();
+			await execute({ space: end.space, txn, world: await spatialWorld(end.space, w), actor, account, ...(account ? {} : { loadAccount }), msgLeaseMs: MSG_LEASE_MS, cache: {}, ...(regional && away.size ? { elsewhere: away } : {}), ...(intent.asked ? { asked: intent.asked } : {}), ...(intent.lang ? { lang: intent.lang } : {}), ...(intent.step ? { step: intent.step } : {}) }, intent.line);
 		}
 		await end.commit();
 		return "ran";
@@ -131,7 +163,8 @@ const serve = async (w: unknown, charId: string): Promise<string> => {
 };
 
 const worlds = new Map<string, unknown>();
-const world = async (id: string) => { if (!worlds.has(id)) worlds.set(id, await loadWorld(id)); return worlds.get(id); };
+const full = async (id: string) => { if (!worlds.has(id)) worlds.set(id, await loadWorld(id)); return worlds.get(id); };
+const world = async (id: string) => { if (!regional) return full(id); const k = `${id}/${cur}`; if (!worlds.has(k)) worlds.set(k, regionWorld(await full(id), cur)); return worlds.get(k); };
 
 async function step(line: Record<string, unknown>): Promise<unknown> {
 	switch (line.op) {
@@ -139,7 +172,7 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 		case "load": {
 			const w = await world(String(line.world));
 			if (!(await space.readIfExists(WORLD_LOCK, 0))) await space.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, null, FOREVER); // the space process writes it
-			return await loadIntoSpace(space, w, { replace: !!line.replace });
+			return await loadIntoSpace(space, w, { replace: !!line.replace, ...(regional ? { elsewhere } : {}) });
 		}
 		case "tick": {
 			const w = await world(String(line.world)), msgLeaseMs = MSG_LEASE_MS;
@@ -182,6 +215,13 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 			const w = await world(String(line.world ?? "leuchtfeuer"));
 			await space.write({ type: "Intent", fields: { intentId: line.intentId, charId: line.charId, line: line.line, at: clock, ...(line.step ? { step: line.step } : {}), ...(line.asked ? { asked: line.asked } : {}), ...(line.lang ? { lang: line.lang } : {}) } }, null, 30_000);
 			return await serve(w, String(line.charId));
+		}
+		case "region": use(String(line.id)); return null;
+		case "deliver": {
+			const w = await full(String(line.world ?? "leuchtfeuer"));
+			let n = 0;
+			for (const carrier of [handovers(w), couriers(w)]) for (const e of await space.readAll({ type: carrier.type }, { limit: 8 })) { await carryOne(space, others(), carrier, e); n++; }
+			return n;
 		}
 		case "write": await space.write(line.entry, null, line.lease ?? FOREVER); return null;
 		case "take": return !!(await space.takeIfExists(line.template, NO_WAIT));

@@ -95,7 +95,10 @@ async fn beam(c: &mut Ctx, arg: &str) -> Result<()> {
 	let room_id = j::s(&t.room, "roomId").to_owned();
 	let to_region = crossing(c.w(), &room_id)?;
 	drop_offers(c).await?;
-	if to_region.is_some() { return Err(Error::Other("unported: handOff".into())); }
+	if let Some(to_region) = to_region {
+		let from = j::s(c.w(), "region").to_owned();
+		return crate::handover::hand_off(c, &from, &to_region, &room_id, &obj! { "x" => landing.0, "y" => landing.1 }, 0.0).await;
+	}
 	let dest = room_of(c, Some(&room_id)).await?;
 	let at = place_in(c, &dest, landing, false, &[]).await?;
 	let dest_id = j::s(&dest, "roomId").to_owned();

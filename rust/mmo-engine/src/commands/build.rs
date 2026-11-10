@@ -2,7 +2,6 @@
 //! needs and work on it; when nothing is missing it becomes the building, in the same transaction. Its chest, a
 //! settlement's warehouse, repair, demolition and estates.
 //!
-//! Not ported yet: chests in other regions (`c.elsewhere`, the courier), which come with regions.
 use std::collections::HashSet;
 
 use phi_json::{obj, Json, Object};
@@ -721,27 +720,37 @@ async fn truhe(c: &mut Ctx) -> Result<()> {
 	msg(c, &me, "look", &text, info()).await
 }
 
-/// `ownChests`: one's chests (a warehouse is not one's chest), in the order the lists number them (`chestOrder`). Only
-/// this region's: chests in other regions come with regions.
-pub async fn own_chests(c: &Ctx) -> Result<Vec<Json>> {
+/// `OwnChest`: a chest of one's own, wherever it stands: here (`region` None) or in another region's space.
+#[derive(Clone)]
+pub struct OwnChest { pub b: Json, pub region: Option<String>, pub space: Space }
+
+/// `ownChests`: one's chests in every region (a warehouse is not one's chest), in the order the lists number them
+/// (`chestOrder`).
+pub async fn own_chests(c: &Ctx) -> Result<Vec<OwnChest>> {
 	let Some(a) = &c.account else { return Ok(vec![]) };
 	let w = c.w();
-	let mut all: Vec<Json> = fields_of(c.space.read_all(&tmpl("Building", obj! { "accountId" => j::at(a, "accountId").clone() }), c.txn()).await?).into_iter().filter(|b| plan_has(w, j::at(b, "plan"), "chest") && !plan_has(w, j::at(b, "plan"), "store")).collect();
-	all.sort_by(|x, y| js::locale_compare(&all_room_name(w, j::s(x, "room")), &all_room_name(w, j::s(y, "room"))).then_with(|| phi_json::utf16_cmp(j::s(x, "buildId"), j::s(y, "buildId"))));
+	let t = tmpl("Building", obj! { "accountId" => j::at(a, "accountId").clone() });
+	let chest = |b: &Json| plan_has(w, j::at(b, "plan"), "chest") && !plan_has(w, j::at(b, "plan"), "store");
+	let mut all: Vec<OwnChest> = fields_of(c.space.read_all(&t, c.txn()).await?).into_iter().filter(|b| chest(b)).map(|b| OwnChest { b, region: None, space: c.space.clone() }).collect();
+	for (region, space) in &c.elsewhere {
+		let Ok(there) = space.read_all(&t, None).await else { continue };
+		all.extend(fields_of(there).into_iter().filter(|b| chest(b)).map(|b| OwnChest { b, region: Some(region.clone()), space: space.clone() }));
+	}
+	all.sort_by(|x, y| js::locale_compare(&all_room_name(w, j::s(&x.b, "room")), &all_room_name(w, j::s(&y.b, "room"))).then_with(|| phi_json::utf16_cmp(j::s(&x.b, "buildId"), j::s(&y.b, "buildId"))));
 	Ok(all)
 }
 fn chest_label(w: &Json, b: &Json) -> String { format!("{} ({})", txt(j::at(b, "name")), all_room_name(w, j::s(b, "room"))) }
-fn numbered(w: &Json, list: &[Json]) -> String { list.iter().enumerate().map(|(i, b)| format!("{} {}", i + 1, chest_label(w, b))).collect::<Vec<_>>().join(", ") }
+fn numbered(w: &Json, list: &[OwnChest]) -> String { list.iter().enumerate().map(|(i, x)| format!("{} {}", i + 1, chest_label(w, &x.b))).collect::<Vec<_>>().join(", ") }
 
 /// `chestNamed`: the chest `target` names ("2", "hütte", "die hütte in den dünen"); none named: the one beside, else the
 /// only one.
-async fn chest_named(c: &Ctx, target: &str) -> Result<Json> {
+async fn chest_named(c: &Ctx, target: &str) -> Result<OwnChest> {
 	let all = own_chests(c).await?;
 	if all.is_empty() { return refuse("Du hast keine Truhe: eine Hütte hat eine („bau hütte“)."); }
 	let w = c.w();
 	let t = js::re(r"^(?:meine[nm]?|my)\s+", "").replace(&no_article(&js::trim(target).to_lowercase()), "");
 	let me = xy(&c.actor);
-	let beside = |list: &[&Json]| list.iter().find(|b| j::s(b, "room") == c.room() && dist_to(me, Rect::of(b)) <= 1.0).map(|b| (*b).clone());
+	let beside = |list: &[&OwnChest]| list.iter().find(|x| x.region.is_none() && j::s(&x.b, "room") == c.room() && dist_to(me, Rect::of(&x.b)) <= 1.0).map(|x| (*x).clone());
 	if t.is_empty() || js::re(r"^(?:truhe|kiste|chest)$", "").test(&t) {
 		if let Some(b) = beside(&all.iter().collect::<Vec<_>>()) { return Ok(b); }
 		if all.len() == 1 { return Ok(all[0].clone()); }
@@ -760,19 +769,21 @@ async fn chest_named(c: &Ctx, target: &str) -> Result<Json> {
 		v.push(all_room_name(w, j::s(b, "room")));
 		v.join(" ").to_lowercase()
 	};
-	let fits: Vec<&Json> = all.iter().filter(|b| !words.is_empty() && words.iter().all(|x| names(b).contains(x.as_str()))).collect();
+	let fits: Vec<&OwnChest> = all.iter().filter(|x| !words.is_empty() && words.iter().all(|k| names(&x.b).contains(k.as_str()))).collect();
 	if fits.len() == 1 { return Ok(fits[0].clone()); }
-	let index = |b: &Json| all.iter().position(|x| x == b).map_or(0, |i| i + 1);
+	let index = |b: &OwnChest| all.iter().position(|x| std::ptr::eq(x, b)).map_or(0, |i| i + 1);
 	if fits.len() > 1 {
 		if let Some(b) = beside(&fits) { return Ok(b); }
-		return refuse(format!("Das passt auf mehrere Truhen: {}. Sag die Nummer, etwa „verstaue 3 muscheln in {}“.", fits.iter().map(|b| format!("{} {}", index(b), chest_label(w, b))).collect::<Vec<_>>().join(", "), index(fits[0])));
+		return refuse(format!("Das passt auf mehrere Truhen: {}. Sag die Nummer, etwa „verstaue 3 muscheln in {}“.", fits.iter().map(|x| format!("{} {}", index(x), chest_label(w, &x.b))).collect::<Vec<_>>().join(", "), index(fits[0])));
 	}
 	refuse(format!("Eine Truhe „{}“ hast du nicht. Deine Truhen: {}.", js::slice16(js::trim(target), 0, Some(30)), numbered(w, &all)))
 }
 
 /// `chestForSale`: what a chest of one's own holds, for the market.
 pub async fn chest_for_sale(c: &Ctx, target: &str) -> Result<(Json, Vec<Json>)> {
-	let b = chest_named(c, target).await?;
+	let chest = chest_named(c, target).await?;
+	if chest.region.is_some() { return refuse(format!("Die Truhe deiner {} steht in einer anderen Gegend; was darin liegt, hängst du an ein Marktbrett dort.", chest_label(c.w(), &chest.b))); }
+	let b = chest.b;
 	let items = chest_of(c, j::at(&b, "buildId")).await?;
 	Ok((b, items))
 }
@@ -832,25 +843,37 @@ async fn verstaue(c: &mut Ctx, arg: &str) -> Result<()> {
 		if later { go_on(c, &more_of(&target, rest_of(n, fit - k))).await?; }
 		return msg(c, &who, "info", &format!("Du legst {} {iname} in das Lager.{}", nt(moved), if later { GOING_ON } else if fit < wanted { " Mehr passt nicht hinein." } else { "" }), info()).await;
 	}
-	let chest = chest_named(c, &target).await?;
+	let own = chest_named(c, &target).await?;
+	let chest = own.b.clone();
 	let cap = cap_of(c.w(), &chest);
 	let bid = txt(j::at(&chest, "buildId"));
 	let mut room = f64::INFINITY;
 	if cap != f64::INFINITY {
-		let inside: Vec<Json> = c.space.read_all(&tmpl("Item", obj! { "location" => bid.as_str() }), c.txn()).await?.into_iter().filter(|e| !keeper_proto(c.w(), j::at(fields(e), "proto"))).collect();
-		room = cap - held_in(c.w(), &inside);
+		let txn = if own.region.is_none() { c.txn() } else { None };
+		let inside: Vec<Json> = own.space.read_all(&tmpl("Item", obj! { "location" => bid.as_str() }), txn).await?.into_iter().filter(|e| !keeper_proto(c.w(), j::at(fields(e), "proto"))).collect();
+		// what is on its way there by courier counts as in it
+		let coming: f64 = if own.region.is_none() { 0.0 } else { c.space.read_all(&tmpl("Courier", obj! { "buildId" => bid.as_str() }), c.txn()).await?.iter().map(|e| j::number(j::at(fields(e), "count"))).sum() };
+		room = cap - held_in(c.w(), &inside) - coming;
 	}
 	let fit = fit_of(n, all.len(), room, each);
 	let k = fit.min(MOVES_PER_COMMAND);
 	let label = chest_label(c.w(), &chest);
 	if k <= 0.0 { return refuse(format!("Die Truhe deiner {label} ist voll ({}).", nt(cap))); }
-	let beside = j::s(&chest, "room") == c.room() && dist_to(me, Rect::of(&chest)) <= 1.0;
+	let beside = own.region.is_none() && j::s(&chest, "room") == c.room() && dist_to(me, Rect::of(&chest)) <= 1.0;
 	let mut moved = 0.0;
-	for it in all.iter().take(k as usize) { if move_item(&c.space, c.txn(), j::at(fields(it), "itemId"), &who, &bid).await? { moved += 1.0; } }
+	if let Some(region) = &own.region {
+		// another region: a courier carries them (courier.rs); until then they lie with it, out of anyone's reach
+		let courier_id = format!("cou-{}", hex(&random_bytes(6)));
+		for it in all.iter().take(k as usize) { if move_item(&c.space, c.txn(), j::at(fields(it), "itemId"), &who, &courier_id).await? { moved += 1.0; } }
+		let f = obj! { "courierId" => courier_id.as_str(), "to" => region.as_str(), "buildId" => bid.as_str(), "accountId" => j::at(&chest, "accountId").clone(), "ownerName" => j::at(&chest, "ownerName").clone(), "room" => j::at(&chest, "room").clone(), "name" => j::at(&chest, "name").clone(), "proto" => proto.clone(), "count" => moved, "at" => time_now() };
+		c.space.write(&tmpl("Courier", f), c.txn(), FOREVER).await?;
+	} else {
+		for it in all.iter().take(k as usize) { if move_item(&c.space, c.txn(), j::at(fields(it), "itemId"), &who, &bid).await? { moved += 1.0; } }
+	}
 	let later = k < fit && moved == k;
 	if later { go_on(c, &more_of(&target, rest_of(n, fit - k))).await?; }
 	let more = if later { GOING_ON } else if fit < wanted { " Mehr passt nicht hinein." } else { "" };
-	let text = if beside { format!("Du legst {} {iname} in die Truhe.{more}", nt(moved)) } else { format!("Du legst {} {iname} in die Truhe deiner {label}.{more}", nt(moved)) };
+	let text = if beside { format!("Du legst {} {iname} in die Truhe.{more}", nt(moved)) } else if own.region.is_none() { format!("Du legst {} {iname} in die Truhe deiner {label}.{more}", nt(moved)) } else { format!("Ein Bote bringt {} {iname} in die Truhe deiner {label}.{more}", nt(moved)) };
 	msg(c, &who, "info", &text, info()).await
 }
 

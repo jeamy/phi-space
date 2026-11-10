@@ -91,7 +91,11 @@ async fn ausschiffen(c: &mut Ctx, arg: &str) -> Result<()> {
 	let me = c.char_id().to_owned();
 	c.space.take_if_exists(&tmpl("Passage", obj! { "charId" => me.as_str() }), NO_WAIT, c.txn()).await?;
 	let to = j::s(&a, "to").to_owned();
-	if crossing(c.w(), &to)?.is_some() { return Err(Error::Other("unported: handOff".into())); }
+	if let Some(to_region) = crossing(c.w(), &to)? {
+		crate::commands::default::drop_offers(c).await?;
+		let from = j::s(c.w(), "region").to_owned();
+		return crate::handover::hand_off(c, &from, &to_region, &to, j::at(&a, "spot"), 0.0).await;
+	}
 	let dest = room_of(c, Some(&to)).await?;
 	let spot = j::at(&a, "spot");
 	let cell = place_in(c, &dest, (j::n(spot, "x"), j::n(spot, "y")), false, &[]).await?;

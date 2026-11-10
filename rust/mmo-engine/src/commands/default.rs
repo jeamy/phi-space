@@ -128,7 +128,9 @@ async fn through_fog(c: &Ctx, exit: &Json) -> Result<()> {
 /// `crossing`: the region a room of another region lies in; None when it is here or the world runs as one space.
 pub fn crossing(w: &Json, room: &str) -> Result<Option<String>> {
 	if !j::b(w, "region") || j::a(w, "rooms").iter().any(|r| j::s(r, "roomId") == room) { return Ok(None); }
-	Err(Error::Other("unported: regions (crossing)".into()))
+	let mut all = j::object(w);
+	all.insert("rooms", j::opt(w, "allRooms").cloned().unwrap_or_else(|| j::at(w, "rooms").clone()));
+	Ok(crate::regions::region_of_room(&Json::Object(all), room))
 }
 
 /// `traverse`: through an exit.
@@ -136,7 +138,13 @@ pub async fn traverse(c: &mut Ctx, exit: &Json) -> Result<()> {
 	let whereto = where_to(c.w(), exit);
 	check(c, j::s(exit, "locks"), "traverse", &format!("Der Weg nach {whereto} ist dir versperrt.")).await?;
 	if let Some(max) = exit.get("fogMax") { if fog_of(&c.space, c.room()).await? > j::number(max) { through_fog(c, exit).await?; } }
-	if crossing(c.w(), j::s(exit, "destination"))?.is_some() { return Err(Error::Other("unported: handOff".into())); }
+	// a ferry into another region: the character leaves this space and a world worker brings it over (handover.rs)
+	if let Some(to_region) = crossing(c.w(), j::s(exit, "destination"))? {
+		drop_offers(c).await?;
+		msg(c, "*", "info", &format!("$you() $conj(gehst|geht) nach {whereto}."), MsgOpts { templ: true, ..Default::default() }).await?;
+		let from = j::s(c.w(), "region").to_owned();
+		return crate::handover::hand_off(c, &from, &to_region, j::s(exit, "destination"), j::at(exit, "arrive"), j::no(exit, "arriveGrowthRevision").unwrap_or(0.0)).await;
+	}
 	let dest = room_of(c, Some(j::s(exit, "destination"))).await?;
 	let dest_id = j::s(&dest, "roomId").to_owned();
 	let growth = c.space.read_all(&tmpl("RoomGrowth", obj! { "roomId" => dest_id.as_str() }), c.txn()).await?.into_iter().next();
@@ -478,7 +486,7 @@ async fn reputation(c: &mut Ctx) -> Result<()> {
 	let pieces: f64 = mine.iter().map(|x| j::n(x, "pieces")).sum();
 	let account_id = c.account.as_ref().map_or(Json::from(""), |a| j::at(a, "accountId").clone());
 	let tended: f64 = c.space.read_all(&tmpl("ParkCare", obj! { "accountId" => account_id }), None).await?.iter().map(|e| j::number(j::at(fields(e), "points"))).sum();
-	let deeds = match &c.account { Some(a) => crate::deeds::deed_text(crate::deeds::deeds_of(&[&c.space], j::s(a, "accountId")).await?), None => String::new() };
+	let deeds = match &c.account { Some(a) => crate::deeds::deed_text(crate::deeds::deeds_of(&std::iter::once(&c.space).chain(c.elsewhere.iter().map(|(_, s)| s)).collect::<Vec<_>>(), j::s(a, "accountId")).await?), None => String::new() };
 	let truthy = |n: f64| n != 0.0 && !n.is_nan();
 	let n = phi_json::number_text;
 	let text = format!("{}{}{}",

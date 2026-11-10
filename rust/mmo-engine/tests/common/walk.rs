@@ -88,32 +88,89 @@ fn compare(step: &str, ts: &Json, rust: &[String]) {
 	if let Some(i) = ts.iter().zip(rust).position(|(x, y)| x != y) { panic!("{step}: the same entries in another order, from entry {i}:\n  TypeScript {}\n  Rust       {}", ts[i], rust[i]); }
 }
 
-/// One comparison: the two spaces, the TypeScript driver, the Rust engine's space and clock.
-pub struct Walk { ts: Driver, _servers: (Kill, Kill), pub space: Space, pub clock: Rc<Cell<f64>>, pub w: Json, rt: tokio::runtime::Runtime, local: tokio::task::LocalSet, intents: usize, mirror: Option<Rc<mmo_engine::mirror::Mirror>> }
+/// A region of a walk with regions: its Rust space, the copy of it, its part of the world.
+struct Region { id: String, space: Space, mirror: Option<Rc<mmo_engine::mirror::Mirror>>, w: Json }
+
+/// One comparison: the two spaces, the TypeScript driver, the Rust engine's space and clock. With regions a pair of
+/// spaces per region; `space`, `w` and the copy are the current region's (`region`).
+pub struct Walk { ts: Driver, _servers: Vec<Kill>, pub space: Space, pub clock: Rc<Cell<f64>>, pub w: Json, rt: tokio::runtime::Runtime, local: tokio::task::LocalSet, intents: usize, mirror: Option<Rc<mmo_engine::mirror::Mirror>>, regions: Vec<Region>, full: Json }
 
 impl Walk {
-	pub fn new(name: &str, seed: u32, start: f64) -> Self {
+	pub fn new(name: &str, seed: u32, start: f64) -> Self { Self::start(name, seed, start, &[]) }
+	/// A walk on the world split into `regions` (the first one current): a pair of spaces for each.
+	pub fn regions(name: &str, seed: u32, start: f64, regions: &[&str]) -> Self { Self::start(name, seed, start, regions) }
+
+	fn start(name: &str, seed: u32, start: f64, regions: &[&str]) -> Self {
 		let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("engine-walk-{name}"));
 		std::fs::create_dir_all(&dir).unwrap();
-		let (a, addr_a) = space_server(&dir, "ts");
-		let (b, addr_b) = space_server(&dir, "rust");
-		let ts = Driver::start(name, &addr_a, seed, start);
+		let ids: Vec<&str> = if regions.is_empty() { vec![""] } else { regions.to_vec() };
+		let mut servers = Vec::new();
+		let (mut ts_addr, mut rust_addr) = (Vec::new(), Vec::new());
+		for id in &ids {
+			let (a, addr_a) = space_server(&dir, &format!("ts{id}"));
+			let (b, addr_b) = space_server(&dir, &format!("rust{id}"));
+			servers.push(a);
+			servers.push(b);
+			ts_addr.push(if regions.is_empty() { addr_a } else { format!("{id}={addr_a}") });
+			rust_addr.push(addr_b);
+		}
+		let ts = Driver::start(name, &ts_addr.join(","), seed, start);
 		let clock = Rc::new(Cell::new(start));
 		let c = clock.clone();
 		set_source(Some(Rc::new(Seeded::new(seed, move || c.get()))));
-		let w = mmo_engine::world::load_world(&oracle().join("spaces-mmo"), "leuchtfeuer").expect("the world");
+		let full = mmo_engine::world::load_world(&oracle().join("spaces-mmo"), "leuchtfeuer").expect("the world");
 		let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
 		let local = tokio::task::LocalSet::new();
-		let space = local.block_on(&rt, async {
-			let (remote, _t) = connect_space(&addr_b, ConnectOptions::default()).expect("connect");
-			let space = Space::new(remote);
-			space.write(&world_lock(), None, FOREVER).await.expect("the lock");
-			space
-		});
-		// the copy the commands read their snapshot from, as the driver's (R8_SERVE: mirror by default, as in production)
-		let mirror = matches!(std::env::var("R8_SERVE").as_deref(), Err(_) | Ok("mirror")).then(|| Rc::new(mmo_engine::mirror::Mirror::new(space.remote().clone())));
-		if let Some(m) = &mirror { local.block_on(&rt, m.fresh()).expect("the first copy"); }
-		Self { ts, _servers: (a, b), space, clock, w, rt, local, intents: 0, mirror }
+		let mut list = Vec::new();
+		for (id, addr) in ids.iter().zip(&rust_addr) {
+			let space = local.block_on(&rt, async {
+				let (remote, _t) = connect_space(addr, ConnectOptions::default()).expect("connect");
+				let space = Space::new(remote);
+				space.write(&world_lock(), None, FOREVER).await.expect("the lock");
+				space
+			});
+			// the copy the commands read their snapshot from, as the driver's (R8_SERVE: mirror by default, as in production)
+			let mirror = matches!(std::env::var("R8_SERVE").as_deref(), Err(_) | Ok("mirror")).then(|| Rc::new(mmo_engine::mirror::Mirror::new(space.remote().clone())));
+			if let Some(m) = &mirror { local.block_on(&rt, m.fresh()).expect("the first copy"); }
+			let w = if regions.is_empty() { full.clone() } else { mmo_engine::regions::region_world(&full, id).expect("the region") };
+			list.push(Region { id: (*id).to_owned(), space, mirror, w });
+		}
+		let first = &list[0];
+		let (space, w, mirror) = (first.space.clone(), first.w.clone(), first.mirror.clone());
+		let regions = if regions.is_empty() { Vec::new() } else { list };
+		Self { ts, _servers: servers, space, clock, w, rt, local, intents: 0, mirror, regions, full }
+	}
+	/// With regions: every later step goes to region `id` on both sides.
+	pub fn region(&mut self, id: &str) {
+		let t = self.ts.call(obj! { "op" => "region", "id" => id });
+		assert_eq!(t.get("ok"), Some(&Json::Bool(true)), "region: {}", t.to_json_text());
+		let r = self.regions.iter().find(|r| r.id == id).expect("a region of the walk");
+		(self.space, self.w, self.mirror) = (r.space.clone(), r.w.clone(), r.mirror.clone());
+	}
+	/// The current region's id.
+	pub fn current(&self) -> String { self.regions.iter().find(|r| r.space.key() == self.space.key()).map_or_else(String::new, |r| r.id.clone()) }
+	/// The other regions' spaces, in the walk's order (world-host.ts `others`).
+	fn others(&self) -> Vec<(String, Space)> { self.regions.iter().filter(|r| r.space.key() != self.space.key()).map(|r| (r.id.clone(), r.space.plain())).collect() }
+	/// Every region compared, the current one again current after.
+	pub fn compare_all(&mut self, step: &str) {
+		let here = self.current();
+		let ids: Vec<String> = self.regions.iter().map(|r| r.id.clone()).collect();
+		for id in &ids { self.region(id); self.compare(&format!("{step} ({id})")); }
+		self.region(&here);
+	}
+	/// One round of the current region's orders out of it (handovers, then couriers) on both sides; how many.
+	pub fn deliver(&mut self) -> f64 {
+		use mmo_engine::transfer::{carry_waiting, Carrier};
+		let t = self.ts.call(obj! { "op" => "deliver" });
+		assert_eq!(t.get("ok"), Some(&Json::Bool(true)), "deliver: {}", t.to_json_text());
+		let others = self.others();
+		let r = self.run(async {
+			let mut n = 0;
+			for carrier in [Carrier::Handover, Carrier::Courier] { n += carry_waiting(&self.space.plain(), &others, carrier, &self.full).await?; }
+			mmo_engine::space::Result::Ok(n)
+		}).expect("the Rust deliver");
+		assert_eq!(t.get("result").and_then(Json::as_f64), Some(r as f64), "deliver: how many");
+		r as f64
 	}
 	pub fn run<T>(&self, f: impl std::future::Future<Output = T>) -> T { self.local.block_on(&self.rt, f) }
 	pub fn at(&mut self, ms: f64) { self.clock.set(ms); self.ts.call(obj! { "op" => "clock", "at" => ms }); }
@@ -124,7 +181,7 @@ impl Walk {
 	}
 	pub fn load(&mut self, replace: bool) {
 		let t = self.ts.call(obj! { "op" => "load", "world" => "leuchtfeuer", "replace" => replace });
-		let r = self.run(load_into_space(&self.space, &self.w, LoadOptions { replace, txn_ms: None })).expect("the Rust load");
+		let r = self.run(load_into_space(&self.space, &self.w, LoadOptions { replace, txn_ms: None, elsewhere: (!self.regions.is_empty()).then(|| self.others().into_iter().map(|(_, s)| s).collect()) })).expect("the Rust load");
 		assert_eq!(t.get("result"), Some(&r.to_json()), "load: the result");
 	}
 	/// How many entries of the Rust space contain `text` (a walk shows that it did something).
@@ -209,7 +266,7 @@ impl Walk {
 		if let Some(s) = step { j_set(&mut f, "step", s); }
 		if let Some(a) = asked { j_set(&mut f, "asked", Json::from(a)); }
 		if let Some(l) = lang { j_set(&mut f, "lang", Json::from(l)); }
-		let worker = Worker { space: self.space.clone(), w: Rc::new(self.w.clone()), msg_lease_ms: 600_000.0, txn_ms: 15_000.0, mirror: self.mirror.clone() };
+		let worker = Worker { space: self.space.clone(), w: Rc::new(self.w.clone()), msg_lease_ms: 600_000.0, txn_ms: 15_000.0, mirror: self.mirror.clone(), elsewhere: self.others() };
 		let r = self.run(async {
 			self.space.write(&obj! { "type" => "Intent", "fields" => f }, None, 30_000.0).await.expect("the intent");
 			worker.serve(char_id).await

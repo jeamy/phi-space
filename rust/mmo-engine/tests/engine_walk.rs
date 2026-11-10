@@ -1684,3 +1684,135 @@ fn sweeping() {
 	}
 	assert!(w.entries_with("Treibholz") + w.entries_with("Tang") + w.entries_with("Muschel") > 3, "no storm brought anything");
 }
+
+/// Regions (regions.ts, handover.ts, transfer.ts, courier.ts): the world as three regions, each a pair of spaces of
+/// its own. Things put into one's chests in other regions by courier (one into a chest that is gone meanwhile, into an
+/// estate), and a character crossing by ferry there and back (a registered one with its pack, a guest), by sailing, by
+/// beaming and aboard the large ship: handed off in the command, then delivered by the world worker of the region it
+/// left. A placed thing carried into another region is not placed again by a reload.
+#[test]
+fn crossing_regions() {
+	let mut w = Walk::regions("crossing_regions", 59, START, &["west", "nord", "ost"]);
+	for r in ["nord", "ost", "west"] { w.region(r); w.load(false); }
+	let a = w.player_as(1, "klippenkopf", (12.0, 2.0), true, false);
+	let b = w.player(2, "anleger", (12.0, 13.0), true);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	for (p, k) in [("muenze", 14), ("muschel", 6), ("netz", 1), ("segelboot", 1)] { give(&mut w, &a, p, k); }
+	give(&mut w, &b, "muschel", 2);
+	// a placed thing in the pack: once it is in another region, a reload does not place it again
+	assert!(w.take(obj! { "type" => "Item", "fields" => obj! { "itemId" => "muschel-1" } }));
+	w.write(thing(&world, "muschel-1", "muschel", &a));
+	let hut = |id: &str, room: &str, beacon: &str| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => "huette", "name" => "Hütte", "room" => room, "x" => 3.0, "y" => 3.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk1", "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => beacon, "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	w.write(hut("h-w", "fischerdorf", "feuer-bucht"));
+	let steg = |id: &str, room: &str, x: f64, y: f64| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => "steg", "name" => "Steg", "room" => room, "x" => x, "y" => y, "w" => 2.0, "h" => 1.0, "owner" => "c-walk9", "ownerName" => "Wanderer9", "accountId" => "a-walk9", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	w.write(steg("st-1", "graue-bucht", 5.0, 7.0));
+	w.region("nord");
+	w.write(hut("h-n", "vogelklippen", "feuer-warte"));
+	w.write(steg("st-3", "moewenfels-strand", 11.0, 7.0));
+	w.region("ost");
+	w.write(hut("h-o", "kupferhafen-markt", "feuer-kai"));
+	w.region("west");
+	w.compare_all("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| -> String {
+		step += 1;
+		at.set(at.get() + 7_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{} {who}: {line} -> {r}", w.current());
+		w.compare_all(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r.clone());
+		r
+	};
+	let deliver = |w: &mut Walk, label: &str| -> f64 { let k = w.deliver(); w.compare_all(&format!("deliver {label}: {k}")); k };
+	let here = |w: &mut Walk, who: &str| w.peek(obj! { "type" => "Character", "fields" => obj! { "charId" => who } }).is_some();
+	// couriers: to the chest in the north and in the east; the north one is gone before the courier comes
+	for line in ["verstaue muschel", "verstaue 2 muschel in 1", "verstaue 1 muschel in 2", "verstaue 1 muschel in 3", "verstaue 1 muschel in vogelklippen", "verstaue muschel in atlantis"] { run(&mut w, &a, line, 0.0); }
+	assert!(w.entries_with("\"Courier\"") >= 2, "no courier");
+	w.region("nord");
+	assert!(w.take(obj! { "type" => "Building", "fields" => obj! { "buildId" => "h-n" } }));
+	w.region("west");
+	let cou = w.peek(obj! { "type" => "Courier", "fields" => obj! { "buildId" => "h-o" } }).expect("the courier east");
+	assert!(deliver(&mut w, "couriers") >= 2.0);
+	assert_eq!(deliver(&mut w, "nothing"), 0.0);
+	// a try that died after the things were written in the east: the courier back, one thing again with it
+	w.region("ost");
+	let moved = w.peek(obj! { "type" => "Item", "fields" => obj! { "location" => "h-o" } }).expect("a thing in the chest");
+	w.region("west");
+	let mut f = moved.get("fields").cloned().unwrap();
+	walk::j_set(&mut f, "location", cou.get("fields").and_then(|c| c.get("courierId")).cloned().unwrap());
+	w.write(obj! { "type" => "Item", "fields" => f });
+	w.write(obj! { "type" => "Courier", "fields" => cou.get("fields").cloned().unwrap() });
+	assert_eq!(deliver(&mut w, "a courier again"), 1.0);
+	// by ferry to the north and back, with the pack
+	run(&mut w, &a, "möwenfels", 0.0);
+	assert!(!here(&mut w, &a), "still in the west");
+	let h = w.peek(obj! { "type" => "Handover" }).expect("the handover");
+	deliver(&mut w, "the ferry north");
+	// a try that died after the character arrived: the order back, a thing of the pack still here
+	w.write(obj! { "type" => "Handover", "fields" => h.get("fields").cloned().unwrap() });
+	w.write(thing(&world, "t-1", "muenze", &a));
+	assert_eq!(deliver(&mut w, "the ferry again"), 1.0);
+	w.region("nord");
+	assert!(here(&mut w, &a), "not in the north");
+	for line in ["look", "inventory", "verstaue 1 muschel in 1", "graue-insel"] { run(&mut w, &a, line, 0.0); }
+	deliver(&mut w, "back and a courier");
+	w.region("west");
+	assert!(here(&mut w, &a), "not back in the west");
+	// a guest by ferry to the east
+	run(&mut w, &b, "tangriff", 0.0);
+	deliver(&mut w, "the guest");
+	// sailing to the north and back
+	stand(&mut w, 1, "graue-bucht", 5.0, 8.0);
+	run(&mut w, &a, "segle möwenfels", 0.0);
+	deliver(&mut w, "sailing north");
+	w.region("nord");
+	if here(&mut w, &a) { run(&mut w, &a, "segle graue insel", 15.0 * 60_000.0); deliver(&mut w, "sailing back"); }
+	w.region("west");
+	assert!(here(&mut w, &a), "not back from sailing");
+	// beaming to the market of the east
+	w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-kai", "until" => 9e15, "litAt" => 0.0 } });
+	w.write(obj! { "type" => "Epoch", "fields" => obj! { "island" => "Graue Insel", "epoch" => 4.0, "points" => 900.0, "at" => START } });
+	w.write(obj! { "type" => "Epoch", "fields" => obj! { "island" => "Kupferhafen", "epoch" => 4.0, "points" => 900.0, "at" => START } });
+	run(&mut w, &a, "beam markt von kupferhafen", 0.0);
+	assert!(!here(&mut w, &a), "the beam stayed in the west");
+	deliver(&mut w, "the beam");
+	w.region("ost");
+	for line in ["look", "inventory"] { run(&mut w, &a, line, 0.0); }
+	// a Handover from before the pack went on its own: it arrives with its things
+	w.region("west");
+	let old = thing(&world, "old-1", "muschel", "c-walk4");
+	w.write(obj! { "type" => "Handover", "fields" => obj! {
+		"handoverId" => "h-old", "charId" => "c-walk4", "from" => "west", "to" => "ost", "at" => START,
+		"character" => obj! { "charId" => "c-walk4", "accountId" => "a-walk4", "name" => "Wanderer4", "room" => "kupferhafen-kai", "x" => 1.0, "y" => 8.0, "skin" => 0.0, "guest" => false },
+		"account" => obj! { "accountId" => "a-walk4", "name" => "Wanderer4", "guest" => false, "admin" => false, "createdAt" => START, "touchedAt" => START },
+		"items" => Json::Array(vec![obj! { "type" => "Item", "types" => Json::Array(vec![Json::from("Item")]), "fields" => old.get("fields").cloned().unwrap() }])
+	} });
+	assert_eq!(deliver(&mut w, "an old handover"), 1.0);
+	// the large ship from the west to another region
+	w.region("west");
+	let s = w.player_as(3, "graue-bucht", (10.0, 8.0), true, false);
+	for i in 0..5 { w.write(thing(&world, &format!("s-{i}"), "muenze", &s)); }
+	let mut boarded = false;
+	for _ in 0..60 {
+		if run(&mut w, &s, "einschiffen tangriff", 0.0) == "ran" { boarded = true; break; }
+		run(&mut w, &s, "look", 25.0 * 60_000.0);
+	}
+	assert!(boarded, "the ship never lay in the bay");
+	let mut landed = false;
+	for _ in 0..80 {
+		w.tick("garden");
+		run(&mut w, &s, "look", 25.0 * 60_000.0);
+		if !here(&mut w, &s) { landed = true; break; }
+	}
+	assert!(landed, "never left the ship");
+	deliver(&mut w, "the ship");
+	// a reload places no thing that is in another region now
+	for r in ["west", "nord", "ost"] { w.region(r); w.load(true); }
+	w.compare_all("reloaded");
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 10, "{said:?}");
+}
