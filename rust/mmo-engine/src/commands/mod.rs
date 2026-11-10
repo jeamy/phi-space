@@ -33,6 +33,7 @@ pub mod siteorder;
 pub mod townhall;
 pub mod trade;
 pub mod wind;
+pub mod wild;
 
 /// A command (`Command`): an exit's command carries the exit.
 #[derive(Debug, Clone)]
@@ -133,6 +134,7 @@ pub async fn run(c: &mut Ctx, cmd: &Command, arg: &str, merged: &Merged, exits: 
 		("festival", key) => festival::run(c, key, arg).await,
 		("field", key) => field::run(c, key, arg).await,
 		("animals", key) => animals::run(c, key, arg).await,
+		("wild", key) => wild::run(c, key, arg).await,
 		("garden", key) => garden::run(c, key, arg).await,
 		("shop", key) => shop::run(c, key, arg).await,
 		("builder", key) => builder::run(c, key, arg).await,

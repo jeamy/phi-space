@@ -28,7 +28,7 @@ const COMMONS_TAKE: f64 = 2.0;
 const KIND_WORD: &str = r"^(?:(zier(?:beet)?|blumen(?:beet)?|flowers?)|(gemeinschaft(?:sbeet)?|gemeinsam|gemein|community))(?:\s+|$)";
 
 fn garden(c: &Ctx) -> Result<Json> { match j::opt(c.w(), "garden") { Some(g) => Ok(g.clone()), None => refuse("In dieser Welt wächst nichts in Beeten.") } }
-fn sort_of<'a>(g: &'a Json, key: &str) -> Option<&'a Json> { j::by(j::a(g, "sorts"), "key", key) }
+pub fn sort_of<'a>(g: &'a Json, key: &str) -> Option<&'a Json> { j::by(j::a(g, "sorts"), "key", key) }
 /// `protoName`.
 pub fn proto_name(c: &Ctx, key: &str) -> String { j::by(j::a(c.w(), "prototypes"), "key", key).map_or_else(|| key.to_owned(), |p| txt(j::at(p, "name"))) }
 fn mine(c: &Ctx, b: &Json) -> bool { c.account.as_ref().is_some_and(|a| j::at(a, "accountId") == j::at(b, "accountId")) }
@@ -106,7 +106,7 @@ async fn tended_bed(c: &Ctx) -> Result<Json> {
 		r => r,
 	}
 }
-async fn write_bed(c: &Ctx, b: &Json) -> Result<()> { c.space.write(&tmpl("Bed", b.clone()), c.txn(), FOREVER).await?; Ok(()) }
+pub async fn write_bed(c: &Ctx, b: &Json) -> Result<()> { c.space.write(&tmpl("Bed", b.clone()), c.txn(), FOREVER).await?; Ok(()) }
 
 async fn describe(c: &Ctx, g: &Json, b: &Json, now: f64) -> Result<String> {
 	let mut count: Vec<(String, f64)> = Vec::new();

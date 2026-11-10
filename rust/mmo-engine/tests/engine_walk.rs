@@ -1326,3 +1326,97 @@ fn keeping_animals() {
 	for (who, line) in [(&a, "schlachte hund"), (&a, "schlachte ziege"), (&a, "schlachte"), (&a, "schlachte huhn"), (&a, "schlachte"), (&a, "schlachte"), (&a, "schlachte"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
 }
+
+/// The wild from the fog (wild.ts): hares at a bed, a deer at a field, a fox at a coop, mice at a chest and gulls at a
+/// smokehouse coming in a room in fog and eating, scared off (`scheuche` with its refusals), fences round the bed, the
+/// field and the coop (`zäune`), a mousetrap and a net, a scarecrow and fed guards keeping them off.
+#[test]
+fn the_wild() {
+	let mut w = Walk::new("the_wild", 54, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (7.0, 13.0), true, false);
+	let g = w.player(3, "graue-bucht", (6.0, 12.0), true);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	for (p, k) in [("spaten", 1), ("samen-strandnelke", 4), ("samen-duenenrose", 3), ("wasserkanne", 22), ("weizen", 6), ("huhn", 4), ("treibholz", 1), ("tangseil", 1)] { give(&mut w, &a, p, k); }
+	give(&mut w, &b, "samen-strandkohl", 3);
+	give(&mut w, &b, "spaten", 1);
+	give(&mut w, &b, "wasserkanne", 22);
+	let building = |id: &str, plan: &str, name: &str, x: f64, y: f64, sz: (f64, f64), owner: usize| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => plan, "name" => name, "room" => "graue-bucht", "x" => x, "y" => y, "w" => sz.0, "h" => sz.1, "owner" => format!("c-walk{owner}"), "ownerName" => format!("Wanderer{owner}"), "accountId" => format!("a-walk{owner}"), "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-bucht", "until" => 9e15, "litAt" => 0.0 } });
+	w.write(obj! { "type" => "Epoch", "fields" => obj! { "island" => "Graue Insel", "epoch" => 2.0, "points" => 100.0, "at" => START } });
+	w.write(building("s-1", "huehnerstall", "Hühnerstall", 5.0, 11.0, (2.0, 1.0), 1));
+	w.write(building("h-1", "huette", "Hütte", 9.0, 12.0, (2.0, 2.0), 2));
+	w.write(building("r-1", "raeucherei", "Räucherei", 12.0, 13.0, (2.0, 2.0), 1));
+	for (p, k) in [("weizen", 4), ("brot", 1)] { give(&mut w, "h-1", p, k); }
+	give(&mut w, "r-1", "fisch", 4);
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| {
+		step += 1;
+		at.set(at.get() + 7_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	// nothing to scare, nothing to fence; then two beds (the second by a scarecrow), a field and the coop's hens
+	for (who, line) in [(&a, "scheuche"), (&a, "scheuche hase"), (&a, "scheuche gibtsnicht"), (&a, "zäune"), (&a, "umgraben 4 13"), (&a, "pflanze 3 strandnelken"), (&b, "umgraben 7 14"), (&b, "pflanze 3 samen-strandkohl")] { run(&mut w, who, line, 0.0); }
+	w.write(building("v-1", "vogelscheuche", "Vogelscheuche", 9.0, 15.0, (1.0, 1.0), 2));
+	stand(&mut w, 1, "graue-bucht", 5.0, 12.0);
+	for _ in 0..3 { run(&mut w, &a, "einstallen huhn", 0.0); }
+	stand(&mut w, 1, "graue-bucht", 2.0, 9.0);
+	for (who, line) in [(&a, "flur anlegen"), (&a, "flur"), (&a, "bestelle weizen")] { run(&mut w, who, line, 0.0); }
+	for _ in 0..3 { run(&mut w, &a, "bestelle", 3_600_000.0); }
+	run(&mut w, &a, "flur", 0.0);
+	stand(&mut w, 1, "graue-bucht", 5.0, 13.0);
+	stand(&mut w, 3, "graue-bucht", 22.0, 8.0);
+	// the fog comes; the wild with it, every twenty minutes through a night, with someone scaring off what comes now
+	// and then (and one too far away to)
+	w.write(obj! { "type" => "Fog", "fields" => obj! { "room" => "graue-bucht", "level" => 3.0 } });
+	let mut got = (0.0, 0.0);
+	let tick = |w: &mut Walk, got: &mut (f64, f64)| { let r = w.call("wildTick", None); eprintln!("wildTick -> {}", r.to_json_text()); got.0 += r.get("came").and_then(Json::as_f64).unwrap(); got.1 += r.get("ate").and_then(Json::as_f64).unwrap(); };
+	for i in 0..60 {
+		run(&mut w, &g, "look", 20.0 * 60_000.0);
+		tick(&mut w, &mut got);
+		if i % 6 == 2 { for line in ["scheuche den hasen weg", "scheuche reh", "scheuche die maus fort", "scheuche möwe", "scheuche fuchs", "scheuche"] { run(&mut w, &a, line, 0.0); } }
+		if i % 7 == 4 { run(&mut w, &g, "scheuche alle", 0.0); }
+		if i % 3 == 0 { run(&mut w, &a, "gieße", 0.0); run(&mut w, &b, "gieße", 0.0); w.call("gardenTick", None); }
+	}
+	// a scarecrow by the field, then fences, traps and the guards
+	w.write(building("v-2", "vogelscheuche", "Vogelscheuche", 1.0, 8.0, (1.0, 1.0), 1));
+	stand(&mut w, 1, "graue-bucht", 5.0, 13.0);
+	run(&mut w, &a, "zäune", 0.0);
+	give(&mut w, &a, "treibholz", 13);
+	give(&mut w, &a, "tangseil", 4);
+	run(&mut w, &a, "zäune", 0.0);
+	run(&mut w, &a, "zäune", 0.0);
+	stand(&mut w, 2, "graue-bucht", 12.0, 9.0);
+	run(&mut w, &b, "zäune", 0.0);
+	give(&mut w, "h-1", "mausefalle", 1);
+	give(&mut w, "r-1", "netz", 1);
+	for _ in 0..24 { run(&mut w, &g, "look", 20.0 * 60_000.0); tick(&mut w, &mut got); }
+	stand(&mut w, 1, "graue-bucht", 7.0, 11.0);
+	run(&mut w, &a, "zäune", 0.0);
+	run(&mut w, &a, "zäune", 0.0);
+	stand(&mut w, 1, "graue-bucht", 2.0, 9.0);
+	run(&mut w, &a, "zäune", 0.0);
+	run(&mut w, &a, "zäune", 0.0);
+	for _ in 0..12 { run(&mut w, &g, "look", 20.0 * 60_000.0); tick(&mut w, &mut got); }
+	let mut f = w.peek(obj! { "type" => "Building", "fields" => obj! { "buildId" => "h-1" } }).unwrap().get("fields").cloned().unwrap();
+	assert!(w.take(obj! { "type" => "Building", "fields" => obj! { "buildId" => "h-1" } }));
+	walk::j_set(&mut f, "keeper", obj! { "kind" => "katze", "fedUntilWorldMs" => 9e15 });
+	w.write(obj! { "type" => "Building", "fields" => f });
+	w.write(obj! { "type" => "Building", "fields" => { let mut x = building("h-2", "huette", "Hütte", 18.0, 13.0, (2.0, 2.0), 2).get("fields").cloned().unwrap(); walk::j_set(&mut x, "keeper", obj! { "kind" => "hund", "fedUntilWorldMs" => 9e15 }); x } });
+	assert!(w.take(obj! { "type" => "Item", "fields" => obj! { "location" => "h-1", "proto" => "mausefalle" } }));
+	// the job as the worker runs it
+	for _ in 0..12 { run(&mut w, &g, "look", 20.0 * 60_000.0); w.tick("wild"); }
+	eprintln!("came {} ate {}", got.0, got.1);
+	assert!(got.0 >= 8.0 && got.1 >= 3.0, "{got:?}");
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 15 && said.iter().filter(|r| r.starts_with("refused")).count() > 8, "{said:?}");
+}
