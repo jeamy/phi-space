@@ -732,3 +732,194 @@ fn milling() {
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 10 && said.iter().filter(|r| r.starts_with("refused")).count() > 10, "{said:?}");
 	assert!(w.entries_with("Du holst") >= 1, "nothing was fetched");
 }
+
+/// Festivals (festival.ts): opening one with its refusals (no park, a guest, the season, no settlement, not a settler,
+/// one open, the rest after one), showing flowers, a harvest and boats, tending the park, and the shows' end in the
+/// epoch job: a prize as an estate, a figure winning for the settlement's honour, too few, and one whose settlement is gone.
+#[test]
+fn festivals() {
+	let mut w = Walk::new("festivals", 41, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (7.0, 13.0), true, false);
+	let g = w.player(3, "graue-bucht", (4.0, 12.0), true);
+	let e = w.player_as(4, "graue-bucht", (6.0, 13.0), true, false);
+	assert!(w.take(obj! { "type" => "Account", "fields" => obj! { "accountId" => "a-walk4" } }));
+	w.write(obj! { "type" => "Account", "fields" => obj! { "accountId" => "a-walk4", "name" => "Wanderer4", "guest" => false, "admin" => false, "settler" => true, "createdAt" => START, "touchedAt" => START } });
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize, variety: Option<Json>| { for _ in 0..k { n += 1; let t = thing(&world, &format!("t-{n}"), proto, to); let t = match &variety { Some(v) => { let mut f = t.get("fields").cloned().unwrap(); walk::j_set(&mut f, "variety", v.clone()); obj! { "type" => "Item", "fields" => f } } None => t }; w.write(t); } };
+	give(&mut w, &a, "strandnelke", 1, Some(obj! { "name" => "Abendrot", "color" => "rot" }));
+	give(&mut w, &a, "strandnelke", 2, None);
+	give(&mut w, &a, "treibholz", 1, None);
+	give(&mut w, &b, "duenenrose", 1, Some(obj! { "color" => "gelb" }));
+	give(&mut w, &e, "nebelblume", 1, None);
+	give(&mut w, &g, "strandnelke", 1, None);
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| {
+		step += 1;
+		at.set(at.get() + 9_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	let building = |id: &str, plan: &str, name: &str, x: f64, y: f64, owner: usize| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => plan, "name" => name, "room" => "graue-bucht", "x" => x, "y" => y, "w" => 2.0, "h" => 2.0, "owner" => format!("c-walk{owner}"), "ownerName" => format!("Wanderer{owner}"), "accountId" => format!("a-walk{owner}"), "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	let settlement = |rest: Option<f64>| { let mut f = obj! { "settlementId" => "s-1", "name" => "Graubucht", "room" => "graue-bucht", "members" => Json::Array(vec![]), "closed" => false }; if let Some(r) = rest { walk::j_set(&mut f, "showRestWorldMs", Json::from(r)); } obj! { "type" => "Settlement", "fields" => f } };
+	for (who, line) in [(&a, "fest"), (&a, "fest tanz"), (&g, "fest blumen"), (&a, "fest blumen"), (&a, "pflege"), (&a, "zeige nelke"), (&g, "pflege")] { run(&mut w, who, line, 0.0); }
+	w.write(building("p-1", "park", "Park", 5.0, 11.0, 9));
+	for (who, line) in [(&a, "fest blumen"), (&a, "fest ernte"), (&a, "fest regatta"), (&a, "fest race")] { run(&mut w, who, line, 0.0); }
+	w.write(obj! { "type" => "Setting", "fields" => obj! { "key" => "year.days", "value" => 0.0 } });
+	run(&mut w, &a, "fest blumen", 0.0);
+	w.write(building("h-1", "huette", "Hütte", 8.0, 15.0, 1));
+	w.write(settlement(None));
+	for (who, line) in [
+		(&b, "fest blumen"), (&a, "fest Blumenschau"), (&a, "fest ernte"), (&a, "fest"), (&a, "zeige"), (&a, "zeige stein"), (&a, "zeige treibholz"),
+		(&a, "zeige abendrot"), (&a, "zeige strandnelke"), (&b, "zeige rose"), (&e, "zeige nebelblume"), (&g, "zeige strandnelke"), (&a, "fest"),
+		(&a, "pflege"), (&a, "pflege"), (&b, "pflege"), (&e, "pflegen"),
+	] { run(&mut w, who, line, 0.0); }
+	assert_eq!(w.call("showTick", None), Json::from(0.0));
+	run(&mut w, &a, "fest", 200_000_000.0);
+	assert_eq!(w.call("showTick", None), Json::from(1.0));
+	for (who, line) in [(&a, "fest"), (&a, "fest blumen"), (&a, "nachlass"), (&a, "pflege")] { run(&mut w, who, line, 0.0); }
+	// a harvest festival
+	assert!(w.take(obj! { "type" => "Settlement", "fields" => obj! { "settlementId" => "s-1" } }));
+	w.write(settlement(Some(1.0)));
+	give(&mut w, &a, "weizen", 3, None);
+	give(&mut w, &a, "samen-ruebe", 1, None);
+	give(&mut w, &b, "kartoffel", 1, None);
+	for (who, line) in [(&a, "fest harvest"), (&a, "zeige"), (&a, "zeige weizen"), (&a, "zeige weizen"), (&a, "zeige rübensamen"), (&b, "zeige kartoffel"), (&a, "fest"), (&e, "zeige nebelblume")] { run(&mut w, who, line, 0.0); }
+	run(&mut w, &a, "fest", 200_000_000.0);
+	assert_eq!(w.call("showTick", None), Json::from(1.0));
+	// a regatta at the landing stage, with a figure among the crews
+	assert!(w.take(obj! { "type" => "Settlement", "fields" => obj! { "settlementId" => "s-1" } }));
+	w.write(settlement(None));
+	give(&mut w, &a, "segelboot", 1, None);
+	give(&mut w, &b, "ruderboot", 1, None);
+	give(&mut w, &e, "ruderboot", 1, None);
+	run(&mut w, &a, "fest regatta", 0.0);
+	w.write(building("st-1", "steg", "Steg", 5.0, 14.0, 9));
+	for (who, line) in [(&a, "fest regatta"), (&a, "zeige"), (&a, "zeige segelboot"), (&b, "zeige ruderboot"), (&e, "zeige ruderboot"), (&e, "zeige ruderboot"), (&a, "zeige weizen"), (&a, "fest"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
+	run(&mut w, &a, "fest", 200_000_000.0);
+	assert_eq!(w.call("showTick", None), Json::from(1.0));
+	// one alone wins nothing; a show whose settlement is gone lapses
+	assert!(w.take(obj! { "type" => "Settlement", "fields" => obj! { "settlementId" => "s-1" } }));
+	w.write(settlement(None));
+	give(&mut w, &a, "strandnelke", 1, None);
+	for (who, line) in [(&a, "fest blumen"), (&a, "zeige strandnelke")] { run(&mut w, who, line, 0.0); }
+	w.write(obj! { "type" => "Show", "fields" => obj! { "showId" => "sh-x", "room" => "duenen", "settlementId" => "s-gone", "settlementName" => "Fort", "kind" => "blumen", "byName" => "Jemand", "endsWorldMs" => 1.0 } });
+	w.write(obj! { "type" => "ShowEntry", "fields" => obj! { "showId" => "sh-x", "accountId" => "a-walk9", "charName" => "Jemand", "name" => "Rose", "score" => 1.0, "at" => 1.0 } });
+	run(&mut w, &a, "fest", 200_000_000.0);
+	assert_eq!(w.call("showTick", None), Json::from(2.0));
+	run(&mut w, &a, "fest", 0.0);
+	// a figure wins for the settlement's honour; of equal ones the earlier is ahead
+	assert!(w.take(obj! { "type" => "Settlement", "fields" => obj! { "settlementId" => "s-1" } }));
+	w.write(settlement(None));
+	give(&mut w, &a, "strandnelke", 1, None);
+	give(&mut w, &b, "strandnelke", 1, None);
+	give(&mut w, &e, "nebelblume", 1, Some(obj! { "name" => "Silberhauch" }));
+	for (who, line) in [(&a, "fest blumen"), (&b, "zeige strandnelke"), (&a, "zeige strandnelke"), (&e, "zeige nebelblume"), (&a, "fest")] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 2, "graue-bucht", 12.0, 8.0);
+	run(&mut w, &b, "zeige strandnelke", 0.0);
+	run(&mut w, &a, "fest", 200_000_000.0);
+	assert_eq!(w.call("showTick", None), Json::from(1.0));
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 15 && said.iter().filter(|r| r.starts_with("refused")).count() > 15, "{said:?}");
+	assert_eq!(w.entries_with(r#""Estate""#), 2, "the prizes of the flower show and the harvest festival");
+}
+
+/// The department store and the counting house (shop.ts): the till filled and emptied by its owner, selling to the store
+/// and buying from it at prices led by its stock, a settlement's tax on what is bought, delivery orders posted, delivered
+/// in part and whole, cancelled, loans against a pledge, paid back, ended by their time with the house standing and gone,
+/// and bills of exchange written and cashed.
+#[test]
+fn shops() {
+	let mut w = Walk::new("shops", 43, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (7.0, 13.0), true, false);
+	let g = w.player(3, "graue-bucht", (12.0, 8.0), true);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	give(&mut w, &b, "treibholz", 3);
+	give(&mut w, &b, "perle", 1);
+	give(&mut w, &b, "kerze", 1);
+	give(&mut w, &b, "brot", 1);
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| {
+		step += 1;
+		at.set(at.get() + 9_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	let building = |id: &str, plan: &str, name: &str, x: f64, y: f64, wh: (f64, f64), owner: usize| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => plan, "name" => name, "room" => "graue-bucht", "x" => x, "y" => y, "w" => wh.0, "h" => wh.1, "owner" => format!("c-walk{owner}"), "ownerName" => format!("Wanderer{owner}"), "accountId" => format!("a-walk{owner}"), "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	for (who, line) in [(&a, "laden"), (&b, "kredit 5 gegen perle"), (&b, "wechsel"), (&b, "wechsel 5"), (&b, "tilge")] { run(&mut w, who, line, 0.0); }
+	w.write(building("k-1", "kaufhaus", "Kaufhaus", 5.0, 11.0, (2.0, 2.0), 1));
+	w.write(building("ko-1", "kontor", "Kontor", 8.0, 11.0, (2.0, 2.0), 9));
+	for (who, line) in [(&a, "laden"), (&a, "laden einlegen 5"), (&a, "laden einlegen x")] { run(&mut w, who, line, 0.0); }
+	give(&mut w, &a, "muenze", 30);
+	for (who, line) in [
+		(&a, "laden einlegen 10"), (&a, "laden entnehme 3"), (&a, "laden entnehme 50"), (&b, "laden einlegen 2"), (&b, "laden"),
+		(&b, "laden verkaufe treibholz"), (&b, "laden verkaufe treibholz"), (&b, "laden verkaufe perle"), (&b, "laden verkaufe gold"), (&b, "laden verkaufe xyzzy"), (&b, "laden verkaufe kerze"), (&a, "laden"),
+		(&b, "laden kaufe stein"), (&b, "laden kaufe treibholz"), (&b, "laden kaufe brot"), (&b, "laden verkaufe brot"), (&b, "laden kaufe das brot"),
+	] { run(&mut w, who, line, 0.0); }
+	// a settlement's tax on what is bought at its store, kept in its warehouse
+	w.write(obj! { "type" => "Settlement", "fields" => obj! { "settlementId" => "s-1", "room" => "graue-bucht", "name" => "Graubucht", "closed" => false, "members" => Json::Array(vec![]), "tax" => 1.0 } });
+	run(&mut w, &b, "laden kaufe treibholz", 0.0);
+	w.write(building("l-1", "lagerhaus", "Lagerhaus", 19.0, 12.0, (3.0, 2.0), 9));
+	give(&mut w, &b, "muenze", 12);
+	for (who, line) in [(&b, "laden kaufe treibholz"), (&b, "laden verkaufe treibholz"), (&b, "laden kaufe treibholz"), (&a, "laden")] { run(&mut w, who, line, 0.0); }
+	// delivery orders
+	give(&mut w, &b, "fisch", 5);
+	for (who, line) in [
+		(&b, "laden bestelle 5 fisch für 2"), (&a, "laden bestelle fisch"), (&a, "laden bestelle 5 kerze für 1"), (&a, "laden bestelle 0 fisch für 1"), (&a, "laden bestelle 21 fisch für 1"),
+		(&a, "laden bestelle 3 fisch für 0"), (&a, "laden bestelle 9 fisch für 9"), (&a, "laden einlegen 15"), (&a, "laden bestelle 3 Fisch für 2"), (&a, "laden bestelle 2 fische für 1"),
+		(&a, "laden bestelle 1 tang fuer 1"), (&a, "laden bestelle 1 Muschel for 1"), (&a, "laden bestelle 1 ei für 1"), (&a, "laden"), (&a, "laden entnehme 20"), (&a, "laden entnehme 2"),
+		(&a, "laden liefere fisch"), (&b, "laden liefere stein"), (&b, "laden liefere kerze"), (&b, "laden liefere 2 fisch"), (&b, "laden"), (&b, "laden liefere alle fisch"), (&b, "laden liefere fisch"),
+		(&a, "laden storniere tang"), (&a, "laden storniere gold"), (&a, "laden storniere"), (&b, "laden storniere muschel"), (&a, "laden storniere Muschel"), (&a, "laden tanz"), (&a, "laden einlegen -2"),
+	] { run(&mut w, who, line, 0.0); }
+	// loans
+	for (who, line) in [(&g, "kredit"), (&b, "kredit"), (&b, "kredit x"), (&a, "kredit 2 gegen muenze"), (&b, "kredit 50 gegen perle"), (&b, "kredit 2 gegen kerze"), (&b, "kredit 2 gegen gold"), (&b, "kredit 2 gegen xyzzy"), (&b, "kredit 0 gegen perle"), (&b, "kredit 5 gegen perle")] { run(&mut w, who, line, 0.0); }
+	give(&mut w, "ko-1", "muenze", 20);
+	give(&mut w, &b, "perle", 1);
+	for (who, line) in [(&b, "kredit 5 gegen die perle"), (&b, "kredit"), (&b, "kredit 3 gegen perle"), (&b, "inventory")] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 2, "graue-bucht", 12.0, 9.0);
+	run(&mut w, &b, "tilge", 0.0);
+	stand(&mut w, 2, "graue-bucht", 7.0, 13.0);
+	for (who, line) in [(&b, "tilge"), (&b, "tilge"), (&b, "kredit 4 gegen perle"), (&a, "tilge")] { run(&mut w, who, line, 0.0); }
+	w.write(obj! { "type" => "Loan", "fields" => obj! { "loanId" => "loan-a", "buildId" => "ko-1", "room" => "graue-bucht", "accountId" => "a-walk1", "charId" => a.as_str(), "charName" => "Wanderer1", "owed" => 999.0, "untilWorldMs" => 9e15 } });
+	stand(&mut w, 1, "graue-bucht", 10.0, 13.0);
+	run(&mut w, &a, "tilge", 0.0);
+	assert!(w.take(obj! { "type" => "Loan", "fields" => obj! { "loanId" => "loan-a" } }));
+	stand(&mut w, 1, "graue-bucht", 5.0, 13.0);
+	// a loan whose house is gone is paid back with nothing; one that ran out: the pledge to the house, or back
+	w.write(obj! { "type" => "Loan", "fields" => obj! { "loanId" => "loan-x", "buildId" => "gone", "room" => "graue-bucht", "accountId" => "a-walk1", "charId" => a.as_str(), "charName" => "Wanderer1", "owed" => 3.0, "untilWorldMs" => 9e15 } });
+	give(&mut w, "loan-x", "muschel", 1);
+	run(&mut w, &a, "tilge", 0.0);
+	w.write(obj! { "type" => "Loan", "fields" => obj! { "loanId" => "loan-y", "buildId" => "gone", "room" => "graue-bucht", "accountId" => "a-walk9", "charId" => a.as_str(), "charName" => "Wanderer1", "owed" => 3.0, "untilWorldMs" => 1.0 } });
+	give(&mut w, "loan-y", "tang", 2);
+	assert_eq!(w.call("loanTick", None), Json::from(1.0));
+	run(&mut w, &b, "kredit", 700_000_000.0);
+	assert_eq!(w.call("loanTick", None), Json::from(1.0));
+	assert_eq!(w.call("loanTick", None), Json::from(0.0));
+	for (who, line) in [(&b, "kredit"), (&b, "inventory"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
+	// bills of exchange
+	give(&mut w, &b, "muenze", 10);
+	for (who, line) in [
+		(&g, "wechsel 5"), (&b, "wechsel"), (&b, "wechsel einlösen"), (&b, "wechsel 500"), (&b, "wechsel x"), (&b, "wechsel 30"), (&b, "wechsel 4"), (&b, "wechsel 3 münzen"), (&b, "wechsel"),
+		(&b, "inventory"), (&b, "wechsel einlösen"), (&b, "wechsel"), (&b, "wechsel 2"), (&b, "wechsel cash"),
+	] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 3, "graue-bucht", 10.0, 11.0);
+	for (who, line) in [(&g, "wechsel 2"), (&g, "wechsel einlösen"), (&g, "laden"), (&g, "kredit 1 gegen x")] { run(&mut w, who, line, 0.0); }
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 30, "{said:?}");
+}

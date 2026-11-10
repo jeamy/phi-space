@@ -15,12 +15,14 @@ pub mod chapel;
 pub mod clock;
 pub mod default;
 pub mod epoch;
+pub mod festival;
 pub mod food;
 pub mod mill;
 pub mod passage;
 pub mod quarry;
 pub mod scenery;
 pub mod settlement;
+pub mod shop;
 pub mod signal;
 pub mod siteorder;
 pub mod townhall;
@@ -123,6 +125,8 @@ pub async fn run(c: &mut Ctx, cmd: &Command, arg: &str, merged: &Merged, exits: 
 		("trade", key) => trade::run(c, key, arg).await,
 		("food", "iss") => food::iss(c, arg).await,
 		("mill", key) => mill::run(c, key, arg).await,
+		("festival", key) => festival::run(c, key, arg).await,
+		("shop", key) => shop::run(c, key, arg).await,
 		("settlement", "siedlung") => settlement::siedlung(c, arg).await,
 		("epoch", "epoche") => epoch::epoche(c, arg).await,
 		("townhall", "antrag") => townhall::antrag(c, arg).await,
