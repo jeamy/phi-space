@@ -596,3 +596,7 @@ button.cmd-word { cursor: pointer; display: inline; min-height: 0; }
 /* the crosses to name in the pack: one chip each, its colour as a dot */
 .pack-crosses { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; }
 .pack-crosses .cross-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; border: 1px solid rgba(0, 0, 0, 0.4); }
+
+/* the pack's order: A by name, D by arrival */
+.pack-sort { display: flex; gap: 4px; justify-content: flex-end; margin: 2px 0 4px; }
+.pack-sort .chip { min-width: 28px; padding: 2px 8px; font-weight: 600; }

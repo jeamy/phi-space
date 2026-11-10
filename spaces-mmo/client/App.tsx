@@ -419,7 +419,11 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 	useEffect(() => { if (!fire) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [fire?.id]);
 	// the pack in short: one icon per kind of thing with how many; a tap shows what can be done with it
 	const [picked, setPicked] = useState<string | null>(null);
-	const order = byArrival(arrived ?? new Map(), uses?.seeds);
+	// by arrival, the newest first (D), or by name (A); the choice is kept for the next visit
+	const [sortBy, setSortBy] = useState<"A" | "D">(() => { try { return localStorage.getItem("mmo.packSort") === "A" ? "A" : "D"; } catch { return "D"; } });
+	const sortTo = (v: "A" | "D") => { setSortBy(v); try { localStorage.setItem("mmo.packSort", v); } catch { /* private window: for this page */ } };
+	const arrival = byArrival(arrived ?? new Map(), uses?.seeds);
+	const order = sortBy === "A" ? (a: string, b: string) => a.localeCompare(b, "de") : arrival;
 	const kinds = [...carried.reduce((m, o) => m.set(o.name, [...(m.get(o.name) ?? []), o]), new Map<string, ObjView[]>())].sort(([a], [b]) => order(a, b));
 	const chosen = kinds.find(([name]) => name === picked);
 	/** The hints about the chosen thing (what it makes, with „Herstellen“), shown under its buttons. */
@@ -520,6 +524,10 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 						return can.length > 0 && <div className="pack-can">{can.map((e) => <button key={e.line} onClick={() => { if (e.confirm && !window.confirm(e.confirm)) return; if (e.run) e.run(); else send(e.line); }}>{e.label}</button>)}</div>;
 					})()}
 					{shownHints.map((h) => <p key={h.id} className="pack-hint">{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>)}
+				</div>}
+				{kinds.length > 1 && <div className="pack-sort" role="radiogroup" aria-label="Sortieren">
+					<button type="button" role="radio" aria-checked={sortBy === "A"} className={`chip${sortBy === "A" ? " on" : ""}`} title="Alphabetisch" onClick={() => sortTo("A")}>A</button>
+					<button type="button" role="radio" aria-checked={sortBy === "D"} className={`chip${sortBy === "D" ? " on" : ""}`} title="Nach Eingang, das Neueste zuerst" onClick={() => sortTo("D")}>D</button>
 				</div>}
 				<div className="pack">{kinds.map(([name, os]) => (
 					<button key={name} className={`chip pack-chip${picked === name ? " on" : ""}`} onClick={() => setPicked(picked === name ? null : name)} title={name} aria-label={`${name}: ${os.length}`} aria-pressed={picked === name}>
