@@ -55,6 +55,7 @@ export const EN: Record<string, string> = {
 	"Meine Wechsel": "My bills of exchange",
 	"Wechsel einlösen": "Cash bills of exchange",
 	"Sand schaufeln": "Shovel sand",
+	"Sand schaufeln (wo du stehst)": "Shovel sand (where you stand)",
 	"Segeln: wohin?": "Sail: where to?",
 	"Nach {0} segeln": "Sail to {0}",
 	"Was liegt in der Luke?": "What is in the hatch?",

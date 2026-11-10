@@ -238,3 +238,14 @@ test("one's own field or bed can be given up from the map, after a question; som
 	assert.ok(at(bed("me")).find((e) => e.line.startsWith("beet aufgeben ja "))?.confirm);
 	assert.ok(!at(bed("other")).some((e) => e.line.startsWith("beet aufgeben ja")));
 });
+
+test("sand: with a spade, a right click on the beach shovels where the figure stands", () => {
+	const spade = new Map([...objs, ["spade", obj({ id: "spade", kind: "item", name: "Spaten", location: "me", x: -1, y: -1 })]]);
+	const beachAt = (x: number) => x <= 6; // the beach: the left of the room
+	const lines = (at: { x: number; y: number }, o = spade) => cellEntries({ ...input, objs: o, beachAt, at }).map((e) => e.line);
+	assert.ok(lines({ x: 5, y: 5 }).includes("schaufle"), "on the figure, on the beach");
+	assert.ok(lines({ x: 3, y: 4 }).includes("schaufle"), "another beach cell: where it stands");
+	assert.ok(!lines({ x: 3, y: 4 }, objs).includes("schaufle"), "no spade, no sand");
+	assert.ok(!cellEntries({ ...input, objs: spade, beachAt, self: char("me", "Mira", 9, 5), at: { x: 3, y: 4 } }).some((e) => e.line === "schaufle"), "standing off the beach: walk there first");
+	assert.ok(!cellEntries({ ...input, objs: spade, at: { x: 5, y: 5 } }).some((e) => e.line === "schaufle"), "a world without sand");
+});

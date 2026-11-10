@@ -35,6 +35,7 @@ export function usesOf(w: WorldDef): ItemUses {
 	const plans = w.building?.plans ?? [];
 	return {
 		...(w.cart?.route ? { roadEpoch: w.cart.route.epoch } : {}),
+		...(w.sand ? { sandTile: w.sand.tile } : {}),
 		npcs: w.npcs.map((n) => n.name),
 		grinds: [...new Set((w.mill?.grinds ?? []).map((g) => name(g.from)))],
 		foods: Object.fromEntries(Object.entries(w.food?.foods ?? {}).map(([k, ms]) => [name(k), Math.round(ms / 3600_000)])),
