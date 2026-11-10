@@ -101,7 +101,7 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 	for (const r of uses.recipes) {
 		const uses1 = r.tool === name || r.needs.some((n) => n.name === name);
 		if (!uses1 || (r.tool && !count.has(r.tool)) || r.needs.some((n) => (count.get(n.name) ?? 0) < n.count)) continue;
-		if (r.at && !built.some((b) => b.plan === r.at)) continue;
+		// made only at a building (the cart at a workshop): offered anywhere too, away from one the server says where (trade.ts craft)
 		if (![...out.values()].some((e) => e.label.startsWith(`${r.name} `))) add({ label: `${r.name} herstellen`, line: `craft ${r.key}` });
 	}
 	// to the registered players in the room, near or not (the server asks no more): those nearest first; not to guests, nor to NPCs
