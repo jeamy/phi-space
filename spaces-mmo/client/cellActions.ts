@@ -92,6 +92,10 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 		if (uses.stores.includes(b.plan ?? "") || (uses.chests.includes(b.plan ?? "") && b.ownerId === me)) add({ label: uses.stores.includes(b.plan ?? "") ? "Ins Lager legen" : "In die Truhe legen", line: `verstaue ${name}` });
 	}
 	if (name === "Spaten" && !guest) add({ label: "Beet umgraben", line: "umgraben" });
+	// a tool whose work wants a building beside it: offered anywhere (beside one the bar's own entry comes first), away from one
+	// the server says where it works (quarry.ts breche, fishing.ts wirf netz)
+	if (name === "Spitzhacke") add({ label: "Stein brechen", line: "breche" });
+	if (name === "Netz") add({ label: "Netz auswerfen", line: "wirf netz" });
 	// a cart carried: set it down beside one (then its own menu loads it and sends it off by road), or see where one's carts are (server: cart.ts)
 	if (name === "Karren" && !guest) { add({ label: "Karren abstellen", line: "karren stelle" }); add({ label: "Meine Karren", line: "karren" }); }
 	for (const r of uses.recipes) {
