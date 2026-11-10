@@ -1798,6 +1798,21 @@ Jedes Hoftier braucht ein Zuhause, das dir gehört. Stall, Gehege und Bienenstoc
 
 In einem Gehege lebt immer nur eine Art: Schafe, Ziegen, Enten, Gänse, Schweine oder Rinder. \`einstallen huhn\` bringt ein Tier, das du trägst, in deinen Stall, \`ausstallen\` nimmt eins heraus. \`stall\` zeigt, wie es ihnen geht. Du hältst bis zu fünf Ställe, Gehege und Bienenstöcke zusammen (der Betreiber kann es ändern).
 
+## Wie oft sie geben {#yields}
+
+Jedes Tier gibt nur, solange es **satt** ist; Zeit ohne Futter zählt nicht. Eine Fütterung reicht einen Tag, im Voraus bis zu drei Tage. Je Tier sammeln sich höchstens **3 Stück** an, dann kommt nichts mehr dazu, bis du \`einsammeln\` machst. **Nachwuchs** kommt nur mit mindestens zwei Tieren im Stall und solange Platz ist. Die Zeiten sind Weltzeit, die normalerweise so schnell läuft wie die echte Uhr.
+
+| Tier | Stall (Platz) | gibt | wie oft | Nachwuchs alle |
+| --- | --- | --- | --- | --- |
+| Huhn | Hühnerstall (6) | 1 Ei | jeden Tag | 4 Tage |
+| Ente | Gehege (4) | 1 Ei | jeden Tag | 4 Tage |
+| Ziege | Gehege (4) | 1 Milch | jeden Tag | 5 Tage |
+| Rind | Gehege (4) | 1 Milch | alle 12 Stunden | 30 Tage |
+| Schaf | Gehege (4) | 1 Wolle | alle 2 Tage | 6 Tage |
+| Gans | Gehege (4) | 1 Daunen | alle 3 Tage | 6 Tage |
+| Schwein | Gehege (4) | 1 Trüffel | alle 3 Tage | 5 Tage |
+| Bienenvolk | Bienenstock (3) | 1 Honig, auf 3 Honig 1 Wachs | alle 2 Tage | 10 Tage (ein Schwarm) |
+
 ## Füttern {#feed}
 
 Tiere fressen, was auf Feldern und Beeten wächst. Füttern darf jeder, nicht nur der Besitzer.
@@ -1983,6 +1998,21 @@ Every farm animal needs a home that belongs to you. You build a coop, pen or hiv
 | hive | \`bau bienenstock\` | 1×1 | 2 driftwood, 2 kelp rope | 4 | 3 colonies |
 
 A pen holds one kind only: sheep, goats, ducks, geese, pigs or cows. \`stable huhn\` puts an animal you carry into your house, \`unstall\` takes one out. \`stall\` shows how they are. You keep up to five coops, pens and hives together (the operator can change it).
+
+## How often they give {#yields}
+
+An animal gives only while it is **fed**; time without food does not count. One feeding lasts a day, up to three days ahead. At most **3 pieces** gather per animal, then nothing more comes until you \`collect\`. **Young** come only with at least two animals in the house and while there is room. The times are world time, which normally runs as fast as the real clock.
+
+| Animal | House (room) | gives | how often | young every |
+| --- | --- | --- | --- | --- |
+| Hen | hen house (6) | 1 egg | every day | 4 days |
+| Duck | pen (4) | 1 egg | every day | 4 days |
+| Goat | pen (4) | 1 milk | every day | 5 days |
+| Cow | pen (4) | 1 milk | every 12 hours | 30 days |
+| Sheep | pen (4) | 1 wool | every 2 days | 6 days |
+| Goose | pen (4) | 1 down | every 3 days | 6 days |
+| Pig | pen (4) | 1 truffle | every 3 days | 5 days |
+| Bee colony | hive (3) | 1 honey, 1 wax per 3 honey | every 2 days | 10 days (a swarm) |
 
 ## Feeding {#feed}
 
