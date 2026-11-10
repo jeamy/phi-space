@@ -17,7 +17,7 @@
 // traders and keepers offer people coins for what they want.
 import { randomInt } from "node:crypto";
 import { clockOf } from "../engine/clockcache.ts";
-import { counted } from "../engine/commands/trade.ts";
+import { counted, lotAsk } from "../engine/commands/trade.ts";
 import { stem } from "../engine/context.ts";
 import { flameOf } from "../engine/fire.ts";
 import { baysOf, linerOf, shipComes } from "../engine/liner.ts";
@@ -199,7 +199,7 @@ export async function answerWanted(n: Npc, l: Look): Promise<boolean> {
 		if (w.buyer === l.me.charId) continue;
 		const each = w.proto === n.world.currency ? 0 : sellPrice(n, w.proto);
 		if (!each) continue;
-		const count = w.count ?? 1, ask = each * count;
+		const count = w.count ?? 1, ask = lotAsk(n.world, w.proto, n.def.prices?.[w.proto], count);
 		if (w.price >= ask) {
 			const carried = l.pack.filter((it) => it.proto === w.proto).length;
 			// what it offers on this board counts too: it takes its own lot back (the next round delivers), rather than
@@ -243,7 +243,7 @@ async function answerOffers(n: Npc, l: Look): Promise<boolean> {
 		const price = p ? sellPrice(n, p) : 0;
 		if (!p || (p !== n.world.currency && !price)) { notMine ||= w.name; continue; }
 		if (l.pack.filter((i) => i.proto === p).length < w.count) missing ||= protoName(n.world, p);
-		asked += price * w.count;
+		asked += p === n.world.currency ? w.count : lotAsk(n.world, p, n.def.prices?.[p], w.count);
 	}
 	if (notMine) { await n.act(`decline ${o.fromName}`); await n.act(`say ${o.fromName}, ${notMine} gebe ich nicht her.`); return true; }
 	if (missing) { await n.act(`decline ${o.fromName}`); await n.act(`say ${o.fromName}, ${missing} habe ich gerade nicht.`); return true; }
@@ -267,8 +267,10 @@ function tradeTalk(n: Npc, to: string): string {
 	const prices = Object.entries(n.def.prices ?? {});
 	const buys = prices.filter(([, [b]]) => b > 0).map(([p, [b]]) => `${protoName(n.world, p)} (bis ${b})`);
 	const sells = prices.filter(([, [, s]]) => s > 0).map(([p, [, s]]) => `${protoName(n.world, p)} (${s})`);
+	// animals by the lot: each one more a coin less (lotAsk), said once after the list
+	const lots = prices.some(([p, [, s]]) => s > 1 && lotAsk(n.world, p, n.def.prices?.[p], 2) < 2 * s);
 	if (!buys.length && !sells.length) return `${to}, ${pick(n.def.lines ?? []) ?? "schön, dich zu sehen."}`;
-	return [`${to},`, buys.length ? `ich kaufe ${buys.join(", ")}` : "", buys.length && sells.length ? "und" : "", sells.length ? `verkaufe ${sells.join(", ")}` : "", `– in Münzen. Biete mir etwas an: offer <ding> an ${n.def.name} für <n> münze.`].filter(Boolean).join(" ");
+	return [`${to},`, buys.length ? `ich kaufe ${buys.join(", ")}` : "", buys.length && sells.length ? "und" : "", sells.length ? `verkaufe ${sells.join(", ")}${lots ? " (bei Tieren kostet jedes weitere eine Münze weniger)" : ""}` : "", `– in Münzen. Biete mir etwas an: offer <ding> an ${n.def.name} für <n> münze.`].filter(Boolean).join(" ");
 }
 
 /** The common part of every round: offers first, then whoever spoke to it. True when it did something. */

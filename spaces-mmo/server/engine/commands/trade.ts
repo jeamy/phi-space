@@ -169,6 +169,18 @@ const roomName = (w: WorldDef, room: string) => (w.allRooms ?? w.rooms).find((r)
 export function sellersOf(w: WorldDef, proto: string): Array<{ name: string; where: string; market: string | null; each: number }> {
 	return w.npcs.flatMap((n) => { const each = n.prices?.[proto]?.[1] ?? 0; return each > 0 ? [{ name: n.name, where: roomName(w, n.market ?? n.room), market: n.market ?? null, each }] : []; });
 }
+/** What a trader asks for `count` of `proto` whose price is `[buy, sell]`: for animals (typeclass Livestock) each one more
+ *  costs a coin less than the one before (a goat 8, two 8 + 7, three 8 + 7 + 6), never less than what the trader pays for one
+ *  (its buying price) nor less than a coin; everything else `count` times its price. */
+export function lotAsk(w: WorldDef, proto: string, price: readonly [number, number] | undefined, count: number): number {
+	const [buy, sell] = price ?? [0, 0];
+	if (sell <= 0 || count <= 0) return 0;
+	if (w.prototypes.find((p) => p.key === proto)?.typeclass !== "Livestock") return sell * count;
+	const floor = Math.max(1, Math.min(sell, buy));
+	let sum = 0;
+	for (let i = 0; i < count; i++) sum += Math.max(floor, sell - i);
+	return sum;
+}
 /** What one who seeks `proto` at `room` hears at once when no trader at this board sells it ("" when one does). */
 export function sellerHint(w: WorldDef, proto: string, protoName: string, room: string): string {
 	const all = sellersOf(w, proto);

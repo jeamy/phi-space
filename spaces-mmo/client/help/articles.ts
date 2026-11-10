@@ -1784,7 +1784,7 @@ Es gibt drei Arten von Tieren: Hoftiere, die du hältst, Wächter, die deinen Or
 | [Katze](help.game.animals#guards) | Wächter | an einem deiner Bauten | Anfang | hält Mäuse fern |
 | [Hase, Reh, Fuchs, Maus, Möwe](help.game.animals#wild) | Wild | kommen aus dem Nebel | – | fressen, was du anbaust und hältst |
 
-Alle Hoftiere, Hund und Katze verkauft Gesa am Markt von Kupferhafen. Ein Tier trägst du wie ein Ding (Last 4, ein Rind 8, Hund und Katze 2) und kannst es tauschen und handeln.
+Alle Hoftiere, Hund und Katze verkauft Gesa am Markt von Kupferhafen. Wer mehrere auf einmal kauft (ein Gesuch am Brett wie \`markt suche 3 ziege für 21\` oder ein Tausch), zahlt für jedes weitere Tier eine Münze weniger: eine Ziege 8, zwei 15, drei 21, nie weniger, als Gesa selbst für eins zahlt. Ein Tier trägst du wie ein Ding (Last 4, ein Rind 8, Hund und Katze 2) und kannst es tauschen und handeln.
 
 ## Stall und Gehege {#house}
 
@@ -1970,7 +1970,7 @@ There are three sorts of animals: farm animals you keep, guards that protect you
 | [Cat](help.game.animals#guards) | guard | at one of your buildings | start | keeps mice away |
 | [Hare, deer, fox, mouse, gull](help.game.animals#wild) | wild | come out of the fog | – | eat what you grow and keep |
 
-Gesa at the Kupferhafen market sells every farm animal, dogs and cats. You carry an animal like a thing (load 4, a cow 8, dog and cat 2) and can trade it.
+Gesa at the Kupferhafen market sells every farm animal, dogs and cats. Buy several at once (a notice on the board like \`market want 3 goats for 21\` or a trade) and each further animal costs a coin less: one goat 8, two 15, three 21, never less than Gesa herself pays for one. You carry an animal like a thing (load 4, a cow 8, dog and cat 2) and can trade it.
 
 ## Coop and pen {#house}
 

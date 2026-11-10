@@ -11,7 +11,7 @@ import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
 import "../server/npc/scripts.ts"; // first: it and the economy import each other, scripts.ts is the entry
 import { answerWanted, type Look } from "../server/npc/economy.ts";
-import { marketTick, RESTOCK_WORLD_MS } from "../server/engine/commands/trade.ts";
+import { lotAsk, marketTick, RESTOCK_WORLD_MS } from "../server/engine/commands/trade.ts";
 import { sweepTick } from "../server/engine/sweep.ts";
 import type { Npc } from "../server/npc/scripts.ts";
 import type { CharacterFields, ItemFields } from "../server/model.ts";
@@ -451,4 +451,13 @@ test("an offer ends when one side leaves the room: withdrawn, the other side tol
 		assert.equal((await pack(s, b.me, "muschel")).length, 1, "the shell stays with her");
 		await a.p.leave(); await b.p.leave();
 	} finally { await srv.close(); }
+});
+
+test("animals by the lot: each one more costs a coin less, never below what the trader pays; other things by the piece", async () => {
+	const w = await loadWorld("leuchtfeuer");
+	assert.deepEqual([1, 2, 3, 4, 5, 6].map((n) => lotAsk(w, "ziege", [4, 8], n)), [8, 15, 21, 26, 30, 34]);
+	assert.equal(lotAsk(w, "huhn", [2, 5], 5), 5 + 4 + 3 + 2 + 2);
+	assert.equal(lotAsk(w, "honig", [2, 4], 3), 12, "honey is no animal");
+	assert.equal(lotAsk(w, "ziege", [0, 3], 5), 3 + 2 + 1 + 1 + 1, "a trader that buys none: down to a coin");
+	assert.equal(lotAsk(w, "ziege", undefined, 2), 0);
 });
