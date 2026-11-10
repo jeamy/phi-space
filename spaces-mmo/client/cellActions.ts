@@ -92,6 +92,8 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 		if (uses.stores.includes(b.plan ?? "") || (uses.chests.includes(b.plan ?? "") && b.ownerId === me)) add({ label: uses.stores.includes(b.plan ?? "") ? "Ins Lager legen" : "In die Truhe legen", line: `verstaue ${name}` });
 	}
 	if (name === "Spaten" && !guest) add({ label: "Beet umgraben", line: "umgraben" });
+	// a cart carried: set it down beside one (then its own menu loads it and sends it off by road), or see where one's carts are (server: cart.ts)
+	if (name === "Karren" && !guest) { add({ label: "Karren abstellen", line: "karren stelle" }); add({ label: "Meine Karren", line: "karren" }); }
 	for (const r of uses.recipes) {
 		const uses1 = r.tool === name || r.needs.some((n) => n.name === name);
 		if (!uses1 || (r.tool && !count.has(r.tool)) || r.needs.some((n) => (count.get(n.name) ?? 0) < n.count)) continue;

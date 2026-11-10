@@ -2527,6 +2527,8 @@ export const EN: Record<string, string> = {
 	"Name der Sorte": "Name of the variety",
 	"Benennen": "Name it",
 	"Netz auswerfen": "Cast the net",
+	"Karren abstellen": "Set the cart down",
+	"Meine Karren": "My carts",
 	"Stand": "Standing",
 	"Rang": "Rank",
 	"Siedler-Figur, spielt von selbst": "Settler figure, plays by itself",
