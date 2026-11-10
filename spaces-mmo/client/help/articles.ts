@@ -1695,6 +1695,61 @@ Marta at the Kupferhafen market buys and sells bread, flour and linen, and the j
 		},
 	},
 	{
+		id: "help.game.fishing",
+		section: "play",
+		title: { de: "Fischen", en: "Fishing" },
+		short: {
+			de: "Am Steg das Netz auswerfen: Fisch, manchmal Tang, Muscheln oder Bernstein.",
+			en: "Cast the net at a jetty: fish, sometimes kelp, shells or amber.",
+		},
+		body: {
+			de: `Gefischt wird an einem **Steg**, an jedem, auch an dem eines anderen. Sonst nirgends: am Strand und am Kai geht es nicht.
+
+## Was du brauchst {#need}
+
+- Ein **Netz**: \`craft netz\` aus 2 Tangseil, mit einem Muschelmesser ([Rezepte](help.game.recipes)). Piet in der Werft macht auch welche. Das Netz hält, es nutzt sich nicht ab.
+- Einen **Steg**. Fehlt einer, baust du ihn (\`bau steg\`, schon im Fischerdorf: 6 Treibholz, 6 Arbeit). Ein Steg liegt auf dem Wasser, mit einem Ende am Ufer: Stell dich an den Strand direkt ans Wasser und tippe \`bau steg\`, er reicht dann von dir ins Wasser hinaus.
+
+## Das Netz auswerfen {#cast}
+
+Stell dich aufs Ufer direkt neben den Steg (höchstens ein Feld entfernt) und tippe \`wirf netz\`, oder tippe den Steg an und wähle **Netz auswerfen**.
+
+Jeder Wurf bringt **genau einen** Fang. Meist ist es **Fisch** (etwa drei von vier Würfen), sonst **Tang** oder eine **Muschel**, selten **Bernstein**. Danach ruhst du wie nach anderer Arbeit (standardmäßig 15 Weltminuten), dann wirfst du wieder. Wie oft du wirfst, entscheidest du: so oft, wie du Fisch brauchst. Satt ruhst du kürzer (\`iss <ding>\`, [Rezepte](help.game.recipes)), und der Segen der Kapelle halbiert die Ruhe.
+
+## Was aus dem Fisch wird {#fish}
+
+- In der **Räucherei** macht \`craft räucherfisch\` aus zwei Fischen und Holz zwei Räucherfische.
+- Auf dem Gestell der Räucherei lagert Fisch (\`verstaue fisch\` daneben). Wo kein Feuer den Nebel fernhält, holen ihn dort die Möwen, außer unter einem Netz.
+- Fisch und Räucherfisch verkaufst du am Markt, und die Auftragstafeln fragen danach.
+
+## Boote am Steg {#boats}
+
+Am Steg legen auch die Boote ab: mit dem Ruderboot \`rudere <ort>\` zu einem anderen Steg der Insel, mit dem Segelboot \`segle <insel>\` zu einer anderen Insel ([Reisen](help.game.village#travel)). Als Siedler eröffnest du am Steg mit \`fest regatta\` eine Regatta.`,
+			en: `You fish at a **jetty**, any jetty, someone else's too. Nowhere else: not on the beach and not at the quay.
+
+## What you need {#need}
+
+- A **net**: \`craft netz\` from 2 kelp rope, with a shell knife ([recipes](help.game.recipes)). Piet at the shipyard makes them too. The net holds; it does not wear out.
+- A **jetty**. If there is none, build one (\`build jetty\`, already in the fishing village: 6 driftwood, 6 work). A jetty lies on the water with one end at the shore: stand on the beach right at the water and type \`build jetty\`, and it reaches from you out into the water.
+
+## Casting the net {#cast}
+
+Stand on the shore right beside the jetty (one cell away at most) and type \`wirf netz\` (\`fish\`), or tap the jetty and choose **Cast the net**.
+
+Every cast brings **exactly one** catch. Mostly it is **fish** (about three casts in four), otherwise **kelp** or a **shell**, rarely **amber**. Afterwards you rest as after other work (15 world minutes by default), then you cast again. How often you cast is up to you: as often as you need fish. Sated you rest less (\`iss <ding>\`, [recipes](help.game.recipes)), and the chapel's blessing halves the rest.
+
+## What becomes of the fish {#fish}
+
+- In a **smokehouse** \`craft räucherfisch\` turns two fish and wood into two smoked fish.
+- The smokehouse's rack keeps fish (\`verstaue fisch\` beside it). Where no fire holds the fog back, the gulls take it there, unless it lies under a net.
+- You sell fish and smoked fish at the market, and the job boards ask for them.
+
+## Boats at the jetty {#boats}
+
+Boats leave from the jetty too: with a rowing boat \`rudere <ort>\` to another jetty of the island, with a sailing boat \`segle <insel>\` to another island ([travel](help.game.village#travel)). As a settler you open a regatta at a jetty with \`fest regatta\`.`,
+		},
+	},
+	{
 		id: "help.game.animals",
 		section: "play",
 		title: { de: "Tiere", en: "Animals" },

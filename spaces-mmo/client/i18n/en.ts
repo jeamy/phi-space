@@ -2526,6 +2526,7 @@ export const EN: Record<string, string> = {
 	"Das gehört neben einen Ausgang.": "That belongs beside an exit.",
 	"Name der Sorte": "Name of the variety",
 	"Benennen": "Name it",
+	"Netz auswerfen": "Cast the net",
 	"Stand": "Standing",
 	"Rang": "Rank",
 	"Siedler-Figur, spielt von selbst": "Settler figure, plays by itself",
