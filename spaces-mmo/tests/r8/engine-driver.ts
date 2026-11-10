@@ -7,7 +7,7 @@
 // (server/engine/source.ts) whose clock is the driver's, moved by the steps. The environment (SPACES_MMO_*) is the
 // caller's: rust/mmo-engine/tests/common sets it for both engines.
 // In:  {"op": "clock", "at": ms} | {"op": "load", "world": "leuchtfeuer", "replace"?: bool} | {"op": "dump"}
-//      | {"op": "tick", "world": "leuchtfeuer", "job": "fire" | "fog" | "flood" | "orders" | "market" | "wind"}: a recurring job as the world worker runs
+//      | {"op": "tick", "world": "leuchtfeuer", "job": "fire" | "fog" | "flood" | "orders" | "market" | "wind" | "epoch"}: a recurring job as the world worker runs
 //      it (server/world-host.ts `runs`: in stableTerrain, on spatialWorld), its messages kept MSG_LEASE_MS (10 min)
 //      | {"op": "player", "account": {...}, "char": {...}, "session"?: id}: an account, its character and its token as the
 //      accounts write them (server/accounts.ts; given whole, so neither side draws from the source), a Session when online
@@ -44,6 +44,8 @@ const { motionTick } = await from("server/engine/commands/townhall.ts");
 const { stormTurnsMills } = await from("server/engine/commands/mill.ts");
 const { showTick } = await from("server/engine/commands/festival.ts");
 const { loanTick } = await from("server/engine/commands/shop.ts");
+const { growthTick } = await from("server/engine/commands/growth.ts");
+const { seasonTick } = await from("server/engine/clock.ts");
 const { byPeoplesPace } = await from("server/engine/clock.ts");
 const { execute, CommandError } = await from("server/engine/commands.ts");
 const { msg } = await from("server/engine/context.ts");
@@ -144,6 +146,10 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 				orders: job((live) => ordersTick(space, live)),
 				market: job((live) => marketTick(space, live)),
 				wind: job(async (live) => { if (process.env.SPACES_MMO_WIND !== "0") await windTick(space, live, msgLeaseMs); }),
+				epoch: async () => {
+					await job(async (live) => { await epochTick(space, live, msgLeaseMs); await settlementTick(space, live, msgLeaseMs); await motionTick(space, live, msgLeaseMs); await showTick(space, live, msgLeaseMs); await loanTick(space, live, msgLeaseMs); await seasonTick(space, live, msgLeaseMs); })();
+					await growthTick(space, w, msgLeaseMs);
+				},
 			};
 			const run = runs[String(line.job)];
 			if (!run) throw new Error(`unknown job ${String(line.job)}`);

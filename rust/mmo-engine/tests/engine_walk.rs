@@ -923,3 +923,85 @@ fn shops() {
 	for (who, line) in [(&g, "wechsel 2"), (&g, "wechsel einlösen"), (&g, "laden"), (&g, "kredit 1 gegen x")] { run(&mut w, who, line, 0.0); }
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 30, "{said:?}");
 }
+
+/// Rooms that grow (growth.ts) in the epoch job with its ticks: a room not full yet, a full one growing east twice with
+/// everyone and everything in it moved (a figure, its spot, a building, a motion's zone, a thing on the ground, the arrival
+/// of an exit into it), then south when east is at its limit, and a room whose seams a building cuts everywhere.
+#[test]
+fn growing() {
+	let mut w = Walk::new("growing", 47, START);
+	w.load(false);
+	let a = w.player_as(1, "duenen", (20.0, 6.0), true, false);
+	let world = w.w.clone();
+	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "h-1", "plan" => "huette", "name" => "Hütte", "room" => "duenen", "x" => 20.0, "y" => 12.0, "w" => 2.0, "h" => 2.0, "owner" => a.as_str(), "ownerName" => "Wanderer1", "accountId" => "a-walk1", "beaconId" => "feuer-anleger", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
+	w.write(obj! { "type" => "Motion", "fields" => obj! { "motionId" => "m-1", "room" => "duenen", "settlementId" => "s-x", "kind" => "zone", "zone" => obj! { "x" => 14.0, "y" => 1.0, "w" => 2.0, "h" => 2.0 }, "byName" => "Jemand", "endsWorldMs" => 9e15 } });
+	w.write(obj! { "type" => "Settlement", "fields" => obj! { "settlementId" => "s-x", "room" => "duenen", "name" => "Dünenheim", "closed" => false, "members" => Json::Array(vec![]) } });
+	w.write(thing(&world, "t-ground", "treibholz", "duenen"));
+	assert!(w.take(obj! { "type" => "Item", "fields" => obj! { "itemId" => "t-ground" } }));
+	let mut f = thing(&world, "t-ground", "treibholz", "duenen").get("fields").cloned().unwrap();
+	walk::j_set(&mut f, "x", Json::from(22.0));
+	walk::j_set(&mut f, "y", Json::from(3.0));
+	w.write(obj! { "type" => "Item", "fields" => f });
+	let ground = |w: &Walk, room: &str| -> Vec<String> {
+		let e = w.run(w.space.peek(&obj! { "type" => "Room", "fields" => obj! { "roomId" => room } }, None)).unwrap().unwrap();
+		e.get("fields").and_then(|f| f.get("ground")).and_then(Json::as_array).unwrap().iter().map(|r| r.as_str().unwrap().to_owned()).collect()
+	};
+	let exits = |w: &Walk, room: &str| -> Vec<(f64, f64)> {
+		w.run(w.space.read_all(&obj! { "type" => "Exit", "fields" => obj! { "location" => room } }, None)).unwrap().iter().map(|e| { let f = e.get("fields").unwrap(); (f.get("x").and_then(Json::as_f64).unwrap_or(-9.0), f.get("y").and_then(Json::as_f64).unwrap_or(-9.0)) }).collect()
+	};
+	// the land of a room, west first: what a Plot may stand on
+	let land = |w: &Walk, room: &str| -> Vec<(f64, f64)> {
+		let g = ground(w, room);
+		let ex = exits(w, room);
+		let mut out = Vec::new();
+		for x in 0..g[0].len() { for (y, row) in g.iter().enumerate() {
+			let (xf, yf) = (x as f64, y as f64);
+			if mmo_engine::world::walkable(&w.w, &g, xf, yf) && &row[x..x + 1] != ":" && !ex.iter().any(|(ex, ey)| (ex - xf).abs().max((ey - yf).abs()) <= 1.0) { out.push((xf, yf)); }
+		} }
+		out
+	};
+	let mut plots = 0;
+	let mut used: std::collections::HashSet<String> = std::collections::HashSet::new();
+	let mut fill = |w: &mut Walk, room: &str, share: f64, skip: &dyn Fn(f64, f64) -> bool| {
+		let cells = land(w, room);
+		let want = (cells.len() as f64 * share).ceil() as usize;
+		let mut put = 0;
+		for (x, y) in cells {
+			if put >= want { break; }
+			if skip(x, y) || !used.insert(format!("{room} {x} {y}")) { continue; } plots += 1; put += 1; w.write(obj! { "type" => "Plot", "fields" => obj! { "room" => room, "x" => x, "y" => y, "of" => format!("p-{plots}") } }); }
+	};
+	w.compare("setup");
+	w.tick("epoch");
+	w.compare("not full");
+	assert!(w.peek(obj! { "type" => "RoomGrowth" }).is_none());
+	fill(&mut w, "duenen", 0.6, &|_, _| false);
+	w.tick("epoch");
+	w.compare("60 percent");
+	assert!(w.peek(obj! { "type" => "RoomGrowth" }).is_none());
+	fill(&mut w, "duenen", 0.15, &|x, _| x < 13.0);
+	w.at(START + 60_000.0);
+	w.tick("epoch");
+	w.compare("grown once");
+	assert!(w.peek(obj! { "type" => "RoomGrowth", "fields" => obj! { "roomId" => "duenen" } }).is_some(), "duenen did not grow");
+	eprintln!("after one: {:?} {:?}", w.where_is(&a), ground(&w, "duenen")[0].len());
+	let r = w.cmd(&a, "look", None);
+	w.compare(&format!("look -> {r}"));
+	fill(&mut w, "duenen", 0.2, &|x, _| x < 16.0);
+	w.at(START + 120_000.0);
+	w.tick("epoch");
+	w.compare("grown twice");
+	fill(&mut w, "duenen", 0.25, &|x, _| x < 20.0);
+	w.at(START + 180_000.0);
+	w.tick("epoch");
+	w.compare("grown a third time");
+	eprintln!("after three: {:?} {}x{}", w.where_is(&a), ground(&w, "duenen")[0].len(), ground(&w, "duenen").len());
+	// a room whose seams a building cuts everywhere does not grow
+	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "wide", "plan" => "huette", "name" => "Hütte", "room" => "salzwiesen", "x" => 0.0, "y" => 0.0, "w" => 24.0, "h" => 16.0, "owner" => "c-walk9", "ownerName" => "Jemand", "accountId" => "a-walk9", "beaconId" => "feuer-anleger", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
+	fill(&mut w, "salzwiesen", 0.8, &|_, _| false);
+	w.at(START + 240_000.0);
+	w.tick("epoch");
+	w.compare("cut everywhere");
+	assert!(w.peek(obj! { "type" => "RoomGrowth", "fields" => obj! { "roomId" => "salzwiesen" } }).is_none());
+	let g = w.peek(obj! { "type" => "RoomGrowth", "fields" => obj! { "roomId" => "duenen" } }).unwrap();
+	eprintln!("{}", g.to_json_text());
+}
