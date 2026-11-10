@@ -91,7 +91,7 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 		if (b.plan === "kapelle" && uses.offerings.includes(name)) add({ label: `${name} opfern`, line: `opfere ${name}` });
 		if (uses.stores.includes(b.plan ?? "") || (uses.chests.includes(b.plan ?? "") && b.ownerId === me)) add({ label: uses.stores.includes(b.plan ?? "") ? "Ins Lager legen" : "In die Truhe legen", line: `verstaue ${name}` });
 	}
-	if (name === "Spaten" && !guest) add({ label: "Beet umgraben", line: "umgraben" });
+	if (name === "Spaten" && !guest) { add({ label: "Beet umgraben", line: "umgraben" }); add({ label: "Zierbeet umgraben (nur Blumen, sie kreuzen sich)", line: "umgraben zier" }); add({ label: "Gemeinschaftsbeet anlegen (3×3, eins je Feuer)", line: "umgraben gemeinschaft" }); }
 	// a tool whose work wants a building beside it: offered anywhere (beside one the bar's own entry comes first), away from one
 	// the server says where it works (quarry.ts breche, fishing.ts wirf netz)
 	if (name === "Spitzhacke") add({ label: "Stein brechen", line: "breche" });
@@ -228,7 +228,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				if (mine && (o.plants ?? []).length < (o.w ?? 1) * (o.h ?? 1)) for (const n of [...new Set(carried.filter((n) => mayPlantIn(o.bedKind, n, beds)))]) entries.push({ label: `${n} pflanzen`, line: `pflanze ${n}` });
 			}
 			// one's own bed (a community bed: who dug it) goes back to grass from beside it (server: garden.ts "beet aufgeben")
-			if (beside && o.ownerId === me) entries.push({ label: "Beet aufgeben (wird wieder Gras)", line: "beet aufgeben ja", confirm: "Das Beet aufgeben? Was darin wächst, geht verloren, die Fläche wird wieder Gras." });
+			if (beside && o.ownerId === me) entries.push({ label: "Beet aufgeben (wird wieder Gras)", line: `beet aufgeben ja ${o.x} ${o.y}`, confirm: "Das Beet aufgeben? Was darin wächst, geht verloren, die Fläche wird wieder Gras." });
 			continue;
 		}
 		if (o.kind === "field") {
@@ -364,7 +364,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 	// a cell nothing covers: build here (the plan's top left corner; the server says why not when it does not fit)
 	const covered = [...objs.values()].some((o) => o.location === room && o.kind !== "item" && at.x >= o.x && at.y >= o.y && at.x < o.x + (o.w ?? 1) && at.y < o.y + (o.h ?? 1));
 	if (!guest && plans.length && !covered) entries.push({ label: "Bauen …", line: "#bau", run: onPlans });
-	if (!guest && !covered && [...objs.values()].some((o) => o.kind === "item" && o.location === me && o.name === "Spaten")) { entries.push({ label: "Beet umgraben", line: `umgraben ${at.x} ${at.y}` }); entries.push({ label: "Acker anlegen (4×4)", line: self && self.x === at.x && self.y === at.y ? "flur anlegen" : `flur anlegen ${at.x} ${at.y}` }); }
+	if (!guest && !covered && [...objs.values()].some((o) => o.kind === "item" && o.location === me && o.name === "Spaten")) { entries.push({ label: "Beet umgraben", line: `umgraben ${at.x} ${at.y}` }); entries.push({ label: "Zierbeet umgraben (nur Blumen, sie kreuzen sich)", line: `umgraben zier ${at.x} ${at.y}` }); entries.push({ label: "Gemeinschaftsbeet anlegen (3×3, eins je Feuer)", line: `umgraben gemeinschaft ${at.x} ${at.y}` }); entries.push({ label: "Acker anlegen (4×4)", line: self && self.x === at.x && self.y === at.y ? "flur anlegen" : `flur anlegen ${at.x} ${at.y}` }); }
 	// on the own figure: what works without anything more
 	if (self && self.x === at.x && self.y === at.y) {
 		entries.push({ label: "Umsehen", line: "look" }, { label: "Was trage ich?", line: "inventory" }, { label: "Wer spielt?", line: "who" }, { label: "Uhrzeit", line: "time" }, { label: "Mein Ruf", line: "reputation" });

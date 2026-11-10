@@ -600,3 +600,12 @@ button.cmd-word { cursor: pointer; display: inline; min-height: 0; }
 /* the pack's order: A by name, D by arrival */
 .pack-sort { display: flex; gap: 4px; justify-content: flex-end; margin: 2px 0 4px; }
 .pack-sort .chip { min-width: 28px; padding: 2px 8px; font-weight: 600; }
+
+/* the game's own question (Ask.tsx): over everything, in the theme */
+.ask-veil { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(2px); }
+.ask { width: min(380px, 100%); background: var(--raised); color: var(--text); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 12px 40px var(--shadow); padding: 16px 16px 12px; }
+.ask p { margin: 0 0 14px; line-height: 1.45; color: var(--text-strong); }
+.ask-do { display: flex; justify-content: flex-end; gap: 8px; }
+.ask-do button { min-height: 36px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.ask-do .ask-yes { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
+.ask-do button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -28,6 +28,7 @@ import { hintsFor, type Hint } from "./hints.ts";
 import { canFullscreen, enterFullscreen, homeSteps, isShort, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
 import { useBack } from "./useBack.ts";
 import { detentPx, Sheet, type Detent } from "./Sheet.tsx";
+import { ask, AskHost } from "./Ask.tsx";
 import { Rich, setNames } from "./RichText.tsx";
 import { language, setLanguage, watchPage } from "./i18n/index.ts";
 import { formatWorldTime, seasonIndex, SEASONS, shownWorldMs, type WorldTimeView } from "../shared/worldtime.ts";
@@ -110,7 +111,7 @@ export function MmoApp() {
 	useEffect(() => { void fetch("/api/me").then((r) => r.json()).then((d) => { pageBuild ??= d.build ?? null; setAccount(d.account ?? null); }, () => setAccount(null)); }, []);
 	if (account === undefined) return <main className="welcome"><p className="muted">Lädt …</p></main>;
 	if (!account) return <Welcome onIn={enter} controls={controls} />;
-	return <Game account={account} onAccount={enter} controls={controls} startView={arrival} />;
+	return <><Game account={account} onAccount={enter} controls={controls} startView={arrival} /><AskHost /></>;
 }
 
 function Welcome({ onIn, controls }: { onIn: (a: Account, fresh?: boolean) => void; controls: ReactNode }) {
@@ -246,7 +247,7 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, wild, beds, r
 			<ul className={sheet ? `cell-menu action-sheet${side}` : "cell-menu"} role="menu" style={sheet ? undefined : { left, top }} onPointerDown={() => { pressed.current = true; }} onClickCapture={(e) => { if (!mayClick(e)) { e.preventDefault(); e.stopPropagation(); } }}>
 				{sheet && about.title && <li className="action-title">{about.title}</li>}
 				{step && typeof step === "object" && <li className="menu-note">{step.name} ({step.w}×{step.h}) ab hier nach rechts unten: {step.needs}, {step.work} Arbeit</li>}
-				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (onWalk && e.line.startsWith("move ")) { onWalk(at); close(); } else if (e.run) { e.run(); if (!e.line.startsWith("#bau") && !e.line.startsWith("#plan") && !e.line.startsWith("#zurück")) close(); } else { if (e.confirm && !window.confirm(e.confirm)) return; send(e.line); close(); } }}>{e.label}</button></li>)}
+				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (onWalk && e.line.startsWith("move ")) { onWalk(at); close(); } else if (e.run) { e.run(); if (!e.line.startsWith("#bau") && !e.line.startsWith("#plan") && !e.line.startsWith("#zurück")) close(); } else if (e.confirm) { const line = e.line; close(); void ask(e.confirm).then((ok) => { if (ok) send(line); }); } else { send(e.line); close(); } }}>{e.label}</button></li>)}
 				{sheet && about.desc && (told ? <li className="menu-note">{about.desc}</li> : <li role="menuitem"><button className="action-help" onClick={() => setTold(true)}>Was ist das?</button></li>)}
 				{sheet && about.article && onHelp && <li role="menuitem"><button className="action-help" onClick={() => { close(); onHelp(about.article!); }}>Was ist das?</button></li>}
 			</ul>
@@ -453,7 +454,7 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 						<button disabled={!fuel} onClick={() => fuel && send(`put ${fuel.name} in ${fire.name}`)} title={fuel ? "" : "Du trägst kein Brennholz"}>Nachlegen</button>
 					</li></ul></>
 				)}
-				{here.length > 0 && <><h3>Hier möglich</h3><div className="here open">{here.map((e) => <button key={e.line} onClick={() => { if (e.confirm && !window.confirm(e.confirm)) return; send(e.line); }}>{e.label}</button>)}</div></>}
+				{here.length > 0 && <><h3>Hier möglich</h3><div className="here open">{here.map((e) => <button key={e.line} onClick={() => { if (e.confirm) void ask(e.confirm).then((ok) => { if (ok) send(e.line); }); else send(e.line); }}>{e.label}</button>)}</div></>}
 			</div>
 		);
 	}
@@ -521,7 +522,7 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 						// a recipe its hint below offers (the line that says what it takes, with „Herstellen“) is not a button here too
 						const hinted = new Set(shownHints.flatMap((h) => (h.line ? [h.line] : [])));
 						const can = itemEntries(chosen[0], { chars, objs, self, room, me, plans, guest, fuel, wild, beds: uses.beds, ...(offer ? { offer: (to: string) => offer(to, chosen[0]) } : {}) }, uses, { fuels, ...(market ? { market: () => market(chosen[0]) } : {}) }).filter((e) => !hinted.has(e.line));
-						return can.length > 0 && <div className="pack-can">{can.map((e) => <button key={e.line} onClick={() => { if (e.confirm && !window.confirm(e.confirm)) return; if (e.run) e.run(); else send(e.line); }}>{e.label}</button>)}</div>;
+						return can.length > 0 && <div className="pack-can">{can.map((e) => <button key={e.line} onClick={() => { const go = () => { if (e.run) e.run(); else send(e.line); }; if (e.confirm) void ask(e.confirm).then((ok) => { if (ok) go(); }); else go(); }}>{e.label}</button>)}</div>;
 					})()}
 					{shownHints.map((h) => <p key={h.id} className="pack-hint">{h.text}{h.line && <button onClick={() => send(h.line!)}>Herstellen</button>}</p>)}
 				</div>}
@@ -1363,7 +1364,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 				</div>
 				{/* one chip: a single action runs on a tap, several open as a list; a tap on the map or an action folds it again */}
 				{hereBar.length > 0 && mapMode !== "text" && (hereOpen && hereBar.length > 1
-					? <div className="here-bar open" role="group" aria-label="Hier möglich">{hereBar.map((e) => <button key={e.line} onClick={() => { if (e.confirm && !window.confirm(e.confirm)) return; setHereOpen(false); send(e.line); }}>{e.label}</button>)}</div>
+					? <div className="here-bar open" role="group" aria-label="Hier möglich">{hereBar.map((e) => <button key={e.line} onClick={() => { setHereOpen(false); if (e.confirm) void ask(e.confirm).then((ok) => { if (ok) send(e.line); }); else send(e.line); }}>{e.label}</button>)}</div>
 					: <div className="here-bar" role="group" aria-label="Hier möglich"><button className="here-chip" aria-expanded={hereBar.length > 1 ? false : undefined} onClick={() => (hereBar.length > 1 ? setHereOpen(true) : send(hereBar[0]!.line))}><span>{hereBar[0]!.label}</span>{hereBar.length > 1 && <b>+{hereBar.length - 1}</b>}</button></div>)}
 				{homeHint && steps && <div className="home-hint"><span>Ohne Adressleiste spielen: <b>{steps.first}</b>, dann <b>{steps.then}</b>, und das Spiel von dort öffnen.</span>{install && <button className="primary home-install" onClick={() => { void install.prompt(); hideHomeHint(); }}>Installieren</button>}<button onClick={hideHomeHint} aria-label="Hinweis schließen">×</button></div>}
 				{travelNote && <div className="travel-note" role="status"><span className="travel-spin" aria-hidden="true" />{travelNote}</div>}

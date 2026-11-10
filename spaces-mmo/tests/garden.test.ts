@@ -190,7 +190,9 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		// giving it up frees the land
 		assert.match(await does(anna.p, "beet aufgeben", "wirklich"), /„beet aufgeben ja“/, "asked first: nothing is given up");
 		assert.equal(await s.count({ type: "Bed", fields: { accountId: String((await s.readAll({ type: "Character", fields: { charId: anna.me } }))[0]!.fields.accountId) } }) > 0, true);
-		assert.match(await does(anna.p, "beet aufgeben ja", "gibt das"), /gibt das Beet auf/);
+		const mineBed = await bedOf(s, anna.me);
+		assert.match(await does(anna.p, `beet aufgeben ja ${mineBed.x + mineBed.w + 5} ${mineBed.y}`, "näher"), /Geh näher an dein Beet heran|kein Beet/, "a cell where none of hers lies: nothing given up");
+		assert.match(await does(anna.p, `beet aufgeben ja ${mineBed.x} ${mineBed.y}`, "gibt das"), /gibt das Beet auf/);
 		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => String(e.fields.of).startsWith("bed-")).length, 0);
 	} finally { await srv.close(); }
 });

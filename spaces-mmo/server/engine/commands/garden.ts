@@ -165,13 +165,15 @@ const umgraben: Command = {
 
 const beet: Command = {
 	key: "beet", aliases: ["beete", "bed", "beds"],
-	help: "beet – die Beete hier (beet anlegen [zier|gemeinschaft] [x y]: umgraben; beet aufgeben: dein Beet neben dir wieder zu Gras)",
+	help: "beet – die Beete hier (beet anlegen [zier|gemeinschaft] [x y]: umgraben; beet aufgeben [ja x y]: dein Beet neben dir wieder zu Gras)",
 	async func(c, arg) {
 		const g = garden(c);
 		const [word = "", ...rest] = arg.trim().split(/\s+/);
 		if (/^(?:anlegen|neu|new|umgraben|\d+)$/i.test(word) || KIND_WORD.test(word)) return dig(c, /^\d+$/.test(word) || KIND_WORD.test(word) ? arg : rest.join(" "));
 		if (/^(?:aufgeben|abreissen|abreißen|weg|remove)$/i.test(word)) {
-			const b = await bedHere(c, { own: true, reach: 1 });
+			// „beet aufgeben ja x y“ (the map's menu): the one of one's beds on that cell, not just the nearest
+			const [cx, cy] = [Number(rest[1]), Number(rest[2])], at = Number.isInteger(cx) && Number.isInteger(cy) && rest.length >= 3;
+			const b = await bedHere(c, { own: true, reach: 1, ...(at ? { may: (x: BedFields) => cx >= x.x && cy >= x.y && cx < x.x + x.w && cy < x.y + x.h } : {}) });
 			// what grows in it is lost: asked first, „beet aufgeben ja“ does it (the map's menu asks on the page and sends that)
 			if (!/^(?:ja|yes)$/i.test(rest[0] ?? "")) { await writeBed(c, b); return msg(c, c.actor.charId, "info", "Das Beet wirklich aufgeben? Was darin wächst, geht verloren, und dort wächst wieder Gras. „beet aufgeben ja“ gibt es auf."); }
 			await freeBed(c.space, c.txn, b);

@@ -235,6 +235,6 @@ test("one's own field or bed can be given up from the map, after a question; som
 	const give = at(field("me")).find((e) => e.line === "flur aufgeben ja");
 	assert.ok(give?.confirm, "asked first: the crop is lost");
 	assert.ok(!at(field("other")).some((e) => e.line === "flur aufgeben ja"));
-	assert.ok(at(bed("me")).find((e) => e.line === "beet aufgeben ja")?.confirm);
-	assert.ok(!at(bed("other")).some((e) => e.line === "beet aufgeben ja"));
+	assert.ok(at(bed("me")).find((e) => e.line.startsWith("beet aufgeben ja "))?.confirm);
+	assert.ok(!at(bed("other")).some((e) => e.line.startsWith("beet aufgeben ja")));
 });
