@@ -839,7 +839,7 @@ Auf den Inseln leben Figuren, die das Spiel selbst führt. Sie sammeln, handeln 
 - **Hüter:** Fast jedes Feuer hat jemanden, der nachlegt und für Holz zahlt: Hinnerk in der Grauen Bucht, Mats, Svea, Greta, Nele, Arne, Frida und Thies. Auf Nebelholm hütet niemand das Feuer.
 - **Ines** ist tagsüber (6 bis 22 Uhr) in der Grauen Bucht. Sie sagt, wenn das Feuer schwach wird, ausgeht oder wieder brennt, und begrüßt, wer „Hallo“ sagt.
 - **Bo** ist der Fährmann und läuft zwischen Grauer Bucht und Klippenpfad hin und her.
-- **Händler, Sammler und Handwerker** wie Marta, Kalle oder Piet kaufen und verkaufen. Sprich sie an, sie nennen dir ihre Preise.
+- **Händler, Sammler und Handwerker** wie Marta, Kalle oder Piet kaufen und verkaufen. Sprich sie an, sie nennen dir ihre Preise. Die richten sich nach **Angebot und Nachfrage**, also nach ihrem Vorrat (was sie tragen und am Brett anbieten): Hat ein Händler viel von etwas, verlangt er weniger und zahlt weniger; wird es knapp, wird es teurer, und er zahlt mehr. Je Stück mehr oder weniger, als er sonst hat, rund ein Achtel, höchstens das Doppelte, mindestens die Hälfte. Was ein Händler nur ankauft, gibt er jeden Tag ein Stück weiter, so erholt sich sein Preis nach einer Schwemme.
 - **(KI)** hinter dem Namen heißt: Hier antwortet ein Sprachmodell, etwa bei Ines, Merle, Hark und dem Fremden, der bei dichtem Nebel auftaucht. Ohne Modell dösen sie und sprechen feste Sätze.
 - **(Siedler)** hinter dem Namen heißt: Ein Skript spielt diese Figur, kein Mensch. Siedler sammeln, bauen, säen und handeln wie Spieler. Standardmäßig sind immer mindestens 30 Figuren unterwegs; für jeden Menschen in der Region geht ein Siedler.
 
@@ -887,7 +887,7 @@ The islands are home to figures the game runs itself. They gather, trade and kee
 - **Keepers:** nearly every fire has someone who feeds it and pays for wood: Hinnerk in Graue Bucht, Mats, Svea, Greta, Nele, Arne, Frida and Thies. On Nebelholm nobody keeps the fire.
 - **Ines** is in Graue Bucht by day (6 to 22 o'clock). She says when the fire gets weak, goes out or burns again, and greets whoever says “hello”.
 - **Bo** is the ferryman and walks back and forth between Graue Bucht and Klippenpfad.
-- **Traders, gatherers and craftspeople** like Marta, Kalle or Piet buy and sell. Speak to them and they name their prices.
+- **Traders, gatherers and craftspeople** like Marta, Kalle or Piet buy and sell. Speak to them and they name their prices. Those follow **supply and demand**, that is their stock (what they carry and offer on the board): a trader who holds much of a thing asks less and pays less; when it runs short it gets dearer, and they pay more. About an eighth for each piece more or less than they usually have, at most twice, at least half the usual price. What a trader only buys they pass on, one piece a day, so their price recovers after a glut.
 - **(KI)** after a name means a language model answers here, as with Ines, Merle, Hark and the stranger who turns up in dense fog. Without a model they doze and speak fixed lines.
 - **(Siedler)** after a name means a script plays this figure, not a person. Settlers gather, build, sow and trade like players. By default at least 30 figures are always about; for every person in the region one settler leaves.
 
@@ -1784,7 +1784,7 @@ Es gibt drei Arten von Tieren: Hoftiere, die du hältst, Wächter, die deinen Or
 | [Katze](help.game.animals#guards) | Wächter | an einem deiner Bauten | Anfang | hält Mäuse fern |
 | [Hase, Reh, Fuchs, Maus, Möwe](help.game.animals#wild) | Wild | kommen aus dem Nebel | – | fressen, was du anbaust und hältst |
 
-Alle Hoftiere, Hund und Katze verkauft Gesa am Markt von Kupferhafen. Wer mehrere auf einmal kauft (ein Gesuch am Brett wie \`markt suche 3 ziege für 21\` oder ein Tausch), zahlt für jedes weitere Tier eine Münze weniger: eine Ziege 8, zwei 15, drei 21, nie weniger, als Gesa selbst für eins zahlt. Ein Tier trägst du wie ein Ding (Last 4, ein Rind 8, Hund und Katze 2) und kannst es tauschen und handeln.
+Alle Hoftiere, Hund und Katze verkauft Gesa am Markt von Kupferhafen. Wer mehrere auf einmal kauft (ein Gesuch am Brett wie \`markt suche 3 ziege für 21\` oder ein Tausch), zahlt für jedes weitere Tier eine Münze weniger: kostet eine Ziege gerade 8, dann zwei 15, drei 21, nie weniger, als Gesa selbst für eins zahlt. Wie viel eine kostet, hängt von ihrem Vorrat ab (siehe [Handel](help.game.trade)). Ein Tier trägst du wie ein Ding (Last 4, ein Rind 8, Hund und Katze 2) und kannst es tauschen und handeln.
 
 ## Stall und Gehege {#house}
 
@@ -1985,7 +1985,7 @@ There are three sorts of animals: farm animals you keep, guards that protect you
 | [Cat](help.game.animals#guards) | guard | at one of your buildings | start | keeps mice away |
 | [Hare, deer, fox, mouse, gull](help.game.animals#wild) | wild | come out of the fog | – | eat what you grow and keep |
 
-Gesa at the Kupferhafen market sells every farm animal, dogs and cats. Buy several at once (a notice on the board like \`market want 3 goats for 21\` or a trade) and each further animal costs a coin less: one goat 8, two 15, three 21, never less than Gesa herself pays for one. You carry an animal like a thing (load 4, a cow 8, dog and cat 2) and can trade it.
+Gesa at the Kupferhafen market sells every farm animal, dogs and cats. Buy several at once (a notice on the board like \`market want 3 goats for 21\` or a trade) and each further animal costs a coin less: when a goat costs 8, two cost 15, three 21, never less than Gesa herself pays for one. What one costs depends on her stock (see [Trade](help.game.trade)). You carry an animal like a thing (load 4, a cow 8, dog and cat 2) and can trade it.
 
 ## Coop and pen {#house}
 

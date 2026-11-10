@@ -11,7 +11,7 @@ import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
 import "../server/npc/scripts.ts"; // first: it and the economy import each other, scripts.ts is the entry
 import { answerWanted, type Look } from "../server/npc/economy.ts";
-import { lotAsk, marketTick, RESTOCK_WORLD_MS } from "../server/engine/commands/trade.ts";
+import { lotAsk, marketTick, RESTOCK_WORLD_MS, stockPrices } from "../server/engine/commands/trade.ts";
 import { sweepTick } from "../server/engine/sweep.ts";
 import type { Npc } from "../server/npc/scripts.ts";
 import type { CharacterFields, ItemFields } from "../server/model.ts";
@@ -129,7 +129,7 @@ test("market: a wanted notice holds the buyer's coins; delivering moves thing an
 		const posted = b.p.frames.length;
 		await does(b.p, "markt suche ziegen für 5", "Du suchst am Marktbrett Ziege und zahlst 5 Münzen.");
 		// no trader at this board sells goats: the one who seeks hears at once who does, where and for how much
-		await b.p.until((f) => f.t === "msg" && /^An diesem Brett verkauft kein Händler Ziege; Gesa \([^)]+\) verkauft es für 8 Münzen\./.test(f.m.text), 10_000, posted);
+		await b.p.until((f) => f.t === "msg" && /^An diesem Brett verkauft kein Händler Ziege; Gesa \([^)]+\) verkauft es um 8 Münzen, je nach Vorrat\./.test(f.m.text), 10_000, posted);
 		assert.equal((await pack(s, b.me, "muenze")).length, 0);
 		assert.equal((await s.readAll({ type: "Item", fields: { location: "market", proto: "muenze" } })).length, 5, "the coins wait at the board");
 		assert.match(await does(a.p, "markt", "Gesuche"), /1\. Ziegensucher sucht Ziege, zahlt 5 Münzen/);
@@ -223,7 +223,7 @@ test("market: a notice is answered with a price, delivered for less with the res
 		await does(b.p, "markt suche bienenvolk für 3", "Du suchst");
 		await does(b.p, "markt suche tang für 1", "Du suchst");
 		assert.equal(await answerWanted(n, look([])), true);
-		assert.deepEqual(acts, ["market antworte 1 ab 8"], "too little: its price");
+		assert.deepEqual(acts, ["market antworte 1 ab 10"], "too little: its price, by its stock (none of the 2 it keeps: 8 × 1.24)");
 		// answered once: not again (the answer stands on the notice)
 		acts.length = 0;
 		const wn = (await s.readAll({ type: "Wanted", fields: { proto: "bienenvolk" } }))[0]!;
@@ -253,7 +253,7 @@ test("market: a notice is answered with a price, delivered for less with the res
 		await s.write({ type: "Listing", fields: { listingId: "l-gesa-honig", seller: me.charId, sellerName: "Gesa", itemId: "x-honig", itemName: "Honig", price: 4, room: "graue-bucht", at: Date.now() } }, null, Number.MAX_SAFE_INTEGER);
 		await does(b.p, "markt suche honig für 4", "Du suchst");
 		const board = (await s.readAll({ type: "Listing", fields: { room: "graue-bucht" } })).map((e) => e.fields as unknown as { listingId: string; at: number }).sort((x, y) => x.at - y.at || x.listingId.localeCompare(y.listingId));
-		assert.equal(await answerWanted(n, look([])), true);
+		assert.equal(await answerWanted(n, { ...look([]), listed: { honig: 1 } }), true, "its lot on the board is its stock (and its price at it)");
 		assert.deepEqual(acts, [`market zurück ${board.findIndex((x) => x.listingId === "l-gesa-honig") + 1}`]);
 		await a.p.leave(); await b.p.leave();
 	} finally { await srv.close(); }
@@ -283,6 +283,27 @@ test("market: a trader's stock comes back, one a world day, up to what it starte
 		assert.equal(await due(), undefined, "full again: no clock");
 		await marketTick(s, w);
 		assert.equal((await pack(s, gesa, "bienenvolk")).length, start, "never more than it started with");
+	} finally { await srv.close(); }
+});
+
+test("market: what a trader only buys it ships off, one a world day, so a glut wears off", async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space, wilma = "npc-wilma";
+		assert.deepEqual(w.npcs.find((n) => n.npcId === "wilma")!.prices!.huehnchen, [2, 0], "Wilma buys chicken meat and never sells it");
+		await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: wilma } })).length === 1, 20_000, "Wilma");
+		await give(s, wilma, "huehnchen", 2);
+		await marketTick(s, w);
+		const due = async () => (await s.readAll({ type: "Restock", fields: { charId: wilma, proto: "-huehnchen" } }))[0];
+		assert.equal((await pack(s, wilma, "huehnchen")).length, 2, "the clock starts; nothing goes yet");
+		for (const left of [1, 0]) {
+			const r = (await due())!;
+			await s.take({ id: r.id }, 2_000);
+			await s.write({ type: "Restock", fields: { ...r.fields, nextWorldMs: 0 } }, null, Number.MAX_SAFE_INTEGER); // its time is up
+			await marketTick(s, w);
+			assert.equal((await pack(s, wilma, "huehnchen")).length, left);
+		}
+		assert.equal(await due(), undefined, "none left: no clock");
 	} finally { await srv.close(); }
 });
 
@@ -460,4 +481,18 @@ test("animals by the lot: each one more costs a coin less, never below what the 
 	assert.equal(lotAsk(w, "honig", [2, 4], 3), 12, "honey is no animal");
 	assert.equal(lotAsk(w, "ziege", [0, 3], 5), 3 + 2 + 1 + 1 + 1, "a trader that buys none: down to a coin");
 	assert.equal(lotAsk(w, "ziege", undefined, 2), 0);
+});
+
+test("trader prices by stock: at what it keeps the list's price, short of it dearer, a glut cheaper, buying always below selling", () => {
+	assert.deepEqual(stockPrices([4, 8], 4, 4), [4, 8], "at what it keeps: the price list");
+	assert.deepEqual(stockPrices([4, 8], 0, 4), [6, 12], "none left: half again as dear (4 × 12 %)");
+	assert.deepEqual(stockPrices([4, 8], 8, 4), [2, 4], "twice what it keeps: about half");
+	assert.deepEqual(stockPrices([4, 8], 40, 4), [2, 4], "never below half");
+	assert.deepEqual(stockPrices([4, 8], 0, 40), [8, 16], "never above twice");
+	assert.deepEqual(stockPrices([1, 2], 20, 2), [0, 1], "a glut of something cheap: it stops buying rather than pay what it sells for");
+	assert.deepEqual(stockPrices([6, 0], 10, 2), [3, 0], "what it only buys: cheaper with a glut, never sold");
+	for (let stock = 0; stock < 30; stock++) for (const base of [[1, 2], [2, 3], [4, 8], [6, 10], [12, 24]] as const) {
+		const [b, s] = stockPrices(base, stock, 4);
+		assert.ok(b < s, `buys below selling (${base} at ${stock}: ${b} < ${s})`);
+	}
 });

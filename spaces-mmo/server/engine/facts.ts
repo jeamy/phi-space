@@ -32,7 +32,7 @@ function aboutThing(w: WorldDef, p: { key: string; name: string; desc?: string }
 	if (sort) { out.push(`  ${sort.name} is a plant for a ${sort.kind === "zier" ? "flower bed" : "garden bed"} (seed ${w.prototypes.find((s) => s.key === sort.seed)?.name ?? sort.seed}; "umgraben" with a spade, "pflanze ${sort.name.toLowerCase()}").`); wild(sort.name, sort.wild); }
 	for (const n of w.npcs) {
 		const [buy, sell] = n.prices?.[p.key] ?? [0, 0];
-		if (sell > 0) out.push(`  ${n.name} sells it for ${sell} coin${sell === 1 ? "" : "s"}${n.market ? ` at the market of ${roomName(w, n.market)}` : ` in ${roomName(w, n.room)}`}${n.carry?.some((c) => c.proto === p.key) ? "" : " (when in stock)"}.`);
+		if (sell > 0) out.push(`  ${n.name} sells it for ${sell} coin${sell === 1 ? "" : "s"}${n.market ? ` at the market of ${roomName(w, n.market)}` : ` in ${roomName(w, n.room)}`}${n.carry?.some((c) => c.proto === p.key) ? "" : " (when in stock)"}, more when it runs short, less when it holds much.`);
 		else if (buy > 0) out.push(`  ${n.name} buys it for up to ${buy} coin${buy === 1 ? "" : "s"} (${roomName(w, n.market ?? n.room)}).`);
 	}
 	const washed = w.flood.rooms.filter((fr) => (fr.protos ?? w.flood.protos).some((x) => x.proto === p.key)).map((fr) => roomName(w, fr.room));

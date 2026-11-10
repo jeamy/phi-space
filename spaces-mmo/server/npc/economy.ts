@@ -17,7 +17,7 @@
 // traders and keepers offer people coins for what they want.
 import { randomInt } from "node:crypto";
 import { clockOf } from "../engine/clockcache.ts";
-import { counted, lotAsk } from "../engine/commands/trade.ts";
+import { counted, lotAsk, stockPrices } from "../engine/commands/trade.ts";
 import { stem } from "../engine/context.ts";
 import { flameOf } from "../engine/fire.ts";
 import { baysOf, linerOf, shipComes } from "../engine/liner.ts";
@@ -44,18 +44,31 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const pick = <T>(xs: T[]): T | undefined => xs[randomInt(0, Math.max(1, xs.length))];
 
 /** What the NPC sees this round: itself, its pack and what lies in its room. */
-export type Look = { me: CharacterFields; pack: ItemFields[]; ground: ItemFields[] };
+export type Look = { me: CharacterFields; pack: ItemFields[]; ground: ItemFields[]; /** its own lots on market boards, by proto: they are its stock too */ listed?: Record<string, number> };
 export async function look(n: Npc): Promise<Look | null> {
 	const me = await self(n);
 	// a figure aboard the large ship does nothing until it lands (engine/commands/passage.ts)
 	if (!me || me.aboard) return null;
 	const pack = (await n.space.readAll({ type: "Item", fields: { location: me.charId } })).map((e) => fieldsOf<ItemFields>(e));
 	const ground = (await n.space.readAll({ type: "Item", fields: { location: me.room } })).map((e) => fieldsOf<ItemFields>(e));
-	return { me, pack, ground };
+	const listed: Record<string, number> = {};
+	for (const x of (await n.space.readAll({ type: "Listing", fields: { seller: me.charId } })).map((e) => fieldsOf<ListingFields>(e))) {
+		const p = protoOf(n.world, x.itemName);
+		if (p) listed[p] = (listed[p] ?? 0) + (x.count ?? 1);
+	}
+	return { me, pack, ground, listed };
 }
 
-const buyPrice = (n: Npc, proto: string) => (proto === n.world.currency ? 1 : (n.def.prices?.[proto]?.[0] ?? 0));
-const sellPrice = (n: Npc, proto: string) => (proto === n.world.currency ? 1 : (n.def.prices?.[proto]?.[1] ?? 0));
+/** Its prices `[buy, sell]` for `proto`: by its price list, and with what it carries (`l`) by its stock (stockPrices: less
+ *  when it holds much, more when it runs short; it keeps as a rule what it starts with, else 2). */
+const pricesOf = (n: Npc, proto: string, l?: Look): [number, number] => {
+	const base = n.def.prices?.[proto] ?? [0, 0];
+	if (!l) return [base[0], base[1]];
+	const keep = n.def.carry?.find((c) => c.proto === proto)?.count ?? 2;
+	return stockPrices(base, l.pack.filter((i) => i.proto === proto).length + (l.listed?.[proto] ?? 0), keep);
+};
+const buyPrice = (n: Npc, proto: string, l?: Look) => (proto === n.world.currency ? 1 : pricesOf(n, proto, l)[0]);
+const sellPrice = (n: Npc, proto: string, l?: Look) => (proto === n.world.currency ? 1 : pricesOf(n, proto, l)[1]);
 const coinsOf = (n: Npc, l: Look) => l.pack.filter((i) => i.proto === n.world.currency);
 const protoName = (w: WorldDef, proto: string) => w.prototypes.find((p) => p.key === proto)?.name ?? proto;
 /** The prototype a player means by a name ("münze", "holz", "Treibholz", also another form: "münzen", "muscheln"). */
@@ -167,9 +180,9 @@ async function sell(n: Npc, l: Look, except: string[] = []): Promise<boolean> {
 	if (!n.world.market.rooms.includes(l.me.room)) return false;
 	const listings = (await n.space.readAll({ type: "Listing", fields: { room: l.me.room } })).map((e) => fieldsOf<ListingFields>(e));
 	if (listings.filter((x) => x.seller === l.me.charId).length >= 3) return false;
-	const item = l.pack.find((i) => i.proto !== n.world.currency && sellPrice(n, i.proto) > 0 && !except.includes(i.proto));
+	const item = l.pack.find((i) => i.proto !== n.world.currency && sellPrice(n, i.proto, l) > 0 && !except.includes(i.proto));
 	if (!item) return false;
-	await n.act(`market biete ${item.name} für ${sellPrice(n, item.proto)}`);
+	await n.act(`market biete ${item.name} für ${sellPrice(n, item.proto, l)}`);
 	return true;
 }
 
@@ -181,7 +194,7 @@ async function buy(n: Npc, l: Look, only?: string[]): Promise<boolean> {
 	const coins = coinsOf(n, l).length;
 	const i = listings.findIndex((x) => {
 		const p = protoOf(n.world, x.itemName);
-		return !!p && x.seller !== l.me.charId && (!only || only.includes(p)) && x.price <= buyPrice(n, p) * (x.count ?? 1) && x.price <= coins && l.pack.filter((it) => it.proto === p).length < 4;
+		return !!p && x.seller !== l.me.charId && (!only || only.includes(p)) && x.price <= buyPrice(n, p, l) * (x.count ?? 1) && x.price <= coins && l.pack.filter((it) => it.proto === p).length < 4;
 	});
 	if (i < 0) return false;
 	await n.act(`market kaufe ${i + 1}`);
@@ -197,9 +210,9 @@ export async function answerWanted(n: Npc, l: Look): Promise<boolean> {
 	const sought = (await n.space.readAll({ type: "Wanted", fields: { room: l.me.room } })).map((e) => fieldsOf<WantedFields>(e)).sort((a, b) => a.at - b.at || a.wantedId.localeCompare(b.wantedId));
 	for (const [i, w] of sought.entries()) {
 		if (w.buyer === l.me.charId) continue;
-		const each = w.proto === n.world.currency ? 0 : sellPrice(n, w.proto);
+		const each = w.proto === n.world.currency ? 0 : sellPrice(n, w.proto, l);
 		if (!each) continue;
-		const count = w.count ?? 1, ask = lotAsk(n.world, w.proto, n.def.prices?.[w.proto], count);
+		const count = w.count ?? 1, ask = lotAsk(n.world, w.proto, pricesOf(n, w.proto, l), count);
 		if (w.price >= ask) {
 			const carried = l.pack.filter((it) => it.proto === w.proto).length;
 			// what it offers on this board counts too: it takes its own lot back (the next round delivers), rather than
@@ -236,14 +249,14 @@ async function answerOffers(n: Npc, l: Look): Promise<boolean> {
 		await n.act(`say Danke, ${o.fromName}! Das kann ich gut brauchen.`);
 		return true;
 	}
-	const worth = gets.reduce((s, i) => s + buyPrice(n, i.proto), 0);
+	const worth = gets.reduce((s, i) => s + buyPrice(n, i.proto, l), 0);
 	let asked = 0, missing = "", notMine = "";
 	for (const w of o.want) {
 		const p = protoOf(n.world, w.name);
-		const price = p ? sellPrice(n, p) : 0;
+		const price = p ? sellPrice(n, p, l) : 0;
 		if (!p || (p !== n.world.currency && !price)) { notMine ||= w.name; continue; }
 		if (l.pack.filter((i) => i.proto === p).length < w.count) missing ||= protoName(n.world, p);
-		asked += p === n.world.currency ? w.count : lotAsk(n.world, p, n.def.prices?.[p], w.count);
+		asked += p === n.world.currency ? w.count : lotAsk(n.world, p, pricesOf(n, p, l), w.count);
 	}
 	if (notMine) { await n.act(`decline ${o.fromName}`); await n.act(`say ${o.fromName}, ${notMine} gebe ich nicht her.`); return true; }
 	if (missing) { await n.act(`decline ${o.fromName}`); await n.act(`say ${o.fromName}, ${missing} habe ich gerade nicht.`); return true; }
@@ -263,14 +276,15 @@ async function answerOffers(n: Npc, l: Look): Promise<boolean> {
 }
 
 /** What it buys and sells, said to someone who asked. */
-function tradeTalk(n: Npc, to: string): string {
-	const prices = Object.entries(n.def.prices ?? {});
+function tradeTalk(n: Npc, to: string, l?: Look): string {
+	// today's prices: by its stock (pricesOf); a price it no longer pays for a glut it leaves out
+	const prices = Object.keys(n.def.prices ?? {}).map((p) => [p, pricesOf(n, p, l)] as const);
 	const buys = prices.filter(([, [b]]) => b > 0).map(([p, [b]]) => `${protoName(n.world, p)} (bis ${b})`);
 	const sells = prices.filter(([, [, s]]) => s > 0).map(([p, [, s]]) => `${protoName(n.world, p)} (${s})`);
 	// animals by the lot: each one more a coin less (lotAsk), said once after the list
 	const lots = prices.some(([p, [, s]]) => s > 1 && lotAsk(n.world, p, n.def.prices?.[p], 2) < 2 * s);
 	if (!buys.length && !sells.length) return `${to}, ${pick(n.def.lines ?? []) ?? "schön, dich zu sehen."}`;
-	return [`${to},`, buys.length ? `ich kaufe ${buys.join(", ")}` : "", buys.length && sells.length ? "und" : "", sells.length ? `verkaufe ${sells.join(", ")}${lots ? " (bei Tieren kostet jedes weitere eine Münze weniger)" : ""}` : "", `– in Münzen. Biete mir etwas an: offer <ding> an ${n.def.name} für <n> münze.`].filter(Boolean).join(" ");
+	return [`${to},`, buys.length ? `ich kaufe ${buys.join(", ")}` : "", buys.length && sells.length ? "und" : "", sells.length ? `verkaufe ${sells.join(", ")}${lots ? " (bei Tieren kostet jedes weitere eine Münze weniger)" : ""}` : "", `– in Münzen, je nach Vorrat. Biete mir etwas an: offer <ding> an ${n.def.name} für <n> münze.`].filter(Boolean).join(" ");
 }
 
 /** The common part of every round: offers first, then whoever spoke to it. True when it did something. */
@@ -281,7 +295,7 @@ export function social(): (n: Npc, l: Look) => Promise<boolean> {
 		if (await answerOffers(n, l)) return true;
 		const said = (await heard(n, l.me)).filter(byPerson);
 		const named = said.find((m: MsgFields) => m.text.toLowerCase().includes(n.def.name.toLowerCase()));
-		if (named) { await n.act(`say ${n.def.script === "plauderer" ? `${named.from}, ${pick(n.def.lines ?? []) ?? "ja?"}` : tradeTalk(n, named.from)}`); return true; }
+		if (named) { await n.act(`say ${n.def.script === "plauderer" ? `${named.from}, ${pick(n.def.lines ?? []) ?? "ja?"}` : tradeTalk(n, named.from, l)}`); return true; }
 		const wnow = await n.now();
 		const hello = said.find((m) => /\b(hallo|hi|moin|servus|hello|hey)\b/i.test(m.text) && wnow - (greeted.get(m.from) ?? -Infinity) > 10 * 60_000);
 		if (hello && randomInt(0, 3) === 0) { greeted.set(hello.from, wnow); await n.act(`say Moin, ${hello.from}.`); return true; }
@@ -300,10 +314,10 @@ function pitcher(): (n: Npc, l: Look, protos?: string[]) => Promise<boolean> {
 		const coins = coinsOf(n, l).length, wnow = await n.now();
 		for (const ch of (await n.space.readAll({ type: "Character", fields: { room: l.me.room } })).map((e) => fieldsOf<CharacterFields>(e)).filter((c) => people.includes(c.name))) {
 			const theirs = (await n.space.readAll({ type: "Item", fields: { location: ch.charId } })).map((e) => fieldsOf<ItemFields>(e));
-			const want = theirs.find((i) => (!protos || protos.includes(i.proto)) && buyPrice(n, i.proto) > 0 && i.proto !== n.world.currency && buyPrice(n, i.proto) <= coins && wnow - (pitched.get(`${ch.charId}:${i.proto}`) ?? -Infinity) > 10 * 60_000);
+			const want = theirs.find((i) => (!protos || protos.includes(i.proto)) && buyPrice(n, i.proto, l) > 0 && i.proto !== n.world.currency && buyPrice(n, i.proto, l) <= coins && wnow - (pitched.get(`${ch.charId}:${i.proto}`) ?? -Infinity) > 10 * 60_000);
 			if (!want) continue;
 			pitched.set(`${ch.charId}:${want.proto}`, wnow);
-			const price = buyPrice(n, want.proto);
+			const price = buyPrice(n, want.proto, l);
 			await n.act(`offer ${price} münze an ${ch.name} für ${want.name.toLowerCase()}`);
 			await n.act(`say ${ch.name}, für dein ${want.name} zahle ich ${plural(price, "Münze", "Münzen")}. „accept ${n.def.name}“, wenn du einverstanden bist.`);
 			return true;

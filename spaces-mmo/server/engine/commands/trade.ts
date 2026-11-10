@@ -169,6 +169,20 @@ const roomName = (w: WorldDef, room: string) => (w.allRooms ?? w.rooms).find((r)
 export function sellersOf(w: WorldDef, proto: string): Array<{ name: string; where: string; market: string | null; each: number }> {
 	return w.npcs.flatMap((n) => { const each = n.prices?.[proto]?.[1] ?? 0; return each > 0 ? [{ name: n.name, where: roomName(w, n.market ?? n.room), market: n.market ?? null, each }] : []; });
 }
+/** How far a trader's price moves with one piece more or less in stock than it keeps as a rule, as a share of the price. */
+export const STOCK_STEP = 0.12;
+/** A trader's prices `[buy, sell]` for a thing by its stock (supply and demand): `base` at `keep` pieces held (what it
+ *  starts with, or 2 for what it only buys), each piece less a STOCK_STEP more, each piece more a STOCK_STEP less, between
+ *  half and twice the base. It always buys for at least a coin less than it sells for (nobody earns by buying from it and
+ *  selling back), and what it hardly wants any more it stops buying (0). */
+export function stockPrices(base: readonly [number, number], stock: number, keep: number): [number, number] {
+	const f = Math.max(0.5, Math.min(2, 1 + STOCK_STEP * (keep - stock)));
+	const sell = base[1] > 0 ? Math.max(1, Math.round(base[1] * f)) : 0;
+	let buy = base[0] > 0 ? Math.round(base[0] * f) : 0;
+	if (sell > 0 && buy >= sell) buy = sell - 1;
+	return [Math.max(0, buy), sell];
+}
+
 /** What a trader asks for `count` of `proto` whose price is `[buy, sell]`: for animals (typeclass Livestock) each one more
  *  costs a coin less than the one before (a goat 8, two 8 + 7, three 8 + 7 + 6), never less than what the trader pays for one
  *  (its buying price) nor less than a coin; everything else `count` times its price. */
@@ -186,7 +200,7 @@ export function sellerHint(w: WorldDef, proto: string, protoName: string, room: 
 	const all = sellersOf(w, proto);
 	if (all.some((s) => s.market === room)) return "";
 	return all.length
-		? `An diesem Brett verkauft kein Händler ${protoName}; ${all.map((s) => `${s.name} (${s.where}) verkauft es für ${coins(s.each)}`).join(", ")}. Hier kann nur liefern, wer es selbst hat.`
+		? `An diesem Brett verkauft kein Händler ${protoName}; ${all.map((s) => `${s.name} (${s.where}) verkauft es um ${coins(s.each)}, je nach Vorrat`).join(", ")}. Hier kann nur liefern, wer es selbst hat.`
 		: `${protoName} verkauft kein Händler; liefern kann nur, wer es selbst hat oder macht.`;
 }
 /** A listing's goods as said: "Muschel", "10× Muschel". */
@@ -531,8 +545,35 @@ async function restock(space: SpaceLike, w: WorldDef): Promise<void> {
 	}
 }
 
+/** What a trader only buys (no selling price) it ships off, one a RESTOCK_WORLD_MS while it holds any: so a glut it paid
+ *  little for wears off, and its buying price (stockPrices) comes back up. */
+async function shipOff(space: SpaceLike, w: WorldDef): Promise<void> {
+	const now = await worldNowOf(space);
+	for (const n of w.npcs) {
+		const only = Object.entries(n.prices ?? {}).filter(([p, [b, s]]) => b > 0 && s <= 0 && p !== w.currency).map(([p]) => p);
+		if (!only.length) continue;
+		const charId = `npc-${n.npcId}`;
+		if (!(await space.readAll({ type: "Character", fields: { charId } }, { limit: 1 })).length) continue; // in another region
+		for (const proto of only) {
+			const key = `-${proto}`, e = await peek(space, { type: "Restock", fields: { charId, proto: key } });
+			const r = e ? fieldsOf<RestockFields>(e) : null;
+			const have = await space.count({ type: "Item", fields: { location: charId, proto } });
+			if (!have) { if (e) await space.takeIfExists({ type: "Restock", id: e.id }, NO_WAIT); continue; }
+			if (r && r.nextWorldMs > now) continue;
+			const txn = (await space.createTransaction(10_000)).id;
+			try {
+				if (e && !(await space.takeIfExists({ type: "Restock", id: e.id }, NO_WAIT, { txn }))) { await space.abort(txn); continue; } // another worker
+				// the first time it holds some, the clock starts; one goes when it is up
+				if (r) await space.takeIfExists({ type: "Item", fields: { location: charId, proto } }, NO_WAIT, { txn });
+				if (!r || have > 1) await space.write({ type: "Restock", fields: { charId, proto: key, nextWorldMs: now + RESTOCK_WORLD_MS } satisfies RestockFields as never }, txn, FOREVER);
+				await space.commit(txn);
+			} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
+		}
+	}
+}
+
 export async function marketTick(space: SpaceLike, w?: WorldDef): Promise<void> {
-	if (w) await restock(space, w);
+	if (w) { await restock(space, w); await shipOff(space, w); }
 	for (const e of await space.readAll({ type: "Item", fields: { location: "market" } })) {
 		const f = fieldsOf<ItemFields>(e);
 		try { if (f.listing && (await readExisting(space, f.listing.startsWith("w-") ? { type: "Wanted", fields: { wantedId: f.listing } } : { type: "Listing", fields: { listingId: f.listing } }))) continue; } catch (err) { if (err instanceof StillHeld) continue; throw err; }
