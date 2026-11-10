@@ -337,10 +337,10 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, item, 
 	return (
 		<div className="things trade">
 			{trade.offersIn.length > 0 && <><h3>Angebote an dich</h3><ul>{trade.offersIn.map((o) => (
-				<li key={o.offerId}><span>{o.fromName}: {counted(o.giveNames)}{wants(o.want)}</span><button onClick={() => send(`accept ${o.fromName}`)}>Annehmen</button><button onClick={() => send(`decline ${o.fromName}`)}>Ablehnen</button></li>
+				<li key={o.offerId}><span>{o.fromName}: {counted(o.giveNames)}{wants(o.want)}</span><button onClick={() => board(`accept ${o.fromName}`)}>Annehmen</button><button onClick={() => board(`decline ${o.fromName}`)}>Ablehnen</button></li>
 			))}</ul></>}
 			{trade.offersOut.length > 0 && <><h3>Deine Angebote</h3><ul>{trade.offersOut.map((o) => (
-				<li key={o.offerId}><span>an {o.toName}: {counted(o.giveNames)}{wants(o.want)}</span><button onClick={() => send("offer zurück")}>Zurücknehmen</button></li>
+				<li key={o.offerId}><span>an {o.toName}: {counted(o.giveNames)}{wants(o.want)}</span><button onClick={() => board("offer zurück")}>Zurücknehmen</button></li>
 			))}</ul></>}
 			{offerTo !== null && !guest && (
 				<form className="trade-form" onSubmit={(e) => { e.preventDefault(); if (!offerTo || !give.trim()) return; send(`offer ${give.trim()} an ${offerTo}${want.trim() ? ` für ${want.trim()}` : ""}`); setGive(""); setWant(""); setOfferTo(null); }}>
