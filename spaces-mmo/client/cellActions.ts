@@ -13,7 +13,7 @@ export type CellInput = {
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] };
 	/** Whether wild plants grow in the room (wildHere); without it seeds are offered anyway and the command answers. */ wild?: boolean;
 	/** Which seeds go into which bed (ItemUses.beds); without it a bed offers every carried seed and the command answers. */ beds?: ItemUses["beds"];
-	/** The rooms of the world and where a boat, a train and a cart can go (the overview's state); without it the commands list their places. */ travel?: { rooms: Array<{ roomId: string; name: string; island: string }>; stops: { jetties: string[]; stations: string[]; trainFare: number; roads: Array<[string, string]> } };
+	/** The rooms of the world and where a boat, a train and a cart can go (the overview's state); without it the commands list their places. */ travel?: { rooms: Array<{ roomId: string; name: string; island: string }>; stops: { jetties: string[]; stations: string[]; trainFare: number; roads: Array<[string, string]> }; /** each island's epoch above the first, and the epoch roads need: without them no road is offered */ epochs?: Record<string, number> | null; roadEpoch?: number };
 	/** The islands a sailing boat goes to from here (the others, with the large ship's routes). */ sail?: string[];
 	/** "Bauen …" was chosen: the caller shows the plans. */ onPlans: () => void;
 	/** "Aushang" of a site: the caller shows the bag's list of them; without it the command answers. */ onOrders?: () => void;
@@ -151,6 +151,27 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				if (!o.gliding) for (const r of o.routes ?? []) entries.push({ label: `Mitfahren nach ${r.island} · ${o.fare ?? 1} ${o.fare === 1 ? "Münze" : "Münzen"}`, line: `einschiffen ${r.island}` });
 			}
 			continue;
+		}
+		// a road on this cell (server: road.ts): look at it; while it is voted on, vote; while it is built, deliver what it lacks
+		// of what one carries and work beside it; a finished one is mended
+		if (o.kind === "road") {
+			if (o.location !== room || !(o.runs?.[0] ?? []).some((c) => c.x === at.x && c.y === at.y)) continue;
+			const to = o.name.replace(/^Straße nach /, ""), near = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 2;
+			entries.push({ label: "Straßen ansehen", line: "straße" });
+			if (o.roadState === "vote" && !guest) entries.push({ label: `Für die Straße nach ${to} stimmen`, line: `straße ja ${to}` }, { label: `Gegen die Straße nach ${to} stimmen`, line: `straße nein ${to}` });
+			if (o.roadState === "build" && near) {
+				const carried = new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me).map((i) => i.name));
+				for (const n of (o.missing ?? "").split(",").map((p) => p.trim().replace(/^\d+\s+/, "")).filter((n) => n && carried.has(n))) entries.push({ label: `${n} an die Straße liefern`, line: `liefere ${n} an die straße` });
+				if (/Arbeit/.test(o.missing ?? "")) entries.push({ label: "An der Straße mitarbeiten", line: "arbeite an der straße" });
+			}
+			if (o.roadState === "built" && near && !guest) entries.push({ label: "Straße ausbessern", line: "straße repariere" });
+			continue;
+		}
+		// a door to another room of this island without a road: plan one (server: road.ts; it says when the island is too young)
+		if (o.kind === "exit" && travel && !guest && o.location === room && o.x === at.x && o.y === at.y && o.toRoom) {
+			const isl = (id: string) => travel.rooms.find((r) => r.roomId === id)?.island;
+			const has = [...objs.values()].some((r) => r.kind === "road" && r.location === room && r.roadTo === o.toRoom);
+			if (!has && isl(o.toRoom) && isl(o.toRoom) === isl(room) && travel.roadEpoch && (travel.epochs?.[isl(room)!] ?? 1) >= travel.roadEpoch) entries.push({ label: `Straße nach ${o.to ?? o.name} planen`, line: `straße plane ${o.to ?? o.name}` });
 		}
 		// a cart: its owner loads and unloads it beside it, or takes it back (server: cart.ts)
 		if (o.kind === "cart") {

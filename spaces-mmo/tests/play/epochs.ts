@@ -27,7 +27,7 @@ import { coversOf } from "../../server/engine/fire.ts";
 import { PATH } from "../../server/engine/commands/build.ts";
 import { linerOf, shipComes } from "../../server/engine/liner.ts";
 import { trainIn } from "../../server/engine/rail.ts";
-import type { BuildingFields, CartFields, CharacterFields } from "../../server/model.ts";
+import type { BuildingFields, CartFields, CharacterFields, RouteFields } from "../../server/model.ts";
 import type { ServerFrame } from "../../server/gateway.ts";
 import { Player, startRegions } from "../stack.ts";
 
@@ -478,10 +478,11 @@ try {
 		}, atHome);
 		return room === "graue-bucht" ? "" : "im Klippenpfad";
 	});
-	const exit = { x: 23, y: 8 }; // the bay's way east to the cliff path
-	let road: BuildingFields | null = null;
 	await check("straße und karren", async () => {
-		road = await place(a, "strasse", { x: exit.x, y: exit.y - 1, buildId: `play-road-${tag}` });
+		// a road from the bay to the cliff path, as road.ts leaves it once voted on and built (planning and voting: tests/cart.test.ts)
+		const pair = ["graue-bucht", "klippenpfad"].sort().join("|");
+		if (!(await west().readAll({ type: "Route" })).some((e) => (e.fields as unknown as RouteFields).pair === pair && (e.fields as unknown as RouteFields).state === "built"))
+			await west().write({ type: "Route", fields: { routeId: `play-road-${tag}`, pair, island: "grau", rooms: ["graue-bucht", "klippenpfad"], names: ["Graue Bucht", "Klippenpfad"], cells: [], state: "built", planner: a.me, plannerName: a.name, accountId: a.account, voters: [], yes: [], no: [], voteUntil: 0, needs: [], work: 0, workNeed: 0, by: {}, untilWorldMs: FOREVER, at: 0, points: 2 } satisfies RouteFields as never }, null, FOREVER);
 		await give(a.me, "karren", 1); await give(a.me, "treibholz", 1);
 		await does(a, "karren stelle", /Karren ab/);
 		await does(a, "karren lade treibholz", /auf dem Karren/);

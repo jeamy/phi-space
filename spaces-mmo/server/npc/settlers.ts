@@ -21,7 +21,7 @@ import { flameOf } from "../engine/fire.ts";
 import { clockOf } from "../engine/clockcache.ts";
 import { setting } from "../settings.ts";
 import type { NpcDef, WorldDef } from "../engine/world.ts";
-import { fieldsOf, type BedFields, type CartFields, type BuildingFields, type ListingFields, type SiteFields, type ShowFields, type SiteOrderFields, type WorkRestFields } from "../model.ts";
+import { fieldsOf, type BedFields, type CartFields, type BuildingFields, type ListingFields, type RouteFields, type SiteFields, type ShowFields, type SiteOrderFields, type WorkRestFields } from "../model.ts";
 import { crops, flowers } from "../engine/commands/festival.ts";
 import { gather, look, nextTo, rest, social, stepBeside, travel, type Look } from "./economy.ts";
 import type { Npc, Script } from "./scripts.ts";
@@ -166,7 +166,7 @@ export function siedler(): Script {
 			if (at) { await n.act(`bau ${def.name.toLowerCase()} ${at.x} ${at.y}`); return; }
 			continue;
 		}
-		if (!own && PLANS.every(has) && (await road(n, l, w, homes, sites))) return;
+		if (!own && PLANS.every(has) && (await road(n, l, w, homes))) return;
 		// three huts of two owners in its room and no settlement yet: it founds one, named after the place
 		if (has("huette") && w.settlement && may("siedlung")) {
 			later("siedlung", 40);
@@ -186,7 +186,7 @@ export function siedler(): Script {
 		// rope from kelp when it has kelp to spare
 		if (count(l, "tang") >= 3 && count(l, "tangseil") < 2) { await n.act("craft tangseil"); return; }
 		// what it does not need goes to the market of its island, when it has one; what it lacks for a site it buys there
-		const roadNeeds = w.building?.plans.find((p) => p.key === w.cart?.road)?.needs ?? [];
+		const roadNeeds = w.cart?.route ? [{ proto: w.cart.route.stone }, { proto: w.cart.route.woodProto }] : [];
 		const heap = l.pack.filter((i) => !RAW.includes(i.proto) && !roadNeeds.some((x) => x.proto === i.proto) && i.proto !== "tangseil" && i.proto !== g?.spade && i.proto !== g?.can && i.proto !== w.cart?.proto && i.proto !== w.currency && n.world.prototypes.find((p) => p.key === i.proto)?.typeclass !== "Seed");
 		if (await haul(n, l, w, homes, heap)) return;
 		if (await trade(n, l, w, homes, heap, own)) return;
@@ -195,28 +195,37 @@ export function siedler(): Script {
 		if (hut && heap.length > 6 && may("chest")) { later("chest", 10); if (!(await besideOf(n, l, hut))) await n.act(`verstaue alle ${heap[0]!.name}`); return; }
 		// gather: what lies on the beaches of its rooms, moving on to the next room when nothing is left here
 		// and what a site of its island lacks beyond that, stone for a road
-		const short = sites.flatMap((s) => s.needs.filter((x) => x.have < x.count && !RAW.includes(x.proto)).map((x) => x.proto));
+		const building = (await n.space.readAll({ type: "Route" })).map((e) => fieldsOf<RouteFields>(e)).filter((r) => r.state === "build" && r.rooms.some((x) => homes.includes(x)));
+		const short = [...sites, ...building].flatMap((s) => s.needs.filter((x) => x.have < x.count && !RAW.includes(x.proto)).map((x) => x.proto));
 		if (await gather(n, l, [...RAW.filter((p) => count(l, p) < RAW_MAX), ...short])) return;
 		homeAt = (homeAt + 1) % homes.length;
 		if (homes.length > 1 && round % 4 === 0) await travel(n, l, homes[homeAt]!);
 	}
 
-	/** A village joins its rooms: beside the first exit between two rooms of its home that no road links, unless a road is
-	 *  being built here already. False when there is nothing to do. */
-	async function road(n: Npc, l: Look, w: WorldDef, homes: string[], sites: SiteFields[]): Promise<boolean> {
-		const def = w.building?.plans.find((p) => p.key === w.cart?.road);
+	/** A village joins its rooms by road (engine/commands/road.ts): it helps build a road of its home that is being built
+	 *  (delivers what it carries of what is missing, else works), and plans one to the first room of its home no road
+	 *  joins yet. It never votes: the settlers who are people decide. False when there is nothing to do. */
+	async function road(n: Npc, l: Look, w: WorldDef, homes: string[]): Promise<boolean> {
+		const def = w.cart?.route;
 		if (!def || !may("road")) return false;
-		const exit = sites.some((s) => s.plan === def.key) || (await epochOf(n.space, w.rooms.find((r) => r.roomId === l.me.room)?.island)) < (def.epoch ?? 1) ? undefined
-			: await roadLinks(n.space, w).then((links) => w.exits.find((e) => homes.includes(e.room) && homes.includes(e.destination) && !links.get(e.room)?.has(e.destination)));
+		if ((await epochOf(n.space, w.rooms.find((r) => r.roomId === l.me.room)?.island)) < def.epoch) { later("road", 30); return false; }
+		const routes = (await n.space.readAll({ type: "Route" })).map((e) => fieldsOf<RouteFields>(e)).filter((r) => r.rooms.every((x) => homes.includes(x)));
+		const open = routes.find((r) => r.state === "build");
+		if (open) {
+			const give = open.needs.find((x) => x.have < x.count && count(l, x.proto) > 0);
+			if (!give && open.work >= open.workNeed) return false; // what it lacks it gathers below
+			const cell = open.cells.find((c) => c.room === l.me.room) ?? open.cells[0]!;
+			if (await besideOf(n, l, { room: cell.room, x: cell.x, y: cell.y, w: 1, h: 1 }, 2)) return true;
+			later("road", 2);
+			await n.act(give ? `liefere ${give.name} an die straße` : "arbeite an der straße");
+			return true;
+		}
+		const pair = (a: string, b: string) => [a, b].sort().join("|");
+		const exit = routes.some((r) => r.state === "vote") ? undefined : w.exits.find((e) => homes.includes(e.room) && homes.includes(e.destination) && !routes.some((r) => r.pair === pair(e.room, e.destination)));
 		if (!exit) { later("road", 30); return false; }
 		if (!(await travel(n, l, exit.room))) return true;
-		// tried again soon: something may lie on the cell it picked
-		later("road", 3);
-		const ground = w.rooms.find((r) => r.roomId === exit.room)?.ground ?? [], cells: Array<{ x: number; y: number }> = [];
-		for (let y = exit.y - EXIT_REACH; y <= exit.y + EXIT_REACH; y++) for (let x = exit.x - EXIT_REACH; x <= exit.x + EXIT_REACH; x++) if (dist({ x, y }, { ...exit, w: 1, h: 1 }) === EXIT_REACH && ",.".includes(ground[y]?.[x] ?? "~")) cells.push({ x, y });
-		if (!cells.length) return false;
-		const at = cells[randomInt(0, cells.length)]!;
-		await n.act(`bau ${def.name.toLowerCase()} ${at.x} ${at.y}`);
+		later("road", 20); // refused (something in the way, too young an island): tried again later
+		await n.act(`straße plane ${w.rooms.find((r) => r.roomId === exit.destination)?.name ?? exit.destination}`);
 		return true;
 	}
 

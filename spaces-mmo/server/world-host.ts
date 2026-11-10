@@ -33,6 +33,7 @@ import { stormTurnsMills } from "./engine/commands/mill.ts";
 import { wildTick } from "./engine/commands/wild.ts";
 import { epochTick } from "./engine/commands/epoch.ts";
 import { settlementTick } from "./engine/commands/settlement.ts";
+import { roadTick } from "./engine/commands/road.ts";
 import { motionTick } from "./engine/commands/townhall.ts";
 import { showTick } from "./engine/commands/festival.ts";
 import { byPeoplesPace, seasonTick, syncRates } from "./engine/clock.ts";
@@ -80,7 +81,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		garden: job(async (live) => { await gardenTick(space, live); await fieldTick(space, live, msgLeaseMs); await cartTick(space, live, msgLeaseMs); await passageTick(space, msgLeaseMs); }),
 		wild: job(async (live) => { await wildTick(space, live, msgLeaseMs); }),
 		epoch: async () => {
-			await job(async (live) => { await epochTick(space, live, msgLeaseMs); await settlementTick(space, live, msgLeaseMs); await motionTick(space, live, msgLeaseMs); await showTick(space, live, msgLeaseMs); await loanTick(space, live, msgLeaseMs); await seasonTick(space, live, msgLeaseMs); })();
+			await job(async (live) => { await epochTick(space, live, msgLeaseMs); await settlementTick(space, live, msgLeaseMs); await roadTick(space, live, msgLeaseMs); await motionTick(space, live, msgLeaseMs); await showTick(space, live, msgLeaseMs); await loanTick(space, live, msgLeaseMs); await seasonTick(space, live, msgLeaseMs); })();
 			await growthTick(space, w, msgLeaseMs);
 		},
 	};

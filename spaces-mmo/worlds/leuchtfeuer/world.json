@@ -8340,7 +8340,7 @@
 		{
 			"key": "strasse",
 			"category": "Allgemein",
-			"text": "Eine Straße (ab Dorf) baut man nahe einem Ausgang, höchstens zwei Felder davon (die Felder direkt daneben bleiben frei); sie verbindet die beiden Räume dieses Ausgangs. Ein Karren (Werkstatt) fährt nur auf Straßen: „karren stelle“ stellt ihn ab, „karren lade <ding>“ lädt bis zu 20 Stück, „karren fahre <ort>“ schickt ihn los, und er fährt allein, einen Raum je Weltstunde. Dort holt „karren entlade“ die Ladung, „karren nimm“ nimmt den leeren Karren wieder mit."
+			"text": "Eine Straße (ab Dorf) verbindet zwei Orte einer Insel für den Karren. Sie wird geplant: „straße plane <ort>“ zieht eine Trasse von der Mitte dieses Orts durch den Ausgang bis zur Mitte des Nachbarorts, entlang der Pflasterwege. Darüber stimmen die Siedler beider Orte ab (wer dort eine Hütte hat oder als Siedler aufgenommen ist), mit „straße ja“ oder „straße nein“, zwei Tage lang; mehr Ja als Nein, und sie wird gebaut. Stimmt dort sonst niemand ab, wird gleich gebaut. Neben der Trasse liefern alle („liefere stein“) und arbeiten mit („arbeite“), jede Arbeit pflastert ein Stück weiter; je zwei Felder kosten einen Stein, dazu 2 Treibholz. Fertig hält sie 45 Tage, „straße repariere“ (2 Stein) bessert sie aus. Auf der Trasse geht man, gebaut wird dort nichts. „straße“ zeigt die Straßen hier. Ein Karren (Werkstatt) fährt nur auf Straßen: „karren stelle“ stellt ihn ab, „karren lade <ding>“ lädt bis zu 20 Stück, „karren fahre <ort>“ schickt ihn los, und er fährt allein, einen Raum je Weltstunde. Dort holt „karren entlade“ die Ladung, „karren nimm“ nimmt den leeren Karren wieder mit."
 		},
 		{
 			"key": "fahrplan",
@@ -12059,7 +12059,6 @@
 			"huehnerstall",
 			"gehege",
 			"bienenstock",
-			"strasse",
 			"signalfeuer"
 		],
 		"ruinWorldMs": 864000000,
@@ -13011,40 +13010,6 @@
 				"repair": [
 					{
 						"proto": "glas",
-						"count": 1
-					}
-				]
-			},
-			{
-				"key": "strasse",
-				"atExit": true,
-				"epoch": 2,
-				"name": "Straße",
-				"dative": "einer Straße",
-				"aliases": [
-					"road",
-					"weg"
-				],
-				"w": 1,
-				"h": 1,
-				"needs": [
-					{
-						"proto": "stein",
-						"count": 4
-					},
-					{
-						"proto": "treibholz",
-						"count": 2
-					}
-				],
-				"work": 6,
-				"points": 1,
-				"keepWorldMs": 3888000000,
-				"keepSetting": "keep.lager",
-				"color": "#8a7f6a",
-				"repair": [
-					{
-						"proto": "stein",
 						"count": 1
 					}
 				]
@@ -14025,7 +13990,27 @@
 		"road": "strasse",
 		"proto": "karren",
 		"capacity": 20,
-		"hopWorldMs": 3600000
+		"hopWorldMs": 3600000,
+		"route": {
+			"epoch": 2,
+			"stone": "stein",
+			"stonePer": 2,
+			"woodProto": "treibholz",
+			"wood": 2,
+			"workPer": 4,
+			"minWork": 3,
+			"voteWorldMs": 172800000,
+			"siteWorldMs": 1209600000,
+			"keepWorldMs": 3888000000,
+			"keepSetting": "keep.lager",
+			"repair": [
+				{
+					"proto": "stein",
+					"count": 2
+				}
+			],
+			"points": 2
+		}
 	},
 	"liner": {
 		"fare": 3,

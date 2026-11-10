@@ -1,33 +1,29 @@
-// Roads and carts, step 8 (docs/siedeln.en.md "Road", "Cart, wagon"). A road is a plan built beside an exit: it links the two
-// rooms of that exit, within an island. A cart stands in a room with its cargo at `cartId`; its owner loads it, sends it to a
+// Roads and carts, step 8 (docs/siedeln.en.md "Road", "Cart, wagon"). A road is planned and voted on (road.ts): it links the
+// two rooms it runs between, within an island. A cart stands in a room with its cargo at `cartId`; its owner loads it, sends it to a
 // room the roads reach, and it goes a room at a time on the world clock, with nobody beside it. On a standing route
 // (`karren pendel`) it does so by itself: it loads from its owner's chests at one end, unloads into them at the other and
 // comes back, as long as there is something to carry. Roads stay on their island; a cart crosses the water as a thing
 // (`karren nimm`: in the pack, a boat's hatch or the railway's freight).
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type CartFields, type ExitFields, type FreightFields, type ItemFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type CartFields, type FreightFields, type ItemFields } from "../../model.ts";
 import { worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, msgOptions, NotUnderstood, roomOf, toPlayer, type CommandCtx } from "../context.ts";
 import type { WorldDef } from "../world.ts";
 import { trainIn } from "../rail.ts";
-import { amount, ARTICLE, distTo, EXIT_REACH, giveBack, planOf } from "./build.ts";
+import { amount, ARTICLE, distTo, giveBack, planOf } from "./build.ts";
 import { placeIn, relocate } from "./default.ts";
 import { consume, move } from "./trade.ts";
 import { countTrip } from "../travel.ts";
 import { randomBytes, timeNow } from "../source.ts";
+import { routeLinks, strasse } from "./road.ts";
 
-/** Room to rooms the roads join: a road beside an exit links its two ends, both ways. */
+/** Room to rooms the roads join, both ways: a finished road (road.ts) links the two rooms it runs between. */
 export async function roadLinks(space: SpaceLike, w: WorldDef, txn: string | null = null): Promise<Map<string, Set<string>>> {
-	const links = new Map<string, Set<string>>(), o = txn ? { txn } : {};
+	const links = new Map<string, Set<string>>();
 	if (!w.cart) return links;
-	const roads = (await space.readAll({ type: "Building", fields: { plan: w.cart.road } }, o)).map((e) => fieldsOf<BuildingFields>(e));
-	if (!roads.length) return links;
 	const link = (a: string, b: string) => { if (!links.has(a)) links.set(a, new Set()); links.get(a)!.add(b); };
-	for (const e of await space.readAll({ type: "Exit" }, o)) {
-		const x = fieldsOf<ExitFields>(e);
-		if (roads.some((r) => r.room === x.location && distTo(x, r) <= EXIT_REACH)) { link(x.location, x.destination); link(x.destination, x.location); }
-	}
+	for (const [a, b] of await routeLinks(space, txn)) { link(a, b); link(b, a); }
 	return links;
 }
 /** The rooms from `from` to `to` by road, without `from`; null when no road goes there. */
@@ -278,4 +274,4 @@ const zug: Command = {
 	},
 };
 
-export const CART_COMMANDS: Command[] = [karren, zug];
+export const CART_COMMANDS: Command[] = [karren, zug, strasse];

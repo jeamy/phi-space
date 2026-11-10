@@ -15,11 +15,10 @@ import { NOTICE_MS, whereTo } from "./engine/context.ts";
 import { decayNow, msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
 import { baysOf, linerOf, type Timetable } from "./engine/liner.ts";
 import { todosFor, type Todo } from "./todos.ts";
-import { asFields, type HerdFields, type MillLoadFields, type EpochFields, type SeedRestFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type WantedFields, type NoticeFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type CartFields, type WindFields, type WorldClockFields, type ZoneFields } from "./model.ts";
+import { asFields, type HerdFields, type MillLoadFields, type EpochFields, type SeedRestFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type WantedFields, type NoticeFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type CartFields, type WindFields, type WorldClockFields, type ZoneFields, type RoadFields } from "./model.ts";
 import { bedPlantsView } from "./engine/commands/garden.ts";
 import { fieldView } from "./engine/commands/field.ts";
 import { wildKinds } from "./engine/commands/wild.ts";
-import { distTo, EXIT_REACH } from "./engine/commands/build.ts";
 import { envMs } from "./space.ts";
 import { RegionSpaces } from "./region-spaces.ts";
 import { setting } from "./settings.ts";
@@ -35,6 +34,7 @@ export function usesOf(w: WorldDef): ItemUses {
 	const name = (k: string) => w.prototypes.find((p) => p.key === k)?.name ?? k;
 	const plans = w.building?.plans ?? [];
 	return {
+		...(w.cart?.route ? { roadEpoch: w.cart.route.epoch } : {}),
 		npcs: w.npcs.map((n) => n.name),
 		grinds: [...new Set((w.mill?.grinds ?? []).map((g) => name(g.from)))],
 		foods: Object.fromEntries(Object.entries(w.food?.foods ?? {}).map(([k, ms]) => [name(k), Math.round(ms / 3600_000)])),
@@ -421,7 +421,7 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Wanted", "Notice", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Wind", "Cart", "MillLoad"]) await this.#readPaged(region, space, { type }, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Wanted", "Notice", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Road", "Wind", "Cart", "MillLoad"]) await this.#readPaged(region, space, { type }, msgs);
 					await this.#readPaged(region, space, { type: "Msg", fields: { to: "*" } }, msgs); // #put keeps the last RECENT of each room
 					this.#advance(region, rev);
 					ready();
@@ -440,7 +440,7 @@ export class Gateway {
 						entryId = key(entryId);
 						const charId = this.#charOf.get(entryId) ?? this.#sessions.get(entryId) ?? (fields && (types?.includes("Character") || types?.includes("Session")) ? String(fields.charId) : undefined);
 						if (charId && !chars.has(charId)) chars.set(charId, this.#chars.get(charId)?.room ?? null);
-						const objId = this.#objOf.get(entryId) ?? this.#flameOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : fields && (types?.includes("Beacon") || types?.includes("Flame")) ? String(fields.beaconId) : fields && types?.includes("Scenery") ? String(fields.sceneryId) : fields && (types?.includes("Site") || types?.includes("Building") || types?.includes("Ruin")) ? String(fields.buildId) : fields && types?.includes("Bed") ? String(fields.bedId) : fields && types?.includes("Field") ? String(fields.fieldId) : fields && types?.includes("Animal") ? String(fields.animalId) : fields && types?.includes("Zone") ? String(fields.zoneId) : fields && types?.includes("Cart") ? String(fields.cartId) : undefined);
+						const objId = this.#objOf.get(entryId) ?? this.#flameOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : fields && (types?.includes("Beacon") || types?.includes("Flame")) ? String(fields.beaconId) : fields && types?.includes("Scenery") ? String(fields.sceneryId) : fields && (types?.includes("Site") || types?.includes("Building") || types?.includes("Ruin")) ? String(fields.buildId) : fields && types?.includes("Bed") ? String(fields.bedId) : fields && types?.includes("Field") ? String(fields.fieldId) : fields && types?.includes("Animal") ? String(fields.animalId) : fields && types?.includes("Zone") ? String(fields.zoneId) : fields && types?.includes("Road") ? String(fields.roadId) : fields && types?.includes("Cart") ? String(fields.cartId) : undefined);
 						if (fields && types?.includes("Fog")) fogs.add(String(fields.room));
 						if (objId && !objs.has(objId)) objs.set(objId, this.#objs.get(objId)?.location ?? null);
 					};
@@ -534,6 +534,12 @@ export class Gateway {
 		else if (type === "Zone") {
 			const z = fields as unknown as ZoneFields;
 			this.#setObj(id, { id: z.zoneId, kind: "zone", name: z.kind === "weg" ? "Wegerecht" : "Grünzone", location: z.room, x: z.x, y: z.y, w: z.w, h: z.h, color: z.kind === "weg" ? "#e0c060" : "#5fbf6a" });
+		}
+		else if (type === "Road") {
+			// a road's part in this room (engine/commands/road.ts): its cells in order, how many are paved; walked over
+			const r = fields as unknown as RoadFields, first = r.cells[0] ?? { x: 0, y: 0 };
+			this.#setObj(id, { id: r.roadId, kind: "road", name: r.name, location: r.room, x: first.x, y: first.y, through: true, runs: [r.cells], paved: r.paved, roadState: r.state, roadTo: r.to, ...(r.state === "build" && r.missing ? { missing: r.missing } : {}), ...(r.state === "vote" ? { votes: r.votes } : {}) });
+			this.#atlasChanged();
 		}
 		else if (type === "Ruin") {
 			const r = fields as unknown as RuinFields;
@@ -680,8 +686,8 @@ export class Gateway {
 	#stops(): AtlasState["stops"] {
 		const built = (plan: string | undefined) => [...this.#objs.values()].filter((o) => o.kind === "building" && !!plan && o.plan === plan);
 		const jetties = [...new Set(built(this.w.fishing?.plan).map((o) => o.location))], stations = [...new Set(built(this.w.rail?.plan).map((o) => o.location))];
-		const roads = built(this.w.cart?.road), links: Array<[string, string]> = [];
-		for (const e of this.w.exits) if (roads.some((r) => r.location === e.room && distTo(e, { x: r.x, y: r.y, w: r.w ?? 1, h: r.h ?? 1 }) <= EXIT_REACH)) links.push([e.room, e.destination]);
+		// the finished roads (engine/commands/road.ts): each part names the room it leads to
+		const links: Array<[string, string]> = [...this.#objs.values()].filter((o) => o.kind === "road" && o.roadState === "built" && o.roadTo).map((o) => [o.location, o.roadTo!]);
 		return { jetties, stations, trainFare: this.w.rail?.fare ?? 1, roads: links };
 	}
 

@@ -35,6 +35,7 @@ import type { CourierFields } from "../courier.ts";
 import { randomBytes, timeNow } from "../source.ts";
 import { creditDeed } from "../deeds.ts";
 import { baysOf, berth, SHIP_LENGTH } from "../liner.ts";
+import { roadCellsIn, routeDeliver, routeNear, routeWork } from "./road.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -84,9 +85,10 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green
 	// the builder is no one in the way: it steps off the site it staked out (bau); beds and fields are dug under anyone's feet
 	const people = await occupiedIn(c.space, room.roomId, c.actor.charId);
 	const things = new Set((await c.space.readAll({ type: "Item", fields: { location: room.roomId } })).map((e) => cellKey(e.fields as never)));
-	const fires = c.world.beacons.filter((b) => b.room === room.roomId);
+	const fires = c.world.beacons.filter((b) => b.room === room.roomId), road = await roadCellsIn(c.space, room.roomId, c.txn);
 	for (const p of cells(rect)) {
 		const k = cellKey(p);
+		if (road.has(k)) return "Dort führt eine Straße entlang; sie bleibt frei.";
 		if (!walkable(c.world, room.ground, p.x, p.y)) return "Dort ist kein fester Boden.";
 		if (room.ground[p.y]?.[p.x] === PATH) return "Das ist ein Weg; Wege und Plätze bleiben frei.";
 		if (isPassage(exits, p)) return "Dort ist ein Weg hinaus; den baut niemand zu.";
@@ -249,6 +251,10 @@ export async function takeNear<F extends Rect>(c: CommandCtx, type: string, idKe
 }
 
 /** The site within SITE_REACH of the actor (by plan name when given), taken in the transaction. */
+/** Whether a site lies within reach of the actor (nothing taken). */
+async function siteNear(c: CommandCtx): Promise<boolean> {
+	return (await c.space.readAll({ type: "Site", fields: { room: c.actor.room } }, { txn: c.txn })).some((e) => distTo(c.actor, fieldsOf<SiteFields>(e)) <= SITE_REACH);
+}
 export async function siteHere(c: CommandCtx, name: string): Promise<{ s: SiteFields }> {
 	const r = await takeNear<SiteFields>(c, "Site", "buildId", SITE_REACH, (s) => !name || planOf(c.world, name)?.key === s.plan || s.name.toLowerCase() === name.toLowerCase());
 	if ("f" in r) return { s: r.f };
@@ -316,7 +322,7 @@ export const bau: Command = {
 			const epoch = await epochOf(c.space, islandOf(c.world, c.actor.room), c.txn);
 			const max = (await setting(c.space, `build.max${Math.min(4, Math.max(1, epoch))}`).catch(() => undefined)) ?? def.maxBuildings;
 			const held = open.filter((s) => !free.has(s.plan)).length + (await c.space.readAll({ type: "Building", fields: { accountId: c.account.accountId } }, { txn: c.txn })).filter((e) => !free.has(String(e.fields.plan))).length;
-			if (held >= max) throw new CommandError(`Mehr als ${max} Bauten hat hier niemand (${epochName(c.world, epoch)}); Regentonne, Vogelscheuche, Ställe, Gehege, Bienenstock, Straße und Signalfeuer zählen nicht mit.`);
+			if (held >= max) throw new CommandError(`Mehr als ${max} Bauten hat hier niemand (${epochName(c.world, epoch)}); Regentonne, Vogelscheuche, Ställe, Gehege, Bienenstock und Signalfeuer zählen nicht mit.`);
 		}
 		const herds = c.world.animals;
 		if (herds?.houses[plan.key]) {
@@ -333,7 +339,7 @@ export const bau: Command = {
 		const tries = plan.water ? jettyTries(c, plan, at) : at ? [{ ...at, w: plan.w, h: plan.h }] : besides(c, plan);
 		let rect: Rect | null = null, why = "";
 		const exits = plan.atExit ? await exitsHere(c) : [];
-		for (const r of tries) { const no = plan.water ? await waterRefusal(c, room, r) : (await refusal(c, room, r, !!plan.green, !!plan.green)) ?? (plan.shore && !touchesWater(c.world, room, r) ? "Das muss ans Wasser grenzen." : plan.atExit && !exits.some((x) => distTo(x.f, r) <= EXIT_REACH) ? "Eine Straße beginnt neben einem Ausgang." : null); if (!no) { rect = r; break; } why ||= no; }
+		for (const r of tries) { const no = plan.water ? await waterRefusal(c, room, r) : (await refusal(c, room, r, !!plan.green, !!plan.green)) ?? (plan.shore && !touchesWater(c.world, room, r) ? "Das muss ans Wasser grenzen." : plan.atExit && !exits.some((x) => distTo(x.f, r) <= EXIT_REACH) ? "Das gehört neben einen Ausgang." : null); if (!no) { rect = r; break; } why ||= no; }
 		if (!rect) throw new CommandError(`Hier passt keine ${plan.name} hin: ${why}`);
 		const buildId = randomBytes(6).toString("hex"), now = await worldNowOf(c.space, c.txn);
 		for (const p of cells(rect)) {
@@ -361,6 +367,10 @@ const liefere: Command = {
 		const hits = itemsNamed(c.world, await inventory(c), m[2]!.replace(ARTICLE, ""));
 		if (!hits.length) throw new NotUnderstood(`Du trägst nichts, was „${m[2]!.slice(0, 30)}“ heißt.`);
 		const proto = hits[0]!.f.proto;
+		// no site in reach, or the road named: a road being built beside the actor takes it (road.ts)
+		const toRoad = !!m[3] && /^(?:straße|strasse|road)$/i.test(m[3]);
+		const road = toRoad || !(await siteNear(c)) ? await routeNear(c) : null;
+		if (road) return routeDeliver(c, road, m[2]!, m[1] ? Number(m[1]) : null);
 		const { s } = await siteHere(c, m[3] && !/^baustelle$/i.test(m[3]) ? m[3] : "");
 		const need = s.needs.find((n) => n.proto === proto);
 		if (!need) throw new CommandError(`Die ${s.name} braucht kein ${hits[0]!.f.name}. Es fehlen ${missing(s).join(", ") || "nur noch Hände"}.`);
@@ -399,6 +409,9 @@ const arbeite: Command = {
 	help: "arbeite – an der Baustelle neben dir (bis zwei Schritte) mitarbeiten (danach ruhst du eine Weile)",
 	async func(c, arg) {
 		await needRank(c, "helfer", "Mitarbeiten");
+		const toRoad = /^(?:an\s+der\s+)?(?:straße|strasse|road)$/i.test(arg.trim());
+		const road = toRoad || !(await siteNear(c)) ? await routeNear(c) : null;
+		if (road) return routeWork(c, road);
 		const { now, rest } = await rested(c);
 		const { s } = await siteHere(c, arg.replace(/^(?:an|auf)\s+(?:der\s+)?/i, "").replace(/^baustelle$/i, ""));
 		if (s.work >= s.workNeed) throw new CommandError(`An der ${s.name} ist die Arbeit getan; es fehlen nur noch ${missing(s).join(", ")}.`);
@@ -811,9 +824,12 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 		try { if (await run(txn)) await space.commit(txn); else await space.abort(txn); }
 		catch (err) { await space.abort(txn).catch(() => {}); throw err; }
 	};
+	// the single road cells of old (and their sites) go: a road is planned from room to room now (road.ts); the cells and
+	// the fire's light are freed, nothing is left behind
+	const oldRoad = w?.cart?.road && !planOf(w, w.cart.road) ? w.cart.road : null;
 	for (const e of await space.readAll({ type: "Site" })) {
 		const s = fieldsOf<SiteFields>(e);
-		if (s.untilWorldMs > now) continue;
+		if (s.untilWorldMs > now && s.plan !== oldRoad) continue;
 		await inTxn(async (txn) => {
 			if (!(await space.takeIfExists({ type: "Site", fields: { buildId: s.buildId } }, NO_WAIT, { txn }))) return false;
 			await closeOrders(space, txn, s, now + (w?.building?.estateWorldMs ?? 30 * 24 * 3600_000));
@@ -824,6 +840,15 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 	}
 	for (const e of await space.readAll({ type: "Building" })) {
 		const b = fieldsOf<BuildingFields>(e);
+		if (b.plan === oldRoad) {
+			await inTxn(async (txn) => {
+				if (!(await space.takeIfExists({ type: "Building", fields: { buildId: b.buildId } }, NO_WAIT, { txn }))) return false;
+				await freeCells(space, txn, b.room, b.buildId);
+				await releaseLight(space, txn, b.beaconId, b.points ?? 1);
+				return true;
+			});
+			continue;
+		}
 		if (b.untilWorldMs > now) continue;
 		await inTxn(async (txn) => {
 			if (!(await space.takeIfExists({ type: "Building", fields: { buildId: b.buildId } }, NO_WAIT, { txn }))) return false;

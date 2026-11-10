@@ -31,7 +31,7 @@ type T = typeof import("three");
 type O3 = import("three").Object3D;
 type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; /** The own figure's lantern, lit in the dark. */ lantern?: { light: import("three").PointLight; glow: import("three").Mesh }; kind?: string; progress?: number; sig?: string; /** The name on a figure. */ shown?: string };
 /** What a bed shows: rebuilt when its plants or weeds change. */
-const bedSig = (o: ObjView) => (o.kind === "track" ? (o.runs ?? []).map((r) => r.map((c) => `${c.x},${c.y}`).join(" ")).join("|") : o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
+const bedSig = (o: ObjView) => (o.kind === "road" ? `${o.roadState}:${o.paved}:${(o.runs?.[0] ?? []).map((c) => `${c.x},${c.y}`).join(" ")}` : o.kind === "track" ? (o.runs ?? []).map((r) => r.map((c) => `${c.x},${c.y}`).join(" ")).join("|") : o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
 type Scene3D = {
 	t: T;
 	renderer: import("three").WebGLRenderer;
@@ -501,7 +501,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		let e = s.objs.get(id);
 		// a site that became a building (or got further) is drawn anew
 		if (e && (e.kind !== obj.kind || e.progress !== obj.progress || e.sig !== bedSig(obj))) { remove(s, s.objs, id); e = undefined; }
-		if (!e) { e = obj.kind === "track" ? track(s, obj) : object(s.t, obj, me); plinth(s, obj, e.obj); prepareModelDetails(s.t, e.obj); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); shade(e.obj, true); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.objs.set(id, e); }
+		if (!e) { e = obj.kind === "track" ? track(s, obj) : obj.kind === "road" ? road(s, obj) : object(s.t, obj, me); plinth(s, obj, e.obj); prepareModelDetails(s.t, e.obj); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); shade(e.obj, true); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.objs.set(id, e); }
 		e.target.copy(placeOf(s, obj));
 		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; }
 	}
@@ -509,6 +509,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 	const covered = new Set<string>();
 	for (const o of objs.values()) if (o.location === s.room.roomId && (o.kind === "building" || o.kind === "site" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field"))
 		for (let y = o.y; y < o.y + (o.h ?? 1); y++) for (let x = o.x; x < o.x + (o.w ?? 1); x++) covered.add(`${x},${y}`);
+	for (const o of objs.values()) if (o.location === s.room.roomId && o.kind === "road") for (const c of o.runs?.[0] ?? []) covered.add(`${c.x},${c.y}`);
 	// where the paths of the room run: no palm stands in a way out, on a fire or at the spawn
 	const free = new Set<string>(s.room.spawn ? [`${s.room.spawn.x},${s.room.spawn.y}`] : []);
 	for (const o of objs.values()) if (o.location === s.room.roomId && (o.kind === "exit" || o.kind === "beacon" || o.kind === "scenery"))
@@ -535,7 +536,7 @@ function plinth(s: Scene3D, obj: ObjView, group: O3): void {
 }
 
 function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
-	if (obj.kind === "track") return new s.t.Vector3(); // its pieces stand where they lie
+	if (obj.kind === "track" || obj.kind === "road") return new s.t.Vector3(); // its pieces stand where they lie
 	const v = at(s, obj.x, obj.y, 0);
 	v.x += ((obj.w ?? 1) - 1) / 2; v.z += ((obj.h ?? 1) - 1) / 2;
 	return v;
@@ -564,6 +565,26 @@ function track(s: Scene3D, obj: ObjView): Entry {
 		}
 	});
 	return { obj: group, target: new t.Vector3(), kind: "track", sig: bedSig(obj) };
+}
+
+/** A road (engine/commands/road.ts): its paved cells as a bed of grey slabs with a kerb, flat on the ground of each cell;
+ *  of a road being built the rest as two pegs a cell, of a planned one a small yellow mark a cell. */
+function road(s: Scene3D, obj: ObjView): Entry {
+	const t = s.t, group = new t.Group(); group.userData.owned = true;
+	const bed = new t.MeshStandardMaterial({ color: 0x6f675a, roughness: 1 }), slab = [new t.MeshStandardMaterial({ color: 0x8f8676, roughness: 0.9 }), new t.MeshStandardMaterial({ color: 0x9c9383, roughness: 0.9 })];
+	const peg = new t.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 1 }), mark = new t.MeshStandardMaterial({ color: 0xf0d060, emissive: 0x403010, roughness: 0.8 });
+	const bedGeo = new t.BoxGeometry(1, 0.03, 1), slabGeo = new t.BoxGeometry(0.28, 0.025, 0.28), pegGeo = new t.BoxGeometry(0.05, 0.22, 0.05), markGeo = new t.CylinderGeometry(0.07, 0.07, 0.02, 8);
+	const paved = obj.paved ?? 0;
+	(obj.runs?.[0] ?? []).forEach((c, i) => {
+		const here = at(s, c.x, c.y, 0);
+		if (i < paved) {
+			const b = new t.Mesh(bedGeo, bed); b.position.set(here.x, here.y + 0.015, here.z); group.add(b);
+			for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) { const m = new t.Mesh(slabGeo, slab[(i + j + k) % 2]!); m.position.set(here.x - 0.32 + j * 0.32, here.y + 0.04, here.z - 0.32 + k * 0.32); group.add(m); }
+		} else if (obj.roadState === "build") {
+			for (const [dx, dz] of [[-0.35, -0.35], [0.35, 0.35]] as const) { const m = new t.Mesh(pegGeo, peg); m.position.set(here.x + dx, here.y + 0.11, here.z + dz); group.add(m); }
+		} else { const m = new t.Mesh(markGeo, mark); m.position.set(here.x, here.y + 0.02, here.z); group.add(m); }
+	});
+	return { obj: group, target: new t.Vector3(), kind: "road", sig: bedSig(obj) };
 }
 
 function object(t: T, obj: ObjView, me: string): Entry {

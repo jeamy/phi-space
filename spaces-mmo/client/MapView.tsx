@@ -454,6 +454,29 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 		if (o.location !== roomId) continue;
 		const x = o.x * ts, y = o.y * ts, cx = x + ts / 2, cy = y + ts / 2;
 		if (o.kind === "scenery") { s.objs.addChild(sceneryView(p, o, ts)); continue; }
+		if (o.kind === "road") {
+			// a road (engine/commands/road.ts): the paved cells as slabs with a kerb, the rest of a road being built as pegs and
+			// a string, a planned one as a dotted line; under the people, over the ground
+			const g = new p.Graphics(), cells = o.runs?.[0] ?? [], paved = o.paved ?? 0;
+			cells.forEach((c, i) => {
+				const px = c.x * ts, py = c.y * ts;
+				if (i < paved) {
+					g.rect(px, py, ts, ts).fill({ color: "#6f675a" });
+					for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) g.roundRect(px + 2 + j * (ts - 4) / 3 + (k % 2) * 2, py + 2 + k * (ts - 4) / 3, (ts - 4) / 3 - 2, (ts - 4) / 3 - 2, 1.5).fill({ color: (j + k + i) % 3 ? "#8f8676" : "#9c9383" });
+					g.rect(px, py, ts, ts).stroke({ width: 1, color: "#4a4338", alpha: 0.6 });
+				} else if (o.roadState === "build") {
+					for (const [dx, dy] of [[0.15, 0.15], [0.85, 0.85]] as const) g.rect(px + dx * ts - 1.5, py + dy * ts - 1.5, 3, 3).fill({ color: "#6b4a2e" });
+					g.moveTo(px + 0.15 * ts, py + 0.15 * ts).lineTo(px + 0.85 * ts, py + 0.85 * ts).stroke({ width: 1, color: "#e8d9a8", alpha: 0.8 });
+				} else g.circle(px + ts / 2, py + ts / 2, Math.max(1.5, ts * 0.08)).fill({ color: "#f0d060", alpha: 0.8 });
+			});
+			s.objs.addChildAt(g, 0);
+			if (o.roadState !== "built" && cells[0]) {
+				const label = new p.Text({ text: tr(o.name), resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 9, fill: "#f0d060", stroke: { color: "#000000", width: 3 } } });
+				label.position.set(cells[0].x * ts + 2, cells[0].y * ts + 2);
+				s.objs.addChild(label);
+			}
+			continue;
+		}
 		if (o.kind === "track") {
 			// the island railway (App, engine/rail.ts): sleepers and two rails through every cell, a quarter circle where the way turns
 			const g = new p.Graphics(), off = 0.16;

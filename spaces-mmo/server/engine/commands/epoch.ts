@@ -6,6 +6,7 @@
 //   the island's Epoch entry (unique per island) only when the epoch changes, and tells every room of the island.
 // - Falling back needs no mechanism of its own: what decays no longer counts. Buildings of a higher epoch stand and work
 //   on; only new plans of that epoch are refused (`bau`, `flur anlegen`) until the stock is enough again.
+import { routePoints } from "./road.ts";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BedFields, type BuildingFields, type EpochFields, type FieldFields } from "../../model.ts";
 import { decayNowOf } from "../clock.ts";
@@ -37,6 +38,8 @@ export async function islandPoints(space: SpaceLike, w: WorldDef, now: number): 
 	for (const e of await space.readAll({ type: "Building" })) { const b = fieldsOf<BuildingFields>(e); if (b.untilWorldMs > now) add(b.room, b.points, "buildings"); }
 	for (const e of await space.readAll({ type: "Bed" })) { const b = fieldsOf<BedFields>(e); if (b.untilWorldMs > now) add(b.room, b.points, "beds"); }
 	for (const e of await space.readAll({ type: "Field" })) { const f = fieldsOf<FieldFields>(e); if (f.untilWorldMs > now) add(f.room, f.points, "fields"); }
+	// a finished road counts as a building of its island (road.ts)
+	for (const [island, points] of await routePoints(space)) { const t = out.get(island); if (t) { t.points += points; t.buildings += points; } }
 	return out;
 }
 
@@ -89,6 +92,7 @@ const cap = (t: string) => t[0]!.toUpperCase() + t.slice(1);
 /** What an epoch unlocks: the plans of exactly that epoch, and the fields. */
 function unlocks(w: WorldDef, epoch: number): string {
 	const names = (w.building?.plans ?? []).filter((p) => (p.epoch ?? 1) === epoch).map((p) => p.name);
+	if (w.cart?.route?.epoch === epoch && epoch > 1) names.push("Straßen"); // planned from room to room (road.ts)
 	if ((w.fields?.epoch ?? 1) === epoch && epoch > 1) names.push("Äcker");
 	return names.join(", ");
 }

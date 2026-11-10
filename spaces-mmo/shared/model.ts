@@ -63,6 +63,18 @@ export type FogFields = { room: string; level: number };
  *  without it), `closed`: the ranks count. */
 export type SettlementMember = { accountId: string; name: string; rank: "helfer" | "siedler" };
 export type SettlementFields = { settlementId: string; name: string; nameKey: string; room: string; founder: string; founderName: string; members: SettlementMember[]; closed: boolean; at: number; /** Coins per thing taken from the warehouse or bought at a store here, set by a town hall; they go into the warehouse. */ tax?: number; /** Before this world time no new festival (engine/commands/festival.ts). */ showRestWorldMs?: number };
+/** A road (engine/commands/road.ts): planned from the middle of one room through a door to the middle of the next, on one
+ *  island; the settlers of both rooms vote on it (`state` "vote" until `voteUntil`), then it is built together ("build"
+ *  until `untilWorldMs`; `work` paves its cells in order) and links the two rooms for carts while it stands ("built" until
+ *  `untilWorldMs`). All terms are on the decay clock. `voters`: the accounts that may vote; `pair`: the two rooms sorted
+ *  (one road per pair). */
+export type RouteFields = { routeId: string; pair: string; island: string; rooms: [string, string]; names: [string, string];
+	cells: Array<{ room: string; x: number; y: number }>; state: "vote" | "build" | "built"; planner: string; plannerName: string; accountId: string;
+	voters: string[]; yes: string[]; no: string[]; voteUntil: number; needs: Array<{ proto: string; name: string; count: number; have: number }>;
+	work: number; workNeed: number; by: Record<string, number>; untilWorldMs: number; at: number; points: number };
+/** A road's part in one room, what a page draws (written with its Route): its cells in order from the door or to it,
+ *  how many are paved, its state and what it lacks. */
+export type RoadFields = { roadId: string; routeId: string; room: string; to: string; name: string; cells: Array<{ x: number; y: number }>; paved: number; state: RouteFields["state"]; missing: string; votes: string };
 /** A festival of a settlement, one per room (`unique`), ending at `endsWorldMs`. */
 /** The wind of an island: an index into `WorldDef.wind.names`. */
 /** What a room grew by (engine/commands/growth.ts), so that a new version of the world file keeps it. */

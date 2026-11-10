@@ -8,7 +8,7 @@ import { FOREVER } from "phi-spaces";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import { roadLinks } from "../server/engine/commands/cart.ts";
-import type { BuildingFields, CartFields, SiteFields, WorldClockFields } from "../server/model.ts";
+import type { BuildingFields, CartFields, RouteFields, SiteFields, WorldClockFields } from "../server/model.ts";
 import { decayNow } from "../server/engine/worldtime.ts";
 import { eventually, lightFire, Player, startServer } from "./stack.ts";
 
@@ -67,14 +67,15 @@ test("a settler of a village joins the rooms of its home by road, through the sa
 			const b: BuildingFields = { buildId: `own-${plan}`, plan, name: plan, room: first.room, x: 0, y: 0, w: 1, h: 1, owner: me, ownerName: first.name, accountId: me, beaconId: first.beacon!, points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 };
 			await s.write({ type: "Building", fields: b as never }, null, FOREVER);
 		}
-		for (const [proto, n] of [["stein", 4], ["treibholz", 2]] as const) {
+		for (const [proto, n] of [["stein", 20], ["treibholz", 2]] as const) {
 			const p = (await resolvePrototype(s, proto))!;
 			for (let i = 0; i < n; i++) await spawn(s, null, w, p, { location: me, x: -1, y: -1 });
 		}
 		await srv.stack.npcProcess();
-		const site = await eventually(async () => (await s.readAll({ type: "Site", fields: { accountId: me } }))[0]?.fields as SiteFields | undefined, 120_000, "a road staked out");
-		assert.equal(site.plan, "strasse");
-		const road = await eventually(async () => (await s.readAll({ type: "Building", fields: { accountId: me, plan: "strasse" } }))[0]?.fields as BuildingFields | undefined, 200_000, "the road built");
+		// it plans the road; nobody who votes lives there (it does not vote itself), so it is built at once, by its hands
+		const planned = await eventually(async () => (await s.readAll({ type: "Route", fields: { accountId: me } }))[0]?.fields as RouteFields | undefined, 120_000, "a road planned");
+		assert.deepEqual(planned.voters, [], "a figure of the game has no vote");
+		const road = await eventually(async () => { const r = (await s.readAll({ type: "Route", fields: { accountId: me } }))[0]?.fields as RouteFields | undefined; return r?.state === "built" ? { room: r.rooms[0] } : undefined; }, 200_000, "the road built");
 		assert.ok(homes.includes(road.room));
 		assert.ok((await roadLinks(s, w)).get(road.room)?.size, "it links a room");
 	} finally { await srv.close(); }
@@ -132,9 +133,9 @@ test("a settler with things to sell and a road to its market sends them by cart,
 			const b: BuildingFields = { buildId: `own-${plan}`, plan, name: plan, room: first.room, x: 0, y: 0, w: 1, h: 1, owner: me, ownerName: first.name, accountId: me, beaconId: first.beacon!, points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 };
 			await s.write({ type: "Building", fields: b as never }, null, FOREVER);
 		}
-		// a road beside the exit to the market, two cells in
-		const road: BuildingFields = { buildId: "strasse-1", plan: "strasse", name: "Straße", room: exit.room, x: exit.x + (exit.x === 0 ? 2 : -2), y: exit.y, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: first.beacon!, points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 };
-		await s.write({ type: "Building", fields: road as never }, null, FOREVER);
+		// a road from that room to the market
+		const road: RouteFields = { routeId: "road-1", pair: [exit.room, market].sort().join("|"), island: w.rooms.find((r) => r.roomId === exit.room)!.island!, rooms: [exit.room, market], names: [exit.room, market], cells: [], state: "built", planner: "o", plannerName: "O", accountId: "o", voters: [], yes: [], no: [], voteUntil: 0, needs: [], work: 0, workNeed: 0, by: {}, untilWorldMs: FOREVER, at: 0, points: 2 };
+		await s.write({ type: "Route", fields: road as never }, null, FOREVER);
 		const c = (await s.take({ type: "Character", fields: { charId: me } }, 5_000))!;
 		const spawnAt = w.rooms.find((r) => r.roomId === exit.room)!.spawn!;
 		await s.write({ type: "Character", fields: { ...c.fields, room: exit.room, x: spawnAt.x, y: spawnAt.y } }, null, FOREVER);

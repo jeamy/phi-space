@@ -121,8 +121,12 @@ export type WorldDef = {
 	/** A rowing boat (engine/commands/fishing.ts) goes between the jetties of an island; `sand` is dug with `tool` on `tile`. */
 	boat?: { proto: string; sail?: string; /** How many things the hatch of each boat holds (`luke`, fishing.ts). */ hatch?: Record<string, number> };
 	sand?: { tool: string; makes: string; count: number; tile: string };
-	/** Roads and carts (engine/commands/cart.ts): `road` the plan, `proto` the cart as a thing, `capacity` its cargo, `hopWorldMs` a room of its way. */
-	cart?: { road: string; proto: string; capacity: number; hopWorldMs: number };
+	/** Roads and carts (engine/commands/cart.ts, road.ts): `road` the key of a road (and of the single road cells of old, which the sweep takes away), `proto` the cart as a thing, `capacity` its cargo, `hopWorldMs` a room of its way. */
+	cart?: { road: string; proto: string; capacity: number; hopWorldMs: number;
+		/** A planned road (engine/commands/road.ts): from `epoch`, `stonePer` cells take one `stone`, plus `wood` of `woodProto`;
+		 *  `workPer` cells one work (at least `minWork`); the vote lasts `voteWorldMs`, the building `siteWorldMs`, the road `keepWorldMs`
+		 *  (the setting `keepSetting` when set); `repair` mends it; `points` it adds to its island's stock. */
+		route?: { epoch: number; stone: string; stonePer: number; woodProto: string; wood: number; workPer: number; minWork: number; voteWorldMs: number; siteWorldMs: number; keepWorldMs: number; keepSetting?: string; repair: Array<{ proto: string; count: number }>; points: number } };
 	/** The large ship (engine/liner.ts, engine/commands/fishing.ts): one ship sails a loop over the bays of all islands, lies `stayWorldMs` in each and takes `unitWorldMs` per map cell between two; ferries stay on demand. */
 	liner?: { fare: number; stayWorldMs: number; unitWorldMs: number };
 	/** The island railway (engine/commands/cart.ts): between the buildings of `plan` on an island, for `fare` coins. */
