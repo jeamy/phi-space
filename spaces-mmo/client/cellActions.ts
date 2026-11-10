@@ -9,6 +9,7 @@ export type CellInput = {
 	offer?: (name: string) => void;
 	/** The world's recipes (ItemUses.recipes): a building beside one offers those made at its plan. */ recipes?: ItemUses["recipes"];
 	/** Whether a cell of this room is ground a spade digs sand from (ItemUses.sandTile). */ beachAt?: (x: number, y: number) => boolean;
+	/** The operator: gives up anyone's bed beside it (server: garden.ts „beet aufgeben“). */ admin?: boolean;
 	/** What the windmill grinds (ItemUses.grinds). */ grinds?: string[];
 	/** The trade offers made to the player (TradeView.offersIn): a figure with one gets "accept" and "decline" first. */ offersIn?: Array<{ fromName: string; giveNames: string[]; want: Array<{ name: string; count: number }> }>;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] };
@@ -144,7 +145,7 @@ export function offerWords(o: { giveNames: string[]; want: Array<{ name: string;
 	return `${counted(o.giveNames.map((name) => ({ name, count: 1 })))}${o.want.length ? ` für ${counted(o.want)}` : " als Geschenk"}`;
 }
 
-export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, recipes, grinds, beachAt }: CellInput): CellEntry[] {
+export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, recipes, grinds, beachAt, admin }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: CellEntry[] = [];
 	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
@@ -229,7 +230,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				if (mine && (o.plants ?? []).length < (o.w ?? 1) * (o.h ?? 1)) for (const n of [...new Set(carried.filter((n) => mayPlantIn(o.bedKind, n, beds)))]) entries.push({ label: `${n} pflanzen`, line: `pflanze ${n}` });
 			}
 			// one's own bed (a community bed: who dug it) goes back to grass from beside it (server: garden.ts "beet aufgeben")
-			if (beside && o.ownerId === me) entries.push({ label: "Beet aufgeben (wird wieder Gras)", line: `beet aufgeben ja ${o.x} ${o.y}`, confirm: "Das Beet aufgeben? Was darin wächst, geht verloren, die Fläche wird wieder Gras." });
+			if (beside && (o.ownerId === me || admin)) entries.push({ label: o.ownerId === me ? "Beet aufgeben (wird wieder Gras)" : "Beet auflösen (als Betreiber)", line: `beet aufgeben ja ${o.x} ${o.y}`, confirm: "Das Beet aufgeben? Was darin wächst, geht verloren, die Fläche wird wieder Gras." });
 			continue;
 		}
 		if (o.kind === "field") {

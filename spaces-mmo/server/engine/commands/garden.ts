@@ -23,7 +23,7 @@ import { fieldsOf, type BedFields, type BedPlant, type BuildingFields, type Item
 import { peek } from "../../space.ts";
 import { decayNowOf, frozenUntil, patienceOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
-import { CommandError, inventory, itemsNamed, msg, NotUnderstood, pluralOf, roomOf, type CommandCtx } from "../context.ts";
+import { CommandError, inventory, itemsNamed, levelOf, msg, NotUnderstood, pluralOf, roomOf, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { fogOf } from "../fire.ts";
 import type { GardenDef, SortDef, WorldDef } from "../world.ts";
@@ -173,10 +173,14 @@ const beet: Command = {
 		if (/^(?:aufgeben|abreissen|abreißen|weg|remove)$/i.test(word)) {
 			// „beet aufgeben ja x y“ (the map's menu): the one of one's beds on that cell, not just the nearest
 			const [cx, cy] = [Number(rest[1]), Number(rest[2])], at = Number.isInteger(cx) && Number.isInteger(cy) && rest.length >= 3;
-			const b = await bedHere(c, { own: true, reach: 1, ...(at ? { may: (x: BedFields) => cx >= x.x && cy >= x.y && cx < x.x + x.w && cy < x.y + x.h } : {}) });
+			// the operator (an admin) gives up anyone's bed beside it, a forsaken one in the way; its owner is told
+			if (!c.account && c.loadAccount) { c.account = await c.loadAccount(); delete c.loadAccount; }
+			const admin = levelOf(c.account) === "Admin";
+			const b = await bedHere(c, { own: !admin, reach: 1, ...(at ? { may: (x: BedFields) => cx >= x.x && cy >= x.y && cx < x.x + x.w && cy < x.y + x.h } : {}) });
 			// what grows in it is lost: asked first, „beet aufgeben ja“ does it (the map's menu asks on the page and sends that)
 			if (!/^(?:ja|yes)$/i.test(rest[0] ?? "")) { await writeBed(c, b); return msg(c, c.actor.charId, "info", "Das Beet wirklich aufgeben? Was darin wächst, geht verloren, und dort wächst wieder Gras. „beet aufgeben ja“ gibt es auf."); }
 			await freeBed(c.space, c.txn, b);
+			if (b.owner !== c.actor.charId) await msg(c, b.owner, "info", `${c.actor.name} hat dein ${b.kind === "gemein" ? "Gemeinschaftsbeet" : b.kind === "zier" ? "Zierbeet" : "Beet"} in ${(await roomOf(c)).name} aufgelöst; dort wächst wieder Gras.`);
 			return msg(c, "*", "info", `${c.actor.name} gibt das ${b.kind === "gemein" ? "Gemeinschaftsbeet" : b.kind === "zier" ? "Zierbeet" : "Beet"} auf; dort wächst wieder Gras.`);
 		}
 		// "beet ansehen x y": the one bed at that cell (the map's menu), else all of the room

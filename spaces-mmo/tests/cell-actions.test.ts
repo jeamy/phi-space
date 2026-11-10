@@ -249,3 +249,10 @@ test("sand: with a spade, a right click on the beach shovels where the figure st
 	assert.ok(!cellEntries({ ...input, objs: spade, beachAt, self: char("me", "Mira", 9, 5), at: { x: 3, y: 4 } }).some((e) => e.line === "schaufle"), "standing off the beach: walk there first");
 	assert.ok(!cellEntries({ ...input, objs: spade, at: { x: 5, y: 5 } }).some((e) => e.line === "schaufle"), "a world without sand");
 });
+
+test("someone else's bed beside one: only the operator may remove it", () => {
+	const beds = new Map([...objs, ["bed", obj({ id: "bed", kind: "bed", name: "Beet", owner: "Mad", ownerId: "mad", x: 6, y: 5, w: 2, h: 2 })]]);
+	const lines = (admin: boolean) => cellEntries({ ...input, objs: beds, admin, at: { x: 6, y: 5 } }).filter((e) => e.line.startsWith("beet aufgeben ja"));
+	assert.equal(lines(false).length, 0);
+	assert.deepEqual(lines(true).map((e) => [e.label, e.line, !!e.confirm]), [["Beet auflösen (als Betreiber)", "beet aufgeben ja 6 5", true]]);
+});

@@ -77,9 +77,9 @@ test("crossing: a ripe flower crosses with another strain beside it, not across 
 });
 
 type P = { p: Player; me: string; name: string };
-async function player(url: string, name: string): Promise<P> {
+async function player(url: string, name: string, setupToken?: string): Promise<P> {
 	const p = new Player(url);
-	assert.equal((await p.post("/api/register", { name, password: "geheim-123" })).status, 200);
+	assert.equal((await p.post("/api/register", { name, password: "geheim-123", ...(setupToken ? { setupToken } : {}) })).status, 200);
 	return { p, me: (await p.play()).me.charId, name };
 }
 async function does(p: Player, line: string, text: string | RegExp, ms = 30_000): Promise<string> {
@@ -107,10 +107,10 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 	// 0.0001: a world hour is 1.44 s, the thirst (16 h) 23 s, a strandnelke ripe after 24 h, 35 s; faster, one stall of the
 	// machine longer than the thirst wilts the whole bed, and nothing ever ripens
 	// it lives fast and does not lapse: at 10 000 alone a stall of the machine wilts a bed in seconds and ends it in two minutes
-	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.0001", SPACES_MMO_CLOCK_DECAY: "1" } });
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.0001", SPACES_MMO_CLOCK_DECAY: "1" }, accountOptions: { setupToken: "t" } });
 	try {
 		const s = srv.stack.space;
-		const anna = await player(srv.url, "Gärtnerin"), bert = await player(srv.url, "Bert");
+		const boss = await player(srv.url, "Betreiberin", "t"), anna = await player(srv.url, "Gärtnerin"), bert = await player(srv.url, "Bert");
 		await walk(anna, s, 16, 11);
 		assert.match(await does(anna.p, "umgraben 16 12", "Spaten"), /brauchst du einen Spaten/);
 		await give(s, anna.me, "spaten", 1);
@@ -192,7 +192,13 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		assert.equal(await s.count({ type: "Bed", fields: { accountId: String((await s.readAll({ type: "Character", fields: { charId: anna.me } }))[0]!.fields.accountId) } }) > 0, true);
 		const mineBed = await bedOf(s, anna.me);
 		assert.match(await does(anna.p, `beet aufgeben ja ${mineBed.x + mineBed.w + 5} ${mineBed.y}`, "näher"), /Geh näher an dein Beet heran|kein Beet/, "a cell where none of hers lies: nothing given up");
-		assert.match(await does(anna.p, `beet aufgeben ja ${mineBed.x} ${mineBed.y}`, "gibt das"), /gibt das Beet auf/);
+		// someone else's bed: a player may not, the operator may, and the owner is told
+		await walk(bert, s, mineBed.x - 1, mineBed.y);
+		assert.match(await does(bert.p, `beet aufgeben ja ${mineBed.x} ${mineBed.y}`, "Beet"), /Geh näher an dein Beet heran|kein Beet/);
+		await walk(boss, s, mineBed.x - 1, mineBed.y + 1);
+		const told = anna.p.frames.length;
+		assert.match(await does(boss.p, `beet aufgeben ja ${mineBed.x} ${mineBed.y}`, "gibt das"), /Betreiberin gibt das Beet auf/);
+		await anna.p.until((f) => f.t === "msg" && f.m.text.includes("Betreiberin hat dein Beet in") && f.m.text.includes("aufgelöst"), 10_000, told);
 		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => String(e.fields.of).startsWith("bed-")).length, 0);
 	} finally { await srv.close(); }
 });
