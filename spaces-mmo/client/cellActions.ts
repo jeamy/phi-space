@@ -96,6 +96,15 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 	// the server says where it works (quarry.ts breche, fishing.ts wirf netz)
 	if (name === "Spitzhacke") add({ label: "Stein brechen", line: "breche" });
 	if (name === "Netz") add({ label: "Netz auswerfen", line: "wirf netz" });
+	if (name === "Spaten") { add({ label: "Lehm stechen", line: "steche" }); add({ label: "Sand schaufeln", line: "schaufle" }); if (!guest) add({ label: "Acker anlegen (4×4)", line: "flur anlegen" }); }
+	if (name === "Kanne Wasser") add({ label: "Gießen", line: "gieße" });
+	if (name === "Schlachtmesser" || name === "Muschelmesser") add({ label: "Ein Tier schlachten", line: "schlachte" });
+	// a boat sets off from a jetty; alone the command says where it goes (fishing.ts rudere, segle; luke)
+	if (name === "Ruderboot") add({ label: "Rudern: wohin?", line: "rudere" });
+	if (name === "Segelboot") add({ label: "Segeln: wohin?", line: "segle" });
+	if (name === "Ruderboot" || name === "Segelboot") add({ label: "Was liegt in der Luke?", line: "luke" });
+	// a bill of exchange is paid out at a counting house (shop.ts wechsel)
+	if (name === "Wechsel") { add({ label: "Wechsel einlösen", line: "wechsel einlösen" }); add({ label: "Meine Wechsel", line: "wechsel" }); }
 	// a cart carried: set it down beside one (then its own menu loads it and sends it off by road), or see where one's carts are (server: cart.ts)
 	if (name === "Karren" && !guest) { add({ label: "Karren abstellen", line: "karren stelle" }); add({ label: "Meine Karren", line: "karren" }); }
 	for (const r of uses.recipes) {
