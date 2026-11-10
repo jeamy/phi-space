@@ -565,7 +565,7 @@ function SiteOrders({ objs, self, room, me, send, walk }: { objs: Map<string, Ob
 									{!near ? <button onClick={() => walk({ x: s.x, y: s.y })}>Hingehen</button>
 										: !o.proto ? <button onClick={() => send("arbeite")}>Mitarbeiten</button>
 										: carried.has(o.name) ? <button onClick={() => send(`liefere ${o.name}`)}>Liefern</button>
-										: <span className="muted order-need">fehlt dir</span>}
+										: <span className="muted order-need" title={mine ? "Wer welche hat, liefert sie hier und bekommt den Lohn; du kannst auch selbst liefern" : "Trägst du welche, steht hier „Liefern“"}>{`keine ${o.name} im Rucksack`}</span>}
 								</li>
 							))}
 							{mine && open.map((m) => (
