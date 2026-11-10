@@ -1005,3 +1005,52 @@ fn growing() {
 	let g = w.peek(obj! { "type" => "RoomGrowth", "fields" => obj! { "roomId" => "duenen" } }).unwrap();
 	eprintln!("{}", g.to_json_text());
 }
+
+/// Builder and admin commands (builder.ts): digging rooms with a way back, opening exits into rooms by name and id,
+/// creating things by typeclass and prototype, setting names, descriptions, aliases and locks, tags on and off, examining,
+/// destroying, and an admin giving and taking the builder's level; for a player the commands do not exist.
+#[test]
+fn shaping_the_world() {
+	let mut w = Walk::new("shaping", 53, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (7.0, 13.0), true, false);
+	let g = w.player(3, "graue-bucht", (4.0, 12.0), true);
+	w.player_as(4, "duenen", (5.0, 5.0), false, false);
+	let account = |n: usize, perms: Json, admin: bool| obj! { "type" => "Account", "fields" => obj! { "accountId" => format!("a-walk{n}"), "name" => format!("Wanderer{n}"), "guest" => false, "admin" => admin, "perms" => perms, "createdAt" => START, "touchedAt" => START } };
+	assert!(w.take(obj! { "type" => "Account", "fields" => obj! { "accountId" => "a-walk1" } }));
+	w.write(account(1, Json::Array(vec![Json::from("Builder")]), false));
+	assert!(w.take(obj! { "type" => "Account", "fields" => obj! { "accountId" => "a-walk2" } }));
+	w.write(account(2, Json::Array(vec![]), true));
+	let world = w.w.clone();
+	w.write(thing(&world, "t-1", "treibholz", &a));
+	w.compare("setup");
+	let i = std::cell::Cell::new(0);
+	let mut said = Vec::new();
+	let mut run = |w: &mut Walk, who: &str, line: &str| {
+		i.set(i.get() + 1);
+		let i = i.get();
+		w.at(START + i as f64 * 7_000.0);
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{i}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	for (who, line) in [
+		(&g, "dig Keller = runter"), (&a, "dig"), (&a, "dig Höhle"), (&a, "dig @@ = hinab"), (&a, "dig Höhle = hinab, hinauf"), (&a, "dig Kammer = tür"), (&a, "move 9 13"), (&a, "dig Kammer = tür"),
+		(&a, "open"), (&a, "open nord"), (&a, "open nord = nirgends"), (&a, "move 11 13"), (&a, "open nord = höhle"), (&a, "move 12 13"), (&a, "open ost = graue-bucht"), (&a, "open west = höhle"),
+		(&a, "create"), (&a, "create Stein der Weisen"), (&a, "create Kiste:Gibtsnicht"), (&a, "create Kiste:Exit"), (&a, "create Kiste:"), (&a, "create Truhe : Item"),
+		(&a, "spawn"), (&a, "spawn Muschel"), (&a, "spawn gibtsnicht"),
+		(&a, "set"), (&a, "set hier = x"), (&a, "set /name = x"), (&a, "set hier/name = Graue Bucht am Meer"), (&a, "set hier/aliases = x"), (&a, "set hier/desc = Ein stiller Strand."),
+		(&a, "set treibholz/aliases = Holz, Stück ,"), (&a, "set treibholz/locks = get:perm(Builder)"), (&a, "set treibholz/locks = get:("), (&a, "set treibholz/name = @@@"), (&a, "set holz/name = Altes Holz"),
+		(&a, "set nichts/name = x"), (&a, "set muschel/desc = Glänzt."), (&a, "set tür/desc = Eine Tür."),
+		(&a, "lock tür = traverse:perm(Builder)"), (&a, "lock hier = x"), (&a, "lock tür = bad("), (&a, "lock tür"),
+		(&a, "tag muschel"), (&a, "tag muschel = schwer"), (&a, "tag muschel = schwer:gewicht"), (&a, "tag muschel = schwer"), (&a, "tag muschel"), (&a, "tag muschel = -schwer"), (&a, "tag muschel = -schwer"), (&a, "tag muschel = !!"), (&a, "tag hier = ruhig"),
+		(&a, "examine"), (&a, "examine muschel"), (&a, "ex tür"), (&a, "examine hier"),
+		(&a, "destroy hier"), (&a, "destroy muschel"), (&a, "destroy stein der weisen"), (&a, "destroy nichts"),
+		(&a, "perm Wanderer1 = Player"), (&b, "perm"), (&b, "perm Wanderer3 = Builder"), (&b, "perm niemand = Builder"), (&b, "perm Wanderer1 = Admin"), (&b, "perm wanderer1 = player"), (&a, "dig Gang = gang"),
+		(&b, "perm Wanderer1 = builder"), (&b, "perm Wanderer1 = Builder"), (&b, "perm Wanderer4 = Builder"), (&a, "move 5 13"), (&a, "hinab"), (&a, "look"), (&a, "hinauf"), (&b, "tür"), (&g, "create Ding"),
+	] { run(&mut w, who, line); }
+	run(&mut w, &a, &format!("set truhe/desc = {}", "x".repeat(1001)));
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 30 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
+}

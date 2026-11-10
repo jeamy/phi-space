@@ -11,6 +11,7 @@ use crate::j;
 use crate::space::{fields, Error, Result};
 
 pub mod build;
+pub mod builder;
 pub mod chapel;
 pub mod clock;
 pub mod default;
@@ -128,6 +129,7 @@ pub async fn run(c: &mut Ctx, cmd: &Command, arg: &str, merged: &Merged, exits: 
 		("mill", key) => mill::run(c, key, arg).await,
 		("festival", key) => festival::run(c, key, arg).await,
 		("shop", key) => shop::run(c, key, arg).await,
+		("builder", key) => builder::run(c, key, arg).await,
 		("settlement", "siedlung") => settlement::siedlung(c, arg).await,
 		("epoch", "epoche") => epoch::epoche(c, arg).await,
 		("townhall", "antrag") => townhall::antrag(c, arg).await,
