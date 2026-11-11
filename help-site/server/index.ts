@@ -200,6 +200,8 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 	}) : null;
 	if (swarmAt) console.log(`[swarm] space on ${swarmAt} (alias ${SWARM_ALIAS})`);
 	const swarm = new SocialSwarmHub(swarmClient?.space ?? swarmSide!.space, meter, {
+		// the demo runs while someone watches it (and SWARM_IDLE_MS after); SWARM_ALWAYS=1 keeps it going unwatched
+		watchedOnly: process.env.SWARM_ALWAYS !== "1",
 		adminCheck: (password: string) => admin.verifyPassword(password),
 		sessionCheck: (sessionId: string) => admin.getSession(sessionId) !== null,
 	});

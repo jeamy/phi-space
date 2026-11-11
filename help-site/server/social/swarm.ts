@@ -292,6 +292,11 @@ export interface SwarmShardOptions {
 	sessionCheck?: ((sessionId: string) => boolean) | null;
 	/** Entry cap of this shard's database (default `SWARM_MAX_ENTRIES`, 20000); null disables the purge. */
 	maxEntries?: number | null;
+	/** Produce and pulse only while someone watches the feed (a WebSocket attached) and for `idleAfterMs` after the last
+	 *  one left (default false: always). The help site's hub sets it, so an unwatched demo costs its Spaces nothing. */
+	watchedOnly?: boolean;
+	/** How long the swarm keeps going after the last viewer left (default `SWARM_IDLE_MS`, 60 s). */
+	idleAfterMs?: number;
 }
 
 /** Whether a changes read failed because the revision asked for is no longer (or not yet) in the retained history. */
@@ -319,6 +324,10 @@ export class SocialSwarmHub {
 	#seq = 0;
 	#rng = mulberry32(0x5eed);
 	#running = true;
+	#watchedOnly = false;
+	#idleAfterMs = 60_000;
+	/** When the last viewer left (0: none has yet). */
+	#lastViewerAt = 0;
 	#rate = Math.max(1, Math.min(40, Number(process.env.SWARM_RATE ?? 5)));
 	#postTimestamps: number[] = [];
 	#timers: Array<ReturnType<typeof setInterval>> = [];
@@ -368,6 +377,13 @@ export class SocialSwarmHub {
 		this.#adminCheck = opts.adminCheck ?? null;
 		this.#sessionCheck = opts.sessionCheck ?? null;
 		this.#retention = opts.maxEntries === undefined ? retentionConfig() : opts.maxEntries === null ? null : retentionConfig(opts.maxEntries);
+		this.#watchedOnly = opts.watchedOnly ?? false;
+		this.#idleAfterMs = opts.idleAfterMs ?? Math.max(0, Number(process.env.SWARM_IDLE_MS ?? 60_000));
+	}
+
+	/** Whether the swarm produces now: always, or (watchedOnly) while a viewer is attached and a while after the last left. */
+	get watched(): boolean {
+		return !this.#watchedOnly || this.clients.size > 0 || (this.#lastViewerAt > 0 && Date.now() - this.#lastViewerAt < this.#idleAfterMs);
 	}
 
 	/** Attach a second shard space (primary hub only): task routing, delta merge and queries fan out to it. */
@@ -907,7 +923,7 @@ export class SocialSwarmHub {
 	 * One logical transaction per shard; remote writes still use individual RPC operations.
 	 */
 	async #intentTick(): Promise<void> {
-		if (!this.#running || this.#busy || this.#intentInFlight) return;
+		if (!this.#running || !this.watched || this.#busy || this.#intentInFlight) return;
 		this.#intentInFlight = true;
 		try { await this.#produceIntents(); } finally { this.#intentInFlight = false; }
 	}
@@ -1282,7 +1298,7 @@ export class SocialSwarmHub {
 	 * Renew = take + fresh write; the whole tick commits as ONE transaction instead of ~70.
 	 */
 	async #pulseTick(): Promise<void> {
-		if (!this.#running) return;
+		if (!this.#running || !this.watched) return;
 		try {
 			const onlineArr = [...this.#online];
 			const renewSet = onlineArr.slice(0, 40);
@@ -1519,8 +1535,11 @@ export class SocialSwarmHub {
 		await this.whenReady();
 		const lifetime = new AbortController();
 		ws.onClose(() => lifetime.abort());
+		const woke = !this.watched;
 		this.clients.add(ws);
-		ws.onClose(() => { this.clients.delete(ws); this.#admins.delete(ws); });
+		ws.onClose(() => { this.clients.delete(ws); this.#admins.delete(ws); if (!this.clients.size) this.#lastViewerAt = Date.now(); });
+		// back from idle: the agents come online at once, not at the next 18 s pulse
+		if (woke && this.#pulses && this.#running) void this.#pulseTick();
 		const requireAdmin = (): boolean => {
 			if (this.#admins.has(ws)) return true;
 			ws.send({ type: "swarm.denied" });

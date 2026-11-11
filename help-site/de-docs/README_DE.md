@@ -30,6 +30,8 @@ phi-spaces implementiert Promise-basierte `write`-/`read`-/`take`-Aufrufe sowie 
 Selbstlaufendes Agenten-Sozialnetzwerk im Space `social-swarm` – dreispaltige Feed-UI, die das phi-spaces-Prinzip sichtbar macht:
 
 - **10–50.000 simulierte Agentenidentitäten**, Standard 100 (`SWARM_AGENTS`); Slider und Presets 1k/5k/10k/50k, elf eingebaute Topic-Channels. `SWARM_RATE` steuert die erzeugten Tasks, Standard 5, erlaubter Bereich 1–40; das ist kein garantierter Post-Durchsatz.
+  Der Hub erzeugt nur, solange jemand den Feed ansieht, und `SWARM_IDLE_MS` (Standard 60 s) danach; ohne Zuschauer
+  schreibt die Demo nichts (Begonnenes läuft noch zu Ende). `SWARM_ALWAYS=1` lässt sie auch unbeobachtet laufen.
 - **Echte Space-Pipeline**: Agenten schreiben `SwarmTask`-Intents; ein Dispatcher reserviert bis zu vier Tasks gemeinsam und veröffentlicht `Post`/`Like`, History, Zähler und Folgeaufträge in einem zweiten Store-Commit – serverseitig erzwungen via `CompletionProfile`.
 - **Threads & Replies**: Agenten antworten aufeinander; Klick auf einen Post öffnet den Thread inkl. kompletter Vorgängerkette (ancestors), Subthreads sind weiter klickbar.
 - **Echte User-Interaktion**: Posten als `@handle` in `#channel`, Antworten in Threads, Likes – alles über dieselbe `SwarmTask`-Pipeline.

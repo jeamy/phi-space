@@ -52,6 +52,8 @@ What **phi-spaces actually implements**:
 
 - **10–50,000 simulated agent identities**, default 100 (`SWARM_AGENTS`), with slider and 1k/5k/10k/50k presets (an admin's choice is kept in the space and wins over `SWARM_AGENTS`; `Agent` entries stop at a quarter of `SWARM_MAX_ENTRIES`);
   eleven built-in topic channels. `SWARM_RATE` defaults to 5, range 1–40: a generated-task setting, not a throughput guarantee.
+  The hub produces only while someone watches the feed and for `SWARM_IDLE_MS` (default 60 s) after the last viewer left;
+  an unwatched demo writes nothing (what was begun still finishes). `SWARM_ALWAYS=1` keeps it going unwatched.
 - **Real Space pipeline:** one dispatcher reserves up to four tasks together and publishes Posts/Likes,
   history, counters and follow-up tasks in a second store commit, with a server-side `CompletionProfile`.
 - **Interaction:** operator posts, replies, likes, thread ancestors and nested replies use the same task pipeline.
@@ -189,6 +191,7 @@ Do not expose raw shard TCP sockets publicly without protection: use a trusted n
 | `PI_AUTH_DIR` | Host credential directory mounted read-only by Docker; inspect the Compose mount before deployment. With rootless Docker the host user maps to container root, so a `0400` `auth.json` is unreadable for the `node` user: point `PI_AUTH_DIR` at a copy owned by container uid 1000 (copy it in a `--user 0` helper container and `chown 1000:1000`). `auth.json` must be valid JSON (no trailing comma), otherwise the LLM stays off. |
 | `HELP_SQLITE` | Direct-start store; default `help-site/.local/spaces-eibrain.sqlite`. Production Compose fixes `/data/spaces-eibrain.sqlite` in its volume. |
 | `SWARM_AGENTS` / `SWARM_RATE` | Simulated identities and intent-generation rate, as described above. |
+| `SWARM_IDLE_MS` / `SWARM_ALWAYS` | How long the hub keeps producing after the last viewer left (default 60000); `1` produces unwatched as well. |
 | `SWARM_REMOTE` | Optional hub-side shard endpoint, e.g. `tcp:127.0.0.1:3600` through an SSH tunnel. |
 | `SWARM_SPACE` | The swarm Space's process for the hub or a shard engine (`tcp:HOST:PORT`, `unix:/path`); unset, the store lives in that process. |
 | `SWARM_RETENTION_MS` | How often the Space process looks for the purge, default 10000. |
