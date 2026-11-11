@@ -36,6 +36,7 @@ import { randomBytes, timeNow } from "../source.ts";
 import { creditDeed } from "../deeds.ts";
 import { baysOf, berth, SHIP_LENGTH } from "../liner.ts";
 import { roadCellsIn, routeDeliver, routeNear, routeWork } from "./road.ts";
+import { spendRested } from "./sleep.ts";
 import { interiorOf, interiorSweep, isInterior, makeInterior, nearBuildings } from "./interior.ts";
 
 export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
@@ -428,9 +429,10 @@ export async function rested(c: CommandCtx) {
 	if (until > now) throw new CommandError(`Du bist noch müde von der letzten Arbeit; in etwa ${Math.max(1, Math.round((until - now) / 60_000))} Minuten wieder.`);
 	return { now, rest };
 }
-/** The actor worked: it rests for a while. */
+/** The actor worked: it rests for a while, unless it slept and has rested works left (sleep.ts). */
 export async function tire(c: CommandCtx, now: number, rest: Awaited<ReturnType<typeof rested>>["rest"]): Promise<void> {
 	if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
+	if (await spendRested(c)) return;
 	const ms = (await workRestMs(c.space)) / ((await blessed(c, now)) ? 2 : 1) / (await satedFactor(c, now));
 	await c.space.write({ type: "WorkRest", fields: { charId: c.actor.charId, untilWorldMs: now + ms } satisfies WorkRestFields as never }, c.txn, FOREVER);
 }

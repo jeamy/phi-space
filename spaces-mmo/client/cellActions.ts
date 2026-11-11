@@ -231,9 +231,10 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 		// owner's chest, the bed is for sleep; each from beside it
 		if (o.kind === "scenery" && o.use && o.location === room && covers(o, at)) {
 			const beside = !!self && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
-			entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` });
-			if (beside && o.use === "cook") made(o.plan);
+			// one's own chest beside one: „Truhe ansehen“ opens it (its description would be a second line of the same name)
 			if (beside && o.use === "chest" && o.ownerId === me) chestEntries(room.slice(3));
+			else entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` });
+			if (beside && o.use === "cook") made(o.plan);
 			if (beside && o.use === "sleep") entries.push({ label: "Schlafen", line: "schlafe" });
 			continue;
 		}

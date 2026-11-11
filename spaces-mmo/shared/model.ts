@@ -286,6 +286,10 @@ export type PlotFields = { room: string; x: number; y: number; of: string };
 export type LightUseFields = { beaconId: string; used: number };
 /** A character's work at a site makes it tired until `untilWorldMs` (the sweep removes it). */
 export type WorkRestFields = { charId: string; untilWorldMs: number };
+/** A figure asleep in a bed since `sinceWorldMs` (engine/commands/sleep.ts); `bed` is the furnishing's sceneryId. */
+export type SleepFields = { charId: string; name: string; room: string; bed: string; sinceWorldMs: number };
+/** The works a figure does without a rest after them, from its last sleep (engine/commands/sleep.ts); gone at 0. */
+export type RestedFields = { charId: string; left: number };
 
 export const asFields = <T extends object>(f: T): Fields => f as unknown as Fields;
 export const fieldsOf = <T>(e: { fields: Fields }): T => e.fields as unknown as T;

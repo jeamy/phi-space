@@ -21,6 +21,7 @@ import { walkable, type InteriorDef, type WorldDef } from "../world.ts";
 import { worldNowOf } from "../clock.ts";
 import { describeRoom, dropOffers, placeIn, relocate } from "./default.ts";
 import { ARTICLE, distTo, planOf } from "./build.ts";
+import { wakeOutside } from "./sleep.ts";
 
 export const INTERIOR = "in-";
 export const interiorOf = (buildId: string) => `${INTERIOR}${buildId}`;
@@ -86,6 +87,7 @@ export async function dropInterior(space: Space, txn: string, w: WorldDef, roomI
 		await releaseSpot(space as SpaceLike, txn, String(t.fields.charId));
 		await space.write({ type: t.type, types: t.types.slice(1), fields: { ...(t.fields as unknown as CharacterFields), ...to } as never }, txn, FOREVER);
 		await toPlayer(space as SpaceLike, { room: to.room, to: String(t.fields.charId), kind: "info", text: `${at?.name ?? "Der Bau"} steht nicht mehr; du stehst draußen.`, from: "", fromId: "", at: timeNow() }, txn);
+		await wakeOutside(space, txn, String(t.fields.charId), to.room);
 	}
 	const floor = await space.readAll({ type: "Item", fields: { location: roomId } }, { txn });
 	if (floor.length && at) {
@@ -232,6 +234,7 @@ const ausladen: Command = {
 				await releaseSpot(c.space, c.txn, g.charId);
 				await c.space.write({ type: t.type, types: t.types.slice(1), fields: { ...t.fields, room: b.room, ...front } as never }, c.txn, FOREVER);
 				await msg(c, g.charId, "info", `${c.actor.name} hat dich ausgeladen; du stehst vor der ${b.name}.`, { room: b.room });
+				await wakeOutside(c.space, c.txn, g.charId, b.room);
 			}
 		}
 		await msg(c, c.actor.charId, "info", `${g.name} darf nicht mehr in deine ${b.name}.`);
@@ -239,16 +242,4 @@ const ausladen: Command = {
 	},
 };
 
-// the bed stands ready; sleeping in it comes with the next step (docs/innenraeume.en.md "Sleep")
-const schlafe: Command = {
-	key: "schlafe", aliases: ["schlafen", "sleep"],
-	help: "schlafe – im Bett der Hütte schlafen (bald: wer ausgeschlafen ist, arbeitet danach eine Weile ohne Pause)",
-	async func(c) {
-		const bed = await furnishingFor(c, "sleep");
-		if (!bed) throw new CommandError("Schlafen kann man im Bett einer Hütte; geh hinein („betrete“ neben ihr).");
-		if (!(await nearBuildings(c, "sleep")).length) throw new CommandError(`Geh zum ${bed.name}.`);
-		await msg(c, c.actor.charId, "info", "Das Bett ist gemacht, aber noch schläft hier niemand: bald arbeitet, wer hier ausgeschlafen hat, danach eine Weile ohne Pause.");
-	},
-};
-
-export const INTERIOR_COMMANDS: Command[] = [betrete, einladen, ausladen, schlafe];
+export const INTERIOR_COMMANDS: Command[] = [betrete, einladen, ausladen];

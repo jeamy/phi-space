@@ -25,6 +25,7 @@ import type { CropDef, FieldDef, WorldDef } from "../world.ts";
 import { blessed } from "./chapel.ts";
 import { ARTICLE, besides, cells, freeCells, giveBack, human, lightFor, plural, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
 import { growFactor } from "./garden.ts";
+import { spendRested } from "./sleep.ts";
 import { randomBytes, timeNow } from "../source.ts";
 
 const STAGE: Record<FieldFields["stage"], string> = { brach: "brach", saat: "wird bestellt", waechst: "wächst", reif: "reif", spaet: "überreif" };
@@ -75,6 +76,7 @@ async function tire(c: CommandCtx, now: number): Promise<void> {
 	const until = rest ? fieldsOf<WorkRestFields>(rest).untilWorldMs : 0;
 	if (until > now) throw new CommandError(`Du bist noch müde von der letzten Arbeit; in etwa ${Math.max(1, Math.round((until - now) / 60_000))} Minuten wieder.`);
 	if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
+	if (await spendRested(c)) return;
 	await c.space.write({ type: "WorkRest", fields: { charId: c.actor.charId, untilWorldMs: now + (await workRestMs(c.space)) / ((await blessed(c, now)) ? 2 : 1) / (await satedFactor(c, now)) } satisfies WorkRestFields as never }, c.txn, FOREVER);
 }
 /** Counts a work point; NPCs and automata may give at most half of them, as at a site. */

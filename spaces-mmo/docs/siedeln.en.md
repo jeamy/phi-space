@@ -1172,7 +1172,9 @@ like 40 (`keep.bau`), storehouses and the like 45 (`keep.lager`), chapel 60 (`ke
 plan names its class with `keepSetting`.
 
 **The rest after work** is the setting `work.rest`, 15 by default, in world minutes: it runs at the life rate. A blessing and
-a full stomach shorten it. A saved number holds from the next work on; who already rests rests to the end.
+a full stomach shorten it. A saved number holds from the next work on; who already rests rests to the end. A sleep in the bed of
+one's hut puts it off: `sleep.rate` (30 world minutes of sleep per work) and `sleep.max` (8) give works without a rest
+after them ([innenraeume.en.md](innenraeume.en.md) "Sleep").
 
 **Plants are 3D models** like the buildings: wild flowers, herbs, grass and ferns as decoration, and the plants of beds
 and fields by their sort (`model` on the sort and the crop), merged vertex-coloured geometry in `client/props3d.ts`.

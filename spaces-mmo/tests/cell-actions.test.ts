@@ -275,6 +275,7 @@ test("a hut one may enter offers „Hineingehen“; inside, the hearth cooks, th
 	const there = (x: number, y: number) => cellEntries({ ...input, self: at, objs: furniture, room: inside, recipes, at: { x, y } } as never).map((e) => e.line);
 	assert.ok(there(1, 1).includes("craft hier"), "the hearth");
 	assert.ok(there(3, 3).includes("truhe") && there(3, 3).includes("entnimm Muschel"), "the chest and what lies in it");
+	assert.equal(cellEntries({ ...input, self: at, objs: furniture, room: inside, at: { x: 3, y: 3 } } as never).filter((e) => e.label === "Truhe ansehen").length, 1, "one „Truhe ansehen“, not its description beside it");
 	assert.ok(!there(5, 1).includes("schlafe"), "the bed is two cells away");
 	assert.ok(cellEntries({ ...input, self: char("me", "Mira", 4, 1), objs: furniture, room: inside, at: { x: 5, y: 1 } }).some((e) => e.line === "schlafe"), "beside the bed");
 });

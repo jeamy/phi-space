@@ -1118,8 +1118,9 @@ Eine Hütte kann man betreten: \`betrete\` direkt neben ihr (oder im Menü der H
 | \`einladen <name>\` | \`invite\` | Jemanden in die eigene Hütte einladen; \`einladen\` allein zeigt, wer eingeladen ist |
 | \`ausladen <name>\` | \`uninvite\` | Die Einladung zurücknehmen; wer gerade drinnen ist, steht dann draußen |
 | \`hinaus\` | \`out\` | Wieder vor die Tür |
+| \`schlafe\` | \`sleep\` | Neben dem Bett schlafen; jeder Befehl weckt |
 
-Am Herd kocht man, was man in der Hütte macht (Rührei, Braten, Käse …): neben ihm stehen, dann \`craft\` oder das Menü des Herds. An der Truhe sieht man hinein und nimmt heraus, \`verstaue\` geht wie immer von überall. Im Bett schläft man bald: wer ausgeschlafen hat, arbeitet danach eine Weile ohne Pause. Von außen geht alles weiter wie bisher. Fällt die Hütte, steht man draußen, und was drinnen auf dem Boden lag, wartet im Nachlass.
+Am Herd kocht man, was man in der Hütte macht (Rührei, Braten, Käse …): neben ihm stehen, dann \`craft\` oder das Menü des Herds. An der Truhe sieht man hinein und nimmt heraus, \`verstaue\` geht wie immer von überall. **Im Bett schlafen:** neben ihm \`schlafe\` (oder „Schlafen“ im Menü des Betts). Wer schläft, tut nichts; der nächste Befehl weckt nur. Je 30 Minuten Schlaf (Weltzeit) arbeitest du danach einmal **ohne Pause**, höchstens acht Mal; erst danach ruhst du wieder nach der Arbeit. Schlaf schiebt die Müdigkeit also nur hinaus. Wer ausgeloggt im Bett liegt, schläft weiter. Ein Gast darf im Bett schlafen, wenn es frei ist. Ohne Bett bleibt alles wie bisher. Von außen geht alles weiter wie bisher. Fällt die Hütte, steht man draußen, und was drinnen auf dem Boden lag, wartet im Nachlass.
 
 ## Last {#load}
 
@@ -1223,8 +1224,9 @@ A hut can be entered: \`betrete\` (\`enter\`) right next to it (or “Go inside�
 | \`einladen <name>\` | \`invite\` | Invite someone into your own hut; \`einladen\` alone shows who is invited |
 | \`ausladen <name>\` | \`uninvite\` | Take the invitation back; whoever is inside then stands outside |
 | \`hinaus\` | \`out\` | Back out of the door |
+| \`schlafe\` | \`sleep\` | Sleep next to the bed; any command wakes you |
 
-At the hearth you cook what is made in the hut (scrambled eggs, roasts, cheese …): stand next to it, then \`craft\` or the hearth's menu. At the chest you look in and take out; \`verstaue\` works from anywhere as always. Soon you will sleep in the bed: whoever has slept works a while without a break afterwards. From outside everything goes on as before. If the hut falls, you stand outside, and what lay on its floor waits in the estate.
+At the hearth you cook what is made in the hut (scrambled eggs, roasts, cheese …): stand next to it, then \`craft\` or the hearth's menu. At the chest you look in and take out; \`verstaue\` works from anywhere as always. **Sleeping in the bed:** next to it \`schlafe\` (\`sleep\`, or “Sleep” in the bed's menu). Asleep you do nothing; the next command only wakes you. For every 30 minutes of sleep (world time) you then work once **without a break**, at most eight times; only then do you rest after work again. So sleep only puts tiredness off. Whoever lies in bed logged out sleeps on. A guest may sleep in the bed when it is free. Without a bed nothing changes. From outside everything goes on as before. If the hut falls, you stand outside, and what lay on its floor waits in the estate.
 
 ## Load {#load}
 

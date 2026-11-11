@@ -1,6 +1,7 @@
 # Interiors: going into a house (plan)
 
-Status 2026-11-10: step 1 (the hut) is built: server/engine/commands/interior.ts, tests/interior.test.ts. It extends [siedeln.en.md](siedeln.en.md) (buildings, recipes, chests,
+Status 2026-11-11: step 1 (the hut) is built: server/engine/commands/interior.ts, tests/interior.test.ts; step 2 (sleep) as
+well: server/engine/commands/sleep.ts, tests/sleep.test.ts. It extends [siedeln.en.md](siedeln.en.md) (buildings, recipes, chests,
 the rest after work) and [welt.en.md](welt.en.md) (rooms and exits).
 
 ## What it is for
@@ -98,15 +99,19 @@ shortened by being sated. This stays: **without a bed nothing changes.**
 
 New:
 
-- **Sleeping in a bed**: `schlafe` beside one's bed (or an invited guest beside the host's bed) lays the figure down.
-  Asleep it does nothing; any command wakes it („Du wachst auf“). The map shows it lying in the bed.
+- **Sleeping in a bed**: `schlafe` beside one's bed (or an invited guest beside the host's bed) lays the figure down
+  (a `Sleep` entry: the bed, since when). The bed holds one. Asleep it does nothing: the next command it sends only
+  wakes it („Du wachst auf nach …“) and is not run. The command path looks for a `Sleep` only when the actor is inside a
+  building, so a step outside costs no read. Logged out in bed, it sleeps on; coming back (the page's `arrive`) wakes it. Put out of the house (`ausladen`, the
+  building gone) it wakes outside with what it slept. The map showing it lying in the bed comes with step 5.
 - **Rested**: the sleep gives the figure rested works (a `Rested` entry per figure: how many are left). The longer it
   slept, the more: proposed 1 work per 30 world minutes of sleep (setting `sleep.rate`), at most 8 (setting
   `sleep.max`), so 4 world hours of sleep give the full 8. Waking earlier keeps what was slept so far.
 - **A rested work writes no rest**: `tire` takes one rested work instead of writing a WorkRest while any are left;
   when they are used up, the rest after work comes back as today. So sleep only puts the tiredness off.
 - **Food and blessing** keep their effect on the rest when there is one.
-- The figure's panel and `ich` say how many rested works are left; the bed's menu shows „Schlafen“.
+- Waking and every rested work say how many are left (there is no `ich` command); the bed's menu shows „Schlafen“.
+- Like `WorkRest` and `Sated`, `Rested` is an entry of the house's region: crossing to another region leaves it there.
 - NPCs and settlers keep their rest as today (they have no beds; settlers.ts works around WorkRest).
 
 ## Client
@@ -146,9 +151,9 @@ New:
 
 ## Order
 
-1. **The hut**: its interior with hearth, bed, chest and table; the door with invitations; cooking and the chest inside;
-   2D tiles and a plain 3D room. Sleep not yet: the bed is there, `schlafe` says what it will do.
-2. **Sleep**: the bed, rested works, their settings and the help.
+1. **The hut** (built): its interior with hearth, bed, chest and table; the door with invitations; cooking and the
+   chest inside; 2D tiles and a plain 3D room.
+2. **Sleep** (built): the bed, rested works, their settings and the help.
 3. **Bakehouse and butcher's shop** with their furnishings.
 4. **The other workshops** (smokehouse, workshop, loom, brewery, glassworks, tannery, brickworks, shipyard).
 5. **3D finish**: models of the furnishings, light, the figure lying in its bed.
@@ -163,6 +168,6 @@ here is new engine behaviour after that commit: it is ported after R8 or as a st
 
 ## Open questions
 
-- **The rate** (`sleep.rate`, 1 work per 30 world minutes): a proposal.
+- **The rate** (`sleep.rate`, 1 work per 30 world minutes, and `sleep.max` 8): settings in the admin page; the defaults are a proposal.
 - **Inns**: a bed for anyone at a fee (a tavern building) would give guests and travellers a place to sleep; not part
   of this plan unless wanted.
