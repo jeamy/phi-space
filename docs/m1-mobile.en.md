@@ -126,6 +126,18 @@ Space. The agent host is a federation Member (`PI_SERVERD_FEDERATION_CONFIG`).
      the answer leaves an extra empty session.
 2. Phone side: a `remote` object over the Space with the same interface as `remote-client.mjs`, behind a
    switch. `remote-state` and `remote-regressions` stay green against both transports.
+   **Done 2026-11-11.**
+   - Under Spaces, "4 · Remote-Sitzungen über Space" stores the agent host (`MobileSpaces` `remoteHost`: host
+     id, endpoint, Space; the key is allowed at that host).
+   - The Remote page offers it in its host list as "(über Space)", which is the switch. `POST
+     /api/remote/connect-space` opens it with `MobileSpaces.openRemote()`: key proof at the agent host's gate
+     and a coordinator grant on every call. It hands `remoteOverSpace` to `remoteState.connectVia`, which has
+     the same generation rules as an SSH connection.
+   - Tests:
+     - pi-termux-mobile `test/spaces-mobile.test.mjs`: a gate in front of a real space service refuses
+       anything without proof and grant, and the loop answers the phone's `list`.
+     - `runtime/test-remote-state.mjs`: a late open does not resurrect a cancelled connection.
+     - The runtime suite (27) is green.
 3. Device test over WLAN with key proof.
 4. Then remove pi-server, pi-client, pi-protocol and the Chord 1.1.0 overrides. In phi-spaces this touches
    `src/pi-server.ts` and `npm run test:pi-server`, so it is planned on its own.
