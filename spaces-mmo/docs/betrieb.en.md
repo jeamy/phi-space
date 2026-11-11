@@ -107,8 +107,9 @@ variant with the Rust Space server, `docker:nano:rust:up|down|logs` and `docker:
 same volumes, only the Space containers change; see [Testing locally](#testing-locally-both-roles-on-this-machine) above). Switching between the
 two needs no other step; keep a copy of `mmo-space-data` before the first switch.
 
-**Since 2026-11-07 both machines run the Rust Space server** (nano's accounts Space, big's four regions; world, NPCs, models
-and web are TypeScript). A deploy of new game code is therefore `docker:big:rust:up` on big (and `docker:nano:rust:up` on
+**Since 2026-11-07 both machines run the Rust Space server** (nano's accounts Space, big's four regions), **and since
+2026-11-11 big runs world, NPCs and web in Rust as well** (`docker-compose.rust-game.yml`, R8.6; only the model
+processes are Node; volumes from before in `~/phi-backup/2026-11-11-mmo-big-r8/`). A deploy of new game code is therefore `docker:big:rust:up` on big (and `docker:nano:rust:up` on
 nano); plain `docker:big:up` / `docker:nano:up` would bring the TypeScript Space server back. The TypeScript volumes
 from before the switch are kept on each machine in `~/phi-backup/2026-11-07-mmo-<machine>-rust/mmo-space-data-ts.tgz`.
 
