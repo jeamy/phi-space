@@ -1,0 +1,13 @@
+# User unit for big (~/.config/systemd/user/mmo-backup.service), started every hour by mmo-backup.timer: the online backup of
+# the world Spaces (mmo-backup.sh, docs/betrieb.en.md "Backups").
+#
+#   cp spaces-mmo/deploy/mmo-backup.{service,timer} ~/.config/systemd/user/ && systemctl --user daemon-reload
+#   systemctl --user enable --now mmo-backup.timer
+[Unit]
+Description=Online backup of the spaces-mmo world Spaces
+
+[Service]
+Type=oneshot
+ExecStart=/media/docker/spaces/spaces-mmo/deploy/mmo-backup.sh
+Nice=10
+IOSchedulingClass=idle

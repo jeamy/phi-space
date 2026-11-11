@@ -355,7 +355,21 @@ npm --prefix spaces-mmo run test:play
 `PLAY_ONLY=kontor,karren` runs only the checks whose name contains one of the words (a check that builds on an earlier one says
 so), `PLAY_OUT=<file>` writes the report as JSON. It is not part of `npm test`: it takes too long for every change.
 
+## Backups
+
+On big the user timer `mmo-backup.timer` (`deploy/mmo-backup.{sh,mjs,service,timer}`) copies every `world-<region>.sqlite`
+of the volume `mmo-space-data` once an hour while the game runs: a container of the game image opens each file read-only and
+copies it with SQLite's backup API (`node:sqlite`; one consistent state, the WAL included), checks the copy with
+`quick_check` and packs it. The runs lie in `~/phi-backup/mmo-hourly/<UTC time>/` (`world-<region>.sqlite.gz`, `backup.log`);
+the newest 72 are kept (`MMO_BACKUP_KEEP`), a failed run as `…-failed` until removed by hand. Measured on 2026-11-11: about
+610 MB of world files, a run 13 s and 76 MB packed, so three days take about 5.5 GB. `journalctl --user -u mmo-backup` shows
+each run's lines.
+
+Install (once, on big): `cp spaces-mmo/deploy/mmo-backup.{service,timer} ~/.config/systemd/user/ && systemctl --user
+daemon-reload && systemctl --user enable --now mmo-backup.timer`. Restore one region: stop its space container, unpack the
+copy over `world-<region>.sqlite` in the volume, delete that file's `-wal` and `-shm`, start it again. Not covered: the
+accounts Space on nano and the agent volume `mmo-agent-data` (NPC memory).
+
 ## Not included
 
-- No backup script like `docker:backup` in the chat; the store lies in the volume, the backup of the directory is taken
-  over by the operator until a backup command is planned.
+- No backup of the accounts Space on nano and of the agent volume yet (Backups, above).
