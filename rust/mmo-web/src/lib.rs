@@ -6,6 +6,7 @@ pub mod accounts;
 pub mod admin;
 pub mod chat;
 pub mod gateway;
+pub mod head;
 pub mod omap;
 pub mod pages;
 pub mod regions;
@@ -386,6 +387,8 @@ pub async fn run_web(root: PathBuf, ready: impl FnOnce(&str), mut halt: watch::R
 				let _ = stream.set_nodelay(true);
 				let web = web.clone();
 				tokio::task::spawn_local(async move {
+					// an upgrade of HTTP/1.0 (nginx without proxy_http_version 1.1) as node takes it: head.rs
+					let Ok(stream) = crate::head::Prefixed::read_head(stream).await else { return };
 					let svc = hyper::service::service_fn(move |req| web.clone().handle(req, peer));
 					let _ = hyper::server::conn::http1::Builder::new().serve_connection(TokioIo::new(stream), svc).with_upgrades().await;
 				});
