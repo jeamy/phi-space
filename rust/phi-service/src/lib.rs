@@ -549,6 +549,16 @@ impl Service {
 			id.roles = a.roles();
 			if let Some(p) = a.principal() { id.principal = p; }
 		}
+		// a local agent host acts for one of its conversations (frame.agent, docs/m1-mobile.en.md)
+		if let Some(agent) = call.get("frame").filter(|f| is_obj(Some(f))).and_then(|f| f.get("agent")) {
+			let valid = agent.as_str().filter(|a| (1..=128).contains(&a.chars().count()) && a.chars().all(|c| c.is_ascii_alphanumeric() || "_.:-".contains(c)));
+			let Some(agent) = valid else { return Err(bad("frame.agent must be 1 to 128 characters of A-Z a-z 0-9 _ . : -")) };
+			if !id.roles.iter().any(|r| r == "agentHost") || id.principal.get("agentId").is_some() {
+				return Err(denied("only a local agent host may act for an agent".to_owned()));
+			}
+			id.principal = obj! { "peerId" => id.principal.get("peerId").cloned().unwrap_or(Json::Null), "agentId" => agent };
+			id.roles.retain(|r| r != "agentHost");
+		}
 		let grant = self.allowed(&id.roles, method)?;
 		let frame = call.get("frame");
 		if let Some(f) = frame {

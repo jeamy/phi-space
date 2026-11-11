@@ -1,7 +1,7 @@
 // The space process in Rust (docs/rust-portierung.en.md, R3): what src/standalone.ts is, on the same store file and the same
 // protocol. Every connection is one peer; whoever can reach the socket uses the space.
 //
-//   phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID]
+//   phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--agent-host]
 //   phi-space-server --profile mmo|codemode|help     what the project's server/space-host.ts is, from the same environment
 //   phi-space-server --tls-register CONFIG.json the independent register over pinned mutual TLS (src/tls-register.ts)
 //   phi-space-server --store FILE --member CONFIG.json a federation Member behind a TypeScript control host
@@ -27,7 +27,7 @@ use phi_store::{system_random, Ledger, MemoryLedger, SpaceHost, SqliteLedger, St
 use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
 
-const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode|help\n       phi-space-server --tls-register CONFIG.json\n       phi-space-server --store FILE --control CONFIG.json\n       phi-space-server --store FILE --member CONFIG.json\n       phi-space-server [--store FILE] --replica-tool CONFIG.json REQUEST\n       phi-space-server --store FILE --recovery-only CONFIG.json RECOVERY.json";
+const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--agent-host] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode|help\n       phi-space-server --tls-register CONFIG.json\n       phi-space-server --store FILE --control CONFIG.json\n       phi-space-server --store FILE --member CONFIG.json\n       phi-space-server [--store FILE] --replica-tool CONFIG.json REQUEST\n       phi-space-server --store FILE --recovery-only CONFIG.json RECOVERY.json";
 
 pub(crate) fn fail(message: impl std::fmt::Display) -> ! {
 	eprintln!("{message}");
@@ -73,6 +73,10 @@ fn main() {
 	let ledger = if store == "memory" { Ledger::Memory(MemoryLedger::default()) } else { SpaceHost::sqlite(SqliteLedger::open(Path::new(&store), Synchronous::Full).unwrap_or_else(|e| fail(e))) };
 	let opened = Store::open(ledger, system_random).unwrap_or_else(|e| fail(e));
 	let mut options = Options::single_peer(&peer);
+	if args.iter().any(|a| a == "--agent-host") {
+		// the peer may act for its agents by frame.agent (docs/m1-mobile.en.md)
+		if let Some(id) = options.identity.get_mut(&peer) { id.roles.push("agentHost".into()); }
+	}
 	let mut serving = ServeOptions::new(listen, &peer);
 	let limits = arg("--test-hooks").map(|config| hooks::apply(&config, &mut options, &mut serving).unwrap_or_else(|e| fail(e)));
 	let mut service = Service::new(opened, options);

@@ -1,7 +1,7 @@
 // Agent-only storage policy. Acknowledgements follow file and namespace flushes.
 import { mkdir, open } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { FileError, type FileSystem } from "@earendil-works/pi-durable/env";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { JsonlStorage } from "@earendil-works/pi-durable/storage/jsonl";

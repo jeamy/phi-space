@@ -21,6 +21,8 @@ export type StandaloneOptions = {
 	listen: ListenTarget;
 	/** The peer every connection is (default "local"), with the member role. */
 	peerId?: string;
+	/** The peer is also a local agent host: it may act for its agents by `frame.agent` (docs/m1-mobile.en.md). */
+	agentHost?: boolean;
 };
 
 /** `unix:/path` or `tcp:host:port` (space-client.ts parseTarget). */
@@ -33,7 +35,7 @@ export async function startStandalone(o: StandaloneOptions): Promise<{ address: 
 		// background work of a space: expired leases and deadlines are settled when due, events delivered
 		const stopService = await startService(host, ctx);
 		const peerId = o.peerId ?? "local";
-		const identity = new StaticIdentity({ [peerId]: { principal: { peerId }, roles: ["member"] } });
+		const identity = new StaticIdentity({ [peerId]: { principal: { peerId }, roles: o.agentHost ? ["member", "agentHost"] : ["member"] } });
 		const server = await serveSpace(new SpaceService({ host, ctx, identity }), { listen: o.listen, connection: () => ({ peerId }) });
 		const a = server.address();
 		const address = "path" in o.listen ? `unix:${o.listen.path}` : `tcp:${o.listen.host}:${typeof a === "object" && a ? a.port : o.listen.port}`;
@@ -46,8 +48,8 @@ export async function startStandalone(o: StandaloneOptions): Promise<{ address: 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href && /\/standalone\.(ts|m?js)$/.test(import.meta.url)) {
 	const arg = (name: string) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined; };
 	const store = arg("--store"), listen = arg("--listen");
-	if (!store || !listen) { console.error("usage: standalone.ts --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID]"); process.exit(2); }
-	const s = await startStandalone({ store: store === "memory" ? null : store, listen: parseListen(listen), ...(arg("--peer") ? { peerId: arg("--peer")! } : {}) });
+	if (!store || !listen) { console.error("usage: standalone.ts --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--agent-host]"); process.exit(2); }
+	const s = await startStandalone({ store: store === "memory" ? null : store, listen: parseListen(listen), ...(arg("--peer") ? { peerId: arg("--peer")! } : {}), ...(process.argv.includes("--agent-host") ? { agentHost: true } : {}) });
 	console.log(`[phi-spaces] ready on ${s.address} (store ${store})`);
 	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await s.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());

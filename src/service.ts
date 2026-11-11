@@ -142,6 +142,8 @@ export const wellFormed = (v: unknown): unknown => {
 
 class Bad extends Error {}
 class Denied extends Error {}
+/** An agent a local agent host acts for (frame.agent). */
+const AGENT_ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 const fail = (code: ErrorCode, message: string, extra: { requiredBytes?: number } = {}): Reply => ({ ok: false, error: { code, message, ...extra } });
 
 /** A request is identified by principal, generation and request ID (claims); a merge controller gets that identity. */
@@ -215,6 +217,16 @@ export class SpaceService {
 			this.rate(id.principal.peerId);
 			const authorization = await this.o.authorize?.(call as unknown as Call, id, conn);
 			if (authorization) { id.roles = authorization.roles; if(authorization.principal)id.principal=authorization.principal; }
+			// A local agent host (role agentHost, docs/m1-mobile.en.md) acts for one of its conversations: the call names it in
+			// frame.agent and runs as {peerId: the host's, agentId: the conversation}, with the host's roles but agentHost.
+			// Nobody else may name an agent, and an agent cannot name another.
+			if (isObj(call.frame) && call.frame.agent !== undefined) {
+				const agent = call.frame.agent;
+				if (typeof agent !== "string" || !AGENT_ID.test(agent)) throw new Bad("frame.agent must be 1 to 128 characters of A-Z a-z 0-9 _ . : -");
+				if (!id.roles.includes("agentHost") || id.principal.agentId !== undefined) throw new Denied("only a local agent host may act for an agent");
+				id.principal = { peerId: id.principal.peerId, agentId: agent };
+				id.roles = id.roles.filter((r) => r !== "agentHost");
+			}
 			const grant = this.allowed(id, method);
 			const frame = call.frame;
 			if (frame !== undefined) {

@@ -61,6 +61,9 @@ export type RemoteOptions = {
 	delegationProvider?: (call: Call, grant?: Json) => Promise<Json>;
 	/** Stable space id or alias; omitted: the default space. */
 	space?: string;
+	/** The agent this client acts for, as `frame.agent` on every call: only a connection with the agentHost role may
+	 *  (the agent host of a phone, docs/m1-mobile.en.md); the space then sees the principal {peerId, agentId}. */
+	agent?: string;
 	/** Transport attempts per call (default 5), pause before the n-th retry: min(backoffMs * 2^n, maxBackoffMs) plus jitter. */
 	attempts?: number;
 	backoffMs?: number;
@@ -115,7 +118,7 @@ export class TransportFailure extends Error {}
 
 export class RemoteSpace implements SpaceLike {
 	private t: Transport;
-	private o: Required<Omit<RemoteOptions, "space" | "maxClientWaitMs" | "signer" | "expectedGateHostId" | "ownPeerId" | "grantProvider" | "delegationProvider">> & Pick<RemoteOptions, "space" | "maxClientWaitMs" | "signer" | "expectedGateHostId" | "ownPeerId" | "grantProvider" | "delegationProvider">;
+	private o: Required<Omit<RemoteOptions, "space" | "maxClientWaitMs" | "signer" | "expectedGateHostId" | "ownPeerId" | "grantProvider" | "delegationProvider" | "agent">> & Pick<RemoteOptions, "space" | "maxClientWaitMs" | "signer" | "expectedGateHostId" | "ownPeerId" | "grantProvider" | "delegationProvider" | "agent">;
 	private proving?: Promise<unknown>;
 	private enrollRequest?: { generation: string; requestId: string };
 	/** What the link cost so far: transport attempts repeated with the same identity, and calls given up as OutcomeUnknown. */
@@ -150,7 +153,8 @@ export class RemoteSpace implements SpaceLike {
 				(async () => {
 					const grant = this.o.grantProvider && !["challenge", "prove", "enroll", "enrollStatus", "grant"].includes(call.method) ? await this.o.grantProvider(call) : undefined;
 					const delegation=this.o.delegationProvider && !["challenge","prove","enroll","enrollStatus","grant","keyLookup","routerLease","epochNotice","routingPolicy","membershipInstruction","runGateInstruction","spaceLifecycleInstruction","workerAssignments","capabilityHeartbeat","replicaNotice","entryDescribe","entryChanges"].includes(call.method) ? await this.o.delegationProvider(call,grant) : undefined;
-					const text = JSON.stringify(grant||delegation ? { ...call, frame: { ...call.frame, ...(grant?{grant}:{}), ...(delegation?{delegation}: {}) } } : call);
+					const agent = this.o.agent !== undefined && !["challenge", "prove", "enroll", "enrollStatus"].includes(call.method) ? this.o.agent : undefined;
+					const text = JSON.stringify(grant||delegation||agent!==undefined ? { ...call, frame: { ...call.frame, ...(grant?{grant}:{}), ...(delegation?{delegation}: {}), ...(agent!==undefined?{agent}:{}) } } : call);
 					const limit = this.frameLimit; // not read from `hello`: the retries of `hello` itself must not wait for it
 					if (new TextEncoder().encode(text).length > limit) throw new core.ResourceExhausted(`a call may take at most ${limit} bytes`);
 					return this.t.request(text);
