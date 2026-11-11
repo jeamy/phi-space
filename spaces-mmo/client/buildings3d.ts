@@ -603,6 +603,68 @@ function chest(t: T): Geo {
 		return merge(t, parts, "truhe");
 	});
 }
+// The bakehouse's inside: an oven and a kneading trough; the butcher's shop's: a block, a rack of hooks, a pickling barrel.
+const CLAY = 0xb8805a, CLAY_DARK = 0x8f5e40, DOUGH = 0xf0dcb0, FLOUR = 0xf4efe2, CRUST = 0xb8742e, MEAT = 0xa8483c, FAT = 0xe8d2b8, BRINE = 0x9fb7b0;
+/** A domed clay oven on a stone plinth: an arched mouth with embers in it, a chimney at the back, a peel leaning on it and two loaves. */
+function oven(t: T): Geo {
+	return cached("ofen", () => {
+		const parts: Part[] = [b(t, 0.88, 0.3, 0.78, STONE, 0, 0.15, -0.02)];
+		for (let i = 0; i < 6; i++) parts.push(b(t, 0.18, 0.08, 0.03, i % 2 ? STONE_DARK : 0x8d8a84, -0.33 + i * 0.13, 0.08 + (i % 2) * 0.13, 0.375));
+		parts.push(dome(t, 0.4, 0.42, 0.36, CLAY, 0, 0.3, -0.04, 12), dome(t, 0.42, 0.06, 0.38, CLAY_DARK, 0, 0.3, -0.04, 12));
+		parts.push(b(t, 0.26, 0.2, 0.08, SOOT, 0, 0.42, 0.3), { g: new t.CylinderGeometry(0.13, 0.13, 0.08, 10, 1, false, 0, Math.PI), c: SOOT, p: [0, 0.52, 0.3], r: [Math.PI / 2, 0, Math.PI / 2] });
+		parts.push(b(t, 0.2, 0.04, 0.06, EMBER, 0, 0.35, 0.29), b(t, 0.32, 0.04, 0.12, STONE_DARK, 0, 0.31, 0.38));
+		parts.push(cy(t, 0.08, 0.07, 0.36, CLAY_DARK, 0.12, 0.62, -0.26, 8));
+		parts.push(b(t, 0.05, 0.8, 0.03, WOOD, 0.4, 0.42, 0.3, [0, 0, -0.18]), b(t, 0.16, 0.02, 0.2, WOOD, 0.47, 0.06, 0.32, [0, 0, -0.18]));
+		parts.push(ball(t, 0.07, CRUST, -0.3, 0.35, 0.3, [1.3, 0.7, 1]), ball(t, 0.07, CRUST, -0.16, 0.35, 0.33, [1.3, 0.7, 1]));
+		return merge(t, parts, "ofen");
+	});
+}
+/** A kneading trough: a long wooden tub on splayed legs with dough in it, a scraper, and a flour sack leaning on its end. */
+function trough(t: T): Geo {
+	return cached("backtrog", () => {
+		const parts: Part[] = [];
+		for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) parts.push(b(t, 0.05, 0.42, 0.05, WOOD_DARK, sx * 0.3, 0.2, sz * 0.14, [sz * 0.12, 0, -sx * 0.1]));
+		parts.push(b(t, 0.74, 0.04, 0.3, WOOD, 0, 0.4, 0), b(t, 0.8, 0.16, 0.03, WOOD, 0, 0.5, 0.17, [0.25, 0, 0]), b(t, 0.8, 0.16, 0.03, WOOD, 0, 0.5, -0.17, [-0.25, 0, 0]));
+		parts.push(b(t, 0.03, 0.17, 0.36, WOOD_DARK, -0.4, 0.5, 0), b(t, 0.03, 0.17, 0.36, WOOD_DARK, 0.4, 0.5, 0));
+		parts.push(dome(t, 0.22, 0.08, 0.12, DOUGH, -0.12, 0.42, 0, 10), dome(t, 0.12, 0.06, 0.1, DOUGH, 0.18, 0.42, 0.01, 8), b(t, 0.12, 0.01, 0.07, FLOUR, 0.05, 0.43, 0.02));
+		parts.push(b(t, 0.1, 0.06, 0.012, IRON, 0.3, 0.6, 0.12, [0, 0.4, 0]));
+		parts.push(dome(t, 0.13, 0.36, 0.11, SACK, 0.46, 0, 0.18, 8), cy(t, 0.05, 0.08, 0.06, 0xb9aa82, 0.46, 0.34, 0.18, 7));
+		return merge(t, parts, "backtrog");
+	});
+}
+/** A chopping block: a thick log on the floor with its rings on top, a cleaver struck into it, a stain and a bucket beside it. */
+function block(t: T): Geo {
+	return cached("hackklotz", () => {
+		const parts: Part[] = [cy(t, 0.3, 0.27, 0.46, BARK, -0.04, 0, 0, 12), cy(t, 0.26, 0.26, 0.02, 0xc8a676, -0.04, 0.46, 0, 12), cy(t, 0.16, 0.16, 0.005, 0xa8865a, -0.04, 0.48, 0, 10)];
+		parts.push(cy(t, 0.08, 0.09, 0.006, MEAT, 0.06, 0.482, 0.08, 8));
+		parts.push(b(t, 0.03, 0.16, 0.2, IRON, 0.02, 0.56, -0.04, [0, 0, 0.15]), b(t, 0.04, 0.04, 0.2, WOOD_DARK, 0.05, 0.66, 0.15, [0.3, 0, 0.15]));
+		parts.push(cy(t, 0.12, 0.13, 0.26, WOOD, 0.36, 0, 0.26, 9), cy(t, 0.125, 0.125, 0.02, IRON, 0.36, 0.2, 0.26, 9), cy(t, 0.11, 0.11, 0.01, MEAT, 0.36, 0.24, 0.26, 9));
+		return merge(t, parts, "hackklotz");
+	});
+}
+/** A rack of meat hooks: two posts and a beam, iron hooks on it with a ham, a side of bacon and a string of sausages. */
+function hooks(t: T): Geo {
+	return cached("haken", () => {
+		const parts: Part[] = [b(t, 0.07, 1.1, 0.07, WOOD_DARK, -0.4, 0.55, -0.3), b(t, 0.07, 1.1, 0.07, WOOD_DARK, 0.4, 0.55, -0.3), b(t, 0.9, 0.08, 0.08, WOOD, 0, 1.06, -0.3)];
+		for (const x of [-0.26, 0, 0.26]) parts.push(b(t, 0.015, 0.14, 0.015, IRON, x, 0.96, -0.3));
+		parts.push(ball(t, 0.13, CRUST, -0.26, 0.76, -0.3, [0.9, 1.4, 0.8]), cy(t, 0.03, 0.03, 0.08, FAT, -0.26, 0.92, -0.3, 6));
+		parts.push(b(t, 0.18, 0.32, 0.06, MEAT, 0, 0.74, -0.3), b(t, 0.18, 0.06, 0.065, FAT, 0, 0.84, -0.3));
+		for (let i = 0; i < 4; i++) parts.push(ball(t, 0.045, 0x8a3a2e, 0.26 + (i % 2 ? 0.03 : -0.03), 0.86 - i * 0.08, -0.3, [1, 1.5, 1]));
+		parts.push(b(t, 0.86, 0.03, 0.28, WOOD, 0, 0.12, -0.2), b(t, 0.04, 0.12, 0.04, WOOD_DARK, -0.38, 0.06, -0.1), b(t, 0.04, 0.12, 0.04, WOOD_DARK, 0.38, 0.06, -0.1));
+		return merge(t, parts, "haken");
+	});
+}
+/** A pickling barrel: squat, with three hoops, salt crusted at its rim, a board lid with a stone weight, a scoop hung on it. */
+function picklingBarrel(t: T): Geo {
+	return cached("poekelfass", () => {
+		const parts: Part[] = [cy(t, 0.26, 0.3, 0.26, WOOD, 0, 0, 0, 12), cy(t, 0.3, 0.27, 0.24, WOOD, 0, 0.26, 0, 12)];
+		for (const y of [0.04, 0.25, 0.46]) parts.push(cy(t, 0.305, 0.305, 0.03, IRON, 0, y, 0, 12));
+		parts.push(cy(t, 0.27, 0.27, 0.02, BRINE, 0, 0.48, 0, 12), cy(t, 0.285, 0.285, 0.015, FLOUR, 0, 0.495, 0, 12));
+		parts.push(b(t, 0.42, 0.03, 0.1, WOOD_DARK, 0, 0.52, -0.06), b(t, 0.42, 0.03, 0.1, WOOD_DARK, 0, 0.52, 0.06), ball(t, 0.08, STONE_DARK, 0.02, 0.6, 0, [1.2, 0.7, 1]));
+		parts.push(b(t, 0.03, 0.22, 0.03, WOOD, 0.31, 0.38, 0.06, [0, 0, -0.3]), cy(t, 0.05, 0.04, 0.05, WOOD, 0.35, 0.24, 0.06, 7));
+		return merge(t, parts, "poekelfass");
+	});
+}
 /** Crates, two below and one on top turned a little, and a crab basket (a cage of rods) beside them. */
 function crates(t: T, w: number, d: number): Geo {
 	return cached(`kisten:${w}x${d}`, () => {
@@ -707,6 +769,11 @@ export function sceneryModel(t: T, model: string | undefined, w: number, d: numb
 		case "bett": return bed(t);
 		case "tisch": return table(t);
 		case "truhe": return chest(t);
+		case "ofen": return oven(t);
+		case "backtrog": return trough(t);
+		case "hackklotz": return block(t);
+		case "haken": return hooks(t);
+		case "poekelfass": return picklingBarrel(t);
 		default: return null;
 	}
 }

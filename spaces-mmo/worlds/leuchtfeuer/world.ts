@@ -628,7 +628,14 @@ export const world: WorldDef = {
 			{ key: "vogelscheuche", name: "Vogelscheuche", dative: "einer Vogelscheuche", aliases: ["strohmann", "scarecrow"], w: 1, h: 1, needs: [{ proto: "treibholz", count: 2 }, { proto: "tangseil", count: 1 }], work: 3, points: 1, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.scheuche", color: "#b08a4a", repair: [{ proto: "tang", count: 1 }] },
 			// step 3 part 2: the windmill grinds grain to flour (mill below), its sails are linen; the bakery's oven bakes it
 			{ key: "windmuehle", epoch: 2, name: "Windmühle", dative: "einer Windmühle", aliases: ["windmühle", "mühle", "muehle", "windmill", "mill"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 8 }, { proto: "tangseil", count: 2 }, { proto: "leinen", count: 2 }], work: 16, points: 2, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.bau", color: "#c8b48a", repair: [{ proto: "treibholz", count: 1 }] },
-			{ key: "backhaus", epoch: 2, name: "Backhaus", dative: "einem Backhaus", aliases: ["bäckerei", "baeckerei", "ofen", "bakery", "bakehouse"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "muschel", count: 6 }, { proto: "tangseil", count: 1 }], work: 12, points: 2, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.bau", color: "#b0604a", repair: [{ proto: "muschel", count: 1 }] },
+			{ key: "backhaus", epoch: 2, name: "Backhaus", dative: "einem Backhaus", aliases: ["bäckerei", "baeckerei", "ofen", "bakery", "bakehouse"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "muschel", count: 6 }, { proto: "tangseil", count: 1 }], work: 12, points: 2, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.bau", color: "#b0604a", repair: [{ proto: "muschel", count: 1 }],
+				interior: {
+					ground: ["#######", "#_____#", "#_____#", "#_____#", "#_____#", "###_###"], spawn: { x: 3, y: 4 }, door: { x: 3, y: 5 },
+					furniture: [
+						{ kind: "ofen", name: "Ofen", x: 2, y: 1, use: "cook", desc: "Ein gewölbter Ofen aus Lehm auf Feldsteinen; im Mundloch glüht die Glut. Hier bäckt man, was das Backhaus macht." },
+						{ kind: "backtrog", name: "Backtrog", x: 5, y: 2, desc: "Ein langer Trog aus Holz, in dem der Teig ruht; daneben lehnt ein Mehlsack." },
+					],
+				} },
 			// step 3 part 3: hens in the coop, sheep or goats in the pen (animals below)
 			{ key: "huehnerstall", name: "Hühnerstall", dative: "einem Hühnerstall", aliases: ["hühnerstall", "stall", "coop", "henhouse"], w: 2, h: 1, needs: [{ proto: "treibholz", count: 4 }, { proto: "tangseil", count: 1 }], work: 6, points: 1, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.bau", color: "#a0784a", repair: [{ proto: "treibholz", count: 1 }] },
 			// bees: a straw hive on a post (animals below), up to three colonies
@@ -647,7 +654,15 @@ export const world: WorldDef = {
 			{ key: "steg", water: true, name: "Steg", dative: "einem Steg", aliases: ["jetty", "anleger"], w: 2, h: 1, needs: [{ proto: "treibholz", count: 6 }], work: 6, points: 1, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.bau", color: "#8a6a44", repair: [{ proto: "treibholz", count: 1 }] },
 			{ key: "raeucherei", name: "Räucherei", dative: "einer Räucherei", aliases: ["smokehouse", "raeucherhaus"], chest: 12, w: 2, h: 2, needs: [{ proto: "treibholz", count: 10 }, { proto: "tangseil", count: 2 }], work: 12, points: 2, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.bau", color: "#5a4a3a", repair: [{ proto: "treibholz", count: 2 }] },
 			// docs/schlachten.en.md step 2: the butcher's shop (slaughtering gives more in its room, salted sausage and cured meat), the salt garden, the tannery
-			{ key: "metzgerei", epoch: 2, name: "Metzgerei", dative: "einer Metzgerei", aliases: ["fleischerei", "schlachterei", "butcher", "butcher's shop", "butchery"], chest: 12, w: 2, h: 2, needs: [{ proto: "stein", count: 6 }, { proto: "bohle", count: 4 }, { proto: "treibholz", count: 4 }], work: 20, points: 2, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.bau", color: "#a85a4a", repair: [{ proto: "bohle", count: 1 }] },
+			{ key: "metzgerei", epoch: 2, name: "Metzgerei", dative: "einer Metzgerei", aliases: ["fleischerei", "schlachterei", "butcher", "butcher's shop", "butchery"], chest: 12, w: 2, h: 2, needs: [{ proto: "stein", count: 6 }, { proto: "bohle", count: 4 }, { proto: "treibholz", count: 4 }], work: 20, points: 2, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.bau", color: "#a85a4a", repair: [{ proto: "bohle", count: 1 }],
+				interior: {
+					ground: ["#######", "#_____#", "#_____#", "#_____#", "#_____#", "###_###"], spawn: { x: 3, y: 4 }, door: { x: 3, y: 5 },
+					furniture: [
+						{ kind: "hackklotz", name: "Hackklotz", x: 2, y: 2, use: "cook", desc: "Ein dicker Klotz mit einem Beil darin. Hier schlachtet man ein mitgebrachtes Tier und macht Wurst und Pökelfleisch." },
+						{ kind: "haken", name: "Fleischhaken", x: 4, y: 1, desc: "Ein Balken mit eisernen Haken: ein Schinken, eine Speckseite, eine Kette Würste." },
+						{ kind: "poekelfass", name: "Pökelfass", x: 5, y: 3, use: "chest", desc: "Das Fass der Metzgerei, in Salzlake; es ist ihre Truhe." },
+					],
+				} },
 			{ key: "salzgarten", epoch: 2, name: "Salzgarten", dative: "einem Salzgarten", aliases: ["saline", "salzbecken", "salt garden", "saltern", "salt pan"], w: 2, h: 2, needs: [{ proto: "stein", count: 4 }, { proto: "lehm", count: 4 }, { proto: "treibholz", count: 2 }], work: 12, points: 2, keepWorldMs: 40 * 24 * 3600_000, keepSetting: "keep.bau", color: "#e4e0d4", repair: [{ proto: "lehm", count: 1 }] },
 			{ key: "gerberei", epoch: 3, name: "Gerberei", dative: "einer Gerberei", aliases: ["lohgerberei", "tannery"], w: 2, h: 2, needs: [{ proto: "stein", count: 8 }, { proto: "bohle", count: 6 }, { proto: "ziegel", count: 4 }], work: 28, points: 3, keepWorldMs: 45 * 24 * 3600_000, keepSetting: "keep.lager", color: "#7a5a3a", repair: [{ proto: "bohle", count: 2 }] },
 			{ key: "leuchtturm", epoch: 3, lightBonus: 20, lightRooms: 1, name: "Leuchtturm", dative: "einem Leuchtturm", aliases: ["lighthouse", "turm"], w: 2, h: 2, needs: [{ proto: "stein", count: 16 }, { proto: "ziegel", count: 10 }, { proto: "tran", count: 2 }], work: 40, points: 3, keepWorldMs: 60 * 24 * 3600_000, keepSetting: "keep.kapelle", color: "#c8c0b0", repair: [{ proto: "stein", count: 2 }] },

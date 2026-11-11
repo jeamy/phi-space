@@ -1,7 +1,8 @@
 # Interiors: going into a house (plan)
 
 Status 2026-11-11: step 1 (the hut) is built: server/engine/commands/interior.ts, tests/interior.test.ts; step 2 (sleep) as
-well: server/engine/commands/sleep.ts, tests/sleep.test.ts. It extends [siedeln.en.md](siedeln.en.md) (buildings, recipes, chests,
+well: server/engine/commands/sleep.ts, tests/sleep.test.ts; step 3 (bakehouse and butcher's shop) too: their layouts in
+worlds/leuchtfeuer/world.ts, tests/interior-shops.test.ts. It extends [siedeln.en.md](siedeln.en.md) (buildings, recipes, chests,
 the rest after work) and [welt.en.md](welt.en.md) (rooms and exits).
 
 ## What it is for
@@ -67,7 +68,7 @@ the plan's `interior.furniture: [{ kind, x, y }]`.
 | --- | --- | --- |
 | Hut | hearth, bed, chest, table | the hut's recipes at the hearth; sleep in the bed; truhe / verstaue / entnimm at the chest |
 | Bakehouse | oven, kneading trough | bread and cake (the recipes at backhaus) |
-| Butcher's shop | block, hooks | schlachte a carried animal, metzgerwurst, salted meat |
+| Butcher's shop | block, hooks, pickling barrel | schlachte a carried animal, metzgerwurst, salted meat at the block; the barrel is its chest |
 | Smokehouse | smoking rack, chest | the smokehouse's recipes, its chest |
 | Workshop | bench, tool wall | the workshop's recipes (planks, cart, case …) |
 | Loom house | loom | cloth, quilt |
@@ -154,7 +155,9 @@ New:
 1. **The hut** (built): its interior with hearth, bed, chest and table; the door with invitations; cooking and the
    chest inside; 2D tiles and a plain 3D room.
 2. **Sleep** (built): the bed, rested works, their settings and the help.
-3. **Bakehouse and butcher's shop** with their furnishings.
+3. **Bakehouse and butcher's shop** (built) with their furnishings: oven and kneading trough; block, hooks and a pickling
+   barrel as the chest. A furnishing's `use: "cook"` is where the building's recipes are made (the hearth, the oven, the
+   block); at the butcher's the block also slaughters.
 4. **The other workshops** (smokehouse, workshop, loom, brewery, glassworks, tannery, brickworks, shipyard).
 5. **3D finish**: models of the furnishings, light, the figure lying in its bed.
 

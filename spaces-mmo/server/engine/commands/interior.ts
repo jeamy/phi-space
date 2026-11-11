@@ -58,7 +58,7 @@ export async function makeInterior(space: Space, txn: string, w: WorldDef, b: Bu
 	if (!front) return null;
 	const growth = (await space.readAll({ type: "RoomGrowth", fields: { roomId: b.room } }, { txn }))[0];
 	const revision = growth ? fieldsOf<RoomGrowthFields>(growth).steps?.length ?? 0 : 0;
-	const room: RoomFields = { roomId, name: `${plan.name} von ${b.ownerName}`, desc: insideText(plan.name, def), ground: def.ground, spawn: def.spawn,
+	const room: RoomFields = { roomId, name: `${plan.name} von ${b.ownerName}`, desc: insideText(plan.name, plan.dative, def), ground: def.ground, spawn: def.spawn,
 		building: { buildId: b.buildId, name: b.name, room: b.room, x: b.x, y: b.y, w: b.w, h: b.h, accountId: b.accountId, ownerName: b.ownerName } };
 	await space.write(draftOf("Room", w.typeclasses, room), txn, FOREVER);
 	const outside = w.rooms.find((r) => r.roomId === b.room)?.name ?? "draußen";
@@ -72,7 +72,8 @@ export async function makeInterior(space: Space, txn: string, w: WorldDef, b: Bu
 	return room;
 }
 
-const insideText = (name: string, def: InteriorDef) => `Drinnen in der ${name}: ${def.furniture.map((f) => f.name).join(", ")}. „hinaus“ führt vor die Tür.`;
+/** "Drinnen in der Hütte", "Drinnen im Backhaus": by the plan's dative ("einer Hütte", "einem Backhaus"). */
+const insideText = (name: string, dative: string | undefined, def: InteriorDef) => `Drinnen ${/^einem\b/.test(dative ?? "") ? "im" : "in der"} ${name}: ${def.furniture.map((f) => f.name).join(", ")}. „hinaus“ führt vor die Tür.`;
 
 /** Takes the inside of a building that is gone: whoever is in it stands in front of where it stood (`at`, the ruin or
  *  the building's place), what lies on its floor goes to the owner's estate, the room, its exit and furnishings go. */
@@ -152,13 +153,13 @@ async function enterable(c: CommandCtx, arg: string): Promise<BuildingFields> {
 	const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e))
 		.filter((b) => distTo(c.actor, b) <= 1 && (at ? distTo({ x: Number(at[1]), y: Number(at[2]) }, b) === 0 : !n || planOf(c.world, n)?.key === b.plan || b.name.toLowerCase() === n));
 	const houses = near.filter((b) => planOf(c.world, b.plan)?.interior);
-	if (!houses.length) throw new (near.length ? CommandError : NotUnderstood)(near.length ? `In ${planOf(c.world, near[0]!.plan)?.dative ?? near[0]!.name} geht man nicht hinein.` : "Geh direkt neben eine Hütte, in die du darfst.");
+	if (!houses.length) throw new (near.length ? CommandError : NotUnderstood)(near.length ? `In ${planOf(c.world, near[0]!.plan)?.dative ?? near[0]!.name} geht man nicht hinein.` : "Geh direkt neben eine Hütte (ein Backhaus, eine Metzgerei), in die du darfst.");
 	return houses.find((b) => isOwner(c, b)) ?? houses.find((b) => mayEnter(c, b)) ?? houses[0]!;
 }
 
 const betrete: Command = {
 	key: "betrete", aliases: ["hinein", "eintreten", "enter"],
-	help: "betrete [x y] – in die Hütte neben dir gehen: die eigene oder eine, in die man eingeladen ist; „hinaus“ führt wieder vor die Tür",
+	help: "betrete [x y] – in den Bau neben dir gehen (Hütte, Backhaus, Metzgerei): den eigenen oder einen, in den man eingeladen ist; „hinaus“ führt wieder vor die Tür",
 	async func(c, arg) {
 		if (isInterior(c.actor.room)) throw new CommandError("Du bist schon drinnen; „hinaus“ führt vor die Tür.");
 		const b = await enterable(c, arg);
@@ -185,15 +186,15 @@ async function ownHouse(c: CommandCtx): Promise<BuildingFields> {
 	const all = inside ? (await c.space.readAll({ type: "Building", fields: { buildId: inside } })).map((e) => fieldsOf<BuildingFields>(e))
 		: (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
 	const b = all.find((x) => planOf(c.world, x.plan)?.interior && isOwner(c, x));
-	if (!b) throw new CommandError(all.some((x) => planOf(c.world, x.plan)?.interior) ? "Einladen kann nur, wem die Hütte gehört." : "Stell dich neben deine Hütte oder geh hinein.");
+	if (!b) throw new CommandError(all.some((x) => planOf(c.world, x.plan)?.interior) ? "Einladen kann nur, wem der Bau gehört." : "Stell dich neben deine Hütte (oder dein Backhaus, deine Metzgerei) oder geh hinein.");
 	const e = await c.space.take({ type: "Building", fields: { buildId: b.buildId } }, 5_000, { txn: c.txn });
-	if (!e) throw new CommandError("Die Hütte ist gerade nicht greifbar; bitte noch einmal.");
+	if (!e) throw new CommandError("Der Bau ist gerade nicht greifbar; bitte noch einmal.");
 	return fieldsOf<BuildingFields>(e);
 }
 
 const einladen: Command = {
 	key: "einladen", aliases: ["lade", "invite"],
-	help: "einladen [name] – jemanden in die eigene Hütte einladen (neben ihr oder drinnen); ohne Namen: wer eingeladen ist",
+	help: "einladen [name] – jemanden in den eigenen Bau einladen, Hütte, Backhaus oder Metzgerei (neben ihm oder drinnen); ohne Namen: wer eingeladen ist",
 	async func(c, arg) {
 		const b = await ownHouse(c);
 		const n = arg.trim().replace(/\s+ein$/i, "");
@@ -203,7 +204,7 @@ const einladen: Command = {
 		}
 		const who = (await c.space.readAll({ type: "Character" })).map((e) => fieldsOf<CharacterFields>(e)).find((ch) => ch.name.toLowerCase() === n.toLowerCase());
 		if (!who) throw new CommandError(`Eine Figur „${n.slice(0, 30)}“ gibt es hier nicht.`);
-		if (who.charId === c.actor.charId) throw new CommandError("In deine eigene Hütte darfst du ohnehin.");
+		if (who.charId === c.actor.charId) throw new CommandError("In deinen eigenen Bau darfst du ohnehin.");
 		if (b.guests?.some((g) => g.charId === who.charId)) throw new CommandError(`${who.name} ist schon eingeladen.`);
 		if ((b.guests?.length ?? 0) >= GUESTS_MAX) throw new CommandError(`Mehr als ${GUESTS_MAX} Gäste lädt man nicht ein; „ausladen <name>“ macht Platz.`);
 		await c.space.write({ type: "Building", fields: { ...b, guests: [...b.guests ?? [], { charId: who.charId, name: who.name }] } as never }, c.txn, FOREVER);
@@ -215,7 +216,7 @@ const GUESTS_MAX = 12;
 
 const ausladen: Command = {
 	key: "ausladen", aliases: ["uninvite"],
-	help: "ausladen <name> – eine Einladung in die eigene Hütte zurücknehmen; wer drinnen ist, steht dann draußen",
+	help: "ausladen <name> – eine Einladung in den eigenen Bau zurücknehmen; wer drinnen ist, steht dann draußen",
 	async func(c, arg) {
 		const b = await ownHouse(c);
 		const n = arg.trim().toLowerCase();

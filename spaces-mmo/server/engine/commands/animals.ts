@@ -17,6 +17,7 @@ import { CommandError, inventory, itemsNamed, msg, NotUnderstood, pluralOf, type
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import type { AnimalKindDef, AnimalsDef, KeeperDef, WorldDef } from "../world.ts";
 import { ARTICLE, distTo, giveBack, planOf, putBack, takeNear } from "./build.ts";
+import { nearBuildings } from "./interior.ts";
 import { protoName } from "./garden.ts";
 import { needEpoch } from "./epoch.ts";
 import { randomInt } from "../source.ts";
@@ -304,7 +305,8 @@ const schlachte: Command = {
 		// beside a butcher's shop and no coop or pen: an animal one carries (taken out of its house, bought); it is one's
 		// own, so no pair has to stay
 		const shopPlan = bt.shop?.plan;
-		const nearShop = !!shopPlan && (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: shopPlan } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1);
+		// (outside beside it, or inside at its block: interior.ts)
+		const nearShop = !!shopPlan && (await nearBuildings(c, "cook")).some((b) => b.plan === shopPlan);
 		const nearHouse = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).some((e) => { const f = fieldsOf<BuildingFields>(e); return !!d.houses[f.plan] && distTo(c.actor, f) <= 1; });
 		if (nearShop && !nearHouse) {
 			const kinds = d.kinds.filter((x) => x.slaughter?.length);

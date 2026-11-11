@@ -448,6 +448,41 @@ function sceneryView(p: Px, o: ObjView, ts: number): InstanceType<Px["Graphics"]
 		g.rect(x + 4, y + 7, w - 8, 6).fill({ color: "#9a7450" });
 		for (const fx of [0.3, 0.7]) g.rect(x + w * fx - 1.5, y + 7, 3, h - 11).fill({ color: "#3a3d44" });
 		g.rect(x + w / 2 - 2.5, y + 12, 5, 5).fill({ color: "#c9a640" }).stroke({ width: 1, color: "#6e5a20" });
+	} else if (o.model === "ofen") {
+		// the bakehouse's oven: a clay dome on stones, the dark arched mouth with embers, the chimney behind, two loaves
+		g.rect(x + 2, y + h * 0.55, w - 4, h * 0.42).fill({ color: "#8d8a84" }).stroke({ width: 1.5, color: "#3a3734" });
+		g.ellipse(x + w / 2, y + h * 0.5, w * 0.42, h * 0.38).fill({ color: "#b8805a" }).stroke({ width: 2, color: "#5e3a24" });
+		g.rect(x + w * 0.58, y + 1, 5, h * 0.25).fill({ color: "#8f5e40" });
+		g.roundRect(x + w * 0.34, y + h * 0.48, w * 0.32, h * 0.3, 6).fill({ color: "#2b2622" });
+		g.ellipse(x + w / 2, y + h * 0.72, w * 0.11, 2.5).fill({ color: "#ff7a1e" });
+		for (const fx of [0.16, 0.84]) g.ellipse(x + w * fx, y + h * 0.84, 3.5, 2.2).fill({ color: "#b8742e" });
+	} else if (o.model === "backtrog") {
+		// the kneading trough: a wooden tub with dough and flour, a sack at its end
+		g.roundRect(x + 2, y + h * 0.3, w - 9, h * 0.44, 4).fill({ color: "#8a6440" }).stroke({ width: 2, color: "#3e2a18" });
+		g.ellipse(x + w * 0.36, y + h * 0.52, w * 0.17, h * 0.12).fill({ color: "#f0dcb0" });
+		g.ellipse(x + w * 0.62, y + h * 0.5, w * 0.08, h * 0.08).fill({ color: "#f0dcb0" }); g.circle(x + w * 0.5, y + h * 0.42, 1.5).fill({ color: "#f4efe2" });
+		g.roundRect(x + w - 9, y + h * 0.45, 8, h * 0.5, 3).fill({ color: "#d8c9a0" }).stroke({ width: 1, color: "#9a8a64" });
+	} else if (o.model === "hackklotz") {
+		// the chopping block: a log seen from above with its rings, a cleaver in it, a bucket beside it
+		g.circle(x + w * 0.42, y + h * 0.48, w * 0.32).fill({ color: "#5a3e26" });
+		g.circle(x + w * 0.42, y + h * 0.48, w * 0.27).fill({ color: "#c8a676" });
+		g.circle(x + w * 0.42, y + h * 0.48, w * 0.16).stroke({ width: 1, color: "#a8865a" }); g.circle(x + w * 0.42, y + h * 0.48, w * 0.07).stroke({ width: 1, color: "#a8865a" });
+		g.circle(x + w * 0.5, y + h * 0.58, 3).fill({ color: "#a8483c", alpha: 0.7 });
+		g.rect(x + w * 0.3, y + h * 0.3, 3, h * 0.3).fill({ color: "#3a3d44" }); g.rect(x + w * 0.3 - 1, y + h * 0.18, 5, h * 0.13).fill({ color: "#3e2a18" });
+		g.circle(x + w * 0.84, y + h * 0.84, 4).fill({ color: "#8a6440" }).stroke({ width: 1.5, color: "#3a3d44" });
+	} else if (o.model === "haken") {
+		// the rack of hooks along the wall: a beam with a ham, a side of bacon and a string of sausages
+		g.rect(x + 1, y + 3, w - 2, 4).fill({ color: "#5a3e26" });
+		for (const fx of [0.2, 0.5, 0.8]) g.rect(x + w * fx - 0.5, y + 7, 1.5, 4).fill({ color: "#3a3d44" });
+		g.ellipse(x + w * 0.2, y + h * 0.5, 4.5, 7).fill({ color: "#b8742e" }).stroke({ width: 1, color: "#6e4218" });
+		g.rect(x + w * 0.5 - 4, y + h * 0.34, 8, 12).fill({ color: "#a8483c" }); g.rect(x + w * 0.5 - 4, y + h * 0.34, 8, 3).fill({ color: "#e8d2b8" });
+		for (let i = 0; i < 4; i++) g.ellipse(x + w * 0.8 + (i % 2 ? 1 : -1), y + h * 0.4 + i * 4, 2.2, 2.6).fill({ color: "#8a3a2e" });
+	} else if (o.model === "poekelfass") {
+		// the pickling barrel from above: hoops, brine with a salt rim, the board lid and its stone
+		g.circle(x + w / 2, y + h / 2, w * 0.4).fill({ color: "#8a6440" }).stroke({ width: 2.5, color: "#3a3d44" });
+		g.circle(x + w / 2, y + h / 2, w * 0.33).fill({ color: "#9fb7b0" }).stroke({ width: 2, color: "#f4efe2" });
+		g.rect(x + w * 0.2, y + h * 0.4, w * 0.6, 3).fill({ color: "#5a3e26" }); g.rect(x + w * 0.2, y + h * 0.54, w * 0.6, 3).fill({ color: "#5a3e26" });
+		g.ellipse(x + w / 2, y + h * 0.49, 4, 3).fill({ color: "#6f6b66" });
 	} else if (o.model === "faesser") {
 		for (const dx of [0, 1]) { g.roundRect(x + dx * ts + 5, y + 5, ts - 10, ts - 8, 6).fill({ color: "#4b3626" }).stroke({ width: 2, color: "#1f160e" }); g.rect(x + dx * ts + 5, y + 13, ts - 10, 2).fill({ color: "#8a8f94" }); }
 	} else {

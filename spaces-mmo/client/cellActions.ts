@@ -159,6 +159,15 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 	};
 	/** One's chest in building `buildId`: look into it, and each kind in it to take out, one or all (the server sends what
 	 *  lies in it while one stands beside or inside; build.ts entnimm). */
+	// the butcher's shop (outside beside it, inside at its block): an animal one carries is slaughtered there, with a knife
+	// (server: animals.ts schlachte); without one, or with no animal, the command says what is missing
+	const slaughterEntries = () => {
+		const carried = [...objs.values()].filter((i) => i.kind === "item" && i.location === me);
+		const animals = [...new Set(carried.filter((i) => SLAUGHTERED.includes(i.name)).map((i) => i.name))];
+		const knife = carried.some((i) => i.name === "Schlachtmesser" || i.name === "Muschelmesser");
+		if (knife && animals.length) for (const n of animals) entries.push({ label: `${n} schlachten`, line: `schlachte ${n.toLowerCase()}` });
+		else entries.push({ label: "Ein Tier schlachten", line: "schlachte" });
+	};
 	const chestEntries = (buildId: string) => {
 		entries.push({ label: "Truhe ansehen", line: "truhe" });
 		const held = new Map<string, number>();
@@ -234,7 +243,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			// one's own chest beside one: „Truhe ansehen“ opens it (its description would be a second line of the same name)
 			if (beside && o.use === "chest" && o.ownerId === me) chestEntries(room.slice(3));
 			else entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` });
-			if (beside && o.use === "cook") made(o.plan);
+			if (beside && o.use === "cook") { made(o.plan); if (o.plan === "metzgerei") slaughterEntries(); }
 			if (beside && o.use === "sleep") entries.push({ label: "Schlafen", line: "schlafe" });
 			continue;
 		}
@@ -317,13 +326,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			}
 			// the butcher's shop: an animal one carries is slaughtered here, with a knife (server: animals.ts schlachte); without
 			// one, or with no animal, the command says what is missing
-			if (o.plan === "metzgerei") {
-				const carried = [...objs.values()].filter((i) => i.kind === "item" && i.location === me);
-				const animals = [...new Set(carried.filter((i) => SLAUGHTERED.includes(i.name)).map((i) => i.name))];
-				const knife = carried.some((i) => i.name === "Schlachtmesser" || i.name === "Muschelmesser");
-				if (knife && animals.length) for (const n of animals) entries.push({ label: `${n} schlachten`, line: `schlachte ${n.toLowerCase()}` });
-				else entries.push({ label: "Ein Tier schlachten", line: "schlachte" });
-			}
+			if (o.plan === "metzgerei") slaughterEntries();
 			// a dog or cat on guard: anyone feeds it; at an own building one leaves one or takes it along (server: animals.ts)
 			const keeperName: Record<string, string> = { hund: "Hund", katze: "Katze" };
 			if (o.keeper) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} füttern`, line: `füttere ${o.keeper}` }, { label: "Wer wacht hier?", line: "wache" });

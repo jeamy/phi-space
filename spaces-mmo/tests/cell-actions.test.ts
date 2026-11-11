@@ -279,3 +279,16 @@ test("a hut one may enter offers „Hineingehen“; inside, the hearth cooks, th
 	assert.ok(!there(5, 1).includes("schlafe"), "the bed is two cells away");
 	assert.ok(cellEntries({ ...input, self: char("me", "Mira", 4, 1), objs: furniture, room: inside, at: { x: 5, y: 1 } }).some((e) => e.line === "schlafe"), "beside the bed");
 });
+
+test("inside the butcher's shop the block makes its recipes and slaughters what one carries", () => {
+	const at = char("me", "Mira", 3, 3), inside = "in-metz";
+	const objs = new Map<string, ObjView>([
+		["block", obj({ id: "block", kind: "scenery", name: "Hackklotz", model: "hackklotz", use: "cook", plan: "metzgerei", ownerId: "me", fixed: true, location: inside, x: 2, y: 2 })],
+		["huhn", obj({ id: "huhn", kind: "item", name: "Huhn", location: "me", x: -1, y: -1 })],
+		["messer", obj({ id: "messer", kind: "item", name: "Schlachtmesser", location: "me", x: -1, y: -1 })],
+	]);
+	const recipes = [{ key: "poekelfleisch", name: "Pökelfleisch", needs: [{ name: "Schweinefleisch", count: 2 }], at: "metzgerei" }];
+	const lines = cellEntries({ ...input, self: at, objs, room: inside, recipes, at: { x: 2, y: 2 } } as never).map((e) => e.line);
+	assert.ok(lines.includes("schlachte huhn"), "slaughter the carried hen");
+	assert.ok(lines.includes("craft hier"), "what is made here");
+});

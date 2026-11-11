@@ -12333,7 +12333,42 @@
 						"proto": "muschel",
 						"count": 1
 					}
-				]
+				],
+				"interior": {
+					"ground": [
+						"#######",
+						"#_____#",
+						"#_____#",
+						"#_____#",
+						"#_____#",
+						"###_###"
+					],
+					"spawn": {
+						"x": 3,
+						"y": 4
+					},
+					"door": {
+						"x": 3,
+						"y": 5
+					},
+					"furniture": [
+						{
+							"kind": "ofen",
+							"name": "Ofen",
+							"x": 2,
+							"y": 1,
+							"use": "cook",
+							"desc": "Ein gewölbter Ofen aus Lehm auf Feldsteinen; im Mundloch glüht die Glut. Hier bäckt man, was das Backhaus macht."
+						},
+						{
+							"kind": "backtrog",
+							"name": "Backtrog",
+							"x": 5,
+							"y": 2,
+							"desc": "Ein langer Trog aus Holz, in dem der Teig ruht; daneben lehnt ein Mehlsack."
+						}
+					]
+				}
 			},
 			{
 				"key": "huehnerstall",
@@ -12815,7 +12850,50 @@
 						"proto": "bohle",
 						"count": 1
 					}
-				]
+				],
+				"interior": {
+					"ground": [
+						"#######",
+						"#_____#",
+						"#_____#",
+						"#_____#",
+						"#_____#",
+						"###_###"
+					],
+					"spawn": {
+						"x": 3,
+						"y": 4
+					},
+					"door": {
+						"x": 3,
+						"y": 5
+					},
+					"furniture": [
+						{
+							"kind": "hackklotz",
+							"name": "Hackklotz",
+							"x": 2,
+							"y": 2,
+							"use": "cook",
+							"desc": "Ein dicker Klotz mit einem Beil darin. Hier schlachtet man ein mitgebrachtes Tier und macht Wurst und Pökelfleisch."
+						},
+						{
+							"kind": "haken",
+							"name": "Fleischhaken",
+							"x": 4,
+							"y": 1,
+							"desc": "Ein Balken mit eisernen Haken: ein Schinken, eine Speckseite, eine Kette Würste."
+						},
+						{
+							"kind": "poekelfass",
+							"name": "Pökelfass",
+							"x": 5,
+							"y": 3,
+							"use": "chest",
+							"desc": "Das Fass der Metzgerei, in Salzlake; es ist ihre Truhe."
+						}
+					]
+				}
 			},
 			{
 				"key": "salzgarten",
