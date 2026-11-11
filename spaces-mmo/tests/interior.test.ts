@@ -60,6 +60,11 @@ test("inside a hut: in, cook at the hearth, the chest beside it, guests by invit
 		await eventually(async () => { const f = await charOf(s, me); return f.x === 2 && f.y === 2 ? f : null; }, 10_000, "beside the hearth");
 		await does(host, "craft ruehrei", "Rührei");
 		assert.equal((await s.readAll({ type: "Item", fields: { location: me, proto: "ruehrei" } })).length, 1);
+		// honey on bread at the same hearth: two honey breads
+		await give(s, me, "honig", 1);
+		await give(s, me, "brot", 1);
+		await does(host, "craft honigbrot", "Honigbrot");
+		assert.equal((await s.readAll({ type: "Item", fields: { location: me, proto: "honigbrot" } })).length, 2);
 
 		// the chest: stored from anywhere (one's only chest), looked into beside it only
 		await give(s, me, "muschel", 2);

@@ -94,3 +94,6 @@ were drawn the same way, by the script `items-src/eggs.py` (same license as this
 
 The tiles of a building's inside (floor planks and a timbered wall: `tilesets/Interior.png`) were drawn by the script
 `items-src/interior.py` (same license as this project).
+
+What the honey makes (honey bread and a jug of mead: `items/honigbrot.png`, `items/met.png`) were drawn the same way, by
+the script `items-src/honey.py` (same license as this project).

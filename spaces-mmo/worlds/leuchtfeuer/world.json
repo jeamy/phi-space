@@ -4258,6 +4258,23 @@
 			"locks": "get:all();drop:all();give:not guest()"
 		},
 		{
+			"key": "met",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Met",
+			"desc": "Ein Krug Met, aus Honig und Wasser gegoren. Süß und stärker als Bier.",
+			"aliases": [
+				"honigwein",
+				"mead"
+			],
+			"glyph": {
+				"shape": "square",
+				"color": "#e8b040"
+			},
+			"icon": "items/met.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
 			"key": "sand",
 			"parent": "ding",
 			"typeclass": "Stone",
@@ -4994,6 +5011,26 @@
 				"color": "#d8a060"
 			},
 			"icon": "items/kuchen.png",
+			"turns": {
+				"afterMs": 432000000
+			},
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "honigbrot",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Honigbrot",
+			"desc": "Eine Scheibe Brot, dick mit Honig bestrichen.",
+			"aliases": [
+				"honigbrote",
+				"honey bread"
+			],
+			"glyph": {
+				"shape": "square",
+				"color": "#e0a848"
+			},
+			"icon": "items/honigbrot.png",
 			"turns": {
 				"afterMs": 432000000
 			},
@@ -9282,6 +9319,10 @@
 				"mausefalle": [
 					8,
 					0
+				],
+				"honigbrot": [
+					3,
+					0
 				]
 			},
 			"carry": [
@@ -9654,6 +9695,14 @@
 				],
 				"segelboot": [
 					66,
+					0
+				],
+				"honigbrot": [
+					3,
+					5
+				],
+				"met": [
+					5,
 					0
 				]
 			},
@@ -10552,6 +10601,14 @@
 				"bohle": [
 					3,
 					0
+				],
+				"honigbrot": [
+					3,
+					0
+				],
+				"met": [
+					5,
+					0
 				]
 			},
 			"carry": [
@@ -10714,6 +10771,14 @@
 				],
 				"bohle": [
 					3,
+					0
+				],
+				"honigbrot": [
+					3,
+					0
+				],
+				"met": [
+					5,
 					0
 				]
 			},
@@ -10885,6 +10950,14 @@
 				],
 				"bohle": [
 					3,
+					0
+				],
+				"honigbrot": [
+					3,
+					0
+				],
+				"met": [
+					5,
 					0
 				]
 			},
@@ -14363,6 +14436,8 @@
 			"fisch": 18000000,
 			"ei": 14400000,
 			"ruehrei": 28800000,
+			"honigbrot": 28800000,
+			"met": 10800000,
 			"pfannkuchen": 21600000,
 			"kuchen": 43200000,
 			"moehre": 10800000,
@@ -14464,7 +14539,9 @@
 			"kerze": 7,
 			"netz": 11,
 			"raeucherwurst": 6,
-			"kette": 17
+			"kette": 17,
+			"honigbrot": 4,
+			"met": 7
 		}
 	},
 	"bank": {
@@ -15168,6 +15245,23 @@
 			"at": "brauerei"
 		},
 		{
+			"key": "met",
+			"name": "Met",
+			"needs": [
+				{
+					"proto": "honig",
+					"count": 3
+				},
+				{
+					"proto": "wasserkanne",
+					"count": 1
+				}
+			],
+			"makes": "met",
+			"count": 2,
+			"at": "brauerei"
+		},
+		{
 			"key": "glas",
 			"name": "Glas",
 			"needs": [
@@ -15456,6 +15550,23 @@
 				}
 			],
 			"makes": "schmalzbrot",
+			"count": 2,
+			"at": "huette"
+		},
+		{
+			"key": "honigbrot",
+			"name": "Honigbrot",
+			"needs": [
+				{
+					"proto": "honig",
+					"count": 1
+				},
+				{
+					"proto": "brot",
+					"count": 1
+				}
+			],
+			"makes": "honigbrot",
 			"count": 2,
 			"at": "huette"
 		},
@@ -16227,6 +16338,23 @@
 				"reward": {
 					"proto": "muenze",
 					"count": 18
+				},
+				"rooms": [
+					"kupferhafen-markt"
+				]
+			},
+			{
+				"key": "met",
+				"text": "Die Schenke im Hafenviertel schenkt zum Fest Met aus: 2 Krüge.",
+				"needs": [
+					{
+						"proto": "met",
+						"count": 2
+					}
+				],
+				"reward": {
+					"proto": "muenze",
+					"count": 14
 				},
 				"rooms": [
 					"kupferhafen-markt"

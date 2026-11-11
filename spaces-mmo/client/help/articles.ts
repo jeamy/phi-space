@@ -965,6 +965,7 @@ Jedes Ding, das man herstellt, hat Käufer. Die Tabelle nennt die **Grundpreise*
 | Glas | Marta (Markt von Kupferhafen) 3 | – | 5 |
 | Grillhähnchen | Wilma (Markt von Kupferhafen) 4, Hauke (Schärenhafen) 4, Bente (Rauchhafen) 4, Momme (Krabbenbucht) 4 | Wilma 7 | 5 |
 | Holzbündel | Hinnerk (Graue Bucht) 5, Kalle (Graue Bucht) 4, Mats (Anleger) 5, Svea (Alte Warte) 5, Greta (Markt von Kupferhafen) 5, Marta (Markt von Kupferhafen) 4, Nele (Riffdorf) 6, Arne (Schärenhafen) 5, Frida (Rauchhafen) 4, Bente (Rauchhafen) 3, Thies (Krabbenbucht) 6 | Jorin 4, Kalle 6, Marta 6, Bente 5 | 8 |
+| Honigbrot | Kalle (Graue Bucht) 3, Marta (Markt von Kupferhafen) 3, Hauke (Schärenhafen) 3, Bente (Rauchhafen) 3, Momme (Krabbenbucht) 3 | Marta 5 | 4 |
 | Hühnersuppe | Wilma (Markt von Kupferhafen) 4, Hauke (Schärenhafen) 4, Bente (Rauchhafen) 4, Momme (Krabbenbucht) 4 | – | 5 |
 | Karren | Marta (Markt von Kupferhafen) 21 | – | 31 |
 | Käse | Marta (Markt von Kupferhafen) 7 | Marta 10 | 10 |
@@ -976,6 +977,7 @@ Jedes Ding, das man herstellt, hat Käufer. Die Tabelle nennt die **Grundpreise*
 | Ledertasche | Marta (Markt von Kupferhafen) 12 | Marta 14 | 17 |
 | Leinen | Marta (Markt von Kupferhafen) 8 | Marta 11 | 11 |
 | Mausefalle | Kalle (Graue Bucht) 8, Marta (Markt von Kupferhafen) 8 | – | 12 |
+| Met | Marta (Markt von Kupferhafen) 5, Hauke (Schärenhafen) 5, Bente (Rauchhafen) 5, Momme (Krabbenbucht) 5 | – | 7 |
 | Muschelmesser | Kalle (Graue Bucht) 5, Marta (Markt von Kupferhafen) 5 | Jorin 5 | 8 |
 | Netz | Kalle (Graue Bucht) 8, Marta (Markt von Kupferhafen) 8, Ruben (Hafenviertel) 8, Hauke (Schärenhafen) 8 | Kalle 11, Marta 12, Piet 10, Ruben 11, Hauke 11 | 11 |
 | Pfannkuchen | Kalle (Graue Bucht) 5, Marta (Markt von Kupferhafen) 5, Hauke (Schärenhafen) 5, Bente (Rauchhafen) 5, Momme (Krabbenbucht) 5 | – | 7 |
@@ -1097,11 +1099,13 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Feast | Wilma (Copper Harbour Market) 38 | – | 55 |
 | Glass | Marta (Copper Harbour Market) 3 | – | 5 |
 | Ham | Marta (Copper Harbour Market) 10, Wilma (Copper Harbour Market) 10 | Marta 14, Wilma 14 | 14 |
+| Honey bread | Kalle (Grey Bay) 3, Marta (Copper Harbour Market) 3, Hauke (Skerry Harbour) 3, Bente (Smoke Harbour) 3, Momme (Crab Bay) 3 | Marta 5 | 4 |
 | Kelp Rope | Kalle (Grey Bay) 3, Marta (Copper Harbour Market) 3, Piet (Shipyard) 2, Hauke (Skerry Harbour) 3, Momme (Crab Bay) 3 | Jorin 3, Kalle 5, Marta 5, Hauke 5, Momme 5 | 3 |
 | Leather | Wilma (Copper Harbour Market) 5, Gesa (Harbour Quarter) 5 | Gesa 7 | 8 |
 | Leather Bag | Marta (Copper Harbour Market) 12 | Marta 14 | 17 |
 | Leather Boots | Marta (Copper Harbour Market) 14 | Marta 16 | 19 |
 | Linen | Marta (Copper Harbour Market) 8 | Marta 11 | 11 |
+| Mead | Marta (Copper Harbour Market) 5, Hauke (Skerry Harbour) 5, Bente (Smoke Harbour) 5, Momme (Crab Bay) 5 | – | 7 |
 | Mousetrap | Kalle (Grey Bay) 8, Marta (Copper Harbour Market) 8 | – | 12 |
 | Net | Kalle (Grey Bay) 8, Marta (Copper Harbour Market) 8, Ruben (Harbour Quarter) 8, Hauke (Skerry Harbour) 8 | Kalle 11, Marta 12, Piet 10, Ruben 11, Hauke 11 | 11 |
 | Pancake | Kalle (Grey Bay) 5, Marta (Copper Harbour Market) 5, Hauke (Skerry Harbour) 5, Bente (Smoke Harbour) 5, Momme (Crab Bay) 5 | – | 7 |
@@ -1409,6 +1413,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Grillhähnchen (\`craft grillhaehnchen\`) | 1 Hähnchen, 1 Treibholz | Hütte | satt 8 Std. |
 | Hühnersuppe ×2 (\`craft huehnersuppe\`) | 1 Hähnchen, 1 Möhre, 1 Kohl, 1 Kanne Wasser | Hütte | satt 8 Std. |
 | Käse (\`craft kaese\`) | 3 Milch, 1 Treibholz | Hütte | satt 8 Std. |
+| Honigbrot ×2 (\`craft honigbrot\`) | 1 Honig, 1 Brot | Hütte | satt 8 Std. |
 | Kerze ×2 (\`craft kerze\`) | 2 Wachs, 1 Leinen | Hütte |  |
 | Lammbraten (\`craft lammbraten\`) | 2 Lammfleisch, 1 Treibholz | Hütte | satt 12 Std. |
 | Pfannkuchen ×2 (\`craft pfannkuchen\`) | 2 Ei, 1 Mehl, 1 Milch, 1 Treibholz | Hütte | satt 6 Std. |
@@ -1433,6 +1438,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Leder (\`craft leder\`) | 1 Schaffell, 1 Salz | Gerberei |  |
 | Ziegenleder (\`craft ziegenleder\`) | 1 Ziegenfell, 1 Salz | Gerberei |  |
 | Bier ×2 (\`craft bier\`) | 3 Gerste, 1 Hopfen, 1 Kanne Wasser | Brauerei | satt 2 Std. |
+| Met ×2 (\`craft met\`) | 3 Honig, 1 Kanne Wasser | Brauerei | satt 3 Std. |
 | Glas ×2 (\`craft glas\`) | 3 Sand, 2 Treibholz | Glashütte |  |
 | Segelboot (\`craft segelboot\`) | 10 Bohle, 4 Leinen, 2 Tauwerk | Werft |  |
 | Bohle (\`craft bohle\`) | 2 Treibholz, mit Muschelmesser | Werkstatt |  |
@@ -1465,6 +1471,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Grillhähnchen (roast chicken) (\`craft grillhaehnchen\`) | 1 chicken meat, 1 driftwood | Hut | sated 8 h |
 | Hühnersuppe (chicken soup) ×2 (\`craft huehnersuppe\`) | 1 chicken meat, 1 carrot, 1 cabbage, 1 can of water | Hut | sated 8 h |
 | Käse (cheese) (\`craft kaese\`) | 3 milk, 1 driftwood | Hut | sated 8 h |
+| Honigbrot (honey bread) ×2 (\`craft honigbrot\`) | 1 honey, 1 bread | Hut | sated 8 h |
 | Kerze (candle) ×2 (\`craft kerze\`) | 2 wax, 1 linen | Hut |  |
 | Lammbraten (roast lamb) (\`craft lammbraten\`) | 2 lamb, 1 driftwood | Hut | sated 12 h |
 | Pfannkuchen (pancake) ×2 (\`craft pfannkuchen\`) | 2 eggs, 1 flour, 1 milk, 1 driftwood | Hut | sated 6 h |
@@ -1489,6 +1496,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Leder (leather) (\`craft leder\`) | 1 sheepskin, 1 salt | Tannery |  |
 | Ziegenleder (goat leather) (\`craft ziegenleder\`) | 1 goatskin, 1 salt | Tannery |  |
 | Bier (beer) ×2 (\`craft bier\`) | 3 barley, 1 hops, 1 can of water | Brewery | sated 2 h |
+| Met (mead) ×2 (\`craft met\`) | 3 honey, 1 can of water | Brewery | sated 3 h |
 | Glas (glass) ×2 (\`craft glas\`) | 3 sand, 2 driftwood | Glassworks |  |
 | Segelboot (sailing boat) (\`craft segelboot\`) | 10 plank, 4 linen, 2 cordage | Shipyard |  |
 | Bohle (plank) (\`craft bohle\`) | 2 driftwood, with shell knife | Workshop |  |
@@ -2020,7 +2028,7 @@ Bienen leben im **Bienenstock**, von Anfang an. Ein **Bienenvolk** kaufst du bei
 
 Bienen fressen **Blumen**: Strandnelke, Dünenrose, Nebelblume und Hopfen, die im [Zierbeet](help.game.garden#bed) wachsen. \`füttere\` gibt sie ihnen wie jedem Tier, eine Blume macht ein Volk einen Tag satt. Satt gibt jedes Volk alle zwei Tage einen Topf **Honig**, und auf drei Töpfe kommt ein Klumpen **Wachs** dazu; \`einsammeln\` holt beides. Ein starkes Volk schwärmt ab und zu, dann zieht ein neues ein, bis der Stock voll ist.
 
-Honig macht satt (\`iss honig\`). Am Herd einer **Hütte** zieht \`craft kerze\` aus 2 Wachs und 1 Leinen zwei Kerzen. Gesa kauft Honig und Wachs, Marta Honig und Kerzen, und die Schenke im Hafenviertel fragt an der Auftragstafel nach Honig.
+Honig macht satt (\`iss honig\`). Am Herd einer **Hütte** zieht \`craft kerze\` aus 2 Wachs und 1 Leinen zwei Kerzen, und \`craft honigbrot\` streicht 1 Honig auf 1 Brot: zwei Honigbrote (satt 8 Std.). In der **Brauerei** gärt \`craft met\` aus 3 Honig und einer Kanne Wasser zwei Krüge Met (satt 3 Std.); im Backhaus geht Honig in den Kuchen. Gesa kauft Honig und Wachs, Marta Honig und Kerzen, und die Schenke im Hafenviertel fragt an der Auftragstafel nach Honig und Met. Honigbrot kaufen Marta, Kalle und die Händler der anderen Inseln, Met Marta und die Händler der anderen Inseln ([Preise](help.game.trade#prices)).
 
 ## Schlachten und Küche {#slaughter}
 
@@ -2221,7 +2229,7 @@ Bees live in a **hive**, from the start. You buy a **bee colony** from Gesa; \`s
 
 Bees eat **flowers**: sea pink, dune rose, fog flower and hops, which grow in the [ornamental bed](help.game.garden#bed). \`fodder\` gives them flowers like any animal its feed; one flower keeps a colony fed for a day. Fed, each colony gives a pot of **honey** every other day, and a lump of **wax** comes with every three pots; \`collect\` fetches both. Now and then a strong colony swarms, and a new one moves in until the hive is full.
 
-Honey is food (\`eat honey\`). At a **hut's** hearth \`craft kerze\` makes two candles from 2 wax and 1 linen. Gesa buys honey and wax, Marta honey and candles, and the inn in the harbour quarter asks for honey at the job board.
+Honey is food (\`eat honey\`). At a **hut's** hearth \`craft kerze\` makes two candles from 2 wax and 1 linen, and \`craft honigbrot\` spreads 1 honey on 1 bread: two honey breads (sated 8 h). In the **brewery** \`craft met\` ferments two jugs of mead from 3 honey and a can of water (sated 3 h); in the bakehouse honey goes into the cake. Gesa buys honey and wax, Marta honey and candles, and the inn in the harbour quarter asks for honey and mead at the job board. Marta, Kalle and the traders of the other islands buy honey bread, Marta and the traders of the other islands mead ([prices](help.game.trade#prices)).
 
 ## Slaughtering and cooking {#slaughter}
 
