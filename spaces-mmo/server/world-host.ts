@@ -48,7 +48,7 @@ import { ClockGuard, runSchedules } from "./engine/schedule.ts";
 import { sweepSpots } from "./engine/occupancy.ts";
 import { SCHEDULE_HANDLERS, tickHandler } from "./engine/worldevents.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
-import { regionAddresses, regionWorld } from "./engine/regions.ts";
+import { regionAddresses, regionOfRoom, regionWorld } from "./engine/regions.ts";
 import { abortableSleep } from "./abort-sleep.ts";
 import { deliver } from "./engine/handover.ts";
 import { carryCouriers } from "./engine/courier.ts";
@@ -98,6 +98,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		}
 		return false;
 	};
+	await refuseOtherWorld(space, full, region).catch((e) => { conn.close(); for (const c of otherConns) c.close(); throw e; });
 	const loaded = await loadIntoSpace(space, w, region ? { elsewhere } : {}).catch((e) => { conn.close(); for (const c of otherConns) c.close(); throw e; });
 	const proc = announce(space, "world");
 	const delivering = region ? deliver(space, others, full, halt.signal) : Promise.resolve();
@@ -335,4 +336,20 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await world.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());
 	process.on("SIGTERM", () => void shutdown());
+}
+
+/** A world worker loads its own part of the world only (2026-11-11, docs/rust-portierung.en.md R8.6): once a worker that was
+ *  told no region loaded the whole world into a region's space, and its rooms, fires, fog and NPCs of the other regions
+ *  stayed there. Without a region it refuses a space that is a region's (an NPC was born there) or when the regions are
+ *  configured; in a region, a space that holds a room of another region. */
+export async function refuseOtherWorld(space: SpaceLike, full: WorldDef, region: string): Promise<void> {
+	if (!region) {
+		if (process.env.SPACES_MMO_REGIONS?.trim()) throw new Error("SPACES_MMO_REGIONS names regions but SPACES_MMO_REGION none: a world worker without a region would load the whole world into one region's space");
+		if ((await space.readAll({ type: "NpcBorn" }, { limit: 1 })).length) throw new Error("this space is a region's (it holds NpcBorn markers): start the world worker with SPACES_MMO_REGION");
+		return;
+	}
+	for (const e of await space.readAll({ type: "Room" })) {
+		const owner = regionOfRoom(full, String(e.fields.roomId));
+		if (owner !== null && owner !== region) throw new Error(`this space holds the room ${String(e.fields.roomId)} of the region ${owner}, not one of ${region}: the wrong space, or one the whole world was loaded into`);
+	}
 }

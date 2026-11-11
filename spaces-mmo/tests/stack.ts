@@ -174,6 +174,8 @@ export async function startRegions(o: { worldEnv?: Record<string, string>; worke
 		ids, accounts, list, space: (id: string) => conns.get(id)!.space,
 		/** The world workers, one per region (started already unless `workers: false`). */
 		workers,
+		/** One world worker of the region `id` with `extra` over its environment (rejects when it ends before ready). */
+		async worldProcess(id: string, extra: Record<string, string> = {}) { const c = await run("server/world-host.ts", { ...env(id), ...extra }, (l) => l.startsWith("[world] ready")); procs.push(c); return c; },
 		async npcProcess(id: string, extra: Record<string, string> = {}) {
 			// as in startStack: model NPCs ask the region's model process, started with the first of its npc processes
 			const all: Record<string, string> = { ...env(id), ...extra };

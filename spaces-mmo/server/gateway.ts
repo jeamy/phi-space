@@ -22,6 +22,7 @@ import { fieldView } from "./engine/commands/field.ts";
 import { wildKinds } from "./engine/commands/wild.ts";
 import { envMs } from "./space.ts";
 import { RegionSpaces } from "./region-spaces.ts";
+import { regionOfRoom } from "./engine/regions.ts";
 import { setting } from "./settings.ts";
 import type { WsConnection } from "phi-spaces/ws";
 import type { Appearance } from "./engine/appearance.ts";
@@ -408,7 +409,7 @@ export class Gateway {
 		let after: string | null = null, token: string | undefined;
 		do {
 			const page: Awaited<ReturnType<SpaceLike["readPage"]>> = await space.readPage(tmpl, { after, token, maxBytes: 256 * 1024 });
-			for (const e of page.items) this.#put(`${region}:${e.id}`, e.type, e.types, e.fields, msgs);
+			for (const e of page.items) if (!this.#foreign(region, e.type, e.types, e.fields)) this.#put(`${region}:${e.id}`, e.type, e.types, e.fields, msgs);
 			after = page.next; token = page.token;
 		} while (after !== null);
 	}
@@ -447,6 +448,7 @@ export class Gateway {
 						if (objId && !objs.has(objId)) objs.set(objId, this.#objs.get(objId)?.location ?? null);
 					};
 					for (const op of b.ops) {
+						if (op.op === "put" && this.#foreign(region, op.type, op.types, op.fields)) continue;
 						// a renewed session is the same session: the character did not change, nothing to announce
 						const id = key(op.id);
 						if (op.op === "put") { clock ||= op.type === "WorldClock"; if (!(op.type === "Session" && this.#sessions.has(id))) touch(op.id, op.fields, op.types); trade ||= ["Offer", "Order", "Listing", "Wanted"].includes(op.type); if (op.type === "SeedRest") seeking.add(String(op.fields.charId)); this.#put(id, op.type, op.types, op.fields, msgs); }
@@ -488,6 +490,29 @@ export class Gateway {
 	}
 
 	/** Applies a put; a message is collected in `msgs` to be sent after the batch. */
+	/** The room a thing of the world's rooms stands in (a room, its fog, fire, exits, what lies or is built there), or null
+	 *  for what is not bound to a room (a character, what one carries, messages, the market). */
+	#roomOf(type: string, types: string[] | undefined, fields: Record<string, unknown> | undefined): string | null {
+		if (!fields) return null;
+		const is = (t: string) => type === t || !!types?.includes(t);
+		if (is("Room")) return typeof fields.roomId === "string" ? fields.roomId : null;
+		if (is("Flame") || is("Contribution")) return this.w.beacons.find((b) => b.beaconId === fields.beaconId)?.room ?? null;
+		if (is("Item") || is("Exit")) return typeof fields.location === "string" ? fields.location : null;
+		if (["Fog", "Beacon", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Road"].some(is)) return typeof fields.room === "string" ? fields.room : null;
+		return null;
+	}
+
+	/** With regions a thing of the world's rooms counts only from the stream of the region its room lies in: a space that
+	 *  once held the whole world keeps old rooms, fires and fog of the others, and whichever stream came last would win
+	 *  (2026-11-11, docs/rust-portierung.en.md R8.6). A room no region knows (dug by a builder) counts from wherever. */
+	#foreign(region: string, type: string, types: string[] | undefined, fields: Record<string, unknown> | undefined): boolean {
+		if (this.#regions.size === 1) return false;
+		const room = this.#roomOf(type, types, fields);
+		if (room === null) return false;
+		const owner = regionOfRoom(this.w, room);
+		return owner !== null && owner !== region;
+	}
+
 	#put(id: string, type: string, types: string[], fields: Record<string, unknown>, msgs: MsgFields[]): void {
 		if (type === "WorldClock") this.#clock = fields as unknown as WorldClockFields;
 		if (type === "MillLoad") { this.#millLoads.set(id, fields as unknown as MillLoadFields); this.#atlasChanged(); return; }

@@ -25,7 +25,14 @@ below it is the consideration before.
   B already has is not written again.
 - **The web process** follows the change stream of every region (entries as "region:ID"), writes commands and the
   session of a figure into the region where it stands (immediately after a crossing), and distributes new guests in turn over
-  the start bays (`server/region-spaces.ts`). It writes settings and model choice into every region.
+  the start bays (`server/region-spaces.ts`). It writes settings and model choice into every region. A thing of the
+  world's rooms (a room, its fog, fire and contributions, exits, what lies or is built there) counts only from the stream
+  of the region its room lies in (`#foreign` in `server/gateway.ts`): a copy another region's space still holds is not
+  shown (since 2026-11-11; `tests/regions-foreign.test.ts`).
+- **A world worker loads only its own part** (`refuseOtherWorld` in `server/world-host.ts`): without `SPACES_MMO_REGION` it
+  refuses to start when `SPACES_MMO_REGIONS` is set or the space holds NpcBorn markers (it is a region's), and in a
+  region when the space holds a room of another region. Until 2026-11-11 nothing refused this, and a worker without a
+  region had once loaded the whole world into the west's space on big (docs/rust-portierung.en.md, R8.6).
 - **Moving a world from one Space** into the regions: `server/migrate-regions.ts` (every entry into the region of its
   room; `tests/migrate-regions.test.ts`: every figure exactly once, no coin lost).
 - **Operation:** compose profile `big` (`npm --prefix spaces-mmo run docker:big:up`), [betrieb.en.md](betrieb.en.md),

@@ -13,6 +13,7 @@ use mmo_engine::fire::key_text as txt;
 use mmo_engine::j;
 use mmo_engine::js;
 use mmo_engine::liner::{bays_of, liner_of};
+use mmo_engine::regions::region_of_room;
 use mmo_engine::settings::setting;
 use mmo_engine::source::{hex, random_bytes, time_now};
 use mmo_engine::space::{fields, tmpl, Space};
@@ -478,7 +479,7 @@ impl Gateway {
 		let (mut after, mut token): (Option<String>, Option<String>) = (None, None);
 		loop {
 			let page = space.remote().read_page(t, Some(256.0 * 1024.0), after.as_deref(), token.as_deref(), None, None).await?;
-			for e in j::a(&page, "items") { self.put(&format!("{region}:{}", txt(j::at(e, "id"))), j::s(e, "type"), j::a(e, "types"), j::at(e, "fields"), msgs); }
+			for e in j::a(&page, "items") { if self.foreign(region, j::s(e, "type"), j::a(e, "types"), j::at(e, "fields")) { continue; } self.put(&format!("{region}:{}", txt(j::at(e, "id"))), j::s(e, "type"), j::a(e, "types"), j::at(e, "fields"), msgs); }
 			after = j::so(&page, "next").map(str::to_owned);
 			token = j::so(&page, "token").map(str::to_owned);
 			if after.is_none() { return Ok(()); }
@@ -544,6 +545,7 @@ impl Gateway {
 		for op in ops {
 			let id = key(&txt(j::at(op, "id")));
 			let ty = j::s(op, "type");
+			if j::s(op, "op") == "put" && self.foreign(region, ty, j::a(op, "types"), j::at(op, "fields")) { continue; }
 			if j::s(op, "op") == "put" {
 				clock |= ty == "WorldClock";
 				let renewed = ty == "Session" && self.st.borrow().sessions.contains_key(&id);
@@ -601,6 +603,27 @@ impl Gateway {
 	}
 
 	fn shown_name(&self, char_id: &str, stored: &Json) -> Json { self.st.borrow().chars.get(char_id).map_or_else(|| stored.clone(), |c| j::at(c, "name").clone()) }
+
+	/// `#roomOf`: the room a thing of the world's rooms stands in (a room, its fog, fire, exits, what lies or is built
+	/// there), or None for what is not bound to a room (a character, what one carries, messages, the market).
+	fn room_of(&self, ty: &str, types: &[Json], f: &Json) -> Option<String> {
+		f.as_object()?;
+		let is = |t: &str| ty == t || types.iter().any(|x| x.as_str() == Some(t));
+		let text = |k: &str| j::at(f, k).as_str().map(str::to_owned);
+		if is("Room") { return text("roomId"); }
+		if is("Flame") || is("Contribution") { let b = txt(j::at(f, "beaconId")); return j::a(&self.w, "beacons").iter().find(|x| j::s(x, "beaconId") == b).map(|x| j::s(x, "room").to_owned()); }
+		if is("Item") || is("Exit") { return text("location"); }
+		if ["Fog", "Beacon", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Road"].iter().any(|t| is(t)) { return text("room"); }
+		None
+	}
+
+	/// `#foreign`: with regions a thing of the world's rooms counts only from the stream of the region its room lies in
+	/// (2026-11-11, docs/rust-portierung.en.md R8.6); a room no region knows counts from wherever.
+	fn foreign(&self, region: &str, ty: &str, types: &[Json], f: &Json) -> bool {
+		if self.regions.size() == 1 { return false; }
+		let Some(room) = self.room_of(ty, types, f) else { return false };
+		region_of_room(&self.w, &room).is_some_and(|owner| owner != region)
+	}
 
 	/// Applies a put; a message is collected in `msgs` to be sent after the batch.
 	fn put(&self, id: &str, ty: &str, types: &[Json], f: &Json, msgs: &mut Vec<Json>) {

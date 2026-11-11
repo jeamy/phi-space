@@ -19,7 +19,7 @@ use crate::j;
 use crate::loader::{ensure_tokens, load_into_space, LoadOptions};
 use crate::model::actor_token;
 use crate::occupancy::online_ids;
-use crate::regions::{region_world, regions_of};
+use crate::regions::{region_of_room, region_world, regions_of};
 use crate::source::{hex, random_bytes, time_now};
 use crate::space::{by_id, fields, tmpl, Error, Result, Space, FOREVER, HELD_WAIT_MS, NO_WAIT};
 use crate::transfer::{carry_waiting, Carrier};
@@ -281,6 +281,22 @@ fn region_addresses(w: &Json, whole: &str) -> Result<Vec<(String, String)>> {
 	Ok(out)
 }
 
+/// `refuseOtherWorld`: a world worker loads its own part of the world only (2026-11-11, docs/rust-portierung.en.md R8.6).
+/// Without a region it refuses a space that is a region's (an NPC was born there) or when the regions are configured;
+/// in a region, a space that holds a room of another region.
+pub async fn refuse_other_world(space: &Space, full: &Json, region: &str) -> Result<()> {
+	if region.is_empty() {
+		if !env("SPACES_MMO_REGIONS").trim().is_empty() { return Err(Error::Other("SPACES_MMO_REGIONS names regions but SPACES_MMO_REGION none: a world worker without a region would load the whole world into one region's space".into())); }
+		if !space.read_limit(&obj! { "type" => "NpcBorn" }, 1, None).await?.is_empty() { return Err(Error::Other("this space is a region's (it holds NpcBorn markers): start the world worker with SPACES_MMO_REGION".into())); }
+		return Ok(());
+	}
+	for e in space.read_all(&obj! { "type" => "Room" }, None).await? {
+		let room = key_text(j::at(fields(&e), "roomId"));
+		if let Some(owner) = region_of_room(full, &room) { if owner != region { return Err(Error::Other(format!("this space holds the room {room} of the region {owner}, not one of {region}: the wrong space, or one the whole world was loaded into"))); } }
+	}
+	Ok(())
+}
+
 /// Starts the world worker and runs it until `halt` turns true (`startWorld` and its close).
 pub async fn run_world(o: HostOptions, ready: impl FnOnce(), halt: watch::Receiver<bool>) -> Result<()> {
 	let full = crate::world::load_world(&o.root, &o.world)?;
@@ -293,6 +309,7 @@ pub async fn run_world(o: HostOptions, ready: impl FnOnce(), halt: watch::Receiv
 	// the other regions: to deliver what leaves this one, and so the loader spawns nothing that is there already
 	let mut others: Vec<(String, Space)> = Vec::new();
 	if !region.is_empty() { for (id, address) in region_addresses(&full, "")? { if id != region { others.push((id, connect(&address)?)); } } }
+	refuse_other_world(&space, &full, &region).await?;
 	let loaded = load_into_space(&space, &w, LoadOptions { replace: false, txn_ms: None, elsewhere: (!region.is_empty()).then(|| others.iter().map(|(_, s)| s.clone()).collect()) }).await?;
 	let proc = announce(space.clone(), "world", halt.clone());
 	if loaded.loaded { println!("[world] loaded {} version {}{}", j::s(&w, "id"), phi_json::number_text(j::n(&w, "version")), if loaded.spawned.is_empty() { String::new() } else { format!(", placed {}", loaded.spawned.join(", ")) }); }

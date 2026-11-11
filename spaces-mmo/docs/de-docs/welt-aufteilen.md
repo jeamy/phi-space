@@ -26,6 +26,14 @@ darunter ist die Überlegung davor.
 - **Der Web-Prozess** folgt dem Änderungsstrom jeder Region (Einträge als „Region:ID“), schreibt Befehle und die
   Sitzung einer Figur in die Region, in der sie steht (nach einer Überfahrt sofort), und verteilt neue Gäste reihum auf
   die Startbuchten (`server/region-spaces.ts`). Einstellungen und Modellwahl schreibt er in jede Region.
+  Ein Ding der Räume der Welt (ein Raum, sein Nebel, Feuer und Beiträge, Ausgänge, was dort liegt oder gebaut ist) zählt
+  nur aus dem Strom der Region, in der sein Raum liegt (`#foreign` in `server/gateway.ts`): eine Kopie, die der Space
+  einer anderen Region noch hält, wird nicht gezeigt (seit 2026-11-11; `tests/regions-foreign.test.ts`).
+- **Ein Weltprozess lädt nur seinen Teil** (`refuseOtherWorld` in `server/world-host.ts`): ohne `SPACES_MMO_REGION`
+  verweigert er den Start, wenn `SPACES_MMO_REGIONS` gesetzt ist oder der Space NpcBorn-Marken hält (er gehört einer
+  Region), und in einer Region, wenn der Space einen Raum einer anderen Region hält. Bis 2026-11-11 verhinderte das nichts,
+  und ein Prozess ohne Region hatte auf big einmal die ganze Welt in den Space des Westens geladen
+  (docs/rust-portierung.en.md, R8.6).
 - **Umzug einer Welt aus einem Space** in die Regionen: `server/migrate-regions.ts` (jeder Eintrag in die Region seines
   Raums; `tests/migrate-regions.test.ts`: jede Figur genau einmal, keine Münze verloren).
 - **Betrieb:** Compose-Profil `big` (`npm --prefix spaces-mmo run docker:big:up`), [betrieb.md](../betrieb.en.md),
