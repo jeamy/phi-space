@@ -397,7 +397,9 @@ async fn schlachte(c: &mut Ctx, arg: &str) -> Result<()> {
 	let said = js::trim(&no_article(&js::lower(js::trim(arg)))).to_owned();
 	let shop = j::opt(&bt, "shop").filter(|s| j::truthy(s)).cloned();
 	let me_at = me_xy(c);
-	let near_shop = match &shop { Some(s) => c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => j::at(s, "plan").clone() }), None).await?.iter().any(|e| dist_to(me_at, Rect::of(fields(e))) <= 1.0), None => false };
+	// (outside beside it, or inside at its block: interior.rs)
+	let shop_plan = shop.as_ref().map(|s| txt(j::at(s, "plan"))).filter(|p| !p.is_empty());
+	let near_shop = match &shop_plan { Some(p) => super::interior::near_buildings(c, Some("cook")).await?.iter().any(|b| j::s(b, "plan") == p), None => false };
 	let near_house = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().any(|e| { let f = fields(e); is_house(&d, f) && dist_to(me_at, Rect::of(f)) <= 1.0 });
 	let me = c.char_id().to_owned();
 	if near_shop && !near_house {

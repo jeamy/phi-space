@@ -56,8 +56,10 @@ async fn front_of(space: &Space, w: &Json, b: &Json) -> Result<Option<(f64, f64)
 	Ok(free_cell_near(w, &ground, (mid, r.y + r.h), &|k| blocked.contains(k) || exits.contains(k), 8))
 }
 
-fn inside_text(name: &str, def: &Json) -> String {
-	format!("Drinnen in der {name}: {}. „hinaus“ führt vor die Tür.", j::a(def, "furniture").iter().map(|f| txt(j::at(f, "name"))).collect::<Vec<_>>().join(", "))
+/// "Drinnen in der Hütte", "Drinnen im Backhaus": by the plan's dative ("einer Hütte", "einem Backhaus").
+fn inside_text(name: &str, dative: Option<&str>, def: &Json) -> String {
+	let pre = if js::re(r"^einem\b", "").test(dative.unwrap_or("")) { "im" } else { "in der" };
+	format!("Drinnen {pre} {name}: {}. „hinaus“ führt vor die Tür.", j::a(def, "furniture").iter().map(|f| txt(j::at(f, "name"))).collect::<Vec<_>>().join(", "))
 }
 
 /// `makeInterior`: the inside of `b`, written once (None when its room is there already, or its plan has none).
@@ -74,7 +76,7 @@ pub async fn make_interior(space: &Space, txn: &str, w: &Json, b: &Json) -> Resu
 	let mut building = obj! {};
 	for k in ["buildId", "name", "room", "x", "y", "w", "h", "accountId", "ownerName"] { j::set(&mut building, k, j::at(b, k).clone()); }
 	let room = obj! {
-		"roomId" => room_id.as_str(), "name" => format!("{pname} von {}", txt(j::at(b, "ownerName"))), "desc" => inside_text(&pname, def),
+		"roomId" => room_id.as_str(), "name" => format!("{pname} von {}", txt(j::at(b, "ownerName"))), "desc" => inside_text(&pname, j::opt(plan, "dative").and_then(Json::as_str), def),
 		"ground" => j::at(def, "ground").clone(), "spawn" => j::at(def, "spawn").clone(), "building" => building
 	};
 	space.write(&draft_of("Room", j::at(w, "typeclasses"), room.clone())?, Some(txn), FOREVER).await?;
@@ -222,7 +224,7 @@ async fn enterable(c: &Ctx, arg: &str) -> Result<Json> {
 	if houses.is_empty() {
 		return match near.first() {
 			Some(b) => refuse(format!("In {} geht man nicht hinein.", plan_of(c.w(), j::s(b, "plan")).and_then(|p| j::so(p, "dative")).map_or_else(|| txt(j::at(b, "name")), str::to_owned))),
-			None => not_understood("Geh direkt neben eine Hütte, in die du darfst."),
+			None => not_understood("Geh direkt neben eine Hütte (ein Backhaus, eine Metzgerei), in die du darfst."),
 		};
 	}
 	Ok(houses.iter().find(|b| is_owner(c, b)).or_else(|| houses.iter().find(|b| may_enter(c, b))).unwrap_or(&houses[0]).to_owned().clone())
@@ -257,9 +259,9 @@ async fn own_house(c: &Ctx) -> Result<Json> {
 	};
 	let house = |x: &Json| interior_def(c.w(), j::s(x, "plan")).is_some();
 	let Some(b) = all.iter().find(|x| house(x) && is_owner(c, x)) else {
-		return refuse(if all.iter().any(house) { "Einladen kann nur, wem die Hütte gehört." } else { "Stell dich neben deine Hütte oder geh hinein." });
+		return refuse(if all.iter().any(house) { "Einladen kann nur, wem der Bau gehört." } else { "Stell dich neben deine Hütte (oder dein Backhaus, deine Metzgerei) oder geh hinein." });
 	};
-	let Some(e) = c.space.take(&tmpl("Building", obj! { "buildId" => j::at(b, "buildId").clone() }), 5_000.0, c.txn()).await? else { return refuse("Die Hütte ist gerade nicht greifbar; bitte noch einmal.") };
+	let Some(e) = c.space.take(&tmpl("Building", obj! { "buildId" => j::at(b, "buildId").clone() }), 5_000.0, c.txn()).await? else { return refuse("Der Bau ist gerade nicht greifbar; bitte noch einmal.") };
 	Ok(fields(&e).clone())
 }
 const GUESTS_MAX: usize = 12;
@@ -279,7 +281,7 @@ async fn einladen(c: &mut Ctx, arg: &str) -> Result<()> {
 		return refuse(format!("Eine Figur „{}“ gibt es hier nicht.", js::slice16(&n, 0, Some(30))));
 	};
 	let wname = txt(j::at(&who, "name"));
-	if j::s(&who, "charId") == me { return refuse("In deine eigene Hütte darfst du ohnehin."); }
+	if j::s(&who, "charId") == me { return refuse("In deinen eigenen Bau darfst du ohnehin."); }
 	if guests.iter().any(|g| j::at(g, "charId") == j::at(&who, "charId")) { return refuse(format!("{wname} ist schon eingeladen.")); }
 	if guests.len() >= GUESTS_MAX { return refuse(format!("Mehr als {GUESTS_MAX} Gäste lädt man nicht ein; „ausladen <name>“ macht Platz.")); }
 	let mut more = guests;

@@ -1945,7 +1945,23 @@ fn roads_and_insides() {
 	w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-bucht", "until" => 9e15, "litAt" => 0.0 } });
 	stand(&mut w, 1, "graue-bucht", 5.0, 13.0);
 	for (who, line) in [(&a, "look"), (&a, "nachlass"), (&a, "bau regentonne"), (&a, "arbeite"), (&a, "arbeite"), (&a, "arbeite"), (&b, "betrete"), (&b, "abriss"), (&b, "look")] { run(&mut w, who, line); }
+	// a bakehouse and a butcher's shop from inside: the oven bakes, the block slaughters a carried animal
+	w.write(building("bk-1", "backhaus", "Backhaus", "graue-bucht", 18.0, 10.0, (2.0, 2.0), 1));
+	w.write(building("m-1", "metzgerei", "Metzgerei", "graue-bucht", 12.0, 10.0, (2.0, 2.0), 1));
+	for (p, k) in [("mehl", 2), ("wasserkanne", 1), ("treibholz", 1), ("huhn", 2), ("schlachtmesser", 3)] { give(&mut w, &a, p, k); }
+	w.tick("sweep");
+	stand(&mut w, 1, "graue-bucht", 18.0, 12.0);
+	for (who, line) in [(&a, "betrete"), (&a, "look"), (&a, "craft brot"), (&e, "betrete backhaus")] { run(&mut w, who, line); }
+	stand(&mut w, 1, "in-bk-1", 2.0, 2.0);
+	for (who, line) in [(&a, "craft brot"), (&a, "hinaus")] { run(&mut w, who, line); }
+	stand(&mut w, 1, "graue-bucht", 12.0, 12.0);
+	for (who, line) in [(&a, "schlachte huhn"), (&a, "einladen Wanderer4"), (&a, "einladen Wanderer1"), (&a, "betrete"), (&a, "schlachte huhn")] { run(&mut w, who, line); }
+	stand(&mut w, 1, "in-m-1", 2.0, 3.0);
+	for (who, line) in [(&a, "schlachte huhn"), (&a, "truhe")] { run(&mut w, who, line); }
+	stand(&mut w, 1, "in-m-1", 4.0, 3.0);
+	for (who, line) in [(&a, "truhe"), (&a, "verstaue mehl"), (&a, "inventory"), (&a, "hinaus")] { run(&mut w, who, line); }
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 10, "{said:?}");
+	assert!(w.entries_with("Drinnen im Backhaus") >= 1, "no bakehouse inside");
 	assert!(w.entries_with("steht nicht mehr; du stehst draußen") >= 1, "nobody was put out");
 	assert!(w.entries_with("Ausgeruht: noch") >= 1, "no rested work");
 }

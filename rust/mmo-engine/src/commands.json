@@ -316,7 +316,7 @@
 				"eintreten",
 				"enter"
 			],
-			"help": "betrete [x y] – in die Hütte neben dir gehen: die eigene oder eine, in die man eingeladen ist; „hinaus“ führt wieder vor die Tür"
+			"help": "betrete [x y] – in den Bau neben dir gehen (Hütte, Backhaus, Metzgerei): den eigenen oder einen, in den man eingeladen ist; „hinaus“ führt wieder vor die Tür"
 		},
 		{
 			"module": "interior",
@@ -325,7 +325,7 @@
 				"lade",
 				"invite"
 			],
-			"help": "einladen [name] – jemanden in die eigene Hütte einladen (neben ihr oder drinnen); ohne Namen: wer eingeladen ist"
+			"help": "einladen [name] – jemanden in den eigenen Bau einladen, Hütte, Backhaus oder Metzgerei (neben ihm oder drinnen); ohne Namen: wer eingeladen ist"
 		},
 		{
 			"module": "interior",
@@ -333,7 +333,7 @@
 			"aliases": [
 				"uninvite"
 			],
-			"help": "ausladen <name> – eine Einladung in die eigene Hütte zurücknehmen; wer drinnen ist, steht dann draußen"
+			"help": "ausladen <name> – eine Einladung in den eigenen Bau zurücknehmen; wer drinnen ist, steht dann draußen"
 		},
 		{
 			"module": "sleep",
