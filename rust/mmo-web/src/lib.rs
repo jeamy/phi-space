@@ -382,6 +382,8 @@ pub async fn run_web(root: PathBuf, ready: impl FnOnce(&str), mut halt: watch::R
 		tokio::select! {
 			a = listener.accept() => {
 				let Ok((stream, peer)) = a else { continue };
+				// as node's http server does: a small frame goes out at once, not after the peer's delayed ACK
+				let _ = stream.set_nodelay(true);
 				let web = web.clone();
 				tokio::task::spawn_local(async move {
 					let svc = hyper::service::service_fn(move |req| web.clone().handle(req, peer));
