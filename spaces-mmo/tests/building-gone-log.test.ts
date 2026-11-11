@@ -31,7 +31,7 @@ test("a building torn down says so in the world's log, with who and where", { ti
 		const now = await worldNowOf(s);
 		await s.write({ type: "Building", fields: { buildId: "b-gone", plan: "huette", name: "Hütte", room: c.room, x: c.x + 1, y: c.y - 1, w: 2, h: 2, owner: me, ownerName: "Abreisserin", accountId: c.accountId, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: now + 7 * 24 * 3600_000, builtAt: now } as never }, null, FOREVER);
 		await does(p, "abriss hütte", "reißt die Hütte ab");
-		const line = await eventually(() => log.split("\n").find((l) => l.includes("[world] building gone: b-gone")) ?? null, 10_000, "the log line");
+		const line = await eventually(async () => log.split("\n").find((l) => l.includes("[world] building gone: b-gone")) ?? null, 10_000, "the log line");
 		assert.equal(line, `[world] building gone: b-gone huette of Abreisserin in ${c.room} at ${c.x + 1},${c.y - 1}: torn down by Abreisserin`);
 		await p.leave();
 	} finally { await srv.close(); }
