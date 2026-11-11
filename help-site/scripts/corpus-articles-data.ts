@@ -267,7 +267,7 @@ Der Kern (\`src/core.ts\`) ist eine reine, deterministische Zustandsmaschine ohn
 │ Schicht 3: Lokaler Client & Netzwerkdienst                                 │
 │  client.ts (PhiSpaces) · index.ts (Zustellung, Reaper) · service.ts        │
 │  remote.ts (RemoteSpace) · socket.ts · space-client.ts · ws.ts             │
-│  standalone.ts · pi-server.ts · meter.ts                                   │
+│  standalone.ts · space-client.ts · meter.ts                                │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ Schicht 2: Eigener Speicher, Claims, Streams, Snapshots & Mailboxes        │
 │  store/ (host · sqlite · sqlite-writer · disk-map · sync-sqlite)           │
@@ -352,7 +352,7 @@ The core (\`src/core.ts\`) is a pure, deterministic state machine with no networ
 │ Layer 3: Local Client & Network Service                                    │
 │  client.ts (PhiSpaces) · index.ts (delivery, reaper) · service.ts          │
 │  remote.ts (RemoteSpace) · socket.ts · space-client.ts · ws.ts             │
-│  standalone.ts · pi-server.ts · meter.ts                                   │
+│  standalone.ts · space-client.ts · meter.ts                                │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ Layer 2: Own Store, Claims, Streams, Snapshots & Mailboxes                 │
 │  store/ (host · sqlite · sqlite-writer · disk-map · sync-sqlite)           │
@@ -2065,7 +2065,7 @@ Stand 30.10.2026, verglichen mit dem veröffentlichten Release 1.4.0 (\`docs/ver
 | **Commit-Verarbeitung** | Ein Schreib-Thread bündelt Commits; der nächste Commit darf schon auf dem vorbereiteten Zustand aufsetzen; Antworten warten aufs dauerhafte Schreiben | Eine Mutationslinie bleibt während des Storage-Aufrufs belegt |
 | **Standard-Sync** | WAL mit \`synchronous=FULL\` | Node-SQLite: WAL mit \`synchronous=NORMAL\` |
 | **Speicherplattformen** | Eigener Memory- und Node-SQLite-Store | Memory, SQLite, JSONL, IndexedDB und Cloudflare-Durable-Object-SQLite |
-| **Netzwerkdienst** | In-Process, Unix-Socket, TCP, Adapter für pi-server | Harness-/Storage-Bibliothek; Netzwerkhosting ist eine zusätzliche Integration |
+| **Netzwerkdienst** | In-Process, Unix-Socket, TCP | Harness-/Storage-Bibliothek; Netzwerkhosting ist eine zusätzliche Integration |
 
 Die Tabelle vergleicht Standards, keine Leistung: Einen kontrollierten Benchmark gegen 1.4.0 gibt es nicht. Die Speicherdateien sind nicht austauschbar. Seit 1.4.0 ist „pi-durable schreibt immer das ganze Dokument“ ebenfalls falsch: Jede Dokumentdefinition legt mit \`checkpointWhen\` fest, wann eine vollständige Basis entsteht.
 
@@ -2137,7 +2137,7 @@ As of 2026-10-30, compared with the published release 1.4.0 (\`docs/vergleich-pi
 | **Commit handling** | A writer thread bundles commits; the next commit may build on the prepared state; replies wait for the durable write | One mutation line stays occupied during the storage call |
 | **Default sync** | WAL with \`synchronous=FULL\` | Node SQLite: WAL with \`synchronous=NORMAL\` |
 | **Storage platforms** | Own memory and Node SQLite store | Memory, SQLite, JSONL, IndexedDB and Cloudflare Durable Object SQLite |
-| **Network service** | In-process, Unix socket, TCP, adapter for pi-server | Harness/storage library; network hosting is an additional integration |
+| **Network service** | In-process, Unix socket, TCP | Harness/storage library; network hosting is an additional integration |
 
 The table compares defaults, not performance: there is no controlled benchmark against 1.4.0. The store files are not interchangeable. Since 1.4.0, "pi-durable always writes the whole document" is false too: each document definition sets through \`checkpointWhen\` when a full base is written.
 

@@ -48,7 +48,7 @@ Stand 30.10.2026, verglichen mit dem veröffentlichten Release 1.4.0 (`docs/verg
 | **Commit-Verarbeitung** | Ein Schreib-Thread bündelt Commits; der nächste Commit darf schon auf dem vorbereiteten Zustand aufsetzen; Antworten warten aufs dauerhafte Schreiben | Eine Mutationslinie bleibt während des Storage-Aufrufs belegt |
 | **Standard-Sync** | WAL mit `synchronous=FULL` | Node-SQLite: WAL mit `synchronous=NORMAL` |
 | **Speicherplattformen** | Eigener Memory- und Node-SQLite-Store | Memory, SQLite, JSONL, IndexedDB und Cloudflare-Durable-Object-SQLite |
-| **Netzwerkdienst** | In-Process, Unix-Socket, TCP, Adapter für pi-server | Harness-/Storage-Bibliothek; Netzwerkhosting ist eine zusätzliche Integration |
+| **Netzwerkdienst** | In-Process, Unix-Socket, TCP | Harness-/Storage-Bibliothek; Netzwerkhosting ist eine zusätzliche Integration |
 
 Die Tabelle vergleicht Standards, keine Leistung: Einen kontrollierten Benchmark gegen 1.4.0 gibt es nicht. Die Speicherdateien sind nicht austauschbar. Seit 1.4.0 ist „pi-durable schreibt immer das ganze Dokument“ ebenfalls falsch: Jede Dokumentdefinition legt mit `checkpointWhen` fest, wann eine vollständige Basis entsteht.
 

@@ -534,7 +534,7 @@
       "id": "pkg_remote",
       "owner": "remote",
       "kind": "runtime_service",
-      "repository": "phi-spaces/src/service.ts + remote.ts + socket.ts + standalone.ts + space-client.ts + ws.ts + pi-server.ts",
+      "repository": "phi-spaces/src/service.ts + remote.ts + socket.ts + standalone.ts + space-client.ts + ws.ts",
       "title": {
         "de": "SpaceService, RemoteSpace & Socket/TCP-Transport",
         "en": "SpaceService, RemoteSpace & Socket/TCP Transport"

@@ -13,7 +13,7 @@ implemented.
 |---|---|
 | pi-durable harness | in pi-serverd: runs conversations and stores them in `harness.sqlite`; since the [changeover](umstellung-ohne-pi-durable.en.md) the Spaces live in the phi-spaces store (`space.sqlite`), not in the harness |
 | phi-spaces | library with its own store (`src/store/`); agent tools as an extension in the harness (`agent/`); default Space version 5; named Spaces through registry and document family |
-| Clients | `PhiSpaces` locally, `RemoteSpace` over Unix socket/TCP/pi-server, `FederatedSpace` through the router |
+| Clients | `PhiSpaces` locally, `RemoteSpace` over Unix socket/TCP, `FederatedSpace` through the router |
 | Reaper and delivery | `startService` handles expiry, follow-up work and events |
 | Stage 1 (WP 1.1–1.9) | signed generations, claims, snapshot/byte pages, mailboxes, budgets, CompletionProfile |
 | Stage 1b | gate (layer A NetBird, layer B key proof), enrollment, grants, rotation, supervisor (`createEnroll`, `revokePeer`, `rotateKey`), recovery register, control/data restore, boot authorization per Space; accepted live on big/vpsc and with the phone |

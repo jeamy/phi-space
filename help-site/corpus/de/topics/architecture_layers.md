@@ -40,7 +40,7 @@ Der Kern (`src/core.ts`) ist eine reine, deterministische Zustandsmaschine ohne 
 │ Schicht 3: Lokaler Client & Netzwerkdienst                                 │
 │  client.ts (PhiSpaces) · index.ts (Zustellung, Reaper) · service.ts        │
 │  remote.ts (RemoteSpace) · socket.ts · space-client.ts · ws.ts             │
-│  standalone.ts · pi-server.ts · meter.ts                                   │
+│  standalone.ts · space-client.ts · meter.ts                                │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ Schicht 2: Eigener Speicher, Claims, Streams, Snapshots & Mailboxes        │
 │  store/ (host · sqlite · sqlite-writer · disk-map · sync-sqlite)           │

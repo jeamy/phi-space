@@ -1,7 +1,7 @@
 // `node --import ./test/support/no-durable.mjs …`: every import of pi-durable, chord or pi-ai from this repository's own
 // files fails, in this thread and in worker threads (the SQLite writer). The U3 acceptance runs the standalone service
 // and its clients under it, so they are shown to need none of them (docs/umstellung-ohne-pi-durable.en.md, U3).
-// Packages from elsewhere (the mobile runtime's pi-server and pi-client, which a test loads from its checkout) may use
+// Packages from elsewhere (the mobile runtime's, which a test loads from its checkout) may use
 // their own dependencies: only an import whose importer is a file of this repository outside node_modules is refused.
 import { register } from "node:module";
 

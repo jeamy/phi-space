@@ -246,11 +246,10 @@ consumer mailbox (`target: "self"` or the own `hello.principal`). `events({ mail
 delivered prefix. After an epoch change continue with the new cursor supplied.
 A delivered take carries its own txn; it is explicitly committed/aborted.
 
-`withSpaceService(existingServerServices, service, trustedConnection)` extends the existing
-pi-server with `serviceId: "space"`. The client uses
-`piServerTransport(call => client.request({ serverId }, call))`. In the sibling project
-Space RPC is explicitly activated with `PI_SERVERD_SPACE_PRINCIPAL` and `PI_SERVERD_SPACE_ROLES`.
-An identity sent by the client does not overwrite the trusted connection context.
+In the sibling project pi-serverd serves Space RPC on a socket of its own (`serveSpace`, `PI_SERVERD_SPACE_SOCK`),
+explicitly activated with `PI_SERVERD_SPACE_PRINCIPAL` and `PI_SERVERD_SPACE_ROLES` or by its federation; clients use
+`connectSpace("unix:<path>")`. An identity sent by the client does not overwrite the trusted connection context.
+Its conversations are calls over a space on a further socket ([m1-mobile](m1-mobile.en.md)).
 
 The service authenticates through `IdentityAdapter`, not through principals
 transmitted by the client. `Policy` limits methods and entry types per role.
@@ -324,8 +323,8 @@ must be proven by the calling service. Details and open wiring are in
 
 `startConfiguredFederation(host, ctx, privateConfigFile)` checks private
 key/configuration files, ownership of the listen IP according to NetBird,
-external authority and boot permission. The returned `service` serves the
-native pi-server adapter: its peer ID and groups are determined anew on the server side per
+external authority and boot permission. The returned `service` serves a
+local socket (pi-serverd's space socket): its peer ID and groups are determined anew on the server side per
 call. `trustedConnection()` creates the matching context;
 `close()` ends gate, supervisor, maintenance and own register connections.
 Configuration and SSH endpoints are explained in [ap1b-betrieb.md](_attic/abnahme/ap1b-betrieb.en.md).
@@ -969,7 +968,6 @@ a commit, and are no separate write path.
 | `Call`, `Reply`, `ErrorCode`, `Connection` | Call and reply envelope, error codes, what a transport knows about a connection |
 | `MergeAdapter`, `MergeTypeNotExclusive` | lww/set types of a Space through its replication controller; exclusive operation on such a type |
 | `ServeOptions`, `SpaceServer`, `SocketTransport`, `ConnectOptions`, `RemoteOptions` | Options and returns of `serveSpace`, `socketTransport` and `connectSpace` |
-| `RoutedServices`, `RoutedAttachment`, `RoutedCall` | Structural types of the pi-server adapter |
 
 ### Gate, keys, enrollment and supervisor
 

@@ -154,6 +154,24 @@ Space. The agent host is a federation Member (`PI_SERVERD_FEDERATION_CONFIG`).
      build now refuses a packaged module that imports a sibling it does not package.
 4. Then remove pi-server, pi-client, pi-protocol and the Chord 1.1.0 overrides. In phi-spaces this touches
    `src/pi-server.ts` and `npm run test:pi-server`, so it is planned on its own.
+   **Done 2026-11-11.**
+   - pi-serverd has two sockets, both `serveSpace`:
+     - The conversation socket (`PI_SERVERD_SOCK`, the one the phone forwards over SSH) serves a store of its own
+       in memory. That store holds nothing but the calls, with a reaper, and its peer `ssh` reaches none of the
+       daemon's Spaces.
+     - Space RPC on the daemon's store is on `PI_SERVERD_SPACE_SOCK`. It exists only with
+       `PI_SERVERD_SPACE_PRINCIPAL`/`PI_SERVERD_SPACE_ROLES` or a federation.
+   - `PI_SERVERD_REMOTE_SPACE` still adds a federation Space.
+   - pi-termux-mobile `attachRemote` keeps its interface: SSH tunnel, then `connectSpace` and `callRemote`.
+     - A tunnel that exits or a transport error is reported as lost; an error the host answers is not.
+     - `requestTimeoutMs` bounds every call, the 25 s long poll of `events` included.
+     - A daemon whose update was declined and that does not answer gets the message to allow the update.
+   - The SSH provisioning ships `remote-calls.mjs` too (it was missing since step 1); a test holds the shipped
+     modules' imports against the list.
+   - In phi-spaces, `src/pi-server.ts` (`withSpaceService`, `piServerTransport`, the `Routed*` types) and
+     `test/test-pi-server.test.ts` are gone.
+   - `agent/test/pi-serverd.test.ts` holds the built bundle in the real pi-serverd over both sockets.
+   - The mobile runtime has one Chord, 1.5.2, and no overrides.
 
 ## Still open
 

@@ -31,7 +31,6 @@ export { EnrollmentService, SpaceKeyDirectory, createEnroll, bootstrapEnroll, re
 export { ProvingService, MemoryKeyDirectory, generateKey, verifySignature, signedBytes, AUTH_PROTOCOL, CHALLENGE_TTL_MS, DEFAULT_PRIVILEGED, type Algorithm, type Challenge, type KeyDirectory, type PeerKeyRec, type Signer, type AuthState, type ProvingOptions } from "./auth.ts";
 export { startGate, NetbirdDirectory, GateIdentity, DirectoryDown, DEFAULT_GROUP_ROLES, rolesOf, type Gate, type GateOptions, type PeerDirectory, type PeerInfo, type GroupRoles, type NetbirdDirectoryOptions } from "./gate.ts";
 export { serveSpace, socketTransport, type ServeOptions, type SpaceServer, type SocketTransport, type ListenTarget } from "./socket.ts";
-export { withSpaceService, piServerTransport, type RoutedServices, type RoutedAttachment, type RoutedCall } from "./pi-server.ts";
 export { RemoteSpace, inProcessTransport, RemoteError, OutcomeUnknown, CommitSealedPending, UnsupportedOperation, type Transport, type RemoteOptions } from "./remote.ts";
 export { cutText, parseTarget, connectSpace, StillHeld, readExisting, takeExisting, peek, takeAll, awaitWork, keepAlive, type ConnectOptions } from "./space-client.ts";
 export { ROOT_METHODS, isRootMethod, rootCall } from "./root-wire.ts";

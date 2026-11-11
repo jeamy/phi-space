@@ -40,7 +40,7 @@ The core (`src/core.ts`) is a pure, deterministic state machine with no network,
 │ Layer 3: Local Client & Network Service                                    │
 │  client.ts (PhiSpaces) · index.ts (delivery, reaper) · service.ts          │
 │  remote.ts (RemoteSpace) · socket.ts · space-client.ts · ws.ts             │
-│  standalone.ts · pi-server.ts · meter.ts                                   │
+│  standalone.ts · space-client.ts · meter.ts                                │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ Layer 2: Own Store, Claims, Streams, Snapshots & Mailboxes                 │
 │  store/ (host · sqlite · sqlite-writer · disk-map · sync-sqlite)           │

@@ -48,7 +48,7 @@ As of 2026-10-30, compared with the published release 1.4.0 (`docs/vergleich-pi-
 | **Commit handling** | A writer thread bundles commits; the next commit may build on the prepared state; replies wait for the durable write | One mutation line stays occupied during the storage call |
 | **Default sync** | WAL with `synchronous=FULL` | Node SQLite: WAL with `synchronous=NORMAL` |
 | **Storage platforms** | Own memory and Node SQLite store | Memory, SQLite, JSONL, IndexedDB and Cloudflare Durable Object SQLite |
-| **Network service** | In-process, Unix socket, TCP, adapter for pi-server | Harness/storage library; network hosting is an additional integration |
+| **Network service** | In-process, Unix socket, TCP | Harness/storage library; network hosting is an additional integration |
 
 The table compares defaults, not performance: there is no controlled benchmark against 1.4.0. The store files are not interchangeable. Since 1.4.0, "pi-durable always writes the whole document" is false too: each document definition sets through `checkpointWhen` when a full base is written.
 

@@ -1647,7 +1647,7 @@ const remote = new RemoteSpace(socketTransport({ path: "/tmp/space.sock" }), { s
 ## Rollen und Fehlerbild {#parameters}
 
 - **\`SpaceService\`**: Transportunabhängige Fassade vor \`SpaceHost\`; ordnet jeder Verbindung über \`IdentityAdapter\` einen vertrauenswürdigen \`Principal\` zu und erzwingt Rollen-Policies.
-- **\`serveSpace\`**: Bindet den Service an Unix-Socket (\`{ path }\`) oder TCP (\`{ host, port }\`). Für den vorhandenen pi-server gibt es \`withSpaceService\` und \`piServerTransport\`.
+- **\`serveSpace\`**: Bindet den Service an Unix-Socket (\`{ path }\`) oder TCP (\`{ host, port }\`).
 - **\`RemoteSpace\`**: Vollständiger \`SpaceLike\`-Client mit Retry-Identität; blockierende Calls kehren bei Transportabbruch als \`OutcomeUnknown\` zurück und werden per \`pollOperation\` aufgelöst. Zusätzlich bietet er \`probe\`, \`batch\`, \`readChain\`, \`spaces()\` und \`statsWithRevision()\`; ein Feature, das ein älterer Server nicht kennt, ergibt \`UnsupportedOperation\`.
 - **\`inProcessTransport\`**: Dieselbe Client-Fassade ohne Netzwerk – ideal für Tests der Remote-Grenze.
 - **Fehler**: Der Dienst überträgt Fehlercodes; \`RemoteSpace\` baut daraus \`RemoteError\` oder die lokale Fehlerklasse. Nicht klassifizierte Fehler kommen als \`Internal\` mit der Meldung \`internal error\` an, den Grund protokolliert nur der Host.
@@ -1705,7 +1705,7 @@ const remote = new RemoteSpace(socketTransport({ path: "/tmp/space.sock" }), { s
 ## Roles And Failure Modes {#parameters}
 
 - **\`SpaceService\`**: Transport-independent facade over \`SpaceHost\`; assigns each connection a trusted \`Principal\` via \`IdentityAdapter\` and enforces role policies.
-- **\`serveSpace\`**: Binds the service to a Unix socket (\`{ path }\`) or TCP (\`{ host, port }\`). For the existing pi-server there are \`withSpaceService\` and \`piServerTransport\`.
+- **\`serveSpace\`**: Binds the service to a Unix socket (\`{ path }\`) or TCP (\`{ host, port }\`).
 - **\`RemoteSpace\`**: Full \`SpaceLike\` client with stable retry identity; blocking calls return \`OutcomeUnknown\` on transport failure and are resolved via \`pollOperation\`. It also offers \`probe\`, \`batch\`, \`readChain\`, \`spaces()\`, and \`statsWithRevision()\`; a feature an older server does not know gives \`UnsupportedOperation\`.
 - **\`inProcessTransport\`**: The same client facade without networking – ideal for testing the remote boundary.
 - **Errors**: The service sends error codes; \`RemoteSpace\` turns them into \`RemoteError\` or the local error class. Unclassified errors arrive as \`Internal\` with the message \`internal error\`, and only the host logs the cause.

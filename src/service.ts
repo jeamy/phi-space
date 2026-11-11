@@ -202,7 +202,7 @@ export class SpaceService {
 
 	async handle(call: unknown, conn: Connection, transportFrameBytes = core.DEFAULT_LIMITS.maxFrameBytes, rawBytes?: number): Promise<Reply> {
 		let responseFrame = transportFrameBytes;
-		if (rawBytes === undefined) call = wellFormed(call); // not through handleText: a pi-server call, an object
+		if (rawBytes === undefined) call = wellFormed(call); // not through handleText: a call handed over as an object (an in-process host, a federation's native service)
 		try {
 			if (!isObj(call) || typeof call.method !== "string") throw new Bad("a call is an object with a method");
 			if (!(METHODS as readonly string[]).includes(call.method)) return fail("UnsupportedMethod", `unknown method ${call.method}`);

@@ -27,7 +27,7 @@ const remote = new RemoteSpace(socketTransport({ path: "/tmp/space.sock" }), { s
 ## Roles And Failure Modes {#parameters}
 
 - **`SpaceService`**: Transport-independent facade over `SpaceHost`; assigns each connection a trusted `Principal` via `IdentityAdapter` and enforces role policies.
-- **`serveSpace`**: Binds the service to a Unix socket (`{ path }`) or TCP (`{ host, port }`). For the existing pi-server there are `withSpaceService` and `piServerTransport`.
+- **`serveSpace`**: Binds the service to a Unix socket (`{ path }`) or TCP (`{ host, port }`).
 - **`RemoteSpace`**: Full `SpaceLike` client with stable retry identity; blocking calls return `OutcomeUnknown` on transport failure and are resolved via `pollOperation`. It also offers `probe`, `batch`, `readChain`, `spaces()`, and `statsWithRevision()`; a feature an older server does not know gives `UnsupportedOperation`.
 - **`inProcessTransport`**: The same client facade without networking – ideal for testing the remote boundary.
 - **Errors**: The service sends error codes; `RemoteSpace` turns them into `RemoteError` or the local error class. Unclassified errors arrive as `Internal` with the message `internal error`, and only the host logs the cause.
