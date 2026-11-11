@@ -82,6 +82,11 @@ pub fn purge(service: &mut Service, cfg: Retention) -> R<Option<String>> {
 	let now = service.now();
 	let reader = service.store.reader(Some(ALIAS))?;
 	let space = &reader.space;
+	// as startRetention: the cheap count first; stats measures the whole document (a full serialization) and runs only
+	// above the cap
+	if space.count(now, &Template::Any, None, None)?.as_f64().unwrap_or(0.0) <= cfg.cap {
+		return Ok(None);
+	}
 	let visible = space.stats(now)?.get("entries").and_then(Json::as_f64).unwrap_or(0.0);
 	if visible <= cfg.cap {
 		return Ok(None);

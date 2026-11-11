@@ -85,7 +85,7 @@ owner lock of the store, the second aborts.
 
 The projects on phi-spaces run their Spaces in separate processes, each holding the owner lock of its store.
 The dashboard therefore does not open these stores, but connects as a client to their socket
-(`connectSpace`) and uses only calls that leave nothing behind: `stats` (every 2 s per app) and `readAll` pages for the
+(`connectSpace`) and uses only calls that leave nothing behind: `stats` (every 2 s per app, a slower one less often: see below) and `readAll` pages for the
 entry list — no `read`/`take`, so no request claims and no locks. The entry list reads the first
 `after + limit + 1` entries in one call and cuts in the dashboard (upper limit 2000), so that no
 page snapshot stays behind in the Space of the app.
@@ -143,7 +143,10 @@ itself has **no writing endpoint**.
 
 ## Interface
 
-**Live per app.** Every measurement (every 2 s, an app with `@*` every 10 s) becomes a point; the dashboard keeps the last 450
+**Live per app.** `stats` measures the whole document of a Space, which on a big one (the swarm Space with about 19,000
+entries) takes a few hundred ms of its server. So an app is read again only 50 times its last poll's time later
+(`APP_COST_SHARE`): the dashboard costs a Space at most about 2 % of a core, and an app answering in 240 ms is read every
+12 s, one in 15 ms still every 2 s. Every measurement (every 2 s, an app with `@*` every 10 s, a slow one as said) becomes a point; the dashboard keeps the last 450
 (15 minutes) and shows them in the detail view of the app as six curves: the answer time of the Space (duration of the
 `stats` call), CPU and working memory of the Space process, memory in the Space (total, claims), entries and among them
 messages (`Msg`), commits per minute. The Space service itself reports CPU and memory with every `stats` answer

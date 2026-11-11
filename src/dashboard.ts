@@ -78,6 +78,9 @@ export function parseApps(spec: string): AppSource[] {
 const APP_HISTORY = 90;
 /** An app source of every space its service lists; polled every APP_ALL_EVERY-th round (one stats call per space). */
 const APP_ALL_EVERY = 5;
+/** A poll may cost an app's space at most 1/APP_COST_SHARE of a core: `stats` measures the whole document, which on a
+ *  big space takes a few hundred ms, so such an app is read again only APP_COST_SHARE times its last poll's time later. */
+const APP_COST_SHARE = 50;
 /** At most this many spaces of one app are read per poll, the newest first. */
 const APP_MAX_SPACES = 100;
 /** Aliases `prefix-<id>` with at least this many of one prefix fold into one row (a chat's sessions). */
@@ -260,10 +263,12 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 	type AppEntry = AppState & { conn: ReturnType<typeof connectSpace> | null; last: { rev: number; streamId: string; entries: number; at: number } | null;
 		/** An app of every space: one RemoteSpace per space on the same connection, and the revision each was read at. */
 		views: Map<string, RemoteSpace>; revs: Map<string, { rev: number; streamId: string }>; round: number;
-		points: AppPoint[]; proc: ServiceProcess | null };
+		points: AppPoint[]; proc: ServiceProcess | null;
+		/** What its last poll took (all its calls), ms: the next waits APP_COST_SHARE times as long. */
+		spentMs: number };
 	const apps = new Map<string, AppEntry>();
 	const history = new StatsHistory({ file: o.historyFile ?? null, now });
-	for (const a of o.apps ?? []) apps.set(a.id, { ...a, addresses: [...a.addresses], address: a.addresses[0]!, online: false, error: null, alias: null, spaceId: null, stats: null, history: [], activity: [], entriesPerMin: 0, checkedAt: 0, conn: null, last: null, views: new Map(), revs: new Map(), round: 0, points: [], proc: null });
+	for (const a of o.apps ?? []) apps.set(a.id, { ...a, addresses: [...a.addresses], address: a.addresses[0]!, online: false, error: null, alias: null, spaceId: null, stats: null, history: [], activity: [], entriesPerMin: 0, checkedAt: 0, conn: null, last: null, views: new Map(), revs: new Map(), round: 0, points: [], proc: null, spentMs: 0 });
 	const appView = (a: AppEntry, full = true): AppState => ({ ...(full ? { series: a.points } : {}), id: a.id, label: a.label, addresses: a.addresses, ...(a.space ? { space: a.space } : {}), address: a.address, online: a.online, error: a.error, alias: a.alias, spaceId: a.spaceId, stats: a.stats, ...(a.spaces ? { spaces: a.spaces } : {}), history: a.history, activity: a.activity, entriesPerMin: a.entriesPerMin, checkedAt: a.checkedAt });
 	const appList = (): AppState[] => [...apps.values()].map((a) => appView(a));
 	const connectApp = async (a: AppEntry) => {
@@ -330,6 +335,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 				const all = a.space === ALL_SPACES;
 				// an app of every space costs its service a stats call per space: it is read every few rounds only
 				if (all && a.round++ % APP_ALL_EVERY !== 0 && a.online) return;
+				if (a.online && now() - a.checkedAt < a.spentMs * APP_COST_SHARE) return;
 				let point: AppPoint | undefined;
 				try {
 					let st: core.SpaceStats, rev: number, streamId: string, proc: ServiceProcess | undefined, calls = 1;
@@ -341,7 +347,8 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 						rev = (a.last?.rev ?? 0) + (r.commits ?? 0);
 						streamId = r.commits === null ? `restart:${now()}` : a.last?.streamId ?? "all";
 					} else ({ stats: st, rev, streamId, process: proc } = await (await connectApp(a)).statsWithRevision());
-					const ms = Math.round(((performance.now() - t0) / calls) * 10) / 10;
+					a.spentMs = performance.now() - t0;
+					const ms = Math.round((a.spentMs / calls) * 10) / 10;
 					const t = now();
 					// commits and entry change per minute since the poll before; a new stream (the space restarted) starts over
 					const prev = a.last && a.last.streamId === streamId && rev >= a.last.rev ? a.last : null;
