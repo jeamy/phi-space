@@ -65,6 +65,12 @@ test("inside a hut: in, cook at the hearth, the chest beside it, guests by invit
 		await give(s, me, "brot", 1);
 		await does(host, "craft honigbrot", "Honigbrot");
 		assert.equal((await s.readAll({ type: "Item", fields: { location: me, proto: "honigbrot" } })).length, 2);
+		// cabbage at the same hearth: soup and rolls, two of each
+		await give(s, me, "kohl", 3); await give(s, me, "kartoffel", 1); await give(s, me, "wasserkanne", 1);
+		await give(s, me, "schweinefleisch", 1); await give(s, me, "treibholz", 1);
+		await does(host, "craft kohlsuppe", "Kohlsuppe");
+		await does(host, "craft kohlroulade", "Kohlroulade");
+		for (const proto of ["kohlsuppe", "kohlroulade"]) assert.equal((await s.readAll({ type: "Item", fields: { location: me, proto } })).length, 2, proto);
 
 		// the chest: stored from anywhere (one's only chest), looked into beside it only
 		await give(s, me, "muschel", 2);

@@ -3902,6 +3902,67 @@
 			"locks": "get:all();drop:all();give:not guest()"
 		},
 		{
+			"key": "sauerkraut",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Sauerkraut",
+			"desc": "Ein Topf Sauerkraut, mit Salz eingelegter Kohl. Hält den ganzen Winter, und wer lange auf See ist, nimmt es mit.",
+			"aliases": [
+				"kraut",
+				"sauerkohl",
+				"sauerkraut topf",
+				"pickled cabbage"
+			],
+			"glyph": {
+				"shape": "square",
+				"color": "#d8d090"
+			},
+			"icon": "items/sauerkraut.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "kohlsuppe",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Kohlsuppe",
+			"desc": "Eine Schüssel Kohlsuppe mit Kartoffeln. Billig und warm.",
+			"aliases": [
+				"kohlsuppen",
+				"cabbage soup"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#a8b870"
+			},
+			"icon": "items/kohlsuppe.png",
+			"turns": {
+				"afterMs": 259200000
+			},
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "kohlroulade",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Kohlroulade",
+			"desc": "Schweinefleisch, in Kohlblätter gewickelt und geschmort.",
+			"aliases": [
+				"kohlrouladen",
+				"roulade",
+				"cabbage roll",
+				"cabbage rolls"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#8aa060"
+			},
+			"icon": "items/kohlroulade.png",
+			"turns": {
+				"afterMs": 432000000
+			},
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
 			"key": "moehre",
 			"parent": "ding",
 			"typeclass": "Produce",
@@ -9704,6 +9765,10 @@
 				"met": [
 					5,
 					0
+				],
+				"sauerkraut": [
+					3,
+					5
 				]
 			},
 			"carry": [
@@ -9864,6 +9929,14 @@
 				],
 				"festessen": [
 					38,
+					0
+				],
+				"kohlroulade": [
+					4,
+					0
+				],
+				"sauerkraut": [
+					3,
 					0
 				]
 			},
@@ -10609,6 +10682,18 @@
 				"met": [
 					5,
 					0
+				],
+				"kohlsuppe": [
+					2,
+					0
+				],
+				"kohlroulade": [
+					4,
+					0
+				],
+				"sauerkraut": [
+					3,
+					0
 				]
 			},
 			"carry": [
@@ -10779,6 +10864,18 @@
 				],
 				"met": [
 					5,
+					0
+				],
+				"kohlsuppe": [
+					2,
+					0
+				],
+				"kohlroulade": [
+					4,
+					0
+				],
+				"sauerkraut": [
+					3,
 					0
 				]
 			},
@@ -10958,6 +11055,18 @@
 				],
 				"met": [
 					5,
+					0
+				],
+				"kohlsuppe": [
+					2,
+					0
+				],
+				"kohlroulade": [
+					4,
+					0
+				],
+				"sauerkraut": [
+					3,
 					0
 				]
 			},
@@ -14436,6 +14545,9 @@
 			"fisch": 18000000,
 			"ei": 14400000,
 			"ruehrei": 28800000,
+			"kohlsuppe": 21600000,
+			"kohlroulade": 36000000,
+			"sauerkraut": 14400000,
 			"honigbrot": 28800000,
 			"met": 10800000,
 			"pfannkuchen": 21600000,
@@ -14541,7 +14653,10 @@
 			"raeucherwurst": 6,
 			"kette": 17,
 			"honigbrot": 4,
-			"met": 7
+			"met": 7,
+			"kohlsuppe": 3,
+			"kohlroulade": 5,
+			"sauerkraut": 4
 		}
 	},
 	"bank": {
@@ -15401,6 +15516,48 @@
 			"at": "huette"
 		},
 		{
+			"key": "kohlsuppe",
+			"name": "Kohlsuppe",
+			"needs": [
+				{
+					"proto": "kohl",
+					"count": 1
+				},
+				{
+					"proto": "kartoffel",
+					"count": 1
+				},
+				{
+					"proto": "wasserkanne",
+					"count": 1
+				}
+			],
+			"makes": "kohlsuppe",
+			"count": 2,
+			"at": "huette"
+		},
+		{
+			"key": "kohlroulade",
+			"name": "Kohlroulade",
+			"needs": [
+				{
+					"proto": "kohl",
+					"count": 2
+				},
+				{
+					"proto": "schweinefleisch",
+					"count": 1
+				},
+				{
+					"proto": "treibholz",
+					"count": 1
+				}
+			],
+			"makes": "kohlroulade",
+			"count": 2,
+			"at": "huette"
+		},
+		{
 			"key": "entenbraten",
 			"name": "Entenbraten",
 			"needs": [
@@ -15753,6 +15910,23 @@
 				}
 			],
 			"makes": "poekelfleisch",
+			"count": 2,
+			"at": "metzgerei"
+		},
+		{
+			"key": "sauerkraut",
+			"name": "Sauerkraut",
+			"needs": [
+				{
+					"proto": "kohl",
+					"count": 3
+				},
+				{
+					"proto": "salz",
+					"count": 1
+				}
+			],
+			"makes": "sauerkraut",
 			"count": 2,
 			"at": "metzgerei"
 		},
@@ -16304,6 +16478,23 @@
 				"reward": {
 					"proto": "muenze",
 					"count": 6
+				},
+				"rooms": [
+					"riffdorf"
+				]
+			},
+			{
+				"key": "sauerkraut",
+				"text": "Die Riffischer fahren lange hinaus und nehmen Sauerkraut mit: 2 Töpfe.",
+				"needs": [
+					{
+						"proto": "sauerkraut",
+						"count": 2
+					}
+				],
+				"reward": {
+					"proto": "muenze",
+					"count": 8
 				},
 				"rooms": [
 					"riffdorf"

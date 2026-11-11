@@ -65,6 +65,9 @@ test("inside the bakehouse and the butcher's shop: bake at the oven, slaughter a
 		await does(p, "schlachte huhn", "Huhn");
 		await eventually(async () => ((await carried(s, me, "huhn")) === 0 ? true : null), 10_000, "the hen slaughtered");
 		assert.ok((await carried(s, me, "huehnchen")) >= 1, "its meat in the pack");
+		await give(s, me, "kohl", 3); await give(s, me, "salz", 1);
+		await does(p, "craft sauerkraut", "Sauerkraut");
+		assert.equal(await carried(s, me, "sauerkraut"), 2);
 		await give(s, me, "muschel", 1);
 		await does(p, "verstaue 1 muschel", "Metzgerei");
 		assert.equal((await s.readAll({ type: "Item", fields: { location: "b-metz", proto: "muschel" } })).length, 1);

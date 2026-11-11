@@ -970,6 +970,8 @@ Jedes Ding, das man herstellt, hat Käufer. Die Tabelle nennt die **Grundpreise*
 | Karren | Marta (Markt von Kupferhafen) 21 | – | 31 |
 | Käse | Marta (Markt von Kupferhafen) 7 | Marta 10 | 10 |
 | Kerze | Marta (Markt von Kupferhafen) 4 | Marta 7 | 7 |
+| Kohlroulade | Wilma (Markt von Kupferhafen) 4, Hauke (Schärenhafen) 4, Bente (Rauchhafen) 4, Momme (Krabbenbucht) 4 | – | 5 |
+| Kohlsuppe | Hauke (Schärenhafen) 2, Bente (Rauchhafen) 2, Momme (Krabbenbucht) 2 | – | 3 |
 | Kuchen | Marta (Markt von Kupferhafen) 16, Hauke (Schärenhafen) 16, Bente (Rauchhafen) 16, Momme (Krabbenbucht) 16 | – | 23 |
 | Lammbraten | Wilma (Markt von Kupferhafen) 10 | – | 14 |
 | Leder | Wilma (Markt von Kupferhafen) 5, Gesa (Hafenviertel) 5 | Gesa 7 | 8 |
@@ -987,6 +989,7 @@ Jedes Ding, das man herstellt, hat Käufer. Die Tabelle nennt die **Grundpreise*
 | Rinderbraten | Wilma (Markt von Kupferhafen) 10 | – | 14 |
 | Ruderboot | Marta (Markt von Kupferhafen) 22 | – | 31 |
 | Rührei | Kalle (Graue Bucht) 5, Marta (Markt von Kupferhafen) 5, Hauke (Schärenhafen) 5, Bente (Rauchhafen) 5, Momme (Krabbenbucht) 5 | – | 8 |
+| Sauerkraut | Marta (Markt von Kupferhafen) 3, Wilma (Markt von Kupferhafen) 3, Hauke (Schärenhafen) 3, Bente (Rauchhafen) 3, Momme (Krabbenbucht) 3 | Marta 5 | 4 |
 | Schinken | Marta (Markt von Kupferhafen) 10, Wilma (Markt von Kupferhafen) 10 | Marta 14, Wilma 14 | 14 |
 | Schlachtmesser | Marta (Markt von Kupferhafen) 9 | – | 13 |
 | Schmalzbrot | Wilma (Markt von Kupferhafen) 2 | – | 3 |
@@ -1084,6 +1087,8 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Bread | Marta (Copper Harbour Market) 2 | Marta 4 | 3 |
 | Brick | Marta (Copper Harbour Market) 2 | – | 3 |
 | Butcher's Knife | Marta (Copper Harbour Market) 9 | – | 13 |
+| Cabbage roll | Wilma (Copper Harbour Market) 4, Hauke (Skerry Harbour) 4, Bente (Smoke Harbour) 4, Momme (Crab Bay) 4 | – | 5 |
+| Cabbage soup | Hauke (Skerry Harbour) 2, Bente (Smoke Harbour) 2, Momme (Crab Bay) 2 | – | 3 |
 | Cake | Marta (Copper Harbour Market) 16, Hauke (Skerry Harbour) 16, Bente (Smoke Harbour) 16, Momme (Crab Bay) 16 | – | 23 |
 | Candle | Marta (Copper Harbour Market) 4 | Marta 7 | 7 |
 | Cart | Marta (Copper Harbour Market) 21 | – | 31 |
@@ -1119,6 +1124,7 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Roast pork | Wilma (Copper Harbour Market) 10, Hauke (Skerry Harbour) 10, Bente (Smoke Harbour) 10, Momme (Crab Bay) 10 | – | 14 |
 | Rowing boat | Marta (Copper Harbour Market) 22 | – | 31 |
 | Sailing boat | Marta (Copper Harbour Market) 66 | – | 95 |
+| Sauerkraut | Marta (Copper Harbour Market) 3, Wilma (Copper Harbour Market) 3, Hauke (Skerry Harbour) 3, Bente (Smoke Harbour) 3, Momme (Crab Bay) 3 | Marta 5 | 4 |
 | Sausage | Wilma (Copper Harbour Market) 2 | Wilma 4 | 3 |
 | Scrambled eggs | Kalle (Grey Bay) 5, Marta (Copper Harbour Market) 5, Hauke (Skerry Harbour) 5, Bente (Smoke Harbour) 5, Momme (Crab Bay) 5 | – | 8 |
 | Shell Knife | Kalle (Grey Bay) 5, Marta (Copper Harbour Market) 5 | Jorin 5 | 8 |
@@ -1411,10 +1417,12 @@ You can tear down what is yours at any time. You get part of the material back.
 | Festessen (\`craft festessen\`) | 1 Gänsebraten, 1 Schweinebraten, 2 Brot, 2 Bier | Hütte | satt 24 Std. |
 | Gänsebraten (\`craft gaensebraten\`) | 2 Gänsefleisch, 1 Treibholz | Hütte | satt 14 Std. |
 | Grillhähnchen (\`craft grillhaehnchen\`) | 1 Hähnchen, 1 Treibholz | Hütte | satt 8 Std. |
+| Honigbrot ×2 (\`craft honigbrot\`) | 1 Honig, 1 Brot | Hütte | satt 8 Std. |
 | Hühnersuppe ×2 (\`craft huehnersuppe\`) | 1 Hähnchen, 1 Möhre, 1 Kohl, 1 Kanne Wasser | Hütte | satt 8 Std. |
 | Käse (\`craft kaese\`) | 3 Milch, 1 Treibholz | Hütte | satt 8 Std. |
-| Honigbrot ×2 (\`craft honigbrot\`) | 1 Honig, 1 Brot | Hütte | satt 8 Std. |
 | Kerze ×2 (\`craft kerze\`) | 2 Wachs, 1 Leinen | Hütte |  |
+| Kohlroulade ×2 (\`craft kohlroulade\`) | 2 Kohl, 1 Schweinefleisch, 1 Treibholz | Hütte | satt 10 Std. |
+| Kohlsuppe ×2 (\`craft kohlsuppe\`) | 1 Kohl, 1 Kartoffel, 1 Kanne Wasser | Hütte | satt 6 Std. |
 | Lammbraten (\`craft lammbraten\`) | 2 Lammfleisch, 1 Treibholz | Hütte | satt 12 Std. |
 | Pfannkuchen ×2 (\`craft pfannkuchen\`) | 2 Ei, 1 Mehl, 1 Milch, 1 Treibholz | Hütte | satt 6 Std. |
 | Rinderbraten (\`craft rinderbraten\`) | 2 Rindfleisch, 1 Treibholz | Hütte | satt 14 Std. |
@@ -1435,6 +1443,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Trockenfleisch ×2 (\`craft trockenfleisch\`) | 2 Rindfleisch, 1 Salz, 1 Treibholz | Räucherei | satt 8 Std. |
 | Bratwurst mit Salz ×5 (\`craft metzgerwurst\`) | 2 Schweinefleisch, 1 Salz, mit Schlachtmesser | Metzgerei | satt 6 Std. |
 | Pökelfleisch ×2 (\`craft poekelfleisch\`) | 2 Schweinefleisch, 1 Salz | Metzgerei | satt 8 Std. |
+| Sauerkraut ×2 (\`craft sauerkraut\`) | 3 Kohl, 1 Salz | Metzgerei | satt 4 Std. |
 | Leder (\`craft leder\`) | 1 Schaffell, 1 Salz | Gerberei |  |
 | Ziegenleder (\`craft ziegenleder\`) | 1 Ziegenfell, 1 Salz | Gerberei |  |
 | Bier ×2 (\`craft bier\`) | 3 Gerste, 1 Hopfen, 1 Kanne Wasser | Brauerei | satt 2 Std. |
@@ -1469,10 +1478,12 @@ You can tear down what is yours at any time. You get part of the material back.
 | Festessen (feast) (\`craft festessen\`) | 1 roast goose, 1 roast pork, 2 bread, 2 beer | Hut | sated 24 h |
 | Gänsebraten (roast goose) (\`craft gaensebraten\`) | 2 goose meat, 1 driftwood | Hut | sated 14 h |
 | Grillhähnchen (roast chicken) (\`craft grillhaehnchen\`) | 1 chicken meat, 1 driftwood | Hut | sated 8 h |
+| Honigbrot (honey bread) ×2 (\`craft honigbrot\`) | 1 honey, 1 bread | Hut | sated 8 h |
 | Hühnersuppe (chicken soup) ×2 (\`craft huehnersuppe\`) | 1 chicken meat, 1 carrot, 1 cabbage, 1 can of water | Hut | sated 8 h |
 | Käse (cheese) (\`craft kaese\`) | 3 milk, 1 driftwood | Hut | sated 8 h |
-| Honigbrot (honey bread) ×2 (\`craft honigbrot\`) | 1 honey, 1 bread | Hut | sated 8 h |
 | Kerze (candle) ×2 (\`craft kerze\`) | 2 wax, 1 linen | Hut |  |
+| Kohlroulade (cabbage roll) ×2 (\`craft kohlroulade\`) | 2 cabbage, 1 pork, 1 driftwood | Hut | sated 10 h |
+| Kohlsuppe (cabbage soup) ×2 (\`craft kohlsuppe\`) | 1 cabbage, 1 potato, 1 can of water | Hut | sated 6 h |
 | Lammbraten (roast lamb) (\`craft lammbraten\`) | 2 lamb, 1 driftwood | Hut | sated 12 h |
 | Pfannkuchen (pancake) ×2 (\`craft pfannkuchen\`) | 2 eggs, 1 flour, 1 milk, 1 driftwood | Hut | sated 6 h |
 | Rinderbraten (roast beef) (\`craft rinderbraten\`) | 2 beef, 1 driftwood | Hut | sated 14 h |
@@ -1493,6 +1504,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Trockenfleisch (dried meat) ×2 (\`craft trockenfleisch\`) | 2 beef, 1 salt, 1 driftwood | Smokehouse | sated 8 h |
 | Bratwurst mit Salz (sausages with salt) ×5 (\`craft metzgerwurst\`) | 2 pork, 1 salt, with butcher's knife | Butcher's Shop | sated 6 h |
 | Pökelfleisch (cured meat) ×2 (\`craft poekelfleisch\`) | 2 pork, 1 salt | Butcher's Shop | sated 8 h |
+| Sauerkraut (sauerkraut) ×2 (\`craft sauerkraut\`) | 3 cabbage, 1 salt | Butcher's Shop | sated 4 h |
 | Leder (leather) (\`craft leder\`) | 1 sheepskin, 1 salt | Tannery |  |
 | Ziegenleder (goat leather) (\`craft ziegenleder\`) | 1 goatskin, 1 salt | Tannery |  |
 | Bier (beer) ×2 (\`craft bier\`) | 3 barley, 1 hops, 1 can of water | Brewery | sated 2 h |
@@ -1631,6 +1643,8 @@ Samen findest du in der wilden Natur der Inseln, oder du kaufst sie bei Gesa. Ni
 
 \`pflanze strandnelke\` setzt einen Samen in dein Beet, eine Pflanze je Feld (\`pflanze kohl <x> <y>\` in ein bestimmtes). Jede Ernte gibt neue Samen, manchmal zwei.
 
+Aus **Kohl** macht man am Herd der Hütte Kohlsuppe (\`craft kohlsuppe\`: 1 Kohl, 1 Kartoffel, 1 Kanne Wasser, zwei Schüsseln), Kohlrouladen (\`craft kohlroulade\`: 2 Kohl, 1 Schweinefleisch, 1 Treibholz, zwei Stück) und Hühnersuppe, in der Metzgerei Sauerkraut (\`craft sauerkraut\`: 3 Kohl, 1 Salz, zwei Töpfe), das lange hält. Die Tiere fressen ihn auch ([Preise](help.game.trade#prices)).
+
 ## Wasser und Pflege {#care}
 
 Pflanzen brauchen Wasser, sonst welken sie. Du holst es aus einer Regentonne und gießt damit das ganze Beet.
@@ -1701,6 +1715,8 @@ You find seeds in the wild plants of the islands, or you buy them from Gesa. Not
 | Möhre (carrot) | Graue Insel, Kupferhafen, Rauchholm, Krabbensand | 2 carrots |
 
 \`pflanze strandnelke\` (\`plant\`) puts a seed into your bed, one plant per cell (\`pflanze kohl <x> <y>\` into a given one). Every harvest gives new seeds, sometimes two.
+
+From **cabbage** the hut's hearth makes cabbage soup (\`craft kohlsuppe\`: 1 cabbage, 1 potato, 1 can of water, two bowls), cabbage rolls (\`craft kohlroulade\`: 2 cabbage, 1 pork, 1 driftwood, two of them) and chicken soup, the butcher's shop sauerkraut (\`craft sauerkraut\`: 3 cabbage, 1 salt, two crocks), which keeps long. The animals eat it too ([prices](help.game.trade#prices)).
 
 ## Water and care {#care}
 
@@ -2057,6 +2073,7 @@ Was daraus wird (\`craft <name>\`):
 | Lammbraten | 2 Lammfleisch, 1 Treibholz | Hütte | 12 Stunden |
 | 3 Eintöpfe | 1 Ziegenfleisch, 2 Kartoffeln, 1 Rübe, 1 Kanne Wasser | Hütte | 10 Stunden |
 | Schweinebraten | 2 Schweinefleisch, 1 Treibholz | Hütte | 12 Stunden |
+| 2 Kohlrouladen | 2 Kohl, 1 Schweinefleisch, 1 Treibholz | Hütte | 10 Stunden |
 | 3 Bratwürste | 2 Schweinefleisch, mit Muschelmesser | Hütte | 6 Stunden |
 | 2 Steaks | 1 Rinderfilet, 1 Treibholz | Hütte | 10 Stunden |
 | Rinderbraten | 2 Rindfleisch, 1 Treibholz | Hütte | 14 Stunden |
@@ -2258,6 +2275,7 @@ What becomes of it (\`craft <name>\`):
 | roast lamb | 2 lamb, 1 driftwood | hut | 12 hours |
 | 3 stews | 1 goat meat, 2 potatoes, 1 beet, 1 can of water | hut | 10 hours |
 | roast pork | 2 pork, 1 driftwood | hut | 12 hours |
+| 2 cabbage rolls | 2 cabbage, 1 pork, 1 driftwood | hut | 10 hours |
 | 3 sausages | 2 pork, with a shell knife | hut | 6 hours |
 | 2 steaks | 1 beef fillet, 1 driftwood | hut | 10 hours |
 | roast beef | 2 beef, 1 driftwood | hut | 14 hours |

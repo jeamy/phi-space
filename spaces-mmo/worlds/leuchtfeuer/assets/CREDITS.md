@@ -97,3 +97,6 @@ The tiles of a building's inside (floor planks and a timbered wall: `tilesets/In
 
 What the honey makes (honey bread and a jug of mead: `items/honigbrot.png`, `items/met.png`) were drawn the same way, by
 the script `items-src/honey.py` (same license as this project).
+
+What the cabbage makes (sauerkraut, cabbage soup and cabbage rolls: `items/sauerkraut.png`, `items/kohlsuppe.png`,
+`items/kohlroulade.png`) were drawn the same way, by the script `items-src/cabbage.py` (same license as this project).
