@@ -95,7 +95,6 @@
 			"key": "put",
 			"aliases": [
 				"nachlegen",
-				"wirf",
 				"feed"
 			],
 			"help": "put [anzahl|alle] <ding> in <feuer> – Brennholz in ein Leuchtfeuer neben dir legen (auch: lege 3 hölzer ins feuer)"
@@ -226,7 +225,7 @@
 			"aliases": [
 				"deliver"
 			],
-			"help": "liefere [n] <ding> – an die Baustelle neben dir (bis zwei Schritte) liefern, was sie braucht (zu viel bleibt bei dir)"
+			"help": "liefere [n] <ding> [an straße] – an die Baustelle oder Straßenbaustelle neben dir (bis zwei Schritte) liefern, was sie braucht (zu viel bleibt bei dir)"
 		},
 		{
 			"module": "build",
@@ -234,7 +233,7 @@
 			"aliases": [
 				"work"
 			],
-			"help": "arbeite – an der Baustelle neben dir (bis zwei Schritte) mitarbeiten (danach ruhst du eine Weile)"
+			"help": "arbeite [an der straße] – an der Baustelle oder Straße neben dir (bis zwei Schritte) mitarbeiten (danach ruhst du eine Weile)"
 		},
 		{
 			"module": "build",
@@ -253,7 +252,7 @@
 				"kiste",
 				"chest"
 			],
-			"help": "truhe – was in der Truhe deines Baus neben dir liegt (verstaue <ding>, entnimm <ding>)"
+			"help": "truhe – was in der Truhe deines Baus (oder im Lagerhaus) neben dir liegt; hineinlegen von überall: verstaue [n|alle] <ding> [in <truhe>]; herausnehmen nur daneben: entnimm [n|alle] <ding>"
 		},
 		{
 			"module": "build",
@@ -280,7 +279,7 @@
 				"hole",
 				"retrieve"
 			],
-			"help": "entnimm [n|alle] <ding> – etwas aus der Truhe deines Baus neben dir nehmen"
+			"help": "entnimm [n|alle] <ding> – etwas aus der Truhe deines Baus oder aus dem Lagerhaus neben dir nehmen (im Lager: Tagesmenge und Steuer der Siedlung)"
 		},
 		{
 			"module": "build",
@@ -307,7 +306,43 @@
 			"aliases": [
 				"estate"
 			],
-			"help": "nachlass – was in der Truhe eines verfallenen Baus von dir lag, hier abholen"
+			"help": "nachlass – hier abholen, was auf dich wartet: die Truhe eines verfallenen oder abgewählten Baus, liegengebliebene Fracht, ein Festpreis"
+		},
+		{
+			"module": "interior",
+			"key": "betrete",
+			"aliases": [
+				"hinein",
+				"eintreten",
+				"enter"
+			],
+			"help": "betrete [x y] – in die Hütte neben dir gehen: die eigene oder eine, in die man eingeladen ist; „hinaus“ führt wieder vor die Tür"
+		},
+		{
+			"module": "interior",
+			"key": "einladen",
+			"aliases": [
+				"lade",
+				"invite"
+			],
+			"help": "einladen [name] – jemanden in die eigene Hütte einladen (neben ihr oder drinnen); ohne Namen: wer eingeladen ist"
+		},
+		{
+			"module": "interior",
+			"key": "ausladen",
+			"aliases": [
+				"uninvite"
+			],
+			"help": "ausladen <name> – eine Einladung in die eigene Hütte zurücknehmen; wer drinnen ist, steht dann draußen"
+		},
+		{
+			"module": "interior",
+			"key": "schlafe",
+			"aliases": [
+				"schlafen",
+				"sleep"
+			],
+			"help": "schlafe – im Bett der Hütte schlafen (bald: wer ausgeschlafen ist, arbeitet danach eine Weile ohne Pause)"
 		},
 		{
 			"module": "siteorder",
@@ -353,16 +388,15 @@
 				"festival",
 				"feier"
 			],
-			"help": "fest blumen|ernte – als Siedler an einem Park eine Blumenschau oder ein Erntefest eröffnen; „fest“ allein zeigt das laufende"
+			"help": "fest blumen|ernte|regatta – als Siedler am Park eine Blumenschau oder ein Erntefest, am Steg eine Regatta eröffnen; „fest“ allein zeigt das laufende"
 		},
 		{
 			"module": "festival",
 			"key": "zeige",
 			"aliases": [
-				"ausstellen",
 				"exhibit"
 			],
-			"help": "zeige <ding> – am Park eine Blume zur Blumenschau oder Ernte zum Erntefest geben; was gezeigt ist, bleibt beim Fest"
+			"help": "zeige <ding> – am Park eine Blume zur Blumenschau oder Ernte zum Erntefest geben (bleibt beim Fest); am Steg dein Boot zur Regatta melden (es bleibt deins)"
 		},
 		{
 			"module": "festival",
@@ -401,6 +435,18 @@
 			"help": "zug <ort> – neben einem Bahnhof mit der Inselbahn zu einem anderen Bahnhof dieser Insel fahren; „zug“ allein zeigt die Bahnhöfe und den Fahrplan; „zug sende [n|alle] <ding> nach <ort>“ gibt Fracht auf, „zug abholen“ holt sie am Ziel"
 		},
 		{
+			"module": "cart",
+			"key": "straße",
+			"aliases": [
+				"strasse",
+				"straßen",
+				"strassen",
+				"road",
+				"roads"
+			],
+			"help": "straße – die Straßen hier; straße plane <ort> (eine Straße von hier zur Mitte des Nachbarorts planen), straße ja|nein [ort] (als Siedler abstimmen, einmal), straße repariere"
+		},
+		{
 			"module": "food",
 			"key": "iss",
 			"aliases": [
@@ -427,7 +473,7 @@
 				"credit",
 				"loan"
 			],
-			"help": "kredit <n> gegen <ding> – am Kontor neben dir Münzen gegen ein Pfand leihen; „tilge“ zahlt sie mit Zinsen zurück, sonst gehört das Pfand dem Kontor"
+			"help": "kredit <n> gegen <ding> – am Kontor neben dir Münzen gegen ein Pfand leihen; „tilge“ zahlt sie mit Zinsen zurück, sonst gehört das Pfand dem Kontor; „kredit“ allein zeigt deine Schuld"
 		},
 		{
 			"module": "shop",
@@ -436,7 +482,7 @@
 				"tilgen",
 				"repay"
 			],
-			"help": "tilge – am Kontor deinen Kredit zurückzahlen und das Pfand auslösen"
+			"help": "tilge – am Kontor, bei dem du geliehen hast, den Kredit mit Zinsen zurückzahlen und das Pfand auslösen"
 		},
 		{
 			"module": "shop",
@@ -484,7 +530,7 @@
 				"segeln",
 				"sail"
 			],
-			"help": "segle <insel> – mit einem Segelboot vom Steg neben dir zu einer anderen Insel; „segle“ allein zeigt, wohin"
+			"help": "segle <insel> – mit einem Segelboot vom Steg neben dir zu einer anderen Insel (danach ruhst du eine Weile); „segle“ allein zeigt, wohin"
 		},
 		{
 			"module": "fishing",
@@ -539,7 +585,7 @@
 				"bed",
 				"beds"
 			],
-			"help": "beet – die Beete hier (beet anlegen [zier|gemeinschaft] [x y]: umgraben; beet aufgeben: dein Beet neben dir wieder zu Gras)"
+			"help": "beet – die Beete hier (beet anlegen [zier|gemeinschaft] [x y]: umgraben; beet aufgeben [ja x y]: dein Beet neben dir wieder zu Gras)"
 		},
 		{
 			"module": "garden",
@@ -578,7 +624,7 @@
 				"gies",
 				"water"
 			],
-			"help": "gieße – ein Beet neben dir gießen, deins oder eins, dessen Pate du bist (braucht eine Kanne Wasser aus der Regentonne)"
+			"help": "gieße – ein Beet neben dir gießen: deins, eins als Pate oder das Gemeinschaftsbeet (braucht eine Kanne Wasser aus der Regentonne)"
 		},
 		{
 			"module": "garden",
@@ -591,7 +637,7 @@
 				"jaet",
 				"weed"
 			],
-			"help": "jäte – Unkraut und Welkes aus einem Beet neben dir ziehen (deins oder als Pate)"
+			"help": "jäte – Unkraut und Welkes aus einem Beet neben dir ziehen (deins, als Pate oder das Gemeinschaftsbeet)"
 		},
 		{
 			"module": "garden",
@@ -602,7 +648,7 @@
 				"pfluecke",
 				"harvest"
 			],
-			"help": "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins oder als Pate; dazu gibt es Samen); an einem reifen Acker (ernte flur, wenn auch ein Beet nah ist) ein Arbeitspunkt der Ernte und dein Anteil"
+			"help": "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins, als Pate oder vom Gemeinschaftsbeet ein Teil; dazu gibt es Samen); an einem reifen Acker (ernte flur, wenn auch ein Beet nah ist) ein Arbeitspunkt der Ernte und dein Anteil"
 		},
 		{
 			"module": "garden",
@@ -648,7 +694,7 @@
 				"taufe",
 				"name-variety"
 			],
-			"help": "benenne [nr] <name> – deiner Kreuzung einen Namen geben (nur wer sie gezogen hat, nur einmal; ihre Samen trägst du bei dir)"
+			"help": "benenne [nr] <name> – deiner Kreuzung einen Namen geben (nur wer sie gezogen hat, nur einmal; ihre Samen trägst du bei dir; die Tasche wählt sie mit #<id>)"
 		},
 		{
 			"module": "field",
@@ -675,7 +721,7 @@
 				"plough",
 				"plow"
 			],
-			"help": "bestelle [frucht] – den Acker neben dir bestellen: wer sie angelegt hat, wählt die Frucht; dann bringt jeder Saatgut und einen Arbeitspunkt (danach ruhst du eine Weile)"
+			"help": "bestelle [frucht] – den Acker neben dir bestellen: wer sie angelegt hat, wählt die Frucht; dann bringen er (bei offenem Acker jeder) Saatgut und Arbeit (danach ruhst du eine Weile)"
 		},
 		{
 			"module": "field",
@@ -710,7 +756,7 @@
 				"windmuehle",
 				"mill"
 			],
-			"help": "mahle [n|alle] <korn> – an einer Windmühle neben dir Korn zu Mehl mahlen lassen (mahle allein: wie lange sie zu tun hat)"
+			"help": "mahle [n|alle] <korn|knochen> – an einer Windmühle neben dir Korn zu Mehl, Knochen zu Knochenmehl mahlen lassen (bis 12 auf einmal; mahle allein: wie lange sie zu tun hat)"
 		},
 		{
 			"module": "mill",
@@ -720,7 +766,7 @@
 				"hol-ab",
 				"pickup"
 			],
-			"help": "abholen – dein gemahlenes Mehl an der Mühle neben dir (bis zwei Schritte) abholen"
+			"help": "abholen – was die Mühle neben dir (bis zwei Schritte) für dich gemahlen hat, abholen"
 		},
 		{
 			"module": "mill",
@@ -729,7 +775,7 @@
 				"backen",
 				"bake"
 			],
-			"help": "backe [brot] – am Backhaus neben dir backen (ein Rezept am Bau, „craft“ zeigt, was es braucht)"
+			"help": "backe [brot|kuchen|…] – neben Backhaus oder Hütte backen und kochen, was dort gemacht wird („craft hier“ zeigt, was es braucht)"
 		},
 		{
 			"module": "quarry",
@@ -770,7 +816,7 @@
 				"coop",
 				"pen"
 			],
-			"help": "stall – die Tiere im Hühnerstall oder Gehege neben dir: wie viele, ob sie satt sind, was bereitliegt"
+			"help": "stall – die Tiere im Hühnerstall, Gehege oder Bienenstock neben dir: wie viele, ob sie satt sind, was bereitliegt"
 		},
 		{
 			"module": "animals",
@@ -780,7 +826,7 @@
 				"einstellen",
 				"stable"
 			],
-			"help": "einstallen <tier> – ein Tier, das du trägst, in deinen Hühnerstall oder dein Gehege neben dir bringen; einen Hund oder eine Katze an einen deiner Bauten, wo sie wachen"
+			"help": "einstallen <tier> – ein Tier, das du trägst, in deinen Hühnerstall, dein Gehege oder deinen Bienenstock neben dir bringen; einen Hund oder eine Katze an einen deiner Bauten, wo sie wachen"
 		},
 		{
 			"module": "animals",

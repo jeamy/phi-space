@@ -81,3 +81,33 @@ pub fn liner_of(w: &Json) -> Option<Timetable> {
 	let d = j::opt(w, "liner").filter(|d| j::truthy(d))?;
 	timetable(j::ao(w, "allRooms").unwrap_or(j::a(w, "rooms")), d)
 }
+
+/// `SHIP_LENGTH` (shared/liner.ts): the large ship's cells.
+pub const SHIP_LENGTH: f64 = 4.0;
+
+/// `berth`: where the ship lies in a bay: the strip of SHIP_LENGTH water cells along x or y nearest the spawn whose
+/// cells around are water too (or beyond the room's edge); its first cell and whether it lies along x.
+pub fn berth(ground: &[String], spawn: (f64, f64), water: &str) -> Option<(f64, f64, bool)> {
+	let (h, w) = (ground.len() as f64, ground.first().map_or(0, |r| js::len16(r)) as f64);
+	let wet = |x: f64, y: f64| x < 0.0 || y < 0.0 || x >= w || y >= h || ground.get(y as usize).is_some_and(|r| js::slice16(r, x as isize, Some(x as isize + 1)) == water);
+	let clear = |x0: f64, y0: f64, along_x: bool| {
+		let (lx, ly) = if along_x { (SHIP_LENGTH, 1.0) } else { (1.0, SHIP_LENGTH) };
+		if x0 < 0.0 || y0 < 0.0 || x0 + lx > w || y0 + ly > h { return false; }
+		let mut y = y0 - 1.0;
+		while y <= y0 + ly { let mut x = x0 - 1.0; while x <= x0 + lx { if !wet(x, y) { return false; } x += 1.0; } y += 1.0; }
+		true
+	};
+	let (mut best, mut best_d) = (None, f64::INFINITY);
+	for y in 0..h as usize {
+		for x in 0..w as usize {
+			for along_x in [true, false] {
+				let (x, y) = (x as f64, y as f64);
+				if !clear(x, y, along_x) { continue; }
+				let (mx, my) = if along_x { (x + SHIP_LENGTH / 2.0, y + 0.5) } else { (x + 0.5, y + SHIP_LENGTH / 2.0) };
+				let d = js::hypot(&[mx - spawn.0, my - spawn.1]);
+				if d < best_d { best_d = d; best = Some((x, y, along_x)); }
+			}
+		}
+	}
+	best
+}

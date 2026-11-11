@@ -127,8 +127,10 @@ pub async fn refusal(c: &Ctx, room: &Json, rect: Rect, green: bool, on_people: b
 	let people: HashSet<String> = occupied_in(&c.space, room_id, Some(c.char_id())).await?.into_iter().map(|(k, _)| k).collect();
 	let things: HashSet<String> = c.space.read_all(&tmpl("Item", obj! { "location" => room_id }), None).await?.iter().map(|e| cell_of(fields(e))).collect();
 	let fires: Vec<&Json> = j::a(c.w(), "beacons").iter().filter(|b| j::s(b, "room") == room_id).collect();
+	let road = super::road::road_cells_in(&c.space, room_id, c.txn()).await?;
 	for p in &cs {
 		let k = cell_key(p.0, p.1);
+		if road.contains(&k) { return Ok(Some("Dort führt eine Straße entlang; sie bleibt frei.".into())); }
 		if !walkable(c.w(), &ground, p.0, p.1) { return Ok(Some("Dort ist kein fester Boden.".into())); }
 		if tile(&ground, p.0, p.1).as_deref() == Some(PATH) { return Ok(Some("Das ist ein Weg; Wege und Plätze bleiben frei.".into())); }
 		if is_passage(&exits, p.0, p.1) { return Ok(Some("Dort ist ein Weg hinaus; den baut niemand zu.".into())); }
@@ -154,6 +156,93 @@ pub async fn refusal(c: &Ctx, room: &Json, rect: Rect, green: bool, on_people: b
 	if !exits.iter().all(|x| ok(xy(x))) || spawn.is_some_and(|s| !ok(xy(s))) || !(ok(xy(&c.actor)) || dist_to(xy(&c.actor), rect) == 0.0) { return Ok(Some("Damit wäre ein Weg zugebaut.".into())); }
 	if !fires.iter().all(|b| DIRS.iter().any(|(dx, dy)| ok((j::n(b, "x") + dx, j::n(b, "y") + dy)))) { return Ok(Some("Damit käme niemand mehr ans Feuer.".into())); }
 	Ok(None)
+}
+
+const DIRS4: [(f64, f64); 4] = [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)];
+
+/// `waterRefusal`: why a jetty cannot go on `rect` (None: it can): it lies on water only, one of its cells beside the
+/// land, free of other things built and of the large ship's berth in a bay.
+async fn water_refusal(space: &Space, w: &Json, room: &Json, rect: Rect) -> Result<Option<String>> {
+	let ground = rows(j::at(room, "ground"));
+	let (height, width) = (ground.len() as f64, ground.first().map_or(0, |r| js::len16(r)) as f64);
+	if rect.x < 0.0 || rect.y < 0.0 || rect.x + rect.w > width || rect.y + rect.h > height { return Ok(Some("Dort ist der Raum zu Ende.".into())); }
+	let cs = cells(rect);
+	let wet = |p: &(f64, f64)| tile(&ground, p.0, p.1).is_some() && !walkable(w, &ground, p.0, p.1);
+	if !cs.iter().all(wet) { return Ok(Some("Ein Steg reicht ins Wasser: er liegt ganz auf dem Wasser, mit einem Ende am Ufer.".into())); }
+	if !cs.iter().any(|p| DIRS4.iter().any(|(dx, dy)| walkable(w, &ground, p.0 + dx, p.1 + dy))) { return Ok(Some("Ein Steg beginnt am Ufer.".into())); }
+	let room_id = j::s(room, "roomId");
+	let blocked = blocked_in(space, room_id).await?;
+	if cs.iter().any(|p| blocked.contains(&cell_key(p.0, p.1))) { return Ok(Some("Dort liegt schon ein Steg oder wird gebaut.".into())); }
+	let island = j::by(j::a(w, "rooms"), "roomId", room_id).and_then(|r| j::so(r, "island")).filter(|i| !i.is_empty());
+	let all = j::ao(w, "allRooms").unwrap_or_else(|| j::a(w, "rooms"));
+	let spawn = j::opt(room, "spawn").filter(|s| j::truthy(s));
+	let bay = match (island, spawn) {
+		(Some(i), Some(sp)) if crate::liner::bays_of(all).iter().find(|(k, _)| k == i).is_some_and(|(_, r)| j::s(r, "roomId") == room_id) => crate::liner::berth(&ground, xy(sp), "~"),
+		_ => None,
+	};
+	if let Some((bx, by, along_x)) = bay {
+		let ship = Rect { x: bx - 1.0, y: by - 1.0, w: if along_x { crate::liner::SHIP_LENGTH } else { 1.0 } + 2.0, h: if along_x { 1.0 } else { crate::liner::SHIP_LENGTH } + 2.0 };
+		if cs.iter().any(|p| dist_to(*p, ship) == 0.0) { return Ok(Some("Dort legt das große Schiff an.".into())); }
+	}
+	Ok(None)
+}
+
+/// `jettyToWater`: a jetty of old on the beach moved onto the water beside it, the nearest place within two cells that
+/// lies on water with one end at the shore, the ones that stick out first; its plot moves with it. False when there is
+/// no place.
+async fn jetty_to_water(space: &Space, w: &Json, txn: &str, ty: &str, b: &Json) -> Result<bool> {
+	let Some(room_e) = space.read_all(&tmpl("Room", obj! { "roomId" => j::at(b, "room").clone() }), Some(txn)).await?.into_iter().next() else { return Ok(false) };
+	let room = fields(&room_e).clone();
+	let ground = rows(j::at(&room, "ground"));
+	let land = |x: f64, y: f64| walkable(w, &ground, x, y);
+	let br = Rect::of(b);
+	if !cells(br).iter().any(|p| land(p.0, p.1)) { return Ok(false); }
+	let (long, short) = (br.w.max(br.h), br.w.min(br.h));
+	let mut tries: Vec<Rect> = Vec::new();
+	for (sw, sh) in [(long, short), (short, long)] {
+		let mut y = br.y - 2.0 - sh;
+		while y <= br.y + br.h + 2.0 {
+			let mut x = br.x - 2.0 - sw;
+			while x <= br.x + br.w + 2.0 {
+				let r = Rect { x, y, w: sw, h: sh };
+				if !cells(r).iter().all(|p| dist_to(*p, br) > 3.0) { tries.push(r); }
+				x += 1.0;
+			}
+			y += 1.0;
+		}
+	}
+	let touch = |r: &Rect| cells(*r).iter().filter(|p| DIRS4.iter().any(|(dx, dy)| land(p.0 + dx, p.1 + dy))).count();
+	let far = |r: &Rect| cells(*r).iter().map(|p| dist_to(*p, br)).fold(f64::INFINITY, f64::min);
+	tries.sort_by(|p, q| touch(p).cmp(&touch(q)).then(far(p).partial_cmp(&far(q)).unwrap_or(std::cmp::Ordering::Equal)));
+	for r in tries {
+		if water_refusal(space, w, &room, r).await?.is_some() { continue; }
+		let Some(e) = space.take_if_exists(&tmpl(ty, obj! { "buildId" => j::at(b, "buildId").clone() }), NO_WAIT, Some(txn)).await? else { return Ok(false) };
+		free_cells(space, txn, j::s(b, "room"), j::at(b, "buildId")).await?;
+		for p in cells(r) { space.write_unique(&tmpl("Plot", obj! { "room" => j::at(b, "room").clone(), "x" => p.0, "y" => p.1, "of" => j::at(b, "buildId").clone() }), Some(txn), FOREVER, &["room", "x", "y"]).await?; }
+		let mut f = fields(&e).clone();
+		for (k, v) in [("x", r.x), ("y", r.y), ("w", r.w), ("h", r.h)] { j::set(&mut f, k, v); }
+		space.write(&tmpl(ty, f), Some(txn), FOREVER).await?;
+		return Ok(true);
+	}
+	Ok(false)
+}
+
+/// `jettyTries`: the rects for a jetty beside the actor: both ways round, the ones that point away from the actor first.
+fn jetty_tries(c: &Ctx, pw: f64, ph: f64, at: Option<(f64, f64)>) -> Vec<Rect> {
+	let (long, short) = (pw.max(ph), pw.min(ph));
+	let shapes = [(long, short), (short, long)];
+	if let Some(p) = at { return shapes.iter().map(|&(w, h)| Rect { x: p.0, y: p.1, w, h }).collect(); }
+	let mut all: Vec<Rect> = shapes.iter().flat_map(|&(w, h)| besides(c, w, h)).collect();
+	let (ax, ay) = xy(&c.actor);
+	let end = |r: &Rect| if r.w >= r.h { if ay >= r.y && ay < r.y + r.h { 0 } else { 1 } } else if ax >= r.x && ax < r.x + r.w { 0 } else { 1 };
+	all.sort_by_key(end);
+	all
+}
+
+/// `siteNear`: whether a site lies within reach of the actor (nothing taken).
+async fn site_near(c: &Ctx) -> Result<bool> {
+	let me = xy(&c.actor);
+	Ok(c.space.read_all(&tmpl("Site", obj! { "room" => c.room() }), c.txn()).await?.iter().any(|e| dist_to(me, Rect::of(fields(e))) <= SITE_REACH))
 }
 
 /// `besides`: the rectangles beside the actor where a plan of `w`×`h` could go, nearest sides first.
@@ -340,7 +429,9 @@ pub async fn settle(c: &Ctx, s: &Json) -> Result<()> {
 		for k in ["buildId", "plan", "name", "room", "x", "y", "w", "h", "owner", "ownerName", "accountId", "beaconId", "points", "by"] { if let Some(v) = s.get(k) { b.insert(k, v.clone()); } }
 		b.insert("untilWorldMs", Json::from(kept + keep_of(c, plan).await?));
 		b.insert("builtAt", Json::from(now));
-		c.space.write(&tmpl("Building", Json::Object(b)), c.txn(), FOREVER).await?;
+		let b = Json::Object(b);
+		c.space.write(&tmpl("Building", b.clone()), c.txn(), FOREVER).await?;
+		super::interior::make_interior(&c.space, &c.txn, c.w(), &b).await?; // its inside, when its plan has one
 		close_orders(&c.space, &c.txn, s, kept + estate_ms(c.w())).await?;
 		let mut by: Vec<(&str, f64)> = j::entries(j::at(s, "by")).map(|(k, v)| (k, j::number(v))).collect();
 		by.sort_by(|a, b| (b.1 - a.1).partial_cmp(&0.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -433,7 +524,7 @@ pub async fn bau(c: &mut Ctx, arg: &str) -> Result<()> {
 		let max = setting(&c.space, &format!("build.max{}", nt(4f64.min(1f64.max(epoch))))).await?;
 		let built = c.space.read_all(&tmpl("Building", obj! { "accountId" => account_id.clone() }), c.txn()).await?;
 		let held = open.iter().filter(|s| !free.contains(&j::s(s, "plan"))).count() + built.iter().filter(|e| !free.contains(&txt(j::at(fields(e), "plan")).as_str())).count();
-		if held as f64 >= max { return refuse(format!("Mehr als {} Bauten hat hier niemand ({}); Regentonne, Vogelscheuche, Ställe, Gehege, Bienenstock, Straße und Signalfeuer zählen nicht mit.", nt(max), epoch_name(&w, epoch))); }
+		if held as f64 >= max { return refuse(format!("Mehr als {} Bauten hat hier niemand ({}); Regentonne, Vogelscheuche, Ställe, Gehege, Bienenstock und Signalfeuer zählen nicht mit.", nt(max), epoch_name(&w, epoch))); }
 	}
 	if let Some(herds) = j::opt(&w, "animals") {
 		let houses = j::at(herds, "houses");
@@ -454,16 +545,18 @@ pub async fn bau(c: &mut Ctx, arg: &str) -> Result<()> {
 	let room = room_of(c, None).await?;
 	let ground = rows(j::at(&room, "ground"));
 	let (pw, ph) = (j::n(plan, "w"), j::n(plan, "h"));
-	let tries = match (m.get(2).cloned().flatten(), m.get(3).cloned().flatten()) { (Some(x), Some(y)) => vec![Rect { x: js::to_number(&x), y: js::to_number(&y), w: pw, h: ph }], _ => besides(c, pw, ph) };
+	let at = match (m.get(2).cloned().flatten(), m.get(3).cloned().flatten()) { (Some(x), Some(y)) => Some((js::to_number(&x), js::to_number(&y))), _ => None };
+	let water = j::b(plan, "water");
+	let tries = if water { jetty_tries(c, pw, ph, at) } else { match at { Some(p) => vec![Rect { x: p.0, y: p.1, w: pw, h: ph }], None => besides(c, pw, ph) } };
 	let exits = if j::b(plan, "atExit") { fields_of(exits_here(c, None).await?) } else { vec![] };
 	let (green, mut rect, mut why) = (j::b(plan, "green"), None, String::new());
 	for r in tries {
-		let no = match refusal(c, &room, r, green, green).await? {
+		let no = if water { water_refusal(&c.space, &w, &room, r).await? } else { match refusal(c, &room, r, green, green).await? {
 			Some(n) => Some(n),
 			None if j::b(plan, "shore") && !touches_water(&w, &ground, r) => Some("Das muss ans Wasser grenzen.".to_owned()),
-			None if j::b(plan, "atExit") && !exits.iter().any(|x| dist_to(xy(x), r) <= EXIT_REACH) => Some("Eine Straße beginnt neben einem Ausgang.".to_owned()),
+			None if j::b(plan, "atExit") && !exits.iter().any(|x| dist_to(xy(x), r) <= EXIT_REACH) => Some("Das gehört neben einen Ausgang.".to_owned()),
 			None => None,
-		};
+		} };
 		match no { None => { rect = Some(r); break; } Some(n) => if why.is_empty() { why = n; } }
 	}
 	let Some(rect) = rect else { return refuse(format!("Hier passt keine {pname} hin: {why}")) };
@@ -503,6 +596,11 @@ async fn liefere(c: &mut Ctx, arg: &str) -> Result<()> {
 	let hits = items_named(c.w(), &inv, &no_article(&what), None);
 	let Some(first) = hits.first().map(|e| fields(e).clone()) else { return not_understood(format!("Du trägst nichts, was „{}“ heißt.", js::slice16(&what, 0, Some(30)))) };
 	let proto = j::at(&first, "proto").clone();
+	// no site in reach, or the road named: a road being built beside the actor takes it (road.rs)
+	let to_road = m[3].as_deref().is_some_and(|t| !t.is_empty() && js::re(r"^(?:straße|strasse|road)$", "i").test(t));
+	if to_road || !site_near(c).await? {
+		if let Some(road) = super::road::route_near(c).await? { return super::road::route_deliver(c, road, &what, m[1].as_deref().map(js::to_number)).await; }
+	}
 	let to = m[3].clone().filter(|t| !t.is_empty() && !js::re(r"^baustelle$", "i").test(t)).unwrap_or_default();
 	let mut s = site_here(c, &to).await?;
 	let sname = txt(j::at(&s, "name"));
@@ -554,6 +652,10 @@ pub async fn tire(c: &Ctx, now: f64, rest: Option<&Json>) -> Result<()> {
 
 async fn arbeite(c: &mut Ctx, arg: &str) -> Result<()> {
 	need_rank(c, "helfer", "Mitarbeiten").await?;
+	let to_road = js::re(r"^(?:an\s+der\s+)?(?:straße|strasse|road)$", "i").test(js::trim(arg));
+	if to_road || !site_near(c).await? {
+		if let Some(road) = super::road::route_near(c).await? { return super::road::route_work(c, road).await; }
+	}
 	let (now, rest) = rested(c).await?;
 	let name = js::re(r"^baustelle$", "i").replace(&js::re(r"^(?:an|auf)\s+(?:der\s+)?", "i").replace(arg, ""), "");
 	let mut s = site_here(c, &name).await?;
@@ -594,11 +696,12 @@ async fn baustelle(c: &mut Ctx, arg: &str) -> Result<()> {
 
 /// `buildingHere`: a building beside the actor (by plan name when given; only one's own with `own`), taken in the
 /// transaction.
-pub async fn building_here(c: &Ctx, name: &str, own: bool) -> Result<Json> {
-	let all = fields_of(c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?);
+pub async fn building_here(c: &Ctx, name: &str, own: bool) -> Result<Json> { building_here_for(c, name, own, None).await }
+/// `buildingHere` with `use`: inside, beside the furnishing for it (interior.rs `near_buildings`).
+pub async fn building_here_for(c: &Ctx, name: &str, own: bool, use_: Option<&str>) -> Result<Json> {
+	let all = super::interior::near_buildings(c, use_).await?;
 	let n = no_article(js::trim(name));
-	let me = xy(&c.actor);
-	let near: Vec<&Json> = all.iter().filter(|b| dist_to(me, Rect::of(b)) <= 1.0 && (n.is_empty() || plan_of(c.w(), &n).is_some_and(|p| j::at(p, "key") == j::at(b, "plan")) || txt(j::at(b, "name")).to_lowercase() == n.to_lowercase())).collect();
+	let near: Vec<&Json> = all.iter().filter(|b| n.is_empty() || plan_of(c.w(), &n).is_some_and(|p| j::at(p, "key") == j::at(b, "plan")) || txt(j::at(b, "name")).to_lowercase() == n.to_lowercase()).collect();
 	let mine_near: Vec<&Json> = near.iter().copied().filter(|b| mine(c, b)).collect();
 	let pick = if own { mine_near.first() } else { mine_near.first().or(near.first()) };
 	let Some(b) = pick else { return not_understood(if own { if near.is_empty() { "Geh direkt neben deinen Bau." } else { "Das ist nicht dein Bau." } } else { "Geh direkt neben den Bau." }) };
@@ -644,13 +747,13 @@ fn no_chest(c: &Ctx, b: &Json) -> Error {
 }
 /// `chestHere`: one's own chest beside the actor first, else a warehouse.
 async fn chest_here(c: &Ctx) -> Result<Json> {
-	let me = xy(&c.actor);
-	let near: Vec<Json> = fields_of(c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?).into_iter().filter(|b| dist_to(me, Rect::of(b)) <= 1.0).collect();
+	let near = super::interior::near_buildings(c, Some("chest")).await?;
 	let own = near.iter().find(|b| mine(c, b) && plan_has(c.w(), j::at(b, "plan"), "chest") && !plan_has(c.w(), j::at(b, "plan"), "store"));
 	let store = near.iter().find(|b| plan_has(c.w(), j::at(b, "plan"), "store"));
+	if near.is_empty() && super::interior::is_interior(c.room()) { return not_understood("Geh zur Truhe; an ihr legt man ab und nimmt heraus."); }
 	match (own, store) {
-		(Some(_), _) | (None, None) => building_here(c, &own.map_or_else(String::new, |b| txt(j::at(b, "plan"))), true).await,
-		(None, Some(s)) => building_here(c, &txt(j::at(s, "plan")), false).await,
+		(Some(_), _) | (None, None) => building_here_for(c, &own.map_or_else(String::new, |b| txt(j::at(b, "plan"))), true, Some("chest")).await,
+		(None, Some(s)) => building_here_for(c, &txt(j::at(s, "plan")), false, Some("chest")).await,
 	}
 }
 
@@ -752,7 +855,9 @@ async fn chest_named(c: &Ctx, target: &str) -> Result<OwnChest> {
 	let me = xy(&c.actor);
 	let beside = |list: &[&OwnChest]| list.iter().find(|x| x.region.is_none() && j::s(&x.b, "room") == c.room() && dist_to(me, Rect::of(&x.b)) <= 1.0).map(|x| (*x).clone());
 	if t.is_empty() || js::re(r"^(?:truhe|kiste|chest)$", "").test(&t) {
-		if let Some(b) = beside(&all.iter().collect::<Vec<_>>()) { return Ok(b); }
+		// inside one's hut: its chest
+		let inside = all.iter().find(|x| x.region.is_none() && if j::s(&x.b, "room") == c.room() { dist_to(me, Rect::of(&x.b)) <= 1.0 } else { c.room() == super::interior::interior_of(j::s(&x.b, "buildId")) });
+		if let Some(b) = inside { return Ok(b.clone()); }
 		if all.len() == 1 { return Ok(all[0].clone()); }
 		return refuse(format!("In welche Truhe? {}. Sag zum Beispiel „verstaue 3 muscheln in 2“.", numbered(w, &all)));
 	}
@@ -878,7 +983,8 @@ async fn verstaue(c: &mut Ctx, arg: &str) -> Result<()> {
 }
 
 async fn entnimm(c: &mut Ctx, arg: &str) -> Result<()> {
-	let (n, name) = amount(arg);
+	// „entnimm 5 käse aus der truhe“ (also mistyped „true“): the place is the chest beside one anyway
+	let (n, name) = amount(&js::re(r"\s+aus\s+(?:der\s+|dem\s+)?(?:truhe|true|kiste|lager)\b.*$", "i").replace(arg, ""));
 	let b = chest_here(c).await?;
 	let shared = plan_has(c.w(), j::at(&b, "plan"), "store");
 	let left = if shared { store_right(c, &b).await?.0 } else { f64::INFINITY };
@@ -1056,7 +1162,7 @@ pub async fn demolish_by_vote(space: &Space, txn: &str, w: &Json, b: &Json, now:
 	Ok(())
 }
 /// One step of the sweep in a transaction of its own: committed when `run` says so, else aborted.
-async fn in_txn<'a, F, Fut>(space: &'a Space, run: F) -> Result<()> where F: FnOnce(String) -> Fut, Fut: std::future::Future<Output = Result<bool>> + 'a {
+pub(crate) async fn in_txn<'a, F, Fut>(space: &'a Space, run: F) -> Result<()> where F: FnOnce(String) -> Fut, Fut: std::future::Future<Output = Result<bool>> + 'a {
 	let txn = space.create_transaction(10_000.0).await?;
 	match run(txn.clone()).await {
 		Ok(true) => space.commit(&txn).await,
@@ -1068,14 +1174,31 @@ async fn in_txn<'a, F, Fut>(space: &'a Space, run: F) -> Result<()> where F: FnO
 fn until_of(e: &Json) -> f64 { fields(e).get("untilWorldMs").map_or(f64::NAN, j::number) }
 fn all_of(es: Vec<Json>) -> Vec<(Json, Json)> { es.into_iter().map(|e| { let f = fields(&e).clone(); (e, f) }).collect() }
 
+thread_local! {
+	/// The spaces whose jetties of old were looked at since the start (`jettiesMoved`).
+	static JETTIES_MOVED: std::cell::RefCell<HashSet<usize>> = std::cell::RefCell::new(HashSet::new());
+}
+
 /// `buildSweep`: sites without progress, buildings not kept (a ruin, what lay inside an estate), freight nobody fetched,
 /// ruins and estates whose time is up, and the rests and loads that lapsed.
 pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 	let now = decay_now_of(space, None).await?;
 	let life = world_now_of(space, None).await?;
 	let estate = now + estate_ms(w);
+	// the single road cells of old (and their sites) go: a road is planned from room to room now (road.rs)
+	let road = j::s(j::at(w, "cart"), "road");
+	let old_road = (!road.is_empty() && plan_of(w, road).is_none()).then_some(road);
+	// the jetties of old on the beach go onto the water (where there is no place they stay; tried once a run)
+	let water: Vec<&str> = j::a(j::at(w, "building"), "plans").iter().filter(|p| j::b(p, "water")).map(|p| j::s(p, "key")).collect();
+	if !water.is_empty() && JETTIES_MOVED.with(|m| m.borrow_mut().insert(space.key())) {
+		for ty in ["Building", "Site"] {
+			for (_, b) in all_of(space.read_all(&obj! { "type" => ty }, None).await?) {
+				if water.contains(&j::s(&b, "plan")) { in_txn(space, |txn| { let b = &b; async move { jetty_to_water(space, w, &txn, ty, b).await } }).await?; }
+			}
+		}
+	}
 	for (_, s) in all_of(space.read_all(&obj! { "type" => "Site" }, None).await?) {
-		if j::n(&s, "untilWorldMs") > now { continue; }
+		if j::n(&s, "untilWorldMs") > now && old_road != Some(j::s(&s, "plan")) { continue; }
 		in_txn(space, |txn| { let s = &s; async move {
 			if space.take_if_exists(&tmpl("Site", obj! { "buildId" => j::at(s, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
 			close_orders(space, &txn, s, estate).await?;
@@ -1085,6 +1208,15 @@ pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 		} }).await?;
 	}
 	for (_, b) in all_of(space.read_all(&obj! { "type" => "Building" }, None).await?) {
+		if old_road == Some(j::s(&b, "plan")) {
+			in_txn(space, |txn| { let b = &b; async move {
+				if space.take_if_exists(&tmpl("Building", obj! { "buildId" => j::at(b, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
+				free_cells(space, &txn, j::s(b, "room"), j::at(b, "buildId")).await?;
+				release_light(space, &txn, j::at(b, "beaconId"), j::no(b, "points").unwrap_or(1.0)).await?;
+				Ok(true)
+			} }).await?;
+			continue;
+		}
 		if j::n(&b, "untilWorldMs") > now { continue; }
 		in_txn(space, |txn| { let b = &b; async move {
 			if space.take_if_exists(&tmpl("Building", obj! { "buildId" => j::at(b, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
@@ -1104,6 +1236,8 @@ pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 			Ok(true)
 		} }).await?;
 	}
+	// the insides: made for buildings that stood before them, taken with buildings that are gone (interior.rs)
+	super::interior::interior_sweep(space, w).await?;
 	// freight the railway carried and nobody fetched, or whose station fell: the sender's estate on the spot
 	for (_, f) in all_of(space.read_all(&obj! { "type" => "Freight" }, None).await?) {
 		if j::n(&f, "untilWorldMs") > life && space.read_if_exists(&tmpl("Building", obj! { "buildId" => j::at(&f, "buildId").clone() }), 1_000.0, None).await?.is_some() { continue; }

@@ -58,6 +58,7 @@ pub async fn run_job(space: &Space, w: &Json, job: &str, msg_lease_ms: f64) -> R
 			"epoch" => {
 				epoch_tick(space, &live, msg_lease_ms).await?;
 				settlement_tick(space, &live, msg_lease_ms).await?;
+				crate::commands::road::road_tick(space, &live, msg_lease_ms).await?;
 				motion_tick(space, &live, msg_lease_ms).await?;
 				show_tick(space, &live, msg_lease_ms).await?;
 				loan_tick(space, &live, msg_lease_ms).await?;

@@ -86,6 +86,8 @@ pub fn way_to(w: &Json, from: &str, to: &str) -> Option<String> {
 
 /// `sceneryText`.
 pub fn scenery_text(w: &Json, s: &Json) -> String {
+	// a furnishing says what it is for (commands/interior.rs)
+	if let Some(d) = j::so(s, "desc").filter(|d| !d.is_empty()) { return d.to_owned(); }
 	let about = j::at(j::at(w, "sceneryAbout"), j::s(s, "name")).as_str().unwrap_or("").to_owned();
 	if j::b(s, "fixed") { return crate::js::trim(&format!("{about} Das bleibt stehen.")).to_owned(); }
 	let gain: Vec<String> = j::a(s, "yields").iter().map(|y| format!("{} {}", crate::fire::key_text(j::at(y, "count")), j::by(j::a(w, "prototypes"), "key", j::s(y, "proto")).map_or_else(|| crate::fire::key_text(j::at(y, "proto")), |p| j::s(p, "name").to_owned()))).collect();

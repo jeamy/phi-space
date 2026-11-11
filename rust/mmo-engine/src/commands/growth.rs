@@ -153,6 +153,7 @@ pub async fn growth_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 	if strip.fract() != 0.0 || strip.is_nan() || strip < 1.0 { return Err(Error::Other("growth.strip must be a positive integer".into())); }
 	let mut grew = 0.0;
 	for entry in space.read_all(&obj! { "type" => "Room" }, None).await? {
+		if super::interior::is_interior(j::s(fields(&entry), "roomId")) { continue; } // a building's inside keeps its walls
 		let txn = space.create_transaction(30_000.0).await?;
 		let r: Result<Option<bool>> = async {
 			if space.take_if_exists(&world_lock(), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(None); }

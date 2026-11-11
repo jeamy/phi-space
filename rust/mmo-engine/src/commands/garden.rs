@@ -213,9 +213,28 @@ async fn beet(c: &mut Ctx, arg: &str) -> Result<()> {
 	let kw = js::re(KIND_WORD, "i").test(&word);
 	if js::re(r"^(?:anlegen|neu|new|umgraben|\d+)$", "i").test(&word) || kw { let a = if js::re(r"^\d+$", "").test(&word) || kw { arg.to_owned() } else { rest.join(" ") }; return dig(c, &a).await; }
 	if js::re(r"^(?:aufgeben|abreissen|abreißen|weg|remove)$", "i").test(&word) {
-		let b = bed_here(c, true, None, Some(1.0)).await?;
+		// „beet aufgeben ja x y“ (the map's menu): the one of one's beds on that cell, not just the nearest
+		let num = |i: usize| rest.get(i).map_or(f64::NAN, |v| js::to_number(v));
+		let (cx, cy) = (num(1), num(2));
+		let at = cx.is_finite() && cx.fract() == 0.0 && cy.is_finite() && cy.fract() == 0.0 && rest.len() >= 3;
+		// the operator (an admin) gives up anyone's bed beside it; its owner is told
+		crate::context::ensure_account(c).await?;
+		let admin = crate::context::level_of(c.account.as_ref()) == "Admin";
+		let on = |x: &Json| cx >= j::n(x, "x") && cy >= j::n(x, "y") && cx < j::n(x, "x") + j::n(x, "w") && cy < j::n(x, "y") + j::n(x, "h");
+		let b = bed_here(c, !admin, if at { Some(&on) } else { None }, Some(1.0)).await?;
+		// what grows in it is lost: asked first, „beet aufgeben ja“ does it
+		if !js::re(r"^(?:ja|yes)$", "i").test(rest.first().map_or("", |s| s.as_str())) {
+			write_bed(c, &b).await?;
+			let me = c.char_id().to_owned();
+			return msg(c, &me, "info", "Das Beet wirklich aufgeben? Was darin wächst, geht verloren, und dort wächst wieder Gras. „beet aufgeben ja“ gibt es auf.", MsgOpts::default()).await;
+		}
 		let txn = c.txn().unwrap_or("").to_owned();
 		free_bed(&c.space, &txn, &b).await?;
+		if j::s(&b, "owner") != c.char_id() {
+			let room = room_of(c, None).await?;
+			let text = format!("{} hat dein {} in {} aufgelöst; dort wächst wieder Gras.", txt(j::at(&c.actor, "name")), bed_word(&b), txt(j::at(&room, "name")));
+			msg(c, j::s(&b, "owner"), "info", &text, MsgOpts::default()).await?;
+		}
 		return msg(c, "*", "info", &format!("{} gibt das {} auf; dort wächst wieder Gras.", txt(j::at(&c.actor, "name")), bed_word(&b)), MsgOpts::default()).await;
 	}
 	let at: Option<(f64, f64)> = if js::re(r"^(?:ansehen|look)$", "i").test(&word) { match (rest.first(), rest.get(1)) { (Some(x), Some(y)) => Some((js::to_number(x), js::to_number(y))), _ => None } } else { None };
@@ -572,8 +591,8 @@ fn anew(e: &Json, f: Json) -> Json {
 async fn benenne(c: &mut Ctx, arg: &str) -> Result<()> {
 	let g = garden(c)?;
 	let line = js::re(r"^(?:die\s+)?(?:kreuzung|sorte)\s+(?:als\s+)?", "i").replace(js::trim(arg), "");
-	let Some(m) = js::caps(&js::re(r"^(?:(\d+)\s+)?(.+)$", ""), &line) else { return not_understood("Wie soll die neue Sorte heißen? Zum Beispiel: benenne Abendrot") };
-	let m2 = m[2].clone().unwrap_or_default();
+	let Some(m) = js::caps(&js::re(r"^(?:(?:#(\S+)|(\d+))\s+)?(.+)$", ""), &line) else { return not_understood("Wie soll die neue Sorte heißen? Zum Beispiel: benenne Abendrot") };
+	let m2 = m[3].clone().unwrap_or_default();
 	let me = c.char_id().to_owned();
 	let held: Vec<Json> = inventory(c).await?.into_iter().filter(|i| variety(fields(i)).is_some_and(|v| !j::b(v, "name") && j::s(v, "breeder") == me)).collect();
 	let vid = |i: &Json| j::at(j::at(fields(i), "variety"), "id").clone();
@@ -581,12 +600,16 @@ async fn benenne(c: &mut Ctx, arg: &str) -> Result<()> {
 	for i in &held { let id = vid(i); if !ids.contains(&id) { ids.push(id); } }
 	if ids.is_empty() { return refuse("Du trägst keine unbenannte Kreuzung, die du gezogen hast. Kreuzungen entstehen im Zierbeet, wenn verschiedene Blumen nebeneinander reifen."); }
 	let sort_for = |id: &Json| j::a(&g, "sorts").iter().find(|s| held.iter().any(|i| vid(i) == *id && (j::at(fields(i), "proto") == j::at(s, "seed") || j::at(fields(i), "proto") == j::at(j::at(s, "yields"), "proto")))).cloned();
-	if ids.len() > 1 && m[1].is_none() {
+	if ids.len() > 1 && m[1].is_none() && m[2].is_none() {
 		let list = ids.iter().enumerate().map(|(k, id)| format!("{}: aus {} ({})", k + 1, sort_for(id).map_or_else(|| "?".to_owned(), |s| txt(j::at(&s, "name"))), held.iter().find(|x| vid(x) == *id).map_or_else(String::new, |x| txt(j::at(j::at(fields(x), "variety"), "color"))))).collect::<Vec<_>>().join(", ");
 		return not_understood(format!("Du trägst mehrere Kreuzungen; welche? {list}. Zum Beispiel: benenne 1 {}", js::slice16(&m2, 0, Some(24))));
 	}
-	let idx = m[1].as_deref().map_or(0.0, |d| js::to_number(d) - 1.0);
-	let Some(id) = (if idx >= 0.0 { ids.get(idx as usize).cloned() } else { None }).filter(j::truthy) else { return not_understood(format!("So viele Kreuzungen trägst du nicht ({}).", ids.len())) };
+	// the pack names one by its id (a number counts in the order the server lists them)
+	let id = match &m[1] {
+		Some(want) => ids.iter().find(|x| x.as_str() == Some(want.as_str())).cloned(),
+		None => { let idx = m[2].as_deref().map_or(0.0, |d| js::to_number(d) - 1.0); if idx >= 0.0 { ids.get(idx as usize).cloned() } else { None } }
+	};
+	let Some(id) = id.filter(j::truthy) else { return not_understood(if m[1].is_some() { "Diese Kreuzung trägst du nicht, oder sie ist nicht deine.".to_owned() } else { format!("So viele Kreuzungen trägst du nicht ({}).", ids.len()) }) };
 	let spaced = js::re(r"\s+", "g").replace(js::trim(&m2), " ");
 	let name = js::re(r"^\p{Ll}", "u").replace_with(&spaced, |s, m| js::upper(&s[m.start..m.end]));
 	if let Some(no) = name_refused(c, &g, &name).await? { return refuse(no); }

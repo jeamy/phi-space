@@ -46,6 +46,7 @@ const { ordersTick, marketTick } = await from("server/engine/commands/trade.ts")
 const { windTick, stormRaisesWind } = await from("server/engine/commands/wind.ts");
 const { settlementTick } = await from("server/engine/commands/settlement.ts");
 const { epochTick } = await from("server/engine/commands/epoch.ts");
+const { roadTick } = await from("server/engine/commands/road.ts");
 const { motionTick } = await from("server/engine/commands/townhall.ts");
 const { stormTurnsMills } = await from("server/engine/commands/mill.ts");
 const { showTick } = await from("server/engine/commands/festival.ts");
@@ -190,7 +191,7 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 				garden: job(async (live) => { await gardenTick(space, live); await fieldTick(space, live, msgLeaseMs); await cartTick(space, live, msgLeaseMs); await passageTick(space, msgLeaseMs); }),
 				wild: job(async (live) => { await wildTick(space, live, msgLeaseMs); }),
 				epoch: async () => {
-					await job(async (live) => { await epochTick(space, live, msgLeaseMs); await settlementTick(space, live, msgLeaseMs); await motionTick(space, live, msgLeaseMs); await showTick(space, live, msgLeaseMs); await loanTick(space, live, msgLeaseMs); await seasonTick(space, live, msgLeaseMs); })();
+					await job(async (live) => { await epochTick(space, live, msgLeaseMs); await settlementTick(space, live, msgLeaseMs); await roadTick(space, live, msgLeaseMs); await motionTick(space, live, msgLeaseMs); await showTick(space, live, msgLeaseMs); await loanTick(space, live, msgLeaseMs); await seasonTick(space, live, msgLeaseMs); })();
 					await growthTick(space, w, msgLeaseMs);
 				},
 			};

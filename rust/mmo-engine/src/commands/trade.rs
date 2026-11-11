@@ -3,8 +3,9 @@
 //! on the board. Every exchange moves its items in the command's transaction.
 use phi_json::{obj, Json, Object};
 
-use super::build::{bau, chest_for_sale, dist_to, plan_of, Rect};
+use super::build::{bau, chest_for_sale, plan_of};
 use super::siteorder::board_lines;
+use super::interior::{furnishing_for, near_buildings};
 use crate::clock::{decay_now_of, patience_of, world_now_of};
 use crate::context::{inventory, items_named, msg, stem, Ctx, MsgOpts};
 use crate::fire::key_text;
@@ -231,7 +232,7 @@ pub fn seller_hint(w: &Json, proto: &str, proto_name: &str, room: &str) -> Strin
 	let all = sellers_of(w, proto);
 	if all.iter().any(|s| s.market.as_deref() == Some(room)) { return String::new(); }
 	if all.is_empty() { return format!("{proto_name} verkauft kein Händler; liefern kann nur, wer es selbst hat oder macht."); }
-	format!("An diesem Brett verkauft kein Händler {proto_name}; {}. Hier kann nur liefern, wer es selbst hat.", all.iter().map(|s| format!("{} ({}) verkauft es für {}", s.name, s.place, coins(s.each))).collect::<Vec<_>>().join(", "))
+	format!("An diesem Brett verkauft kein Händler {proto_name}; {}. Hier kann nur liefern, wer es selbst hat.", all.iter().map(|s| format!("{} ({}) verkauft es um {}, je nach Vorrat", s.name, s.place, coins(s.each))).collect::<Vec<_>>().join(", "))
 }
 /// `lotOf`: "Muschel", "10× Muschel".
 pub fn lot_of(l: &Json) -> String { let n = j::no(l, "count").unwrap_or(1.0); if n > 1.0 { format!("{}× {}", nt(n), txt(j::at(l, "itemName"))) } else { txt(j::at(l, "itemName")) } }
@@ -475,8 +476,7 @@ fn recipe_named<'a>(w: &'a Json, what: &str) -> Option<&'a Json> {
 
 /// `craft hier`.
 async fn craft_here(c: &mut Ctx, w: &Json) -> Result<()> {
-	let me_at = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	let beside: Vec<Json> = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| f(e).clone()).filter(|b| dist_to(me_at, Rect::of(b)) <= 1.0).collect();
+	let beside = near_buildings(c, Some("cook")).await?;
 	let rs = j::a(w, "recipes");
 	let mut plans: Vec<String> = Vec::new();
 	for b in &beside { let p = txt(j::at(b, "plan")); if !plans.contains(&p) && rs.iter().any(|r| j::so(r, "at") == Some(p.as_str())) { plans.push(p); } }
@@ -528,9 +528,10 @@ pub async fn craft(c: &mut Ctx, arg: &str) -> Result<()> {
 	};
 	let rname = txt(j::at(r, "name"));
 	if let Some(at) = j::so(r, "at").filter(|t| !t.is_empty()) {
-		let me_at = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-		let beside = c.space.read_all(&tmpl("Building", obj! { "room" => c.room(), "plan" => at }), None).await?.iter().any(|e| dist_to(me_at, Rect::of(f(e))) <= 1.0);
-		if !beside {
+		if !near_buildings(c, Some("cook")).await?.iter().any(|b| j::s(b, "plan") == at) {
+			// inside the building of the recipe, away from its hearth: go to it
+			let hearth = if near_buildings(c, None).await?.iter().any(|b| j::s(b, "plan") == at) { furnishing_for(c, "cook").await? } else { None };
+			if let Some(h) = hearth { return refuse(format!("{rname} macht man am {}; geh zu ihm.", txt(j::at(&h, "name")))); }
 			let p = plan_of(&w, at);
 			let dative = p.and_then(|p| j::so(p, "dative")).map_or_else(|| format!("einem {}", p.map_or_else(|| at.to_owned(), |p| txt(j::at(p, "name")))), str::to_owned);
 			return refuse(format!("{rname} macht man nur direkt neben {dative}."));
@@ -542,9 +543,8 @@ pub async fn craft(c: &mut Ctx, arg: &str) -> Result<()> {
 	let tool_proto = j::so(r, "tool").filter(|t| !t.is_empty()).map(str::to_owned);
 	let tools: Vec<&Json> = tool_proto.as_ref().map(|t| inv.iter().filter(|i| j::s(f(i), "proto") == t).collect()).unwrap_or_default();
 	let wearing = if tool_proto.is_some() {
-		let me_at = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-		let near = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?;
-		if near.iter().any(|e| dist_to(me_at, Rect::of(f(e))) <= 1.0 && plan_of(&w, j::s(f(e), "plan")).is_some_and(|p| j::b(p, "sparesTools"))) { 0.5 } else { 1.0 }
+		let near = near_buildings(c, None).await?;
+		if near.iter().any(|b| plan_of(&w, j::s(b, "plan")).is_some_and(|p| j::b(p, "sparesTools"))) { 0.5 } else { 1.0 }
 	} else { 1.0 };
 	let (mut used, mut inputs, mut wear): (Vec<String>, Vec<Json>, Vec<(String, f64)>) = (Vec::new(), Vec::new(), Vec::new());
 	let wear_of = |wear: &[(String, f64)], t: &Json| wear.iter().find(|(k, _)| *k == item_id(t)).map(|(_, v)| *v).unwrap_or_else(|| j::no(f(t), "wear").unwrap_or(1.0));
@@ -709,9 +709,41 @@ async fn restock(space: &Space, w: &Json) -> Result<()> {
 	Ok(())
 }
 
-/// `marketTick`: restocking, and what lies in escrow for a listing or notice that lapsed goes back.
+/// `shipOff`: what a trader only buys (no selling price) it ships off, one a RESTOCK_WORLD_MS while it holds any, so a
+/// glut it paid little for wears off and its buying price comes back up.
+async fn ship_off(space: &Space, w: &Json) -> Result<()> {
+	let now = world_now_of(space, None).await?;
+	let currency = j::s(w, "currency");
+	for n in j::a(w, "npcs") {
+		let only: Vec<String> = j::entries(j::at(n, "prices")).filter(|(p, v)| { let pr = v.as_array().map(Vec::as_slice).unwrap_or(&[]); let (b, s) = (pr.first().map_or(f64::NAN, j::number), pr.get(1).map_or(f64::NAN, j::number)); b > 0.0 && s <= 0.0 && *p != currency }).map(|(p, _)| p.to_owned()).collect();
+		if only.is_empty() { continue; }
+		let char_id = format!("npc-{}", txt(j::at(n, "npcId")));
+		if space.read_limit(&tmpl("Character", obj! { "charId" => char_id.as_str() }), 1, None).await?.is_empty() { continue; } // in another region
+		for proto in &only {
+			let key = format!("-{proto}");
+			let e = space.peek(&tmpl("Restock", obj! { "charId" => char_id.as_str(), "proto" => key.as_str() }), None).await?;
+			let next = e.as_ref().map(|e| j::n(f(e), "nextWorldMs"));
+			let have = space.count(&tmpl("Item", obj! { "location" => char_id.as_str(), "proto" => proto.as_str() }), None).await?;
+			if have == 0.0 { if let Some(e) = &e { space.take_if_exists(&obj! { "type" => "Restock", "id" => j::at(e, "id").clone() }, NO_WAIT, None).await?; } continue; }
+			if next.is_some_and(|x| x > now) { continue; }
+			let txn = space.create_transaction(10_000.0).await?;
+			let r: Result<bool> = async {
+				if let Some(e) = &e { if space.take_if_exists(&obj! { "type" => "Restock", "id" => j::at(e, "id").clone() }, NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); } }
+				// the first time it holds some, the clock starts; one goes when it is up
+				if e.is_some() { space.take_if_exists(&tmpl("Item", obj! { "location" => char_id.as_str(), "proto" => proto.as_str() }), NO_WAIT, Some(&txn)).await?; }
+				if e.is_none() || have > 1.0 { space.write(&tmpl("Restock", obj! { "charId" => char_id.as_str(), "proto" => key.as_str(), "nextWorldMs" => now + RESTOCK_WORLD_MS }), Some(&txn), FOREVER).await?; }
+				Ok(true)
+			}.await;
+			match r { Ok(true) => space.commit(&txn).await?, Ok(false) => space.abort(&txn).await?, Err(err) => { let _ = space.abort(&txn).await; return Err(err); } }
+		}
+	}
+	Ok(())
+}
+
+/// `marketTick`: restocking, shipping off, and what lies in escrow for a listing or notice that lapsed goes back.
 pub async fn market_tick(space: &Space, w: &Json) -> Result<()> {
 	restock(space, w).await?;
+	ship_off(space, w).await?;
 	for e in space.read_all(&tmpl("Item", obj! { "location" => "market" }), None).await? {
 		let it = f(&e);
 		if let Some(l) = j::so(it, "listing").filter(|l| !l.is_empty()) {

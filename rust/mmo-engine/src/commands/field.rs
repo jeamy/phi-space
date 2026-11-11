@@ -69,7 +69,8 @@ async fn tire(c: &Ctx, now: f64) -> Result<()> {
 	let until = rest.as_ref().map_or(0.0, |e| j::n(fields(e), "untilWorldMs"));
 	if until > now { return refuse(format!("Du bist noch müde von der letzten Arbeit; in etwa {} Minuten wieder.", nt(1f64.max(js::round((until - now) / 60_000.0))))); }
 	if let Some(r) = &rest { c.space.take_if_exists(&obj! { "id" => j::at(r, "id").clone() }, NO_WAIT, c.txn()).await?; }
-	let ms = work_rest_ms(&c.space).await? / sated_factor(c, now).await?;
+	let base = work_rest_ms(&c.space).await? / if super::chapel::blessed(c, now).await? { 2.0 } else { 1.0 };
+	let ms = base / sated_factor(c, now).await?;
 	c.space.write(&tmpl("WorkRest", obj! { "charId" => c.char_id(), "untilWorldMs" => now + ms }), c.txn(), FOREVER).await?;
 	Ok(())
 }
@@ -191,6 +192,12 @@ async fn flur(c: &mut Ctx, arg: &str) -> Result<()> {
 	if re(r"^(?:aufgeben|weg|remove)$").test(&word) {
 		let f = field_here(c).await?;
 		if !mine(c, &f) { return refuse(format!("Das ist der {}; aufgeben kann ihn nur, wer ihn angelegt hat.", field_name(&f))); }
+		// what grows on it is lost: asked first, „flur aufgeben ja“ does it
+		if !re(r"^(?:ja|yes)$").test(rest.first().map_or("", |s| s.as_str())) {
+			write_field(c, &f).await?;
+			let me = c.char_id().to_owned();
+			return msg(c, &me, "info", "Den Acker wirklich aufgeben? Was darauf wächst, geht verloren, und dort wächst wieder Gras. „flur aufgeben ja“ gibt ihn auf.", MsgOpts::default()).await;
+		}
 		let txn = c.txn().unwrap_or("").to_owned();
 		free_cells(&c.space, &txn, j::s(&f, "room"), j::at(&f, "fieldId")).await?;
 		release_light(&c.space, &txn, j::at(&f, "beaconId"), j::n(&f, "points")).await?;

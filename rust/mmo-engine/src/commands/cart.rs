@@ -4,7 +4,7 @@
 //! rides between stations and freight.
 use phi_json::{obj, Json};
 
-use super::build::{amount, dist_to, give_back, move_item as shift_item, plan_of, Rect, ARTICLE, EXIT_REACH};
+use super::build::{amount, dist_to, give_back, move_item as shift_item, plan_of, Rect, ARTICLE};
 use super::default::{place_in, relocate};
 use super::trade::{consume, move_item};
 use crate::clock::world_now_of;
@@ -23,21 +23,16 @@ fn templ() -> MsgOpts { MsgOpts { templ: true, ..Default::default() } }
 /// Room to rooms the roads join, in the order a Map of Sets keeps them.
 pub type Links = Vec<(String, Vec<String>)>;
 
-/// `roadLinks`: a road beside an exit links its two ends, both ways.
+/// `roadLinks`: a finished road links the two rooms it runs between, both ways.
 pub async fn road_links(space: &Space, w: &Json, txn: Option<&str>) -> Result<Links> {
 	let mut links: Links = Vec::new();
-	let Some(d) = j::opt(w, "cart") else { return Ok(links) };
-	let roads: Vec<Json> = space.read_all(&tmpl("Building", obj! { "plan" => j::at(d, "road").clone() }), txn).await?.iter().map(|e| fields(e).clone()).collect();
-	if roads.is_empty() { return Ok(links); }
+	if j::opt(w, "cart").is_none() { return Ok(links) }
 	let mut link = |a: &str, b: &str| {
 		let i = match links.iter().position(|(r, _)| r == a) { Some(i) => i, None => { links.push((a.to_owned(), Vec::new())); links.len() - 1 } };
 		if !links[i].1.iter().any(|x| x == b) { links[i].1.push(b.to_owned()); }
 	};
-	for e in space.read_all(&obj! { "type" => "Exit" }, txn).await? {
-		let x = fields(&e);
-		let (loc, dest) = (j::s(x, "location"), j::s(x, "destination"));
-		if roads.iter().any(|r| j::s(r, "room") == loc && dist_to((j::n(x, "x"), j::n(x, "y")), Rect::of(r)) <= EXIT_REACH) { link(loc, dest); link(dest, loc); }
-	}
+	// a finished road (road.rs) links the two rooms it runs between
+	for (a, b) in super::road::route_links(space, txn).await? { link(&a, &b); link(&b, &a); }
 	Ok(links)
 }
 /// `roadPath`: the rooms from `from` to `to` by road, without `from`; None when no road goes there.
@@ -93,6 +88,7 @@ pub async fn run(c: &mut Ctx, key: &str, arg: &str) -> Result<()> {
 	match key {
 		"karren" => karren(c, arg).await,
 		"zug" => zug(c, arg).await,
+		"straße" => super::road::strasse(c, arg).await,
 		k => Err(Error::Other(format!("unported: cart/{k}"))),
 	}
 }

@@ -137,8 +137,7 @@ async fn backe(c: &mut Ctx, arg: &str) -> Result<()> {
 	let protos = j::a(&w, "prototypes");
 	let proto = |k: &Json| protos.iter().find(|p| j::at(p, "key") == k);
 	let food: Vec<&Json> = j::a(&w, "recipes").iter().filter(|r| j::b(r, "at") && proto(j::at(r, "makes")).is_some_and(|p| j::s(p, "typeclass") == "Produce")).collect();
-	let at = xy(&c.actor);
-	let beside: HashSet<String> = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(fields).filter(|b| dist_to(at, Rect::of(b)) <= 1.0).map(|b| txt(j::at(b, "plan"))).collect();
+	let beside: HashSet<String> = super::interior::near_buildings(c, None).await?.iter().map(|b| txt(j::at(b, "plan"))).collect();
 	let here = |r: &Json| beside.contains(&txt(j::at(r, "at")));
 	let ovens: Vec<&Json> = food.iter().copied().filter(|r| here(r)).chain(food.iter().copied().filter(|r| !here(r))).collect();
 	let n = no_article(&js::lower(js::trim(arg)));

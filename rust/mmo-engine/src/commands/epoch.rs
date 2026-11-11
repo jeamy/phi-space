@@ -69,6 +69,8 @@ pub async fn island_points(space: &Space, w: &Json, now: f64) -> Result<Vec<(Str
 			match what { 0 => t.buildings += p, 1 => t.beds += p, _ => t.fields += p }
 		}
 	}
+	// a finished road counts as a building of its island (road.rs)
+	for (island, points) in super::road::route_points(space).await? { if let Some((_, t)) = out.iter_mut().find(|(k, _)| *k == island) { t.points += points; t.buildings += points; } }
 	Ok(out)
 }
 
@@ -79,6 +81,7 @@ async fn written_epoch(space: &Space, island: &str) -> Result<f64> {
 /// What an epoch unlocks: the plans of exactly that epoch, and the fields.
 fn unlocks(w: &Json, epoch: f64) -> String {
 	let mut names: Vec<String> = j::a(j::at(w, "building"), "plans").iter().filter(|p| j::no(p, "epoch").unwrap_or(1.0) == epoch).map(|p| key_text(j::at(p, "name"))).collect();
+	if j::no(j::opt(j::at(w, "cart"), "route").unwrap_or(&Json::Null), "epoch") == Some(epoch) && epoch > 1.0 { names.push("Straßen".into()); } // planned from room to room (road.rs)
 	if j::no(j::at(w, "fields"), "epoch").unwrap_or(1.0) == epoch && epoch > 1.0 { names.push("Äcker".into()); }
 	names.join(", ")
 }

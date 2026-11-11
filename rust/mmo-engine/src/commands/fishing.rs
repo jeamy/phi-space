@@ -85,7 +85,8 @@ async fn rudere(c: &mut Ctx, arg: &str) -> Result<()> {
 	};
 	let jetty = jetties.iter().find(|b| j::at(b, "room") == j::at(&to, "roomId")).cloned().unwrap_or(Json::Null);
 	let dest = room_of(c, Some(j::s(&to, "roomId"))).await?;
-	let at = place_in(c, &dest, (j::n(&jetty, "x"), j::n(&jetty, "y") + 1.0), false, &[]).await?;
+	let shore = shore_of(c.w(), &crate::room_growth::rows(j::at(&dest, "ground")), &jetty).unwrap_or((j::n(&jetty, "x"), j::n(&jetty, "y") + 1.0));
+	let at = place_in(c, &dest, shore, false, &[]).await?;
 	count_trip(c, "row").await?;
 	msg(c, "*", "info", &format!("$you() $conj(ruderst|rudert) nach {}.", txt(j::at(&to, "name"))), templ()).await?;
 	let dest_id = j::s(&dest, "roomId").to_owned();
@@ -226,4 +227,21 @@ async fn einschiffen(c: &mut Ctx, arg: &str) -> Result<()> {
 	// the passenger stays aboard until the ship lies at the island: it is the time of the loop, not a jump
 	let from = c.room().to_owned();
 	board(c, &stop.room, &stop.island, &spawn, now + ship_comes(&t, now, to), Some(&from)).await
+}
+
+/// `shoreOf`: the land beside a jetty that lies on the water (where one steps ashore): its first walkable neighbour;
+/// None for a jetty on land.
+fn shore_of(w: &Json, ground: &[String], r: &Json) -> Option<(f64, f64)> {
+	let (x0, y0, rw, rh) = (j::n(r, "x"), j::n(r, "y"), j::n(r, "w"), j::n(r, "h"));
+	if crate::world::walkable(w, ground, x0, y0) { return None; }
+	let mut y = y0;
+	while y < y0 + rh {
+		let mut x = x0;
+		while x < x0 + rw {
+			for (dx, dy) in [(0.0, 1.0), (1.0, 0.0), (-1.0, 0.0), (0.0, -1.0)] { if crate::world::walkable(w, ground, x + dx, y + dy) { return Some((x + dx, y + dy)); } }
+			x += 1.0;
+		}
+		y += 1.0;
+	}
+	None
 }

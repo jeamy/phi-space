@@ -544,6 +544,27 @@ pub fn caps(r: &JsRegex, s: &str) -> Option<Vec<Option<String>>> {
 	r.exec(s).map(|m| (0..m.groups.len()).map(|i| m.group(s, i).map(str::to_owned)).collect())
 }
 
+/// `Math.hypot` as V8 computes it (builtins `MathHypot`): scaled by the largest value, the squares summed with Kahan's
+/// compensation, so ties between cells break the same way.
+pub fn hypot(values: &[f64]) -> f64 {
+	let abs: Vec<f64> = values.iter().map(|v| v.abs()).collect();
+	let mut max = 0.0f64;
+	let mut nan = false;
+	for &v in &abs { if v.is_nan() { nan = true; } else if v > max { max = v; } }
+	if max == f64::INFINITY { return f64::INFINITY; }
+	if nan { return f64::NAN; }
+	if max == 0.0 { return 0.0; }
+	let (mut sum, mut compensation) = (0.0f64, 0.0f64);
+	for &v in &abs {
+		let n = v / max;
+		let summand = n * n - compensation;
+		let preliminary = sum + summand;
+		compensation = (preliminary - sum) - summand;
+		sum = preliminary;
+	}
+	sum.sqrt() * max
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

@@ -383,7 +383,8 @@ fn trading() {
 	for id in ["w-t2", "w-t1"] { w.write(obj! { "type" => "Wanted", "fields" => obj! { "wantedId" => id, "buyer" => "c-x", "buyerName" => "X", "proto" => "perle", "protoName" => "Perle", "price" => 5.0, "room" => "graue-bucht", "at" => 1.0, "expiresWorldMs" => 9e15 } }); }
 	run(&mut w, &a, "markt");
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 30 && said.iter().filter(|r| r.starts_with("refused")).count() > 30, "{said:?}");
-	assert!(w.entries_with(r#""Restock""#) == 0 && w.entries_with("t-lapsed") == 1, "the ticks did nothing");
+	// the restock entry written above went (what a trader only buys has its own, `-<proto>`, shipOff)
+	assert!(w.entries_with(r#""proto":"muschelmesser","nextWorldMs":0}"#) == 0 && w.entries_with("t-lapsed") == 1, "the ticks did nothing");
 }
 
 /// The small modules: eating (food.ts), offering at a chapel (chapel.ts), the signal fire chains (signal.ts), clearing
@@ -1117,7 +1118,7 @@ fn gardening() {
 	for (who, line) in [(&a, "beet"), (&a, "ernte"), (&b, "ernte"), (&g, "ernte"), (&a, "jäte"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
 	// the digger's share of the community bed
 	stand(&mut w, 1, "graue-bucht", 0.0, 12.0);
-	for (who, line) in [(&a, "beet"), (&a, "ernte"), (&a, "ernte"), (&a, "gieße"), (&a, "jäte"), (&a, "beet aufgeben")] { run(&mut w, who, line, 0.0); }
+	for (who, line) in [(&a, "beet"), (&a, "ernte"), (&a, "ernte"), (&a, "gieße"), (&a, "jäte"), (&a, "beet aufgeben"), (&a, "beet aufgeben ja")] { run(&mut w, who, line, 0.0); }
 	stand(&mut w, 1, "graue-bucht", 5.0, 13.0);
 	// naming crossings (two seeds of one, one of another, in place of what the harvest crossed): one planted before it is
 	// named, then one planted named
@@ -1130,12 +1131,12 @@ fn gardening() {
 	give(&mut w, &a, "wasserkanne", 16);
 	for (who, line) in [
 		(&a, "benenne"), (&a, "benenne Abendrot"), (&a, "benenne 9 Abendrot"), (&a, "benenne 0 Abendrot"), (&a, "benenne 1 Kohl"), (&a, "benenne 1 x"), (&a, "benenne 1 look"), (&a, "benenne 1 Ab3nd"),
-		(&a, "pflanze kreuzungssamen"), (&a, "benenne die kreuzung als 1 abendröte"), (&a, "benenne Abendröte"), (&a, "pflanze abendröte-samen"), (&b, "benenne Tau"), (&a, "benenne   morgen   rot"), (&a, "benenne Neu"), (&a, "inventory"), (&a, "beet"),
+		(&a, "pflanze kreuzungssamen"), (&a, "benenne die kreuzung als 1 abendröte"), (&a, "benenne Abendröte"), (&a, "pflanze abendröte-samen"), (&b, "benenne Tau"), (&a, "benenne   morgen   rot"), (&a, "benenne Neu"), (&a, "benenne #x Neu"), (&a, "benenne #1 Neu"), (&a, "inventory"), (&a, "beet"),
 	] { run(&mut w, who, line, 0.0); }
 	for _ in 0..16 { run(&mut w, &a, "gieße", 4.0 * 3_600_000.0); w.call("gardenTick", None); }
 	for (who, line) in [(&a, "beet"), (&a, "ernte"), (&a, "inventory"), (&a, "pate weg wanderer2"), (&a, "pate weg Wanderer2")] { run(&mut w, who, line, 0.0); }
 	stand(&mut w, 1, "graue-bucht", 9.0, 14.0);
-	for (who, line) in [(&a, "ernte"), (&a, "beet aufgeben"), (&a, "ernte flur")] { run(&mut w, who, line, 0.0); }
+	for (who, line) in [(&a, "ernte"), (&a, "beet aufgeben"), (&b, "beet aufgeben ja 1 1"), (&a, "beet aufgeben ja"), (&a, "ernte flur")] { run(&mut w, who, line, 0.0); }
 	stand(&mut w, 1, "graue-bucht", 5.0, 13.0);
 	// planted again, left dry: the tick wilts it, weeding pulls it
 	for (who, line) in [(&a, "pflanze 2 strandnelken"), (&a, "pflanze 3 samen-duenenrose 4 11")] { run(&mut w, who, line, 0.0); }
@@ -1143,7 +1144,7 @@ fn gardening() {
 	w.call("gardenTick", None);
 	run(&mut w, &a, "beet", 30.0 * 3_600_000.0);
 	w.call("gardenTick", None);
-	for (who, line) in [(&a, "beet"), (&a, "jäte"), (&a, "jäte"), (&a, "beet aufgeben")] { run(&mut w, who, line, 0.0); }
+	for (who, line) in [(&a, "beet"), (&a, "jäte"), (&a, "jäte"), (&a, "beet aufgeben"), (&a, "beet aufgeben ja")] { run(&mut w, who, line, 0.0); }
 	// winter: what grows outside stands still until the spring, beside a greenhouse it grows on
 	give(&mut w, &a, "samen-strandnelke", 1);
 	give(&mut w, &a, "samen-strandkohl", 1);
@@ -1254,7 +1255,7 @@ fn farming() {
 	for (who, line) in [(&a, "flur"), (&a, "ernte"), (&b, "ernte")] { run(&mut w, who, line, 2_000_000.0); }
 	run(&mut w, &a, "flur", 50.0 * 3_600_000.0);
 	w.call("fieldTick", None);
-	for (who, line) in [(&a, "flur"), (&b, "flur aufgeben"), (&a, "flur zu"), (&a, "flur aufgeben"), (&a, "flur"), (&a, "pflanze weizen")] { run(&mut w, who, line, 0.0); }
+	for (who, line) in [(&a, "flur"), (&b, "flur aufgeben"), (&a, "flur zu"), (&a, "flur aufgeben"), (&a, "flur aufgeben ja"), (&a, "flur"), (&a, "pflanze weizen")] { run(&mut w, who, line, 0.0); }
 	// one nobody works goes back to grass
 	run(&mut w, &a, "flur anlegen", 0.0);
 	run(&mut w, &a, "flur", 15.0 * 86_400_000.0);
@@ -1438,8 +1439,11 @@ fn carts_and_trains() {
 	give(&mut w, &b, "muenze", 1);
 	give(&mut w, &b, "treibholz", 1);
 	let building = |id: &str, plan: &str, room: &str, x: f64, y: f64, sz: (f64, f64), owner: usize| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => plan, "name" => plan, "room" => room, "x" => x, "y" => y, "w" => sz.0, "h" => sz.1, "owner" => format!("c-walk{owner}"), "ownerName" => format!("Wanderer{owner}"), "accountId" => format!("a-walk{owner}"), "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
-	w.write(building("road-1", "strasse", "graue-bucht", 21.0, 8.0, (1.0, 1.0), 1));
-	w.write(building("road-2", "strasse", "klippenpfad", 22.0, 7.0, (1.0, 1.0), 1));
+	// two finished roads (road.rs): Graue Bucht to Klippenpfad, Klippenpfad to Klippenkopf
+	let island = |room: &str| mmo_engine::j::s(mmo_engine::j::by(mmo_engine::j::a(&world, "rooms"), "roomId", room).unwrap_or(&Json::Null), "island").to_owned();
+	for (id, from, to) in [("road-1", "graue-bucht", "klippenpfad"), ("road-2", "klippenkopf", "klippenpfad")] {
+		w.write(obj! { "type" => "Route", "fields" => obj! { "routeId" => id, "pair" => format!("{from}|{to}"), "island" => island(from), "rooms" => Json::Array(vec![Json::from(from), Json::from(to)]), "names" => Json::Array(vec![Json::from(from), Json::from(to)]), "cells" => Json::Array(vec![]), "state" => "built", "untilWorldMs" => 9e15, "points" => 2.0 } });
+	}
 	w.compare("setup");
 	let at = std::cell::Cell::new(START);
 	let mut said = Vec::new();
@@ -1842,3 +1846,92 @@ fn dressing() {
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() >= 8 && said.iter().filter(|r| r.starts_with("refused")).count() >= 5, "{said:?}");
 }
 
+
+/// Roads and the inside of a hut (road.rs, interior.rs): a road planned between two places, voted on, supplied with
+/// stone and worked until it stands, shown and mended, the votes and decay of the road tick; a hut's inside given by
+/// the sweep, entered by its owner and an invited guest, the hearth, the chest and the bed inside, a guest put out,
+/// the hut taken with people inside, and an old jetty on the beach moved onto the water.
+#[test]
+fn roads_and_insides() {
+	let mut w = Walk::new("roads_and_insides", 61, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (15.0, 12.0), true, false);
+	let b = w.player_as(2, "klippenpfad", (14.0, 12.0), true, false);
+	let g = w.player(3, "graue-bucht", (14.0, 12.0), true);
+	let e = w.player_as(4, "graue-bucht", (16.0, 12.0), true, false);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	for (p, k) in [("stein", 30), ("treibholz", 4), ("muschel", 2)] { give(&mut w, &a, p, k); }
+	give(&mut w, &b, "stein", 4);
+	give(&mut w, &e, "treibholz", 2);
+	let building = |id: &str, plan: &str, name: &str, room: &str, x: f64, y: f64, sz: (f64, f64), owner: usize| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => plan, "name" => name, "room" => room, "x" => x, "y" => y, "w" => sz.0, "h" => sz.1, "owner" => format!("c-walk{owner}"), "ownerName" => format!("Wanderer{owner}"), "accountId" => format!("a-walk{owner}"), "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } };
+	w.write(building("h-1", "huette", "Hütte", "graue-bucht", 15.0, 10.0, (2.0, 2.0), 1));
+	w.write(building("h-2", "huette", "Hütte", "klippenpfad", 14.0, 10.0, (2.0, 2.0), 2));
+	w.write(building("s-1", "steg", "Steg", "graue-bucht", 12.0, 14.0, (2.0, 1.0), 1));
+	w.write(obj! { "type" => "Setting", "fields" => obj! { "key" => "work.rest", "value" => 0.0 } });
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str| {
+		step += 1;
+		at.set(at.get() + 11_000.0);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	// roads: too early, then in the second epoch
+	for (who, line) in [(&a, "straße"), (&a, "straße plane klippenpfad")] { run(&mut w, who, line); }
+	w.write(obj! { "type" => "Setting", "fields" => obj! { "key" => "epoch.force", "value" => 2.0 } });
+	for (who, line) in [
+		(&a, "straße"), (&g, "straße plane klippenpfad"), (&a, "straße plane"), (&a, "straße plane nirgendwo"), (&a, "straße plane fischerdorf"), (&a, "straße x"),
+		(&a, "straße plane klippenpfad"), (&a, "straße"), (&a, "straße plane klippenpfad"), (&e, "straße ja"), (&g, "straße nein"), (&a, "straße ja"), (&b, "straße"), (&b, "straße ja"), (&a, "straße"), (&b, "straße"),
+		(&a, "liefere stein an straße"), (&a, "arbeite an der straße"),
+	] { run(&mut w, who, line); }
+	let road = w.peek(obj! { "type" => "Route", "fields" => obj! { "pair" => "graue-bucht|klippenpfad" } }).map(|r| r.get("fields").cloned().unwrap());
+	let cells: Vec<(f64, f64)> = road.as_ref().and_then(|r| r.get("cells")).and_then(Json::as_array).map(|c| c.iter().map(|c| (c.get("x").and_then(Json::as_f64).unwrap(), c.get("y").and_then(Json::as_f64).unwrap())).collect()).unwrap_or_default();
+	assert!(!cells.is_empty(), "the road has no trace: {road:?}");
+	let first = cells[0];
+	stand(&mut w, 1, "graue-bucht", first.0, first.1);
+	for (who, line) in [(&a, "liefere stein an straße"), (&a, "liefere 3 stein an straße"), (&a, "liefere treibholz an straße"), (&a, "liefere muschel an straße"), (&a, "straße"), (&a, "arbeite an der straße"), (&g, "arbeite an der straße")] { run(&mut w, who, line); }
+	for (who, line) in [(&a, "liefere 11 stein an straße"), (&a, "liefere 2 treibholz an straße"), (&a, "liefere stein an straße")] { run(&mut w, who, line); }
+	for _ in 0..40 { run(&mut w, &a, "arbeite an der straße"); if w.entries_with(r#""state":"built""#) > 0 { break; } }
+	for (who, line) in [(&a, "straße"), (&a, "straße repariere"), (&b, "straße repariere"), (&b, "straße")] { run(&mut w, who, line); }
+	// the road tick: a vote whose time is up, a road that decayed, a site not built in time
+	let route = |id: &str, from: &str, to: &str, state: &str, extra: &[(&str, Json)]| {
+		let mut f = obj! { "routeId" => id, "pair" => format!("{from}|{to}"), "island" => "Graue Insel", "rooms" => Json::Array(vec![Json::from(from), Json::from(to)]), "names" => Json::Array(vec![Json::from(from), Json::from(to)]), "cells" => Json::Array(vec![]), "state" => state, "untilWorldMs" => 1.0, "points" => 2.0 };
+		for (k, v) in extra { walk::j_set(&mut f, k, v.clone()); }
+		obj! { "type" => "Route", "fields" => f }
+	};
+	w.write(route("r-v", "klippenkopf", "klippenpfad", "vote", &[("voteUntil", Json::from(1.0)), ("voters", Json::Array(vec![Json::from("a-walk2")])), ("yes", Json::Array(vec![])), ("no", Json::Array(vec![])), ("planner", Json::from("a-walk2")), ("plannerName", Json::from("Wanderer2"))]));
+	w.write(route("r-b", "klippenkopf", "moewenfels-strand", "built", &[]));
+	w.compare("routes to tick");
+	w.tick("epoch");
+	run(&mut w, &b, "straße");
+	// insides: the sweep gives the huts theirs and moves the jetty
+	stand(&mut w, 1, "graue-bucht", 15.0, 12.0);
+	w.tick("sweep");
+	w.compare("after the sweep");
+	for (who, line) in [
+		(&g, "betrete"), (&e, "betrete"), (&a, "betrete gibtsnicht"), (&a, "einladen"), (&a, "einladen Niemand"), (&a, "einladen Wanderer4"), (&a, "einladen Wanderer4"), (&e, "betrete hütte"),
+		(&a, "betrete"), (&a, "look"), (&a, "craft ruehrei"), (&a, "truhe"), (&a, "schlafe"), (&a, "einladen Wanderer3"),
+	] { run(&mut w, who, line); }
+	stand(&mut w, 1, "in-h-1", 1.0, 2.0);
+	for (who, line) in [(&a, "craft ruehrei"), (&a, "craft pfannkuchen")] { run(&mut w, who, line); }
+	stand(&mut w, 1, "in-h-1", 5.0, 4.0);
+	for (who, line) in [(&a, "truhe"), (&a, "verstaue muschel"), (&a, "truhe"), (&a, "entnimm muschel aus der truhe")] { run(&mut w, who, line); }
+	stand(&mut w, 1, "in-h-1", 5.0, 2.0);
+	for (who, line) in [(&a, "schlafe"), (&a, "look"), (&e, "look"), (&a, "ausladen"), (&a, "ausladen Niemand"), (&a, "ausladen Wanderer4"), (&e, "look"), (&a, "hinaus"), (&a, "betrete"), (&a, "bau hütte")] { run(&mut w, who, line); }
+	// the hut goes with its owner inside and a thing on its floor
+	give(&mut w, "in-h-1", "muschel", 1);
+	assert!(w.take(obj! { "type" => "Building", "fields" => obj! { "buildId" => "h-1" } }));
+	w.tick("sweep");
+	w.compare("the hut gone");
+	// demolished from inside
+	for (who, line) in [(&a, "look"), (&a, "nachlass"), (&b, "betrete"), (&b, "abriss"), (&b, "look")] { run(&mut w, who, line); }
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 10, "{said:?}");
+	assert!(w.entries_with("steht nicht mehr; du stehst draußen") >= 1, "nobody was put out");
+}
