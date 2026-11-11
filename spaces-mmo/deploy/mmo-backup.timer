@@ -1,4 +1,4 @@
-# User unit for big (~/.config/systemd/user/mmo-backup.timer): mmo-backup.service every hour (docs/betrieb.en.md "Backups").
+# User unit for big and nano (~/.config/systemd/user/mmo-backup.timer): mmo-backup.service every hour (docs/betrieb.en.md "Backups").
 [Unit]
 Description=Hourly online backup of the spaces-mmo world Spaces
 

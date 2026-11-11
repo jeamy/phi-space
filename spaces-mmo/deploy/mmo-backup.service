@@ -1,13 +1,16 @@
-# User unit for big (~/.config/systemd/user/mmo-backup.service), started every hour by mmo-backup.timer: the online backup of
-# the world Spaces (mmo-backup.sh, docs/betrieb.en.md "Backups").
+# User unit for big and nano (~/.config/systemd/user/mmo-backup.service), started every hour by mmo-backup.timer: the
+# online backup of the game's SQLite files (mmo-backup.sh, docs/betrieb.en.md "Backups"). ~/.config/mmo-backup.env names
+# the checkout (MMO_BACKUP_HOME, default /media/docker/spaces as on big) and what the host holds (MMO_BACKUP_VOLUMES).
 #
 #   cp spaces-mmo/deploy/mmo-backup.{service,timer} ~/.config/systemd/user/ && systemctl --user daemon-reload
 #   systemctl --user enable --now mmo-backup.timer
 [Unit]
-Description=Online backup of the spaces-mmo world Spaces
+Description=Online backup of the spaces-mmo SQLite files
 
 [Service]
 Type=oneshot
-ExecStart=/media/docker/spaces/spaces-mmo/deploy/mmo-backup.sh
+Environment=MMO_BACKUP_HOME=/media/docker/spaces
+EnvironmentFile=-%h/.config/mmo-backup.env
+ExecStart=/usr/bin/env bash -c 'exec "$MMO_BACKUP_HOME/spaces-mmo/deploy/mmo-backup.sh"'
 Nice=10
 IOSchedulingClass=idle

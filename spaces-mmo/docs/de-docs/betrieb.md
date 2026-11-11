@@ -349,19 +349,28 @@ früheren aufbaut, sagt das), `PLAY_OUT=<datei>` schreibt den Bericht auch als J
 
 ## Sicherungen
 
-Auf big kopiert der Benutzer-Timer `mmo-backup.timer` (`deploy/mmo-backup.{sh,mjs,service,timer}`) jede Stunde jede
-`world-<region>.sqlite` des Volumes `mmo-space-data`, während das Spiel läuft: ein Container des Spiel-Images öffnet jede
-Datei nur lesend und kopiert sie mit der Backup-API von SQLite (`node:sqlite`; ein stimmiger Stand samt WAL), prüft die
-Kopie mit `quick_check` und packt sie. Die Läufe liegen in `~/phi-backup/mmo-hourly/<UTC-Zeit>/` (`world-<region>.sqlite.gz`,
-`backup.log`); die neuesten 72 bleiben (`MMO_BACKUP_KEEP`), ein gescheiterter Lauf als `…-failed`, bis man ihn von Hand
-löscht. Gemessen am 2026-11-11: etwa 610 MB Weltdateien, ein Lauf 13 s und 76 MB gepackt, drei Tage also etwa 5,5 GB.
-`journalctl --user -u mmo-backup` zeigt die Zeilen jedes Laufs.
+Der Benutzer-Timer `mmo-backup.timer` (`deploy/mmo-backup.{sh,mjs,service,timer}`) kopiert jede Stunde die SQLite-Dateien des
+Spiels, während es läuft, auf big und auf nano: ein Container des Spiel-Images öffnet jede Datei nur lesend und kopiert sie
+mit der Backup-API von SQLite (`node:sqlite`; ein stimmiger Stand samt WAL), prüft die Kopie mit `quick_check` und packt
+sie. Was ein Rechner hält, steht in `~/.config/mmo-backup.env` (`MMO_BACKUP_VOLUMES`, Paare `volume=regex`;
+`MMO_BACKUP_HOME` der Checkout):
 
-Einrichten (einmal, auf big): `cp spaces-mmo/deploy/mmo-backup.{service,timer} ~/.config/systemd/user/ && systemctl --user
-daemon-reload && systemctl --user enable --now mmo-backup.timer`. Eine Region zurückholen: ihren Space-Container stoppen,
-die Kopie über `world-<region>.sqlite` im Volume entpacken, deren `-wal` und `-shm` löschen, wieder starten. Nicht
-abgedeckt: der Konten-Space auf nano und das Agenten-Volume `mmo-agent-data` (Gedächtnis der NPCs).
+| Rechner | Volume | Dateien |
+| --- | --- | --- |
+| big | `phi-spaces-mmo_mmo-space-data` | `world-<region>.sqlite`, die vier Welt-Spaces |
+| big | `phi-spaces-mmo_mmo-agent-data` | `npc-agents/leuchtfeuer/<region>.sqlite`, das Gedächtnis der NPCs |
+| nano | `phi-spaces-mmo_mmo-space-data` | `accounts.sqlite`, der Konten-Space (`MMO_BACKUP_HOME=/home/mux/spaces`) |
+
+Die Läufe liegen in `~/phi-backup/mmo-hourly/<UTC-Zeit>/<volume>/<pfad>.gz` mit einem `backup.log` je Volume; die neuesten
+72 bleiben (`MMO_BACKUP_KEEP`), ein gescheiterter Lauf als `…-failed`, bis man ihn von Hand löscht. Gemessen am
+2026-11-11: auf big etwa 610 MB Weltdateien und 24 MB Gedächtnis, ein Lauf 15–22 s und 78 MB gepackt, drei Tage also etwa
+5,5 GB; auf nano 1 MB, eine Sekunde. `journalctl --user -u mmo-backup` zeigt die Zeilen jedes Laufs.
+
+Einrichten (einmal je Rechner): `cp spaces-mmo/deploy/mmo-backup.{service,timer} ~/.config/systemd/user/`,
+`~/.config/mmo-backup.env` schreiben, `systemctl --user daemon-reload && systemctl --user enable --now mmo-backup.timer`.
+Eine Datei zurückholen: den Container stoppen, der sie hält, die Kopie über die Datei im Volume entpacken, deren `-wal` und
+`-shm` löschen, wieder starten.
 
 ## Nicht enthalten
 
-- Noch keine Sicherung des Konten-Space auf nano und des Agenten-Volumes (Sicherungen, oben).
+- Keine Sicherung der Spaces der Hilfeseite und des Chats hier (eigene Projekte).
