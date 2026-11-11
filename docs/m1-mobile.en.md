@@ -113,6 +113,17 @@ Space. The agent host is a federation Member (`PI_SERVERD_FEDERATION_CONFIG`).
    pi-server listener, with the same member functions. Tests with scripted models against the TypeScript and
    Rust servers: one turn after a retry following OutcomeUnknown, a crash between take and answer, isolation of
    sessions.
+   **Done 2026-11-11.**
+   - `runtime/remote-calls.mjs` holds the host loop (`serveRemoteCalls`), the phone's call (`callRemote`) and
+     the phone's `remote` object (`remoteOverSpace`). Answers above an entry's size go in parts.
+   - `pi-serverd.mjs` shares `sessionsMember`/`chatMember` between both paths and serves the calls with
+     `PI_SERVERD_REMOTE_SPACE=local[:alias]|unix:…|tcp:…`.
+   - `runtime/test-remote-space.mjs` passes against both servers (`PHI_SPACES_SERVER_CMD` for Rust). It covers a
+     host that dies after taking a call (the call comes back and is answered once), a 300 000-character answer,
+     unknown members, and pi-serverd end to end (one turn for a repeated requestId, separate sessions, rename,
+     delete).
+   - Known gap: `create` has no request identity. A host crash between creating the session and committing
+     the answer leaves an extra empty session.
 2. Phone side: a `remote` object over the Space with the same interface as `remote-client.mjs`, behind a
    switch. `remote-state` and `remote-regressions` stay green against both transports.
 3. Device test over WLAN with key proof.
