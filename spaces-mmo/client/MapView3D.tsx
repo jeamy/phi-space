@@ -687,6 +687,8 @@ function object(t: T, obj: ObjView, me: string): Entry {
 		const color = Number.parseInt((obj.color ?? "#8a6a44").slice(1), 16);
 		group.add(propShadow(t, w * 1.15, d * 1.15));
 		const body = propMesh(t, obj.kind === "building" ? (buildingModel(t, obj.plan, w, d, variant) ?? buildingGeometry(t, obj.plan, w, d, color, variant, obj.herd)) : siteGeometry(t, obj.plan, w, d, color, obj.progress ?? 0));
+		// a jetty's deck stands above the water: a tap on it is its cell (pointer, cell), not the water the ray meets behind it
+		if (obj.kind === "building" && obj.plan === "steg") body.userData.deck = true;
 		group.add(body);
 		// one's own site says so above it
 		if (obj.kind === "site" && obj.ownerId === me) { const mark = label(t, "Deine Baustelle", "#dfff73"); mark.position.y = 1.3; group.add(mark); }
@@ -1015,7 +1017,8 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 	const cell = (e: PointerEvent) => {
 		const r = s.canvas.getBoundingClientRect(); mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
 		s.camera.updateMatrixWorld(); ray.setFromCamera(mouse, s.camera);
-		const terrain = s.ground?.children.filter((o) => o.userData.pick) ?? [];
+		const terrain: import("three").Object3D[] = s.ground?.children.filter((o) => o.userData.pick) ?? [];
+		s.scene.traverse((o) => { if (o.userData.deck) terrain.push(o); });
 		const { w, h } = dims(s.room);
 		const first = ray.intersectObjects(terrain, false)[0];
 		if (first) {
