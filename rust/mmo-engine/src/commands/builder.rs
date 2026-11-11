@@ -237,6 +237,9 @@ async fn destroy(c: &mut Ctx, arg: &str) -> Result<()> {
 	let t = target(c, arg).await?;
 	if matches!(t.kind, Kind::Room) { return refuse("Räume lassen sich noch nicht vernichten."); }
 	if c.space.take(&by_id(j::s(&t.e, "type"), &t.e), NO_WAIT, c.txn()).await?.is_none() { return refuse("Das ist gerade in Benutzung; bitte gleich noch einmal."); }
+	let who = txt(j::at(&c.actor, "name"));
+	eprintln!("[world] destroy by {who} in {}: {} {} {}", c.room(), j::s(&t.e, "type"), t.name, crate::fire::key_text(&t.id));
+	if j::s(&t.e, "type") == "Building" { super::build::log_gone(fields(&t.e), &format!("destroyed by the builder {who}")); }
 	for tg in tags_of(c, &t.id).await? { c.space.take(&by_id("Tag", &tg), NO_WAIT, c.txn()).await?; }
 	msg(c, "*", "info", &format!("$you() $conj(vernichtest|vernichtet) {}.", t.name), templ()).await
 }

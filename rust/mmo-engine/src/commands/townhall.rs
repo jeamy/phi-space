@@ -2,7 +2,7 @@
 //! closing or opening it, zones, the warehouse's tax, the demolition of a building, or plain words.
 use phi_json::{obj, Json, Object};
 
-use super::build::{demolish_by_vote, dist_to, plan_of, Rect};
+use super::build::{demolish_by_vote, dist_to, log_gone, plan_of, Rect};
 use super::settlement::{huts_in, rank_of, settlement_in};
 use crate::clock::decay_now_of;
 use crate::context::{msg, msg_transient, room_of, Ctx, MsgOpts};
@@ -205,7 +205,7 @@ pub async fn motion_tick(space: &Space, w: &Json, lease_ms: f64) -> Result<f64> 
 					match space.take_if_exists(&tmpl("Building", obj! { "buildId" => bid.clone() }), NO_WAIT, Some(&txn)).await?.map(|e| fields(&e).clone()) {
 						None => after = if space.count(&tmpl("Building", obj! { "buildId" => bid }), None).await? > 0.0 { " Der Bau war gerade in Arbeit und bleibt stehen.".into() } else { " Der Bau steht nicht mehr.".into() },
 						Some(b) if holds_goods(space, w, &b).await? => { space.write(&tmpl("Building", b), Some(&txn), FOREVER).await?; after = " Im Lager liegt inzwischen wieder etwas; es bleibt stehen.".into(); }
-						Some(b) => { demolish_by_vote(space, &txn, w, &b, now).await?; after = format!(" Die Fläche ist frei; was blieb, holt {} hier mit „nachlass“ ab.", key_text(j::at(&b, "ownerName"))); }
+						Some(b) => { demolish_by_vote(space, &txn, w, &b, now).await?; log_gone(&b, "voted down at the town hall"); after = format!(" Die Fläche ist frei; was blieb, holt {} hier mit „nachlass“ ab.", key_text(j::at(&b, "ownerName"))); }
 					}
 				}
 				let text = format!("Abstimmung in {}: {} ist {}, {} dafür, {} dagegen.{after}", key_text(j::at(&s, "name")), said(&m), if carried { "angenommen" } else { "abgelehnt" }, yes(&votes), no(&votes));

@@ -120,6 +120,9 @@ export async function interiorSweep(space: SpaceLike, w: WorldDef | undefined, i
 		const ruin = (await space.readAll({ type: "Ruin", fields: { buildId: buildIdOf(roomId)! } }))[0];
 		// where it stood: the ruin when it fell (a room grown since moved it), else what the room kept of it
 		const at = b ?? (ruin ? fieldsOf<RuinFields>(ruin) : kept.get(roomId)?.building ?? null);
+		// without a ruin the building went by a way that logs itself (torn down, voted down, destroyed: "building gone"); a
+		// line here without such a line before it is a building that went unaccounted for
+		if (!b && !ruin) console.error(`[world] inside ${roomId} taken: its building is gone without a ruin (${JSON.stringify(kept.get(roomId)?.building ?? null)})`);
 		await inTxn(async (txn) => { await dropInterior(space, txn, w, roomId, at); return true; });
 	}
 }

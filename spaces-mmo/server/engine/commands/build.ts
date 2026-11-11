@@ -488,6 +488,8 @@ export async function buildingHere(c: CommandCtx, name: string, o: { own: boolea
 	if (!e) throw new CommandError("Der Bau ist gerade nicht greifbar; bitte noch einmal.");
 	return fieldsOf<BuildingFields>(e);
 }
+/** One line in the world's log when a building goes, with why: an operator can tell later what took it. */
+export const logGone = (b: { buildId: string; plan: string; ownerName?: string; room: string; x: number; y: number }, why: string) => console.error(`[world] building gone: ${b.buildId} ${b.plan} of ${b.ownerName ?? "?"} in ${b.room} at ${b.x},${b.y}: ${why}`);
 export const putBack = (c: CommandCtx, b: BuildingFields) => c.space.write({ type: "Building", fields: b as never }, c.txn, FOREVER);
 /** Moves a thing (taken in the transaction) to `location`. */
 async function moveItem(space: SpaceLike, txn: string | null, itemId: string, from: string, to: string): Promise<boolean> {
@@ -817,6 +819,7 @@ const abriss: Command = {
 		await freeCells(c.space, c.txn, b.room, b.buildId);
 		await releaseLight(c.space, c.txn, b.beaconId, b.points ?? 1);
 		const stopped = await stopLoads(c.space, c.txn, b.buildId, await worldNowOf(c.space, c.txn));
+		logGone(b, `torn down by ${c.actor.name}`);
 		await msg(c, "*", "info", `${c.actor.name} reißt die ${b.name} ab; die Fläche ist frei.${back.length ? ` Zurück: ${back.join(", ")}.` : ""}${kept ? ` Aus der Truhe: ${kept} Dinge.` : ""}${stopped ? " Das Korn, das noch nicht gemahlen war, holen die, die es brachten, hier ab („abholen“)." : ""}`);
 	},
 };
@@ -888,6 +891,7 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 		if (b.plan === oldRoad) {
 			await inTxn(async (txn) => {
 				if (!(await space.takeIfExists({ type: "Building", fields: { buildId: b.buildId } }, NO_WAIT, { txn }))) return false;
+				logGone(b, "a road of the old kind");
 				await freeCells(space, txn, b.room, b.buildId);
 				await releaseLight(space, txn, b.beaconId, b.points ?? 1);
 				return true;
@@ -897,6 +901,7 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 		if (b.untilWorldMs > now) continue;
 		await inTxn(async (txn) => {
 			if (!(await space.takeIfExists({ type: "Building", fields: { buildId: b.buildId } }, NO_WAIT, { txn }))) return false;
+			logGone(b, "fell to a ruin (its term ran out)");
 			const ruin: RuinFields = { buildId: b.buildId, plan: b.plan, name: b.name, room: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: b.owner, ownerName: b.ownerName, accountId: b.accountId, untilWorldMs: now + (w?.building?.ruinWorldMs ?? 10 * 24 * 3600_000) };
 			await space.write({ type: "Ruin", fields: ruin as never }, txn, FOREVER);
 			await releaseLight(space, txn, b.beaconId, b.points ?? 1);

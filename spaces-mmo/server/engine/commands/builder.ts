@@ -11,6 +11,7 @@ import { draftOf, typeChain } from "../typeclasses.ts";
 import { walkable } from "../world.ts";
 import { peek } from "../../space.ts";
 import { randomBytes } from "../source.ts";
+import { logGone } from "./build.ts";
 
 const BUILDER = "cmd:perm(Builder)";
 const ADMIN = "cmd:perm(Admin)";
@@ -200,6 +201,8 @@ const destroy: Command = {
 		const t = await target(c, arg);
 		if (t.kind === "room") throw new CommandError("Räume lassen sich noch nicht vernichten.");
 		if (!(await c.space.take({ type: t.e.type, id: t.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Das ist gerade in Benutzung; bitte gleich noch einmal.");
+		console.error(`[world] destroy by ${c.actor.name} in ${c.actor.room}: ${t.e.type} ${t.name} ${t.id}`);
+		if (t.e.type === "Building") logGone(t.e.fields as never, `destroyed by the builder ${c.actor.name}`);
 		for (const tg of await c.space.readAll({ type: "Tag", fields: { target: t.id } })) await c.space.take({ type: "Tag", id: tg.id }, NO_WAIT, { txn: c.txn });
 		await msg(c, "*", "info", `$you() $conj(vernichtest|vernichtet) ${t.name}.`, { templ: true });
 	},

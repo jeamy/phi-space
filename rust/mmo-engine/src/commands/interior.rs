@@ -183,6 +183,9 @@ pub async fn interior_sweep(space: &Space, w: &Json) -> Result<()> {
 		let b = standing.iter().find(|(k, _)| k == bid).map(|(_, b)| b);
 		if b.is_some_and(|b| interior_def(w, j::s(b, "plan")).is_some()) { continue; }
 		let ruin = space.read_all(&tmpl("Ruin", obj! { "buildId" => bid }), None).await?.into_iter().next().map(|e| fields(&e).clone());
+		// without a ruin the building went by a way that logs itself (torn down, voted down, destroyed: "building gone"); a
+		// line here without such a line before it is a building that went unaccounted for
+		if b.is_none() && ruin.is_none() { eprintln!("[world] inside {room_id} taken: its building is gone without a ruin ({})", j::opt(r, "building").map_or_else(|| "null".to_owned(), |x| x.to_json_text())); }
 		let at: Option<Json> = b.cloned().or(ruin).or_else(|| j::opt(r, "building").cloned());
 		super::build::in_txn(space, |txn| { let at = at.as_ref(); async move { drop_interior(space, &txn, w, room_id, at).await?; Ok(true) } }).await?;
 	}

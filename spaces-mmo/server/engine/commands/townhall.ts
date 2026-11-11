@@ -14,7 +14,7 @@ import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, msgOptions, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
 import { peek } from "../../space.ts";
 import type { WorldDef } from "../world.ts";
-import { demolishByVote, distTo, planOf } from "./build.ts";
+import { demolishByVote, distTo, logGone, planOf } from "./build.ts";
 import { hutsIn, rankOf, settlementIn } from "./settlement.ts";
 import { randomBytes, timeNow } from "../source.ts";
 
@@ -152,7 +152,7 @@ export async function motionTick(space: SpaceLike, w: WorldDef, leaseMs: number)
 					const b = standing && fieldsOf<BuildingFields>(standing);
 					if (!b) after = (await space.count({ type: "Building", fields: { buildId: m.target.buildId } })) ? " Der Bau war gerade in Arbeit und bleibt stehen." : " Der Bau steht nicht mehr.";
 					else if (await holdsGoods(space, w, b)) { await space.write({ type: "Building", fields: b as never }, txn, FOREVER); after = " Im Lager liegt inzwischen wieder etwas; es bleibt stehen."; }
-					else { await demolishByVote(space, txn, w, b, now); after = ` Die Fläche ist frei; was blieb, holt ${b.ownerName} hier mit „nachlass“ ab.`; }
+					else { await demolishByVote(space, txn, w, b, now); logGone(b, "voted down at the town hall"); after = ` Die Fläche ist frei; was blieb, holt ${b.ownerName} hier mit „nachlass“ ab.`; }
 				}
 				const text = `Abstimmung in ${s.name}: ${said(m)} ist ${carried ? "angenommen" : "abgelehnt"}, ${yes(votes)} dafür, ${no(votes)} dagegen.${after}`;
 				await space.write({ type: "Msg", fields: { room: m.room, to: "*", kind: "world", text, from: "", at: timeNow() } as never }, txn, leaseMs, await msgOptions(space, { to: "*", kind: "world" }));

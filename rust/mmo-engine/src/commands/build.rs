@@ -709,6 +709,12 @@ pub async fn building_here_for(c: &Ctx, name: &str, own: bool, use_: Option<&str
 	let Some(e) = c.space.take(&tmpl("Building", obj! { "buildId" => j::at(b, "buildId").clone() }), 5_000.0, c.txn()).await? else { return refuse("Der Bau ist gerade nicht greifbar; bitte noch einmal.") };
 	Ok(fields(&e).clone())
 }
+/// `logGone`: one line in the world's log when a building goes, with why: an operator can tell later what took it.
+pub fn log_gone(b: &Json, why: &str) {
+	let t = |k: &str| crate::fire::key_text(j::at(b, k));
+	let owner = j::so(b, "ownerName").unwrap_or("?");
+	eprintln!("[world] building gone: {} {} of {owner} in {} at {},{}: {why}", t("buildId"), t("plan"), t("room"), t("x"), t("y"));
+}
 /// `putBack`.
 pub async fn put_back(c: &Ctx, b: &Json) -> Result<()> { c.space.write(&tmpl("Building", b.clone()), c.txn(), FOREVER).await.map(|_| ()) }
 
@@ -1103,6 +1109,7 @@ async fn abriss(c: &mut Ctx, arg: &str) -> Result<()> {
 	release_light(&c.space, &c.txn, j::at(&b, "beaconId"), points_of(&b)).await?;
 	let now = world_now_of(&c.space, c.txn()).await?;
 	let stopped = stop_loads(&c.space, &c.txn, j::at(&b, "buildId"), now).await?;
+	log_gone(&b, &format!("torn down by {actor}"));
 	let text = format!("{actor} reißt die {} ab; die Fläche ist frei.{}{}{}", txt(j::at(&b, "name")), if back.is_empty() { String::new() } else { format!(" Zurück: {}.", back.join(", ")) }, if kept > 0 { format!(" Aus der Truhe: {kept} Dinge.") } else { String::new() }, if stopped > 0 { " Das Korn, das noch nicht gemahlen war, holen die, die es brachten, hier ab („abholen“)." } else { "" });
 	msg(c, "*", "info", &text, info()).await
 }
@@ -1212,6 +1219,7 @@ pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 		if old_road == Some(j::s(&b, "plan")) {
 			in_txn(space, |txn| { let b = &b; async move {
 				if space.take_if_exists(&tmpl("Building", obj! { "buildId" => j::at(b, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
+				log_gone(b, "a road of the old kind");
 				free_cells(space, &txn, j::s(b, "room"), j::at(b, "buildId")).await?;
 				release_light(space, &txn, j::at(b, "beaconId"), j::no(b, "points").unwrap_or(1.0)).await?;
 				Ok(true)
@@ -1221,6 +1229,7 @@ pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 		if j::n(&b, "untilWorldMs") > now { continue; }
 		in_txn(space, |txn| { let b = &b; async move {
 			if space.take_if_exists(&tmpl("Building", obj! { "buildId" => j::at(b, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
+			log_gone(b, "fell to a ruin (its term ran out)");
 			let mut ruin = Object::new();
 			for k in ["buildId", "plan", "name", "room", "x", "y", "w", "h", "owner", "ownerName", "accountId"] { if let Some(v) = b.get(k) { ruin.insert(k, v.clone()); } }
 			ruin.insert("untilWorldMs", Json::from(now + j::no(j::at(w, "building"), "ruinWorldMs").unwrap_or(10.0 * 24.0 * 3_600_000.0)));
