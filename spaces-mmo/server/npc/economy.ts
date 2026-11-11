@@ -68,6 +68,16 @@ const pricesOf = (n: Npc, proto: string, l?: Look): [number, number] => {
 	return stockPrices(base, l.pack.filter((i) => i.proto === proto).length + (l.listed?.[proto] ?? 0), keep);
 };
 const buyPrice = (n: Npc, proto: string, l?: Look) => (proto === n.world.currency ? 1 : pricesOf(n, proto, l)[0]);
+/** What it pays for a lot of `count` of `proto` at once: each piece at the price its stock would have with the ones
+ *  before it in hand (stockPrices), so a big lot gets less per piece, as a full shelf of the department store does. */
+const lotBid = (n: Npc, proto: string, l: Look, count: number): number => {
+	if (proto === n.world.currency) return count;
+	const base = n.def.prices?.[proto] ?? [0, 0], keep = n.def.carry?.find((c) => c.proto === proto)?.count ?? 2;
+	const stock = l.pack.filter((i) => i.proto === proto).length + (l.listed?.[proto] ?? 0);
+	let sum = 0;
+	for (let i = 0; i < count; i++) sum += stockPrices(base, stock + i, keep)[0];
+	return sum;
+};
 const sellPrice = (n: Npc, proto: string, l?: Look) => (proto === n.world.currency ? 1 : pricesOf(n, proto, l)[1]);
 const coinsOf = (n: Npc, l: Look) => l.pack.filter((i) => i.proto === n.world.currency);
 const protoName = (w: WorldDef, proto: string) => w.prototypes.find((p) => p.key === proto)?.name ?? proto;
@@ -194,7 +204,7 @@ async function buy(n: Npc, l: Look, only?: string[]): Promise<boolean> {
 	const coins = coinsOf(n, l).length;
 	const i = listings.findIndex((x) => {
 		const p = protoOf(n.world, x.itemName);
-		return !!p && x.seller !== l.me.charId && (!only || only.includes(p)) && x.price <= buyPrice(n, p, l) * (x.count ?? 1) && x.price <= coins && l.pack.filter((it) => it.proto === p).length < 4;
+		return !!p && x.seller !== l.me.charId && (!only || only.includes(p)) && x.price <= lotBid(n, p, l, x.count ?? 1) && x.price <= coins && l.pack.filter((it) => it.proto === p).length < 4;
 	});
 	if (i < 0) return false;
 	await n.act(`market kaufe ${i + 1}`);
@@ -249,7 +259,9 @@ async function answerOffers(n: Npc, l: Look): Promise<boolean> {
 		await n.act(`say Danke, ${o.fromName}! Das kann ich gut brauchen.`);
 		return true;
 	}
-	const worth = gets.reduce((s, i) => s + buyPrice(n, i.proto, l), 0);
+	const kinds = new Map<string, number>();
+	for (const i of gets) kinds.set(i.proto, (kinds.get(i.proto) ?? 0) + 1);
+	const worth = [...kinds].reduce((s, [p, k]) => s + lotBid(n, p, l, k), 0);
 	let asked = 0, missing = "", notMine = "";
 	for (const w of o.want) {
 		const p = protoOf(n.world, w.name);

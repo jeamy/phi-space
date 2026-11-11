@@ -940,6 +940,67 @@ Auch die **Händler** lesen die Gesuche, wenn sie am Brett stehen (Gesa in Kupfe
 
 Unter **Aktionen → Markt** stehen die Gesuche mit „Liefern“, den Antworten und der Zeit, die sie noch hängen, und ein Feld zum Suchen. Ein Gesuch bleibt wie ein Angebot einen Tag stehen; danach bekommst du deine Münzen zurück. Du kannst an jedem Brett bis zu fünf Gesuche aushängen.
 
+## Preise {#prices}
+
+Jedes Ding, das man herstellt, hat Käufer. Die Tabelle nennt die **Grundpreise** in Münzen: was die Händler zahlen und, wo sie es auch verkaufen, was sie verlangen, und den Preis des Kaufhauses.
+
+- **Angebot und Nachfrage**: Ein Händler, der nichts von einem Ding hat, zahlt und verlangt mehr, bis doppelt so viel; hat er viel davon, weniger, bis zur Hälfte. Was er nur kauft, bringt er einmal am Welttag fort, dann steigt sein Preis wieder. Hat er vier Stück eines Dings dabei, kauft er keins mehr.
+- **Kaufhaus**: Es verlangt leer bis doppelt so viel wie seinen Preis und voll die Hälfte; es kauft an, was es führt, für sieben Zehntel davon und zahlt aus seiner Kasse.
+- **Mengenrabatt**: Für ein Los zahlt ein Händler Stück für Stück, jedes so, als hätte er die vorigen schon: Je mehr auf einmal, desto weniger je Stück. Tiere, die er verkauft, werden im Los billiger, jedes weitere eine Münze weniger, nie unter dem, was er selbst für eins zahlt.
+- Händler kaufen am Marktbrett, wo sie stehen: was dort angeboten wird und mindestens ihren Preis kostet, und sie sprechen Leute an, die so etwas tragen.
+
+| Ding | Händler zahlen | Händler verlangen | Kaufhaus |
+| --- | --- | --- | --- |
+| Bernsteinkette | Marta (Markt von Kupferhafen) 10 | Marta 15, Piet 14 | 17 |
+| Bier | Marta (Markt von Kupferhafen) 4, Hauke (Schärenhafen) 4, Bente (Rauchhafen) 4, Momme (Krabbenbucht) 4 | – | 6 |
+| Bohle | Marta (Markt von Kupferhafen) 3, Hauke (Schärenhafen) 3, Bente (Rauchhafen) 3, Momme (Krabbenbucht) 3 | – | 5 |
+| Bratwurst | Wilma (Markt von Kupferhafen) 2 | Wilma 4 | 3 |
+| Brot | Marta (Markt von Kupferhafen) 2 | Marta 4 | 3 |
+| Daunendecke | Marta (Markt von Kupferhafen) 22 | Marta 30 | 30 |
+| Eintopf | Wilma (Markt von Kupferhafen) 3, Hauke (Schärenhafen) 3, Bente (Rauchhafen) 3, Momme (Krabbenbucht) 3 | – | 4 |
+| Entenbraten | Wilma (Markt von Kupferhafen) 5 | – | 7 |
+| Festessen | Wilma (Markt von Kupferhafen) 38 | – | 55 |
+| Gänsebraten | Wilma (Markt von Kupferhafen) 10 | – | 14 |
+| Gehäuse | Marta (Markt von Kupferhafen) 17 | – | 25 |
+| Glas | Marta (Markt von Kupferhafen) 3 | – | 5 |
+| Grillhähnchen | Wilma (Markt von Kupferhafen) 4, Hauke (Schärenhafen) 4, Bente (Rauchhafen) 4, Momme (Krabbenbucht) 4 | Wilma 7 | 5 |
+| Holzbündel | Hinnerk (Graue Bucht) 5, Kalle (Graue Bucht) 4, Mats (Anleger) 5, Svea (Alte Warte) 5, Greta (Markt von Kupferhafen) 5, Marta (Markt von Kupferhafen) 4, Nele (Riffdorf) 6, Arne (Schärenhafen) 5, Frida (Rauchhafen) 4, Bente (Rauchhafen) 3, Thies (Krabbenbucht) 6 | Jorin 4, Kalle 6, Marta 6, Bente 5 | 8 |
+| Hühnersuppe | Wilma (Markt von Kupferhafen) 4, Hauke (Schärenhafen) 4, Bente (Rauchhafen) 4, Momme (Krabbenbucht) 4 | – | 5 |
+| Karren | Marta (Markt von Kupferhafen) 21 | – | 31 |
+| Käse | Marta (Markt von Kupferhafen) 7 | Marta 10 | 10 |
+| Kerze | Marta (Markt von Kupferhafen) 4 | Marta 7 | 7 |
+| Kuchen | Marta (Markt von Kupferhafen) 16, Hauke (Schärenhafen) 16, Bente (Rauchhafen) 16, Momme (Krabbenbucht) 16 | – | 23 |
+| Lammbraten | Wilma (Markt von Kupferhafen) 10 | – | 14 |
+| Leder | Wilma (Markt von Kupferhafen) 5, Gesa (Hafenviertel) 5 | Gesa 7 | 8 |
+| Lederstiefel | Marta (Markt von Kupferhafen) 14 | Marta 16 | 19 |
+| Ledertasche | Marta (Markt von Kupferhafen) 12 | Marta 14 | 17 |
+| Leinen | Marta (Markt von Kupferhafen) 8 | Marta 11 | 11 |
+| Mausefalle | Kalle (Graue Bucht) 8, Marta (Markt von Kupferhafen) 8 | – | 12 |
+| Muschelmesser | Kalle (Graue Bucht) 5, Marta (Markt von Kupferhafen) 5 | Jorin 5 | 8 |
+| Netz | Kalle (Graue Bucht) 8, Marta (Markt von Kupferhafen) 8, Ruben (Hafenviertel) 8, Hauke (Schärenhafen) 8 | Kalle 11, Marta 12, Piet 10, Ruben 11, Hauke 11 | 11 |
+| Pfannkuchen | Kalle (Graue Bucht) 5, Marta (Markt von Kupferhafen) 5, Hauke (Schärenhafen) 5, Bente (Rauchhafen) 5, Momme (Krabbenbucht) 5 | – | 7 |
+| Pökelfleisch | Marta (Markt von Kupferhafen) 5, Wilma (Markt von Kupferhafen) 5 | Marta 8, Wilma 8 | 8 |
+| Räucherfisch | Gesa (Hafenviertel) 2 | Gesa 4 | 4 |
+| Räucherwurst | Marta (Markt von Kupferhafen) 4, Wilma (Markt von Kupferhafen) 3 | Marta 7, Wilma 6 | 6 |
+| Rinderbraten | Wilma (Markt von Kupferhafen) 10 | – | 14 |
+| Ruderboot | Marta (Markt von Kupferhafen) 22 | – | 31 |
+| Rührei | Kalle (Graue Bucht) 5, Marta (Markt von Kupferhafen) 5, Hauke (Schärenhafen) 5, Bente (Rauchhafen) 5, Momme (Krabbenbucht) 5 | – | 8 |
+| Schinken | Marta (Markt von Kupferhafen) 10, Wilma (Markt von Kupferhafen) 10 | Marta 14, Wilma 14 | 14 |
+| Schlachtmesser | Marta (Markt von Kupferhafen) 9 | – | 13 |
+| Schmalzbrot | Wilma (Markt von Kupferhafen) 2 | – | 3 |
+| Schweinebraten | Wilma (Markt von Kupferhafen) 10, Hauke (Schärenhafen) 10, Bente (Rauchhafen) 10, Momme (Krabbenbucht) 10 | – | 14 |
+| Segelboot | Marta (Markt von Kupferhafen) 66 | – | 95 |
+| Spaten | Kalle (Graue Bucht) 6, Marta (Markt von Kupferhafen) 6, Hauke (Schärenhafen) 6, Bente (Rauchhafen) 6, Momme (Krabbenbucht) 6 | – | 9 |
+| Speck | Marta (Markt von Kupferhafen) 6, Wilma (Markt von Kupferhafen) 6 | Marta 9, Wilma 9 | 9 |
+| Spindel | Kalle (Graue Bucht) 3, Marta (Markt von Kupferhafen) 3 | – | 5 |
+| Spitzhacke | Marta (Markt von Kupferhafen) 10, Hauke (Schärenhafen) 10, Bente (Rauchhafen) 10, Momme (Krabbenbucht) 10 | – | 14 |
+| Steak | Wilma (Markt von Kupferhafen) 5 | – | 7 |
+| Tangseil | Kalle (Graue Bucht) 3, Marta (Markt von Kupferhafen) 3, Piet (Werft) 2, Hauke (Schärenhafen) 3, Momme (Krabbenbucht) 3 | Jorin 3, Kalle 5, Marta 5, Hauke 5, Momme 5 | 3 |
+| Tauwerk | Marta (Markt von Kupferhafen) 8 | – | 12 |
+| Trockenfleisch | Marta (Markt von Kupferhafen) 6 | Marta 9 | 9 |
+| Tuch | Marta (Markt von Kupferhafen) 8 | Marta 12 | 12 |
+| Ziegel | Marta (Markt von Kupferhafen) 2 | – | 3 |
+
 ## Handwerk {#craft}
 
 Aus wenigen Dingen machst du Nützliches. Manches braucht ein Werkzeug, manches eine Werkstatt. Werkzeug nutzt sich ab und zerbricht irgendwann.
@@ -1003,6 +1064,67 @@ If you are looking for something nobody offers right now, post a **wanted notice
 The **traders** read the notices too when they stand at the board (Gesa in Kupferhafen, the traders on their routes). If a notice offers at least their price and they carry the thing, they deliver and take only their price; you get the rest back. If it offers too little, they answer once with their price, say „Gesa: ab 8“. That stands under the notice, and you get it as a message. If it offers enough but they have none right now, they say so once („Gesa: gerade keins“) and deliver as soon as one is back: a trader gets back one piece of what it started with every world day (one hour). If no trader at this board deals in the thing, you hear at once when you post who sells it where, and the notice says „kein Händler führt es“: then only a player can deliver here. If a notice lapses without a delivery, you get a message and your coins back.
 
 Under **Actions → Market** the notices stand with „Deliver“, their answers and the time they still hang, and a field to seek something. A notice stays up for a day like an offer; then your coins come back. You can post up to five notices at each board.
+
+## Prices {#prices}
+
+Everything you make has buyers. The table gives the **base prices** in coins: what the traders pay and, where they also sell it, what they ask, and the department store's price.
+
+- **Supply and demand**: a trader who has none of a thing pays and asks more, up to twice as much; with plenty of it, less, down to half. What it only buys it ships off once a world day, and its price rises again. With four of a thing in its pack it buys no more of it.
+- **Department store**: empty it asks up to twice its price and full half; it buys what it stocks for seven tenths of that and pays from its till.
+- **Quantity discount**: for a lot a trader pays piece by piece, each as if it held the ones before already: the more at once, the less each. Animals it sells get cheaper in a lot, each one more a coin less, never below what it pays for one itself.
+- Traders buy at the market board where they stand: what is offered there at their price or less, and they speak to people who carry such things.
+
+| Thing | Traders pay | Traders ask | Store |
+| --- | --- | --- | --- |
+| Amber Necklace | Marta (Copper Harbour Market) 10 | Marta 15, Piet 14 | 17 |
+| Bacon | Marta (Copper Harbour Market) 6, Wilma (Copper Harbour Market) 6 | Marta 9, Wilma 9 | 9 |
+| Beer | Marta (Copper Harbour Market) 4, Hauke (Skerry Harbour) 4, Bente (Smoke Harbour) 4, Momme (Crab Bay) 4 | – | 6 |
+| Bread | Marta (Copper Harbour Market) 2 | Marta 4 | 3 |
+| Brick | Marta (Copper Harbour Market) 2 | – | 3 |
+| Butcher's Knife | Marta (Copper Harbour Market) 9 | – | 13 |
+| Cake | Marta (Copper Harbour Market) 16, Hauke (Skerry Harbour) 16, Bente (Smoke Harbour) 16, Momme (Crab Bay) 16 | – | 23 |
+| Candle | Marta (Copper Harbour Market) 4 | Marta 7 | 7 |
+| Cart | Marta (Copper Harbour Market) 21 | – | 31 |
+| Casing | Marta (Copper Harbour Market) 17 | – | 25 |
+| Cheese | Marta (Copper Harbour Market) 7 | Marta 10 | 10 |
+| Chicken soup | Wilma (Copper Harbour Market) 4, Hauke (Skerry Harbour) 4, Bente (Smoke Harbour) 4, Momme (Crab Bay) 4 | – | 5 |
+| Cloth | Marta (Copper Harbour Market) 8 | Marta 12 | 12 |
+| Cordage | Marta (Copper Harbour Market) 8 | – | 12 |
+| Cured Meat | Marta (Copper Harbour Market) 5, Wilma (Copper Harbour Market) 5 | Marta 8, Wilma 8 | 8 |
+| Down Quilt | Marta (Copper Harbour Market) 22 | Marta 30 | 30 |
+| Dried Meat | Marta (Copper Harbour Market) 6 | Marta 9 | 9 |
+| Dripping bread | Wilma (Copper Harbour Market) 2 | – | 3 |
+| Feast | Wilma (Copper Harbour Market) 38 | – | 55 |
+| Glass | Marta (Copper Harbour Market) 3 | – | 5 |
+| Ham | Marta (Copper Harbour Market) 10, Wilma (Copper Harbour Market) 10 | Marta 14, Wilma 14 | 14 |
+| Kelp Rope | Kalle (Grey Bay) 3, Marta (Copper Harbour Market) 3, Piet (Shipyard) 2, Hauke (Skerry Harbour) 3, Momme (Crab Bay) 3 | Jorin 3, Kalle 5, Marta 5, Hauke 5, Momme 5 | 3 |
+| Leather | Wilma (Copper Harbour Market) 5, Gesa (Harbour Quarter) 5 | Gesa 7 | 8 |
+| Leather Bag | Marta (Copper Harbour Market) 12 | Marta 14 | 17 |
+| Leather Boots | Marta (Copper Harbour Market) 14 | Marta 16 | 19 |
+| Linen | Marta (Copper Harbour Market) 8 | Marta 11 | 11 |
+| Mousetrap | Kalle (Grey Bay) 8, Marta (Copper Harbour Market) 8 | – | 12 |
+| Net | Kalle (Grey Bay) 8, Marta (Copper Harbour Market) 8, Ruben (Harbour Quarter) 8, Hauke (Skerry Harbour) 8 | Kalle 11, Marta 12, Piet 10, Ruben 11, Hauke 11 | 11 |
+| Pancake | Kalle (Grey Bay) 5, Marta (Copper Harbour Market) 5, Hauke (Skerry Harbour) 5, Bente (Smoke Harbour) 5, Momme (Crab Bay) 5 | – | 7 |
+| Pickaxe | Marta (Copper Harbour Market) 10, Hauke (Skerry Harbour) 10, Bente (Smoke Harbour) 10, Momme (Crab Bay) 10 | – | 14 |
+| Plank | Marta (Copper Harbour Market) 3, Hauke (Skerry Harbour) 3, Bente (Smoke Harbour) 3, Momme (Crab Bay) 3 | – | 5 |
+| Roast beef | Wilma (Copper Harbour Market) 10 | – | 14 |
+| Roast chicken | Wilma (Copper Harbour Market) 4, Hauke (Skerry Harbour) 4, Bente (Smoke Harbour) 4, Momme (Crab Bay) 4 | Wilma 7 | 5 |
+| Roast duck | Wilma (Copper Harbour Market) 5 | – | 7 |
+| Roast goose | Wilma (Copper Harbour Market) 10 | – | 14 |
+| Roast lamb | Wilma (Copper Harbour Market) 10 | – | 14 |
+| Roast pork | Wilma (Copper Harbour Market) 10, Hauke (Skerry Harbour) 10, Bente (Smoke Harbour) 10, Momme (Crab Bay) 10 | – | 14 |
+| Rowing boat | Marta (Copper Harbour Market) 22 | – | 31 |
+| Sailing boat | Marta (Copper Harbour Market) 66 | – | 95 |
+| Sausage | Wilma (Copper Harbour Market) 2 | Wilma 4 | 3 |
+| Scrambled eggs | Kalle (Grey Bay) 5, Marta (Copper Harbour Market) 5, Hauke (Skerry Harbour) 5, Bente (Smoke Harbour) 5, Momme (Crab Bay) 5 | – | 8 |
+| Shell Knife | Kalle (Grey Bay) 5, Marta (Copper Harbour Market) 5 | Jorin 5 | 8 |
+| Smoked fish | Gesa (Harbour Quarter) 2 | Gesa 4 | 4 |
+| Smoked sausage | Marta (Copper Harbour Market) 4, Wilma (Copper Harbour Market) 3 | Marta 7, Wilma 6 | 6 |
+| Spade | Kalle (Grey Bay) 6, Marta (Copper Harbour Market) 6, Hauke (Skerry Harbour) 6, Bente (Smoke Harbour) 6, Momme (Crab Bay) 6 | – | 9 |
+| Spindle | Kalle (Grey Bay) 3, Marta (Copper Harbour Market) 3 | – | 5 |
+| Steak | Wilma (Copper Harbour Market) 5 | – | 7 |
+| Stew | Wilma (Copper Harbour Market) 3, Hauke (Skerry Harbour) 3, Bente (Smoke Harbour) 3, Momme (Crab Bay) 3 | – | 4 |
+| Wood Bundle | Hinnerk (Grey Bay) 5, Kalle (Grey Bay) 4, Mats (Landing) 5, Svea (Old Watch) 5, Greta (Copper Harbour Market) 5, Marta (Copper Harbour Market) 4, Nele (Reef Village) 6, Arne (Skerry Harbour) 5, Frida (Smoke Harbour) 4, Bente (Smoke Harbour) 3, Thies (Crab Bay) 6 | Jorin 4, Kalle 6, Marta 6, Bente 5 | 8 |
 
 ## Crafting {#craft}
 

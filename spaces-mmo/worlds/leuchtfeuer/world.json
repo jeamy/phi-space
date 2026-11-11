@@ -9258,6 +9258,30 @@
 				"netz": [
 					8,
 					11
+				],
+				"ruehrei": [
+					5,
+					0
+				],
+				"pfannkuchen": [
+					5,
+					0
+				],
+				"muschelmesser": [
+					5,
+					0
+				],
+				"spaten": [
+					6,
+					0
+				],
+				"spindel": [
+					3,
+					0
+				],
+				"mausefalle": [
+					8,
+					0
 				]
 			},
 			"carry": [
@@ -9505,20 +9529,20 @@
 					4
 				],
 				"leinen": [
-					4,
-					7
+					8,
+					11
 				],
 				"tuch": [
-					6,
-					10
+					8,
+					12
 				],
 				"decke": [
-					14,
-					22
+					22,
+					30
 				],
 				"kaese": [
-					3,
-					6
+					7,
+					10
 				],
 				"honig": [
 					2,
@@ -9533,32 +9557,104 @@
 					10
 				],
 				"schinken": [
-					7,
-					12
+					10,
+					14
 				],
 				"speck": [
-					5,
-					8
+					6,
+					9
 				],
 				"raeucherwurst": [
 					4,
 					7
 				],
 				"poekelfleisch": [
-					4,
-					7
+					5,
+					8
 				],
 				"trockenfleisch": [
-					4,
-					7
+					6,
+					9
 				],
 				"ledertasche": [
-					8,
+					12,
 					14
 				],
 				"lederstiefel": [
-					7,
-					12
+					14,
+					16
+				],
+				"kuchen": [
+					16,
+					0
+				],
+				"bier": [
+					4,
+					0
+				],
+				"ruehrei": [
+					5,
+					0
+				],
+				"pfannkuchen": [
+					5,
+					0
+				],
+				"bohle": [
+					3,
+					0
+				],
+				"glas": [
+					3,
+					0
+				],
+				"ziegel": [
+					2,
+					0
+				],
+				"tauwerk": [
+					8,
+					0
+				],
+				"spaten": [
+					6,
+					0
+				],
+				"spitzhacke": [
+					10,
+					0
+				],
+				"spindel": [
+					3,
+					0
+				],
+				"mausefalle": [
+					8,
+					0
+				],
+				"muschelmesser": [
+					5,
+					0
+				],
+				"schlachtmesser": [
+					9,
+					0
+				],
+				"gehaeuse": [
+					17,
+					0
+				],
+				"karren": [
+					21,
+					0
+				],
+				"ruderboot": [
+					22,
+					0
+				],
+				"segelboot": [
+					66,
+					0
 				]
 			},
 			"carry": [
@@ -9638,7 +9734,7 @@
 					0
 				],
 				"leder": [
-					3,
+					5,
 					0
 				],
 				"talg": [
@@ -9654,12 +9750,12 @@
 					4
 				],
 				"speck": [
-					4,
-					7
+					6,
+					9
 				],
 				"schinken": [
-					6,
-					10
+					10,
+					14
 				],
 				"raeucherwurst": [
 					3,
@@ -9678,8 +9774,48 @@
 					0
 				],
 				"poekelfleisch": [
+					5,
+					8
+				],
+				"eintopf": [
 					3,
-					6
+					0
+				],
+				"entenbraten": [
+					5,
+					0
+				],
+				"gaensebraten": [
+					10,
+					0
+				],
+				"lammbraten": [
+					10,
+					0
+				],
+				"schweinebraten": [
+					10,
+					0
+				],
+				"rinderbraten": [
+					10,
+					0
+				],
+				"steak": [
+					5,
+					0
+				],
+				"huehnersuppe": [
+					4,
+					0
+				],
+				"schmalzbrot": [
+					2,
+					0
+				],
+				"festessen": [
+					38,
+					0
 				]
 			},
 			"carry": [
@@ -9934,8 +10070,8 @@
 					4
 				],
 				"leder": [
-					3,
-					6
+					5,
+					7
 				],
 				"ei": [
 					1,
@@ -10372,6 +10508,50 @@
 				"netz": [
 					8,
 					11
+				],
+				"ruehrei": [
+					5,
+					0
+				],
+				"pfannkuchen": [
+					5,
+					0
+				],
+				"kuchen": [
+					16,
+					0
+				],
+				"bier": [
+					4,
+					0
+				],
+				"eintopf": [
+					3,
+					0
+				],
+				"huehnersuppe": [
+					4,
+					0
+				],
+				"schweinebraten": [
+					10,
+					0
+				],
+				"grillhaehnchen": [
+					4,
+					0
+				],
+				"spaten": [
+					6,
+					0
+				],
+				"spitzhacke": [
+					10,
+					0
+				],
+				"bohle": [
+					3,
+					0
 				]
 			},
 			"carry": [
@@ -10491,6 +10671,50 @@
 				"muschel": [
 					1,
 					2
+				],
+				"ruehrei": [
+					5,
+					0
+				],
+				"pfannkuchen": [
+					5,
+					0
+				],
+				"kuchen": [
+					16,
+					0
+				],
+				"bier": [
+					4,
+					0
+				],
+				"eintopf": [
+					3,
+					0
+				],
+				"huehnersuppe": [
+					4,
+					0
+				],
+				"schweinebraten": [
+					10,
+					0
+				],
+				"grillhaehnchen": [
+					4,
+					0
+				],
+				"spaten": [
+					6,
+					0
+				],
+				"spitzhacke": [
+					10,
+					0
+				],
+				"bohle": [
+					3,
+					0
 				]
 			},
 			"carry": [
@@ -10618,6 +10842,50 @@
 				"treibholz": [
 					2,
 					4
+				],
+				"ruehrei": [
+					5,
+					0
+				],
+				"pfannkuchen": [
+					5,
+					0
+				],
+				"kuchen": [
+					16,
+					0
+				],
+				"bier": [
+					4,
+					0
+				],
+				"eintopf": [
+					3,
+					0
+				],
+				"huehnersuppe": [
+					4,
+					0
+				],
+				"schweinebraten": [
+					10,
+					0
+				],
+				"grillhaehnchen": [
+					4,
+					0
+				],
+				"spaten": [
+					6,
+					0
+				],
+				"spitzhacke": [
+					10,
+					0
+				],
+				"bohle": [
+					3,
+					0
 				]
 			},
 			"carry": [
@@ -14138,7 +14406,7 @@
 			"muschel": 2,
 			"stein": 2,
 			"ziegel": 3,
-			"bohle": 3,
+			"bohle": 5,
 			"tangseil": 3,
 			"mehl": 3,
 			"brot": 3,
@@ -14146,12 +14414,12 @@
 			"raeucherfisch": 4,
 			"ei": 2,
 			"milch": 2,
-			"kaese": 5,
+			"kaese": 10,
 			"wolle": 3,
-			"leder": 5,
-			"tuch": 6,
-			"leinen": 5,
-			"bier": 4,
+			"leder": 8,
+			"tuch": 12,
+			"leinen": 11,
+			"bier": 6,
 			"glas": 5,
 			"sand": 1,
 			"perle": 7,
@@ -14159,16 +14427,44 @@
 			"weizen": 2,
 			"kartoffel": 2,
 			"bratwurst": 3,
-			"speck": 5,
-			"schinken": 8,
+			"speck": 9,
+			"schinken": 14,
 			"grillhaehnchen": 5,
-			"ruehrei": 3,
-			"pfannkuchen": 3,
-			"kuchen": 9,
+			"ruehrei": 8,
+			"pfannkuchen": 7,
+			"kuchen": 23,
 			"salz": 2,
-			"poekelfleisch": 6,
-			"trockenfleisch": 6,
-			"ledertasche": 12
+			"poekelfleisch": 8,
+			"trockenfleisch": 9,
+			"ledertasche": 17,
+			"eintopf": 4,
+			"entenbraten": 7,
+			"gaensebraten": 14,
+			"lammbraten": 14,
+			"schweinebraten": 14,
+			"rinderbraten": 14,
+			"steak": 7,
+			"huehnersuppe": 5,
+			"schmalzbrot": 3,
+			"festessen": 55,
+			"spaten": 9,
+			"spitzhacke": 14,
+			"spindel": 5,
+			"mausefalle": 12,
+			"muschelmesser": 8,
+			"schlachtmesser": 13,
+			"tauwerk": 12,
+			"gehaeuse": 25,
+			"karren": 31,
+			"ruderboot": 31,
+			"segelboot": 95,
+			"decke": 30,
+			"lederstiefel": 19,
+			"holzbuendel": 8,
+			"kerze": 7,
+			"netz": 11,
+			"raeucherwurst": 6,
+			"kette": 17
 		}
 	},
 	"bank": {
