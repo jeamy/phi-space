@@ -1,0 +1,352 @@
+[
+	{
+		"key": "llm.perMin",
+		"env": "SPACES_MMO_LLM_PER_MIN",
+		"def": 20,
+		"min": 0,
+		"max": 600,
+		"label": "Modellaufrufe je Minute",
+		"unit": "Aufrufe",
+		"help": "Alle Prozesse zusammen: Übersetzungen und Modell-NPCs. 0 hält alle Aufrufe an."
+	},
+	{
+		"key": "llm.perDay",
+		"env": "SPACES_MMO_LLM_PER_DAY",
+		"def": 500,
+		"min": 0,
+		"max": 100000,
+		"label": "Modellaufrufe je Tag",
+		"unit": "Aufrufe",
+		"help": "Alle Prozesse zusammen, je Kalendertag (UTC). Die Kostengrenze."
+	},
+	{
+		"key": "translate.perDay",
+		"env": "SPACES_MMO_TRANSLATE_PER_DAY",
+		"def": 200,
+		"min": 0,
+		"max": 10000,
+		"label": "Übersetzungen je Konto und Tag",
+		"unit": "Sätze",
+		"help": "Freie Sätze, die die festen Regeln nicht verstehen und das Modell in einen Befehl übersetzt (registrierte Konten)."
+	},
+	{
+		"key": "translate.guestPerDay",
+		"env": "SPACES_MMO_TRANSLATE_GUEST_PER_DAY",
+		"def": 20,
+		"min": 0,
+		"max": 10000,
+		"label": "Übersetzungen je Gast und Tag",
+		"unit": "Sätze",
+		"help": "Dasselbe für Gäste."
+	},
+	{
+		"key": "npc.max",
+		"env": "SPACES_MMO_NPC_MAX",
+		"def": 10,
+		"min": 0,
+		"max": 100,
+		"label": "Wache Modell-NPCs zugleich",
+		"unit": "NPCs",
+		"help": "So viele Modell-NPCs antworten gleichzeitig mit dem Modell; weitere dösen, bis ein Platz frei ist."
+	},
+	{
+		"key": "npc.budgetDay",
+		"env": "SPACES_MMO_NPC_BUDGET_DAY",
+		"def": -1,
+		"min": -1,
+		"max": 10000,
+		"label": "Modellaufrufe je NPC und Welttag",
+		"unit": "Aufrufe",
+		"help": "−1: das Budget, das die Welt jeder Rolle gibt (Ines 40, der Fremde 20). Sonst gilt diese Zahl für alle Rollen; 0: keine Modellaufrufe für NPCs."
+	},
+	{
+		"key": "cmd.burst",
+		"env": "SPACES_MMO_CMD_BURST",
+		"def": 20,
+		"min": 1,
+		"max": 1000,
+		"label": "Befehle auf einmal je Konto",
+		"unit": "Befehle",
+		"help": "Getippte Befehle, die ein Konto (alle offenen Seiten zusammen) auf einmal schicken darf. Schritte haben ihren eigenen Takt."
+	},
+	{
+		"key": "settlers.min",
+		"env": "SPACES_MMO_SETTLERS_MIN",
+		"def": 30,
+		"min": 0,
+		"max": 200,
+		"label": "Figuren, die immer spielen",
+		"unit": "Figuren",
+		"help": "So viele Figuren sind mindestens unterwegs: fehlen Menschen, spielen Siedler (Skript, kein Modell) ihren Teil, sammeln, bauen, säen und helfen auf Baustellen. Jeder Mensch, der spielt, ersetzt einen Siedler seiner Region. 0: keine Siedler."
+	},
+	{
+		"key": "epoch.dorf",
+		"env": "SPACES_MMO_EPOCH_DORF",
+		"def": 15,
+		"min": 0,
+		"max": 10000,
+		"label": "Punkte einer Insel für das Dorf",
+		"unit": "Punkte",
+		"help": "Gehaltener Bestand einer Insel (Bauten, Beete, Äcker nach ihren Lichtpunkten), ab dem sie Epoche 2 erreicht und Mühle, Backhaus, Gehege, Webstuhl und Äcker freischaltet. Wenige Spieler: kleiner."
+	},
+	{
+		"key": "epoch.stadt",
+		"env": "SPACES_MMO_EPOCH_STADT",
+		"def": 40,
+		"min": 0,
+		"max": 10000,
+		"label": "Punkte einer Insel für die Stadt",
+		"unit": "Punkte",
+		"help": "Dasselbe für Epoche 3."
+	},
+	{
+		"key": "epoch.netz",
+		"env": "SPACES_MMO_EPOCH_NETZ",
+		"def": 80,
+		"min": 0,
+		"max": 10000,
+		"label": "Punkte einer Insel für das Netz",
+		"unit": "Punkte",
+		"help": "Dasselbe für Epoche 4."
+	},
+	{
+		"key": "clock.life",
+		"env": "SPACES_MMO_CLOCK_LIFE",
+		"def": -1,
+		"min": -1,
+		"max": 100000,
+		"label": "Lebenstakt",
+		"unit": "Welttage je Tag",
+		"help": "Wie schnell die Welt lebt, in allen Regionen: Tag und Nacht, Wetter, Wachstum, Arbeit, Tiere. 1 ist Echtzeit, 24 ein Welttag je Stunde. −1: Die Uhr bleibt, wie sie steht."
+	},
+	{
+		"key": "clock.decay",
+		"env": "SPACES_MMO_CLOCK_DECAY",
+		"def": -1,
+		"min": -1,
+		"max": 100000,
+		"label": "Verfallstakt",
+		"unit": "Tage je Tag",
+		"help": "Wie schnell läuft, was auf Menschen wartet: Verfall, Abstimmungen, Feste, Durst, Erntefenster, Marktangebote, Feuer, Strandgut. 1 ist Echtzeit, die Tage hier sind dann echte Tage. −1: bleibt, wie es steht."
+	},
+	{
+		"key": "work.rest",
+		"env": "SPACES_MMO_WORK_REST",
+		"def": 15,
+		"min": 0,
+		"max": 1440,
+		"label": "Ruhe nach der Arbeit",
+		"unit": "Weltminuten",
+		"help": "So lange ruht eine Figur nach einem Arbeitspunkt (Baustelle, Acker, Steinbruch, Lehmgrube, Netz). Es sind Minuten der Weltzeit, sie laufen also im Lebenstakt. Segen und Essen kürzen die Ruhe. Gilt ab der nächsten Arbeit; wer schon ruht, ruht zu Ende. 0: keine Ruhe."
+	},
+	{
+		"key": "sleep.rate",
+		"env": "SPACES_MMO_SLEEP_RATE",
+		"def": 30,
+		"min": 1,
+		"max": 1440,
+		"label": "Schlaf je ausgeruhte Arbeit",
+		"unit": "Weltminuten",
+		"help": "So lange muss eine Figur im Bett ihrer Hütte schlafen, damit sie danach eine Arbeit ohne Ruhe tun kann. Weltzeit, sie läuft im Lebenstakt."
+	},
+	{
+		"key": "sleep.max",
+		"env": "SPACES_MMO_SLEEP_MAX",
+		"def": 8,
+		"min": 0,
+		"max": 100,
+		"label": "Ausgeruhte Arbeiten höchstens",
+		"unit": "Arbeiten",
+		"help": "So viele Arbeiten ohne Ruhe danach gibt ein Schlaf höchstens, auch wenn er länger dauert. 0: Schlafen ändert nichts."
+	},
+	{
+		"key": "year.days",
+		"env": "SPACES_MMO_YEAR_DAYS",
+		"def": 56,
+		"min": 0,
+		"max": 1000,
+		"label": "Länge eines Jahres",
+		"unit": "Welttage",
+		"help": "Vier gleich lange Jahreszeiten. Im Winter wächst draußen nichts, das Erntefest gibt es im Herbst, die Blumenschau im Frühling und Sommer. 0: keine Jahreszeiten."
+	},
+	{
+		"key": "light.base",
+		"env": "SPACES_MMO_LIGHT_BASE",
+		"def": 20,
+		"min": 0,
+		"max": 1000,
+		"label": "Licht eines Feuers",
+		"unit": "Punkte",
+		"help": "So viele Punkte an Bauten, Beeten und Äckern trägt ein brennendes Feuer, bevor jemand mitbaut (jeder, der dort in den letzten sieben Tagen gebaut hat, gibt 5 mehr, bis 40 oder bis zu diesem Wert, wenn er höher ist). Für einen Server mit wenigen Spielern höher stellen; gilt für den nächsten Bau."
+	},
+	{
+		"key": "light.epoch",
+		"env": "SPACES_MMO_LIGHT_EPOCH",
+		"def": 20,
+		"min": 0,
+		"max": 1000,
+		"label": "Licht je Epoche",
+		"unit": "Punkte",
+		"help": "So viel mehr Licht trägt jedes Feuer einer Insel mit jeder Epoche über dem Fischerdorf: im Dorf einmal, in der Stadt zweimal, im Netz dreimal. Ein Dorf hat so Licht für Werkstatt, Steinbruch und Lehmgrube, auch mit wenigen Spielern."
+	},
+	{
+		"key": "epoch.force",
+		"env": "SPACES_MMO_EPOCH_FORCE",
+		"def": 0,
+		"min": 0,
+		"max": 4,
+		"label": "Epoche erzwingen (zum Testen)",
+		"unit": "Epoche",
+		"help": "0: die Epoche jeder Insel folgt ihrem Bestand. 1 bis 4 setzt sie für alle Inseln fest, damit sich testen lässt, was eine Epoche freischaltet (Pläne, Äcker, Beamen). Danach wieder auf 0 stellen („Standard“ im Feld); der Bestand zählt dann wieder."
+	},
+	{
+		"key": "beam.cost",
+		"env": "SPACES_MMO_BEAM_COST",
+		"def": 1,
+		"min": 0,
+		"max": 100,
+		"label": "Beamen: Münzen je Kartenfeld",
+		"unit": "Münzen",
+		"help": "So viele Münzen kostet das Beamen von einem brennenden Feuer zu einem anderen je Feld Abstand auf der Weltkarte (mindestens ein Feld). 0: kostenlos."
+	},
+	{
+		"key": "beam.cooldown",
+		"env": "SPACES_MMO_BEAM_COOLDOWN",
+		"def": 10,
+		"min": 0,
+		"max": 1440,
+		"label": "Beamen: Pause danach",
+		"unit": "Weltminuten",
+		"help": "So lange muss eine Figur nach dem Beamen warten, bis sie wieder beamen kann (Weltzeit, sie läuft im Lebenstakt). 0: keine Pause."
+	},
+	{
+		"key": "beam.epoch",
+		"env": "SPACES_MMO_BEAM_EPOCH",
+		"def": 4,
+		"min": 1,
+		"max": 4,
+		"label": "Beamen ab Epoche",
+		"unit": "Epoche",
+		"help": "Ab dieser Epoche der Insel, auf der man steht, kann man beamen (4: das Netz, 1: von Anfang an)."
+	},
+	{
+		"key": "keep.scheuche",
+		"env": "SPACES_MMO_KEEP_SCHEUCHE",
+		"def": 40,
+		"min": 1,
+		"max": 1000,
+		"label": "Vogelscheuche steht",
+		"unit": "Tage",
+		"help": "So lange hält sie nach Bau oder Reparatur. Gilt für Neues und die nächste Reparatur; was steht, behält sein Datum."
+	},
+	{
+		"key": "keep.bau",
+		"env": "SPACES_MMO_KEEP_BAU",
+		"def": 40,
+		"min": 1,
+		"max": 1000,
+		"label": "Hütten, Mühle, Backhaus, Ställe stehen",
+		"unit": "Tage",
+		"help": "Dasselbe für Hütte, Windmühle, Backhaus, Webstuhl, Hühnerstall, Gehege und Regentonne."
+	},
+	{
+		"key": "keep.lager",
+		"env": "SPACES_MMO_KEEP_LAGER",
+		"def": 45,
+		"min": 1,
+		"max": 1000,
+		"label": "Lager, Gruben, Werkstätten, Rathaus stehen",
+		"unit": "Tage",
+		"help": "Dasselbe für Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Werkstatt und Rathaus."
+	},
+	{
+		"key": "keep.kapelle",
+		"env": "SPACES_MMO_KEEP_KAPELLE",
+		"def": 60,
+		"min": 1,
+		"max": 1000,
+		"label": "Kapelle steht",
+		"unit": "Tage",
+		"help": "Dasselbe für die Kapelle."
+	},
+	{
+		"key": "keep.park",
+		"env": "SPACES_MMO_KEEP_PARK",
+		"def": 120,
+		"min": 1,
+		"max": 1000,
+		"label": "Park steht",
+		"unit": "Tage",
+		"help": "Dasselbe für den Park."
+	},
+	{
+		"key": "build.max1",
+		"env": "SPACES_MMO_BUILD_MAX_1",
+		"def": 10,
+		"min": 1,
+		"max": 1000,
+		"label": "Bauten je Konto im Fischerdorf",
+		"unit": "Bauten",
+		"help": "So viele Bauten und Baustellen darf ein Konto haben, wenn die Insel, auf der es baut, noch Fischerdorf ist (Epoche 1). Kleine Bauten und Tierhäuser zählen nicht mit: Regentonne, Vogelscheuche, Hühnerstall, Gehege, Bienenstock, Signalfeuer (Tierhäuser haben ihre eigene Grenze, darunter)."
+	},
+	{
+		"key": "build.max2",
+		"env": "SPACES_MMO_BUILD_MAX_2",
+		"def": 15,
+		"min": 1,
+		"max": 1000,
+		"label": "Bauten je Konto im Dorf",
+		"unit": "Bauten",
+		"help": "Dasselbe auf einer Insel, die Dorf ist (Epoche 2)."
+	},
+	{
+		"key": "build.max3",
+		"env": "SPACES_MMO_BUILD_MAX_3",
+		"def": 18,
+		"min": 1,
+		"max": 1000,
+		"label": "Bauten je Konto in der Stadt",
+		"unit": "Bauten",
+		"help": "Dasselbe in der Stadt (Epoche 3)."
+	},
+	{
+		"key": "build.max4",
+		"env": "SPACES_MMO_BUILD_MAX_4",
+		"def": 20,
+		"min": 1,
+		"max": 1000,
+		"label": "Bauten je Konto im Netz",
+		"unit": "Bauten",
+		"help": "Dasselbe im Netz (Epoche 4)."
+	},
+	{
+		"key": "animals.houses",
+		"env": "SPACES_MMO_ANIMAL_HOUSES",
+		"def": 5,
+		"min": 0,
+		"max": 1000,
+		"label": "Ställe, Gehege und Bienenstöcke je Konto",
+		"unit": "Bauten",
+		"help": "So viele Häuser für Tiere (Hühnerstall, Gehege, Bienenstock) darf ein Konto zusammen haben, Baustellen eingerechnet. Sie zählen nicht zu den Bauten oben."
+	},
+	{
+		"key": "pack.max",
+		"env": "SPACES_MMO_PACK_MAX",
+		"def": 1000,
+		"min": 1,
+		"max": 100000,
+		"label": "Gepäck je Figur",
+		"unit": "Last",
+		"help": "So viel Last trägt eine Figur. Jedes Ding wiegt nach seiner Art (Muschel und Samen ½, Treibholz und Stein 2, Holzbündel und Tiere 4, Rind und Segelboot 8, sonst 1; Münzen nichts). Wer mehr trägt, verliert nichts, nimmt aber nichts mehr auf, bis er etwas in eine Truhe legt."
+	},
+	{
+		"key": "cmd.perSec",
+		"env": "SPACES_MMO_CMD_PER_SEC",
+		"def": 5,
+		"min": 1,
+		"max": 100,
+		"label": "Befehle je Sekunde je Konto",
+		"unit": "je s",
+		"help": "Danach so viele je Sekunde."
+	}
+]

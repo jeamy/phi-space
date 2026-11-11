@@ -1,0 +1,19 @@
+[package]
+name = "mmo-web"
+description = "The web process of spaces-mmo (spaces-mmo/server/index.ts): HTTP, the game WebSocket, accounts, chat, the page as static files (docs/rust-portierung.en.md, R8.5)"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+mmo-engine = { path = "../mmo-engine" }
+phi-json = { path = "../phi-json" }
+phi-spaces-client = { path = "../phi-spaces-client" }
+tokio.workspace = true
+sha2.workspace = true
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+scrypt = { version = "0.11", default-features = false }
+sha1 = "0.10"

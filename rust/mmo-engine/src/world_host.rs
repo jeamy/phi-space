@@ -81,7 +81,7 @@ fn real_floor(job: &str) -> f64 {
 }
 
 /// `msUntilWorld`.
-fn ms_until_world(clock: &Json, due: f64, real_now: f64) -> f64 {
+pub fn ms_until_world(clock: &Json, due: f64, real_now: f64) -> f64 {
 	let left = due - world_at(clock, real_now);
 	if left <= 0.0 { 0.0 } else if j::b(clock, "paused") { f64::INFINITY } else { (left / j::n(clock, "rate")).ceil() }
 }
