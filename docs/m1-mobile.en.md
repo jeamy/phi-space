@@ -139,6 +139,19 @@ Space. The agent host is a federation Member (`PI_SERVERD_FEDERATION_CONFIG`).
      - `runtime/test-remote-state.mjs`: a late open does not resurrect a cancelled connection.
      - The runtime suite (27) is green.
 3. Device test over WLAN with key proof.
+   **Done 2026-11-11.**
+   - pi-termux-mobile `scripts/remote-demo/run.sh` runs it; the flow is in its `docs/remote-demo.md`.
+   - The demo starts `test/testbed/device/b9-coordinator.ts` with `B9_REMOTE_SOCKET`. The coordinator then also
+     serves its Space `remote` to pi-serverd (scripted model) on a private socket as the peer `agent-host`, under
+     the gate's authority, because generations are bound to the authority.
+   - The phone is driven over adb through its app bridge:
+     - it pairs over WLAN with a new Keystore key;
+     - it gives the key proof;
+     - it stores the agent host;
+     - it connects the Remote page over the Space (`connect-space`);
+     - it creates a session and sends one prompt, and `echo: …` comes back.
+   - The demo found that `remote-calls.mjs` was missing from the APK (the app's node exited on start). The Android
+     build now refuses a packaged module that imports a sibling it does not package.
 4. Then remove pi-server, pi-client, pi-protocol and the Chord 1.1.0 overrides. In phi-spaces this touches
    `src/pi-server.ts` and `npm run test:pi-server`, so it is planned on its own.
 

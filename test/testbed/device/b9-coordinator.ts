@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import {
 	CONTROL_SPACE, GateIdentity, GrantAuthority, GrantVerifier, RunController, SpaceKeyDirectory, WorkerAssignments, WorkerSupervisor, bootstrapEnroll, core,
-	createSpace, hashToken, listSpaces, loadFileSigner, localRunMember, newEnrollToken, provisionFileSigner, snapshotSpace, spaceDoc, startFederationHost,
+	SpaceService, StaticIdentity, serveSpace, createSpace, hashToken, listSpaces, loadFileSigner, localRunMember, newEnrollToken, provisionFileSigner, snapshotSpace, spaceDoc, startFederationHost,
 } from "../../../src/index.ts";
 import { SIEVE_WORKER_KIND, configureGatedSieveSpace, prepareSieveRun, type SieveConfig } from "../../../examples/sieve.ts";
 
@@ -75,6 +75,18 @@ const tick = setInterval(async () => {
 		await h.commit(async tx => { const s = await spaceDoc(tx, controlId, Date.now()); for (const e of core.list(s, Date.now(), { type: "Capability", fields: { hostId: HOST_ID } })) core.probe(s, Date.now(), { id: e.id }, null, true); core.write(s, Date.now(), { type: "Capability", fields: { hostId: HOST_ID, at: Date.now(), resources: {}, tools: ["sieve"], models: [], metrics: { workers: summary as any } } }, null, 120_000); }, ctx);
 	} catch (e) { console.error("tick", e); }
 }, 2000);
-console.log(JSON.stringify({ ready: true, directory: NETBIRD ? "netbird-management-api" : "fixture-pin", endpoint: `tcp://${LAN}:${PORT}`, controlHostId: HOST_ID, phonePeer: PHONE_PEER, members: spaces, controlSpaceId: controlId, fresh }));
-const shutdown = async () => { clearInterval(tick); await local.stop(); await runtime.close(); await h.close(ctx); process.exit(0); };
+// B9_REMOTE_SOCKET=<path>: the remote-conversation demo (docs/m1-mobile.en.md, pi-termux-mobile docs/remote-demo.md).
+// The named Space `remote` of this store is reached by the phone through the gate above (key proof, grant), and by
+// the agent host (pi-serverd with PI_SERVERD_REMOTE_SPACE=unix:<path>, PI_SERVERD_REMOTE_SPACE_NAME=remote) over
+// this private unix socket as the peer `agent-host`.
+const remoteSocket = process.env.B9_REMOTE_SOCKET;
+let remoteServer: { close(): Promise<void> } | null = null;
+if (remoteSocket) {
+	await h.commit(tx => createSpace(tx, "remote", Date.now()), ctx);
+	// the same authority as the gate's service: generations are bound to it, and the two admit on one store
+	const agent = new SpaceService({ host: h, ctx, hostId: HOST_ID, authorityId: "b9", identity: new StaticIdentity({ "agent-host": { principal: { peerId: "agent-host" }, roles: ["member"] } }) });
+	remoteServer = await serveSpace(agent, { listen: { path: remoteSocket }, connection: () => ({ peerId: "agent-host" }) });
+}
+console.log(JSON.stringify({ ready: true, ...(remoteSocket ? { remoteSpace: "remote", remoteSocket } : {}), directory: NETBIRD ? "netbird-management-api" : "fixture-pin", endpoint: `tcp://${LAN}:${PORT}`, controlHostId: HOST_ID, phonePeer: PHONE_PEER, members: spaces, controlSpaceId: controlId, fresh }));
+const shutdown = async () => { clearInterval(tick); await remoteServer?.close(); await local.stop(); await runtime.close(); await h.close(ctx); process.exit(0); };
 process.on("SIGTERM", shutdown); process.on("SIGINT", shutdown);
