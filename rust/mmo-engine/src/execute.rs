@@ -69,6 +69,8 @@ pub async fn execute(c: &mut Ctx, line: &str) -> Result<()> {
 	let mut line = js::trim(line).to_owned();
 	if line.is_empty() { return Ok(()); }
 	if j::truthy(j::at(&c.actor, "aboard")) && WALKING.with(|r| r.test(&line)) { return refuse(crate::commands::passage::aboard_text(c).await?); }
+	// asleep in a bed (only inside a house): whatever it sends wakes it, and nothing else is done (sleep.rs)
+	if crate::commands::sleep::woken_by(c, &line).await? { return Ok(()); }
 	if STEP.with(|r| r.test(&line)) { return crate::commands::default::step(c, js::trim(js::slice16(&line, 5, None))).await; }
 	let (merged, exits) = crate::commands::commands_of(c).await?;
 	let said = c.asked.clone().unwrap_or_else(|| line.clone());

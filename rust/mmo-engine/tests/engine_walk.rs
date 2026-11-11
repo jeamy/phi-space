@@ -1923,15 +1923,29 @@ fn roads_and_insides() {
 	for (who, line) in [(&a, "craft ruehrei"), (&a, "craft pfannkuchen")] { run(&mut w, who, line); }
 	stand(&mut w, 1, "in-h-1", 5.0, 4.0);
 	for (who, line) in [(&a, "truhe"), (&a, "verstaue muschel"), (&a, "truhe"), (&a, "entnimm muschel aus der truhe")] { run(&mut w, who, line); }
+	// sleep (sleep.rs): too short, then long enough for rested works; the bed holds one; a guest put out wakes outside
 	stand(&mut w, 1, "in-h-1", 5.0, 2.0);
-	for (who, line) in [(&a, "schlafe"), (&a, "look"), (&e, "look"), (&a, "ausladen"), (&a, "ausladen Niemand"), (&a, "ausladen Wanderer4"), (&e, "look"), (&a, "hinaus"), (&a, "betrete"), (&a, "bau hütte")] { run(&mut w, who, line); }
-	// the hut goes with its owner inside and a thing on its floor
+	for (who, line) in [(&a, "schlafe"), (&a, "schlafe"), (&a, "look"), (&a, "schlafe")] { run(&mut w, who, line); }
+	at.set(at.get() + 2.0 * 3_600_000.0);
+	for (who, line) in [(&a, "look"), (&e, "look")] { run(&mut w, who, line); }
+	stand(&mut w, 4, "in-h-1", 4.0, 2.0);
+	for (who, line) in [(&e, "schlafe"), (&a, "schlafe"), (&a, "ausladen"), (&a, "ausladen Niemand")] { run(&mut w, who, line); }
+	at.set(at.get() + 3_600_000.0);
+	for (who, line) in [(&a, "ausladen Wanderer4"), (&e, "look"), (&a, "hinaus"), (&a, "betrete"), (&a, "bau hütte")] { run(&mut w, who, line); }
+	// the hut goes with its owner asleep inside and a thing on its floor
+	stand(&mut w, 1, "in-h-1", 5.0, 2.0);
+	run(&mut w, &a, "schlafe");
+	at.set(at.get() + 3_600_000.0);
 	give(&mut w, "in-h-1", "muschel", 1);
 	assert!(w.take(obj! { "type" => "Building", "fields" => obj! { "buildId" => "h-1" } }));
 	w.tick("sweep");
 	w.compare("the hut gone");
-	// demolished from inside
-	for (who, line) in [(&a, "look"), (&a, "nachlass"), (&b, "betrete"), (&b, "abriss"), (&b, "look")] { run(&mut w, who, line); }
+	// rested works at a site, demolished from inside
+	w.write(obj! { "type" => "Setting", "fields" => obj! { "key" => "work.rest", "value" => 15.0 } });
+	w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-bucht", "until" => 9e15, "litAt" => 0.0 } });
+	stand(&mut w, 1, "graue-bucht", 5.0, 13.0);
+	for (who, line) in [(&a, "look"), (&a, "nachlass"), (&a, "bau regentonne"), (&a, "arbeite"), (&a, "arbeite"), (&a, "arbeite"), (&b, "betrete"), (&b, "abriss"), (&b, "look")] { run(&mut w, who, line); }
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 10, "{said:?}");
 	assert!(w.entries_with("steht nicht mehr; du stehst draußen") >= 1, "nobody was put out");
+	assert!(w.entries_with("Ausgeruht: noch") >= 1, "no rested work");
 }

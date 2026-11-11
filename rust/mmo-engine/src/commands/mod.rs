@@ -39,6 +39,7 @@ pub mod cart;
 pub mod fishing;
 pub mod road;
 pub mod interior;
+pub mod sleep;
 
 /// A command (`Command`): an exit's command carries the exit.
 #[derive(Debug, Clone)]
@@ -143,6 +144,7 @@ pub async fn run(c: &mut Ctx, cmd: &Command, arg: &str, merged: &Merged, exits: 
 		("beam", key) => beam::run(c, key, arg).await,
 		("cart", key) => cart::run(c, key, arg).await,
 		("interior", key) => interior::run(c, key, arg).await,
+		("sleep", key) => sleep::run(c, key, arg).await,
 		("fishing", key) => fishing::run(c, key, arg).await,
 		("passage", key) => passage::run(c, key, arg).await,
 		("garden", key) => garden::run(c, key, arg).await,

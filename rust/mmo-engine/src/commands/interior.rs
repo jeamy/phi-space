@@ -131,6 +131,7 @@ pub async fn drop_interior(space: &Space, txn: &str, w: &Json, room_id: &str, at
 		space.write(&again(&t, f), Some(txn), FOREVER).await?;
 		let name = at.map_or_else(|| "Der Bau".to_owned(), |a| txt(j::at(a, "name")));
 		to_player(space, &obj! { "room" => to.0.as_str(), "to" => char_id.as_str(), "kind" => "info", "text" => format!("{name} steht nicht mehr; du stehst draußen."), "from" => "", "fromId" => "", "at" => time_now() }, Some(txn)).await?;
+		super::sleep::wake_outside(space, txn, &char_id, &to.0).await?;
 	}
 	let floor = space.read_all(&tmpl("Item", obj! { "location" => room_id }), Some(txn)).await?;
 	match at {
@@ -317,6 +318,8 @@ async fn ausladen(c: &mut Ctx, arg: &str) -> Result<()> {
 				j::set(&mut f, "y", front.1);
 				c.space.write(&again(&t, f), c.txn(), FOREVER).await?;
 				msg(c, &gid, "info", &format!("{me_name} hat dich ausgeladen; du stehst vor der {bname}."), MsgOpts { room: Some(txt(j::at(&b, "room"))), ..MsgOpts::default() }).await?;
+				let txn = c.txn.clone();
+				super::sleep::wake_outside(&c.space, &txn, &gid, &txt(j::at(&b, "room"))).await?;
 			}
 		}
 	}
@@ -325,19 +328,11 @@ async fn ausladen(c: &mut Ctx, arg: &str) -> Result<()> {
 	msg(c, &gid, "info", &format!("{me_name} hat die Einladung in die {bname} zurückgenommen."), MsgOpts::default()).await
 }
 
-async fn schlafe(c: &mut Ctx) -> Result<()> {
-	let Some(bed) = furnishing_for(c, "sleep").await? else { return refuse("Schlafen kann man im Bett einer Hütte; geh hinein („betrete“ neben ihr).") };
-	if near_buildings(c, Some("sleep")).await?.is_empty() { return refuse(format!("Geh zum {}.", txt(j::at(&bed, "name")))); }
-	let me = c.char_id().to_owned();
-	msg(c, &me, "info", "Das Bett ist gemacht, aber noch schläft hier niemand: bald arbeitet, wer hier ausgeschlafen hat, danach eine Weile ohne Pause.", MsgOpts::default()).await
-}
-
 pub async fn run(c: &mut Ctx, key: &str, arg: &str) -> Result<()> {
 	match key {
 		"betrete" => betrete(c, arg).await,
 		"einladen" => einladen(c, arg).await,
 		"ausladen" => ausladen(c, arg).await,
-		"schlafe" => schlafe(c).await,
 		k => Err(Error::Other(format!("unported: interior/{k}"))),
 	}
 }

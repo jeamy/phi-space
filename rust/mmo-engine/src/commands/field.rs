@@ -69,6 +69,7 @@ async fn tire(c: &Ctx, now: f64) -> Result<()> {
 	let until = rest.as_ref().map_or(0.0, |e| j::n(fields(e), "untilWorldMs"));
 	if until > now { return refuse(format!("Du bist noch müde von der letzten Arbeit; in etwa {} Minuten wieder.", nt(1f64.max(js::round((until - now) / 60_000.0))))); }
 	if let Some(r) = &rest { c.space.take_if_exists(&obj! { "id" => j::at(r, "id").clone() }, NO_WAIT, c.txn()).await?; }
+	if super::sleep::spend_rested(c).await? { return Ok(()); }
 	let base = work_rest_ms(&c.space).await? / if super::chapel::blessed(c, now).await? { 2.0 } else { 1.0 };
 	let ms = base / sated_factor(c, now).await?;
 	c.space.write(&tmpl("WorkRest", obj! { "charId" => c.char_id(), "untilWorldMs" => now + ms }), c.txn(), FOREVER).await?;

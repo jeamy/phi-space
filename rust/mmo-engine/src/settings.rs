@@ -14,7 +14,7 @@ pub const SETTINGS: &[(&str, &str, f64)] = &[
 	("translate.guestPerDay", "SPACES_MMO_TRANSLATE_GUEST_PER_DAY", 20.0), ("npc.max", "SPACES_MMO_NPC_MAX", 10.0), ("npc.budgetDay", "SPACES_MMO_NPC_BUDGET_DAY", -1.0),
 	("cmd.burst", "SPACES_MMO_CMD_BURST", 20.0), ("settlers.min", "SPACES_MMO_SETTLERS_MIN", 30.0), ("epoch.dorf", "SPACES_MMO_EPOCH_DORF", 15.0),
 	("epoch.stadt", "SPACES_MMO_EPOCH_STADT", 40.0), ("epoch.netz", "SPACES_MMO_EPOCH_NETZ", 80.0), ("clock.life", "SPACES_MMO_CLOCK_LIFE", -1.0),
-	("clock.decay", "SPACES_MMO_CLOCK_DECAY", -1.0), ("work.rest", "SPACES_MMO_WORK_REST", 15.0), ("year.days", "SPACES_MMO_YEAR_DAYS", 56.0),
+	("clock.decay", "SPACES_MMO_CLOCK_DECAY", -1.0), ("work.rest", "SPACES_MMO_WORK_REST", 15.0), ("sleep.rate", "SPACES_MMO_SLEEP_RATE", 30.0), ("sleep.max", "SPACES_MMO_SLEEP_MAX", 8.0), ("year.days", "SPACES_MMO_YEAR_DAYS", 56.0),
 	("light.base", "SPACES_MMO_LIGHT_BASE", 20.0), ("light.epoch", "SPACES_MMO_LIGHT_EPOCH", 20.0), ("epoch.force", "SPACES_MMO_EPOCH_FORCE", 0.0), ("beam.cost", "SPACES_MMO_BEAM_COST", 1.0), ("beam.cooldown", "SPACES_MMO_BEAM_COOLDOWN", 10.0),
 	("beam.epoch", "SPACES_MMO_BEAM_EPOCH", 4.0), ("keep.scheuche", "SPACES_MMO_KEEP_SCHEUCHE", 40.0), ("keep.bau", "SPACES_MMO_KEEP_BAU", 40.0),
 	("keep.lager", "SPACES_MMO_KEEP_LAGER", 45.0), ("keep.kapelle", "SPACES_MMO_KEEP_KAPELLE", 60.0), ("keep.park", "SPACES_MMO_KEEP_PARK", 120.0),

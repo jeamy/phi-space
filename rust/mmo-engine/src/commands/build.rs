@@ -645,6 +645,7 @@ pub async fn rested(c: &Ctx) -> Result<(f64, Option<Json>)> {
 /// `tire`: the actor worked; it rests for a while.
 pub async fn tire(c: &Ctx, now: f64, rest: Option<&Json>) -> Result<()> {
 	if let Some(r) = rest { c.space.take_if_exists(&obj! { "id" => j::at(r, "id").clone() }, NO_WAIT, c.txn()).await?; }
+	if super::sleep::spend_rested(c).await? { return Ok(()); }
 	let ms = work_rest_ms(&c.space).await? / (if blessed(c, now).await? { 2.0 } else { 1.0 }) / sated_factor(c, now).await?;
 	c.space.write(&tmpl("WorkRest", obj! { "charId" => c.char_id(), "untilWorldMs" => now + ms }), c.txn(), FOREVER).await?;
 	Ok(())

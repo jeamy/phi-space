@@ -336,13 +336,13 @@
 			"help": "ausladen <name> – eine Einladung in die eigene Hütte zurücknehmen; wer drinnen ist, steht dann draußen"
 		},
 		{
-			"module": "interior",
+			"module": "sleep",
 			"key": "schlafe",
 			"aliases": [
 				"schlafen",
 				"sleep"
 			],
-			"help": "schlafe – im Bett der Hütte schlafen (bald: wer ausgeschlafen ist, arbeitet danach eine Weile ohne Pause)"
+			"help": "schlafe – im Bett der Hütte schlafen: je länger, desto mehr Arbeiten danach ohne Pause (bis acht); jeder Befehl weckt"
 		},
 		{
 			"module": "siteorder",
