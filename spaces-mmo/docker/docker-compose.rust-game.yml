@@ -1,0 +1,41 @@
+# The game processes in Rust (docs/rust-portierung.en.md, R8.6): world workers, npc processes and the web process run
+# mmo-world, mmo-npc and mmo-web of the production-rust image; the model process stays Node. Laid over
+# docker-compose.yml and docker-compose.rust.yml (the space containers): `npm run docker:rust:up` (a project of its own)
+# and `npm run docker:local:rust:up` (the local test bed, project phi-spaces-mmo-local). The servers' scripts
+# (docker:nano:rust:up, docker:big:rust:up) do not read it: there the game processes stay TypeScript until asked.
+services:
+  web:
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/mmo-web"]
+
+  world-west:
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/mmo-world"]
+
+  npc-west:
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/mmo-npc"]
+
+  world-nord:
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/mmo-world"]
+
+  npc-nord:
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/mmo-npc"]
+
+  world-ost:
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/mmo-world"]
+
+  npc-ost:
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/mmo-npc"]
+
+  world-sued:
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/mmo-world"]
+
+  npc-sued:
+    image: phi-spaces-mmo:rust
+    command: ["/usr/local/bin/mmo-npc"]

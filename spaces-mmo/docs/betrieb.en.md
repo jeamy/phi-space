@@ -65,6 +65,12 @@ The same with the Rust Space server (`phi-space-server --profile mmo`) in the Sp
 with volumes of its own (`docker/docker-compose.rust.yml`, [rust-portierung.md](../../docs/rust-portierung.en.md)):
 `npm --prefix spaces-mmo run docker:image:rust`, then `docker:rust:up|down|logs`.
 
+The game processes in Rust as well (R8.6: `mmo-world`, `mmo-npc` and `mmo-web` of the same image in the world, npc
+and web containers, `docker/docker-compose.rust-game.yml`; the model process stays Node): `docker:rust:up` lays that file
+over its project too, and `docker:local:rust:up|down|logs` runs the local test bed (project `phi-spaces-mmo-local`, the
+volumes and ports of `docker:local:up`) that way; `docker:local:up` brings TypeScript back on the same files. The
+servers' scripts below do not read it: on nano and big the game processes stay TypeScript until that is decided.
+
 On the machines the same file swaps the Space containers of the running project for the Rust server, on the same
 volumes and ports: `docker:nano:rust:up|down|logs` on nano, `docker:big:rust:up|down|logs` on big (with the host network
 override). `up` builds both images on the machine (the Rust server is compiled there, as `docker build --network host`)

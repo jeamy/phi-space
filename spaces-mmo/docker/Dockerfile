@@ -71,13 +71,17 @@ WORKDIR /opt/phi-spaces/spaces-mmo
 # docker-compose.yml)
 CMD ["node", "--no-warnings", "--experimental-strip-types", "server/launch.ts"]
 
-# ---- Stage 5: production-rust: the production image with the Rust space server (docs/rust-portierung.en.md, R4) ----
+# ---- Stage 5: production-rust: the production image with the Rust space server (docs/rust-portierung.en.md, R4) and the
+# Rust game processes (R8.6) ----
 # docker-compose.rust.yml gives it to the space containers; the other roles and every other command stay as they are.
 # The builder is Debian bookworm like the Node image, so the binary finds the same libc.
 FROM ${RUST_IMAGE} AS rust-builder
 WORKDIR /opt/phi-spaces/rust
 COPY rust ./
-RUN cargo build --release --locked -p phi-space-server
+RUN cargo build --release --locked -p phi-space-server -p mmo-engine -p mmo-web --bins
 
 FROM production AS production-rust
 COPY --from=rust-builder /opt/phi-spaces/rust/target/release/phi-space-server /usr/local/bin/phi-space-server
+# the game processes in Rust (R8.3-R8.5; docker-compose.rust-game.yml gives them to the world, npc and web containers):
+# they run from spaces-mmo/ like the TypeScript ones (worlds/, out/), the model process stays Node
+COPY --from=rust-builder /opt/phi-spaces/rust/target/release/mmo-world /opt/phi-spaces/rust/target/release/mmo-npc /opt/phi-spaces/rust/target/release/mmo-web /usr/local/bin/
