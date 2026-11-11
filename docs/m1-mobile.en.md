@@ -49,6 +49,76 @@ pairing calls.
 has its own mailbox, and that wrong or unauthorised agent names are refused. With `PHI_SPACES_SERVER_CMD` it runs
 against the Rust server.
 
+## Remote conversations over a Space (replacing pi-server/pi-client)
+
+Decided 2026-11-11 (variant 3): the phone's remote conversations stop using pi-server, pi-client and
+pi-protocol, which stay at 1.1.0 and need Chord 1.1.0 next to the agent's 1.5.2. Instead they run through a
+Space. Only the session transport changes. `remote-provision.mjs` still installs the runtime over SSH.
+
+### The contract being replaced
+
+pi-serverd answers two services. The phone's `server.mjs` only uses them through its `remote` object.
+
+| Service | Member | Arguments | Answer |
+|---|---|---|---|
+| sessions | list | | `{sessions}` |
+| sessions | models | | `{models: [{provider, modelId}]}` |
+| sessions | create | `{name?}` | `{id}` |
+| sessions | delete | id | `{ok}` (aborts, then removes; transcript stays) |
+| sessions | rename | id, name | `{ok}` |
+| sessions | attach | id | `{ok}` (binds the chat calls to that session) |
+| chat | prompt | `{message, requestId, whenBusy}` | `{submissionId}`; `requestId` makes it exactly-once |
+| chat | abort | | `{ok}` |
+| chat | compact | `{instructions?}` | `{ok, taskId}` |
+| chat | state | | the conversation view and `busy` |
+| chat | configure | `{model: {provider, modelId}}` | `{ok}` |
+| chat | history | `{limit}` (≤ 500) | `{entries, epoch, cursor}` oldest first |
+| chat | events | `{after, epoch}` | long poll of 25 s: `{epoch, cursor, reset, events}` (self-contained snapshots) |
+
+This table is the specification. The parity test at the end runs the existing `remote-state` and
+`remote-regressions` suites against the new transport.
+
+### Calls as entries
+
+The design uses only operations both servers already have (`write`, `take`, `read` with a wait, leases, the
+request identity of `RemoteSpace`). It adds no service method, so the Rust server serves it as is.
+
+- **Space.** One Space per agent host, for example `remote-<host>`. Only the agent host and the paired phones
+  have access, through the coordinator's grants. The policy grants rights per method and role, not per entry
+  type, so the Space itself is the boundary.
+- **`RemoteCall`** `{callId, session?, member, args}`, written by the phone with a lease of a few minutes.
+  `callId` is chosen by the phone. A retry after OutcomeUnknown keeps the same request identity, so the write
+  happens once.
+- **The host** takes `RemoteCall` entries (`take` with a wait), carries out the member, and writes
+  **`RemoteAnswer`** `{callId, ok, result | error}` with a lease of a few minutes. A call the host took but did
+  not answer, because it crashed, comes back when the take's transaction lease runs out: take and answer run in
+  one transaction. A `prompt` passes on its `requestId` (from the entry, never from a delivery count), so the
+  harness runs the turn once even when the call is carried out twice.
+- **The phone** waits for `RemoteAnswer {callId}` with a blocking `take`. Its own answer is taken, so answers
+  do not pile up. One that is never taken expires with its lease.
+- **`events`** stays a long poll. The host answers when there are events or after 25 s. The answer carries the
+  self-contained snapshots and pages of `common.mjs` (bounded by the frame limit), never token deltas as
+  entries of their own.
+
+### Identity
+
+The old path was authenticated by SSH. A LAN listener without authentication would let anyone on the network
+drive a conversation that has bash tools, so it is not an option. The phone connects as for "Space öffnen":
+key proof with its Keystore key at the host's gate (layer B) and a grant from the coordinator for the remote
+Space. The agent host is a federation Member (`PI_SERVERD_FEDERATION_CONFIG`).
+
+### Steps
+
+1. Host side in pi-termux-mobile `pi-serverd.mjs` (the conversations live there): a call loop next to the
+   pi-server listener, with the same member functions. Tests with scripted models against the TypeScript and
+   Rust servers: one turn after a retry following OutcomeUnknown, a crash between take and answer, isolation of
+   sessions.
+2. Phone side: a `remote` object over the Space with the same interface as `remote-client.mjs`, behind a
+   switch. `remote-state` and `remote-regressions` stay green against both transports.
+3. Device test over WLAN with key proof.
+4. Then remove pi-server, pi-client, pi-protocol and the Chord 1.1.0 overrides. In phi-spaces this touches
+   `src/pi-server.ts` and `npm run test:pi-server`, so it is planned on its own.
+
 ## Still open
 
 - The agent side: `remoteSpaces(…)` in `agent/src/agent.ts` with one agent id per conversation, and an event pump
