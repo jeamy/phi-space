@@ -49,9 +49,9 @@
     "docker:nano:rust:up": "npm run docker:image:rust && docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano up -d --no-build --remove-orphans",
     "docker:nano:rust:down": "docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano down",
     "docker:nano:rust:logs": "docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano logs -f",
-    "docker:big:rust:up": "npm run docker:image:rust && docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.hostnet.yml -f docker/docker-compose.rust.yml --profile big up -d --no-build --remove-orphans",
-    "docker:big:rust:down": "docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.hostnet.yml -f docker/docker-compose.rust.yml --profile big down",
-    "docker:big:rust:logs": "docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.hostnet.yml -f docker/docker-compose.rust.yml --profile big logs -f",
+    "docker:big:rust:up": "npm run docker:image:rust && docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.hostnet.yml -f docker/docker-compose.rust.yml -f docker/docker-compose.rust-game.yml --profile big up -d --no-build --remove-orphans",
+    "docker:big:rust:down": "docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.hostnet.yml -f docker/docker-compose.rust.yml -f docker/docker-compose.rust-game.yml --profile big down",
+    "docker:big:rust:logs": "docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.hostnet.yml -f docker/docker-compose.rust.yml -f docker/docker-compose.rust-game.yml --profile big logs -f",
     "docker:dev:up": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev up -d --build mmo-dev",
     "docker:dev:down": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev down",
     "docker:dev:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev logs -f mmo-dev"
