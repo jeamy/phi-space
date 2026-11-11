@@ -16,6 +16,7 @@ pub mod liner;
 pub mod loader;
 pub mod locks;
 pub mod mirror;
+pub mod npc;
 pub mod model;
 pub mod occupancy;
 pub mod pack;

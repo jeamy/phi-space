@@ -51,10 +51,14 @@ const COMMANDS: Record<string, string> = { "server/world-host.ts": "SPACES_MMO_W
 /** Mixed operation (R8.3): with SPACES_MMO_WORLD_MIXED=1 every second world worker a test starts is the TypeScript one,
  *  the others SPACES_MMO_WORLD_CMD's program (in startRegions the regions alternate, so a ferry goes between the two). */
 let worldsStarted = 0;
+/** The same for npc processes (R8.4): with SPACES_MMO_NPC_MIXED=1 every second npc process is the TypeScript one, so the
+ *  two share the roles of a world (claimed under the NPC lock, never one played twice). */
+let npcsStarted = 0;
 /** The program of a process: the one its variable names, else `file` on this node. */
 export function programOf(file: string, env: Readonly<Record<string, string | undefined>> = process.env): { command: string; args: string[] } {
 	if (file === "server/space-host.ts") return spaceServer(env) ?? { command: process.execPath, args: ["--no-warnings", "--experimental-strip-types", file] };
 	if (file === "server/world-host.ts" && env.SPACES_MMO_WORLD_MIXED === "1" && worldsStarted++ % 2 === 1) return { command: process.execPath, args: ["--no-warnings", "--experimental-strip-types", file] };
+	if (file === "server/npc-host.ts" && env.SPACES_MMO_NPC_MIXED === "1" && npcsStarted++ % 2 === 1) return { command: process.execPath, args: ["--no-warnings", "--experimental-strip-types", file] };
 	const name = COMMANDS[file], words = name ? (env[name]?.trim().split(/\s+/).filter(Boolean) ?? []) : [];
 	if (!words.length) return { command: process.execPath, args: ["--no-warnings", "--experimental-strip-types", file] };
 	const [first, ...args] = words as [string, ...string[]];

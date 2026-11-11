@@ -261,7 +261,7 @@ impl HostOptions {
 	}
 }
 
-fn connect(address: &str) -> Result<Space> {
+pub fn connect(address: &str) -> Result<Space> {
 	let (remote, _t) = connect_space(address, ConnectOptions::default()).map_err(Error::Other)?;
 	Ok(Space::new(remote))
 }
