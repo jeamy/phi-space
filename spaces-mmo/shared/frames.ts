@@ -24,7 +24,7 @@ export type ItemUses = { /** the epoch from which roads are planned (world.cart.
 	/** What turns one thing into another outside the recipes (client/hints.ts): a mill grinds corn, a pen or coop keeps
 	 *  an animal that yields; `at` the plan, `line` the command. */
 	steps: Array<{ kind: "grind" | "keep"; from: string; to: string; at: string; line: string }> };
-export type PlanView = { key: string; name: string; /** as one says „bei …“: "einer Hütte" */ dative?: string; w: number; h: number; needs: string; work: number; /** the island's epoch it needs ("Dorf"; none: the first) */ epoch?: string; /** a chest of its owner's own (not a store for all): "truhe" opens it */ chest?: true };
+export type PlanView = { key: string; name: string; /** as one says „bei …“: "einer Hütte" */ dative?: string; w: number; h: number; needs: string; work: number; /** the island's epoch it needs ("Dorf"; none: the first) */ epoch?: string; /** a chest of its owner's own (not a store for all): "truhe" opens it */ chest?: true; /** what mending it takes (build.ts repariere): the menu offers it only when carried */ repair?: Array<{ name: string; count: number }> };
 /** A site or building (docs/siedeln.en.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
 export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed" | "field" | "tree" | "animal" | "scenery" | "zone" | "cart" | "liner" | "track" | "train" | "road"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;

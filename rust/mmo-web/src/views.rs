@@ -168,6 +168,8 @@ pub fn plans_of(w: &Json) -> Json {
 		if j::truthy(j::at(p, "chest")) && !j::truthy(j::at(p, "store")) { o.insert("chest", Json::Bool(true)); }
 		let epoch = j::no(p, "epoch").unwrap_or(1.0);
 		if epoch > 1.0 { o.insert("epoch", j::a(j::at(w, "epochs"), "names").get(epoch as usize - 1).cloned().filter(|x| !x.is_null()).unwrap_or_else(|| Json::from(format!("Epoche {}", js::number_text(epoch))))); }
+		let repair = j::a(p, "repair");
+		if !repair.is_empty() { o.insert("repair", Json::Array(repair.iter().map(|r| obj! { "name" => proto_name(w, j::s(r, "proto")), "count" => j::at(r, "count").clone() }).collect())); }
 		Json::Object(o)
 	}).collect())
 }

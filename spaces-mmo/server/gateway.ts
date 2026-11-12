@@ -358,7 +358,7 @@ export class Gateway {
 
 	#plans(): PlanView[] {
 		const name = (k: string) => this.w.prototypes.find((p) => p.key === k)?.name ?? k;
-		return (this.w.building?.plans ?? []).map((p) => ({ key: p.key, name: p.name, ...(p.dative ? { dative: p.dative } : {}), w: p.w, h: p.h, needs: p.needs.map((n) => `${n.count} ${name(n.proto)}`).join(", "), work: p.work, ...(p.chest && !p.store ? { chest: true as const } : {}), ...((p.epoch ?? 1) > 1 ? { epoch: this.w.epochs?.names[p.epoch! - 1] ?? `Epoche ${p.epoch}` } : {}) }));
+		return (this.w.building?.plans ?? []).map((p) => ({ key: p.key, name: p.name, ...(p.dative ? { dative: p.dative } : {}), w: p.w, h: p.h, needs: p.needs.map((n) => `${n.count} ${name(n.proto)}`).join(", "), work: p.work, ...(p.chest && !p.store ? { chest: true as const } : {}), ...((p.epoch ?? 1) > 1 ? { epoch: this.w.epochs?.names[p.epoch! - 1] ?? `Epoche ${p.epoch}` } : {}), ...(p.repair?.length ? { repair: p.repair.map((r) => ({ name: name(r.proto), count: r.count })) } : {}) }));
 	}
 	#hello(c: Client): void {
 		const self = this.#chars.get(c.me.charId);

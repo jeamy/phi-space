@@ -343,3 +343,20 @@ test("a mill offers „Mehl abholen“ only with one's flour ready there, a fall
 	assert.ok(!labels("ruin", []).includes("Korn abholen"));
 	assert.ok(labels("building").includes("Mehl abholen"), "without the tasks it is offered as before");
 });
+
+test("feeding, collecting, taking out and mending are offered only when they work", () => {
+	const carried = (...names: string[]) => names.map((n, i) => [`c${i}`, obj({ id: `c${i}`, kind: "item", name: n, location: "me", x: -1, y: -1 })] as [string, ObjView]);
+	const coop = obj({ id: "coop", kind: "building", name: "Hühnerstall", owner: "Mira", ownerId: "me", plan: "huehnerstall", herd: "huhn", keeper: "katze", x: 6, y: 5, w: 2, h: 2 });
+	const empty = obj({ id: "coop", kind: "building", name: "Hühnerstall", owner: "Mira", ownerId: "me", plan: "huehnerstall", x: 6, y: 5, w: 2, h: 2 });
+	const feed = { huhn: ["Weizen"], katze: ["Fisch"] };
+	const plans = [{ key: "huehnerstall", name: "Hühnerstall", w: 2, h: 2, needs: "", work: 1, repair: [{ name: "Treibholz", count: 2 }] }];
+	const labels = (o: ObjView, items: Array<[string, ObjView]>, todos: Array<{ id: string; text: string; room: string; x: number; y: number; rank: 0 }> = []) =>
+		cellEntries({ ...input, plans, feed, todos, objs: new Map<string, ObjView>([["coop", o], ...items]), at: { x: 6, y: 5 } }).map((e) => e.label);
+	const none = labels(coop, []);
+	for (const l of ["Füttern", "Katze füttern", "Eier einsammeln"]) assert.ok(!none.includes(l), l);
+	assert.ok(!none.some((l) => l.startsWith("Ausbessern")), "no wood, no mending");
+	assert.ok(none.includes("Wer wacht hier?") && none.includes("Ein Tier herausnehmen"));
+	const all = labels(coop, carried("Weizen", "Fisch", "Treibholz", "Treibholz"), [{ id: "coop:ertrag", text: "", room: "r", x: 6, y: 5, rank: 0 }]);
+	for (const l of ["Füttern", "Katze füttern", "Eier einsammeln", "Ausbessern (2 Treibholz)"]) assert.ok(all.includes(l), l);
+	assert.ok(!labels(empty, carried("Weizen")).some((l) => l === "Ein Tier herausnehmen" || l === "Füttern"), "an empty coop");
+});
