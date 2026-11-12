@@ -951,8 +951,13 @@ Jedes Ding, das man herstellt, hat Käufer. Die Tabelle nennt die **Grundpreise*
 
 | Ding | Händler zahlen | Händler verlangen | Kaufhaus |
 | --- | --- | --- | --- |
+| Apfelkompott | Marta (Markt von Kupferhafen) 4 | Marta 7 | 6 |
+| Apfelsaft | Marta (Markt von Kupferhafen) 3 | Marta 5 | 4 |
+| Axt | Marta (Markt von Kupferhafen) 7 | – | 9 |
 | Bernsteinkette | Marta (Markt von Kupferhafen) 10 | Marta 15, Piet 14 | 17 |
 | Bier | Marta (Markt von Kupferhafen) 4, Hauke (Schärenhafen) 4, Bente (Rauchhafen) 4, Momme (Krabbenbucht) 4 | – | 6 |
+| Birnenkompott | Marta (Markt von Kupferhafen) 4 | Marta 7 | 6 |
+| Birnensaft | Marta (Markt von Kupferhafen) 3 | Marta 5 | 4 |
 | Bohle | Marta (Markt von Kupferhafen) 3, Hauke (Schärenhafen) 3, Bente (Rauchhafen) 3, Momme (Krabbenbucht) 3 | – | 5 |
 | Bratwurst | Wilma (Markt von Kupferhafen) 2 | Wilma 4 | 3 |
 | Brot | Marta (Markt von Kupferhafen) 2 | Marta 4 | 3 |
@@ -1082,6 +1087,8 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Thing | Traders pay | Traders ask | Store |
 | --- | --- | --- | --- |
 | Amber Necklace | Marta (Copper Harbour Market) 10 | Marta 15, Piet 14 | 17 |
+| Apple juice | Marta (Copper Harbour Market) 3 | Marta 5 | 4 |
+| Axe | Marta (Copper Harbour Market) 7 | – | 9 |
 | Bacon | Marta (Copper Harbour Market) 6, Wilma (Copper Harbour Market) 6 | Marta 9, Wilma 9 | 9 |
 | Beer | Marta (Copper Harbour Market) 4, Hauke (Skerry Harbour) 4, Bente (Smoke Harbour) 4, Momme (Crab Bay) 4 | – | 6 |
 | Bread | Marta (Copper Harbour Market) 2 | Marta 4 | 3 |
@@ -1114,6 +1121,7 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Mousetrap | Kalle (Grey Bay) 8, Marta (Copper Harbour Market) 8 | – | 12 |
 | Net | Kalle (Grey Bay) 8, Marta (Copper Harbour Market) 8, Ruben (Harbour Quarter) 8, Hauke (Skerry Harbour) 8 | Kalle 11, Marta 12, Piet 10, Ruben 11, Hauke 11 | 11 |
 | Pancake | Kalle (Grey Bay) 5, Marta (Copper Harbour Market) 5, Hauke (Skerry Harbour) 5, Bente (Smoke Harbour) 5, Momme (Crab Bay) 5 | – | 7 |
+| Pear juice | Marta (Copper Harbour Market) 3 | Marta 5 | 4 |
 | Pickaxe | Marta (Copper Harbour Market) 10, Hauke (Skerry Harbour) 10, Bente (Smoke Harbour) 10, Momme (Crab Bay) 10 | – | 14 |
 | Plank | Marta (Copper Harbour Market) 3, Hauke (Skerry Harbour) 3, Bente (Smoke Harbour) 3, Momme (Crab Bay) 3 | – | 5 |
 | Roast beef | Wilma (Copper Harbour Market) 10 | – | 14 |
@@ -1134,6 +1142,8 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Spindle | Kalle (Grey Bay) 3, Marta (Copper Harbour Market) 3 | – | 5 |
 | Steak | Wilma (Copper Harbour Market) 5 | – | 7 |
 | Stew | Wilma (Copper Harbour Market) 3, Hauke (Skerry Harbour) 3, Bente (Smoke Harbour) 3, Momme (Crab Bay) 3 | – | 4 |
+| Stewed apples | Marta (Copper Harbour Market) 4 | Marta 7 | 6 |
+| Stewed pears | Marta (Copper Harbour Market) 4 | Marta 7 | 6 |
 | Wood Bundle | Hinnerk (Grey Bay) 5, Kalle (Grey Bay) 4, Mats (Landing) 5, Svea (Old Watch) 5, Greta (Copper Harbour Market) 5, Marta (Copper Harbour Market) 4, Nele (Reef Village) 6, Arne (Skerry Harbour) 5, Frida (Smoke Harbour) 4, Bente (Smoke Harbour) 3, Thies (Crab Bay) 6 | Jorin 4, Kalle 6, Marta 6, Bente 5 | 8 |
 
 ## Crafting {#craft}
@@ -1401,6 +1411,7 @@ You can tear down what is yours at any time. You get part of the material back.
 
 | Rezept | braucht | wo | Essen, Hinweis |
 | --- | --- | --- | --- |
+| Axt (\`craft axt\`) | 2 Treibholz, 1 Stein, 1 Tangseil | überall |  |
 | Bernsteinkette (\`craft kette\`) | 1 Bernstein, 2 Muschel, 1 Tangseil, mit Muschelmesser | überall |  |
 | Holzbündel (\`craft holzbuendel\`) | 3 Treibholz, mit Muschelmesser | überall |  |
 | Leinen (\`craft leinen\`) | 3 Flachs, mit Spindel | überall |  |
@@ -1411,6 +1422,10 @@ You can tear down what is yours at any time. You get part of the material back.
 | Spindel (\`craft spindel\`) | 1 Treibholz, 1 Muschel | überall |  |
 | Spitzhacke (\`craft spitzhacke\`) | 2 Treibholz, 2 Stein, 1 Tangseil | überall |  |
 | Tangseil (\`craft tangseil\`) | 3 Tang | überall |  |
+| Apfelkompott ×2 (\`craft apfelkompott\`) | 4 Apfel, 1 Kanne Wasser, 1 Treibholz | Hütte | satt 6 Std. |
+| Apfelsaft ×2 (\`craft apfelsaft\`) | 3 Apfel, 1 Kanne Wasser | Hütte | satt 3 Std. |
+| Birnenkompott ×2 (\`craft birnenkompott\`) | 4 Birne, 1 Kanne Wasser, 1 Treibholz | Hütte | satt 6 Std. |
+| Birnensaft ×2 (\`craft birnensaft\`) | 3 Birne, 1 Kanne Wasser | Hütte | satt 3 Std. |
 | Bratwurst ×3 (\`craft bratwurst\`) | 2 Schweinefleisch, mit Muschelmesser | Hütte | satt 6 Std. |
 | Eintopf ×3 (\`craft eintopf\`) | 1 Ziegenfleisch, 2 Kartoffel, 1 Rübe, 1 Kanne Wasser | Hütte | satt 10 Std. |
 | Entenbraten (\`craft entenbraten\`) | 1 Entenfleisch, 1 Treibholz | Hütte | satt 10 Std. |
@@ -1462,6 +1477,7 @@ You can tear down what is yours at any time. You get part of the material back.
 
 | Recipe | needs | where | food, note |
 | --- | --- | --- | --- |
+| Axt (axe) (\`craft axt\`) | 2 driftwood, 1 stone, 1 kelp rope | anywhere |  |
 | Bernsteinkette (amber necklace) (\`craft kette\`) | 1 amber, 2 shell, 1 kelp rope, with shell knife | anywhere |  |
 | Holzbündel (wood bundle) (\`craft holzbuendel\`) | 3 driftwood, with shell knife | anywhere |  |
 | Leinen (linen) (\`craft leinen\`) | 3 flax, with spindle | anywhere |  |
@@ -1472,6 +1488,10 @@ You can tear down what is yours at any time. You get part of the material back.
 | Spindel (spindle) (\`craft spindel\`) | 1 driftwood, 1 shell | anywhere |  |
 | Spitzhacke (pickaxe) (\`craft spitzhacke\`) | 2 driftwood, 2 stone, 1 kelp rope | anywhere |  |
 | Tangseil (kelp rope) (\`craft tangseil\`) | 3 kelp | anywhere |  |
+| Apfelkompott (apple compote) ×2 (\`craft apfelkompott\`) | 4 apple, 1 can of water, 1 driftwood | Hut | sated 6 h |
+| Apfelsaft (apple juice) ×2 (\`craft apfelsaft\`) | 3 apple, 1 can of water | Hut | sated 3 h |
+| Birnenkompott (pear compote) ×2 (\`craft birnenkompott\`) | 4 pear, 1 can of water, 1 driftwood | Hut | sated 6 h |
+| Birnensaft (pear juice) ×2 (\`craft birnensaft\`) | 3 pear, 1 can of water | Hut | sated 3 h |
 | Bratwurst (sausage) ×3 (\`craft bratwurst\`) | 2 pork, with shell knife | Hut | sated 6 h |
 | Eintopf (stew) ×3 (\`craft eintopf\`) | 1 goat meat, 2 potato, 1 turnip, 1 can of water | Hut | sated 10 h |
 | Entenbraten (roast duck) (\`craft entenbraten\`) | 1 duck meat, 1 driftwood | Hut | sated 10 h |
@@ -1609,7 +1629,7 @@ You can tear down what is yours at any time. You get part of the material back.
 	{
 		id: "help.game.garden",
 		section: "play",
-		title: { de: "Gärten: Beet, Samen, Gießen, Ernte", en: "Gardens: bed, seeds, watering, harvest" },
+		title: { de: "Gärten: Beet, Samen, Gießen, Ernte, Bäume", en: "Gardens: bed, seeds, watering, harvest, trees" },
 		short: {
 			de: "Beet anlegen, Samen pflanzen, gießen, jäten und ernten; neue Sorten kreuzen.",
 			en: "Dig a bed, plant seeds, water, weed and harvest; cross new sorts.",
@@ -1674,6 +1694,24 @@ Blumen können sich kreuzen und eine ganz neue Sorte ergeben. Wer sie zieht, dar
 Reift im Zierbeet eine Blume, neben der (nicht über Eck) eine Blume einer anderen Sorte steht, ist bei der Ernte manchmal ein **Kreuzungssamen** dabei. Was daraus wächst, hat eine eigene Farbe zwischen den Farben seiner Eltern. Eine Kreuzung kreuzt sich weiter, auch mit ihrer eigenen Ausgangssorte.
 
 Wer sie gezogen hat, gibt ihr mit \`benenne <name>\` einen Namen, einmal und für immer: Dann heißen ihre Samen „<Name>-Samen“ und ihre Blumen wie die Sorte, und wer sie erntet oder geschenkt bekommt, trägt den Namen weiter. Ein Name hat 3 bis 24 Buchstaben, ist noch nicht vergeben und bezeichnet nichts, was es in der Welt oder als Befehl schon gibt.
+
+## Bäume {#trees}
+
+Bäume wachsen langsam, über Tage, aber dann stehen sie, bis jemand sie fällt. Sie geben Holz, Obst und Eicheln.
+
+Ihre Samen findet \`sammle samen\` dort, wo wilde Bäume stehen: **Birkensamen**, **Weidenstecklinge**, **Apfelkerne**, **Birnenkerne** und **Eicheln**. Mit einem Spaten setzt \`pflanze birkensamen\` (oder \`pflanze eichel <x> <y>\`) einen Baum neben dich, im Licht eines Feuers; er belegt ein Feld und einen Lichtpunkt, und jeder hat höchstens acht. \`baum\` zeigt die Bäume hier und wie weit sie sind: **Setzling**, **junger Baum**, **ausgewachsen**. Die Tage zählen auf der zweiten Uhr, wie das Satt der Tiere: Eine Birke steht in drei Tagen, eine Eiche in sieben, wie schnell die Welt auch läuft. Nebel bremst sie, im Winter warten sie.
+
+| Baum | Ausgewachsen nach | Gefällt | Trägt |
+| --- | --- | --- | --- |
+| Birke | 3 Tagen | 4 Scheite, treibt aus dem Stumpf wieder aus | – |
+| Kopfweide | 2 Tagen | 2 Scheite, treibt wieder aus | alle 2 Tage 2 Scheite und einen Steckling (Ruten schneiden) |
+| Apfelbaum | 4 Tagen | 3 Scheite | jeden Tag 4 Äpfel, manchmal Apfelkerne |
+| Birnbaum | 4 Tagen | 3 Scheite | jeden Tag 4 Birnen, manchmal Birnenkerne |
+| Eiche | 7 Tagen | 10 Scheite | alle 2 Tage 3 Eicheln |
+
+\`fälle\` fällt deinen ausgewachsenen Baum neben dir mit einer **Axt** (\`craft axt\`: 2 Treibholz, 1 Stein, 1 Tangseil; sie nutzt sich ab), danach ruhst du wie nach der Arbeit. Ein **Scheit** zählt überall wie Treibholz: für Bauten, Rezepte und das Feuer, und die Hüter kaufen es wie Treibholz. \`ernte baum\` (oder einfach \`ernte\`, wenn kein Beet und kein Acker nah ist) holt, was dein Baum trägt; danach trägt er wieder. Nur wer einen Baum gepflanzt hat, erntet und fällt ihn.
+
+Aus dem Obst macht der Herd der Hütte **Apfelsaft** und **Birnensaft** (\`craft apfelsaft\`: 3 Äpfel, 1 Kanne Wasser, zwei Krüge) und **Apfelkompott** und **Birnenkompott** (\`craft apfelkompott\`: 4 Äpfel, 1 Kanne Wasser, 1 Treibholz, zwei Gläser). Äpfel und Birnen verderben nach einer Woche, der Saft nach zehn Tagen; das Kompott hält. Alles davon macht satt, Eicheln und Äpfel fressen auch die Schweine.
 
 ## Die Gärtnerin {#gardener}
 
@@ -1747,6 +1785,24 @@ Flowers can cross and give a completely new sort. Whoever breeds it may name it.
 When a flower ripens in a flower bed with a flower of another sort beside it (not across a corner), the harvest sometimes brings a **seed of a crossing** (\`Kreuzungssamen\`). What grows from it has a colour of its own, between its parents' colours. A crossing crosses again, with its own parent sort too.
 
 Whoever bred it names it with \`benenne <name>\`, once and for good. Its seeds are then called "<Name>-Samen" and its flowers like the sort, and whoever harvests them or is given them carries the name on. A name has 3 to 24 letters, is not yet taken, and means nothing the world or its commands already mean.
+
+## Trees {#trees}
+
+Trees grow slowly, over days, but then they stand until someone fells them. They give wood, fruit and acorns.
+
+\`sammle samen\` finds their seeds where wild trees stand: **birch seeds**, **willow cuttings**, **apple seeds**, **pear seeds** and **acorns**. With a spade, \`pflanze birkensamen\` (or \`pflanze eichel <x> <y>\`) sets a tree beside you, in a fire's light; it takes one cell and one light point, and everyone has at most eight. \`baum\` shows the trees here and how far they are: **seedling**, **young tree**, **grown**. The days count on the second clock, like the animals' feeding: a birch stands in three days, an oak in seven, however fast the world runs. Fog slows them, in winter they wait.
+
+| Tree | Grown after | Felled | Bears |
+| --- | --- | --- | --- |
+| Birch | 3 days | 4 logs, sprouts again from the stump | – |
+| Pollard willow | 2 days | 2 logs, sprouts again | every 2 days 2 logs and a cutting (cut the rods) |
+| Apple tree | 4 days | 3 logs | 4 apples every day, sometimes apple seeds |
+| Pear tree | 4 days | 3 logs | 4 pears every day, sometimes pear seeds |
+| Oak | 7 days | 10 logs | 3 acorns every 2 days |
+
+\`fälle\` fells your grown tree beside you with an **axe** (\`craft axt\`: 2 driftwood, 1 stone, 1 kelp rope; it wears), after which you rest as after work. A **log** counts as driftwood everywhere: for buildings, recipes and the fire, and the keepers buy it as driftwood. \`ernte baum\` (or just \`ernte\` when no bed or field is near) takes what your tree bears; then it bears again. Only who planted a tree harvests and fells it.
+
+At a hut's hearth the fruit becomes **apple juice** and **pear juice** (\`craft apfelsaft\`: 3 apples, 1 can of water, two jugs) and **stewed apples** and **stewed pears** (\`craft apfelkompott\`: 4 apples, 1 can of water, 1 driftwood, two jars). Apples and pears spoil after a week, the juice after ten days; the compote keeps. All of it fills you up, and the pigs eat acorns and apples too.
 
 ## The gardener {#gardener}
 

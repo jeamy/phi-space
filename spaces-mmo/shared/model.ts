@@ -33,7 +33,8 @@ export type ItemFields = { itemId: string; name: string; aliases: string[]; desc
 	/** A tool: uses left (it breaks at 0). */ wear?: number;
 	/** A thing that turns (PrototypeFields.turns): it spoils or grows up when the second clock reaches `turnsAtMs` (engine/sweep.ts); `turns` lets the sweep find it. */ turns?: true; turnsAtMs?: number;
 	/** On the market board: `location` is "market", these name the listing and who gets it back. */ listing?: string; seller?: string;
-	/** A bred sort (garden.ts): seeds and flowers of a crossing carry it, so it travels with them to other regions. */ variety?: Variety };
+	/** A bred sort (garden.ts): seeds and flowers of a crossing carry it, so it travels with them to other regions. */ variety?: Variety;
+	/** Its own icon, of a prototype that stands for another (PrototypeFields.stands): a log keeps its look. */ icon?: string };
 /** A crossing of two sorts in a flower bed (docs/siedeln.en.md "Vermehren und züchten"): its own colour and its breeder;
  *  `name` stays empty until the breeder names it (`benenne`). The thing keeps the prototype of the sort it grew from. */
 export type Variety = { id: string; name: string; color: string; breeder: string; breederName: string };
@@ -46,7 +47,9 @@ export type TagFields = { target: string; key: string; category: string };
 /** A template to spawn items from; `parent` names the prototype whose fields it extends. */
 /** `icon`: a picture of the thing, a 32×32 PNG below the world's assets (e.g. "items/tang.png"); without one the map
  *  draws its glyph. */
-export type PrototypeFields = { key: string; parent: string | null; typeclass: string; name: string; desc: string; aliases: string[]; glyph: Glyph; locks: string; wear?: number; icon?: string; /** It turns after `afterMs` of the second clock (the decay clock: real days by default): into `into` (a young animal grows up), or into nothing (fresh meat spoils). */ turns?: { afterMs: number; into?: string } };
+export type PrototypeFields = { key: string; parent: string | null; typeclass: string; name: string; desc: string; aliases: string[]; glyph: Glyph; locks: string; wear?: number; icon?: string;
+	/** A thing that counts as another: it is spawned with that prototype (`proto`) under its own name, words, look and
+	 *  icon, so whatever wants the other takes it (a log from a tree is driftwood to every recipe and site). */ stands?: string; /** It turns after `afterMs` of the second clock (the decay clock: real days by default): into `into` (a young animal grows up), or into nothing (fresh meat spoils). */ turns?: { afterMs: number; into?: string } };
 /** A beacon: where a fire can burn. It is also the lock every change of its fire takes (feeding, the fire tick), so
  *  two players feeding at once cannot light two flames. `lit` is what the fire tick last saw. */
 export type BeaconFields = { beaconId: string; name: string; aliases: string[]; room: string; x: number; y: number; covers: string[]; lit: boolean };
@@ -251,6 +254,11 @@ export type BedPlant = { x: number; y: number; sort: string; stage: 0 | 1 | 2 | 
  *  `fenced`: a fence keeps the hares out (engine/commands/wild.ts). */
 export type BedFields = { kind?: "zier" | "gemein"; fenced?: boolean; bedId: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number;
 	sponsors: Array<{ charId: string; name: string }>; plants: BedPlant[]; wateredWorldMs: number; weedy: boolean; dueWorldMs: number; untilWorldMs: number; at: number };
+/** A tree (docs/siedeln.en.md "Bäume", engine/commands/trees.ts): one cell (a Plot entry like a bed's) in the light of a
+ *  fire. `stage`: seedling, young, grown; `dueWorldMs`: when it grows on, or when its crop is ripe (FOREVER: nothing comes);
+ *  `ripe`: its crop hangs ready to be picked. */
+export type TreeFields = { treeId: string; sort: string; room: string; x: number; y: number; w: 1; h: 1; owner: string; ownerName: string; accountId: string; beaconId: string; points: number;
+	stage: 0 | 1 | 2; dueWorldMs: number; ripe?: true; at: number };
 /** A field (docs/siedeln.en.md "Äcker und Getreide", engine/commands/field.ts): one entry over its cells (Plot entries like a
  *  building's), one crop at a time. `stage`: fallow, being sown (seed and work delivered so far), growing, ripe, late
  *  (the window passed: each share loses part). `dueWorldMs`: the next stage the field tick writes (ripe, late, lost);

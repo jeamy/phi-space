@@ -83,6 +83,9 @@ export type WorldDef = {
 	building?: BuildingDef;
 	/** Gardens (docs/siedeln.en.md "Gärten"): beds, what grows in them and how. Without it nothing is planted. */
 	garden?: GardenDef;
+	/** Trees (docs/siedeln.en.md "Bäume"): planted in the light with a spade, grown over days, felled with an axe for
+	 *  logs, picked for fruit. Without it nothing but the scenery's trees stands. */
+	trees?: TreesDef;
 	wild?: WildDef;
 	/** The epochs of an island (docs/siedeln.en.md "Epochen"): their names from the first on (`a`: with the article, "ein
 	 *  Dorf"), and how often the count runs. The thresholds are settings (epoch.dorf, epoch.stadt, epoch.netz). */
@@ -173,6 +176,16 @@ export type SortDef = { /** Its form on the 3D map (client/props3d.ts). */ model
  *  seed of a crossing. */
 export type GardenDef = { /** A bed this near a building of this plan grows through the winter. */ greenhouse?: { plan: string; reach: number }; bed: { w: number; h: number; points: number; keepWorldMs: number }; commons: { w: number; h: number; points: number }; crossChance: number; maxBeds: number; spade: string; can: string; barrel: string; barrelCap: number; barrelFillWorldMs: number;
 	thirstWorldMs: number; seedRestWorldMs: number; seedChance: number; decor: { flowers: string[]; herbs: string[] }; sorts: SortDef[] };
+/** A kind of tree: its seed (what one plants), how long its stages take (seedling to young tree, young to grown; world
+ *  time times the patience, so in the second clock), what felling it gives and whether its stump sprouts again (back to a
+ *  young tree), and what it bears (`crop`: every `everyWorldMs` times the patience; `seedChance`: a seed comes along).
+ *  `wild`: where its seed is found by „sammle samen“ (on the cells of the trees' decor, on these islands). */
+export type TreeSortDef = { key: string; name: string; /** "eine Birke", "ein Apfelbaum" */ a: string; /** "die Birke", "den Apfelbaum" (as one fells it) */ the: string; aliases: string[]; /** Its form on the 3D map (client/props3d.ts). */ model: "tree" | "conifer"; seed: string; grow: [number, number];
+	fell: Array<{ proto: string; count: number }>; sprouts?: boolean; crop?: { yields: Array<{ proto: string; count: number }>; everyWorldMs: number; seedChance?: number; /** what one does to take it: picks fruit, cuts the rods */ cut?: boolean }; color: string; fruit?: string;
+	wild?: { islands?: string[] } };
+/** `points`: the light a tree takes, `maxTrees` per account; `spade` plants, `axe` fells (a tool that wears); `decor`:
+ *  the decor cells where wild trees stand (their seeds are found there). */
+export type TreesDef = { points: number; maxTrees: number; spade: string; axe: string; decor: string[]; sorts: TreeSortDef[] };
 /** The wild from the fog (docs/siedeln.en.md "Wild im Nebel"), first the hares in the beds: every `checkWorldMs` a room
  *  with beds rolls `chance[fog]` (by its fog level 0 to 3; `nightFactor` times that at night) for a hare, at most
  *  `maxPerRoom` at once. A hare eats `eatAfterWorldMs` after it came unless someone within `scareReach` scared it off;

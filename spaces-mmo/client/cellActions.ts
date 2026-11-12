@@ -133,7 +133,7 @@ const SOWN: Record<string, string> = { Weizen: "weizen", Gerste: "gerste", Hafer
 const HOUSES: Record<string, string[]> = { huehnerstall: ["Huhn", "Küken"], gehege: ["Schaf", "Ziege", "Ente", "Gans", "Rind", "Schwein", "Ferkel"], bienenstock: ["Bienenvolk"] };
 /** The animals that are slaughtered, as their things are named (server: world animals with `slaughter`; the young grow up first). */
 const SLAUGHTERED = ["Huhn", "Schaf", "Ziege", "Ente", "Gans", "Rind", "Schwein"];
-const AREA = new Set(["site", "building", "ruin", "bed", "field", "scenery", "liner"]);
+const AREA = new Set(["site", "building", "ruin", "bed", "field", "tree", "scenery", "liner"]);
 const covers = (o: ObjView, c: { x: number; y: number }) => c.x >= o.x && c.y >= o.y && c.x < o.x + (o.w ?? 1) && c.y < o.y + (o.h ?? 1);
 
 /** An offer in words, as the trade panel says it: "1 Münze für Muschel", "2× Treibholz als Geschenk". */
@@ -252,6 +252,14 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			continue;
 		}
 		if (o.kind === "scenery" && o.location === room && !o.through && !o.fixed && covers(o, at) && self && Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) <= 2) entries.push({ label: `${o.name} abräumen (noch ${o.left ?? 1})`, line: `räume ${o.x} ${o.y}` });
+		if (o.kind === "tree" && o.location === room && o.x === at.x && o.y === at.y) {
+			// a planted tree (server: trees.ts): looked at by anyone; picked, cut and felled by its owner from two cells away
+			const dist = self ? Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) : Infinity, mine = o.ownerId === me;
+			entries.push({ label: `${o.name} von ${o.owner ?? ""} ansehen`, line: `baum ansehen ${o.x} ${o.y}` });
+			if (dist <= 2 && mine && o.ripe) entries.push({ label: o.cut ? "Ruten schneiden" : "Ernten", line: "ernte baum" });
+			if (dist <= 2 && (mine || admin) && o.treeStage === 2) entries.push({ label: `${o.name} fällen (mit der Axt)`, line: `fälle ${o.x} ${o.y}`, confirm: `${o.name} fällen? Er gibt Scheite; ein Obstbaum und eine Eiche sind danach fort.` });
+			continue;
+		}
 		if ((o.kind !== "site" && o.kind !== "building" && o.kind !== "ruin" && o.kind !== "bed" && o.kind !== "field") || o.location !== room || at.x < o.x || at.y < o.y || at.x >= o.x + (o.w ?? 1) || at.y >= o.y + (o.h ?? 1)) continue;
 		const dist = self ? Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) : Infinity;
 		// a site is worked on from two cells away (server: build.ts SITE_REACH), a building only from beside it
@@ -383,7 +391,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 		}
 	}
 	for (const o of objs.values()) {
-		if (o.location !== room || o.x !== at.x || o.y !== at.y || o.kind === "zone" || o.kind === "scenery" || o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field") continue;
+		if (o.location !== room || o.x !== at.x || o.y !== at.y || o.kind === "zone" || o.kind === "scenery" || o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field" || o.kind === "tree") continue;
 		if (o.kind === "item") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach) entries.push({ label: `${o.name} aufheben`, line: `get ${o.name}` }); }
 		if (o.kind === "beacon") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach && fuel) entries.push({ label: "Treibholz nachlegen", line: `put ${fuel.name} in ${o.name}` }); }
 		if (o.kind === "exit") entries.push({ label: `Nach ${o.to ?? o.name} gehen`, line: `go ${o.name}` });
@@ -418,7 +426,7 @@ export function tapTarget(at: { x: number; y: number }, chars: Map<string, CharV
 }
 
 /** The help article (with its section) for a kind of thing; a building has its plan's article first (HELP_OF_PLAN). */
-export const HELP_OF_KIND: Record<string, string> = { site: "help.game.build#stake", building: "help.game.build", ruin: "help.game.build#decay", bed: "help.game.garden#bed", field: "help.game.fields#fields", beacon: "help.game.fire#beacon", animal: "help.game.wild#hares", exit: "help.game.controls#map", liner: "help.game.village#travel", cart: "help.game.village#travel" };
+export const HELP_OF_KIND: Record<string, string> = { site: "help.game.build#stake", building: "help.game.build", ruin: "help.game.build#decay", bed: "help.game.garden#bed", tree: "help.game.garden#trees", field: "help.game.fields#fields", beacon: "help.game.fire#beacon", animal: "help.game.wild#hares", exit: "help.game.controls#map", liner: "help.game.village#travel", cart: "help.game.village#travel" };
 export const HELP_OF_PLAN: Record<string, string> = { windmuehle: "help.game.fields#mill", backhaus: "help.game.fields#mill", gehege: "help.game.animals#house", huehnerstall: "help.game.animals#house", bienenstock: "help.game.animals#bees", rathaus: "help.game.village#townhall", steg: "help.game.fishing", strasse: "help.game.village#travel", kaufhaus: "help.game.village#store", kontor: "help.game.village#store", lagerhaus: "help.game.village#store", bahnhof: "help.game.village#travel", werft: "help.game.village#travel", park: "help.game.village#ranks" };
 
 /** A name for the sheet's head and the help article about what stands on a cell (help/articles.ts). */

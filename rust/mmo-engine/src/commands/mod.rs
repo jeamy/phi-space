@@ -21,6 +21,7 @@ pub mod festival;
 pub mod field;
 pub mod food;
 pub mod garden;
+pub mod trees;
 pub mod growth;
 pub mod mill;
 pub mod passage;
@@ -148,6 +149,7 @@ pub async fn run(c: &mut Ctx, cmd: &Command, arg: &str, merged: &Merged, exits: 
 		("fishing", key) => fishing::run(c, key, arg).await,
 		("passage", key) => passage::run(c, key, arg).await,
 		("garden", key) => garden::run(c, key, arg).await,
+		("trees", key) => trees::run(c, key, arg).await,
 		("shop", key) => shop::run(c, key, arg).await,
 		("builder", key) => builder::run(c, key, arg).await,
 		("settlement", "siedlung") => settlement::siedlung(c, arg).await,

@@ -5836,6 +5836,264 @@
 			},
 			"icon": "items/kette.png",
 			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "scheit",
+			"parent": "ding",
+			"typeclass": "Driftwood",
+			"stands": "treibholz",
+			"name": "Scheit",
+			"desc": "Ein gespaltenes Stück Holz von einem gefällten Baum. Es zählt überall wie Treibholz.",
+			"aliases": [
+				"scheite",
+				"holzscheit",
+				"holzscheite",
+				"holz",
+				"treibholz",
+				"log",
+				"logs"
+			],
+			"glyph": {
+				"shape": "square",
+				"color": "#a0703a"
+			},
+			"icon": "items/scheit.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "axt",
+			"parent": "ding",
+			"typeclass": "Tool",
+			"name": "Axt",
+			"desc": "Ein geschliffener Stein an einem langen Stiel, mit Tangseil gezurrt. Damit fällt man einen Baum.",
+			"aliases": [
+				"äxte",
+				"aexte",
+				"beil",
+				"axe"
+			],
+			"glyph": {
+				"shape": "diamond",
+				"color": "#8a7a6a"
+			},
+			"icon": "items/axt.png",
+			"locks": "get:all();drop:all();give:not guest()",
+			"wear": 6
+		},
+		{
+			"key": "samen-birke",
+			"parent": "ding",
+			"typeclass": "Seed",
+			"name": "Birkensamen",
+			"desc": "Winzige geflügelte Samen einer Birke. Mit einem Spaten gepflanzt wächst daraus ein Baum.",
+			"aliases": [
+				"birkensame",
+				"birke",
+				"birch seeds"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#d8d0b0"
+			},
+			"icon": "items/samen-birke.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "weidensteckling",
+			"parent": "ding",
+			"typeclass": "Seed",
+			"name": "Weidensteckling",
+			"desc": "Ein frisch geschnittener Weidenzweig. In feuchte Erde gesteckt, schlägt er Wurzeln und wird eine Kopfweide.",
+			"aliases": [
+				"weidenstecklinge",
+				"steckling",
+				"stecklinge",
+				"weide",
+				"kopfweide",
+				"willow cutting"
+			],
+			"glyph": {
+				"shape": "diamond",
+				"color": "#9ab86a"
+			},
+			"icon": "items/weidensteckling.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "apfelkern",
+			"parent": "ding",
+			"typeclass": "Seed",
+			"name": "Apfelkerne",
+			"desc": "Ein paar braune Kerne aus einem Apfel. Gepflanzt wächst daraus ein Apfelbaum.",
+			"aliases": [
+				"apfelkern",
+				"kerne",
+				"apfelbaum",
+				"apple seeds"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#6a4020"
+			},
+			"icon": "items/apfelkern.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "birnenkern",
+			"parent": "ding",
+			"typeclass": "Seed",
+			"name": "Birnenkerne",
+			"desc": "Ein paar dunkle Kerne aus einer Birne. Gepflanzt wächst daraus ein Birnbaum.",
+			"aliases": [
+				"birnenkern",
+				"birnbaum",
+				"pear seeds"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#4a3018"
+			},
+			"icon": "items/birnenkern.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "eichel",
+			"parent": "ding",
+			"typeclass": "Seed",
+			"name": "Eichel",
+			"desc": "Eine glänzende Eichel in ihrem Hütchen. Schweine fressen sie gern; gepflanzt wird eine Eiche daraus, langsam.",
+			"aliases": [
+				"eicheln",
+				"eiche",
+				"acorn",
+				"acorns"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#9a7a3a"
+			},
+			"icon": "items/eichel.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "apfel",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Apfel",
+			"desc": "Ein rotbackiger Apfel, knackig und ein wenig sauer.",
+			"aliases": [
+				"äpfel",
+				"aepfel",
+				"apple",
+				"apples"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#d8402a"
+			},
+			"icon": "items/apfel.png",
+			"turns": {
+				"afterMs": 604800000
+			},
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "birne",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Birne",
+			"desc": "Eine gelbe Birne, saftig und süß.",
+			"aliases": [
+				"birnen",
+				"pear",
+				"pears"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#c8c040"
+			},
+			"icon": "items/birne.png",
+			"turns": {
+				"afterMs": 432000000
+			},
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "apfelsaft",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Apfelsaft",
+			"desc": "Ein Krug trüber Apfelsaft, frisch gepresst.",
+			"aliases": [
+				"saft",
+				"apple juice",
+				"juice"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#e0b040"
+			},
+			"icon": "items/apfelsaft.png",
+			"turns": {
+				"afterMs": 864000000
+			},
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "birnensaft",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Birnensaft",
+			"desc": "Ein Krug süßer Birnensaft.",
+			"aliases": [
+				"pear juice"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#d8d070"
+			},
+			"icon": "items/birnensaft.png",
+			"turns": {
+				"afterMs": 864000000
+			},
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "apfelkompott",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Apfelkompott",
+			"desc": "Ein Glas gekochter Äpfel. Es hält sich lange.",
+			"aliases": [
+				"kompott",
+				"apfelmus",
+				"stewed apples",
+				"apple compote",
+				"compote"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#e8c070"
+			},
+			"icon": "items/apfelkompott.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "birnenkompott",
+			"parent": "ding",
+			"typeclass": "Produce",
+			"name": "Birnenkompott",
+			"desc": "Ein Glas gekochter Birnen. Es hält sich lange.",
+			"aliases": [
+				"stewed pears",
+				"pear compote"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#e0d890"
+			},
+			"icon": "items/birnenkompott.png",
+			"locks": "get:all();drop:all();give:not guest()"
 		}
 	],
 	"objects": [
@@ -8451,6 +8709,11 @@
 			"text": "Ein Garten wächst mit der Zeit und will gepflegt werden. Du brauchst einen Spaten, Wasser und das Licht eines Feuers. Mit einem Spaten („craft spaten“: 2 Treibholz, 1 Tangseil) gräbt „umgraben“ neben dir ein Beet um (2×2, registrierte Spieler, höchstens drei, wo ein Feuer brennt). Samen findet „sammle samen“ in der wilden Flora (nicht immer; Strandnelke und Strandkohl fast überall, Dünenrose, Möhre und die Nebelblume nur auf manchen Inseln). „pflanze strandnelke“ setzt einen Samen ins Beet. Wasser gibt die Regentonne („bau regentonne“; „schöpfe“ füllt eine Kanne, sie füllt sich alle acht Stunden um eine, bei Sturmflut ganz); „gieße“ gießt das ganze Beet. Was zu lange trocken steht, welkt; Nebel und Unkraut lassen es langsamer wachsen, „jäte“ zieht Unkraut und Welkes. Reifes holt „ernte“ in die Tasche, mit neuen Samen. „pate <name>“ lässt jemanden, auch einen Gast, dein Beet gießen, jäten und ernten; „pate weg <name>“ beendet es. „beet“ zeigt die Beete hier, „beet aufgeben“ macht deins wieder zu Gras. Ein Beet, das zwei Wochen niemand pflegt, wächst zu. „umgraben zier“ gräbt ein Zierbeet (nur Blumen): reifen dort zwei Sorten nebeneinander, ist bei der Ernte manchmal ein Kreuzungssamen dabei, eine neue Sorte mit eigener Farbe, der ihr Züchter mit „benenne <name>“ einen Namen gibt. „umgraben gemeinschaft“ legt ein Gemeinschaftsbeet an (3×3, eins je Feuer): pflanzen darf jeder mit Konto, gießen, jäten und ernten alle. Samen verkauft die Gärtnerin Gesa am Markt von Kupferhafen. Wo kein Feuer brennt, kommen Hasen aus dem Nebel an die Beete und fressen nach einer Weile: „scheuche hase“ jagt sie fort, ein Zaun („zäune“: 2 Treibholz, 1 Tangseil) oder eine Vogelscheuche („bau vogelscheuche“) schützt dauerhaft. Größer als ein Beet ist der Acker: „help ackerbau“."
 		},
 		{
+			"key": "bäume",
+			"category": "Allgemein",
+			"text": "Bäume wachsen über Tage und stehen dann, bis jemand sie fällt. Ihre Samen findet „sammle samen“, wo wilde Bäume stehen (Birkensamen, Weidenstecklinge, Apfelkerne, Birnenkerne, Eicheln); mit einem Spaten setzt „pflanze birkensamen“ einen Baum neben dich, im Licht eines Feuers (ein Feld, ein Lichtpunkt, höchstens acht je Spieler). „baum“ zeigt, wie weit sie sind; die Tage zählen auf der zweiten Uhr: eine Birke steht in drei Tagen, ein Apfel- oder Birnbaum in vier, eine Eiche in sieben. „fälle“ fällt deinen ausgewachsenen Baum mit einer Axt („craft axt“): Er gibt Scheite, und ein Scheit zählt überall wie Treibholz; Birke und Kopfweide treiben aus dem Stumpf wieder aus. „ernte baum“ holt Äpfel, Birnen, Eicheln oder schneidet die Ruten der Kopfweide (Scheite und einen Steckling). Am Herd der Hütte wird aus dem Obst Saft („craft apfelsaft“) und Kompott („craft apfelkompott“); alles davon macht satt, und Schweine fressen Eicheln und Äpfel."
+		},
+		{
 			"key": "brot",
 			"category": "Allgemein",
 			"text": "Aus der Ernte wird mehr: aus Korn Mehl, aus Mehl Brot, aus Flachs Leinen. Mühle und Backhaus darf jeder benutzen. Eine Windmühle (erst wenn die Insel ein Dorf ist, „help epochen“; „bau windmühle“: 2×2, 8 Treibholz, 2 Tangseil, 2 Leinen für die Flügel, 16 Arbeit) mahlt Weizen, Gerste und Hafer zu Mehl, eine Stunde je Handvoll. „mahle alle weizen“ schüttet dein Korn hinein (bis 12 auf einmal, drei Säcke je Figur), egal wessen Mühle; was andere vor dir brachten, wird zuerst gemahlen. „mahle“ allein sagt, wie lange sie noch zu tun hat, „abholen“ holt dein fertiges Mehl. Bei Sturmflut auf ihrer Insel dreht sie schneller und mahlt sechs Stunden voraus. Fällt eine Mühle, bevor dein Korn gemahlen ist, holst du es an ihrer Stelle zurück. Im Backhaus („bau backhaus“, erst im Dorf: 6 Treibholz, 6 Muscheln, 1 Tangseil, 12 Arbeit) bäckt „backe brot“ aus 2 Mehl, einer Kanne Wasser und einem Scheit Treibholz drei Brote; backen darf jeder an jedem Backhaus. Aus Flachs spinnt man mit einer Spindel („craft spindel“: 1 Treibholz, 1 Muschel) Leinen: „craft leinen“ (3 Flachs). Brot, Mehl und Leinen kauft Marta am Markt von Kupferhafen, die Auftragstafeln fragen danach."
@@ -9781,6 +10044,34 @@
 				"sauerkraut": [
 					3,
 					5
+				],
+				"apfel": [
+					1,
+					3
+				],
+				"birne": [
+					1,
+					3
+				],
+				"apfelsaft": [
+					3,
+					5
+				],
+				"birnensaft": [
+					3,
+					5
+				],
+				"apfelkompott": [
+					4,
+					7
+				],
+				"birnenkompott": [
+					4,
+					7
+				],
+				"axt": [
+					7,
+					0
 				]
 			},
 			"carry": [
@@ -12531,6 +12822,10 @@
 			"samen-hopfen": 0.5,
 			"samen-ruebe": 0.5,
 			"leinsamen": 0.5,
+			"samen-birke": 0.5,
+			"apfelkern": 0.5,
+			"birnenkern": 0.5,
+			"eichel": 0.5,
 			"treibholz": 2,
 			"tangseil": 2,
 			"stein": 2,
@@ -14244,6 +14539,219 @@
 			}
 		]
 	},
+	"trees": {
+		"points": 1,
+		"maxTrees": 8,
+		"spade": "spaten",
+		"axe": "axt",
+		"decor": [
+			"T",
+			"A"
+		],
+		"sorts": [
+			{
+				"key": "birke",
+				"model": "tree",
+				"name": "Birke",
+				"a": "eine Birke",
+				"the": "die Birke",
+				"aliases": [
+					"birken",
+					"birch"
+				],
+				"seed": "samen-birke",
+				"grow": [
+					86400000,
+					172800000
+				],
+				"fell": [
+					{
+						"proto": "scheit",
+						"count": 4
+					}
+				],
+				"sprouts": true,
+				"color": "#e8e4d8",
+				"wild": {
+					"islands": [
+						"Graue Insel",
+						"Nebelholm",
+						"Rauchholm"
+					]
+				}
+			},
+			{
+				"key": "kopfweide",
+				"model": "tree",
+				"name": "Kopfweide",
+				"a": "eine Kopfweide",
+				"the": "die Kopfweide",
+				"aliases": [
+					"weide",
+					"weiden",
+					"kopfweiden",
+					"willow"
+				],
+				"seed": "weidensteckling",
+				"grow": [
+					86400000,
+					86400000
+				],
+				"fell": [
+					{
+						"proto": "scheit",
+						"count": 2
+					}
+				],
+				"sprouts": true,
+				"crop": {
+					"yields": [
+						{
+							"proto": "scheit",
+							"count": 2
+						},
+						{
+							"proto": "weidensteckling",
+							"count": 1
+						}
+					],
+					"everyWorldMs": 172800000,
+					"cut": true
+				},
+				"color": "#9ab86a",
+				"wild": {
+					"islands": [
+						"Graue Insel",
+						"Kupferhafen",
+						"Krabbensand"
+					]
+				}
+			},
+			{
+				"key": "apfelbaum",
+				"model": "tree",
+				"name": "Apfelbaum",
+				"a": "ein Apfelbaum",
+				"the": "den Apfelbaum",
+				"aliases": [
+					"apfelbäume",
+					"apfelbaeume",
+					"apple tree"
+				],
+				"seed": "apfelkern",
+				"grow": [
+					172800000,
+					172800000
+				],
+				"fell": [
+					{
+						"proto": "scheit",
+						"count": 3
+					}
+				],
+				"crop": {
+					"yields": [
+						{
+							"proto": "apfel",
+							"count": 4
+						}
+					],
+					"everyWorldMs": 86400000,
+					"seedChance": 0.3
+				},
+				"fruit": "Äpfel",
+				"color": "#d8402a",
+				"wild": {
+					"islands": [
+						"Graue Insel",
+						"Kupferhafen",
+						"Rauchholm"
+					]
+				}
+			},
+			{
+				"key": "birnbaum",
+				"model": "tree",
+				"name": "Birnbaum",
+				"a": "ein Birnbaum",
+				"the": "den Birnbaum",
+				"aliases": [
+					"birnbäume",
+					"birnbaeume",
+					"pear tree"
+				],
+				"seed": "birnenkern",
+				"grow": [
+					172800000,
+					172800000
+				],
+				"fell": [
+					{
+						"proto": "scheit",
+						"count": 3
+					}
+				],
+				"crop": {
+					"yields": [
+						{
+							"proto": "birne",
+							"count": 4
+						}
+					],
+					"everyWorldMs": 86400000,
+					"seedChance": 0.3
+				},
+				"fruit": "Birnen",
+				"color": "#c8c040",
+				"wild": {
+					"islands": [
+						"Nebelholm",
+						"Kupferhafen",
+						"Krabbensand"
+					]
+				}
+			},
+			{
+				"key": "eiche",
+				"model": "tree",
+				"name": "Eiche",
+				"a": "eine Eiche",
+				"the": "die Eiche",
+				"aliases": [
+					"eichen",
+					"oak"
+				],
+				"seed": "eichel",
+				"grow": [
+					259200000,
+					345600000
+				],
+				"fell": [
+					{
+						"proto": "scheit",
+						"count": 10
+					}
+				],
+				"crop": {
+					"yields": [
+						{
+							"proto": "eichel",
+							"count": 3
+						}
+					],
+					"everyWorldMs": 172800000
+				},
+				"fruit": "Eicheln",
+				"color": "#6a8a3a",
+				"wild": {
+					"islands": [
+						"Nebelholm",
+						"Rauchholm"
+					]
+				}
+			}
+		]
+	},
 	"settlement": {
 		"plan": "huette",
 		"huts": 3,
@@ -14565,7 +15073,13 @@
 			"pfannkuchen": 21600000,
 			"kuchen": 43200000,
 			"moehre": 10800000,
-			"kartoffel": 10800000
+			"kartoffel": 10800000,
+			"apfel": 7200000,
+			"birne": 7200000,
+			"apfelsaft": 10800000,
+			"birnensaft": 10800000,
+			"apfelkompott": 21600000,
+			"birnenkompott": 21600000
 		},
 		"maxWorldMs": 86400000,
 		"restFactor": 1.5
@@ -14668,7 +15182,15 @@
 			"met": 7,
 			"kohlsuppe": 3,
 			"kohlroulade": 5,
-			"sauerkraut": 4
+			"sauerkraut": 4,
+			"axt": 9,
+			"apfel": 2,
+			"birne": 2,
+			"eichel": 1,
+			"apfelsaft": 4,
+			"birnensaft": 4,
+			"apfelkompott": 6,
+			"birnenkompott": 6
 		}
 	},
 	"bank": {
@@ -15024,7 +15546,9 @@
 					"moehre",
 					"kohl",
 					"hafer",
-					"gerste"
+					"gerste",
+					"eichel",
+					"apfel"
 				],
 				"breedWorldMs": 432000000,
 				"slaughter": [
@@ -15246,6 +15770,101 @@
 				}
 			],
 			"makes": "spitzhacke"
+		},
+		{
+			"key": "axt",
+			"name": "Axt",
+			"needs": [
+				{
+					"proto": "treibholz",
+					"count": 2
+				},
+				{
+					"proto": "stein",
+					"count": 1
+				},
+				{
+					"proto": "tangseil",
+					"count": 1
+				}
+			],
+			"makes": "axt"
+		},
+		{
+			"key": "apfelsaft",
+			"name": "Apfelsaft",
+			"needs": [
+				{
+					"proto": "apfel",
+					"count": 3
+				},
+				{
+					"proto": "wasserkanne",
+					"count": 1
+				}
+			],
+			"makes": "apfelsaft",
+			"count": 2,
+			"at": "huette"
+		},
+		{
+			"key": "birnensaft",
+			"name": "Birnensaft",
+			"needs": [
+				{
+					"proto": "birne",
+					"count": 3
+				},
+				{
+					"proto": "wasserkanne",
+					"count": 1
+				}
+			],
+			"makes": "birnensaft",
+			"count": 2,
+			"at": "huette"
+		},
+		{
+			"key": "apfelkompott",
+			"name": "Apfelkompott",
+			"needs": [
+				{
+					"proto": "apfel",
+					"count": 4
+				},
+				{
+					"proto": "wasserkanne",
+					"count": 1
+				},
+				{
+					"proto": "treibholz",
+					"count": 1
+				}
+			],
+			"makes": "apfelkompott",
+			"count": 2,
+			"at": "huette"
+		},
+		{
+			"key": "birnenkompott",
+			"name": "Birnenkompott",
+			"needs": [
+				{
+					"proto": "birne",
+					"count": 4
+				},
+				{
+					"proto": "wasserkanne",
+					"count": 1
+				},
+				{
+					"proto": "treibholz",
+					"count": 1
+				}
+			],
+			"makes": "birnenkompott",
+			"count": 2,
+			"at": "huette"
 		},
 		{
 			"key": "ziegel",

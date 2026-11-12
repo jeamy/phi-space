@@ -37,7 +37,8 @@ pub fn item_view(f: &Json, proto_icon: &dyn Fn(&str) -> Option<String>, w: &Json
 	let proto = j::s(f, "proto");
 	let mut o = obj_of(obj! { "id" => j::at(f, "itemId").clone(), "kind" => "item", "name" => j::at(f, "name").clone(), "location" => j::at(f, "location").clone(), "x" => j::at(f, "x").clone(), "y" => j::at(f, "y").clone() });
 	put_some(&mut o, "glyph", f.get("glyph"));
-	if let Some(i) = proto_icon(proto) { o.insert("icon", Json::from(i)); }
+	if j::truthy(j::at(f, "icon")) { o.insert("icon", Json::from(format!("/assets/{}/{}", txt(j::at(w, "id")), txt(j::at(f, "icon"))))); }
+	else if let Some(i) = proto_icon(proto) { o.insert("icon", Json::from(i)); }
 	if j::truthy(j::at(w, "pack")) { o.insert("load", Json::Number(mmo_engine::pack::load_of(w, f.get("proto").and_then(Json::as_str)))); }
 	if let Some(bag) = j::at(j::at(w, "pack"), "bags").get(proto).filter(|b| j::truthy(b)) { o.insert("bag", bag.clone()); }
 	let v = j::at(f, "variety");

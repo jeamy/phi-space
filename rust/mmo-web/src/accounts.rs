@@ -210,7 +210,7 @@ impl Accounts {
 	async fn rename_owned(&self, char_id: &str, account_id: &str, from: &str, to: &str) -> WebResult<()> {
 		for (_, space) in self.regions.entries() {
 			let mut owned: Vec<(Json, &str)> = Vec::new();
-			for ty in ["Site", "Building", "Ruin", "Bed", "Field"] { for e in space.read_all(&tmpl(ty, obj! { "owner" => char_id }), None).await? { owned.push((e, "ownerName")); } }
+			for ty in ["Site", "Building", "Ruin", "Bed", "Field", "Tree"] { for e in space.read_all(&tmpl(ty, obj! { "owner" => char_id }), None).await? { owned.push((e, "ownerName")); } }
 			for e in space.read_all(&tmpl("Estate", obj! { "accountId" => account_id }), None).await? { owned.push((e, "ownerName")); }
 			for e in space.read_all(&tmpl("SiteOrder", obj! { "ownerName" => from }), None).await? { owned.push((e, "ownerName")); }
 			for e in space.read_all(&tmpl("Listing", obj! { "seller" => char_id }), None).await? { owned.push((e, "sellerName")); }

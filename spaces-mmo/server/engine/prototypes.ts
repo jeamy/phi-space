@@ -48,13 +48,14 @@ export const newItemId = () => `i-${randomBytes(6).toString("hex")}`;
 
 /** Writes an item of prototype `p` (under `txn`); `expiresWorldMs`: the sweep takes it away when the world time reaches
  *  that (flotsam), else it stays; `lease` is a real-time lifetime of the entry itself; `own`: what this thing has of its
- *  own instead of its prototype's (a bred variety: its name, words, colour). */
+ *  own instead of its prototype's (a bred variety: its name, words, colour). A prototype that stands for another (a log
+ *  for driftwood) is written as that one under its own name, words, look and icon. */
 export async function spawn(space: SpaceLike, txn: string | null, w: WorldDef, p: PrototypeFields, at: { itemId?: string; location: string; x: number; y: number; flotsam?: boolean; lease?: number; expiresWorldMs?: number }, own?: Partial<Pick<ItemFields, "name" | "aliases" | "desc" | "glyph" | "variety">>): Promise<ItemFields> {
 	// a thing that spoils or grows up carries the moment it turns, on the second clock (engine/sweep.ts turns it); what the
 	// loader hands out before the world has its clock (an NPC's stock) keeps
 	const kept = p.turns ? await decayNowOf(space, txn).catch(() => null) : null;
 	const turning = p.turns && kept !== null ? { turns: true as const, turnsAtMs: kept + p.turns.afterMs } : {};
-	const item: ItemFields = { ...turning, itemId: at.itemId ?? newItemId(), name: p.name, aliases: p.aliases ?? [], desc: p.desc ?? "", location: at.location, x: at.x, y: at.y, glyph: p.glyph, locks: p.locks || DEFAULT_ITEM_LOCKS, proto: p.key, ...(at.flotsam ? { flotsam: true } : {}), ...(at.expiresWorldMs !== undefined ? { expiresWorldMs: at.expiresWorldMs } : {}), ...(p.wear ? { wear: p.wear } : {}), ...own };
+	const item: ItemFields = { ...turning, itemId: at.itemId ?? newItemId(), name: p.name, aliases: p.aliases ?? [], desc: p.desc ?? "", location: at.location, x: at.x, y: at.y, glyph: p.glyph, locks: p.locks || DEFAULT_ITEM_LOCKS, proto: p.stands ?? p.key, ...(at.flotsam ? { flotsam: true } : {}), ...(at.expiresWorldMs !== undefined ? { expiresWorldMs: at.expiresWorldMs } : {}), ...(p.wear ? { wear: p.wear } : {}), ...(p.stands && p.icon ? { icon: p.icon } : {}), ...own };
 	await space.write(draftOf(p.typeclass || "Item", w.typeclasses, item), txn, at.lease ?? FOREVER);
 	return item;
 }

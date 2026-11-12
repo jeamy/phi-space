@@ -335,6 +335,32 @@ Stößen statt täglich, und als Gemeinschaftswerk wie eine Baustelle.
   Takt und an Sturmtagen schneller; Flauten gibt es erst mit dem Wetter der Jahreszeiten.
 - **Zielkonflikt**: Korn ist Brot, Saatgut und Bier zugleich — was man vermahlt, sät man nicht.
 
+### Bäume
+
+Bäume stehen auf je einer Zelle und bleiben stehen (`server/engine/commands/trees.ts`, `trees` der Welt). Es gibt fünf
+Sorten: Birke, Kopfweide, Apfelbaum, Birnbaum und Eiche.
+
+- **Pflanzen**: `pflanze <Samen> [x y]` mit einem Spaten, im Licht eines Feuers, auf einer freien Zelle; höchstens
+  `maxTrees` (8) je Figur. Die Samen sind Birkensamen, Weidenstecklinge, Apfel- und Birnenkerne und Eicheln.
+  `sammle samen` findet sie, wo die Deko Bäume zeigt (T, A), jede Sorte auf ihren eigenen Inseln. Ein Gartensamen
+  gleichen Namens geht vor: Der Baumsamen wird nur genommen, wenn er unter dem Mitgetragenen am besten passt.
+- **Wachsen**: Ein Setzling wird zum jungen Baum und dann zum ausgewachsenen. Jede Stufe dauert Welttage (Birke 1+2,
+  Weide 1+1, Apfel und Birne 2+2, Eiche 3+4), mal der Geduld der zweiten Uhr, im Nebel um die Hälfte länger. Im Winter
+  rückt der Termin ins Frühjahr. `treeTick` im Gartenjob schreibt einen Baum erst, wenn sein Termin da ist; dazwischen
+  kostet ein Baum nichts.
+- **Fällen**: `fälle [x y]` geht mit einer Axt (`craft axt`: 2 Treibholz, 1 Stein, 1 Tangseil; sie nutzt sich ab),
+  nur bei einem ausgewachsenen Baum und nur für den, der ihn gepflanzt hat. Danach ist man müde wie nach Arbeit. Ein
+  Baum gibt **Scheite**: Birke 4, Weide 2, Obstbäume 3, Eiche 10. Ein Scheit ist ein Prototyp, der für Treibholz
+  *steht* (`stands: "treibholz"`): Er wird als Treibholz geschrieben, unter eigenem Namen und Icon. So nimmt ihn jedes
+  Rezept, jede Baustelle, jedes Feuer und jeder Preis, der Treibholz nimmt. Birke und Weide treiben aus dem Stumpf
+  wieder aus und sind dann wieder ein junger Baum; die anderen Sorten geben ihre Zelle und ihr Licht frei.
+- **Tragen**: Ein ausgewachsener Obstbaum ist jeden Welttag mal der Geduld reif (4 Äpfel, 4 Birnen; eine Eiche alle
+  zwei Tage 3 Eicheln). Dann wartet er, bis sein Besitzer mit `ernte [baum]` pflückt. Ein Obstbaum gibt ab und zu
+  einen Kern mit (30 %). Die Kopfweide wird alle zwei Tage mit `ernte` geschnitten: 2 Scheite und ein Steckling.
+- **Verwenden**: Apfel und Birne werden gegessen (`iss`); ein Apfel verdirbt nach einer Woche, eine Birne nach fünf Tagen. In einer Hütte machen
+  3 Früchte und eine Wasserkanne 2 Säfte; 4 Früchte, eine Wasserkanne und ein Scheit machen 2 Gläser Kompott. Schweine
+  fressen Eicheln und Äpfel. `baum` listet die eigenen Bäume, `baum ansehen x y` erzählt von einem.
+
 ### Tiere auf dem Hof
 
 Tiere kommen früh, nicht erst spät: schon der Hühnerstall des Fischerdorfs. Ein Tier ist eine kleine Figur mit

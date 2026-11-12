@@ -100,3 +100,9 @@ the script `items-src/honey.py` (same license as this project).
 
 What the cabbage makes (sauerkraut, cabbage soup and cabbage rolls: `items/sauerkraut.png`, `items/kohlsuppe.png`,
 `items/kohlroulade.png`) were drawn the same way, by the script `items-src/cabbage.py` (same license as this project).
+
+What the trees give and need (a log, an axe, the seeds of birch, willow, apple, pear and oak, apples, pears, their juice
+and compote: `items/scheit.png`, `items/axt.png`, `items/samen-birke.png`, `items/weidensteckling.png`,
+`items/apfelkern.png`, `items/birnenkern.png`, `items/eichel.png`, `items/apfel.png`, `items/birne.png`,
+`items/apfelsaft.png`, `items/birnensaft.png`, `items/apfelkompott.png`, `items/birnenkompott.png`) were drawn the same
+way, by the script `items-src/trees.py` (same license as this project).

@@ -9,6 +9,7 @@ use phi_json::{obj, Json};
 use super::animals::{collect, means_yield};
 use super::build::{besides, building_here, cells, free_cells, give_back, human, light_for, no_article, plural, put_back, refusal, release_light, take_near, use_light, Rect, SITE_REACH};
 use super::field::{harvest_field, sow_on_field};
+use super::trees::{harvest_tree, means_tree, plant_tree};
 use super::settlement::need_rank;
 use crate::clock::{decay_now_of, frozen_until, patience_of, world_now_of};
 use crate::context::{inventory, items_named, msg, plural_of, room_of, Ctx, MsgOpts};
@@ -251,6 +252,8 @@ async fn beet(c: &mut Ctx, arg: &str) -> Result<()> {
 fn plants_of(b: &Json) -> Vec<Json> { j::a(b, "plants").to_vec() }
 
 async fn pflanze(c: &mut Ctx, arg: &str) -> Result<()> {
+	// a tree's seed: a tree beside one (trees.rs)
+	if plant_tree(c, arg).await? { return Ok(()); }
 	let g = garden(c)?;
 	let counted = js::caps(&js::re(r"^(\d+)\s+(.+)$", ""), js::trim(arg));
 	let want = counted.as_ref().map_or(1.0, |m| js::to_number(m[1].as_deref().unwrap_or("")));
@@ -436,8 +439,10 @@ async fn ernte(c: &mut Ctx, arg: &str) -> Result<()> {
 		if harvest_field(c).await? { return Ok(()); }
 		return not_understood("Hier ist kein Acker. „flur anlegen“ legt eine an (mit einem Spaten, im Licht eines Feuers).");
 	}
+	// a tree named: its crop (trees.rs)
+	if means_tree(c.w(), arg) && harvest_tree(c, true).await? { return Ok(()); }
 	let mut b = match tended_bed(c).await {
-		Err(Error::NotUnderstood(t)) => { if harvest_field(c).await? { return Ok(()); } return Err(Error::NotUnderstood(t)); }
+		Err(Error::NotUnderstood(t)) => { if harvest_field(c).await? || harvest_tree(c, false).await? { return Ok(()); } return Err(Error::NotUnderstood(t)); }
 		r => r?,
 	};
 	if !may_tend(c, &b) { return refuse(format!("Das ist das {}; ernten dürfen der Besitzer und seine Paten.", bed_name(&b))); }
@@ -532,7 +537,11 @@ async fn sammle(c: &mut Ctx, arg: &str) -> Result<()> {
 	let gd = j::at(&g, "decor");
 	let grows = |s: &Json| j::opt(s, "wild").filter(|w| j::truthy(w)).is_some_and(|w| j::a(gd, j::s(w, "decor")).iter().any(|k| k.as_str().is_some_and(|k| decor.contains(k))) && j::ao(w, "islands").is_none_or(|is| is.iter().any(|i| i.as_str() == Some(island.as_str()))));
 	let crops = j::opt(c.w(), "fields").map_or(&[][..], |f| j::a(f, "crops"));
-	let wild: Vec<Json> = j::a(&g, "sorts").iter().chain(crops.iter()).filter(|s| grows(s)).cloned().collect();
+	// the wild flora gives seeds of garden sorts and of field crops (wild barley, flax, beet), the wild trees theirs
+	let t = j::opt(c.w(), "trees");
+	let woods = t.is_some_and(|t| j::a(t, "decor").iter().any(|k| k.as_str().is_some_and(|k| decor.contains(k))));
+	let mut wild: Vec<Json> = j::a(&g, "sorts").iter().chain(crops.iter()).filter(|s| grows(s)).cloned().collect();
+	if woods { wild.extend(j::a(t.unwrap_or(&Json::Null), "sorts").iter().filter(|s| j::opt(s, "wild").filter(|w| j::truthy(w)).is_some_and(|w| j::ao(w, "islands").is_none_or(|is| is.iter().any(|i| i.as_str() == Some(island.as_str()))))).cloned()); }
 	if wild.is_empty() { return refuse("Hier wächst nichts Wildes, das Samen trägt."); }
 	if let Some(r) = &rest { c.space.take_if_exists(&obj! { "id" => j::at(r, "id").clone() }, NO_WAIT, c.txn()).await?; }
 	c.space.write(&tmpl("SeedRest", obj! { "charId" => c.char_id(), "room" => c.room(), "untilWorldMs" => now + j::n(&g, "seedRestWorldMs") }), c.txn(), FOREVER).await?;

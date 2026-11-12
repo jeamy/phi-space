@@ -201,7 +201,7 @@ export class Accounts {
 	async #renameOwned(charId: string, accountId: string, from: string, to: string): Promise<void> {
 		for (const [, space] of this.#regions.entries()) {
 			const owned = [
-				...(await Promise.all(["Site", "Building", "Ruin", "Bed", "Field"].map((type) => space.readAll({ type, fields: { owner: charId } })))).flat().map((e) => ({ e, key: "ownerName" })),
+				...(await Promise.all(["Site", "Building", "Ruin", "Bed", "Field", "Tree"].map((type) => space.readAll({ type, fields: { owner: charId } })))).flat().map((e) => ({ e, key: "ownerName" })),
 				...(await space.readAll({ type: "Estate", fields: { accountId } })).map((e) => ({ e, key: "ownerName" })),
 				...(await space.readAll({ type: "SiteOrder", fields: { ownerName: from } })).map((e) => ({ e, key: "ownerName" })),
 				...(await space.readAll({ type: "Listing", fields: { seller: charId } })).map((e) => ({ e, key: "sellerName" })),

@@ -629,6 +629,25 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>, me: stri
 			s.objs.addChild(g, label);
 			continue;
 		}
+		if (o.kind === "tree") {
+			// a planted tree (engine/commands/trees.ts): a trunk and a crown by its stage, a conifer as a cone; its crop in
+			// the fruit's colour when ripe; the owner's name under it
+			const stage = o.treeStage ?? 2, k = [0.35, 0.65, 1][stage]!, cx = x + ts / 2, base = y + ts - 3;
+			const g = new p.Graphics();
+			g.rect(cx - 1.5 * k, base - ts * 0.45 * k, 3 * k + 0.5, ts * 0.45 * k).fill({ color: "#6b4a2e" });
+			if (o.model === "conifer") g.poly([cx, base - ts * 1.25 * k, cx - ts * 0.42 * k, base - ts * 0.3 * k, cx + ts * 0.42 * k, base - ts * 0.3 * k]).fill({ color: "#2f6b3a" }).stroke({ width: 1, color: "#1a1410", alpha: 0.5 });
+			else g.circle(cx, base - ts * 0.75 * k, ts * 0.42 * k).fill({ color: o.cut ? "#8aa860" : "#4f8f3a" }).stroke({ width: 1, color: "#1a1410", alpha: 0.5 });
+			if (o.ripe && !o.cut) for (const [fx, fy] of [[-0.18, -0.85], [0.2, -0.7], [-0.05, -0.55], [0.12, -0.95]] as const) g.circle(cx + ts * fx * k, base + ts * fy * k, 2.2).fill({ color: o.color ?? "#d8402a" }).stroke({ width: 1, color: "#1a1410", alpha: 0.6 });
+			if (o.ripe && o.cut) for (const fx of [-0.25, 0, 0.25]) g.rect(cx + ts * fx * k - 0.5, base - ts * 1.2 * k, 1.5, ts * 0.3 * k).fill({ color: "#a8c870" });
+			s.objs.addChild(g);
+			if (o.owner) {
+				const label = new p.Text({ text: o.owner, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 9, fill: "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
+				label.anchor.set(0.5, 0);
+				label.position.set(cx, y + ts);
+				s.objs.addChild(label);
+			}
+			continue;
+		}
 		if (o.kind === "field") {
 			// a field: soil in rows; fallow light with a few tufts, being sown the furrows so far, growing green shoots,
 			// ripe the crop's colour (late a little faded)

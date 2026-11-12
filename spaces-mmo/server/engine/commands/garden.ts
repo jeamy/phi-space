@@ -28,6 +28,7 @@ import { resolvePrototype, spawn } from "../prototypes.ts";
 import { fogOf } from "../fire.ts";
 import type { GardenDef, SortDef, WorldDef } from "../world.ts";
 import { harvestField, sowOnField } from "./field.ts";
+import { harvestTree, meansTree, plantTree } from "./trees.ts";
 import { collect, meansYield } from "./animals.ts";
 import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, plural, putBack, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
 import { random, randomBytes, randomInt } from "../source.ts";
@@ -195,8 +196,10 @@ const beet: Command = {
 
 const pflanze: Command = {
 	key: "pflanze", aliases: ["pflanz", "pflanzen", "säe", "säen", "saee", "sae", "plant", "sow", "setze-samen"],
-	help: "pflanze [anzahl] <samen> [x y] – Samen in dein Beet oder ins Gemeinschaftsbeet neben dir setzen (bis zwei Schritte; eine Pflanze je Zelle; ins Zierbeet nur Blumen; z. B. pflanze 3 strandnelken). Korn, Kartoffeln, Rüben und Flachs wachsen auf dem Acker: „bestelle“",
+	help: "pflanze [anzahl] <samen> [x y] – Samen in dein Beet oder ins Gemeinschaftsbeet neben dir setzen (bis zwei Schritte; eine Pflanze je Zelle; ins Zierbeet nur Blumen; z. B. pflanze 3 strandnelken). Korn, Kartoffeln, Rüben und Flachs wachsen auf dem Acker: „bestelle“. Der Samen eines Baums (Birkensamen, Weidensteckling, Apfelkerne, Birnenkerne, Eichel) kommt mit einem Spaten neben dich in die Erde",
 	async func(c, arg) {
+		// a tree's seed: a tree beside one (trees.ts)
+		if (await plantTree(c, arg)) return;
 		const g = garden(c);
 		// "pflanze 3 strandnelken": that many of one kind, each in a free cell of the bed
 		const counted = /^(\d+)\s+(.+)$/.exec(arg.trim()), want = counted ? Number(counted[1]) : 1;
@@ -330,15 +333,17 @@ async function giveOwn(c: CommandCtx, what: Array<{ proto: string; count: number
 
 const ernte: Command = {
 	key: "ernte", aliases: ["ernten", "pflücke", "pfluecke", "harvest"],
-	help: "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins, als Pate oder vom Gemeinschaftsbeet ein Teil; dazu gibt es Samen); an einem reifen Acker (ernte flur, wenn auch ein Beet nah ist) ein Arbeitspunkt der Ernte und dein Anteil",
+	help: "ernte – was in einem Beet neben dir reif ist, in deine Tasche (deins, als Pate oder vom Gemeinschaftsbeet ein Teil; dazu gibt es Samen); an einem reifen Acker (ernte flur, wenn auch ein Beet nah ist) ein Arbeitspunkt der Ernte und dein Anteil; an deinem Baum (ernte baum) sein Obst, seine Eicheln oder Ruten",
 	async func(c, arg) {
 		const g = garden(c);
 		if (/^(?:die\s+|der\s+|das\s+)?(?:flur|acker|feld|field)$/i.test(arg.trim())) {
 			if (await harvestField(c)) return;
 			throw new NotUnderstood("Hier ist kein Acker. „flur anlegen“ legt eine an (mit einem Spaten, im Licht eines Feuers).");
 		}
-		// no bed near, but a field: its harvest (field.ts)
-		const b = await tendedBed(c).catch(async (e) => { if (e instanceof NotUnderstood && (await harvestField(c))) return null; throw e; });
+		// a tree named: its crop (trees.ts)
+		if (meansTree(c.world, arg) && (await harvestTree(c, true))) return;
+		// no bed near, but a field or a tree that bears: its harvest (field.ts, trees.ts)
+		const b = await tendedBed(c).catch(async (e) => { if (e instanceof NotUnderstood && ((await harvestField(c)) || (await harvestTree(c, false)))) return null; throw e; });
 		if (!b) return;
 		if (!mayTend(c, b)) throw new CommandError(`Das ist das ${bedName(b)}; ernten dürfen der Besitzer und seine Paten.`);
 		const allRipe = b.plants.filter((p) => p.stage === 2);
@@ -416,8 +421,9 @@ const sammle: Command = {
 		const room = c.world.rooms.find((r) => r.roomId === c.actor.room);
 		const decor = new Set((room?.decor ?? []).join(""));
 		const grows = (s: Pick<SortDef, "wild">) => !!s.wild && g.decor[s.wild.decor].some((k) => decor.has(k)) && (!s.wild.islands || s.wild.islands.includes(room?.island ?? ""));
-		// the wild flora gives seeds of garden sorts and of field crops (wild barley, flax, beet)
-		const wild = [...g.sorts, ...(c.world.fields?.crops ?? [])].filter(grows);
+		// the wild flora gives seeds of garden sorts and of field crops (wild barley, flax, beet), the wild trees theirs
+		const t = c.world.trees, woods = !!t && t.decor.some((k) => decor.has(k));
+		const wild: Array<{ seed: string }> = [...[...g.sorts, ...(c.world.fields?.crops ?? [])].filter(grows), ...(woods ? t!.sorts.filter((s) => !!s.wild && (!s.wild.islands || s.wild.islands.includes(room?.island ?? ""))) : [])];
 		if (!wild.length) throw new CommandError("Hier wächst nichts Wildes, das Samen trägt.");
 		if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
 		await c.space.write({ type: "SeedRest", fields: { charId: c.actor.charId, room: c.actor.room, untilWorldMs: now + g.seedRestWorldMs } satisfies SeedRestFields as never }, c.txn, FOREVER);

@@ -11,6 +11,7 @@ use crate::commands::epoch::epoch_tick;
 use crate::commands::field::field_tick;
 use crate::commands::garden::{garden_tick, storm_fills_barrels};
 use crate::commands::passage::passage_tick;
+use crate::commands::trees::tree_tick;
 use crate::commands::festival::show_tick;
 use crate::commands::growth::growth_tick;
 use crate::commands::settlement::settlement_tick;
@@ -49,6 +50,7 @@ pub async fn run_job(space: &Space, w: &Json, job: &str, msg_lease_ms: f64) -> R
 			"wind" => { if std::env::var("SPACES_MMO_WIND").as_deref() != Ok("0") { wind_tick(space, &live, msg_lease_ms).await?; } Ok(()) }
 			"garden" => {
 				garden_tick(space, &live).await?;
+				tree_tick(space, &live).await?;
 				field_tick(space, &live, msg_lease_ms).await?;
 				cart_tick(space, &live, msg_lease_ms).await?;
 				passage_tick(space, msg_lease_ms).await?;

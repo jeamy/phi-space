@@ -10,7 +10,7 @@ import { timeNow } from "../source.ts";
 import { isInterior } from "./interior.ts";
 export { grownGround, grownDecor } from "../room-growth.ts";
 
-const POSITIONED = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Plot", "Zone", "Motion", "Animal"];
+const POSITIONED = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Plot", "Zone", "Motion", "Animal", "Tree"];
 const is = (e: Taken, type: string) => e.types.includes(type);
 type Rect = { x: number; y: number; w?: number; h?: number };
 const crosses = (r: Rect, s: RoomGrowthStep) => r[s.axis] < s.at && r[s.axis] + (s.axis === "x" ? r.w ?? 1 : r.h ?? 1) > s.at;

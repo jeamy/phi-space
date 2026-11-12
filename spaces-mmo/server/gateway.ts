@@ -16,8 +16,9 @@ import { decayNow, msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./
 import { baysOf, linerOf, type Timetable } from "./engine/liner.ts";
 import { todosFor, type Todo } from "./todos.ts";
 import { interiorOf } from "./engine/commands/interior.ts";
-import { asFields, type HerdFields, type MillLoadFields, type EpochFields, type SeedRestFields, type AnimalFields, type BedFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type WantedFields, type NoticeFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type CartFields, type WindFields, type WorldClockFields, type ZoneFields, type RoadFields } from "./model.ts";
+import { asFields, type HerdFields, type MillLoadFields, type EpochFields, type SeedRestFields, type AnimalFields, type BedFields, type TreeFields, type BuildingFields, type FieldFields, type RuinFields, type SiteFields, type ListingFields, type WantedFields, type NoticeFields, type SceneryFields, type SiteOrderFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type CartFields, type WindFields, type WorldClockFields, type ZoneFields, type RoadFields } from "./model.ts";
 import { bedPlantsView } from "./engine/commands/garden.ts";
+import { treeView } from "./engine/commands/trees.ts";
 import { fieldView } from "./engine/commands/field.ts";
 import { wildKinds } from "./engine/commands/wild.ts";
 import { envMs } from "./space.ts";
@@ -90,7 +91,7 @@ const ATLAS_MS = 1_000;
 
 /** The characters a model plays (docs/modell-npcs.en.md: marked as AI wherever they appear). */
 const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(c.look ? { look: c.look } : {}), ...(c.aboard ? { aboard: { island: c.aboard.island, arriveWorldMs: c.aboard.arriveWorldMs, to: c.aboard.to, ...(c.aboard.from ? { from: c.aboard.from } : {}) } } : {}), ...(modelChars.has(c.charId) ? { ai: true as const } : {}), ...(c.charId.startsWith("npc-siedler-") ? { settler: true as const } : {}), ...(c.guest ? { guest: true as const } : {}) });
-const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>, w: WorldDef): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}), ...(w.pack ? { load: loadOf(w, f.proto) } : {}), ...(w.pack?.bags?.[f.proto] ? { bag: w.pack.bags[f.proto] } : {}), ...(f.variety && !f.variety.name ? { cross: { id: f.variety.id, from: w.garden?.sorts.find((s) => s.seed === f.proto || s.yields.proto === f.proto)?.name ?? "", breeder: f.variety.breeder } } : {}) });
+const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>, w: WorldDef): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(f.icon ? { icon: `/assets/${w.id}/${f.icon}` } : protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}), ...(w.pack ? { load: loadOf(w, f.proto) } : {}), ...(w.pack?.bags?.[f.proto] ? { bag: w.pack.bags[f.proto] } : {}), ...(f.variety && !f.variety.name ? { cross: { id: f.variety.id, from: w.garden?.sorts.find((s) => s.seed === f.proto || s.yields.proto === f.proto)?.name ?? "", breeder: f.variety.breeder } } : {}) });
 const exitView = (f: ExitFields, w: WorldDef): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, to: whereTo(w, f), toRoom: f.destination, location: f.location, x: f.x, y: f.y });
 const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = "", players: ReadonlySet<string> = new Set()): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}),
 	// said to the viewer alone, or what its own figure did as the room is told ("$you() stellst 3 Brot her": „Du stellst …“;
@@ -424,7 +425,7 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Wanted", "Notice", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Road", "Wind", "Cart", "MillLoad"]) await this.#readPaged(region, space, { type }, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Wanted", "Notice", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Tree", "Animal", "Zone", "Road", "Wind", "Cart", "MillLoad"]) await this.#readPaged(region, space, { type }, msgs);
 					await this.#readPaged(region, space, { type: "Msg", fields: { to: "*" } }, msgs); // #put keeps the last RECENT of each room
 					this.#advance(region, rev);
 					ready();
@@ -443,7 +444,7 @@ export class Gateway {
 						entryId = key(entryId);
 						const charId = this.#charOf.get(entryId) ?? this.#sessions.get(entryId) ?? (fields && (types?.includes("Character") || types?.includes("Session")) ? String(fields.charId) : undefined);
 						if (charId && !chars.has(charId)) chars.set(charId, this.#chars.get(charId)?.room ?? null);
-						const objId = this.#objOf.get(entryId) ?? this.#flameOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : fields && (types?.includes("Beacon") || types?.includes("Flame")) ? String(fields.beaconId) : fields && types?.includes("Scenery") ? String(fields.sceneryId) : fields && (types?.includes("Site") || types?.includes("Building") || types?.includes("Ruin")) ? String(fields.buildId) : fields && types?.includes("Bed") ? String(fields.bedId) : fields && types?.includes("Field") ? String(fields.fieldId) : fields && types?.includes("Animal") ? String(fields.animalId) : fields && types?.includes("Zone") ? String(fields.zoneId) : fields && types?.includes("Road") ? String(fields.roadId) : fields && types?.includes("Cart") ? String(fields.cartId) : undefined);
+						const objId = this.#objOf.get(entryId) ?? this.#flameOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : fields && (types?.includes("Beacon") || types?.includes("Flame")) ? String(fields.beaconId) : fields && types?.includes("Scenery") ? String(fields.sceneryId) : fields && (types?.includes("Site") || types?.includes("Building") || types?.includes("Ruin")) ? String(fields.buildId) : fields && types?.includes("Bed") ? String(fields.bedId) : fields && types?.includes("Field") ? String(fields.fieldId) : fields && types?.includes("Tree") ? String(fields.treeId) : fields && types?.includes("Animal") ? String(fields.animalId) : fields && types?.includes("Zone") ? String(fields.zoneId) : fields && types?.includes("Road") ? String(fields.roadId) : fields && types?.includes("Cart") ? String(fields.cartId) : undefined);
 						if (fields && types?.includes("Fog")) fogs.add(String(fields.room));
 						if (objId && !objs.has(objId)) objs.set(objId, this.#objs.get(objId)?.location ?? null);
 					};
@@ -498,7 +499,7 @@ export class Gateway {
 		if (is("Room")) return typeof fields.roomId === "string" ? fields.roomId : null;
 		if (is("Flame") || is("Contribution")) return this.w.beacons.find((b) => b.beaconId === fields.beaconId)?.room ?? null;
 		if (is("Item") || is("Exit")) return typeof fields.location === "string" ? fields.location : null;
-		if (["Fog", "Beacon", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Road"].some(is)) return typeof fields.room === "string" ? fields.room : null;
+		if (["Fog", "Beacon", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Tree", "Animal", "Zone", "Road"].some(is)) return typeof fields.room === "string" ? fields.room : null;
 		return null;
 	}
 
@@ -579,6 +580,10 @@ export class Gateway {
 		else if (type === "Field") {
 			const f = fields as unknown as FieldFields, v = fieldView(this.w, f);
 			this.#setObj(id, { id: f.fieldId, kind: "field", name: v.crop ? `Acker (${v.crop})` : "Acker", location: f.room, x: f.x, y: f.y, w: f.w, h: f.h, owner: this.#shownName(f.owner, f.ownerName), ownerId: f.owner, fieldStage: v.stage, progress: v.progress, ...(v.color ? { color: v.color } : {}), ...(v.model ? { cropModel: v.model } : {}), ...(f.open ? { open: true } : {}), ...(f.fenced ? { fenced: true } : {}) });
+		}
+		else if (type === "Tree") {
+			const f = fields as unknown as TreeFields, v = treeView(this.w, f);
+			this.#setObj(id, { id: f.treeId, kind: "tree", name: v.name, location: f.room, x: f.x, y: f.y, w: 1, h: 1, owner: this.#shownName(f.owner, f.ownerName), ownerId: f.owner, model: v.model, color: v.color, treeStage: v.stage, ...(v.ripe ? { ripe: true } : {}), ...(v.cut ? { cut: true } : {}) });
 		}
 		else if (type === "Animal") {
 			const a = fields as unknown as AnimalFields;

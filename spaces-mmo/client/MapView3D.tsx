@@ -31,7 +31,7 @@ type T = typeof import("three");
 type O3 = import("three").Object3D;
 type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; /** The own figure's lantern, lit in the dark. */ lantern?: { light: import("three").PointLight; glow: import("three").Mesh }; kind?: string; progress?: number; sig?: string; /** The name on a figure. */ shown?: string };
 /** What a bed shows: rebuilt when its plants or weeds change. */
-const bedSig = (o: ObjView) => (o.kind === "road" ? `${o.roadState}:${o.paved}:${(o.runs?.[0] ?? []).map((c) => `${c.x},${c.y}`).join(" ")}` : o.kind === "track" ? (o.runs ?? []).map((r) => r.map((c) => `${c.x},${c.y}`).join(" ")).join("|") : o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
+const bedSig = (o: ObjView) => (o.kind === "road" ? `${o.roadState}:${o.paved}:${(o.runs?.[0] ?? []).map((c) => `${c.x},${c.y}`).join(" ")}` : o.kind === "track" ? (o.runs ?? []).map((r) => r.map((c) => `${c.x},${c.y}`).join(" ")).join("|") : o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : o.kind === "field" ? `${o.fieldStage}|${o.cropModel ?? ""}|${o.color ?? ""}${o.fenced ? "f" : ""}` : o.kind === "tree" ? `${o.treeStage}|${o.ripe ? 1 : 0}` : o.kind === "building" && (o.herd || o.keeper || o.fenced) ? `${o.herd ?? ""}|${o.keeper ?? ""}|${o.fenced ? "f" : ""}` : undefined);
 type Scene3D = {
 	t: T;
 	renderer: import("three").WebGLRenderer;
@@ -589,7 +589,7 @@ function road(s: Scene3D, obj: ObjView): Entry {
 
 function object(t: T, obj: ObjView, me: string): Entry {
 	const group = new t.Group(); group.userData.owned = true;
-	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" || obj.kind === "field" || obj.kind === "building" ? { sig: bedSig(obj) } : {}) };
+	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" || obj.kind === "field" || obj.kind === "building" || obj.kind === "tree" ? { sig: bedSig(obj) } : {}) };
 	if (obj.kind === "cart") {
 		// a two-wheeled cart: a box of planks on an axle, its shafts on the ground
 		const wood = new t.MeshStandardMaterial({ color: 0x8a6a44, roughness: 1 }), dark = new t.MeshStandardMaterial({ color: 0x4a3522, roughness: 1 });
@@ -651,6 +651,19 @@ function object(t: T, obj: ObjView, me: string): Entry {
 			if (p.stage === 2) { const head = new t.Mesh(new t.SphereGeometry(0.17, 10, 8), new t.MeshStandardMaterial({ color: Number.parseInt(p.color.slice(1), 16), roughness: 0.7 })); head.position.set(px, 0.08 + tall + 0.08, pz); group.add(head); }
 		}
 		if (obj.weedy) for (const [wx, wz] of [[-0.3, 0.25], [0.3, -0.3], [0.1, 0.35]] as const) { const weed = new t.Mesh(new t.ConeGeometry(0.04, 0.14, 4), stem); weed.position.set(wx * w, 0.15, wz * d); group.add(weed); }
+		return e;
+	}
+	if (obj.kind === "tree") {
+		// a planted tree (engine/commands/trees.ts): the scenery's tree or conifer, smaller while it grows; its ripe crop as
+		// little balls in the fruit's colour round the crown
+		const k = [0.35, 0.65, 1][obj.treeStage ?? 2]!, look = placeLook(obj.id);
+		const tree = propMesh(t, plantGeometry(t, obj.model === "conifer" ? "conifer" : "tree", look.variant % PLANT_VARIANTS));
+		tree.scale.setScalar(k); tree.rotation.y = look.turn; group.add(tree);
+		group.add(propShadow(t, 1.1 * k, 1.1 * k));
+		if (obj.ripe && !obj.cut) {
+			const fruit = new t.MeshStandardMaterial({ color: Number.parseInt((obj.color ?? "#d8402a").slice(1), 16), roughness: 0.6 }), ball = new t.SphereGeometry(0.06, 8, 6);
+			for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2, m = new t.Mesh(ball, fruit); m.position.set(Math.cos(a) * 0.42 * k, (0.75 + (i % 3) * 0.18) * k, Math.sin(a) * 0.42 * k); group.add(m); }
+		}
 		return e;
 	}
 	if (obj.kind === "field") {
@@ -762,7 +775,7 @@ function surface(room: MapRendererProps["room"], world: MapRendererProps["world"
 	return tile3d(key, !!world.tiles[key]?.walk).height;
 }
 
-const AREA = new Set(["building", "site", "ruin", "bed", "field"]);
+const AREA = new Set(["building", "site", "ruin", "bed", "field", "tree"]);
 /** The highest and the lowest ground under a field, bed or building: it stands on the highest (else the higher terrace
  *  next to it would cover it), with a plinth of earth down to the lowest. */
 function areaGround(s: Scene3D, o: ObjView): { top: number; bottom: number } {

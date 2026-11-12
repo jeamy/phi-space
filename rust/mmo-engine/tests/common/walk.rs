@@ -239,6 +239,7 @@ impl Walk {
 					"showTick" => Json::from(festival::show_tick(&self.space, &live, 600_000.0).await?),
 					"stormTurnsMills" => { mill::storm_turns_mills(&self.space, &live, room).await?; Json::Null }
 					"gardenTick" => Json::from(garden::garden_tick(&self.space, &live).await?),
+					"treeTick" => Json::from(mmo_engine::commands::trees::tree_tick(&self.space, &live).await?),
 					"fieldTick" => Json::from(field::field_tick(&self.space, &live, 600_000.0).await?),
 					"stormFillsBarrels" => { garden::storm_fills_barrels(&self.space, &live, room).await?; Json::Null }
 					"cartTick" => Json::from(cart::cart_tick(&self.space, &live, 600_000.0).await?),

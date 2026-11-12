@@ -86,10 +86,13 @@ pub async fn spawn(space: &Space, txn: Option<&str>, w: &Json, p: &Json, at: At,
 	item.insert("y", Json::from(at.y));
 	if let Some(g) = p.get("glyph") { item.insert("glyph", g.clone()); }
 	item.insert("locks", if j::b(p, "locks") { j::at(p, "locks").clone() } else { Json::from(DEFAULT_ITEM_LOCKS) });
-	item.insert("proto", j::at(p, "key").clone());
+	// a prototype that stands for another (a log for driftwood) is written as that one, with its own icon
+	let stands = j::opt(p, "stands").filter(|v| j::truthy(v));
+	item.insert("proto", stands.unwrap_or_else(|| j::at(p, "key")).clone());
 	if at.flotsam { item.insert("flotsam", Json::Bool(true)); }
 	if let Some(e) = at.expires_world_ms { item.insert("expiresWorldMs", Json::from(e)); }
 	if j::b(p, "wear") { item.insert("wear", j::at(p, "wear").clone()); }
+	if stands.is_some() && j::b(p, "icon") { item.insert("icon", j::at(p, "icon").clone()); }
 	for (k, v) in j::entries(own) { item.insert(k, v.clone()); }
 	let item = Json::Object(item);
 	let tc = if j::b(p, "typeclass") { j::s(p, "typeclass") } else { "Item" };

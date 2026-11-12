@@ -16,7 +16,7 @@ use crate::source::time_now;
 use crate::space::{fields, tmpl, Error, Result, Space, FOREVER, NO_WAIT};
 use crate::world::walkable;
 
-const POSITIONED: [&str; 16] = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Plot", "Zone", "Motion", "Animal"];
+const POSITIONED: [&str; 17] = ["Character", "Spot", "Beacon", "Cart", "Site", "Building", "Ruin", "Bed", "Field", "Scenery", "MillLoad", "SiteOrder", "Plot", "Zone", "Motion", "Animal", "Tree"];
 fn is(e: &Json, ty: &str) -> bool { j::a(e, "types").iter().any(|t| t.as_str() == Some(ty)) }
 fn key(x: f64, y: f64) -> String { format!("{},{}", phi_json::number_text(x), phi_json::number_text(y)) }
 fn key_of(p: &Json) -> String { format!("{},{}", key_text(j::at(p, "x")), key_text(j::at(p, "y"))) }

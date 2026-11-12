@@ -1191,6 +1191,77 @@ fn gardening() {
 	assert!(w.entries_with(r#""Variety""#) + w.entries_with("Kreuzung") >= 1, "nothing crossed");
 }
 
+/// Trees (trees.ts): planting the five sorts with their refusals (no spade, no light, a garden seed's name), `baum` and
+/// `baum ansehen`, the tree tick moving them on through the days, felling with an axe for logs that are driftwood (a
+/// birch sprouting again, an oak freeing its cell), a stranger refused, picking a fruit tree and cutting the willow's
+/// rods, and the fruit eaten, pressed and cooked at a hut.
+#[test]
+fn trees() {
+	let mut w = Walk::new("trees", 48, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let b = w.player_as(2, "graue-bucht", (7.0, 13.0), true, false);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	give(&mut w, &a, "samen-birke", 2);
+	give(&mut w, &a, "apfelkern", 1);
+	give(&mut w, &a, "birnenkern", 1);
+	give(&mut w, &a, "eichel", 1);
+	give(&mut w, &a, "weidensteckling", 1);
+	give(&mut w, &a, "samen-strandnelke", 1);
+	give(&mut w, &b, "axt", 1);
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| {
+		step += 1;
+		at.set(at.get() + 7_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	// no spade, then no light
+	for (who, line) in [(&a, "baum"), (&a, "pflanze birkensamen 4 12"), (&a, "fälle")] { run(&mut w, who, line, 0.0); }
+	give(&mut w, &a, "spaten", 1);
+	run(&mut w, &a, "pflanze birkensamen 4 12", 0.0);
+	w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-bucht", "until" => 9e15, "litAt" => 0.0 } });
+	for (who, line) in [
+		(&a, "pflanze birkensamen 4 12"), (&a, "pflanze birkensamen 4 12"), (&a, "pflanze birkensamen 30 30"), (&a, "pflanze apfelkerne 6 12"), (&a, "pflanze birnenkerne 4 14"),
+		(&a, "pflanze eichel 6 14"), (&a, "pflanze weidensteckling 5 11"), (&a, "pflanze strandnelke 3 13"), (&a, "baum"), (&a, "baum ansehen 4 12"), (&b, "baum ansehen 6 12"),
+		(&a, "fälle"), (&a, "ernte baum"), (&b, "fälle 4 12"),
+	] { run(&mut w, who, line, 0.0); }
+	// the days go by; the tree tick moves them on
+	for later in [3.0, 30.0, 30.0, 60.0, 60.0] {
+		run(&mut w, &a, "baum", later * 86_400_000.0);
+		w.call("treeTick", None);
+	}
+	for (who, line) in [(&a, "baum"), (&b, "fälle 4 12"), (&b, "ernte baum"), (&a, "ernte baum"), (&a, "ernte"), (&a, "ernte weide"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 2, "graue-bucht", 5.0, 12.0);
+	give(&mut w, &a, "stein", 1);
+	give(&mut w, &a, "tangseil", 1);
+	for (who, line) in [(&b, "fälle 4 12"), (&a, "craft axt")] { run(&mut w, who, line, 0.0); }
+	give(&mut w, &a, "axt", 1);
+	for (who, line, later) in [(&a, "fälle 4 12", 0.0), (&a, "fälle eiche", 0.0), (&a, "fälle eiche", 1_200_000.0), (&a, "fälle 6 14", 1_200_000.0), (&a, "craft axt", 0.0), (&a, "baum", 0.0), (&a, "inventory", 0.0)] { run(&mut w, who, line, later); }
+	// fruit eaten, pressed and cooked at a hut
+	w.write(obj! { "type" => "Building", "fields" => obj! { "buildId" => "h-1", "plan" => "huette", "name" => "Hütte", "room" => "graue-bucht", "x" => 8.0, "y" => 12.0, "w" => 2.0, "h" => 2.0, "owner" => "c-walk9", "ownerName" => "Jemand", "accountId" => "a-walk9", "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => 9e15, "builtAt" => 0.0 } });
+	give(&mut w, &a, "apfel", 7);
+	give(&mut w, &a, "birne", 3);
+	give(&mut w, &a, "wasserkanne", 3);
+	stand(&mut w, 1, "graue-bucht", 7.0, 12.0);
+	for (who, line) in [(&a, "iss apfel"), (&a, "craft apfelsaft"), (&a, "craft apfelkompott"), (&a, "craft birnensaft"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
+	// later again: fruit ripe once more, sprouts grown
+	run(&mut w, &a, "baum", 90.0 * 86_400_000.0);
+	w.call("treeTick", None);
+	w.call("treeTick", None);
+	for (who, line) in [(&a, "baum"), (&a, "ernte birnbaum")] { run(&mut w, who, line, 0.0); }
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 15, "{said:?}");
+	assert!(w.entries_with(r#""Tree""#) >= 2, "no trees");
+}
+
 /// Fields (field.ts): staking one out with its refusals, choosing the crop, seed and work points with their rests, an open
 /// field with a helper, the field tick ripening it, fertiliser, the harvest's shares over many hands, tired soil after the
 /// same crop again, a crop left too late and lost, sowing from `pflanze`, and giving a field up.

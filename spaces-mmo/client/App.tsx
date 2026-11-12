@@ -891,7 +891,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		const passage = (c: { x: number; y: number }) => exits.some((e) => Math.max(Math.abs(e.x - c.x), Math.abs(e.y - c.y)) <= 1);
 		const taken = new Set([...[...chars.values()].filter((c) => c.charId !== meRef.current && !passage(c)), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)].map((c) => `${c.x},${c.y}`));
 		// sites and buildings cover their cells: nobody walks into them (server: occupancy.ts blockedIn)
-		for (const o of objs.values()) if ((o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field" || (o.kind === "scenery" && !o.through)) && !(from && (o.kind === "bed" || o.kind === "field") && from.x >= o.x && from.y >= o.y && from.x < o.x + (o.w ?? 1) && from.y < o.y + (o.h ?? 1)) && o.location === hello.room.roomId) for (let dy = 0; dy < (o.h ?? 1); dy++) for (let dx = 0; dx < (o.w ?? 1); dx++) taken.add(`${o.x + dx},${o.y + dy}`);
+		for (const o of objs.values()) if ((o.kind === "site" || o.kind === "building" || o.kind === "ruin" || o.kind === "bed" || o.kind === "field" || o.kind === "tree" || (o.kind === "scenery" && !o.through)) && !(from && (o.kind === "bed" || o.kind === "field") && from.x >= o.x && from.y >= o.y && from.x < o.x + (o.w ?? 1) && from.y < o.y + (o.h ?? 1)) && o.location === hello.room.roomId) for (let dy = 0; dy < (o.h ?? 1); dy++) for (let dx = 0; dx < (o.w ?? 1); dx++) taken.add(`${o.x + dx},${o.y + dy}`);
 		return (x: number, y: number) => !!hello.world.tiles[hello.room.ground[y]?.[x] ?? ""]?.walk && !taken.has(`${x},${y}`);
 	}, []);
 	const step = useCallback((d: [number, number] | { x: number; y: number }) => {
@@ -1045,7 +1045,7 @@ function Game({ account, onAccount, controls, startView }: { account: Account; o
 		const station = here.find((o) => o.kind === "building" && o.plan === railPlan);
 		if (!exits.length || (!station && exits.length < 2)) return null;
 		const blocked = new Set<string>();
-		for (const o of here) if (["building", "site", "ruin", "bed", "field"].includes(o.kind) || (o.kind === "scenery" && !o.through)) for (let y = o.y; y < o.y + (o.h ?? 1); y++) for (let x = o.x; x < o.x + (o.w ?? 1); x++) blocked.add(`${x},${y}`);
+		for (const o of here) if (["building", "site", "ruin", "bed", "field", "tree"].includes(o.kind) || (o.kind === "scenery" && !o.through)) for (let y = o.y; y < o.y + (o.h ?? 1); y++) for (let x = o.x; x < o.x + (o.w ?? 1); x++) blocked.add(`${x},${y}`);
 		const runs = trackCells(hello.room.ground, station ? { x: station.x, y: station.y, w: station.w ?? 1, h: station.h ?? 1 } : null, exits, blocked);
 		return runs.length ? ({ id: "track", kind: "track", name: "Gleis", location: room, x: -1, y: -1, through: true, runs, fromStation: !!station } as ObjView) : null; // off the grid: no menu, no "Was ist das?" lands on it
 	}, [hello, atlas, railPlan, stations, objs]);

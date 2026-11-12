@@ -380,6 +380,30 @@ instead of daily, and as joint work like a building site.
   with the weather of the seasons.
 - **Conflict of goals**: Grain is bread, seed and beer at once — what one grinds, one does not sow.
 
+### Trees
+
+Trees stand on one cell each and for good (`server/engine/commands/trees.ts`, the world's `trees`). Five sorts:
+birch, pollard willow, apple tree, pear tree and oak.
+
+- **Planting**: `pflanze <seed> [x y]` with a spade, in a fire's light, on a free cell, at most `maxTrees` (8) per
+  character. The seeds are birch seeds, willow cuttings, apple and pear pips and acorns. `sammle samen` finds them where
+  the decor shows trees (T, A), each sort on its own islands. A garden seed of the same name wins: the tree seed is taken
+  only when it is the best match among what one carries.
+- **Growing**: a seedling, then a young tree, then grown. Each stage takes world days (birch 1+2, willow 1+1, apple and
+  pear 2+2, oak 3+4) times the patience of the second clock, half as long again in fog. In winter the date moves to
+  spring. The garden job's `treeTick` writes a tree only when its date has come; a tree costs nothing in between.
+- **Felling**: `fälle [x y]` with an axe (`craft axt`: 2 driftwood, 1 stone, 1 kelp rope; it wears) and only when the
+  tree is grown, by whoever planted it, then tired as after work. A tree gives **logs** (`Scheit`): birch 4, willow 2,
+  fruit trees 3, oak 10. A log is a prototype that *stands* for driftwood (`stands: "treibholz"`): it is written as
+  driftwood under its own name and icon, so every recipe, site, fire and price that takes driftwood takes it. A birch
+  and a willow sprout again from the stump, back to a young tree; the other sorts free their cell and their light.
+- **Bearing**: a grown fruit tree is ripe every world day times the patience (apples 4, pears 4, an oak 3 acorns every
+  two days) and then waits until its owner picks it with `ernte [baum]`. A fruit tree gives a pip now and then (30 %).
+  The pollard willow is cut every two days with `ernte`: 2 logs and a cutting.
+- **Use**: an apple or a pear is eaten (`iss`); an apple turns after a week, a pear after five days. At a hut, 3 fruits and a water jug make 2 juices,
+  and 4 fruits, a water jug and a log make 2 jars of compote. Pigs eat acorns and apples. `baum` lists one's trees,
+  `baum ansehen x y` tells of one.
+
 ### Animals on the farm
 
 Animals come early, not only late: already the chicken coop of the fishing village. An animal is a small figure with a

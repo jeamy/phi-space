@@ -495,7 +495,7 @@ impl Gateway {
 				if rev < 0.0 {
 					rev = j::n(&space.remote().read_page(&obj! { "type" => "-" }, None, None, None, None, None).await?, "rev");
 					let mut msgs: Vec<Json> = Vec::new();
-					for ty in ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Wanted", "Notice", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Road", "Wind", "Cart", "MillLoad"] { self.read_paged(&region, &space, &obj! { "type" => ty }, &mut msgs).await?; }
+					for ty in ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Wanted", "Notice", "SeedRest", "Epoch", "SiteOrder", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Tree", "Animal", "Zone", "Road", "Wind", "Cart", "MillLoad"] { self.read_paged(&region, &space, &obj! { "type" => ty }, &mut msgs).await?; }
 					self.read_paged(&region, &space, &tmpl("Msg", obj! { "to" => "*" }), &mut msgs).await?;
 					self.advance(&region, rev);
 					if !signalled { signalled = true; left.set(left.get() - 1); if left.get() == 0 { self.ready.send_replace(true); } }
@@ -536,7 +536,7 @@ impl Gateway {
 			if let Some(cid) = char_id { if !chars.iter().any(|(c, _)| *c == cid) { let before = st.chars.get(&cid).map(|c| j::s(c, "room").to_owned()); chars.push((cid, before)); } }
 			let obj_id = st.obj_of.get(entry).cloned().or_else(|| st.flame_of.get(entry).cloned()).or_else(|| {
 				f?;
-				let by = [("Item", "itemId"), ("Exit", "exitId"), ("Beacon", "beaconId"), ("Flame", "beaconId"), ("Scenery", "sceneryId"), ("Site", "buildId"), ("Building", "buildId"), ("Ruin", "buildId"), ("Bed", "bedId"), ("Field", "fieldId"), ("Animal", "animalId"), ("Zone", "zoneId"), ("Road", "roadId"), ("Cart", "cartId")];
+				let by = [("Item", "itemId"), ("Exit", "exitId"), ("Beacon", "beaconId"), ("Flame", "beaconId"), ("Scenery", "sceneryId"), ("Site", "buildId"), ("Building", "buildId"), ("Ruin", "buildId"), ("Bed", "bedId"), ("Field", "fieldId"), ("Tree", "treeId"), ("Animal", "animalId"), ("Zone", "zoneId"), ("Road", "roadId"), ("Cart", "cartId")];
 				by.iter().find(|(t, _)| has(t)).and_then(|(_, k)| field(k))
 			});
 			if let (Some(f), true) = (f, has("Fog")) { let r = txt(j::at(f, "room")); if !fogs.contains(&r) { fogs.push(r); } }
@@ -613,7 +613,7 @@ impl Gateway {
 		if is("Room") { return text("roomId"); }
 		if is("Flame") || is("Contribution") { let b = txt(j::at(f, "beaconId")); return j::a(&self.w, "beacons").iter().find(|x| j::s(x, "beaconId") == b).map(|x| j::s(x, "room").to_owned()); }
 		if is("Item") || is("Exit") { return text("location"); }
-		if ["Fog", "Beacon", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Animal", "Zone", "Road"].iter().any(|t| is(t)) { return text("room"); }
+		if ["Fog", "Beacon", "Scenery", "Site", "Building", "Ruin", "Bed", "Field", "Tree", "Animal", "Zone", "Road"].iter().any(|t| is(t)) { return text("room"); }
 		None
 	}
 
@@ -724,6 +724,19 @@ impl Gateway {
 				let sponsors = j::a(f, "sponsors");
 				o.insert("sponsors", Json::Array(sponsors.iter().map(|x| self.shown_name(j::s(x, "charId"), j::at(x, "name"))).collect()));
 				o.insert("sponsorIds", Json::Array(sponsors.iter().map(|x| j::at(x, "charId").clone()).collect()));
+				self.set_obj(id, Json::Object(o));
+			}
+			"Tree" => {
+				let s = j::by(j::a(j::at(&w, "trees"), "sorts"), "key", j::s(f, "sort"));
+				let pick = |k: &str, or: &str| s.map(|s| j::at(s, k)).filter(|v| j::truthy(v)).cloned().unwrap_or_else(|| if or.is_empty() { j::at(f, "sort").clone() } else { Json::from(or) });
+				let mut o = obj_of(obj! { "id" => j::at(f, "treeId").clone(), "kind" => "tree", "name" => pick("name", ""), "location" => j::at(f, "room").clone(), "x" => j::at(f, "x").clone(), "y" => j::at(f, "y").clone(), "w" => 1.0, "h" => 1.0 });
+				o.insert("owner", self.shown_name(j::s(f, "owner"), j::at(f, "ownerName")));
+				o.insert("ownerId", j::at(f, "owner").clone());
+				o.insert("model", pick("model", "tree"));
+				o.insert("color", pick("color", "#6a8a3a"));
+				o.insert("treeStage", j::at(f, "stage").clone());
+				if j::truthy(j::at(f, "ripe")) { o.insert("ripe", Json::Bool(true)); }
+				if s.is_some_and(|s| j::truthy(j::at(j::at(s, "crop"), "cut"))) { o.insert("cut", Json::Bool(true)); }
 				self.set_obj(id, Json::Object(o));
 			}
 			"Field" => {

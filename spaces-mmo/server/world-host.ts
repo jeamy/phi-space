@@ -29,6 +29,7 @@ import { marketTick, ordersTick } from "./engine/commands/trade.ts";
 import { chainTick, fireTick, floodTick, fogTick, stormTick } from "./engine/fire.ts";
 import { sweepTick } from "./engine/sweep.ts";
 import { gardenTick, stormFillsBarrels } from "./engine/commands/garden.ts";
+import { treeTick } from "./engine/commands/trees.ts";
 import { stormTurnsMills } from "./engine/commands/mill.ts";
 import { wildTick } from "./engine/commands/wild.ts";
 import { epochTick } from "./engine/commands/epoch.ts";
@@ -78,7 +79,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		market: job((live) => marketTick(space, live)),
 		storm: job(async (live) => { if (!(await byPeoplesPace(space))) return; const room = await stormTick(space, live, msgLeaseMs); await stormFillsBarrels(space, live, room); await stormTurnsMills(space, live, room); await stormRaisesWind(space, live, room, msgLeaseMs); }),
 		wind: job(async (live) => { if (process.env.SPACES_MMO_WIND !== "0") await windTick(space, live, msgLeaseMs); }),
-		garden: job(async (live) => { await gardenTick(space, live); await fieldTick(space, live, msgLeaseMs); await cartTick(space, live, msgLeaseMs); await passageTick(space, msgLeaseMs); }),
+		garden: job(async (live) => { await gardenTick(space, live); await treeTick(space, live); await fieldTick(space, live, msgLeaseMs); await cartTick(space, live, msgLeaseMs); await passageTick(space, msgLeaseMs); }),
 		wild: job(async (live) => { await wildTick(space, live, msgLeaseMs); }),
 		epoch: async () => {
 			await job(async (live) => { await epochTick(space, live, msgLeaseMs); await settlementTick(space, live, msgLeaseMs); await roadTick(space, live, msgLeaseMs); await motionTick(space, live, msgLeaseMs); await showTick(space, live, msgLeaseMs); await loanTick(space, live, msgLeaseMs); await seasonTick(space, live, msgLeaseMs); })();

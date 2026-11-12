@@ -13,7 +13,7 @@
 //      accounts write them (server/accounts.ts; given whole, so neither side draws from the source), a Session when online
 //      | {"op": "write", "entry": {...}, "lease"?: ms}: an entry written as it is (the state a walk needs: a Spot, an Offer)
 //      | {"op": "take", "template": {...}}: one entry taken away (true when there was one)
-//      | {"op": "call", "fn": "settlementTick" | "epochTick" | "motionTick" | "stormRaisesWind" | "stormTurnsMills" | "showTick" | "loanTick" | "gardenTick" | "fieldTick" | "stormFillsBarrels" | "wildTick" | "cartTick", "room"?}: one tick of a job
+//      | {"op": "call", "fn": "settlementTick" | "epochTick" | "motionTick" | "stormRaisesWind" | "stormTurnsMills" | "showTick" | "loanTick" | "gardenTick" | "treeTick" | "fieldTick" | "stormFillsBarrels" | "wildTick" | "cartTick", "room"?}: one tick of a job
 //      alone, in stableTerrain on spatialWorld as the job runs it; what it returned
 //      | {"op": "region", "id"}: with regions, every later op goes to that region's space and world (regionWorld)
 //      | {"op": "deliver"}: with regions, one round of the region's orders out of it (handovers, then couriers, as
@@ -53,6 +53,7 @@ const { showTick } = await from("server/engine/commands/festival.ts");
 const { loanTick } = await from("server/engine/commands/shop.ts");
 const { growthTick } = await from("server/engine/commands/growth.ts");
 const { gardenTick, stormFillsBarrels } = await from("server/engine/commands/garden.ts");
+const { treeTick } = await from("server/engine/commands/trees.ts");
 const { fieldTick } = await from("server/engine/commands/field.ts");
 const { wildTick } = await from("server/engine/commands/wild.ts");
 const { cartTick } = await from("server/engine/commands/cart.ts");
@@ -188,7 +189,7 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 				market: job((live) => marketTick(space, live)),
 				storm: job(async (live) => { if (!(await byPeoplesPace(space))) return; const room = await stormTick(space, live, msgLeaseMs); await stormFillsBarrels(space, live, room); await stormTurnsMills(space, live, room); await stormRaisesWind(space, live, room, msgLeaseMs); }),
 				wind: job(async (live) => { if (process.env.SPACES_MMO_WIND !== "0") await windTick(space, live, msgLeaseMs); }),
-				garden: job(async (live) => { await gardenTick(space, live); await fieldTick(space, live, msgLeaseMs); await cartTick(space, live, msgLeaseMs); await passageTick(space, msgLeaseMs); }),
+				garden: job(async (live) => { await gardenTick(space, live); await treeTick(space, live); await fieldTick(space, live, msgLeaseMs); await cartTick(space, live, msgLeaseMs); await passageTick(space, msgLeaseMs); }),
 				wild: job(async (live) => { await wildTick(space, live, msgLeaseMs); }),
 				epoch: async () => {
 					await job(async (live) => { await epochTick(space, live, msgLeaseMs); await settlementTick(space, live, msgLeaseMs); await roadTick(space, live, msgLeaseMs); await motionTick(space, live, msgLeaseMs); await showTick(space, live, msgLeaseMs); await loanTick(space, live, msgLeaseMs); await seasonTick(space, live, msgLeaseMs); })();
@@ -238,6 +239,7 @@ async function step(line: Record<string, unknown>): Promise<unknown> {
 				showTick: (live) => showTick(space, live, msgLeaseMs),
 				loanTick: (live) => loanTick(space, live, msgLeaseMs),
 				gardenTick: (live) => gardenTick(space, live),
+				treeTick: (live) => treeTick(space, live),
 				fieldTick: (live) => fieldTick(space, live, msgLeaseMs),
 				stormFillsBarrels: (live) => stormFillsBarrels(space, live, line.room ?? null),
 				wildTick: (live) => wildTick(space, live, msgLeaseMs),
