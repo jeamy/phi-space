@@ -43,7 +43,7 @@ test("a path stays free: no hut and no bed on the cobbles", { timeout: 90_000 },
 		const x = room.ground[y]!.indexOf(":");
 		const from = p.frames.length;
 		p.send(`bau hütte ${x} ${y}`);
-		const f = await p.until((f) => f.t === "msg" && /Weg|passt keine/.test(f.m.text), 20_000, from);
+		const f = await p.until((f) => f.t === "msg" && /Weg|passt keine?/.test(f.m.text), 20_000, from);
 		assert.match((f as Extract<ServerFrame, { t: "msg" }>).m.text, /Das ist ein Weg/);
 	} finally { await srv.close(); }
 });

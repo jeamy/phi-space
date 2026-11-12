@@ -67,14 +67,14 @@ test("a fire carries 20 and grows with a builder; five animal houses are the mos
 		assert.match(await does(p, "bau regentonne", "Licht"), /Licht des Feuers reicht/);
 		const key = accountId ?? (await s.readAll({ type: "Account" })).map((e) => e.fields as { accountId: string; name: string }).find((a) => a.name === "Ole")?.accountId ?? c.accountId;
 		await s.write({ type: "FireBuilder", fields: { beaconId: "feuer-bucht", accountId: "someone", atWorldMs: Date.now() * 2 } as never }, null, FOREVER);
-		assert.doesNotMatch(await does(p, "bau regentonne", /steckt eine Baustelle ab|passt keine/), /Licht/, "a builder here widened the light");
+		assert.doesNotMatch(await does(p, "bau regentonne", /steckt eine Baustelle ab|passt keine?/), /Licht/, "a builder here widened the light");
 		for (const e of await s.readAll({ type: "Site" })) await s.takeIfExists({ id: e.id }, 0);
 		for (const i of [0, 1, 2, 3, 4]) await s.write({ type: "Building", fields: { buildId: `stall${i}`, plan: "huehnerstall", name: "Hühnerstall", room: c.room, x: 1, y: 1 + i, w: 1, h: 1, owner: me, ownerName: "Ole", accountId: key, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
 		assert.match(await does(p, "bau hühnerstall", "Ställe"), /Mehr als 5 Ställe, Gehege und Bienenstöcke/);
 		// the animal houses do not count towards the buildings: ten in the fishing village (the operator's setting), then no more
 		for (let i = 0; i < 10; i++) await s.write({ type: "Building", fields: { buildId: `hut${i}`, plan: "huette", name: "Hütte", room: "nowhere", x: i, y: 0, w: 1, h: 1, owner: me, ownerName: "Ole", accountId: key, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
 		assert.match(await does(p, "bau hütte", "Bauten"), /Mehr als 10 Bauten hat hier niemand \(Fischerdorf\); Regentonne/);
-		assert.doesNotMatch(await does(p, "bau regentonne", /steckt eine Baustelle ab|passt keine|Licht|Bauten/), /Mehr als/, "a rain barrel does not count");
+		assert.doesNotMatch(await does(p, "bau regentonne", /steckt eine Baustelle ab|passt keine?|Licht|Bauten/), /Mehr als/, "a rain barrel does not count");
 		for (const e of await s.readAll({ type: "Site" })) await s.takeIfExists({ id: e.id }, 0);
 		for (let i = 0; i < 10; i++) await s.takeIfExists({ type: "Building", fields: { buildId: `hut${i}` } }, 0);
 		await s.write({ type: "Building", fields: { buildId: "pen", plan: "gehege", name: "Gehege", room: c.room, x: c.x + 1, y: c.y, w: 1, h: 1, owner: me, ownerName: "Ole", accountId: key, beaconId: "feuer-bucht", points: 2, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);

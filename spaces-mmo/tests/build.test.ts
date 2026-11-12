@@ -65,7 +65,7 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		// the hut at 16,12–17,13
 		const foot: Array<[number, number]> = [[16, 12], [17, 12], [16, 13], [17, 13]];
 		let staked = "";
-		for (let i = 0; i < 5 && !staked.includes("steckt"); i++) { await clear(s, foot); staked = await does(boss.p, "baue eine hütte 16 12", /steckt eine Baustelle ab|passt keine/); }
+		for (let i = 0; i < 5 && !staked.includes("steckt"); i++) { await clear(s, foot); staked = await does(boss.p, "baue eine hütte 16 12", /steckt eine Baustelle ab|passt keine?/); }
 		assert.match(staked, /Baumeisterin steckt eine Baustelle ab: Hütte\. Es fehlen 6 Treibholz, 2 Tangseil, 20 Arbeit/);
 		assert.equal((await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).filter((e) => !/^(?:graue-)?bucht-/.test(String(e.fields.of))).length, 4);
 		assert.match(await does(boss.p, "bau hütte", "offene Baustelle"), /offene Baustelle: Hütte in .+ \(16 12\); bau sie erst fertig/);
@@ -115,7 +115,7 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		await s.write({ type: "LightUse", fields: { beaconId: "feuer-bucht", used: 40 } }, null, FOREVER);
 		const other = crew[0]!;
 		await walk(other, s, 20, 12);
-		const dark = await does(other.p, "bau hütte", /Licht|passt keine/);
+		const dark = await does(other.p, "bau hütte", /Licht|passt keine?/);
 		assert.match(dark, /Licht des Feuers reicht/);
 		// what helps as it stands: a fishing village builds no lighthouse yet, and nobody builds a fire
 		assert.match(dark, /Leuchtturm hätte es mehr Licht, aber der Bauplan öffnet sich erst, wenn die Insel eine Stadt ist/);
@@ -124,7 +124,7 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		// a village: every fire of the island carries 20 more, the hut fits again
 		await saveSettings(s, { "epoch.force": 2 });
 		await new Promise((ok) => setTimeout(ok, Number(process.env.SPACES_MMO_SETTINGS_MS) || 5_100));
-		assert.doesNotMatch(await does(other.p, "bau hütte", /steckt eine Baustelle ab|passt keine|Licht/), /Licht des Feuers reicht/);
+		assert.doesNotMatch(await does(other.p, "bau hütte", /steckt eine Baustelle ab|passt keine?|Licht/), /Licht des Feuers reicht/);
 		await saveSettings(s, { "epoch.force": null });
 		for (const a of [boss, ...crew]) await a.p.leave();
 		await guest.leave();
@@ -266,7 +266,7 @@ test("the builder is not in the way of its own site: it stakes it out where it s
 		await walk(other, s, 20, 10);
 		// only the builder on it: staked out, and the builder stands beside it, not on it
 		let staked = "";
-		for (let i = 0; i < 5 && !staked.includes("steckt"); i++) { await clear(s, foot); staked = await does(boss.p, "bau hütte 16 12", /steckt eine Baustelle ab|passt keine/); }
+		for (let i = 0; i < 5 && !staked.includes("steckt"); i++) { await clear(s, foot); staked = await does(boss.p, "bau hütte 16 12", /steckt eine Baustelle ab|passt keine?/); }
 		assert.match(staked, /Baumeister steckt eine Baustelle ab: Hütte/);
 		const me = (await s.readAll({ type: "Character", fields: { charId: boss.me } }))[0]!.fields as { x: number; y: number };
 		assert.ok(!foot.some(([x, y]) => x === me.x && y === me.y), `the builder stepped off the site (${me.x},${me.y})`);

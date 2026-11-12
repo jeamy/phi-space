@@ -72,11 +72,11 @@ test("a jetty goes only to the water; a lighthouse adds its light and covers the
 		assert.equal((await p.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
 		const me = (await p.play()).me.charId;
 		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
-		assert.match(await does(p, "bau steg 2 12", /Wasser|passt keine|steckt/), /Wasser/);
+		assert.match(await does(p, "bau steg 2 12", /Wasser|passt keine?|steckt/), /Wasser/);
 		await s.write({ type: "LightUse", fields: { beaconId: "feuer-bucht", used: 20 } as never }, null, FOREVER, { unique: ["beaconId"] });
 		assert.match(await does(p, "bau regentonne", "Licht"), /Licht des Feuers reicht/);
 		await s.write({ type: "Building", fields: { buildId: "turm", plan: "leuchtturm", name: "Leuchtturm", room: c.room, x: 1, y: 14, w: 1, h: 1, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 3, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
-		assert.doesNotMatch(await does(p, "bau regentonne", /steckt eine Baustelle ab|passt keine/), /Licht/);
+		assert.doesNotMatch(await does(p, "bau regentonne", /steckt eine Baustelle ab|passt keine?/), /Licht/);
 		// it also covers the rooms one way from its own, on its island: the fire there and its fog
 		const around = roomsAround(w, "klippenpfad", 1);
 		assert.ok(around.includes("klippenkopf") && around.every((r) => w.rooms.find((x) => x.roomId === r)?.island === w.rooms.find((x) => x.roomId === "klippenpfad")!.island), around.join());
@@ -115,11 +115,11 @@ test("a jetty is built on the water from the shore, clear of the ship's berth, a
 			if (!near && ![[x, y - 1], [x, y + 1], [x + 1, y - 1], [x + 1, y + 1]].some(([a, z]) => g[z!]?.[a!] === undefined)) open ??= { x, y };
 		}
 		assert.ok(pier && open, "the bay has a shore and open water");
-		assert.match(await does(p, "bau steg 2 12", /Wasser|passt keine|steckt/), /Wasser/, "not on the beach");
-		assert.match(await does(p, `bau steg ${open!.x} ${open!.y}`, /Ufer|passt keine|steckt/), /Ufer/, "not out at sea");
-		assert.match(await does(p, `bau steg ${b.x} ${b.y}`, /Schiff|Ufer|passt keine|steckt/), /Schiff|Ufer/, "not where the ship lies");
+		assert.match(await does(p, "bau steg 2 12", /Wasser|passt keine?|steckt/), /Wasser/, "not on the beach");
+		assert.match(await does(p, `bau steg ${open!.x} ${open!.y}`, /Ufer|passt keine?|steckt/), /Ufer/, "not out at sea");
+		assert.match(await does(p, `bau steg ${b.x} ${b.y}`, /Schiff|Ufer|passt keine?|steckt/), /Schiff|Ufer/, "not where the ship lies");
 		// the shore cell before it names the jetty in the water (the menu sends the cell one clicks, often where one stands)
-		assert.match(await does(p, `bau steg ${pier!.x - 1} ${pier!.y}`, /steckt|passt keine/), /steckt eine Baustelle ab/);
+		assert.match(await does(p, `bau steg ${pier!.x - 1} ${pier!.y}`, /steckt|passt keine?/), /steckt eine Baustelle ab/);
 		const site = (await s.readAll({ type: "Site", fields: { accountId: (await s.readAll({ type: "Character", fields: { charId: me } }))[0]!.fields.accountId } }))[0]!.fields as unknown as { x: number; y: number; w: number; h: number };
 		for (let y = site.y; y < site.y + site.h; y++) for (let x = site.x; x < site.x + site.w; x++) assert.ok(wet(x, y), `${x} ${y} is water`);
 		// a jetty of old on the beach goes onto the water beside it, with its plot

@@ -129,9 +129,9 @@ test("a room holds one station: a second is refused, built or staked", { timeout
 		await lightFire(s, 600_000, "feuer-bucht");
 		const c = (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, me))!.fields as unknown as CharacterFields;
 		await s.write({ type: "Building", fields: { buildId: "st", plan: "bahnhof", name: "Bahnhof", room: c.room, x: 0, y: 0, w: 3, h: 2, owner: "o", ownerName: "O", accountId: "o", beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
-		assert.match(await does(p, "bau bahnhof", /höchstens einen|Baustelle ab|passt keine/), /höchstens einen Bau „Bahnhof“/);
+		assert.match(await does(p, "bau bahnhof", /höchstens einen|Baustelle ab|passt keine?/), /höchstens einen Bau „Bahnhof“/);
 		await s.take({ type: "Building", fields: { buildId: "st" } }, 5_000);
-		assert.doesNotMatch(await does(p, "bau bahnhof", /höchstens einen|Baustelle ab|passt keine/), /höchstens einen/, "the room is free again");
+		assert.doesNotMatch(await does(p, "bau bahnhof", /höchstens einen|Baustelle ab|passt keine?/), /höchstens einen/, "the room is free again");
 	} finally { await srv.close(); }
 });
 

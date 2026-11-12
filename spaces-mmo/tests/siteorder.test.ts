@@ -34,7 +34,7 @@ async function stake(s: SpaceLike, f: { p: Player; me: string }): Promise<void> 
 			await does(f.p, `move ${x} ${y}`, /./, 5_000).catch(() => "");
 			await eventually(async () => { const c = (await s.readAll({ type: "Character", fields: { charId: f.me } }))[0]?.fields as unknown as CharacterFields | undefined; return !!c && c.x === x && c.y === y ? c : undefined; }, 5_000, "walked").catch(() => undefined);
 		}
-		if (/steckt eine Baustelle ab/.test(await does(f.p, "bau hütte", /steckt eine Baustelle ab|Hier passt keine/))) return;
+		if (/steckt eine Baustelle ab/.test(await does(f.p, "bau hütte", /steckt eine Baustelle ab|Hier passt keine?/))) return;
 	}
 	throw new Error("no place for a hut");
 }

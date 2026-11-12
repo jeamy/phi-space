@@ -101,7 +101,7 @@ test("as a player: a village plan is refused in the fishing village, allowed in 
 		await epochTick(s, w, 60_000);
 		await p.until((f) => f.t === "msg" && /Graue Insel ist jetzt ein Dorf \(Epoche 2\): Windmühle, Backhaus, Gehege, Webstuhl, Lagerhaus, Steinbruch, Lehmgrube, Ziegelei, Kapelle, Metzgerei, Salzgarten, Werkstatt, Straßen, Äcker lassen sich jetzt bauen/.test(f.m.text), 10_000, from);
 		assert.match(await does(p, "epoche", "Punkte"), /Graue Insel ist ein Dorf \(Epoche 2\): 15 Punkte/);
-		const staked = await does(p, "bau backhaus", /steckt eine Baustelle ab|passt keine|braucht/);
+		const staked = await does(p, "bau backhaus", /steckt eine Baustelle ab|passt keine?|braucht/);
 		assert.doesNotMatch(staked, /braucht ein Dorf/);
 
 		// beds decay, the island falls back: a bakery that stands bakes on, a new plan of the village is refused
