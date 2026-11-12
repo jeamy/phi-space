@@ -330,3 +330,16 @@ test("inside the butcher's shop the block makes its recipes and slaughters what 
 	assert.ok(lines.includes("schlachte huhn"), "slaughter the carried hen");
 	assert.ok(lines.includes("craft hier"), "what is made here");
 });
+
+test("a mill offers „Mehl abholen“ only with one's flour ready there, a fallen one „Korn abholen“ with one's grain in it", () => {
+	const mill = (kind: "building" | "ruin") => new Map<string, ObjView>([["m", obj({ id: "m", kind, name: "Windmühle", owner: "Ines", ownerId: "o", plan: "windmuehle", x: 6, y: 5, w: 2, h: 2 })]]);
+	const todo = (what: string, x = 6) => ({ id: `load:${what}`, text: "", room: "r", x, y: 5, rank: 0 as const });
+	const labels = (kind: "building" | "ruin", todos?: ReturnType<typeof todo>[]) => cellEntries({ ...input, objs: mill(kind), todos, at: { x: 6, y: 5 } }).map((e) => e.label);
+	assert.ok(!labels("building", []).includes("Mehl abholen"), "nothing at the mill");
+	assert.ok(!labels("building", [todo("mahlt")]).includes("Mehl abholen"), "still grinding");
+	assert.ok(!labels("building", [todo("mehl", 20)]).includes("Mehl abholen"), "flour at another mill");
+	assert.ok(labels("building", [todo("mehl")]).includes("Mehl abholen"), "flour ready here");
+	assert.ok(labels("ruin", [todo("mahlt")]).includes("Korn abholen"), "the grain of a fallen mill");
+	assert.ok(!labels("ruin", []).includes("Korn abholen"));
+	assert.ok(labels("building").includes("Mehl abholen"), "without the tasks it is offered as before");
+});

@@ -1062,6 +1062,7 @@ export const EN: Record<string, string> = {
 	"Mausefalle": "Mousetrap",
 	"Mehl": "Flour",
 	"Mehl abholen": "Collect flour",
+	"Korn abholen": "Collect grain",
 	"Mehr ({0})": "More ({0})",
 	"Mehr als fünf Paten hat kein Beet.": "No bed has more than five sponsors.",
 	"Mehr als {0} Bauten hat hier niemand ({1}); Regentonne, Vogelscheuche, Ställe, Gehege, Bienenstock und Signalfeuer zählen nicht mit.": "Nobody has more than {0} buildings here ({1}); rain barrel, scarecrow, coops, pens, hive and signal fire do not count.",

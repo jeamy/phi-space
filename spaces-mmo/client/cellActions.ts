@@ -1,6 +1,6 @@
 // What can be done on a cell of the map: one function for the mouse's menu and the action sheet of a touch screen. Every
 // entry is a text command; `run` is for what stays on the page. Pure, so it is tested without a browser.
-import type { CharView, ItemUses, ObjView, PlanView } from "../shared/frames.ts";
+import type { CharView, ItemUses, ObjView, PlanView, Todo } from "../shared/frames.ts";
 
 export type CellEntry = { label: string; line: string; run?: () => void; /** asked before the line is sent (what cannot be undone) */ confirm?: string };
 export type CellInput = {
@@ -11,6 +11,7 @@ export type CellInput = {
 	/** Whether a cell of this room is ground a spade digs sand from (ItemUses.sandTile). */ beachAt?: (x: number, y: number) => boolean;
 	/** The operator: gives up anyone's bed beside it (server: garden.ts „beet aufgeben“). */ admin?: boolean;
 	/** What the windmill grinds (ItemUses.grinds). */ grinds?: string[];
+	/** The player's tasks (AtlasState.todos): a mill offers "Mehl abholen" only with flour of one's own ready there (unknown: offered). */ todos?: Todo[];
 	/** The trade offers made to the player (TradeView.offersIn): a figure with one gets "accept" and "decline" first. */ offersIn?: Array<{ fromName: string; giveNames: string[]; want: Array<{ name: string; count: number }> }>;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] };
 	/** Whether wild plants grow in the room (wildHere); without it seeds are offered anyway and the command answers. */ wild?: boolean;
@@ -159,7 +160,7 @@ export function offerWords(o: { giveNames: string[]; want: Array<{ name: string;
 	return `${counted(o.giveNames.map((name) => ({ name, count: 1 })))}${o.want.length ? ` für ${counted(o.want)}` : " als Geschenk"}`;
 }
 
-export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, onTake, recipes, grinds, beachAt, admin }: CellInput): CellEntry[] {
+export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, onTake, recipes, grinds, beachAt, admin, todos }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: CellEntry[] = [];
 	/** The recipes made at a building of `plan`: what one carries enough for, and the whole list (server: trade.ts "craft hier"). */
@@ -393,7 +394,12 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 		if (o.kind === "ruin" && o.ownerId === me) entries.push({ label: "Nachlass abholen", line: "nachlass" });
 		// anyone registered clears a ruin from beside it (server: build.ts abriss)
 		if (o.kind === "ruin" && beside && !guest) entries.push({ label: "Ruine abräumen", line: `abriss ruine ${o.name}` });
-		if ((o.kind === "building" || o.kind === "ruin") && o.plan === "windmuehle" && nearSite) entries.push({ label: "Mehl abholen", line: "abholen" });
+		// only what is there to fetch (server: mill.ts abholen): one's flour ready at this mill, or, where it fell, one's grain
+		// (todos.ts gives a load the mill's corner: "<load>:mehl" ready, "<load>:mahlt" still grinding)
+		if ((o.kind === "building" || o.kind === "ruin") && o.plan === "windmuehle" && nearSite) {
+			const mine = (t: Todo) => t.room === o.location && t.x === o.x && t.y === o.y && (t.id.endsWith(":mehl") || (o.kind === "ruin" && t.id.endsWith(":mahlt")));
+			if (!todos || todos.some(mine)) entries.push({ label: o.kind === "ruin" ? "Korn abholen" : "Mehl abholen", line: "abholen" });
+		}
 		if (o.kind === "site" && nearSite) {
 			entries.push({ label: "Aushang ansehen", line: "aushang", ...(onOrders ? { run: onOrders } : {}) });
 			entries.push({ label: "Mitarbeiten", line: "arbeite" });
