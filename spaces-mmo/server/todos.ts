@@ -13,25 +13,31 @@ const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >=
 
 /** The tasks of `charId`, most urgent first. `herds`: the herd of each building by its id; `loads`: the grain at the
  *  mills; `now`: the world's time (null without a clock: nothing that goes by the time). */
-export function todosFor(charId: string, objs: Iterable<ObjView>, herds: ReadonlyMap<string, HerdFields>, loads: Iterable<MillLoadFields>, w: WorldDef, now: number | null): Todo[] {
+export function todosFor(charId: string, objs: Iterable<ObjView>, herds: ReadonlyMap<string, HerdFields>, loads: Iterable<MillLoadFields>, w: WorldDef, now: number | null, patient = 1): Todo[] {
 	const room = (id: string) => w.rooms.find((r) => r.roomId === id)?.name ?? id;
 	const where = (o: { location: string; x: number; y: number }) => `in ${room(o.location)} (${o.x} ${o.y})`;
 	const proto = (key: string) => w.prototypes.find((p) => p.key === key)?.name ?? key;
 	const out: Todo[] = [];
 	const add = (o: { id: string; location: string; x: number; y: number }, what: string, text: string, rank: Todo["rank"]) => out.push({ id: `${o.id}:${what}`, text, room: o.location, x: o.x, y: o.y, rank });
 	for (const o of objs) {
-		if (o.ownerId !== charId) continue;
+		// a bed's sponsor waters it too (garden.ts mayTend): it is told when it gets dry, nothing else of it
+		const own = o.ownerId === charId;
+		if (!own && !(o.kind === "bed" && o.sponsorIds?.includes(charId))) continue;
 		if (o.kind === "field") {
 			if (o.fieldStage === "reif") add(o, "reif", `Dein ${o.name} ${where(o)} ist reif: ernten.`, 0);
 			else if (o.fieldStage === "spaet") add(o, "spaet", `Dein ${o.name} ${where(o)} ist überreif: bald ernten, sonst verdirbt die Ernte.`, 0);
 			else if (o.fieldStage === "brach") add(o, "brach", `Dein Acker ${where(o)} liegt brach: bestellen („bestelle“).`, 2);
 		} else if (o.kind === "bed") {
 			const plants = o.plants ?? [], ripe = plants.filter((p) => p.stage === 2).length, growing = plants.filter((p) => p.stage < 2).length;
-			if (ripe) add(o, "reif", `In deinem ${o.name} ${where(o)} ${ripe === 1 ? "ist 1 Pflanze" : `sind ${ripe} Pflanzen`} reif: ernten („ernte“).`, 0);
-			if (growing && now !== null && o.thirstMs && o.wateredWorldMs !== undefined && now - o.wateredWorldMs > o.thirstMs / 2) {
-				const dry = now - o.wateredWorldMs >= o.thirstMs;
-				add(o, "durst", dry ? `Dein ${o.name} ${where(o)} ist trocken: gießen („gieße“), sonst welken die Pflanzen.` : `Dein ${o.name} ${where(o)} braucht bald Wasser: gießen („gieße“).`, dry ? 0 : 1);
+			if (own && ripe) add(o, "reif", `In deinem ${o.name} ${where(o)} ${ripe === 1 ? "ist 1 Pflanze" : `sind ${ripe} Pflanzen`} reif: ernten („ernte“).`, 0);
+			// by the engine's clock (garden.ts advance): the plants wilt when the thirst times the patience is over; "dry" from
+			// three quarters of it, as „look“ says „braucht Wasser“, "soon" from half
+			const thirst = (o.thirstMs ?? 0) * patient;
+			if (growing && now !== null && thirst && o.wateredWorldMs !== undefined && now - o.wateredWorldMs > thirst / 2) {
+				const dry = now - o.wateredWorldMs > thirst * 0.75, whose = own ? `Dein ${o.name}` : `Das ${o.name} von ${o.owner}`;
+				add(o, "durst", dry ? `${whose} ${where(o)} ist trocken: gießen („gieße“), sonst welken die Pflanzen.` : `${whose} ${where(o)} braucht bald Wasser: gießen („gieße“).`, dry ? 0 : 1);
 			}
+			if (!own) continue;
 			if (o.weedy) add(o, "unkraut", `In deinem ${o.name} ${where(o)} wächst Unkraut: jäten („jäte“).`, 1);
 			if (plants.some((p) => p.stage === 3)) add(o, "welk", `In deinem ${o.name} ${where(o)} ist etwas verwelkt: neu pflanzen („pflanze“).`, 2);
 			if (!plants.length) add(o, "leer", `Dein ${o.name} ${where(o)} ist leer: pflanzen („pflanze“).`, 2);

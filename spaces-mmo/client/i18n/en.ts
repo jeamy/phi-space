@@ -27,6 +27,8 @@ export const EN: Record<string, string> = {
 	"In deinem {0} {1} sind {2} Pflanzen reif: ernten („ernte“).": "In your {0} {1} {2} plants are ripe: harvest them („harvest“).",
 	"Dein {0} {1} ist trocken: gießen („gieße“), sonst welken die Pflanzen.": "Your {0} {1} is dry: water it („water“), or the plants wilt.",
 	"Dein {0} {1} braucht bald Wasser: gießen („gieße“).": "Your {0} {1} needs water soon: water it („water“).",
+	"Das {0} von {1} ist trocken: gießen („gieße“), sonst welken die Pflanzen.": "The {0} of {1} is dry: water it („water“), or the plants wilt.",
+	"Das {0} von {1} braucht bald Wasser: gießen („gieße“).": "The {0} of {1} needs water soon: water it („water“).",
 	"In deinem {0} {1} wächst Unkraut: jäten („jäte“).": "Weeds grow in your {0} {1}: weed it („weed“).",
 	"In deinem {0} {1} ist etwas verwelkt: neu pflanzen („pflanze“).": "Something wilted in your {0} {1}: plant anew („plant“).",
 	"Dein {0} {1} ist leer: pflanzen („pflanze“).": "Your {0} {1} is empty: plant something („plant“).",

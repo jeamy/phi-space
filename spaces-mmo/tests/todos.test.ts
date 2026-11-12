@@ -46,6 +46,22 @@ test("the urgent ones first; without a clock nothing that goes by the time", () 
 	assert.ok(!timeless.some((id) => id.endsWith(":durst") || id.endsWith(":hunger") || id.startsWith("l")));
 });
 
+test("the thirst goes by the patience as in the engine; a sponsor is told when the bed gets dry, nothing else of it", () => {
+	const bed = (o: Partial<ObjView>): ObjView => ({ id: "b9", kind: "bed", name: "Beet", ownerId: me, owner: "Ich", plants: [{ x: 0, y: 0, stage: 1, color: "#fff" }], thirstMs: 24 * H, weedy: true, ...at, ...o });
+	const durst = (o: Partial<ObjView>, patient: number, who = me) => todosFor(who, [bed(o)], herds, [], w, now, patient).filter((t) => t.id === "b9:durst").map((t) => t.text);
+	// patience 24: the plants wilt after 24 × 24 hours; nothing before half of it, "soon" from half, "dry" from three quarters
+	assert.deepEqual(durst({ wateredWorldMs: now - 30 * H }, 24), []);
+	assert.deepEqual(durst({ wateredWorldMs: now - 300 * H }, 24), ["Dein Beet in Graue Bucht (4 5) braucht bald Wasser: gießen („gieße“)."]);
+	assert.deepEqual(durst({ wateredWorldMs: now - 450 * H }, 24), ["Dein Beet in Graue Bucht (4 5) ist trocken: gießen („gieße“), sonst welken die Pflanzen."]);
+	// only what grows needs water
+	assert.deepEqual(durst({ wateredWorldMs: now - 450 * H, plants: [{ x: 0, y: 0, stage: 3, color: "#fff" }] }, 24), []);
+	// a sponsor: the watering only, by the owner's name
+	const sponsored = { ownerId: "c-ida", owner: "Ida", sponsorIds: [me], wateredWorldMs: now - 20 * H };
+	assert.deepEqual(todosFor(me, [bed(sponsored)], herds, [], w, now).map((t) => t.text), ["Das Beet von Ida in Graue Bucht (4 5) ist trocken: gießen („gieße“), sonst welken die Pflanzen."]);
+	assert.deepEqual(todosFor("c-stranger", [bed(sponsored)], herds, [], w, now), []);
+	assert.equal(toEnglish("Das Beet von Ida in Graue Bucht (4 5) braucht bald Wasser: gießen („gieße“)."), "The Bed of Ida in Grey Bay (4 5) needs water soon: water it („water“).");
+});
+
 test("every task has its English, with the English commands", () => {
 	for (const t of texts) {
 		const en = toEnglish(t);

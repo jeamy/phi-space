@@ -117,7 +117,9 @@ async fn describe(c: &Ctx, g: &Json, b: &Json, now: f64) -> Result<String> {
 	}
 	let plants = if count.is_empty() { "noch nichts gepflanzt".to_owned() } else { count.iter().map(|(k, n)| format!("{}× {k}", nt(*n))).collect::<Vec<_>>().join(", ") };
 	let ago = now - j::n(b, "wateredWorldMs");
-	let water = if ago > j::n(g, "thirstWorldMs") * 0.75 * patience_of(&c.space, c.txn()).await? { "braucht Wasser".to_owned() } else { format!("gegossen vor {}", hours(ago)) };
+	// only what still grows needs water (a bed of wilted plants wants planting, todos)
+	let growing = j::a(b, "plants").iter().any(|p| j::n(p, "stage") < 2.0);
+	let water = if growing && ago > j::n(g, "thirstWorldMs") * 0.75 * patience_of(&c.space, c.txn()).await? { "braucht Wasser".to_owned() } else { format!("gegossen vor {}", hours(ago)) };
 	let sponsors = j::a(b, "sponsors");
 	Ok(format!("{}{} ({}×{}): {plants}; {water}{}{}.", bed_name(b), if kind(b) == "gemein" { format!(", angelegt von {}", txt(j::at(b, "ownerName"))) } else { String::new() }, txt(j::at(b, "w")), txt(j::at(b, "h")), if j::b(b, "weedy") { ", voller Unkraut" } else { "" },
 		if sponsors.is_empty() { String::new() } else { format!("; Paten: {}", sponsors.iter().map(|s| txt(j::at(s, "name"))).collect::<Vec<_>>().join(", ")) }))

@@ -1011,7 +1011,8 @@ impl Gateway {
 		}
 		let world_now = st.clock.as_ref().map(|c| world_at(c, now()));
 		let lit: Vec<Json> = j::a(&w, "beacons").iter().filter(|b| self.burns(&st, st.flames.get(j::s(b, "beaconId")).copied().unwrap_or(0.0))).map(|b| j::at(b, "room").clone()).collect();
-		let todos = todos_for(&c.me.char_id, st.objs.values(), &|id| st.herds.get(id).cloned(), st.mill_loads.values(), &w, world_now);
+		let patient = st.clock.as_ref().map_or(1.0, |c| { let rate = j::n(c, "rate"); rate / j::no(c, "decayRate").unwrap_or(rate) });
+		let todos = todos_for(&c.me.char_id, st.objs.values(), &|id| st.herds.get(id).cloned(), st.mill_loads.values(), &w, world_now, patient);
 		let mut fog = Object::new();
 		for (k, v) in st.fog.iter() { fog.insert(k, Json::Number(*v)); }
 		let epochs = if !j::truthy(j::at(&w, "epochs")) { Json::Null } else if self.epoch_force.get() > 0.0 {

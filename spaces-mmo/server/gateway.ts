@@ -12,7 +12,7 @@ import { render } from "./engine/funcparser.ts";
 import { sceneryText, type CropDef, type SortDef, type WorldDef } from "./engine/world.ts";
 import { loadOf } from "./engine/pack.ts";
 import { NOTICE_MS, whereTo } from "./engine/context.ts";
-import { decayNow, msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
+import { decayNow, msUntilWorld, patience, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
 import { baysOf, linerOf, type Timetable } from "./engine/liner.ts";
 import { todosFor, type Todo } from "./todos.ts";
 import { interiorOf } from "./engine/commands/interior.ts";
@@ -734,7 +734,7 @@ export class Gateway {
 		void setting(this.space, "beam.cost").then((n) => { this.#beamCost = n; }, () => {}); // the next state carries it
 		void setting(this.space, "epoch.force").then((n) => { this.#epochForce = n; }, () => {});
 		if (this.w.pack) void setting(this.space, "pack.max").then((n) => { this.#packMax = n; }, () => {});
-		const todos = todosFor(c.me.charId, this.#objs.values(), this.#herds, this.#millLoads.values(), this.w, this.#clock ? worldNow(this.#clock, Date.now()) : null);
+		const todos = todosFor(c.me.charId, this.#objs.values(), this.#herds, this.#millLoads.values(), this.w, this.#clock ? worldNow(this.#clock, Date.now()) : null, this.#clock ? patience(this.#clock) : 1);
 		return { todos, here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people, mine: owned.get(c.me.charId) ?? [], epochs: !this.w.epochs ? null : this.#epochForce > 0 ? Object.fromEntries([...new Set(this.w.rooms.map((r) => r.island ?? ""))].map((i) => [i, this.#epochForce])) : Object.fromEntries([...this.#epochs.values()].map((e) => [e.island, e.epoch])), beamCost: this.#beamCost, packMax: this.w.pack ? this.#packMax ?? this.w.pack.max : null, stops: this.#stops() };
 	}
 

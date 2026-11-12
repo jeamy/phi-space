@@ -175,13 +175,15 @@ pub fn plans_of(w: &Json) -> Json {
 fn hours(ms: f64) -> String { let h = js::round(ms / 3_600_000.0); if h >= 1.0 { format!("{} {}", js::number_text(h), if h == 1.0 { "Stunde" } else { "Stunden" }) } else { "weniger als einer Stunde".into() } }
 
 /// `todosFor` (server/todos.ts): the tasks of `char_id`, most urgent first.
-pub fn todos_for<'a>(char_id: &str, objs: impl Iterator<Item = &'a Json>, herd_of: &dyn Fn(&str) -> Option<Json>, loads: impl Iterator<Item = &'a Json>, w: &Json, now: Option<f64>) -> Json {
+pub fn todos_for<'a>(char_id: &str, objs: impl Iterator<Item = &'a Json>, herd_of: &dyn Fn(&str) -> Option<Json>, loads: impl Iterator<Item = &'a Json>, w: &Json, now: Option<f64>, patient: f64) -> Json {
 	let room = |id: &str| j::by(j::a(w, "rooms"), "roomId", id).map_or_else(|| id.to_owned(), |r| txt(j::at(r, "name")));
 	let where_ = |o: &Json| format!("in {} ({} {})", room(j::s(o, "location")), js::number_text(j::n(o, "x")), js::number_text(j::n(o, "y")));
 	let mut out: Vec<(f64, Json)> = Vec::new();
 	let mut add = |o: &Json, what: &str, text: String, rank: f64| out.push((rank, obj! { "id" => format!("{}:{what}", txt(j::at(o, "id"))), "text" => text, "room" => j::at(o, "location").clone(), "x" => j::at(o, "x").clone(), "y" => j::at(o, "y").clone(), "rank" => rank }));
 	for o in objs {
-		if j::s(o, "ownerId") != char_id || !j::truthy(j::at(o, "ownerId")) { continue; }
+		// a bed's sponsor waters it too (garden mayTend): it is told when it gets dry, nothing else of it
+		let own = j::s(o, "ownerId") == char_id && j::truthy(j::at(o, "ownerId"));
+		if !own && !(j::s(o, "kind") == "bed" && j::a(o, "sponsorIds").iter().any(|x| x.as_str() == Some(char_id))) { continue; }
 		let name = j::s(o, "name");
 		match j::s(o, "kind") {
 			"field" => match j::s(o, "fieldStage") {
@@ -194,14 +196,18 @@ pub fn todos_for<'a>(char_id: &str, objs: impl Iterator<Item = &'a Json>, herd_o
 				let plants = j::a(o, "plants");
 				let ripe = plants.iter().filter(|p| j::n(p, "stage") == 2.0).count();
 				let growing = plants.iter().filter(|p| j::n(p, "stage") < 2.0).count();
-				if ripe > 0 { add(o, "reif", format!("In deinem {name} {} {} reif: ernten („ernte“).", where_(o), if ripe == 1 { "ist 1 Pflanze".to_owned() } else { format!("sind {ripe} Pflanzen") }), 0.0); }
-				let thirst = j::n(o, "thirstMs");
+				if own && ripe > 0 { add(o, "reif", format!("In deinem {name} {} {} reif: ernten („ernte“).", where_(o), if ripe == 1 { "ist 1 Pflanze".to_owned() } else { format!("sind {ripe} Pflanzen") }), 0.0); }
+				// by the engine's clock (garden advance): the plants wilt when the thirst times the patience is over; "dry" from
+				// three quarters of it, as „look“ says „braucht Wasser“, "soon" from half
+				let thirst = j::no(o, "thirstMs").unwrap_or(0.0) * patient;
 				if let (true, Some(now), Some(wat)) = (growing > 0, now, j::no(o, "wateredWorldMs")) {
 					if thirst != 0.0 && !thirst.is_nan() && now - wat > thirst / 2.0 {
-						let dry = now - wat >= thirst;
-						add(o, "durst", if dry { format!("Dein {name} {} ist trocken: gießen („gieße“), sonst welken die Pflanzen.", where_(o)) } else { format!("Dein {name} {} braucht bald Wasser: gießen („gieße“).", where_(o)) }, if dry { 0.0 } else { 1.0 });
+						let dry = now - wat > thirst * 0.75;
+						let whose = if own { format!("Dein {name}") } else { format!("Das {name} von {}", txt(j::at(o, "owner"))) };
+						add(o, "durst", if dry { format!("{whose} {} ist trocken: gießen („gieße“), sonst welken die Pflanzen.", where_(o)) } else { format!("{whose} {} braucht bald Wasser: gießen („gieße“).", where_(o)) }, if dry { 0.0 } else { 1.0 });
 					}
 				}
+				if !own { continue; }
 				if j::truthy(j::at(o, "weedy")) { add(o, "unkraut", format!("In deinem {name} {} wächst Unkraut: jäten („jäte“).", where_(o)), 1.0); }
 				if plants.iter().any(|p| j::n(p, "stage") == 3.0) { add(o, "welk", format!("In deinem {name} {} ist etwas verwelkt: neu pflanzen („pflanze“).", where_(o)), 2.0); }
 				if plants.is_empty() { add(o, "leer", format!("Dein {name} {} ist leer: pflanzen („pflanze“).", where_(o)), 2.0); }
@@ -230,4 +236,34 @@ pub fn todos_for<'a>(char_id: &str, objs: impl Iterator<Item = &'a Json>, herd_o
 	}
 	out.sort_by(|a, b| a.0.total_cmp(&b.0));
 	Json::Array(out.into_iter().map(|(_, t)| t).collect())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// The thirst goes by the patience as in the engine (tests/todos.test.ts); a sponsor is told when the bed gets dry.
+	#[test]
+	fn the_thirst_goes_by_the_patience_and_a_sponsor_is_told() {
+		const H: f64 = 3_600_000.0;
+		let (now, me) = (1000.0 * H, "c-me");
+		let w = obj! { "rooms" => Json::Array(vec![obj! { "roomId" => "graue-bucht", "name" => "Graue Bucht" }]) };
+		let bed = |owner: &str, sponsors: &[&str], watered: f64, stage: f64| obj! {
+			"id" => "b9", "kind" => "bed", "name" => "Beet", "ownerId" => owner, "owner" => if owner == me { "Ich" } else { "Ida" },
+			"sponsorIds" => Json::Array(sponsors.iter().map(|s| Json::from(*s)).collect()),
+			"plants" => Json::Array(vec![obj! { "x" => 0.0, "y" => 0.0, "stage" => stage, "color" => "#fff" }]),
+			"thirstMs" => 24.0 * H, "wateredWorldMs" => watered, "weedy" => true, "location" => "graue-bucht", "x" => 4.0, "y" => 5.0,
+		};
+		let all = |who: &str, o: &Json, patient: f64, only: bool| -> Vec<String> {
+			let t = todos_for(who, std::iter::once(o), &|_| None, std::iter::empty(), &w, Some(now), patient);
+			t.as_array().map(|a| a.iter().filter(|t| !only || j::s(t, "id") == "b9:durst").map(|t| j::s(t, "text").to_owned()).collect()).unwrap_or_default()
+		};
+		assert!(all(me, &bed(me, &[], now - 30.0 * H, 1.0), 24.0, true).is_empty());
+		assert_eq!(all(me, &bed(me, &[], now - 300.0 * H, 1.0), 24.0, true), ["Dein Beet in Graue Bucht (4 5) braucht bald Wasser: gießen („gieße“)."]);
+		assert_eq!(all(me, &bed(me, &[], now - 450.0 * H, 1.0), 24.0, true), ["Dein Beet in Graue Bucht (4 5) ist trocken: gießen („gieße“), sonst welken die Pflanzen."]);
+		assert!(all(me, &bed(me, &[], now - 450.0 * H, 3.0), 24.0, true).is_empty(), "only what grows needs water");
+		let sponsored = bed("c-ida", &[me], now - 20.0 * H, 1.0);
+		assert_eq!(all(me, &sponsored, 1.0, false), ["Das Beet von Ida in Graue Bucht (4 5) ist trocken: gießen („gieße“), sonst welken die Pflanzen."]);
+		assert!(all("c-stranger", &sponsored, 1.0, false).is_empty());
+	}
 }

@@ -103,7 +103,9 @@ const describe = async (c: CommandCtx, g: GardenDef, b: BedFields, now: number) 
 	for (const p of b.plants) { const k = `${plantName(g, p)} (${STAGES[p.stage]})`; count.set(k, (count.get(k) ?? 0) + 1); }
 	const plants = count.size ? [...count].map(([k, n]) => `${n}× ${k}`).join(", ") : "noch nichts gepflanzt";
 	const ago = now - b.wateredWorldMs;
-	const water = ago > g.thirstWorldMs * 0.75 * (await patienceOf(c.space, c.txn)) ? "braucht Wasser" : `gegossen vor ${hours(ago)}`;
+	// only what still grows needs water (a bed of wilted plants wants planting, todos.ts)
+	const growing = b.plants.some((p) => p.stage < 2);
+	const water = growing && ago > g.thirstWorldMs * 0.75 * (await patienceOf(c.space, c.txn)) ? "braucht Wasser" : `gegossen vor ${hours(ago)}`;
 	return `${bedName(b)}${b.kind === "gemein" ? `, angelegt von ${b.ownerName}` : ""} (${b.w}×${b.h}): ${plants}; ${water}${b.weedy ? ", voller Unkraut" : ""}${b.sponsors.length ? `; Paten: ${b.sponsors.map((s) => s.name).join(", ")}` : ""}.`;
 };
 
