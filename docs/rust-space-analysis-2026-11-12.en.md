@@ -4,6 +4,8 @@ As of 2026-11-12 (after decision R-D12: `big` and `nano` run exclusively the Rus
 
 This document analyzes the eight Space crates in `rust/`, compares their architecture and semantics systematically against the TypeScript implementation in `src/`, and catalogs newly identified bugs/divergences, dead code, duplicated code and optimization opportunities.
 
+**Second pass (same day, tree `ba69f70`).** The findings below were read again at their lines: B1–B4, the dead-code lists of section 4, and O1–O3 hold as written. Three mechanical scans over the eight Space crates were added: `cargo clippy --workspace --all-targets` (no warning; `src/` holds no `allow(dead_code)`, `todo!`, `unimplemented!`, `TODO` or `FIXME`), a count of every declared name's uses across `rust/` (section 4), and a comparison of function bodies after stripping whitespace and comments (section 5.2). What they changed is marked "second pass": the `valid_id` variants in 5.2 were listed wrongly, 4.2 and 5.2/5.3 gained items, and O6/O7 are new. Nothing here was measured; the optimization items name where the work is, not how much it costs.
+
 ---
 
 ## 1. Scope and Quantitative Overview
@@ -146,6 +148,7 @@ These items are `pub` solely for differential test drivers (`entry_walk.rs`, `st
   - `phi-store/src/sync.rs:435` `pub fn abandon_transition` (tested, not exposed in `--replica-tool`).
   - `phi-host/src/control_host_change.rs:51` `pub fn record_control_host_change` (operator action; Rust hosts only call `follow_control_host_change`).
   - `phi-host/src/replica_transitions.rs:94, 100` `pub fn release_host_to_quarantine` and `pub fn readmit_space` (tested in `replica_transitions.rs`, not exposed in `--replica-tool`).
+- **Second pass, the same class:** `phi-core/src/space.rs:2425` `Space::list_page` and `phi-core/src/mailbox.rs:166` `Space::append_mail_line` (only `driver.rs` and `phi-host/tests/data_admin.rs`); `phi-host/src/control.rs:113, 120, 164` `create_enroll`, `bootstrap_enroll`, `revoke_peer_key` (only the `--test-hooks` of `phi-space-server/src/hooks.rs:280-282`; the admin commands go through `create_enroll_in` / `revoke_peer_keys_in` at `control.rs:610, 614`, and nothing in production calls `bootstrap_enroll`); `phi-spaces-client/src/remote.rs` `RemoteSpace::request_generation` and `cancel_operation` (client API that only `phi-client-driver` calls; `mmo-engine` and `mmo-web` do not).
 - **Test-only helpers:** `phi-core/src/admin.rs:134` `Space::put_restored`, `phi-store/src/ledger.rs:190` `SqliteLedger::part_rows`, `phi-store/src/ledger.rs:213` `SqliteLedger::persist`, `phi-store/src/primary.rs:73` `PrimaryGate::into_journal`, `phi-service/src/lib.rs:491` `Service::handle_text` (production `phi-wire` calls `handle_call` on the pre-parsed `Json`).
 
 ### 4.3 Over-Broad `pub` Visibility (Used Only Within Their Defining File)
@@ -175,10 +178,32 @@ Because `phi-spaces-client` depends only on `phi-json` and `tokio` while `phi-wi
 - **`truthy` (4 copies):** `phi_core::space::truthy` (`space.rs:90`), `phi_service::entry::truthy` (`entry.rs:93`), `phi_host::alerts::truthy` (`alerts.rs:55`), `phi-space-server/src/help.rs:248` (plus `claim_flag` in `state.rs:586`). Belongs once in `phi-json`.
 - **`js_string` (4 copies):** `phi_core::space::js_string` (`space.rs:67`), `phi_service::entry::js_string` (`entry.rs:102`), `phi_host::control_recovery`, `phi_host::workers` (plus `help::stringify` and `alerts::string`). Belongs once in `phi-json`.
 - **`js_number` (3 copies):** `phi_host::entry_pump::js_number` (`entry_pump.rs:160`), `phi_host::run_controller`, `phi_host::workers`. Belongs once in `phi-json`.
-- **`valid_id` (8 copies, two variants):**
-  - 128-char `[A-Za-z0-9][A-Za-z0-9._:-]{0,127}` in `phi-core/src/run_gates.rs:17`, `phi-host/src/data_admin.rs:24`, `membership_control.rs`, `run_controller.rs`, `space_lifecycle.rs`, `workers.rs` (and `reason_like` in `phi-store/src/sync.rs:52`).
-  - 64-char `[A-Za-z0-9][A-Za-z0-9._-]{0,63}` in `phi-host/src/profile_transition.rs` and `federated_space.rs` (and 128-char with `._-` in `entry.rs:67` and `sync.rs:46`). Two named validators in `phi-json` (`is_id_128`, `is_slug_64`) would make the distinction explicit instead of accidental.
-- **`hash` / `canonical` / `copy` wrappers (9–13 copies):** Almost every module in `phi-host`, `phi-core` and `phi-store` defines local `fn hash(v: &Json)` and `fn canonical(v: &Json)`.
+- **`valid_id` (8 functions of that name, five rules; corrected in the second pass):**
+
+  | Rule | Where |
+  |---|---|
+  | `[A-Za-z0-9][A-Za-z0-9._:-]{0,127}` | `phi-core/src/run_gates.rs:17` (takes `Option<&Json>`), `phi-host/src/data_admin.rs:24`, `grants.rs:17` (`agent_id_ok`), `phi-store/src/sync.rs:52` (`reason_like`); the last three have the same body |
+  | the same, less `constructor`, `prototype`, `__proto__` | `phi-host/src/federated_space.rs:40`, `membership_control.rs:34` (same body) |
+  | `[A-Za-z0-9][A-Za-z0-9._:-]{0,95}` | `phi-host/src/workers.rs:19`, `space_lifecycle.rs:25` (same body), `run_controller.rs:47` (by bytes; the same set, since every character is ASCII) |
+  | `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`, less the three names | `phi-host/src/profile_transition.rs:39` |
+  | `[A-Za-z0-9][A-Za-z0-9._-]{0,127}` | `phi-service/src/entry.rs:67` (`id_text`) |
+
+  The lengths and the `:` differ on purpose (each is the regex of its TypeScript module), so one validator would be wrong; one function taking the length, the `:` and the reserved names, with a named constant per rule, keeps the differences visible.
+- **`hash` / `canonical` / `copy` wrappers (9–13 copies):** Almost every module in `phi-host`, `phi-core` and `phi-store` defines local `fn hash(v: &Json)` and `fn canonical(v: &Json)`. Five of the `hash` wrappers have the same body (`phi-core/src/policy.rs:13`, `routing.rs:12`, `phi-host/src/federated_space.rs:25`, `membership.rs:22`, `membership_control.rs:20`); the others differ only in the error they map to.
+- **Functions with the same body (second pass):**
+
+  | Body | Copies |
+  |---|---|
+  | `v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN)` | 8: `number` / `num` / `n` in `phi-core/src/member.rs:13`, `restore.rs:12`, `phi-store/src/sync.rs:60`, `phi-service/src/entry.rs:132`, `phi-host/src/register.rs:59`, `delegation.rs:22`, `replica_notice.rs:12`, `replica_transitions.rs:18`. `phi_json::num_of` (`phi-json/src/lib.rs:333`) is this without the default. |
+  | `v.get(k).and_then(Json::as_str).unwrap_or("")` | 3: `phi-store/src/sync.rs:61`, `phi-service/src/entry.rs:131`, `phi-host/src/control.rs:52`; `phi_json::text` is this without the default. |
+  | `set(v, k, x)`: insert into a `Json::Object` | 6: `phi-host/src/federated_space.rs:26`, `federation_rpc.rs:56`, `membership_control.rs:21`, `router.rs:43`, `deployment.rs:49`, `run_controller.rs:53` |
+  | `value(r)` and `version(r)` of a register record | 4 each: `phi-host/src/control_ack.rs:16-17`, `control_recovery.rs:21-22`, `recovery.rs:15-16`, `recovery_controller.rs:16-17` |
+  | `with(rec, changes)`: a record with fields replaced | 3: `phi-host/src/control_recovery.rs:26`, `control.rs:62`, `recovery_controller.rs:19` |
+  | `names(v)`: an array of strings | 3: `phi-core/src/routing.rs:15`, `member.rs:14`, `phi-host/src/federated_space.rs:38` |
+  | `cut(t, n)`: `slice(0, n)` by UTF-16 units | 3: `phi-host/src/alerts.rs:27`, `run_controller.rs:52`, `workers.rs:73` |
+  | wall clock in ms | 2: `phi-host/src/recovery_rpc.rs:57` (`now_ms`), `phi-spaces-client/src/remote.rs:35` (`wall_ms`) |
+  | `sign_lifecycle` / `verify_lifecycle` | 2 each: `phi-host/src/space_lifecycle.rs:31, 37` and `space_commands.rs:24, 28` |
+  | `DiskClaims::adopt` / `adopt_map` | `phi-core/src/state.rs:613, 621`: the same body over `MemoryClaims::iter` and `Object::iter`; one function over an iterator of `(&str, &Json)` serves both. |
 
 ### 5.3 Controller & Startup Duplication in `phi-host` and `phi-space-server`
 
@@ -237,6 +262,18 @@ Because `phi-spaces-client` depends only on `phi-json` and `tokio` while `phi-wi
   2. **Entry replication (`phi-service/src/entry.rs` & `lib.rs:1098`):** Every `merge_call` `read`, `readAll` or `count` calls `m.controller.read(&self.store)`, which clones the cached state document (`Json`) and re-runs full event materialization + erasure fixpoint on every read even when no local write or stream import occurred since the last read. Caching the materialized `Rc<Vec<Json>>` keyed by `(state_seq, erasure_count, expired_watermark)` makes repeated merge reads O(matches) instead of O(history).
   3. **Client socket writes (`phi-spaces-client/src/socket.rs:204`):** `out.write_all(&frame(id, &text))` allocates and copies `8 + text.len()` bytes per call; writing the 8-byte header + `text.as_bytes()` via `write_vectored` (or into a reusable buffer inside `Conn::writer`) removes one full payload copy per RPC.
 
+### O6 (Unmeasured — Every Binary): No Release Profile (second pass)
+
+- **Where:** `rust/Cargo.toml` (only `[profile.dev.package.*]` entries); the images build with `cargo build --release --locked` (`spaces-mmo/docker/Dockerfile:81`, `help-site/docker/Dockerfile:155`, `codemode-chat/docker/Dockerfile:77`, `test/testbed/local-federation/Dockerfile:8`), and nothing sets `CARGO_PROFILE_*` or `RUSTFLAGS`.
+- **Finding:** The servers on `big` and `nano` run cargo's default release profile: no LTO across the eight crates and 16 codegen units. The hot path crosses crate borders on every call (`phi-wire` → `phi-service` → `phi-core` → `phi-json`), where only functions marked `#[inline]` or generic ones are inlined without LTO.
+- **Lever:** `[profile.release]` with `lto = "thin"` (or `"fat"`) and `codegen-units = 1`, measured with `scripts/server-probe.ts` and `spaces-mmo/tests/perf/space-cost.ts` before it is kept; it lengthens the image build. `panic = "abort"` is not part of this: it changes what a panic on the writer thread or in a task does.
+
+### O7 (Low/Medium — Lease Calls on Large Spaces): Linear Lookups by Id (second pass)
+
+- **Where:** `rust/phi-core/src/space.rs:2474` (`leased`), `:840, 844, 868` (`reg_at`, `waiter_at`, `txn_at`), `rust/phi-core/src/state.rs:197` (`Entries::remove`).
+- **Finding:** `leased` (every `renew` and `cancel`) finds its entry with `entries.iter().position(|e| e.id == id)`, a string comparison per entry, and then scans waiters, transactions and registrations as well. `Entries::remove` shifts the tail of the `Vec` and clones the removed record into the undo log.
+- **Lever:** Only if a profile shows it (a region of `spaces-mmo` holds 3,000–4,000 entries, a keep-alive renews every third of its lease): an id → position index beside `Memo`, rebuilt as `of_type` is. Whether TypeScript does better here was not compared.
+
 ---
 
 ## 7. Summary Priority List
@@ -246,3 +283,5 @@ Because `phi-spaces-client` depends only on `phi-json` and `tokio` while `phi-wi
 3. **Fix B3 (`phi-spaces-client/src/socket.rs`):** Add a cancellation/timeout drop guard on `SocketTransport::call` so `RemoteSpace` call timeouts tear down stalled TCP connections and clean up `c.pending` entries, matching `src/socket.ts` + `src/remote.ts`.
 4. **Fix B4 (`phi-core/src/admin.rs` + `src/data-admin.ts`):** Reset `outbox_bytes` (`outboxBytes`) when `erase_batch` removes outbox items, in lockstep across Rust and TypeScript.
 5. **Quick-win optimizations O1 + O2 + O3 (`Entries::get_mut` bucket preservation):** Cache `installedRegisterFile` reads in `BootGuard`, make `Json::json_bytes` zero-allocation, write `ryu-js` buffers directly into `String`, and keep `Entries` type buckets across `get_mut` mutations (which never alter `EntryRec::types` or positions).
+6. **Measure O6:** a release profile with LTO and one codegen unit is a change of four lines; the probe says whether it is worth the longer build.
+7. **Duplicates (5.2):** the helpers with the same body (`num`, `text`, `set`, `value`/`version`, `with`, `names`, `cut`) belong once in `phi-json` or one `phi-host` module; `valid_id` as one function with its five rules named.
