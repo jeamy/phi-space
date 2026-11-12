@@ -34,7 +34,7 @@ mkdir -p -m 755 ~/.pi/agent-node && cp ~/.pi/agent/auth.json ~/.pi/agent-node/
 docker run --rm -v ~/.pi/agent-node:/d node:22-bookworm-slim sh -c 'chown 1000:1000 /d/auth.json && chmod 400 /d/auth.json'
 ```
 
-Afterwards `npm --prefix spaces-mmo run docker:big:up`; `docker exec phi-spaces-mmo-npc-west-1 cat /home/node/.pi/agent/auth.json
+Afterwards `npm --prefix spaces-mmo run docker:big:rust:up`; `docker exec phi-spaces-mmo-npc-west-1 cat /home/node/.pi/agent/auth.json
 >/dev/null` checks whether `node` can read the file.
 
 ## Ports
@@ -75,9 +75,8 @@ stays Node; nano runs only the accounts space.
 On the machines the same file swaps the Space containers of the running project for the Rust server, on the same
 volumes and ports: `docker:nano:rust:up|down|logs` on nano, `docker:big:rust:up|down|logs` on big (with the host network
 override). `up` builds both images on the machine (the Rust server is compiled there, as `docker build --network host`)
-and recreates what changed; on big world, NPCs and web are the Rust processes too (above), the models stay Node. Every web build gets a new Next build id, so `up` also restarts world, NPCs, models and web; to swap only the Space containers, start them by name with the same files (`docker compose … -f docker/docker-compose.rust.yml --profile big up -d --no-build --no-deps space-west space-nord space-ost space-sued`). Back to the TypeScript server:
-`docker:nano:up` or `docker:big:up`, which read the store files the Rust server wrote. Before the first switch, keep a
-copy of the volume `mmo-space-data` (`docker run --rm -v phi-spaces-mmo_mmo-space-data:/d:ro -v $PWD:/b alpine tar -C /d -czf /b/mmo-space-data.tgz .`).
+and recreates what changed; on big world, NPCs and web are the Rust processes too (above), the models stay Node. Every web build gets a new Next build id, so `up` also restarts world, NPCs, models and web; to swap only the Space containers, start them by name with the same files (`docker compose … -f docker/docker-compose.rust.yml --profile big up -d --no-build --no-deps space-west space-nord space-ost space-sued`). There is no way back to the
+TypeScript server on the machines since 2026-11-12 (R-D12); locally `docker:local:up` still runs TypeScript on its own files.
 
 ## Development (recompiles on every change)
 
@@ -104,19 +103,21 @@ off). The newest available model whose ID contains `SPACES_MMO_LLM_MODEL` is cho
 
 One machine runs exactly one profile. On both: `git pull --ff-only`, then the script of the machine. Each script has a
 variant with the Rust Space server, `docker:nano:rust:up|down|logs` and `docker:big:rust:up|down|logs` (same project,
-same volumes, only the Space containers change; see [Testing locally](#testing-locally-both-roles-on-this-machine) above). Switching between the
-two needs no other step; keep a copy of `mmo-space-data` before the first switch.
+same volumes, only the Space containers change; see [Testing locally](#testing-locally-both-roles-on-this-machine) above). Since 2026-11-12 only the
+Rust variants run there: the plain `docker:nano:up` / `docker:big:up` refuse (below).
 
 **Since 2026-11-07 both machines run the Rust Space server** (nano's accounts Space, big's four regions), **and since
 2026-11-11 big runs world, NPCs and web in Rust as well** (`docker-compose.rust-game.yml`, R8.6; only the model
 processes are Node; volumes from before in `~/phi-backup/2026-11-11-mmo-big-r8/`). A deploy of new game code is therefore `docker:big:rust:up` on big (and `docker:nano:rust:up` on
-nano); plain `docker:big:up` / `docker:nano:up` would bring the TypeScript Space server back. The TypeScript volumes
-from before the switch are kept on each machine in `~/phi-backup/2026-11-07-mmo-<machine>-rust/mmo-space-data-ts.tgz`.
+nano). **Since 2026-11-12 the way back is closed** (decision R-D12 in [rust-portierung](../../docs/rust-portierung.en.md)):
+big and nano run only the Rust implementation, and the plain `docker:big:up` / `docker:nano:up` refuse with a pointer
+to the Rust script. Store files and entries may from now on take forms the TypeScript processes of before do not read.
+The TypeScript volumes from before the switch are kept on each machine in `~/phi-backup/2026-11-07-mmo-<machine>-rust/mmo-space-data-ts.tgz`.
 
 | Machine | Processes | Script | `.env` |
 | --- | --- | --- | --- |
-| nano | accounts Space (credentials, web sessions) | `docker:nano:up` (Rust: `docker:nano:rust:up`) | `SPACES_MMO_SPACE_BIND=<internal address of nano>` |
-| big | the four regions (Space, world worker, NPCs, model per region) and web | `docker:big:up` (Rust: `docker:big:rust:up`) | `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, `SPACES_MMO_WEB_REGIONS` (below), `PI_AUTH_DIR` |
+| nano | accounts Space (credentials, web sessions) | `docker:nano:rust:up` | `SPACES_MMO_SPACE_BIND=<internal address of nano>` |
+| big | the four regions (Space, world worker, NPCs, model per region) and web | `docker:big:rust:up` | `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, `SPACES_MMO_WEB_REGIONS` (below), `PI_AUTH_DIR` |
 | big | the arena for the codemode chat's bot tasks (`server/arena.ts`; a compose project of its own, `phi-spaces-mmo-arena`, so the world's up/down leaves it alone) | `docker:arena:up` | none: it reads no `.env` (its worlds must not see the game's spaces); loopback port 3990, `SPACES_MMO_ARENA_WORLDS` (default 2); a durable run's world waits for the next judge as long as the dead one's lease (about 11 min with `CODEMODE_MAX_TIMEOUT_S=600`) and holds a slot meanwhile |
 
 Every region Space needs a fast core; on nano (small VM) one core computed about three times as long as on big
@@ -275,7 +276,7 @@ docker compose … --profile big up -d space-west space-nord space-ost space-sue
 docker compose … --profile big run --rm --no-deps -v mmo-space-data:/data -e SPACES_MMO_DATA=/data \
   -e SPACES_MMO_REGIONS=west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950 \
   world-west node --experimental-strip-types server/migrate-regions.ts
-npm --prefix spaces-mmo run docker:big:up                          # Welt-Worker, NPCs, Modelle, Web
+npm --prefix spaces-mmo run docker:big:rust:up                     # Welt-Worker, NPCs, Modelle, Web
 ```
 
 The script names beforehand what the old world holds, and afterwards per region what it has written. Afterwards count

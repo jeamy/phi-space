@@ -77,8 +77,9 @@ Die Docker-Konfiguration liegt in `help-site/docker/Dockerfile` und `help-site/d
 # A) Lokale Tests isoliert in der Dev-Docker-Umgebung bauen & ausführen:
 npm --prefix help-site run docker:test
 
-# B) Gehärteten Production-Container für https://spaces.eibrain.org im Hintergrund starten:
-npm --prefix help-site run docker:prod:up
+# B) Gehärteten Production-Container für https://spaces.eibrain.org im Hintergrund starten (der Swarm-Space in Rust;
+#    docker:prod:up verweigert seit 2026-11-12, R-D12):
+npm --prefix help-site run docker:prod:rust:up
 
 # Production-Logs verfolgen / Container stoppen:
 npm --prefix help-site run docker:prod:logs

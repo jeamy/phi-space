@@ -5,7 +5,7 @@ Cargo-Workspace enthält `phi-json`, `phi-core`, `phi-store`, `phi-service`, `ph
 Projekte laufen auf dem Rust-Server. Von R4 ist der lokale Teil erledigt, R5 ist begonnen (Scheiben 1 bis 3, Abschnitt R5). **Festlegung 2026-10-31:** Zuerst wird die
 Implementierung vollständig, es gibt keine Teilportierung im Betrieb; bis dahin wird nur lokal entwickelt und getestet.
 `big`, `nano` und ihr Zusammenspiel werden lokal simuliert (`docker:local`, mehrere Container und ein Netz dazwischen), jede Abnahme mit mehreren Hosts, Replikation, Fencing oder Handy bekommt so eine Simulation und bleibt nicht offen. Der echte Umstieg auf den Servern, R8.6 auf den Hosts und R-D12 kommen danach. **Festlegung 2026-11-07:** Der Rust-Space-Server wird getrennt ausgeliefert: Die Space-Container von spaces-mmo auf `big` und `nano` steigen jetzt um (R4), die Spielprozesse folgen schrittweise mit R8 (R8.6 auf den Hosts an dessen Ende). R8 hat begonnen: R8.1 und R8.0 sind fertig, R8.2 hat gegen die eingefrorene Engine von `2698bad` begonnen (Abschnitt R8); R7 und M1 sind nicht begonnen. Die Entscheidungen R-D0 bis R-D11 (Abschnitt 9)
-sind getroffen, R-D12 und R-D13 sind offen und keine Freigaben.
+sind getroffen, R-D12 ist entschieden (2026-11-12: der Rückweg ist geschlossen, big und nano fahren nur noch die Rust-Implementierung), R-D13 ist offen und keine Freigabe.
 
 ## 1. Ergebnis und Abgrenzung
 
@@ -823,7 +823,7 @@ Alle Rust-Werte stammen vom selben Binary, dem Stand dieses Commits. R-D2 ist da
 - **`codemode-chat`:** Space auf Rust, Judge und Web auf TS, Start und Rückwechsel laufen. Der Store war dabei leer, belegt ist hier also nur der Start; Daten belegen die `.local`-Kopien aus R3 Scheibe 7.
 - **Build aus dem Arbeitsbaum:** Das Image übernimmt unversionierte Dateien. Scheitert ihre Typprüfung, scheitert der Build; das gilt für `docker:image` genauso.
 
-**Noch offen:** R-D12, eine Woche Betrieb (Bestandsprüfung, Sicherung und Umstieg auf `big` und `nano` erledigt, unten).
+**Noch offen:** eine Woche Betrieb (Bestandsprüfung, Sicherung und Umstieg auf `big` und `nano` erledigt, unten). R-D12 ist entschieden (2026-11-12, Abschnitt 9).
 
 **Der Umstieg auf den Servern (2026-11-07).** Nach der Festlegung vom 2026-11-07 sind die Space-Container von spaces-mmo umgestiegen: der Accounts-Space auf nano um 21:47 UTC, die vier Regionen auf big um 21:53 UTC, beide auf Commit `324c469`. Welt, NPCs, Modelle und Web bleiben TypeScript. Je Rechner: das Image dort gebaut (`docker:image:rust`); eine Kopie des laufenden Volumes mit `phi-space-server --profile mmo` in einem Container ohne Netz geöffnet (jeder Store erreichte seine Ready-Zeile; eine während eines Schreibens gezogene Kopie von `world-sued` war zerrissen, zwei frische bestanden `integrity_check` und öffneten sich); die TypeScript-Space-Container gestoppt, das Volume gestoppt gesichert (`~/phi-backup/2026-11-07-mmo-<rechner>-rust/mmo-space-data-ts.tgz`), dann der Rust-Server auf denselben Dateien gestartet. Auf big wurden nur die vier Space-Dienste beim Namen gestartet (`--no-deps`), Welt, NPCs und Web liefen weiter; der Wechsel dauerte etwa 6 s, die Verbindungsfehler und `outcome unknown`-Zeilen der Worker fallen in dieses Fenster, danach kam keine. Eine Anmeldung mit falschem Passwort über das Web auf big erreichte den Accounts-Space auf nano und wurde wie zuvor abgewiesen. Rückweg: `docker:nano:up` / `docker:big:up` auf denselben Volumes (der oben geprobte Rückwechsel); weiter zurück die gesicherten Volumes. Offen sind die Woche Betrieb und R-D12 (wie lange der TypeScript-Server erlaubter Rückweg bleibt).
 
@@ -1008,6 +1008,11 @@ Intents, Rollen-Claims, Lease-Ablauf, Worker-Abbruch und Zeitplänen geprüft.
 Downgrade. Bis zum Ende des vereinbarten Rollback-Fensters bleiben Entry-Schemata, Weltdefinition und Regeln
 zum festgehaltenen TS-Stand kompatibel und der Rückwechsel wird getestet. Änderungen, die das brechen, beenden
 die Rückwegzusage für dieses Versionspaar und brauchen einen neuen Migrations-/Freigabeplan.
+**Geschlossen 2026-11-12** (der Nutzer: „rückwegfenster geschlossen. ab sofort nur noch rust implementation auf big/nano“):
+big und nano fahren nur noch die Rust-Implementierung; die TypeScript-Deploy-Skripte von spaces-mmo (`docker:big:up`,
+`docker:nano:up`), codemode-chat (`docker:nano:up`) und der Hilfeseite (`docker:prod:up`, `docker:nano:up`) verweigern und
+nennen das Rust-Skript. Entry-Schemata, Weltdefinition und Store-Dateien auf den Servern müssen nicht mehr für einen
+älteren TypeScript-Worker lesbar bleiben. TypeScript bleibt das Orakel der Tests und läuft lokal (R-D5, R-D13).
 
 **Grenzen von R8:**
 
@@ -1082,5 +1087,5 @@ Die Auswahl b) beendet weder die TS-Referenz noch die In-Process-API automatisch
 | R-D9 | Zusätzliche Crates für R8: `axum` oder `hyper` (HTTP), `tokio-tungstenite` (WebSocket), `scrypt`, `ts-rs` (TS-Typen aus Rust), `tower-http` (statische Dateien) | **entschieden 2026-10-29:** freigegeben |
 | R-D10 | Verlustfreie JS-Strings oder gemeinsame Vertragsänderung? | **entschieden 2026-10-30:** Vertragsänderung. Texte im Space sind wohlgeformt: Der Dienst ersetzt ein einzelnes Surrogat am Eingang durch U+FFFD, Rust ebenso (`parse_repairing`); ein Store mit so einem Wert wird nicht geöffnet. Vor dem Umstieg in R4 werden die Stores erneut gelesen |
 | R-D11 | Quantitative Ergänzung zu R-D2 | **entschieden 2026-10-30:** verfehlt die CPU den Faktor 2, muss der RSS um mindestens 50 % sinken; p95 und p99 je Lastprofil nicht schlechter als TS; keine zusätzlichen Fehler oder Timeouts |
-| R-D12 | Rollback-Fenster und kompatible Versionspaare | **offen, vor R4 und erneut vor R8.3:** Dauer, TS-/Rust-Versionen, unterstützte Schemata/Features und Downgrade-Grenzen festlegen; Rückwechsel mit laufender Arbeit prüfen |
+| R-D12 | Rollback-Fenster und kompatible Versionspaare | **entschieden 2026-11-12:** das Fenster ist geschlossen; big und nano fahren nur noch die Rust-Implementierung, die TypeScript-Deploy-Skripte dort verweigern, und kein Rückwechsel zu TypeScript wird kompatibel gehalten. Lokal bleibt TypeScript das Orakel (R-D5) |
 | R-D13 | Späterer Entfall der TS-Referenz/In-Process-Implementierung | **offen, kein Teil der Handy-Freigabe:** erst mit Ersatz für Referenztests und `PhiSpaces`-In-Process-Nutzung oder einer ausdrücklich beschlossenen API-Änderung; bis dahin bleibt TS erhalten |

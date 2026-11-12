@@ -17,7 +17,7 @@
     "docker:image:prod": "docker build --network host -f docker/Dockerfile --target production -t phi-spaces-help:prod ..",
     "docker:image:nano": "docker build --network host -f docker/Dockerfile --target nano -t phi-spaces-help:nano ..",
     "docker:image:rust": "npm run docker:image:prod && docker build --network host -f docker/Dockerfile --target production-rust -t phi-spaces-help:rust ..",
-    "docker:prod:up": "npm run docker:image:prod && docker compose --env-file .env -f docker/docker-compose.yml up -d --no-build swarm-space spaces-help-prod",
+    "docker:prod:up": "echo 'since 2026-11-12 big runs only the Rust implementation (R-D12: the way back to TypeScript is closed): npm run docker:prod:rust:up' && exit 1",
     "docker:prod:rust:up": "npm run docker:image:rust && docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.rust.yml up -d --no-build swarm-space spaces-help-prod",
     "docker:prod:down": "docker compose --env-file .env -f docker/docker-compose.yml down",
     "docker:prod:logs": "docker compose --env-file .env -f docker/docker-compose.yml logs -f swarm-space spaces-help-prod",
@@ -25,7 +25,7 @@
     "docker:dev:down": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev down",
     "docker:dev:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev logs -f spaces-help-dev",
     "docker:nano:build": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano build swarm-nano",
-    "docker:nano:up": "npm run docker:image:nano && docker compose --env-file .env -f docker/docker-compose.yml --profile nano up -d --no-build swarm-space-nano swarm-nano",
+    "docker:nano:up": "echo 'since 2026-11-12 nano runs only the Rust implementation (R-D12: the way back to TypeScript is closed): npm run docker:nano:rust:up' && exit 1",
     "docker:nano:rust:up": "npm run docker:image:nano && npm run docker:image:rust && docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.rust.yml --profile nano up -d --no-build swarm-space-nano swarm-nano",
     "docker:nano:down": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano down",
     "docker:nano:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano logs -f swarm-space-nano swarm-nano"

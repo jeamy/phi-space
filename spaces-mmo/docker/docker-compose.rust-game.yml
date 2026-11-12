@@ -2,8 +2,8 @@
 # mmo-world, mmo-npc and mmo-web of the production-rust image; the model process stays Node. Laid over
 # docker-compose.yml and docker-compose.rust.yml (the space containers): `npm run docker:rust:up` (a project of its own),
 # `npm run docker:local:rust:up` (the local test bed, project phi-spaces-mmo-local) and on big `docker:big:rust:up`
-# (since 2026-11-11; nano runs only the accounts space). `docker:big:up` brings the TypeScript processes back on the
-# same volumes.
+# (since 2026-11-11; nano runs only the accounts space). `docker:big:up` refuses: since 2026-11-12 big runs only the
+# Rust implementation (R-D12, the way back is closed).
 services:
   web:
     image: phi-spaces-mmo:rust

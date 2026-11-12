@@ -163,9 +163,9 @@ Startup time depends on the store and machine; no fixed latency is guaranteed.
 # Full help suite, including integration, regressions, consistency, batches and SSR:
 npm --prefix help-site run docker:test
 
-# Production start, logs, stop (docker:prod:rust:up / docker:nano:rust:up: the swarm Space on the Rust server,
-# docker/docker-compose.rust.yml; docker:prod:up / docker:nano:up bring the TypeScript one back on the same files):
-npm --prefix help-site run docker:prod:up
+# Production start, logs, stop (the swarm Space on the Rust server, docker/docker-compose.rust.yml; on nano
+# docker:nano:rust:up; docker:prod:up / docker:nano:up refuse since 2026-11-12, R-D12: only the Rust implementation):
+npm --prefix help-site run docker:prod:rust:up
 npm --prefix help-site run docker:prod:logs
 npm --prefix help-site run docker:prod:down
 

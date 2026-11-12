@@ -1,7 +1,7 @@
 # The Rust space server in the space containers, for a test bed on this machine (docs/rust-portierung.en.md, R4):
 # `npm run docker:rust:up` after `npm run docker:image:rust`, as a project of its own with volumes of its own. On the
 # machines `docker:nano:rust:up` and `docker:big:rust:up` lay it over their profile (same project, same volumes);
-# docker:nano:up and docker:big:up do not read it and bring the TypeScript server back.
+# docker:nano:up and docker:big:up refuse since 2026-11-12 (R-D12: the servers run only the Rust implementation).
 services:
   space:
     build:

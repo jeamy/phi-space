@@ -906,7 +906,7 @@ Lokal startet \`npm run dev\` (oder \`npm start\`) alle fünf Prozesse und start
 
 | Rechner | Container | Bemerkung |
 |---|---|---|
-| nano | \`space\`, \`judge-nano\` | hält den Zustand; Start mit \`docker:nano:up\` |
+| nano | \`space\`, \`judge-nano\` | hält den Zustand; Start mit \`docker:nano:rust:up\` (der Space in Rust) |
 | big | \`web\`, \`judge-big\`, \`agents\`, \`model\` | macht die meiste Arbeit; Start mit \`docker:big:up\` |
 
 \`docker:big:up\` nutzt immer \`docker/docker-compose.hostnet.yml\`: Die Rollen teilen das Host-Netz und erreichen nano über den SSH-Tunnel auf \`127.0.0.1\`, und der web-Prozess lauscht nur dort. \`docker:local:up\` startet beide Seiten auf einem Rechner als Testumgebung (web auf Port 3710, Space auf \`127.0.0.1:3810\`).
@@ -964,7 +964,7 @@ Locally \`npm run dev\` (or \`npm start\`) starts all five and restarts a proces
 
 | Host | Containers | Remark |
 |---|---|---|
-| nano | \`space\`, \`judge-nano\` | keeps the state; start with \`docker:nano:up\` |
+| nano | \`space\`, \`judge-nano\` | keeps the state; start with \`docker:nano:rust:up\` (the space in Rust) |
 | big | \`web\`, \`judge-big\`, \`agents\`, \`model\` | does most of the work; start with \`docker:big:up\` |
 
 \`docker:big:up\` always uses \`docker/docker-compose.hostnet.yml\`: the roles share the host network and reach nano through the SSH tunnel on \`127.0.0.1\`, and the web process listens there only. \`docker:local:up\` starts both sides on one machine as a test bed (web on port 3710, the space on \`127.0.0.1:3810\`).
@@ -1079,7 +1079,7 @@ Im Dev-Modus lädt Next.js \`app/\` und \`client/\` bei jeder Änderung neu, und
 Der Build-Kontext ist das Repository. \`docker/docker-compose.yml\` startet aus einem Image einen Container je Rolle. Die Datei \`codemode-chat/.env\` muss bestehen; alle Rollen-Container lesen sie, also erreichen dort eingetragene API-Schlüssel jeden dieser Container. Die Einordnung der Rollen steht unter [Prozesse, big und nano](help.topic.big_and_nano#hosts).
 
 \`\`\`bash
-npm --prefix codemode-chat run docker:nano:up   # nano: space und judge-nano; baut das Image selbst
+npm --prefix codemode-chat run docker:nano:rust:up   # nano: space (Rust) und judge-nano; baut die Images selbst
 npm --prefix codemode-chat run docker:big:up    # big: web, judge-big, agents, model; baut das Image selbst
 npm --prefix codemode-chat run docker:image     # das Image bauen (vor docker:local:up nötig)
 npm --prefix codemode-chat run docker:local:up  # beide auf einem Rechner, http://localhost:3710
@@ -1087,7 +1087,7 @@ npm --prefix codemode-chat run docker:dev:up    # alle Rollen in einem Container
 npm --prefix codemode-chat run docker:test      # Tests im Container
 \`\`\`
 
-\`docker:prod:up\` ist absichtlich gesperrt: Ein Rechner fährt ein Profil. \`down\` und \`logs\` gibt es zu \`nano\`, \`big\`, \`local\` und \`dev\`.
+\`docker:prod:up\` ist absichtlich gesperrt: Ein Rechner fährt ein Profil. Seit 2026-11-12 sperrt auch \`docker:nano:up\`: Auf nano läuft nur noch der Space in Rust, der Rückweg zu TypeScript ist geschlossen. \`down\` und \`logs\` gibt es zu \`nano\`, \`big\`, \`local\` und \`dev\`.
 
 Die Ports 3700 (web) und 3800 (Space über TCP) kollidieren nicht mit dem Hilfesystem (3500/3600). Beispiele für Caddy, nginx und systemd liegen in \`deploy/\`.
 
@@ -1176,7 +1176,7 @@ In dev mode Next.js reloads \`app/\` and \`client/\` on every change, and \`node
 The build context is the repository. \`docker/docker-compose.yml\` starts one container per role from one image. The file \`codemode-chat/.env\` must exist; every role container reads it, so API keys entered there reach each of these containers. Where the roles belong is under [Processes, big and nano](help.topic.big_and_nano#hosts).
 
 \`\`\`bash
-npm --prefix codemode-chat run docker:nano:up   # nano: space and judge-nano; builds the image itself
+npm --prefix codemode-chat run docker:nano:rust:up   # nano: space (Rust) and judge-nano; builds the images itself
 npm --prefix codemode-chat run docker:big:up    # big: web, judge-big, agents, model; builds the image itself
 npm --prefix codemode-chat run docker:image     # build the image (needed before docker:local:up)
 npm --prefix codemode-chat run docker:local:up  # both on one machine, http://localhost:3710
@@ -1184,7 +1184,7 @@ npm --prefix codemode-chat run docker:dev:up    # all roles in one container, so
 npm --prefix codemode-chat run docker:test      # tests in a container
 \`\`\`
 
-\`docker:prod:up\` is refused on purpose: one host runs one profile. \`down\` and \`logs\` exist for \`nano\`, \`big\`, \`local\` and \`dev\`.
+\`docker:prod:up\` is refused on purpose: one host runs one profile. Since 2026-11-12 \`docker:nano:up\` refuses too: nano runs only the space in Rust, the way back to TypeScript is closed. \`down\` and \`logs\` exist for \`nano\`, \`big\`, \`local\` and \`dev\`.
 
 Ports 3700 (web) and 3800 (the space over TCP) do not collide with the help system (3500/3600). Examples for Caddy, nginx and systemd are in \`deploy/\`.
 

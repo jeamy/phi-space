@@ -5,7 +5,7 @@ Cargo workspace contains `phi-json`, `phi-core`, `phi-store`, `phi-service`, `ph
 projects run on the Rust server. Of R4 the local part is done. R5 and R5b are done and R5b was accepted on 2026-11-01; R6 has begun with its control host (section R6). **Decision 2026-10-31:** The
 implementation is completed first; there is no partial port in operation; until then development and testing happen only locally.
 `big`, `nano` and their interplay are simulated locally (`docker:local`, several containers and a network between them); every acceptance involving several hosts, replication, fencing or a phone gets such a simulation and does not stay open. The real move on the servers, R8.6 on the hosts and R-D12 come after that. **Decision 2026-11-07:** The Rust space server ships on its own: the space containers of spaces-mmo on `big` and `nano` move now (R4), the game processes follow step by step with R8 (R8.6 on the hosts at its end). R8 has begun: R8.1 and R8.0 are done, R8.2 has begun against the frozen engine of `2698bad` (section R8); R7 and M1 have not begun. The decisions R-D0 to R-D11 (section 9)
-are made, R-D12 and R-D13 are open and are not approvals.
+are made, R-D12 is decided (2026-11-12: the way back is closed, big and nano run only the Rust implementation), R-D13 is open and is not an approval.
 
 ## 1. Result and scope
 
@@ -819,7 +819,7 @@ All Rust values come from the same binary, the state of this commit. R-D2 is the
 - **`codemode-chat`:** Space on Rust, judge and web on TS, start and switching back work. The store was empty, so only the start is proven here; data is proven by the `.local` copies from R3 slice 7.
 - **Build from the working tree:** The image takes over unversioned files. If their typecheck fails, the build fails; this applies to `docker:image` just the same.
 
-**Still open:** R-D12, a week of operation (inventory check, backup and move on `big` and `nano` are done, below).
+**Still open:** a week of operation (inventory check, backup and move on `big` and `nano` are done, below). R-D12 is decided (2026-11-12, section 9).
 
 **The move on the servers (2026-11-07).** After the decision of 2026-11-07 the Space containers of spaces-mmo moved: nano's accounts Space at 21:47 UTC, big's four regions at 21:53 UTC, both on commit `324c469`. World, NPCs, models and web stay TypeScript. Per machine: the image built there (`docker:image:rust`); a copy of the running volume opened with `phi-space-server --profile mmo` in a container without network (every store reached its ready line; one copy of `world-sued` taken during a write was torn, two fresh ones passed `integrity_check` and opened); the TypeScript Space containers stopped, the volume saved while stopped (`~/phi-backup/2026-11-07-mmo-<machine>-rust/mmo-space-data-ts.tgz`), then the Rust server started on the same files. On big only the four Space services were started by name (`--no-deps`), so world, NPCs and web kept running; the switch took about 6 s, the workers' connection errors and `outcome unknown` lines fall in that window and none came after. A login with a wrong password over big's web reached the accounts Space on nano and was refused as before. Way back: `docker:nano:up` / `docker:big:up` on the same volumes (the rehearsed handover above); further back the saved volumes. The week of operation and R-D12 (how long the TypeScript server stays a permitted way back) are still open.
 
@@ -1290,6 +1290,11 @@ intents, role claims, lease expiry, worker abort and schedules.
 downgrade. Until the end of the agreed rollback window, entry schemas, world definition and rules
 stay compatible with the recorded TS state and switching back is tested. Changes that break this
 end the way-back commitment for this version pair and need a new migration/approval plan.
+**Closed 2026-11-12** (the user: „rückwegfenster geschlossen. ab sofort nur noch rust implementation auf big/nano“):
+big and nano run only the Rust implementation; the TypeScript deploy scripts of spaces-mmo (`docker:big:up`,
+`docker:nano:up`), codemode-chat (`docker:nano:up`) and the help site (`docker:prod:up`, `docker:nano:up`) refuse and
+name the Rust one. Entry schemas, world definition and store files on the servers need no longer stay readable by an
+older TypeScript worker. TypeScript stays the oracle of the tests and runs locally (R-D5, R-D13).
 
 **Limits of R8:**
 
@@ -1364,7 +1369,7 @@ Choice b) does not automatically end the TS reference or the in-process API (R-D
 | R-D9 | Additional crates for R8: `axum` or `hyper` (HTTP), `tokio-tungstenite` (WebSocket), `scrypt`, `ts-rs` (TS types from Rust), `tower-http` (static files) | **decided 2026-10-29:** approved |
 | R-D10 | Lossless JS strings or a joint contract change? | **decided 2026-10-30:** contract change. Texts in the Space are well-formed: The service replaces a lone surrogate at the input with U+FFFD, Rust likewise (`parse_repairing`); a store with such a value is not opened. Before the move in R4 the stores are read again |
 | R-D11 | Quantitative addition to R-D2 | **decided 2026-10-30:** if the CPU misses the factor of 2, the RSS must fall by at least 50 %; p95 and p99 per load profile not worse than TS; no additional errors or timeouts |
-| R-D12 | Rollback window and compatible version pairs | **open, before R4 and again before R8.3:** set duration, TS/Rust versions, supported schemas/features and downgrade limits; check switching back with running work |
+| R-D12 | Rollback window and compatible version pairs | **decided 2026-11-12:** the window is closed; big and nano run only the Rust implementation, the TypeScript deploy scripts there refuse, and no switch back to TypeScript is kept compatible. Locally TypeScript stays the oracle (R-D5) |
 | R-D13 | Later removal of the TS reference/in-process implementation | **open, no part of the phone approval:** only with a replacement for reference tests and `PhiSpaces` in-process use or an explicitly decided API change; until then TS is kept |
 
 Security and federation decisions from the reviews of 2026-11-01 (`review-typescript-2026-11-01.en.md`, `review-rust-2026-11-01.en.md`). They bind both servers; "open" names what is still to be built.

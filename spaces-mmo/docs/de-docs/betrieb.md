@@ -34,7 +34,7 @@ mkdir -p -m 755 ~/.pi/agent-node && cp ~/.pi/agent/auth.json ~/.pi/agent-node/
 docker run --rm -v ~/.pi/agent-node:/d node:22-bookworm-slim sh -c 'chown 1000:1000 /d/auth.json && chmod 400 /d/auth.json'
 ```
 
-Danach `npm --prefix spaces-mmo run docker:big:up`; `docker exec phi-spaces-mmo-npc-west-1 cat /home/node/.pi/agent/auth.json
+Danach `npm --prefix spaces-mmo run docker:big:rust:up`; `docker exec phi-spaces-mmo-npc-west-1 cat /home/node/.pi/agent/auth.json
 >/dev/null` prüft, ob `node` die Datei lesen kann.
 
 ## Ports
@@ -69,8 +69,8 @@ Auf den Rechnern tauscht dieselbe Datei die Space-Container des laufenden Projek
 Volumes und Ports: `docker:nano:rust:up|down|logs` auf nano, `docker:big:rust:up|down|logs` auf big (mit dem
 Host-Netz-Override). `up` baut beide Images auf dem Rechner (der Rust-Server wird dort kompiliert, als
 `docker build --network host`) und erstellt neu, was sich geändert hat; Welt, NPCs, Modelle und Web bleiben
-TypeScript. Jeder Web-Build bekommt eine neue Next-Build-ID, daher startet `up` auch Welt, NPCs, Modelle und Web neu; nur die Space-Container tauscht, wer sie mit denselben Dateien beim Namen startet (`docker compose … -f docker/docker-compose.rust.yml --profile big up -d --no-build --no-deps space-west space-nord space-ost space-sued`). Zurück zum TypeScript-Server: `docker:nano:up` bzw. `docker:big:up`, die die Store-Dateien des Rust-Servers
-lesen. Vor dem ersten Wechsel eine Kopie des Volumes `mmo-space-data` aufheben (`docker run --rm -v phi-spaces-mmo_mmo-space-data:/d:ro -v $PWD:/b alpine tar -C /d -czf /b/mmo-space-data.tgz .`).
+TypeScript. Jeder Web-Build bekommt eine neue Next-Build-ID, daher startet `up` auch Welt, NPCs, Modelle und Web neu; nur die Space-Container tauscht, wer sie mit denselben Dateien beim Namen startet (`docker compose … -f docker/docker-compose.rust.yml --profile big up -d --no-build --no-deps space-west space-nord space-ost space-sued`). Einen Rückweg zum TypeScript-Server gibt es auf den Rechnern seit 2026-11-12 nicht mehr (R-D12); lokal fährt
+`docker:local:up` weiter TypeScript auf eigenen Dateien.
 
 ## Entwicklung (kompiliert bei jeder Änderung neu)
 
@@ -97,19 +97,21 @@ Grenzen stehen in `.env.example`.
 
 Ein Rechner betreibt genau ein Profil. Auf beiden: `git pull --ff-only`, dann das Skript des Rechners. Jedes Skript hat
 eine Variante mit dem Rust-Space-Server, `docker:nano:rust:up|down|logs` und `docker:big:rust:up|down|logs` (dasselbe
-Projekt, dieselben Volumes, nur die Space-Container wechseln; siehe oben). Der Wechsel in beide Richtungen braucht keinen
-weiteren Schritt; vor dem ersten Wechsel eine Kopie von `mmo-space-data` aufheben.
+Projekt, dieselben Volumes, nur die Space-Container wechseln; siehe oben). Seit 2026-11-12 laufen
+dort nur noch die Rust-Varianten: Die einfachen `docker:nano:up` / `docker:big:up` verweigern (unten).
 
 **Seit 2026-11-07 laufen beide Rechner mit dem Rust-Space-Server** (der Accounts-Space auf nano, die vier Regionen auf
-big; Welt, NPCs, Modelle und Web sind TypeScript). Neuer Spielcode wird daher mit `docker:big:rust:up` auf big (und
-`docker:nano:rust:up` auf nano) ausgerollt; ein einfaches `docker:big:up` / `docker:nano:up` brächte den
-TypeScript-Space-Server zurück. Die TypeScript-Volumes von vor dem Wechsel liegen auf jedem Rechner in
+big), **seit 2026-11-11 auf big auch Welt, NPCs und Web in Rust** (`docker-compose.rust-game.yml`, R8.6; nur die
+Modellprozesse sind Node). Neuer Spielcode wird daher mit `docker:big:rust:up` auf big (und `docker:nano:rust:up` auf
+nano) ausgerollt. **Seit 2026-11-12 ist der Rückweg geschlossen** (Entscheidung R-D12): big und nano fahren nur noch die
+Rust-Implementierung, die einfachen `docker:big:up` / `docker:nano:up` verweigern mit einem Hinweis auf das Rust-Skript.
+Store-Dateien und Einträge dürfen ab jetzt Formen annehmen, die die TypeScript-Prozesse von früher nicht lesen. Die TypeScript-Volumes von vor dem Wechsel liegen auf jedem Rechner in
 `~/phi-backup/2026-11-07-mmo-<rechner>-rust/mmo-space-data-ts.tgz`.
 
 | Rechner | Prozesse | Skript | `.env` |
 | --- | --- | --- | --- |
-| nano | Konten-Space (Zugangsdaten, Web-Sitzungen) | `docker:nano:up` (Rust: `docker:nano:rust:up`) | `SPACES_MMO_SPACE_BIND=<interne Adresse von nano>` |
-| big | die vier Regionen (Space, Welt-Worker, NPCs, Modell je Region) und web | `docker:big:up` (Rust: `docker:big:rust:up`) | `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, `SPACES_MMO_WEB_REGIONS` (unten), `PI_AUTH_DIR` |
+| nano | Konten-Space (Zugangsdaten, Web-Sitzungen) | `docker:nano:rust:up` | `SPACES_MMO_SPACE_BIND=<interne Adresse von nano>` |
+| big | die vier Regionen (Space, Welt-Worker, NPCs, Modell je Region) und web | `docker:big:rust:up` | `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, `SPACES_MMO_WEB_REGIONS` (unten), `PI_AUTH_DIR` |
 
 Jeder Region-Space braucht einen schnellen Kern; auf nano (kleine VM) rechnete ein Kern etwa dreimal so lange wie auf big
 ([lasttest-2026-10-28.md](../lasttest-2026-10-28.en.md)). Deshalb liegt die Welt auf big und nur der Konten-Space auf nano.
@@ -264,7 +266,7 @@ docker compose … --profile big up -d space-west space-nord space-ost space-sue
 docker compose … --profile big run --rm --no-deps -v mmo-space-data:/data -e SPACES_MMO_DATA=/data \
   -e SPACES_MMO_REGIONS=west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950 \
   world-west node --experimental-strip-types server/migrate-regions.ts
-npm --prefix spaces-mmo run docker:big:up                          # Welt-Worker, NPCs, Modelle, Web
+npm --prefix spaces-mmo run docker:big:rust:up                     # Welt-Worker, NPCs, Modelle, Web
 ```
 
 Das Skript nennt vorher, was die alte Welt hält, und danach je Region, was es geschrieben hat. Danach über alle vier

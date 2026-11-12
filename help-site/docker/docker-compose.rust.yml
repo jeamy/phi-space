@@ -1,7 +1,7 @@
 # The Rust space server in the swarm's Space containers (docs/rust-portierung.en.md): `phi-space-server --profile help`
 # reads the same environment as server/space-host.ts, on the same volumes and files. `npm run docker:prod:rust:up` (big)
-# and `docker:nano:rust:up` (nano) lay this over docker-compose.yml; docker:prod:up / docker:nano:up do not read it and
-# bring the TypeScript Space process back. The hub and the shard engine stay TypeScript.
+# and `docker:nano:rust:up` (nano) lay this over docker-compose.yml; docker:prod:up / docker:nano:up refuse: since
+# 2026-11-12 big and nano run only the Rust Space server (R-D12). The hub and the shard engine stay TypeScript.
 services:
   swarm-space:
     image: phi-spaces-help:rust
