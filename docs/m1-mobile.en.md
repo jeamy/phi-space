@@ -173,11 +173,11 @@ Space. The agent host is a federation Member (`PI_SERVERD_FEDERATION_CONFIG`).
    - `agent/test/pi-serverd.test.ts` holds the built bundle in the real pi-serverd over both sockets.
    - The mobile runtime has one Chord, 1.5.2, and no overrides.
    - Known limits:
-     - The SSH path ran on 2026-11-12 from the phone against two real hosts, this machine and rb5 (aarch64,
-       after its Node was raised to 22.23.5), with pi-termux-mobile `scripts/remote-demo/phone-ssh.mjs`:
+     - The SSH path ran on 2026-11-12 from the phone against all four saved clients (pi-termux-mobile
+       `scripts/remote-demo/phone-ssh.mjs`): this machine, rb5 (aarch64, after its Node was raised to 22.23.5)
+       and the two mux hosts over the VPN (one without tmux, under nohup):
        - first run: provisioning;
        - second run: health check over the calls, sessions, an idle 25 s long poll, no `space.sock`.
-       - The 192.168.1.x hosts are on another network and were not reached.
      - Every host provisioned before asks for an update on its next connect (a full `npm install`).
      - A long poll of `events` holds one of the daemon's 16 call workers for 25 s: more clients polling at once
        make later calls wait.
