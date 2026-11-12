@@ -132,6 +132,14 @@ test("the bar offers a field once, for the cell one stands on, not for every cel
 	assert.deepEqual(lines, ["flur anlegen"], "on one's own cell, which may be a way, the field lies beside the figure");
 });
 
+test("the bar offers a tree's seed once, not for every free cell around", () => {
+	const both = new Map([...objs, ["spade", obj({ id: "spade", kind: "item", name: "Spaten", location: "me", x: -1, y: -1 })], ["weide", obj({ id: "weide", kind: "item", name: "Weidensteckling", location: "me", x: -1, y: -1 })]]);
+	const trees = hereEntries({ chars, objs: both, self: me, room: "r", me: "me", plans: [], guest: false, fuel: undefined }).filter((e) => e.line.startsWith("pflanze"));
+	assert.deepEqual(trees.map((e) => [e.label, e.line]), [["Weidensteckling pflanzen (ein Baum, neben dir)", "pflanze weidensteckling"]]);
+	// the menu of one cell keeps its cell
+	assert.ok(cellEntries({ ...input, objs: both, at: { x: 6, y: 6 } }).some((e) => e.line === "pflanze weidensteckling 6 6"));
+});
+
 test("a long text falls into sentences, an abbreviation does not end one", () => {
 	assert.deepEqual(sentences("Eins, z. B. dies. Zwei „look“. Drei."), ["Eins, z. B. dies.", "Zwei „look“.", "Drei."]);
 });

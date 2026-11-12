@@ -39,7 +39,10 @@ export function hereEntries(input: Omit<CellInput, "at" | "onPlans">): CellEntry
 	const { self } = input, seen = new Map<string, CellEntry>();
 	if (!self) return [];
 	for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
-		for (const e of cellEntries({ ...input, at: { x: self.x + dx, y: self.y + dy }, onPlans: () => {}, onTake: undefined })) {
+		for (let e of cellEntries({ ...input, at: { x: self.x + dx, y: self.y + dy }, onPlans: () => {}, onTake: undefined })) {
+			// a tree's seed is offered on every free cell around: here once, the server finds the cell beside one
+			const tree = /^pflanze (\S+) -?\d+ -?\d+$/.exec(e.line);
+			if (tree && e.label.endsWith(" hier pflanzen (ein Baum)")) e = { label: `${e.label.slice(0, -" hier pflanzen (ein Baum)".length)} pflanzen (ein Baum, neben dir)`, line: `pflanze ${tree[1]}` };
 			// what is done on a cell of one's choice is offered once, for the cell one stands on
 			if ((dx || dy) && e.line.startsWith("flur anlegen ")) continue;
 			if (e.run || e.line.startsWith("#") || e.line.startsWith("move ") || e.line.startsWith("umgraben ") || INFO.test(e.line) || /ansehen$/.test(e.label)) continue;

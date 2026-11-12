@@ -1559,6 +1559,7 @@ export const EN: Record<string, string> = {
 	"Obstkiste": "Fruit crate",
 	"Fensterläden": "Shutters",
 	"{0} hier pflanzen (ein Baum)": "Plant {0} here (a tree)",
+	"{0} pflanzen (ein Baum, neben dir)": "Plant {0} (a tree, beside you)",
 	"Als Baum pflanzen (neben dir, mit Spaten)": "Plant as a tree (beside you, with a spade)",
 	"Baum fällen": "Fell a tree",
 	"Ein Fass aus Bohlen, mit Tauwerk gebunden. In einer Truhe hält es Saft, Suppe und Fleisch doppelt so lange frisch.": "A barrel of planks, bound with cordage. In a chest it keeps juice, soup and meat fresh twice as long.",
