@@ -464,6 +464,9 @@ fn count_of(arg: &str) -> (f64, String) {
 	match count { Some(n) => (n, m[2].clone().unwrap_or_default()), None => (1.0, arg.to_owned()) }
 }
 /// `recipeNamed`: by key or name, in any form, or by what it makes is also called.
+/// A thing a recipe asks for by `key`: of that prototype, or one of its own that stands for it (a log for driftwood).
+fn is_of(f: &Json, key: &Json) -> bool { j::at(f, "proto") == key || j::at(f, "of") == key }
+
 fn recipe_named<'a>(w: &'a Json, what: &str) -> Option<&'a Json> {
 	let rs = j::a(w, "recipes");
 	let own = |r: &Json| vec![j::s(r, "key").to_owned(), j::s(r, "name").to_owned()];
@@ -484,7 +487,11 @@ async fn craft_here(c: &mut Ctx, w: &Json) -> Result<()> {
 		return refuse(match beside.first() { Some(b) => format!("Neben {} stellt man nichts her; was überall geht, zeigt „craft“.", txt(j::at(b, "name"))), None => "Neben dir steht kein Bau. Was überall geht, zeigt „craft“.".to_owned() });
 	}
 	let mut carried: Vec<(String, f64)> = Vec::new();
-	for i in inventory(c).await? { let p = txt(j::at(f(&i), "proto")); match carried.iter_mut().find(|(k, _)| *k == p) { Some((_, n)) => *n += 1.0, None => carried.push((p, 1.0)) } }
+	for i in inventory(c).await? {
+		let mut ks = vec![txt(j::at(f(&i), "proto"))];
+		if j::truthy(j::at(f(&i), "of")) { ks.push(txt(j::at(f(&i), "of"))); }
+		for p in ks { match carried.iter_mut().find(|(k, _)| *k == p) { Some((_, n)) => *n += 1.0, None => carried.push((p, 1.0)) } }
+	}
 	let has = |k: &str| carried.iter().find(|(p, _)| p == k).map_or(0.0, |(_, n)| *n);
 	let pn = |k: &str| j::a(w, "prototypes").iter().find(|p| j::s(p, "key") == k).map_or_else(|| k.to_owned(), |p| txt(j::at(p, "name")));
 	let mut lines: Vec<String> = Vec::new();
@@ -553,7 +560,12 @@ pub async fn craft(c: &mut Ctx, arg: &str) -> Result<()> {
 		let mut round: Vec<String> = Vec::new();
 		for n in j::a(r, "needs") {
 			let count = j::n(n, "count");
-			let hits: Vec<String> = inv.iter().filter(|i| j::at(f(i), "proto") == j::at(n, "proto") && !used.contains(&item_id(i)) && !round.contains(&item_id(i))).take(count.max(0.0) as usize).map(item_id).collect();
+			// a log is driftwood and a log (ItemFields.of): asked for driftwood, real driftwood goes first
+			let want_p = j::at(n, "proto");
+			let rank = |i: &Json| { let of = j::at(f(i), "of"); u8::from(j::truthy(of) && of != want_p) };
+			let mut hits: Vec<&Json> = inv.iter().filter(|i| is_of(f(i), want_p) && !used.contains(&item_id(i)) && !round.contains(&item_id(i))).collect();
+			hits.sort_by_key(|i| rank(i));
+			let hits: Vec<String> = hits.into_iter().take(count.max(0.0) as usize).map(item_id).collect();
 			if (hits.len() as f64) < count { lack = format!("Dir fehlt: {}× {}.", nt(count), txt(j::at(n, "proto"))); break 'rounds; }
 			round.extend(hits);
 		}

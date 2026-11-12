@@ -34,7 +34,10 @@ export type ItemFields = { itemId: string; name: string; aliases: string[]; desc
 	/** A thing that turns (PrototypeFields.turns): it spoils or grows up when the second clock reaches `turnsAtMs` (engine/sweep.ts); `turns` lets the sweep find it. */ turns?: true; turnsAtMs?: number;
 	/** On the market board: `location` is "market", these name the listing and who gets it back. */ listing?: string; seller?: string;
 	/** A bred sort (garden.ts): seeds and flowers of a crossing carry it, so it travels with them to other regions. */ variety?: Variety;
-	/** Its own icon, of a prototype that stands for another (PrototypeFields.stands): a log keeps its look. */ icon?: string };
+	/** Its own icon, of a prototype that stands for another (PrototypeFields.stands): a log keeps its look. */ icon?: string;
+	/** The prototype it is of its own when it stands for another: a log is driftwood (`proto`) and a log (`of`), so a recipe
+	 *  can ask for logs only (trade.ts craft). */ of?: string;
+	/** It was kept fresh once by a barrel or a crate in its chest (WorldDef.keeps, sweep.ts): it turns later, once. */ kept?: true };
 /** A crossing of two sorts in a flower bed (docs/siedeln.en.md "Vermehren und züchten"): its own colour and its breeder;
  *  `name` stays empty until the breeder names it (`benenne`). The thing keeps the prototype of the sort it grew from. */
 export type Variety = { id: string; name: string; color: string; breeder: string; breederName: string };

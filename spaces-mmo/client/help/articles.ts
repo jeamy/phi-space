@@ -964,6 +964,8 @@ Jedes Ding, das man herstellt, hat Käufer. Die Tabelle nennt die **Grundpreise*
 | Daunendecke | Marta (Markt von Kupferhafen) 22 | Marta 30 | 30 |
 | Eintopf | Wilma (Markt von Kupferhafen) 3, Hauke (Schärenhafen) 3, Bente (Rauchhafen) 3, Momme (Krabbenbucht) 3 | – | 4 |
 | Entenbraten | Wilma (Markt von Kupferhafen) 5 | – | 7 |
+| Fass | Marta (Markt von Kupferhafen) 14 | – | 24 |
+| Fensterläden | Marta (Markt von Kupferhafen) 8 | – | 13 |
 | Festessen | Wilma (Markt von Kupferhafen) 38 | – | 55 |
 | Gänsebraten | Wilma (Markt von Kupferhafen) 10 | – | 14 |
 | Gehäuse | Marta (Markt von Kupferhafen) 17 | – | 25 |
@@ -987,6 +989,7 @@ Jedes Ding, das man herstellt, hat Käufer. Die Tabelle nennt die **Grundpreise*
 | Met | Marta (Markt von Kupferhafen) 5, Hauke (Schärenhafen) 5, Bente (Rauchhafen) 5, Momme (Krabbenbucht) 5 | – | 7 |
 | Muschelmesser | Kalle (Graue Bucht) 5, Marta (Markt von Kupferhafen) 5 | Jorin 5 | 8 |
 | Netz | Kalle (Graue Bucht) 8, Marta (Markt von Kupferhafen) 8, Ruben (Hafenviertel) 8, Hauke (Schärenhafen) 8 | Kalle 11, Marta 12, Piet 10, Ruben 11, Hauke 11 | 11 |
+| Obstkiste | Marta (Markt von Kupferhafen) 9 | – | 15 |
 | Pfannkuchen | Kalle (Graue Bucht) 5, Marta (Markt von Kupferhafen) 5, Hauke (Schärenhafen) 5, Bente (Rauchhafen) 5, Momme (Krabbenbucht) 5 | – | 7 |
 | Pökelfleisch | Marta (Markt von Kupferhafen) 5, Wilma (Markt von Kupferhafen) 5 | Marta 8, Wilma 8 | 8 |
 | Räucherfisch | Gesa (Hafenviertel) 2 | Gesa 4 | 4 |
@@ -1007,6 +1010,7 @@ Jedes Ding, das man herstellt, hat Käufer. Die Tabelle nennt die **Grundpreise*
 | Steak | Wilma (Markt von Kupferhafen) 5 | – | 7 |
 | Tangseil | Kalle (Graue Bucht) 3, Marta (Markt von Kupferhafen) 3, Piet (Werft) 2, Hauke (Schärenhafen) 3, Momme (Krabbenbucht) 3 | Jorin 3, Kalle 5, Marta 5, Hauke 5, Momme 5 | 3 |
 | Tauwerk | Marta (Markt von Kupferhafen) 8 | – | 12 |
+| Tisch | Marta (Markt von Kupferhafen) 12 | – | 20 |
 | Trockenfleisch | Marta (Markt von Kupferhafen) 6 | Marta 9 | 9 |
 | Tuch | Marta (Markt von Kupferhafen) 8 | Marta 12 | 12 |
 | Ziegel | Marta (Markt von Kupferhafen) 2 | – | 3 |
@@ -1090,6 +1094,7 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Apple juice | Marta (Copper Harbour Market) 3 | Marta 5 | 4 |
 | Axe | Marta (Copper Harbour Market) 7 | – | 9 |
 | Bacon | Marta (Copper Harbour Market) 6, Wilma (Copper Harbour Market) 6 | Marta 9, Wilma 9 | 9 |
+| Barrel | Marta (Copper Harbour Market) 14 | – | 24 |
 | Beer | Marta (Copper Harbour Market) 4, Hauke (Skerry Harbour) 4, Bente (Smoke Harbour) 4, Momme (Crab Bay) 4 | – | 6 |
 | Bread | Marta (Copper Harbour Market) 2 | Marta 4 | 3 |
 | Brick | Marta (Copper Harbour Market) 2 | – | 3 |
@@ -1109,6 +1114,7 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Dried Meat | Marta (Copper Harbour Market) 6 | Marta 9 | 9 |
 | Dripping bread | Wilma (Copper Harbour Market) 2 | – | 3 |
 | Feast | Wilma (Copper Harbour Market) 38 | – | 55 |
+| Fruit crate | Marta (Copper Harbour Market) 9 | – | 15 |
 | Glass | Marta (Copper Harbour Market) 3 | – | 5 |
 | Ham | Marta (Copper Harbour Market) 10, Wilma (Copper Harbour Market) 10 | Marta 14, Wilma 14 | 14 |
 | Honey bread | Kalle (Grey Bay) 3, Marta (Copper Harbour Market) 3, Hauke (Skerry Harbour) 3, Bente (Smoke Harbour) 3, Momme (Crab Bay) 3 | Marta 5 | 4 |
@@ -1136,6 +1142,7 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Sausage | Wilma (Copper Harbour Market) 2 | Wilma 4 | 3 |
 | Scrambled eggs | Kalle (Grey Bay) 5, Marta (Copper Harbour Market) 5, Hauke (Skerry Harbour) 5, Bente (Smoke Harbour) 5, Momme (Crab Bay) 5 | – | 8 |
 | Shell Knife | Kalle (Grey Bay) 5, Marta (Copper Harbour Market) 5 | Jorin 5 | 8 |
+| Shutters | Marta (Copper Harbour Market) 8 | – | 13 |
 | Smoked fish | Gesa (Harbour Quarter) 2 | Gesa 4 | 4 |
 | Smoked sausage | Marta (Copper Harbour Market) 4, Wilma (Copper Harbour Market) 3 | Marta 7, Wilma 6 | 6 |
 | Spade | Kalle (Grey Bay) 6, Marta (Copper Harbour Market) 6, Hauke (Skerry Harbour) 6, Bente (Smoke Harbour) 6, Momme (Crab Bay) 6 | – | 9 |
@@ -1144,6 +1151,7 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Stew | Wilma (Copper Harbour Market) 3, Hauke (Skerry Harbour) 3, Bente (Smoke Harbour) 3, Momme (Crab Bay) 3 | – | 4 |
 | Stewed apples | Marta (Copper Harbour Market) 4 | Marta 7 | 6 |
 | Stewed pears | Marta (Copper Harbour Market) 4 | Marta 7 | 6 |
+| Table | Marta (Copper Harbour Market) 12 | – | 20 |
 | Wood Bundle | Hinnerk (Grey Bay) 5, Kalle (Grey Bay) 4, Mats (Landing) 5, Svea (Old Watch) 5, Greta (Copper Harbour Market) 5, Marta (Copper Harbour Market) 4, Nele (Reef Village) 6, Arne (Skerry Harbour) 5, Frida (Smoke Harbour) 4, Bente (Smoke Harbour) 3, Thies (Crab Bay) 6 | Jorin 4, Kalle 6, Marta 6, Bente 5 | 8 |
 
 ## Crafting {#craft}
@@ -1466,13 +1474,18 @@ You can tear down what is yours at any time. You get part of the material back.
 | Glas ×2 (\`craft glas\`) | 3 Sand, 2 Treibholz | Glashütte |  |
 | Segelboot (\`craft segelboot\`) | 10 Bohle, 4 Leinen, 2 Tauwerk | Werft |  |
 | Bohle (\`craft bohle\`) | 2 Treibholz, mit Muschelmesser | Werkstatt |  |
+| Bohle aus Scheit (\`craft scheitbohle\`) | 1 Scheit, mit Muschelmesser | Werkstatt |  |
+| Fass (\`craft fass\`) | 4 Bohle, 1 Tauwerk | Werkstatt | in der Truhe: Saft, Suppe, Fleisch halten doppelt so lange |
+| Fensterläden (\`craft fensterlaeden\`) | 2 Bohle, 1 Tangseil | Werkstatt | in der Truhe: halten den Bau noch einmal halb so lange |
 | Gehäuse (\`craft gehaeuse\`) | 4 Bohle, 2 Stein, 1 Tangseil, mit Muschelmesser | Werkstatt | noch ohne Nutzen: ein Teil der Automaten, die noch kommen |
 | Karren (\`craft karren\`) | 4 Bohle, 1 Tauwerk | Werkstatt |  |
 | Lederstiefel (\`craft lederstiefel\`) | 3 Leder, mit Muschelmesser | Werkstatt |  |
 | Ledertasche (\`craft ledertasche\`) | 2 Leder, 1 Tangseil, mit Muschelmesser | Werkstatt |  |
+| Obstkiste (\`craft obstkiste\`) | 3 Bohle, mit Muschelmesser | Werkstatt | in der Truhe: Äpfel und Birnen halten doppelt so lange |
 | Ruderboot (\`craft ruderboot\`) | 6 Bohle, 2 Tangseil | Werkstatt |  |
 | Schlachtmesser (\`craft schlachtmesser\`) | 2 Stein, 1 Bohle, 1 Tangseil | Werkstatt |  |
-| Tauwerk (\`craft tauwerk\`) | 3 Tangseil | Werkstatt |  |`,
+| Tauwerk (\`craft tauwerk\`) | 3 Tangseil | Werkstatt |  |
+| Tisch (\`craft tisch\`) | 4 Bohle, 1 Tangseil | Werkstatt | in der Truhe eines Hauses: Essen drinnen macht ein Viertel länger satt |`,
 			en: `Everything one makes, with \`craft <recipe>\`. Where a place is named, only **right beside** such a building, whoever owns it; the ingredients come from your pack. Beside a building \`craft hier\` (or „Was man hier herstellen kann“ in its menu) lists its recipes and offers what you already carry everything for. „×3“ means the recipe gives three. Raw meat and fish are not eaten, they are cooked or smoked; **sated** says how long a thing keeps you sated after \`iss\` ([Building](help.game.build), [All buildings](help.game.buildings)).
 
 | Recipe | needs | where | food, note |
@@ -1532,13 +1545,18 @@ You can tear down what is yours at any time. You get part of the material back.
 | Glas (glass) ×2 (\`craft glas\`) | 3 sand, 2 driftwood | Glassworks |  |
 | Segelboot (sailing boat) (\`craft segelboot\`) | 10 plank, 4 linen, 2 cordage | Shipyard |  |
 | Bohle (plank) (\`craft bohle\`) | 2 driftwood, with shell knife | Workshop |  |
+| Bohle aus Scheit (plank from a log) (\`craft scheitbohle\`) | 1 log, with shell knife | Workshop |  |
+| Fass (barrel) (\`craft fass\`) | 4 plank, 1 cordage | Workshop | in the chest: juice, soup, meat keep twice as long |
+| Fensterläden (shutters) (\`craft fensterlaeden\`) | 2 plank, 1 kelp rope | Workshop | in the chest: hold the building half as long again |
 | Gehäuse (casing) (\`craft gehaeuse\`) | 4 plank, 2 stone, 1 kelp rope, with shell knife | Workshop | no use yet: a part of the automatons still to come |
 | Karren (cart) (\`craft karren\`) | 4 plank, 1 cordage | Workshop |  |
 | Lederstiefel (leather boots) (\`craft lederstiefel\`) | 3 leather, with shell knife | Workshop |  |
 | Ledertasche (leather bag) (\`craft ledertasche\`) | 2 leather, 1 kelp rope, with shell knife | Workshop |  |
+| Obstkiste (fruit crate) (\`craft obstkiste\`) | 3 plank, with shell knife | Workshop | in the chest: apples and pears keep twice as long |
 | Ruderboot (rowing boat) (\`craft ruderboot\`) | 6 plank, 2 kelp rope | Workshop |  |
 | Schlachtmesser (butcher's knife) (\`craft schlachtmesser\`) | 2 stone, 1 plank, 1 kelp rope | Workshop |  |
-| Tauwerk (cordage) (\`craft tauwerk\`) | 3 kelp rope | Workshop |  |`,
+| Tauwerk (cordage) (\`craft tauwerk\`) | 3 kelp rope | Workshop |  |
+| Tisch (table) (\`craft tisch\`) | 4 plank, 1 kelp rope | Workshop | in a house's chest: a meal inside sates a quarter longer |`,
 		},
 	},
 	{
@@ -1711,7 +1729,17 @@ Ihre Samen findet \`sammle samen\` dort, wo wilde Bäume stehen: **Birkensamen**
 
 \`fälle\` fällt deinen ausgewachsenen Baum neben dir mit einer **Axt** (\`craft axt\`: 2 Treibholz, 1 Stein, 1 Tangseil; sie nutzt sich ab), danach ruhst du wie nach der Arbeit. Ein **Scheit** zählt überall wie Treibholz: für Bauten, Rezepte und das Feuer, und die Hüter kaufen es wie Treibholz. \`ernte baum\` (oder einfach \`ernte\`, wenn kein Beet und kein Acker nah ist) holt, was dein Baum trägt; danach trägt er wieder. Nur wer einen Baum gepflanzt hat, erntet und fällt ihn.
 
-Aus dem Obst macht der Herd der Hütte **Apfelsaft** und **Birnensaft** (\`craft apfelsaft\`: 3 Äpfel, 1 Kanne Wasser, zwei Krüge) und **Apfelkompott** und **Birnenkompott** (\`craft apfelkompott\`: 4 Äpfel, 1 Kanne Wasser, 1 Treibholz, zwei Gläser). Äpfel und Birnen verderben nach einer Woche, der Saft nach zehn Tagen; das Kompott hält. Alles davon macht satt, Eicheln und Äpfel fressen auch die Schweine.
+Aus dem Obst macht der Herd der Hütte **Apfelsaft** und **Birnensaft** (\`craft apfelsaft\`: 3 Äpfel, 1 Kanne Wasser, zwei Krüge) und **Apfelkompott** und **Birnenkompott** (\`craft apfelkompott\`: 4 Äpfel, 1 Kanne Wasser, 1 Treibholz, zwei Gläser). Äpfel verderben nach einer Woche, Birnen nach fünf Tagen, der Saft nach zehn Tagen; das Kompott hält. Alles davon macht satt, Eicheln und Äpfel fressen auch die Schweine.
+
+### Bohlen aus Scheiten {#planks}
+
+In der Werkstatt gibt ein Scheit eine ganze **Bohle** (\`craft scheitbohle\`, mit Muschelmesser), aus Treibholz braucht eine Bohle zwei Stück. Wer Treibholz und Scheite trägt, verbraucht bei Rezepten, die Treibholz wollen, zuerst das Treibholz. Aus Bohlen macht die Werkstatt:
+
+- **Fass** (\`craft fass\`: 4 Bohlen, 1 Tauwerk): In der Truhe eines Baus hält es Saft, Suppe, Eintopf und rohes Fleisch doppelt so lange frisch.
+- **Obstkiste** (\`craft obstkiste\`: 3 Bohlen, mit Muschelmesser): In der Truhe hält sie Äpfel und Birnen doppelt so lange frisch.
+- **Tisch** (\`craft tisch\`: 4 Bohlen, 1 Tangseil): Liegt er in der Truhe eines Hauses, macht ein Essen drinnen (\`betrete\`) ein Viertel länger satt.
+- **Fensterläden** (\`craft fensterlaeden\`: 2 Bohlen, 1 Tangseil): Liegen sie in der Truhe eines Baus, halten sie ihn, wenn seine Zeit abläuft, noch einmal halb so lange; dann sind sie verbraucht.
+- **Zaun aus Bohlen**: \`zäune\` nimmt 2 Bohlen statt Treibholz und Tangseil (5 um einen Acker, 3 um einen Stall), wenn dir das andere fehlt.
 
 ## Die Gärtnerin {#gardener}
 
@@ -1802,7 +1830,17 @@ Trees grow slowly, over days, but then they stand until someone fells them. They
 
 \`fälle\` fells your grown tree beside you with an **axe** (\`craft axt\`: 2 driftwood, 1 stone, 1 kelp rope; it wears), after which you rest as after work. A **log** counts as driftwood everywhere: for buildings, recipes and the fire, and the keepers buy it as driftwood. \`ernte baum\` (or just \`ernte\` when no bed or field is near) takes what your tree bears; then it bears again. Only who planted a tree harvests and fells it.
 
-At a hut's hearth the fruit becomes **apple juice** and **pear juice** (\`craft apfelsaft\`: 3 apples, 1 can of water, two jugs) and **stewed apples** and **stewed pears** (\`craft apfelkompott\`: 4 apples, 1 can of water, 1 driftwood, two jars). Apples and pears spoil after a week, the juice after ten days; the compote keeps. All of it fills you up, and the pigs eat acorns and apples too.
+At a hut's hearth the fruit becomes **apple juice** and **pear juice** (\`craft apfelsaft\`: 3 apples, 1 can of water, two jugs) and **stewed apples** and **stewed pears** (\`craft apfelkompott\`: 4 apples, 1 can of water, 1 driftwood, two jars). Apples spoil after a week, pears after five days, the juice after ten days; the compote keeps. All of it fills you up, and the pigs eat acorns and apples too.
+
+### Planks from logs {#planks}
+
+In the workshop one log makes a whole **plank** (\`craft scheitbohle\`, with a shell knife); from driftwood a plank takes two pieces. Whoever carries driftwood and logs uses up the driftwood first in recipes that want driftwood. From planks the workshop makes:
+
+- **Barrel** (\`craft fass\`: 4 planks, 1 cordage): in a building's chest it keeps juice, soup, stew and raw meat fresh twice as long.
+- **Fruit crate** (\`craft obstkiste\`: 3 planks, with a shell knife): in the chest it keeps apples and pears fresh twice as long.
+- **Table** (\`craft tisch\`: 4 planks, 1 kelp rope): kept in a house's chest, it makes a meal inside (\`betrete\`) sate a quarter longer.
+- **Shutters** (\`craft fensterlaeden\`: 2 planks, 1 kelp rope): kept in a building's chest, they hold it half as long again when its time runs out; then they are used up.
+- **Plank fence**: \`zäune\` takes 2 planks instead of driftwood and kelp rope (5 round a field, 3 round a coop) when you lack those.
 
 ## The gardener {#gardener}
 

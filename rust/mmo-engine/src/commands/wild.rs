@@ -351,11 +351,15 @@ async fn scheuche(c: &mut Ctx, arg: &str) -> Result<()> {
 }
 
 /// `payFence`: takes what a fence costs from the actor's pack; refuses (naming it) when something is missing.
-async fn pay_fence(c: &mut Ctx, needs: &[Json]) -> Result<()> {
+async fn pay_fence(c: &mut Ctx, first: &[Json], alt: Option<&[Json]>) -> Result<()> {
 	let inv = inventory(c).await?;
 	let of = |p: &Json| inv.iter().filter(|i| j::at(fields(i), "proto") == p).collect::<Vec<_>>();
-	if needs.iter().any(|n| (of(j::at(n, "proto")).len() as f64) < j::n(n, "count")) {
-		return refuse(format!("Für diesen Zaun brauchst du {}.", needs.iter().map(|n| format!("{} {}", txt(j::at(n, "count")), proto_name(c, j::s(n, "proto")))).collect::<Vec<_>>().join(" und ")));
+	let lacks = |needs: &[Json]| needs.iter().any(|n| (of(j::at(n, "proto")).len() as f64) < j::n(n, "count"));
+	let named = |c: &Ctx, needs: &[Json]| needs.iter().map(|n| format!("{} {}", txt(j::at(n, "count")), proto_name(c, j::s(n, "proto")))).collect::<Vec<_>>().join(" und ");
+	// planks instead (WildDef.fenceAlt) when the first cost is not carried
+	let needs = match alt { Some(a) if lacks(first) && !lacks(a) => a, _ => first };
+	if lacks(needs) {
+		return refuse(format!("Für diesen Zaun brauchst du {}{}.", named(c, first), alt.map_or_else(String::new, |a| format!(" oder {}", named(c, a)))));
 	}
 	let me = c.char_id().to_owned();
 	for n in needs {
@@ -375,7 +379,7 @@ async fn zaeune(c: &mut Ctx) -> Result<()> {
 	if near(read("Bed").await?).iter().any(|b| may_tend(c, b)) {
 		let b = bed_here(c, false, Some(&|x: &Json| may_tend(c, x)), Some(1.0)).await?;
 		if j::b(&b, "fenced") { return refuse(format!("Um das {} steht schon ein Zaun.", bed_name(&b))); }
-		pay_fence(c, j::a(&wd, "fence")).await?;
+		pay_fence(c, j::a(&wd, "fence"), j::ao(&wd, "fenceAlt")).await?;
 		let keep = j::opt(c.w(), "garden").map_or(0.0, |g| j::no(j::at(g, "bed"), "keepWorldMs").unwrap_or(0.0));
 		let until = j::n(&b, "untilWorldMs").max(decay_now_of(&c.space, c.txn()).await? + keep);
 		let mut nb = b.clone();
@@ -390,7 +394,7 @@ async fn zaeune(c: &mut Ctx) -> Result<()> {
 		if near(read("Field").await?).iter().any(mine_field) {
 			let Ok(f) = take_near(c, "Field", "fieldId", 1.0, &mine_field).await? else { return refuse("Der Acker ist gerade nicht greifbar; bitte noch einmal.") };
 			if j::b(&f, "fenced") { return refuse(format!("Um die {} steht schon ein Zaun.", field_name(&f))); }
-			pay_fence(c, fence).await?;
+			pay_fence(c, fence, j::ao(&wd, "fieldFenceAlt")).await?;
 			let mut nf = f.clone();
 			j::set(&mut nf, "fenced", true);
 			c.space.write(&tmpl("Field", nf), c.txn(), FOREVER).await?;
@@ -403,7 +407,7 @@ async fn zaeune(c: &mut Ctx) -> Result<()> {
 		if near(read("Building").await?).iter().any(mine_coop) {
 			let Ok(b) = take_near(c, "Building", "buildId", 1.0, &mine_coop).await? else { return refuse("Der Stall ist gerade nicht greifbar; bitte noch einmal.") };
 			if j::b(&b, "fenced") { return refuse("Um den Stall steht schon ein Zaun."); }
-			pay_fence(c, fence).await?;
+			pay_fence(c, fence, j::ao(&wd, "coopFenceAlt")).await?;
 			let mut nb = b.clone();
 			j::set(&mut nb, "fenced", true);
 			put_back(c, &nb).await?;

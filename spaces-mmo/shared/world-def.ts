@@ -114,7 +114,10 @@ export type WorldDef = {
 	/** Rooms grow (engine/commands/growth.ts): by `strip` cells of `tile` once `fullShare` of the land is taken, up to `maxW`×`maxH`. */
 	growth?: { strip: number; fullShare: number; maxW: number; maxH: number; tile: string };
 	/** Food (engine/commands/food.ts): how long each thing keeps a figure sated, up to `maxWorldMs` ahead; sated, the rest after work is divided by `restFactor`. */
-	food?: { foods: Record<string, number>; maxWorldMs: number; restFactor: number };
+	food?: { foods: Record<string, number>; maxWorldMs: number; restFactor: number; /** A table in the chest of the building one eats in: what one eats there sates `factor` times as long. */ table?: { proto: string; factor: number } };
+	/** Things that keep others fresh in a building's chest (sweep.ts turnItem): when a thing of `keeps` would turn there
+	 *  beside one of `proto`, it turns `factor` times as late instead, once (a barrel for juice, soup and meat, a crate for fruit). */
+	keeps?: Array<{ proto: string; keeps: string[]; factor: number }>;
 	/** Fishing (engine/commands/fishing.ts): beside `plan`, with a `net`, a weighted catch. */
 	fishing?: { plan: string; net: string; catch: Array<{ proto: string; weight: number }> };
 	/** A department store (engine/commands/shop.ts): the things it deals in by base price; its price runs from twice that on an empty shelf to half at `full`, it pays `buyShare` of it, and `turnoverPerPoint` coins turned over are a point of rank. */
@@ -197,7 +200,8 @@ export type TreesDef = { points: number; maxTrees: number; spade: string; axe: s
  *  a coop costs. */
 export type WildDef = { checkWorldMs: number; chance: [number, number, number, number]; nightFactor: number; maxPerRoom: number; eatAfterWorldMs: number; scareReach: number;
 	hare: { name: string; icon: string }; fence: Array<{ proto: string; count: number }>; scarecrow: string; scarecrowReach: number;
-	prey?: PreyDef[]; guards?: GuardDef[]; keepers?: KeeperDef[]; fieldFence?: Array<{ proto: string; count: number }>; coopFence?: Array<{ proto: string; count: number }> };
+	prey?: PreyDef[]; guards?: GuardDef[]; keepers?: KeeperDef[]; fieldFence?: Array<{ proto: string; count: number }>; coopFence?: Array<{ proto: string; count: number }>;
+	/** What each fence costs instead, of planks (taken when the first cost is not carried). */ fenceAlt?: Array<{ proto: string; count: number }>; fieldFenceAlt?: Array<{ proto: string; count: number }>; coopFenceAlt?: Array<{ proto: string; count: number }> };
 /** A kind of wild beside the hare: `reh` grazes a growing field (each bite costs `bite` of its yield, never below `keep`),
  *  `fuchs` takes an animal from a house of `houses` (never the last), `maus` eats up to `take` of `eats` from a chest
  *  (never the last; a `trap` in the chest catches it). `nom`/`the`/`acc`/`none`: "ein Reh", "das Reh", "das Reh", "kein
@@ -234,7 +238,7 @@ export type AnimalsDef = { /** Buildings of `houses` one account may own where t
  *  may take per world day; `logKeepMs`: how long a line of the log stays (real time, it must outlast the quota's day);
  *  `logShow`: how many lines `lager log` shows. */
 export type StoreDef = { quota: { fremder: number; helfer: number; siedler: number }; logKeepMs: number; logShow: number };
-export type BuildingDef = { store?: StoreDef; plans: PlanDef[]; lightPoints: number; /** What each epoch of the fire's island above the first adds to its light (the setting light.epoch overrides it). */ lightPerEpoch?: number; /** `perPlayer` more points for each registered player who built here within `activeMs` (of the second clock), up to `max` in all. */ lightGrowth?: { perPlayer: number; max: number; activeMs: number }; siteWorldMs: number; maxSites: number; maxBuildings: number; uncounted?: string[]; ruinWorldMs: number; estateWorldMs: number };
+export type BuildingDef = { /** Shutters in a building's chest (build.ts buildSweep): when its term runs out they are used up and it stands `share` of its term again. */ shutters?: { proto: string; share: number }; store?: StoreDef; plans: PlanDef[]; lightPoints: number; /** What each epoch of the fire's island above the first adds to its light (the setting light.epoch overrides it). */ lightPerEpoch?: number; /** `perPlayer` more points for each registered player who built here within `activeMs` (of the second clock), up to `max` in all. */ lightGrowth?: { perPlayer: number; max: number; activeMs: number }; siteWorldMs: number; maxSites: number; maxBuildings: number; uncounted?: string[]; ruinWorldMs: number; estateWorldMs: number };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
 	/** In world hours: the NPC is there from `presentFromHour` to `presentUntilHour` (over midnight too), else away. */

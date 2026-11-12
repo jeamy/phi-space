@@ -899,6 +899,19 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 			continue;
 		}
 		if (b.untilWorldMs > now) continue;
+		// shutters in its chest are used up and hold it a while longer (BuildingDef.shutters)
+		const shut = w?.building?.shutters;
+		let held = false;
+		if (shut) await inTxn(async (txn) => {
+			const s = (await space.readAll({ type: "Item", fields: { location: b.buildId, proto: shut.proto } }, { txn }))[0];
+			if (!s || !(await space.takeIfExists({ id: s.id }, NO_WAIT, { txn }))) return false;
+			const e = await space.takeIfExists({ type: "Building", fields: { buildId: b.buildId } }, NO_WAIT, { txn });
+			if (!e) return false;
+			const plan = planOf(w!, b.plan), keep = plan?.keepSetting ? (await setting(space, plan.keepSetting)) * WORLD_DAY : (plan?.keepWorldMs ?? 7 * WORLD_DAY);
+			await space.write({ type: e.type, types: e.types.slice(1), fields: { ...e.fields, untilWorldMs: now + Math.round(keep * shut.share) } as never }, txn, FOREVER);
+			return (held = true);
+		});
+		if (held) continue;
 		await inTxn(async (txn) => {
 			if (!(await space.takeIfExists({ type: "Building", fields: { buildId: b.buildId } }, NO_WAIT, { txn }))) return false;
 			logGone(b, "fell to a ruin (its term ran out)");

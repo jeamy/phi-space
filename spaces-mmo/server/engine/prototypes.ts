@@ -55,7 +55,7 @@ export async function spawn(space: SpaceLike, txn: string | null, w: WorldDef, p
 	// loader hands out before the world has its clock (an NPC's stock) keeps
 	const kept = p.turns ? await decayNowOf(space, txn).catch(() => null) : null;
 	const turning = p.turns && kept !== null ? { turns: true as const, turnsAtMs: kept + p.turns.afterMs } : {};
-	const item: ItemFields = { ...turning, itemId: at.itemId ?? newItemId(), name: p.name, aliases: p.aliases ?? [], desc: p.desc ?? "", location: at.location, x: at.x, y: at.y, glyph: p.glyph, locks: p.locks || DEFAULT_ITEM_LOCKS, proto: p.stands ?? p.key, ...(at.flotsam ? { flotsam: true } : {}), ...(at.expiresWorldMs !== undefined ? { expiresWorldMs: at.expiresWorldMs } : {}), ...(p.wear ? { wear: p.wear } : {}), ...(p.stands && p.icon ? { icon: p.icon } : {}), ...own };
+	const item: ItemFields = { ...turning, itemId: at.itemId ?? newItemId(), name: p.name, aliases: p.aliases ?? [], desc: p.desc ?? "", location: at.location, x: at.x, y: at.y, glyph: p.glyph, locks: p.locks || DEFAULT_ITEM_LOCKS, proto: p.stands ?? p.key, ...(at.flotsam ? { flotsam: true } : {}), ...(at.expiresWorldMs !== undefined ? { expiresWorldMs: at.expiresWorldMs } : {}), ...(p.wear ? { wear: p.wear } : {}), ...(p.stands && p.icon ? { icon: p.icon } : {}), ...(p.stands ? { of: p.key } : {}), ...own };
 	await space.write(draftOf(p.typeclass || "Item", w.typeclasses, item), txn, at.lease ?? FOREVER);
 	return item;
 }

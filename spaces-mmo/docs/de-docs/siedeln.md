@@ -360,6 +360,21 @@ Sorten: Birke, Kopfweide, Apfelbaum, Birnbaum und Eiche.
 - **Verwenden**: Apfel und Birne werden gegessen (`iss`); ein Apfel verdirbt nach einer Woche, eine Birne nach fünf Tagen. In einer Hütte machen
   3 Früchte und eine Wasserkanne 2 Säfte; 4 Früchte, eine Wasserkanne und ein Scheit machen 2 Gläser Kompott. Schweine
   fressen Eicheln und Äpfel. `baum` listet die eigenen Bäume, `baum ansehen x y` erzählt von einem.
+- **Bohlen**: Ein Scheit wird als Treibholz geschrieben, das zugleich *von* einem Scheit ist (`ItemFields.of`). So kann
+  ein Rezept nur Scheite verlangen: In der Werkstatt macht `craft scheitbohle` aus einem Scheit eine ganze Bohle, wo
+  `craft bohle` zwei Stück Treibholz nimmt (und wer beides trägt, verbraucht zuerst das echte Treibholz). Aus Bohlen
+  macht die Werkstatt:
+  - ein **Fass** (4 Bohlen, 1 Tauwerk) und eine **Obstkiste** (3 Bohlen): In der Truhe eines Baus halten sie Saft,
+    Suppe, Eintopf und rohes Fleisch (das Fass) oder Äpfel und Birnen (die Kiste) doppelt so lange frisch. Würde so ein
+    Ding dort verderben, schiebt der Sweep seinen Termin einmal um sein `afterMs` und markiert es `kept`
+    (`WorldDef.keeps`, `sweep.ts`);
+  - einen **Tisch** (4 Bohlen, 1 Tangseil): In der Truhe eines Hauses macht ein Essen drinnen (`betrete`) ein Viertel
+    länger satt (`food.table`);
+  - **Fensterläden** (2 Bohlen, 1 Tangseil): In der Truhe eines Baus werden sie verbraucht, wenn seine Zeit abläuft,
+    und er steht noch einmal halb so lange, statt zur Ruine zu werden (`building.shutters`, `buildSweep`);
+  - einen **Bohlenzaun**: `zäune` nimmt 2 Bohlen (5 um einen Acker, 3 um einen Stall), wenn Treibholz und Seil fehlen
+    (`wild.fenceAlt`, `fieldFenceAlt`, `coopFenceAlt`).
+  Ein Wegweiser war erwogen und bleibt weg: `straße` zeigt schon, wohin die Straßen eines Orts führen.
 
 ### Tiere auf dem Hof
 

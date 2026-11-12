@@ -91,6 +91,12 @@ test("a carried thing shows what it can do here and now, nothing it cannot", () 
 	assert.ok(!lines("Tang", at(site, ...pack("Tangseil", 1), ...pack("Tang", 1))).includes("liefere Tangseil"), "Tang is not the Tangseil");
 	const fire: [string, ObjView] = ["b", obj({ id: "b", kind: "beacon", name: "Leuchtfeuer", x: 6, y: 5 })];
 	assert.ok(lines("Treibholz", at(fire, ...pack("Treibholz", 1))).includes("put Treibholz in Leuchtfeuer"));
+	// a log is driftwood to the fire and to a recipe; a tree's seed and an axe say what they are for
+	assert.ok(lines("Scheit", at(fire, ...pack("Scheit", 1))).includes("put Scheit in Leuchtfeuer"));
+	const planks = { ...uses, recipes: [{ key: "bohle", name: "Bohle", needs: [{ name: "Treibholz", count: 2 }] }] };
+	assert.deepEqual(itemEntries("Scheit", at(...pack("Scheit", 2)), planks, { fuels: [] }).map((e) => e.line), ["craft bohle"]);
+	assert.deepEqual(lines("Birkensamen", at(...pack("Birkensamen", 1))), ["pflanze birkensamen"]);
+	assert.deepEqual(lines("Axt", at(...pack("Axt", 1))), ["fälle"]);
 	const ines = new Map([["me", me], ["o", char("o", "Ines", 6, 5)]]);
 	assert.deepEqual(itemEntries("Hafer", { ...at(...pack("Hafer", 1)), chars: ines, offer: () => {} }, uses, { fuels: [], market: () => {} }).map((e) => e.line), ["give Hafer an Ines", "#offer Ines", "#sell"]);
 	assert.deepEqual(itemEntries("Hafer", { ...at(...pack("Hafer", 1)), chars: ines, guest: true }, uses, { fuels: [] }), [], "a guest gives nothing");

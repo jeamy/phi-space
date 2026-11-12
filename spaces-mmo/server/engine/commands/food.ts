@@ -27,13 +27,16 @@ const iss: Command = {
 		if (!arg.trim()) throw new NotUnderstood(`Was isst du? Satt machen: ${names()}.`);
 		const it = itemsNamed(c.world, await inventory(c), arg.trim())[0];
 		if (!it) throw new NotUnderstood(`Du trägst nichts, was „${arg.trim().slice(0, 30)}“ heißt.`);
-		const ms = d.foods[it.f.proto];
-		if (!ms) throw new CommandError(`${it.f.name} macht nicht satt. Das tun: ${names()}.`);
+		const base = d.foods[it.f.proto];
+		if (!base) throw new CommandError(`${it.f.name} macht nicht satt. Das tun: ${names()}.`);
 		await consume(c, it.f, c.actor.charId);
+		// inside a building (interior.ts: the room in-<buildId>) with a table in its chest, a meal sates longer
+		const atTable = !!d.table && c.actor.room.startsWith("in-") && (await c.space.count({ type: "Item", fields: { location: c.actor.room.slice(3), proto: d.table.proto } }, c.txn)) > 0;
+		const ms = atTable ? Math.round(base * d.table!.factor) : base;
 		const now = await worldNowOf(c.space, c.txn), held = await c.space.takeIfExists({ type: "Sated", fields: { charId: c.actor.charId } }, NO_WAIT, { txn: c.txn });
 		const from = held ? Math.max(now, fieldsOf<SatedFields>(held).untilWorldMs) : now;
 		await c.space.write({ type: "Sated", fields: { charId: c.actor.charId, untilWorldMs: Math.min(now + d.maxWorldMs, from + ms) } satisfies SatedFields as never }, c.txn, FOREVER);
-		await msg(c, "*", "info", `$you() $conj(isst|isst) ${it.f.name}.`, { templ: true });
+		await msg(c, "*", "info", `$you() $conj(isst|isst) ${it.f.name}${atTable ? " am Tisch" : ""}.`, { templ: true });
 	},
 };
 

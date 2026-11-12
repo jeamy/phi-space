@@ -4,14 +4,14 @@
 use phi_json::{obj, Json};
 
 use crate::clock::{decay_now_of, world_now_of};
-use crate::commands::build::build_sweep;
+use crate::commands::build::{anew, build_sweep};
 use crate::context::to_player;
 use crate::fire::key_text;
 use crate::j;
 use crate::js;
 use crate::prototypes::{resolve_prototype, spawn, At};
 use crate::source::time_now;
-use crate::space::{by_id, fields, tmpl, Result, Space, NO_WAIT};
+use crate::space::{by_id, fields, tmpl, Result, Space, FOREVER, NO_WAIT};
 
 fn txt(v: &Json) -> String { key_text(v) }
 
@@ -52,6 +52,21 @@ async fn turn_item(space: &Space, e: &Json, w: &Json) -> Result<()> {
 		let Some(t) = space.take_if_exists(&by_id("Item", e), NO_WAIT, Some(&txn)).await? else { return Ok(false) };
 		let f = fields(&t).clone();
 		let p = resolve_prototype(space, j::s(&f, "proto")).await?;
+		// in a building's chest beside a barrel or a crate (WorldDef.keeps) it keeps fresh: it turns that much later, once
+		let turns = p.as_ref().map(|p| j::at(p, "turns")).filter(|t| j::truthy(t));
+		if let Some(turns) = turns.filter(|_| !j::truthy(j::at(&f, "kept")) && f.get("turnsAtMs").is_some_and(|v| !v.is_null())) {
+			let proto = j::at(&f, "proto");
+			if let Some(k) = j::a(w, "keeps").iter().find(|k| j::a(k, "keeps").iter().any(|x| x == proto)) {
+				let loc = j::at(&f, "location").clone();
+				if space.count(&tmpl("Building", obj! { "buildId" => loc.clone() }), Some(&txn)).await? > 0.0 && space.count(&tmpl("Item", obj! { "location" => loc, "proto" => j::at(k, "proto").clone() }), Some(&txn)).await? > 0.0 {
+					let mut g = j::object(&f);
+					g.insert("turnsAtMs", Json::from(j::n(&f, "turnsAtMs") + j::n(turns, "afterMs") * (j::n(k, "factor") - 1.0)));
+					g.insert("kept", Json::Bool(true));
+					space.write(&anew(&t, Json::Object(g)), Some(&txn), FOREVER).await?;
+					return Ok(true);
+				}
+			}
+		}
 		let into_key = p.as_ref().and_then(|p| j::so(j::at(p, "turns"), "into")).map(str::to_owned);
 		let into = match into_key { Some(k) if !k.is_empty() => resolve_prototype(space, &k).await?, _ => None };
 		let loc = txt(j::at(&f, "location"));

@@ -32,13 +32,20 @@ pub async fn iss(c: &mut Ctx, arg: &str) -> Result<()> {
 	let inv = inventory(c).await?;
 	let Some(it) = items_named(c.w(), &inv, &a, None).into_iter().next() else { return not_understood(format!("Du trägst nichts, was „{}“ heißt.", js::slice16(&a, 0, Some(30)))) };
 	let f = fields(&it).clone();
-	let ms = foods.get(j::s(&f, "proto")).and_then(Json::as_f64).unwrap_or(0.0);
-	if ms == 0.0 || ms.is_nan() { return refuse(format!("{} macht nicht satt. Das tun: {names}.", key_text(j::at(&f, "name")))); }
+	let base = foods.get(j::s(&f, "proto")).and_then(Json::as_f64).unwrap_or(0.0);
+	if base == 0.0 || base.is_nan() { return refuse(format!("{} macht nicht satt. Das tun: {names}.", key_text(j::at(&f, "name")))); }
 	let me = c.char_id().to_owned();
 	consume(c, &f, &me).await?;
+	// inside a building (interior.rs: the room in-<buildId>) with a table in its chest, a meal sates longer
+	let table = j::opt(&d, "table").filter(|t| j::truthy(t)).cloned();
+	let at_table = match &table {
+		Some(t) if c.room().starts_with("in-") => c.space.count(&tmpl("Item", obj! { "location" => &c.room()[3..], "proto" => j::at(t, "proto").clone() }), c.txn()).await? > 0.0,
+		_ => false,
+	};
+	let ms = match &table { Some(t) if at_table => js::round(base * j::n(t, "factor")), _ => base };
 	let now = world_now_of(&c.space, c.txn()).await?;
 	let held = c.space.take_if_exists(&tmpl("Sated", obj! { "charId" => me.as_str() }), NO_WAIT, c.txn()).await?;
 	let from = held.map_or(now, |h| now.max(j::n(fields(&h), "untilWorldMs")));
 	c.space.write(&tmpl("Sated", obj! { "charId" => me.as_str(), "untilWorldMs" => (now + j::n(&d, "maxWorldMs")).min(from + ms) }), c.txn(), FOREVER).await?;
-	msg(c, "*", "info", &format!("$you() $conj(isst|isst) {}.", key_text(j::at(&f, "name"))), MsgOpts { templ: true, ..Default::default() }).await
+	msg(c, "*", "info", &format!("$you() $conj(isst|isst) {}{}.", key_text(j::at(&f, "name")), if at_table { " am Tisch" } else { "" }), MsgOpts { templ: true, ..Default::default() }).await
 }

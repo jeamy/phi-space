@@ -68,12 +68,17 @@ const NEEDS: Record<string, string[]> = { "Kanne Wasser": ["gieße"], Spitzhacke
 /** What a carried thing can do right now, besides laying it down and looking at it: what the bar offers with it or for it
  *  (a price in brackets counts when all of it is carried), and what only the thing brings: feeding, offering, the chest, recipes,
  *  people beside one and the market board. */
+/** The seeds a tree grows from (world.ts trees: their prototypes' names). */
+const TREE_SEEDS = ["Birkensamen", "Weidensteckling", "Apfelkerne", "Birnenkerne", "Eichel"];
+
 export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans">, uses: ItemUses, o: { fuels: string[]; market?: () => void }): CellEntry[] {
 	const { objs, chars, self, room, me, guest, offer } = input;
 	if (!self) return [];
 	const out = new Map<string, CellEntry>(), add = (e: CellEntry) => { if (!out.has(e.line)) out.set(e.line, e); };
 	const count = new Map<string, number>();
-	for (const i of objs.values()) if (i.kind === "item" && i.location === me) count.set(i.name, (count.get(i.name) ?? 0) + 1);
+	for (const i of objs.values()) if (i.kind === "item" && i.location === me) for (const n of i.name === "Scheit" ? ["Scheit", "Treibholz"] : [i.name]) count.set(n, (count.get(n) ?? 0) + 1);
+	// a log is driftwood to every recipe, site and fire (server: ItemFields.of)
+	const as = name === "Scheit" ? "Treibholz" : name;
 	const word = new RegExp(`(?<![\\p{L}])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "iu");
 	// something to eat: sated, one rests less after work (server: food.ts iss); first, it is what the thing is for
 	const sated = uses.foods?.[name];
@@ -83,11 +88,11 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 		const [head = "", price] = e.label.split(/ \((.*)\)$/);
 		if (word.test(head) || NEEDS[name]?.includes(e.line) || (e.line === "pflege" && uses.flowers.includes(name))) { add(e); continue; }
 		const costs = price?.split(", ").map((p) => /^(?:(\d+) )?(.+)$/.exec(p)!) ?? [];
-		if (costs.some((c) => c[2] === name) && costs.every((c) => (count.get(c[2]!) ?? 0) >= Number(c[1] ?? 1))) add(e);
+		if (costs.some((c) => c[2] === name || c[2] === as) && costs.every((c) => (count.get(c[2]!) ?? 0) >= Number(c[1] ?? 1))) add(e);
 	}
 	const beside = [...objs.values()].filter((b) => b.location === room && self.x >= b.x - 1 && self.y >= b.y - 1 && self.x <= b.x + (b.w ?? 1) && self.y <= b.y + (b.h ?? 1));
 	const built = beside.filter((b) => b.kind === "building");
-	if (o.fuels.includes(name) && beside.some((b) => b.kind === "beacon")) { const fire = beside.find((b) => b.kind === "beacon")!; add({ label: `${name} nachlegen`, line: `put ${name} in ${fire.name}` }); }
+	if ((o.fuels.includes(name) || o.fuels.includes(as)) && beside.some((b) => b.kind === "beacon")) { const fire = beside.find((b) => b.kind === "beacon")!; add({ label: `${name} nachlegen`, line: `put ${name} in ${fire.name}` }); }
 	for (const b of built) {
 		if (b.herd && uses.feed[b.herd]?.includes(name)) add({ label: `${name} verfüttern`, line: `füttere ${name}` });
 		if (b.keeper && uses.feed[b.keeper]?.includes(name)) add({ label: `${name} verfüttern (${b.keeper === "hund" ? "Hund" : "Katze"})`, line: `füttere ${b.keeper} ${name}` });
@@ -99,6 +104,9 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 	// the server says where it works (quarry.ts breche, fishing.ts wirf netz)
 	if (name === "Spitzhacke") add({ label: "Stein brechen", line: "breche" });
 	if (name === "Netz") add({ label: "Netz auswerfen", line: "wirf netz" });
+	// trees (server: trees.ts): a seed is planted beside one with a spade, an axe fells one's grown tree beside one
+	if (TREE_SEEDS.includes(name) && !guest) add({ label: "Als Baum pflanzen (neben dir, mit Spaten)", line: `pflanze ${name.toLowerCase()}` });
+	if (name === "Axt") add({ label: "Baum fällen", line: "fälle" });
 	if (name === "Spaten") { add({ label: "Lehm stechen", line: "steche" }); add({ label: "Sand schaufeln", line: "schaufle" }); if (!guest) add({ label: "Acker anlegen (4×4)", line: "flur anlegen" }); }
 	if (name === "Kanne Wasser") add({ label: "Gießen", line: "gieße" });
 	if (name === "Schlachtmesser" || name === "Muschelmesser") add({ label: "Ein Tier schlachten", line: "schlachte" });
@@ -111,7 +119,7 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 	// a cart carried: set it down beside one (then its own menu loads it and sends it off by road), or see where one's carts are (server: cart.ts)
 	if (name === "Karren" && !guest) { add({ label: "Karren abstellen", line: "karren stelle" }); add({ label: "Meine Karren", line: "karren" }); }
 	for (const r of uses.recipes) {
-		const uses1 = r.tool === name || r.needs.some((n) => n.name === name);
+		const uses1 = r.tool === name || r.needs.some((n) => n.name === name || n.name === as);
 		if (!uses1 || (r.tool && !count.has(r.tool)) || r.needs.some((n) => (count.get(n.name) ?? 0) < n.count)) continue;
 		// made only at a building (the cart at a workshop): offered anywhere too, away from one the server says where (trade.ts craft)
 		if (![...out.values()].some((e) => e.label.startsWith(`${r.name} `))) add({ label: `${r.name} herstellen`, line: `craft ${r.key}` });
@@ -154,7 +162,8 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 		const here = (recipes ?? []).filter((r) => r.at === plan);
 		if (!here.length) return;
 		const count = new Map<string, number>();
-		for (const i of objs.values()) if (i.kind === "item" && i.location === me) count.set(i.name, (count.get(i.name) ?? 0) + 1);
+		// a log is driftwood to every recipe as well (server: ItemFields.of, trade.ts craft)
+		for (const i of objs.values()) if (i.kind === "item" && i.location === me) for (const n of i.name === "Scheit" ? ["Scheit", "Treibholz"] : [i.name]) count.set(n, (count.get(n) ?? 0) + 1);
 		for (const r of here) if (r.needs.every((n) => (count.get(n.name) ?? 0) >= n.count) && (!r.tool || count.has(r.tool))) entries.push({ label: `${r.name} herstellen (${r.needs.map((n) => `${n.count} ${n.name}`).join(", ")})`, line: `craft ${r.key}` });
 		entries.push({ label: "Was man hier herstellen kann", line: "craft hier" });
 	};
@@ -275,7 +284,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				if (carried.includes("Kanne Wasser")) entries.push({ label: "Gießen", line: "gieße" });
 				if (o.weedy || (o.plants ?? []).some((pl) => pl.stage === 3)) entries.push({ label: "Jäten", line: "jäte" });
 				if ((o.plants ?? []).some((pl) => pl.stage === 2)) entries.push({ label: "Ernten", line: "ernte" });
-				if (beside && !o.fenced) entries.push({ label: "Zaun setzen (2 Treibholz, 1 Tangseil)", line: "zäune" });
+				if (beside && !o.fenced) entries.push({ label: "Zaun setzen (2 Treibholz, 1 Tangseil oder 2 Bohlen)", line: "zäune" });
 				if (mine && (o.plants ?? []).length < (o.w ?? 1) * (o.h ?? 1)) for (const n of [...new Set(carried.filter((n) => mayPlantIn(o.bedKind, n, beds)))]) entries.push({ label: `${n} pflanzen`, line: `pflanze ${n}` });
 			}
 			// one's own bed (a community bed: who dug it) goes back to grass from beside it (server: garden.ts "beet aufgeben")
@@ -300,7 +309,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (nearSite && mine) entries.push(o.open ? { label: "Acker für Fremde schließen", line: "flur zu" } : { label: "Acker für alle öffnen", line: "flur offen" });
 			// one laid out by mistake goes back to grass, its light back to the fire (server: field.ts "flur aufgeben")
 			if (nearSite && mine) entries.push({ label: "Acker aufgeben (wird wieder Gras)", line: "flur aufgeben ja", confirm: "Den Acker aufgeben? Was darauf wächst, geht verloren, die Fläche wird wieder Gras." });
-			if (beside && may && !o.fenced) entries.push({ label: "Zaun um den Acker ziehen (6 Treibholz, 2 Tangseil)", line: "zäune" });
+			if (beside && may && !o.fenced) entries.push({ label: "Zaun um den Acker ziehen (6 Treibholz, 2 Tangseil oder 5 Bohlen)", line: "zäune" });
 			continue;
 		}
 		// this one, not all in the room: the command takes its cell
@@ -333,7 +342,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 					entries.push({ label: o.plan === "bienenstock" ? "Ein Volk herausnehmen" : "Ein Tier herausnehmen", line: "ausstallen" });
 					// slaughtering takes a knife; bees are not slaughtered (server: animals.ts schlachte, which keeps the last pair)
 					if (o.herd && o.herd !== "biene" && [...objs.values()].some((i) => i.kind === "item" && i.location === me && (i.name === "Schlachtmesser" || i.name === "Muschelmesser"))) entries.push({ label: "Ein Tier schlachten", line: "schlachte" });
-					if (o.plan === "huehnerstall" && !o.fenced) entries.push({ label: "Zaun mit Tür setzen (3 Treibholz, 1 Tangseil)", line: "zäune" });
+					if (o.plan === "huehnerstall" && !o.fenced) entries.push({ label: "Zaun mit Tür setzen (3 Treibholz, 1 Tangseil oder 3 Bohlen)", line: "zäune" });
 				}
 			}
 			// the butcher's shop: an animal one carries is slaughtered here, with a knife (server: animals.ts schlachte); without
@@ -387,7 +396,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			const carried = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me).map((i) => i.name))];
 			// "2 Tangseil, 5 Arbeit" → the names, matched whole: "Tang" is not the "Tangseil" it needs
 			const needed = new Set((o.missing ?? "").split(",").map((p) => p.trim().replace(/^\d+\s+/, "")).filter(Boolean));
-			for (const n of carried.filter((n) => needed.has(n))) entries.push({ label: `${n} liefern`, line: `liefere ${n}` });
+			for (const n of carried.filter((n) => needed.has(n) || (n === "Scheit" && needed.has("Treibholz")))) entries.push({ label: `${n} liefern`, line: `liefere ${n}` });
 		}
 	}
 	for (const o of objs.values()) {
@@ -408,6 +417,8 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 	const covered = [...objs.values()].some((o) => o.location === room && o.kind !== "item" && at.x >= o.x && at.y >= o.y && at.x < o.x + (o.w ?? 1) && at.y < o.y + (o.h ?? 1));
 	if (!guest && plans.length && !covered) entries.push({ label: "Bauen …", line: "#bau", run: onPlans });
 	if (!guest && !covered && [...objs.values()].some((o) => o.kind === "item" && o.location === me && o.name === "Spaten")) { entries.push({ label: "Beet umgraben", line: `umgraben ${at.x} ${at.y}` }); entries.push({ label: "Zierbeet umgraben (nur Blumen, sie kreuzen sich)", line: `umgraben zier ${at.x} ${at.y}` }); entries.push({ label: "Gemeinschaftsbeet anlegen (3×3, eins je Feuer)", line: `umgraben gemeinschaft ${at.x} ${at.y}` }); entries.push({ label: "Acker anlegen (4×4)", line: self && self.x === at.x && self.y === at.y ? "flur anlegen" : `flur anlegen ${at.x} ${at.y}` }); }
+	// a tree's seed on a free cell, with a spade (server: trees.ts plantTree; the light and the cell the server checks)
+	if (!guest && !covered && [...objs.values()].some((o) => o.kind === "item" && o.location === me && o.name === "Spaten")) for (const n of [...new Set([...objs.values()].filter((o) => o.kind === "item" && o.location === me && TREE_SEEDS.includes(o.name)).map((o) => o.name))]) entries.push({ label: `${n} hier pflanzen (ein Baum)`, line: `pflanze ${n.toLowerCase()} ${at.x} ${at.y}` });
 	// on the own figure: what works without anything more
 	if (self && self.x === at.x && self.y === at.y) {
 		entries.push({ label: "Umsehen", line: "look" }, { label: "Was trage ich?", line: "inventory" }, { label: "Wer spielt?", line: "who" }, { label: "Uhrzeit", line: "time" }, { label: "Mein Ruf", line: "reputation" });

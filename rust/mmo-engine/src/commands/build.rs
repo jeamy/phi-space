@@ -79,7 +79,7 @@ fn tile(ground: &[String], x: f64, y: f64) -> Option<String> {
 	let t = js::slice16(row, x as isize, Some(x as isize + 1));
 	(!t.is_empty() && (x as usize) < js::len16(row)).then(|| t.to_owned())
 }
-fn anew(e: &Json, f: Json) -> Json {
+pub(crate) fn anew(e: &Json, f: Json) -> Json {
 	let types: Vec<Json> = j::a(e, "types").iter().skip(1).cloned().collect();
 	obj! { "type" => j::at(e, "type").clone(), "types" => Json::Array(types), "fields" => f }
 }
@@ -1227,6 +1227,24 @@ pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 			continue;
 		}
 		if j::n(&b, "untilWorldMs") > now { continue; }
+		// shutters in its chest are used up and hold it a while longer (BuildingDef.shutters)
+		if let Some(shut) = j::opt(j::at(w, "building"), "shutters").filter(|s| j::truthy(s)) {
+			let held = std::cell::Cell::new(false);
+			in_txn(space, |txn| { let (b, held) = (&b, &held); async move {
+				let id = j::at(b, "buildId").clone();
+				let Some(s) = space.read_all(&tmpl("Item", obj! { "location" => id.clone(), "proto" => j::at(shut, "proto").clone() }), Some(&txn)).await?.into_iter().next() else { return Ok(false) };
+				if space.take_if_exists(&tmpl("Item", obj! { "itemId" => j::at(fields(&s), "itemId").clone(), "location" => id.clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
+				let Some(e) = space.take_if_exists(&tmpl("Building", obj! { "buildId" => id }), NO_WAIT, Some(&txn)).await? else { return Ok(false) };
+				let plan = plan_of(w, j::s(b, "plan"));
+				let keep = match plan.and_then(|p| j::so(p, "keepSetting")).filter(|k| !k.is_empty()) { Some(k) => setting(space, k).await? * WORLD_DAY, None => plan.and_then(|p| j::no(p, "keepWorldMs")).unwrap_or(7.0 * WORLD_DAY) };
+				let mut f = j::object(fields(&e));
+				f.insert("untilWorldMs", Json::from(now + js::round(keep * j::n(shut, "share"))));
+				space.write(&anew(&e, Json::Object(f)), Some(&txn), FOREVER).await?;
+				held.set(true);
+				Ok(true)
+			} }).await?;
+			if held.get() { continue; }
+		}
 		in_txn(space, |txn| { let b = &b; async move {
 			if space.take_if_exists(&tmpl("Building", obj! { "buildId" => j::at(b, "buildId").clone() }), NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); }
 			log_gone(b, "fell to a ruin (its term ran out)");

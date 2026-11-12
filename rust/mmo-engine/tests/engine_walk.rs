@@ -1262,6 +1262,74 @@ fn trees() {
 	assert!(w.entries_with(r#""Tree""#) >= 2, "no trees");
 }
 
+/// Planks (trees.ts, trade.ts craft, sweep.ts, food.ts, build.ts, wild.ts): a log makes a whole plank while a driftwood
+/// recipe takes real driftwood first; the barrel, the crate, the table and the shutters made at a workshop; a plank fence;
+/// a barrel and a crate keeping things fresh in a chest once, shutters holding a lapsed building, a meal at the table inside.
+#[test]
+fn planks() {
+	let mut w = Walk::new("planks", 49, START);
+	w.load(false);
+	let a = w.player_as(1, "graue-bucht", (5.0, 13.0), true, false);
+	let world = w.w.clone();
+	let mut n = 0;
+	let mut give = |w: &mut Walk, to: &str, proto: &str, k: usize| { for _ in 0..k { n += 1; w.write(thing(&world, &format!("t-{n}"), proto, to)); } };
+	// logs as spawn writes them: driftwood, of a log
+	for i in 0..3 {
+		let mut f = thing(&w.w, &format!("log-{i}"), "scheit", &a).get("fields").cloned().unwrap();
+		walk::j_set(&mut f, "proto", Json::from("treibholz"));
+		walk::j_set(&mut f, "icon", Json::from("items/scheit.png"));
+		walk::j_set(&mut f, "of", Json::from("scheit"));
+		w.write(obj! { "type" => "Item", "fields" => f });
+	}
+	give(&mut w, &a, "treibholz", 2);
+	give(&mut w, &a, "muschelmesser", 6);
+	let building = |id: &str, plan: &str, name: &str, x: f64, y: f64, ww: f64, hh: f64, owner: u32, until: f64| obj! { "type" => "Building", "fields" => obj! { "buildId" => id, "plan" => plan, "name" => name, "room" => "graue-bucht", "x" => x, "y" => y, "w" => ww, "h" => hh, "owner" => format!("c-walk{owner}"), "ownerName" => format!("Wanderer{owner}"), "accountId" => format!("a-walk{owner}"), "beaconId" => "feuer-bucht", "points" => 1.0, "by" => obj! {}, "untilWorldMs" => until, "builtAt" => 0.0 } };
+	w.write(building("w-1", "werkstatt", "Werkstatt", 4.0, 10.0, 3.0, 2.0, 9, 9e15));
+	w.write(building("h-1", "huette", "Hütte", 8.0, 14.0, 2.0, 2.0, 1, 9e15));
+	w.write(obj! { "type" => "Flame", "fields" => obj! { "beaconId" => "feuer-bucht", "until" => 9e15, "litAt" => 0.0 } });
+	w.compare("setup");
+	let at = std::cell::Cell::new(START);
+	let mut said = Vec::new();
+	let mut step = 0;
+	let mut run = |w: &mut Walk, who: &str, line: &str, later: f64| {
+		step += 1;
+		at.set(at.get() + 7_000.0 + later);
+		w.at(at.get());
+		let r = w.cmd(who, line, None);
+		eprintln!("{who}: {line} -> {r}");
+		w.compare(&format!("{step}: {who} {line} -> {r}"));
+		said.push(r);
+	};
+	for (who, line) in [(&a, "craft scheitbohle"), (&a, "craft hier")] { run(&mut w, who, line, 0.0); }
+	stand(&mut w, 1, "graue-bucht", 5.0, 12.0);
+	for (who, line) in [(&a, "craft hier"), (&a, "craft bohle"), (&a, "inventory"), (&a, "craft 2 scheitbohle"), (&a, "craft scheitbohle"), (&a, "craft bohle"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
+	give(&mut w, &a, "bohle", 13);
+	give(&mut w, &a, "tauwerk", 1);
+	give(&mut w, &a, "tangseil", 2);
+	for (who, line) in [(&a, "craft fass"), (&a, "craft obstkiste"), (&a, "craft tisch"), (&a, "craft fensterlaeden"), (&a, "craft fass"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
+	// a plank fence round a bed: without driftwood and rope, two planks
+	give(&mut w, &a, "spaten", 1);
+	give(&mut w, &a, "bohle", 2);
+	for (who, line) in [(&a, "umgraben 6 13"), (&a, "zäune"), (&a, "zäune"), (&a, "beet")] { run(&mut w, who, line, 0.0); }
+	// in the chests: a barrel and a crate keep things once, shutters hold a lapsed building, a table sates longer inside
+	let due = |w: &Walk, id: &str, proto: &str, at: &str| { let mut f = thing(&w.w, id, proto, at).get("fields").cloned().unwrap(); walk::j_set(&mut f, "turns", Json::Bool(true)); walk::j_set(&mut f, "turnsAtMs", Json::from(1.0)); obj! { "type" => "Item", "fields" => f } };
+	for (id, proto, chest) in [("k-fass", "fass", "h-1"), ("k-tisch", "tisch", "h-1"), ("k-kiste", "obstkiste", "w-1")] { w.write(thing(&w.w.clone(), id, proto, chest)); }
+	for (id, proto, chest) in [("d-1", "apfelsaft", "h-1"), ("d-2", "schweinefleisch", "h-1"), ("d-3", "apfel", "h-1"), ("d-4", "apfel", "w-1"), ("d-5", "apfelsaft", "w-1"), ("d-6", "apfelsaft", a.as_str())] { let t = due(&w, id, proto, chest); w.write(t); }
+	w.write(building("h-2", "huette", "Hütte", 11.0, 14.0, 2.0, 2.0, 9, 1.0));
+	w.write(thing(&w.w.clone(), "k-laden", "fensterlaeden", "h-2"));
+	w.write(building("h-3", "huette", "Hütte", 13.0, 10.0, 2.0, 2.0, 9, 1.0));
+	w.compare("before the sweep");
+	w.tick("sweep");
+	w.compare("after the sweep");
+	assert!(w.entries_with(r#""kept":true"#) >= 2, "nothing kept");
+	w.tick("sweep");
+	w.compare("after the second sweep");
+	give(&mut w, &a, "apfel", 2);
+	stand(&mut w, 1, "graue-bucht", 7.0, 14.0);
+	for (who, line) in [(&a, "iss apfel"), (&a, "betrete"), (&a, "iss apfel"), (&a, "look")] { run(&mut w, who, line, 0.0); }
+	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 12, "{said:?}");
+}
+
 /// Fields (field.ts): staking one out with its refusals, choosing the crop, seed and work points with their rests, an open
 /// field with a helper, the field tick ripening it, fertiliser, the harvest's shares over many hands, tired soil after the
 /// same crop again, a crop left too late and lost, sowing from `pflanze`, and giving a field up.

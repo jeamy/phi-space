@@ -363,6 +363,9 @@ function countOf(arg: string): { count: number; what: string } {
 }
 /** A recipe by its key or name, then in any form or by what it makes is also called: "tangseile", "seil". The own name
  *  goes first: "tuch" is the cloth, though linen is called so too. */
+/** A thing a recipe asks for by `key`: of that prototype, or one of its own that stands for it (a log for driftwood). */
+const isOf = (f: ItemFields, key: string) => f.proto === key || f.of === key;
+
 function recipeNamed(w: WorldDef, what: string) {
 	const own = (r: WorldDef["recipes"][number]) => [r.key, r.name];
 	const also = (r: WorldDef["recipes"][number]) => w.prototypes.find((p) => p.key === r.makes)?.aliases ?? [];
@@ -386,7 +389,7 @@ export const craft: Command = {
 			const plans = [...new Set(beside.map((b) => b.plan))].filter((p) => rs.some((r) => r.at === p));
 			if (!plans.length) throw new CommandError(beside.length ? `Neben ${beside[0]!.name} stellt man nichts her; was überall geht, zeigt „craft“.` : "Neben dir steht kein Bau. Was überall geht, zeigt „craft“.");
 			const carried = new Map<string, number>();
-			for (const i of await inventory(c)) carried.set(i.f.proto, (carried.get(i.f.proto) ?? 0) + 1);
+			for (const i of await inventory(c)) for (const k of i.f.of ? [i.f.proto, i.f.of] : [i.f.proto]) carried.set(k, (carried.get(k) ?? 0) + 1);
 			const pn = (k: string) => c.world.prototypes.find((p) => p.key === k)?.name ?? k;
 			const lines = plans.flatMap((p) => [`${planOf(c.world, p)?.name ?? p}:`, ...rs.filter((r) => r.at === p).map((r) => {
 				const ok = r.needs.every((x) => (carried.get(x.proto) ?? 0) >= x.count) && (!r.tool || carried.has(r.tool));
@@ -419,7 +422,8 @@ export const craft: Command = {
 		rounds: while (made < want) {
 			const round: Inv = [];
 			for (const n of r.needs) {
-				const hits = inv.filter((i) => i.f.proto === n.proto && !used.has(i.f.itemId) && !round.includes(i)).slice(0, n.count);
+				// a log is driftwood and a log (ItemFields.of): asked for driftwood, real driftwood goes first
+				const hits = inv.filter((i) => isOf(i.f, n.proto) && !used.has(i.f.itemId) && !round.includes(i)).sort((x, y) => (x.f.of === n.proto ? 0 : x.f.of ? 1 : 0) - (y.f.of === n.proto ? 0 : y.f.of ? 1 : 0)).slice(0, n.count);
 				if (hits.length < n.count) { lack = `Dir fehlt: ${n.count}× ${n.proto}.`; break rounds; }
 				round.push(...hits);
 			}

@@ -403,6 +403,19 @@ birch, pollard willow, apple tree, pear tree and oak.
 - **Use**: an apple or a pear is eaten (`iss`); an apple turns after a week, a pear after five days. At a hut, 3 fruits and a water jug make 2 juices,
   and 4 fruits, a water jug and a log make 2 jars of compote. Pigs eat acorns and apples. `baum` lists one's trees,
   `baum ansehen x y` tells of one.
+- **Planks**: a log is written as driftwood that is also *of* a log (`ItemFields.of`), so a recipe can ask for logs only:
+  at the workshop `craft scheitbohle` makes a whole plank of one log, where `craft bohle` takes two pieces of driftwood
+  (and real driftwood goes first when one carries both). Of planks the workshop makes:
+  - a **barrel** (4 planks, 1 cordage) and a **fruit crate** (3 planks): in a building's chest they keep juice, soup,
+    stew and raw meat (the barrel) or apples and pears (the crate) fresh twice as long. When such a thing would turn
+    there, the sweep moves its date on by its `afterMs` once and marks it `kept` (`WorldDef.keeps`, `sweep.ts`);
+  - a **table** (4 planks, 1 kelp rope): in the chest of a house, a meal eaten inside it (`betrete`) sates a quarter
+    longer (`food.table`);
+  - **shutters** (2 planks, 1 kelp rope): in a building's chest, when its term runs out they are used up and it stands
+    half its term again instead of falling to a ruin (`building.shutters`, `buildSweep`);
+  - a **plank fence**: `zäune` takes 2 planks (5 round a field, 3 round a coop) when the driftwood and rope are not
+    carried (`wild.fenceAlt`, `fieldFenceAlt`, `coopFenceAlt`).
+  A signpost was considered and left out: `straße` already lists where the roads of a place lead.
 
 ### Animals on the farm
 

@@ -5881,6 +5881,80 @@
 			"wear": 6
 		},
 		{
+			"key": "fass",
+			"parent": "ding",
+			"typeclass": "Gear",
+			"name": "Fass",
+			"desc": "Ein Fass aus Bohlen, mit Tauwerk gebunden. In einer Truhe hält es Saft, Suppe und Fleisch doppelt so lange frisch.",
+			"aliases": [
+				"fässer",
+				"faesser",
+				"faß",
+				"barrel"
+			],
+			"glyph": {
+				"shape": "circle",
+				"color": "#8a5a2e"
+			},
+			"icon": "items/fass.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "obstkiste",
+			"parent": "ding",
+			"typeclass": "Gear",
+			"name": "Obstkiste",
+			"desc": "Eine luftige Kiste aus Bohlen. In einer Truhe hält sie Äpfel und Birnen doppelt so lange frisch.",
+			"aliases": [
+				"obstkisten",
+				"kiste",
+				"crate",
+				"fruit crate"
+			],
+			"glyph": {
+				"shape": "square",
+				"color": "#b08a50"
+			},
+			"icon": "items/obstkiste.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "tisch",
+			"parent": "ding",
+			"typeclass": "Gear",
+			"name": "Tisch",
+			"desc": "Ein Tisch aus Bohlen. Liegt er in der Truhe eines Hauses, macht ein Essen darin ein Viertel länger satt.",
+			"aliases": [
+				"tische",
+				"table"
+			],
+			"glyph": {
+				"shape": "square",
+				"color": "#9a6a3a"
+			},
+			"icon": "items/tisch.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
+			"key": "fensterlaeden",
+			"parent": "ding",
+			"typeclass": "Gear",
+			"name": "Fensterläden",
+			"desc": "Zwei Läden aus Bohlen. In der Truhe eines Baus halten sie ihn, wenn seine Zeit abläuft, noch einmal halb so lange; dann sind sie verbraucht.",
+			"aliases": [
+				"fensterladen",
+				"laeden",
+				"läden",
+				"shutters"
+			],
+			"glyph": {
+				"shape": "square",
+				"color": "#6a8a5a"
+			},
+			"icon": "items/fensterlaeden.png",
+			"locks": "get:all();drop:all();give:not guest()"
+		},
+		{
 			"key": "samen-birke",
 			"parent": "ding",
 			"typeclass": "Seed",
@@ -8711,7 +8785,7 @@
 		{
 			"key": "bäume",
 			"category": "Allgemein",
-			"text": "Bäume wachsen über Tage und stehen dann, bis jemand sie fällt. Ihre Samen findet „sammle samen“, wo wilde Bäume stehen (Birkensamen, Weidenstecklinge, Apfelkerne, Birnenkerne, Eicheln); mit einem Spaten setzt „pflanze birkensamen“ einen Baum neben dich, im Licht eines Feuers (ein Feld, ein Lichtpunkt, höchstens acht je Spieler). „baum“ zeigt, wie weit sie sind; die Tage zählen auf der zweiten Uhr: eine Birke steht in drei Tagen, ein Apfel- oder Birnbaum in vier, eine Eiche in sieben. „fälle“ fällt deinen ausgewachsenen Baum mit einer Axt („craft axt“): Er gibt Scheite, und ein Scheit zählt überall wie Treibholz; Birke und Kopfweide treiben aus dem Stumpf wieder aus. „ernte baum“ holt Äpfel, Birnen, Eicheln oder schneidet die Ruten der Kopfweide (Scheite und einen Steckling). Am Herd der Hütte wird aus dem Obst Saft („craft apfelsaft“) und Kompott („craft apfelkompott“); alles davon macht satt, und Schweine fressen Eicheln und Äpfel."
+			"text": "Bäume wachsen über Tage und stehen dann, bis jemand sie fällt. Ihre Samen findet „sammle samen“, wo wilde Bäume stehen (Birkensamen, Weidenstecklinge, Apfelkerne, Birnenkerne, Eicheln); mit einem Spaten setzt „pflanze birkensamen“ einen Baum neben dich, im Licht eines Feuers (ein Feld, ein Lichtpunkt, höchstens acht je Spieler). „baum“ zeigt, wie weit sie sind; die Tage zählen auf der zweiten Uhr: eine Birke steht in drei Tagen, ein Apfel- oder Birnbaum in vier, eine Eiche in sieben. „fälle“ fällt deinen ausgewachsenen Baum mit einer Axt („craft axt“): Er gibt Scheite, und ein Scheit zählt überall wie Treibholz; Birke und Kopfweide treiben aus dem Stumpf wieder aus. „ernte baum“ holt Äpfel, Birnen, Eicheln oder schneidet die Ruten der Kopfweide (Scheite und einen Steckling). Am Herd der Hütte wird aus dem Obst Saft („craft apfelsaft“) und Kompott („craft apfelkompott“); alles davon macht satt, und Schweine fressen Eicheln und Äpfel. In der Werkstatt gibt ein Scheit eine ganze Bohle („craft scheitbohle“); aus Bohlen werden Fass und Obstkiste (in der Truhe hält sich darin alles doppelt so lange), Tisch (drinnen macht Essen länger satt) und Fensterläden (sie halten einen Bau, wenn seine Zeit abläuft, noch einmal halb so lange)."
 		},
 		{
 			"key": "brot",
@@ -10071,6 +10145,22 @@
 				],
 				"axt": [
 					7,
+					0
+				],
+				"fass": [
+					14,
+					0
+				],
+				"obstkiste": [
+					9,
+					0
+				],
+				"tisch": [
+					12,
+					0
+				],
+				"fensterlaeden": [
+					8,
 					0
 				]
 			},
@@ -12833,6 +12923,8 @@
 			"ziegel": 2,
 			"bohle": 2,
 			"tauwerk": 2,
+			"obstkiste": 2,
+			"fensterlaeden": 2,
 			"lehm": 2,
 			"hund": 2,
 			"katze": 2,
@@ -12847,6 +12939,8 @@
 			"bienenvolk": 4,
 			"ruderboot": 4,
 			"karren": 4,
+			"fass": 4,
+			"tisch": 4,
 			"rind": 8,
 			"segelboot": 8
 		},
@@ -12866,6 +12960,10 @@
 		"listMs": 86400000
 	},
 	"building": {
+		"shutters": {
+			"proto": "fensterlaeden",
+			"share": 0.5
+		},
 		"store": {
 			"quota": {
 				"fremder": 2,
@@ -15006,6 +15104,24 @@
 				"proto": "tangseil",
 				"count": 1
 			}
+		],
+		"fenceAlt": [
+			{
+				"proto": "bohle",
+				"count": 2
+			}
+		],
+		"fieldFenceAlt": [
+			{
+				"proto": "bohle",
+				"count": 5
+			}
+		],
+		"coopFenceAlt": [
+			{
+				"proto": "bohle",
+				"count": 3
+			}
 		]
 	},
 	"quarry": {
@@ -15082,8 +15198,42 @@
 			"birnenkompott": 21600000
 		},
 		"maxWorldMs": 86400000,
-		"restFactor": 1.5
+		"restFactor": 1.5,
+		"table": {
+			"proto": "tisch",
+			"factor": 1.25
+		}
 	},
+	"keeps": [
+		{
+			"proto": "fass",
+			"keeps": [
+				"apfelsaft",
+				"birnensaft",
+				"kohlsuppe",
+				"huehnersuppe",
+				"eintopf",
+				"huehnchen",
+				"entenfleisch",
+				"gaensefleisch",
+				"lammfleisch",
+				"ziegenfleisch",
+				"schweinefleisch",
+				"speckseite",
+				"rindfleisch",
+				"rinderfilet"
+			],
+			"factor": 2
+		},
+		{
+			"proto": "obstkiste",
+			"keeps": [
+				"apfel",
+				"birne"
+			],
+			"factor": 2
+		}
+	],
 	"fishing": {
 		"plan": "steg",
 		"net": "netz",
@@ -15184,6 +15334,10 @@
 			"kohlroulade": 5,
 			"sauerkraut": 4,
 			"axt": 9,
+			"fass": 24,
+			"obstkiste": 15,
+			"tisch": 20,
+			"fensterlaeden": 13,
 			"apfel": 2,
 			"birne": 2,
 			"eichel": 1,
@@ -15894,6 +16048,80 @@
 			],
 			"tool": "muschelmesser",
 			"makes": "bohle",
+			"at": "werkstatt"
+		},
+		{
+			"key": "scheitbohle",
+			"name": "Bohle aus Scheit",
+			"needs": [
+				{
+					"proto": "scheit",
+					"count": 1
+				}
+			],
+			"tool": "muschelmesser",
+			"makes": "bohle",
+			"at": "werkstatt"
+		},
+		{
+			"key": "fass",
+			"name": "Fass",
+			"needs": [
+				{
+					"proto": "bohle",
+					"count": 4
+				},
+				{
+					"proto": "tauwerk",
+					"count": 1
+				}
+			],
+			"makes": "fass",
+			"at": "werkstatt"
+		},
+		{
+			"key": "obstkiste",
+			"name": "Obstkiste",
+			"needs": [
+				{
+					"proto": "bohle",
+					"count": 3
+				}
+			],
+			"tool": "muschelmesser",
+			"makes": "obstkiste",
+			"at": "werkstatt"
+		},
+		{
+			"key": "tisch",
+			"name": "Tisch",
+			"needs": [
+				{
+					"proto": "bohle",
+					"count": 4
+				},
+				{
+					"proto": "tangseil",
+					"count": 1
+				}
+			],
+			"makes": "tisch",
+			"at": "werkstatt"
+		},
+		{
+			"key": "fensterlaeden",
+			"name": "Fensterläden",
+			"needs": [
+				{
+					"proto": "bohle",
+					"count": 2
+				},
+				{
+					"proto": "tangseil",
+					"count": 1
+				}
+			],
+			"makes": "fensterlaeden",
 			"at": "werkstatt"
 		},
 		{

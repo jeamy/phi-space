@@ -106,3 +106,7 @@ and compote: `items/scheit.png`, `items/axt.png`, `items/samen-birke.png`, `item
 `items/apfelkern.png`, `items/birnenkern.png`, `items/eichel.png`, `items/apfel.png`, `items/birne.png`,
 `items/apfelsaft.png`, `items/birnensaft.png`, `items/apfelkompott.png`, `items/birnenkompott.png`) were drawn the same
 way, by the script `items-src/trees.py` (same license as this project).
+
+What the workshop makes of planks (a barrel, a fruit crate, a table and shutters: `items/fass.png`,
+`items/obstkiste.png`, `items/tisch.png`, `items/fensterlaeden.png`) were drawn the same way, by the script
+`items-src/planks.py` (same license as this project).

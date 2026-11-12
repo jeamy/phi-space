@@ -93,6 +93,7 @@ pub async fn spawn(space: &Space, txn: Option<&str>, w: &Json, p: &Json, at: At,
 	if let Some(e) = at.expires_world_ms { item.insert("expiresWorldMs", Json::from(e)); }
 	if j::b(p, "wear") { item.insert("wear", j::at(p, "wear").clone()); }
 	if stands.is_some() && j::b(p, "icon") { item.insert("icon", j::at(p, "icon").clone()); }
+	if stands.is_some() { item.insert("of", j::at(p, "key").clone()); }
 	for (k, v) in j::entries(own) { item.insert(k, v.clone()); }
 	let item = Json::Object(item);
 	let tc = if j::b(p, "typeclass") { j::s(p, "typeclass") } else { "Item" };

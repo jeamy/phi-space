@@ -300,10 +300,13 @@ const scheuche: Command = {
 };
 
 /** Takes what a fence costs from the actor's pack; throws (naming it) when something is missing. */
-async function payFence(c: CommandCtx, needs: Array<{ proto: string; count: number }>): Promise<void> {
+async function payFence(c: CommandCtx, first: Array<{ proto: string; count: number }>, alt?: Array<{ proto: string; count: number }>): Promise<void> {
 	const inv = await inventory(c);
-	const missing = needs.filter((n) => inv.filter((i) => i.f.proto === n.proto).length < n.count);
-	if (missing.length) throw new CommandError(`Für diesen Zaun brauchst du ${needs.map((n) => `${n.count} ${protoName(c, n.proto)}`).join(" und ")}.`);
+	const lacks = (needs: Array<{ proto: string; count: number }>) => needs.some((n) => inv.filter((i) => i.f.proto === n.proto).length < n.count);
+	const named = (needs: Array<{ proto: string; count: number }>) => needs.map((n) => `${n.count} ${protoName(c, n.proto)}`).join(" und ");
+	// planks instead (WildDef.fenceAlt) when the first cost is not carried
+	const needs = lacks(first) && alt && !lacks(alt) ? alt : first;
+	if (lacks(needs)) throw new CommandError(`Für diesen Zaun brauchst du ${named(first)}${alt ? ` oder ${named(alt)}` : ""}.`);
 	for (const n of needs) for (const it of inv.filter((i) => i.f.proto === n.proto).slice(0, n.count)) {
 		if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Dein Material ist gerade nicht greifbar; bitte noch einmal.");
 	}
@@ -319,7 +322,7 @@ const zaeune: Command = {
 		if (beds.length) {
 			const b = await bedHere(c, { may: (x) => mayTend(c, x), reach: 1 });
 			if (b.fenced) throw new CommandError(`Um das ${bedName(b)} steht schon ein Zaun.`);
-			await payFence(c, wd.fence);
+			await payFence(c, wd.fence, wd.fenceAlt);
 			await writeBed(c, { ...b, fenced: true, untilWorldMs: Math.max(b.untilWorldMs, (await decayNowOf(c.space, c.txn)) + (c.world.garden?.bed.keepWorldMs ?? 0)) });
 			return msg(c, "*", "emote", `${c.actor.name} setzt einen Zaun um das ${bedName(b)}; kein Hase kommt mehr hinein.`);
 		}
@@ -328,7 +331,7 @@ const zaeune: Command = {
 			const r = await takeNear<FieldFields>(c, "Field", "fieldId", 1, mineField);
 			if (!("f" in r)) throw new CommandError("Der Acker ist gerade nicht greifbar; bitte noch einmal.");
 			if (r.f.fenced) throw new CommandError(`Um die ${fieldName(r.f)} steht schon ein Zaun.`);
-			await payFence(c, wd.fieldFence);
+			await payFence(c, wd.fieldFence, wd.fieldFenceAlt);
 			await c.space.write({ type: "Field", fields: { ...r.f, fenced: true } as never }, c.txn, FOREVER);
 			return msg(c, "*", "emote", `${c.actor.name} zieht einen Zaun um den ${fieldName(r.f)}; kein Reh kommt mehr hinein.`);
 		}
@@ -338,7 +341,7 @@ const zaeune: Command = {
 			const r = await takeNear<BuildingFields>(c, "Building", "buildId", 1, mineCoop);
 			if (!("f" in r)) throw new CommandError("Der Stall ist gerade nicht greifbar; bitte noch einmal.");
 			if (r.f.fenced) throw new CommandError("Um den Stall steht schon ein Zaun.");
-			await payFence(c, wd.coopFence);
+			await payFence(c, wd.coopFence, wd.coopFenceAlt);
 			await putBack(c, { ...r.f, fenced: true });
 			return msg(c, "*", "emote", `${c.actor.name} setzt einen Zaun mit Tür um den Stall; kein Fuchs kommt mehr hinein.`);
 		}

@@ -2,7 +2,7 @@
 // space cannot do this, because a lease runs on real time and does not stand still with the clock. Flotsam of the tide, jobs
 // of the order board and listings of the market carry `expiresWorldMs`; the date `tick.sweep` calls this every few world
 // seconds. Each thing is taken in a transaction of its own, so what someone picks up or buys at that moment is theirs.
-import { NO_WAIT, type SpaceLike } from "phi-spaces";
+import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type ItemFields, type ListingFields, type OrderFields, type WantedFields } from "../model.ts";
 import { decayNowOf, worldNowOf } from "./clock.ts";
 import { buildSweep } from "./commands/build.ts";
@@ -41,6 +41,13 @@ async function turnItem(space: SpaceLike, id: string, w?: WorldDef): Promise<voi
 		const e = await space.takeIfExists({ type: "Item", id }, NO_WAIT, { txn });
 		if (!e) { await space.abort(txn); return; } // taken right now
 		const f = fieldsOf<ItemFields>(e), p = await resolvePrototype(space, f.proto);
+		// in a building's chest beside a barrel or a crate (WorldDef.keeps) it keeps fresh: it turns that much later, once
+		const keeper = !f.kept && p?.turns && f.turnsAtMs !== undefined ? w?.keeps?.find((k) => k.keeps.includes(f.proto)) : undefined;
+		if (keeper && (await space.count({ type: "Building", fields: { buildId: f.location } }, txn)) && (await space.count({ type: "Item", fields: { location: f.location, proto: keeper.proto } }, txn))) {
+			await space.write({ type: e.type, types: e.types.slice(1), fields: { ...e.fields, turnsAtMs: f.turnsAtMs! + p!.turns!.afterMs * (keeper.factor - 1), kept: true } as never }, txn, FOREVER);
+			await space.commit(txn);
+			return;
+		}
 		const into = p?.turns?.into ? await resolvePrototype(space, p.turns.into) : null;
 		if (into && w) await spawn(space, txn, w, into, { location: f.location, x: f.x, y: f.y });
 		const room = (await space.readAll({ type: "Character", fields: { charId: f.location } }, { txn }))[0]?.fields.room;
