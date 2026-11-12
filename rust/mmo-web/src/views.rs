@@ -174,8 +174,16 @@ pub fn plans_of(w: &Json) -> Json {
 
 fn hours(ms: f64) -> String { let h = js::round(ms / 3_600_000.0); if h >= 1.0 { format!("{} {}", js::number_text(h), if h == 1.0 { "Stunde" } else { "Stunden" }) } else { "weniger als einer Stunde".into() } }
 
+const DAY: f64 = 24.0 * 3_600_000.0;
+/// A span as `baustelle` says it (build.ts days).
+fn span(ms: f64) -> String {
+	let d = (ms / DAY).round();
+	if d >= 1.0 { format!("etwa {} {}", js::number_text(d), if d == 1.0 { "Tag" } else { "Tage" }) } else { format!("etwa {} Stunden", js::number_text(1f64.max((ms / 3_600_000.0).round()))) }
+}
+
 /// `todosFor` (server/todos.ts): the tasks of `char_id`, most urgent first.
-pub fn todos_for<'a>(char_id: &str, objs: impl Iterator<Item = &'a Json>, herd_of: &dyn Fn(&str) -> Option<Json>, loads: impl Iterator<Item = &'a Json>, w: &Json, now: Option<f64>, patient: f64) -> Json {
+#[allow(clippy::too_many_arguments)] // the gateway's state, as the TypeScript todosFor takes it
+pub fn todos_for<'a>(char_id: &str, objs: impl Iterator<Item = &'a Json>, herd_of: &dyn Fn(&str) -> Option<Json>, loads: impl Iterator<Item = &'a Json>, w: &Json, now: Option<f64>, patient: f64, decay: Option<f64>) -> Json {
 	let room = |id: &str| j::by(j::a(w, "rooms"), "roomId", id).map_or_else(|| id.to_owned(), |r| txt(j::at(r, "name")));
 	let where_ = |o: &Json| format!("in {} ({} {})", room(j::s(o, "location")), js::number_text(j::n(o, "x")), js::number_text(j::n(o, "y")));
 	let mut out: Vec<(f64, Json)> = Vec::new();
@@ -185,6 +193,16 @@ pub fn todos_for<'a>(char_id: &str, objs: impl Iterator<Item = &'a Json>, herd_o
 		let own = j::s(o, "ownerId") == char_id && j::truthy(j::at(o, "ownerId"));
 		if !own && !(j::s(o, "kind") == "bed" && j::a(o, "sponsorIds").iter().any(|x| x.as_str() == Some(char_id))) { continue; }
 		let name = j::s(o, "name");
+		// a building's term runs on the second clock (as `baustelle` and `repariere` count it): told five days before it falls
+		if j::s(o, "kind") == "building" {
+			if let (Some(term), Some(decay)) = (j::no(o, "term"), decay) {
+				if term - decay < 5.0 * DAY {
+					let left = term - decay;
+					let his = if j::by(j::a(j::at(w, "building"), "plans"), "key", j::s(o, "plan")).is_some_and(|p| j::s(p, "dative").starts_with("einem ")) { "Dein" } else { "Deine" };
+					add(o, "verfall", format!("{his} {name} {} hält noch {}: ausbessern („repariere“), sonst wird daraus eine Ruine.", where_(o), span(left)), if left < DAY { 0.0 } else { 1.0 });
+				}
+			}
+		}
 		match j::s(o, "kind") {
 			"field" => match j::s(o, "fieldStage") {
 				"reif" => add(o, "reif", format!("Dein {name} {} ist reif: ernten.", where_(o)), 0.0),
@@ -255,7 +273,7 @@ mod tests {
 			"thirstMs" => 24.0 * H, "wateredWorldMs" => watered, "weedy" => true, "location" => "graue-bucht", "x" => 4.0, "y" => 5.0,
 		};
 		let all = |who: &str, o: &Json, patient: f64, only: bool| -> Vec<String> {
-			let t = todos_for(who, std::iter::once(o), &|_| None, std::iter::empty(), &w, Some(now), patient);
+			let t = todos_for(who, std::iter::once(o), &|_| None, std::iter::empty(), &w, Some(now), patient, None);
 			t.as_array().map(|a| a.iter().filter(|t| !only || j::s(t, "id") == "b9:durst").map(|t| j::s(t, "text").to_owned()).collect()).unwrap_or_default()
 		};
 		assert!(all(me, &bed(me, &[], now - 30.0 * H, 1.0), 24.0, true).is_empty());
@@ -265,5 +283,23 @@ mod tests {
 		let sponsored = bed("c-ida", &[me], now - 20.0 * H, 1.0);
 		assert_eq!(all(me, &sponsored, 1.0, false), ["Das Beet von Ida in Graue Bucht (4 5) ist trocken: gießen („gieße“), sonst welken die Pflanzen."]);
 		assert!(all("c-stranger", &sponsored, 1.0, false).is_empty());
+	}
+
+	/// A building is told five days before its term on the second clock runs out, urgent on its last day.
+	#[test]
+	fn a_building_is_told_before_it_falls() {
+		const H: f64 = 3_600_000.0;
+		let me = "c-me";
+		let w = obj! { "rooms" => Json::Array(vec![obj! { "roomId" => "moewenfels-strand", "name" => "Möwenfels-Strand" }]), "building" => obj! { "plans" => Json::Array(vec![obj! { "key" => "huette", "dative" => "einer Hütte" }, obj! { "key" => "steg", "dative" => "einem Steg" }]) } };
+		let b = |plan: &str, name: &str, term: f64| obj! { "id" => "h1", "kind" => "building", "name" => name, "plan" => plan, "ownerId" => me, "term" => term, "location" => "moewenfels-strand", "x" => 20.0, "y" => 6.0 };
+		let told = |o: &Json, decay: Option<f64>| -> Vec<(String, f64)> {
+			let t = todos_for(me, std::iter::once(o), &|_| None, std::iter::empty(), &w, Some(0.0), 1.0, decay);
+			t.as_array().map(|a| a.iter().map(|t| (j::s(t, "text").to_owned(), j::n(t, "rank"))).collect()).unwrap_or_default()
+		};
+		let decay = 1000.0 * H;
+		assert!(told(&b("huette", "Hütte", decay + 6.0 * DAY), Some(decay)).is_empty(), "six days left: nothing yet");
+		assert_eq!(told(&b("huette", "Hütte", decay + 3.0 * DAY), Some(decay)), [("Deine Hütte in Möwenfels-Strand (20 6) hält noch etwa 3 Tage: ausbessern („repariere“), sonst wird daraus eine Ruine.".to_owned(), 1.0)]);
+		assert_eq!(told(&b("steg", "Steg", decay + 5.0 * H), Some(decay)), [("Dein Steg in Möwenfels-Strand (20 6) hält noch etwa 5 Stunden: ausbessern („repariere“), sonst wird daraus eine Ruine.".to_owned(), 0.0)]);
+		assert!(told(&b("huette", "Hütte", decay + H), None).is_empty(), "without a clock nothing that goes by the time");
 	}
 }

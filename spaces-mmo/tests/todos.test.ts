@@ -62,6 +62,17 @@ test("the thirst goes by the patience as in the engine; a sponsor is told when t
 	assert.equal(toEnglish("Das Beet von Ida in Graue Bucht (4 5) braucht bald Wasser: gießen („gieße“)."), "The Bed of Ida in Grey Bay (4 5) needs water soon: water it („water“).");
 });
 
+test("a building is told five days before its term on the second clock runs out, urgent on its last day", () => {
+	const decay = 1000 * H, DAY = 24 * H, at = { location: "moewenfels-strand", x: 20, y: 6 };
+	const b = (plan: string, name: string, term: number): ObjView => ({ id: "h1", kind: "building", name, plan, ownerId: me, term, ...at });
+	const told = (o: ObjView, d: number | null) => todosFor(me, [o], herds, [], w, now, 1, d).map((t) => [t.text, t.rank]);
+	assert.deepEqual(told(b("huette", "Hütte", decay + 6 * DAY), decay), [], "six days left: nothing yet");
+	assert.deepEqual(told(b("huette", "Hütte", decay + 3 * DAY), decay), [["Deine Hütte in Möwenstrand (20 6) hält noch etwa 3 Tage: ausbessern („repariere“), sonst wird daraus eine Ruine.", 1]]);
+	assert.deepEqual(told(b("steg", "Steg", decay + 5 * H), decay), [["Dein Steg in Möwenstrand (20 6) hält noch etwa 5 Stunden: ausbessern („repariere“), sonst wird daraus eine Ruine.", 0]]);
+	assert.deepEqual(told(b("huette", "Hütte", decay + H), null), [], "without a clock nothing that goes by the time");
+	assert.equal(toEnglish("Deine Hütte in Möwenstrand (20 6) hält noch etwa 3 Tage: ausbessern („repariere“), sonst wird daraus eine Ruine."), "Your Hut in Gull Beach (20 6) lasts about 3 days more: mend it („repair“), or it becomes a ruin.");
+});
+
 test("every task has its English, with the English commands", () => {
 	for (const t of texts) {
 		const en = toEnglish(t);

@@ -9,11 +9,14 @@ import type { ObjView } from "./gateway.ts";
 export type { Todo } from "../shared/frames.ts";
 import type { Todo } from "../shared/frames.ts";
 
+const DAY = 24 * 3600_000;
+/** A span as `baustelle` says it (build.ts days). */
+const span = (ms: number) => { const d = Math.round(ms / DAY); return d >= 1 ? `etwa ${d} ${d === 1 ? "Tag" : "Tage"}` : `etwa ${Math.max(1, Math.round(ms / 3600_000))} Stunden`; };
 const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : "weniger als einer Stunde"; };
 
-/** The tasks of `charId`, most urgent first. `herds`: the herd of each building by its id; `loads`: the grain at the
+/** The tasks of `charId`, most urgent first. `decay`: the second clock now (a building's term). `herds`: the herd of each building by its id; `loads`: the grain at the
  *  mills; `now`: the world's time (null without a clock: nothing that goes by the time). */
-export function todosFor(charId: string, objs: Iterable<ObjView>, herds: ReadonlyMap<string, HerdFields>, loads: Iterable<MillLoadFields>, w: WorldDef, now: number | null, patient = 1): Todo[] {
+export function todosFor(charId: string, objs: Iterable<ObjView>, herds: ReadonlyMap<string, HerdFields>, loads: Iterable<MillLoadFields>, w: WorldDef, now: number | null, patient = 1, decay: number | null = null): Todo[] {
 	const room = (id: string) => w.rooms.find((r) => r.roomId === id)?.name ?? id;
 	const where = (o: { location: string; x: number; y: number }) => `in ${room(o.location)} (${o.x} ${o.y})`;
 	const proto = (key: string) => w.prototypes.find((p) => p.key === key)?.name ?? key;
@@ -43,7 +46,13 @@ export function todosFor(charId: string, objs: Iterable<ObjView>, herds: Readonl
 			if (!plants.length) add(o, "leer", `Dein ${o.name} ${where(o)} ist leer: pflanzen („pflanze“).`, 2);
 		} else if (o.kind === "site") {
 			add(o, "bau", `Deine Baustelle ${o.name} ${where(o)}: ${o.missing ? `es fehlen noch ${o.missing}` : "fertig bauen"} („liefere“, „arbeite“).`, 1);
-		} else if (o.kind === "building" && o.herd) {
+		}
+		// a building's term runs on the second clock (as `baustelle` and `repariere` count it): told five days before it falls
+		if (o.kind === "building" && o.term !== undefined && decay !== null && o.term - decay < 5 * DAY) {
+			const left = o.term - decay, his = w.building?.plans.find((p) => p.key === o.plan)?.dative?.startsWith("einem ") ? "Dein" : "Deine";
+			add(o, "verfall", `${his} ${o.name} ${where(o)} hält noch ${span(left)}: ausbessern („repariere“), sonst wird daraus eine Ruine.`, left < DAY ? 0 : 1);
+		}
+		if (o.kind === "building" && o.herd) {
 			const h = herds.get(o.id), k = w.animals?.kinds.find((x) => x.key === o.herd);
 			if (!h || !k || now === null) continue;
 			// at least one animal: what it has given since the last look (the house counts the rest when one comes)
