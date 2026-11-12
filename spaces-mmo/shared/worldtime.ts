@@ -83,7 +83,7 @@ export const paused = (clock: WorldClockFields, realNow: number): WorldClockFiel
 export const resumed = (clock: WorldClockFields, realNow: number): WorldClockFields => ({ ...materialize(clock, realNow), paused: false });
 
 /** What the gateway tells a browser; the browser interpolates between two of these, and decides nothing by it. */
-export type WorldTimeView = { epoch: number; worldMs: number; rate: number; paused: boolean; serverNowMs: number; /** World days of a year; 0 or absent: no seasons. */ yearDays?: number };
+export type WorldTimeView = { epoch: number; worldMs: number; rate: number; paused: boolean; serverNowMs: number; /** World days of a year; 0 or absent: no seasons. */ yearDays?: number; /** The clock's patience (`patience`): what an animal is fed ahead is stretched by it. */ patience?: number };
 export const viewOf = (clock: WorldClockFields, serverNowMs: number): WorldTimeView => ({ epoch: clock.epoch, worldMs: worldNow(clock, serverNowMs), rate: clock.rate, paused: clock.paused, serverNowMs });
 /** The world time a browser shows `now`, from the view it received at `receivedAtMs` (its own clock). */
 export const shownWorldMs = (v: WorldTimeView, receivedAtMs: number, now: number): number => (v.paused ? v.worldMs : v.worldMs + Math.max(0, now - receivedAtMs) * v.rate);

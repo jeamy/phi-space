@@ -44,6 +44,7 @@ export function usesOf(w: WorldDef): ItemUses {
 		foods: Object.fromEntries(Object.entries(w.food?.foods ?? {}).map(([k, ms]) => [name(k), Math.round(ms / 3600_000)])),
 		recipes: w.recipes.map((r) => ({ key: r.key, name: r.name, needs: r.needs.map((n) => ({ name: name(n.proto), count: n.count })), ...(r.tool ? { tool: name(r.tool) } : {}), ...(r.at ? { at: r.at } : {}) })),
 		feed: Object.fromEntries([...(w.animals?.kinds ?? []), ...(w.wild?.keepers ?? [])].map((k) => [k.key, k.feed.map(name)])),
+		...(w.animals ? { feeding: { feedWorldMs: w.animals.feedWorldMs, fedMaxWorldMs: w.animals.fedMaxWorldMs, houses: w.animals.houses } } : {}),
 		offerings: (w.chapel?.offerings ?? []).map(name),
 		flowers: (w.garden?.sorts ?? []).filter((s) => s.kind === "zier").map((s) => name(s.yields.proto)),
 		// a seed by what grows of it (the pack keeps them side by side); a crop sown from itself (Weizen) is left out
@@ -283,7 +284,7 @@ export class Gateway {
 		if (this.#clock.paused || !(rate > 0)) return null;
 		return Date.now() + Math.max(0, atDecayMs - decayNow(this.#clock)) / rate;
 	}
-	#worldTime(): WorldTimeView | null { return this.#clock ? { ...viewOf(this.#clock, Date.now()), yearDays: this.#yearDays } : null; }
+	#worldTime(): WorldTimeView | null { return this.#clock ? { ...viewOf(this.#clock, Date.now()), yearDays: this.#yearDays, patience: patience(this.#clock) } : null; }
 	#broadcastTime(): void {
 		void setting(this.space, "year.days").then((d) => { this.#yearDays = d; }, () => {}); // the next one carries it
 		const time = this.#worldTime();
@@ -597,7 +598,7 @@ export class Gateway {
 			const missing = site ? [...b.needs.filter((n) => n.have < n.count).map((n) => `${n.count - n.have} ${n.name}`), ...(b.work < b.workNeed ? [`${b.workNeed - b.work} Arbeit`] : [])].join(", ") : undefined;
 			const color = this.w.building?.plans.find((p) => p.key === b.plan)?.color;
 			if (!site && b.herd) this.#herds.set(b.buildId, b.herd); else this.#herds.delete(b.buildId);
-			this.#setObj(id, { id: b.buildId, kind: site ? "site" : "building", name: b.name, location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: this.#shownName(b.owner, b.ownerName), ownerId: b.owner, plan: b.plan, ...(site ? { orders: this.#ordersOf(b.buildId) } : {}), ...(site ? { progress: total ? have / total : 0, missing } : {}), ...(color ? { color } : {}), ...(!site && b.herd ? { herd: b.herd.kind } : {}), ...(!site && b.keeper ? { keeper: b.keeper.kind } : {}), ...(!site && b.fenced ? { fenced: true } : {}), ...(site ? {} : { term: b.untilWorldMs }), ...(!site && this.w.building?.plans.find((p) => p.key === b.plan)?.interior ? { interior: true, ...(b.guests?.length ? { guestIds: b.guests.map((g) => g.charId) } : {}) } : {}) });
+			this.#setObj(id, { id: b.buildId, kind: site ? "site" : "building", name: b.name, location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: this.#shownName(b.owner, b.ownerName), ownerId: b.owner, plan: b.plan, ...(site ? { orders: this.#ordersOf(b.buildId) } : {}), ...(site ? { progress: total ? have / total : 0, missing } : {}), ...(color ? { color } : {}), ...(!site && b.herd ? { herd: b.herd.kind, fedUntil: b.herd.fedUntilWorldMs } : {}), ...(!site && b.keeper ? { keeper: b.keeper.kind, keeperFedUntil: b.keeper.fedUntilWorldMs } : {}), ...(!site && b.fenced ? { fenced: true } : {}), ...(site ? {} : { term: b.untilWorldMs }), ...(!site && this.w.building?.plans.find((p) => p.key === b.plan)?.interior ? { interior: true, ...(b.guests?.length ? { guestIds: b.guests.map((g) => g.charId) } : {}) } : {}) });
 		}
 		else if (type === "Flame") { const f = fields as unknown as FlameFields; this.#flames.set(f.beaconId, f.until); this.#flameOf.set(id, f.beaconId); }
 		else if (type === "Wind") { const f = fields as unknown as WindFields; this.#winds.set(f.island, f.level); for (const c of this.#clients) if (c.room !== null && this.#rooms.get(c.room)?.island === f.island) c.ws.send({ t: "wind", wind: this.#windIn(c.room) } satisfies ServerFrame); }

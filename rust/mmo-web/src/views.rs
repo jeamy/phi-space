@@ -130,6 +130,8 @@ pub fn uses_of(w: &Json) -> Json {
 	let mut feed = Object::new();
 	for k in j::a(j::at(w, "animals"), "kinds").iter().chain(j::a(j::at(w, "wild"), "keepers")) { feed.insert(j::s(k, "key"), Json::Array(j::a(k, "feed").iter().map(|f| Json::from(name(f.as_str().unwrap_or("")))).collect())); }
 	o.insert("feed", Json::Object(feed));
+	let animals = j::at(w, "animals");
+	if j::truthy(animals) { o.insert("feeding", obj! { "feedWorldMs" => j::at(animals, "feedWorldMs").clone(), "fedMaxWorldMs" => j::at(animals, "fedMaxWorldMs").clone(), "houses" => j::at(animals, "houses").clone() }); }
 	o.insert("offerings", Json::Array(j::a(j::at(w, "chapel"), "offerings").iter().map(|f| Json::from(name(f.as_str().unwrap_or("")))).collect()));
 	let sorts = j::a(j::at(w, "garden"), "sorts");
 	let crops = j::a(j::at(w, "fields"), "crops");

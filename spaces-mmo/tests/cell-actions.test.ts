@@ -360,3 +360,20 @@ test("feeding, collecting, taking out and mending are offered only when they wor
 	for (const l of ["Füttern", "Katze füttern", "Eier einsammeln", "Ausbessern (2 Treibholz)"]) assert.ok(all.includes(l), l);
 	assert.ok(!labels(empty, carried("Weizen")).some((l) => l === "Ein Tier herausnehmen" || l === "Füttern"), "an empty coop");
 });
+
+test("feeding is offered only while the animal eats: a sated herd or cat has no entry, a hungry one has", () => {
+	const DAY = 24 * 3600_000, now = 10 * DAY;
+	const fed = { feedWorldMs: DAY, fedMaxWorldMs: 3 * DAY, houses: { huehnerstall: 6 }, now, patience: 1 };
+	const coop = (fedUntil: number, keeperFedUntil: number) => obj({ id: "coop", kind: "building", name: "Hühnerstall", owner: "Mira", ownerId: "me", plan: "huehnerstall", herd: "huhn", fedUntil, keeper: "katze", keeperFedUntil, x: 6, y: 5, w: 2, h: 2 });
+	const bag = new Map<string, ObjView>([["w", obj({ id: "w", kind: "item", name: "Weizen", location: "me", x: -1, y: -1 })], ["f", obj({ id: "f", kind: "item", name: "Fisch", location: "me", x: -1, y: -1 })]]);
+	const labels = (o: ObjView, f: typeof fed = fed) => cellEntries({ ...input, feed: { huhn: ["Weizen"], katze: ["Fisch"] }, fed: f, objs: new Map([["coop", o], ...bag]), at: { x: 6, y: 5 } }).map((e) => e.label);
+	const full = labels(coop(now + 3 * DAY, now + 3 * DAY));
+	assert.ok(!full.includes("Füttern") && !full.includes("Katze füttern"), "both fed as far ahead as they eat");
+	const hungry = labels(coop(now - DAY, now));
+	assert.ok(hungry.includes("Füttern") && hungry.includes("Katze füttern"));
+	// a cat fed two days ahead takes no more (a food is a day, the most three); a coop takes another share
+	const half = labels(coop(now + 2 * DAY + 1, now + 2 * DAY + 1));
+	assert.ok(half.includes("Füttern") && !half.includes("Katze füttern"));
+	// with patience 24, three days are 72: the cat fed two days ahead still eats
+	assert.ok(labels(coop(now + 3 * DAY, now + 2 * DAY), { ...fed, patience: 24 }).includes("Katze füttern"));
+});

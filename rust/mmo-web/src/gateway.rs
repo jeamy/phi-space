@@ -296,7 +296,7 @@ impl Gateway {
 		let st = self.st.borrow();
 		let Some(c) = &st.clock else { return Json::Null };
 		let n = now();
-		obj! { "epoch" => j::at(c, "epoch").clone(), "worldMs" => world_at(c, n), "rate" => j::at(c, "rate").clone(), "paused" => j::at(c, "paused").clone(), "serverNowMs" => n, "yearDays" => self.year_days.get() }
+		obj! { "epoch" => j::at(c, "epoch").clone(), "worldMs" => world_at(c, n), "rate" => j::at(c, "rate").clone(), "paused" => j::at(c, "paused").clone(), "serverNowMs" => n, "yearDays" => self.year_days.get(), "patience" => { let rate = j::n(c, "rate"); rate / j::no(c, "decayRate").unwrap_or(rate) } }
 	}
 	fn broadcast_time(&self) {
 		{ let (g, s) = (Rc::downgrade(&self.rc()), self.space.clone()); tokio::task::spawn_local(async move { if let (Ok(d), Some(g)) = (setting(&s, "year.days").await, g.upgrade()) { g.year_days.set(d); } }); }
@@ -781,8 +781,8 @@ impl Gateway {
 					o.insert("missing", Json::from(miss.join(", ")));
 				}
 				if let Some(c) = plan.as_ref().and_then(|p| j::opt(p, "color")).filter(|c| j::truthy(c)) { o.insert("color", c.clone()); }
-				if !site && j::truthy(j::at(f, "herd")) { o.insert("herd", j::at(j::at(f, "herd"), "kind").clone()); }
-				if !site && j::truthy(j::at(f, "keeper")) { o.insert("keeper", j::at(j::at(f, "keeper"), "kind").clone()); }
+				if !site && j::truthy(j::at(f, "herd")) { o.insert("herd", j::at(j::at(f, "herd"), "kind").clone()); o.insert("fedUntil", j::at(j::at(f, "herd"), "fedUntilWorldMs").clone()); }
+				if !site && j::truthy(j::at(f, "keeper")) { o.insert("keeper", j::at(j::at(f, "keeper"), "kind").clone()); o.insert("keeperFedUntil", j::at(j::at(f, "keeper"), "fedUntilWorldMs").clone()); }
 				if !site && j::truthy(j::at(f, "fenced")) { o.insert("fenced", Json::Bool(true)); }
 				// its term on the second clock (todos: told before it falls)
 				if !site { put_some(&mut o, "term", f.get("untilWorldMs")); }
