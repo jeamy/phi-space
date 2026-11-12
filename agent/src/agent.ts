@@ -10,7 +10,7 @@
 import { arr, bool, int, lit, map, num, obj, opt, union, unknown, str } from "@earendil-works/pi-schema";
 import { BACKGROUND_CONTEXT, type Context as AgentContext } from "@earendil-works/chord/context";
 import { defineDocFamily, defineExtension, defineTool, section, type ConversationId, type Harness } from "@earendil-works/pi-durable";
-import { PhiSpaces, core, meter as defaultMeter, withEventSink, type EventSink, type Meter, type SpaceHost, type SpaceLike } from "../../src/index.ts";
+import { PhiSpaces, core, describeEvent, meter as defaultMeter, withEventSink, type EventSink, type Meter, type RemoteSpace, type SpaceHost, type SpaceLike } from "../../src/index.ts";
 import type { Context } from "../../src/context.ts";
 import type { Principal, RequestRef } from "../../src/claims.ts";
 
@@ -48,6 +48,8 @@ export interface AgentSpaces {
 	generation(id: number, ctx: Context): Promise<{ generation: string; admitUntil: number }>;
 	/** The request identity of a call of conversation `id` under one of its generations. */
 	request(id: number, generation: string, requestId: string): RequestRef;
+	/** Where conversation `id`'s waits and notifies are delivered (default: the conversation's id, the local outbox). */
+	target?(id: number): core.Target;
 }
 
 /** The principal of a conversation in the space's request claims. */
@@ -61,6 +63,91 @@ export function localSpaces(host: SpaceHost, o: { space?: string; meter?: Meter;
 		space: as,
 		generation: (id, ctx) => as(undefined, ctx).issueGeneration(conversationPrincipal(id)),
 		request: (id, generation, requestId) => ({ principal: conversationPrincipal(id), generation, requestId }),
+	};
+}
+
+/** The agent id of a conversation on a remote space (`frame.agent`, docs/m1-mobile.en.md "The agent frame"). */
+export const conversationAgent = (id: number): string => `conversation-${id}`;
+
+/** What the tools need of a remote client acting as one agent: `RemoteSpace` with the option `agent`. */
+export type AgentClient = SpaceLike & Pick<RemoteSpace, "newGeneration" | "events" | "ack">;
+
+/**
+ * The tools on a remote space, through one agent host's connection (the role `agentHost`): each conversation acts as
+ * its own agent `conversation-<id>` (its own principal, mailbox, claims and pending budget); without one, as the host.
+ * `open(agent)` makes a client for an agent, e.g. `agent => new RemoteSpace(transport, { agent })` over one
+ * transport; one client per agent is kept. Waits and notifies target the agent's own mailbox: `eventPump` hands
+ * them to the conversations. `onUse(id)` is told whenever a conversation uses the space (e.g. `pump.watch`).
+ */
+export function remoteSpaces(open: (agent?: string) => AgentClient, o: { peerId?: string; onUse?: (id: number) => void } = {}): AgentSpaces {
+	const clients = new Map<string, AgentClient>();
+	const of = (agent?: string): AgentClient => {
+		let c = clients.get(agent ?? "");
+		if (!c) clients.set(agent ?? "", c = open(agent));
+		return c;
+	};
+	return {
+		space: (id) => { if (id === undefined) return of(); o.onUse?.(id); return of(conversationAgent(id)); },
+		generation: (id) => of(conversationAgent(id)).newGeneration(),
+		// the service takes the principal from the connection and the frame; this one only names it
+		request: (id, generation, requestId) => ({ principal: { peerId: o.peerId ?? "agent-host", agentId: conversationAgent(id) }, generation, requestId }),
+		target: () => "self",
+	};
+}
+
+/**
+ * The event pump of an agent host on a remote space: per watched conversation one loop that reads the agent's mailbox
+ * (a long poll), hands every event to the conversation as input under a request id derived from the event
+ * (`phi-spaces:<mailbox epoch>:<seq>`, so a repeated hand-over is one input), and acknowledges the events only after
+ * all of the page were handed over. A loop that fails starts again from the acknowledged prefix. A conversation that
+ * no longer exists ends its loop; a take it was handed goes back to the space (its transaction is aborted).
+ * Events of an earlier mailbox that are lost (`gap`) are told to the conversation once.
+ */
+export function eventPump(open: (agent: string) => Pick<AgentClient, "events" | "ack" | "abort">, harness: Pick<Harness, "conversation">,
+	o: { waitMs?: number; retryMs?: number; onError?: (e: unknown) => void; context?: AgentContext } = {}) {
+	const waitMs = o.waitMs ?? 25_000, retryMs = o.retryMs ?? 1_000, ctx = o.context ?? BACKGROUND_CONTEXT;
+	const onError = o.onError ?? ((e) => console.error("phi-spaces event pump:", e instanceof Error ? e.message : e));
+	const halt = new AbortController(), loops = new Map<number, Promise<void>>();
+	const pause = (ms: number) => new Promise<void>((resolve) => {
+		const timer = setTimeout(resolve, ms);
+		halt.signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+	});
+	const loop = async (id: number) => {
+		const s = open(conversationAgent(id));
+		let epoch: string | undefined, after: number | undefined;
+		while (!halt.signal.aborted) {
+			try {
+				const page = await s.events({ ...(epoch === undefined ? {} : { mailboxEpoch: epoch }), ...(after === undefined ? {} : { after }), waitMs });
+				if (halt.signal.aborted) return;
+				const conversation = await harness.conversation(id as ConversationId, ctx);
+				if (page.gap && conversation) {
+					await conversation.submit({ type: "input", requestId: `phi-spaces:gap:${page.mailboxEpoch}:${page.gap.epoch}`,
+						content: `[space] events ${page.gap.from} to ${page.gap.to} of your earlier mailbox were lost: waits or notifies registered before may not report.` }, ctx);
+				}
+				for (const item of page.events) {
+					if (!conversation) { if (item.event.txn) await s.abort(item.event.txn).catch(() => {}); continue; } // gone: back to the space
+					await conversation.submit({ type: "input", requestId: `phi-spaces:${page.mailboxEpoch}:${item.seq}`, content: describeEvent(item.event) }, ctx);
+				}
+				if (page.events.length) await s.ack(page.mailboxEpoch, page.next);
+				epoch = page.mailboxEpoch; after = page.next;
+				if (!conversation) return;
+			} catch (e) {
+				if (halt.signal.aborted) return;
+				onError(e);
+				after = undefined; // from the acknowledged prefix again: what was handed over is one input by its request id
+				await pause(retryMs);
+			}
+		}
+	};
+	return {
+		/** Pump the events of conversation `id` (again after its loop ended); a conversation already pumped stays as it is. */
+		watch(id: number): void {
+			if (halt.signal.aborted || loops.has(id)) return;
+			loops.set(id, loop(id).finally(() => loops.delete(id)));
+		},
+		get watched(): number[] { return [...loops.keys()]; },
+		/** Ends the loops; a long poll still waiting is not waited out (its events stay unacknowledged). */
+		async stop(): Promise<void> { halt.abort(); await Promise.race([Promise.allSettled([...loops.values()]), pause(1_000)]); },
 	};
 }
 
@@ -185,7 +272,7 @@ export function createSpaces(spaces: AgentSpaces) {
 				replay: "safe",
 				execute: async (a, api, ctx) => {
 					const { s, request } = await call(api, ctx);
-					const waitId = await s.wait(tmpl(a), { take: a.mode !== "read", target: api.conversationId, timeout: ms(a.timeoutMs, core.FOREVER), txnLeaseMs: ms(a.txnLeaseMs, core.ANY), handback: (a.handback ?? null) as core.Json, request });
+					const waitId = await s.wait(tmpl(a), { take: a.mode !== "read", target: spaces.target?.(api.conversationId) ?? api.conversationId, timeout: ms(a.timeoutMs, core.FOREVER), txnLeaseMs: ms(a.txnLeaseMs, core.ANY), handback: (a.handback ?? null) as core.Json, request });
 					return text({ waitId });
 				},
 			}),
@@ -196,7 +283,7 @@ export function createSpaces(spaces: AgentSpaces) {
 				replay: "safe",
 				execute: async (a, api, ctx) => {
 					const { s, request } = await call(api, ctx);
-					return text(await s.notify(tmpl(a), { target: api.conversationId, txn: null, lease: ms(a.ttlMs, core.ANY), handback: (a.handback ?? null) as core.Json, request }));
+					return text(await s.notify(tmpl(a), { target: spaces.target?.(api.conversationId) ?? api.conversationId, txn: null, lease: ms(a.ttlMs, core.ANY), handback: (a.handback ?? null) as core.Json, request }));
 				},
 			}),
 			defineTool({

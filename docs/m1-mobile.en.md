@@ -184,8 +184,36 @@ Space. The agent host is a federation Member (`PI_SERVERD_FEDERATION_CONFIG`).
 
 ## Still open
 
-- The agent side: `remoteSpaces(…)` in `agent/src/agent.ts` with one agent id per conversation, and an event pump
-  that reads each conversation's mailbox, hands an event to the conversation under a request id derived from the
-  event, and acknowledges it only after the hand-over.
-- In pi-termux-mobile: starting and supervising the binary in the app service (pi-serverd), and Doze.
-- A device test over WLAN against a coordinator on the LAN.
+- In pi-termux-mobile: starting and supervising the binary in the app service (pi-serverd), and Doze; then
+  wiring `remoteSpaces` and `eventPump` into pi-serverd for its conversations.
+
+## The agent side on a remote space
+
+Done 2026-11-12, in `agent/src/agent.ts`:
+
+- **`remoteSpaces(open, {peerId, onUse})`** gives the space tools a remote space through one agent host's connection
+  (role `agentHost`).
+  - Each conversation acts as its own agent `conversation-<id>` (`conversationAgent`): its own principal, mailbox,
+    claims and pending budget.
+  - Without a conversation (the prompt section's count), the tools act as the host.
+  - `open(agent)` makes the client, e.g. `agent => new RemoteSpace(transport, { agent })` over one transport.
+  - A tool call takes its request identity from the conversation's own generation (`RemoteSpace.newGeneration()`),
+    recorded in the agent's store as before.
+  - Waits and notifies target `self`, the agent's mailbox.
+- **`eventPump(open, harness, {waitMs, retryMs, onError})`** runs one loop per watched conversation (`watch(id)`;
+  `onUse` can start it, a host starts it for its conversations after a restart).
+  - Each loop reads the agent's mailbox with a long poll and hands every event to the conversation as input, under
+    `phi-spaces:<mailbox epoch>:<seq>`. The text is `describeEvent`, the same as local delivery.
+  - It acknowledges a page only after all of it was handed over.
+  - A loop that fails starts again from the acknowledged prefix. The request id makes a second hand-over the same
+    input.
+  - A conversation that is gone ends its loop, and a take it was handed goes back to the space (its transaction is
+    aborted).
+  - Lost events of an earlier mailbox (`gap`) are told to the conversation once.
+- `agent/test/remote-agents.test.ts` covers four cases; with `PHI_SPACES_SERVER_CMD` they also run against the Rust
+  server:
+  - a wait served to the conversation's own mailbox and handed over once, which another agent of the host cannot
+    commit;
+  - a hand-over that fails after reaching the conversation stays one input;
+  - a conversation that is gone gives its take back;
+  - the entries a conversation writes are owned by its agent.

@@ -17,6 +17,10 @@ phi-spaces: a space library with its own store; the optional `agent/` package co
   pi-serverd of the sibling mobile runtime (`PI_SERVER_RUNTIME_DIR` overrides the path; skips if not installed, never
   installs dependencies). pi-serverd answers its conversations as calls over a space on its conversation socket, no
   pi-server/pi-client (docs/m1-mobile.en.md).
+- Remote agents: `agent/test/remote-agents.test.ts` (in `npm run test:agent`) runs the space tools of pi-durable conversations
+  over one agent host's connection (`remoteSpaces`, each conversation the agent `conversation-<id>`) and the `eventPump`
+  that hands each mailbox's events to its conversation once (docs/m1-mobile.en.md); with `PHI_SPACES_SERVER_CMD` (an absolute
+  path) against the Rust server.
 - Single test: `node --experimental-strip-types --test --test-name-pattern=<pattern> test/integration.test.ts`
 - Rust port (`rust/`, cargo workspace; docs/rust-portierung.en.md): `cd rust && cargo test` and `cargo clippy --all-targets`;
   `phi-core`'s tests start the TypeScript core as `test/support/core-driver.ts` (node on PATH) and hold every state against it

@@ -297,6 +297,13 @@ export class RemoteSpace implements SpaceLike {
 
 	// ---- request identity
 
+	/** A fresh generation for a caller that keeps its request identities itself, durably (an agent's tool calls,
+	 *  agent/src/agent.ts): pass `{ request: { generation, requestId } }` to the operations. */
+	async newGeneration(): Promise<{ generation: string; admitUntil: number }> {
+		await this.info();
+		return (await this.rawCall("generation")) as unknown as { generation: string; admitUntil: number };
+	}
+
 	/** A generation to start new requests under; renewed shortly before its admission ends. Known requests need none. */
 	private async generation(): Promise<string> {
 		if (this.gen && this.gen.admitUntil - this.o.now() > this.o.generationMarginMs) return this.gen.generation;
