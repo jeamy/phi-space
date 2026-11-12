@@ -110,11 +110,13 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect, green
 }
 
 /** The rectangles beside the actor where `plan` could go, nearest sides first (below, right, left, above, corners). */
-export function besides(c: CommandCtx, plan: Pick<PlanDef, "w" | "h">): Rect[] {
-	const { x, y } = c.actor, out: Rect[] = [];
+export function besides(c: CommandCtx, plan: Pick<PlanDef, "w" | "h">): Rect[] { return besidesOf(c.actor, plan); }
+/** The rects of `plan`'s size right beside the cell `p`, in the order of `besides`. */
+function besidesOf(p: { x: number; y: number }, plan: Pick<PlanDef, "w" | "h">): Rect[] {
+	const { x, y } = p, out: Rect[] = [];
 	for (let ry = y - plan.h; ry <= y + 1; ry++) for (let rx = x - plan.w; rx <= x + 1; rx++) {
 		const r = { x: rx, y: ry, w: plan.w, h: plan.h };
-		if (distTo(c.actor, r) === 1) out.push(r);
+		if (distTo(p, r) === 1) out.push(r);
 	}
 	const side = (r: Rect) => (r.y === y + 1 ? 0 : r.x === x + 1 ? 1 : r.x + r.w === x ? 2 : 3) * 10 + Math.abs(r.x + r.w / 2 - 0.5 - x) + Math.abs(r.y + r.h / 2 - 0.5 - y);
 	return out.sort((a, b) => side(a) - side(b));
@@ -195,7 +197,12 @@ async function jettyToWater(space: SpaceLike, w: WorldDef, txn: string, type: "B
 /** The rects for a jetty beside the actor: both ways round, the ones that point away from the actor (it stands at their end) first. */
 function jettyTries(c: CommandCtx, plan: Pick<PlanDef, "w" | "h">, at?: { x: number; y: number }): Rect[] {
 	const long = Math.max(plan.w, plan.h), short = Math.min(plan.w, plan.h), shapes = [{ w: long, h: short }, { w: short, h: long }];
-	if (at) return shapes.map((s) => ({ ...at, ...s }));
+	// a cell named ("bau steg 20 4", the menu's cell): a jetty from that corner first, then one that covers it, then one
+	// right beside it, so the shore one stands on names the jetty in the water before it
+	if (at) {
+		const over = (s: { w: number; h: number }) => { const out: Rect[] = []; for (let dy = 0; dy < s.h; dy++) for (let dx = 0; dx < s.w; dx++) if (dx || dy) out.push({ x: at.x - dx, y: at.y - dy, ...s }); return out; };
+		return [...shapes.map((s) => ({ ...at, ...s })), ...shapes.flatMap(over), ...shapes.flatMap((s) => besidesOf(at, s))];
+	}
 	const all = shapes.flatMap((s) => besides(c, s));
 	const end = (r: Rect) => { const along = r.w >= r.h; return along ? (c.actor.y >= r.y && c.actor.y < r.y + r.h ? 0 : 1) : (c.actor.x >= r.x && c.actor.x < r.x + r.w ? 0 : 1); };
 	return all.sort((a, b) => end(a) - end(b));
@@ -372,7 +379,7 @@ export const bau: Command = {
 		let rect: Rect | null = null, why = "";
 		const exits = plan.atExit ? await exitsHere(c) : [];
 		for (const r of tries) { const no = plan.water ? await waterRefusal(c, room, r) : (await refusal(c, room, r, !!plan.green, !!plan.green)) ?? (plan.shore && !touchesWater(c.world, room, r) ? "Das muss ans Wasser grenzen." : plan.atExit && !exits.some((x) => distTo(x.f, r) <= EXIT_REACH) ? "Das gehört neben einen Ausgang." : null); if (!no) { rect = r; break; } why ||= no; }
-		if (!rect) throw new CommandError(`Hier passt keine ${plan.name} hin: ${why}`);
+		if (!rect) throw new CommandError(`Hier passt ${plan.dative?.startsWith("einem ") ? "kein" : "keine"} ${plan.name} hin: ${why}`);
 		const buildId = randomBytes(6).toString("hex"), now = await worldNowOf(c.space, c.txn);
 		for (const p of cells(rect)) {
 			try { await c.space.write({ type: "Plot", fields: { room: room.roomId, x: p.x, y: p.y, of: buildId } as never }, c.txn, FOREVER, { unique: ["room", "x", "y"] }); }

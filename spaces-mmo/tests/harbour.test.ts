@@ -118,7 +118,8 @@ test("a jetty is built on the water from the shore, clear of the ship's berth, a
 		assert.match(await does(p, "bau steg 2 12", /Wasser|passt keine|steckt/), /Wasser/, "not on the beach");
 		assert.match(await does(p, `bau steg ${open!.x} ${open!.y}`, /Ufer|passt keine|steckt/), /Ufer/, "not out at sea");
 		assert.match(await does(p, `bau steg ${b.x} ${b.y}`, /Schiff|Ufer|passt keine|steckt/), /Schiff|Ufer/, "not where the ship lies");
-		assert.match(await does(p, `bau steg ${pier!.x} ${pier!.y}`, /steckt|passt keine/), /steckt eine Baustelle ab/);
+		// the shore cell before it names the jetty in the water (the menu sends the cell one clicks, often where one stands)
+		assert.match(await does(p, `bau steg ${pier!.x - 1} ${pier!.y}`, /steckt|passt keine/), /steckt eine Baustelle ab/);
 		const site = (await s.readAll({ type: "Site", fields: { accountId: (await s.readAll({ type: "Character", fields: { charId: me } }))[0]!.fields.accountId } }))[0]!.fields as unknown as { x: number; y: number; w: number; h: number };
 		for (let y = site.y; y < site.y + site.h; y++) for (let x = site.x; x < site.x + site.w; x++) assert.ok(wet(x, y), `${x} ${y} is water`);
 		// a jetty of old on the beach goes onto the water beside it, with its plot

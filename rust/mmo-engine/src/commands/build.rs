@@ -231,7 +231,14 @@ async fn jetty_to_water(space: &Space, w: &Json, txn: &str, ty: &str, b: &Json) 
 fn jetty_tries(c: &Ctx, pw: f64, ph: f64, at: Option<(f64, f64)>) -> Vec<Rect> {
 	let (long, short) = (pw.max(ph), pw.min(ph));
 	let shapes = [(long, short), (short, long)];
-	if let Some(p) = at { return shapes.iter().map(|&(w, h)| Rect { x: p.0, y: p.1, w, h }).collect(); }
+	// a cell named ("bau steg 20 4", the menu's cell): a jetty from that corner first, then one that covers it, then one
+	// right beside it, so the shore one stands on names the jetty in the water before it
+	if let Some(p) = at {
+		let mut out: Vec<Rect> = shapes.iter().map(|&(w, h)| Rect { x: p.0, y: p.1, w, h }).collect();
+		for &(w, h) in &shapes { let mut dy = 0.0; while dy < h { let mut dx = 0.0; while dx < w { if dx != 0.0 || dy != 0.0 { out.push(Rect { x: p.0 - dx, y: p.1 - dy, w, h }); } dx += 1.0; } dy += 1.0; } }
+		for &(w, h) in &shapes { out.extend(besides_of(p, w, h)); }
+		return out;
+	}
 	let mut all: Vec<Rect> = shapes.iter().flat_map(|&(w, h)| besides(c, w, h)).collect();
 	let (ax, ay) = xy(&c.actor);
 	let end = |r: &Rect| if r.w >= r.h { if ay >= r.y && ay < r.y + r.h { 0 } else { 1 } } else if ax >= r.x && ax < r.x + r.w { 0 } else { 1 };
@@ -246,8 +253,10 @@ async fn site_near(c: &Ctx) -> Result<bool> {
 }
 
 /// `besides`: the rectangles beside the actor where a plan of `w`×`h` could go, nearest sides first.
-pub fn besides(c: &Ctx, w: f64, h: f64) -> Vec<Rect> {
-	let (x, y) = xy(&c.actor);
+pub fn besides(c: &Ctx, w: f64, h: f64) -> Vec<Rect> { besides_of(xy(&c.actor), w, h) }
+/// The rects of size `w`×`h` right beside the cell `p`, in the order of `besides`.
+fn besides_of(p: (f64, f64), w: f64, h: f64) -> Vec<Rect> {
+	let (x, y) = p;
 	let mut out = Vec::new();
 	let mut ry = y - h;
 	while ry <= y + 1.0 {
@@ -559,7 +568,7 @@ pub async fn bau(c: &mut Ctx, arg: &str) -> Result<()> {
 		} };
 		match no { None => { rect = Some(r); break; } Some(n) => if why.is_empty() { why = n; } }
 	}
-	let Some(rect) = rect else { return refuse(format!("Hier passt keine {pname} hin: {why}")) };
+	let Some(rect) = rect else { return refuse(format!("Hier passt {} {pname} hin: {why}", if j::s(plan, "dative").starts_with("einem ") { "kein" } else { "keine" })) };
 	let build_id = hex(&random_bytes(6));
 	let now = world_now_of(&c.space, c.txn()).await?;
 	let room_id = j::s(&room, "roomId").to_owned();
