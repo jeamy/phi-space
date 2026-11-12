@@ -22,6 +22,9 @@ pub enum Error {
 	Command(String),
 	/// A refusal that means "not understood" (`NotUnderstood`, a `CommandError` too).
 	NotUnderstood(String),
+	/// Not understood after the command had begun to change things (`AskModel`, a `CommandError` too): the transaction
+	/// is aborted, and the refusal's own transaction asks the model with these Translate fields and says this text.
+	AskModel(String, Json),
 	/// Anything else (a broken definition, a bug).
 	Other(String),
 }
@@ -30,7 +33,7 @@ impl std::fmt::Display for Error {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Error::Space(e) => write!(f, "{e}"),
-			Error::StillHeld(m) | Error::Command(m) | Error::NotUnderstood(m) | Error::Other(m) => f.write_str(m),
+			Error::StillHeld(m) | Error::Command(m) | Error::NotUnderstood(m) | Error::AskModel(m, _) | Error::Other(m) => f.write_str(m),
 		}
 	}
 }
@@ -41,7 +44,7 @@ impl From<SpaceError> for Error {
 
 impl Error {
 	/// `e instanceof CommandError` (NotUnderstood included).
-	pub fn is_command(&self) -> bool { matches!(self, Error::Command(_) | Error::NotUnderstood(_)) }
+	pub fn is_command(&self) -> bool { matches!(self, Error::Command(_) | Error::NotUnderstood(_) | Error::AskModel(..)) }
 }
 
 /// `throw new CommandError(text)`.

@@ -62,7 +62,8 @@ const { seasonTick, syncRates } = await from("server/engine/clock.ts");
 const { sweepTick } = await from("server/engine/sweep.ts");
 const { byPeoplesPace } = await from("server/engine/clock.ts");
 const { execute, CommandError } = await from("server/engine/commands.ts");
-const { msg } = await from("server/engine/context.ts");
+// AskModel: since the oracle at the commit that aborts a command whose NotUnderstood goes to the model (none before it)
+const { msg, AskModel } = await from("server/engine/context.ts");
 const { pinTerrain } = await from("server/engine/room-growth.ts");
 const { actorToken, fieldsOf } = await from("server/model.ts");
 const { batching, bufferedTxn, Mirror } = await from("server/space.ts");
@@ -128,14 +129,15 @@ const finishing = (txn: string, charId: string) => {
 };
 const one = async (tmpl: { type: string; fields: Record<string, unknown> }, waitMs: number) =>
 	(mirror ? mirror.readAll(tmpl, 1) : await space.readAll(tmpl, { limit: 1 }))[0] ?? (await space.readIfExists(tmpl, waitMs));
-const refuse = async (actor: Record<string, unknown>, text: string) => {
+const refuse = async (actor: Record<string, unknown>, text: string, ask?: Record<string, unknown>) => {
 	let txn: string | null = null;
 	try {
 		const b = await begin(String(actor.charId));
 		txn = b.txn;
 		if (!b.intent) { await space.abort(txn); return; }
 		const end = finishing(txn!, String(actor.charId));
-		await msg({ space: end.space, txn, actor, msgLeaseMs: MSG_LEASE_MS }, actor.charId, "error", text);
+		if (ask) await end.space.write({ type: "Translate", fields: ask as never }, txn, 60_000);
+		await msg({ space: end.space, txn, actor, msgLeaseMs: MSG_LEASE_MS }, actor.charId, ask ? "info" : "error", text);
 		await end.commit();
 	} catch { if (txn) await space.abort(txn).catch(() => {}); }
 };
@@ -159,7 +161,7 @@ const serve = async (w: unknown, charId: string): Promise<string> => {
 		return "ran";
 	} catch (e) {
 		await space.abort(txn).catch(() => {});
-		if (e instanceof CommandError) { const m = (e as Error).message; if (actor) await refuse(actor, m); return `refused: ${m}`; }
+		if (e instanceof CommandError) { const m = (e as Error).message; if (actor) await refuse(actor, m, AskModel && e instanceof AskModel ? (e as { translate: Record<string, unknown> }).translate : undefined); return `refused: ${m}`; }
 		return `failed: ${(e as Error).message}`;
 	}
 };

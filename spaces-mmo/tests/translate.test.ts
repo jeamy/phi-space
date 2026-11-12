@@ -159,6 +159,25 @@ test("what is not understood goes to the model before any refusal: \"lege 2 bren
 	} finally { await srv.close(); await stack.close(); }
 });
 
+test("a command that took a building and then did not understand leaves it standing while the model reads the line", async () => {
+	// "entnimm katze aus truhe" (2026-11-12, big): the chest's building was taken in the command's transaction, the
+	// NotUnderstood went to the model and the transaction was committed without the building
+	const stack = await startStack({ worldEnv: { SPACES_MMO_LLM: "1", SPACES_MMO_LLM_MODULE: "tests/fake-llm.ts" } });
+	const srv = await startServer({ stack });
+	try {
+		await stack.modelProcess();
+		const s = stack.space;
+		const a = await player(srv.url, "Truhenfrau");
+		const me = (await s.readAll({ type: "Character", fields: { charId: a.me } }))[0]!.fields as { room: string; x: number; y: number; accountId: string };
+		const hut = { buildId: "huette-truhe", plan: "huette", name: "Hütte", room: me.room, x: me.x + 1, y: me.y, w: 2, h: 2, owner: a.me, ownerName: "Truhenfrau", accountId: me.accountId, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: Number.MAX_SAFE_INTEGER, builtAt: 0 };
+		for (let y = hut.y; y < hut.y + 2; y++) for (let x = hut.x; x < hut.x + 2; x++) await s.write({ type: "Plot", fields: { room: hut.room, x, y, of: hut.buildId } as never }, null, Number.MAX_SAFE_INTEGER);
+		await s.write({ type: "Building", fields: hut as never }, null, Number.MAX_SAFE_INTEGER);
+		assert.match(await does(a.p, "entnimm kiesel aus der truhe", "einen Moment"), /versuche das zu verstehen/);
+		assert.equal((await s.readAll({ type: "Building", fields: { buildId: hut.buildId } })).length, 1, "the building is still there");
+		await a.p.leave();
+	} finally { await srv.close(); await stack.close(); }
+});
+
 test("a question about the game is answered from the world's facts and help, told as information", async () => {
 	const w = await loadWorld();
 	const facts = gameFacts(w, "wo bekommt man hafer?").join("\n");

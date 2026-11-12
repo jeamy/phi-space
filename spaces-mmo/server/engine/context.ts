@@ -2,7 +2,7 @@
 // is taken in, the world, the actor and its account, and helpers every command needs: finding things by name,
 // asking locks, writing messages.
 import { NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
-import { fieldsOf, type AccountFields, type CharacterFields, type ExitFields, type ItemFields, type MsgFields, type MsgKind, type NoticeFields, type RoomFields } from "../model.ts";
+import { fieldsOf, type AccountFields, type CharacterFields, type ExitFields, type ItemFields, type MsgFields, type MsgKind, type NoticeFields, type RoomFields, type TranslateFields } from "../model.ts";
 import { allowed, LEVELS, type Level, type LockCtx } from "./locks.ts";
 import type { WorldDef } from "./world.ts";
 import { peek, supports } from "../space.ts";
@@ -33,6 +33,9 @@ export class CommandError extends Error {}
 /** A refusal that means "not understood" (no thing, person or exit of that name, a command without what it needs), not
  *  "not now": with model calls on, the model process reads the sentence once before the refusal is shown ("holstücke"). */
 export class NotUnderstood extends CommandError {}
+/** Not understood after the command had begun to change things: the transaction is aborted (what it took stays where it
+ *  was), and the refusal's own transaction writes `translate` for the model process and tells the actor `message`. */
+export class AskModel extends CommandError { readonly translate: TranslateFields; constructor(message: string, translate: TranslateFields) { super(message); this.translate = translate; } }
 
 /** The account's level: an admin has every level; `perms` adds Builder; a guest is a guest. */
 export function levelOf(a: AccountFields | null): Level {

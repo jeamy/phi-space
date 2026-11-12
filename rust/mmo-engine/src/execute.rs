@@ -53,15 +53,23 @@ async fn view_for(c: &mut Ctx) -> Result<crate::translate::View> {
 	Ok(crate::translate::View { exits, listings, carried, people })
 }
 
-/// The model reads a line once before it is refused (`Translate`), when model calls are on.
-async fn ask_model(c: &Ctx, line: &str, why: Option<&str>) -> Result<()> {
+/// The Translate the model process reads a line by (once, before it is refused), when model calls are on.
+fn translate_of(c: &Ctx, line: &str, why: Option<&str>) -> Json {
 	let a = c.account.clone().unwrap_or(Json::Null);
 	let mut t = phi_json::obj! { "reqId" => crate::source::hex(&crate::source::random_bytes(6)), "charId" => c.char_id(), "accountId" => j::at(&a, "accountId").clone(), "guest" => j::at(&a, "guest").clone(), "line" => js::slice16(line, 0, Some(300)), "room" => c.room(), "at" => crate::source::time_now() };
 	if let Some(w) = why { crate::j::set(&mut t, "why", js::slice16(w, 0, Some(300))); }
 	if let Some(l) = &c.lang { crate::j::set(&mut t, "lang", l.as_str()); }
+	t
+}
+
+/// What the actor is told while the model reads its line.
+fn asking_text(line: &str) -> String { format!("„{}“ – einen Moment, ich versuche das zu verstehen …", js::slice16(line, 0, Some(80))) }
+
+/// Writes the Translate `t` in the transaction of `c` and tells the actor (`askModel`).
+pub(crate) async fn ask_model(c: &Ctx, t: Json, text: &str) -> Result<()> {
 	c.space.write(&phi_json::obj! { "type" => "Translate", "fields" => t }, c.txn(), 60_000.0).await?;
 	let me = c.char_id().to_owned();
-	msg(c, &me, "info", &format!("„{}“ – einen Moment, ich versuche das zu verstehen …", js::slice16(line, 0, Some(80))), MsgOpts::default()).await
+	msg(c, &me, "info", text, MsgOpts::default()).await
 }
 
 /// `execute(c, line)`.
@@ -81,7 +89,7 @@ pub async fn execute(c: &mut Ctx, line: &str) -> Result<()> {
 	let lower = verb.to_lowercase();
 	let Some(cmd) = merged.iter().find(|(k, _)| *k == lower).map(|(_, c)| c.clone()) else {
 		let model = llm_enabled() && c.asked.is_none() && c.account.as_ref().is_some_and(|a| !j::b(a, "npc"));
-		if model { return ask_model(c, &line, None).await; }
+		if model { let t = translate_of(c, &line, None); return ask_model(c, t, &asking_text(&line)).await; }
 		return refuse(match &c.asked { Some(a) => format!("„{}“ habe ich nicht verstanden. „help“ zeigt die Befehle.", js::slice16(a, 0, Some(80))), None => format!("Unbekannter Befehl „{}“. „help“ zeigt alle Befehle.", js::slice16(&verb, 0, Some(20))) });
 	};
 	if j::truthy(j::at(&c.actor, "aboard")) && !crate::commands::passage::may_aboard(&cmd.key) { return refuse(crate::commands::passage::aboard_text(c).await?); }
@@ -101,7 +109,7 @@ pub async fn execute(c: &mut Ctx, line: &str) -> Result<()> {
 		Ok(())
 	}.await;
 	match ran {
-		Err(Error::NotUnderstood(why)) if llm_enabled() && c.asked.is_none() && c.account.as_ref().is_some_and(|a| !j::b(a, "npc")) => ask_model(c, &said, Some(&why)).await,
+		Err(Error::NotUnderstood(why)) if llm_enabled() && c.asked.is_none() && c.account.as_ref().is_some_and(|a| !j::b(a, "npc")) => Err(Error::AskModel(asking_text(&said), translate_of(c, &said, Some(&why)))),
 		Err(e) if e.is_command() && understood.is_some() => refuse(format!("{}: {e}", understood.unwrap_or_default())),
 		other => other,
 	}
@@ -156,14 +164,17 @@ impl Worker {
 	}
 
 	/// `refuse`: in a transaction of its own (again holding the token), the intent consumed and the actor told.
-	pub async fn refuse(&self, actor: &Json, text: &str) {
+	pub async fn refuse(&self, actor: &Json, text: &str) { self.refuse_or_ask(actor, text, None).await }
+
+	/// `refuse` with the Translate of an `AskModel`: written in the refusal's transaction, the text told as info.
+	pub async fn refuse_or_ask(&self, actor: &Json, text: &str, ask: Option<Json>) {
 		let char_id = j::s(actor, "charId").to_owned();
 		let Ok((txn, intent)) = self.begin(&char_id).await else { return };
 		let told: Result<()> = async {
 			if intent.is_none() { return self.space.abort(&txn).await; }
 			let end = self.finishing(&txn);
 			let c = Ctx { space: end.clone(), txn: txn.clone(), world: self.w.clone(), actor: actor.clone(), account: None, load_account: false, msg_lease_ms: self.msg_lease_ms, asked: None, lang: None, step: None, inventory: None, elsewhere: self.elsewhere.clone() };
-			msg(&c, &char_id, "error", text, MsgOpts::default()).await?;
+			match ask { Some(t) => ask_model(&c, t, text).await?, None => msg(&c, &char_id, "error", text, MsgOpts::default()).await? }
 			Self::finish(&end, &txn, &char_id).await
 		}.await;
 		if told.is_err() { let _ = self.space.abort(&txn).await; }
@@ -195,7 +206,8 @@ impl Worker {
 		let _ = self.space.abort(&txn).await;
 		if e.is_command() {
 			let text = e.to_string();
-			if let Some(a) = &actor { self.refuse(a, &text).await; }
+			let ask = if let Error::AskModel(_, t) = e { Some(t) } else { None };
+			if let Some(a) = &actor { self.refuse_or_ask(a, &text, ask).await; }
 			return Ok(format!("refused: {text}"));
 		}
 		Ok(format!("failed: {e}"))

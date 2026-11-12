@@ -24,7 +24,7 @@ import "./env.ts";
 import { pathToFileURL } from "node:url";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { CommandError, execute } from "./engine/commands.ts";
-import { msg } from "./engine/context.ts";
+import { AskModel, msg } from "./engine/context.ts";
 import { marketTick, ordersTick } from "./engine/commands/trade.ts";
 import { chainTick, fireTick, floodTick, fogTick, stormTick } from "./engine/fire.ts";
 import { sweepTick } from "./engine/sweep.ts";
@@ -53,7 +53,7 @@ import { regionAddresses, regionOfRoom, regionWorld } from "./engine/regions.ts"
 import { abortableSleep } from "./abort-sleep.ts";
 import { deliver } from "./engine/handover.ts";
 import { carryCouriers } from "./engine/courier.ts";
-import { WORLD_LOCK, actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields } from "./model.ts";
+import { WORLD_LOCK, actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields, type TranslateFields } from "./model.ts";
 import { announce, awaitWork, batching, bufferedTxn, connectSpace, DEFAULT_SPACE, envMs, Mirror, readExisting, StillHeld } from "./space.ts";
 
 export async function startWorld(o: { space?: string; world?: WorldDef; region?: string } = {}) {
@@ -154,14 +154,15 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		(mirror ? mirror.readAll(tmpl as never, 1) : await space.readAll(tmpl as never, { limit: 1 }))[0] ?? (await space.readIfExists(tmpl as never, waitMs));
 
 	/** A refusal: in a transaction of its own (again holding the token), the intent is consumed and the actor told. */
-	const refuse = async (actor: CharacterFields, text: string) => {
+	const refuse = async (actor: CharacterFields, text: string, ask?: TranslateFields) => {
 		let txn: string | null = null;
 		try {
 			const b = await begin(actor.charId);
 			txn = b.txn;
 			if (!b.intent) { await space.abort(txn); return; }
 			const end = finishing(txn, actor.charId);
-			await msg({ space: end.space, txn, actor, msgLeaseMs }, actor.charId, "error", text);
+			if (ask) await end.space.write({ type: "Translate", fields: ask as never }, txn, 60_000);
+			await msg({ space: end.space, txn, actor, msgLeaseMs }, actor.charId, ask ? "info" : "error", text);
 			await end.commit();
 		} catch { if (txn) await space.abort(txn).catch(() => {}); }
 	};
@@ -193,7 +194,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 			await space.abort(txn).catch(() => {});
 			// a refusal is told and its intent consumed (it would only fail again); anything else (the space busy, a
 			// conflict) leaves the intent for another try a moment later, and one that keeps failing lapses with its lease
-			if (e instanceof CommandError) { if (actor) await refuse(actor, e.message); return "ran"; }
+			if (e instanceof CommandError) { if (actor) await refuse(actor, e.message, e instanceof AskModel ? e.translate : undefined); return "ran"; }
 			// a command that would write more than one commit carries fails the same way every time: told, not tried again
 			if (/could write \d+ bytes; the limit is/.test((e as Error).message)) {
 				console.error("[world] command too large:", charId, intent?.line.slice(0, 60), (e as Error).message);

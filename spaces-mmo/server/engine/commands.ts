@@ -34,7 +34,7 @@ import { INTERIOR_COMMANDS } from "./commands/interior.ts";
 import { SLEEP_COMMANDS, wokenBy } from "./commands/sleep.ts";
 import { llmEnabled } from "../llm-switch.ts";
 import { fieldsOf, type ListingFields, type TranslateFields } from "../model.ts";
-import { CommandError, NotUnderstood, exitsHere, inventory, lockCtx, msg, type CommandCtx } from "./context.ts";
+import { AskModel, CommandError, NotUnderstood, exitsHere, inventory, lockCtx, msg, type CommandCtx } from "./context.ts";
 import { translateRules, type TranslateView } from "./translate.ts";
 import { allowed } from "./locks.ts";
 import { randomBytes, timeNow } from "./source.ts";
@@ -123,8 +123,8 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 		// only what it cannot read either is refused (a translation is never sent again, `c.asked`)
 		if (e instanceof NotUnderstood && llmEnabled() && !c.asked && c.account && !c.account.npc) {
 			const t: TranslateFields = { reqId: randomBytes(6).toString("hex"), charId: c.actor.charId, accountId: c.account.accountId, guest: c.account.guest, line: said.slice(0, 300), room: c.actor.room, at: timeNow(), why: e.message.slice(0, 300), ...(c.lang ? { lang: c.lang } : {}) };
-			await c.space.write({ type: "Translate", fields: t as never }, c.txn, 60_000);
-			return msg(c, c.actor.charId, "info", `„${said.slice(0, 80)}“ – einen Moment, ich versuche das zu verstehen …`);
+			// in the refusal's transaction (serve): what the command took before it gave up must not be committed
+			throw new AskModel(`„${said.slice(0, 80)}“ – einen Moment, ich versuche das zu verstehen …`, t);
 		}
 		// a refusal of a translated line says what it was translated to
 		if (e instanceof CommandError && understood) throw new CommandError(`${understood}: ${e.message}`);
