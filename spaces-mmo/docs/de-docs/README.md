@@ -22,7 +22,7 @@ der späteren Epochen. Für den Betrieb ist es auf die Rechner big und nano ausg
 | Phase 5, Modell-NPCs ([modell-npcs.md](../modell-npcs.en.md)) | gebaut, mit geskripteten Modellen getestet; Modellaufrufe nur mit `SPACES_MMO_LLM=1` |
 | Welt | acht Inseln, 37 Räume, neun Feuer (`worlds/leuchtfeuer/world.ts`); dazu 40 Siedler, von denen standardmäßig mindestens 30 Figuren spielen |
 | Chat ([siedeln.md](../siedeln.en.md), Schritt 0) | gebaut: zu zweit und in Gruppen, Ende-zu-Ende verschlüsselt |
-| Bauen und Gärten (Schritte 1 und 2) | gebaut: Hütte, Truhe (ohne Grenze, von überall befüllbar; eine Figur trägt bis 1000 Last), Verfall; Beete, Kreuzen, Hasen, Zaun, Vogelscheuche |
+| Bauen und Gärten (Schritte 1 und 2) | gebaut: Hütte, Truhe (ohne Grenze, von überall befüllbar; eine Figur trägt bis 1500 Last), Verfall; Beete, Kreuzen, Hasen, Zaun, Vogelscheuche |
 | Äcker und Hof (Schritt 3) | gebaut: Fluren mit Fruchtfolge, Mühle, Backhaus, Tiere, Webstuhl, Wild, Wächter |
 | Epochen und Siedlungen (Schritt 4) | gebaut: Inseln werden zum Dorf; Siedlungen mit Rängen und Tür. Stadt und Netz haben noch keine Pläne |
 | Regionen ([welt-aufteilen.md](../welt-aufteilen.en.md)) | gebaut: vier Regionen auf big, Konten-Space auf nano, ihre Space-Container seit 2026-11-07 auf dem Rust-Server ([betrieb.md](../betrieb.en.md)) |

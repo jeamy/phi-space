@@ -19,6 +19,7 @@ export type CellInput = {
 	/** The islands a sailing boat goes to from here (the others, with the large ship's routes). */ sail?: string[];
 	/** "Bauen …" was chosen: the caller shows the plans. */ onPlans: () => void;
 	/** "Aushang" of a site: the caller shows the bag's list of them; without it the command answers. */ onOrders?: () => void;
+	/** "<ding> entnehmen …" of a chest with more than one: the caller asks how many, of `count` (without it: all of them). */ onTake?: (name: string, count: number) => void;
 };
 
 /** Whether wild flowers or herbs grow in the room: there "sammle samen" can find something (server: garden.ts). */
@@ -38,7 +39,7 @@ export function hereEntries(input: Omit<CellInput, "at" | "onPlans">): CellEntry
 	const { self } = input, seen = new Map<string, CellEntry>();
 	if (!self) return [];
 	for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
-		for (const e of cellEntries({ ...input, at: { x: self.x + dx, y: self.y + dy }, onPlans: () => {} })) {
+		for (const e of cellEntries({ ...input, at: { x: self.x + dx, y: self.y + dy }, onPlans: () => {}, onTake: undefined })) {
 			// what is done on a cell of one's choice is offered once, for the cell one stands on
 			if ((dx || dy) && e.line.startsWith("flur anlegen ")) continue;
 			if (e.run || e.line.startsWith("#") || e.line.startsWith("move ") || e.line.startsWith("umgraben ") || INFO.test(e.line) || /ansehen$/.test(e.label)) continue;
@@ -145,7 +146,7 @@ export function offerWords(o: { giveNames: string[]; want: Array<{ name: string;
 	return `${counted(o.giveNames.map((name) => ({ name, count: 1 })))}${o.want.length ? ` für ${counted(o.want)}` : " als Geschenk"}`;
 }
 
-export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, recipes, grinds, beachAt, admin }: CellInput): CellEntry[] {
+export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, onPlans, onOrders, onTake, recipes, grinds, beachAt, admin }: CellInput): CellEntry[] {
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const entries: CellEntry[] = [];
 	/** The recipes made at a building of `plan`: what one carries enough for, and the whole list (server: trade.ts "craft hier"). */
@@ -172,7 +173,10 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 		entries.push({ label: "Truhe ansehen", line: "truhe" });
 		const held = new Map<string, number>();
 		for (const i of objs.values()) if (i.kind === "item" && i.location === buildId) held.set(i.name, (held.get(i.name) ?? 0) + 1);
-		for (const [n, k] of [...held].sort(([a], [b]) => a.localeCompare(b, "de")).slice(0, 12)) entries.push(k > 1 ? { label: `${n} entnehmen (alle ${k})`, line: `entnimm alle ${n}` } : { label: `${n} entnehmen`, line: `entnimm ${n}` });
+		for (const [n, k] of [...held].sort(([a], [b]) => a.localeCompare(b, "de")).slice(0, 12)) {
+			if (k > 1 && onTake) entries.push({ label: `${n} entnehmen … (${k} da)`, line: `#entnimm ${n}`, run: () => onTake(n, k) });
+			else entries.push(k > 1 ? { label: `${n} entnehmen (alle ${k})`, line: `entnimm alle ${n}` } : { label: `${n} entnehmen`, line: `entnimm ${n}` });
+		}
 	};
 	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
 		// what the figure offers the player comes first: a tap on its speech bubble opens this menu (MapView3D)

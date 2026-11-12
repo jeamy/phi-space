@@ -24,7 +24,8 @@ import { randomInt } from "../source.ts";
 import { creditDeed } from "../deeds.ts";
 import { consume, move } from "./trade.ts";
 
-const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : `${Math.max(1, Math.round(ms / 60_000))} Minuten`; };
+// from two days on in days ("satt noch 5 Tage")
+const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >= 48 ? `${Math.round(h / 24)} Tage` : h >= 1 ? `${h} ${h === 1 ? "Stunde" : "Stunden"}` : `${Math.max(1, Math.round(ms / 60_000))} Minuten`; };
 const few = (k: AnimalKindDef, n: number) => `${n} ${n === 1 ? k.name : k.plural}`;
 function animalsOf(c: CommandCtx): AnimalsDef {
 	if (!c.world.animals) throw new CommandError("In dieser Welt hält niemand Tiere.");
@@ -159,8 +160,9 @@ const fuettere: Command = {
 		if (m[2] && named.length && !k.feed.includes(named[0]!.f.proto)) throw new CommandError(`${named[0]!.f.name} mögen ${k.plural} nicht; sie fressen ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);
 		const offer = m[2] ? named.filter((i) => i.f.proto === named[0]!.f.proto) : feed;
 		if (!offer.length) throw new CommandError(`Du hast kein Futter. ${k.plural} fressen ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);
+		// a food is a world day for one animal (they eat by the life rate); fed ahead as far as a dog, for people who are away
 		const per = d.feedWorldMs / n, from = Math.max(now, b.herd.fedUntilWorldMs);
-		const room = now + d.fedMaxWorldMs - from;
+		const room = now + d.fedMaxWorldMs * (await patienceOf(c.space, c.txn)) - from;
 		if (room < per) throw new CommandError(`Die ${k.plural} sind satt (noch ${hours(from - now)}).`);
 		const want = Math.min(Math.floor(room / per), offer.length, m[1] && /^\d+$/.test(m[1]) ? Number(m[1]) : Infinity);
 		const used = new Map<string, number>();
@@ -234,26 +236,26 @@ async function feedKeeper(c: CommandCtx, kp: KeeperDef | null, arg: string): Pro
 	if (!offer.length) throw new CommandError(`Du hast kein Futter für ${k.acc}: ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);
 	const patient = await patienceOf(c.space, c.txn), feedMs = d.feedWorldMs * patient; // it keeps the beds for people who are away
 	const from = Math.max(now, b.keeper.fedUntilWorldMs), room = now + d.fedMaxWorldMs * patient - from;
-	if (room < feedMs) throw new CommandError(`${cap(k.the)} ist satt (noch ${hours(from - now)}).`);
+	if (room < feedMs) throw new CommandError(`${cap(k.the)} ist satt (noch ${hours((from - now) / patient)}).`);
 	const want = Math.min(Math.floor(room / feedMs), offer.length, m[1] && /^\d+$/.test(m[1]) ? Number(m[1]) : Infinity);
 	let count = 0;
 	for (const it of offer.slice(0, want)) if (await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn })) count++;
 	if (!count) throw new CommandError("Das Futter ist gerade nicht greifbar; bitte noch einmal.");
 	const until = from + count * feedMs;
 	await putBack(c, { ...b, keeper: { ...b.keeper, fedUntilWorldMs: until } });
-	await msg(c, "*", "emote", `${c.actor.name} füttert ${k.acc} von ${b.ownerName} mit ${count} ${offer[0]!.f.name}; satt für etwa ${hours(until - now)}.`);
+	await msg(c, "*", "emote", `${c.actor.name} füttert ${k.acc} von ${b.ownerName} mit ${count} ${offer[0]!.f.name}; satt für etwa ${hours((until - now) / patient)}.`);
 }
 
 const wache: Command = {
 	key: "wache", aliases: ["wachen", "wächter", "waechter", "guards"],
 	help: "wache – wer in diesem Raum Hof und Felder vor dem Wild bewacht (Hund, Katze, Gänse) und ob sie satt sind",
 	async func(c) {
-		const wd = c.world.wild, now = await worldNowOf(c.space, c.txn);
+		const wd = c.world.wild, now = await worldNowOf(c.space, c.txn), patient = await patienceOf(c.space, c.txn);
 		const all = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e));
 		const out: string[] = [];
 		for (const b of all) {
 			const kp = keeperOf(c, b);
-			if (kp && b.keeper) out.push(`${kp.the} von ${b.ownerName} am Bau (${b.name}), ${b.keeper.fedUntilWorldMs > now ? `satt noch ${hours(b.keeper.fedUntilWorldMs - now)}` : "hungrig"}`);
+			if (kp && b.keeper) out.push(`${kp.the} von ${b.ownerName} am Bau (${b.name}), ${b.keeper.fedUntilWorldMs > now ? `satt noch ${hours((b.keeper.fedUntilWorldMs - now) / patient)}` : "hungrig"}`);
 			const g = wd?.guards?.find((x) => x.by === b.herd?.kind), k = c.world.animals?.kinds.find((x) => x.key === g?.by);
 			if (g && k && b.herd) out.push(`die ${k.plural} von ${b.ownerName}, ${b.herd.fedUntilWorldMs > now ? `satt noch ${hours(b.herd.fedUntilWorldMs - now)}` : "hungrig"}`);
 		}

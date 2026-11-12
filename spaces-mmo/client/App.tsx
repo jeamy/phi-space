@@ -216,16 +216,23 @@ function CellMenu({ at, beachAt, admin, chars, objs, self, room, me, plans, gues
 		return () => window.removeEventListener("keydown", key);
 	}, [close]);
 	// building goes in steps: "Bauen …" → the plans → a plan with what it needs and OK
-	const [step, setStep] = useState<"plans" | PlanView | null>(null);
+	// taking from a chest asks how many: "<ding> entnehmen …" → x of y
+	const [step, setStep] = useState<"plans" | PlanView | { take: string; count: number } | null>(null);
+	const [takeN, setTakeN] = useState("");
 	useEffect(() => setStep(null), [at]);
 	const fuel = fuelIn(objs, me);
-	const entries = cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, recipes, grinds, beachAt, admin, onPlans: () => setStep("plans"), onOrders });
-	if (step === "plans") {
+	const entries = cellEntries({ at, chars, objs, self, room, me, plans, guest, fuel, offer, offersIn, chat, wild, beds, sail, travel, recipes, grinds, beachAt, admin, onPlans: () => setStep("plans"), onOrders, onTake: (take, count) => { setTakeN(""); setStep({ take, count }); } });
+	const taking = step && typeof step === "object" && "take" in step ? step : null;
+	if (taking) {
+		entries.length = 0;
+		if (taking.count > 1) entries.push({ label: `Alle ${taking.count} entnehmen`, line: `entnimm alle ${taking.take}` });
+		entries.push({ label: "Zurück", line: "#zurück", run: () => setStep(null) });
+	} else if (step === "plans") {
 		entries.length = 0;
 		// alphabetical, as one looks for a name
 		for (const p of [...plans].sort((a, b) => a.name.localeCompare(b.name, "de"))) entries.push({ label: `${p.name} (${p.w}×${p.h}${p.epoch ? `, ab ${p.epoch}` : ""})`, line: `#plan ${p.key}`, run: () => setStep(p) });
 		entries.push({ label: "Zurück", line: "#zurück", run: () => setStep(null) });
-	} else if (step) {
+	} else if (step && "w" in step) {
 		entries.length = 0;
 		entries.push({ label: `OK: ${step.name} hier abstecken`, line: `bau ${step.key} ${at.x} ${at.y}` }, { label: "Zurück", line: "#zurück", run: () => setStep("plans") });
 	}
@@ -246,8 +253,17 @@ function CellMenu({ at, beachAt, admin, chars, objs, self, room, me, plans, gues
 			<div className={`menu-backdrop${sheet ? " dim" : ""}`} onClick={dismiss} onContextMenu={(e) => { e.preventDefault(); dismiss(); }} />
 			<ul className={sheet ? `cell-menu action-sheet${side}` : "cell-menu"} role="menu" style={sheet ? undefined : { left, top }} onPointerDown={() => { pressed.current = true; }} onClickCapture={(e) => { if (!mayClick(e)) { e.preventDefault(); e.stopPropagation(); } }}>
 				{sheet && about.title && <li className="action-title">{about.title}</li>}
-				{step && typeof step === "object" && <li className="menu-note">{step.name} ({step.w}×{step.h}) ab hier nach rechts unten: {step.needs}, {step.work} Arbeit</li>}
-				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (onWalk && e.line.startsWith("move ")) { onWalk(at); close(); } else if (e.run) { e.run(); if (!e.line.startsWith("#bau") && !e.line.startsWith("#plan") && !e.line.startsWith("#zurück")) close(); } else if (e.confirm) { const line = e.line; close(); void ask(e.confirm).then((ok) => { if (ok) send(line); }); } else { send(e.line); close(); } }}>{e.label}</button></li>)}
+				{step && typeof step === "object" && !taking && "w" in step && <li className="menu-note">{step.name} ({step.w}×{step.h}) ab hier nach rechts unten: {step.needs}, {step.work} Arbeit</li>}
+				{taking && <li className="menu-take">
+					{/* how many: a number, at most what lies there; empty: one */}
+					<form onSubmit={(e) => { e.preventDefault(); const n = Math.min(taking.count, Math.max(1, Math.floor(Number(takeN) || 1))); send(`entnimm ${n} ${taking.take}`); close(); }}>
+						<span>{taking.take}:</span>
+						<input type="number" min={1} max={taking.count} inputMode="numeric" placeholder="1" value={takeN} autoFocus onChange={(e) => setTakeN(e.target.value)} aria-label={`Wie viele ${taking.take} entnehmen, von ${taking.count}`} />
+						<span>{`von ${taking.count} in der Truhe`}</span>
+						<button type="submit">Entnehmen</button>
+					</form>
+				</li>}
+				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (onWalk && e.line.startsWith("move ")) { onWalk(at); close(); } else if (e.run) { e.run(); if (!e.line.startsWith("#bau") && !e.line.startsWith("#plan") && !e.line.startsWith("#zurück") && !e.line.startsWith("#entnimm")) close(); } else if (e.confirm) { const line = e.line; close(); void ask(e.confirm).then((ok) => { if (ok) send(line); }); } else { send(e.line); close(); } }}>{e.label}</button></li>)}
 				{sheet && about.desc && (told ? <li className="menu-note">{about.desc}</li> : <li role="menuitem"><button className="action-help" onClick={() => setTold(true)}>Was ist das?</button></li>)}
 				{sheet && about.article && onHelp && <li role="menuitem"><button className="action-help" onClick={() => { close(); onHelp(about.article!); }}>Was ist das?</button></li>}
 			</ul>

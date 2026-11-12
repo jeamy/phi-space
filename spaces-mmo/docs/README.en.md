@@ -22,7 +22,7 @@ are still missing. For operation it is laid out for the machines big and nano ([
 | Phase 5, model NPCs ([modell-npcs.en.md](modell-npcs.en.md)) | built, tested with scripted models; model calls only with `SPACES_MMO_LLM=1` |
 | World | eight islands, 37 rooms, nine fires (`worlds/leuchtfeuer/world.ts`); plus 40 settlers, of whom at least 30 figures play by default |
 | Chat ([siedeln.en.md](siedeln.en.md), step 0) | built: one-to-one and in groups, end-to-end encrypted |
-| Building and gardens (steps 1 and 2) | built: hut, chest (without a limit, filled from anywhere; a figure carries up to 1000 load), decay; beds, crossbreeding, hares, fence, scarecrow |
+| Building and gardens (steps 1 and 2) | built: hut, chest (without a limit, filled from anywhere; a figure carries up to 1500 load), decay; beds, crossbreeding, hares, fence, scarecrow |
 | Fields and farm (step 3) | built: fields with crop rotation, mill, bakehouse, animals, loom, game, guards |
 | Epochs and settlements (step 4) | built: islands become a village; settlements with ranks and a door. Town and network have no plans yet |
 | Regions ([welt-aufteilen.en.md](welt-aufteilen.en.md)) | built: four regions on big, accounts space on nano, their Space containers on the Rust server since 2026-11-07 ([betrieb.en.md](betrieb.en.md)) |

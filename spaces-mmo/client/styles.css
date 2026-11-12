@@ -144,6 +144,9 @@ a { color: var(--accent); }
 .cell-menu button { width: 100%; text-align: left; border: 0; border-radius: 6px; background: transparent; padding: 8px 10px; }
 .cell-menu button:hover { transform: none; }
 .cell-menu button:hover { background: var(--surface); }
+.cell-menu .menu-take form { display: flex; align-items: center; gap: 6px; padding: 6px 10px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.cell-menu .menu-take input { width: 4.5em; font-size: max(14px, var(--min-font)); }
+.cell-menu .menu-take button { width: auto; flex: none; }
 .cell-menu .menu-note { padding: 6px 10px 8px; max-width: 260px; font-size: max(12px, var(--min-font)); color: var(--muted); border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 
 /* the help sidebar (opened by the "?" in the header bar), after the phi-spaces help systems */

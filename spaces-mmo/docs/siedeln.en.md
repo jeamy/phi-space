@@ -747,7 +747,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      abandoned building site gives back everything delivered. The map shows the ruin, the cell menu offers repair, chest
      and estate. Not yet: faster decay in fog (comes with the game), rebuilding a ruin, the hut as return point.
    - **Part 3, built 2026-11-07: load** (`server/engine/pack.ts`, `server/engine/courier.ts`, test `tests/pack.test.ts`).
-     A figure carries at most 1000 load (40 at first, raised on the user's word; setting `pack.max`, `SPACES_MMO_PACK_MAX`, the admin window). Each thing weighs by
+     A figure carries at most 1500 load (40 at first, raised on the user's word to 1000 and on 2026-11-12 to 1500; setting `pack.max`, `SPACES_MMO_PACK_MAX`, the admin window). Each thing weighs by
      its kind (`world.pack.load`, 1 where it names none): coins and bills 0; shells, seeds, pearls, amber, wax, candles,
      down ½; driftwood, kelp rope, stone, cabbage, bricks, planks, rope, clay, dog, cat 2; bundle of wood, hen, duck,
      goose, sheep, goat, pig, bee colony, rowing boat, cart 4; cow and sailing boat 8. The check sits once around every command
@@ -948,7 +948,7 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
        2 goats) and that can be carried and traded. `einstallen` puts one into one's own stable like into a chest (place:
        the buildId), `ausstallen` takes it out. Therefore demolition gives the animals back and a ruin puts them into the
        estate, without code of its own.
-     - **Feeding** (`füttere`, anyone may): one feed makes an animal sated for a world day, up to three days ahead.
+     - **Feeding** (`füttere`, anyone may): one feed makes an animal sated for a world day; it can be fed ahead for up to three days of the second clock (fedMaxWorldMs times patience, as a dog), so a herd does not starve while its owner sleeps.
        Chickens eat kelp, cabbage, carrots and grain, sheep and goats turnips, oats, barley, cabbage and kelp: the plots
        feed the farm.
      - **Yield:** Sated, a chicken lays an egg a day, a goat gives milk a day, a sheep wool every two days; hungry ones give

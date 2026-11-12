@@ -19,7 +19,7 @@ pub const SETTINGS: &[(&str, &str, f64)] = &[
 	("beam.epoch", "SPACES_MMO_BEAM_EPOCH", 4.0), ("keep.scheuche", "SPACES_MMO_KEEP_SCHEUCHE", 40.0), ("keep.bau", "SPACES_MMO_KEEP_BAU", 40.0),
 	("keep.lager", "SPACES_MMO_KEEP_LAGER", 45.0), ("keep.kapelle", "SPACES_MMO_KEEP_KAPELLE", 60.0), ("keep.park", "SPACES_MMO_KEEP_PARK", 120.0),
 	("build.max1", "SPACES_MMO_BUILD_MAX_1", 10.0), ("build.max2", "SPACES_MMO_BUILD_MAX_2", 15.0), ("build.max3", "SPACES_MMO_BUILD_MAX_3", 18.0),
-	("build.max4", "SPACES_MMO_BUILD_MAX_4", 20.0), ("animals.houses", "SPACES_MMO_ANIMAL_HOUSES", 5.0), ("pack.max", "SPACES_MMO_PACK_MAX", 1000.0),
+	("build.max4", "SPACES_MMO_BUILD_MAX_4", 20.0), ("animals.houses", "SPACES_MMO_ANIMAL_HOUSES", 5.0), ("pack.max", "SPACES_MMO_PACK_MAX", 1500.0),
 	("cmd.perSec", "SPACES_MMO_CMD_PER_SEC", 5.0),
 ];
 

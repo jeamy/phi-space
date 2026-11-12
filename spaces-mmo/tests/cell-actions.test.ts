@@ -276,6 +276,17 @@ test("a hut one may enter offers „Hineingehen“; inside, the hearth cooks, th
 	assert.ok(there(1, 1).includes("craft hier"), "the hearth");
 	assert.ok(there(3, 3).includes("truhe") && there(3, 3).includes("entnimm Muschel"), "the chest and what lies in it");
 	assert.equal(cellEntries({ ...input, self: at, objs: furniture, room: inside, at: { x: 3, y: 3 } } as never).filter((e) => e.label === "Truhe ansehen").length, 1, "one „Truhe ansehen“, not its description beside it");
+	// more than one of a kind: "… entnehmen …" asks how many (the menu's next step), one alone is taken at once
+	const three = new Map(furniture);
+	for (const i of [1, 2, 3]) three.set(`holz-${i}`, obj({ id: `holz-${i}`, kind: "item", name: "Treibholz", location: "hut", x: -1, y: -1 }));
+	const asked: Array<[string, number]> = [];
+	const chest = cellEntries({ ...input, self: at, objs: three, room: inside, at: { x: 3, y: 3 }, onTake: (n: string, k: number) => asked.push([n, k]) } as never);
+	const take = chest.find((e) => e.label === "Treibholz entnehmen … (3 da)")!;
+	assert.equal(take.line, "#entnimm Treibholz");
+	take.run!();
+	assert.deepEqual(asked, [["Treibholz", 3]]);
+	assert.ok(chest.some((e) => e.line === "entnimm Muschel" && !e.run), "one alone: at once");
+	assert.ok(cellEntries({ ...input, self: at, objs: three, room: inside, at: { x: 3, y: 3 } } as never).some((e) => e.line === "entnimm alle Treibholz"), "without the dialog: all of them, as before");
 	assert.ok(!there(5, 1).includes("schlafe"), "the bed is two cells away");
 	assert.ok(cellEntries({ ...input, self: char("me", "Mira", 4, 1), objs: furniture, room: inside, at: { x: 5, y: 1 } }).some((e) => e.line === "schlafe"), "beside the bed");
 });

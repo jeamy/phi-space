@@ -1256,7 +1256,7 @@ Am Herd kocht man, was man in der Hütte macht (Rührei, Braten, Käse …): neb
 
 ## Last {#load}
 
-Eine Figur trägt höchstens **1000 Last** (der Betreiber stellt es ein). Jedes Ding wiegt nach seiner Art:
+Eine Figur trägt höchstens **1500 Last** (der Betreiber stellt es ein). Jedes Ding wiegt nach seiner Art:
 
 | Last | Dinge |
 |---|---|
@@ -1362,7 +1362,7 @@ At the hearth you cook what is made in the hut (scrambled eggs, roasts, cheese �
 
 ## Load {#load}
 
-A figure carries at most **1000 load** (the operator sets it). Each thing weighs by its kind:
+A figure carries at most **1500 load** (the operator sets it). Each thing weighs by its kind:
 
 | Load | Things |
 |---|---|
@@ -1974,7 +1974,7 @@ In einem Gehege lebt immer nur eine Art: Schafe, Ziegen, Enten, Gänse, Schweine
 
 ## Wie oft sie geben {#yields}
 
-Jedes Tier gibt nur, solange es **satt** ist; Zeit ohne Futter zählt nicht. Eine Fütterung reicht einen Tag, im Voraus bis zu drei Tage. Je Tier sammeln sich höchstens **3 Stück** an, dann kommt nichts mehr dazu, bis du \`einsammeln\` machst. **Nachwuchs** kommt nur mit mindestens zwei Tieren im Stall und solange Platz ist. Die Zeiten sind Weltzeit, die normalerweise so schnell läuft wie die echte Uhr.
+Jedes Tier gibt nur, solange es **satt** ist; Zeit ohne Futter zählt nicht. Eine Fütterung reicht einen Tag; vorfüttern geht für bis zu drei Tage, die du fort bist (läuft die Welt schneller, sind das mehr Welttage). Je Tier sammeln sich höchstens **3 Stück** an, dann kommt nichts mehr dazu, bis du \`einsammeln\` machst. **Nachwuchs** kommt nur mit mindestens zwei Tieren im Stall und solange Platz ist. Die Zeiten sind Weltzeit, die normalerweise so schnell läuft wie die echte Uhr.
 
 | Tier | Stall (Platz) | gibt | wie oft | Nachwuchs alle |
 | --- | --- | --- | --- | --- |
@@ -1991,7 +1991,7 @@ Jedes Tier gibt nur, solange es **satt** ist; Zeit ohne Futter zählt nicht. Ein
 
 Tiere fressen, was auf Feldern und Beeten wächst. Füttern darf jeder, nicht nur der Besitzer.
 
-\`füttere\` gibt Futter aus deiner Tasche (\`füttere 3 hafer\` mehrere auf einmal). Ein Futter macht ein Tier einen Tag satt, bis zu drei Tage im Voraus.
+\`füttere\` gibt Futter aus deiner Tasche (\`füttere 3 hafer\` mehrere auf einmal). Ein Futter macht ein Tier einen Tag satt; vorfüttern geht für bis zu drei Tage, die du fort bist.
 
 | Tier | frisst | gibt, wenn es satt ist |
 | --- | --- | --- |
@@ -2176,7 +2176,7 @@ A pen holds one kind only: sheep, goats, ducks, geese, pigs or cows. \`stable hu
 
 ## How often they give {#yields}
 
-An animal gives only while it is **fed**; time without food does not count. One feeding lasts a day, up to three days ahead. At most **3 pieces** gather per animal, then nothing more comes until you \`collect\`. **Young** come only with at least two animals in the house and while there is room. The times are world time, which normally runs as fast as the real clock.
+An animal gives only while it is **fed**; time without food does not count. One feeding lasts a day; you can feed ahead for up to three days you are away (more world days when the world runs faster). At most **3 pieces** gather per animal, then nothing more comes until you \`collect\`. **Young** come only with at least two animals in the house and while there is room. The times are world time, which normally runs as fast as the real clock.
 
 | Animal | House (room) | gives | how often | young every |
 | --- | --- | --- | --- | --- |
@@ -2193,7 +2193,7 @@ An animal gives only while it is **fed**; time without food does not count. One 
 
 Animals eat what grows on fields and beds. Anyone may feed them, not just the owner.
 
-\`fodder\` gives feed from your pack (\`fodder 3 oats\` several at once). One feed keeps one animal fed for a day, up to three days ahead.
+\`fodder\` gives feed from your pack (\`fodder 3 oats\` several at once). One feed keeps one animal fed for a day; you can feed ahead for up to three days you are away.
 
 | Animal | eats | gives while fed |
 | --- | --- | --- |

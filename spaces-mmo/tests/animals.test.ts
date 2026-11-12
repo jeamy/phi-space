@@ -9,10 +9,11 @@ import { herdNow } from "../server/engine/commands/animals.ts";
 import { guardedRooms, sheltered } from "../server/engine/commands/wild.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld, walkable } from "../server/engine/world.ts";
-import { decayNowOf, worldNowOf } from "../server/engine/clock.ts";
+import { decayNowOf, patienceOf, worldNowOf } from "../server/engine/clock.ts";
+import { decayNow, worldNow } from "../server/engine/worldtime.ts";
 import { sweepTick } from "../server/engine/sweep.ts";
 import { packMax } from "../server/engine/pack.ts";
-import type { BedFields, BuildingFields, HerdFields } from "../server/model.ts";
+import type { BedFields, BuildingFields, HerdFields, WorldClockFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, Player, startServer } from "./stack.ts";
 
@@ -272,7 +273,7 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		await give(s, bert.me, "ruebe", 1);
 		assert.match(await does(bert.p, "füttere rübe", "mögen"), /Rübe mögen Hühner nicht; sie fressen Tang/);
 		await give(s, bert.me, "tang", 12);
-		assert.match(await does(bert.p, "füttere", "satt für"), /Nachbar füttert die Hühner von Bäuerin mit 9 Tang; satt für etwa 72 Stunden/);
+		assert.match(await does(bert.p, "füttere", "satt für"), /Nachbar füttert die Hühner von Bäuerin mit 9 Tang; satt für etwa 3 Tage/);
 		assert.equal(await pack(s, bert.me, "tang"), 3, "only what fits");
 		assert.match(await does(bert.p, "füttere tang", "satt"), /Die Hühner sind satt/);
 		assert.match(await does(bert.p, "einsammeln", "sammelt"), /Was die Tiere von Bäuerin geben, sammelt Bäuerin/);
@@ -328,5 +329,32 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		await building(s, { buildId: "huette-1", plan: "huette", name: "Hütte", x: me.x - 2, y: me.y - 1, w: 2, h: 2 });
 		await does(anna.p, "craft käse", "Käse her");
 		assert.equal(await pack(s, anna.me, "kaese"), 1);
+	} finally { await srv.close(); }
+});
+
+test("with the second clock slower (patience 24) a herd can be fed ahead for three of its days, a food still a world day; a dog's food is told in its time", { timeout: 300_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		// the life rate 24 times the decay rate, without speeding the world up: the second clock runs at 1/24
+		const clock = (await s.take({ type: "WorldClock" }, 5_000))!.fields as unknown as WorldClockFields, now = Date.now();
+		await s.write({ type: "WorldClock", fields: { ...clock, decayAnchorMs: decayNow(clock, now), realAnchorMs: now, worldAnchorMs: worldNow(clock, now), decayRate: clock.rate / 24 } as never }, null, FOREVER);
+		assert.equal(await patienceOf(s), 24);
+		const anna = await player(srv.url, "Vorfuetterin");
+		const accountId = String((await s.readAll({ type: "Character", fields: { charId: anna.me } }))[0]!.fields.accountId);
+		const coop = await building(s, { buildId: "stall-vor", plan: "huehnerstall", name: "Hühnerstall", x: 16, y: 12, w: 2, h: 1, owner: anna.me, ownerName: anna.name, accountId });
+		await walkBeside(anna, s, coop, new Set());
+		await give(s, anna.me, "huhn", 1);
+		await does(anna.p, "einstallen huhn", "(1 Huhn)");
+		await give(s, anna.me, "tang", 30);
+		// one hen, a food a world day: all 30 (three days of the second clock are 72 world days), before only 3
+		assert.match(await does(anna.p, "füttere", "satt für"), /mit 30 Tang; satt für etwa 30 Tage/);
+		await give(s, anna.me, "hund", 1);
+		await does(anna.p, "einstallen hund", "wachen");
+		await give(s, anna.me, "ei", 1);
+		// a dog's food is a day of the second clock (24 world days), told as such
+		assert.match(await does(anna.p, "füttere hund", "satt für"), /mit 1 Ei; satt für etwa 24 Stunden/);
+		assert.match(await does(anna.p, "wache", "Hier wachen"), /der Hund von Vorfuetterin am Bau \(Hühnerstall\), satt noch 24 Stunden/);
+		await anna.p.leave();
 	} finally { await srv.close(); }
 });

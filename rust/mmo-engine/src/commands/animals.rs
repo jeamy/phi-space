@@ -22,6 +22,7 @@ fn txt(v: &Json) -> String { key_text(v) }
 fn nt(n: f64) -> String { phi_json::number_text(n) }
 fn hours(ms: f64) -> String {
 	let h = js::round(ms / 3_600_000.0);
+	if h >= 48.0 { return format!("{} Tage", nt(js::round(h / 24.0))); } // from two days on in days ("satt noch 5 Tage")
 	if h >= 1.0 { format!("{} {}", nt(h), if h == 1.0 { "Stunde" } else { "Stunden" }) } else { format!("{} Minuten", nt(1f64.max(js::round(ms / 60_000.0)))) }
 }
 fn few(k: &Json, n: f64) -> String { format!("{} {}", nt(n), txt(j::at(k, if n == 1.0 { "name" } else { "plural" }))) }
@@ -234,7 +235,8 @@ async fn fuettere(c: &mut Ctx, arg: &str) -> Result<()> {
 	if offer.is_empty() { return refuse(format!("Du hast kein Futter. {} fressen {}.", txt(j::at(&k, "plural")), feeds(c, &kf))); }
 	let per = j::n(&d, "feedWorldMs") / n;
 	let from = now.max(j::n(&herd, "fedUntilWorldMs"));
-	let room = now + j::n(&d, "fedMaxWorldMs") - from;
+	// a food is a world day for one animal (they eat by the life rate); fed ahead as far as a dog, for people who are away
+	let room = now + j::n(&d, "fedMaxWorldMs") * patience_of(&c.space, c.txn()).await? - from;
 	if room < per { return refuse(format!("Die {} sind satt (noch {}).", txt(j::at(&k, "plural")), hours(from - now))); }
 	let want = (room / per).floor().min(offer.len() as f64).min(count_of(m1.as_deref()));
 	let mut used: Vec<(String, f64)> = Vec::new();
@@ -306,7 +308,7 @@ async fn feed_keeper(c: &mut Ctx, kp: Option<&Json>, arg: &str) -> Result<()> {
 	let feed_ms = j::n(&d, "feedWorldMs") * patient;
 	let from = now.max(j::n(&keeper, "fedUntilWorldMs"));
 	let room = now + j::n(&d, "fedMaxWorldMs") * patient - from;
-	if room < feed_ms { return refuse(format!("{} ist satt (noch {}).", cap(&the), hours(from - now))); }
+	if room < feed_ms { return refuse(format!("{} ist satt (noch {}).", cap(&the), hours((from - now) / patient))); }
 	let want = (room / feed_ms).floor().min(offer.len() as f64).min(count_of(m1.as_deref()));
 	let me = c.char_id().to_owned();
 	let mut count = 0.0;
@@ -320,7 +322,7 @@ async fn feed_keeper(c: &mut Ctx, kp: Option<&Json>, arg: &str) -> Result<()> {
 	let mut nb = b.clone();
 	j::set(&mut nb, "keeper", kpr);
 	put_back(c, &nb).await?;
-	msg(c, "*", "emote", &format!("{} füttert {} von {} mit {} {}; satt für etwa {}.", txt(j::at(&c.actor, "name")), txt(j::at(&k, "acc")), txt(j::at(&b, "ownerName")), nt(count), txt(j::at(fields(&offer[0]), "name")), hours(until - now)), MsgOpts::default()).await
+	msg(c, "*", "emote", &format!("{} füttert {} von {} mit {} {}; satt für etwa {}.", txt(j::at(&c.actor, "name")), txt(j::at(&k, "acc")), txt(j::at(&b, "ownerName")), nt(count), txt(j::at(fields(&offer[0]), "name")), hours((until - now) / patient)), MsgOpts::default()).await
 }
 
 async fn wache(c: &mut Ctx) -> Result<()> {
@@ -328,15 +330,16 @@ async fn wache(c: &mut Ctx) -> Result<()> {
 	let all: Vec<Json> = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).collect();
 	let guards = j::opt(c.w(), "wild").map_or(&[][..], |w| j::a(w, "guards")).to_vec();
 	let mut out: Vec<String> = Vec::new();
-	let fed = |until: f64| if until > now { format!("satt noch {}", hours(until - now)) } else { "hungrig".to_owned() };
+	let patient = patience_of(&c.space, c.txn()).await?;
+	let fed = |until: f64, per: f64| if until > now { format!("satt noch {}", hours((until - now) / per)) } else { "hungrig".to_owned() };
 	for b in &all {
 		if let (Some(kp), Some(kr)) = (keeper_of(c, b), j::opt(b, "keeper").filter(|x| j::truthy(x))) {
-			out.push(format!("{} von {} am Bau ({}), {}", txt(j::at(&kp, "the")), txt(j::at(b, "ownerName")), txt(j::at(b, "name")), fed(j::n(kr, "fedUntilWorldMs"))));
+			out.push(format!("{} von {} am Bau ({}), {}", txt(j::at(&kp, "the")), txt(j::at(b, "ownerName")), txt(j::at(b, "name")), fed(j::n(kr, "fedUntilWorldMs"), patient)));
 		}
 		let hk = herd_of(b).map(|h| j::at(h, "kind").clone()).unwrap_or(Json::Null);
 		let g = guards.iter().find(|x| *j::at(x, "by") == hk);
 		let k = g.and_then(|g| j::opt(c.w(), "animals").and_then(|a| kind_by(a, j::at(g, "by"))));
-		if let (Some(_), Some(k), Some(h)) = (g, k, herd_of(b)) { out.push(format!("die {} von {}, {}", txt(j::at(k, "plural")), txt(j::at(b, "ownerName")), fed(j::n(h, "fedUntilWorldMs")))); }
+		if let (Some(_), Some(k), Some(h)) = (g, k, herd_of(b)) { out.push(format!("die {} von {}, {}", txt(j::at(k, "plural")), txt(j::at(b, "ownerName")), fed(j::n(h, "fedUntilWorldMs"), 1.0))); }
 	}
 	let me = c.char_id().to_owned();
 	msg(c, &me, "info", &if out.is_empty() { "Hier wacht niemand. Hunde und Katzen verkauft Gesa am Markt von Kupferhafen („einstallen hund“ an einem deiner Bauten).".to_owned() } else { format!("Hier wachen: {}. Nur satt halten sie das Wild fern.", out.join("; ")) }, MsgOpts::default()).await

@@ -215,10 +215,10 @@ test("a dog and a cat as a player keeps them; scheuche reh; a fence round the ow
 		await give(s, a.me, "ei", 4);
 		await give(s, a.me, "tang", 1);
 		assert.match(await does(p, "füttere hund mit tang", "mag"), /Der Hund mag Tang nicht; er frisst Ei, Brot, Käse, Milch/);
-		assert.match(await does(p, "füttere hund", "satt für"), /Ida füttert den Hund von Ida mit 3 Ei; satt für etwa 72 Stunden/);
+		assert.match(await does(p, "füttere hund", "satt für"), /Ida füttert den Hund von Ida mit 3 Ei; satt für etwa 3 Tage/);
 		assert.equal(await pack(s, a.me, "ei"), 1, "only what fits");
 		assert.ok((await kept())!.fedUntilWorldMs > (await worldNowOf(s)) + 2 * DAY);
-		assert.match(await does(p, "wache", "Hier wachen"), /Hier wachen: der Hund von Ida am Bau \(Hütte\), satt noch 72 Stunden/);
+		assert.match(await does(p, "wache", "Hier wachen"), /Hier wachen: der Hund von Ida am Bau \(Hütte\), satt noch 3 Tage/);
 		await give(s, a.me, "katze", 1);
 		assert.match(await does(p, "einstallen katze", "niemand wacht"), /Geh direkt neben einen Bau von dir, an dem noch niemand wacht/);
 		assert.match(await does(p, "ausstallen hund", "mit"), /Ida nimmt den Hund wieder mit/);
