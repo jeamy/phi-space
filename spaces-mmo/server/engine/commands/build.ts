@@ -659,6 +659,9 @@ const verstaue: Command = {
 		const { n, name } = amount(what);
 		const hits = itemsNamed(c.world, await inventory(c), name);
 		if (!hits.length) throw new NotUnderstood(`Du trägst nichts, was „${name.slice(0, 30)}“ heißt.`);
+		// a dog or cat is no thing for a chest: in it, neither „truhe“ nor „entnimm“ would see it (chestOf), it guards instead
+		const kp = c.world.wild?.keepers?.find((k) => k.proto === hits[0]!.f.proto);
+		if (kp) throw new CommandError(`${kp.name} kommt nicht in die Truhe; neben deinem Bau lässt „einstallen ${kp.key}“ ${kp.acc} dort wachen.`);
 		// beside a warehouse and no chest named: into the store, as before
 		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
 		const ownBeside = near.some((b) => b.accountId === c.account?.accountId && planOf(c.world, b.plan)?.chest && !planOf(c.world, b.plan)?.store);

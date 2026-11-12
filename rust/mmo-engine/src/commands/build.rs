@@ -927,6 +927,10 @@ async fn verstaue(c: &mut Ctx, arg: &str) -> Result<()> {
 	let inv = inventory(c).await?;
 	let hits = items_named(c.w(), &inv, &name, None);
 	let Some(first) = hits.first().map(|e| fields(e).clone()) else { return not_understood(format!("Du trägst nichts, was „{}“ heißt.", js::slice16(&name, 0, Some(30)))) };
+	// a dog or cat is no thing for a chest: in it, neither „truhe“ nor „entnimm“ would see it (chest_of), it guards instead
+	if let Some(kp) = j::a(j::at(c.w(), "wild"), "keepers").iter().find(|k| j::at(k, "proto") == j::at(&first, "proto")) {
+		return refuse(format!("{} kommt nicht in die Truhe; neben deinem Bau lässt „einstallen {}“ {} dort wachen.", j::s(kp, "name"), j::s(kp, "key"), j::s(kp, "acc")));
+	}
 	let me = xy(&c.actor);
 	let near: Vec<Json> = fields_of(c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?).into_iter().filter(|b| dist_to(me, Rect::of(b)) <= 1.0).collect();
 	let own_beside = near.iter().any(|b| mine(c, b) && plan_has(c.w(), j::at(b, "plan"), "chest") && !plan_has(c.w(), j::at(b, "plan"), "store"));

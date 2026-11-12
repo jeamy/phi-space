@@ -263,6 +263,15 @@ test("someone else's bed beside one: only the operator may remove it", () => {
 	assert.deepEqual(lines(true).map((e) => [e.label, e.line, !!e.confirm]), [["Beet auflösen (als Betreiber)", "beet aufgeben ja 6 5", true]]);
 });
 
+test("a dog or cat one carries is let guard one's hut, never put into its chest", () => {
+	const uses = { recipes: [], feed: {}, offerings: [], flowers: [], chests: ["huette"], stores: ["lagerhaus"] };
+	const hut = obj({ id: "hut", kind: "building", name: "Hütte", owner: "Mira", ownerId: "me", plan: "huette", x: 6, y: 5, w: 2, h: 2 });
+	const carried = (n: string) => obj({ id: n, kind: "item", name: n, location: "me", x: 0, y: 0 });
+	const lines = (n: string) => itemEntries(n, { ...input, chars: new Map([["me", me]]), objs: new Map([["hut", hut], [n, carried(n)]]) }, uses as never, { fuels: [] }).map((e) => e.line);
+	assert.ok(lines("Muschel").includes("verstaue Muschel"), "a thing goes into the chest");
+	for (const n of ["Katze", "Hund"]) assert.ok(!lines(n).some((l) => l.startsWith("verstaue")), n);
+});
+
 test("a hut one may enter offers „Hineingehen“; inside, the hearth cooks, the chest opens for its owner, the bed sleeps", () => {
 	const self = char("me", "Mira", 9, 10);
 	const house = (o: Partial<ObjView>) => new Map([["hut", obj({ id: "hut", kind: "building", name: "Hütte", owner: "Ines", ownerId: "o", plan: "huette", interior: true, x: 10, y: 10, w: 2, h: 2, ...o })]]);
@@ -293,6 +302,10 @@ test("a hut one may enter offers „Hineingehen“; inside, the hearth cooks, th
 	assert.deepEqual(asked, [["Treibholz", 3]]);
 	assert.ok(chest.some((e) => e.line === "entnimm Muschel" && !e.run), "one alone: at once");
 	assert.ok(cellEntries({ ...input, self: at, objs: three, room: inside, at: { x: 3, y: 3 } } as never).some((e) => e.line === "entnimm alle Treibholz"), "without the dialog: all of them, as before");
+	// a cat on guard lies in the building but is no thing of its chest: „ausstallen“ takes it along, not „entnimm“
+	const guarded = new Map(furniture).set("katze", obj({ id: "katze", kind: "item", name: "Katze", location: "hut", x: -1, y: -1 }));
+	const atChest = cellEntries({ ...input, self: at, objs: guarded, room: inside, at: { x: 3, y: 3 } } as never).map((e) => e.line);
+	assert.ok(atChest.includes("entnimm Muschel") && !atChest.some((l) => /entnimm .*Katze/.test(l)), "no „Katze entnehmen“");
 	assert.ok(!there(5, 1).includes("schlafe"), "the bed is two cells away");
 	assert.ok(cellEntries({ ...input, self: char("me", "Mira", 4, 1), objs: furniture, room: inside, at: { x: 5, y: 1 } }).some((e) => e.line === "schlafe"), "beside the bed");
 });

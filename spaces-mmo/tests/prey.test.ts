@@ -221,6 +221,9 @@ test("a dog and a cat as a player keeps them; scheuche reh; a fence round the ow
 		assert.match(await does(p, "wache", "Hier wachen"), /Hier wachen: der Hund von Ida am Bau \(Hütte\), satt noch 3 Tage/);
 		await give(s, a.me, "katze", 1);
 		assert.match(await does(p, "einstallen katze", "niemand wacht"), /Geh direkt neben einen Bau von dir, an dem noch niemand wacht/);
+		// a cat is no thing for the chest: in it, neither „truhe“ nor „entnimm“ would see it
+		assert.equal(await does(p, "verstaue katze", "kommt nicht"), "Katze kommt nicht in die Truhe; neben deinem Bau lässt „einstallen katze“ die Katze dort wachen.");
+		assert.equal(await pack(s, a.me, "katze"), 1, "still carried");
 		assert.match(await does(p, "ausstallen hund", "mit"), /Ida nimmt den Hund wieder mit/);
 		assert.equal(await kept(), undefined);
 		assert.equal(await pack(s, a.me, "hund"), 1);

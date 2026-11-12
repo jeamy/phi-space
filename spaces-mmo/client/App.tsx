@@ -23,7 +23,7 @@ import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.t
 import { ChatOverview, TalkView } from "./ChatPanel.tsx";
 import { forgetDeviceKeys, useChat } from "./useChat.ts";
 import { MAX_AHEAD, nextStep, screenToGrid, WALK_MS, Walker } from "./walk.ts";
-import { cellAbout, cellEntries, type CellInput, hereEntries, itemEntries, tapTarget, wildHere } from "./cellActions.ts";
+import { cellAbout, cellEntries, type CellInput, hereEntries, itemEntries, KEEPERS, tapTarget, wildHere } from "./cellActions.ts";
 import { hintsFor, type Hint } from "./hints.ts";
 import { canFullscreen, enterFullscreen, homeSteps, isShort, isTouch, useKeyboardInset, useLandscapeFullscreen, usePageHeld } from "./useShell.ts";
 import { useBack } from "./useBack.ts";
@@ -513,7 +513,8 @@ function Things({ part = "mine", objs, chars, self, room, me, plans, guest, wild
 						<button onClick={() => send(`look ${chosen[0]}`)}>Ansehen</button>
 					</div>
 					{/* into a chest of one's own, from anywhere (verstaue … in <nr>) */}
-					{!guest && chestAt && <div className="pack-store">
+					{/* a dog or cat goes to no chest: it guards a building (einstallen) */}
+					{!guest && chestAt && !KEEPERS.includes(chosen[0]) && <div className="pack-store">
 						{chests.length > 1 ? <select aria-label="Truhe" value={chestAt.nr} onChange={(e) => setChestNr(Number(e.target.value))}>{chests.map((x) => <option key={x.nr} value={x.nr}>{x.label}</option>)}</select> : <span>{`Truhe: ${chestAt.label}`}</span>}
 						{/* how many: a number (at most what is carried), empty: one */}
 						<form className="pack-store-n" onSubmit={(e) => { e.preventDefault(); const n = Math.min(chosen[1].length, Math.max(1, Math.floor(Number(storeN) || 1))); send(`verstaue ${n} ${chosen[0]} in ${chestAt.nr}`); setStoreN(""); }}>

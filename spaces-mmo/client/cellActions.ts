@@ -97,7 +97,7 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 		if (b.herd && uses.feed[b.herd]?.includes(name)) add({ label: `${name} verfüttern`, line: `füttere ${name}` });
 		if (b.keeper && uses.feed[b.keeper]?.includes(name)) add({ label: `${name} verfüttern (${b.keeper === "hund" ? "Hund" : "Katze"})`, line: `füttere ${b.keeper} ${name}` });
 		if (b.plan === "kapelle" && uses.offerings.includes(name)) add({ label: `${name} opfern`, line: `opfere ${name}` });
-		if (uses.stores.includes(b.plan ?? "") || (uses.chests.includes(b.plan ?? "") && b.ownerId === me)) add({ label: uses.stores.includes(b.plan ?? "") ? "Ins Lager legen" : "In die Truhe legen", line: `verstaue ${name}` });
+		if (!KEEPERS.includes(name) && (uses.stores.includes(b.plan ?? "") || (uses.chests.includes(b.plan ?? "") && b.ownerId === me))) add({ label: uses.stores.includes(b.plan ?? "") ? "Ins Lager legen" : "In die Truhe legen", line: `verstaue ${name}` });
 	}
 	if (name === "Spaten" && !guest) { add({ label: "Beet umgraben", line: "umgraben" }); add({ label: "Zierbeet umgraben (nur Blumen, sie kreuzen sich)", line: "umgraben zier" }); add({ label: "Gemeinschaftsbeet anlegen (3×3, eins je Feuer)", line: "umgraben gemeinschaft" }); }
 	// a tool whose work wants a building beside it: offered anywhere (beside one the bar's own entry comes first), away from one
@@ -140,6 +140,8 @@ const SOWN: Record<string, string> = { Weizen: "weizen", Gerste: "gerste", Hafer
 // with the young ones that grow up in them (Küken, Ferkel)
 const HOUSES: Record<string, string[]> = { huehnerstall: ["Huhn", "Küken"], gehege: ["Schaf", "Ziege", "Ente", "Gans", "Rind", "Schwein", "Ferkel"], bienenstock: ["Bienenvolk"] };
 /** The animals that are slaughtered, as their things are named (server: world animals with `slaughter`; the young grow up first). */
+/** A dog or cat: it guards a building (einstallen), it is no thing for a chest (server: build.ts verstaue, chestOf). */
+export const KEEPERS = ["Hund", "Katze"];
 const SLAUGHTERED = ["Huhn", "Schaf", "Ziege", "Ente", "Gans", "Rind", "Schwein"];
 const AREA = new Set(["site", "building", "ruin", "bed", "field", "tree", "scenery", "liner"]);
 const covers = (o: ObjView, c: { x: number; y: number }) => c.x >= o.x && c.y >= o.y && c.x < o.x + (o.w ?? 1) && c.y < o.y + (o.h ?? 1);
@@ -181,7 +183,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 	const chestEntries = (buildId: string) => {
 		entries.push({ label: "Truhe ansehen", line: "truhe" });
 		const held = new Map<string, number>();
-		for (const i of objs.values()) if (i.kind === "item" && i.location === buildId) held.set(i.name, (held.get(i.name) ?? 0) + 1);
+		for (const i of objs.values()) if (i.kind === "item" && i.location === buildId && !KEEPERS.includes(i.name)) held.set(i.name, (held.get(i.name) ?? 0) + 1);
 		for (const [n, k] of [...held].sort(([a], [b]) => a.localeCompare(b, "de")).slice(0, 12)) {
 			if (k > 1 && onTake) entries.push({ label: `${n} entnehmen … (${k} da)`, line: `#entnimm ${n}`, run: () => onTake(n, k) });
 			else entries.push(k > 1 ? { label: `${n} entnehmen (alle ${k})`, line: `entnimm alle ${n}` } : { label: `${n} entnehmen`, line: `entnimm ${n}` });
@@ -353,7 +355,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.keeper) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} füttern`, line: `füttere ${o.keeper}` }, { label: "Wer wacht hier?", line: "wache" });
 			if (o.ownerId === me) {
 				if (o.keeper) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} mitnehmen`, line: `ausstallen ${o.keeper}` });
-				else for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && ["Hund", "Katze"].includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} hier wachen lassen`, line: `einstallen ${n}` });
+				else for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && KEEPERS.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} hier wachen lassen`, line: `einstallen ${n}` });
 			}
 			entries.push({ label: "Ausbessern", line: "repariere" });
 			if (o.plan === "bahnhof" && beside) {
