@@ -264,6 +264,17 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		const hive = await building(s, { buildId: "stock-neben", plan: "bienenstock", name: "Bienenstock", x: spot.x, y: spot.y, w: 1, h: 1, owner: anna.me, ownerName: anna.name, accountId });
 		for (let i = 1; i <= 3; i++) await does(anna.p, "einstallen huhn", `(${i} ${i === 1 ? "Huhn" : "Hühner"})`);
 		assert.equal(await s.count({ type: "Item", fields: { location: coop.buildId, proto: "huhn" } }), 3, "the hens lie in the coop");
+		// bees in the hive beside the coop: what is collected comes from the house named, by its cell (the menu) or by what
+		// it gives, never from the neighbour beside it
+		await give(s, anna.me, "bienenvolk", 1);
+		await does(anna.p, "einstallen bienenvolk", "(1 Bienenvolk)");
+		assert.match(await does(anna.p, `einsammeln ${coop.x} ${coop.y}`, "Noch kein"), /Noch kein Ei bereit/);
+		assert.match(await does(anna.p, `einsammeln ${hive.x} ${hive.y}`, "Noch kein"), /Noch kein Honig bereit/);
+		assert.match(await does(anna.p, "einsammeln eier", "Noch kein"), /Noch kein Ei bereit/);
+		assert.match(await does(anna.p, "sammle honig", "Noch kein"), /Noch kein Honig bereit/);
+		assert.match(await does(anna.p, "einsammeln wolle", "Stall"), /Neben dir ist kein Stall von dir, dessen Tiere wolle geben/);
+		assert.match(await does(anna.p, "einsammeln 0 0", "Stall"), /Dort steht neben dir kein Stall von dir mit Tieren/);
+		for (const e of await s.readAll({ type: "Item", fields: { location: hive.buildId } })) await s.takeIfExists({ id: e.id }, 0);
 		await s.takeIfExists({ type: "Building", fields: { buildId: hive.buildId } }, 0);
 		await s.takeIfExists({ type: "Plot", fields: { room: "graue-bucht", x: spot.x, y: spot.y } }, 0);
 		assert.match(await does(anna.p, "stall", "Hühnerstall von"), /3 Hühner \(Platz für 6\), hungrig/);

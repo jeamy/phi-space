@@ -523,7 +523,7 @@ async fn pate(c: &mut Ctx, arg: &str) -> Result<()> {
 }
 
 async fn sammle(c: &mut Ctx, arg: &str) -> Result<()> {
-	if means_yield(c, arg) { return collect(c).await; }
+	if means_yield(c, arg) { return collect(c, arg).await; }
 	let g = garden(c)?;
 	let t = js::trim(arg);
 	if !t.is_empty() && !js::re(r"^(?:samen|seeds?|saatgut)$", "i").test(&no_article(t)) { return not_understood("Gesammelt werden hier Samen („sammle samen“) und im Stall, was die Tiere geben („sammle eier“); Dinge am Strand hebst du mit „get“ auf."); }

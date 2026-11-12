@@ -338,7 +338,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 				if (o.herd) entries.push({ label: "Füttern", line: "füttere" });
 				if (o.ownerId === me) {
 					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", rind: "Milch", schwein: "Trüffel", gans: "Daunen", biene: "Honig" };
-					if (o.herd) entries.push({ label: `${yields[o.herd] ?? "Ertrag"} einsammeln`, line: "einsammeln" });
+					if (o.herd) entries.push({ label: `${yields[o.herd] ?? "Ertrag"} einsammeln`, line: `einsammeln ${o.x} ${o.y}` }); // this house, not the neighbour beside it
 					const fits = HOUSES[o.plan ?? ""]!;
 					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && fits.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} einstallen`, line: `einstallen ${n}` });
 					entries.push({ label: o.plan === "bienenstock" ? "Ein Volk herausnehmen" : "Ein Tier herausnehmen", line: "ausstallen" });

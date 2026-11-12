@@ -264,9 +264,17 @@ const wache: Command = {
 };
 
 /** Collects what the herd beside the actor gave (the owner only); also reached from "sammle eier" (garden.ts). */
-export async function collect(c: CommandCtx): Promise<void> {
+export async function collect(c: CommandCtx, arg = ""): Promise<void> {
 	const d = animalsOf(c);
-	const { b, k, n, now } = await houseHere(c, d, (h) => mine(c, h) && !!h.herd);
+	// which house, when one stands beside several (a coop and a hive): its cell ("einsammeln 20 6", the menu) or what it
+	// gives ("einsammeln eier", "sammle honig"); a house named so must be there, no neighbour stands in for it
+	const t = arg.trim(), cell = /^(\d+)\s+(\d+)$/.exec(t), kinds = cell ? [] : yieldKinds(c, t);
+	const named = (h: BuildingFields) => cell ? Number(cell[1]) >= h.x && Number(cell[1]) < h.x + h.w && Number(cell[2]) >= h.y && Number(cell[2]) < h.y + h.h : !kinds.length || kinds.includes(h.herd?.kind ?? "");
+	if (cell || kinds.length) {
+		const there = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).some((h) => !!d.houses[h.plan] && distTo(c.actor, h) <= 1 && mine(c, h) && !!h.herd && named(h));
+		if (!there) throw new CommandError(cell ? "Dort steht neben dir kein Stall von dir mit Tieren." : `Neben dir ist kein Stall von dir, dessen Tiere ${t} geben.`);
+	}
+	const { b, k, n, now } = await houseHere(c, d, (h) => mine(c, h) && !!h.herd && named(h));
 	if (!mine(c, b)) throw new CommandError(`Was die Tiere von ${b.ownerName} geben, sammelt ${b.ownerName}.`);
 	if (!k || !n || !b.herd) throw new CommandError("Im Stall ist kein Tier.");
 	const whole = Math.floor(b.herd.goods);
@@ -283,7 +291,7 @@ export async function collect(c: CommandCtx): Promise<void> {
 const einsammeln: Command = {
 	key: "einsammeln", aliases: ["melke", "melken", "schere", "scheren", "eier", "collect"],
 	help: "einsammeln – Eier, Wolle, Milch oder Honig deiner Tiere im Stall, Gehege oder Bienenstock neben dir (auch: sammle eier, sammle honig, melke, schere)",
-	async func(c) { await collect(c); },
+	async func(c, arg) { await collect(c, arg); },
 };
 
 /** "ein Schwein", "eine Ziege", "eine Gans": the article of a kind by its name. */
@@ -350,9 +358,11 @@ async function butchered(c: CommandCtx, tool: { f: ItemFields }, k: AnimalKindDe
 }
 
 /** Whether "sammle <arg>" means a yield of the animals ("sammle eier", "die wolle"). */
-export const meansYield = (c: CommandCtx, arg: string) => {
+export const meansYield = (c: CommandCtx, arg: string) => yieldKinds(c, arg).length > 0;
+/** The kinds of animal whose yield `arg` names ("eier": huhn, ente). */
+const yieldKinds = (c: CommandCtx, arg: string) => {
 	const n = arg.trim().toLowerCase().replace(ARTICLE, "");
-	return !!n && (c.world.animals?.kinds ?? []).some((k) => { const p = c.world.prototypes.find((x) => x.key === k.yields); return !!p && [p.key, p.name, ...p.aliases].some((a) => a.toLowerCase() === n); });
+	return !n ? [] : (c.world.animals?.kinds ?? []).filter((k) => { const p = c.world.prototypes.find((x) => x.key === k.yields); return !!p && [p.key, p.name, ...p.aliases].some((a) => a.toLowerCase() === n); }).map((k) => k.key);
 };
 
 export const ANIMAL_COMMANDS: Command[] = [stall, einstallen, ausstallen, fuettere, einsammeln, wache, schlachte];

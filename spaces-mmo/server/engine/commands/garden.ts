@@ -411,7 +411,7 @@ const sammle: Command = {
 	help: "sammle samen – in der wilden Flora hier nach Samen suchen (findet nicht immer etwas; an dieser Stelle danach eine kurze Pause)",
 	async func(c, arg) {
 		// "sammle eier": what the animals gave (animals.ts)
-		if (meansYield(c, arg)) return collect(c);
+		if (meansYield(c, arg)) return collect(c, arg);
 		const g = garden(c);
 		if (arg.trim() && !/^(?:samen|seeds?|saatgut)$/i.test(arg.trim().replace(ARTICLE, ""))) throw new NotUnderstood("Gesammelt werden hier Samen („sammle samen“) und im Stall, was die Tiere geben („sammle eier“); Dinge am Strand hebst du mit „get“ auf.");
 		const now = await worldNowOf(c.space, c.txn);

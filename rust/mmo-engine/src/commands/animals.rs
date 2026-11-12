@@ -104,7 +104,7 @@ pub async fn run(c: &mut Ctx, key: &str, arg: &str) -> Result<()> {
 		"einstallen" => einstallen(c, arg).await,
 		"ausstallen" => ausstallen(c, arg).await,
 		"füttere" => fuettere(c, arg).await,
-		"einsammeln" => collect(c).await,
+		"einsammeln" => collect(c, arg).await,
 		"wache" => wache(c).await,
 		"schlachte" => schlachte(c, arg).await,
 		k => Err(Error::Other(format!("unported: animals/{k}"))),
@@ -346,9 +346,23 @@ async fn wache(c: &mut Ctx) -> Result<()> {
 }
 
 /// `collect`: what the herd beside the actor gave (the owner only); also reached from "sammle eier" (garden.rs).
-pub async fn collect(c: &mut Ctx) -> Result<()> {
+pub async fn collect(c: &mut Ctx, arg: &str) -> Result<()> {
 	let d = animals_of(c)?;
-	let House { b, k, n, now, .. } = house_here(c, &d, &|h| mine(c, h) && herd_of(h).is_some()).await?;
+	// which house, when one stands beside several (a coop and a hive): its cell ("einsammeln 20 6", the menu) or what it
+	// gives ("einsammeln eier", "sammle honig"); a house named so must be there, no neighbour stands in for it
+	let t = js::trim(arg);
+	let cell = js::re(r"^(\d+)\s+(\d+)$", "").exec(t).map(|m| (m.group(t, 1).unwrap_or("").parse::<f64>().unwrap_or(f64::NAN), m.group(t, 2).unwrap_or("").parse::<f64>().unwrap_or(f64::NAN)));
+	let kinds = if cell.is_some() { vec![] } else { yield_kinds(c, t) };
+	let named = |h: &Json| match cell {
+		Some((x, y)) => x >= j::n(h, "x") && x < j::n(h, "x") + j::n(h, "w") && y >= j::n(h, "y") && y < j::n(h, "y") + j::n(h, "h"),
+		None => kinds.is_empty() || herd_of(h).is_some_and(|g| kinds.iter().any(|k| k == j::s(g, "kind"))),
+	};
+	if cell.is_some() || !kinds.is_empty() {
+		let me = me_xy(c);
+		let there = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().any(|e| { let h = fields(e); is_house(&d, h) && dist_to(me, Rect::of(h)) <= 1.0 && mine(c, h) && herd_of(h).is_some() && named(h) });
+		if !there { return refuse(if cell.is_some() { "Dort steht neben dir kein Stall von dir mit Tieren.".to_owned() } else { format!("Neben dir ist kein Stall von dir, dessen Tiere {t} geben.") }); }
+	}
+	let House { b, k, n, now, .. } = house_here(c, &d, &|h| mine(c, h) && herd_of(h).is_some() && named(h)).await?;
 	if !mine(c, &b) { let o = txt(j::at(&b, "ownerName")); return refuse(format!("Was die Tiere von {o} geben, sammelt {o}.")); }
 	let (Some(k), Some(herd)) = (k.filter(|_| n != 0.0), herd_of(&b).cloned()) else { return refuse("Im Stall ist kein Tier.") };
 	let goods = j::n(&herd, "goods");
@@ -373,11 +387,14 @@ pub async fn collect(c: &mut Ctx) -> Result<()> {
 }
 
 /// `meansYield`: whether "sammle <arg>" means a yield of the animals.
-pub fn means_yield(c: &Ctx, arg: &str) -> bool {
+pub fn means_yield(c: &Ctx, arg: &str) -> bool { !yield_kinds(c, arg).is_empty() }
+/// The kinds of animal whose yield `arg` names ("eier": huhn, ente).
+fn yield_kinds(c: &Ctx, arg: &str) -> Vec<String> {
 	let n = no_article(&js::lower(js::trim(arg)));
-	!n.is_empty() && j::opt(c.w(), "animals").map_or(&[][..], |a| j::a(a, "kinds")).iter().any(|k| {
+	if n.is_empty() { return vec![]; }
+	j::opt(c.w(), "animals").map_or(&[][..], |a| j::a(a, "kinds")).iter().filter(|k| {
 		j::by(j::a(c.w(), "prototypes"), "key", j::s(k, "yields")).is_some_and(|p| std::iter::once(j::s(p, "key")).chain(std::iter::once(j::s(p, "name"))).chain(j::a(p, "aliases").iter().filter_map(Json::as_str)).any(|a| js::lower(a) == n))
-	})
+	}).map(|k| j::s(k, "key").to_owned()).collect()
 }
 
 /// `oneOf`: "ein Schwein", "eine Ziege", "eine Gans".
