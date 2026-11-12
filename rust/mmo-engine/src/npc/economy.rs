@@ -378,6 +378,29 @@ fn trade_talk(w: &Json, def: &Json, to: &str, l: Option<&Look>) -> String {
 	parts.into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join(" ")
 }
 
+/// What one say carries (MAX_SAY of the say command; it cuts the rest).
+const SAY_MAX: usize = 300;
+
+/// `sayParts`: a text longer than one say, cut at spaces into says of at most `max` UTF-16 units; each part after the
+/// first begins with `lead` (whom it is said to) and "…" (a word longer than a say on its own, which a trade list never
+/// has, is cut by the say command).
+pub fn say_parts(text: &str, max: usize, lead: &str) -> Vec<String> {
+	let len = |t: &str| t.encode_utf16().count();
+	if len(text) <= max { return vec![text.to_owned()]; }
+	let more = if lead.is_empty() { "…".to_owned() } else { format!("{lead} …") };
+	let mut parts: Vec<String> = vec![];
+	let mut cur = String::new();
+	for word in text.split(' ').filter(|w| !w.is_empty()) {
+		if !cur.is_empty() && cur != more && len(&cur) + 1 + len(word) > max {
+			parts.push(std::mem::replace(&mut cur, more.clone()));
+		}
+		if !cur.is_empty() { cur.push(' '); }
+		cur.push_str(word);
+	}
+	if !cur.is_empty() && cur != more { parts.push(cur); }
+	parts
+}
+
 /// `social`: offers first, then whoever spoke to it. True when it did something.
 #[derive(Default)]
 pub struct Social { heard: Heard, greeted: HashMap<String, f64> }
@@ -391,7 +414,9 @@ impl Social {
 		if let Some(m) = said.iter().find(|m| j::s(m, "text").to_lowercase().contains(&name)) {
 			let from = j::s(m, "from");
 			let text = if j::s(&def, "script") == "plauderer" { format!("{from}, {}", pick_line(&def).unwrap_or_else(|| "ja?".into())) } else { trade_talk(&w, &def, from, Some(l)) };
-			n.act(&format!("say {text}")).await?;
+			for part in say_parts(&text, SAY_MAX, &format!("{from},")) {
+				n.act(&format!("say {part}")).await?;
+			}
 			return Ok(true);
 		}
 		let wnow = n.now().await;
@@ -693,4 +718,22 @@ async fn gossip(n: &Npc) -> Result<Option<String>> {
 	let orders: Vec<Json> = n.space.read_all(&obj! { "type" => "Order" }, None).await?.iter().map(|e| fields(e).clone()).filter(|o| !j::truthy(j::at(o, "takenBy"))).collect();
 	if let Some(o) = pick(&orders) { told.push(format!("An der Tafel in {}: {} {} Lohn.", room_name(&w, j::s(&o, "room")), j::s(&o, "text"), plural(j::n(j::at(&o, "reward"), "count"), "Münze", "Münzen"))); }
 	Ok(pick(&told))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::say_parts;
+
+	#[test]
+	fn a_long_text_goes_in_several_says() {
+		assert_eq!(say_parts("Fischerin, ich kaufe Treibholz (bis 2).", 300, "Fischerin,"), vec!["Fischerin, ich kaufe Treibholz (bis 2)."]);
+		let items: Vec<String> = (0..60).map(|i| format!("Ding{i} (bis {i})")).collect();
+		let text = format!("Fischerin, ich kaufe {} – in Münzen.", items.join(", "));
+		let parts = say_parts(&text, 300, "Fischerin,");
+		assert!(parts.len() > 1);
+		assert!(parts.iter().all(|p| p.encode_utf16().count() <= 300));
+		assert!(parts[1..].iter().all(|p| p.starts_with("Fischerin, … ")));
+		let rest: Vec<&str> = parts[1..].iter().map(|p| &p["Fischerin, … ".len()..]).collect();
+		assert_eq!([vec![parts[0].as_str()], rest].concat().join(" "), text);
+	}
 }

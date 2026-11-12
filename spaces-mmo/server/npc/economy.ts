@@ -27,6 +27,7 @@ import { wayTo, type WorldDef } from "../engine/world.ts";
 import { fieldsOf, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type MsgFields, type OfferFields, type OrderFields, type WantedFields } from "../model.ts";
 import { deliverer } from "./settlers.ts";
 import { byPerson, humansIn, newHeard, self, type Npc, type Script } from "./scripts.ts";
+import { SAY_MAX, sayParts } from "./say-parts.ts";
 
 /** One round of a trader or a worker: every look is several calls to the space (each a transaction), and players do not
  *  wait on a trader as they do on the keeper, so the rounds are not short. */
@@ -307,7 +308,11 @@ export function social(): (n: Npc, l: Look) => Promise<boolean> {
 		if (await answerOffers(n, l)) return true;
 		const said = (await heard(n, l.me)).filter(byPerson);
 		const named = said.find((m: MsgFields) => m.text.toLowerCase().includes(n.def.name.toLowerCase()));
-		if (named) { await n.act(`say ${n.def.script === "plauderer" ? `${named.from}, ${pick(n.def.lines ?? []) ?? "ja?"}` : tradeTalk(n, named.from, l)}`); return true; }
+		if (named) {
+			const text = n.def.script === "plauderer" ? `${named.from}, ${pick(n.def.lines ?? []) ?? "ja?"}` : tradeTalk(n, named.from, l);
+			for (const part of sayParts(text, SAY_MAX, `${named.from},`)) await n.act(`say ${part}`);
+			return true;
+		}
 		const wnow = await n.now();
 		const hello = said.find((m) => /\b(hallo|hi|moin|servus|hello|hey)\b/i.test(m.text) && wnow - (greeted.get(m.from) ?? -Infinity) > 10 * 60_000);
 		if (hello && randomInt(0, 3) === 0) { greeted.set(hello.from, wnow); await n.act(`say Moin, ${hello.from}.`); return true; }

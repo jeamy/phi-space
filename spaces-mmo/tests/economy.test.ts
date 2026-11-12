@@ -67,7 +67,10 @@ test("a trader offers coins for what one carries, takes a fair offer, turns down
 		from = a.p.frames.length;
 		a.p.send("say Kalle, was kaufst du?");
 		const answer = (await msg(a.p, (t) => t.startsWith("Kalle: Fischerin, ich kaufe"), from)).m;
-		assert.match(answer.text, /Treibholz \(bis 2\).*verkaufe/);
+		// a long list comes in several says, each after the first again to her: "Fischerin, … "
+		let said = answer.text;
+		if (!said.includes("verkaufe")) said += ` ${(await msg(a.p, (t) => t.startsWith("Kalle: Fischerin, … ") && t.includes("verkaufe"), from)).m.text}`;
+		assert.match(said, /Treibholz \(bis 2\).*Kohlroulade \(bis \d+\).*verkaufe/s);
 		assert.equal(answer.toMe, true, "words that name her");
 		assert.equal((await msg(a.p, (t) => t === "Fischerin: Kalle, was kaufst du?", from)).m.toMe, undefined, "not her own words");
 		assert.equal((await msg(a.p, (t) => t === "Fischerin: Kalle, was kaufst du?", from)).m.mine, undefined, "her words to the room: under \"Allgemein\"");

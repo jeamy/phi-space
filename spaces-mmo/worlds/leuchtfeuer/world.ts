@@ -203,7 +203,7 @@ const NPCS: NpcDef[] = [
 		prices: { treibholz: [1, 0], muschel: [1, 0], tang: [1, 0], holzbuendel: [0, 4], muschelmesser: [0, 5], tangseil: [0, 3] }, carry: [{ proto: "muschelmesser", count: 1 }, { proto: "muenze", count: 8 }],
 		lines: ["Ein gutes Bündel brennt die halbe Nacht.", "Bring mir Holz, ich zahle in Münzen.", "Ohne scharfes Messer kein Bündel."] },
 	{ npcId: "kalle", name: "Kalle", skin: 0, room: "graue-bucht", x: 4, y: 12, script: "haendler", route: ["graue-bucht", "kupferhafen-markt"],
-		prices: { treibholz: [2, 3], muschel: [1, 3], holzbuendel: [4, 6], tangseil: [3, 5], perle: [4, 7], bernstein: [3, 6], netz: [8, 11], ruehrei: [5, 0], pfannkuchen: [5, 0], muschelmesser: [5, 0], spaten: [6, 0], spindel: [3, 0], mausefalle: [8, 0], honigbrot: [3, 0] }, carry: [{ proto: "muenze", count: 12 }],
+		prices: { treibholz: [2, 3], muschel: [1, 3], holzbuendel: [4, 6], tangseil: [3, 5], perle: [4, 7], bernstein: [3, 6], netz: [8, 11], ruehrei: [5, 0], pfannkuchen: [5, 0], muschelmesser: [5, 0], spaten: [6, 0], spindel: [3, 0], mausefalle: [8, 0], honigbrot: [3, 0], kohlsuppe: [2, 0], kohlroulade: [4, 0], sauerkraut: [3, 0] }, carry: [{ proto: "muenze", count: 12 }],
 		lines: ["Kaufen, wo es reichlich ist, verkaufen, wo es fehlt.", "Die Fähre ist mein zweites Zuhause.", "Hast du was für mich? Ich zahle bar."] },
 	{ npcId: "mats", name: "Mats", skin: 3, room: "anleger", ...near("anleger", 9, 7), script: "huter", beacon: "feuer-anleger", home: ["anleger", "salzwiesen"],
 		prices: { treibholz: [2, 0], holzbuendel: [5, 0], tran: [6, 0] }, carry: [{ proto: "treibholz", count: 2 }, { proto: "muenze", count: 4 }],

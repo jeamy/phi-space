@@ -970,8 +970,8 @@ Jedes Ding, das man herstellt, hat Käufer. Die Tabelle nennt die **Grundpreise*
 | Karren | Marta (Markt von Kupferhafen) 21 | – | 31 |
 | Käse | Marta (Markt von Kupferhafen) 7 | Marta 10 | 10 |
 | Kerze | Marta (Markt von Kupferhafen) 4 | Marta 7 | 7 |
-| Kohlroulade | Wilma (Markt von Kupferhafen) 4, Hauke (Schärenhafen) 4, Bente (Rauchhafen) 4, Momme (Krabbenbucht) 4 | – | 5 |
-| Kohlsuppe | Hauke (Schärenhafen) 2, Bente (Rauchhafen) 2, Momme (Krabbenbucht) 2 | – | 3 |
+| Kohlroulade | Kalle (Graue Bucht) 4, Wilma (Markt von Kupferhafen) 4, Hauke (Schärenhafen) 4, Bente (Rauchhafen) 4, Momme (Krabbenbucht) 4 | – | 5 |
+| Kohlsuppe | Kalle (Graue Bucht) 2, Hauke (Schärenhafen) 2, Bente (Rauchhafen) 2, Momme (Krabbenbucht) 2 | – | 3 |
 | Kuchen | Marta (Markt von Kupferhafen) 16, Hauke (Schärenhafen) 16, Bente (Rauchhafen) 16, Momme (Krabbenbucht) 16 | – | 23 |
 | Lammbraten | Wilma (Markt von Kupferhafen) 10 | – | 14 |
 | Leder | Wilma (Markt von Kupferhafen) 5, Gesa (Hafenviertel) 5 | Gesa 7 | 8 |
@@ -989,7 +989,7 @@ Jedes Ding, das man herstellt, hat Käufer. Die Tabelle nennt die **Grundpreise*
 | Rinderbraten | Wilma (Markt von Kupferhafen) 10 | – | 14 |
 | Ruderboot | Marta (Markt von Kupferhafen) 22 | – | 31 |
 | Rührei | Kalle (Graue Bucht) 5, Marta (Markt von Kupferhafen) 5, Hauke (Schärenhafen) 5, Bente (Rauchhafen) 5, Momme (Krabbenbucht) 5 | – | 8 |
-| Sauerkraut | Marta (Markt von Kupferhafen) 3, Wilma (Markt von Kupferhafen) 3, Hauke (Schärenhafen) 3, Bente (Rauchhafen) 3, Momme (Krabbenbucht) 3 | Marta 5 | 4 |
+| Sauerkraut | Kalle (Graue Bucht) 3, Marta (Markt von Kupferhafen) 3, Wilma (Markt von Kupferhafen) 3, Hauke (Schärenhafen) 3, Bente (Rauchhafen) 3, Momme (Krabbenbucht) 3 | Marta 5 | 4 |
 | Schinken | Marta (Markt von Kupferhafen) 10, Wilma (Markt von Kupferhafen) 10 | Marta 14, Wilma 14 | 14 |
 | Schlachtmesser | Marta (Markt von Kupferhafen) 9 | – | 13 |
 | Schmalzbrot | Wilma (Markt von Kupferhafen) 2 | – | 3 |
@@ -1087,8 +1087,8 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Bread | Marta (Copper Harbour Market) 2 | Marta 4 | 3 |
 | Brick | Marta (Copper Harbour Market) 2 | – | 3 |
 | Butcher's Knife | Marta (Copper Harbour Market) 9 | – | 13 |
-| Cabbage roll | Wilma (Copper Harbour Market) 4, Hauke (Skerry Harbour) 4, Bente (Smoke Harbour) 4, Momme (Crab Bay) 4 | – | 5 |
-| Cabbage soup | Hauke (Skerry Harbour) 2, Bente (Smoke Harbour) 2, Momme (Crab Bay) 2 | – | 3 |
+| Cabbage roll | Kalle (Grey Bay) 4, Wilma (Copper Harbour Market) 4, Hauke (Skerry Harbour) 4, Bente (Smoke Harbour) 4, Momme (Crab Bay) 4 | – | 5 |
+| Cabbage soup | Kalle (Grey Bay) 2, Hauke (Skerry Harbour) 2, Bente (Smoke Harbour) 2, Momme (Crab Bay) 2 | – | 3 |
 | Cake | Marta (Copper Harbour Market) 16, Hauke (Skerry Harbour) 16, Bente (Smoke Harbour) 16, Momme (Crab Bay) 16 | – | 23 |
 | Candle | Marta (Copper Harbour Market) 4 | Marta 7 | 7 |
 | Cart | Marta (Copper Harbour Market) 21 | – | 31 |
@@ -1124,7 +1124,7 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Roast pork | Wilma (Copper Harbour Market) 10, Hauke (Skerry Harbour) 10, Bente (Smoke Harbour) 10, Momme (Crab Bay) 10 | – | 14 |
 | Rowing boat | Marta (Copper Harbour Market) 22 | – | 31 |
 | Sailing boat | Marta (Copper Harbour Market) 66 | – | 95 |
-| Sauerkraut | Marta (Copper Harbour Market) 3, Wilma (Copper Harbour Market) 3, Hauke (Skerry Harbour) 3, Bente (Smoke Harbour) 3, Momme (Crab Bay) 3 | Marta 5 | 4 |
+| Sauerkraut | Kalle (Grey Bay) 3, Marta (Copper Harbour Market) 3, Wilma (Copper Harbour Market) 3, Hauke (Skerry Harbour) 3, Bente (Smoke Harbour) 3, Momme (Crab Bay) 3 | Marta 5 | 4 |
 | Sausage | Wilma (Copper Harbour Market) 2 | Wilma 4 | 3 |
 | Scrambled eggs | Kalle (Grey Bay) 5, Marta (Copper Harbour Market) 5, Hauke (Skerry Harbour) 5, Bente (Smoke Harbour) 5, Momme (Crab Bay) 5 | – | 8 |
 | Shell Knife | Kalle (Grey Bay) 5, Marta (Copper Harbour Market) 5 | Jorin 5 | 8 |
