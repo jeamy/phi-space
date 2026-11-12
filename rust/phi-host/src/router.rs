@@ -40,11 +40,7 @@ fn bounded_evidence(t: &str) -> String {
 }
 fn terminal(state: Option<&str>) -> bool { matches!(state, Some("completed" | "failed" | "needsReview")) }
 fn command_key(router: &str, id: &str) -> R<String> { hash(&Json::Array(vec![router.into(), id.into()])) }
-fn set(v: &mut Json, k: &str, x: impl Into<Json>) {
-	if let Json::Object(o) = v {
-		o.insert(k, x.into());
-	}
-}
+use phi_json::set;
 fn steps(c: &Json) -> &[Json] { c.get("steps").and_then(Json::as_array).map_or(&[], Vec::as_slice) }
 fn step_mut(c: &mut Json, n: usize) -> &mut Json { &mut c.as_object_mut().and_then(|o| o.get_mut("steps")).and_then(Json::as_array_mut).expect("a command has steps")[n] }
 fn step_state(c: &Json, n: usize) -> Option<&str> { steps(c).get(n).and_then(|s| text(s, "state")) }

@@ -42,8 +42,8 @@ pub const RETIRE: &str = "DELETE FROM documents WHERE kind = ? AND key = ?";
 pub const RETIRE_PARTS: &str = "DELETE FROM parts WHERE kind = ? AND key = ?";
 pub const PART: &str = "INSERT INTO parts (kind, key, part, id, ord, value, at, grp, flag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (kind, key, part, id) DO UPDATE SET ord = excluded.ord, value = excluded.value, at = excluded.at, grp = excluded.grp, flag = excluded.flag";
 pub const PART_DEL: &str = "DELETE FROM parts WHERE kind = ? AND key = ? AND part = ? AND id = ?";
-pub const PART_CLEAR: &str = "DELETE FROM parts WHERE kind = ? AND key = ? AND part = ?";
-pub const META: &str = "INSERT INTO store_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value";
+pub(crate) const PART_CLEAR: &str = "DELETE FROM parts WHERE kind = ? AND key = ? AND part = ?";
+pub(crate) const META: &str = "INSERT INTO store_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value";
 pub const SEQ: &str = "UPDATE store_meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'commit_seq'";
 
 /// `at` as node:sqlite binds a number: an integral one as an integer, any other as a real (which the STRICT INTEGER

@@ -6,13 +6,13 @@ use std::time::Duration;
 /// The format of the file; a newer one is refused, an older one is migrated (1 to 2: the index columns of parts).
 pub const FORMAT_VERSION: i64 = 2;
 
-pub const SCHEMA: &str = "
+pub(crate) const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS store_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE IF NOT EXISTS documents (kind TEXT NOT NULL, key TEXT NOT NULL, version INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY (kind, key)) STRICT;
 CREATE TABLE IF NOT EXISTS parts (kind TEXT NOT NULL, key TEXT NOT NULL, part TEXT NOT NULL, id TEXT NOT NULL, ord INTEGER NOT NULL, value TEXT NOT NULL, at INTEGER, grp TEXT, flag INTEGER, PRIMARY KEY (kind, key, part, id)) STRICT;
 CREATE INDEX IF NOT EXISTS parts_order ON parts (kind, key, part, ord);
 ";
-pub const INDEXES: &str = "
+pub(crate) const INDEXES: &str = "
 CREATE INDEX IF NOT EXISTS parts_at ON parts (kind, key, part, at) WHERE at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS parts_grp ON parts (kind, key, part, grp) WHERE grp IS NOT NULL;
 CREATE INDEX IF NOT EXISTS parts_open ON parts (kind, key, part) WHERE at IS NULL;

@@ -10,8 +10,8 @@ use phi_json::{digest_json, obj, Json};
 type Result<T> = std::result::Result<T, CoreError>;
 
 fn drained(m: impl Into<String>) -> CoreError { error("MemberDrained", m) }
-fn number(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
-fn names(v: Option<&Json>) -> Vec<String> { v.and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect()) }
+use phi_json::num_or_nan as number;
+use phi_json::names;
 fn sorted(mut v: Vec<String>) -> Vec<String> {
 	v.sort_by(|a, b| phi_json::utf16_cmp(a, b));
 	v

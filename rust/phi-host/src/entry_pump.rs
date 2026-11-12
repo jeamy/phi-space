@@ -156,22 +156,5 @@ pub async fn compact(owner: Owner, every_ms: u64, boot: Rc<BootGuard>, now: crat
 	}
 }
 
-/// `Number(v)` of JavaScript, for the arguments of `entryChanges`.
-pub fn js_number(v: Option<&Json>) -> f64 {
-	match v {
-		None => f64::NAN,
-		Some(Json::Null) => 0.0,
-		Some(Json::Bool(b)) => f64::from(u8::from(*b)),
-		Some(Json::Number(n)) => *n,
-		Some(Json::String(s)) => {
-			let t = s.trim();
-			if t.is_empty() {
-				0.0
-			} else {
-				t.parse().unwrap_or(f64::NAN)
-			}
-		}
-		Some(Json::Array(a)) if a.is_empty() => 0.0,
-		Some(_) => f64::NAN,
-	}
-}
+/// `Number(v)` of JavaScript (one implementation, `workers.rs`).
+pub use crate::workers::js_number;

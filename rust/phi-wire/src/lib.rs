@@ -40,21 +40,13 @@ pub enum Listen {
 	Tcp { host: String, port: u16 },
 }
 impl Listen {
-	/// `unix:/path` or `tcp:host:port` (space-client.ts parseTarget).
+	/// `unix:/path`, `tcp:host:port` or a bare path: the one parser of the client (space-client.ts parseTarget), so a
+	/// server takes exactly the addresses its clients do.
 	pub fn parse(spec: &str) -> Result<Listen, String> {
-		if let Some(rest) = spec.strip_prefix("tcp:") {
-			let wrong = || format!("a tcp address is tcp:host:port, not {spec}");
-			let (host, port) = rest.split_once(':').ok_or_else(wrong)?;
-			if host.is_empty() {
-				return Err(wrong());
-			}
-			return Ok(Listen::Tcp { host: host.to_owned(), port: port.parse().map_err(|_| wrong())? });
-		}
-		let path = spec.strip_prefix("unix:").unwrap_or(spec);
-		if path.is_empty() {
-			return Err(format!("an address is unix:/path or tcp:host:port, not {spec}"));
-		}
-		Ok(Listen::Unix(path.into()))
+		Ok(match phi_spaces_client::parse_target(spec)? {
+			phi_spaces_client::Target::Unix(path) => Listen::Unix(path),
+			phi_spaces_client::Target::Tcp { host, port } => Listen::Tcp { host, port },
+		})
 	}
 }
 
@@ -152,7 +144,7 @@ enum Space {
 }
 
 /// What the test hooks do with a line (`--test-hooks`): the service, how many connections are open, the text.
-pub type Hook = Box<dyn FnMut(&mut Service, usize, &str) -> String>;
+pub(crate) type Hook = Box<dyn FnMut(&mut Service, usize, &str) -> String>;
 
 /// Host work at a regular interval, on the owner thread between two calls.
 pub struct Periodic {

@@ -17,8 +17,7 @@ pub const PROFILES: &str = "phi-spaces.profile-transitions";
 const MAX_HISTORY: usize = 32;
 
 fn hash(v: Option<&Json>) -> R<String> { digest_json(v.unwrap_or(&Json::Null)).map_err(|_| routing("a value that cannot be hashed")) }
-fn empty_operations() -> Json { obj! { "operations" => Object::new() } }
-fn empty_routing() -> Json { obj! { "policy" => Json::Null, "members" => Object::new() } }
+use crate::federated_space::{empty_operations_only as empty_operations, empty_routing};
 fn ops(d: &Json) -> Vec<(&str, &Json)> { d.get("operations").and_then(Json::as_object).map_or(vec![], |o| o.iter().collect()) }
 fn op_of(d: &Json, id: &str) -> Option<Json> { d.get("operations").and_then(|o| o.get(id)).cloned() }
 fn put(d: &mut Json, id: &str, op: Json) {
@@ -26,20 +25,13 @@ fn put(d: &mut Json, id: &str, op: Json) {
 		o.insert(id, op);
 	}
 }
-fn set(op: &mut Json, k: &str, x: impl Into<Json>) {
-	if let Json::Object(o) = op {
-		o.insert(k, x.into());
-	}
-}
+use phi_json::set;
 fn with(p: &Json, k: &str, x: Json) -> Json {
 	let mut c = p.clone();
 	set(&mut c, k, x);
 	c
 }
-fn valid_id(id: &str) -> bool {
-	let mut c = id.chars();
-	c.next().is_some_and(|f| f.is_ascii_alphanumeric()) && id.len() <= 64 && c.all(|x| x.is_ascii_alphanumeric() || "._-".contains(x)) && !["constructor", "prototype", "__proto__"].contains(&id)
-}
+fn valid_id(id: &str) -> bool { phi_json::SLUG_64_KEY.accepts(id) }
 fn members_of(op: &Json) -> &[Json] { op.get("members").and_then(Json::as_array).map_or(&[], Vec::as_slice) }
 fn targets_moved(op: &Json, state: &Json) -> R<bool> {
 	for m in members_of(op) {

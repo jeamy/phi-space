@@ -9,10 +9,10 @@ use phi_service::Service;
 use phi_store::sync::{durability_of, SyncJournal};
 
 const DOMAIN: &str = "phi-spaces/replica-config-notice/v1\n";
-fn num(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
+use phi_json::num_or_nan as num;
 
 /// `replicaConfigNotice`: the notice of a completed transition, from its configuration entry in the chain.
-pub fn notice_of(journal: &SyncJournal, transition_id: &str, data_incarnation: &str) -> phi_store::sync::Result<Option<Json>> {
+pub(crate) fn notice_of(journal: &SyncJournal, transition_id: &str, data_incarnation: &str) -> phi_store::sync::Result<Option<Json>> {
 	if journal.transition(transition_id)?.as_ref().and_then(|r| text(r, "phase")) != Some("completed") {
 		return Ok(None);
 	}

@@ -46,11 +46,7 @@ fn no_workers() -> CoreError { type_error("Cannot read properties of undefined (
 fn list_of(v: Option<&Json>) -> &[Json] { v.and_then(Json::as_array).map_or(&[], Vec::as_slice) }
 fn obj_of<'a>(v: &'a Json, k: &str) -> Option<&'a Object> { v.get(k).and_then(Json::as_object) }
 fn obj_mut<'a>(v: &'a mut Json, k: &str) -> &'a mut Object { v.as_object_mut().and_then(|o| o.get_mut(k)).and_then(Json::as_object_mut).expect("the document has its parts") }
-fn set(v: &mut Json, k: &str, x: impl Into<Json>) {
-	if let Json::Object(o) = v {
-		o.insert(k, x.into());
-	}
-}
+use phi_json::set;
 
 /// `/-----BEGIN [A-Z ]*PRIVATE KEY-----/`.
 fn looks_like_pem(s: &str) -> bool {
@@ -100,7 +96,7 @@ fn scan(v: &Json, path: &str, errors: &mut Vec<String>) {
 }
 
 /// What `validateDeployment` returns: the normalized config and its hash, or the errors.
-pub struct Validated {
+pub(crate) struct Validated {
 	pub config: Option<Json>,
 	pub config_hash: Option<String>,
 	pub errors: Vec<String>,
@@ -108,7 +104,7 @@ pub struct Validated {
 
 /// `validateDeployment`: validates and normalizes a config. Every problem is listed; secrets anywhere in the file are refused.
 /// `raw` is `undefined` when `None`.
-pub fn validate_deployment(raw: Option<&Json>) -> R<Validated> {
+pub(crate) fn validate_deployment(raw: Option<&Json>) -> R<Validated> {
 	let mut errors = vec![];
 	if let Some(raw) = raw {
 		scan(raw, "$", &mut errors);
@@ -317,7 +313,7 @@ impl<E: RouterEnv, P: DeploymentPorts> DeploymentController<E, P> {
 	}
 
 	/// `bindHost`: binds a host alias to an enrolled hostId. An alias never silently moves to another host.
-	pub fn bind_host(&self, alias: &str, host_id: &str) -> R<Json> {
+	pub(crate) fn bind_host(&self, alias: &str, host_id: &str) -> R<Json> {
 		if !valid_alias(alias) || !valid_id(host_id) {
 			return Err(illegal("bindHost needs an alias and a hostId"));
 		}
@@ -550,7 +546,7 @@ impl<E: RouterEnv, P: DeploymentPorts> DeploymentController<E, P> {
 	}
 
 	/// `startWorkers`: starts (or rescales) the registered workers of a completed deployment to their configured counts.
-	pub fn start_workers(&self, command_id: &str, deployment: &str) -> R<Json> {
+	pub(crate) fn start_workers(&self, command_id: &str, deployment: &str) -> R<Json> {
 		if !valid_id(command_id) {
 			return Err(illegal("invalid command ID"));
 		}

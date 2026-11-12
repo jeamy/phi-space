@@ -44,17 +44,10 @@ fn busy(m: impl Into<String>) -> CoreError { error("RunBusy", m) }
 fn limit(m: impl Into<String>) -> CoreError { error("LimitError", m) }
 fn hash(v: &Json) -> R<String> { digest_json(v).map_err(|_| illegal("a value that cannot be hashed")) }
 /// `/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,95}$/`
-fn valid_id(s: &str) -> bool {
-	let b = s.as_bytes();
-	!b.is_empty() && b.len() <= 96 && b[0].is_ascii_alphanumeric() && b.iter().all(|c| c.is_ascii_alphanumeric() || b"._:-".contains(c))
-}
+fn valid_id(id: &str) -> bool { phi_json::ID_96.accepts(id) }
 /// `.slice(0, n)` by UTF-16 units.
-fn cut(t: &str, n: usize) -> String { String::from_utf16_lossy(&t.encode_utf16().take(n).collect::<Vec<_>>()) }
-fn set(v: &mut Json, k: &str, x: impl Into<Json>) {
-	if let Json::Object(o) = v {
-		o.insert(k, x.into());
-	}
-}
+use phi_json::js_slice as cut;
+use phi_json::set;
 fn del(v: &mut Json, k: &str) {
 	if let Json::Object(o) = v {
 		o.remove(k);
@@ -129,7 +122,7 @@ fn view_hash(r: &Json, views: &Json) -> R<String> {
 }
 fn ack_phase<'a>(p: &'a Json, m: &str) -> Option<&'a str> { p.get("acks").and_then(|a| a.get(m)).and_then(|a| text(a, "phase")) }
 /// `viewOf`.
-pub fn view_of(r: &Json) -> Json {
+pub(crate) fn view_of(r: &Json) -> Json {
 	let members = members_of(r);
 	let spec = r.get("spec").cloned().unwrap_or_else(empty);
 	let mut v = obj! { "runId" => spec.get("runId").cloned().unwrap_or(Json::Null), "kind" => spec.get("kind").cloned().unwrap_or(Json::Null), "members" => phi_json::strings(&members), "revision" => r.get("revision").cloned().unwrap_or(Json::Null), "state" => r.get("state").cloned().unwrap_or(Json::Null) };
@@ -845,40 +838,5 @@ impl<E: RunEnv> RunController<E> {
 	}
 }
 
-/// `Number(x)` of a JSON value (`undefined` is NaN).
-pub fn js_number(v: Option<&Json>) -> f64 {
-	match v {
-		None => f64::NAN,
-		Some(Json::Null) => 0.0,
-		Some(Json::Bool(b)) => f64::from(u8::from(*b)),
-		Some(Json::Number(n)) => *n,
-		Some(Json::String(s)) => string_number(s),
-		Some(a @ Json::Array(_)) => string_number(&js_string(a)),
-		Some(Json::Object(_)) => f64::NAN,
-	}
-}
-/// `Number(string)`: StringToNumber of JavaScript.
-fn string_number(s: &str) -> f64 {
-	let t = s.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}');
-	if t.is_empty() {
-		return 0.0;
-	}
-	match t {
-		"Infinity" | "+Infinity" => return f64::INFINITY,
-		"-Infinity" => return f64::NEG_INFINITY,
-		_ => {}
-	}
-	for (prefix, radix) in [("0x", 16), ("0X", 16), ("0o", 8), ("0O", 8), ("0b", 2), ("0B", 2)] {
-		if let Some(digits) = t.strip_prefix(prefix) {
-			if digits.is_empty() || !digits.chars().all(|c| c.is_digit(radix)) {
-				return f64::NAN;
-			}
-			return digits.chars().fold(0.0, |n, c| n * f64::from(radix) + f64::from(c.to_digit(radix).unwrap_or(0)));
-		}
-	}
-	// a decimal literal: sign, digits with an optional point, an optional exponent (Rust's parser also takes inf and nan)
-	if t.bytes().any(|c| !(c.is_ascii_digit() || b"+-.eE".contains(&c))) {
-		return f64::NAN;
-	}
-	t.parse().unwrap_or(f64::NAN)
-}
+/// `Number(v)` of JavaScript (one implementation, `workers.rs`).
+pub use crate::workers::js_number;

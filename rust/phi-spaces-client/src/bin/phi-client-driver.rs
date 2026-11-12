@@ -176,7 +176,7 @@ impl Driver {
 	}
 
 	fn space_options(&self, sid: u64, o: &Json) -> (Options, Option<Rc<Cell<f64>>>) {
-		let mut opt = Options { space: opt_str(o, "space"), max_client_wait_ms: opt_num(o, "maxClientWaitMs"), ..Options::default() };
+		let mut opt = Options { space: opt_str(o, "space"), max_client_wait_ms: opt_num(o, "maxClientWaitMs"), agent: opt_str(o, "agent"), ..Options::default() };
 		if let Some(n) = opt_num(o, "attempts") {
 			opt.attempts = n as u32;
 		}

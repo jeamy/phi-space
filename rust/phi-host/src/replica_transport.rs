@@ -20,13 +20,13 @@ const RESPONSE: &str = "phi-spaces/replica-sync/v1/response\n";
 /// A frame's header: its length and its id, both u32 big-endian.
 const HEADER: usize = 8;
 /// What a replica frame may hold, on both sides (`maxFrameBytes: 1 << 20` of src/sync-spaces.ts).
-pub const MAX_FRAME_BYTES: usize = 1 << 20;
+pub(crate) const MAX_FRAME_BYTES: usize = 1 << 20;
 /// How long the primary waits for the standby's answer to one entry (`STANDBY_ANSWER_MS`); beyond it the commit counts as
 /// not confirmed and the resolver takes over, instead of every write hanging for the life of a cut connection.
-pub const STANDBY_ANSWER_MS: u64 = 15_000;
-pub const CONNECT_MS: u64 = 8_000;
+pub(crate) const STANDBY_ANSWER_MS: u64 = 15_000;
+pub(crate) const CONNECT_MS: u64 = 8_000;
 /// A replica listener serves this many connections at once.
-pub const MAX_CONNECTIONS: usize = 4;
+pub(crate) const MAX_CONNECTIONS: usize = 4;
 const IDLE_MS: u64 = 5 * 60_000;
 
 /// The pinned key of the other replica.

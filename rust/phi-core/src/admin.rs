@@ -101,7 +101,7 @@ impl Space {
 
 	/// `tally`: the claim tally counted anew from the claims in memory (never for claims on the disk: that would read
 	/// every one of them).
-	pub fn tally_claims(&mut self) {
+	pub(crate) fn tally_claims(&mut self) {
 		let Some(r) = self.state.rpc.as_mut() else { return };
 		let claims = r.claims.entries();
 		r.reserved_bytes = Some(claims.iter().map(|(_, c)| num_of(c, "reservedResultBytes").unwrap_or(0.0)).sum());
@@ -191,6 +191,7 @@ impl Space {
 						if let Some(Json::Array(a)) = self.state.rest.get_mut("outbox") {
 							a.remove(i);
 						}
+						self.state.outbox_bytes = None; // counted anew from the outbox, as after a delivery
 					}
 				}
 				c.insert("phase", "mailboxes".into());

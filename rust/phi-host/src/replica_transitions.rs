@@ -15,12 +15,8 @@ fn refused<T>(m: impl Into<String>) -> TR<T> { Err(m.into()) }
 fn sync<T>(r: phi_store::sync::Result<T>) -> TR<T> { r.map_err(|e| e.to_string()) }
 fn as_sync<T>(r: TR<T>) -> phi_store::sync::Result<T> { r.map_err(SyncError::Blocked) }
 fn canonical(v: &Json) -> String { v.canonical().unwrap_or_default() }
-fn num(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
-fn with(v: &Json, changes: &[(&str, Json)]) -> Json {
-	let mut o = v.as_object().cloned().unwrap_or_default();
-	for (k, x) in changes { o.insert(*k, x.clone()); }
-	Json::Object(o)
-}
+use phi_json::num_or_nan as num;
+use phi_json::with;
 
 /// The independent register as the transitions use it: records `{version, value}` (or `null`) and compare-and-set.
 pub trait Boots {
@@ -92,7 +88,7 @@ fn cas_boot(r: &dyn Boots, host_id: &str, change: &dyn Fn(Option<Json>) -> TR<Op
 fn spaces_of(b: &Json) -> Object { b.get("spaces").and_then(Json::as_object).cloned().unwrap_or_default() }
 
 /// `fenceHostBoot`: the host `fenced`, every Space permit `revoked`.
-pub fn fence_host_boot(r: &dyn Boots, host_id: &str, transition_id: &str) -> TR<Json> {
+pub(crate) fn fence_host_boot(r: &dyn Boots, host_id: &str, transition_id: &str) -> TR<Json> {
 	cas_boot(r, host_id, &|b| {
 		let b = b.ok_or_else(|| format!("no boot state for {host_id}"))?;
 		let spaces: Object = spaces_of(&b).iter().map(|(id, p)| (id.to_owned(), with(p, &[("state", "revoked".into())]))).collect();
@@ -100,7 +96,7 @@ pub fn fence_host_boot(r: &dyn Boots, host_id: &str, transition_id: &str) -> TR<
 	})
 }
 /// `revokeSpacePermit`: only the permit of this Space is revoked.
-pub fn revoke_space_permit(r: &dyn Boots, host_id: &str, space_id: &str, transition_id: &str) -> TR<Json> {
+pub(crate) fn revoke_space_permit(r: &dyn Boots, host_id: &str, space_id: &str, transition_id: &str) -> TR<Json> {
 	cas_boot(r, host_id, &|b| {
 		let b = b.filter(|b| b.get("spaces").and_then(|s| s.get(space_id)).is_some()).ok_or_else(|| format!("{host_id} has no permit for {space_id}"))?;
 		let p = b.get("spaces").and_then(|s| s.get(space_id)).cloned().expect("checked");

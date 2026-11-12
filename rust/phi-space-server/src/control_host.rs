@@ -281,13 +281,18 @@ fn commands_of(m: Option<&Json>) -> phi_host::root::AdminCommands {
 
 /// `mainSync`: the configuration of the journal the host's main store `store` runs under.
 fn main_sync(c: &Json, store: &str) -> Option<SyncSpaceConfig> {
-	let m = c.get("mainSync").filter(|m| !m.is_null())?;
+	let mut config = main_sync_config(c.get("mainSync").filter(|m| !m.is_null())?);
+	config.store = Some(store.into());
+	Some(config)
+}
+
+/// The journal of a main store from its `mainSync` (also the replica tool's): the alias `control-main`, the Space of the
+/// genesis.
+pub(crate) fn main_sync_config(m: &Json) -> SyncSpaceConfig {
 	let mut o = m.as_object().cloned().unwrap_or_default();
 	o.insert("alias", Json::from("control-main"));
 	o.insert("spaceId", m.get("genesis").and_then(|g| g.get("spaceId")).cloned().unwrap_or(Json::Null));
-	let mut config = SyncSpaceConfig::from_json(&Json::Object(o)).unwrap_or_else(|e| fail(e));
-	config.store = Some(store.into());
-	Some(config)
+	SyncSpaceConfig::from_json(&Json::Object(o)).unwrap_or_else(|e| fail(e))
 }
 
 /// A main store this host is not the primary of, or a host in quarantine: only the journal and its replica listener, for

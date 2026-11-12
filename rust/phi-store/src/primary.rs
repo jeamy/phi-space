@@ -11,7 +11,7 @@ use phi_json::{obj, parse, Json};
 use rusqlite::{Connection, OptionalExtension};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-pub const POISONED: &str = "poisoned by a sealed candidate: restart and resolve sealed history before more work";
+pub(crate) const POISONED: &str = "poisoned by a sealed candidate: restart and resolve sealed history before more work";
 
 /// The standby of a primary: it accepts a sealed entry and answers its ACK (`PrimarySyncPeer.accept`).
 pub trait SyncPeer: Send {

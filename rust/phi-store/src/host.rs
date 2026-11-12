@@ -238,12 +238,7 @@ impl SpaceHost {
 		Ok(Ok(self.handed))
 	}
 
-	fn claim_failure(&self) -> Option<String> {
-		match self.space.state.rpc.as_ref().map(|r| &r.claims) {
-			Some(Claims::Disk(d)) => d.take_failure(),
-			_ => None,
-		}
-	}
+	fn claim_failure(&self) -> Option<String> { self.space.claim_failure() }
 
 	fn fail(&mut self, e: &StoreError) {
 		self.failure.get_or_insert_with(|| match e {

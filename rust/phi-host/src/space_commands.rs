@@ -1,7 +1,7 @@
 //! The control side of Space lifecycle (`spaceCommands` of src/space-lifecycle.ts): the admin commands createSpace, archiveSpace,
 //! reactivateSpace and deleteSpace for a target host, each a signed instruction whose signed result the host's pin verifies. The
 //! Member side is `crate::space_lifecycle`.
-use crate::auth::{seal, verify_value, Signer};
+use crate::auth::Signer;
 use crate::run_member::Pin;
 use crate::workers::{cut, js_string};
 use phi_core::space::{illegal, permission as denied, truthy, CoreError};
@@ -20,15 +20,7 @@ pub trait SpaceCommandPorts {
 	fn host_pin(&self, host_id: &str) -> Local<R<Pin>>;
 }
 
-/// `signLifecycle`.
-fn sign_lifecycle(kind: &str, value: Json, issuer: &str, signer: &Signer) -> R<Json> {
-	seal("value", value, &format!("space-lifecycle-{kind}"), issuer, signer).ok_or_else(|| illegal("a value that cannot be hashed"))
-}
-/// `verifyLifecycle`.
-fn verify_lifecycle(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
-	verify_value(t, &format!("space-lifecycle-{kind}"), &pin.issuer, pin.algorithm, &pin.public_key)
-		.cloned().ok_or_else(|| denied(format!("invalid Space lifecycle {kind} signature")))
-}
+use crate::space_lifecycle::{sign_lifecycle, verify_lifecycle};
 
 pub struct SpaceCommands<P: SpaceCommandPorts> {
 	pub ports: P,

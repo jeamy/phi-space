@@ -292,9 +292,17 @@ impl Parser<'_> {
 }
 
 /// `String(n)` for a finite double: the ECMAScript Number::toString form (`-0` is `"0"`).
-pub fn number_text(n: f64) -> String {
-	if n == 0.0 { return "0".to_owned(); }
-	ryu_js::Buffer::new().format_finite(n).to_owned()
+pub fn number_text(n: f64) -> String { number_str(n, &mut ryu_js::Buffer::new()).to_owned() }
+/// `number_text` into a buffer on the stack.
+fn number_str(n: f64, b: &mut ryu_js::Buffer) -> &str { if n == 0.0 { "0" } else { b.format_finite(n) } }
+
+/// The UTF-8 bytes `quote` writes for `s`.
+fn quoted_len(s: &str) -> usize {
+	2 + s.bytes().map(|b| match b {
+		b'"' | b'\\' | 0x08 | 0x0c | b'\n' | b'\r' | b'\t' => 2,
+		b if b < 0x20 => 6,
+		_ => 1, // every byte of a character above U+007F is one byte of its UTF-8 form, which is written as it is
+	}).sum::<usize>()
 }
 
 /// A string as `JSON.stringify` writes it.
@@ -335,6 +343,64 @@ pub fn num_of(v: &Json, k: &str) -> Option<f64> { v.get(k).and_then(Json::as_f64
 pub fn safe_of(v: Option<&Json>) -> Option<f64> { v.and_then(Json::as_f64).filter(|n| safe_integer(*n)) }
 /// A list of strings as JSON.
 pub fn strings(list: &[String]) -> Json { Json::Array(list.iter().map(|s| Json::String(s.clone())).collect()) }
+/// A number field, NaN when it is missing or no number (`Number(v[k])` of a field the shape check let through).
+pub fn num_or_nan(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
+/// A string field, `""` when it is missing or no string.
+pub fn text_or_empty<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or("") }
+/// The strings of an array, the others left out; none when it is no array.
+pub fn names(v: Option<&Json>) -> Vec<String> { v.and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect()) }
+/// `v[k] = x` on an object; anything else stays as it is.
+pub fn set(v: &mut Json, k: &str, x: impl Into<Json>) {
+	if let Json::Object(o) = v {
+		o.insert(k, x.into());
+	}
+}
+/// `{ ...rec, ...changes }`: a copy of an object with fields replaced (no object: just the changes).
+pub fn with(rec: &Json, changes: &[(&str, Json)]) -> Json {
+	let mut o = rec.as_object().cloned().unwrap_or_default();
+	for (k, v) in changes {
+		o.insert(*k, v.clone());
+	}
+	Json::Object(o)
+}
+/// `t.slice(0, n)` of a JavaScript string: the first `n` UTF-16 units (a pair cut in half becomes U+FFFD).
+pub fn js_slice(t: &str, n: usize) -> String { String::from_utf16_lossy(&t.encode_utf16().take(n).collect::<Vec<_>>()) }
+/// An id as a TypeScript module's regex takes it: `^[A-Za-z0-9][A-Za-z0-9._-]{0,max-1}$`, with `:` among the later
+/// characters when `colon`, and when `reserved` not one of the names of `Object.prototype` that a record keyed by it
+/// would trip over. The modules differ in these on purpose, so each names its rule (`ID_128` and the others).
+#[derive(Clone, Copy, Debug)]
+pub struct IdRule {
+	pub max: usize,
+	pub colon: bool,
+	pub reserved: bool,
+}
+impl IdRule {
+	pub fn accepts(&self, id: &str) -> bool {
+		let b = id.as_bytes();
+		!b.is_empty() && b.len() <= self.max && b[0].is_ascii_alphanumeric() && b[1..].iter().all(|&c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-') || (self.colon && c == b':')) && !(self.reserved && ["constructor", "prototype", "__proto__"].contains(&id))
+	}
+}
+/// RunGates, principal deletion, agent ids of grants, the reasons of the sync journal.
+pub const ID_128: IdRule = IdRule { max: 128, colon: true, reserved: false };
+/// The keys of the federated journals (federated_space, membership_control).
+pub const ID_128_KEY: IdRule = IdRule { max: 128, colon: true, reserved: true };
+/// Workers, Space lifecycle commands, run controller.
+pub const ID_96: IdRule = IdRule { max: 96, colon: true, reserved: false };
+/// Profile transitions.
+pub const SLUG_64_KEY: IdRule = IdRule { max: 64, colon: false, reserved: true };
+/// Entry replication: replica and change ids.
+pub const SLUG_128: IdRule = IdRule { max: 128, colon: false, reserved: false };
+/// JavaScript truthiness of a value; a missing one is `undefined`.
+pub fn truthy(v: Option<&Json>) -> bool {
+	match v {
+		None | Some(Json::Null) | Some(Json::Bool(false)) => false,
+		Some(Json::Number(x)) => *x != 0.0 && !x.is_nan(),
+		Some(Json::String(s)) => !s.is_empty(),
+		Some(_) => true,
+	}
+}
+/// `Date.now()`: the wall clock in whole milliseconds.
+pub fn wall_ms() -> f64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_millis() as f64) }
 
 impl Json {
 	/// A copy with JSON.stringify's numeric semantics, without encoding and parsing the text.
@@ -355,7 +421,7 @@ impl Json {
 		match self {
 			Json::Null => out.push_str("null"),
 			Json::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-			Json::Number(n) => if n.is_finite() { out.push_str(&number_text(*n)) } else { out.push_str("null") },
+			Json::Number(n) => if n.is_finite() { out.push_str(number_str(*n, &mut ryu_js::Buffer::new())) } else { out.push_str("null") },
 			Json::String(s) => quote(s, out),
 			Json::Array(a) => {
 				out.push('[');
@@ -390,8 +456,22 @@ impl Json {
 		}
 		Ok(())
 	}
-	/// `jsonBytes(v)` (src/json.ts): the UTF-8 bytes of `JSON.stringify(v)`.
-	pub fn json_bytes(&self) -> usize { self.to_json_text().len() }
+	/// `jsonBytes(v)` (src/json.ts): the UTF-8 bytes of `JSON.stringify(v)`, counted without writing the text.
+	pub fn json_bytes(&self) -> usize {
+		let n = self.text_len();
+		debug_assert_eq!(n, self.to_json_text().len(), "json_bytes of {}", self.to_json_text());
+		n
+	}
+	fn text_len(&self) -> usize {
+		match self {
+			Json::Null => 4,
+			Json::Bool(b) => if *b { 4 } else { 5 },
+			Json::Number(n) => if n.is_finite() { number_str(*n, &mut ryu_js::Buffer::new()).len() } else { 4 },
+			Json::String(s) => quoted_len(s),
+			Json::Array(a) => 2 + a.len().saturating_sub(1) + a.iter().map(Json::text_len).sum::<usize>(),
+			Json::Object(o) => 2 + o.0.len().saturating_sub(1) + o.0.iter().map(|(k, v)| quoted_len(k) + 1 + v.text_len()).sum::<usize>(),
+		}
+	}
 
 	pub fn as_str(&self) -> Option<&str> { if let Json::String(s) = self { Some(s) } else { None } }
 	pub fn as_f64(&self) -> Option<f64> { if let Json::Number(n) = self { Some(*n) } else { None } }
@@ -421,6 +501,19 @@ macro_rules! obj {
 
 #[cfg(test)]
 mod tests {
+	#[test]
+	fn json_bytes_counts_what_the_text_holds() {
+		let tricky = "\"\\\u{8}\u{c}\n\r\t\u{1}\u{1f}\u{7f}é€\u{2028}\u{2029}😀";
+		let values = [
+			Json::Null, Json::Bool(true), Json::Bool(false), Json::Number(0.0), Json::Number(-0.0), Json::Number(1e21), Json::Number(-1.5e-7), Json::Number(f64::NAN), Json::Number(f64::INFINITY), Json::Number(123_456_789.0),
+			Json::String(String::new()), Json::String(tricky.into()), Json::Array(vec![]), Json::Array(vec![Json::Null, Json::String(tricky.into()), Json::Array(vec![])]),
+			parse(r#"{"a":1,"":{},"0":[true,null],"k\u0000":"\ud83d\ude00","x":{"y":-0.000001}}"#).unwrap(), Json::Object(Object::new()),
+		];
+		for v in values {
+			assert_eq!(v.text_len(), v.to_json_text().len(), "{}", v.to_json_text());
+		}
+	}
+
 	use super::*;
 	#[test]
 	fn index_keys_go_first_and_repeated_keys_keep_their_place() {

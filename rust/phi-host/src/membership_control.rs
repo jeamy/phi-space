@@ -7,7 +7,7 @@ use phi_core::member::{hrw, rule_for};
 use phi_core::policy::validate_federation_policy;
 use phi_core::routing::normalize_federated_entry;
 use phi_core::space::{error, routing, CoreError};
-use phi_json::{digest_json, num_of, obj, text, Json, Object};
+use phi_json::{num_of, obj, text, Json, Object};
 use phi_wire::Local;
 use std::rc::Rc;
 
@@ -17,24 +17,16 @@ pub const ROUTING: &str = "phi-spaces.federation-routing";
 const PROFILES: &str = "phi-spaces.profile-transitions";
 const MAX_HISTORY: usize = 64;
 
-fn hash(v: &Json) -> R<String> { digest_json(v).map_err(|_| routing("a value that cannot be hashed")) }
-fn set(v: &mut Json, k: &str, x: impl Into<Json>) {
-	if let Json::Object(o) = v {
-		o.insert(k, x.into());
-	}
-}
-fn empty_operations() -> Json { obj! { "operations" => Object::new() } }
-fn empty_routing() -> Json { obj! { "policy" => Json::Null, "members" => Object::new() } }
+use phi_core::routing::hash;
+use phi_json::set;
+use crate::federated_space::{empty_operations_only as empty_operations, empty_routing};
 fn ops_of(d: &Json) -> Vec<(&str, &Json)> { d.get("operations").and_then(Json::as_object).map_or(vec![], |o| o.iter().collect()) }
 fn put_op(d: &mut Json, id: &str, op: &Json) {
 	if let Some(Json::Object(o)) = d.as_object_mut().and_then(|o| o.get_mut("operations")) {
 		o.insert(id, op.clone());
 	}
 }
-fn valid_id(id: &str) -> bool {
-	let mut c = id.chars();
-	c.next().is_some_and(|f| f.is_ascii_alphanumeric()) && id.len() <= 128 && c.all(|x| x.is_ascii_alphanumeric() || "._:-".contains(x)) && !["constructor", "prototype", "__proto__"].contains(&id)
-}
+fn valid_id(id: &str) -> bool { phi_json::ID_128_KEY.accepts(id) }
 fn member_state<'a>(state: &'a Json, id: &str) -> Option<&'a Json> { state.get("members").and_then(|m| m.get(id)) }
 fn set_member_state(d: &mut Json, id: &str, to: &str) -> R<()> {
 	let m = d.as_object_mut().and_then(|o| o.get_mut("members")).and_then(Json::as_object_mut).and_then(|m| m.get_mut(id)).ok_or_else(|| routing("unregistered Member"))?;

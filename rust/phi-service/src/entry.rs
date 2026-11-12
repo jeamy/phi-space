@@ -64,10 +64,7 @@ fn clock_error<T>(m: &str) -> ER<T> { Err(EntryError::Clock(m.into())) }
 fn canonical(v: &Json) -> String { canonical_key(v).unwrap_or_default() }
 fn bytes(v: &Json) -> usize { canonical(v).len() }
 fn hash(v: &Json) -> String { digest_json(v).unwrap_or_default() }
-fn id_text(s: &str) -> bool {
-	let b = s.as_bytes();
-	!b.is_empty() && b.len() <= 128 && b[0].is_ascii_alphanumeric() && b[1..].iter().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
-}
+fn id_text(id: &str) -> bool { phi_json::SLUG_128.accepts(id) }
 fn id(v: Option<&Json>) -> bool { v.and_then(Json::as_str).is_some_and(id_text) }
 fn number(v: Option<&Json>) -> bool { v.and_then(Json::as_f64).is_some_and(|n| safe_integer(n) && n >= 0.0) }
 fn sha(v: Option<&Json>) -> bool { v.and_then(Json::as_str).is_some_and(phi_json::is_sha256_hex) }
@@ -89,15 +86,7 @@ fn exact(v: &Json, names: &[&str]) -> bool {
 	b.sort_by(|x, y| utf16_cmp(x, y));
 	a.join(",") == b.join(",")
 }
-/// JavaScript truthiness.
-fn truthy(v: Option<&Json>) -> bool {
-	match v {
-		None | Some(Json::Null) | Some(Json::Bool(false)) => false,
-		Some(Json::Number(n)) => *n != 0.0 && !n.is_nan(),
-		Some(Json::String(s)) => !s.is_empty(),
-		_ => true,
-	}
-}
+use phi_json::truthy;
 /// `String(v)`.
 fn js_string(v: &Json) -> String {
 	match v {
@@ -128,8 +117,8 @@ fn copy(v: &Json) -> ER<Json> {
 	}
 	Ok(v.json_copy())
 }
-fn s<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or("") }
-fn n(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
+use phi_json::text_or_empty as s;
+use phi_json::num_or_nan as n;
 fn list<'a>(v: &'a Json, k: &str) -> &'a [Json] { v.get(k).and_then(Json::as_array).map_or(&[], |a| a) }
 fn put(v: &mut Json, k: &str, x: Json) {
 	if let Some(o) = v.as_object_mut() {
@@ -161,7 +150,7 @@ fn hex(b: &[u8]) -> String { phi_json::hex(b) }
 
 // ---- the hybrid clock (src/replication-clock.ts)
 
-pub fn validate_clock(v: Option<&Json>) -> ER<()> {
+pub(crate) fn validate_clock(v: Option<&Json>) -> ER<()> {
 	let Some(v) = v else { return clock_error("invalid hybrid clock") };
 	let mut k = keys_of(v);
 	k.sort_by(|x, y| utf16_cmp(x, y));
@@ -171,7 +160,7 @@ pub fn validate_clock(v: Option<&Json>) -> ER<()> {
 	}
 	Ok(())
 }
-pub fn compare_clock(a: &Json, b: &Json) -> Ordering {
+pub(crate) fn compare_clock(a: &Json, b: &Json) -> Ordering {
 	let (ap, al, bp, bl) = (n(a, "physical"), n(a, "logical"), n(b, "physical"), n(b, "logical"));
 	if ap < bp {
 		Ordering::Less
@@ -185,7 +174,7 @@ pub fn compare_clock(a: &Json, b: &Json) -> Ordering {
 		Ordering::Equal
 	}
 }
-pub fn advance_clock(local: &Json, now: f64, remote: Option<&Json>) -> ER<Json> {
+pub(crate) fn advance_clock(local: &Json, now: f64, remote: Option<&Json>) -> ER<Json> {
 	validate_clock(Some(local))?;
 	if !safe(now) || now < 0.0 {
 		return clock_error("invalid clock time or future bound");
@@ -221,7 +210,7 @@ struct Def {
 	version: i64,
 	initial: fn() -> Json,
 }
-pub const REPLICAS: &str = "phi-spaces.entry-replica";
+pub(crate) const REPLICAS: &str = "phi-spaces.entry-replica";
 const STATE: Def = Def { kind: REPLICAS, version: 2, initial: || obj! { "config" => Json::Null, "configHash" => "", "clock" => obj! { "physical" => 0.0, "logical" => 0.0 }, "lastWallTime" => 0.0, "seq" => 0.0, "events" => Json::Array(vec![]), "segments" => Json::Array(vec![]) } };
 const PEERS: Def = Def { kind: "phi-spaces.entry-replica-peers", version: 1, initial: || obj! { "peers" => Object::new() } };
 const TRANSFERS: Def = Def { kind: "phi-spaces.entry-snapshot-transfers", version: 1, initial: || obj! { "retainedBytes" => 0.0, "transfers" => Object::new() } };
@@ -348,7 +337,7 @@ fn runs_of_json(v: Option<&Json>) -> Vec<(f64, f64)> { v.and_then(Json::as_array
 fn runs_json(runs: &[(f64, f64)]) -> Json { Json::Array(runs.iter().map(|(a, b)| Json::Array(vec![num(*a), num(*b)])).collect()) }
 fn dropped_count(runs: &[(f64, f64)]) -> f64 { runs.iter().map(|(a, b)| b - a + 1.0).sum() }
 /// `positionsOf`: the stream position of each retained event, in logical order.
-pub fn positions_of(count: usize, runs: &[(f64, f64)]) -> Vec<f64> {
+pub(crate) fn positions_of(count: usize, runs: &[(f64, f64)]) -> Vec<f64> {
 	let (mut out, mut p, mut r) = (Vec::with_capacity(count), 0.0, 0);
 	while out.len() < count {
 		p += 1.0;
@@ -365,7 +354,7 @@ pub fn positions_of(count: usize, runs: &[(f64, f64)]) -> Vec<f64> {
 fn head_of(st: &Json) -> f64 { list(st, "events").len() as f64 + dropped_count(&runs_of_json(st.get("dropped"))) }
 fn contiguous(after: f64, positions: &[f64]) -> bool { positions.iter().enumerate().all(|(i, p)| *p == after + i as f64 + 1.0) }
 /// `mergeRuns`: the sorted, merged union of position runs.
-pub fn merge_runs(lists: &[&[(f64, f64)]]) -> Vec<(f64, f64)> {
+pub(crate) fn merge_runs(lists: &[&[(f64, f64)]]) -> Vec<(f64, f64)> {
 	let mut all: Vec<(f64, f64)> = lists.iter().flat_map(|l| l.iter().copied()).collect();
 	all.sort_by(|x, y| x.0.partial_cmp(&y.0).unwrap_or(Ordering::Equal));
 	let mut out: Vec<(f64, f64)> = vec![];
@@ -392,7 +381,7 @@ struct Exported {
 }
 
 /// `authorize(action)` and `assertActive()` of a step.
-pub type Check = Rc<dyn Fn(&str) -> ER<()>>;
+pub(crate) type Check = Rc<dyn Fn(&str) -> ER<()>>;
 /// A page's frame for its events, their positions, `next` and `more`, as `pageAfter` measures it.
 type Frame<'a> = &'a dyn Fn(&[Json], &[f64], f64, bool) -> Json;
 
@@ -2156,7 +2145,7 @@ impl EntryReplication {
 
 	// ---- the stream
 
-	pub fn stream_identity(&self) -> Json {
+	pub(crate) fn stream_identity(&self) -> Json {
 		let mut body = obj! { "version" => 1.0, "spaceId" => self.config.get("spaceId").cloned().unwrap(), "authorityId" => self.config.get("authorityId").cloned().unwrap(), "configHash" => self.config_hash.as_str(), "replicaId" => self.replica_id(), "incarnation" => self.incarnation() };
 		let h = hash(&body);
 		put(&mut body, "streamId", h.into());

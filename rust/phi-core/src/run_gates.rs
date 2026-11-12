@@ -14,12 +14,7 @@ const GATE_COST: f64 = 1024.0;
 
 fn number(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(0.0) }
 /// `/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/`
-fn valid_id(v: Option<&Json>) -> bool {
-	v.and_then(Json::as_str).is_some_and(|s| {
-		let b = s.as_bytes();
-		!b.is_empty() && b.len() <= 128 && b[0].is_ascii_alphanumeric() && b.iter().all(|c| c.is_ascii_alphanumeric() || b"._:-".contains(c))
-	})
-}
+fn valid_id(v: Option<&Json>) -> bool { v.and_then(Json::as_str).is_some_and(|s| phi_json::ID_128.accepts(s)) }
 const STATES: [&str; 4] = ["preparing", "running", "paused", "stopped"];
 
 fn valid_command(c: &Json) -> bool {

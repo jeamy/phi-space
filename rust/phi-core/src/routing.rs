@@ -9,10 +9,11 @@ use std::cmp::Ordering;
 const MAX_AGE_MS: f64 = 60_000.0;
 const FUTURE_SKEW_MS: f64 = 2_000.0;
 
-fn hash(v: &Json) -> Result<String> { digest_json(v).map_err(|_| routing("a value that cannot be hashed")) }
+/// The digest of a routing value; one that cannot be hashed is a routing conflict.
+pub fn hash(v: &Json) -> Result<String> { digest_json(v).map_err(|_| routing("a value that cannot be hashed")) }
 fn canonical(v: &Json) -> Result<String> { v.canonical().map_err(|_| routing("a value that cannot be hashed")) }
 fn type_error(m: &str) -> CoreError { error("TypeError", m) }
-fn names(v: Option<&Json>) -> Vec<String> { v.and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect()) }
+use phi_json::names;
 fn sorted_unique(mut v: Vec<String>) -> Vec<String> {
 	v.sort_by(|a, b| utf16_cmp(a, b));
 	v.dedup();

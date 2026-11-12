@@ -11,6 +11,7 @@ use phi_json::Json;
 use phi_service::Guard;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 type R<T> = Result<T, CoreError>;
 fn blocked(m: impl Into<String>) -> CoreError { error("BootBlocked", m) }
@@ -79,6 +80,9 @@ struct Seen {
 	at: f64,
 }
 
+/// An installed permit and its canonical text.
+type Installed = Rc<(Json, Option<String>)>;
+
 pub struct BootGuard {
 	host_id: String,
 	authority_id: String,
@@ -88,6 +92,9 @@ pub struct BootGuard {
 	/// How long a read of the register counts.
 	max_age_ms: f64,
 	seen: RefCell<Option<Seen>>,
+	/// The installed permits read so far, with their canonical text, while the file's `data_version` stays: every call's
+	/// check of its Space reads them (`space`), the file changes only by a boot admission or another process.
+	installed_read: RefCell<(Option<i64>, HashMap<String, Installed>)>,
 	/// Reads begun, and the newest that has answered: calls overlap, and an older read must not replace a newer one.
 	reads: Cell<(u64, u64)>,
 	/// The control authority this host follows: its space, host and key, read with the rest.
@@ -131,7 +138,7 @@ impl BootGuard {
 	/// The external register this guard reads (a Root reads boot permits of other hosts from it).
 	pub fn external(&self) -> &External { &self.external }
 	pub fn new(host_id: &str, authority_id: &str, external: External, installed: SqliteRegister, now: crate::gate::Now, max_age_ms: f64) -> BootGuard {
-		BootGuard { host_id: host_id.to_owned(), authority_id: authority_id.to_owned(), external, installed, now, max_age_ms, seen: RefCell::new(None), reads: Cell::new((0, 0)), authority: None, replica: RefCell::new(HashMap::new()) }
+		BootGuard { host_id: host_id.to_owned(), authority_id: authority_id.to_owned(), external, installed, now, max_age_ms, seen: RefCell::new(None), installed_read: RefCell::new((None, HashMap::new())), reads: Cell::new((0, 0)), authority: None, replica: RefCell::new(HashMap::new()) }
 	}
 
 	/// Reads the register for these Spaces. A failed read forgets the last one. What was read stays while another call's
@@ -190,9 +197,29 @@ impl BootGuard {
 			let local = self.installed.get(&key).map_err(|e| e.to_string())?;
 			if local.get("value").and_then(|l| l.canonical().ok()) != permit.canonical().ok() {
 				self.installed.compare_and_set(&key, local.get("version").and_then(Json::as_f64), permit).map_err(|e| e.to_string())?;
+				self.installed_read.borrow_mut().1.clear(); // this connection's own write leaves data_version as it is
 			}
 		}
 		Ok(())
+	}
+
+	/// The installed permit of Space `id` (`installed:{host}:{id}`'s value) and its canonical text; read again once the
+	/// register file changed.
+	fn installed_permit(&self, id: &str) -> Result<Option<Installed>, String> {
+		let version = self.installed.data_version().map_err(|e| e.to_string())?;
+		let mut read = self.installed_read.borrow_mut();
+		if read.0 != Some(version) {
+			*read = (Some(version), HashMap::new());
+		}
+		if let Some(known) = read.1.get(id) {
+			return Ok(Some(Rc::clone(known)));
+		}
+		let local = self.installed.get(&format!("installed:{}:{id}", self.host_id)).map_err(|e| e.to_string())?;
+		let Some(value) = local.get("value").cloned() else { return Ok(None) };
+		let canonical = value.canonical().ok();
+		let entry = Rc::new((value, canonical));
+		read.1.insert(id.to_owned(), Rc::clone(&entry));
+		Ok(Some(entry))
 	}
 
 	/// `assertActive` of a host's entry replication: the host's boot record, read last, is active and admits the Space.
@@ -213,11 +240,11 @@ impl Guard for BootGuard {
 		let id = s.state.space_id.as_deref().unwrap_or("");
 		let lacks = || blocked(format!("space {id} lacks matching external/local boot permission"));
 		let permit = seen.boot.get("value").and_then(|v| v.get("spaces")).and_then(|p| p.get(id)).ok_or_else(lacks)?;
-		let local = self.installed.get(&format!("installed:{}:{id}", self.host_id)).map_err(|e| blocked(e.to_string()))?;
-		let local = local.get("value").ok_or_else(lacks)?;
+		let installed = self.installed_permit(id).map_err(blocked)?.ok_or_else(lacks)?;
+		let (local, local_canonical) = (&installed.0, &installed.1);
 		let marker = permit.get("authorityMarker").and_then(Json::as_bool) == Some(true);
 		let accepted = s.state.rest.get("acceptedAuthorityId").and_then(Json::as_str);
-		if text(permit, "state") != Some("active") || text(local, "state") != Some("active") || text(permit, "authorityId") != Some(&self.authority_id) || (marker && accepted != Some(&self.authority_id)) || text(permit, "dataIncarnation") != s.state.incarnation.as_deref() || permit.canonical().ok() != local.canonical().ok() {
+		if text(permit, "state") != Some("active") || text(local, "state") != Some("active") || text(permit, "authorityId") != Some(&self.authority_id) || (marker && accepted != Some(&self.authority_id)) || text(permit, "dataIncarnation") != s.state.incarnation.as_deref() || permit.canonical().ok() != *local_canonical {
 			return Err(lacks());
 		}
 		match text(permit, "role") {

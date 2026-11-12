@@ -56,7 +56,7 @@ fn catalog(v: &Json, space: &str) -> R<()> {
 }
 
 fn artifacts(v: Option<&Json>) -> &[Json] { v.and_then(|c| c.get("artifacts")).and_then(Json::as_array).map_or(&[], Vec::as_slice) }
-fn number(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
+use phi_json::num_or_nan as number;
 fn flag(v: &Json, k: &str) -> bool { v.get(k) == Some(&Json::Bool(true)) }
 fn rank(a: &Json) -> u8 {
 	match text(a, "state") {
@@ -168,6 +168,9 @@ impl SqliteRegister {
 	}
 
 	pub fn get(&self, key: &str) -> R<Json> { Ok(self.row(key)?.map_or(Json::Null, |(v, value)| record(v, value))) }
+	/// `PRAGMA data_version` of this connection: it changes when another connection (another process: the replica tool,
+	/// a recovery) committed to the file, not for this connection's own writes.
+	pub fn data_version(&self) -> R<i64> { self.db.query_row("PRAGMA data_version", [], |r| r.get(0)).map_err(failed) }
 
 	pub fn get_many(&self, keys: &[String]) -> R<Json> {
 		validate_read_keys(keys)?;
@@ -299,7 +302,7 @@ pub struct PeerPolicy {
 	pub operator: bool,
 	pub write_keys: Vec<String>,
 }
-pub type Peers = dyn Fn() -> HashMap<String, PeerPolicy>;
+pub(crate) type Peers = dyn Fn() -> HashMap<String, PeerPolicy>;
 
 fn answer(register: &SqliteRegister, policy: &PeerPolicy, line: &[u8]) -> Json {
 	let done = (|| {

@@ -3,7 +3,7 @@
 use crate::ops::at_value;
 use phi_core::ClaimSource;
 use phi_json::{parse, Json};
-use rusqlite::{params_from_iter, Connection};
+use rusqlite::{params_from_iter, Connection, OpenFlags};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -21,7 +21,8 @@ fn marks(n: usize) -> String { vec!["?"; n].join(", ") }
 
 impl SqliteClaims {
 	pub fn open(path: &Path, kind: &str, key: &str, part: &str) -> rusqlite::Result<SqliteClaims> {
-		let db = Connection::open(path)?;
+		// it only reads; the Mutex around it serializes its use, so SQLite's own mutex is not needed as well
+		let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX | OpenFlags::SQLITE_OPEN_URI)?;
 		db.busy_timeout(std::time::Duration::from_secs(10))?;
 		Ok(SqliteClaims { db: Mutex::new(db), kind: kind.to_owned(), key: key.to_owned(), part: part.to_owned(), failure: Mutex::new(None) })
 	}

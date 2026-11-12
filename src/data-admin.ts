@@ -114,7 +114,7 @@ function eraseBatch(s:core.SpaceState,c:Command,p:Principal,now:number,id:string
     if(r.target===pid||r.consumer&&same(r.consumer)){if(!spend(256))return;s.regs.splice(i,1);}
     else if(r.pendingEntry&&ids.has(r.pendingEntry.id)){if(!spend(256))return;delete r.pendingEntry;r.pending=0;}
    }
-   for(let i=s.outbox.length-1;i>=0;i--){const e=s.outbox[i]!;if(e.target===pid||e.entry&&ids.has(e.entry.id)){if(!spend(256))return;s.outbox.splice(i,1);}}
+   for(let i=s.outbox.length-1;i>=0;i--){const e=s.outbox[i]!;if(e.target===pid||e.entry&&ids.has(e.entry.id)){if(!spend(256))return;s.outbox.splice(i,1);delete s.outboxBytes;}}
    c.phase='mailboxes';return;
   }
   case 'mailboxes': {

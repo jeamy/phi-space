@@ -4,13 +4,13 @@ use phi_json::{text, safe_of};
 use crate::space::routing;
 use crate::member::declared_supertypes;
 use crate::space::{error, CoreError};
-use phi_json::{digest_json, obj, Json};
+use phi_json::{obj, Json};
 use std::collections::{HashMap, HashSet};
 
 type Result<T> = std::result::Result<T, CoreError>;
 fn migration(m: impl Into<String>) -> CoreError { error("MigrationRequired", m) }
 fn array<'a>(v: &'a Json, k: &str) -> &'a [Json] { v.get(k).and_then(Json::as_array).map_or(&[], Vec::as_slice) }
-fn hash(v: &Json) -> Result<String> { digest_json(v).map_err(|_| routing("a value that cannot be hashed")) }
+use crate::routing::hash;
 fn same(a: Option<&Json>, b: Option<&Json>) -> Result<bool> { Ok(hash(a.unwrap_or(&Json::Null))? == hash(b.unwrap_or(&Json::Null))?) }
 
 fn name(v: Option<&Json>) -> Result<()> {

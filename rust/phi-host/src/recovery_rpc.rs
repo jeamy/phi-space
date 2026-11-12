@@ -54,7 +54,7 @@ pub fn conflict(m: impl Into<String>) -> RecoveryError { RecoveryError::Conflict
 /// The bytes a recovery call is signed over (test/vectors/replication.json `recoveryCall`).
 pub fn recovery_bytes(call: &Json) -> Option<Vec<u8>> { Some(format!("{DOMAIN}{}", call.canonical().ok()?).into_bytes()) }
 
-pub fn now_ms() -> f64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_millis() as f64) }
+pub use phi_json::wall_ms as now_ms;
 
 /// A pinned public key: the operator's, the supervisor's, a host's.
 #[derive(Clone, Debug, PartialEq)]

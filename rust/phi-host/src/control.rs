@@ -14,11 +14,11 @@ use std::rc::Rc;
 use std::collections::HashMap;
 
 pub const CONTROL_SPACE: &str = "control";
-pub const ENROLL_TTL_MS: f64 = 300_000.0;
-pub const MAX_FAILED_ATTEMPTS: f64 = 3.0;
-pub const ATTEMPT_INTERVAL_MS: f64 = 60_000.0;
+pub(crate) const ENROLL_TTL_MS: f64 = 300_000.0;
+pub(crate) const MAX_FAILED_ATTEMPTS: f64 = 3.0;
+pub(crate) const ATTEMPT_INTERVAL_MS: f64 = 60_000.0;
 pub const UNPAIRED_ROLE: &str = "unpaired";
-pub const RESULT_RETENTION_MS: f64 = 7.0 * 24.0 * 3600.0 * 1000.0;
+pub(crate) const RESULT_RETENTION_MS: f64 = 7.0 * 24.0 * 3600.0 * 1000.0;
 const ENROLLABLE_ROLES: [&str; 4] = ["host", "member", "observer", "router"];
 const READABLE: [&str; 3] = ["Command", "Result", "PeerKey"];
 const REFUSED: &str = "enrollment refused";
@@ -49,7 +49,7 @@ pub fn listed(s: &Space, now: f64, tmpl: &Json) -> R<Vec<Json>> {
 	Ok(s.list(now, &t, None, None, None)?.as_array().cloned().unwrap_or_default())
 }
 pub fn fields(e: &Json) -> Json { e.get("fields").cloned().unwrap_or(Json::Null) }
-pub(crate) fn text<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or("") }
+pub(crate) use phi_json::text_or_empty as text;
 pub(crate) fn put(s: &mut Space, now: f64, type_name: &str, f: Json, lease: f64) -> R<()> {
 	s.write(now, &obj! { "type" => type_name, "fields" => f }, None, Some(&Json::Number(lease)), None).map(|_| ())
 }
@@ -59,13 +59,7 @@ pub(crate) fn take(s: &mut Space, now: f64, tmpl: &Json) -> R<Option<Json>> {
 	let p = s.probe(now, &t, None, true, None)?;
 	Ok(if p.get("status").and_then(Json::as_str) == Some("found") { p.get("entry").cloned() } else { None })
 }
-pub(crate) fn with(rec: &Json, changes: &[(&str, Json)]) -> Json {
-	let mut o = rec.as_object().cloned().unwrap_or_default();
-	for (k, v) in changes {
-		o.insert(*k, v.clone());
-	}
-	Json::Object(o)
-}
+pub(crate) use phi_json::with;
 fn enroll_tmpl(hash: &str) -> Json { obj! { "type" => "Enroll", "fields" => obj! { "tokenHash" => hash } } }
 
 fn check_hash(h: &str) -> R<()> {

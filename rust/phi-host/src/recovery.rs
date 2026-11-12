@@ -10,10 +10,12 @@ const DOMAIN: &str = "phi-spaces/recovery-authority/v1\n";
 const FIELDS: [&str; 6] = ["recoveryId", "expectedAuthorityId", "newAuthorityId", "controlSpaceId", "targetHostId", "supervisorKey"];
 
 /// The bytes the recovery operator signs for an authority transition (test/vectors/replication.json).
-pub fn authority_transition_bytes(t: &Json) -> Vec<u8> { format!("{DOMAIN}{}", t.canonical().expect("a transition is parsed JSON")).into_bytes() }
+pub(crate) fn authority_transition_bytes(t: &Json) -> Vec<u8> { format!("{DOMAIN}{}", t.canonical().expect("a transition is parsed JSON")).into_bytes() }
 
-fn version(r: &Json) -> Option<f64> { r.get("version").and_then(Json::as_f64) }
-fn value(r: &Json) -> Json { r.get("value").cloned().unwrap_or(Json::Null) }
+/// The version of a register record (none: not yet written).
+pub(crate) fn version(r: &Json) -> Option<f64> { r.get("version").and_then(Json::as_f64) }
+/// The value of a register record.
+pub(crate) fn value(r: &Json) -> Json { r.get("value").cloned().unwrap_or(Json::Null) }
 
 /// An authority that never had a successor may carry no lineage yet; anything but an object is refused by name.
 fn lineage_of(a: &Json) -> RR<Object> {

@@ -4,7 +4,7 @@ use crate::federation_rpc::Failure;
 use crate::router::{release_future_in, RouterController, RouterEnv, Tx};
 use phi_core::routing::{is_merge_type, normalize_federated_entry, operation_partition, parent_journal_key, search_members, validate_journal_partitions, write_member};
 use phi_core::space::{bytes, error, routing, CoreError};
-use phi_json::{digest_json, num_of, obj, safe_integer, text, Json, Object};
+use phi_json::{num_of, obj, safe_integer, text, Json, Object};
 use phi_wire::Local;
 
 type R<T> = Result<T, CoreError>;
@@ -22,25 +22,20 @@ const CHILD_BYTES: f64 = 64.0 * 1024.0;
 fn unavailable(m: impl Into<String>) -> CoreError { error("FederationUnavailable", m) }
 fn pending() -> CoreError { error("FederationPending", "bound child outcome is unresolved") }
 fn erased() -> CoreError { error("ResultExpired", "Root operation content was erased") }
-fn hash(v: &Json) -> R<String> { digest_json(v).map_err(|_| routing("a value that cannot be hashed")) }
-fn set(v: &mut Json, k: &str, x: impl Into<Json>) {
-	if let Json::Object(o) = v {
-		o.insert(k, x.into());
-	}
-}
+use phi_core::routing::hash;
+use phi_json::set;
 fn child(id: &str, label: &str) -> R<String> { Ok(format!("f-{}", hash(&Json::Array(vec![id.into(), label.into()]))?)) }
 fn empty_operations() -> Json { obj! { "operations" => Object::new(), "reservedBytes" => 0.0 } }
 fn empty_layout() -> Json { obj! { "partitions" => Json::Null, "routerIds" => Json::Null } }
-fn empty_operations_only() -> Json { obj! { "operations" => Object::new() } }
-fn empty_routing() -> Json { obj! { "policy" => Json::Null, "members" => Object::new() } }
+/// An operations journal before its first operation (membership, profile transitions).
+pub(crate) fn empty_operations_only() -> Json { obj! { "operations" => Object::new() } }
+/// The routing document before its first Member.
+pub(crate) fn empty_routing() -> Json { obj! { "policy" => Json::Null, "members" => Object::new() } }
 fn operations(d: &Json) -> Vec<(&str, &Json)> { d.get("operations").and_then(Json::as_object).map_or(vec![], |o| o.iter().collect()) }
 fn operations_mut(d: &mut Json) -> &mut Object { d.as_object_mut().and_then(|o| o.get_mut("operations")).and_then(Json::as_object_mut).expect("a journal has operations") }
-fn names(v: Option<&Json>) -> Vec<String> { v.and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect()) }
+use phi_json::names;
 fn members(op: &Json) -> Vec<String> { names(op.get("members")) }
-fn valid_id(id: &str) -> bool {
-	let mut c = id.chars();
-	c.next().is_some_and(|f| f.is_ascii_alphanumeric()) && id.len() <= 128 && c.all(|x| x.is_ascii_alphanumeric() || "._:-".contains(x)) && !["constructor", "prototype", "__proto__"].contains(&id)
-}
+fn valid_id(id: &str) -> bool { phi_json::ID_128_KEY.accepts(id) }
 fn child_of(op: &Json, m: &str) -> String { op.get("children").and_then(|c| text(c, m)).unwrap_or("").to_owned() }
 fn registration<'a>(op: &'a Json, m: &str) -> Option<&'a Json> { op.get("registrations").and_then(|c| c.get(m)) }
 /// `event.eventId === registrations[member]`.

@@ -134,7 +134,9 @@ export async function purgeOldest(b: BatchHost, cfg: RetentionConfig): Promise<P
 				if (!l.newer || going.has(l.newer)) continue; // the newest node never goes (MIN_KEEP_POSTS); a neighbour that goes too is not relinked
 				const at = s.entries.findIndex((e) => e.id === l.newer), edge = s.entries[at];
 				if (!edge) throw new Error("history chain changed");
-				s.entries[at] = { ...edge, fields: { ...edge.fields, next: l.older } }; // records are values: replaced, never changed
+				const fields = { ...edge.fields, next: l.older };
+				// records are values: replaced, never changed; the byte tally of the record follows its fields
+				s.entries[at] = { ...edge, fields, ...(edge.size === undefined ? {} : { size: Buffer.byteLength(JSON.stringify(fields)) }) };
 			}
 			core.touch(s, now);
 			return n;

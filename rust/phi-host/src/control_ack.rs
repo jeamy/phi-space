@@ -9,12 +9,11 @@ use phi_core::space::bytes;
 use phi_json::{obj, text, Json, Object};
 use std::rc::Rc;
 
-pub const RECEIPTS: &str = "phi-spaces.control-recovery-receipts";
+pub(crate) const RECEIPTS: &str = "phi-spaces.control-recovery-receipts";
 const ROUTING: &str = "phi-spaces.federation-routing";
 const TUPLE: [&str; 6] = ["recoveryId", "incarnation", "primaryEpoch", "targetHostId", "argsHash", "authorityId"];
 
-fn version(r: &Json) -> Option<f64> { r.get("version").and_then(Json::as_f64) }
-fn value(r: &Json) -> Json { r.get("value").cloned().unwrap_or(Json::Null) }
+use crate::recovery::{value, version};
 fn fields(e: &Json) -> Json { e.get("fields").cloned().unwrap_or(Json::Null) }
 fn has(list: Option<&Json>, v: &str) -> bool { list.and_then(Json::as_array).is_some_and(|a| a.iter().any(|x| x.as_str() == Some(v))) }
 

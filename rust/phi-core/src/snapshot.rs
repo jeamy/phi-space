@@ -58,6 +58,8 @@ impl Snapshots {
 		self.cache.retain(|s| s.expires > now);
 		let lim = space.limits();
 		let stream_id = space.stream_id();
+		// a principal's erasure counts it up: a snapshot made before holds what was erased
+		let epoch = space.state.rest.get("snapshotEpoch").and_then(Json::as_f64).unwrap_or(0.0);
 		let txn = o.get("txn").filter(|t| !t.is_null());
 		let query = obj! { "tmpl" => tmpl.clone(), "txn" => txn.cloned().unwrap_or(Json::Null) }.canonical().map_err(|_| error("TypeError", "canonical JSON: non-finite number"))?;
 		let mut token = o.get("token").cloned();
@@ -72,7 +74,7 @@ impl Snapshots {
 		}
 		let truthy_token = token.as_ref().filter(|t| crate::space::truthy(Some(t)));
 		let found = truthy_token.and_then(|t| t.as_str()).and_then(|t| self.cache.iter().find(|s| s.token == t)).cloned();
-		if truthy_token.is_some() && found.as_ref().is_none_or(|r| r.stream_id != stream_id || r.snapshot_epoch != 0.0) {
+		if truthy_token.is_some() && found.as_ref().is_none_or(|r| r.stream_id != stream_id || r.snapshot_epoch != epoch) {
 			return Err(error("SnapshotExpired", "the entry snapshot expired or belongs to another incarnation"));
 		}
 		if found.as_ref().is_some_and(|r| !same_owner(&r.owner, owner) || r.query != query) {
@@ -103,7 +105,7 @@ impl Snapshots {
 					return Err(error("ResourceExhausted", "the snapshot exceeds maxSnapshotBytes"));
 				}
 				let token = format!("ss{}", hex(&space.random_bytes(16)));
-				Record { snapshot_epoch: 0.0, token, stream_id: stream_id.clone(), query, owner: owner.cloned(), rev: rev.as_f64().unwrap_or(0.0), expires: until(now, lim.snapshot_ttl_ms), bytes: size, items: items.into(), read: false }
+				Record { snapshot_epoch: epoch, token, stream_id: stream_id.clone(), query, owner: owner.cloned(), rev: rev.as_f64().unwrap_or(0.0), expires: until(now, lim.snapshot_ttl_ms), bytes: size, items: items.into(), read: false }
 			}
 		};
 		if !safe_integer(offset) || offset < 0.0 || offset > rec.items.len() as f64 {

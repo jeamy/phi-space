@@ -144,9 +144,9 @@ pub trait Authorization {
 	/// Inside each commit, with what only the host keeps (`checkTx`).
 	fn check_commit(&self) -> Result<(), String> { Ok(()) }
 }
-pub type EpochForSpace = Rc<dyn Fn(&mut Store, Option<&str>) -> f64>;
+pub(crate) type EpochForSpace = Rc<dyn Fn(&mut Store, Option<&str>) -> f64>;
 /// The Space by name and the epoch of the request; the evidence with its `hash`.
-pub type PromotionProof = Rc<dyn Fn(Option<&str>, f64) -> Option<Json>>;
+pub(crate) type PromotionProof = Rc<dyn Fn(Option<&str>, f64) -> Option<Json>>;
 pub type Authorize = Box<dyn Fn(&mut Store, &Json, &Identity, &Conn) -> Result<Rc<dyn Authorization>, CoreError>>;
 
 /// What a host demands of everything served (`installBootGuard`): of the host, and of each Space read or committed.
@@ -419,13 +419,17 @@ pub fn rpc_domain(method: &str, a: &Object, principal: &Json) -> (String, Json) 
 	}
 }
 
-fn process_figures(now: f64) -> Json {
+/// The figures of the process that serves the space (src/service.ts `stats`; a dashboard draws them over time).
+/// `heapBytes` is the resident size: the allocator keeps no count of its own (Node's `heapUsed` has no counterpart).
+fn process_figures() -> Json {
 	let stat = std::fs::read_to_string("/proc/self/stat").unwrap_or_default();
 	let fields: Vec<&str> = stat.rsplit(')').next().unwrap_or("").split_whitespace().collect();
-	// clock ticks of user and system time; Linux gives processes 100 per second
+	// clock ticks of user and system time; USER_HZ, what Linux counts them in for processes, is 100 on every architecture
 	let ticks = |i: usize| fields.get(i).and_then(|f| f.parse::<f64>().ok()).unwrap_or(0.0);
-	let rss = std::fs::read_to_string("/proc/self/statm").ok().and_then(|s| s.split_whitespace().nth(1).and_then(|p| p.parse::<f64>().ok())).unwrap_or(0.0) * 4096.0;
-	obj! { "cpuMs" => (ticks(11) + ticks(12)) * 10.0, "rssBytes" => rss, "heapBytes" => rss, "at" => now }
+	// VmRSS is given in kB, whatever the page size
+	let rss = std::fs::read_to_string("/proc/self/status").ok().and_then(|s| s.lines().find_map(|l| l.strip_prefix("VmRSS:").and_then(|v| v.trim().trim_end_matches("kB").trim().parse::<f64>().ok()))).unwrap_or(0.0) * 1024.0;
+	// the wall clock, as Date.now(): the figures are the process's, not the space's (whose clock a test may set)
+	obj! { "cpuMs" => (ticks(11) + ticks(12)) * 10.0, "rssBytes" => rss, "heapBytes" => rss, "at" => phi_json::wall_ms() }
 }
 
 pub struct Service {
@@ -459,7 +463,7 @@ pub fn space_epoch(store: &mut Store, space: Option<&str>, replica: &dyn Fn(&str
 	}
 	store.reader(Some(&id)).ok().and_then(|h| h.space.state.rest.get("primaryEpoch").and_then(Json::as_f64)).unwrap_or(1.0)
 }
-pub fn entry_error(e: entry::EntryError) -> CoreError {
+pub(crate) fn entry_error(e: entry::EntryError) -> CoreError {
 	use entry::EntryError as E;
 	match e {
 		E::Conflict(m) => error("IllegalArgumentError", m),
@@ -858,7 +862,11 @@ impl Service {
 	fn poll_operation(&mut self, c: &Ctx, target: &Json) -> R<Json> {
 		let now = self.now();
 		let s = self.snap(c)?;
+		s.claim_failure(); // a look before answered for itself
 		let v = s.lookup(now, Some(target))?;
+		if let Some(m) = s.claim_failure() {
+			return Err(error("Error", m)); // the claims could not be read: no answer from what they seemed to say
+		}
 		if v.get("state").and_then(Json::as_str) != Some("pending") {
 			return Ok(v);
 		}
@@ -1247,7 +1255,7 @@ impl Service {
 				}
 				let now = self.now();
 				let s = self.snap(c)?;
-				reply(obj! { "stats" => s.stats(now)?, "rev" => s.revision()?, "streamId" => s.stream_id(), "process" => process_figures(now) })
+				reply(obj! { "stats" => s.stats(now)?, "rev" => s.revision()?, "streamId" => s.stream_id(), "process" => process_figures() })
 			}
 			"batch" => self.batch(a, c).map(Step::Reply),
 			"spaces" => {
@@ -1432,8 +1440,8 @@ impl Service {
 		o.insert("txn", or_null(a.get("txn")));
 		if self.snap(c)?.state.space_id.is_none() {
 			self.commit_on(c.space.as_deref(), |_, _| Ok(()))?;
+			self.snap_of(c.space.as_deref())?; // the guard again, on the Space the commit just registered
 		}
-		self.snap_of(c.space.as_deref())?;
 		let host = self.store.reader(c.space.as_deref())?;
 		// by the Space, not by the name of this call: alias and id share their pages
 		let key = host.space.state.space_id.clone();

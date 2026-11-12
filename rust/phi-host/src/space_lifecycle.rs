@@ -22,19 +22,16 @@ fn given<'a>(q: &'a Json, k: &str) -> Option<&'a Json> {
 	q.get(k).filter(|v| !matches!(v, Json::Null | Json::Bool(false)) && v.as_f64() != Some(0.0) && v.as_str() != Some(""))
 }
 fn canonical(v: &Json) -> R<String> { v.canonical().map_err(|_| illegal("a value that cannot be hashed")) }
-fn valid_id(id: &str) -> bool {
-	let mut c = id.chars();
-	c.next().is_some_and(|f| f.is_ascii_alphanumeric()) && id.chars().count() <= 96 && c.all(|x| x.is_ascii_alphanumeric() || "._:-".contains(x))
-}
+fn valid_id(id: &str) -> bool { phi_json::ID_96.accepts(id) }
 
 /// `verifyLifecycle`.
-fn verify_lifecycle(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
+pub(crate) fn verify_lifecycle(kind: &str, t: &Json, pin: &Pin) -> R<Json> {
 	verify_value(t, &format!("space-lifecycle-{kind}"), &pin.issuer, pin.algorithm, &pin.public_key)
 		.cloned().ok_or_else(|| denied(format!("invalid Space lifecycle {kind} signature")))
 }
 
 /// `signLifecycle`.
-fn sign_lifecycle(kind: &str, value: Json, issuer: &str, signer: &Signer) -> R<Json> {
+pub(crate) fn sign_lifecycle(kind: &str, value: Json, issuer: &str, signer: &Signer) -> R<Json> {
 	seal("value", value, &format!("space-lifecycle-{kind}"), issuer, signer).ok_or_else(|| illegal("a value that cannot be hashed"))
 }
 

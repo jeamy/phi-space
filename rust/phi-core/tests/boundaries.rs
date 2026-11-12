@@ -739,3 +739,22 @@ fn a_negative_claim_at_its_edges() {
 		compare(&resolve(&lines), &format!("a negative claim at {at}"));
 	}
 }
+
+#[test]
+fn an_erasure_expires_the_snapshots_made_before_it() {
+	// data_admin counts `snapshotEpoch` up when it erases a principal (src/data-admin.ts): a snapshot made before holds
+	// what was erased, so its next page is refused (src/snapshot.ts), one made after pages on
+	let mut d = Driver::new();
+	d.step(&init(obj! {})).unwrap();
+	for _ in 0..3 {
+		d.step(&typed_write("Task", 120)).unwrap();
+	}
+	let first = d.step(&snap(1000.0, "Task", 500.0, None)).unwrap();
+	let next = first.get("next").and_then(Json::as_str).filter(|n| n.starts_with("ss")).expect("a snapshot").to_owned();
+	d.space.state.rest.insert("snapshotEpoch", Json::Number(1.0));
+	let e = d.step(&snap(1001.0, "Task", 500.0, Some(&next))).unwrap_err();
+	assert_eq!(e.class, "SnapshotExpired", "{}", e.message);
+	let again = d.step(&snap(1002.0, "Task", 500.0, None)).unwrap();
+	let next = again.get("next").and_then(Json::as_str).expect("a snapshot").to_owned();
+	assert!(d.step(&snap(1003.0, "Task", 500.0, Some(&next))).is_ok(), "made under the new epoch");
+}

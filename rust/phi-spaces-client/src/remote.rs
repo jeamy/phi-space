@@ -32,7 +32,7 @@ pub fn lease_arg(ms: f64) -> Json {
 	}
 }
 
-fn wall_ms() -> f64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_millis() as f64) }
+use phi_json::wall_ms;
 
 /// A number in [0, 1) from the system's random bytes, as Math.random gives one.
 pub(crate) fn random_unit() -> f64 {
@@ -64,7 +64,7 @@ fn default_request_id() -> String {
 	format!("q{}{tail}", base36(wall_ms() as u64))
 }
 
-pub type SleepFn = Rc<dyn Fn(f64) -> LocalFuture<'static, ()>>;
+pub(crate) type SleepFn = Rc<dyn Fn(f64) -> LocalFuture<'static, ()>>;
 
 #[derive(Clone)]
 pub struct Options {
@@ -84,6 +84,10 @@ pub struct Options {
 	pub sleep: SleepFn,
 	pub random: Rc<dyn Fn() -> f64>,
 	pub new_request_id: Rc<dyn Fn() -> String>,
+	/// The agent this client acts for, as `frame.agent` on every call (src/remote.ts `agent`): only a connection with
+	/// the agentHost role may (the agent host of a phone, docs/m1-mobile.en.md); the space then sees the principal
+	/// {peerId, agentId}.
+	pub agent: Option<String>,
 }
 
 impl Default for Options {
@@ -100,6 +104,7 @@ impl Default for Options {
 			sleep: Rc::new(|ms: f64| Box::pin(tokio::time::sleep(Duration::from_secs_f64(ms.max(0.0) / 1000.0))) as LocalFuture<'static, ()>),
 			random: Rc::new(random_unit),
 			new_request_id: Rc::new(default_request_id),
+			agent: None,
 		}
 	}
 }
@@ -205,6 +210,12 @@ impl RemoteSpace {
 	async fn send(&self, mut call: Json, exhausted: Option<(&RequestRef, &str)>, end: Option<Instant>) -> Result<Json, Error> {
 		if let Some(space) = &self.o.space {
 			insert(&mut call, "space", Json::from(space.as_str()));
+		}
+		let method = call.get("method").and_then(Json::as_str).unwrap_or("");
+		if let Some(agent) = self.o.agent.as_deref().filter(|_| !["challenge", "prove", "enroll", "enrollStatus"].contains(&method)) {
+			let mut frame = call.get("frame").filter(|f| f.as_object().is_some()).cloned().unwrap_or_else(|| Json::Object(Default::default()));
+			insert(&mut frame, "agent", Json::from(agent));
+			insert(&mut call, "frame", frame);
 		}
 		let target = call.get("request").or_else(|| call.get("args").and_then(|a| a.get("targetRequest"))).and_then(RequestRef::of);
 		let text = call.to_json_text();

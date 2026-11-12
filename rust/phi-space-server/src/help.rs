@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 pub const ALIAS: &str = "social-swarm";
 /// retention.ts `SWARM_CLAIM_RESULT_MS`.
-pub const CLAIM_RESULT_MS: f64 = 15.0 * 60_000.0;
+pub(crate) const CLAIM_RESULT_MS: f64 = 15.0 * 60_000.0;
 const DEFAULT_MAX_ENTRIES: f64 = 20_000.0;
 const MIN_KEEP_POSTS: usize = 20;
 /// The author id of the operator's own posts: never purged, nor are the replies under them.
@@ -216,7 +216,12 @@ pub fn purge(service: &mut Service, cfg: Retention) -> R<Option<String>> {
 					continue; // the newest node never goes (MIN_KEEP_POSTS); a neighbour that goes too is not relinked
 				}
 				let Some(at) = s.state.entries.iter().position(|e| e.id == *newer) else { return Err(error("Error", "history chain changed")) };
-				s.state.entries.get_mut(at).fields.insert("next", older.as_str().into());
+				let e = s.state.entries.get_mut(at);
+				e.fields.insert("next", older.as_str().into());
+				// the byte tally of the record follows its fields (retention.ts)
+				if e.size.is_some() {
+					e.size = Some(Json::Object(e.fields.clone()).json_bytes() as f64);
+				}
 			}
 			s.touch(now);
 			Ok(n)
@@ -245,11 +250,4 @@ fn stringify(v: &Json) -> String {
 	}
 }
 /// JavaScript truthiness of a JSON value.
-fn truthy(v: &Json) -> bool {
-	match v {
-		Json::Null | Json::Bool(false) => false,
-		Json::Number(n) => *n != 0.0 && !n.is_nan(),
-		Json::String(s) => !s.is_empty(),
-		_ => true,
-	}
-}
+fn truthy(v: &Json) -> bool { phi_json::truthy(Some(v)) }

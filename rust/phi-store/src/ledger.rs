@@ -20,7 +20,7 @@ pub struct StoredDoc {
 }
 
 /// The order of each array part's records of one document, by part and record id.
-pub type Ords = HashMap<String, HashMap<String, i64>>;
+pub(crate) type Ords = HashMap<String, HashMap<String, i64>>;
 
 fn doc_key(key: Option<&str>) -> &str { key.unwrap_or("") }
 fn doc_id(kind: &str, key: Option<&str>) -> String { format!("{kind}\u{0}{}", doc_key(key)) }

@@ -128,3 +128,19 @@ for(const backend of BACKENDS)test(`${backend}: admin commands reject alias targ
  assert.equal((await snapshotSpace(host,sid,ctx))!.adminMaintenance,undefined);
  }finally{await home.dispose();}
 });
+
+for(const backend of BACKENDS)test(`${backend}: an erasure that removes events from the outbox counts the outbox anew`,async()=>{
+ // both cores kept the tally of the outbox high after the registrations phase removed events (rust-space-analysis B4)
+ const home=new PersistentHome(backend);try{
+ const host=await home.open(),sid=(await host.commit(tx=>createSpace(tx,'outbox',1000),ctx)).spaceId,p={peerId:'gone'},q={peerId:'stays'};
+ const admin=new DataAdminController({host,ctx,assertAuthority:async()=>{},authorize:async()=>{},now:()=>1002});
+ await host.commit(async tx=>{const s=await spaceDoc(tx,sid,1000);
+  core.notify(s,1000,{type:'Note'},null,core.FOREVER,null,principalId(p));core.notify(s,1000,{type:'Note'},null,core.FOREVER,null,principalId(q));
+  core.write(s,1000,{type:'Note',fields:{n:1}},null,core.FOREVER);core.write(s,1000,{type:'Note',fields:{n:2}},null,core.FOREVER);
+  assert.equal(s.outbox.length,4,'two events for each');},ctx);
+ await admin.execute('erase-outbox','deletePrincipal',sid,'admin',p);
+ const s=(await snapshotSpace(host,sid,ctx))!;
+ assert.equal(s.outbox.length,2,'only the events of the one who stays');
+ assert.equal(core.stats(s,1002).bytes!.outbox,Buffer.byteLength(JSON.stringify(s.outbox)),'the tally is the outbox as it is');
+ }finally{await home.dispose();}
+});

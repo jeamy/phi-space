@@ -9,10 +9,10 @@ use phi_json::{digest_json, hex, obj, text, Json, Object, FOREVER};
 
 fn permission(m: &str) -> crate::space::CoreError { error("PermissionError", m) }
 fn exhausted(m: &str) -> crate::space::CoreError { error("ResourceExhausted", m) }
-fn num(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
+use phi_json::num_or_nan as num;
 
 /// `runRecoveryIdOf`: the restore ID itself if it is a valid gate ID, else a stable hash of it.
-pub fn run_recovery_id_of(recovery_id: &str) -> String {
+pub(crate) fn run_recovery_id_of(recovery_id: &str) -> String {
 	let b = recovery_id.as_bytes();
 	let fine = !b.is_empty() && b.len() <= 96 && b[0].is_ascii_alphanumeric() && b.iter().all(|c| c.is_ascii_alphanumeric() || b"._:-".contains(c));
 	if fine { recovery_id.to_owned() } else { format!("restore-{}", &hex(&<sha2::Sha256 as sha2::Digest>::digest(recovery_id.as_bytes()))[..32]) }

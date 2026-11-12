@@ -56,8 +56,6 @@ impl Netbird {
 		Ok(Rc::new(Netbird { url: url.trim_end_matches('/').to_owned(), token: token.to_owned(), cache_ms, timeout_ms: 4_000, ca: RefCell::default(), now, by_ip: RefCell::default(), fetched_at: Cell::new(f64::NEG_INFINITY), inflight: RefCell::default(), requests: Cell::new(0) }))
 	}
 
-	pub fn cache_ms(&self) -> f64 { self.cache_ms }
-
 	/// A fresh list now.
 	pub async fn refresh(self: &Rc<Self>) -> Result<(), String> {
 		let running = self.inflight.borrow().clone();
@@ -255,7 +253,7 @@ pub struct Gate {
 }
 
 /// One connection through the gate: what `Connection` is there, with the identity of `GateIdentity`.
-pub struct GateSession {
+pub(crate) struct GateSession {
 	id: u64,
 	gate: Rc<Gate>,
 	peer_id: String,
@@ -768,7 +766,7 @@ mod tests {
 	#[test]
 	fn the_cache_time_stays_within_a_minute() {
 		let now: Now = Rc::new(|| 0.0);
-		assert_eq!(Netbird::new("http://x", "t", Some(600_000.0), Rc::clone(&now)).map(|d| d.cache_ms()), Ok(60_000.0));
+		assert_eq!(Netbird::new("http://x", "t", Some(600_000.0), Rc::clone(&now)).map(|d| d.cache_ms), Ok(60_000.0));
 		assert!(Netbird::new("http://x", "t", Some(0.0), now).is_err());
 	}
 

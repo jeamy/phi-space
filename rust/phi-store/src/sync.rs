@@ -49,16 +49,13 @@ fn name(v: Option<&Json>) -> bool {
 		!b.is_empty() && b.len() <= 128 && b[0].is_ascii_alphanumeric() && b.iter().all(|c| c.is_ascii_alphanumeric() || b"._-".contains(c))
 	})
 }
-fn reason_like(s: &str) -> bool {
-	let b = s.as_bytes();
-	!b.is_empty() && b.len() <= 128 && b[0].is_ascii_alphanumeric() && b.iter().all(|c| c.is_ascii_alphanumeric() || b"._:-".contains(c))
-}
+fn reason_like(id: &str) -> bool { phi_json::ID_128.accepts(id) }
 /// `Number.isSafeInteger(v) && v >= 0`.
 fn integer(v: Option<&Json>) -> Option<f64> {
 	v.and_then(Json::as_f64).filter(|x| x.fract() == 0.0 && (0.0..=9_007_199_254_740_991.0).contains(x))
 }
-pub(crate) fn num(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
-pub(crate) fn text<'a>(v: &'a Json, k: &str) -> &'a str { v.get(k).and_then(Json::as_str).unwrap_or("") }
+pub(crate) use phi_json::num_or_nan as num;
+pub(crate) use phi_json::text_or_empty as text;
 
 /// `durability` absent means sync.
 pub fn durability_of(c: &Json) -> &str { c.get("durability").and_then(Json::as_str).unwrap_or("sync") }
@@ -109,7 +106,7 @@ pub mod own {
 		parse(w.get("value")?.as_str()?).ok().map(|v| (v, marker_key(space_id)))
 	}
 	pub fn touches(w: &Json) -> bool { w.get("t").and_then(Json::as_str) == Some("meta") && w.get("key").and_then(Json::as_str).is_some_and(|k| k.starts_with(MARKER_PREFIX)) }
-	pub fn bootstrap_write(w: &Json) -> bool { matches!(w.get("t").and_then(Json::as_str), Some("doc" | "part")) }
+	pub(crate) fn bootstrap_write(w: &Json) -> bool { matches!(w.get("t").and_then(Json::as_str), Some("doc" | "part")) }
 }
 
 #[derive(Default)]

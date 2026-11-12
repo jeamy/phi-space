@@ -21,10 +21,7 @@ pub type Authorize = Box<dyn Fn(&str, &str, &str) -> R<()>>;
 pub type AuthorityCheck = Box<dyn Fn() -> R<()>>;
 
 fn units(t: &str) -> usize { t.encode_utf16().count() }
-fn valid_id(id: &str) -> bool {
-	let b = id.as_bytes();
-	!b.is_empty() && b.len() <= 128 && b[0].is_ascii_alphanumeric() && b.iter().all(|c| c.is_ascii_alphanumeric() || b"._:-".contains(c))
-}
+fn valid_id(id: &str) -> bool { phi_json::ID_128.accepts(id) }
 
 /// `commandHash`: the hash of what a command does; its id and identifiers checked first.
 pub fn command_hash(id: &str, kind: &str, space_id: &str, admin: &str, input: &Json) -> R<String> {
@@ -41,7 +38,7 @@ pub fn command_hash(id: &str, kind: &str, space_id: &str, admin: &str, input: &J
 }
 
 /// `validPrincipal` (src/mailbox.ts): a peer of at most 128 characters, an agent likewise, nothing else.
-pub fn valid_principal(p: &Json) -> bool {
+pub(crate) fn valid_principal(p: &Json) -> bool {
 	let Some(o) = p.as_object() else { return false };
 	let part = |v: Option<&Json>| v.and_then(Json::as_str).is_some_and(|t| !t.is_empty() && units(t) <= 128);
 	part(o.get("peerId")) && (!o.contains_key("agentId") || part(o.get("agentId"))) && o.keys().all(|k| k == "peerId" || k == "agentId")

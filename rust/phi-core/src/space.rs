@@ -13,8 +13,9 @@
 //! running commit, its byte budget and the expiry watermark. The watermark is not only a speed-up: `nextExpiry` answers
 //! from it, and it can be stale low.
 //!
-//! Unsupported document fields (negative claims, for one) are refused with `NotPorted` before operations change them.
-//! Member admission, completion profiles, RunGates and what a restore leaves (`restore.rs`) are supported.
+//! Document fields this core does not know are refused with `NotPorted` before operations change them (`assert_ported`,
+//! an allowlist). Member admission, completion profiles, RunGates, negative claims, a principal deletion's fence and what
+//! a restore leaves (`restore.rs`) are supported.
 use phi_json::num_of;
 use crate::state::{EntryRec, RegRec, SpaceState, TxnRec, WaiterRec};
 use crate::stream::{self, Collected, Open};
@@ -22,7 +23,7 @@ use phi_json::{number_text, obj, Json, Object, FOREVER};
 
 /// Lease.ANY: the space picks the duration.
 pub const ANY: f64 = -1.0;
-pub const DEFAULT_LEASE_MS: f64 = 3_600_000.0;
+pub(crate) const DEFAULT_LEASE_MS: f64 = 3_600_000.0;
 /// Kind, ids, sequence, target, count of an event.
 const EVENT_OVERHEAD: f64 = 256.0;
 /// The envelope of a change page: stream id, revisions, flags.
@@ -86,15 +87,7 @@ fn is_integer(v: Option<&Json>) -> Option<f64> {
 }
 /// JavaScript's `.length` of a string: UTF-16 code units.
 fn js_len(s: &str) -> f64 { s.encode_utf16().count() as f64 }
-/// JavaScript truthiness.
-pub fn truthy(v: Option<&Json>) -> bool {
-	match v {
-		None | Some(Json::Null) | Some(Json::Bool(false)) => false,
-		Some(Json::Number(x)) => *x != 0.0 && !x.is_nan(),
-		Some(Json::String(s)) => !s.is_empty(),
-		Some(_) => true,
-	}
-}
+pub use phi_json::truthy;
 
 macro_rules! limits {
 	($($field:ident $key:literal = $default:expr),* $(,)?) => {
@@ -669,6 +662,18 @@ impl Space {
 		if self.state.rest.get("archived").is_some() { Err(permission("the Space is archived; reactivate it first")) } else { Ok(()) }
 	}
 
+	/// The first failed read of the claims on the disk since the last look (SQLITE_BUSY, I/O, a row that does not parse):
+	/// `rpc.claims` and the historical claims of a restore (`restoredClaims`) alike; both are drained. A commit that
+	/// read them fails with it (phi-store `start_commit`), and so does a read without a commit (`pollOperation`).
+	pub fn claim_failure(&self) -> Option<String> {
+		let rpc = match self.state.rpc.as_ref().map(|r| &r.claims) {
+			Some(crate::state::Claims::Disk(d)) => d.take_failure(),
+			_ => None,
+		};
+		let restored = self.restored_disk.as_ref().and_then(|d| d.take_failure());
+		rpc.or(restored)
+	}
+
 	/// Refuses a space with parts the Rust core does not port yet. An allowlist: what is not named here is refused.
 	pub fn assert_ported(&self) -> Result<()> {
 		for (k, v) in self.state.rest.iter() {
@@ -791,7 +796,7 @@ impl Space {
 	}
 
 	/// Bytes of all entries' fields.
-	pub(crate) fn entry_bytes(&self) -> f64 { self.state.entries.total_bytes(|e| e.size.unwrap_or_else(|| bytes(&Json::Object(e.fields.clone())))) }
+	pub(crate) fn entry_bytes(&self) -> f64 { self.state.entries.total_bytes() }
 	/// The entries a walk of all matches of `tmpl` has to look at, in order.
 	fn candidates<'a>(&'a self, tmpl: &Template) -> Box<dyn Iterator<Item = &'a EntryRec> + 'a> {
 		let entries = &self.state.entries;

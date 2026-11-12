@@ -148,3 +148,23 @@ fn a_read_of_the_claims_that_fails_is_noted_and_does_not_end_the_process() {
 	assert!(broken.take_failure().is_some_and(|m| m.contains("reading the claims")));
 	assert!(broken.take_failure().is_none(), "once");
 }
+
+#[test]
+fn a_failed_read_of_the_restored_claims_fails_the_commit_that_made_it() {
+	// the historical claims of a restore are a map part on the disk as rpc.claims are: a read that fails answers empty
+	// (a replay would look fresh, an erasure page done), so the commit that made it must not stand
+	let d = dir("restored-read");
+	std::fs::write(d.join("no-store"), b"x".repeat(8192)).unwrap();
+	let broken = std::sync::Arc::new(SqliteClaims::open(&d.join("no-store"), "k", "k", "restoredClaims").unwrap());
+	let mut h = host(&d.join("store.sqlite"), WriterOptions::default());
+	h.space.restored_disk = Some(phi_core::DiskClaims::new(broken));
+	let before = h.space.state.next_id;
+	let got = h.start_commit(|s| {
+		s.write(1000.0, &obj! { "type" => "Task", "fields" => obj! {} }, None, Some(&Json::Number(FOREVER)), None)?;
+		Ok(s.restored_disk.as_ref().expect("set").get("historical"))
+	}).unwrap();
+	let e = got.err().expect("the commit fails");
+	assert!(e.message.contains("reading the claims"), "{}", e.message);
+	assert_eq!(h.space.state.next_id, before, "rolled back");
+	assert!(h.start_commit(|_| Ok(())).unwrap().is_ok(), "the failure was the one commit's");
+}

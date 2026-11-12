@@ -34,11 +34,7 @@ pub fn run(config: &str, request: &str, store: Option<&str>) {
 		// the main store: its harness is the host's store, its sibling Spaces follow
 		Some(file) => {
 			let m = c.get("mainSync").filter(|m| !m.is_null()).unwrap_or_else(|| fail("the config has no mainSync"));
-			let mut o = m.as_object().cloned().unwrap_or_default();
-			o.insert("alias", Json::from("control-main"));
-			o.insert("spaceId", m.get("genesis").and_then(|g| g.get("spaceId")).cloned().unwrap_or(Json::Null));
-			let siblings: Vec<String> = m.get("siblings").and_then(Json::as_array).map_or(vec![], |s| s.iter().filter_map(Json::as_str).map(str::to_owned).collect());
-			(SyncSpaceConfig::from_json(&Json::Object(o)).unwrap_or_else(|e| fail(e)), std::path::PathBuf::from(file), siblings)
+			(crate::control_host::main_sync_config(m), std::path::PathBuf::from(file), phi_json::names(m.get("siblings")))
 		}
 		None => {
 			let s = c.get("syncSpaces").and_then(Json::as_array).and_then(|a| a.first()).unwrap_or_else(|| fail("the config has no primary/sync Space"));

@@ -11,7 +11,7 @@
 //! the historical claims), read by the modules that own it.
 use phi_json::{strings, Json, Object};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 /// A state that is not the TypeScript document shape.
@@ -148,13 +148,19 @@ impl PartialEq for Entries {
 	fn eq(&self, other: &Self) -> bool { self.items == other.items && self.log == other.log }
 }
 
-/// What reads worked out from the records, kept until the next change (`entrySums`, `typeBuckets` of core.ts).
+/// What reads worked out from the records, kept across changes as far as they allow (`entrySums`, `typeBuckets` of
+/// core.ts). A record's `types` and its position change only by a push, a removal or an undo, never through `get_mut`.
 #[derive(Clone, Debug, Default)]
 struct Memo {
+	/// The sum of `record_bytes` over the records, but for those at `open` (handed out by `get_mut` since).
 	bytes: Option<f64>,
+	open: HashSet<usize>,
 	/// The positions of the records of a type, in order; a template's type matches subtypes.
 	types: HashMap<String, Rc<[usize]>>,
 }
+
+/// What a record counts in a space's entry bytes: its `size`, or its fields as JSON.
+pub fn record_bytes(e: &EntryRec) -> f64 { e.size.unwrap_or_else(|| Json::Object(e.fields.clone()).json_bytes() as f64) }
 
 /// One change of the entries, with what undoes it.
 #[derive(Clone, Debug, PartialEq)]
@@ -169,13 +175,16 @@ pub enum EntryUndo {
 
 impl Entries {
 	fn changed(&mut self) { *self.memo.get_mut() = Memo::default(); }
-	/// The sum of `size` over all records.
-	pub fn total_bytes(&self, size: impl Fn(&EntryRec) -> f64) -> f64 {
-		if let Some(known) = self.memo.borrow().bytes {
-			return known;
-		}
-		let total = self.items.iter().map(size).sum();
-		self.memo.borrow_mut().bytes = Some(total);
+	/// The sum of `record_bytes` over all records.
+	pub fn total_bytes(&self) -> f64 {
+		let mut m = self.memo.borrow_mut();
+		let total = match m.bytes {
+			Some(known) => known + m.open.iter().map(|&i| record_bytes(&self.items[i])).sum::<f64>(),
+			None => self.items.iter().map(record_bytes).sum(),
+		};
+		debug_assert_eq!(total, self.items.iter().map(record_bytes).sum::<f64>(), "the memo of the entry bytes");
+		m.bytes = Some(total);
+		m.open.clear();
 		total
 	}
 	/// The positions of the records of `type_`, in order.
@@ -188,7 +197,12 @@ impl Entries {
 		found
 	}
 	pub fn push(&mut self, e: EntryRec) {
-		self.changed();
+		let m = self.memo.get_mut();
+		// appended: no position moves, only the buckets of its own types change
+		m.types.retain(|t, _| !e.types.iter().any(|x| x == t));
+		if let Some(b) = m.bytes.as_mut() {
+			*b += record_bytes(&e);
+		}
 		if let Some(log) = &mut self.log {
 			log.push(EntryUndo::Pushed(e.id.clone()));
 		}
@@ -217,9 +231,14 @@ impl Entries {
 			}
 		});
 	}
-	/// The record at `i`, to change.
+	/// The record at `i`, to change: its fields, lease and marks, not its types (which the type buckets rely on).
 	pub fn get_mut(&mut self, i: usize) -> &mut EntryRec {
-		self.changed();
+		let m = self.memo.get_mut();
+		if let Some(b) = m.bytes.as_mut() {
+			if m.open.insert(i) {
+				*b -= record_bytes(&self.items[i]); // counted again as it then is
+			}
+		}
 		if let Some(log) = &mut self.log {
 			log.push(EntryUndo::Set(i, self.items[i].clone()));
 		}
@@ -534,7 +553,7 @@ impl MemoryClaims {
 	pub fn len(&self) -> usize { self.map.len() }
 	pub fn is_empty(&self) -> bool { self.map.is_empty() }
 	pub fn iter(&self) -> impl Iterator<Item = (&str, &Json)> { self.order.values().map(|k| (k.as_str(), &self.map[k].1)) }
-	pub fn to_object(&self) -> Object { self.iter().map(|(k, v)| (k, v.clone())).collect() }
+	pub(crate) fn to_object(&self) -> Object { self.iter().map(|(k, v)| (k, v.clone())).collect() }
 }
 impl From<Object> for MemoryClaims {
 	fn from(o: Object) -> Self {
@@ -610,18 +629,13 @@ impl DiskClaims {
 	}
 	/// From a map in memory that commit `written` is writing to the disk now (`DiskMap.adopt`): every record held until
 	/// that commit is durable.
-	pub fn adopt(source: std::sync::Arc<dyn ClaimSource>, from: &MemoryClaims, written: u64) -> DiskClaims {
-		let mut d = DiskClaims { source, held: vec![], held_index: HashMap::new(), stamp: written, enumerations: Default::default(), blind_until: Some(written) };
-		for (k, v) in from.iter() {
-			d.write(k, Some(v.clone()));
-		}
-		d
-	}
+	pub fn adopt(source: std::sync::Arc<dyn ClaimSource>, from: &MemoryClaims, written: u64) -> DiskClaims { DiskClaims::adopt_records(source, from.iter(), written) }
 	/// `adopt` of a map of records in memory (the historical claims a restore left).
-	pub fn adopt_map(source: std::sync::Arc<dyn ClaimSource>, from: &Object, written: u64) -> DiskClaims {
+	pub fn adopt_map(source: std::sync::Arc<dyn ClaimSource>, from: &Object, written: u64) -> DiskClaims { DiskClaims::adopt_records(source, from.iter(), written) }
+	fn adopt_records<'a, K: AsRef<str>>(source: std::sync::Arc<dyn ClaimSource>, from: impl Iterator<Item = (K, &'a Json)>, written: u64) -> DiskClaims {
 		let mut d = DiskClaims { source, held: vec![], held_index: HashMap::new(), stamp: written, enumerations: Default::default(), blind_until: Some(written) };
-		for (k, v) in from.iter() {
-			d.write(k, Some(v.clone()));
+		for (k, v) in from {
+			d.write(k.as_ref(), Some(v.clone()));
 		}
 		d
 	}
@@ -823,7 +837,7 @@ impl RpcState {
 	}
 	pub fn to_json(&self) -> Json { self.to_json_with(false) }
 	/// `head`: with empty claims and generations (rows of their own in a store).
-	pub fn to_json_with(&self, head: bool) -> Json { self.to_json_parts(head, head) }
+	pub(crate) fn to_json_with(&self, head: bool) -> Json { self.to_json_parts(head, head) }
 	fn to_json_parts(&self, no_generations: bool, no_claims: bool) -> Json {
 		let mut o = Object::new();
 		o.insert("generations", Json::Object(if no_generations { Object::new() } else { self.generations.clone() }));
@@ -838,7 +852,7 @@ impl RpcState {
 }
 
 /// One operation of a change batch (stream.ts `Op`). Kept as its JSON: it is written once and only ever read back.
-pub type StreamOp = Json;
+pub(crate) type StreamOp = Json;
 
 /// A batch of the change stream: one per commit that changed what a plain reader sees.
 #[derive(Clone, Debug, PartialEq)]
@@ -890,7 +904,7 @@ impl StreamState {
 	}
 	pub fn to_json(&self) -> Json { self.to_json_with(false) }
 	/// `head`: with an empty log (the batches are rows of their own in a store).
-	pub fn to_json_with(&self, head: bool) -> Json {
+	pub(crate) fn to_json_with(&self, head: bool) -> Json {
 		let mut o = Object::new();
 		o.insert("rev", Json::Number(self.rev));
 		o.insert("floor", Json::Number(self.floor));

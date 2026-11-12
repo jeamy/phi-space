@@ -272,4 +272,29 @@ mod tests {
 		assert_eq!(cut_text("a😀b", 3), "a😀");
 		assert_eq!(cut_text("ab", 5), "ab");
 	}
+
+	/// Answers hello and keeps every frame it was sent.
+	struct Frames(RefCell<Vec<Json>>);
+	impl Transport for Frames {
+		fn request(&self, text: String) -> LocalFuture<'_, Result<String, String>> {
+			Box::pin(async move {
+				self.0.borrow_mut().push(parse(&text).map_err(|e| e.to_string())?);
+				Ok(obj! { "ok" => true, "result" => obj! { "principal" => "p", "features" => Json::Array(vec![]), "limits" => obj! { "maxFrameBytes" => 262_144.0 } } }.to_json_text())
+			})
+		}
+	}
+
+	#[test]
+	fn an_agent_goes_on_every_call_as_frame_agent() {
+		run(async {
+			let t = Rc::new(Frames(RefCell::new(vec![])));
+			let r = RemoteSpace::new(t.clone() as Rc<dyn Transport>, Options { agent: Some("agent-1".to_owned()), ..Options::default() });
+			r.info().await.unwrap();
+			let sent = t.0.borrow()[0].clone();
+			assert_eq!(sent.get("frame").and_then(|f| f.get("agent")).and_then(Json::as_str), Some("agent-1"), "{}", sent.to_json_text());
+			let t2 = Rc::new(Frames(RefCell::new(vec![])));
+			RemoteSpace::new(t2.clone() as Rc<dyn Transport>, Options::default()).info().await.unwrap();
+			assert!(t2.0.borrow()[0].get("frame").is_none(), "no agent, no frame");
+		});
+	}
 }

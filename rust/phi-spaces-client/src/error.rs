@@ -36,8 +36,6 @@ impl Error {
 	pub fn remote(code: &str, message: impl Into<String>) -> Error { Error::Remote { code: code.to_owned(), message: message.into(), required_bytes: None } }
 	/// The protocol code of a refusal.
 	pub fn code(&self) -> Option<&str> { if let Error::Remote { code, .. } = self { Some(code) } else { None } }
-	/// The request whose outcome nobody knows.
-	pub fn unknown_request(&self) -> Option<&RequestRef> { if let Error::OutcomeUnknown { request, .. } = self { Some(request) } else { None } }
 }
 
 impl fmt::Display for Error {

@@ -19,7 +19,7 @@ use std::rc::Rc;
 
 type R<T> = Result<T, CoreError>;
 const DOC: &str = "phi-spaces.delegation-epochs";
-fn number(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN) }
+use phi_json::num_or_nan as number;
 fn positive(v: Option<&Json>) -> bool { v.and_then(Json::as_f64).is_some_and(|n| n.fract() == 0.0 && n > 0.0 && n <= FOREVER) }
 fn safe(v: Option<&Json>) -> bool { v.and_then(Json::as_f64).is_some_and(phi_json::safe_integer) }
 fn arg_hash(method: &str, args: &Json) -> R<String> { digest_json(&obj! { "method" => method, "args" => args.clone() }).map_err(|_| denied("a value that cannot be hashed")) }

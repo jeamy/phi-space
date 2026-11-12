@@ -17,6 +17,14 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 tokio = { version = "1", default-features = false, features = ["rt", "net", "io-util", "time", "sync", "signal", "macros"] }
 
+# Thin LTO and one codegen unit: the hot path crosses phi-wire → phi-service → phi-core → phi-json on every call.
+# scripts/server-probe.ts (sqlite, 8 clients, alternating): 1.62–1.83 instead of 1.96–2.05 ms server CPU per call,
+# about 16 % more calls a second; the build of phi-space-server takes 81 s instead of 35 s
+# (docs/rust-space-analysis-2026-11-12.en.md O6). No panic = "abort": a panic on the writer thread or in a task stays one.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
 # The engine's tests run every helper over the oracle's vectors and walk whole worlds: optimised in the dev profile too
 # (the regex engine unoptimised is most of their time).
 [profile.dev.package.mmo-engine]

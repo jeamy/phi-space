@@ -772,6 +772,7 @@ version = "0.0.1"
 dependencies = [
  "phi-json",
  "phi-service",
+ "phi-spaces-client",
  "phi-store",
  "tokio",
 ]

@@ -9,7 +9,7 @@ use crate::run_member::{AuthorityCheck, Pin};
 use phi_core::member::declared_supertypes;
 use phi_core::space::{error, CoreError, Space};
 use phi_core::state::SpaceState;
-use phi_json::{digest_json, obj, Json, Object};
+use phi_json::{obj, Json, Object};
 use phi_service::Service;
 use phi_store::system_random;
 use std::cell::RefCell;
@@ -19,7 +19,7 @@ type R<T> = Result<T, CoreError>;
 const JOURNAL: &str = "phi-spaces.member-transitions";
 fn migration(m: impl Into<String>) -> CoreError { error("MigrationRequired", m) }
 fn number(v: &Json, k: &str) -> f64 { v.get(k).and_then(Json::as_f64).unwrap_or(0.0) }
-fn hash(v: &Json) -> R<String> { digest_json(v).map_err(|_| routing("a value that cannot be hashed")) }
+use phi_core::routing::hash;
 fn same(a: Option<&Json>, b: Option<&Json>) -> R<bool> { Ok(hash(a.unwrap_or(&Json::Null))? == hash(b.unwrap_or(&Json::Null))?) }
 
 /// `verifyMembership`.

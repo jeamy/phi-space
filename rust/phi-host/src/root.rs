@@ -1,6 +1,7 @@
 //! The Root on a control host (src/configured-root.ts, src/root-wire.ts): the journals in the control store, the Members over proven
-//! lines, and the operations on the wire for the hosted agents of this very peer. Replicated Members, a router change, the status
-//! heartbeat and epoch notices are not carried; `check_start` refuses what would rely on them.
+//! lines, and the operations on the wire for the hosted agents of this very peer; replicated Members (their targets move with an
+//! adopted notice), a router change (`check_start`, the takeover of an earlier router's journal), the status heartbeat and the
+//! epoch notices to every active Member.
 use crate::auth::{Algorithm, KeyDirectory, PeerKey, Proof, Signer};
 use crate::boot::BootGuard;
 use crate::control::{has_admin_key, held_document, peer_key, AsyncCommands, CONTROL_SPACE};
@@ -46,7 +47,7 @@ pub const METHODS: [&str; 10] = ["rootWrite", "rootRead", "rootTake", "rootBegin
 const KEPT: [&str; 8] = ["FederationPending", "FederationUnavailable", "RoutingConflict", "MemberDrained", "CapacityUnavailable", "NoCapableMember", "MergeTypeNotExclusive", "ResultExpired"];
 
 fn blocked(m: impl Into<String>) -> CoreError { error("BootBlocked", m) }
-fn empty_routing() -> Json { obj! { "policy" => Json::Null, "members" => phi_json::Object::new() } }
+use crate::federated_space::empty_routing;
 
 struct StoreKeys<'a> {
 	store: RefCell<&'a mut phi_store::Store>,
@@ -627,12 +628,12 @@ pub struct Root {
 }
 
 /// The run commands (`runCommands`).
-pub const RUN_COMMANDS: [&str; 10] = ["startRun", "pauseRun", "resumeRun", "stopRun", "reconcileRun", "resolveRunRecovery", "listRuns", "runStatus", "scheduleRun", "exportRun"];
-pub const DATA_ADMIN_COMMANDS: [&str; 2] = ["purgeTasks", "deletePrincipal"];
+pub(crate) const RUN_COMMANDS: [&str; 10] = ["startRun", "pauseRun", "resumeRun", "stopRun", "reconcileRun", "resolveRunRecovery", "listRuns", "runStatus", "scheduleRun", "exportRun"];
+pub(crate) const DATA_ADMIN_COMMANDS: [&str; 2] = ["purgeTasks", "deletePrincipal"];
 /// What a data-admin command answers as a failed result (`IllegalArgumentError | TransactionError | LimitError | PermissionError | UnknownSpaceError`).
 const DATA_ADMIN_REFUSALS: [&str; 10] = ["IllegalArgumentError", "UniqueConflict", "TransactionError", "CompletionViolation", "RunGateConflict", "RunBusy", "LimitError", "ResourceExhausted", "PermissionError", "UnknownSpaceError"];
 /// The membership commands of the supervisor.
-pub const COMMANDS_OF_ROOT: [&str; 4] = ["addMember", "drain", "removeMember", "migrateProfiles"];
+pub(crate) const COMMANDS_OF_ROOT: [&str; 4] = ["addMember", "drain", "removeMember", "migrateProfiles"];
 impl AsyncCommands for Rc<Root> {
 	fn kinds(&self) -> &[&'static str] { &self.kinds }
 	fn alert_sources(&self) -> R<(Vec<Json>, Vec<Json>)> {
@@ -922,7 +923,7 @@ impl Root {
 
 	/// v3 5.3.1 step 5: adopts every published ReplicaConfigNotice in version order, before the probes; the register
 	/// decides, the signer is the key provisioned for the issuing host. Refusals are reported, not fatal.
-	pub async fn adopt_notices(&self) -> R<(usize, Vec<String>)> {
+	pub(crate) async fn adopt_notices(&self) -> R<(usize, Vec<String>)> {
 		let env = &self.env;
 		let c = &env.0.c;
 		env.authorize()?;

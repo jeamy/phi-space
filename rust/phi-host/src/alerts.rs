@@ -24,10 +24,7 @@ fn string(v: Option<&Json>) -> String {
 	}
 }
 /// `slice(0, n)` of a JavaScript string.
-fn cut(t: &str, n: usize) -> String { String::from_utf16_lossy(&t.encode_utf16().take(n).collect::<Vec<_>>()) }
-
-/// `collectAlerts` of the hosts' reports alone (a host without runs or worker assignments).
-pub fn collect_alerts(s: &Space, now: f64) -> R<Json> { collect_alerts_with(s, now, &[], &[]) }
+use phi_json::js_slice as cut;
 
 /// `appliedWorkers`: the newest report per host of the Capability entries of the control Space, with its age.
 pub fn applied_workers(s: &Space, now: f64) -> R<Vec<(String, f64, Json)>> {
@@ -52,7 +49,7 @@ fn js(n: f64) -> String { if n.is_nan() { "NaN".into() } else { phi_json::number
 /// `Math.round`.
 fn round(x: f64) -> f64 { (x + 0.5).floor() }
 /// JavaScript truthiness.
-fn truthy(v: Option<&Json>) -> bool { phi_core::space::truthy(v) }
+use phi_json::truthy;
 
 /// `collectAlerts`: `runs` are the newest run views (`RunController.list(200)`), `assignments` the desired worker
 /// assignments (`WorkerAssignments.list().assignments`).
@@ -80,7 +77,7 @@ pub fn collect_alerts_with(s: &Space, now: f64, runs: &[Json], assignments: &[Js
 			let errors = p.get("errors").and_then(Json::as_object).map_or(vec![], |e| e.iter().map(|(m, x)| format!("{m}: {}", string(Some(x)))).collect::<Vec<_>>());
 			if !errors.is_empty() && state != "pauseIncomplete" {
 				let revision = js(number_of(p.get("revision")));
-				push(false, format!("run:{subject}:errors:{revision}"), "run", &subject, format!("{} r{revision}: {}", string(p.get("kind")), cut(&errors.join("; "), 300)));
+				push(false, format!("run:{subject}:errors:{revision}"), "run", &subject, format!("{} r{revision}: {}", string(p.get("kind")), cut(&errors.join("; "), MAX_ERROR)));
 			}
 		}
 	}

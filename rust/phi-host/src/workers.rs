@@ -16,10 +16,7 @@ const MAX_ASSIGNMENTS: usize = 1024;
 const MAX_COMMANDS: usize = 1024;
 
 /// `ID`: `/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,95}$/`.
-pub(crate) fn valid_id(id: &str) -> bool {
-	let mut c = id.chars();
-	c.next().is_some_and(|f| f.is_ascii_alphanumeric()) && id.chars().count() <= 96 && c.all(|x| x.is_ascii_alphanumeric() || "._:-".contains(x))
-}
+pub(crate) fn valid_id(id: &str) -> bool { phi_json::ID_96.accepts(id) }
 /// `String(v)` of JavaScript; `undefined` (a missing value) is the empty string here, as in `String(a.x ?? "")`.
 pub(crate) fn js_string(v: Option<&Json>) -> String {
 	match v {
@@ -42,7 +39,7 @@ fn js_number_text(n: f64) -> String {
 	if n.is_nan() { "NaN".into() } else if n.is_infinite() { if n > 0.0 { "Infinity".into() } else { "-Infinity".into() } } else { number_text(n) }
 }
 /// `Number(v)` of JavaScript; a missing value is NaN.
-pub(crate) fn js_number(v: Option<&Json>) -> f64 {
+pub fn js_number(v: Option<&Json>) -> f64 {
 	match v {
 		None => f64::NAN,
 		Some(Json::Null) => 0.0,
@@ -70,7 +67,7 @@ pub(crate) fn js_number(v: Option<&Json>) -> f64 {
 	}
 }
 /// `slice(0, n)` of a JavaScript string.
-pub(crate) fn cut(t: &str, n: usize) -> String { String::from_utf16_lossy(&t.encode_utf16().take(n).collect::<Vec<_>>()) }
+pub(crate) use phi_json::js_slice as cut;
 /// A refusal the command adapters turn into a failed result: `IllegalArgumentError | TransactionError | LimitError` and their subclasses.
 pub(crate) fn failed_result(e: CoreError) -> R<Json> {
 	match e.class {
@@ -223,5 +220,21 @@ pub fn worker_commands<E: RouterEnv>(w: &WorkerAssignments<E>, applied: Option<&
 			w.set(command_id, &a).or_else(failed_result)
 		}
 		_ => Err(illegal(format!("unknown worker command {kind}"))),
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::js_number;
+	use phi_json::parse;
+
+	#[test]
+	fn number_as_javascript_takes_it() {
+		let n = |t: &str| js_number(Some(&parse(t).unwrap()));
+		for (text, want) in [(r#""inf""#, f64::NAN), (r#""nan""#, f64::NAN), (r#""Infinity""#, f64::INFINITY), (r#"" -Infinity ""#, f64::NEG_INFINITY), (r#"" 0x10 ""#, 16.0), (r#""0b""#, f64::NAN), (r#""\u00851""#, f64::NAN), (r#""\ufeff2""#, 2.0), (r#""""#, 0.0), ("[]", 0.0), ("[7]", 7.0), ("[1,2]", f64::NAN), ("null", 0.0), ("true", 1.0), ("{}", f64::NAN), (r#""1e3""#, 1000.0), (r#""1_0""#, f64::NAN)] {
+			let got = n(text);
+			assert!(got == want || (got.is_nan() && want.is_nan()), "Number({text}) = {got}, not {want}");
+		}
+		assert!(js_number(None).is_nan());
 	}
 }

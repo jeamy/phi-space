@@ -53,11 +53,7 @@ pub trait RootIo {
 fn hash(v: &Json) -> R<String> { digest_json(v).map_err(|_| error("TypeError", "a value that cannot be hashed")) }
 fn canonical(v: Option<&Json>) -> Option<String> { v.and_then(|v| v.canonical().ok()) }
 fn members(state: &Json) -> Vec<&Json> { state.get("members").and_then(Json::as_object).map_or(vec![], |m| m.iter().map(|(_, v)| v).collect()) }
-fn set(v: &mut Json, k: &str, x: impl Into<Json>) {
-	if let Json::Object(o) = v {
-		o.insert(k, x.into());
-	}
-}
+use phi_json::set;
 
 /// `reference`: the original request a resolution, a poll or a cancel refers to.
 pub fn reference(s: &Json) -> R<Json> {
@@ -88,7 +84,7 @@ pub fn receipt(s: &Json, outcome: &str, result: Option<Json>, evidence: Option<&
 }
 
 /// `checkedResolution`: an answer counts only for the request it names.
-pub fn checked_resolution(s: &Json, v: &Json) -> R<Json> {
+pub(crate) fn checked_resolution(s: &Json, v: &Json) -> R<Json> {
 	let review = |why: &str| receipt(s, "needsReview", None, Some(why));
 	let r = reference(s)?;
 	if !matches!(v, Json::Object(_)) {
@@ -135,7 +131,7 @@ fn checked_witness(s: &Json, w: &Json) -> R<Json> {
 
 /// `delegationForCall`, signed.
 #[allow(clippy::too_many_arguments)]
-pub fn delegation_for_call(call: &Json, principal: &Json, lease: &Json, policy_version: &Json, space_id: &str, primary_epoch: &Json, grant: &Json, target_request: Option<&Json>, now: f64, replica_config_version: Option<&Json>, fresh_id: &str, signer: &Signer, key_id: &str) -> R<Json> {
+pub(crate) fn delegation_for_call(call: &Json, principal: &Json, lease: &Json, policy_version: &Json, space_id: &str, primary_epoch: &Json, grant: &Json, target_request: Option<&Json>, now: f64, replica_config_version: Option<&Json>, fresh_id: &str, signer: &Signer, key_id: &str) -> R<Json> {
 	let null = Json::Null;
 	let args = call.get("args").and_then(Json::as_object).cloned().unwrap_or_default();
 	let (method, domain) = phi_service::rpc_domain(text(call, "method").unwrap_or(""), &args, principal);

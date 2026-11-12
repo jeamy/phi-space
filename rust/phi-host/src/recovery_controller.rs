@@ -13,16 +13,9 @@ use std::rc::Rc;
 
 pub const JOBS: &str = "phi-spaces.recovery-jobs";
 
-fn version(r: &Json) -> Option<f64> { r.get("version").and_then(Json::as_f64) }
-fn value(r: &Json) -> Json { r.get("value").cloned().unwrap_or(Json::Null) }
+use crate::recovery::{value, version};
 fn num(v: &Json, k: &str) -> Option<f64> { v.get(k).and_then(Json::as_f64) }
-fn with(rec: &Json, changes: &[(&str, Json)]) -> Json {
-	let mut o = rec.as_object().cloned().unwrap_or_default();
-	for (k, v) in changes {
-		o.insert(*k, v.clone());
-	}
-	Json::Object(o)
-}
+use phi_json::with;
 fn canonical(v: Option<&Json>) -> String { v.unwrap_or(&Json::Null).canonical().unwrap_or_default() }
 fn exhausted(m: &str) -> RecoveryError { blocked(m) }
 /// `reserve`: one bounded maintenance mutation for the journal record `record`.

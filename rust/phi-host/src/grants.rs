@@ -14,10 +14,7 @@ pub const MAX_TTL_MS: f64 = 60_000.0;
 fn text_list(v: Option<&Json>) -> Option<Vec<&str>> { v?.as_array()?.iter().map(Json::as_str).collect() }
 
 /// `/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/`
-fn agent_id_ok(id: &str) -> bool {
-	let b = id.as_bytes();
-	!b.is_empty() && b.len() <= 128 && b[0].is_ascii_alphanumeric() && b.iter().all(|c| c.is_ascii_alphanumeric() || b"._:-".contains(c))
-}
+fn agent_id_ok(id: &str) -> bool { phi_json::ID_128.accepts(id) }
 
 /// Only on the authoritative control host, with its durable signing key.
 pub struct GrantAuthority<'a> {

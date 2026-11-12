@@ -8,6 +8,7 @@ version.workspace = true
 [dependencies]
 phi-json = { path = "../phi-json" }
 phi-service = { path = "../phi-service" }
+phi-spaces-client = { path = "../phi-spaces-client" }
 tokio.workspace = true
 
 [dev-dependencies]

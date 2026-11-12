@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{oneshot, Mutex, Notify};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
@@ -55,6 +55,10 @@ struct Conn {
 	pending: RefCell<HashMap<u32, Waiter>>,
 	alive: Cell<bool>,
 	reader: RefCell<Option<JoinHandle<()>>>,
+	/// Calls given up by their callers while still unanswered, with the end of their request timeout (`Call`).
+	orphans: RefCell<Vec<(u32, tokio::time::Instant)>>,
+	orphaned: Rc<Notify>,
+	watch: RefCell<Option<JoinHandle<()>>>,
 }
 
 impl Conn {
@@ -68,6 +72,10 @@ impl Conn {
 		if let Some(h) = self.reader.borrow_mut().take() {
 			h.abort();
 		}
+		if let Some(h) = self.watch.borrow_mut().take() {
+			h.abort();
+		}
+		self.orphans.borrow_mut().clear();
 		if let Ok(mut w) = self.writer.try_lock() {
 			*w = None;
 		}
@@ -79,7 +87,56 @@ impl Drop for Conn {
 		if let Some(h) = self.reader.get_mut().take() {
 			h.abort();
 		}
+		if let Some(h) = self.watch.get_mut().take() {
+			h.abort();
+		}
 	}
+}
+
+/// Watches the calls given up on a connection: one not answered by the end of its request timeout drops the connection
+/// (src/socket.ts, whose timer runs on after RemoteSpace stopped waiting). Holds the connection only while it looks.
+async fn watch_loop(conn: Weak<Conn>, orphaned: Rc<Notify>) {
+	loop {
+		let next = match conn.upgrade() {
+			None => return,
+			Some(c) => c.orphans.borrow().iter().map(|(_, at)| *at).min(),
+		};
+		match next {
+			None => orphaned.notified().await,
+			Some(at) => {
+				tokio::select! {
+					_ = tokio::time::sleep_until(at) => {}
+					_ = orphaned.notified() => {}
+				}
+			}
+		}
+		let Some(c) = conn.upgrade() else { return };
+		let now = tokio::time::Instant::now();
+		let due: Vec<u32> = c.orphans.borrow().iter().filter(|(_, at)| *at <= now).map(|(id, _)| *id).collect();
+		c.orphans.borrow_mut().retain(|(_, at)| *at > now);
+		if due.into_iter().any(|id| c.pending.borrow_mut().remove(&id).is_some()) {
+			c.watch.borrow_mut().take(); // this very task: ends by returning
+			c.end("connection lost");
+			return;
+		}
+	}
+}
+
+/// One frame onto the socket: the header and the text as they are, without a copy of the text (`frame`).
+async fn write_frame(out: &mut (dyn AsyncWrite + Unpin), id: u32, text: &str) -> std::io::Result<()> {
+	let mut head = [0u8; HEADER];
+	head[..4].copy_from_slice(&(text.len() as u32).to_be_bytes());
+	head[4..].copy_from_slice(&id.to_be_bytes());
+	let body = text.as_bytes();
+	let mut done = 0;
+	while done < HEADER + body.len() {
+		let n = if done < HEADER { out.write_vectored(&[std::io::IoSlice::new(&head[done..]), std::io::IoSlice::new(body)]).await? } else { out.write(&body[done - HEADER..]).await? };
+		if n == 0 {
+			return Err(std::io::ErrorKind::WriteZero.into());
+		}
+		done += n;
+	}
+	Ok(())
 }
 
 async fn read_frame(r: &mut (dyn AsyncRead + Unpin), max: usize) -> Result<(u32, String), String> {
@@ -110,6 +167,47 @@ async fn read_loop(mut r: Box<dyn AsyncRead + Unpin>, conn: Weak<Conn>, max: usi
 				c.reader.borrow_mut().take(); // this very task: ends by returning
 				c.end(&why);
 				return;
+			}
+		}
+	}
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Stage {
+	Queued,
+	Writing,
+	Sent,
+}
+
+/// A call on its connection until it is answered. A caller may give it up (a timeout above it, a cancelled wait) by
+/// dropping its future: its entry in `pending` goes, and as in src/socket.ts, where the socket's timer runs on beside
+/// RemoteSpace's own, the request's timeout still holds: a connection that has not answered by then is dropped, so the
+/// next call connects anew instead of writing onto a link that went silent. A frame cut short ends the connection.
+struct Call {
+	conn: Rc<Conn>,
+	id: u32,
+	rx: Option<oneshot::Receiver<Result<String, String>>>,
+	deadline: Option<tokio::time::Instant>,
+	stage: Stage,
+}
+
+impl Drop for Call {
+	fn drop(&mut self) {
+		let Some(rx) = self.rx.take() else { return };
+		let c = &self.conn;
+		if c.pending.borrow_mut().remove(&self.id).is_none() || !c.alive.get() {
+			return; // answered or failed meanwhile
+		}
+		match (self.stage, self.deadline) {
+			(Stage::Writing, _) => c.end("connection lost"),
+			(Stage::Queued, _) | (Stage::Sent, None) => {}
+			(Stage::Sent, Some(at)) => {
+				// the answer may still come and is discarded; none by the deadline drops the connection (`watch_loop`)
+				let (tx, _late) = oneshot::channel();
+				c.pending.borrow_mut().insert(self.id, tx);
+				drop(rx);
+				c.orphans.borrow_mut().push((self.id, at));
+				c.orphaned.notify_one();
 			}
 		}
 	}
@@ -174,9 +272,13 @@ impl SocketTransport {
 			Err(_) => return Err("connect timed out".to_owned()),
 			Ok(got) => got?,
 		};
-		let conn = Rc::new(Conn { writer: Mutex::new(Some(w)), pending: RefCell::new(HashMap::new()), alive: Cell::new(true), reader: RefCell::new(None) });
+		let orphaned = Rc::new(Notify::new());
+		let conn = Rc::new(Conn { writer: Mutex::new(Some(w)), pending: RefCell::new(HashMap::new()), alive: Cell::new(true), reader: RefCell::new(None), orphans: RefCell::new(vec![]), orphaned: Rc::clone(&orphaned), watch: RefCell::new(None) });
 		let reader = tokio::task::spawn_local(read_loop(r, Rc::downgrade(&conn), self.o.max_frame_bytes.saturating_sub(HEADER)));
 		*conn.reader.borrow_mut() = Some(reader);
+		if self.o.request_timeout_ms.is_some() {
+			*conn.watch.borrow_mut() = Some(tokio::task::spawn_local(watch_loop(Rc::downgrade(&conn), orphaned)));
+		}
 		*self.conn.borrow_mut() = Some(Rc::clone(&conn));
 		Ok(conn)
 	}
@@ -195,32 +297,37 @@ impl SocketTransport {
 		let id = self.take_id();
 		let (tx, rx) = oneshot::channel();
 		c.pending.borrow_mut().insert(id, tx);
+		let deadline = self.o.request_timeout_ms.map(|ms| tokio::time::Instant::now() + Duration::from_millis(ms));
+		let mut call = Call { conn: Rc::clone(&c), id, rx: Some(rx), deadline, stage: Stage::Queued };
 		{
 			let mut w = c.writer.lock().await;
 			let Some(out) = w.as_mut() else {
-				c.pending.borrow_mut().remove(&id);
 				return Err("connection lost".to_owned());
 			};
-			if let Err(e) = out.write_all(&frame(id, &text)).await {
+			call.stage = Stage::Writing;
+			if let Err(e) = write_frame(&mut **out, id, &text).await {
 				drop(w);
-				c.pending.borrow_mut().remove(&id);
+				call.stage = Stage::Queued;
 				c.end(&e.to_string());
 				return Err(e.to_string());
 			}
+			call.stage = Stage::Sent;
 		}
-		let got = match self.o.request_timeout_ms {
+		let rx = call.rx.as_mut().expect("armed until answered");
+		let got = match deadline {
 			None => rx.await,
-			Some(ms) => match timeout(Duration::from_millis(ms), rx).await {
+			Some(at) => match tokio::time::timeout_at(at, rx).await {
 				Ok(got) => got,
 				Err(_) => {
-					let mine = c.pending.borrow_mut().remove(&id).is_some();
-					if mine {
+					call.rx = None;
+					if c.pending.borrow_mut().remove(&id).is_some() {
 						c.end("connection lost");
 					}
 					return Err("request timed out".to_owned());
 				}
 			},
 		};
+		call.rx = None;
 		got.unwrap_or_else(|_| Err("connection lost".to_owned()))
 	}
 
@@ -240,4 +347,59 @@ impl Transport for SocketTransport {
 
 impl<T: Transport + ?Sized> Transport for Rc<T> {
 	fn request(&self, text: String) -> LocalFuture<'_, Result<String, String>> { (**self).request(text) }
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::sync::atomic::{AtomicUsize, Ordering};
+	use std::sync::Arc;
+
+	/// A server that takes connections and never answers (a link gone silent).
+	async fn silent(path: PathBuf) -> Arc<AtomicUsize> {
+		let accepted = Arc::new(AtomicUsize::new(0));
+		let l = tokio::net::UnixListener::bind(&path).unwrap();
+		let n = Arc::clone(&accepted);
+		tokio::task::spawn_local(async move {
+			loop {
+				let (mut s, _) = l.accept().await.unwrap();
+				n.fetch_add(1, Ordering::SeqCst);
+				tokio::task::spawn_local(async move {
+					let mut sink = [0u8; 1024];
+					while s.read(&mut sink).await.is_ok_and(|n| n > 0) {}
+				});
+			}
+		});
+		accepted
+	}
+
+	#[test]
+	fn a_call_given_up_by_its_caller_leaves_no_waiter_and_its_timeout_still_drops_a_silent_link() {
+		let dir = std::env::temp_dir().join(format!("phi-client-socket-{}", std::process::id()));
+		let _ = std::fs::create_dir_all(&dir);
+		let path = dir.join("silent.sock");
+		let _ = std::fs::remove_file(&path);
+		let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+		tokio::task::LocalSet::new().block_on(&rt, async {
+			let accepted = silent(path.clone()).await;
+			let t = SocketTransport::new(Target::Unix(path.clone()), SocketOptions { request_timeout_ms: Some(300), ..SocketOptions::default() });
+			// given up above the transport (RemoteSpace's call timeout is shorter than the socket's)
+			assert!(timeout(Duration::from_millis(100), t.call("{}".to_owned())).await.is_err());
+			let c = t.live().expect("still connected");
+			assert_eq!(c.pending.borrow().len(), 1, "the request's own timer still runs");
+			tokio::time::sleep(Duration::from_millis(400)).await;
+			assert!(!c.alive.get(), "no answer by the request's timeout: the connection is dropped");
+			assert!(c.pending.borrow().is_empty());
+			// the next call connects anew
+			assert!(timeout(Duration::from_millis(100), t.call("{}".to_owned())).await.is_err());
+			assert_eq!(accepted.load(Ordering::SeqCst), 2);
+			// without a request timeout a given-up call only leaves its place
+			let u = SocketTransport::new(Target::Unix(path.clone()), SocketOptions::default());
+			assert!(timeout(Duration::from_millis(100), u.call("{}".to_owned())).await.is_err());
+			let c = u.live().expect("connected");
+			assert!(c.pending.borrow().is_empty(), "no waiter is left behind");
+			assert!(c.alive.get());
+		});
+		let _ = std::fs::remove_dir_all(&dir);
+	}
 }

@@ -143,7 +143,7 @@ impl ControlClient {
 	pub async fn grant(&self) -> Result<Json, String> { self.call(&obj! { "method" => "grant", "space" => "control", "args" => obj! { "purpose" => "effect" } }).await }
 
 	/// `routingPolicy`: the signed policy.
-	pub async fn routing_policy(&self) -> Result<Json, String> {
+	pub(crate) async fn routing_policy(&self) -> Result<Json, String> {
 		let grant = self.grant().await?;
 		self.call(&obj! { "method" => "routingPolicy", "space" => "control", "frame" => obj! { "grant" => grant } }).await
 	}
