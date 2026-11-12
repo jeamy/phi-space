@@ -184,8 +184,7 @@ Space. The agent host is a federation Member (`PI_SERVERD_FEDERATION_CONFIG`).
 
 ## Still open
 
-- In pi-termux-mobile: starting and supervising the binary in the app service (pi-serverd), and Doze; then
-  wiring `remoteSpaces` and `eventPump` into pi-serverd for its conversations.
+- In pi-termux-mobile: starting and supervising the binary in the app service (pi-serverd), and Doze.
 
 ## The agent side on a remote space
 
@@ -217,3 +216,7 @@ Done 2026-11-12, in `agent/src/agent.ts`:
   - a hand-over that fails after reaching the conversation stays one input;
   - a conversation that is gone gives its take back;
   - the entries a conversation writes are owned by its agent.
+- pi-serverd (pi-termux-mobile `1633947`) uses them with `PI_SERVERD_AGENT_SPACE` (and `PI_SERVERD_AGENT_SPACE_NAME`):
+  its conversations' space tools go to that space server, pi-serverd being one agent host there. The conversations that
+  used it are kept in `agent-space.json`, so a restart watches them again. Its `runtime/test-remote-space.mjs` runs a
+  served wait and a notification written during a restart against the TypeScript and the Rust server.
