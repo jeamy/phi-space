@@ -229,6 +229,17 @@ test("3. HTTP Server, Live Multiplayer Space-Chat API & Login-Protected AdminSpa
 		assert.equal(del.result.state, "deleted");
 		assert.equal((await fetch(`${srv.url}/api/admin/export?space=${spaceId}`)).status === 200, false, "the export needs a session");
 
+		// sieve-main deleted: the next run without members makes it anew instead of naming the deleted Space
+		const before = (await (await fetch(`${srv.url}/api/admin/overview`, { headers: { cookie: cookiePair } })).json()).profile.defaultSieveSpaceId;
+		for (const kind of ["archiveSpace", "purgeSpace", "deleteSpace"]) assert.equal((await command(kind, { spaceId: before })).status, 200, kind);
+		const started = await command("startRun", { runId: "sieve-after-delete", start: 1, end: 101, blockSize: 50 });
+		const startedBody = await started.json();
+		assert.equal(started.status, 200, JSON.stringify(startedBody));
+		const after = (await (await fetch(`${srv.url}/api/admin/overview`, { headers: { cookie: cookiePair } })).json()).profile.defaultSieveSpaceId;
+		assert.notEqual(after, before, "a new sieve-main");
+		const again = await command("startRun", { runId: "sieve-after-delete", start: 1, end: 101, blockSize: 50 });
+		assert.equal(again.status, 400, "a run ID names one run");
+
 		// Generate Mobile Enrollment QR via AdminSpaces
 		const enrollRes = await fetch(`${srv.url}/api/admin/command`, {
 			method: "POST",

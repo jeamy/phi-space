@@ -30,7 +30,9 @@ export function AdminSpacesView(props: AdminSpacesViewProps) {
 	const [workerCount, setWorkerCount] = useState<string>("2");
 	const [workerRunId, setWorkerRunId] = useState<string>("");
 
-	const [sieveRunId, setSieveRunId] = useState<string>("sieve-run-1");
+	// a run ID names one run for good (a stopped run keeps it): suggest a fresh one, sieve-YYYYMMDD-HHMMSS
+	const freshRunId = () => `sieve-${new Date().toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-")}`;
+	const [sieveRunId, setSieveRunId] = useState<string>(freshRunId);
 	const sieveStart = "1";
 	const [sieveEnd, setSieveEnd] = useState<string>("1001");
 	const sieveBlock = "128";
@@ -629,15 +631,25 @@ export function AdminSpacesView(props: AdminSpacesViewProps) {
 							<button
 								type="button"
 								className="wb-btn"
-								onClick={() =>
-									void sendAdminCommand("startRun", {
-										runId: sieveRunId,
+								onClick={async () => {
+									const id = sieveRunId.trim();
+									const old = runsList.find((r: any) => r.runId === id);
+									if (old) {
+										setStatusMsg(locale === "de"
+											? `Den Lauf „${id}“ gibt es schon (${old.state}). Eine Lauf-ID gilt für genau einen Lauf, auch nach dem Stoppen; neuer Name vorgeschlagen.`
+											: `The run "${id}" exists already (${old.state}). A run ID names exactly one run, also after it stopped; a new name is suggested.`);
+										setSieveRunId(freshRunId());
+										return;
+									}
+									// no members: the server takes the sieve Space (sieve-main), made anew if it was deleted
+									const done = await sendAdminCommand("startRun", {
+										runId: id,
 										start: Number(sieveStart),
 										end: Number(sieveEnd),
 										blockSize: Number(sieveBlock),
-										members: overview?.profile?.defaultSieveSpaceId,
-									})
-								}
+									});
+									if (done) setSieveRunId(freshRunId());
+								}}
 							>
 								{locale === "de" ? "Sieblauf starten" : "Start Sieve Run"}
 							</button>
@@ -673,7 +685,7 @@ export function AdminSpacesView(props: AdminSpacesViewProps) {
 												<div style={{ color: "var(--muted)", fontSize: 11, marginTop: 3 }}>
 													{r.progress.found}/{r.progress.expected} {locale === "de" ? "Ergebnisse" : "results"}
 													{(r.progress.summary?.primes ?? r.progress.summary?.primeCount) != null
-														? ` · ${r.progress.summary?.primes ?? r.progress.summary?.primeCount} ${locale === "de" ? "Primzahlen" : "primes"}${r.progress.complete ? "" : ` (${locale === "de" ? "läuft" : "running"})`}`
+														? ` · ${r.progress.summary?.primes ?? r.progress.summary?.primeCount} ${locale === "de" ? "Primzahlen" : "primes"}${r.progress.complete || r.state !== "running" ? "" : ` (${locale === "de" ? "läuft" : "running"})`}`
 														: ""}
 												</div>
 												{r.progress.complete && r.progress.summary?.first != null && r.progress.summary?.last != null ? (

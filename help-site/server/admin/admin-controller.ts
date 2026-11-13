@@ -512,6 +512,15 @@ export class WebAdminController {
 		return exportSpaceEntries({ host: this.host, ctx: this.ctx }, info.spaceId);
 	}
 
+	/** The Space of the sieve runs: `sieve-main`, made anew (and set up for gated tasks) when it was deleted. */
+	async #sieveSpace(): Promise<string> {
+		const all = await listSpaces(this.host, this.ctx);
+		if (all.some((i) => i.spaceId === this.defaultSieveSpaceId)) return this.defaultSieveSpaceId;
+		this.defaultSieveSpaceId = (await this.host.commit((tx) => createSpace(tx, "sieve-main", Date.now()), this.ctx)).spaceId;
+		await configureGatedSieveSpace(this.host, this.defaultSieveSpaceId);
+		return this.defaultSieveSpaceId;
+	}
+
 	async inspectSpaceObjects(spaceIdOrAlias: string, limit = 100) {
 		const sp = new PhiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
 			space: spaceIdOrAlias,
@@ -729,7 +738,7 @@ export class WebAdminController {
 					const membersRaw = args.members;
 					const members = Array.isArray(membersRaw)
 						? membersRaw.map(String)
-						: String(membersRaw || this.defaultSieveSpaceId)
+						: String(membersRaw || (await this.#sieveSpace()))
 								.split(",")
 								.map((s) => s.trim())
 								.filter(Boolean);
