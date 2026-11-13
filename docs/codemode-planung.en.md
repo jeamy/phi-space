@@ -86,8 +86,10 @@ Some are shown (the sample), the rest are hidden (the holdout), as for tools tas
 
 - A hidden episode's start and goal never both lie on one path of the sample. The task checks this when it is written,
   not the judge.
-- Every episode runs with three seeds. An episode counts as reached only when all three reach it. The post's 38 of 250
-  flips are the reason.
+- An episode runs with one seed when the task allows no `wait`, with three when it does. The clock stands still unless
+  a bot waits, so without waiting the world is the same for every seed and a second seed only costs time; chance (tide,
+  storm, wind) comes only after a wait. An episode counts as reached only when every seed reaches it. The post's 38 of
+  250 flips are the reason for the three.
 - The verdict is the holdout's share of reached episodes, then points, then time. A contribution that reaches no
   sample episode is not run on the holdout.
 - Of a hidden episode the verdict says only reached or not, as for the hidden implementations of a harness task.
@@ -152,7 +154,7 @@ The progress curve and the episode matrix come with step 1, the rest with the st
 
 ## Steps
 
-1. **Evaluation.** Episodes with sample and holdout, three seeds, `hold`, the arena's `start`/`seed`/`setup`,
+1. **Evaluation.** Episodes with sample and holdout, seeds (1 or 3), `hold`, the arena's `start`/`seed`/`setup`,
    `BotEpisode` entries, the progress curve and the episode matrix. The two existing bot tasks get episodes of their
    own (other start cells, other driftwood).
 2. **Paths on the map.** The arena's `map`, paths in `BotEpisode`, the room map with paths.
@@ -174,9 +176,23 @@ The progress curve and the episode matrix come with step 1, the rest with the st
 - A test that a hidden episode never lies on a sample path, run over every planning task in the catalog.
 - The page: the snapshot carries the curve's and matrix's figures; a test checks them against the `BotEpisode` entries.
 
-## Open decisions
+## Values (decided 2026-11-13)
 
-- How many episodes and seeds a task brings. The arena runs at most two worlds at a time, and every episode is a world
-  of its own.
-- Whether `recall` belongs to every planning task or only to some. A task without it measures planning alone.
-- Step 6 at all.
+A clickable mockup of the views, with example data on the real map of the Graue Insel, computes with these values.
+
+| Point | Value | Why |
+|---|---|---|
+| Episodes per task | 3 sample + 6 hidden | Three visible ones are enough to work on a path; six hidden ones make learning by heart expensive. The hidden ones run only when at least one sample episode was reached. |
+| Seeds per episode | 1 without `wait`, 3 with `wait` | See the judge above. |
+| Worlds per contribution | at most 9 or 27 | Episodes times seeds, fewer when the sample fails. Every one is an arena world of its own. |
+| Arena worlds at a time | 2, later 4 | `SPACES_MMO_ARENA_WORLDS`; raised only after the memory of one arena world is measured. |
+| Time limit | 60 s per episode | As for the beacon bot today. The judge's lease must cover all episodes of a contribution. |
+| `hold` | 5 world minutes | A piece of driftwood burns 10 world minutes (`fire.fuel` in world.json); 5 check that the goal holds without asking for a second piece. The judge waits with the episode's fixed seed. |
+| `recall` | two variants of one task | "With memory" and "without", the same episodes. The distance between their curves measures what the memory brings. |
+| Cost of `recall` | 1 point; a jump counts as 10 cells | Like every tool one point. When paths are chained, each jump from one remembered path to another counts as 10 cells of detour. |
+| "Near" for coverage | same room, at most 3 cells | Manhattan distance; a bot walks with `move x y`, and 3 cells are a short step. |
+| Freeze | at the start of every generation | A contribution sees only the paths of earlier generations. |
+| Path in `BotEpisode` | at most 200 steps | Only room and direction changes. |
+| Retention | best of each generation + newest 50 | Enough for the curve, the matrix and the map. |
+
+Still open: step 6 at all.
