@@ -63,7 +63,7 @@ pi-serverd answers two services. The phone's `server.mjs` only uses them through
 |---|---|---|---|
 | sessions | list | | `{sessions}` |
 | sessions | models | | `{models: [{provider, modelId}]}` |
-| sessions | create | `{name?}` | `{id}` |
+| sessions | create | `{name?, requestId?}` | `{id}`; once per `requestId`, or per call when it has none (since 2026-11-13) |
 | sessions | delete | id | `{ok}` (aborts, then removes; transcript stays) |
 | sessions | rename | id, name | `{ok}` |
 | sessions | attach | id | `{ok}` (binds the chat calls to that session) |
@@ -208,6 +208,15 @@ Done 2026-11-13 in pi-termux-mobile:
   power savers can still end apps, which `dumpsys` cannot show.
 - `runtime/test-remote-space.mjs` kills the space server (SIGKILL with `PHI_SPACES_SERVER_CMD`) between two tool calls:
   the agent host's connection is opened again and the pump goes on.
+
+## Creating a session once
+
+Since 2026-11-13 (pi-termux-mobile), `create` makes one session per request. Before, a host that took the call,
+created the session and died before its answer committed left that session behind, and the call coming back made a
+second one. pi-serverd now keeps the request in the session's registry entry (`createRequest`, in the commit that
+creates the session) and answers a repeat with that session. The request is the client's `requestId` when it sends
+one, else the call's `callId`, which stays the same when the call comes back. `runtime/test-remote-space.mjs` delivers
+one call twice and sends one `requestId` twice.
 
 ## Still open
 
