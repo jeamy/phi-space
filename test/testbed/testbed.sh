@@ -65,7 +65,7 @@ Settings (environment or test/testbed/testbed.env), defaults in brackets:
   TESTBED_NETBIRD_DASHBOARD_PORT [18080]  TESTBED_NETBIRD_SERVER_PORT [18081]  (loopback ports behind nginx)
   TESTBED_NETBIRD_SPACE_PORT [7421]  (TCP port the policies allow between the space groups; placeholder until space-gate)
   TESTBED_NETBIRD_STUN_BIND [127.0.0.1]  (0.0.0.0 publishes STUN on UDP 3478 for peers outside the host)
-  TESTBED_NETBIRD_VERSION [0.80.0]  TESTBED_NETBIRD_DASHBOARD_VERSION [latest]  (image tags; the dashboard has its own versioning)
+  TESTBED_NETBIRD_VERSION [0.82.1]  TESTBED_NETBIRD_DASHBOARD_VERSION [latest]  (image tags; the dashboard has its own versioning)
 EOF
 }
 
@@ -101,7 +101,7 @@ configure() {
 	: "${TESTBED_MEM_LIMIT:=512m}" "${TESTBED_CPUS:=0.5}" "${TESTBED_RUNNER_MEM:=2g}" "${TESTBED_RUNNER_CPUS:=2.0}" "${TESTBED_PIDS_LIMIT:=1024}"
 	: "${TESTBED_NETBIRD_DOMAIN:=spacebird.eibrain.org}" "${TESTBED_NETBIRD_PROJECT:=spacebird}"
 	: "${TESTBED_NETBIRD_DASHBOARD_PORT:=18080}" "${TESTBED_NETBIRD_SERVER_PORT:=18081}"
-	: "${TESTBED_NETBIRD_STUN_BIND:=127.0.0.1}" "${TESTBED_NETBIRD_SPACE_PORT:=7421}" "${TESTBED_NETBIRD_VERSION:=0.80.0}" "${TESTBED_NETBIRD_DASHBOARD_VERSION:=latest}"
+	: "${TESTBED_NETBIRD_STUN_BIND:=127.0.0.1}" "${TESTBED_NETBIRD_SPACE_PORT:=7421}" "${TESTBED_NETBIRD_VERSION:=0.82.1}" "${TESTBED_NETBIRD_DASHBOARD_VERSION:=latest}"
 	[[ $TESTBED_NETBIRD_DOMAIN =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || die "TESTBED_NETBIRD_DOMAIN: a host name"
 	[[ $TESTBED_NETBIRD_PROJECT =~ ^[a-z0-9][a-z0-9_-]*$ ]] || die "TESTBED_NETBIRD_PROJECT: lower case letters, digits, - and _"
 	[[ $TESTBED_NETBIRD_DASHBOARD_PORT =~ ^[0-9]{4,5}$ && $TESTBED_NETBIRD_SERVER_PORT =~ ^[0-9]{4,5}$ ]] || die "TESTBED_NETBIRD_*_PORT: unprivileged port numbers"

@@ -260,7 +260,7 @@ nginx and certificate (as root on big; the script never does this itself):
 (e.g. a real phone) set `TESTBED_NETBIRD_STUN_BIND=0.0.0.0` and open UDP 3478 in the firewall; nginx cannot forward
 UDP.
 
-**Pin the version:** `TESTBED_NETBIRD_VERSION` (server) is set to 0.80.0; the dashboard has its own versioning (`TESTBED_NETBIRD_DASHBOARD_VERSION`, default `latest`, the digest is in `netbird status`). For the evidence for gate 5,
+**Pin the version:** `TESTBED_NETBIRD_VERSION` (server) is set to 0.82.1 (0.80.0 until 2026-11-11; the server on big was upgraded in place following NetBird's upgrade guide, its previous state is in `<dir>/netbird/backup-20261111-222417/`); the dashboard has its own versioning (`TESTBED_NETBIRD_DASHBOARD_VERSION`, default `latest`, the digest is in `netbird status`). For the evidence for gate 5,
 enter `netbird status` (image digest) in section 4.6 of the federation plan. The Linux agents (sidecar with `NET_ADMIN` and `/dev/net/tun`,
 shared network namespace) and the test matrix 4.6 follow as soon as the server is reachable; the userspace WireGuard mode was not needed under
 rootless Docker (kernel WireGuard, see result below).
@@ -288,7 +288,7 @@ not against the real server: fields of the NetBird API may deviate.
 
 ### Agent peers (profile `overlay`)
 
-Four agent containers (`nb-host-a`, `nb-host-b`, `nb-member-1`, `nb-member-2`, image `netbirdio/netbird:0.80.0`) join the overlay with the
+Four agent containers (`nb-host-a`, `nb-host-b`, `nb-member-1`, `nb-member-2`, image `netbirdio/netbird:0.82.1`, 0.80.0 until 2026-11-11) join the overlay with the
 setup key `testbed-hosts` and appear in the dashboard as `host-a`, `host-b`, `member-1`, `member-2` in the group `space-hosts`.
 The key is in `<dir>/netbird/peer-hosts.env` (mode 600; only `NB_SETUP_KEY` and `NB_MANAGEMENT_URL`, never the API token); `netbird setup`
 writes the file. The agents need `/dev/net/tun` and `NET_ADMIN` and therefore do not run in the hardened profile of the Node containers.
@@ -378,7 +378,7 @@ the backup/register host, big does not become a fencing target because of its ot
 | Area | Setup |
 |---|---|
 | Network | **IPv6 only** (netcup image without IPv4). `spacebird.eibrain.org` has had the AAAA record `2a0a:4cc0:c0:62f2:8000::1000` since 2026-10-16 (big, nginx on `[::]:443`). nanoi resolves it through the netcup resolver; the temporary `/etc/hosts` entry has been removed. |
-| NetBird | client 0.80.0 from the signed repository `pkgs.netbird.io`, pinned to the server version (`apt-mark hold`); peer `nano-test`, 100.89.28.88, group `space-hosts` through the existing setup key `testbed-hosts` (passed on directly from big, never printed). Connections to IPv4 peers run through the relay. |
+| NetBird | client 0.80.0 from the signed repository `pkgs.netbird.io`, pinned to the server version of that time (`apt-mark hold`; the server is on 0.82.1 since 2026-11-11, the clients stay on 0.80.0 until they are upgraded); peer `nano-test`, 100.89.28.88, group `space-hosts` through the existing setup key `testbed-hosts` (passed on directly from big, never printed). Connections to IPv4 peers run through the relay. |
 | Firewall | `pi-nft-host.service` loads `/etc/nftables-pi-host.nft`: inbound only SSH, ICMP/ICMPv6, WireGuard (UDP 51820) and everything over `wt0`; outbound free. Applied with a dead man's switch during setup and checked by a new SSH connection. |
 | Runtime | Debian `docker.io`; image `phi-spaces-test-node:local` transferred from big (Node v22.23.3, production dependencies). Directories `/opt/phi-spaces/artifacts` and `/var/lib/phi-spaces` (0700). As on big, only built artifacts are shipped. |
 | Time | systemd-timesyncd active, synchronized (prerequisite for the HLC clock check). |

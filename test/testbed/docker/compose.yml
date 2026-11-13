@@ -86,7 +86,7 @@ services:
   # separate peers for now; the hosts will share their network namespace once the userspace WireGuard mode is proven under
   # rootless docker. The agent needs /dev/net/tun and NET_ADMIN, so it cannot use the hardened profile of the node containers.
   nb-host-a: &nb-agent
-    image: ${NETBIRD_AGENT_IMAGE:-netbirdio/netbird:0.80.0}
+    image: ${NETBIRD_AGENT_IMAGE:-netbirdio/netbird:0.82.1}
     pull_policy: missing
     profiles: [overlay]
     init: true
