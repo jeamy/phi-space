@@ -182,9 +182,36 @@ Space. The agent host is a federation Member (`PI_SERVERD_FEDERATION_CONFIG`).
      - A long poll of `events` holds one of the daemon's 16 call workers for 25 s: more clients polling at once
        make later calls wait.
 
+## The binary in the app
+
+Done 2026-11-13 in pi-termux-mobile:
+
+- `scripts/prepare-runtime.py` builds `phi-space-server` for `aarch64-linux-android` from this checkout (the same one
+  `phi-spaces.mjs` is bundled from, so both speak the same wire), strips it and packs it as `runtime/bin/phi-space-server`.
+- The app's service (`PiService`), not node, supervises it: its own process beside node, restarted with backoff
+  (1 s doubling to 30 s). A node crash or update leaves the space running. Its store is
+  `home/.pi-mobile/space-server.sqlite`; it listens only on the unix socket `home/.pi-mobile/space-server.sock`, as
+  `--peer phone --agent-host`.
+- The phone's agent host is `server.mjs` (the chat), not pi-serverd. With `PI_MOBILE_SPACE`, which the service sets
+  when the binary is there, its conversations get the space tools on that server through `remoteSpaces` and
+  `eventPump` (`agentSpace` in `runtime/common.mjs`, shared with pi-serverd). Before, the phone's chat had no space tools.
+- When the space cannot be reached, the prompt section says so (`Shared space (unreachable now: …)`) instead of failing
+  the turn (`agent/src/agent.ts`, tested in `agent/test/remote-agents.test.ts`).
+- Checked on the phone:
+  - `kill -9` of the server: it is back within a second and the data is kept.
+  - `kill -9` of node: the server keeps running.
+  - force-stop and start: exactly one process of each.
+  - two minutes of forced deep idle (`dumpsys deviceidle force-idle`, battery unplugged): the bridge and the server
+    answered and took writes.
+
+  The service runs in the foreground with a partial wakelock; no battery-optimisation exemption was needed. Vendor
+  power savers can still end apps, which `dumpsys` cannot show.
+- `runtime/test-remote-space.mjs` kills the space server (SIGKILL with `PHI_SPACES_SERVER_CMD`) between two tool calls:
+  the agent host's connection is opened again and the pump goes on.
+
 ## Still open
 
-- In pi-termux-mobile: starting and supervising the binary in the app service (pi-serverd), and Doze.
+Nothing of M1.
 
 ## The agent side on a remote space
 

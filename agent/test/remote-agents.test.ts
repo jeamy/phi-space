@@ -118,3 +118,18 @@ test("remote agents: tool calls take their request identities from the conversat
 	assert.ok(note, "written");
 	assert.equal(note!.owner, JSON.stringify(["phone", conversationAgent(a.id)]), "owned by the conversation's agent, not the host");
 });
+
+test("remote agents: a space that cannot be reached leaves the turn running, the prompt says so", async () => {
+	const down = new RemoteSpace({ request: async () => { throw new Error("connect ENOENT /nowhere.sock"); }, close() {} } as any, { attempts: 1 });
+	const faux = fauxProvider(); const models = createModels(); models.setProvider(faux.provider);
+	const ext = createSpaces(remoteSpaces(() => down, { peerId: "phone" }));
+	const registry = createRegistry(); registry.install(ext);
+	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
+	try {
+		const a = await h.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-1" }, extensions: [ext] } });
+		let system = "";
+		faux.setResponses([(c: any) => { system = String(c.systemPrompt ?? JSON.stringify(c.messages)); return fauxAssistantMessage("fine"); }]);
+		await (await a.submit({ type: "input", content: "hi" }, ctx)).wait(ctx);
+		assert.match(system, /Shared space \(unreachable now: .*ENOENT/);
+	} finally { await h.close(ctx); }
+});
