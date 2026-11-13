@@ -423,9 +423,10 @@ const sammle: Command = {
 		const room = c.world.rooms.find((r) => r.roomId === c.actor.room);
 		const decor = new Set((room?.decor ?? []).join(""));
 		const grows = (s: Pick<SortDef, "wild">) => !!s.wild && g.decor[s.wild.decor].some((k) => decor.has(k)) && (!s.wild.islands || s.wild.islands.includes(room?.island ?? ""));
-		// the wild flora gives seeds of garden sorts and of field crops (wild barley, flax, beet), the wild trees theirs
+		// the wild flora gives seeds of garden sorts and of field crops (wild barley, flax, beet), the wild trees theirs, each
+		// tree with `seedWeight` lots (there are many more flowers and herbs than trees)
 		const t = c.world.trees, woods = !!t && t.decor.some((k) => decor.has(k));
-		const wild: Array<{ seed: string }> = [...[...g.sorts, ...(c.world.fields?.crops ?? [])].filter(grows), ...(woods ? t!.sorts.filter((s) => !!s.wild && (!s.wild.islands || s.wild.islands.includes(room?.island ?? ""))) : [])];
+		const wild: Array<{ seed: string }> = [...[...g.sorts, ...(c.world.fields?.crops ?? [])].filter(grows), ...(woods ? t!.sorts.filter((s) => !!s.wild && (!s.wild.islands || s.wild.islands.includes(room?.island ?? ""))).flatMap((s) => Array<typeof s>(t!.seedWeight ?? 1).fill(s)) : [])];
 		if (!wild.length) throw new CommandError("Hier wächst nichts Wildes, das Samen trägt.");
 		if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
 		await c.space.write({ type: "SeedRest", fields: { charId: c.actor.charId, room: c.actor.room, untilWorldMs: now + g.seedRestWorldMs } satisfies SeedRestFields as never }, c.txn, FOREVER);

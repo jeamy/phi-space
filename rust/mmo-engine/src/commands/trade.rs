@@ -701,23 +701,34 @@ async fn restock(space: &Space, w: &Json) -> Result<()> {
 		if sells.is_empty() { continue; }
 		let char_id = format!("npc-{}", txt(j::at(n, "npcId")));
 		if space.peek(&tmpl("Character", obj! { "charId" => char_id.as_str() }), None).await?.is_none() { continue; }
-		for c in sells {
-			let proto = j::at(c, "proto").clone();
-			let have = space.count(&tmpl("Item", obj! { "location" => char_id.as_str(), "proto" => proto.clone() }), None).await?;
-			let e = space.peek(&tmpl("Restock", obj! { "charId" => char_id.as_str(), "proto" => proto.clone() }), None).await?;
-			let next = e.as_ref().map(|e| j::n(f(e), "nextWorldMs"));
-			if have >= j::n(c, "count") { if let Some(e) = &e { space.take_if_exists(&obj! { "type" => "Restock", "id" => j::at(e, "id").clone() }, NO_WAIT, None).await?; } continue; }
-			if next.is_some_and(|x| x > now) { continue; }
-			let txn = space.create_transaction(10_000.0).await?;
-			let r: Result<bool> = async {
-				if let Some(e) = &e { if space.take_if_exists(&obj! { "type" => "Restock", "id" => j::at(e, "id").clone() }, NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); } }
-				if e.is_some() { if let Some(p) = resolve_prototype(space, j::s(c, "proto")).await? { spawn(space, Some(&txn), w, &p, At { location: char_id.clone(), x: -1.0, y: -1.0, ..Default::default() }, &Json::Null).await?; } }
-				if e.is_none() || have + 1.0 < j::n(c, "count") { space.write(&tmpl("Restock", obj! { "charId" => char_id.as_str(), "proto" => proto.clone(), "nextWorldMs" => now + RESTOCK_WORLD_MS }), Some(&txn), FOREVER).await?; }
-				Ok(true)
-			}.await;
-			match r { Ok(true) => space.commit(&txn).await?, Ok(false) => space.abort(&txn).await?, Err(err) => { let _ = space.abort(&txn).await; return Err(err); } }
-		}
+		for c in sells { restock_one(space, w, now, &char_id, j::s(c, "proto"), j::n(c, "count")).await?; }
 	}
+	// a store's base stock (world shop.stock) grows back on its shelf the same way, under its building's id
+	let shop = j::at(w, "shop");
+	let Some(stock) = j::at(shop, "stock").as_object().filter(|s| !s.is_empty()) else { return Ok(()) };
+	for e in space.read_all(&tmpl("Building", obj! { "plan" => j::at(shop, "plan").clone() }), None).await? {
+		let id = txt(j::at(f(&e), "buildId"));
+		for (proto, count) in stock.iter() { restock_one(space, w, now, &id, proto, count.as_f64().unwrap_or(0.0)).await?; }
+	}
+	Ok(())
+}
+
+/// `restockOne`: one thing of a holder's (a trader's pack, a store's shelf) back towards `count`, one a RESTOCK_WORLD_MS.
+async fn restock_one(space: &Space, w: &Json, now: f64, char_id: &str, proto: &str, count: f64) -> Result<()> {
+	let have = space.count(&tmpl("Item", obj! { "location" => char_id, "proto" => proto }), None).await?;
+	let e = space.peek(&tmpl("Restock", obj! { "charId" => char_id, "proto" => proto }), None).await?;
+	let next = e.as_ref().map(|e| j::n(f(e), "nextWorldMs"));
+	if have >= count { if let Some(e) = &e { space.take_if_exists(&obj! { "type" => "Restock", "id" => j::at(e, "id").clone() }, NO_WAIT, None).await?; } return Ok(()); }
+	if next.is_some_and(|x| x > now) { return Ok(()); }
+	let txn = space.create_transaction(10_000.0).await?;
+	let r: Result<bool> = async {
+		if let Some(e) = &e { if space.take_if_exists(&obj! { "type" => "Restock", "id" => j::at(e, "id").clone() }, NO_WAIT, Some(&txn)).await?.is_none() { return Ok(false); } }
+		// the first time it runs short, the clock starts; one comes back when it is up
+		if e.is_some() { if let Some(p) = resolve_prototype(space, proto).await? { spawn(space, Some(&txn), w, &p, At { location: char_id.to_owned(), x: -1.0, y: -1.0, ..Default::default() }, &Json::Null).await?; } }
+		if e.is_none() || have + 1.0 < count { space.write(&tmpl("Restock", obj! { "charId" => char_id, "proto" => proto, "nextWorldMs" => now + RESTOCK_WORLD_MS }), Some(&txn), FOREVER).await?; }
+		Ok(true)
+	}.await;
+	match r { Ok(true) => space.commit(&txn).await?, Ok(false) => space.abort(&txn).await?, Err(err) => { let _ = space.abort(&txn).await; return Err(err); } }
 	Ok(())
 }
 

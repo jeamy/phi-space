@@ -539,11 +539,16 @@ async fn sammle(c: &mut Ctx, arg: &str) -> Result<()> {
 	let gd = j::at(&g, "decor");
 	let grows = |s: &Json| j::opt(s, "wild").filter(|w| j::truthy(w)).is_some_and(|w| j::a(gd, j::s(w, "decor")).iter().any(|k| k.as_str().is_some_and(|k| decor.contains(k))) && j::ao(w, "islands").is_none_or(|is| is.iter().any(|i| i.as_str() == Some(island.as_str()))));
 	let crops = j::opt(c.w(), "fields").map_or(&[][..], |f| j::a(f, "crops"));
-	// the wild flora gives seeds of garden sorts and of field crops (wild barley, flax, beet), the wild trees theirs
+	// the wild flora gives seeds of garden sorts and of field crops (wild barley, flax, beet), the wild trees theirs, each
+	// tree with `seedWeight` lots (there are many more flowers and herbs than trees)
 	let t = j::opt(c.w(), "trees");
 	let woods = t.is_some_and(|t| j::a(t, "decor").iter().any(|k| k.as_str().is_some_and(|k| decor.contains(k))));
 	let mut wild: Vec<Json> = j::a(&g, "sorts").iter().chain(crops.iter()).filter(|s| grows(s)).cloned().collect();
-	if woods { wild.extend(j::a(t.unwrap_or(&Json::Null), "sorts").iter().filter(|s| j::opt(s, "wild").filter(|w| j::truthy(w)).is_some_and(|w| j::ao(w, "islands").is_none_or(|is| is.iter().any(|i| i.as_str() == Some(island.as_str()))))).cloned()); }
+	if woods {
+		let t = t.unwrap_or(&Json::Null);
+		let lots = j::no(t, "seedWeight").unwrap_or(1.0) as usize;
+		for s in j::a(t, "sorts").iter().filter(|s| j::opt(s, "wild").filter(|w| j::truthy(w)).is_some_and(|w| j::ao(w, "islands").is_none_or(|is| is.iter().any(|i| i.as_str() == Some(island.as_str()))))) { wild.extend(std::iter::repeat_n(s.clone(), lots)); }
+	}
 	if wild.is_empty() { return refuse("Hier wächst nichts Wildes, das Samen trägt."); }
 	if let Some(r) = &rest { c.space.take_if_exists(&obj! { "id" => j::at(r, "id").clone() }, NO_WAIT, c.txn()).await?; }
 	c.space.write(&tmpl("SeedRest", obj! { "charId" => c.char_id(), "room" => c.room(), "untilWorldMs" => now + j::n(&g, "seedRestWorldMs") }), c.txn(), FOREVER).await?;

@@ -8785,7 +8785,7 @@
 		{
 			"key": "bäume",
 			"category": "Allgemein",
-			"text": "Bäume wachsen über Tage und stehen dann, bis jemand sie fällt. Ihre Samen findet „sammle samen“, wo wilde Bäume stehen (Birkensamen, Weidenstecklinge, Apfelkerne, Birnenkerne, Eicheln); mit einem Spaten setzt „pflanze birkensamen“ einen Baum neben dich, im Licht eines Feuers (ein Feld, ein Lichtpunkt, höchstens acht je Spieler). „baum“ zeigt, wie weit sie sind; die Tage zählen auf der zweiten Uhr: eine Birke steht in drei Tagen, ein Apfel- oder Birnbaum in vier, eine Eiche in sieben. „fälle“ fällt deinen ausgewachsenen Baum mit einer Axt („craft axt“): Er gibt Scheite, und ein Scheit zählt überall wie Treibholz; Birke und Kopfweide treiben aus dem Stumpf wieder aus. „ernte baum“ holt Äpfel, Birnen, Eicheln oder schneidet die Ruten der Kopfweide (Scheite und einen Steckling). Am Herd der Hütte wird aus dem Obst Saft („craft apfelsaft“) und Kompott („craft apfelkompott“); alles davon macht satt, und Schweine fressen Eicheln und Äpfel. In der Werkstatt gibt ein Scheit eine ganze Bohle („craft scheitbohle“); aus Bohlen werden Fass und Obstkiste (in der Truhe hält sich darin alles doppelt so lange), Tisch (drinnen macht Essen länger satt) und Fensterläden (sie halten einen Bau, wenn seine Zeit abläuft, noch einmal halb so lange)."
+			"text": "Bäume wachsen über Tage und stehen dann, bis jemand sie fällt. Ihre Samen findet „sammle samen“, wo wilde Bäume stehen (Birkensamen, Weidenstecklinge, Apfelkerne, Birnenkerne, Eicheln), Gesa am Markt von Kupferhafen verkauft Birkensamen und Weidenstecklinge, und ein Kaufhaus hat einige Baumsamen im Regal; mit einem Spaten setzt „pflanze birkensamen“ einen Baum neben dich, im Licht eines Feuers (ein Feld, ein Lichtpunkt, höchstens acht je Spieler). „baum“ zeigt, wie weit sie sind; die Tage zählen auf der zweiten Uhr: eine Birke steht in drei Tagen, ein Apfel- oder Birnbaum in vier, eine Eiche in sieben. „fälle“ fällt deinen ausgewachsenen Baum mit einer Axt („craft axt“): Er gibt Scheite, und ein Scheit zählt überall wie Treibholz; Birke und Kopfweide treiben aus dem Stumpf wieder aus. „ernte baum“ holt Äpfel, Birnen, Eicheln oder schneidet die Ruten der Kopfweide (Scheite und einen Steckling). Am Herd der Hütte wird aus dem Obst Saft („craft apfelsaft“) und Kompott („craft apfelkompott“); alles davon macht satt, und Schweine fressen Eicheln und Äpfel. In der Werkstatt gibt ein Scheit eine ganze Bohle („craft scheitbohle“); aus Bohlen werden Fass und Obstkiste (in der Truhe hält sich darin alles doppelt so lange), Tisch (drinnen macht Essen länger satt) und Fensterläden (sie halten einen Bau, wenn seine Zeit abläuft, noch einmal halb so lange)."
 		},
 		{
 			"key": "brot",
@@ -10556,6 +10556,14 @@
 					1,
 					3
 				],
+				"samen-birke": [
+					1,
+					3
+				],
+				"weidensteckling": [
+					1,
+					3
+				],
 				"huhn": [
 					2,
 					5
@@ -10673,6 +10681,14 @@
 				{
 					"proto": "samen-strandkohl",
 					"count": 1
+				},
+				{
+					"proto": "samen-birke",
+					"count": 2
+				},
+				{
+					"proto": "weidensteckling",
+					"count": 2
 				},
 				{
 					"proto": "weizen",
@@ -14646,6 +14662,7 @@
 			"T",
 			"A"
 		],
+		"seedWeight": 3,
 		"sorts": [
 			{
 				"key": "birke",
@@ -15340,11 +15357,22 @@
 			"fensterlaeden": 13,
 			"apfel": 2,
 			"birne": 2,
-			"eichel": 1,
+			"eichel": 2,
 			"apfelsaft": 4,
 			"birnensaft": 4,
 			"apfelkompott": 6,
-			"birnenkompott": 6
+			"birnenkompott": 6,
+			"samen-birke": 3,
+			"weidensteckling": 3,
+			"apfelkern": 3,
+			"birnenkern": 3
+		},
+		"stock": {
+			"samen-birke": 2,
+			"weidensteckling": 2,
+			"apfelkern": 2,
+			"birnenkern": 2,
+			"eichel": 2
 		}
 	},
 	"bank": {

@@ -121,7 +121,7 @@ export type WorldDef = {
 	/** Fishing (engine/commands/fishing.ts): beside `plan`, with a `net`, a weighted catch. */
 	fishing?: { plan: string; net: string; catch: Array<{ proto: string; weight: number }> };
 	/** A department store (engine/commands/shop.ts): the things it deals in by base price; its price runs from twice that on an empty shelf to half at `full`, it pays `buyShare` of it, and `turnoverPerPoint` coins turned over are a point of rank. */
-	shop?: { plan: string; prices: Record<string, number>; full: number; buyShare: number; turnoverPerPoint: number; /** Delivery orders a store keeps open at once, and pieces in one (`laden bestelle`). */ orders: number; orderMax: number };
+	shop?: { plan: string; prices: Record<string, number>; full: number; buyShare: number; turnoverPerPoint: number; /** Delivery orders a store keeps open at once, and pieces in one (`laden bestelle`). */ orders: number; orderMax: number; /** A base stock: a store's shelf grows back to this many of each, one a world day (trade.ts restock), as a trader's carry does. */ stock?: Record<string, number> };
 	/** A counting house: a loan is up to `pledgeShare` of the pledge's base price, runs `termWorldMs` of the second clock, at `interest`. */
 	bank?: { plan: string; pledgeShare: number; termWorldMs: number; interest: number; /** The bill of exchange (shop.ts `wechsel`): a thing of `proto` that holds up to `max` coins (they lie at it), written for `fee` coins to the house. */ note?: { proto: string; max: number; fee: number } };
 	/** A rowing boat (engine/commands/fishing.ts) goes between the jetties of an island; `sand` is dug with `tool` on `tile`. */
@@ -188,7 +188,7 @@ export type TreeSortDef = { key: string; name: string; /** "eine Birke", "ein Ap
 	wild?: { islands?: string[] } };
 /** `points`: the light a tree takes, `maxTrees` per account; `spade` plants, `axe` fells (a tool that wears); `decor`:
  *  the decor cells where wild trees stand (their seeds are found there). */
-export type TreesDef = { points: number; maxTrees: number; spade: string; axe: string; decor: string[]; sorts: TreeSortDef[] };
+export type TreesDef = { points: number; maxTrees: number; spade: string; axe: string; decor: string[]; sorts: TreeSortDef[]; /** How many lots each wild tree has in „sammle samen“ against one of each flower, herb or crop (default 1). */ seedWeight?: number };
 /** The wild from the fog (docs/siedeln.en.md "Wild im Nebel"), first the hares in the beds: every `checkWorldMs` a room
  *  with beds rolls `chance[fog]` (by its fog level 0 to 3; `nightFactor` times that at night) for a hare, at most
  *  `maxPerRoom` at once. A hare eats `eatAfterWorldMs` after it came unless someone within `scareReach` scared it off;

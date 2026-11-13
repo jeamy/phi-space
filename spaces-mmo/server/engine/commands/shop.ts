@@ -2,7 +2,8 @@
 // store is a shop anyone may use: `laden` shows its stock, `laden kaufe` and `laden verkaufe` trade with it at prices a simple
 // rule leads (empty dear, full cheap), so trade goes on when nobody stands at the market board. It pays from its own till, so
 // it mints nothing: its owner fills that with `laden einlegen` and takes the profit with `laden entnehme`. What it turned
-// over counts in the rank of the settlements. In a counting house `kredit` lends coins from its till against a pledge kept in
+// over counts in the rank of the settlements. A few tree seeds grow back on every shelf (world shop.stock, trade.ts restock), one
+// of each a world day, as a trader's stock does: what they sell for goes into the till. In a counting house `kredit` lends coins from its till against a pledge kept in
 // escrow; `tilge` pays them back with interest and frees it; when the time runs out, the pledge goes to the house.
 // `wechsel <n>` writes a bill of exchange there: the n coins lie at the bill itself, so it is worth them wherever it goes
 // (passed on, traded, in a hatch, to another region with its holder), and any counting house pays them out against it

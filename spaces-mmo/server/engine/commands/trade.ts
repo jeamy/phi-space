@@ -535,22 +535,31 @@ async function restock(space: SpaceLike, w: WorldDef): Promise<void> {
 		if (!sells.length) continue;
 		const charId = `npc-${n.npcId}`;
 		if (!(await space.readAll({ type: "Character", fields: { charId } }, { limit: 1 })).length) continue; // in another region
-		for (const c of sells) {
-			const have = await space.count({ type: "Item", fields: { location: charId, proto: c.proto } });
-			const e = await peek(space, { type: "Restock", fields: { charId, proto: c.proto } });
-			const r = e ? fieldsOf<RestockFields>(e) : null;
-			if (have >= c.count) { if (e) await space.takeIfExists({ type: "Restock", id: e.id }, NO_WAIT); continue; }
-			if (r && r.nextWorldMs > now) continue;
-			const txn = (await space.createTransaction(10_000)).id;
-			try {
-				if (e && !(await space.takeIfExists({ type: "Restock", id: e.id }, NO_WAIT, { txn }))) { await space.abort(txn); continue; } // another worker
-				// the first time it runs short, the clock starts; one comes back when it is up
-				if (r) { const p = await resolvePrototype(space, c.proto); if (p) await spawn(space, txn, w, p, { location: charId, x: -1, y: -1 }); }
-				if (!r || have + 1 < c.count) await space.write({ type: "Restock", fields: { charId, proto: c.proto, nextWorldMs: now + RESTOCK_WORLD_MS } satisfies RestockFields as never }, txn, FOREVER);
-				await space.commit(txn);
-			} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
-		}
+		for (const c of sells) await restockOne(space, w, now, charId, c.proto, c.count);
 	}
+	// a store's base stock (world shop.stock) grows back on its shelf the same way, under its building's id
+	const stock = Object.entries(w.shop?.stock ?? {});
+	if (!stock.length) return;
+	for (const e of await space.readAll({ type: "Building", fields: { plan: w.shop!.plan } })) {
+		const b = fieldsOf<BuildingFields>(e);
+		for (const [proto, count] of stock) await restockOne(space, w, now, b.buildId, proto, count);
+	}
+}
+/** One thing of a holder's (a trader's pack, a store's shelf) back towards `count`, one a RESTOCK_WORLD_MS. */
+async function restockOne(space: SpaceLike, w: WorldDef, now: number, charId: string, proto: string, count: number): Promise<void> {
+	const have = await space.count({ type: "Item", fields: { location: charId, proto } });
+	const e = await peek(space, { type: "Restock", fields: { charId, proto } });
+	const r = e ? fieldsOf<RestockFields>(e) : null;
+	if (have >= count) { if (e) await space.takeIfExists({ type: "Restock", id: e.id }, NO_WAIT); return; }
+	if (r && r.nextWorldMs > now) return;
+	const txn = (await space.createTransaction(10_000)).id;
+	try {
+		if (e && !(await space.takeIfExists({ type: "Restock", id: e.id }, NO_WAIT, { txn }))) { await space.abort(txn); return; } // another worker
+		// the first time it runs short, the clock starts; one comes back when it is up
+		if (r) { const p = await resolvePrototype(space, proto); if (p) await spawn(space, txn, w, p, { location: charId, x: -1, y: -1 }); }
+		if (!r || have + 1 < count) await space.write({ type: "Restock", fields: { charId, proto, nextWorldMs: now + RESTOCK_WORLD_MS } satisfies RestockFields as never }, txn, FOREVER);
+		await space.commit(txn);
+	} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
 }
 
 /** What a trader only buys (no selling price) it ships off, one a RESTOCK_WORLD_MS while it holds any: so a glut it paid

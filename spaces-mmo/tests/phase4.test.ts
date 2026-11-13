@@ -286,6 +286,29 @@ test("market: a trader's stock comes back, one a world day, up to what it starte
 	} finally { await srv.close(); }
 });
 
+test("market: a department store keeps a few tree seeds, one of each coming back a world day; Gesa sells birch seeds and willow cuttings", async () => {
+	assert.ok(w.npcs.find((n) => n.npcId === "gesa")!.carry!.some((c) => c.proto === "weidensteckling"), "Gesa carries willow cuttings");
+	const stock = w.shop!.stock!;
+	for (const p of Object.keys(stock)) assert.ok((w.shop!.prices[p] ?? 0) > 0, `${p}: the store has a price for it`);
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space, shop = "shop-test";
+		await s.write({ type: "Building", fields: { buildId: shop, plan: w.shop!.plan, name: "Kaufhaus", room: "werft", x: 1, y: 1, w: 3, h: 3, owner: "c-x", ownerName: "X", accountId: "a-x" } as never }, null, Number.MAX_SAFE_INTEGER);
+		await marketTick(s, w);
+		const due = async (proto: string) => (await s.readAll({ type: "Restock", fields: { charId: shop, proto } }))[0];
+		assert.ok(await due("weidensteckling"), "the clock starts");
+		assert.equal((await pack(s, shop, "weidensteckling")).length, 0, "nothing yet");
+		for (let i = 1; i <= stock.weidensteckling!; i++) {
+			const r = (await due("weidensteckling"))!;
+			await s.take({ id: r.id }, 2_000);
+			await s.write({ type: "Restock", fields: { ...r.fields, nextWorldMs: 0 } }, null, Number.MAX_SAFE_INTEGER); // its time is up
+			await marketTick(s, w);
+			assert.equal((await pack(s, shop, "weidensteckling")).length, i);
+		}
+		assert.equal(await due("weidensteckling"), undefined, "full: no clock");
+	} finally { await srv.close(); }
+});
+
 test("market: what a trader only buys it ships off, one a world day, so a glut wears off", async () => {
 	const srv = await startServer();
 	try {
