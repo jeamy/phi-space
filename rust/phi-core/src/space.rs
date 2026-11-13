@@ -2034,7 +2034,13 @@ impl Space {
 
 	fn find(&self, tmpl: &Template, txn: Option<&str>, take: bool) -> Found {
 		let mut locked = false;
-		for (i, e) in self.state.entries.iter().enumerate() {
+		// a template of a type looks only at the records of that type (the type buckets, in the records' order: the same
+		// first match as a scan of them all; a waiting take of a rare type no longer goes over every record of the space)
+		let entries = &self.state.entries;
+		let typed = match tmpl { Template::Of { type_: Some(Json::String(t)), .. } => Some(entries.of_type(t)), _ => None };
+		let positions: Box<dyn Iterator<Item = usize>> = match &typed { Some(at) => Box::new(at.iter().copied()), None => Box::new(0..entries.len()) };
+		for i in positions {
+			let e = &entries[i];
 			if !tmpl.matches(e) || (e.restored_unverified && (take || txn.is_some())) {
 				continue;
 			}

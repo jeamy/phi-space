@@ -209,7 +209,10 @@ impl Entries {
 		self.items.push(e);
 	}
 	pub fn remove(&mut self, i: usize) -> EntryRec {
+		// the type buckets follow the removal (the positions after it move up by one) instead of being worked out anew
+		let types = std::mem::take(&mut self.memo.get_mut().types);
 		self.changed();
+		self.memo.get_mut().types = types.into_iter().map(|(t, at)| (t, at.iter().filter(|&&p| p != i).map(|&p| if p > i { p - 1 } else { p }).collect())).collect();
 		let e = self.items.remove(i);
 		if let Some(log) = &mut self.log {
 			log.push(EntryUndo::Removed(i, e.clone()));

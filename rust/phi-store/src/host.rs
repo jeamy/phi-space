@@ -7,7 +7,7 @@ use crate::ops::WriteOp;
 use crate::writer::{Compaction, Durable};
 use crate::parts::{id_of, CLAIM_INDEX, SPACE_PARTS};
 use phi_core::space::{Changes, CoreError, Random, Space};
-use phi_core::state::{EntryUndo, SpaceState};
+use phi_core::state::{Entries, EntryUndo, SpaceState};
 use phi_core::{ClaimSource, Claims, DiskClaims};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::cell::RefCell;
@@ -416,7 +416,7 @@ impl SpaceHost {
 			let ord = ords.get(part).unwrap_or(&empty);
 			let mut max = *self.max_ord.get(part).unwrap_or(&ord.values().copied().max().unwrap_or(-1));
 			let mut present = HashSet::new();
-			for e in state.entries.iter().filter(|e| touched.contains(e.id.as_str())) {
+			for e in touched_now(&state.entries, &c.entries).into_iter().map(|i| &state.entries[i]) {
 				present.insert(e.id.as_str());
 				let o = match ord.get(&e.id) {
 					Some(o) => *o,
@@ -606,6 +606,49 @@ impl SpaceHost {
 	}
 	/// Waits for everything handed over; the store's failure, if it failed.
 	pub fn drain(&mut self) -> Result<()> { self.durable(self.handed) }
+}
+
+/// The positions of the records a commit's log touched that are still there, in the records' order. Worked out from the
+/// log (a push appends, a removal moves the ones after it up, a change names its place) instead of a pass over every
+/// record of the space; when the result does not fit the records (a length or a place that does not match), every
+/// record is looked at as before.
+fn touched_now(entries: &Entries, log: &[EntryUndo]) -> Vec<usize> {
+	let pushes = log.iter().filter(|u| matches!(u, EntryUndo::Pushed(_))).count();
+	let removes = log.iter().filter(|u| matches!(u, EntryUndo::Removed(..))).count();
+	let scan = || {
+		let ids: HashSet<&str> = log.iter().map(|u| match u { EntryUndo::Pushed(id) => id.as_str(), EntryUndo::Removed(_, e) | EntryUndo::Set(_, e) => e.id.as_str() }).collect();
+		entries.iter().enumerate().filter(|(_, e)| ids.contains(e.id.as_str())).map(|(i, _)| i).collect::<Vec<_>>()
+	};
+	let Some(mut len) = (entries.len() + removes).checked_sub(pushes) else { return scan() };
+	// id -> where it is now (None: removed since)
+	let mut at: HashMap<&str, Option<usize>> = HashMap::new();
+	for u in log {
+		match u {
+			EntryUndo::Pushed(id) => { at.insert(id.as_str(), Some(len)); len += 1; }
+			EntryUndo::Set(i, e) => { at.insert(e.id.as_str(), Some(*i)); }
+			EntryUndo::Removed(i, e) => {
+				if len == 0 { return scan(); }
+				for p in at.values_mut() {
+					match *p { Some(q) if q == *i => *p = None, Some(q) if q > *i => *p = Some(q - 1), _ => {} }
+				}
+				at.entry(e.id.as_str()).or_insert(None);
+				len -= 1;
+			}
+		}
+	}
+	if len != entries.len() { return scan(); }
+	let mut found: Vec<usize> = Vec::new();
+	for (id, p) in &at {
+		match p {
+			Some(i) if *i < entries.len() && entries[*i].id == *id => found.push(*i),
+			Some(_) => return scan(),
+			None => {} // removed: a record back under its id would have been pushed again, which the log says
+		}
+	}
+	found.sort_unstable();
+	found.dedup();
+	debug_assert_eq!(found, scan(), "the touched records worked out from the log");
+	found
 }
 
 #[cfg(test)]
