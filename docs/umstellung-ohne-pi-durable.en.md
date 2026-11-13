@@ -346,7 +346,7 @@ U5 is dropped. U6 to U8 follow: agent package, pi-durable out of the main packag
     140 ms. For the profile (10,000 per Space) that suffices; an index becomes necessary only when Spaces regularly hold more than
     50,000 entries and are searched by exact field.
 - **Platforms (decision 2026-10-24):** Supported and tested are Linux (server, Docker, development) and
-  Android (Termux, Xiaomi M2007J17G, Node 26.4.0). Tests for other platforms are provided by whoever needs them;
+  Android (Termux, Android test phone, Node 26.4.0). Tests for other platforms are provided by whoever needs them;
   with that the platform tests item in U7 is closed.
 - **Backup in operation:** Retention is set in the environment (`CODEMODE_BACKUP_KEEP`, default 7, `.env`); the
   interval is not a variable but the rate at which `npm --prefix codemode-chat run docker:backup` (or

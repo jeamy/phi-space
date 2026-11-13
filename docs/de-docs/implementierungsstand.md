@@ -518,7 +518,7 @@ und sendet Admin-Commands über die gepairte Control-Verbindung. Die Command-ID 
 Profil gespeichert; Wiederholungen, Timeouts und Neustarts verwenden sie erneut, und ein unklarer Ausgang wird als
 „Ausgang wird geprüft“ angezeigt. Neue lesende Admin-Commands auf dem Koordinator: `listRuns`, `runStatus`,
 `listWorkers` (Soll-Zuweisungen und zuletzt gemeldeter Stand je Host). Nachweis: mobiler Test der Brücke und
-Geräteabnahme auf dem Xiaomi gegen einen Koordinator in Produktionskomposition per WLAN, einschließlich Koordinator-Absturz und erneutem Senden derselben ID und über NetBird mit Peer-Identität aus der Management-API ([Nachweis](../../test/evidence/b9-device-2026-10-16/README.md)); ein Koordinator auf big steht aus.
+Geräteabnahme auf dem Testhandy gegen einen Koordinator in Produktionskomposition per WLAN, einschließlich Koordinator-Absturz und erneutem Senden derselben ID und über NetBird mit Peer-Identität aus der Management-API ([Nachweis](../../test/evidence/b9-device-2026-10-16/README.md)); ein Koordinator auf big steht aus.
 
 
 ## Alarmierung, Audit und Plan-Vorschau (2026-10-16)

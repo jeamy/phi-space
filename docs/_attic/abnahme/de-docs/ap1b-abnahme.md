@@ -136,7 +136,7 @@ Das Overlay-Verzeichnis ist eine Fixture; dies ist keine Live-NetBird-Ausfallmat
 Die übrigen Host-/Member- und NetBird-Container liefen weiter mit ihren bisherigen
 Images. Der neue Federation-Dienst wurde nicht in diese Container ausgerollt.
 
-Die anschließende Handy-Abnahme ist bestanden: Xiaomi M2007J17G, Android 12,
+Die anschließende Handy-Abnahme ist bestanden: Testhandy, Android 12,
 Node v26.4.0, WLAN-ADB. Die zwei frisch gebauten Testmodule wurden im separaten
 App-Verzeichnis `files/runtime/phi-spaces-acceptance` ausgeführt. Ergebnis:
 1 Federation-Integrationstest und 3 Recovery-/Boot-/Restore-Tests bestanden,
@@ -215,7 +215,7 @@ enthalten.
   falsche Authority im ACK und beliebiger Commit sind live abgewiesen. Ein
   gültiges Restore-ACK wurde auf beiden Backends automatisiert und anschließend
   innerhalb des verteilten Live-Data-Restores geprüft.
-- **Android:** Aktualisierte APK auf Xiaomi M2007J17G/Android 12 installiert;
+- **Android:** Aktualisierte APK auf dem Android-12-Testhandy installiert;
   echte P-256-Signaturen aus Android Keystore durch phi-spaces und Node crypto
   geprüft. Fremder Peer/Host, abgelaufene Challenge, beliebige Nachricht und
   Private-Key-Export werden abgewiesen. Beide Rotationssignaturen funktionieren;
@@ -270,7 +270,7 @@ Ein Regressionstest über zwei echte TCP-Verbindungen reproduziert den alten
 Fehler und besteht mit der Korrektur. Alle drei mobilen Tests bestehen.
 Die korrigierte APK wurde gebaut und ohne Datenlöschung installiert.
 
-Live auf dem Xiaomi sind Jobs-Objektzugriff über NetBird, eigene P-256-Rotation,
+Live auf dem Testhandy sind Jobs-Objektzugriff über NetBird, eigene P-256-Rotation,
 Abweisung des alten Schlüssels sowie Auflösung einer noch ausstehenden Rotation
 nach Force-stop/Neustart und anschließender Objektzugriff bestanden. Der Grant-
 Test verwendet einen Fixture-Signer; die Geräteprüfung verwendet den nativen
@@ -361,7 +361,7 @@ widerrufener Schlüssel wird weiter abgewiesen. Pending-Enrollment wird weiterhi
 über sein dauerhaft gespeichertes ursprüngliches Request-Tupel aufgelöst.
 Abgeschlossene Rotations-Command-IDs bleiben für erneute Statusabfragen erhalten.
 
-Die korrigierte APK wurde offline gebaut und auf dem Xiaomi aktualisiert.
+Die korrigierte APK wurde offline gebaut und auf dem Testhandy aktualisiert.
 Sichtbar bedient und bestanden: Kopplungsstatus, Schlüsselbeweis, eigene Rotation,
 Rotation auswerten (einschließlich Wiederholung nach Abschluss) und Objektanzeige
 mit dem neuen Schlüssel. Alle vier Mobile-Regressionen sind bestanden.
@@ -427,7 +427,7 @@ Formulare beziehungsweise Kamera-QR-Funktion.
 
 ### Frische Erstkopplung und gemessener Gruppen-/Peer-Entzug
 
-Auf dem realen Xiaomi wurden Prepare, Übernahme eines frischen QR-Payloads,
+Auf dem realen Testhandy wurden Prepare, Übernahme eines frischen QR-Payloads,
 Datenformular, Authentifizierung und Objektanzeige durch die tatsächlichen
 UI-Handler ausgeführt. Das neue native Keystore-Profil ist gepairt; der zuvor
 verwendete Schlüssel ist widerrufen und wird zurückgewiesen. Nach Installation

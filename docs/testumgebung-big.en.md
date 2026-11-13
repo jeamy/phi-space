@@ -454,7 +454,7 @@ set up fresh under the new names; the old data has been removed.
 | NetBird | stack `spacebird` unchanged, directory now `/media/docker/phi-spaces/netbird`; test bed peers new (host-a `100.89.103.95`, member-1 `100.89.136.73`, host-b `100.89.90.236`, member-2 `100.89.226.1`), old test bed peers deleted |
 | Federation | authority `a-ddb275ab…`, control Space `sp-be8af63f…` on `phase1b-host-a` (with recovery socket and recovery admin pin); members `phase1b-member-1`, `nano-test`, `standby-100` enrolled as `host`; admin `lux27` newly paired (`keyId b3004c21…`). New recovery operator key `de22259f…` |
 | big | units `phi-spaces-phase1b-{host-a,member-1}.service` active, the three restore acceptance units renamed and deactivated; forced commands under `~/.local/share/phi-spaces-operations`; local SSH aliases `phi-spaces-*` |
-| Phone | `xi` (Xiaomi M2007J17G) with newly built debug APK (bundle `d20f60d4…`); new Keystore key `c5c68f25…` (alias `phi-spaces/…`) paired as `member` with scope `jobs`, data host `phase1b-member-1`; object access over the overlay checked. The old profile is on the device as `space-profile.legacy-20261018.json`, the old Keystore entry remains unused |
+| Phone | test phone with newly built debug APK (bundle `d20f60d4…`); new Keystore key (alias `phi-spaces/…`) paired as `member` with scope `jobs`, data host `phase1b-member-1`; object access over the overlay checked. The old profile is on the device as `space-profile.legacy-20261018.json`, the old Keystore entry remains unused |
 | not rebuilt | the main store of host-a as primary/sync (`main-sync`, last `single` with a peer that no longer exists) |
 
 Checked: all four services `ready` and `ready` again after restart; the admin reads over the overlay the data Space

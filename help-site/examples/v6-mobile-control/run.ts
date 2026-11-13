@@ -50,7 +50,7 @@ export async function runStageV6() {
 				fields: {
 					tokenHash: hashToken(mobileToken),
 					role: "admin",
-					allowedPeerId: "mobile-admin-xiaomi",
+					allowedPeerId: "mobile-admin-phone",
 					scope: ["*"],
 				},
 			},
@@ -191,7 +191,7 @@ export async function runStageV6() {
 					commandId: "m-setWorkers-1",
 					kind: "setWorkers",
 					state: "completed",
-					requestedBy: "mobile-admin-xiaomi",
+					requestedBy: "mobile-admin-phone",
 					at: Date.now(),
 				},
 			},

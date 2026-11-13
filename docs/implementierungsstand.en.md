@@ -516,7 +516,7 @@ and sends admin commands over the paired control connection. The command ID is s
 profile before sending; retries, timeouts and restarts reuse it, and an unclear outcome is displayed as
 "Ausgang wird geprüft" (outcome being checked). New read-only admin commands on the coordinator: `listRuns`, `runStatus`,
 `listWorkers` (desired assignments and last reported state per host). Evidence: mobile test of the bridge and
-device acceptance on the Xiaomi against a coordinator in production composition over WLAN, including coordinator crash and resending of the same ID, and over NetBird with peer identity from the management API ([evidence](../test/evidence/b9-device-2026-10-16/README.md)); a coordinator on big is still outstanding.
+device acceptance on the test phone against a coordinator in production composition over WLAN, including coordinator crash and resending of the same ID, and over NetBird with peer identity from the management API ([evidence](../test/evidence/b9-device-2026-10-16/README.md)); a coordinator on big is still outstanding.
 
 
 ## Alerting, audit and plan preview (2026-10-16)

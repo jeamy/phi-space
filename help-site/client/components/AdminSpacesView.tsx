@@ -17,7 +17,7 @@ export function AdminSpacesView(props: AdminSpacesViewProps) {
 	const [statusMsg, setStatusMsg] = useState<string>("");
 
 	// Form states matching steuerung.html & spaces.html
-	const [enrollPeerId, setEnrollPeerId] = useState<string>("mobile-admin-xiaomi");
+	const [enrollPeerId, setEnrollPeerId] = useState<string>("mobile-admin-phone");
 	const [enrollEndpoint, setEnrollEndpoint] = useState<string>("tcp://100.64.0.10:9440");
 	const [lastQrPayload, setLastQrPayload] = useState<string>("");
 

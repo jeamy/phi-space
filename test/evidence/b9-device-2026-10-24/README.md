@@ -2,7 +2,7 @@
 
 Re-run of the B9 acceptance ([2026-10-16](../b9-device-2026-10-16/README.md)) after the cutover from pi-durable
 to the own store (U6/U8): a freshly built debug APK (`pi-termux-mobile`, bundle of phi-spaces at commit e817ab9
-plus the mobile edits of U6) installed over wireless ADB on the Xiaomi M2007J17G, Node 26.4.0 from the app's rootfs.
+plus the mobile edits of U6) installed over wireless ADB on the Android test phone, Node 26.4.0 from the app's rootfs.
 The coordinator (`test/testbed/device/b9-coordinator.ts`) ran on the operator host on its LAN address
 (layer A: fixture pin of the phone's IP). The app's HTTP bridge was driven through `adb forward`; every call went
 through the phone's runtime, its private profile and the Android Keystore.

@@ -28,7 +28,7 @@ The following points were incomplete or not implementable as stated; the right c
 | "The newer asOf wins" | Clocks of different hosts drift. → leases with bounded time uncertainty; HLC orders versions, guarantees no business-wise newest measurement (7.2). |
 | "Limit transactions to one member" | Correct; IDs must carry the member (L3). → global IDs `spaceId/localId`; host, Space and replica identity separate (section 2). |
 | "Directory with capability entries" | Correct (Jini lookup service); needs write-protected types. |
-| Router on the phone, star via the phone | The phone sleeps or is terminated (MIUI, phantom process killer). → router as a worker in the control space on a host; clients only control (section 5). |
+| Router on the phone, star via the phone | The phone sleeps or is terminated (vendor power savers, phantom process killer). → router as a worker in the control space on a host; clients only control (section 5). |
 | Connections via SSH, key per host pair | Works, but TOFU, key distribution and NAT are manual work. → NetBird takes over key exchange, encryption, NAT traversal and network ACLs (section 4). SSH CA remains as an alternative (appendix A). |
 
 Added compared to the draft: owner across hosts, quotas per peer, loop avoidance when mirroring,

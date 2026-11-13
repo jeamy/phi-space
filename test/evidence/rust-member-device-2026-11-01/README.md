@@ -1,6 +1,6 @@
 # A real phone on a Rust Member — 2026-11-01
 
-Device acceptance of R5b ([Rust port](../../../docs/rust-portierung.en.md)): the app of `pi-termux-mobile` on a Xiaomi M2007J17G
+Device acceptance of R5b ([Rust port](../../../docs/rust-portierung.en.md)): the app of `pi-termux-mobile` on an Android test phone
 (Android 12) against the local federation (`npm run testbed:federation -- phone`) in containers on the operator host: a TypeScript
 control host, the TLS register and a Rust Member (`phi-space-server --member`). The phone reached them over WLAN; layer A was the
 directory of the test bed with the phone's LAN address. The app's bridge was driven through `adb forward` from the desktop, and

@@ -1,7 +1,7 @@
 # Mobile Spaces control on the device — 2026-10-16
 
 Device acceptance of step B9 ([Betrieb und mobile Steuerung](../../../docs/betrieb-und-mobile-steuerung.en.md) §8):
-the Spaces control page of `pi-termux-mobile`, served by the real app runtime on a Xiaomi M2007J17G (Android 12),
+the Spaces control page of `pi-termux-mobile`, served by the real app runtime on an Android test phone (Android 12),
 installed as a fresh debug APK over wireless ADB without clearing app data. The coordinator
 (`test/testbed/device/b9-coordinator.ts`) ran on the operator host in the production composition
 (`startFederationHost` with grants, enrollment, control access, supervisor, run and worker commands) on its LAN
@@ -43,7 +43,7 @@ no collision. Afterwards the original profile was restored byte-identically agai
 
 ## Over NetBird (same day)
 
-The phone's NetBird client (peer `xi`, 100.89.186.250) was connected for this test; the coordinator listened on the
+The phone's NetBird client (the phone's peer) was connected for this test; the coordinator listened on the
 operator host's NetBird address (100.89.218.189, TCP 17460) with `--netbird`: peer id, overlay IP and connection
 state came from the real NetBird Management API (queried over ssh on big, so the token stayed there). Existing
 policies (`net1`/`net8`) already connect both peers; only an owned local `ts-input` RETURN rule for exactly this

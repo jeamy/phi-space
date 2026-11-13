@@ -1,6 +1,6 @@
 {
   "date": "2026-10-11",
-  "device": "M2007J17G Android 12",
+  "device": "Android 12 test phone",
   "realNetbird": true,
   "nativeAndroidKeystore": true,
   "freshIdentityReplacedRevokedPreviousIdentity": true,

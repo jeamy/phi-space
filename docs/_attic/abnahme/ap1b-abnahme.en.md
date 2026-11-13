@@ -136,7 +136,7 @@ The overlay directory is a fixture; this is not a live NetBird outage matrix.
 The remaining host/member and NetBird containers continued with their previous
 images. The new federation service was not rolled out into these containers.
 
-The subsequent phone acceptance passed: Xiaomi M2007J17G, Android 12,
+The subsequent phone acceptance passed: Android test phone, Android 12,
 Node v26.4.0, Wi-Fi ADB. The two freshly built test modules were run in the separate
 app directory `files/runtime/phi-spaces-acceptance`. Result:
 1 federation integration test and 3 recovery/boot/restore tests passed,
@@ -214,7 +214,7 @@ No tokens, private keys or still valid signed grants are contained in them.
   wrong authority in the ACK and an arbitrary commit were rejected live. A
   valid restore ACK was exercised automatically on both backends and then
   within the distributed live data restore.
-- **Android:** Updated APK installed on Xiaomi M2007J17G/Android 12;
+- **Android:** Updated APK installed on the Android 12 test phone;
   real P-256 signatures from Android Keystore checked by phi-spaces and Node crypto.
   Foreign peer/host, expired challenge, arbitrary message and
   private-key export are rejected. Both rotation signatures work;
@@ -269,7 +269,7 @@ A regression test over two real TCP connections reproduces the old
 error and passes with the fix. All three mobile tests pass.
 The corrected APK was built and installed without deleting data.
 
-Live on the Xiaomi, jobs object access over NetBird, own P-256 rotation,
+Live on the test phone, jobs object access over NetBird, own P-256 rotation,
 rejection of the old key as well as resolution of a still pending rotation
 after force-stop/restart and subsequent object access passed. The grant
 test uses a fixture signer; the device check uses the native
@@ -360,7 +360,7 @@ revoked key is still rejected. Pending enrollment is still resolved
 via its durably stored original request tuple.
 Completed rotation command IDs are retained for renewed status queries.
 
-The corrected APK was built offline and updated on the Xiaomi.
+The corrected APK was built offline and updated on the test phone.
 Operated visibly and passed: pairing status, key proof, own rotation,
 evaluate rotation (including repetition after completion) and object display
 with the new key. All four mobile regressions passed.
@@ -425,7 +425,7 @@ forms or the camera QR function.
 
 ### Fresh Initial Pairing and Measured Group/Peer Withdrawal
 
-On the real Xiaomi, prepare, takeover of a fresh QR payload,
+On the real test phone, prepare, takeover of a fresh QR payload,
 data form, authentication and object display were executed by the actual
 UI handlers. The new native keystore profile is paired; the previously
 used key is revoked and rejected. After installing the normal APK without

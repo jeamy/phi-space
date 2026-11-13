@@ -129,7 +129,7 @@ Krypto- oder Betriebsverträgen; alte und neue Version sind dort **nicht interop
 (siehe 1–3), die Föderation wurde deshalb gestoppt, gesichert und unter den neuen Namen frisch aufgesetzt; neue CA
 und Zertifikate, neue Authority und Schlüssel, Forced Commands, Units, Verzeichnisse und SSH-Aliase umbenannt,
 Altbestände entfernt. Details und Prüfungen: [Testumgebung §20](../testumgebung-big.en.md#20-rebuild-under-phi-spaces-2026-10-18).
-Das Handy `xi` ist mit neuer APK und neuem Keystore-Schlüssel neu gekoppelt. Offen: der primary/sync-Haupt-Store von
+Das Handy ist mit neuer APK und neuem Keystore-Schlüssel neu gekoppelt. Offen: der primary/sync-Haupt-Store von
 host-a wurde nicht wieder eingerichtet.
 
 ## Prüfungen und Evidenz

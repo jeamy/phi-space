@@ -129,7 +129,7 @@ crypto or operating contracts; old and new versions are **not interoperable** th
 (see 1–3), so the federation was stopped, backed up and set up fresh under the new names; new CA
 and certificates, new authority and keys, forced commands, units, directories and SSH aliases renamed,
 old data removed. Details and checks: [Test environment §20](testumgebung-big.en.md#20-rebuild-under-phi-spaces-2026-10-18).
-The phone `xi` was paired anew with a new APK and a new Keystore key. Open: the primary/sync main store of
+The phone was paired anew with a new APK and a new Keystore key. Open: the primary/sync main store of
 host-a was not set up again.
 
 ## Checks and evidence

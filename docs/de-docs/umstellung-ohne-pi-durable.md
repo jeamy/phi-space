@@ -347,7 +347,7 @@ U5 entfällt. Es folgen U6 bis U8: Agent-Paket, pi-durable aus Hauptpaket und Te
     140 ms. Für das Profil (10 000 je Space) reicht das; ein Index wird erst nötig, wenn Spaces regelmäßig über
     50 000 Einträge halten und feldgenau gesucht wird.
 - **Plattformen (Entscheidung 2026-10-24):** Unterstützt und getestet sind Linux (Server, Docker, Entwicklung) und
-  Android (Termux, Xiaomi M2007J17G, Node 26.4.0). Tests für weitere Plattformen stellt, wer sie braucht, selbst bereit;
+  Android (Termux, Testhandy, Node 26.4.0). Tests für weitere Plattformen stellt, wer sie braucht, selbst bereit;
   damit ist der Punkt Plattformtests in U7 abgeschlossen.
 - **Backup im Betrieb:** Die Aufbewahrung steht in der Umgebung (`CODEMODE_BACKUP_KEEP`, Standard 7, `.env`); das
   Intervall ist keine Variable, sondern der Takt, in dem `npm --prefix codemode-chat run docker:backup` (oder

@@ -63,7 +63,7 @@ Der Entwurf (vier Schichten, Modus pro Typ, Primär/Replikat, Verzeichnis, Stern
 | "Es gewinnt der neuere asOf" | Uhren verschiedener Hosts driften. → Leases mit begrenzter Zeitunsicherheit; HLC ordnet Versionen, garantiert keine fachlich neueste Messung ([7.2](#72-sync-spiegeln) + [14.3](#143-lwwset-konsistenz)). |
 | "Transaktionen auf ein Mitglied beschränken" | Richtig; IDs müssen das Mitglied tragen (L3). → globale IDs `spaceId/localId`; Host-, Space- und Replikatidentität getrennt ([2](#2-begriffe)). |
 | "Verzeichnis mit Capability-Entries" | Richtig (Jini Lookup Service); braucht schreibgeschützte Typen. |
-| Router auf dem Handy, Stern über das Handy | Handy schläft oder wird beendet (MIUI, Phantom-Process-Killer). → Router als Worker im Control Space auf einem Host; Clients steuern nur ([5](#5-control-space-und-router)). |
+| Router auf dem Handy, Stern über das Handy | Handy schläft oder wird beendet (Energiesparen des Herstellers, Phantom-Process-Killer). → Router als Worker im Control Space auf einem Host; Clients steuern nur ([5](#5-control-space-und-router)). |
 | Verbindungen per SSH, Schlüssel pro Host-Paar | Funktioniert, aber TOFU, Schlüsselverteilung und NAT sind Handarbeit. → **NetBird + mTLS + Challenge ([4.1](#41-netbird-als-netzschicht) + [14.7](#147-mtls-challenge))**. |
 
 Ergänzt gegenüber dem Entwurf: Owner über Hosts, Quoten pro Peer, Schleifen-Vermeidung beim Spiegeln, Protokollversionierung, Rückstau, Simulator-Tests mit Partitionen, Migration des Dokuments (Version 4 → 5).
