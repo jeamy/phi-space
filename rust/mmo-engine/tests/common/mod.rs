@@ -8,7 +8,7 @@ use std::process::Command;
 use std::sync::Once;
 
 /// The commit the port follows (docs/rust-portierung.en.md, R8.2).
-pub const FROZEN: &str = "b75f771";
+pub const FROZEN: &str = "d834da0";
 
 pub fn repo() -> PathBuf { Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().expect("the checkout") }
 
