@@ -298,11 +298,11 @@ JSONL ist kein Speicher des Space mehr. pi-durable-Stores werden nicht importier
 
 ### Rust-Portierung {#rust-port}
 
-Den Space-Server gibt es zweimal: \`src/standalone.ts\` in TypeScript und \`phi-space-server\` in Rust (der Cargo-Workspace in \`rust/\`, \`docs/rust-portierung.en.md\`). Beide sprechen dasselbe Wire-Protokoll, lesen und schreiben dieselbe SQLite-Datei und haben dieselbe Semantik; dieselben Tests halten die Rust-Crates gegen Kern, Speicher und Dienst in TypeScript, Antwort für Antwort. Die Clients bleiben TypeScript (\`RemoteSpace\`, \`phi-spaces/ws\`), eine Anwendung tauscht also nur das Programm hinter der Adresse.
+Den Space-Server gibt es zweimal: \`src/standalone.ts\` in TypeScript und \`phi-space-server\` in Rust (der Cargo-Workspace in \`rust/\`, \`docs/rust-portierung.en.md\`). Beide sprechen dasselbe Wire-Protokoll, lesen und schreiben dieselbe SQLite-Datei und haben dieselbe Semantik; dieselben Tests halten die Rust-Crates gegen Kern, Speicher und Dienst in TypeScript, Antwort für Antwort. Die TypeScript-Clients (\`RemoteSpace\`, \`phi-spaces/ws\`) sprechen mit beiden, eine Anwendung tauscht also nur das Programm hinter der Adresse.
 
-Im Betrieb seit 2026-11-07: Die Space-Prozesse von spaces-mmo (der Accounts-Space auf nano, die vier Regionen auf big), der Space von codemode-chat auf nano und seit 2026-11-08 die Swarm-Spaces dieser Hilfe-Seite auf big und nano laufen auf Rust. Die Spielprozesse, die Rollen des Chats und der Hub bleiben TypeScript-Clients. Gemessen gegen den TypeScript-Server bei gleicher Last: CPU je Befehl 2,8- bis 3,4-mal niedriger (im reinen Dienst 6-mal und mehr), Speicher (RSS) etwa zehnmal niedriger, p95 und p99 in jedem Profil besser. Auf big laufen die vier Regions-Spaces mit 20 bis 85 MB statt 120 bis 175 MB.
+Im Betrieb seit 2026-11-07: Die Space-Prozesse von spaces-mmo (der Accounts-Space auf nano, die vier Regionen auf big), der Space von codemode-chat auf nano und seit 2026-11-08 die Swarm-Spaces dieser Hilfe-Seite auf big und nano laufen auf Rust. Seit 2026-11-11 folgen die Spielprozesse von spaces-mmo auf big: Welt (\`mmo-world\`), NPCs (\`mmo-npc\`) und Web (\`mmo-web\`), Schritt für Schritt gegen die eingefrorene TypeScript-Engine gehalten (R8). Gemessen gegen den TypeScript-Server bei gleicher Last: CPU je Befehl 2,8- bis 3,4-mal niedriger (im reinen Dienst 6-mal und mehr), Speicher (RSS) etwa zehnmal niedriger, p95 und p99 in jedem Profil besser. Auf big laufen die vier Regions-Spaces mit 20 bis 85 MB statt 120 bis 175 MB, der Web-Prozess des Spiels mit 59 MB statt 199 MB.
 
-Der Rückweg bleibt offen: Der TypeScript-Server öffnet dieselben Dateien. Als Nächstes kommen die Serverprozesse von spaces-mmo (Welt, NPC, Web) nach Rust (R8); das Agenten-Paket, die Modellaufrufe und die Webseiten bleiben TypeScript.
+Seit 2026-11-12 ist der Rückweg geschlossen (Entscheidung R-D12): Auf big und nano läuft nur noch die Rust-Implementierung, die TypeScript-Deploy-Skripte verweigern dort. Lokal bleibt TypeScript die Referenz, gegen die die Rust-Crates getestet werden. TypeScript bleiben die Clients, die Rollen von codemode-chat, der Hub der Hilfe-Seite, die Modellaufrufe (auch der Modell-Prozess von spaces-mmo), das Agenten-Paket und die Webseiten. Auf dem Handy läuft dasselbe Programm als eigener Space-Server der App ([Agenten auf einem entfernten Space](help.topic.agent_tools_and_replay#remote-spaces)).
 
 ## Technische Referenz {#technical-reference}
 
@@ -383,11 +383,11 @@ JSONL is no longer a store of the space. pi-durable stores are not imported (dec
 
 ### Rust Port {#rust-port}
 
-The Space server exists twice: \`src/standalone.ts\` in TypeScript and \`phi-space-server\` in Rust (the cargo workspace in \`rust/\`, \`docs/rust-portierung.en.md\`). Both speak the same wire protocol, read and write the same SQLite file and keep the same semantics; the Rust crates are held against the TypeScript core, store and service by the same tests, reply for reply. The clients stay TypeScript (\`RemoteSpace\`, \`phi-spaces/ws\`), so an application changes only the program behind the address.
+The Space server exists twice: \`src/standalone.ts\` in TypeScript and \`phi-space-server\` in Rust (the cargo workspace in \`rust/\`, \`docs/rust-portierung.en.md\`). Both speak the same wire protocol, read and write the same SQLite file and keep the same semantics; the Rust crates are held against the TypeScript core, store and service by the same tests, reply for reply. The TypeScript clients (\`RemoteSpace\`, \`phi-spaces/ws\`) talk to either, so an application changes only the program behind the address.
 
-In production since 2026-11-07: the Space processes of spaces-mmo (the accounts Space on nano, the four regions on big), the codemode-chat Space on nano and, since 2026-11-08, the swarm Spaces of this help site on big and nano run on Rust. The game processes, the chat roles and the hub stay TypeScript clients. Measured against the TypeScript server under the same load: CPU per command 2.8 to 3.4 times lower (in the bare service 6 times and more), memory (RSS) about ten times lower, p95 and p99 better in every profile. On big the four region Spaces run with 20 to 85 MB instead of 120 to 175 MB.
+In production since 2026-11-07: the Space processes of spaces-mmo (the accounts Space on nano, the four regions on big), the codemode-chat Space on nano and, since 2026-11-08, the swarm Spaces of this help site on big and nano run on Rust. Since 2026-11-11 the game processes of spaces-mmo on big follow: world (\`mmo-world\`), NPCs (\`mmo-npc\`) and web (\`mmo-web\`), held step by step against the frozen TypeScript engine (R8). Measured against the TypeScript server under the same load: CPU per command 2.8 to 3.4 times lower (in the bare service 6 times and more), memory (RSS) about ten times lower, p95 and p99 better in every profile. On big the four region Spaces run with 20 to 85 MB instead of 120 to 175 MB; the game's web process with 59 MB instead of 199 MB.
 
-The way back stays open: the TypeScript server opens the same files. Next come the server processes of spaces-mmo (world, npc, web) in Rust (R8); the agent package, the model calls and the web pages stay TypeScript.
+Since 2026-11-12 the way back is closed (decision R-D12): big and nano run only the Rust implementation, and the TypeScript deploy scripts there refuse. Locally TypeScript stays the reference the Rust crates are tested against. TypeScript remains for the clients, the codemode-chat roles, the help site's hub, the model calls (spaces-mmo's model process too), the agent package and the web pages. On the phone the same binary runs as the app's own Space server ([agents on a remote space](help.topic.agent_tools_and_replay#remote-spaces)).
 
 ## Technical Reference {#technical-reference}
 
@@ -1508,7 +1508,7 @@ Zum Ausprobieren gibt es [Beispiele mit Agenten](help.topic.examples#agents).
 
 ### Technische Details {#technical-details}
 
-Die Erweiterung \`spaces\` (\`createSpaces(localSpaces(host))\` im Paket \`agent/\`, npm-Name \`phi-spaces-agent\`) stattet \`pi-durable\`-Conversations mit 8 Werkzeugen aus, die sämtlich mit \`replay: "safe"\` laufen. Die Werkzeuge wirken auf einen getrennten Space-Host. Das Paket nutzt pi-durable, pi-ai und Chord in Version 1.4.0; Werkzeugergebnisse stehen in \`output\`, nicht mehr in \`content\`.
+Die Erweiterung \`spaces\` (\`createSpaces(localSpaces(host))\` im Paket \`agent/\`, npm-Name \`phi-spaces-agent\`) stattet \`pi-durable\`-Conversations mit 8 Werkzeugen aus, die sämtlich mit \`replay: "safe"\` laufen. Die Werkzeuge wirken auf einen getrennten Space-Host. \`remoteSpaces(...)\` richtet sie auf einen Space-Server anderswo ([unten](help.topic.agent_tools_and_replay#remote-spaces)). Das Paket nutzt pi-durable, pi-ai und Chord in Version 1.5.2; Werkzeugergebnisse stehen in \`output\`, nicht mehr in \`content\`.
 
 ## Technische Referenz {#technical-reference}
 
@@ -1540,15 +1540,24 @@ Der Space liegt im eigenen Speicher, der Agent im Speicher von pi-durable. Beide
 - **Grenze**: Die Zusage setzt voraus, dass das Memo den Ausfall überlebt. Stabile Identitäten ersetzen keinen gemeinsamen Commit. Prozessabstürze sind getestet, ein echter Stromausfall nicht (\`docs/agenten-stromausfalltest.en.md\`).
 - **Externe Dienste**: Ein nach einem Absturz wiederholter Modellaufruf kann erneut ausgeführt und berechnet werden.
 
+### Agenten auf einem entfernten Space {#remote-spaces}
+
+Die Werkzeuge können auch auf einem Space-Server anderswo wirken. \`remoteSpaces(open)\` gibt ihnen einen entfernten Space über eine Verbindung eines Agenten-Hosts (Rolle \`agentHost\`, \`--agent-host\` am Server). Jede Conversation handelt als eigener Agent \`conversation-<id>\`, mit eigenem Principal, eigener Mailbox, eigenen Claims und eigenem Budget für offene Anfragen. Der Host schickt diesen Namen mit jedem Aufruf als \`frame.agent\`; von jeder anderen Verbindung weist der Server ihn ab. Waits und Benachrichtigungen landen in der eigenen Mailbox der Conversation.
+
+\`eventPump(open, harness)\` liest die Mailbox jeder beobachteten Conversation per Long Poll und übergibt jedes Ereignis einmal an die Conversation, unter \`phi-spaces:<Mailbox-Epoche>:<seq>\`. Eine Seite bestätigt er erst, wenn sie ganz übergeben ist, sodass ein Neustart nichts doppelt übergibt. Eine Conversation, die es nicht mehr gibt, gibt einen ihr übergebenen Take zurück. Ist der Space nicht erreichbar, sagt das der Prompt-Abschnitt, statt den Turn scheitern zu lassen.
+
+Zwei Hosts nutzen das. Der Chat der Android-App (pi-termux-mobile) hat einen eigenen \`phi-space-server\` auf dem Handy: Der Dienst der App überwacht ihn neben node, sein Speicher liegt in den Dateien der App und er lauscht nur auf einem Unix-Socket. pi-serverd gibt die Werkzeuge seiner Conversations auf dieselbe Weise an einen Space-Server, und die Remote-Sitzungen des Handys laufen als Aufrufe über einen Space, ohne pi-server und pi-client. Details: \`docs/m1-mobile.en.md\`.
+
 ### Getrennter Agentenprozess {#agent-process}
 
 \`DurableAgentClient\` (\`agent/src/durable-client.ts\`) startet \`durable-worker.ts\` als Kindprozess und spricht über Node-IPC mit ihm (Protokoll in \`durable-protocol.ts\`). So gelangen keine pi-durable-Importe in die Anwendung, und das Harness dort kennt den Space nicht. Der Worker sichert seinen Speicher mit einer eigenen \`.owner\`-Datei gegen einen zweiten Prozess. Codemode-Chat und spaces-mmo nutzen diesen Weg; \`CODEMODE_DURABLE_AGENT=0\` und \`SPACES_MMO_DURABLE_NPCS=0\` schalten ihn ab.
 
-### Upgrade auf pi 1.4.0 {#pi-140}
+### Upgrades auf pi 1.4.0 und 1.5.2 {#pi-140}
 
 - Werkzeugergebnisse stehen in \`output\` statt \`content\`. Nachrichten an das Modell behalten ihre \`content\`-Struktur.
 - pi-durable 1.4.0 migriert seine SQLite-Datenbank automatisch auf Schema 2. Danach lässt sie sich mit 1.3.0 oder älter nicht mehr öffnen. **Agentendatenbanken vorher sichern**, einschließlich WAL-Zustand.
 - Das betrifft nur den Agentenspeicher. Format 2 des eigenen phi-spaces-Speichers ist davon unabhängig.
+- pi 1.5 rechnet eine Modellanfrage, die ein Absturz unterbrochen hat, gegen die Wiederholungsregel. Der Durable-Worker erlaubt eine Wiederholung, damit die Wiederherstellung nach einem Absturz weiter funktioniert, begrenzt durch das in seinem Speicher gehaltene Budget an Modellaufrufen je Job.
 
 Details stehen in \`docs/upgrade-pi-1.4.0.en.md\`.
 
@@ -1568,7 +1577,7 @@ To try it out, there are [examples with agents](help.topic.examples#agents).
 
 ### Technical Details {#technical-details}
 
-The \`spaces\` extension (\`createSpaces(localSpaces(host))\` in the \`agent/\` package, npm name \`phi-spaces-agent\`) equips \`pi-durable\` conversations with 8 tools, all marked \`replay: "safe"\`. The tools act on a separate space host. The package uses pi-durable, pi-ai and Chord at version 1.4.0; tool results go in \`output\`, no longer in \`content\`.
+The \`spaces\` extension (\`createSpaces(localSpaces(host))\` in the \`agent/\` package, npm name \`phi-spaces-agent\`) equips \`pi-durable\` conversations with 8 tools, all marked \`replay: "safe"\`. The tools act on a separate space host. \`remoteSpaces(...)\` points them at a space server elsewhere ([below](help.topic.agent_tools_and_replay#remote-spaces)). The package uses pi-durable, pi-ai and Chord at version 1.5.2; tool results go in \`output\`, no longer in \`content\`.
 
 ## Technical Reference {#technical-reference}
 
@@ -1600,15 +1609,24 @@ The space lives in the own store, the agent in pi-durable's store. Both may run 
 - **Boundary**: The promise assumes the memo survives the failure. Stable identities do not replace a shared commit. Process crashes are tested; a real power loss is not (\`docs/agenten-stromausfalltest.en.md\`).
 - **External services**: A model call repeated after a crash can run and be billed again.
 
+### Agents On A Remote Space {#remote-spaces}
+
+The tools can also act on a space server elsewhere. \`remoteSpaces(open)\` gives them a remote space through one connection of an agent host (role \`agentHost\`, \`--agent-host\` on the server). Every conversation acts as an agent of its own, \`conversation-<id>\`, with its own principal, mailbox, claims and pending budget. The host sends that name with each call as \`frame.agent\`; from any other connection the server refuses it. Waits and notifications land in the conversation's own mailbox.
+
+\`eventPump(open, harness)\` reads each watched conversation's mailbox with a long poll and hands every event to the conversation once, under \`phi-spaces:<mailbox epoch>:<seq>\`. It acknowledges a page only after all of it was handed over, so a restart hands nothing over twice. A conversation that is gone gives back a take it was handed. If the space cannot be reached, the prompt section says so instead of failing the turn.
+
+Two hosts use this. The chat of the Android app (pi-termux-mobile) has its own \`phi-space-server\` on the phone: the app's service supervises it beside node, its store is in the app's files and it listens only on a unix socket. pi-serverd gives its conversations' tools to a space server the same way, and the phone's remote sessions run as calls over a space, without pi-server and pi-client. Details: \`docs/m1-mobile.en.md\`.
+
 ### Separate Agent Process {#agent-process}
 
 \`DurableAgentClient\` (\`agent/src/durable-client.ts\`) starts \`durable-worker.ts\` as a child process and talks to it over Node IPC (protocol in \`durable-protocol.ts\`). This keeps pi-durable imports out of the application, and the harness over there does not know the space. The worker guards its store against a second process with an \`.owner\` file of its own. Codemode-Chat and spaces-mmo use this path; \`CODEMODE_DURABLE_AGENT=0\` and \`SPACES_MMO_DURABLE_NPCS=0\` turn it off.
 
-### Upgrade To pi 1.4.0 {#pi-140}
+### Upgrades To pi 1.4.0 And 1.5.2 {#pi-140}
 
 - Tool results go in \`output\` instead of \`content\`. Messages to the model keep their \`content\` structure.
 - pi-durable 1.4.0 migrates its SQLite database to schema 2 automatically. After that, 1.3.0 or older can no longer open it. **Back up agent databases first**, including their WAL state.
 - This concerns the agent store only. Format 2 of the own phi-spaces store has nothing to do with it.
+- pi 1.5 counts a model request that a crash interrupted against the retry policy. The durable worker allows one retry so that crash recovery still works, bounded by the per-job model admission budget kept in its store.
 
 Details are in \`docs/upgrade-pi-1.4.0.en.md\`.
 

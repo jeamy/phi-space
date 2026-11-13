@@ -32,7 +32,7 @@ const INTROS: Record<IntroApp, Intro> = {
 			{ de: "Ab 20.000 Entries je Shard räumt die Aufbewahrung die ältesten Posts ab.", en: "Above 20,000 entries per shard, retention purges the oldest posts." },
 		],
 		where: [
-			{ de: "Zwei Shards: A im Store der Hilfeseite auf big, B auf nano; der Hub auf big erreicht nano über einen SSH-Tunnel.", en: "Two shards: A in the help site's store on big, B on nano; the hub on big reaches nano through an SSH tunnel." },
+			{ de: "Zwei Shards: A auf big, B auf nano, jeder in einem eigenen Space-Prozess (dem Rust-Server phi-space-server); der Hub auf big und die Shard-Engine auf nano sind seine Clients, nano erreicht der Hub über einen SSH-Tunnel.", en: "Two shards: A on big, B on nano, each in a Space process of its own (the Rust server phi-space-server); the hub on big and the shard engine on nano are its clients, the hub reaches nano through an SSH tunnel." },
 		],
 		open: { de: "Space Chat öffnen", en: "Open Space Chat" },
 	},
@@ -52,7 +52,7 @@ const INTROS: Record<IntroApp, Intro> = {
 			{ de: "Jede Rolle (Space, Judge, Agenten, Modell, Web) ist ein eigener Prozess; Judges nehmen Vorschläge mit take, so wird jeder genau einmal geprüft – auch mit Judges auf zwei Rechnern.", en: "Every role (space, judge, agents, model, web) is its own process; judges take proposals, so each is judged exactly once – even with judges on two machines." },
 		],
 		where: [
-			{ de: "Der Space liegt auf nano; Web, Agenten, Modell und ein Judge laufen auf big und erreichen ihn über einen Tunnel, ein zweiter Judge läuft auf nano.", en: "The space lives on nano; web, agents, model and one judge run on big and reach it through a tunnel, a second judge runs on nano." },
+			{ de: "Der Space (der Rust-Server) liegt auf nano; Web, Agenten, Modell und ein Judge laufen auf big und erreichen ihn über einen Tunnel, ein zweiter Judge läuft auf nano.", en: "The space (the Rust server) lives on nano; web, agents, model and one judge run on big and reach it through a tunnel, a second judge runs on nano." },
 		],
 		open: { de: "Codemode-Chat öffnen", en: "Open codemode chat" },
 	},
@@ -72,7 +72,7 @@ const INTROS: Record<IntroApp, Intro> = {
 			{ de: "Ein Abzweig ist ein Zeiger auf den alten Thread; die Nachrichten bleiben, wo sie sind.", en: "A fork is a pointer to the old thread; the messages stay where they are." },
 		],
 		where: [
-			{ de: "Im Store der Hilfeseite auf big, neben dem Schwarm-Shard A.", en: "In the help site's store on big, next to swarm shard A." },
+			{ de: "Im Store der Hilfeseite auf big.", en: "In the help site's store on big." },
 		],
 		open: { de: "Multiplayer Space-Chat öffnen", en: "Open Multiplayer Space-Chat" },
 	},
@@ -84,8 +84,8 @@ const INTROS: Record<IntroApp, Intro> = {
 			en: "An online role-playing game on phi-spaces. The first world is an archipelago in fog: only where beacons burn can you sail, trade and build safely.",
 		},
 		what: [
-			{ de: "Kein Feuer hält einer allein: Spieler und NPCs sammeln, handeln, siedeln und halten die Feuer gemeinsam am Brennen.", en: "No one keeps a fire alone: players and NPCs gather, trade, settle and keep the fires burning together." },
-			{ de: "Karte im Browser, Befehle als Text; NPCs mit Skript oder mit echtem Modell.", en: "A map in the browser, commands as text; NPCs scripted or driven by a real model." },
+			{ de: "Kein Feuer hält einer allein: Spieler und NPCs sammeln, fischen, bestellen Felder, halten Tiere, stellen Dinge her, handeln, bauen Hütten und Wege und halten die Feuer gemeinsam am Brennen.", en: "No one keeps a fire alone: players and NPCs gather, fish, farm, keep animals, craft, trade, build huts and roads and keep the fires burning together." },
+			{ de: "Karte im Browser in 2D oder 3D, Befehle als Text; NPCs mit Skript oder mit echtem Modell.", en: "A map in the browser in 2D or 3D, commands as text; NPCs scripted or driven by a real model." },
 		],
 		spaces: [
 			{ de: "Die ganze Welt sind Entries: Räume, Wege, Nebel, Dinge, Figuren, Angebote und Aufträge.", en: "The whole world is entries: rooms, exits, fog, things, characters, listings and orders." },
@@ -93,7 +93,7 @@ const INTROS: Record<IntroApp, Intro> = {
 			{ de: "Zugangsdaten und Sitzungen liegen getrennt in einem eigenen Konten-Space.", en: "Credentials and sessions live apart in an accounts space of their own." },
 		],
 		where: [
-			{ de: "Die Welt läuft in vier Regionen auf big, jede mit eigenem Space, Welt-, NPC- und Modell-Prozess, dazu das Web. Der Konten-Space liegt auf nano, über einen Tunnel verbunden.", en: "The world runs in four regions on big, each with its own space and its own world, NPC and model process, plus the web. The accounts space lives on nano, connected through a tunnel." },
+			{ de: "Die Welt läuft in vier Regionen auf big, jede mit eigenem Space, Welt-, NPC- und Modell-Prozess, dazu das Web. Der Konten-Space liegt auf nano, über einen Tunnel verbunden. Space-, Welt-, NPC- und Web-Prozess sind Rust-Programme, nur der Modell-Prozess bleibt TypeScript.", en: "The world runs in four regions on big, each with its own space and its own world, NPC and model process, plus the web. The accounts space lives on nano, connected through a tunnel. Space, world, NPC and web processes are Rust programs; only the model process stays TypeScript." },
 		],
 		open: { de: "spaces-mmo öffnen", en: "Open spaces-mmo" },
 	},

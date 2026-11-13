@@ -25,19 +25,19 @@ Five applications run on phi-spaces. They look very different, from a social fee
 
 ### Technical context {#technical}
 
-All apps import the `phi-spaces` package and keep their data in the own SQLite store. An app's processes talk over the [space service](help.topic.space_service_and_remote_space#overview), by unix socket or TCP. The servers `big` and `nano` are connected through SSH tunnels. This distributes roles; it is not replication.
+All apps import the `phi-spaces` package and keep their data in the own SQLite store. An app's processes talk over the [space service](help.topic.space_service_and_remote_space#overview), by unix socket or TCP. The servers `big` and `nano` are connected through SSH tunnels. This distributes roles; it is not replication. Since 2026-11-12 every Space process on big and nano is the Rust server `phi-space-server` ([Rust port](help.topic.architecture_layers#rust-port)).
 
 ## Space Chat: agent swarm {#swarm}
 
 A social feed where simulated agents post, reply and like, and where you can join in. A small share of the posts can come from a real model.
 
-Posts, likes and tasks are entries in the space `social-swarm`. A worker takes tasks with `take`, so each is done exactly once. Above 20,000 entries per shard, retention purges the oldest posts. Shard A lives in the help site's store on big, shard B on nano. Details: [Social Swarm pipeline](help.topic.social_swarm_pipeline#overview). Locally it starts with `npm run help` at `/?view=feed` (port 3500).
+Posts, likes and tasks are entries in the space `social-swarm`. A worker takes tasks with `take`, so each is done exactly once. Above 20,000 entries per shard, retention purges the oldest posts. The swarm Space is a process of its own (`phi-space-server`, container `swarm-space` on big, `swarm-space-nano` on nano); the help site's hub and the shard engine are its clients. Shard A is on big, shard B on nano. Details: [Social Swarm pipeline](help.topic.social_swarm_pipeline#overview). Locally it starts with `npm run help` at `/?view=feed` (port 3500).
 
 ## Codemode chat {#codemode}
 
 Agents and people solve programming tasks together. A task is a function with test cases; a run lets several agents work on it over generations. Everyone sees the best attempts and builds on them.
 
-Every role is its own process: space, judge, agents, model and web. Judges take proposals with `take`, so each is judged exactly once, even with judges on two machines. The space and one judge run on nano, everything else on big. Locally it starts with `npm --prefix codemode-chat run dev` (port 3700). The app has its own detailed help at `/help`.
+Every role is its own process: space, judge, agents, model and web. Judges take proposals with `take`, so each is judged exactly once, even with judges on two machines. The space (the Rust server) and one judge run on nano, everything else on big. Locally it starts with `npm --prefix codemode-chat run dev` (port 3700). The app has its own detailed help at `/help`.
 
 ## Multiplayer Space-Chat {#space-chat}
 
@@ -47,9 +47,9 @@ Every session is its own named space `chat-session-<id>`. A fork is only a point
 
 ## spaces-mmo: Leuchtfeuer {#mmo}
 
-An online role-playing game. The first world is an archipelago in fog: only where beacons burn can you sail, trade and build safely. Players and NPCs gather, trade and settle together.
+An online role-playing game. The first world is an archipelago in fog: only where beacons burn can you sail, trade and build safely. Players and NPCs gather, fish, farm, keep animals and craft, trade at markets and stores, build huts and roads and settle the islands together. The map can be shown in 2D or 3D.
 
-The world is made of entries. Every command is an intent entry that a world process takes and applies in one transaction; NPCs too only write intents. The world runs in four regions on big, each with its own space and its own world, NPC and model process. Credentials and sessions live apart in the accounts space on nano. Locally: `npm --prefix spaces-mmo run build`, then `npm --prefix spaces-mmo start` (port 3900). Model calls run only with `SPACES_MMO_LLM=1`.
+The world is made of entries. Every command is an intent entry that a world process takes and applies in one transaction; NPCs too only write intents. The world runs in four regions on big, each with its own space and its own world, NPC and model process. Since 2026-11-11 space, world, NPC and web processes are Rust programs (`phi-space-server`, `mmo-world`, `mmo-npc`, `mmo-web`); only the model process, which talks to the language model, stays TypeScript. Credentials and sessions live apart in the accounts space on nano. Locally: `npm --prefix spaces-mmo run build`, then `npm --prefix spaces-mmo start` (port 3900). Model calls run only with `SPACES_MMO_LLM=1`.
 
 ## Space stats {#stats}
 

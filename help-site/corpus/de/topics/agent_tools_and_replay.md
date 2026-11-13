@@ -19,7 +19,7 @@ Zum Ausprobieren gibt es [Beispiele mit Agenten](help.topic.examples#agents).
 
 ### Technische Details {#technical-details}
 
-Die Erweiterung `spaces` (`createSpaces(localSpaces(host))` im Paket `agent/`, npm-Name `phi-spaces-agent`) stattet `pi-durable`-Conversations mit 8 Werkzeugen aus, die sämtlich mit `replay: "safe"` laufen. Die Werkzeuge wirken auf einen getrennten Space-Host. Das Paket nutzt pi-durable, pi-ai und Chord in Version 1.4.0; Werkzeugergebnisse stehen in `output`, nicht mehr in `content`.
+Die Erweiterung `spaces` (`createSpaces(localSpaces(host))` im Paket `agent/`, npm-Name `phi-spaces-agent`) stattet `pi-durable`-Conversations mit 8 Werkzeugen aus, die sämtlich mit `replay: "safe"` laufen. Die Werkzeuge wirken auf einen getrennten Space-Host. `remoteSpaces(...)` richtet sie auf einen Space-Server anderswo ([unten](help.topic.agent_tools_and_replay#remote-spaces)). Das Paket nutzt pi-durable, pi-ai und Chord in Version 1.5.2; Werkzeugergebnisse stehen in `output`, nicht mehr in `content`.
 
 ## Technische Referenz {#technical-reference}
 
@@ -51,15 +51,24 @@ Der Space liegt im eigenen Speicher, der Agent im Speicher von pi-durable. Beide
 - **Grenze**: Die Zusage setzt voraus, dass das Memo den Ausfall überlebt. Stabile Identitäten ersetzen keinen gemeinsamen Commit. Prozessabstürze sind getestet, ein echter Stromausfall nicht (`docs/agenten-stromausfalltest.en.md`).
 - **Externe Dienste**: Ein nach einem Absturz wiederholter Modellaufruf kann erneut ausgeführt und berechnet werden.
 
+### Agenten auf einem entfernten Space {#remote-spaces}
+
+Die Werkzeuge können auch auf einem Space-Server anderswo wirken. `remoteSpaces(open)` gibt ihnen einen entfernten Space über eine Verbindung eines Agenten-Hosts (Rolle `agentHost`, `--agent-host` am Server). Jede Conversation handelt als eigener Agent `conversation-<id>`, mit eigenem Principal, eigener Mailbox, eigenen Claims und eigenem Budget für offene Anfragen. Der Host schickt diesen Namen mit jedem Aufruf als `frame.agent`; von jeder anderen Verbindung weist der Server ihn ab. Waits und Benachrichtigungen landen in der eigenen Mailbox der Conversation.
+
+`eventPump(open, harness)` liest die Mailbox jeder beobachteten Conversation per Long Poll und übergibt jedes Ereignis einmal an die Conversation, unter `phi-spaces:<Mailbox-Epoche>:<seq>`. Eine Seite bestätigt er erst, wenn sie ganz übergeben ist, sodass ein Neustart nichts doppelt übergibt. Eine Conversation, die es nicht mehr gibt, gibt einen ihr übergebenen Take zurück. Ist der Space nicht erreichbar, sagt das der Prompt-Abschnitt, statt den Turn scheitern zu lassen.
+
+Zwei Hosts nutzen das. Der Chat der Android-App (pi-termux-mobile) hat einen eigenen `phi-space-server` auf dem Handy: Der Dienst der App überwacht ihn neben node, sein Speicher liegt in den Dateien der App und er lauscht nur auf einem Unix-Socket. pi-serverd gibt die Werkzeuge seiner Conversations auf dieselbe Weise an einen Space-Server, und die Remote-Sitzungen des Handys laufen als Aufrufe über einen Space, ohne pi-server und pi-client. Details: `docs/m1-mobile.en.md`.
+
 ### Getrennter Agentenprozess {#agent-process}
 
 `DurableAgentClient` (`agent/src/durable-client.ts`) startet `durable-worker.ts` als Kindprozess und spricht über Node-IPC mit ihm (Protokoll in `durable-protocol.ts`). So gelangen keine pi-durable-Importe in die Anwendung, und das Harness dort kennt den Space nicht. Der Worker sichert seinen Speicher mit einer eigenen `.owner`-Datei gegen einen zweiten Prozess. Codemode-Chat und spaces-mmo nutzen diesen Weg; `CODEMODE_DURABLE_AGENT=0` und `SPACES_MMO_DURABLE_NPCS=0` schalten ihn ab.
 
-### Upgrade auf pi 1.4.0 {#pi-140}
+### Upgrades auf pi 1.4.0 und 1.5.2 {#pi-140}
 
 - Werkzeugergebnisse stehen in `output` statt `content`. Nachrichten an das Modell behalten ihre `content`-Struktur.
 - pi-durable 1.4.0 migriert seine SQLite-Datenbank automatisch auf Schema 2. Danach lässt sie sich mit 1.3.0 oder älter nicht mehr öffnen. **Agentendatenbanken vorher sichern**, einschließlich WAL-Zustand.
 - Das betrifft nur den Agentenspeicher. Format 2 des eigenen phi-spaces-Speichers ist davon unabhängig.
+- pi 1.5 rechnet eine Modellanfrage, die ein Absturz unterbrochen hat, gegen die Wiederholungsregel. Der Durable-Worker erlaubt eine Wiederholung, damit die Wiederherstellung nach einem Absturz weiter funktioniert, begrenzt durch das in seinem Speicher gehaltene Budget an Modellaufrufen je Job.
 
 Details stehen in `docs/upgrade-pi-1.4.0.en.md`.
 

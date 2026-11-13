@@ -17,9 +17,9 @@ These tools give a language model access to a space: write, read, take, and wait
 
 ## Technical Reference {#technical-reference}
 
-The tools come from the optional agent package (`agent/`, with its own dependencies: pi-durable, pi-ai, and Chord at 1.4.0). `createSpaces(localSpaces(host))` makes the extension for the agents' `pi-durable` registry. The space does not live in the agents' store but on a host of its own (the own store), so it survives an agent restart, and the other way round.
+The tools come from the optional agent package (`agent/`, with its own dependencies: pi-durable, pi-ai, and Chord at 1.5.2). `createSpaces(localSpaces(host))` makes the extension for the agents' `pi-durable` registry. The space does not live in the agents' store but on a host of its own (the own store), so it survives an agent restart, and the other way round. `createSpaces(remoteSpaces(open))` puts the space on a space server elsewhere, each conversation an agent of its own there, and `eventPump` hands their mailboxes' events over ([agents on a remote space](help.topic.agent_tools_and_replay#remote-spaces)).
 
-`startService(withEventSink(host, agentHost), ctx, { space? })` starts the background loop for lease expiration (`core.reap`) and delivery to the agents' conversations. A pi-durable 1.4 harness connects through `withAgentEventSink(host, harness)` from `agent/src/agent.ts`: it adds what harness and space each expect of the context. `withEventSink` from `phi-spaces` takes any other `EventSink`.
+`startService(withEventSink(host, agentHost), ctx, { space? })` starts the background loop for lease expiration (`core.reap`) and delivery to the agents' conversations. A pi-durable harness connects through `withAgentEventSink(host, harness)` from `agent/src/agent.ts`: it adds what harness and space each expect of the context. `withEventSink` from `phi-spaces` takes any other `EventSink`.
 
 ```ts
 const spaces = createSpaces(localSpaces(host)); // the space: its own host

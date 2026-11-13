@@ -19,7 +19,7 @@ To try it out, there are [examples with agents](help.topic.examples#agents).
 
 ### Technical Details {#technical-details}
 
-The `spaces` extension (`createSpaces(localSpaces(host))` in the `agent/` package, npm name `phi-spaces-agent`) equips `pi-durable` conversations with 8 tools, all marked `replay: "safe"`. The tools act on a separate space host. The package uses pi-durable, pi-ai and Chord at version 1.4.0; tool results go in `output`, no longer in `content`.
+The `spaces` extension (`createSpaces(localSpaces(host))` in the `agent/` package, npm name `phi-spaces-agent`) equips `pi-durable` conversations with 8 tools, all marked `replay: "safe"`. The tools act on a separate space host. `remoteSpaces(...)` points them at a space server elsewhere ([below](help.topic.agent_tools_and_replay#remote-spaces)). The package uses pi-durable, pi-ai and Chord at version 1.5.2; tool results go in `output`, no longer in `content`.
 
 ## Technical Reference {#technical-reference}
 
@@ -51,15 +51,24 @@ The space lives in the own store, the agent in pi-durable's store. Both may run 
 - **Boundary**: The promise assumes the memo survives the failure. Stable identities do not replace a shared commit. Process crashes are tested; a real power loss is not (`docs/agenten-stromausfalltest.en.md`).
 - **External services**: A model call repeated after a crash can run and be billed again.
 
+### Agents On A Remote Space {#remote-spaces}
+
+The tools can also act on a space server elsewhere. `remoteSpaces(open)` gives them a remote space through one connection of an agent host (role `agentHost`, `--agent-host` on the server). Every conversation acts as an agent of its own, `conversation-<id>`, with its own principal, mailbox, claims and pending budget. The host sends that name with each call as `frame.agent`; from any other connection the server refuses it. Waits and notifications land in the conversation's own mailbox.
+
+`eventPump(open, harness)` reads each watched conversation's mailbox with a long poll and hands every event to the conversation once, under `phi-spaces:<mailbox epoch>:<seq>`. It acknowledges a page only after all of it was handed over, so a restart hands nothing over twice. A conversation that is gone gives back a take it was handed. If the space cannot be reached, the prompt section says so instead of failing the turn.
+
+Two hosts use this. The chat of the Android app (pi-termux-mobile) has its own `phi-space-server` on the phone: the app's service supervises it beside node, its store is in the app's files and it listens only on a unix socket. pi-serverd gives its conversations' tools to a space server the same way, and the phone's remote sessions run as calls over a space, without pi-server and pi-client. Details: `docs/m1-mobile.en.md`.
+
 ### Separate Agent Process {#agent-process}
 
 `DurableAgentClient` (`agent/src/durable-client.ts`) starts `durable-worker.ts` as a child process and talks to it over Node IPC (protocol in `durable-protocol.ts`). This keeps pi-durable imports out of the application, and the harness over there does not know the space. The worker guards its store against a second process with an `.owner` file of its own. Codemode-Chat and spaces-mmo use this path; `CODEMODE_DURABLE_AGENT=0` and `SPACES_MMO_DURABLE_NPCS=0` turn it off.
 
-### Upgrade To pi 1.4.0 {#pi-140}
+### Upgrades To pi 1.4.0 And 1.5.2 {#pi-140}
 
 - Tool results go in `output` instead of `content`. Messages to the model keep their `content` structure.
 - pi-durable 1.4.0 migrates its SQLite database to schema 2 automatically. After that, 1.3.0 or older can no longer open it. **Back up agent databases first**, including their WAL state.
 - This concerns the agent store only. Format 2 of the own phi-spaces store has nothing to do with it.
+- pi 1.5 counts a model request that a crash interrupted against the retry policy. The durable worker allows one retry so that crash recovery still works, bounded by the per-job model admission budget kept in its store.
 
 Details are in `docs/upgrade-pi-1.4.0.en.md`.
 

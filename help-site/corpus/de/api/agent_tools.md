@@ -17,9 +17,9 @@ Diese Werkzeuge geben einem Sprachmodell Zugriff auf einen Space: schreiben, les
 
 ## Technische Referenz {#technical-reference}
 
-Die Werkzeuge kommen aus dem optionalen Agent-Paket (`agent/`, eigene Abhängigkeiten: pi-durable, pi-ai und Chord in 1.4.0). `createSpaces(localSpaces(host))` erzeugt die Erweiterung für die Agenten-Registry von `pi-durable`. Der Space liegt dabei nicht im Speicher der Agenten, sondern auf einem eigenen Host (dem eigenen Speicher). Er überlebt so einen Neustart der Agenten, und umgekehrt.
+Die Werkzeuge kommen aus dem optionalen Agent-Paket (`agent/`, eigene Abhängigkeiten: pi-durable, pi-ai und Chord in 1.5.2). `createSpaces(localSpaces(host))` erzeugt die Erweiterung für die Agenten-Registry von `pi-durable`. Der Space liegt dabei nicht im Speicher der Agenten, sondern auf einem eigenen Host (dem eigenen Speicher). Er überlebt so einen Neustart der Agenten, und umgekehrt. `createSpaces(remoteSpaces(open))` legt den Space auf einen Space-Server anderswo, jede Conversation dort ein eigener Agent, und `eventPump` übergibt die Ereignisse ihrer Mailboxen ([Agenten auf einem entfernten Space](help.topic.agent_tools_and_replay#remote-spaces)).
 
-`startService(withEventSink(host, agentHost), ctx, { space? })` startet die Hintergrundschleife für Lease-Ablauf (`core.reap`) und die Zustellung an die Conversations der Agenten. Ein pi-durable-Harness 1.4 wird mit `withAgentEventSink(host, harness)` aus `agent/src/agent.ts` angebunden: Es ergänzt den Kontext, den Harness und Space unterschiedlich erwarten. `withEventSink` aus `phi-spaces` nimmt jede andere `EventSink`.
+`startService(withEventSink(host, agentHost), ctx, { space? })` startet die Hintergrundschleife für Lease-Ablauf (`core.reap`) und die Zustellung an die Conversations der Agenten. Ein pi-durable-Harness wird mit `withAgentEventSink(host, harness)` aus `agent/src/agent.ts` angebunden: Es ergänzt den Kontext, den Harness und Space unterschiedlich erwarten. `withEventSink` aus `phi-spaces` nimmt jede andere `EventSink`.
 
 ```ts
 const spaces = createSpaces(localSpaces(host)); // the space: its own host
