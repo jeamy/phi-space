@@ -38,7 +38,7 @@ This README was checked against the checkout on 2026-10-30; those documents carr
 ## What it looks like
 
 Four applications run on phi-spaces. The short text below describes phi-spaces and pi-durable and how they work
-together in the public test installations (screenshots of 3 November 2026).
+together in the public test installations (screenshots of 3 November 2026, spaces-mmo of 13 November 2026).
 
 ### Short text
 
