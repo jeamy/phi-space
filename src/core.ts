@@ -1312,6 +1312,25 @@ export function purgeTasks(s:SpaceState,now:number,template:Template):number {
  touch(s,now);return tasks.length;
 }
 
+/** Trusted administrative purge of an archived Space before its deletion: removes up to `max` unreserved entries and
+ *  says how many went and how many are left. Refused while the Space is not archived, is attached to a federation,
+ *  has a run that is not stopped, or holds a transaction or a reserved entry. The caller exports the entries first
+ *  and journals the command (src/space-lifecycle.ts `purgeArchived`). */
+export function purgeArchived(s:SpaceState,now:number,max=256):{purged:number;left:number} {
+ assertAdminIdle(s);
+ if(!s.archived)throw new PermissionError("purge needs an archived Space; archive it first");
+ if(s.membership&&s.membership.state!=="detached")throw new PermissionError(`it is a federation Member (${s.membership.state}); removeMember first`);
+ if(Object.values(s.runGates??{}).some(g=>g.state!=="stopped"||g.recovery))throw new TransactionError("a run on it is not stopped");
+ settle(s,now);
+ if(Object.keys(s.txns).length)throw new TransactionError("it has open transactions");
+ if(!Number.isInteger(max)||max<1)throw new IllegalArgumentError("max must be a positive integer");
+ if(s.entries.some(e=>e.takenBy!==null||e.writtenUnder!==null||e.readBy.length))throw new TransactionError("it holds reserved entries");
+ const batch=s.entries.slice(0,max);
+ charge(s,batch.reduce((n,e)=>n+publishCost(s,e),0));
+ for(const e of batch){logDel(s,now,e.id);s.entries.splice(s.entries.indexOf(e),1);}
+ touch(s,now);return {purged:batch.length,left:s.entries.length};
+}
+
 // RunGates (docs/betrieb-und-mobile-steuerung.en.md §6): per-run control state that the core enforces on every take,
 // so direct, waiting and host takes cannot bypass a pause. A take binds its transaction to the gate's revision.
 const MAX_RUN_GATES = 256, MAX_GATE_HISTORY = 32, GATE_COST = 1024;

@@ -8,6 +8,8 @@
 use crate::mailbox::principal_id;
 use crate::space::{bytes, error, exhausted, permission, truthy, Extra, Result, Space, Template};
 use phi_json::{hex, num_of, obj, text, Json, Object};
+
+fn truthy_ref(v: &Json) -> bool { truthy(Some(v)) }
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 
@@ -80,6 +82,48 @@ impl Space {
 		}
 		self.touch(now);
 		Ok(tasks.len() as f64)
+	}
+
+	/// `purgeArchived`: trusted purge of an archived Space before its deletion, at most `max` unreserved entries;
+	/// (purged, left). Refused while not archived, attached to a federation, with a run not stopped, an open
+	/// transaction or a reserved entry.
+	pub fn purge_archived(&mut self, now: f64, max: usize) -> Result<(usize, usize)> {
+		self.assert_admin_idle()?;
+		if self.state.rest.get("archived").filter(|a| !a.is_null()).is_none() {
+			return Err(permission("purge needs an archived Space; archive it first"));
+		}
+		if let Some(state) = self.state.rest.get("membership").and_then(|m| text(m, "state")) {
+			if state != "detached" {
+				return Err(permission(format!("it is a federation Member ({state}); removeMember first")));
+			}
+		}
+		let live = self.state.rest.get("runGates").and_then(Json::as_object).is_some_and(|g| {
+			g.iter().any(|(_, gate)| text(gate, "state") != Some("stopped") || gate.as_object().and_then(|o| o.get("recovery")).is_some_and(truthy_ref))
+		});
+		if live {
+			return Err(error("TransactionError", "a run on it is not stopped"));
+		}
+		self.settle(now)?;
+		if !self.state.txns.is_empty() {
+			return Err(error("TransactionError", "it has open transactions"));
+		}
+		if max < 1 {
+			return Err(crate::space::illegal("max must be a positive integer"));
+		}
+		if self.state.entries.iter().any(|e| e.taken_by.is_some() || e.written_under.is_some() || !e.read_by.is_empty()) {
+			return Err(error("TransactionError", "it holds reserved entries"));
+		}
+		let n = max.min(self.state.entries.len());
+		let cost: f64 = self.state.entries[..n].iter().map(|e| self.publish_cost(e, Extra::None)).sum();
+		self.charge(cost)?;
+		let ids: Vec<String> = self.state.entries[..n].iter().map(|e| e.id.clone()).collect();
+		for id in &ids {
+			self.log_del(now, id);
+			let i = self.state.entries.iter().position(|e| &e.id == id).expect("listed");
+			self.state.entries.remove(i);
+		}
+		self.touch(now);
+		Ok((n, self.state.entries.len()))
 	}
 
 	/// `quiescent`: no transaction, waiter, fanout job, release or open request is on the Space.

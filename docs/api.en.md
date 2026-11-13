@@ -855,7 +855,14 @@ state per host from the capability entries; `at` shows how old it is. With `cont
 const life = new SpaceLifecycle({ host, ctx });
 await life.apply({ commandId, action: "create", alias, limits?, profiles? }); // { spaceId, alias, state, existed? }
 await life.apply({ commandId, action: "archive" | "reactivate" | "delete", spaceId });
+await exportSpaceEntries({ host, ctx }, spaceId);          // { spaceId, alias, at, entries, complete }
+await life.purgeArchived({ commandId, spaceId, max? });    // { purged, left }: one batch, at most max (256)
 ```
+
+A Space is deleted only when it is archived and empty. `purgeArchived` empties an archived Space in bounded batches
+(`core.purgeArchived`, also in the Rust core); it refuses while a run on it is not stopped, it is attached to a
+federation, or it holds a transaction or a reserved entry. Export the entries first; the help site's admin page does
+both behind "Export & empty" (`GET /api/admin/export`, admin command `purgeSpace`).
 
 Errors: `SpaceInUse` with a reason (membership, entries, open work, claims, mailboxes, runs, restore),
 `RunGateConflict` for an alias with other limits/profiles, `PermissionError` for default and control Space.

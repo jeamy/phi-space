@@ -174,3 +174,23 @@ fn a_recovery_fence_holds_a_run_until_its_decision() {
 	assert_eq!(view.get("stable"), Some(&Json::Bool(true)), "{}", view.to_json_text());
 	refused(b.step(obj! { "op" => "recoverRunGate", "o" => obj! { "runId" => "-", "recoveryId" => "x" } }), "invalid run recovery request");
 }
+
+#[test]
+fn purge_archived_empties_an_archived_space_in_batches_like_the_typescript_core() {
+	let mut b = Both::new(obj! {});
+	b.profile().unwrap();
+	for n in 0..5 {
+		b.step(obj! { "op" => "write", "entry" => obj! { "type" => "Note", "fields" => obj! { "n" => n as f64 } }, "lease" => 50_000.0 }).unwrap();
+	}
+	refused(b.step(obj! { "op" => "purgeArchived" }), "archive it first");
+	b.gate("r", "c1", "prepare", 1.0).unwrap();
+	b.task("r").unwrap();
+	b.step(obj! { "op" => "setArchived", "archived" => obj! { "at" => 1.0, "commandId" => "a" } }).unwrap();
+	refused(b.step(obj! { "op" => "purgeArchived" }), "a run on it is not stopped");
+	assert_eq!(phase(b.gate("r", "c2", "stop", 2.0)), "applied");
+	let first = b.step(obj! { "op" => "purgeArchived", "max" => 4.0 }).unwrap();
+	assert_eq!((first.get("purged"), first.get("left")), (Some(&Json::Number(4.0)), Some(&Json::Number(2.0))));
+	let last = b.step(obj! { "op" => "purgeArchived" }).unwrap();
+	assert_eq!(last.get("left"), Some(&Json::Number(0.0)));
+	refused(b.step(obj! { "op" => "purgeArchived", "max" => 0.0 }), "positive integer");
+}

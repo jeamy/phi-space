@@ -433,6 +433,12 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 					return sendJson(res, 200, await admin.overview());
 				}
 
+				if (pathname === "/api/admin/export" && method === "GET") {
+					const exported = await admin.exportSpace(url.searchParams.get("space") ?? "");
+					res.setHeader("content-disposition", `attachment; filename="space-${exported.alias}-${new Date(exported.at).toISOString().slice(0, 19).replace(/:/g, "")}.json"`);
+					return sendJson(res, 200, exported);
+				}
+
 				if (pathname === "/api/admin/objects" && method === "GET") {
 					const spaceParam = url.searchParams.get("space") ?? "default";
 					const limitParam = Number(url.searchParams.get("limit") ?? 100);

@@ -42,7 +42,7 @@ export { CompletionViolation, RunGateConflict, type CompletionProfile, type RunG
 export { RunController, RunBusy, RunJournal, localRunMember, runCommands, type RunExporter, type RunIdentity, type RunMember, type RunSpec, type RunStatus, type RunView } from "./run-controller.ts";
 export { auditLog, collectAlerts, startAlertMonitor, webhookPublisher, type Alert } from "./alerts.ts";
 export { DeploymentController, DeploymentState, capabilityHostStatus, deploymentCommands, validateDeployment, type DeploymentConfig, type DeploymentPlan, type DeploymentPorts, type PlanStep } from "./deployment.ts";
-export { SpaceLifecycle, SpaceLifecycleService, SpaceLifecycleJournal, SpaceInUse, signLifecycle, verifyLifecycle, spaceCommands, type SpaceAction, type SpaceLifecycleRequest, type SpaceLifecycleResult, type SpaceLifecycleInstruction, type SignedLifecycle, type LifecyclePin } from "./space-lifecycle.ts";
+export { exportSpaceEntries, SpaceLifecycle, SpaceLifecycleService, SpaceLifecycleJournal, SpaceInUse, signLifecycle, verifyLifecycle, spaceCommands, type SpaceAction, type SpaceLifecycleRequest, type SpaceLifecycleResult, type SpaceLifecycleInstruction, type SignedLifecycle, type LifecyclePin } from "./space-lifecycle.ts";
 export { WorkerAssignments, WorkerSupervisor, WorkerJournal, appliedWorkers, abortableSleep, startWorkerSupervisor, workerCommands, type SignedWorkers, type WorkerKind, type WorkerList, type WorkerPin, type WorkerSpec, type WorkerSummary } from "./workers.ts";
 export { RunGateService, remoteRunMember, signRun, type RunGateInstruction, type RunPin, type RunPreparer, type SignedRun } from "./run-member.ts";
 export * from "./meter.ts";

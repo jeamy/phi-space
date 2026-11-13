@@ -12,7 +12,7 @@ import { RemoteSpace } from "../src/remote.ts";
 import { startFederationHost } from "../src/runtime.ts";
 import { socketTransport } from "../src/socket.ts";
 import { CONTROL_SPACE, Supervisor } from "../src/index.ts";
-import { SpaceInUse, SpaceLifecycle, SpaceLifecycleService, signLifecycle, spaceCommands, type SpaceLifecycleInstruction } from "../src/space-lifecycle.ts";
+import { exportSpaceEntries, SpaceInUse, SpaceLifecycle, SpaceLifecycleService, signLifecycle, spaceCommands, type SpaceLifecycleInstruction } from "../src/space-lifecycle.ts";
 import { createSpace, listSpaces, resolveSpaceId, snapshotSpace, spaceDoc } from "../src/spaces.ts";
 import { BACKENDS, ctx, PersistentHome } from "./support/persistent.ts";
 
@@ -128,4 +128,40 @@ for (const backend of BACKENDS) test(`${backend}: the composed Gate applies a si
 			assert.ok((await listSpaces(h, ctx)).some(i => i.alias === "over-tcp"));
 		} finally { socket.close(); await runtime.close(); }
 	} finally { await home.dispose(); }
+});
+
+for (const backend of BACKENDS) test(`${backend}: an archived Space is exported, emptied in bounded batches and then deleted`, async () => {
+	const home = new PersistentHome(backend);
+	try {
+		const h = await home.open();
+		const life = new SpaceLifecycle({ host: h, ctx });
+		const made = await life.apply({ commandId: "p1", action: "create", alias: "old-run" });
+		const space = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: made.spaceId });
+		for (let n = 0; n < 5; n++) await space.write({ type: "Result", fields: { n } }, null, c.FOREVER);
+		await assert.rejects(life.purgeArchived({ commandId: "p2", spaceId: made.spaceId }), /archive it first/, "an active Space is not emptied");
+		await life.apply({ commandId: "p3", action: "archive", spaceId: made.spaceId });
+		await assert.rejects(life.apply({ commandId: "p4", action: "delete", spaceId: made.spaceId }), /still holds 5 entries/);
+		const exported = await exportSpaceEntries({ host: h, ctx }, made.spaceId);
+		assert.deepEqual([exported.alias, exported.complete, exported.entries.map((e: any) => e.fields.n).sort()], ["old-run", true, [0, 1, 2, 3, 4]]);
+		const first = await life.purgeArchived({ commandId: "p5", spaceId: made.spaceId, max: 3 });
+		assert.deepEqual([first.purged, first.left], [3, 2]);
+		assert.deepEqual(await life.purgeArchived({ commandId: "p5", spaceId: made.spaceId, max: 3 }), first, "the same command repeats its answer");
+		await assert.rejects(life.purgeArchived({ commandId: "p5", spaceId: made.spaceId }), /another lifecycle request/);
+		assert.deepEqual((await life.purgeArchived({ commandId: "p6", spaceId: made.spaceId, max: 3 })).left, 0);
+		assert.equal((await life.apply({ commandId: "p7", action: "delete", spaceId: made.spaceId })).state, "deleted");
+	} finally { await home.dispose(); }
+});
+
+test("purgeArchived refuses reserved entries and runs that are not stopped", () => {
+	const s = c.initialState(), now = 1000;
+	c.write(s, now, { type: "Job", fields: { n: 1 } }, null, c.FOREVER);
+	const t = c.createTxn(s, now, 60_000);
+	assert.equal(c.probe(s, now, { type: "Job", fields: {} }, t.id, true).status, "found");
+	s.archived = { at: now, commandId: "a" };
+	assert.throws(() => c.purgeArchived(s, now), /open transactions|reserved entries/);
+	c.abortTxn(s, now, t.id);
+	s.runGates = { r1: { state: "running" } as any };
+	assert.throws(() => c.purgeArchived(s, now), /run on it is not stopped/);
+	delete s.runGates;
+	assert.deepEqual(c.purgeArchived(s, now), { purged: 1, left: 0 });
 });

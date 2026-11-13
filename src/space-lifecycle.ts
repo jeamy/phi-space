@@ -91,6 +91,37 @@ export class SpaceLifecycle {
 			return core.plain(result);
 		}, this.o.ctx);
 	}
+
+	/** Empties an archived Space before its deletion, one bounded batch per call (`core.purgeArchived`); the same
+	 *  command ID repeats the batch's answer. Export the entries first (`exportSpaceEntries`). */
+	async purgeArchived(q: { commandId: string; spaceId: string; max?: number }): Promise<{ commandId: string; spaceId: string; alias: string; purged: number; left: number }> {
+		if (!q || !ID.test(q.commandId) || typeof q.spaceId !== "string") throw new core.IllegalArgumentError("invalid purge request");
+		const hash = hashOf({ action: "purge", spaceId: q.spaceId, max: q.max ?? null });
+		return this.o.host.commit(async tx => {
+			const j = await tx.doc(SpaceLifecycleJournal), old = j.commands[q.commandId] as any;
+			if (old) { if (old.hash !== hash) throw new core.IllegalArgumentError("command ID was used for another lifecycle request"); return core.plain(old.result); }
+			if (Object.keys(j.commands).length >= 4096) throw new core.ResourceExhausted("lifecycle journal is full");
+			const now = (this.o.now ?? Date.now)(), r = await tx.doc(Registry), info: SpaceInfo | undefined = r.spaces[q.spaceId];
+			if (!info || info.deletedAt) throw new core.IllegalArgumentError(`no Space ${q.spaceId} on this host`);
+			if (info.spaceId === r.defaultSpaceId || info.alias === DEFAULT_ALIAS || info.alias === CONTROL_SPACE) throw new core.PermissionError("the default and the control Space have no lifecycle");
+			const s = await spaceDoc(tx, info.spaceId, now);
+			const { purged, left } = core.purgeArchived(s, now, q.max ?? 256);
+			const result = { commandId: q.commandId, spaceId: info.spaceId, alias: info.alias, purged, left };
+			j.commands[q.commandId] = { hash, result: result as any };
+			return core.plain(result);
+		}, this.o.ctx);
+	}
+}
+
+/** The entries of one Space of this host as plain JSON, for the export before `purgeArchived` (at most `max`). */
+export async function exportSpaceEntries(o: { host: SpaceHost; ctx: Context; now?: () => number }, spaceId: string, max = 100_000): Promise<{ spaceId: string; alias: string; at: number; entries: core.Json[]; complete: boolean }> {
+	return o.host.commit(async tx => {
+		const r = await tx.doc(Registry), info: SpaceInfo | undefined = r.spaces[spaceId];
+		if (!info || info.deletedAt) throw new core.IllegalArgumentError(`no Space ${spaceId} on this host`);
+		const now = (o.now ?? Date.now)(), s = await spaceDoc(tx, info.spaceId, now);
+		const entries = s.entries.slice(0, max).map(e => core.plain({ id: e.id, types: e.types, fields: e.fields, owner: e.owner ?? null, expires: e.expires ?? null } as any) as core.Json);
+		return { spaceId: info.spaceId, alias: info.alias, at: now, entries, complete: s.entries.length <= max };
+	}, o.ctx);
 }
 
 export type SignedLifecycle<T> = { value: T; issuer: string; algorithm: Algorithm; signature: string };

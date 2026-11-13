@@ -209,6 +209,26 @@ test("3. HTTP Server, Live Multiplayer Space-Chat API & Login-Protected AdminSpa
 		const c2 = await createRes2.json();
 		assert.equal(c2.result.spaceId, c1.result.spaceId);
 
+		// Export & empty, then delete: refused while active, then archive, export (a download), purge, delete
+		const command = async (kind: string, args: Record<string, unknown>) => fetch(`${srv.url}/api/admin/command`, {
+			method: "POST", headers: { "content-type": "application/json", cookie: cookiePair, "x-csrf-token": csrfToken }, body: JSON.stringify({ kind, args }),
+		});
+		const spaceId = c1.result.spaceId as string;
+		const early = await command("purgeSpace", { spaceId });
+		assert.equal(early.status, 400);
+		assert.match((await early.json()).error, /archive it first/);
+		assert.equal((await command("archiveSpace", { spaceId })).status, 200);
+		const downloadRes = await fetch(`${srv.url}/api/admin/export?space=${spaceId}`, { headers: { cookie: cookiePair } });
+		assert.equal(downloadRes.status, 200);
+		assert.match(downloadRes.headers.get("content-disposition") ?? "", /attachment; filename="space-admin-created-space-/);
+		const exported = await downloadRes.json();
+		assert.deepEqual([exported.alias, exported.complete, exported.entries], ["admin-created-space", true, []]);
+		const purge = await (await command("purgeSpace", { spaceId })).json();
+		assert.deepEqual([purge.operation.state, purge.result.left], ["completed", 0]);
+		const del = await (await command("deleteSpace", { spaceId })).json();
+		assert.equal(del.result.state, "deleted");
+		assert.equal((await fetch(`${srv.url}/api/admin/export?space=${spaceId}`)).status === 200, false, "the export needs a session");
+
 		// Generate Mobile Enrollment QR via AdminSpaces
 		const enrollRes = await fetch(`${srv.url}/api/admin/command`, {
 			method: "POST",

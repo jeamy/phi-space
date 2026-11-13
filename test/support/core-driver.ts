@@ -92,6 +92,7 @@ export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 			default: return partitionRouterId(l.id, l.partition);
 		}
 		case "setArchived": if (l.archived) s.archived = l.archived; else delete s.archived; return null;
+		case "purgeArchived": return core.purgeArchived(s, now, l.max ?? 256);
 		case "permitRoutedWrite": permitRoutedWrite(s, l.proven === true); return null;
 		case "recoverRunGate": return core.recoverRunGate(s, now, l.o);
 		case "applyRunGate": return core.applyRunGate(s, now, l.command);

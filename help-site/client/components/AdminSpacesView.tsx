@@ -144,7 +144,7 @@ export function AdminSpacesView(props: AdminSpacesViewProps) {
 			setStatusMsg(
 				`${locale === "de" ? "Fehler" : "Error"} (${commandId}): ${data.error ?? (locale === "de" ? "Unbekannt" : "Unknown")}`,
 			);
-			return;
+			return null;
 		}
 		if (data.overview) setOverview(data.overview);
 		if (kind === "createEnroll" && data.result?.qrPayload) {
@@ -161,6 +161,29 @@ export function AdminSpacesView(props: AdminSpacesViewProps) {
 		setStatusMsg(
 			`${locale === "de" ? "Auftrag bestätigt" : "Command confirmed"}: ${commandId} (${data.operation?.state ?? "completed"})`,
 		);
+		return data;
+	};
+
+	/** "Exportieren & leeren": download every entry as JSON, then empty the archived Space (purgeSpace). */
+	const exportAndPurge = async (sp: { spaceId: string; alias: string }) => {
+		const res = await fetch(`/api/admin/export?space=${encodeURIComponent(sp.spaceId)}`);
+		const exported = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+		if (!res.ok || exported.error) { setStatusMsg(`${locale === "de" ? "Export fehlgeschlagen" : "Export failed"}: ${exported.error ?? res.status}`); return; }
+		if (!exported.complete) { setStatusMsg(locale === "de" ? "Der Space ist zu groß für einen Export in einem Stück; nichts wurde geleert." : "The Space is too large for a one-piece export; nothing was emptied."); return; }
+		const name = `space-${sp.alias}-${new Date(exported.at).toISOString().slice(0, 19).replace(/:/g, "")}.json`;
+		const link = document.createElement("a");
+		link.href = URL.createObjectURL(new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" }));
+		link.download = name;
+		link.click();
+		setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+		const n = exported.entries.length;
+		if (!confirm(locale === "de"
+			? `${n} Einträge wurden als ${name} heruntergeladen. Jetzt alle ${n} Einträge aus „${sp.alias}“ endgültig entfernen?`
+			: `${n} entries were downloaded as ${name}. Remove all ${n} entries from "${sp.alias}" for good now?`)) return;
+		const done = await sendAdminCommand("purgeSpace", { spaceId: sp.spaceId });
+		if (done?.result) setStatusMsg(locale === "de"
+			? `${done.result.purged} Einträge entfernt; „${sp.alias}“ kann jetzt gelöscht werden.`
+			: `${done.result.purged} entries removed; "${sp.alias}" can be deleted now.`);
 	};
 
 	const inspectSpace = async (spaceIdOrAlias: string) => {
@@ -432,6 +455,16 @@ export function AdminSpacesView(props: AdminSpacesViewProps) {
 														{locale === "de" ? "Archivieren" : "Archive"}
 													</button>
 												)}
+												{sp.archived && (sp.stats?.entries ?? 0) > 0 ? (
+													<button
+														type="button"
+														className="wb-btn wb-btn--secondary"
+														title={locale === "de" ? "Alle Einträge als JSON herunterladen, dann aus dem Space entfernen" : "Download every entry as JSON, then remove them from the Space"}
+														onClick={() => void exportAndPurge(sp)}
+													>
+														{locale === "de" ? "Exportieren & leeren" : "Export & empty"}
+													</button>
+												) : null}
 												{/* only an archived, empty Space outside every run can be deleted (src/space-lifecycle.ts) */}
 												{sp.archived ? (
 													<button

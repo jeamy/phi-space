@@ -5,7 +5,7 @@
 //! Operations this crate does not port yet answer `NotPorted`.
 use crate::space::{js_string, not_ported, truthy, CoreError, Random, Space, Template, ANY};
 use crate::state::SpaceState;
-use phi_json::{Json, Object, FOREVER};
+use phi_json::{obj, Json, Object, FOREVER};
 use sha2::{Digest, Sha256};
 
 /// The driver's randomness: the next bytes of SHA-256("phi-spaces/driver/v1\n<seed>\n<block>") blocks, as
@@ -149,6 +149,10 @@ pub fn apply_line(s: &mut Space, snapshots: &mut crate::snapshot::Snapshots, now
 					}
 				}
 				Ok(Json::Null)
+			}
+			"purgeArchived" => {
+				let max = l.get("max").and_then(Json::as_f64).unwrap_or(256.0);
+				s.purge_archived(now, max as usize).map(|(purged, left)| obj! { "purged" => purged as f64, "left" => left as f64 })
 			}
 			"validatePolicy" => {
 				let allow: Vec<String> = l.get("allow").and_then(Json::as_array).map_or(vec![], |a| a.iter().filter_map(Json::as_str).map(str::to_owned).collect());

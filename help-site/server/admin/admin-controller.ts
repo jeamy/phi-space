@@ -33,6 +33,7 @@ import {
 	RunController,
 	snapshotSpace,
 	SpaceLifecycle,
+	exportSpaceEntries,
 	type SpaceHost,
 	WorkerAssignments,
 	WorkerSupervisor,
@@ -503,6 +504,14 @@ export class WebAdminController {
 		};
 	}
 
+	/** Every entry of one Space as JSON, the download before "Exportieren & leeren" (read only, not a command). */
+	async exportSpace(spaceIdOrAlias: string) {
+		const all = await listSpaces(this.host, this.ctx);
+		const info = all.find((i) => i.spaceId === spaceIdOrAlias || i.alias === spaceIdOrAlias);
+		if (!info) throw new Error(`no Space ${spaceIdOrAlias} on this host`);
+		return exportSpaceEntries({ host: this.host, ctx: this.ctx }, info.spaceId);
+	}
+
 	async inspectSpaceObjects(spaceIdOrAlias: string, limit = 100) {
 		const sp = new PhiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
 			space: spaceIdOrAlias,
@@ -672,6 +681,18 @@ export class WebAdminController {
 						action: actionMap[input.kind],
 						spaceId: String(args.spaceId ?? ""),
 					});
+					break;
+				}
+				case "purgeSpace": {
+					// an archived Space emptied before its deletion, in bounded batches (core.purgeArchived); the page
+					// downloads the export first. Each batch is its own lifecycle command, so a retry repeats none.
+					const spaceId = String(args.spaceId ?? "");
+					let purged = 0, left = 0, batch = 0;
+					do {
+						const r = await this.lifecycle.purgeArchived({ commandId: `${commandId}.${batch++}`, spaceId });
+						purged += r.purged; left = r.left;
+					} while (left > 0 && batch < 1000);
+					result = { spaceId, purged, left };
 					break;
 				}
 				case "setWorkers": {

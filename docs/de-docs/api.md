@@ -832,7 +832,14 @@ Stand je Host aus den Capability-Entries; `at` zeigt, wie alt er ist. Mit `contr
 const life = new SpaceLifecycle({ host, ctx });
 await life.apply({ commandId, action: "create", alias, limits?, profiles? }); // { spaceId, alias, state, existed? }
 await life.apply({ commandId, action: "archive" | "reactivate" | "delete", spaceId });
+await exportSpaceEntries({ host, ctx }, spaceId);          // { spaceId, alias, at, entries, complete }
+await life.purgeArchived({ commandId, spaceId, max? });    // { purged, left }: ein Schub, höchstens max (256)
 ```
+
+Gelöscht wird ein Space nur archiviert und leer. `purgeArchived` leert einen archivierten Space in begrenzten Schüben
+(`core.purgeArchived`, auch im Rust-Kern); es lehnt ab, solange ein Lauf darauf nicht gestoppt ist, der Space einer
+Föderation angehört oder eine Transaktion oder einen reservierten Eintrag hält. Vorher die Einträge exportieren; die
+Admin-Seite der Hilfe tut beides hinter „Exportieren & leeren“ (`GET /api/admin/export`, Admin-Befehl `purgeSpace`).
 
 Fehler: `SpaceInUse` mit Grund (Mitgliedschaft, Entries, offene Arbeit, Claims, Mailboxes, Läufe, Restore),
 `RunGateConflict` bei einem Alias mit anderen Limits/Profilen, `PermissionError` für Default- und Control-Space.
