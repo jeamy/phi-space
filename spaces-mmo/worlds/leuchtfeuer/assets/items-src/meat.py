@@ -1,7 +1,7 @@
 # What slaughtering gives and what the hearth and the smokehouse make of it (docs/schlachten.en.md), in the style of
 # garden.py (32x32, dark outline, a light edge on top, shade below): raw meat of each animal, fells, feathers, tallow, lard
 # and bristles; roasts, soups, sausages, bacon, ham and a slice of bread with lard; the butcher's knife, salt, cured and
-# dried meat, bones and bone meal, a leather bag and boots, a chick, a piglet and a feast.
+# dried meat, bones and bone meal, a leather bag and boots, a chick, a piglet, a feast and a feather pillow.
 # Usage: python3 meat.py <items dir> [sheet.png]
 import sys
 from PIL import Image
@@ -167,6 +167,20 @@ def feathers():
     return outline(img)
 
 
+def pillow():
+    img = new(); px = img.load()
+    C = rgb("#e8e0f0"); CD = shade(C, 0.72)
+    for y in range(8, 26):                  # a plump pillow of cloth, pinched in at the four corners
+        for x in range(4, 29):
+            ex, ey = abs(x + 0.5 - 16.5) / 12.5, abs(y + 0.5 - 17) / 9
+            if ex ** 4 + ey ** 4 > 1: continue
+            f = 1.2 if y < 12 and x < 18 else 0.8 if y > 22 else 1.0
+            px[x, y] = shade(C, f)
+    line(px, 8, 17, 25, 17, CD)             # the seam across the middle
+    for (x, y) in ((5, 9), (27, 9), (5, 24), (27, 24)): disc(px, x + 0.5, y + 0.5, 1.2, C, light=False)  # the corners
+    return outline(img)
+
+
 def pot(colour):
     img = new(); px = img.load()
     for x in range(8, 24):
@@ -328,7 +342,7 @@ things = {
     "speck": bacon(), "schinken": ham("#c0605a"), "raeucherwurst": sausage("#8a4a32", 1), "schmalzbrot": lardbread(),
     "schlachtmesser": cleaver(), "salz": heap("#f4f4ee", "#c8ccd0"), "poekelfleisch": cured(), "trockenfleisch": jerky(),
     "knochen": bones(), "knochenmehl": bonemeal(), "ledertasche": bag(), "lederstiefel": boots(), "kueken": chick(),
-    "ferkel": piglet(), "festessen": feast(),
+    "ferkel": piglet(), "festessen": feast(), "kissen": pillow(),
 }
 for key, img in things.items():
     img.save(f"{out}/{key}.png")

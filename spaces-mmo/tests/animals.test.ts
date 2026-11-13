@@ -322,7 +322,7 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		await give(s, anna.me, "gerste", 2);
 		assert.match(await does(anna.p, "füttere", "satt für"), /füttert die Gänse von Bäuerin mit 2 Gerste/);
 
-		// what the farm gives, made on: cloth and a blanket at a loom, cheese at a hut's hearth
+		// what the farm gives, made on: cloth, a blanket and a pillow at a loom, cheese at a hut's hearth
 		const me = (await s.readAll({ type: "Character", fields: { charId: anna.me } }))[0]!.fields as unknown as { x: number; y: number };
 		await give(s, anna.me, "wolle", 3);
 		await give(s, anna.me, "spindel", 1);
@@ -334,6 +334,12 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		await does(anna.p, "craft decke", "Daunendecke her");
 		assert.equal(await pack(s, anna.me, "decke"), 1);
 		assert.equal(await pack(s, anna.me, "tuch"), 0);
+		// a hen's or a duck's feathers, four in a cloth: a pillow
+		await give(s, anna.me, "tuch", 1);
+		await give(s, anna.me, "federn", 4);
+		await does(anna.p, "craft kissen", "Federkissen her");
+		assert.equal(await pack(s, anna.me, "kissen"), 1);
+		assert.equal(await pack(s, anna.me, "federn"), 0);
 		await give(s, anna.me, "milch", 3);
 		await give(s, anna.me, "treibholz", 1);
 		assert.match(await does(anna.p, "craft käse", "nur direkt"), /Käse macht man nur direkt neben einer Hütte/);

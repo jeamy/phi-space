@@ -965,6 +965,7 @@ Jedes Ding, das man herstellt, hat Käufer. Die Tabelle nennt die **Grundpreise*
 | Eintopf | Wilma (Markt von Kupferhafen) 3, Hauke (Schärenhafen) 3, Bente (Rauchhafen) 3, Momme (Krabbenbucht) 3 | – | 4 |
 | Entenbraten | Wilma (Markt von Kupferhafen) 5 | – | 7 |
 | Fass | Marta (Markt von Kupferhafen) 14 | – | 24 |
+| Federkissen | Marta (Markt von Kupferhafen) 12 | Marta 16 | 16 |
 | Fensterläden | Marta (Markt von Kupferhafen) 8 | – | 13 |
 | Festessen | Wilma (Markt von Kupferhafen) 38 | – | 55 |
 | Gänsebraten | Wilma (Markt von Kupferhafen) 10 | – | 14 |
@@ -1034,6 +1035,7 @@ Aus wenigen Dingen machst du Nützliches. Manches braucht ein Werkzeug, manches 
 | Brot | 2 Mehl, 1 Kanne Wasser, 1 Treibholz, nur am Backhaus | 3 Brote |
 | Tuch | 3 Wolle und eine Spindel, nur am Webstuhl | Ein Stück Wolltuch ([Tiere](help.game.animals#products)) |
 | Daunendecke | 2 Tuch, 3 Daunen, nur am Webstuhl | Eine Decke |
+| Federkissen | 1 Tuch, 4 Federn, nur am Webstuhl | Ein Kissen |
 | Käse | 3 Milch, 1 Treibholz, nur an einer Hütte | Ein Käse |
 | Mausefalle | 1 Treibholz, 2 Muscheln, 1 Tangseil | In der Truhe fängt sie die Mäuse ([Wild](help.game.wild#shelter)) |
 
@@ -1114,6 +1116,7 @@ Everything you make has buyers. The table gives the **base prices** in coins: wh
 | Dried Meat | Marta (Copper Harbour Market) 6 | Marta 9 | 9 |
 | Dripping bread | Wilma (Copper Harbour Market) 2 | – | 3 |
 | Feast | Wilma (Copper Harbour Market) 38 | – | 55 |
+| Feather Pillow | Marta (Copper Harbour Market) 12 | Marta 16 | 16 |
 | Fruit crate | Marta (Copper Harbour Market) 9 | – | 15 |
 | Glass | Marta (Copper Harbour Market) 3 | – | 5 |
 | Ham | Marta (Copper Harbour Market) 10, Wilma (Copper Harbour Market) 10 | Marta 14, Wilma 14 | 14 |
@@ -1457,6 +1460,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Brot ×3 (\`craft brot\`) | 2 Mehl, 1 Kanne Wasser, 1 Treibholz | Backhaus | satt 12 Std. |
 | Kuchen (\`craft kuchen\`) | 3 Ei, 2 Mehl, 1 Milch, 1 Honig | Backhaus | satt 12 Std. |
 | Daunendecke (\`craft decke\`) | 2 Tuch, 3 Daunen | Webstuhl |  |
+| Federkissen (\`craft kissen\`) | 1 Tuch, 4 Federn | Webstuhl |  |
 | Tuch (\`craft tuch\`) | 3 Wolle, mit Spindel | Webstuhl |  |
 | Ziegel ×3 (\`craft ziegel\`) | 3 Lehm, 1 Treibholz | Ziegelei |  |
 | Räucherfisch ×2 (\`craft raeucherfisch\`) | 2 Fisch, 1 Treibholz | Räucherei | satt 10 Std. |
@@ -1528,6 +1532,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Brot (bread) ×3 (\`craft brot\`) | 2 flour, 1 can of water, 1 driftwood | Bakehouse | sated 12 h |
 | Kuchen (cake) (\`craft kuchen\`) | 3 eggs, 2 flour, 1 milk, 1 honey | Bakehouse | sated 12 h |
 | Daunendecke (down quilt) (\`craft decke\`) | 2 cloth, 3 down | Loom |  |
+| Federkissen (feather pillow) (\`craft kissen\`) | 1 cloth, 4 feathers | Loom |  |
 | Tuch (cloth) (\`craft tuch\`) | 3 wool, with spindle | Loom |  |
 | Ziegel (brick) ×3 (\`craft ziegel\`) | 3 clay, 1 driftwood | Brickworks |  |
 | Räucherfisch (smoked fish) ×2 (\`craft raeucherfisch\`) | 2 fish, 1 driftwood | Smokehouse | sated 10 h |
@@ -1587,7 +1592,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Metzgerei (\`bau metzgerei\`) | Dorf | 2×2, 6 Stein, 4 Bohle, 4 Treibholz, 20 Arbeit | 2 | 40 | schlachtet ein Tier, das du trägst; ein Stück Fleisch mehr beim Schlachten im Ort; Bratwurst mit Salz, Pökelfleisch |
 | Salzgarten (\`bau salzgarten\`) | Dorf | 2×2, 4 Stein, 4 Lehm, 2 Treibholz, 12 Arbeit | 2 | 40 | Salz harken (\`harke\`) |
 | Steinbruch (\`bau steinbruch\`) | Dorf | 2×2, 8 Treibholz, 3 Tangseil, 4 Stein, 16 Arbeit | 3 | 45 | Stein brechen mit Spitzhacke (\`breche\`) |
-| Webstuhl (\`bau webstuhl\`) | Dorf | 2×1, 6 Treibholz, 2 Tangseil, 8 Arbeit | 1 | 40 | webt Tuch, näht Daunendecken |
+| Webstuhl (\`bau webstuhl\`) | Dorf | 2×1, 6 Treibholz, 2 Tangseil, 8 Arbeit | 1 | 40 | webt Tuch, näht Daunendecken und Federkissen |
 | Werkstatt (\`bau werkstatt\`) | Dorf | 3×2, 10 Treibholz, 8 Stein, 4 Tangseil, 24 Arbeit | 3 | 45 | Bohlen, Tauwerk, Gehäuse, Karren, Ruderboot, Schlachtmesser, Ledertasche, Lederstiefel; Werkzeug nutzt sich daneben nur halb so schnell ab |
 | Windmühle (\`bau windmühle\`) | Dorf | 2×2, 8 Treibholz, 2 Tangseil, 2 Leinen, 16 Arbeit | 2 | 40 | mahlt Korn zu Mehl, Knochen zu Knochenmehl (\`mahle\`) |
 | Ziegelei (\`bau ziegelei\`) | Dorf | 2×2, 8 Stein, 6 Treibholz, 6 Lehm, 20 Arbeit | 3 | 45 | brennt Ziegel aus Lehm |
@@ -1624,7 +1629,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Butcher's Shop (\`bau metzgerei\`) | Village | 2×2, 6 stone, 4 plank, 4 driftwood, 20 work | 2 | 40 | slaughters an animal you carry; one more piece of meat when slaughtering in the room; salted sausage, cured meat |
 | Salt Garden (\`bau salzgarten\`) | Village | 2×2, 4 stone, 4 clay, 2 driftwood, 12 work | 2 | 40 | rake salt (\`harke\`) |
 | Quarry (\`bau steinbruch\`) | Village | 2×2, 8 driftwood, 3 kelp rope, 4 stone, 16 work | 3 | 45 | break stone with a pickaxe (\`breche\`) |
-| Loom (\`bau webstuhl\`) | Village | 2×1, 6 driftwood, 2 kelp rope, 8 work | 1 | 40 | weaves cloth, sews down quilts |
+| Loom (\`bau webstuhl\`) | Village | 2×1, 6 driftwood, 2 kelp rope, 8 work | 1 | 40 | weaves cloth, sews down quilts and feather pillows |
 | Workshop (\`bau werkstatt\`) | Village | 3×2, 10 driftwood, 8 stone, 4 kelp rope, 24 work | 3 | 45 | planks, rope, casings, cart, rowing boat, butcher's knife, leather bag, leather boots; beside it tools wear only half as fast |
 | Windmill (\`bau windmühle\`) | Village | 2×2, 8 driftwood, 2 kelp rope, 2 linen, 16 work | 2 | 40 | grinds grain to flour, bones to bone meal (\`mahle\`) |
 | Brickworks (\`bau ziegelei\`) | Village | 2×2, 8 stone, 6 driftwood, 6 clay, 20 work | 3 | 45 | fires bricks from clay |
@@ -2114,7 +2119,7 @@ Die **Ente** lebt im Gehege und legt wie das Huhn ein **Ei** am Tag. Sie frisst 
 
 ## Gans {#goose}
 
-Die **Gans** gibt alle drei Tage **Daunen**. Am Webstuhl näht \`craft decke\` aus 2 Tuch und 3 Daunen eine Daunendecke, die Marta gut bezahlt. Satte **Gänse** halten Wache: In ihrem Raum kommt kein Hase an die Beete und kein Fuchs in den Stall, sie schnattern ihn fort.
+Die **Gans** gibt alle drei Tage **Daunen**. Am Webstuhl näht \`craft decke\` aus 2 Tuch und 3 Daunen eine Daunendecke, die Marta gut bezahlt. Die **Federn**, die ein geschlachtetes Huhn oder eine Ente gibt, stopft \`craft kissen\` mit einem Tuch zu einem Federkissen (4 Federn). Satte **Gänse** halten Wache: In ihrem Raum kommt kein Hase an die Beete und kein Fuchs in den Stall, sie schnattern ihn fort.
 
 ## Schaf {#sheep}
 
@@ -2230,10 +2235,11 @@ Aus Wolle, Daunen, Milch und Wachs werden teurere Waren. Dafür brauchst du den 
 | --- | --- | --- |
 | Tuch (\`craft tuch\`) | 3 Wolle, mit einer Spindel | Webstuhl |
 | Daunendecke (\`craft decke\`) | 2 Tuch, 3 Daunen | Webstuhl |
+| Federkissen (\`craft kissen\`) | 1 Tuch, 4 Federn | Webstuhl |
 | Käse (\`craft käse\`) | 3 Milch, 1 Treibholz | Hütte |
 | 2 Kerzen (\`craft kerze\`) | 2 Wachs, 1 Leinen | Hütte |
 
-Gesa kauft Eier, Wolle, Milch, Daunen, Leder, Honig und Wachs, Marta Tuch, Decken, Käse, Honig, Kerzen und Trüffel.`,
+Gesa kauft Eier, Wolle, Milch, Daunen, Leder, Honig und Wachs, Marta Tuch, Decken, Kissen, Käse, Honig, Kerzen und Trüffel.`,
 			en: `Animals live in a coop, pen or hive that belongs to you. You feed them, and they give you eggs, milk, wool, down, truffles or honey. These make goods that sell well. Hens and bees work from the start, a pen only in a [village](help.game.village#epochs), cows only in a town.
 
 ## All animals {#all}
@@ -2316,7 +2322,7 @@ The **duck** lives in the pen and lays an **egg** a day like a hen. It eats kelp
 
 ## Goose {#goose}
 
-The **goose** gives **down** every three days. At the loom \`craft decke\` sews a down blanket from 2 cloth and 3 down, which Marta pays well for. Fed **geese** keep watch: in their room no hare gets to the beds and no fox into the coop, they cackle it away.
+The **goose** gives **down** every three days. At the loom \`craft decke\` sews a down blanket from 2 cloth and 3 down, which Marta pays well for. The **feathers** a slaughtered hen or duck gives go into a feather pillow: \`craft kissen\` stuffs 4 of them into a cloth. Fed **geese** keep watch: in their room no hare gets to the beds and no fox into the coop, they cackle it away.
 
 ## Sheep {#sheep}
 
@@ -2432,10 +2438,11 @@ Wool, down, milk and wax become dearer goods. For that you need the loom or a hu
 | --- | --- | --- |
 | cloth (\`craft tuch\`) | 3 wool, with a spindle | loom |
 | down blanket (\`craft decke\`) | 2 cloth, 3 down | loom |
+| feather pillow (\`craft kissen\`) | 1 cloth, 4 feathers | loom |
 | cheese (\`craft käse\`) | 3 milk, 1 driftwood | hut |
 | 2 candles (\`craft kerze\`) | 2 wax, 1 linen | hut |
 
-Gesa buys eggs, wool, milk, down, leather, honey and wax, Marta cloth, blankets, cheese, honey, candles and truffles.`,
+Gesa buys eggs, wool, milk, down, leather, honey and wax, Marta cloth, blankets, pillows, cheese, honey, candles and truffles.`,
 		},
 	},
 	{
