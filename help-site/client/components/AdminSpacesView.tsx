@@ -432,17 +432,22 @@ export function AdminSpacesView(props: AdminSpacesViewProps) {
 														{locale === "de" ? "Archivieren" : "Archive"}
 													</button>
 												)}
-												<button
-													type="button"
-													className="wb-btn wb-btn--danger"
-													onClick={() => {
-														if (confirm(locale === "de" ? `Space "${sp.alias}" endgültig löschen?` : `Permanently delete space "${sp.alias}"?`)) {
-															void sendAdminCommand("deleteSpace", { spaceId: sp.spaceId });
-														}
-													}}
-												>
-													{locale === "de" ? "Löschen" : "Delete"}
-												</button>
+												{/* only an archived, empty Space outside every run can be deleted (src/space-lifecycle.ts) */}
+												{sp.archived ? (
+													<button
+														type="button"
+														className="wb-btn wb-btn--danger"
+														onClick={() => {
+															if (confirm(locale === "de"
+																? `Space "${sp.alias}" endgültig löschen? Das gelingt nur, wenn er leer ist und zu keinem Lauf gehört; die ID bleibt reserviert.`
+																: `Permanently delete space "${sp.alias}"? This succeeds only if it is empty and belongs to no run; the ID stays reserved.`)) {
+																void sendAdminCommand("deleteSpace", { spaceId: sp.spaceId });
+															}
+														}}
+													>
+														{locale === "de" ? "Löschen" : "Delete"}
+													</button>
+												) : null}
 											</>
 										) : null}
 									</div>
@@ -711,6 +716,7 @@ export function AdminSpacesView(props: AdminSpacesViewProps) {
 							{operationsList.map((op: any) => (
 								<div key={op.commandId} style={{ padding: "5px 0", borderBottom: "1px solid var(--line)" }}>
 									<b>{op.commandId}</b> · {op.kind} → <span style={{ color: "var(--accent-readable)" }}>{op.state}</span>
+									{op.error ? <div style={{ color: "var(--warning)" }}>{String(op.error)}</div> : null}
 								</div>
 							))}
 						</div>
@@ -733,6 +739,7 @@ export function AdminSpacesView(props: AdminSpacesViewProps) {
 								<div key={entry.commandId} style={{ padding: "5px 0", borderBottom: "1px solid var(--line)" }}>
 									[{new Date(entry.at).toLocaleTimeString()}] <b>{entry.kind}</b> ({entry.commandId}) by {entry.requestedBy} →{" "}
 									<span>{entry.state}</span>
+									{entry.error ? <div style={{ color: "var(--warning)" }}>{String(entry.error)}</div> : null}
 								</div>
 							))}
 						</div>
