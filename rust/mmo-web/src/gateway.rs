@@ -79,6 +79,12 @@ struct State {
 	applied: HashMap<String, f64>, char_region: HashMap<String, String>,
 }
 
+/// What every client's atlas state shares (Gateway::atlas_shared).
+struct AtlasShared {
+	owned: HashMap<String, Vec<Json>>, tasks: HashMap<String, Vec<Json>>,
+	people: Json, world_now: Option<f64>, lit: Json, patient: f64, decay_now: Option<f64>, fog: Json, epochs: Json, pack_max: Json, stops: Json,
+}
+
 /// A hello waiting for a region's stream to reach a revision.
 type Waiter = (String, f64, Option<oneshot::Sender<()>>);
 
@@ -444,7 +450,7 @@ impl Gateway {
 			c.ws.send(&obj! { "t" => "trade", "trade" => self.trade(c) });
 			self.tell(&c.me.char_id);
 			if !c.atlas.get() { c.atlas.set(true); c.ws.send(&obj! { "t" => "atlas", "atlas" => self.atlas() }); }
-			c.ws.send(&obj! { "t" => "atlasState", "state" => self.atlas_state(c, &self.owned()) });
+			c.ws.send(&obj! { "t" => "atlasState", "state" => self.atlas_state(c, &self.atlas_shared()) });
 		}
 	}
 
@@ -964,17 +970,65 @@ impl Gateway {
 		obj! { "rooms" => Json::Array(rooms), "links" => Json::Array(links.values().cloned().collect()) }
 	}
 
-	/// What each character owns anywhere in the world.
-	fn owned(&self) -> HashMap<String, Vec<Json>> {
-		let mut out: HashMap<String, Vec<Json>> = HashMap::new();
-		for o in self.st.borrow().objs.values() {
-			let owner = j::s(o, "ownerId");
-			if owner.is_empty() || !["site", "building", "bed", "field", "ruin"].contains(&j::s(o, "kind")) { continue; }
-			let mut x = obj_of(obj! { "id" => j::at(o, "id").clone(), "kind" => j::at(o, "kind").clone(), "name" => j::at(o, "name").clone(), "room" => j::at(o, "location").clone(), "x" => j::at(o, "x").clone(), "y" => j::at(o, "y").clone() });
-			if j::truthy(j::at(o, "plan")) { x.insert("plan", j::at(o, "plan").clone()); }
-			out.entry(owner.to_owned()).or_default().push(Json::Object(x));
+	/// What an atlas state needs that is the same for every client, read once per broadcast (not once per client: with
+	/// many players the per-client passes over every object of the world were the web process's whole time): what each
+	/// character owns, the objects each one has tasks of, and the parts every state shares. The settings the next state
+	/// carries are read here too, once.
+	fn atlas_shared(&self) -> AtlasShared {
+		{
+			let (g, s, pack) = (Rc::downgrade(&self.rc()), self.space.clone(), j::truthy(j::at(&self.w, "pack")));
+			tokio::task::spawn_local(async move {
+				let (b, e, p) = (setting(&s, "beam.cost").await, setting(&s, "epoch.force").await, if pack { setting(&s, "pack.max").await.ok() } else { None });
+				let Some(g) = g.upgrade() else { return };
+				if let Ok(b) = b { g.beam_cost.set(b); }
+				if let Ok(e) = e { g.epoch_force.set(e); }
+				if let Some(p) = p { g.pack_max.set(Some(p)); }
+			});
 		}
-		out
+		let w = &self.w;
+		let st = self.st.borrow();
+		let mut owned: HashMap<String, Vec<Json>> = HashMap::new();
+		let mut tasks: HashMap<String, Vec<Json>> = HashMap::new();
+		for o in st.objs.values() {
+			let owner = j::s(o, "ownerId");
+			let kind = j::s(o, "kind");
+			if !owner.is_empty() && ["site", "building", "bed", "field", "ruin"].contains(&kind) {
+				let mut x = obj_of(obj! { "id" => j::at(o, "id").clone(), "kind" => j::at(o, "kind").clone(), "name" => j::at(o, "name").clone(), "room" => j::at(o, "location").clone(), "x" => j::at(o, "x").clone(), "y" => j::at(o, "y").clone() });
+				if j::truthy(j::at(o, "plan")) { x.insert("plan", j::at(o, "plan").clone()); }
+				owned.entry(owner.to_owned()).or_default().push(Json::Object(x));
+			}
+			// whose tasks this object may give (todos_for: its owner, a bed's sponsors), each once, in the objects' order
+			let mut whose: Vec<&str> = Vec::new();
+			if j::truthy(j::at(o, "ownerId")) { whose.push(owner); }
+			if kind == "bed" { for sp in j::a(o, "sponsorIds") { if let Some(sp) = sp.as_str() { if !whose.contains(&sp) { whose.push(sp); } } } }
+			for who in whose { tasks.entry(who.to_owned()).or_default().push(o.clone()); }
+		}
+		let mut people = Object::new();
+		for ch in st.chars.values() {
+			let cid = j::s(ch, "charId");
+			if st.online.get(cid).copied().unwrap_or(0.0) <= 0.0 { continue; }
+			let room = j::s(ch, "room");
+			let mut n = people.get(room).cloned().unwrap_or_else(|| Json::Array(vec![Json::Number(0.0), Json::Number(0.0)]));
+			if let Json::Array(a) = &mut n { let i = usize::from(cid.starts_with("npc-")); a[i] = Json::Number(j::number(&a[i]) + 1.0); }
+			people.insert(room, n);
+		}
+		let world_now = st.clock.as_ref().map(|c| world_at(c, now()));
+		let lit: Vec<Json> = j::a(w, "beacons").iter().filter(|b| self.burns(&st, st.flames.get(j::s(b, "beaconId")).copied().unwrap_or(0.0))).map(|b| j::at(b, "room").clone()).collect();
+		let patient = st.clock.as_ref().map_or(1.0, |c| { let rate = j::n(c, "rate"); rate / j::no(c, "decayRate").unwrap_or(rate) });
+		let decay_now = st.clock.as_ref().map(|c| decay_at(c, now()));
+		let mut fog = Object::new();
+		for (k, v) in st.fog.iter() { fog.insert(k, Json::Number(*v)); }
+		let epochs = if !j::truthy(j::at(w, "epochs")) { Json::Null } else if self.epoch_force.get() > 0.0 {
+			let mut o = Object::new();
+			for r in j::a(w, "rooms") { o.insert(j::so(r, "island").unwrap_or(""), Json::Number(self.epoch_force.get())); }
+			Json::Object(o)
+		} else {
+			let mut o = Object::new();
+			for e in st.epochs.values() { o.insert(txt(j::at(e, "island")), j::at(e, "epoch").clone()); }
+			Json::Object(o)
+		};
+		let pack_max = if j::truthy(j::at(w, "pack")) { self.pack_max.get().map_or_else(|| j::at(j::at(w, "pack"), "max").clone(), Json::Number) } else { Json::Null };
+		AtlasShared { owned, tasks, people: Json::Object(people), world_now, lit: Json::Array(lit), patient, decay_now, fog: Json::Object(fog), epochs, pack_max, stops: self.stops(&st) }
 	}
 
 	fn stops(&self, st: &State) -> Json {
@@ -988,47 +1042,11 @@ impl Gateway {
 		obj! { "jetties" => Json::Array(built(j::so(j::at(w, "fishing"), "plan"))), "stations" => Json::Array(built(j::so(j::at(w, "rail"), "plan"))), "trainFare" => j::no(j::at(w, "rail"), "fare").unwrap_or(1.0), "roads" => Json::Array(roads) }
 	}
 
-	fn atlas_state(&self, c: &Client, owned: &HashMap<String, Vec<Json>>) -> Json {
-		let w = self.w.clone();
-		// the settings the next state carries
-		{
-			let (g, s, pack) = (Rc::downgrade(&self.rc()), self.space.clone(), j::truthy(j::at(&w, "pack")));
-			tokio::task::spawn_local(async move {
-				let (b, e, p) = (setting(&s, "beam.cost").await, setting(&s, "epoch.force").await, if pack { setting(&s, "pack.max").await.ok() } else { None });
-				let Some(g) = g.upgrade() else { return };
-				if let Ok(b) = b { g.beam_cost.set(b); }
-				if let Ok(e) = e { g.epoch_force.set(e); }
-				if let Some(p) = p { g.pack_max.set(Some(p)); }
-			});
-		}
+	fn atlas_state(&self, c: &Client, sh: &AtlasShared) -> Json {
 		let st = self.st.borrow();
-		let mut people = Object::new();
-		for ch in st.chars.values() {
-			let cid = j::s(ch, "charId");
-			if st.online.get(cid).copied().unwrap_or(0.0) <= 0.0 { continue; }
-			let room = j::s(ch, "room");
-			let mut n = people.get(room).cloned().unwrap_or_else(|| Json::Array(vec![Json::Number(0.0), Json::Number(0.0)]));
-			if let Json::Array(a) = &mut n { let i = usize::from(cid.starts_with("npc-")); a[i] = Json::Number(j::number(&a[i]) + 1.0); }
-			people.insert(room, n);
-		}
-		let world_now = st.clock.as_ref().map(|c| world_at(c, now()));
-		let lit: Vec<Json> = j::a(&w, "beacons").iter().filter(|b| self.burns(&st, st.flames.get(j::s(b, "beaconId")).copied().unwrap_or(0.0))).map(|b| j::at(b, "room").clone()).collect();
-		let patient = st.clock.as_ref().map_or(1.0, |c| { let rate = j::n(c, "rate"); rate / j::no(c, "decayRate").unwrap_or(rate) });
-		let decay_now = st.clock.as_ref().map(|c| decay_at(c, now()));
-		let todos = todos_for(&c.me.char_id, st.objs.values(), &|id| st.herds.get(id).cloned(), st.mill_loads.values(), &w, world_now, patient, decay_now);
-		let mut fog = Object::new();
-		for (k, v) in st.fog.iter() { fog.insert(k, Json::Number(*v)); }
-		let epochs = if !j::truthy(j::at(&w, "epochs")) { Json::Null } else if self.epoch_force.get() > 0.0 {
-			let mut o = Object::new();
-			for r in j::a(&w, "rooms") { o.insert(j::so(r, "island").unwrap_or(""), Json::Number(self.epoch_force.get())); }
-			Json::Object(o)
-		} else {
-			let mut o = Object::new();
-			for e in st.epochs.values() { o.insert(txt(j::at(e, "island")), j::at(e, "epoch").clone()); }
-			Json::Object(o)
-		};
-		let pack_max = if j::truthy(j::at(&w, "pack")) { self.pack_max.get().map_or_else(|| j::at(j::at(&w, "pack"), "max").clone(), Json::Number) } else { Json::Null };
-		obj! { "todos" => todos, "here" => c.room().unwrap_or_default(), "fog" => Json::Object(fog), "lit" => Json::Array(lit), "people" => Json::Object(people), "mine" => Json::Array(owned.get(&c.me.char_id).cloned().unwrap_or_default()), "epochs" => epochs, "beamCost" => self.beam_cost.get(), "packMax" => pack_max, "stops" => self.stops(&st) }
+		let mine = sh.tasks.get(&c.me.char_id).map_or(&[][..], Vec::as_slice);
+		let todos = todos_for(&c.me.char_id, mine.iter(), &|id| st.herds.get(id).cloned(), st.mill_loads.values(), &self.w, sh.world_now, sh.patient, sh.decay_now);
+		obj! { "todos" => todos, "here" => c.room().unwrap_or_default(), "fog" => sh.fog.clone(), "lit" => sh.lit.clone(), "people" => sh.people.clone(), "mine" => Json::Array(sh.owned.get(&c.me.char_id).cloned().unwrap_or_default()), "epochs" => sh.epochs.clone(), "beamCost" => self.beam_cost.get(), "packMax" => sh.pack_max.clone(), "stops" => sh.stops.clone() }
 	}
 
 	/// Something on the overview changed: its state goes out to every client once the short pause is over.
@@ -1040,12 +1058,12 @@ impl Gateway {
 			tokio::time::sleep(Duration::from_millis(ATLAS_MS)).await;
 			let Some(g) = g.upgrade() else { return };
 			g.atlas_due.set(false);
-			let owned = g.owned();
+			let shared = g.atlas_shared();
 			let atlas = if g.atlas_geometry.replace(false) { Some(g.atlas()) } else { None };
 			let cs: Vec<Rc<Client>> = g.clients.borrow().clone();
 			for c in cs { if c.atlas.get() {
 				if let Some(a) = &atlas { c.ws.send(&obj! { "t" => "atlas", "atlas" => a.clone() }); }
-				c.ws.send(&obj! { "t" => "atlasState", "state" => g.atlas_state(&c, &owned) });
+				c.ws.send(&obj! { "t" => "atlasState", "state" => g.atlas_state(&c, &shared) });
 			} }
 		});
 	}

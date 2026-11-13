@@ -308,11 +308,26 @@ docker exec -w /opt/phi-spaces/spaces-mmo phi-spaces-mmo-web-1 node --experiment
 docker exec phi-spaces-mmo-web-1 rm -f /opt/phi-spaces/spaces-mmo/live-load-cleanup.ts /opt/phi-spaces/spaces-mmo/load-bots.json
 ```
 
-Results: 100 figures on one world Space on nano, [lasttest-2026-10-28.en.md](lasttest-2026-10-28.en.md); 50 and 100 figures on the four region Spaces on the Rust server, 15 minutes each, [lasttest-2026-11-08.en.md](lasttest-2026-11-08.en.md). The cost per command without a server:
+Results: 100 figures on one world Space on nano, [lasttest-2026-10-28.en.md](lasttest-2026-10-28.en.md); 50 and 100 figures on the four region Spaces on the Rust server, 15 minutes each, [lasttest-2026-11-08.en.md](lasttest-2026-11-08.en.md); 200 registered players of `play-load.ts` (below) on big and locally under a profiler, [lasttest-2026-11-13.en.md](lasttest-2026-11-13.en.md). The cost per command without a server:
 `LOAD_BOTS=50 LOAD_SECONDS=60 node --no-warnings --experimental-strip-types --import ./tests/test-env.ts
 tests/perf/space-cost.ts` (a stack as on the servers, one JSON line with CPU ms of the Space process per command).
 `SPACE_COST_SEED=<dir>` starts that stack from the `world.sqlite` in that directory (copied), to measure a world that
 already holds much.
+
+### Players who play everything
+
+`tests/perf/play-load.ts` lets `LOAD_BOTS` players register (each with its own `x-forwarded-for`, `LOAD_NET` names the
+second octet) and play for `LOAD_SECONDS` activities of all four epochs picked at random, with 1 to 3 s between two
+commands: gathering, fire, trading with each other, market board, a hut built the whole way, chest, rain barrel, bed,
+jetty, smokehouse, food, crafts, coop and pen, workshop, warehouse, mill, bakery, loom, quarry, clay pit, brickworks,
+chapel, field, department store, counting house, park, brewery, sand and glassworks, shipyard, hatch, railway, signal
+fires, ship, beaming, looking around and the exits. Like the play-through it sets the world up through the region spaces
+(`LOAD_SPACES`): things into the pack, a building placed beside the player (`load-…`, taken away), `epoch.force` set to
+`LOAD_EPOCH` and `llm.perMin` to 0 while it plays (a line the rules do not read would go to the model), both put back at
+the end. `commands.jsonl` times every command (`ok`, `refused`, `timeout`, `model`), `activities.jsonl` says per activity
+whether it worked. It changes the world for good (accounts, figures, what they made, the things it gave): on a server only
+with a backup that is put back afterwards (the Backups section; on big the driver runs in a container of the game image
+with `--network host`, the image has the modules it imports).
 
 ## Soak on this machine
 

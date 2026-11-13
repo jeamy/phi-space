@@ -68,8 +68,26 @@ fn for_viewer(m: &Json, viewer: &str, name: &str) -> bool {
 	if kind == "error" || j::s(m, "fromId") == viewer || (!name.is_empty() && j::s(m, "from") == name) { return false; }
 	if j::s(m, "to") == viewer { return j::truthy(j::at(m, "fromId")); }
 	if name.is_empty() || !(["say", "emote", "channel"].contains(&kind) || (kind == "info" && j::truthy(j::at(m, "actor")))) { return false; }
-	let esc = js::re(r"[.*+?^${}()|[\]\\]", "g").replace(name, "\\$&");
-	JsRegex::new(&format!("(^|[^\\p{{L}}\\p{{N}}]){esc}([^\\p{{L}}\\p{{N}}]|$)"), "iu").is_ok_and(|r| r.test(j::s(m, "text")))
+	named_in(name, j::s(m, "text"))
+}
+
+thread_local! {
+	/// The name patterns of for_viewer, compiled once per name (each message to each viewer compiled one anew: with many
+	/// players that was a tenth of the web process's time). Cleared when it grows past NAMED_MAX names.
+	static NAMED: std::cell::RefCell<std::collections::HashMap<String, Option<JsRegex>>> = std::cell::RefCell::default();
+}
+const NAMED_MAX: usize = 10_000;
+
+/// Whether `text` names `name` as a word of its own (any case).
+fn named_in(name: &str, text: &str) -> bool {
+	NAMED.with(|c| {
+		let mut c = c.borrow_mut();
+		if c.len() > NAMED_MAX { c.clear(); }
+		c.entry(name.to_owned()).or_insert_with(|| {
+			let esc = js::re(r"[.*+?^${}()|[\]\\]", "g").replace(name, "\\$&");
+			JsRegex::new(&format!("(^|[^\\p{{L}}\\p{{N}}]){esc}([^\\p{{L}}\\p{{N}}]|$)"), "iu").ok()
+		}).as_ref().is_some_and(|r| r.test(text))
+	})
 }
 
 pub fn msg_view(m: &Json, viewer: &str, model_names: &HashSet<String>, viewer_name: &str, players: Option<&HashSet<String>>) -> Json {
