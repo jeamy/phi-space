@@ -7,9 +7,10 @@
 import { connect, type Socket } from "node:net";
 import type { Meter } from "./tooltask.ts";
 import type { Subgoal } from "./subgoals.ts";
+import type { TideSeen } from "./toyisland.ts";
 
-export type BotTool = "look" | "act" | "wait" | "recall" | "subgoals";
-export const BOT_COST: Record<BotTool, number> = { look: 1, act: 1, wait: 1, recall: 1, subgoals: 0 };
+export type BotTool = "look" | "act" | "wait" | "recall" | "subgoals" | "observations";
+export const BOT_COST: Record<BotTool, number> = { look: 1, act: 1, wait: 1, recall: 1, subgoals: 0, observations: 1 };
 /** The most tool calls one bot may make; a bot beyond it fails with this message. */
 export const MAX_BOT_CALLS = 300;
 
@@ -20,7 +21,7 @@ export type BotCell = { room: string; x: number; y: number };
 export type BotEpisode = { id: string; kind: "sample" | "holdout"; /** a task on toy islands (`BotSpec.toy`): the made island "Neuland n" (toyisland.ts genIsland), none for the Graue Insel */ island?: number; start?: BotCell; setup?: { clear?: string[]; items?: Array<{ proto: string } & BotCell> }; text: { de: string; en: string } };
 /** What a verdict keeps of one episode: reached per seed, the points of its runs; `skipped`: the hidden ones did not run
  *  because no sample episode was reached. Only sample episodes keep the arena's detail. */
-export type EpisodeResult = { id: string; kind: "sample" | "holdout"; reached: boolean[]; cost: number; skipped?: true; detail?: string; /** a sample episode's way (its first seed), from the arena's `path`; the judge host stores it as a BotEpisode entry, not in the verdict */ path?: PathStep[]; cut?: true; /** the jumps between remembered paths its recall answers took (memory view) */ links?: Array<[PathStep, PathStep]>; /** a sample episode of a contribution with subgoals: how many of them its first seed reached, in turn */ subgoals?: number; /** and the cells where (BotEpisode entries, not the verdict) */ subgoalAt?: PathStep[] };
+export type EpisodeResult = { id: string; kind: "sample" | "holdout"; reached: boolean[]; cost: number; skipped?: true; detail?: string; /** a sample episode's way (its first seed), from the arena's `path`; the judge host stores it as a BotEpisode entry, not in the verdict */ path?: PathStep[]; cut?: true; /** the jumps between remembered paths its recall answers took (memory view) */ links?: Array<[PathStep, PathStep]>; /** a sample episode of a contribution with subgoals: how many of them its first seed reached, in turn */ subgoals?: number; /** and the cells where (BotEpisode entries, not the verdict) */ subgoalAt?: PathStep[]; /** a sample episode of a task with observations: the tide's landings in its worlds (PlanMemory entries, not the verdict) */ tides?: TideSeen[] };
 /** One step of a path: the room and the cell where the figure changed room or direction (the arena's `path`). */
 export type PathStep = [room: string, x: number, y: number];
 /** A room's geometry as the arena's `map` gives it, for the page that draws paths (BotRoom entries). */
@@ -46,6 +47,13 @@ export type BotSpec = {
 	plans?: Array<{ text: string; subgoals: Subgoal[] }>;
 	/** Played on toy islands in the judge's own process (toyarena.ts), not in the arena: every judge takes it. */
 	toy?: true;
+	/** Toy islands under TIDE_RULES (toyisland.ts, step 7): exits take time, the tide follows a law the prompt does not
+	 *  tell, washed-up wood goes back. */
+	toyRules?: "tide";
+	/** Observations (step 7): the judge logs every landing of the tide in the sample episodes into the block's memory
+	 *  (PlanMemory, goal "tide"), frozen per generation like the paths; a bot reads them with `observations()`. Needs
+	 *  `memory`; such a task has no `recall`. */
+	observe?: true;
 };
 
 /** How many seeds an episode runs with: one when the bot cannot wait (the world is then the same for every seed), three
@@ -54,7 +62,7 @@ export const seedsOf = (b: BotSpec): number => (b.noWait ? 1 : 3);
 /** The seed of run `s` (0-based) of episode `i`: fixed, so every judge plays the same worlds. */
 export const episodeSeed = (i: number, s: number): number => 1000 * (i + 1) + s;
 /** The tools a bot of this task has. */
-export const botToolNames = (b?: BotSpec): BotTool[] => [...(b?.noWait ? ["look", "act"] as BotTool[] : ["look", "act", "wait"] as BotTool[]), ...(b?.memory ? ["recall"] as BotTool[] : []), ...(b?.subgoals ? ["subgoals"] as BotTool[] : [])];
+export const botToolNames = (b?: BotSpec): BotTool[] => [...(b?.noWait ? ["look", "act"] as BotTool[] : ["look", "act", "wait"] as BotTool[]), ...(b?.memory ? [b.observe ? "observations" : "recall"] as BotTool[] : []), ...(b?.subgoals ? ["subgoals"] as BotTool[] : [])];
 
 /** The arena failed (unreachable, busy, gone in the middle): not the bot's doing. The judge gives the candidate back
  *  for a later round instead of writing a verdict (judge-host.ts). */
@@ -123,6 +131,10 @@ const DESCRIPTIONS: Record<BotTool, { de: string; en: string }> = {
 		de: "das Gedächtnis: Wege früherer Generationen, die das Ziel einer gezeigten Episode erreicht haben (eingefroren, wenn die Generation begann). { goal?: string (Standard: das Ziel der Aufgabe), from?: { room, x, y } (Standard: wo die Figur steht) } → { found: true, from: [room, x, y] (die nächste gemerkte Stelle im selben Raum), distance (Zellen dorthin), steps: Array<[room, x, y]> (von dort bis dahin, wo das Ziel galt; \"move x y\" auf jeden Schritt im Raum der Figur, ein Schritt auf einen Ausgang wechselt den Raum), jumps (Wechsel zwischen gemerkten Wegen, je 10 Zellen Umweg), cost } oder { found: false, reason }. 1 Punkt.",
 		en: "the memory: paths of earlier generations that reached a shown episode's goal (frozen when the generation began). { goal?: string (default: the task's goal), from?: { room, x, y } (default: where the figure stands) } → { found: true, from: [room, x, y] (the nearest remembered cell in the same room), distance (cells to it), steps: Array<[room, x, y]> (from there to where the goal held; \"move x y\" onto each step in the figure's room, a step onto an exit changes the room), jumps (changes between remembered paths, 10 cells of detour each), cost } or { found: false, reason }. 1 point.",
 	},
+	observations: {
+		de: "was frühere Generationen beobachtet haben: jede Landung der Flut in den gezeigten Episoden, eingefroren, wenn die Generation dieses Beitrags begann: {} → { observations: Array<{ island, seed, piece, minute, room, x, y, exits, fromFire }> } (piece: das wievielte Stück dieser Welt, ab 0; minute: Weltminuten seit Beginn; exits: die Ausgänge des Raums; fromFire: Ausgänge zwischen dem Raum und dem Raum des Feuers). Leer in der ersten Generation. 1 Punkt.",
+		en: "what earlier generations observed: every landing of the tide in the shown episodes, frozen when this contribution's generation began: {} → { observations: Array<{ island, seed, piece, minute, room, x, y, exits, fromFire }> } (piece: which piece of that world, from 0; minute: world minutes since the start; exits: the room's exits; fromFire: exits between the room and the fire's room). Empty in the first generation. 1 point.",
+	},
 	subgoals: {
 		de: "die Teilziele des Plans, dem dieser Beitrag folgt, der Reihe nach: {} → { subgoals: Array<{ room?, near?: { x, y }, holds? }> } (leer ohne Plan). Ein Teilziel gilt, wenn die Figur in `room` ist (ohne room: überall), höchstens 3 Zellen von `near` entfernt, und `holds` zutrifft (\"pack:treibholz\": sie trägt Treibholz; \"beacon:<id>\": das Feuer brennt, von ihr genährt). 0 Punkte.",
 		en: "the subgoals of the plan this contribution follows, in order: {} → { subgoals: Array<{ room?, near?: { x, y }, holds? }> } (empty without a plan). A subgoal holds when the figure is in `room` (anywhere without one), at most 3 cells from `near`, and `holds` is true (\"pack:treibholz\": it carries driftwood; \"beacon:<id>\": the fire burns, fed by it). 0 points.",
@@ -143,7 +155,7 @@ export function botTools(arena: Arena, world: string, m: Meter, names: BotTool[]
 			return run(arg(a));
 		},
 	});
-	return names.map((name) => call(name, (a) => (name === "recall" ? (recall ? recall(a) : Promise.resolve({ found: false, reason: "this task has no memory" })) : name === "subgoals" ? Promise.resolve({ subgoals: plan.map((g) => ({ ...g, ...(g.near ? { near: { ...g.near } } : {}) })) }) : botCall(arena, world, name, a))));
+	return names.map((name) => call(name, (a) => (name === "recall" || name === "observations" ? (recall ? recall(a) : Promise.resolve({ found: false, reason: "this task has no memory" })) : name === "subgoals" ? Promise.resolve({ subgoals: plan.map((g) => ({ ...g, ...(g.near ? { near: { ...g.near } } : {}) })) }) : botCall(arena, world, name, a))));
 }
 
 /** One bot call in a world: what the arena answers, without its envelope. A `key` makes it safe to send again (the
@@ -153,6 +165,6 @@ export async function botCall(arena: Arena, world: string, name: BotTool, a: Rec
 	const k = key ? { key } : {};
 	if (name === "look") return strip(await arena.ask("look", { world, ...k }));
 	if (name === "act") { if (typeof a.line !== "string") throw new Error("act needs { line: string }"); return strip(await arena.ask("act", { world, line: a.line, ...k })); }
-	if (name === "recall" || name === "subgoals") throw new Error(`${name} is answered by the judge, not the arena`);
+	if (name === "recall" || name === "subgoals" || name === "observations") throw new Error(`${name} is answered by the judge, not the arena`);
 	return strip(await arena.ask("wait", { world, minutes: Number(a.minutes), ...k }));
 }

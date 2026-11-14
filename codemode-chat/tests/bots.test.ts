@@ -14,7 +14,8 @@ import { offeredTasks, taskById, TASKS } from "../server/tasks.ts";
 import { ISLAND_ROOMS } from "../server/island.ts";
 import { ArenaDown, MAX_BOT_CALLS } from "../server/bottask.ts";
 import { toyArena } from "../server/toyarena.ts";
-import { genIsland } from "../server/toyisland.ts";
+import { deadEnds, genIsland, TIDE_RULES, tideLanding, ToyIsland } from "../server/toyisland.ts";
+import { TIDE_HIDDEN, TIDE_SAMPLES } from "../server/tides.ts";
 import { NEULAND_HIDDEN, NEULAND_SAMPLES } from "../server/neuland.ts";
 import { execute } from "../server/runner.ts";
 
@@ -73,7 +74,7 @@ test("bot tasks: their own lane, offered only with an arena, the prompt names th
 	assert.equal(laneOf("frustration"), "code");
 	assert.equal(laneOf("custom"), "code");
 	process.env.CODEMODE_ARENA = "";
-	assert.deepEqual(offeredTasks().filter((x) => x.kind === "bot").map((x) => x.id), ["beacon-neuland"], "no arena: only the bot task on made islands, which the judge plays itself");
+	assert.deepEqual(offeredTasks().filter((x) => x.kind === "bot").map((x) => x.id), ["beacon-neuland", "tide-law"], "no arena: only the bot tasks on made islands, which the judge plays itself");
 	process.env.CODEMODE_ARENA = "unix:/nowhere";
 	try { assert.equal(offeredTasks().some((x) => x.id === "beacon-bucht"), true); } finally { process.env.CODEMODE_ARENA = ""; }
 	const p = teamPrompt({ task, lang: "en", agent: 0, gen: 1 }).user;
@@ -553,5 +554,81 @@ t("new islands on a server without an arena: offered, judged by a plain judge, i
 		assert.deepEqual(d.paths.map((p: any) => p.episode), ["S1", "S2", "S3"]);
 		assert.deepEqual([...new Set(d.rooms.map((r: any) => r.island))].sort(), NEULAND_SAMPLES.map((n) => `Neuland ${n}`));
 		assert.ok(d.rooms.every((r: any) => r.map && r.world === "toy"));
+	} finally { await srv.close(); }
+});
+
+// ---- step 7: learn the tide, a law from observations
+const tide = taskById("tide-law")!;
+const [tLearner, tLaw, tNoCalibration, tReplay, tSearch, tCamper] = tide.variants;
+
+test("the tide's law: dead ends in turn by number, 3 cells in, the seed shifts the minute; exits take time, wood goes back, the day ends", () => {
+	for (const n of [...TIDE_SAMPLES, ...TIDE_HIDDEN]) {
+		const w = genIsland(n), d = deadEnds(w);
+		assert.ok(d.length >= 2 && !d.includes(w.fire.room), `${n}`);
+		assert.deepEqual([0, 1, 2].map((seed) => tideLanding(w, seed, 0)!.minute), [30, 40, 50]);
+		assert.equal(tideLanding(w, 0, d.length)!.room, d[0]);
+	}
+	const w = genIsland(TIDE_SAMPLES[0]!), d = deadEnds(w), first = tideLanding(w, 0, 0)!;
+	const t = new ToyIsland(w.episode.start, [], 0, w, TIDE_RULES);
+	const exit = Object.keys(w.rooms[w.episode.start.room]!.exits)[0]!;
+	t.act(exit);
+	assert.equal(t.waited, 5, "an exit takes 5 world minutes");
+	t.wait(25);
+	assert.deepEqual(t.wood.map((x) => [x.room, x.x, x.y]), [[d[0], first.x, first.y]]);
+	assert.equal(t.landed[0]!.exits.length, 1);
+	t.wait(30);
+	assert.deepEqual(t.wood, [], "after 30 minutes the sea takes it back");
+	for (let i = 0; i < 3; i++) t.wait(120);
+	assert.throws(() => t.wait(120), /480/, "the day ends after 480 minutes");
+	const plain = new ToyIsland(w.episode.start, [], 0, w);
+	plain.act(exit);
+	assert.equal(plain.waited, 0, "without rules an exit takes no time (steps 5 and 6)");
+});
+
+t("learn the tide: the law in code reaches all; without calibration, without a model, by the fire, or by room ids not", async () => {
+	process.env.CODEMODE_ARENA = "";
+	assert.equal(laneOf("tide-law"), "code");
+	const [law, noCal, search, camper, blind] = await Promise.all([tLaw, tNoCalibration, tSearch, tCamper, tLearner].map((v) => judge(cm!, tide, v!)));
+	assert.equal(law!.ok, true, law!.error ?? "");
+	assert.deepEqual([law!.passed, law!.total], [9, 9]);
+	assert.equal(noCal!.passed, 0, "one seed's minute misses the others");
+	assert.ok(!search!.ok && search!.cost! > law!.cost! * 1.5, `${search!.passed}/9, ${search!.cost} points`);
+	assert.equal(camper!.passed, 0);
+	assert.equal(blind!.ok, false, "the learner without observations is only a searcher");
+	// the law bot's verdict logs the shown episodes' landings: observations, every seed, never a hidden episode
+	const obs = memoryEntries(law!, tide.bot!.goal, true);
+	assert.ok(obs.length >= 9, String(obs.length));
+	assert.ok(obs.every((o) => o.goal === "tide" && o.obs!.exits.length === 1 && TIDE_SAMPLES.map((n) => `n${n}`).includes(o.obs!.island)));
+	assert.equal(JSON.stringify(verdictFields(law!)).includes("tides"), false, "the verdict entry carries no observations");
+	const memory = obs.map((o) => ({ ...o, gen: 1, author: "law" }));
+	const [learner, replay] = await Promise.all([tLearner, tReplay].map((v) => judge(cm!, tide, v!, { memory })));
+	assert.equal(learner!.ok, true, learner!.error ?? "");
+	assert.deepEqual([replay!.passed, replay!.score], [3, 0], "room ids carry to no other island");
+});
+
+t("learn the tide on a server: a verdict's observations go into the block's memory, a later contribution reads them from its freeze", async () => {
+	process.env.CODEMODE_ARENA = "";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [{ host: "plain-1" }] });
+	try {
+		const post = (path: string, body: unknown) => fetch(srv.url + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+		const done = async (n: number) => {
+			for (const end = Date.now() + 120_000; ;) {
+				const s = await (await fetch(srv.url + "/api/sessions/tide1")).json() as any;
+				const snap = { ...s, ...(s.blocks.find((b: any) => b.blockId === s.current) ?? {}) };
+				if (snap.contributions?.length === n && snap.contributions.every((c: any) => c.ok !== null)) return snap;
+				if (Date.now() > end) throw new Error(`timeout: ${JSON.stringify(snap.contributions)}`);
+				await new Promise((r) => setTimeout(r, 200));
+			}
+		};
+		assert.equal((await post("/api/sessions/tide1/task", { taskId: "tide-law" })).status, 200);
+		assert.equal((await post("/api/sessions/tide1/code", { author: "lerner-1", source: tLearner })).status, 200);
+		const a = await done(1);
+		assert.equal(a.contributions[0].ok, false, "nothing observed yet: the learner only searches");
+		const seen = await srv.stack.space.count({ type: "PlanMemory", fields: { goal: "tide" } });
+		assert.ok(seen >= 9, `${seen} observations`);
+		assert.equal((await post("/api/sessions/tide1/code", { author: "lerner-2", source: tLearner })).status, 200);
+		const b = await done(2);
+		const by = Object.fromEntries(b.contributions.map((c: any) => [c.author, c]));
+		assert.equal(by["lerner-2"].ok, true, by["lerner-2"].error);
 	} finally { await srv.close(); }
 });

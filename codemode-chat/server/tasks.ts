@@ -6,6 +6,7 @@ import { describeHarnessTools, type HarnessSpec } from "./harnesstask.ts";
 import { TOY_FIRE } from "./toyisland.ts";
 import { ANLEGER_EPISODES, ANLEGER_FIRE, ANLEGER_PLANS, ANLEGER_VARIANTS, episodeList, PLANNER_HARNESS, PLANNER_RATERS, ISLAND_EPISODES, ISLAND_MAP, ISLAND_MEMORY_VARIANTS, ISLAND_VARIANTS, searchBot } from "./island.ts";
 import { NEULAND_EPISODES, neulandVariants } from "./neuland.ts";
+import { TIDE_EPISODES, TIDE_VARIANTS } from "./tides.ts";
 import { checkSpec, dataToolSpec, describeDataTools, type DataItem, type DataSpec } from "./datatask.ts";
 import { describeTools, FRUSTRATION, MAX_CALLS, PI_SOURCE, PI_WINDOWS, PI_WINDOWS_BUGS, type ToolSpec } from "./tooltask.ts";
 
@@ -183,6 +184,33 @@ function neulandTask(): Task {
 		cases: [],
 		bench: "",
 		variants: neulandVariants(searchBot(99)),
+	};
+}
+
+/** Learn the tide (docs/codemode-planung.en.md, step 7): made islands under TIDE_RULES, a tide whose law the prompt does
+ *  not tell. The judge logs the shown episodes' landings as observations (memory, frozen per generation); a bot reads
+ *  them with tools.observations and may fit its model of the tide to them. */
+function tideTask(): Task {
+	const spec = { goal: "", goalText: { de: "", en: "" }, memory: true as const, observe: true as const };
+	return {
+		id: "tide-law", fn: "bot", kind: "bot", timeoutMs: 30_000,
+		bot: {
+			goal: "feed:island:3", toy: true, toyRules: "tide", memory: true, observe: true,
+			goalText: { de: "3 Stück Treibholz im Leuchtfeuer der Insel, vom Bot hineingelegt, binnen 8 Weltstunden", en: "3 pieces of driftwood put into the island's beacon by the bot within 8 world hours" },
+			episodes: TIDE_EPISODES,
+		},
+		title: { de: "Die Flut lernen: ein Gesetz aus Beobachtungen, auf Inseln, die keiner kennt (erzeugte Welten, Weltmodell)", en: "Learn the tide: a law from observations, on islands nobody knows (made worlds, world model)" },
+		prompt: {
+			de: `Aufgabe: Schreibe async function bot(). Der Bot spielt eine Figur auf einer Insel, die er nicht kennt, und soll binnen 8 Weltstunden 3 Stück Treibholz ins Leuchtfeuer der Insel legen.\n\nDie Inseln: wie bei „Neue Inseln“ aus einer Zahl erzeugt, 5 bis 8 Räume, Ausgänge nord, ost, süd, west (wer durch „ost“ geht, kommt durch „west“ zurück), ein Leuchtfeuer, keine Karte. Zu Beginn liegt kein Treibholz auf der Insel.\n\nDie Flut: Sie spült im Lauf des Tages Stück für Stück an. Wann und wo, sagt dir niemand; es folgt einem Gesetz, das auf jeder Insel dasselbe ist, und der Zufall der Welt (Seed) spielt mit hinein. Ein angeschwemmtes Stück liegt 30 Weltminuten, dann holt das Meer es zurück.\n\nBeobachtungen: Der Richter schreibt jede Landung der Flut in den gezeigten Episoden ins Gedächtnis des Blocks. tools.observations gibt die Landungen, die die Generationen vor diesem Beitrag gesehen haben; in der ersten Generation ist es leer. Die verdeckten Episoden liegen auf Inseln, die keine gezeigte betritt.\n\nEpisoden: Drei siehst du:\n${episodeList(TIDE_EPISODES, "de")}\nSechs weitere sind verdeckt. Jede Episode läuft mit 3 Seeds; sie zählt, wenn alle drei das Ziel erreichen.\n\nWelt: Die Weltzeit läuft nur, wenn der Bot wartet (tools.wait) oder durch einen Ausgang geht: ein Ausgang kostet 5 Weltminuten, „move x y“ im Raum nichts. Nach 480 Minuten ist der Tag um. Befehle: "ost" durch den Ausgang, "move x y", "nimm treibholz" wo es liegt, "lege holz ins feuer" direkt neben dem Feuer. tools.look zeigt die Uhrzeit (time, ab 08:00).\n\nPunkte: Jeder Tool-Aufruf kostet einen Punkt (höchstens ${MAX_BOT_CALLS} je Episode). Am besten ist ein Bot, der jede Episode erreicht; unter ihnen gewinnt der mit den wenigsten Punkten.\n\nBewertung: Am Ende jeder Episode fragt der Richter, wie viele Stück der Bot ins Feuer gelegt hat (mindestens 3). Rückgabewert egal.\n\nTools:\n${describeBotTools("de", spec)}`,
+			en: `Task: write async function bot(). The bot plays a figure on an island it does not know and is to put 3 pieces of driftwood into the island's beacon within 8 world hours.\n\nThe islands: made from a number as in "New islands", 5 to 8 rooms, exits nord, ost, süd, west (who goes through "ost" comes back through "west"), one Leuchtfeuer, no map. At first no driftwood lies on the island.\n\nThe tide: it washes pieces up one by one in the course of the day. When and where, nobody tells you; it follows a law that is the same on every island, and the world's chance (seed) plays into it. A washed-up piece lies 30 world minutes, then the sea takes it back.\n\nObservations: the judge writes every landing of the tide in the shown episodes into the block's memory. tools.observations gives the landings the generations before this contribution saw; in the first generation it is empty. The hidden episodes lie on islands no shown one enters.\n\nEpisodes: you see three:\n${episodeList(TIDE_EPISODES, "en")}\nSix more are hidden. Every episode runs with 3 seeds; it counts when all three reach the goal.\n\nWorld: world time passes only when the bot waits (tools.wait) or goes through an exit: an exit takes 5 world minutes, "move x y" within a room nothing. After 480 minutes the day is over. Commands: "ost" through the exit, "move x y", "nimm treibholz" where it lies, "lege holz ins feuer" right next to the fire. tools.look shows the time (time, from 08:00).\n\nPoints: every tool call costs one point (at most ${MAX_BOT_CALLS} per episode). Best is a bot that reaches every episode; among those the one with the fewest points wins.\n\nScoring: at the end of every episode the judge asks how many pieces the bot put into the fire (at least 3). The return value does not matter.\n\nTools:\n${describeBotTools("en", spec)}`,
+		},
+		about: {
+			de: "So läuft es: ein gelerntes Weltmodell als Code und Daten (docs/codemode-planung.en.md, Schritt 7). Die Flut folgt einem Gesetz, das kein Prompt nennt. Der Richter protokolliert jede Landung in den gezeigten Episoden (Raum, Zelle, Minute, die Ausgänge des Raums, sein Abstand zum Feuer) als Beobachtung im Gedächtnis des Blocks; wenn eine Generation beginnt, friert der Lauf ein, was ihre Bots lesen dürfen. Ein Bot kann sein Modell der Flut an diese Daten anpassen, ein Agent kann das Gesetz aus ihnen ablesen und in Code schreiben. Die verdeckten Episoden liegen auf Inseln, die keine gezeigte betritt: Es trägt nur ein Gesetz, das von der Gestalt einer Insel spricht, nicht von ihren Raumnamen. Der Seed verschiebt die Minuten: Wer nur eine kennt, verpasst die Stücke.\n\nKI-Modelle: Für die Bewertung braucht es keine.\n\n▶ Ausführen: läuft für Bots nicht. Bewertet wird nur beim Einreichen.",
+			en: "How it runs: a learned world model as code and data (docs/codemode-planung.en.md, step 7). The tide follows a law no prompt names. The judge logs every landing in the shown episodes (room, cell, minute, the room's exits, its distance from the fire) as an observation in the block's memory; when a generation begins, the run freezes what its bots may read. A bot may fit its model of the tide to these data, an agent may read the law off them and write it as code. The hidden episodes lie on islands no shown one enters: only a law that speaks of an island's shape carries over, not one of its room names. The seed shifts the minutes: a bot that knows only one misses the pieces.\n\nAI models: the scoring needs none.\n\n▶ Run: does not run bots. Bots are judged only when handed in.",
+		},
+		cases: [],
+		bench: "",
+		variants: TIDE_VARIANTS,
 	};
 }
 
@@ -376,6 +404,7 @@ export const TASKS: Task[] = [
 	islandTask(true),
 	anlegerTask(),
 	neulandTask(),
+	tideTask(),
 	{
 		id: "beacon-flut", fn: "bot", kind: "bot", durable: true, timeoutMs: 180_000,
 		bot: { goal: "feed:feuer-bucht:6", goalText: { de: "6 Stück Treibholz im Leuchtfeuer der Grauen Bucht, vom Bot hineingelegt", en: "6 pieces of driftwood put into the beacon of the Graue Bucht by the bot" } },

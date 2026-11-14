@@ -15,9 +15,10 @@
 import { createHash } from "node:crypto";
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import type { PathStep } from "./bottask.ts";
+import type { TideSeen } from "./toyisland.ts";
 
 /** One path of the memory, as the judge gets it from the freeze. */
-export type MemoryPath = { memoryId: string; gen: number; author: string; episode: string; goal: string; path: PathStep[] };
+export type MemoryPath = { memoryId: string; gen: number; author: string; episode: string; goal: string; path: PathStep[]; /** an observation (goal "tide", step 7): what the judge logged of a landing */ obs?: TideSeen };
 export type Cell = { room: string; x: number; y: number };
 /** What `recall` answers: the steps to walk (the first is the remembered cell to go to), how far that cell is, how many
  *  jumps between paths the way takes, and where they are. */
@@ -114,12 +115,12 @@ export async function frozenMemory(space: Store, session: string, blockId: strin
 	const ids = Array.isArray((f?.fields as { memoryIds?: unknown } | undefined)?.memoryIds) ? ((f!.fields as { memoryIds: string[] }).memoryIds) : [];
 	if (!ids.length) return [];
 	const rows = new Map((await space.readAll({ type: "PlanMemory", fields: { session, blockId } }, { limit: MAX_MEMORY + 10 })).map((e) => { const m = e.fields as unknown as MemoryFields; return [m.memoryId, m] as const; }));
-	return ids.flatMap((id) => { const m = rows.get(id); return m ? [{ memoryId: m.memoryId, gen: m.gen, author: m.author, episode: m.episode, goal: m.goal, path: m.path }] : []; });
+	return ids.flatMap((id) => { const m = rows.get(id); return m ? [{ memoryId: m.memoryId, gen: m.gen, author: m.author, episode: m.episode, goal: m.goal, path: m.path, ...(m.obs ? { obs: m.obs } : {}) }] : []; });
 }
 
 /** A verdict's reached sample paths into the block's memory (in the verdict's transaction): a path the block holds
  *  already is skipped, beyond MAX_MEMORY the oldest give way. */
-export async function remember(space: Store, txn: string, ttl: number, k: { session: string; blockId: string; candidateId: string; author: string; gen: number }, paths: Array<{ memoryId: string; episode: string; goal: string; path: PathStep[] }>): Promise<number> {
+export async function remember(space: Store, txn: string, ttl: number, k: { session: string; blockId: string; candidateId: string; author: string; gen: number }, paths: Array<{ memoryId: string; episode: string; goal: string; path: PathStep[]; obs?: TideSeen }>): Promise<number> {
 	let added = 0;
 	for (const p of paths) {
 		if (await space.readIfExists({ type: "PlanMemory", fields: { session: k.session, blockId: k.blockId, memoryId: p.memoryId } }, NO_WAIT, { txn })) continue;

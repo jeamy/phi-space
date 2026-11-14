@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="14">
+  <title>LeWM and codemode planning bots, side by side</title>
+  <style>
+    .bg { fill: #ffffff; } .box { fill: #f3f5f8; stroke: #5b6472; stroke-width: 1.2; } .hot { fill: #e8f1ff; stroke: #2f6fd6; stroke-width: 1.4; }
+    .warm { fill: #fff3e3; stroke: #c9771a; stroke-width: 1.4; } .t { fill: #1b2230; } .m { fill: #5b6472; font-size: 12px; }
+    .h { fill: #1b2230; font-size: 17px; font-weight: 700; } .a { stroke: #5b6472; stroke-width: 1.4; fill: none; marker-end: url(#ar); }
+    .ad { stroke: #c9771a; stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; marker-end: url(#ar2); } .tip { fill: #5b6472; } .tip2 { fill: #c9771a; }
+    .rule { stroke: #c9ced6; stroke-width: 1; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #141922; } .box { fill: #1e2531; stroke: #8d97a6; } .hot { fill: #182a46; stroke: #6ea2ff; } .warm { fill: #34261a; stroke: #e39a45; }
+      .t, .h { fill: #e8ecf2; } .m { fill: #a3acba; } .a { stroke: #a3acba; } .tip { fill: #a3acba; } .ad { stroke: #e39a45; } .tip2 { fill: #e39a45; } .rule { stroke: #343c4a; }
+    }
+  </style>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="tip" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="tip2" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <rect class="bg" width="960" height="520"/>
+  <line class="rule" x1="480" y1="20" x2="480" y2="500"/>
+
+  <text class="h" x="30" y="40">LeWM (JEPA world model, Push-T)</text>
+  <text class="m" x="30" y="60">learned once, offline, from demonstrations of one world</text>
+  <rect class="box" x="30" y="85" width="120" height="50" rx="6"/><text class="t" x="90" y="115" text-anchor="middle">frame (pixels)</text>
+  <rect class="hot" x="185" y="85" width="110" height="50" rx="6"/><text class="t" x="240" y="108" text-anchor="middle">encoder</text><text class="m" x="240" y="125" text-anchor="middle">frame → z</text>
+  <rect class="hot" x="185" y="175" width="250" height="60" rx="6"/><text class="t" x="310" y="200" text-anchor="middle">predictor (z, action) → z′</text><text class="m" x="310" y="219" text-anchor="middle">neural net, trained by gradient</text>
+  <rect class="box" x="185" y="275" width="250" height="60" rx="6"/><text class="t" x="310" y="300" text-anchor="middle">planner (CEM / MPC)</text><text class="m" x="310" y="319" text-anchor="middle">hundreds of action sequences rolled out</text>
+  <rect class="box" x="185" y="375" width="250" height="50" rx="6"/><text class="t" x="310" y="405" text-anchor="middle">action → robot pushes the T</text>
+  <rect class="warm" x="30" y="175" width="120" height="60" rx="6"/><text class="t" x="90" y="200" text-anchor="middle">demonstrations</text><text class="m" x="90" y="219" text-anchor="middle">~460k states</text>
+  <path class="a" d="M150,110 L183,110"/><path class="a" d="M240,135 L240,173"/><path class="a" d="M310,235 L310,273"/><path class="a" d="M310,335 L310,373"/>
+  <path class="ad" d="M150,205 L183,205"/>
+  <text class="m" x="30" y="460">goal: an image (embedding of the target state)</text>
+  <text class="m" x="30" y="480">the model is of this one world</text>
+
+  <text class="h" x="510" y="40">Codemode planning bots</text>
+  <text class="m" x="510" y="60">code written by agents, judged in fresh worlds</text>
+  <rect class="box" x="510" y="85" width="140" height="50" rx="6"/><text class="t" x="580" y="108" text-anchor="middle">look()</text><text class="m" x="580" y="125" text-anchor="middle">room, exits, wood, fire</text>
+  <rect class="hot" x="690" y="85" width="240" height="50" rx="6"/><text class="t" x="810" y="108" text-anchor="middle">the bot's map G</text><text class="m" x="810" y="125" text-anchor="middle">rooms and exits seen, built in the episode</text>
+  <rect class="hot" x="690" y="175" width="240" height="60" rx="6"/><text class="t" x="810" y="200" text-anchor="middle">model of the tide (step 7)</text><text class="m" x="810" y="219" text-anchor="middle">a law in code, fitted to observations</text>
+  <rect class="box" x="690" y="275" width="240" height="60" rx="6"/><text class="t" x="810" y="300" text-anchor="middle">planner</text><text class="m" x="810" y="319" text-anchor="middle">breadth-first route, timing, calibration</text>
+  <rect class="box" x="690" y="375" width="240" height="50" rx="6"/><text class="t" x="810" y="405" text-anchor="middle">act / wait in the world</text>
+  <rect class="warm" x="510" y="175" width="140" height="60" rx="6"/><text class="t" x="580" y="200" text-anchor="middle">observations</text><text class="m" x="580" y="219" text-anchor="middle">frozen per generation</text>
+  <path class="a" d="M650,110 L688,110"/><path class="a" d="M810,135 L810,173"/><path class="a" d="M810,235 L810,273"/><path class="a" d="M810,335 L810,373"/>
+  <path class="ad" d="M650,205 L688,205"/>
+  <path class="a" d="M690,400 L495,400 L495,110 L508,110"/>
+  <text class="m" x="510" y="460">goal: a predicate checked by the world (beacon burns, held 5 min)</text>
+  <text class="m" x="510" y="480">what carries over: a way of searching, not one world</text>
+</svg>

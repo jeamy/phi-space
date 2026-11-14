@@ -110,7 +110,7 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 		if (v && (await alive())) {
 			await space.write({ type: "CodeScore", fields: { session, blockId, candidateId, author: f.author, via: f.via, host, gen: f.gen, ...lineageOf(f), ...verdictFields(v), source: f.source, ts: f.ts } as never }, t.id, ttl);
 			// a planning task's sample paths (docs/codemode-planung.en.md): they live and go with the verdict
-			if (task?.bot?.memory && typeof blockId === "string") await remember(space, t.id, ttl, { session, blockId, candidateId, author: String(f.author ?? ""), gen: Number(f.gen ?? 0) }, memoryEntries(v, task.bot.goal));
+			if (task?.bot?.memory && typeof blockId === "string") await remember(space, t.id, ttl, { session, blockId, candidateId, author: String(f.author ?? ""), gen: Number(f.gen ?? 0) }, memoryEntries(v, task.bot.goal, !!task.bot.observe));
 			for (const e of episodeEntries(v)) await space.write({ type: "BotEpisode", fields: { session, ...(typeof blockId === "string" ? { blockId } : {}), candidateId, ...e, ts: f.ts } as never }, t.id, ttl);
 			// a correct verdict that beats the block's best (and no person rejected it) becomes the new best
 			if (v.ok && task && typeof blockId === "string" && !(await space.readIfExists({ type: "CodeVeto", fields: { session, candidateId } }, NO_WAIT, { txn: t.id })))

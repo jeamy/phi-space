@@ -128,12 +128,44 @@ export function toyRoomMap(room: string): RoomMap | null {
 	};
 }
 
+// ---- the tides of step 7 (docs/codemode-planung.en.md): a law the prompt does not tell ------------------------------
+/** The rules of a world that are not the default: crossing an exit takes `walk` world minutes, a washed-up piece lies
+ *  `life` minutes before the sea takes it back, the day ends after `day` minutes, and the tide follows `tide`
+ *  ("law": tideLanding below) instead of the island's plain tide. Without rules a world is as in steps 5 and 6. */
+export type ToyRules = { walk: number; life: number; day: number; tide: "law" };
+export const TIDE_RULES: ToyRules = { walk: 5, life: 30, day: 480, tide: "law" };
+/** The rooms with one exit, the fire's room left out, in the order of their number (`n4-2` before `n4-5`). */
+export function deadEnds(w: ToyWorld): string[] {
+	const k = (id: string) => Number(/-(\d+)$/.exec(id)?.[1] ?? 0);
+	return Object.keys(w.rooms).filter((id) => id !== w.fire.room && Object.keys(w.rooms[id]!.exits).length === 1).sort((a, b) => k(a) - k(b) || a.localeCompare(b));
+}
+/** The cell `n` cells in from an exit (toward the room's middle). */
+export const inFrom = (exit: string, n: number): { x: number; y: number } => { const e = EXIT_CELL[exit]!, d = STEP[exit]!; return { x: e.x - d.x * n, y: e.y - d.y * n }; };
+/** The law: the j-th piece (from 0) lands at minute 30 + 10·(seed mod 3) + 60·j in the island's dead ends in turn, by
+ *  their number, 3 cells in from the one exit. Islands without a dead end have no tide under this law. */
+export function tideLanding(w: ToyWorld, seed: number, j: number): (ToyCell & { minute: number }) | null {
+	const d = deadEnds(w);
+	if (!d.length) return null;
+	const room = d[j % d.length]!, exit = Object.keys(w.rooms[room]!.exits)[0]!;
+	return { room, ...inFrom(exit, 3), minute: 30 + 10 * (seed % 3) + 60 * j };
+}
+/** How many exits lie between a room and the fire's room. */
+export function fromFire(w: ToyWorld, room: string): number {
+	const d = new Map([[w.fire.room, 0]]), q = [w.fire.room];
+	while (q.length) { const x = q.shift()!; for (const y of Object.values(w.rooms[x]!.exits)) if (!d.has(y)) { d.set(y, d.get(x)! + 1); q.push(y); } }
+	return d.get(room) ?? -1;
+}
+/** What the judge logs of a landing (step 7's data): when, where, and what the room looks like. */
+export type TideSeen = { island: string; seed: number; piece: number; minute: number; room: string; x: number; y: number; exits: string[]; fromFire: number };
+
 /** One world of a toy island: a figure, the driftwood, the fire, the clock; and the cells the figure went over. */
 export class ToyIsland {
-	at: ToyCell; wood: ToyCell[]; readonly seed: number; readonly world: ToyWorld; pack = 0; waited = 0; fedAt: number | null = null; fed = false;
+	at: ToyCell; wood: Array<ToyCell & { until?: number }>; readonly seed: number; readonly world: ToyWorld; readonly rules: ToyRules | null; pack = 0; waited = 0; fedAt: number | null = null; fed = false; feeds = 0;
 	trail: PathStep[];
-	constructor(start: ToyCell, wood: ToyCell[], seed = 0, world: ToyWorld = GRAUE_INSEL) {
-		this.at = { ...start }; this.wood = wood.map((w) => ({ ...w })); this.seed = seed; this.world = world; this.trail = [[start.room, start.x, start.y]];
+	/** The landings of the law so far (rules only). */
+	landed: TideSeen[] = [];
+	constructor(start: ToyCell, wood: ToyCell[], seed = 0, world: ToyWorld = GRAUE_INSEL, rules: ToyRules | null = null) {
+		this.at = { ...start }; this.wood = wood.map((w) => ({ ...w })); this.seed = seed; this.world = world; this.rules = rules; this.trail = [[start.room, start.x, start.y]];
 	}
 
 	look() {
@@ -155,6 +187,10 @@ export class ToyIsland {
 	#step(c: ToyCell) { this.at = c; const l = this.trail.at(-1)!; if ((l[0] !== c.room || l[1] !== c.x || l[2] !== c.y) && this.trail.length < 20_000) this.trail.push([c.room, c.x, c.y]); }
 	#cross(name: string): string[] {
 		const to = this.world.rooms[this.at.room]!.exits[name]!;
+		if (this.rules) {
+			if (this.waited + this.rules.walk > this.rules.day) return ["Der Tag ist um."];
+			this.#advance(this.rules.walk);
+		}
 		this.#step({ room: this.at.room, ...EXIT_CELL[name]! });
 		this.#step({ room: to, ...ARRIVE[name]! });
 		return [`Du gehst nach ${this.world.rooms[to]!.name}.`];
@@ -182,7 +218,7 @@ export class ToyIsland {
 		if (/^lege (treib)?holz ins feuer$/.test(line)) {
 			if (!this.pack) return ["Du hast kein Treibholz dabei."];
 			if (this.at.room !== f.room || Math.abs(this.at.x - f.x) + Math.abs(this.at.y - f.y) > 1) return ["Dafür musst du direkt neben dem Feuer stehen."];
-			this.pack--; this.fedAt = this.waited; this.fed = true;
+			this.pack--; this.fedAt = this.waited; this.fed = true; this.feeds++;
 			return [`Du legst Treibholz ins ${f.name}. Es brennt noch etwa ${FUEL_MINUTES} Minuten.`];
 		}
 		return [`Unbekannter Befehl: ${line}`];
@@ -191,10 +227,27 @@ export class ToyIsland {
 	wait(minutes: unknown): { time: string } {
 		const m = Number(minutes);
 		if (!Number.isInteger(m) || m < 1 || m > 120) throw new Error("wait takes 1 to 120 minutes");
-		if (this.waited + m > MAX_TOY_WAIT) throw new Error(`a bot may wait at most ${MAX_TOY_WAIT} world minutes in all`);
-		for (let k = Math.floor(this.waited / TIDE_MINUTES) + 1; k <= Math.floor((this.waited + m) / TIDE_MINUTES); k++) this.wood.push(this.world.tide(this.seed));
-		this.waited += m;
+		const day = this.rules?.day ?? MAX_TOY_WAIT;
+		if (this.waited + m > day) throw new Error(`a bot may wait at most ${day} world minutes in all`);
+		this.#advance(m);
 		return { time: this.look().time };
+	}
+	/** The clock goes on `m` minutes: the tide comes (and, under rules, takes back what lay too long). */
+	#advance(m: number) {
+		const from = this.waited, to = from + m;
+		if (!this.rules) {
+			for (let k = Math.floor(from / TIDE_MINUTES) + 1; k <= Math.floor(to / TIDE_MINUTES); k++) this.wood.push(this.world.tide(this.seed));
+		} else {
+			for (let j = 0; ; j++) {
+				const l = tideLanding(this.world, this.seed, j);
+				if (!l || l.minute > to) break;
+				if (l.minute <= from) continue;
+				this.wood.push({ room: l.room, x: l.x, y: l.y, until: l.minute + this.rules.life });
+				this.landed.push({ island: this.world.id, seed: this.seed, piece: j, minute: l.minute, room: l.room, x: l.x, y: l.y, exits: Object.keys(this.world.rooms[l.room]!.exits).sort(), fromFire: fromFire(this.world, l.room) });
+			}
+			this.wood = this.wood.filter((w) => w.until === undefined || w.until > to);
+		}
+		this.waited = to;
 	}
 
 	lit(minute: number): boolean { return this.fedAt !== null && minute < this.fedAt + FUEL_MINUTES; }

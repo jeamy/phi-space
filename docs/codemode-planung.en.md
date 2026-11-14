@@ -1,6 +1,6 @@
 # Codemode chat: planning bots, after the JEPA experiments (plan)
 
-Status (2026-11-13): plan only, nothing built. It extends the bot lane (B in
+Status (2026-11-14): steps 1 to 7 built; the account for an article is [codemode-planning-article.en.md](codemode-planning-article.en.md). It extends the bot lane (B in
 [codemode-anwendungen.en.md](codemode-anwendungen.en.md)) and the eval harnesses (C there). It needs no new
 dependency and no model call in the judge.
 
@@ -359,6 +359,48 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      task's nine episodes in the real arena, the explorer reached 9/9 with 111 points and the surveyor 9/9 with 399.
      Neither knows the Graue Insel's map.
 
+7. **A world model from observations (the tide).**
+
+   *Done 2026-11-14* (`tide-law`, `codemode-chat/server/tides.ts`, the law in `toyisland.ts`). Step 6 replaced a
+   learned model by exact rules a bot can see. This step adds a dynamic the bot cannot see and nobody tells: the tide.
+   The bot learns it from data the judge collected, which is the part of a JEPA world model step 6 left out.
+   - **The law.** On a made island the tide washes up one piece an hour, in the island's dead ends in turn, by their
+     number. A dead end is a room with one exit, the fire's room left out. Each piece lands 3 cells in from the room's
+     exit. The first piece lands at minute 30 + 10·(seed mod 3), the j-th 60·j minutes later. The law is the same on
+     every island and speaks only of an island's shape, so it carries over to islands no episode showed.
+   - **The rules** (`TIDE_RULES`, only for this task; steps 5 and 6 keep theirs):
+     - an exit takes 5 world minutes;
+     - a washed-up piece lies 30 minutes, then the sea takes it back;
+     - the day ends after 480 minutes;
+     - the goal is `feed:island:3`, three pieces put into the island's fire by the bot.
+
+     Time now passes when the bot walks, so a wrong guess costs pieces, not only points.
+   - **Observations.** In every sample episode, all three seeds, the toy arena logs each landing: island, seed,
+     piece, minute, room, cell, the room's exits and its distance from the fire. These are the facts a learner needs,
+     not the law. They go into the block's memory as `PlanMemory` entries with goal `tide` (once each, reached or
+     not), frozen per generation as the paths of step 3 are. A bot reads its freeze with `observations()` (1 point).
+     Hidden episodes log nothing. Its verdict entry carries no observations.
+   - **The task "Learn the tide".** The episodes start on Neuland 21, 23 and 26 (shown) and 28 to 33 (hidden). Each
+     of these islands has at least two dead ends. There is no driftwood at the start, and every episode runs with
+     3 seeds. The prompt describes the rules and the observations, not the law. The scripted variants (judged in the
+     judge, no arena):
+
+     | Variant | Reached | Points |
+     |---|---|---|
+     | The law in code (as an agent would write it after reading the observations), calibrated | 9/9 | 2253 |
+     | The learner: fits a small hypothesis space to the frozen observations (one exit? away from the fire? order by number up or down? how far in? which minutes?), then plays that model | 9/9 with observations (2280), 6/9 without (it falls back to the searcher) | |
+     | The law without calibration: assumes minute 30 always | 0/9 | |
+     | The observed rooms by their id | 3/9 with observations (the shown islands only), 0/9 without | |
+     | No model: tours the island again and again | 6/9 | 4603 |
+     | Waits by the fire | 0/9 | |
+
+     On a server the learner fails while the memory is empty and reaches 9/9 once a verdict's observations are in it
+     (`tests/bots.test.ts`).
+   - **What is learned where.** The model of the tide can be learned by the bot from data at run time (the learner),
+     or by an agent who reads the observations and writes the law as code (the law bot). The scripted agents of the
+     tests do not learn; they are fixed hypotheses. Model agents could do the second, but that costs tokens and has not
+     been run.
+
 ## Tests
 
 - `spaces-mmo/tests/arena.test.ts`: `start`, `seed`, `setup`, `map`, `hold`; the same seed gives the same world after
@@ -388,4 +430,4 @@ A clickable mockup of the views, with example data on the real map of the Graue 
 | Path in `BotEpisode` | at most 200 steps | Only room and direction changes. |
 | Retention | with the block (step 2), see there | Planned: best of each generation + newest 50. Step 2 keeps every sample path as long as its verdict, which the room cap already bounds. |
 
-Step 6 needs no learned model (see there).
+Step 6 needs no learned model (see there). Step 7 learns one dynamic, the tide, as code and data. The account for an article is [codemode-planning-article.en.md](codemode-planning-article.en.md).

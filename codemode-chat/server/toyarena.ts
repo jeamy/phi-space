@@ -3,9 +3,11 @@
 // .en.md, step 6). The judge plays such a task as it plays one in the arena (judge.ts judgeEpisodes); the task needs
 // no arena, so every judge takes it. `open` takes the episode's island, start, setup and seed; `score` the goal
 // `beacon:island` (the island's one fire), held `hold` world minutes; `path` the cells as the arena gives them; `map` a
-// room's geometry. Subgoals are not watched here.
+// room's geometry. Subgoals are not watched here. With `rules: "tide"` (step 7) the world runs under TIDE_RULES: exits
+// take time, the tide follows its law, washed-up wood goes back to the sea; `score` then also takes `feed:island:<n>`
+// (the bot put n pieces into the island's fire), and `tides` gives the landings so far (the judge's log, step 7's data).
 import type { Arena, PathStep } from "./bottask.ts";
-import { islandError, toyCellError, toyRoomMap, ToyIsland, worldOf } from "./toyisland.ts";
+import { islandError, TIDE_RULES, toyCellError, toyRoomMap, ToyIsland, worldOf } from "./toyisland.ts";
 
 const PATH_STEPS = 200;
 /** The trail as the arena's `path` gives it: the start, the turns and room changes, the last cell; at most PATH_STEPS. */
@@ -35,7 +37,8 @@ export function toyArena(): Arena {
 			const cell = (c: unknown) => { const o = c as Record<string, unknown>; return { room: String(o.room), x: Number(o.x), y: Number(o.y) }; };
 			const seed = a.seed === undefined ? 0 : Number(a.seed);
 			const id = `t${++n}`;
-			worlds.set(id, new ToyIsland(cell(start), (setup.items ?? []).map(cell), Number.isInteger(seed) && seed >= 0 ? seed : 0, w));
+			if (a.rules !== undefined && a.rules !== "tide") throw new Error(`unknown rules ${String(a.rules)}`);
+			worlds.set(id, new ToyIsland(cell(start), (setup.items ?? []).map(cell), Number.isInteger(seed) && seed >= 0 ? seed : 0, w, a.rules === "tide" ? TIDE_RULES : null));
 			return { world: id, charId: `c-${id}`, name: "Strandläufer-1" };
 		}
 		if (op === "map") { const m = toyRoomMap(String(a.room ?? "")); if (!m) throw new Error(`no room ${String(a.room)}`); return m as unknown as Record<string, unknown>; }
@@ -46,8 +49,14 @@ export function toyArena(): Arena {
 			case "act": return t.act(String(a.line ?? ""));
 			case "wait": return t.wait(a.minutes);
 			case "path": return toyPath(t.trail);
+			case "tides": return { tides: t.landed.map((l) => ({ ...l, exits: [...l.exits] })) };
 			case "score": {
 				const goal = String(a.goal ?? ""), hold = Number(a.hold ?? 0);
+				const feed = /^feed:(?:island|[\w-]+):(\d+)$/.exec(goal);
+				if (feed && (goal.startsWith("feed:island:") || goal.startsWith(`feed:${t.world.fire.beaconId}:`))) {
+					const n = Number(feed[1]);
+					return { done: t.feeds >= n, detail: `${t.feeds} of ${n} pieces in the fire of ${t.world.name}, ${t.waited} world minutes gone` };
+				}
 				if (goal !== "beacon:island" && goal !== `beacon:${t.world.fire.beaconId}`) throw new Error(`unknown goal ${goal}`);
 				const done = t.reached(Number.isFinite(hold) && hold > 0 ? hold : 0);
 				return { done, detail: `the fire of ${t.world.name} ${t.lit(t.waited) ? "burns" : "is out"}, ${t.fed ? "fed by the bot" : "not fed by the bot"}${hold > 0 && t.reached(0) && !done ? `; reached, but not held ${hold} world minutes` : hold > 0 && done ? `; held ${hold} world minutes` : ""}` };
