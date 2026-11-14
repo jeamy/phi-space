@@ -17,7 +17,8 @@
 //! an allowlist). Member admission, completion profiles, RunGates, negative claims, a principal deletion's fence and what
 //! a restore leaves (`restore.rs`) are supported.
 use phi_json::num_of;
-use crate::state::{EntryRec, RegRec, SpaceState, TxnRec, WaiterRec};
+use crate::state::{EntryRec, RegRec, ScalarKey, SpaceState, TxnRec, WaiterRec};
+use std::rc::Rc;
 use crate::stream::{self, Collected, Open};
 use phi_json::{number_text, obj, Json, Object, FOREVER};
 
@@ -797,12 +798,36 @@ impl Space {
 
 	/// Bytes of all entries' fields.
 	pub(crate) fn entry_bytes(&self) -> f64 { self.state.entries.total_bytes() }
+	/// Positions of candidate entries for `tmpl` in order, or `None` when all entries must be scanned.
+	fn candidate_positions(&self, tmpl: &Template) -> Option<Rc<[usize]>> {
+		let entries = &self.state.entries;
+		let Template::Of { id, type_, fields } = tmpl else { return None };
+		if let Some(id) = id {
+			return Some(match id.as_str().and_then(|s| entries.of_id(s)) {
+				Some(i) => Rc::from([i]),
+				None => Rc::from([]),
+			});
+		}
+		let t = type_.as_ref()?;
+		let Some(t) = t.as_str() else { return Some(Rc::from([])) };
+		let mut best: Option<Rc<[usize]>> = None;
+		for (k, v) in fields {
+			if v.is_null() { continue; }
+			if let Some(sk) = ScalarKey::from_json(v) {
+				let bucket = entries.of_type_field(t, k, &sk);
+				if bucket.is_empty() { return Some(bucket); }
+				if best.as_ref().is_none_or(|b| bucket.len() < b.len()) { best = Some(bucket); }
+			}
+		}
+		Some(best.unwrap_or_else(|| entries.of_type(t)))
+	}
 	/// The entries a walk of all matches of `tmpl` has to look at, in order.
 	fn candidates<'a>(&'a self, tmpl: &Template) -> Box<dyn Iterator<Item = &'a EntryRec> + 'a> {
 		let entries = &self.state.entries;
-		let Template::Of { type_: Some(Json::String(t)), .. } = tmpl else { return Box::new(entries.iter()) };
-		let at = entries.of_type(t);
-		Box::new((0..at.len()).map(move |i| &entries[at[i]]))
+		match self.candidate_positions(tmpl) {
+			Some(at) => Box::new((0..at.len()).map(move |i| &entries[at[i]])),
+			None => Box::new(entries.iter()),
+		}
 	}
 	fn rest_bytes(&self, key: &str, absent: f64) -> f64 { self.state.rest.get(key).map_or(absent, bytes) }
 	fn outbox_bytes(&self) -> f64 { self.state.outbox_bytes.unwrap_or_else(|| self.rest_bytes("outbox", 2.0)) }
@@ -2034,11 +2059,9 @@ impl Space {
 
 	fn find(&self, tmpl: &Template, txn: Option<&str>, take: bool) -> Found {
 		let mut locked = false;
-		// a template of a type looks only at the records of that type (the type buckets, in the records' order: the same
-		// first match as a scan of them all; a waiting take of a rare type no longer goes over every record of the space)
 		let entries = &self.state.entries;
-		let typed = match tmpl { Template::Of { type_: Some(Json::String(t)), .. } => Some(entries.of_type(t)), _ => None };
-		let positions: Box<dyn Iterator<Item = usize>> = match &typed { Some(at) => Box::new(at.iter().copied()), None => Box::new(0..entries.len()) };
+		let indexed = self.candidate_positions(tmpl);
+		let positions: Box<dyn Iterator<Item = usize>> = match &indexed { Some(at) => Box::new(at.iter().copied()), None => Box::new(0..entries.len()) };
 		for i in positions {
 			let e = &entries[i];
 			if !tmpl.matches(e) || (e.restored_unverified && (take || txn.is_some())) {
@@ -2397,10 +2420,6 @@ impl Space {
 			Template::Any => (None, vec![]),
 			Template::Of { type_, fields, .. } => (type_, fields),
 		};
-		let mut index = std::collections::HashMap::new();
-		for e in &self.state.entries {
-			index.insert(e.id.as_str(), e);
-		}
 		let mut seen = std::collections::HashSet::new();
 		let mut items: Vec<Json> = vec![];
 		while !next.is_empty() && (items.len() as f64) < limit && ready {
@@ -2410,7 +2429,7 @@ impl Space {
 			}
 			let node = Template::Of { id: Some(Json::String(id.clone())), type_: type_.clone(), fields: fields.clone() };
 			// the normal read visibility, expiry, lock and template rules
-			let raw = index.get(id.as_str()).filter(|e| self.readable(e, now, None, false) && node.matches(e));
+			let raw = self.state.entries.of_id(&id).map(|i| &self.state.entries[i]).filter(|e| self.readable(e, now, None, false) && node.matches(e));
 			let Some(raw) = raw else { return Err(illegal("chain node unavailable")) };
 			let entry = view(raw, self.state.space_id.as_deref());
 			let after = pointer(&entry)?;
@@ -2482,7 +2501,7 @@ impl Space {
 			Some(Json::String(s)) => s.as_str(),
 			_ => return Err(not_ported("a lease id that is not a string")),
 		};
-		let e = self.state.entries.iter().position(|e| e.id == id);
+		let e = self.state.entries.of_id(id);
 		if e.is_some_and(|i| directory_rec(&self.state.entries[i])) && as_.is_some() {
 			return Err(permission("directory leases require trusted publication"));
 		}

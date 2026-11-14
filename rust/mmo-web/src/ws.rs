@@ -79,8 +79,10 @@ impl WsConn {
 		self.unsent.set(self.unsent.get() + f.len());
 		let _ = self.out.send(Out::Frame(f));
 	}
+	/// Sends a pre-serialized JSON text message.
+	pub fn send_text(&self, text: &str) { self.send_frame(1, text.as_bytes()); }
 	/// Sends a JSON value as a text message.
-	pub fn send(&self, v: &Json) { self.send_frame(1, v.to_json_text().as_bytes()); }
+	pub fn send(&self, v: &Json) { self.send_text(&v.to_json_text()); }
 	pub fn close(&self) { self.stop(1000); }
 	pub fn on_close(&self, h: Box<dyn FnOnce()>) { if self.closed.get() { h(); } else { self.closers.borrow_mut().push(h); } }
 }

@@ -86,6 +86,7 @@ struct Web {
 	allowed: Quota, login_by_ip: Quota, login_by_name: Quota, guests_by_ip: Quota, registrations_by_ip: Quota,
 	sockets: Cell<usize>,
 	system: RefCell<Option<(f64, Json)>>,
+	file_cache: RefCell<HashMap<PathBuf, Bytes>>,
 }
 
 type Resp = Response<Full<Bytes>>;
@@ -133,16 +134,22 @@ fn origin_host(origin: &str) -> Option<String> {
 }
 
 /// The world's graphics: `/assets/<world>/<path>`.
-fn world_asset(root: &Path, id: &str, path: &str) -> Option<(Vec<u8>, &'static str)> {
+fn world_asset_path(root: &Path, id: &str, path: &str) -> Option<(PathBuf, &'static str)> {
 	let id_ok = !id.is_empty() && id.len() <= 40 && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
 	let (stem, ext) = path.rsplit_once('.')?;
 	let part_ok = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
 	if !id_ok || !["png", "md"].contains(&ext) || !stem.split('/').all(part_ok) { return None; }
-	let body = std::fs::read(root.join("worlds").join(id).join("assets").join(path)).ok()?;
-	Some((body, if ext == "png" { "image/png" } else { "text/markdown; charset=utf-8" }))
+	Some((root.join("worlds").join(id).join("assets").join(path), if ext == "png" { "image/png" } else { "text/markdown; charset=utf-8" }))
 }
 
 impl Web {
+	fn read_cached(&self, path: &Path) -> Option<Bytes> {
+		if let Some(b) = self.file_cache.borrow().get(path) { return Some(b.clone()); }
+		let data = Bytes::from(std::fs::read(path).ok()?);
+		let mut cache = self.file_cache.borrow_mut();
+		if cache.len() < 4096 { cache.insert(path.to_path_buf(), data.clone()); }
+		Some(data)
+	}
 	fn me_view(&self, me: Option<&Me>) -> Json {
 		let account = me.map_or(Json::Null, |m| {
 			let mut o = phi_json::Object::new();
@@ -197,8 +204,8 @@ impl Web {
 		if method == Method::GET {
 			if let Some(rest) = p.strip_prefix("/assets/") {
 				if let Some((id, path)) = rest.split_once('/').filter(|(id, path)| !id.is_empty() && !path.is_empty() && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')) {
-					return Ok(match world_asset(&self.root, id, path) {
-						Some((body, ty)) => Response::builder().status(200).header("content-type", ty).header("cache-control", "public, max-age=3600").body(Full::new(Bytes::from(body))).expect("a response"),
+					return Ok(match world_asset_path(&self.root, id, path).and_then(|(fp, ty)| self.read_cached(&fp).map(|b| (b, ty))) {
+						Some((body, ty)) => Response::builder().status(200).header("content-type", ty).header("cache-control", "public, max-age=3600").body(Full::new(body)).expect("a response"),
 						None => plain(404, "text/plain", "Not found"),
 					});
 				}
@@ -209,11 +216,11 @@ impl Web {
 			if method == Method::GET || method == Method::HEAD {
 				let head = method == Method::HEAD;
 				let send = |status: u16, f: &Path| -> Resp {
-					let body = std::fs::read(f).unwrap_or_default();
+					let body = self.read_cached(f).unwrap_or_default();
 					let immutable = status == 200 && p.starts_with("/_next/static/");
 					let r = Response::builder().status(status).header("content-type", pages::type_of(f)).header("content-length", body.len().to_string())
 						.header("cache-control", if immutable { "public, max-age=31536000, immutable" } else { "no-cache" });
-					r.body(Full::new(if head { Bytes::new() } else { Bytes::from(body) })).expect("a response")
+					r.body(Full::new(if head { Bytes::new() } else { body })).expect("a response")
 				};
 				if let Some(f) = pages::page_file(dir, &p) { return Ok(send(200, &f)); }
 				let missing = dir.join("404.html");
@@ -372,7 +379,7 @@ pub async fn run_web(root: PathBuf, ready: impl FnOnce(&str), mut halt: watch::R
 		root: root.clone(), w: w.clone(), stats: StatsCache::new(regions.clone(), w.clone()), regions, store, accounts, gateway, build, pages,
 		allowed: Quota::new(env_number("SPACES_MMO_REQ_PER_MIN", 120.0), 60_000.0), login_by_ip: Quota::new(10.0, 60_000.0), login_by_name: Quota::new(10.0, 60_000.0),
 		guests_by_ip: Quota::new(env_number("SPACES_MMO_GUESTS_PER_HOUR", 5.0), 3_600_000.0), registrations_by_ip: Quota::new(env_number("SPACES_MMO_REGISTRATIONS_PER_DAY", 20.0), 24.0 * 3_600_000.0),
-		sockets: Cell::new(0), system: RefCell::new(None),
+		sockets: Cell::new(0), system: RefCell::new(None), file_cache: RefCell::default(),
 	});
 	let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(3900);
 	let bind = std::env::var("SPACES_MMO_BIND").ok().unwrap_or_else(|| "127.0.0.1".into());

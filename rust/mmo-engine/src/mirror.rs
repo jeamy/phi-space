@@ -15,19 +15,70 @@ use phi_spaces_client::{Error as SpaceError, RemoteSpace};
 
 use crate::space::{Error, Result};
 
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum ScalarKey { Str(String), Num(u64), Bool(bool) }
+
+impl ScalarKey {
+	fn from_json(v: &Json) -> Option<Self> {
+		match v {
+			Json::String(s) => Some(Self::Str(s.clone())),
+			Json::Number(n) if !n.is_nan() => Some(Self::Num(if *n == 0.0 { 0.0f64.to_bits() } else { n.to_bits() })),
+			Json::Bool(b) => Some(Self::Bool(*b)),
+			_ => None,
+		}
+	}
+}
+
 #[derive(Default)]
-struct Copy { by_id: HashMap<String, Json>, by_type: HashMap<String, HashSet<String>>, rev: f64, stream: String, ready: bool }
+struct Copy {
+	by_id: HashMap<String, Json>,
+	by_type: HashMap<String, HashSet<String>>,
+	sorted_type: HashMap<String, Vec<String>>,
+	by_type_field: HashMap<(String, String), HashMap<ScalarKey, Vec<String>>>,
+	rev: f64,
+	stream: String,
+	ready: bool,
+}
 
 impl Copy {
+	fn invalidate_type(&mut self, ty: &str) {
+		self.sorted_type.remove(ty);
+		self.by_type_field.retain(|(t, _), _| t != ty);
+	}
 	fn put(&mut self, e: Json) {
 		let Some(id) = e.get("id").and_then(Json::as_str).map(str::to_owned) else { return };
 		self.del(&id);
-		for t in e.get("types").and_then(Json::as_array).into_iter().flatten().filter_map(Json::as_str) { self.by_type.entry(t.to_owned()).or_default().insert(id.clone()); }
+		for t in e.get("types").and_then(Json::as_array).into_iter().flatten().filter_map(Json::as_str) {
+			self.by_type.entry(t.to_owned()).or_default().insert(id.clone());
+			self.invalidate_type(t);
+		}
 		self.by_id.insert(id, e);
 	}
 	fn del(&mut self, id: &str) {
 		let Some(e) = self.by_id.remove(id) else { return };
-		for t in e.get("types").and_then(Json::as_array).into_iter().flatten().filter_map(Json::as_str) { if let Some(s) = self.by_type.get_mut(t) { s.remove(id); } }
+		for t in e.get("types").and_then(Json::as_array).into_iter().flatten().filter_map(Json::as_str) {
+			if let Some(s) = self.by_type.get_mut(t) { s.remove(id); }
+			self.invalidate_type(t);
+		}
+	}
+	fn ensure_sorted_type(&mut self, ty: &str) {
+		if self.sorted_type.contains_key(ty) { return; }
+		let mut ids: Vec<String> = self.by_type.get(ty).into_iter().flatten().cloned().collect();
+		ids.sort_by(|a, b| seq_of(a).partial_cmp(&seq_of(b)).unwrap_or(std::cmp::Ordering::Equal));
+		self.sorted_type.insert(ty.to_owned(), ids);
+	}
+	fn ensure_type_field(&mut self, ty: &str, field: &str) {
+		let key = (ty.to_owned(), field.to_owned());
+		if self.by_type_field.contains_key(&key) { return; }
+		self.ensure_sorted_type(ty);
+		let ids = self.sorted_type.get(ty).map(Vec::as_slice).unwrap_or(&[]);
+		let mut map: HashMap<ScalarKey, Vec<String>> = HashMap::new();
+		for id in ids {
+			if let Some(sk) = self.by_id.get(id).and_then(|e| e.get("fields")).and_then(|f| f.get(field)).and_then(ScalarKey::from_json) {
+				map.entry(sk).or_default().push(id.clone());
+			}
+		}
+		self.by_type_field.insert(key, map);
 	}
 }
 
@@ -148,17 +199,36 @@ impl Mirror {
 
 	/// `readAll`: the matches in the order the space lists them (their ids count up), at most `limit`.
 	pub fn read_all(&self, t: &Json, limit: Option<usize>) -> Vec<Json> {
-		let c = self.copy.borrow();
+		let mut c = self.copy.borrow_mut();
 		let now = real_now();
+		let max = limit.unwrap_or(usize::MAX);
 		let live = |e: &Json| e.get("expires").and_then(Json::as_f64).unwrap_or(f64::INFINITY) > now;
-		let mut out: Vec<&Json> = match (t.get("id").filter(|v| !v.is_null()), t.get("type").and_then(Json::as_str)) {
-			(Some(id), _) => id.as_str().and_then(|id| c.by_id.get(id)).into_iter().collect(),
-			(None, Some(ty)) => c.by_type.get(ty).into_iter().flatten().filter_map(|id| c.by_id.get(id)).collect(),
-			(None, None) => c.by_id.values().collect(),
-		};
-		out.retain(|e| live(e) && matches(t, e));
+		let to_view = |e: &Json| { let mut o = e.as_object().cloned().unwrap_or_default(); o.remove("expires"); Json::Object(o) };
+		if let Some(id) = t.get("id").filter(|v| !v.is_null()) {
+			return id.as_str().and_then(|id| c.by_id.get(id)).filter(|e| live(e) && matches(t, e)).into_iter().take(max).map(to_view).collect();
+		}
+		if let Some(ty) = t.get("type").and_then(Json::as_str) {
+			let mut best_field: Option<(String, ScalarKey, usize)> = None;
+			if let Some(fields) = t.get("fields").and_then(Json::as_object) {
+				for (k, v) in fields.iter() {
+					if v.is_null() { continue; }
+					if let Some(sk) = ScalarKey::from_json(v) {
+						c.ensure_type_field(ty, k);
+						let len = c.by_type_field.get(&(ty.to_owned(), k.to_owned())).and_then(|m| m.get(&sk)).map_or(0, Vec::len);
+						if len == 0 { return vec![]; }
+						if best_field.as_ref().is_none_or(|b| len < b.2) { best_field = Some((k.to_owned(), sk, len)); }
+					}
+				}
+			}
+			let ids: &[String] = match best_field {
+				Some((ref k, ref sk, _)) => c.by_type_field.get(&(ty.to_owned(), k.clone())).and_then(|m| m.get(sk)).map_or(&[], Vec::as_slice),
+				None => { c.ensure_sorted_type(ty); c.sorted_type.get(ty).map_or(&[], Vec::as_slice) }
+			};
+			return ids.iter().filter_map(|id| c.by_id.get(id)).filter(|e| live(e) && matches(t, e)).take(max).map(to_view).collect();
+		}
+		let mut out: Vec<&Json> = c.by_id.values().filter(|e| live(e) && matches(t, e)).collect();
 		out.sort_by(|a, b| seq_of(a.get("id").and_then(Json::as_str).unwrap_or("")).partial_cmp(&seq_of(b.get("id").and_then(Json::as_str).unwrap_or(""))).unwrap_or(std::cmp::Ordering::Equal));
-		out.into_iter().take(limit.unwrap_or(usize::MAX)).map(|e| { let mut o = e.as_object().cloned().unwrap_or_default(); o.remove("expires"); Json::Object(o) }).collect()
+		out.into_iter().take(max).map(to_view).collect()
 	}
 
 	/// `count`.

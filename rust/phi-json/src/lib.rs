@@ -42,6 +42,8 @@ fn index_of(key: &str) -> Option<u32> {
 	if n <= 4_294_967_294 { Some(n as u32) } else { None }
 }
 
+const OBJECT_INDEX_THRESHOLD: usize = 12;
+
 impl Object {
 	pub fn new() -> Self { Self::default() }
 	pub fn len(&self) -> usize { self.0.len() }
@@ -63,7 +65,7 @@ impl Object {
 		if at == self.0.len() {
 			if let Some(index) = &mut self.1 { index.insert(key.clone(), at); }
 			self.0.push((key, value));
-			if self.1.is_none() && self.0.len() >= 32 { self.reindex(); }
+			if self.1.is_none() && self.0.len() >= OBJECT_INDEX_THRESHOLD { self.reindex(); }
 		} else {
 			self.0.insert(at, (key, value));
 			self.reindex();
@@ -77,12 +79,12 @@ impl Object {
 		}
 	}
 	fn reindex(&mut self) {
-		self.1 = (self.0.len() >= 32).then(|| self.0.iter().enumerate().map(|(i, (k, _))| (k.clone(), i)).collect());
+		self.1 = (self.0.len() >= OBJECT_INDEX_THRESHOLD).then(|| self.0.iter().enumerate().map(|(i, (k, _))| (k.clone(), i)).collect());
 	}
 	pub fn remove(&mut self, key: &str) -> Option<Json> {
 		let at = self.position(key)?;
 		let value = self.0.remove(at).1;
-		if self.0.len() < 32 {
+		if self.0.len() < OBJECT_INDEX_THRESHOLD {
 			self.1 = None;
 		} else if let Some(index) = &mut self.1 {
 			index.remove(key);

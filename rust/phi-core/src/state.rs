@@ -148,8 +148,27 @@ impl PartialEq for Entries {
 	fn eq(&self, other: &Self) -> bool { self.items == other.items && self.log == other.log }
 }
 
+/// An indexable scalar value from a template or entry field.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ScalarKey {
+	Str(String),
+	Num(u64),
+	Bool(bool),
+}
+
+impl ScalarKey {
+	pub fn from_json(v: &Json) -> Option<Self> {
+		match v {
+			Json::String(s) => Some(Self::Str(s.clone())),
+			Json::Number(n) if !n.is_nan() => Some(Self::Num(if *n == 0.0 { 0.0f64.to_bits() } else { n.to_bits() })),
+			Json::Bool(b) => Some(Self::Bool(*b)),
+			_ => None,
+		}
+	}
+}
+
 /// What reads worked out from the records, kept across changes as far as they allow (`entrySums`, `typeBuckets` of
-/// core.ts). A record's `types` and its position change only by a push, a removal or an undo, never through `get_mut`.
+/// core.ts). A record's `types`, `id` and `fields` change only by a push, a removal or an undo, never through `get_mut`.
 #[derive(Clone, Debug, Default)]
 struct Memo {
 	/// The sum of `record_bytes` over the records, but for those at `open` (handed out by `get_mut` since).
@@ -157,7 +176,13 @@ struct Memo {
 	open: HashSet<usize>,
 	/// The positions of the records of a type, in order; a template's type matches subtypes.
 	types: HashMap<String, Rc<[usize]>>,
+	/// The position of a record by its `id`.
+	by_id: Option<HashMap<String, usize>>,
+	/// The positions of records of `(type, field)` grouped by scalar value, in order.
+	fields: FieldIndex,
 }
+
+type FieldIndex = HashMap<(String, String), HashMap<ScalarKey, Rc<[usize]>>>;
 
 /// What a record counts in a space's entry bytes: its `size`, or its fields as JSON.
 pub fn record_bytes(e: &EntryRec) -> f64 { e.size.unwrap_or_else(|| Json::Object(e.fields.clone()).json_bytes() as f64) }
@@ -196,10 +221,55 @@ impl Entries {
 		self.memo.borrow_mut().types.insert(type_.to_owned(), Rc::clone(&found));
 		found
 	}
+	/// The position of the record with `id`, if present.
+	pub fn of_id(&self, id: &str) -> Option<usize> {
+		if let Some(known) = self.memo.borrow().by_id.as_ref() {
+			return known.get(id).copied();
+		}
+		let map: HashMap<String, usize> = self.items.iter().enumerate().map(|(i, e)| (e.id.clone(), i)).collect();
+		let res = map.get(id).copied();
+		self.memo.borrow_mut().by_id = Some(map);
+		res
+	}
+	/// The positions of the records of `type_` whose `field` equals `key`, in order.
+	pub fn of_type_field(&self, type_: &str, field: &str, key: &ScalarKey) -> Rc<[usize]> {
+		{
+			let m = self.memo.borrow();
+			if let Some(by_val) = m.fields.get(&(type_.to_owned(), field.to_owned())) {
+				return by_val.get(key).map_or_else(|| Rc::from([]), Rc::clone);
+			}
+		}
+		let bucket = self.of_type(type_);
+		let mut by_val: HashMap<ScalarKey, Vec<usize>> = HashMap::new();
+		for &i in bucket.iter() {
+			if let Some(k) = self.items[i].fields.get(field).and_then(ScalarKey::from_json) {
+				by_val.entry(k).or_default().push(i);
+			}
+		}
+		let built: HashMap<ScalarKey, Rc<[usize]>> = by_val.into_iter().map(|(k, v)| (k, Rc::from(v))).collect();
+		let res = built.get(key).map_or_else(|| Rc::from([]), Rc::clone);
+		self.memo.borrow_mut().fields.insert((type_.to_owned(), field.to_owned()), built);
+		res
+	}
 	pub fn push(&mut self, e: EntryRec) {
+		let new_idx = self.items.len();
 		let m = self.memo.get_mut();
 		// appended: no position moves, only the buckets of its own types change
 		m.types.retain(|t, _| !e.types.iter().any(|x| x == t));
+		if let Some(by_id) = m.by_id.as_mut() {
+			by_id.insert(e.id.clone(), new_idx);
+		}
+		for ((t, field), by_val) in m.fields.iter_mut() {
+			if e.types.iter().any(|x| x == t) {
+				if let Some(k) = e.fields.get(field).and_then(ScalarKey::from_json) {
+					let entry = by_val.entry(k).or_insert_with(|| Rc::from([]));
+					let mut v = Vec::with_capacity(entry.len() + 1);
+					v.extend_from_slice(entry);
+					v.push(new_idx);
+					*entry = Rc::from(v);
+				}
+			}
+		}
 		if let Some(b) = m.bytes.as_mut() {
 			*b += record_bytes(&e);
 		}
@@ -209,11 +279,37 @@ impl Entries {
 		self.items.push(e);
 	}
 	pub fn remove(&mut self, i: usize) -> EntryRec {
-		// the type buckets follow the removal (the positions after it move up by one) instead of being worked out anew
-		let types = std::mem::take(&mut self.memo.get_mut().types);
+		let shift = |at: &Rc<[usize]>| -> Rc<[usize]> {
+			if at.last().is_none_or(|&last| last < i) {
+				return Rc::clone(at);
+			}
+			at.iter().filter(|&&p| p != i).map(|&p| if p > i { p - 1 } else { p }).collect()
+		};
+		// the type and field buckets follow the removal (positions after it move up by one) instead of being worked out anew
+		let (types, fields, by_id) = {
+			let m = self.memo.get_mut();
+			(std::mem::take(&mut m.types), std::mem::take(&mut m.fields), m.by_id.take())
+		};
 		self.changed();
-		self.memo.get_mut().types = types.into_iter().map(|(t, at)| (t, at.iter().filter(|&&p| p != i).map(|&p| if p > i { p - 1 } else { p }).collect())).collect();
 		let e = self.items.remove(i);
+		let m = self.memo.get_mut();
+		m.types = types.into_iter().map(|(t, at)| (t, shift(&at))).collect();
+		m.fields = fields.into_iter().map(|(k, by_val)| {
+			let shifted: HashMap<ScalarKey, Rc<[usize]>> = by_val.into_iter().filter_map(|(v, at)| {
+				let next = shift(&at);
+				(!next.is_empty()).then_some((v, next))
+			}).collect();
+			(k, shifted)
+		}).collect();
+		if let Some(mut map) = by_id {
+			map.remove(&e.id);
+			for v in map.values_mut() {
+				if *v > i {
+					*v -= 1;
+				}
+			}
+			m.by_id = Some(map);
+		}
 		if let Some(log) = &mut self.log {
 			log.push(EntryUndo::Removed(i, e.clone()));
 		}

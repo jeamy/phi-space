@@ -10,6 +10,7 @@ impl<V> OMap<V> {
 	pub fn get(&self, k: &str) -> Option<&V> { self.at.get(k).and_then(|i| self.slots[*i].as_ref()).map(|(_, v)| v) }
 	pub fn get_mut(&mut self, k: &str) -> Option<&mut V> { let i = *self.at.get(k)?; self.slots[i].as_mut().map(|(_, v)| v) }
 	pub fn has(&self, k: &str) -> bool { self.at.contains_key(k) }
+	pub fn index_of(&self, k: &str) -> Option<usize> { self.at.get(k).copied() }
 	pub fn set(&mut self, k: &str, v: V) {
 		if let Some(i) = self.at.get(k) { self.slots[*i] = Some((k.to_owned(), v)); return; }
 		self.at.insert(k.to_owned(), self.slots.len());

@@ -73,9 +73,10 @@ struct State {
 	chars: OMap<Json>, char_of: HashMap<String, String>, char_entry: HashMap<String, String>, sessions: HashMap<String, String>, online: HashMap<String, f64>,
 	rooms: OMap<Json>, winds: HashMap<String, f64>,
 	objs: OMap<Json>, obj_of: HashMap<String, String>, obj_entry: HashMap<String, String>,
+	objs_by_loc: HashMap<String, OMap<()>>, atlas_objs: OMap<()>,
 	recent: HashMap<String, Vec<Json>>, flames: HashMap<String, f64>, flame_of: OMap<String>, fog: OMap<f64>,
 	clock: Option<Json>,
-	offers: OMap<Json>, orders: OMap<Json>, listings: OMap<Json>, wanted: OMap<Json>, notices: OMap<Json>, seed_rests: OMap<Json>, epochs: OMap<Json>, site_orders: OMap<Json>, mill_loads: OMap<Json>, herds: HashMap<String, Json>,
+	offers: OMap<Json>, orders: OMap<Json>, listings: OMap<Json>, wanted: OMap<Json>, notices: OMap<Json>, notices_by_char: HashMap<String, OMap<()>>, seed_rests: OMap<Json>, epochs: OMap<Json>, site_orders: OMap<Json>, mill_loads: OMap<Json>, herds: HashMap<String, Json>,
 	applied: HashMap<String, f64>, char_region: HashMap<String, String>,
 }
 
@@ -103,7 +104,8 @@ pub struct Gateway {
 	atlas_due: Cell<bool>,
 	atlas_geometry: Cell<bool>,
 	year_days: Cell<f64>, beam_cost: Cell<f64>, pack_max: Cell<Option<f64>>, epoch_force: Cell<f64>,
-	model_chars: HashSet<String>, model_names: HashSet<String>, proto_icons: Vec<(String, String)>,
+	cmd_burst: Cell<f64>, cmd_per_sec: Cell<f64>,
+	model_chars: HashSet<String>, model_names: HashSet<String>, proto_icons: Vec<(String, String)>, world_base: Object,
 	pub chat: RefCell<Option<Rc<Chat>>>,
 	deferred: RefCell<Vec<Rc<Client>>>,
 	me: RefCell<Weak<Gateway>>,
@@ -115,12 +117,45 @@ fn is_safe_int(v: &Json) -> bool { v.as_f64().is_some_and(phi_json::safe_integer
 fn unit(v: &Json) -> Option<f64> { v.as_f64().filter(|d| *d == -1.0 || *d == 0.0 || *d == 1.0) }
 fn strip_controls(s: &str) -> String { s.chars().map(|c| if (c as u32) < 0x20 || c as u32 == 0x7f { ' ' } else { c }).collect() }
 
+fn is_atlas_kind(kind: &str) -> bool { matches!(kind, "site" | "building" | "bed" | "field" | "ruin" | "road" | "beacon") }
+
+fn build_world_base(w: &Json, proto_icons: &[(String, String)]) -> Object {
+	let mut world = obj_of(obj! { "id" => j::at(w, "id").clone(), "title" => j::at(w, "title").clone(), "tileSize" => j::at(w, "tileSize").clone(), "tiles" => j::at(w, "tiles").clone(), "skins" => j::at(w, "skins").clone() });
+	if j::truthy(j::at(w, "decor")) { world.insert("decor", j::at(w, "decor").clone()); }
+	world.insert("fuels", Json::Array(j::entries(j::at(j::at(w, "fire"), "fuel")).map(|(k, _)| Json::from(proto_name(w, k))).collect()));
+	let mut icons: Vec<String> = Vec::new();
+	for (_, i) in proto_icons { if !icons.contains(i) { icons.push(i.clone()); } }
+	if j::truthy(j::at(w, "wild")) { let i = format!("/assets/{}/{}", j::s(w, "id"), txt(j::at(j::at(j::at(w, "wild"), "hare"), "icon"))); if !icons.contains(&i) { icons.push(i); } }
+	world.insert("icons", Json::Array(icons.into_iter().map(Json::from).collect()));
+	world.insert("plans", plans_of(w));
+	world.insert("uses", uses_of(w));
+	if j::truthy(j::at(w, "liner")) {
+		if let Some(t) = liner_of(w) {
+			let all_rooms = j::ao(w, "allRooms").unwrap_or(j::a(w, "rooms"));
+			world.insert("liner", obj! {
+				"stops" => Json::Array(t.stops.iter().map(|s| obj! { "island" => s.island.as_str(), "room" => s.room.as_str(), "x" => s.x, "y" => s.y }).collect()),
+				"stayMs" => t.stay_ms, "legMs" => Json::Array(t.leg_ms.iter().map(|x| Json::Number(*x)).collect()), "cycleMs" => t.cycle_ms,
+				"island" => "", "fare" => j::at(j::at(w, "liner"), "fare").clone(),
+				"routes" => Json::Array(bays_of(all_rooms).into_iter().map(|(i, r)| obj! { "island" => i, "room" => j::at(r, "roomId").clone() }).collect())
+			});
+		}
+	}
+	if j::truthy(j::at(w, "rail")) {
+		let rail = j::at(w, "rail");
+		let mut r = obj_of(obj! { "plan" => j::at(rail, "plan").clone() });
+		if j::truthy(j::at(rail, "everyWorldMs")) { r.insert("everyWorldMs", j::at(rail, "everyWorldMs").clone()); }
+		world.insert("rail", Json::Object(r));
+	}
+	world
+}
+
 impl Gateway {
 	pub fn new(regions: Rc<RegionSpaces>, w: Rc<Json>, on_activity: Box<dyn Fn(&str)>, build: Option<String>, chat_space: Option<Space>) -> Rc<Gateway> {
 		let model_chars = j::a(&w, "npcs").iter().filter(|n| j::truthy(j::at(n, "model"))).map(|n| format!("npc-{}", j::s(n, "npcId"))).collect();
 		let model_names = j::a(&w, "npcs").iter().filter(|n| j::truthy(j::at(n, "model"))).map(|n| j::s(n, "name").to_owned()).collect();
 		let id = j::s(&w, "id").to_owned();
-		let proto_icons = j::a(&w, "prototypes").iter().filter(|p| j::truthy(j::at(p, "icon"))).map(|p| (j::s(p, "key").to_owned(), format!("/assets/{id}/{}", txt(j::at(p, "icon"))))).collect();
+		let proto_icons: Vec<(String, String)> = j::a(&w, "prototypes").iter().filter(|p| j::truthy(j::at(p, "icon"))).map(|p| (j::s(p, "key").to_owned(), format!("/assets/{id}/{}", txt(j::at(p, "icon"))))).collect();
+		let world_base = build_world_base(&w, &proto_icons);
 		let (ready, _) = watch::channel(false);
 		let g = Rc::new(Gateway {
 			session_lease_ms: crate::env_ms("SPACES_MMO_SESSION_LEASE_MS", 30_000.0),
@@ -128,9 +163,11 @@ impl Gateway {
 			st: RefCell::default(), clients: RefCell::default(), waiting: RefCell::default(), ready,
 			atlas_due: Cell::new(false), atlas_geometry: Cell::new(false),
 			year_days: Cell::new(0.0), beam_cost: Cell::new(1.0), pack_max: Cell::new(None), epoch_force: Cell::new(0.0),
-			model_chars, model_names, proto_icons, chat: RefCell::new(None), deferred: RefCell::default(), me: RefCell::new(Weak::new()),
+			cmd_burst: Cell::new(20.0), cmd_per_sec: Cell::new(5.0),
+			model_chars, model_names, proto_icons, world_base, chat: RefCell::new(None), deferred: RefCell::default(), me: RefCell::new(Weak::new()),
 		});
 		*g.me.borrow_mut() = Rc::downgrade(&g);
+		g.refresh_settings();
 		if let Some(s) = chat_space { *g.chat.borrow_mut() = Some(Chat::new(s, Rc::downgrade(&g))); }
 		let n = g.regions.entries().len();
 		let left = Rc::new(Cell::new(n));
@@ -155,6 +192,22 @@ impl Gateway {
 	}
 	pub fn close(&self) { self.closed.set(true); if let Some(c) = self.chat.borrow().as_ref() { c.close(); } let cs: Vec<Rc<Client>> = self.clients.borrow().clone(); for c in cs { c.ws.close(); } }
 	fn rc(&self) -> Rc<Gateway> { self.me.borrow().upgrade().expect("the gateway") }
+	fn refresh_settings(&self) {
+		let (g, s, pack) = (Rc::downgrade(&self.rc()), self.space.clone(), j::truthy(j::at(&self.w, "pack")));
+		tokio::task::spawn_local(async move {
+			let (b, e, cb, cp, p) = (
+				setting(&s, "beam.cost").await, setting(&s, "epoch.force").await,
+				setting(&s, "cmd.burst").await, setting(&s, "cmd.perSec").await,
+				if pack { setting(&s, "pack.max").await.ok() } else { None },
+			);
+			let Some(g) = g.upgrade() else { return };
+			if let Ok(b) = b { g.beam_cost.set(b); }
+			if let Ok(e) = e { g.epoch_force.set(e); }
+			if let Ok(cb) = cb { g.cmd_burst.set(cb); }
+			if let Ok(cp) = cp { g.cmd_per_sec.set(cp); }
+			if let Some(p) = p { g.pack_max.set(Some(p)); }
+		});
+	}
 	fn icon_of(&self, proto: &str) -> Option<String> { self.proto_icons.iter().find(|(k, _)| k == proto).map(|(_, v)| v.clone()) }
 
 	// ---- what chat asks of the gateway
@@ -187,7 +240,7 @@ impl Gateway {
 	pub async fn attach(&self, ws: Rc<WsConn>, me: Me, mut messages: mpsc::UnboundedReceiver<String>, waiting: Rc<Cell<(usize, usize)>>) {
 		let mine: Vec<Rc<Client>> = self.clients.borrow().iter().filter(|x| x.me.account_id == me.account_id).cloned().collect();
 		for old in mine.iter().take((mine.len() + 1).saturating_sub(MAX_PAGES)) { old.ws.close(); }
-		let limits = match mine.last() { Some(m) => m.limits.clone(), None => Rc::new(RefCell::new(Limits { steps: Bucket { left: STEP_BURST, at: now() }, cmds: Bucket { left: setting(&self.space, "cmd.burst").await.unwrap_or(20.0), at: now() } })) };
+		let limits = match mine.last() { Some(m) => m.limits.clone(), None => Rc::new(RefCell::new(Limits { steps: Bucket { left: STEP_BURST, at: now() }, cmds: Bucket { left: self.cmd_burst.get(), at: now() } })) };
 		let c = Rc::new(Client { ws: ws.clone(), me: me.clone(), lang: RefCell::new(None), room: RefCell::new(None), lease: RefCell::new(None), lease_region: RefCell::new(None), awaits_hello: Cell::new(false), atlas: Cell::new(false), limits, warned: Cell::new(0.0), timer: RefCell::new(None) });
 		self.clients.borrow_mut().push(c.clone());
 		{
@@ -308,7 +361,8 @@ impl Gateway {
 		{ let (g, s) = (Rc::downgrade(&self.rc()), self.space.clone()); tokio::task::spawn_local(async move { if let (Ok(d), Some(g)) = (setting(&s, "year.days").await, g.upgrade()) { g.year_days.set(d); } }); }
 		let time = self.world_time();
 		if time.is_null() { return; }
-		for c in self.clients.borrow().iter() { if c.room.borrow().is_some() { c.ws.send(&obj! { "t" => "time", "time" => time.clone() }); } }
+		let text = obj! { "t" => "time", "time" => time }.to_json_text();
+		for c in self.clients.borrow().iter() { if c.room.borrow().is_some() { c.ws.send_text(&text); } }
 	}
 
 	async fn inbound(&self, c: &Rc<Client>, text: &str) {
@@ -325,8 +379,8 @@ impl Gateway {
 		}
 		let chat = self.chat.borrow().clone();
 		if let (true, Some(chat)) = (is_chat_frame(&f), &chat) {
-			let burst = setting(&self.space, "cmd.burst").await.unwrap_or(20.0);
-			let per = setting(&self.space, "cmd.perSec").await.unwrap_or(5.0);
+			let burst = self.cmd_burst.get();
+			let per = self.cmd_per_sec.get();
 			if !spend(&mut c.limits.borrow_mut().cmds, burst, 1000.0 / per.max(1.0)) { c.ws.send(&error_msg("Zu viele Nachrichten auf einmal; einen Moment bitte.")); return; }
 			let ws = c.ws.clone();
 			chat.frame(&self.chat_user(c), &f, &move |x: &Json| ws.send(x)).await;
@@ -338,8 +392,8 @@ impl Gateway {
 		*c.lang.borrow_mut() = (j::s(&f, "lang") == "en").then(|| "en".to_owned());
 		let line = cut_text(js::trim(&strip_controls(line)), MAX_LINE).to_owned();
 		if line.is_empty() { return; }
-		let burst = setting(&self.space, "cmd.burst").await.unwrap_or(20.0);
-		let refill = 1000.0 / setting(&self.space, "cmd.perSec").await.unwrap_or(5.0).max(1.0);
+		let burst = self.cmd_burst.get();
+		let refill = 1000.0 / self.cmd_per_sec.get().max(1.0);
 		let is_step = js::re(r"^step\s", "").test(&line);
 		let ok = { let mut l = c.limits.borrow_mut(); if is_step { spend(&mut l.steps, STEP_BURST, STEP_REFILL_MS) } else { spend(&mut l.cmds, burst, refill) } };
 		if !ok {
@@ -390,8 +444,21 @@ impl Gateway {
 		let (chars, objs, log) = {
 			let st = self.st.borrow();
 			let chars: Vec<Json> = st.chars.values().filter(|ch| j::s(ch, "room") == my_room && (j::s(ch, "charId") == my_id || (st.online.get(j::s(ch, "charId")).copied().unwrap_or(0.0) > 0.0 && !j::truthy(j::at(ch, "aboard"))))).map(|ch| char_view(ch, &self.model_chars)).collect();
-			let objs: Vec<Json> = st.objs.values().filter(|o| { let l = j::s(o, "location"); l == my_room || l == my_id || self.in_own_chest(&st, Some(l), &my_id, Some(&my_room)) }).map(|o| self.view(&st, o)).collect();
-			let mut kept: Vec<Json> = st.notices.values().filter(|n| j::s(n, "charId") == my_id && j::truthy(j::at(n, "told"))).map(|n| { let mut o = j::object(n); o.remove("noticeId"); o.remove("charId"); o.remove("told"); Json::Object(o) }).collect();
+			let mut seen_oids: HashSet<&str> = HashSet::new();
+			let mut oids: Vec<&str> = Vec::new();
+			let mut push_loc = |loc: &str| {
+				if let Some(m) = st.objs_by_loc.get(loc) {
+					for k in m.keys() { if seen_oids.insert(k) { oids.push(k); } }
+				}
+			};
+			push_loc(&my_room);
+			push_loc(&my_id);
+			for cid in st.atlas_objs.keys() {
+				if self.in_own_chest(&st, Some(cid), &my_id, Some(&my_room)) { push_loc(cid); }
+			}
+			oids.sort_by_key(|id| st.objs.index_of(id).unwrap_or(usize::MAX));
+			let objs: Vec<Json> = oids.into_iter().filter_map(|id| st.objs.get(id)).map(|o| self.view(&st, o)).collect();
+			let mut kept: Vec<Json> = st.notices_by_char.get(&my_id).into_iter().flat_map(|m| m.keys()).filter_map(|id| st.notices.get(id)).filter(|n| j::truthy(j::at(n, "told"))).map(|n| { let mut o = j::object(n); o.remove("noticeId"); o.remove("charId"); o.remove("told"); Json::Object(o) }).collect();
 			let recent = st.recent.get(&my_room).cloned().unwrap_or_default();
 			let lines = if kept.is_empty() { recent } else {
 				kept.sort_by(|a, b| j::n(a, "at").total_cmp(&j::n(b, "at")));
@@ -403,33 +470,10 @@ impl Gateway {
 			let log: Vec<Json> = lines.iter().map(|m| msg_view(m, &my_id, &self.model_names, j::s(&me, "name"), Some(&players))).collect();
 			(chars, objs, log)
 		};
-		let w = &self.w;
-		let mut world = obj_of(obj! { "id" => j::at(w, "id").clone(), "title" => j::at(w, "title").clone(), "tileSize" => j::at(w, "tileSize").clone(), "tiles" => j::at(w, "tiles").clone(), "skins" => j::at(w, "skins").clone() });
-		if j::truthy(j::at(w, "decor")) { world.insert("decor", j::at(w, "decor").clone()); }
-		world.insert("fuels", Json::Array(j::entries(j::at(j::at(w, "fire"), "fuel")).map(|(k, _)| Json::from(proto_name(w, k))).collect()));
-		let mut icons: Vec<String> = Vec::new();
-		for (_, i) in &self.proto_icons { if !icons.contains(i) { icons.push(i.clone()); } }
-		if j::truthy(j::at(w, "wild")) { let i = format!("/assets/{}/{}", j::s(w, "id"), txt(j::at(j::at(j::at(w, "wild"), "hare"), "icon"))); if !icons.contains(&i) { icons.push(i); } }
-		world.insert("icons", Json::Array(icons.into_iter().map(Json::from).collect()));
-		world.insert("plans", plans_of(w));
-		world.insert("uses", uses_of(w));
-		if j::truthy(j::at(w, "liner")) {
-			if let Some(t) = liner_of(w) {
-				let island = self.st.borrow().rooms.get(&my_room).map_or("", |r| j::s(r, "island")).to_owned();
-				let all_rooms = j::ao(w, "allRooms").unwrap_or(j::a(w, "rooms"));
-				world.insert("liner", obj! {
-					"stops" => Json::Array(t.stops.iter().map(|s| obj! { "island" => s.island.as_str(), "room" => s.room.as_str(), "x" => s.x, "y" => s.y }).collect()),
-					"stayMs" => t.stay_ms, "legMs" => Json::Array(t.leg_ms.iter().map(|x| Json::Number(*x)).collect()), "cycleMs" => t.cycle_ms,
-					"island" => island, "fare" => j::at(j::at(w, "liner"), "fare").clone(),
-					"routes" => Json::Array(bays_of(all_rooms).into_iter().map(|(i, r)| obj! { "island" => i, "room" => j::at(r, "roomId").clone() }).collect())
-				});
-			}
-		}
-		if j::truthy(j::at(w, "rail")) {
-			let rail = j::at(w, "rail");
-			let mut r = obj_of(obj! { "plan" => j::at(rail, "plan").clone() });
-			if j::truthy(j::at(rail, "everyWorldMs")) { r.insert("everyWorldMs", j::at(rail, "everyWorldMs").clone()); }
-			world.insert("rail", Json::Object(r));
+		let mut world = self.world_base.clone();
+		if let Some(Json::Object(liner)) = world.get_mut("liner") {
+			let island = self.st.borrow().rooms.get(&my_room).map_or("", |r| j::s(r, "island")).to_owned();
+			liner.insert("island", Json::from(island));
 		}
 		let fog = self.st.borrow().fog.get(&my_room).copied().unwrap_or(0.0);
 		let hello = obj! {
@@ -444,13 +488,20 @@ impl Gateway {
 
 	/** What a hello sends after the frames of the batch (or call) that brought it. */
 	fn flush(&self) {
+		if self.deferred.borrow().is_empty() { return; }
+		let shared = self.atlas_shared();
+		let mut atlas: Option<String> = None;
 		loop {
 			let next = { let mut d = self.deferred.borrow_mut(); if d.is_empty() { break; } d.remove(0) };
 			let c = &next;
 			c.ws.send(&obj! { "t" => "trade", "trade" => self.trade(c) });
 			self.tell(&c.me.char_id);
-			if !c.atlas.get() { c.atlas.set(true); c.ws.send(&obj! { "t" => "atlas", "atlas" => self.atlas() }); }
-			c.ws.send(&obj! { "t" => "atlasState", "state" => self.atlas_state(c, &self.atlas_shared()) });
+			if !c.atlas.get() {
+				c.atlas.set(true);
+				let a = atlas.get_or_insert_with(|| obj! { "t" => "atlas", "atlas" => self.atlas() }.to_json_text());
+				c.ws.send_text(a);
+			}
+			c.ws.send(&obj! { "t" => "atlasState", "state" => self.atlas_state(c, &shared) });
 		}
 	}
 
@@ -458,8 +509,12 @@ impl Gateway {
 	fn tell(&self, char_id: &str) {
 		let pages: Vec<Rc<Client>> = self.clients.borrow().iter().filter(|c| c.me.char_id == char_id && c.room.borrow().is_some()).cloned().collect();
 		if pages.is_empty() { return; }
-		let new: Vec<(String, Json)> = self.st.borrow().notices.iter().filter(|(_, n)| j::s(n, "charId") == char_id && !j::truthy(j::at(n, "told"))).map(|(k, v)| (k.to_owned(), v.clone())).collect();
-		let name = self.st.borrow().chars.get(char_id).map_or_else(String::new, |c| j::s(c, "name").to_owned());
+		let (new, name): (Vec<(String, Json)>, String) = {
+			let st = self.st.borrow();
+			let new = st.notices_by_char.get(char_id).into_iter().flat_map(|m| m.keys()).filter_map(|id| st.notices.get(id).map(|v| (id.to_owned(), v.clone()))).filter(|(_, n)| !j::truthy(j::at(n, "told"))).collect();
+			let name = st.chars.get(char_id).map_or_else(String::new, |c| j::s(c, "name").to_owned());
+			(new, name)
+		};
 		for (id, n) in new {
 			let mut told = n.clone();
 			j::set(&mut told, "told", true);
@@ -594,8 +649,8 @@ impl Gateway {
 		if self.regions.size() == 1 {
 			let mut st = self.st.borrow_mut();
 			st.clock = None;
-			st.chars.clear(); st.char_of.clear(); st.char_entry.clear(); st.sessions.clear(); st.online.clear(); st.rooms.clear(); st.objs.clear(); st.obj_of.clear(); st.obj_entry.clear(); st.recent.clear(); st.flames.clear(); st.flame_of.clear(); st.fog.clear();
-			st.offers.clear(); st.orders.clear(); st.listings.clear(); st.wanted.clear(); st.notices.clear(); st.seed_rests.clear(); st.epochs.clear(); st.mill_loads.clear(); st.herds.clear();
+			st.chars.clear(); st.char_of.clear(); st.char_entry.clear(); st.sessions.clear(); st.online.clear(); st.rooms.clear(); st.objs.clear(); st.obj_of.clear(); st.obj_entry.clear(); st.objs_by_loc.clear(); st.atlas_objs.clear(); st.recent.clear(); st.flames.clear(); st.flame_of.clear(); st.fog.clear();
+			st.offers.clear(); st.orders.clear(); st.listings.clear(); st.wanted.clear(); st.notices.clear(); st.notices_by_char.clear(); st.seed_rests.clear(); st.epochs.clear(); st.mill_loads.clear(); st.herds.clear();
 			return;
 		}
 		let pre = format!("{region}:");
@@ -811,7 +866,14 @@ impl Gateway {
 			"Order" => self.st.borrow_mut().orders.set(id, f.clone()),
 			"Listing" => self.st.borrow_mut().listings.set(id, f.clone()),
 			"Wanted" => self.st.borrow_mut().wanted.set(id, f.clone()),
-			"Notice" => { self.st.borrow_mut().notices.set(id, f.clone()); self.tell(j::s(f, "charId")); }
+			"Notice" => {
+				{
+					let mut st = self.st.borrow_mut();
+					st.notices.set(id, f.clone());
+					st.notices_by_char.entry(j::s(f, "charId").to_owned()).or_default().set(id, ());
+				}
+				self.tell(j::s(f, "charId"));
+			}
 			"SeedRest" => self.st.borrow_mut().seed_rests.set(id, f.clone()),
 			"Epoch" => { self.st.borrow_mut().epochs.set(id, f.clone()); self.atlas_changed(false); }
 			"Scenery" => {
@@ -845,8 +907,18 @@ impl Gateway {
 
 	fn set_obj(&self, id: &str, o: Json) {
 		let oid = j::s(&o, "id").to_owned();
+		let new_loc = j::s(&o, "location").to_owned();
+		let atlas_kind = is_atlas_kind(j::s(&o, "kind"));
 		let mut st = self.st.borrow_mut();
 		if let Some(prev) = st.obj_entry.get(&oid).cloned() { if prev != id { st.obj_of.remove(&prev); } }
+		let old_loc = st.objs.get(&oid).map(|old| j::s(old, "location").to_owned());
+		if old_loc.as_deref() != Some(new_loc.as_str()) {
+			if let Some(ol) = old_loc {
+				if let Some(m) = st.objs_by_loc.get_mut(&ol) { m.delete(&oid); if m.is_empty() { st.objs_by_loc.remove(&ol); } }
+			}
+			st.objs_by_loc.entry(new_loc).or_default().set(&oid, ());
+		}
+		if atlas_kind { st.atlas_objs.set(&oid, ()); } else { st.atlas_objs.delete(&oid); }
 		st.objs.set(&oid, o); st.obj_of.insert(id.to_owned(), oid.clone()); st.obj_entry.insert(oid, id.to_owned());
 	}
 	fn orders_of(&self, build_id: &str) -> Json {
@@ -863,31 +935,51 @@ impl Gateway {
 		let order = self.st.borrow_mut().site_orders.delete(id);
 		if let Some(o) = order { self.show_orders(j::s(&o, "buildId")); return; }
 		let mut st = self.st.borrow_mut();
-		if st.offers.delete(id).is_some() || st.orders.delete(id).is_some() || st.listings.delete(id).is_some() || st.wanted.delete(id).is_some() || st.notices.delete(id).is_some() || st.seed_rests.delete(id).is_some() { return; }
+		if st.offers.delete(id).is_some() || st.orders.delete(id).is_some() || st.listings.delete(id).is_some() || st.wanted.delete(id).is_some() || st.seed_rests.delete(id).is_some() { return; }
+		if let Some(n) = st.notices.delete(id) {
+			let cid = j::s(&n, "charId");
+			if let Some(m) = st.notices_by_char.get_mut(cid) { m.delete(id); if m.is_empty() { st.notices_by_char.remove(cid); } }
+			return;
+		}
 		if st.epochs.delete(id).is_some() { drop(st); self.atlas_changed(false); return; }
 		if let Some(b) = st.flame_of.delete(id) { if !st.flame_of.values().any(|x| *x == b) { st.flames.remove(&b); } return; }
 		if let Some(cid) = st.char_of.remove(id) { if st.char_entry.get(&cid).map(String::as_str) == Some(id) { st.char_entry.remove(&cid); st.chars.delete(&cid); } return; }
-		if let Some(oid) = st.obj_of.remove(id) { if st.obj_entry.get(&oid).map(String::as_str) == Some(id) { st.obj_entry.remove(&oid); st.objs.delete(&oid); } return; }
+		if let Some(oid) = st.obj_of.remove(id) {
+			if st.obj_entry.get(&oid).map(String::as_str) == Some(id) {
+				st.obj_entry.remove(&oid);
+				st.atlas_objs.delete(&oid);
+				if let Some(old) = st.objs.delete(&oid) {
+					let loc = j::s(&old, "location");
+					if let Some(m) = st.objs_by_loc.get_mut(loc) { m.delete(&oid); if m.is_empty() { st.objs_by_loc.remove(loc); } }
+				}
+			}
+			return;
+		}
 		if let Some(s) = st.sessions.remove(id) { let n = st.online.get(&s).copied().unwrap_or(1.0) - 1.0; if n > 0.0 { st.online.insert(s, n); } else { st.online.remove(&s); } }
 	}
 
 	/// After a batch: tells the clients of the character's room (and of the room it left) where it is now.
 	fn announce(&self, char_id: &str, room_before: Option<&str>) {
 		let (c, visible) = { let st = self.st.borrow(); let c = st.chars.get(char_id).cloned(); let v = c.is_some() && st.online.get(char_id).copied().unwrap_or(0.0) > 0.0; (c, v) };
+		let view = c.as_ref().filter(|_| visible).map(|c| char_view(c, &self.model_chars));
+		let view_text = view.as_ref().map(|v| obj! { "t" => "char", "c" => v.clone() }.to_json_text());
+		let gone_text = obj! { "t" => "gone", "charId" => char_id }.to_json_text();
 		let clients: Vec<Rc<Client>> = self.clients.borrow().clone();
 		for cl in clients {
 			let room = cl.room();
 			if let Some(c) = &c { if cl.me.char_id == char_id && (cl.awaits_hello.get() || room.as_ref().is_some_and(|r| r != j::s(c, "room"))) { self.hello(&cl); continue; } }
-			if let (true, Some(c)) = (visible, &c) {
+			if let (true, Some(c), Some(v), Some(vt)) = (visible, &c, &view, &view_text) {
 				if room.as_deref() == Some(j::s(c, "room")) && (!j::truthy(j::at(c, "aboard")) || cl.me.char_id == char_id) {
-					let mut f = obj_of(obj! { "t" => "char", "c" => char_view(c, &self.model_chars) });
 					let ack = j::at(c, "ack");
-					if cl.me.char_id == char_id && j::s(ack, "conn") == cl.ws.id && !ack.is_null() { f.insert("ack", j::at(ack, "seq").clone()); }
-					cl.ws.send(&Json::Object(f));
+					if cl.me.char_id == char_id && j::s(ack, "conn") == cl.ws.id && !ack.is_null() {
+						cl.ws.send(&obj! { "t" => "char", "c" => v.clone(), "ack" => j::at(ack, "seq").clone() });
+					} else {
+						cl.ws.send_text(vt);
+					}
 					continue;
 				}
 			}
-			if let Some(r) = &room { if Some(r.as_str()) == room_before || c.as_ref().is_some_and(|c| j::s(c, "room") == r) { cl.ws.send(&obj! { "t" => "gone", "charId" => char_id }); } }
+			if let Some(r) = &room { if Some(r.as_str()) == room_before || c.as_ref().is_some_and(|c| j::s(c, "room") == r) { cl.ws.send_text(&gone_text); } }
 		}
 	}
 
@@ -953,7 +1045,7 @@ impl Gateway {
 		let rooms: Vec<Json> = st.rooms.values().filter(|r| j::truthy(j::at(r, "map"))).map(|r| {
 			let rid = j::s(r, "roomId");
 			let mut o = obj_of(obj! { "roomId" => rid, "name" => j::at(r, "name").clone(), "island" => j::so(r, "island").unwrap_or(""), "x" => j::at(j::at(r, "map"), "x").clone(), "y" => j::at(j::at(r, "map"), "y").clone(), "ground" => j::at(r, "ground").clone(),
-				"fires" => Json::Array(st.objs.values().filter(|o| j::s(o, "kind") == "beacon" && j::s(o, "location") == rid).map(|o| obj! { "x" => j::at(o, "x").clone(), "y" => j::at(o, "y").clone() }).collect()) });
+				"fires" => Json::Array(st.atlas_objs.keys().filter_map(|id| st.objs.get(id)).filter(|o| j::s(o, "kind") == "beacon" && j::s(o, "location") == rid).map(|o| obj! { "x" => j::at(o, "x").clone(), "y" => j::at(o, "y").clone() }).collect()) });
 			if market.iter().any(|m| m.as_str() == Some(rid)) { o.insert("market", Json::Bool(true)); }
 			Json::Object(o)
 		}).collect();
@@ -975,21 +1067,13 @@ impl Gateway {
 	/// character owns, the objects each one has tasks of, and the parts every state shares. The settings the next state
 	/// carries are read here too, once.
 	fn atlas_shared(&self) -> AtlasShared {
-		{
-			let (g, s, pack) = (Rc::downgrade(&self.rc()), self.space.clone(), j::truthy(j::at(&self.w, "pack")));
-			tokio::task::spawn_local(async move {
-				let (b, e, p) = (setting(&s, "beam.cost").await, setting(&s, "epoch.force").await, if pack { setting(&s, "pack.max").await.ok() } else { None });
-				let Some(g) = g.upgrade() else { return };
-				if let Ok(b) = b { g.beam_cost.set(b); }
-				if let Ok(e) = e { g.epoch_force.set(e); }
-				if let Some(p) = p { g.pack_max.set(Some(p)); }
-			});
-		}
+		self.refresh_settings();
 		let w = &self.w;
 		let st = self.st.borrow();
 		let mut owned: HashMap<String, Vec<Json>> = HashMap::new();
 		let mut tasks: HashMap<String, Vec<Json>> = HashMap::new();
-		for o in st.objs.values() {
+		for oid in st.atlas_objs.keys() {
+			let Some(o) = st.objs.get(oid) else { continue };
 			let owner = j::s(o, "ownerId");
 			let kind = j::s(o, "kind");
 			if !owner.is_empty() && ["site", "building", "bed", "field", "ruin"].contains(&kind) {
@@ -1035,10 +1119,15 @@ impl Gateway {
 		let w = &self.w;
 		let built = |plan: Option<&str>| -> Vec<Json> {
 			let mut seen: Vec<String> = Vec::new();
-			if let Some(plan) = plan { for o in st.objs.values() { if j::s(o, "kind") == "building" && j::s(o, "plan") == plan { let l = j::s(o, "location").to_owned(); if !seen.contains(&l) { seen.push(l); } } } }
+			if let Some(plan) = plan {
+				for oid in st.atlas_objs.keys() {
+					let Some(o) = st.objs.get(oid) else { continue };
+					if j::s(o, "kind") == "building" && j::s(o, "plan") == plan { let l = j::s(o, "location").to_owned(); if !seen.contains(&l) { seen.push(l); } }
+				}
+			}
 			seen.into_iter().map(Json::from).collect()
 		};
-		let roads: Vec<Json> = st.objs.values().filter(|o| j::s(o, "kind") == "road" && j::s(o, "roadState") == "built" && j::truthy(j::at(o, "roadTo"))).map(|o| Json::Array(vec![j::at(o, "location").clone(), j::at(o, "roadTo").clone()])).collect();
+		let roads: Vec<Json> = st.atlas_objs.keys().filter_map(|oid| st.objs.get(oid)).filter(|o| j::s(o, "kind") == "road" && j::s(o, "roadState") == "built" && j::truthy(j::at(o, "roadTo"))).map(|o| Json::Array(vec![j::at(o, "location").clone(), j::at(o, "roadTo").clone()])).collect();
 		obj! { "jetties" => Json::Array(built(j::so(j::at(w, "fishing"), "plan"))), "stations" => Json::Array(built(j::so(j::at(w, "rail"), "plan"))), "trainFare" => j::no(j::at(w, "rail"), "fare").unwrap_or(1.0), "roads" => Json::Array(roads) }
 	}
 
@@ -1059,10 +1148,10 @@ impl Gateway {
 			let Some(g) = g.upgrade() else { return };
 			g.atlas_due.set(false);
 			let shared = g.atlas_shared();
-			let atlas = if g.atlas_geometry.replace(false) { Some(g.atlas()) } else { None };
+			let atlas = if g.atlas_geometry.replace(false) { Some(obj! { "t" => "atlas", "atlas" => g.atlas() }.to_json_text()) } else { None };
 			let cs: Vec<Rc<Client>> = g.clients.borrow().clone();
 			for c in cs { if c.atlas.get() {
-				if let Some(a) = &atlas { c.ws.send(&obj! { "t" => "atlas", "atlas" => a.clone() }); }
+				if let Some(a) = &atlas { c.ws.send_text(a); }
 				c.ws.send(&obj! { "t" => "atlasState", "state" => g.atlas_state(&c, &shared) });
 			} }
 		});
@@ -1091,12 +1180,17 @@ impl Gateway {
 	}
 	fn announce_obj(&self, obj_id: &str, before: Option<&str>) {
 		let o = { let st = self.st.borrow(); st.objs.get(obj_id).map(|b| self.view(&st, b)) };
+		let obj_loc = o.as_ref().and_then(|o| j::so(o, "location").map(str::to_owned));
+		let obj_text = o.as_ref().map(|o| obj! { "t" => "obj", "o" => o.clone() }.to_json_text());
+		let gone_text = obj! { "t" => "objgone", "id" => obj_id }.to_json_text();
 		let clients: Vec<Rc<Client>> = self.clients.borrow().clone();
 		for cl in clients {
 			let room = cl.room();
 			let sees = |loc: Option<&str>| { let st = self.st.borrow(); loc.is_some_and(|l| !l.is_empty() && (room.as_deref() == Some(l) || cl.me.char_id == l || self.in_own_chest(&st, Some(l), &cl.me.char_id, room.as_deref()))) };
-			if let Some(o) = o.as_ref().filter(|o| sees(j::so(o, "location"))) { cl.ws.send(&obj! { "t" => "obj", "o" => o.clone() }); }
-			else if sees(before) { cl.ws.send(&obj! { "t" => "objgone", "id" => obj_id }); }
+			if let (Some(loc), Some(text)) = (obj_loc.as_deref(), &obj_text) {
+				if sees(Some(loc)) { cl.ws.send_text(text); continue; }
+			}
+			if sees(before) { cl.ws.send_text(&gone_text); }
 		}
 	}
 }
