@@ -41,6 +41,12 @@ export function referenceBot(n: number): string {
 	return `async function bot(){${HEAD}const ODDS=${JSON.stringify(odds)};Object.assign(CELL,${JSON.stringify(cells)});await look();await explore();if(!fire)return;const rooms=Object.keys(EX).filter(r=>(ODDS[r]||0)>0);await play(bestTour(rooms,(r)=>ODDS[r]||0),MINUTES,grabAt)}`;
 }
 
+/** The learner's round with Jev as the estimator: each room's odds as Jev read them from the logbook
+ *  (server/data/fetch-shore-jev.ts records them, the bot carries them written in); the cells from the logbook. */
+export function jevShoreBot(odds: Record<string, number>): string {
+	return `async function bot(){${HEAD}${LOG}const ODDS=${JSON.stringify(odds)};await readLog();await look();await explore();if(!fire)return;const rooms=Object.keys(EX).filter(r=>r!==fire.room&&(ODDS[r]||0)>0);await play(bestTour(rooms,(r)=>ODDS[r]||0),MINUTES,grabAt)}`;
+}
+
 /** Wrong: step 8's law, the dead ends by their distance from the fire. */
 const lawOfStep8Bot = `async function bot(){${HEAD}await look();await explore();if(!fire)return;await play(bestTour(dead(),(r)=>Math.min(0.9,0.15*dist(r,fire.room))),MINUTES,grabLook)}`;
 /** Wrong: every room but the fire's, every hour, in the order of their names. */

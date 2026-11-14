@@ -10,13 +10,14 @@ import { covers, JUMP_CELLS, recall, type MemoryPath } from "../server/memory.ts
 import { describeObservations, proposePrompt, teamPrompt } from "../server/llm.ts";
 import { checkSubgoals, extractSubgoals, subgoalText } from "../server/subgoals.ts";
 import { laneOf } from "../server/room.ts";
-import { offeredTasks, portableTask, restoreTask, taskById, TASKS } from "../server/tasks.ts";
+import { offeredTasks, portableTask, restoreTask, shoreTask, taskById, TASKS } from "../server/tasks.ts";
 import { ISLAND_ROOMS } from "../server/island.ts";
 import { ArenaDown, MAX_BOT_CALLS } from "../server/bottask.ts";
 import { toyArena } from "../server/toyarena.ts";
 import { CHANCE_MINUTES, CHANCE_RULES, chanceDay, chanceLands, chanceOf, deadEnds, fromFire, genIsland, TIDE_RULES, tideLanding, ToyIsland, type ChanceSeen, type TideSeen } from "../server/toyisland.ts";
 import { CHANCE_HIDDEN, CHANCE_SAMPLES, CHANCE_SEEDS } from "../server/chance.ts";
-import { referenceBot, SHORE_BOTS, SHORE_HIDDEN, SHORE_SAMPLES, SHORE_SEEDS } from "../server/shores.ts";
+import { jevShoreBot, referenceBot, SHORE_BOTS, SHORE_HIDDEN, SHORE_SAMPLES, SHORE_SEEDS, shoreEpisodes } from "../server/shores.ts";
+import { SHORE_JEV_ODDS, type ShoreJevData } from "../server/data/fetch-shore-jev.ts";
 import { LOG_DAYS, LOG_SEED, logSeeds, SHORE_ODDS, SHORE_RULES, shoreCell, shoreDay, shoreLands, shoreLog, shoreOf, shoreRooms } from "../server/toyisland.ts";
 import { episodeSeed } from "../server/bottask.ts";
 import { TIDE_HIDDEN, TIDE_LAW_COST, TIDE_LIMIT, TIDE_SAMPLES } from "../server/tides.ts";
@@ -827,4 +828,16 @@ t("shores of the tide: the learner reads the logbook and passes; step 8's law, t
 	// the reference plan of a shown island brings what its target was made from
 	const n = SHORE_SAMPLES[0]!, ref = await judge(cm!, shores, referenceBot(n[0]));
 	assert.ok(ref.episodes![0]!.mean! * 0.9 >= n[1] && ref.episodes![0]!.mean! * 0.9 < n[1] + 0.125);
+});
+
+t("shores of the tide with Jev as the estimator: the recorded answers cover every room of the task's islands, and the learner's round with them reaches every target", async () => {
+	const data = JSON.parse(readFileSync(new URL("../server/data/shore-jev.json", import.meta.url), "utf8")) as ShoreJevData;
+	for (const [n, target] of [...SHORE_SAMPLES, ...SHORE_HIDDEN]) {
+		const sets = data.islands[n]!, w = genIsland(n);
+		assert.ok(sets.length >= 1, `island ${n} recorded`);
+		for (const set of sets) assert.deepEqual(Object.keys(set).sort(), shoreRooms(w).sort(), `island ${n}: every room asked`);
+		const odds = Object.fromEntries(Object.entries(sets[0]!).map(([r, [c]]) => [r, SHORE_JEV_ODDS[c]]));
+		const v = await judge(cm!, shoreTask(shoreEpisodes([[n, target]], [])), jevShoreBot(odds));
+		assert.equal(v.ok, true, `island ${n}: ${v.error ?? ""}`);
+	}
 });

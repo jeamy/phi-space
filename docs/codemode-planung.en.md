@@ -1,6 +1,6 @@
 # Codemode chat: planning bots, after the JEPA experiments (plan)
 
-Status (2026-11-14): steps 1 to 7 built; the account for an article is [codemode-planning-article.en.md](codemode-planning-article.en.md). It extends the bot lane (B in
+Status (2026-11-14): steps 1 to 9 built, with model runs on steps 7 to 9 and Jev as an estimator on step 9; the account for an article is [codemode-planning-article.en.md](codemode-planning-article.en.md). It extends the bot lane (B in
 [codemode-anwendungen.en.md](codemode-anwendungen.en.md)) and the eval harnesses (C there). It needs no new
 dependency and no model call in the judge.
 
@@ -509,7 +509,19 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      $1.51; below target on 9 of the 95 islands), GPT-6.1 Sol (OpenRouter) in generation 2 (8793 points, $0.61; on none
      of the 95, median 1.09 times the reference, since it replans before every tide and takes the map from the
      logbook); both estimate each room's odds from the logbook. Claude Sonnet 5.5 and Claude Haiku 5.5 did not (0/9 in
-     all 5 generations): their bots never reached a room with pieces, Sonnet's never checked the logbook's format.
+     all 5 generations, in two runs each): their bots never reached a room with pieces, Sonnet's never checked the logbook's format.
+     Jev as the estimator (`server/data/fetch-shore-jev.ts`, recorded in `server/data/shore-jev.json`): Jev reads each
+     island's logbook and puts every room in one of the four odds classes; 104 islands × 3 repeats, 312 calls, $0.027,
+     96.6 % of the rooms right, errors only between neighbouring classes. `jevShoreBot` plans the learner's round with
+     them and brings exactly the reference plan's mean on every island and every repeat (0 of 95 below the target).
+     The four classes are the generator's levels, a hint no bot gets. Without them (`--noul`, the probability that a piece
+     lands at the next tide; `server/data/shore-jev-noul.json`, 312 calls, $0.020) Jev orders the rooms right but squeezes
+     the odds towards the middle (empty rooms 0.05 to 0.10, odds 0.7 read as 0.62 on average): 25 or 26 of 95 below the
+     target; with 0 for a room the logbook never shows a piece in, 2 of 95 (the learner 1). That 0 comes from Jev as well
+     with a second question (`--seen`: does the logbook show a piece in the room on any day; `server/data/shore-jev-seen.json`,
+     312 calls, $0.020): 1812 of 1818 rooms right, its 6 errors all rooms with a piece taken for empty, none the other
+     way; the round with `noul` and these answers is 2 or 3 of 95 below the target, 0 or 2 of the task's nine. Jev alone,
+     without the generator's levels, reads the logbook about as well as the learner counts it.
 
 ## Tests
 
@@ -520,6 +532,10 @@ The progress curve and the episode matrix come with step 1, the rest with the st
 - A test that a hidden episode never lies on a sample path, run over every planning task in the catalog (step 2,
   `tests/bots.test.ts`).
 - The page: the snapshot carries the curve's and matrix's figures; a test checks them against the `BotEpisode` entries.
+- Steps 7 to 9 (`tests/bots.test.ts`): the tide, odds and shore mechanics, the toy arena's `observations` and `logbook`,
+  and each task's judge with its scripted bots and the model winners as fixtures (`tests/fixtures/`); for step 9 also
+  Jev's recorded classes (`server/data/shore-jev.json`): every room of the task's islands asked, and the learner's
+  round with them reaching every target.
 
 ## Values (decided 2026-11-13)
 
@@ -540,4 +556,4 @@ A clickable mockup of the views, with example data on the real map of the Graue 
 | Path in `BotEpisode` | at most 200 steps | Only room and direction changes. |
 | Retention | with the block (step 2), see there | Planned: best of each generation + newest 50. Step 2 keeps every sample path as long as its verdict, which the room cap already bounds. |
 
-Step 6 needs no learned model (see there). Step 7 learns one dynamic, the tide, as code and data. Step 8 learns odds and plans for the expected value. Step 9 learns them anew on every island, from that island's data. The account for an article is [codemode-planning-article.en.md](codemode-planning-article.en.md). Runs with model agents (2026-11-14, 5 generations each): haiku on step 7 not solved; Claude Opus 5.5 solved step 7 in generation 5 with a statistic of the observations rather than the law (the task does not bound the cost, so a searcher with a prior passes), and did not solve step 8. After four changes (observations in the prompt, longer code in it, richer failures, a point limit per episode on step 7): four models under the same conditions, one run each: Claude Opus 5.5 solved step 7 in generation 3 with the law read off the observations in its prompt and written into its bot (1371 points, the law in code 2253), and step 8 in generation 3; GPT-6.1 Sol (through OpenRouter) solved step 8 in generation 4 with the odds counted from `observations()`, step 7 7/9; Claude Sonnet 5.5 solved step 8 in generation 4 by a greedy sweep of every dead end, without the odds (below target on 8 % of 91 unselected islands; step 8 does not require the odds), step 7 3/9; Claude Haiku 5.5 neither (0/9 throughout, the game's rules); a second GPT-6.1 Sol run (direct, through the pi login) did step 7 2/9 and step 8 in generation 5. Step 9 (odds every island has its own, read from a logbook at run time) takes away what the priors of step 8's winners live on: all three fail it. Opus and GPT solve it in generation 2 with an estimator from the logbook; Sonnet and Haiku do not. See the article.
+Step 6 needs no learned model (see there). Step 7 learns one dynamic, the tide, as code and data. Step 8 learns odds and plans for the expected value. Step 9 learns them anew on every island, from that island's data; Jev, a decisions model asked offline and replayed, reads them from the logbook about as well as counting does. The account for an article is [codemode-planning-article.en.md](codemode-planning-article.en.md). Runs with model agents (2026-11-14, 5 generations each): haiku on step 7 not solved; Claude Opus 5.5 solved step 7 in generation 5 with a statistic of the observations rather than the law (the task does not bound the cost, so a searcher with a prior passes), and did not solve step 8. After four changes (observations in the prompt, longer code in it, richer failures, a point limit per episode on step 7): four models under the same conditions, one run each: Claude Opus 5.5 solved step 7 in generation 3 with the law read off the observations in its prompt and written into its bot (1371 points, the law in code 2253), and step 8 in generation 3; GPT-6.1 Sol (through OpenRouter) solved step 8 in generation 4 with the odds counted from `observations()`, step 7 7/9; Claude Sonnet 5.5 solved step 8 in generation 4 by a greedy sweep of every dead end, without the odds (below target on 8 % of 91 unselected islands; step 8 does not require the odds), step 7 3/9; Claude Haiku 5.5 neither (0/9 throughout, the game's rules); a second GPT-6.1 Sol run (direct, through the pi login) did step 7 2/9 and step 8 in generation 5. Step 9 (odds every island has its own, read from a logbook at run time) takes away what the priors of step 8's winners live on: all three fail it. Opus and GPT solve it in generation 2 with an estimator from the logbook; Sonnet and Haiku do not. See the article.

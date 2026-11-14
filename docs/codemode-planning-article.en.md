@@ -1,9 +1,5 @@
 # Planning bots without a learned world model: notes for an article
 
-Status (2026-11-14): material for an article. It records the approach, how it compares with the JEPA world model of
-Haddy Alchaer's post, every development step with its numbers, the detours and what is still open. The plan with every
-detail is [codemode-planung.en.md](codemode-planung.en.md). The figures are in `docs/img/codemode-planung/`.
-
 ## The question
 
 Haddy Alchaer's post "After 600 experiments, here's what I discovered about JEPA world models"
@@ -505,8 +501,8 @@ $5 budget, German prompts. GPT-6.1 Sol ran through OpenRouter: its first start t
 
 | Model | Solved | Best tool points (the nine episodes) | Cost | Below the target, of the 95 unselected islands |
 |---|---|---|---|---|
-| Claude Haiku 5.5 | no (0/9 in all 5 generations) | | $0.02 | |
-| Claude Sonnet 5.5 | no (0/9 in all 5 generations) | | $0.43 | |
+| Claude Haiku 5.5 | no (0/9 in all 5 generations; repeated: the same) | | $0.02, repeat $0.02 | |
+| Claude Sonnet 5.5 | no (0/9 in all 5 generations; repeated: the same) | | $0.43, repeat $0.48 | |
 | Claude Opus 5.5 | generation 2 (9/9; one bot 4/9) | 9516 | $1.51 | 9 (9 %) |
 | GPT-6.1 Sol | generation 2 (9/9; one bot 8/9) | 8793 | $0.61 | 0 |
 | For comparison: the learner (scripted) | | 9105 | | 1 (1 %) |
@@ -528,8 +524,65 @@ waited up to 451 world minutes without ever seeing a piece: their own notes say 
 was "still unverified", and five generations did not verify it. Opus's first bots failed the same way; from
 generation 2 on its bots read the logbook in any of the forms they guessed.
 
-So step 9 separates where step 8 did not: the two models that wrote an estimator pass, and no prior passes. With n = 1
-per model, "Sonnet cannot" is not shown; "Sonnet did not, for this reason" is.
+A second run of each (same conditions) ended the same way: Haiku's bots again called a tool on an undefined object or
+stopped at 0 world minutes; Sonnet's came closest in generation 3 (two pieces in the fire on the first seed, after
+456 world minutes), and generations 4 and 5 fell back to bots that were "not a function" or never moved.
+
+So step 9 separates where step 8 did not: the two models that wrote an estimator pass, and no prior passes. With two
+runs each for Haiku and Sonnet and one for Opus and GPT, "Sonnet cannot" is not shown; "Sonnet did not, twice, for
+this reason" is.
+
+## Jev as the estimator (2026-11-14)
+
+A decisions model in the bot itself does not fit the judge: a bot decides at every tide, some 500 times per
+contribution, and the judge must give the same points on every host without a network. But step 9's planning question
+"how good is each room?" depends only on the island, since the logbook is fixed per island. So it can be asked once
+per island, recorded, and replayed, the way the issue tasks replay Jev's labels.
+
+`server/data/fetch-shore-jev.ts` gives Jev (`typesafe/jev-1.13`) an island's logbook as its state and asks, for every
+room, one choice: never, about one tide in ten, about one in three, about two in three. It asked for all 104 islands
+of the selection, three times each: 312 calls, $0.027. `jevShoreBot` (`server/shores.ts`) plans the learner's round
+with these answers as the odds; the answers are written into the bot, as the reference plan's odds are.
+
+| | Rooms classed right | Below the target, of 95 | Of the reference plan's mean |
+|---|---|---|---|
+| Jev, each of the 3 repeats | 96.6 % (1757 of 1818) | 0 | 1.00 on every island |
+| The learner (counted rates) | | 1 | 0.87 to 1.00 (median 1.00) |
+| The counted rate snapped to the nearest of the four classes | 96.5 % (585 of 606) | 1 | 0.87 to 1.12 (median 1.00) |
+
+Jev never called an empty room anything but "never", and never called a room with pieces "never". Its 61 errors are
+all between neighbouring classes (one in three taken for one in ten, two in three for one in three), and they do not
+change the round, so all three repeats bring exactly the reference plan's pieces on every island, as do the nine
+episodes of the task (the new test in `tests/bots.test.ts`). The repeats disagree on 15 of the 606 rooms.
+
+Two caveats. The four classes are the generator's own levels (`SHORE_ODDS`), which the question hands to Jev and no
+bot is told. And Jev here is a recorded table: it shows how well a decisions model reads the odds out of the raw
+logbook, not that a team would do better with it at run time.
+
+**Without the levels.** Jev also answers `noul` questions: the probability that a statement is true. Asked only "At
+the next tide, does a piece of driftwood land in room R?", with no classes at all (`fetch-shore-jev.ts --noul`,
+`server/data/shore-jev-noul.json`; again 104 islands × 3, 312 calls, $0.020), Jev orders the rooms right but squeezes
+the odds towards the middle:
+
+| True odds | 0 | 0.1 | 0.35 | 0.7 |
+|---|---|---|---|---|
+| Jev's `noul`, mean (min to max) | 0.07 (0.05 to 0.10) | 0.31 (0.10 to 0.46) | 0.47 (0.30 to 0.58) | 0.62 (0.49 to 0.77) |
+
+| Round planned with | Below the target, of 95 | Of the reference plan's mean |
+|---|---|---|
+| Jev's `noul` as the odds, each of the 3 repeats | 25 or 26 | 0.64 to 1.23 (median 1.00) |
+| Jev's `noul`, and 0 for a room without a piece in the logbook | 2 | 0.64 to 1.00 (median 1.00) |
+| Jev's `noul`, and 0 where Jev says the logbook shows no piece in the room (`--seen`) | 2 or 3 | 0.40 to 1.00 (median 1.00) |
+| The learner (counted rates) | 1 | 0.87 to 1.00 (median 1.00) |
+
+Almost all the loss is the empty rooms: Jev gives them 0.05 to 0.10, never 0, and the round walks to them. Once a
+room the logbook never shows a piece in counts as empty, a fact of the data and no knowledge of the generator, the
+squeezed odds cost two islands. That 0 can come from Jev as well: a second `noul` question, "does the logbook show a
+piece of driftwood in room R on any of its days?" (`--seen`, 312 calls, $0.020), is right for 1812 of the 1818
+rooms, and its six errors are all rooms with a piece taken for empty (probabilities 0.04 to 0.49), never the other way;
+with it the round is 2 or 3 of 95 below the target. So the perfect result above came from the four levels in the question, and without
+them Jev reads the logbook about as well as the learner counts it, not better. The documentation says the same of
+`noul`: it is a probability of "yes", not said to be calibrated.
 
 ## Figures
 
@@ -640,6 +693,8 @@ logbook, a new round before every tide (8793 points, fewer than the reference pl
 
 - Repeats on "Shores of the tide": Sonnet's failure at the logbook's format, and whether a hint in the prompt (the
   logbook's shape) changes it.
+- Jev in the loop between generations: it sorts each failure (interface, game rule, strategy) and the loop hands the
+  next generation a matching hint; Sonnet on "Shores of the tide" with and without it.
 - Repeats: every model and task ran once, GPT twice (7 and 2 of 9 on "Learn the tide"). Opus's two solutions and
   Haiku's two failures look stable from their curves; the rest needs more runs.
 - A law that changes between generations: then only a bot that reads `observations()` at run time (GPT's way) keeps
