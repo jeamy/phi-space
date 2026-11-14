@@ -414,6 +414,7 @@ aside .about__text { max-height: 240px; overflow-y: auto; }
 .pm-fire { fill: none; stroke: var(--warning); stroke-width: 2; }
 .pm-frame { fill: none; stroke: var(--line-strong); stroke-width: 1; }
 .pm-name { fill: var(--text); font-size: 9px; font-weight: 600; paint-order: stroke; stroke: var(--surface); stroke-width: 2.5px; }
+.pm-island { fill: var(--text); font-size: 13px; font-weight: 700; }
 .pm-path { cursor: default; }
 .pm-path--dim { opacity: .25; }
 .pm-line { fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }

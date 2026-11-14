@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { CAPTURED, judge, loadCodemode } from "../server/judge.ts";
 import { harnessTools } from "../server/harnesstask.ts";
 import { newMeter } from "../server/tooltask.ts";
-import { tideCell, ToyIsland, toyCellError } from "../server/toyisland.ts";
+import { genIsland, tideCell, ToyIsland, toyCellError } from "../server/toyisland.ts";
 import { teamPrompt } from "../server/llm.ts";
 import { portableTask, restoreTask, taskById } from "../server/tasks.ts";
 import { execute } from "../server/runner.ts";
@@ -75,7 +75,7 @@ t("▶ runs a harness against the reference only", async () => {
 // ---- rate planners (docs/codemode-planung.en.md, step 5): island bots played on the toy island in the judge
 const planners = taskById("harness-planners")!;
 const spec = planners.harness!;
-const [farAll, farCheap, shownOnly, oneSeed, noHold, nearOnly] = planners.variants;
+const [farAll, farCheap, shownOnly, oneSeed, noHold, nearOnly, graueOnly] = planners.variants;
 /** One `run` of a planner harness against one bot, as rate() makes it. */
 const play = async (source: string, a: Record<string, unknown>) => {
 	const tools = harnessTools((o) => new cm!.CodemodeSandbox(o), CAPTURED, spec, { label: "x", source }, newMeter());
@@ -102,15 +102,41 @@ test("the toy island: the same episode and seed give the same world; the seed mo
 	assert.match(toyCellError({ room: "duenen", x: 0, y: 1 }, "start")!, /x 1\.\.22/);
 });
 
+test("made islands: the same number gives the same island, every room reachable, exits both ways, the tide of seeds 0 and 1 beside the fire", () => {
+	const rev: Record<string, string> = { nord: "süd", "süd": "nord", ost: "west", west: "ost" };
+	const shapes = new Set<string>();
+	for (let n = 0; n < 200; n++) {
+		const w = genIsland(n), ids = Object.keys(w.rooms);
+		assert.deepEqual(JSON.stringify(genIsland(n)), JSON.stringify(w));
+		assert.ok(ids.length >= 5 && ids.length <= 8, `${n}: ${ids.length} rooms`);
+		const seen = new Set([ids[0]!]), q = [ids[0]!];
+		while (q.length) for (const t of Object.values(w.rooms[q.shift()!]!.exits)) if (!seen.has(t)) { seen.add(t); q.push(t); }
+		assert.equal(seen.size, ids.length, `${n}: every room reachable`);
+		for (const [id, r] of Object.entries(w.rooms)) for (const [d, t] of Object.entries(r.exits)) assert.equal(w.rooms[t]!.exits[rev[d]!], id, `${n}: ${id} ${d}`);
+		assert.equal(toyCellError(w.episode.start, "start", w), null);
+		assert.equal(toyCellError(w.episode.wood, "wood", w), null);
+		assert.notEqual(w.episode.start.room, w.fire.room);
+		assert.deepEqual([w.tide(0), w.tide(1)], [{ room: w.fire.room, x: w.fire.x - 1, y: w.fire.y }, { room: w.fire.room, x: w.fire.x + 1, y: w.fire.y }]);
+		shapes.add(JSON.stringify(Object.values(w.rooms).map((r) => [r.at, Object.keys(r.exits)])));
+	}
+	assert.ok(shapes.size > 150, `${shapes.size} layouts of 200`);
+	assert.match(toyCellError({ room: "graue-bucht", x: 5, y: 5 }, "start", genIsland(4))!, /no room/);
+});
+
 t("rate planners: every bad bot reaches the shown episodes with seed 0 and no hold; each fails where its lesson says", async () => {
 	const shown = [{ start: { room: "graue-bucht", x: 10, y: 8 }, wood: { room: "graue-bucht", x: 5, y: 7 } }, { start: { room: "fischerdorf", x: 12, y: 8 }, wood: { room: "fischerdorf", x: 5, y: 5 } }, { start: { room: "klippenpfad", x: 2, y: 8 }, wood: { room: "graue-bucht", x: 17, y: 9 } }];
 	for (const impl of [...spec.good, ...spec.bad, ...spec.hiddenGood, ...spec.hiddenBad]) for (const e of shown) assert.equal((await play(impl.source, e)).reached, true, `${impl.label} on ${e.start.room}`);
 	const far = { start: { room: "klippenkopf", x: 12, y: 8 }, wood: { room: "torfmoor", x: 5, y: 5 } };
-	const [byHeart, near, goesOut, tide] = spec.bad;
+	const [byHeart, near, goesOut, tide, graue] = spec.bad;
 	assert.equal((await play(byHeart!.source, far)).reached, false);
 	assert.equal((await play(near!.source, far)).reached, false);
 	assert.equal((await play(goesOut!.source, { ...shown[0], hold: 5 })).reached, false);
 	assert.equal((await play(tide!.source, { ...shown[0], seed: 1 })).reached, false);
+	// a made island: the reference finds its way, the bot with the Graue Insel's map does not
+	assert.equal((await play(graue!.source, { island: 4 })).reached, false);
+	assert.equal((await play(spec.good[0]!.source, { island: 4, seed: 2, hold: 5 })).reached, true);
+	assert.match((await play(spec.good[0]!.source, { island: -1 })).error!, /island/);
+	assert.match((await play(spec.good[0]!.source, { island: 4, start: { room: "fischerdorf", x: 12, y: 8 } })).error!, /no room fischerdorf/);
 	const ref = await play(spec.good[0]!.source, { ...far, seed: 7, hold: 5 });
 	assert.equal(ref.reached, true);
 	assert.ok(ref.points! > 10, String(ref.points));
@@ -120,14 +146,15 @@ t("rate planners: every bad bot reaches the shown episodes with seed 0 and no ho
 });
 
 t("rate planners: the two correct harnesses rank every bot right, each blind one misranks the bot of its lesson, the verdict repeats", async () => {
-	const [a, b, c, d, e, f] = await Promise.all([farAll, farCheap, shownOnly, oneSeed, noHold, nearOnly].map((v) => judge(cm!, planners, v!)));
-	for (const v of [a!, b!]) { assert.equal(v.ok, true, v.error ?? ""); assert.deepEqual([v.passed, v.total], [10, 10]); }
+	const [a, b, c, d, e, f, g] = await Promise.all([farAll, farCheap, shownOnly, oneSeed, noHold, nearOnly, graueOnly].map((v) => judge(cm!, planners, v!)));
+	for (const v of [a!, b!]) { assert.equal(v.ok, true, v.error ?? ""); assert.deepEqual([v.passed, v.total], [12, 12]); }
 	assert.ok(b!.cost! < a!.cost!, `${b!.cost} < ${a!.cost}`);
 	const wrong = (v: typeof a) => v!.cases.filter((x) => !x.ok && !/reference/.test(x.call)).map((x) => x.call.replace("rate() on ", ""));
-	assert.deepEqual(wrong(c), ["knows the shown episodes by heart", "looks only in its start room and the next ones"]);
+	assert.deepEqual(wrong(c), ["knows the shown episodes by heart", "looks only in its start room and the next ones", "knows only the map of the Graue Insel"]);
 	assert.deepEqual(wrong(d), ["waits for the tide where it lands with seed 0"]);
 	assert.deepEqual(wrong(e), ["lets the fire go out right after"]);
 	assert.deepEqual(wrong(f), ["looks only in its start room and the next ones"]);
+	assert.deepEqual(wrong(g), ["knows only the map of the Graue Insel"]);
 	const again = await judge(cm!, planners, farCheap!);
 	assert.deepEqual(again.cases, b!.cases, "the toy island gives every judge the same worlds");
 	const constant = await judge(cm!, planners, `async function rate(){return 1}`);

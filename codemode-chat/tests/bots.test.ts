@@ -13,6 +13,9 @@ import { laneOf } from "../server/room.ts";
 import { offeredTasks, taskById, TASKS } from "../server/tasks.ts";
 import { ISLAND_ROOMS } from "../server/island.ts";
 import { ArenaDown, MAX_BOT_CALLS } from "../server/bottask.ts";
+import { toyArena } from "../server/toyarena.ts";
+import { genIsland } from "../server/toyisland.ts";
+import { NEULAND_HIDDEN, NEULAND_SAMPLES } from "../server/neuland.ts";
 import { execute } from "../server/runner.ts";
 
 const cm = await loadCodemode();
@@ -70,7 +73,7 @@ test("bot tasks: their own lane, offered only with an arena, the prompt names th
 	assert.equal(laneOf("frustration"), "code");
 	assert.equal(laneOf("custom"), "code");
 	process.env.CODEMODE_ARENA = "";
-	assert.equal(offeredTasks().some((x) => x.kind === "bot"), false, "no arena: no bot task in the catalog");
+	assert.deepEqual(offeredTasks().filter((x) => x.kind === "bot").map((x) => x.id), ["beacon-neuland"], "no arena: only the bot task on made islands, which the judge plays itself");
 	process.env.CODEMODE_ARENA = "unix:/nowhere";
 	try { assert.equal(offeredTasks().some((x) => x.id === "beacon-bucht"), true); } finally { process.env.CODEMODE_ARENA = ""; }
 	const p = teamPrompt({ task, lang: "en", agent: 0, gen: 1 }).user;
@@ -482,4 +485,73 @@ t("a scripted run on the Anleger plans every turn: Subgoals with each plan, cand
 		assert.equal((await post("/api/sessions/sub1/delete", { blockId: snap.current })).status, 200);
 		assert.equal(await space.count({ type: "Subgoals" }), 0);
 	} finally { await srv.close(); await arena.close(); process.env.CODEMODE_ARENA = ""; }
+});
+
+// ---- step 6: new worlds, islands made from a number, played in the judge
+const neuland = taskById("beacon-neuland")!;
+const [nExplorer, nSurvey, nGraue, nByHeart, nWander, nNoWood] = neuland.variants;
+
+test("the toy arena: open on a made island, look, act, path, score with a hold, map, close; wrong input is refused", async () => {
+	const a = toyArena(), w = genIsland(4), { start, wood } = w.episode;
+	const { world } = await a.ask("open", { island: 4, setup: { items: [{ proto: "treibholz", ...wood }] } });
+	const l = await a.ask("look", { world });
+	assert.deepEqual([l.room.id, l.at], [start.room, { x: 12, y: 8 }]);
+	assert.deepEqual(l.exits.map((e: any) => e.name).sort(), Object.keys(w.rooms[start.room]!.exits).sort());
+	const d = Object.keys(w.rooms[start.room]!.exits)[0]!;
+	assert.equal((await a.ask("act", { world, line: d })).at.room, w.rooms[start.room]!.exits[d]);
+	assert.match((await a.ask("act", { world, line: "fliegen" })).said[0], /Unbekannter Befehl/);
+	const p = await a.ask("path", { world });
+	assert.deepEqual(p.path[0], [start.room, 12, 8]);
+	assert.equal((await a.ask("score", { world, goal: "beacon:island", hold: 5 })).done, false);
+	const m = await a.ask("map", { room: start.room });
+	assert.deepEqual([m.island, m.ground.length, m.ground[0].length], ["Neuland 4", 16, 24]);
+	await assert.rejects(a.ask("open", { island: 1.5 }), /island/);
+	await assert.rejects(a.ask("open", { island: 4, start: { room: "duenen", x: 12, y: 8 } }), /no room duenen/);
+	await assert.rejects(a.ask("score", { world, goal: "beacon:feuer-bucht" }), /unknown goal/);
+	await a.ask("close", { world });
+	await assert.rejects(a.ask("look", { world }), /no such world/);
+});
+
+t("new islands: no map, judged in the judge without an arena; the explorer reaches all, the map, the memory of the shown islands and the wanderer do not", async () => {
+	process.env.CODEMODE_ARENA = "";
+	assert.equal(laneOf("beacon-neuland"), "code", "no arena: the code lane's judges take it");
+	assert.equal(neuland.prompt.en.includes("graue-bucht"), false, "the prompt names no map");
+	for (const n of NEULAND_HIDDEN) for (const id of Object.keys(genIsland(n).rooms)) assert.equal(neuland.prompt.en.includes(id), false, id);
+	assert.deepEqual(NEULAND_SAMPLES.filter((n) => NEULAND_HIDDEN.includes(n)), []);
+	const [a, b, c, d, e, f] = await Promise.all([nExplorer, nSurvey, nGraue, nByHeart, nWander, nNoWood].map((v) => judge(cm!, neuland, v!)));
+	for (const v of [a!, b!]) { assert.equal(v.ok, true, v.error ?? ""); assert.deepEqual([v.passed, v.total, v.score], [9, 9, 1]); }
+	assert.ok(a!.cost! < b!.cost!, `the explorer plans as soon as it knows enough: ${a!.cost} < ${b!.cost}`);
+	assert.equal(c!.passed, 0, "the Graue Insel's map is no use here");
+	assert.deepEqual([d!.passed, d!.score], [3, 0], "the shown islands by heart: none of the hidden ones");
+	assert.ok(e!.ok === false && e!.score! < 1, "without a memory it gets lost");
+	assert.equal(f!.passed, 0);
+	// the rooms of the shown paths, each with its island, for the atlas
+	assert.deepEqual([...new Set(a!.rooms!.map((r) => r.island))].sort(), NEULAND_SAMPLES.map((n) => `Neuland ${n}`));
+	assert.ok(a!.episodes!.filter((x) => x.kind === "sample").every((x) => x.path![0]![0] === genIsland(NEULAND_SAMPLES[Number(x.id.slice(1)) - 1]!).episode.start.room));
+});
+
+t("new islands on a server without an arena: offered, judged by a plain judge, its paths drawn island by island", async () => {
+	process.env.CODEMODE_ARENA = "";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [{ host: "plain-1" }] });
+	try {
+		const post = (path: string, body: unknown) => fetch(srv.url + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+		assert.ok(((await (await fetch(srv.url + "/api/tasks")).json()) as any[]).some((x) => x.id === "beacon-neuland"));
+		assert.equal((await post("/api/sessions/neu1/task", { taskId: "beacon-neuland" })).status, 200);
+		assert.equal((await post("/api/sessions/neu1/code", { author: "erkunder", source: nExplorer })).status, 200);
+		let snap: any;
+		for (const end = Date.now() + 60_000; ;) {
+			const s = await (await fetch(srv.url + "/api/sessions/neu1")).json() as any;
+			snap = { ...s, ...(s.blocks.find((b: any) => b.blockId === s.current) ?? {}) };
+			if (snap.contributions?.length === 1 && snap.contributions[0].ok !== null) break;
+			if (Date.now() > end) throw new Error(`timeout: ${JSON.stringify(snap.contributions)}`);
+			await new Promise((r) => setTimeout(r, 100));
+		}
+		const c = snap.contributions[0];
+		assert.equal(c.ok, true, c.error);
+		assert.equal(c.host, "plain-1");
+		const d = await (await fetch(`${srv.url}/api/sessions/neu1/source/${c.candidateId}`)).json() as any;
+		assert.deepEqual(d.paths.map((p: any) => p.episode), ["S1", "S2", "S3"]);
+		assert.deepEqual([...new Set(d.rooms.map((r: any) => r.island))].sort(), NEULAND_SAMPLES.map((n) => `Neuland ${n}`));
+		assert.ok(d.rooms.every((r: any) => r.map && r.world === "toy"));
+	} finally { await srv.close(); }
 });

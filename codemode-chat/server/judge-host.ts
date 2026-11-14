@@ -105,6 +105,8 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 		// a task with memory: the paths of the candidate's freeze, read before judging (recall answers from them only)
 		const memory = task?.bot?.memory && typeof blockId === "string" ? await frozenMemory(space, session, blockId, typeof f.freeze === "string" ? f.freeze : undefined) : undefined;
 		const v: Verdict | null = spec === false ? null : missing ? { ok: false, ms: TIMEOUT_MS, error: missing, passed: 0, total: 2, cases: [] } : task ? await judgeInSlot(cm, task, String(f.source ?? ""), { ...(log ? { log, leaseMs: TXN_LEASE_MS } : {}), ...(memory ? { memory } : {}), ...(subgoals.length ? { subgoals } : {}) }) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
+		// the rooms first, so a page that sees the verdict finds every room its paths cross (outside the transaction)
+		if (v?.rooms?.length) await keepRooms(space, v.rooms).catch(() => {});
 		if (v && (await alive())) {
 			await space.write({ type: "CodeScore", fields: { session, blockId, candidateId, author: f.author, via: f.via, host, gen: f.gen, ...lineageOf(f), ...verdictFields(v), source: f.source, ts: f.ts } as never }, t.id, ttl);
 			// a planning task's sample paths (docs/codemode-planung.en.md): they live and go with the verdict
@@ -115,7 +117,6 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 				await setBest(space, t.id, session, blockId, task, ttl, { offer: { candidateId, ms: v.ms, source: String(f.source ?? ""), ...(v.cost !== undefined ? { cost: v.cost } : {}) } });
 		}
 		await space.commit(t.id);
-		if (v?.rooms?.length) await keepRooms(space, v.rooms).catch(() => {});
 		// the verdict is stored: the run's log has served (a judge dying here leaves it to its lease)
 		if (log) await log.clear().catch(() => {});
 		return true;

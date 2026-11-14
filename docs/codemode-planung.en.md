@@ -51,7 +51,8 @@ What the post shows applies to the bots without any neural network:
 | Model agents are not in the post | Model agents propose the subgoals and write the bots; the post's open question is their job |
 
 What does not carry over: a learned predictor. The judge needs none, since the arena is exact. A neural JEPA model
-would need Python or ONNX, weights that are not published and a GPU that neither big nor nano has (step 6).
+would need Python or ONNX, weights that are not published and a GPU that neither big nor nano has. Nor would it help a
+bot find its way in a world it has not seen: step 6 tests that with made islands instead.
 
 ## Entries
 
@@ -294,10 +295,69 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      seeds and `hold: 5` (24 runs a bot); and the same with one seed per start, cycling 0, 1, 2 (8 runs, cheaper).
      Four are blind, each to one lesson: shown episodes only, one seed, no hold, wood always in the start room. Each
      misranks exactly the bot of its lesson; the tests check this, and that the same verdict comes out twice.
-6. **A learned world model (only with a decision).** A process of its own, like the model process. It takes
-   `Predict` entries and writes the answers, and the judge only replays recorded ones, as for Jev. It needs a new
-   dependency (Python or ONNX), weights and probably a GPU. It pays off only if the arena turns out too slow for
-   planners that roll out many sequences.
+6. **New worlds (made islands).**
+
+   *Done 2026-11-14* (`beacon-neuland`, `codemode-chat/server/toyisland.ts`, `toyarena.ts`, `neuland.ts`,
+   `explorer.ts`). This step replaces the learned world model planned here before.
+   - **Why no learned model.** A bot has to find its way on islands it has never seen. A model trained on the Graue
+     Insel learns that island: its rooms, its exits, where its fire stands. On a new island this is the same mistake
+     as a bot that carries the Graue Insel's map. What carries over to a new world is a way of searching: look,
+     remember what was seen, plan over that. Agents write it as code, and the judge's simulator is exact, so it needs
+     no prediction. A learned predictor would pay off only for planners that roll out many sequences in a world too
+     slow to simulate. The toy islands are not slow.
+   - **Made islands.** `genIsland(n)` makes island "Neuland n" (0 to 999999) from its number with a small fixed
+     generator, so every judge gets the same island:
+     - 5 to 8 rooms grown from one on a 4 × 3 grid, and further links with chance 0.3, so some islands have loops;
+     - room names shuffled from a list, room ids `n<n>-<k>`;
+     - exits nord, ost, süd, west, each leading to the grid neighbour, with the opposite exit leading back;
+     - one fire, the Leuchtfeuer;
+     - an episode of its own: the start is one of the two rooms farthest from the fire, and the driftwood lies in
+       another room.
+
+     As on the Graue Insel, the tide lays a piece beside the fire with seeds 0 and 1 (west and east of it), and
+     somewhere else with every other seed.
+   - **Played in the judge.** `toyarena.ts` answers the arena's JSON-line protocol (`open`, `look`, `act`, `wait`,
+     `path`, `score`, `map`, `close`) over toy islands in the judge's own process. `open` takes the episode's `island`,
+     and the goal `beacon:island` is that island's fire. A planning task with `bot.toy` is judged there:
+     - `needsArena` is false for it;
+     - it takes the code lane;
+     - it is offered without `CODEMODE_ARENA`, and every judge takes it.
+
+     ▶ still does not run bots.
+   - **The task "New islands".** The prompt names no map. It says what every made island has (5 to 8 rooms, the four
+     exits, one fire) and that `look` shows a room only once the figure stands in it. The three shown episodes lie on
+     Neuland 1, 2 and 3. The six hidden ones lie on Neuland 4 to 9, which no shown episode enters, so no hidden island
+     ever reaches a prompt. No wait, `hold: 5`. The scripted variants:
+
+     | Variant | Reached | Points |
+     |---|---|---|
+     | Explorer: depth first, takes the wood where it sees it, feeds the fire over the exits it crossed as soon as it knows both | 9/9 | 163 |
+     | Surveyor: explores the whole island, then plans | 9/9 | 355 |
+     | The Graue Insel's map (the island task's searcher) | 0/9 | 6 |
+     | The three shown islands by heart | 3/9 (none hidden) | 36 |
+     | Walks without a memory: the first exit it did not come in by | 5/9 (fails S1) | 315 |
+     | No wood | 0/9 | 55 |
+   - **The atlas.** Rooms are grouped by their `island` and laid out island under island, each with its own grid
+     place and its name above it. A single island keeps the layout it had.
+   - **"Rate planners" on new worlds.** The harness's `run` also takes `island` (start and wood may then be left out:
+     the island's own episode), and the bot must now work on any made island too. The changes:
+     - The reference is the explorer.
+     - The bad bots are mapless where their lesson is not the map, so each still fails only by its lesson: the near
+       searcher looks at most one room deep for the wood, then explores on for the fire.
+     - A fifth shown bad bot knows only the Graue Insel's map. It is step 5's reference.
+     - The hidden good ones are the surveyor and an explorer that takes the exits in the other order.
+     - The hidden bad ones are an explorer two rooms deep, one that waits 7 minutes, a tide waiter that takes whatever
+       lies in the fire's room, and the reverse searcher with the Graue Insel's map.
+     - The two correct harnesses add Neuland 11, 12 and 13 with their own episodes: 33 runs a bot, and 11 for the
+       cheaper one.
+     - A seventh, blind harness plays only the Graue Insel and misranks exactly the map bot. The shown-only harness
+       now also passes it.
+     - The time limit is 60 s, since the 33 runs take about 15 s alone.
+   - **Counter-check in the real arena.** The mapless bots know no island, so they also play the real Graue Insel. The real
+     arena has other fires as well and exits other than the four directions; the bots take only the compass exits,
+     feed only the fire named Leuchtfeuer, and do not count an exit that left them where they were. On the island
+     task's nine episodes in the real arena, the explorer reached 9/9 with 111 points and the surveyor 9/9 with 399.
+     Neither knows the Graue Insel's map.
 
 ## Tests
 
@@ -328,4 +388,4 @@ A clickable mockup of the views, with example data on the real map of the Graue 
 | Path in `BotEpisode` | at most 200 steps | Only room and direction changes. |
 | Retention | with the block (step 2), see there | Planned: best of each generation + newest 50. Step 2 keeps every sample path as long as its verdict, which the room cap already bounds. |
 
-Still open: step 6 at all.
+Step 6 needs no learned model (see there).

@@ -9,7 +9,7 @@
 // toy island (toyisland.ts) and answers whether the goal was reached.
 import { toolProgram, type Meter } from "./tooltask.ts";
 import { MAX_BOT_CALLS } from "./bottask.ts";
-import { MAX_TOY_WAIT, ToyIsland, toyCellError } from "./toyisland.ts";
+import { islandError, MAX_TOY_WAIT, ToyIsland, toyCellError, worldOf } from "./toyisland.ts";
 
 export type Impl = { label: string; source: string };
 export type HarnessSpec = {
@@ -58,8 +58,8 @@ const DESCRIPTION = {
 	en: (s: HarnessSpec) => `- tools.run(args): calls the implementation being rated, in a sandbox of its own: { args: unknown[] } (the arguments of ${s.target}) → { value, ms } (what came out and how many milliseconds the call took) or { error } (it threw, or took longer than ${s.runMs / 1000} s). 1 point; at most ${MAX_RUNS} calls per implementation.`,
 };
 const ISLAND_DESCRIPTION = {
-	de: (s: HarnessSpec) => `- tools.run(args): spielt den Bot, der gerade bewertet wird, eine Episode lang in einer eigenen Welt der Insel: { start: { room, x, y } (wo die Figur startet), wood: { room, x, y } (wo das einzige Stück Treibholz liegt), seed?: number (der Zufall der Welt, ganzzahlig ≥ 0, Standard 0), hold?: number (so viele Weltminuten muss das Feuer nach dem Bot noch brennen, 0 bis 60, Standard 0) } → { reached: boolean (das Feuer brennt, vom Bot genährt, auch nach hold Minuten), points: number (die Tool-Aufrufe des Bots) } oder { error } (die Episode ist ungültig). Ein Bot, der wirft oder länger als ${s.runMs / 1000} s braucht, hat die Episode nicht erreicht. Räume und Ausgänge wie oben; jede Zelle x 1..22, y 1..14 ist Boden, außer dem Feuer. 1 Punkt; höchstens ${MAX_RUNS} Aufrufe pro Bot.`,
-	en: (s: HarnessSpec) => `- tools.run(args): plays the bot being rated for one episode in a world of the island of its own: { start: { room, x, y } (where the figure starts), wood: { room, x, y } (where the one piece of driftwood lies), seed?: number (the world's chance, an integer ≥ 0, default 0), hold?: number (how many world minutes the fire must still burn after the bot, 0 to 60, default 0) } → { reached: boolean (the fire burns, fed by the bot, also after hold minutes), points: number (the bot's tool calls) } or { error } (the episode is not valid). A bot that throws or takes longer than ${s.runMs / 1000} s did not reach the episode. Rooms and exits as above; every cell x 1..22, y 1..14 is ground except the fire. 1 point; at most ${MAX_RUNS} calls per bot.`,
+	de: (s: HarnessSpec) => `- tools.run(args): spielt den Bot, der gerade bewertet wird, eine Episode lang in einer eigenen Welt der Insel: { island?: number (eine erzeugte Insel „Neuland n“, 0 bis 999999; ohne: die Graue Insel), start: { room, x, y } (wo die Figur startet; auf einer erzeugten Insel weglassbar), wood: { room, x, y } (wo das einzige Stück Treibholz liegt; auf einer erzeugten Insel weglassbar: dann Start und Holz der Insel selbst), seed?: number (der Zufall der Welt, ganzzahlig ≥ 0, Standard 0), hold?: number (so viele Weltminuten muss das Feuer nach dem Bot noch brennen, 0 bis 60, Standard 0) } → { reached: boolean (das Feuer brennt, vom Bot genährt, auch nach hold Minuten), points: number (die Tool-Aufrufe des Bots) } oder { error } (die Episode ist ungültig). Ein Bot, der wirft oder länger als ${s.runMs / 1000} s braucht, hat die Episode nicht erreicht. Räume und Ausgänge der Grauen Insel wie oben (die einer erzeugten Insel kennst du nicht); jede Zelle x 1..22, y 1..14 ist Boden, außer dem Feuer. 1 Punkt; höchstens ${MAX_RUNS} Aufrufe pro Bot.`,
+	en: (s: HarnessSpec) => `- tools.run(args): plays the bot being rated for one episode in a world of the island of its own: { island?: number (a made island "Neuland n", 0 to 999999; without: the Graue Insel), start: { room, x, y } (where the figure starts; may be left out on a made island), wood: { room, x, y } (where the one piece of driftwood lies; may be left out on a made island: then the island's own start and wood), seed?: number (the world's chance, an integer ≥ 0, default 0), hold?: number (how many world minutes the fire must still burn after the bot, 0 to 60, default 0) } → { reached: boolean (the fire burns, fed by the bot, also after hold minutes), points: number (the bot's tool calls) } or { error } (the episode is not valid). A bot that throws or takes longer than ${s.runMs / 1000} s did not reach the episode. Rooms and exits of the Graue Insel as above (those of a made island you do not know); every cell x 1..22, y 1..14 is ground except the fire. 1 point; at most ${MAX_RUNS} calls per bot.`,
 };
 export const describeHarnessTools = (s: HarnessSpec, lang: "de" | "en"): string => (s.world === "island" ? ISLAND_DESCRIPTION : DESCRIPTION)[lang](s);
 
@@ -106,18 +106,23 @@ function islandTools(make: SandboxMaker, captured: string, s: HarnessSpec, impl:
 			if (m.total >= MAX_RUNS) throw new Error(`more than ${MAX_RUNS} runs`);
 			const a = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
 			m.total++; m.calls.run = (m.calls.run ?? 0) + 1; m.cost += RUN_COST;
-			const bad = toyCellError(a.start, "start") ?? toyCellError(a.wood, "wood");
+			const island = islandError(a.island);
+			if (island) return { error: island };
+			const w = worldOf(a.island as number | undefined);
+			// on a made island start and wood may be left out: the island's own episode
+			if (a.island !== undefined) { a.start ??= w.episode.start; a.wood ??= w.episode.wood; }
+			const bad = toyCellError(a.start, "start", w) ?? toyCellError(a.wood, "wood", w);
 			if (bad) return { error: bad };
 			const seed = a.seed === undefined ? 0 : Number(a.seed), hold = a.hold === undefined ? 0 : Number(a.hold);
 			if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) return { error: "seed: an integer from 0 to 2^32 - 1" };
 			if (!Number.isInteger(hold) || hold < 0 || hold > 60 || hold > MAX_TOY_WAIT) return { error: "hold: an integer from 0 to 60" };
 			const cell = (c: unknown) => { const o = c as Record<string, unknown>; return { room: String(o.room), x: Number(o.x), y: Number(o.y) }; };
-			const w = new ToyIsland(cell(a.start), [cell(a.wood)], seed), points = { n: 0 };
-			const sandbox = make({ timeoutMs: s.runMs, tools: toyTools(w, points), memoryLimitBytes: 64 * 1024 * 1024 });
+			const t = new ToyIsland(cell(a.start), [cell(a.wood)], seed, w), points = { n: 0 };
+			const sandbox = make({ timeoutMs: s.runMs, tools: toyTools(t, points), memoryLimitBytes: 64 * 1024 * 1024 });
 			try {
 				const r = await sandbox.execute(toolProgram(captured, "bot", impl.source));
 				const failed = !r.ok || typeof (r.value as { error?: unknown } | undefined)?.error === "string";
-				return { reached: !failed && w.reached(hold), points: points.n };
+				return { reached: !failed && t.reached(hold), points: points.n };
 			} catch { return { reached: false, points: points.n }; } finally { await sandbox.close().catch(() => {}); }
 		},
 	}];

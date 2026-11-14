@@ -3,6 +3,7 @@
 // is always the beacon of the Graue Bucht. The rooms, exits and cells are those of spaces-mmo/worlds/leuchtfeuer
 // (world.json); spaces-mmo/tests/arena.test.ts opens the episodes in the real world.
 import type { BotEpisode } from "./bottask.ts";
+import { explorer, explorerBot, surveyBot, tideWaiter } from "./explorer.ts";
 import type { Subgoal } from "./subgoals.ts";
 import type { HarnessSpec } from "./harnesstask.ts";
 
@@ -128,46 +129,54 @@ export const ANLEGER_VARIANTS: string[] = [
 // hold ranks it below the good ones; the hidden bad ones fail more narrowly still.
 const FEED2 = `s=await tools.look();const f=s.fires[0];await tools.act({line:"move "+f.x+" "+(f.y-1)});await tools.act({line:"lege holz ins feuer"});`;
 /** A bot that searches the rooms up to `depth` exits from its start, nearest first, then feeds the fire; `after` runs last. */
-const searchBot = (depth: number, after = "", reverse = false) => `async function bot(){${ROUTE}let s=await tools.look();let here=s.room.id;const order=[here],dist={[here]:0};for(let i=0;i<order.length;i++)for(const d of Object.values(MAP[order[i]]||{})${reverse ? ".reverse()" : ""})if(!(d in dist)){dist[d]=dist[order[i]]+1;if(dist[d]<=${depth})order.push(d)}for(const r of order){if(r!==here){for(const ex of route(here,r))await tools.act({line:ex});here=r;s=await tools.look()}const w=s.things.find(t=>t.name==="Treibholz");if(w){await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"});break}}for(const ex of route(here,"graue-bucht"))await tools.act({line:ex});${FEED2}${after}}`;
+export const searchBot = (depth: number, after = "", reverse = false) => `async function bot(){${ROUTE}let s=await tools.look();let here=s.room.id;const order=[here],dist={[here]:0};for(let i=0;i<order.length;i++)for(const d of Object.values(MAP[order[i]]||{})${reverse ? ".reverse()" : ""})if(!(d in dist)){dist[d]=dist[order[i]]+1;if(dist[d]<=${depth})order.push(d)}for(const r of order){if(r!==here){for(const ex of route(here,r))await tools.act({line:ex});here=r;s=await tools.look()}const w=s.things.find(t=>t.name==="Treibholz");if(w){await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"});break}}for(const ex of route(here,"graue-bucht"))await tools.act({line:ex});${FEED2}${after}}`;
 /** A bot that waits for the tide in the Graue Bucht instead of searching: `take` picks the piece up. */
 const tideBot = (take: string) => `async function bot(){${ROUTE}let s=await tools.look();for(const ex of route(s.room.id,"graue-bucht"))await tools.act({line:ex});await tools.wait({minutes:60});${take}${FEED2}}`;
 
 export const PLANNER_HARNESS: HarnessSpec = {
 	target: "bot", runMs: 3000, world: "island",
-	good: [{ label: "the reference (searches the whole island)", source: searchBot(99) }],
+	good: [{ label: "the reference (explores any island, remembers it, plans)", source: explorerBot }],
 	bad: [
 		{ label: "knows the shown episodes by heart", source: ISLAND_VARIANTS[2]! },
-		{ label: "looks only in its start room and the next ones", source: searchBot(1) },
-		{ label: "lets the fire go out right after", source: searchBot(99, `await tools.wait({minutes:9})`) },
-		{ label: "waits for the tide where it lands with seed 0", source: tideBot(`await tools.act({line:"move 8 10"});await tools.act({line:"nimm treibholz"});`) },
+		{ label: "looks only in its start room and the next ones", source: explorer({ depth: 1 }) },
+		{ label: "lets the fire go out right after", source: explorer({ after: `await tools.wait({minutes:9})` }) },
+		{ label: "waits for the tide where it lands with seed 0", source: tideWaiter() },
+		{ label: "knows only the map of the Graue Insel", source: searchBot(99) },
 	],
 	hiddenGood: [
-		{ label: "hidden good 1", source: ISLAND_VARIANTS[1]! },
-		{ label: "hidden good 2", source: searchBot(99, "", true) },
+		{ label: "hidden good 1", source: surveyBot },
+		{ label: "hidden good 2", source: explorer({ reverse: true }) },
 	],
 	hiddenBad: [
-		{ label: "hidden bad 1", source: searchBot(2) },
-		{ label: "hidden bad 2", source: searchBot(99, `await tools.wait({minutes:7})`) },
-		{ label: "hidden bad 3", source: tideBot(`s=await tools.look();const w=s.things[0];if(w){await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"})}`) },
+		{ label: "hidden bad 1", source: explorer({ depth: 2 }) },
+		{ label: "hidden bad 2", source: explorer({ after: `await tools.wait({minutes:7})` }) },
+		{ label: "hidden bad 3", source: tideWaiter(true) },
+		{ label: "hidden bad 4", source: searchBot(99, "", true) },
 	],
 };
 
-// The scripted harnesses: two correct ones (every room's farthest piece with three seeds and a hold; the same with one
-// seed per start, cheaper), and one blind to each lesson.
+// The scripted harnesses: two correct ones (every room's farthest piece on the Graue Insel and three made islands with
+// their own episodes, three seeds and a hold; the same with one seed per episode, cheaper), and one blind to each lesson.
 const FAR = `${ROUTE}const far=(a)=>{let best=a,n=0;for(const r of Object.keys(MAP)){const k=route(a,r).length;if(k>n){n=k;best=r}}return best};`;
 const RATE = (episodes: string, seeds: string, hold: number) => `async function rate(){${FAR}let n=0;const eps=${episodes};for(const [i,e] of eps.entries())for(const seed of ${seeds}){const r=await tools.run({...e,seed,hold:${hold}});if(r.reached)n++}return n}`;
 const FAR_EPS = `Object.keys(MAP).map(r=>({start:{room:r,x:12,y:8},wood:{room:far(r),x:5,y:5}}))`;
+const MADE = `[11,12,13].map(island=>({island}))`;
+const ALL_EPS = `[...${FAR_EPS},...${MADE}]`;
 export const PLANNER_RATERS: string[] = [
-	// correct: every start room, the wood in the room farthest from it, seeds 0 to 2, hold 5 (24 runs)
-	RATE(FAR_EPS, "[0,1,2]", 5),
-	// correct and cheaper: the same episodes, one seed each, in turn 0, 1, 2 (8 runs)
-	`async function rate(){${FAR}let n=0;for(const [i,r] of Object.keys(MAP).entries()){const x=await tools.run({start:{room:r,x:12,y:8},wood:{room:far(r),x:5,y:5},seed:i%3,hold:5});if(x.reached)n++}return n}`,
-	// wrong: only the shown episodes (the bot that knows them by heart, the one that looks near its start pass)
+	// correct: every start room of the Graue Insel with the wood in the room farthest from it, and three made islands,
+	// seeds 0 to 2, hold 5 (33 runs)
+	RATE(ALL_EPS, "[0,1,2]", 5),
+	// correct and cheaper: the same episodes, one seed each, in turn 0, 1, 2 (11 runs)
+	`async function rate(){${FAR}let n=0;for(const [i,e] of ${ALL_EPS}.entries()){const x=await tools.run({...e,seed:i%3,hold:5});if(x.reached)n++}return n}`,
+	// wrong: only the shown episodes (the bot that knows them by heart, the one that looks near its start and the one
+	// with the Graue Insel's map pass)
 	RATE(`[{start:{room:"graue-bucht",x:10,y:8},wood:{room:"graue-bucht",x:5,y:7}},{start:{room:"fischerdorf",x:12,y:8},wood:{room:"fischerdorf",x:5,y:5}},{start:{room:"klippenpfad",x:2,y:8},wood:{room:"graue-bucht",x:17,y:9}}]`, "[0,1,2]", 5),
 	// wrong: one seed (the tide waiter passes)
-	RATE(FAR_EPS, "[0]", 5),
+	RATE(ALL_EPS, "[0]", 5),
 	// wrong: no hold (the bot that lets the fire go out passes)
-	RATE(FAR_EPS, "[0,1,2]", 0),
+	RATE(ALL_EPS, "[0,1,2]", 0),
 	// wrong: the wood always in the start room (the near searcher passes)
-	RATE(`Object.keys(MAP).map(r=>({start:{room:r,x:12,y:8},wood:{room:r,x:5,y:5}}))`, "[0,1,2]", 5),
+	RATE(`[...Object.keys(MAP).map(r=>({start:{room:r,x:12,y:8},wood:{room:r,x:5,y:5}})),...[11,12,13].map(island=>({island,wood:{room:"n"+island+"-0",x:5,y:5},start:{room:"n"+island+"-0",x:12,y:8}}))]`, "[0,1,2]", 5),
+	// wrong: only the Graue Insel (the bot with its map passes)
+	RATE(FAR_EPS, "[0,1,2]", 5),
 ];

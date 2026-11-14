@@ -17,7 +17,7 @@ export const MAX_BOT_CALLS = 300;
 export type BotCell = { room: string; x: number; y: number };
 /** One episode of a planning task (docs/codemode-planung.en.md): where the figure starts and what lies where. A sample
  *  episode is in the prompt and its verdict says what happened; of a hidden one the verdict says only reached or not. */
-export type BotEpisode = { id: string; kind: "sample" | "holdout"; start?: BotCell; setup?: { clear?: string[]; items?: Array<{ proto: string } & BotCell> }; text: { de: string; en: string } };
+export type BotEpisode = { id: string; kind: "sample" | "holdout"; /** a task on toy islands (`BotSpec.toy`): the made island "Neuland n" (toyisland.ts genIsland), none for the Graue Insel */ island?: number; start?: BotCell; setup?: { clear?: string[]; items?: Array<{ proto: string } & BotCell> }; text: { de: string; en: string } };
 /** What a verdict keeps of one episode: reached per seed, the points of its runs; `skipped`: the hidden ones did not run
  *  because no sample episode was reached. Only sample episodes keep the arena's detail. */
 export type EpisodeResult = { id: string; kind: "sample" | "holdout"; reached: boolean[]; cost: number; skipped?: true; detail?: string; /** a sample episode's way (its first seed), from the arena's `path`; the judge host stores it as a BotEpisode entry, not in the verdict */ path?: PathStep[]; cut?: true; /** the jumps between remembered paths its recall answers took (memory view) */ links?: Array<[PathStep, PathStep]>; /** a sample episode of a contribution with subgoals: how many of them its first seed reached, in turn */ subgoals?: number; /** and the cells where (BotEpisode entries, not the verdict) */ subgoalAt?: PathStep[] };
@@ -44,6 +44,8 @@ export type BotSpec = {
 	subgoals?: true;
 	/** The plans scripted agents pick from (one at random per turn), with their subgoals. */
 	plans?: Array<{ text: string; subgoals: Subgoal[] }>;
+	/** Played on toy islands in the judge's own process (toyarena.ts), not in the arena: every judge takes it. */
+	toy?: true;
 };
 
 /** How many seeds an episode runs with: one when the bot cannot wait (the world is then the same for every seed), three
@@ -60,6 +62,8 @@ export class ArenaDown extends Error {}
 
 /** The arena's address, or null when this process has none (it then neither offers nor judges bot tasks). */
 export const arenaAddress = (): string | null => process.env.CODEMODE_ARENA?.trim() || null;
+/** Whether a task needs the arena: a bot task, unless it plays toy islands (`BotSpec.toy`). */
+export const needsArena = (t: { kind?: string; bot?: BotSpec }): boolean => t.kind === "bot" && !t.bot?.toy;
 
 // ---- the arena's client: JSON lines, answers by id ------------------------------------------------------------
 export type Arena = { ask(op: string, args?: Record<string, unknown>): Promise<Record<string, any>>; close(): void; /** the connection broke or a call went unanswered */ broken(): boolean };

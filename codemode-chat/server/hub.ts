@@ -22,7 +22,7 @@ import { limitOf, maxTimeoutMs, plain, sandboxSlot, sourceProblem, testRule, typ
 import { archive, earlierLeaseMs, EARLIER_CAP, setBest, validMs } from "./results.ts";
 import { endRun, readRun, startSpaceRun, type RunEntry, type RunInfo, type RunMode, type RunParams } from "./run.ts";
 import { addNote, answersOf, bestOf, enqueueCandidate, execTarget, modelInfoOf, isSolved, planTurn, rid, scoresOf, systemLine, taskEntries, vetoesOf, type Contribution } from "./room.ts";
-import { arenaAddress, type PathStep, type RoomMap } from "./bottask.ts";
+import { arenaAddress, needsArena, type PathStep, type RoomMap } from "./bottask.ts";
 import { MAX_MEMORY } from "./memory.ts";
 import { subgoalsOf, subgoalText, type Subgoal } from "./subgoals.ts";
 /** One sample episode's way, as the panel of a planning contribution draws it. */
@@ -694,7 +694,7 @@ export class CodeChatHub {
 		if (o.data) return this.#setDataTask(s, o.data, o.client);
 		let task = o.custom ? customTask({ fn: clip(o.custom.fn, 41), prompt: clip(o.custom.prompt, 600), cases: o.custom.cases, timeoutS: o.custom.timeoutS, ...(typeof o.custom.check === "string" ? { check: o.custom.check } : {}) }) : taskById(String(o.taskId));
 		if (!task) throw new Error("Unknown task");
-		if (task.kind === "bot" && !arenaAddress()) throw new Error(NO_ARENA);
+		if (needsArena(task) && !arenaAddress()) throw new Error(NO_ARENA);
 		if (await this.#runNow(s)) throw new Error("A run is active; stop it first");
 		// the active custom task once more with only another time limit: change it in place, the attempts stay
 		const t = task;
@@ -823,7 +823,7 @@ export class CodeChatHub {
 	async submitCode(id: string, author: string, source: string): Promise<string> {
 		const s = await this.session(id);
 		if (isText(s.task)) throw new Error("This block is a text task: answers come from the agents on the work board");
-		if (s.task.kind === "bot" && !arenaAddress()) throw new Error(NO_ARENA);
+		if (needsArena(s.task) && !arenaAddress()) throw new Error(NO_ARENA);
 		if (!this.allow(s, "code", 20)) throw new Error("Too many submissions, slow down");
 		const src = String(source ?? ""), problem = sourceProblem(src);
 		if (problem) throw new Error(problem);
@@ -871,7 +871,7 @@ export class CodeChatHub {
 		 *  counts against the day's allowance of their address. Without it (tests, scripts in-process) it counts as admin. */
 		client?: { ip: string; admin: boolean } }): Promise<void> {
 		const s = await this.session(id);
-		if (s.task.kind === "bot" && !arenaAddress()) throw new Error(NO_ARENA);
+		if (needsArena(s.task) && !arenaAddress()) throw new Error(NO_ARENA);
 		if (!this.allow(s, "run", 6)) throw new Error("Too many runs, slow down");
 		const int = (v: unknown, dflt: number, min: number, max: number) => Math.min(max, Math.max(min, Math.floor(Number(v ?? dflt)) || (min > 0 ? min : 0)));
 		const agents = int(o.agents, 4, 1, LIMITS.agents), gens = int(o.gens, 3, 1, LIMITS.gens), perAgent = int(o.perAgent, 1, 1, LIMITS.perAgent), polish = int(o.polish, 1, 0, LIMITS.polish);

@@ -36,7 +36,7 @@ type EpisodePath = { episode: string; reached: boolean[]; cost: number; path: Pa
 /** A subgoal of the plan a contribution followed (server/subgoals.ts). */
 type Subgoal = { room?: string; near?: { x: number; y: number }; holds?: string };
 const subgoalText = (g: Subgoal): string => [g.room ? `in ${g.room}` : "", g.near ? `near ${g.near.x},${g.near.y}` : "", g.holds ? `${g.holds} holds` : ""].filter(Boolean).join(", ");
-type RoomMap = { room: string; name: string; map?: { x: number; y: number }; ground: string[]; decor?: string[]; walk: Record<string, boolean>; exits: Array<{ name: string; x: number; y: number; to: string }>; fires: Array<{ beaconId: string; x: number; y: number }> };
+type RoomMap = { room: string; name: string; island?: string; map?: { x: number; y: number }; ground: string[]; decor?: string[]; walk: Record<string, boolean>; exits: Array<{ name: string; x: number; y: number; to: string }>; fires: Array<{ beaconId: string; x: number; y: number }> };
 type Cell = { room: string; x: number; y: number };
 type EpisodeDef = { id: string; kind: "sample" | "holdout"; text?: L; start?: Cell; items?: Array<Cell & { proto: string }> };
 /** `rejected`: the note of a contribution that was rejected; the agents no longer get it. */
@@ -103,32 +103,42 @@ function groundClass(k: string, walk: boolean): string {
 	if (!walk) return k === "#" ? "pm-wall" : "pm-water";
 	return k === "," ? "pm-grass" : k === ":" ? "pm-way" : k === "_" ? "pm-floor" : "pm-sand";
 }
-/** Where each room of a room map sits: the rooms on the atlas by their map place, those without one in a row below;
- *  `px`/`py` the centre of a cell in the drawing. */
+/** Where each room of a room map sits: the rooms on the atlas by their map place, island under island (made islands,
+ *  docs/codemode-planung.en.md step 6), those without a place in a row below; `px`/`py` the centre of a cell in the
+ *  drawing, `islands` where each island's name goes when there are several. */
 function atlasOf(rooms: RoomMap[]) {
-	// the rooms on the atlas: their map place, those without one in a row below
-	const placed = rooms.filter((r) => r.map), minX = Math.min(...placed.map((r) => r.map!.x), 0), minY = Math.min(...placed.map((r) => r.map!.y), 0);
 	const w = Math.max(...rooms.map((r) => r.ground[0]?.length ?? 0)), h = Math.max(...rooms.map((r) => r.ground.length));
-	const rows = placed.length ? Math.max(...placed.map((r) => r.map!.y)) - minY + 1 : 0;
-	const at = new Map<string, { x: number; y: number }>();
+	// the placed rooms by island, in the order they first come
+	const groups = new Map<string, RoomMap[]>();
+	for (const r of rooms) if (r.map) groups.set(r.island ?? "", [...(groups.get(r.island ?? "") ?? []), r]);
+	const at = new Map<string, { x: number; y: number }>(), islands: Array<{ name: string; y: number }> = [];
+	const ISLAND_GAP = groups.size > 1 ? 0.45 : 0;
+	let top = 0;
+	for (const [name, g] of groups) {
+		const mx = Math.min(...g.map((r) => r.map!.x)), my = Math.min(...g.map((r) => r.map!.y)), rows = Math.max(...g.map((r) => r.map!.y)) - my + 1;
+		top += ISLAND_GAP;
+		islands.push({ name, y: top });
+		for (const r of g) at.set(r.room, { x: r.map!.x - mx, y: r.map!.y - my + top });
+		top += rows;
+	}
 	let spare = 0;
-	for (const r of rooms) at.set(r.room, r.map ? { x: r.map.x - minX, y: r.map.y - minY } : { x: spare++, y: rows });
-	const used = [...at.values()], ux = Math.min(...used.map((p) => p.x)), uy = Math.min(...used.map((p) => p.y));
-	for (const [k, p] of at) at.set(k, { x: p.x - ux, y: p.y - uy });
+	for (const r of rooms) if (!r.map) at.set(r.room, { x: spare++, y: top });
 	const cols = Math.max(...[...at.values()].map((p) => p.x)) + 1, lines = Math.max(...[...at.values()].map((p) => p.y)) + 1;
 	const roomW = w * CELL, roomH = h * CELL, W = cols * (roomW + GAP) - GAP, H = lines * (roomH + GAP) - GAP;
 	const ox = (room: string) => at.get(room)!.x * (roomW + GAP), oy = (room: string) => at.get(room)!.y * (roomH + GAP);
 	const px = (s: { room: string; x: number } | PathStep) => (Array.isArray(s) ? ox(s[0]) + (s[1] + 0.5) * CELL : ox(s.room) + (s.x + 0.5) * CELL);
 	const py = (s: { room: string; y: number } | PathStep) => (Array.isArray(s) ? oy(s[0]) + (s[2] + 0.5) * CELL : oy(s.room) + (s.y + 0.5) * CELL);
+	const islandAt = groups.size > 1 ? islands.map((i) => ({ name: i.name, x: 0, y: i.y * (roomH + GAP) - 6 })) : [];
 	const known = (room: string) => at.has(room);
-	return { W, H, ox, oy, px, py, known, roomW, roomH };
+	return { W, H, ox, oy, px, py, known, roomW, roomH, islands: islandAt };
 }
 
 /** The rooms of a room map: their ground (runs of one kind per row), decor, exits, fires, frame and name. */
 function AtlasRooms({ rooms, t }: { rooms: RoomMap[]; t: Tr }) {
-	const { ox, oy, px, py, roomW, roomH } = atlasOf(rooms);
+	const { ox, oy, px, py, roomW, roomH, islands } = atlasOf(rooms);
 	return (
 		<>
+			{islands.map((i) => <text key={`island-${i.name}`} className="pm-island" x={i.x + 2} y={i.y}>{i.name}</text>)}
 				{rooms.map((r) => (
 				<g key={r.room}>
 					{r.ground.flatMap((row, y) => {

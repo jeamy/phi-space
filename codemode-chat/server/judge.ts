@@ -15,6 +15,7 @@ import { pathToFileURL } from "node:url";
 import type { Task } from "./tasks.ts";
 import { covers, memoryIdOf, recall, type MemoryPath } from "./memory.ts";
 import { subgoalText, type Subgoal } from "./subgoals.ts";
+import { toyArena } from "./toyarena.ts";
 import { ArenaDown, arenaAddress, arenaClient, botArg, botCall, BOT_COST, botToolNames, botTools, episodeSeed, MAX_BOT_CALLS, seedsOf, type Arena, type BotEpisode, type BotSpec, type BotTool, type EpisodeResult, type PathStep, type RoomMap } from "./bottask.ts";
 import { Diverged, LogDown, runDurable, type CallLog, type LoggedCall, type RunHead } from "./durable-run.ts";
 import { harnessTools, type HarnessSpec, type Impl } from "./harnesstask.ts";
@@ -370,9 +371,10 @@ async function judgeBot(cm: Codemode, task: Task & { bot: BotSpec }, source: str
  *  reached or not: no detail, no error text. */
 async function judgeEpisodes(cm: Codemode, task: Task & { bot: BotSpec }, source: string, memory: MemoryPath[] = [], plan: Subgoal[] = []): Promise<Verdict> {
 	const b = task.bot, eps = b.episodes!, limit = limitOf(task), seeds = seedsOf(b), names = botToolNames(b);
-	const address = arenaAddress();
+	// toy islands are played here (toyarena.ts); every other planning task in the arena
+	const address = b.toy ? "toy" : arenaAddress();
 	if (!address) return { ok: false, ms: limit, error: "this judge has no arena (CODEMODE_ARENA)", passed: 0, total: eps.length, cases: [] };
-	const arena = await arenaClient(address);
+	const arena = b.toy ? toyArena() : await arenaClient(address);
 	const total: Meter = newMeter();
 	let msAll = 0;
 	try {
@@ -431,7 +433,7 @@ async function playEpisode(cm: Codemode, arena: Arena, task: Task & { bot: BotSp
 	try {
 		// the arena watches the plan's subgoals only where the path is kept: a hidden episode keeps none
 		const watch = withPath && plan.length ? { subgoals: plan } : {};
-		try { world = String((await arena.ask("open", { ...(e.start ? { start: e.start } : {}), ...(e.setup ? { setup: e.setup } : {}), ...(seed !== undefined ? { seed } : {}), ...watch })).world); }
+		try { world = String((await arena.ask("open", { ...(e.island !== undefined ? { island: e.island } : {}), ...(e.start ? { start: e.start } : {}), ...(e.setup ? { setup: e.setup } : {}), ...(seed !== undefined ? { seed } : {}), ...watch })).world); }
 		catch (err) { throw err instanceof ArenaDown ? err : new ArenaDown(`the arena could not open a world: ${(err as Error).message}`); }
 		// recall answers from the candidate's frozen memory; the jumps it took are kept for the memory view
 		const links: Array<[PathStep, PathStep]> = [], here = world;

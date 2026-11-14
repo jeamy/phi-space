@@ -9,6 +9,7 @@ import { EARLIER_CAP, rankCmp, validMs } from "./results.ts";
 import { HELD_WAIT_MS, readExisting } from "./space.ts";
 import { isText, taskById, taskFromSpec, type Task } from "./tasks.ts";
 import { freezeMemory, runFreezeId } from "./memory.ts";
+import { needsArena } from "./bottask.ts";
 
 /** What a room may hold at most: every read of it stays complete (a read limit never cuts entries off). */
 export const ROOM_LIMITS = { contributions: 1000, notes: 300, blocks: 60, messages: 500 };
@@ -128,7 +129,7 @@ export async function contributionCount(space: SpaceLike, session: string): Prom
 }
 
 /** Which judges take a task's contributions: "bot" only those with an arena (judge-host.ts), "code" every judge. */
-export const laneOf = (taskId: string): "code" | "bot" => (taskById(taskId)?.kind === "bot" ? "bot" : "code");
+export const laneOf = (taskId: string): "code" | "bot" => { const t = taskById(taskId); return t && needsArena(t) ? "bot" : "code"; };
 
 /** Hands a contribution to the judges: a CodeCandidate in the space (in `txn`, it becomes visible with its commit).
  *  The candidate names its task by the block (judges read the CodeTask): a custom task's cases next to the source
