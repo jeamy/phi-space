@@ -9,6 +9,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { liveModels } from "../../agent/src/live-models.ts";
 import { isText, type Task } from "./tasks.ts";
+import { extractSubgoals, MAX_SUBGOALS, type Subgoal } from "./subgoals.ts";
 
 const CALLS_PER_MIN = Number(process.env.CODEMODE_LLM_PER_MIN ?? 20);
 const CALLS_PER_DAY = Number(process.env.CODEMODE_LLM_PER_DAY ?? 500);
@@ -129,7 +130,7 @@ export type Finding = { author: string; via: string; queries: string[]; sources:
 /** An earlier task's accepted result: the question (or task), the result (answer text or code), who accepted it. */
 export type Earlier = { question: string; result: string; by: string };
 /** A plan from the planning round: who proposed it, how the team rated it (1 to 5), what it says. */
-export type PlanRef = { author: string; via: string; score: number | null; text: string };
+export type PlanRef = { author: string; via: string; score: number | null; text: string; /** a task with subgoals: the plan's, as tools.subgoals gives them */ subgoals?: Subgoal[] };
 
 const clipText = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "\n// … (cut)" : s);
 const showValue = (v: unknown) => { const s = JSON.stringify(v); return s === undefined ? "undefined" : s.length > 200 ? s.slice(0, 200) + "…" : s; };
@@ -245,8 +246,11 @@ export function teamPrompt(c: TeamContext): { system: string; user: string } {
 	else if (role === "improve" && c.target) parts.push(`Your job: IMPROVE this correct solution: make it ${t.kind === "tools" || t.kind === "bot" || t.kind === "harness" ? "cheaper in tool points, then faster" : "faster or simpler"}. It must stay correct on every case.\n${describeAttempt(c.target, true)}`);
 	else if (role === "revise" && c.target && c.critique) parts.push(`Your job: REVISE this attempt using the critique a teammate wrote about it. Take the critique seriously, but check it: if a point is wrong, say so in your NOTE.\n${describeAttempt(c.target, true)}\nCritique by ${c.critique.author} (${c.critique.via}):\n${c.critique.text}`);
 	else if (role === "merge" && c.target && c.partner) parts.push(`Your job: MERGE these two attempts into one that keeps what each does right; together they pass more cases than either alone.\nAttempt A: ${describeAttempt(c.target, true)}\nAttempt B: ${describeAttempt(c.partner, true)}`);
-	else if (c.plan) parts.push(`Your job: IMPLEMENT the plan the team chose in its planning round (proposed by ${c.plan.author}, ${c.plan.via}${c.plan.score !== null ? `, rated ${c.plan.score.toFixed(1)} of 5` : ""}). Follow it; where it is wrong or vague, decide sensibly and say so in your NOTE.\nPlan:\n${c.plan.text}`);
+	else if (c.plan) parts.push(`Your job: IMPLEMENT the plan the team chose in its planning round (proposed by ${c.plan.author}, ${c.plan.via}${c.plan.score !== null ? `, rated ${c.plan.score.toFixed(1)} of 5` : ""}). Follow it; where it is wrong or vague, decide sensibly and say so in your NOTE.\nPlan:\n${c.plan.text}${c.task.bot?.subgoals ? `\nIts subgoals, as tools.subgoals() gives them to the bot: ${c.plan.subgoals?.length ? JSON.stringify(c.plan.subgoals) : "none (the plan named no valid ones)"}` : ""}`);
 	else parts.push(`Your job: EXPLORE. Write a solution with an approach of your own${c.others?.length ? ", different from the attempts below where they fail" : ""}.`);
+	// a task with subgoals plans every turn: a repair or improvement follows its own plan too
+	const planUsed = !(role === "repair" && c.target) && !(role === "improve" && c.target) && !(role === "revise" && c.target && c.critique) && !(role === "merge" && c.target && c.partner);
+	if (c.plan && !planUsed && t.bot?.subgoals) parts.push(`Your plan for this turn (the bot's tools.subgoals() returns its subgoals: ${c.plan.subgoals?.length ? JSON.stringify(c.plan.subgoals) : "none"}):\n${c.plan.text}`);
 	if (c.others?.length) parts.push("Other attempts of the team (for reference; reuse what helps):\n" + c.others.map((a) => describeAttempt(a, false)).join("\n\n"));
 	parts.push("Answer with exactly one ```js block holding the complete function (and its helpers). After the block you may add ONE line `NOTE: …` (at most 300 characters) with an insight the next teammates should know.");
 	return {
@@ -313,15 +317,20 @@ export function proposePrompt(c: { task: Task; agent: number; notes?: Note[]; at
 			isText(c.task)
 				? "Propose ONE outline for the answer, as a plan for whoever writes it: the key points in order, what facts or reasoning each needs, how it meets every criterion, and the pitfalls. At most 10 short lines. Plain text."
 				: "Propose ONE approach, as a plan for whoever implements it: the algorithm and its key data structures, why it fits the time limit (estimate the work), the pitfalls, and how to check the result. At most 10 short lines, no code longer than 5 lines. Plain text.",
+			...(c.task.bot?.subgoals ? [SUBGOALS_ASK] : []),
 		].join("\n\n"),
 	};
 }
 
-export async function llmPropose(c: { task: Task; agent: number; notes?: Note[]; attempts?: Attempt[]; findings?: Finding[]; model?: string }): Promise<{ text: string; model: string; usage?: Usage }> {
+/** What a plan of a task with subgoals ends with (docs/codemode-planung.en.md, the subgoal role). */
+const SUBGOALS_ASK = `Then name the plan's subgoals as data: the rooms and conditions the bot passes on its way, in order, in a \`\`\`subgoals block holding a JSON array (at most ${MAX_SUBGOALS}) of { "room"?: room id, "near"?: { "x", "y" } (within 3 cells; needs the room), "holds"?: "pack:<proto>" (the figure carries one) or "beacon:<id>" (the fire burns, fed by it) }. Each names a room or a condition; the judge reports how far the bot got along them. Example: [{ "holds": "pack:treibholz" }, { "room": "duenen" }]`;
+
+export async function llmPropose(c: { task: Task; agent: number; notes?: Note[]; attempts?: Attempt[]; findings?: Finding[]; model?: string }): Promise<{ text: string; model: string; usage?: Usage; subgoals?: Subgoal[] }> {
 	const p = proposePrompt(c);
-	const { text, model, usage } = await guardedCall(c.model, p.system, p.user, 700);
+	const { text: answer, model, usage } = await guardedCall(c.model, p.system, p.user, c.task.bot?.subgoals ? 1000 : 700);
+	const { text, subgoals } = c.task.bot?.subgoals ? extractSubgoals(answer) : { text: answer, subgoals: undefined };
 	const clean = text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim();
-	return { text: clean.length > 1500 ? clean.slice(0, 1499) + "…" : clean, model, usage };
+	return { text: clean.length > 1500 ? clean.slice(0, 1499) + "…" : clean, model, usage, ...(subgoals ? { subgoals } : {}) };
 }
 
 /** The planning round, step 2: an agent rates the others' proposals, 1 to 5, one line each. */

@@ -8,6 +8,7 @@ import { HELD_WAIT_MS } from "./space.ts";
 import type { Attempt, CritiqueRef, Earlier, Finding, PlanRef, Role, TeamContext, Usage } from "./llm.ts";
 import { blockTask, earlierFor, findingsOf, rankedProposals, teamView } from "./room.ts";
 import { isText, taskFromSpec, type Task } from "./tasks.ts";
+import { subgoalsOf } from "./subgoals.ts";
 
 export type CallKind = "contribute" | "critique" | "propose" | "vote" | "judge" | "research" | "verify" | "criteria" | "reviewCriteria";
 /** A request for a model call, as an agent writes it (and the model process takes it). */
@@ -45,7 +46,10 @@ async function team(space: SpaceLike, call: LlmCall): Promise<{ task: Task; atte
 async function planOf(space: SpaceLike, call: LlmCall): Promise<PlanRef | undefined> {
 	if (!call.proposalId || !call.runId) return undefined;
 	const p = (await rankedProposals(space, call.session, call.runId)).find((x) => x.proposalId === call.proposalId);
-	return p ? { author: p.author, via: p.via, score: p.score, text: p.text } : undefined;
+	if (!p) return undefined;
+	const task = await blockTask(space, call.session, call.blockId ?? "");
+	const subgoals = task?.bot?.subgoals ? await subgoalsOf(space, call.session, p.proposalId) : [];
+	return { author: p.author, via: p.via, score: p.score, text: p.text, ...(subgoals.length ? { subgoals } : {}) };
 }
 async function critiqueOf(space: SpaceLike, call: LlmCall): Promise<CritiqueRef | undefined> {
 	if (!call.critiqueId) return undefined;

@@ -152,6 +152,14 @@ test("an episode: the guest starts where it says, the setup lays out the driftwo
 		await c.ask("act", { world, line: "nimm treibholz" });
 		await c.ask("act", { world, line: "move 9 9" });
 		await c.ask("act", { world, line: "lege holz ins feuer" });
+		// the way it went: the start, the turns, the room it crossed into (a straight walk west is one step); it crosses
+		// while the fire burns (a fire gone out lets the fog close the ways that lead away from it)
+		assert.deepEqual((await c.ask("path", { world })).path, [["graue-bucht", 14, 9], ["graue-bucht", 9, 9]]);
+		await c.ask("act", { world, line: "move 23 8" });
+		const p = await c.ask("path", { world });
+		assert.equal(p.cut, false);
+		assert.deepEqual(p.path.slice(0, 2), [["graue-bucht", 14, 9], ["graue-bucht", 9, 9]]);
+		assert.deepEqual(p.path.slice(-2), [["graue-bucht", 23, 8], ["klippenpfad", 1, 8]], "to the exit's cell, then where it arrives");
 		// one piece burns 10 world minutes: it holds 5, not another 15
 		const held = await c.ask("score", { world, goal: "beacon:feuer-bucht", hold: 5 });
 		assert.equal(held.done, true, held.detail);
@@ -160,13 +168,6 @@ test("an episode: the guest starts where it says, the setup lays out the driftwo
 		assert.equal(gone.done, false, gone.detail);
 		assert.match(gone.detail, /not held 15 world minutes/);
 		assert.equal((await c.ask("score", { world, goal: "beacon:feuer-bucht", hold: 500 })).ok, false);
-		// the way it went: the start, the turns, the room it crossed into (a straight walk west is one step)
-		assert.deepEqual((await c.ask("path", { world })).path, [["graue-bucht", 14, 9], ["graue-bucht", 9, 9]]);
-		await c.ask("act", { world, line: "move 23 8" });
-		const p = await c.ask("path", { world });
-		assert.equal(p.cut, false);
-		assert.deepEqual(p.path.slice(0, 2), [["graue-bucht", 14, 9], ["graue-bucht", 9, 9]]);
-		assert.deepEqual(p.path.slice(-2), [["graue-bucht", 23, 8], ["klippenpfad", 1, 8]], "to the exit's cell, then where it arrives");
 		for (const [a, b] of p.path.slice(1, -1).map((s: any, i: number) => [p.path[i], s])) assert.ok(a[1] === b[1] || a[2] === b[2], `${a} → ${b} is a straight run`);
 		// a room's geometry needs no world
 		const m = await c.ask("map", { room: "graue-bucht" });
@@ -179,6 +180,40 @@ test("an episode: the guest starts where it says, the setup lays out the driftwo
 		assert.deepEqual(m.map, { x: 1, y: 1 });
 		assert.match(m.rev, /^[0-9a-f]{16}$/);
 		assert.equal((await c.ask("map", { room: "nowhere" })).ok, false);
+		await c.ask("close", { world });
+		await c.end();
+	} finally {
+		await arena.close();
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("subgoals: the arena marks each where the figure reached it, in turn; path gives the cells", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "arena-test-")), path = join(dir, "a.sock");
+	const arena = await startArena({ listen: `unix:${path}`, worlds: 1 });
+	try {
+		const c = await client(path);
+		for (const bad of [[{ room: "nowhere" }], [{ near: { x: 1, y: 1 } }], [{ holds: "steal:all" }], [{}], Array.from({ length: 13 }, () => ({ room: "duenen" }))]) {
+			const r = await c.ask("open", { subgoals: bad });
+			assert.equal(r.ok, false, JSON.stringify(bad));
+		}
+		const subgoals = [{ holds: "pack:treibholz" }, { room: "anleger" }, { room: "anleger", near: { x: 7, y: 5 } }, { room: "anleger", holds: "beacon:feuer-anleger" }];
+		const o = await c.ask("open", { start: { room: "duenen", x: 12, y: 8 }, setup: { clear: ["treibholz", "holzbuendel", "tran"], items: [{ proto: "treibholz", room: "duenen", x: 20, y: 5 }] }, seed: 3, subgoals });
+		assert.equal(o.ok, true, o.error);
+		const world = o.world, reached = async () => (await c.ask("path", { world })).subgoals;
+		assert.deepEqual(await reached(), []);
+		// the fire first: nothing, the wood comes first
+		await c.ask("act", { world, line: "move 20 5" });
+		assert.deepEqual(await reached(), []);
+		await c.ask("act", { world, line: "nimm treibholz" });
+		assert.deepEqual(await reached(), [["duenen", 20, 5]]);
+		await c.ask("act", { world, line: "move 12 15" });
+		assert.deepEqual(await reached(), [["duenen", 20, 5], ["anleger", 12, 1]]);
+		await c.ask("act", { world, line: "move 7 4" });
+		await c.ask("act", { world, line: "lege holz ins feuer" });
+		assert.deepEqual(await reached(), [["duenen", 20, 5], ["anleger", 12, 1], ["anleger", 7, 4], ["anleger", 7, 4]]);
+		assert.equal((await c.ask("score", { world, goal: "beacon:feuer-anleger", hold: 5 })).done, true);
+		assert.equal((await c.ask("score", { world, goal: "pack:treibholz" })).done, false, "the wood is in the fire");
 		await c.ask("close", { world });
 		await c.end();
 	} finally {

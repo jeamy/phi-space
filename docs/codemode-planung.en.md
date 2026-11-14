@@ -219,6 +219,47 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      without wood.
 4. **Subgoals.** The board role, `Subgoals`, the `subgoals` tool, the subgoal chain, and the task "Light the fire of
    Anleger".
+
+   *Done 2026-11-14* (`codemode-chat/server/subgoals.ts`):
+   - A subgoal is `{ room?, near?: { x, y }, holds? }`: the figure in `room` (any room without one), within 3 cells of
+     `near`, and `holds` true: a goal as `score` takes it (`beacon:<id>`, `feed:<id>:<n>`) or the new `pack:<proto>`.
+     It names a room or a predicate; at most 12 a plan. The room is optional, unlike the entry's sketch above: "carry
+     driftwood" belongs to no room.
+   - The arena's `open` takes `subgoals` and checks them as it does a start; after `open`, every `act` and `wait` it
+     marks the next one when it holds (several at once when they all do), and `path` gives the cells where each was
+     reached. The judge hands them over only for a sample episode's first seed, the one whose path is kept: hidden
+     episodes run without them and keep none.
+   - `Subgoals { session, blockId, runId, proposalId, author, via, subgoals }` belongs to the plan with the same
+     `proposalId` (a `CodeProposal`). On the work board the planning round's `propose` asks a task with subgoals for a
+     ```` ```subgoals ```` block (a JSON list) after the plan; the run writes it when it is valid, and the implementing
+     contributions follow it by their lineage's `proposalId`. In a run of generations every turn plans first: a model
+     agent with the same `propose` call, a scripted one with one of the task's plans (`bot.plans`), and the turn's
+     contribution follows that plan. So scripted agents plan in the tests without opening the board to them.
+   - `subgoals()` gives the bot its plan's subgoals for 0 points. The judge host reads them by the candidate's
+     `proposalId`. A sample episode reports `subgoals` (how many its first seed reached in turn) in the verdict, and its
+     `BotEpisode` entry also has `subgoalAt`, the cells. The case line reads "subgoals 1 of 3, stuck before 2 (in
+     duenen, pack:treibholz holds)": that is how critique sees which subgoal broke in which episode.
+   - The task "Light the fire of Anleger" (`beacon-anleger`) has nine episodes: the figure starts elsewhere on the
+     Graue Insel each time and the driftwood lies in another room. The Feuerkorb at 7,5 must hold 5 world minutes. The
+     prompt keeps the island's map. Fog does not block the way there: the way toward a fire that covers a room stays
+     open. It does block a search for wood away from it.
+   - Its scripted plans: one that searches the island for the wood (4 subgoals), one that expects it in the Dünen, and
+     one that goes to the fire first. Its variants: a follower that walks the plan's subgoals, a searcher that ignores
+     the plan, and one without wood. Results in the real arena:
+
+     | Variant and plan | Result | Points |
+     |---|---|---|
+     | Follower, search plan | 9/9 | 152 |
+     | Follower, Dünen plan | 1/9; S2 and S3 stuck before subgoal 1 | — |
+     | Follower, fire first | 9/9 | 195 |
+     | Searcher | 9/9 | 141 |
+   - View 5: the lineage of a contribution that followed subgoals shows a row of marks, one per subgoal, filled as far
+     as the share of sample episodes that got past it. Contributions of scripted agents now open their lineage too,
+     when they followed a plan. The panel's map draws each reached subgoal as a numbered mark in the path's colour. A
+     ring marks the plan's cell, where a subgoal names one.
+   - A fire gone out lets dense fog close the ways that lead away from it. The arena test of step 2 crossed into the
+     next room after the judge's hold had let the fire go out, and failed whenever the fog was dense. It now crosses
+     before the hold.
 5. **Harness task "Rate planners".**
 6. **A learned world model (only with a decision).** A process of its own, like the model process. It takes
    `Predict` entries and writes the answers, and the judge only replays recorded ones, as for Jev. It needs a new

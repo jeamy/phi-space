@@ -430,3 +430,15 @@ aside .about__text { max-height: 240px; overflow-y: auto; }
 .episodes__key--coverage { border-top: 2.4px dotted var(--path-2); }
 .memview { margin-top: 8px; }
 .pm-jump { stroke: var(--text-strong); stroke-width: 1.5; stroke-dasharray: 3 3; }
+/* subgoals (docs/codemode-planung.en.md, step 4): numbered marks on the path map, the chain in the lineage */
+.pm-sub circle { fill: var(--surface); stroke: var(--text-strong); stroke-width: 1.5; }
+.pm-sub text { fill: var(--text-strong); font-size: 7px; font-weight: 700; text-anchor: middle; }
+.pm-sub--on circle { fill: currentColor; stroke: var(--surface); }
+.pm-sub--on text { fill: var(--surface); }
+.chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 4px; }
+.chain__svg { overflow: visible; max-width: 100%; }
+.chain__mark { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; }
+.chain__fill { fill: var(--accent); }
+.chain__link { stroke: var(--line-strong); stroke-width: 1.5; }
+.chain__num { fill: var(--text-strong); font-size: 9px; font-weight: 700; text-anchor: middle; paint-order: stroke; stroke: var(--surface); stroke-width: 2px; }
+.chain__pct { fill: var(--muted); font-size: 9px; text-anchor: middle; }

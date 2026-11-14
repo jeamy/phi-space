@@ -58,7 +58,8 @@ async function answer(api: ModelApi, kind: CallKind, args: Record<string, unknow
 			if (!isText((args as { task: Task }).task)) { const problem = sourceProblem(v.source); if (problem) throw Object.assign(new Error(`the model's code cannot be handed in: ${problem}`), { usage: v.usage }); }
 			return { value: { source: v.source, model: v.model, ...(v.note ? { note: v.note } : {}), ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) };
 		}
-		case "critique": case "propose": { const v = await api[kind](a); return { value: { text: v.text, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
+		case "critique": { const v = await api.critique(a); return { value: { text: v.text, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
+		case "propose": { const v = await api.propose(a); return { value: { text: v.text, model: v.model, ...(v.subgoals ? { subgoals: v.subgoals } : {}), ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
 		case "vote": { const v = await api.vote(a); return { value: { scores: voteScores(args, v.scores), text: v.text, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
 		case "judge": { const v = await api.judge(a); return { value: { results: v.results, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
 		case "research": { const v = await api.research({ ...(args as object), search } as never); return { value: { queries: v.queries, sources: v.sources, text: v.text, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }

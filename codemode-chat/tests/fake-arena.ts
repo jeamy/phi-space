@@ -1,8 +1,10 @@
 // A stand-in for the arena of spaces-mmo (spaces-mmo/server/arena.ts) for the codemode tests: the same JSON lines, a
 // toy Graue Insel instead of a world (no import of spaces-mmo): the island's rooms and exits (server/island.ts), two
-// pieces of driftwood in the Graue Bucht, one fire there; `move`, an exit's name (`süd`, `go süd`), `nimm treibholz`,
+// pieces of driftwood in the Graue Bucht, a fire there and one at the Anleger; `move`, an exit's name (`süd`, `go süd`), `nimm treibholz`,
 // `lege holz ins feuer`; `open` takes an episode's start and setup, `score` a hold. A fed fire burns 10 world minutes.
 // `path` gives the cells after each command (no walk in between), `map` a toy room: sand, one row of sea, the exits.
+// `open` takes subgoals as the real arena does (room, near within 3 cells, holds: a beacon goal or pack:treibholz),
+// marks each in turn after every command, and `path` gives the cells where they were reached.
 // An exit lies on a cell at the room's edge (EXIT_CELL); a `move` onto it crosses as an exit command does, and the figure
 // arrives on the other side (ARRIVE), as in the game.
 // Its own test (spaces-mmo/tests/arena.test.ts) holds the real one.
@@ -13,15 +15,34 @@ import { join } from "node:path";
 import { ISLAND_ROOMS } from "../server/island.ts";
 
 type Cell = { room: string; x: number; y: number };
-type Toy = { at: Cell; wood: Cell[]; pack: number; fedAt: number | null; fed: boolean; pieces: number; waited: number; done: Map<string, Record<string, unknown>>; trail: Array<[string, number, number]> };
-const FIRE = { room: "graue-bucht", x: 9, y: 10 };
+type Sub = { room?: string; near?: { x: number; y: number }; holds?: string };
+type Toy = { at: Cell; wood: Cell[]; pack: number; fedAt: Record<string, number>; pieces: Record<string, number>; waited: number; done: Map<string, Record<string, unknown>>; trail: Array<[string, number, number]>; subgoals: Sub[]; reached: Array<[string, number, number]> };
+/** The fires by room: the Graue Bucht's and the Anleger's, as in Leuchtfeuer. */
+const FIRES: Record<string, { beaconId: string; name: string; x: number; y: number }> = { "graue-bucht": { beaconId: "feuer-bucht", name: "Leuchtfeuer", x: 9, y: 10 }, anleger: { beaconId: "feuer-anleger", name: "Feuerkorb am Anleger", x: 7, y: 5 } };
+const fireById = (id: string) => Object.values(FIRES).find((f) => f.beaconId === id);
 /** A fed fire burns this many world minutes after its last piece. */
 const BURN = 10;
 /** Where the island's rooms sit on the atlas (as in Leuchtfeuer). */
 const TOY_ATLAS: Record<string, { x: number; y: number }> = { fischerdorf: { x: 0, y: 1 }, "graue-bucht": { x: 1, y: 1 }, klippenpfad: { x: 2, y: 1 }, klippenkopf: { x: 3, y: 1 }, torfmoor: { x: 0, y: 2 }, duenen: { x: 1, y: 2 }, salzwiesen: { x: 2, y: 2 }, anleger: { x: 1, y: 3 } };
 const EXIT_CELL: Record<string, { x: number; y: number }> = { nord: { x: 12, y: 0 }, "süd": { x: 12, y: 15 }, west: { x: 0, y: 8 }, ost: { x: 23, y: 8 } };
 const ARRIVE: Record<string, { x: number; y: number }> = { nord: { x: 12, y: 14 }, "süd": { x: 12, y: 1 }, west: { x: 22, y: 8 }, ost: { x: 1, y: 8 } };
-const litAt = (t: Toy, minute: number) => t.fedAt !== null && minute < t.fedAt + BURN;
+const litAt = (t: Toy, minute: number, beacon = "feuer-bucht") => t.fedAt[beacon] !== undefined && minute < t.fedAt[beacon]! + BURN;
+/** A goal as the arena scores it, now. */
+const holdsNow = (t: Toy, goal: string): boolean => {
+	if (goal === "pack:treibholz") return t.pack > 0;
+	const b = /^beacon:([\w-]+)$/.exec(goal);
+	if (b) return litAt(t, t.waited, b[1]!) && !!t.pieces[b[1]!];
+	const f = /^feed:([\w-]+):(\d+)$/.exec(goal);
+	return !!f && (t.pieces[f[1]!] ?? 0) >= Number(f[2]);
+};
+const passed = (t: Toy) => {
+	for (let g = t.subgoals[t.reached.length]; g; g = t.subgoals[t.reached.length]) {
+		if (g.room && g.room !== t.at.room) return;
+		if (g.near && Math.abs(g.near.x - t.at.x) + Math.abs(g.near.y - t.at.y) > 3) return;
+		if (g.holds && !holdsNow(t, g.holds)) return;
+		t.reached.push([t.at.room, t.at.x, t.at.y]);
+	}
+};
 
 export async function startFakeArena(o: { openMs?: number; /** the arena goes away at the first act */ dropOnAct?: boolean; /** each look/act/wait takes this long */ opMs?: number } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), "fake-arena-")), path = join(dir, "arena.sock");
@@ -47,8 +68,9 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 		}
 		if (/^lege (treib)?holz ins feuer$/.test(line)) {
 			if (!t.pack) return ["Du hast kein Treibholz dabei."];
-			if (t.at.room !== FIRE.room || Math.abs(t.at.x - FIRE.x) + Math.abs(t.at.y - FIRE.y) > 1) return ["Dafür musst du direkt neben dem Feuer stehen."];
-			t.pack--; t.fedAt = t.waited; t.fed = true; t.pieces++; return ["Du legst Treibholz ins Leuchtfeuer. Es brennt noch etwa 10 Minuten.", "Das Leuchtfeuer flammt auf."];
+			const fire = FIRES[t.at.room];
+			if (!fire || Math.abs(t.at.x - fire.x) + Math.abs(t.at.y - fire.y) > 1) return ["Dafür musst du direkt neben dem Feuer stehen."];
+			t.pack--; t.fedAt[fire.beaconId] = t.waited; t.pieces[fire.beaconId] = (t.pieces[fire.beaconId] ?? 0) + 1; return [`Du legst Treibholz ins ${fire.name}. Es brennt noch etwa 10 Minuten.`, `${fire.name} flammt auf.`];
 		}
 		return [`Unbekannter Befehl: ${line}`];
 	};
@@ -61,7 +83,9 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 			const wood: Cell[] = setup?.clear?.includes("treibholz") ? [] : [{ room: "graue-bucht", x: 5, y: 7 }, { room: "graue-bucht", x: 17, y: 9 }];
 			for (const i of setup?.items ?? []) wood.push({ room: i.room, x: i.x, y: i.y });
 			const at = start ? { room: start.room, x: start.x, y: start.y } : { room: "graue-bucht", x: 12, y: 8 };
-			worlds.set(id, { at, wood, pack: 0, fedAt: null, fed: false, pieces: 0, waited: 0, done: new Map(), trail: [[at.room, at.x, at.y]] });
+			const t: Toy = { at, wood, pack: 0, fedAt: {}, pieces: {}, waited: 0, done: new Map(), trail: [[at.room, at.x, at.y]], subgoals: Array.isArray(r.subgoals) ? r.subgoals as Sub[] : [], reached: [] };
+			passed(t);
+			worlds.set(id, t);
 			lastOpen = r;
 			return { world: id, charId: `c-${id}`, name: "Strandläufer-1" };
 		}
@@ -70,7 +94,7 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 			if (!def) throw new Error(`no room ${room}`);
 			maps++;
 			const exits = Object.entries(def.exits).map(([name, to]) => ({ name, ...EXIT_CELL[name]!, to }));
-			return { world: "toy", room, name: def.name, island: "Graue Insel", map: TOY_ATLAS[room] ?? { x: 0, y: 0 }, ground: ["~".repeat(24), ...Array.from({ length: 15 }, () => ".".repeat(24))], walk: { "~": false, ".": true }, exits, fires: room === FIRE.room ? [{ beaconId: "feuer-bucht", x: FIRE.x, y: FIRE.y }] : [], rev: "toy0000000000000" };
+			return { world: "toy", room, name: def.name, island: "Graue Insel", map: TOY_ATLAS[room] ?? { x: 0, y: 0 }, ground: ["~".repeat(24), ...Array.from({ length: 15 }, () => ".".repeat(24))], walk: { "~": false, ".": true }, exits, fires: FIRES[room] ? [{ beaconId: FIRES[room]!.beaconId, x: FIRES[room]!.x, y: FIRES[room]!.y }] : [], rev: "toy0000000000000" };
 		}
 		const t = worlds.get(String(r.world));
 		if (!t) throw new Error("no such world");
@@ -88,25 +112,30 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 		switch (r.op) {
 			case "look": {
 				const room = t.at.room;
-				return { room: { id: room, name: ISLAND_ROOMS[room]?.name ?? room }, at: { x: t.at.x, y: t.at.y }, exits: Object.keys(ISLAND_ROOMS[room]?.exits ?? {}).map((name) => ({ name, ...EXIT_CELL[name]! })), things: t.wood.filter((w) => w.room === room).map((w) => ({ name: "Treibholz", x: w.x, y: w.y })), fires: room === FIRE.room ? [{ name: "Leuchtfeuer", x: FIRE.x, y: FIRE.y, lit: litAt(t, t.waited) }] : [], pack: t.pack ? [{ name: "Treibholz", count: t.pack }] : [], time: `Tag 1, 08:${String(t.waited).padStart(2, "0")}` };
+				return { room: { id: room, name: ISLAND_ROOMS[room]?.name ?? room }, at: { x: t.at.x, y: t.at.y }, exits: Object.keys(ISLAND_ROOMS[room]?.exits ?? {}).map((name) => ({ name, ...EXIT_CELL[name]! })), things: t.wood.filter((w) => w.room === room).map((w) => ({ name: "Treibholz", x: w.x, y: w.y })), fires: FIRES[room] ? [{ name: FIRES[room]!.name, x: FIRES[room]!.x, y: FIRES[room]!.y, lit: litAt(t, t.waited, FIRES[room]!.beaconId) }] : [], pack: t.pack ? [{ name: "Treibholz", count: t.pack }] : [], time: `Tag 1, 08:${String(t.waited).padStart(2, "0")}` };
 			}
 			case "act": {
 				acts++;
-				return { said: act(t, String(r.line ?? "").trim()), at: { ...t.at } };
+				const said = act(t, String(r.line ?? "").trim());
+				passed(t);
+				return { said, at: { ...t.at } };
 			}
-			case "path": paths++; return { path: t.trail.slice(0, 200), cut: t.trail.length > 200 };
+			case "path": paths++; return { path: t.trail.slice(0, 200), cut: t.trail.length > 200, ...(t.subgoals.length ? { subgoals: t.reached } : {}) };
 			case "wait": {
 				const m = Number(r.minutes); if (!(m >= 1 && m <= 120)) throw new Error("wait takes 1 to 120 minutes");
 				if (t.waited + m > 1440) throw new Error("a bot may wait at most 1440 world minutes in all");
 				for (let k = Math.floor(t.waited / 60) + 1; k <= Math.floor((t.waited + m) / 60); k++) t.wood.push(TIDE[(k - 1) % TIDE.length]!);
-				t.waited += m; return { time: `+${t.waited}` };
+				t.waited += m; passed(t); return { time: `+${t.waited}` };
 			}
 			case "score": {
 				const f = /^feed:([\w-]+):(\d+)$/.exec(String(r.goal));
-				if (f) return { done: t.pieces >= Number(f[2]), detail: `${t.pieces} of ${f[2]} pieces put into ${f[1]}, ${t.waited} world minutes waited` };
-				const hold = Number(r.hold ?? 0), now = litAt(t, t.waited) && t.fed;
-				if (hold && now) { const later = litAt(t, t.waited + hold); return { done: later, detail: later ? `feuer-bucht burns, fed by the bot; held ${hold} world minutes` : `reached, but not held ${hold} world minutes` }; }
-				return { done: now, detail: `feuer-bucht ${litAt(t, t.waited) ? "burns" : "is out"}, ${t.fed ? "fed by the bot" : "not fed by the bot"}` };
+				if (f) { const n = t.pieces[f[1]!] ?? 0; return { done: n >= Number(f[2]), detail: `${n} of ${f[2]} pieces put into ${f[1]}, ${t.waited} world minutes waited` }; }
+				if (String(r.goal) === "pack:treibholz") return { done: t.pack > 0, detail: `${t.pack} treibholz in the pack` };
+				const b = /^beacon:([\w-]+)$/.exec(String(r.goal)), id = b?.[1] ?? "";
+				if (!b || !fireById(id)) throw new Error(`unknown goal ${String(r.goal)}`);
+				const hold = Number(r.hold ?? 0), fed = !!t.pieces[id], now = litAt(t, t.waited, id) && fed;
+				if (hold && now) { const later = litAt(t, t.waited + hold, id); return { done: later, detail: later ? `${id} burns, fed by the bot; held ${hold} world minutes` : `reached, but not held ${hold} world minutes` }; }
+				return { done: now, detail: `${id} ${litAt(t, t.waited, id) ? "burns" : "is out"}, ${fed ? "fed by the bot" : "not fed by the bot"}` };
 			}
 			case "close": worlds.delete(String(r.world)); return {};
 			default: throw new Error(`unknown op ${r.op}`);

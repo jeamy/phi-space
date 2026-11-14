@@ -3,6 +3,7 @@
 // is always the beacon of the Graue Bucht. The rooms, exits and cells are those of spaces-mmo/worlds/leuchtfeuer
 // (world.json); spaces-mmo/tests/arena.test.ts opens the episodes in the real world.
 import type { BotEpisode } from "./bottask.ts";
+import type { Subgoal } from "./subgoals.ts";
 
 /** The island's rooms and their exits on the island (exits that leave it are left out). */
 export const ISLAND_ROOMS: Record<string, { name: string; exits: Record<string, string> }> = {
@@ -80,4 +81,42 @@ export const ISLAND_MEMORY_VARIANTS: string[] = [
 	`async function bot(){${WALK}const m=await tools.recall();if(!m.found)return;await walk(m,true);let s;${FEED}}`,
 	// wrong: goes to the fire without wood
 	ISLAND_VARIANTS[4]!,
+];
+
+// ---- the fire of the Anleger (docs/codemode-planung.en.md, step 4) ---------------------------------------------
+// The Feuerkorb am Anleger lies at the island's south end, behind the Dünen: from most rooms a way of several rooms. The
+// episodes start the figure elsewhere each time and lay the driftwood out in another room; a plan names the subgoals on
+// the way (driftwood, the Dünen, the fire's side, the fire burning).
+export const ANLEGER_FIRE = { room: "anleger", x: 7, y: 5 };
+export const ANLEGER_EPISODES: BotEpisode[] = [
+	ep("S1", "sample", ["graue-bucht", 10, 8], ["duenen", 6, 4]),
+	ep("S2", "sample", ["fischerdorf", 12, 8], ["torfmoor", 18, 3]),
+	ep("S3", "sample", ["klippenkopf", 12, 8], ["salzwiesen", 5, 9]),
+	ep("H1", "holdout", ["torfmoor", 12, 8], ["fischerdorf", 5, 5]),
+	ep("H2", "holdout", ["salzwiesen", 12, 8], ["klippenpfad", 2, 8]),
+	ep("H3", "holdout", ["anleger", 12, 8], ["graue-bucht", 5, 7]),
+	ep("H4", "holdout", ["klippenpfad", 2, 8], ["klippenkopf", 13, 11]),
+	ep("H5", "holdout", ["duenen", 12, 8], ["anleger", 15, 1]),
+	ep("H6", "holdout", ["graue-bucht", 14, 9], ["torfmoor", 9, 2]),
+];
+
+/** The plans scripted agents pick from: one that finds the wood wherever it lies, one that expects it in the Dünen, one
+ *  that goes to the fire first and fetches the wood after. */
+export const ANLEGER_PLANS: Array<{ text: string; subgoals: Subgoal[] }> = [
+	{ text: "Search the island for driftwood, nearest rooms first; then through the Dünen to the Anleger, next to the Feuerkorb, and feed it.", subgoals: [{ holds: "pack:treibholz" }, { room: "duenen" }, { room: "anleger", near: { x: 7, y: 5 } }, { room: "anleger", holds: "beacon:feuer-anleger" }] },
+	{ text: "The driftwood washes up in the Dünen: take it there, go south to the Anleger and feed the Feuerkorb.", subgoals: [{ room: "duenen", holds: "pack:treibholz" }, { room: "anleger", near: { x: 7, y: 5 } }, { room: "anleger", holds: "beacon:feuer-anleger" }] },
+	{ text: "Go to the Feuerkorb first to know the way, then search the island for driftwood and come back to feed it.", subgoals: [{ room: "anleger", near: { x: 7, y: 5 } }, { holds: "pack:treibholz" }, { room: "anleger", holds: "beacon:feuer-anleger" }] },
+];
+
+// FOLLOW walks a plan's subgoals in turn: to a subgoal's room by the island's route, next to its `near` cell, driftwood
+// picked up where it says (in its room, or searched for room by room when it names none), the fire fed.
+const SEARCH = `const take=async()=>{const s=await tools.look();const w=s.things.find(t=>t.name==="Treibholz");if(!w)return false;await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"});return true};const go=async(r)=>{for(const ex of route(here,r))await tools.act({line:ex});here=r};const search=async()=>{const order=[here];for(let i=0;i<order.length;i++)for(const d of Object.values(MAP[order[i]]||{}))if(!order.includes(d))order.push(d);for(const r of order){await go(r);if(await take())return true}return false};`;
+const FEED_HERE = `const feed=async()=>{const s=await tools.look();const f=s.fires[0];if(!f)return;await tools.act({line:"move "+f.x+" "+(f.y-1)});await tools.act({line:"lege holz ins feuer"})};`;
+export const ANLEGER_VARIANTS: string[] = [
+	// follows the plan's subgoals; how far it gets is the plan's doing (no plan: to the fire without wood)
+	`async function bot(){${ROUTE}let here=(await tools.look()).room.id;${SEARCH}${FEED_HERE}const {subgoals}=await tools.subgoals();if(!subgoals.length){await go("anleger");return feed()}for(const g of subgoals){if(g.room&&g.room!==here)await go(g.room);if(g.holds==="pack:treibholz"){if(g.room)await take();else await search();continue}if(g.holds&&g.holds.startsWith("beacon:")){await feed();continue}if(g.near)await tools.act({line:"move "+g.near.x+" "+(g.near.y-1)})}}`,
+	// searches the island for the driftwood and goes to the Anleger, whatever the plan says: correct
+	`async function bot(){${ROUTE}let here=(await tools.look()).room.id;${SEARCH}${FEED_HERE}await search();await go("anleger");await feed()}`,
+	// wrong: goes to the fire without wood
+	`async function bot(){${ROUTE}let here=(await tools.look()).room.id;${SEARCH}${FEED_HERE}await go("anleger");await feed()}`,
 ];

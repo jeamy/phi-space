@@ -82,6 +82,8 @@ type World = {
 	done: Map<string, Promise<Record<string, unknown>>>;
 	/** The world's definition, and every cell the figure went over (its start first). */
 	w: WorldDef; trail: Step[];
+	/** The subgoals `open` named, and the cell where each of them was reached, in turn (docs/codemode-planung.en.md). */
+	subgoals: Subgoal[]; reached: Step[];
 };
 /** The most keyed answers a world keeps. */
 const MAX_KEYS = 5000;
@@ -101,9 +103,14 @@ function run(file: string, env: Record<string, string>, ready: string): Promise<
 }
 const stop = (c: ChildProcess) => new Promise<void>((r) => { if (c.exitCode !== null || c.signalCode !== null) return r(); c.once("exit", () => r()); c.kill("SIGTERM"); setTimeout(() => c.kill("SIGKILL"), 5_000).unref(); });
 
-/** What `open` may set up: where the guest starts, what lies where, the world worker's seed. */
-export type OpenSpec = { start?: { room: string; x: number; y: number }; setup?: { clear?: string[]; items?: Array<{ proto: string; room: string; x: number; y: number }> }; seed?: number };
+/** A subgoal of a plan: reached when the figure is in `room` (any room when there is none), within SUBGOAL_NEAR cells of
+ *  `near`, and the predicate `holds` (a goal as `score` takes it, or `pack:<proto>`) is true, all of those it names. */
+export type Subgoal = { room?: string; near?: { x: number; y: number }; holds?: string };
+/** What `open` may set up: where the guest starts, what lies where, the world worker's seed, the subgoals to watch. */
+export type OpenSpec = { start?: { room: string; x: number; y: number }; setup?: { clear?: string[]; items?: Array<{ proto: string; room: string; x: number; y: number }> }; seed?: number; subgoals?: Subgoal[] };
 const MAX_SETUP_ITEMS = 50;
+export const MAX_SUBGOALS = 12, SUBGOAL_NEAR = 3;
+const PREDICATE = /^(?:beacon:[\w-]+|feed:[\w-]+:\d+|pack:[\w-]+)$/;
 
 /** Checks an `open` request's start, setup and seed against the world before a world is started for it. */
 export function openSpec(w: WorldDef, r: Record<string, unknown>): OpenSpec {
@@ -127,6 +134,21 @@ export function openSpec(w: WorldDef, r: Record<string, unknown>): OpenSpec {
 		if (!Number.isInteger(s) || s < 0 || s > 0xffffffff) throw new Error("seed: an integer from 0 to 2^32 - 1");
 		out.seed = s;
 	}
+	if (r.subgoals !== undefined) {
+		if (!Array.isArray(r.subgoals) || r.subgoals.length > MAX_SUBGOALS) throw new Error(`subgoals: a list of at most ${MAX_SUBGOALS}`);
+		out.subgoals = r.subgoals.map((g, n) => {
+			const o = (g && typeof g === "object" ? g : {}) as Record<string, unknown>, sg: Subgoal = {}, what = `subgoal ${n + 1}`;
+			if (o.room !== undefined) { if (!rooms.has(String(o.room))) throw new Error(`${what}: no room ${String(o.room)}`); sg.room = String(o.room); }
+			if (o.near !== undefined) {
+				const c = (o.near && typeof o.near === "object" ? o.near : {}) as Record<string, unknown>, x = Number(c.x), y = Number(c.y);
+				if (!sg.room || !Number.isInteger(x) || !Number.isInteger(y)) throw new Error(`${what}: near needs a room and whole cells`);
+				sg.near = { x, y };
+			}
+			if (o.holds !== undefined) { if (!PREDICATE.test(String(o.holds))) throw new Error(`${what}: holds is beacon:<id>, feed:<id>:<n> or pack:<proto>`); sg.holds = String(o.holds); }
+			if (!sg.room && !sg.holds) throw new Error(`${what}: names no room and no predicate`);
+			return sg;
+		});
+	}
 	return out;
 }
 
@@ -144,7 +166,9 @@ async function openWorld(w: WorldDef, owner: Socket | null, spec: OpenSpec = {})
 		if (spec.setup) await setUp(w, ws.space, spec.setup);
 		await toSpawn(w, ws.space, me.charId, spec.start);
 		const ch = await character(ws.space, me.charId);
-		return { id: randomBytes(6).toString("hex"), dir, procs, conns, space: ws.space, charId: me.charId, name: ch.name, waited: 0, touched: Date.now(), owner, done: new Map(), w, trail: [[ch.room, ch.x, ch.y]] };
+		const x: World = { id: randomBytes(6).toString("hex"), dir, procs, conns, space: ws.space, charId: me.charId, name: ch.name, waited: 0, touched: Date.now(), owner, done: new Map(), w, trail: [[ch.room, ch.x, ch.y]], subgoals: spec.subgoals ?? [], reached: [] };
+		await passed(x);
+		return x;
 	} catch (e) {
 		for (const c of conns) c.close();
 		await Promise.all(procs.map(stop));
@@ -256,6 +280,7 @@ export async function act(x: World, line: string): Promise<{ said: string[]; at:
 	}
 	const after = await character(x.space, x.charId);
 	await walked(x, before, after);
+	await passed(x, after);
 	const rooms = new Set([before.room, after.room]);
 	const msgs = [
 		...(await all<MsgFields>(x.space, "Msg", { to: x.charId })),
@@ -288,6 +313,19 @@ async function walked(x: World, before: { room: string; x: number; y: number }, 
 	const exit = x.w.exits.find((e) => e.room === before.room && e.destination === after.room);
 	if (exit) add(await walk(before.room, before, exit));
 	add([[after.room, after.x, after.y]]);
+}
+
+/** Marks the subgoals the figure reached now, in turn: the next one only once the one before it is reached (several at
+ *  once when they all hold). */
+async function passed(x: World, at?: { room: string; x: number; y: number }): Promise<void> {
+	if (x.reached.length >= x.subgoals.length) return;
+	const me = at ?? await character(x.space, x.charId);
+	for (let g = x.subgoals[x.reached.length]; g; g = x.subgoals[x.reached.length]) {
+		if (g.room && g.room !== me.room) return;
+		if (g.near && Math.abs(g.near.x - me.x) + Math.abs(g.near.y - me.y) > SUBGOAL_NEAR) return;
+		if (g.holds && !(await scoreNow(x, g.holds)).done) return;
+		x.reached.push([me.room, me.x, me.y]);
+	}
 }
 
 /** The trail as `path` gives it: the start, every cell where the room or the direction changes, the last one; at most
@@ -327,6 +365,7 @@ export async function wait(x: World, minutes: number): Promise<{ time: string }>
 	x.waited += m;
 	const c = await moveClock(x.space, (c) => ({ ...c, worldAnchorMs: c.worldAnchorMs + m * WORLD_MINUTE_MS }));
 	await new Promise((r) => setTimeout(r, 300)); // the world's ticks see the new time
+	await passed(x);
 	return { time: formatWorldTime(worldNow(c)) };
 }
 
@@ -344,6 +383,11 @@ export async function score(x: World, goal: string, hold = 0): Promise<{ done: b
 	return later.done ? { done: true, detail: `${later.detail}; held ${h} world minutes` } : { done: false, detail: `reached, but not held ${h} world minutes: ${later.detail}` };
 }
 async function scoreNow(x: World, goal: string): Promise<{ done: boolean; detail: string }> {
+	const k = /^pack:([\w-]+)$/.exec(String(goal));
+	if (k) {
+		const n = (await x.space.readAll({ type: "Item", fields: { location: x.charId, proto: k[1]! } as never }, { limit: 50 })).length;
+		return { done: n > 0, detail: `${n} ${k[1]} in the pack` };
+	}
 	const f = /^feed:([\w-]+):(\d+)$/.exec(String(goal));
 	if (f) {
 		const c = await x.space.readIfExists({ type: "Contribution", fields: { beaconId: f[1]!, charId: x.charId } as never }, NO_WAIT);
@@ -406,7 +450,7 @@ export async function startArena(o: { listen?: string; worlds?: number; /** test
 			case "act": return await once(() => act(x, String(r.line ?? "")));
 			case "wait": return await once(() => wait(x, Number(r.minutes)));
 			case "score": return await score(x, String(r.goal ?? ""), Number(r.hold ?? 0));
-			case "path": return pathOf(x.trail);
+			case "path": return { ...pathOf(x.trail), ...(x.subgoals.length ? { subgoals: x.reached } : {}) };
 			case "close": await close(x.id); return {};
 			default: throw new Error(`unknown op ${String(r.op)}`);
 		}

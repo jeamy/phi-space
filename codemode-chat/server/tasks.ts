@@ -3,7 +3,7 @@
 import { MAX_CHECK_CHARS, maxTimeoutMs } from "./judge.ts";
 import { arenaAddress, describeBotTools, MAX_BOT_CALLS, type BotSpec } from "./bottask.ts";
 import { describeHarnessTools, type HarnessSpec } from "./harnesstask.ts";
-import { episodeList, ISLAND_EPISODES, ISLAND_MAP, ISLAND_MEMORY_VARIANTS, ISLAND_VARIANTS } from "./island.ts";
+import { ANLEGER_EPISODES, ANLEGER_FIRE, ANLEGER_PLANS, ANLEGER_VARIANTS, episodeList, ISLAND_EPISODES, ISLAND_MAP, ISLAND_MEMORY_VARIANTS, ISLAND_VARIANTS } from "./island.ts";
 import { checkSpec, dataToolSpec, describeDataTools, type DataItem, type DataSpec } from "./datatask.ts";
 import { describeTools, FRUSTRATION, MAX_CALLS, PI_SOURCE, PI_WINDOWS, PI_WINDOWS_BUGS, type ToolSpec } from "./tooltask.ts";
 
@@ -128,6 +128,33 @@ function islandTask(memory: boolean): Task {
 		cases: [],
 		bench: "",
 		variants: memory ? ISLAND_MEMORY_VARIANTS : ISLAND_VARIANTS,
+	};
+}
+
+/** The fire of the Anleger (docs/codemode-planung.en.md, step 4): a planning task with subgoals. Every contribution
+ *  follows a plan; the plan names its subgoals as data, the bot reads them with tools.subgoals, and the judge reports
+ *  how far each shown episode got along them. */
+function anlegerTask(): Task {
+	const spec = { goal: "", goalText: { de: "", en: "" }, noWait: true as const, subgoals: true as const };
+	return {
+		id: "beacon-anleger", fn: "bot", kind: "bot", timeoutMs: 30_000,
+		bot: {
+			goal: "beacon:feuer-anleger", hold: 5, noWait: true, subgoals: true, plans: ANLEGER_PLANS,
+			goalText: { de: "der Feuerkorb am Anleger brennt, vom Bot genährt, und brennt nach 5 Weltminuten noch", en: "the Feuerkorb of the Anleger burns, fed by the bot, and still burns 5 world minutes later" },
+			episodes: ANLEGER_EPISODES,
+		},
+		title: { de: "Feuer am Anleger: ein Plan mit Teilzielen, Räume weit weg vom Start (Spielwelt, Episoden)", en: "Light the fire of Anleger: a plan with subgoals, rooms away from the start (game world, episodes)" },
+		prompt: {
+			de: `Aufgabe: Schreibe async function bot(). Der Bot spielt eine Figur auf der Grauen Insel von Leuchtfeuer und soll den Feuerkorb am Anleger entzünden (Raum anleger, Feuer auf ${ANLEGER_FIRE.x},${ANLEGER_FIRE.y}): ein Stück Treibholz finden und aufheben, zum Anleger gehen, sich neben das Feuer stellen und es hineinlegen. Der Anleger liegt am Südende der Insel, hinter den Dünen; von den meisten Räumen sind es mehrere Räume.\n\nPlan und Teilziele: Jeder Beitrag folgt einem Plan. Wer plant, nennt die Teilziele unterwegs als Daten (Räume, Stellen, Bedingungen, der Reihe nach); tools.subgoals gibt sie dem Bot. Der Richter meldet bei jeder sichtbaren Episode, wie viele Teilziele der Bot der Reihe nach erreicht hat und vor welchem er stecken blieb.\n\nEpisoden: Jeder Beitrag spielt mehrere Episoden, jede in einer eigenen Welt: wo die Figur startet und wo das einzige Stück Treibholz der Insel liegt. Drei siehst du:\n${episodeList(ANLEGER_EPISODES, "de")}\nSechs weitere sind verdeckt: andere Starträume, Treibholz in anderen Räumen; von ihnen erfährst du nur, ob sie erreicht wurden.\n\nDie Insel (Raum: Ausgang → Ziel). Ein Ausgang ist ein Befehl: "süd" geht den ganzen Weg zum Ausgang und hindurch.\n${ISLAND_MAP}\n\nWelt: Die Weltzeit steht still, es gibt kein tools.wait. Befehle sind deutsch, wie ein Spieler sie tippt.\n\nPunkte: Jeder Tool-Aufruf kostet einen Punkt, tools.subgoals keinen (höchstens ${MAX_BOT_CALLS} Aufrufe je Episode). Am besten ist ein Bot, der jede Episode erreicht; unter ihnen gewinnt der mit den wenigsten Punkten.\n\nBewertung: Am Ende jeder Episode fragt der Richter, ob der Feuerkorb brennt und ob der Bot ihn genährt hat, lässt 5 Weltminuten vergehen und fragt noch einmal. Rückgabewert egal.\n\nTools:\n${describeBotTools("de", spec)}`,
+			en: `Task: write async function bot(). The bot plays a figure on the Graue Insel of Leuchtfeuer and is to light the Feuerkorb of the Anleger (room anleger, fire at ${ANLEGER_FIRE.x},${ANLEGER_FIRE.y}): find a piece of driftwood and pick it up, go to the Anleger, stand next to the fire and put it in. The Anleger lies at the island's south end, behind the Dünen; from most rooms it is several rooms away.\n\nPlan and subgoals: every contribution follows a plan. Whoever plans names the subgoals on the way as data (rooms, cells, conditions, in order); tools.subgoals gives them to the bot. For every visible episode the judge reports how many subgoals the bot reached in turn and before which one it got stuck.\n\nEpisodes: every contribution plays several episodes, each in a world of its own: where the figure starts and where the island's only piece of driftwood lies. You see three:\n${episodeList(ANLEGER_EPISODES, "en")}\nSix more are hidden: other start rooms, driftwood in other rooms; of those you learn only whether they were reached.\n\nThe island (room: exit → where it leads). An exit is a command: "süd" walks the whole way to the exit and through it.\n${ISLAND_MAP}\n\nWorld: world time stands still; there is no tools.wait. Commands are German, as a player types them.\n\nPoints: every tool call costs one point, tools.subgoals none (at most ${MAX_BOT_CALLS} calls per episode). Best is a bot that reaches every episode; among those the one with the fewest points wins.\n\nScoring: at the end of every episode the judge asks whether the Feuerkorb burns and whether the bot fed it, lets 5 world minutes pass and asks again. The return value does not matter.\n\nTools:\n${describeBotTools("en", spec)}`,
+		},
+		about: {
+			de: "So läuft es: eine Planungsaufgabe mit Teilzielen (docs/codemode-planung.en.md, Schritt 4). Bevor ein Agent den Bot schreibt, plant er: auf dem Arbeitsbrett in der Planungsrunde, in einem Generationenlauf in seinem Zug. Der Plan nennt seine Teilziele als Daten (Subgoals); der Bot liest sie mit tools.subgoals. Die Arena prüft bei der ersten Welt jeder sichtbaren Episode nach jedem Befehl das nächste Teilziel und merkt sich die Stelle, an der es erreicht wurde. Die Kette in der Abstammung zeigt je Teilziel, welcher Anteil der sichtbaren Episoden daran vorbeikam; die Karte des Beitrags zeigt die Teilziele als nummerierte Marken. Verdeckte Episoden laufen ohne Teilziele.\n\nKI-Modelle: Für die Bewertung braucht es keine.\n\n▶ Ausführen: läuft für Bots nicht. Bewertet wird nur beim Einreichen.",
+			en: "How it runs: a planning task with subgoals (docs/codemode-planung.en.md, step 4). Before an agent writes the bot it plans: on the work board in the planning round, in a run of generations in its turn. The plan names its subgoals as data (Subgoals); the bot reads them with tools.subgoals. In the first world of every visible episode the arena checks the next subgoal after every command and remembers the cell where it was reached. The chain in the lineage shows for each subgoal the share of visible episodes that got past it; the contribution's map shows the subgoals as numbered marks. Hidden episodes run without subgoals.\n\nAI models: the scoring needs none.\n\n▶ Run: does not run bots. Bots are judged only when handed in.",
+		},
+		cases: [],
+		bench: "",
+		variants: ANLEGER_VARIANTS,
 	};
 }
 
@@ -296,6 +323,7 @@ export const TASKS: Task[] = [
 	},
 	islandTask(false),
 	islandTask(true),
+	anlegerTask(),
 	{
 		id: "beacon-flut", fn: "bot", kind: "bot", durable: true, timeoutMs: 180_000,
 		bot: { goal: "feed:feuer-bucht:6", goalText: { de: "6 Stück Treibholz im Leuchtfeuer der Grauen Bucht, vom Bot hineingelegt", en: "6 pieces of driftwood put into the beacon of the Graue Bucht by the bot" } },

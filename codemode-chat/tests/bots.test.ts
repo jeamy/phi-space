@@ -7,7 +7,8 @@ import { startServer } from "./stack.ts";
 import { startFakeArena } from "./fake-arena.ts";
 import { episodeEntries, judge, loadCodemode, memoryEntries, verdictFields } from "../server/judge.ts";
 import { covers, JUMP_CELLS, recall, type MemoryPath } from "../server/memory.ts";
-import { teamPrompt } from "../server/llm.ts";
+import { proposePrompt, teamPrompt } from "../server/llm.ts";
+import { checkSubgoals, extractSubgoals, subgoalText } from "../server/subgoals.ts";
 import { laneOf } from "../server/room.ts";
 import { offeredTasks, taskById, TASKS } from "../server/tasks.ts";
 import { ISLAND_ROOMS } from "../server/island.ts";
@@ -385,5 +386,100 @@ t("a run with memory: each generation recalls what the ones before it reached, f
 		assert.equal((await post("/api/sessions/mem1/delete", { blockId: snap.current })).status, 200);
 		assert.equal(await space.count({ type: "PlanMemory" }), 0);
 		assert.equal(await space.count({ type: "MemoryFreeze" }), 0);
+	} finally { await srv.close(); await arena.close(); process.env.CODEMODE_ARENA = ""; }
+});
+
+// ---- step 4: subgoals, the plan's chain, the fire of the Anleger
+const anleger = taskById("beacon-anleger")!;
+const [follower, searcher, noWoodAnleger] = anleger.variants;
+const [wide, dunesOnly, fireFirst] = anleger.bot!.plans!;
+
+test("subgoals: checked as the arena checks them, a model's ```subgoals block read out of its plan", () => {
+	assert.equal(checkSubgoals([{ holds: "pack:treibholz" }, { room: "duenen", near: { x: 3, y: 4 } }]).ok, true);
+	for (const bad of [[], [{}], [{ near: { x: 1, y: 1 } }], [{ holds: "steal:all" }], [{ room: "a b" }], Array.from({ length: 13 }, () => ({ room: "duenen" })), "duenen"]) assert.equal(checkSubgoals(bad).ok, false, JSON.stringify(bad));
+	const x = extractSubgoals("Walk south.\n```subgoals\n[{\"room\":\"duenen\"},{\"holds\":\"beacon:feuer-anleger\"}]\n```\nThen feed it.");
+	assert.deepEqual(x.subgoals, [{ room: "duenen" }, { holds: "beacon:feuer-anleger" }]);
+	assert.equal(x.text, "Walk south.\n\nThen feed it.");
+	assert.equal(extractSubgoals("```subgoals\nnot json\n```").subgoals, undefined);
+	assert.equal(subgoalText({ room: "anleger", near: { x: 7, y: 5 } }), "in anleger, near 7,5");
+	// the task: subgoals cost nothing, the plans are valid, the prompt names the tool, and a plan asks for the block
+	assert.ok(anleger.bot!.plans!.every((p) => checkSubgoals(p.subgoals).ok));
+	assert.match(anleger.prompt.en, /tools\.subgoals\(args\)/);
+	assert.match(proposePrompt({ task: anleger, agent: 0 }).user, /```subgoals/);
+	assert.doesNotMatch(proposePrompt({ task: island, agent: 0 }).user, /```subgoals/);
+});
+
+t("the Anleger: a bot follows its plan's subgoals; the judge reports how far each shown episode got, a hidden one keeps none", async () => {
+	const arena = await startFakeArena();
+	try {
+		const run = (source: string, subgoals?: typeof wide.subgoals) => withArena(arena.address, () => judge(cm!, anleger, source, subgoals ? { subgoals } : {}));
+		const good = await run(follower!, wide!.subgoals);
+		assert.equal(good.ok, true, good.error ?? "");
+		assert.deepEqual([good.passed, good.total, good.plan], [9, 9, 4]);
+		assert.deepEqual(good.episodes!.filter((e) => e.kind === "sample").map((e) => e.subgoals), [4, 4, 4]);
+		assert.ok(good.episodes!.filter((e) => e.kind === "holdout").every((e) => e.subgoals === undefined && e.subgoalAt === undefined));
+		assert.equal(arena.lastOpen()!.subgoals, undefined, "a hidden episode is played without them");
+		assert.equal(good.calls!.subgoals, 9, "every episode asked, for no points");
+		assert.match(good.cases.find((c) => c.call.startsWith("S1"))!.got!, /subgoals 4 of 4/);
+		// where the figure reached each: the wood, the Dünen, the fire's side twice (near it, then burning)
+		const s1 = good.episodes!.find((e) => e.id === "S1")!;
+		assert.deepEqual(s1.subgoalAt, [["duenen", 6, 4], ["duenen", 6, 4], ["anleger", 7, 4], ["anleger", 7, 4]]);
+		assert.equal((episodeEntries(good).find((e) => e.episode === "S1") as any).subgoals, 4);
+		assert.ok((verdictFields(good).episodes as any[]).every((e) => e.subgoalAt === undefined && e.path === undefined));
+		// the Dünen plan breaks at its first subgoal wherever the wood lies elsewhere
+		const narrow = await run(follower!, dunesOnly!.subgoals);
+		assert.deepEqual([narrow.passed, narrow.score], [1, 0]);
+		assert.deepEqual(narrow.episodes!.filter((e) => e.kind === "sample").map((e) => e.subgoals), [3, 0, 0]);
+		assert.match(narrow.cases.find((c) => c.call.startsWith("S2"))!.error!, /subgoals 0 of 3, stuck before 1 \(in duenen, pack:treibholz holds\)/);
+		// to the fire first, then the wood: correct, but more points than the wide plan
+		const back = await run(follower!, fireFirst!.subgoals);
+		assert.equal(back.ok, true, back.error ?? "");
+		assert.ok(back.cost! > good.cost!, `${back.cost} > ${good.cost}`);
+		// without a plan the follower goes to the fire without wood; the searcher needs none
+		const none = await run(follower!);
+		assert.equal(none.ok, false);
+		assert.equal(none.plan, undefined);
+		assert.ok(none.episodes!.every((e) => e.subgoals === undefined));
+		assert.equal((await run(searcher!)).ok, true);
+		assert.equal((await run(noWoodAnleger!, wide!.subgoals)).ok, false);
+	} finally { await arena.close(); }
+});
+
+t("a scripted run on the Anleger plans every turn: Subgoals with each plan, candidates follow it, the lineage shows the chain", async () => {
+	const arena = await startFakeArena();
+	process.env.CODEMODE_ARENA = arena.address;
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [{ host: "arena", arena: arena.address, workers: 2 }] });
+	try {
+		const post = (path: string, body: unknown) => fetch(srv.url + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+		assert.equal((await post("/api/sessions/sub1/task", { taskId: "beacon-anleger" })).status, 200);
+		assert.equal((await post("/api/sessions/sub1/run", { agents: 3, gens: 2, perAgent: 1, polish: 0, contenders: ["scripted"] })).status, 200);
+		let snap: any;
+		for (const end = Date.now() + 240_000; ;) {
+			const s = await (await fetch(srv.url + "/api/sessions/sub1")).json() as any;
+			snap = { ...s, ...(s.blocks.find((b: any) => b.blockId === s.current) ?? {}) };
+			if (snap.run && !snap.run.active && snap.contributions?.length >= 3 && snap.contributions.every((c: any) => c.ok !== null)) break;
+			if (Date.now() > end) throw new Error(`timeout: ${JSON.stringify([snap.run, snap.contributions?.map((c: any) => [c.author, c.gen, c.ok])])}`);
+			await new Promise((r) => setTimeout(r, 200));
+		}
+		const space = srv.stack.space;
+		const plans = (await space.readAll({ type: "Subgoals", fields: { session: "sub1" } })).map((e: any) => e.fields);
+		const scores = (await space.readAll({ type: "CodeScore", fields: { session: "sub1" } })).map((e: any) => e.fields);
+		assert.ok(plans.length >= scores.length, `${plans.length} plans, ${scores.length} verdicts`);
+		assert.ok(scores.every((f: any) => plans.some((p: any) => p.proposalId === f.proposalId)), "every contribution follows a plan of its own turn");
+		for (const p of plans) assert.ok(anleger.bot!.plans!.some((x) => JSON.stringify(x.subgoals) === JSON.stringify(p.subgoals)));
+		assert.ok(snap.contributions.every((c: any) => c.planBy), "the tile says whose plan");
+		// the chain of a follower's contribution: one mark per subgoal, the share of shown episodes past it
+		const f = scores.find((x: any) => x.source === follower) ?? scores[0];
+		const lin = await (await fetch(`${srv.url}/api/sessions/sub1/lineage/${encodeURIComponent(f.candidateId)}`)).json() as any;
+		const chain = lin.steps[0].chain;
+		const plan = plans.find((p: any) => p.proposalId === f.proposalId);
+		assert.equal(chain.of, 3);
+		assert.equal(chain.subgoals.length, plan.subgoals.length);
+		assert.ok(chain.subgoals.every((g: any, k: number) => g.share >= 0 && g.share <= 1 && (k === 0 || g.share <= chain.subgoals[k - 1].share)), JSON.stringify(chain));
+		// the panel draws the plan's marks
+		const det = await (await fetch(`${srv.url}/api/sessions/sub1/source/${encodeURIComponent(f.candidateId)}`)).json() as any;
+		assert.deepEqual(det.subgoals, plan.subgoals);
+		assert.equal((await post("/api/sessions/sub1/delete", { blockId: snap.current })).status, 200);
+		assert.equal(await space.count({ type: "Subgoals" }), 0);
 	} finally { await srv.close(); await arena.close(); process.env.CODEMODE_ARENA = ""; }
 });

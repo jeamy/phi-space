@@ -10,6 +10,7 @@ import "./env.ts";
 import { pathToFileURL } from "node:url";
 import { FOREVER, NO_WAIT, peek, TransactionError, type SpaceLike } from "phi-spaces";
 import { frozenMemory, remember } from "./memory.ts";
+import { subgoalsOf } from "./subgoals.ts";
 import { episodeEntries, judgeInSlot, memoryEntries, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { LogDown, type CallLog, type LoggedCall, type RunHead } from "./durable-run.ts";
 import { setBest, trimArchive } from "./results.ts";
@@ -99,9 +100,11 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 			if (holdout) task = dataTask(task.data, holdout); else missing = "the hidden part of the dataset is missing (the block was deleted, or its upload did not complete)";
 		}
 		const log = task?.durable ? spaceLog(space, { session, ...(typeof blockId === "string" ? { blockId } : {}), candidateId }) : undefined;
+		// a task with subgoals: those of the plan the candidate follows (its lineage's proposalId)
+		const subgoals = task?.bot?.subgoals ? await subgoalsOf(space, session, typeof f.proposalId === "string" ? f.proposalId : undefined) : [];
 		// a task with memory: the paths of the candidate's freeze, read before judging (recall answers from them only)
 		const memory = task?.bot?.memory && typeof blockId === "string" ? await frozenMemory(space, session, blockId, typeof f.freeze === "string" ? f.freeze : undefined) : undefined;
-		const v: Verdict | null = spec === false ? null : missing ? { ok: false, ms: TIMEOUT_MS, error: missing, passed: 0, total: 2, cases: [] } : task ? await judgeInSlot(cm, task, String(f.source ?? ""), { ...(log ? { log, leaseMs: TXN_LEASE_MS } : {}), ...(memory ? { memory } : {}) }) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
+		const v: Verdict | null = spec === false ? null : missing ? { ok: false, ms: TIMEOUT_MS, error: missing, passed: 0, total: 2, cases: [] } : task ? await judgeInSlot(cm, task, String(f.source ?? ""), { ...(log ? { log, leaseMs: TXN_LEASE_MS } : {}), ...(memory ? { memory } : {}), ...(subgoals.length ? { subgoals } : {}) }) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
 		if (v && (await alive())) {
 			await space.write({ type: "CodeScore", fields: { session, blockId, candidateId, author: f.author, via: f.via, host, gen: f.gen, ...lineageOf(f), ...verdictFields(v), source: f.source, ts: f.ts } as never }, t.id, ttl);
 			// a planning task's sample paths (docs/codemode-planung.en.md): they live and go with the verdict

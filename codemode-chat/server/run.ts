@@ -21,7 +21,7 @@
 // when that count is 0, whatever another agent holds right now.
 import { NO_WAIT, UniqueConflict, type SpaceLike } from "phi-spaces";
 import { limitOf, maxTimeoutMs } from "./judge.ts";
-import { criticModel, type Attempt, type Role, type Usage } from "./llm.ts";
+import { addUsage, criticModel, type Attempt, type Role, type Usage } from "./llm.ts";
 import type { CallKind, LlmCall, LlmResultEntry } from "./context.ts";
 import { crossWaitMs, FATAL_LLM, modelWaitMs, verdictWaitOr } from "./limits.ts";
 import { addNote, answersOf, attemptOf, blockTask, enqueueAnswer, enqueueCandidate, isSolved, rankedProposals, rid, scoresOf, systemLine, teamView, planTurn } from "./room.ts";
@@ -29,6 +29,7 @@ import { archive } from "./results.ts";
 import { entryLeaseMs, HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeAll, takeExisting } from "./space.ts";
 import { isText, type Task } from "./tasks.ts";
 import { freezeMemory, runFreezeId } from "./memory.ts";
+import { checkSubgoals, writeSubgoals, type Subgoal } from "./subgoals.ts";
 
 export type RunMode = "scripted" | "llm";
 /** What the board shows while it runs. */
@@ -379,21 +380,38 @@ async function turn(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn: str
 	const task = await blockTask(space, it.session, it.blockId);
 	let handedIn = 0, usage: Usage | undefined, note: string | undefined, runNote: string | undefined, fatal = false;
 	if (task && !run.info.ended) {
-		let source: string | undefined, via = "scripted", lineage: { role?: Role; basedOn?: string; usage?: Usage } = {};
+		let source: string | undefined, via = "scripted", lineage: { role?: Role; basedOn?: string; usage?: Usage; proposalId?: string } = {}, proposalId: string | undefined;
 		if (slot.model !== "scripted" && !overBudget(run)) {
 			const plan = it.role ? { role: it.role, target: it.targetId ? { candidateId: it.targetId } : null } : planTurn((await teamView(space, it.session, it.blockId, false)).attempts, it.k ?? 0);
 			try {
-				const v = await ask(d, txn, it, slot, run, 0, "contribute", { role: plan.role, ...(plan.target ? { targetId: plan.target.candidateId } : {}) }) as { source: string; model: string; note?: string; usage?: Usage };
-				source = v.source; via = v.model; usage = v.usage; note = v.note;
-				lineage = { role: plan.role, ...(plan.target ? { basedOn: plan.target.candidateId } : {}), ...(v.usage ? { usage: v.usage } : {}) };
+				// a task with subgoals: the agent plans first (the planning round's call), and its bot follows the plan
+				let planUsage: Usage | undefined;
+				if (task.bot?.subgoals) {
+					const p = await ask(d, txn, it, slot, run, 1, "propose", { withEarlier: true }) as { text: string; model: string; subgoals?: unknown; usage?: Usage };
+					proposalId = await writePlan(d, txn, it, me, p.model, p.text, p.subgoals, p.usage);
+					planUsage = p.usage; usage = p.usage;
+				}
+				const v = await ask(d, txn, it, slot, run, 0, "contribute", { role: plan.role, ...(plan.target ? { targetId: plan.target.candidateId } : {}), ...(proposalId ? { proposalId } : {}) }) as { source: string; model: string; note?: string; usage?: Usage };
+				source = v.source; via = v.model; note = v.note;
+				usage = planUsage && v.usage ? addUsage(planUsage, v.usage) : planUsage ?? v.usage;
+				lineage = { role: plan.role, ...(plan.target ? { basedOn: plan.target.candidateId } : {}), ...(proposalId ? { proposalId } : {}), ...(usage ? { usage } : {}) };
 			} catch (e) {
 				if (!(e instanceof ModelFailed)) throw e;
 				runNote = `${slot.model}: ${e.message}${task.variants.length ? "; scripted agent used" : ""}`;
-				usage = e.usage;
+				usage = usage && e.usage ? addUsage(usage, e.usage) : usage ?? e.usage; // the plan was paid already
 				fatal = FATAL_LLM.test(e.message);
 			}
 		}
-		if (source === undefined) source = scriptedSource(task);
+		if (source === undefined) {
+			source = scriptedSource(task);
+			// a scripted agent plans too: one of the task's plans, with its subgoals (or the model's, when only its code failed)
+			const plans = task.bot?.subgoals ? task.bot.plans ?? [] : [];
+			if (source !== undefined && proposalId) lineage = { ...lineage, proposalId };
+			else if (source !== undefined && plans.length) {
+				const p = plans[Math.floor(Math.random() * plans.length)]!;
+				lineage = { ...lineage, proposalId: await writePlan(d, txn, it, me, "scripted", p.text, p.subgoals) };
+			}
+		}
 		if (source !== undefined) {
 			const candidateId = await enqueueCandidate(space, txn, d.ttl, { session: it.session, blockId: it.blockId, taskId: task.id, author: me, via, gen: it.gen + 1, source, runId: it.runId, lineage });
 			handedIn = 1;
@@ -409,6 +427,20 @@ async function turn(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn: str
 		if (runNote) r.info.note = runNote;
 		if (fatal) r.info.ended ??= "budget"; // no next generation; the run ends once its items are done
 	});
+}
+
+/** A plan of a generation's turn: a CodeProposal as in the planning round, and its Subgoals when it names valid ones.
+ *  Its id is the item's, so a retried turn writes the same plan again (the retry's transaction is a new one). */
+async function writePlan(d: AgentDeps, txn: string, it: WorkItem, me: string, via: string, text: string, subgoals: unknown, usage?: Usage): Promise<string> {
+	const proposalId = `${it.itemId}-p`;
+	await d.space.write({ type: "CodeProposal", fields: { session: it.session, blockId: it.blockId, runId: it.runId, proposalId, author: me, via, text, ts: Date.now(), ...(usage ? { usage } : {}) } as never }, txn, d.ttl);
+	await planSubgoals(d, txn, it, proposalId, me, via, subgoals);
+	return proposalId;
+}
+async function planSubgoals(d: AgentDeps, txn: string, it: WorkItem, proposalId: string, me: string, via: string, subgoals: unknown): Promise<void> {
+	if (subgoals === undefined) return;
+	const c = checkSubgoals(subgoals);
+	if (c.ok) await writeSubgoals(d.space, txn, d.ttl, { session: it.session, blockId: it.blockId, runId: it.runId, proposalId, author: me, via, subgoals: c.subgoals as Subgoal[] });
 }
 
 /** A scripted agent's contribution: one of the task's hand-written variants (a custom task has none). */
@@ -495,8 +527,10 @@ async function boardItem(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn
 		await space.write({ type: "CodeFinding", fields: { session: it.session, blockId: it.blockId, runId: it.runId, findingId: `${it.itemId}-f`, author: me, via: v.model, queries: v.queries, sources: v.sources, text: v.text, ts: Date.now(), ...(v.usage ? { usage: v.usage } : {}) } as never }, txn, d.ttl);
 		usage = v.usage; counted = { findings: 1 };
 	} else if (it.kind === "propose") {
-		const v = await ask(d, txn, it, slot, run, 0, "propose", { withEarlier: true, withFindings: run.params.research }) as { text: string; model: string; usage?: Usage };
+		const v = await ask(d, txn, it, slot, run, 0, "propose", { withEarlier: true, withFindings: run.params.research }) as { text: string; model: string; subgoals?: unknown; usage?: Usage };
 		await space.write({ type: "CodeProposal", fields: { session: it.session, blockId: it.blockId, runId: it.runId, proposalId: `${it.itemId}-p`, author: me, via: v.model, text: v.text, ts: Date.now(), ...(v.usage ? { usage: v.usage } : {}) } as never }, txn, d.ttl);
+		// the subgoal role: a plan of a task with subgoals names them as data (the implementing bot reads them)
+		await planSubgoals(d, txn, it, `${it.itemId}-p`, me, v.model, v.subgoals);
 		usage = v.usage; counted = { proposals: 1 };
 	} else if (it.kind === "vote") {
 		const others = (await rankedProposals(space, it.session, it.runId, txn)).filter((p) => p.author !== me).map((p) => p.proposalId);

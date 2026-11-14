@@ -24,8 +24,9 @@ import { endRun, readRun, startSpaceRun, type RunEntry, type RunInfo, type RunMo
 import { addNote, answersOf, bestOf, enqueueCandidate, execTarget, modelInfoOf, isSolved, planTurn, rid, scoresOf, systemLine, taskEntries, vetoesOf, type Contribution } from "./room.ts";
 import { arenaAddress, type PathStep, type RoomMap } from "./bottask.ts";
 import { MAX_MEMORY } from "./memory.ts";
+import { subgoalsOf, subgoalText, type Subgoal } from "./subgoals.ts";
 /** One sample episode's way, as the panel of a planning contribution draws it. */
-export type EpisodePath = { episode: string; reached: boolean[]; cost: number; path: PathStep[]; cut?: true };
+export type EpisodePath = { episode: string; reached: boolean[]; cost: number; path: PathStep[]; cut?: true; /** a contribution with subgoals: where its first seed reached each, in turn */ subgoalAt?: PathStep[] };
 import { customSpec, customTask, dataTask, expectedOf, isText, offeredTasks, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
 import { readUpload, storeHoldout } from "./datatask.ts";
 import { clipWords, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
@@ -37,7 +38,7 @@ import { entryLeaseMs, HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeAll
 import type { WsConnection } from "phi-spaces/ws";
 
 /** The entry types that belong to a task block besides its CodeTask (deleted and extended with it). */
-const BLOCK_TYPES = ["CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "BotRun", "BotCall", "BotEpisode", "PlanMemory", "MemoryFreeze", "CodeData", "ChatMessage"];
+const BLOCK_TYPES = ["CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "BotRun", "BotCall", "BotEpisode", "PlanMemory", "MemoryFreeze", "Subgoals", "CodeData", "ChatMessage"];
 const LIMITS = { agents: 8, gens: 10, perAgent: 3, polish: 3, boardDepth: 12, plans: 500, sessions: 50, messages: 500, contributions: 1000, blocks: 60, notes: 300 };
 /** Code a snapshot carries at most, counted as encoded JSON (escapes included); the rest is fetched per contribution
  *  (`source()`), so a frame stays far below the 1 MiB WebSocket limit however many contributions a room holds. */
@@ -55,6 +56,9 @@ export type { RunInfo, RunMode };
 /** One step of a contribution's lineage (see lineage()). */
 export type LineageStep = { candidateId: string; author: string; via: string; gen: number; ts: number; role?: Role; ok: boolean | null; ms?: number; passed?: number; total?: number;
 	plan?: { author: string; via: string; text: string }; critique?: { author: string; via: string; text: string };
+	/** a contribution that followed subgoals: each of its plan's, with the share of sample episodes that got past it
+	 *  (of `of` judged; docs/codemode-planung.en.md, view 5) */
+	chain?: { of: number; subgoals: Array<{ text: string; share: number }> };
 	from?: { candidateId: string; author: string }; diff?: LineDiff; partner?: { candidateId: string; author: string; share: number } };
 /** One step in a block's trace: an agent researched, proposed, voted, wrote (a new approach, a revision, a merge, an
  *  improvement), critiqued (`to`: the author it addressed) or judged an answer (`ok`: every criterion met). */
@@ -522,7 +526,7 @@ export class CodeChatHub {
 	async #paths(session: string, candidateId: string): Promise<{ paths?: EpisodePath[]; rooms?: RoomMap[] }> {
 		const paths = (await this.host.readAll({ type: "BotEpisode", fields: { session, candidateId } }, { limit: 50 }))
 			.map((e) => e.fields as unknown as EpisodePath & { episode: string })
-			.map(({ episode, reached, cost, path, cut }) => ({ episode, reached, cost, path, ...(cut ? { cut: true as const } : {}) }))
+			.map(({ episode, reached, cost, path, cut, subgoalAt }) => ({ episode, reached, cost, path, ...(cut ? { cut: true as const } : {}), ...(Array.isArray(subgoalAt) ? { subgoalAt } : {}) }))
 			.sort((a, b) => a.episode.localeCompare(b.episode));
 		if (!paths.length) return {};
 		const rooms = await this.#rooms(new Set(paths.flatMap((p) => p.path.map((x) => x[0]))));
@@ -554,7 +558,7 @@ export class CodeChatHub {
 	}
 
 	/** Code, case results and lineage of one contribution (what the page shows when it is unfolded); null when gone. */
-	async details(id: string, candidateId: string): Promise<{ source: string; cases: Verdict["cases"]; passed?: number; total?: number; role?: Role; basedOn?: string; critiques?: Array<{ author: string; via: string; text: string }>; followed?: { author: string; via: string; text: string }; judgements?: Array<{ judge: string; via: string; results: Array<{ criterion: string; pass: boolean; reason: string }> }>; paths?: EpisodePath[]; rooms?: RoomMap[] } | null> {
+	async details(id: string, candidateId: string): Promise<{ source: string; cases: Verdict["cases"]; passed?: number; total?: number; role?: Role; basedOn?: string; critiques?: Array<{ author: string; via: string; text: string }>; followed?: { author: string; via: string; text: string }; judgements?: Array<{ judge: string; via: string; results: Array<{ criterion: string; pass: boolean; reason: string }> }>; paths?: EpisodePath[]; rooms?: RoomMap[]; subgoals?: Subgoal[] } | null> {
 		const s = await this.session(id);
 		const f = await this.#contribution(s, candidateId);
 		if (!f) return null;
@@ -576,9 +580,20 @@ export class CodeChatHub {
 			...(followed ? { followed: { author: followed.author, via: followed.via, text: followed.text } } : {}),
 			...(Array.isArray(f.judgements) ? { judgements: f.judgements as Array<{ judge: string; via: string; results: Array<{ criterion: string; pass: boolean; reason: string }> }> } : {}),
 			...(Array.isArray(f.episodes) ? await this.#paths(s.id, candidateId) : {}),
+			...(Array.isArray(f.episodes) && typeof f.proposalId === "string" ? await subgoalsOf(this.host, s.id, f.proposalId).then((g) => (g.length ? { subgoals: g } : {})) : {}),
 		};
 	}
 
+	/** The subgoal chain of a judged contribution that followed a plan with subgoals: per subgoal the share of its
+	 *  sample episodes whose first seed got past it (the verdict's episodes say how many each reached in turn). */
+	async #chain(session: string, f: Record<string, unknown>): Promise<{ chain?: LineageStep["chain"] }> {
+		if (typeof f.proposalId !== "string" || !Array.isArray(f.episodes)) return {};
+		const plan = await subgoalsOf(this.host, session, f.proposalId);
+		if (!plan.length) return {};
+		const got = (f.episodes as Array<{ kind?: string; subgoals?: unknown }>).filter((e) => e.kind === "sample" && typeof e.subgoals === "number").map((e) => e.subgoals as number);
+		if (!got.length) return {};
+		return { chain: { of: got.length, subgoals: plan.map((g, k) => ({ text: subgoalText(g), share: Math.round((got.filter((n) => n > k).length / got.length) * 1000) / 1000 })) } };
+	}
 	/** How a contribution came about: it and the attempts it built on (`basedOn`, newest first, at most 8). Each step
 	 *  names its author, model, role and verdict, the plan it followed, the critique it worked in, its merge partner, and
 	 *  what it took from the step before (a line diff, the share of lines kept; for a merge also the partner's share). */
@@ -610,6 +625,7 @@ export class CodeChatHub {
 				...(typeof f.role === "string" ? { role: f.role as Role } : {}),
 				ok: typeof v.ok === "boolean" ? v.ok : null, ...(num(v.ms) !== undefined ? { ms: num(v.ms) } : {}), ...(num(v.passed) !== undefined ? { passed: num(v.passed) } : {}), ...(num(v.total) !== undefined ? { total: num(v.total) } : {}),
 				...(plan ? { plan: { author: plan.author, via: plan.via, text: clipWords(plan.text, 600) } } : {}),
+				...(await this.#chain(s.id, f)),
 				...(critique ? { critique: { author: critique.author, via: critique.via, text: clipWords(critique.text, 900) } } : {}),
 				...(parent ? { from: { candidateId: String(parent.candidateId), author: String(parent.author ?? "") }, diff: lineDiff(String(parent.source ?? ""), source) } : {}),
 				...(partner ? { partner: { candidateId: String(partner.candidateId), author: String(partner.author ?? ""), share: shareOf(String(partner.source ?? ""), source) } } : {}),
