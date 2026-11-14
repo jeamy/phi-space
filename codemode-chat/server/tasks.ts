@@ -3,7 +3,8 @@
 import { MAX_CHECK_CHARS, maxTimeoutMs } from "./judge.ts";
 import { arenaAddress, describeBotTools, MAX_BOT_CALLS, type BotSpec } from "./bottask.ts";
 import { describeHarnessTools, type HarnessSpec } from "./harnesstask.ts";
-import { ANLEGER_EPISODES, ANLEGER_FIRE, ANLEGER_PLANS, ANLEGER_VARIANTS, episodeList, ISLAND_EPISODES, ISLAND_MAP, ISLAND_MEMORY_VARIANTS, ISLAND_VARIANTS } from "./island.ts";
+import { TOY_FIRE } from "./toyisland.ts";
+import { ANLEGER_EPISODES, ANLEGER_FIRE, ANLEGER_PLANS, ANLEGER_VARIANTS, episodeList, PLANNER_HARNESS, PLANNER_RATERS, ISLAND_EPISODES, ISLAND_MAP, ISLAND_MEMORY_VARIANTS, ISLAND_VARIANTS } from "./island.ts";
 import { checkSpec, dataToolSpec, describeDataTools, type DataItem, type DataSpec } from "./datatask.ts";
 import { describeTools, FRUSTRATION, MAX_CALLS, PI_SOURCE, PI_WINDOWS, PI_WINDOWS_BUGS, type ToolSpec } from "./tooltask.ts";
 
@@ -155,6 +156,29 @@ function anlegerTask(): Task {
 		cases: [],
 		bench: "",
 		variants: ANLEGER_VARIANTS,
+	};
+}
+
+/** Rate planners (docs/codemode-planung.en.md, step 5): a harness task whose implementations are island bots, played on
+ *  the toy island in the judge (toyisland.ts). The post's evaluation lessons as a task: fresh episodes, several seeds,
+ *  a goal that must hold. */
+function plannerHarnessTask(): Task {
+	const bads = { de: "eine, die nur die drei gezeigten Episoden auswendig kennt; eine, die nur im Startraum und den Räumen daneben sucht; eine, die das Feuer gleich danach ausgehen lässt; eine, die auf die Flut wartet, wo sie mit Seed 0 Treibholz anschwemmt", en: "one that knows the three shown episodes by heart; one that looks only in its start room and the rooms next to it; one that lets the fire go out right after; one that waits for the tide where it washes driftwood up with seed 0" };
+	return {
+		id: "harness-planners", fn: "rate", kind: "harness", timeoutMs: 30_000,
+		harness: PLANNER_HARNESS,
+		title: { de: "Bewertungsskript: Planer bewerten (Insel-Bots, Episoden und Seeds)", en: "Eval harness: rate planners (island bots, episodes and seeds)" },
+		prompt: {
+			de: `Aufgabe: Schreibe async function rate(). Sie bewertet einen Insel-Bot mit einer Zahl: höher ist besser. Gefordert ist vom Bot (wie bei der Aufgabe „Insel-Bot“): von jedem Start auf der Grauen Insel das einzige Stück Treibholz finden, wo es auch liegt, und das Leuchtfeuer der Grauen Bucht damit entzünden, so dass es danach noch 5 Weltminuten brennt, bei jedem Zufall der Welt (Seed).\n\nDie gezeigten Episoden der Aufgabe „Insel-Bot“:\n${episodeList(ISLAND_EPISODES, "de")}\n\nDie Insel (Raum: Ausgang → Ziel), das Feuer steht in der Grauen Bucht auf ${TOY_FIRE.x},${TOY_FIRE.y}:\n${ISLAND_MAP}\n\nDen Code des Bots siehst du nicht. Du spielst ihn über ein Werkzeug, auf einer Nachbildung der Insel im Richter:\n${describeHarnessTools(PLANNER_HARNESS, "de")}\n\nBewertung: Der Richter ruft rate() einmal je Bot auf. Die guten sind die Referenz (sucht die ganze Insel ab) und verdeckte weitere. Die schlechten sind diese vier und verdeckte weitere: ${bads.de}. Jeder schlechte erreicht die drei gezeigten Episoden mit Seed 0 und ohne hold. rate() zählt nur, wenn jeder gute Bot eine echt höhere Zahl bekommt als jeder schlechte.\n\nPunkte: Jeder Lauf kostet 1 Punkt, gezählt auf den gezeigten Bots. Unter den richtigen Skripten gewinnt das mit den wenigsten Punkten, dann das schnellste.`,
+			en: `Task: write async function rate(). It rates an island bot with a number: higher is better. What the bot must do (as in the task "Island bot"): from any start on the Graue Insel find the one piece of driftwood, wherever it lies, and light the beacon of the Graue Bucht with it, so that it still burns 5 world minutes later, whatever the world's chance (seed).\n\nThe shown episodes of the task "Island bot":\n${episodeList(ISLAND_EPISODES, "en")}\n\nThe island (room: exit → where it leads); the fire stands in the Graue Bucht at ${TOY_FIRE.x},${TOY_FIRE.y}:\n${ISLAND_MAP}\n\nYou do not see the bot's code. You play it through a tool, on a copy of the island in the judge:\n${describeHarnessTools(PLANNER_HARNESS, "en")}\n\nScoring: the judge calls rate() once per bot. The good ones are the reference (searches the whole island) and hidden others. The bad ones are these four and hidden others: ${bads.en}. Every bad one reaches the three shown episodes with seed 0 and no hold. rate() counts only when every good bot gets a strictly higher number than every bad one.\n\nPoints: every run costs 1 point, counted on the shown bots. Among correct scripts the one with the fewest points wins, then the fastest.`,
+		},
+		about: {
+			de: "So läuft es: ein Prüfskript wie „Sortierfunktionen prüfen“, aber für Planer (docs/codemode-planung.en.md, Schritt 5). Die Bots spielen auf einer Nachbildung der Grauen Insel im Richter, nicht in der Arena: ein Skript darf sie Dutzende Male spielen, und dieselbe Episode mit demselben Seed ergibt bei jedem Richter dieselbe Welt. Der Seed entscheidet, wo die Flut nach jeder gewarteten Stunde Treibholz anschwemmt. Die schlechten Bots tragen die Lehren der Planungsaufgaben: wer nur die gezeigten Episoden prüft, nur einen Seed spielt oder das Halten nicht verlangt, ordnet sie falsch ein. Verdeckte Bots zeigen nur, ob sie richtig eingeordnet wurden.\n\nKI-Modelle: Für die Bewertung braucht es keine.",
+			en: "How it runs: a test script as in \"rate sort functions\", but for planners (docs/codemode-planung.en.md, step 5). The bots play on a copy of the Graue Insel in the judge, not in the arena: a script may play them dozens of times, and the same episode with the same seed gives the same world on every judge. The seed decides where the tide washes driftwood up after every hour waited. The bad bots carry the lessons of the planning tasks: a script that checks only the shown episodes, plays one seed or does not ask for the goal to hold ranks them wrong. Hidden bots show only whether they were ranked right.\n\nAI models: the scoring needs none.",
+		},
+		cases: [],
+		bench: "",
+		variants: PLANNER_RATERS,
 	};
 }
 
@@ -377,6 +401,7 @@ export const TASKS: Task[] = [
 			`async function rate(){return 1}`,
 		],
 	},
+	plannerHarnessTask(),
 ];
 
 export const taskById = (id: string): Task | undefined => TASKS.find((t) => t.id === id);

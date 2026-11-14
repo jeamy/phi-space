@@ -261,6 +261,39 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      next room after the judge's hold had let the fire go out, and failed whenever the fog was dense. It now crosses
      before the hold.
 5. **Harness task "Rate planners".**
+
+   *Done 2026-11-14* (`harness-planners`, `codemode-chat/server/toyisland.ts`), with one difference: the bots do not
+   play in the arena but on a copy of the Graue Insel in the judge.
+   - **Why not the arena.** A harness plays each bot dozens of times. In the arena every world costs seconds to start,
+     so a verdict would take minutes. A seed also does not fix the arena's world after a wait (step 1), and the bot
+     that only works with one seed would be judged differently from one judge to the next.
+   - **The toy island.** It has the island's rooms and exits, every room 24 × 16 cells of ground, the fire of the
+     Graue Bucht at 9,10, and the same commands as the arena (`move`, exit names, `nimm treibholz`,
+     `lege holz ins feuer`). A piece of driftwood burns 10 world minutes. The seed decides where the tide washes a
+     piece up after every hour waited: with seeds 0 and 1 beside the fire, with every other seed in another room. The
+     same episode and seed give the same world on every judge, and the task needs no arena, so every judge takes it.
+   - **The harness's `run`.** `HarnessSpec.world: "island"` turns `run` into
+     `{ start, wood, seed?, hold? } → { reached, points }`: one episode of the bot under test, in a fresh toy world
+     and a fresh sandbox. A bot that throws or runs past 3 s did not reach it; an invalid episode answers `{ error }`.
+     The rest is the harness judge as for "rate sort functions": every good bot must score strictly higher than every
+     bad one, the hidden ones show only "ordered right" or "ordered wrong", and points count the shown bots.
+   - **The bots.** Each bad bot reaches the three shown episodes of the island task with seed 0 and no hold, so only
+     a careful harness catches it:
+
+     | Bad bot (shown) | Caught by |
+     |---|---|
+     | Knows the shown episodes by heart (the memory lesson) | fresh episodes |
+     | Looks only in its start room and the rooms next to it (no subgoals) | wood far from the start |
+     | Lets the fire go out right after feeding it (waits 9 minutes) | a `hold` |
+     | Waits for the tide where it lands with seed 0 | several seeds |
+
+     The good ones are the reference (searches the whole island) and two hidden ones (a careful searcher, one
+     searching in another order). The hidden bad ones fail more narrowly: one searches two rooms deep, one waits 7
+     minutes, and one takes whatever the tide brings to the Graue Bucht (it fails only with seeds from 2 on).
+   - **Scripted harnesses.** Two are correct: every start room with the wood in the room farthest from it, three
+     seeds and `hold: 5` (24 runs a bot); and the same with one seed per start, cycling 0, 1, 2 (8 runs, cheaper).
+     Four are blind, each to one lesson: shown episodes only, one seed, no hold, wood always in the start room. Each
+     misranks exactly the bot of its lesson; the tests check this, and that the same verdict comes out twice.
 6. **A learned world model (only with a decision).** A process of its own, like the model process. It takes
    `Predict` entries and writes the answers, and the judge only replays recorded ones, as for Jev. It needs a new
    dependency (Python or ONNX), weights and probably a GPU. It pays off only if the arena turns out too slow for

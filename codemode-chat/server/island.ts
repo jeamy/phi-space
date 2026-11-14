@@ -4,6 +4,7 @@
 // (world.json); spaces-mmo/tests/arena.test.ts opens the episodes in the real world.
 import type { BotEpisode } from "./bottask.ts";
 import type { Subgoal } from "./subgoals.ts";
+import type { HarnessSpec } from "./harnesstask.ts";
 
 /** The island's rooms and their exits on the island (exits that leave it are left out). */
 export const ISLAND_ROOMS: Record<string, { name: string; exits: Record<string, string> }> = {
@@ -119,4 +120,54 @@ export const ANLEGER_VARIANTS: string[] = [
 	`async function bot(){${ROUTE}let here=(await tools.look()).room.id;${SEARCH}${FEED_HERE}await search();await go("anleger");await feed()}`,
 	// wrong: goes to the fire without wood
 	`async function bot(){${ROUTE}let here=(await tools.look()).room.id;${SEARCH}${FEED_HERE}await go("anleger");await feed()}`,
+];
+
+// ---- rate planners (docs/codemode-planung.en.md, step 5) ----------------------------------------------------------
+// A harness task on the toy island (toyisland.ts): the contribution rates island bots by playing them. Each bad bot
+// reaches every shown episode with seed 0 and no hold, so only a harness that runs fresh episodes, several seeds and a
+// hold ranks it below the good ones; the hidden bad ones fail more narrowly still.
+const FEED2 = `s=await tools.look();const f=s.fires[0];await tools.act({line:"move "+f.x+" "+(f.y-1)});await tools.act({line:"lege holz ins feuer"});`;
+/** A bot that searches the rooms up to `depth` exits from its start, nearest first, then feeds the fire; `after` runs last. */
+const searchBot = (depth: number, after = "", reverse = false) => `async function bot(){${ROUTE}let s=await tools.look();let here=s.room.id;const order=[here],dist={[here]:0};for(let i=0;i<order.length;i++)for(const d of Object.values(MAP[order[i]]||{})${reverse ? ".reverse()" : ""})if(!(d in dist)){dist[d]=dist[order[i]]+1;if(dist[d]<=${depth})order.push(d)}for(const r of order){if(r!==here){for(const ex of route(here,r))await tools.act({line:ex});here=r;s=await tools.look()}const w=s.things.find(t=>t.name==="Treibholz");if(w){await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"});break}}for(const ex of route(here,"graue-bucht"))await tools.act({line:ex});${FEED2}${after}}`;
+/** A bot that waits for the tide in the Graue Bucht instead of searching: `take` picks the piece up. */
+const tideBot = (take: string) => `async function bot(){${ROUTE}let s=await tools.look();for(const ex of route(s.room.id,"graue-bucht"))await tools.act({line:ex});await tools.wait({minutes:60});${take}${FEED2}}`;
+
+export const PLANNER_HARNESS: HarnessSpec = {
+	target: "bot", runMs: 3000, world: "island",
+	good: [{ label: "the reference (searches the whole island)", source: searchBot(99) }],
+	bad: [
+		{ label: "knows the shown episodes by heart", source: ISLAND_VARIANTS[2]! },
+		{ label: "looks only in its start room and the next ones", source: searchBot(1) },
+		{ label: "lets the fire go out right after", source: searchBot(99, `await tools.wait({minutes:9})`) },
+		{ label: "waits for the tide where it lands with seed 0", source: tideBot(`await tools.act({line:"move 8 10"});await tools.act({line:"nimm treibholz"});`) },
+	],
+	hiddenGood: [
+		{ label: "hidden good 1", source: ISLAND_VARIANTS[1]! },
+		{ label: "hidden good 2", source: searchBot(99, "", true) },
+	],
+	hiddenBad: [
+		{ label: "hidden bad 1", source: searchBot(2) },
+		{ label: "hidden bad 2", source: searchBot(99, `await tools.wait({minutes:7})`) },
+		{ label: "hidden bad 3", source: tideBot(`s=await tools.look();const w=s.things[0];if(w){await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"})}`) },
+	],
+};
+
+// The scripted harnesses: two correct ones (every room's farthest piece with three seeds and a hold; the same with one
+// seed per start, cheaper), and one blind to each lesson.
+const FAR = `${ROUTE}const far=(a)=>{let best=a,n=0;for(const r of Object.keys(MAP)){const k=route(a,r).length;if(k>n){n=k;best=r}}return best};`;
+const RATE = (episodes: string, seeds: string, hold: number) => `async function rate(){${FAR}let n=0;const eps=${episodes};for(const [i,e] of eps.entries())for(const seed of ${seeds}){const r=await tools.run({...e,seed,hold:${hold}});if(r.reached)n++}return n}`;
+const FAR_EPS = `Object.keys(MAP).map(r=>({start:{room:r,x:12,y:8},wood:{room:far(r),x:5,y:5}}))`;
+export const PLANNER_RATERS: string[] = [
+	// correct: every start room, the wood in the room farthest from it, seeds 0 to 2, hold 5 (24 runs)
+	RATE(FAR_EPS, "[0,1,2]", 5),
+	// correct and cheaper: the same episodes, one seed each, in turn 0, 1, 2 (8 runs)
+	`async function rate(){${FAR}let n=0;for(const [i,r] of Object.keys(MAP).entries()){const x=await tools.run({start:{room:r,x:12,y:8},wood:{room:far(r),x:5,y:5},seed:i%3,hold:5});if(x.reached)n++}return n}`,
+	// wrong: only the shown episodes (the bot that knows them by heart, the one that looks near its start pass)
+	RATE(`[{start:{room:"graue-bucht",x:10,y:8},wood:{room:"graue-bucht",x:5,y:7}},{start:{room:"fischerdorf",x:12,y:8},wood:{room:"fischerdorf",x:5,y:5}},{start:{room:"klippenpfad",x:2,y:8},wood:{room:"graue-bucht",x:17,y:9}}]`, "[0,1,2]", 5),
+	// wrong: one seed (the tide waiter passes)
+	RATE(FAR_EPS, "[0]", 5),
+	// wrong: no hold (the bot that lets the fire go out passes)
+	RATE(FAR_EPS, "[0,1,2]", 0),
+	// wrong: the wood always in the start room (the near searcher passes)
+	RATE(`Object.keys(MAP).map(r=>({start:{room:r,x:12,y:8},wood:{room:r,x:5,y:5}}))`, "[0,1,2]", 5),
 ];
