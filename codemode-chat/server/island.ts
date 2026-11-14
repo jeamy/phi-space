@@ -64,3 +64,20 @@ export const ISLAND_VARIANTS: string[] = [
 	// wrong: goes to the fire without wood
 	`async function bot(){${ROUTE}let s=await tools.look();for(const ex of route(s.room.id,"graue-bucht"))await tools.act({line:ex});${FEED}}`,
 ];
+
+// The variants of the island bot with memory (docs/codemode-planung.en.md, step 3). WALK follows a recall answer: a
+// `move` onto every step in the figure's room (a step onto an exit changes the room), TAKE picks up driftwood on the
+// way when asked to.
+const WALK = `const walk=async(r,take)=>{let s=await tools.look();let room=s.room.id,at=s.at;for(const st of [r.from,...r.steps]){if(st[0]!==room||(st[1]===at.x&&st[2]===at.y))continue;const a=await tools.act({line:"move "+st[1]+" "+st[2]});room=a.at.room;at=a.at;if(take)await tools.act({line:"nimm treibholz"})}return room};`;
+export const ISLAND_MEMORY_VARIANTS: string[] = [
+	// searches the island for the driftwood (as the island bot does) and never recalls: correct, no memory needed
+	ISLAND_VARIANTS[0]!,
+	// searches for the driftwood, then recalls the way to the fire from there and walks it, the room route when the
+	// memory has none: correct, and it learns the way once a generation reached it
+	`async function bot(){${ROUTE}${WALK}let s=await tools.look();let here=s.room.id;const order=[here];for(let i=0;i<order.length;i++)for(const d of Object.values(MAP[order[i]]||{}))if(!order.includes(d))order.push(d);for(const r of order){if(r!==here){for(const ex of route(here,r))await tools.act({line:ex});here=r;s=await tools.look()}const w=s.things.find(t=>t.name==="Treibholz");if(w){await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"});break}}const m=await tools.recall();if(m.found&&m.distance<=3)here=await walk(m,false);for(const ex of route(here,"graue-bucht"))await tools.act({line:ex});${FEED}}`,
+	// only replays the memory from where it starts, picking up what lies on the way: nothing in the first generation,
+	// then the shown episodes whose way passes their driftwood, never a hidden one
+	`async function bot(){${WALK}const m=await tools.recall();if(!m.found)return;await walk(m,true);let s;${FEED}}`,
+	// wrong: goes to the fire without wood
+	ISLAND_VARIANTS[4]!,
+];

@@ -8,6 +8,7 @@ import { clipWords, type Attempt, type Earlier, type Finding, type Note, type Ro
 import { EARLIER_CAP, rankCmp, validMs } from "./results.ts";
 import { HELD_WAIT_MS, readExisting } from "./space.ts";
 import { isText, taskById, taskFromSpec, type Task } from "./tasks.ts";
+import { freezeMemory, runFreezeId } from "./memory.ts";
 
 /** What a room may hold at most: every read of it stays complete (a read limit never cuts entries off). */
 export const ROOM_LIMITS = { contributions: 1000, notes: 300, blocks: 60, messages: 500 };
@@ -139,7 +140,15 @@ export async function enqueueCandidate(space: SpaceLike, txn: string | null, ttl
 	if ((await contributionCount(space, c.session)) >= ROOM_LIMITS.contributions) throw new Error("This room holds the maximum number of contributions; delete a task block");
 	const candidateId = `${Date.now().toString(36)}-${rid()}`;
 	const l = c.lineage ?? {};
-	await space.write({ type: "CodeCandidate", fields: { lane: laneOf(c.taskId), session: c.session, blockId: c.blockId, taskId: c.taskId, candidateId, author: c.author, via: c.via, gen: c.gen, ...(c.runId ? { runId: c.runId } : {}), ...(l.role ? { role: l.role } : {}), ...(l.basedOn ? { basedOn: l.basedOn } : {}), ...(l.partner ? { partner: l.partner } : {}), ...(l.critiqueId ? { critiqueId: l.critiqueId } : {}), ...(l.proposalId ? { proposalId: l.proposalId } : {}), ...(l.usage ? { usage: l.usage } : {}), source: c.source, ts: Date.now() } as never }, txn, ttl);
+	// a task with memory: the candidate recalls from its generation's freeze (run.ts writes it when the generation
+	// begins); one handed in outside a generation gets a freeze of its own, of the memory as it stands
+	let freeze: string | undefined;
+	if (taskById(c.taskId)?.bot?.memory) {
+		const gen = c.runId ? runFreezeId(c.runId, c.gen) : null;
+		freeze = gen && (await space.readIfExists({ type: "MemoryFreeze", fields: { session: c.session, blockId: c.blockId, freezeId: gen } }, NO_WAIT, { txn })) ? gen : `c-${candidateId}`;
+		if (freeze !== gen) await freezeMemory(space, txn, ttl, { session: c.session, blockId: c.blockId, freezeId: freeze });
+	}
+	await space.write({ type: "CodeCandidate", fields: { lane: laneOf(c.taskId), session: c.session, blockId: c.blockId, taskId: c.taskId, candidateId, author: c.author, via: c.via, gen: c.gen, ...(c.runId ? { runId: c.runId } : {}), ...(freeze ? { freeze } : {}), ...(l.role ? { role: l.role } : {}), ...(l.basedOn ? { basedOn: l.basedOn } : {}), ...(l.partner ? { partner: l.partner } : {}), ...(l.critiqueId ? { critiqueId: l.critiqueId } : {}), ...(l.proposalId ? { proposalId: l.proposalId } : {}), ...(l.usage ? { usage: l.usage } : {}), source: c.source, ts: Date.now() } as never }, txn, ttl);
 	return candidateId;
 }
 

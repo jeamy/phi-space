@@ -28,6 +28,7 @@ import { addNote, answersOf, attemptOf, blockTask, enqueueAnswer, enqueueCandida
 import { archive } from "./results.ts";
 import { entryLeaseMs, HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeAll, takeExisting } from "./space.ts";
 import { isText, type Task } from "./tasks.ts";
+import { freezeMemory, runFreezeId } from "./memory.ts";
 
 export type RunMode = "scripted" | "llm";
 /** What the board shows while it runs. */
@@ -442,6 +443,8 @@ async function barrier(d: AgentDeps, it: WorkItem, txn: string): Promise<"done" 
 		const enough = info.solvedGen !== null && next >= info.solvedGen + info.polish;
 		if (!alive || info.ended || next >= info.gens || enough) return; // no next generation: the run ends when its agents find nothing left
 		const g = generationItems(run, run.params, next, attempts);
+		// a task with memory: what this generation may recall, fixed before its first contribution (server/memory.ts)
+		if (task?.bot?.memory) await freezeMemory(space, txn, d.ttl, { session: it.session, blockId: it.blockId, freezeId: runFreezeId(it.runId, next + 1) });
 		run.progress[next] = g.progress;
 		info.gen = next + 1;
 		settle(run, g.items.length);
@@ -674,6 +677,7 @@ export async function startSpaceRun(space: SpaceLike, txn: string, ttl: number, 
 	if (!run.params.board) {
 		const opening = run.info.solvedGen !== null && 0 >= run.info.solvedGen + run.params.polish ? null : generationItems(run, run.params, 0, attempts);
 		if (opening) { progress[0] = opening.progress; items = opening.items; gen = 1; }
+		if (opening && task?.bot?.memory) await freezeMemory(space, txn, ttl, { session: run.session, blockId: run.blockId, freezeId: runFreezeId(run.runId, 1) });
 	} else {
 		board = { phase: "work", phaseLeft: 0, created: 0, done: 0, critiques: 0, proposals: 0, votes: 0, judgements: 0, findings: 0, improveLeft: run.params.polish * run.params.agents, merged: [] };
 		const solved = await isSolved(space, run.session, run.blockId, text);

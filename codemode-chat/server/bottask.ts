@@ -7,8 +7,8 @@
 import { connect, type Socket } from "node:net";
 import type { Meter } from "./tooltask.ts";
 
-export type BotTool = "look" | "act" | "wait";
-export const BOT_COST: Record<BotTool, number> = { look: 1, act: 1, wait: 1 };
+export type BotTool = "look" | "act" | "wait" | "recall";
+export const BOT_COST: Record<BotTool, number> = { look: 1, act: 1, wait: 1, recall: 1 };
 /** The most tool calls one bot may make; a bot beyond it fails with this message. */
 export const MAX_BOT_CALLS = 300;
 
@@ -19,7 +19,7 @@ export type BotCell = { room: string; x: number; y: number };
 export type BotEpisode = { id: string; kind: "sample" | "holdout"; start?: BotCell; setup?: { clear?: string[]; items?: Array<{ proto: string } & BotCell> }; text: { de: string; en: string } };
 /** What a verdict keeps of one episode: reached per seed, the points of its runs; `skipped`: the hidden ones did not run
  *  because no sample episode was reached. Only sample episodes keep the arena's detail. */
-export type EpisodeResult = { id: string; kind: "sample" | "holdout"; reached: boolean[]; cost: number; skipped?: true; detail?: string; /** a sample episode's way (its first seed), from the arena's `path`; the judge host stores it as a BotEpisode entry, not in the verdict */ path?: PathStep[]; cut?: true };
+export type EpisodeResult = { id: string; kind: "sample" | "holdout"; reached: boolean[]; cost: number; skipped?: true; detail?: string; /** a sample episode's way (its first seed), from the arena's `path`; the judge host stores it as a BotEpisode entry, not in the verdict */ path?: PathStep[]; cut?: true; /** the jumps between remembered paths its recall answers took (memory view) */ links?: Array<[PathStep, PathStep]> };
 /** One step of a path: the room and the cell where the figure changed room or direction (the arena's `path`). */
 export type PathStep = [room: string, x: number, y: number];
 /** A room's geometry as the arena's `map` gives it, for the page that draws paths (BotRoom entries). */
@@ -36,6 +36,8 @@ export type BotSpec = {
 	hold?: number;
 	/** No `wait` tool: the clock never moves for the bot, so one seed per episode is enough. */
 	noWait?: true;
+	/** A memory (server/memory.ts): reached sample paths are remembered, a bot may `recall` them, the judge reports coverage. */
+	memory?: true;
 };
 
 /** How many seeds an episode runs with: one when the bot cannot wait (the world is then the same for every seed), three
@@ -44,7 +46,7 @@ export const seedsOf = (b: BotSpec): number => (b.noWait ? 1 : 3);
 /** The seed of run `s` (0-based) of episode `i`: fixed, so every judge plays the same worlds. */
 export const episodeSeed = (i: number, s: number): number => 1000 * (i + 1) + s;
 /** The tools a bot of this task has. */
-export const botToolNames = (b?: BotSpec): BotTool[] => (b?.noWait ? ["look", "act"] : ["look", "act", "wait"]);
+export const botToolNames = (b?: BotSpec): BotTool[] => [...(b?.noWait ? ["look", "act"] as BotTool[] : ["look", "act", "wait"] as BotTool[]), ...(b?.memory ? ["recall"] as BotTool[] : [])];
 
 /** The arena failed (unreachable, busy, gone in the middle): not the bot's doing. The judge gives the candidate back
  *  for a later round instead of writing a verdict (judge-host.ts). */
@@ -107,13 +109,17 @@ const DESCRIPTIONS: Record<BotTool, { de: string; en: string }> = {
 		de: "lässt die Weltzeit weiterlaufen (sonst steht sie still): { minutes: number (1..120) } → { time }. 1 Punkt.",
 		en: "lets world time pass (it stands still otherwise): { minutes: number (1..120) } → { time }. 1 point.",
 	},
+	recall: {
+		de: "das Gedächtnis: Wege früherer Generationen, die das Ziel einer gezeigten Episode erreicht haben (eingefroren, wenn die Generation begann). { goal?: string (Standard: das Ziel der Aufgabe), from?: { room, x, y } (Standard: wo die Figur steht) } → { found: true, from: [room, x, y] (die nächste gemerkte Stelle im selben Raum), distance (Zellen dorthin), steps: Array<[room, x, y]> (von dort bis dahin, wo das Ziel galt; \"move x y\" auf jeden Schritt im Raum der Figur, ein Schritt auf einen Ausgang wechselt den Raum), jumps (Wechsel zwischen gemerkten Wegen, je 10 Zellen Umweg), cost } oder { found: false, reason }. 1 Punkt.",
+		en: "the memory: paths of earlier generations that reached a shown episode's goal (frozen when the generation began). { goal?: string (default: the task's goal), from?: { room, x, y } (default: where the figure stands) } → { found: true, from: [room, x, y] (the nearest remembered cell in the same room), distance (cells to it), steps: Array<[room, x, y]> (from there to where the goal held; \"move x y\" onto each step in the figure's room, a step onto an exit changes the room), jumps (changes between remembered paths, 10 cells of detour each), cost } or { found: false, reason }. 1 point.",
+	},
 };
 
 export const describeBotTools = (lang: "de" | "en", b?: BotSpec): string => botToolNames(b).map((n) => `- tools.${n}(args): ${DESCRIPTIONS[n][lang]}`).join("\n");
 
 /** The tools of one world; every call is counted on `m`, and a call beyond MAX_BOT_CALLS throws. */
 export const botArg = (a: unknown): Record<string, unknown> => (a && typeof a === "object" ? (a as Record<string, unknown>) : {});
-export function botTools(arena: Arena, world: string, m: Meter, names: BotTool[] = ["look", "act", "wait"]): CodemodeTool[] {
+export function botTools(arena: Arena, world: string, m: Meter, names: BotTool[] = ["look", "act", "wait"], /** answers `recall` (judge.ts, from the candidate's freeze) */ recall?: (a: Record<string, unknown>) => Promise<unknown>): CodemodeTool[] {
 	const arg = botArg;
 	const call = (name: BotTool, run: (a: Record<string, unknown>) => Promise<unknown>) => ({
 		name, description: DESCRIPTIONS[name].en,
@@ -123,7 +129,7 @@ export function botTools(arena: Arena, world: string, m: Meter, names: BotTool[]
 			return run(arg(a));
 		},
 	});
-	return names.map((name) => call(name, (a) => botCall(arena, world, name, a)));
+	return names.map((name) => call(name, (a) => (name === "recall" ? (recall ? recall(a) : Promise.resolve({ found: false, reason: "this task has no memory" })) : botCall(arena, world, name, a))));
 }
 
 /** One bot call in a world: what the arena answers, without its envelope. A `key` makes it safe to send again (the
@@ -133,5 +139,6 @@ export async function botCall(arena: Arena, world: string, name: BotTool, a: Rec
 	const k = key ? { key } : {};
 	if (name === "look") return strip(await arena.ask("look", { world, ...k }));
 	if (name === "act") { if (typeof a.line !== "string") throw new Error("act needs { line: string }"); return strip(await arena.ask("act", { world, line: a.line, ...k })); }
+	if (name === "recall") throw new Error("recall is answered by the judge, not the arena");
 	return strip(await arena.ask("wait", { world, minutes: Number(a.minutes), ...k }));
 }

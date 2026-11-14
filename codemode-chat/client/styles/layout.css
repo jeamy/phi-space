@@ -422,3 +422,11 @@ aside .about__text { max-height: 240px; overflow-y: auto; }
 .pm-wood { fill: none; stroke: currentColor; stroke-width: 1.5; }
 .pm-cross { stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
 .pm-label { fill: var(--text-strong); font-size: 9px; font-weight: 600; paint-order: stroke; stroke: var(--surface); stroke-width: 2.5px; }
+
+/* step 3: the coverage line in the curve, the memory view (generations as one blue ramp, newer stronger) */
+:root, :root[data-mode="dark"] { --gen-1: #256abf; --gen-2: #3987e5; --gen-3: #6da7ec; --gen-4: #9ec5f4; --gen-5: #cde2fb; }
+:root[data-mode="light"] { --gen-1: #86b6ef; --gen-2: #5598e7; --gen-3: #2a78d6; --gen-4: #1c5cab; --gen-5: #104281; }
+.episodes__coverage { fill: none; stroke: var(--path-2); stroke-width: 1.8; stroke-dasharray: 1.5 3.5; stroke-linecap: round; }
+.episodes__key--coverage { border-top: 2.4px dotted var(--path-2); }
+.memview { margin-top: 8px; }
+.pm-jump { stroke: var(--text-strong); stroke-width: 1.5; stroke-dasharray: 3 3; }

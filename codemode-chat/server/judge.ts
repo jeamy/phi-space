@@ -13,6 +13,7 @@
 // contribution's reach: patched builtins cannot make the rule pass.
 import { pathToFileURL } from "node:url";
 import type { Task } from "./tasks.ts";
+import { covers, memoryIdOf, recall, type MemoryPath } from "./memory.ts";
 import { ArenaDown, arenaAddress, arenaClient, botArg, botCall, BOT_COST, botToolNames, botTools, episodeSeed, MAX_BOT_CALLS, seedsOf, type Arena, type BotEpisode, type BotSpec, type BotTool, type EpisodeResult, type PathStep, type RoomMap } from "./bottask.ts";
 import { Diverged, LogDown, runDurable, type CallLog, type LoggedCall, type RunHead } from "./durable-run.ts";
 import { harnessTools, type HarnessSpec, type Impl } from "./harnesstask.ts";
@@ -22,7 +23,7 @@ import { meterText, newMeter, toolProgram, worldCase, worldTools, type Meter, ty
 export type CaseResult = { call: string; ok: boolean; got?: string; expect?: string; error?: string };
 /** `hardcoded`: the code passed, but only by returning an expected result written into it (not computed). */
 /** A tools task (tooltask.ts) adds what the holdout's run cost: `cost` in points, `calls` per tool, `score` 0..1. */
-export type Verdict = { ok: boolean; ms: number; error?: string; passed: number; total: number; cases: CaseResult[]; hardcoded?: true; cost?: number; calls?: Record<string, number>; score?: number; /** a planning task's episodes (bottask.ts) */ episodes?: EpisodeResult[]; /** the rooms the sample paths cross, for drawing them (the judge host keeps them as BotRoom entries) */ rooms?: RoomMap[] };
+export type Verdict = { ok: boolean; ms: number; error?: string; passed: number; total: number; cases: CaseResult[]; hardcoded?: true; cost?: number; calls?: Record<string, number>; score?: number; /** a planning task's episodes (bottask.ts) */ episodes?: EpisodeResult[]; /** the rooms the sample paths cross, for drawing them (the judge host keeps them as BotRoom entries) */ rooms?: RoomMap[]; /** a task with memory: the share of hidden episodes the frozen memory covers (server/memory.ts) */ coverage?: number };
 type Sandbox = { execute(code: string): Promise<{ ok: boolean; value?: unknown; error?: { message: string } }>; close(): Promise<void> };
 type SandboxTool = { name: string; description?: string; execute(args: unknown): unknown };
 export type Codemode = { CodemodeSandbox: new (o: { timeoutMs: number; tools: SandboxTool[]; memoryLimitBytes?: number }) => Sandbox };
@@ -325,8 +326,8 @@ async function judgeHarness(cm: Codemode, task: Task & { harness: HarnessSpec },
 /** Judges one contribution; the caller already holds a sandbox slot. */
 /** A bot task (bottask.ts): a world of its own from the arena, opened before the bot's time limit starts; the bot plays
  *  it through look/act/wait, the arena says whether the goal was reached, and the world is closed. One case. */
-async function judgeBot(cm: Codemode, task: Task & { bot: BotSpec }, source: string): Promise<Verdict> {
-	if (task.bot.episodes?.length) return judgeEpisodes(cm, task, source);
+async function judgeBot(cm: Codemode, task: Task & { bot: BotSpec }, source: string, memory: MemoryPath[] = []): Promise<Verdict> {
+	if (task.bot.episodes?.length) return judgeEpisodes(cm, task, source, memory);
 	const limit = limitOf(task), goal = task.bot.goalText.en, call = `${task.fn}() in a world of its own`;
 	const fail = (error: string, meter?: Meter): Verdict => ({ ok: false, ms: limit, error: plain(error), passed: 0, total: 1, cases: [{ call, ok: false, error: plain(error), expect: goal }], ...(meter ? { cost: meter.cost, calls: { ...meter.calls } as Record<string, number>, score: 0 } : {}) });
 	const address = arenaAddress();
@@ -366,7 +367,7 @@ async function judgeBot(cm: Codemode, task: Task & { bot: BotSpec }, source: str
  *  the goal held. The verdict is correct when every episode counts; `score` is the share of hidden episodes that count,
  *  `passed` the episodes that count, the points and time are those of all runs. Of a hidden episode it says only
  *  reached or not: no detail, no error text. */
-async function judgeEpisodes(cm: Codemode, task: Task & { bot: BotSpec }, source: string): Promise<Verdict> {
+async function judgeEpisodes(cm: Codemode, task: Task & { bot: BotSpec }, source: string, memory: MemoryPath[] = []): Promise<Verdict> {
 	const b = task.bot, eps = b.episodes!, limit = limitOf(task), seeds = seedsOf(b), names = botToolNames(b);
 	const address = arenaAddress();
 	if (!address) return { ok: false, ms: limit, error: "this judge has no arena (CODEMODE_ARENA)", passed: 0, total: eps.length, cases: [] };
@@ -380,9 +381,9 @@ async function judgeEpisodes(cm: Codemode, task: Task & { bot: BotSpec }, source
 			for (const [i, e] of eps.entries()) {
 				if (e.kind !== kind) continue;
 				if (kind === "holdout" && !sampleReached) { results.push({ id: e.id, kind, reached: [], cost: 0, skipped: true }); cases.push({ call: `hidden episode ${e.id}`, ok: false, error: "not run: no sample episode was reached" }); continue; }
-				const runs: Array<{ reached: boolean; detail: string; cost: number; path?: { path: PathStep[]; cut: boolean } }> = [];
+				const runs: Array<{ reached: boolean; detail: string; cost: number; path?: { path: PathStep[]; cut: boolean }; links?: Array<[PathStep, PathStep]> }> = [];
 				for (let s = 0; s < seeds; s++) {
-					const r = await playEpisode(cm, arena, task, source, e, seeds > 1 ? episodeSeed(i, s) : undefined, names, kind === "sample" && s === 0);
+					const r = await playEpisode(cm, arena, task, source, e, seeds > 1 ? episodeSeed(i, s) : undefined, names, kind === "sample" && s === 0, memory);
 					runs.push(r); msAll += r.ms;
 					total.cost += r.meter.cost; total.total += r.meter.total;
 					for (const [k, n] of Object.entries(r.meter.calls)) total.calls[k] = (total.calls[k] ?? 0) + (n ?? 0);
@@ -392,8 +393,8 @@ async function judgeEpisodes(cm: Codemode, task: Task & { bot: BotSpec }, source
 				const seedText = seeds > 1 ? ` (${reached.filter(Boolean).length} of ${seeds} seeds)` : "";
 				if (kind === "sample") {
 					const detail = plain(runs.find((r) => !r.reached)?.detail ?? runs[0]!.detail);
-					const way = runs[0]!.path;
-					results.push({ id: e.id, kind, reached, cost, detail, ...(way?.path.length ? { path: way.path, ...(way.cut ? { cut: true as const } : {}) } : {}) });
+					const way = runs[0]!.path, links = runs[0]!.links;
+					results.push({ id: e.id, kind, reached, cost, detail, ...(way?.path.length ? { path: way.path, ...(way.cut ? { cut: true as const } : {}) } : {}), ...(links?.length ? { links } : {}) });
 					cases.push({ call: `${e.id}: ${e.text.en}`, ok: all, ...(all ? { got: `reached${seedText}, ${cost} points` } : { error: `${detail}${seedText}` }), expect: b.goalText.en });
 					if (!all && firstError === null) firstError = `${e.id}: ${detail}`;
 				} else {
@@ -407,8 +408,11 @@ async function judgeEpisodes(cm: Codemode, task: Task & { bot: BotSpec }, source
 		const ok = counted.length === results.length;
 		const calls = `calls: ${meterText(total)}`;
 		const error = ok ? undefined : plain(firstError ? `${firstError} (${calls})` : `${hidden.length - hidden.filter((r) => counted.includes(r)).length} of ${hidden.length} hidden episodes not reached (${calls})`);
+		// what the frozen memory covers of the hidden episodes: a way to the goal from near their start (not told to the bot)
+		const hiddenEps = eps.filter((e) => e.kind === "holdout" && e.start);
+		const coverage = b.memory && hiddenEps.length ? Math.round((hiddenEps.filter((e) => covers(memory, b.goal, e.start!)).length / hiddenEps.length) * 1000) / 1000 : undefined;
 		const rooms = await roomMaps(arena, new Set([...results.flatMap((r) => (r.path ?? []).map((p) => p[0])), ...eps.filter((e) => e.kind === "sample" && e.start).map((e) => e.start!.room)]));
-		return { ok, ms: ok ? Math.round(msAll * 100) / 100 : limit, ...(error ? { error } : {}), passed: counted.length, total: results.length, cases, cost: total.cost, calls: { ...total.calls } as Record<string, number>, score: Math.round(score * 1000) / 1000, episodes: results, ...(rooms.length ? { rooms } : {}) };
+		return { ok, ms: ok ? Math.round(msAll * 100) / 100 : limit, ...(error ? { error } : {}), passed: counted.length, total: results.length, cases, cost: total.cost, calls: { ...total.calls } as Record<string, number>, score: Math.round(score * 1000) / 1000, episodes: results, ...(rooms.length ? { rooms } : {}), ...(coverage !== undefined ? { coverage } : {}) };
 	} catch (e) {
 		if (e instanceof ArenaDown) throw e;
 		return { ok: false, ms: limit, error: plain((e as Error).message), passed: 0, total: eps.length, cases: [] };
@@ -417,13 +421,24 @@ async function judgeEpisodes(cm: Codemode, task: Task & { bot: BotSpec }, source
 
 /** One run of an episode: a world opened with its start, setup and seed, the bot in a fresh sandbox, the goal asked
  *  (held for the task's `hold`), the world closed. The arena's own trouble throws ArenaDown. */
-async function playEpisode(cm: Codemode, arena: Arena, task: Task & { bot: BotSpec }, source: string, e: BotEpisode, seed: number | undefined, names: BotTool[], withPath = false): Promise<{ reached: boolean; detail: string; cost: number; ms: number; meter: Meter; path?: { path: PathStep[]; cut: boolean } }> {
+async function playEpisode(cm: Codemode, arena: Arena, task: Task & { bot: BotSpec }, source: string, e: BotEpisode, seed: number | undefined, names: BotTool[], withPath = false, memory: MemoryPath[] = []): Promise<{ reached: boolean; detail: string; cost: number; ms: number; meter: Meter; path?: { path: PathStep[]; cut: boolean }; links?: Array<[PathStep, PathStep]> }> {
 	const limit = limitOf(task), meter: Meter = newMeter();
 	let world: string | null = null;
 	try {
 		try { world = String((await arena.ask("open", { ...(e.start ? { start: e.start } : {}), ...(e.setup ? { setup: e.setup } : {}), ...(seed !== undefined ? { seed } : {}) })).world); }
 		catch (err) { throw err instanceof ArenaDown ? err : new ArenaDown(`the arena could not open a world: ${(err as Error).message}`); }
-		const sandbox = new cm.CodemodeSandbox({ timeoutMs: limit, tools: botTools(arena, world, meter, names), memoryLimitBytes: 64 * 1024 * 1024 });
+		// recall answers from the candidate's frozen memory; the jumps it took are kept for the memory view
+		const links: Array<[PathStep, PathStep]> = [], here = world;
+		const answer = async (a: Record<string, unknown>) => {
+			const goal = typeof a.goal === "string" ? a.goal : task.bot.goal, f = botArg(a.from);
+			const from = typeof f.room === "string" && Number.isInteger(f.x) && Number.isInteger(f.y) ? { room: f.room, x: Number(f.x), y: Number(f.y) } : await arena.ask("look", { world: here }).then((l) => ({ room: String(l.room?.id ?? ""), x: Number(l.at?.x), y: Number(l.at?.y) }));
+			const r = recall(memory, goal, from);
+			if (!r.found) return r;
+			if (withPath) for (const l of r.links) if (links.length < 20) links.push(l);
+			const { links: _l, ...out } = r;
+			return out;
+		};
+		const sandbox = new cm.CodemodeSandbox({ timeoutMs: limit, tools: botTools(arena, world, meter, names, answer), memoryLimitBytes: 64 * 1024 * 1024 });
 		let error: string | null = null, ms = limit;
 		try {
 			const r = await sandbox.execute(toolProgram(CAPTURED, task.fn, source));
@@ -435,7 +450,7 @@ async function playEpisode(cm: Codemode, arena: Arena, task: Task & { bot: BotSp
 		if (arena.broken()) throw new ArenaDown("the arena went away while the bot played");
 		// the way it went, before the judge's own wait (a sample episode's first seed; a hidden one keeps none)
 		const path = withPath ? pathFrom(await arena.ask("path", { world }).catch(() => null)) : undefined;
-		const way = path ? { path } : {};
+		const way = { ...(path ? { path } : {}), ...(links.length ? { links } : {}) };
 		if (error) return { reached: false, detail: error, cost: meter.cost, ms: limit, meter, ...way };
 		const s = await arena.ask("score", { world, goal: task.bot.goal, ...(task.bot.hold ? { hold: task.bot.hold } : {}) });
 		return s.done === true ? { reached: true, detail: String(s.detail ?? ""), cost: meter.cost, ms, meter, ...way } : { reached: false, detail: `goal not reached: ${String(s.detail ?? "")}`, cost: meter.cost, ms: limit, meter, ...way };
@@ -471,11 +486,15 @@ async function roomMaps(arena: Arena, rooms: Set<string>): Promise<RoomMap[]> {
 
 /** The BotEpisode entries of a verdict: one per sample episode that has a path (judge-host.ts writes them with the
  *  verdict). */
-export const episodeEntries = (v: Verdict) => (v.episodes ?? []).filter((e) => e.kind === "sample" && e.path?.length).map((e) => ({ episode: e.id, kind: e.kind, reached: e.reached, cost: e.cost, path: e.path!, ...(e.cut ? { cut: true } : {}) }));
+export const episodeEntries = (v: Verdict) => (v.episodes ?? []).filter((e) => e.kind === "sample" && e.path?.length).map((e) => ({ episode: e.id, kind: e.kind, reached: e.reached, cost: e.cost, path: e.path!, ...(e.cut ? { cut: true } : {}), ...(e.links?.length ? { jumps: e.links } : {}) }));
+
+/** The paths a verdict adds to a task's memory: the sample episodes reached with every seed, their path whole (not
+ *  cut). Never a hidden episode's. */
+export const memoryEntries = (v: Verdict, goal: string) => (v.episodes ?? []).filter((e) => e.kind === "sample" && e.path?.length && !e.cut && e.reached.length && e.reached.every(Boolean)).map((e) => ({ memoryId: memoryIdOf(goal, e.path!), episode: e.id, goal, path: e.path! }));
 
 /** What a judge hands along for a durable task: the candidate's call log in the space (judge-host.ts). Without it a
  *  durable task keeps its log in memory (it then survives nothing, but runs the same way). */
-export type JudgeContext = { log?: CallLog; /** the judge's transaction lease: a dead judge's candidate is back within it, and its world must wait that long */ leaseMs?: number };
+export type JudgeContext = { log?: CallLog; /** the judge's transaction lease: a dead judge's candidate is back within it, and its world must wait that long */ leaseMs?: number; /** a task with memory: the paths of the candidate's freeze (judge-host.ts) */ memory?: MemoryPath[] };
 
 /** An in-memory call log. */
 export function memoryLog(): CallLog {
@@ -548,7 +567,7 @@ async function judgeDurableBot(cm: Codemode, task: Task & { bot: BotSpec }, sour
 
 export async function judgeInSlot(cm: Codemode, task: Task, source: string, ctx: JudgeContext = {}): Promise<Verdict> {
 	if (task.kind === "bot" && task.bot && task.durable) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 1, cases: [] } : judgeDurableBot(cm, task as Task & { bot: BotSpec }, source, ctx.log ?? memoryLog(), ctx.leaseMs);
-	if (task.kind === "bot" && task.bot) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 1, cases: [] } : judgeBot(cm, task as Task & { bot: BotSpec }, source);
+	if (task.kind === "bot" && task.bot) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 1, cases: [] } : judgeBot(cm, task as Task & { bot: BotSpec }, source, ctx.memory);
 	if (task.kind === "harness" && task.harness) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 1, cases: [] } : judgeHarness(cm, task as Task & { harness: HarnessSpec }, source);
 	if (task.kind === "tools" && task.tools) return source.length > MAX_SOURCE_CHARS ? { ok: false, ms: limitOf(task), error: "source too long", passed: 0, total: 2, cases: [] } : judgeTools(cm, task as Task & { tools: ToolSpec }, source);
 	const total = task.cases.length;
@@ -590,6 +609,6 @@ export async function judgeInSlot(cm: Codemode, task: Task, source: string, ctx:
 }
 
 /** The score fields of a verdict, as hub and shard write them: the case results failing ones first, at most 10. */
-export const verdictFields = (v: Verdict) => ({ ok: v.ok, ms: v.ms, passed: v.passed, total: v.total, cases: [...v.cases.filter((c) => !c.ok), ...v.cases.filter((c) => c.ok)].slice(0, 10), ...(v.error ? { error: v.error } : {}), ...(v.hardcoded ? { hardcoded: true } : {}), ...(v.cost !== undefined ? { cost: v.cost, calls: v.calls ?? {}, score: v.score ?? 0 } : {}), ...(v.episodes ? { episodes: v.episodes.map(({ path: _p, cut: _c, ...e }) => e) } : {}) });
+export const verdictFields = (v: Verdict) => ({ ok: v.ok, ms: v.ms, passed: v.passed, total: v.total, cases: [...v.cases.filter((c) => !c.ok), ...v.cases.filter((c) => c.ok)].slice(0, 10), ...(v.error ? { error: v.error } : {}), ...(v.hardcoded ? { hardcoded: true } : {}), ...(v.cost !== undefined ? { cost: v.cost, calls: v.calls ?? {}, score: v.score ?? 0 } : {}), ...(v.episodes ? { episodes: v.episodes.map(({ path: _p, cut: _c, links: _l, ...e }) => e) } : {}), ...(v.coverage !== undefined ? { coverage: v.coverage } : {}) });
 
 export const judge = (cm: Codemode, task: Task, source: string, ctx: JudgeContext = {}): Promise<Verdict> => sandboxSlot(() => judgeInSlot(cm, task, source, ctx));

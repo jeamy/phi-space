@@ -23,6 +23,7 @@ import { archive, earlierLeaseMs, EARLIER_CAP, setBest, validMs } from "./result
 import { endRun, readRun, startSpaceRun, type RunEntry, type RunInfo, type RunMode, type RunParams } from "./run.ts";
 import { addNote, answersOf, bestOf, enqueueCandidate, execTarget, modelInfoOf, isSolved, planTurn, rid, scoresOf, systemLine, taskEntries, vetoesOf, type Contribution } from "./room.ts";
 import { arenaAddress, type PathStep, type RoomMap } from "./bottask.ts";
+import { MAX_MEMORY } from "./memory.ts";
 /** One sample episode's way, as the panel of a planning contribution draws it. */
 export type EpisodePath = { episode: string; reached: boolean[]; cost: number; path: PathStep[]; cut?: true };
 import { customSpec, customTask, dataTask, expectedOf, isText, offeredTasks, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
@@ -36,7 +37,7 @@ import { entryLeaseMs, HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeAll
 import type { WsConnection } from "phi-spaces/ws";
 
 /** The entry types that belong to a task block besides its CodeTask (deleted and extended with it). */
-const BLOCK_TYPES = ["CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "BotRun", "BotCall", "BotEpisode", "CodeData", "ChatMessage"];
+const BLOCK_TYPES = ["CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "BotRun", "BotCall", "BotEpisode", "PlanMemory", "MemoryFreeze", "CodeData", "ChatMessage"];
 const LIMITS = { agents: 8, gens: 10, perAgent: 3, polish: 3, boardDepth: 12, plans: 500, sessions: 50, messages: 500, contributions: 1000, blocks: 60, notes: 300 };
 /** Code a snapshot carries at most, counted as encoded JSON (escapes included); the rest is fetched per contribution
  *  (`source()`), so a frame stays far below the 1 MiB WebSocket limit however many contributions a room holds. */
@@ -455,7 +456,7 @@ export class CodeChatHub {
 			const slim = <T extends { candidateId: string; source?: string; cases?: unknown }>(c: T): T => { const { cases: _cases, ...rest } = c; return (withCode && keep.has(c.candidateId) ? rest : { ...rest, source: undefined, sourceOmitted: true }) as T; };
 			const blocks = raw.map(({ f, task, blockId, contributions, best, spent }) => ({
 				blockId, ts: f.ts as number, active: blockId === s.blockId, ...(typeof f.until === "number" ? { until: f.until } : {}),
-				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, ...(task.about ? { about: task.about } : {}), cases: task.id === "custom" ? task.cases.length : undefined, ...(isText(task) ? { kind: "text", criteria: task.criteria, criteriaBy: task.criteriaBy } : {}), ...(task.kind === "bot" ? { kind: "bot", ...(task.bot?.episodes?.length ? { episodes: task.bot.episodes.map((e) => (e.kind === "sample" ? { id: e.id, kind: e.kind, text: e.text, ...(e.start ? { start: e.start } : {}), ...(e.setup?.items?.length ? { items: e.setup.items } : {}) } : { id: e.id, kind: e.kind })) } : {}) } : {}), ...(task.check !== undefined ? { check: task.check, checkBy: task.checkBy ?? "user" } : {}), ...(task.id === "custom" ? { timeoutS: limitOf(task) / 1000 } : {}) },
+				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, ...(task.about ? { about: task.about } : {}), cases: task.id === "custom" ? task.cases.length : undefined, ...(isText(task) ? { kind: "text", criteria: task.criteria, criteriaBy: task.criteriaBy } : {}), ...(task.kind === "bot" ? { kind: "bot", ...(task.bot?.memory ? { memory: true } : {}), ...(task.bot?.episodes?.length ? { episodes: task.bot.episodes.map((e) => (e.kind === "sample" ? { id: e.id, kind: e.kind, text: e.text, ...(e.start ? { start: e.start } : {}), ...(e.setup?.items?.length ? { items: e.setup.items } : {}) } : { id: e.id, kind: e.kind })) } : {}) } : {}), ...(task.check !== undefined ? { check: task.check, checkBy: task.checkBy ?? "user" } : {}), ...(task.id === "custom" ? { timeoutS: limitOf(task) / 1000 } : {}) },
 				...(spent.tokens > 0 ? { usage: spent } : {}),
 				contributions: contributions.map(slim), best: best ? slim<Best>(best) : null, messages: messages.filter((m) => m.blockId === blockId),
 				// plan texts ride along for the active block only (and not in the code-less fallback); others come with plan()
@@ -489,6 +490,33 @@ export class CodeChatHub {
 		return null;
 	}
 
+	/** A block's memory for the memory view (docs/codemode-planung.en.md, view 4): every remembered path with its
+	 *  generation and author, the jumps between paths that recall answers took (from the BotEpisode entries), and the
+	 *  rooms they cross. Null when the block is unknown. */
+	async memory(id: string, blockId: string): Promise<{ memories: Array<{ memoryId: string; gen: number; author: string; episode: string; path: PathStep[] }>; jumps: Array<[PathStep, PathStep]>; rooms: RoomMap[] } | null> {
+		const s = await this.session(id);
+		if (!(await this.#taskEntries(s.id)).some((f) => f.blockId === blockId)) return null;
+		const memories = (await this.host.readAll({ type: "PlanMemory", fields: { session: s.id, blockId } }, { limit: MAX_MEMORY + 10 }))
+			.map((e) => e.fields as unknown as { memoryId: string; gen: number; author: string; episode: string; path: PathStep[]; ts: number })
+			.sort((a, b) => a.ts - b.ts || a.memoryId.localeCompare(b.memoryId))
+			.map(({ memoryId, gen, author, episode, path }) => ({ memoryId, gen, author, episode, path }));
+		const jumps: Array<[PathStep, PathStep]> = [];
+		for (const e of await this.host.readAll({ type: "BotEpisode", fields: { session: s.id, blockId } }, { limit: LIMITS.contributions * 4 })) {
+			for (const j of ((e.fields as { jumps?: Array<[PathStep, PathStep]> }).jumps ?? [])) if (jumps.length < 500 && !jumps.some((k) => JSON.stringify(k) === JSON.stringify(j))) jumps.push(j);
+		}
+		return { memories, jumps, rooms: await this.#rooms(new Set(memories.flatMap((m) => m.path.map((p) => p[0])))) };
+	}
+
+	/** The BotRoom geometry of these rooms (the newest entry of each). */
+	async #rooms(ids: Set<string>): Promise<RoomMap[]> {
+		const rooms: RoomMap[] = [];
+		for (const room of [...ids].sort().slice(0, 30)) {
+			const e = (await this.host.readAll({ type: "BotRoom", fields: { room } }, { limit: 5 })).sort((a, b) => Number((b.fields as { ts?: number }).ts ?? 0) - Number((a.fields as { ts?: number }).ts ?? 0))[0];
+			if (e) rooms.push((e.fields as unknown as { geo: RoomMap }).geo);
+		}
+		return rooms;
+	}
+
 	/** A planning contribution's sample paths (BotEpisode entries) and the rooms they cross (BotRoom), for the room
 	 *  map of its panel (docs/codemode-planung.en.md). */
 	async #paths(session: string, candidateId: string): Promise<{ paths?: EpisodePath[]; rooms?: RoomMap[] }> {
@@ -497,12 +525,7 @@ export class CodeChatHub {
 			.map(({ episode, reached, cost, path, cut }) => ({ episode, reached, cost, path, ...(cut ? { cut: true as const } : {}) }))
 			.sort((a, b) => a.episode.localeCompare(b.episode));
 		if (!paths.length) return {};
-		const ids = new Set(paths.flatMap((p) => p.path.map((x) => x[0])));
-		const rooms: RoomMap[] = [];
-		for (const room of [...ids].sort().slice(0, 30)) {
-			const e = (await this.host.readAll({ type: "BotRoom", fields: { room } }, { limit: 5 })).sort((a, b) => Number((b.fields as { ts?: number }).ts ?? 0) - Number((a.fields as { ts?: number }).ts ?? 0))[0];
-			if (e) rooms.push((e.fields as unknown as { geo: RoomMap }).geo);
-		}
+		const rooms = await this.#rooms(new Set(paths.flatMap((p) => p.path.map((x) => x[0]))));
 		return { paths, ...(rooms.length ? { rooms } : {}) };
 	}
 

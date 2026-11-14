@@ -5,7 +5,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./stack.ts";
 import { startFakeArena } from "./fake-arena.ts";
-import { episodeEntries, judge, loadCodemode, verdictFields } from "../server/judge.ts";
+import { episodeEntries, judge, loadCodemode, memoryEntries, verdictFields } from "../server/judge.ts";
+import { covers, JUMP_CELLS, recall, type MemoryPath } from "../server/memory.ts";
 import { teamPrompt } from "../server/llm.ts";
 import { laneOf } from "../server/room.ts";
 import { offeredTasks, taskById, TASKS } from "../server/tasks.ts";
@@ -262,5 +263,127 @@ t("the panel of a planning contribution gets its paths and the rooms' geometry; 
 		assert.equal((await post("/api/sessions/paths1/delete", { blockId: snap.current })).status, 200);
 		assert.equal(await srv.stack.space.count({ type: "BotEpisode" }), 0);
 		assert.equal(await srv.stack.space.count({ type: "BotRoom" }), 3);
+	} finally { await srv.close(); await arena.close(); process.env.CODEMODE_ARENA = ""; }
+});
+
+// ---- step 3: the memory, recall from a freeze, coverage
+const memTask = taskById("beacon-insel-memory")!;
+const [mExplorer, mRecaller, mReplayer, mNoWood] = memTask.variants;
+const asMemory = (v: Awaited<ReturnType<typeof judge>>, gen = 1): MemoryPath[] => memoryEntries(v, memTask.bot!.goal).map((m) => ({ ...m, gen, author: "a" }));
+
+test("recall: the nearest remembered cell, along a path to its end, a jump to another path costs 10 cells", () => {
+	const goal = "beacon:x";
+	const a: MemoryPath = { memoryId: "a", gen: 1, author: "a", episode: "S1", goal, path: [["r", 0, 0], ["r", 5, 0], ["s", 1, 1]] };
+	const b: MemoryPath = { memoryId: "b", gen: 1, author: "b", episode: "S2", goal, path: [["q", 0, 0], ["q", 9, 9], ["r", 6, 1]] };
+	const one = recall([a], goal, { room: "r", x: 1, y: 0 });
+	assert.ok(one.found);
+	assert.deepEqual([one.from, one.distance, one.jumps, one.steps], [["r", 0, 0], 1, 0, [["r", 0, 0], ["r", 5, 0], ["s", 1, 1]]]);
+	// from q: b leads into r, where it ends; a jump onto a would go further: b's own end is cheaper
+	const two = recall([a, b], goal, { room: "q", x: 0, y: 0 });
+	assert.ok(two.found && two.jumps === 0 && two.steps.at(-1)![0] === "r");
+	// a path whose own end lies far: the way jumps over to a (2 cells apart) and on to a's end, 10 cells for the jump
+	const d: MemoryPath = { memoryId: "d", gen: 2, author: "d", episode: "S3", goal, path: [["q", 0, 0], ["r", 6, 1], ["r", 22, 1]] };
+	const three = recall([a, d], goal, { room: "q", x: 0, y: 0 });
+	assert.ok(three.found);
+	assert.deepEqual([three.jumps, three.cost, three.links, three.steps.at(-1)], [1, 1 + JUMP_CELLS + 2 + 1, [[["r", 6, 1], ["r", 5, 0]]], ["s", 1, 1]]);
+	assert.equal(recall([a], goal, { room: "elsewhere", x: 0, y: 0 }).found, false);
+	assert.equal(recall([a], "beacon:y", { room: "r", x: 0, y: 0 }).found, false, "only paths of that goal");
+	assert.equal(covers([a], goal, { room: "r", x: 3, y: 0 }), true);
+	assert.equal(covers([a], goal, { room: "r", x: 2, y: 9 }), false, "more than 3 cells from every remembered cell");
+});
+
+t("with memory: a correct contribution's shown paths are remembered, recall answers from them, coverage counts the hidden starts they reach", async () => {
+	const arena = await startFakeArena();
+	try {
+		// an empty memory: the explorer is correct, covers nothing, and its three shown paths would be remembered
+		const first = await withArena(arena.address, () => judge(cm!, memTask, mExplorer!, { memory: [] }));
+		assert.equal(first.ok, true, first.error ?? "");
+		assert.equal(first.coverage, 0);
+		const memory = asMemory(first);
+		assert.deepEqual(memory.map((m) => m.episode), ["S1", "S2", "S3"]);
+		// the replayer has nothing to replay without a memory
+		const empty = await withArena(arena.address, () => judge(cm!, memTask, mReplayer!, { memory: [] }));
+		assert.deepEqual([empty.passed, empty.score], [0, 0]);
+		// with it: the recaller is still correct and recalls once per episode; the memory covers H6 (it starts 3 cells from
+		// where S3's driftwood lay in the Graue Bucht), no other hidden start
+		const rec = await withArena(arena.address, () => judge(cm!, memTask, mRecaller!, { memory }));
+		assert.equal(rec.ok, true, rec.error ?? "");
+		assert.equal(rec.calls!.recall, 9);
+		assert.equal(rec.coverage, 0.167);
+		// the replayer reaches the shown episodes whose remembered way passes their driftwood, none of the hidden
+		const rep = await withArena(arena.address, () => judge(cm!, memTask, mReplayer!, { memory }));
+		assert.equal(rep.ok, false);
+		assert.equal(rep.score, 0);
+		assert.ok(rep.passed >= 2 && rep.passed <= 3, String(rep.passed));
+		assert.ok(rep.episodes!.filter((e) => e.kind === "holdout").every((e) => !e.reached[0]));
+		// nothing of a hidden episode goes into the memory; a contribution that is not correct adds its reached ones only
+		assert.ok(memoryEntries(rep, memTask.bot!.goal).every((m) => m.episode.startsWith("S")));
+		// the same contribution with the same memory: the same verdict, as on another judge
+		const again = await withArena(arena.address, () => judge(cm!, memTask, mRecaller!, { memory }));
+		const same = (v: typeof rec) => JSON.stringify([v.ok, v.passed, v.score, v.cost, v.calls, v.coverage, v.episodes!.map((e) => [e.id, e.reached, e.cost, e.path])]);
+		assert.equal(same(again), same(rec));
+		// the task without memory has no recall tool and no coverage
+		const plain = await withArena(arena.address, () => judge(cm!, island, mExplorer!, { memory }));
+		assert.equal(plain.coverage, undefined);
+		assert.doesNotMatch(island.prompt.en, /tools\.recall/);
+		assert.match(memTask.prompt.en, /tools\.recall/);
+		void mNoWood;
+	} finally { await arena.close(); }
+});
+
+t("a run with memory: each generation recalls what the ones before it reached, frozen when it began; the block's memory goes with it", async () => {
+	const arena = await startFakeArena();
+	process.env.CODEMODE_ARENA = arena.address;
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [{ host: "arena", arena: arena.address, workers: 2 }] });
+	try {
+		const post = (path: string, body: unknown) => fetch(srv.url + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+		assert.equal((await post("/api/sessions/mem1/task", { taskId: "beacon-insel-memory" })).status, 200);
+		assert.equal((await post("/api/sessions/mem1/run", { agents: 3, gens: 3, perAgent: 1, polish: 1, contenders: ["scripted"] })).status, 200);
+		let snap: any;
+		for (const end = Date.now() + 240_000; ;) {
+			const s = await (await fetch(srv.url + "/api/sessions/mem1")).json() as any;
+			snap = { ...s, ...(s.blocks.find((b: any) => b.blockId === s.current) ?? {}) };
+			if (snap.run && !snap.run.active && snap.contributions?.length >= 6 && snap.contributions.every((c: any) => c.ok !== null)) break;
+			if (Date.now() > end) throw new Error(`timeout: ${JSON.stringify([snap.run, snap.contributions?.map((c: any) => [c.author, c.gen, c.ok])])}`);
+			await new Promise((r) => setTimeout(r, 200));
+		}
+		assert.equal(snap.task.memory, true);
+		const space = srv.stack.space;
+		const freezes = (await space.readAll({ type: "MemoryFreeze", fields: { session: "mem1" } })).map((e: any) => e.fields).sort((a: any, b: any) => a.freezeId.localeCompare(b.freezeId));
+		assert.ok(freezes.length >= 2, JSON.stringify(freezes.map((f: any) => f.freezeId)));
+		assert.deepEqual(freezes[0].memoryIds, [], "the first generation recalls nothing");
+		assert.ok(freezes[1].memoryIds.length > 0, "the second recalls what the first reached");
+		// every candidate carries its generation's freeze; the first generation's verdicts cover nothing (its own paths
+		// came in while it was judged), the second's cover H6
+		const scores = (await space.readAll({ type: "CodeScore", fields: { session: "mem1" } })).map((e: any) => e.fields);
+		const byGen = (g: number) => snap.contributions.filter((c: any) => c.gen === g);
+		assert.ok(byGen(1).length && byGen(1).every((c: any) => c.coverage === 0), JSON.stringify(byGen(1).map((c: any) => c.coverage)));
+		assert.ok(byGen(2).length && byGen(2).every((c: any) => c.coverage > 0), JSON.stringify(byGen(2).map((c: any) => c.coverage)));
+		assert.ok(scores.length >= 6);
+		const memories = await space.readAll({ type: "PlanMemory", fields: { session: "mem1" } });
+		assert.ok(memories.length >= 3 && memories.every((e: any) => /^S\d$/.test(e.fields.episode)), "only shown episodes, each path once");
+		// the memory view
+		const view = await (await fetch(`${srv.url}/api/sessions/mem1/memory/${snap.current}`)).json() as any;
+		assert.equal(view.memories.length, memories.length);
+		assert.ok(view.rooms.length >= 3);
+		// a contribution by hand gets a freeze of its own, of the memory as it stands
+		const own = await (await post("/api/sessions/mem1/code", { author: "hand", source: mRecaller })).json() as any;
+		const cand = (await space.readAll({ type: "CodeCandidate", fields: { session: "mem1", candidateId: own.candidateId } }))[0]
+			?? (await space.readAll({ type: "CodeJudging", fields: { session: "mem1", candidateId: own.candidateId } }))[0]
+			?? (await space.readAll({ type: "CodeScore", fields: { session: "mem1", candidateId: own.candidateId } }))[0];
+		void cand;
+		const mine = (await space.readAll({ type: "MemoryFreeze", fields: { session: "mem1", freezeId: `c-${own.candidateId}` } }))[0] as any;
+		assert.ok(mine && mine.fields.memoryIds.length === memories.length);
+		// deleting the block takes memory and freezes along
+		for (const end = Date.now() + 60_000; ;) {
+			const s = await (await fetch(srv.url + "/api/sessions/mem1")).json() as any;
+			const b = s.blocks.find((x: any) => x.blockId === s.current);
+			if (b.contributions.every((c: any) => c.ok !== null)) break;
+			if (Date.now() > end) throw new Error("the hand contribution was not judged");
+			await new Promise((r) => setTimeout(r, 200));
+		}
+		assert.equal((await post("/api/sessions/mem1/delete", { blockId: snap.current })).status, 200);
+		assert.equal(await space.count({ type: "PlanMemory" }), 0);
+		assert.equal(await space.count({ type: "MemoryFreeze" }), 0);
 	} finally { await srv.close(); await arena.close(); process.env.CODEMODE_ARENA = ""; }
 });

@@ -9,7 +9,8 @@
 import "./env.ts";
 import { pathToFileURL } from "node:url";
 import { FOREVER, NO_WAIT, peek, TransactionError, type SpaceLike } from "phi-spaces";
-import { episodeEntries, judgeInSlot, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
+import { frozenMemory, remember } from "./memory.ts";
+import { episodeEntries, judgeInSlot, memoryEntries, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { LogDown, type CallLog, type LoggedCall, type RunHead } from "./durable-run.ts";
 import { setBest, trimArchive } from "./results.ts";
 import { serveExec } from "./exec.ts";
@@ -98,10 +99,13 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 			if (holdout) task = dataTask(task.data, holdout); else missing = "the hidden part of the dataset is missing (the block was deleted, or its upload did not complete)";
 		}
 		const log = task?.durable ? spaceLog(space, { session, ...(typeof blockId === "string" ? { blockId } : {}), candidateId }) : undefined;
-		const v: Verdict | null = spec === false ? null : missing ? { ok: false, ms: TIMEOUT_MS, error: missing, passed: 0, total: 2, cases: [] } : task ? await judgeInSlot(cm, task, String(f.source ?? ""), log ? { log, leaseMs: TXN_LEASE_MS } : {}) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
+		// a task with memory: the paths of the candidate's freeze, read before judging (recall answers from them only)
+		const memory = task?.bot?.memory && typeof blockId === "string" ? await frozenMemory(space, session, blockId, typeof f.freeze === "string" ? f.freeze : undefined) : undefined;
+		const v: Verdict | null = spec === false ? null : missing ? { ok: false, ms: TIMEOUT_MS, error: missing, passed: 0, total: 2, cases: [] } : task ? await judgeInSlot(cm, task, String(f.source ?? ""), { ...(log ? { log, leaseMs: TXN_LEASE_MS } : {}), ...(memory ? { memory } : {}) }) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
 		if (v && (await alive())) {
 			await space.write({ type: "CodeScore", fields: { session, blockId, candidateId, author: f.author, via: f.via, host, gen: f.gen, ...lineageOf(f), ...verdictFields(v), source: f.source, ts: f.ts } as never }, t.id, ttl);
 			// a planning task's sample paths (docs/codemode-planung.en.md): they live and go with the verdict
+			if (task?.bot?.memory && typeof blockId === "string") await remember(space, t.id, ttl, { session, blockId, candidateId, author: String(f.author ?? ""), gen: Number(f.gen ?? 0) }, memoryEntries(v, task.bot.goal));
 			for (const e of episodeEntries(v)) await space.write({ type: "BotEpisode", fields: { session, ...(typeof blockId === "string" ? { blockId } : {}), candidateId, ...e, ts: f.ts } as never }, t.id, ttl);
 			// a correct verdict that beats the block's best (and no person rejected it) becomes the new best
 			if (v.ok && task && typeof blockId === "string" && !(await space.readIfExists({ type: "CodeVeto", fields: { session, candidateId } }, NO_WAIT, { txn: t.id })))

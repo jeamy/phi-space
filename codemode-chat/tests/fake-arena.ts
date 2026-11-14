@@ -3,6 +3,8 @@
 // pieces of driftwood in the Graue Bucht, one fire there; `move`, an exit's name (`süd`, `go süd`), `nimm treibholz`,
 // `lege holz ins feuer`; `open` takes an episode's start and setup, `score` a hold. A fed fire burns 10 world minutes.
 // `path` gives the cells after each command (no walk in between), `map` a toy room: sand, one row of sea, the exits.
+// An exit lies on a cell at the room's edge (EXIT_CELL); a `move` onto it crosses as an exit command does, and the figure
+// arrives on the other side (ARRIVE), as in the game.
 // Its own test (spaces-mmo/tests/arena.test.ts) holds the real one.
 import { createServer, type Socket } from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -17,6 +19,8 @@ const FIRE = { room: "graue-bucht", x: 9, y: 10 };
 const BURN = 10;
 /** Where the island's rooms sit on the atlas (as in Leuchtfeuer). */
 const TOY_ATLAS: Record<string, { x: number; y: number }> = { fischerdorf: { x: 0, y: 1 }, "graue-bucht": { x: 1, y: 1 }, klippenpfad: { x: 2, y: 1 }, klippenkopf: { x: 3, y: 1 }, torfmoor: { x: 0, y: 2 }, duenen: { x: 1, y: 2 }, salzwiesen: { x: 2, y: 2 }, anleger: { x: 1, y: 3 } };
+const EXIT_CELL: Record<string, { x: number; y: number }> = { nord: { x: 12, y: 0 }, "süd": { x: 12, y: 15 }, west: { x: 0, y: 8 }, ost: { x: 23, y: 8 } };
+const ARRIVE: Record<string, { x: number; y: number }> = { nord: { x: 12, y: 14 }, "süd": { x: 12, y: 1 }, west: { x: 22, y: 8 }, ost: { x: 1, y: 8 } };
 const litAt = (t: Toy, minute: number) => t.fedAt !== null && minute < t.fedAt + BURN;
 
 export async function startFakeArena(o: { openMs?: number; /** the arena goes away at the first act */ dropOnAct?: boolean; /** each look/act/wait takes this long */ opMs?: number } = {}) {
@@ -27,9 +31,15 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 	const TIDE = [{ x: 6, y: 9 }, { x: 15, y: 11 }, { x: 4, y: 8 }, { x: 18, y: 10 }].map((c) => ({ room: "graue-bucht", ...c }));
 	const act = (t: Toy, line: string): string[] => {
 		let m: RegExpExecArray | null;
-		if ((m = /^move (\d+) (\d+)$/.exec(line))) { t.at = { ...t.at, x: Number(m[1]), y: Number(m[2]) }; return []; }
-		const exit = ISLAND_ROOMS[t.at.room]?.exits[line.replace(/^go /, "")];
-		if (exit) { t.at = { room: exit, x: 12, y: 8 }; return [`Du gehst nach ${ISLAND_ROOMS[exit]!.name}.`]; }
+		const step = (c: Cell) => { t.at = c; const last = t.trail.at(-1)!; if (last[0] !== c.room || last[1] !== c.x || last[2] !== c.y) t.trail.push([c.room, c.x, c.y]); };
+		const cross = (name: string) => { const to = ISLAND_ROOMS[t.at.room]!.exits[name]!; step({ room: t.at.room, ...EXIT_CELL[name]! }); step({ room: to, ...ARRIVE[name]! }); return [`Du gehst nach ${ISLAND_ROOMS[to]!.name}.`]; };
+		if ((m = /^move (\d+) (\d+)$/.exec(line))) {
+			const x = Number(m[1]), y = Number(m[2]), onExit = Object.keys(ISLAND_ROOMS[t.at.room]?.exits ?? {}).find((n) => EXIT_CELL[n]!.x === x && EXIT_CELL[n]!.y === y);
+			if (onExit) return cross(onExit);
+			step({ ...t.at, x, y }); return [];
+		}
+		const name = line.replace(/^go /, "");
+		if (ISLAND_ROOMS[t.at.room]?.exits[name]) return cross(name);
 		if (/^nimm (treib)?holz$/.test(line)) {
 			const i = t.wood.findIndex((w) => w.room === t.at.room && w.x === t.at.x && w.y === t.at.y);
 			if (i < 0) return ["Hier liegt kein Treibholz."];
@@ -59,7 +69,7 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 			const room = String(r.room), def = ISLAND_ROOMS[room];
 			if (!def) throw new Error(`no room ${room}`);
 			maps++;
-			const exits = Object.entries(def.exits).map(([name, to]) => ({ name, x: 12, y: 0, to }));
+			const exits = Object.entries(def.exits).map(([name, to]) => ({ name, ...EXIT_CELL[name]!, to }));
 			return { world: "toy", room, name: def.name, island: "Graue Insel", map: TOY_ATLAS[room] ?? { x: 0, y: 0 }, ground: ["~".repeat(24), ...Array.from({ length: 15 }, () => ".".repeat(24))], walk: { "~": false, ".": true }, exits, fires: room === FIRE.room ? [{ beaconId: "feuer-bucht", x: FIRE.x, y: FIRE.y }] : [], rev: "toy0000000000000" };
 		}
 		const t = worlds.get(String(r.world));
@@ -78,13 +88,11 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 		switch (r.op) {
 			case "look": {
 				const room = t.at.room;
-				return { room: { id: room, name: ISLAND_ROOMS[room]?.name ?? room }, at: { x: t.at.x, y: t.at.y }, exits: Object.keys(ISLAND_ROOMS[room]?.exits ?? {}).map((name) => ({ name, x: 12, y: 0 })), things: t.wood.filter((w) => w.room === room).map((w) => ({ name: "Treibholz", x: w.x, y: w.y })), fires: room === FIRE.room ? [{ name: "Leuchtfeuer", x: FIRE.x, y: FIRE.y, lit: litAt(t, t.waited) }] : [], pack: t.pack ? [{ name: "Treibholz", count: t.pack }] : [], time: `Tag 1, 08:${String(t.waited).padStart(2, "0")}` };
+				return { room: { id: room, name: ISLAND_ROOMS[room]?.name ?? room }, at: { x: t.at.x, y: t.at.y }, exits: Object.keys(ISLAND_ROOMS[room]?.exits ?? {}).map((name) => ({ name, ...EXIT_CELL[name]! })), things: t.wood.filter((w) => w.room === room).map((w) => ({ name: "Treibholz", x: w.x, y: w.y })), fires: room === FIRE.room ? [{ name: "Leuchtfeuer", x: FIRE.x, y: FIRE.y, lit: litAt(t, t.waited) }] : [], pack: t.pack ? [{ name: "Treibholz", count: t.pack }] : [], time: `Tag 1, 08:${String(t.waited).padStart(2, "0")}` };
 			}
 			case "act": {
 				acts++;
-				const said = act(t, String(r.line ?? "").trim()), last = t.trail.at(-1)!;
-				if (last[0] !== t.at.room || last[1] !== t.at.x || last[2] !== t.at.y) t.trail.push([t.at.room, t.at.x, t.at.y]);
-				return { said, at: { ...t.at } };
+				return { said: act(t, String(r.line ?? "").trim()), at: { ...t.at } };
 			}
 			case "path": paths++; return { path: t.trail.slice(0, 200), cut: t.trail.length > 200 };
 			case "wait": {

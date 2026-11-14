@@ -191,6 +191,32 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      within 3 cells of a sample start or piece, and on the island no sample's shortest way enters a room a hidden piece
      lies in.
 3. **Memory.** `PlanMemory`, `MemoryFreeze`, `recall`, the coverage figure and the memory view.
+
+   *Done 2026-11-14* (`codemode-chat/server/memory.ts`):
+   - A second island task, "Island bot with memory" (`beacon-insel-memory`), has the same episodes and `bot.memory`;
+     the plain island task stays without, so the two curves can be compared.
+   - `judge-host.ts` writes a `PlanMemory` entry for every sample path reached with every seed (not cut), once per
+     path and block (its id is a hash of goal and path), at most 300 a block, the oldest giving way. Hidden episodes
+     never go in.
+   - The run writes a `MemoryFreeze` when a generation begins (`<runId>-g<gen>`, the ids of the block's paths), and a
+     candidate carries the freeze it was written under. One handed in by hand or on the work board gets a freeze of
+     its own, of the memory as it stands. The judge reads the freeze's paths before judging and answers `recall` from
+     them only.
+   - `recall({ goal?, from? })` starts at the remembered cell nearest to the figure (or `from`) in its room and takes the
+     cheapest way from there to the end of a path: along a path cell by cell, a room change counting 1, a jump to
+     another path within 3 cells counting 10 cells plus the distance. It answers `from`, `distance`, `steps`, `jumps`
+     and `cost`; the steps are walkable with `move x y` (a step onto an exit changes the room). 1 point.
+   - Coverage is the share of hidden episodes whose start is within 3 cells of a remembered way to the goal. It is in
+     the verdict and drawn as a dotted line in the progress curve. In the real arena the first generation covers
+     nothing, every later one H6 (it starts 3 cells from where S3's driftwood lay), 1 of 6.
+   - The memory view (run card, loaded when unfolded) draws every remembered path on the atlas in a blue ramp by
+     generation and the jumps recall took (kept with the sample paths' `BotEpisode` entries) dashed. Hidden goals are
+     not drawn as rings: the goal of the island tasks is the fire, the same for every episode, and drawing the hidden
+     starts would show them; the coverage line says what the rings would.
+   - The scripted variants: the explorer (never recalls), one that searches the driftwood and then recalls the way to
+     the fire (correct, more points: it walks the remembered turns one `move` at a time), one that only replays the
+     memory from its start (nothing in the first generation, then the three shown episodes and no hidden one), one
+     without wood.
 4. **Subgoals.** The board role, `Subgoals`, the `subgoals` tool, the subgoal chain, and the task "Light the fire of
    Anleger".
 5. **Harness task "Rate planners".**

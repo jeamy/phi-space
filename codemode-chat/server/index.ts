@@ -166,6 +166,12 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				const got = await hub.lineage(lin[1]!, lin[2]!); // the contribution and the attempts it built on
 				return got ? json(res, 200, got) : json(res, 404, { error: "Unknown contribution" });
 			}
+			const mem = /^\/api\/sessions\/([^/]+)\/memory\/([^/]+)$/.exec(p);
+			if (mem && req.method === "GET") {
+				if (!ID.test(mem[1]!) || !CANDIDATE.test(mem[2]!)) return json(res, 400, { error: "Invalid id" });
+				const got = await hub.memory(mem[1]!, mem[2]!); // a planning block's memory: paths, jumps, rooms
+				return got ? json(res, 200, got) : json(res, 404, { error: "Unknown task block" });
+			}
 			const src = /^\/api\/sessions\/([^/]+)\/source\/([^/]+)$/.exec(p);
 			if (src && req.method === "GET") {
 				if (!ID.test(src[1]!) || !CANDIDATE.test(src[2]!)) return json(res, 400, { error: "Invalid id" });
