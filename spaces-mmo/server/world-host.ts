@@ -51,6 +51,7 @@ import { SCHEDULE_HANDLERS, tickHandler } from "./engine/worldevents.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { regionAddresses, regionOfRoom, regionWorld } from "./engine/regions.ts";
 import { abortableSleep } from "./abort-sleep.ts";
+import { seeded, withSource } from "./engine/source.ts";
 import { deliver } from "./engine/handover.ts";
 import { carryCouriers } from "./engine/courier.ts";
 import { WORLD_LOCK, actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields, type TranslateFields } from "./model.ts";
@@ -323,8 +324,12 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	// started together with the space (the dev runner restarts both on a change): wait until its socket is there
 	let world: Awaited<ReturnType<typeof startWorld>> | undefined;
+	// SPACES_MMO_SEED: the worker's chance from that seed (the arena's episodes, docs/codemode-planung.en.md); the clock stays real
+	const seed = process.env.SPACES_MMO_SEED ? Number(process.env.SPACES_MMO_SEED) : null;
+	if (seed !== null && !(Number.isInteger(seed) && seed >= 0 && seed <= 0xffffffff)) throw new Error("SPACES_MMO_SEED: an integer from 0 to 2^32 - 1");
+	const begin = () => (seed === null ? startWorld() : withSource(seeded(seed, () => Date.now()), () => startWorld()));
 	for (let tries = 0; !world; tries++) {
-		try { world = await startWorld(); }
+		try { world = await begin(); }
 		catch (e) {
 			// a job of a process that was killed pins the terrain until its lease ends (stableTerrain): the next start waits
 			const locked = /world lock stayed taken/.test((e as Error).message);

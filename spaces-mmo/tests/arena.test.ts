@@ -131,3 +131,39 @@ test("a kept world waits as long as its judge asked, a plain one only the idle t
 		rmSync(dir, { recursive: true, force: true });
 	}
 });
+
+test("an episode: the guest starts where it says, the setup lays out the driftwood, and a goal must hold", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "arena-test-")), path = join(dir, "a.sock");
+	const arena = await startArena({ listen: `unix:${path}`, worlds: 1 });
+	try {
+		const c = await client(path);
+		// refused before a world is started
+		for (const bad of [{ start: { room: "nowhere", x: 1, y: 1 } }, { start: { room: "graue-bucht", x: 0, y: 0 } }, { setup: { items: [{ proto: "treibholz", room: "graue-bucht", x: 99, y: 1 }] } }, { seed: -1 }]) {
+			const r = await c.ask("open", bad);
+			assert.equal(r.ok, false, JSON.stringify(bad));
+		}
+		assert.equal(arena.worlds(), 0);
+		const o = await c.ask("open", { start: { room: "graue-bucht", x: 14, y: 9 }, setup: { clear: ["treibholz"], items: [{ proto: "treibholz", room: "graue-bucht", x: 12, y: 9 }] }, seed: 7 });
+		assert.equal(o.ok, true, o.error);
+		const world = o.world, seen = await c.ask("look", { world });
+		assert.deepEqual(seen.at, { x: 14, y: 9 });
+		assert.deepEqual(seen.things.filter((t: any) => t.name === "Treibholz").map((t: any) => [t.x, t.y]), [[12, 9]], "only the episode's driftwood lies there");
+		await c.ask("act", { world, line: "move 12 9" });
+		await c.ask("act", { world, line: "nimm treibholz" });
+		await c.ask("act", { world, line: "move 9 9" });
+		await c.ask("act", { world, line: "lege holz ins feuer" });
+		// one piece burns 10 world minutes: it holds 5, not another 15
+		const held = await c.ask("score", { world, goal: "beacon:feuer-bucht", hold: 5 });
+		assert.equal(held.done, true, held.detail);
+		assert.match(held.detail, /held 5 world minutes/);
+		const gone = await c.ask("score", { world, goal: "beacon:feuer-bucht", hold: 15 });
+		assert.equal(gone.done, false, gone.detail);
+		assert.match(gone.detail, /not held 15 world minutes/);
+		assert.equal((await c.ask("score", { world, goal: "beacon:feuer-bucht", hold: 500 })).ok, false);
+		await c.ask("close", { world });
+		await c.end();
+	} finally {
+		await arena.close();
+		rmSync(dir, { recursive: true, force: true });
+	}
+});

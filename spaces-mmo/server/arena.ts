@@ -8,13 +8,22 @@
 //                                              or tcp:127.0.0.1:3990; SPACES_MMO_ARENA_WORLDS=2 worlds at a time
 //
 // The protocol is JSON lines: a request `{ id, op, ... }`, an answer `{ id, ok: true, ... }` or `{ id, ok: false, error }`.
-//   open {}                         → { world, charId, name }      (waits for a free slot)
+//   open { start?, setup?, seed? }  → { world, charId, name }      (waits for a free slot) start { room, x, y }: where
+//                                                                    the guest stands (default: the spawn cell of its
+//                                                                    room); setup { clear?: protos, items?: [{ proto,
+//                                                                    room, x, y }] }: those things off the ground of
+//                                                                    every room, these laid out; seed: the world
+//                                                                    worker's chance (a planning task's episode,
+//                                                                    docs/codemode-planung.en.md)
 //   look { world }                  → what the figure sees: its room, place, exits, things, fires, pack, the time
 //   act { world, line }             → { said: string[], at }        the line as a player types it, done when the
 //                                                                    world worker has carried it out
 //   wait { world, minutes }         → { time }                      the clock moves on (it stands still otherwise)
-//   score { world, goal }           → { done, detail }              goal "beacon:<beaconId>": the figure lit it;
-//                                                                    "feed:<beaconId>:<n>": it put n pieces into it
+//   score { world, goal, hold? }    → { done, detail }              goal "beacon:<beaconId>": the figure lit it;
+//                                                                    "feed:<beaconId>:<n>": it put n pieces into it;
+//                                                                    hold: the world moves on that many minutes (not
+//                                                                    counted against the bot's waits) and the goal
+//                                                                    must still hold
 //   close { world }                 → {}
 // A world is closed when its connection ends or nobody asks it anything for SPACES_MMO_ARENA_IDLE_MS (default 5 min).
 // A durable run (codemode-chat, docs/codemode-anwendungen.en.md D) opens with `keep: true`: its world outlives the
@@ -34,7 +43,8 @@ import { ROOT } from "./env.ts";
 import { actorToken, asFields, fieldsOf, type BeaconFields, type CharacterFields, type ExitFields, type IntentFields, type ItemFields, type MsgFields, type WorldClockFields } from "./model.ts";
 import { connectSpace, peek } from "./space.ts";
 import { spaceServer } from "./space-server.ts";
-import { loadWorld, type WorldDef } from "./engine/world.ts";
+import { loadWorld, walkable, type WorldDef } from "./engine/world.ts";
+import { resolvePrototype, spawn as spawnItem } from "./engine/prototypes.ts";
 import { flameOf, isLit } from "./engine/fire.ts";
 import { render } from "./engine/funcparser.ts";
 import { formatWorldTime, paused, worldNow, WORLD_MINUTE_MS } from "./engine/worldtime.ts";
@@ -74,18 +84,48 @@ function run(file: string, env: Record<string, string>, ready: string): Promise<
 }
 const stop = (c: ChildProcess) => new Promise<void>((r) => { if (c.exitCode !== null || c.signalCode !== null) return r(); c.once("exit", () => r()); c.kill("SIGTERM"); setTimeout(() => c.kill("SIGKILL"), 5_000).unref(); });
 
-async function openWorld(w: WorldDef, owner: Socket | null): Promise<World> {
+/** What `open` may set up: where the guest starts, what lies where, the world worker's seed. */
+export type OpenSpec = { start?: { room: string; x: number; y: number }; setup?: { clear?: string[]; items?: Array<{ proto: string; room: string; x: number; y: number }> }; seed?: number };
+const MAX_SETUP_ITEMS = 50;
+
+/** Checks an `open` request's start, setup and seed against the world before a world is started for it. */
+export function openSpec(w: WorldDef, r: Record<string, unknown>): OpenSpec {
+	const rooms = new Map((w.allRooms ?? w.rooms).map((room) => [room.roomId, room]));
+	const cell = (c: unknown, what: string) => {
+		const o = (c && typeof c === "object" ? c : {}) as Record<string, unknown>, room = rooms.get(String(o.room)), x = Number(o.x), y = Number(o.y);
+		if (!room) throw new Error(`${what}: no room ${String(o.room)}`);
+		if (!Number.isInteger(x) || !Number.isInteger(y) || !walkable(w, room.ground, x, y)) throw new Error(`${what}: ${room.roomId} ${o.x},${o.y} is no walkable cell`);
+		return { room: room.roomId, x, y };
+	};
+	const out: OpenSpec = {};
+	if (r.start !== undefined) out.start = cell(r.start, "start");
+	if (r.setup !== undefined) {
+		const s = (r.setup && typeof r.setup === "object" ? r.setup : {}) as Record<string, unknown>;
+		const clear = Array.isArray(s.clear) ? s.clear.map(String) : [], items = Array.isArray(s.items) ? s.items : [];
+		if (clear.length > 20 || items.length > MAX_SETUP_ITEMS) throw new Error(`setup: at most 20 protos to clear and ${MAX_SETUP_ITEMS} items`);
+		out.setup = { clear, items: items.map((i, n) => ({ proto: String((i as Record<string, unknown>)?.proto ?? ""), ...cell(i, `setup item ${n + 1}`) })) };
+	}
+	if (r.seed !== undefined) {
+		const s = Number(r.seed);
+		if (!Number.isInteger(s) || s < 0 || s > 0xffffffff) throw new Error("seed: an integer from 0 to 2^32 - 1");
+		out.seed = s;
+	}
+	return out;
+}
+
+async function openWorld(w: WorldDef, owner: Socket | null, spec: OpenSpec = {}): Promise<World> {
 	const dir = mkdtempSync(join(tmpdir(), "mmo-arena-")), world = `unix:${join(dir, "world.sock")}`, accounts = `unix:${join(dir, "accounts.sock")}`;
 	const procs: ChildProcess[] = [], conns: Array<{ close(): void }> = [];
 	const quiet = { SPACES_MMO_LLM: "", SPACES_MMO_NPCS: "", SPACES_MMO_REGION: "", SPACES_MMO_REGIONS: "", SPACES_MMO_SPACES: "" };
 	try {
 		procs.push(await run("server/space-host.ts", { ...quiet, SPACES_MMO_LISTEN: world, SPACES_MMO_ACCOUNTS_LISTEN: accounts, SPACES_MMO_MEM: "1", SPACES_MMO_DATA: "" }, "[space] ready"));
-		procs.push(await run("server/world-host.ts", { ...quiet, SPACES_MMO_SPACE: world }, "[world] ready"));
+		procs.push(await run("server/world-host.ts", { ...quiet, SPACES_MMO_SPACE: world, SPACES_MMO_SEED: spec.seed === undefined ? "" : String(spec.seed) }, "[world] ready"));
 		const ws = connectSpace(world), as = connectSpace(accounts);
 		conns.push(ws, as);
 		const me = await new Accounts(ws.space, as.space, w).createGuest();
 		await pauseClock(ws.space);
-		await toSpawn(w, ws.space, me.charId);
+		if (spec.setup) await setUp(w, ws.space, spec.setup);
+		await toSpawn(w, ws.space, me.charId, spec.start);
 		const ch = await character(ws.space, me.charId);
 		return { id: randomBytes(6).toString("hex"), dir, procs, conns, space: ws.space, charId: me.charId, name: ch.name, waited: 0, touched: Date.now(), owner, done: new Map() };
 	} catch (e) {
@@ -115,15 +155,34 @@ async function moveClock(space: SpaceLike, f: (c: WorldClockFields) => WorldCloc
 }
 const pauseClock = (space: SpaceLike) => moveClock(space, (c) => (c.paused ? c : paused(c, Date.now())));
 
-/** The guest onto its room's spawn cell: a new figure is scattered around it at random, and a bot should start where
- *  every other bot starts (the spawn is kept free in the world's definition). */
-async function toSpawn(w: WorldDef, space: SpaceLike, charId: string): Promise<void> {
+/** The guest onto its room's spawn cell, or onto `start`: a new figure is scattered around the spawn at random, and a
+ *  bot should start where every other bot of its episode starts (the spawn is kept free in the world's definition). */
+async function toSpawn(w: WorldDef, space: SpaceLike, charId: string, start?: OpenSpec["start"]): Promise<void> {
 	const txn = (await space.createTransaction(10_000)).id;
 	try {
 		const t = await space.take({ type: "Character", fields: { charId } }, 5_000, { txn });
 		if (!t) throw new Error("the figure is gone");
 		const ch = fieldsOf<CharacterFields>(t), room = (w.allRooms ?? w.rooms).find((r) => r.roomId === ch.room);
-		await space.write({ type: "Character", fields: asFields({ ...ch, ...(room ? { x: room.spawn.x, y: room.spawn.y } : {}) }) }, txn, FOREVER);
+		const at = start ?? (room ? { room: room.roomId, x: room.spawn.x, y: room.spawn.y } : null);
+		await space.write({ type: "Character", fields: asFields({ ...ch, ...(at ?? {}) }) }, txn, FOREVER);
+		await space.commit(txn);
+	} catch (e) { await space.abort(txn).catch(() => {}); throw e; }
+}
+
+/** An episode's layout: the things of the protos in `clear` taken off the ground of every room (not out of anyone's
+ *  pack), then `items` laid out, in one transaction. */
+async function setUp(w: WorldDef, space: SpaceLike, s: NonNullable<OpenSpec["setup"]>): Promise<void> {
+	const rooms = new Set((w.allRooms ?? w.rooms).map((r) => r.roomId));
+	const protos = await Promise.all((s.items ?? []).map(async (i) => { const p = await resolvePrototype(space, i.proto); if (!p) throw new Error(`setup: no prototype ${i.proto}`); return p; }));
+	const txn = (await space.createTransaction(15_000)).id;
+	try {
+		for (const proto of s.clear ?? []) {
+			for (const e of await space.readAll({ type: "Item", fields: { proto } as never }, { limit: 500 })) {
+				if (!rooms.has(String((e.fields as Record<string, unknown>).location))) continue;
+				await space.take({ id: e.id }, NO_WAIT, { txn });
+			}
+		}
+		for (const [n, i] of (s.items ?? []).entries()) await spawnItem(space, txn, w, protos[n]!, { location: i.room, x: i.x, y: i.y });
 		await space.commit(txn);
 	} catch (e) { await space.abort(txn).catch(() => {}); throw e; }
 }
@@ -198,8 +257,20 @@ export async function wait(x: World, minutes: number): Promise<{ time: string }>
 	return { time: formatWorldTime(worldNow(c)) };
 }
 
-/** Whether the figure reached `goal`. "beacon:<beaconId>": the fire burns now and the figure fed it. */
-export async function score(x: World, goal: string): Promise<{ done: boolean; detail: string }> {
+/** Whether the figure reached `goal` and, with `hold`, still has it after that many world minutes: the judge's own
+ *  wait, not counted against the bot's (a goal reached at the last moment must hold, docs/codemode-planung.en.md). */
+export async function score(x: World, goal: string, hold = 0): Promise<{ done: boolean; detail: string }> {
+	const h = Number(hold);
+	if (!h) return scoreNow(x, goal);
+	if (!Number.isInteger(h) || h < 1 || h > MAX_WAIT_MINUTES) throw new Error(`hold takes 1 to ${MAX_WAIT_MINUTES} minutes`);
+	const first = await scoreNow(x, goal);
+	if (!first.done) return first;
+	await moveClock(x.space, (c) => ({ ...c, worldAnchorMs: c.worldAnchorMs + h * WORLD_MINUTE_MS }));
+	await new Promise((r) => setTimeout(r, 300)); // the world's ticks see the new time
+	const later = await scoreNow(x, goal);
+	return later.done ? { done: true, detail: `${later.detail}; held ${h} world minutes` } : { done: false, detail: `reached, but not held ${h} world minutes: ${later.detail}` };
+}
+async function scoreNow(x: World, goal: string): Promise<{ done: boolean; detail: string }> {
 	const f = /^feed:([\w-]+):(\d+)$/.exec(String(goal));
 	if (f) {
 		const c = await x.space.readIfExists({ type: "Contribution", fields: { beaconId: f[1]!, charId: x.charId } as never }, NO_WAIT);
@@ -238,7 +309,7 @@ export async function startArena(o: { listen?: string; worlds?: number; /** test
 		if (r.op === "open") {
 			await slot();
 			try {
-				const x = await openWorld(w, r.keep === true ? null : sock);
+				const x = await openWorld(w, r.keep === true ? null : sock, openSpec(w, r));
 				if (r.keep === true && typeof r.idleMs === "number" && Number.isFinite(r.idleMs)) x.idleMs = Math.min(MAX_KEEP_MS, Math.max(idle, r.idleMs));
 				worlds.set(x.id, x);
 				return { world: x.id, charId: x.charId, name: x.name };
@@ -260,7 +331,7 @@ export async function startArena(o: { listen?: string; worlds?: number; /** test
 			case "look": return await once(() => look(w, x));
 			case "act": return await once(() => act(x, String(r.line ?? "")));
 			case "wait": return await once(() => wait(x, Number(r.minutes)));
-			case "score": return await score(x, String(r.goal ?? ""));
+			case "score": return await score(x, String(r.goal ?? ""), Number(r.hold ?? 0));
 			case "close": await close(x.id); return {};
 			default: throw new Error(`unknown op ${String(r.op)}`);
 		}

@@ -157,6 +157,20 @@ The progress curve and the episode matrix come with step 1, the rest with the st
 1. **Evaluation.** Episodes with sample and holdout, seeds (1 or 3), `hold`, the arena's `start`/`seed`/`setup`,
    `BotEpisode` entries, the progress curve and the episode matrix. The two existing bot tasks get episodes of their
    own (other start cells, other driftwood).
+
+   *Done 2026-11-14*, with these differences:
+   - A new task "Island bot" (`beacon-insel`, `codemode-chat/server/island.ts`) carries the episodes; the two existing
+     bot tasks are unchanged. Its nine episodes start on the eight rooms of the Graue Insel, the one piece of driftwood
+     lies elsewhere each time (the arena's `setup` clears every fuel first), and the fire must hold 5 world minutes. It
+     allows no `wait`, so one seed per episode.
+   - The episodes' results are kept in the verdict (`Verdict.episodes`, carried into the `CodeScore` entry and the
+     snapshot), not as `BotEpisode` entries. Those come in step 2, when they carry paths.
+   - The time limit is 30 s per episode, not 60: the scripted variants need 3 to 7 s an episode in the real arena.
+   - A seed narrows the world but does not fix it after a wait: the world's ticks draw at moments of real time, so the
+     same seed gave the same world once and another world the next time. The world worker takes `SPACES_MMO_SEED`
+     (`server/world-host.ts`), the arena passes `open`'s `seed` to it; a task with `wait` may still see two seeds
+     disagree on the same contribution. Fixing that needs ticks counted in world time, not real time.
+   - The test that no hidden episode lies on a sample path waits for step 2, where paths are recorded.
 2. **Paths on the map.** The arena's `map`, paths in `BotEpisode`, the room map with paths.
 3. **Memory.** `PlanMemory`, `MemoryFreeze`, `recall`, the coverage figure and the memory view.
 4. **Subgoals.** The board role, `Subgoals`, the `subgoals` tool, the subgoal chain, and the task "Light the fire of
@@ -186,7 +200,7 @@ A clickable mockup of the views, with example data on the real map of the Graue 
 | Seeds per episode | 1 without `wait`, 3 with `wait` | See the judge above. |
 | Worlds per contribution | at most 9 or 27 | Episodes times seeds, fewer when the sample fails. Every one is an arena world of its own. |
 | Arena worlds at a time | 2, later 4 | `SPACES_MMO_ARENA_WORLDS`; raised only after the memory of one arena world is measured. |
-| Time limit | 60 s per episode | As for the beacon bot today. The judge's lease must cover all episodes of a contribution. |
+| Time limit | 60 s per episode (30 s for the island bot) | As for the beacon bot today. The judge's lease must cover all episodes of a contribution. |
 | `hold` | 5 world minutes | A piece of driftwood burns 10 world minutes (`fire.fuel` in world.json); 5 check that the goal holds without asking for a second piece. The judge waits with the episode's fixed seed. |
 | `recall` | two variants of one task | "With memory" and "without", the same episodes. The distance between their curves measures what the memory brings. |
 | Cost of `recall` | 1 point; a jump counts as 10 cells | Like every tool one point. When paths are chained, each jump from one remembered path to another counts as 10 cells of detour. |

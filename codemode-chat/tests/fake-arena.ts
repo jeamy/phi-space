@@ -1,32 +1,41 @@
 // A stand-in for the arena of spaces-mmo (spaces-mmo/server/arena.ts) for the codemode tests: the same JSON lines, a
-// toy Graue Bucht instead of a world (no import of spaces-mmo). A figure, two pieces of driftwood, one fire; `move`,
-// `nimm treibholz`, `lege holz ins feuer`. Its own test (spaces-mmo/tests/arena.test.ts) holds the real one.
+// toy Graue Insel instead of a world (no import of spaces-mmo): the island's rooms and exits (server/island.ts), two
+// pieces of driftwood in the Graue Bucht, one fire there; `move`, an exit's name (`süd`, `go süd`), `nimm treibholz`,
+// `lege holz ins feuer`; `open` takes an episode's start and setup, `score` a hold. A fed fire burns 10 world minutes.
+// Its own test (spaces-mmo/tests/arena.test.ts) holds the real one.
 import { createServer, type Socket } from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ISLAND_ROOMS } from "../server/island.ts";
 
-type Toy = { at: { x: number; y: number }; wood: Array<{ x: number; y: number }>; pack: number; lit: boolean; fed: boolean; pieces: number; waited: number; done: Map<string, Record<string, unknown>> };
-const FIRE = { x: 9, y: 10 };
+type Cell = { room: string; x: number; y: number };
+type Toy = { at: Cell; wood: Cell[]; pack: number; fedAt: number | null; fed: boolean; pieces: number; waited: number; done: Map<string, Record<string, unknown>> };
+const FIRE = { room: "graue-bucht", x: 9, y: 10 };
+/** A fed fire burns this many world minutes after its last piece. */
+const BURN = 10;
+const litAt = (t: Toy, minute: number) => t.fedAt !== null && minute < t.fedAt + BURN;
 
 export async function startFakeArena(o: { openMs?: number; /** the arena goes away at the first act */ dropOnAct?: boolean; /** each look/act/wait takes this long */ opMs?: number } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), "fake-arena-")), path = join(dir, "arena.sock");
 	const worlds = new Map<string, Toy>();
-	let n = 0, opened = 0, acts = 0, idleMs: number | null = null;
+	let n = 0, opened = 0, acts = 0, idleMs: number | null = null, lastOpen: Record<string, unknown> | null = null;
 	/** The tide: every 60 waited minutes a piece of driftwood at the next of these places. */
-	const TIDE = [{ x: 6, y: 9 }, { x: 15, y: 11 }, { x: 4, y: 8 }, { x: 18, y: 10 }];
+	const TIDE = [{ x: 6, y: 9 }, { x: 15, y: 11 }, { x: 4, y: 8 }, { x: 18, y: 10 }].map((c) => ({ room: "graue-bucht", ...c }));
 	const act = (t: Toy, line: string): string[] => {
 		let m: RegExpExecArray | null;
-		if ((m = /^move (\d+) (\d+)$/.exec(line))) { t.at = { x: Number(m[1]), y: Number(m[2]) }; return []; }
+		if ((m = /^move (\d+) (\d+)$/.exec(line))) { t.at = { ...t.at, x: Number(m[1]), y: Number(m[2]) }; return []; }
+		const exit = ISLAND_ROOMS[t.at.room]?.exits[line.replace(/^go /, "")];
+		if (exit) { t.at = { room: exit, x: 12, y: 8 }; return [`Du gehst nach ${ISLAND_ROOMS[exit]!.name}.`]; }
 		if (/^nimm (treib)?holz$/.test(line)) {
-			const i = t.wood.findIndex((w) => w.x === t.at.x && w.y === t.at.y);
+			const i = t.wood.findIndex((w) => w.room === t.at.room && w.x === t.at.x && w.y === t.at.y);
 			if (i < 0) return ["Hier liegt kein Treibholz."];
 			t.wood.splice(i, 1); t.pack++; return ["Du hebst Treibholz auf."];
 		}
 		if (/^lege (treib)?holz ins feuer$/.test(line)) {
 			if (!t.pack) return ["Du hast kein Treibholz dabei."];
-			if (Math.abs(t.at.x - FIRE.x) + Math.abs(t.at.y - FIRE.y) > 1) return ["Dafür musst du direkt neben dem Feuer stehen."];
-			t.pack--; t.lit = true; t.fed = true; t.pieces++; return ["Du legst Treibholz ins Leuchtfeuer. Es brennt noch etwa 10 Minuten.", "Das Leuchtfeuer flammt auf."];
+			if (t.at.room !== FIRE.room || Math.abs(t.at.x - FIRE.x) + Math.abs(t.at.y - FIRE.y) > 1) return ["Dafür musst du direkt neben dem Feuer stehen."];
+			t.pack--; t.fedAt = t.waited; t.fed = true; t.pieces++; return ["Du legst Treibholz ins Leuchtfeuer. Es brennt noch etwa 10 Minuten.", "Das Leuchtfeuer flammt auf."];
 		}
 		return [`Unbekannter Befehl: ${line}`];
 	};
@@ -35,7 +44,11 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 			if (o.openMs) await new Promise((res) => setTimeout(res, o.openMs));
 			const id = `w${++n}`; opened++;
 			if (r.keep === true) idleMs = typeof r.idleMs === "number" ? r.idleMs : null;
-			worlds.set(id, { at: { x: 12, y: 8 }, wood: [{ x: 5, y: 7 }, { x: 17, y: 9 }], pack: 0, lit: false, fed: false, pieces: 0, waited: 0, done: new Map() });
+			const start = r.start as Cell | undefined, setup = r.setup as { clear?: string[]; items?: Cell[] } | undefined;
+			const wood: Cell[] = setup?.clear?.includes("treibholz") ? [] : [{ room: "graue-bucht", x: 5, y: 7 }, { room: "graue-bucht", x: 17, y: 9 }];
+			for (const i of setup?.items ?? []) wood.push({ room: i.room, x: i.x, y: i.y });
+			worlds.set(id, { at: start ? { room: start.room, x: start.x, y: start.y } : { room: "graue-bucht", x: 12, y: 8 }, wood, pack: 0, fedAt: null, fed: false, pieces: 0, waited: 0, done: new Map() });
+			lastOpen = r;
 			return { world: id, charId: `c-${id}`, name: "Strandläufer-1" };
 		}
 		const t = worlds.get(String(r.world));
@@ -52,8 +65,11 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 	const answer = async (t: Toy, r: Record<string, any>): Promise<Record<string, unknown>> => {
 		if (o.opMs && (r.op === "look" || r.op === "act" || r.op === "wait")) await new Promise((res) => setTimeout(res, o.opMs));
 		switch (r.op) {
-			case "look": return { room: { id: "graue-bucht", name: "Graue Bucht" }, at: t.at, exits: [{ name: "ost", x: 23, y: 8 }], things: t.wood.map((w) => ({ name: "Treibholz", ...w })), fires: [{ name: "Leuchtfeuer", ...FIRE, lit: t.lit }], pack: t.pack ? [{ name: "Treibholz", count: t.pack }] : [], time: `Tag 1, 08:${String(t.waited).padStart(2, "0")}` };
-			case "act": acts++; return { said: act(t, String(r.line ?? "").trim()), at: { room: "graue-bucht", ...t.at } };
+			case "look": {
+				const room = t.at.room;
+				return { room: { id: room, name: ISLAND_ROOMS[room]?.name ?? room }, at: { x: t.at.x, y: t.at.y }, exits: Object.keys(ISLAND_ROOMS[room]?.exits ?? {}).map((name) => ({ name, x: 12, y: 0 })), things: t.wood.filter((w) => w.room === room).map((w) => ({ name: "Treibholz", x: w.x, y: w.y })), fires: room === FIRE.room ? [{ name: "Leuchtfeuer", x: FIRE.x, y: FIRE.y, lit: litAt(t, t.waited) }] : [], pack: t.pack ? [{ name: "Treibholz", count: t.pack }] : [], time: `Tag 1, 08:${String(t.waited).padStart(2, "0")}` };
+			}
+			case "act": acts++; return { said: act(t, String(r.line ?? "").trim()), at: { ...t.at } };
 			case "wait": {
 				const m = Number(r.minutes); if (!(m >= 1 && m <= 120)) throw new Error("wait takes 1 to 120 minutes");
 				if (t.waited + m > 1440) throw new Error("a bot may wait at most 1440 world minutes in all");
@@ -63,7 +79,9 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 			case "score": {
 				const f = /^feed:([\w-]+):(\d+)$/.exec(String(r.goal));
 				if (f) return { done: t.pieces >= Number(f[2]), detail: `${t.pieces} of ${f[2]} pieces put into ${f[1]}, ${t.waited} world minutes waited` };
-				return { done: t.lit && t.fed, detail: `feuer-bucht ${t.lit ? "burns" : "is out"}, ${t.fed ? "fed by the bot" : "not fed by the bot"}` };
+				const hold = Number(r.hold ?? 0), now = litAt(t, t.waited) && t.fed;
+				if (hold && now) { const later = litAt(t, t.waited + hold); return { done: later, detail: later ? `feuer-bucht burns, fed by the bot; held ${hold} world minutes` : `reached, but not held ${hold} world minutes` }; }
+				return { done: now, detail: `feuer-bucht ${litAt(t, t.waited) ? "burns" : "is out"}, ${t.fed ? "fed by the bot" : "not fed by the bot"}` };
 			}
 			case "close": worlds.delete(String(r.world)); return {};
 			default: throw new Error(`unknown op ${r.op}`);
@@ -91,6 +109,8 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 		address: `unix:${path}`,
 		/** Worlds opened so far, and those still open. */
 		opened: () => opened, open: () => worlds.size,
+		/** The last `open` request (its start, setup and seed). */
+		lastOpen: () => lastOpen,
 		/** Commands carried out (a keyed one answered from memory does not count). */
 		acts: () => acts,
 		/** The idle time the last kept world was opened with. */

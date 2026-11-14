@@ -365,3 +365,27 @@ aside .row select { width: 100%; min-width: 0; max-width: 100%; text-overflow: e
 .tasktext__list code { color: var(--text); font-size: 12px; }
 aside .about__text { max-height: 240px; overflow-y: auto; }
 .dataformat { font-size: 12px; margin: 0 0 6px; line-height: 1.4; }
+
+/* A planning task's episodes (docs/codemode-planung.en.md): the curve of the generations' best and the episode matrix. */
+.episodes__hint { margin: 2px 0 8px; font-size: 12.5px; }
+.episodes__curve { display: block; width: 100%; max-width: 560px; height: auto; }
+.episodes__curve text { fill: var(--muted); font-size: 11px; }
+.episodes__grid { stroke: var(--line); }
+.episodes__band { fill: var(--accent-fill); fill-opacity: .18; }
+.episodes__hidden { fill: none; stroke: var(--accent); stroke-width: 2.4; }
+.episodes__sample { fill: none; stroke: var(--color-c); stroke-width: 1.8; stroke-dasharray: 5 4; }
+.episodes__dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2; cursor: pointer; }
+.episodes__legend { font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin: 2px 0 8px; }
+.episodes__key { display: inline-block; width: 14px; height: 0; border-top: 2.4px solid var(--accent); margin-right: 4px; vertical-align: middle; }
+.episodes__key--sample { border-top: 2px dashed var(--color-c); }
+.episodes__key--band { height: 9px; border: 0; background: var(--accent-fill); opacity: .3; }
+.episodes__matrix { overflow-x: auto; }
+.episodes__matrix table { border-collapse: separate; border-spacing: 3px; font-size: 12px; }
+.episodes__matrix th { font-weight: 500; color: var(--muted); padding: 0 2px; white-space: nowrap; }
+.episodes__matrix td { white-space: nowrap; }
+.epcell { width: 34px; height: 22px; border-radius: 5px; border: 2px solid transparent; padding: 0; cursor: pointer; font: 11px var(--font-mono); color: var(--accent-ink); }
+.epcell--ok { background: var(--success); } .epcell--half { background: var(--warning); } .epcell--bad { background: var(--danger); }
+.epcell--skip { background: var(--raised); color: var(--muted); }
+.epcell[aria-pressed="true"] { border-color: var(--text-strong); }
+.episodes__detail { margin-top: 8px; padding: 7px 10px; background: var(--raised); border-radius: 8px; font-size: 12.5px; }
+.episodes__detail b { color: var(--text-strong); }

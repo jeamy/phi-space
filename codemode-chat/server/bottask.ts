@@ -12,12 +12,35 @@ export const BOT_COST: Record<BotTool, number> = { look: 1, act: 1, wait: 1 };
 /** The most tool calls one bot may make; a bot beyond it fails with this message. */
 export const MAX_BOT_CALLS = 300;
 
+/** A cell of the world: room and place. */
+export type BotCell = { room: string; x: number; y: number };
+/** One episode of a planning task (docs/codemode-planung.en.md): where the figure starts and what lies where. A sample
+ *  episode is in the prompt and its verdict says what happened; of a hidden one the verdict says only reached or not. */
+export type BotEpisode = { id: string; kind: "sample" | "holdout"; start?: BotCell; setup?: { clear?: string[]; items?: Array<{ proto: string } & BotCell> }; text: { de: string; en: string } };
+/** What a verdict keeps of one episode: reached per seed, the points of its runs; `skipped`: the hidden ones did not run
+ *  because no sample episode was reached. Only sample episodes keep the arena's detail. */
+export type EpisodeResult = { id: string; kind: "sample" | "holdout"; reached: boolean[]; cost: number; skipped?: true; detail?: string };
+
 export type BotSpec = {
 	/** What the arena checks at the end, e.g. "beacon:feuer-bucht". */
 	goal: string;
 	/** The goal in words, for the case line. */
 	goalText: { de: string; en: string };
+	/** A planning task: the episodes, each a world of its own per seed. Without them the bot plays one world from the spawn. */
+	episodes?: BotEpisode[];
+	/** World minutes the goal must still hold after the bot is done (the judge's own wait). */
+	hold?: number;
+	/** No `wait` tool: the clock never moves for the bot, so one seed per episode is enough. */
+	noWait?: true;
 };
+
+/** How many seeds an episode runs with: one when the bot cannot wait (the world is then the same for every seed), three
+ *  when it can (chance comes only after a wait; docs/codemode-planung.en.md, values). */
+export const seedsOf = (b: BotSpec): number => (b.noWait ? 1 : 3);
+/** The seed of run `s` (0-based) of episode `i`: fixed, so every judge plays the same worlds. */
+export const episodeSeed = (i: number, s: number): number => 1000 * (i + 1) + s;
+/** The tools a bot of this task has. */
+export const botToolNames = (b?: BotSpec): BotTool[] => (b?.noWait ? ["look", "act"] : ["look", "act", "wait"]);
 
 /** The arena failed (unreachable, busy, gone in the middle): not the bot's doing. The judge gives the candidate back
  *  for a later round instead of writing a verdict (judge-host.ts). */
@@ -82,11 +105,11 @@ const DESCRIPTIONS: Record<BotTool, { de: string; en: string }> = {
 	},
 };
 
-export const describeBotTools = (lang: "de" | "en"): string => (["look", "act", "wait"] as const).map((n) => `- tools.${n}(args): ${DESCRIPTIONS[n][lang]}`).join("\n");
+export const describeBotTools = (lang: "de" | "en", b?: BotSpec): string => botToolNames(b).map((n) => `- tools.${n}(args): ${DESCRIPTIONS[n][lang]}`).join("\n");
 
 /** The tools of one world; every call is counted on `m`, and a call beyond MAX_BOT_CALLS throws. */
 export const botArg = (a: unknown): Record<string, unknown> => (a && typeof a === "object" ? (a as Record<string, unknown>) : {});
-export function botTools(arena: Arena, world: string, m: Meter): CodemodeTool[] {
+export function botTools(arena: Arena, world: string, m: Meter, names: BotTool[] = ["look", "act", "wait"]): CodemodeTool[] {
 	const arg = botArg;
 	const call = (name: BotTool, run: (a: Record<string, unknown>) => Promise<unknown>) => ({
 		name, description: DESCRIPTIONS[name].en,
@@ -96,7 +119,7 @@ export function botTools(arena: Arena, world: string, m: Meter): CodemodeTool[] 
 			return run(arg(a));
 		},
 	});
-	return (["look", "act", "wait"] as const).map((name) => call(name, (a) => botCall(arena, world, name, a)));
+	return names.map((name) => call(name, (a) => botCall(arena, world, name, a)));
 }
 
 /** One bot call in a world: what the arena answers, without its envelope. A `key` makes it safe to send again (the

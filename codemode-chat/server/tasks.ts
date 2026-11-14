@@ -3,6 +3,7 @@
 import { MAX_CHECK_CHARS, maxTimeoutMs } from "./judge.ts";
 import { arenaAddress, describeBotTools, MAX_BOT_CALLS, type BotSpec } from "./bottask.ts";
 import { describeHarnessTools, type HarnessSpec } from "./harnesstask.ts";
+import { episodeList, ISLAND_EPISODES, ISLAND_MAP, ISLAND_VARIANTS } from "./island.ts";
 import { checkSpec, dataToolSpec, describeDataTools, type DataItem, type DataSpec } from "./datatask.ts";
 import { describeTools, FRUSTRATION, MAX_CALLS, PI_SOURCE, PI_WINDOWS, PI_WINDOWS_BUGS, type ToolSpec } from "./tooltask.ts";
 
@@ -261,6 +262,26 @@ export const TASKS: Task[] = [
 			// wrong: tries to feed the fire from where it picked the wood up
 			`async function bot(){const s=await tools.look();const wood=s.things.find(t=>t.name==="Treibholz");await tools.act({line:"move "+wood.x+" "+wood.y});await tools.act({line:"nimm treibholz"});await tools.act({line:"lege holz ins feuer"})}`,
 		],
+	},
+	{
+		id: "beacon-insel", fn: "bot", kind: "bot", timeoutMs: 30_000,
+		bot: {
+			goal: "beacon:feuer-bucht", hold: 5, noWait: true,
+			goalText: { de: "das Leuchtfeuer der Grauen Bucht brennt, vom Bot genährt, und brennt nach 5 Weltminuten noch", en: "the beacon of the Graue Bucht burns, fed by the bot, and still burns 5 world minutes later" },
+			episodes: ISLAND_EPISODES,
+		},
+		title: { de: "Insel-Bot: das Feuer der Grauen Bucht von überall entzünden (Spielwelt, Episoden)", en: "Island bot: light the fire of the Graue Bucht from anywhere (game world, episodes)" },
+		prompt: {
+			de: `Aufgabe: Schreibe async function bot(). Der Bot spielt eine Figur auf der Grauen Insel von Leuchtfeuer und soll das Leuchtfeuer der Grauen Bucht entzünden: ein Stück Treibholz finden und aufheben, in die Graue Bucht gehen, sich neben das Feuer stellen und es hineinlegen.\n\nEpisoden: Jeder Beitrag spielt mehrere Episoden, jede in einer eigenen Welt. Eine Episode legt fest, in welchem Raum und auf welcher Zelle die Figur startet und wo das einzige Stück Treibholz der Insel liegt. Drei Episoden siehst du:\n${episodeList(ISLAND_EPISODES, "de")}\nSechs weitere sind verdeckt: andere Starträume, Treibholz in anderen Räumen. Von ihnen erfährst du nur, ob sie erreicht wurden. Ein Bot, der nur die drei sichtbaren kennt, scheitert an ihnen.\n\nDie Insel (Raum: Ausgang → Ziel). Ein Ausgang ist ein Befehl: "süd" geht den ganzen Weg zum Ausgang und hindurch.\n${ISLAND_MAP}\n\nWelt: Die Weltzeit steht still, es gibt kein tools.wait. Befehle sind deutsch, wie ein Spieler sie tippt.\n\nPunkte: Jeder Tool-Aufruf kostet einen Punkt (höchstens ${MAX_BOT_CALLS} je Episode). Am besten ist ein Bot, der jede Episode erreicht; unter ihnen gewinnt der mit den wenigsten Punkten über alle Episoden, die Zeit entscheidet erst danach. Sonst zählt, wie viele Episoden er erreicht.\n\nBewertung: Am Ende jeder Episode fragt der Richter die Welt, ob das Feuer brennt und ob der Bot es genährt hat, lässt dann 5 Weltminuten vergehen und fragt noch einmal. Rückgabewert egal.\n\nTools:\n${describeBotTools("de", { goal: "", goalText: { de: "", en: "" }, noWait: true })}`,
+			en: `Task: write async function bot(). The bot plays a figure on the Graue Insel of Leuchtfeuer and is to light the beacon of the Graue Bucht: find a piece of driftwood and pick it up, go to the Graue Bucht, stand next to the fire and put it in.\n\nEpisodes: every contribution plays several episodes, each in a world of its own. An episode sets in which room and on which cell the figure starts and where the island's only piece of driftwood lies. You see three of them:\n${episodeList(ISLAND_EPISODES, "en")}\nSix more are hidden: other start rooms, driftwood in other rooms. Of those you learn only whether they were reached. A bot that knows only the three you see fails them.\n\nThe island (room: exit → where it leads). An exit is a command: "süd" walks the whole way to the exit and through it.\n${ISLAND_MAP}\n\nWorld: world time stands still; there is no tools.wait. Commands are German, as a player types them.\n\nPoints: every tool call costs one point (at most ${MAX_BOT_CALLS} per episode). Best is a bot that reaches every episode; among those the one with the fewest points over all episodes wins, the time decides only after that. Otherwise what counts is how many episodes it reaches.\n\nScoring: at the end of every episode the judge asks the world whether the fire burns and whether the bot fed it, then lets 5 world minutes pass and asks again. The return value does not matter.\n\nTools:\n${describeBotTools("en", { goal: "", goalText: { de: "", en: "" }, noWait: true })}`,
+		},
+		about: {
+			de: `So läuft es: eine Planungsaufgabe (docs/codemode-planung.en.md). Für jede Episode öffnet die Arena eine eigene Welt, stellt die Figur auf ihren Start, nimmt alles Treibholz von der Insel und legt das eine Stück der Episode hin. Erst die drei sichtbaren Episoden; erreicht der Bot keine davon, laufen die verdeckten nicht. Eine Episode zählt, wenn das Feuer brennt, der Bot es genährt hat und es 5 Weltminuten später noch brennt. Ein Seed je Episode: Ohne Warten ist die Welt jedes Mal dieselbe.\n\nKI-Modelle: Für die Bewertung braucht es keine.\n\n▶ Ausführen: läuft für Bots nicht. Bewertet wird nur beim Einreichen.`,
+			en: `How it runs: a planning task (docs/codemode-planung.en.md). For every episode the arena opens a world of its own, puts the figure on its start, takes all driftwood off the island and lays out the episode's one piece. The three visible episodes come first; if the bot reaches none of them, the hidden ones do not run. An episode counts when the fire burns, the bot fed it and it still burns 5 world minutes later. One seed per episode: without waiting the world is the same every time.\n\nAI models: the scoring needs none.\n\n▶ Run: does not run bots. Bots are judged only when handed in.`,
+		},
+		cases: [],
+		bench: "",
+		variants: ISLAND_VARIANTS,
 	},
 	{
 		id: "beacon-flut", fn: "bot", kind: "bot", durable: true, timeoutMs: 180_000,

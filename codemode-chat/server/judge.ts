@@ -13,7 +13,7 @@
 // contribution's reach: patched builtins cannot make the rule pass.
 import { pathToFileURL } from "node:url";
 import type { Task } from "./tasks.ts";
-import { ArenaDown, arenaAddress, arenaClient, botArg, botCall, BOT_COST, botTools, MAX_BOT_CALLS, type BotSpec, type BotTool } from "./bottask.ts";
+import { ArenaDown, arenaAddress, arenaClient, botArg, botCall, BOT_COST, botToolNames, botTools, episodeSeed, MAX_BOT_CALLS, seedsOf, type Arena, type BotEpisode, type BotSpec, type BotTool, type EpisodeResult } from "./bottask.ts";
 import { Diverged, LogDown, runDurable, type CallLog, type LoggedCall, type RunHead } from "./durable-run.ts";
 import { harnessTools, type HarnessSpec, type Impl } from "./harnesstask.ts";
 import { meterText, newMeter, toolProgram, worldCase, worldTools, type Meter, type ToolSpec, type World, type WorldResult } from "./tooltask.ts";
@@ -22,7 +22,7 @@ import { meterText, newMeter, toolProgram, worldCase, worldTools, type Meter, ty
 export type CaseResult = { call: string; ok: boolean; got?: string; expect?: string; error?: string };
 /** `hardcoded`: the code passed, but only by returning an expected result written into it (not computed). */
 /** A tools task (tooltask.ts) adds what the holdout's run cost: `cost` in points, `calls` per tool, `score` 0..1. */
-export type Verdict = { ok: boolean; ms: number; error?: string; passed: number; total: number; cases: CaseResult[]; hardcoded?: true; cost?: number; calls?: Record<string, number>; score?: number };
+export type Verdict = { ok: boolean; ms: number; error?: string; passed: number; total: number; cases: CaseResult[]; hardcoded?: true; cost?: number; calls?: Record<string, number>; score?: number; /** a planning task's episodes (bottask.ts) */ episodes?: EpisodeResult[] };
 type Sandbox = { execute(code: string): Promise<{ ok: boolean; value?: unknown; error?: { message: string } }>; close(): Promise<void> };
 type SandboxTool = { name: string; description?: string; execute(args: unknown): unknown };
 export type Codemode = { CodemodeSandbox: new (o: { timeoutMs: number; tools: SandboxTool[]; memoryLimitBytes?: number }) => Sandbox };
@@ -326,6 +326,7 @@ async function judgeHarness(cm: Codemode, task: Task & { harness: HarnessSpec },
 /** A bot task (bottask.ts): a world of its own from the arena, opened before the bot's time limit starts; the bot plays
  *  it through look/act/wait, the arena says whether the goal was reached, and the world is closed. One case. */
 async function judgeBot(cm: Codemode, task: Task & { bot: BotSpec }, source: string): Promise<Verdict> {
+	if (task.bot.episodes?.length) return judgeEpisodes(cm, task, source);
 	const limit = limitOf(task), goal = task.bot.goalText.en, call = `${task.fn}() in a world of its own`;
 	const fail = (error: string, meter?: Meter): Verdict => ({ ok: false, ms: limit, error: plain(error), passed: 0, total: 1, cases: [{ call, ok: false, error: plain(error), expect: goal }], ...(meter ? { cost: meter.cost, calls: { ...meter.calls } as Record<string, number>, score: 0 } : {}) });
 	const address = arenaAddress();
@@ -357,6 +358,84 @@ async function judgeBot(cm: Codemode, task: Task & { bot: BotSpec }, source: str
 	} finally {
 		if (world && !arena.broken()) await arena.ask("close", { world }).catch(() => {});
 		arena.close();
+	}
+}
+
+/** A planning task (docs/codemode-planung.en.md): every episode in a world of its own per seed, the sample episodes
+ *  first; the hidden ones run only when a sample episode was reached. An episode counts when every seed reached it and
+ *  the goal held. The verdict is correct when every episode counts; `score` is the share of hidden episodes that count,
+ *  `passed` the episodes that count, the points and time are those of all runs. Of a hidden episode it says only
+ *  reached or not: no detail, no error text. */
+async function judgeEpisodes(cm: Codemode, task: Task & { bot: BotSpec }, source: string): Promise<Verdict> {
+	const b = task.bot, eps = b.episodes!, limit = limitOf(task), seeds = seedsOf(b), names = botToolNames(b);
+	const address = arenaAddress();
+	if (!address) return { ok: false, ms: limit, error: "this judge has no arena (CODEMODE_ARENA)", passed: 0, total: eps.length, cases: [] };
+	const arena = await arenaClient(address);
+	const total: Meter = newMeter();
+	let msAll = 0;
+	try {
+		const results: EpisodeResult[] = [], cases: CaseResult[] = [];
+		let sampleReached = false, firstError: string | null = null;
+		for (const kind of ["sample", "holdout"] as const) {
+			for (const [i, e] of eps.entries()) {
+				if (e.kind !== kind) continue;
+				if (kind === "holdout" && !sampleReached) { results.push({ id: e.id, kind, reached: [], cost: 0, skipped: true }); cases.push({ call: `hidden episode ${e.id}`, ok: false, error: "not run: no sample episode was reached" }); continue; }
+				const runs: Array<{ reached: boolean; detail: string; cost: number }> = [];
+				for (let s = 0; s < seeds; s++) {
+					const r = await playEpisode(cm, arena, task, source, e, seeds > 1 ? episodeSeed(i, s) : undefined, names);
+					runs.push(r); msAll += r.ms;
+					total.cost += r.meter.cost; total.total += r.meter.total;
+					for (const [k, n] of Object.entries(r.meter.calls)) total.calls[k] = (total.calls[k] ?? 0) + (n ?? 0);
+				}
+				const reached = runs.map((r) => r.reached), all = reached.every(Boolean), cost = runs.reduce((a, r) => a + r.cost, 0);
+				if (kind === "sample" && reached.some(Boolean)) sampleReached = true;
+				const seedText = seeds > 1 ? ` (${reached.filter(Boolean).length} of ${seeds} seeds)` : "";
+				if (kind === "sample") {
+					const detail = plain(runs.find((r) => !r.reached)?.detail ?? runs[0]!.detail);
+					results.push({ id: e.id, kind, reached, cost, detail });
+					cases.push({ call: `${e.id}: ${e.text.en}`, ok: all, ...(all ? { got: `reached${seedText}, ${cost} points` } : { error: `${detail}${seedText}` }), expect: b.goalText.en });
+					if (!all && firstError === null) firstError = `${e.id}: ${detail}`;
+				} else {
+					results.push({ id: e.id, kind, reached, cost });
+					cases.push({ call: `hidden episode ${e.id}`, ok: all, ...(all ? { got: `reached${seedText}` } : { error: `not reached${seedText}` }) });
+				}
+			}
+		}
+		const counted = results.filter((r) => !r.skipped && r.reached.length && r.reached.every(Boolean));
+		const hidden = results.filter((r) => r.kind === "holdout"), score = hidden.length ? hidden.filter((r) => counted.includes(r)).length / hidden.length : counted.length === results.length ? 1 : 0;
+		const ok = counted.length === results.length;
+		const calls = `calls: ${meterText(total)}`;
+		const error = ok ? undefined : plain(firstError ? `${firstError} (${calls})` : `${hidden.length - hidden.filter((r) => counted.includes(r)).length} of ${hidden.length} hidden episodes not reached (${calls})`);
+		return { ok, ms: ok ? Math.round(msAll * 100) / 100 : limit, ...(error ? { error } : {}), passed: counted.length, total: results.length, cases, cost: total.cost, calls: { ...total.calls } as Record<string, number>, score: Math.round(score * 1000) / 1000, episodes: results };
+	} catch (e) {
+		if (e instanceof ArenaDown) throw e;
+		return { ok: false, ms: limit, error: plain((e as Error).message), passed: 0, total: eps.length, cases: [] };
+	} finally { arena.close(); }
+}
+
+/** One run of an episode: a world opened with its start, setup and seed, the bot in a fresh sandbox, the goal asked
+ *  (held for the task's `hold`), the world closed. The arena's own trouble throws ArenaDown. */
+async function playEpisode(cm: Codemode, arena: Arena, task: Task & { bot: BotSpec }, source: string, e: BotEpisode, seed: number | undefined, names: BotTool[]): Promise<{ reached: boolean; detail: string; cost: number; ms: number; meter: Meter }> {
+	const limit = limitOf(task), meter: Meter = newMeter();
+	let world: string | null = null;
+	try {
+		try { world = String((await arena.ask("open", { ...(e.start ? { start: e.start } : {}), ...(e.setup ? { setup: e.setup } : {}), ...(seed !== undefined ? { seed } : {}) })).world); }
+		catch (err) { throw err instanceof ArenaDown ? err : new ArenaDown(`the arena could not open a world: ${(err as Error).message}`); }
+		const sandbox = new cm.CodemodeSandbox({ timeoutMs: limit, tools: botTools(arena, world, meter, names), memoryLimitBytes: 64 * 1024 * 1024 });
+		let error: string | null = null, ms = limit;
+		try {
+			const r = await sandbox.execute(toolProgram(CAPTURED, task.fn, source));
+			const v = (r.ok ? r.value ?? {} : {}) as { ms?: unknown; error?: unknown };
+			if (!r.ok) error = r.error?.message ?? "failed";
+			else if (typeof v.error === "string") error = v.error;
+			else if (typeof v.ms === "number" && Number.isFinite(v.ms) && v.ms >= 0) ms = v.ms;
+		} catch (err) { error = (err as Error).message; } finally { await sandbox.close().catch(() => {}); }
+		if (arena.broken()) throw new ArenaDown("the arena went away while the bot played");
+		if (error) return { reached: false, detail: error, cost: meter.cost, ms: limit, meter };
+		const s = await arena.ask("score", { world, goal: task.bot.goal, ...(task.bot.hold ? { hold: task.bot.hold } : {}) });
+		return s.done === true ? { reached: true, detail: String(s.detail ?? ""), cost: meter.cost, ms, meter } : { reached: false, detail: `goal not reached: ${String(s.detail ?? "")}`, cost: meter.cost, ms: limit, meter };
+	} finally {
+		if (world && !arena.broken()) await arena.ask("close", { world }).catch(() => {});
 	}
 }
 
@@ -477,6 +556,6 @@ export async function judgeInSlot(cm: Codemode, task: Task, source: string, ctx:
 }
 
 /** The score fields of a verdict, as hub and shard write them: the case results failing ones first, at most 10. */
-export const verdictFields = (v: Verdict) => ({ ok: v.ok, ms: v.ms, passed: v.passed, total: v.total, cases: [...v.cases.filter((c) => !c.ok), ...v.cases.filter((c) => c.ok)].slice(0, 10), ...(v.error ? { error: v.error } : {}), ...(v.hardcoded ? { hardcoded: true } : {}), ...(v.cost !== undefined ? { cost: v.cost, calls: v.calls ?? {}, score: v.score ?? 0 } : {}) });
+export const verdictFields = (v: Verdict) => ({ ok: v.ok, ms: v.ms, passed: v.passed, total: v.total, cases: [...v.cases.filter((c) => !c.ok), ...v.cases.filter((c) => c.ok)].slice(0, 10), ...(v.error ? { error: v.error } : {}), ...(v.hardcoded ? { hardcoded: true } : {}), ...(v.cost !== undefined ? { cost: v.cost, calls: v.calls ?? {}, score: v.score ?? 0 } : {}), ...(v.episodes ? { episodes: v.episodes } : {}) });
 
 export const judge = (cm: Codemode, task: Task, source: string, ctx: JudgeContext = {}): Promise<Verdict> => sandboxSlot(() => judgeInSlot(cm, task, source, ctx));

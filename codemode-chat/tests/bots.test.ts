@@ -121,3 +121,59 @@ t("a scripted run on the bot task ends with the cheapest bot as best, its summar
 		assert.ok(snap.messages.some((m: any) => /tool points/.test(m.text)), JSON.stringify(snap.messages.map((m: any) => m.text)));
 	} finally { await srv.close(); await arena.close(); process.env.CODEMODE_ARENA = ""; }
 });
+
+// ---- a planning task (docs/codemode-planung.en.md, step 1): episodes, the hidden ones after the shown ones, a goal that holds
+const island = taskById("beacon-insel")!;
+const [explorer, careful, memorizer, startRoom, noWoodAtAll] = island.variants;
+
+t("a planning task plays every episode in a world of its own: the explorer reaches all, the memorizer only the shown ones", async () => {
+	const arena = await startFakeArena();
+	try {
+		const [a, b, m, s] = await withArena(arena.address, async () => { const out = []; for (const v of [explorer, careful, memorizer, startRoom]) out.push(await judge(cm!, island, v!)); return out; });
+		for (const v of [a!, b!]) { assert.equal(v.ok, true, v.error ?? ""); assert.deepEqual([v.passed, v.total, v.score], [9, 9, 1]); }
+		assert.ok(a!.cost! < b!.cost!, "looking after every step costs points");
+		assert.equal(m!.ok, false);
+		assert.deepEqual([m!.passed, m!.score], [3, 0], "the three shown episodes, none of the hidden");
+		assert.match(m!.error!, /6 of 6 hidden episodes not reached/);
+		assert.deepEqual([s!.passed, s!.score], [7, 0.667]);
+		assert.deepEqual(s!.episodes!.filter((e) => !e.reached[0]).map((e) => e.id), ["H3", "H6"], "the driftwood lay in another room");
+		// one world per episode (no wait, one seed), every one closed; the last one opened with its episode's start and setup
+		assert.equal(arena.opened(), 4 * 9);
+		assert.equal(arena.open(), 0);
+		assert.deepEqual(arena.lastOpen()!.start, { room: "graue-bucht", x: 14, y: 9 });
+		assert.equal(arena.lastOpen()!.seed, undefined, "no seed without wait");
+		// a hidden episode says reached or not, nothing else; a shown one keeps the arena's detail
+		const hidden = m!.episodes!.filter((e) => e.kind === "holdout");
+		assert.ok(hidden.every((e) => e.detail === undefined && e.reached.length === 1));
+		assert.ok(m!.cases.filter((c) => c.call.startsWith("hidden")).every((c) => c.error === "not reached" || c.got === "reached"));
+		assert.ok(m!.episodes!.filter((e) => e.kind === "sample").every((e) => typeof e.detail === "string"));
+	} finally { await arena.close(); }
+});
+
+t("the hidden episodes do not run when no shown one was reached; the prompt shows the shown ones only, and no wait", async () => {
+	const arena = await startFakeArena();
+	try {
+		const v = await withArena(arena.address, () => judge(cm!, island, noWoodAtAll!));
+		assert.equal(v.ok, false);
+		assert.equal(arena.opened(), 3, "only the three shown episodes");
+		assert.deepEqual(v.episodes!.filter((e) => e.skipped).map((e) => e.id), ["H1", "H2", "H3", "H4", "H5", "H6"]);
+		assert.match(v.error!, /^S1: goal not reached/);
+		// a bot that calls wait has no such tool here
+		const w = await withArena(arena.address, () => judge(cm!, island, `async function bot(){await tools.wait({minutes:5})}`));
+		assert.equal(w.ok, false);
+		assert.doesNotMatch(island.prompt.en, /tools\.wait\(args\)/);
+		for (const e of island.bot!.episodes!) assert.equal(island.prompt.en.includes(e.text.en), e.kind === "sample", e.id);
+	} finally { await arena.close(); }
+});
+
+t("a fire fed and then left burns out: the goal must still hold after the judge's 5 world minutes", async () => {
+	const arena = await startFakeArena();
+	try {
+		// feeds the fire, then waits it out (beacon-bucht has wait): with hold 5 the episode would not count
+		const v = await withArena(arena.address, () => judge(cm!, { ...island, bot: { ...island.bot!, noWait: undefined, episodes: island.bot!.episodes!.slice(0, 1) } }, `async function bot(){const s=await tools.look();const w=s.things[0];await tools.act({line:"move "+w.x+" "+w.y});await tools.act({line:"nimm treibholz"});await tools.act({line:"move 9 9"});await tools.act({line:"lege holz ins feuer"});await tools.wait({minutes:8})}`));
+		assert.equal(v.ok, false);
+		assert.match(v.error!, /not held 5 world minutes/);
+		assert.equal(v.episodes![0]!.reached.length, 3, "a task with wait runs three seeds");
+		assert.deepEqual(arena.lastOpen()!.seed, 1002);
+	} finally { await arena.close(); }
+});
