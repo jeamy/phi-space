@@ -254,3 +254,26 @@ avoid repeated JSON serialization on broadcasts.
 2. **Verification:**
    - `cd rust && cargo test -p mmo-engine && cargo clippy --all-targets`
    - `npm --prefix spaces-mmo test`
+
+---
+
+## Results on `big` (2026-11-14, commit `add0f83`)
+
+Phases 1–3 were deployed to `big` and `nano` (`docker:big:rust:up`, `docker:nano:rust:up`) and measured with `tests/perf/play-load.ts` (`LOAD_BOTS=200`, `LOAD_EPOCH=4`, 600 s), backed up before and restored afterwards:
+
+| Metric | 2026-11-13 (`59a52a1`, 1,800 s) | 2026-11-14 (`add0f83`, 600 s) |
+|---|---|---|
+| Commands / rate | 34,119 (18/s) | 27,008 (**41.8/s**, 2.3×) |
+| ok / refused / timeout (> 10 s) | 13,575 / 4,051 / 15,289 (45 %) | 22,078 / 3,104 / 1,295 (**4.8 %**, plus 531 model) |
+| Response median (p50) | 8.9 s | **898 ms** (~10× faster) |
+| Response p95 (p90) | 10.0 s (–) | 10.0 s (7.44 s) |
+| `mmo-web` CPU avg (max) | 88 % (100 %) | **23.3 % (45.3 %)** |
+| Space `west / nord / ost / sued` CPU avg | 90 % / 90 % / 93 % / – | **60.2 % / 53.1 % / 61.9 % / 36.7 %** |
+| World `west / nord / ost / sued` CPU avg | – | 52.0 % / 55.6 % / 54.3 % / 33.4 % |
+| Load average on `big` (8 cores) | avg 9.0, max 11.6 | avg 8.4, max 11.4 |
+
+During the 600 s run, `Item` counts per region grew from `1,444–7,169` to `10,474–25,145`. `mmo-web` is no longer the bottleneck (`23.3 %` avg CPU at `41.8` cmd/s); remaining tail latency (`p90` `7.44 s`, `p95` `10.0 s`) comes from the `ost`/`west` Space and world worker processes.
+
+Local `spaces-mmo` perf checks against the compiled Rust binaries:
+- `tests/perf/latency.test.ts`: median `26 ms`, p90 `26 ms`
+- `tests/perf/load.test.ts` (10 players, 0 ms delay, all NPCs): 997 steps (`66.5/s`), 0 unanswered, p50 `9 ms`, p95 `20 ms`, p99 `26 ms`, max `35 ms`.
