@@ -316,7 +316,7 @@
 				"eintreten",
 				"enter"
 			],
-			"help": "betrete [x y] – in den Bau neben dir gehen (Hütte, Backhaus, Metzgerei): den eigenen oder einen, in den man eingeladen ist; „hinaus“ führt wieder vor die Tür"
+			"help": "betrete [x y] – in den Bau neben dir gehen (Hütte, Backhaus, Metzgerei, Gewächshaus): den eigenen oder einen, in den man eingeladen ist; „hinaus“ führt wieder vor die Tür"
 		},
 		{
 			"module": "interior",
@@ -325,7 +325,7 @@
 				"lade",
 				"invite"
 			],
-			"help": "einladen [name] – jemanden in den eigenen Bau einladen, Hütte, Backhaus oder Metzgerei (neben ihm oder drinnen); ohne Namen: wer eingeladen ist"
+			"help": "einladen [name] – jemanden in den eigenen Bau einladen, Hütte, Backhaus, Metzgerei oder Gewächshaus (neben ihm oder drinnen); ohne Namen: wer eingeladen ist"
 		},
 		{
 			"module": "interior",
@@ -684,7 +684,7 @@
 				"fuelle",
 				"fill"
 			],
-			"help": "schöpfe – an einer Regentonne neben dir eine Kanne Wasser füllen"
+			"help": "schöpfe – an einer Regentonne neben dir eine Kanne Wasser füllen (im Gewächshaus am Wasserfass)"
 		},
 		{
 			"module": "garden",

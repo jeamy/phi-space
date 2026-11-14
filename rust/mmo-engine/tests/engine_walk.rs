@@ -2099,6 +2099,39 @@ fn roads_and_insides() {
 	for (who, line) in [(&a, "schlachte huhn"), (&a, "truhe")] { run(&mut w, who, line); }
 	stand(&mut w, 1, "in-m-1", 4.0, 3.0);
 	for (who, line) in [(&a, "truhe"), (&a, "verstaue mehl"), (&a, "inventory"), (&a, "hinaus")] { run(&mut w, who, line); }
+	// a greenhouse's inside (interior.rs, garden.rs): its three beds laid by the sweep, nothing dug or given up inside, the
+	// owner's carrots and cabbage, a guest's flower in the community bed, grown through the winter, gone with the building
+	for (p, k) in [("samen-moehre", 1), ("samen-strandkohl", 1), ("wasserkanne", 1)] { give(&mut w, &a, p, k); }
+	give(&mut w, &e, "samen-strandnelke", 2);
+	w.write(building("gh-1", "gewaechshaus", "Gewächshaus", "graue-bucht", 15.0, 10.0, (3.0, 2.0), 1));
+	w.tick("sweep");
+	w.compare("the greenhouse's inside");
+	stand(&mut w, 1, "graue-bucht", 16.0, 12.0);
+	for (who, line) in [(&a, "betrete"), (&a, "look"), (&a, "beet"), (&a, "umgraben"), (&a, "umgraben gemeinschaft")] { run(&mut w, who, line); }
+	stand(&mut w, 1, "in-gh-1", 3.0, 2.0);
+	for (who, line) in [(&a, "pflanze möhrensamen"), (&a, "pflanze strandkohlsamen"), (&a, "beet aufgeben ja"), (&a, "gieße"), (&a, "schöpfe"), (&a, "pate Wanderer4"), (&a, "einladen Wanderer4")] { run(&mut w, who, line); }
+	// the water butt beside the beds: a can, then empty, then one again after eight world hours
+	stand(&mut w, 1, "in-gh-1", 2.0, 3.0);
+	for (who, line) in [(&a, "schöpfe"), (&a, "schöpfe"), (&a, "gieße")] { run(&mut w, who, line); }
+	at.set(at.get() + 9.0 * 3_600_000.0);
+	for (who, line) in [(&a, "schöpfe"), (&a, "inventory")] { run(&mut w, who, line); }
+	stand(&mut w, 1, "in-gh-1", 3.0, 2.0);
+	stand(&mut w, 4, "graue-bucht", 16.0, 12.0);
+	run(&mut w, &e, "betrete gewächshaus");
+	stand(&mut w, 4, "in-gh-1", 5.0, 2.0);
+	for (who, line) in [(&e, "pflanze strandnelkensamen"), (&e, "ernte"), (&e, "beet aufgeben ja")] { run(&mut w, who, line); }
+	// winter: under glass the plants move on, the year set so that now is winter
+	at.set(at.get() + 30.0 * 3_600_000.0);
+	let day = world_now(&mut w, at.get()) / 86_400_000.0;
+	w.write(obj! { "type" => "Setting", "fields" => obj! { "key" => "year.days", "value" => day * 1.1 } });
+	w.call("gardenTick", None);
+	for (who, line) in [(&a, "beet"), (&e, "ernte")] { run(&mut w, who, line); }
+	assert!(w.take(obj! { "type" => "Setting", "fields" => obj! { "key" => "year.days" } }));
+	assert!(w.entries_with("Drinnen im Gewächshaus") >= 1, "no greenhouse inside");
+	assert!(w.entries_with(r#""of":"gh-1""#) >= 3, "the greenhouse's beds are missing");
+	assert!(w.take(obj! { "type" => "Building", "fields" => obj! { "buildId" => "gh-1" } }));
+	w.tick("sweep");
+	w.compare("the greenhouse gone");
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 10, "{said:?}");
 	assert!(w.entries_with("Drinnen im Backhaus") >= 1, "no bakehouse inside");
 	assert!(w.entries_with("steht nicht mehr; du stehst draußen") >= 1, "nobody was put out");

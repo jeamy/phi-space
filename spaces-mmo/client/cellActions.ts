@@ -266,6 +266,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			else entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` });
 			if (beside && o.use === "cook") { made(o.plan); if (o.plan === "metzgerei") slaughterEntries(); }
 			if (beside && o.use === "sleep") entries.push({ label: "Schlafen", line: "schlafe" });
+			if (beside && o.use === "water") entries.push({ label: "Wasser schöpfen", line: "schöpfe" });
 			continue;
 		}
 		if (o.kind === "scenery" && o.location === room && !o.through && !o.fixed && covers(o, at) && self && Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) <= 2) entries.push({ label: `${o.name} abräumen (noch ${o.left ?? 1})`, line: `räume ${o.x} ${o.y}` });
@@ -462,7 +463,7 @@ export function tapTarget(at: { x: number; y: number }, chars: Map<string, CharV
 
 /** The help article (with its section) for a kind of thing; a building has its plan's article first (HELP_OF_PLAN). */
 export const HELP_OF_KIND: Record<string, string> = { site: "help.game.build#stake", building: "help.game.build", ruin: "help.game.build#decay", bed: "help.game.garden#bed", tree: "help.game.garden#trees", field: "help.game.fields#fields", beacon: "help.game.fire#beacon", animal: "help.game.wild#hares", exit: "help.game.controls#map", liner: "help.game.village#travel", cart: "help.game.village#travel" };
-export const HELP_OF_PLAN: Record<string, string> = { windmuehle: "help.game.fields#mill", backhaus: "help.game.fields#mill", gehege: "help.game.animals#house", huehnerstall: "help.game.animals#house", bienenstock: "help.game.animals#bees", rathaus: "help.game.village#townhall", steg: "help.game.fishing", strasse: "help.game.village#travel", kaufhaus: "help.game.village#store", kontor: "help.game.village#store", lagerhaus: "help.game.village#store", bahnhof: "help.game.village#travel", werft: "help.game.village#travel", park: "help.game.village#ranks" };
+export const HELP_OF_PLAN: Record<string, string> = { windmuehle: "help.game.fields#mill", backhaus: "help.game.fields#mill", gehege: "help.game.animals#house", huehnerstall: "help.game.animals#house", bienenstock: "help.game.animals#bees", rathaus: "help.game.village#townhall", steg: "help.game.fishing", strasse: "help.game.village#travel", kaufhaus: "help.game.village#store", kontor: "help.game.village#store", lagerhaus: "help.game.village#store", bahnhof: "help.game.village#travel", werft: "help.game.village#travel", park: "help.game.village#ranks", gewaechshaus: "help.game.garden#greenhouse" };
 
 /** A name for the sheet's head and the help article about what stands on a cell (help/articles.ts). */
 export function cellAbout(at: { x: number; y: number }, chars: Map<string, CharView>, objs: Map<string, ObjView>, room: string): { title?: string; article?: string; desc?: string } {

@@ -11,7 +11,7 @@
 // - Nothing walks in from outside: there is no exit into it, so a stranger passing the building never bumps into a door,
 //   and NPCs, the atlas and the room jobs (they go by the world's rooms) never see it.
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type CharacterFields, type EstateFields, type ExitFields, type RoomFields, type RoomGrowthFields, type RuinFields, type SceneryFields } from "../../model.ts";
+import { fieldsOf, type BedFields, type BuildingFields, type CharacterFields, type EstateFields, type ExitFields, type RoomFields, type RoomGrowthFields, type RuinFields, type SceneryFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, NotUnderstood, toPlayer, type CommandCtx } from "../context.ts";
 import { timeNow } from "../source.ts";
@@ -30,6 +30,8 @@ export const isInterior = (room: string) => room.startsWith(INTERIOR);
 export const buildIdOf = (room: string): string | null => (isInterior(room) ? room.slice(INTERIOR.length) : null);
 const exitIdOf = (buildId: string) => `x-${interiorOf(buildId)}`;
 const furnishingId = (buildId: string, kind: string) => `f-${buildId}-${kind}`;
+/** A bed laid with the inside, by its place in the plan (no draw: the same id on every server). */
+const bedIdOf = (buildId: string, i: number) => `bed-${buildId}-${i}`;
 
 type Space = Pick<SpaceLike, "readAll" | "readIfExists" | "write" | "takeIfExists">;
 
@@ -69,11 +71,22 @@ export async function makeInterior(space: Space, txn: string, w: WorldDef, b: Bu
 		await space.write({ type: "Scenery", fields: s as never }, txn, FOREVER);
 		await space.write({ type: "Plot", fields: { room: roomId, x: f.x, y: f.y, of: s.sceneryId } as never }, txn, FOREVER, { unique: ["room", "x", "y"] });
 	}
+	// a greenhouse's beds: the owner's, no light taken, kept while the building stands (garden.ts goes by `of`)
+	const beds = def.beds ?? [];
+	const now = beds.length ? await worldNowOf(space as SpaceLike, txn) : 0;
+	for (const [i, d] of beds.entries()) {
+		const bed: BedFields = { ...(d.kind ? { kind: d.kind } : {}), of: b.buildId, bedId: bedIdOf(b.buildId, i), room: roomId, x: d.x, y: d.y, w: d.w, h: d.h, owner: b.owner, ownerName: b.ownerName, accountId: b.accountId, beaconId: "", points: 0,
+			sponsors: [], plants: [], wateredWorldMs: now, weedy: false, dueWorldMs: FOREVER, untilWorldMs: FOREVER, at: now };
+		await space.write({ type: "Bed", fields: bed as never }, txn, FOREVER);
+		for (let y = d.y; y < d.y + d.h; y++) for (let x = d.x; x < d.x + d.w; x++) await space.write({ type: "Plot", fields: { room: roomId, x, y, of: bed.bedId } as never }, txn, FOREVER, { unique: ["room", "x", "y"] });
+	}
 	return room;
 }
 
 /** "Drinnen in der Hütte", "Drinnen im Backhaus": by the plan's dative ("einer Hütte", "einem Backhaus"). */
-const insideText = (name: string, dative: string | undefined, def: InteriorDef) => `Drinnen ${/^einem\b/.test(dative ?? "") ? "im" : "in der"} ${name}: ${def.furniture.map((f) => f.name).join(", ")}. „hinaus“ führt vor die Tür.`;
+const insideText = (name: string, dative: string | undefined, def: InteriorDef) => `Drinnen ${/^einem\b/.test(dative ?? "") ? "im" : "in der"} ${name}: ${[...def.furniture.map((f) => f.name), ...bedWords(def)].join(", ")}. „hinaus“ führt vor die Tür.`;
+/** The beds of an inside as the room's text names them. */
+const bedWords = (def: InteriorDef) => (def.beds ?? []).map((d) => (d.kind === "gemein" ? "ein Gemeinschaftsbeet" : d.kind === "zier" ? "ein Zierbeet" : "ein Beet"));
 
 /** Takes the inside of a building that is gone: whoever is in it stands in front of where it stood (`at`, the ruin or
  *  the building's place), what lies on its floor goes to the owner's estate, the room, its exit and furnishings go. */
@@ -100,6 +113,7 @@ export async function dropInterior(space: Space, txn: string, w: WorldDef, roomI
 		}
 	} else for (const it of floor) await space.takeIfExists({ id: it.id }, NO_WAIT, { txn });
 	for (const e of await space.readAll({ type: "Scenery", fields: { room: roomId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
+	for (const e of await space.readAll({ type: "Bed", fields: { room: roomId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
 	for (const e of await space.readAll({ type: "Plot", fields: { room: roomId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
 	for (const e of await space.readAll({ type: "Spot", fields: { room: roomId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
 	await space.takeIfExists({ type: "Exit", fields: { exitId: exitIdOf(buildId) } }, NO_WAIT, { txn });
@@ -133,7 +147,7 @@ const isOwner = (c: CommandCtx, b: BuildingFields) => !!c.account && !c.account.
 
 /** The buildings that count as beside the actor: outside those it stands beside; inside, its building when it stands
  *  beside the furnishing that does `use` (any furnishing, or none needed, without one). */
-export async function nearBuildings(c: CommandCtx, use?: "cook" | "chest" | "sleep"): Promise<BuildingFields[]> {
+export async function nearBuildings(c: CommandCtx, use?: "cook" | "chest" | "sleep" | "water"): Promise<BuildingFields[]> {
 	const inside = buildIdOf(c.actor.room);
 	if (!inside) return (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
 	const b = (await c.space.readAll({ type: "Building", fields: { buildId: inside } }))[0];
@@ -145,7 +159,7 @@ export async function nearBuildings(c: CommandCtx, use?: "cook" | "chest" | "sle
 	return [fieldsOf<BuildingFields>(b)];
 }
 /** Inside a building, the furnishing for `use` and whether the actor stands beside it (to say where to go). */
-export async function furnishingFor(c: CommandCtx, use: "cook" | "chest" | "sleep"): Promise<SceneryFields | null> {
+export async function furnishingFor(c: CommandCtx, use: "cook" | "chest" | "sleep" | "water"): Promise<SceneryFields | null> {
 	if (!isInterior(c.actor.room)) return null;
 	return (await c.space.readAll({ type: "Scenery", fields: { room: c.actor.room } })).map((e) => fieldsOf<SceneryFields>(e)).find((s) => s.use === use) ?? null;
 }
@@ -156,13 +170,13 @@ async function enterable(c: CommandCtx, arg: string): Promise<BuildingFields> {
 	const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e))
 		.filter((b) => distTo(c.actor, b) <= 1 && (at ? distTo({ x: Number(at[1]), y: Number(at[2]) }, b) === 0 : !n || planOf(c.world, n)?.key === b.plan || b.name.toLowerCase() === n));
 	const houses = near.filter((b) => planOf(c.world, b.plan)?.interior);
-	if (!houses.length) throw new (near.length ? CommandError : NotUnderstood)(near.length ? `In ${planOf(c.world, near[0]!.plan)?.dative ?? near[0]!.name} geht man nicht hinein.` : "Geh direkt neben eine Hütte (ein Backhaus, eine Metzgerei), in die du darfst.");
+	if (!houses.length) throw new (near.length ? CommandError : NotUnderstood)(near.length ? `In ${planOf(c.world, near[0]!.plan)?.dative ?? near[0]!.name} geht man nicht hinein.` : "Geh direkt neben eine Hütte (ein Backhaus, eine Metzgerei, ein Gewächshaus), in die du darfst.");
 	return houses.find((b) => isOwner(c, b)) ?? houses.find((b) => mayEnter(c, b)) ?? houses[0]!;
 }
 
 const betrete: Command = {
 	key: "betrete", aliases: ["hinein", "eintreten", "enter"],
-	help: "betrete [x y] – in den Bau neben dir gehen (Hütte, Backhaus, Metzgerei): den eigenen oder einen, in den man eingeladen ist; „hinaus“ führt wieder vor die Tür",
+	help: "betrete [x y] – in den Bau neben dir gehen (Hütte, Backhaus, Metzgerei, Gewächshaus): den eigenen oder einen, in den man eingeladen ist; „hinaus“ führt wieder vor die Tür",
 	async func(c, arg) {
 		if (isInterior(c.actor.room)) throw new CommandError("Du bist schon drinnen; „hinaus“ führt vor die Tür.");
 		const b = await enterable(c, arg);
@@ -189,7 +203,7 @@ async function ownHouse(c: CommandCtx): Promise<BuildingFields> {
 	const all = inside ? (await c.space.readAll({ type: "Building", fields: { buildId: inside } })).map((e) => fieldsOf<BuildingFields>(e))
 		: (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
 	const b = all.find((x) => planOf(c.world, x.plan)?.interior && isOwner(c, x));
-	if (!b) throw new CommandError(all.some((x) => planOf(c.world, x.plan)?.interior) ? "Einladen kann nur, wem der Bau gehört." : "Stell dich neben deine Hütte (oder dein Backhaus, deine Metzgerei) oder geh hinein.");
+	if (!b) throw new CommandError(all.some((x) => planOf(c.world, x.plan)?.interior) ? "Einladen kann nur, wem der Bau gehört." : "Stell dich neben deine Hütte (oder dein Backhaus, deine Metzgerei, dein Gewächshaus) oder geh hinein.");
 	const e = await c.space.take({ type: "Building", fields: { buildId: b.buildId } }, 5_000, { txn: c.txn });
 	if (!e) throw new CommandError("Der Bau ist gerade nicht greifbar; bitte noch einmal.");
 	return fieldsOf<BuildingFields>(e);
@@ -197,7 +211,7 @@ async function ownHouse(c: CommandCtx): Promise<BuildingFields> {
 
 const einladen: Command = {
 	key: "einladen", aliases: ["lade", "invite"],
-	help: "einladen [name] – jemanden in den eigenen Bau einladen, Hütte, Backhaus oder Metzgerei (neben ihm oder drinnen); ohne Namen: wer eingeladen ist",
+	help: "einladen [name] – jemanden in den eigenen Bau einladen, Hütte, Backhaus, Metzgerei oder Gewächshaus (neben ihm oder drinnen); ohne Namen: wer eingeladen ist",
 	async func(c, arg) {
 		const b = await ownHouse(c);
 		const n = arg.trim().replace(/\s+ein$/i, "");

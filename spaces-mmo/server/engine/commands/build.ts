@@ -485,7 +485,7 @@ const baustelle: Command = {
 };
 
 /** A building beside the actor (by plan name when given; only one's own with `own`), taken in the transaction. */
-export async function buildingHere(c: CommandCtx, name: string, o: { own: boolean; /** inside: beside the furnishing for it */ use?: "cook" | "chest" | "sleep" }): Promise<BuildingFields> {
+export async function buildingHere(c: CommandCtx, name: string, o: { own: boolean; /** inside: beside the furnishing for it */ use?: "cook" | "chest" | "sleep" | "water" }): Promise<BuildingFields> {
 	const n = name.trim().replace(ARTICLE, "");
 	const near = (await nearBuildings(c, o.use)).filter((b) => (!n || planOf(c.world, n)?.key === b.plan || b.name.toLowerCase() === n.toLowerCase()));
 	const mine = near.filter((b) => b.accountId === c.account?.accountId);

@@ -255,7 +255,7 @@ export type BedPlant = { x: number; y: number; sort: string; stage: 0 | 1 | 2 | 
  *  `untilWorldMs`: a bed nobody tends goes back to grass. `kind`: a flower bed ("zier": flowers only, and only there
  *  sorts cross) or a community bed ("gemein": everyone may tend it); without one a garden bed of the owner's.
  *  `fenced`: a fence keeps the hares out (engine/commands/wild.ts). */
-export type BedFields = { kind?: "zier" | "gemein"; fenced?: boolean; bedId: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number;
+export type BedFields = { kind?: "zier" | "gemein"; fenced?: boolean; /** The building whose inside it lies in (interior.ts): laid with it, goes with it. */ of?: string; bedId: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number;
 	sponsors: Array<{ charId: string; name: string }>; plants: BedPlant[]; wateredWorldMs: number; weedy: boolean; dueWorldMs: number; untilWorldMs: number; at: number };
 /** A tree (docs/siedeln.en.md "Bäume", engine/commands/trees.ts): one cell (a Plot entry like a bed's) in the light of a
  *  fire. `stage`: seedling, young, grown; `dueWorldMs`: when it grows on, or when its crop is ripe (FOREVER: nothing comes);
@@ -291,7 +291,7 @@ export type EstateFields = { estateId: string; accountId: string; ownerName: str
 /** A piece of the world's scenery (worlds/<id>/scenery.ts): `left` the work it still takes. */
 export type SceneryFields = { sceneryId: string; room: string; x: number; y: number; w: number; h: number; model: string; name: string; fixed?: boolean; through?: boolean; work: number; left: number; yields: Array<{ proto: string; count: number }>;
 	/** A furnishing of a building's inside (docs/innenraeume.en.md): the building, what it is for, what it says of itself. */
-	of?: string; plan?: string; owner?: string; use?: "cook" | "chest" | "sleep"; desc?: string };
+	of?: string; plan?: string; owner?: string; use?: "cook" | "chest" | "sleep" | "water"; desc?: string };
 export type PlotFields = { room: string; x: number; y: number; of: string };
 /** How much of a fire's light the sites and buildings that use it take (engine/build.ts, "Lichtpunkte"). */
 export type LightUseFields = { beaconId: string; used: number };

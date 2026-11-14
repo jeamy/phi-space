@@ -59,8 +59,13 @@ async fn front_of(space: &Space, w: &Json, b: &Json) -> Result<Option<(f64, f64)
 /// "Drinnen in der Hütte", "Drinnen im Backhaus": by the plan's dative ("einer Hütte", "einem Backhaus").
 fn inside_text(name: &str, dative: Option<&str>, def: &Json) -> String {
 	let pre = if js::re(r"^einem\b", "").test(dative.unwrap_or("")) { "im" } else { "in der" };
-	format!("Drinnen {pre} {name}: {}. „hinaus“ führt vor die Tür.", j::a(def, "furniture").iter().map(|f| txt(j::at(f, "name"))).collect::<Vec<_>>().join(", "))
+	// the furnishings, then the beds of a greenhouse (`bedWords`)
+	let beds = j::a(def, "beds").iter().map(|d| match j::s(d, "kind") { "gemein" => "ein Gemeinschaftsbeet", "zier" => "ein Zierbeet", _ => "ein Beet" }.to_owned());
+	format!("Drinnen {pre} {name}: {}. „hinaus“ führt vor die Tür.", j::a(def, "furniture").iter().map(|f| txt(j::at(f, "name"))).chain(beds).collect::<Vec<_>>().join(", "))
 }
+
+/// A bed laid with the inside, by its place in the plan (no draw: the same id on every server).
+fn bed_id_of(build_id: &str, i: usize) -> String { format!("bed-{build_id}-{i}") }
 
 /// `makeInterior`: the inside of `b`, written once (None when its room is there already, or its plan has none).
 pub async fn make_interior(space: &Space, txn: &str, w: &Json, b: &Json) -> Result<Option<Json>> {
@@ -101,6 +106,30 @@ pub async fn make_interior(space: &Space, txn: &str, w: &Json, b: &Json) -> Resu
 		let sid = j::at(&s, "sceneryId").clone();
 		space.write(&tmpl("Scenery", s), Some(txn), FOREVER).await?;
 		space.write_unique(&tmpl("Plot", obj! { "room" => room_id.as_str(), "x" => j::at(f, "x").clone(), "y" => j::at(f, "y").clone(), "of" => sid }), Some(txn), FOREVER, &["room", "x", "y"]).await?;
+	}
+	// a greenhouse's beds: the owner's, no light taken, kept while the building stands (garden.rs goes by `of`)
+	let beds = j::a(def, "beds");
+	let now = if beds.is_empty() { 0.0 } else { world_now_of(space, Some(txn)).await? };
+	for (i, d) in beds.iter().enumerate() {
+		let bed_id = bed_id_of(&build_id, i);
+		let mut bed = obj! {};
+		if j::truthy(j::at(d, "kind")) { j::set(&mut bed, "kind", j::at(d, "kind").clone()); }
+		for (k, v) in [("of", Json::from(build_id.as_str())), ("bedId", Json::from(bed_id.as_str())), ("room", Json::from(room_id.as_str())), ("x", j::at(d, "x").clone()), ("y", j::at(d, "y").clone()), ("w", j::at(d, "w").clone()), ("h", j::at(d, "h").clone()),
+			("owner", j::at(b, "owner").clone()), ("ownerName", j::at(b, "ownerName").clone()), ("accountId", j::at(b, "accountId").clone()), ("beaconId", Json::from("")), ("points", Json::from(0.0)),
+			("sponsors", Json::Array(vec![])), ("plants", Json::Array(vec![])), ("wateredWorldMs", Json::from(now)), ("weedy", Json::Bool(false)), ("dueWorldMs", Json::from(FOREVER)), ("untilWorldMs", Json::from(FOREVER)), ("at", Json::from(now))] {
+			j::set(&mut bed, k, v);
+		}
+		space.write(&tmpl("Bed", bed), Some(txn), FOREVER).await?;
+		let (x0, y0, bw, bh) = (j::n(d, "x"), j::n(d, "y"), j::n(d, "w"), j::n(d, "h"));
+		let mut y = y0;
+		while y < y0 + bh {
+			let mut x = x0;
+			while x < x0 + bw {
+				space.write_unique(&tmpl("Plot", obj! { "room" => room_id.as_str(), "x" => x, "y" => y, "of" => bed_id.as_str() }), Some(txn), FOREVER, &["room", "x", "y"]).await?;
+				x += 1.0;
+			}
+			y += 1.0;
+		}
 	}
 	Ok(Some(room))
 }
@@ -152,7 +181,7 @@ pub async fn drop_interior(space: &Space, txn: &str, w: &Json, room_id: &str, at
 		}
 		_ => { for it in &floor { space.take_if_exists(&obj! { "id" => j::at(it, "id").clone() }, NO_WAIT, Some(txn)).await?; } }
 	}
-	for ty in ["Scenery", "Plot", "Spot"] {
+	for ty in ["Scenery", "Bed", "Plot", "Spot"] {
 		for e in space.read_all(&tmpl(ty, obj! { "room" => room_id }), Some(txn)).await? { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, Some(txn)).await?; }
 	}
 	space.take_if_exists(&tmpl("Exit", obj! { "exitId" => exit_id_of(&build_id) }), NO_WAIT, Some(txn)).await?;
@@ -227,7 +256,7 @@ async fn enterable(c: &Ctx, arg: &str) -> Result<Json> {
 	if houses.is_empty() {
 		return match near.first() {
 			Some(b) => refuse(format!("In {} geht man nicht hinein.", plan_of(c.w(), j::s(b, "plan")).and_then(|p| j::so(p, "dative")).map_or_else(|| txt(j::at(b, "name")), str::to_owned))),
-			None => not_understood("Geh direkt neben eine Hütte (ein Backhaus, eine Metzgerei), in die du darfst."),
+			None => not_understood("Geh direkt neben eine Hütte (ein Backhaus, eine Metzgerei, ein Gewächshaus), in die du darfst."),
 		};
 	}
 	Ok(houses.iter().find(|b| is_owner(c, b)).or_else(|| houses.iter().find(|b| may_enter(c, b))).unwrap_or(&houses[0]).to_owned().clone())
@@ -262,7 +291,7 @@ async fn own_house(c: &Ctx) -> Result<Json> {
 	};
 	let house = |x: &Json| interior_def(c.w(), j::s(x, "plan")).is_some();
 	let Some(b) = all.iter().find(|x| house(x) && is_owner(c, x)) else {
-		return refuse(if all.iter().any(house) { "Einladen kann nur, wem der Bau gehört." } else { "Stell dich neben deine Hütte (oder dein Backhaus, deine Metzgerei) oder geh hinein." });
+		return refuse(if all.iter().any(house) { "Einladen kann nur, wem der Bau gehört." } else { "Stell dich neben deine Hütte (oder dein Backhaus, deine Metzgerei, dein Gewächshaus) oder geh hinein." });
 	};
 	let Some(e) = c.space.take(&tmpl("Building", obj! { "buildId" => j::at(b, "buildId").clone() }), 5_000.0, c.txn()).await? else { return refuse("Der Bau ist gerade nicht greifbar; bitte noch einmal.") };
 	Ok(fields(&e).clone())

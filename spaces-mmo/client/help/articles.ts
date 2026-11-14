@@ -1598,7 +1598,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Ziegelei (\`bau ziegelei\`) | Dorf | 2×2, 8 Stein, 6 Treibholz, 6 Lehm, 20 Arbeit | 3 | 45 | brennt Ziegel aus Lehm |
 | Brauerei (\`bau brauerei\`) | Stadt | 3×2, 8 Ziegel, 6 Bohle, 24 Arbeit | 3 | 45 | braut Bier |
 | Gerberei (\`bau gerberei\`) | Stadt | 2×2, 8 Stein, 6 Bohle, 4 Ziegel, 28 Arbeit | 3 | 45 | gerbt Felle mit Salz zu Leder |
-| Gewächshaus (\`bau gewächshaus\`) | Stadt | 3×2, 8 Glas, 6 Bohle, 20 Arbeit | 2 | 45 | Beete bis drei Felder daneben wachsen im Winter durch |
+| Gewächshaus (\`bau gewächshaus\`) | Stadt | 3×2, 8 Glas, 6 Bohle, 20 Arbeit | 2 | 45 | drinnen drei Beete, die im Winter wachsen (Beet, Zierbeet, Gemeinschaftsbeet für Gäste); Beete bis drei Felder daneben wachsen im Winter durch |
 | Glashütte (\`bau glashütte\`) | Stadt | 3×2, 12 Ziegel, 6 Stein, 28 Arbeit | 3 | 45 | bläst Glas aus Sand |
 | Kaufhaus (\`bau kaufhaus\`) | Stadt | 4×3, 14 Ziegel, 8 Bohle, 6 Stein, 36 Arbeit | 5 | 45 | Laden mit festen Preisen (\`laden\`) |
 | Kontor (\`bau kontor\`) | Stadt | 3×2, 10 Ziegel, 6 Stein, 24 Arbeit | 4 | 45 | leiht gegen ein Pfand, stellt Wechsel aus (\`kredit\`, \`wechsel\`) |
@@ -1635,7 +1635,7 @@ You can tear down what is yours at any time. You get part of the material back.
 | Brickworks (\`bau ziegelei\`) | Village | 2×2, 8 stone, 6 driftwood, 6 clay, 20 work | 3 | 45 | fires bricks from clay |
 | Brewery (\`bau brauerei\`) | Town | 3×2, 8 brick, 6 plank, 24 work | 3 | 45 | brews beer |
 | Tannery (\`bau gerberei\`) | Town | 2×2, 8 stone, 6 plank, 4 brick, 28 work | 3 | 45 | tans skins into leather with salt |
-| Greenhouse (\`bau gewächshaus\`) | Town | 3×2, 8 glass, 6 plank, 20 work | 2 | 45 | beds up to three cells beside it grow on through winter |
+| Greenhouse (\`bau gewächshaus\`) | Town | 3×2, 8 glass, 6 plank, 20 work | 2 | 45 | three beds inside that grow in winter (bed, flower bed, community bed for guests); beds up to three cells beside it grow on through winter |
 | Glassworks (\`bau glashütte\`) | Town | 3×2, 12 brick, 6 stone, 28 work | 3 | 45 | blows glass from sand |
 | Department store (\`bau kaufhaus\`) | Town | 4×3, 14 brick, 8 plank, 6 stone, 36 work | 5 | 45 | a shop with fixed prices (\`laden\`) |
 | Counting house (\`bau kontor\`) | Town | 3×2, 10 brick, 6 stone, 24 work | 4 | 45 | lends against a pledge, issues bills (\`kredit\`, \`wechsel\`) |
@@ -1709,6 +1709,27 @@ Es gibt drei Arten von Beeten. Das Gartenbeet nimmt alles, das Zierbeet nur Blum
 \`umgraben\` legt ein **Gartenbeet** an, in dem Gemüse und Blumen wachsen. \`umgraben zier\` gräbt ein **Zierbeet** um: Dort wachsen nur Blumen (Strandnelke, Dünenrose, Nebelblume), und nur dort kreuzen sie sich. Es zählt wie jedes Beet zu deinen dreien.
 
 \`umgraben gemeinschaft\` legt ein **Gemeinschaftsbeet** an: 3×3 Felder, zwei Lichtpunkte, **eins je Feuer**. Es zählt nicht zu deinen Beeten. Pflanzen darf darin jeder mit Konto, gießen, jäten und ernten alle, auch Gäste. Was du erntest, kommt in deine Tasche, aber jeder nimmt nur einen Teil: Wer es nicht angelegt hat, erntet auf einmal **höchstens 2 Pflanzen und höchstens die Hälfte** des Reifen (mit ihren Samen), wer es angelegt hat, höchstens **zwei Drittel**; eine einzelne reife Pflanze darf jeder nehmen. Aufgeben kann es nur, wer es angelegt hat.
+
+## Das Gewächshaus {#greenhouse}
+
+Im Winter steht draußen alles still. Unter Glas wächst es weiter.
+
+Ein **Gewächshaus** baust du ab der Stadt (\`bau gewächshaus\`: 3×2 Felder, 8 Glas, 6 Bohlen, 20 Arbeit). Wer darf, geht mit \`betrete\` hinein, wie in eine Hütte: du selbst und wen du mit \`einladen <name>\` einlädst.
+
+Drinnen liegen schon **drei Beete**, du gräbst dort nichts um:
+
+- ein **Beet** für Gemüse und Blumen, etwa Möhren, Kohl und Strandnelken,
+- ein **Zierbeet**, in dem sich Blumen kreuzen,
+- ein **Gemeinschaftsbeet** (3×3), in das deine Gäste pflanzen, das sie gießen, jäten und ernten wie jedes Gemeinschaftsbeet.
+
+Darin geht alles wie draußen: \`pflanze\`, \`gieße\`, \`jäte\`, \`ernte\`, \`pate\` und \`benenne\`. Die Unterschiede:
+
+- Die Beete wachsen **auch im Winter**, und Nebel bremst sie nicht.
+- Sie nehmen **kein Licht** eines Feuers und zählen **nicht zu deinen drei Beeten**.
+- Sie verfallen nicht, auch wenn du sie lange nicht pflegst, und aufgeben kann man sie nicht: Sie bleiben, solange das Gewächshaus steht, und gehen mit ihm.
+- Wasser gibt das **Wasserfass** drinnen: \`schöpfe\` daneben füllt eine Kanne. Das Glasdach füllt es wie eine Regentonne, eine Kanne alle acht Weltstunden, höchstens sechs.
+
+Auch draußen hilft das Gewächshaus: Beete bis drei Felder daneben wachsen im Winter ebenfalls weiter.
 
 ## Kreuzen und Benennen {#breeding}
 
@@ -1810,6 +1831,27 @@ There are three kinds of bed. A garden bed takes everything, a flower bed only f
 \`umgraben\` digs a **garden bed**, where vegetables and flowers grow. \`umgraben zier\` digs a **flower bed**: only flowers grow there (thrift, dune rose, fog flower), and only there do they cross. It counts towards your three like any bed.
 
 \`umgraben gemeinschaft\` lays out a **community bed**: 3×3 cells, two light points, **one per fire**. It does not count towards your beds. Everyone with an account may plant in it, and everyone, guests too, may water, weed and harvest. What you harvest goes into your pack, but each takes only a part: whoever did not lay it out harvests **at most 2 plants and at most half** of what is ripe at once (with their seeds), whoever laid it out at most **two thirds**; a single ripe plant anyone may take. Only whoever laid it out can give it up.
+
+## The greenhouse {#greenhouse}
+
+In winter everything stands still outside. Under glass it grows on.
+
+You build a **greenhouse** from the town on (\`bau gewächshaus\`: 3×2 cells, 8 glass, 6 planks, 20 work). Whoever may goes in with \`betrete\`, as into a hut: you, and whoever you invite with \`einladen <name>\`.
+
+Inside lie **three beds** already, you dig nothing there:
+
+- a **bed** for vegetables and flowers, carrots, cabbage and thrift for instance,
+- a **flower bed**, where flowers cross,
+- a **community bed** (3×3), where your guests plant, water, weed and harvest as at any community bed.
+
+Everything works as outside: \`pflanze\`, \`gieße\`, \`jäte\`, \`ernte\`, \`pate\` and \`benenne\`. The differences:
+
+- The beds grow **in winter too**, and fog does not slow them.
+- They take **no light** of a fire and do **not count towards your three beds**.
+- They do not decay however long you leave them, and they cannot be given up: they stay as long as the greenhouse stands, and go with it.
+- Water comes from the **water butt** inside: \`schöpfe\` beside it fills a can. The glass roof fills it as a rain barrel fills, a can every eight world hours, six at most.
+
+Outside, too, the greenhouse helps: beds up to three cells beside it grow on in winter as well.
 
 ## Crossing and naming {#breeding}
 

@@ -143,14 +143,17 @@ async fn dig(c: &mut Ctx, arg: &str) -> Result<()> {
 	let kind = k.as_ref().and_then(|m| if m.group(trimmed, 1).is_some_and(|s| !s.is_empty()) { Some("zier") } else if m.group(trimmed, 2).is_some_and(|s| !s.is_empty()) { Some("gemein") } else { None });
 	let at = k.as_ref().map_or(arg, |m| &trimmed[m.end..]).to_owned();
 	let size = j::at(&g, if kind == Some("gemein") { "commons" } else { "bed" }).clone();
+	// an inside has its beds laid with it (a greenhouse's, interior.rs)
+	if c.room().starts_with("in-") { return refuse("Drinnen gräbt man nicht um; die Beete eines Gewächshauses liegen schon da, „beet“ zeigt sie."); }
 	let Some(account) = c.account.clone().filter(|a| !j::b(a, "guest")) else { return refuse("Gäste können als Pate gießen und ernten, aber kein eigenes Beet anlegen; registriere dich dafür.") };
 	if !human(c) { return refuse("Beete legen nur Menschen an."); }
 	need_rank(c, "siedler", "Beete anlegen").await?;
 	let spade = j::s(&g, "spade").to_owned();
 	if !inventory(c).await?.iter().any(|i| j::s(fields(i), "proto") == spade) { let n = proto_name(c, &spade); return refuse(format!("Zum Umgraben brauchst du einen {n} („craft {}“).", js::lower(&n))); }
 	let acc = j::at(&account, "accountId").clone();
-	if kind != Some("gemein") && c.space.count(&tmpl("Bed", obj! { "accountId" => acc.clone() }), None).await? - c.space.count(&tmpl("Bed", obj! { "accountId" => acc.clone(), "kind" => "gemein" }), None).await? >= j::n(&g, "maxBeds") {
-		return refuse(format!("Mehr als {} Beete pflegt niemand (ein Gemeinschaftsbeet zählt nicht dazu).", txt(j::at(&g, "maxBeds"))));
+	// a community bed is no one's and a greenhouse's beds are its building's: neither counts to the digger's beds
+	if kind != Some("gemein") && c.space.read_all(&tmpl("Bed", obj! { "accountId" => acc.clone() }), None).await?.iter().filter(|e| j::s(fields(e), "kind") != "gemein" && !j::truthy(j::at(fields(e), "of"))).count() as f64 >= j::n(&g, "maxBeds") {
+		return refuse(format!("Mehr als {} Beete pflegt niemand (ein Gemeinschaftsbeet und die Beete im Gewächshaus zählen nicht dazu).", txt(j::at(&g, "maxBeds"))));
 	}
 	let points = j::n(&size, "points");
 	let light = match light_for(c, points).await? { Ok(l) => l, Err(why) => return refuse(why.replacen("gebaut wird", "gegärtnert wird", 1).replacen("Bau", "Beet", 1)) };
@@ -225,6 +228,8 @@ async fn beet(c: &mut Ctx, arg: &str) -> Result<()> {
 		let admin = crate::context::level_of(c.account.as_ref()) == "Admin";
 		let on = |x: &Json| cx >= j::n(x, "x") && cy >= j::n(x, "y") && cx < j::n(x, "x") + j::n(x, "w") && cy < j::n(x, "y") + j::n(x, "h");
 		let b = bed_here(c, !admin, if at { Some(&on) } else { None }, Some(1.0)).await?;
+		// a greenhouse's bed goes only with its building
+		if j::truthy(j::at(&b, "of")) { write_bed(c, &b).await?; return refuse("Die Beete im Gewächshaus gehören zum Bau; sie bleiben, solange er steht."); }
 		// what grows in it is lost: asked first, „beet aufgeben ja“ does it
 		if !js::re(r"^(?:ja|yes)$", "i").test(rest.first().map_or("", |s| s.as_str())) {
 			write_bed(c, &b).await?;
@@ -563,15 +568,32 @@ async fn schoepfe(c: &mut Ctx) -> Result<()> {
 	let g = garden(c)?;
 	let barrel_key = j::s(&g, "barrel").to_owned();
 	let barrel = j::opt(c.w(), "building").and_then(|b| j::by(j::a(b, "plans"), "key", &barrel_key)).cloned();
-	let near = format!("Geh direkt neben eine {}.", barrel.as_ref().map_or_else(|| "Regentonne".to_owned(), |p| txt(j::at(p, "name"))));
-	let b = match building_here(c, &barrel.as_ref().map_or_else(|| barrel_key.clone(), |p| txt(j::at(p, "name"))), false).await {
+	// inside a greenhouse its water butt (a furnishing for "water"): it holds and fills as a rain barrel, its water kept on
+	// the greenhouse's Building
+	let butt = super::interior::furnishing_for(c, "water").await?;
+	let near = match &butt {
+		Some(f) => format!("Geh zum {}.", txt(j::at(f, "name"))),
+		None => format!("Geh direkt neben eine {}.", barrel.as_ref().map_or_else(|| "Regentonne".to_owned(), |p| txt(j::at(p, "name")))),
+	};
+	let found = match &butt {
+		Some(_) => super::build::building_here_for(c, "", false, Some("water")).await,
+		None => building_here(c, &barrel.as_ref().map_or_else(|| barrel_key.clone(), |p| txt(j::at(p, "name"))), false).await,
+	};
+	let b = match found {
 		Err(Error::NotUnderstood(_)) => return not_understood(near),
 		r => r?,
 	};
-	if j::s(&b, "plan") != barrel_key { put_back(c, &b).await?; return not_understood(near); }
+	if butt.is_none() && j::s(&b, "plan") != barrel_key { put_back(c, &b).await?; return not_understood(near); }
 	let now = world_now_of(&c.space, c.txn()).await?;
 	let (cans, at) = barrel_water(&g, &b, now);
-	if cans < 1.0 { put_back(c, &b).await?; return refuse(format!("Die {} ist leer; in etwa {} hat sie wieder eine Kanne (bei Sturmflut ist sie voll).", txt(j::at(&b, "name")), hours(at + j::n(&g, "barrelFillWorldMs") - now))); }
+	if cans < 1.0 {
+		put_back(c, &b).await?;
+		let wait = hours(at + j::n(&g, "barrelFillWorldMs") - now);
+		return refuse(match &butt {
+			Some(f) => format!("Das {} ist leer; in etwa {wait} hat es wieder eine Kanne.", txt(j::at(f, "name"))),
+			None => format!("Die {} ist leer; in etwa {wait} hat sie wieder eine Kanne (bei Sturmflut ist sie voll).", txt(j::at(&b, "name"))),
+		});
+	}
 	let mut nb = b.clone();
 	j::set(&mut nb, "water", cans - 1.0);
 	j::set(&mut nb, "waterAtWorldMs", at);
@@ -579,7 +601,8 @@ async fn schoepfe(c: &mut Ctx) -> Result<()> {
 	let can = j::s(&g, "can").to_owned();
 	give_back(c, &[(can.clone(), 1.0)]).await?;
 	let me = c.char_id().to_owned();
-	msg(c, &me, "info", &format!("Du füllst eine {} (noch {} in der Tonne).", proto_name(c, &can), nt(cans - 1.0)), MsgOpts::default()).await
+	let left = if butt.is_some() { "im Fass" } else { "in der Tonne" };
+	msg(c, &me, "info", &format!("Du füllst eine {} (noch {} {left}).", proto_name(c, &can), nt(cans - 1.0)), MsgOpts::default()).await
 }
 
 /// `nameRefused`: a name a variety may have.
@@ -658,19 +681,21 @@ pub async fn garden_tick(space: &Space, w: &Json) -> Result<f64> {
 	let glass = j::opt(g, "greenhouse");
 	let houses: Vec<Json> = match (winter, glass) { (Some(_), Some(gl)) => space.read_all(&tmpl("Building", obj! { "plan" => j::at(gl, "plan").clone() }), None).await?.iter().map(|e| fields(e).clone()).collect(), _ => Vec::new() };
 	let mut written = 0.0;
+	// a bed of a greenhouse's inside (`of`) stays while its building stands (interior.rs takes it with it) and never freezes
+	let lasts = |b: &Json| j::truthy(j::at(b, "of")) || j::n(b, "untilWorldMs") > kept;
 	for e in space.read_all(&obj! { "type" => "Bed" }, None).await? {
 		let b = fields(&e);
-		if j::n(b, "dueWorldMs") > now && j::n(b, "untilWorldMs") > kept { continue; }
+		if j::n(b, "dueWorldMs") > now && lasts(b) { continue; }
 		let txn = space.create_transaction(10_000.0).await?;
 		let r: Result<bool> = async {
 			let Some(t) = space.take_if_exists(&tmpl("Bed", obj! { "bedId" => j::at(b, "bedId").clone() }), NO_WAIT, Some(&txn)).await? else { return Ok(false) };
 			let mut bed = fields(&t).clone();
-			if j::n(&bed, "dueWorldMs") > now && j::n(&bed, "untilWorldMs") > kept { return Ok(false); }
-			if j::n(&bed, "untilWorldMs") <= kept { free_bed(space, &txn, &bed).await?; } else {
+			if j::n(&bed, "dueWorldMs") > now && lasts(&bed) { return Ok(false); }
+			if !lasts(&bed) { free_bed(space, &txn, &bed).await?; } else {
 				let fog = fog_of(space, j::s(&bed, "room")).await?;
 				let reach = glass.map_or(f64::NAN, |gl| j::n(gl, "reach"));
 				let (bx, by, bw, bh) = (j::n(&bed, "x"), j::n(&bed, "y"), j::n(&bed, "w"), j::n(&bed, "h"));
-				let sheltered = houses.iter().any(|h| j::at(h, "room") == j::at(&bed, "room") && (j::n(h, "x") - (bx + bw - 1.0)).max(bx - (j::n(h, "x") + j::n(h, "w") - 1.0)).max(j::n(h, "y") - (by + bh - 1.0)).max(by - (j::n(h, "y") + j::n(h, "h") - 1.0)) <= reach);
+				let sheltered = j::truthy(j::at(&bed, "of")) || houses.iter().any(|h| j::at(h, "room") == j::at(&bed, "room") && (j::n(h, "x") - (bx + bw - 1.0)).max(bx - (j::n(h, "x") + j::n(h, "w") - 1.0)).max(j::n(h, "y") - (by + bh - 1.0)).max(by - (j::n(h, "y") + j::n(h, "h") - 1.0)) <= reach);
 				advance(g, &mut bed, now, fog, patient, if sheltered { None } else { winter });
 				space.write(&tmpl("Bed", bed), Some(&txn), FOREVER).await?;
 			}

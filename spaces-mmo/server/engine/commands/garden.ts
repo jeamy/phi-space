@@ -29,6 +29,7 @@ import { fogOf } from "../fire.ts";
 import type { GardenDef, SortDef, WorldDef } from "../world.ts";
 import { harvestField, sowOnField } from "./field.ts";
 import { harvestTree, meansTree, plantTree } from "./trees.ts";
+import { furnishingFor } from "./interior.ts";
 import { collect, meansYield } from "./animals.ts";
 import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, plural, putBack, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
 import { random, randomBytes, randomInt } from "../source.ts";
@@ -126,12 +127,14 @@ async function dig(c: CommandCtx, arg: string): Promise<void> {
 	const kind = k?.[1] ? "zier" as const : k?.[2] ? "gemein" as const : undefined;
 	const at = k ? arg.trim().slice(k[0].length) : arg;
 	const size = kind === "gemein" ? g.commons : g.bed;
+	// an inside has its beds laid with it (a greenhouse's, interior.ts)
+	if (c.actor.room.startsWith("in-")) throw new CommandError("Drinnen gräbt man nicht um; die Beete eines Gewächshauses liegen schon da, „beet“ zeigt sie.");
 	if (!c.account || c.account.guest) throw new CommandError("Gäste können als Pate gießen und ernten, aber kein eigenes Beet anlegen; registriere dich dafür.");
 	if (!human(c)) throw new CommandError("Beete legen nur Menschen an.");
 	await needRank(c, "siedler", "Beete anlegen");
 	if (!(await inventory(c)).some((i) => i.f.proto === g.spade)) throw new CommandError(`Zum Umgraben brauchst du einen ${protoName(c, g.spade)} („craft ${protoName(c, g.spade).toLowerCase()}“).`);
-	// a community bed is no one's: it does not count to the digger's beds
-	if (kind !== "gemein" && (await c.space.count({ type: "Bed", fields: { accountId: c.account.accountId } })) - (await c.space.count({ type: "Bed", fields: { accountId: c.account.accountId, kind: "gemein" } })) >= g.maxBeds) throw new CommandError(`Mehr als ${g.maxBeds} Beete pflegt niemand (ein Gemeinschaftsbeet zählt nicht dazu).`);
+	// a community bed is no one's and a greenhouse's beds are its building's: neither counts to the digger's beds
+	if (kind !== "gemein" && (await c.space.readAll({ type: "Bed", fields: { accountId: c.account.accountId } })).map((e) => fieldsOf<BedFields>(e)).filter((b) => b.kind !== "gemein" && !b.of).length >= g.maxBeds) throw new CommandError(`Mehr als ${g.maxBeds} Beete pflegt niemand (ein Gemeinschaftsbeet und die Beete im Gewächshaus zählen nicht dazu).`);
 	const light = await lightFor(c, size.points);
 	if (typeof light === "string") throw new CommandError(light.replace("gebaut wird", "gegärtnert wird").replace("Bau", "Beet"));
 	if (kind === "gemein" && (await peek(c.space, { type: "BedCommons", fields: { beaconId: light.beaconId } }))) throw new CommandError("Im Licht dieses Feuers liegt schon ein Gemeinschaftsbeet; pflanze dort mit („beet“ zeigt es).");
@@ -180,6 +183,8 @@ const beet: Command = {
 			if (!c.account && c.loadAccount) { c.account = await c.loadAccount(); delete c.loadAccount; }
 			const admin = levelOf(c.account) === "Admin";
 			const b = await bedHere(c, { own: !admin, reach: 1, ...(at ? { may: (x: BedFields) => cx >= x.x && cy >= x.y && cx < x.x + x.w && cy < x.y + x.h } : {}) });
+			// a greenhouse's bed goes only with its building
+			if (b.of) { await writeBed(c, b); throw new CommandError("Die Beete im Gewächshaus gehören zum Bau; sie bleiben, solange er steht."); }
 			// what grows in it is lost: asked first, „beet aufgeben ja“ does it (the map's menu asks on the page and sends that)
 			if (!/^(?:ja|yes)$/i.test(rest[0] ?? "")) { await writeBed(c, b); return msg(c, c.actor.charId, "info", "Das Beet wirklich aufgeben? Was darin wächst, geht verloren, und dort wächst wieder Gras. „beet aufgeben ja“ gibt es auf."); }
 			await freeBed(c.space, c.txn, b);
@@ -439,18 +444,22 @@ const sammle: Command = {
 
 const schoepfe: Command = {
 	key: "schöpfe", aliases: ["schoepfe", "schöpfen", "schoepfen", "schöpf", "schoepf", "fülle", "fuelle", "fill"],
-	help: "schöpfe – an einer Regentonne neben dir eine Kanne Wasser füllen",
+	help: "schöpfe – an einer Regentonne neben dir eine Kanne Wasser füllen (im Gewächshaus am Wasserfass)",
 	async func(c) {
 		const g = garden(c);
 		const barrel = c.world.building?.plans.find((p) => p.key === g.barrel);
-		const b = await buildingHere(c, barrel?.name ?? g.barrel, { own: false }).catch((e) => { throw e instanceof NotUnderstood ? new NotUnderstood(`Geh direkt neben eine ${barrel?.name ?? "Regentonne"}.`) : e; });
-		if (b.plan !== g.barrel) { await putBack(c, b); throw new NotUnderstood(`Geh direkt neben eine ${barrel?.name ?? "Regentonne"}.`); }
+		// inside a greenhouse its water butt (a furnishing for "water"): it holds and fills as a rain barrel, its water kept
+		// on the greenhouse's Building
+		const butt = await furnishingFor(c, "water");
+		const where = butt ? `Geh zum ${butt.name}.` : `Geh direkt neben eine ${barrel?.name ?? "Regentonne"}.`;
+		const b = await buildingHere(c, butt ? "" : barrel?.name ?? g.barrel, { own: false, ...(butt ? { use: "water" as const } : {}) }).catch((e) => { throw e instanceof NotUnderstood ? new NotUnderstood(where) : e; });
+		if (!butt && b.plan !== g.barrel) { await putBack(c, b); throw new NotUnderstood(where); }
 		const now = await worldNowOf(c.space, c.txn);
 		const w = barrelWater(g, b, now);
-		if (w.cans < 1) { await putBack(c, b); throw new CommandError(`Die ${b.name} ist leer; in etwa ${hours(w.at + g.barrelFillWorldMs - now)} hat sie wieder eine Kanne (bei Sturmflut ist sie voll).`); }
+		if (w.cans < 1) { await putBack(c, b); throw new CommandError(butt ? `Das ${butt.name} ist leer; in etwa ${hours(w.at + g.barrelFillWorldMs - now)} hat es wieder eine Kanne.` : `Die ${b.name} ist leer; in etwa ${hours(w.at + g.barrelFillWorldMs - now)} hat sie wieder eine Kanne (bei Sturmflut ist sie voll).`); }
 		await putBack(c, { ...b, water: w.cans - 1, waterAtWorldMs: w.at });
 		await giveBack(c, [{ proto: g.can, count: 1 }]);
-		await msg(c, c.actor.charId, "info", `Du füllst eine ${protoName(c, g.can)} (noch ${w.cans - 1} in der Tonne).`);
+		await msg(c, c.actor.charId, "info", butt ? `Du füllst eine ${protoName(c, g.can)} (noch ${w.cans - 1} im Fass).` : `Du füllst eine ${protoName(c, g.can)} (noch ${w.cans - 1} in der Tonne).`);
 	},
 };
 
@@ -511,18 +520,20 @@ export async function gardenTick(space: SpaceLike, w: WorldDef): Promise<number>
 	const now = await worldNowOf(space), kept = await decayNowOf(space), patient = await patienceOf(space), winter = await frozenUntil(space, now), glass = g.greenhouse;
 	const houses = winter === null || !glass ? [] : (await space.readAll({ type: "Building", fields: { plan: glass.plan } })).map((e) => fieldsOf<BuildingFields>(e));
 	let written = 0;
+	// a bed of a greenhouse's inside (`of`) stays while its building stands (interior.ts takes it with it) and never freezes
+	const lasts = (b: BedFields) => !!b.of || b.untilWorldMs > kept;
 	for (const e of await space.readAll({ type: "Bed" })) {
 		const b = fieldsOf<BedFields>(e);
-		if (b.dueWorldMs > now && b.untilWorldMs > kept) continue;
+		if (b.dueWorldMs > now && lasts(b)) continue;
 		const txn = (await space.createTransaction(10_000)).id;
 		try {
 			const t = await space.takeIfExists({ type: "Bed", fields: { bedId: b.bedId } }, NO_WAIT, { txn });
 			if (!t) { await space.abort(txn); continue; }
 			const bed = fieldsOf<BedFields>(t);
-			if (bed.dueWorldMs > now && bed.untilWorldMs > kept) { await space.abort(txn); continue; } // the read was older: done already
-			if (bed.untilWorldMs <= kept) await freeBed(space, txn, bed);
+			if (bed.dueWorldMs > now && lasts(bed)) { await space.abort(txn); continue; } // the read was older: done already
+			if (!lasts(bed)) await freeBed(space, txn, bed);
 			else {
-				advance(g, bed, now, await fogOf(space, bed.room), random, patient, houses.some((h) => h.room === bed.room && Math.max(h.x - (bed.x + bed.w - 1), bed.x - (h.x + h.w - 1), h.y - (bed.y + bed.h - 1), bed.y - (h.y + h.h - 1)) <= glass!.reach) ? null : winter);
+				advance(g, bed, now, await fogOf(space, bed.room), random, patient, bed.of || houses.some((h) => h.room === bed.room && Math.max(h.x - (bed.x + bed.w - 1), bed.x - (h.x + h.w - 1), h.y - (bed.y + bed.h - 1), bed.y - (h.y + h.h - 1)) <= glass!.reach) ? null : winter);
 				await space.write({ type: "Bed", fields: bed as never }, txn, FOREVER);
 			}
 			await space.commit(txn);

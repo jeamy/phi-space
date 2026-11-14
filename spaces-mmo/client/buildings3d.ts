@@ -654,6 +654,16 @@ function hooks(t: T): Geo {
 		return merge(t, parts, "haken");
 	});
 }
+/** The greenhouse's water butt: a tall open barrel with three hoops, water to near its rim, a gutter's spout above it. */
+function waterButt(t: T): Geo {
+	return cached("wasserfass", () => {
+		const parts: Part[] = [cy(t, 0.24, 0.27, 0.5, WOOD, 0, 0, 0, 12)];
+		for (const y of [0.05, 0.24, 0.44]) parts.push(cy(t, 0.275, 0.275, 0.03, IRON, 0, y, 0, 12));
+		parts.push(cy(t, 0.22, 0.22, 0.02, 0x5f8fa8, 0, 0.45, 0, 12));
+		parts.push(b(t, 0.06, 0.04, 0.34, IRON, 0, 0.72, -0.12), b(t, 0.05, 0.2, 0.05, IRON, 0, 0.6, 0.04));
+		return merge(t, parts, "wasserfass");
+	});
+}
 /** A pickling barrel: squat, with three hoops, salt crusted at its rim, a board lid with a stone weight, a scoop hung on it. */
 function picklingBarrel(t: T): Geo {
 	return cached("poekelfass", () => {
@@ -774,6 +784,8 @@ export function sceneryModel(t: T, model: string | undefined, w: number, d: numb
 		case "hackklotz": return block(t);
 		case "haken": return hooks(t);
 		case "poekelfass": return picklingBarrel(t);
+		case "wasserfass": return waterButt(t);
+		case "pflanztisch": return table(t);
 		default: return null;
 	}
 }

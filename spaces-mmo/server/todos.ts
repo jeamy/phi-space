@@ -17,12 +17,15 @@ const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >=
 /** The tasks of `charId`, most urgent first. `decay`: the second clock now (a building's term). `herds`: the herd of each building by its id; `loads`: the grain at the
  *  mills; `now`: the world's time (null without a clock: nothing that goes by the time). */
 export function todosFor(charId: string, objs: Iterable<ObjView>, herds: ReadonlyMap<string, HerdFields>, loads: Iterable<MillLoadFields>, w: WorldDef, now: number | null, patient = 1, decay: number | null = null): Todo[] {
-	const room = (id: string) => w.rooms.find((r) => r.roomId === id)?.name ?? id;
+	const all = [...objs];
+	// a building's inside (`in-<id>`, interior.ts): named as its room is, „Gewächshaus von Mira“; a task there leads to the building
+	const houses = new Map(all.filter((o) => o.kind === "building").map((o) => [`in-${o.id}`, o]));
+	const room = (id: string) => { const h = houses.get(id); return h ? `${h.name} von ${h.owner ?? ""}` : w.rooms.find((r) => r.roomId === id)?.name ?? id; };
 	const where = (o: { location: string; x: number; y: number }) => `in ${room(o.location)} (${o.x} ${o.y})`;
 	const proto = (key: string) => w.prototypes.find((p) => p.key === key)?.name ?? key;
 	const out: Todo[] = [];
-	const add = (o: { id: string; location: string; x: number; y: number }, what: string, text: string, rank: Todo["rank"]) => out.push({ id: `${o.id}:${what}`, text, room: o.location, x: o.x, y: o.y, rank });
-	for (const o of objs) {
+	const add = (o: { id: string; location: string; x: number; y: number }, what: string, text: string, rank: Todo["rank"]) => { const at = houses.get(o.location) ?? o; out.push({ id: `${o.id}:${what}`, text, room: at.location, x: at.x, y: at.y, rank }); };
+	for (const o of all) {
 		// a bed's sponsor waters it too (garden.ts mayTend): it is told when it gets dry, nothing else of it
 		const own = o.ownerId === charId;
 		if (!own && !(o.kind === "bed" && o.sponsorIds?.includes(charId))) continue;

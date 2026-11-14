@@ -206,11 +206,20 @@ fn span(ms: f64) -> String {
 /// `todosFor` (server/todos.ts): the tasks of `char_id`, most urgent first.
 #[allow(clippy::too_many_arguments)] // the gateway's state, as the TypeScript todosFor takes it
 pub fn todos_for<'a>(char_id: &str, objs: impl Iterator<Item = &'a Json>, herd_of: &dyn Fn(&str) -> Option<Json>, loads: impl Iterator<Item = &'a Json>, w: &Json, now: Option<f64>, patient: f64, decay: Option<f64>) -> Json {
-	let room = |id: &str| j::by(j::a(w, "rooms"), "roomId", id).map_or_else(|| id.to_owned(), |r| txt(j::at(r, "name")));
+	let all: Vec<&Json> = objs.collect();
+	// a building's inside (`in-<id>`, interior.rs): named as its room is, „Gewächshaus von Mira“; a task there leads to the building
+	let houses: std::collections::HashMap<String, &Json> = all.iter().filter(|o| j::s(o, "kind") == "building").map(|o| (format!("in-{}", txt(j::at(o, "id"))), *o)).collect();
+	let room = |id: &str| match houses.get(id) {
+		Some(h) => format!("{} von {}", txt(j::at(h, "name")), j::opt(h, "owner").map_or_else(String::new, txt)),
+		None => j::by(j::a(w, "rooms"), "roomId", id).map_or_else(|| id.to_owned(), |r| txt(j::at(r, "name"))),
+	};
 	let where_ = |o: &Json| format!("in {} ({} {})", room(j::s(o, "location")), js::number_text(j::n(o, "x")), js::number_text(j::n(o, "y")));
 	let mut out: Vec<(f64, Json)> = Vec::new();
-	let mut add = |o: &Json, what: &str, text: String, rank: f64| out.push((rank, obj! { "id" => format!("{}:{what}", txt(j::at(o, "id"))), "text" => text, "room" => j::at(o, "location").clone(), "x" => j::at(o, "x").clone(), "y" => j::at(o, "y").clone(), "rank" => rank }));
-	for o in objs {
+	let mut add = |o: &Json, what: &str, text: String, rank: f64| {
+		let at = houses.get(j::s(o, "location")).copied().unwrap_or(o);
+		out.push((rank, obj! { "id" => format!("{}:{what}", txt(j::at(o, "id"))), "text" => text, "room" => j::at(at, "location").clone(), "x" => j::at(at, "x").clone(), "y" => j::at(at, "y").clone(), "rank" => rank }));
+	};
+	for o in all.iter().copied() {
 		// a bed's sponsor waters it too (garden mayTend): it is told when it gets dry, nothing else of it
 		let own = j::s(o, "ownerId") == char_id && j::truthy(j::at(o, "ownerId"));
 		if !own && !(j::s(o, "kind") == "bed" && j::a(o, "sponsorIds").iter().any(|x| x.as_str() == Some(char_id))) { continue; }

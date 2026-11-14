@@ -1,7 +1,7 @@
 {
 	"id": "leuchtfeuer",
 	"title": "Leuchtfeuer",
-	"version": 53,
+	"version": 54,
 	"startHour": 8,
 	"evening": {
 		"hour": 20
@@ -8859,7 +8859,7 @@
 		{
 			"key": "jahreszeiten",
 			"category": "Allgemein",
-			"text": "Das Jahr hat Frühling, Sommer, Herbst und Winter, die Länge stellt der Betreiber ein. „time“ nennt die Jahreszeit. Im Winter wächst draußen nichts: Beete und Äcker stehen still, nichts geht verloren, im Frühling geht es weiter. Beete bis drei Felder neben einem Gewächshaus (ab Stadt, braucht Glas) wachsen durch. Das Erntefest gibt es nur im Herbst, die Blumenschau im Frühling und Sommer, Regatten nicht im Winter."
+			"text": "Das Jahr hat Frühling, Sommer, Herbst und Winter, die Länge stellt der Betreiber ein. „time“ nennt die Jahreszeit. Im Winter wächst draußen nichts: Beete und Äcker stehen still, nichts geht verloren, im Frühling geht es weiter. Unter Glas wächst es weiter: in einem Gewächshaus (ab Stadt, braucht Glas) liegen drei Beete, „betrete“ führt hinein, und Beete bis drei Felder daneben wachsen ebenfalls durch. Das Erntefest gibt es nur im Herbst, die Blumenschau im Frühling und Sommer, Regatten nicht im Winter."
 		},
 		{
 			"key": "boote",
@@ -14110,7 +14110,65 @@
 						"proto": "glas",
 						"count": 1
 					}
-				]
+				],
+				"interior": {
+					"ground": [
+						"##########",
+						"#________#",
+						"#________#",
+						"#________#",
+						"#________#",
+						"#________#",
+						"####_#####"
+					],
+					"spawn": {
+						"x": 4,
+						"y": 5
+					},
+					"door": {
+						"x": 4,
+						"y": 6
+					},
+					"furniture": [
+						{
+							"kind": "pflanztisch",
+							"name": "Pflanztisch",
+							"x": 8,
+							"y": 5,
+							"desc": "Ein Tisch voll Töpfe, Erde und Stecklinge unter dem Glas. Unter den Scheiben ist es warm, auch wenn es draußen friert."
+						},
+						{
+							"kind": "wasserfass",
+							"name": "Wasserfass",
+							"x": 1,
+							"y": 3,
+							"use": "water",
+							"desc": "Ein Fass unter der Dachrinne; das Glasdach füllt es wie eine Regentonne. „schöpfe“ füllt daneben eine Kanne."
+						}
+					],
+					"beds": [
+						{
+							"x": 1,
+							"y": 1,
+							"w": 2,
+							"h": 2
+						},
+						{
+							"kind": "zier",
+							"x": 1,
+							"y": 4,
+							"w": 2,
+							"h": 2
+						},
+						{
+							"kind": "gemein",
+							"x": 6,
+							"y": 1,
+							"w": 3,
+							"h": 3
+						}
+					]
+				}
 			},
 			{
 				"key": "signalfeuer",

@@ -2,7 +2,8 @@
 
 Status 2026-11-11: step 1 (the hut) is built: server/engine/commands/interior.ts, tests/interior.test.ts; step 2 (sleep) as
 well: server/engine/commands/sleep.ts, tests/sleep.test.ts; step 3 (bakehouse and butcher's shop) too: their layouts in
-worlds/leuchtfeuer/world.ts, tests/interior-shops.test.ts. It extends [siedeln.en.md](siedeln.en.md) (buildings, recipes, chests,
+worlds/leuchtfeuer/world.ts, tests/interior-shops.test.ts; and the greenhouse with its beds (2026-11-14, see "Greenhouse"):
+tests/greenhouse.test.ts. It extends [siedeln.en.md](siedeln.en.md) (buildings, recipes, chests,
 the rest after work) and [welt.en.md](welt.en.md) (rooms and exits).
 
 ## What it is for
@@ -75,8 +76,35 @@ the plan's `interior.furniture: [{ kind, x, y }]`.
 | Brewery, glassworks, tannery, brickworks, shipyard | their one piece each | their recipes |
 | Warehouse, department store, counting house, town hall | later, if wanted | their commands stay outside first |
 
-Windmill, quarry, clay pit, salt garden, park, greenhouse, lighthouse, signal fire, station, coop, pen and hive get no
-interior: their work is outside or the building is a place, not a house.
+Windmill, quarry, clay pit, salt garden, park, lighthouse, signal fire, station, coop, pen and hive get no interior: their
+work is outside or the building is a place, not a house. The greenhouse has one since 2026-11-14 (see "Greenhouse").
+
+## Greenhouse
+
+Decided by the user on 2026-11-14: one goes into the greenhouse and plants there, carrots, cabbage and flowers, with
+everything one does at a bed or a community bed.
+
+- **Its inside** (10×7, the door below): a potting bench (no use), a water butt (`use: "water"`) and three beds laid with the room, from the plan's
+  `interior.beds`: a garden bed (2×2), a flower bed (2×2) and a community bed (3×3). They are Bed entries like any other,
+  with `of` (the building's id) and the ids `bed-<buildId>-<n>` (by their place in the plan, so every server writes the
+  same), on Plot cells of the room. They belong to the building's owner.
+- **The commands are those of every bed**: `pflanze`, `gieße`, `jäte`, `ernte`, `pate`, `benenne`, `beet`. Who may do
+  what is as outside: the owner plants in its garden and flower bed, its sponsors tend them, and at the community bed
+  everyone with an account who is inside plants, and everyone inside waters, weeds and harvests their share. Inside are
+  only the owner and its guests, so the community bed is the guests' bed.
+- **What differs** (garden.ts, by `of`):
+  - the beds take no light (`beaconId` empty, 0 points) and do not count to the owner's `maxBeds`
+  - they do not decay (the garden tick never frees them) and cannot be given up (`beet aufgeben` refuses)
+  - they never freeze in winter
+  - the room has no fog, so it never slows them
+  - `umgraben` refuses in every interior
+- **They go with the building**: `dropInterior` takes the room's beds with its furnishings and plot cells.
+- **Water**: the water butt inside. `schöpfe` beside it fills a can, and the butt fills as a rain barrel does
+  (`barrelWater`: a can every `barrelFillWorldMs`, at most `barrelCap`), its water kept on the greenhouse's Building
+  (`water`, `waterAtWorldMs`). A storm surge does not fill it.
+- **Tasks** (server/todos.ts, mmo-web `todos_for`) name a bed inside by its building („in Gewächshaus von Mira (2 1)“)
+  and lead to the building outside, since the atlas leaves `in-` rooms out.
+- The beds outside within three cells of a greenhouse keep growing through the winter as before (`garden.greenhouse`).
 
 ## Commands inside
 
@@ -159,6 +187,7 @@ New:
    barrel as the chest. A furnishing's `use: "cook"` is where the building's recipes are made (the hearth, the oven, the
    block); at the butcher's the block also slaughters.
 4. **The other workshops** (smokehouse, workshop, loom, brewery, glassworks, tannery, brickworks, shipyard).
+4a. **The greenhouse** (built 2026-11-14): three beds inside that grow through the winter (see "Greenhouse").
 5. **3D finish**: models of the furnishings, light, the figure lying in its bed.
 
 Each step is deployed on its own after the full suite.
