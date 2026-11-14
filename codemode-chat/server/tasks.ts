@@ -53,7 +53,11 @@ export type Task = {
 	criteria?: string[];
 	/** Who wrote the criteria: the person (the optional field) or the verifier agent (when it was empty). */
 	criteriaBy?: "user" | "verifier";
+	/** The run settings the page fills in when this task is chosen (agents, most generations, contributions per agent,
+	 *  improvement rounds after the solution); a field left out keeps the page's default. */
+	run?: RunPreset;
 };
+export type RunPreset = { agents?: number; gens?: number; per?: number; polish?: number };
 
 export const isText = (t: Task): boolean => t.kind === "text";
 export const isBot = (t: Task): t is Task & { bot: BotSpec } => t.kind === "bot" && !!t.bot;
@@ -113,7 +117,7 @@ function islandTask(memory: boolean): Task {
 		en: "\n\nMemory: every path with which a bot reached a shown episode goes into the block's memory (never a hidden one). tools.recall gives the way from the nearest remembered cell to where the fire burned; a bot sees only what the generations before it reached (frozen when its generation begins). The way leads to the fire, not to the driftwood of another episode.",
 	};
 	return {
-		id: memory ? "beacon-insel-memory" : "beacon-insel", fn: "bot", kind: "bot", timeoutMs: 30_000,
+		id: memory ? "beacon-insel-memory" : "beacon-insel", fn: "bot", kind: "bot", timeoutMs: 30_000, run: memory ? { agents: 3, gens: 5, per: 1, polish: 2 } : { agents: 3, gens: 3, per: 1, polish: 1 },
 		bot: {
 			goal: "beacon:feuer-bucht", hold: 5, noWait: true, ...m,
 			goalText: { de: "das Leuchtfeuer der Grauen Bucht brennt, vom Bot genährt, und brennt nach 5 Weltminuten noch", en: "the beacon of the Graue Bucht burns, fed by the bot, and still burns 5 world minutes later" },
@@ -140,7 +144,7 @@ function islandTask(memory: boolean): Task {
 function anlegerTask(): Task {
 	const spec = { goal: "", goalText: { de: "", en: "" }, noWait: true as const, subgoals: true as const };
 	return {
-		id: "beacon-anleger", fn: "bot", kind: "bot", timeoutMs: 30_000,
+		id: "beacon-anleger", fn: "bot", kind: "bot", timeoutMs: 30_000, run: { agents: 3, gens: 4, per: 1, polish: 1 },
 		bot: {
 			goal: "beacon:feuer-anleger", hold: 5, noWait: true, subgoals: true, plans: ANLEGER_PLANS,
 			goalText: { de: "der Feuerkorb am Anleger brennt, vom Bot genährt, und brennt nach 5 Weltminuten noch", en: "the Feuerkorb of the Anleger burns, fed by the bot, and still burns 5 world minutes later" },
@@ -166,7 +170,7 @@ function anlegerTask(): Task {
 function neulandTask(): Task {
 	const spec = { goal: "", goalText: { de: "", en: "" }, noWait: true as const };
 	return {
-		id: "beacon-neuland", fn: "bot", kind: "bot", timeoutMs: 30_000,
+		id: "beacon-neuland", fn: "bot", kind: "bot", timeoutMs: 30_000, run: { agents: 3, gens: 4, per: 1, polish: 1 },
 		bot: {
 			goal: "beacon:island", hold: 5, noWait: true, toy: true,
 			goalText: { de: "das Leuchtfeuer der Insel brennt, vom Bot genährt, und brennt nach 5 Weltminuten noch", en: "the island's beacon burns, fed by the bot, and still burns 5 world minutes later" },
@@ -193,7 +197,7 @@ function neulandTask(): Task {
 function tideTask(): Task {
 	const spec = { goal: "", goalText: { de: "", en: "" }, memory: true as const, observe: true as const };
 	return {
-		id: "tide-law", fn: "bot", kind: "bot", timeoutMs: 30_000,
+		id: "tide-law", fn: "bot", kind: "bot", timeoutMs: 30_000, run: { agents: 3, gens: 5, per: 1, polish: 2 },
 		bot: {
 			goal: "feed:island:3", toy: true, toyRules: "tide", memory: true, observe: true,
 			goalText: { de: "3 Stück Treibholz im Leuchtfeuer der Insel, vom Bot hineingelegt, binnen 8 Weltstunden", en: "3 pieces of driftwood put into the island's beacon by the bot within 8 world hours" },
@@ -220,7 +224,7 @@ function tideTask(): Task {
 function plannerHarnessTask(): Task {
 	const bads = { de: "eine, die nur die drei gezeigten Episoden auswendig kennt; eine, die nur im Startraum und den Räumen daneben sucht; eine, die das Feuer gleich danach ausgehen lässt; eine, die auf die Flut wartet, wo sie mit Seed 0 Treibholz anschwemmt; eine, die nur die Karte der Grauen Insel kennt", en: "one that knows the three shown episodes by heart; one that looks only in its start room and the rooms next to it; one that lets the fire go out right after; one that waits for the tide where it washes driftwood up with seed 0; one that knows only the map of the Graue Insel" };
 	return {
-		id: "harness-planners", fn: "rate", kind: "harness", timeoutMs: 60_000,
+		id: "harness-planners", fn: "rate", kind: "harness", timeoutMs: 60_000, run: { agents: 3, gens: 3, per: 1, polish: 1 },
 		harness: PLANNER_HARNESS,
 		title: { de: "Bewertungsskript: Planer bewerten (Insel-Bots, Episoden und Seeds)", en: "Eval harness: rate planners (island bots, episodes and seeds)" },
 		prompt: {
@@ -376,7 +380,7 @@ export const TASKS: Task[] = [
 		],
 	},
 	{
-		id: "beacon-bucht", fn: "bot", kind: "bot", timeoutMs: 60_000,
+		id: "beacon-bucht", fn: "bot", kind: "bot", timeoutMs: 60_000, run: { agents: 3, gens: 4, per: 1, polish: 1 },
 		bot: { goal: "beacon:feuer-bucht", goalText: { de: "das Leuchtfeuer der Grauen Bucht brennt, von dem Bot entzündet", en: "the beacon of the Graue Bucht burns, lit by the bot" } },
 		title: { de: "Leuchtfeuer-Bot: das Feuer der Grauen Bucht entzünden (Spielwelt)", en: "Beacon bot: light the fire of the Graue Bucht (game world)" },
 		prompt: {
@@ -406,7 +410,7 @@ export const TASKS: Task[] = [
 	neulandTask(),
 	tideTask(),
 	{
-		id: "beacon-flut", fn: "bot", kind: "bot", durable: true, timeoutMs: 180_000,
+		id: "beacon-flut", fn: "bot", kind: "bot", durable: true, timeoutMs: 180_000, run: { agents: 2, gens: 3, per: 1, polish: 0 },
 		bot: { goal: "feed:feuer-bucht:6", goalText: { de: "6 Stück Treibholz im Leuchtfeuer der Grauen Bucht, vom Bot hineingelegt", en: "6 pieces of driftwood put into the beacon of the Graue Bucht by the bot" } },
 		title: { de: "Flut-Bot: einen Tag lang Treibholz sammeln (langer Lauf, Spielwelt)", en: "Tide bot: gather driftwood for a day (long run, game world)" },
 		prompt: {

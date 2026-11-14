@@ -470,7 +470,7 @@ export class CodeChatHub {
 				notes: notes.filter((n) => n.blockId === blockId).slice(-20).map(({ author, via, gen, text, ts, human, candidateId }) => ({ author, via, gen, text, ts, ...(human ? { human: true } : {}), ...(candidateId ? { candidateId } : {}), ...(candidateId && rejectedIds.has(candidateId) ? { rejected: true } : {}) })),
 			}));
 			return {
-				session: id, current: s.blockId, tasks: offeredTasks().map((t) => ({ id: t.id, title: t.title, fn: t.fn, prompt: t.prompt, ...(t.about ? { about: t.about } : {}) })),
+				session: id, current: s.blockId, tasks: offeredTasks().map((t) => ({ id: t.id, title: t.title, fn: t.fn, prompt: t.prompt, ...(t.about ? { about: t.about } : {}), ...(t.run ? { run: t.run } : {}) })),
 				// what the time-limit field may offer (CODEMODE_MAX_TIMEOUT_S), and a visitor's token budget (default and most)
 				limits: { maxTimeoutS: maxTimeoutMs() / 1000, ...(runBudgetTokens() ? { runBudgetTokens: runBudgetTokens() } : {}) },
 				// the active custom task in full, so the page can fill its form again (after a reload) and continue it

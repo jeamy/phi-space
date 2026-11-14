@@ -536,7 +536,11 @@ t("new islands on a server without an arena: offered, judged by a plain judge, i
 	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [{ host: "plain-1" }] });
 	try {
 		const post = (path: string, body: unknown) => fetch(srv.url + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-		assert.ok(((await (await fetch(srv.url + "/api/tasks")).json()) as any[]).some((x) => x.id === "beacon-neuland"));
+		const listed = (await (await fetch(srv.url + "/api/tasks")).json()) as any[];
+		assert.ok(listed.some((x) => x.id === "beacon-neuland"));
+		// the run preset the page fills in when the task is chosen
+		assert.deepEqual(listed.find((x) => x.id === "tide-law")?.run, { agents: 3, gens: 5, per: 1, polish: 2 });
+		assert.equal(listed.find((x) => x.id === "primes")?.run, undefined);
 		assert.equal((await post("/api/sessions/neu1/task", { taskId: "beacon-neuland" })).status, 200);
 		assert.equal((await post("/api/sessions/neu1/code", { author: "erkunder", source: nExplorer })).status, 200);
 		let snap: any;
