@@ -100,8 +100,9 @@ as code. That is the part of a world model that carries over.
 
 **Honest limits of what was shown:**
 - The scripted agents are fixed hypotheses. They demonstrate that the judge, the data and the tasks separate good bots
-  from bad ones, not that agents learn. Learning across generations needs model agents, which cost tokens and were not
-  run for these steps.
+  from bad ones, not that agents learn. The model runs (haiku and Opus 5.5, 2026-11-14, below) show some learning
+  across generations: Opus solved "Learn the tide" in generation 5 with a statistic read off the observations, not
+  with the law, and did not solve "Odds of the tide".
 - The learner of step 7 fits a hypothesis space its author wrote. It finds which hypothesis the data support; it does
   not invent new ones. An agent reading the observations could; that is the open experiment.
 - The toy islands are small: 5 to 8 rooms, one fire, four exit directions.
@@ -259,6 +260,46 @@ separates "can the model see the law in the data" from "can it write a bot that 
   and tests itself with `verify_code`. On this task the bot never passes, the fourth request ends in "Agent model request
   budget exhausted", no code is handed in, and the scripted agent stands in. The measured run used the plain path.
 
+## A run with Claude Opus 5.5 on both tide tasks (2026-11-14)
+
+**Setup.** As for haiku, n = 1 per task:
+- 3 agents, all `anthropic/claude-opus-5-5`, 5 generations at most, 2 improvement rounds, 5 $ cap;
+- the plain path (`CODEMODE_DURABLE_AGENT=0`), no scripted agents, the same prompts;
+- one run on "Learn the tide" (`tide-law`), one on "Odds of the tide" (`tide-odds`), side by side.
+
+**Result.**
+
+| Task | Solved | Passes by generation | Cost |
+|---|---|---|---|
+| Learn the tide | generation 5 | 0, 0, 6 · 6, 5, 6 · 6, 6, 6 · 6, 7, 5 · 7, 7, **9** of 9 | 1.24 $ |
+| Odds of the tide | no | every contribution 0 of 9; the best mean 2.93 pieces against a target of 6.19 on average (generation 5), generation 1's blind bot 2.40 | 1.37 $ |
+
+**What the winner does.** It did not find the law (dead ends by number, 3 cells in, the calibrated minute). It
+patrols: it scores each room by how long it has not been seen, weighted by how often the room's distance from the fire
+appears in the observations, and collects up to three pieces before it goes to the fire. Judged again afterwards
+(no model calls):
+
+| Bot | Without observations | With the law bot's observations | Points with observations |
+|---|---|---|---|
+| The law in code (scripted) | 9 of 9 | 9 of 9 | 2253 |
+| Opus's winner | 7 of 9 | 9 of 9 | 3258 |
+
+So the observations helped measurably (7 → 9), but as a statistic, not as a law, and the task let that pass:
+"Learn the tide" asks for the goal on every episode, not for a cost near the law's. A good searcher with a coarse prior
+is enough. That is the post's warning about flattering evaluations, found by a model in this project's own task. A
+cost limit per episode (for example 1.3 times the law bot's points) would close it; the winner spends 1.45 times.
+
+**On "Odds of the tide"** Opus went the way haiku went on step 7: generations 1 and 2 learned the game's limits
+(`bot()` takes no arguments, `tools` is global, `wait` takes 1 to 120 minutes, at most 300 calls), and later bots read
+`observations()` for the mean pieces by distance from the fire, but none reached half the target.
+
+**Detour: every answer empty.** The first pair of runs measured nothing: every Opus answer came back without text, and
+the scripted stand-in played every contribution (1.29 $ for the thinking). Opus 5.5 cannot turn its thinking off
+(adaptive thinking, the "off" level is absent), and a call without a thinking level is marked effort "high" by pi-ai;
+the thinking used the whole 1500 tokens. Raising the limit to 13,500 tokens did not help (158 s, all thinking).
+`guardedCall` (`server/llm.ts`) now asks such a model for effort "low" and gives it 4000 tokens and 180 s on top: the
+same prompt then answers in 21 s with code, for 0.04 $.
+
 ## Figures
 
 The diagrams are hand-drawn SVG that follow the reader's light or dark theme. The screenshots come from a local run
@@ -302,9 +343,12 @@ where it reaches the episode's target. The detail line below says the mean, the 
 
 ## Open
 
-- Model agents with the observations in their prompt (see the run of 2026-11-14), and with a stronger model than haiku.
+- Model agents with the observations in their prompt (see the runs of 2026-11-14).
+- A cost limit per episode on "Learn the tide", so that a searcher with a coarse prior no longer passes (Opus's winner
+  spends 1.45 times the law bot's points).
 - The durable agent path on a task its own check never passes: hand in the last code instead of failing.
 - Goals as sets ("any fire of the island burns") and goals against the usual direction. The post leaves both open too.
 - Risk beyond the mean: a target that also bounds the bad days (a quantile, not only the mean), so a plan must weigh
   variance as well.
-- Model agents on "Odds of the tide": the observations are 24 days of every room, enough to read the slope off.
+- Model agents that reach the target on "Odds of the tide" (Opus 5.5: half of it after 5 generations). The
+  observations are 24 days of every room, enough to read the slope off.

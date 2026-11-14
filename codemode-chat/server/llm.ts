@@ -567,6 +567,9 @@ export async function metered<T>(fn: () => Promise<T>, signal?: AbortSignal): Pr
 	catch (error) { return { error, usage: m.usage }; }
 }
 
+/** Output tokens a model that must think gets on top of its answer's budget (guardedCall). */
+const THINKING_ROOM = 4_000;
+
 /** One guarded model call (whitelist, day budget, minute window, two in flight): the answer text and the model label.
  *  A full minute window waits for the next one (a run is teamwork, not a race against the limit). */
 async function guardedCall(modelLabel: string | undefined, system: string, user: string, maxTokens: number): Promise<{ text: string; model: string; usage: Usage }> {
@@ -587,11 +590,17 @@ async function guardedCall(modelLabel: string | undefined, system: string, user:
 	if (inFlight >= 2) await new Promise<void>((ok) => slotWaiters.push(ok)); // wait for a free slot instead of failing
 	if (stopSignal?.aborted) { slotWaiters.shift()?.(); throw new Error("the run is over"); } // not started: nothing paid
 	inFlight++;
+	// A model that cannot turn its thinking off (Claude Opus 5.5: adaptive thinking, thinkingLevelMap.off null) spends
+	// output tokens on it first: within `maxTokens` alone it may think to the limit and give no text (seen in a live
+	// tide-odds run, every answer empty: without `reasoning` pi-ai marks the message with effort "high"). Such a model
+	// thinks at effort "low" and gets room for it on top, and more time.
+	const mustThink = model.reasoning === true && model.thinkingLevelMap?.off === null;
+	const timeout = AbortSignal.timeout(mustThink ? 180_000 : 60_000);
 	try {
 		const res: any = await s.models.completeSimple(model, {
 			systemPrompt: system,
 			messages: [{ role: "user", content: user, timestamp: Date.now() }],
-		}, { maxTokens, signal: stopSignal ? AbortSignal.any([AbortSignal.timeout(60_000), stopSignal]) : AbortSignal.timeout(60_000) });
+		}, { ...(mustThink ? { reasoning: "low", maxTokens: maxTokens + THINKING_ROOM } : { maxTokens }), signal: stopSignal ? AbortSignal.any([timeout, stopSignal]) : timeout });
 		const m = meter.getStore();
 		if (m) m.usage = addUsage(m.usage, usageOf(res)); // paid, whatever happens with the answer
 		const text = (res?.content ?? []).filter((x: any) => x?.type === "text").map((x: any) => x.text).join("");
