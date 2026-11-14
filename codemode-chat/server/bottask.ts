@@ -9,8 +9,8 @@ import type { Meter } from "./tooltask.ts";
 import type { Subgoal } from "./subgoals.ts";
 import type { ChanceSeen, TideSeen } from "./toyisland.ts";
 
-export type BotTool = "look" | "act" | "wait" | "recall" | "subgoals" | "observations";
-export const BOT_COST: Record<BotTool, number> = { look: 1, act: 1, wait: 1, recall: 1, subgoals: 0, observations: 1 };
+export type BotTool = "look" | "act" | "wait" | "recall" | "subgoals" | "observations" | "logbook";
+export const BOT_COST: Record<BotTool, number> = { look: 1, act: 1, wait: 1, recall: 1, subgoals: 0, observations: 1, logbook: 1 };
 /** The most tool calls one bot may make; a bot beyond it fails with this message. */
 export const MAX_BOT_CALLS = 300;
 
@@ -18,7 +18,7 @@ export const MAX_BOT_CALLS = 300;
 export type BotCell = { room: string; x: number; y: number };
 /** One episode of a planning task (docs/codemode-planung.en.md): where the figure starts and what lies where. A sample
  *  episode is in the prompt and its verdict says what happened; of a hidden one the verdict says only reached or not. */
-export type BotEpisode = { id: string; kind: "sample" | "holdout"; /** a task on toy islands (`BotSpec.toy`): the made island "Neuland n" (toyisland.ts genIsland), none for the Graue Insel */ island?: number; start?: BotCell; setup?: { clear?: string[]; items?: Array<{ proto: string } & BotCell> }; text: { de: string; en: string } ; /** a task that scores the mean (`BotSpec.mean`, step 8): the pieces the bot must put into the fire on average over the seeds */ target?: number };
+export type BotEpisode = { id: string; kind: "sample" | "holdout"; /** a task on toy islands (`BotSpec.toy`): the made island "Neuland n" (toyisland.ts genIsland), none for the Graue Insel */ island?: number; start?: BotCell; setup?: { clear?: string[]; items?: Array<{ proto: string } & BotCell> }; text: { de: string; en: string } ; /** a task that scores the mean (`BotSpec.mean`, step 8): the pieces the bot must put into the fire on average over the seeds */ target?: number; /** the most points the episode may cost over all its seeds: a bot that reaches the goal dearer does not pass it */ maxCost?: number };
 /** What a verdict keeps of one episode: reached per seed, the points of its runs; `skipped`: the hidden ones did not run
  *  because no sample episode was reached. Only sample episodes keep the arena's detail. */
 export type EpisodeResult = { id: string; kind: "sample" | "holdout"; reached: boolean[]; cost: number; skipped?: true; detail?: string; /** a sample episode's way (its first seed), from the arena's `path`; the judge host stores it as a BotEpisode entry, not in the verdict */ path?: PathStep[]; cut?: true; /** the jumps between remembered paths its recall answers took (memory view) */ links?: Array<[PathStep, PathStep]>; /** a sample episode of a contribution with subgoals: how many of them its first seed reached, in turn */ subgoals?: number; /** and the cells where (BotEpisode entries, not the verdict) */ subgoalAt?: PathStep[]; /** a sample episode of a task with observations: the tide's landings in its worlds (PlanMemory entries, not the verdict) */ tides?: TideSeen[] ; /** a task that scores the mean (step 8): the pieces in the fire per seed, their mean and the episode's target */ counts?: number[]; mean?: number; target?: number; /** a sample episode of such a task with observations: the judge's log of each seed's day of the chance tide */ days?: ChanceSeen[] };
@@ -49,7 +49,7 @@ export type BotSpec = {
 	toy?: true;
 	/** Toy islands under TIDE_RULES (toyisland.ts, step 7): exits take time, the tide follows a law the prompt does not
 	 *  tell, washed-up wood goes back. */
-	toyRules?: "tide" | "chance";
+	toyRules?: "tide" | "chance" | "shore";
 	/** How many seeds every episode runs with (default: seedsOf below). */
 	seeds?: number;
 	/** The verdict asks the mean, not every seed (step 8): an episode counts when the pieces the bot put into the fire,
@@ -59,6 +59,8 @@ export type BotSpec = {
 	 *  (PlanMemory, goal "tide"), frozen per generation like the paths; a bot reads them with `observations()`. Needs
 	 *  `memory`; such a task has no `recall`. */
 	observe?: true;
+	/** The logbook (step 9): the bot reads past days of the tide on its own island (`logbook()`, the toy arena answers). */
+	logbook?: true;
 };
 
 /** How many seeds an episode runs with: one when the bot cannot wait (the world is then the same for every seed), three
@@ -67,7 +69,7 @@ export const seedsOf = (b: BotSpec): number => b.seeds ?? (b.noWait ? 1 : 3);
 /** The seed of run `s` (0-based) of episode `i`: fixed, so every judge plays the same worlds. */
 export const episodeSeed = (i: number, s: number): number => 1000 * (i + 1) + s;
 /** The tools a bot of this task has. */
-export const botToolNames = (b?: BotSpec): BotTool[] => [...(b?.noWait ? ["look", "act"] as BotTool[] : ["look", "act", "wait"] as BotTool[]), ...(b?.memory ? [b.observe ? "observations" : "recall"] as BotTool[] : []), ...(b?.subgoals ? ["subgoals"] as BotTool[] : [])];
+export const botToolNames = (b?: BotSpec): BotTool[] => [...(b?.noWait ? ["look", "act"] as BotTool[] : ["look", "act", "wait"] as BotTool[]), ...(b?.memory ? [b.observe ? "observations" : "recall"] as BotTool[] : []), ...(b?.subgoals ? ["subgoals"] as BotTool[] : []), ...(b?.logbook ? ["logbook"] as BotTool[] : [])];
 
 /** The arena failed (unreachable, busy, gone in the middle): not the bot's doing. The judge gives the candidate back
  *  for a later round instead of writing a verdict (judge-host.ts). */
@@ -140,6 +142,10 @@ const DESCRIPTIONS: Record<BotTool, { de: string; en: string }> = {
 		de: "was frühere Generationen beobachtet haben: jede Landung der Flut in den gezeigten Episoden, eingefroren, wenn die Generation dieses Beitrags begann: {} → { observations: Array<{ island, seed, piece, minute, room, x, y, exits, fromFire }> } (piece: das wievielte Stück dieser Welt, ab 0; minute: Weltminuten seit Beginn; exits: die Ausgänge des Raums; fromFire: Ausgänge zwischen dem Raum und dem Raum des Feuers). Leer in der ersten Generation. 1 Punkt.",
 		en: "what earlier generations observed: every landing of the tide in the shown episodes, frozen when this contribution's generation began: {} → { observations: Array<{ island, seed, piece, minute, room, x, y, exits, fromFire }> } (piece: which piece of that world, from 0; minute: world minutes since the start; exits: the room's exits; fromFire: exits between the room and the fire's room). Empty in the first generation. 1 point.",
 	},
+	logbook: {
+		de: "das Logbuch des Hafenmeisters dieser Insel: frühere Tage der Flut, nicht der heutige: {} → { days: Array<{ island, day, minutes, rooms: Array<{ room, exits, fromFire, pieces: Array<{ minute, x, y }> }> }> } (ein Eintrag je Tag; minutes: die Minuten seit Beginn, zu denen die Flut kam; rooms: jeder Raum der Insel mit seinen Ausgängen, den Ausgängen zwischen ihm und dem Raum des Feuers und den Stücken, die dort angeschwemmt wurden: wann und wo). 1 Punkt.",
+		en: "the harbour master's logbook of this island: earlier days of the tide, not today's: {} → { days: Array<{ island, day, minutes, rooms: Array<{ room, exits, fromFire, pieces: Array<{ minute, x, y }> }> }> } (one entry per day; minutes: the world minutes since the start at which the tide came; rooms: every room of the island with its exits, the exits between it and the fire's room, and the pieces washed up there: when and where). 1 point.",
+	},
 	subgoals: {
 		de: "die Teilziele des Plans, dem dieser Beitrag folgt, der Reihe nach: {} → { subgoals: Array<{ room?, near?: { x, y }, holds? }> } (leer ohne Plan). Ein Teilziel gilt, wenn die Figur in `room` ist (ohne room: überall), höchstens 3 Zellen von `near` entfernt, und `holds` zutrifft (\"pack:treibholz\": sie trägt Treibholz; \"beacon:<id>\": das Feuer brennt, von ihr genährt). 0 Punkte.",
 		en: "the subgoals of the plan this contribution follows, in order: {} → { subgoals: Array<{ room?, near?: { x, y }, holds? }> } (empty without a plan). A subgoal holds when the figure is in `room` (anywhere without one), at most 3 cells from `near`, and `holds` is true (\"pack:treibholz\": it carries driftwood; \"beacon:<id>\": the fire burns, fed by it). 0 points.",
@@ -174,6 +180,7 @@ export async function botCall(arena: Arena, world: string, name: BotTool, a: Rec
 	const strip = ({ id: _id, ok: _ok, ...rest }: Record<string, any>) => rest;
 	const k = key ? { key } : {};
 	if (name === "look") return strip(await arena.ask("look", { world, ...k }));
+	if (name === "logbook") return strip(await arena.ask("logbook", { world, ...k }));
 	if (name === "act") { if (typeof a.line !== "string") throw new Error("act needs { line: string }"); return strip(await arena.ask("act", { world, line: a.line, ...k })); }
 	if (name === "recall" || name === "subgoals" || name === "observations") throw new Error(`${name} is answered by the judge, not the arena`);
 	return strip(await arena.ask("wait", { world, minutes: Number(a.minutes), ...k }));

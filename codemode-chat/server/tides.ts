@@ -14,13 +14,19 @@ export function tideIslands(from: number, n: number): number[] {
 }
 export const TIDE_SAMPLES = tideIslands(21, 3), TIDE_HIDDEN = tideIslands(TIDE_SAMPLES.at(-1)! + 1, 6);
 
+/** The points the law in code (`lawBot`) spends on each episode, over all its seeds (a test holds them), and the limit
+ *  an episode allows: 1.3 times that. Without a limit a searcher that weights the rooms by the observed distances from
+ *  the fire passed every episode without the law (Claude Opus 5.5's winner of 2026-11-14, 1.45 times the law's points);
+ *  the scripted learner, which fits the law, spends 3 points more than the law per episode (its `observations()`). */
+export const TIDE_LAW_COST: Record<string, number> = { S1: 243, S2: 279, S3: 219, H1: 270, H2: 191, H3: 321, H4: 222, H5: 232, H6: 276 };
+export const TIDE_LIMIT = 1.3;
 const ep = (id: string, kind: BotEpisode["kind"], n: number): BotEpisode => {
-	const w = genIsland(n), { start } = w.episode;
+	const w = genIsland(n), { start } = w.episode, maxCost = Math.round(TIDE_LAW_COST[id]! * TIDE_LIMIT);
 	return {
-		id, kind, island: n, start,
+		id, kind, island: n, start, maxCost,
 		text: {
-			de: `${w.name}: Start ${w.rooms[start.room]!.name} (${start.room}) (${start.x},${start.y}), kein Treibholz auf der Insel`,
-			en: `${w.name}: start ${w.rooms[start.room]!.name} (${start.room}) (${start.x},${start.y}), no driftwood on the island`,
+			de: `${w.name}: Start ${w.rooms[start.room]!.name} (${start.room}) (${start.x},${start.y}), kein Treibholz auf der Insel, höchstens ${maxCost} Punkte über alle Seeds`,
+			en: `${w.name}: start ${w.rooms[start.room]!.name} (${start.room}) (${start.x},${start.y}), no driftwood on the island, at most ${maxCost} points over all seeds`,
 		},
 	};
 };

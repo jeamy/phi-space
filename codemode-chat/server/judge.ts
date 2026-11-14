@@ -400,12 +400,15 @@ async function judgeEpisodes(cm: Codemode, task: Task & { bot: BotSpec }, source
 				const counts = b.mean ? runs.map((r) => r.count ?? 0) : undefined;
 				const mean = counts ? Math.round((counts.reduce((a, c) => a + c, 0) / counts.length) * 1000) / 1000 : undefined;
 				const target = e.target ?? 0, meanOk = mean !== undefined && mean >= target;
-				const reached = counts ? runs.map(() => meanOk) : runs.map((r) => r.reached), all = reached.every(Boolean), cost = runs.reduce((a, r) => a + r.cost, 0);
-				if (kind === "sample" && (counts ? counts.some((c) => c > 0) : reached.some(Boolean))) sampleReached = true;
+				const cost = runs.reduce((a, r) => a + r.cost, 0), over = e.maxCost !== undefined && cost > e.maxCost;
+				// an episode with a point limit: reached, but dearer than the limit, counts as not reached on every seed
+				const reached = over ? runs.map(() => false) : counts ? runs.map(() => meanOk) : runs.map((r) => r.reached), all = reached.every(Boolean);
+				const overText = over ? `; ${cost} points, over the limit of ${e.maxCost}` : "";
+				if (kind === "sample" && (counts ? counts.some((c) => c > 0) : runs.some((r) => r.reached))) sampleReached = true; // a dear bot still gets its hidden episodes
 				const meanFields = counts ? { counts, mean: mean!, target } : {};
 				const seedText = counts ? ` (mean ${mean} pieces over ${seeds} seeds, target ${target})` : seeds > 1 ? ` (${reached.filter(Boolean).length} of ${seeds} seeds)` : "";
 				if (kind === "sample") {
-					const detail = plain(counts ? (runs.find((r) => r.count === undefined)?.detail ?? (meanOk ? "reached" : "goal not reached")) : runs.find((r) => !r.reached)?.detail ?? runs[0]!.detail);
+					const detail = plain(counts ? (runs.find((r) => r.count === undefined)?.detail ?? (meanOk ? "reached" : `goal not reached; first seed: ${runs[0]!.detail}`)) : runs.find((r) => !r.reached)?.detail ?? runs[0]!.detail) + overText;
 					const way = runs[0]!.path, links = runs[0]!.links, at = runs[0]!.subgoalAt;
 					// how far its first seed got along the plan's subgoals, in words for the critique: where the chain broke
 					const sub = plan.length && at ? { subgoals: at.length, ...(at.length ? { subgoalAt: at } : {}) } : {};
@@ -416,7 +419,7 @@ async function judgeEpisodes(cm: Codemode, task: Task & { bot: BotSpec }, source
 					if (!all && firstError === null) firstError = `${e.id}: ${detail}`;
 				} else {
 					results.push({ id: e.id, kind, reached, cost, ...meanFields });
-					cases.push({ call: `hidden episode ${e.id}`, ok: all, ...(all ? { got: `reached${seedText}` } : { error: `not reached${seedText}` }) });
+					cases.push({ call: `hidden episode ${e.id}`, ok: all, ...(all ? { got: `reached${seedText}` } : { error: over ? `reached, but over the point limit${seedText}` : `not reached${seedText}` }) });
 				}
 			}
 		}

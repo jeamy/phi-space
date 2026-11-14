@@ -132,7 +132,7 @@ export function toyRoomMap(room: string): RoomMap | null {
 /** The rules of a world that are not the default: crossing an exit takes `walk` world minutes, a washed-up piece lies
  *  `life` minutes before the sea takes it back, the day ends after `day` minutes, and the tide follows `tide`
  *  ("law": tideLanding below) instead of the island's plain tide. Without rules a world is as in steps 5 and 6. */
-export type ToyRules = { walk: number; life: number; day: number; tide: "law" | "chance" };
+export type ToyRules = { walk: number; life: number; day: number; tide: "law" | "chance" | "shore" };
 export const TIDE_RULES: ToyRules = { walk: 5, life: 30, day: 480, tide: "law" };
 /** Step 8: the same world, but the tide is chance (chanceLands below). */
 export const CHANCE_RULES: ToyRules = { walk: 5, life: 30, day: 480, tide: "chance" };
@@ -189,12 +189,56 @@ export function fromFire(w: ToyWorld, room: string): number {
 	while (q.length) { const x = q.shift()!; for (const y of Object.values(w.rooms[x]!.exits)) if (!d.has(y)) { d.set(y, d.get(x)! + 1); q.push(y); } }
 	return d.get(room) ?? -1;
 }
+// ---- the shores of step 9: every room but the fire's has odds of its own, different on every island -------------------
+/** Step 9: the chance tide, but the odds belong to each room of each island (shoreOf), not to the island's shape. */
+export const SHORE_RULES: ToyRules = { walk: 5, life: 30, day: 480, tide: "shore" };
+/** The rooms the tide of step 9 may reach: every room but the fire's, in the order of their number. */
+export function shoreRooms(w: ToyWorld): string[] {
+	const k = (id: string) => Number(/-(\d+)$/.exec(id)?.[1] ?? 0);
+	return Object.keys(w.rooms).filter((id) => id !== w.fire.room).sort((a, b) => k(a) - k(b) || a.localeCompare(b));
+}
+/** The odds of a room's shore: drawn once per island and room (no shape, no name tells them), 0 on about half the
+ *  rooms, else 0.1, 0.35 or 0.7. Only a day of the tide on that island shows them. */
+export const SHORE_ODDS = [0, 0.1, 0.35, 0.7] as const;
+export function shoreOf(w: ToyWorld, room: string): number {
+	if (room === w.fire.room || !w.rooms[room]) return 0;
+	const u = dice(`${w.id}/shore/${room}`);
+	return u < 0.45 ? SHORE_ODDS[0] : u < 0.7 ? SHORE_ODDS[1] : u < 0.87 ? SHORE_ODDS[2] : SHORE_ODDS[3];
+}
+/** Where a room's shore lays its pieces: one cell per room, away from the edge. */
+export function shoreCell(w: ToyWorld, room: string): { x: number; y: number } {
+	return { x: 3 + Math.floor(dice(`${w.id}/shore-x/${room}`) * 18), y: 3 + Math.floor(dice(`${w.id}/shore-y/${room}`) * 10) };
+}
+/** Whether the tide of step 9 lands a piece in `room` at its `j`-th minute (the minutes of step 8) in the world of `seed`. */
+export function shoreLands(w: ToyWorld, seed: number, j: number, room: string): (ToyCell & { minute: number }) | null {
+	if (j < 0 || j >= CHANCE_MINUTES.length || dice(`${w.id}/${seed}/${j}/${room}/shore`) >= shoreOf(w, room)) return null;
+	return { room, ...shoreCell(w, room), minute: CHANCE_MINUTES[j]! };
+}
+/** One day of the tide of step 9, in the form of step 8's ChanceSeen (`day` instead of the seed: a day of the log). */
+export type ShoreDay = Omit<ChanceSeen, "seed"> & { day: number };
+export function shoreDay(w: ToyWorld, seed: number, day: number): ShoreDay {
+	return {
+		island: w.id, day, minutes: [...CHANCE_MINUTES],
+		rooms: Object.keys(w.rooms).sort().map((room) => ({
+			room, exits: Object.keys(w.rooms[room]!.exits).sort(), fromFire: fromFire(w, room),
+			pieces: CHANCE_MINUTES.flatMap((_, j) => { const l = shoreLands(w, seed, j, room); return l ? [{ minute: l.minute, x: l.x, y: l.y }] : []; }),
+		})),
+	};
+}
+/** The logbook's days: seeds no episode runs with (an episode's are 1000 · (island or place + 1) + run, below 1.001 · 10^9:
+ *  bottask.ts episodeSeed). */
+export const LOG_DAYS = 6, LOG_SEED = 2_000_000_000;
+export const logSeeds = (): number[] => Array.from({ length: LOG_DAYS }, (_, d) => LOG_SEED + d);
+export const shoreLog = (w: ToyWorld): ShoreDay[] => logSeeds().map((s, d) => shoreDay(w, s, d + 1));
+
 /** What the judge logs of a landing (step 7's data): when, where, and what the room looks like. */
 export type TideSeen = { island: string; seed: number; piece: number; minute: number; room: string; x: number; y: number; exits: string[]; fromFire: number };
 
 /** One world of a toy island: a figure, the driftwood, the fire, the clock; and the cells the figure went over. */
 export class ToyIsland {
 	at: ToyCell; wood: Array<ToyCell & { until?: number }>; readonly seed: number; readonly world: ToyWorld; readonly rules: ToyRules | null; pack = 0; waited = 0; fedAt: number | null = null; fed = false; feeds = 0;
+	/** For the judge's feedback: pieces picked up, and the pieces a look showed (by room, cell and minute they lie until). */
+	taken = 0; readonly seen = new Set<string>();
 	trail: PathStep[];
 	/** The landings of the law so far (rules only). */
 	landed: TideSeen[] = [];
@@ -204,6 +248,7 @@ export class ToyIsland {
 
 	look() {
 		const room = this.at.room, f = this.world.fire, d = (c: { x: number; y: number }) => Math.abs(c.x - this.at.x) + Math.abs(c.y - this.at.y);
+		for (const w of this.wood) if (w.room === room) this.seen.add(`${w.room}/${w.x}/${w.y}/${w.until ?? ""}`);
 		return {
 			room: { id: room, name: this.world.rooms[room]?.name ?? room }, at: { x: this.at.x, y: this.at.y },
 			exits: Object.keys(this.world.rooms[room]?.exits ?? {}).map((name) => ({ name, ...EXIT_CELL[name]! })),
@@ -246,7 +291,7 @@ export class ToyIsland {
 		if (/^nimm (treib)?holz$/.test(line)) {
 			const i = this.wood.findIndex((w) => w.room === this.at.room && w.x === this.at.x && w.y === this.at.y);
 			if (i < 0) return ["Hier liegt kein Treibholz."];
-			this.wood.splice(i, 1); this.pack++;
+			this.wood.splice(i, 1); this.pack++; this.taken++;
 			return ["Du hebst Treibholz auf."];
 		}
 		if (/^lege (treib)?holz ins feuer$/.test(line)) {
@@ -275,6 +320,12 @@ export class ToyIsland {
 			for (const [j, minute] of CHANCE_MINUTES.entries()) {
 				if (minute <= from || minute > to) continue;
 				for (const room of deadEnds(this.world)) { const l = chanceLands(this.world, this.seed, j, room); if (l) this.wood.push({ room, x: l.x, y: l.y, until: minute + this.rules.life }); }
+			}
+			this.wood = this.wood.filter((w) => w.until === undefined || w.until > to);
+		} else if (this.rules.tide === "shore") {
+			for (const [j, minute] of CHANCE_MINUTES.entries()) {
+				if (minute <= from || minute > to) continue;
+				for (const room of shoreRooms(this.world)) { const l = shoreLands(this.world, this.seed, j, room); if (l) this.wood.push({ room, x: l.x, y: l.y, until: minute + this.rules.life }); }
 			}
 			this.wood = this.wood.filter((w) => w.until === undefined || w.until > to);
 		} else {

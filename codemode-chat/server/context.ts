@@ -9,6 +9,8 @@ import type { Attempt, CritiqueRef, Earlier, Finding, PlanRef, Role, TeamContext
 import { blockTask, earlierFor, findingsOf, rankedProposals, teamView } from "./room.ts";
 import { isText, taskFromSpec, type Task } from "./tasks.ts";
 import { subgoalsOf } from "./subgoals.ts";
+import { frozenMemory, runFreezeId } from "./memory.ts";
+import type { ChanceSeen, TideSeen } from "./toyisland.ts";
 
 export type CallKind = "contribute" | "critique" | "propose" | "vote" | "judge" | "research" | "verify" | "criteria" | "reviewCriteria";
 /** A request for a model call, as an agent writes it (and the model process takes it). */
@@ -60,6 +62,14 @@ const findings = async (space: SpaceLike, call: LlmCall): Promise<Finding[] | un
 const earlier = async (space: SpaceLike, call: LlmCall, task: Task): Promise<Earlier[] | undefined> => (call.withEarlier ? earlierFor(space, call.session, call.blockId ?? "", task) : undefined);
 const some = <T>(x: T[] | undefined) => (x?.length ? x : undefined);
 
+/** A bot task with observations: what this generation's bots get from `observations()`, the freeze the run wrote when
+ *  the generation began (its candidates count generations from 1, the call from 0). */
+async function observationsOf(space: SpaceLike, call: LlmCall, task: Task): Promise<Array<TideSeen | ChanceSeen>> {
+	if (!task.bot?.observe || !call.runId || !call.blockId) return [];
+	const frozen = await frozenMemory(space, call.session, call.blockId, runFreezeId(call.runId, call.gen + 1));
+	return frozen.filter((m) => m.goal === "tide" && m.obs).map((m) => m.obs as TideSeen | ChanceSeen);
+}
+
 /** The arguments of the llm.ts function for a call's kind. */
 export async function callArgs(space: SpaceLike, call: LlmCall): Promise<Record<string, unknown>> {
 	const base = { agent: call.agent, ...(call.model ? { model: call.model } : {}) };
@@ -69,7 +79,10 @@ export async function callArgs(space: SpaceLike, call: LlmCall): Promise<Record<
 	const t = await team(space, call);
 	const usable = t.attempts.filter((a) => !a.rejected), fs = await findings(space, call);
 	if (call.kind === "research") return { task: t.task, ...base, ...(fs ? { findings: fs } : {}) };
-	if (call.kind === "propose") return { task: t.task, ...base, notes: t.notes, attempts: t.attempts.slice(0, 3), ...(some(await earlier(space, call, t.task)) ? { earlier: await earlier(space, call, t.task) } : {}), ...(some(fs) ? { findings: fs } : {}) };
+	if (call.kind === "propose") {
+		const obs = await observationsOf(space, call, t.task);
+		return { task: t.task, ...base, notes: t.notes, attempts: t.attempts.slice(0, 3), ...(obs.length ? { observations: obs } : {}), ...(some(await earlier(space, call, t.task)) ? { earlier: await earlier(space, call, t.task) } : {}), ...(some(fs) ? { findings: fs } : {}) };
+	}
 	if (call.kind === "vote") {
 		const ps = (await rankedProposals(space, call.session, call.runId ?? "")).filter((p) => call.proposalIds?.includes(p.proposalId)).sort((a, b) => a.proposalId.localeCompare(b.proposalId));
 		return { task: t.task, ...base, notes: t.notes, proposals: ps.map((p, i) => ({ key: `P${i + 1}`, author: p.author, text: p.text, proposalId: p.proposalId })) };
@@ -89,12 +102,13 @@ export async function callArgs(space: SpaceLike, call: LlmCall): Promise<Record<
 	const best = call.blockId && !isText(t.task) ? (await space.readIfExists({ type: "CodeBest", fields: { session: call.session, blockId: call.blockId } }, HELD_WAIT_MS))?.fields as { candidateId: string; ms: number } | undefined : undefined;
 	const bestSource = best ? usable.find((a) => a.candidateId === best.candidateId)?.source : undefined;
 	const plan = await planOf(space, call), critique = await critiqueOf(space, call), ea = await earlier(space, call, t.task);
+	const obs = await observationsOf(space, call, t.task);
 	const ctx: TeamContext = {
 		task: t.task, lang: call.lang, agent: call.agent, gen: call.gen, ...(call.model ? { model: call.model } : {}),
 		role: call.role ?? "explore", target: target && !target.rejected ? target : null,
 		others: usable.filter((a) => a.candidateId !== call.targetId && a.candidateId !== call.partnerId).slice(0, 3), rejected: t.attempts.filter((a) => a.rejected).slice(0, 3), notes: t.notes,
 		best: best && bestSource !== undefined ? { source: bestSource, ms: best.ms } : null,
-		...(critique ? { critique } : {}), ...(partner ? { partner } : {}), ...(plan ? { plan } : {}), ...(some(ea) ? { earlier: ea } : {}), ...(some(fs) ? { findings: fs } : {}),
+		...(critique ? { critique } : {}), ...(partner ? { partner } : {}), ...(plan ? { plan } : {}), ...(some(ea) ? { earlier: ea } : {}), ...(some(fs) ? { findings: fs } : {}), ...(obs.length ? { observations: obs } : {}),
 	};
 	return ctx as unknown as Record<string, unknown>;
 }

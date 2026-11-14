@@ -459,6 +459,52 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      On a server the learner fails while the memory is empty, and passes once a verdict's 24 days are in it
      (`tests/bots.test.ts`).
 
+9. **Odds every island has its own (shores of the tide).**
+   - **Why.** Step 8 does not separate the models that can walk: Sonnet 5.5, Opus 5.5 and GPT-6.1 Sol all passed it,
+     two of them with a prior written into the code (dead ends, valued by their distance or not at all) and only GPT
+     with the odds. A greedy sweep over the dead ends beats the reference plan on most islands (the article). A point
+     limit does not help there: the sweeps spent fewer points than the law bot (6304 to 6493 against 7627). Step 9
+     takes away what the priors live on.
+   - **The task** "Shores of the tide" (`tide-shores`, `server/shores.ts`) runs on made islands under `SHORE_RULES`
+     (`toyisland.ts`): as step 8 (the tide at half past every hour, a piece lies 30 minutes, an exit takes 5, the day
+     480), but every room except the fire's draws, with odds of its own: `shoreOf` draws them once per island and room
+     from 0 (about 45 %), 0.1, 0.35 and 0.7. Neither the room's exits nor its distance from the fire nor its name tells
+     them (a test: every common shape of room meets every value). A room's pieces lie on one cell of its own
+     (`shoreCell`).
+   - **The logbook.** `logbook()` (1 point, answered by the toy arena) gives 6 earlier days of the tide on the bot's own
+     island, in the form of step 8's days (every room with its pieces, minute and cell). Their seeds start at
+     2 · 10^9, beyond every episode seed, so the logbook never shows the day the bot plays (a test holds it). There is no
+     `observations()` and no memory: the data are the island's own, read at run time, and a law brought from another
+     island has nothing to hold on to.
+   - **The verdict** is step 8's: the mean over 8 seeds against a target of 90 % of the reference plan's mean, rounded
+     down to an eighth. The reference plan knows the true odds and cells (`referenceBot(n)`, written per island) and
+     plays every hour the round with the most expected pieces (step 8's `bestTour`). No point limit: every bot that
+     fails spends fewer points than the reference or about as many, so a limit would bite nothing.
+   - **The islands** (every bot on the 104 islands from 34 to 233 with two rooms of odds 0.35 or more):
+     - Shown are Neuland 52, 64 and 148, hidden 72, 75, 105, 140, 176 and 222: islands on which every wrong bot and
+       each of the three model winners of step 8 fail and the learner passes with a margin. Chosen with the wrong bots
+       in view, as in step 8; the last column is the figure over the 95 unselected islands.
+     - The reference plan's means against the targets: 6.125/5.5, 14.375/12.875, 9/8 shown; 13.125/11.75, 11/9.875,
+       7.625/6.75, 14.875/13.375, 9.875/8.875, 6.125/5.5 hidden.
+   - **The variants** (and the model winners of step 8, `tests/fixtures/`):
+
+     | Bot | Counted | Points | Of 95: below the target |
+     |---|---|---|---|
+     | Reference plan (true odds) | (defines the targets) | 9033 | |
+     | The learner: reads the logbook, each room's hits over the tides as its odds, then the round with the most expected pieces | 9/9 | 9105 | 1 (1 %) |
+     | Step 8's law: the dead ends by their distance from the fire | 0/9 | 6291 | 92 (97 %) |
+     | Every room but the fire's, every hour, in the order of their names | 0/9 | 8378 | 84 (88 %) |
+     | The logbook, but dead ends only (step 8's prior) | 0/9 | 4477 | 92 (97 %) |
+     | The most likely room only, every hour | 0/9 | 3774 | 95 (100 %) |
+     | No logbook, every room alike | 0/9 | 9164 | 39 (41 %) |
+     | Sonnet 5.5's winner of step 8 (greedy sweep of the dead ends) | 0/9 | 7327 | 92 (97 %) |
+     | Opus 5.5's winner of step 8 (dead ends weighted by distance) | 0/9 | 5478 | 92 (97 %) |
+     | GPT-6.1 Sol's winner of step 8 (rates from `observations()`) | 0/9 | 0 | 95 (100 %): the tool does not exist here |
+
+     The learner brings 0.87 to 1.0 times the reference plan's mean (median 1.0). The bot without the logbook is the
+     closest wrong one: on 59 % of the islands a round over every room happens to cover the good ones; the selection
+     keeps the islands where it does not.
+
 ## Tests
 
 - `spaces-mmo/tests/arena.test.ts`: `start`, `seed`, `setup`, `map`, `hold`; the same seed gives the same world after
@@ -488,4 +534,4 @@ A clickable mockup of the views, with example data on the real map of the Graue 
 | Path in `BotEpisode` | at most 200 steps | Only room and direction changes. |
 | Retention | with the block (step 2), see there | Planned: best of each generation + newest 50. Step 2 keeps every sample path as long as its verdict, which the room cap already bounds. |
 
-Step 6 needs no learned model (see there). Step 7 learns one dynamic, the tide, as code and data. Step 8 learns odds and plans for the expected value. The account for an article is [codemode-planning-article.en.md](codemode-planning-article.en.md). Runs with model agents (2026-11-14, 5 generations each): haiku on step 7 not solved; Claude Opus 5.5 solved step 7 in generation 5 with a statistic of the observations rather than the law (the task does not bound the cost, so a searcher with a prior passes), and did not solve step 8; see the article.
+Step 6 needs no learned model (see there). Step 7 learns one dynamic, the tide, as code and data. Step 8 learns odds and plans for the expected value. Step 9 learns them anew on every island, from that island's data. The account for an article is [codemode-planning-article.en.md](codemode-planning-article.en.md). Runs with model agents (2026-11-14, 5 generations each): haiku on step 7 not solved; Claude Opus 5.5 solved step 7 in generation 5 with a statistic of the observations rather than the law (the task does not bound the cost, so a searcher with a prior passes), and did not solve step 8. After four changes (observations in the prompt, longer code in it, richer failures, a point limit per episode on step 7): four models under the same conditions, one run each: Claude Opus 5.5 solved step 7 in generation 3 with the law read off the observations in its prompt and written into its bot (1371 points, the law in code 2253), and step 8 in generation 3; GPT-6.1 Sol (through OpenRouter) solved step 8 in generation 4 with the odds counted from `observations()`, step 7 7/9; Claude Sonnet 5.5 solved step 8 in generation 4 by a greedy sweep of every dead end, without the odds (below target on 8 % of 91 unselected islands; step 8 does not require the odds), step 7 3/9; Claude Haiku 5.5 neither (0/9 throughout, the game's rules); a second GPT-6.1 Sol run (direct, through the pi login) did step 7 2/9 and step 8 in generation 5. Step 9 (odds every island has its own, read from a logbook at run time) takes away what the priors of step 8's winners live on: all three fail it. See the article.

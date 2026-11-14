@@ -7,7 +7,7 @@ import { startServer } from "./stack.ts";
 import { startFakeArena } from "./fake-arena.ts";
 import { episodeEntries, judge, loadCodemode, memoryEntries, verdictFields } from "../server/judge.ts";
 import { covers, JUMP_CELLS, recall, type MemoryPath } from "../server/memory.ts";
-import { proposePrompt, teamPrompt } from "../server/llm.ts";
+import { describeObservations, proposePrompt, teamPrompt } from "../server/llm.ts";
 import { checkSubgoals, extractSubgoals, subgoalText } from "../server/subgoals.ts";
 import { laneOf } from "../server/room.ts";
 import { offeredTasks, portableTask, restoreTask, taskById, TASKS } from "../server/tasks.ts";
@@ -16,7 +16,13 @@ import { ArenaDown, MAX_BOT_CALLS } from "../server/bottask.ts";
 import { toyArena } from "../server/toyarena.ts";
 import { CHANCE_MINUTES, CHANCE_RULES, chanceDay, chanceLands, chanceOf, deadEnds, fromFire, genIsland, TIDE_RULES, tideLanding, ToyIsland, type ChanceSeen, type TideSeen } from "../server/toyisland.ts";
 import { CHANCE_HIDDEN, CHANCE_SAMPLES, CHANCE_SEEDS } from "../server/chance.ts";
-import { TIDE_HIDDEN, TIDE_SAMPLES } from "../server/tides.ts";
+import { referenceBot, SHORE_BOTS, SHORE_HIDDEN, SHORE_SAMPLES, SHORE_SEEDS } from "../server/shores.ts";
+import { LOG_DAYS, LOG_SEED, logSeeds, SHORE_ODDS, SHORE_RULES, shoreCell, shoreDay, shoreLands, shoreLog, shoreOf, shoreRooms } from "../server/toyisland.ts";
+import { episodeSeed } from "../server/bottask.ts";
+import { TIDE_HIDDEN, TIDE_LAW_COST, TIDE_LIMIT, TIDE_SAMPLES } from "../server/tides.ts";
+import { readFileSync } from "node:fs";
+import { callArgs } from "../server/context.ts";
+import { freezeMemory, runFreezeId } from "../server/memory.ts";
 import { NEULAND_HIDDEN, NEULAND_SAMPLES } from "../server/neuland.ts";
 import { execute } from "../server/runner.ts";
 
@@ -75,7 +81,7 @@ test("bot tasks: their own lane, offered only with an arena, the prompt names th
 	assert.equal(laneOf("frustration"), "code");
 	assert.equal(laneOf("custom"), "code");
 	process.env.CODEMODE_ARENA = "";
-	assert.deepEqual(offeredTasks().filter((x) => x.kind === "bot").map((x) => x.id), ["beacon-neuland", "tide-law", "tide-odds"], "no arena: only the bot tasks on made islands, which the judge plays itself");
+	assert.deepEqual(offeredTasks().filter((x) => x.kind === "bot").map((x) => x.id), ["beacon-neuland", "tide-law", "tide-odds", "tide-shores"], "no arena: only the bot tasks on made islands, which the judge plays itself");
 	process.env.CODEMODE_ARENA = "unix:/nowhere";
 	try { assert.equal(offeredTasks().some((x) => x.id === "beacon-bucht"), true); } finally { process.env.CODEMODE_ARENA = ""; }
 	const p = teamPrompt({ task, lang: "en", agent: 0, gen: 1 }).user;
@@ -606,9 +612,36 @@ t("learn the tide: the law in code reaches all; without calibration, without a m
 	assert.ok(obs.every((o) => o.goal === "tide" && (o.obs as TideSeen).exits.length === 1 && TIDE_SAMPLES.map((n) => `n${n}`).includes(o.obs!.island)));
 	assert.equal(JSON.stringify(verdictFields(law!)).includes("tides"), false, "the verdict entry carries no observations");
 	const memory = obs.map((o) => ({ ...o, gen: 1, author: "law" }));
-	const [learner, replay] = await Promise.all([tLearner, tReplay].map((v) => judge(cm!, tide, v!, { memory })));
+	const [learner, replay, patrol] = await Promise.all([tLearner, tReplay, PATROL].map((v) => judge(cm!, tide, v!, { memory })));
 	assert.equal(learner!.ok, true, learner!.error ?? "");
 	assert.deepEqual([replay!.passed, replay!.score], [3, 0], "room ids carry to no other island");
+	// the point limit: 1.3 times the law's points per episode; the law's points are what the limits were made from
+	assert.deepEqual(Object.fromEntries(law!.episodes!.map((e) => [e.id, e.cost])), TIDE_LAW_COST);
+	assert.ok(learner!.episodes!.every((e) => e.cost <= Math.round(TIDE_LAW_COST[e.id]! * TIDE_LIMIT)), "the learner fits the law and stays within");
+	// Opus 5.5's winner of 2026-11-14 (a patrol weighted by the observed distances from the fire) reaches every goal,
+	// but dearer: it no longer passes
+	assert.equal(patrol!.ok, false);
+	assert.match(patrol!.error!, /^S1: .*over the limit of 316/);
+	assert.ok(patrol!.passed <= 1, `${patrol!.passed}/9`);
+});
+
+/** Claude Opus 5.5's winner on "Learn the tide" before the point limit (2026-11-14), as the model wrote it. */
+const PATROL = readFileSync(new URL("./fixtures/opus-tide-patrol.js", import.meta.url), "utf8");
+
+test("the observations in the prompt: one line per landing or per day, cut where they no longer fit, in the team's and the plan's prompt", () => {
+	const landing: TideSeen = { island: "n24", seed: 1, piece: 0, minute: 40, room: "n24-3", x: 5, y: 2, exits: ["west"], fromFire: 2 };
+	const day: ChanceSeen = { island: "n36", seed: 0, minutes: [30, 90], rooms: [{ room: "n36-2", exits: ["ost"], fromFire: 1, pieces: [{ minute: 90, x: 4, y: 3 }] }, { room: "n36-4", exits: ["nord", "süd"], fromFire: 0, pieces: [] }] };
+	const [a] = describeObservations([landing]);
+	assert.match(a!, /n24 seed 1 piece 0: minute 40, n24-3 \(5,2\) \[west\] fromFire 2/);
+	const [b] = describeObservations([day]);
+	assert.match(b!, /n36 seed 0: n36-2 \[ost\] fromFire 1: 90@\(4,3\); n36-4 \[nord,süd\] fromFire 0: -/);
+	const [c] = describeObservations(Array.from({ length: 50 }, (_, i) => ({ ...landing, piece: i })), 500);
+	assert.match(c!, /50 entries, the last \d+ cut here/);
+	assert.ok(c!.length < 900);
+	assert.deepEqual(describeObservations([]), []);
+	assert.ok(teamPrompt({ task: tide, lang: "en", agent: 0, gen: 1, observations: [landing] }).user.includes("n24 seed 1 piece 0"));
+	assert.ok(proposePrompt({ task: tide, agent: 0, observations: [landing] }).user.includes("n24 seed 1 piece 0"));
+	assert.ok(!teamPrompt({ task: tide, lang: "en", agent: 0, gen: 1 }).user.includes("returns to this generation's bots"));
 });
 
 t("learn the tide on a server: a verdict's observations go into the block's memory, a later contribution reads them from its freeze", async () => {
@@ -683,6 +716,7 @@ t("odds of the tide: the law in code reaches the target everywhere; the learner 
 	// the verdict asks the mean over the seeds, against each episode's target
 	assert.ok(law!.episodes!.every((e) => e.counts!.length === CHANCE_SEEDS && e.mean! >= e.target! && e.reached.every(Boolean)));
 	assert.equal(blind!.ok, false, "the learner without observations knows no odds");
+	assert.match(blind!.error!, /goal not reached; first seed: \d+ of 1 pieces in the fire of .* \(\d+ seen in a look, \d+ picked up\)/, "a failure says what the bot saw and took");
 	for (const [name, v] of [["mode", mode], ["sweep", sweep], ["rotation", rotation]] as const) assert.ok(v!.score! < 1, `${name}: ${v!.passed}/9`);
 	// the law bot's verdict logs each shown day of the tide: one observation per island and seed, none of a hidden one
 	const obs = memoryEntries(law!, odds.bot!.goal, true);
@@ -716,9 +750,81 @@ t("odds of the tide on a server: each shown day goes into the block's memory, a 
 		assert.equal(a.contributions[0].ok, false, "nothing observed yet: the learner knows no odds");
 		const seen = await srv.stack.space.count({ type: "PlanMemory", fields: { goal: "tide" } });
 		assert.equal(seen, CHANCE_SAMPLES.length * CHANCE_SEEDS);
+		// a model call of the next generation sees the same observations in its prompt as its bot gets from the tool
+		await freezeMemory(srv.stack.space, null, 60_000, { session: "odds1", blockId: a.current, freezeId: runFreezeId("r-test", 2) });
+		const args = await callArgs(srv.stack.space, { callId: "c1", session: "odds1", blockId: a.current, runId: "r-test", kind: "contribute", agent: 0, gen: 1, lang: "en", ts: Date.now() }) as { observations?: ChanceSeen[] };
+		assert.equal(args.observations?.length, CHANCE_SAMPLES.length * CHANCE_SEEDS);
+		assert.equal((await callArgs(srv.stack.space, { callId: "c2", session: "odds1", blockId: a.current, runId: "r-test", kind: "contribute", agent: 0, gen: 0, lang: "en", ts: Date.now() }) as { observations?: unknown }).observations, undefined, "the first generation's freeze does not exist: nothing");
 		assert.equal((await post("/api/sessions/odds1/code", { author: "lerner-2", source: oLearner })).status, 200);
 		const b = await done(2);
 		const by = Object.fromEntries(b.contributions.map((c: any) => [c.author, c]));
 		assert.equal(by["lerner-2"].ok, true, by["lerner-2"].error);
 	} finally { await srv.close(); }
+});
+
+// ---- step 9: shores of the tide ----------------------------------------------------------------------------------
+const shores = taskById("tide-shores")!;
+const fixture = (f: string) => readFileSync(new URL(`./fixtures/${f}`, import.meta.url), "utf8");
+
+test("the shores: every room but the fire's draws with odds of its own island and room, on its own cell; the logbook lists other days than any episode's", () => {
+	for (const [n] of [...SHORE_SAMPLES, ...SHORE_HIDDEN]) {
+		const w = genIsland(n);
+		assert.ok(shoreRooms(w).every((r) => r !== w.fire.room && (SHORE_ODDS as readonly number[]).includes(shoreOf(w, r))));
+		assert.equal(shoreOf(w, w.fire.room), 0);
+		assert.ok(shoreRooms(w).filter((r) => shoreOf(w, r) >= 0.35).length >= 2, `${w.name}: two good rooms at least`);
+		// the seeds of an episode and of the logbook never meet
+		for (let s = 0; s < SHORE_SEEDS; s++) assert.ok(!logSeeds().includes(episodeSeed(n, s)));
+	}
+	assert.ok(episodeSeed(999_999, SHORE_SEEDS) < LOG_SEED);
+	// the odds hold over many days, the cell is the room's own
+	const w = genIsland(SHORE_SAMPLES[1]![0]);
+	for (const r of shoreRooms(w)) {
+		let hits = 0;
+		for (let seed = 0; seed < 300; seed++) for (let j = 0; j < CHANCE_MINUTES.length; j++) { const l = shoreLands(w, seed, j, r); if (l) { hits++; assert.deepEqual({ x: l.x, y: l.y }, shoreCell(w, r)); } }
+		assert.ok(Math.abs(hits / (300 * CHANCE_MINUTES.length) - shoreOf(w, r)) < 0.04, `${r}: ${hits}`);
+	}
+	// odds differ from island to island: no room's odds follow its shape
+	const shape = new Map<string, number[]>();
+	for (let n = 34; n < 134; n++) { const v = genIsland(n); for (const r of shoreRooms(v)) { const k = `${Object.keys(v.rooms[r]!.exits).length}/${fromFire(v, r)}`; if (!shape.has(k)) shape.set(k, []); shape.get(k)!.push(shoreOf(v, r)); } }
+	assert.ok([...shape.values()].filter((o) => o.length >= 30).every((o) => new Set(o).size === SHORE_ODDS.length), "every common shape of room meets every odds");
+	// the day a world plays is the day the judge can log
+	const day = shoreDay(w, 7, 1), t = new ToyIsland(w.episode.start, [], 7, w, SHORE_RULES);
+	t.wait(31);
+	const lying = t.look().things.length + shoreRooms(w).reduce((a, r) => a + (r === t.at.room ? 0 : shoreLands(w, 7, 0, r) ? 1 : 0), 0);
+	assert.equal(lying, day.rooms.reduce((a, r) => a + r.pieces.filter((p) => p.minute === 30).length, 0));
+	assert.equal(shoreLog(w).length, LOG_DAYS);
+});
+
+test("the toy arena's logbook: earlier days of the island under the shore rules, refused elsewhere; a bot pays a point for it", async () => {
+	const a = toyArena(), n = SHORE_SAMPLES[0]![0];
+	const { world } = await a.ask("open", { island: n, rules: "shore", seed: episodeSeed(n, 0) });
+	const log = await a.ask("logbook", { world });
+	assert.equal(log.days.length, LOG_DAYS);
+	assert.deepEqual(log.days.map((d: any) => d.day), Array.from({ length: LOG_DAYS }, (_, i) => i + 1));
+	assert.ok(log.days.every((d: any) => d.island === `n${n}` && d.rooms.length === Object.keys(genIsland(n).rooms).length));
+	const odds = await a.ask("open", { island: n, rules: "chance" });
+	await assert.rejects(a.ask("logbook", { world: odds.world }), /no logbook/);
+	a.close();
+	assert.match(shores.prompt.en, /tools\.logbook\(args\)/);
+	assert.doesNotMatch(shores.prompt.en, /tools\.observations/);
+});
+
+t("shores of the tide: the learner reads the logbook and passes; step 8's law, the sweep, dead ends only, the most likely room, every room alike and the three model winners of step 8 do not", async () => {
+	process.env.CODEMODE_ARENA = "";
+	assert.equal(laneOf("tide-shores"), "code");
+	const bots: Array<[string, string]> = [...Object.entries(SHORE_BOTS), ["sonnet", fixture("sonnet-odds-sweep.js")], ["opus", fixture("opus-odds-distance.js")], ["gpt", fixture("gpt-odds-rates.js")]];
+	const vs = await Promise.all(bots.map(([, src]) => judge(cm!, shores, src)));
+	const by = Object.fromEntries(bots.map(([name], i) => [name, vs[i]!]));
+	assert.equal(by.learnerBot!.ok, true, by.learnerBot!.error ?? "");
+	assert.deepEqual([by.learnerBot!.passed, by.learnerBot!.total], [9, 9]);
+	assert.ok(by.learnerBot!.episodes!.every((e) => e.counts!.length === SHORE_SEEDS && e.mean! >= e.target!));
+	for (const name of ["lawOfStep8Bot", "sweepBot", "deadOnlyBot", "modeBot", "uniformBot", "sonnet", "opus", "gpt"]) {
+		const v = by[name]!;
+		assert.equal(v.ok, false, `${name} passes`);
+		assert.ok(v.episodes!.filter((e) => e.kind === "holdout").some((e) => !e.reached.every(Boolean)) || v.episodes!.every((e) => e.skipped || !e.reached.every(Boolean)), `${name}: fails no hidden episode`);
+	}
+	assert.match(by.gpt!.error!, /tools\.observations does not exist/, "step 8's tool is gone: the data are the island's own");
+	// the reference plan of a shown island brings what its target was made from
+	const n = SHORE_SAMPLES[0]!, ref = await judge(cm!, shores, referenceBot(n[0]));
+	assert.ok(ref.episodes![0]!.mean! * 0.9 >= n[1] && ref.episodes![0]!.mean! * 0.9 < n[1] + 0.125);
 });
