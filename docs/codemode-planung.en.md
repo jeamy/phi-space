@@ -170,8 +170,26 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      same seed gave the same world once and another world the next time. The world worker takes `SPACES_MMO_SEED`
      (`server/world-host.ts`), the arena passes `open`'s `seed` to it; a task with `wait` may still see two seeds
      disagree on the same contribution. Fixing that needs ticks counted in world time, not real time.
-   - The test that no hidden episode lies on a sample path waits for step 2, where paths are recorded.
+   - The test that no hidden episode lies on a sample path waits for step 2, where paths are recorded (done there).
 2. **Paths on the map.** The arena's `map`, paths in `BotEpisode`, the room map with paths.
+
+   *Done 2026-11-14:*
+   - The arena records every cell the figure goes over (a `move` as the shortest walk around fires, a change of room as
+     the walk to the exit and the cell it arrives on), and `path { world }` gives the start, the turns and the room
+     changes, at most 200 steps. `map { room }` needs no world and adds a `rev` that changes with the geometry.
+   - The judge asks `path` for the first seed of each sample episode, before its own `hold` wait, and `map` for the
+     rooms those paths cross (remembered for 10 minutes). `judge-host.ts` writes one `BotEpisode` entry per sample path
+     in the verdict's transaction (`episode`, `reached`, `cost`, `path`, `cut`); the `CodeScore` entry keeps no path.
+     The rooms become `BotRoom` entries (`world`, `room`, `rev`, `geo`), one per room, after the commit.
+   - Retention is simpler than the table below: a `BotEpisode` carries its block and the verdict's lease and goes
+     when the block is deleted, like `CodeScore` (at most 1000 contributions a room, three sample paths each). Picking
+     the best of each generation is only worth it if rooms grow beyond that.
+   - The contribution's panel draws the rooms on the atlas, every sample path in its own colour from its start (a dot
+     with the episode's id) to its end (✕ when the goal was missed), the fire ringed, the episode's driftwood a square;
+     a chip shows one episode alone. The snapshot's task carries the sample episodes' start and items for these marks.
+   - The test that no hidden episode lies on a sample path runs over the catalog: a hidden piece of driftwood is never
+     within 3 cells of a sample start or piece, and on the island no sample's shortest way enters a room a hidden piece
+     lies in.
 3. **Memory.** `PlanMemory`, `MemoryFreeze`, `recall`, the coverage figure and the memory view.
 4. **Subgoals.** The board role, `Subgoals`, the `subgoals` tool, the subgoal chain, and the task "Light the fire of
    Anleger".
@@ -187,7 +205,8 @@ The progress curve and the episode matrix come with step 1, the rest with the st
   a wait.
 - `codemode-chat/tests/bots.test.ts` with `tests/fake-arena.ts`: episodes and seeds in the verdict, the holdout
   without paths, the same verdict on two judges, `recall` answering from the freeze and not from later paths, coverage.
-- A test that a hidden episode never lies on a sample path, run over every planning task in the catalog.
+- A test that a hidden episode never lies on a sample path, run over every planning task in the catalog (step 2,
+  `tests/bots.test.ts`).
 - The page: the snapshot carries the curve's and matrix's figures; a test checks them against the `BotEpisode` entries.
 
 ## Values (decided 2026-11-13)
@@ -207,6 +226,6 @@ A clickable mockup of the views, with example data on the real map of the Graue 
 | "Near" for coverage | same room, at most 3 cells | Manhattan distance; a bot walks with `move x y`, and 3 cells are a short step. |
 | Freeze | at the start of every generation | A contribution sees only the paths of earlier generations. |
 | Path in `BotEpisode` | at most 200 steps | Only room and direction changes. |
-| Retention | best of each generation + newest 50 | Enough for the curve, the matrix and the map. |
+| Retention | with the block (step 2), see there | Planned: best of each generation + newest 50. Step 2 keeps every sample path as long as its verdict, which the room cap already bounds. |
 
 Still open: step 6 at all.

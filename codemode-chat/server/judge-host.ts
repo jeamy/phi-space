@@ -8,12 +8,12 @@
 //   CODEMODE_HOST_NAME=big                         name in the system bar and on the tiles (default: hostname)
 import "./env.ts";
 import { pathToFileURL } from "node:url";
-import { NO_WAIT, peek, TransactionError, type SpaceLike } from "phi-spaces";
-import { judgeInSlot, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
+import { FOREVER, NO_WAIT, peek, TransactionError, type SpaceLike } from "phi-spaces";
+import { episodeEntries, judgeInSlot, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { LogDown, type CallLog, type LoggedCall, type RunHead } from "./durable-run.ts";
 import { setBest, trimArchive } from "./results.ts";
 import { serveExec } from "./exec.ts";
-import { ArenaDown, arenaAddress } from "./bottask.ts";
+import { ArenaDown, arenaAddress, type RoomMap } from "./bottask.ts";
 import { announce, awaitWork, connectSpace, entryLeaseMs, hostFacts, keepAlive, readExisting, StillHeld, takeAll } from "./space.ts";
 import { dataTask, taskFromSpec } from "./tasks.ts";
 import { loadHoldout } from "./datatask.ts";
@@ -101,11 +101,14 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 		const v: Verdict | null = spec === false ? null : missing ? { ok: false, ms: TIMEOUT_MS, error: missing, passed: 0, total: 2, cases: [] } : task ? await judgeInSlot(cm, task, String(f.source ?? ""), log ? { log, leaseMs: TXN_LEASE_MS } : {}) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
 		if (v && (await alive())) {
 			await space.write({ type: "CodeScore", fields: { session, blockId, candidateId, author: f.author, via: f.via, host, gen: f.gen, ...lineageOf(f), ...verdictFields(v), source: f.source, ts: f.ts } as never }, t.id, ttl);
+			// a planning task's sample paths (docs/codemode-planung.en.md): they live and go with the verdict
+			for (const e of episodeEntries(v)) await space.write({ type: "BotEpisode", fields: { session, ...(typeof blockId === "string" ? { blockId } : {}), candidateId, ...e, ts: f.ts } as never }, t.id, ttl);
 			// a correct verdict that beats the block's best (and no person rejected it) becomes the new best
 			if (v.ok && task && typeof blockId === "string" && !(await space.readIfExists({ type: "CodeVeto", fields: { session, candidateId } }, NO_WAIT, { txn: t.id })))
 				await setBest(space, t.id, session, blockId, task, ttl, { offer: { candidateId, ms: v.ms, source: String(f.source ?? ""), ...(v.cost !== undefined ? { cost: v.cost } : {}) } });
 		}
 		await space.commit(t.id);
+		if (v?.rooms?.length) await keepRooms(space, v.rooms).catch(() => {});
 		// the verdict is stored: the run's log has served (a judge dying here leaves it to its lease)
 		if (log) await log.clear().catch(() => {});
 		return true;
@@ -132,6 +135,19 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 
 /** A failed verdict without code for a candidate that could not be judged; the run's barrier counts it (runId), lineage
  *  and usage stay with it. */
+/** The rooms a verdict's paths cross, as BotRoom entries for the page (one per world and room, replaced when the
+ *  arena's geometry changed). Not part of the verdict's transaction: two judges may store the same room at once, the
+ *  later one finds it there or a rewrite reconciles. */
+async function keepRooms(space: SpaceLike, rooms: RoomMap[]): Promise<void> {
+	for (const geo of rooms) {
+		const tmpl = { type: "BotRoom", fields: { world: geo.world, room: geo.room } };
+		const had = await space.readAll(tmpl, { limit: 5 });
+		if (had.length === 1 && (had[0]!.fields as { rev?: unknown }).rev === geo.rev) continue;
+		await takeAll(space, tmpl);
+		await space.write({ type: "BotRoom", fields: { world: geo.world, room: geo.room, rev: geo.rev, geo, ts: Date.now() } as never }, null, FOREVER);
+	}
+}
+
 const failedVerdict = (f: Record<string, any>, host: string, error: string) => ({ session: f.session, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host, gen: f.gen, ...lineageOf(f), ok: false, ms: TIMEOUT_MS, passed: 0, total: 0, cases: [], error, source: "", ts: f.ts });
 
 /** Consumes a candidate whose verdict could not be stored, with a failed verdict that carries no code. */

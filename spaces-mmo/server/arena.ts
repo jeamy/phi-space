@@ -24,6 +24,16 @@
 //                                                                    hold: the world moves on that many minutes (not
 //                                                                    counted against the bot's waits) and the goal
 //                                                                    must still hold
+//   path { world }                  → { path, cut }                 the way the figure went: [room, x, y] for its start
+//                                                                    and every cell where it changed room or direction
+//                                                                    (a `move` counted cell by cell, the shortest walk
+//                                                                    around fires); at most PATH_STEPS, else every n-th
+//                                                                    and the last, and `cut` says so
+//   map { room }                    → { world, room, name, island, map, ground, decor, walk, exits, fires }   a room's
+//                                                                    geometry for drawing paths (no world needed): the
+//                                                                    ground and decor rows, which ground keys are walkable,
+//                                                                    the exits with their destination, the fires, its
+//                                                                    place on the atlas, and `rev` (changes with them)
 //   close { world }                 → {}
 // A world is closed when its connection ends or nobody asks it anything for SPACES_MMO_ARENA_IDLE_MS (default 5 min).
 // A durable run (codemode-chat, docs/codemode-anwendungen.en.md D) opens with `keep: true`: its world outlives the
@@ -36,14 +46,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { Accounts } from "./accounts.ts";
 import { ROOT } from "./env.ts";
 import { actorToken, asFields, fieldsOf, type BeaconFields, type CharacterFields, type ExitFields, type IntentFields, type ItemFields, type MsgFields, type WorldClockFields } from "./model.ts";
 import { connectSpace, peek } from "./space.ts";
 import { spaceServer } from "./space-server.ts";
-import { loadWorld, walkable, type WorldDef } from "./engine/world.ts";
+import { findPath, loadWorld, walkable, type WorldDef } from "./engine/world.ts";
+import { blockedIn } from "./engine/occupancy.ts";
 import { resolvePrototype, spawn as spawnItem } from "./engine/prototypes.ts";
 import { flameOf, isLit } from "./engine/fire.ts";
 import { render } from "./engine/funcparser.ts";
@@ -57,6 +68,10 @@ const ACT_MS = 15_000;
 /** At most this many world minutes per `wait`, and in all per world (a day). */
 export const MAX_WAIT_MINUTES = 120, MAX_WAITED_MINUTES = 24 * 60;
 const MAX_LINE = 300, MAX_THINGS = 30;
+/** The most cells a world remembers of the figure's way, and the most steps `path` gives. */
+const MAX_TRAIL = 20_000;
+export const PATH_STEPS = 200;
+type Step = [room: string, x: number, y: number];
 
 type World = {
 	id: string; dir: string; procs: ChildProcess[]; conns: Array<{ close(): void }>;
@@ -65,6 +80,8 @@ type World = {
 	idleMs?: number;
 	/** Answers by key (look/act/wait with a `key`), so a repeated call is not carried out twice. */
 	done: Map<string, Promise<Record<string, unknown>>>;
+	/** The world's definition, and every cell the figure went over (its start first). */
+	w: WorldDef; trail: Step[];
 };
 /** The most keyed answers a world keeps. */
 const MAX_KEYS = 5000;
@@ -127,7 +144,7 @@ async function openWorld(w: WorldDef, owner: Socket | null, spec: OpenSpec = {})
 		if (spec.setup) await setUp(w, ws.space, spec.setup);
 		await toSpawn(w, ws.space, me.charId, spec.start);
 		const ch = await character(ws.space, me.charId);
-		return { id: randomBytes(6).toString("hex"), dir, procs, conns, space: ws.space, charId: me.charId, name: ch.name, waited: 0, touched: Date.now(), owner, done: new Map() };
+		return { id: randomBytes(6).toString("hex"), dir, procs, conns, space: ws.space, charId: me.charId, name: ch.name, waited: 0, touched: Date.now(), owner, done: new Map(), w, trail: [[ch.room, ch.x, ch.y]] };
 	} catch (e) {
 		for (const c of conns) c.close();
 		await Promise.all(procs.map(stop));
@@ -238,6 +255,7 @@ export async function act(x: World, line: string): Promise<{ said: string[]; at:
 		if (!(await peek(x.space, { type: "Intent", fields: { intentId: intent.intentId } }))) break;
 	}
 	const after = await character(x.space, x.charId);
+	await walked(x, before, after);
 	const rooms = new Set([before.room, after.room]);
 	const msgs = [
 		...(await all<MsgFields>(x.space, "Msg", { to: x.charId })),
@@ -245,6 +263,61 @@ export async function act(x: World, line: string): Promise<{ said: string[]; at:
 	].filter((m) => m.at >= t0).sort((a, b) => a.at - b.at);
 	const text = (m: MsgFields) => (m.actor ? render(m.text, { viewer: x.charId, actor: m.actor, actorName: m.from }) : m.text);
 	return { said: [...new Set(msgs.map(text))].slice(0, 20), at: { room: after.room, x: after.x, y: after.y } };
+}
+
+/** The cells from `before` to `after` onto the world's trail: a step in the room the shortest walk around its fires
+ *  (as `move` checks it), a change of room the walk to the exit that leads there and the cell it arrives on. */
+async function walked(x: World, before: { room: string; x: number; y: number }, after: { room: string; x: number; y: number }): Promise<void> {
+	if (before.room === after.room && before.x === after.x && before.y === after.y) return;
+	const rooms = x.w.allRooms ?? x.w.rooms, roomOf = (id: string) => rooms.find((r) => r.roomId === id);
+	const walk = async (room: string, from: { x: number; y: number }, to: { x: number; y: number }) => {
+		const r = roomOf(room), there: Step = [room, to.x, to.y];
+		if (!r) return [there];
+		const cells = findPath(x.w, r.ground, from, to, 400, await blockedIn(x.space, x.w, room)) ?? findPath(x.w, r.ground, from, to, 400);
+		return cells ? cells.map((c): Step => [room, c.x, c.y]) : [there];
+	};
+	const add = (steps: Step[]) => {
+		for (const s of steps) {
+			const last = x.trail.at(-1);
+			if (last && last[0] === s[0] && last[1] === s[1] && last[2] === s[2]) continue;
+			if (x.trail.length >= MAX_TRAIL) return;
+			x.trail.push(s);
+		}
+	};
+	if (before.room === after.room) return add(await walk(before.room, before, after));
+	const exit = x.w.exits.find((e) => e.room === before.room && e.destination === after.room);
+	if (exit) add(await walk(before.room, before, exit));
+	add([[after.room, after.x, after.y]]);
+}
+
+/** The trail as `path` gives it: the start, every cell where the room or the direction changes, the last one; at most
+ *  PATH_STEPS (every n-th and the last when there are more). */
+export function pathOf(trail: Step[], max = PATH_STEPS): { path: Step[]; cut: boolean } {
+	const turns: Step[] = [];
+	for (let i = 0; i < trail.length; i++) {
+		const s = trail[i]!, prev = trail[i - 1], next = trail[i + 1];
+		if (!prev || !next || prev[0] !== s[0] || next[0] !== s[0] || next[1] - s[1] !== s[1] - prev[1] || next[2] - s[2] !== s[2] - prev[2]) turns.push(s);
+	}
+	if (turns.length <= max) return { path: turns, cut: false };
+	const n = Math.ceil((turns.length - 1) / (max - 1)), out: Step[] = [];
+	for (let i = 0; i < turns.length - 1; i += n) out.push(turns[i]!);
+	out.push(turns.at(-1)!);
+	return { path: out, cut: true };
+}
+
+/** One room's geometry for the page that draws the paths (codemode-chat imports nothing from here). */
+export function roomMap(w: WorldDef, id: string) {
+	const r = (w.allRooms ?? w.rooms).find((x) => x.roomId === id);
+	if (!r) throw new Error(`no room ${id}`);
+	const keys = new Set(r.ground.join(""));
+	const out = {
+		world: w.id, room: r.roomId, name: r.name, ...(r.island ? { island: r.island } : {}), ...(r.map ? { map: r.map } : {}),
+		ground: r.ground, ...(r.decor ? { decor: r.decor } : {}),
+		walk: Object.fromEntries([...keys].sort().map((k) => [k, !!w.tiles[k]?.walk])),
+		exits: w.exits.filter((e) => e.room === r.roomId).map((e) => ({ name: e.name, x: e.x, y: e.y, to: e.destination })),
+		fires: w.beacons.filter((b) => b.room === r.roomId).map((b) => ({ beaconId: b.beaconId, x: b.x, y: b.y })),
+	};
+	return { ...out, rev: createHash("sha256").update(JSON.stringify(out)).digest("hex").slice(0, 16) };
 }
 
 export async function wait(x: World, minutes: number): Promise<{ time: string }> {
@@ -315,6 +388,7 @@ export async function startArena(o: { listen?: string; worlds?: number; /** test
 				return { world: x.id, charId: x.charId, name: x.name };
 			} finally { starting--; if (worlds.size + starting < max) free(); }
 		}
+		if (r.op === "map") return roomMap(w, String(r.room ?? ""));
 		const x = worlds.get(String(r.world));
 		if (!x) throw new Error("no such world");
 		x.touched = Date.now();
@@ -332,6 +406,7 @@ export async function startArena(o: { listen?: string; worlds?: number; /** test
 			case "act": return await once(() => act(x, String(r.line ?? "")));
 			case "wait": return await once(() => wait(x, Number(r.minutes)));
 			case "score": return await score(x, String(r.goal ?? ""), Number(r.hold ?? 0));
+			case "path": return pathOf(x.trail);
 			case "close": await close(x.id); return {};
 			default: throw new Error(`unknown op ${String(r.op)}`);
 		}

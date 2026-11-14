@@ -19,7 +19,11 @@ export type BotCell = { room: string; x: number; y: number };
 export type BotEpisode = { id: string; kind: "sample" | "holdout"; start?: BotCell; setup?: { clear?: string[]; items?: Array<{ proto: string } & BotCell> }; text: { de: string; en: string } };
 /** What a verdict keeps of one episode: reached per seed, the points of its runs; `skipped`: the hidden ones did not run
  *  because no sample episode was reached. Only sample episodes keep the arena's detail. */
-export type EpisodeResult = { id: string; kind: "sample" | "holdout"; reached: boolean[]; cost: number; skipped?: true; detail?: string };
+export type EpisodeResult = { id: string; kind: "sample" | "holdout"; reached: boolean[]; cost: number; skipped?: true; detail?: string; /** a sample episode's way (its first seed), from the arena's `path`; the judge host stores it as a BotEpisode entry, not in the verdict */ path?: PathStep[]; cut?: true };
+/** One step of a path: the room and the cell where the figure changed room or direction (the arena's `path`). */
+export type PathStep = [room: string, x: number, y: number];
+/** A room's geometry as the arena's `map` gives it, for the page that draws paths (BotRoom entries). */
+export type RoomMap = { world: string; room: string; name: string; island?: string; map?: { x: number; y: number }; ground: string[]; decor?: string[]; walk: Record<string, boolean>; exits: Array<{ name: string; x: number; y: number; to: string }>; fires: Array<{ beaconId: string; x: number; y: number }>; rev: string };
 
 export type BotSpec = {
 	/** What the arena checks at the end, e.g. "beacon:feuer-bucht". */

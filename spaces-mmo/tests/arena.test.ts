@@ -7,7 +7,7 @@ import { connect, type Socket } from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startArena } from "../server/arena.ts";
+import { pathOf, startArena } from "../server/arena.ts";
 import { loadWorld } from "../server/engine/world.ts";
 
 /** A client of the arena: one request at a time, answers by id. */
@@ -160,10 +160,40 @@ test("an episode: the guest starts where it says, the setup lays out the driftwo
 		assert.equal(gone.done, false, gone.detail);
 		assert.match(gone.detail, /not held 15 world minutes/);
 		assert.equal((await c.ask("score", { world, goal: "beacon:feuer-bucht", hold: 500 })).ok, false);
+		// the way it went: the start, the turns, the room it crossed into (a straight walk west is one step)
+		assert.deepEqual((await c.ask("path", { world })).path, [["graue-bucht", 14, 9], ["graue-bucht", 9, 9]]);
+		await c.ask("act", { world, line: "move 23 8" });
+		const p = await c.ask("path", { world });
+		assert.equal(p.cut, false);
+		assert.deepEqual(p.path.slice(0, 2), [["graue-bucht", 14, 9], ["graue-bucht", 9, 9]]);
+		assert.deepEqual(p.path.slice(-2), [["graue-bucht", 23, 8], ["klippenpfad", 1, 8]], "to the exit's cell, then where it arrives");
+		for (const [a, b] of p.path.slice(1, -1).map((s: any, i: number) => [p.path[i], s])) assert.ok(a[1] === b[1] || a[2] === b[2], `${a} → ${b} is a straight run`);
+		// a room's geometry needs no world
+		const m = await c.ask("map", { room: "graue-bucht" });
+		assert.equal(m.ok, true, m.error);
+		assert.equal(m.world, "leuchtfeuer");
+		assert.equal(m.ground.length, 16);
+		assert.equal(m.walk["~"], false);
+		assert.deepEqual(m.fires, [{ beaconId: "feuer-bucht", x: 9, y: 10 }]);
+		assert.deepEqual(m.exits.find((e: any) => e.to === "klippenpfad"), { name: "ost", x: 23, y: 8, to: "klippenpfad" });
+		assert.deepEqual(m.map, { x: 1, y: 1 });
+		assert.match(m.rev, /^[0-9a-f]{16}$/);
+		assert.equal((await c.ask("map", { room: "nowhere" })).ok, false);
 		await c.ask("close", { world });
 		await c.end();
 	} finally {
 		await arena.close();
 		rmSync(dir, { recursive: true, force: true });
 	}
+});
+
+test("a long way is cut to PATH_STEPS: every n-th turn and the last", () => {
+	const trail: Array<[string, number, number]> = [];
+	for (let i = 0; i < 500; i++) trail.push(["r", i, i % 2]); // a zigzag: every cell a turn
+	const p = pathOf(trail, 200);
+	assert.equal(p.cut, true);
+	assert.ok(p.path.length <= 200, String(p.path.length));
+	assert.deepEqual(p.path[0], ["r", 0, 0]);
+	assert.deepEqual(p.path.at(-1), ["r", 499, 1]);
+	assert.deepEqual(pathOf([["r", 1, 1], ["r", 2, 1], ["r", 3, 1], ["s", 1, 1]]), { path: [["r", 1, 1], ["r", 3, 1], ["s", 1, 1]], cut: false });
 });

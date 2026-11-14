@@ -2,6 +2,7 @@
 // toy Graue Insel instead of a world (no import of spaces-mmo): the island's rooms and exits (server/island.ts), two
 // pieces of driftwood in the Graue Bucht, one fire there; `move`, an exit's name (`süd`, `go süd`), `nimm treibholz`,
 // `lege holz ins feuer`; `open` takes an episode's start and setup, `score` a hold. A fed fire burns 10 world minutes.
+// `path` gives the cells after each command (no walk in between), `map` a toy room: sand, one row of sea, the exits.
 // Its own test (spaces-mmo/tests/arena.test.ts) holds the real one.
 import { createServer, type Socket } from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -10,16 +11,18 @@ import { join } from "node:path";
 import { ISLAND_ROOMS } from "../server/island.ts";
 
 type Cell = { room: string; x: number; y: number };
-type Toy = { at: Cell; wood: Cell[]; pack: number; fedAt: number | null; fed: boolean; pieces: number; waited: number; done: Map<string, Record<string, unknown>> };
+type Toy = { at: Cell; wood: Cell[]; pack: number; fedAt: number | null; fed: boolean; pieces: number; waited: number; done: Map<string, Record<string, unknown>>; trail: Array<[string, number, number]> };
 const FIRE = { room: "graue-bucht", x: 9, y: 10 };
 /** A fed fire burns this many world minutes after its last piece. */
 const BURN = 10;
+/** Where the island's rooms sit on the atlas (as in Leuchtfeuer). */
+const TOY_ATLAS: Record<string, { x: number; y: number }> = { fischerdorf: { x: 0, y: 1 }, "graue-bucht": { x: 1, y: 1 }, klippenpfad: { x: 2, y: 1 }, klippenkopf: { x: 3, y: 1 }, torfmoor: { x: 0, y: 2 }, duenen: { x: 1, y: 2 }, salzwiesen: { x: 2, y: 2 }, anleger: { x: 1, y: 3 } };
 const litAt = (t: Toy, minute: number) => t.fedAt !== null && minute < t.fedAt + BURN;
 
 export async function startFakeArena(o: { openMs?: number; /** the arena goes away at the first act */ dropOnAct?: boolean; /** each look/act/wait takes this long */ opMs?: number } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), "fake-arena-")), path = join(dir, "arena.sock");
 	const worlds = new Map<string, Toy>();
-	let n = 0, opened = 0, acts = 0, idleMs: number | null = null, lastOpen: Record<string, unknown> | null = null;
+	let n = 0, opened = 0, acts = 0, maps = 0, paths = 0, idleMs: number | null = null, lastOpen: Record<string, unknown> | null = null;
 	/** The tide: every 60 waited minutes a piece of driftwood at the next of these places. */
 	const TIDE = [{ x: 6, y: 9 }, { x: 15, y: 11 }, { x: 4, y: 8 }, { x: 18, y: 10 }].map((c) => ({ room: "graue-bucht", ...c }));
 	const act = (t: Toy, line: string): string[] => {
@@ -47,9 +50,17 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 			const start = r.start as Cell | undefined, setup = r.setup as { clear?: string[]; items?: Cell[] } | undefined;
 			const wood: Cell[] = setup?.clear?.includes("treibholz") ? [] : [{ room: "graue-bucht", x: 5, y: 7 }, { room: "graue-bucht", x: 17, y: 9 }];
 			for (const i of setup?.items ?? []) wood.push({ room: i.room, x: i.x, y: i.y });
-			worlds.set(id, { at: start ? { room: start.room, x: start.x, y: start.y } : { room: "graue-bucht", x: 12, y: 8 }, wood, pack: 0, fedAt: null, fed: false, pieces: 0, waited: 0, done: new Map() });
+			const at = start ? { room: start.room, x: start.x, y: start.y } : { room: "graue-bucht", x: 12, y: 8 };
+			worlds.set(id, { at, wood, pack: 0, fedAt: null, fed: false, pieces: 0, waited: 0, done: new Map(), trail: [[at.room, at.x, at.y]] });
 			lastOpen = r;
 			return { world: id, charId: `c-${id}`, name: "Strandläufer-1" };
+		}
+		if (r.op === "map") {
+			const room = String(r.room), def = ISLAND_ROOMS[room];
+			if (!def) throw new Error(`no room ${room}`);
+			maps++;
+			const exits = Object.entries(def.exits).map(([name, to]) => ({ name, x: 12, y: 0, to }));
+			return { world: "toy", room, name: def.name, island: "Graue Insel", map: TOY_ATLAS[room] ?? { x: 0, y: 0 }, ground: ["~".repeat(24), ...Array.from({ length: 15 }, () => ".".repeat(24))], walk: { "~": false, ".": true }, exits, fires: room === FIRE.room ? [{ beaconId: "feuer-bucht", x: FIRE.x, y: FIRE.y }] : [], rev: "toy0000000000000" };
 		}
 		const t = worlds.get(String(r.world));
 		if (!t) throw new Error("no such world");
@@ -69,7 +80,13 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 				const room = t.at.room;
 				return { room: { id: room, name: ISLAND_ROOMS[room]?.name ?? room }, at: { x: t.at.x, y: t.at.y }, exits: Object.keys(ISLAND_ROOMS[room]?.exits ?? {}).map((name) => ({ name, x: 12, y: 0 })), things: t.wood.filter((w) => w.room === room).map((w) => ({ name: "Treibholz", x: w.x, y: w.y })), fires: room === FIRE.room ? [{ name: "Leuchtfeuer", x: FIRE.x, y: FIRE.y, lit: litAt(t, t.waited) }] : [], pack: t.pack ? [{ name: "Treibholz", count: t.pack }] : [], time: `Tag 1, 08:${String(t.waited).padStart(2, "0")}` };
 			}
-			case "act": acts++; return { said: act(t, String(r.line ?? "").trim()), at: { ...t.at } };
+			case "act": {
+				acts++;
+				const said = act(t, String(r.line ?? "").trim()), last = t.trail.at(-1)!;
+				if (last[0] !== t.at.room || last[1] !== t.at.x || last[2] !== t.at.y) t.trail.push([t.at.room, t.at.x, t.at.y]);
+				return { said, at: { ...t.at } };
+			}
+			case "path": paths++; return { path: t.trail.slice(0, 200), cut: t.trail.length > 200 };
 			case "wait": {
 				const m = Number(r.minutes); if (!(m >= 1 && m <= 120)) throw new Error("wait takes 1 to 120 minutes");
 				if (t.waited + m > 1440) throw new Error("a bot may wait at most 1440 world minutes in all");
@@ -111,6 +128,8 @@ export async function startFakeArena(o: { openMs?: number; /** the arena goes aw
 		opened: () => opened, open: () => worlds.size,
 		/** The last `open` request (its start, setup and seed). */
 		lastOpen: () => lastOpen,
+		/** How often `map` and `path` were asked. */
+		maps: () => maps, paths: () => paths,
 		/** Commands carried out (a keyed one answered from memory does not count). */
 		acts: () => acts,
 		/** The idle time the last kept world was opened with. */
