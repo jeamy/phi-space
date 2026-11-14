@@ -7,7 +7,7 @@
 import { connect, type Socket } from "node:net";
 import type { Meter } from "./tooltask.ts";
 import type { Subgoal } from "./subgoals.ts";
-import type { TideSeen } from "./toyisland.ts";
+import type { ChanceSeen, TideSeen } from "./toyisland.ts";
 
 export type BotTool = "look" | "act" | "wait" | "recall" | "subgoals" | "observations";
 export const BOT_COST: Record<BotTool, number> = { look: 1, act: 1, wait: 1, recall: 1, subgoals: 0, observations: 1 };
@@ -18,10 +18,10 @@ export const MAX_BOT_CALLS = 300;
 export type BotCell = { room: string; x: number; y: number };
 /** One episode of a planning task (docs/codemode-planung.en.md): where the figure starts and what lies where. A sample
  *  episode is in the prompt and its verdict says what happened; of a hidden one the verdict says only reached or not. */
-export type BotEpisode = { id: string; kind: "sample" | "holdout"; /** a task on toy islands (`BotSpec.toy`): the made island "Neuland n" (toyisland.ts genIsland), none for the Graue Insel */ island?: number; start?: BotCell; setup?: { clear?: string[]; items?: Array<{ proto: string } & BotCell> }; text: { de: string; en: string } };
+export type BotEpisode = { id: string; kind: "sample" | "holdout"; /** a task on toy islands (`BotSpec.toy`): the made island "Neuland n" (toyisland.ts genIsland), none for the Graue Insel */ island?: number; start?: BotCell; setup?: { clear?: string[]; items?: Array<{ proto: string } & BotCell> }; text: { de: string; en: string } ; /** a task that scores the mean (`BotSpec.mean`, step 8): the pieces the bot must put into the fire on average over the seeds */ target?: number };
 /** What a verdict keeps of one episode: reached per seed, the points of its runs; `skipped`: the hidden ones did not run
  *  because no sample episode was reached. Only sample episodes keep the arena's detail. */
-export type EpisodeResult = { id: string; kind: "sample" | "holdout"; reached: boolean[]; cost: number; skipped?: true; detail?: string; /** a sample episode's way (its first seed), from the arena's `path`; the judge host stores it as a BotEpisode entry, not in the verdict */ path?: PathStep[]; cut?: true; /** the jumps between remembered paths its recall answers took (memory view) */ links?: Array<[PathStep, PathStep]>; /** a sample episode of a contribution with subgoals: how many of them its first seed reached, in turn */ subgoals?: number; /** and the cells where (BotEpisode entries, not the verdict) */ subgoalAt?: PathStep[]; /** a sample episode of a task with observations: the tide's landings in its worlds (PlanMemory entries, not the verdict) */ tides?: TideSeen[] };
+export type EpisodeResult = { id: string; kind: "sample" | "holdout"; reached: boolean[]; cost: number; skipped?: true; detail?: string; /** a sample episode's way (its first seed), from the arena's `path`; the judge host stores it as a BotEpisode entry, not in the verdict */ path?: PathStep[]; cut?: true; /** the jumps between remembered paths its recall answers took (memory view) */ links?: Array<[PathStep, PathStep]>; /** a sample episode of a contribution with subgoals: how many of them its first seed reached, in turn */ subgoals?: number; /** and the cells where (BotEpisode entries, not the verdict) */ subgoalAt?: PathStep[]; /** a sample episode of a task with observations: the tide's landings in its worlds (PlanMemory entries, not the verdict) */ tides?: TideSeen[] ; /** a task that scores the mean (step 8): the pieces in the fire per seed, their mean and the episode's target */ counts?: number[]; mean?: number; target?: number; /** a sample episode of such a task with observations: the judge's log of each seed's day of the chance tide */ days?: ChanceSeen[] };
 /** One step of a path: the room and the cell where the figure changed room or direction (the arena's `path`). */
 export type PathStep = [room: string, x: number, y: number];
 /** A room's geometry as the arena's `map` gives it, for the page that draws paths (BotRoom entries). */
@@ -49,7 +49,12 @@ export type BotSpec = {
 	toy?: true;
 	/** Toy islands under TIDE_RULES (toyisland.ts, step 7): exits take time, the tide follows a law the prompt does not
 	 *  tell, washed-up wood goes back. */
-	toyRules?: "tide";
+	toyRules?: "tide" | "chance";
+	/** How many seeds every episode runs with (default: seedsOf below). */
+	seeds?: number;
+	/** The verdict asks the mean, not every seed (step 8): an episode counts when the pieces the bot put into the fire,
+	 *  averaged over its seeds, reach the episode's `target`. The goal must be a `feed:` goal (the arena counts). */
+	mean?: true;
 	/** Observations (step 7): the judge logs every landing of the tide in the sample episodes into the block's memory
 	 *  (PlanMemory, goal "tide"), frozen per generation like the paths; a bot reads them with `observations()`. Needs
 	 *  `memory`; such a task has no `recall`. */
@@ -58,7 +63,7 @@ export type BotSpec = {
 
 /** How many seeds an episode runs with: one when the bot cannot wait (the world is then the same for every seed), three
  *  when it can (chance comes only after a wait; docs/codemode-planung.en.md, values). */
-export const seedsOf = (b: BotSpec): number => (b.noWait ? 1 : 3);
+export const seedsOf = (b: BotSpec): number => b.seeds ?? (b.noWait ? 1 : 3);
 /** The seed of run `s` (0-based) of episode `i`: fixed, so every judge plays the same worlds. */
 export const episodeSeed = (i: number, s: number): number => 1000 * (i + 1) + s;
 /** The tools a bot of this task has. */
@@ -141,7 +146,12 @@ const DESCRIPTIONS: Record<BotTool, { de: string; en: string }> = {
 	},
 };
 
-export const describeBotTools = (lang: "de" | "en", b?: BotSpec): string => botToolNames(b).map((n) => `- tools.${n}(args): ${DESCRIPTIONS[n][lang]}`).join("\n");
+/** `observations` of a task under the chance tide (step 8): one entry per observed day, not per landing. */
+const CHANCE_OBSERVATIONS = {
+	de: "was frühere Generationen beobachtet haben: jeder Tag der Flut in den gezeigten Episoden, eingefroren, wenn die Generation dieses Beitrags begann: {} → { observations: Array<{ island, seed, minutes, rooms: Array<{ room, exits, fromFire, pieces: Array<{ minute, x, y }> }> }> } (ein Eintrag je Insel und Seed; minutes: die Minuten seit Beginn, zu denen die Flut kam; rooms: jeder Raum der Insel mit seinen Ausgängen, den Ausgängen zwischen ihm und dem Raum des Feuers und den Stücken, die dort angeschwemmt wurden: wann und wo). In der ersten Generation leer. 1 Punkt.",
+	en: "what earlier generations observed: every day of the tide in the shown episodes, frozen when this contribution's generation began: {} → { observations: Array<{ island, seed, minutes, rooms: Array<{ room, exits, fromFire, pieces: Array<{ minute, x, y }> }> }> } (one entry per island and seed; minutes: the world minutes since the start at which the tide came; rooms: every room of the island with its exits, the exits between it and the fire's room, and the pieces washed up there: when and where). Empty in the first generation. 1 point.",
+};
+export const describeBotTools = (lang: "de" | "en", b?: BotSpec): string => botToolNames(b).map((n) => `- tools.${n}(args): ${n === "observations" && b?.toyRules === "chance" ? CHANCE_OBSERVATIONS[lang] : DESCRIPTIONS[n][lang]}`).join("\n");
 
 /** The tools of one world; every call is counted on `m`, and a call beyond MAX_BOT_CALLS throws. */
 export const botArg = (a: unknown): Record<string, unknown> => (a && typeof a === "object" ? (a as Record<string, unknown>) : {});

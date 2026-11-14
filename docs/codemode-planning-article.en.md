@@ -57,7 +57,7 @@ are built from what it sees and from the frozen observations; its goal is a pred
 |---|---|---|
 | Encoder: pixels → embedding | `look()` returns symbols already | Different: no perception is learned |
 | Predictor: (state, action) → next state, a neural net trained on demonstrations | The bot's map: "room A, exit ost → room B", built during one episode. Since step 7 also a model of the tide, fitted to observations | Same role. Different form: code and data, exact where the rules are exact, fitted where they are hidden |
-| Planner: CEM or MPC over hundreds of rolled-out sequences | Breadth-first route over the map, timing against the clock, calibration on the first piece seen | Same role. Simpler, because the model is exact |
+| Planner: CEM or MPC over hundreds of rolled-out sequences | Breadth-first route over the map, timing against the clock, calibration on the first piece seen; since step 8 a search over rounds by their expected pieces | Same role. Simpler, because the model is small and its odds are known once estimated |
 | Goal: an image of the target state | A predicate the world checks (`beacon:island` held 5 minutes, `feed:island:3`) | The post's own advice: score what matters |
 | Horizon as the limit; subgoals | Goals several rooms away; subgoals as data in a plan (step 4) | Carried over |
 | Memory graph with a jump cost | `recall` over the frozen paths of earlier generations, a jump between paths costing 10 cells (step 3) | Carried over |
@@ -121,6 +121,7 @@ scripted variants' results, judged as in the tests.
 | 5. Rate planners | 7d50eea | A harness task: agents write `rate()`, which must rank good island bots above bad ones; played on a toy copy of the island in the judge | Two correct harnesses; four blind ones, each misranking exactly the bot of its lesson |
 | 6. New worlds | e44f11d | Islands made from a number; the toy arena in the judge; the task "New islands" without a map; "Rate planners" on made islands | Mapless explorer 9/9 (163), the Graue Insel's map 0/9, the shown islands by heart 3/9; real arena: the mapless explorer 9/9 (111) |
 | 7. The tide | 2412979 | A hidden law of the tide; walking takes time; observations logged into the memory and frozen; the task "Learn the tide" | The law in code 9/9 (2253); the learner 9/9 with observations, 6/9 without; no model 6/9 (4603); without calibration 0/9; by room ids 3/9 |
+| 8. Odds of the tide | (this commit) | Each dead end draws a piece every hour by odds that grow with its distance from the fire; the verdict asks the mean over 8 seeds against a target per episode; one observation per observed day, every room with its pieces; the task "Odds of the tide" | The law in code and the learner with observations 9/9; counts instead of rates 2/9; the most likely place 0/9; every dead end every hour 2/9; step 7's law 0/9; by room ids 3/9; the learner without observations 1/9 |
 
 ### The detours worth telling
 
@@ -172,6 +173,92 @@ falls back to searching.
 - A model that is learned and one that is written are equally good. The law written by hand (9/9, 2253 points) and the
   law fitted to the data (9/9, 2280 points) differ by the one `observations()` call per run.
 
+## Step 8 in detail: odds, not a law
+
+**What changes from step 7.** In step 7 the tide was a law: who knew it knew where every piece would land. In step 8
+only the odds follow a law. Every hour at half past, each dead end draws for itself. It gets a piece with odds 0.15 for
+each exit between it and the fire, at most 0.9. The prompt names the hours, not the odds.
+
+**What a plan must reckon with.** A piece lies 30 minutes and an exit takes 5. In one hour a bot reaches only the dead
+ends at most 5 exits apart. The expected pieces of such a round are the sum of their odds. The most likely dead end
+is the farthest from the fire and often far from the others too. Two nearer ones together are worth more. "Where is a
+piece most likely?" and "which round brings the most pieces?" are different questions, and the task asks the second.
+
+**What is judged.** The mean over 8 seeds, not "every seed". What a good round brings varies from 2.6 to 10.5 pieces
+on the candidate islands, so each episode has its own target: 90 % of what the law bot brings there on average. The
+law bot passes by construction; the learner and the wrong bots are the informative rows. The draws are a hash of island, seed,
+hour and room, so every bot meets the same pieces.
+
+**What the data must contain.** One observation per observed day: the hours the tide came and every room of the island
+with its exits, its distance from the fire and the pieces it got. Rooms that got nothing are in it too, because
+estimating odds needs the chances as well as the hits.
+
+**What the variants show.** The six hidden islands were chosen with the wrong bots' results in view, so that each
+fails at least once; over all 97 candidates that are not shown, the share below the target is given in brackets.
+- **Rates, not counts.** The shown islands have many dead ends at distance 2, two at 4, none at 3. A bot that counts
+  landings per distance thinks 2 is better than 4 and has no number for 3, 5 or 6. It passes the two shown islands
+  where that does not matter and none of the hidden ones. The learner divides by the chances, fits a slope, and its
+  law carries to distances it never saw: 9/9 (counts below target on 64 % of the candidates, the learner on none).
+- **The expected count, not the most likely place.** Waiting every hour at the dead end with the best odds brings a
+  third to two thirds of what the law bot's round brings: 0/9 (82 %).
+- **Within the time the piece lies.** Visiting every dead end every hour is too slow wherever they lie far apart: 2/9
+  (34 %).
+- **Data, then a model.** Without observations the learner does not even know that only dead ends get pieces: 1/9.
+  With them, 9/9. Over all candidates the gap is smaller (27 % below target without observations): on many islands a
+  round over all rooms happens to cover the good dead ends.
+
+**Where it stands against the post.** LeWM's planner rolls its learned predictor out over many sampled action
+sequences and keeps the best. Here the predictor is the estimated odds, and the planner searches the rounds of one
+hour exactly. That is possible because the model is small. The point the post makes about a world model holds here
+too: what is learned is how the world behaves, here how likely it is, and the plan is made against that model, not
+against the data directly.
+
+## A run with model agents on "Learn the tide" (2026-11-14)
+
+**Setup.** One run, so n = 1:
+- 3 agents, all `anthropic/claude-haiku-5-5`, 5 generations at most, 2 improvement rounds, 1 $ cap;
+- no scripted agents, because their variants include the law in code, which would solve the task in generation 1;
+- one model call per contribution, judged as usual (`CODEMODE_DURABLE_AGENT=0`, see the detours below);
+- the prompt names `observations()`, its fields and its cost, and states no law.
+
+**Result.** Not solved: 15 contributions, all 0 of 9, 86,733 tokens, 0.017 $.
+
+| Generation | What failed |
+|---|---|
+| 1 | Two waited past the 480-minute day; one went over the 300 tool calls (1954 looks). |
+| 2–3 | The same limits, with the looks cut from about 1000 to about 300. |
+| 4–5 | Every bot within the limits, every one with 0 of 3 pieces in the fire. |
+
+**What the team learned, by its notes:**
+- the rules of the game (one look per decision, exits and waits share the day, stop near 455 minutes);
+- not the law.
+
+**Where the observations came in:**
+- Generation 1's bots waited past minute 30, so the judge logged landings, and generation 2 had observations.
+- One note of generation 1 says the right thing ("cluster landing rooms by fromFire/exit distance to predict where to
+  wait"), but no later bot does it.
+- Three of the 15 bots called `observations()` (one in generation 1, where it is empty, and two later), and none fitted
+  anything to the result. Generations 4 and 5 no longer called it.
+
+**Why, as far as one run shows.** A model sees its team's attempts as code, failures and points. It never sees what
+`observations()` returned. To read the law off the data, it would have to write a bot that fits hypotheses at run time
+(the scripted learner does), without having seen a single observation. The JEPA model in the post sees its
+demonstrations; these agents see only their effect.
+
+**Next experiment.** Show the frozen observations in the prompt as well, as data the agent reads before it writes. That
+separates "can the model see the law in the data" from "can it write a bot that finds the law blind".
+
+**Detours of this run:**
+- **The model list outgrew its entry.** With every provider's catalog (about 500 models) the model process's
+  ModelInfo entry was 65,550 bytes, over the space's 64 KiB, so the page saw no models. It now carries the admin list
+  packed (provider, id, name when it differs), about 32 KB.
+- **The scripted stand-in.** A model call that fails (Mistral answered 429 for codestral) is replaced by a scripted
+  agent. For a measurement that is a contamination, so the first run, with codestral and haiku, was stopped after a
+  generation.
+- **The durable agent path ran out of requests.** By default a model contribution gets 4 requests of 1500 tokens
+  and tests itself with `verify_code`. On this task the bot never passes, the fourth request ends in "Agent model request
+  budget exhausted", no code is handed in, and the scripted agent stands in. The measured run used the plain path.
+
 ## Figures
 
 The diagrams are hand-drawn SVG that follow the reader's light or dark theme. The screenshots come from a local run
@@ -203,10 +290,21 @@ the cards: the explorer reaches 9/9 (163 points), the walker without a memory 5/
   (2280 points). The page counts a contribution handed in by hand as generation 0, so it is the top row of the
   matrix.*
 
+![Odds of the tide](img/codemode-planung/step8-odds.jpg)
+
+*Figure 7 (step 8), "Odds of the tide". In this task a cell shows the mean number of pieces over the 8 seeds; green
+where it reaches the episode's target. The detail line below says the mean, the seeds and the target.*
+- *Generation 1: the law in code reaches every target.*
+- *Generation 2: the observed room ids. They reach the three shown islands and bring nothing on the hidden ones.*
+- *Generation 3: the law again, from another agent.*
+- *Generation 0 (top row): the learner, handed in afterwards. It estimated the odds from the 24 days the run had
+  logged and reached every target (7714 points).*
+
 ## Open
 
-- A run with model agents on "Learn the tide": do they read the law off the observations, and how many generations
-  does it take? It costs tokens and needs a decision.
+- Model agents with the observations in their prompt (see the run of 2026-11-14), and with a stronger model than haiku.
+- The durable agent path on a task its own check never passes: hand in the last code instead of failing.
 - Goals as sets ("any fire of the island burns") and goals against the usual direction. The post leaves both open too.
-- Chance a bot must reason about, not only calibrate: a tide whose landing is a distribution, and a bot that plans for
-  the expected number of pieces.
+- Risk beyond the mean: a target that also bounds the bad days (a quantile, not only the mean), so a plan must weigh
+  variance as well.
+- Model agents on "Odds of the tide": the observations are 24 days of every room, enough to read the slope off.

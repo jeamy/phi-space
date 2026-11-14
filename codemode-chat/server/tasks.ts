@@ -7,6 +7,8 @@ import { TOY_FIRE } from "./toyisland.ts";
 import { ANLEGER_EPISODES, ANLEGER_FIRE, ANLEGER_PLANS, ANLEGER_VARIANTS, episodeList, PLANNER_HARNESS, PLANNER_RATERS, ISLAND_EPISODES, ISLAND_MAP, ISLAND_MEMORY_VARIANTS, ISLAND_VARIANTS, searchBot } from "./island.ts";
 import { NEULAND_EPISODES, neulandVariants } from "./neuland.ts";
 import { TIDE_EPISODES, TIDE_VARIANTS } from "./tides.ts";
+import { CHANCE_EPISODES, CHANCE_SEEDS, CHANCE_VARIANTS } from "./chance.ts";
+import type { BotEpisode } from "./bottask.ts";
 import { checkSpec, dataToolSpec, describeDataTools, type DataItem, type DataSpec } from "./datatask.ts";
 import { describeTools, FRUSTRATION, MAX_CALLS, PI_SOURCE, PI_WINDOWS, PI_WINDOWS_BUGS, type ToolSpec } from "./tooltask.ts";
 
@@ -218,6 +220,34 @@ function tideTask(): Task {
 	};
 }
 
+/** Odds of the tide (docs/codemode-planung.en.md, step 8): made islands under CHANCE_RULES, a tide whose landings are
+ *  chance, by odds the prompt does not tell. An episode counts by the mean over CHANCE_SEEDS seeds against its target;
+ *  the judge logs each shown day of the tide as an observation. */
+export function chanceTask(episodes: BotEpisode[] = CHANCE_EPISODES): Task {
+	const spec = { goal: "", goalText: { de: "", en: "" }, memory: true as const, observe: true as const, toyRules: "chance" as const };
+	const shown = episodes.filter((e) => e.kind === "sample").length, hidden = episodes.length - shown;
+	return {
+		id: "tide-odds", fn: "bot", kind: "bot", timeoutMs: 10_000, run: { agents: 3, gens: 5, per: 1, polish: 2 },
+		bot: {
+			goal: "feed:island:1", toy: true, toyRules: "chance", memory: true, observe: true, mean: true, seeds: CHANCE_SEEDS,
+			goalText: { de: "im Mittel über die Seeds mindestens so viele Stück Treibholz im Leuchtfeuer der Insel wie das Ziel der Episode", en: "on average over the seeds at least the episode's target of driftwood pieces in the island's beacon" },
+			episodes,
+		},
+		title: { de: "Die Chancen der Flut: Zufall, mit dem ein Plan rechnen muss (erzeugte Welten, Erwartungswert)", en: "Odds of the tide: chance a plan must reckon with (made worlds, expected value)" },
+		prompt: {
+			de: `Aufgabe: Schreibe async function bot(). Der Bot spielt eine Figur auf einer Insel, die er nicht kennt, und soll an einem Tag so viel Treibholz wie möglich ins Leuchtfeuer der Insel legen.\n\nDie Inseln: wie bei „Neue Inseln“ aus einer Zahl erzeugt, 5 bis 8 Räume, Ausgänge nord, ost, süd, west (wer durch „ost“ geht, kommt durch „west“ zurück), ein Leuchtfeuer, keine Karte. Zu Beginn liegt kein Treibholz auf der Insel.\n\nDie Flut: Sie kommt jede Stunde um halb (8:30, 9:30, …, 15:30). Wo sie ein Stück anspült, ist Zufall: Jede Stelle, an die sie überhaupt etwas spült, würfelt für sich, mit Chancen, die einem Gesetz folgen; das Gesetz ist auf jeder Insel dasselbe, der Seed entscheidet die Würfe. Ein angeschwemmtes Stück liegt 30 Weltminuten, dann holt das Meer es zurück. Der Bot kann beliebig viele Stücke tragen.\n\nBeobachtungen: Der Richter schreibt jeden Tag der Flut in den gezeigten Episoden ins Gedächtnis des Blocks: je Seed jeden Raum der Insel mit den Stücken, die er bekam. tools.observations gibt sie; in der ersten Generation ist es leer. Die verdeckten Episoden liegen auf Inseln, die keine gezeigte betritt.\n\nEpisoden: ${shown} siehst du:\n${episodeList(episodes, "de")}\n${hidden} weitere sind verdeckt. Jede Episode läuft mit ${CHANCE_SEEDS} Seeds; sie zählt, wenn der Bot im Mittel über die Seeds mindestens ihr Ziel an Stücken ins Feuer gelegt hat. Das Ziel einer Episode ist 90 % dessen, was ein Vergleichsplan auf dieser Insel im Mittel holt (in jeder Stunde die Runde mit den meisten erwarteten Stücken); die verdeckten haben ihres ebenso.\n\nWelt: Die Weltzeit läuft nur, wenn der Bot wartet (tools.wait) oder durch einen Ausgang geht: ein Ausgang kostet 5 Weltminuten, „move x y“ im Raum nichts. Nach 480 Minuten ist der Tag um. Befehle: "ost" durch den Ausgang, "move x y", "nimm treibholz" wo es liegt, "lege holz ins feuer" direkt neben dem Feuer (ein Stück je Befehl). tools.look zeigt die Uhrzeit (time, ab 08:00).\n\nPunkte: Jeder Tool-Aufruf kostet einen Punkt (höchstens ${MAX_BOT_CALLS} je Lauf). Am besten ist ein Bot, der jede Episode erreicht; unter ihnen gewinnt der mit den wenigsten Punkten.\n\nBewertung: Am Ende jedes Laufs zählt der Richter die Stücke, die der Bot ins Feuer gelegt hat. Rückgabewert egal.\n\nTools:\n${describeBotTools("de", spec)}`,
+			en: `Task: write async function bot(). The bot plays a figure on an island it does not know and is to put as much driftwood as it can into the island's beacon in one day.\n\nThe islands: made from a number as in "New islands", 5 to 8 rooms, exits nord, ost, süd, west (who goes through "ost" comes back through "west"), one Leuchtfeuer, no map. At first no driftwood lies on the island.\n\nThe tide: it comes every hour at half past (8:30, 9:30, …, 15:30). Where it washes a piece up is chance: every place it washes anything up to draws for itself, with odds that follow a law; the law is the same on every island, the seed decides the draws. A washed-up piece lies 30 world minutes, then the sea takes it back. The bot can carry any number of pieces.\n\nObservations: the judge writes every day of the tide in the shown episodes into the block's memory: per seed every room of the island with the pieces it got. tools.observations gives them; in the first generation it is empty. The hidden episodes lie on islands no shown one enters.\n\nEpisodes: you see ${shown}:\n${episodeList(episodes, "en")}\n${hidden} more are hidden. Every episode runs with ${CHANCE_SEEDS} seeds; it counts when the bot put at least its target of pieces into the fire on average over the seeds. An episode's target is 90 % of what a reference plan brings on that island on average (every hour the round with the most expected pieces); the hidden ones have theirs too.\n\nWorld: world time passes only when the bot waits (tools.wait) or goes through an exit: an exit takes 5 world minutes, "move x y" within a room nothing. After 480 minutes the day is over. Commands: "ost" through the exit, "move x y", "nimm treibholz" where it lies, "lege holz ins feuer" right next to the fire (one piece per command). tools.look shows the time (time, from 08:00).\n\nPoints: every tool call costs one point (at most ${MAX_BOT_CALLS} per run). Best is a bot that reaches every episode; among those the one with the fewest points wins.\n\nScoring: at the end of every run the judge counts the pieces the bot put into the fire. The return value does not matter.\n\nTools:\n${describeBotTools("en", spec)}`,
+		},
+		about: {
+			de: "So läuft es: Zufall, mit dem ein Plan rechnen muss (docs/codemode-planung.en.md, Schritt 8). Jede Sackgasse einer Insel bekommt zur halben Stunde ein Stück oder nicht, mit einer Chance, die mit ihrem Abstand zum Feuer wächst; kein Prompt nennt sie. Ein Stück liegt 30 Minuten, also erreicht ein Bot in einer Stunde nur wenige Sackgassen: Am besten ist die Runde mit den meisten erwarteten Stücken, nicht die wahrscheinlichste Stelle. Gewertet wird der Mittelwert über 8 Seeds gegen ein Ziel: 90 % dessen, was der Vergleichsplan (das Gesetz in Code) auf der Insel holt. Der Richter protokolliert jeden gezeigten Tag (jeder Raum, mit seinen Stücken) als Beobachtung; ein Bot kann die Chancen daraus schätzen: Treffer durch Gelegenheiten, nicht Treffer allein.\n\nKI-Modelle: Für die Bewertung braucht es keine.\n\n▶ Ausführen: läuft für Bots nicht. Bewertet wird nur beim Einreichen.",
+			en: "How it runs: chance a plan must reckon with (docs/codemode-planung.en.md, step 8). Every dead end of an island gets a piece at half past or not, with odds that grow with its distance from the fire; no prompt names them. A piece lies 30 minutes, so a bot reaches only a few dead ends in an hour: best is the round with the most expected pieces, not the most likely place. The verdict is the mean over 8 seeds against a target: 90 % of what the reference plan (the law in code) brings on the island. The judge logs every shown day (every room, with its pieces) as an observation; a bot may estimate the odds from them: hits over chances, not hits alone.\n\nAI models: the scoring needs none.\n\n▶ Run: does not run bots. Bots are judged only when handed in.",
+		},
+		cases: [],
+		bench: "",
+		variants: CHANCE_VARIANTS,
+	};
+}
+
 /** Rate planners (docs/codemode-planung.en.md, step 5): a harness task whose implementations are island bots, played on
  *  the toy island in the judge (toyisland.ts). The post's evaluation lessons as a task: fresh episodes, several seeds,
  *  a goal that must hold. */
@@ -409,6 +439,7 @@ export const TASKS: Task[] = [
 	anlegerTask(),
 	neulandTask(),
 	tideTask(),
+	chanceTask(),
 	{
 		id: "beacon-flut", fn: "bot", kind: "bot", durable: true, timeoutMs: 180_000, run: { agents: 2, gens: 3, per: 1, polish: 0 },
 		bot: { goal: "feed:feuer-bucht:6", goalText: { de: "6 Stück Treibholz im Leuchtfeuer der Grauen Bucht, vom Bot hineingelegt", en: "6 pieces of driftwood put into the beacon of the Graue Bucht by the bot" } },

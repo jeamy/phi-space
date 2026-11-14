@@ -10,11 +10,12 @@ import { covers, JUMP_CELLS, recall, type MemoryPath } from "../server/memory.ts
 import { proposePrompt, teamPrompt } from "../server/llm.ts";
 import { checkSubgoals, extractSubgoals, subgoalText } from "../server/subgoals.ts";
 import { laneOf } from "../server/room.ts";
-import { offeredTasks, taskById, TASKS } from "../server/tasks.ts";
+import { offeredTasks, portableTask, restoreTask, taskById, TASKS } from "../server/tasks.ts";
 import { ISLAND_ROOMS } from "../server/island.ts";
 import { ArenaDown, MAX_BOT_CALLS } from "../server/bottask.ts";
 import { toyArena } from "../server/toyarena.ts";
-import { deadEnds, genIsland, TIDE_RULES, tideLanding, ToyIsland } from "../server/toyisland.ts";
+import { CHANCE_MINUTES, CHANCE_RULES, chanceDay, chanceLands, chanceOf, deadEnds, fromFire, genIsland, TIDE_RULES, tideLanding, ToyIsland, type ChanceSeen, type TideSeen } from "../server/toyisland.ts";
+import { CHANCE_HIDDEN, CHANCE_SAMPLES, CHANCE_SEEDS } from "../server/chance.ts";
 import { TIDE_HIDDEN, TIDE_SAMPLES } from "../server/tides.ts";
 import { NEULAND_HIDDEN, NEULAND_SAMPLES } from "../server/neuland.ts";
 import { execute } from "../server/runner.ts";
@@ -74,7 +75,7 @@ test("bot tasks: their own lane, offered only with an arena, the prompt names th
 	assert.equal(laneOf("frustration"), "code");
 	assert.equal(laneOf("custom"), "code");
 	process.env.CODEMODE_ARENA = "";
-	assert.deepEqual(offeredTasks().filter((x) => x.kind === "bot").map((x) => x.id), ["beacon-neuland", "tide-law"], "no arena: only the bot tasks on made islands, which the judge plays itself");
+	assert.deepEqual(offeredTasks().filter((x) => x.kind === "bot").map((x) => x.id), ["beacon-neuland", "tide-law", "tide-odds"], "no arena: only the bot tasks on made islands, which the judge plays itself");
 	process.env.CODEMODE_ARENA = "unix:/nowhere";
 	try { assert.equal(offeredTasks().some((x) => x.id === "beacon-bucht"), true); } finally { process.env.CODEMODE_ARENA = ""; }
 	const p = teamPrompt({ task, lang: "en", agent: 0, gen: 1 }).user;
@@ -602,7 +603,7 @@ t("learn the tide: the law in code reaches all; without calibration, without a m
 	// the law bot's verdict logs the shown episodes' landings: observations, every seed, never a hidden episode
 	const obs = memoryEntries(law!, tide.bot!.goal, true);
 	assert.ok(obs.length >= 9, String(obs.length));
-	assert.ok(obs.every((o) => o.goal === "tide" && o.obs!.exits.length === 1 && TIDE_SAMPLES.map((n) => `n${n}`).includes(o.obs!.island)));
+	assert.ok(obs.every((o) => o.goal === "tide" && (o.obs as TideSeen).exits.length === 1 && TIDE_SAMPLES.map((n) => `n${n}`).includes(o.obs!.island)));
 	assert.equal(JSON.stringify(verdictFields(law!)).includes("tides"), false, "the verdict entry carries no observations");
 	const memory = obs.map((o) => ({ ...o, gen: 1, author: "law" }));
 	const [learner, replay] = await Promise.all([tLearner, tReplay].map((v) => judge(cm!, tide, v!, { memory })));
@@ -631,6 +632,91 @@ t("learn the tide on a server: a verdict's observations go into the block's memo
 		const seen = await srv.stack.space.count({ type: "PlanMemory", fields: { goal: "tide" } });
 		assert.ok(seen >= 9, `${seen} observations`);
 		assert.equal((await post("/api/sessions/tide1/code", { author: "lerner-2", source: tLearner })).status, 200);
+		const b = await done(2);
+		const by = Object.fromEntries(b.contributions.map((c: any) => [c.author, c]));
+		assert.equal(by["lerner-2"].ok, true, by["lerner-2"].error);
+	} finally { await srv.close(); }
+});
+
+// ---- step 8: odds of the tide (server/chance.ts) ------------------------------------------------------------------
+const odds = taskById("tide-odds")!;
+const [oLearner, oLaw, oCounts, oMode, oSweep, oRotation, oReplay] = odds.variants;
+
+test("the chance tide: every dead end draws for itself at half past, by odds that grow with its distance from the fire; the same draws in every judge", () => {
+	for (const [n] of [...CHANCE_SAMPLES, ...CHANCE_HIDDEN]) {
+		const w = genIsland(n), d = deadEnds(w);
+		assert.ok(d.length >= 2, `${n}`);
+		for (const r of Object.keys(w.rooms)) assert.equal(chanceOf(w, r), d.includes(r) ? Math.min(0.9, 0.15 * fromFire(w, r)) : 0, `${n} ${r}`);
+	}
+	// the durable path hands the task on as JSON: the mean, the seeds and the targets come through
+	assert.deepEqual(restoreTask(JSON.parse(JSON.stringify(portableTask(odds)))).bot, odds.bot);
+	// the draws are a pure function of island, seed, minute and room, and their rate is the odds
+	const w = genIsland(CHANCE_HIDDEN[2]![0]), d = deadEnds(w);
+	assert.deepEqual(chanceLands(w, 7, 3, d[0]!), chanceLands(w, 7, 3, d[0]!));
+	for (const r of d) {
+		let hits = 0;
+		for (let seed = 0; seed < 300; seed++) for (let j = 0; j < CHANCE_MINUTES.length; j++) if (chanceLands(w, seed, j, r)) hits++;
+		assert.ok(Math.abs(hits / (300 * CHANCE_MINUTES.length) - chanceOf(w, r)) < 0.04, `${r}: ${hits}`);
+	}
+	// in a world: at 8:30 the pieces of that minute lie 3 cells in from the exit, at 9:00 the sea took them back
+	const seed = [...Array(50).keys()].find((s) => d.some((r) => chanceLands(w, s, 0, r)))!;
+	const t = new ToyIsland(w.episode.start, [], seed, w, CHANCE_RULES);
+	t.wait(30);
+	const want = d.flatMap((r) => { const l = chanceLands(w, seed, 0, r); return l ? [[r, l.x, l.y]] : []; });
+	assert.deepEqual(t.wood.map((x) => [x.room, x.x, x.y]).sort(), want.sort());
+	t.wait(30);
+	assert.deepEqual(t.wood, [], "after 30 minutes the sea takes them back");
+	// the judge's log of a day: every room of the island, the pieces each got
+	const day = chanceDay(w, seed);
+	assert.deepEqual(day.minutes, CHANCE_MINUTES);
+	assert.equal(day.rooms.length, Object.keys(w.rooms).length);
+	assert.ok(day.rooms.every((r) => r.pieces.length === CHANCE_MINUTES.filter((_, j) => chanceLands(w, seed, j, r.room)).length));
+	assert.ok(day.rooms.filter((r) => !d.includes(r.room)).every((r) => r.pieces.length === 0));
+});
+
+t("odds of the tide: the law in code reaches the target everywhere; the learner with observations too; counts, the most likely place, the sweep, step 7's law and room ids not", async () => {
+	process.env.CODEMODE_ARENA = "";
+	assert.equal(laneOf("tide-odds"), "code");
+	const [law, blind, mode, sweep, rotation] = await Promise.all([oLaw, oLearner, oMode, oSweep, oRotation].map((v) => judge(cm!, odds, v!)));
+	assert.equal(law!.ok, true, law!.error ?? "");
+	assert.deepEqual([law!.passed, law!.total], [9, 9]);
+	// the verdict asks the mean over the seeds, against each episode's target
+	assert.ok(law!.episodes!.every((e) => e.counts!.length === CHANCE_SEEDS && e.mean! >= e.target! && e.reached.every(Boolean)));
+	assert.equal(blind!.ok, false, "the learner without observations knows no odds");
+	for (const [name, v] of [["mode", mode], ["sweep", sweep], ["rotation", rotation]] as const) assert.ok(v!.score! < 1, `${name}: ${v!.passed}/9`);
+	// the law bot's verdict logs each shown day of the tide: one observation per island and seed, none of a hidden one
+	const obs = memoryEntries(law!, odds.bot!.goal, true);
+	assert.equal(obs.length, CHANCE_SAMPLES.length * CHANCE_SEEDS);
+	assert.ok(obs.every((o) => o.goal === "tide" && CHANCE_SAMPLES.map(([n]) => `n${n}`).includes((o.obs as ChanceSeen).island) && (o.obs as ChanceSeen).rooms.length >= 5));
+	assert.equal(JSON.stringify(verdictFields(law!)).includes("\"days\""), false, "the verdict entry carries no observations");
+	const memory = obs.map((o) => ({ ...o, gen: 1, author: "law" }));
+	const [learner, counts, replay] = await Promise.all([oLearner, oCounts, oReplay].map((v) => judge(cm!, odds, v!, { memory })));
+	assert.equal(learner!.ok, true, learner!.error ?? "");
+	assert.ok(counts!.score! < 1, `counts: ${counts!.passed}/9`);
+	assert.equal(replay!.score, 0, "room ids carry to no other island");
+});
+
+t("odds of the tide on a server: each shown day goes into the block's memory, a later learner reads them from its freeze", async () => {
+	process.env.CODEMODE_ARENA = "";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [{ host: "plain-1" }] });
+	try {
+		const post = (path: string, body: unknown) => fetch(srv.url + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+		const done = async (n: number) => {
+			for (const end = Date.now() + 180_000; ;) {
+				const s = await (await fetch(srv.url + "/api/sessions/odds1")).json() as any;
+				const snap = { ...s, ...(s.blocks.find((b: any) => b.blockId === s.current) ?? {}) };
+				if (snap.contributions?.length === n && snap.contributions.every((c: any) => c.ok !== null)) return snap;
+				if (Date.now() > end) throw new Error(`timeout: ${JSON.stringify(snap.contributions)}`);
+				await new Promise((r) => setTimeout(r, 200));
+			}
+		};
+		assert.equal((await post("/api/sessions/odds1/task", { taskId: "tide-odds" })).status, 200);
+		assert.equal((await post("/api/sessions/odds1/code", { author: "lerner-1", source: oLearner })).status, 200);
+		const a = await done(1);
+		assert.equal(a.contributions[0].ok, false, "nothing observed yet: the learner knows no odds");
+		const seen = await srv.stack.space.count({ type: "PlanMemory", fields: { goal: "tide" } });
+		assert.equal(seen, CHANCE_SAMPLES.length * CHANCE_SEEDS);
+		assert.equal((await post("/api/sessions/odds1/code", { author: "lerner-2", source: oLearner })).status, 200);
 		const b = await done(2);
 		const by = Object.fromEntries(b.contributions.map((c: any) => [c.author, c]));
 		assert.equal(by["lerner-2"].ok, true, by["lerner-2"].error);

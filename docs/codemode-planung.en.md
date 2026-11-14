@@ -401,6 +401,64 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      tests do not learn; they are fixed hypotheses. Model agents could do the second, but that costs tokens and has not
      been run.
 
+8. **Chance a plan must reckon with (odds of the tide).**
+
+   *Done 2026-11-14* (`tide-odds`, `codemode-chat/server/chance.ts`, the odds in `toyisland.ts`). Step 7's tide was
+   a law: once calibrated, a bot knew where every piece would land. Here, where a piece lands is chance. A bot has to
+   estimate the odds from data and plan for the expected number of pieces, not for the most likely place.
+   - **The odds.** Every hour at half past (8:30 to 15:30) each dead end of the island draws for itself. It gets a
+     piece with odds 0.15 for each exit between it and the fire's room, at most 0.9; other rooms get nothing. The
+     piece lands 3 cells in from the exit and lies 30 minutes. A draw is a pure function of island, seed, minute and
+     room (`chanceLands`, a hash, not a generator a bot could advance), so every bot meets the same pieces and a verdict
+     can be repeated.
+   - **The rules** (`CHANCE_RULES`): as step 7's (an exit takes 5 minutes, the day ends after 480), with the tide
+     above. The bot carries any number of pieces and puts them into the fire one per command.
+   - **Why a round, not a place.** A piece lies 30 minutes and an exit takes 5, so in one hour a bot reaches the dead
+     ends that lie at most 5 exits apart. The expected pieces of a round are the sum of the odds of its dead ends. The
+     most likely dead end is often far from the others, and a round of two nearer ones brings more.
+   - **The verdict asks the mean** (`BotSpec.mean`, `seeds: 8`, 10 s per run). Every episode runs with 8 seeds; the arena's `score`
+     says how many pieces went into the fire (`count`). An episode counts when the mean reaches its `target`. The
+     target is 90 % of the law bot's mean on that island, rounded down to an eighth, because the haul of a good round
+     differs from island to island (2.6 to 10.5 pieces on the candidates). The prompt says that, and shows the shown
+     episodes' targets. The seeds of a mean task come from the island, not the episode's place in the list, so an
+     island is the same 8 days wherever it stands.
+   - **Observations.** In every sample episode, all 8 seeds, the judge logs the whole day of the tide: the minutes it
+     came and every room of the island with its exits, its distance from the fire and its pieces (minute and cell).
+     That is one `PlanMemory` entry per island and seed (24), not one per landing. Every room is logged, not only the
+     ones that got pieces, because a rate needs its denominator. `observations()` returns them; the verdict entry
+     carries none.
+   - **The islands** (chosen by running every bot on the 100 islands from 34 to 160 with two dead ends or more):
+     - Shown are Neuland 36, 154 and 77. Their dead ends lie 1, 2 and 4 exits from the fire, many at 2 and none at 3.
+       Counting landings therefore misleads, and only a rate per chance carries to distances never shown.
+     - With these observations the learner reached the target on all 100 islands.
+     - The hidden islands are 40, 60, 78, 151, 38 and 47. They were chosen with the wrong bots' results in view: greedily,
+       so that every wrong bot fails at least once and the most wrong bots fail on each. Steps 6 and 7 did not choose
+       that way. The table below therefore shows the selection as much as the bots; the column "Of 97" is the
+       unselected figure.
+   - **The variants**:
+
+     | Variant | Counted | Points | Of 97: below the target |
+     |---|---|---|---|
+     | The law in code: explores, then every hour the round with the most expected pieces (dead ends at most 5 exits apart, valued by their odds) | 9/9 (by construction: the targets are 90 % of its own means) | 7627 | 0 |
+     | The learner: estimates hits over chances per kind of room from the observations, picks the better of two laws (the same odds everywhere, or odds that grow with the distance, fitted by their slope), then plays the law bot's round | 9/9 with observations (7714); 1/9 without (it takes every room alike) | | 0 with observations; 26 (27 %) without |
+     | Counts instead of rates: values a distance by its landings, not by how often it got one | 2/9 (the shown islands 36 and 154) | | 62 (64 %) |
+     | The most likely dead end, every hour | 0/9 | | 80 (82 %) |
+     | Every dead end every hour, in the order of their names | 2/9 | | 33 (34 %) |
+     | Step 7's law: one dead end an hour, in turn | 0/9 | | 96 (99 %) |
+     | The observed rooms by their id | 3/9 (the shown islands only) | | 97 (100 %) |
+
+     The last column is over the 97 candidate islands that are not shown, with the same 24 observations. The
+     informative rows are the learner and the wrong bots; the law bot defines the targets. Without observations the
+     learner still reaches the target on 73 % of the candidates: on many islands a round over all rooms happens to
+     cover the good dead ends.
+
+     The law bot's means against the targets: 5.5/4.875, 4.75/4.25 and 7.125/6.375 on the shown islands; 5.5/4.875,
+     4.625/4.125, 8.5/7.625, 9.375/8.375, 7.5/6.75 and 9.5/8.5 on the hidden ones. The bot that waits at the most
+     likely place reaches between a third and two thirds of that.
+
+     On a server the learner fails while the memory is empty, and passes once a verdict's 24 days are in it
+     (`tests/bots.test.ts`).
+
 ## Tests
 
 - `spaces-mmo/tests/arena.test.ts`: `start`, `seed`, `setup`, `map`, `hold`; the same seed gives the same world after
@@ -418,8 +476,8 @@ A clickable mockup of the views, with example data on the real map of the Graue 
 | Point | Value | Why |
 |---|---|---|
 | Episodes per task | 3 sample + 6 hidden | Three visible ones are enough to work on a path; six hidden ones make learning by heart expensive. The hidden ones run only when at least one sample episode was reached. |
-| Seeds per episode | 1 without `wait`, 3 with `wait` | See the judge above. |
-| Worlds per contribution | at most 9 or 27 | Episodes times seeds, fewer when the sample fails. Every one is an arena world of its own. |
+| Seeds per episode | 1 without `wait`, 3 with `wait`; 8 for a task that scores the mean (step 8) | See the judge above; a mean over 3 seeds says more about luck than about the bot. |
+| Worlds per contribution | at most 9 or 27; 72 for a mean task | Episodes times seeds, fewer when the sample fails. Every one is an arena world of its own (a toy world in the judge for the made islands). |
 | Arena worlds at a time | 2, later 4 | `SPACES_MMO_ARENA_WORLDS`; raised only after the memory of one arena world is measured. |
 | Time limit | 60 s per episode (30 s for the island bot) | As for the beacon bot today. The judge's lease must cover all episodes of a contribution. |
 | `hold` | 5 world minutes | A piece of driftwood burns 10 world minutes (`fire.fuel` in world.json); 5 check that the goal holds without asking for a second piece. The judge waits with the episode's fixed seed. |
@@ -430,4 +488,4 @@ A clickable mockup of the views, with example data on the real map of the Graue 
 | Path in `BotEpisode` | at most 200 steps | Only room and direction changes. |
 | Retention | with the block (step 2), see there | Planned: best of each generation + newest 50. Step 2 keeps every sample path as long as its verdict, which the room cap already bounds. |
 
-Step 6 needs no learned model (see there). Step 7 learns one dynamic, the tide, as code and data. The account for an article is [codemode-planning-article.en.md](codemode-planning-article.en.md).
+Step 6 needs no learned model (see there). Step 7 learns one dynamic, the tide, as code and data. Step 8 learns odds and plans for the expected value. The account for an article is [codemode-planning-article.en.md](codemode-planning-article.en.md). A run with model agents on step 7 (2026-11-14, haiku, 5 generations): not solved, see the article.

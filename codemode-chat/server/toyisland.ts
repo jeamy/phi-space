@@ -132,8 +132,10 @@ export function toyRoomMap(room: string): RoomMap | null {
 /** The rules of a world that are not the default: crossing an exit takes `walk` world minutes, a washed-up piece lies
  *  `life` minutes before the sea takes it back, the day ends after `day` minutes, and the tide follows `tide`
  *  ("law": tideLanding below) instead of the island's plain tide. Without rules a world is as in steps 5 and 6. */
-export type ToyRules = { walk: number; life: number; day: number; tide: "law" };
+export type ToyRules = { walk: number; life: number; day: number; tide: "law" | "chance" };
 export const TIDE_RULES: ToyRules = { walk: 5, life: 30, day: 480, tide: "law" };
+/** Step 8: the same world, but the tide is chance (chanceLands below). */
+export const CHANCE_RULES: ToyRules = { walk: 5, life: 30, day: 480, tide: "chance" };
 /** The rooms with one exit, the fire's room left out, in the order of their number (`n4-2` before `n4-5`). */
 export function deadEnds(w: ToyWorld): string[] {
 	const k = (id: string) => Number(/-(\d+)$/.exec(id)?.[1] ?? 0);
@@ -148,6 +150,38 @@ export function tideLanding(w: ToyWorld, seed: number, j: number): (ToyCell & { 
 	if (!d.length) return null;
 	const room = d[j % d.length]!, exit = Object.keys(w.rooms[room]!.exits)[0]!;
 	return { room, ...inFrom(exit, 3), minute: 30 + 10 * (seed % 3) + 60 * j };
+}
+// ---- the chance tide of step 8: where is a matter of odds, the odds follow the island's shape --------------------------
+/** The minutes of the day the chance tide comes: every hour at half past (8:30 to 15:30). */
+export const CHANCE_MINUTES = [30, 90, 150, 210, 270, 330, 390, 450];
+/** The odds that a dead end gets a piece at one of those minutes: 0.15 for each exit between it and the fire's room,
+ *  at most 0.9. Every dead end draws for itself; other rooms get nothing. */
+export const chanceOf = (w: ToyWorld, room: string): number => (deadEnds(w).includes(room) ? Math.min(0.9, 0.15 * fromFire(w, room)) : 0);
+/** A number in [0, 1) that depends only on its text (FNV-1a, then a mixer): the tide's dice, the same in every judge. */
+export function dice(text: string): number {
+	let h = 2166136261;
+	for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+	h ^= h >>> 15; h = Math.imul(h, 2246822507); h ^= h >>> 13; h = Math.imul(h, 3266489909); h ^= h >>> 16;
+	return (h >>> 0) / 2 ** 32;
+}
+/** Whether the chance tide lands a piece in `room` at its `j`-th minute in the world of `seed`: a pure function of
+ *  island, seed, minute and room, so whatever a bot does, every bot meets the same pieces. The cell is 3 in from the exit. */
+export function chanceLands(w: ToyWorld, seed: number, j: number, room: string): (ToyCell & { minute: number }) | null {
+	if (j < 0 || j >= CHANCE_MINUTES.length || dice(`${w.id}/${seed}/${j}/${room}`) >= chanceOf(w, room)) return null;
+	return { room, ...inFrom(Object.keys(w.rooms[room]!.exits)[0]!, 3), minute: CHANCE_MINUTES[j]! };
+}
+/** What the judge logs of one day of the chance tide (step 8's data): the minutes it came, and per room of the island
+ *  its exits, its distance from the fire and the pieces it got (minute and cell). Every room, not only the dead ends:
+ *  the counts need their denominators. */
+export type ChanceSeen = { island: string; seed: number; minutes: number[]; rooms: Array<{ room: string; exits: string[]; fromFire: number; pieces: Array<{ minute: number; x: number; y: number }> }> };
+export function chanceDay(w: ToyWorld, seed: number): ChanceSeen {
+	return {
+		island: w.id, seed, minutes: [...CHANCE_MINUTES],
+		rooms: Object.keys(w.rooms).sort().map((room) => ({
+			room, exits: Object.keys(w.rooms[room]!.exits).sort(), fromFire: fromFire(w, room),
+			pieces: CHANCE_MINUTES.flatMap((_, j) => { const l = chanceLands(w, seed, j, room); return l ? [{ minute: l.minute, x: l.x, y: l.y }] : []; }),
+		})),
+	};
 }
 /** How many exits lie between a room and the fire's room. */
 export function fromFire(w: ToyWorld, room: string): number {
@@ -237,6 +271,12 @@ export class ToyIsland {
 		const from = this.waited, to = from + m;
 		if (!this.rules) {
 			for (let k = Math.floor(from / TIDE_MINUTES) + 1; k <= Math.floor(to / TIDE_MINUTES); k++) this.wood.push(this.world.tide(this.seed));
+		} else if (this.rules.tide === "chance") {
+			for (const [j, minute] of CHANCE_MINUTES.entries()) {
+				if (minute <= from || minute > to) continue;
+				for (const room of deadEnds(this.world)) { const l = chanceLands(this.world, this.seed, j, room); if (l) this.wood.push({ room, x: l.x, y: l.y, until: minute + this.rules.life }); }
+			}
+			this.wood = this.wood.filter((w) => w.until === undefined || w.until > to);
 		} else {
 			for (let j = 0; ; j++) {
 				const l = tideLanding(this.world, this.seed, j);

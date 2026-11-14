@@ -15,10 +15,10 @@
 import { createHash } from "node:crypto";
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import type { PathStep } from "./bottask.ts";
-import type { TideSeen } from "./toyisland.ts";
+import type { ChanceSeen, TideSeen } from "./toyisland.ts";
 
 /** One path of the memory, as the judge gets it from the freeze. */
-export type MemoryPath = { memoryId: string; gen: number; author: string; episode: string; goal: string; path: PathStep[]; /** an observation (goal "tide", step 7): what the judge logged of a landing */ obs?: TideSeen };
+export type MemoryPath = { memoryId: string; gen: number; author: string; episode: string; goal: string; path: PathStep[]; /** an observation (goal "tide"): what the judge logged of a landing (step 7) or of a day of the chance tide (step 8) */ obs?: TideSeen | ChanceSeen };
 export type Cell = { room: string; x: number; y: number };
 /** What `recall` answers: the steps to walk (the first is the remembered cell to go to), how far that cell is, how many
  *  jumps between paths the way takes, and where they are. */
@@ -120,7 +120,7 @@ export async function frozenMemory(space: Store, session: string, blockId: strin
 
 /** A verdict's reached sample paths into the block's memory (in the verdict's transaction): a path the block holds
  *  already is skipped, beyond MAX_MEMORY the oldest give way. */
-export async function remember(space: Store, txn: string, ttl: number, k: { session: string; blockId: string; candidateId: string; author: string; gen: number }, paths: Array<{ memoryId: string; episode: string; goal: string; path: PathStep[]; obs?: TideSeen }>): Promise<number> {
+export async function remember(space: Store, txn: string, ttl: number, k: { session: string; blockId: string; candidateId: string; author: string; gen: number }, paths: Array<{ memoryId: string; episode: string; goal: string; path: PathStep[]; obs?: TideSeen | ChanceSeen }>): Promise<number> {
 	let added = 0;
 	for (const p of paths) {
 		if (await space.readIfExists({ type: "PlanMemory", fields: { session: k.session, blockId: k.blockId, memoryId: p.memoryId } }, NO_WAIT, { txn })) continue;
