@@ -143,6 +143,9 @@ export async function interiorSweep(space: SpaceLike, w: WorldDef | undefined, i
 
 /** Whether the actor may go into `b`: its owner, and whom the owner invited. */
 export const mayEnter = (c: CommandCtx, b: BuildingFields) => (!!c.account && !c.account.guest && b.accountId === c.account.accountId) || !!b.guests?.some((g) => g.charId === c.actor.charId);
+/** Whether the building's name is neuter (das Backhaus, das Gewächshaus: its plan's dative "einem …"), so the sentences
+ *  say „ins“, „dein“, „vor dem“, „neben ihm“ instead of „in die“, „deine“, „vor der“, „neben ihr“. */
+const neuter = (c: CommandCtx, b: BuildingFields) => /^einem\b/.test(planOf(c.world, b.plan)?.dative ?? "");
 const isOwner = (c: CommandCtx, b: BuildingFields) => !!c.account && !c.account.guest && b.accountId === c.account.accountId;
 
 /** The buildings that count as beside the actor: outside those it stands beside; inside, its building when it stands
@@ -191,7 +194,7 @@ const betrete: Command = {
 		const at = await placeIn(c, room, room.spawn ?? planOf(c.world, b.plan)!.interior!.spawn);
 		await relocate(c, { room: roomId, x: at.x, y: at.y }, { spot: false });
 		await dropOffers(c);
-		await msg(c, "*", "info", `$you() $conj(gehst|geht) in die ${b.name} von ${b.ownerName}.`, { templ: true });
+		await msg(c, "*", "info", neuter(c, b) ? `$you() $conj(gehst|geht) ins ${b.name} von ${b.ownerName}.` : `$you() $conj(gehst|geht) in die ${b.name} von ${b.ownerName}.`, { templ: true });
 		await msg(c, "*", "info", `$you() $conj(kommst|kommt) herein.`, { templ: true, room: roomId });
 		await msg(c, c.actor.charId, "look", made ? `${made.name}\n${made.desc}` : await describeRoom(c, roomId, true), { room: roomId });
 	},
@@ -217,7 +220,7 @@ const einladen: Command = {
 		const n = arg.trim().replace(/\s+ein$/i, "");
 		if (!n) {
 			await c.space.write({ type: "Building", fields: b as never }, c.txn, FOREVER);
-			return msg(c, c.actor.charId, "info", b.guests?.length ? `In deine ${b.name} dürfen: ${b.guests.map((g) => g.name).join(", ")}. „ausladen <name>“ nimmt es zurück.` : `In deine ${b.name} hast du niemanden eingeladen. „einladen <name>“ lädt jemanden ein.`);
+			return msg(c, c.actor.charId, "info", b.guests?.length ? (neuter(c, b) ? `In dein ${b.name} dürfen: ${b.guests.map((g) => g.name).join(", ")}. „ausladen <name>“ nimmt es zurück.` : `In deine ${b.name} dürfen: ${b.guests.map((g) => g.name).join(", ")}. „ausladen <name>“ nimmt es zurück.`) : neuter(c, b) ? `In dein ${b.name} hast du niemanden eingeladen. „einladen <name>“ lädt jemanden ein.` : `In deine ${b.name} hast du niemanden eingeladen. „einladen <name>“ lädt jemanden ein.`);
 		}
 		const who = (await c.space.readAll({ type: "Character" })).map((e) => fieldsOf<CharacterFields>(e)).find((ch) => ch.name.toLowerCase() === n.toLowerCase());
 		if (!who) throw new CommandError(`Eine Figur „${n.slice(0, 30)}“ gibt es hier nicht.`);
@@ -225,8 +228,8 @@ const einladen: Command = {
 		if (b.guests?.some((g) => g.charId === who.charId)) throw new CommandError(`${who.name} ist schon eingeladen.`);
 		if ((b.guests?.length ?? 0) >= GUESTS_MAX) throw new CommandError(`Mehr als ${GUESTS_MAX} Gäste lädt man nicht ein; „ausladen <name>“ macht Platz.`);
 		await c.space.write({ type: "Building", fields: { ...b, guests: [...b.guests ?? [], { charId: who.charId, name: who.name }] } as never }, c.txn, FOREVER);
-		await msg(c, c.actor.charId, "info", `${who.name} darf jetzt in deine ${b.name}.`);
-		await msg(c, who.charId, "info", `${c.actor.name} lädt dich in die ${b.name} ein („betrete“ neben ihr).`, { room: who.room });
+		await msg(c, c.actor.charId, "info", neuter(c, b) ? `${who.name} darf jetzt in dein ${b.name}.` : `${who.name} darf jetzt in deine ${b.name}.`);
+		await msg(c, who.charId, "info", neuter(c, b) ? `${c.actor.name} lädt dich ins ${b.name} ein („betrete“ neben ihm).` : `${c.actor.name} lädt dich in die ${b.name} ein („betrete“ neben ihr).`, { room: who.room });
 	},
 };
 const GUESTS_MAX = 12;
@@ -251,12 +254,12 @@ const ausladen: Command = {
 			if (t && front) {
 				await releaseSpot(c.space, c.txn, g.charId);
 				await c.space.write({ type: t.type, types: t.types.slice(1), fields: { ...t.fields, room: b.room, ...front } as never }, c.txn, FOREVER);
-				await msg(c, g.charId, "info", `${c.actor.name} hat dich ausgeladen; du stehst vor der ${b.name}.`, { room: b.room });
+				await msg(c, g.charId, "info", neuter(c, b) ? `${c.actor.name} hat dich ausgeladen; du stehst vor dem ${b.name}.` : `${c.actor.name} hat dich ausgeladen; du stehst vor der ${b.name}.`, { room: b.room });
 				await wakeOutside(c.space, c.txn, g.charId, b.room);
 			}
 		}
-		await msg(c, c.actor.charId, "info", `${g.name} darf nicht mehr in deine ${b.name}.`);
-		await msg(c, g.charId, "info", `${c.actor.name} hat die Einladung in die ${b.name} zurückgenommen.`);
+		await msg(c, c.actor.charId, "info", neuter(c, b) ? `${g.name} darf nicht mehr in dein ${b.name}.` : `${g.name} darf nicht mehr in deine ${b.name}.`);
+		await msg(c, g.charId, "info", neuter(c, b) ? `${c.actor.name} hat die Einladung ins ${b.name} zurückgenommen.` : `${c.actor.name} hat die Einladung in die ${b.name} zurückgenommen.`);
 	},
 };
 

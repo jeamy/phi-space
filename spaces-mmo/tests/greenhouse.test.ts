@@ -93,7 +93,8 @@ test("inside a greenhouse: its three beds, planted by the owner and its guest, h
 		assert.equal((await s.readAll({ type: "Item", fields: { location: me, proto: "kohl" } })).length >= 1, true);
 
 		// an invited guest plants flowers in the community bed, not in the owner's beds
-		await does(host, "einladen Besucher", "darf jetzt");
+		await does(host, "einladen Besucher", "Besucher darf jetzt in dein Gewächshaus.");
+		await guest.until((f) => f.t === "msg" && f.m.text.includes("lädt dich ins Gewächshaus ein („betrete“ neben ihm)"), 10_000);
 		guest.send(`move ${c.x} ${c.y}`);
 		await eventually(async () => { const f = await charOf(s, other); return f.room === c.room && Math.abs(f.x - c.x) <= 1 && Math.abs(f.y - c.y) <= 1 ? f : null; }, 10_000, "the guest beside the greenhouse");
 		await does(guest, "betrete", "Du kommst herein");

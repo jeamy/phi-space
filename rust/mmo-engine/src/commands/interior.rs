@@ -240,6 +240,14 @@ pub async fn near_buildings(c: &Ctx, use_: Option<&str>) -> Result<Vec<Json>> {
 	Ok(vec![fields(&b).clone()])
 }
 /// `furnishingFor`: inside a building, its furnishing for `use`.
+/// `neuter`: whether the building's name is neuter (its plan's dative "einem …": das Backhaus, das Gewächshaus), and the
+/// words the sentences then take: „ins“ / „in die“, „dein“ / „deine“, „vor dem“ / „vor der“, „neben ihm“ / „neben ihr“.
+struct Words { into: &'static str, yours: &'static str, before: &'static str, beside: &'static str }
+fn words_for(c: &Ctx, b: &Json) -> Words {
+	let n = plan_of(c.w(), j::s(b, "plan")).and_then(|p| j::opt(p, "dative")).and_then(Json::as_str).is_some_and(|d| js::re(r"^einem\b", "").test(d));
+	if n { Words { into: "ins", yours: "dein", before: "vor dem", beside: "ihm" } } else { Words { into: "in die", yours: "deine", before: "vor der", beside: "ihr" } }
+}
+
 pub async fn furnishing_for(c: &Ctx, use_: &str) -> Result<Option<Json>> {
 	if !is_interior(c.room()) { return Ok(None); }
 	Ok(c.space.read_all(&tmpl("Scenery", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).find(|s| j::s(s, "use") == use_))
@@ -275,7 +283,8 @@ async fn betrete(c: &mut Ctx, arg: &str) -> Result<()> {
 	let at = place_in(c, &room, xy(&spawn), true, &[]).await?;
 	relocate(c, &room_id, at, false, None).await?;
 	drop_offers(c).await?;
-	msg(c, "*", "info", &format!("$you() $conj(gehst|geht) in die {} von {}.", txt(j::at(&b, "name")), txt(j::at(&b, "ownerName"))), templ(None)).await?;
+	let into = words_for(c, &b).into;
+	msg(c, "*", "info", &format!("$you() $conj(gehst|geht) {into} {} von {}.", txt(j::at(&b, "name")), txt(j::at(&b, "ownerName"))), templ(None)).await?;
 	msg(c, "*", "info", "$you() $conj(kommst|kommt) herein.", templ(Some(&room_id))).await?;
 	let look = match &made { Some(m) => format!("{}\n{}", txt(j::at(m, "name")), txt(j::at(m, "desc"))), None => describe_room(c, &room_id, true).await? };
 	let me = c.char_id().to_owned();
@@ -306,7 +315,8 @@ async fn einladen(c: &mut Ctx, arg: &str) -> Result<()> {
 	let guests = j::a(&b, "guests").to_vec();
 	if n.is_empty() {
 		c.space.write(&tmpl("Building", b.clone()), c.txn(), FOREVER).await?;
-		let text = if guests.is_empty() { format!("In deine {bname} hast du niemanden eingeladen. „einladen <name>“ lädt jemanden ein.") } else { format!("In deine {bname} dürfen: {}. „ausladen <name>“ nimmt es zurück.", guests.iter().map(|g| txt(j::at(g, "name"))).collect::<Vec<_>>().join(", ")) };
+		let yours = words_for(c, &b).yours;
+		let text = if guests.is_empty() { format!("In {yours} {bname} hast du niemanden eingeladen. „einladen <name>“ lädt jemanden ein.") } else { format!("In {yours} {bname} dürfen: {}. „ausladen <name>“ nimmt es zurück.", guests.iter().map(|g| txt(j::at(g, "name"))).collect::<Vec<_>>().join(", ")) };
 		return msg(c, &me, "info", &text, MsgOpts::default()).await;
 	}
 	let Some(who) = c.space.read_all(&obj! { "type" => "Character" }, None).await?.iter().map(|e| fields(e).clone()).find(|ch| txt(j::at(ch, "name")).to_lowercase() == n.to_lowercase()) else {
@@ -321,8 +331,9 @@ async fn einladen(c: &mut Ctx, arg: &str) -> Result<()> {
 	let mut nb = b.clone();
 	j::set(&mut nb, "guests", Json::Array(more));
 	c.space.write(&tmpl("Building", nb), c.txn(), FOREVER).await?;
-	msg(c, &me, "info", &format!("{wname} darf jetzt in deine {bname}."), MsgOpts::default()).await?;
-	msg(c, j::s(&who, "charId"), "info", &format!("{} lädt dich in die {bname} ein („betrete“ neben ihr).", txt(j::at(&c.actor, "name"))), MsgOpts { room: Some(txt(j::at(&who, "room"))), ..MsgOpts::default() }).await
+	let w = words_for(c, &b);
+	msg(c, &me, "info", &format!("{wname} darf jetzt in {} {bname}.", w.yours), MsgOpts::default()).await?;
+	msg(c, j::s(&who, "charId"), "info", &format!("{} lädt dich {} {bname} ein („betrete“ neben {}).", txt(j::at(&c.actor, "name")), w.into, w.beside), MsgOpts { room: Some(txt(j::at(&who, "room"))), ..MsgOpts::default() }).await
 }
 
 async fn ausladen(c: &mut Ctx, arg: &str) -> Result<()> {
@@ -351,15 +362,16 @@ async fn ausladen(c: &mut Ctx, arg: &str) -> Result<()> {
 				j::set(&mut f, "x", front.0);
 				j::set(&mut f, "y", front.1);
 				c.space.write(&again(&t, f), c.txn(), FOREVER).await?;
-				msg(c, &gid, "info", &format!("{me_name} hat dich ausgeladen; du stehst vor der {bname}."), MsgOpts { room: Some(txt(j::at(&b, "room"))), ..MsgOpts::default() }).await?;
+				msg(c, &gid, "info", &format!("{me_name} hat dich ausgeladen; du stehst {} {bname}.", words_for(c, &b).before), MsgOpts { room: Some(txt(j::at(&b, "room"))), ..MsgOpts::default() }).await?;
 				let txn = c.txn.clone();
 				super::sleep::wake_outside(&c.space, &txn, &gid, &txt(j::at(&b, "room"))).await?;
 			}
 		}
 	}
 	let me = c.char_id().to_owned();
-	msg(c, &me, "info", &format!("{} darf nicht mehr in deine {bname}.", txt(j::at(&g, "name"))), MsgOpts::default()).await?;
-	msg(c, &gid, "info", &format!("{me_name} hat die Einladung in die {bname} zurückgenommen."), MsgOpts::default()).await
+	let w = words_for(c, &b);
+	msg(c, &me, "info", &format!("{} darf nicht mehr in {} {bname}.", txt(j::at(&g, "name")), w.yours), MsgOpts::default()).await?;
+	msg(c, &gid, "info", &format!("{me_name} hat die Einladung {} {bname} zurückgenommen.", w.into), MsgOpts::default()).await
 }
 
 pub async fn run(c: &mut Ctx, key: &str, arg: &str) -> Result<()> {
