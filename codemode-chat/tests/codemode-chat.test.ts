@@ -5,6 +5,7 @@ import { startServer, startStack } from "./stack.ts";
 import { judge, loadCodemode } from "../server/judge.ts";
 import { customTask, taskById, TASKS } from "../server/tasks.ts";
 import { startFakeArena } from "./fake-arena.ts";
+import { packModels, unpackModels } from "../server/room.ts";
 
 /** Judges every variant of `task`; a bot task in a fake arena (tests/fake-arena.ts), the others as they are. */
 async function judgeVariants(task: (typeof TASKS)[number]) {
@@ -1740,4 +1741,16 @@ t("a stop aborts the model call in progress: the model process sees the run gone
 		assert.equal((await post(srv.url, "/api/sessions/stop3/stop", {})).status, 200);
 		await until(async () => (await fakeCalls(srv, "stop3")).some((c) => c.kind === "aborted"), 10_000);
 	} finally { await srv.close(); }
+});
+
+test("the admin's model list goes packed into its ModelInfo entry: hundreds of models stay under the space's 64 KiB, and unpack restores them", () => {
+	const models = Array.from({ length: 600 }, (_, i) => {
+		const provider = i < 500 ? "openrouter" : "mistral", id = i < 500 ? `vendor-${i % 40}/model-name-${i}-instruct` : `model-${i}`;
+		return { label: `${provider}/${id}`, provider, id, name: i % 2 ? `Vendor ${i % 40}: Model Name ${i} Instruct` : id };
+	});
+	const packed = packModels(models);
+	assert.ok(JSON.stringify(packed).length < 60_000, `${JSON.stringify(packed).length} bytes`);
+	assert.deepEqual(unpackModels(packed), models);
+	// an entry of an older model process (objects, not tuples) reads as before
+	assert.deepEqual(unpackModels(models.slice(0, 3)), models.slice(0, 3));
 });

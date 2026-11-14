@@ -23,6 +23,7 @@ import { ipTokensPerDay, today } from "./limits.ts";
 import { announce, awaitWork, connectSpace, keepAlive, readExisting } from "./space.ts";
 import { openDurableContributions } from "./durable-agent.ts";
 import { admitAgentAttempt } from "./run.ts";
+import { packModels } from "./room.ts";
 
 /** What the model process can be asked for; a test module may stand in for the real models. */
 export type ModelApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; critique: typeof llmCritique; propose: typeof llmPropose; vote: typeof llmVote; judge: typeof llmJudge; research: typeof llmResearch; verify: typeof llmVerifier; criteria: typeof llmCriteria; reviewCriteria: typeof llmReviewCriteria };
@@ -140,7 +141,10 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 			if (text === lastInfo && infoLease) { try { await space.renew(infoLease, 30_000); return; } catch { infoLease = null; } }
 			// this process's own entry (the web process merges those of every model process): replaced when it changes
 			if (infoLease) await space.cancel(infoLease).catch(() => {});
-			infoLease = (await space.write({ type: "ModelInfo", fields: { procId, ...info, ts: Date.now() } as never }, null, 30_000)).id;
+			// every model with credentials can be several hundred (openrouter): the admin list goes packed, [provider, id,
+			// name when it differs], so the entry stays under the space's 64 KiB (modelInfoOf unpacks it)
+			const fields = { procId, info: info.info, admin: { ...info.admin, models: packModels(info.admin.models) }, ts: Date.now() };
+			infoLease = (await space.write({ type: "ModelInfo", fields: fields as never }, null, 30_000)).id;
 			lastInfo = text;
 		} catch (e) { if (!stopping) console.error("[model] publishing the models failed", (e as Error).message); }
 	};

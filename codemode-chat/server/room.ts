@@ -231,8 +231,12 @@ export async function execTarget(space: SpaceLike, session: string, candidateId:
  *  merged here (the models of all of them, the newest one's current model and admin view). Model processes take any
  *  call, so they are meant to have the same credentials: more of them share the load and stand in for each other. */
 export type ModelInfoView = { info: { enabled: boolean; on: boolean; current: string | null; models: Array<{ id: string; label: string }> }; admin: { enabled: boolean; on: boolean; models: Array<{ label: string; provider: string; id: string; name: string }>; allowed: string[]; custom: boolean } };
+type AdminModel = ModelInfoView["admin"]["models"][number];
+/** The admin's model list as a ModelInfo entry carries it: [provider, id, name when it differs from the id]. */
+export const packModels = (l: AdminModel[]): Array<[string, string] | [string, string, string]> => l.map((m) => (m.name && m.name !== m.id ? [m.provider, m.id, m.name] : [m.provider, m.id]));
+export const unpackModels = (l: unknown): AdminModel[] => (Array.isArray(l) ? l : []).map((m) => (Array.isArray(m) ? { label: `${m[0]}/${m[1]}`, provider: String(m[0]), id: String(m[1]), name: String(m[2] ?? m[1]) } : (m as AdminModel)));
 export async function modelInfoOf(space: SpaceLike): Promise<ModelInfoView> {
-	const rows = (await space.readAll({ type: "ModelInfo" }, { limit: 50 })).map((e) => e.fields as Partial<ModelInfoView> & { ts?: number }).filter((f) => f.info && f.admin).sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0));
+	const rows = (await space.readAll({ type: "ModelInfo" }, { limit: 50 })).map((e) => e.fields as Partial<ModelInfoView> & { ts?: number }).filter((f) => f.info && f.admin).map((f) => ({ ...f, admin: { ...f.admin!, models: unpackModels(f.admin!.models) } })).sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0));
 	if (!rows.length) return { info: { enabled: false, on: false, current: null, models: [] }, admin: { enabled: false, on: false, models: [], allowed: [], custom: false } };
 	const union = <T>(lists: T[][], key: (x: T) => string) => { const seen = new Set<string>(); return lists.flat().filter((x) => !seen.has(key(x)) && !!seen.add(key(x))); };
 	const [newest] = rows as Array<ModelInfoView>;
