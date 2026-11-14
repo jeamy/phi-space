@@ -125,7 +125,7 @@ scripted variants' results, judged as in the tests.
 | 6. New worlds | e44f11d | Islands made from a number; the toy arena in the judge; the task "New islands" without a map; "Rate planners" on made islands | Mapless explorer 9/9 (163), the Graue Insel's map 0/9, the shown islands by heart 3/9; real arena: the mapless explorer 9/9 (111) |
 | 7. The tide | 2412979 | A hidden law of the tide; walking takes time; observations logged into the memory and frozen; the task "Learn the tide" | The law in code 9/9 (2253); the learner 9/9 with observations, 6/9 without; no model 6/9 (4603); without calibration 0/9; by room ids 3/9 |
 | 8. Odds of the tide | 0ea9172 | Each dead end draws a piece every hour by odds that grow with its distance from the fire; the verdict asks the mean over 8 seeds against a target per episode; one observation per observed day, every room with its pieces; the task "Odds of the tide" | The law in code and the learner with observations 9/9; counts instead of rates 2/9; the most likely place 0/9; every dead end every hour 2/9; step 7's law 0/9; by room ids 3/9; the learner without observations 1/9 |
-| 9. Shores of the tide | (uncommitted) | Every room but the fire's draws by odds of its own, drawn per island and room; a logbook tool with 6 earlier days of the bot's own island; no observations; the task "Shores of the tide" | The learner with the logbook 9/9; step 8's law, the sweep, dead ends only, the most likely room, every room alike 0/9; the three model winners of step 8 0/9 |
+| 9. Shores of the tide | e26c34d | Every room but the fire's draws by odds of its own, drawn per island and room; a logbook tool with 6 earlier days of the bot's own island; no observations; the task "Shores of the tide" | The learner with the logbook 9/9; step 8's law, the sweep, dead ends only, the most likely room, every room alike 0/9; the three model winners of step 8 0/9 |
 
 ### The detours worth telling
 
@@ -497,6 +497,40 @@ observations, and that is the bot this step asks for. Sonnet's and Opus's winner
 built for: their prior is wrong on almost every island. The learner brings 0.87 to 1.0 times the reference plan's
 mean on the 95 islands (median 1.0).
 
+## Four models on "Shores of the tide" (2026-11-14)
+
+The same conditions as the four runs above: 3 agents, 5 generations, one contribution per agent, 2 improvement rounds,
+$5 budget, German prompts. GPT-6.1 Sol ran through OpenRouter: its first start through the pi login lost its token
+(`invalid_grant`) during the run, and a scripted stand-in played; that run was stopped and does not count.
+
+| Model | Solved | Best tool points (the nine episodes) | Cost | Below the target, of the 95 unselected islands |
+|---|---|---|---|---|
+| Claude Haiku 5.5 | no (0/9 in all 5 generations) | | $0.02 | |
+| Claude Sonnet 5.5 | no (0/9 in all 5 generations) | | $0.43 | |
+| Claude Opus 5.5 | generation 2 (9/9; one bot 4/9) | 9516 | $1.51 | 9 (9 %) |
+| GPT-6.1 Sol | generation 2 (9/9; one bot 8/9) | 8793 | $0.61 | 0 |
+| For comparison: the learner (scripted) | | 9105 | | 1 (1 %) |
+| For comparison: the reference plan (true odds) | | 9033 | | (defines the targets) |
+
+**Both winners read the logbook, not a prior.** Opus's bot counts each room's pieces over the logged days as its
+odds and, before every tide, searches the walk of at most five rooms from where it stands with the most expected
+pieces; in a room with odds below one half it looks before it grabs. GPT's bot also plans anew before every tide, with
+a smoothed rate ((pieces + 0.5) / (8 · days + 1)) and a walk as long as the tide's half hour allows, and takes the
+map from the logbook too (each room's way from the fire), so it explores less. Both differ from the reference plan,
+which walks one fixed round at every tide. GPT's bot spends fewer points than the reference and brings more pieces: on
+the 95 islands 1.00 to 1.41 times the reference's mean (median 1.09). Opus's winner brings 0.75 to 1.24 times (median
+1.00) and stays below the target on 9 of them, more often than the learner (1). The target is a yardstick, not the best
+plan.
+
+**What the two failures failed at is the interface, not the odds.** Every Haiku bot either called a tool on an
+undefined object or ended after one look and the logbook, at 0 world minutes. Sonnet's bots read the logbook and then
+waited up to 451 world minutes without ever seeing a piece: their own notes say the format of `fromFire` and `exits`
+was "still unverified", and five generations did not verify it. Opus's first bots failed the same way; from
+generation 2 on its bots read the logbook in any of the forms they guessed.
+
+So step 9 separates where step 8 did not: the two models that wrote an estimator pass, and no prior passes. With n = 1
+per model, "Sonnet cannot" is not shown; "Sonnet did not, for this reason" is.
+
 ## Figures
 
 The diagrams are hand-drawn SVG that follow the reader's light or dark theme. The screenshots come from a local run
@@ -582,9 +616,30 @@ before taking and brought nothing. The run's winner is generation 3's (6304 poin
 *Figure 15. GPT-6.1 Sol on "Odds of the tide": every target from generation 4 on, with the odds counted from
 `observations()` (6305 points).*
 
+![Haiku 5.5 on Shores of the tide](img/codemode-planung/haiku-shores-en.jpg)
+
+*Figure 16. Haiku 5.5 on "Shores of the tide": 0 in every episode of every generation; the bots ended after one look
+and the logbook.*
+
+![Sonnet 5.5 on Shores of the tide](img/codemode-planung/sonnet-shores-en.jpg)
+
+*Figure 17. Sonnet 5.5 on "Shores of the tide": 0 throughout; its bots read the logbook and waited, but never reached a
+room with pieces.*
+
+![Opus 5.5 on Shores of the tide](img/codemode-planung/opus-shores-en.jpg)
+
+*Figure 18. Opus 5.5 on "Shores of the tide": every target from generation 2 on, with each room's odds counted from the
+logbook (9516 points).*
+
+![GPT-6.1 Sol on Shores of the tide](img/codemode-planung/gpt-shores-en.jpg)
+
+*Figure 19. GPT-6.1 Sol on "Shores of the tide": every target from generation 2 on; the map and the odds from the
+logbook, a new round before every tide (8793 points, fewer than the reference plan's 9033).*
+
 ## Open
 
-- Model runs on "Shores of the tide" (step 9): does a team write the estimator, or a prior again?
+- Repeats on "Shores of the tide": Sonnet's failure at the logbook's format, and whether a hint in the prompt (the
+  logbook's shape) changes it.
 - Repeats: every model and task ran once, GPT twice (7 and 2 of 9 on "Learn the tide"). Opus's two solutions and
   Haiku's two failures look stable from their curves; the rest needs more runs.
 - A law that changes between generations: then only a bot that reads `observations()` at run time (GPT's way) keeps
