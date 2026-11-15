@@ -49,6 +49,9 @@ async fn play(n: Rc<Npc>, full: Rc<Json>, regional: bool, owner: Rc<String>, wor
 		let gone = Rc::new(Cell::new(false));
 		n.session.keep(&space).await;
 		ready();
+		// on its cell it holds its Spot (nobody builds where it stands), and where something was built on it meanwhile it
+		// steps off onto the nearest free cell (`arrive`)
+		if n.is_online() { let _ = n.act("arrive").await; }
 		let beat = {
 			let (space, session, lost, gone, role, char_id, mut halt) = (space.clone(), n.session.clone(), lost.clone(), gone.clone(), role.clone(), n.char_id.clone(), n.halt.clone());
 			let every = SESSION_LEASE_MS.min(role_lease_ms()) / 2.0;

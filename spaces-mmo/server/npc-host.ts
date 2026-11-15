@@ -116,6 +116,9 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 				let lost = false;
 				await keep();
 				ready();
+				// on its cell it holds its Spot (nobody builds where it stands), and where something was built on it meanwhile
+				// (while no process played it) it steps off onto the nearest free cell (default.ts arrive)
+				if (online) await npc.act("arrive").catch(() => {});
 				// every lease renewal is a commit, for every role: renewed at half its time, and a role whose NPC left the region
 				// is given up (the region it went to claims it)
 				let gone = false;
