@@ -7,7 +7,7 @@ export async function complete(system: string, user: string): Promise<string> {
 		if (typed.includes("brennstück") && typed.includes("feuer")) return "put 2 treibholz in feuer";
 		if (typed.includes("zeig mir")) return "look";
 		// a question: it answers from the facts it was given, and only from them
-		if (typed.includes("hafer") && /Facts about/.test(user)) return `ANSWER: ${/Gesa sells it/.test(user) ? "Gesa verkauft Hafer am Markt." : "Das weiß ich nicht."}${/sammle samen/.test(user) ? " Wild: sammle samen." : ""}`;
+		if (typed.includes("hafer") && /Facts about/.test(user)) return `ANSWER: ${/Gesa [^:]*: (buys it for \d+ coins?, )?sells it/.test(user) ? "Gesa verkauft Hafer am Markt." : "Das weiß ich nicht."}${/sammle samen/.test(user) ? " Wild: sammle samen." : ""}`;
 		if (typed.includes("seile") && /Recipes for craft: .*tangseil/.test(user)) return "craft 3 tangseil";
 		if (typed.includes("kaputt")) return "rm -rf /";
 		return "?";

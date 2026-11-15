@@ -181,7 +181,12 @@ test("a command that took a building and then did not understand leaves it stand
 test("a question about the game is answered from the world's facts and help, told as information", async () => {
 	const w = await loadWorld();
 	const facts = gameFacts(w, "wo bekommt man hafer?").join("\n");
-	assert.match(facts, /Gesa sells it for \d+ coin/);
+	assert.match(facts, /Gesa (?:at the market of|in) [^:]+: (buys it for \d+ coins?, )?sells it for \d+ coin/);
+	// a question about a price: every trader's two prices and how they vary
+	const truffle = gameFacts(w, "wieviel kostet ein trüffel").join("\n");
+	assert.ok(isQuestion("wieviel kostet ein trüffel") && isQuestion("was zahlt marta für honig") && isQuestion("how much is a truffle"));
+	assert.match(truffle, /Marta (?:at the market of|in) [^:]*Kupferhafen: buys it for 6 coins, sells it for 10 coins/);
+	assert.match(truffle, /up to twice the base price.*down to half.*the less each/s);
 	assert.match(facts, /sammle samen/);
 	assert.ok(isQuestion("wo bekommt man hafer?") && isQuestion("how does a field work") && !isQuestion("put treibholz in feuer") && !isQuestion("geh nach osten"));
 	assert.match(gameFacts(w, "wie funktioniert ein acker?").join("\n"), /\[ackerbau\]/);
