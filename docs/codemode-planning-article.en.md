@@ -636,6 +636,32 @@ description. That is a finding about the setting rather than the models: a task 
 words measures how well a model guesses a format, and one example removes most of it. The open question is whether
 the examples belong in every bot task's prompt; the runs above with examples are the comparison for that.
 
+## A fresh evaluation (2026-11-15)
+
+The 95 additional islands above came from the same range as the nine task islands (34 to 233), and every run and
+evaluation played seeds 0 to 7. `server/data/shore-fresh.ts` plays the stored winners (`tests/fixtures/shores/`) and
+the scripted controls on islands that no selection or tuning looked at, 234 to 433 by the same rule (two rooms of
+odds 0.35 or more: 94 islands), and on seeds no run has met, 8 to 15. The target of each island is the task's: 90 %
+of the reference plan's mean on the same seeds. As a second set, the 95 earlier islands on the fresh seeds. No model
+call.
+
+| Bot | Below the target, fresh islands (of 94) | Ratio to the reference: min / median / max | Mean points per island | Below, earlier islands on fresh seeds (of 95) |
+|---|---|---|---|---|
+| GPT-6.1 Sol, with the example | 0 | 0.98 / 1.13 / 1.44 | 778 | 0 |
+| GPT-6.1 Sol, without | 0 | 1.00 / 1.10 / 1.41 | 968 | 0 |
+| Claude Opus 5.5, with the example | 0 | 1.00 / 1.11 / 1.41 | 897 | 0 |
+| Claude Opus 5.5, without | 13 | 0.71 / 1.00 / 1.22 | 1031 | 8 |
+| Claude Sonnet 5.5, with the example | 2 | 0.63 / 1.06 / 1.36 | 810 | 0 |
+| Learner (counted rates) | 0 | 1.00 / 1.00 / 1.16 | 1059 | 0 |
+| Every room alike | 31 | 0.11 / 1.00 / 1.11 | 1097 | 39 |
+| Reference plan | | 1 | 1050 | |
+
+The picture of the 95 earlier islands holds on fresh islands and fresh seeds: both GPT winners and Opus's winner with
+the example stay at or above the target everywhere and bring more than the reference plan on the median island; the
+GPT winner with the example does so for the fewest points. Opus's winner without the example falls below on 13 of
+94 (9 of 95 on the old seeds), Sonnet's on 2. The selection of the nine task islands did not flatter the winners.
+What this cannot say is how often a model writes such a winner: each is one run's best.
+
 ## Figures
 
 The diagrams are hand-drawn SVG that follow the reader's light or dark theme. The screenshots come from a local run

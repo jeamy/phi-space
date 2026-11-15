@@ -389,7 +389,7 @@ async function judgeEpisodes(cm: Codemode, task: Task & { bot: BotSpec }, source
 				for (let s = 0; s < seeds; s++) {
 					// a task that scores the mean draws its seeds from the island, not the episode's place: the same island is
 					// the same days wherever it stands in the list
-					const seed = seeds > 1 ? episodeSeed(b.mean && e.island !== undefined ? e.island : i, s) : undefined;
+					const seed = seeds > 1 ? episodeSeed(b.mean && e.island !== undefined ? e.island : i, (b.seedFrom ?? 0) + s) : undefined;
 					const r = await playEpisode(cm, arena, task, source, e, seed, names, kind === "sample" && s === 0, memory, plan);
 					runs.push(r); msAll += r.ms;
 					total.cost += r.meter.cost; total.total += r.meter.total;

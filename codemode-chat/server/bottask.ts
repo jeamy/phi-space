@@ -52,6 +52,8 @@ export type BotSpec = {
 	toyRules?: "tide" | "chance" | "shore";
 	/** How many seeds every episode runs with (default: seedsOf below). */
 	seeds?: number;
+	/** The first seed an episode runs with (default 0): a fresh evaluation plays seeds no run has met (server/data/shore-fresh.ts). */
+	seedFrom?: number;
 	/** The verdict asks the mean, not every seed (step 8): an episode counts when the pieces the bot put into the fire,
 	 *  averaged over its seeds, reach the episode's `target`. The goal must be a `feed:` goal (the arena counts). */
 	mean?: true;
