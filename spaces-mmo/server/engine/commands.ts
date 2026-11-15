@@ -80,6 +80,10 @@ const STEP = DEFAULT_COMMANDS.find((cmd) => cmd.key === "step")!;
 export async function execute(c: CommandCtx, line: string): Promise<void> {
 	line = line.trim();
 	if (!line) return;
+	// a menu entry names the building it was for by its cell (" @x,y", client/cellActions.ts): beside several (two hives
+	// and a coop) the command is for that one; talk keeps what it says
+	const cell = say(line) ? null : /\s+@(\d+),(\d+)$/.exec(line);
+	if (cell) { c.at = { x: Number(cell[1]), y: Number(cell[2]) }; line = line.slice(0, cell.index); }
 	// aboard the large ship nothing is walked or done until it lands (the arrival is an intent of its own)
 	if (c.actor.aboard && /^(step|move|arrive)\b/.test(line)) throw new CommandError(await aboardText(c));
 	// asleep in a bed (only inside a house): whatever it sends wakes it, and nothing else is done (sleep.ts)
@@ -121,7 +125,7 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 	} catch (e) {
 		// not understood (no thing of that name, a command without what it needs): the model reads the sentence first;
 		// only what it cannot read either is refused (a translation is never sent again, `c.asked`)
-		if (e instanceof NotUnderstood && llmEnabled() && !c.asked && c.account && !c.account.npc) {
+		if (e instanceof NotUnderstood && llmEnabled() && !c.asked && !c.at && c.account && !c.account.npc) {
 			const t: TranslateFields = { reqId: randomBytes(6).toString("hex"), charId: c.actor.charId, accountId: c.account.accountId, guest: c.account.guest, line: said.slice(0, 300), room: c.actor.room, at: timeNow(), why: e.message.slice(0, 300), ...(c.lang ? { lang: c.lang } : {}) };
 			// in the refusal's transaction (serve): what the command took before it gave up must not be committed
 			throw new AskModel(`„${said.slice(0, 80)}“ – einen Moment, ich versuche das zu verstehen …`, t);

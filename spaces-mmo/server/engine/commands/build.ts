@@ -44,6 +44,8 @@ export type Rect = { x: number; y: number; w: number; h: number };
 export const cells = (r: Rect) => { const out: Array<{ x: number; y: number }> = []; for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) out.push({ x, y }); return out; };
 /** Chebyshev distance from a cell to a rectangle (0: inside, 1: beside it). */
 export const distTo = (p: { x: number; y: number }, r: Rect) => Math.max(Math.max(r.x - p.x, 0, p.x - (r.x + r.w - 1)), Math.max(r.y - p.y, 0, p.y - (r.y + r.h - 1)));
+/** Whether `r` is the building a menu entry was for (CommandCtx.at); without one any is. */
+export const atCell = (c: CommandCtx, r: Rect) => !c.at || distTo(c.at, r) === 0;
 export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 /** A person, for the rules of building and sowing: a player, or a settler (an NPC that plays like one, server/npc/settlers.ts). */
 export const human = (c: CommandCtx) => !!c.account && (!!c.account.settler || (!c.account.npc && !c.actor.charId.startsWith("npc-")));
@@ -270,7 +272,7 @@ export const SITE_REACH = 2;
 export async function takeNear<F extends Rect>(c: CommandCtx, type: string, idKey: keyof F & string, reach: number, named: (f: F) => boolean = () => true): Promise<{ f: F } | { far: boolean }> {
 	const all = (await c.space.readAll({ type, fields: { room: c.actor.room } })).map((e) => fieldsOf<F>(e));
 	// the nearest first: what the figure stands at, not what lies two steps behind it
-	const near = all.filter((f) => distTo(c.actor, f) <= reach && named(f)).sort((a, b) => distTo(c.actor, a) - distTo(c.actor, b));
+	const near = all.filter((f) => distTo(c.actor, f) <= reach && named(f) && atCell(c, f)).sort((a, b) => distTo(c.actor, a) - distTo(c.actor, b));
 	if (near.length) {
 		const e = await c.space.take({ type, fields: { [idKey]: near[0]![idKey] as never } }, 5_000, { txn: c.txn });
 		if (!e) throw new CommandError("Das ist gerade nicht greifbar; bitte noch einmal.");
@@ -282,7 +284,7 @@ export async function takeNear<F extends Rect>(c: CommandCtx, type: string, idKe
 		const e = await c.space.takeIfExists({ type, fields: { [idKey]: id } }, 5_000, { txn: c.txn });
 		if (!e) continue; // cells of something else, or it is gone meanwhile
 		const f = fieldsOf<F>(e);
-		if (named(f)) return { f };
+		if (named(f) && atCell(c, f)) return { f };
 		await c.space.write({ type: e.type, types: e.types.slice(1), fields: e.fields as never }, c.txn, FOREVER);
 	}
 	return { far: all.length > 0 };

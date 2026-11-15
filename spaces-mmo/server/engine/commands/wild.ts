@@ -21,7 +21,7 @@ import { fogOf } from "../fire.ts";
 import { calendar } from "../worldtime.ts";
 import { walkable, type FieldDef, type GardenDef, type PreyDef, type WildDef, type WorldDef } from "../world.ts";
 import { settleHerd } from "./animals.ts";
-import { distTo, planOf, putBack, takeNear, type Rect } from "./build.ts";
+import { atCell, distTo, planOf, putBack, takeNear, type Rect } from "./build.ts";
 import { cropOf, fieldName, harvestOf } from "./field.ts";
 import { bedHere, bedName, growFactor, mayTend, nextDue, protoName, sortOf, writeBed } from "./garden.ts";
 import { random, randomBytes, timeNow } from "../source.ts";
@@ -317,7 +317,7 @@ const zaeune: Command = {
 	help: "zäune – einen Zaun um ein Beet (2 Treibholz, 1 Tangseil), einen Acker oder einen Hühnerstall neben dir setzen: Hasen, Rehe und Füchse kommen nicht mehr hinein",
 	async func(c) {
 		const wd = wild(c), room = { room: c.actor.room };
-		const near = <F extends Rect>(xs: F[]) => xs.filter((x) => distTo(c.actor, x) <= 1);
+		const near = <F extends Rect>(xs: F[]) => xs.filter((x) => distTo(c.actor, x) <= 1 && atCell(c, x));
 		const beds = near((await c.space.readAll({ type: "Bed", fields: room })).map((e) => fieldsOf<BedFields>(e))).filter((b) => mayTend(c, b));
 		if (beds.length) {
 			const b = await bedHere(c, { may: (x) => mayTend(c, x), reach: 1 });

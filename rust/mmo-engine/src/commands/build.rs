@@ -50,6 +50,8 @@ pub fn cells(r: Rect) -> Vec<(f64, f64)> {
 /// `distTo`: the Chebyshev distance from a cell to a rectangle (0 inside, 1 beside it).
 pub fn dist_to(p: (f64, f64), r: Rect) -> f64 { (r.x - p.0).max(0.0).max(p.0 - (r.x + r.w - 1.0)).max((r.y - p.1).max(0.0).max(p.1 - (r.y + r.h - 1.0))) }
 fn xy(f: &Json) -> (f64, f64) { (j::n(f, "x"), j::n(f, "y")) }
+/// `atCell`: whether `f` is the building a menu entry was for (`Ctx::at`); without one any is.
+pub fn at_cell(c: &Ctx, f: &Json) -> bool { c.at.is_none_or(|p| dist_to(p, Rect::of(f)) == 0.0) }
 /// `plural`.
 pub fn plural(n: f64, one: &str, many: &str) -> String { format!("{} {}", phi_json::number_text(n), if n == 1.0 { one } else { many }) }
 /// `human`: a player, or a settler.
@@ -386,7 +388,7 @@ pub const SITE_REACH: f64 = 2.0;
 pub async fn take_near(c: &Ctx, ty: &str, id_key: &str, reach: f64, named: &dyn Fn(&Json) -> bool) -> Result<std::result::Result<Json, bool>> {
 	let all = fields_of(c.space.read_all(&tmpl(ty, obj! { "room" => c.room() }), None).await?);
 	let me = xy(&c.actor);
-	let mut near: Vec<&Json> = all.iter().filter(|f| dist_to(me, Rect::of(f)) <= reach && named(f)).collect();
+	let mut near: Vec<&Json> = all.iter().filter(|f| dist_to(me, Rect::of(f)) <= reach && named(f) && at_cell(c, f)).collect();
 	near.sort_by(|a, b| dist_to(me, Rect::of(a)).partial_cmp(&dist_to(me, Rect::of(b))).unwrap_or(std::cmp::Ordering::Equal));
 	let key = |v: Json| { let mut o = Object::new(); o.insert(id_key, v); Json::Object(o) };
 	if let Some(f) = near.first() {
@@ -402,7 +404,7 @@ pub async fn take_near(c: &Ctx, ty: &str, id_key: &str, reach: f64, named: &dyn 
 	for id in held {
 		let Some(e) = c.space.take_if_exists(&tmpl(ty, key(id)), 5_000.0, c.txn()).await? else { continue };
 		let f = fields(&e).clone();
-		if named(&f) { return Ok(Ok(f)); }
+		if named(&f) && at_cell(c, &f) { return Ok(Ok(f)); }
 		c.space.write(&anew(&e, f), c.txn(), FOREVER).await?;
 	}
 	Ok(Err(!all.is_empty()))

@@ -76,6 +76,13 @@ pub(crate) async fn ask_model(c: &Ctx, t: Json, text: &str) -> Result<()> {
 pub async fn execute(c: &mut Ctx, line: &str) -> Result<()> {
 	let mut line = js::trim(line).to_owned();
 	if line.is_empty() { return Ok(()); }
+	// a menu entry names the building it was for by its cell (" @x,y", client/cellActions.ts); talk keeps what it says
+	if !is_talk(&line) {
+		if let Some(m) = js::caps(&js::re(r"^([\s\S]*?)\s+@(\d+),(\d+)$", ""), &line) {
+			c.at = Some((js::to_number(m[2].as_deref().unwrap_or("")), js::to_number(m[3].as_deref().unwrap_or(""))));
+			line = m[1].clone().unwrap_or_default();
+		}
+	}
 	if j::truthy(j::at(&c.actor, "aboard")) && WALKING.with(|r| r.test(&line)) { return refuse(crate::commands::passage::aboard_text(c).await?); }
 	// asleep in a bed (only inside a house): whatever it sends wakes it, and nothing else is done (sleep.rs)
 	if crate::commands::sleep::woken_by(c, &line).await? { return Ok(()); }
@@ -109,7 +116,7 @@ pub async fn execute(c: &mut Ctx, line: &str) -> Result<()> {
 		Ok(())
 	}.await;
 	match ran {
-		Err(Error::NotUnderstood(why)) if llm_enabled() && c.asked.is_none() && c.account.as_ref().is_some_and(|a| !j::b(a, "npc")) => Err(Error::AskModel(asking_text(&said), translate_of(c, &said, Some(&why)))),
+		Err(Error::NotUnderstood(why)) if llm_enabled() && c.asked.is_none() && c.at.is_none() && c.account.as_ref().is_some_and(|a| !j::b(a, "npc")) => Err(Error::AskModel(asking_text(&said), translate_of(c, &said, Some(&why)))),
 		Err(e) if e.is_command() && understood.is_some() => refuse(format!("{}: {e}", understood.unwrap_or_default())),
 		other => other,
 	}
@@ -173,7 +180,7 @@ impl Worker {
 		let told: Result<()> = async {
 			if intent.is_none() { return self.space.abort(&txn).await; }
 			let end = self.finishing(&txn);
-			let c = Ctx { space: end.clone(), txn: txn.clone(), world: self.w.clone(), actor: actor.clone(), account: None, load_account: false, msg_lease_ms: self.msg_lease_ms, asked: None, lang: None, step: None, inventory: None, elsewhere: self.elsewhere.clone() };
+			let c = Ctx { space: end.clone(), txn: txn.clone(), world: self.w.clone(), actor: actor.clone(), account: None, load_account: false, msg_lease_ms: self.msg_lease_ms, asked: None, lang: None, step: None, inventory: None, elsewhere: self.elsewhere.clone(), at: None };
 			match ask { Some(t) => ask_model(&c, t, text).await?, None => msg(&c, &char_id, "error", text, MsgOpts::default()).await? }
 			Self::finish(&end, &txn, &char_id).await
 		}.await;
@@ -197,7 +204,7 @@ impl Worker {
 				let stepping = STEP.with(|r| r.test(&line));
 				let account = if stepping { None } else { self.one(&view, &tmpl("Account", phi_json::obj! { "accountId" => j::at(&a, "accountId").clone() }), 2_000.0).await?.map(|e| fields(&e).clone()) };
 				let world = Rc::new(spatial_world(&end, &self.w).await?);
-				let mut c = Ctx { space: end.clone(), txn: txn.clone(), world, actor: a, load_account: account.is_none(), account, msg_lease_ms: self.msg_lease_ms, asked: j::so(&intent, "asked").map(str::to_owned), lang: j::so(&intent, "lang").map(str::to_owned), step: j::opt(&intent, "step").cloned(), inventory: None, elsewhere: self.elsewhere.clone() };
+				let mut c = Ctx { space: end.clone(), txn: txn.clone(), world, actor: a, load_account: account.is_none(), account, msg_lease_ms: self.msg_lease_ms, asked: j::so(&intent, "asked").map(str::to_owned), lang: j::so(&intent, "lang").map(str::to_owned), step: j::opt(&intent, "step").cloned(), inventory: None, elsewhere: self.elsewhere.clone(), at: None };
 				execute(&mut c, &line).await?;
 			}
 			Self::finish(&end, &txn, char_id).await

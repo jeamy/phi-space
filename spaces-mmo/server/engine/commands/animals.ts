@@ -16,7 +16,7 @@ import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, NotUnderstood, pluralOf, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import type { AnimalKindDef, AnimalsDef, KeeperDef, WorldDef } from "../world.ts";
-import { ARTICLE, distTo, giveBack, planOf, putBack, takeNear } from "./build.ts";
+import { ARTICLE, atCell, distTo, giveBack, planOf, putBack, takeNear } from "./build.ts";
 import { nearBuildings } from "./interior.ts";
 import { protoName } from "./garden.ts";
 import { needEpoch } from "./epoch.ts";
@@ -66,7 +66,7 @@ export async function settleHerd(space: SpaceLike, txn: string, w: WorldDef, b: 
  *  cells) and its herd brought up to now. */
 async function houseHere(c: CommandCtx, d: AnimalsDef, prefer?: (b: BuildingFields) => boolean): Promise<House> {
 	// beside several houses (a coop and a hive): the one the command is for first, else the nearest
-	const fit = prefer && (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).some((e) => { const f = fieldsOf<BuildingFields>(e); return !!d.houses[f.plan] && distTo(c.actor, f) <= 1 && prefer(f); });
+	const fit = prefer && (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).some((e) => { const f = fieldsOf<BuildingFields>(e); return !!d.houses[f.plan] && distTo(c.actor, f) <= 1 && atCell(c, f) && prefer(f); });
 	const r = await takeNear<BuildingFields>(c, "Building", "buildId", 1, (b) => !!d.houses[b.plan] && (!fit || prefer!(b)));
 	if (!("f" in r)) throw new NotUnderstood(`Geh direkt neben einen Stall (${houseNames(c, d)}).`);
 	const { born, ...h } = await settleHerd(c.space, c.txn, c.world, r.f, await worldNowOf(c.space, c.txn));
@@ -150,7 +150,7 @@ const fuettere: Command = {
 		const kn = keeperNamed(c, arg);
 		if (kn) return feedKeeper(c, kn.kp, kn.rest);
 		// no coop or pen beside, but a dog or cat on guard: it is the one to feed
-		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1);
+		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1 && atCell(c, b));
 		if (!near.some((b) => d.houses[b.plan]) && near.some((b) => b.keeper)) return feedKeeper(c, null, arg);
 		const m = /^(?:(\d+|alle?)\s+)?(.*)$/i.exec(arg.trim().replace(/^(?:die|den)\s+(?:tiere|hühner|huehner|schafe|ziegen)(?:\s+mit)?\s*/i, "").replace(/^mit\s+/i, ""))!;
 		const { b, k, n, max, now } = await houseHere(c, d, (h) => !!h.herd);
@@ -271,7 +271,7 @@ export async function collect(c: CommandCtx, arg = ""): Promise<void> {
 	const t = arg.trim(), cell = /^(\d+)\s+(\d+)$/.exec(t), kinds = cell ? [] : yieldKinds(c, t);
 	const named = (h: BuildingFields) => cell ? Number(cell[1]) >= h.x && Number(cell[1]) < h.x + h.w && Number(cell[2]) >= h.y && Number(cell[2]) < h.y + h.h : !kinds.length || kinds.includes(h.herd?.kind ?? "");
 	if (cell || kinds.length) {
-		const there = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).some((h) => !!d.houses[h.plan] && distTo(c.actor, h) <= 1 && mine(c, h) && !!h.herd && named(h));
+		const there = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).some((h) => !!d.houses[h.plan] && distTo(c.actor, h) <= 1 && atCell(c, h) && mine(c, h) && !!h.herd && named(h));
 		if (!there) throw new CommandError(cell ? "Dort steht neben dir kein Stall von dir mit Tieren." : `Neben dir ist kein Stall von dir, dessen Tiere ${t} geben.`);
 	}
 	const { b, k, n, now } = await houseHere(c, d, (h) => mine(c, h) && !!h.herd && named(h));
@@ -317,7 +317,7 @@ const schlachte: Command = {
 		const shopPlan = bt.shop?.plan;
 		// (outside beside it, or inside at its block: interior.ts)
 		const nearShop = !!shopPlan && (await nearBuildings(c, "cook")).some((b) => b.plan === shopPlan);
-		const nearHouse = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).some((e) => { const f = fieldsOf<BuildingFields>(e); return !!d.houses[f.plan] && distTo(c.actor, f) <= 1; });
+		const nearHouse = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).some((e) => { const f = fieldsOf<BuildingFields>(e); return !!d.houses[f.plan] && distTo(c.actor, f) <= 1 && atCell(c, f); });
 		if (nearShop && !nearHouse) {
 			const kinds = d.kinds.filter((x) => x.slaughter?.length);
 			const named = (x: AnimalKindDef) => { const p = c.world.prototypes.find((y) => y.key === x.proto); return [x.key, x.name, x.plural, ...(p?.aliases ?? [])].some((a) => a.toLowerCase() === said); };

@@ -52,7 +52,14 @@ export function hereEntries(input: Omit<CellInput, "at" | "onPlans">): CellEntry
 			if (!seen.has(e.line)) seen.set(e.line, e);
 		}
 	}
-	return [...seen.values()].sort((a, b) => rank(a.line) - rank(b.line));
+	// the same entry at two buildings beside the figure (two hives, a hive and a coop: "Füttern" twice, each with its
+	// cell): the building's name before it, and its cell when two of a kind stand there
+	const all = [...seen.values()], cellOf = (e: CellEntry) => / @(\d+),(\d+)$/.exec(e.line);
+	const twice = (xs: CellEntry[], label: (e: CellEntry) => string) => xs.filter((e) => cellOf(e) && xs.some((x) => x !== e && cellOf(x) && label(x) === label(e)));
+	const nameAt = (e: CellEntry) => { const m = cellOf(e)!; return [...input.objs.values()].find((o) => o.kind === "building" && o.location === input.room && o.x === Number(m[1]) && o.y === Number(m[2]))?.name ?? ""; };
+	const named = new Map(twice(all, (e) => e.label).map((e) => [e, `${nameAt(e)}: ${e.label}`] as const));
+	for (const e of twice([...named.keys()], (x) => named.get(x)!)) { const m = cellOf(e)!; named.set(e, `${nameAt(e)} ${m[1]},${m[2]}: ${e.label}`); }
+	return all.map((e) => named.has(e) ? { ...e, label: named.get(e)! } : e).sort((a, b) => rank(a.line) - rank(b.line));
 }
 
 /** A figure a player gives and offers things to: a registered player's, not a guest's and not an NPC's. */
@@ -328,9 +335,12 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 		const eats = (until: number | undefined, share: number) => !fed || until === undefined || Math.max(fed.now, until) <= fed.now + fed.fedMaxWorldMs * fed.patience - share;
 		const canFeed = (kind: string, until: number | undefined, share: number) => (!feed || (feed[kind] ?? []).some((n) => carriedNames.has(n))) && eats(until, share);
 		// this one, not all in the room: the command takes its cell
-		entries.push({ label: o.kind === "site" ? (o.ownerId === me ? `Deine Baustelle ${o.name}: was fehlt?` : `Baustelle ${o.name} von ${o.owner ?? ""}: was fehlt?`) : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: o.kind === "building" && beside && HOUSES[o.plan ?? ""] ? "stall" : `baustelle ${o.x} ${o.y}` }); // beside a coop or pen, looking at it shows its animals
+		entries.push({ label: o.kind === "site" ? (o.ownerId === me ? `Deine Baustelle ${o.name}: was fehlt?` : `Baustelle ${o.name} von ${o.owner ?? ""}: was fehlt?`) : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: o.kind === "building" && beside && HOUSES[o.plan ?? ""] ? `stall @${o.x},${o.y}` : `baustelle ${o.x} ${o.y}` }); // beside a coop or pen, looking at it shows its animals
 		if (o.kind === "building" && beside) {
-			if (o.name === "Regentonne") entries.push({ label: "Wasser schöpfen", line: "schöpfe" });
+			// beside several buildings (two hives and a coop) a command is for this one: its cell after the line (server:
+			// commands.ts execute, build.ts atCell)
+			const here = (line: string) => `${line} @${o.x},${o.y}`;
+			if (o.name === "Regentonne") entries.push({ label: "Wasser schöpfen", line: here("schöpfe") });
 			// anyone grinds at a mill and bakes at a bakery (server: mill.ts, the recipes "at" a plan)
 			if (o.plan === "windmuehle") {
 				entries.push({ label: "Mühle: wie lange noch?", line: "mahle" });
@@ -344,21 +354,21 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			made(o.plan);
 			// into one's own building or one invited into (server: interior.ts betrete); its owner sees who is invited
 			if (o.interior && (o.ownerId === me || (o.guestIds ?? []).includes(me))) entries.push({ label: "Hineingehen", line: `betrete ${o.x} ${o.y}` });
-			if (o.interior && o.ownerId === me) entries.push({ label: "Wer darf hinein?", line: "einladen" });
+			if (o.interior && o.ownerId === me) entries.push({ label: "Wer darf hinein?", line: here("einladen") });
 			// a coop, pen or hive: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
 			if (HOUSES[o.plan ?? ""]) {
 				// the house carries its herd while an animal is in it: nothing to feed in an empty one
-				if (o.herd && canFeed(o.herd, o.fedUntil, fed ? fed.feedWorldMs / (fed.houses[o.plan ?? ""] ?? 1) : 0)) entries.push({ label: "Füttern", line: "füttere" });
+				if (o.herd && canFeed(o.herd, o.fedUntil, fed ? fed.feedWorldMs / (fed.houses[o.plan ?? ""] ?? 1) : 0)) entries.push({ label: "Füttern", line: here("füttere") });
 				if (o.ownerId === me) {
 					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", rind: "Milch", schwein: "Trüffel", gans: "Daunen", biene: "Honig" };
 					// this house, not the neighbour beside it; only with something ready (todos.ts "<house>:ertrag")
 					if (o.herd && (!todos || todos.some((t) => t.id === `${o.id}:ertrag`))) entries.push({ label: `${yields[o.herd] ?? "Ertrag"} einsammeln`, line: `einsammeln ${o.x} ${o.y}` });
 					const fits = HOUSES[o.plan ?? ""]!;
-					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && fits.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} einstallen`, line: `einstallen ${n}` });
-					if (o.herd) entries.push({ label: o.plan === "bienenstock" ? "Ein Volk herausnehmen" : "Ein Tier herausnehmen", line: "ausstallen" });
+					for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && fits.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} einstallen`, line: here(`einstallen ${n}`) });
+					if (o.herd) entries.push({ label: o.plan === "bienenstock" ? "Ein Volk herausnehmen" : "Ein Tier herausnehmen", line: here("ausstallen") });
 					// slaughtering takes a knife; bees are not slaughtered (server: animals.ts schlachte, which keeps the last pair)
-					if (o.herd && o.herd !== "biene" && [...objs.values()].some((i) => i.kind === "item" && i.location === me && (i.name === "Schlachtmesser" || i.name === "Muschelmesser"))) entries.push({ label: "Ein Tier schlachten", line: "schlachte" });
-					if (o.plan === "huehnerstall" && !o.fenced) entries.push({ label: "Zaun mit Tür setzen (3 Treibholz, 1 Tangseil oder 3 Bohlen)", line: "zäune" });
+					if (o.herd && o.herd !== "biene" && [...objs.values()].some((i) => i.kind === "item" && i.location === me && (i.name === "Schlachtmesser" || i.name === "Muschelmesser"))) entries.push({ label: "Ein Tier schlachten", line: here("schlachte") });
+					if (o.plan === "huehnerstall" && !o.fenced) entries.push({ label: "Zaun mit Tür setzen (3 Treibholz, 1 Tangseil oder 3 Bohlen)", line: here("zäune") });
 				}
 			}
 			// the butcher's shop: an animal one carries is slaughtered here, with a knife (server: animals.ts schlachte); without
@@ -366,16 +376,16 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.plan === "metzgerei") slaughterEntries();
 			// a dog or cat on guard: anyone feeds it; at an own building one leaves one or takes it along (server: animals.ts)
 			const keeperName: Record<string, string> = { hund: "Hund", katze: "Katze" };
-			if (o.keeper && canFeed(o.keeper, o.keeperFedUntil, fed ? fed.feedWorldMs * fed.patience : 0)) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} füttern`, line: `füttere ${o.keeper}` });
+			if (o.keeper && canFeed(o.keeper, o.keeperFedUntil, fed ? fed.feedWorldMs * fed.patience : 0)) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} füttern`, line: here(`füttere ${o.keeper}`) });
 			if (o.keeper) entries.push({ label: "Wer wacht hier?", line: "wache" });
 			if (o.ownerId === me) {
-				if (o.keeper) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} mitnehmen`, line: `ausstallen ${o.keeper}` });
-				else for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && KEEPERS.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} hier wachen lassen`, line: `einstallen ${n}` });
+				if (o.keeper) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} mitnehmen`, line: here(`ausstallen ${o.keeper}`) });
+				else for (const n of [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && KEEPERS.includes(i.name)).map((i) => i.name))]) entries.push({ label: `${n} hier wachen lassen`, line: here(`einstallen ${n}`) });
 			}
 			// mending takes its plan's material (server: build.ts repariere): offered only when carried, with what it costs
 			const repair = plans.find((p) => p.key === o.plan)?.repair ?? [];
 			const count = (n: string) => [...objs.values()].filter((i) => i.kind === "item" && i.location === me && i.name === n).length;
-			if (repair.every((r) => count(r.name) >= r.count)) entries.push({ label: repair.length ? `Ausbessern (${repair.map((r) => `${r.count} ${r.name}`).join(", ")})` : "Ausbessern", line: "repariere" });
+			if (repair.every((r) => count(r.name) >= r.count)) entries.push({ label: repair.length ? `Ausbessern (${repair.map((r) => `${r.count} ${r.name}`).join(", ")})` : "Ausbessern", line: here("repariere") });
 			if (o.plan === "bahnhof" && beside) {
 			const island = travel?.rooms.find((r) => r.roomId === room)?.island, to = travel ? travel.rooms.filter((r) => r.island === island && r.roomId !== room && travel.stops.stations.includes(r.roomId)) : [];
 			if (to.length) for (const r of to) entries.push({ label: `Mit dem Zug nach ${r.name} · ${travel!.stops.trainFare} ${travel!.stops.trainFare === 1 ? "Münze" : "Münzen"}`, line: `zug ${r.name}` });

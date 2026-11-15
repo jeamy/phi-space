@@ -24,6 +24,9 @@ export type CommandCtx = {
 	step?: { conn: string; seq: number };
 	/** The other regions' spaces, by region (a world worker of a region reaches them): one's chests there (verstaue). */
 	elsewhere?: ReadonlyMap<string, SpaceLike>;
+	/** The cell of the building a menu entry was for (" @x,y" after the line, commands.ts execute): the commands that take
+	 *  a building beside the actor take that one, no neighbour stands in for it (build.ts atCell). */
+	at?: { x: number; y: number };
 	/** Memo of the actor's inventory for this command (read once, outside the transaction). */
 	cache: { inventory?: Array<{ e: Taken; f: ItemFields }> };
 };

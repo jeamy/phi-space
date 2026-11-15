@@ -10,7 +10,7 @@ use std::collections::HashSet;
 
 use phi_json::{obj, Json};
 
-use super::build::{dist_to, no_article, plan_of, Rect};
+use super::build::{at_cell, dist_to, no_article, plan_of, Rect};
 use super::default::{describe_room, drop_offers, place_in, relocate};
 use crate::clock::world_now_of;
 use crate::context::{msg, to_player, Ctx, MsgOpts};
@@ -230,7 +230,7 @@ pub fn may_enter(c: &Ctx, b: &Json) -> bool { is_owner(c, b) || j::a(b, "guests"
 pub async fn near_buildings(c: &Ctx, use_: Option<&str>) -> Result<Vec<Json>> {
 	let me = xy(&c.actor);
 	let Some(inside) = build_id_of(c.room()) else {
-		return Ok(c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(me, Rect::of(b)) <= 1.0).collect());
+		return Ok(c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(me, Rect::of(b)) <= 1.0 && at_cell(c, b)).collect());
 	};
 	let Some(b) = c.space.read_all(&tmpl("Building", obj! { "buildId" => inside }), None).await?.into_iter().next() else { return Ok(vec![]) };
 	if let Some(u) = use_ {
@@ -259,7 +259,7 @@ async fn enterable(c: &Ctx, arg: &str) -> Result<Json> {
 	let n = no_article(js::trim(arg)).to_lowercase();
 	let me = xy(&c.actor);
 	let near: Vec<Json> = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone())
-		.filter(|b| dist_to(me, Rect::of(b)) <= 1.0 && match at { Some(p) => dist_to(p, Rect::of(b)) == 0.0, None => n.is_empty() || plan_of(c.w(), &n).is_some_and(|p| j::at(p, "key") == j::at(b, "plan")) || txt(j::at(b, "name")).to_lowercase() == n }).collect();
+		.filter(|b| dist_to(me, Rect::of(b)) <= 1.0 && at_cell(c, b) && match at { Some(p) => dist_to(p, Rect::of(b)) == 0.0, None => n.is_empty() || plan_of(c.w(), &n).is_some_and(|p| j::at(p, "key") == j::at(b, "plan")) || txt(j::at(b, "name")).to_lowercase() == n }).collect();
 	let houses: Vec<&Json> = near.iter().filter(|b| interior_def(c.w(), j::s(b, "plan")).is_some()).collect();
 	if houses.is_empty() {
 		return match near.first() {
@@ -296,7 +296,7 @@ async fn own_house(c: &Ctx) -> Result<Json> {
 	let me = xy(&c.actor);
 	let all: Vec<Json> = match build_id_of(c.room()) {
 		Some(inside) => c.space.read_all(&tmpl("Building", obj! { "buildId" => inside }), None).await?.iter().map(|e| fields(e).clone()).collect(),
-		None => c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(me, Rect::of(b)) <= 1.0).collect(),
+		None => c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(me, Rect::of(b)) <= 1.0 && at_cell(c, b)).collect(),
 	};
 	let house = |x: &Json| interior_def(c.w(), j::s(x, "plan")).is_some();
 	let Some(b) = all.iter().find(|x| house(x) && is_owner(c, x)) else {

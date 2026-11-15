@@ -116,6 +116,47 @@ test("a hive: bee colonies eat flowers, give honey every other day and wax with 
 	} finally { await srv.close(); }
 });
 
+test("beside two hives and a coop, a line with a building's cell (a menu entry) is for that building, no neighbour stands in", { timeout: 300_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const ida = await player(srv.url, "Dreistall");
+		const accountId = String((await s.readAll({ type: "Character", fields: { charId: ida.me } }))[0]!.fields.accountId);
+		const own = { owner: ida.me, ownerName: ida.name, accountId };
+		const herd = (kind: string): HerdFields => ({ kind, fedUntilWorldMs: 0, atWorldMs: await0, goods: 0, bred: 0 });
+		const await0 = await worldNowOf(s);
+		const one = await building(s, { buildId: "stock-a", plan: "bienenstock", name: "Bienenstock", x: 16, y: 12, w: 1, h: 1, ...own, herd: herd("biene") });
+		const two = await building(s, { buildId: "stock-b", plan: "bienenstock", name: "Bienenstock", x: 18, y: 12, w: 1, h: 1, ...own });
+		const coop = await building(s, { buildId: "stall-c", plan: "huehnerstall", name: "Hühnerstall", x: 17, y: 11, w: 2, h: 1, ...own, herd: herd("huhn") });
+		await give(s, one.buildId, "bienenvolk", 1);
+		await give(s, coop.buildId, "huhn", 1);
+		ida.p.send("move 17 12");
+		await eventually(async () => { const c = (await s.readAll({ type: "Character", fields: { charId: ida.me } }))[0]?.fields; return c?.x === 17 && c?.y === 12; }, 15_000, "beside all three");
+		const fed = async (id: string) => ((await s.readAll({ type: "Building", fields: { buildId: id } }))[0]!.fields as unknown as BuildingFields).herd?.fedUntilWorldMs ?? 0;
+		// the empty hive, chosen: a colony goes into it, not into the one beside with bees already
+		await give(s, ida.me, "bienenvolk", 1);
+		await does(ida.p, "einstallen bienenvolk @18,12", "(1 Bienenvolk)");
+		assert.equal((await s.readAll({ type: "Item", fields: { location: two.buildId, proto: "bienenvolk" } })).length, 1);
+		// feeding the hive that was clicked, not the coop (which has a herd as well)
+		await give(s, ida.me, "strandnelke", 1);
+		await does(ida.p, "füttere @18,12", "satt für");
+		assert.ok((await fed(two.buildId)) > await0 && (await fed(coop.buildId)) === 0 && (await fed(one.buildId)) === 0);
+		await give(s, ida.me, "tang", 1);
+		await does(ida.p, "füttere @17,11", "Hühner");
+		assert.ok((await fed(coop.buildId)) > await0 && (await fed(one.buildId)) === 0);
+		// looking, taking out, mending: each at its cell
+		assert.match(await does(ida.p, "stall @17,11", "Hühnerstall von"), /Hühnerstall von Dreistall: 1 Huhn/);
+		await does(ida.p, "ausstallen @16,12", "aus dem Stall");
+		assert.equal((await s.readAll({ type: "Item", fields: { location: one.buildId, proto: "bienenvolk" } })).length, 0);
+		assert.equal((await s.readAll({ type: "Item", fields: { location: two.buildId, proto: "bienenvolk" } })).length, 1);
+		await give(s, ida.me, "treibholz", 1);
+		assert.match(await does(ida.p, "repariere @17,11", "bessert"), /Hühnerstall/);
+		// a cell where none of them stands: refused, not another one beside
+		assert.match(await does(ida.p, "füttere @3,3", "Stall"), /Stall/);
+		await ida.p.leave();
+	} finally { await srv.close(); }
+});
+
 test("a pen of pigs: they eat potatoes, not kelp, and root up a truffle every third day while fed; two of them soon get a piglet", { timeout: 300_000 }, async () => {
 	const srv = await startServer();
 	try {

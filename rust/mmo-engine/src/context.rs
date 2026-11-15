@@ -23,6 +23,9 @@ pub struct Ctx {
 	pub inventory: Option<Vec<Json>>,
 	/// The other regions' spaces (`elsewhere`): one's chests there, one's deeds.
 	pub elsewhere: Vec<(String, Space)>,
+	/// `at`: the cell of the building a menu entry was for (" @x,y" after the line, execute.rs); the commands that take a
+	/// building beside the actor take that one (build.rs `at_cell`).
+	pub at: Option<(f64, f64)>,
 }
 
 impl Ctx {

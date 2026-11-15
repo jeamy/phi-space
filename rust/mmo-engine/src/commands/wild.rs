@@ -373,7 +373,8 @@ async fn pay_fence(c: &mut Ctx, first: &[Json], alt: Option<&[Json]>) -> Result<
 async fn zaeune(c: &mut Ctx) -> Result<()> {
 	let wd = wild(c)?;
 	let me = (j::n(&c.actor, "x"), j::n(&c.actor, "y"));
-	let near = |xs: Vec<Json>| -> Vec<Json> { xs.into_iter().filter(|x| dist_to(me, Rect::of(x)) <= 1.0).collect() };
+	let at = c.at;
+	let near = |xs: Vec<Json>| -> Vec<Json> { xs.into_iter().filter(|x| dist_to(me, Rect::of(x)) <= 1.0 && at.is_none_or(|p| dist_to(p, Rect::of(x)) == 0.0)).collect() };
 	let read = |ty: &'static str| { let t = tmpl(ty, obj! { "room" => c.room() }); let space = c.space.clone(); async move { Ok::<_, Error>(space.read_all(&t, None).await?.iter().map(|e| fields(e).clone()).collect::<Vec<Json>>()) } };
 	let name = txt(j::at(&c.actor, "name"));
 	if near(read("Bed").await?).iter().any(|b| may_tend(c, b)) {

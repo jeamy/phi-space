@@ -1464,6 +1464,18 @@ fn keeping_animals() {
 	w.write(building("m-1", "metzgerei", "Metzgerei", 12.0, 13.0, 9));
 	stand(&mut w, 1, "graue-bucht", 12.0, 12.0);
 	for (who, line) in [(&a, "schlachte hund"), (&a, "schlachte ziege"), (&a, "schlachte"), (&a, "schlachte huhn"), (&a, "schlachte"), (&a, "schlachte"), (&a, "schlachte"), (&a, "inventory")] { run(&mut w, who, line, 0.0); }
+	// beside two hives and a coop: a line with a building's cell (a menu entry, " @x,y") is for that one, no neighbour
+	// stands in; a cell with none of them is refused; talk keeps its words
+	w.write(building("b-1", "bienenstock", "Bienenstock", 14.0, 16.0, 1));
+	w.write(building("b-2", "bienenstock", "Bienenstock", 17.0, 16.0, 1));
+	w.write(building("s-2", "huehnerstall", "Hühnerstall", 15.0, 18.0, 1));
+	stand(&mut w, 1, "graue-bucht", 16.0, 17.0);
+	for (p, k) in [("bienenvolk", 3), ("strandnelke", 2), ("huhn", 1), ("weizen", 2), ("treibholz", 4), ("tangseil", 2)] { give(&mut w, &a, p, k); }
+	for (who, line) in [
+		(&a, "einstallen bienenvolk @17,16"), (&a, "einstallen bienenvolk @14,16"), (&a, "einstallen bienenvolk @18,17"), (&a, "füttere @15,18"), (&a, "einstallen huhn @14,16"), (&a, "einstallen huhn @16,19"),
+		(&a, "füttere @17,16"), (&a, "füttere @15,18"), (&a, "stall @14,16"), (&a, "stall @15,18"), (&a, "stall"), (&a, "ausstallen @14,16"), (&a, "repariere @15,18"), (&a, "repariere @17,16"),
+		(&a, "füttere @3,3"), (&a, "stall @3,3"), (&a, "zäune @15,18"), (&a, "einsammeln 17 16"), (&a, "sag hallo @1,2"), (&a, "füttere"),
+	] { run(&mut w, who, line, 0.0); }
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
 }
 

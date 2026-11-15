@@ -999,6 +999,13 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
      - **Map and help:** Chicken coop (little house on stilts with ramp and chickens) and pen (fence, trough, shelter, a
        sheep) in 3D; the cell menu offers looking, feeding, stabling, collecting. Help: section "Tiere" in the article
        "Gärten", topic `help tiere`.
+     - **The clicked building (2026-11-15):** Beside several buildings (two hives and a coop) a command used to take the
+       first that fit, so "Füttern" in a hive's menu could feed the coop beside it. A menu entry for a building now
+       sends that building's cell after its line (`füttere @17,16`); `execute` strips it into `CommandCtx.at`, and
+       every helper that picks a building beside the actor (`takeNear`, `nearBuildings`, `houseHere`, the fence, the
+       inside) takes only the one on that cell (`atCell`) or refuses, never a neighbour and never through the model.
+       The bar "Hier möglich" names the building before an entry it offers for two of them ("Bienenstock 17,16:
+       Füttern"). Typed lines without a cell work as before.
 
      Acceptance (`tests/animals.test.ts`):
      - A stranger may feed, but not stable and not collect. Only what fits in is fed.

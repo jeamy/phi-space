@@ -149,9 +149,20 @@ test("feeding is offered at a coop only while animals live in it", () => {
 	const lines = (o: Map<string, ObjView>) => cellEntries({ ...input, at: { x: 6, y: 5 }, objs: o }).map((e) => e.line);
 	const labels = (o: Map<string, ObjView>) => cellEntries({ ...input, at: { x: 6, y: 5 }, objs: o }).map((e) => e.label);
 	assert.equal(labels(coop("huhn")).filter((l) => /ansehen/.test(l)).length, 1, "one way to look at a coop, not two with different answers");
-	assert.ok(lines(coop("huhn")).includes("stall") && lines(coop()).includes("stall"));
-	assert.ok(lines(coop("huhn")).includes("füttere"));
-	assert.ok(!lines(coop()).includes("füttere") && lines(coop()).includes("stall"), "an empty coop can only be looked at");
+	assert.ok(lines(coop("huhn")).includes("stall @6,5") && lines(coop()).includes("stall @6,5"));
+	assert.ok(lines(coop("huhn")).includes("füttere @6,5"));
+	assert.ok(!lines(coop()).includes("füttere @6,5") && lines(coop()).includes("stall @6,5"), "an empty coop can only be looked at");
+});
+
+test("beside two hives and a coop, each entry names its building by its cell; the bar tells them apart", () => {
+	const house = (id: string, name: string, plan: string, herd: string, x: number) => [id, obj({ id, kind: "building", name, plan, herd, ownerId: "me", owner: "Ich", x, y: 4, w: 1, h: 1 })] as [string, ObjView];
+	const objs = new Map<string, ObjView>([house("h1", "Bienenstock", "bienenstock", "biene", 5), house("h2", "Bienenstock", "bienenstock", "biene", 6), house("c", "Hühnerstall", "huehnerstall", "huhn", 4)]);
+	const self = char("me", "Ich", 5, 5);
+	const lines = (x: number) => cellEntries({ ...input, self, objs, at: { x, y: 4 } }).map((e) => e.line);
+	assert.ok(lines(6).includes("füttere @6,4") && lines(6).includes("repariere @6,4") && lines(6).includes("ausstallen @6,4"), lines(6).join(" | "));
+	assert.ok(lines(4).includes("füttere @4,4") && !lines(4).some((l) => l.endsWith("@6,4")), "the coop's menu is for the coop");
+	const bar = hereEntries({ chars: input.chars, objs, self, room: "r", me: "me", plans: [], guest: false, fuel: undefined }).filter((e) => e.line.startsWith("füttere"));
+	assert.deepEqual(bar.map((e) => e.label).sort(), ["Bienenstock 5,4: Füttern", "Bienenstock 6,4: Füttern", "Hühnerstall: Füttern"]);
 });
 
 test("the large ship offers its timetable and a ride to every other island", () => {
@@ -188,9 +199,9 @@ test("beside a coop that is still a site, \"what is missing?\" asks the site, no
 	const site = obj({ id: "s", kind: "site", name: "Hühnerstall", owner: "Keno", ownerId: "k", plan: "huehnerstall", x: 6, y: 5, w: 2, h: 1 });
 	const lines = cellEntries({ ...input, objs: new Map([["s", site]]), at: { x: 6, y: 5 } }).map((e) => e.line);
 	assert.ok(lines.includes("baustelle 6 5"), lines.join(" | "));
-	assert.ok(!lines.includes("stall"));
+	assert.ok(!lines.some((l) => l.startsWith("stall")));
 	const coop = obj({ id: "c", kind: "building", name: "Hühnerstall", owner: "Keno", ownerId: "k", plan: "huehnerstall", x: 6, y: 5, w: 2, h: 1 });
-	assert.ok(cellEntries({ ...input, objs: new Map([["c", coop]]), at: { x: 6, y: 5 } }).some((e) => e.line === "stall"), "a finished coop shows its animals");
+	assert.ok(cellEntries({ ...input, objs: new Map([["c", coop]]), at: { x: 6, y: 5 } }).some((e) => e.line === "stall @6,5"), "a finished coop shows its animals");
 });
 
 test("\"Truhe ansehen\" only at an own building whose plan has a chest: a hut yes, a scarecrow or a coop no", () => {
@@ -286,7 +297,7 @@ test("a hut one may enter offers „Hineingehen“; inside, the hearth cooks, th
 	const lines = (objs: Map<string, ObjView>) => cellEntries({ ...input, self, objs, at: { x: 10, y: 10 } }).map((e) => e.line);
 	assert.ok(!lines(house({})).includes("betrete 10 10"), "a stranger's hut stays shut");
 	assert.ok(lines(house({ guestIds: ["me"] })).includes("betrete 10 10"), "invited");
-	assert.ok(lines(house({ ownerId: "me" })).includes("betrete 10 10") && lines(house({ ownerId: "me" })).includes("einladen"), "one's own");
+	assert.ok(lines(house({ ownerId: "me" })).includes("betrete 10 10") && lines(house({ ownerId: "me" })).includes("einladen @10,10"), "one's own");
 	const inside = "in-hut", at = char("me", "Mira", 2, 2);
 	const furniture = new Map<string, ObjView>([
 		["herd", obj({ id: "herd", kind: "scenery", name: "Herd", model: "herd", use: "cook", plan: "huette", ownerId: "me", fixed: true, location: inside, x: 1, y: 1 })],
