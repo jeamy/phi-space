@@ -71,8 +71,9 @@ test("a fire goes out by itself at the computed moment; without it the fog rises
 });
 
 test("the tide brings flotsam up to a limit; what nobody picks up leaves again, what is picked up stays", async () => {
-	// 0.02: a wave every 1.2 s, flotsam lies 6 s
-	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.02" } });
+	// 0.02: a wave every 1.2 s, flotsam lies 6 s; without the staples every island gets on top (fire.ts bringStaples),
+	// which lie longer and are no part of a room's limit
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.02", SPACES_MMO_STAPLES: "0" } });
 	try {
 		const space = srv.stack.space;
 		const a = await player(srv.url, "Strandgut");
@@ -124,7 +125,8 @@ test("scripted NPCs: the ferryman crosses for game hours without leaving entries
 		await lightFire(space, 120_000);
 		await eventually(async () => (await fog(space, "graue-bucht")) === 0, 20_000, "fog cleared");
 		const a = await player(srv.url, "Gast");
-		await stack.npcProcess();
+		// only the two it is about: the world has many more NPCs online now, each with a session of its own
+		await stack.npcProcess({ SPACES_MMO_NPCS: "ines,bo" });
 		// who tells the moment it is asked: asked again until both have come online
 		await eventually(async () => {
 			const n = a.p.frames.length;
