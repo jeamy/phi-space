@@ -3,6 +3,7 @@
 // model process reads the task, the team's attempts, notes, plans, critiques, findings and earlier results itself. So a
 // call entry stays small whatever the room holds (the space caps an entry at 64 KiB, and the context of one call can be
 // several times that). Calls about a task that has no block yet (its check rule, its criteria) carry the task's spec.
+import { toolExamples } from "./examples.ts";
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { HELD_WAIT_MS } from "./space.ts";
 import type { Attempt, CritiqueRef, Earlier, Finding, PlanRef, Role, TeamContext, Usage } from "./llm.ts";
@@ -23,6 +24,8 @@ export type LlmCall = {
 	role?: Role; targetId?: string; partnerId?: string; critiqueId?: string; proposalId?: string;
 	/** contribute and propose: earlier accepted results as material; research findings of the block as material. */
 	withEarlier?: boolean; withFindings?: boolean;
+	/** contribute on a bot task on made islands: the tools' real answers in the prompt (server/examples.ts). */
+	toolExamples?: boolean;
 	/** vote: the proposals to rate (by id); judge: the answer. */
 	proposalIds?: string[]; answerId?: string;
 	/** verify / criteria / reviewCriteria: the task (it has no block yet), and why the last check rule was refused. */
@@ -103,12 +106,13 @@ export async function callArgs(space: SpaceLike, call: LlmCall): Promise<Record<
 	const bestSource = best ? usable.find((a) => a.candidateId === best.candidateId)?.source : undefined;
 	const plan = await planOf(space, call), critique = await critiqueOf(space, call), ea = await earlier(space, call, t.task);
 	const obs = await observationsOf(space, call, t.task);
+	const ex = call.toolExamples ? await toolExamples(t.task) : null;
 	const ctx: TeamContext = {
 		task: t.task, lang: call.lang, agent: call.agent, gen: call.gen, ...(call.model ? { model: call.model } : {}),
 		role: call.role ?? "explore", target: target && !target.rejected ? target : null,
 		others: usable.filter((a) => a.candidateId !== call.targetId && a.candidateId !== call.partnerId).slice(0, 3), rejected: t.attempts.filter((a) => a.rejected).slice(0, 3), notes: t.notes,
 		best: best && bestSource !== undefined ? { source: bestSource, ms: best.ms } : null,
-		...(critique ? { critique } : {}), ...(partner ? { partner } : {}), ...(plan ? { plan } : {}), ...(some(ea) ? { earlier: ea } : {}), ...(some(fs) ? { findings: fs } : {}), ...(obs.length ? { observations: obs } : {}),
+		...(critique ? { critique } : {}), ...(partner ? { partner } : {}), ...(plan ? { plan } : {}), ...(some(ea) ? { earlier: ea } : {}), ...(some(fs) ? { findings: fs } : {}), ...(obs.length ? { observations: obs } : {}), ...(ex ? { toolExamples: ex } : {}),
 	};
 	return ctx as unknown as Record<string, unknown>;
 }

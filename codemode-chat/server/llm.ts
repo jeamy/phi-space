@@ -6,6 +6,7 @@
 // with model agents; beyond the day budget the caller falls back to scripted agents. Several models can take part in
 // one run: the caller names the model. Agents are teammates: each sees the cases, the team's attempts with their test
 // results, and the notes, and repairs, explores or improves (teamPrompt).
+import { describeToolExamples } from "./examples.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { liveModels } from "../../agent/src/live-models.ts";
 import { isText, type Task } from "./tasks.ts";
@@ -120,6 +121,8 @@ export type Note = { author: string; gen: number; text: string; human?: boolean 
 export type TeamContext = { task: Task; lang: "de" | "en"; agent: number; gen: number; model?: string; role?: Role; target?: Attempt | null; others?: Attempt[]; rejected?: Attempt[]; notes?: Note[]; best?: { source: string; ms: number } | null;
 	/** A bot task with observations: what `observations()` returns to this generation's bots (its freeze), shown to the agent too. */
 	observations?: Array<TideSeen | ChanceSeen>;
+	/** A bot task on made islands: the tools' real answers on the first shown episode (server/examples.ts). */
+	toolExamples?: string;
 	/** revise: the critique to work with; merge: the second attempt to combine with `target`. */
 	critique?: CritiqueRef; partner?: Attempt;
 	/** explore on the work board after the planning round: the plan the team chose to implement. */
@@ -262,7 +265,7 @@ export function teamPrompt(c: TeamContext): { system: string; user: string } {
 		...(t.kind === "tools" ? [TOOLS_RULE] : t.kind === "bot" ? [BOT_RULE] : t.kind === "harness" ? [HARNESS_RULE] : []),
 	];
 	parts.push(...describeEarlier(c.earlier, false), ...describeFindings(c.findings));
-	parts.push(...describeObservations(c.observations));
+	parts.push(...describeObservations(c.observations), ...describeToolExamples(c.toolExamples));
 	if (c.rejected?.length) parts.push("NOT like this. These attempts were rejected; do not repeat their approach:\n" + c.rejected.map((a) => `- ${a.author} (${a.via}, generation ${a.gen}), ${a.rejected}:\n\`\`\`js\n${clipText(a.source, isLong(t) ? 3000 : 800)}\n\`\`\``).join("\n"));
 	const hints = c.notes?.filter((n) => n.human) ?? [], notes = c.notes?.filter((n) => !n.human) ?? [];
 	if (hints.length) parts.push("Guidance from the people you work for. FOLLOW it; it outranks everything else here:\n" + hints.map((n) => `- ${n.author}: ${n.text}`).join("\n"));

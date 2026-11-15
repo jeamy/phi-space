@@ -1,4 +1,4 @@
-# Planning bots without a learned world model: notes for an article
+# Planning bots without a neural world model
 
 ## The question
 
@@ -32,11 +32,11 @@ The agents do not train a model. They write a bot, a JavaScript function that pl
 - `act({ line })` types a command as a player would;
 - `wait({ minutes })` lets world time pass.
 
-Every call costs one point. The judge plays each bot in several episodes, each a world of its own: three shown, six
-hidden, one or three seeds each, and the goal must still hold some minutes after the bot is done. What the bot learns,
-it learns while it plays: its map of the rooms it has seen, and, in the last step, the law of the tide fitted to
-observations that earlier generations collected. What the agents learn, they learn as code: the next generation reads
-the verdicts, the case lines and the frozen memory, and writes a better bot.
+Every call costs one point. The judge plays each bot in three shown and six hidden episodes, each in its own
+world. Depending on the task, an episode uses one, three or eight seeds. Tasks with `hold` also require the goal to
+remain satisfied after the bot finishes. During play, the bot builds a map of the rooms it visits. Steps 7 and 8
+provide frozen observations from earlier generations; step 9 provides a logbook of earlier days on the current
+island. Across generations, agents read verdicts, case results and the available observations, then write the next bot.
 
 ![LeWM and codemode side by side](img/codemode-planung/lewm-vs-codemode.svg)
 
@@ -53,57 +53,48 @@ are built from what it sees and from the frozen observations; its goal is a pred
 |---|---|---|
 | Encoder: pixels → embedding | `look()` returns symbols already | Different: no perception is learned |
 | Predictor: (state, action) → next state, a neural net trained on demonstrations | The bot's map: "room A, exit ost → room B", built during one episode. Since step 7 also a model of the tide, fitted to observations | Same role. Different form: code and data, exact where the rules are exact, fitted where they are hidden |
-| Planner: CEM or MPC over hundreds of rolled-out sequences | Breadth-first route over the map, timing against the clock, calibration on the first piece seen; since step 8 a search over rounds by their expected pieces | Same role. Simpler, because the model is small and its odds are known once estimated |
+| Planner: CEM or MPC over hundreds of rolled-out sequences | Breadth-first route over the map, timing against the clock, calibration on the first piece seen; since step 8 a search over rounds by their expected pieces | A compact model permits explicit route search using estimated odds |
 | Goal: an image of the target state | A predicate the world checks (`beacon:island` held 5 minutes, `feed:island:3`) | The post's own advice: score what matters |
 | Horizon as the limit; subgoals | Goals several rooms away; subgoals as data in a plan (step 4) | Carried over |
 | Memory graph with a jump cost | `recall` over the frozen paths of earlier generations, a jump between paths costing 10 cells (step 3) | Carried over |
 | Fresh episodes, seeds, a held goal | 3 shown and 6 hidden episodes, 1 or 3 seeds, `hold`; since step 6 hidden islands no shown episode enters | Carried over and pushed further: hidden worlds, not only hidden start and goal pairs |
 | Learning: gradient descent on weights, offline | Agents rewrite code across generations; the bot fits a small hypothesis space at run time | Different |
 
-## Why no learned model
+## What the bot needs to predict
 
-A bot has to find its way in worlds it has not seen. A model trained on one island learns that island: its rooms, its
-exits, where its fire stands. On another island that is the mistake of a bot that carries the first island's map, and
-step 6 measures it: such a bot reaches 0 of 9 episodes on made islands. What carries over to a new world is a way of
-searching:
+In step 6, a bot with the Graue Insel's map built into its code reaches none of the nine episodes on generated
+islands. A bot that observes its surroundings, remembers connections and plans routes over them reaches all nine.
+This experiment demonstrates the value of a search procedure that builds its map during play.
 
-1. look;
-2. remember what was seen;
-3. plan over that.
+The judge's worlds follow explicit rules. For these tasks, a bot can store observed room connections and apply the
+movement and timing rules directly. A neural predictor could be useful when a planner needs many rollouts and direct
+simulation is too expensive. These experiments do not measure that trade-off.
 
-The judge's worlds are exact simulators, so nothing needs to be predicted that the rules already say. A learned
-predictor would pay off only for planners that roll out many sequences in a world too slow to simulate. A neural
-model would also need Python or ONNX, weights that are not published, and a GPU that neither of the project's
-servers has.
+Step 7 introduces a hidden tide rule that the bot can infer from recorded events. Steps 8 and 9 extend the model to
+landing probabilities. In step 9, those probabilities belong to each individual island and must be estimated from
+its logbook.
 
-What a bot cannot see has to be learned, though. Step 7 adds such a dynamic, the tide, and the bot learns it from data,
-as code. That is the part of a world model that carries over.
+## What the comparison establishes
 
-## What carries over, what does not
+Codemode uses discrete rooms, known movement rules and structured observations. Its maps, routes, subgoals and
+estimated tide models can be inspected. From step 6 onward, evaluation includes unfamiliar worlds. The task
+"Rate planners" also tests whether agents can write an evaluation that exposes weaknesses in candidate bots.
 
-**Codemode is stronger where:**
-- the model is exact and readable: the map, the route, the subgoals and the fitted law can be printed and drawn;
-- no training data, no GPU and no weights are needed;
-- generalisation is tested on worlds the bot has never seen, not only on new start and goal pairs in one world;
-- the evaluation lessons are a task of their own: "Rate planners" asks agents to write a judge that is not fooled.
+LeWM addresses perception from pixels and planning with continuous control and physical effects such as contact
+and friction. Codemode's islands have five to eight rooms, one fire and four exit directions. Step 7 calibrates a
+seed-dependent time offset; steps 8 and 9 model landings probabilistically. Fixed seeds make these experiments
+reproducible while the bots plan with estimated probabilities.
 
-**LeWM can do what codemode does not:**
-- perception from raw pixels: codemode's world is already cut into symbols;
-- dynamics nobody can write down, such as contact and friction: codemode's rules are discrete and known, except the
-  one law step 7 hides;
-- continuous control and uncertainty: the bots assume a deterministic world. The tide's seed is the only chance they
-  meet, and they handle it by calibration, not by a distribution.
+The scripted bots represent predefined strategies. Their results show which strategies the judge distinguishes
+under the chosen conditions. Model runs additionally show how observations enter later code contributions. On
+"Learn the tide", Opus first used a statistic of the observations, then inferred the relevant rule when observations
+were included in its prompt. On "Odds of the tide", Sonnet, Opus and GPT passed, although only GPT estimated the odds.
+Step 9 removed the shared spatial assumptions that allowed those other strategies to pass.
 
-**Honest limits of what was shown:**
-- The scripted agents are fixed hypotheses. They demonstrate that the judge, the data and the tasks separate good bots
-  from bad ones, not that agents learn. The model runs (Haiku, Sonnet and Opus 5.5, GPT-6.1 Sol, 2026-11-14, below)
-  show learning across generations. Before the observations were in the prompt, Opus solved "Learn the tide" with a
-  statistic of them, not the law. With them in the prompt, Opus read the law off the data in one generation and wrote
-  it into its bot; Sonnet, Opus and GPT solved "Odds of the tide", only GPT with the odds, which that task turned out
-  not to require. Haiku came past neither task's rules of the game.
-- The learner of step 7 fits a hypothesis space its author wrote. It finds which hypothesis the data support; it does
-  not invent new ones. An agent reading the observations can: Opus 5.5 found the law of step 7 that way (below), n = 1.
-- The toy islands are small: 5 to 8 rooms, one fire, four exit directions.
+With concrete tool answers in the prompt, Sonnet solved step 9 in generation 2, and Opus and GPT in generation 1.
+Their winning bots fell below the target on 2, 0 and 0 of the 95 additional islands, respectively. Haiku still failed.
+Each example-assisted condition has one run. These are case studies of generated programs and prompt conditions;
+more independent runs are needed to estimate success rates or rank the models reliably.
 
 ## Development log
 
@@ -488,8 +479,7 @@ model fitted to them. Here the model is a table of rates the bot fills itself.
 | GPT-6.1 Sol's winner of step 8 | 0 of 9 | 100 % (it calls `observations()`, which this task does not have) |
 
 The nine islands were chosen where every wrong bot fails, so the 0 of 9 is by construction; the last column is not.
-Without its tool, GPT's winner fails at once; with the tool renamed it would read the logbook as it read the
-observations, and that is the bot this step asks for. Sonnet's and Opus's winners fail for the reason the step was
+Without its tool, GPT's winner fails at once; adapting it to the logbook would require another test. The reported result therefore includes an interface incompatibility. Sonnet's and Opus's winners fail for the reason the step was
 built for: their prior is wrong on almost every island. The learner brings 0.87 to 1.0 times the reference plan's
 mean on the 95 islands (median 1.0).
 
@@ -583,6 +573,68 @@ rooms, and its six errors are all rooms with a piece taken for empty (probabilit
 with it the round is 2 or 3 of 95 below the target. So the perfect result above came from the four levels in the question, and without
 them Jev reads the logbook about as well as the learner counts it, not better. The documentation says the same of
 `noul`: it is a probability of "yes", not said to be calibrated.
+
+## Triage between generations (2026-11-14)
+
+Sonnet and Haiku did not fail step 9 at the odds but at the interface: their bots guessed the logbook's shape and
+never saw a piece. So the loop between generations gets a triage (`server/triage.ts`, `triage: "jev" | "fixed"` when
+a run starts): after a generation's verdicts, Jev sorts each failing contribution into a cause (interface, rule,
+strategy), and the next generation gets a fixed hint for the main cause as a team note; the control `fixed` sends the
+interface hint every generation, without Jev. The judge is untouched.
+
+The first version gave Jev the judge's failure text. It took "goal not reached; 0 seen in a look, 0 picked up" for a
+strategy failure and sent the strategy hint ("keep the working code"); offline, on the 103 failing contributions of the
+step 9 runs, it matched the rule-based cause 233 of 309 times (3 repeats). Given the numbers of the failure as fields
+of their own (`failureFacts`: pieces seen and picked up, world minutes, tool calls, whether it crashed or hit a limit)
+it matched 309 of 309. The rule and Jev's criteria name the same fields, so this shows that Jev reads them, not that
+it finds causes a rule would miss.
+
+| Run on "Shores of the tide" (5 generations) | Contributions that picked up pieces | Most pieces in the fire (first seed) | Crashed | Cost |
+|---|---|---|---|---|
+| Sonnet, no triage (2 runs) | 0 and 2 of 15 | 0 and 2 | 3 and 6 | $0.43, $0.48 |
+| Sonnet, Jev on the failure text (strategy hint in generations 1 to 3) | 0 of 15 | 0 | 1 | $0.45 |
+| Sonnet, Jev with the numbers (interface hint) | 5 of 15 | 3 | 1 | $0.52 |
+| Sonnet, the interface hint always (`fixed`) | 7 of 15 | 3 | 5 | $0.45 |
+| Haiku, no triage (2 runs) | 0 of 15 | 0 | 7 and 7 | $0.02 each |
+| Haiku, Jev with the numbers (interface hint) | 0 of 15 | 0 | 13 | $0.02 |
+| Haiku, the interface hint always (`fixed`) | 0 of 15 | 0 | 12 | $0.02 |
+
+None of them solved the task. The interface hint gets Sonnet's bots through the tools (5 and 7 of 15 contributions
+picked up pieces, against 0 and 2 without it), but not to the target; a wrong hint is worse than none. Jev with the
+numbers chose the interface hint every time, so on this task it adds nothing over sending that hint always; it would
+earn its place on a task whose failures change cause between generations. Haiku's bots crashed more often with the
+hint than without (12 and 13 of 15 against 7): the hint does not reach a model that cannot read the tools'
+description. One run per variant: a tendency, not a measurement.
+
+## Real tool answers in the prompt (2026-11-14)
+
+A hint says what not to do; an example shows the shapes. With `examples: "always"` when a run starts
+(`server/examples.ts`), every contribution's prompt carries what the tools really return on the task's first shown
+episode, called in turn: a look, the logbook (its first day, "… 5 more days of the same form"), a walk, a second look,
+a wait, a pick-up with nothing there. The judge plays the made islands itself, so the same toy arena gives the
+answers; they come from a shown island and the logbook's own days, nothing of a hidden episode. The example shows,
+among other things, that `fromFire` is a number, the distance to the fire, where Sonnet's bots had assumed a list of
+exits.
+
+Same conditions as before (3 agents, 5 generations, one contribution each, 2 improvement rounds, German prompts),
+one run per model:
+
+| Model | Without the example | With it | Best tool points (nine episodes) | Of the reference plan's mean on the 95 unselected islands | Below the target, of 95 | Cost |
+|---|---|---|---|---|---|---|
+| Claude Haiku 5.5 | not solved (2 runs) | not solved | | | | $0.03 |
+| Claude Sonnet 5.5 | not solved (2 runs, and 3 with triage) | generation 2 | 6965 | 0.87 to 1.41 (median 1.06) | 2 | $0.63 |
+| Claude Opus 5.5 | generation 2 (9516 points) | generation 1 | 7440 | 1.00 to 1.54 (median 1.11) | 0 | $1.10 |
+| GPT-6.1 Sol | generation 2 (8793 points) | generation 1 | 6720 | 1.00 to 1.54 (median 1.14) | 0 | $0.39 |
+
+The example does what the hints did not: Sonnet solves the task, Opus and GPT a generation earlier and for fewer
+points, all three below the reference plan's 9033 points and with more pieces than it on most islands (their rounds
+are planned anew before every tide). Haiku's bots stopped crashing but still did not move: they read the logbook,
+looked once and ended at 0 world minutes, in every generation.
+
+So the failures of step 9's first runs were mostly not about planning but about reading an interface from its
+description. That is a finding about the setting rather than the models: a task whose tools are described only in
+words measures how well a model guesses a format, and one example removes most of it. The open question is whether
+the examples belong in every bot task's prompt; the runs above with examples are the comparison for that.
 
 ## Figures
 
@@ -689,18 +741,19 @@ logbook (9516 points).*
 *Figure 19. GPT-6.1 Sol on "Shores of the tide": every target from generation 2 on; the map and the odds from the
 logbook, a new round before every tide (8793 points, fewer than the reference plan's 9033).*
 
-## Open
+## Open questions
 
-- Repeats on "Shores of the tide": Sonnet's failure at the logbook's format, and whether a hint in the prompt (the
-  logbook's shape) changes it.
-- Jev in the loop between generations: it sorts each failure (interface, game rule, strategy) and the loop hands the
-  next generation a matching hint; Sonnet on "Shores of the tide" with and without it.
-- Repeats: every model and task ran once, GPT twice (7 and 2 of 9 on "Learn the tide"). Opus's two solutions and
-  Haiku's two failures look stable from their curves; the rest needs more runs.
-- A law that changes between generations: then only a bot that reads `observations()` at run time (GPT's way) keeps
-  passing, and a law written into the code as constants (Opus's and Sonnet's way) fails.
-- The effect of each of the four changes alone (observations in the prompt, longer code, richer failures, the limit).
-- The durable agent path on a task its own check never passes: hand in the last code instead of failing.
-- Goals as sets ("any fire of the island burns") and goals against the usual direction. The post leaves both open too.
-- Risk beyond the mean: a target that also bounds the bad days (a quantile, not only the mean), so a plan must weigh
-  variance as well.
+- How do concrete tool examples affect steps 7 and 8? Should they become standard for bot tasks on generated
+  islands? Why do Haiku's bots still fail to move with an example?
+- How stable are the results across further independent model runs? GPT reached 7 of 9 episodes on its first
+  "Learn the tide" run and 2 of 9 on its second. Repetition counts vary by model and task; each example-assisted
+  step 9 condition has one run.
+- How do bots respond when the tide rule changes between generations? A comparison could establish when updating
+  estimates through `observations()` helps relative to a rule embedded in code.
+- What is the individual effect of observations in the prompt, the longer code window, richer failures and the
+  point limit? The four changes were introduced together.
+- Can the durable agent path submit its last code when its own check keeps failing until the request budget ends?
+- How should goals expressed as sets ("any fire on the island burns") and goals against the usual direction be
+  handled? The source post also leaves these open.
+- How do routes change when success depends on a lower quantile of yield? Such a target would account for
+  variability across seeds as well as the mean.

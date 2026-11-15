@@ -867,6 +867,10 @@ export class CodeChatHub {
 	async startRun(id: string, o: { agents?: number; gens?: number; perAgent?: number; polish?: number; mode?: RunMode; contenders?: string[]; models?: string[]; lang?: "de" | "en"; board?: boolean; plan?: boolean; budgetTokens?: unknown; budgetUsd?: unknown;
 		/** Research with web search before the work (work board only); the server lets only an admin ask for it. */
 		research?: boolean;
+		/** Triage between generations: "jev" (Jev sorts the failures) or "fixed" (the interface hint always); admin only. */
+		triage?: unknown;
+		/** Real tool answers in the prompt: "always", or "triage" (once a triage named the interface; needs triage); admin only. */
+		examples?: unknown;
 		/** Who asks (set by the server, never from the request body): a visitor's run gets the default budget at most and
 		 *  counts against the day's allowance of their address. Without it (tests, scripts in-process) it counts as admin. */
 		client?: { ip: string; admin: boolean } }): Promise<void> {
@@ -894,9 +898,16 @@ export class CodeChatHub {
 		const mode: RunMode = contenders.some((c) => c !== "scripted") ? "llm" : "scripted";
 		const research = o.research === true;
 		if (research && !board) throw new Error("Research runs on the work board with model agents only");
+		const triage = o.triage === "jev" || o.triage === "fixed" ? o.triage : undefined;
+		if (triage && (board || mode !== "llm")) throw new Error("Triage runs between generations of model agents only");
+		if (triage && visitor) throw new Error("Triage needs the admin login");
+		const examples = o.examples === "always" || o.examples === "triage" ? o.examples : undefined;
+		if (examples && (board || mode !== "llm" || !s.task.bot?.toyRules)) throw new Error("Tool examples run between generations of model agents, on a bot task on made islands");
+		if (examples === "triage" && !triage) throw new Error("Tool examples on triage need a triage");
+		if (examples && visitor) throw new Error("Tool examples need the admin login");
 		// checked and written under the room's lock and in one transaction: the CodeRun is unique per room, so of two
 		// requests only one starts a run; the agent processes carry it out (model calls by the model process)
-		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, agents, gens, perAgent, polish, contenders, lang: o.lang === "de" ? "de" : "en", board, plan: board && o.plan !== false, research, budget, engine: "space", ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };
+		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, agents, gens, perAgent, polish, contenders, lang: o.lang === "de" ? "de" : "en", board, plan: board && o.plan !== false, research, budget, engine: "space", ...(triage ? { triage } : {}), ...(examples ? { examples } : {}), ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };
 		if (board) await this.#trimPlans(s); // a planning round adds up to one proposal and one vote per agent
 		await this.#exclusive(s, async () => {
 			if (await this.#runNow(s)) throw new Error("A run is already active");

@@ -24,6 +24,8 @@ import { limitOf, maxTimeoutMs } from "./judge.ts";
 import { addUsage, criticModel, type Attempt, type Role, type Usage } from "./llm.ts";
 import type { CallKind, LlmCall, LlmResultEntry } from "./context.ts";
 import { crossWaitMs, FATAL_LLM, modelWaitMs, verdictWaitOr } from "./limits.ts";
+import { triageNote, type TriageMode } from "./triage.ts";
+import type { ExamplesMode } from "./examples.ts";
 import { addNote, answersOf, attemptOf, blockTask, enqueueAnswer, enqueueCandidate, isSolved, rankedProposals, rid, scoresOf, systemLine, teamView, planTurn } from "./room.ts";
 import { archive } from "./results.ts";
 import { entryLeaseMs, HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeAll, takeExisting } from "./space.ts";
@@ -46,7 +48,11 @@ export type RunInfo = { active: boolean; blockId: string; mode: RunMode; contend
 /** What a run was started with. */
 export type RunParams = { runId: string; agents: number; gens: number; perAgent: number; polish: number; contenders: string[]; lang: "de" | "en"; board: boolean; plan: boolean; research: boolean; budget: { tokens?: number; usd?: number };
 	/** Who started it: a visitor's usage counts against the day's allowance of their address; an admin's does not. */
-	client?: { ip: string; admin: boolean }; engine?: "space" };
+	client?: { ip: string; admin: boolean }; engine?: "space";
+	/** Triage between generations (server/triage.ts): Jev sorts the failures and the next generation gets a hint for the cause. */
+	triage?: TriageMode;
+	/** Real tool answers in the prompt (server/examples.ts): "always", or "triage" once a triage named the interface. */
+	examples?: ExamplesMode };
 /** A generation's progress: turns in it, turns done, contributions handed in. */
 export type GenProgress = { total: number; done: number; handedIn: number };
 /** The work board's state: its phase and how many items of it are left, its counters, the improvement rounds left,
@@ -382,7 +388,10 @@ async function turn(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn: str
 	if (task && !run.info.ended) {
 		let source: string | undefined, via = "scripted", lineage: { role?: Role; basedOn?: string; usage?: Usage; proposalId?: string } = {}, proposalId: string | undefined;
 		if (slot.model !== "scripted" && !overBudget(run)) {
-			const plan = it.role ? { role: it.role, target: it.targetId ? { candidateId: it.targetId } : null } : planTurn((await teamView(space, it.session, it.blockId, false)).attempts, it.k ?? 0);
+			const view = await teamView(space, it.session, it.blockId, false);
+			const plan = it.role ? { role: it.role, target: it.targetId ? { candidateId: it.targetId } : null } : planTurn(view.attempts, it.k ?? 0);
+			// real tool answers in the prompt: always, or once a triage of this block named the interface
+			const examples = run.params.examples === "always" || (run.params.examples === "triage" && view.notes.some((n) => n.author === "triage (interface)"));
 			try {
 				// a task with subgoals: the agent plans first (the planning round's call), and its bot follows the plan
 				let planUsage: Usage | undefined;
@@ -391,7 +400,7 @@ async function turn(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn: str
 					proposalId = await writePlan(d, txn, it, me, p.model, p.text, p.subgoals, p.usage);
 					planUsage = p.usage; usage = p.usage;
 				}
-				const v = await ask(d, txn, it, slot, run, 0, "contribute", { role: plan.role, ...(plan.target ? { targetId: plan.target.candidateId } : {}), ...(proposalId ? { proposalId } : {}) }) as { source: string; model: string; note?: string; usage?: Usage };
+				const v = await ask(d, txn, it, slot, run, 0, "contribute", { role: plan.role, ...(plan.target ? { targetId: plan.target.candidateId } : {}), ...(proposalId ? { proposalId } : {}), ...(examples ? { toolExamples: true } : {}) }) as { source: string; model: string; note?: string; usage?: Usage };
 				source = v.source; via = v.model; note = v.note;
 				usage = planUsage && v.usage ? addUsage(planUsage, v.usage) : planUsage ?? v.usage;
 				lineage = { role: plan.role, ...(plan.target ? { basedOn: plan.target.candidateId } : {}), ...(proposalId ? { proposalId } : {}), ...(usage ? { usage } : {}) };
@@ -466,6 +475,11 @@ async function barrier(d: AgentDeps, it: WorkItem, txn: string): Promise<"done" 
 	}
 	const solved = !!(await space.readIfExists({ type: "CodeBest", fields: { session: it.session, blockId: it.blockId } }, HELD_WAIT_MS));
 	const attempts = (await teamView(space, it.session, it.blockId, false)).attempts;
+	// triage: what this generation failed at, as a hint for the next one (only while unsolved and a next one follows)
+	if (task && r.params.triage && !solved && !r.info.ended && it.gen + 1 < r.info.gens) {
+		const t = await triageNote(r.params.triage, { title: task.title.en }, attempts.filter((a) => a.gen === it.gen + 1), r.params.lang);
+		if (t) await addNote(space, txn, d.ttl, { session: it.session, blockId: it.blockId, author: `triage (${t.cause})`, via: t.via, gen: it.gen + 1, text: t.text });
+	}
 	await updateRun(space, txn, d.ttl, it.session, it.runId, async (run) => {
 		const info = run.info, next = it.gen + 1;
 		settle(run, -1);

@@ -522,6 +522,20 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      312 calls, $0.020): 1812 of 1818 rooms right, its 6 errors all rooms with a piece taken for empty, none the other
      way; the round with `noul` and these answers is 2 or 3 of 95 below the target, 0 or 2 of the task's nine. Jev alone,
      without the generator's levels, reads the logbook about as well as the learner counts it.
+     Triage between generations (`server/triage.ts`, `triage: "jev" | "fixed"` when a run starts; model agents, admin
+     only, not on the durable path): Jev sorts each failing contribution of a generation into interface, rule or
+     strategy from its failure and the failure's numbers (`failureFacts`), and the next generation gets the main cause's
+     hint as a team note; `fixed` sends the interface hint always. Offline on the 103 failures of the step 9 runs Jev
+     matched the rule-based cause 233 of 309 times from the text alone, 309 of 309 with the numbers. Runs (5 generations,
+     one each): Sonnet with the interface hint picked up pieces in 5 (Jev) and 7 (`fixed`) of 15 contributions, against
+     0 and 2 without a hint and 0 with the wrong (strategy) hint; none reached the target. Haiku: 0 of 15 in every
+     variant, more crashes with the hint (12, 13) than without (7).
+     Real tool answers in the prompt (`server/examples.ts`, `examples: "always" | "triage"` when a run starts; `triage`
+     shows them once a triage named the interface): the answers of look, logbook (first day), a walk, a look, a wait and
+     an empty pick-up on the first shown episode, from the toy arena the judge plays. One run each: Sonnet solved it in
+     generation 2 (6965 points), Opus and GPT in generation 1 (7440, 6720 points; without the example generation 2,
+     9516 and 8793); on the 95 unselected islands 2, 0 and 0 below the target, medians 1.06, 1.11 and 1.14 of the
+     reference plan's mean. Haiku: 0/9 throughout, its bots no longer crash but never move.
 
 ## Tests
 
@@ -532,6 +546,8 @@ The progress curve and the episode matrix come with step 1, the rest with the st
 - A test that a hidden episode never lies on a sample path, run over every planning task in the catalog (step 2,
   `tests/bots.test.ts`).
 - The page: the snapshot carries the curve's and matrix's figures; a test checks them against the `BotEpisode` entries.
+- `tests/triage.test.ts`: the failure's facts, Jev's request and answers (a stand-in endpoint), the main cause, the
+  note and its length; the tool examples of a task and their place in the prompt.
 - Steps 7 to 9 (`tests/bots.test.ts`): the tide, odds and shore mechanics, the toy arena's `observations` and `logbook`,
   and each task's judge with its scripted bots and the model winners as fixtures (`tests/fixtures/`); for step 9 also
   Jev's recorded classes (`server/data/shore-jev.json`): every room of the task's islands asked, and the learner's
