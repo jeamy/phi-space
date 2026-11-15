@@ -470,7 +470,7 @@ export class CodeChatHub {
 				notes: notes.filter((n) => n.blockId === blockId).slice(-20).map(({ author, via, gen, text, ts, human, candidateId }) => ({ author, via, gen, text, ts, ...(human ? { human: true } : {}), ...(candidateId ? { candidateId } : {}), ...(candidateId && rejectedIds.has(candidateId) ? { rejected: true } : {}) })),
 			}));
 			return {
-				session: id, current: s.blockId, tasks: offeredTasks().map((t) => ({ id: t.id, title: t.title, fn: t.fn, prompt: t.prompt, ...(t.about ? { about: t.about } : {}), ...(t.run ? { run: t.run } : {}) })),
+				session: id, current: s.blockId, tasks: offeredTasks().map((t) => ({ id: t.id, title: t.title, fn: t.fn, prompt: t.prompt, ...(t.about ? { about: t.about } : {}), ...(t.run ? { run: t.run } : {}), ...(t.bot?.toyRules ? { toolExamples: true } : {}) })),
 				// what the time-limit field may offer (CODEMODE_MAX_TIMEOUT_S), and a visitor's token budget (default and most)
 				limits: { maxTimeoutS: maxTimeoutMs() / 1000, ...(runBudgetTokens() ? { runBudgetTokens: runBudgetTokens() } : {}) },
 				// the active custom task in full, so the page can fill its form again (after a reload) and continue it
@@ -869,7 +869,7 @@ export class CodeChatHub {
 		research?: boolean;
 		/** Triage between generations: "jev" (Jev sorts the failures) or "fixed" (the interface hint always); admin only. */
 		triage?: unknown;
-		/** Real tool answers in the prompt: "always", or "triage" (once a triage named the interface; needs triage); admin only. */
+		/** Real tool answers in the prompt: "always", or "triage" (once a triage named the interface; needs triage, which is admin only). */
 		examples?: unknown;
 		/** Who asks (set by the server, never from the request body): a visitor's run gets the default budget at most and
 		 *  counts against the day's allowance of their address. Without it (tests, scripts in-process) it counts as admin. */
@@ -904,7 +904,6 @@ export class CodeChatHub {
 		const examples = o.examples === "always" || o.examples === "triage" ? o.examples : undefined;
 		if (examples && (board || mode !== "llm" || !s.task.bot?.toyRules)) throw new Error("Tool examples run between generations of model agents, on a bot task on made islands");
 		if (examples === "triage" && !triage) throw new Error("Tool examples on triage need a triage");
-		if (examples && visitor) throw new Error("Tool examples need the admin login");
 		// checked and written under the room's lock and in one transaction: the CodeRun is unique per room, so of two
 		// requests only one starts a run; the agent processes carry it out (model calls by the model process)
 		const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, agents, gens, perAgent, polish, contenders, lang: o.lang === "de" ? "de" : "en", board, plan: board && o.plan !== false, research, budget, engine: "space", ...(triage ? { triage } : {}), ...(examples ? { examples } : {}), ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };

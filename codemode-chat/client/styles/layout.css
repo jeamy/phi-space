@@ -353,6 +353,12 @@ main > * { min-width: 0; }
 /* a task's description: line breaks kept, scrolls inside a bounded box so the panel stays short */
 .taskdesc { color: var(--muted); white-space: pre-line; overflow-wrap: anywhere; max-height: 260px; overflow-y: auto; margin: 0 0 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: 13px; line-height: 1.5; }
 .taskdesc--side { max-height: 220px; margin-top: 8px; }
+.taskdesc--zoom { cursor: zoom-in; }
+.taskdesc--zoom:hover, .taskdesc--zoom:focus-visible { border-color: var(--line-strong); }
+.taskdesc-backdrop { position: fixed; inset: 0; z-index: 30; background: color-mix(in srgb, #000 45%, transparent); }
+.taskdesc--big { position: fixed; box-sizing: border-box; max-height: calc(100vh - 32px); margin: 0; padding: 12px 40px 14px 14px; font-size: 14px; color: var(--text); border-color: var(--line-strong); box-shadow: 0 18px 50px rgba(0, 0, 0, .5); outline: none; }
+.taskdesc__close { position: sticky; top: 0; float: right; margin: -4px -30px 0 0; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; font-size: 15px; line-height: 1; }
+@media (max-width: 760px) { .taskdesc--big { height: 100dvh; max-height: none; border-radius: 0; border-width: 0; padding: 12px 14px 24px; } .taskdesc__close { margin: 0 0 6px 8px; width: 40px; height: 40px; } }
 .about { margin: 0 0 10px; font-size: 13px; }
 .about summary { cursor: pointer; color: var(--accent); }
 .about__text { white-space: pre-line; color: var(--muted); padding: 6px 10px; border-left: 2px solid var(--line-strong); margin-top: 6px; line-height: 1.5; }

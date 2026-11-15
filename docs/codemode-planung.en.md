@@ -536,6 +536,8 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      generation 2 (6965 points), Opus and GPT in generation 1 (7440, 6720 points; without the example generation 2,
      9516 and 8793); on the 95 unselected islands 2, 0 and 0 below the target, medians 1.06, 1.11 and 1.14 of the
      reference plan's mean. Haiku: 0/9 throughout, its bots no longer crash but never move.
+     On the page a switch under the run settings ("Real tool answers in the prompt", on by default) sends
+     `examples: "always"` for a bot task on made islands with model agents; it needs no admin login (Jev's triage does).
 
 ## Tests
 
