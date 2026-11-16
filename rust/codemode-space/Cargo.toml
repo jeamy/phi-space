@@ -1,0 +1,17 @@
+[package]
+name = "codemode-space"
+description = "The space process of codemode-chat in Rust: what codemode-chat/server/space-host.ts is, on phi-space-host"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "codemode-space"
+path = "src/main.rs"
+
+[dependencies]
+phi-json = { path = "../phi-json" }
+phi-space-host = { path = "../phi-space-host" }
+
+[dev-dependencies]
+phi-space-host = { path = "../phi-space-host", features = ["testing"] }

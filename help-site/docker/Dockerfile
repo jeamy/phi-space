@@ -4,7 +4,7 @@
 #   - dev-test:   Local development & automated test runner in Docker
 #   - production: Hardened production server for https://spaces.eibrain.org
 #   - nano:       the shard engine and the swarm Space process of nano
-#   - production-rust: production with the Rust phi-space-server (the swarm Space containers, docker-compose.rust.yml)
+#   - production-rust: production with the Rust help-space (the swarm Space containers, docker-compose.rust.yml)
 
 ARG NODE_IMAGE=node:22-bookworm-slim
 ARG RUST_IMAGE=rust:1.99-bookworm
@@ -152,7 +152,7 @@ CMD ["node", "--no-warnings", "--experimental-strip-types", "help-site/server/na
 FROM ${RUST_IMAGE} AS rust-builder
 WORKDIR /opt/phi-spaces/rust
 COPY rust ./
-RUN cargo build --release --locked -p phi-space-server
+RUN cargo build --release --locked -p help-space
 
 FROM production AS production-rust
-COPY --from=rust-builder /opt/phi-spaces/rust/target/release/phi-space-server /usr/local/bin/phi-space-server
+COPY --from=rust-builder /opt/phi-spaces/rust/target/release/help-space /usr/local/bin/help-space

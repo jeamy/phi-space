@@ -7,4 +7,4 @@ services:
     build:
       target: production-rust
     image: phi-spaces-codemode:rust
-    command: ["/usr/local/bin/phi-space-server", "--profile", "codemode"]
+    command: ["/usr/local/bin/codemode-space"]

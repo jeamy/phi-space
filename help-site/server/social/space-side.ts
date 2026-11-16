@@ -1,5 +1,5 @@
 // The swarm Space's own side: what the process that holds the store does beyond serving it. That is
-// `server/space-host.ts` in TypeScript or `phi-space-server --profile help` in Rust (rust/phi-space-server/src/profiles.rs).
+// `server/space-host.ts` in TypeScript or `help-space` in Rust (rust/help-space).
 // It opens the Space by its alias and sets the limits and the completion profile. It writes the HostInfo entry the
 // test-system bar shows and purges the oldest posts above the cap. All of this is host code. The swarm (swarm.ts) is
 // only a client of the Space, the same over a socket as in-process.

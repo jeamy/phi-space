@@ -7,28 +7,28 @@ services:
     build:
       target: production-rust
     image: phi-spaces-mmo:rust
-    command: ["/usr/local/bin/phi-space-server", "--profile", "mmo"]
+    command: ["/usr/local/bin/mmo-space"]
 
   space-west:
     build:
       target: production-rust
     image: phi-spaces-mmo:rust
-    command: ["/usr/local/bin/phi-space-server", "--profile", "mmo"]
+    command: ["/usr/local/bin/mmo-space"]
 
   space-nord:
     build:
       target: production-rust
     image: phi-spaces-mmo:rust
-    command: ["/usr/local/bin/phi-space-server", "--profile", "mmo"]
+    command: ["/usr/local/bin/mmo-space"]
 
   space-ost:
     build:
       target: production-rust
     image: phi-spaces-mmo:rust
-    command: ["/usr/local/bin/phi-space-server", "--profile", "mmo"]
+    command: ["/usr/local/bin/mmo-space"]
 
   space-sued:
     build:
       target: production-rust
     image: phi-spaces-mmo:rust
-    command: ["/usr/local/bin/phi-space-server", "--profile", "mmo"]
+    command: ["/usr/local/bin/mmo-space"]

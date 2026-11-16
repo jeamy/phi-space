@@ -2,7 +2,6 @@
 // protocol. Every connection is one peer; whoever can reach the socket uses the space.
 //
 //   phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--agent-host]
-//   phi-space-server --profile mmo|codemode|help     what the project's server/space-host.ts is, from the same environment
 //   phi-space-server --tls-register CONFIG.json the independent register over pinned mutual TLS (src/tls-register.ts)
 //   phi-space-server --store FILE --member CONFIG.json a federation Member behind a TypeScript control host
 //   phi-space-server [--store FILE] --replica-tool CONFIG.json REQUEST the operator's tool for a primary/sync Space, or with
@@ -14,12 +13,10 @@
 mod hooks;
 mod control_host;
 mod member;
-mod help;
-mod profiles;
 mod recovery;
 mod replica_tool;
-mod stopping;
 mod register;
+pub(crate) use phi_space_host::{fail, stopping};
 use register::register;
 
 use phi_service::{Options, Service};
@@ -27,26 +24,12 @@ use phi_store::{system_random, Ledger, MemoryLedger, SpaceHost, SqliteLedger, St
 use phi_wire::{serve, Listen, ServeOptions};
 use std::path::Path;
 
-const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--agent-host] [--test-hooks CONFIG.json]\n       phi-space-server --profile mmo|codemode|help\n       phi-space-server --tls-register CONFIG.json\n       phi-space-server --store FILE --control CONFIG.json\n       phi-space-server --store FILE --member CONFIG.json\n       phi-space-server [--store FILE] --replica-tool CONFIG.json REQUEST\n       phi-space-server --store FILE --recovery-only CONFIG.json RECOVERY.json";
-
-pub(crate) fn fail(message: impl std::fmt::Display) -> ! {
-	eprintln!("{message}");
-	std::process::exit(1)
-}
+const USAGE: &str = "usage: phi-space-server --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID] [--agent-host] [--test-hooks CONFIG.json]\n       phi-space-server --tls-register CONFIG.json\n       phi-space-server --store FILE --control CONFIG.json\n       phi-space-server --store FILE --member CONFIG.json\n       phi-space-server [--store FILE] --replica-tool CONFIG.json REQUEST\n       phi-space-server --store FILE --recovery-only CONFIG.json RECOVERY.json";
 
 fn main() {
-	std::panic::set_hook({
-		let default = std::panic::take_hook();
-		Box::new(move |info| {
-			default(info);
-			std::process::abort();
-		})
-	});
+	phi_space_host::abort_on_panic();
 	let args: Vec<String> = std::env::args().collect();
 	let arg = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
-	if let Some(profile) = arg("--profile") {
-		return profiles::run(&profile);
-	}
 	if let Some(config) = arg("--tls-register") {
 		return register(&config);
 	}

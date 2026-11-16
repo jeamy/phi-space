@@ -1,0 +1,18 @@
+[package]
+name = "phi-space-host"
+description = "A store on a socket with host tasks: the generic part of an application's space process (limits, locks, Process lease, compaction, ready line)"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[features]
+# the helpers of the process tests of the binaries built on it (src/testing.rs)
+testing = []
+
+[dependencies]
+phi-core = { path = "../phi-core" }
+phi-json = { path = "../phi-json" }
+phi-service = { path = "../phi-service" }
+phi-store = { path = "../phi-store" }
+phi-wire = { path = "../phi-wire" }
+tokio.workspace = true

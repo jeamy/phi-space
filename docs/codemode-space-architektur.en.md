@@ -473,7 +473,7 @@ every connection as a process of the chat: never on a public interface.
 Scripts in `codemode-chat/package.json`: `docker:nano:*` (on nano), `docker:big:*` (on big, with
 `docker-compose.hostnet.yml`: host network, web only on `127.0.0.1`, the Space comes through the SSH tunnel), `docker:local:*`
 (both on this machine), `docker:rust:*` (the same local test environment with the Rust Space server
-(`phi-space-server --profile codemode`) in the Space containers, `docker/docker-compose.rust.yml`, after `docker:image:rust`),
+(`codemode-space`, `rust/codemode-space`) in the Space containers, `docker/docker-compose.rust.yml`, after `docker:image:rust`),
 `docker:dev:*`, `docker:test`. `docker:prod:*` is now only a pointer to the other scripts (it ends with an error): both profiles on one
 server collide on the tunnel port. On the servers, `git pull` and then `npm --prefix codemode-chat run
 docker:nano:up` or `docker:big:up` suffice; the images are built on the host network (rootless Docker on nano cannot reach the npm registry from the

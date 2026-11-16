@@ -1,10 +1,10 @@
 // The swarm Space of a test. By default it lives in this process (space-side.ts, memory). `HELP_SPACE_SERVER` names a
 // separate space process instead, reached over a unix socket the way the hub reaches it in production:
-// `rust/target/release/phi-space-server` (started with `--profile help`) or `server/space-host.ts` (the TypeScript one).
+// `rust/target/release/help-space` (the Rust one) or `server/space-host.ts` (the TypeScript one).
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { connectSpace, type Meter } from "phi-spaces";
@@ -27,7 +27,9 @@ export interface TestSwarmSpace {
 
 function command(server: string): { cmd: string; args: string[] } {
 	if (server.endsWith(".ts")) return { cmd: process.execPath, args: ["--experimental-strip-types", "--no-warnings", resolve(ROOT, server)] };
-	return { cmd: server, args: ["--profile", "help"] };
+	// the generic server lost `--profile help` (docs/umstellung-verzeichnisse.en.md): started bare it would only print its usage
+	if (basename(server) === "phi-space-server") throw new Error(`HELP_SPACE_SERVER: ${server} is the generic server; the swarm Space's process is rust/target/release/help-space`);
+	return { cmd: server, args: [] };
 }
 
 /** `maxEntries`: the cap of the space side's purge (null: no purge; the default). `retentionMs`: how often it looks.

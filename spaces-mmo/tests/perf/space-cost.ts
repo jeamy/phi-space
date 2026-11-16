@@ -22,7 +22,7 @@ const TICK = Number(execFileSync("getconf", ["CLK_TCK"]).toString().trim()) || 1
 
 /** CPU ms (user + system) of this process's children that run `script`, together. */
 /** How the space process shows in the process table: the host script, or the Rust server. */
-const SPACE = process.env.SPACES_MMO_SPACE_SERVER ? "phi-space-server" : "server/space-host.ts";
+const SPACE = process.env.SPACES_MMO_SPACE_SERVER ? "mmo-space" : "server/space-host.ts";
 function cpuOf(script: string): number {
 	let ms = 0, found = false;
 	for (const pid of readdirSync("/proc").filter((p) => /^\d+$/.test(p))) {

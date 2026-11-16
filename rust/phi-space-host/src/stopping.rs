@@ -1,4 +1,4 @@
-//! What all modes of the server share around their serve loop.
+//! What every space process shares around its serve loop: the runtime, the signals, the limit on closing.
 use std::future::Future;
 use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};

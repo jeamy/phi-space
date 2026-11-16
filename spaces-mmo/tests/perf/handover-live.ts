@@ -5,20 +5,22 @@
 // to the same counts.
 //
 //   node --experimental-strip-types tests/perf/handover-live.ts
-//   HANDOVER_SERVER=../rust/target/release/phi-space-server   the Rust binary (default)
+//   HANDOVER_SERVER=../rust/target/release/mmo-space          the Rust binary (default)
 //   HANDOVER_BOTS=6 HANDOVER_SECONDS=150 HANDOVER_PORT=3930    figures, playing time, web port
 //   HANDOVER_SWITCH_S=30                                       seconds between two switches
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { ROOT } from "../../server/env.ts";
 import { RemoteSpace, socketTransport } from "phi-spaces";
 
 const env = (k: string, d: string) => process.env[k] || d;
-const BINARY = resolve(ROOT, env("HANDOVER_SERVER", "../rust/target/release/phi-space-server"));
+const BINARY = resolve(ROOT, env("HANDOVER_SERVER", "../rust/target/release/mmo-space"));
 const BOTS = env("HANDOVER_BOTS", "6"), SECONDS = Number(env("HANDOVER_SECONDS", "150")), PORT = env("HANDOVER_PORT", "3930"), SWITCH_S = Number(env("HANDOVER_SWITCH_S", "30"));
 if (!existsSync(BINARY)) throw new Error(`no Rust space server at ${BINARY}`);
+// the generic server lost `--profile mmo` (docs/umstellung-verzeichnisse.en.md)
+if (basename(BINARY) === "phi-space-server") throw new Error(`HANDOVER_SERVER: ${BINARY} is the generic server; the space process of spaces-mmo is rust/target/release/mmo-space`);
 const dir = mkdtempSync(join(tmpdir(), "mmo-handover-"));
 const world = `unix:${join(dir, "world.sock")}`, accounts = `unix:${join(dir, "accounts.sock")}`;
 const base = { ...process.env, SPACES_MMO_LLM: "0", SPACES_MMO_DATA: dir, SPACES_MMO_LISTEN: world, SPACES_MMO_ACCOUNTS_LISTEN: accounts, SPACES_MMO_SPACE: world, SPACES_MMO_ACCOUNTS: accounts, PORT };
@@ -33,7 +35,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const until = async (f: () => Promise<boolean>, ms: number, what: string) => { const end = Date.now() + ms; while (Date.now() < end) { if (await f().catch(() => false)) return; await sleep(250); } throw new Error(`no ${what}`); };
 /** The space process of one server, ready once it answers on its world socket. */
 async function space(server: "rust" | "ts"): Promise<ChildProcess> {
-	const child = server === "rust" ? run("space-rust", BINARY, ["--profile", "mmo"]) : run("space-ts", process.execPath, ["--no-warnings", "--experimental-strip-types", "server/space-host.ts"]);
+	const child = server === "rust" ? run("space-rust", BINARY, []) : run("space-ts", process.execPath, ["--no-warnings", "--experimental-strip-types", "server/space-host.ts"]);
 	await until(async () => { const t = socketTransport({ path: join(dir, "world.sock") }); try { await new RemoteSpace(t, { attempts: 1, callTimeoutMs: 1000 }).info(); return true; } finally { t.close(); } }, 30_000, `${server} space process`);
 	return child;
 }

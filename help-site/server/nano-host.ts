@@ -1,6 +1,6 @@
 // Headless swarm shard ("nano"): the shard engine runs the worker side locally. Task processing, post commits and the
 // doc scans of this shard happen on THIS machine, not on the hub host. Its Space is either a separate space process
-// (`SWARM_SPACE`, TypeScript server/space-host.ts or `phi-space-server --profile help`, which also serves the hub), or
+// (`SWARM_SPACE`, TypeScript server/space-host.ts or `help-space`, which also serves the hub), or
 // this process holds the store itself and serves it on `SWARM_LISTEN`.
 //
 //   SWARM_SPACE=tcp:127.0.0.1:3600        the shard's space process; unset = the store lives in this process:

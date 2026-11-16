@@ -186,7 +186,7 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 	await chatHub.initialize();
 	await chatHub.ensureSession("lobby");
 	// The swarm Space is a store of its own: a separate space process (`SWARM_SPACE`, TypeScript server/space-host.ts or
-	// `phi-space-server --profile help`), or in this process on a file of its own. The swarm is only its client.
+	// `help-space`), or in this process on a file of its own. The swarm is only its client.
 	const swarmAt = options.swarmSpace !== undefined ? options.swarmSpace : process.env.SWARM_SPACE || null;
 	const swarmSide = swarmAt ? null : await openSwarmSide(ctx, {
 		file: options.swarmSqlitePath !== undefined ? options.swarmSqlitePath : options.sqlitePath ? join(dirname(options.sqlitePath), "swarm.sqlite") : null,

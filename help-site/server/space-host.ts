@@ -1,6 +1,6 @@
 // The swarm Space's process: holds the store of one swarm shard and serves it over the phi-spaces socket transport. The
-// swarm engines (the hub on big, the shard engine on nano) are its clients. The Rust `phi-space-server --profile help`
-// reads the same environment and prints the same ready line (rust/phi-space-server/src/profiles.rs).
+// swarm engines (the hub on big, the shard engine on nano) are its clients. The Rust `help-space` (rust/help-space) reads
+// the same environment and prints the same ready line.
 //
 //   SWARM_LISTEN=tcp:0.0.0.0:3600        (default unix:/tmp/swarm-space.sock)
 //   SWARM_DB=/data/swarm.sqlite          (default help-site/.local/swarm.sqlite); SWARM_MEM=1 keeps it in memory

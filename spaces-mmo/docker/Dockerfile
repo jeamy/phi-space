@@ -78,10 +78,10 @@ CMD ["node", "--no-warnings", "--experimental-strip-types", "server/launch.ts"]
 FROM ${RUST_IMAGE} AS rust-builder
 WORKDIR /opt/phi-spaces/rust
 COPY rust ./
-RUN cargo build --release --locked -p phi-space-server -p mmo-engine -p mmo-web --bins
+RUN cargo build --release --locked -p mmo-space -p mmo-engine -p mmo-web --bins
 
 FROM production AS production-rust
-COPY --from=rust-builder /opt/phi-spaces/rust/target/release/phi-space-server /usr/local/bin/phi-space-server
+COPY --from=rust-builder /opt/phi-spaces/rust/target/release/mmo-space /usr/local/bin/mmo-space
 # the game processes in Rust (R8.3-R8.5; docker-compose.rust-game.yml gives them to the world, npc and web containers):
 # they run from spaces-mmo/ like the TypeScript ones (worlds/, out/), the model process stays Node
 COPY --from=rust-builder /opt/phi-spaces/rust/target/release/mmo-world /opt/phi-spaces/rust/target/release/mmo-npc /opt/phi-spaces/rust/target/release/mmo-web /usr/local/bin/

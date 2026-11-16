@@ -260,7 +260,7 @@ npm --prefix codemode-chat run docker:dev:up     # every role in one container, 
 npm --prefix codemode-chat run docker:test       # the tests in a container
 ```
 
-- Since 2026-11-07 nano's space runs the Rust `phi-space-server --profile codemode` (`docker/docker-compose.rust.yml`, same project and volume); since 2026-11-12 the way back is closed (R-D12) and `docker:nano:up` refuses.
+- Since 2026-11-07 nano's space runs the Rust space server (since 2026-11-16 the binary `codemode-space`, `rust/codemode-space`) (`docker/docker-compose.rust.yml`, same project and volume); since 2026-11-12 the way back is closed (R-D12) and `docker:nano:up` refuses.
 - `docker:nano:rust:up` and `docker:big:up` build the images themselves. `docker:prod:up` is refused: one host runs one profile.
 - `docker:big:up` always adds `docker/docker-compose.hostnet.yml`: the big roles share the host network, reach the space
   through an SSH tunnel on the loopback (`CODEMODE_SPACE=tcp:127.0.0.1:3800`), and the web process listens on `127.0.0.1`.

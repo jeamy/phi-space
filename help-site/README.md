@@ -65,7 +65,7 @@ What **phi-spaces actually implements**:
 - **Inspector:** Entry counts, revision, pending tasks, posts/minute, dispatcher and LLM metrics; feed deltas use `changes(rev)`.
 
 The swarm Space is a store of its own, apart from the help store (chat stages, control space, admin state). The process
-that holds it is `server/space-host.ts` in TypeScript or the Rust `phi-space-server --profile help`. It sets the
+that holds it is `server/space-host.ts` in TypeScript or the Rust `help-space` (`rust/help-space`). It sets the
 limits and the completion profile, writes the `HostInfo` entry and purges above `SWARM_MAX_ENTRIES`
 (`server/social/space-side.ts`). The swarm engines are only its clients: the hub reaches it through `SWARM_SPACE`, and
 without that variable the store lives in the hub's process (`swarm.sqlite` beside `HELP_SQLITE`, or memory). An
@@ -134,8 +134,8 @@ node --experimental-strip-types help-site/examples/v6-mobile-control/run.ts
 
 # All help, regression and worker-batch tests; no model calls:
 PHI_SPACES_LLM=0 npm --prefix help-site test
-# The same with the swarm Space in a separate process: the Rust server (started with --profile help) or the TypeScript one
-HELP_SPACE_SERVER=$PWD/rust/target/release/phi-space-server PHI_SPACES_LLM=0 npm --prefix help-site test
+# The same with the swarm Space in a separate process: the Rust one (help-space) or the TypeScript one
+HELP_SPACE_SERVER=$PWD/rust/target/release/help-space PHI_SPACES_LLM=0 npm --prefix help-site test
 HELP_SPACE_SERVER=server/space-host.ts PHI_SPACES_LLM=0 npm --prefix help-site test
 
 # Fresh production build and separate Next.js SSR check:
@@ -198,7 +198,7 @@ Do not expose raw shard TCP sockets publicly without protection: use a trusted n
 | `SWARM_LLM_RATE` | Share of new hub-shard posts written by a live model, 0..1, default 0.01 (cost guard; only the hub has model access, so posts routed to the second shard never use it). |
 | `SWARM_MAX_ENTRIES` | Entry cap per shard database, default 20000, `0` disables. Above it the oldest posts (with their likes and history nodes) are purged in bursts down to 95 %; the feed shows a yellow notice. Test-system limit, not a product limit. |
 | `SWARM_HOST_NAME` | Name this host reports in the test-system bar below the live views (default: the machine's hostname; set `big` / `nano` in each host's `.env`). |
-| `SWARM_LISTEN`, `SWARM_DB`, `SWARM_TAG`, `SWARM_PRODUCE` | The Space process's listener and store (`space-host.ts`, `phi-space-server --profile help`, `SWARM_MEM=1` in memory), the shard's ID prefix and optional local intent generation; see `.env.example`. |
+| `SWARM_LISTEN`, `SWARM_DB`, `SWARM_TAG`, `SWARM_PRODUCE` | The Space process's listener and store (`space-host.ts`, `help-space`, `SWARM_MEM=1` in memory), the shard's ID prefix and optional local intent generation; see `.env.example`. |
 
 <a id="demo-vertrag-und-wiederanlauf"></a>
 
@@ -311,7 +311,7 @@ help-site/
 │   ├── index.ts                  # HTTP, Next.js, uploads, API and WebSocket routing
 │   ├── llm.ts                    # Optional providers, picker and budget
 │   ├── nano-host.ts              # Optional headless shard
-│   ├── space-host.ts             # The swarm Space's process (TypeScript; Rust: phi-space-server --profile help)
+│   ├── space-host.ts             # The swarm Space's process (TypeScript; Rust: help-space)
 │   ├── admin/                    # Authenticated administrative control
 │   ├── space-chat/               # Command dispatcher, sessions and stage reports
 │   └── social/

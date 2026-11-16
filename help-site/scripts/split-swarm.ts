@@ -1,6 +1,6 @@
 // One-time move of the swarm Space out of the help store (spaces-eibrain.sqlite, which also holds the chat stages, the
 // control space and the admin state) into a store of its own (swarm.sqlite). That store is served by the swarm's space
-// process (server/space-host.ts or `phi-space-server --profile help`). Run it while the hub is stopped.
+// process (server/space-host.ts or `help-space`). Run it while the hub is stopped.
 //
 //   node --experimental-strip-types help-site/scripts/split-swarm.ts FROM.sqlite TO.sqlite
 //

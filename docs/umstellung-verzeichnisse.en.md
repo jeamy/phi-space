@@ -1,6 +1,8 @@
 # Directory split: the spaces core apart from the applications (plan)
 
-Status: phase 1 in progress (2026-11-16). Review incorporated on 2026-11-15, gaps on 2026-11-16 (below).
+Status: phase 1 in code (2026-11-16): `phi-space-host`, `mmo-space`, `codemode-space`, `help-space`, no `--profile` in
+`phi-space-server`; the image check (phase 1, step 5) is open. Review incorporated on 2026-11-15, gaps on 2026-11-16
+(below). The open questions were decided on 2026-11-16.
 
 ## Goal
 
@@ -54,7 +56,7 @@ docs/ de-docs/ AGENTS.md README.md package.json (thin: forwards to spaces/ and t
 
 ## Decisions
 
-**D1. One Cargo workspace per project (recommended).** Each app crate takes the core crates as path dependencies.
+**D1. One Cargo workspace per project (decided 2026-11-16).** Each app crate takes the core crates as path dependencies.
 For example, from `spaces-mmo/rust/mmo-engine/Cargo.toml` the path to `phi-spaces-client` is
 `../../../spaces/rust/phi-spaces-client`. Cargo permits dependencies across workspace boundaries. The repo-wide
 layering check uses Cargo's resolved package graph to enforce the direction from apps to core, including normal,
@@ -73,7 +75,7 @@ as now, so the TypeScript starters and tests see no difference except the binary
 configuration. It still gets its own binary, so all three projects work the same way and the core keeps no codemode
 defaults. `phi-space-server` keeps no `--profile` alias, because that alias would be app code in the core.
 
-**D3. Move the TypeScript package into `spaces/` and keep a thin root manifest (recommended).** The apps'
+**D3. Move the TypeScript package into `spaces/` and keep a thin root manifest (decided 2026-11-16).** The apps'
 `"phi-spaces": "file:.."` becomes `"file:../spaces"`. The same commit installs the root `package.json` with the
 existing command names and argument forwarding. Put commands that launch an app, such as `example:space-chat`, in
 the root or app scripts. The `phi-spaces` package name and exports belong to `spaces/package.json`.
@@ -250,9 +252,20 @@ affected service still running an old image before accepting the rollout.
 The mobile consumer is not affected by phase 1: `pi-termux-mobile` starts `phi-space-server` with `--store`,
 `--listen` and `--agent-host` only.
 
-## Open for the user
+## Decided on 2026-11-16
 
-1. D1: one workspace per project (recommended) or one virtual workspace with a layering check.
-2. D3: is the thin forwarding `package.json` at the root wanted, or should the root have none?
-3. Names: `spaces/` as the directory name, and `mmo-space` / `codemode-space` / `help-space` / `phi-space-host` for
-   the new crates.
+1. D1: one Cargo workspace per project.
+2. D3: a thin forwarding `package.json` at the root.
+3. Names: `spaces/`, `mmo-space`, `codemode-space`, `help-space` and `phi-space-host` stay.
+
+## Phase 1 record (2026-11-16)
+
+- Rust: `cargo test` of `phi-space-host`, `phi-space-server`, `mmo-space`, `codemode-space` and `help-space` green,
+  `cargo clippy --all-targets` without warnings. The MMO and Codemode process tests moved unchanged except for the binary.
+- `test/test-standalone.test.ts` with `PHI_SPACES_SERVER_CMD=rust/target/release/phi-space-server`: 4 of 4.
+- `HELP_SPACE_SERVER=…/help-space npm --prefix help-site test`: 67 of 68, 0 failed, 1 skipped (the Next.js production
+  server test, skipped before too).
+- `SPACES_MMO_SPACE_SERVER=../rust/target/release/mmo-space npm --prefix spaces-mmo test`: 413 of 416. The two arena
+  tests (`tests/arena.test.ts`) fail the same way with the old `phi-space-server --profile mmo`, built from the commit
+  before, and pass on the TypeScript space: not from this change. The warehouse test of `tests/store.test.ts` failed
+  once under the suite's load and passes alone on the new binary, the old one and TypeScript.

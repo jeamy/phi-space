@@ -78,7 +78,7 @@ CMD ["node", "--no-warnings", "--experimental-strip-types", "server/launch.ts"]
 FROM ${RUST_IMAGE} AS rust-builder
 WORKDIR /opt/phi-spaces/rust
 COPY rust ./
-RUN cargo build --release --locked -p phi-space-server
+RUN cargo build --release --locked -p codemode-space
 
 FROM production AS production-rust
-COPY --from=rust-builder /opt/phi-spaces/rust/target/release/phi-space-server /usr/local/bin/phi-space-server
+COPY --from=rust-builder /opt/phi-spaces/rust/target/release/codemode-space /usr/local/bin/codemode-space

@@ -1,0 +1,20 @@
+[package]
+name = "help-space"
+description = "The space process of the help site in Rust: what help-site/server/space-host.ts is, the swarm Space on phi-space-host"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "help-space"
+path = "src/main.rs"
+
+[dependencies]
+phi-core = { path = "../phi-core" }
+phi-json = { path = "../phi-json" }
+phi-service = { path = "../phi-service" }
+phi-space-host = { path = "../phi-space-host" }
+phi-store = { path = "../phi-store" }
+
+[dev-dependencies]
+phi-space-host = { path = "../phi-space-host", features = ["testing"] }

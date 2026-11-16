@@ -61,7 +61,7 @@ The game is then reachable at <http://127.0.0.1:3910> (web 3910, regions 3960/39
 running development instance on 3900 does not interfere; web reaches the Spaces in the Docker network). `NANO_CPUS`
 (default 2) limits nano like the smaller machine. The tests in Docker: `npm --prefix spaces-mmo run docker:test`.
 
-The same with the Rust Space server (`phi-space-server --profile mmo`) in the Space containers, as a project of its own
+The same with the Rust Space server (`mmo-space`, `rust/mmo-space`) in the Space containers, as a project of its own
 with volumes of its own (`docker/docker-compose.rust.yml`, [rust-portierung.md](../../docs/rust-portierung.en.md)):
 `npm --prefix spaces-mmo run docker:image:rust`, then `docker:rust:up|down|logs`.
 

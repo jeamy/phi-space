@@ -1,6 +1,9 @@
 // CODEMODE_SPACE_SERVER: the switch to the Rust server, and that it never falls back (docs/rust-portierung.en.md, R3).
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { spaceServer } from "../server/space-server.ts";
 
 test("without the switch the space process is server/space-host.ts", () => {
@@ -8,7 +11,15 @@ test("without the switch the space process is server/space-host.ts", () => {
 	assert.equal(spaceServer({ CODEMODE_SPACE_SERVER: " " }), null);
 });
 
-test("the switch names the binary and its profile; one that is not there ends the start", () => {
-	assert.deepEqual(spaceServer({ CODEMODE_SPACE_SERVER: process.execPath }), { command: process.execPath, args: ["--profile", "codemode"] });
-	assert.throws(() => spaceServer({ CODEMODE_SPACE_SERVER: "/nonexistent/phi-space-server" }), /no such binary/);
+test("the switch names the binary; one that is not there ends the start", () => {
+	assert.deepEqual(spaceServer({ CODEMODE_SPACE_SERVER: process.execPath }), { command: process.execPath, args: [] });
+	assert.throws(() => spaceServer({ CODEMODE_SPACE_SERVER: "/nonexistent/codemode-space" }), /no such binary/);
+});
+
+test("the generic server is refused with the name of the project's binary", (t) => {
+	const dir = mkdtempSync(join(tmpdir(), "codemode-space-server-"));
+	t.after(() => rmSync(dir, { recursive: true, force: true }));
+	const old = join(dir, "phi-space-server");
+	writeFileSync(old, "");
+	assert.throws(() => spaceServer({ CODEMODE_SPACE_SERVER: old }), /generic server.*codemode-space/);
 });

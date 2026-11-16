@@ -100,7 +100,7 @@ Der Swarm-Space wird in zwei durable Spaces gesplittet — wie v5, aber real
    ist seit 2026-11-08 nur Client ihres Space: jeder Schritt ist ein Aufruf,
    über einen Socket wie im Prozess.
 2. Der Space jedes Shards ist ein eigener Prozess (`server/space-host.ts` oder
-   das Rust-`phi-space-server --profile help`): der Store, Limits und
+   das Rust-`help-space`): der Store, Limits und
    Completion-Profil, der `HostInfo`-Eintrag und die Bereinigung
    (`server/social/space-side.ts`). Auf big ist das der Container
    `swarm-space` (`/data/swarm.sqlite`, Loopback 3610), auf nano

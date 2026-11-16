@@ -7,7 +7,7 @@
 #   5. `swarm-nano`:       Headless swarm shard engine for the big/nano two-host setup (profile: nano)
 #   6. `swarm-space-nano`: The nano shard's Space process (profile: nano; the hub reaches it through the tunnel on 3600)
 # The two Space processes run TypeScript (server/space-host.ts); docker-compose.rust.yml swaps them for the Rust
-# phi-space-server --profile help on the same volumes.
+# help-space on the same volumes.
 
 name: phi-spaces-help
 
