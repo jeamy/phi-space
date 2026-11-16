@@ -32,6 +32,6 @@ npm test
 npm run test:examples
 ```
 
-Details: [test overview](../../test/examples/README.en.md),
+Details: [test overview](../../spaces/test/examples/README.en.md),
 [example index](../examples/README.en.md), [history](HISTORISCHE-REFERENZEN.en.md).
 Federation tests are prerequisites of later plan stages, not example tests that have already passed.

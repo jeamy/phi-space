@@ -86,7 +86,7 @@ Comparisons use actual entries and claims from the target harnesses.
 The final overall check run passed 345 tests; type check, 158 example tests and
 four mobile tests are also green. In addition the built
 production bundle is checked on both backends with a duplicate, lost take reply and
-router crash/reopen. [Evidence](../../../test/evidence/ap2-2026-10-11/checks.json). The cases comprise:
+router crash/reopen. [Evidence](../../../spaces/test/evidence/ap2-2026-10-11/checks.json). The cases comprise:
 
 - duplicate plus lost take reply and restart of router and target;
 - crash before sending, after reply and before/after the result journal commit;

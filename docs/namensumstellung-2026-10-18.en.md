@@ -14,7 +14,7 @@ External projects and third-party products such as pi-durable, pi-ai and pi-serv
 - [x] Local admin password variable name changed to `PHI_SPACES_ADMIN_PASSWORD`;
   the password value was neither changed nor printed.
 - [x] Historical text evidence normalized and its editorial change explicitly documented
-  in the [evidence note](../test/evidence/README.en.md). They are no longer unchanged raw logs;
+  in the [evidence note](../spaces/test/evidence/README.en.md). They are no longer unchanged raw logs;
   hashes/signatures contained in them still attest only the original artifacts of the time.
 - [x] Corpus build cleans up only dropped articles that the previous generated index explicitly
   names as property of the generator. Unknown files are preserved; unsafe paths are rejected

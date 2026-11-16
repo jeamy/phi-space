@@ -409,7 +409,7 @@ kein Neuanwenden); von außen ist nur `…8263:8000::` erreichbar, nicht `…826
 Fencing: netcup-SCP-Zugang (Offline-Refresh-Token) und Fencing-Dienst liegen auf vpsc, nicht auf nanoi.
 Details in [ap3-replica-control.md](../_attic/abnahme/ap3-replica-control.en.md#netcup-adapter). nanoi ist Server 964249 mit
 MAC `2a:38:5f:38:de:22`; nur dieser Server steht in der Liste der Ziele. Ein echter Abschaltlauf ist am 2026-10-16 bestanden
-([Nachweis](../../test/evidence/f1-netcup-2026-10-16/README.en.md)).
+([Nachweis](../../spaces/test/evidence/f1-netcup-2026-10-16/README.en.md)).
 
 Nach einem harten Ausschalten bleibt `/var/lib/phi-spaces/nano/owner.lock` liegen, und `phi-spaces-nano` startet
 nicht von selbst. Vorgehen:

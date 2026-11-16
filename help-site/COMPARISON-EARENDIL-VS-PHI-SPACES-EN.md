@@ -3,9 +3,9 @@
 **Date:** October 17, 2026; persistence row and paths updated October 30, 2026  
 **References:**
 - Baseline Reference: [Pi Durable on Cloudflare – Multiplayer Chat](https://earendil.com/posts/pi-durable-on-cloudflare/)
-- Our Implementation: [`help-site/examples/v1..v6`](file:///media/data/programming/phi-spaces/help-site/examples) and [`help-site/examples/shared/chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts)
-- Contrast to Actor Model: [`agent/examples/chat.ts`](file:///media/data/programming/phi-spaces/agent/examples/chat.ts)
-- Target Architecture without Pi-Durable: [`docs/umstellung-ohne-pi-durable.en.md`](file:///media/data/programming/phi-spaces/docs/umstellung-ohne-pi-durable.md)
+- Our Implementation: [`help-site/examples/v1..v6`](examples) and [`help-site/examples/shared/chat-core.ts`](examples/shared/chat-core.ts)
+- Contrast to Actor Model: [`agent/examples/chat.ts`](../spaces/agent/examples/chat.ts)
+- Target Architecture without Pi-Durable: [`docs/umstellung-ohne-pi-durable.en.md`](../docs/umstellung-ohne-pi-durable.en.md)
 
 ---
 
@@ -15,17 +15,17 @@ Although both architectures historically originated from the `@earendil-works` e
 
 | Dimension | Earendil Reference (`Pi Durable on Cloudflare`) | Our `phi-spaces` Approach (`v1` to `v6`) | Status / Notes |
 |---|---|---|---|
-| **Core Paradigm** | **Stateful Actor per Session (Durable Object)**: Each session is an isolated Cloudflare Durable Object encapsulating WebSockets, an embedded SQLite database, a single alarm timer, and the `pi-durable` harness inside one object instance. | **Decoupled Coordination Space (Tuple Space)**: State lives as a collection of typed, immutable JSON entries (`Thread`, `Msg`, `ChatTask`, `Presence`, `ScheduledJob`, `SearchTask`) inside a space. Clients, workers, and subagents are loosely coupled participants. | ✅ Implemented in code ([`chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts)). |
+| **Core Paradigm** | **Stateful Actor per Session (Durable Object)**: Each session is an isolated Cloudflare Durable Object encapsulating WebSockets, an embedded SQLite database, a single alarm timer, and the `pi-durable` harness inside one object instance. | **Decoupled Coordination Space (Tuple Space)**: State lives as a collection of typed, immutable JSON entries (`Thread`, `Msg`, `ChatTask`, `Presence`, `ScheduledJob`, `SearchTask`) inside a space. Clients, workers, and subagents are loosely coupled participants. | ✅ Implemented in code ([`chat-core.ts`](examples/shared/chat-core.ts)). |
 | **Where Business Logic Lives** | Inside the methods of the `Session` Durable Object class, directly calling `harness.commit(...)`, `conversation.submit(...)`, and `watchEvents(...)`. | Inside independent workers interacting with the space through the unified `SpaceLike` contract (`write`, `read`, `take`, `wait`, `notify`, `createTransaction`, `commit`). | ✅ Implemented in `processNextChatTask` and `processNextSearchTask`. |
 | **Coupling of Web Server & AI Workers** | **Tightly Coupled (In-Object)**: WebSocket termination, conversation state, and model invocations all run inside the same Durable Object instance. | **Freely Composable (`v1`–`v6`)**: Can run in-process (`v1`/`v2`), decoupled across Unix sockets or TCP (`v3`), cryptographically authenticated across host boundaries (`v4`), or federated across multiple servers (`v5`/`v6`). | ⚠️ **Gap:** In `v5-federated-cluster`, the test currently runs in-process with 4 `MemoryStorage` instances rather than over physical TCP sockets. |
 | **Platform Dependency** | Tied to **Cloudflare Workers & Durable Objects** (`DurableObjectState`, `ctx.storage.sql`, Hibernatable WebSockets, `alarm()`). | **Platform-Independent (Self-Hosted / On-Prem / VPS / Docker / Mobile)**: Runs anywhere Node.js runs (RAM, local SQLite/JSONL, Docker containers, Linux VPS, Android/Termux). | ✅ Verified on Linux & Android/Termux. |
-| **Persistence Dependency** | Hardwired to Cloudflare Edge Storage and `@earendil-works/pi-durable`. | Own SQLite store without pi-durable ([`docs/umstellung-ohne-pi-durable.en.md`](file:///media/data/programming/phi-spaces/docs/umstellung-ohne-pi-durable.md)); only the optional `agent/` package uses pi-durable. | ✅ **Migrated:** the space is independent of `pi-durable`. |
+| **Persistence Dependency** | Hardwired to Cloudflare Edge Storage and `@earendil-works/pi-durable`. | Own SQLite store without pi-durable ([`docs/umstellung-ohne-pi-durable.en.md`](../docs/umstellung-ohne-pi-durable.en.md)); only the optional `agent/` package uses pi-durable. | ✅ **Migrated:** the space is independent of `pi-durable`. |
 | **Scaling Model** | **Scale-to-Zero per Session** (hibernates when idle; supports thousands of small, completely isolated sessions on edge infrastructure). | **Horizontal & Vertical Scaling of Workers and Spaces**: Scales from a single space (`v1`–`v4`) to a sharded multi-member cluster (`v5` with HRW routing by `threadId`) and centralized operational control (`v6`). | ✅ HRW routing implemented in core; see Section 2.8 for cluster transaction boundaries. |
 
 > [!NOTE]
 > **Coexistence of Two Chat Approaches in the Repository:**  
-> The root example [`agent/examples/chat.ts`](file:///media/data/programming/phi-spaces/agent/examples/chat.ts) implements chat as an **Earendil actor network**, where `alice`, `bob`, and `carol` are durable `pi-durable` conversations and the space acts strictly as an event bus.  
-> Stages `v1` through `v6` in `help-site/examples/` ([`chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts)), by contrast, demonstrate the **pure tuple-space architecture**, operating entirely without actor conversations.
+> The root example [`agent/examples/chat.ts`](../spaces/agent/examples/chat.ts) implements chat as an **Earendil actor network**, where `alice`, `bob`, and `carol` are durable `pi-durable` conversations and the space acts strictly as an event bus.  
+> Stages `v1` through `v6` in `help-site/examples/` ([`chat-core.ts`](examples/shared/chat-core.ts)), by contrast, demonstrate the **pure tuple-space architecture**, operating entirely without actor conversations.
 
 ---
 
@@ -41,7 +41,7 @@ Although both architectures historically originated from the `@earendil-works` e
   - Each session is a **named space (`NamedSpace`)** (or, in `v5`, a set of member spaces sharded via HRW by `threadId`). Threads and messages are standard `Thread` and `Msg` entries.
   - **Advantage**: Threads, messages, and pending tasks are regular space entries that can be queried via templates, filtered, archived (`archiveSpace`), and searched cluster-wide.
   - ✅ **$O(1)$ Pointer-Based Thread Forking (Tuple-Level Copy-on-Write):**  
-    In [`chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts), `forkThread()` writes only the new `Thread` metadata entry (`parentThreadId`, `forkUpToSeq`) with 1 `RequestRef` claim ($O(1)$ space entries, zero physical duplication of inherited `Msg` entries). When reading or inspecting threads, `SpaceChatEngine.resolveMessagesForThread()` dynamically resolves inherited ancestor messages up to `forkUpToSeq` across the pointer chain.
+    In [`chat-core.ts`](examples/shared/chat-core.ts), `forkThread()` writes only the new `Thread` metadata entry (`parentThreadId`, `forkUpToSeq`) with 1 `RequestRef` claim ($O(1)$ space entries, zero physical duplication of inherited `Msg` entries). When reading or inspecting threads, `SpaceChatEngine.resolveMessagesForThread()` dynamically resolves inherited ancestor messages up to `forkUpToSeq` across the pointer chain.
 
 ---
 
@@ -51,9 +51,9 @@ Although both architectures historically originated from the `@earendil-works` e
   - Manually defines a custom `ConversationCommandReceipts` document to check whether `conversation.create` was already executed for a given `requestId` before a WebSocket drop.
   - **Disadvantage**: Application developers must design, write, and maintain custom receipt documents for every new command type.
 - **`phi-spaces` Implementation**:
-  - Uses **built-in core idempotency ([`src/claims.ts`](file:///media/data/programming/phi-spaces/src/claims.ts))**: Every mutating or blocking operation (`write`, `take`, `createTransaction`, `commit`, `abort`, `renew`, `cancel`, `wait`, `notify`) natively accepts `{ request: { principal, generation, requestId } }`.
+  - Uses **built-in core idempotency ([`src/claims.ts`](../spaces/src/claims.ts))**: Every mutating or blocking operation (`write`, `take`, `createTransaction`, `commit`, `abort`, `renew`, `cancel`, `wait`, `notify`) natively accepts `{ request: { principal, generation, requestId } }`.
   - **Advantage**: Universally available for every space operation out of the box, including canonical RFC-8785 argument hashing (`RequestConflict` thrown if retried with altered parameters), 24-hour retention, and `pollOperation` / `resolveOperation` across process restarts.
-  - ✅ **Durable Admin Idempotency in Web Admin ([`admin-controller.ts`](file:///media/data/programming/phi-spaces/help-site/server/admin/admin-controller.ts)):** `#operations` is reconstructed at server boot from the durable `Result` entries in `CONTROL_SPACE`, ensuring retried `commandId` requests return their stored result even across process restarts.
+  - ✅ **Durable Admin Idempotency in Web Admin ([`admin-controller.ts`](server/admin/admin-controller.ts)):** `#operations` is reconstructed at server boot from the durable `Result` entries in `CONTROL_SPACE`, ensuring retried `commandId` requests return their stored result even across process restarts.
 
 ---
 
@@ -67,7 +67,7 @@ Although both architectures historically originated from the `@earendil-works` e
   - Submitting a message atomically writes the user `Msg` and a `ChatTask` entry inside a transaction. A worker exclusively reserves the `ChatTask` via `space.take(..., { txn })`.
   - **Advantage 1 (`CompletionProfile`)**: On `commit(txn)`, the space core enforces server-side that for every taken `ChatTask`, exactly one matching reply `Msg` carrying the same `taskId` and `threadId` was written in the same transaction (throwing `CompletionViolation` otherwise!).
   - **Advantage 2 (Worker Decoupling)**: Any number of heterogeneous workers (scripts, local models, remote GPU workers connected via `RemoteSpace`) can process `ChatTask` entries. If a worker crashes mid-generation, its transaction lease expires and the `ChatTask` automatically returns to the space.
-  - ✅ **Missing/Deleted Target Handling in Social Swarm ([`swarm.ts`](file:///media/data/programming/phi-spaces/help-site/server/social/swarm.ts)):**  
+  - ✅ **Missing/Deleted Target Handling in Social Swarm ([`swarm.ts`](server/social/swarm.ts)):**  
     When a `like` task targets a missing post, the worker writes a short-lived `Like` dedup-ack entry (60s TTL, `dedup: true`), satisfying the `CompletionProfile` cleanly without retry loops.
 
 ---
@@ -84,7 +84,7 @@ Although both architectures historically originated from the `@earendil-works` e
   - **Advantage**: Presence is queryable state in the space and can be inspected across cluster nodes.
   - **Disadvantage / Realistic Boundary**: Because a tuple space publishes transactional entries upon commit, it is optimized for discrete messages rather than sub-millisecond character-by-character token streaming.
   - ⚠️ **Mobile Client Disconnect Behavior:** If a mobile client holding an active `take` transaction loses connection, the task remains locked in the space for the full duration of the transaction lease (e.g., 30–60 s) before other workers can re-claim it.
-  - ✅ **Accurate Lease Expiry Tracking ([`chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts)):** `#presenceExpires` records the actual lease expiration returned by `space.write` and `space.renew`, accurately reflecting heartbeat extensions in snapshots.
+  - ✅ **Accurate Lease Expiry Tracking ([`chat-core.ts`](examples/shared/chat-core.ts)):** `#presenceExpires` records the actual lease expiration returned by `space.write` and `space.renew`, accurately reflecting heartbeat extensions in snapshots.
 
 ---
 
@@ -96,7 +96,7 @@ Although both architectures historically originated from the `@earendil-works` e
   - A space natively manages **any number of independent leases and waiter deadlines concurrently**.
   - A scheduled reminder is created by writing a `ScheduledJob` entry (`FOREVER`) paired with a `TimerLock` entry (`lease = delayMs`).
   - When `TimerLock` expires, the reaper removes the lock and the job is transactionally transitioned into an executable `ChatTask`.
-  - ✅ **Concurrent Multi-Alarm Processing ([`stage-runner.ts`](file:///media/data/programming/phi-spaces/help-site/server/space-chat/stage-runner.ts)):**  
+  - ✅ **Concurrent Multi-Alarm Processing ([`stage-runner.ts`](server/space-chat/stage-runner.ts)):**  
     `tickAlarms()` drains all concurrently triggered alarms in a loop (`for (let i = 0; i < triggered.length; i++) await processNextChatTask()`).
 
 ---
@@ -117,9 +117,9 @@ Although both architectures historically originated from the `@earendil-works` e
 - **Earendil Reference**:
   - Relies completely on Cloudflare's proprietary internal storage replication. Developers have no control over replication topologies, split-brain fencing, or targeted standby promotions.
 - **`phi-spaces` Implementation**:
-  - Delivers a full-fledged, self-hosted high-availability architecture via **Primary/Sync Replication ([`src/primary-sync.ts`](file:///media/data/programming/phi-spaces/src/primary-sync.ts))** and **Replica Control ([`src/replica-control.ts`](file:///media/data/programming/phi-spaces/src/replica-control.ts))**:
+  - Delivers a full-fledged, self-hosted high-availability architecture via **Primary/Sync Replication ([`src/primary-sync.ts`](../spaces/src/primary-sync.ts))** and **Replica Control ([`src/replica-control.ts`](../spaces/src/replica-control.ts))**:
     - **Deterministic Journaling:** Synchronous replication of commit intents to standby replicas before answering clients.
-    - **Cryptographic Fencing & Boot Guards:** `SimulatorFencing`, Netcup SCP fencing ([`src/netcup-fencing.ts`](file:///media/data/programming/phi-spaces/src/netcup-fencing.ts)), and Container fencing ([`src/container-fencing.ts`](file:///media/data/programming/phi-spaces/src/container-fencing.ts)) ensure an isolated primary cannot execute rogue commits.
+    - **Cryptographic Fencing & Boot Guards:** `SimulatorFencing`, Netcup SCP fencing ([`src/netcup-fencing.ts`](../spaces/src/netcup-fencing.ts)), and Container fencing ([`src/container-fencing.ts`](../spaces/src/container-fencing.ts)) ensure an isolated primary cannot execute rogue commits.
     - **Controlled Promotion & Degradation:** `promoteStandby` and `degradeToSingle` enable zero-data-loss failover with epoch fencing.
 
 ---

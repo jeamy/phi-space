@@ -702,7 +702,7 @@ According to `/media/data/programming/phi-spaces/AGENTS.md`, the following rules
    - **For the backend (`help-site/server/`)**, **no new dependencies at all** are needed:
      - HTTP server and static delivery use `node:http`, `node:fs/promises` and `node:path` (like `src/dashboard.ts`).
      - The WebSocket server uses a compact, standards-compliant RFC 6455 upgrade handler based on `node:http` and `node:crypto` (without an external `ws` package!).
-     - Persistence uses the phi-spaces store (SQLite or memory) via the local library `phi-spaces` (`file:..`).
+     - Persistence uses the phi-spaces store (SQLite or memory) via the local library `phi-spaces` (`file:../spaces`).
    - **For the React frontend (`help-site/client/`)** there were two clean ways (option B was implemented: `help-site/package.json` carries `next` 16, `react` 19 and `react-dom` 19; the frontend is built with Next.js, `app/`, and `scripts/build-web.ts`):
      - **Option A (zero install, runnable immediately without `npm install`)**: a lightweight JSX runtime shim in `help-site/client/lib/react-shim.ts` (or a local vendor bundle), compiled with `esbuild` (`--jsx=automatic`) into a single fast browser bundle – entirely without network download or change to `package.json`.
      - **Option B (with approval)**: installation of `react` and `react-dom` after explicit approval by the user.

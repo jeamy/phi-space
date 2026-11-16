@@ -311,8 +311,8 @@ Compose reicht sie an den Space-Prozess durch. Das ist keine unbegrenzte Histori
 Claim-Belegung und freie Plattenkapazität müssen weiterhin überwacht werden.
 
 Die Anbindung liegt in [durable-agent.ts](../../codemode-chat/server/durable-agent.ts).
-Die Anwendung importiert nur einen [Node-IPC-Client](../../agent/src/durable-client.ts);
-pi-durable und Chord bleiben im [Agentenprozess](../../agent/src/durable-worker.ts). Die Importgrenze des
+Die Anwendung importiert nur einen [Node-IPC-Client](../../spaces/agent/src/durable-client.ts);
+pi-durable und Chord bleiben im [Agentenprozess](../../spaces/agent/src/durable-worker.ts). Die Importgrenze des
 Space-Kerns und seine Tests ohne Earendil-Abhängigkeiten bleiben bestehen.
 
 - `LlmCall`/`LlmResult`, Run-Steuerung und abschließendes Judging bleiben im Space.
@@ -477,7 +477,7 @@ jede Verbindung als Prozess des Chats: nie auf einer öffentlichen Schnittstelle
 Skripte in `codemode-chat/package.json`: `docker:nano:*` (auf nano), `docker:big:*` (auf big, mit
 `docker-compose.hostnet.yml`: Host-Netz, Web nur auf `127.0.0.1`, der Space kommt über den SSH-Tunnel), `docker:local:*`
 (beide auf diesem Rechner), `docker:rust:*` (dieselbe lokale Testumgebung mit dem Rust-Space-Server
-(`codemode-space`, `rust/codemode-space`) in den Space-Containern, `docker/docker-compose.rust.yml`, nach `docker:image:rust`),
+(`codemode-space`, `codemode-chat/rust/codemode-space`) in den Space-Containern, `docker/docker-compose.rust.yml`, nach `docker:image:rust`),
 `docker:dev:*`, `docker:test`. `docker:prod:*` ist nur noch ein Hinweis auf die anderen Skripte (es endet mit einem Fehler): beide Profile auf einem
 Server kollidieren mit dem Tunnelport. Auf den Servern genügt `git pull` und dann `npm --prefix codemode-chat run
 docker:nano:up` bzw. `docker:big:up`; die Images werden im Host-Netz gebaut (rootless Docker auf nano erreicht aus dem

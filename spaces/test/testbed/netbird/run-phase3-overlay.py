@@ -76,7 +76,7 @@ try:
  ssh(['test','!','-e',B]);ssh(['mkdir','-m','700',B]);ssh(['mkdir',B+'/artifacts',B+'/store'])
  for source,dest in [('phi-spaces.mjs','phi-spaces.mjs'),('scenarios/phase3-overlay-node.mjs','phase3-overlay-node.mjs')]:subprocess.run(['scp','-oControlMaster=auto','-oControlPath=/tmp/pi-overlay-ssh-%r@%h-%p','-oControlPersist=120','-q',str(A/source),'big:'+B+'/artifacts/'+dest],check=True)
  modulelink=A/'node_modules'
- if not modulelink.exists():modulelink.symlink_to('/media/data/programming/phi-spaces/node_modules',target_is_directory=True)
+ if not modulelink.exists():modulelink.symlink_to(pathlib.Path(__file__).resolve().parents[3]/'node_modules',target_is_directory=True)
  localerr=open(O/'local.stderr','w');remoteerr=open(O/'remote.stderr','w')
  local=subprocess.Popen(['node',str(A/'scenarios/phase3-overlay-node.mjs'),localhome,'a',localip,bigip,token],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=localerr,text=True,bufsize=1);procs.append(local)
  args=['docker','run','--rm','-i','--name',T,'--label','phi-spaces.owned-phase3='+T,'--network','host','--user','0','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--cpus','2','--memory','1g','--pids-limit','128','--tmpfs','/tmp:rw,size=64m','-e','NODE_ENV=production','-v',B+'/artifacts/phi-spaces.mjs:/opt/app/phi-spaces.mjs:ro','-v',B+'/artifacts/phase3-overlay-node.mjs:/opt/app/scenarios/phase3-overlay-node.mjs:ro','-v',B+'/store:/data','sha256:95cb86e8e1be12e8daece82ac83c038bad97117802f45210b797747c6ba7c413','node','/opt/app/scenarios/phase3-overlay-node.mjs','/data','b',bigip,localip,token]

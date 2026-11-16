@@ -3,7 +3,7 @@
 ## Status and limit of the evidence
 
 The integration uses SQLite WAL with `synchronous=FULL` as well as JSONL with synchronized
-sidecars, commit markers and directory entries. See [`agent/src/storage.ts`](../agent/src/storage.ts).
+sidecars, commit markers and directory entries. See [`agent/src/storage.ts`](../spaces/agent/src/storage.ts).
 This also applies to the mobile harness; the Space keeps its phi-spaces store.
 
 **On 30 and 31.10.2026 experiments ran in a VM, see [result](#result-of-30102026). In the profiles and cuts examined,
@@ -11,7 +11,7 @@ no loss was found in the strong profile. Still open are drives, other file syste
 not a hardware certificate. Disk and file system must implement flushes correctly.
 A passed finite test also does not prove all possible write interruptions.
 
-The [local regressions](../agent/test/storage.test.ts) check:
+The [local regressions](../spaces/agent/test/storage.test.ts) check:
 
 - WAL/FULL on every newly opened SQLite connection, not only on the first start.
 - JSONL: sidecars before marker, marker flush and namespace barrier before acknowledgement.
@@ -20,14 +20,14 @@ The [local regressions](../agent/test/storage.test.ts) check:
 - Refused acknowledgement and a poisoned JSONL store after a failed marker flush.
 - The counter-case from pi-durable 1.4.0: `{ fsync: true }` alone does not flush a pure marker commit.
 
-The [probe self-tests](../agent/test/power-loss-probe.test.ts) end their own writer with SIGKILL.
+The [probe self-tests](../spaces/agent/test/power-loss-probe.test.ts) end their own writer with SIGKILL.
 That checks writer, externally observed acknowledgements and verifier, but **no power loss**.
 
 ## Result of 30.10.2026
 
-Two series in the guest `linux2020`, raw data and environment in [test/evidence](../test/evidence/power-loss-2026-10-30/README.en.md).
+Two series in the guest `linux2020`, raw data and environment in [test/evidence](../spaces/test/evidence/power-loss-2026-10-30/README.en.md).
 
-**Replay** ([power-loss-replay.mjs](../agent/test/power-loss-replay.mjs)): `dm-log-writes` logs the flushed
+**Replay** ([power-loss-replay.mjs](../spaces/agent/test/power-loss-replay.mjs)): `dm-log-writes` logs the flushed
 writes in order, and after each acknowledgement a mark goes into the log. The disk is rebuilt at random marks
 and then contains only what had been flushed by then. This reproduces the loss of the drive cache.
 
@@ -38,7 +38,7 @@ and then contains only what had been flushed by then. This reproduces the loss o
 | SQLite weak | 115 | 38 | 77, up to 249 commits |
 | JSONL weak | 115 | 0 | 115, of which 35 with `main.jsonl` missing entirely |
 
-**Hard power-off** ([power-loss-hard-off.mjs](../agent/test/power-loss-hard-off.mjs)): `virsh destroy` during writing,
+**Hard power-off** ([power-loss-hard-off.mjs](../spaces/agent/test/power-loss-hard-off.mjs)): `virsh destroy` during writing,
 acknowledgements stored outside the VM, check after the restart.
 
 | Cell | Runs | passed | Loss |
@@ -56,7 +56,7 @@ call was an open `fsync`, in all 4 with loss a `pwrite`. For SQLite, the hard po
 
 The strong profile costs a lot; the rates are in [section 5.3 of the comparison](vergleich-pi-durable.en.md#53-durable-depends-on-the-backend-and-the-failure-model). This applies to this host, not in general.
 
-The same experiment ran for comparison against the phi-spaces store of the Space, with an [identically built probe](../agent/test/power-loss-own-probe.ts).
+The same experiment ran for comparison against the phi-spaces store of the Space, with an [identically built probe](../spaces/agent/test/power-loss-own-probe.ts).
 The results are there as well.
 
 Limits:
@@ -85,7 +85,7 @@ production file system; no performance promise follows from the small temporary-
 
 ## Disposable VM: prepared procedure
 
-The [probe](../agent/test/power-loss-probe.ts) needs only Node and the agent dependencies already
+The [probe](../spaces/agent/test/power-loss-probe.ts) needs only Node and the agent dependencies already
 present. It calls no models or paid services.
 
 1. Use a standalone disposable VM and a dedicated test disk image. Do not attach production volumes,

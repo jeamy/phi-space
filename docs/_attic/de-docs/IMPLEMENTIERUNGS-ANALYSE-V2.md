@@ -21,6 +21,6 @@ Die frühere Sammlung uneinheitlicher Codekopien und Leistungszahlen ist durch d
 | uneinheitliche Specs/Links | Dokumente konsolidiert, lokale Verweise geprüft | echte Modell-/Mehrhost-Abnahme weiterhin offen |
 
 Die Korrekturen werden durch typecheck, Kern- und Beispielsuite geprüft.
-[recovery.test.ts](../../../test/examples/recovery.test.ts) enthält gezielte Fehlerfälle.
+[recovery.test.ts](../../../spaces/test/examples/recovery.test.ts) enthält gezielte Fehlerfälle.
 Keine Behauptung, dass jede hypothetische Ausfallsequenz oder jede wissenschaftliche Aussage geprüft ist.
 [Zur Übersicht](../../examples/README.en.md).

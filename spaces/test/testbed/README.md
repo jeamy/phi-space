@@ -32,14 +32,14 @@ The source tests (`npm run typecheck`, `npm test`, `npm run test:examples`) read
 - `testbed.env.example`: every setting. Environment variables win over `testbed.env`.
 - No ports are published, containers have memory/cpu/pid limits, and the script never deletes the server directory.
 
-Procedure, container roles, limits and troubleshooting: [docs/testumgebung-big.en.md](../../docs/testumgebung-big.en.md) (German).
+Procedure, container roles, limits and troubleshooting: [docs/testumgebung-big.en.md](../../../docs/testumgebung-big.en.md) (German).
 
-Terminal controls: [docs/tui.en.md](../../docs/tui.en.md). The inspector opens only a private temporary copy of JSONL state or a consistent SQLite backup, never a second harness on a live directory. Planned controls without a backend are disabled.
+Terminal controls: [docs/tui.en.md](../../../docs/tui.en.md). The inspector opens only a private temporary copy of JSONL state or a consistent SQLite backup, never a second harness on a live directory. Planned controls without a backend are disabled.
 
-`federation-runtime` verifies the built library with two persistent hosts and real TCP gates, on JSONL and SQLite. Its overlay directory and clock are fixtures; it does not certify the live NetBird outage matrix or Android Keystore integration. See [Phase 1b acceptance](../../docs/_attic/abnahme/ap1b-abnahme.en.md).
+`federation-runtime` verifies the built library with two persistent hosts and real TCP gates, on JSONL and SQLite. Its overlay directory and clock are fixtures; it does not certify the live NetBird outage matrix or Android Keystore integration. See [Phase 1b acceptance](../../../docs/_attic/abnahme/ap1b-abnahme.en.md).
 
 
-`tools/federation-host.mjs` provides the provisioned production-mode daemon. On big, host-a and member-1 now run separate SQLite harnesses and real NetBird gates with the independent register on vpsc. Their user services are `phi-spaces-phase1b-host-a.service` and `phi-spaces-phase1b-member-1.service`; state lives in each container's `/data/phase1b`. See [operations](../../docs/_attic/abnahme/ap1b-betrieb.en.md) and [public live evidence](../evidence/ap1b-2026-10-11/README.md). The daemon refuses normal startup while `restart.lock` exists and requires exclusive harness ownership. Recovery mode starts no normal gate or agents; SSH fencing needs an existing SSH-capable administrative runtime.
+`tools/federation-host.mjs` provides the provisioned production-mode daemon. On big, host-a and member-1 now run separate SQLite harnesses and real NetBird gates with the independent register on vpsc. Their user services are `phi-spaces-phase1b-host-a.service` and `phi-spaces-phase1b-member-1.service`; state lives in each container's `/data/phase1b`. See [operations](../../../docs/_attic/abnahme/ap1b-betrieb.en.md) and [public live evidence](../evidence/ap1b-2026-10-11/README.md). The daemon refuses normal startup while `restart.lock` exists and requires exclusive harness ownership. Recovery mode starts no normal gate or agents; SSH fencing needs an existing SSH-capable administrative runtime.
 
 The SQLite inspector uses read-only online backup into a temporary directory. It never opens a second harness on a live database. Do not use `kill`/container recreation as proof of F15 fencing: the fixed SSH adapter checks the actual process, service and persistent restart lock.
 
@@ -50,7 +50,7 @@ HRW-Sieb mit 1.000 Aufgaben/sechs Workern. Auf dem Server ausschließlich das
 gebaute `scenarios/phase2-load.mjs` ausführen. Der Lauf benötigt einen eigenen
 Container mit temporärem Schreibspeicher und liefert einen JSON-Bericht.
 Er ist ein Member-Lasttest; virtuelle Router- und NetBird-Systemabnahme sowie
-die offenen Journal-/Löschgrenzen stehen in [ap2-abnahme.md](../../docs/_attic/abnahme/ap2-abnahme.en.md).
+die offenen Journal-/Löschgrenzen stehen in [ap2-abnahme.md](../../../docs/_attic/abnahme/ap2-abnahme.en.md).
 
 
 ### Phase-2 virtual Router load
@@ -210,7 +210,7 @@ and Worker effects from replacing each other's challenge. The runtime library
 must include this correction before running the concurrent ACK scenario.
 
 The remaining seven Phase-2 acceptance blocks and the separate overall release
-are tracked in [the current acceptance document](../../docs/_attic/abnahme/ap2-abnahme.en.md).
+are tracked in [the current acceptance document](../../../docs/_attic/abnahme/ap2-abnahme.en.md).
 
 ### NetBird load with individual Member process crashes
 
@@ -294,7 +294,7 @@ socket. Both are standalone operator scenarios built by the existing builder.
 Use an isolated production-mode container with 2 CPUs, 1 GiB RAM and private
 writable scratch space; no external network or production-store access is needed.
 They do not rerun the accepted job workload or native Block 4. Final limits and
-acceptance scope: [Gate 4](../../docs/_attic/abnahme/ap2-gate4.en.md).
+acceptance scope: [Gate 4](../../../docs/_attic/abnahme/ap2-gate4.en.md).
 
 
 ### Phase 3 entry-replication invariants
@@ -305,7 +305,7 @@ in an isolated production-mode container with private scratch storage, 2 CPUs
 and 1 GiB RAM. No external network or live store is required. It covers durable
 HLC/LWW/Add-Wins metadata, reordered delivery and commit-loss recovery. The
 ten-minute partition uses an injected clock; this is not live NetBird replication
-or primary/standby acceptance. See [Phase 3](../../docs/_attic/abnahme/ap3-replikation.en.md).
+or primary/standby acceptance. See [Phase 3](../../../docs/_attic/abnahme/ap3-replikation.en.md).
 
 
 ### Paged entry snapshots
@@ -316,7 +316,7 @@ persistent backends, schema migration, immutable pages, durable transfer cursors
 atomic publication, concurrent writes and actual commit-loss/reopen boundaries.
 Use an isolated production-mode container with private scratch storage, 2 CPUs
 and 1 GiB RAM; no live store or external network is required. This is not a live
-NetBird replication acceptance. See [snapshot transfer](../../docs/_attic/abnahme/ap3-snapshot-transfer.en.md).
+NetBird replication acceptance. See [snapshot transfer](../../../docs/_attic/abnahme/ap3-snapshot-transfer.en.md).
 
 
 ### Continuous entry-stream progress
@@ -327,7 +327,7 @@ It verifies atomic event/checkpoint commits, real loopback TCP disconnect/reconn
 competing workers, cancellation and bounded source retries. Run only built
 JavaScript in an isolated production-mode container with private scratch, 2 CPUs
 and 1 GiB RAM. This is not a production NetBird deployment or primary/sync
-acceptance. See [stream protocol](../../docs/_attic/abnahme/ap3-stream-transfer.en.md).
+acceptance. See [stream protocol](../../../docs/_attic/abnahme/ap3-stream-transfer.en.md).
 
 
 ### Phase-3 generation maintenance and synchronous storage

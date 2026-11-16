@@ -116,8 +116,8 @@ management + relay 3604.0 s. Every case ends with successful object access.
 The desktop, too, could read an object again after the last case; its
 temporary firewall exception was removed. The three main services remain active.
 
-[Acceptance summary](../../../test/evidence/ap1b-2026-10-11/acceptance-summary.json)
-and [complete measurements](../../../test/evidence/ap1b-2026-10-11/netbird-fault-matrix.json)
+[Acceptance summary](../../../spaces/test/evidence/ap1b-2026-10-11/acceptance-summary.json)
+and [complete measurements](../../../spaces/test/evidence/ap1b-2026-10-11/netbird-fault-matrix.json)
 thus demonstrate the phase 1b acceptance in the examined F15 operating model. The outages
 targeted the reachability of the components for two dedicated test peers,
 not a global server/database outage. An existing direct tunnel
@@ -183,7 +183,7 @@ visible UI/NetBird device acceptance.
 
 ## Operations and Device Check of 2026-10-11
 
-Evidence: [public result files](../../../test/evidence/ap1b-2026-10-11/README.md).
+Evidence: [public result files](../../../spaces/test/evidence/ap1b-2026-10-11/README.md).
 No tokens, private keys or still valid signed grants are contained in them.
 
 - **Register:** `vpsc` is independent of the Space test bed on `big`. Two active
@@ -245,13 +245,13 @@ Wi-Fi ADB is connected again. The phone now has a real paired
 keystore identity for `phase1b-host-a` and authenticates via NetBird.
 The role limitation and the remaining acceptances are stated above; the test was done
 via the local mobile API, not by visible UI operation. See
-[phone evidence](../../../test/evidence/ap1b-2026-10-11/phone.json).
+[phone evidence](../../../spaces/test/evidence/ap1b-2026-10-11/phone.json).
 
 The final artifacts were rolled out to host-a and member-1; both services
 are running. The checks of grants, write/take, existing rotation and private
 recovery access were repeated afterwards. The built TUI inspector reads on
 both running hosts `harness.sqlite` and shows control/jobs Space including
-objects without read errors: [TUI evidence](../../../test/evidence/ap1b-2026-10-11/tui.json).
+objects without read errors: [TUI evidence](../../../spaces/test/evidence/ap1b-2026-10-11/tui.json).
 
 A renewed authentication call after a short switch of the app to the
 background passed. Afterwards the app was displayed again. This demonstrates
@@ -276,7 +276,7 @@ test uses a fixture signer; the device check uses the native
 Android Keystore. The visible UI operation is not yet fully accepted.
 The screen-off attempt does not count as success: `dumpsys power` reported
 `Awake`, so no screen-off duration is demonstrated. The screen was switched
-on again at the end. Evidence: [phone.json](../../../test/evidence/ap1b-2026-10-11/phone.json).
+on again at the end. Evidence: [phone.json](../../../spaces/test/evidence/ap1b-2026-10-11/phone.json).
 
 The controlled 90-second attempt also could not demonstrate a full
 rest phase: Android first switched to `Dozing`, but after about 11 seconds
@@ -306,7 +306,7 @@ SSH credentials were removed before the normal start. From the real phone
 the released object was read, taken and written back over NetBird.
 The original phone jobs access continues to work. All 232 tests
 passed again after the changes without omissions. Evidence:
-[data-restore.json](../../../test/evidence/ap1b-2026-10-11/data-restore.json).
+[data-restore.json](../../../spaces/test/evidence/ap1b-2026-10-11/data-restore.json).
 
 
 ### Distributed Live Control Restore with a Separate Member
@@ -336,7 +336,7 @@ main services and the already restored data target started again and the
 temporary register write permission and firewall rules removed. The old
 control source remains locked. All 233 tests and the typecheck passed;
 mobile bundle and test bed artifacts were rebuilt. Public evidence:
-[control-restore.json](../../../test/evidence/ap1b-2026-10-11/control-restore.json).
+[control-restore.json](../../../spaces/test/evidence/ap1b-2026-10-11/control-restore.json).
 
 
 ### Repeated Short Screen-Off Test
@@ -348,7 +348,7 @@ phone object access and finally still `Asleep`. The whole run took
 115.2 seconds; the screen was switched on again afterwards.
 This closes the short screen-off evidence, not the long-term/Doze acceptance.
 Samples and both attempts are in
-[phone.json](../../../test/evidence/ap1b-2026-10-11/phone.json).
+[phone.json](../../../spaces/test/evidence/ap1b-2026-10-11/phone.json).
 
 
 ### Visible Phone Operation after Rotation
@@ -364,7 +364,7 @@ The corrected APK was built offline and updated on the test phone.
 Operated visibly and passed: pairing status, key proof, own rotation,
 evaluate rotation (including repetition after completion) and object display
 with the new key. All four mobile regressions passed.
-Public evidence: [phone-ui.json](../../../test/evidence/ap1b-2026-10-11/phone-ui.json).
+Public evidence: [phone-ui.json](../../../spaces/test/evidence/ap1b-2026-10-11/phone-ui.json).
 Fresh initial pairing through the visible forms and camera QR capture were
 not performed again in this run. The ten-minute screen-off attempt
 was interrupted by waking after 192 seconds and does not count as passed.
@@ -372,7 +372,7 @@ was interrupted by waking after 192 seconds and does not count as passed.
 ### Bounded NetBird Outage Matrix in Progress
 
 The separate administrative fault proxy and its measurement tools are described in
-[test/testbed/netbird/FAULT-TESTS.en.md](../../../test/testbed/netbird/FAULT-TESTS.en.md).
+[test/testbed/netbird/FAULT-TESTS.en.md](../../../spaces/test/testbed/netbird/FAULT-TESTS.en.md).
 Only the dedicated test peers host-b/member-2 and the additional
 restored data gate run through it; original main services and phone
 stay on their normal path. Management, signal and relay were each measured as connected
@@ -389,7 +389,7 @@ completed evidence. Desktop/relay access is additionally measured locally.
 The first complete management case has ended: 305.3 seconds of fault phase,
 signal/relay and direct TCP access retained, object access locked after gate cache
 expiry and then restored. The separate one-hour run
-has started. [Measurement evidence](../../../test/evidence/ap1b-2026-10-11/netbird-management-5m.json).
+has started. [Measurement evidence](../../../spaces/test/evidence/ap1b-2026-10-11/netbird-management-5m.json).
 
 
 ### Ten Minutes of Background Operation with the Screen Off
@@ -402,7 +402,7 @@ NetBird and native key proof continued to work. The samples for the
 old Resumed-Activity field are not meaningful on all Android versions;
 the independent activity check and the continuous screen state complement
 them. The screen was switched on again afterwards.
-[phone-background-10m.json](../../../test/evidence/ap1b-2026-10-11/phone-background-10m.json).
+[phone-background-10m.json](../../../spaces/test/evidence/ap1b-2026-10-11/phone-background-10m.json).
 This demonstrates the measured ten-minute interval, no unlimited runtime and
 no automatically entered deep Doze phase.
 
@@ -415,7 +415,7 @@ four successful real object checks. Beforehand no force-idle was active.
 Afterwards the own test lock was lifted; Android reported again
 `mForceIdle=false` and `ACTIVE`. No battery exceptions or
 power settings were changed. The screen was switched on again.
-[phone-doze.json](../../../test/evidence/ap1b-2026-10-11/phone-doze.json).
+[phone-doze.json](../../../spaces/test/evidence/ap1b-2026-10-11/phone-doze.json).
 
 The controlled Doze test with Wi-Fi ADB and the ten-minute screen-off run
 have passed. They replace no uninstrumented overnight measurement.
@@ -430,7 +430,7 @@ data form, authentication and object display were executed by the actual
 UI handlers. The new native keystore profile is paired; the previously
 used key is revoked and rejected. After installing the normal APK without
 instrumentation, object access continues to work.
-[phone-first-pair-ui.json](../../../test/evidence/ap1b-2026-10-11/phone-first-pair-ui.json).
+[phone-first-pair-ui.json](../../../spaces/test/evidence/ap1b-2026-10-11/phone-first-pair-ui.json).
 
 A dedicated NetBird peer lost access after group withdrawal in
 2.895 seconds. After confirmed re-admission exactly this test peer was
@@ -438,4 +438,4 @@ deleted; access was denied after 2.823 seconds. The measurement concerns
 end-to-end access including overlay ACL and gate, not an isolated
 measurement of the layer A cache alone. Throwaway peer, container and setup key
 were removed or revoked. Existing peers were not changed.
-[peer-withdrawal.json](../../../test/evidence/ap1b-2026-10-11/peer-withdrawal.json).
+[peer-withdrawal.json](../../../spaces/test/evidence/ap1b-2026-10-11/peer-withdrawal.json).

@@ -3,7 +3,7 @@
 ## Stand und Nachweisgrenze
 
 Die Integration verwendet SQLite WAL mit `synchronous=FULL` sowie JSONL mit synchronisierten
-Sidecars, Commit-Markern und Verzeichniseintraegen. Siehe [`agent/src/storage.ts`](../../agent/src/storage.ts).
+Sidecars, Commit-Markern und Verzeichniseintraegen. Siehe [`agent/src/storage.ts`](../../spaces/agent/src/storage.ts).
 Das gilt auch fuer den mobilen Harness; der Space behaelt seinen eigenen Speicher.
 
 **Am 30. und 31.10.2026 liefen Versuche in einer VM, siehe [Ergebnis](#ergebnis-vom-30102026). In den untersuchten Profilen und Schnittpunkten
@@ -11,7 +11,7 @@ wurde im starken Profil kein Verlust festgestellt. Offen bleiben Laufwerke, ande
 kein Hardware-Zertifikat. Datentraeger und Dateisystem muessen Flushes korrekt umsetzen.
 Auch ein bestandener endlicher Test beweist nicht alle moeglichen Schreibunterbrechungen.
 
-Die [lokalen Regressionen](../../agent/test/storage.test.ts) pruefen:
+Die [lokalen Regressionen](../../spaces/agent/test/storage.test.ts) pruefen:
 
 - WAL/FULL auf jeder neu geoeffneten SQLite-Verbindung, nicht nur beim ersten Start.
 - JSONL: Sidecars vor Marker, Marker-Flush und Namespace-Barriere vor Bestaetigung.
@@ -20,14 +20,14 @@ Die [lokalen Regressionen](../../agent/test/storage.test.ts) pruefen:
 - Verweigerte Bestaetigung und vergifteten JSONL-Speicher nach einem fehlgeschlagenen Marker-Flush.
 - Den Gegenfall aus pi-durable 1.4.0: `{ fsync: true }` alleine flusht einen reinen Marker-Commit nicht.
 
-Die [Probe-Selbsttests](../../agent/test/power-loss-probe.test.ts) beenden ihren eigenen Writer mit SIGKILL.
+Die [Probe-Selbsttests](../../spaces/agent/test/power-loss-probe.test.ts) beenden ihren eigenen Writer mit SIGKILL.
 Das prueft Writer, extern beobachtete Bestaetigungen und Verifier, aber **keinen Stromverlust**.
 
 ## Ergebnis vom 30.10.2026
 
-Zwei Serien im Gast `linux2020`, Rohdaten und Umgebung in [test/evidence](../../test/evidence/power-loss-2026-10-30/README.en.md).
+Zwei Serien im Gast `linux2020`, Rohdaten und Umgebung in [test/evidence](../../spaces/test/evidence/power-loss-2026-10-30/README.en.md).
 
-**Replay** ([power-loss-replay.mjs](../../agent/test/power-loss-replay.mjs)): `dm-log-writes` protokolliert die geflushten
+**Replay** ([power-loss-replay.mjs](../../spaces/agent/test/power-loss-replay.mjs)): `dm-log-writes` protokolliert die geflushten
 Schreibvorgaenge in Reihenfolge, nach jeder Bestaetigung kommt eine Marke ins Protokoll. Die Platte wird an zufaelligen Marken
 neu aufgebaut und enthaelt dann nur, was bis dahin geflusht war. Das bildet den Verlust des Laufwerkscaches nach.
 
@@ -38,7 +38,7 @@ neu aufgebaut und enthaelt dann nur, was bis dahin geflusht war. Das bildet den 
 | SQLite schwach | 115 | 38 | 77, bis zu 249 Commits |
 | JSONL schwach | 115 | 0 | 115, davon 35 mit ganz fehlendem `main.jsonl` |
 
-**Hartes Aus** ([power-loss-hard-off.mjs](../../agent/test/power-loss-hard-off.mjs)): `virsh destroy` waehrend des Schreibens,
+**Hartes Aus** ([power-loss-hard-off.mjs](../../spaces/agent/test/power-loss-hard-off.mjs)): `virsh destroy` waehrend des Schreibens,
 Bestaetigungen ausserhalb der VM gespeichert, Pruefung nach dem Neustart.
 
 | Zelle | Laeufe | bestanden | Verlust |
@@ -56,7 +56,7 @@ Aufruf ein offener `fsync`, in allen 4 mit Verlust ein `pwrite`. Das harte Aus i
 
 Das starke Profil kostet viel, die Raten stehen in [Abschnitt 5.3 des Vergleichs](../vergleich-pi-durable.en.md#53-durable-depends-on-the-backend-and-the-failure-model). Das gilt fuer diesen Host, nicht allgemein.
 
-Derselbe Versuch lief zum Vergleich gegen den eigenen Store des Space, mit [gleich aufgebauter Probe](../../agent/test/power-loss-own-probe.ts).
+Derselbe Versuch lief zum Vergleich gegen den eigenen Store des Space, mit [gleich aufgebauter Probe](../../spaces/agent/test/power-loss-own-probe.ts).
 Die Ergebnisse stehen ebenfalls dort.
 
 Grenzen:
@@ -85,7 +85,7 @@ Produktivdateisystem erfolgen; aus den kleinen Temporaerdatei-Tests folgt kein L
 
 ## Wegwerf-VM: vorbereiteter Ablauf
 
-Die [Probe](../../agent/test/power-loss-probe.ts) braucht nur Node und die bereits vorhandenen
+Die [Probe](../../spaces/agent/test/power-loss-probe.ts) braucht nur Node und die bereits vorhandenen
 Agentenabhaengigkeiten. Sie ruft keine Modelle oder kostenpflichtigen Dienste auf.
 
 1. Eine eigenstaendige Wegwerf-VM und ein eigenes Test-Disk-Image verwenden. Keine Produktionsvolumes,

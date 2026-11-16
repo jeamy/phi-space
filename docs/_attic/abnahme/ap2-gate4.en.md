@@ -28,21 +28,21 @@ not reopened. Replication and promotion still belong to phase 3.
 
 ## Basis of the Decision
 
-The existing [router load measurement](../../../test/evidence/ap2-router-load-2026-10-12/README.md)
+The existing [router load measurement](../../../spaces/test/evidence/ap2-router-load-2026-10-12/README.md)
 documents 10,000 entries, 1,000 jobs, three members and six workers with 5,000
 completed root operations on SQLite. 36 lost effect replies
 were resolved through the same IDs. 227.5 seconds total runtime and about
 258 MiB measured RSS apply to the in-process transport described there.
 API p95/p99 are not pure network latencies.
 
-The [five NetBird journal runs](../../../test/evidence/ap2-netbird-journal-2026-10-14/README.md)
+The [five NetBird journal runs](../../../spaces/test/evidence/ap2-netbird-journal-2026-10-14/README.md)
 document the signed overlay path under 1,000 jobs with six workers,
 26 targeted journal SIGKILLs, 25,294 checked original claims, no open
 transactions and no unused future reservations. Runtimes:
 443,914 to 499,317 ms. ACK and member aborts have their separate
 completed evidence in the [phase 2 acceptance](ap2-abnahme.en.md).
 
-The [supplementary limit test](../../../test/evidence/ap2-gate4-2026-10-15/README.md)
+The [supplementary limit test](../../../spaces/test/evidence/ap2-gate4-2026-10-15/README.md)
 measures snapshot, frame, commit, connection and runtime limits on built
 artifacts in production mode on big with 2 CPUs and 1 GiB RAM. Peak RSS in the
 snapshot test: 244,903,936 bytes. The follow-up check measures exclusively

@@ -14,8 +14,8 @@ The [authoritative overview](../examples.en.md) contains the invocations and the
 | Background | [Historical references](../_attic/HISTORISCHE-REFERENZEN.en.md) | Linda/JavaSpaces and differences from the project |
 | Correction log | [Implementation analysis](../_attic/IMPLEMENTIERUNGS-ANALYSE-V2.en.md) | fixed findings and remaining limits |
 
-All runnable examples are in [examples/](../../examples/).
-Tests: [test/examples/README.en.md](../../test/examples/README.en.md).
+All runnable examples are in [examples/](../../spaces/examples/).
+Tests: [test/examples/README.en.md](../../spaces/test/examples/README.en.md).
 Federation, HRW and LWW replication are implemented ([implementation status](../implementierungsstand.en.md)), but these examples
 do not use them. `RemoteSpace` is the RPC layer against a single space service;
 the remote sieve scenario lives in the test bed, not in these example pages.

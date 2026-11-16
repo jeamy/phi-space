@@ -78,4 +78,4 @@ und arXiv-Netzrequests waren nicht Teil dieser Abnahme. Referenzwerte und Datenv
 [arXiv-API-Dokumentation](https://info.arxiv.org/help/api/user-manual.html) abgeglichen.
 
 Keine gemessene Performance-/Skalierungs-, Coverage-, Mehrhost- oder wissenschaftliche Qualitätsabnahme.
-Details: [Beispielverträge](../../examples.en.md), [Tests](../../../test/examples/README.en.md).
+Details: [Beispielverträge](../../examples.en.md), [Tests](../../../spaces/test/examples/README.en.md).

@@ -11,12 +11,12 @@ The comparison with the acceptance criteria is in the [acceptance matrix](ap3-ab
 | Part | State | Remaining evidence |
 |---|---|---|
 | 3.1 Entry replication | Persistent HLC, LWW, versioned tombstones, add-wins tags, deduplication, fixed replica incarnations, byte-limited change retrieval and small atomic snapshot merge implemented | Local and built invariant tests are building-block evidence; no productive NetBird replication yet |
-| 3.2 Large snapshots and continuous exchange | [Snapshot part](ap3-snapshot-transfer.en.md) and [pull worker with atomic stream cursor](ap3-stream-transfer.en.md) implemented and checked as administrative building blocks | [Generation maintenance](ap3-snapshot-maintenance.en.md) implemented and checked; real ten-minute NetBird partition between two hosts passed as a component run ([evidence](../../../test/evidence/ap3-overlay-2026-10-15/README.md)); productive integration open |
+| 3.2 Large snapshots and continuous exchange | [Snapshot part](ap3-snapshot-transfer.en.md) and [pull worker with atomic stream cursor](ap3-stream-transfer.en.md) implemented and checked as administrative building blocks | [Generation maintenance](ap3-snapshot-maintenance.en.md) implemented and checked; real ten-minute NetBird partition between two hosts passed as a component run ([evidence](../../../spaces/test/evidence/ap3-overlay-2026-10-15/README.md)); productive integration open |
 | 3.3 Integration into Spaces and service | Open | Policy modes, type/owner rights, fresh import grants for exactly source/target, boot role `entryReplica`, clock health, revocation, deletion barriers and distributed principal deletion also of these histories; set renewal is implemented as an atomic version; exclusive txns/takes in the public adapter still to be rejected |
 | 3.4 Complete primary/standby history | [Synchronous storage layer](ap3-primary-sync.en.md), signed transport, primary/sync Spaces in the federation daemon, bootstrap of existing stores and controlled transitions implemented; real runs passed | `CommitSealed` public with resolution in the running host; `NotCommitted` with negative claim for primary/sync Spaces and main store |
 | 3.5 `setStandby` and single switch | [Implemented](ap3-replica-control.en.md): transition journal, degradeToSingle, setStandby for an empty quarantine target, write lock of all sources including reaper, boot fencing and external permissions; actually run with netcup and container fencing | — |
 | 3.6 Promotion and quarantine | [Implemented](ap3-replica-control.en.md): only a fixed synchronous standby with active permission, verified evidence, new epoch, quarantine only via `release`; netcup and container fencing real, boot guard for replica version and durability, promotion of the control replica actually run | Negative claims implemented; root actually run on control promotion |
-| 3.7 Overall operation | Real run through the productive service passed ([evidence](../../../test/evidence/phase3-partition-2026-10-17/README.en.md)): ten-minute partition, process aborts of standby and primary, failover with `NotCommitted`, way back; every decided write exactly once | Router delegation instead of admin grants, failure of a NetBird agent, exhausted storage |
+| 3.7 Overall operation | Real run through the productive service passed ([evidence](../../../spaces/test/evidence/phase3-partition-2026-10-17/README.en.md)): ten-minute partition, process aborts of standby and primary, failover with `NotCommitted`, way back; every decided write exactly once | Router delegation instead of admin grants, failure of a NetBird agent, exhausted storage |
 
 ## Building Block 3.1
 
@@ -117,7 +117,7 @@ promotion or physical deletion of the new history.
 All 505 repository tests and 24 mobile runtime/lifecycle tests passed;
 the type check is green. The eleven new replication cases also pass on the
 built server artifact. Library and mobile bundle are byte-identical. The
-[evidence](../../../test/evidence/ap3-entry-2026-10-15/README.md) records source states,
+[evidence](../../../spaces/test/evidence/ap3-entry-2026-10-15/README.md) records source states,
 artifact hashes, isolated container and complete cleanup. This is
 the completion of the first building block described here, not an overall Phase 3 release.
 
@@ -136,7 +136,7 @@ and the real overlay partition remain open.
 Current stream evidence: 530 repository tests and 24 mobile tests green;
 36 built server cases passed. Data and cursor survive the checked
 commit losses together; TCP restart and concurrent workers are checked.
-[Artifact and source binding](../../../test/evidence/ap3-stream-2026-10-15/README.md).
+[Artifact and source binding](../../../spaces/test/evidence/ap3-stream-2026-10-15/README.md).
 Generation/receipt maintenance, real NetBird partition and productive integration remain open.
 
 
@@ -172,7 +172,7 @@ both sides writes, renewals, a delete and winners expiring during the partition.
 harnesses and exchange both views are equal (revision 90), deleted and expired items stayed invisible, and
 maintenance plus renewed exchange produced no echo. Own rules, group, policy and container were removed.
 Limits: component fixture with peer IP pin and private token, no snapshot under load, no productive service.
-[Evidence](../../../test/evidence/ap3-overlay-2026-10-15/README.md).
+[Evidence](../../../spaces/test/evidence/ap3-overlay-2026-10-15/README.md).
 
 
 ## Test Server for Fencing and Promotion (2026-10-16)
@@ -288,7 +288,7 @@ steps; each step has its own tests on both backends.
   - After that the existing step `erase-compact` removes the old revisions.
   - Every merge member runs through this flow; "deleted everywhere" means each reports `complete`.
 - **Real run** with two merge members over NetBird, partition and deletion passed
-  ([evidence](../../../test/evidence/merge-run-2026-10-17/README.en.md)).
+  ([evidence](../../../spaces/test/evidence/merge-run-2026-10-17/README.en.md)).
 
 **4. Compaction (implemented):** Events that no longer influence the view are removed once they are
 causally stable. A random test compares every compacting replica after each step with a non-compacting
@@ -350,8 +350,8 @@ shadow that receives exactly the same inputs.
   - Every rule is evidenced by mutation probes: without it at least one test fails.
   - The runtime test compacts periodically between two hosts over proven connections.
 - **Real run** with nano-test and standby-100: periodic compaction on both hosts, views unchanged,
-  streams continuing afterwards ([evidence](../../../test/evidence/compaction-run-2026-10-17/README.en.md)).
+  streams continuing afterwards ([evidence](../../../spaces/test/evidence/compaction-run-2026-10-17/README.en.md)).
 
 **5. Real run:** passed with nano-test and standby-100: replication, partition with concurrent writes
 and convergence, distributed deletion with physical compaction on both hosts
-([evidence](../../../test/evidence/merge-run-2026-10-17/README.en.md)).
+([evidence](../../../spaces/test/evidence/merge-run-2026-10-17/README.en.md)).

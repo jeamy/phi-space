@@ -168,7 +168,7 @@ remain open.
 | Phone with current APK | Installation and object reading over a real NetBird connection demonstrated |
 | Overall release of phase 2 / final gate 4 values | Not granted |
 
-Evidence and check numbers: [acceptance directory](../../../test/evidence/ap2-final-2026-10-11).
+Evidence and check numbers: [acceptance directory](../../../spaces/test/evidence/ap2-final-2026-10-11).
 
 ## Addendum 2026-10-12: Local Batchwise Deletion
 
@@ -182,11 +182,11 @@ Foreign entries are preserved; new effects are locked until completion.
 The deletion concerns the currently accessible state; physical cleanup
 of backend histories, snapshots and backups is thereby not demonstrated.
 
-Current evidence: [test bench 2026-10-12](../../../test/evidence/ap2-batches-2026-10-12).
+Current evidence: [test bench 2026-10-12](../../../spaces/test/evidence/ap2-batches-2026-10-12).
 
 ## Addendum 2026-10-12: Partitioned Root Journals
 
-[Check reports](../../../test/evidence/ap2-journals-2026-10-12) contain the current
+[Check reports](../../../spaces/test/evidence/ap2-journals-2026-10-12) contain the current
 local, mobile and server artifact checks. Production was not switched for this
 check. The test transport of the three persistent members is
 simulated; no new NetBird or phone acceptance is claimed.
@@ -214,7 +214,7 @@ writes/commits are queried again. Exactly 1,000 unique results,
 no remaining tasks, complete prime comparison and exactly 5,000
 completed parents/child commands are mandatory checks.
 
-[Measurements and evidence](../../../test/evidence/ap2-router-load-2026-10-12)
+[Measurements and evidence](../../../spaces/test/evidence/ap2-router-load-2026-10-12)
 document the concrete server run. It still replaces neither the
 three-host NetBird acceptance nor the complete crash-boundary matrix.
 
@@ -280,7 +280,7 @@ already completed parent releases unused child future reservations
 idempotently. This also closes the gap between parent completion and
 release of the reserved child budget.
 
-[Evidence](../../../test/evidence/ap2-netbird-2026-10-12) documents the concrete
+[Evidence](../../../spaces/test/evidence/ap2-netbird-2026-10-12) documents the concrete
 wire run and the current artifact checks. The complete crash matrix
 under full overlay load remains a separate acceptance step; the additional
 targeted cases do not replace it. Phase 2 as a whole is still open.
@@ -349,7 +349,7 @@ The reference comparison yielded 9,592 primes up to 100,000, sum 454,396,537.
 422 local tests, 185 tests on the built server artifact and 24 mobile/remote
 runtime tests passed. The old adapter fails specifically on both
 backends at the new error classification regression.
-[Evidence](../../../test/evidence/ap2-wire-recovery-2026-10-13) contains the
+[Evidence](../../../spaces/test/evidence/ap2-wire-recovery-2026-10-13) contains the
 reports and the separately labeled failed attempts.
 
 The separate real NetBird attempt with `beforeSend` confirms the safe
@@ -400,7 +400,7 @@ No unused child future reservation remained.
 428 local tests, 199 server artifact tests, an updated 43-case
 compatibility check on the server (with 42 overlapping cases and one new
 legacy case) and 24 mobile/remote tests passed.
-[Evidence](../../../test/evidence/ap2-admission-2026-10-13) distinguishes this
+[Evidence](../../../spaces/test/evidence/ap2-admission-2026-10-13) distinguishes this
 current wire evidence from the still open process/journal/ACK matrix.
 
 
@@ -419,7 +419,7 @@ winner is consumed, two losers returned. No transaction,
 no mailbox event and no unused future reservation remains open.
 Typecheck and 428 regression tests passed. Existing server services remain
 active; the production library and the mobile bundle remain unchanged.
-[Evidence](../../../test/evidence/ap2-process-crashes-2026-10-13).
+[Evidence](../../../spaces/test/evidence/ap2-process-crashes-2026-10-13).
 
 **Limit:** The killed process owns all four stores; RPC uses
 fixture identities in the same process and the clock is fixed. This supplements the
@@ -459,7 +459,7 @@ All 30 interrupted requests are among them; no unused
 future reservation and no active member transaction remained.
 Typecheck and 428 regression tests passed; the extended audit is also checked
 against the previous full-load admission run.
-[Evidence](../../../test/evidence/ap2-netbird-process-crashes-2026-10-13).
+[Evidence](../../../spaces/test/evidence/ap2-netbird-process-crashes-2026-10-13).
 
 **Limits of this root RPC evidence:** It concerns root aborts with running
 members and does not cover targeted mailbox ACKs, explicit journal commit boundaries
@@ -504,7 +504,7 @@ Ed25519 and P-256 over real TCP connections and is regression-protected.
 432 local tests, ten built server authentication cases, 24 mobile tests
 and typecheck passed. The mobile bundle is synchronized; a new
 phone deployment evidence is not claimed by this.
-[Evidence](../../../test/evidence/ap2-netbird-ack-2026-10-13).
+[Evidence](../../../spaces/test/evidence/ap2-netbird-ack-2026-10-13).
 
 This ACK evidence includes no member aborts or all explicit
 journal boundaries over NetBird. The subsequent member evidence follows below. All fixture containers and temporary NetBird objects
@@ -553,7 +553,7 @@ the server. The successful acceptance uses a fresh fixture. A refused
 existing test directory does not entitle adopting its CID files;
 this cleanup boundary is checked separately with the running own fixture.
 
-[Evidence](../../../test/evidence/ap2-netbird-member-crashes-2026-10-13).
+[Evidence](../../../spaces/test/evidence/ap2-netbird-member-crashes-2026-10-13).
 
 All own fixture containers and temporary NetBird objects are removed;
 existing production services remain active. The evidence replaces neither
@@ -587,7 +587,7 @@ The first small run detected the initially uncaptured document first creation
 and failed correctly at 22 instead of 26 aborts. After the correction, the
 four first-creation probes including audit and all five complete runs pass.
 Additional probe entries do not count toward the initially checked 10,000 inventory.
-[Evidence](../../../test/evidence/ap2-netbird-journal-2026-10-14).
+[Evidence](../../../spaces/test/evidence/ap2-netbird-journal-2026-10-14).
 
 The acceptance covers successful data/race journals. Failure/review,
 restore, deletion and profile migration flows have their own acceptances.
@@ -651,7 +651,7 @@ operating evidence and does not release phase 2. The original IDs and their
 histories are not obscured by substitute IDs or deleted journals.
 
 
-The [evidence of the native continuation](../../../test/evidence/ap2-native-root-2026-10-14/README.md)
+The [evidence of the native continuation](../../../spaces/test/evidence/ap2-native-root-2026-10-14/README.md)
 contains tests, artifact checksums, fencing, the CAS rejection and the durably
 review-required original request. The own test environment was subsequently
 ended: six containers, six precisely assigned firewall exceptions and the
@@ -670,7 +670,7 @@ are irreversible. The archive and floor checks run within the same
 SQLite write transaction: A late registration of a backup from an
 older epoch fails even after sealing has already taken place.
 
-The [register evidence](../../../test/evidence/ap2-erasure-register-2026-10-14/README.md)
+The [register evidence](../../../spaces/test/evidence/ap2-erasure-register-2026-10-14/README.md)
 contains two-connection/restart and mTLS checks, **463/463** tests,
 **24/24** mobile tests, typecheck and 29 built artifacts. The shared
 live register service was not updated or restarted. Backup/restore
@@ -680,7 +680,7 @@ blocks 4–8 as a whole thereby receive no release.
 
 ## Native Root Latency: Bundling Fresh Checks
 
-The [latency evidence](../../../test/evidence/ap2-native-performance-2026-10-14/README.md)
+The [latency evidence](../../../spaces/test/evidence/ap2-native-performance-2026-10-14/README.md)
 separates the negative take, reading measurements and the still separate live acceptance.
 A single reading root call initially needed 19.4 seconds and 141
 register queries. Root state and keys are now checked from a shared control snapshot,
@@ -716,7 +716,7 @@ completed: policy version 5, `maxResultCount=2`, all three members `active` agai
 and with exactly the new completion profile. The existing migration tests
 continue to check reply loss, commit aborts and rights/target bindings.
 
-Evidence: [profile-transition.json](../../../test/evidence/ap2-remaining-2026-10-15/profile-transition.json).
+Evidence: [profile-transition.json](../../../spaces/test/evidence/ap2-remaining-2026-10-15/profile-transition.json).
 Block 4 is thereby neither executed again nor assessed.
 
 ## Block 5: Two Physical Hosts and Isolated Member Failure (2026-10-15)
@@ -740,7 +740,7 @@ no new data run was created. Both parents are durably `done`.
 
 The local inbound firewall received exclusively two documented rules
 for root peer, local NetBird address and test port 7432.
-Evidence: [physical-domains.json](../../../test/evidence/ap2-remaining-2026-10-15/physical-domains.json).
+Evidence: [physical-domains.json](../../../spaces/test/evidence/ap2-remaining-2026-10-15/physical-domains.json).
 
 ## Blocks 6 and 7: Distributed Deletion with Backend and Archive Evidence (2026-10-15)
 
@@ -773,11 +773,11 @@ original write parent, own read parent and foreign
 read parent each returned `ResultExpired`; no check entries were visible any more.
 No earlier root operation was repeated with a new request ID.
 
-Evidence: [deletion run](../../../test/evidence/ap2-remaining-2026-10-15/distributed-erasure.json),
-[file checks](../../../test/evidence/ap2-remaining-2026-10-15/file-verification.json),
-[progress sequence](../../../test/evidence/ap2-remaining-2026-10-15/erasure-progress.jsonl),
-[old cache contents present](../../../test/evidence/ap2-remaining-2026-10-15/privacy-before-erasure.json),
-[test bench](../../../test/evidence/ap2-remaining-2026-10-15/validation.json).
+Evidence: [deletion run](../../../spaces/test/evidence/ap2-remaining-2026-10-15/distributed-erasure.json),
+[file checks](../../../spaces/test/evidence/ap2-remaining-2026-10-15/file-verification.json),
+[progress sequence](../../../spaces/test/evidence/ap2-remaining-2026-10-15/erasure-progress.jsonl),
+[old cache contents present](../../../spaces/test/evidence/ap2-remaining-2026-10-15/privacy-before-erasure.json),
+[test bench](../../../spaces/test/evidence/ap2-remaining-2026-10-15/validation.json).
 
 The final source state passes typecheck, 492 phi-spaces tests,
 20 mobile runtime tests, four mobile lifecycle tests and two additional
@@ -795,7 +795,7 @@ exactly added restricted SSH authorization line were removed.
 The own register container was ended and removed; its database,
 the sealed deletion receipts and the stores are preserved. The checked
 existing services on `big` and `vpsc` kept container ID, start time and
-restart counter: [cleanup evidence](../../../test/evidence/ap2-remaining-2026-10-15/cleanup.json).
+restart counter: [cleanup evidence](../../../spaces/test/evidence/ap2-remaining-2026-10-15/cleanup.json).
 
 
 ## Gate 4 and Completion Decision (2026-10-15)

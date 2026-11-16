@@ -21,6 +21,6 @@ The earlier collection of inconsistent code copies and performance figures is re
 | inconsistent specs/links | documents consolidated, local references checked | real model/multi-host acceptance still open |
 
 The corrections are checked by typecheck, core and example suites.
-[recovery.test.ts](../../test/examples/recovery.test.ts) contains targeted failure cases.
+[recovery.test.ts](../../spaces/test/examples/recovery.test.ts) contains targeted failure cases.
 No claim that every hypothetical failure sequence or every scientific statement has been checked.
 [Back to the overview](../examples/README.en.md).

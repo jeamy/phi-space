@@ -1,7 +1,7 @@
 # Lokales segmentiertes Primzahlsieb
 
-Stand: 2026-10-16. Implementierung: [sieve.ts](../../../examples/sieve.ts).
-Tests: [sieve.test.ts](../../../test/examples/sieve.test.ts). Kein Modell oder Netzwerk erforderlich.
+Stand: 2026-10-16. Implementierung: [sieve.ts](../../../spaces/examples/sieve.ts).
+Tests: [sieve.test.ts](../../../spaces/test/examples/sieve.test.ts). Kein Modell oder Netzwerk erforderlich.
 
 ```bash
 npm run example:sieve -- 1001 4
@@ -46,7 +46,7 @@ und SIGKILL/Neustart des Host-Prozesses; [AP-1-Abnahme](../../_attic/abnahme/ap1
 
 In einer späteren Federation müssen Task und Ergebnis in derselben Member-Txn liegen.
 Siehe [v3-Plan](../../federation-plan-v3.en.md). Weitere Minimalmuster:
-[workers.ts](../../../agent/examples/workers.ts), [blocking-tool.ts](../../../agent/examples/blocking-tool.ts).
+[workers.ts](../../../spaces/agent/examples/workers.ts), [blocking-tool.ts](../../../spaces/agent/examples/blocking-tool.ts).
 [Zur Übersicht](../README.en.md).
 
 

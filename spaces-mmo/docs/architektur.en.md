@@ -419,7 +419,7 @@ on the target phone is added.
 
 ```
 spaces-mmo/
-  package.json          Paket phi-spaces-mmo (next, react, react-dom, pixi.js, phi-spaces: "file:..")
+  package.json          Paket phi-spaces-mmo (next, react, react-dom, pixi.js, phi-spaces: "file:../spaces")
   tsconfig.json         eigene; nicht Teil des Root-`tsc`; moduleResolution "bundler" wie codemode-chat
   server/               die Engine
     launch.ts           startet space, world, npc, model, web (Entwicklung)
@@ -451,6 +451,6 @@ bundles nothing outside the project directory; `checks/shared-copies.test.mjs` k
 
 ## Integration of phi-spaces
 
-As a package: `"phi-spaces": "file:.."` and `import { RemoteSpace, socketTransport } from "phi-spaces"`, without build and
+As a package: `"phi-spaces": "file:../spaces"` and `import { RemoteSpace, socketTransport } from "phi-spaces"`, without build and
 without special Node flags (see [paket.en.md](paket.en.md)). `npm run check:durable` applies here too, so no pi-durable, chord or
 pi-ai in the game. Model NPCs go via the `agent/` package as a process of their own.

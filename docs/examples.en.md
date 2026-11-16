@@ -7,15 +7,15 @@ evidence are in the [implementation status](implementierungsstand.en.md) and the
 
 | Example | Implementation | Evidence and limit |
 |---|---|---|
-| Master/worker | [workers.ts](../agent/examples/workers.ts) | scripted write/take demonstration; no image resize, no crash reassignment |
-| Blocking take | [blocking-tool.ts](../agent/examples/blocking-tool.ts) | scripted tool call; host later writes a job in the same process |
-| Sensor pipeline | [sensor-pipeline.ts](../examples/sensor-pipeline.ts) | real functions, concurrency, lease expiry and rollback tested locally |
-| Chat | [chat.ts](../agent/examples/chat.ts) | actual scripted ring tested; live mode (`--live`) present, not accepted |
-| arXiv research | [arxiv-research.ts](../agent/examples/arxiv-research.ts) | actual runner tested with scripted model and JSONL; real source/model quality open |
-| Dark-energy research | [dark-energy-research.ts](../agent/examples/dark-energy-research.ts) | actual runner including classification and abstract summary tested with scripts |
-| Golomb | [golomb.ts](../examples/golomb.ts) | actual order-4 search, result validation and persistent resumption tested |
-| Prime sieve | [sieve.ts](../examples/sieve.ts) | independent reference comparison, txn rollback, lease recovery and SQLite reopen |
-| Cache | [cache.ts](../examples/cache.ts) | local atomic replacement, CAS, TTL and SQLite reopen; no replication |
+| Master/worker | [workers.ts](../spaces/agent/examples/workers.ts) | scripted write/take demonstration; no image resize, no crash reassignment |
+| Blocking take | [blocking-tool.ts](../spaces/agent/examples/blocking-tool.ts) | scripted tool call; host later writes a job in the same process |
+| Sensor pipeline | [sensor-pipeline.ts](../spaces/examples/sensor-pipeline.ts) | real functions, concurrency, lease expiry and rollback tested locally |
+| Chat | [chat.ts](../spaces/agent/examples/chat.ts) | actual scripted ring tested; live mode (`--live`) present, not accepted |
+| arXiv research | [arxiv-research.ts](../spaces/agent/examples/arxiv-research.ts) | actual runner tested with scripted model and JSONL; real source/model quality open |
+| Dark-energy research | [dark-energy-research.ts](../spaces/agent/examples/dark-energy-research.ts) | actual runner including classification and abstract summary tested with scripts |
+| Golomb | [golomb.ts](../spaces/examples/golomb.ts) | actual order-4 search, result validation and persistent resumption tested |
+| Prime sieve | [sieve.ts](../spaces/examples/sieve.ts) | independent reference comparison, txn rollback, lease recovery and SQLite reopen |
+| Cache | [cache.ts](../spaces/examples/cache.ts) | local atomic replacement, CAS, TTL and SQLite reopen; no replication |
 | Space chat (v1–v6) | [help-site/examples/](../help-site/examples) | pure tuple-space architecture (`SpaceChatEngine`): presence leases, `ChatTask`+CompletionProfile, `ScheduledJob`/`TimerLock` alarms; stages from local to federated |
 
 ## Two Different Chat Architectures
@@ -70,7 +70,7 @@ LLM agent would write the source itself. `@earendil-works/pi-codemode` is a depe
 (`PI_CODEMODE_DIR` selects another path); if it cannot be loaded, the example is skipped. Measured time is wall time and fluctuates.
 
 Live examples (`agent/examples/chat.ts --live`, `npm run example:arxiv`, `npm run example:dark-energy`, `npm run example:codemode-evolve:live`) need credentials and incur
-model costs; [live-models.ts](../agent/src/live-models.ts) selects provider and model. Under AGENTS.md they are
+model costs; [live-models.ts](../spaces/agent/src/live-models.ts) selects provider and model. Under AGENTS.md they are
 run only after approval. The arXiv network access and scientific result quality are not validated by
 faux tests. API parser and data contract are checked with local fixtures.
 
@@ -87,7 +87,7 @@ external effects exactly-once in general. Durability depends on the store: `open
 
 ## Atomic Research Outputs
 
-[research-support.ts](../agent/examples/research-support.ts) defines `researchSpaces`. Result entries and
+[research-support.ts](../spaces/agent/examples/research-support.ts) defines `researchSpaces`. Result entries and
 completion markers require the active transaction owned by the agent with the matching reserved task.
 Missing/wrong transactions are rejected server-side. All writes of a phase stay
 invisible until commit. The simple arXiv pipeline also writes PresentTask under the AnalyzeTask transaction.
@@ -95,7 +95,7 @@ invisible until commit. The simple arXiv pipeline also writes PresentTask under 
 A new run requires a fresh, empty state directory. With `--resume --dir <directory>` both research programs
 explicitly reopen a compatible existing run. The topic/query configuration
 is adopted; explicitly deviating values or a different run kind are rejected.
-[research-run.ts](../agent/examples/research-run.ts) stores the run identity in the manifest and team IDs,
+[research-run.ts](../spaces/agent/examples/research-run.ts) stores the run identity in the manifest and team IDs,
 model selection and phase in a pi-durable document. Conversation creation and ID entry are one commit;
 start messages have stable request IDs.
 
@@ -105,8 +105,8 @@ the agent store from a second launcher and is released by the operating system o
 A finished run can output its report files again without restarting the team.
 
 ```sh
-node --experimental-strip-types agent/examples/arxiv-research.ts --resume --dir /pfad/zum/lauf
-node --experimental-strip-types agent/examples/dark-energy-research.ts --resume --dir /pfad/zum/lauf
+node --experimental-strip-types spaces/agent/examples/arxiv-research.ts --resume --dir /pfad/zum/lauf
+node --experimental-strip-types spaces/agent/examples/dark-energy-research.ts --resume --dir /pfad/zum/lauf
 ```
 
 Resume does not retroactively validate expired Space transactions or request generations.
@@ -117,13 +117,13 @@ crash. Live execution costs tokens and needs its own approval.
 ## Test Scope
 
 The older suite checks many Space patterns with its own scripts. It is not complete evidence for the
-respective CLI programs. [recovery.test.ts](../test/examples/recovery.test.ts) adds calls of the actual
-implementations and SQLite reopen; the [agent version](../agent/test/examples/recovery.test.ts) checks JSONL reopen,
+respective CLI programs. [recovery.test.ts](../spaces/test/examples/recovery.test.ts) adds calls of the actual
+implementations and SQLite reopen; the [agent version](../spaces/agent/test/examples/recovery.test.ts) checks JSONL reopen,
 resume after SIGKILL during analysis and targeted failures. Scripted model tests filter system messages before checking
-the last message (`m.role !== "system"`, see `agent/test/examples/`). [Test overview](../test/examples/README.en.md).
+the last message (`m.role !== "system"`, see `agent/test/examples/`). [Test overview](../spaces/test/examples/README.en.md).
 
 No scaling or production benchmarks exist for the examples themselves. System-wide NetBird,
-partition and load evidence is in [test/evidence](../test/evidence/) and the
+partition and load evidence is in [test/evidence](../spaces/test/evidence/) and the
 [acceptance documents](_attic/abnahme/ap3-abnahme.en.md).
 [v3 resource values](federation-plan-v3.en.md#411-resource-planning-with-several-vps) are planning figures,
 not demonstrated minimum requirements.

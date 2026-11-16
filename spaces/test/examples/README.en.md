@@ -50,4 +50,4 @@ Of these, 7 new tests check the sieve and 8 new tests the local cache. The sieve
 independent trial division; lease/TTL tests inject a clock instead of using the fake-timer stub.
 The process-crash test needs permission to start and end a local Node subprocess.
 Under a sandbox with child_process blocked, a targeted approval is required for it.
-[Example documentation](../../docs/examples.en.md).
+[Example documentation](../../../docs/examples.en.md).

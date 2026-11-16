@@ -149,14 +149,14 @@ policy change, lost responses, real TCP gates, JSONL/SQLite restart,
 sequential takes, partial queries, concurrent reservations, txn binding,
 drain, wrong inventory, notify closing events and atomic reference races.
 The final counts and build evidence are in
-[checks.json](../../../test/evidence/ap2-2026-10-11/checks.json).
+[checks.json](../../../spaces/test/evidence/ap2-2026-10-11/checks.json).
 
 Still open are AP 2.6 (further admin commands and controlled profile changes),
 2.7 (automatic capability/MemberStatus directory), 2.9 (load acceptance) and
 the complete phase 2 system acceptance. RunGate and replication follow later.
 
 The final check comprises 345 total tests, 158 example tests, four mobile tests
-and [65 compiled tests on big](../../../test/evidence/ap2-2026-10-11/server-built-phase2.json).
+and [65 compiled tests on big](../../../spaces/test/evidence/ap2-2026-10-11/server-built-phase2.json).
 The isolated container uses controlled management directories and
 real loopback TCP; this is not a complete phase 2 overlay acceptance.
 The normal Android APK is built offline. Its final update on the

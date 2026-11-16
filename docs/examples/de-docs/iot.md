@@ -1,6 +1,6 @@
 # Sensor-Pipeline
 
-Stand: 2026-10-07. Implementierung: [sensor-pipeline.ts](../../../examples/sensor-pipeline.ts).
+Stand: 2026-10-07. Implementierung: [sensor-pipeline.ts](../../../spaces/examples/sensor-pipeline.ts).
 Lokaler, deterministischer Host-Code mit verschiedenen Conversation-IDs als Owner; kein LLM und keine Federation.
 
 ## Datenvertrag

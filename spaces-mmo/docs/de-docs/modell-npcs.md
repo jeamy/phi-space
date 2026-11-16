@@ -171,7 +171,7 @@ Sie verwendet WAL/`synchronous=FULL` statt des Upstream-Standards NORMAL.
   keine direkten Welt-, Shell- oder Dateiwerkzeuge. Abschalten des Modellprozesses bricht seine Agentenantwort ab.
 - `NpcMemory` und `NOTE:` bleiben die fachliche Zusammenfassung im Space. Nach 64 abgeschlossenen Dialogantworten
   beginnt eine neue Conversation mit der aktuellen Lage und dieser Zusammenfassung. Das löscht keine früheren Transkripte.
-- Jeder Aufruf zeigt dem Modell nur ein Fenster des Dialogs ([agent/src/dialogue-window.ts](../../../agent/src/dialogue-window.ts)):
+- Jeder Aufruf zeigt dem Modell nur ein Fenster des Dialogs ([agent/src/dialogue-window.ts](../../../spaces/agent/src/dialogue-window.ts)):
   die aktuelle Lage und davor die letzten beantworteten Runden, höchstens 4 und zusammen höchstens 150.000 Zeichen. Eine
   Runde, deren Aufruf fehlschlug, bleibt weg. Die gespeicherte Conversation behält jedes Wort; nichts wird
   zusammengefasst (kein Compaction-Aufruf). Vor dem 2026-11-08 ging die ganze Conversation mit: Bei etwa 13k Tokens

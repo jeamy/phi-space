@@ -9,7 +9,7 @@ Servicevertrag und das Agentenpaket. Der Abschnitt [Exportübersicht](#exportüb
 ## Paket und Unterpfade
 
 Projekte, die auf phi-spaces aufbauen (codemode-chat, help-site, künftige), binden die Bibliothek als Paket ein:
-`"phi-spaces": "file:.."` in ihren `dependencies` (npm legt einen Symlink an) und Importe über den Paketnamen.
+`"phi-spaces": "file:../spaces"` in ihren `dependencies` (npm legt einen Symlink an) und Importe über den Paketnamen.
 `exports` zeigt direkt auf die TypeScript-Quellen; es gibt keinen Build-Schritt, Node entfernt die Typen
 (`--experimental-strip-types`), weil der Symlink auf den echten Pfad außerhalb von `node_modules` auflöst.
 
@@ -614,7 +614,7 @@ eine Überschreitung stoppt den Command unter den bestehenden Sperren.
 Driver-Aufrufe müssen für dieselbe Command-Bindung wiederholbar
 sein und exklusiv gestoppte Writer nachweisen. Vor jedem Wartungsschritt
 werden alle Sperren geprüft; Freigabe setzt alle versiegelten Floors voraus.
-Die CLI [run-distributed-erasure.ts](../../test/testbed/run-distributed-erasure.ts)
+Die CLI [run-distributed-erasure.ts](../../spaces/test/testbed/run-distributed-erasure.ts)
 bindet dies für den eigenen Testverbund an echte Prozesse, lokale Löschbelege,
 Archivdateien und die unabhängigen mTLS-Registereinträge.
 

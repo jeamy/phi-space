@@ -14,7 +14,7 @@ Externe Projekte und Fremdprodukte wie pi-durable, pi-ai und pi-server behalten 
 - [x] Lokalen Admin-Passwort-Variablennamen auf `PHI_SPACES_ADMIN_PASSWORD` umgestellt;
   der Passwortwert wurde weder verändert noch ausgegeben.
 - [x] Historische Textnachweise normalisiert und ihre redaktionelle Veränderung ausdrücklich
-  im [Evidence-Hinweis](../../test/evidence/README.en.md) dokumentiert. Sie sind keine unveränderten Rohlogs mehr;
+  im [Evidence-Hinweis](../../spaces/test/evidence/README.en.md) dokumentiert. Sie sind keine unveränderten Rohlogs mehr;
   enthaltene Hashes/Signaturen belegen weiterhin nur die damaligen Originalartefakte.
 - [x] Corpus-Build bereinigt nur entfallene Artikel, die der vorherige generierte Index ausdrücklich
   als Eigentum des Generators ausweist. Unbekannte Dateien bleiben erhalten; unsichere Pfade werden

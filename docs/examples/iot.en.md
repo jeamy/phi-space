@@ -1,6 +1,6 @@
 # Sensor Pipeline
 
-As of 2026-10-07. Implementation: [sensor-pipeline.ts](../../examples/sensor-pipeline.ts).
+As of 2026-10-07. Implementation: [sensor-pipeline.ts](../../spaces/examples/sensor-pipeline.ts).
 Local, deterministic host code with different conversation IDs as owners; no LLM and no federation.
 
 ## Data Contract

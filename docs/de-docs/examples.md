@@ -7,15 +7,15 @@ Nachweise stehen im [Implementierungsstand](../implementierungsstand.en.md) und 
 
 | Beispiel | Implementierung | Nachweis und Grenze |
 |---|---|---|
-| Master/Worker | [workers.ts](../../agent/examples/workers.ts) | geskriptete Write/Take-Demonstration; kein Bild-Resize, keine Crash-Wiedervergabe |
-| Blockierendes Take | [blocking-tool.ts](../../agent/examples/blocking-tool.ts) | geskripteter Tool-Aufruf; Host schreibt später einen Job im selben Prozess |
-| Sensor-Pipeline | [sensor-pipeline.ts](../../examples/sensor-pipeline.ts) | echte Funktionen, Konkurrenz, Lease-Ablauf und Rollback lokal getestet |
-| Chat | [chat.ts](../../agent/examples/chat.ts) | tatsächlicher geskripteter Ring getestet; Live-Modus (`--live`) vorhanden, nicht abgenommen |
-| arXiv-Recherche | [arxiv-research.ts](../../agent/examples/arxiv-research.ts) | tatsächlicher Runner mit geskriptetem Modell und JSONL getestet; echte Quellen-/Modellqualität offen |
-| Dark-Energy-Recherche | [dark-energy-research.ts](../../agent/examples/dark-energy-research.ts) | tatsächlicher Runner einschließlich Klassifikation und Abstract-Zusammenfassung geskriptet getestet |
-| Golomb | [golomb.ts](../../examples/golomb.ts) | tatsächliche Ordnung-4-Suche, Ergebnisvalidierung und persistente Wiederaufnahme getestet |
-| Primzahlsieb | [sieve.ts](../../examples/sieve.ts) | unabhängiger Referenzvergleich, Txn-Rollback, Lease-Recovery und SQLite-Reopen |
-| Cache | [cache.ts](../../examples/cache.ts) | lokaler atomarer Ersatz, CAS, TTL und SQLite-Reopen; keine Replikation |
+| Master/Worker | [workers.ts](../../spaces/agent/examples/workers.ts) | geskriptete Write/Take-Demonstration; kein Bild-Resize, keine Crash-Wiedervergabe |
+| Blockierendes Take | [blocking-tool.ts](../../spaces/agent/examples/blocking-tool.ts) | geskripteter Tool-Aufruf; Host schreibt später einen Job im selben Prozess |
+| Sensor-Pipeline | [sensor-pipeline.ts](../../spaces/examples/sensor-pipeline.ts) | echte Funktionen, Konkurrenz, Lease-Ablauf und Rollback lokal getestet |
+| Chat | [chat.ts](../../spaces/agent/examples/chat.ts) | tatsächlicher geskripteter Ring getestet; Live-Modus (`--live`) vorhanden, nicht abgenommen |
+| arXiv-Recherche | [arxiv-research.ts](../../spaces/agent/examples/arxiv-research.ts) | tatsächlicher Runner mit geskriptetem Modell und JSONL getestet; echte Quellen-/Modellqualität offen |
+| Dark-Energy-Recherche | [dark-energy-research.ts](../../spaces/agent/examples/dark-energy-research.ts) | tatsächlicher Runner einschließlich Klassifikation und Abstract-Zusammenfassung geskriptet getestet |
+| Golomb | [golomb.ts](../../spaces/examples/golomb.ts) | tatsächliche Ordnung-4-Suche, Ergebnisvalidierung und persistente Wiederaufnahme getestet |
+| Primzahlsieb | [sieve.ts](../../spaces/examples/sieve.ts) | unabhängiger Referenzvergleich, Txn-Rollback, Lease-Recovery und SQLite-Reopen |
+| Cache | [cache.ts](../../spaces/examples/cache.ts) | lokaler atomarer Ersatz, CAS, TTL und SQLite-Reopen; keine Replikation |
 | Space-Chat (v1–v6) | [help-site/examples/](../../help-site/examples) | reine Tuple-Space-Architektur (`SpaceChatEngine`): Presence-Leases, `ChatTask`+CompletionProfile, `ScheduledJob`/`TimerLock`-Alarme; Stufen lokal bis föderiert |
 
 ## Zwei verschiedene Chat-Architekturen
@@ -70,7 +70,7 @@ LLM-Agent würde den Quelltext selbst schreiben. `@earendil-works/pi-codemode` i
 (`PI_CODEMODE_DIR` wählt einen anderen Pfad); lässt es sich nicht laden, wird übersprungen. Gemessene Zeit ist Wandzeit und schwankt.
 
 Live-Beispiele (`agent/examples/chat.ts --live`, `npm run example:arxiv`, `npm run example:dark-energy`, `npm run example:codemode-evolve:live`) benötigen Zugangsdaten und verursachen
-Modellkosten; [live-models.ts](../../agent/src/live-models.ts) wählt Provider und Modell. Gemäß AGENTS.md werden
+Modellkosten; [live-models.ts](../../spaces/agent/src/live-models.ts) wählt Provider und Modell. Gemäß AGENTS.md werden
 sie erst nach Freigabe ausgeführt. Der arXiv-Netzzugang und wissenschaftliche Ergebnisqualität sind durch
 Faux-Tests nicht validiert. API-Parser und Datenvertrag werden mit lokalen Fixtures geprüft.
 
@@ -87,7 +87,7 @@ externe Wirkungen nicht allgemein exactly-once. Dauerhaftigkeit hängt vom Store
 
 ## Atomare Forschungsausgaben
 
-[research-support.ts](../../agent/examples/research-support.ts) definiert `researchSpaces`. Ergebnis-Entries und
+[research-support.ts](../../spaces/agent/examples/research-support.ts) definiert `researchSpaces`. Ergebnis-Entries und
 Abschlussmarker benötigen die aktive, dem Agenten gehörende Transaktion mit der passenden reservierten Aufgabe.
 Fehlende/falsche Transaktionen werden serverseitig abgewiesen. Alle Writes einer Phase bleiben bis Commit
 unsichtbar. Die einfache arXiv-Pipeline schreibt auch PresentTask unter der AnalyzeTask-Transaktion.
@@ -95,7 +95,7 @@ unsichtbar. Die einfache arXiv-Pipeline schreibt auch PresentTask unter der Anal
 Ein neuer Lauf verlangt ein frisches, leeres State-Verzeichnis. Mit `--resume --dir <Verzeichnis>` öffnen
 beide Rechercheprogramme einen kompatiblen vorhandenen Lauf ausdrücklich wieder. Die Topic-/Query-Konfiguration
 wird übernommen; ausdrücklich abweichende Werte oder eine andere Laufart werden abgewiesen.
-[research-run.ts](../../agent/examples/research-run.ts) speichert die Laufidentität im Manifest und Team-IDs,
+[research-run.ts](../../spaces/agent/examples/research-run.ts) speichert die Laufidentität im Manifest und Team-IDs,
 Modellauswahl und Phase in einem pi-durable-Dokument. Conversation-Erzeugung und ID-Eintrag sind ein Commit;
 Startnachrichten besitzen stabile Request-IDs.
 
@@ -105,8 +105,8 @@ auch den Agentenspeicher vor einem zweiten Launcher und wird bei einem Prozessab
 Ein fertiger Lauf kann seine Berichtdateien erneut ausgeben, ohne das Team neu zu starten.
 
 ```sh
-node --experimental-strip-types agent/examples/arxiv-research.ts --resume --dir /pfad/zum/lauf
-node --experimental-strip-types agent/examples/dark-energy-research.ts --resume --dir /pfad/zum/lauf
+node --experimental-strip-types spaces/agent/examples/arxiv-research.ts --resume --dir /pfad/zum/lauf
+node --experimental-strip-types spaces/agent/examples/dark-energy-research.ts --resume --dir /pfad/zum/lauf
 ```
 
 Resume macht abgelaufene Space-Transaktionen oder Request-Generationen nicht rückwirkend gültig.
@@ -117,13 +117,13 @@ Absturz erneut ausgeführt werden. Live-Ausführung kostet Tokens und braucht ei
 ## Testumfang
 
 Die ältere Suite prüft viele Space-Muster mit eigenen Skripten. Sie ist kein vollständiger Nachweis für die
-jeweiligen CLI-Programme. [recovery.test.ts](../../test/examples/recovery.test.ts) ergänzt Aufrufe der tatsächlichen
-Implementierungen und SQLite-Reopen; die [Agentenfassung](../../agent/test/examples/recovery.test.ts) prüft JSONL-Reopen,
+jeweiligen CLI-Programme. [recovery.test.ts](../../spaces/test/examples/recovery.test.ts) ergänzt Aufrufe der tatsächlichen
+Implementierungen und SQLite-Reopen; die [Agentenfassung](../../spaces/agent/test/examples/recovery.test.ts) prüft JSONL-Reopen,
 Resume nach SIGKILL während der Analyse sowie gezielte Fehler. Geskriptete Modelltests filtern Systemnachrichten vor der
-Prüfung der letzten Nachricht (`m.role !== "system"`, siehe `agent/test/examples/`). [Testübersicht](../../test/examples/README.en.md).
+Prüfung der letzten Nachricht (`m.role !== "system"`, siehe `agent/test/examples/`). [Testübersicht](../../spaces/test/examples/README.en.md).
 
 Für die Beispiele selbst liegen keine Skalierungs- oder Produktionsbenchmarks vor. Systemweite NetBird-,
-Partitions- und Lastnachweise stehen in [test/evidence](../../test/evidence/) und den
+Partitions- und Lastnachweise stehen in [test/evidence](../../spaces/test/evidence/) und den
 [Abnahmedokumenten](../_attic/abnahme/ap3-abnahme.en.md).
 [v3-Ressourcenwerte](../federation-plan-v3.en.md#411-resource-planning-with-several-vps) sind Planungsgrößen,
 keine nachgewiesenen Mindestanforderungen.

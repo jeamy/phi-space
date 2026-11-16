@@ -702,7 +702,7 @@ Gemäß `/media/data/programming/phi-spaces/AGENTS.md` gelten folgende Regeln ve
    - **Für das Backend (`help-site/server/`)** werden **keinerlei neue Abhängigkeiten** benötigt:
      - HTTP-Server und statische Auslieferung nutzen `node:http`, `node:fs/promises` und `node:path` (wie `src/dashboard.ts`).
      - Der WebSocket-Server nutzt einen kompakten, standardkonformen RFC-6455-Upgrade-Handler auf Basis von `node:http` und `node:crypto` (ohne externes `ws`-Paket!).
-     - Die Persistenz nutzt den phi-spaces-Store (SQLite oder Speicher) über die lokale Bibliothek `phi-spaces` (`file:..`).
+     - Die Persistenz nutzt den phi-spaces-Store (SQLite oder Speicher) über die lokale Bibliothek `phi-spaces` (`file:../spaces`).
    - **Für das React-Frontend (`help-site/client/`)** gab es zwei Wege (umgesetzt wurde Option B: `help-site/package.json` führt `next` 16, `react` 19 und `react-dom` 19; das Frontend baut mit Next.js, `app/`, und `scripts/build-web.ts`):
      - **Option A (Zero-Install, sofort ohne `npm install` lauffähig)**: Ein leichtgewichtiges JSX-Runtime-Shim in `help-site/client/lib/react-shim.ts` (oder lokales Vendor-Bundle), das mit `esbuild` (`--jsx=automatic`) zu einem einzigen schnellen Browser-Bundle kompiliert wird – komplett ohne Netz-Download oder Änderung an `package.json`.
      - **Option B (Mit Freigabe)**: Installation von `react` und `react-dom` nach ausdrücklicher Freigabe durch den Benutzer.

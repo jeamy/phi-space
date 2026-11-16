@@ -26,7 +26,7 @@ PHI_SPACES_LLM=0 node --experimental-strip-types help-site/examples/tuple-basics
 
 ## Complete Tested Program {#complete-program}
 
-This is help-site/examples/tuple-basics.ts; imports go through the phi-spaces package, which the help site links with `file:..`. The build includes the same source checked by TypeScript and the executable test.
+This is help-site/examples/tuple-basics.ts; imports go through the phi-spaces package, which the help site links with `file:../spaces`. The build includes the same source checked by TypeScript and the executable test.
 
 ```ts
 // Complete, model-free tutorial. Run from the repository root with node --experimental-strip-types.

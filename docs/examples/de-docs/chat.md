@@ -1,6 +1,6 @@
 # Space-Chat
 
-Stand: 2026-10-07. Implementierung: [chat.ts](../../../agent/examples/chat.ts).
+Stand: 2026-10-07. Implementierung: [chat.ts](../../../spaces/agent/examples/chat.ts).
 
 Drei Conversations alice → bob → carol kommunizieren über Msg-Entries
 `{room, from, to, n, text}`. Der Host erzeugt pro Empfänger ein Notify-Template nach room und to.
@@ -17,13 +17,13 @@ noch Antworten auslösen. Notify ist best effort, keine allgemeine Exactly-once-
 ```bash
 npm run example:chat
 # Real model: requires approval under AGENTS.md
-node --experimental-strip-types agent/examples/chat.ts --live "Thema"
+node --experimental-strip-types spaces/agent/examples/chat.ts --live "Thema"
 ```
 
 Der Faux-Dispatcher ignoriert Systemnachrichten bei der Prüfung des letzten Tool-Resultats.
 Nach dem Tool-Aufruf beendet er den Turn. Es handelt sich um Conversations in einem Prozess, nicht um
 verteilte Hosts. MemoryStorage verliert den Verlauf bei Prozessende.
 
-[agent/test/examples/recovery.test.ts](../../../agent/test/examples/recovery.test.ts) führt runChat selbst aus und prüft den Ring 0–3.
+[agent/test/examples/recovery.test.ts](../../../spaces/agent/test/examples/recovery.test.ts) führt runChat selbst aus und prüft den Ring 0–3.
 Die ältere agent/test/examples/chat.test.ts prüft eigene Skripte mit dem echten Space. Live-Modell-, Langzeit- und
 Mehrhost-Nachweise fehlen. [Zur Übersicht](../README.en.md).

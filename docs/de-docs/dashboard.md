@@ -15,7 +15,7 @@ npm run dashboard -- --dir /pfad/zum/store              # Verzeichnis mit store.
 npm run dashboard -- --sqlite /pfad/store.sqlite        # Speicherdatei
 ```
 
-Im Hintergrund mit dem Lifecycle-Skript ([scripts/dashboard.sh](../../scripts/dashboard.sh)):
+Im Hintergrund mit dem Lifecycle-Skript ([scripts/dashboard.sh](../../spaces/scripts/dashboard.sh)):
 
 ```bash
 npm run dashboard:start          # startet im Hintergrund und wartet auf Bereitschaft
@@ -33,7 +33,7 @@ Das Skript konfiguriert sich über Umgebungsvariablen oder die `DASHBOARD_*`-Zei
 Repository-Root), `DASHBOARD_DIR` (Verzeichnis mit `store.sqlite`, Standard
 `~/.local/share/phi-spaces/dashboard-store`), `DASHBOARD_SQLITE` (Speicherdatei stattdessen), `DASHBOARD_PORT`
 (Standard 8787), `DASHBOARD_BIND` (Standard 127.0.0.1). Weitere Flags nach dem Kommando werden an
-`src/dashboard.ts` durchgereicht, z.B. `bash scripts/dashboard.sh start --no-socket`. PID- und Log-Datei
+`src/dashboard.ts` durchgereicht, z.B. `bash spaces/scripts/dashboard.sh start --no-socket`. PID- und Log-Datei
 liegen unter `$XDG_RUNTIME_DIR/phi-spaces-dashboard-<uid>/` (Fallback `/tmp`); ein zweiter `start` meldet
 den laufenden Prozess, statt einen zweiten zu öffnen.
 
@@ -59,7 +59,7 @@ After=network-online.target codemode-nano-tunnel.service mmo-accounts-tunnel.ser
 
 [Service]
 WorkingDirectory=/media/docker/spaces
-ExecStart=/usr/local/bin/node --no-warnings --experimental-strip-types src/dashboard.ts
+ExecStart=/usr/local/bin/node --no-warnings --experimental-strip-types spaces/src/dashboard.ts
 Restart=always
 RestartSec=5
 
@@ -140,7 +140,7 @@ zusätzlich den Space-Dienst auf einem Unix-Socket — das ist der einzige Weg, 
 entsteht: Beispiele oder Clients verbinden sich über `socketTransport({ path: ".../space.sock" })` und der
 Dashboard-Prozess zählt und zeigt deren Operationen. Wer die Socket-Datei öffnen darf (gleicher
 Betriebsbenutzer, Dateirechte 0600), ist dort lokaler Admin — Identität kommt aus der vertrauenswürdigen
-lokalen Grenze, nie aus gesendeten Bytes; dieselbe Regel wie in [socket.ts](../../src/socket.ts). Der Dashboard
+lokalen Grenze, nie aus gesendeten Bytes; dieselbe Regel wie in [socket.ts](../../spaces/src/socket.ts). Der Dashboard
 hat selbst **keinen schreibenden Endpunkt**.
 
 ## Oberfläche
@@ -209,7 +209,7 @@ Aktualisierung. Watches (`watchDoc`) wecken den Server, die Korrektheit hängt n
 ## Grenzen von Phase 1
 
 - Nur lesend; es gibt absichtlich keinen Schreib-, Steuer- oder Agent-Endpunkt.
-- Das `Meter` ist **prozesslokal** ([meter.ts](../../src/meter.ts)): gezählt wird der Verkehr dieses Prozesses
+- Das `Meter` ist **prozesslokal** ([meter.ts](../../spaces/src/meter.ts)): gezählt wird der Verkehr dieses Prozesses
   (Socket-Clients und eigene Läufe), nicht der anderer Hosts oder Stores.
 - Entries/Paginierung liest den vollen Snapshot und schneidet serverseitig — bei sehr großen Spaces ist
   das ein bekanntes Budget-Ziel der Store-Arbeitspakete (U2), kein UI-Thema.

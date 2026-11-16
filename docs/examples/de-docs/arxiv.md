@@ -1,10 +1,10 @@
 # arXiv-Recherche: Datenvertrag und Workflow
 
 Stand: 2026-10-07. Implementierungen:
-[arxiv-tool.ts](../../../agent/examples/arxiv-tool.ts),
-[arxiv-research.ts](../../../agent/examples/arxiv-research.ts),
-[dark-energy-research.ts](../../../agent/examples/dark-energy-research.ts),
-[research-support.ts](../../../agent/examples/research-support.ts).
+[arxiv-tool.ts](../../../spaces/agent/examples/arxiv-tool.ts),
+[arxiv-research.ts](../../../spaces/agent/examples/arxiv-research.ts),
+[dark-energy-research.ts](../../../spaces/agent/examples/dark-energy-research.ts),
+[research-support.ts](../../../spaces/agent/examples/research-support.ts).
 
 ## Quellenvertrag
 
@@ -79,7 +79,7 @@ npm run test:agent
 ```
 
 Die Runner sind als runArxivResearch/runDarkEnergyResearch importierbar. Tests injizieren Modelle,
-Pollintervalle und Fristen. [agent/test/examples/recovery.test.ts](../../../agent/test/examples/recovery.test.ts) startet die tatsächlichen Runner mit Faux-Modellen und echtem Store,
+Pollintervalle und Fristen. [agent/test/examples/recovery.test.ts](../../../spaces/agent/test/examples/recovery.test.ts) startet die tatsächlichen Runner mit Faux-Modellen und echtem Store,
 prüft Berichte, Resume nach SIGKILL, frische Verzeichnisse und Ergebnis-Guards. Es wird kein Paper tatsächlich aus dem Netz geladen.
 Ältere Suites bauen eigene Prompts/Workflows nach. Echte Modellläufe, bibliometrische Qualität,
 Faktenvalidierung und produktiver Betrieb sind nicht abgenommen.

@@ -15,7 +15,7 @@ since: 0.0.1
 
 The examples are small programs that show phi-spaces at work. Most run straight away, without a model or network, and finish within seconds. Some let agents work together, with a scripted model giving the answers. Only the examples under [With a real model](#live) cost tokens.
 
-For a first impression, start `npm run example:pipeline` for cooperation without agents and `npm run example:chat` for three agents in conversation. All commands apply in the repository root.
+For a first impression, start `npm run example:pipeline` for cooperation without agents and `npm run example:chat` for three agents in conversation. All commands apply in the repository root. The package's files (`examples/`, `agent/`) are in `spaces/` there.
 
 ### Requirements {#requirements}
 

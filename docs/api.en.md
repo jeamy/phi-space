@@ -9,7 +9,7 @@ other sections do not cover. It describes no federation guarantee; for that,
 ## Package and subpaths
 
 Projects built on phi-spaces (codemode-chat, help-site, future ones) include the library as a package:
-`"phi-spaces": "file:.."` in their `dependencies` (npm creates a symlink) and imports through the package name.
+`"phi-spaces": "file:../spaces"` in their `dependencies` (npm creates a symlink) and imports through the package name.
 `exports` points directly at the TypeScript sources; there is no build step, Node strips the types
 (`--experimental-strip-types`), because the symlink resolves to the real path outside `node_modules`.
 
@@ -633,7 +633,7 @@ exceeding it stops the command under the existing locks.
 Driver calls must be repeatable for the same command binding
 and prove exclusively stopped writers. Before every maintenance step
 all locks are checked; release presupposes all sealed floors.
-The CLI [run-distributed-erasure.ts](../test/testbed/run-distributed-erasure.ts)
+The CLI [run-distributed-erasure.ts](../spaces/test/testbed/run-distributed-erasure.ts)
 binds this for the test federation to real processes, local deletion receipts,
 archive files and the independent mTLS register entries.
 

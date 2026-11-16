@@ -1099,7 +1099,7 @@ Diese Sicherung umfasst **nicht** den Speicher des dauerhaften Code-Agenten (\`c
 
 ## Pakete und Versionen {#versions}
 
-Alle Abhängigkeiten sind auf exakte Versionen festgelegt. Der Chat nutzt pi-codemode 1.4.0, Next.js 16.4.3 und React 19.3.0. \`phi-spaces\` kommt als Paket \`file:..\` aus dem Repository, keine Importe in \`../src\`. Die Pakete des Agenten (pi-durable, pi-ai, Chord, alle 1.4.0) gehören zu \`agent/\` und werden dort installiert.
+Alle Abhängigkeiten sind auf exakte Versionen festgelegt. Der Chat nutzt pi-codemode 1.4.0, Next.js 16.4.3 und React 19.3.0. \`phi-spaces\` kommt als Paket \`file:../spaces\` aus dem Repository, keine Importe in \`../spaces/src\`. Die Pakete des Agenten (pi-durable, pi-ai, Chord, alle 1.4.0) gehören zu \`spaces/agent/\` und werden dort installiert.
 
 ## Siehe auch {#see-also}
 
@@ -1196,7 +1196,7 @@ This backup does **not** cover the durable code agent's store (\`codemode-agent.
 
 ## Packages and versions {#versions}
 
-All dependencies are pinned to exact versions. The chat uses pi-codemode 1.4.0, Next.js 16.4.3 and React 19.3.0. \`phi-spaces\` comes as the package \`file:..\` from the repository, with no imports into \`../src\`. The agent's packages (pi-durable, pi-ai, Chord, all 1.4.0) belong to \`agent/\` and are installed there.
+All dependencies are pinned to exact versions. The chat uses pi-codemode 1.4.0, Next.js 16.4.3 and React 19.3.0. \`phi-spaces\` comes as the package \`file:../spaces\` from the repository, with no imports into \`../spaces/src\`. The agent's packages (pi-durable, pi-ai, Chord, all 1.4.0) belong to \`spaces/agent/\` and are installed there.
 
 ## See also {#see-also}
 

@@ -409,7 +409,7 @@ serverseitige Begehbarkeit. Für die 3D-Ansicht kommen zusätzlich ein FPS- und 
 
 ```
 spaces-mmo/
-  package.json          Paket phi-spaces-mmo (next, react, react-dom, pixi.js, phi-spaces: "file:..")
+  package.json          Paket phi-spaces-mmo (next, react, react-dom, pixi.js, phi-spaces: "file:../spaces")
   tsconfig.json         eigene; nicht Teil des Root-`tsc`; moduleResolution "bundler" wie codemode-chat
   server/               die Engine
     launch.ts           startet space, world, npc, model, web (Entwicklung)
@@ -441,6 +441,6 @@ Next.js nichts außerhalb des Projektverzeichnisses bündelt; `checks/shared-cop
 
 ## Einbindung von phi-spaces
 
-Als Paket: `"phi-spaces": "file:.."` und `import { RemoteSpace, socketTransport } from "phi-spaces"`, ohne Build und
+Als Paket: `"phi-spaces": "file:../spaces"` und `import { RemoteSpace, socketTransport } from "phi-spaces"`, ohne Build und
 ohne besondere Node-Flags (siehe [paket.md](../paket.en.md)). `npm run check:durable` gilt auch hier, also kein pi-durable, chord oder pi-ai im
 Spiel. Modell-NPCs gehen über das `agent/`-Paket als eigener Prozess.

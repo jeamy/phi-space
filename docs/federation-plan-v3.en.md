@@ -438,7 +438,7 @@ real data gate refused object access; after 305 seconds of fault phase and lifti
 of the fault it succeeded again. This confirms the security
 hypothesis for the targeted reachability failure of these peers, not a
 global management server crash. Measurement points are in
-[netbird-management-5m.json](../test/evidence/ap1b-2026-10-11/netbird-management-5m.json).
+[netbird-management-5m.json](../spaces/test/evidence/ap1b-2026-10-11/netbird-management-5m.json).
 
 **Complete acceptance of 2026-10-11:** Management 305.3 s and 3604.3 s,
 signal 608.6 s, relay 1807.3 s and management + relay 3604.0 s are complete.
@@ -446,7 +446,7 @@ Every case ends with successful object access. Group withdrawal and real
 peer DELETE blocked access after 2.895 s and 2.823 s respectively.
 Fresh phone initial pairing, key control, background and controlled
 Doze were also verified. [Acceptance and limits](_attic/abnahme/ap1b-abnahme.en.md),
-[measurements](../test/evidence/ap1b-2026-10-11/acceptance-summary.json).
+[measurements](../spaces/test/evidence/ap1b-2026-10-11/acceptance-summary.json).
 
 The limited test proxy interrupted reachability per component for two
 own peers. The global combined server and its database were not

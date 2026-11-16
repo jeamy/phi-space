@@ -221,7 +221,7 @@ installation, configuration and own signer. Since the rebuild of 2026-10-18
 ([test environment §20](../../testumgebung-big.en.md#20-rebuild-under-phi-spaces-2026-10-18)) the gate addresses
 are `100.89.103.95:7421` (host-a) and `100.89.136.73:7421` (member-1). The registry IDs and key fingerprints
 of the earlier federation (`100.89.128.128`, `100.89.5.70`) are in the public
-[evidence](../../../test/evidence/ap1b-2026-10-11/README.md).
+[evidence](../../../spaces/test/evidence/ap1b-2026-10-11/README.md).
 The daemon `tools/federation-host.mjs` supports `provision` (JSON on stdin),
 `bootstrap`, `enroll` (token on stdin only), `run`, `stop`, `status`, `fence` and
 `recovery`, `member-recovery` and `recovery-call`. `owner.lock` prevents two writers; `restart.lock` refuses

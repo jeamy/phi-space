@@ -1,6 +1,6 @@
 # Golomb Ruler: Local Combinatorial Search
 
-As of 2026-10-07. Implementation: [golomb.ts](../../examples/golomb.ts).
+As of 2026-10-07. Implementation: [golomb.ts](../../spaces/examples/golomb.ts).
 One process with several asynchronous worker loops and a Space in the SQLite store (`<dir>/space.sqlite`). No federation and no
 parallelization across several CPU cores.
 
@@ -72,15 +72,15 @@ Other bounds have a different runId. Old, unmarked entries are not counted as ne
 
 ```bash
 npm run example:golomb -- 4 --workers 2
-node --experimental-strip-types examples/golomb.ts 4 --workers 2 --dir /tmp/golomb-state
-node --experimental-strip-types examples/golomb.ts 4 --workers 2 --dir /tmp/golomb-state
+node --experimental-strip-types spaces/examples/golomb.ts 4 --workers 2 --dir /tmp/golomb-state
+node --experimental-strip-types spaces/examples/golomb.ts 4 --workers 2 --dir /tmp/golomb-state
 ```
 
 Order 2–25, workers 1–64, positive integer length. High orders are no runtime promise.
 The search grows steeply; no production benchmarks exist. Snapshot lists are limited to 1000 entries;
 a general pagination is missing for long runs. BitSet clones and recursive search limit performance.
 
-[recovery.test.ts](../../test/examples/recovery.test.ts) runs an actual order-4 search,
+[recovery.test.ts](../../spaces/test/examples/recovery.test.ts) runs an actual order-4 search,
 validates the result, reopens the SQLite store and checks task rollback, old checkpoints and changed configuration.
 The older golomb.test.ts mostly checks helper functions and manually created entries; its test names alone
 are no search evidence. No multi-process/GPU/federation or scaling acceptance.

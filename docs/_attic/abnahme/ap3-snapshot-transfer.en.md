@@ -119,7 +119,7 @@ green; type check and link check passed. The 23 built replication cases
 also pass on big. Both backends transfer 353,186 bytes in 20 pages in the large case.
 The separate 32 KiB boundary case measures at most 3,743 bytes (JSONL)
 or 3,746 bytes (SQLite) per StorageWrite array and 2,433 bytes for
-publication. [Artifacts and evidence](../../../test/evidence/ap3-paged-2026-10-15/README.md).
+publication. [Artifacts and evidence](../../../spaces/test/evidence/ap3-paged-2026-10-15/README.md).
 The test container is removed; existing containers remained unchanged.
 
 

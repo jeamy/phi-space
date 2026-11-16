@@ -6,6 +6,7 @@
   "description": "Next.js 16 + React 19 Help System, 6-Stage Multiplayer Space-Chat & AdminSpaces Portal for https://spaces.eibrain.org",
   "scripts": {
     "build": "node --experimental-strip-types scripts/check-help.ts && node --experimental-strip-types scripts/build-web.ts && next build",
+    "typecheck": "tsc --noEmit",
     "check:docs": "node --experimental-strip-types scripts/check-help.ts",
     "dev": "node --experimental-strip-types server/index.ts --dev",
     "start": "node --experimental-strip-types server/index.ts",

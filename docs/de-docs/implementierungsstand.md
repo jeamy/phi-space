@@ -146,7 +146,7 @@ journalisierte Federation-Operationen und Membership mit Core-Admission.
 Die neuen APIs sind serverseitige Bausteine mit echtem Member-RPC-Adapter;
 eine virtuelle öffentliche Space-Adresse wird dadurch nicht automatisch gestartet.
 Prüfzahlen und gebaute Artefakte stehen in
-[checks.json](../../test/evidence/ap2-2026-10-11/checks.json).
+[checks.json](../../spaces/test/evidence/ap2-2026-10-11/checks.json).
 
 AP 2.6/2.7 sind um Abschlussbudgets, auditierte lokale Admin-Bausteine,
 Restore-Reconciliation und das geschützte Directory erweitert. Der Member-Lasttest
@@ -284,7 +284,7 @@ Historie verwendet. Phase 3 besitzt noch keine Gesamtfreigabe.
 
 Die Abschlussprüfung dieses Bausteins besteht aus 505 grünen Repository-Tests,
 24 mobilen Tests sowie elf Fällen am gebauten isolierten Server-Artefakt.
-[Nachweise](../../test/evidence/ap3-entry-2026-10-15/README.md); keine produktive
+[Nachweise](../../spaces/test/evidence/ap3-entry-2026-10-15/README.md); keine produktive
 Replikation wurde aktiviert.
 
 
@@ -300,7 +300,7 @@ produktive Rechte-/Boot-/Löschintegration bleiben offen.
 
 Aktueller Snapshot-Nachweis: 517 Repository-Tests und 24 mobile Tests grün;
 23 gebaute Serverfälle bestanden.
-[Artefakt- und Quellbindung](../../test/evidence/ap3-paged-2026-10-15/README.md).
+[Artefakt- und Quellbindung](../../spaces/test/evidence/ap3-paged-2026-10-15/README.md).
 
 
 ## Fortlaufender Entry-Stream (2026-10-15)
@@ -317,7 +317,7 @@ produktive Rechte-/Boot-/Löschintegration bleiben offen.
 Aktueller Stream-Nachweis: 530 Repository-Tests und 24 mobile Tests grün;
 36 gebaute Serverfälle bestanden. Daten und Cursor überstehen die geprüften
 Commit-Verluste gemeinsam; TCP-Wiederanlauf und konkurrierende Worker sind geprüft.
-[Artefakt- und Quellbindung](../../test/evidence/ap3-stream-2026-10-15/README.md).
+[Artefakt- und Quellbindung](../../spaces/test/evidence/ap3-stream-2026-10-15/README.md).
 Generation-/Belegpflege, reale NetBird-Partition und produktive Einbindung bleiben offen.
 
 
@@ -342,7 +342,7 @@ und die Ablehnung von Simulator-Nachweisen. Die Abnahme bleibt durch F1/Gate 2
 
 Nachtrag 2026-10-16: Der netcup-Fencing-Adapter mit mTLS-Dienst auf vpsc und ein signierter Replikat-Transport
 sind umgesetzt. Ein Fixture-Lauf über echte Hosts hat bestanden, mit nanoi als Primary und 100 als Standby
-([Nachweis](../../test/evidence/phase3-sync-2026-10-16/README.en.md)). Der Lauf umfasste:
+([Nachweis](../../spaces/test/evidence/phase3-sync-2026-10-16/README.en.md)). Der Lauf umfasste:
 
 - Fork ohne ACK;
 - netcup-Power-off;
@@ -358,7 +358,7 @@ Nachtrag später am 2026-10-16:
   sind umgesetzt.
 - primary/sync-Spaces laufen mit eigenem Store im Federation-Daemon, inklusive Quarantäne-Start.
 - Ein echter Daemon-Lauf auf nanoi und 100 hat bestanden
-  ([Nachweis](../../test/evidence/phase3-daemon-sync-2026-10-16/README.en.md)): Fork ohne ACK, netcup-Fencing,
+  ([Nachweis](../../spaces/test/evidence/phase3-daemon-sync-2026-10-16/README.en.md)): Fork ohne ACK, netcup-Fencing,
   promote, degrade, Quarantäne, setStandby, Schreibvorgänge in beide Richtungen, identische Stände.
 - Offen: Router-Übernahme auf echten Hosts (host-a braucht das neue Bündel) und 3.8.
 
@@ -366,7 +366,7 @@ Nachtrag 2026-10-17 (3.8):
 
 - Der Control-Store von host-a lief per Bootstrap auf primary/sync.
 - Er durchlief zweimal setStandby → degradeToSingle mit dem Standby `control-standby-nano` auf nanoi und
-  netcup-Fencing und endet wieder `single` ([Nachweis](../../test/evidence/control-sync-hosta-2026-10-17/README.en.md)).
+  netcup-Fencing und endet wieder `single` ([Nachweis](../../spaces/test/evidence/control-sync-hosta-2026-10-17/README.en.md)).
 - Dabei wurde ein Fehler gefunden und behoben: Der Daemon endete nach SIGTERM nicht, wenn der Hauptstore im
   Sync-Betrieb lief.
 - Offen: Promotion des Control-Replikats und Schritt 6.
@@ -376,7 +376,7 @@ Nachtrag 2026-10-17 (Router-Pfad echt):
 - Ein nativer Root auf host-a hat einen replizierten Member auf nano-test und standby-100 per `addMember`
   aufgenommen und Schreibvorgänge dorthin geroutet.
 - Nach Promotion mit netcup-Fencing und Degrade auf 100 hat er die `ReplicaConfigNotice` übernommen und weiter
-  geroutet; danach alles zurückgesetzt ([Nachweis](../../test/evidence/root-hosta-2026-10-17/README.en.md)).
+  geroutet; danach alles zurückgesetzt ([Nachweis](../../spaces/test/evidence/root-hosta-2026-10-17/README.en.md)).
 - Dabei wurden zwei übersehene Stellen aus 3.8 gefunden und behoben: der Journal-Wächter des Roots und die
   Erneuerung der aufbewahrten Router-Lease verglichen noch die Epoche des Space-Dokuments.
 - Der Testbed-Daemon hat dafür den sperrfreien Modus `enroll-key` für zusätzliche Schlüssel eines laufenden Hosts.
@@ -388,7 +388,7 @@ Nachtrag 2026-10-17 (Schritt 6):
 - Die Router-Lease erneuert sich über einen Übergang mit gleichem Primary; der Root verteilt die `EpochNotice`.
 - Echter Lauf auf host-a mit Root, Member und Policy: `setStandby`, `degrade` mit netcup-Fencing, Root-Neustart
   nach Ablauf der Lease, geroutete Schreibvorgänge danach; alles zurückgesetzt
-  ([Nachweis](../../test/evidence/step6-hosta-2026-10-17/README.en.md)).
+  ([Nachweis](../../spaces/test/evidence/step6-hosta-2026-10-17/README.en.md)).
 
 Nachtrag 2026-10-17 (Promotion des Control-Replikats):
 
@@ -396,7 +396,7 @@ Nachtrag 2026-10-17 (Promotion des Control-Replikats):
   gleicher Autorität (`ControlHostChange`, vom Recovery-Admin signiert, vom Register erst nach der Promotion
   aufgezeichnet, von den Hosts beim Start übernommen) sind umgesetzt.
 - Echter Lauf auf big in beide Richtungen: host-a → host-c → host-a, die Members folgten jeweils
-  ([Nachweis](../../test/evidence/control-promotion-2026-10-17/README.en.md)).
+  ([Nachweis](../../spaces/test/evidence/control-promotion-2026-10-17/README.en.md)).
 - Dabei behoben: Berechtigungen der Geschwister-Spaces für das `setStandby`-Ziel, das Fencing-Ziel beim
   Fortsetzen einer Promotion und eine Sperrliste für Quelladressen im Fencing-Dienst.
 
@@ -406,7 +406,7 @@ Nachtrag 2026-10-17 (Router-Wechsel, 3.8 abgeschlossen):
   Router-Epoche; der Supervisor stellt einem anderen Router keine Lease aus, solange die vorige lebt.
 - Hosts folgen einem Control-Wechsel im laufenden Betrieb (Prüfung alle 15 Sekunden, Neustart über Code 75).
 - Echter Lauf mit Root und repliziertem Member in beide Richtungen
-  ([Nachweis](../../test/evidence/root-promotion-2026-10-17/README.en.md)); host-a danach zurückgesetzt.
+  ([Nachweis](../../spaces/test/evidence/root-promotion-2026-10-17/README.en.md)); host-a danach zurückgesetzt.
 
 Nachtrag 2026-10-17 (lww/set eingebunden):
 
@@ -416,11 +416,11 @@ Nachtrag 2026-10-17 (lww/set eingebunden):
 - Die Löschung eines Principals ist eine replizierte Änderung mit Schwärzung; physisch entfernt die bestehende
   Offline-Kompaktierung die alten Revisionen.
 - Echter Lauf mit nano-test und standby-100: Partition, Konvergenz, verteilte Löschung
-  ([Nachweis](../../test/evidence/merge-run-2026-10-17/README.en.md)).
+  ([Nachweis](../../spaces/test/evidence/merge-run-2026-10-17/README.en.md)).
 - Kompaktierung (Schritt 4): stabile Stream-Positionen, Versionsvektoren der Members, Untergrenze je Ursprung;
   entfernt werden nur stabile, unsichtbare Ereignisse ([Regeln](../_attic/abnahme/ap3-replikation.en.md)). Periodisch im Daemon über
   `entryReplication.compactEveryMs`. Echter Lauf mit nano-test und standby-100
-  ([Nachweis](../../test/evidence/compaction-run-2026-10-17/README.en.md)).
+  ([Nachweis](../../spaces/test/evidence/compaction-run-2026-10-17/README.en.md)).
 
 Nachtrag 2026-10-17 (versiegelte Commits): Ein versiegelter, unbestätigter primary/sync-Commit ist öffentlich
 `CommitSealed`; der Host klärt ihn mit dem Standby und bedient den Space ohne Neustart wieder
@@ -428,7 +428,7 @@ Nachtrag 2026-10-17 (versiegelte Commits): Ein versiegelter, unbestätigter prim
 Epoche mit Nachweis per Negativclaim mit `NotCommitted`.
 Gesamtbetrieb 3.7 echt gelaufen: zehnminütige Partition, Prozessabbrüche, Failover mit `NotCommitted` und Rückweg
 über den produktiven Dienst, jeder entschiedene Schreibvorgang genau einmal
-([Nachweis](../../test/evidence/phase3-partition-2026-10-17/README.en.md)). Gefunden und behoben: unbegrenztes Warten des
+([Nachweis](../../spaces/test/evidence/phase3-partition-2026-10-17/README.en.md)). Gefunden und behoben: unbegrenztes Warten des
 Primary auf den Standby (`requestTimeoutMs`).
 `degradeToSingle` geht auch ohne Fencing-Adapter: Dann wird nur die Standby-Berechtigung dieses Space widerrufen,
 der Host bleibt aktiv ([Ablauf](../_attic/abnahme/ap3-replica-control.en.md)).
@@ -461,7 +461,7 @@ Umgesetzt sind die Schritte B2–B5 der [Betriebserweiterung](../betrieb-und-mob
 Nachweise: `test/test-run-gate.test.ts`, `test/test-run-member.test.ts`, `test/test-run-recovery.test.ts` (31 Fälle, JSONL und
 SQLite, Commit-Fehler, Controller-Neustart, verlorene ACKs, TCP über das zusammengesetzte Gate) und ein Lauf über
 das echte NetBird-Overlay zwischen Operator-Host und einem Container auf big
-([Nachweis](../../test/evidence/run-gate-overlay-2026-10-15/README.md); Schicht A dort als Fixture-Pin).
+([Nachweis](../../spaces/test/evidence/run-gate-overlay-2026-10-15/README.md); Schicht A dort als Fixture-Pin).
 
 Grenzen: Gate-Änderungen werden mit festen 1 KiB gegen die Budgets gerechnet, die Historie hält 32 Revisionen je
 Lauf, `stopped`-Gates werden noch nicht in Laufhistorie überführt (höchstens 256 Gates je Space). Ein
@@ -518,7 +518,7 @@ und sendet Admin-Commands über die gepairte Control-Verbindung. Die Command-ID 
 Profil gespeichert; Wiederholungen, Timeouts und Neustarts verwenden sie erneut, und ein unklarer Ausgang wird als
 „Ausgang wird geprüft“ angezeigt. Neue lesende Admin-Commands auf dem Koordinator: `listRuns`, `runStatus`,
 `listWorkers` (Soll-Zuweisungen und zuletzt gemeldeter Stand je Host). Nachweis: mobiler Test der Brücke und
-Geräteabnahme auf dem Testhandy gegen einen Koordinator in Produktionskomposition per WLAN, einschließlich Koordinator-Absturz und erneutem Senden derselben ID und über NetBird mit Peer-Identität aus der Management-API ([Nachweis](../../test/evidence/b9-device-2026-10-16/README.md)); ein Koordinator auf big steht aus.
+Geräteabnahme auf dem Testhandy gegen einen Koordinator in Produktionskomposition per WLAN, einschließlich Koordinator-Absturz und erneutem Senden derselben ID und über NetBird mit Peer-Identität aus der Management-API ([Nachweis](../../spaces/test/evidence/b9-device-2026-10-16/README.md)); ein Koordinator auf big steht aus.
 
 
 ## Alarmierung, Audit und Plan-Vorschau (2026-10-16)

@@ -16,7 +16,7 @@ export const EXAMPLE_AND_APP_ARTICLES: ArticleSeed[] = [
 
 Die Beispiele sind kleine Programme, die phi-spaces bei der Arbeit zeigen. Die meisten laufen sofort, ohne Modell und ohne Netz, und sind nach wenigen Sekunden fertig. Einige lassen Agenten zusammenarbeiten, wobei ein vorgeskriptetes Modell antwortet. Nur die Beispiele im Abschnitt [Mit echtem Modell](#live) kosten Tokens.
 
-Wer nur einen Eindruck will, startet \`npm run example:pipeline\` für die Zusammenarbeit ohne Agenten und \`npm run example:chat\` für drei Agenten im Gespräch. Alle Befehle gelten im Wurzelverzeichnis des Repositorys.
+Wer nur einen Eindruck will, startet \`npm run example:pipeline\` für die Zusammenarbeit ohne Agenten und \`npm run example:chat\` für drei Agenten im Gespräch. Alle Befehle gelten im Wurzelverzeichnis des Repositorys. Die Dateien des Pakets (\`examples/\`, \`agent/\`) liegen dort in \`spaces/\`.
 
 ### Voraussetzungen {#requirements}
 
@@ -105,7 +105,7 @@ Die Tests prüfen diese Programme mit geskripteten Modellen. Die Qualität echte
 
 The examples are small programs that show phi-spaces at work. Most run straight away, without a model or network, and finish within seconds. Some let agents work together, with a scripted model giving the answers. Only the examples under [With a real model](#live) cost tokens.
 
-For a first impression, start \`npm run example:pipeline\` for cooperation without agents and \`npm run example:chat\` for three agents in conversation. All commands apply in the repository root.
+For a first impression, start \`npm run example:pipeline\` for cooperation without agents and \`npm run example:chat\` for three agents in conversation. All commands apply in the repository root. The package's files (\`examples/\`, \`agent/\`) are in \`spaces/\` there.
 
 ### Requirements {#requirements}
 

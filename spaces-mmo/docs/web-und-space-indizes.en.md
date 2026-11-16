@@ -49,7 +49,7 @@ What still limits response times and web throughput as the world fills with item
 
 Data lives in memory in three places, each with its own lifetime and mutation model:
 
-### 1. `phi-core`: `Entries` and `Memo` (`rust/phi-core/src/state.rs`)
+### 1. `phi-core`: `Entries` and `Memo` (`spaces/rust/phi-core/src/state.rs`)
 
 - **Primary storage:** `Entries { items: Vec<EntryRec>, log: Option<Vec<EntryUndo>>, memo: RefCell<Memo> }`.
   `items` stays in insertion order so `find`, `list` and `list_page` preserve the exact oldest-first semantics of
@@ -96,7 +96,7 @@ Data lives in memory in three places, each with its own lifetime and mutation mo
         via `get_mut(i)` and only removes the entry at `commit` (`finish`), reads during a transaction do not even
         trigger `remove(i)`!
 
-### 2. `mmo-engine`: `Mirror` (`rust/mmo-engine/src/mirror.rs`)
+### 2. `mmo-engine`: `Mirror` (`spaces-mmo/rust/mmo-engine/src/mirror.rs`)
 
 - **How `Copy` works today:**
   - `by_id: HashMap<String, Json>` and `by_type: HashMap<String, HashSet<String>>`.
@@ -110,7 +110,7 @@ Data lives in memory in three places, each with its own lifetime and mutation mo
     always appends to the end; an update in place keeps its position), eliminating both the 30,000-entry scan and the
     per-call `sort_by` in `Mirror::read_all`.
 
-### 3. `mmo-web`: `Gateway::State` (`rust/mmo-web/src/gateway.rs`)
+### 3. `mmo-web`: `Gateway::State` (`spaces-mmo/rust/mmo-web/src/gateway.rs`)
 
 - **How `State` works today:**
   - Uses `OMap<Json>` (insertion-ordered map backed by `Vec<Option<(String, V)>>` + `HashMap<String, usize>`) for
@@ -183,7 +183,7 @@ and TypeScript test suites.
 
 **Goal:** Eliminate the 29 % `read_all` scan and 7 % `Object::position` overhead in `phi-space-server`.
 
-1. **`rust/phi-core/src/state.rs` (`Entries` & `Memo`):**
+1. **`spaces/rust/phi-core/src/state.rs` (`Entries` & `Memo`):**
    - Define `ScalarKey` (`Str(String)`, `Num(u64)`, `Bool(bool)`) with `ScalarKey::from_json(&Json) -> Option<Self>`.
    - Extend `Memo` with:
      - `by_id: Option<HashMap<String, usize>>`
@@ -198,46 +198,46 @@ and TypeScript test suites.
      - `remove(i)`: update `by_id` and `m.fields` (shift indices `> i` down by `1` or drop affected type entries).
      - `get_mut(i)`: leave `types`, `by_id` and `fields` untouched (since `id`, `types` and `fields` do not change).
      - In debug builds (`debug_assert!`), verify `of_type_field` against a linear filter of `of_type`.
-2. **`rust/phi-core/src/space.rs` (`candidates`, `find`, `leased`, `read_chain`):**
+2. **`spaces/rust/phi-core/src/space.rs` (`candidates`, `find`, `leased`, `read_chain`):**
    - Update `candidates(&self, tmpl: &Template)` and `find(&self, tmpl: &Template, ...)`:
      - If `tmpl` has `id: Some(Json::String(id))`, look up the single candidate via `entries.of_id(id)`.
      - Else if `tmpl` has `type_: Some(Json::String(t))`, inspect `fields` for scalar `(k, v)` pairs; if present, fetch
        `entries.of_type_field(t, k, &scalar)` for each and iterate the shortest `Rc<[usize]>` slice.
    - Use `entries.of_id(id)` in `leased` and `read_chain` (replacing the per-call `HashMap` build over all entries in
      `read_chain`).
-3. **`rust/phi-json/src/lib.rs` (`Object`):**
+3. **`spaces/rust/phi-json/src/lib.rs` (`Object`):**
    - Lower the `HashMap` index threshold in `Object` from `32` to `12` keys so `Character`, `Building` and `Room`
      objects use `O(1)` lookup, while tiny objects (2–11 keys) avoid the `HashMap` allocation.
 4. **Verification:**
-   - `cd rust && cargo test -p phi-json -p phi-core -p phi-store -p phi-service && cargo clippy --all-targets`
+   - `cd spaces/rust && cargo test -p phi-json -p phi-core -p phi-store -p phi-service && cargo clippy --all-targets`
 
 ### Phase 2: `mmo-web` gateway indexes, settings cache, `flush` fix and broadcast serialization
 
 **Goal:** Remove the 2 Space RPCs per command, eliminate `O(N_objs)` scans on room transitions and atlas ticks, and
 avoid repeated JSON serialization on broadcasts.
 
-1. **`rust/mmo-web/src/gateway.rs` – Cache `cmd.burst` and `cmd.perSec`:**
+1. **`spaces-mmo/rust/mmo-web/src/gateway.rs` – Cache `cmd.burst` and `cmd.perSec`:**
    - Add `cmd_burst: Cell<f64>` (initialized to `20.0`) and `cmd_per_sec: Cell<f64>` (initialized to `5.0`) to
      `Gateway`.
    - Refresh them asynchronously alongside `beam.cost`, `epoch.force` and `pack.max` in `atlas_shared` (and once at
      startup in `Gateway::new`).
    - Use `self.cmd_burst.get()` and `self.cmd_per_sec.get()` synchronously in `attach` and `inbound`.
-2. **`rust/mmo-web/src/gateway.rs` – Fix `flush()`:**
+2. **`spaces-mmo/rust/mmo-web/src/gateway.rs` – Fix `flush()`:**
    - In `Gateway::flush`, return early if `self.deferred.borrow().is_empty()`. Otherwise compute
      `let shared = self.atlas_shared();` **once** before the `loop` and pass `&shared` to `self.atlas_state(c, &shared)`.
-3. **`rust/mmo-web/src/gateway.rs` – Secondary indexes in `State` and cached static `world` view:**
+3. **`spaces-mmo/rust/mmo-web/src/gateway.rs` – Secondary indexes in `State` and cached static `world` view:**
    - Precompute the static parts of the `hello.world` object (`id`, `title`, `tileSize`, `tiles`, `skins`, `decor`,
      `fuels`, `icons`, `plans`, `uses`, `rail`, and `liner` template) once in `Gateway::new`.
    - Maintain `objs_by_loc: HashMap<String, OMap<()>>`, `atlas_objs: OMap<()>` (non-item/exit/scenery objects) and
      `notices_by_char: HashMap<String, OMap<()>>` in `State` (`set_obj`, `put`, `del`, `reset`).
    - Use `atlas_objs` in `atlas_shared`, `stops` and `atlas` so `Item` entries are never scanned there.
    - Use `objs_by_loc` and `notices_by_char` in `hello` and `tell`.
-4. **`rust/mmo-web/src/ws.rs` & `gateway.rs` – Serialize once per broadcast and cache static assets:**
+4. **`spaces-mmo/rust/mmo-web/src/ws.rs` & `gateway.rs` – Serialize once per broadcast and cache static assets:**
    - Add `WsConn::send_text(&self, text: &str)` and pre-serialize shared frames in `broadcast_time`, `atlas_changed`,
      `announce` and `announce_obj`.
    - Cache static files from `out/` and `/assets/` in memory on first read in `Web`.
 5. **Verification:**
-   - `cd rust && cargo test -p mmo-web && cargo clippy --all-targets`
+   - `cd spaces-mmo/rust && cargo test -p mmo-web && cargo clippy --all-targets`
    - Run `spaces-mmo/tests/r8/web-cross.ts` against the TypeScript oracle to verify byte-identical WebSocket frames.
 
 ### Phase 3: Ordered type and field index in `mmo-engine`'s `Mirror`
@@ -245,14 +245,14 @@ avoid repeated JSON serialization on broadcasts.
 **Goal:** Reduce `mmo-world` CPU (30–50 % under high item counts) by making `Mirror::read_all` `O(matches)` instead of
 `O(N_type * log N_type)`.
 
-1. **`rust/mmo-engine/src/mirror.rs`:**
+1. **`spaces-mmo/rust/mmo-engine/src/mirror.rs`:**
    - Keep `by_type` entries in ascending `seq_of(id)` order (using an ordered structure or lazy sorted slice) and add a
      secondary index `by_field: HashMap<(String, String), HashMap<ScalarKey, Vec<String>>>` (maintained on `put`/`del`
      or lazily per `(type, field)`).
    - In `Mirror::read_all`, use the most selective `(type, field, value)` bucket and return matches directly without
      scanning all `Item` records or re-sorting on every call.
 2. **Verification:**
-   - `cd rust && cargo test -p mmo-engine && cargo clippy --all-targets`
+   - `cd spaces-mmo/rust && cargo test -p mmo-engine && cargo clippy --all-targets`
    - `npm --prefix spaces-mmo test`
 
 ---

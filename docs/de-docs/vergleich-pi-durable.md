@@ -91,7 +91,7 @@ abgelehnt. Die Zusage setzt voraus, dass das Memo den Ausfall überlebt; siehe A
 
 Das Diagramm zeigt die Anbindung im selben Prozess. Seit dem Upgrade gibt es für Codemode-Chat und spaces-mmo
 zusätzlich einen getrennten Agentenprozess: Die Anwendung spricht über Node-IPC mit
-[`durable-worker.ts`](../../agent/src/durable-worker.ts), das dortige Harness kennt den Space nicht.
+[`durable-worker.ts`](../../spaces/agent/src/durable-worker.ts), das dortige Harness kennt den Space nicht.
 
 ## 3. Gemeinsamkeiten
 
@@ -200,14 +200,14 @@ nicht einhalten. Lokale SIGKILL-Tests belegen außerdem keinen realen Stromverlu
 Replikation, Sicherung und Wiederherstellung sind separate Fragen. [P3, L2, L6]
 
 **Folge für die Kombination:** Die Tabelle vergleicht die Standards, nicht die Haltbarkeit eines Zusammenspiels.
-Die zunächst schwächer geöffneten Agentenspeicher sind inzwischen gehärtet: [`agent/src/storage.ts`](../../agent/src/storage.ts) im phi-spaces-Agentenpaket
+Die zunächst schwächer geöffneten Agentenspeicher sind inzwischen gehärtet: [`agent/src/storage.ts`](../../spaces/agent/src/storage.ts) im phi-spaces-Agentenpaket
 öffnet die pi-durable-Speicher `SqliteStorage` und `JsonlStorage` mit strengeren Einstellungen; es ändert weder
 pi-durable noch den phi-spaces-Store. Der Worker und die mobile Runtime verwenden SQLite
 `synchronous=FULL`, vor der Schemaöffnung geprüft. Rechercheläufe verwenden JSONL mit `{ fsync: true }`
 plus zusätzlichem Flush des Commit-Markers und der Verzeichniseinträge. Allein die Upstream-Option wäre
 dafür nicht ausreichend. Recherchemanifest und atomare Exporte werden ebenfalls synchronisiert.
 
-Die [Regressionen](../../agent/test/storage.test.ts) prüfen Sync-Policy, Marker-Reihenfolge, ein vereinfachtes
+Die [Regressionen](../../spaces/agent/test/storage.test.ts) prüfen Sync-Policy, Marker-Reihenfolge, ein vereinfachtes
 Dateicache-Verlustmodell und verweigerte Bestätigung bei Flush-Fehlern.
 Ein [VM-Versuch](../agenten-stromausfalltest.en.md#result-of-30102026) prüfte den Agentenspeicher in beiden Profilen:
 „Schwach“ sind die pi-durable-Speicher mit den pi-durable-Standards, „stark“ dieselben Speicher, geöffnet über `agent/src/storage.ts`.
@@ -226,7 +226,7 @@ weiterarbeiten. Die Frage des Versuchs ist, ob jeder bestätigte Zähler nach de
 | phi-spaces-Store, stark | `openSqliteHost(pfad)`: Standard `synchronous=FULL` | Wie schwach, aber vor der gemeinsamen Bestätigung wird das WAL geflusht | Vor jeder Bestätigung, ein Flush für alle Commits der Gruppe |
 
 Ein Flush ist `fsync`, bei SQLite je nach Node-Build auch `fdatasync` (VM mit dem offiziellen Node 22.23.1: `fsync`, Entwicklungsrechner: `fdatasync`); er endet erst, wenn das Laufwerk die Daten gesichert
-meldet. Ohne Flush liegen sie nach `write` nur im Seitencache des Kernels. Die Abläufe sind [mit `strace` mitgeschnitten](../../test/evidence/power-loss-2026-10-30/syscalls.en.md).
+meldet. Ohne Flush liegen sie nach `write` nur im Seitencache des Kernels. Die Abläufe sind [mit `strace` mitgeschnitten](../../spaces/test/evidence/power-loss-2026-10-30/syscalls.en.md).
 Der Mitschnitt je Commit lief auf dem Entwicklungsrechner (SQLite 3.51.2), der beim harten Aus in der VM. Er zeigt die Reihenfolge der Syscalls, nicht das Laufwerk.
 Mit 8 Schreibern kamen beim phi-spaces-Store 81 Bestätigungen auf 32 WAL-Flushes, bei pi-durable SQLite 47 auf 50.
 
@@ -262,7 +262,7 @@ in allen 4 Läufen mit Verlust ein `pwrite`; der Stand fiel dort auf den letzten
 Ob `NORMAL` beim Ausschalten Daten verliert, hängt also nur davon ab, wo der Schnitt liegt. Die Haltbarkeit kostet viel, die Raten stehen in der Tabelle unten.
 
 **Vergleich mit dem phi-spaces-Store:** Derselbe Versuch lief auf derselben VM und Platte mit einer
-[gleich aufgebauten Probe](../../agent/test/power-loss-own-probe.ts) gegen den phi-spaces-Store: einmal dasselbe Dokument, einmal
+[gleich aufgebauten Probe](../../spaces/agent/test/power-loss-own-probe.ts) gegen den phi-spaces-Store: einmal dasselbe Dokument, einmal
 echte `PhiSpaces`-Writes. Beim phi-spaces-Store steht stark für `synchronous=FULL`, schwach für `NORMAL`.
 
 | Speicher | Replay: Schnitte mit Verlust | Hartes Aus: Läufe mit Verlust |
@@ -281,7 +281,7 @@ eine Reihe einzelner Entries, nicht Conversations, Tasks oder Dokument-Deltas, u
 Für diese Fälle sagt der Versuch nichts. Im Versuch folgte der Unterschied der Standards aus der Einstellung: phi-spaces nimmt von selbst `FULL`,
 pi-durable `NORMAL`. Im phi-spaces-Agentenpaket ersetzt `agent/src/storage.ts` dieses `NORMAL` durch `FULL`.
 
-Median (kleinster bis größter Wert) der Commits je Sekunde auf derselben Platte: [je 5 Läufe von 20 s](../../agent/test/power-loss-rate.mjs) in gemischter
+Median (kleinster bis größter Wert) der Commits je Sekunde auf derselben Platte: [je 5 Läufe von 20 s](../../spaces/agent/test/power-loss-rate.mjs) in gemischter
 Reihenfolge, frisches ext4, kein Lauf verworfen, Festplatten-RAID, Lastwert des Hosts 4,3 bis 10,6 durch Fremdlast:
 
 | Speicher | stark, 1 Schreiber | stark, 8 Schreiber | schwach, 1 | schwach, 8 |
@@ -487,7 +487,7 @@ Ein Agent benötigt einen anderen Zustand als die Anwendung, für die er arbeite
 Die mobile Runtime hält den Session-Katalog zusammen mit den Conversations im Agentenspeicher.
 Das vermeidet eine unabhängig geschriebene JSON-Nebendatei. Die Space-Werkzeuge verwenden dagegen
 einen getrennten Host; `withAgentEventSink` überbrückt die Kontextgrenze ausdrücklich.
-Siehe [Agentenanbindung](../../agent/src/agent.ts) und
+Siehe [Agentenanbindung](../../spaces/agent/src/agent.ts) und
 [Upgrade einschließlich Mobile-Runtime](../upgrade-pi-1.4.0.en.md).
 
 **Wichtig:** Eine Anwendung wird nicht schon dadurch dauerhaft agentisch, dass sie pi-ai oder
@@ -498,7 +498,7 @@ Erst das pi-durable-Harness übernimmt die dauerhafte Agentenausführung.
 
 #### Schritt 1: Rechercheläufe als Ganzes wiederaufnehmen
 
-Die [Recherchebeispiele](../../agent/examples/research-support.ts) haben bereits persistente Agenten,
+Die [Recherchebeispiele](../../spaces/agent/examples/research-support.ts) haben bereits persistente Agenten,
 lehnen am Ausgangspunkt aber ein vorhandenes Laufverzeichnis ab. Einzelne persistente Conversations
 sind noch keine sichere Wiederaufnahme des gesamten Teams.
 
@@ -511,9 +511,9 @@ abgelehnt. Ein frischer Lauf darf keine fremden oder alten Verzeichnisse stillsc
 Abnahme: Unterbrechung und Wiederöffnung, keine doppelten Teams oder Aufgaben, erneute Ausgabe eines
 fertigen Berichts, abgelehnte Konfigurationskonflikte und weiterhin Fehler bei unvollständigen Phasen.
 
-**Integriert:** [ResearchRun](../../agent/examples/research-run.ts) implementiert explizites `--resume`,
+**Integriert:** [ResearchRun](../../spaces/agent/examples/research-run.ts) implementiert explizites `--resume`,
 den gemeinsamen Launcher-Owner-Lock, atomar gespeicherte Team-IDs und deduplizierte Phasenübergaben.
-Die [Regressionen](../../agent/test/examples/recovery.test.ts) prüfen auch SIGKILL während einer laufenden
+Die [Regressionen](../../spaces/agent/test/examples/recovery.test.ts) prüfen auch SIGKILL während einer laufenden
 Analyse: dieselbe Teamzuordnung vor und nach der Wiederaufnahme, die Phase nur einmal, keine übrige Aufgabe, ein Bericht. Grenzen bei abgelaufenen Space-Claims und CLI-Beispiele stehen in [examples.md](../examples.en.md).
 
 #### Schritt 2: Längere Agentenabläufe im Codemode-Chat
@@ -602,7 +602,7 @@ Offline-Stand vom 31.10.2026 (mobile Runtime vom 30.10.2026):
 
 `test-env.ts` beider Projekte schaltet die Agentenpfade für die allgemeinen Suiten ab. `npm run test:durable` jedes Projekts führt dieselben `tests/*.test.ts`
 mit eingeschaltetem Pfad aus, immer mit Faux-Modellen ([Codemode](../../codemode-chat/tests/test-env-durable.ts), [spaces-mmo](../../spaces-mmo/tests/test-env-durable.ts)):
-Das Fake des Projekts antwortet im Agent-Worker ([durable-fake-models.ts](../../agent/test/durable-fake-models.ts)), seine Szenarien laufen also durch den echten Worker, die Konversation
+Das Fake des Projekts antwortet im Agent-Worker ([durable-fake-models.ts](../../spaces/agent/test/durable-fake-models.ts)), seine Szenarien laufen also durch den echten Worker, die Konversation
 und den Speicher. Fake-Teams erreichen Space und Gates über eine Verbindung des Workers, der Verbrauch kommt genau durch, und ein Stopp erreicht sie als Abbruchsignal des Workers.
 
 | Matrix | Tests | Antworten durch den Worker | Abweichungen |
@@ -650,13 +650,13 @@ Das alles ist keine uneingeschränkte Produktionsfreigabe.
 
 ### Lokale phi-spaces-Quellen
 
-- **L1:** [Kernsemantik](../../src/core.ts), [Space-Dokument und Teile](../../src/doc.ts), [öffentliche API](../api.en.md).
-- **L2:** [Host](../../src/store/host.ts), [Store-Typen](../../src/store/types.ts), [Dokumentdefinitionen](../../src/store/documents.ts), [SQLite](../../src/store/sqlite.ts), [Schreibthread](../../src/store/sqlite-writer.ts), [DiskMap](../../src/store/disk-map.ts).
-- **L3:** [Standalone-Dienst](../../src/standalone.ts), [Dienst](../../src/service.ts), [Remote-Client](../../src/remote.ts), [pi-server-Adapter](../../src/pi-server.ts), [Standalone-Regressionen](../../test/test-standalone.test.ts).
-- **L4:** [Claims](../../src/claims.ts), [lokaler Client](../../src/client.ts), [Mailbox](../../src/mailbox.ts), [Changes](../../src/stream.ts).
-- **L5:** [Agentenanbindung](../../agent/src/agent.ts), [Agent-Paket](../../agent/package.json), [Agent-Lockfile](../../agent/package-lock.json), [Integrationsregressionen](../../agent/test/agent.test.ts).
+- **L1:** [Kernsemantik](../../spaces/src/core.ts), [Space-Dokument und Teile](../../spaces/src/doc.ts), [öffentliche API](../api.en.md).
+- **L2:** [Host](../../spaces/src/store/host.ts), [Store-Typen](../../spaces/src/store/types.ts), [Dokumentdefinitionen](../../spaces/src/store/documents.ts), [SQLite](../../spaces/src/store/sqlite.ts), [Schreibthread](../../spaces/src/store/sqlite-writer.ts), [DiskMap](../../spaces/src/store/disk-map.ts).
+- **L3:** [Standalone-Dienst](../../spaces/src/standalone.ts), [Dienst](../../spaces/src/service.ts), [Remote-Client](../../spaces/src/remote.ts), [pi-server-Adapter](../../src/pi-server.ts), [Standalone-Regressionen](../../spaces/test/test-standalone.test.ts).
+- **L4:** [Claims](../../spaces/src/claims.ts), [lokaler Client](../../spaces/src/client.ts), [Mailbox](../../spaces/src/mailbox.ts), [Changes](../../spaces/src/stream.ts).
+- **L5:** [Agentenanbindung](../../spaces/agent/src/agent.ts), [Agent-Paket](../../spaces/agent/package.json), [Agent-Lockfile](../../spaces/agent/package-lock.json), [Integrationsregressionen](../../spaces/agent/test/agent.test.ts).
 - **L6:** [Umstellung einschließlich späterer U2-/U6-/U4-Stände](../umstellung-ohne-pi-durable.en.md), [Bestandsaufnahme und Entscheidung D6](../umstellung-u0-bestand.en.md), [Rust-Portierungsplan](../rust-portierung.en.md).
-- **L7:** [Federationslaufzeit](../../src/runtime.ts), [Gate](../../src/gate.ts), [Auth](../../src/auth.ts), [Replikationskontrolle](../../src/replica-control.ts), [Föderationsplan](../federation-plan-v3.en.md), [Phasenabnahmen](../implementierungsstand.en.md).
+- **L7:** [Federationslaufzeit](../../spaces/src/runtime.ts), [Gate](../../spaces/src/gate.ts), [Auth](../../spaces/src/auth.ts), [Replikationskontrolle](../../spaces/src/replica-control.ts), [Föderationsplan](../federation-plan-v3.en.md), [Phasenabnahmen](../implementierungsstand.en.md).
 
 **Nachweisgrenze:** Die ursprüngliche Upstream-Recherche war quellenbasiert; der damalige lokale
 1.0.3-Bestand war kein Kompatibilitätsnachweis für 1.4.0. Anschließend wurden die Release-Pakete auf 1.4.0

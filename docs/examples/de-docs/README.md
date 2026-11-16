@@ -14,8 +14,8 @@ Die [verbindliche Übersicht](../../examples.en.md) enthält Aufrufe und den akt
 | Hintergrund | [Historische Referenzen](../../_attic/HISTORISCHE-REFERENZEN.en.md) | Linda/JavaSpaces und Unterschiede zum Projekt |
 | Korrekturprotokoll | [Implementierungsanalyse](../../_attic/IMPLEMENTIERUNGS-ANALYSE-V2.en.md) | behobene Befunde und verbleibende Grenzen |
 
-Alle ausführbaren Beispiele liegen in [examples/](../../../examples/).
-Tests: [test/examples/README.en.md](../../../test/examples/README.en.md).
+Alle ausführbaren Beispiele liegen in [examples/](../../../spaces/examples/).
+Tests: [test/examples/README.en.md](../../../spaces/test/examples/README.en.md).
 Federation, HRW und LWW-Replikation sind implementiert ([Implementierungsstand](../../implementierungsstand.en.md)), werden aber von diesen Beispielen
 nicht benutzt. `RemoteSpace` ist der RPC-Unterbau gegen einen einzelnen Space-Dienst;
 das Remote-Sieb-Szenario liegt im Testbed, nicht in diesen Beispielseiten.

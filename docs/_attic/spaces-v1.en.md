@@ -113,5 +113,5 @@ speedup; snapshot limits and the JSON byte budget are not RAM/VPS minimum requir
 Optimizations such as indexes, sharding, dirty flags and a remote protocol need their own implementation/tests.
 
 Typecheck, core and example suites are run locally. Examples and the actual scope of evidence:
-[examples.md](../examples.en.md), [test overview](../../test/examples/README.en.md).
+[examples.md](../examples.en.md), [test overview](../../spaces/test/examples/README.en.md).
 Federation, NetBird identity, promotion and scientific model quality are not demonstrated by them.

@@ -93,7 +93,7 @@ ein Web-Prozess mit eigenem WebSocket-Gateway, dahinter die Space-Prozesse. Der 
 direkt mit einem Space, er schickt nur Befehle und bekommt Ansichten.
 
 **Ist die Space-Implementierung getrennt?** Ja, die Abhängigkeit geht nur in eine Richtung: `src/` kennt weder
-help-site noch codemode-chat noch spaces-mmo. spaces-mmo hängt als `"phi-spaces": "file:.."` am Paket und importiert
+help-site noch codemode-chat noch spaces-mmo. spaces-mmo hängt als `"phi-spaces": "file:../spaces"` am Paket und importiert
 `phi-spaces` ([paket.md](../paket.en.md)).
 
 **Evennia als Basis?** Evennias Komponenten lassen sich fast eins zu eins auf Entries und Worker abbilden. Die

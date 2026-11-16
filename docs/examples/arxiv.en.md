@@ -1,10 +1,10 @@
 # arXiv Research: Data Contract and Workflow
 
 As of 2026-10-07. Implementations:
-[arxiv-tool.ts](../../agent/examples/arxiv-tool.ts),
-[arxiv-research.ts](../../agent/examples/arxiv-research.ts),
-[dark-energy-research.ts](../../agent/examples/dark-energy-research.ts),
-[research-support.ts](../../agent/examples/research-support.ts).
+[arxiv-tool.ts](../../spaces/agent/examples/arxiv-tool.ts),
+[arxiv-research.ts](../../spaces/agent/examples/arxiv-research.ts),
+[dark-energy-research.ts](../../spaces/agent/examples/dark-energy-research.ts),
+[research-support.ts](../../spaces/agent/examples/research-support.ts).
 
 ## Source Contract
 
@@ -79,7 +79,7 @@ npm run test:agent
 ```
 
 The runners can be imported as runArxivResearch/runDarkEnergyResearch. Tests inject models,
-poll intervals and deadlines. [agent/test/examples/recovery.test.ts](../../agent/test/examples/recovery.test.ts) starts the actual runners with faux models and a real store,
+poll intervals and deadlines. [agent/test/examples/recovery.test.ts](../../spaces/agent/test/examples/recovery.test.ts) starts the actual runners with faux models and a real store,
 checks reports, resume after SIGKILL, fresh directories and result guards. No paper is actually loaded from the network.
 Older suites rebuild their own prompts/workflows. Real model runs, bibliometric quality,
 fact validation and production operation are not accepted.

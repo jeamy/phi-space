@@ -13,9 +13,11 @@
 > keinen Dokumenttyp-Namespace; ein neuer leerer Namespace bedeutet nicht, dass die bisherigen Daten gelöscht sind.
 
 phi-spaces ist eine Space-Bibliothek in TypeScript und Rust mit eigenem Speicher (SQLite im Besitz eines Prozesses oder Arbeitsspeicher).
-Die Rust-Portierung (`rust/`) liest und schreibt dieselben Store-Dateien und spricht dasselbe Protokoll; ihr `phi-space-server`
-bedient die Spaces von spaces-mmo, codemode-chat und dem Swarm der Hilfe-Seite in der Produktion.
-Sie braucht kein Agenten-Framework; das optionale Paket `agent/` gibt
+Die Bibliothek ist das Paket in `spaces/`; die Anwendungen darauf (`spaces-mmo/`, `codemode-chat/`, `help-site/`) liegen
+daneben. Die Rust-Portierung (`spaces/rust/`) liest und schreibt dieselben Store-Dateien und spricht dasselbe Protokoll;
+auf ihrer Bibliothek `phi-space-host` hat jede Anwendung ihren eigenen Space-Server (`mmo-space`, `codemode-space`,
+`help-space`, im `rust/`-Workspace der Anwendung), der ihre Spaces in der Produktion bedient.
+Sie braucht kein Agenten-Framework; das optionale Paket `spaces/agent/` gibt
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable)-Agenten die Space-Werkzeuge.
 Stores, die ältere Versionen über pi-durable geschrieben haben, werden verworfen, nicht übernommen. Es ist ein
 Space für beliebige Daten, die ausgetauscht werden sollen: Aufträge, Nachrichten, Messwerte, Ergebnisse,
@@ -110,7 +112,7 @@ Abschlusspunkte unterscheiden sich:
 
 Damit setzt phi-spaces sowohl auf den Aufrufer wartende asynchrone Operationen als auch dauerhafte, ereignisgesteuerte
 Interaktion um. Es macht synchrone Serialisierungs-/CPU-Arbeit nicht nicht-blockierend und hebt endliche
-Space-Budgets nicht auf. Siehe [`src/client.ts`](../src/client.ts), [`src/index.ts`](../src/index.ts) und die [Waiter-API](../docs/api.en.md).
+Space-Budgets nicht auf. Siehe [`src/client.ts`](../spaces/src/client.ts), [`src/index.ts`](../spaces/src/index.ts) und die [Waiter-API](../docs/api.en.md).
 
 ### Was phi-spaces ergänzt und was es nicht verspricht
 
@@ -177,6 +179,8 @@ aus und nutzt flüchtigen Arbeitsspeicher: Es zeigt Koordination, **keine** Pers
 
 ## Schichten
 
+Die Dateien des Pakets unten liegen in `spaces/`; die Anwendungen liegen daneben im Wurzelverzeichnis des Repositorys.
+
 | Datei | Aufgabe |
 |---|---|
 | `src/core.ts` | Reine Spezifikationssemantik über einen JSON-Zustand: Entries, Templates, Leases, Transaktionen, Notify |
@@ -200,7 +204,7 @@ aus und nutzt flüchtigen Arbeitsspeicher: Es zeigt Koordination, **keine** Pers
 | `help-site/` | Zweisprachige Hilfe, Social Swarm, Space-Chat-Stufen und authentifiziertes Web Admin |
 | `codemode-chat/` | Agenten und Menschen lösen Programmieraufgaben gemeinsam um einen Space; jede Rolle ist ein eigener Prozess |
 | `spaces-mmo/` | Online-Rollenspiel-Engine auf Spaces, erste Welt Leuchtfeuer |
-| `rust/` | Rust-Portierung von Kern, Store, Dienst und sicherem Host ([docs/rust-portierung.en.md](../docs/rust-portierung.en.md)); die Space-Container von spaces-mmo auf nano und big und der Space von codemode-chat auf nano laufen seit 2026-11-07, die Swarm-Spaces der Hilfe-Seite seit 2026-11-08 auf ihrem `phi-space-server`, überall sonst bleibt der TypeScript-Code maßgeblich |
+| `rust/` | Rust-Portierung von Kern, Store, Dienst und sicherem Host, der Cargo-Workspace des Kerns ([docs/rust-portierung.en.md](../docs/rust-portierung.en.md)); jede Anwendung hat ihren eigenen in `<app>/rust/` mit ihrem Space-Server auf `phi-space-host`; die Space-Container von spaces-mmo auf nano und big und der Space von codemode-chat auf nano laufen seit 2026-11-07, die Swarm-Spaces der Hilfe-Seite seit 2026-11-08 auf dem Rust-Space-Server, überall sonst bleibt der TypeScript-Code maßgeblich |
 
 Ein Space ist ein Dokument; Commits des eigenen Stores (`src/store/`) sorgen für atomare Zustandsänderungen. Das Überstehen
 von Neustarts setzt den SQLite-Store voraus,
@@ -352,7 +356,7 @@ dauerhaft wurde. Ein Store allein im Arbeitsspeicher beweist nichts über Durabi
 `npm run testbed -- <command>` prüft das **gebaute Artefakt** (das Bundle `phi-spaces.mjs`, kompilierte Beispiele und Szenarien; kein
 Quellcode) in Docker-Containern auf einem Server statt auf diesem Rechner: `check`, `up`, `test`, `scenario`, `status`, `kill`,
 `partition`, `heal`, `down`. Server, Verzeichnis und Zugangsdaten kommen aus Umgebungsvariablen oder einer von Git ignorierten
-`test/testbed/testbed.env`. Siehe [test/testbed/README.md](../test/testbed/README.md) und
+`test/testbed/testbed.env`. Siehe [test/testbed/README.md](../spaces/test/testbed/README.md) und
 [docs/testumgebung-big.en.md](../docs/testumgebung-big.en.md) (Deutsch). Das Szenario `sieve-mobile` lässt ein Primzahlsieb laufen, das von einem
 simulierten Telefon gesteuert wird: verlorene Aufrufe und Antworten mit Retries unter derselben Request-Id, App im Hintergrund, Worker, die mit einer
 reservierten Aufgabe sterben, ein Host-Neustart; die Auswertung vergleicht den gespeicherten Zustand mit Probedivision.
@@ -361,6 +365,8 @@ reservierten Aufgabe sterben, ein Host-Neustart; die Auswertung vergleicht den g
 Mit `--dry-run` lassen sich Aktionen ohne Serverzugriff vorab ansehen. Siehe [docs/tui.en.md](../docs/tui.en.md).
 
 ## Beispiele
+
+Die Dateien liegen in `spaces/`; die Befehle laufen im Wurzelverzeichnis des Repositorys.
 
 | Datei | Inhalt | Voraussetzung |
 |---|---|---|
@@ -396,8 +402,8 @@ npm run example:cache
 ```
 
 ```
-node --experimental-strip-types agent/examples/chat.ts --live "Was war der wichtigste Schritt zu heutigen LLMs?"
-node --experimental-strip-types agent/examples/arxiv-research.ts --out /tmp/llm-history.md
+node --experimental-strip-types spaces/agent/examples/chat.ts --live "Was war der wichtigste Schritt zu heutigen LLMs?"
+node --experimental-strip-types spaces/agent/examples/arxiv-research.ts --out /tmp/llm-history.md
 ```
 
 ## Dokumentation

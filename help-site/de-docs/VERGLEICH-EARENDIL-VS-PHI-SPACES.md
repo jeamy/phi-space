@@ -3,9 +3,9 @@
 **Stand:** 17. Oktober 2026, Persistenz-Zeile und Pfade am 30. Oktober 2026 nachgeführt  
 **Bezug:**
 - Vorlage: [Pi Durable on Cloudflare – Multiplayer Chat](https://earendil.com/posts/pi-durable-on-cloudflare/)
-- Unsere Umsetzung: [`help-site/examples/v1..v6`](file:///media/data/programming/phi-spaces/help-site/examples) und [`help-site/examples/shared/chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts)
-- Abgrenzung zum Aktor-Modell: [`agent/examples/chat.ts`](file:///media/data/programming/phi-spaces/agent/examples/chat.ts)
-- Zielarchitektur ohne Pi-Durable: [`docs/umstellung-ohne-pi-durable.en.md`](file:///media/data/programming/phi-spaces/docs/umstellung-ohne-pi-durable.md)
+- Unsere Umsetzung: [`help-site/examples/v1..v6`](../examples) und [`help-site/examples/shared/chat-core.ts`](../examples/shared/chat-core.ts)
+- Abgrenzung zum Aktor-Modell: [`agent/examples/chat.ts`](../../spaces/agent/examples/chat.ts)
+- Zielarchitektur ohne Pi-Durable: [`docs/umstellung-ohne-pi-durable.en.md`](../../docs/umstellung-ohne-pi-durable.en.md)
 
 ---
 
@@ -15,17 +15,17 @@ Obwohl beide Ansätze historisch aus der `@earendil-works`-Ökosphäre hervorgeg
 
 | Dimension | Earendil-Vorlage (`Pi Durable on Cloudflare`) | Unser `phi-spaces`-Ansatz (`v1` bis `v6`) | Status / Anmerkung |
 |---|---|---|---|
-| **Leitparadigma** | **Stateful Actor pro Session (Durable Object)**: Eine Session ist ein isoliertes Cloudflare Durable Object, das WebSockets, SQLite-DB, Alarm-Timer und den `pi-durable`-Harness in einer einzigen Objektinstanz kapselt. | **Entkoppelter Koordinationsraum (Tuple Space)**: Der Zustand liegt als Menge typisierter, unveränderlicher JSON-Entries (`Thread`, `Msg`, `ChatTask`, `Presence`, `ScheduledJob`, `SearchTask`) in einem Space. Clients, Worker und Subagenten sind lose gekoppelte Teilnehmer. | ✅ Im Code umgesetzt ([`chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts)). |
+| **Leitparadigma** | **Stateful Actor pro Session (Durable Object)**: Eine Session ist ein isoliertes Cloudflare Durable Object, das WebSockets, SQLite-DB, Alarm-Timer und den `pi-durable`-Harness in einer einzigen Objektinstanz kapselt. | **Entkoppelter Koordinationsraum (Tuple Space)**: Der Zustand liegt als Menge typisierter, unveränderlicher JSON-Entries (`Thread`, `Msg`, `ChatTask`, `Presence`, `ScheduledJob`, `SearchTask`) in einem Space. Clients, Worker und Subagenten sind lose gekoppelte Teilnehmer. | ✅ Im Code umgesetzt ([`chat-core.ts`](../examples/shared/chat-core.ts)). |
 | **Geschäftslogik & Zustand** | Im Methoden-Code der Durable-Object-Klasse (`Session`), die direkt `harness.commit(...)`, `conversation.submit(...)` und `watchEvents(...)` aufruft. | In unabhängigen Workern, die über das einheitliche `SpaceLike`-Interface (`write`, `read`, `take`, `wait`, `notify`, `createTransaction`, `commit`) mit dem Space interagieren. | ✅ Implementiert in `processNextChatTask` und `processNextSearchTask`. |
 | **Koppelung Web-Server & KI-Worker** | **Eng gekoppelt (In-Object)**: WebSocket-Terminierung, Konversationszustand und Modellaufrufe laufen zwingend in derselben Cloudflare-Instanz. | **Frei wählbar (`v1`–`v6`)**: Kann im selben Prozess (`v1`/`v2`), über Unix-Socket/TCP getrennt (`v3`), kryptografisch gesichert (`v4`) oder über mehrere Server föderiert (`v5`/`v6`) laufen. | ⚠️ **Lücke:** In `v5-federated-cluster` läuft der Test aktuell in-process mit 4 `MemoryStorage`-Instanzen statt über echte TCP-Sockets. |
 | **Plattformbindung** | Gebunden an **Cloudflare Workers & Durable Objects** (`DurableObjectState`, `ctx.storage.sql`, Hibernatable WebSockets, `alarm()`). | **Plattformunabhängig (Self-Hosted / On-Prem / VPS / Container / Mobile)**: Läuft überall, wo Node.js läuft (RAM, lokale SQLite/JSONL, Docker, Linux-VPS, Android/Termux). | ✅ Verifiziert auf Linux & Android/Termux. |
-| **Persistenz-Abhängigkeit** | Fest verdrahtet mit Cloudflare Edge Storage und `@earendil-works/pi-durable`. | Eigener SQLite-Speicher ohne pi-durable ([`docs/umstellung-ohne-pi-durable.en.md`](file:///media/data/programming/phi-spaces/docs/umstellung-ohne-pi-durable.md)); pi-durable nutzt nur das optionale Paket `agent/`. | ✅ **Umgestellt:** Der Space ist unabhängig von `pi-durable`. |
+| **Persistenz-Abhängigkeit** | Fest verdrahtet mit Cloudflare Edge Storage und `@earendil-works/pi-durable`. | Eigener SQLite-Speicher ohne pi-durable ([`docs/umstellung-ohne-pi-durable.en.md`](../../docs/umstellung-ohne-pi-durable.en.md)); pi-durable nutzt nur das optionale Paket `agent/`. | ✅ **Umgestellt:** Der Space ist unabhängig von `pi-durable`. |
 | **Skalierungsmodell** | **Scale-to-Zero pro Session** (Hibernation bei Inaktivität; unbegrenzt viele kleine, voneinander komplett isolierte Sessions in der Cloud). | **Horizontale & vertikale Skalierung von Workern und Spaces**: Einzel-Space (`v1`–`v4`) bis zum geshardeten Multi-Member-Cluster (`v5` mit HRW-Routing nach `threadId`) und zentraler Betriebssteuerung (`v6`). | ✅ HRW-Routing in Core implementiert; siehe Abschnitt 2.8 für Cluster-Transaktionsgrenzen. |
 
 > [!NOTE]
 > **Koexistenz zweier Chat-Ansätze im Repository:**  
-> Das Root-Beispiel [`agent/examples/chat.ts`](file:///media/data/programming/phi-spaces/agent/examples/chat.ts) implementiert den Chat als **Earendil-Aktor-Netzwerk**, in dem `alice`, `bob` und `carol` langlebige `pi-durable`-Conversations sind und der Space nur als Event-Bus dient.  
-> Die Stufen `v1` bis `v6` in `help-site/examples/` ([`chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts)) demonstrieren hingegen die **reine Tuple-Space-Architektur**, die gänzlich ohne Aktor-Konversationen auskommt.
+> Das Root-Beispiel [`agent/examples/chat.ts`](../../spaces/agent/examples/chat.ts) implementiert den Chat als **Earendil-Aktor-Netzwerk**, in dem `alice`, `bob` und `carol` langlebige `pi-durable`-Conversations sind und der Space nur als Event-Bus dient.  
+> Die Stufen `v1` bis `v6` in `help-site/examples/` ([`chat-core.ts`](../examples/shared/chat-core.ts)) demonstrieren hingegen die **reine Tuple-Space-Architektur**, die gänzlich ohne Aktor-Konversationen auskommt.
 
 ---
 
@@ -41,7 +41,7 @@ Obwohl beide Ansätze historisch aus der `@earendil-works`-Ökosphäre hervorgeg
   - Jede Session ist ein **benannter Space (`NamedSpace`)** (bzw. in `v5` eine über `threadId` per HRW geshardete Menge von Member-Spaces). Threads und Nachrichten sind reguläre `Thread`- und `Msg`-Entries.
   - **Vorteil**: Threads, Nachrichten und Aufgaben sind normale Space-Entries, die jederzeit per Template abgefragt, gefiltert, archiviert (`archiveSpace`) und clusterweit durchsucht werden können.
   - ✅ **$O(1)$ Pointer-basiertes Thread-Forking (Copy-on-Write auf Tuple-Ebene):**  
-    In [`chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts) schreibt `forkThread()` ausschließlich den neuen `Thread`-Metadateneintrag (`parentThreadId`, `forkUpToSeq`) mit 1 `RequestRef`-Claim ($O(1)$ Space-Entries, keine physische Duplizierung geerbter `Msg`-Entries). Beim Lesen und Inspizieren löst `SpaceChatEngine.resolveMessagesForThread()` die geerbten Nachrichten über die Ancestor-Pointer-Kette bis `forkUpToSeq` dynamisch auf.
+    In [`chat-core.ts`](../examples/shared/chat-core.ts) schreibt `forkThread()` ausschließlich den neuen `Thread`-Metadateneintrag (`parentThreadId`, `forkUpToSeq`) mit 1 `RequestRef`-Claim ($O(1)$ Space-Entries, keine physische Duplizierung geerbter `Msg`-Entries). Beim Lesen und Inspizieren löst `SpaceChatEngine.resolveMessagesForThread()` die geerbten Nachrichten über die Ancestor-Pointer-Kette bis `forkUpToSeq` dynamisch auf.
 
 ---
 
@@ -51,9 +51,9 @@ Obwohl beide Ansätze historisch aus der `@earendil-works`-Ökosphäre hervorgeg
   - Definiert manuell ein anwendungsspezifisches Dokument `ConversationCommandReceipts`, um bei `conversation.create` anhand der `requestId` zu prüfen, ob der Befehl vor einem WebSocket-Abbruch bereits ausgeführt wurde.
   - **Nachteil**: Muss vom Anwendungsentwickler für jeden neuen Befehlstyp per Hand entworfen und gepflegt werden.
 - **`phi-spaces`-Umsetzung**:
-  - Nutzt die **eingebaute Kern-Idempotenz von `phi-spaces` ([`src/claims.ts`](file:///media/data/programming/phi-spaces/src/claims.ts))**: Jede Mutation (`write`, `take`, `createTransaction`, `commit`, `abort`, `renew`, `cancel`, `wait`, `notify`) akzeptiert `{ request: { principal, generation, requestId } }`.
+  - Nutzt die **eingebaute Kern-Idempotenz von `phi-spaces` ([`src/claims.ts`](../../spaces/src/claims.ts))**: Jede Mutation (`write`, `take`, `createTransaction`, `commit`, `abort`, `renew`, `cancel`, `wait`, `notify`) akzeptiert `{ request: { principal, generation, requestId } }`.
   - **Vorteil**: Universell für jede Space-Operation verfügbar, inklusive kanonischem RFC-8785-Argument-Hash (`RequestConflict` bei veränderten Parametern), 24-Stunden-Aufbewahrung und `pollOperation` / `resolveOperation` über Prozessneustarts hinweg.
-  - ✅ **Persistente Admin-Idempotenz im Web-Admin ([`admin-controller.ts`](file:///media/data/programming/phi-spaces/help-site/server/admin/admin-controller.ts)):** `#operations` wird beim Serverstart aus den langlebigen `Result`-Entries des `CONTROL_SPACE` rekonstruiert, sodass Retries einer `commandId` auch nach Server-Neustarts idempotent beantwortet werden.
+  - ✅ **Persistente Admin-Idempotenz im Web-Admin ([`admin-controller.ts`](../server/admin/admin-controller.ts)):** `#operations` wird beim Serverstart aus den langlebigen `Result`-Entries des `CONTROL_SPACE` rekonstruiert, sodass Retries einer `commandId` auch nach Server-Neustarts idempotent beantwortet werden.
 
 ---
 
@@ -67,7 +67,7 @@ Obwohl beide Ansätze historisch aus der `@earendil-works`-Ökosphäre hervorgeg
   - Jede Teilnehmer-Nachricht schreibt in einer Transaktion die User-`Msg` und einen `ChatTask`-Entry. Ein Worker reserviert den `ChatTask` exklusiv per `space.take(..., { txn })`.
   - **Vorteil 1 (`CompletionProfile`)**: Der Space-Kern erzwingt beim `commit(txn)` serverseitig, dass für jeden genommenen `ChatTask` genau eine passende Antwort-`Msg` mit identischer `taskId` und `threadId` geschrieben wurde (`CompletionViolation` sonst!).
   - **Vorteil 2 (Worker-Freiheit)**: Beliebig viele heterogene Worker (Skripte, lokale Modelle, entfernte GPU-Worker über `RemoteSpace`) können `ChatTask`-Entries abarbeiten. Stürzt ein Worker ab, läuft die Transaktions-Lease ab und der `ChatTask` kehrt automatisch in den Space zurück.
-  - ✅ **Gelöschte/fehlende Targets im Social Swarm ([`swarm.ts`](file:///media/data/programming/phi-spaces/help-site/server/social/swarm.ts)):**  
+  - ✅ **Gelöschte/fehlende Targets im Social Swarm ([`swarm.ts`](../server/social/swarm.ts)):**  
     Wird ein `Like`-Task für einen fehlenden Post verarbeitet, schreibt der Worker einen kurzlebigen `Like`-Dedup-Ack-Entry (TTL 60 s, `dedup: true`), damit das `CompletionProfile` sauber erfüllt wird.
 
 ---
@@ -84,7 +84,7 @@ Obwohl beide Ansätze historisch aus der `@earendil-works`-Ökosphäre hervorgeg
   - **Vorteil**: Präsenz ist ein erstklassiger, abfragbarer Zustand im Space und kann clusterweit abgefragt werden.
   - **Nachteil / Realistische Grenze:** Da ein Space transaktionale Entries bei Commit veröffentlicht, ist er für diskrete Nachrichten optimiert, nicht für unkommittiertes Token-Streaming im Sub-Millisekunden-Takt.
   - ⚠️ **Disconnect-Verhalten bei mobilen Clients:** Bricht ein mobiler Client während eines offenen `take`-Aufrufs die Verbindung ab, bleibt die Aufgabe für die volle Dauer der Transaktions-Lease (z.B. 30–60 s) blockiert, bevor andere Worker sie übernehmen können.
-  - ✅ **Exakte Lease-Ablaufverfolgung ([`chat-core.ts`](file:///media/data/programming/phi-spaces/help-site/examples/shared/chat-core.ts)):** `#presenceExpires` speichert die realen Rückgabewerte von `space.write` und `space.renew`, sodass Heartbeat-Verlängerungen im Snapshot exakt sichtbar sind.
+  - ✅ **Exakte Lease-Ablaufverfolgung ([`chat-core.ts`](../examples/shared/chat-core.ts)):** `#presenceExpires` speichert die realen Rückgabewerte von `space.write` und `space.renew`, sodass Heartbeat-Verlängerungen im Snapshot exakt sichtbar sind.
 
 ---
 
@@ -96,7 +96,7 @@ Obwohl beide Ansätze historisch aus der `@earendil-works`-Ökosphäre hervorgeg
   - Ein Space verwaltet **beliebig viele unabhängige Leases und Waiter-Deadlines gleichzeitig**.
   - Für eine geplante Aufgabe wird ein `ScheduledJob`-Entry (`FOREVER`) zusammen mit einem `TimerLock`-Entry (`lease = delayMs`) geschrieben.
   - Läuft `TimerLock` ab, räumt der Reaper den Lock ab und der Job wird transaktional in einen `ChatTask` überführt.
-  - ✅ **Mehrfach-Alarm-Abarbeitung ([`stage-runner.ts`](file:///media/data/programming/phi-spaces/help-site/server/space-chat/stage-runner.ts)):**  
+  - ✅ **Mehrfach-Alarm-Abarbeitung ([`stage-runner.ts`](../server/space-chat/stage-runner.ts)):**  
     `tickAlarms()` arbeitet alle gleichzeitig fälligen Alarme in einer Schleife (`for (let i = 0; i < triggered.length; i++) await processNextChatTask()`) vollständig ab.
 
 ---
@@ -117,9 +117,9 @@ Obwohl beide Ansätze historisch aus der `@earendil-works`-Ökosphäre hervorgeg
 - **Earendil-Vorlage**:
   - Verlässt sich vollständig auf die proprietäre Cloudflare-Speicherarchitektur. Der Entwickler hat keine Kontrolle über Replikations-Topologien, Split-Brain-Fencing oder gezielte Standby-Promotionen.
 - **`phi-spaces`-Umsetzung**:
-  - Bietet eine vollwertige, selbstgehostete Hochverfügbarkeits-Architektur über **Primary/Sync Replikation ([`src/primary-sync.ts`](file:///media/data/programming/phi-spaces/src/primary-sync.ts))** und **Replica-Control ([`src/replica-control.ts`](file:///media/data/programming/phi-spaces/src/replica-control.ts))**:
+  - Bietet eine vollwertige, selbstgehostete Hochverfügbarkeits-Architektur über **Primary/Sync Replikation ([`src/primary-sync.ts`](../../spaces/src/primary-sync.ts))** und **Replica-Control ([`src/replica-control.ts`](../../spaces/src/replica-control.ts))**:
     - **Deterministisches Journal:** Synchrone Replikation von Commit-Intents an Standby-Replikate vor Beantwortung des Clients.
-    - **Kryptografisches Fencing & Boot Guards:** `SimulatorFencing`, Netcup-SCP-Fencing ([`src/netcup-fencing.ts`](file:///media/data/programming/phi-spaces/src/netcup-fencing.ts)) und Container-Fencing ([`src/container-fencing.ts`](file:///media/data/programming/phi-spaces/src/container-fencing.ts)) stellen sicher, dass ein isolierter Primärknoten keine unberechtigten Schreibvorgänge ausführt.
+    - **Kryptografisches Fencing & Boot Guards:** `SimulatorFencing`, Netcup-SCP-Fencing ([`src/netcup-fencing.ts`](../../spaces/src/netcup-fencing.ts)) und Container-Fencing ([`src/container-fencing.ts`](../../spaces/src/container-fencing.ts)) stellen sicher, dass ein isolierter Primärknoten keine unberechtigten Schreibvorgänge ausführt.
     - **Kontrollierte Promotion & Degradation:** `promoteStandby` und `degradeToSingle` ermöglichen Failover ohne Datenverlust mit Epochen-Inkrementierung.
 
 ---

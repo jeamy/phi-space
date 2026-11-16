@@ -50,4 +50,4 @@ Davon prüfen 7 neue Tests das Sieb und 8 neue Tests den lokalen Cache. Die Sieb
 unabhängige Probedivision; Lease-/TTL-Tests injizieren eine Uhr, statt den Fake-Timer-Stub zu verwenden.
 Der Prozess-Crash-Test benötigt die Erlaubnis, einen lokalen Node-Unterprozess zu starten und zu beenden.
 Unter einer Sandbox mit gesperrtem child_process ist dafür eine gezielte Freigabe erforderlich.
-[Beispieldokumentation](../../../docs/examples.en.md).
+[Beispieldokumentation](../../../../docs/examples.en.md).

@@ -1,6 +1,6 @@
 # Space Chat
 
-As of 2026-10-07. Implementation: [chat.ts](../../agent/examples/chat.ts).
+As of 2026-10-07. Implementation: [chat.ts](../../spaces/agent/examples/chat.ts).
 
 Three conversations alice → bob → carol communicate through Msg entries
 `{room, from, to, n, text}`. The host creates one notify template per recipient by room and to.
@@ -17,13 +17,13 @@ answers until the stop. Notify is best effort, not a general exactly-once chat g
 ```bash
 npm run example:chat
 # Real model: requires approval under AGENTS.md
-node --experimental-strip-types agent/examples/chat.ts --live "Thema"
+node --experimental-strip-types spaces/agent/examples/chat.ts --live "Thema"
 ```
 
 The faux dispatcher ignores system messages when checking the last tool result.
 After the tool call it ends the turn. These are conversations in one process, not
 distributed hosts. MemoryStorage loses the history when the process ends.
 
-[agent/test/examples/recovery.test.ts](../../agent/test/examples/recovery.test.ts) runs runChat itself and checks the ring 0–3.
+[agent/test/examples/recovery.test.ts](../../spaces/agent/test/examples/recovery.test.ts) runs runChat itself and checks the ring 0–3.
 The older agent/test/examples/chat.test.ts checks its own scripts with the real Space. Live-model, long-running and
 multi-host evidence is missing. [Back to the overview](README.en.md).

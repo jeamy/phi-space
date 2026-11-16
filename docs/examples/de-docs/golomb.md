@@ -1,6 +1,6 @@
 # Golomb-Lineal: lokale kombinatorische Suche
 
-Stand: 2026-10-07. Implementierung: [golomb.ts](../../../examples/golomb.ts).
+Stand: 2026-10-07. Implementierung: [golomb.ts](../../../spaces/examples/golomb.ts).
 Ein Prozess mit mehreren asynchronen Worker-Schleifen und einem Space im SQLite-Store (`<dir>/space.sqlite`). Keine Federation und keine
 Parallelisierung auf mehrere CPU-Kerne.
 
@@ -72,15 +72,15 @@ Andere Grenzen besitzen eine andere runId. Alte, unmarkierte Entries werden nich
 
 ```bash
 npm run example:golomb -- 4 --workers 2
-node --experimental-strip-types examples/golomb.ts 4 --workers 2 --dir /tmp/golomb-state
-node --experimental-strip-types examples/golomb.ts 4 --workers 2 --dir /tmp/golomb-state
+node --experimental-strip-types spaces/examples/golomb.ts 4 --workers 2 --dir /tmp/golomb-state
+node --experimental-strip-types spaces/examples/golomb.ts 4 --workers 2 --dir /tmp/golomb-state
 ```
 
 Ordnung 2–25, workers 1–64, positive ganzzahlige Länge. Hohe Ordnungen sind keine Laufzeitzusage.
 Die Suche wächst stark; keine Produktionsbenchmarks vorhanden. Snapshot-Listen sind auf 1000 Entries begrenzt;
 für lange Läufe fehlt eine allgemeine Pagination. BitSet-Clones und rekursive Suche begrenzen die Leistung.
 
-[recovery.test.ts](../../../test/examples/recovery.test.ts) führt eine echte Ordnung-4-Suche aus,
+[recovery.test.ts](../../../spaces/test/examples/recovery.test.ts) führt eine echte Ordnung-4-Suche aus,
 validiert das Ergebnis, öffnet den SQLite-Store erneut und prüft Task-Rollback, alte Checkpoints und geänderte Konfiguration.
 Die ältere golomb.test.ts prüft überwiegend Hilfsfunktionen und manuell erzeugte Entries; ihre Testnamen allein
 sind kein Suchnachweis. Keine Mehrprozess-/GPU-/Federation- oder Skalierungsabnahme.

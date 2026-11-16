@@ -2,8 +2,9 @@
 
 Status (2026-11-16): phase 1 done (`phi-space-host`, `mmo-space`, `codemode-space`, `help-space`, no `--profile` in
 `phi-space-server`; images checked locally, not deployed), phase 2 done (the dashboard's apps in `dashboard.apps.json`,
-the repository-wide checks in `checks/` with `checks/layering.mjs`), phase 3 committed locally (the package in
-`spaces/`, one Cargo workspace per project; record below), not pushed or deployed. Phase 4 is next. Review incorporated
+the repository-wide checks in `checks/` with `checks/layering.mjs`), phases 3 and 4 committed locally (the package in
+`spaces/`, one Cargo workspace per project, the references after them; records below), not pushed or deployed.
+Phase 5 waits for the user's approval. Review incorporated
 on 2026-11-15, gaps on 2026-11-16 (below). The open questions were decided on 2026-11-16.
 
 ## Goal
@@ -230,7 +231,7 @@ services. Check the running containers' image IDs, commands, health and mounts a
 affected service still running an old image before accepting the rollout.
 
 Checkouts on the hosts (from phase 3): `git pull` moves the tracked files but leaves the ignored ones at the old
-places. On each host that runs something from its checkout (the dashboard on big through `scripts/dashboard.sh`, any
+places. On each host that runs something from its checkout (the dashboard on big, through `scripts/dashboard.sh` or its systemd unit, any
 `npm --prefix <app>` command) before starting it again:
 
 - move the ignored `node_modules/` and `dist/` of the root into `spaces/` and `agent/node_modules/` to
@@ -244,7 +245,10 @@ places. On each host that runs something from its checkout (the dashboard on big
 - move a local `test/testbed/testbed.env` to `spaces/test/testbed/testbed.env` (the root `.gitignore` names the new
   place; at the old one it is no longer ignored);
 - restart the dashboard with `npm run dashboard:start` from the root (it reads the root `.env` and
-  `dashboard.apps.json` as before).
+  `dashboard.apps.json` as before); where it runs as the systemd user unit of docs/dashboard.en.md
+  (`phi-spaces-dashboard.service`, `WorkingDirectory` the checkout), its `ExecStart` names `src/dashboard.ts` and
+  must name `spaces/src/dashboard.ts` before the restart (`systemctl --user daemon-reload`, then `restart`), or the
+  unit fails after the `git pull`. Record the unit's current text in the inventory first.
 
 The images are not affected by the leftovers: they install their dependencies themselves (`npm --prefix spaces ci`,
 the app's `npm ci`) and copy the core crates and the app's workspace with the checkout's layout.
@@ -345,3 +349,35 @@ The mobile consumer is not affected by phase 1: `pi-termux-mobile` starts `phi-s
   reports and stops from the root with the root `.env`. The compose dev mounts resolve to `spaces/src`. `npm run
   bundle` from the root writes the mobile runtime; `pi-termux-mobile` finds the package in `spaces/` (and an old
   checkout at its top) in `scripts/prepare-runtime.py` and `scripts/remote-demo/run.sh`.
+- Images, built from a clean worktree of the phase 3 commit under throwaway tags (deleted afterwards): the
+  `production-rust` (with `production`) and `dev-test` targets of all three applications, the help site's `nano` and
+  the local federation image (context `spaces/`). In each production image `phi-spaces` (331 exports) and the agent
+  package's `live-models.ts` load from the application's directory through `node_modules/phi-spaces -> ../../spaces`,
+  and every Rust binary finds its libraries. The test images, run as their compose services (user node, no
+  capabilities, without the `.env`): codemode-chat 221 of 221, help-site 68 of 68, spaces-mmo 416 of 416 (the
+  TypeScript space; the arena tests pass there as in phase 1). The applications' `docker:rust:up` stacks were not
+  started: their scripts tag the images the running local world uses. `npm run testbed:federation -- both` from the
+  root (the image built from `spaces/`): every pairing of TypeScript and Rust control host and Member answered alike,
+  the admin commands too.
+
+## Phase 4 record (2026-11-16)
+
+- Markdown links: the 393 relative links the move broke point at the moved files again, each mapped from its
+  target before the move to the target's new place (in `docs/`, `de-docs/`, the applications and `spaces/`). Of the
+  161 links that were broken before the move none was touched, and none is new. The help site's two comparison
+  documents linked with absolute `file:///` paths of this machine into the old places; they link relatively now.
+- The local dependency reads `file:../spaces` in AGENTS.md, docs/api.en.md, the MMO docs, the help site's plan and
+  corpus sources and Codemode's help articles (with `../spaces/src` and `spaces/agent/`). The record of the earlier
+  package step (spaces-mmo/docs/paket.en.md) stays as it was.
+- Commands run from the root name the files at their new places: the example commands in docs/examples*.en.md,
+  the README's live examples, the dashboard's `scripts/dashboard.sh` and its systemd unit (docs/dashboard.en.md; on
+  big, phase 5 changes the installed unit), the open index plan of spaces-mmo (`spaces/rust/phi-*`,
+  `spaces-mmo/rust/mmo-*`). Package paths in prose (`src/core.ts`, `agent/`) stay paths from `spaces/`, as AGENTS.md
+  says; the READMEs and the help corpus's examples article say so once. The records of runs before the move (the
+  power-loss test, the R3 and R8 records, the U0 inventory) keep their paths.
+- `npx tsc -p help-site` from the root found no TypeScript after the move: the help site has a `typecheck` script
+  like the other applications, and AGENTS.md names it. The netbird overlay script linked a fixed path to the root's
+  `node_modules`; it takes the package's, next to itself.
+- After phase 4: `npm test` 663 of 669 (0 failed, 6 skipped), `help-site` with `help-space` 67 of 68 (1 skipped),
+  `codemode-chat` with `codemode-space` 221 of 221, the help corpus rebuilt (the changed sources only), the branding
+  check passed; `spaces/examples/golomb.ts` runs from the root.

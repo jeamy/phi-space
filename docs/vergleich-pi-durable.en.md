@@ -91,7 +91,7 @@ The promise presupposes that the memo survives the failure; see section 5.3. [L5
 
 The diagram shows the connection in the same process. Since the upgrade, Codemode chat and spaces-mmo
 additionally have a separate agent process: the application talks over Node IPC to
-[`durable-worker.ts`](../agent/src/durable-worker.ts), and the harness there does not know the Space.
+[`durable-worker.ts`](../spaces/agent/src/durable-worker.ts), and the harness there does not know the Space.
 
 ## 3. What they share
 
@@ -200,14 +200,14 @@ flush promises. Local SIGKILL tests also do not demonstrate a real power loss.
 Replication, backup and restoration are separate questions. [P3, L2, L6]
 
 **Consequence for the combination:** The table compares the defaults, not the durability of an interplay.
-The agent stores, opened more weakly at first, have since been hardened: [`agent/src/storage.ts`](../agent/src/storage.ts) in the phi-spaces agent package
+The agent stores, opened more weakly at first, have since been hardened: [`agent/src/storage.ts`](../spaces/agent/src/storage.ts) in the phi-spaces agent package
 opens the pi-durable stores `SqliteStorage` and `JsonlStorage` with stricter settings; it changes neither
 pi-durable nor the phi-spaces store. The worker and the mobile runtime use SQLite
 `synchronous=FULL`, checked before the schema is opened. Research runs use JSONL with `{ fsync: true }`
 plus an additional flush of the commit marker and the directory entries. The upstream option alone would
 not be sufficient for that. The research manifest and atomic exports are likewise synchronized.
 
-The [regressions](../agent/test/storage.test.ts) check sync policy, marker order, a simplified
+The [regressions](../spaces/agent/test/storage.test.ts) check sync policy, marker order, a simplified
 file-cache loss model and refused acknowledgement on flush errors.
 A [VM experiment](agenten-stromausfalltest.en.md#result-of-30102026) tested the agent store in both profiles:
 "weak" means the pi-durable stores with the pi-durable defaults, "strong" the same stores opened via `agent/src/storage.ts`.
@@ -226,7 +226,7 @@ continue working. The question of the experiment is whether every acknowledged c
 | phi-spaces store, strong | `openSqliteHost(pfad)`: default `synchronous=FULL` | As weak, but the WAL is flushed before the joint acknowledgement | Before every acknowledgement, one flush for all commits of the group |
 
 A flush is `fsync`, with SQLite depending on the Node build also `fdatasync` (VM with the official Node 22.23.1: `fsync`, development machine: `fdatasync`); it ends only when the drive reports the data
-as secured. Without a flush it lies only in the kernel's page cache after `write`. The sequences are [recorded with `strace`](../test/evidence/power-loss-2026-10-30/syscalls.en.md).
+as secured. Without a flush it lies only in the kernel's page cache after `write`. The sequences are [recorded with `strace`](../spaces/test/evidence/power-loss-2026-10-30/syscalls.en.md).
 The per-commit recording ran on the development machine (SQLite 3.51.2), the one at hard power-off in the VM. It shows the order of the syscalls, not the drive.
 With 8 writers the phi-spaces store had 81 acknowledgements on 32 WAL flushes, pi-durable SQLite 47 on 50.
 
@@ -262,7 +262,7 @@ in all 4 runs with loss a `pwrite`; the state there fell back to the last checkp
 Whether `NORMAL` loses data at power-off thus depends only on where the cut lies. Durability costs a lot; the rates are in the table below.
 
 **Comparison with the phi-spaces store:** The same experiment ran on the same VM and disk with an
-[identically built probe](../agent/test/power-loss-own-probe.ts) against the phi-spaces store: once the same document, once
+[identically built probe](../spaces/agent/test/power-loss-own-probe.ts) against the phi-spaces store: once the same document, once
 real `PhiSpaces` writes. For the phi-spaces store, strong stands for `synchronous=FULL`, weak for `NORMAL`.
 
 | Store | Replay: cuts with loss | Hard power-off: runs with loss |
@@ -281,7 +281,7 @@ a series of individual entries, not conversations, tasks or document deltas, and
 For those cases the experiment says nothing. In the experiment, the difference of the defaults followed from the setting: phi-spaces takes `FULL` by itself,
 pi-durable `NORMAL`. In the phi-spaces agent package, `agent/src/storage.ts` replaces this `NORMAL` with `FULL`.
 
-Median (smallest to largest value) of commits per second on the same disk: [5 runs of 20 s each](../agent/test/power-loss-rate.mjs) in mixed
+Median (smallest to largest value) of commits per second on the same disk: [5 runs of 20 s each](../spaces/agent/test/power-loss-rate.mjs) in mixed
 order, fresh ext4, no run discarded, hard-disk RAID, host load value 4.3 to 10.6 due to unrelated load:
 
 | Store | strong, 1 writer | strong, 8 writers | weak, 1 | weak, 8 |
@@ -487,7 +487,7 @@ An agent needs a different state than the application it works for.
 The mobile runtime keeps the session catalog together with the conversations in the agent store.
 That avoids an independently written JSON side file. The Space tools, by contrast, use
 a separate host; `withAgentEventSink` explicitly bridges the context boundary.
-See [agent connection](../agent/src/agent.ts) and
+See [agent connection](../spaces/agent/src/agent.ts) and
 [upgrade including the mobile runtime](upgrade-pi-1.4.0.en.md).
 
 **Important:** An application does not become durably agentic merely by using pi-ai or
@@ -498,7 +498,7 @@ Only the pi-durable harness takes on durable agent execution.
 
 #### Step 1: Resume research runs as a whole
 
-The [research examples](../agent/examples/research-support.ts) already have persistent agents,
+The [research examples](../spaces/agent/examples/research-support.ts) already have persistent agents,
 but reject an existing run directory at the starting point. Individual persistent conversations
 are not yet a safe resumption of the entire team.
 
@@ -511,9 +511,9 @@ rejected. A fresh run must not silently adopt foreign or old directories.
 Acceptance: interruption and reopening, no duplicate teams or tasks, renewed output of a
 finished report, rejected configuration conflicts and continued errors on incomplete phases.
 
-**Integrated:** [ResearchRun](../agent/examples/research-run.ts) implements explicit `--resume`,
+**Integrated:** [ResearchRun](../spaces/agent/examples/research-run.ts) implements explicit `--resume`,
 the shared launcher owner lock, atomically stored team IDs and deduplicated phase handoffs.
-The [regressions](../agent/test/examples/recovery.test.ts) also check SIGKILL during a running
+The [regressions](../spaces/agent/test/examples/recovery.test.ts) also check SIGKILL during a running
 analysis: the same team assignment before and after resumption, the phase only once, no remaining task, one report. Limits with expired Space claims and CLI examples are in [examples.en.md](examples.en.md).
 
 #### Step 2: Longer agent sequences in Codemode chat
@@ -602,7 +602,7 @@ Offline state of 31.10.2026 (mobile runtime of 30.10.2026):
 
 `test-env.ts` of both projects switches off the agent paths for the general suites. `npm run test:durable` of each project runs the same `tests/*.test.ts`
 with the path on, always with faux models ([codemode](../codemode-chat/tests/test-env-durable.ts), [spaces-mmo](../spaces-mmo/tests/test-env-durable.ts)):
-the project's own fake answers inside the agent worker ([durable-fake-models.ts](../agent/test/durable-fake-models.ts)), so its scenarios pass through the real worker, conversation
+the project's own fake answers inside the agent worker ([durable-fake-models.ts](../spaces/agent/test/durable-fake-models.ts)), so its scenarios pass through the real worker, conversation
 and storage. Fake teams reach the Space and its gates over a connection of the worker, usage passes through exactly, and a stop reaches them as the worker's abort signal.
 
 | Matrix | Tests | Answers through the worker | Deviations |
@@ -650,13 +650,13 @@ None of this is an unrestricted production approval.
 
 ### Local phi-spaces sources
 
-- **L1:** [Core semantics](../src/core.ts), [Space document and parts](../src/doc.ts), [public API](api.en.md).
-- **L2:** [Host](../src/store/host.ts), [store types](../src/store/types.ts), [document definitions](../src/store/documents.ts), [SQLite](../src/store/sqlite.ts), [writer thread](../src/store/sqlite-writer.ts), [DiskMap](../src/store/disk-map.ts).
-- **L3:** [Standalone service](../src/standalone.ts), [service](../src/service.ts), [remote client](../src/remote.ts), [pi-server adapter](../src/pi-server.ts), [standalone regressions](../test/test-standalone.test.ts).
-- **L4:** [Claims](../src/claims.ts), [local client](../src/client.ts), [mailbox](../src/mailbox.ts), [changes](../src/stream.ts).
-- **L5:** [Agent connection](../agent/src/agent.ts), [agent package](../agent/package.json), [agent lockfile](../agent/package-lock.json), [integration regressions](../agent/test/agent.test.ts).
+- **L1:** [Core semantics](../spaces/src/core.ts), [Space document and parts](../spaces/src/doc.ts), [public API](api.en.md).
+- **L2:** [Host](../spaces/src/store/host.ts), [store types](../spaces/src/store/types.ts), [document definitions](../spaces/src/store/documents.ts), [SQLite](../spaces/src/store/sqlite.ts), [writer thread](../spaces/src/store/sqlite-writer.ts), [DiskMap](../spaces/src/store/disk-map.ts).
+- **L3:** [Standalone service](../spaces/src/standalone.ts), [service](../spaces/src/service.ts), [remote client](../spaces/src/remote.ts), [pi-server adapter](../src/pi-server.ts), [standalone regressions](../spaces/test/test-standalone.test.ts).
+- **L4:** [Claims](../spaces/src/claims.ts), [local client](../spaces/src/client.ts), [mailbox](../spaces/src/mailbox.ts), [changes](../spaces/src/stream.ts).
+- **L5:** [Agent connection](../spaces/agent/src/agent.ts), [agent package](../spaces/agent/package.json), [agent lockfile](../spaces/agent/package-lock.json), [integration regressions](../spaces/agent/test/agent.test.ts).
 - **L6:** [Conversion including later U2/U6/U4 states](umstellung-ohne-pi-durable.en.md), [inventory and decision D6](umstellung-u0-bestand.en.md), [Rust port plan](rust-portierung.en.md).
-- **L7:** [Federation runtime](../src/runtime.ts), [gate](../src/gate.ts), [auth](../src/auth.ts), [replication control](../src/replica-control.ts), [federation plan](federation-plan-v3.en.md), [phase acceptances](implementierungsstand.en.md).
+- **L7:** [Federation runtime](../spaces/src/runtime.ts), [gate](../spaces/src/gate.ts), [auth](../spaces/src/auth.ts), [replication control](../spaces/src/replica-control.ts), [federation plan](federation-plan-v3.en.md), [phase acceptances](implementierungsstand.en.md).
 
 **Limit of the evidence:** The original upstream research was source-based; the local
 1.0.3 holdings of that time were no compatibility evidence for 1.4.0. Subsequently the release packages were updated to 1.4.0

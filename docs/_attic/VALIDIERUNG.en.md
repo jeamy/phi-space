@@ -78,4 +78,4 @@ and arXiv network requests were not part of this acceptance. Reference values an
 [arXiv API documentation](https://info.arxiv.org/help/api/user-manual.html).
 
 No measured performance/scaling, coverage, multi-host or scientific quality acceptance.
-Details: [example contracts](../examples.en.md), [tests](../../test/examples/README.en.md).
+Details: [example contracts](../examples.en.md), [tests](../../spaces/test/examples/README.en.md).

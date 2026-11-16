@@ -145,7 +145,7 @@ journaled federation operations and membership with core admission.
 The new APIs are server-side building blocks with a real member RPC adapter;
 they do not automatically start a virtual public Space address.
 Check numbers and built artifacts are in
-[checks.json](../test/evidence/ap2-2026-10-11/checks.json).
+[checks.json](../spaces/test/evidence/ap2-2026-10-11/checks.json).
 
 AP 2.6/2.7 are extended by completion budgets, audited local admin building blocks,
 restore reconciliation and the protected directory. The member load test
@@ -282,7 +282,7 @@ history. Phase 3 has no overall release yet.
 
 The final check of this building block consists of 505 green repository tests,
 24 mobile tests and eleven cases on the built isolated server artifact.
-[Evidence](../test/evidence/ap3-entry-2026-10-15/README.md); no production
+[Evidence](../spaces/test/evidence/ap3-entry-2026-10-15/README.md); no production
 replication was activated.
 
 
@@ -298,7 +298,7 @@ production rights/boot/erasure integration remain open.
 
 Current snapshot evidence: 517 repository tests and 24 mobile tests green;
 23 built server cases passed.
-[Artifact and source binding](../test/evidence/ap3-paged-2026-10-15/README.md).
+[Artifact and source binding](../spaces/test/evidence/ap3-paged-2026-10-15/README.md).
 
 
 ## Continuous entry stream (2026-10-15)
@@ -315,7 +315,7 @@ production rights/boot/erasure integration remain open.
 Current stream evidence: 530 repository tests and 24 mobile tests green;
 36 built server cases passed. Data and cursors survive the verified
 commit losses together; TCP resumption and competing workers are verified.
-[Artifact and source binding](../test/evidence/ap3-stream-2026-10-15/README.md).
+[Artifact and source binding](../spaces/test/evidence/ap3-stream-2026-10-15/README.md).
 Generation/receipt maintenance, real NetBird partition and production integration remain open.
 
 
@@ -340,7 +340,7 @@ and the rejection of simulator evidence. Acceptance remains blocked by F1/gate 2
 
 Addendum 2026-10-16: The netcup fencing adapter with mTLS service on vpsc and a signed replica transport
 are implemented. A fixture run over real hosts passed, with nanoi as primary and 100 as standby
-([evidence](../test/evidence/phase3-sync-2026-10-16/README.en.md)). The run comprised:
+([evidence](../spaces/test/evidence/phase3-sync-2026-10-16/README.en.md)). The run comprised:
 
 - fork without ACK;
 - netcup power-off;
@@ -356,7 +356,7 @@ Addendum later on 2026-10-16:
   are implemented.
 - primary/sync Spaces run with their own store in the federation daemon, including quarantine start.
 - A real daemon run on nanoi and 100 passed
-  ([evidence](../test/evidence/phase3-daemon-sync-2026-10-16/README.en.md)): fork without ACK, netcup fencing,
+  ([evidence](../spaces/test/evidence/phase3-daemon-sync-2026-10-16/README.en.md)): fork without ACK, netcup fencing,
   promote, degrade, quarantine, setStandby, writes in both directions, identical states.
 - Open: router takeover on real hosts (host-a needs the new bundle) and 3.8.
 
@@ -364,7 +364,7 @@ Addendum 2026-10-17 (3.8):
 
 - The control store of host-a was moved to primary/sync by bootstrap.
 - It went through setStandby → degradeToSingle twice with the standby `control-standby-nano` on nanoi and
-  netcup fencing and ends `single` again ([evidence](../test/evidence/control-sync-hosta-2026-10-17/README.en.md)).
+  netcup fencing and ends `single` again ([evidence](../spaces/test/evidence/control-sync-hosta-2026-10-17/README.en.md)).
 - A bug was found and fixed in the process: The daemon did not exit after SIGTERM when the main store was running in
   sync operation.
 - Open: promotion of the control replica and step 6.
@@ -374,7 +374,7 @@ Addendum 2026-10-17 (real router path):
 - A native root on host-a admitted a replicated member on nano-test and standby-100 by `addMember`
   and routed writes to it.
 - After promotion with netcup fencing and degrade to 100 it took over the `ReplicaConfigNotice` and continued
-  routing; afterwards everything was reset ([evidence](../test/evidence/root-hosta-2026-10-17/README.en.md)).
+  routing; afterwards everything was reset ([evidence](../spaces/test/evidence/root-hosta-2026-10-17/README.en.md)).
 - Two overlooked places from 3.8 were found and fixed: the root's journal guard and the
   renewal of the retained router lease still compared the epoch of the Space document.
 - For this the test bed daemon has the lock-free mode `enroll-key` for additional keys of a running host.
@@ -386,7 +386,7 @@ Addendum 2026-10-17 (step 6):
 - The router lease renews itself across a transition with the same primary; the root distributes the `EpochNotice`.
 - Real run on host-a with root, member and policy: `setStandby`, `degrade` with netcup fencing, root restart
   after lease expiry, routed writes afterwards; everything reset
-  ([evidence](../test/evidence/step6-hosta-2026-10-17/README.en.md)).
+  ([evidence](../spaces/test/evidence/step6-hosta-2026-10-17/README.en.md)).
 
 Addendum 2026-10-17 (promotion of the control replica):
 
@@ -394,7 +394,7 @@ Addendum 2026-10-17 (promotion of the control replica):
   the same authority (`ControlHostChange`, signed by the recovery admin, recorded by the register only after the
   promotion, taken over by the hosts at start) are implemented.
 - Real run on big in both directions: host-a → host-c → host-a, the members followed each time
-  ([evidence](../test/evidence/control-promotion-2026-10-17/README.en.md)).
+  ([evidence](../spaces/test/evidence/control-promotion-2026-10-17/README.en.md)).
 - Fixed in the process: permissions of the sibling Spaces for the `setStandby` target, the fencing target when
   resuming a promotion and a blocklist for source addresses in the fencing service.
 
@@ -404,7 +404,7 @@ Addendum 2026-10-17 (router change, 3.8 complete):
   router epoch; the supervisor issues no lease to another router while the previous one is alive.
 - Hosts follow a control change during operation (check every 15 seconds, restart via code 75).
 - Real run with root and replicated member in both directions
-  ([evidence](../test/evidence/root-promotion-2026-10-17/README.en.md)); host-a reset afterwards.
+  ([evidence](../spaces/test/evidence/root-promotion-2026-10-17/README.en.md)); host-a reset afterwards.
 
 Addendum 2026-10-17 (lww/set integrated):
 
@@ -414,11 +414,11 @@ Addendum 2026-10-17 (lww/set integrated):
 - The erasure of a principal is a replicated change with redaction; the existing offline compaction physically
   removes the old revisions.
 - Real run with nano-test and standby-100: partition, convergence, distributed erasure
-  ([evidence](../test/evidence/merge-run-2026-10-17/README.en.md)).
+  ([evidence](../spaces/test/evidence/merge-run-2026-10-17/README.en.md)).
 - Compaction (step 4): stable stream positions, version vectors of the members, floor per origin;
   only stable, invisible events are removed ([rules](_attic/abnahme/ap3-replikation.en.md)). Periodically in the daemon via
   `entryReplication.compactEveryMs`. Real run with nano-test and standby-100
-  ([evidence](../test/evidence/compaction-run-2026-10-17/README.en.md)).
+  ([evidence](../spaces/test/evidence/compaction-run-2026-10-17/README.en.md)).
 
 Addendum 2026-10-17 (sealed commits): A sealed, unconfirmed primary/sync commit is publicly
 `CommitSealed`; the host resolves it with the standby and serves the Space again without restart
@@ -426,7 +426,7 @@ Addendum 2026-10-17 (sealed commits): A sealed, unconfirmed primary/sync commit 
 epoch with evidence by negative claim with `NotCommitted`.
 Overall operation 3.7 ran for real: ten-minute partition, process aborts, failover with `NotCommitted` and return path
 over the production service, every decided write exactly once
-([evidence](../test/evidence/phase3-partition-2026-10-17/README.en.md)). Found and fixed: unbounded waiting of the
+([evidence](../spaces/test/evidence/phase3-partition-2026-10-17/README.en.md)). Found and fixed: unbounded waiting of the
 primary for the standby (`requestTimeoutMs`).
 `degradeToSingle` also works without a fencing adapter: Then only the standby permission of this Space is revoked,
 the host stays active ([procedure](_attic/abnahme/ap3-replica-control.en.md)).
@@ -459,7 +459,7 @@ Steps B2-B5 of the [operations extension](betrieb-und-mobile-steuerung.en.md#8-i
 Evidence: `test/test-run-gate.test.ts`, `test/test-run-member.test.ts`, `test/test-run-recovery.test.ts` (31 cases, JSONL and
 SQLite, commit errors, controller restart, lost ACKs, TCP over the composed gate) and a run over
 the real NetBird overlay between operator host and a container on big
-([evidence](../test/evidence/run-gate-overlay-2026-10-15/README.md); layer A there as fixture pin).
+([evidence](../spaces/test/evidence/run-gate-overlay-2026-10-15/README.md); layer A there as fixture pin).
 
 Limits: Gate changes are charged against the budgets at a fixed 1 KiB, the history holds 32 revisions per
 run, `stopped` gates are not yet moved into run history (at most 256 gates per Space). A
@@ -516,7 +516,7 @@ and sends admin commands over the paired control connection. The command ID is s
 profile before sending; retries, timeouts and restarts reuse it, and an unclear outcome is displayed as
 "Ausgang wird geprüft" (outcome being checked). New read-only admin commands on the coordinator: `listRuns`, `runStatus`,
 `listWorkers` (desired assignments and last reported state per host). Evidence: mobile test of the bridge and
-device acceptance on the test phone against a coordinator in production composition over WLAN, including coordinator crash and resending of the same ID, and over NetBird with peer identity from the management API ([evidence](../test/evidence/b9-device-2026-10-16/README.md)); a coordinator on big is still outstanding.
+device acceptance on the test phone against a coordinator in production composition over WLAN, including coordinator crash and resending of the same ID, and over NetBird with peer identity from the management API ([evidence](../spaces/test/evidence/b9-device-2026-10-16/README.md)); a coordinator on big is still outstanding.
 
 
 ## Alerting, audit and plan preview (2026-10-16)

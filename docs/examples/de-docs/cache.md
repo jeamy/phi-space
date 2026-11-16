@@ -1,7 +1,7 @@
 # Lokaler atomarer Cache
 
-Stand: 2026-10-07. Implementierung: [cache.ts](../../../examples/cache.ts).
-Tests: [cache.test.ts](../../../test/examples/cache.test.ts). Kein Modell oder Netzwerk erforderlich.
+Stand: 2026-10-07. Implementierung: [cache.ts](../../../spaces/examples/cache.ts).
+Tests: [cache.test.ts](../../../spaces/test/examples/cache.test.ts). Kein Modell oder Netzwerk erforderlich.
 
 ```bash
 npm run example:cache

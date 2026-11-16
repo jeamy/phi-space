@@ -95,7 +95,7 @@ a web process with its own WebSocket gateway, and the Space processes behind it.
 directly to a Space; it only sends commands and receives views.
 
 **Is the Space implementation separate?** Yes, the dependency goes in one direction only: `src/` knows neither
-help-site nor codemode-chat nor spaces-mmo. spaces-mmo depends on the package as `"phi-spaces": "file:.."` and imports
+help-site nor codemode-chat nor spaces-mmo. spaces-mmo depends on the package as `"phi-spaces": "file:../spaces"` and imports
 `phi-spaces` ([paket.en.md](paket.en.md)).
 
 **Evennia as a basis?** Evennia's components can be mapped almost one to one onto entries and workers. The

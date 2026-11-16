@@ -237,7 +237,7 @@ store commit. Its policy step therefore follows in the first commit after it, be
   lacks lease file and key on the new host, and it rejects a change of the router epoch on
   reopening.
 - **Step 6** is implemented, checked locally (`test/test-configured-root.test.ts`) and actually run on host-a
-  ([evidence](../../../test/evidence/step6-hosta-2026-10-17/README.en.md)). Whether the mark at the member comes from the `EpochNotice`
+  ([evidence](../../../spaces/test/evidence/step6-hosta-2026-10-17/README.en.md)). Whether the mark at the member comes from the `EpochNotice`
   or from the first delegation of the new epoch cannot be distinguished here.
 - **Coupling:** With a standby, every control write needs its ACK. If the standby fails, enrollments,
   admin commands and routing changes stand until `degradeToSingle`.
@@ -297,9 +297,9 @@ via `Restart=on-failure`. The restart takes the same start path with the install
   control transition and router epoch.
 - The new router needs its own router and host keys, enrolled for its peer.
 
-Real run with root on a control promotion in both directions: [evidence](../../../test/evidence/root-promotion-2026-10-17/README.en.md).
+Real run with root on a control promotion in both directions: [evidence](../../../spaces/test/evidence/root-promotion-2026-10-17/README.en.md).
 
-Real run in both directions on big: [evidence](../../../test/evidence/control-promotion-2026-10-17/README.en.md).
+Real run in both directions on big: [evidence](../../../spaces/test/evidence/control-promotion-2026-10-17/README.en.md).
 
 **Measurement on the copy of host-a:** 114 control commits in six days, revisions of 1–3 KB. The journal budget
 of 64 MiB thus roughly suffices for years.
@@ -426,11 +426,11 @@ factories that the daemon passes.
   `set-standby`, `wipe`) for a stopped service as well as `sync-head` for a reading look with the service
   running.
 - **Real run in the daemon** passed on 2026-10-16
-  ([evidence](../../../test/evidence/phase3-daemon-sync-2026-10-16/README.en.md)). The router adoption of the notice is not
+  ([evidence](../../../spaces/test/evidence/phase3-daemon-sync-2026-10-16/README.en.md)). The router adoption of the notice is not
   included, because host-a runs with the old bundle.
 - **Automated cycle:** The driver `test/testbed/scenarios/phase3-daemon-cycle.ts` runs all
   operator steps, continues after an abort and waits for journal lines instead of fixed pauses. Real run
-  passed on 2026-10-17 ([evidence](../../../test/evidence/phase3-daemon-cycle-2026-10-17/README.en.md)).
+  passed on 2026-10-17 ([evidence](../../../spaces/test/evidence/phase3-daemon-cycle-2026-10-17/README.en.md)).
 - **Orphaned lock:** `owner.lock` contains `boot_id` and start time. A lock from an earlier boot is cleared
   by the daemon itself; within the same boot the operator's check continues to apply.
 - **Membership:** Instructions for a sync Space go to a `MemberLifecycle` via its own store.
@@ -532,9 +532,9 @@ A reused ID with different arguments is rejected.
 ## Limits
 
 - The netcup adapter actually shut nanoi down on 2026-10-16, checked it and released it via quarantine
-  ([evidence](../../../test/evidence/f1-netcup-2026-10-16/README.en.md)).
+  ([evidence](../../../spaces/test/evidence/f1-netcup-2026-10-16/README.en.md)).
 - On the same day the whole cycle ran with real hosts
-  ([evidence](../../../test/evidence/phase3-sync-2026-10-16/README.en.md)):
+  ([evidence](../../../spaces/test/evidence/phase3-sync-2026-10-16/README.en.md)):
   - primary nanoi, standby 100, connected via the signed replica transport;
   - fork without ACK;
   - netcup fencing, `promote` and `degradeToSingle` on 100;
@@ -542,7 +542,7 @@ A reused ID with different arguments is rejected.
   - identical states at the end.
 
   That was a fixture run. The productive service ran afterwards in the daemon run and in the overall run 3.7
-  ([evidence](../../../test/evidence/phase3-partition-2026-10-17/README.en.md)).
+  ([evidence](../../../spaces/test/evidence/phase3-partition-2026-10-17/README.en.md)).
 - For standby 100 there is no fencing adapter. Promotion to 100 runs after fencing of nanoi;
   `degradeToSingle` on nanoi revokes only the standby permission of the Space (see above).
 - 3.6 is implemented in its core (guard hook, standby lock, readmission per Space, restart). Whoever operates a

@@ -115,5 +115,5 @@ Type check and local document links are checked. On big all 36
 built cases pass (11 entry, 12 snapshot and 13 stream cases). The separate
 32 KiB boundary case measures on both backends at most 7,386 bytes for the joint
 StorageWrite array of data and checkpoint. This does not measure disk/fsync amplification.
-[Artifacts and evidence](../../../test/evidence/ap3-stream-2026-10-15/README.md).
+[Artifacts and evidence](../../../spaces/test/evidence/ap3-stream-2026-10-15/README.md).
 The dedicated test container is removed; existing containers remained unchanged.

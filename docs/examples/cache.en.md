@@ -1,7 +1,7 @@
 # Local Atomic Cache
 
-As of 2026-10-07. Implementation: [cache.ts](../../examples/cache.ts).
-Tests: [cache.test.ts](../../test/examples/cache.test.ts). No model or network required.
+As of 2026-10-07. Implementation: [cache.ts](../../spaces/examples/cache.ts).
+Tests: [cache.test.ts](../../spaces/test/examples/cache.test.ts). No model or network required.
 
 ```bash
 npm run example:cache

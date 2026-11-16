@@ -60,7 +60,7 @@ const stopService = await startService(host, ctx);
 
 ### Paket und Importe {#package-imports}
 
-Projekte binden die Bibliothek mit `"phi-spaces": "file:.."` ein und importieren über den Paketnamen. Einen Build-Schritt gibt es nicht; `exports` zeigt auf die TypeScript-Quellen. Nur diese Unterpfade sind Vertrag:
+Projekte binden die Bibliothek mit `"phi-spaces": "file:../spaces"` ein und importieren über den Paketnamen. Einen Build-Schritt gibt es nicht; `exports` zeigt auf die TypeScript-Quellen. Nur diese Unterpfade sind Vertrag:
 
 | Import | Inhalt |
 |---|---|

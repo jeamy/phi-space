@@ -1,7 +1,7 @@
 # Local Segmented Prime Sieve
 
-As of 2026-10-16. Implementation: [sieve.ts](../../examples/sieve.ts).
-Tests: [sieve.test.ts](../../test/examples/sieve.test.ts). No model or network required.
+As of 2026-10-16. Implementation: [sieve.ts](../../spaces/examples/sieve.ts).
+Tests: [sieve.test.ts](../../spaces/test/examples/sieve.test.ts). No model or network required.
 
 ```bash
 npm run example:sieve -- 1001 4
@@ -46,7 +46,7 @@ and SIGKILL/restart of the host process; [AP-1 acceptance](../_attic/abnahme/ap1
 
 In a later federation, task and result must lie in the same member txn.
 See [v3 plan](../federation-plan-v3.en.md). Further minimal patterns:
-[workers.ts](../../agent/examples/workers.ts), [blocking-tool.ts](../../agent/examples/blocking-tool.ts).
+[workers.ts](../../spaces/agent/examples/workers.ts), [blocking-tool.ts](../../spaces/agent/examples/blocking-tool.ts).
 [Back to the overview](README.en.md).
 
 

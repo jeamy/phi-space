@@ -60,7 +60,7 @@ const stopService = await startService(host, ctx);
 
 ### Package And Imports {#package-imports}
 
-Projects depend on the library with `"phi-spaces": "file:.."` and import through the package name. There is no build step; `exports` points at the TypeScript sources. Only these subpaths are contract:
+Projects depend on the library with `"phi-spaces": "file:../spaces"` and import through the package name. There is no build step; `exports` points at the TypeScript sources. Only these subpaths are contract:
 
 | Import | Content |
 |---|---|

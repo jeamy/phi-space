@@ -113,5 +113,5 @@ Speedup; Snapshot-Limits und JSON-Bytebudget sind keine RAM-/VPS-Mindestanforder
 Optimierungen wie Indizes, Sharding, Dirty-Flags und Remote-Protokoll benötigen eigene Implementierung/Tests.
 
 Typecheck, Kern- und Beispielsuite werden lokal ausgeführt. Beispiele und tatsächlicher Nachweisumfang:
-[examples.md](../../examples.en.md), [Testübersicht](../../../test/examples/README.en.md).
+[examples.md](../../examples.en.md), [Testübersicht](../../../spaces/test/examples/README.en.md).
 Federation, NetBird-Identität, Promotion und wissenschaftliche Modellqualität sind damit nicht nachgewiesen.

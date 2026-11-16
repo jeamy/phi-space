@@ -222,7 +222,7 @@ Installation, Konfiguration und eigenen Signer. Seit dem Neuaufbau vom 2026-10-1
 ([Testumgebung §20](../../../testumgebung-big.en.md#20-rebuild-under-phi-spaces-2026-10-18)) sind die Gate-Adressen
 `100.89.103.95:7421` (host-a) und `100.89.136.73:7421` (member-1). Die Registry-IDs und Key-Fingerprints
 der früheren Föderation (`100.89.128.128`, `100.89.5.70`) stehen in den öffentlichen
-[Nachweisen](../../../../test/evidence/ap1b-2026-10-11/README.md).
+[Nachweisen](../../../../spaces/test/evidence/ap1b-2026-10-11/README.md).
 Der Daemon `tools/federation-host.mjs` unterstützt `provision` (JSON auf stdin),
 `bootstrap`, `enroll` (Token nur auf stdin), `run`, `stop`, `status`, `fence` und
 `recovery`, `member-recovery` und `recovery-call`. `owner.lock` verhindert zwei Writer; `restart.lock` verweigert

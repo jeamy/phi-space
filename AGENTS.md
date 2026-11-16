@@ -66,7 +66,7 @@ so a relative path still means the repository root (`checks/root-scripts.mjs` ke
   (`src/standalone.ts`); `examples/sieve.ts` and `examples/cache.ts` take `--remote <address>`. `test/support/no-durable.mjs`
   (`node --import`) refuses pi-durable, chord and pi-ai; `test/test-standalone.test.ts` runs service and examples under it.
 - Examples without a model: `npm run example:pipeline`, `npm run example:sieve`, `npm run example:cache`, `npm run example:golomb` (root); `npm run example`, `npm run example:chat`, `npm run example:blocking` (agent package, scripted models)
-- Help site (`help-site/`: Next.js help, Space-Chat stages, the social swarm; `help-site/README.md`): tests `npm --prefix help-site test`, typecheck `npx tsc --noEmit -p help-site` (own tsconfig). The swarm Space is a store and process of its own (`server/space-host.ts` or the Rust `help-space`; containers `swarm-space` on big, `swarm-space-nano` on nano); the hub and the shard engine are its clients (`SWARM_SPACE`). Deploy on big `npm --prefix help-site run docker:prod:rust:up`, on nano `docker:nano:rust:up` (`docker:prod:up`/`docker:nano:up` refuse since 2026-11-12: big and nano run only the Rust implementation, R-D12); never on a shared server without asking.
+- Help site (`help-site/`: Next.js help, Space-Chat stages, the social swarm; `help-site/README.md`): tests `npm --prefix help-site test`, typecheck `npm --prefix help-site run typecheck` (own tsconfig). The swarm Space is a store and process of its own (`server/space-host.ts` or the Rust `help-space`; containers `swarm-space` on big, `swarm-space-nano` on nano); the hub and the shard engine are its clients (`SWARM_SPACE`). Deploy on big `npm --prefix help-site run docker:prod:rust:up`, on nano `docker:nano:rust:up` (`docker:prod:up`/`docker:nano:up` refuse since 2026-11-12: big and nano run only the Rust implementation, R-D12); never on a shared server without asking.
 - Live examples (real model, cost tokens, ask first): `agent/examples/chat.ts --live`, `npm run example:arxiv`
 
 Run typecheck and tests after every change (root: `npm run typecheck`, `npm test`; agent package: `npm run typecheck:agent`, `npm run test:agent`; the chat and the help site have their own, below).
@@ -104,7 +104,7 @@ Run typecheck and tests after every change (root: `npm run typecheck`, `npm test
 ## Conventions
 
 - No new dependencies without asking; nothing is installed locally.
-- Projects built on phi-spaces depend on it as `"phi-spaces": "file:.."` and import `phi-spaces`, `phi-spaces/context`,
+- Projects built on phi-spaces depend on it as `"phi-spaces": "file:../spaces"` and import `phi-spaces`, `phi-spaces/context`,
   `phi-spaces/core`, `phi-spaces/store/*` (root `exports`, pointing at the `.ts` sources); `agent/` keeps relative imports.
 - Agent packages use Pi 1.5.2; schema builders come from `@earendil-works/pi-schema`, not `Type` from `pi-ai`.
   Pi 1.5 counts an in-flight model request interrupted by a crash against the retry policy; the durable worker allows

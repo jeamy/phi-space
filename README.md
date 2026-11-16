@@ -148,7 +148,7 @@ points differ:
 
 Thus phi-spaces implements both caller-waiting async operations and durable, event-driven interaction. It does
 not make synchronous serialization/CPU work non-blocking or remove finite Space budgets. See
-[`src/client.ts`](src/client.ts), [`src/index.ts`](src/index.ts) and the [waiter API](docs/api.en.md).
+[`src/client.ts`](spaces/src/client.ts), [`src/index.ts`](spaces/src/index.ts) and the [waiter API](docs/api.en.md).
 
 ### What phi-spaces adds, and what it does not promise
 
@@ -213,6 +213,8 @@ survival and `RemoteSpace` for a separate worker process; see [examples](docs/ex
 
 ## Layers
 
+The package's files below are in `spaces/`; the applications are beside it at the repository root.
+
 | file | what |
 |---|---|
 | `src/core.ts` | pure spec semantics over a JSON state: entries, templates, leases, transactions, notify |
@@ -236,7 +238,7 @@ survival and `RemoteSpace` for a separate worker process; see [examples](docs/ex
 | `help-site/` | bilingual help, Social Swarm, Space-Chat stages and authenticated Web Admin |
 | `codemode-chat/` | agents and people solve coding tasks together around one space; every role is its own process |
 | `spaces-mmo/` | online role-playing engine on spaces, first world Leuchtfeuer |
-| `rust/` | Rust port of core, store, service and secure host ([docs/rust-portierung.en.md](docs/rust-portierung.en.md)); the Space containers of spaces-mmo on nano and big and the codemode-chat Space on nano run its `phi-space-server` since 2026-11-07, the help site's swarm Spaces since 2026-11-08, everywhere else the TypeScript code stays authoritative |
+| `rust/` | Rust port of core, store, service and secure host, the core's Cargo workspace ([docs/rust-portierung.en.md](docs/rust-portierung.en.md)); each application has its own in `<app>/rust/` with its space server on `phi-space-host`; the Space containers of spaces-mmo on nano and big and the codemode-chat Space on nano run the Rust space server since 2026-11-07, the help site's swarm Spaces since 2026-11-08, everywhere else the TypeScript code stays authoritative |
 
 A Space is one document; commits of the own store (`src/store/`) provide atomic state changes. Restart survival requires
 the SQLite store,
@@ -388,7 +390,7 @@ memory alone proves nothing about durability.
 `npm run testbed -- <command>` verifies the **built artifact** (the `phi-spaces.mjs` bundle, compiled examples and scenarios; no
 source code) in docker containers on a server instead of on this machine: `check`, `up`, `test`, `scenario`, `status`, `kill`,
 `partition`, `heal`, `down`. Server, directory and credentials come from environment variables or a git-ignored
-`test/testbed/testbed.env`. See [test/testbed/README.md](test/testbed/README.md) and
+`test/testbed/testbed.env`. See [test/testbed/README.md](spaces/test/testbed/README.md) and
 [docs/testumgebung-big.en.md](docs/testumgebung-big.en.md) (German). The scenario `sieve-mobile` runs a prime sieve driven by a
 simulated phone: lost calls and answers with retries under the same request id, app in the background, workers dying
 with a reserved task, a host restart; its evaluation compares the stored state with trial division.
@@ -397,6 +399,8 @@ with a reserved task, a host restart; its evaluation compares the stored state w
 Use `--dry-run` to preview actions without contacting the server. See [docs/tui.en.md](docs/tui.en.md).
 
 ## Examples
+
+The files are in `spaces/`; the commands run from the repository root.
 
 | file | what | needs |
 |---|---|---|
@@ -432,8 +436,8 @@ npm run example:cache
 ```
 
 ```
-node --experimental-strip-types agent/examples/chat.ts --live "Was war der wichtigste Schritt zu heutigen LLMs?"
-node --experimental-strip-types agent/examples/arxiv-research.ts --out /tmp/llm-history.md
+node --experimental-strip-types spaces/agent/examples/chat.ts --live "Was war der wichtigste Schritt zu heutigen LLMs?"
+node --experimental-strip-types spaces/agent/examples/arxiv-research.ts --out /tmp/llm-history.md
 ```
 
 ## Documentation

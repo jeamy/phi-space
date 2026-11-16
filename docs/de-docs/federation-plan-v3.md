@@ -440,7 +440,7 @@ echte Data-Gate den Objektzugriff; nach 305 Sekunden Fehlerphase und Aufhebung
 des Fehlers war dieser wieder erfolgreich. Dies bestätigt die Sicherheits-
 hypothese für den gezielten Erreichbarkeitsausfall dieser Peers, nicht einen
 globalen Management-Serverabsturz. Messpunkte stehen in
-[netbird-management-5m.json](../../test/evidence/ap1b-2026-10-11/netbird-management-5m.json).
+[netbird-management-5m.json](../../spaces/test/evidence/ap1b-2026-10-11/netbird-management-5m.json).
 
 **Vollständige Abnahme vom 2026-10-11:** Management 305,3 s und 3604,3 s,
 Signal 608,6 s, Relay 1807,3 s und Management + Relay 3604,0 s sind abgeschlossen.
@@ -448,7 +448,7 @@ Jeder Fall endet mit erfolgreichem Objektzugriff. Gruppenentzug und echtes
 Peer-DELETE sperrten den Zugriff nach 2,895 s beziehungsweise 2,823 s.
 Frische Handy-Erstkopplung, Schlüsselsteuerung, Hintergrund und kontrollierter
 Doze sind ebenfalls geprüft. [Abnahme und Grenzen](../_attic/abnahme/ap1b-abnahme.en.md),
-[Messungen](../../test/evidence/ap1b-2026-10-11/acceptance-summary.json).
+[Messungen](../../spaces/test/evidence/ap1b-2026-10-11/acceptance-summary.json).
 
 Der begrenzte Testproxy unterbrach komponentenweise die Erreichbarkeit für zwei
 eigene Peers. Der globale kombinierte Server und seine Datenbank wurden dabei
