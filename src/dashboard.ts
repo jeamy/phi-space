@@ -46,32 +46,43 @@ export const shownFields = (f: unknown): unknown => (f && typeof f === "object" 
 
 export type AppSource = { id: string; label: string; addresses: string[]; space?: string };
 
-/** The default addresses of the projects' space processes: the unix socket of a plain start (`npm start`, `dev`), the
- *  port `docker:local:up` publishes on loopback, then the loopback port on big (a tunnel to nano for the chat and the help system, the region's own port for the world) (docs/dashboard.en.md). The spaces-mmo accounts space (credentials, sessions) is left out on
- *  purpose. The help system's hub serves only figures (stats and its list of spaces, HELP_SPACE_LISTEN), no entries. */
+/** The space of an app that takes every space its service lists (`spaces`), each with its stats. */
 const ALL_SPACES = "*";
 
-const DEFAULT_APPS: AppSource[] = [
-	{ id: "codemode-chat", label: "Codemode Chat", addresses: ["unix:/tmp/codemode-space.sock", "tcp:127.0.0.1:3810", "tcp:127.0.0.1:3800"] },
-	{ id: "spaces-mmo", label: "spaces-mmo · Welt", addresses: ["unix:/tmp/spaces-mmo-world.sock", "tcp:127.0.0.1:3960", "tcp:127.0.0.1:3950"] },
-	// the shard keeps its posts in the named space "social-swarm" (help-site SWARM_ALIAS), its default space stays empty
-	{ id: "help-swarm", label: "Help · Swarm-Shard", addresses: ["unix:/tmp/swarm-b.sock", "tcp:127.0.0.1:3600"], space: "social-swarm" },
-	// the hub's swarm Space in its own process (help-site server/space-host.ts or its Rust help-space)
-	{ id: "help-swarm-hub", label: "Help · Swarm-Hub", addresses: ["unix:/tmp/swarm-space.sock", "tcp:127.0.0.1:3610"], space: "social-swarm" },
-	{ id: "help-hub", label: "Help · Hub", addresses: ["unix:/tmp/help-space.sock", "tcp:127.0.0.1:3520"], space: ALL_SPACES },
-];
-
-/** `id[@space]=address[|address…]` entries, comma separated (DASHBOARD_APPS, `--app`); a default id keeps its label,
- *  and its space unless one is given. */
-export function parseApps(spec: string): AppSource[] {
+/** `id[@space]=address[|address…]` entries, comma separated (DASHBOARD_APPS, `--app`); an id of `known` (the configured
+ *  apps, `loadApps`) keeps its label, and its space unless one is given. */
+export function parseApps(spec: string, known: readonly AppSource[] = []): AppSource[] {
 	return spec.split(",").map((part) => part.trim()).filter(Boolean).map((part) => {
 		const m = /^([^=@\s]+)(?:@([^=\s]+))?=(.+)$/.exec(part);
 		if (!m) throw new Error(`an app is id[@space]=address[|address…], not ${part}`);
 		const addresses = m[3]!.split("|").map((a) => a.trim()).filter(Boolean);
 		if (!addresses.length) throw new Error(`app ${m[1]} has no address`);
-		const known = DEFAULT_APPS.find((d) => d.id === m[1]);
-		const space = m[2] ?? known?.space;
-		return { id: m[1]!, label: known?.label ?? m[1]!, addresses, ...(space ? { space } : {}) };
+		const k = known.find((d) => d.id === m[1]);
+		const space = m[2] ?? k?.space;
+		return { id: m[1]!, label: k?.label ?? m[1]!, addresses, ...(space ? { space } : {}) };
+	});
+}
+
+/** The configured apps of a file (`{ "apps": [{ id, label, addresses, space? }] }`; `space` "*" takes every space its
+ *  service lists). The dashboard knows no app of its own: the repository keeps its list in `dashboard.apps.json`
+ *  (DASHBOARD_APPS_FILE names another). A missing file is no apps. */
+export function loadApps(file: string): AppSource[] {
+	if (!existsSync(file)) return [];
+	let doc: unknown;
+	try { doc = JSON.parse(readFileSync(file, "utf8")); } catch (e) { throw new Error(`${file}: ${(e as Error).message}`); }
+	const apps = (doc as { apps?: unknown })?.apps;
+	if (!Array.isArray(apps)) throw new Error(`${file}: no "apps" list`);
+	const seen = new Set<string>();
+	return apps.map((a, i) => {
+		const { id, label, addresses, space } = (a ?? {}) as Record<string, unknown>;
+		const where = `${file}: apps[${i}]`;
+		if (typeof id !== "string" || !/^[^=@\s,]+$/.test(id)) throw new Error(`${where}: id is a name without = @ , or space`);
+		if (seen.has(id)) throw new Error(`${where}: id ${id} twice`);
+		seen.add(id);
+		if (typeof label !== "string" || !label) throw new Error(`${where}: label is a text`);
+		if (!Array.isArray(addresses) || !addresses.length || !addresses.every((x) => typeof x === "string" && x.trim())) throw new Error(`${where}: addresses is a list of addresses`);
+		if (space !== undefined && (typeof space !== "string" || !space)) throw new Error(`${where}: space is a space id or alias, or *`);
+		return { id, label, addresses: addresses.map((x: string) => x.trim()), ...(space ? { space } : {}) };
 	});
 }
 
@@ -163,7 +174,7 @@ export type DashboardOptions = {
 	flushMs?: number;
 	/** Cadence of the metrics push (default 2000 ms). */
 	metricsMs?: number;
-	/** Spaces of other processes to show (default: none; the standalone start uses DEFAULT_APPS). */
+	/** Spaces of other processes to show (default: none; the standalone start uses the configured apps, `loadApps`). */
 	apps?: AppSource[];
 	/** Cadence of the app polls (default 2000 ms). */
 	appPollMs?: number;
@@ -518,15 +529,14 @@ const usage = `phi-spaces dashboard (read-only Phase 1)
   --socket <path>   unix socket for the space service (default: <store>/space.sock)
   --no-socket       do not serve the space service; the dashboard then shows a quiet store
   --app id[@space]=address[|address…]
-                    show the space of another process (repeatable; replaces the defaults and DASHBOARD_APPS);
-                    the defaults: codemode-chat, spaces-mmo world, help swarm shard, help hub, each on its unix
-                    socket, else the loopback port of docker:local, else the tunnel port on big; @space picks a
-                    named space of that service (default: its default space; help-swarm: social-swarm), @* every
-                    space it lists (stats only; help-hub)
+                    show the space of another process (repeatable; replaces the configured apps and DASHBOARD_APPS);
+                    the addresses are tried in turn; @space picks a named space of that service (default: its default
+                    space, or the configured one of that id), @* every space it lists (stats only)
   --no-apps         show no app spaces
 
 Environment (also read from the repository's .env; set values win): DASHBOARD_APPS (as --app, comma separated),
-DASHBOARD_PORT, DASHBOARD_BIND, DASHBOARD_DIR, DASHBOARD_SQLITE (defaults of the flags above).`;
+DASHBOARD_APPS_FILE (the configured apps with their labels; default: the repository's dashboard.apps.json, none when
+it is missing), DASHBOARD_PORT, DASHBOARD_BIND, DASHBOARD_DIR, DASHBOARD_SQLITE (defaults of the flags above).`;
 
 /** Reads the repository's .env like the projects' server/env.ts: values already in the environment win. */
 function loadDotEnv(file: string): void {
@@ -543,8 +553,10 @@ function loadDotEnv(file: string): void {
 }
 
 async function main(argv: string[]): Promise<void> {
-	loadDotEnv(join(fileURLToPath(import.meta.url), "..", "..", ".env"));
+	const repo = join(fileURLToPath(import.meta.url), "..", "..");
+	loadDotEnv(join(repo, ".env"));
 	const env = process.env;
+	const configured = loadApps(env.DASHBOARD_APPS_FILE ? resolve(env.DASHBOARD_APPS_FILE) : join(repo, "dashboard.apps.json"));
 	const a = new Map<string, string>();
 	const appArgs: AppSource[] = [];
 	for (let i = 0; i < argv.length; i++) {
@@ -554,7 +566,7 @@ async function main(argv: string[]): Promise<void> {
 		const v = argv[i + 1];
 		if (!v || v.startsWith("--")) throw new Error(`${k} needs a value\n\n${usage}`);
 		if (k === "--app") {
-			appArgs.push(...parseApps(v));
+			appArgs.push(...parseApps(v, configured));
 			i++;
 			continue;
 		}
@@ -574,7 +586,7 @@ async function main(argv: string[]): Promise<void> {
 		port: Number.parseInt(a.get("--port") ?? env.DASHBOARD_PORT ?? "8787", 10) || 8787,
 		serve: a.has("no-socket") ? null : { socket: a.get("--socket") ?? `${store.replace(/\/+$/, "")}/space.sock` },
 		historyFile: join(store, "history.jsonl"),
-		apps: a.has("no-apps") ? [] : appArgs.length > 0 ? appArgs : env.DASHBOARD_APPS ? parseApps(env.DASHBOARD_APPS) : DEFAULT_APPS,
+		apps: a.has("no-apps") ? [] : appArgs.length > 0 ? appArgs : env.DASHBOARD_APPS ? parseApps(env.DASHBOARD_APPS, configured) : configured,
 	});
 	console.log(`dashboard: ${dashboard.url} (read-only)`);
 	if (dashboard.socketPath) console.log(`space service: unix socket ${dashboard.socketPath} (local admin; point clients at it)`);

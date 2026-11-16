@@ -40,8 +40,9 @@ phi-spaces: a space library with its own store; the optional `agent/` package co
 - TUI: `npm run tui` (read-only spaces/objects and test-bed controls); `--dry-run` previews without server access, `--local-dir DIR` inspects local store files. Docs: `docs/tui.en.md`.
 - Dashboard (read-only live UI): `npm run dashboard -- --dir <store>` in the foreground;
   `npm run dashboard:start|stop|status` (via `scripts/dashboard.sh`) in the background; it also shows the projects'
-  spaces over their sockets (`DASHBOARD_APPS` / `--app`, read from the root `.env`; defaults: unix socket, then the
-  docker:local port, then the tunnel port on big; public on big as spaces-stats.eibrain.org). Docs: `docs/dashboard.en.md`.
+  spaces over their sockets (the list with labels in the root `dashboard.apps.json`, `DASHBOARD_APPS_FILE` names another;
+  `DASHBOARD_APPS` / `--app` replace it, read from the root `.env`; each app: unix socket, then the docker:local port, then
+  the tunnel port on big; the dashboard itself names no app; public on big as spaces-stats.eibrain.org). Docs: `docs/dashboard.en.md`.
 - Codemode chat (`codemode-chat/`: Next.js; every role its own process around one space, see
   `docs/codemode-space-architektur.en.md` and its README): `npm --prefix codemode-chat run dev` (space, judge, agents, model, web; port 3700),
   `npm run codemode-chat` (after `npm --prefix codemode-chat run build`), tests `npm run test:codemode-chat` (they start

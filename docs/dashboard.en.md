@@ -29,7 +29,8 @@ Space socket. It does not read old JSONL or pi-durable stocks in the directory (
 
 The script is configured through environment variables or the `DASHBOARD_*` lines of the `.env` in the repository root
 (set variables take precedence; `src/dashboard.ts` reads the same `.env` in the foreground too): `DASHBOARD_APPS`
-(app sources, see below), `DASHBOARD_DIR` (directory with `store.sqlite`, default
+(app sources, see below), `DASHBOARD_APPS_FILE` (the configured apps, default `dashboard.apps.json` in the repository
+root), `DASHBOARD_DIR` (directory with `store.sqlite`, default
 `~/.local/share/phi-spaces/dashboard-store`), `DASHBOARD_SQLITE` (store file instead), `DASHBOARD_PORT`
 (default 8787), `DASHBOARD_BIND` (default 127.0.0.1). Further flags after the command are passed through to
 `src/dashboard.ts`, e.g. `bash scripts/dashboard.sh start --no-socket`. PID and log file
@@ -38,7 +39,7 @@ the running process instead of opening a second one.
 
 Options of the daemon (apply to both kinds of start): `--port` (default 8787), `--bind` (default 127.0.0.1 —
 deliberately loopback only), `--socket <pfad>` (default `<store>/space.sock`, can be switched off with `--no-socket`),
-`--app id=adresse` (repeatable, replaces the default apps), `--no-apps`, `--help`.
+`--app id=adresse` (repeatable, replaces the configured apps), `--no-apps`, `--help`.
 
 Open in the browser: **http://127.0.0.1:8787** (or the chosen port).
 
@@ -90,7 +91,9 @@ entry list — no `read`/`take`, so no request claims and no locks. The entry li
 `after + limit + 1` entries in one call and cuts in the dashboard (upper limit 2000), so that no
 page snapshot stays behind in the Space of the app.
 
-Each app has several default addresses, tried in this order (the last successful one first): the Unix socket
+The dashboard knows no app of its own (since 2026-11-16, docs/umstellung-verzeichnisse.en.md): the repository keeps
+the list in `dashboard.apps.json` at its root (`{ "apps": [{ id, label, addresses, space? }] }`), `DASHBOARD_APPS_FILE`
+names another file, and without one it shows no apps. Each configured app has several addresses, tried in this order (the last successful one first): the Unix socket
 of a normal start (`npm start`, `dev`), the loopback port that `docker:local:up` publishes, and on big the
 production address: the local end of the SSH tunnel to nano or the loopback port of a Space running on big.
 
@@ -118,19 +121,19 @@ only figures: its role may use `hello`, `stats` and `spaces`, no `readAll`. It h
 ("Einträge nicht freigegeben"), but it does show every Space with count per type and memory. If an app is not running, it appears
 as "offline" with its address. Other addresses: `--app chat=tcp:nano:3800 --app welt=unix:/pfad.sock`, or in the `.env`
 `DASHBOARD_APPS=spaces-mmo=tcp:127.0.0.1:3960|unix:/tmp/spaces-mmo-world.sock,codemode-chat=tcp:127.0.0.1:3810`
-(entries separated by comma, alternatives by `|`; `--app` replaces `DASHBOARD_APPS`, both replace the default apps; a
-default ID keeps its name and its Space).
+(entries separated by comma, alternatives by `|`; `--app` replaces `DASHBOARD_APPS`, both replace the configured apps; a
+configured ID keeps its name and its Space).
 
 **Named Spaces.** Without a statement the dashboard queries the default Space of the service. If the data lies in a
 named Space, it is attached to the ID with `@`: `id@space=adresse`. The swarm shard of the help site keeps its posts in the Space
 `social-swarm` (`SWARM_ALIAS`, created by its space process, `help-site/server/social/space-side.ts`), its default Space stays empty;
-the default apps `help-swarm` and `help-swarm-hub` therefore query `social-swarm`, even if they stand in `DASHBOARD_APPS` without `@`.
+the configured apps `help-swarm` and `help-swarm-hub` therefore query `social-swarm`, even if they stand in `DASHBOARD_APPS` without `@`.
 
 **All Spaces of a service.** `id@*=adresse` queries the list of the service (method `spaces`, [API](api.en.md)) and
 reads the figures of each Space (the 100 newest), summed for the app and individually in the table "Spaces".
 It collapses aliases `präfix-<id>` from three equal prefixes on into one row (`chat-session-*` with their count).
 Because this costs one call per Space, it reads such an app only every fifth round (at 2 s, every 10 s). The
-default app `help-hub` is such an app. Which data lies in which store and Space: [data storage](datenhaltung.en.md).
+configured app `help-hub` is such an app. Which data lies in which store and Space: [data storage](datenhaltung.en.md).
 
 The daemon opens the store **exclusively**: no second process may hold the same store
 (single owner, see [conversion plan](umstellung-ohne-pi-durable.en.md) 5.2). Without `--no-socket` it

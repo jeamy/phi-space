@@ -2,11 +2,12 @@
 // listSpaces/snapshotSpace/core.stats and the process meter — no mutation endpoint exists.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSpace, PhiSpaces, serveSpace, SpaceService, StaticIdentity } from "../src/index.ts";
 import { Meter } from "../src/meter.ts";
-import { groupSpaces, parseApps, startDashboard } from "../src/dashboard.ts";
+import { groupSpaces, loadApps, parseApps, startDashboard } from "../src/dashboard.ts";
 import { StatsHistory, thin } from "../src/dashboard-history.ts";
 import { ctx } from "./support/persistent.ts";
 import { openTestHost } from "./support/host.ts";
@@ -174,13 +175,33 @@ test("dashboard: an app's space over its socket shows stats and entry pages; a m
 	}
 });
 
-test("dashboard: app specs (DASHBOARD_APPS, --app) take alternatives; a default id keeps its label", () => {
-	assert.deepEqual(parseApps("spaces-mmo=unix:/a.sock|tcp:127.0.0.1:3960, mine@posts=tcp:nano:3800, help-swarm=tcp:127.0.0.1:3600"), [
-		{ id: "spaces-mmo", label: "spaces-mmo · Welt", addresses: ["unix:/a.sock", "tcp:127.0.0.1:3960"] },
+test("dashboard: app specs (DASHBOARD_APPS, --app) take alternatives; a configured id keeps its label and space", () => {
+	const known = [{ id: "world", label: "The world", addresses: ["unix:/w.sock"] }, { id: "shard", label: "A shard", addresses: ["unix:/s.sock"], space: "posts" }];
+	assert.deepEqual(parseApps("world=unix:/a.sock|tcp:127.0.0.1:3960, mine@posts=tcp:nano:3800, shard=tcp:127.0.0.1:3600", known), [
+		{ id: "world", label: "The world", addresses: ["unix:/a.sock", "tcp:127.0.0.1:3960"] },
 		{ id: "mine", label: "mine", addresses: ["tcp:nano:3800"], space: "posts" },
-		{ id: "help-swarm", label: "Help · Swarm-Shard", addresses: ["tcp:127.0.0.1:3600"], space: "social-swarm" },
+		{ id: "shard", label: "A shard", addresses: ["tcp:127.0.0.1:3600"], space: "posts" },
 	]);
+	assert.deepEqual(parseApps("shard=tcp:x:1"), [{ id: "shard", label: "shard", addresses: ["tcp:x:1"] }], "without a configuration no id is known");
 	assert.throws(() => parseApps("nothing"), /id\[@space\]=address/);
+});
+
+test("dashboard: the configured apps come from a file; none without one, a bad one is refused", () => {
+	const dir = mkdtempSync(join(tmpdir(), "dashboard-apps-"));
+	try {
+		const file = join(dir, "apps.json");
+		assert.deepEqual(loadApps(file), [], "no file, no apps");
+		writeFileSync(file, JSON.stringify({ about: "x", apps: [{ id: "a", label: "A", addresses: [" unix:/a.sock ", "tcp:h:1"] }, { id: "b", label: "B", addresses: ["unix:/b.sock"], space: "*" }] }));
+		assert.deepEqual(loadApps(file), [{ id: "a", label: "A", addresses: ["unix:/a.sock", "tcp:h:1"] }, { id: "b", label: "B", addresses: ["unix:/b.sock"], space: "*" }]);
+		for (const [bad, reason] of [[{}, /no "apps" list/], [{ apps: [{ id: "a=b", label: "A", addresses: ["x"] }] }, /id is a name/], [{ apps: [{ id: "a", label: "A", addresses: [] }] }, /addresses/], [{ apps: [{ id: "a", addresses: ["x"] }] }, /label/], [{ apps: [{ id: "a", label: "A", addresses: ["x"] }, { id: "a", label: "B", addresses: ["y"] }] }, /twice/]] as const) {
+			writeFileSync(file, JSON.stringify(bad));
+			assert.throws(() => loadApps(file), reason as RegExp);
+		}
+		writeFileSync(file, "{ not json");
+		assert.throws(() => loadApps(file), /apps\.json/);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
 });
 
 test("dashboard: an app of every space (@*) lists its service's spaces with stats, folds session spaces, refuses entries", async () => {
