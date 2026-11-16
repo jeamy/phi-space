@@ -1,10 +1,10 @@
 # Directory split: the spaces core apart from the applications (plan)
 
-Status (2026-11-16): phase 1 done (`phi-space-host`, `mmo-space`, `codemode-space`, `help-space`, no `--profile` in
-`phi-space-server`; images checked locally, not deployed), phase 2 done (the dashboard's apps in `dashboard.apps.json`,
-the repository-wide checks in `checks/` with `checks/layering.mjs`), phases 3 and 4 committed locally (the package in
-`spaces/`, one Cargo workspace per project, the references after them; records below), not pushed or deployed.
-Phase 5 waits for the user's approval. Review incorporated
+Status (2026-11-16): done. Phase 1 (`phi-space-host`, `mmo-space`, `codemode-space`, `help-space`, no `--profile` in
+`phi-space-server`), phase 2 (the dashboard's apps in `dashboard.apps.json`, the repository-wide checks in `checks/`
+with `checks/layering.mjs`), phases 3 and 4 (the package in `spaces/`, one Cargo workspace per project, the references
+after them) and phase 5 (pushed, rehearsed on copies of the stores, deployed on nano and big the same evening; records
+below). Review incorporated
 on 2026-11-15, gaps on 2026-11-16 (below). The open questions were decided on 2026-11-16.
 
 ## Goal
@@ -453,3 +453,25 @@ What follows for the deploy:
   untouched since the deployed revisions), as expected.
 - Not rehearsed: the web, world, npc and model processes (their code changed only in where the package lives; the
   phase 3 test images ran their suites) and the hosts' compose files themselves (the `:rust:up` scripts as above).
+
+## Phase 5 deploy (2026-11-16, with the user's approval)
+
+- Step 1, no container touched: `git pull --ff-only` to `76433c4` on big and nano; on big the dashboard unit's
+  `ExecStart` names `spaces/src/dashboard.ts` (the old unit file in `~/phi-backup/2026-11-16-split-rehearsal/`),
+  `daemon-reload`, restart of the dashboard alone; it answered at once and saw all five apps online.
+- Before the builds, every running image was tagged `<repo>:before-split-<rev>-<service>` (`8645e41` on big,
+  `b808534` on nano). Two containers on big ran an image no longer in the image store (`phi-spaces-help-prod`,
+  `dbba2b159543`, and the arena, `b8022792cb02`); the first, which the deploy recreates, was saved with
+  `docker commit --pause=false` as `phi-spaces-help:before-split-8645e41-spaces-help-prod`; the arena is not part of
+  the deploy and still runs its old image.
+- Step 2: on nano `npm --prefix <app> run docker:nano:rust:up` for spaces-mmo, codemode-chat and help-site; then on
+  big `npm --prefix spaces-mmo run docker:big:rust:up` and `npm --prefix help-site run docker:prod:rust:up` (logs
+  `deploy-nano.log`, `deploy-big.log` in the same folder on each host). Every recreated container runs its new image
+  with the new command (`mmo-space`, `codemode-space`, `help-space` for the Spaces; the game, model, judge, web and hub
+  processes as before), on the same volumes, healthy where it has a check, no restart. The Spaces opened their stores
+  with the same entries as before; big reaches nano's accounts Space (10 entries, the same space and stream), the
+  codemode Space and the swarm shard through the tunnels; the game, the help site and the dashboard answer on their
+  loopback ports. The web process lost its change stream twice at start, while the Spaces came up, and not since.
+- Not redeployed: big's codemode roles (agents, judge, model, web) and the arena; they run from images built before
+  and need nothing of this change. The rollback for any service: recreate it from its `before-split-*` tag with the
+  compose files of its revision (a `git worktree` of `8645e41` or `b808534`).
