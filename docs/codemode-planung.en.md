@@ -541,7 +541,10 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      A fresh evaluation (`server/data/shore-fresh.ts`, `BotSpec.seedFrom`; the winners kept in `tests/fixtures/shores/`):
      94 islands from 234 to 433 and seeds 8 to 15, which no run met; GPT with and without the example and Opus with it 0
      below the target, Opus without 13, Sonnet with 2, the learner 0, every room alike 31. A series of runs per model
-     and condition (`server/data/run-series.ts`, resumable, with a Wilson interval of the solve rate) is the next step.
+     and condition (`server/data/run-series.ts`, resumable, with a Wilson interval of the solve rate; a run with a
+     scripted stand-in is kept apart and run again) with ten runs each: with the example GPT 10/10, Opus 10/10, Sonnet
+     7/10; without it 9/10, 8/10 and 0/10. Winners that hold on every fresh island: GPT 9 and 4 runs of 10, Opus 8 and 4,
+     Sonnet 0 (docs/codemode-planning-article.en.md, "Ten runs per model and condition").
 
 ## Tests
 

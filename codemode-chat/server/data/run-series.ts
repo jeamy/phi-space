@@ -1,10 +1,11 @@
 // A series of model runs on one task, for repeated comparisons (docs/codemode-planning-summary.en.md, "Next experiments" 1):
 // the same run settings, one session per run, with and without real tool answers in the prompt. It talks to a running
 // codemode-chat server over its HTTP API as the admin (CODEMODE_ADMIN_TOKEN, sent as x-admin-token), keeps every
-// finished session as JSON in --out and skips a run whose file is there already, so a series can be resumed. Model runs
-// cost tokens: started only by hand.
+// finished session as JSON in --out and skips a run whose file is there already (under any --tag), so a series can be
+// resumed. A run in which a scripted agent stood in for the model goes to --out/invalid and runs again once; two such
+// runs in a row stop the series. Model runs cost tokens: started only by hand.
 //   node --experimental-strip-types server/data/run-series.ts --base http://127.0.0.1:3790 --model openrouter/openai/gpt-6.1-sol \
-//     --runs 10 [--conditions examples,plain] [--task tide-shores] [--parallel 2] [--budget-usd 5] --out DIR
+//     --runs 10 [--from 1] [--conditions examples,plain] [--task tide-shores] [--parallel 2] [--budget-usd 5] --out DIR
 //   node --experimental-strip-types server/data/run-series.ts --summary --out DIR
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -15,7 +16,7 @@ if (!out) throw new Error("--out DIR is needed");
 mkdirSync(out, { recursive: true });
 
 type Contribution = { gen: number; via?: string; ok: boolean | null; passed: number; total: number; cost: number; source?: string; candidateId: string };
-type Session = { run?: { active: boolean; solvedGen?: number; gen: number; usage?: { tokens: number; costUsd: number } }; current: string; blocks: Array<{ blockId: string; contributions: Contribution[] }> };
+type Session = { run?: { active: boolean; solvedGen?: number; gen: number; note?: string; usage?: { tokens: number; costUsd: number } }; current: string; blocks: Array<{ blockId: string; contributions: Contribution[] }> };
 
 /** One run's outcome, from its session. */
 export function outcome(s: Session): { solvedGen: number | null; usd: number; tokens: number; contributions: number; fallbacks: number; winner: { gen: number; cost: number; candidateId: string } | null } {
@@ -54,10 +55,10 @@ function summary(): void {
 
 async function series(): Promise<void> {
 	const base = opt("--base", "http://127.0.0.1:3790"), model = opt("--model"), task = opt("--task", "tide-shores");
-	const runs = Number(opt("--runs", "10")), parallel = Number(opt("--parallel", "2")), budgetUsd = Number(opt("--budget-usd", "5"));
+	const runs = Number(opt("--runs", "10")), from = Number(opt("--from", "1")), parallel = Number(opt("--parallel", "2")), budgetUsd = Number(opt("--budget-usd", "5"));
 	const conditions = opt("--conditions", "examples,plain").split(","), token = process.env.CODEMODE_ADMIN_TOKEN;
 	if (!model || !token) throw new Error("--model and CODEMODE_ADMIN_TOKEN are needed");
-	const tag = model.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+	const tag = opt("--tag") || model.split("/").pop()!.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
 	const call = async (path: string, body?: unknown) => {
 		const r = await fetch(base + path, body === undefined ? { headers: { "x-admin-token": token } } : { method: "POST", headers: { "x-admin-token": token, "content-type": "application/json" }, body: JSON.stringify(body) });
 		const j = await r.json().catch(() => ({})) as Record<string, unknown>;
@@ -65,24 +66,43 @@ async function series(): Promise<void> {
 		return j;
 	};
 	// interleaved: run 1 of every condition, then run 2, … so a stopped series stays balanced
-	const queue = Array.from({ length: runs }, (_, i) => conditions.map((c) => ({ c, i: i + 1 }))).flat();
+	const queue = Array.from({ length: runs - from + 1 }, (_, i) => conditions.map((c) => ({ c, i: from + i }))).flat();
 	const one = async ({ c, i }: { c: string; i: number }) => {
 		const sid = `${tag}-${c}-${i}`, file = join(out, `${sid}.json`);
-		if (existsSync(file)) return;
+		// done already, under this tag or another one (a series resumed under a new tag after its sessions were cut off)
+		if (existsSync(file) || readdirSync(out).some((f) => f.endsWith(`-${c}-${i}.json`))) return;
 		await call(`/api/sessions/${sid}/task`, { taskId: task });
-		await call(`/api/sessions/${sid}/run`, { agents: 3, gens: 5, perAgent: 1, polish: 2, lang: "de", contenders: [model], budgetUsd, ...(c === "examples" ? { examples: "always" } : {}) });
+		// the model list comes from the model process: right after it starts, a model may not be listed yet
+		for (let attempt = 1; ; attempt++) {
+			try { await call(`/api/sessions/${sid}/run`, { agents: 3, gens: 5, perAgent: 1, polish: 2, lang: "de", contenders: [model], budgetUsd, ...(c === "examples" ? { examples: "always" } : {}) }); break; }
+			catch (e) { if (attempt >= 10 || !/Model not available/.test(String(e))) throw e; await new Promise((r) => setTimeout(r, 15_000)); }
+		}
 		for (;;) {
 			await new Promise((r) => setTimeout(r, 30_000));
 			const s = await call(`/api/sessions/${sid}`) as unknown as Session;
 			if (s.run && !s.run.active) {
-				writeFileSync(file, JSON.stringify(s));
 				const o = outcome(s);
+				// a scripted stand-in means the model did not answer (an exhausted key, a limit): the run does not count,
+				// is kept apart and runs again at the end of the queue; one such run can be a passing fault (an empty answer),
+				// two in a row stop the series so that no more runs go the same way (an exhausted key, a limit)
+				if (o.fallbacks) {
+					mkdirSync(join(out, "invalid"), { recursive: true });
+					writeFileSync(join(out, "invalid", `${sid}-${Date.now()}.json`), JSON.stringify(s));
+					const why = `${sid}: ${o.fallbacks} scripted stand-ins (the model did not answer: ${s.run?.note ?? "see the session"}); kept apart in invalid/`;
+					if (++invalidInRow >= 2) stopped = `${why}; the second in a row: series stopped`;
+					else queue.push({ c, i });
+					console.log(stopped || `${why}; runs again`);
+					return;
+				}
+				invalidInRow = 0;
+				writeFileSync(file, JSON.stringify(s));
 				console.log(`${sid}: ${o.solvedGen ? `solved in generation ${o.solvedGen}` : "not solved"}, $${o.usd.toFixed(2)}, ${o.contributions} contributions${o.fallbacks ? `, ${o.fallbacks} scripted stand-ins` : ""}`);
 				return;
 			}
 		}
 	};
-	const workers = Array.from({ length: Math.max(1, parallel) }, async () => { for (let job = queue.shift(); job; job = queue.shift()) await one(job); });
+	let stopped = "", invalidInRow = 0;
+	const workers = Array.from({ length: Math.max(1, parallel) }, async () => { for (let job = queue.shift(); job && !stopped; job = queue.shift()) await one(job); });
 	await Promise.all(workers);
 	summary();
 }

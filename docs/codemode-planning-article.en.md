@@ -662,6 +662,48 @@ GPT winner with the example does so for the fewest points. Opus's winner without
 94 (9 of 95 on the old seeds), Sonnet's on 2. The selection of the nine task islands did not flatter the winners.
 What this cannot say is how often a model writes such a winner: each is one run's best.
 
+## Ten runs per model and condition (2026-11-15)
+
+The runs above were one per model and condition. `server/data/run-series.ts` repeats them: ten runs per model with the
+tool example and ten without, interleaved, under the same settings (3 agents, 5 generations, one contribution each, 2
+improvement rounds, German prompts, a budget of $5 per run). GPT-6.1 Sol ran through the pi CLI's OpenAI login,
+Claude Sonnet 5.5 and Claude Opus 5.5 through the Anthropic API. A run in which a scripted agent stood in for the model
+(an exhausted key, a daily call limit, an empty answer) was kept apart and run again; the 60 runs below have none.
+Every winner (the passing contribution with the fewest points) was then played on the fresh islands and seeds of the
+section above (`shore-fresh.ts --series`).
+
+| Model | Condition | Solved (95 % interval) | Generation of the solution | Cost per run | Points of the winner, median | Winners with no fresh island below the target |
+|---|---|---|---|---|---|---|
+| GPT-6.1 Sol | with the example | 10/10 (72–100 %) | 1 1 1 2 2 2 2 2 3 3 | $0.40 | 7938 | 9 of 10 runs |
+| GPT-6.1 Sol | without | 9/10 (60–98 %) | 2 2 2 2 2 3 3 5 5 | $0.48 | 8413 | 4 of 10 runs |
+| Claude Opus 5.5 | with the example | 10/10 (72–100 %) | 1 1 1 1 1 1 1 2 2 2 | $1.15 | 8428 | 8 of 10 runs |
+| Claude Opus 5.5 | without | 8/10 (49–94 %) | 2 3 3 3 3 3 4 4 | $1.93 | 8965 | 4 of 10 runs |
+| Claude Sonnet 5.5 | with the example | 7/10 (40–89 %) | 1 1 2 2 3 3 3 | $0.60 | 7745 | 0 of 10 runs |
+| Claude Sonnet 5.5 | without | 0/10 (0–28 %) | | $0.46 | | 0 of 10 runs |
+
+*The interval is Wilson's. Points: the winner's tool calls over the nine episodes and 8 seeds each; the reference plan
+spends 9033. The last column counts runs whose winner stayed at or above the target on all 94 fresh islands (seeds 8 to
+15); a run without a winner counts as none.*
+
+What the repetition shows:
+
+- **Sonnet needs the example.** Without it, none of ten runs solves the task, with it seven do (Fisher's exact test,
+  p = 0.003). The earlier single runs (0 of 2 without, generation 2 with) were not a lucky draw.
+- **GPT and Opus solve the task either way, but earlier with the example.** Every run with the example solves it,
+  Opus in generation 1 in seven of ten; without it, GPT and Opus need generation 2 to 5 and two Opus runs and one GPT run
+  never get there. On the solve rate alone the difference is within chance (10 vs. 9 and 10 vs. 8).
+- **The example changes what the winners are, not only whether there is one.** A winner that passes the nine episodes
+  may still fail elsewhere: of the winners without the example, five of GPT's and four of Opus's fall below the target
+  on 4 to 8 of the 94 fresh islands. With the example, nine of GPT's and eight of Opus's runs give a winner that holds
+  on every fresh island (GPT and Opus together: 17 of 20 runs with the example, 8 of 20 without; Fisher's exact test,
+  p = 0.008). Sonnet's winners, all with the example, fall below on 1 to 10 fresh islands each.
+- **The example is cheaper.** Runs with it end their search earlier: Opus's cost $1.15 instead of $1.93 per run, GPT's
+  $0.40 instead of $0.48, and their winners spend fewer points.
+
+The single runs of the section before overstated one thing: there every winner with the example held on all fresh
+islands; over ten runs, one GPT winner and two Opus winners do not (one of them brings nothing on some islands). The
+selection of the nine task islands catches most but not all winners that only work on islands like them.
+
 ## Figures
 
 The diagrams are hand-drawn SVG that follow the reader's light or dark theme. The screenshots come from a local run
@@ -771,9 +813,8 @@ logbook, a new round before every tide (8793 points, fewer than the reference pl
 
 - How do concrete tool examples affect steps 7 and 8? Should they become standard for bot tasks on generated
   islands? Why do Haiku's bots still fail to move with an example?
-- How stable are the results across further independent model runs? GPT reached 7 of 9 episodes on its first
-  "Learn the tide" run and 2 of 9 on its second. Repetition counts vary by model and task; each example-assisted
-  step 9 condition has one run.
+- How stable are the results on steps 7 and 8? GPT reached 7 of 9 episodes on its first "Learn the tide" run and 2 of
+  9 on its second; step 9 now has ten runs per model and condition.
 - How do bots respond when the tide rule changes between generations? A comparison could establish when updating
   estimates through `observations()` helps relative to a rule embedded in code.
 - What is the individual effect of observations in the prompt, the longer code window, richer failures and the
