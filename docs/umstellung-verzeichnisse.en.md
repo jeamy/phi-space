@@ -430,3 +430,26 @@ What follows for the deploy:
   moves `:rust`, `:prod` and `:nano`; the rollback recreates with those tags and the compose files of the deployed
   revision (`git worktree` of `8645e41` or `b808534`).
 - The arena and big's codemode roles need no redeploy for this change.
+
+## Phase 5 rehearsal (2026-11-16, local, on copies of the stores)
+
+- Copies: the eight live stores (big: the four world regions and the swarm Space; nano: the accounts Space, the
+  swarm shard and the codemode Space) were copied on each host from the volume's directory, the database and its WAL
+  with no checkpoint in between (the database's mtime and the WAL header the same before and after; every one on
+  the first attempt), then fetched with rsync, checksums equal, `PRAGMA integrity_check` ok. A first try by
+  `docker cp` streamed over ssh gave torn copies (a live SQLite file read across checkpoints) and was dropped. The
+  copies stay on the hosts and on this machine as the backup from before the deploy
+  (`~/phi-backup/2026-11-16-split-rehearsal/`). No container on big or nano was started, stopped or changed.
+- Images, built under throwaway tags and deleted after: `production-rust` of the three applications at `25972e1`
+  (`mmo-space`, `codemode-space`, `help-space`; the new mmo image has no `phi-space-server`) and the mmo one at the
+  deployed revision `8645e41` (`phi-space-server` with `--profile`).
+- Per store, on one working copy, with the containers' environment of the hosts (only the listen addresses local):
+  the old image with `phi-space-server --profile <app>` (today's state), the new image with the application's binary
+  (the deploy), the old image again (the rollback). Each run: every space with its entries and revision, a marker
+  entry written, read and taken in the default space, then a stop by SIGTERM. All 24 runs ready and exit 0, the
+  entries the same in all three runs of each store (accounts 10; west 12372, nord 8734, ost 12472, sued 1860; swarm
+  big 19598, nano 9518; codemode 346), the round trip complete, the revisions only rising, no error or warning in the
+  logs, `integrity_check` ok after the rollback. The store format is unchanged (`phi-store` and `phi-service` are
+  untouched since the deployed revisions), as expected.
+- Not rehearsed: the web, world, npc and model processes (their code changed only in where the package lives; the
+  phase 3 test images ran their suites) and the hosts' compose files themselves (the `:rust:up` scripts as above).
