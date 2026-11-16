@@ -183,7 +183,7 @@ placeholder "Agents & Mobiles": the Space core knows no agent resources; as soon
 **Theme.** The same 14 palettes and the same controls as help site, codemode chat and spaces-mmo: mode
 (☾/☀) and palette top right, remembered in the browser (`dashboard.mode`, `dashboard.palette`; without a choice the mode follows
 `prefers-color-scheme`). `src/dashboard/palettes.ts` is a copy of `client/lib/palettes.ts` of the projects
-(`test/test-shared-copies.test.ts` keeps them equal; `tsconfig.json` leaves it out, it uses the DOM); the server
+(`checks/shared-copies.test.mjs` keeps them equal; `tsconfig.json` leaves it out, it uses the DOM); the server
 delivers it without types as `/palettes.js`. The surfaces are derived, as in the projects, by `color-mix` from the
 palette colors.
 

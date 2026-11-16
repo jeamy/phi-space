@@ -27,7 +27,7 @@ Projekte, die auf phi-spaces aufbauen (codemode-chat, help-site, künftige), bin
 Nur diese Unterpfade sind Vertrag; ein neuer Unterpfad ist eine API-Änderung und gehört in diese Tabelle.
 `npm run check:package` (auch Teil von `npm test`) lehnt in solchen Projekten relative Importe nach `src/` und
 nicht exportierte Unterpfade ab. Ausnahmen: das Agentenpaket `agent/` (greift auf Föderations-Interna zu) und zwei
-einzeln begründete Dateien der help-site (`scripts/package-imports.mjs`, `ALLOWED`). `pi-codemode` ist nur noch
+einzeln begründete Dateien der help-site (`checks/package-imports.mjs`, `ALLOWED`). `pi-codemode` ist nur noch
 Entwicklungsabhängigkeit des Roots (Beispiele); wer den Sandbox braucht, führt ihn selbst.
 
 ## Gemeinsame Typen

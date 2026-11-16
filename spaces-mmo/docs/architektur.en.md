@@ -447,7 +447,7 @@ once in the library: the WebSocket gateway (`phi-spaces/ws`, the message limit a
 and the Space helpers (`connectSpace`, `readExisting`/`StillHeld`, `peek`, `awaitWork`, `keepAlive`, `takeAll` from
 `phi-spaces`, `src/space-client.ts`). `server/space.ts` now only inserts the values of spaces-mmo (addresses, waiting
 times, trace). Pure interface (`client/lib/palettes.ts`, `markdown.ts`) remains a copy per project, because Next.js
-bundles nothing outside the project directory; `test/test-shared-copies.test.ts` keeps the copies equal.
+bundles nothing outside the project directory; `checks/shared-copies.test.mjs` keeps the copies equal.
 
 ## Integration of phi-spaces
 

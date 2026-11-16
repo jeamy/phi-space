@@ -1227,7 +1227,7 @@ intent is taken by exactly one. So a Rust worker can work next to a TS worker on
 3. **Shared types for the browser.** The client imports types from `server/gateway.ts`, `chat.ts` and `model.ts`
    as well as `formatWorldTime`/`shownWorldMs` from `engine/worldtime.ts`. The types move to `spaces-mmo/shared/` and
    are generated from Rust in R8. The two functions remain as a small TS copy with test vectors, as
-   `test/test-shared-copies.test.ts` checks it for other copies.
+   `checks/shared-copies.test.mjs` checks it for other copies.
 4. **Static page.** The Next app is a single page (`app/page.tsx`). With `output: "export"` it becomes
    static files that any web server can deliver. The check of the build id (`.next/BUILD_ID`) moves into a
    file that the export writes along.

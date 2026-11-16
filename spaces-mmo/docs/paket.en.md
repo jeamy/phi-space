@@ -70,7 +70,7 @@ a step of its own (e.g. `prepack`, which rewrites `exports` to `dist/`, or an op
 
 ### Check script
 
-`scripts/package-imports.mjs --check` (`npm run check:package`, hooked into `npm test`) checks every project with
+`checks/package-imports.mjs --check` (`npm run check:package`, hooked into `npm test`) checks every project with
 its own `package.json` except `agent/`:
 
 - no relative imports into `src/` (static, dynamic, re-export);

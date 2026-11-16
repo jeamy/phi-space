@@ -244,7 +244,7 @@ U5 is dropped. U6 to U8 follow: agent package, pi-durable out of the main packag
   `sqlite-writer.ts` that was not shipped.
 - **Test bed:** The daemon (`federation-host.ts`) and the scenarios `phase3-sync-node` and `sieve-mobile` run on
   the phi-spaces store.
-- **Guard:** `npm run check:durable` (`scripts/durable-imports.mjs --check`) runs before `npm test`. It fails
+- **Guard:** `npm run check:durable` (`checks/durable-imports.mjs --check`) runs before `npm test`. It fails
   if a file outside the allowlist reaches pi-durable, chord or pi-ai, directly or through its imports.
   - pi-ai alone is allowed in `codemode-chat/`.
   - The list shrinks with U6 and the tools.

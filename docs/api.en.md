@@ -27,7 +27,7 @@ Projects built on phi-spaces (codemode-chat, help-site, future ones) include the
 Only these subpaths are contract; a new subpath is an API change and belongs in this table.
 `npm run check:package` (also part of `npm test`) rejects, in such projects, relative imports into `src/` and
 unexported subpaths. Exceptions: the agent package `agent/` (reaches federation internals) and two
-individually justified files of the help-site (`scripts/package-imports.mjs`, `ALLOWED`). `pi-codemode` is now only a
+individually justified files of the help-site (`checks/package-imports.mjs`, `ALLOWED`). `pi-codemode` is now only a
 development dependency of the root (examples); whoever needs the sandbox carries it themselves.
 
 ## Common types

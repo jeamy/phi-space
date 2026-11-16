@@ -965,7 +965,7 @@ Intent wird von genau einem genommen. So kann ein Rust-Worker neben einem TS-Wor
 3. **Geteilte Typen für den Browser.** Der Client importiert Typen aus `server/gateway.ts`, `chat.ts` und `model.ts`
    sowie `formatWorldTime`/`shownWorldMs` aus `engine/worldtime.ts`. Die Typen ziehen nach `spaces-mmo/shared/` und
    werden in R8 aus Rust erzeugt. Die beiden Funktionen bleiben als kleine TS-Kopie mit Testvektoren, wie
-   `test/test-shared-copies.test.ts` es für andere Kopien prüft.
+   `checks/shared-copies.test.mjs` es für andere Kopien prüft.
 4. **Seite statisch.** Die Next-App ist eine einzige Seite (`app/page.tsx`). Mit `output: "export"` wird sie zu
    statischen Dateien, die jeder Webserver ausliefern kann. Die Prüfung der Build-Id (`.next/BUILD_ID`) zieht in eine
    Datei, die der Export mitschreibt.

@@ -70,7 +70,7 @@ eigener Schritt (z. B. `prepack`, das `exports` auf `dist/` umschreibt, oder ein
 
 ### Prüfskript
 
-`scripts/package-imports.mjs --check` (`npm run check:package`, in `npm test` eingehängt) prüft jedes Projekt mit
+`checks/package-imports.mjs --check` (`npm run check:package`, in `npm test` eingehängt) prüft jedes Projekt mit
 eigenem `package.json` außer `agent/`:
 
 - keine relativen Importe nach `src/` (statisch, dynamisch, Re-Export);

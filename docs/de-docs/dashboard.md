@@ -179,7 +179,7 @@ schreiben (künftige Phase, vgl. `CapabilityReport` in `capability-directory.ts`
 **Theme.** Dieselben 14 Paletten und dieselben Bedienelemente wie Hilfeseite, Codemode-Chat und spaces-mmo: Modus
 (☾/☀) und Palette oben rechts, gemerkt im Browser (`dashboard.mode`, `dashboard.palette`; ohne Wahl folgt der Modus
 `prefers-color-scheme`). `src/dashboard/palettes.ts` ist eine Kopie von `client/lib/palettes.ts` der Projekte
-(`test/test-shared-copies.test.ts` hält sie gleich; `tsconfig.json` lässt sie aus, sie benutzt das DOM); der Server
+(`checks/shared-copies.test.mjs` hält sie gleich; `tsconfig.json` lässt sie aus, sie benutzt das DOM); der Server
 liefert sie ohne Typen als `/palettes.js`. Die Flächen leiten sich wie in den Projekten per `color-mix` aus den
 Palettenfarben ab.
 

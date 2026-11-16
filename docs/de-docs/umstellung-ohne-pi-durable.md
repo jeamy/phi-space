@@ -245,7 +245,7 @@ U5 entfällt. Es folgen U6 bis U8: Agent-Paket, pi-durable aus Hauptpaket und Te
   `sqlite-writer.ts`, die nicht mitgeliefert wurde.
 - **Testbed:** Der Daemon (`federation-host.ts`) und die Szenarien `phase3-sync-node` und `sieve-mobile` laufen auf
   dem eigenen Speicher.
-- **Wächter:** `npm run check:durable` (`scripts/durable-imports.mjs --check`) läuft vor `npm test`. Er schlägt fehl,
+- **Wächter:** `npm run check:durable` (`checks/durable-imports.mjs --check`) läuft vor `npm test`. Er schlägt fehl,
   wenn eine Datei außerhalb der Erlaubnisliste pi-durable, chord oder pi-ai erreicht, direkt oder über ihre Importe.
   - pi-ai allein ist in `codemode-chat/` erlaubt.
   - Die Liste schrumpft mit U6 und den Werkzeugen.

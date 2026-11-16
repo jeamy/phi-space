@@ -437,7 +437,7 @@ einmal in der Bibliothek: das WebSocket-Gateway (`phi-spaces/ws`, das Nachrichte
 Minute) und die Space-Helfer (`connectSpace`, `readExisting`/`StillHeld`, `peek`, `awaitWork`, `keepAlive`, `takeAll`
 aus `phi-spaces`, `src/space-client.ts`). `server/space.ts` setzt nur noch die Werte von spaces-mmo ein (Adressen,
 Wartezeiten, Trace). Reine Oberfläche (`client/lib/palettes.ts`, `markdown.ts`) bleibt eine Kopie je Projekt, weil
-Next.js nichts außerhalb des Projektverzeichnisses bündelt; `test/test-shared-copies.test.ts` hält die Kopien gleich.
+Next.js nichts außerhalb des Projektverzeichnisses bündelt; `checks/shared-copies.test.mjs` hält die Kopien gleich.
 
 ## Einbindung von phi-spaces
 

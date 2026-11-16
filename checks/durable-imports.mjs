@@ -3,21 +3,24 @@
 // only agents need): directly, with the names they import, and transitively through the files they import. The
 // inventory of work package U0 in docs/umstellung-ohne-pi-durable.en.md, now also its guard; read-only, no dependencies.
 //
-//   node scripts/durable-imports.mjs            a markdown report
-//   node scripts/durable-imports.mjs --json     the same as JSON
-//   node scripts/durable-imports.mjs --check    exit 1 when a file outside ALLOWED depends on them
+//   node checks/durable-imports.mjs            a markdown report
+//   node checks/durable-imports.mjs --json     the same as JSON
+//   node checks/durable-imports.mjs --check    exit 1 when a file outside ALLOWED depends on them
+// A scanned directory that is missing ends it with exit 1 in every mode: a move must not leave one unchecked.
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { APPS, PACKAGE_PREFIX, REPO } from "./roots.mjs";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const DIRS = ["src", "examples", "test", "scripts", "agent", "codemode-chat/server", "codemode-chat/tests", "codemode-chat/app", "codemode-chat/client", "help-site", "spaces-mmo"];
+/** The package's directories and the applications' (paths from the repository root). */
+const DIRS = [...["src", "examples", "test", "scripts", "agent"].map((d) => `${PACKAGE_PREFIX}${d}`), "codemode-chat/server", "codemode-chat/tests", "codemode-chat/app", "codemode-chat/client", "help-site", "spaces-mmo"];
+const missing = [...DIRS.filter((d) => !existsSync(join(REPO, d))), ...APPS.filter((a) => !DIRS.some((d) => d === a || d.startsWith(`${a}/`)))];
+if (missing.length) { console.error(`durable imports: not found or not scanned: ${missing.join(", ")}`); process.exit(1); }
 const EXT = /\.(ts|tsx|mts|mjs|js)$/;
 const SKIP = /(^|\/)(node_modules|\.next|dist|\.local|evidence)(\/|$)/;
 const PACKAGES = ["@earendil-works/pi-durable", "@earendil-works/chord", "@earendil-works/pi-ai"];
 /** Where these packages may still be used, directly or not (U6–U8 shrink this list to the agent package). */
 const ALLOWED = [
-	"agent/", // the agent package, with its own dependencies
+	`${PACKAGE_PREFIX}agent/`, // the agent package, with its own dependencies
 ];
 /** pi-ai alone (models, no durable store) is also allowed here: the chat, the help site and spaces-mmo call models
  *  themselves. */
@@ -27,7 +30,7 @@ const ALLOWED_PI_AI = ["codemode-chat/", "help-site/", "spaces-mmo/"];
 function files(dir, out = []) {
 	if (!existsSync(dir)) return out;
 	for (const name of readdirSync(dir)) {
-		const p = join(dir, name), rel = relative(ROOT, p);
+		const p = join(dir, name), rel = relative(REPO, p);
 		if (SKIP.test(rel)) continue;
 		if (statSync(p).isDirectory()) files(p, out);
 		else if (EXT.test(name) && !name.endsWith(".d.ts")) out.push(p);
@@ -63,7 +66,7 @@ function resolveSpec(from, spec) {
 	return null;
 }
 
-const all = DIRS.flatMap((d) => files(join(ROOT, d)));
+const all = DIRS.flatMap((d) => files(join(REPO, d)));
 const graph = new Map(); // file -> { direct: Map<package subpath, {names, typeOnly}>, local: Set<file> }
 for (const f of all) {
 	const text = readFileSync(f, "utf8"), direct = new Map(), local = new Set();
@@ -97,7 +100,7 @@ const visit = (f, stack = new Set()) => {
 };
 for (const f of all) visit(f);
 
-const rel = (f) => relative(ROOT, f);
+const rel = (f) => relative(REPO, f);
 const direct = all.filter((f) => graph.get(f).direct.size).map((f) => ({
 	file: rel(f),
 	imports: [...graph.get(f).direct].map(([spec, v]) => ({ spec, names: [...v.names].sort(), typeOnly: v.typeOnly })),

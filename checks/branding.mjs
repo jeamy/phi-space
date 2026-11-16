@@ -2,10 +2,10 @@
 // Does not inspect Git history, dependencies or runtime databases.
 import { execFileSync } from 'node:child_process';
 import { lstat, readdir, readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { resolve, relative } from 'node:path';
+import { PACKAGE_PREFIX, REPO } from './roots.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = REPO;
 // The old name with any separator (-, _, ., space) or none, singular or plural, any case; not inside a word.
 const obsolete = /(?<![a-z])pi[-_. ]?spaces?(?![a-z])/gi;
 const files = new Set(execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], {cwd:root,encoding:'utf8'}).split('\0').filter(Boolean));
@@ -20,7 +20,7 @@ async function generated(dir) {
     else if(entry.isFile())files.add(path);
   }
 }
-for(const dir of ['dist','help-site/dist','help-site/public','help-site/.next'])await generated(dir);
+for(const dir of [`${PACKAGE_PREFIX}dist`,'help-site/dist','help-site/public','help-site/.next'])await generated(dir);
 const failures=[];
 let checked=0;
 for(const file of files) {
@@ -41,7 +41,7 @@ for(const file of files) {
 }
 // Report keys only, never credentials or environment values. Inspect only explicitly
 // project-identifying values in private testbed settings, not passwords/tokens.
-for(const file of ['.env','help-site/.env','test/testbed/testbed.env']) {
+for(const file of ['.env','help-site/.env',`${PACKAGE_PREFIX}test/testbed/testbed.env`]) {
   let text;try{text=await readFile(resolve(root,file),'utf8');}catch(error){if(error.code==='ENOENT')continue;throw error;}
   for(const line of text.split('\n')) {
     const key=/^\s*([A-Z_][A-Z0-9_]*)\s*=/.exec(line)?.[1];

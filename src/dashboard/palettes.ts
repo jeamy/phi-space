@@ -1,4 +1,4 @@
-// Copy of client/lib/palettes.ts in help-site, codemode-chat and spaces-mmo (test/test-shared-copies.test.ts keeps them
+// Copy of client/lib/palettes.ts in help-site, codemode-chat and spaces-mmo (checks/shared-copies.test.mjs keeps them
 // equal); the dashboard serves it with the types stripped as /palettes.js.
 // The 14 canonical PHI-SPACES / HELP color palettes (Dark & Light modes) and WCAG contrast helper.
 

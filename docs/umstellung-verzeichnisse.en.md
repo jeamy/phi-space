@@ -1,8 +1,9 @@
 # Directory split: the spaces core apart from the applications (plan)
 
-Status: phase 1 in code (2026-11-16): `phi-space-host`, `mmo-space`, `codemode-space`, `help-space`, no `--profile` in
-`phi-space-server`; the image check (phase 1, step 5) is open. Review incorporated on 2026-11-15, gaps on 2026-11-16
-(below). The open questions were decided on 2026-11-16.
+Status (2026-11-16): phase 1 done (`phi-space-host`, `mmo-space`, `codemode-space`, `help-space`, no `--profile` in
+`phi-space-server`; images checked locally, not deployed), phase 2 done (the dashboard's apps in `dashboard.apps.json`,
+the repository-wide checks in `checks/` with `checks/layering.mjs`). Phase 3 is next. Review incorporated on
+2026-11-15, gaps on 2026-11-16 (below). The open questions were decided on 2026-11-16.
 
 ## Goal
 
@@ -27,7 +28,7 @@ counted.
 | `rust/mmo-engine`, `rust/mmo-web` (bins `mmo-world`, `mmo-npc`, `mmo-web`) | the game engine and web process | spaces-mmo |
 | `rust/Cargo.toml` | `[profile.dev.package.mmo-engine]`, `regex-*` opt-levels | spaces-mmo |
 | `src/dashboard.ts` | the default app list (codemode-chat, spaces-mmo world, swarm shard, hub; sockets and ports) | configuration, not core code |
-| `test/test-shared-copies.test.ts` | reads `client/lib/palettes.ts`, `markdown.ts`, `server/env.ts` in the three apps | a repo-wide check, not a core test |
+| `test/test-shared-copies.test.ts` (now `checks/shared-copies.test.mjs`) | reads `client/lib/palettes.ts`, `markdown.ts`, `server/env.ts` in the three apps | a repo-wide check, not a core test |
 | `scripts/package-imports.mjs`, `scripts/durable-imports.mjs`, `scripts/check-branding.mjs` | discover or scan files across the applications and the core | repo-wide checks |
 
 Everything else in `rust/` is core: `phi-json`, `phi-core`, `phi-store`, `phi-service`, `phi-wire`, `phi-host`,
@@ -141,6 +142,24 @@ can follow the moved files. When rolling back several phases, revert the depende
    manifests in the check so entry points and build metadata are covered.
 4. `examples/codemode-evolve.ts` is checked: if it only demonstrates pi-codemode on a space, it stays a core example.
    If it needs codemode-chat, it moves there.
+
+Done on 2026-11-16:
+
+- **Dashboard.** `dashboard.apps.json` at the repository root holds the list with labels, spaces and the order of
+  the addresses; `loadApps` reads it, `DASHBOARD_APPS_FILE` names another file, none means no apps. `DASHBOARD_APPS`
+  and `--app` replace it, an id of it keeps its label and space. `src/dashboard.ts` finds the file beside the `.env`
+  it already reads (`join(import.meta.url, "../..")`): phase 3 points both at the repository root, two levels further up.
+- **`checks/`.** `durable-imports.mjs`, `package-imports.mjs`, `branding.mjs` (was `scripts/check-branding.mjs`) and
+  `shared-copies.test.mjs` (plain JavaScript like the others, outside `tsconfig.json`). `checks/roots.mjs` holds the
+  two roots (`REPO`, `PACKAGE`, `PACKAGE_PREFIX`) and the list of applications; phase 3 changes `PACKAGE` there to
+  `spaces/`. A check that does not find an application or a scanned directory fails instead of scanning less.
+- **`checks/layering.mjs`** runs first in `npm test` (`npm run check:layering`). It scans `src`, `test`, `scripts`,
+  `agent`, `examples`, `rust/phi-*` and the manifests (`package.json`, the tsconfigs, `rust/Cargo.toml`) without
+  their comments, and reads Cargo's resolved graph (`cargo metadata --locked --offline`, so it needs cargo). Two files
+  are allowed until phase 3: the root `package.json` (the scripts that start the applications, D3) and
+  `rust/Cargo.toml` (the one workspace, D1). Probed: a path to `spaces-mmo/` in `src/` and a dev-dependency of
+  `phi-wire` on `mmo-engine` are both refused.
+- **`examples/codemode-evolve.ts`** stays a core example: it imports only `src/` and `@earendil-works/pi-codemode`.
 
 ### Phase 3: move the TypeScript package and all Cargo workspaces
 
