@@ -1084,6 +1084,7 @@ export function CodemodeChat() {
 				<span className="pill">{t.session}: {session}</span>
 				<span className={"pill" + (live ? " pill--accent" : "")}>{live ? t.live : t.offline}</span>
 				<span className="pill">{llm?.enabled ? `${llm.models.length} ${t.llm}` : t.off}</span>
+				<a className="toplink" href={`/experiments?lang=${lang}`}>{lang === "de" ? "Experimente" : "Experiments"}</a>
 				<ThemeControls lang={theme.lang} setLang={theme.setLang} mode={theme.mode} changeMode={theme.changeMode} palette={theme.palette} changePalette={theme.changePalette} />
 				<a className="toplink" href={`/help?lang=${lang}`}>{t.helpLink}</a>
 			</header>

@@ -305,3 +305,11 @@ Code from entries is data. It only ever runs inside the sandbox, which can reach
 limits source size (16 000 characters), submissions, runs, tasks and deletions per minute and room, and the number of
 rooms and WebSocket clients per web process. Identities are unauthenticated display names, and anyone in a room can
 create tasks, start runs and delete blocks. Do not expose this publicly without a reverse proxy in front.
+
+## Experiment publications
+
+`/experiments` presents the island experiments, protocol diagrams, model comparison and result tables in English and German. `/experiments/planning` and `/experiments/jev` render the two English papers; `/experiments/article` offers the detailed article in English and German. The header links to this section. Each reader includes a table of contents and a Markdown download.
+
+The repository documents in `../docs/` remain the source of truth. `server/experiments-content.ts` publishes an explicit document and figure allowlist, reuses the shared Markdown renderer and rewrites publication links. It does not expose arbitrary repository paths. The Docker image includes the selected documents and their figure directory for build and runtime. Rebuild the web image after source-document changes; deploying to shared hosts is a separate operation.
+
+The comparison distinguishes JEPA latent-state prediction, language-model code generation and Jev typed decisions inside deterministic planning. Push-T and island success rates are not directly comparable. Jev's fresh-island evaluation remains open.

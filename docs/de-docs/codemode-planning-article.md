@@ -2,6 +2,37 @@
 
 [Englische Fassung](../codemode-planning-article.en.md) · [Technischer Plan](../codemode-planung.en.md)
 
+## Versuchsaufbauten lesen und vergleichen
+
+Der neue Codemode-Bereich `/experiments` bereitet das kompakte Planungspaper, den Jev-Bericht und diesen Entwicklungsartikel als HTML auf. Versuchsprotokolle, Abbildungen und Quelldownloads sind dort getrennt zugänglich.
+
+![Modellrollen bei JEPA, Code-Agenten und Jev-Hybriden](../img/codemode-planung/planning-approaches.svg)
+
+*Abbildung. Die Ansätze setzen gelernte Modelle unterschiedlich ein: JEPA sagt latente Zustände voraus, Code-Agenten erzeugen Programme und Jev beantwortet typisierte Fragen innerhalb eines expliziten Programms.*
+
+![Versuchsprotokolle für Code-Generierung und feste Policies](../img/codemode-planung/experiment-design.svg)
+
+*Abbildung. Aus 60 gültigen Code-Agenten-Läufen gingen 44 Gewinner für die Prüfung auf frischen Inseln hervor. Jev-Policies wurden stattdessen jeweils einmal auf den ursprünglichen Inseln ausgewertet. Die Auswertungseinheiten unterscheiden sich.*
+
+### JEPA, Code-generierende KI und Jev: Gemeinsamkeiten und Unterschiede
+
+Alle drei sind KI-Ansätze. „Code-generierende KI“ bezeichnet hier Sprachmodell-Agenten, die Bots schreiben und überarbeiten, keine Gegenkategorie zu JEPA oder Jev.
+
+| Aspekt | JEPA / LeWM in der Quellanalyse | Code-Agenten hier | Jev-Hybrid hier |
+|---|---|---|---|
+| Modellausgabe | Nächster latenter Zustand aus Zustand und Aktion | Ausführbarer JavaScript-Bot | Typisierte Auswahl oder Wahrscheinlichkeiten über vorgegebene Kandidaten |
+| Zustand und Umgebung | Bilder und kontinuierliche Push-T-Physik | Symbolische Spiel-Tool-Antworten | Von Code vorbereitete Zustände und Kandidaten |
+| Planung | Suche über Aktionsfolgen mit gelerntem Prädiktor; Demonstrationsspeicher liefert Zwischenziele | Agenten überarbeiten Code über Generationen; Bots kartieren, schätzen Raten und planen während des Spiels neu | Code berechnet Wege, Fristen und machbare Runden; Jev bewertet oder wählt darin |
+| Anpassung im Versuch | Vortrainierte Modellgewichte bleiben fest | Code-Revisionen und Datenschätzungen im Spiel; keine neuronalen Gewichtsänderungen | Festes vortrainiertes Modell und fester Workflow; Zustandsabfragen, kein neuronales Dynamiktraining |
+| Generalisierungsprüfung | Neue Start-Ziel-Paare, Seeds und gehaltene Ziele in Push-T | Verborgene Aufgabenepisoden plus 94 frische Inseln und Seeds für Gewinner | Bisher neun ursprüngliche Inseln mit acht Seeds; entsprechende Transferprüfung noch offen |
+
+Gemeinsam sind die Fragen nach Repräsentation, Teilzielen, Speicher, Planungshorizont und Zielbewertung. Die Verbindung ist konzeptionell: Unser Hybrid lernt nicht das neuronale Vorwärtsmodell von LeWM. Eine typkorrekte Antwort belegt außerdem weder eine richtige Wertschätzung noch eine wirksame Strategie.
+
+[Alchaers Analyse](https://haddyalchaer.com/jepa) zeigt die Bedeutung von Aufgabenzerlegung und Zielbewertung. Das motiviert entsprechende Kontrollen hier. Die Push-T-Prozentzahlen und die Zahl erfüllter Inselziele messen jedoch verschiedene Dinge und bilden keine gemeinsame Rangliste. Besonders aufschlussreich ist unsere Kontrolle mit empirischen Raten: Sie erreicht ebenfalls alle neun Inselziele ohne Modellanfragen. Der Versuch zeigt damit einen funktionsfähigen Jev-Hybrid, bisher keinen Mehrwert gegenüber dieser Kontrolle.
+
+Quellen: [LeWorldModel](https://arxiv.org/abs/2603.19312), [TypeSafe zu typisierten Entscheidungen](https://docs.typesafe.ai/introduction). Der Vergleich ist unsere Einordnung der Architekturen und unserer Versuche, keine gemeinsame Auswertung dieser Quellen.
+
+
 ## Die Ausgangsfrage
 
 Haddy Alchaer untersucht im November 2026 LeWorldModel (LeWM, Maes et al., 2026) an der Aufgabe Push-T. Ein Roboter muss einen
@@ -99,10 +130,17 @@ für seinen Bot entscheidenden Teil der Flutregel. Der geskriptete Bot von Schri
 Hypothesen. Bei „Die Chancen der Flut“ bestanden Sonnet, Opus und GPT. Nur GPT schätzte dafür Wahrscheinlichkeiten.
 Haiku scheiterte bei beiden Aufgaben an der Spielsteuerung. Die einzelnen Läufe liefern Fallbeispiele.
 
-Mit konkreten Tool-Antworten im Prompt löste Sonnet Schritt 9 in Generation 2, Opus und GPT in Generation 1.
-Ihre Gewinner blieben auf 2, 0 beziehungsweise 0 der 95 zusätzlichen Inseln unter dem Ziel. Haiku scheiterte weiterhin.
-Für jede Bedingung mit Tool-Beispielen liegt ein Lauf vor. Die Ergebnisse sind Fallstudien zu erzeugten Programmen
-und Prompt-Bedingungen. Belastbare Erfolgsquoten und Modellrangfolgen erfordern weitere unabhängige Läufe.
+Auf die ersten Läufe mit Tool-Beispielen folgten 60 gültige Läufe, zehn je Modell und Bedingung, sowie eine Prüfung
+aller 44 Gewinner auf 94 frischen Inseln mit neuen Seeds. Mit Beispiel löste Sonnet 7/10 Läufe, Opus und GPT jeweils
+10/10. GPT und Opus erzeugten mit Beispiel in 17/20 Läufen einen Gewinner, der jedes Ziel der frischen Inseln erreichte,
+ohne Beispiel in 8/20. Die Intervalle bleiben breit. Diese explorativen Vergleiche begründen keine allgemeine
+Rangfolge der Modelle.
+
+Jev wurde außerdem als direkter Spieler und in vorgegebenen Workflows geprüft. Die direkten Strategien verfehlten
+die Aufgabenziele. Ein Hybrid mit Kandidatenbewertung und ein erweiterter Workflow erreichten jeweils 9/9 Ziele.
+Die Kontrolle mit empirisch gezählten Fundraten erreichte dieselbe Zielabdeckung mit weniger Tool-Aufrufen und ohne
+Modellanfragen. Für jede Jev-Strategie liegt eine Auswertung auf den ursprünglichen Aufgabenseeds vor. Wiederholungen
+und die Prüfung auf frischen Inseln stehen dafür noch aus.
 
 ## Entwicklungsprotokoll
 
@@ -635,6 +673,149 @@ Die ersten Läufe von Schritt 9 erfassten neben der Planung auch, wie gut die Ag
 anhand ihrer Beschreibung erschließen konnten. Das konkrete Beispiel beseitigte in diesen Läufen einen
 großen Teil dieser Hürde. Offen bleibt, ob solche Beispiele in den Standardprompt aller Bot-Aufgaben gehören.
 
+## Prüfung auf frischen Inseln und Seeds (15. November 2026)
+
+Die früheren 95 zusätzlichen Inseln stammten aus demselben Zahlenbereich wie die neun Aufgabeninseln, 34 bis 233.
+Alle bisherigen Auswertungen verwendeten die Seed-Indizes 0 bis 7. `server/data/shore-fresh.ts` prüft gespeicherte
+Gewinner und geskriptete Kontrollen auf Inseln 234 bis 433. Dieselbe Auswahlregel, mindestens zwei Räume mit einer
+wahren Fundwahrscheinlichkeit von 0,35 oder mehr, ergibt dort 94 Inseln. Dazu kommen neue Seed-Indizes 8 bis 15.
+Der Zielwert wird je Insel auf diesen Seeds erneut aus dem Referenzplan berechnet. Eine zweite Prüfung nutzt die
+95 früheren Inseln mit den neuen Seeds. Dafür entstehen keine Modellaufrufe.
+
+| Bot aus einem ursprünglichen Einzellauf | Frische Inseln unter Ziel, von 94 | Ertrag relativ zur Referenz, Minimum / Median / Maximum | Mittlere Tool-Aufrufe je Insel | Frühere Inseln unter Ziel bei neuen Seeds, von 95 |
+|---|---:|---|---:|---:|
+| GPT-6.1 Sol, mit Beispiel | 0 | 0,98 / 1,13 / 1,44 | 778 | 0 |
+| GPT-6.1 Sol, ohne Beispiel | 0 | 1,00 / 1,10 / 1,41 | 968 | 0 |
+| Opus 5.5, mit Beispiel | 0 | 1,00 / 1,11 / 1,41 | 897 | 0 |
+| Opus 5.5, ohne Beispiel | 13 | 0,71 / 1,00 / 1,22 | 1.031 | 8 |
+| Sonnet 5.5, mit Beispiel | 2 | 0,63 / 1,06 / 1,36 | 810 | 0 |
+| Lerner mit gezählten Fundraten | 0 | 1,00 / 1,00 / 1,16 | 1.059 | 0 |
+| Jeder Raum gleich bewertet | 31 | 0,11 / 1,00 / 1,11 | 1.097 | 39 |
+| Referenzplan | — | 1,00 | 1.050 | — |
+
+Die beiden GPT-Gewinner und Opus' Gewinner mit Beispiel erreichen jedes Ziel der frischen Inseln. Dies prüft die
+Übertragbarkeit dieser ausgewählten Programme. Wie zuverlässig ein Modell einen solchen Gewinner erzeugt, lässt
+sich erst durch wiederholte Modellläufe beurteilen.
+
+## Zehn Läufe je Modell und Bedingung (15. November 2026)
+
+`server/data/run-series.ts` wiederholt den Versuch zehnmal mit und zehnmal ohne Tool-Beispiel pro Modell.
+Die Bedingungen werden je Serie abwechselnd ausgeführt. Jeder Lauf nutzt drei Agenten, höchstens fünf Generationen,
+einen Beitrag je Agent, zwei Verbesserungsrunden, deutsche Prompts und ein Budget von 5 US-Dollar.
+GPT-6.1 Sol lief über die OpenAI-Anmeldung der pi CLI, Sonnet und Opus über die Anthropic-API. Läufe mit einem
+eingesprungenen Skript-Agenten wurden getrennt gespeichert und wiederholt. Die 60 gültigen Läufe enthalten keinen
+solchen Ersatz. Jeder der 44 Gewinner, der günstigste bestandene Beitrag eines Laufs, wurde anschließend auf den
+94 frischen Inseln und den neuen Seeds geprüft.
+
+| Modell | Bedingung | Gelöst, Wilson-Intervall 95 % | Generationen der ersten Lösung | Mittlere Kosten je Lauf | Tool-Aufrufe des Gewinners, Median | Läufe mit einem Gewinner, der alle 94 frischen Inselziele erreicht |
+|---|---|---|---|---:|---:|---|
+| GPT-6.1 Sol | Mit Beispiel | 10/10 (72–100 %) | 1 1 1 2 2 2 2 2 3 3 | $0,40 | 7.938 | 9/10 (90 %) |
+| GPT-6.1 Sol | Ohne | 9/10 (60–98 %) | 2 2 2 2 2 3 3 5 5 | $0,48 | 8.413 | 4/10 (40 %) |
+| Opus 5.5 | Mit Beispiel | 10/10 (72–100 %) | 1 1 1 1 1 1 1 2 2 2 | $1,15 | 8.428 | 8/10 (80 %) |
+| Opus 5.5 | Ohne | 8/10 (49–94 %) | 2 3 3 3 3 3 4 4 | $1,93 | 8.965 | 4/10 (40 %) |
+| Sonnet 5.5 | Mit Beispiel | 7/10 (40–89 %) | 1 1 2 2 3 3 3 | $0,60 | 7.745 | 0/10 (0 %) |
+| Sonnet 5.5 | Ohne | 0/10 (0–28 %) | — | $0,46 | — | 0/10 (0 %) |
+
+Die Tool-Aufrufe des Gewinners summieren neun Aufgabenepisoden mit je acht Seeds, insgesamt 72 Spieldurchläufe.
+Der Referenzplan benötigt 9.033 Aufrufe. Die Mediane beziehen sich auf gelöste Läufe, die mittleren Modellkosten auf
+alle zehn gültigen Läufe. In der letzten Spalte zählt ein Lauf ohne Gewinner als Misserfolg. Ein frisches Inselziel
+verlangt mindestens 90 % des mittleren Referenzertrags auf denselben acht neuen Seeds, abgerundet auf ein Achtel.
+
+Sonnet löste mit Beispiel 7/10 Läufe und ohne Beispiel 0/10. Der zweiseitige Fisher-Test ergibt p = 0,0031.
+Opus und GPT lösten mit Beispiel früher. Bei Opus gelang es siebenmal in Generation 1. Die Unterschiede ihrer
+reinen Lösungsquoten bleiben bei diesen Stichprobengrößen unklar, mit p = 0,474 für Opus und p = 1,00 für GPT.
+
+Der größere beobachtete Unterschied betrifft die Gewinner. GPT und Opus erzeugten mit Beispiel zusammen in
+17/20 Läufen einen Gewinner, der alle 94 frischen Inselziele erreicht, ohne Beispiel in 8/20. Der zusammengefasste
+Fisher-Test ergibt p = 0,0079. Daraus folgt kein gesicherter Effekt für jedes Modell einzeln. Sonnets sieben
+Gewinner scheiterten jeweils auf einer bis zehn frischen Inseln. Auch mit Beispiel blieben ein GPT- und zwei
+Opus-Gewinner auf vier bis 18 frischen Inseln unter dem Ziel. Die ursprünglichen Einzelläufe überschätzten daher
+die Verlässlichkeit der Übertragung.
+
+Fordert man zusätzlich Erfolg auf den 95 früheren Inseln mit neuen Seeds, bestehen GPT und Opus gemeinsam in
+16/20 Läufen mit Beispiel und 7/20 ohne Beispiel. Ein Opus-Gewinner mit Beispiel und ein GPT-Gewinner ohne Beispiel
+erreichen alle frischen Inselziele, verfehlen aber jeweils eines der früheren Inselziele bei neuen Seeds.
+Die Haupttabelle betrachtet ausschließlich die 94 frischen Inseln.
+
+Die gültigen Serien kosteten insgesamt GPT $8,73, Opus $30,80 und Sonnet $10,62. GPTs Dollarwerte sind Listenpreis-
+Schätzungen für die Nutzung über die pi-Anmeldung. Kosten ungültiger Versuche und ihrer Wiederholungen sind in diesen
+Summen nicht enthalten. Mit Beispiel waren die mittleren Kosten für GPT und Opus niedriger. Bei Sonnet stiegen sie
+von $0,46 auf $0,60, zusammen mit der höheren Lösungsquote. Die Tests sind explorativ und nicht für Mehrfachvergleiche
+korrigiert. Zehn gültige Läufe pro Bedingung begrenzen die Genauigkeit und erfassen keine Zuverlässigkeit des Anbieters
+bei ungültigen Antworten.
+
+## Jev als direkter Spieler und in expliziten Workflows (16. November 2026)
+
+Die früheren Schätzversuche ließen Jev das Logbuch auswerten und spielten gespeicherte Antworten in einem festen
+Planer ab. Weitere Live-Versuche prüften direkte Spielentscheidungen und Entscheidungen innerhalb eines vorgegebenen
+Planungsablaufs. Alle nutzten `typesafe/jev-1.13`, aufgelöst als `typesafe/jev-1.13-20260917`. Simulation, Aufgabeninseln,
+die acht ursprünglichen Seeds je Episode und die Grenze von 300 Tool-Aufrufen entsprechen Schritt 9.
+
+**Direkter Spieler.** Jede Modellanfrage wählte eine einzelne Aktion aus einem Menü, das aus bisherigen
+Tool-Antworten abgeleitet wurde. Jev erhielt die Aufgabenbeschreibung und den bisherigen Verlauf. Mit und ohne
+Tool-Beispiele wurden je 72 Durchläufe abgeschlossen. Beide Bedingungen erreichten 0/9 Episodenziele.
+Mit Beispiel hob der Spieler 48 Stück auf und lieferte 15 ab, ohne Beispiel 77 und 17. Zusammen kosteten
+4.823 Anfragen $1,60351. Jeder Durchlauf endete durch Jevs eigene Stop-Entscheidung vor der Tool-Grenze.
+
+Zwei weitere Strategien ergänzten ein strukturiertes Gedächtnis und danach eine zweite Anfrage zur Prüfung jeder
+vorgeschlagenen Aktion. Beide lieferten in den 24 sichtbaren Durchläufen kein Holz ab. Die sechs versteckten Episoden
+wurden deshalb nach der bestehenden Judge-Regel übersprungen. Das Gedächtnis benötigte 571 Anfragen für $0,17631.
+Die Aktionsprüfung benötigte 1.178 für $0,37610 und behielt den Vorschlag in allen 565 ausgeführten Aktionen bei.
+Diese einzelnen Auswertungen zeigten keinen Vorteil der Ergänzungen.
+
+**Hybrid mit Kandidatenbewertung.** Code erkundet die Insel über die Spieltools, erzeugt je Flut bis zu
+32 machbare Sammelrunden, reserviert Rückweg und Ablieferung und führt die ausgewählte Runde aus. Jev schätzt den
+Ertrag mit getrennten Fragen nach mindestens einem, zwei und weiteren neuen Holzstücken. Die Summe dieser
+Wahrscheinlichkeiten ergibt die geschätzte erwartete Holzmenge. Der Code wählt die höchste Bewertung und löst
+Gleichstände deterministisch auf. Rohwahrscheinlichkeiten, Kandidaten, Auswahl und Tool-Verlauf werden gespeichert.
+Die empirische Kontrolle nutzt dieselben Kandidaten und dieselbe Ausführung mit gezählten Logbuchraten.
+Die gleichgewichtete Kontrolle gibt jedem Raum mit protokollierter Fundstelle denselben Wert.
+
+**Erweiterter Workflow.** Zusätzlich wählt Jev das Zwischenziel `collect`, `deliver` oder `finish`. Eine eigene
+Wahrscheinlichkeitsfrage prüft die Ablieferbarkeit jeder Runde. Antworten unter 0,5 schließen einen Kandidaten aus.
+Wege, Bewegungszeiten, Aufrufgrenzen und sichere Rückwege berechnet weiterhin der Code. Jede folgende Bedingung
+schloss alle 72 Durchläufe ab.
+
+| Strategie | Episodenziele erreicht | Holz abgeliefert | Tool-Aufrufe | Jev-Anfragen | API-Kosten |
+|---|---:|---:|---:|---:|---:|
+| Hybrid mit Kandidatenbewertung | 9/9 | 733 | 8.447 | 3.352 | $0,89258 |
+| Erweiterter Workflow | 9/9 | 724 | 9.740 | 5.725 | $1,26707 |
+| Empirische Fundraten | 9/9 | 737 | 8.059 | 0 | $0 |
+| Gleichgewichtete Fundstellen | 8/9 | 707 | 7.953 | 0 | $0 |
+
+Ein Episodenziel gilt für die durchschnittliche Holzmenge über acht Seeds. Die Summen der Tabelle umfassen alle
+72 Durchläufe. Je Modellstrategie liegt eine Auswertung mit Tool-Beispielen und einem Budget von 5 US-Dollar vor.
+Der Referenzplan benötigt 9.033 Spielaufrufe. Diese festen Strategien unterscheiden sich von der Serie mit
+codegenerierenden Agenten, die Programme über Generationen verbessert und auswählt. Die Spielleistung wird unter
+denselben Regeln geprüft. Inferenz und Anpassung unterscheiden sich zwischen diesen Ansätzen.
+
+Die gleichgewichtete Kontrolle verfehlt H4. Bei einem Ziel von 13,375 Stück liefert sie im Mittel 11,125 ab.
+Der Jev-Hybrid erreicht 14,375, der erweiterte Workflow 14,250 und die empirische Kontrolle 14,875.
+Hier enthält Jevs Bewertung ein nützliches Signal gegenüber gleichen Raumwerten. Die höchste mittlere Ausbeute
+unter diesen Kontrollen erreicht das Zählen der Logbuchfunde.
+
+Beim einfacheren Hybrid gab es unter 14.704 Kandidatenbewertungen 125 Fälle, in denen eine strengere
+Holzmengenschwelle eine höhere Wahrscheinlichkeit erhielt als eine schwächere. Die rohen Werte wurden ohne
+Korrektur summiert. Das Bestehen der Aufgabe belegt daher weder kalibrierte Schätzungen noch durchgehend
+kohärente Wahrscheinlichkeitsverteilungen.
+
+Der erweiterte Workflow wählte 512 Sammelziele und 378 Zwischenablieferungen. `finish` wurde an keinem der
+angebotenen Entscheidungspunkte gewählt. Die zusätzliche Prüfung lehnte 407 bereits mathematisch zulässige
+Kandidaten ab und änderte die Auswahl in 27 von 512 Runden. Da nur Kandidaten mit bestandenen Code-Prüfungen
+angeboten werden, misst dieser Versuch falsche Ablehnungen sicherer Runden. Er belegt keine Erkennung unsicherer
+Pläne.
+
+Die Ergänzungen hielten die Zielabdeckung, lieferten aber neun Stück weniger als der einfachere Hybrid, benötigten
+15,3 % mehr Spielaufrufe und kosteten 42,0 % mehr. Zwischenzielwahl und zusätzliche Prüfung wurden gemeinsam
+geändert. Ihr jeweiliger Einfluss lässt sich daraus nicht bestimmen. Für beide Hybride fehlen Wiederholungsserien
+und die Prüfung auf den 94 frischen Inseln. Die Kombination von Jev und Code bewältigt diese Aufgabenepisoden.
+Die empirische Kontrolle erreicht dieselben Ziele mit weniger Interaktionen und ohne API-Ausgaben.
+
+Der [ausführliche Jev-Bericht](../codemode-jev-player.en.md) enthält Strategien, Implementierungsprüfungen und
+Startbefehle. Das [kompakte Paper](../codemode-planning-summary.en.md) verbindet die Ergebnisse mit den wiederholten
+Modellläufen. Die Rohdaten liegen unter `~/phi-experiments/2026-11-15-series/` in `jev-direct/`, `jev-memory/`,
+`jev-review/`, `jev-hybrid/` und `jev-workflow/`.
+
 ## Abbildungen
 
 Die SVG-Diagramme passen sich an das helle oder dunkle Farbschema an. Die Abbildungen 3 bis 7 stammen aus einem
@@ -749,11 +930,13 @@ eine neue Runde vor jeder Flut (8793 Punkte, weniger als die 9033 des Referenzpl
 
 ## Offene Fragen
 
+- Wie verlässlich sind die beiden Jev-Hybride über Wiederholungen und auf den 94 frischen Inseln? Getrennte
+  Versuche sollten Zwischenzielwahl und zusätzliche Prüfung untersuchen. Für die Erkennung unsicherer Pläne
+  braucht es sichere und unsichere Kandidaten.
 - Wie wirken sich konkrete Tool-Beispiele in Schritt 7 und 8 aus? Sollen sie bei Bot-Aufgaben auf generierten
   Inseln zum Standard gehören? Warum bewegen sich Haikus Bots auch mit einem Beispiel nicht?
-- Wie stabil sind die Ergebnisse über weitere Modellläufe? GPT erreichte bei „Die Flut lernen“ 7 von 9 Episoden im
-  ersten Lauf und 2 von 9 im zweiten. Die Zahl der Wiederholungen variiert je nach Modell und Aufgabe. Für jede Bedingung mit Tool-Beispielen in
-  Schritt 9 liegt ein Lauf vor.
+- Wie stabil sind die Ergebnisse von Schritt 7 und 8 über weitere Modellläufe? GPT erreichte bei „Die Flut lernen“
+  7 von 9 Episoden im ersten Lauf und 2 von 9 im zweiten. Schritt 9 hat inzwischen zehn Läufe je Modell und Bedingung.
 - Wie reagieren Bots, wenn sich die Flutregel zwischen Generationen ändert? Ein Vergleich könnte zeigen, wann eine
   neue Schätzung über `observations()` einer fest codierten Regel überlegen ist.
 - Welchen Beitrag leisten die Beobachtungen im Prompt, das längere Codefenster, die genaueren Fehlermeldungen und

@@ -1,5 +1,36 @@
 # Planning bots without a neural world model
 
+## Reading the experimental designs
+
+The Codemode experiments page presents the compact planning paper, the Jev report and this development article as HTML, with separate protocols and source downloads at `/experiments`.
+
+![Model roles in JEPA, code-generating agents and Jev hybrids](img/codemode-planung/planning-approaches.svg)
+
+*Figure. The three approaches use learned models in different roles. JEPA predicts latent states; code agents produce programs; Jev answers typed questions inside an explicit program.*
+
+![The code-generation and fixed-policy experimental protocols](img/codemode-planung/experiment-design.svg)
+
+*Figure. Sixty valid code-generation runs produced 44 winners for fresh-island evaluation. Jev policies instead received one fixed-policy evaluation each on the original islands. These evaluation units are different.*
+
+### JEPA, code-generating AI and Jev: similarities and differences
+
+All three are AI approaches. Here, “code-generating AI” refers specifically to language-model agents that write and revise bots. It is not an alternative category to AI-based JEPA or Jev.
+
+| Aspect | JEPA / LeWM in the source analysis | Code-generating agents here | Jev hybrid here |
+|---|---|---|---|
+| Model output | Next latent state from the current state and an action | Executable JavaScript bot | Typed choices or probabilities about supplied candidates |
+| State and environment | Images and continuous Push-T physics | Symbolic game-tool responses | Symbolic state and candidates prepared by code |
+| Planning machinery | Action-sequence search with a learned predictor; demonstration memory supplies intermediate targets | Agents revise code across generations; bots map, estimate rates and replan during play | Code computes routes, deadlines and feasible rounds; Jev scores or selects within this workflow |
+| Adaptation during evaluation | Pretrained model weights remain fixed | Program revisions and within-game data estimates; no neural weight updates | Fixed pretrained model and fixed workflow; current-state queries, no neural dynamics training |
+| Generalization check | Fresh starts/goals, seeds and sustained goal attainment in Push-T | Held task episodes plus 94 fresh islands and fresh seeds for selected winners | Original nine islands and eight seeds so far; the equivalent fresh-island test is still open |
+
+The common design questions concern representation, subgoals, memory, the planning horizon and objective design. The correspondence is conceptual: our hybrid does not learn the neural forward dynamics used by LeWM. A well-typed response also does not establish a correct value estimate or an effective strategy.
+
+[Alchaer’s analysis](https://haddyalchaer.com/jepa) reports that task decomposition and objective design can matter as much as forward prediction. That motivates analogous controls here, but the Push-T percentages and island target counts measure different things. They cannot rank the approaches on a shared benchmark. Our empirical-rate control is particularly important: it also meets all nine island targets without model requests. The current experiment therefore demonstrates that the Jev hybrid is workable, not that Jev adds value over that control.
+
+Sources: [LeWorldModel](https://arxiv.org/abs/2603.19312), [TypeSafe’s typed decision workflow](https://docs.typesafe.ai/introduction). The comparison above is our interpretation of these architectures and our own experiment, rather than a shared evaluation from those sources.
+
+
 ## The question
 
 Haddy Alchaer's post "After 600 experiments, here's what I discovered about JEPA world models"
@@ -91,10 +122,15 @@ under the chosen conditions. Model runs additionally show how observations enter
 were included in its prompt. On "Odds of the tide", Sonnet, Opus and GPT passed, although only GPT estimated the odds.
 Step 9 removed the shared spatial assumptions that allowed those other strategies to pass.
 
-With concrete tool answers in the prompt, Sonnet solved step 9 in generation 2, and Opus and GPT in generation 1.
-Their winning bots fell below the target on 2, 0 and 0 of the 95 additional islands, respectively. Haiku still failed.
-Each example-assisted condition has one run. These are case studies of generated programs and prompt conditions;
-more independent runs are needed to estimate success rates or rank the models reliably.
+The initial tool-example runs were followed by 60 valid runs, ten per model and condition, and an evaluation of
+all 44 winners on 94 fresh islands and fresh seeds. With examples, Sonnet solved 7/10 runs, Opus and GPT 10/10 each.
+GPT and Opus produced a winner meeting every fresh-island target in 17/20 runs with examples and 8/20 without.
+Intervals remain wide, and these exploratory comparisons do not establish a general model ranking.
+
+Jev was also tested as a direct player and within explicit workflows. Direct policies failed the task targets.
+A candidate-scoring hybrid and an expanded workflow both reached 9/9 targets, while the empirical-rate control
+matched that coverage with fewer tool calls and no model requests. Each Jev policy has one evaluation on the original
+task seeds. Repeated trials and the fresh-island evaluation remain open for those policies.
 
 ## Development log
 
@@ -687,8 +723,8 @@ spends 9033. The last column counts runs whose winner stayed at or above the tar
 
 What the repetition shows:
 
-- **Sonnet needs the example.** Without it, none of ten runs solves the task, with it seven do (Fisher's exact test,
-  p = 0.003). The earlier single runs (0 of 2 without, generation 2 with) were not a lucky draw.
+- **Sonnet solved only with examples in this series.** Without it, none of ten runs solves the task, with it seven do (Fisher's exact test,
+  p = 0.003). The repeats support the pattern of the initial runs (0 of 2 without, generation 2 with).
 - **GPT and Opus solve the task either way, but earlier with the example.** Every run with the example solves it,
   Opus in generation 1 in seven of ten; without it, GPT and Opus need generation 2 to 5 and two Opus runs and one GPT run
   never get there. On the solve rate alone the difference is within chance (10 vs. 9 and 10 vs. 8).
@@ -697,12 +733,85 @@ What the repetition shows:
   on 4 to 8 of the 94 fresh islands. With the example, nine of GPT's and eight of Opus's runs give a winner that holds
   on every fresh island (GPT and Opus together: 17 of 20 runs with the example, 8 of 20 without; Fisher's exact test,
   p = 0.008). Sonnet's winners, all with the example, fall below on 1 to 10 fresh islands each.
-- **The example is cheaper.** Runs with it end their search earlier: Opus's cost $1.15 instead of $1.93 per run, GPT's
-  $0.40 instead of $0.48, and their winners spend fewer points.
+- **GPT and Opus cost less with examples.** Runs with it end their search earlier: Opus's cost $1.15 instead of $1.93 per run, GPT's
+  $0.40 instead of $0.48, and their winners spend fewer points. Sonnet's mean cost rose from $0.46 to $0.60 alongside its higher solve rate.
 
 The single runs of the section before overstated one thing: there every winner with the example held on all fresh
 islands; over ten runs, one GPT winner and two Opus winners do not (one of them brings nothing on some islands). The
 selection of the nine task islands catches most but not all winners that only work on islands like them.
+
+The main fresh-island criterion concerns the 94 new islands. Requiring success on both those islands and the
+95 earlier islands on fresh seeds gives 16/20 GPT and Opus runs with examples and 7/20 without. One example-assisted
+Opus winner and one GPT winner without examples pass all fresh islands but fail one earlier island each.
+
+Valid-run series costs total $8.73 for GPT, $30.80 for Opus and $10.62 for Sonnet. GPT's reported cost uses list prices
+for the pi-login route. Invalid attempts and retries are outside these totals. Statistical comparisons are exploratory
+and uncorrected for multiple testing. The intervals remain wide with ten valid runs per condition.
+
+## Jev as a direct player and in explicit workflows (2026-11-16)
+
+The estimator experiments asked Jev about the logbook and used recorded answers in a fixed planner. Further live
+experiments asked whether the model could steer a figure directly or select decisions in a planning workflow.
+All used `typesafe/jev-1.13`; the resolved model was `typesafe/jev-1.13-20260917`. The simulation, task islands, original
+eight seeds per episode and 300-tool-call allowance were shared with step 9.
+
+**Direct player.** Each request chose one action from a menu derived from previous tool replies. The model received
+the task description and its tool history. With and without tool examples, each condition completed 72 trajectories
+and reached 0/9 episode targets. With examples, it picked up 48 pieces and delivered 15; without examples, 77 and 17.
+Together, 4,823 requests cost $1.60351. Every trajectory ended through the model's stop choice before its tool limit.
+
+Two follow-ups added structured observation memory, then a second request to review each proposed action. Neither
+delivered any wood in the 24 shown trajectories, so the six hidden episodes were skipped under the judge's existing
+gate. The memory condition used 571 requests for $0.17631. Review used 1,178 for $0.37610 and retained every proposal
+in the 565 executed actions. These conditions provided no observed improvement in their single evaluations.
+
+**Candidate-scoring hybrid.** Code mapped the island through charged game tools, generated up to 32 feasible rounds
+per tide, reserved return and delivery time, and executed the selected round. Jev estimated each candidate's expected
+new wood using separate probability questions for at least one, two and further pieces. Their sum gives the estimated
+expectation. The code chose the highest value, with deterministic tie-breaking. Raw probabilities, plans, choices
+and tool traces were recorded. The empirical control used the same generator and executor with counted logbook rates.
+The equal-value control assigned the same value to every room with a logged landing cell.
+
+**Expanded workflow.** Jev additionally selected `collect`, `deliver` or `finish` as a subgoal. A separate probability
+question checked each candidate's delivery feasibility. A response below 0.5 excluded that candidate. The code still
+calculated paths, movement times, tool bounds and safe returns. Each condition below completed all 72 trajectories.
+
+| Policy | Episode targets reached | Wood delivered | Charged tool calls | Jev requests | API cost |
+|---|---:|---:|---:|---:|---:|
+| Candidate-scoring hybrid | 9/9 | 733 | 8,447 | 3,352 | $0.89258 |
+| Expanded typed workflow | 9/9 | 724 | 9,740 | 5,725 | $1.26707 |
+| Empirical-rate control | 9/9 | 737 | 8,059 | 0 | $0 |
+| Equal-value control | 8/9 | 707 | 7,953 | 0 | $0 |
+
+Targets are evaluated on the delivered-wood mean of eight seeds per episode. The table's wood and call totals cover
+all 72 trajectories. Each model condition has one evaluation with tool examples and a $5 budget. The reference
+planner uses 9,033 game-tool calls. This fixed-policy experiment differs from the code-generating series, which
+improves and selects programs across generations. Game performance is comparable under the common rules; inference
+and adaptation differ between these settings.
+
+The equal-value control fails H4. Against its target of 13.375 pieces, it delivers 11.125 on average; the scoring-only
+Jev hybrid delivers 14.375, the expanded workflow 14.250 and empirical rates 14.875. This episode shows a useful
+ranking signal relative to equal room values. Empirical counting achieves the highest mean among these controls.
+
+In the scoring-only hybrid, 125 of 14,704 candidate evaluations assigned a higher probability to a stricter
+wood-count threshold than to a weaker one. The raw tail probabilities were summed without correction. Passing the
+task does not establish that these estimates are calibrated or always form a coherent distribution.
+
+The expanded workflow chose 512 collection subgoals and 378 intermediate deliveries. It never selected `finish` at
+the offered decision points. Its delivery gate rejected 407 already feasible candidate evaluations and changed the
+selection in 27 of 512 rounds. The test contains only candidates that pass the code's feasibility checks, so it
+measures false rejections of safe rounds. It does not establish detection of unsafe plans.
+
+The additional stages preserved target coverage but delivered nine fewer pieces than the scoring-only hybrid,
+used 15.3% more game-tool calls and cost 42.0% more. Subgoal selection and the gate changed together, preventing
+attribution to either stage alone. Neither hybrid has been tested on the 94 fresh islands or in repeated series.
+The result demonstrates successful Jev-and-code execution on these task episodes. The empirical control provides
+the same coverage with lower interaction cost and zero API expenditure.
+
+The [detailed Jev report](codemode-jev-player.en.md) records the policies, implementation checks and reproduction
+commands. The [compact paper](codemode-planning-summary.en.md) combines these results with the repeated model runs.
+Raw results are under `~/phi-experiments/2026-11-15-series/jev-direct/`, `jev-memory/`, `jev-review/`, `jev-hybrid/`
+and `jev-workflow/`.
 
 ## Figures
 
@@ -811,6 +920,8 @@ logbook, a new round before every tide (8793 points, fewer than the reference pl
 
 ## Open questions
 
+- How do the two Jev hybrids behave across repeated runs and on the 94 fresh islands? Ablations should separate
+  subgoal choice from the delivery gate, with safe and unsafe plans to test feasibility discrimination.
 - How do concrete tool examples affect steps 7 and 8? Should they become standard for bot tasks on generated
   islands? Why do Haiku's bots still fail to move with an example?
 - How stable are the results on steps 7 and 8? GPT reached 7 of 9 episodes on its first "Learn the tide" run and 2 of

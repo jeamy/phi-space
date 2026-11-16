@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "../client/styles/layout.css";
+import "../client/experiments/experiments.css";
 
 export const metadata: Metadata = {
 	title: "PHI-SPACES / CODEMODE CHAT",

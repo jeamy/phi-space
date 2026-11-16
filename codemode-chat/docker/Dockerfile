@@ -28,6 +28,9 @@ COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 COPY agent/src ./agent/src
 COPY agent/test/durable-models.ts ./agent/test/
+COPY docs/codemode-planning-summary.en.md docs/codemode-jev-player.en.md docs/codemode-planning-article.en.md docs/codemode-planung.en.md ./docs/
+COPY docs/de-docs/codemode-planning-article.md ./docs/de-docs/
+COPY docs/img/codemode-planung ./docs/img/codemode-planung
 COPY codemode-chat ./codemode-chat
 RUN npm --prefix codemode-chat run typecheck && npm --prefix codemode-chat run build
 
@@ -50,6 +53,7 @@ WORKDIR /opt/phi-spaces
 COPY --from=builder --chown=node:node /opt/phi-spaces/package.json /opt/phi-spaces/package-lock.json ./
 COPY --from=builder --chown=node:node /opt/phi-spaces/node_modules ./node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/src ./src
+COPY --from=builder --chown=node:node /opt/phi-spaces/docs ./docs
 COPY --from=builder --chown=node:node /opt/phi-spaces/agent/package.json /opt/phi-spaces/agent/package-lock.json ./agent/
 COPY --from=builder --chown=node:node /opt/phi-spaces/agent/node_modules ./agent/node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/agent/src ./agent/src
