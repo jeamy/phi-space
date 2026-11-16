@@ -8,7 +8,7 @@
 // results, and the notes, and repairs, explores or improves (teamPrompt).
 import { describeToolExamples } from "./examples.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { liveModels } from "../../agent/src/live-models.ts";
+import { liveModels } from "../../spaces/agent/src/live-models.ts";
 import { isText, type Task } from "./tasks.ts";
 import type { ChanceSeen, TideSeen } from "./toyisland.ts";
 import { extractSubgoals, MAX_SUBGOALS, type Subgoal } from "./subgoals.ts";

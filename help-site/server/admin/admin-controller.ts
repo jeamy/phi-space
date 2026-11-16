@@ -48,7 +48,7 @@ import {
 	prepareSieveRun,
 	SIEVE_EXPORTER,
 	SIEVE_WORKER_KIND,
-} from "../../../examples/sieve.ts";
+} from "../../../spaces/examples/sieve.ts";
 import { SpaceChatEngine } from "../../examples/shared/chat-core.ts";
 
 export interface AdminSessionInfo {

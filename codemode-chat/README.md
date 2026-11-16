@@ -225,8 +225,8 @@ environment variables win.
 `.env.example` lists the rest, and `/help` has the full table under "Configuration and startup".
 
 Dependencies are pinned to exact versions (pi-codemode 1.4.0, Next.js 16.4.3, React 19.3.0). `phi-spaces` is imported as
-a package (`"phi-spaces": "file:.."`), not through relative paths into `../src`. The durable agent's packages (pi-durable,
-pi-ai, Chord, all 1.4.0) belong to `agent/`.
+a package (`"phi-spaces": "file:../spaces"`), not through relative paths into `../spaces/src`. The durable agent's packages (pi-durable,
+pi-ai, Chord, all 1.4.0) belong to `spaces/agent/`.
 
 ## Commands
 

@@ -1,0 +1,17 @@
+[package]
+name = "mmo-space"
+description = "The space process of spaces-mmo in Rust: what spaces-mmo/server/space-host.ts is, the world and the accounts stores on phi-space-host"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "mmo-space"
+path = "src/main.rs"
+
+[dependencies]
+phi-json = { path = "../../../spaces/rust/phi-json" }
+phi-space-host = { path = "../../../spaces/rust/phi-space-host" }
+
+[dev-dependencies]
+phi-space-host = { path = "../../../spaces/rust/phi-space-host", features = ["testing"] }

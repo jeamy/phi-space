@@ -21,7 +21,7 @@ const bindings: Record<string, string[]> = {
 
 export function apiSignatures(): Map<string, string> {
 	// the public module and the agent module (the agent tools are not exported by the public one: they need pi-durable)
-	const root = resolve(dirname(fileURLToPath(import.meta.url)), "../.."), path = resolve(root, "src/index.ts"), agentPath = resolve(root, "agent/src/agent.ts");
+	const root = resolve(dirname(fileURLToPath(import.meta.url)), "../.."), path = resolve(root, "spaces/src/index.ts"), agentPath = resolve(root, "spaces/agent/src/agent.ts");
 	const program = ts.createProgram([path, agentPath], {target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,strictNullChecks:true,skipLibCheck:true,allowImportingTsExtensions:true,noEmit:true});
 	const checker = program.getTypeChecker(), source = program.getSourceFile(path)!;
 	const exports = new Map([source, program.getSourceFile(agentPath)!].flatMap(f => checker.getExportsOfModule(checker.getSymbolAtLocation(f)!)).map(s => [s.name,s]));
@@ -46,7 +46,7 @@ export function apiSignatures(): Map<string, string> {
 			// Keep these references relative to src/ so builds are portable and expose no checkout paths.
 			const portable = signature.replace(/import\("([^"]+)"\)/g, (original, modulePath: string) => {
 				if (!isAbsolute(modulePath)) return original;
-				const local = relative(resolve(root, "src"), modulePath).replaceAll("\\", "/");
+				const local = relative(resolve(root, "spaces/src"), modulePath).replaceAll("\\", "/");
 				if (local.startsWith("../")) throw new Error(`Nonportable API type reference in ${binding}`);
 				return `import("./${local}${local.endsWith(".ts") ? "" : ".ts"}")`;
 			});

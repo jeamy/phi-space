@@ -16,7 +16,8 @@ const DIRS = [...["src", "examples", "test", "scripts", "agent"].map((d) => `${P
 const missing = [...DIRS.filter((d) => !existsSync(join(REPO, d))), ...APPS.filter((a) => !DIRS.some((d) => d === a || d.startsWith(`${a}/`)))];
 if (missing.length) { console.error(`durable imports: not found or not scanned: ${missing.join(", ")}`); process.exit(1); }
 const EXT = /\.(ts|tsx|mts|mjs|js)$/;
-const SKIP = /(^|\/)(node_modules|\.next|dist|\.local|evidence)(\/|$)/;
+// target: a Cargo target, where spaces-mmo's oracle unpacks a whole old checkout (spaces-mmo/rust/target/tmp)
+const SKIP = /(^|\/)(node_modules|target|\.next|dist|\.local|evidence)(\/|$)/;
 const PACKAGES = ["@earendil-works/pi-durable", "@earendil-works/chord", "@earendil-works/pi-ai"];
 /** Where these packages may still be used, directly or not (U6–U8 shrink this list to the agent package). */
 const ALLOWED = [

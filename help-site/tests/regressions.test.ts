@@ -21,7 +21,7 @@ import { swarmSpace } from "./swarm-space.ts";
 import { startArticleLoad } from "../client/lib/article-load.ts";
 import { startChatConnection, type ChatSocket } from "../client/lib/chat-connection.ts";
 import { UploadStore } from "../server/uploads.ts";
-import { SIEVE_EXPORTER, collectSieveResults } from "../../examples/sieve.ts";
+import { SIEVE_EXPORTER, collectSieveResults } from "../../spaces/examples/sieve.ts";
 
 async function memory() {
 	return openOwnMemoryHost();

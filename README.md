@@ -13,9 +13,11 @@
 > namespaces; an empty new namespace does not mean the previous data was deleted.
 
 phi-spaces is a space library in TypeScript and Rust with a storage of its own (SQLite, owned by one process, or memory).
-The Rust port (`rust/`) reads and writes the same store files and speaks the same wire protocol; its `phi-space-server`
-serves the spaces of spaces-mmo, codemode-chat and the help site's swarm in production.
-It needs no agent framework; the optional `agent/` package gives
+The library is the package in `spaces/`; the applications built on it (`spaces-mmo/`, `codemode-chat/`, `help-site/`)
+sit beside it. The Rust port (`spaces/rust/`) reads and writes the same store files and speaks the same wire protocol;
+on its `phi-space-host` library each application has its own space server (`mmo-space`, `codemode-space`,
+`help-space`, in the application's `rust/` workspace), which serves its spaces in production.
+It needs no agent framework; the optional `spaces/agent/` package gives
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable) agents the space
 tools. Stores written by older versions through pi-durable are discarded, not taken over. It is a
 general-purpose space for any kind of data that needs to be exchanged: jobs, messages, sensor readings, results,

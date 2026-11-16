@@ -169,7 +169,7 @@ export async function buildCorpus(): Promise<{
 	let commit = "unversioned", dirty = true;
 	try {
 		commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-		dirty = !!execFileSync("git", ["status", "--porcelain", "--untracked-files=normal", "--", "scripts", "examples", "client", "corpus/api_facts.json", "corpus/help_product_catalog.json", "../src"], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+		dirty = !!execFileSync("git", ["status", "--porcelain", "--untracked-files=normal", "--", "scripts", "examples", "client", "corpus/api_facts.json", "corpus/help_product_catalog.json", "../spaces/src"], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 	} catch { /* Archive/container builds may have no .git: report that honestly. */ }
 	const allIds = new Set(allSeeds.map((s) => s.id));
 

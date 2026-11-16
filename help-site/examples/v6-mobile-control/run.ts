@@ -16,7 +16,7 @@ import {
 	prepareSieveRun,
 	SIEVE_EXPORTER,
 	SIEVE_WORKER_KIND,
-} from "../../../examples/sieve.ts";
+} from "../../../spaces/examples/sieve.ts";
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 
 export async function runStageV6() {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Projects built on phi-spaces (every top-level directory with its own package.json, except the agent package) import
+// Projects built on phi-spaces (every top-level directory with its own package.json beside the package) import
 // the library as the package `phi-spaces` and its exported subpaths, never relative paths into src/. Read-only, no
 // dependencies; spaces-mmo/docs/paket.en.md (Phase P) explains the decision.
 //
@@ -10,9 +10,8 @@ import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "n
 import { dirname, join, relative, resolve } from "node:path";
 import { APPS, PACKAGE, REPO } from "./roots.mjs";
 const EXT = /\.(ts|tsx|mts|mjs|js)$/;
-const SKIP = /(^|\/)(node_modules|\.next|dist|\.local|evidence)(\/|$)/;
-/** Projects that keep relative imports: the agent package reaches federation internals that are no public contract. */
-const OWN = ["agent"];
+// target: a Cargo target, where spaces-mmo's oracle unpacks a whole old checkout (spaces-mmo/rust/target/tmp)
+const SKIP = /(^|\/)(node_modules|target|\.next|dist|\.local|evidence)(\/|$)/;
 /** Single files that may still import src/ relatively, each with its reason. */
 const ALLOWED = {
 	"help-site/examples/v5-federated-cluster/run.ts": "drives federation internals (router, entry replication) directly",
@@ -21,7 +20,7 @@ const ALLOWED = {
 
 const pkg = JSON.parse(readFileSync(join(PACKAGE, "package.json"), "utf8"));
 const exported = new Map(Object.entries(pkg.exports ?? {}).map(([k, v]) => [k === "." ? "phi-spaces" : `phi-spaces/${k.slice(2)}`, v]));
-const projects = readdirSync(REPO).filter((d) => !d.startsWith(".") && d !== "node_modules" && !OWN.includes(d) && join(REPO, d) !== PACKAGE && existsSync(join(REPO, d, "package.json")));
+const projects = readdirSync(REPO).filter((d) => !d.startsWith(".") && d !== "node_modules" && join(REPO, d) !== PACKAGE && existsSync(join(REPO, d, "package.json")));
 
 function files(dir, out = []) {
 	for (const name of readdirSync(dir)) {

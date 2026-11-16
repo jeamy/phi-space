@@ -1,7 +1,7 @@
 // Default multi-step contribution backend. The Space queue and final judge remain authoritative.
 import { dirname, join, resolve } from "node:path";
-import { DurableAgentClient } from "../../agent/src/durable-client.ts";
-import type { AgentUsage } from "../../agent/src/durable-protocol.ts";
+import { DurableAgentClient } from "../../spaces/agent/src/durable-client.ts";
+import type { AgentUsage } from "../../spaces/agent/src/durable-protocol.ts";
 import { ROOT } from "./env.ts";
 import { extractCode, extractNote, teamPrompt, type llmContribution } from "./llm.ts";
 import { judge, loadCodemode, verdictFields } from "./judge.ts";

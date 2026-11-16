@@ -2,8 +2,9 @@
 
 Status (2026-11-16): phase 1 done (`phi-space-host`, `mmo-space`, `codemode-space`, `help-space`, no `--profile` in
 `phi-space-server`; images checked locally, not deployed), phase 2 done (the dashboard's apps in `dashboard.apps.json`,
-the repository-wide checks in `checks/` with `checks/layering.mjs`). Phase 3 is next. Review incorporated on
-2026-11-15, gaps on 2026-11-16 (below). The open questions were decided on 2026-11-16.
+the repository-wide checks in `checks/` with `checks/layering.mjs`), phase 3 committed locally (the package in
+`spaces/`, one Cargo workspace per project; record below), not pushed or deployed. Phase 4 is next. Review incorporated
+on 2026-11-15, gaps on 2026-11-16 (below). The open questions were decided on 2026-11-16.
 
 ## Goal
 
@@ -228,6 +229,26 @@ After approval, pull the verified revision and use each app's Rust deployment en
 services. Check the running containers' image IDs, commands, health and mounts after the update. Recreate any
 affected service still running an old image before accepting the rollout.
 
+Checkouts on the hosts (from phase 3): `git pull` moves the tracked files but leaves the ignored ones at the old
+places. On each host that runs something from its checkout (the dashboard on big through `scripts/dashboard.sh`, any
+`npm --prefix <app>` command) before starting it again:
+
+- move the ignored `node_modules/` and `dist/` of the root into `spaces/` and `agent/node_modules/` to
+  `spaces/agent/node_modules/` (or delete them and install anew, which needs approval); the old directories then
+  hold nothing and go;
+- delete the old `rust/target/` instead of moving it: a moved target keeps the core crates' test binaries with the old
+  `CARGO_MANIFEST_DIR` baked in (`env!`), and Cargo does not rebuild them (seen on 2026-11-16: the phi-core drivers
+  started in `rust/phi-core/../..`); after a move, `cargo clean -p <each core crate>` (both profiles) is needed;
+- repoint each app's `node_modules/phi-spaces` to `../../spaces` (`ln -sfn ../../spaces <app>/node_modules/phi-spaces`)
+  or run `npm --prefix <app> ci`;
+- move a local `test/testbed/testbed.env` to `spaces/test/testbed/testbed.env` (the root `.gitignore` names the new
+  place; at the old one it is no longer ignored);
+- restart the dashboard with `npm run dashboard:start` from the root (it reads the root `.env` and
+  `dashboard.apps.json` as before).
+
+The images are not affected by the leftovers: they install their dependencies themselves (`npm --prefix spaces ci`,
+the app's `npm ci`) and copy the core crates and the app's workspace with the checkout's layout.
+
 ## Risks
 
 - **Moves collide with open work.** Coordinate the shared paths and use the clean checkout from phase 0.
@@ -288,3 +309,39 @@ The mobile consumer is not affected by phase 1: `pi-termux-mobile` starts `phi-s
   tests (`tests/arena.test.ts`) fail the same way with the old `phi-space-server --profile mmo`, built from the commit
   before, and pass on the TypeScript space: not from this change. The warehouse test of `tests/store.test.ts` failed
   once under the suite's load and passes alone on the new binary, the old one and TypeScript.
+
+## Phase 3 record (2026-11-16)
+
+- Layout: the package in `spaces/` (with a README and license of its own for `npm pack`; `npm pack --dry-run` lists
+  both), its Cargo workspace `spaces/rust/` (the nine `phi-*` crates), `spaces-mmo/rust/`, `codemode-chat/rust/` and
+  `help-site/rust/`, each with its own `Cargo.lock` (begun from the old one; Cargo only dropped what the workspace does
+  not use) and `rustfmt.toml`. The MMO dev opt-levels moved to the MMO workspace. The apps depend on
+  `file:../spaces`; npm rewrote their lockfiles offline (beside the path records, help-site and spaces-mmo now record
+  pi-codemode 1.5.2, the version installed).
+- The root `package.json` (`phi-spaces-repository`, private) runs the checks and forwards; the commands that take a
+  path run the package's file from the root. `checks/root-scripts.mjs` (in `npm test`) holds every forward to an
+  existing script and every direct script to the package's of the same name. `checks/layering.mjs` reads Cargo's graph
+  of each workspace (`--locked --offline`): no core crate depends on anything outside the core but a registry crate,
+  and each application workspace has the core's `[workspace.package]`, `[workspace.dependencies]` and
+  `[profile.release]` and no registry crate in a version the core does not resolve. Planted faults (an application
+  crate as a core dev-dependency, a different release profile, a missing application `Cargo.lock`) are refused.
+- A Cargo target moved with its workspace keeps test binaries with the old `CARGO_MANIFEST_DIR` (`env!`): Cargo does
+  not rebuild them. `cargo clean -p` of the core crates (or a new target) fixes it; phase 5 deletes the old target.
+- The MMO oracle now unpacks into `spaces-mmo/rust/target/tmp`, inside a directory the import checks walk:
+  `checks/durable-imports.mjs` and `checks/package-imports.mjs` skip `target` (as `checks/layering.mjs` did), else
+  the old checkout's `agent/` fails `npm test` once the MMO tests have run.
+- `npm test` from the root: 663 of 669, 0 failed, 6 skipped (as the baseline; the checks count 535, 148 and 497 files
+  as before). `npm run test:agent`: 115 of 115 (with pi-serverd). Typechecks of the package, the agent package and the
+  three applications clean.
+- Rust: `cargo build --release --locked --bins`, `cargo test --locked --no-fail-fast` and `cargo clippy --locked
+  --all-targets` in each of the four workspaces green, without warnings: 93 test binaries (77, 12, 2, 2) as in the
+  single workspace before, among them the oracle tests of `mmo-engine` (`primitives`, `engine_walk`, `model_walk`)
+  against the frozen commit, unpacked from the checkout's top. The Android `phi-space-server` builds from `spaces/rust`.
+- `test/test-standalone.test.ts` against the Rust server: 4 of 4. `help-site` with `help-space`: 67 of 68, 1 skipped
+  (as before). `codemode-chat` with `codemode-space`: 221 of 221, `test:durable` 221 of 221. `spaces-mmo` with
+  `mmo-space`: 413 of 416 (the two arena tests as in phase 1, and the takeover test of `tests/phase5.test.ts` under the
+  suite's load), `test:durable` 415 of 416 (`tests/planks.test.ts` under load); both pass alone.
+- The help corpus builds unchanged (47 articles, 14 API signatures, 66 examples typechecked). The dashboard starts,
+  reports and stops from the root with the root `.env`. The compose dev mounts resolve to `spaces/src`. `npm run
+  bundle` from the root writes the mobile runtime; `pi-termux-mobile` finds the package in `spaces/` (and an old
+  checkout at its top) in `scripts/prepare-runtime.py` and `scripts/remote-demo/run.sh`.

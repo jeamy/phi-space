@@ -1,7 +1,7 @@
 // Conversation history only: world ownership, memory summaries and commands remain in the Space.
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
-import { DurableAgentClient } from "../../../agent/src/durable-client.ts";
+import { DurableAgentClient } from "../../../spaces/agent/src/durable-client.ts";
 import { ROOT } from "../env.ts";
 import type { Completion } from "../llm.ts";
 

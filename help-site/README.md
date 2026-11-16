@@ -65,7 +65,7 @@ What **phi-spaces actually implements**:
 - **Inspector:** Entry counts, revision, pending tasks, posts/minute, dispatcher and LLM metrics; feed deltas use `changes(rev)`.
 
 The swarm Space is a store of its own, apart from the help store (chat stages, control space, admin state). The process
-that holds it is `server/space-host.ts` in TypeScript or the Rust `help-space` (`rust/help-space`). It sets the
+that holds it is `server/space-host.ts` in TypeScript or the Rust `help-space` (`rust/help-space`, the help site's own Cargo workspace in `help-site/rust`). It sets the
 limits and the completion profile, writes the `HostInfo` entry and purges above `SWARM_MAX_ENTRIES`
 (`server/social/space-side.ts`). The swarm engines are only its clients: the hub reaches it through `SWARM_SPACE`, and
 without that variable the store lives in the hub's process (`swarm.sqlite` beside `HELP_SQLITE`, or memory). An

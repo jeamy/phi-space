@@ -29,7 +29,7 @@ const answer = async (stack: Stack, ms: number) => {
 async function withDurable(env: Record<string, string>, body: (dir: string, log: string) => Promise<void>) {
 	const dir = mkdtempSync(join(tmpdir(), "codemode-interrupt-")), log = join(dir, "attempts");
 	const values: Record<string, string | undefined> = { CODEMODE_DURABLE_AGENT: undefined, CODEMODE_DURABLE_STORE: join(dir, "agent.sqlite"), PHI_TEST_MODEL_LOG: log,
-		CODEMODE_DURABLE_MODELS_MODULE: fileURLToPath(new URL("../../agent/test/durable-models.ts", import.meta.url)), ...Object.fromEntries(Object.entries(env).map(([k, v]) => [k, join(dir, v)])) };
+		CODEMODE_DURABLE_MODELS_MODULE: fileURLToPath(new URL("../../spaces/agent/test/durable-models.ts", import.meta.url)), ...Object.fromEntries(Object.entries(env).map(([k, v]) => [k, join(dir, v)])) };
 	const previous = Object.keys(values).map((key) => [key, process.env[key]] as const);
 	for (const [key, value] of Object.entries(values)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
 	try { await body(dir, log); } finally {

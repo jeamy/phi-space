@@ -58,7 +58,7 @@
   },
   "dependencies": {
     "next": "16.4.3",
-    "phi-spaces": "file:..",
+    "phi-spaces": "file:../spaces",
     "pixi.js": "8.22.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",

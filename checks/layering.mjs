@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 // The core of phi-spaces knows nothing of the applications built on it (docs/umstellung-verzeichnisse.en.md): no file
-// of the package (src/, test/, scripts/, agent/, examples/, the Rust core crates rust/phi-*, the manifests) imports or
-// names a path of spaces-mmo, codemode-chat or the help site outside a comment, and in Cargo's resolved graph no core
-// crate depends on an application crate (normal, build or dev). Comments may cite an application as a reason.
-// Read-only, no dependencies; needs cargo on the PATH for the graph.
+// of the package in spaces/ (src/, test/, scripts/, agent/, examples/, the Rust core crates rust/phi-*, the manifests)
+// imports or names a path of spaces-mmo, codemode-chat or the help site outside a comment, and in Cargo's resolved graph
+// no core crate depends on a crate outside the core workspace but from a registry (normal, build or dev). Comments may
+// cite an application as a reason. The applications' own Cargo workspaces (<app>/rust, D1) resolve from their lockfiles
+// (--locked) and share the core workspace's package fields, dependencies and release profile, and a registry crate the
+// core resolves too resolves there to none of another version, so a core crate builds the same inside an application.
+// Read-only, no dependencies; needs cargo on the PATH for the graphs.
 //
-//   node checks/layering.mjs     exit 1 on a reference, a dependency, a scanned path that is missing, or no cargo
+//   node checks/layering.mjs     exit 1 on a reference, a dependency, a drifted application workspace, a scanned path
+//                                that is missing, or no cargo
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -15,11 +19,8 @@ import { APPS, PACKAGE, REPO } from "./roots.mjs";
 const DIRS = ["src", "test", "scripts", "agent", "examples"];
 const RUST = join(PACKAGE, "rust");
 const MANIFESTS = ["package.json", "tsconfig.json", "tsconfig.build.json", "rust/Cargo.toml"];
-/** Files that may still name an application, each with its reason (paths from the package root). Phase 3 empties it. */
-const ALLOWED = {
-	"package.json": "the scripts that start and test the applications; phase 3 moves them to the thin root manifest (D3)",
-	"rust/Cargo.toml": "the one workspace still holds the application crates and their dev profile; phase 3 splits it (D1)",
-};
+/** Files that may still name an application, each with its reason (paths from the package root). Empty since phase 3. */
+const ALLOWED = {};
 const EXT = /\.(ts|tsx|mts|mjs|js|json|rs|toml|sh|ya?ml)$/;
 const SKIP = /(^|\/)(node_modules|target|\.next|dist|\.local|evidence)(\/|$)/;
 const NAMES = new RegExp(`(?<![\\w.-])(${APPS.map((a) => a.replace(/[-]/g, "\\-")).join("|")})(?![\\w-])`, "g");
@@ -60,35 +61,67 @@ for (const f of paths) {
 	}
 }
 
-// Cargo's resolved graph: the core crates are the packages under rust/phi-*, every other workspace member is an
-// application crate; no dependency of any kind may lead from the one to the other.
-let metadata;
-try {
-	metadata = JSON.parse(execFileSync("cargo", ["metadata", "--format-version", "1", "--locked", "--offline", "--manifest-path", join(RUST, "Cargo.toml")], { encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "pipe"] }));
-} catch (e) {
-	problems.push(`cargo metadata failed (cargo on the PATH, the lockfile current?): ${String(e.stderr || e.message).trim().split("\n").at(-1)}`);
+// Cargo's resolved graphs. The core crates are the core workspace's members; a dependency of one without a registry
+// source (a path or git dependency) must be one of them.
+function metadataOf(manifest) {
+	try {
+		return JSON.parse(execFileSync("cargo", ["metadata", "--format-version", "1", "--locked", "--offline", "--manifest-path", manifest], { encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "pipe"] }));
+	} catch (e) {
+		problems.push(`${relative(REPO, manifest)}: cargo metadata failed (cargo on the PATH, the lockfile there and current?): ${String(e.stderr || e.message).trim().split("\n").at(-1)}`);
+	}
 }
-let crates = 0;
+const registry = (p) => typeof p.source === "string" && p.source.startsWith("registry+");
+/** name -> sorted versions of the registry crates a graph resolves. */
+function versions(metadata) {
+	const out = new Map();
+	for (const p of metadata.packages) if (registry(p)) out.set(p.name, [...new Set([...(out.get(p.name) ?? []), p.version])].sort());
+	return out;
+}
+/** The sections of a workspace manifest an application workspace copies from the core's, without comments. */
+function shared(manifest) {
+	const text = readFileSync(manifest, "utf8").replace(/(^|\s)#.*$/gm, "$1");
+	return ["workspace.package", "workspace.dependencies", "profile.release"].map((name) => {
+		const m = text.match(new RegExp(`^\\[${name.replace(".", "\\.")}\\]\\n([\\s\\S]*?)(?=^\\[|(?![\\s\\S]))`, "m"));
+		return [name, m ? m[1].split("\n").map((l) => l.trim()).filter(Boolean).join("\n") : null];
+	});
+}
+
+let crates = 0, apps = 0;
+const metadata = metadataOf(join(RUST, "Cargo.toml"));
 if (metadata) {
-	const inCore = (p) => relative(RUST, p.manifest_path).split(sep)[0].startsWith("phi-");
 	const members = new Set(metadata.workspace_members);
 	const byId = new Map(metadata.packages.map((p) => [p.id, p]));
-	const coreIds = new Set(metadata.packages.filter((p) => members.has(p.id) && inCore(p)).map((p) => p.id));
-	const appIds = new Set(metadata.packages.filter((p) => members.has(p.id) && !inCore(p)).map((p) => p.id));
-	crates = coreIds.size;
+	crates = members.size;
+	for (const id of members) if (!relative(RUST, byId.get(id).manifest_path).startsWith("phi-")) problems.push(`${relative(REPO, byId.get(id).manifest_path)}: a core workspace member outside rust/phi-*`);
 	for (const node of metadata.resolve.nodes) {
-		if (!coreIds.has(node.id)) continue;
+		if (!members.has(node.id)) continue;
 		for (const dep of node.deps) {
-			if (!appIds.has(dep.pkg)) continue;
+			const target = byId.get(dep.pkg);
+			if (members.has(dep.pkg) || registry(target)) continue;
 			const kinds = dep.dep_kinds.map((k) => k.kind ?? "normal").join("/");
-			problems.push(`${byId.get(node.id).name} depends on the application crate ${byId.get(dep.pkg).name} (${kinds})`);
+			problems.push(`${byId.get(node.id).name} depends on ${target.name} outside the core (${relative(REPO, target.manifest_path)}, ${kinds})`);
 		}
 	}
 	if (!crates) problems.push("cargo metadata: no core crate under rust/phi-*");
+	const core = versions(metadata), coreShared = new Map(shared(join(RUST, "Cargo.toml")));
+	for (const app of APPS) {
+		const manifest = join(REPO, app, "rust", "Cargo.toml");
+		if (!existsSync(manifest)) continue;
+		apps++;
+		for (const [name, body] of shared(manifest)) if (body !== coreShared.get(name)) problems.push(`${app}/rust/Cargo.toml: [${name}] differs from the core workspace's`);
+		const own = metadataOf(manifest);
+		if (!own) continue;
+		for (const [name, vs] of versions(own)) {
+			const theirs = core.get(name);
+			const other = theirs ? vs.filter((v) => !theirs.includes(v)) : [];
+			if (other.length) problems.push(`${app}/rust/Cargo.lock: ${name} ${other.join(", ")}, the core resolves ${theirs.join(", ")}`);
+		}
+	}
+	if (!apps) problems.push("no application Cargo workspace found (<app>/rust/Cargo.toml)");
 }
 
 if (problems.length) {
 	console.error(`the core names an application:\n${problems.map((p) => `  ${p}`).join("\n")}`);
 	process.exit(1);
 }
-console.log(`the core names no application (${scanned} files, ${crates} core crates, ${Object.keys(ALLOWED).length} allowed until phase 3)`);
+console.log(`the core names no application (${scanned} files, ${crates} core crates, ${apps} application workspaces in step)`);

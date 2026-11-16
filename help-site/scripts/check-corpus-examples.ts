@@ -11,7 +11,7 @@ const fixture = `
  const remote: api.RemoteSpace = undefined!;
  const host: api.OwnStoreHost = undefined!;
  const harness: api.OwnStoreHost = undefined!;
- const ctx: import("../../src/context.ts").Context = undefined!;
+ const ctx: import("../../spaces/src/context.ts").Context = undefined!;
  const meter: api.Meter = undefined!;
  const registry: ReturnType<typeof durable.createRegistry> = undefined!;
  const agentHost: api.EventSink = undefined!;
@@ -63,7 +63,7 @@ export function checkCorpusExamples(seeds: ArticleSeed[] = ALL_ARTICLES): { exam
 			const imports = ast.statements.filter(ts.isImportDeclaration);
 			let body = code;
 			for (const declaration of [...imports].reverse()) body = body.slice(0, declaration.getFullStart()) + body.slice(declaration.end);
-			virtual.set(file, `import * as api from "../../src/index.ts";\nimport * as agent from "../../agent/src/agent.ts";\nimport * as core from "../../src/core.ts";\nimport * as durable from "@earendil-works/pi-durable";\nimport * as ai from "@earendil-works/pi-ai/models";\n${imports.map(d => d.getText(ast)).join("\n")}\nasync function documentationExample() {\n${fixture}\n{\n${body}\n}\n}\n`);
+			virtual.set(file, `import * as api from "../../spaces/src/index.ts";\nimport * as agent from "../../spaces/agent/src/agent.ts";\nimport * as core from "../../spaces/src/core.ts";\nimport * as durable from "@earendil-works/pi-durable";\nimport * as ai from "@earendil-works/pi-ai/models";\n${imports.map(d => d.getText(ast)).join("\n")}\nasync function documentationExample() {\n${fixture}\n{\n${body}\n}\n}\n`);
 		}
 	}
 	const options: ts.CompilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, strict: true, skipLibCheck: true, noEmit: true, allowImportingTsExtensions: true, types: ["node"] };
@@ -74,11 +74,11 @@ export function checkCorpusExamples(seeds: ArticleSeed[] = ALL_ARTICLES): { exam
 		const text = host.readFile(path); return text === undefined ? undefined : ts.createSourceFile(path, text, languageVersion, true);
 	};
 	host.resolveModuleNames = (names, containingFile) => names.map(name => {
-		if (name === "phi-spaces") return { resolvedFileName: resolve(ROOT, "src/index.ts"), extension: ts.Extension.Ts };
-		if (name === "phi-spaces/agent") return { resolvedFileName: resolve(ROOT, "agent/src/agent.ts"), extension: ts.Extension.Ts };
+		if (name === "phi-spaces") return { resolvedFileName: resolve(ROOT, "spaces/src/index.ts"), extension: ts.Extension.Ts };
+		if (name === "phi-spaces/agent") return { resolvedFileName: resolve(ROOT, "spaces/agent/src/agent.ts"), extension: ts.Extension.Ts };
 		if (name.startsWith("./help-site/")) return { resolvedFileName: resolve(ROOT, name), extension: ts.Extension.Ts };
 		// pi-durable and pi-ai are the agent package's dependencies (the root has none)
-		if (name.startsWith("@earendil-works/")) return ts.resolveModuleName(name, resolve(ROOT, "agent/src/agent.ts"), options, host).resolvedModule;
+		if (name.startsWith("@earendil-works/")) return ts.resolveModuleName(name, resolve(ROOT, "spaces/agent/src/agent.ts"), options, host).resolvedModule;
 		return ts.resolveModuleName(name, containingFile, options, host).resolvedModule;
 	});
 	const program = ts.createProgram([...virtual.keys()], options, host);

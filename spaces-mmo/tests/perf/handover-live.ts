@@ -5,7 +5,7 @@
 // to the same counts.
 //
 //   node --experimental-strip-types tests/perf/handover-live.ts
-//   HANDOVER_SERVER=../rust/target/release/mmo-space          the Rust binary (default)
+//   HANDOVER_SERVER=rust/target/release/mmo-space             the Rust binary (default)
 //   HANDOVER_BOTS=6 HANDOVER_SECONDS=150 HANDOVER_PORT=3930    figures, playing time, web port
 //   HANDOVER_SWITCH_S=30                                       seconds between two switches
 import { spawn, type ChildProcess } from "node:child_process";
@@ -16,7 +16,7 @@ import { ROOT } from "../../server/env.ts";
 import { RemoteSpace, socketTransport } from "phi-spaces";
 
 const env = (k: string, d: string) => process.env[k] || d;
-const BINARY = resolve(ROOT, env("HANDOVER_SERVER", "../rust/target/release/mmo-space"));
+const BINARY = resolve(ROOT, env("HANDOVER_SERVER", "rust/target/release/mmo-space"));
 const BOTS = env("HANDOVER_BOTS", "6"), SECONDS = Number(env("HANDOVER_SECONDS", "150")), PORT = env("HANDOVER_PORT", "3930"), SWITCH_S = Number(env("HANDOVER_SWITCH_S", "30"));
 if (!existsSync(BINARY)) throw new Error(`no Rust space server at ${BINARY}`);
 // the generic server lost `--profile mmo` (docs/umstellung-verzeichnisse.en.md)

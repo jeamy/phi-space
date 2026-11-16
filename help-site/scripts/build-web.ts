@@ -4,7 +4,8 @@
 import { copyFile, mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import * as esbuild from "esbuild";
+// esbuild is the phi-spaces package's (spaces/package.json); the help site has none of its own
+import * as esbuild from "../../spaces/node_modules/esbuild/lib/main.js";
 import { buildCorpus } from "./build-corpus.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");

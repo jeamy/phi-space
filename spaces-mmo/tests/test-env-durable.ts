@@ -10,7 +10,7 @@ import "./test-env.ts";
 process.env.SPACES_MMO_TEST = "1";
 process.env.SPACES_MMO_DURABLE_NPCS = "";
 process.env.SPACES_MMO_DURABLE_MATRIX = "1";
-process.env.SPACES_MMO_DURABLE_MODELS_MODULE = fileURLToPath(new URL("../../agent/test/durable-fake-models.ts", import.meta.url));
+process.env.SPACES_MMO_DURABLE_MODELS_MODULE = fileURLToPath(new URL("../../spaces/agent/test/durable-fake-models.ts", import.meta.url));
 process.env.PHI_DURABLE_FAKE_ANSWERS = fileURLToPath(new URL("./durable-answers.ts", import.meta.url));
 const own = join(tmpdir(), `mmo-durable-${process.pid}`);
 process.env.SPACES_MMO_DURABLE_STORE = join(own, "agent.sqlite");

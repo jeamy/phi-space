@@ -46,7 +46,7 @@
   "dependencies": {
     "@earendil-works/pi-codemode": "1.5.2",
     "next": "16.4.3",
-    "phi-spaces": "file:..",
+    "phi-spaces": "file:../spaces",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

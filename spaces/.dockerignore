@@ -1,0 +1,14 @@
+# The build context of the package's own images (test/testbed/local-federation/Dockerfile: `docker build ... .` in
+# spaces/). The applications build from the repository root and use the root's .dockerignore.
+node_modules
+**/node_modules
+dist
+rust/target
+test/evidence
+**/.env
+**/.env.*
+**/*.sqlite
+**/*.sqlite-wal
+**/*.sqlite-shm
+**/*.pem
+**/*.key

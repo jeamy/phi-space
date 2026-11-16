@@ -18,7 +18,7 @@ process.env.SPACES_MMO_LLM = "1";
 process.env.SPACES_MMO_LLM_MODULE = "tests/durable-fallback.ts";
 process.env.SPACES_MMO_TEST = "1";
 delete process.env.SPACES_MMO_DURABLE_NPCS;
-process.env.SPACES_MMO_DURABLE_MODELS_MODULE = fileURLToPath(new URL("../../agent/test/durable-npc-models.ts", import.meta.url));
+process.env.SPACES_MMO_DURABLE_MODELS_MODULE = fileURLToPath(new URL("../../spaces/agent/test/durable-npc-models.ts", import.meta.url));
 
 test("NPC dialogues default on with world/region stores, explicit opt-out and independent paid-model permission", () => {
   const env = { SPACES_MMO_LLM: "1" };

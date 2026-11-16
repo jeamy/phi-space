@@ -6,11 +6,11 @@
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FOREVER, PhiSpaces, Space, openOwnMemoryHost, startService } from "phi-spaces";
-import { FederatedSpace, type FederationIO } from "../../../src/federated-space.ts";
-import { partitionRouterId } from "../../../src/federation-journals.ts";
-import { RouterController } from "../../../src/router.ts";
-import type { RoutingState } from "../../../src/routing-semantics.ts";
-import { EntryReplicationController } from "../../../src/entry-replication.ts";
+import { FederatedSpace, type FederationIO } from "../../../spaces/src/federated-space.ts";
+import { partitionRouterId } from "../../../spaces/src/federation-journals.ts";
+import { RouterController } from "../../../spaces/src/router.ts";
+import type { RoutingState } from "../../../spaces/src/routing-semantics.ts";
+import { EntryReplicationController } from "../../../spaces/src/entry-replication.ts";
 import {
 	CHAT_COMPLETION_PROFILES,
 	type MsgRecord,

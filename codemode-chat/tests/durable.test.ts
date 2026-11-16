@@ -27,7 +27,7 @@ test("default durable contributions use the real Space queue, sandbox and per-at
   const previous = keys.map(key => process.env[key]);
   delete process.env.CODEMODE_DURABLE_AGENT;
   process.env.CODEMODE_DURABLE_STORE = join(dir, "agent.sqlite");
-  process.env.CODEMODE_DURABLE_MODELS_MODULE = fileURLToPath(new URL("../../agent/test/durable-models.ts", import.meta.url));
+  process.env.CODEMODE_DURABLE_MODELS_MODULE = fileURLToPath(new URL("../../spaces/agent/test/durable-models.ts", import.meta.url));
   const stack = await startStack({ judges: [], agents: false, model: false });
   try {
     const call: LlmCall = {

@@ -187,7 +187,7 @@ services:
       - ../app:/opt/phi-spaces/codemode-chat/app
       - ../client:/opt/phi-spaces/codemode-chat/client
       - ../server:/opt/phi-spaces/codemode-chat/server
-      - ../../src:/opt/phi-spaces/src
+      - ../../spaces/src:/opt/phi-spaces/spaces/src
       # Optional: mount the host's pi CLI credentials so model agents work in dev (PI_AUTH_DIR= to skip).
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
     working_dir: /opt/phi-spaces/codemode-chat

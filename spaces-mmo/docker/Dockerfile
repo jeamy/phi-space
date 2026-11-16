@@ -10,24 +10,24 @@
 ARG NODE_IMAGE=node:22-bookworm-slim
 ARG RUST_IMAGE=rust:1.99-bookworm
 
-# ---- Stage 1: dependencies (root phi-spaces + spaces-mmo Next.js/React/PixiJS) ----
+# ---- Stage 1: dependencies (phi-spaces in spaces/ + spaces-mmo Next.js/React/PixiJS) ----
 FROM ${NODE_IMAGE} AS deps
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false NEXT_TELEMETRY_DISABLED=1
 WORKDIR /opt/phi-spaces
-COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+COPY spaces/package.json spaces/package-lock.json ./spaces/
+RUN --mount=type=cache,target=/root/.npm npm --prefix spaces ci --no-audit --no-fund
 COPY spaces-mmo/package.json spaces-mmo/package-lock.json ./spaces-mmo/
 RUN --mount=type=cache,target=/root/.npm npm --prefix spaces-mmo ci --no-audit --no-fund
-COPY agent/package.json agent/package-lock.json ./agent/
-RUN --mount=type=cache,target=/root/.npm npm --prefix agent ci --no-audit --no-fund
+COPY spaces/agent/package.json spaces/agent/package-lock.json ./spaces/agent/
+RUN --mount=type=cache,target=/root/.npm npm --prefix spaces/agent ci --no-audit --no-fund
 
 # ---- Stage 2: builder (typecheck + Next.js production build) ----
 FROM deps AS builder
 WORKDIR /opt/phi-spaces
-COPY tsconfig.json tsconfig.build.json ./
-COPY src ./src
-COPY agent/src ./agent/src
-COPY agent/test/durable-npc-models.ts ./agent/test/
+COPY spaces/tsconfig.json spaces/tsconfig.build.json ./spaces/
+COPY spaces/src ./spaces/src
+COPY spaces/agent/src ./spaces/agent/src
+COPY spaces/agent/test/durable-npc-models.ts ./spaces/agent/test/
 COPY spaces-mmo ./spaces-mmo
 RUN npm --prefix spaces-mmo run typecheck && npm --prefix spaces-mmo run build
 
@@ -47,12 +47,12 @@ ENV NODE_ENV=production \
     PORT=3900 \
     SPACES_MMO_DATA=/data
 WORKDIR /opt/phi-spaces
-COPY --from=builder --chown=node:node /opt/phi-spaces/package.json /opt/phi-spaces/package-lock.json ./
-COPY --from=builder --chown=node:node /opt/phi-spaces/node_modules ./node_modules
-COPY --from=builder --chown=node:node /opt/phi-spaces/src ./src
-COPY --from=builder --chown=node:node /opt/phi-spaces/agent/package.json /opt/phi-spaces/agent/package-lock.json ./agent/
-COPY --from=builder --chown=node:node /opt/phi-spaces/agent/node_modules ./agent/node_modules
-COPY --from=builder --chown=node:node /opt/phi-spaces/agent/src ./agent/src
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/package.json /opt/phi-spaces/spaces/package-lock.json ./spaces/
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/node_modules ./spaces/node_modules
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/src ./spaces/src
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/agent/package.json /opt/phi-spaces/spaces/agent/package-lock.json ./spaces/agent/
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/agent/node_modules ./spaces/agent/node_modules
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/agent/src ./spaces/agent/src
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/package.json /opt/phi-spaces/spaces-mmo/package-lock.json ./spaces-mmo/
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/node_modules ./spaces-mmo/node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces-mmo/tsconfig.json ./spaces-mmo/
@@ -76,12 +76,16 @@ CMD ["node", "--no-warnings", "--experimental-strip-types", "server/launch.ts"]
 # docker-compose.rust.yml gives it to the space containers; the other roles and every other command stay as they are.
 # The builder is Debian bookworm like the Node image, so the binary finds the same libc.
 FROM ${RUST_IMAGE} AS rust-builder
-WORKDIR /opt/phi-spaces/rust
-COPY rust ./
+# The application's own workspace (spaces-mmo/rust) takes the core crates as path dependencies from spaces/rust: both are
+# copied with the layout of the checkout (docs/umstellung-verzeichnisse.en.md, D1).
+WORKDIR /opt/phi-spaces
+COPY spaces/rust ./spaces/rust
+COPY spaces-mmo/rust ./spaces-mmo/rust
+WORKDIR /opt/phi-spaces/spaces-mmo/rust
 RUN cargo build --release --locked -p mmo-space -p mmo-engine -p mmo-web --bins
 
 FROM production AS production-rust
-COPY --from=rust-builder /opt/phi-spaces/rust/target/release/mmo-space /usr/local/bin/mmo-space
+COPY --from=rust-builder /opt/phi-spaces/spaces-mmo/rust/target/release/mmo-space /usr/local/bin/mmo-space
 # the game processes in Rust (R8.3-R8.5; docker-compose.rust-game.yml gives them to the world, npc and web containers):
 # they run from spaces-mmo/ like the TypeScript ones (worlds/, out/), the model process stays Node
-COPY --from=rust-builder /opt/phi-spaces/rust/target/release/mmo-world /opt/phi-spaces/rust/target/release/mmo-npc /opt/phi-spaces/rust/target/release/mmo-web /usr/local/bin/
+COPY --from=rust-builder /opt/phi-spaces/spaces-mmo/rust/target/release/mmo-world /opt/phi-spaces/spaces-mmo/rust/target/release/mmo-npc /opt/phi-spaces/spaces-mmo/rust/target/release/mmo-web /usr/local/bin/

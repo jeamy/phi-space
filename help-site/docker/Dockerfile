@@ -9,7 +9,7 @@
 ARG NODE_IMAGE=node:22-bookworm-slim
 ARG RUST_IMAGE=rust:1.99-bookworm
 
-# ---- Stage 1: Base dependencies (root phi-spaces + help-site Next.js/React) ----
+# ---- Stage 1: Base dependencies (phi-spaces in spaces/ + help-site Next.js/React) ----
 FROM ${NODE_IMAGE} AS deps
 # nanoi is IPv6-only: never prefer IPv4 for DNS/npm (causes "Exit handler never called!")
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false \
@@ -31,21 +31,21 @@ RUN set -eux; \
     printf '\nlabel ::/0          1\nprecedence ::/0   100\nprecedence ::ffff:0:0/96  10\n' >> /etc/gai.conf; \
     node -e "const dns=require('dns'); dns.setDefaultResultOrder('ipv6first'); console.log('dns', dns.getDefaultResultOrder())"
 
-COPY package.json package-lock.json ./
+COPY spaces/package.json spaces/package-lock.json ./spaces/
 RUN --mount=type=cache,target=/root/.npm \
     set -eux; \
     for i in 1 2 3 4 5; do \
       echo "npm ci attempt $i"; \
-      npm ci --no-audit --no-fund && exit 0; \
+      npm --prefix spaces ci --no-audit --no-fund && exit 0; \
       echo "npm ci failed on attempt $i"; \
-      rm -rf node_modules; \
+      rm -rf spaces/node_modules; \
       sleep $((i * 3)); \
     done; \
     echo "npm ci failed after retries"; exit 1
 
 # the agent package's dependencies: live-models.ts (model access) and the documentation snippet check use them
-COPY agent/package.json agent/package-lock.json ./agent/
-RUN --mount=type=cache,target=/root/.npm npm --prefix agent ci --no-audit --no-fund
+COPY spaces/agent/package.json spaces/agent/package-lock.json ./spaces/agent/
+RUN --mount=type=cache,target=/root/.npm npm --prefix spaces/agent ci --no-audit --no-fund
 
 COPY help-site/package.json help-site/package-lock.json ./help-site/
 RUN --mount=type=cache,target=/root/.npm \
@@ -63,11 +63,11 @@ RUN --mount=type=cache,target=/root/.npm \
 FROM deps AS builder
 WORKDIR /opt/phi-spaces
 
-COPY tsconfig.json tsconfig.build.json ./
-COPY src ./src
-COPY examples ./examples
+COPY spaces/tsconfig.json spaces/tsconfig.build.json ./spaces/
+COPY spaces/src ./spaces/src
+COPY spaces/examples ./spaces/examples
 # live-models.ts (the help server's model access) lives in the agent package
-COPY agent/src ./agent/src
+COPY spaces/agent/src ./spaces/agent/src
 COPY help-site ./help-site
 
 # Generate bilingual Help corpus (DE/EN), standalone React bundle, and Next.js 16 production build
@@ -101,13 +101,13 @@ ENV NODE_ENV=production \
 WORKDIR /opt/phi-spaces
 
 # Copy production runtime dependencies and built artifacts
-COPY --from=builder --chown=node:node /opt/phi-spaces/package.json /opt/phi-spaces/package-lock.json ./
-COPY --from=builder --chown=node:node /opt/phi-spaces/node_modules ./node_modules
-COPY --from=builder --chown=node:node /opt/phi-spaces/src ./src
-COPY --from=builder --chown=node:node /opt/phi-spaces/examples ./examples
-COPY --from=builder --chown=node:node /opt/phi-spaces/agent/package.json /opt/phi-spaces/agent/package-lock.json ./agent/
-COPY --from=builder --chown=node:node /opt/phi-spaces/agent/node_modules ./agent/node_modules
-COPY --from=builder --chown=node:node /opt/phi-spaces/agent/src ./agent/src
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/package.json /opt/phi-spaces/spaces/package-lock.json ./spaces/
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/node_modules ./spaces/node_modules
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/src ./spaces/src
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/examples ./spaces/examples
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/agent/package.json /opt/phi-spaces/spaces/agent/package-lock.json ./spaces/agent/
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/agent/node_modules ./spaces/agent/node_modules
+COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/agent/src ./spaces/agent/src
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/package.json /opt/phi-spaces/help-site/package-lock.json ./help-site/
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/node_modules ./help-site/node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/next.config.mjs /opt/phi-spaces/help-site/tsconfig.json ./help-site/
@@ -150,9 +150,13 @@ CMD ["node", "--no-warnings", "--experimental-strip-types", "help-site/server/na
 # docker-compose.rust.yml gives it to the swarm Space containers; the hub and the shard engine stay as they are.
 # The builder is Debian bookworm like the Node image, so the binary finds the same libc.
 FROM ${RUST_IMAGE} AS rust-builder
-WORKDIR /opt/phi-spaces/rust
-COPY rust ./
+# The application's own workspace (help-site/rust) takes the core crates as path dependencies from spaces/rust: both are
+# copied with the layout of the checkout (docs/umstellung-verzeichnisse.en.md, D1).
+WORKDIR /opt/phi-spaces
+COPY spaces/rust ./spaces/rust
+COPY help-site/rust ./help-site/rust
+WORKDIR /opt/phi-spaces/help-site/rust
 RUN cargo build --release --locked -p help-space
 
 FROM production AS production-rust
-COPY --from=rust-builder /opt/phi-spaces/rust/target/release/help-space /usr/local/bin/help-space
+COPY --from=rust-builder /opt/phi-spaces/help-site/rust/target/release/help-space /usr/local/bin/help-space

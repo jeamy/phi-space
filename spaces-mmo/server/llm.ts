@@ -32,7 +32,7 @@ function load(): Promise<Registry | null> {
 			return { available: async () => [one], complete: async (_l, s, u) => ({ text: await m.complete(s, u), model: "scripted" }) };
 		}
 		try {
-			const { liveModels } = await import("../../agent/src/live-models.ts");
+			const { liveModels } = await import("../../spaces/agent/src/live-models.ts");
 			const { models } = await liveModels();
 			let cached: { at: number; list: readonly any[] } | null = null;
 			const list = async (): Promise<readonly any[]> => {

@@ -5,9 +5,10 @@ help-site/dist
 help-site/public/help
 help-site/.local
 dist
+spaces/dist
 .git
 .vscode
-test/evidence
+spaces/test/evidence
 .env
 **/.env
 **/.env.*
@@ -20,4 +21,4 @@ codemode-chat/.next
 codemode-chat/.local
 spaces-mmo/.next
 spaces-mmo/.local
-rust/target
+**/rust/target
