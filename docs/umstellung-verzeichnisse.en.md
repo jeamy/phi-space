@@ -1,6 +1,6 @@
 # Directory split: the spaces core apart from the applications (plan)
 
-Status: plan, nothing moved yet (2026-11-14).
+Status: phase 1 in progress (2026-11-16). Review incorporated on 2026-11-15, gaps on 2026-11-16 (below).
 
 ## Goal
 
@@ -9,8 +9,7 @@ spaces-mmo, codemode-chat or the help site lives under that project's own `rust/
 the applications. It has no code path, binary, profile, default or test that names one of them. The dependency runs
 one way only, from the applications to the core.
 
-The phrase "in die jeweiligen Verzeichnisse unter rust" is read here as `spaces-mmo/rust/`, `help-site/rust/` and
-`codemode-chat/rust/`. It is not read as `rust/mmo/` and so on inside one shared Rust tree.
+The application Rust directories are `spaces-mmo/rust/`, `help-site/rust/` and `codemode-chat/rust/`.
 
 ## Where things are tangled today
 
@@ -22,15 +21,16 @@ counted.
 |---|---|---|
 | `rust/phi-space-server/src/profiles.rs` | `--profile mmo\|codemode\|help`: listen addresses, store files, limits, locks, peer names, Process entry, compaction, all from the projects' env variables (`SPACES_MMO_*`, `CODEMODE_*`, `SWARM_*`) | the generic part is core, the three profile functions belong to the apps |
 | `rust/phi-space-server/src/help.rs` | the help site's swarm Space: alias, limits, completion profile, HostInfo, purge of old posts | help-site |
-| `rust/phi-space-server/tests/process.rs` | starts `--profile mmo` / `codemode` / `help` | the apps, beside their binaries |
+| `rust/phi-space-server/tests/process.rs` | generic server tests and process tests for `--profile mmo` / `codemode` | generic tests stay in core, profile tests follow their binaries |
 | `rust/mmo-engine`, `rust/mmo-web` (bins `mmo-world`, `mmo-npc`, `mmo-web`) | the game engine and web process | spaces-mmo |
 | `rust/Cargo.toml` | `[profile.dev.package.mmo-engine]`, `regex-*` opt-levels | spaces-mmo |
 | `src/dashboard.ts` | the default app list (codemode-chat, spaces-mmo world, swarm shard, hub; sockets and ports) | configuration, not core code |
 | `test/test-shared-copies.test.ts` | reads `client/lib/palettes.ts`, `markdown.ts`, `server/env.ts` in the three apps | a repo-wide check, not a core test |
+| `scripts/package-imports.mjs`, `scripts/durable-imports.mjs`, `scripts/check-branding.mjs` | discover or scan files across the applications and the core | repo-wide checks |
 
 Everything else in `rust/` is core: `phi-json`, `phi-core`, `phi-store`, `phi-service`, `phi-wire`, `phi-host`,
-`phi-spaces-client` (with `phi-client-driver`) and `phi-space-server` without the profiles. `mmo-web` and
-`mmo-engine` already depend only on `phi-json` and `phi-spaces-client`.
+`phi-spaces-client` (with `phi-client-driver`) and `phi-space-server` without the profiles. `mmo-web` depends
+on `mmo-engine`. Both use `phi-json` and `phi-spaces-client` from the core.
 
 ## Target layout
 
@@ -45,7 +45,7 @@ spaces/                     the core: package "phi-spaces"
 spaces-mmo/rust/            Cargo workspace: mmo-engine, mmo-web, mmo-space (bin, was --profile mmo)
 codemode-chat/rust/         Cargo workspace: codemode-space (bin, was --profile codemode)
 help-site/rust/             Cargo workspace: help-space (bin, was --profile help, with help.rs)
-checks/                     repo-wide checks: shared copies, branding, layering
+checks/                     repo-wide checks: imports, shared copies, branding, layering, Cargo lockfiles
 docs/ de-docs/ AGENTS.md README.md package.json (thin: forwards to spaces/ and the apps, no exports)
 ```
 
@@ -54,17 +54,18 @@ docs/ de-docs/ AGENTS.md README.md package.json (thin: forwards to spaces/ and t
 
 ## Decisions
 
-**D1, Cargo workspaces: one per project (recommended), not one for the whole repo.** Each app workspace takes the core
-crates as path dependencies (`phi-spaces-client = { path = "../../spaces/rust/phi-spaces-client" }`). This makes the
-separation structural: no core crate can depend on an app crate, because the core workspace does not contain them.
-The cost is a `Cargo.lock` and a `target/` per workspace, so the core is compiled again for each app.
+**D1. One Cargo workspace per project (recommended).** Each app crate takes the core crates as path dependencies.
+For example, from `spaces-mmo/rust/mmo-engine/Cargo.toml` the path to `phi-spaces-client` is
+`../../../spaces/rust/phi-spaces-client`. Cargo permits dependencies across workspace boundaries. The repo-wide
+layering check uses Cargo's resolved package graph to enforce the direction from apps to core, including normal,
+build and dev dependencies. The cost is a `Cargo.lock` and a `target/` per workspace, so each app compiles its
+dependencies on the core in its own build.
 `[profile.release]` (thin LTO, one codegen unit) only takes effect at a workspace root, so it is copied into every
 workspace. The mmo opt-levels go into the mmo workspace only. Lock drift between the workspaces (rusqlite, tokio,
-rustls) is held off by `checks/rust-locks`, which compares the versions of shared crates across the lockfiles.
-The alternative is one virtual workspace at the repo root with a layering check. It is simpler to operate (one lock,
-one target) but separates only by folder.
+rustls) is checked by comparing versions of shared crates across the lockfiles. A single virtual workspace at the
+repo root is also an option, with one lockfile, one target directory and the same dependency check.
 
-**D2, app profiles become app binaries.** `profiles.rs` splits in two. The generic part becomes the library
+**D2. App profiles become app binaries.** The generic part of `profiles.rs` becomes the library
 `phi-space-host`: `Instance`, `run_instance`, the Process lease, locks only when missing, compaction, host facts, the
 ready line, `stopping`, and a `HostTask` hook for prepare and periodic work on the store's thread. The three profile
 functions become `main.rs` of three small binaries in the apps. Each keeps its env variables and its ready line exactly
@@ -72,126 +73,182 @@ as now, so the TypeScript starters and tests see no difference except the binary
 configuration. It still gets its own binary, so all three projects work the same way and the core keeps no codemode
 defaults. `phi-space-server` keeps no `--profile` alias, because that alias would be app code in the core.
 
-**D3, the TypeScript core moves into `spaces/` as a whole package.** The apps' `"phi-spaces": "file:.."` becomes
-`"file:../spaces"`. The root `package.json` keeps only forwarding scripts (`test`, `typecheck`, `test:agent`,
-`codemode-chat`, ...). It has no `exports`, so nothing can import "the repo".
+**D3. Move the TypeScript package into `spaces/` and keep a thin root manifest (recommended).** The apps'
+`"phi-spaces": "file:.."` becomes `"file:../spaces"`. The same commit installs the root `package.json` with the
+existing command names and argument forwarding. Put commands that launch an app, such as `example:space-chat`, in
+the root or app scripts. The `phi-spaces` package name and exports belong to `spaces/package.json`.
 
-**D4, the dashboard takes its app list from configuration.** The defaults move out of `src/dashboard.ts` into the
-root `.env` (`DASHBOARD_APPS`, which already exists) or into a `dashboard.apps.json` at the root. Without either, the
-dashboard shows only `--dir`/`--app`.
+**D4. Configure the dashboard app list through the repo root.** Both the CLI and `dashboard.sh` read the repo
+root's `.env` after the move. Preserve the existing `DASHBOARD_APPS` and CLI override behavior. Move app addresses,
+space selectors, labels and address fallback order into repo-level configuration before removing the built-in list.
+The current `DASHBOARD_APPS` syntax accepts addresses and space selectors. Keep label metadata in the repo-level
+configuration too. With no configured apps, the dashboard shows the stores and app addresses supplied through
+`--dir` and `--app`.
 
-**D5, `docs/` stays at the repo root.** It holds documents that span the core and the apps (rust-portierung, the
-federation plan, betrieb). Only the documents that are purely codemode (`codemode-*.en.md`) move to
-`codemode-chat/docs/`, as spaces-mmo already does. Moving the whole tree would break hundreds of links for little gain.
+**D5. Keep `docs/` at the repo root for the technical migration.** Update references to moved code as part of the
+migration. The move of Codemode-only documents to `codemode-chat/docs/` can be reviewed separately with its links
+and German counterparts.
 
 ## Phases
 
-Each phase is its own commit (or a few), ends green, and can be reverted on its own. Phases 1 and 2 change content in
-place. Phases 3 and 4 are moves made with `git mv`, plus only the path fixes they force, so rename detection and
-`git blame` follow the files.
+Every commit ends green. Phases 1 and 2 decouple the code in place. Phase 3 moves the TypeScript package and all
+Cargo workspaces together with their path fixes. Use `git mv` and keep behavior changes in phases 1 and 2 so blame
+can follow the moved files. When rolling back several phases, revert the dependent commits in reverse order.
 
 ### Phase 0: preconditions
 
-- Clean working tree: the open changes in `codemode-chat/` and `spaces-mmo/` (planning bots, `server/subgoals.ts`)
-  are committed or set aside first. Other sessions working in this checkout pause for phases 3 and 4.
+- Coordinate with the owners of open work before moving files. Do the migration in a clean checkout and coordinate
+  the cutover with other sessions working on affected paths.
+- Inventory consumers outside this checkout, especially the Android build and remote demo in `pi-termux-mobile`,
+  running soak jobs, backup scripts and absolute paths to binaries in local or server configuration.
 - Baseline: `npm run typecheck`, `npm test`, `npm run test:agent`, `cd rust && cargo test && cargo clippy
   --all-targets`, the app tests, and the cross runs with `PHI_SPACES_SERVER_CMD` / `PHI_SPACES_CLIENT_CMD`. Results
   recorded so later failures can be told apart from existing ones.
 
 ### Phase 1: decouple Rust in place (still under `rust/`)
 
-1. Extract `rust/phi-space-host` (library) from `profiles.rs` with the `HostTask` hook. `phi-space-server` uses it
-   for nothing app-specific and loses `--profile`. Its `help.rs` (`--help` text) is checked for profile mentions.
-2. `rust/mmo-space`, `rust/codemode-space`, `rust/help-space` (with today's `help.rs`) as binaries on
-   `phi-space-host`. `tests/process.rs` is split into each.
-3. Switch the callers to the new binaries, one app per commit:
+1. Extract `rust/phi-space-host` (library) from `profiles.rs` with the `HostTask` hook. Keep the current entry
+   points while preparing the new binaries.
+2. Add `rust/mmo-space`, `rust/codemode-space` and `rust/help-space` (with the swarm-specific `help.rs`) on
+   `phi-space-host`. Move the MMO and Codemode profile tests alongside their binaries and keep the generic tests
+   with `phi-space-server`. Exercise the Help binary through the swarm tests, including retention.
+3. Switch each app's callers in the same commit as its command change:
    - `SPACES_MMO_SPACE_SERVER`, `CODEMODE_SPACE_SERVER`, `HELP_SPACE_SERVER` and the launchers that pass
      `--profile`
    - the three Dockerfiles (`cargo build -p ...`, `COPY --from=rust-builder ...`)
    - `docker-compose.rust*.yml` (`command:`), `spaces-mmo/tests/perf/space-cost.ts`, `handover-live.ts`, `soak.sh`
-4. Verification: `cargo test`/`clippy`, every app's tests against the new binary, and the `docker:local:rust:up`
-   images of each app built and started on this machine.
+4. Once the callers have switched, remove `--profile` dispatch and its usage text from `phi-space-server/src/main.rs`.
+5. Run Cargo tests and Clippy, run each app's tests with its new binary, and build and start each app's Rust images
+   locally. Verify the ready line, first start and restart on an existing store, and graceful shutdown. Check MMO
+   accounts and region stores, Codemode capacity validation, and the Help swarm alias and retention.
 
 ### Phase 2: decouple the TypeScript core in place
 
-1. Dashboard defaults to configuration (D4). `test/test-dashboard.test.ts` gets its apps from the test.
+1. Move the dashboard app list to configuration (D4) and supply the test list in `test/test-dashboard.test.ts`.
 2. `test/test-shared-copies.test.ts` → `checks/shared-copies.test.ts`, and `scripts/check-branding.mjs` →
-   `checks/`. Both run from the root scripts.
-3. New check `checks/layering.mjs`, run by `npm test` before the suites:
+   `checks/`. Put the package and durable import checks there as well. Use separate repo and package roots for
+   app discovery, export targets, import allowlists and the expected `node_modules/phi-spaces` real path.
+   Verify that every app is discovered and scanned. Keep the core-only test command usable from its package.
+3. Add `checks/layering.mjs` to the root test command before the suites. Verify the following.
    - nothing under `src/`, `test/`, `scripts/`, `agent/` or `rust/phi-*` imports or path-references `spaces-mmo/`,
      `codemode-chat/` or `help-site/`
-   - no core `Cargo.toml` has a path dependency on an app crate
+   - the resolved Cargo graph contains zero dependencies from core crates into app crates
    - comments that cite an app as a reason are allowed
 
-   The check is written against today's paths and switched to `spaces/` in phase 3.
+   Start with today's paths and switch the check to the new layout in phase 3. Include package scripts and Cargo
+   manifests in the check so entry points and build metadata are covered.
 4. `examples/codemode-evolve.ts` is checked: if it only demonstrates pi-codemode on a space, it stays a core example.
    If it needs codemode-chat, it moves there.
 
-### Phase 3: the core into `spaces/`
+### Phase 3: move the TypeScript package and all Cargo workspaces
 
-One commit, so the TypeScript and Rust paths to each other never break:
+Land the moves and path fixes in one phi-spaces commit. Moving the old Cargo manifest first would leave its member
+paths invalid and the app crates without their inherited package fields and dependencies.
 
-- `git mv src test examples agent scripts tsconfig*.json package.json package-lock.json spaces/`, plus the core part of
-  `rust/` (`Cargo.toml`, `Cargo.lock`, `rustfmt.toml`, `phi-*`) to `spaces/rust/`. `node_modules/` and `dist/` are moved
-  with `mv`, not reinstalled (nothing is installed locally). In each app, the `node_modules/phi-spaces` symlink is
-  repointed by hand (`ln -sfn ../../spaces`). An `npm install` needs the user's approval first.
-- Path fixes this forces:
-  - **Each app's dependency:** `package.json` (`file:../spaces`) and its `package-lock.json` entry.
-  - **Tooling inside `spaces/`:** the allowlists in `scripts/package-imports.mjs` and `scripts/durable-imports.mjs`.
-  - **`scripts/bundle-mobile.mjs`:** the mobile sibling becomes `resolve(root, '../../pi-termux-mobile')`.
-  - **Test support paths:** the `rust/target/release/...` defaults in `test/support/*-under-test.ts`, and
-    `test/testbed/` (federation images, `phi-federation:local`, its Dockerfiles).
-  - **App references into the old tree:** the paths from the apps to the core test tree (`spaces-mmo/tests/r8/*`,
-    `help-site/server/social`), and the Dockerfiles' `COPY` of the core (`/opt/phi-spaces/spaces/...`).
-  - **Git configuration:** `.gitignore` (`spaces/rust/target/`, `spaces/dist/`).
-- Verification: everything from the phase 0 baseline, run from `spaces/` and through the root forwarders.
+- **TypeScript package.** Move `src/`, `test/`, `examples/`, `agent/`, `scripts/`, the TypeScript configs and the
+  package manifest and lockfile to `spaces/`. Add the root forwarders in the same commit. Update each app's
+  `file:../spaces` dependency and all corresponding lockfile records. Move existing local `node_modules/` and
+  `dist/` with the package and repoint each app's `node_modules/phi-spaces` symlink to `../../spaces`. Local
+  installation requires prior approval. Verify the package contents listed in `files`, including the README and
+  license, with `npm pack --dry-run --json` from `spaces/`.
+- **Cargo workspaces.** Move the `phi-*` crates to `spaces/rust/`, the three MMO crates to `spaces-mmo/rust/`,
+  `codemode-space` to `codemode-chat/rust/` and `help-space` to `help-site/rust/`. With the recommended D1 layout,
+  add the workspace manifests with the inherited package fields, dependencies and profiles. Carry over
+  `rustfmt.toml` so formatting commands keep the same settings. Start each lockfile
+  from the original and review Cargo's changes to package versions. Validate the resulting lockfiles with
+  `--locked` and run the resolved dependency and shared-version checks. Remove the old root `rust/` directory.
+- **Cross-language tests and MMO oracle.** Update callers' binary paths, app references to core, agent and test
+  sources, and the federation testbed's Docker context, build paths and mounts. `tests/common::repo()` in
+  `mmo-engine` goes up three directories. Cargo unpacks the oracle under the MMO workspace's `target/tmp`. Link
+  the archived checkout's root and agent `node_modules` to the live checkout's `spaces/node_modules` and
+  `spaces/agent/node_modules`. Keep the archived app's `phi-spaces` link pointing to the archive's own root.
+  Update the R8 scripts and paths for the oracle, coverage, command table and app binaries.
+- **Mobile consumer.** Coordinate the matching change in `pi-termux-mobile` for this cutover. Update
+  `scripts/bundle-mobile.mjs`, the default runtime path in `agent/test/pi-serverd.test.ts`, Android
+  `scripts/prepare-runtime.py` and `scripts/remote-demo/run.sh`. Android currently looks for the bundle script,
+  Cargo workspace and Android binary at the old paths. Verify a pre-build refresh that rebuilds both the bundle
+  and native server from the new layout, and verify the remote-demo coordinator path.
+- **Container builds.** Update where all stages copy npm manifests, source and runtime dependencies, including
+  `agent/` and the local package symlink. Fix the MMO and Codemode dev bind mounts, Rust build and artifact paths,
+  and `.gitignore` and `.dockerignore` entries for the moved outputs, Cargo targets and test evidence. Keep a
+  build context that includes both the app and its core path dependencies.
+- **Repo commands and configuration.** Update the repo-wide checks and their fixture paths. Verify dashboard
+  start, stop and status and the CLI's use of the root `.env`. Preserve testbed env discovery, testbed and
+  operations artifact paths or update their consumers in the same commit. Check argument forwarding and commands
+  that accept paths relative to the invocation directory.
 
-### Phase 4: the app crates into the apps
+Repeat the phase 0 baseline through the root commands and from the individual packages. Test and lint each Cargo
+workspace, run the Rust/TypeScript oracle and wire cross-checks, and run the app suites against their new binaries.
+Build the dev, test and production Rust image targets from a clean local checkout. Run the Rust app stacks and
+local federation testbed with the moved paths. Verify that every app is scanned by the import checks and that the
+root commands still reach their intended packages.
 
-One commit per app. Each new workspace gets its own `Cargo.toml` with the release profile copied in (D1), its own
-`Cargo.lock` started from the core one (`cargo generate-lockfile` is not run, the lock is copied and trimmed by
-`cargo`), and its own `target/` in `.gitignore`.
+### Phase 4: update instructions and references
 
-- **spaces-mmo:** `git mv rust/mmo-engine rust/mmo-web rust/mmo-space spaces-mmo/rust/`.
-  - `tests/common::repo()` becomes `../../..`.
-  - The oracle is unpacked into `spaces-mmo/rust/target/tmp`. The frozen commit keeps its old layout inside the
-    archive, so the oracle itself is unaffected.
-  - The `MMO_ORACLE`, `commands.json` and `uncovered.ts` paths, and the `SPACES_MMO_*_CMD` defaults, follow.
-  - The Dockerfile builds in `spaces-mmo/rust` and copies `spaces/rust` beside it for the path dependencies.
-- **codemode-chat:** `git mv rust/codemode-space codemode-chat/rust/`.
-- **help-site:** `git mv rust/help-space help-site/rust/`.
-- After this, `rust/` at the root is empty and gone.
-- Verification:
-  - `cargo test`/`clippy` in all four workspaces
-  - `tests/engine_walk.rs` and `primitives.rs` against the oracle
-  - `web-cross.ts`, the app test suites against their binaries, and the local docker images
+- Update `AGENTS.md`, the app instructions and the root README for the new paths and commands. Land any updates
+  needed to run phase 3's verification with phase 3.
+- Fix Markdown links and commands in `docs/`, `de-docs/` and the apps, and check the links. Update the help site's
+  corpus sources and Codemode's help articles where they describe the layout or the local package dependency.
+  Keep any move of Codemode documents in a separate follow-up (D5).
 
-### Phase 5: the root and the documentation
+### Phase 5: deploy (only with the user's approval)
 
-- **Root and agent instructions:** the root `package.json` becomes the thin forwarder (D3). `AGENTS.md` is rewritten
-  for the new paths (commands, layout, every `rust/...` and `test/...` mention), as is `README.md`.
-- **Documentation links:** the codemode documents move (D5). Links in `docs/`, `de-docs/` and the apps' docs are
-  rewritten by a script, then checked by a link check over every `*.md`.
-- **Memory:** entries that name paths (soak, local mmo, deploy) are updated.
+Inventory the deployed revision, effective Compose project and service names, image IDs, and each store's mount
+and path on big and nano. Include the separate MMO arena project if its image or commands are affected. Record
+the existing dashboard app configuration where applicable.
 
-### Phase 6: deploy (only with the user's approval)
+Build the candidate images and rehearse the update and rollback locally on copies of the existing stores. Preserve
+the current volume and bind-mount mappings. Verify startup and a read/write round trip on the expected stores,
+with the appropriate account, region and swarm endpoints. Retain the previous images and their matching Compose
+files and commands. To roll back, recreate the affected services with those images and commands, then verify
+the mounts and endpoint health again.
 
-big and nano run only Rust (R-D12). The new binary names reach them only with a new image and the changed
-`command:` in the compose files. The compose project names are set explicitly (`phi-spaces-mmo`,
-`phi-spaces-codemode`, `phi-spaces-help`), so volumes and store files stay where they are. The servers' checkouts get
-`git pull` and then the usual `docker:*:rust:up`. Before that, the same images run on this machine against copies of
-the store files (`~/phi-backup/`). Nothing is started on a shared server without asking.
+After approval, pull the verified revision and use each app's Rust deployment entry point for the affected
+services. Check the running containers' image IDs, commands, health and mounts after the update. Recreate any
+affected service still running an old image before accepting the rollout.
 
 ## Risks
 
-- **Moves collide with open work.** A large move makes every uncommitted change elsewhere a conflict. Hence phase 0
-  and the pause of other sessions.
-- **Compile time.** Separate workspaces compile the core once per app (D1). This applies locally and in the docker
-  builder. A shared `CARGO_TARGET_DIR` locally would soften it, but it is not part of this plan.
-- **Paths outside the repo.** Some paths are not in git: the mobile runtime (`pi-termux-mobile`), `~/phi-soak`,
-  `~/phi-backup`, the servers' checkouts, and scripts that use absolute `rust/target/release/...` paths. They are
-  searched for before phase 3, and the hits are listed in that commit.
-- **The frozen mmo oracle** is an old tree. It must not be "fixed" to the new layout, only its extraction target moves.
+- **Moves collide with open work.** Coordinate the shared paths and use the clean checkout from phase 0.
+- **Compile time.** The separate workspaces build their core dependencies independently, including in Docker.
+- **Paths outside the repo.** Apply the phase 0 inventory to the cutover. Mobile builds can use cached artifacts
+  when the source probe fails, so confirm the refresh in the Android build output.
+- **The frozen MMO oracle.** Its archive retains the original layout. Verify the links to dependencies from the
+  live checkout as part of the oracle run.
+
+## Gaps found on 2026-11-16 (folded into phase 1)
+
+1. **A routine deploy ships phase 1.** big and nano are deployed from master with `docker:*:rust:up`. Once the
+   compose `command:` names `mmo-space`, `codemode-space` or `help-space`, the next deploy for any other reason
+   carries the new binaries, long before phase 5. Phase 1 is therefore verified to deploy grade: images built and
+   started on this machine as throwaway projects (`docker:rust:up`, never `docker:local:rust:up`, which is the live
+   local world) on copies of the stores, restarted on the existing files.
+2. **A stale binary path fails without a reason.** An env value, a script or a habit that still points
+   `SPACES_MMO_SPACE_SERVER`, `CODEMODE_SPACE_SERVER`, `HELP_SPACE_SERVER` or `HANDOVER_SERVER` at
+   `phi-space-server` would start it without arguments, and it ends with its usage text. The app-side launchers
+   (`server/space-server.ts` in spaces-mmo and codemode-chat, `help-site/tests/swarm-space.ts`,
+   `spaces-mmo/tests/perf/handover-live.ts`) refuse that basename with a message naming the app's binary. The core
+   keeps no word about it. Old run scripts in `~/phi-soak/runs/` name `phi-space-server` with `HELP_SPACE_SERVER`;
+   they are records, not rerun.
+3. **Generic process behavior beyond `profiles.rs`.** The abort-on-panic hook (in `main.rs`), `fail`,
+   `stopping.rs`, the exit after the threads are joined and `host_facts` (used by the Process entry and by the
+   swarm's HostInfo) belong to `phi-space-host` too. `phi-space-server` depends on it for its other modes.
+4. **The help profile has no Rust process test.** `help-space` gets one: the ready line, the `social-swarm` alias,
+   the HostInfo entry, and a purge with a small `SWARM_MAX_ENTRIES` and `SWARM_RETENTION_MS`. The MMO and Codemode
+   process tests move unchanged except for the binary, so they hold the old behavior.
+5. **Where the process-test helpers live.** `start`, the framed `call`, `stored_limits` and `items` are needed by
+   four crates, across workspaces after phase 3. They are the `testing` feature of `phi-space-host`, enabled from
+   the dev-dependencies.
+6. **Instructions follow each phase.** `AGENTS.md`, the `.env.example` files and the source comments that name
+   `--profile` or `profiles.rs` change in the commit that changes the command, not in phase 4: other sessions work
+   from `AGENTS.md`.
+7. **Images carry only what they run.** The MMO image copies `mmo-space` instead of `phi-space-server`, the Help and
+   Codemode images likewise. Nothing in their containers starts the generic server.
+8. **Name collision.** `phi-space-host` sits beside the `phi-host` crate, `phi_store::SpaceHost` and the apps'
+   `server/space-host.ts`. The names are kept for phase 1; a rename before phase 3 is cheap (open question 3).
+
+The mobile consumer is not affected by phase 1: `pi-termux-mobile` starts `phi-space-server` with `--store`,
+`--listen` and `--agent-host` only.
 
 ## Open for the user
 
