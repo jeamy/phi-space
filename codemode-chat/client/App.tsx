@@ -7,6 +7,7 @@
 import { Fragment, useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { AdminPanel } from "./AdminPanel.tsx";
 import { HelpTip } from "./HelpTip.tsx";
+import { PHI_SPACES_GITHUB } from "./experiments/publication-links.ts";
 import { ThemeControls } from "./ThemeControls.tsx";
 import { parseCases } from "./lib/cases.ts";
 import { exampleHref } from "./lib/data-example.ts";
@@ -1085,6 +1086,7 @@ export function CodemodeChat() {
 				<span className={"pill" + (live ? " pill--accent" : "")}>{live ? t.live : t.offline}</span>
 				<span className="pill">{llm?.enabled ? `${llm.models.length} ${t.llm}` : t.off}</span>
 				<a className="toplink" href={`/experiments?lang=${lang}`}>{lang === "de" ? "Experimente" : "Experiments"}</a>
+				<a className="toplink" href={PHI_SPACES_GITHUB}>GitHub</a>
 				<ThemeControls lang={theme.lang} setLang={theme.setLang} mode={theme.mode} changeMode={theme.changeMode} palette={theme.palette} changePalette={theme.changePalette} />
 				<a className="toplink" href={`/help?lang=${lang}`}>{t.helpLink}</a>
 			</header>

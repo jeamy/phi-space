@@ -1,18 +1,14 @@
 // The repository documents remain the source of truth. Only these authored files and their figures are public.
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { EXPERIMENT_FILES, experimentSourceUrl } from "../client/experiments/publication-links.ts";
 import { renderMarkdownToHtml } from "../client/lib/markdown.ts";
 import type { Publication, PublicationBody, PublicationId } from "../client/experiments/types.ts";
 
 const docs = [resolve(process.cwd(), "docs"), resolve(process.cwd(), "../docs")].find((path) => existsSync(join(path, "codemode-planning-summary.en.md")));
 if (!docs) throw new Error("Experiment documents are missing from this checkout or image");
 export const EXPERIMENT_DOCS = docs;
-const files = {
-	planning: { en: "codemode-planning-summary.en.md" },
-	jev: { en: "codemode-jev-player.en.md" },
-	article: { en: "codemode-planning-article.en.md", de: "de-docs/codemode-planning-article.md" },
-	plan: { en: "codemode-planung.en.md" },
-} as const;
+const files = EXPERIMENT_FILES;
 const extraMedia = ["experiment-design.svg", "planning-approaches.svg", "jev-workflow.svg"];
 const media = new Set(extraMedia);
 const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -26,9 +22,12 @@ export function experimentSource(id: string, lang = "en"): { name: string; markd
 
 function localLink(target: string): string | null {
 	if (/^https?:\/\//.test(target) || target.startsWith("#")) return target;
-	const name = target.replace(/^\.\.\//, "");
+	const [path, anchor] = target.split("#", 2);
+	const name = path!.replace(/^\.\.\//, "");
 	for (const [id, choices] of Object.entries(files)) {
-		if (Object.values(choices).some((path) => path === name)) return id === "plan" ? "/experiments/source/plan" : `/experiments/${id}${id === "article" ? `?lang=${name.startsWith("de-docs/") ? "de" : "en"}` : ""}`;
+		if (Object.values(choices).some((path) => path === name)) {
+			return experimentSourceUrl(id, name.startsWith("de-docs/") ? "de" : "en") + (anchor ? `#${anchor}` : "");
+		}
 	}
 	return null;
 }

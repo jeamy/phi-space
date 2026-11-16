@@ -4,7 +4,7 @@
 
 ## Versuchsaufbauten lesen und vergleichen
 
-Der neue Codemode-Bereich `/experiments` bereitet das kompakte Planungspaper, den Jev-Bericht und diesen Entwicklungsartikel als HTML auf. Versuchsprotokolle, Abbildungen und Quelldownloads sind dort getrennt zugänglich.
+Der neue Codemode-Bereich `/experiments` bereitet das kompakte Planungspaper, den Jev-Bericht und diesen Entwicklungsartikel als HTML auf. Versuchsprotokolle, Abbildungen und GitHub-Verweise auf die Markdown-Quelldokumente sind dort getrennt zugänglich.
 
 ![Modellrollen bei JEPA, Code-Agenten und Jev-Hybriden](../img/codemode-planung/planning-approaches.svg)
 

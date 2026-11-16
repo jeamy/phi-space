@@ -2,7 +2,7 @@
 
 ## Reading the experimental designs
 
-The Codemode experiments page presents the compact planning paper, the Jev report and this development article as HTML, with separate protocols and source downloads at `/experiments`.
+The Codemode experiments page presents the compact planning paper, the Jev report and this development article as HTML, with separate protocols and GitHub links to the Markdown sources at `/experiments`.
 
 ![Model roles in JEPA, code-generating agents and Jev hybrids](img/codemode-planung/planning-approaches.svg)
 

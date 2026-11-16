@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { experimentPublication, experimentSource, EXPERIMENT_MEDIA } from "../server/experiments-content.ts";
 import { GET as media } from "../app/experiments/media/[name]/route.ts";
+import { experimentSourceUrl } from "../client/experiments/publication-links.ts";
 import { GET as source } from "../app/experiments/source/[document]/route.ts";
 
 test("published papers render their figures, navigation and code without raw image syntax", () => {
@@ -16,7 +17,11 @@ test("published papers render their figures, navigation and code without raw ima
   }
  }
  const german = experimentPublication("article")!.bodies.de!;
- assert.ok(german.html.includes('/experiments/article?lang=en'));
+ assert.ok(german.html.includes('https://github.com/jeamy/phi-space/blob/master/docs/codemode-planning-article.en.md'));
+ assert.ok(german.html.includes('https://github.com/jeamy/phi-space/blob/master/docs/codemode-planung.en.md#steps'));
+ for (const id of ["planning", "jev", "article"]) {
+  for (const body of Object.values(experimentPublication(id)!.bodies)) assert.doesNotMatch(body.html, /href="\/experiments\/source\//);
+ }
  assert.match(experimentPublication("planning")!.bodies.en.html, /&lt;|<code>/);
 });
 
@@ -30,9 +35,10 @@ test("publication and media endpoints use explicit allowlists", async () => {
  assert.equal(image.headers.get("content-type"), "image/svg+xml");
  assert.match(await image.text(), /<svg/);
  const article = await source(new Request("http://localhost/experiments/source/article?lang=de"), { params: Promise.resolve({ document: "article" }) });
- assert.equal(article.status, 200);
- assert.match(article.headers.get("content-disposition")!, /codemode-planning-article.md/);
- assert.match(await article.text(), /Planungsbots/);
+ assert.equal(article.status, 302);
+ assert.equal(article.headers.get("location"), "https://github.com/jeamy/phi-space/blob/master/docs/de-docs/codemode-planning-article.md");
+ assert.equal(experimentSourceUrl("plan", "de"), "https://github.com/jeamy/phi-space/blob/master/docs/codemode-planung.en.md");
+ assert.equal(experimentSourceUrl("../../package.json"), null);
  const invalid = await source(new Request("http://localhost/experiments/source/private"), { params: Promise.resolve({ document: "private" }) });
  assert.equal(invalid.status, 404);
 });

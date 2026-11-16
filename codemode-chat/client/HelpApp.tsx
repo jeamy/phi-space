@@ -3,6 +3,7 @@
 // the middle, the table of contents on the right, a search box, and addresses like /help?lang=en&article=help.topic.overview.
 // The article text is authored in client/help/articles.ts (trusted); everything else is rendered as React text.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PHI_SPACES_GITHUB } from "./experiments/publication-links.ts";
 import { ThemeControls } from "./ThemeControls.tsx";
 import { ARTICLES, DEFAULT_ARTICLE, SECTIONS, articleById, tocOf, type Article } from "./help/articles.ts";
 import { renderMarkdownToHtml } from "./lib/markdown.ts";
@@ -76,6 +77,7 @@ export function HelpApp() {
 				<input className="help__search" type="search" placeholder={t.search} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={t.search} />
 				<a className="toplink" href="/">{t.chat}</a>
 				<a className="toplink" href={`/experiments?lang=${lang}`}>{lang === "de" ? "Experimente" : "Experiments"}</a>
+				<a className="toplink" href={PHI_SPACES_GITHUB}>GitHub</a>
 				<ThemeControls lang={theme.lang} setLang={theme.setLang} mode={theme.mode} changeMode={theme.changeMode} palette={theme.palette} changePalette={theme.changePalette} />
 			</header>
 			<div className="help__layout">
