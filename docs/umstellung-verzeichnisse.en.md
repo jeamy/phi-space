@@ -385,3 +385,48 @@ The mobile consumer is not affected by phase 1: `pi-termux-mobile` starts `phi-s
   `spaces/test/examples/recovery.test.ts` imported `./src/` against the working directory; it runs in the package's
   directory now (84 of 84 from the root and from `spaces/`). The other direct root scripts resolve their paths from
   their own file (`testbed check --dry-run`, `tui --dry-run --once`, `vectors`, the dashboard, the bundle checked).
+
+## Phase 5 inventory (2026-11-16, read only)
+
+Pushed first: `master` at `040492a` (GitHub and knot), the mobile checkout at `38e017f`. Nothing on the hosts changed.
+
+**big** (`/media/docker/spaces`, at `8645e41`, 12 commits behind; untracked only `.env.bak-dashboard`):
+
+- No ignored leftovers: no `node_modules/`, `dist/`, `agent/node_modules/`, `rust/target/` or `testbed.env` in
+  the checkout, no `<app>/node_modules`. The images install their own; the pull needs no move or delete.
+- The dashboard runs as the user unit `phi-spaces-dashboard.service` (active), text before the change:
+  `WorkingDirectory=/media/docker/spaces`,
+  `ExecStart=/usr/local/bin/node --no-warnings --experimental-strip-types src/dashboard.ts`, `Restart=always`,
+  `RestartSec=5`, `After=` the three tunnel units. After the pull, `src/dashboard.ts` is gone and `Restart=always`
+  loops: the `ExecStart` must name `spaces/src/dashboard.ts` in the same step. The root `.env` has only
+  `DASHBOARD_*` keys.
+- Compose projects of this checkout: `phi-spaces-mmo` (17 containers: space, world, npc on `phi-spaces-mmo:rust`
+  `44c1e079e488`, model on `:prod` `a3d214a4eb3d`, web on `:rust`; files `docker-compose.yml`, `hostnet`, `rust`,
+  `rust-game`; the space containers run `phi-space-server --profile mmo` on the volume `phi-spaces-mmo_mmo-space-data`),
+  `phi-spaces-mmo-arena` (1, image `b8022792cb02`), `phi-spaces-help` (`swarm-space` on `phi-spaces-help:rust`
+  `14664ae17e6d` with `phi-space-server --profile help`, `spaces-help-prod` on `dbba2b159543`, both on the volume
+  `phi-spaces-help_spaces-help-data`), `phi-spaces-codemode` (agents, judge-big, model on `df33575b58dd`, web on
+  `:prod` `c1f7a8d32714`; no space here; `hostnet`).
+- Unrelated: the user units `phi-spaces-phase1b-host-a` and `phi-spaces-phase1b-member-1` restart in a loop
+  (`activating auto-restart`); not from this change, the checkout there is untouched.
+
+**nano** (`/home/mux/spaces`, at `b808534`, 16 commits behind; untracked only old `.bak` copies and
+`docker-compose.rootless.yml` in `help-site/docker/`, none of them a path the pull writes):
+
+- No ignored leftovers, no dashboard, no user units of the project.
+- `phi-spaces-mmo` (`space-1` on `phi-spaces-mmo:rust` `bee7707d2039`, `phi-space-server --profile mmo`, volume
+  `phi-spaces-mmo_mmo-space-data`), `phi-spaces-codemode` (`space-1` on `:rust` `3ba19ffa2049`,
+  `phi-space-server --profile codemode`, volume `phi-spaces-codemode_codemode-space-data`; `judge-nano` on `:prod`
+  `321291247433`), `phi-spaces-help` (`swarm-space-nano` on `:rust` `7b12525e5d02`, `phi-space-server --profile help`,
+  volume `phi-spaces-help_swarm-nano-data`; `swarm-nano` on `:nano` `4ee60b6bbaf6`).
+
+What follows for the deploy:
+
+- Every running space container runs `phi-space-server --profile`, which the new binary refuses; the new compose
+  files run `mmo-space`, `codemode-space` and `help-space`. The `:rust:up` scripts build the image first, so they
+  bring both together. A `--no-build` recreate after the pull would start the new command in the old image and
+  fail: never recreate a space service from the new files without the new image.
+- Before the first build on a host, tag the running images (the IDs above) as `before-split-<rev>`, since the build
+  moves `:rust`, `:prod` and `:nano`; the rollback recreates with those tags and the compose files of the deployed
+  revision (`git worktree` of `8645e41` or `b808534`).
+- The arena and big's codemode roles need no redeploy for this change.
