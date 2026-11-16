@@ -8,7 +8,11 @@ import { PhiSpaces, FOREVER, Space, openSqliteHost } from "../../src/index.ts";
 import { GolombMaster, GolombWorker, GolombRuler } from "../../examples/golomb.ts";
 import { openWindow, collect, analyse, present } from "../../examples/sensor-pipeline.ts";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { openTestHost } from "../support/host.ts";
+
+// The package directory: the child below imports ./src/ from there, whether the suite runs from spaces/ or the root.
+const PACKAGE = fileURLToPath(new URL("../..", import.meta.url));
 
 async function memory() {
   const h = await openTestHost(ctx);
@@ -82,7 +86,7 @@ test("Killed Golomb process leaves a recoverable reservation in its store", { ti
   `;
   const childEnv = { ...process.env };
   delete childEnv.NODE_TEST_CONTEXT;
-  const child = spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", code, dir], { cwd: process.cwd(), env: childEnv, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", code, dir], { cwd: PACKAGE, env: childEnv, stdio: ["ignore", "pipe", "pipe"] });
   let output = "", errors = "";
   child.stdout.on("data", data => { output += String(data); });
   child.stderr.on("data", data => { errors += String(data); });

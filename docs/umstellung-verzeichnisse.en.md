@@ -381,3 +381,7 @@ The mobile consumer is not affected by phase 1: `pi-termux-mobile` starts `phi-s
 - After phase 4: `npm test` 663 of 669 (0 failed, 6 skipped), `help-site` with `help-space` 67 of 68 (1 skipped),
   `codemode-chat` with `codemode-space` 221 of 221, the help corpus rebuilt (the changed sources only), the branding
   check passed; `spaces/examples/golomb.ts` runs from the root.
+- `npm run test:examples` (from the root, not part of `npm test`) failed once from the root: a child of
+  `spaces/test/examples/recovery.test.ts` imported `./src/` against the working directory; it runs in the package's
+  directory now (84 of 84 from the root and from `spaces/`). The other direct root scripts resolve their paths from
+  their own file (`testbed check --dry-run`, `tui --dry-run --once`, `vectors`, the dashboard, the bundle checked).
