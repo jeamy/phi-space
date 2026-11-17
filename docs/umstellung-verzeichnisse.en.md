@@ -463,7 +463,7 @@ What follows for the deploy:
   `b808534` on nano). Two containers on big ran an image no longer in the image store (`phi-spaces-help-prod`,
   `dbba2b159543`, and the arena, `b8022792cb02`); the first, which the deploy recreates, was saved with
   `docker commit --pause=false` as `phi-spaces-help:before-split-8645e41-spaces-help-prod`; the arena is not part of
-  the deploy and still runs its old image.
+  the deploy (it was recreated later that evening, below).
 - Step 2: on nano `npm --prefix <app> run docker:nano:rust:up` for spaces-mmo, codemode-chat and help-site; then on
   big `npm --prefix spaces-mmo run docker:big:rust:up` and `npm --prefix help-site run docker:prod:rust:up` (logs
   `deploy-nano.log`, `deploy-big.log` in the same folder on each host). Every recreated container runs its new image
@@ -473,5 +473,9 @@ What follows for the deploy:
   codemode Space and the swarm shard through the tunnels; the game, the help site and the dashboard answer on their
   loopback ports. The web process lost its change stream twice at start, while the Spaces came up, and not since.
 - Not redeployed: big's codemode roles (agents, judge, model, web) and the arena; they run from images built before
-  and need nothing of this change. The rollback for any service: recreate it from its `before-split-*` tag with the
+  and need nothing of this change.
+- Afterwards, at the user's request: the arena was recreated without saving its old image
+  (`npm --prefix spaces-mmo run docker:arena:up`, log `deploy-arena.log` on big) and runs the new
+  `phi-spaces-mmo:prod`, ready on its port, healthy; the two user units `phi-spaces-phase1b-host-a`/`-member-1` on
+  big, whose containers no longer existed, were stopped and disabled (docs/testumgebung-big.en.md). The rollback for any service: recreate it from its `before-split-*` tag with the
   compose files of its revision (a `git worktree` of `8645e41` or `b808534`).
