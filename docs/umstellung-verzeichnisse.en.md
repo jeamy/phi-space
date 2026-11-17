@@ -478,9 +478,19 @@ What follows for the deploy:
   codemode Space and the swarm shard through the tunnels; the game, the help site and the dashboard answer on their
   loopback ports. The web process lost its change stream twice at start, while the Spaces came up, and not since.
 - Not redeployed: big's codemode roles (agents, judge, model, web) and the arena; they run from images built before
-  and need nothing of this change.
+  and need nothing of this change. The rollback for any service was to recreate it from its `before-split-*` tag
+  with the compose files of its revision (a `git worktree` of `8645e41` or `b808534`); the tags and the store copies
+  were removed on 2026-11-17 (below).
 - Afterwards, at the user's request: the arena was recreated without saving its old image
   (`npm --prefix spaces-mmo run docker:arena:up`, log `deploy-arena.log` on big) and runs the new
   `phi-spaces-mmo:prod`, ready on its port, healthy; the two user units `phi-spaces-phase1b-host-a`/`-member-1` on
-  big, whose containers no longer existed, were stopped and disabled (docs/testumgebung-big.en.md). The rollback for any service: recreate it from its `before-split-*` tag with the
-  compose files of its revision (a `git worktree` of `8645e41` or `b808534`).
+  big, whose containers no longer existed, were stopped and disabled (docs/testumgebung-big.en.md).
+- 2026-11-17: big's codemode roles (agents, judge-big, model, web) were recreated at `73e1ff1` (`npm --prefix
+  codemode-chat run docker:big:up`, log `deploy-codemode-big.log` on big), with the documents in `codemode-chat/docs`
+  (D5): running, no restart, the experiments pages and their figures answer, their sources link to GitHub under
+  `codemode-chat/docs/`. big's model processes of the game needed nothing: they run the image built by the deploy at
+  `76433c4` (its `:prod` tag went to the arena's rebuild of the same code; the server code in the container is
+  identical). Then the rollback was given up: the `before-split-*` tags removed on both hosts (23 on big, 5 on nano,
+  by name; the image saved by `docker commit` for help-prod went with its tag) and the store copies of the rehearsal
+  deleted on big, nano and this machine; the scripts, logs and the old dashboard unit stay in
+  `~/phi-backup/2026-11-16-split-rehearsal/`.
