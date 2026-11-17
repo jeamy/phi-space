@@ -23,8 +23,8 @@
 | [datenhaltung.md](../datenhaltung.en.md) | welche Daten in welchem Store und Space liegen, lokal und auf big/nano | Stand 2026-10-28 |
 | [wire-protokoll.md](../wire-protokoll.en.md) | Leitungsprotokoll des Space-Dienstes, Grundlage eines zweiten Servers | Stand 2026-10-29 |
 | [rust-portierung.md](../rust-portierung.en.md) | Portierung des Space-Servers nach Rust | laufend |
-| [codemode-space-architektur.md](../codemode-space-architektur.en.md) | Codemode-Chat: jede Rolle ein eigener Prozess um einen Space | aktuell |
-| [codemode-kooperation.md](../codemode-kooperation.en.md) | Codemode-Chat: Kooperation der Agenten | Konzept vom 2026-10-20 |
+| [codemode-space-architektur.md](../../codemode-chat/docs/codemode-space-architektur.en.md) | Codemode-Chat: jede Rolle ein eigener Prozess um einen Space | aktuell |
+| [codemode-kooperation.md](../../codemode-chat/docs/codemode-kooperation.en.md) | Codemode-Chat: Kooperation der Agenten | Konzept vom 2026-10-20 |
 | [ap1-abnahme.md](../_attic/abnahme/ap1-abnahme.en.md) | AP 1.1–1.9: Implementierung, Regressionen und native pi-serverd-Abnahme | lokal geprüft |
 | [testumgebung-big.md](../testumgebung-big.en.md) | Docker-Testumgebung auf dem Server big: Skript, Container, Fehlerinjektion, Grenzen | umgesetzt, `test/testbed/` |
 | [tui.md](../tui.en.md) | Terminaloberfläche: Spaces/Objekte, Serveraktionen, Tests und Berichte | umgesetzt; geplante Backends gesperrt |

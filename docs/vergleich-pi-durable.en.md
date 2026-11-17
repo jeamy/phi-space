@@ -534,7 +534,7 @@ on repetition, reopening of the agent store and observance of run cancellation a
 agent process, an isolated `verify_code` check and at most four model attempts.
 The existing Space queue is retained; quotas and budget reservations are checked per attempt.
 The path is active by default and can be switched off with `CODEMODE_DURABLE_AGENT=0`.
-Configuration and limits: [Codemode architecture](codemode-space-architektur.en.md#durable-code-agents).
+Configuration and limits: [Codemode architecture](../codemode-chat/docs/codemode-space-architektur.en.md#durable-code-agents).
 
 #### Step 3: Selected model NPCs
 

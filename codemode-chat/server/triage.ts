@@ -1,4 +1,4 @@
-// Triage between generations (docs/codemode-planung.en.md, step 9): after a generation's verdicts, the run asks what
+// Triage between generations (codemode-chat/docs/codemode-planung.en.md, step 9): after a generation's verdicts, the run asks what
 // its contributions failed at and hands the next generation a fixed hint for that cause, as a team note. With
 // `triage: "jev"` the decisions model Jev (typesafe/jev-1.13 behind OpenRouter's /api/alpha/decisions) sorts each
 // failing contribution into a cause; with `triage: "fixed"` the interface hint goes out every generation, without

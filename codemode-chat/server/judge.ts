@@ -365,7 +365,7 @@ async function judgeBot(cm: Codemode, task: Task & { bot: BotSpec }, source: str
 	}
 }
 
-/** A planning task (docs/codemode-planung.en.md): every episode in a world of its own per seed, the sample episodes
+/** A planning task (codemode-chat/docs/codemode-planung.en.md): every episode in a world of its own per seed, the sample episodes
  *  first; the hidden ones run only when a sample episode was reached. An episode counts when every seed reached it and
  *  the goal held. The verdict is correct when every episode counts; `score` is the share of hidden episodes that count,
  *  `passed` the episodes that count, the points and time are those of all runs. Of a hidden episode it says only

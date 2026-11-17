@@ -92,7 +92,12 @@ configuration too. With no configured apps, the dashboard shows the stores and a
 
 **D5. Keep `docs/` at the repo root for the technical migration.** Update references to moved code as part of the
 migration. The move of Codemode-only documents to `codemode-chat/docs/` can be reviewed separately with its links
-and German counterparts.
+and German counterparts. Done on 2026-11-17 as the follow-up: the seven `codemode-*.en.md`, their three German
+versions (`codemode-chat/docs/de-docs/`, as in spaces-mmo) and the figures (`codemode-chat/docs/img/codemode-planung`)
+moved; every relative link to or from them points at the new places (the list of links broken before is unchanged),
+the path mentions in code, comments, task texts and docs follow, the Codemode image takes the documents from
+`codemode-chat/docs`, and the experiments pages link to them on GitHub under `codemode-chat/docs/` (links to the old
+GitHub paths copied elsewhere no longer resolve).
 
 ## Phases
 
@@ -212,7 +217,7 @@ root commands still reach their intended packages.
   needed to run phase 3's verification with phase 3.
 - Fix Markdown links and commands in `docs/`, `de-docs/` and the apps, and check the links. Update the help site's
   corpus sources and Codemode's help articles where they describe the layout or the local package dependency.
-  Keep any move of Codemode documents in a separate follow-up (D5).
+  Keep any move of Codemode documents in a separate follow-up (D5; done on 2026-11-17).
 
 ### Phase 5: deploy (only with the user's approval)
 

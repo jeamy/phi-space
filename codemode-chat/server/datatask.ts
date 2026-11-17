@@ -1,4 +1,4 @@
-// Data tasks (docs/codemode-anwendungen.en.md, A step 2): a tools task over a dataset a person uploads. The upload is
+// Data tasks (codemode-chat/docs/codemode-anwendungen.en.md, A step 2): a tools task over a dataset a person uploads. The upload is
 // JSON (an array of objects) or CSV (a header row), one item per row with an `id` and an answer column that marks the
 // items the question asks for (yes/no). The contribution is `async function solve()`, which returns the ids of those
 // items; its only inputs are `tools.list`, `tools.get` and `tools.search` over the items, without the answer column.

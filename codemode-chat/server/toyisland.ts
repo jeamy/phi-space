@@ -1,4 +1,4 @@
-// The toy islands of the judge (docs/codemode-planung.en.md, steps 5 and 6): the Graue Insel as a copy (its rooms and
+// The toy islands of the judge (codemode-chat/docs/codemode-planung.en.md, steps 5 and 6): the Graue Insel as a copy (its rooms and
 // exits from island.ts, the fire of the Graue Bucht) and islands made from a number, each another layout ("Neuland n").
 // Every room is 24 × 16 cells of ground inside a rim of water, its exits on the edge (nord, ost, süd, west, each leading
 // to the neighbouring room on the island's grid), one fire per island. It runs in the judge's own process: a harness
@@ -128,7 +128,7 @@ export function toyRoomMap(room: string): RoomMap | null {
 	};
 }
 
-// ---- the tides of step 7 (docs/codemode-planung.en.md): a law the prompt does not tell ------------------------------
+// ---- the tides of step 7 (codemode-chat/docs/codemode-planung.en.md): a law the prompt does not tell ------------------------------
 /** The rules of a world that are not the default: crossing an exit takes `walk` world minutes, a washed-up piece lies
  *  `life` minutes before the sea takes it back, the day ends after `day` minutes, and the tide follows `tide`
  *  ("law": tideLanding below) instead of the island's plain tide. Without rules a world is as in steps 5 and 6. */

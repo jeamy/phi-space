@@ -5,7 +5,7 @@ import { EXPERIMENT_FILES, experimentSourceUrl } from "../client/experiments/pub
 import { renderMarkdownToHtml } from "../client/lib/markdown.ts";
 import type { Publication, PublicationBody, PublicationId } from "../client/experiments/types.ts";
 
-const docs = [resolve(process.cwd(), "docs"), resolve(process.cwd(), "../docs")].find((path) => existsSync(join(path, "codemode-planning-summary.en.md")));
+const docs = [resolve(process.cwd(), "docs"), resolve(process.cwd(), "codemode-chat/docs")].find((path) => existsSync(join(path, "codemode-planning-summary.en.md")));
 if (!docs) throw new Error("Experiment documents are missing from this checkout or image");
 export const EXPERIMENT_DOCS = docs;
 const files = EXPERIMENT_FILES;

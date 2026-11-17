@@ -1,4 +1,4 @@
-// A fresh final evaluation of "Shores of the tide" (step 9, docs/codemode-planning-article.en.md): the stored winners
+// A fresh final evaluation of "Shores of the tide" (step 9, codemode-chat/docs/codemode-planning-article.en.md): the stored winners
 // and the scripted controls on islands that no selection or tuning ever looked at (234 to 433 by the same rule as the
 // candidates: two rooms of odds 0.35 or more) and on seeds no run has met (8 to 15; every run and every earlier
 // evaluation played 0 to 7), and, as a second set, the 95 earlier additional islands on the fresh seeds. The target of an

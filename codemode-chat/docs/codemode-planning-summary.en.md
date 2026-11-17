@@ -77,7 +77,7 @@ A concrete solution pattern is to count arrivals, build a room graph, search fea
 
 Once the connections are known, a feasible round starts at Fischerkate when the tide arrives, visits Salzpfanne after five minutes and Torfgrube after ten. Returning via Salzpfanne and Fischerkate reaches the fire at Heidekamm after 25 minutes. The estimated collection is (20 + 6 + 13) / 48 = 0.8125 pieces per tide. Each room is visited before its piece expires after 30 minutes. Even the last tide at minute 450 allows delivery at minute 475, before the day ends at 480.
 
-This is a worked calculation using the actual island and logbook, not a newly measured bot result. One stored [GPT winner](../codemode-chat/tests/fixtures/shores/gpt-examples.js) implements a more elaborate version. It smooths positive rates as (arrivals + 0.5) / (tides + 1), constrains candidate maps with the logbook's exits and fire distances, replans during each tide and checks the final return to the fire.
+This is a worked calculation using the actual island and logbook, not a newly measured bot result. One stored [GPT winner](../tests/fixtures/shores/gpt-examples.js) implements a more elaborate version. It smooths positive rates as (arrivals + 0.5) / (tides + 1), constrains candidate maps with the logbook's exits and fire distances, replans during each tide and checks the final return to the fire.
 
 ## 3. Results
 

@@ -1,4 +1,4 @@
-// Real tool answers in the prompt (docs/codemode-planung.en.md, step 9): on a bot task on made islands the judge
+// Real tool answers in the prompt (codemode-chat/docs/codemode-planung.en.md, step 9): on a bot task on made islands the judge
 // plays the toy arena itself, so the same arena can show the agents what each tool really returns, on the task's
 // first shown episode: a look, the logbook, a walk, a wait, a pick-up with nothing there. A hint ("do not guess the
 // format") tells an agent what not to do; the example shows it the shapes. Data of a shown island only, and of the

@@ -11,5 +11,5 @@ export function experimentSourceUrl(id: string, lang = "en"): string | null {
  if (!Object.hasOwn(EXPERIMENT_FILES, id)) return null;
  const choices = EXPERIMENT_FILES[id as keyof typeof EXPERIMENT_FILES] as { en: string; de?: string };
  const path = lang === "de" && choices.de ? choices.de : choices.en;
- return `${PHI_SPACES_GITHUB}/blob/master/docs/${path}`;
+ return `${PHI_SPACES_GITHUB}/blob/master/codemode-chat/docs/${path}`;
 }

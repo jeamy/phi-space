@@ -106,7 +106,7 @@ Outputs are in `~/phi-experiments/2026-11-15-series/jev-memory/` and `jev-review
 
 ## Hybrid candidate evaluation
 
-The third strategy is implemented in [jev-hybrid.ts](../codemode-chat/server/jev-hybrid.ts) and exposed by the existing runner as `--policy hybrid`. The code maps the island through charged `look` and `act` calls and reads landing cells from the historical logbook. It enumerates tide rounds and asks Jev to estimate their incremental reward. The live evaluation below measures this policy on the nine task episodes.
+The third strategy is implemented in [jev-hybrid.ts](../server/jev-hybrid.ts) and exposed by the existing runner as `--policy hybrid`. The code maps the island through charged `look` and `act` calls and reads landing cells from the historical logbook. It enumerates tide rounds and asks Jev to estimate their incremental reward. The live evaluation below measures this policy on the nine task episodes.
 
 The responsibilities are explicit.
 
@@ -224,7 +224,7 @@ The new mode is implemented by `jev-workflow.ts` and the optional workflow hooks
 
 ## Reproduction and verification
 
-The implementation is in [jev-player.ts](../codemode-chat/server/jev-player.ts). The standalone [series runner](../codemode-chat/server/data/run-jev-player.ts) uses the existing simulation without changing running Codemode servers.
+The implementation is in [jev-player.ts](../server/jev-player.ts). The standalone [series runner](../server/data/run-jev-player.ts) uses the existing simulation without changing running Codemode servers.
 
 ```bash
 cd codemode-chat

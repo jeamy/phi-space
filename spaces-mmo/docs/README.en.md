@@ -7,7 +7,7 @@ gardens. It can be played with a 2D or 3D map or with text only.
 The package is called `phi-spaces-mmo`. The whole world lives in phi-spaces; no game state is kept in the browser. Text is the foundation (as in a MUD), with a tile graphic using PixiJS
 and a 3D view using Three.js on top. The structure of the game world follows
 [Evennia](https://www.evennia.com/docs/latest/Components/Components-Overview.html), the process layout follows
-`codemode-chat/` (see `docs/codemode-space-architektur.en.md` in the root). Engine (`server/`) and world
+`codemode-chat/` (see `codemode-chat/docs/codemode-space-architektur.en.md`). Engine (`server/`) and world
 (`worlds/leuchtfeuer/`) are separate so that further worlds can run on the same engine.
 
 ## Status 2026-11-04

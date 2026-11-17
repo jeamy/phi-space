@@ -1,4 +1,4 @@
-// The arena (docs/codemode-anwendungen.en.md, B): worlds of their own for bots that the codemode chat judges. Every
+// The arena (codemode-chat/docs/codemode-anwendungen.en.md, B): worlds of their own for bots that the codemode chat judges. Every
 // `open` starts a fresh Leuchtfeuer world in memory (a space process and a world worker, no NPC and no model process),
 // signs one guest in and stops the world clock; the bot then plays that guest through `look`, `act` and `wait`, and
 // `score` says whether it reached its goal. The judge talks to it only over this socket (no TypeScript import across
@@ -14,7 +14,7 @@
 //                                                                    room, x, y }] }: those things off the ground of
 //                                                                    every room, these laid out; seed: the world
 //                                                                    worker's chance (a planning task's episode,
-//                                                                    docs/codemode-planung.en.md)
+//                                                                    codemode-chat/docs/codemode-planung.en.md)
 //   look { world }                  → what the figure sees: its room, place, exits, things, fires, pack, the time
 //   act { world, line }             → { said: string[], at }        the line as a player types it, done when the
 //                                                                    world worker has carried it out
@@ -36,7 +36,7 @@
 //                                                                    place on the atlas, and `rev` (changes with them)
 //   close { world }                 → {}
 // A world is closed when its connection ends or nobody asks it anything for SPACES_MMO_ARENA_IDLE_MS (default 5 min).
-// A durable run (codemode-chat, docs/codemode-anwendungen.en.md D) opens with `keep: true`: its world outlives the
+// A durable run (codemode-chat, codemode-chat/docs/codemode-anwendungen.en.md D) opens with `keep: true`: its world outlives the
 // connection, so a judge that takes over after a crash finds it again by its id. It names how long the world must
 // wait for that judge (`idleMs`, its transaction lease and a margin; at most an hour), else the idle time applies. Such a judge replays the calls it
 // has logged and sends the rest anew; a `key` on look/act/wait makes that safe: a key the world has seen gets the
@@ -82,7 +82,7 @@ type World = {
 	done: Map<string, Promise<Record<string, unknown>>>;
 	/** The world's definition, and every cell the figure went over (its start first). */
 	w: WorldDef; trail: Step[];
-	/** The subgoals `open` named, and the cell where each of them was reached, in turn (docs/codemode-planung.en.md). */
+	/** The subgoals `open` named, and the cell where each of them was reached, in turn (codemode-chat/docs/codemode-planung.en.md). */
 	subgoals: Subgoal[]; reached: Step[];
 };
 /** The most keyed answers a world keeps. */
@@ -370,7 +370,7 @@ export async function wait(x: World, minutes: number): Promise<{ time: string }>
 }
 
 /** Whether the figure reached `goal` and, with `hold`, still has it after that many world minutes: the judge's own
- *  wait, not counted against the bot's (a goal reached at the last moment must hold, docs/codemode-planung.en.md). */
+ *  wait, not counted against the bot's (a goal reached at the last moment must hold, codemode-chat/docs/codemode-planung.en.md). */
 export async function score(x: World, goal: string, hold = 0): Promise<{ done: boolean; detail: string }> {
 	const h = Number(hold);
 	if (!h) return scoreNow(x, goal);

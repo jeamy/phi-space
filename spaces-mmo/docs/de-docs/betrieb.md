@@ -1,6 +1,6 @@
 # Betrieb mit Docker
 
-Aufgebaut wie `codemode-chat/docker/` (siehe `docs/codemode-space-architektur.en.md` im Root): ein Image, ein Container je
+Aufgebaut wie `codemode-chat/docker/` (siehe `codemode-chat/docs/codemode-space-architektur.en.md`): ein Image, ein Container je
 Rolle, alle sprechen nur über den Space und TCP. Dateien: `spaces-mmo/docker/Dockerfile`, `docker-compose.yml`,
 `docker-compose.hostnet.yml`; die Skripte stehen in `spaces-mmo/package.json` (`docker:*`).
 

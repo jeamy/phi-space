@@ -149,7 +149,7 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   | Rückstand | in Schritten abgeräumt | |
 
 - **Weniger Leerlauf-Claims im Chat:** Die Rollen warten ohne Transaktion auf Arbeit (`awaitWork`, siehe
-  [codemode-space-architektur.md](../codemode-space-architektur.en.md)). Gemessen mit dem Stack der Testumgebung als
+  [codemode-space-architektur.md](../../codemode-chat/docs/codemode-space-architektur.en.md)). Gemessen mit dem Stack der Testumgebung als
   lokale Prozesse (Space auf SQLite, Web, Judges big und nano, agents, model), 5 Minuten Leerlauf: 3.480 statt 23.800
   Claims pro Stunde, also rund 84.000 je Tag (Kapazitätswert D2: 150.000).
 - **Abfragen ohne Commit (2026-10-23):** In der Docker-Testumgebung brauchte der Space-Prozess im Leerlauf weiter

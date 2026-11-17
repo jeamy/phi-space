@@ -544,7 +544,7 @@ The progress curve and the episode matrix come with step 1, the rest with the st
      and condition (`server/data/run-series.ts`, resumable, with a Wilson interval of the solve rate; a run with a
      scripted stand-in is kept apart and run again) with ten runs each: with the example GPT 10/10, Opus 10/10, Sonnet
      7/10; without it 9/10, 8/10 and 0/10. Winners that hold on every fresh island: GPT 9 and 4 runs of 10, Opus 8 and 4,
-     Sonnet 0 (docs/codemode-planning-article.en.md, "Ten runs per model and condition").
+     Sonnet 0 (codemode-chat/docs/codemode-planning-article.en.md, "Ten runs per model and condition").
 
 ## Tests
 

@@ -1,4 +1,4 @@
-// Tasks with tools (server/tooltask.ts, docs/codemode-anwendungen.en.md A): the judge answers the tools from the task's
+// Tasks with tools (server/tooltask.ts, codemode-chat/docs/codemode-anwendungen.en.md A): the judge answers the tools from the task's
 // data, counts every call, scores on a hidden holdout and ranks correct verdicts by tool points before time.
 import test from "node:test";
 import assert from "node:assert/strict";

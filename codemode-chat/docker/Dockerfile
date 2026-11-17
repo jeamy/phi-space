@@ -28,9 +28,6 @@ COPY spaces/tsconfig.json spaces/tsconfig.build.json ./spaces/
 COPY spaces/src ./spaces/src
 COPY spaces/agent/src ./spaces/agent/src
 COPY spaces/agent/test/durable-models.ts ./spaces/agent/test/
-COPY docs/codemode-planning-summary.en.md docs/codemode-jev-player.en.md docs/codemode-planning-article.en.md docs/codemode-planung.en.md ./docs/
-COPY docs/de-docs/codemode-planning-article.md ./docs/de-docs/
-COPY docs/img/codemode-planung ./docs/img/codemode-planung
 COPY codemode-chat ./codemode-chat
 RUN npm --prefix codemode-chat run typecheck && npm --prefix codemode-chat run build
 
@@ -53,7 +50,6 @@ WORKDIR /opt/phi-spaces
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/package.json /opt/phi-spaces/spaces/package-lock.json ./spaces/
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/node_modules ./spaces/node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/src ./spaces/src
-COPY --from=builder --chown=node:node /opt/phi-spaces/docs ./docs
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/agent/package.json /opt/phi-spaces/spaces/agent/package-lock.json ./spaces/agent/
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/agent/node_modules ./spaces/agent/node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/spaces/agent/src ./spaces/agent/src
@@ -64,6 +60,8 @@ COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-chat/.next ./code
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-chat/app ./codemode-chat/app
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-chat/client ./codemode-chat/client
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-chat/server ./codemode-chat/server
+# the experiment documents and their figures, which the experiments pages render (server/experiments-content.ts)
+COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-chat/docs ./codemode-chat/docs
 RUN mkdir -p /data && chown -R node:node /data
 USER node
 EXPOSE 3700 3800

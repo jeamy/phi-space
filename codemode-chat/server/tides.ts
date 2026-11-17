@@ -1,4 +1,4 @@
-// Learn the tide (docs/codemode-planung.en.md, step 7): a planning task on made islands under TIDE_RULES (toyisland.ts).
+// Learn the tide (codemode-chat/docs/codemode-planung.en.md, step 7): a planning task on made islands under TIDE_RULES (toyisland.ts).
 // The tide follows a law the prompt does not tell: where it lands, in which order, at which minute. The judge logs every
 // landing of the shown episodes as an observation in the block's memory (PlanMemory, goal "tide"); a bot of a later
 // generation reads them with `observations()` and may fit its model of the tide to them. The hidden episodes lie on

@@ -1,4 +1,4 @@
-// Durable runs (server/durable-run.ts, docs/codemode-anwendungen.en.md D): a long bot run survives its judge. Every
+// Durable runs (server/durable-run.ts, codemode-chat/docs/codemode-anwendungen.en.md D): a long bot run survives its judge. Every
 // answer of the world is logged before the bot gets it; a judge that takes over replays the log and goes on in the same
 // world, and a call that was on its way is not carried out twice. Here the arena is tests/fake-arena.ts.
 import test from "node:test";

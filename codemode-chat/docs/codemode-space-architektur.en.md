@@ -296,7 +296,7 @@ The default path is `codemode-chat/.local/codemode-agent.sqlite`; if `CODEMODE_S
 The Compose model service keeps `/data/codemode-agent.sqlite` in its own volume `codemode-agent-data`;
 the dev container uses its existing `/data` volume.
 The agent store runs with WAL/`synchronous=FULL`; directory entries are synchronized as well.
-The [power-failure acceptance](agenten-stromausfalltest.en.md) remains separate despite this stronger write policy.
+The [power-failure acceptance](../../docs/agenten-stromausfalltest.en.md) remains separate despite this stronger write policy.
 
 The shared persistent Space has capacity limits independent of this:
 `CODEMODE_MAX_CLAIM_MIB` (default 1024 MiB) and `CODEMODE_MAX_DOC_MIB` (default 1280 MiB).
@@ -309,9 +309,9 @@ and run budgets do not change as a result. Values can be set in the codemode `.e
 Compose passes them on to the Space process. This is no unlimited history strategy:
 claim occupancy and free disk capacity must still be monitored.
 
-The integration lives in [durable-agent.ts](../codemode-chat/server/durable-agent.ts).
-The application imports only a [Node IPC client](../spaces/agent/src/durable-client.ts);
-pi-durable and Chord stay in the [agent process](../spaces/agent/src/durable-worker.ts). The import boundary of the
+The integration lives in [durable-agent.ts](../server/durable-agent.ts).
+The application imports only a [Node IPC client](../../spaces/agent/src/durable-client.ts);
+pi-durable and Chord stay in the [agent process](../../spaces/agent/src/durable-worker.ts). The import boundary of the
 Space core and its tests without Earendil dependencies remain in place.
 
 - `LlmCall`/`LlmResult`, run control and final judging remain in the Space.
@@ -331,7 +331,7 @@ A store has exactly one worker owner. Several model processes each need their ow
 durably mounted store path; the Space queue remains their shared distribution.
 A local agent store is no distributed conversation replication.
 Aborting stops further attempts, but guarantees no refund of a model request already sent.
-The sandbox regression and reopening are tested in [durable.test.ts](../codemode-chat/tests/durable.test.ts).
+The sandbox regression and reopening are tested in [durable.test.ts](../tests/durable.test.ts).
 Test models (`CODEMODE_DURABLE_MODELS_MODULE`) are permitted only with `CODEMODE_TEST=1`.
 
 ## Interactive execution (▶)

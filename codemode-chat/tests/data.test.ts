@@ -1,4 +1,4 @@
-// Data tasks (server/datatask.ts, docs/codemode-anwendungen.en.md A step 2): a person uploads a dataset (JSON or CSV)
+// Data tasks (server/datatask.ts, codemode-chat/docs/codemode-anwendungen.en.md A step 2): a person uploads a dataset (JSON or CSV)
 // with an answer column; the sample travels with the task, the hidden part lies in the block's CodeData and only the
 // judge reads it. The dataset here is tests/fake-tickets.ts: made-up support tickets, some about a refund.
 import test from "node:test";

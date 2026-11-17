@@ -1,4 +1,4 @@
-// Harness tasks (docs/codemode-anwendungen.en.md, C): the contribution is not a solution but a judging script,
+// Harness tasks (codemode-chat/docs/codemode-anwendungen.en.md, C): the contribution is not a solution but a judging script,
 // `async function rate()`, that rates one implementation of a stated goal with a number. It never sees the
 // implementation's code: its one tool, `tools.run({ args })`, calls the implementation under test in a fresh sandbox of
 // its own and returns what came out and how long it took. The judge calls rate() once per implementation the task
@@ -25,7 +25,7 @@ export type HarnessSpec = {
 	runMs: number;
 	/** "island": the implementations are bots (`async function bot()`), and `run` plays one in a world of the toy island
 	 *  (toyisland.ts) instead of calling a function: { start, wood, seed?, hold? } → { reached, points } (step 5 of
-	 *  docs/codemode-planung.en.md, "Rate planners"). */
+	 *  codemode-chat/docs/codemode-planung.en.md, "Rate planners"). */
 	world?: "island";
 };
 

@@ -23,8 +23,8 @@
 | [datenhaltung.en.md](datenhaltung.en.md) | which data lies in which store and Space, locally and on big/nano | as of 2026-10-28 |
 | [wire-protokoll.en.md](wire-protokoll.en.md) | wire protocol of the Space service, basis of a second server | as of 2026-10-29 |
 | [rust-portierung.en.md](rust-portierung.en.md) | port of the Space server to Rust | ongoing |
-| [codemode-space-architektur.en.md](codemode-space-architektur.en.md) | codemode chat: every role its own process around one Space | current |
-| [codemode-kooperation.en.md](codemode-kooperation.en.md) | codemode chat: cooperation of the agents | concept of 2026-10-20 |
+| [codemode-space-architektur.en.md](../codemode-chat/docs/codemode-space-architektur.en.md) | codemode chat: every role its own process around one Space | current |
+| [codemode-kooperation.en.md](../codemode-chat/docs/codemode-kooperation.en.md) | codemode chat: cooperation of the agents | concept of 2026-10-20 |
 | [ap1-abnahme.md](_attic/abnahme/ap1-abnahme.en.md) | AP 1.1–1.9: implementation, regressions and native pi-serverd acceptance | checked locally |
 | [testumgebung-big.en.md](testumgebung-big.en.md) | Docker test environment on the server big: script, containers, fault injection, limits | implemented, `test/testbed/` |
 | [tui.en.md](tui.en.md) | Terminal interface: Spaces/objects, server actions, tests and reports | implemented; planned backends locked |

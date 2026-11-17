@@ -1,4 +1,4 @@
-// Durable runs (docs/codemode-anwendungen.en.md, D): a script that survives the judge running it. It runs with
+// Durable runs (codemode-chat/docs/codemode-anwendungen.en.md, D): a script that survives the judge running it. It runs with
 // pi-codemode's `start()`: the VM is deterministic given its start time, seed and the answers to its calls in their
 // order, so every answer is written to a log (CodeCall entries in the space, judge-host.ts) BEFORE the VM gets it. A
 // judge that takes the candidate over after a crash starts the same script with the same seed and start time and hands

@@ -1,4 +1,4 @@
-// Shores of the tide (docs/codemode-planung.en.md, step 9): the chance tide of step 8, but the odds belong to each room
+// Shores of the tide (codemode-chat/docs/codemode-planung.en.md, step 9): the chance tide of step 8, but the odds belong to each room
 // of each island (toyisland.ts shoreOf), not to the island's shape: no law carries from one island to the next. What
 // carries is a way to learn them: the harbour master's logbook (`logbook()`) lists earlier days of the tide on the
 // bot's own island, so a bot that estimates each room's odds from it, at run time, can plan the round with the most

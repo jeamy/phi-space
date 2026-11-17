@@ -148,7 +148,7 @@ open decisions. The measurement there makes partial storage of large documents (
   | Backlog | cleared in steps | |
 
 - **Fewer idle claims in the chat:** The roles wait for work without a transaction (`awaitWork`, see
-  [codemode-space-architektur.en.md](codemode-space-architektur.en.md)). Measured with the stack of the test environment as
+  [codemode-space-architektur.en.md](../codemode-chat/docs/codemode-space-architektur.en.md)). Measured with the stack of the test environment as
   local processes (Space on SQLite, web, judges big and nano, agents, model), 5 minutes idle: 3,480 instead of 23,800
   claims per hour, so about 84,000 per day (capacity value D2: 150,000).
 - **Queries without a commit (2026-10-23):** In the Docker test environment the Space process still needed

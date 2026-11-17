@@ -1,4 +1,4 @@
-// Records Jev as the planner's estimator on "Shores of the tide" (step 9, docs/codemode-planung.en.md): Jev
+// Records Jev as the planner's estimator on "Shores of the tide" (step 9, codemode-chat/docs/codemode-planung.en.md): Jev
 // (typesafe/jev-1.13, a decisions model behind OpenRouter's /api/alpha/decisions) reads an island's logbook and says,
 // for every room, how often the tide brings a piece there; shores.ts `jevShoreBot` plans its round with these answers
 // as the odds, the same round the learner plans with the counted rates. Run by hand, never by the server or the tests:

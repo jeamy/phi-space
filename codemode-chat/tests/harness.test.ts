@@ -1,4 +1,4 @@
-// Harness tasks (server/harnesstask.ts, docs/codemode-anwendungen.en.md C): the contribution is a judging script that
+// Harness tasks (server/harnesstask.ts, codemode-chat/docs/codemode-anwendungen.en.md C): the contribution is a judging script that
 // rates implementations it cannot see, through `tools.run`. It counts only when every good implementation scores
 // strictly higher than every bad one, the hidden ones included.
 import test from "node:test";
@@ -72,7 +72,7 @@ t("▶ runs a harness against the reference only", async () => {
 	assert.ok(lines.some((l) => /runs of the reference \(built-in sort\): run 1 = 1 points/.test(l)), JSON.stringify(lines));
 });
 
-// ---- rate planners (docs/codemode-planung.en.md, step 5): island bots played on the toy island in the judge
+// ---- rate planners (codemode-chat/docs/codemode-planung.en.md, step 5): island bots played on the toy island in the judge
 const planners = taskById("harness-planners")!;
 const spec = planners.harness!;
 const [farAll, farCheap, shownOnly, oneSeed, noHold, nearOnly, graueOnly] = planners.variants;

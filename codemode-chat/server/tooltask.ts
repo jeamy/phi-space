@@ -1,4 +1,4 @@
-// Tasks with tools (docs/codemode-anwendungen.en.md, A): the contribution is `async function solve()`, and its only
+// Tasks with tools (codemode-chat/docs/codemode-anwendungen.en.md, A): the contribution is `async function solve()`, and its only
 // inputs are the tools of the sandbox (`tools.list`, `tools.get`, …), answered by the judge from a dataset the task
 // brings. No network and no model: a "classifier" is a deterministic stand-in of the task. Every call costs points;
 // among correct contributions the cheapest wins, the time only breaks ties.

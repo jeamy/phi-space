@@ -1,4 +1,4 @@
-// A series of model runs on one task, for repeated comparisons (docs/codemode-planning-summary.en.md, "Next experiments" 1):
+// A series of model runs on one task, for repeated comparisons (codemode-chat/docs/codemode-planning-summary.en.md, "Next experiments" 1):
 // the same run settings, one session per run, with and without real tool answers in the prompt. It talks to a running
 // codemode-chat server over its HTTP API as the admin (CODEMODE_ADMIN_TOKEN, sent as x-admin-token), keeps every
 // finished session as JSON in --out and skips a run whose file is there already (under any --tag), so a series can be

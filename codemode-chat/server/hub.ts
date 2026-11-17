@@ -57,7 +57,7 @@ export type { RunInfo, RunMode };
 export type LineageStep = { candidateId: string; author: string; via: string; gen: number; ts: number; role?: Role; ok: boolean | null; ms?: number; passed?: number; total?: number;
 	plan?: { author: string; via: string; text: string }; critique?: { author: string; via: string; text: string };
 	/** a contribution that followed subgoals: each of its plan's, with the share of sample episodes that got past it
-	 *  (of `of` judged; docs/codemode-planung.en.md, view 5) */
+	 *  (of `of` judged; codemode-chat/docs/codemode-planung.en.md, view 5) */
 	chain?: { of: number; subgoals: Array<{ text: string; share: number }> };
 	from?: { candidateId: string; author: string }; diff?: LineDiff; partner?: { candidateId: string; author: string; share: number } };
 /** One step in a block's trace: an agent researched, proposed, voted, wrote (a new approach, a revision, a merge, an
@@ -494,7 +494,7 @@ export class CodeChatHub {
 		return null;
 	}
 
-	/** A block's memory for the memory view (docs/codemode-planung.en.md, view 4): every remembered path with its
+	/** A block's memory for the memory view (codemode-chat/docs/codemode-planung.en.md, view 4): every remembered path with its
 	 *  generation and author, the jumps between paths that recall answers took (from the BotEpisode entries), and the
 	 *  rooms they cross. Null when the block is unknown. */
 	async memory(id: string, blockId: string): Promise<{ memories: Array<{ memoryId: string; gen: number; author: string; episode: string; path: PathStep[] }>; jumps: Array<[PathStep, PathStep]>; rooms: RoomMap[] } | null> {
@@ -522,7 +522,7 @@ export class CodeChatHub {
 	}
 
 	/** A planning contribution's sample paths (BotEpisode entries) and the rooms they cross (BotRoom), for the room
-	 *  map of its panel (docs/codemode-planung.en.md). */
+	 *  map of its panel (codemode-chat/docs/codemode-planung.en.md). */
 	async #paths(session: string, candidateId: string): Promise<{ paths?: EpisodePath[]; rooms?: RoomMap[] }> {
 		const paths = (await this.host.readAll({ type: "BotEpisode", fields: { session, candidateId } }, { limit: 50 }))
 			.map((e) => e.fields as unknown as EpisodePath & { episode: string })

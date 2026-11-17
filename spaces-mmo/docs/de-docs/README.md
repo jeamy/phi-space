@@ -7,7 +7,7 @@ anlegen. Spielen geht mit Karte in 2D oder 3D oder nur mit Text.
 Das Paket heißt `phi-spaces-mmo`. Die ganze Welt liegt in phi-spaces, kein Spielzustand im Browser. Text ist die Grundlage (wie in einem MUD), darüber liegen eine Kachelgrafik mit PixiJS
 und eine 3D-Ansicht mit Three.js. Die Struktur der Spielwelt folgt
 [Evennia](https://www.evennia.com/docs/latest/Components/Components-Overview.html), die Prozessaufteilung folgt
-`codemode-chat/` (siehe `docs/codemode-space-architektur.en.md` im Root). Engine (`server/`) und Welt
+`codemode-chat/` (siehe `codemode-chat/docs/codemode-space-architektur.en.md`). Engine (`server/`) und Welt
 (`worlds/leuchtfeuer/`) sind getrennt, damit weitere Welten auf derselben Engine laufen können.
 
 ## Stand 2026-11-04

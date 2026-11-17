@@ -1,4 +1,4 @@
-// The memory of a planning task (docs/codemode-planung.en.md, step 3): the paths of earlier bots that reached a shown
+// The memory of a planning task (codemode-chat/docs/codemode-planung.en.md, step 3): the paths of earlier bots that reached a shown
 // episode's goal, frozen at the start of each generation, offered to a bot through `recall` and measured as coverage.
 //
 //   PlanMemory   one remembered path: { session, blockId, memoryId, candidateId, author, gen, episode, goal, path, ts }

@@ -324,7 +324,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	// started together with the space (the dev runner restarts both on a change): wait until its socket is there
 	let world: Awaited<ReturnType<typeof startWorld>> | undefined;
-	// SPACES_MMO_SEED: the worker's chance from that seed (the arena's episodes, docs/codemode-planung.en.md); the clock stays real
+	// SPACES_MMO_SEED: the worker's chance from that seed (the arena's episodes, codemode-chat/docs/codemode-planung.en.md); the clock stays real
 	const seed = process.env.SPACES_MMO_SEED ? Number(process.env.SPACES_MMO_SEED) : null;
 	if (seed !== null && !(Number.isInteger(seed) && seed >= 0 && seed <= 0xffffffff)) throw new Error("SPACES_MMO_SEED: an integer from 0 to 2^32 - 1");
 	const begin = () => (seed === null ? startWorld() : withSource(seeded(seed, () => Date.now()), () => startWorld()));

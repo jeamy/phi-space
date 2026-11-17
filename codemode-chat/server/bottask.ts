@@ -1,4 +1,4 @@
-// Bot tasks (docs/codemode-anwendungen.en.md, B): the contribution is `async function bot()`, which plays one guest in a
+// Bot tasks (codemode-chat/docs/codemode-anwendungen.en.md, B): the contribution is `async function bot()`, which plays one guest in a
 // Leuchtfeuer world of its own through three tools: `look`, `act` and `wait`. The world runs in the arena, a spaces-mmo
 // process (spaces-mmo/server/arena.ts); this side knows it only by its socket, CODEMODE_ARENA, and its JSON lines.
 // The judge opens a world before the bot's time limit starts, runs the bot, asks the arena whether the goal was reached
@@ -16,7 +16,7 @@ export const MAX_BOT_CALLS = 300;
 
 /** A cell of the world: room and place. */
 export type BotCell = { room: string; x: number; y: number };
-/** One episode of a planning task (docs/codemode-planung.en.md): where the figure starts and what lies where. A sample
+/** One episode of a planning task (codemode-chat/docs/codemode-planung.en.md): where the figure starts and what lies where. A sample
  *  episode is in the prompt and its verdict says what happened; of a hidden one the verdict says only reached or not. */
 export type BotEpisode = { id: string; kind: "sample" | "holdout"; /** a task on toy islands (`BotSpec.toy`): the made island "Neuland n" (toyisland.ts genIsland), none for the Graue Insel */ island?: number; start?: BotCell; setup?: { clear?: string[]; items?: Array<{ proto: string } & BotCell> }; text: { de: string; en: string } ; /** a task that scores the mean (`BotSpec.mean`, step 8): the pieces the bot must put into the fire on average over the seeds */ target?: number; /** the most points the episode may cost over all its seeds: a bot that reaches the goal dearer does not pass it */ maxCost?: number };
 /** What a verdict keeps of one episode: reached per seed, the points of its runs; `skipped`: the hidden ones did not run
@@ -66,7 +66,7 @@ export type BotSpec = {
 };
 
 /** How many seeds an episode runs with: one when the bot cannot wait (the world is then the same for every seed), three
- *  when it can (chance comes only after a wait; docs/codemode-planung.en.md, values). */
+ *  when it can (chance comes only after a wait; codemode-chat/docs/codemode-planung.en.md, values). */
 export const seedsOf = (b: BotSpec): number => b.seeds ?? (b.noWait ? 1 : 3);
 /** The seed of run `s` (0-based) of episode `i`: fixed, so every judge plays the same worlds. */
 export const episodeSeed = (i: number, s: number): number => 1000 * (i + 1) + s;

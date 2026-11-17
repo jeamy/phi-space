@@ -1,4 +1,4 @@
-// Bot tasks (server/bottask.ts, docs/codemode-anwendungen.en.md B): the judge opens a world in the arena, the bot plays
+// Bot tasks (server/bottask.ts, codemode-chat/docs/codemode-anwendungen.en.md B): the judge opens a world in the arena, the bot plays
 // it through look/act/wait, the arena says whether the goal was reached. Here the arena is tests/fake-arena.ts (the
 // same JSON lines; spaces-mmo/tests/arena.test.ts holds the real one). Only judges with an arena take bot candidates.
 import test from "node:test";
@@ -137,7 +137,7 @@ t("a scripted run on the bot task ends with the cheapest bot as best, its summar
 	} finally { await srv.close(); await arena.close(); process.env.CODEMODE_ARENA = ""; }
 });
 
-// ---- a planning task (docs/codemode-planung.en.md, step 1): episodes, the hidden ones after the shown ones, a goal that holds
+// ---- a planning task (codemode-chat/docs/codemode-planung.en.md, step 1): episodes, the hidden ones after the shown ones, a goal that holds
 const island = taskById("beacon-insel")!;
 const [explorer, careful, memorizer, startRoom, noWoodAtAll] = island.variants;
 

@@ -1,5 +1,5 @@
 // The arena's JSON-line protocol (spaces-mmo/server/arena.ts) answered by the toy islands in the judge's own process
-// (toyisland.ts), for a planning task whose episodes are islands made from a number (`bot.toy`, docs/codemode-planung
+// (toyisland.ts), for a planning task whose episodes are islands made from a number (`bot.toy`, codemode-chat/docs/codemode-planung
 // .en.md, step 6). The judge plays such a task as it plays one in the arena (judge.ts judgeEpisodes); the task needs
 // no arena, so every judge takes it. `open` takes the episode's island, start, setup and seed; `score` the goal
 // `beacon:island` (the island's one fire), held `hold` world minutes; `path` the cells as the arena gives them; `map` a

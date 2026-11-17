@@ -1,4 +1,4 @@
-// The mapless island bots (docs/codemode-planung.en.md, step 6): they know no island, they explore what they see,
+// The mapless island bots (codemode-chat/docs/codemode-planung.en.md, step 6): they know no island, they explore what they see,
 // remember the rooms and exits they crossed and plan over that. The task "New islands" (neuland.ts) and the harness
 // "Rate planners" (island.ts) share them; no imports, so both may take them.
 

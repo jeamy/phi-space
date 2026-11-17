@@ -372,7 +372,7 @@ aside .row select { width: 100%; min-width: 0; max-width: 100%; text-overflow: e
 aside .about__text { max-height: 240px; overflow-y: auto; }
 .dataformat { font-size: 12px; margin: 0 0 6px; line-height: 1.4; }
 
-/* A planning task's episodes (docs/codemode-planung.en.md): the curve of the generations' best and the episode matrix. */
+/* A planning task's episodes (codemode-chat/docs/codemode-planung.en.md): the curve of the generations' best and the episode matrix. */
 .episodes__hint { margin: 2px 0 8px; font-size: 12.5px; }
 .episodes__curve { display: block; width: 100%; max-width: 560px; height: auto; }
 .episodes__curve text { fill: var(--muted); font-size: 11px; }
@@ -437,7 +437,7 @@ aside .about__text { max-height: 240px; overflow-y: auto; }
 .episodes__key--coverage { border-top: 2.4px dotted var(--path-2); }
 .memview { margin-top: 8px; }
 .pm-jump { stroke: var(--text-strong); stroke-width: 1.5; stroke-dasharray: 3 3; }
-/* subgoals (docs/codemode-planung.en.md, step 4): numbered marks on the path map, the chain in the lineage */
+/* subgoals (codemode-chat/docs/codemode-planung.en.md, step 4): numbered marks on the path map, the chain in the lineage */
 .pm-sub circle { fill: var(--surface); stroke: var(--text-strong); stroke-width: 1.5; }
 .pm-sub text { fill: var(--text-strong); font-size: 7px; font-weight: 700; text-anchor: middle; }
 .pm-sub--on circle { fill: currentColor; stroke: var(--surface); }

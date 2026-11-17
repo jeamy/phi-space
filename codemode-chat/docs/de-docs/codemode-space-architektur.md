@@ -297,7 +297,7 @@ Standardpfad ist `codemode-chat/.local/codemode-agent.sqlite`, bei gesetztem `CO
 Das Compose-model-Service hält `/data/codemode-agent.sqlite` im eigenen Volume `codemode-agent-data`;
 der Dev-Container verwendet sein vorhandenes `/data`-Volume.
 Der Agentenspeicher läuft mit WAL/`synchronous=FULL`; Verzeichniseinträge werden ebenfalls synchronisiert.
-Die [Stromausfall-Abnahme](../agenten-stromausfalltest.en.md) bleibt trotz dieser stärkeren Schreibpolitik separat.
+Die [Stromausfall-Abnahme](../../../docs/agenten-stromausfalltest.en.md) bleibt trotz dieser stärkeren Schreibpolitik separat.
 
 Der gemeinsame persistente Space hat davon unabhängige Kapazitätsgrenzen:
 `CODEMODE_MAX_CLAIM_MIB` (Standard 1024 MiB) und `CODEMODE_MAX_DOC_MIB` (Standard 1280 MiB).
@@ -310,9 +310,9 @@ und Laufbudgets ändern sich dadurch nicht. Werte lassen sich in der Codemode-`.
 Compose reicht sie an den Space-Prozess durch. Das ist keine unbegrenzte Historienstrategie:
 Claim-Belegung und freie Plattenkapazität müssen weiterhin überwacht werden.
 
-Die Anbindung liegt in [durable-agent.ts](../../codemode-chat/server/durable-agent.ts).
-Die Anwendung importiert nur einen [Node-IPC-Client](../../spaces/agent/src/durable-client.ts);
-pi-durable und Chord bleiben im [Agentenprozess](../../spaces/agent/src/durable-worker.ts). Die Importgrenze des
+Die Anbindung liegt in [durable-agent.ts](../../server/durable-agent.ts).
+Die Anwendung importiert nur einen [Node-IPC-Client](../../../spaces/agent/src/durable-client.ts);
+pi-durable und Chord bleiben im [Agentenprozess](../../../spaces/agent/src/durable-worker.ts). Die Importgrenze des
 Space-Kerns und seine Tests ohne Earendil-Abhängigkeiten bleiben bestehen.
 
 - `LlmCall`/`LlmResult`, Run-Steuerung und abschließendes Judging bleiben im Space.
@@ -332,7 +332,7 @@ Ein Speicher hat genau einen Worker-Eigentümer. Mehrere model-Prozesse brauchen
 dauerhaft gemounteten Speicherpfad; die Space-Queue bleibt ihre gemeinsame Verteilung.
 Ein lokaler Agentenspeicher ist keine verteilte Conversation-Replikation.
 Abbruch stoppt weitere Versuche, garantiert aber keine Rückerstattung einer bereits versandten Modellanfrage.
-Die Sandbox-Regression und Wiederöffnung sind in [durable.test.ts](../../codemode-chat/tests/durable.test.ts) geprüft.
+Die Sandbox-Regression und Wiederöffnung sind in [durable.test.ts](../../tests/durable.test.ts) geprüft.
 Testmodelle (`CODEMODE_DURABLE_MODELS_MODULE`) sind nur mit `CODEMODE_TEST=1` zulässig.
 
 ## Interaktives Ausführen (▶)

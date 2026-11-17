@@ -1,4 +1,4 @@
-// Odds of the tide (docs/codemode-planung.en.md, step 8): a planning task on made islands under CHANCE_RULES
+// Odds of the tide (codemode-chat/docs/codemode-planung.en.md, step 8): a planning task on made islands under CHANCE_RULES
 // (toyisland.ts). Every hour at half past, each dead end of the island gets a piece of driftwood or not, by odds that
 // follow the island's shape (chanceOf); the prompt does not tell the odds. A piece lies 30 minutes, so a bot can reach
 // only a few dead ends in an hour: the best it can do is the round whose expected number of pieces is highest. The

@@ -95,8 +95,8 @@ const episodeRank = (a: Contribution, b: Contribution) => Number(!counts(a)) - N
 const shareOf = (eps: EpisodeResult[], kind: EpisodeResult["kind"], seed?: number) => { const of = eps.filter((e) => e.kind === kind); return of.length ? of.filter((e) => !e.skipped && e.reached.length > 0 && (seed === undefined ? e.reached.every(Boolean) : !!e.reached[seed])).length / of.length : 0; };
 const epState = (e: EpisodeResult | undefined) => (!e || e.skipped ? "skip" : e.reached.every(Boolean) ? "ok" : e.reached.some(Boolean) ? "half" : "bad");
 
-/** A planning task's progress (docs/codemode-planung.en.md): the curve of the generations' best, the episode matrix. */
-/** The room map of a planning contribution (docs/codemode-planung.en.md, view 3): the rooms its sample paths cross,
+/** A planning task's progress (codemode-chat/docs/codemode-planung.en.md): the curve of the generations' best, the episode matrix. */
+/** The room map of a planning contribution (codemode-chat/docs/codemode-planung.en.md, view 3): the rooms its sample paths cross,
  *  placed as on the game's atlas, each path as a line from its start (a dot with the episode's id) to where it ended
  *  (✕ when the goal was missed), the fire ringed, the episode's driftwood as a square. A chip shows one episode alone. */
 const PATH_COLORS = 4, CELL = 6, GAP = 3;
@@ -105,7 +105,7 @@ function groundClass(k: string, walk: boolean): string {
 	return k === "," ? "pm-grass" : k === ":" ? "pm-way" : k === "_" ? "pm-floor" : "pm-sand";
 }
 /** Where each room of a room map sits: the rooms on the atlas by their map place, island under island (made islands,
- *  docs/codemode-planung.en.md step 6), those without a place in a row below; `px`/`py` the centre of a cell in the
+ *  codemode-chat/docs/codemode-planung.en.md step 6), those without a place in a row below; `px`/`py` the centre of a cell in the
  *  drawing, `islands` where each island's name goes when there are several. */
 function atlasOf(rooms: RoomMap[]) {
 	const w = Math.max(...rooms.map((r) => r.ground[0]?.length ?? 0)), h = Math.max(...rooms.map((r) => r.ground.length));
@@ -221,7 +221,7 @@ function PathMap({ paths, rooms, episodes, subgoals = [], t, lang }: { paths: Ep
 	);
 }
 
-/** The memory of a planning block (docs/codemode-planung.en.md, view 4): every remembered path on the atlas, coloured
+/** The memory of a planning block (codemode-chat/docs/codemode-planung.en.md, view 4): every remembered path on the atlas, coloured
  *  by its generation, the jumps recall took between them dashed. Loaded when it is unfolded. */
 const GEN_STEPS = 5;
 function MemoryView({ sid, b, t }: { sid: string; b: Block; t: Tr }) {
@@ -331,7 +331,7 @@ type LineageStep = { candidateId: string; author: string; via: string; gen: numb
 	from?: { candidateId: string; author: string }; diff?: { kept: number; added: number; removed: number; hunks: string; cut?: true }; partner?: { candidateId: string; author: string; share: number };
 	chain?: { of: number; subgoals: Array<{ text: string; share: number }> } };
 
-/** The subgoal chain of a lineage step (docs/codemode-planung.en.md, view 5): one mark per subgoal of its plan, filled
+/** The subgoal chain of a lineage step (codemode-chat/docs/codemode-planung.en.md, view 5): one mark per subgoal of its plan, filled
  *  as far as the share of shown episodes that got past it. A chain that always breaks at the same mark shows where to work. */
 function SubgoalChain({ chain, t }: { chain: NonNullable<LineageStep["chain"]>; t: Tr }) {
 	const R = 9, GAP = 30, W = chain.subgoals.length * GAP, id = useId().replace(/:/g, "");

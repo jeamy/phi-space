@@ -1,6 +1,6 @@
 # Operation with Docker
 
-Built like `codemode-chat/docker/` (see `docs/codemode-space-architektur.en.md` in the root): one image, one container per
+Built like `codemode-chat/docker/` (see `codemode-chat/docs/codemode-space-architektur.en.md`): one image, one container per
 role, all talk only via the Space and TCP. Files: `spaces-mmo/docker/Dockerfile`, `docker-compose.yml`,
 `docker-compose.hostnet.yml`; the scripts are in `spaces-mmo/package.json` (`docker:*`).
 

@@ -820,7 +820,7 @@ Modellläufen. Die Rohdaten liegen unter `~/phi-experiments/2026-11-15-series/` 
 
 Die SVG-Diagramme passen sich an das helle oder dunkle Farbschema an. Die Abbildungen 3 bis 7 stammen aus einem
 lokalen Lauf mit geskripteten Agenten, einem neutral benannten Bewerter und deutscher Oberfläche im dunklen
-Farbschema. Die Abbildungen 8 bis 19 zeigen Modellläufe. Alle Bilder liegen in `docs/img/codemode-planung/`.
+Farbschema. Die Abbildungen 8 bis 19 zeigen Modellläufe. Alle Bilder liegen in `codemode-chat/docs/img/codemode-planung/`.
 
 ![Inselbot: Kurve, Matrix und Wege](../img/codemode-planung/step1-2-island.jpg)
 

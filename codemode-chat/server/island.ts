@@ -1,4 +1,4 @@
-// The island bot (docs/codemode-planung.en.md, step 1): the first planning task. Its episodes start the figure in the
+// The island bot (codemode-chat/docs/codemode-planung.en.md, step 1): the first planning task. Its episodes start the figure in the
 // rooms of the Graue Insel of spaces-mmo's world Leuchtfeuer and lay out the island's only piece of driftwood; the goal
 // is always the beacon of the Graue Bucht. The rooms, exits and cells are those of spaces-mmo/worlds/leuchtfeuer
 // (world.json); spaces-mmo/tests/arena.test.ts opens the episodes in the real world.
@@ -68,7 +68,7 @@ export const ISLAND_VARIANTS: string[] = [
 	`async function bot(){${ROUTE}let s=await tools.look();for(const ex of route(s.room.id,"graue-bucht"))await tools.act({line:ex});${FEED}}`,
 ];
 
-// The variants of the island bot with memory (docs/codemode-planung.en.md, step 3). WALK follows a recall answer: a
+// The variants of the island bot with memory (codemode-chat/docs/codemode-planung.en.md, step 3). WALK follows a recall answer: a
 // `move` onto every step in the figure's room (a step onto an exit changes the room), TAKE picks up driftwood on the
 // way when asked to.
 const WALK = `const walk=async(r,take)=>{let s=await tools.look();let room=s.room.id,at=s.at;for(const st of [r.from,...r.steps]){if(st[0]!==room||(st[1]===at.x&&st[2]===at.y))continue;const a=await tools.act({line:"move "+st[1]+" "+st[2]});room=a.at.room;at=a.at;if(take)await tools.act({line:"nimm treibholz"})}return room};`;
@@ -85,7 +85,7 @@ export const ISLAND_MEMORY_VARIANTS: string[] = [
 	ISLAND_VARIANTS[4]!,
 ];
 
-// ---- the fire of the Anleger (docs/codemode-planung.en.md, step 4) ---------------------------------------------
+// ---- the fire of the Anleger (codemode-chat/docs/codemode-planung.en.md, step 4) ---------------------------------------------
 // The Feuerkorb am Anleger lies at the island's south end, behind the Dünen: from most rooms a way of several rooms. The
 // episodes start the figure elsewhere each time and lay the driftwood out in another room; a plan names the subgoals on
 // the way (driftwood, the Dünen, the fire's side, the fire burning).
@@ -123,7 +123,7 @@ export const ANLEGER_VARIANTS: string[] = [
 	`async function bot(){${ROUTE}let here=(await tools.look()).room.id;${SEARCH}${FEED_HERE}await go("anleger");await feed()}`,
 ];
 
-// ---- rate planners (docs/codemode-planung.en.md, step 5) ----------------------------------------------------------
+// ---- rate planners (codemode-chat/docs/codemode-planung.en.md, step 5) ----------------------------------------------------------
 // A harness task on the toy island (toyisland.ts): the contribution rates island bots by playing them. Each bad bot
 // reaches every shown episode with seed 0 and no hold, so only a harness that runs fresh episodes, several seeds and a
 // hold ranks it below the good ones; the hidden bad ones fail more narrowly still.

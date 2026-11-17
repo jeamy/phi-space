@@ -1,4 +1,4 @@
-// New islands (docs/codemode-planung.en.md, step 6): a planning task whose episodes are islands made from a number
+// New islands (codemode-chat/docs/codemode-planung.en.md, step 6): a planning task whose episodes are islands made from a number
 // (toyisland.ts genIsland), played in the judge (toyarena.ts). The prompt names no map: the shown episodes are three
 // islands, the hidden ones six others. A bot that knows a map, or the shown islands by heart, fails the hidden ones;
 // one that explores what it sees, remembers it and plans over it, reaches them.

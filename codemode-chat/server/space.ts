@@ -1,4 +1,4 @@
-// The one space every process of the codemode chat shares (docs/codemode-space-architektur.en.md): how a process connects
+// The one space every process of the codemode chat shares (codemode-chat/docs/codemode-space-architektur.en.md): how a process connects
 // to it, how long a room's entries live, and the Process entry each process keeps there while it runs.
 import os from "node:os";
 import { randomBytes } from "node:crypto";

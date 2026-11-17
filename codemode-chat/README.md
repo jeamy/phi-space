@@ -31,7 +31,7 @@ inputs are tools: `tools.list`, `tools.get`, `tools.search`, `tools.classify`. T
 dataset; there is still no network and no model (the classifier is a fixed stand-in). Every call costs points, and among
 correct contributions the one with the fewest points wins, the time only after that. The sample's result is the visible
 case (▶ runs on the sample); the verdict comes from a hidden, larger dataset with other texts, of which only the score and
-the calls are shown. Plan and next steps: `docs/codemode-anwendungen.en.md`.
+the calls are shown. Plan and next steps: `codemode-chat/docs/codemode-anwendungen.en.md`.
 
 "Pi issues: Windows with a reply" runs on real data: 1000 issues of github.com/earendil-works/pi in
 `server/data/pi-issues.json`, shortened and without names (logins become u1, u2, …, the tracker's bot "bot"). Every
@@ -130,7 +130,7 @@ agents are assigned to them in turn, and all of them work in one team.
 
 ## Processes and the one space
 
-Everything is space (`docs/codemode-space-architektur.en.md`): every role is its own process, and the processes talk only
+Everything is space (`codemode-chat/docs/codemode-space-architektur.en.md`): every role is its own process, and the processes talk only
 through one phi-space. Nothing a process knows lives only in its memory. A process that dies lets its transactions and
 leases lapse, and its work comes back for another process of the same role.
 

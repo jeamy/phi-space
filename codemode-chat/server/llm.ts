@@ -350,7 +350,7 @@ export function proposePrompt(c: { task: Task; agent: number; notes?: Note[]; at
 	};
 }
 
-/** What a plan of a task with subgoals ends with (docs/codemode-planung.en.md, the subgoal role). */
+/** What a plan of a task with subgoals ends with (codemode-chat/docs/codemode-planung.en.md, the subgoal role). */
 const SUBGOALS_ASK = `Then name the plan's subgoals as data: the rooms and conditions the bot passes on its way, in order, in a \`\`\`subgoals block holding a JSON array (at most ${MAX_SUBGOALS}) of { "room"?: room id, "near"?: { "x", "y" } (within 3 cells; needs the room), "holds"?: "pack:<proto>" (the figure carries one) or "beacon:<id>" (the fire burns, fed by it) }. Each names a room or a condition; the judge reports how far the bot got along them. Example: [{ "holds": "pack:treibholz" }, { "room": "duenen" }]`;
 
 export async function llmPropose(c: { task: Task; agent: number; notes?: Note[]; attempts?: Attempt[]; findings?: Finding[]; observations?: Array<TideSeen | ChanceSeen>; model?: string }): Promise<{ text: string; model: string; usage?: Usage; subgoals?: Subgoal[] }> {

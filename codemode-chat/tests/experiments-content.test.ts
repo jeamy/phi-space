@@ -17,8 +17,8 @@ test("published papers render their figures, navigation and code without raw ima
   }
  }
  const german = experimentPublication("article")!.bodies.de!;
- assert.ok(german.html.includes('https://github.com/jeamy/phi-space/blob/master/docs/codemode-planning-article.en.md'));
- assert.ok(german.html.includes('https://github.com/jeamy/phi-space/blob/master/docs/codemode-planung.en.md#steps'));
+ assert.ok(german.html.includes('https://github.com/jeamy/phi-space/blob/master/codemode-chat/docs/codemode-planning-article.en.md'));
+ assert.ok(german.html.includes('https://github.com/jeamy/phi-space/blob/master/codemode-chat/docs/codemode-planung.en.md#steps'));
  for (const id of ["planning", "jev", "article"]) {
   for (const body of Object.values(experimentPublication(id)!.bodies)) assert.doesNotMatch(body.html, /href="\/experiments\/source\//);
  }
@@ -36,8 +36,8 @@ test("publication and media endpoints use explicit allowlists", async () => {
  assert.match(await image.text(), /<svg/);
  const article = await source(new Request("http://localhost/experiments/source/article?lang=de"), { params: Promise.resolve({ document: "article" }) });
  assert.equal(article.status, 302);
- assert.equal(article.headers.get("location"), "https://github.com/jeamy/phi-space/blob/master/docs/de-docs/codemode-planning-article.md");
- assert.equal(experimentSourceUrl("plan", "de"), "https://github.com/jeamy/phi-space/blob/master/docs/codemode-planung.en.md");
+ assert.equal(article.headers.get("location"), "https://github.com/jeamy/phi-space/blob/master/codemode-chat/docs/de-docs/codemode-planning-article.md");
+ assert.equal(experimentSourceUrl("plan", "de"), "https://github.com/jeamy/phi-space/blob/master/codemode-chat/docs/codemode-planung.en.md");
  assert.equal(experimentSourceUrl("../../package.json"), null);
  const invalid = await source(new Request("http://localhost/experiments/source/private"), { params: Promise.resolve({ document: "private" }) });
  assert.equal(invalid.status, 404);

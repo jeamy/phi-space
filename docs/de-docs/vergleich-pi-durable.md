@@ -534,7 +534,7 @@ bei Wiederholung, Wiederöffnung des Agentenspeichers und Beachtung von Run-Abbr
 Agentenprozess, eine isolierte `verify_code`-Prüfung und höchstens vier Modellversuche.
 Die vorhandene Space-Queue bleibt erhalten; Quoten und Budgetreservierungen werden pro Versuch geprüft.
 Der Pfad ist standardmäßig aktiv, mit `CODEMODE_DURABLE_AGENT=0` abschaltbar.
-Konfiguration und Grenzen: [Codemode-Architektur](../codemode-space-architektur.en.md#durable-code-agents).
+Konfiguration und Grenzen: [Codemode-Architektur](../../codemode-chat/docs/codemode-space-architektur.en.md#durable-code-agents).
 
 #### Schritt 3: Ausgewählte Modell-NPCs
 

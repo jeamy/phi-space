@@ -1,4 +1,4 @@
-// The subgoals of a plan (docs/codemode-planung.en.md, step 4): the rooms and conditions a bot passes on its way, as
+// The subgoals of a plan (codemode-chat/docs/codemode-planung.en.md, step 4): the rooms and conditions a bot passes on its way, as
 // data. An agent writes them with its plan: on the work board in the planning round (run.ts `propose`, from the model's
 // ```subgoals block), in a generation's turn before it writes the bot (the same call, or a scripted plan of the task).
 //
