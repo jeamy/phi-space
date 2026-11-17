@@ -1,15 +1,16 @@
 //! What the comparisons with the frozen TypeScript engine share: the oracle (the commit the port follows, unpacked into
 //! the target folder once with `git archive`, its node_modules linked to the checkout's, `phi-spaces` pointing at the
 //! archive's own root, so the oracle is the frozen library too) and the engine's environment, the same for this process
-//! and the node processes it starts. `MMO_ORACLE` names another tree. The frozen commit has the old layout (the package
-//! at the repository root); the checkout has it in spaces/, whose node_modules the oracle's root borrows.
+//! and the node processes it starts. `MMO_ORACLE` names another tree. A frozen commit before the directory split has the
+//! old layout (the package at the repository root), one after it the package in spaces/ (docs/umstellung-verzeichnisse.en.md);
+//! either way the oracle's package borrows the checkout's spaces/ node_modules, and its spaces-mmo links `phi-spaces` to it.
 #![allow(dead_code)]
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Once;
 
 /// The commit the port follows (docs/rust-portierung.en.md, R8.2).
-pub const FROZEN: &str = "5291aa0";
+pub const FROZEN: &str = "1ddc37d";
 
 /// The top of the checkout (this crate is spaces-mmo/rust/mmo-engine): `git archive` has to run there, as from a
 /// subdirectory it packs only that one.
@@ -41,8 +42,11 @@ pub fn oracle() -> PathBuf {
 			let st = Command::new("sh").arg("-c").arg(format!("git -C '{}' archive {FROZEN} | tar -x -C '{}'", repo().display(), root.display())).status().expect("git and tar");
 			assert!(st.success(), "git archive {FROZEN} failed");
 			let repo = repo();
-			link(&repo.join("spaces/node_modules"), &root.join("node_modules"));
-			link(&repo.join("spaces/agent/node_modules"), &root.join("agent/node_modules"));
+			// the oracle's package: spaces/ after the split, the root before it
+			let split = root.join("spaces/package.json").exists();
+			let pkg = if split { root.join("spaces") } else { root.clone() };
+			link(&repo.join("spaces/node_modules"), &pkg.join("node_modules"));
+			link(&repo.join("spaces/agent/node_modules"), &pkg.join("agent/node_modules"));
 			let nm = root.join("spaces-mmo/node_modules");
 			std::fs::create_dir_all(&nm).unwrap();
 			for e in std::fs::read_dir(repo.join("spaces-mmo/node_modules")).unwrap() {
@@ -50,7 +54,7 @@ pub fn oracle() -> PathBuf {
 				if e.file_name() == "phi-spaces" { continue; }
 				link(&e.path(), &nm.join(e.file_name()));
 			}
-			link(Path::new("../.."), &nm.join("phi-spaces"));
+			link(Path::new(if split { "../../spaces" } else { "../.." }), &nm.join("phi-spaces"));
 			std::fs::write(&done, FROZEN).unwrap();
 		}
 	});

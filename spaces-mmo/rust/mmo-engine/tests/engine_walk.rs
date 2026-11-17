@@ -1458,9 +1458,9 @@ fn keeping_animals() {
 	for (who, line) in [(&b, "stall"), (&b, "einstallen huhn"), (&b, "einstallen schaf"), (&b, "einstallen ziege"), (&b, "füttere"), (&b, "füttere 1 kohl"), (&b, "stall"), (&b, "wache"), (&a, "wache")] { run(&mut w, who, line, 0.0); }
 	// a day at a time: with several kinds and none named it asks which, before it takes anything; a count or "alle"
 	// feeds ahead
-	give(&mut w, &b, "tang", 3);
-	give(&mut w, &b, "weizen", 2);
-	for (who, line) in [(&b, "füttere"), (&b, "füttere 2"), (&b, "füttere tang"), (&b, "inventory"), (&b, "füttere 1 weizen"), (&b, "füttere alle tang"), (&b, "füttere alle"), (&b, "stall")] { run(&mut w, who, line, day); }
+	give(&mut w, &b, "tang", 6);
+	give(&mut w, &b, "hafer", 2);
+	for (who, line) in [(&b, "füttere"), (&b, "füttere 2"), (&b, "füttere tang"), (&b, "inventory"), (&b, "füttere 1 hafer"), (&b, "füttere alle tang"), (&b, "füttere alle"), (&b, "stall")] { run(&mut w, who, line, day); }
 	w.write(building("h-2", "huette", "Hütte", 4.0, 15.0, 1));
 	stand(&mut w, 1, "graue-bucht", 3.0, 15.0);
 	stand(&mut w, 2, "graue-bucht", 4.0, 14.0);
