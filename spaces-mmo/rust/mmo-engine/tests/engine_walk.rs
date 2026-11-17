@@ -1456,10 +1456,16 @@ fn keeping_animals() {
 	// the pen of another and the guards
 	stand(&mut w, 2, "graue-bucht", 8.0, 13.0);
 	for (who, line) in [(&b, "stall"), (&b, "einstallen huhn"), (&b, "einstallen schaf"), (&b, "einstallen ziege"), (&b, "füttere"), (&b, "füttere 1 kohl"), (&b, "stall"), (&b, "wache"), (&a, "wache")] { run(&mut w, who, line, 0.0); }
+	// a day at a time: with several kinds and none named it asks which, before it takes anything; a count or "alle"
+	// feeds ahead
+	give(&mut w, &b, "tang", 3);
+	give(&mut w, &b, "weizen", 2);
+	for (who, line) in [(&b, "füttere"), (&b, "füttere 2"), (&b, "füttere tang"), (&b, "inventory"), (&b, "füttere 1 weizen"), (&b, "füttere alle tang"), (&b, "füttere alle"), (&b, "stall")] { run(&mut w, who, line, day); }
 	w.write(building("h-2", "huette", "Hütte", 4.0, 15.0, 1));
 	stand(&mut w, 1, "graue-bucht", 3.0, 15.0);
 	stand(&mut w, 2, "graue-bucht", 4.0, 14.0);
-	for (who, line) in [(&a, "ausstallen hund"), (&a, "füttere katze"), (&a, "einstallen hund"), (&a, "einstallen katze"), (&a, "wache"), (&a, "füttere katze stein"), (&b, "füttere katze"), (&a, "füttere hund stein"), (&a, "füttere hund 1 ei"), (&a, "füttere den hund mit 1 ei"), (&a, "füttere hund"), (&a, "füttere hund"), (&a, "füttere"), (&b, "füttere hund"), (&a, "wache"), (&a, "schlachte hund"), (&a, "ausstallen katze"), (&a, "ausstallen hund"), (&a, "ausstallen hund")] { run(&mut w, who, line, 0.0); }
+	give(&mut w, &a, "brot", 1);
+	for (who, line) in [(&a, "ausstallen hund"), (&a, "füttere katze"), (&a, "einstallen hund"), (&a, "einstallen katze"), (&a, "wache"), (&a, "füttere katze stein"), (&b, "füttere katze"), (&a, "füttere hund stein"), (&a, "füttere hund 1 ei"), (&a, "füttere den hund mit 1 ei"), (&a, "füttere hund"), (&a, "füttere hund brot"), (&a, "füttere hund alle"), (&a, "füttere hund"), (&a, "füttere"), (&b, "füttere hund"), (&a, "wache"), (&a, "schlachte hund"), (&a, "ausstallen katze"), (&a, "ausstallen hund"), (&a, "ausstallen hund")] { run(&mut w, who, line, 0.0); }
 	// at the butcher's shop with an animal carried
 	w.write(building("m-1", "metzgerei", "Metzgerei", 12.0, 13.0, 9));
 	stand(&mut w, 1, "graue-bucht", 12.0, 12.0);

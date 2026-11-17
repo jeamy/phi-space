@@ -208,8 +208,18 @@ async fn ausstallen(c: &mut Ctx, arg: &str) -> Result<()> {
 	msg(c, "*", "emote", &format!("{} nimmt {} aus dem Stall.", txt(j::at(&c.actor, "name")), if wants_young { txt(j::at(fields(&e), "name")) } else { one_of(&k) }), MsgOpts::default()).await
 }
 
-/// `(\d+|alle?)` as a count, else no limit.
-fn count_of(m1: Option<&str>) -> f64 { match m1 { Some(x) if js::re(r"^\d+$", "").test(x) => js::to_number(x), _ => f64::INFINITY } }
+/// `FEED_LINE`: what "füttere" takes, a count or "alle", then the feed (both may be missing).
+const FEED_LINE: &str = r"^(?:(\d+|alle?)(?:\s+|$))?(.*)$";
+/// `feedCount`: how many foods at most: a number that many, "alle" as many as fit, none one day's worth (`day` foods).
+fn feed_count(m1: Option<&str>, day: f64) -> f64 { match m1 { Some(x) if js::re(r"^\d+$", "").test(x) => js::to_number(x), Some(x) if !x.is_empty() => f64::INFINITY, _ => day } }
+/// `whichFeed`: no feed named and the carried feed of more than one kind: the question which, with a line for each kind
+/// (in the order of the animal's list; one kind at a time, the menu offers one entry for each).
+fn which_feed(c: &Ctx, feed: &[Json], carried: &[Json], line: &dyn Fn(&str) -> String) -> Option<String> {
+	let kinds: Vec<&Json> = feed.iter().filter(|p| carried.iter().any(|i| j::at(fields(i), "proto") == *p)).collect();
+	if kinds.len() < 2 { return None; }
+	let counted = kinds.iter().map(|p| format!("{} {}", carried.iter().filter(|i| j::at(fields(i), "proto") == *p).count(), proto_name(c, &txt(p)))).collect::<Vec<_>>().join(", ");
+	Some(format!("Womit füttern? Du trägst {counted}: {}.", kinds.iter().map(|p| format!("„{}“", line(&js::lower(&proto_name(c, &txt(p)))))).collect::<Vec<_>>().join(" oder ")))
+}
 
 async fn fuettere(c: &mut Ctx, arg: &str) -> Result<()> {
 	let d = animals_of(c)?;
@@ -219,7 +229,7 @@ async fn fuettere(c: &mut Ctx, arg: &str) -> Result<()> {
 	let near: Vec<Json> = c.space.read_all(&tmpl("Building", obj! { "room" => c.room() }), None).await?.iter().map(|e| fields(e).clone()).filter(|b| dist_to(me_at, Rect::of(b)) <= 1.0 && at_cell(c, b)).collect();
 	if !near.iter().any(|b| is_house(&d, b)) && near.iter().any(|b| j::b(b, "keeper")) { return feed_keeper(c, None, arg).await; }
 	let line = js::re(r"^mit\s+", "i").replace(&js::re(r"^(?:die|den)\s+(?:tiere|hühner|huehner|schafe|ziegen)(?:\s+mit)?\s*", "i").replace(js::trim(arg), ""), "");
-	let m = js::caps(&js::re(r"^(?:(\d+|alle?)\s+)?(.*)$", "i"), &line).unwrap_or_default();
+	let m = js::caps(&js::re(FEED_LINE, "i"), &line).unwrap_or_default();
 	let m1 = m.get(1).cloned().flatten();
 	let m2 = m.get(2).cloned().flatten().unwrap_or_default();
 	let House { b, k, n, max, now, .. } = house_here(c, &d, &|h| herd_of(h).is_some()).await?;
@@ -238,7 +248,9 @@ async fn fuettere(c: &mut Ctx, arg: &str) -> Result<()> {
 	// a food is a world day for one animal (they eat by the life rate); fed ahead as far as a dog, for people who are away
 	let room = now + j::n(&d, "fedMaxWorldMs") * patience_of(&c.space, c.txn()).await? - from;
 	if room < per { return refuse(format!("Die {} sind satt (noch {}).", txt(j::at(&k, "plural")), hours(from - now))); }
-	let want = (room / per).floor().min(offer.len() as f64).min(count_of(m1.as_deref()));
+	if m2.is_empty() { if let Some(ask) = which_feed(c, &kf, &offer, &|name| format!("füttere {name}")) { return refuse(ask); } }
+	// without a count one day for the house (a food for each animal), with one that many, "alle" as far ahead as it goes
+	let want = (room / per).floor().min(offer.len() as f64).min(feed_count(m1.as_deref(), n));
 	let mut used: Vec<(String, f64)> = Vec::new();
 	let me = c.char_id().to_owned();
 	for it in offer.iter().take(want as usize) {
@@ -294,7 +306,7 @@ async fn feed_keeper(c: &mut Ctx, kp: Option<&Json>, arg: &str) -> Result<()> {
 	let now = world_now_of(&c.space, c.txn()).await?;
 	let (Some(k), Some(keeper)) = (k, j::opt(&b, "keeper").filter(|x| j::truthy(x)).cloned()) else { return refuse("Neben dir ist kein Tier zu füttern.") };
 	let line = js::re(r"^mit\s+", "i").replace(js::trim(arg), "");
-	let m = js::caps(&js::re(r"^(?:(\d+|alle?)\s+)?(.*)$", "i"), &line).unwrap_or_default();
+	let m = js::caps(&js::re(FEED_LINE, "i"), &line).unwrap_or_default();
 	let m1 = m.get(1).cloned().flatten();
 	let m2 = m.get(2).cloned().flatten().unwrap_or_default();
 	let kf = j::a(&k, "feed").to_vec();
@@ -309,7 +321,8 @@ async fn feed_keeper(c: &mut Ctx, kp: Option<&Json>, arg: &str) -> Result<()> {
 	let from = now.max(j::n(&keeper, "fedUntilWorldMs"));
 	let room = now + j::n(&d, "fedMaxWorldMs") * patient - from;
 	if room < feed_ms { return refuse(format!("{} ist satt (noch {}).", cap(&the), hours((from - now) / patient))); }
-	let want = (room / feed_ms).floor().min(offer.len() as f64).min(count_of(m1.as_deref()));
+	if m2.is_empty() { if let Some(ask) = which_feed(c, &kf, &offer, &|name| format!("füttere {} {name}", txt(j::at(&k, "key")))) { return refuse(ask); } }
+	let want = (room / feed_ms).floor().min(offer.len() as f64).min(feed_count(m1.as_deref(), 1.0));
 	let me = c.char_id().to_owned();
 	let mut count = 0.0;
 	for it in offer.iter().take(want as usize) {

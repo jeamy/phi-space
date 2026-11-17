@@ -107,8 +107,9 @@ export function itemEntries(name: string, input: Omit<CellInput, "at" | "onPlans
 	const built = beside.filter((b) => b.kind === "building");
 	if ((o.fuels.includes(name) || o.fuels.includes(as)) && beside.some((b) => b.kind === "beacon")) { const fire = beside.find((b) => b.kind === "beacon")!; add({ label: `${name} nachlegen`, line: `put ${name} in ${fire.name}` }); }
 	for (const b of built) {
-		if (b.herd && uses.feed[b.herd]?.includes(name)) add({ label: `${name} verfüttern`, line: `füttere ${name}` });
-		if (b.keeper && uses.feed[b.keeper]?.includes(name)) add({ label: `${name} verfüttern (${b.keeper === "hund" ? "Hund" : "Katze"})`, line: `füttere ${b.keeper} ${name}` });
+		// for a day, at this building (the same line as its own menu's entry, which then stands for both)
+		if (b.herd && uses.feed[b.herd]?.includes(name)) add({ label: `${name} verfüttern`, line: `füttere ${name} @${b.x},${b.y}` });
+		if (b.keeper && uses.feed[b.keeper]?.includes(name)) add({ label: `${name} verfüttern (${b.keeper === "hund" ? "Hund" : "Katze"})`, line: `füttere ${b.keeper} ${name} @${b.x},${b.y}` });
 		if (b.plan === "kapelle" && uses.offerings.includes(name)) add({ label: `${name} opfern`, line: `opfere ${name}` });
 		if (!KEEPERS.includes(name) && (uses.stores.includes(b.plan ?? "") || (uses.chests.includes(b.plan ?? "") && b.ownerId === me))) add({ label: uses.stores.includes(b.plan ?? "") ? "Ins Lager legen" : "In die Truhe legen", line: `verstaue ${name}` });
 	}
@@ -334,6 +335,10 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 		// animal's share (the full house's share here: the server counts the animals), a dog or cat less a whole food
 		const eats = (until: number | undefined, share: number) => !fed || until === undefined || Math.max(fed.now, until) <= fed.now + fed.fedMaxWorldMs * fed.patience - share;
 		const canFeed = (kind: string, until: number | undefined, share: number) => (!feed || (feed[kind] ?? []).some((n) => carriedNames.has(n))) && eats(until, share);
+		// a day's feed, one entry for each kind carried (server: animals.ts füttere feeds a day and asks which kind when
+		// none is named); without the lists one entry, and the server asks
+		const feedWith = (kind: string, label: (n: string) => string, line: (n: string) => string, bare: CellEntry) =>
+			feed ? (feed[kind] ?? []).filter((n) => carriedNames.has(n)).map((n) => ({ label: label(n), line: line(n) })) : [bare];
 		// this one, not all in the room: the command takes its cell
 		entries.push({ label: o.kind === "site" ? (o.ownerId === me ? `Deine Baustelle ${o.name}: was fehlt?` : `Baustelle ${o.name} von ${o.owner ?? ""}: was fehlt?`) : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: o.kind === "building" && beside && HOUSES[o.plan ?? ""] ? `stall @${o.x},${o.y}` : `baustelle ${o.x} ${o.y}` }); // beside a coop or pen, looking at it shows its animals
 		if (o.kind === "building" && beside) {
@@ -358,7 +363,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			// a coop, pen or hive: anyone feeds, the owner puts in, takes out and collects (server: animals.ts)
 			if (HOUSES[o.plan ?? ""]) {
 				// the house carries its herd while an animal is in it: nothing to feed in an empty one
-				if (o.herd && canFeed(o.herd, o.fedUntil, fed ? fed.feedWorldMs / (fed.houses[o.plan ?? ""] ?? 1) : 0)) entries.push({ label: "Füttern", line: here("füttere") });
+				if (o.herd && canFeed(o.herd, o.fedUntil, fed ? fed.feedWorldMs / (fed.houses[o.plan ?? ""] ?? 1) : 0)) entries.push(...feedWith(o.herd, (n) => `Einen Tag mit ${n} füttern`, (n) => here(`füttere ${n}`), { label: "Füttern", line: here("füttere") }));
 				if (o.ownerId === me) {
 					const yields: Record<string, string> = { huhn: "Eier", ente: "Eier", schaf: "Wolle", ziege: "Milch", rind: "Milch", schwein: "Trüffel", gans: "Daunen", biene: "Honig" };
 					// this house, not the neighbour beside it; only with something ready (todos.ts "<house>:ertrag")
@@ -376,7 +381,7 @@ export function cellEntries({ at, chars, objs, self, room, me, plans, guest, fue
 			if (o.plan === "metzgerei") slaughterEntries();
 			// a dog or cat on guard: anyone feeds it; at an own building one leaves one or takes it along (server: animals.ts)
 			const keeperName: Record<string, string> = { hund: "Hund", katze: "Katze" };
-			if (o.keeper && canFeed(o.keeper, o.keeperFedUntil, fed ? fed.feedWorldMs * fed.patience : 0)) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} füttern`, line: here(`füttere ${o.keeper}`) });
+			if (o.keeper && canFeed(o.keeper, o.keeperFedUntil, fed ? fed.feedWorldMs * fed.patience : 0)) { const who = keeperName[o.keeper] ?? "Tier"; entries.push(...feedWith(o.keeper, (n) => `${who} einen Tag mit ${n} füttern`, (n) => here(`füttere ${o.keeper} ${n}`), { label: `${who} füttern`, line: here(`füttere ${o.keeper}`) })); }
 			if (o.keeper) entries.push({ label: "Wer wacht hier?", line: "wache" });
 			if (o.ownerId === me) {
 				if (o.keeper) entries.push({ label: `${keeperName[o.keeper] ?? "Tier"} mitnehmen`, line: here(`ausstallen ${o.keeper}`) });

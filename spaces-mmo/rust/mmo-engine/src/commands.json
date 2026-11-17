@@ -871,7 +871,7 @@
 				"futter",
 				"fodder"
 			],
-			"help": "füttere [n] [futter] – die Tiere im Stall oder Gehege neben dir füttern (jeder darf; ein Futter macht ein Tier einen Tag satt); füttere hund [futter], füttere katze [futter]"
+			"help": "füttere [futter] – die Tiere im Stall oder Gehege neben dir für einen Tag füttern (jeder darf; ein Futter macht ein Tier einen Tag satt; trägst du mehrere Sorten, fragt es, welche); füttere 3 [futter] oder füttere alle [futter] füttert vor; füttere hund [futter], füttere katze [futter]"
 		},
 		{
 			"module": "animals",

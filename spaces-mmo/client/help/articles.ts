@@ -526,7 +526,7 @@ Tiere wollen gefüttert werden und geben dafür Eier, Milch, Wolle, Daunen oder 
 | \`stall\` | \`coop\`, \`pen\` | Wie es den Tieren im Hühnerstall oder Gehege neben dir geht |
 | \`einstallen <tier>\` | \`stalle\` | Ein Huhn, Schaf oder eine Ziege in deinen Stall bringen, einen Hund oder eine Katze an einem deiner Bauten wachen lassen |
 | \`ausstallen [tier]\` | \`ausstellen\` | Ein Tier aus deinem Stall nehmen, auch \`ausstallen hund\` |
-| \`füttere [futter]\` | \`futter\` | Die Tiere neben dir füttern (jeder darf; ein Futter macht ein Tier einen Tag satt) |
+| \`füttere [futter]\` | \`futter\` | Die Tiere neben dir für einen Tag füttern (jeder darf; ein Futter macht ein Tier einen Tag satt; bei mehreren Sorten fragt es, welche) |
 | \`einsammeln\` | \`sammle eier\`, \`melke\`, \`schere\` | Eier, Milch oder Wolle deiner Tiere einsammeln |
 | \`schlachte [tier]\` | \`schlachten\` | Ein Tier aus deinem Stall oder Gehege schlachten, an der Metzgerei auch eins, das du trägst, mit einem Schlachtmesser oder Muschelmesser; das letzte Paar bleibt ([Schlachten](help.game.animals#slaughter)) |
 
@@ -713,7 +713,7 @@ Animals want feeding and give eggs, milk, wool, down or honey for it. In detail 
 | \`stall\` | \`coop\`, \`pen\` | How the animals in the coop or pen beside you are |
 | \`einstallen <animal>\` | \`stalle\` | Put a hen, sheep or goat into your coop or pen, leave a dog or cat on guard at a building of yours |
 | \`ausstallen [animal]\` | \`ausstellen\` | Take an animal out of your coop or pen, also \`ausstallen hund\` |
-| \`füttere [feed]\` | \`futter\` | Feed the animals beside you (anyone may; one feed keeps one animal fed a day) |
+| \`füttere [feed]\` | \`futter\` | Feed the animals beside you for a day (anyone may; one feed keeps one animal fed a day; with several kinds it asks which) |
 | \`einsammeln\` | \`sammle eier\`, \`melke\`, \`schere\` | Collect your animals' eggs, milk or wool |
 | \`schlachte [animal]\` | \`slaughter\` | Slaughter an animal of your coop or pen, at the butcher's shop also one you carry, with a butcher's knife or a shell knife; the last pair stays ([slaughtering](help.game.animals#slaughter)) |
 
@@ -2132,7 +2132,7 @@ Jedes Tier gibt nur, solange es **satt** ist; Zeit ohne Futter zählt nicht. Ein
 
 Tiere fressen, was auf Feldern und Beeten wächst. Füttern darf jeder, nicht nur der Besitzer.
 
-\`füttere\` gibt Futter aus deiner Tasche (\`füttere 3 hafer\` mehrere auf einmal). Ein Futter macht ein Tier einen Tag satt; vorfüttern geht für bis zu drei Tage, die du fort bist.
+\`füttere hafer\` gibt Futter aus deiner Tasche, genug für einen Tag: ein Futter je Tier, denn ein Futter macht ein Tier einen Tag satt. Trägst du mehrere Sorten, fragt \`füttere\`, welche. Vorfüttern geht für bis zu drei Tage, die du fort bist: \`füttere 6 hafer\` gibt so viele, \`füttere alle hafer\` so viele, wie hineinpassen.
 
 | Tier | frisst | gibt, wenn es satt ist |
 | --- | --- | --- |
@@ -2335,7 +2335,7 @@ An animal gives only while it is **fed**; time without food does not count. One 
 
 Animals eat what grows on fields and beds. Anyone may feed them, not just the owner.
 
-\`fodder\` gives feed from your pack (\`fodder 3 oats\` several at once). One feed keeps one animal fed for a day; you can feed ahead for up to three days you are away.
+\`fodder oats\` gives feed from your pack, enough for a day: one feed per animal, as one feed keeps one animal fed for a day. Carrying several kinds, \`fodder\` asks which. You can feed ahead for up to three days you are away: \`fodder 6 oats\` gives that many, \`fodder alle oats\` as many as fit.
 
 | Animal | eats | gives while fed |
 | --- | --- | --- |

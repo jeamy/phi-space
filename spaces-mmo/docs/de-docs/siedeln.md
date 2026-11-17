@@ -925,6 +925,10 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
        (Ort: die buildId), `ausstallen` holt es heraus. Darum gibt der Abriss die Tiere zurück und eine Ruine legt sie in
        den Nachlass, ohne eigenen Code.
      - **Füttern** (`füttere`, jeder darf): ein Futter macht ein Tier einen Welttag satt, bis drei Tage im Voraus.
+       Seit 2026-11-17 gibt `füttere` ohne Zahl Futter für einen Tag (ein Futter je Tier, eines für Hund oder Katze);
+       eine Zahl gibt so viele (`füttere 6 hafer`), `alle` so viele, wie hineinpassen. Ist kein Futter genannt und trägt
+       man mehrere Sorten, gibt es nichts und fragt, welche; das Zellenmenü bietet je Sorte einen Eintrag („Einen Tag
+       mit Hafer füttern“).
        Hühner fressen Tang, Kohl, Möhren und Korn, Schafe und Ziegen Rüben, Hafer, Gerste, Kohl und Tang: die Fluren
        füttern den Hof.
      - **Ertrag:** Satt legt ein Huhn ein Ei am Tag, eine Ziege gibt Milch am Tag, ein Schaf Wolle alle zwei Tage;

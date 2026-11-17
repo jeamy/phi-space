@@ -84,7 +84,7 @@ test("a carried thing shows what it can do here and now, nothing it cannot", () 
 	assert.match(eat[0]!.label, /Essen \(satt 12 Std\./);
 	assert.deepEqual(lines("Brot", at(...pack("Brot", 1))), [], "a world without foods offers no eating");
 	const coop: [string, ObjView] = ["c", obj({ id: "c", kind: "building", name: "Hühnerstall", plan: "huehnerstall", herd: "huhn", x: 6, y: 5, w: 2, h: 1 })];
-	assert.ok(lines("Hafer", at(coop, ...pack("Hafer", 1))).includes("füttere Hafer"));
+	assert.ok(lines("Hafer", at(coop, ...pack("Hafer", 1))).includes("füttere Hafer @6,5"), "a day's feed at this coop");
 	assert.ok(!lines("Stein", at(coop, ...pack("Stein", 1))).includes("füttere Stein"));
 	const site: [string, ObjView] = ["s", obj({ id: "s", kind: "site", name: "Hütte", ownerId: "me", missing: "2 Treibholz, 5 Arbeit", x: 6, y: 5, w: 2, h: 2 })];
 	assert.ok(lines("Treibholz", at(site, ...pack("Treibholz", 1))).includes("liefere Treibholz"));
@@ -152,6 +152,19 @@ test("feeding is offered at a coop only while animals live in it", () => {
 	assert.ok(lines(coop("huhn")).includes("stall @6,5") && lines(coop()).includes("stall @6,5"));
 	assert.ok(lines(coop("huhn")).includes("füttere @6,5"));
 	assert.ok(!lines(coop()).includes("füttere @6,5") && lines(coop()).includes("stall @6,5"), "an empty coop can only be looked at");
+});
+
+test("feeding offers a day of each kind carried, for a herd and for a dog; without the lists one entry, the server asks", () => {
+	const item = (n: string, i: number): [string, ObjView] => [`${n}${i}`, obj({ id: `${n}${i}`, kind: "item", name: n, location: "me", x: 0, y: 0 })];
+	const objs = new Map<string, ObjView>([
+		["c", obj({ id: "c", kind: "building", name: "Hühnerstall", plan: "huehnerstall", ownerId: "thees", herd: "huhn", keeper: "hund", x: 6, y: 5, w: 2, h: 1 })],
+		item("Tang", 0), item("Tang", 1), item("Kohl", 0), item("Ei", 0), item("Stein", 0),
+	]);
+	const feeding = (feed?: Record<string, string[]>) => cellEntries({ ...input, at: { x: 6, y: 5 }, objs, feed }).filter((e) => e.line.startsWith("füttere")).map((e) => [e.label, e.line]);
+	assert.deepEqual(feeding({ huhn: ["Tang", "Kohl", "Weizen"], hund: ["Ei", "Brot"] }), [
+		["Einen Tag mit Tang füttern", "füttere Tang @6,5"], ["Einen Tag mit Kohl füttern", "füttere Kohl @6,5"], ["Hund einen Tag mit Ei füttern", "füttere hund Ei @6,5"],
+	]);
+	assert.deepEqual(feeding(), [["Füttern", "füttere @6,5"], ["Hund füttern", "füttere hund @6,5"]]);
 });
 
 test("beside two hives and a coop, each entry names its building by its cell; the bar tells them apart", () => {
@@ -364,12 +377,12 @@ test("feeding, collecting, taking out and mending are offered only when they wor
 	const labels = (o: ObjView, items: Array<[string, ObjView]>, todos: Array<{ id: string; text: string; room: string; x: number; y: number; rank: 0 }> = []) =>
 		cellEntries({ ...input, plans, feed, todos, objs: new Map<string, ObjView>([["coop", o], ...items]), at: { x: 6, y: 5 } }).map((e) => e.label);
 	const none = labels(coop, []);
-	for (const l of ["Füttern", "Katze füttern", "Eier einsammeln"]) assert.ok(!none.includes(l), l);
+	for (const l of ["Einen Tag mit Weizen füttern", "Katze einen Tag mit Fisch füttern", "Eier einsammeln"]) assert.ok(!none.includes(l), l);
 	assert.ok(!none.some((l) => l.startsWith("Ausbessern")), "no wood, no mending");
 	assert.ok(none.includes("Wer wacht hier?") && none.includes("Ein Tier herausnehmen"));
 	const all = labels(coop, carried("Weizen", "Fisch", "Treibholz", "Treibholz"), [{ id: "coop:ertrag", text: "", room: "r", x: 6, y: 5, rank: 0 }]);
-	for (const l of ["Füttern", "Katze füttern", "Eier einsammeln", "Ausbessern (2 Treibholz)"]) assert.ok(all.includes(l), l);
-	assert.ok(!labels(empty, carried("Weizen")).some((l) => l === "Ein Tier herausnehmen" || l === "Füttern"), "an empty coop");
+	for (const l of ["Einen Tag mit Weizen füttern", "Katze einen Tag mit Fisch füttern", "Eier einsammeln", "Ausbessern (2 Treibholz)"]) assert.ok(all.includes(l), l);
+	assert.ok(!labels(empty, carried("Weizen")).some((l) => l === "Ein Tier herausnehmen" || l === "Einen Tag mit Weizen füttern"), "an empty coop");
 });
 
 test("feeding is offered only while the animal eats: a sated herd or cat has no entry, a hungry one has", () => {
@@ -379,12 +392,12 @@ test("feeding is offered only while the animal eats: a sated herd or cat has no 
 	const bag = new Map<string, ObjView>([["w", obj({ id: "w", kind: "item", name: "Weizen", location: "me", x: -1, y: -1 })], ["f", obj({ id: "f", kind: "item", name: "Fisch", location: "me", x: -1, y: -1 })]]);
 	const labels = (o: ObjView, f: typeof fed = fed) => cellEntries({ ...input, feed: { huhn: ["Weizen"], katze: ["Fisch"] }, fed: f, objs: new Map([["coop", o], ...bag]), at: { x: 6, y: 5 } }).map((e) => e.label);
 	const full = labels(coop(now + 3 * DAY, now + 3 * DAY));
-	assert.ok(!full.includes("Füttern") && !full.includes("Katze füttern"), "both fed as far ahead as they eat");
+	assert.ok(!full.includes("Einen Tag mit Weizen füttern") && !full.includes("Katze einen Tag mit Fisch füttern"), "both fed as far ahead as they eat");
 	const hungry = labels(coop(now - DAY, now));
-	assert.ok(hungry.includes("Füttern") && hungry.includes("Katze füttern"));
+	assert.ok(hungry.includes("Einen Tag mit Weizen füttern") && hungry.includes("Katze einen Tag mit Fisch füttern"));
 	// a cat fed two days ahead takes no more (a food is a day, the most three); a coop takes another share
 	const half = labels(coop(now + 2 * DAY + 1, now + 2 * DAY + 1));
-	assert.ok(half.includes("Füttern") && !half.includes("Katze füttern"));
+	assert.ok(half.includes("Einen Tag mit Weizen füttern") && !half.includes("Katze einen Tag mit Fisch füttern"));
 	// with patience 24, three days are 72: the cat fed two days ahead still eats
-	assert.ok(labels(coop(now + 3 * DAY, now + 2 * DAY), { ...fed, patience: 24 }).includes("Katze füttern"));
+	assert.ok(labels(coop(now + 3 * DAY, now + 2 * DAY), { ...fed, patience: 24 }).includes("Katze einen Tag mit Fisch füttern"));
 });

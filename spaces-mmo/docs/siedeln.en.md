@@ -1006,6 +1006,14 @@ epoch, road, cart and island railway. What crosses regions needs the handover or
        inside) takes only the one on that cell (`atCell`) or refuses, never a neighbour and never through the model.
        The bar "Hier möglich" names the building before an entry it offers for two of them ("Bienenstock 17,16:
        Füttern"). Typed lines without a cell work as before.
+     - **A day at a time (2026-11-17):** `füttere` used to give everything that fit, as far ahead as it could (every
+       feed carried, up to three days). Without a count it now gives a day's feed: one food for each animal of the
+       house, one for a dog or cat. A count gives that many (`füttere 6 hafer`), `alle` as many as fit, so feeding
+       ahead stays possible. With no feed named and more than one kind carried, it gives nothing and asks which, with
+       a line for each kind in the order of the animal's list ("Womit füttern? Du trägst 3 Tang, 2 Kohl: „füttere
+       tang“ oder „füttere kohl“."), before it takes anything. The cell menu offers one entry for each kind carried
+       ("Einen Tag mit Hafer füttern", "Hund einen Tag mit Ei füttern"); an item's own entry ("Hafer verfüttern")
+       sends the same line with the building's cell.
 
      Acceptance (`tests/animals.test.ts`):
      - A stranger may feed, but not stable and not collect. Only what fits in is fed.

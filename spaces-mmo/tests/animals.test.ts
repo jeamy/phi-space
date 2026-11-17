@@ -321,12 +321,20 @@ test("a coop: hens put in by the owner lay while fed, anyone feeds, the owner co
 		assert.match(await does(anna.p, "stall", "Hühnerstall von"), /3 Hühner \(Platz für 6\), hungrig/);
 		assert.match(await does(anna.p, "einsammeln", "Noch kein"), /Noch kein Ei bereit; sie sind hungrig/);
 
-		// anyone feeds: what the hens eat, up to three days ahead
+		// anyone feeds: what the hens eat, a day at a time; with two kinds carried and none named it asks which, before it
+		// takes anything; a count or "alle" feeds ahead, up to three days
 		await give(s, bert.me, "ruebe", 1);
 		assert.match(await does(bert.p, "füttere rübe", "mögen"), /Rübe mögen Hühner nicht; sie fressen Tang/);
 		await give(s, bert.me, "tang", 12);
-		assert.match(await does(bert.p, "füttere", "satt für"), /Nachbar füttert die Hühner von Bäuerin mit 9 Tang; satt für etwa 3 Tage/);
-		assert.equal(await pack(s, bert.me, "tang"), 3, "only what fits");
+		await give(s, bert.me, "kohl", 1);
+		assert.equal(await does(bert.p, "füttere", "Womit"), "Womit füttern? Du trägst 12 Tang, 1 Kohl: „füttere tang“ oder „füttere kohl“.");
+		assert.equal(await pack(s, bert.me, "tang"), 12, "asking takes nothing");
+		assert.match(await does(bert.p, "füttere kohl", "satt für"), /Nachbar füttert die Hühner von Bäuerin mit 1 Kohl; satt für etwa 8 Stunden/);
+		assert.match(await does(bert.p, "füttere", "satt für"), /Nachbar füttert die Hühner von Bäuerin mit 3 Tang; satt für etwa 32 Stunden/);
+		assert.equal(await pack(s, bert.me, "tang"), 9, "a day: one food for each hen");
+		assert.match(await does(bert.p, "füttere 2 tang", "satt für"), /mit 2 Tang; satt für etwa 2 Tage/);
+		assert.match(await does(bert.p, "füttere alle tang", "satt für"), /mit 3 Tang; satt für etwa 3 Tage/);
+		assert.equal(await pack(s, bert.me, "tang"), 4, "only what fits");
 		assert.match(await does(bert.p, "füttere tang", "satt"), /Die Hühner sind satt/);
 		assert.match(await does(bert.p, "einsammeln", "sammelt"), /Was die Tiere von Bäuerin geben, sammelt Bäuerin/);
 
@@ -405,8 +413,10 @@ test("with the second clock slower (patience 24) a herd can be fed ahead for thr
 		await give(s, anna.me, "huhn", 1);
 		await does(anna.p, "einstallen huhn", "(1 Huhn)");
 		await give(s, anna.me, "tang", 30);
-		// one hen, a food a world day: all 30 (three days of the second clock are 72 world days), before only 3
-		assert.match(await does(anna.p, "füttere", "satt für"), /mit 30 Tang; satt für etwa 30 Tage/);
+		// one hen, a food a world day: a day without a count, then all the other 29 (three days of the second clock are
+		// 72 world days), before only 3
+		assert.match(await does(anna.p, "füttere", "satt für"), /mit 1 Tang; satt für etwa 24 Stunden/);
+		assert.match(await does(anna.p, "füttere alle", "satt für"), /mit 29 Tang; satt für etwa 30 Tage/);
 		await give(s, anna.me, "hund", 1);
 		await does(anna.p, "einstallen hund", "wachen");
 		await give(s, anna.me, "ei", 1);

@@ -142,9 +142,22 @@ const ausstallen: Command = {
 	},
 };
 
+// What "füttere" takes: a count or "alle", then the feed (both may be missing).
+const FEED_LINE = /^(?:(\d+|alle?)(?:\s+|$))?(.*)$/i;
+/** How many foods at most: a number that many, "alle" as many as fit, none one day's worth (`day` foods). */
+const feedCount = (m1: string | undefined, day: number) => (m1 && /^\d+$/.test(m1) ? Number(m1) : m1 ? Infinity : day);
+/** No feed named and the carried feed of more than one kind: the question which, with a line for each kind (in the
+ *  order of the animal's list; one kind at a time, the menu offers one entry for each). */
+function whichFeed(c: CommandCtx, feed: string[], carried: { f: ItemFields }[], line: (name: string) => string): string | null {
+	const kinds = feed.filter((p) => carried.some((i) => i.f.proto === p));
+	if (kinds.length < 2) return null;
+	const counted = kinds.map((p) => `${carried.filter((i) => i.f.proto === p).length} ${protoName(c, p)}`).join(", ");
+	return `Womit füttern? Du trägst ${counted}: ${kinds.map((p) => `„${line(protoName(c, p).toLowerCase())}“`).join(" oder ")}.`;
+}
+
 const fuettere: Command = {
 	key: "füttere", aliases: ["fuettere", "füttern", "fuettern", "futter", "fodder"],
-	help: "füttere [n] [futter] – die Tiere im Stall oder Gehege neben dir füttern (jeder darf; ein Futter macht ein Tier einen Tag satt); füttere hund [futter], füttere katze [futter]",
+	help: "füttere [futter] – die Tiere im Stall oder Gehege neben dir für einen Tag füttern (jeder darf; ein Futter macht ein Tier einen Tag satt; trägst du mehrere Sorten, fragt es, welche); füttere 3 [futter] oder füttere alle [futter] füttert vor; füttere hund [futter], füttere katze [futter]",
 	async func(c, arg) {
 		const d = animalsOf(c);
 		const kn = keeperNamed(c, arg);
@@ -152,7 +165,7 @@ const fuettere: Command = {
 		// no coop or pen beside, but a dog or cat on guard: it is the one to feed
 		const near = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1 && atCell(c, b));
 		if (!near.some((b) => d.houses[b.plan]) && near.some((b) => b.keeper)) return feedKeeper(c, null, arg);
-		const m = /^(?:(\d+|alle?)\s+)?(.*)$/i.exec(arg.trim().replace(/^(?:die|den)\s+(?:tiere|hühner|huehner|schafe|ziegen)(?:\s+mit)?\s*/i, "").replace(/^mit\s+/i, ""))!;
+		const m = FEED_LINE.exec(arg.trim().replace(/^(?:die|den)\s+(?:tiere|hühner|huehner|schafe|ziegen)(?:\s+mit)?\s*/i, "").replace(/^mit\s+/i, ""))!;
 		const { b, k, n, max, now } = await houseHere(c, d, (h) => !!h.herd);
 		if (!k || !n || !b.herd) throw new CommandError(`${b.name} von ${b.ownerName} ist leer (Platz für ${max}), da ist nichts zu füttern. ${mine(c, b) ? "„einstallen <tier>“ bringt ein Tier hinein; Tiere verkauft Gesa am Markt von Kupferhafen." : ""}`.trim());
 		const feed = (await inventory(c)).filter((i) => k.feed.includes(i.f.proto));
@@ -164,7 +177,10 @@ const fuettere: Command = {
 		const per = d.feedWorldMs / n, from = Math.max(now, b.herd.fedUntilWorldMs);
 		const room = now + d.fedMaxWorldMs * (await patienceOf(c.space, c.txn)) - from;
 		if (room < per) throw new CommandError(`Die ${k.plural} sind satt (noch ${hours(from - now)}).`);
-		const want = Math.min(Math.floor(room / per), offer.length, m[1] && /^\d+$/.test(m[1]) ? Number(m[1]) : Infinity);
+		const ask = m[2] ? null : whichFeed(c, k.feed, feed, (name) => `füttere ${name}`);
+		if (ask) throw new CommandError(ask);
+		// without a count one day for the house (a food for each animal), with one that many, "alle" as far ahead as it goes
+		const want = Math.min(Math.floor(room / per), offer.length, feedCount(m[1], n));
 		const used = new Map<string, number>();
 		for (const it of offer.slice(0, want)) {
 			if (!(await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn }))) continue;
@@ -228,7 +244,7 @@ async function feedKeeper(c: CommandCtx, kp: KeeperDef | null, arg: string): Pro
 	if (!("f" in r)) throw new NotUnderstood(kp ? `Neben dir wacht ${kp.none}.` : "Neben dir ist kein Tier zu füttern.");
 	const b = r.f, k = keeperOf(c, b), now = await worldNowOf(c.space, c.txn);
 	if (!k || !b.keeper) throw new CommandError("Neben dir ist kein Tier zu füttern.");
-	const m = /^(?:(\d+|alle?)\s+)?(.*)$/i.exec(arg.trim().replace(/^mit\s+/i, ""))!;
+	const m = FEED_LINE.exec(arg.trim().replace(/^mit\s+/i, ""))!;
 	const inv = await inventory(c);
 	const named = m[2] ? itemsNamed(c.world, inv, m[2].replace(ARTICLE, "")) : inv.filter((i) => k.feed.includes(i.f.proto));
 	if (m[2] && named.length && !k.feed.includes(named[0]!.f.proto)) throw new CommandError(`${cap(k.the)} mag ${named[0]!.f.name} nicht; ${k.the.startsWith("die ") ? "sie" : "er"} frisst ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);
@@ -237,7 +253,9 @@ async function feedKeeper(c: CommandCtx, kp: KeeperDef | null, arg: string): Pro
 	const patient = await patienceOf(c.space, c.txn), feedMs = d.feedWorldMs * patient; // it keeps the beds for people who are away
 	const from = Math.max(now, b.keeper.fedUntilWorldMs), room = now + d.fedMaxWorldMs * patient - from;
 	if (room < feedMs) throw new CommandError(`${cap(k.the)} ist satt (noch ${hours((from - now) / patient)}).`);
-	const want = Math.min(Math.floor(room / feedMs), offer.length, m[1] && /^\d+$/.test(m[1]) ? Number(m[1]) : Infinity);
+	const ask = m[2] ? null : whichFeed(c, k.feed, named, (name) => `füttere ${k.key} ${name}`);
+	if (ask) throw new CommandError(ask);
+	const want = Math.min(Math.floor(room / feedMs), offer.length, feedCount(m[1], 1));
 	let count = 0;
 	for (const it of offer.slice(0, want)) if (await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn })) count++;
 	if (!count) throw new CommandError("Das Futter ist gerade nicht greifbar; bitte noch einmal.");
