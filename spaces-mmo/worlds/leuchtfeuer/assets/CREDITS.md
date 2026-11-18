@@ -110,3 +110,21 @@ way, by the script `items-src/trees.py` (same license as this project).
 What the workshop makes of planks (a barrel, a fruit crate, a table and shutters: `items/fass.png`,
 `items/obstkiste.png`, `items/tisch.png`, `items/fensterlaeden.png`) were drawn the same way, by the script
 `items-src/planks.py` (same license as this project).
+
+## Surfaces of the 3D view (`public/materials/`)
+
+The photographed surfaces of the 3D view's ground (`client/ground3d.ts`) come from [Poly Haven](https://polyhaven.com)
+and are licensed [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (no attribution required; given here all
+the same). Each folder holds the 1k JPEG maps of one asset, downloaded 2026-11-18 and recompressed (metadata removed,
+quality 80 to 88): `color.jpg` (the asset's "Diffuse"), `normal.jpg` ("nor_gl") and `arm.jpg` ("arm": ambient
+occlusion, roughness and metalness in the red, green and blue channels). They are not in this directory, because the
+page serves them itself (`/materials/<name>/…`) and they do not belong to one world.
+
+| Folder | Poly Haven asset | Authors | Used for |
+| --- | --- | --- | --- |
+| `public/materials/sand/` | [`sand_01`](https://polyhaven.com/a/sand_01) | Rob Tuytel | sand (`.`) |
+| `public/materials/grass/` | [`leafy_grass`](https://polyhaven.com/a/leafy_grass) | Charlotte Baglioni | grass (`,`) |
+| `public/materials/paving/` | [`cobblestone_floor_08`](https://polyhaven.com/a/cobblestone_floor_08) | Rob Tuytel | paving (`:`) |
+| `public/materials/rock/` | [`rock_face_03`](https://polyhaven.com/a/rock_face_03) | Dario Barresi, Rico Cilliers | the earth of a terrace's wall |
+| `public/materials/planks/` | [`wood_planks`](https://polyhaven.com/a/wood_planks) | Amal Kumar | a building's floor (`_`) |
+| `public/materials/plaster/` | [`white_rough_plaster`](https://polyhaven.com/a/white_rough_plaster) | Rob Tuytel | a building's walls (`#`) |

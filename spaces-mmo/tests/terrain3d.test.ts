@@ -109,6 +109,22 @@ test("the water knows how far the shore is: 0 on land, a cell more with every st
 	assert.deepEqual([...shoreDistances([], water)], []);
 });
 
+test("every ground material of the 3D view has its three pictures and its line in the credits", async () => {
+	const { existsSync, readFileSync, statSync } = await import("node:fs");
+	const { GROUND } = await import("../client/ground3d.ts");
+	const root = new URL("../", import.meta.url).pathname, credits = readFileSync(`${root}worlds/leuchtfeuer/assets/CREDITS.md`, "utf8");
+	const names = new Set([...Object.values(GROUND).map((g) => g.name), "rock"]);
+	assert.deepEqual(Object.keys(GROUND).sort(), ["#", ",", ".", ":", "_"].sort());
+	for (const name of names) {
+		for (const file of ["color", "normal", "arm"]) {
+			const path = `${root}public/materials/${name}/${file}.jpg`;
+			assert.ok(existsSync(path), `${path} is missing`);
+			assert.ok(statSync(path).size < 700_000, `${path} is larger than 700 kB`);
+		}
+		assert.ok(credits.includes(`\`public/materials/${name}/\``), `no credit for ${name}`);
+	}
+});
+
 test("near barrel geometry is cached separately, with more detail and the same footprint", async () => {
 	const t = await import("three"), { barrel } = await import("../client/props3d.ts");
 	const far = barrel(t), near = barrel(t, true);

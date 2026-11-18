@@ -194,7 +194,7 @@ function About() {
 		<p className="about muted">
 			Eine Welt auf <a href="https://spaces.eibrain.org" target="_blank" rel="noreferrer">phi-spaces</a>. Grafiken: Intersect-Assets von
 			PixelFox, Zetasis, George und Murdoc, CC BY 4.0; Gegenstände: Shikashi's Fantasy Icons von Matt Firth (shikashipx) nach
-			game-icons.net, CC BY 4.0, und 7Soul1, CC0 (<a href="/assets/leuchtfeuer/CREDITS.md" target="_blank" rel="noreferrer">Nachweise</a>).
+			game-icons.net, CC BY 4.0, und 7Soul1, CC0; Oberflächen der 3D-Ansicht: Poly Haven, CC0 (<a href="/assets/leuchtfeuer/CREDITS.md" target="_blank" rel="noreferrer">Nachweise</a>).
 		</p>
 	);
 }

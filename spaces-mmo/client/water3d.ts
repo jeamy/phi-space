@@ -66,13 +66,19 @@ const NORMAL = /* glsl */ `
 		normal = normalize( ( viewMatrix * vec4( up, 0.0 ) ).xyz );
 	}`;
 
+/** `shoreDistances` as a texture, one texel a cell: 0 where `water` says no, 1 at SHORE_REACH cells from there. */
+export function shoreTexture(t: T, ground: readonly string[], water: (key: string) => boolean): import("three").DataTexture {
+	const h = ground.length, w = ground[0]?.length ?? 0, distances = shoreDistances(ground, water), data = new Uint8Array(w * h);
+	for (let i = 0; i < data.length; i++) data[i] = Math.round((distances[i]! / SHORE_REACH) * 255);
+	const texture = new t.DataTexture(data, Math.max(1, w), Math.max(1, h), t.RedFormat, t.UnsignedByteType);
+	texture.magFilter = texture.minFilter = t.LinearFilter; texture.needsUpdate = true;
+	return texture;
+}
+
 /** The material of a room's water surface (a face that looks up): `ground` gives the shore. It owns a small texture;
  *  `material.userData.dispose` frees it. */
 export function waterMaterial(t: T, ground: readonly string[], water: (key: string) => boolean): import("three").MeshStandardMaterial {
-	const h = ground.length, w = ground[0]?.length ?? 0, distances = shoreDistances(ground, water), data = new Uint8Array(w * h);
-	for (let i = 0; i < data.length; i++) data[i] = Math.round((distances[i]! / SHORE_REACH) * 255);
-	const shore = new t.DataTexture(data, w, h, t.RedFormat, t.UnsignedByteType);
-	shore.magFilter = shore.minFilter = t.LinearFilter; shore.needsUpdate = true;
+	const h = ground.length, w = ground[0]?.length ?? 0, shore = shoreTexture(t, ground, water);
 	const material = new t.MeshStandardMaterial({ color: 0xffffff, roughness: 0.07, metalness: 0, envMapIntensity: 1.25 });
 	const uniforms = { uWaterTime: time, uShore: { value: shore }, uRoom: { value: new t.Vector2(w, h) }, uShallow: { value: new t.Color(0x4f9a94) }, uDeep: { value: new t.Color(0x0d3350) } };
 	material.onBeforeCompile = (shader) => {

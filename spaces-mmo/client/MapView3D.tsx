@@ -18,6 +18,7 @@ import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
 import { closeBlur, frameSummary } from "./closeup3d.ts";
 import { POST } from "./post3d.ts";
 import { setWaterTime, waterMaterial } from "./water3d.ts";
+import { GROUND, groundLooks } from "./ground3d.ts";
 import { START_VIEW } from "./viewPreferences.ts";
 import { atModelLevel, updateModelDetails, type ModelLevel } from "./modelDetail3d.ts";
 import { stableHash, tile3d } from "./terrain3d.ts";
@@ -289,8 +290,11 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 	const group = new t.Group(); group.userData.owned = true;
 	const kind = (key: string) => tile3d(key, !!world.tiles[key]?.walk);
 	const earth = new t.MeshStandardMaterial({ color: 0x6b5236, roughness: 1 });
+	// photographed surfaces where the kind has one (ground3d.ts), else the tile art as before
+	const pbr = groundLooks(t, room.ground, (key) => kind(key).water, s.renderer.capabilities.getMaxAnisotropy());
 	const lookOf = (key: string): TerraceLook => {
-		const visual = kind(key), look = looks.get(key);
+		const visual = kind(key), look = looks.get(key), real = pbr(key, visual.color);
+		if (real) return real;
 		const top = new t.MeshStandardMaterial({ color: look ? 0xffffff : visual.color, map: look?.frames[0] ?? null, roughness: 0.95 });
 		// the rounded edge carries the tile art on, a little darker as it turns away from the sky
 		const flank = new t.MeshStandardMaterial({ color: look ? 0xd4d4d4 : new t.Color(visual.color).multiplyScalar(0.85), map: look?.frames[0] ?? null, roughness: 0.95 });
@@ -447,6 +451,8 @@ function lantern(s: Scene3D, e: Entry, time: number): void {
 
 function pavingDetail(s: Scene3D): void {
 	if (!s.ground) return;
+	// the photographed paving (ground3d.ts) has its stones in its own picture and normals: no stones of geometry on it
+	if (GROUND[":"]) { if (s.paving) s.paving.visible = false; return; }
 	if (s.zoom < 2) { if (s.paving) s.paving.visible = false; return; }
 	// every paved cell of the room (at most a few hundred: one instanced mesh), built once per room and ground; before,
 	// only the cells round the middle of the view had stones and the rest of the paving stayed smooth

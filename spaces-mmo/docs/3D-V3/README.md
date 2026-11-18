@@ -13,7 +13,8 @@ everything here is the client's view of the same room data: the grid, walkabilit
 - **Assets.** Textures and skies from CC0 libraries; buildings and figures as one consistent set. Licences go into the
   world's `assets/CREDITS.md`.
 - **One quality level.** No reduced tier for phones; the 2D map stays the fallback for a device without WebGL 2.
-- **Download size.** A budget per room, loaded per room (to be set in phase 2).
+- **Download size.** A budget per room, loaded per room (to be set in phase 2). The ground's six surfaces are 4.8 MB together, loaded once.
+- **Models.** Built in this project (the user's decision, 2026-11-18), not bought or commissioned.
 
 ## Phases
 
@@ -21,7 +22,7 @@ everything here is the client's view of the same room data: the grid, walkabilit
 | --- | --- | --- |
 | 1 Light and picture | sky and sun from the world's clock, the sky's light as an environment map, a filmic tone curve, shadows that turn with the sun, ambient occlusion, bloom, the close-up blur as a pass | done, except rain and wet surfaces |
 | 2 Asset pipeline | glTF models with Meshopt, KTX2 textures, a catalogue from today's builder keys to model files with three levels of detail, the procedural builder as the fallback | open |
-| 3 Terrain and water | a smoothed height field instead of hard terraces, PBR ground materials blended at the seams, rock on the block's sides; the water's surface | water done, the rest open |
+| 3 Terrain and water | a smoothed height field instead of hard terraces, PBR ground materials blended at the seams, rock on the block's sides; the water's surface | water and ground materials done; the height field and the block's sides open |
 | 4 Vegetation | tree and bush models with leaf cards, wind, translucent leaves, instanced grass, crops per stage | open |
 | 5 Buildings and things | models in the order hut, site, ruin, later epochs, scenery; a small shared set of materials; lit interiors | open |
 | 6 Figures and animals | rigged figures with skeletal animation, the chosen look (`shared/appearance.ts`) as parts and colour masks | open |
@@ -59,8 +60,23 @@ distance to the nearest land (a chamfer distance, at most 4 cells), kept as a sm
 a shallow and a deep colour by it, puts a ragged band of foam at the land and lines of foam that run in, moves its
 normal with a few sine waves and noise, and mirrors the sky.
 
+**Ground (`client/ground3d.ts`, `public/materials/`).** The terraces of sand, grass, paving, a building's floor and its
+walls carry photographed surfaces (colour, normals, and occlusion with roughness; Poly Haven, CC0, credited in
+`worlds/leuchtfeuer/assets/CREDITS.md`) instead of the tile art; the wall under a terrace's edge is rock tinted as earth.
+One picture covers 1.5 to 2.5 cells, and a slow noise over the room varies its brightness so the repeat does not show.
+Sand within about a cell of the water is dark and smooth (the water's shore texture with land and water swapped). A
+tile kind without a surface keeps the tile art; until the pictures are loaded, or where the page is served without them
+(`SPACES_MMO_NO_NEXT`), a surface shows its plain colour. The close-up's cobbles of geometry (v2) are off on
+photographed paving. The pictures are served by the page (`/materials/…`), not by the world's asset route, which serves
+PNG only.
+
 Dev probes on the canvas (not in a production build): `probeHour(hour)`, `probeFog(level)`, `probeLight()`,
 `probeTune(light, post)`.
+
+## Open in phase 3
+
+- The smoothed height field: the ground still stands on v2's rounded terraces.
+- Rock on the block's sides (they keep the strata bands).
 
 ## Open in phase 1
 
