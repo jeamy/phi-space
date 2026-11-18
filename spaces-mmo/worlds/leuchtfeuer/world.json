@@ -14419,7 +14419,7 @@
 					21600000,
 					64800000
 				],
-				"ripeWorldMs": 172800000,
+				"ripeWorldMs": 518400000,
 				"yields": {
 					"proto": "strandnelke",
 					"count": 1
@@ -14442,7 +14442,7 @@
 					28800000,
 					86400000
 				],
-				"ripeWorldMs": 172800000,
+				"ripeWorldMs": 518400000,
 				"yields": {
 					"proto": "duenenrose",
 					"count": 1
@@ -14468,7 +14468,7 @@
 					43200000,
 					129600000
 				],
-				"ripeWorldMs": 259200000,
+				"ripeWorldMs": 777600000,
 				"yields": {
 					"proto": "nebelblume",
 					"count": 1
@@ -14494,7 +14494,7 @@
 					21600000,
 					86400000
 				],
-				"ripeWorldMs": 86400000,
+				"ripeWorldMs": 259200000,
 				"yields": {
 					"proto": "kohl",
 					"count": 2
@@ -14517,7 +14517,7 @@
 					21600000,
 					64800000
 				],
-				"ripeWorldMs": 86400000,
+				"ripeWorldMs": 259200000,
 				"yields": {
 					"proto": "moehre",
 					"count": 2
@@ -14547,7 +14547,7 @@
 					43200000,
 					108000000
 				],
-				"ripeWorldMs": 172800000,
+				"ripeWorldMs": 518400000,
 				"yields": {
 					"proto": "hopfen",
 					"count": 2

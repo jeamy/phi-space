@@ -1694,7 +1694,7 @@ Pflanzen brauchen Wasser, sonst welken sie. Du holst es aus einer Regentonne und
 
 Wasser kommt aus der **Regentonne** (\`bau regentonne\`: 3 Treibholz, 1 Tangseil, 4 Arbeit). \`schöpfe\` neben der Tonne füllt eine **Kanne Wasser**; die Tonne fasst sechs, bekommt alle acht Weltstunden eine dazu und ist nach einer Sturmflut auf ihrer Insel voll. \`gieße\` gießt mit einer Kanne das ganze Beet.
 
-Eine Pflanze wächst in Stufen: **Saat**, **Keim**, **reif**, **welk**. Steht sie beim nächsten Schritt länger als 16 Weltstunden ohne Wasser, welkt sie. Eine reife Pflanze welkt nach ein bis drei Tagen. **Nebel** und **Unkraut** lassen sie langsamer wachsen: ein brennendes Feuer hilft auch dem Garten. \`jäte\` zieht Unkraut und Welkes heraus.
+Eine Pflanze wächst in Stufen: **Saat**, **Keim**, **reif**, **welk**. Steht sie beim nächsten Schritt länger als 16 Weltstunden ohne Wasser, welkt sie. Eine reife Pflanze welkt nach drei bis neun Tagen. **Nebel** und **Unkraut** lassen sie langsamer wachsen: ein brennendes Feuer hilft auch dem Garten. \`jäte\` zieht Unkraut und Welkes heraus.
 
 ## Ernten {#harvest}
 
@@ -1816,7 +1816,7 @@ Plants need water or they wilt. You fetch it from a rain barrel and water the wh
 
 Water comes from the **rain barrel** (\`bau regentonne\`: 3 driftwood, 1 kelp rope, 4 work). \`schöpfe\` (\`fill\`) next to the barrel fills a **can of water**; the barrel holds six, gains one every eight world hours and is full after a storm surge on its island. \`gieße\` (\`water\`) waters the whole bed with one can.
 
-A plant grows in stages: **seed**, **sprout**, **ripe**, **wilted**. If it has gone without water for more than 16 world hours at its next step, it wilts. A ripe plant wilts after one to three days. **Fog** and **weeds** slow it down: a burning fire helps the garden too. \`jäte\` (\`weed\`) pulls weeds and what has wilted.
+A plant grows in stages: **seed**, **sprout**, **ripe**, **wilted**. If it has gone without water for more than 16 world hours at its next step, it wilts. A ripe plant wilts after three to nine days. **Fog** and **weeds** slow it down: a burning fire helps the garden too. \`jäte\` (\`weed\`) pulls weeds and what has wilted.
 
 ## Harvest {#harvest}
 
