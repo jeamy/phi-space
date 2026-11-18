@@ -57,7 +57,7 @@
     "docker:dev:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev logs -f mmo-dev"
   },
   "dependencies": {
-    "next": "16.4.3",
+    "next": "16.4.6",
     "phi-spaces": "file:../spaces",
     "pixi.js": "8.22.0",
     "react": "19.3.0",

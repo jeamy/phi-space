@@ -32,7 +32,7 @@
     "docker:nano:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano logs -f swarm-space-nano swarm-nano"
   },
   "dependencies": {
-    "next": "16.4.3",
+    "next": "16.4.6",
     "phi-spaces": "file:../spaces",
     "react": "19.3.0",
     "react-dom": "19.3.0"
