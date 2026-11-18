@@ -1,5 +1,7 @@
 # 3D view, version 2: mockups
 
+Version 3 (`docs/3D-V3/README.md`, from 2026-11-18) builds on this one: the sky, the light and the picture described below have changed there, the ladder, the blocks and the models have not. `client/closeuppost3d.ts` is now `client/post3d.ts`.
+
 Mockups for a second version of the optional 3D view (`client/MapView3D.tsx`), drawn 2026-11-03. The original pictures show the design direction; the implementation status and its differences are recorded below. Everything in them is the client's view of the same room data: the grid, walkability and every action stay as they are on the server (docs/architektur.en.md, "3D-Ansicht").
 
 The idea: every room is a diorama block, the island is the group of blocks, and one zoom slider goes from the island down to a figure's face. The camera elevation is a function of the zoom, so a pinch does both. Levels of detail cross-fade over half a second.

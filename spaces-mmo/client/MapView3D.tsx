@@ -16,12 +16,14 @@ import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
 import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, prepareModelDetails, propMaterial, propMesh, propShadow, setNight, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
 import { closeBlur, frameSummary } from "./closeup3d.ts";
+import { POST } from "./post3d.ts";
+import { setWaterTime, waterMaterial } from "./water3d.ts";
 import { START_VIEW } from "./viewPreferences.ts";
 import { atModelLevel, updateModelDetails, type ModelLevel } from "./modelDetail3d.ts";
 import { stableHash, tile3d } from "./terrain3d.ts";
 import { edgeSides } from "./terrace.ts";
 import { terraceMeshes, type TerraceLook } from "./terraces3d.ts";
-import { cameraElevation, clampTilt, clampZoom, daylightAt, wheelView, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./camera3d.ts";
+import { cameraElevation, clampTilt, clampZoom, daylightAt, shadowLightAt, wheelView, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "./camera3d.ts";
 import { calendar, shownWorldMs, WORLD_HOUR_MS } from "../shared/worldtime.ts";
 import { fishItem, fishModel, type FishKind } from "./fish3d.ts";
 import { blockUnder, fishFor, islandBlock, nameCard, swimFish, type Fish, type SeaEdge } from "./block3d.ts";
@@ -35,19 +37,22 @@ const bedSig = (o: ObjView) => (o.kind === "road" ? `${o.roadState}:${o.paved}:$
 type Scene3D = {
 	t: T;
 	renderer: import("three").WebGLRenderer;
-	post: ReturnType<typeof import("./closeuppost3d.ts").createClosePost>;
+	post: ReturnType<typeof import("./post3d.ts").createPost>;
+	/** the sky, its light on everything and the fog's colour (atmosphere3d.ts) */
+	air: import("./atmosphere3d.ts").Atmosphere;
 	measurement: { at: number; times: number[]; calls: number[]; zooms: number[]; remaining: number } | null;
 	detailAt: number;
 	catalogue?: boolean;
 	scene: import("three").Scene;
 	camera: import("three").PerspectiveCamera;
 	fog: import("three").FogExp2;
-	/** the sun: its shadow map is fitted to the room (lightRoom) */
+	/** the sun by day, the moon at night: its shadow map is fitted to the room (lightRoom), its place follows the clock */
 	sun: import("three").DirectionalLight;
-	/** the sky's light, dimmed with the sun at night (daylight) */
+	/** a little light from all round on top of the sky's own (atmosphere3d.ts), so the night keeps its shapes */
 	hemi: import("three").HemisphereLight;
-	/** the daylight last applied (1 day, 0 night) and when it was last worked out */
+	/** the daylight last applied (1 day, 0 night), the world hour and fog level it was set for, and when it was last worked out */
 	light: number;
+	lightFor: string;
 	lightAt: number;
 	/** the fish behind the room's sea sides (block3d.ts) */
 	fish: Fish[];
@@ -72,7 +77,6 @@ type Scene3D = {
 	plants: import("three").Group | null;
 	plantLooks: Map<string, import("three").Texture>;
 	plantsFor: string;
-	water: Array<{ material: import("three").MeshStandardMaterial; look: TileLook }>;
 	paving: import("three").InstancedMesh | null;
 	pavingFor: string;
 	chars: Map<string, Entry>;
@@ -133,11 +137,13 @@ export function MapView3D(props: MapRendererProps) {
 		document.addEventListener("visibilitychange", visibility);
 		void (async () => {
 			try {
-				const [t, { createClosePost }] = await Promise.all([import("three"), import("./closeuppost3d.ts")]);
+				const [t, { createPost }, { createAtmosphere }] = await Promise.all([import("three"), import("./post3d.ts"), import("./atmosphere3d.ts")]);
 				if (dead || !host.current) return;
 				const renderer = new t.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
 				renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 				renderer.outputColorSpace = t.SRGBColorSpace;
+				// the filmic tone curve (v3): the sun may be brighter than white without burning out (post3d.ts applies it)
+				renderer.toneMapping = t.ACESFilmicToneMapping; renderer.toneMappingExposure = LIGHT.exposure;
 				renderer.setClearColor(0x10171c, 1);
 				renderer.domElement.addEventListener("contextmenu", prevent);
 				host.current.querySelector(".map-canvas")?.replaceChildren(renderer.domElement);
@@ -145,17 +151,15 @@ export function MapView3D(props: MapRendererProps) {
 				const scene = new t.Scene();
 				const fog = new t.FogExp2(0xb8c1c7, 0); scene.fog = fog;
 				const camera = new t.PerspectiveCamera(38, 1, 0.1, 160); camera.layers.enable(1);
-				const post = createClosePost(renderer, scene, camera); renderer.info.autoReset = false;
-				const hemi = new t.HemisphereLight(0xd9edff, 0x3a4a2a, 1.7); scene.add(hemi);
+				const post = createPost(renderer, scene, camera), air = createAtmosphere(t, renderer, scene, fog); renderer.info.autoReset = false;
+				const hemi = new t.HemisphereLight(0xd9edff, 0x3a4a2a, 0.2); scene.add(hemi);
 				const sun = new t.DirectionalLight(0xfff1cf, 2.2);
 				sun.position.set(-6, 12, 8); scene.add(sun); scene.add(sun.target);
-				// the sun casts shadows (v2): one map fitted to the room, smaller on a phone (lightRoom)
-				const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
-				renderer.shadowMap.enabled = true; renderer.shadowMap.type = t.PCFSoftShadowMap;
-				sun.castShadow = true; sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
-				scene.background = skyTexture(t);
+				// the sun casts shadows (v2): one map fitted to the room (lightRoom)
+				renderer.shadowMap.enabled = true; renderer.shadowMap.type = t.PCFShadowMap;
+				sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.025; sun.shadow.radius = 2.5;
 
-				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, scene, camera, fog, sun, hemi, light: -1, lightAt: 0, fish: [], host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", water: [], paving: null, pavingFor: "", chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", paving: null, pavingFor: "", chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				s.resize = new ResizeObserver(() => resize(s));
 				s.resize.observe(host.current);
 				pointer(s, latest, view);
@@ -199,7 +203,7 @@ export function MapView3D(props: MapRendererProps) {
 			const s = state.current;
 			if (!s) return;
 			if (s.measurement) { s.measurement = null; sayFps({ running: false, fps: null, note: "Messung abgebrochen: 3D-Ansicht wurde neu gestartet." }); }
-			cancelAnimationFrame(s.frame); s.resize.disconnect(); unpointer(s); s.post.dispose(); dispose(s.scene); s.renderer.dispose(); s.canvas.remove(); state.current = null;
+			cancelAnimationFrame(s.frame); s.resize.disconnect(); unpointer(s); s.post.dispose(); s.air.dispose(); dispose(s.scene); s.renderer.dispose(); s.canvas.remove(); state.current = null;
 		};
 	}, []);
 
@@ -217,7 +221,7 @@ export function MapView3D(props: MapRendererProps) {
 			try { plants = await loadDecorLooks(s.t, props.world); } catch { /* a bare room */ }
 			if (dead || state.current !== s) return;
 			if (s.ground) { s.scene.remove(s.ground); dispose(s.ground); }
-			s.water = []; s.paving = null; s.pavingFor = "";
+			s.paving = null; s.pavingFor = "";
 			s.ground = buildTerrain(s, looks);
 			shade(s.ground, true);
 			s.scene.add(s.ground);
@@ -297,10 +301,10 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 	const wet = new Map<string, Array<{ x: number; y: number }>>();
 	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const k = room.ground[y]![x]!; if (kind(k).water) { const a = wet.get(k) ?? []; a.push({ x, y }); wet.set(k, a); } }
 	const main = [...wet].sort((a, b) => b[1].length - a[1].length)[0]?.[0];
+	// the surface (water3d.ts): one material for all the room's water, whatever its kind
+	const top = waterMaterial(t, room.ground, (key) => kind(key).water);
 	const waterMaterials = (key: string) => {
-		const visual = kind(key), look = looks.get(key);
-		const top = new t.MeshStandardMaterial({ color: look ? 0xffffff : visual.color, map: look?.frames[0] ?? null, roughness: 0.3, metalness: 0.1 });
-		if (look && look.frames.length > 1) s.water.push({ material: top, look });
+		const visual = kind(key);
 		const side = new t.MeshStandardMaterial({ color: new t.Color(visual.color).multiplyScalar(0.6), roughness: 1 });
 		return [side, side, top, side, side, side];
 	};
@@ -397,7 +401,7 @@ function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): impor
 
 /** Every frame: the water moves, figures and things glide to their cell and the figures walk; the camera does not follow. */
 function step(s: Scene3D, dt: number, time: number, me: string): void {
-	for (const w of s.water) w.material.map = w.look.frames[Math.floor((time * 1000) / w.look.frameMs) % w.look.frames.length]!;
+	setWaterTime(time);
 	pavingDetail(s);
 	const k = 1 - Math.exp(-12 * dt);
 	for (const [id, e] of s.chars) {
@@ -897,38 +901,36 @@ function shade(root: O3, receive: boolean): void {
 		m.castShadow = !basic; m.receiveShadow = receive && !basic;
 	});
 }
-/** Fits the sun's shadow map to the room: an orthographic box round the block, the sun high in the south-west. */
+/** Fits the shadow map to the room: an orthographic box round the block, the light where the clock puts it (daylight). */
 function lightRoom(s: Scene3D): void {
 	const { w, h } = dims(s.room), r = Math.hypot(w, h) / 2 + 2, cam = s.sun.shadow.camera;
-	s.sun.position.set(-r * 0.55, r * 1.1, r * 0.75); s.sun.target.position.set(0, 0, 0);
 	cam.left = -r; cam.right = r; cam.top = r; cam.bottom = -r; cam.near = 0.5; cam.far = r * 4; cam.updateProjectionMatrix();
+	s.lightFor = ""; s.lightAt = 0;
 }
-/** Day and night from the world's clock: the sun sinks to a pale moonlight, warm at dawn and dusk, the sky darkens, and
- *  the lamplit faces of the models glow (props3d.ts, setNight). Visual only; without a clock it stays day. */
-const NOON = 0xfff1cf, MOON = 0x8fa6d8, DUSK = 0xffa25a;
+/** How bright the picture is under the tone curve, the sun's and the moon's light, and the sky's light on everything. */
+const LIGHT = { exposure: 0.55, sun: 5, moon: 1.6, sky: 0.45 };
+/** Day and night from the world's clock (v3): the sun crosses the sky from east to west and the moon follows it, the
+ *  shadows turn with them, the sky and its light on everything follow (atmosphere3d.ts), the light is warm near the
+ *  horizon, and the lamplit faces of the models glow in the dark (props3d.ts, setNight). Visual only; without a clock it
+ *  stays early afternoon. */
+const NOON = 0xfff4e0, MOON = 0x8fa6d8, DUSK = 0xff9a4e;
 function daylight(s: Scene3D, clock: { v: import("../shared/worldtime.ts").WorldTimeView; at: number } | null): void {
-	const hour = s.hourProbe != null ? s.hourProbe : clock ? calendar(shownWorldMs(clock.v, clock.at, Date.now())).millisOfDay / WORLD_HOUR_MS : 12;
-	const d = Math.round(daylightAt(hour) * 100) / 100;
-	if (d === s.light) return;
+	const hour = s.hourProbe != null ? s.hourProbe : clock ? calendar(shownWorldMs(clock.v, clock.at, Date.now())).millisOfDay / WORLD_HOUR_MS : 13;
+	const key = `${hour.toFixed(2)}|${s.level}`;
+	if (key === s.lightFor) return;
+	s.lightFor = key;
+	const from = shadowLightAt(hour), d = daylightAt(hour), r = Math.hypot(dims(s.room).w, dims(s.room).h) / 2 + 2;
+	s.sun.position.set(from.dir[0] * r * 1.6, from.dir[1] * r * 1.6, from.dir[2] * r * 1.6); s.sun.target.position.set(0, 0, 0);
+	// under fog the sun is a pale disc: less of its light comes straight, more from all round (the sky's own haze)
+	const clear = 1 - s.level * 0.22;
+	if (from.body === "sun") { s.sun.intensity = LIGHT.sun * from.strength * clear; s.sun.color.setHex(NOON).lerp(new s.t.Color(DUSK), from.warm); }
+	else { s.sun.intensity = LIGHT.moon * from.strength * clear; s.sun.color.setHex(MOON); }
 	s.light = d;
-	const dusk = 4 * d * (1 - d);
-	s.sun.intensity = 2.2 * (0.14 + 0.86 * d);
-	s.sun.color.setHex(MOON).lerp(new s.t.Color(NOON), d).lerp(new s.t.Color(DUSK), dusk * 0.55);
-	s.hemi.intensity = 1.7 * (0.32 + 0.68 * d);
-	s.hemi.color.setHex(0x5a6c9e).lerp(new s.t.Color(0xd9edff), d);
-	s.scene.backgroundIntensity = 0.4 + 0.6 * d;
+	s.hemi.intensity = 0.12 + 0.9 * (1 - d);
+	s.hemi.color.setHex(0x6a7cae).lerp(new s.t.Color(0xd9edff), d);
+	s.scene.environmentIntensity = LIGHT.sky; s.renderer.toneMappingExposure = LIGHT.exposure;
+	s.air.update(hour, s.level); s.post.daylight(d);
 	setNight(Math.min(1, (1 - d) * 1.3));
-}
-let sky: import("three").CanvasTexture | null = null;
-/** The void round the block: a dusk gradient instead of black, lighter towards the horizon. */
-function skyTexture(t: T): import("three").CanvasTexture {
-	if (sky) return sky;
-	const c = document.createElement("canvas"); c.width = 2; c.height = 256;
-	const g = c.getContext("2d")!, grad = g.createLinearGradient(0, 0, 0, 256);
-	grad.addColorStop(0, "#141a26"); grad.addColorStop(0.55, "#26324a"); grad.addColorStop(1, "#3c4d66");
-	g.fillStyle = grad; g.fillRect(0, 0, 2, 256);
-	sky = new t.CanvasTexture(c); sky.colorSpace = t.SRGBColorSpace; sky.userData.shared = true;
-	return sky;
 }
 
 /** The camera looks at the middle of the room (moved by the drag) from a distance that shows all of it at zoom 1; only
@@ -962,6 +964,7 @@ function positionCamera(s: Scene3D): void {
  *  whole room in grey as soon as the camera has to stand far enough away to show all of it. */
 const FOG_HIDES = [0, 0.2, 0.35, 0.5];
 function applyFog(s: Scene3D, level: number): void {
+	if (s.level !== clamp(level, 0, 3)) s.lightAt = 0;
 	s.level = clamp(level, 0, 3);
 	const hides = FOG_HIDES[s.level]!;
 	s.fog.density = hides > 0 ? Math.sqrt(-Math.log(1 - hides)) / Math.max(1, s.dist) : 0;
@@ -1076,6 +1079,13 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		},
 		/** a world hour for the light instead of the clock (screenshots of the night) */
 		probeHour: (hour: number | null) => { s.hourProbe = hour; s.lightAt = 0; },
+		/** the light as set: the fog's colour (the sky near the horizon), the sun's strength, the daylight */
+		probeLight: () => ({ fog: s.fog.color.toArray(), sun: s.sun.intensity, daylight: s.light, level: s.level }),
+		/** the numbers of the picture (post3d.ts), to try others */
+		/** other numbers for the light (LIGHT) and the picture (POST), to try them */
+		probeTune: (light: Partial<typeof LIGHT>, post: Partial<typeof POST> = {}) => { Object.assign(LIGHT, light); Object.assign(POST, post); s.post.tune(); s.lightFor = ""; s.lightAt = 0; },
+		/** a fog level instead of the room's (0 to 3) */
+		probeFog: (level: number) => applyFog(s, level),
 		probeScreen: (x: number, y: number, dx = 0, dz = 0) => { const p = at(s, x, y, 0).add(new t.Vector3(dx, 0, dz)).project(s.camera), r = s.canvas.getBoundingClientRect(); return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height }; },
 	});
 	let down: { x: number; y: number; at: { x: number; y: number } | null; talk?: boolean; long: boolean; turn: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
@@ -1171,6 +1181,6 @@ function dispose(root: O3): void {
 		// the models' geometries and materials are made once and shared (props3d.ts): only what an object owns goes
 		if (!m.geometry?.userData.shared) m.geometry?.dispose?.();
 		const materials = m.material ? (Array.isArray(m.material) ? m.material : [m.material]) : [];
-		for (const material of materials) { if (material.userData.shared) continue; const mm = material as import("three").MeshStandardMaterial; if (mm.map && !mm.map.userData.shared) mm.map.dispose(); material.dispose(); }
+		for (const material of materials) { if (material.userData.shared) continue; (material.userData.dispose as (() => void) | undefined)?.(); const mm = material as import("three").MeshStandardMaterial; if (mm.map && !mm.map.userData.shared) mm.map.dispose(); material.dispose(); }
 	});
 }

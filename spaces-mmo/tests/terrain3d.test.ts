@@ -74,14 +74,39 @@ test("close-up detail has hysteresis, turns off outside close zoom and caps pavi
 	assert.equal(report.frames, 4); assert.equal(report.triangles, 100); assert.equal(report.geometries, 9);
 });
 
-test("postprocessing is not allocated in the island and room views", async () => {
-	const t = await import("three"), { createClosePost } = await import("../client/closeuppost3d.ts");
-	const scene = new t.Scene(), camera = new t.PerspectiveCamera();
-	let renders = 0;
-	const renderer = { render: (s: unknown, c: unknown) => { assert.equal(s, scene); assert.equal(c, camera); renders++; } } as unknown as import("three").WebGLRenderer;
-	const post = createClosePost(renderer, scene, camera);
-	post.resize(390, 844); post.render(0); post.dispose(); post.dispose();
-	assert.equal(renders, 1);
+test("the sun and the moon cross the sky with the world's clock, and one of them always lights the room", async () => {
+	const { shadowLightAt, skyAt } = await import("../client/camera3d.ts");
+	const deg = (r: number) => (r * 180) / Math.PI, len = (v: readonly number[]) => Math.hypot(v[0]!, v[1]!, v[2]!);
+	const noon = skyAt(13);
+	assert.equal(Math.round(deg(noon.sunElevation)), 58); assert.ok(noon.sun[2] > 0.5 && Math.abs(noon.sun[0]) < 1e-9, "the sun stands in the south at 13:00");
+	assert.ok(skyAt(7).sun[0] > 0 && skyAt(19).sun[0] < 0, "east in the morning, west in the evening");
+	assert.ok(Math.abs(skyAt(5.5).sunElevation) < 1e-9 && Math.abs(skyAt(20.5).sunElevation) < 1e-9);
+	assert.ok(skyAt(1).sunElevation < 0 && skyAt(1).moonElevation > 0);
+	for (let h = 0; h < 24; h += 0.25) {
+		const sky = skyAt(h), light = shadowLightAt(h);
+		assert.ok(Math.abs(len(sky.sun) - 1) < 1e-9 && Math.abs(len(sky.moon) - 1) < 1e-9 && Math.abs(len(light.dir) - 1) < 1e-9);
+		assert.ok(deg(Math.asin(light.dir[1])) >= 12 - 1e-9, `the light lies too flat at ${h}`);
+		assert.equal(light.body, sky.sunElevation > 0 ? "sun" : "moon");
+		assert.ok(light.strength >= 0 && light.strength <= 1 && light.warm >= 0 && light.warm <= 1);
+	}
+	// the change from the sun to the moon happens in the dark of neither
+	for (const h of [20.49, 20.51, 5.49, 5.51]) assert.ok(shadowLightAt(h).strength < 0.02, `a jump of the light at ${h}`);
+	assert.equal(shadowLightAt(13).strength, 1); assert.equal(shadowLightAt(13).warm, 0);
+	assert.ok(shadowLightAt(0.5).strength > 0.9, "the moon is high at midnight");
+});
+
+test("the water knows how far the shore is: 0 on land, a cell more with every step out, never beyond its reach", async () => {
+	const { SHORE_REACH, shoreDistances } = await import("../client/water3d.ts");
+	const water = (key: string) => key === "~";
+	const ground = ["~~~~~~~", "~~~~~~~", "~~~.~~~", "~~~~~~~", "~~~~~~~"], d = shoreDistances(ground, water), at = (x: number, y: number) => d[y * 7 + x]!;
+	assert.equal(at(3, 2), 0);
+	assert.equal(at(4, 2), 1); assert.equal(at(3, 0), 2); assert.equal(at(0, 2), 3);
+	assert.ok(Math.abs(at(4, 3) - Math.SQRT2) < 1e-6 && Math.abs(at(5, 4) - 2 * Math.SQRT2) < 1e-6, "a diagonal step counts √2");
+	assert.equal(SHORE_REACH, 4);
+	const far = shoreDistances(["~".repeat(12) + "."], water);
+	assert.equal(far[0], SHORE_REACH); assert.equal(far[11], 1); assert.equal(far[12], 0);
+	assert.deepEqual([...shoreDistances(["~~", "~~"], water)], [4, 4, 4, 4], "no land: open water everywhere");
+	assert.deepEqual([...shoreDistances([], water)], []);
 });
 
 test("near barrel geometry is cached separately, with more detail and the same footprint", async () => {

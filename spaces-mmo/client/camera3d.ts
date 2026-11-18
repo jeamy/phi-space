@@ -44,3 +44,32 @@ export function daylightAt(hour: number): number {
 	if (h > 19 && h < 21) return ease(1 - (h - 19) / 2);
 	return 0;
 }
+
+export type V3 = readonly [x: number, y: number, z: number];
+const DEG = Math.PI / 180;
+/** A body on its arc: `k` 0 at its rise in the east, 0.5 at its top in the south, 1 at its set in the west, on to 2 below. */
+const onArc = (k: number, top: number): { dir: V3; elevation: number } => {
+	const elevation = Math.sin(Math.PI * k) * top * DEG, flat = Math.cos(elevation);
+	return { dir: [Math.cos(Math.PI * k) * flat, Math.sin(elevation), Math.sin(Math.PI * k) * flat], elevation };
+};
+/** Where the sun and the moon stand at a world hour (3D v3, docs/3D-V3): the sun rises at 5:30 in the east (+x), stands
+ *  58° high in the south (+z, the bottom of the map) at 13:00 and sets at 20:30; the moon is up from 18:30 to 7:30, 42° at
+ *  its top. Directions point from the ground to the body; an elevation below 0 is under the horizon. Visual only. */
+export function skyAt(hour: number): { sun: V3; sunElevation: number; moon: V3; moonElevation: number } {
+	const h = ((hour % 24) + 24) % 24, since = (from: number) => (h - from + 24) % 24;
+	const s = since(5.5), m = since(18.5);
+	const sun = onArc(s <= 15 ? s / 15 : 1 + (s - 15) / 9, 58), moon = onArc(m <= 13 ? m / 13 : 1 + (m - 13) / 11, 42);
+	return { sun: sun.dir, sunElevation: sun.elevation, moon: moon.dir, moonElevation: moon.elevation };
+}
+/** The one light that casts shadows at a world hour: the sun while it is up, else the moon. `strength` (0 to 1) fades
+ *  to nothing as the body nears the horizon, and the moon's only comes as the sun sinks 6° below it, so the change from
+ *  one to the other is never seen; the direction never lies
+ *  flatter than 12°, so a shadow stays inside the room's shadow map. `warm` is 1 at the horizon and 0 from 25° up. */
+export function shadowLightAt(hour: number): { dir: V3; body: "sun" | "moon"; strength: number; warm: number } {
+	const sky = skyAt(hour), body = sky.sunElevation > 0 ? "sun" : "moon";
+	const from = body === "sun" ? sky.sun : sky.moon, elevation = Math.max(0, body === "sun" ? sky.sunElevation : sky.moonElevation);
+	const ease = (k: number) => { const c = Math.min(1, Math.max(0, k)); return c * c * (3 - 2 * c); };
+	const lifted = Math.max(elevation, 12 * DEG), flat = Math.hypot(from[0], from[2]) || 1, scale = Math.cos(lifted) / flat;
+	const strength = ease(elevation / (10 * DEG)) * (body === "moon" ? ease(-sky.sunElevation / (6 * DEG)) : 1);
+	return { dir: [from[0] * scale, Math.sin(lifted), from[2] * scale], body, strength, warm: 1 - ease(elevation / (25 * DEG)) };
+}
