@@ -986,14 +986,15 @@ const SHADOW_SOFT = 2.5;
 /** The parts of the picture a device is asked about, one left out at a time (`leave(s, true)`, and put back). */
 const PARTS: Array<{ name: string; leave(s: Scene3D, out: boolean): void }> = [
 	{ name: "alles", leave() {} },
-	{ name: "ohne Kantenglättung", leave(s, out) { s.post.leaveOut({ smooth: out }); } },
+	{ name: "Verdeckung aus der Bildtiefe", leave(s, out) { s.post.leaveOut({ aoFromPicture: out }); } },
+	{ name: "… mit 8 Proben", leave(s, out) { s.post.leaveOut(out ? { aoFromPicture: true, aoSamples: 8 } : {}); } },
 	{ name: "Verdeckung mit 8 Proben", leave(s, out) { s.post.leaveOut(out ? { aoSamples: 8 } : {}); } },
 	{ name: "ohne Verdeckung", leave(s, out) { s.post.leaveOut({ ao: out }); } },
 	{ name: "ohne Verdeckung, Bloom", leave(s, out) { s.post.leaveOut({ ao: out, bloom: out }); } },
-	{ name: "… und ohne Kantenglättung", leave(s, out) { s.post.leaveOut({ ao: out, bloom: out, smooth: out }); } },
+	{ name: "ohne Pflanzen", leave(s, out) { if (s.plants) s.plants.visible = !out; } },
+	{ name: "ohne Dinge, Figuren", leave(s, out) { for (const m of [s.objs, s.chars]) for (const e of m.values()) e.obj.visible = !out; } },
 	{ name: "nur Boden, Wasser", leave(s, out) { bare(s, out); s.post.leaveOut({ ao: out, bloom: out }); } },
-	{ name: "… ohne Kantenglättung", leave(s, out) { bare(s, out); s.post.leaveOut({ ao: out, bloom: out, smooth: out }); } },
-	{ name: "… und ohne Wasser", leave(s, out) { bare(s, out); s.post.leaveOut({ ao: out, bloom: out, smooth: out }); s.ground?.traverse((o) => { if (o.userData.water) o.visible = !out; }); } },
+	{ name: "… ohne Nachbearbeitung", leave(s, out) { bare(s, out); s.post.leaveOut({ ao: out, bloom: out, post: out }); } },
 ];
 /** Only the ground and the water, without shadows: no plants, things or figures. */
 function bare(s: Scene3D, out: boolean): void {
