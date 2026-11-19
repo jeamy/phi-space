@@ -18,6 +18,7 @@ import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
 import { shadowSizeAt, closeBlur, frameSummary, SHARP, sharpen, sharpness, type Sharpness } from "./closeup3d.ts";
 import { POST } from "./post3d.ts";
 import { AO, aoHider, createAoBaker, installAo, tuneAo } from "./ao3d.ts";
+import { MOVING_LAYER, splitShadows } from "./shadow3d.ts";
 import { setWaterTime, waterMaterial } from "./water3d.ts";
 import { GROUND, groundLooks } from "./ground3d.ts";
 import { START_VIEW } from "./viewPreferences.ts";
@@ -55,6 +56,8 @@ type Scene3D = {
 	aoHide: (out: boolean) => void;
 	aoDue: boolean;
 	aoAt: number;
+	/** the shadow map in a still part, kept, and the figures drawn on top (shadow3d.ts) */
+	shadows: ReturnType<typeof splitShadows>;
 	catalogue?: boolean;
 	scene: import("three").Scene;
 	camera: import("three").PerspectiveCamera;
@@ -172,7 +175,7 @@ export function MapView3D(props: MapRendererProps) {
 
 				const scene = new t.Scene();
 				const fog = new t.FogExp2(0xb8c1c7, 0); scene.fog = fog;
-				const camera = new t.PerspectiveCamera(38, 1, 0.1, 160); camera.layers.enable(1);
+				const camera = new t.PerspectiveCamera(38, 1, 0.1, 160); camera.layers.enable(1); camera.layers.enable(MOVING_LAYER);
 				const post = createPost(renderer, scene, camera), air = createAtmosphere(t, renderer, scene, fog); renderer.info.autoReset = false;
 				const hemi = new t.HemisphereLight(0xd9edff, 0x3a4a2a, 0.2); scene.add(hemi);
 				const sun = new t.DirectionalLight(0xfff1cf, 2.2);
@@ -181,7 +184,7 @@ export function MapView3D(props: MapRendererProps) {
 				renderer.shadowMap.enabled = true; renderer.shadowMap.type = t.PCFShadowMap;
 				sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.025; sun.shadow.radius = SHADOW_SOFT;
 
-				const s: Scene3D = { t, renderer, post, measurement: null, parts: null, detailAt: -Infinity, ao: createAoBaker(t, renderer), aoHide: () => {}, aoDue: false, aoAt: -Infinity, shadowAt: -Infinity, sharp: sharpness(), scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], school: null, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", objsFor: null, chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				const s: Scene3D = { t, renderer, post, measurement: null, parts: null, detailAt: -Infinity, ao: createAoBaker(t, renderer), aoHide: () => {}, aoDue: false, aoAt: -Infinity, shadows: splitShadows(t, renderer, sun), shadowAt: -Infinity, sharp: sharpness(), scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], school: null, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", objsFor: null, chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				// figures and the island's other rooms stay out of the room's heights
 				s.aoHide = aoHider(scene, () => [s.island, ...[...s.chars.values()].map((e) => e.obj)]);
 				s.resize = new ResizeObserver(() => resize(s));
@@ -208,12 +211,14 @@ export function MapView3D(props: MapRendererProps) {
 					if (s.school) { s.school.group.visible = s.zoom > 0.3; if (s.school.group.visible) { swimFish(s.fish, now / 1000); s.school.draw(); } }
 					if (now - s.lightAt > 500) { s.lightAt = now; daylight(s, latest.current.worldTime ?? null); }
 					if (now - s.detailAt >= 150) { updateModelDetails(t, s.scene, s.camera, s.zoom); s.detailAt = now; }
-					// the shadow map only when a caster moved, and four times a second for all that changes slowly (the sun,
-					// a model's level of detail, a new object)
 					// the occlusion anew when the room's things or plants changed, at most once a second
 					if (s.aoDue && s.ground && now - s.aoAt >= 1000) { s.aoDue = false; s.aoAt = now; const { w, h } = dims(s.room); s.ao.bake(s.scene, { x0: -w / 2, z0: -h / 2, w, d: h }, s.aoHide); }
-					const shadows = moved || now - s.shadowAt >= SHADOW_EVERY_MS;
-					if (shadows) s.shadowAt = now;
+					// the shadow map only when a caster moved; what stands still is drawn into it once a second (a model's
+					// level of detail, a thing moving slowly), at once when the sun moved (daylight) or the things changed
+					// (sync), and between those only the figures are drawn anew, over the kept still part (shadow3d.ts)
+					const still = now - s.shadowAt >= SHADOW_EVERY_MS;
+					if (still) { s.shadowAt = now; s.shadows.redrawStill(); }
+					const shadows = moved || still;
 					const drawing = s.measurement || s.parts ? performance.now() : 0;
 					s.post.render(closeBlur(s.zoom), shadows);
 					if (s.parts) measureParts(s, elapsed, now, performance.now() - drawing);
@@ -248,7 +253,7 @@ export function MapView3D(props: MapRendererProps) {
 			const s = state.current;
 			if (!s) return;
 			if (s.measurement) { s.measurement = null; sayFps({ running: false, fps: null, note: "Messung abgebrochen: 3D-Ansicht wurde neu gestartet." }); }
-			cancelAnimationFrame(s.frame); s.resize.disconnect(); unpointer(s); s.post.dispose(); s.ao.dispose(); s.air.dispose(); dispose(s.scene); s.renderer.dispose(); s.canvas.remove(); state.current = null;
+			cancelAnimationFrame(s.frame); s.resize.disconnect(); unpointer(s); s.post.dispose(); s.ao.dispose(); s.shadows.dispose(); s.air.dispose(); dispose(s.scene); s.renderer.dispose(); s.canvas.remove(); state.current = null;
 		};
 	}, []);
 
@@ -559,7 +564,9 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 			const fig = makeFigure(s.t, { id, skin: c.skin, own: id === me, ai: !!c.ai, ...(c.look ? { style: c.look } : {}) });
 			if (heading !== undefined) fig.heading = heading;
 			fig.group.add(label(s.t, c.settler ? `${c.name} (Siedler)` : c.name, id === me ? "#dfff73" : c.ai ? "#9fd3ff" : "#ffffff"));
-			e = { obj: fig.group, target: at(s, c.x, c.y, 0), fig, shown: c.name, sig }; e.obj.position.copy(e.target); shade(e.obj, false); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.chars.set(id, e);
+			e = { obj: fig.group, target: at(s, c.x, c.y, 0), fig, shown: c.name, sig }; e.obj.position.copy(e.target); shade(e.obj, false);
+			// a figure moves often: its own layer, drawn into the shadow map over the kept still part (shadow3d.ts)
+			e.obj.traverse((o) => { if ((o as import("three").Mesh).isMesh) o.layers.set(MOVING_LAYER); }); if (!s.named) e.obj.traverse((o) => { if (o.userData.label) o.visible = false; }); fitSprites(s, e.obj); s.scene.add(e.obj); s.chars.set(id, e);
 		}
 		e.look = c.look;
 		e.target.copy(at(s, c.x, c.y, 0));
@@ -568,7 +575,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 	// a fire burns down by the clock, not by a change of the objects
 	for (const [id, e] of s.objs) if (e.flame) e.flame.light.userData.lit = (objs.get(id)?.until ?? 0) > Date.now();
 	if (!things) return;
-	s.objsFor = objs; s.aoDue = true;
+	s.objsFor = objs; s.aoDue = true; s.shadowAt = -Infinity;
 	for (const id of [...s.objs.keys()]) if (!objs.has(id) || objs.get(id)?.location !== s.room.roomId) {
 		const e = s.objs.get(id)!;
 		// cleared scenery sinks away instead of vanishing
@@ -1051,7 +1058,7 @@ function measureParts(s: Scene3D, elapsed: number, now: number, drawMs: number):
 }
 
 /** How often the shadow map is drawn when nothing that casts a shadow moves. */
-const SHADOW_EVERY_MS = 250;
+const SHADOW_EVERY_MS = 1000;
 /** `nightLift`: how much the exposure rises in the dark (an eye used to the night), so the land stays readable by moonlight. */
 const LIGHT = { exposure: 0.55, sun: 5, moon: 2.4, sky: 0.45, nightLift: 0.6 };
 /** Day and night from the world's clock (v3): the sun crosses the sky from east to west and the moon follows it, the

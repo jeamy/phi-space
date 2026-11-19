@@ -11,6 +11,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { aoOff } from "./ao3d.ts";
+import { MOVING_LAYER } from "./shadow3d.ts";
 
 /** The numbers of the picture, in one place. The bloom starts at a brightness
  *  that follows the daylight, as an eye does: by day only what outshines sand in the sun, at night every lamp. */
@@ -73,7 +74,7 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 			try {
 				// the shadow map at most once a frame
 				renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = shadows;
-				camera.layers.set(0);
+				camera.layers.set(0); camera.layers.enable(MOVING_LAYER);
 				if (direct) { renderer.setRenderTarget(null); renderer.render(scene, camera); } else composer.render();
 				camera.layers.set(1); renderer.toneMapping = NoToneMapping; renderer.autoClear = false; renderer.clearDepth(); renderer.render(scene, camera);
 			} finally { camera.layers.mask = mask; renderer.autoClear = autoClear; renderer.shadowMap.autoUpdate = shadowAutoUpdate; renderer.toneMapping = toneMapping; }

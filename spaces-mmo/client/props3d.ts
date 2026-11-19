@@ -242,7 +242,7 @@ function frond(t: T, parts: Part[], top: V3, a: number, len: number, c: number, 
 	for (let i = 0; i < steps; i++) {
 		const p = at(i / steps), q = at((i + 1) / steps), dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2], l = Math.hypot(dx, dy, dz);
 		// a thin rib piece from p to q (a cylinder stands along y: turned to the piece's direction)
-		parts.push({ g: new t.CylinderGeometry(0.008, 0.011, l, 4), c: 0x6f8a3a, m: "none", p: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2], r: [0, -a, Math.atan2(dy, Math.hypot(dx, dz)) - Math.PI / 2] });
+		parts.push({ g: fixed(t, new t.CylinderGeometry(0.008, 0.011, l, 4)), c: 0x6f8a3a, m: "none", p: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2], r: [0, -a, Math.atan2(dy, Math.hypot(dx, dz)) - Math.PI / 2] });
 	}
 	const pairs = level === "far" ? 5 : level === "near" ? 16 : 11;
 	leaves(t, parts, [c, c === 0x5c9c42 ? 0x4f8f3a : 0x5c9c42], r, (push) => {
@@ -326,21 +326,25 @@ export function plantGeometry(t: T, model: PlantModel, variant: number, color = 
 
 /** A stem from the ground, leaning `lean` towards `a`, with its tip returned. */
 function stem(t: T, parts: Part[], x: number, z: number, high: number, a: number, lean: number, c: number, thick = 0.014): V3 {
-	parts.push({ g: new t.CylinderGeometry(thick * 0.7, thick, high, 4), c, p: [x + (Math.cos(a) * lean) / 2, high / 2, z + (Math.sin(a) * lean) / 2], r: [Math.sin(a) * lean / high, 0, -Math.cos(a) * lean / high] });
+	parts.push({ g: fixed(t, new t.CylinderGeometry(thick * 0.7, thick, high, modelLevel() === "near" ? 6 : 4)), c, p: [x + (Math.cos(a) * lean) / 2, high / 2, z + (Math.sin(a) * lean) / 2], r: [Math.sin(a) * lean / high, 0, -Math.cos(a) * lean / high] });
 	return [x + Math.cos(a) * lean, high, z + Math.sin(a) * lean];
 }
+/** A geometry the level of detail leaves as it is (modelPrimitive refines only what still carries its parameters): for
+ *  the parts of a plant a few pixels large. A leaf is a flattened ball of radius 0.5, which the refinement took for a crown
+ *  and gave 320 triangles (1280 close up), and a thin stem got 10 or 16 sides: a flower had over 4000 triangles. */
+function fixed(t: T, g: Geo): Geo { const out = new t.BufferGeometry().copy(g); g.dispose(); return out; }
 /** A blossom at `p`: five petals round a yellow eye. */
 function blossom(t: T, parts: Part[], p: V3, size: number, c: number, turn: number, eye = 0xe8c23a): void {
 	for (let i = 0; i < 5; i++) {
 		const a = turn + (i / 5) * Math.PI * 2;
-		parts.push({ g: new t.IcosahedronGeometry(size * 0.6, 0), c, p: [p[0] + Math.cos(a) * size, p[1], p[2] + Math.sin(a) * size], s: [1, 0.4, 1] });
+		parts.push({ g: fixed(t, new t.IcosahedronGeometry(size * 0.6, 0)), c, p: [p[0] + Math.cos(a) * size, p[1], p[2] + Math.sin(a) * size], s: [1, 0.4, 1] });
 	}
-	parts.push({ g: new t.IcosahedronGeometry(size * 0.5, 0), c: eye, p: [p[0], p[1] + size * 0.15, p[2]] });
+	parts.push({ g: fixed(t, new t.IcosahedronGeometry(size * 0.5, modelLevel() === "near" ? 1 : 0)), c: eye, p: [p[0], p[1] + size * 0.15, p[2]] });
 }
 /** A leaf: a flat lens from `p` towards `a`. */
 function leaf(t: T, parts: Part[], p: V3, a: number, len: number, c: number, tilt = 0.5): void {
-	parts.push({ g: new t.IcosahedronGeometry(0.5, 0), c, p: [p[0] + (Math.cos(a) * len) / 2, p[1] + (tilt * len) / 2, p[2] + (Math.sin(a) * len) / 2], r: [0, -a, tilt], s: [len, 0.03, len * 0.4] });
-	if (modelLevel() === "near") parts.push({ g: new t.BoxGeometry(len * 0.78, 0.004, 0.006), c: 0x386b2e, p: [p[0] + Math.cos(a) * len / 2, p[1] + tilt * len / 2 + 0.012, p[2] + Math.sin(a) * len / 2], r: [0, -a, Math.atan(tilt)] });
+	parts.push({ g: fixed(t, new t.IcosahedronGeometry(0.5, modelLevel() === "near" ? 1 : 0)), c, p: [p[0] + (Math.cos(a) * len) / 2, p[1] + (tilt * len) / 2, p[2] + (Math.sin(a) * len) / 2], r: [0, -a, tilt], s: [len, 0.03, len * 0.4] });
+	if (modelLevel() === "near") parts.push({ g: fixed(t, new t.BoxGeometry(len * 0.78, 0.004, 0.006)), c: 0x386b2e, p: [p[0] + Math.cos(a) * len / 2, p[1] + tilt * len / 2 + 0.012, p[2] + Math.sin(a) * len / 2], r: [0, -a, Math.atan(tilt)] });
 }
 /** The small plants of the ground, about 0.3 units high, a few to a cell. */
 function small(t: T, model: PlantModel, parts: Part[], r: () => number, variant: number, color: number): void {

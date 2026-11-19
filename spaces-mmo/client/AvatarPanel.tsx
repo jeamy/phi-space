@@ -97,8 +97,8 @@ function build(v: Preview, charId: string, a: Appearance): void {
 	if (v.fig) { v.scene.remove(v.fig.group); drop(v.fig.group); }
 	const fig = makeFigure(v.t, { id: charId, skin: 0, own: false, ai: false, style: a });
 	// up close: the details the map shows only near (eyebrows, ears, buckle) are on here
-	fig.group.traverse((o) => { if (o.userData.detailOnly) o.visible = true; });
-	fig.group.children.filter((o) => (o as import("three").Mesh).isMesh && o !== fig.body).forEach((o) => { o.visible = false; }); // no shadow disc in the air
+	fig.mesh.geometry = fig.mesh.geometry.userData.modelVariant("near");
+	fig.group.children.filter((o) => (o as import("three").Mesh).isMesh && o !== fig.mesh).forEach((o) => { o.visible = false; }); // no shadow disc in the air
 	v.scene.add(fig.group); v.fig = fig;
 }
 

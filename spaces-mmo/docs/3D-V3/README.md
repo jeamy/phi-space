@@ -198,6 +198,22 @@ What follows from it, and what was done:
   and when its things or plants change, at most once a second. A material with an `onBeforeCompile` of its own calls
   `withAo` (the ground, the models); the others take it from `MeshStandardMaterial`'s prototype (`installAo`).
 - The edges' smoothing and the water's shader cost nothing that could be measured; the post chain's own cost neither.
+- The ground and water alone took 20 ms at 873×393 pixels whatever was left out (the water, the post chain, the
+  anisotropic filtering of the ground's pictures): about the 16.7 ms a 60 Hz screen allows a frame at least. What lay
+  above it in Graue Bucht at zoom 2 (headless Chromium): 294 draw calls and 464 thousand triangles in a frame that
+  draws the shadow map; the shadow map 174 of the calls, the 11 figures 127, the plants 390 thousand of the triangles.
+- A figure is one skinned mesh on seven bones (the body, the legs, the torso, the arms, the head; `figure3d.ts`
+  `skinned`): every part's vertices placed where its bone holds them at rest and bound to that bone alone, the fine parts
+  in it only at the near level. One draw call and one in the shadow map instead of six to eight each.
+- The shadow map is drawn in two parts (`client/shadow3d.ts`): what stands still once a second (`SHADOW_EVERY_MS`), at
+  once when the sun moved or the things changed, and kept in a copy; in a frame in which a figure moved the copy is put
+  back and only the figures (their own layer, `MOVING_LAYER`) are drawn on top.
+- A plant's leaves, petals, stems and fronds keep the few faces they are made with (`props3d.ts` `fixed`): a leaf is a
+  flattened ball of radius 0.5, which the level of detail took for a crown and gave 320 triangles (1280 close up), and a
+  thin stem got 10 or 16 sides. A flower had over 4000 triangles at room zoom and has 936 now, a fern close up 19656 and
+  now about 6700.
+- The same frame afterwards: 217 draw calls with the whole shadow map, about 120 in a frame with only the figures in it,
+  and about 160 thousand triangles.
 
 ### The night
 

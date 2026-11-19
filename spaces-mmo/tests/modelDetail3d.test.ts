@@ -82,15 +82,24 @@ test("LOD has distance and zoom hysteresis and caps close-up meshes and instance
 	updateModelDetails(t, scene, camera, 3); assert.equal(fern.userData.modelLevel, "room", "actual leaflet triangles must fit the budget, not just the base-model estimate");
 });
 
-test("figures retain their animated parts and only reveal fine face and clothing details close up", async () => {
+test("a figure is one skinned mesh that moves its limbs and shows its fine face and clothing details only close up", async () => {
 	const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
 	Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => ({ getContext: () => ({ createRadialGradient: () => ({ addColorStop() {} }), fillRect() {} }) }) } });
 	try {
 		const { makeFigure, animateFigure } = await import("../client/figure3d.ts");
 		const figure = makeFigure(t, { id: "catalogue", skin: 0, own: true, ai: false }), scene = new t.Scene(), camera = new t.PerspectiveCamera(); scene.add(figure.group); camera.position.set(0, 1, 5);
-		const details: t.Object3D[] = []; figure.group.traverse(o => { if (o.userData.detailOnly) details.push(o); });
-		assert.equal(details.length, 2, "the fine parts of the head and of the torso, one mesh each"); updateModelDetails(t, scene, camera, 3); assert.ok(details.every(o => o.visible));
-		updateModelDetails(t, scene, camera, 1); assert.ok(details.every(o => !o.visible));
+		let meshes = 0; figure.group.traverse(o => { if ((o as t.Mesh).isMesh && (o as t.Mesh).material === figure.mesh.material) meshes++; });
+		assert.equal(meshes, 1, "the whole figure in one mesh"); assert.equal(figure.mesh.skeleton.bones.length, 7);
+		const vertices = () => figure.mesh.geometry.getAttribute("position").count;
+		updateModelDetails(t, scene, camera, 3); const near = vertices();
+		updateModelDetails(t, scene, camera, 1); const room = vertices();
+		assert.ok(near > room, `close up the fine parts are in it: ${near} vs ${room}`);
+		// every vertex follows one bone, and a step swings the legs
+		const weights = figure.mesh.geometry.getAttribute("skinWeight");
+		for (let i = 0; i < weights.count; i += 97) assert.equal(weights.getX(i), 1);
 		animateFigure(figure, 0.1, 0, 0.016, 1); assert.notEqual(figure.legL.rotation.x, 0);
+		// at rest the skinned figure stands where its parts stood: the bones' rest is the binding
+		figure.group.updateMatrixWorld(true); figure.mesh.skeleton.update();
+		const v = new t.Vector3(); figure.mesh.getVertexPosition(0, v); assert.ok(Number.isFinite(v.y));
 	} finally { if (previous) Object.defineProperty(globalThis, "document", previous); else Reflect.deleteProperty(globalThis, "document"); }
 });

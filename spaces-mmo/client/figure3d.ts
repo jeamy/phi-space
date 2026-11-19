@@ -4,10 +4,11 @@
 // same skin number picks the sprite in the 2D map). Everything here is visual only.
 import { stableHash } from "./terrain3d.ts";
 import { cached, merge } from "./props3d.ts";
+import { modelLevel } from "./modelDetail3d.ts";
 import { COATS, HAIRS, SKINS, type Appearance } from "../shared/appearance.ts";
 
 type T = typeof import("three");
-type G = import("three").Group;
+type G = import("three").Object3D;
 
 const SKIN = [0xf0c8a0, 0xdcae82, 0xc08a5c, 0x95643f, 0xe8b894];
 const HAIR = [0x2a1c12, 0x5b3a1e, 0xc4952e, 0x8d8d90, 0x15120f, 0x9a3b1f];
@@ -32,6 +33,8 @@ const BUILD = [
 const GLOVE = 0x5a3a22, RIM = 0x2a2a2e;
 export type Figure = {
 	group: G; body: G; legL: G; legR: G; armL: G; armR: G; head: G;
+	/** the whole figure as one skinned mesh on those bones */
+	mesh: import("three").SkinnedMesh;
 	heading: number; phase: number; swing: number;
 	/** the body's height by its build (the breath moves round it), and where in its breath the figure is */
 	tall: number; breath: number;
@@ -74,14 +77,43 @@ function figureMaterial(t: T): import("three").MeshStandardMaterial {
 	return cloth;
 }
 
-/** The shapes of one moving part (a leg, the head) as one mesh: a figure is drawn with a handful of calls instead of one
- *  per shape. The geometry is shared by every figure with the same part and has its three levels of detail (cached). */
-function part(t: T, parent: G, shapes: Shape[], detailOnly = false): void {
-	if (!shapes.length) return;
-	const key = shapes.map((s) => `${s.g}|${s.c}|${s.p}|${s.r ?? ""}|${s.s ?? ""}`).join(";");
-	const mesh = new t.Mesh(cached(`figure:${key}`, () => merge(t, shapes.map((s) => ({ g: primitive(t, s.g), c: s.c, p: s.p, ...(s.r ? { r: s.r } : {}), ...(s.s ? { s: s.s } : {}), m: "none" as const })), "figure")), figureMaterial(t));
-	if (detailOnly) { mesh.userData.detailOnly = true; mesh.visible = false; }
-	parent.add(mesh);
+/** The shapes of one moving part (a leg, the head) as one geometry, shared by every figure with the same part, at the
+ *  level of detail being built (cached). */
+const partGeometry = (t: T, shapes: Shape[]): Geo => cached(`figure:${shapesKey(shapes)}`, () => merge(t, shapes.map((s) => ({ g: primitive(t, s.g), c: s.c, p: s.p, ...(s.r ? { r: s.r } : {}), ...(s.s ? { s: s.s } : {}), m: "none" as const })), "figure"));
+const shapesKey = (shapes: Shape[]) => shapes.map((s) => `${s.g}|${s.c}|${s.p}|${s.r ?? ""}|${s.s ?? ""}`).join(";");
+
+/** A part's shapes and the bone that moves them; a fine part shows only close up. */
+type PartSpec = { bone: number; shapes: Shape[]; fine: boolean };
+
+/** All the parts of a figure as one skinned geometry: each part's vertices placed where its bone holds them at rest and
+ *  bound to that bone alone. A figure is one draw call (and one in the shadow map) instead of one per part. The fine
+ *  parts are in it only at the near level of detail. */
+function skinned(t: T, specs: PartSpec[], rest: import("three").Matrix4[]): Geo {
+	const near = modelLevel() === "near";
+	const parts = specs.filter((p) => near || !p.fine).map((p) => ({ g: partGeometry(t, p.shapes), m: rest[p.bone]!, bone: p.bone }));
+	const count = parts.reduce((n, p) => n + p.g.getAttribute("position").count, 0);
+	const pos = new Float32Array(count * 3), nor = new Float32Array(count * 3), col = new Float32Array(count * 3), index = new Uint16Array(count * 4), weight = new Float32Array(count * 4);
+	const v = new t.Vector3(), normals = new t.Matrix3();
+	let at = 0;
+	for (const p of parts) {
+		const ps = p.g.getAttribute("position"), ns = p.g.getAttribute("normal"), cs = p.g.getAttribute("color");
+		normals.getNormalMatrix(p.m);
+		for (let i = 0; i < ps.count; i++, at++) {
+			v.fromBufferAttribute(ps, i).applyMatrix4(p.m); pos.set([v.x, v.y, v.z], at * 3);
+			v.fromBufferAttribute(ns, i).applyMatrix3(normals).normalize(); nor.set([v.x, v.y, v.z], at * 3);
+			col.set([cs.getX(i), cs.getY(i), cs.getZ(i)], at * 3);
+			index[at * 4] = p.bone; weight[at * 4] = 1;
+		}
+	}
+	const out = new t.BufferGeometry();
+	out.setAttribute("position", new t.BufferAttribute(pos, 3));
+	out.setAttribute("normal", new t.BufferAttribute(nor, 3));
+	out.setAttribute("color", new t.BufferAttribute(col, 3));
+	out.setAttribute("skinIndex", new t.Uint16BufferAttribute(index, 4));
+	out.setAttribute("skinWeight", new t.BufferAttribute(weight, 4));
+	out.computeBoundingSphere();
+	out.userData.shared = true;
+	return out;
 }
 
 export function makeFigure(t: T, look: Look): Figure {
@@ -101,14 +133,17 @@ export function makeFigure(t: T, look: Look): Figure {
 		ring.position.y = 0.02; ring.rotation.x = -Math.PI / 2; ring.renderOrder = 2; group.add(ring);
 	}
 	// the body stands on y = 0 and faces +z; everything inside `body` is in metres of the cell (a person ≈ 0.9 high)
-	const body = new t.Group(); body.scale.set(FIGURE_SCALE * build.wide, FIGURE_SCALE * build.tall, FIGURE_SCALE * build.wide); group.add(body);
+	const specs: PartSpec[] = [];
+	const part = (bone: number, shapes: Shape[], fine = false) => { if (shapes.length) specs.push({ bone, shapes, fine }); };
+	// the bones: 0 the body, 1 and 2 the legs, 3 the torso, 4 and 5 the arms, 6 the head
+	const body = new t.Bone(); body.scale.set(FIGURE_SCALE * build.wide, FIGURE_SCALE * build.tall, FIGURE_SCALE * build.wide); group.add(body);
 	const leg = (side: number) => {
-		const g = new t.Group(); g.position.set(side * 0.075, 0.4, 0);
-		part(t, g, [shape(["Capsule", 0.052, 0.27, 4, 8], trousers, 0, -0.2), shape(["Box", 0.1, 0.06, 0.17], 0x2a2018, 0, -0.385, 0.03)]);
+		const g = new t.Bone(); g.position.set(side * 0.075, 0.4, 0);
+		part(side < 0 ? 1 : 2, [shape(["Capsule", 0.052, 0.27, 4, 8], trousers, 0, -0.2), shape(["Box", 0.1, 0.06, 0.17], 0x2a2018, 0, -0.385, 0.03)]);
 		body.add(g); return g;
 	};
 	const legL = leg(-1), legR = leg(1);
-	const torso = new t.Group(); body.add(torso);
+	const torso = new t.Bone(); body.add(torso);
 	const chest: Shape[] = [
 		shape(["Capsule", 0.115, 0.17, 6, 12], tunic, 0, 0.58, 0, undefined, [1.12, 1, 0.78]),
 		shape(["Cylinder", 0.128, 0.134, 0.035, 14], 0x3a2a1c, 0, 0.46), // belt
@@ -117,14 +152,14 @@ export function makeFigure(t: T, look: Look): Figure {
 			: shape(["Cylinder", 0.135, 0.15, 0.1, 14, 1, true], tunic, 0, 0.42), // tunic skirt
 	];
 	const arm = (side: number) => {
-		const g = new t.Group(); g.position.set(side * 0.172, 0.69, 0);
+		const g = new t.Bone(); g.position.set(side * 0.172, 0.69, 0);
 		const shapes = [shape(["Capsule", 0.038, 0.2, 4, 8], tunic, 0, -0.13), st?.gloves ? shape(["Sphere", 0.046, 10, 8], GLOVE, 0, -0.275) : shape(["Sphere", 0.04, 10, 8], skin, 0, -0.275)];
 		if (st?.gloves) shapes.push(shape(["Cylinder", 0.045, 0.042, 0.05, 10], GLOVE, 0, -0.235)); // the cuff
-		part(t, g, shapes);
+		part(side < 0 ? 4 : 5, shapes);
 		body.add(g); return g;
 	};
 	const armL = arm(-1), armR = arm(1);
-	const head = new t.Group(); head.position.set(0, 0.8, 0); body.add(head);
+	const head = new t.Bone(); head.position.set(0, 0.8, 0); body.add(head);
 	const face: Shape[] = [
 		shape(["Cylinder", 0.036, 0.042, 0.07, 10], skin, 0, -0.065), // neck
 		shape(["Sphere", 0.094, 20, 16], skin, 0, 0.02),
@@ -161,7 +196,7 @@ export function makeFigure(t: T, look: Look): Figure {
 		chest.push(shape(["Box", 0.05, 0.11, 0.12], 0x8a6a44, -0.17, 0.47, 0.02));
 		chest.push(shape(["Box", 0.018, 0.36, 0.012], 0x5b3a22, 0, 0.6, 0.095, [0, 0, -0.62]));
 	}
-	part(t, head, face); part(t, torso, chest);
+	part(6, face); part(3, chest);
 	// shown only close up: brows and ears, a buckle, a seam, the satchel's clasp
 	const fineFace: Shape[] = [], fineChest: Shape[] = [];
 	for (const side of [-1, 1]) {
@@ -171,8 +206,17 @@ export function makeFigure(t: T, look: Look): Figure {
 	fineChest.push(shape(["Box", 0.035, 0.03, 0.012], 0xc49c49, 0, 0.46, 0.13));
 	fineChest.push(shape(["Box", 0.005, 0.15, 0.005], 0xd4c6a7, 0.025, 0.59, 0.105));
 	if (satchel) fineChest.push(shape(["Box", 0.009, 0.027, 0.019], 0xb9a16c, -0.198, 0.49, 0.02));
-	part(t, head, fineFace, true); part(t, torso, fineChest, true);
-	return { group, body, legL, legR, armL, armR, head, heading: 0, phase: 0, swing: 0, tall: FIGURE_SCALE * build.tall, breath: ((h >>> 5) % 628) / 100 };
+	part(6, fineFace, true); part(3, fineChest, true);
+	// one skinned mesh for the whole figure, bound to the bones as they stand now (the figure at the origin)
+	const bones = [body, legL, legR, torso, armL, armR, head];
+	group.updateMatrixWorld(true);
+	const rest = bones.map((b) => b.matrixWorld.clone());
+	const key = `figure:skin:${st?.body ?? 0}:${specs.map((p) => `${p.bone}${p.fine ? "f" : ""}=${shapesKey(p.shapes)}`).join("/")}`;
+	const mesh = new t.SkinnedMesh(cached(key, () => skinned(t, specs, rest)), figureMaterial(t));
+	mesh.frustumCulled = false; // its bounds move with the bones; a handful of figures
+	group.add(mesh); group.updateMatrixWorld(true);
+	mesh.bind(new t.Skeleton(bones));
+	return { group, mesh, body, legL, legR, armL, armR, head, heading: 0, phase: 0, swing: 0, tall: FIGURE_SCALE * build.tall, breath: ((h >>> 5) % 628) / 100 };
 }
 
 const turn = (from: number, to: number, k: number) => { let d = ((to - from + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return from + d * k; };
