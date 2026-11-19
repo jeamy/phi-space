@@ -1,61 +1,39 @@
 // The picture of the 3D view after the scene is drawn (3D v3, docs/3D-V3/README.md), at every zoom: the scene goes into a
-// half-float target with multisampling, then ambient occlusion (corners and the foot of every wall and trunk darken), a
+// half-float target with multisampling (the ambient occlusion is in the materials, worked out once per room: ao3d.ts), a
 // bloom on what is far brighter than a white wall in the sun (fire, lamplit windows, the sun's glint on water), close up the depth-aware blur of the
 // background (v2), and last the filmic tone curve and the display's colour space. Names and speech bubbles (layer 1) are
 // drawn afterwards, straight to the screen, so they stay sharp and keep their colours.
-import type { Line, Mesh, Object3D, PerspectiveCamera, Points, Scene, Sprite, WebGLRenderer } from "three";
-import { HalfFloatType, NoToneMapping, Vector2, WebGLRenderTarget } from "three";
+import type { PerspectiveCamera, Scene, WebGLRenderer } from "three";
+import { DepthTexture, HalfFloatType, NoToneMapping, Vector2, WebGLRenderTarget } from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
-import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { aoOff } from "./ao3d.ts";
 
-/** The numbers of the picture, in one place. `aoRadius` is in world units (a cell is 1). The bloom starts at a brightness
+/** The numbers of the picture, in one place. The bloom starts at a brightness
  *  that follows the daylight, as an eye does: by day only what outshines sand in the sun, at night every lamp. */
-export const POST = { samples: 4, aoScale: 0.5, aoRadius: 0.45, aoIntensity: 1, bloomStrength: 0.22, bloomRadius: 0.5, bloomDay: 3.4, bloomNight: 1.2 };
+export const POST = { samples: 4, bloomStrength: 0.22, bloomRadius: 0.5, bloomDay: 3.4, bloomNight: 1.2 };
 
 export function createPost(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera) {
 	const ratio = renderer.getPixelRatio();
-	const composer = new EffectComposer(renderer, new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: POST.samples }));
+	// the targets keep the scene's depth (resolved from the multisampling) for the close-up blur; the composer clones the
+	// first target with its depth texture
+	const composer = new EffectComposer(renderer, new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: POST.samples, depthTexture: new DepthTexture(1, 1) }));
 	composer.setPixelRatio(ratio);
 	composer.addPass(new RenderPass(scene, camera));
-	const ao = new GTAOPass(scene, camera, 1, 1);
-	ao.updateGtaoMaterial({ radius: POST.aoRadius, distanceExponent: 1, thickness: 1, scale: 1, samples: 16, screenSpaceRadius: false });
-	ao.blendIntensity = POST.aoIntensity; composer.addPass(ao);
-	// the occlusion is soft by nature: at POST.aoScale of the picture's size it costs a quarter (its own pass over the scene,
-	// its samples and its smoothing) and looks the same but for the thinnest gaps
-	const aoSize = ao.setSize.bind(ao);
-	ao.setSize = (w: number, h: number) => aoSize(Math.max(1, Math.round(w * POST.aoScale)), Math.max(1, Math.round(h * POST.aoScale)));
 	const bloom = new UnrealBloomPass(new Vector2(1, 1), POST.bloomStrength, POST.bloomRadius, POST.bloomDay); composer.addPass(bloom);
 	const bokeh = new BokehPass(scene, camera, { focus: 10, aperture: 0.0015, maxblur: 0.006 }); bokeh.enabled = false; composer.addPass(bokeh);
 	composer.addPass(new OutputPass());
-	// The occlusion and the blur draw the scene once more with one material for everything, to get its depth (the occlusion; the blur reads that depth). A sprite
-	// (an item's picture, a plant) would lie there as a flat quad, and glass or a soft shadow as a wall: they sit out.
-	const hidden: Object3D[] = [];
-	// an invisible group is left alone with all that is in it (the island's blocks at room zoom, the cards), and a mesh of
-	// several materials sits out only when none of them writes depth
-	const flatMaterial = (m: Mesh["material"]) => (Array.isArray(m) ? m.length > 0 && m.every((x) => x.transparent && !x.depthWrite) : !!m && m.transparent && !m.depthWrite);
-	const hideIn = (o: Object3D) => {
-		if (!o.visible) return;
-		if ((o as Sprite).isSprite || (o as Points).isPoints || (o as Line).isLine || flatMaterial((o as Mesh).material)) { o.visible = false; hidden.push(o); return; }
-		const children = o.children;
-		for (let i = 0; i < children.length; i++) hideIn(children[i]!);
-	};
-	const hide = () => hideIn(scene);
-	const show = () => { for (const o of hidden) o.visible = true; hidden.length = 0; };
-	const patched = ao as unknown as { _overrideVisibility(): void; _restoreVisibility(): void };
-	patched._overrideVisibility = hide; patched._restoreVisibility = show;
-	// The blur reads the depth the occlusion drew this frame (ao.depthTexture, the same things hidden) instead of drawing
-	// the whole scene once more for a depth of its own: close up that was a fourth pass over the scene in every frame.
-	// The occlusion's depth has half the picture's size, which a blur does not show.
+	// The blur reads the depth the scene left in the target it was drawn into (the bloom adds to that target without
+	// swapping; the blur draws into the other one) instead of drawing the whole scene once more for a depth of its own.
 	const blur = bokeh as unknown as { materialBokeh: import("three").ShaderMaterial; uniforms: Record<string, { value: unknown }>; _fsQuad: { render(r: WebGLRenderer): void }; _renderTargetDepth: WebGLRenderTarget };
 	blur.materialBokeh.defines.DEPTH_PACKING = 0; blur.materialBokeh.needsUpdate = true;
 	blur._renderTargetDepth.dispose();
 	bokeh.setSize = (w: number, h: number) => { blur.uniforms.aspect!.value = w / h; };
 	bokeh.render = (r: WebGLRenderer, writeBuffer: WebGLRenderTarget, readBuffer: WebGLRenderTarget) => {
-		blur.uniforms.tDepth!.value = ao.depthTexture; blur.uniforms.tColor!.value = readBuffer.texture;
+		blur.uniforms.tDepth!.value = readBuffer.depthTexture; blur.uniforms.tColor!.value = readBuffer.texture;
 		blur.uniforms.nearClip!.value = camera.near; blur.uniforms.farClip!.value = camera.far;
 		r.setRenderTarget(bokeh.renderToScreen ? null : writeBuffer);
 		blur._fsQuad.render(r);
@@ -65,17 +43,17 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 	return {
 		/** The passes, for measurements. */
 		composer,
-		/** For measurements: the occlusion (and with it the blur, which reads its depth) or the bloom left out. */
-		leaveOut(parts: { ao?: boolean; bloom?: boolean; smooth?: boolean; aoSamples?: number; post?: boolean }) {
-			ao.enabled = !parts.ao; bloom.enabled = !parts.bloom; direct = !!parts.post;
-			noBlur = !!parts.ao || !!parts.post;
-			ao.updateGtaoMaterial({ samples: parts.aoSamples ?? 16 });
+		/** For measurements: the occlusion (ao3d.ts), the bloom, the edges' smoothing or the whole chain left out. */
+		leaveOut(parts: { ao?: boolean; bloom?: boolean; smooth?: boolean; post?: boolean }) {
+			aoOff(!!parts.ao); bloom.enabled = !parts.bloom; direct = !!parts.post;
+			// without multisampling the blur would read the depth of a target that also holds it for drawing
+			noBlur = !!parts.post || !!parts.smooth;
 			// the edges' smoothing is the targets' multisampling: a target with another count is made anew
 			const samples = parts.smooth ? 0 : POST.samples;
 			for (const target of [composer.renderTarget1, composer.renderTarget2]) if (target.samples !== samples) { target.samples = samples; target.dispose(); }
 		},
 		/** Takes the numbers of POST anew. */
-		tune() { ao.updateGtaoMaterial({ radius: POST.aoRadius }); ao.blendIntensity = POST.aoIntensity; bloom.strength = POST.bloomStrength; bloom.radius = POST.bloomRadius; },
+		tune() { bloom.strength = POST.bloomStrength; bloom.radius = POST.bloomRadius; },
 		/** How light it is (1 day, 0 night): sets where the bloom starts. */
 		daylight(d: number) { bloom.threshold = POST.bloomNight + (POST.bloomDay - POST.bloomNight) * d; },
 		/** The picture's size in CSS pixels; the renderer's pixel ratio may have changed (the resolution follows the frame rate). */
@@ -93,7 +71,7 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 			}
 			const mask = camera.layers.mask, autoClear = renderer.autoClear, shadowAutoUpdate = renderer.shadowMap.autoUpdate, toneMapping = renderer.toneMapping;
 			try {
-				// the shadow map at most once a frame, not again for the occlusion's and the blur's own passes over the scene
+				// the shadow map at most once a frame
 				renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = shadows;
 				camera.layers.set(0);
 				if (direct) { renderer.setRenderTarget(null); renderer.render(scene, camera); } else composer.render();

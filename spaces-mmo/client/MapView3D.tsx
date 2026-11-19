@@ -17,6 +17,7 @@ import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireG
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
 import { shadowSizeAt, closeBlur, frameSummary, SHARP, sharpen, sharpness, type Sharpness } from "./closeup3d.ts";
 import { POST } from "./post3d.ts";
+import { AO, aoHider, createAoBaker, installAo, tuneAo } from "./ao3d.ts";
 import { setWaterTime, waterMaterial } from "./water3d.ts";
 import { GROUND, groundLooks } from "./ground3d.ts";
 import { START_VIEW } from "./viewPreferences.ts";
@@ -49,6 +50,11 @@ type Scene3D = {
 	/** a running measurement by parts (PARTS): which part is left out, since when, and the frames so far */
 	parts: { step: number; at: number; times: number[]; draws: number[]; lines: string[]; base: number } | null;
 	detailAt: number;
+	/** the room's occlusion (ao3d.ts): the baker, what stays out of its heights, whether a bake is due and the last one's time */
+	ao: ReturnType<typeof createAoBaker>;
+	aoHide: (out: boolean) => void;
+	aoDue: boolean;
+	aoAt: number;
 	catalogue?: boolean;
 	scene: import("three").Scene;
 	camera: import("three").PerspectiveCamera;
@@ -155,6 +161,7 @@ export function MapView3D(props: MapRendererProps) {
 			try {
 				const [t, { createPost }, { createAtmosphere }] = await Promise.all([import("three"), import("./post3d.ts"), import("./atmosphere3d.ts")]);
 				if (dead || !host.current) return;
+				installAo(t); // before any material is drawn
 				const renderer = new t.WebGLRenderer({ antialias: false, powerPreference: "high-performance" }); // the picture is smoothed in post3d.ts's own target
 				renderer.setPixelRatio(fullRatio());
 				renderer.outputColorSpace = t.SRGBColorSpace;
@@ -174,7 +181,9 @@ export function MapView3D(props: MapRendererProps) {
 				renderer.shadowMap.enabled = true; renderer.shadowMap.type = t.PCFShadowMap;
 				sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.025; sun.shadow.radius = SHADOW_SOFT;
 
-				const s: Scene3D = { t, renderer, post, measurement: null, parts: null, detailAt: -Infinity, shadowAt: -Infinity, sharp: sharpness(), scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], school: null, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", objsFor: null, chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				const s: Scene3D = { t, renderer, post, measurement: null, parts: null, detailAt: -Infinity, ao: createAoBaker(t, renderer), aoHide: () => {}, aoDue: false, aoAt: -Infinity, shadowAt: -Infinity, sharp: sharpness(), scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], school: null, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", objsFor: null, chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				// figures and the island's other rooms stay out of the room's heights
+				s.aoHide = aoHider(scene, () => [s.island, ...[...s.chars.values()].map((e) => e.obj)]);
 				s.resize = new ResizeObserver(() => resize(s));
 				s.resize.observe(host.current);
 				pointer(s, latest, view);
@@ -201,6 +210,8 @@ export function MapView3D(props: MapRendererProps) {
 					if (now - s.detailAt >= 150) { updateModelDetails(t, s.scene, s.camera, s.zoom); s.detailAt = now; }
 					// the shadow map only when a caster moved, and four times a second for all that changes slowly (the sun,
 					// a model's level of detail, a new object)
+					// the occlusion anew when the room's things or plants changed, at most once a second
+					if (s.aoDue && s.ground && now - s.aoAt >= 1000) { s.aoDue = false; s.aoAt = now; const { w, h } = dims(s.room); s.ao.bake(s.scene, { x0: -w / 2, z0: -h / 2, w, d: h }, s.aoHide); }
 					const shadows = moved || now - s.shadowAt >= SHADOW_EVERY_MS;
 					if (shadows) s.shadowAt = now;
 					const drawing = s.measurement || s.parts ? performance.now() : 0;
@@ -237,7 +248,7 @@ export function MapView3D(props: MapRendererProps) {
 			const s = state.current;
 			if (!s) return;
 			if (s.measurement) { s.measurement = null; sayFps({ running: false, fps: null, note: "Messung abgebrochen: 3D-Ansicht wurde neu gestartet." }); }
-			cancelAnimationFrame(s.frame); s.resize.disconnect(); unpointer(s); s.post.dispose(); s.air.dispose(); dispose(s.scene); s.renderer.dispose(); s.canvas.remove(); state.current = null;
+			cancelAnimationFrame(s.frame); s.resize.disconnect(); unpointer(s); s.post.dispose(); s.ao.dispose(); s.air.dispose(); dispose(s.scene); s.renderer.dispose(); s.canvas.remove(); state.current = null;
 		};
 	}, []);
 
@@ -252,7 +263,7 @@ export function MapView3D(props: MapRendererProps) {
 		// the old ground and its plants go at once: until the new ground stands, sync puts nothing on the old one
 		if (s.ground) { s.scene.remove(s.ground); dispose(s.ground); s.ground = null; s.school = null; s.fish = []; }
 		if (s.plants) { s.scene.remove(s.plants); dispose(s.plants); s.plants = null; }
-		s.plantsFor = "-"; s.objsFor = null;
+		s.plantsFor = "-"; s.objsFor = null; s.ao.clear(); s.aoAt = -Infinity;
 		void (async () => {
 			let looks = new Map<string, TileLook>(), plants = new Map<string, import("three").Texture>();
 			// the tile art only for a kind of land without a photographed ground (ground3d.ts); the water is water3d.ts's
@@ -267,6 +278,7 @@ export function MapView3D(props: MapRendererProps) {
 			lightRoom(s);
 			s.plantLooks = plants; s.plantsFor = "-"; // sync builds the plants
 			sync(s, latest.current.chars, latest.current.objs, latest.current.me, true);
+			s.aoDue = true;
 			resize(s);
 		})();
 		return () => { dead = true; };
@@ -381,6 +393,10 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 	s.fish = fishFor(block.userData.seaEdges as SeaEdge[], w, h, stableHash(room.roomId));
 	s.school = s.fish.length ? fishSchool(t, s.fish) : null;
 	if (s.school) { block.add(s.school.group); swimFish(s.fish, 0); s.school.draw(); }
+	// under the ground and the water nothing takes the room's occlusion: its heights lie over all of it (ao3d.ts)
+	const noAo = (o: import("three").Object3D) => { const m = (o as import("three").Mesh).material; if (m) for (const x of Array.isArray(m) ? m : [m]) x.userData.noAo = true; };
+	block.traverse(noAo);
+	for (const o of group.children) if (o.userData.water) noAo(o);
 	group.add(block);
 	return group;
 }
@@ -552,7 +568,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 	// a fire burns down by the clock, not by a change of the objects
 	for (const [id, e] of s.objs) if (e.flame) e.flame.light.userData.lit = (objs.get(id)?.until ?? 0) > Date.now();
 	if (!things) return;
-	s.objsFor = objs;
+	s.objsFor = objs; s.aoDue = true;
 	for (const id of [...s.objs.keys()]) if (!objs.has(id) || objs.get(id)?.location !== s.room.roomId) {
 		const e = s.objs.get(id)!;
 		// cleared scenery sinks away instead of vanishing
@@ -986,7 +1002,6 @@ const SHADOW_SOFT = 2.5;
 /** The parts of the picture a device is asked about, one left out at a time (`leave(s, true)`, and put back). */
 const PARTS: Array<{ name: string; leave(s: Scene3D, out: boolean): void }> = [
 	{ name: "alles", leave() {} },
-	{ name: "Verdeckung mit 8 Proben", leave(s, out) { s.post.leaveOut(out ? { aoSamples: 8 } : {}); } },
 	{ name: "ohne Verdeckung", leave(s, out) { s.post.leaveOut({ ao: out }); } },
 	{ name: "ohne Verdeckung, Bloom", leave(s, out) { s.post.leaveOut({ ao: out, bloom: out }); } },
 	{ name: "ohne Schatten", leave(s, out) { s.sun.castShadow = !out; s.shadowAt = -Infinity; } },
@@ -1202,8 +1217,8 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		/** the light as set: the fog's colour (the sky near the horizon), the sun's strength, the daylight */
 		probeLight: () => ({ fog: s.fog.color.toArray(), sun: s.sun.intensity, daylight: s.light, level: s.level }),
 		/** the numbers of the picture (post3d.ts), to try others */
-		/** other numbers for the light (LIGHT) and the picture (POST), to try them */
-		probeTune: (light: Partial<typeof LIGHT>, post: Partial<typeof POST> = {}) => { Object.assign(LIGHT, light); Object.assign(POST, post); s.post.tune(); s.lightFor = ""; s.lightAt = 0; },
+		/** other numbers for the light (LIGHT), the picture (POST) and the occlusion (AO), to try them */
+		probeTune: (light: Partial<typeof LIGHT>, post: Partial<typeof POST> = {}, ao: Partial<typeof AO> = {}) => { Object.assign(LIGHT, light); Object.assign(POST, post); Object.assign(AO, ao); tuneAo(); s.aoDue = true; s.aoAt = -Infinity; s.post.tune(); s.lightFor = ""; s.lightAt = 0; },
 		/** a fog level instead of the room's (0 to 3) */
 		probeFog: (level: number) => applyFog(s, level),
 		probeScreen: (x: number, y: number, dx = 0, dz = 0) => { const p = at(s, x, y, 0).add(new t.Vector3(dx, 0, dz)).project(s.camera), r = s.canvas.getBoundingClientRect(); return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height }; },

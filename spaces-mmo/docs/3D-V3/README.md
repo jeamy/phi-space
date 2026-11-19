@@ -50,10 +50,10 @@ cascades were not needed, because a room is small and the map covers it whole. `
 nothing but the lamplight: windows, lanterns and kiln mouths glow by it.
 
 **Picture (`client/post3d.ts`, `POST`).** At every zoom the scene is drawn into a half-float target with 4× multisampling,
-then: ambient occlusion (GTAO, radius 0.45 cells), a bloom whose threshold follows the daylight (3.4 by day, 1.2 at
-night), the close-up's depth-aware blur (v2, now a pass), and the tone curve with the display's colour space. Sprites,
-lines, and glass or soft shadows that write no depth sit out the occlusion's and the blur's own depth passes. Names and
-speech bubbles are drawn afterwards, straight to the screen, without the tone curve.
+then: a bloom whose threshold follows the daylight (3.4 by day, 1.2 at night), the close-up's depth-aware blur (v2, now
+a pass, reading the depth the scene left in its target), and the tone curve with the display's colour space. The ambient
+occlusion is no longer a pass: it is worked out once per room and read by the materials (`client/ao3d.ts`, below, "On a
+phone"). Names and speech bubbles are drawn afterwards, straight to the screen, without the tone curve.
 
 **Water (`client/water3d.ts`).** The surface no longer shows the tile art. `shoreDistances` gives every cell its
 distance to the nearest land (a chamfer distance, at most 4 cells), kept as a small texture per room; the surface mixes
@@ -110,8 +110,8 @@ a mesh of its own (309 meshes for the figures, 160 for the road). Since then:
 - A road's beds, slabs and pegs are one mesh (`road`).
 - The shadow map is drawn only in a frame in which something that casts a shadow moved, and every 250 ms for what
   changes slowly (`SHADOW_EVERY_MS`); a new sun position draws it at once.
-- The occlusion works at half the picture's size (`POST.aoScale`): its pass over the scene, its samples and its
-  smoothing cost a quarter.
+- The occlusion worked at half the picture's size: its pass over the scene, its samples and its smoothing cost a
+  quarter (since replaced by the occlusion worked out once per room, "On a phone").
 - Drawing the sky after everything solid (so its shader runs only where sky shows) was tried and taken back: the sky
   box puts every point on the far plane, a face of it clipped at the camera's plane has no defined depth, and at single
   zoom steps it covered part of the scene.
@@ -160,6 +160,44 @@ The points of `docs/code-analyse-2026-11-19.md` (it says which were taken and wh
 
 Graue Bucht at zoom 1.4, headless Chromium (software rendering), before and after: 693 and 520 draw calls, 303 and 220
 meshes. The share of the graphics card is still not measured.
+
+### On a phone
+
+A phone drew the 3D view at 12 to 22 frames a second. The `FPS` button measures for 30 seconds and then shows four lines:
+the frame rate with the median and the 95th percentile of a frame, the JavaScript in a frame (moving things, and handing
+the draw calls over), the draw calls and triangles with the zoom, and the picture's size with how far the resolution gave
+way. Under them "Nach Teilen messen" draws the same view several times for 4.5 seconds each, with one part of the picture
+left out at a time and the resolution held still, and gives each part's frame time against the whole (`MapView3D.tsx`
+`PARTS`, `measureParts`; `post3d.ts` `leaveOut`). What it showed on one phone, in ms of a frame:
+
+| | 1484×668 px | 873×393 px |
+|---|---|---|
+| the whole picture | 114 | 50 |
+| without the occlusion (GTAO) | 78 | 37 |
+| GTAO with 8 samples instead of 16 | 105 | 49 |
+| GTAO from the picture's own depth (no pass over the scene of its own, the normals from the depth) | | 48 |
+| without the edges' smoothing (the 4× multisampling) | 100 | |
+| without the plants | | 40 |
+| without the things and figures | | 36 |
+| only the ground and the water | 28 | 20 |
+| the same without the post chain | | 20 |
+| the same without the water | 28 | |
+
+What follows from it, and what was done:
+
+- The close-up blur no longer draws the scene once more for a depth of its own; it reads the depth the scene left in the
+  target it was drawn into. The shadow map gives way with the resolution (`closeup3d.ts` `shadowSizeAt`: 4096 texels,
+  2048 one step down, 1024 at the lowest), its softness following, so a shadow's edge stays as wide on the ground.
+- GTAO cost a third of a frame however it was fed. It is gone. The ambient occlusion is worked out once per room
+  (`client/ao3d.ts`): the room is drawn from straight above into a depth, which is the height of whatever stands at each
+  point; the heights are blurred by the occlusion's reach (`AO.reach`, 0.45 cells), and every lit material reads the
+  blurred height at its own point in the world and darkens its light by how far it lies below it (`AO.strength` 0.45,
+  `AO.depth` 0.7 cells). The ground darkens at the foot of a wall and under a crown, a wall near its foot, a figure
+  beside a house. Figures, the sky, sprites, points, lines and what is see-through without depth stay out of the
+  heights; what lies under the ground and the water takes none (`userData.noAo`). The bake runs when the room is built
+  and when its things or plants change, at most once a second. A material with an `onBeforeCompile` of its own calls
+  `withAo` (the ground, the models); the others take it from `MeshStandardMaterial`'s prototype (`installAo`).
+- The edges' smoothing and the water's shader cost nothing that could be measured; the post chain's own cost neither.
 
 ### The night
 

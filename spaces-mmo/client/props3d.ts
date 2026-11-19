@@ -5,6 +5,7 @@
 // stands, how it is turned and how large it is come from the place, so a room looks the same every time it is drawn.
 // Everything here is visual only (docs/architektur.en.md, "3D-Ansicht").
 import { stableHash } from "./terrain3d.ts";
+import { withAo } from "./ao3d.ts";
 import { atModelLevel, modelLevel, modelPrimitive, type ModelLevel } from "./modelDetail3d.ts";
 
 import { SURFACE_COLOUR, SURFACE_HEAD, surfaceLayer, surfaceUniforms, type Surface } from "./surfaces3d.ts";
@@ -146,6 +147,7 @@ export function propMaterial(t: T): import("three").MeshStandardMaterial {
 	}`)
 				.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n\troughnessFactor = clamp( ( surfaceArm.g < 0.0 ? roughnessFactor : surfaceArm.g ) + ( grain - 0.5 ) * 0.2, 0.0, 1.0 );")
 				.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * vGlow * uNight * 4.0;");
+			withAo(shader); // the room's occlusion (ao3d.ts)
 		};
 		material.userData.shared = true;
 	}

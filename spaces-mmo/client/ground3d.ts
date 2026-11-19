@@ -5,6 +5,7 @@
 // until the pictures have loaded (or where the page is served without them) a surface shows its plain colour.
 // Visual only.
 import { SHORE_REACH, shoreTexture } from "./water3d.ts";
+import { withAo } from "./ao3d.ts";
 import type { TerraceLook } from "./terraces3d.ts";
 
 type T = typeof import("three");
@@ -77,6 +78,7 @@ export function groundLooks(t: T, ground: readonly string[], water: (key: string
 			shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>\n${HEAD}`)
 				.replace("#include <color_fragment>", `#include <color_fragment>\n${COLOUR(wet)}`)
 				.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n\troughnessFactor = mix( roughnessFactor, 0.28, groundWet );");
+			withAo(shader); // the room's occlusion (ao3d.ts)
 		};
 		material.customProgramCacheKey = () => `ground3d:${wet}`;
 		material.userData.dispose = () => shore.dispose();
