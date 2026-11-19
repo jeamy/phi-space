@@ -24,3 +24,33 @@ export function frameSummary(times: number[], calls: number[], triangles: number
 		triangles, geometries,
 	};
 }
+
+/** The picture's resolution follows the frame rate, on every device (3D v3: one quality level, the resolution is what
+ *  gives): below `slow` milliseconds a frame for a second, it drops by `step`; when frames come faster than `fast` for
+ *  `hold` seconds, it rises again, up to the screen's. Never below `floor` pixels per CSS pixel. A drop that brings no
+ *  faster frames (the browser holds the page to 30 frames, a phone saving power) is taken back, and the resolution stays
+ *  for `rest` seconds; so does it when a rise makes frames slow again. */
+export const SHARP = { slow: 1000 / 42, fast: 1000 / 56, step: 0.85, min: 0.5, floor: 0.75, hold: 4, rest: 30 };
+export type Sharpness = { scale: number; sum: number; frames: number; at: number; good: number; before: number | null; restUntil: number; rose: number };
+export const sharpness = (): Sharpness => ({ scale: 1, sum: 0, frames: 0, at: 0, good: 0, before: null, restUntil: 0, rose: -Infinity });
+/** Counts one frame (`elapsed` ms since the last); once a second decides. Returns whether the scale changed. */
+export function sharpen(p: Sharpness, elapsed: number, now: number): boolean {
+	if (elapsed > 1000) { p.sum = p.frames = 0; p.at = now; return false; } // a stall (a tab in the background, a new room)
+	p.sum += elapsed; p.frames++;
+	if (now - p.at < 1000 || p.frames < 10) return false;
+	const frame = p.sum / p.frames; p.sum = p.frames = 0; p.at = now;
+	if (p.before !== null) {
+		const before = p.before; p.before = null;
+		// the last drop made frames no faster: not the drawing holds them back
+		if (frame > before * 0.92) { p.scale = Math.min(1, p.scale / SHARP.step); p.restUntil = now + SHARP.rest * 1000; return true; }
+	}
+	if (now < p.restUntil) return false;
+	if (frame > SHARP.slow && p.scale > SHARP.min) {
+		// a rise that made it slow again: back down, and stay there a while instead of going up and down
+		if (now - p.rose < (SHARP.hold + 2) * 1000) p.restUntil = now + SHARP.rest * 1000;
+		p.before = frame; p.good = 0; p.scale = Math.max(SHARP.min, p.scale * SHARP.step); return true;
+	}
+	if (frame < SHARP.fast && p.scale < 1) { if (++p.good >= SHARP.hold) { p.good = 0; p.rose = now; p.scale = Math.min(1, p.scale / SHARP.step); return true; } }
+	else p.good = 0;
+	return false;
+}

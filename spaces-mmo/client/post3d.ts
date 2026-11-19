@@ -53,7 +53,8 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 		tune() { ao.updateGtaoMaterial({ radius: POST.aoRadius }); ao.blendIntensity = POST.aoIntensity; bloom.strength = POST.bloomStrength; bloom.radius = POST.bloomRadius; },
 		/** How light it is (1 day, 0 night): sets where the bloom starts. */
 		daylight(d: number) { bloom.threshold = POST.bloomNight + (POST.bloomDay - POST.bloomNight) * d; },
-		resize(w: number, h: number) { composer.setSize(w, h); },
+		/** The picture's size in CSS pixels; the renderer's pixel ratio may have changed (the resolution follows the frame rate). */
+		resize(w: number, h: number) { composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); },
 		/** Draws one frame; `blur` (0 to 1) is how far the background is out of focus (the close level), `shadows` whether
 		 *  the shadow map is drawn anew (else the last one stays). */
 		render(blur: number, shadows = true) {

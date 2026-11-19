@@ -278,3 +278,38 @@ test("leaves: a crown, a palm and a conifer carry leaves near and in the room, n
 		assert.ok(room!.boundingBox!.min.y > -0.2 && room!.boundingBox!.max.y < 2.6, `${model}: stands on the ground`);
 	}
 });
+
+test("the resolution follows the frame rate: it drops on slow frames, comes back on fast ones, and is taken back when a drop helps nothing", async () => {
+	const { sharpen, sharpness, SHARP } = await import("../client/closeup3d.ts");
+	/** `seconds` of frames `ms` apart from `start`; returns the time after them */
+	const run = (p: ReturnType<typeof sharpness>, start: number, seconds: number, ms: (scale: number) => number) => {
+		let now = start;
+		while (now < start + seconds * 1000) { const e = ms(p.scale); now += e; sharpen(p, e, now); }
+		return now;
+	};
+	// the drawing is too slow at full resolution (50 ms) and fast enough at about half of it
+	const p = sharpness();
+	let now = run(p, 0, 12, (k) => 10 + 40 * k * k);
+	assert.ok(p.scale < 1 && p.scale >= SHARP.min, `dropped to ${p.scale}`);
+	assert.ok(10 + 40 * p.scale * p.scale <= SHARP.slow, "frames are fast enough at the scale it settled on");
+	// the room gets simpler: it climbs back to full
+	now = run(p, now, 30, () => 12);
+	assert.equal(p.scale, 1);
+	// a page held to 30 frames whatever it draws: a drop is taken back and it rests at full
+	const q = sharpness();
+	run(q, 0, 20, () => 33.4);
+	assert.equal(q.scale, 1);
+	// a stall (a tab in the background) decides nothing
+	const r = sharpness();
+	sharpen(r, 5000, 5000);
+	assert.equal(r.scale, 1);
+});
+
+test("the resolution does not go up and down between two steps", async () => {
+	const { sharpen, sharpness } = await import("../client/closeup3d.ts");
+	// fast below 0.6 of full resolution, slow above it
+	const p = sharpness(), changes: number[] = [];
+	let now = 0;
+	while (now < 60_000) { const e = p.scale > 0.6 ? 30 : 15; now += e; if (sharpen(p, e, now)) changes.push(now); }
+	assert.ok(changes.length <= 8, `${changes.length} changes in a minute`);
+});

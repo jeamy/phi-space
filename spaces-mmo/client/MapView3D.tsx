@@ -15,7 +15,7 @@ import { tr } from "./i18n/index.ts";
 import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
 import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, prepareModelDetails, propMaterial, propMesh, merge, propShadow, setNight, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type Part, type PlantModel } from "./props3d.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
-import { closeBlur, frameSummary } from "./closeup3d.ts";
+import { closeBlur, frameSummary, SHARP, sharpen, sharpness, type Sharpness } from "./closeup3d.ts";
 import { POST } from "./post3d.ts";
 import { setWaterTime, waterMaterial } from "./water3d.ts";
 import { GROUND, groundLooks } from "./ground3d.ts";
@@ -43,6 +43,8 @@ type Scene3D = {
 	air: import("./atmosphere3d.ts").Atmosphere;
 	/** when the shadow map was last drawn (ms) */
 	shadowAt: number;
+	/** the resolution as it follows the frame rate (sharpness) */
+	sharp: Sharpness;
 	measurement: { at: number; times: number[]; calls: number[]; zooms: number[]; remaining: number } | null;
 	detailAt: number;
 	catalogue?: boolean;
@@ -143,7 +145,7 @@ export function MapView3D(props: MapRendererProps) {
 				const [t, { createPost }, { createAtmosphere }] = await Promise.all([import("three"), import("./post3d.ts"), import("./atmosphere3d.ts")]);
 				if (dead || !host.current) return;
 				const renderer = new t.WebGLRenderer({ antialias: false, powerPreference: "high-performance" }); // the picture is smoothed in post3d.ts's own target
-				renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+				renderer.setPixelRatio(fullRatio());
 				renderer.outputColorSpace = t.SRGBColorSpace;
 				// the filmic tone curve (v3): the sun may be brighter than white without burning out (post3d.ts applies it)
 				renderer.toneMapping = t.ACESFilmicToneMapping; renderer.toneMappingExposure = LIGHT.exposure;
@@ -162,7 +164,7 @@ export function MapView3D(props: MapRendererProps) {
 				renderer.shadowMap.enabled = true; renderer.shadowMap.type = t.PCFShadowMap;
 				sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.025; sun.shadow.radius = 2.5;
 
-				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, shadowAt: -Infinity, scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", paving: null, pavingFor: "", chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, shadowAt: -Infinity, sharp: sharpness(), scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", paving: null, pavingFor: "", chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				s.resize = new ResizeObserver(() => resize(s));
 				s.resize.observe(host.current);
 				pointer(s, latest, view);
@@ -177,6 +179,7 @@ export function MapView3D(props: MapRendererProps) {
 						if (s.measurement) { s.measurement = null; sayFps({ running: false, fps: null, note: "Messung abgebrochen: Tab war im Hintergrund." }); }
 						s.frame = requestAnimationFrame(frame); return;
 					}
+					if (sharpen(s.sharp, elapsed, now)) setRatio(s);
 					s.renderer.info.reset();
 					const moved = step(s, dt, now / 1000, latest.current.me);
 					bubbleTick(s);
@@ -926,9 +929,17 @@ function lightRoom(s: Scene3D): void {
 	s.lightFor = ""; s.lightAt = 0;
 }
 /** How bright the picture is under the tone curve, the sun's and the moon's light, and the sky's light on everything. */
+/** The pixel ratio at full sharpness: the screen's, at most 2. */
+const fullRatio = () => Math.min(2, window.devicePixelRatio || 1);
+function setRatio(s: Scene3D): void {
+	s.renderer.setPixelRatio(Math.max(Math.min(SHARP.floor, fullRatio()), fullRatio() * s.sharp.scale));
+	s.size = { w: 0, h: 0 }; resize(s);
+}
+
 /** How often the shadow map is drawn when nothing that casts a shadow moves. */
 const SHADOW_EVERY_MS = 250;
-const LIGHT = { exposure: 0.55, sun: 5, moon: 1.6, sky: 0.45 };
+/** `nightLift`: how much the exposure rises in the dark (an eye used to the night), so the land stays readable by moonlight. */
+const LIGHT = { exposure: 0.55, sun: 5, moon: 2.4, sky: 0.45, nightLift: 0.6 };
 /** Day and night from the world's clock (v3): the sun crosses the sky from east to west and the moon follows it, the
  *  shadows turn with them, the sky and its light on everything follow (atmosphere3d.ts), the light is warm near the
  *  horizon, and the lamplit faces of the models glow in the dark (props3d.ts, setNight). Visual only; without a clock it
@@ -948,7 +959,7 @@ function daylight(s: Scene3D, clock: { v: import("../shared/worldtime.ts").World
 	s.light = d;
 	s.hemi.intensity = 0.12 + 0.9 * (1 - d);
 	s.hemi.color.setHex(0x6a7cae).lerp(new s.t.Color(0xd9edff), d);
-	s.scene.environmentIntensity = LIGHT.sky; s.renderer.toneMappingExposure = LIGHT.exposure;
+	s.scene.environmentIntensity = LIGHT.sky; s.renderer.toneMappingExposure = LIGHT.exposure * (1 + LIGHT.nightLift * (1 - d));
 	s.air.update(hour, s.level); s.post.daylight(d);
 	s.shadowAt = -Infinity;
 	setNight(Math.min(1, (1 - d) * 1.3));

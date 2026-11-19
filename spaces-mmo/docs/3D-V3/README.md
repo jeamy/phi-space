@@ -112,11 +112,24 @@ a mesh of its own (309 meshes for the figures, 160 for the road). Since then:
   changes slowly (`SHADOW_EVERY_MS`); a new sun position draws it at once.
 - The occlusion works at half the picture's size (`POST.aoScale`): its pass over the scene, its samples and its
   smoothing cost a quarter.
-- The sky is drawn after everything solid, so its shader runs only where sky shows.
+- Drawing the sky after everything solid (so its shader runs only where sky shows) was tried and taken back: the sky
+  box puts every point on the far plane, a face of it clipped at the camera's plane has no defined depth, and at single
+  zoom steps it covered part of the scene.
 - The canvas itself is not multisampled; the picture is smoothed in the post chain's own target.
+- The resolution follows the frame rate on every device (`closeup3d.ts`, `sharpen`; the decision of one quality level
+  stands, the resolution is what gives): below 42 frames a second it drops by 15 % a step, to half the screen's at
+  most and never below 0.75 pixels per CSS pixel; after four seconds above 56 frames it rises again. A drop that brings
+  no faster frames (a page held to 30 frames, a phone saving power) is taken back, and so is a rise that makes frames
+  slow again; then the resolution stays for 30 seconds.
 
 The same frame is now about 630 draw calls (560 close up) and 3.7 ms of JavaScript. The share of the graphics card is
 not measured yet: that needs the `FPS` button on a real device.
+
+### The night
+
+By moonlight the land was hardly to be seen on a real screen. The moon is brighter (`LIGHT.moon` 2.4 instead of 1.6),
+and the exposure rises in the dark by `LIGHT.nightLift` (60 % at full night), as an eye gets used to it; the fires and
+lanterns stay the brightest things.
 
 Dev probes on the canvas (not in a production build): `probeHour(hour)`, `probeFog(level)`, `probeLight()`,
 `probeTune(light, post)`, `probeState()` (the whole state of the view, for measurements).

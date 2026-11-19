@@ -31,8 +31,10 @@ export function createAtmosphere(t: T, renderer: import("three").WebGLRenderer, 
 			texColor += vec3( 0.035, 0.055, 0.11 ) * nightGlow * ( 2.0 - abs( direction.y ) );
 			texColor *= mix( vec3( 1.0 ), vec3( 0.36, 0.35, 0.33 ), smoothstep( 0.0, -0.7, direction.y ) );
 			gl_FragColor = vec4( texColor, 1.0 );`);
-	// drawn after everything solid, so only the pixels that show sky run its shader (clouds and scattering)
-	sky.scale.setScalar(1000); sky.frustumCulled = false; sky.renderOrder = 1000; sky.userData.unshaded = true; sky.userData.sky = true;
+	// drawn first, under everything: the sky shader puts every point on the far plane (z = w), and a face of its box that
+	// crosses the camera's plane is clipped where w is 0, so its depth is undefined there; drawn last, such a face covered
+	// the scene at single camera poses
+	sky.scale.setScalar(1000); sky.frustumCulled = false; sky.renderOrder = -1; sky.userData.unshaded = true; sky.userData.sky = true;
 	scene.add(sky);
 
 	// the same sky without its sun disc, for the environment map (the sun itself is the directional light)
