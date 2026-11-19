@@ -72,7 +72,11 @@ pub fn graze(d: &Json, p: &Json, f: &mut Json) -> bool {
 	if j::s(f, "stage") != "waechst" || grazed >= max_grazes(p) { return false; }
 	let g = grazed + 1.0;
 	j::set(f, "grazed", g);
-	let y = harvest_of(&crop, j::n(f, "w") * j::n(f, "h"), j::n(f, "soil") * j::no(p, "keep").unwrap_or(0.5).max(1.0 - j::no(p, "bite").unwrap_or(0.0) * g));
+	let mut y = harvest_of(&crop, j::n(f, "w") * j::n(f, "h"), j::n(f, "soil") * j::no(p, "keep").unwrap_or(0.5).max(1.0 - j::no(p, "bite").unwrap_or(0.0) * g));
+	// a dunged field keeps its dung (field.rs duenge): what is left is still the richer harvest
+	if let (true, Some(factor)) = (j::b(f, "dunged"), j::no(j::at(d, "dung"), "factor")) {
+		y = Json::Array(y.as_array().map_or(&[][..], Vec::as_slice).iter().map(|x| { let mut x = x.clone(); let n = (j::n(&x, "count") * factor).ceil(); j::set(&mut x, "count", n); x }).collect());
+	}
 	j::set(f, "yields", y);
 	true
 }

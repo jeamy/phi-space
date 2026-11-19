@@ -1482,6 +1482,14 @@ fn keeping_animals() {
 		(&a, "füttere @17,16"), (&a, "füttere @15,18"), (&a, "stall @14,16"), (&a, "stall @15,18"), (&a, "stall"), (&a, "ausstallen @14,16"), (&a, "repariere @15,18"), (&a, "repariere @17,16"),
 		(&a, "füttere @3,3"), (&a, "stall @3,3"), (&a, "zäune @15,18"), (&a, "einsammeln 17 16"), (&a, "sag hallo @1,2"), (&a, "füttere"),
 	] { run(&mut w, who, line, 0.0); }
+	// a pen with only a young one in it is a pen of its kind: no other kind goes in
+	w.write(building("p-9", "gehege", "Gehege", 20.0, 14.0, 1));
+	stand(&mut w, 1, "graue-bucht", 19.0, 14.0);
+	give(&mut w, &a, "ferkel", 1);
+	give(&mut w, &a, "ziege", 1);
+	for line in ["einstallen ferkel", "einstallen ziege", "stall"] { run(&mut w, &a, line, 0.0); }
+	assert!(w.peek(obj! { "type" => "Item", "fields" => obj! { "proto" => "ziege", "location" => "p-9" } }).is_none(), "a goat among the piglets");
+	assert!(w.peek(obj! { "type" => "Item", "fields" => obj! { "proto" => "ferkel", "location" => "p-9" } }).is_some(), "the piglet is not in the pen");
 	assert!(said.iter().filter(|r| r.as_str() == "ran").count() > 25 && said.iter().filter(|r| r.starts_with("refused")).count() > 20, "{said:?}");
 }
 
@@ -1532,6 +1540,9 @@ fn the_wild() {
 	for (who, line) in [(&a, "flur anlegen"), (&a, "flur"), (&a, "bestelle weizen")] { run(&mut w, who, line, 0.0); }
 	for _ in 0..3 { run(&mut w, &a, "bestelle", 3_600_000.0); }
 	run(&mut w, &a, "flur", 0.0);
+	// dunged: what a deer leaves is still the richer harvest
+	give(&mut w, &a, "knochenmehl", 2);
+	for line in ["dünge", "flur"] { run(&mut w, &a, line, 0.0); }
 	stand(&mut w, 1, "graue-bucht", 5.0, 13.0);
 	stand(&mut w, 3, "graue-bucht", 22.0, 8.0);
 	// the fog comes; the wild with it, every twenty minutes through a night, with someone scaring off what comes now
@@ -1844,6 +1855,34 @@ fn sweeping() {
 		w.compare(&format!("storm {i}"));
 	}
 	assert!(w.entries_with("Treibholz") + w.entries_with("Tang") + w.entries_with("Muschel") > 3, "no storm brought anything");
+	// the two clocks apart, the life clock 100 days ahead (a world that lives faster than it decays): a rest, a blessing, a
+	// beam's pause and a meal end on the life clock, the estate of an inside on the decay clock
+	let real = START + 120_000.0 + 30.0 * 20.0 * 60_000.0;
+	w.at(real);
+	let mut clock = w.peek(obj! { "type" => "WorldClock" }).unwrap().get("fields").cloned().unwrap();
+	let n = |k: &str| clock.get(k).and_then(Json::as_f64).unwrap();
+	let (decay, day) = (n("worldAnchorMs") + (real - n("realAnchorMs")) * n("rate"), 86_400_000.0);
+	let (life, rate) = (decay + 100.0 * day, n("rate"));
+	assert!(w.take(obj! { "type" => "WorldClock" }));
+	for (k, v) in [("worldAnchorMs", life), ("decayAnchorMs", decay), ("decayRate", rate), ("realAnchorMs", real)] { walk::j_set(&mut clock, k, Json::from(v)); }
+	w.write(obj! { "type" => "WorldClock", "fields" => clock });
+	for ty in ["WorkRest", "Blessing", "BeamRest", "Sated"] {
+		while w.take(obj! { "type" => ty }) {}
+		w.write(obj! { "type" => ty, "fields" => obj! { "charId" => "over", "untilWorldMs" => life - day } });
+		w.write(obj! { "type" => ty, "fields" => obj! { "charId" => "held", "untilWorldMs" => life + day } });
+	}
+	assert!(w.peek(obj! { "type" => "Room", "fields" => obj! { "roomId" => "in-b-3" } }).is_some(), "the hut has no inside");
+	w.write(item("i-9", "muschel", "in-b-3", &[]));
+	assert!(w.take(obj! { "type" => "Building", "fields" => obj! { "buildId" => "b-3" } }));
+	w.compare("clocks apart");
+	w.tick("sweep");
+	w.compare("swept by two clocks");
+	for ty in ["WorkRest", "Blessing", "BeamRest", "Sated"] {
+		assert!(w.peek(obj! { "type" => ty, "fields" => obj! { "charId" => "over" } }).is_none(), "{ty}: over by the life clock and still there");
+		assert!(w.peek(obj! { "type" => ty, "fields" => obj! { "charId" => "held" } }).is_some(), "{ty}: taken before its time");
+	}
+	let until = w.peek(obj! { "type" => "Estate", "fields" => obj! { "estateId" => "est-in-b-3" } }).expect("no estate of the inside").get("fields").and_then(|f| f.get("untilWorldMs")).and_then(Json::as_f64).unwrap();
+	assert!(until < decay + 60.0 * day, "the estate of the inside ends on the life clock");
 }
 
 /// Regions (regions.ts, handover.ts, transfer.ts, courier.ts): the world as three regions, each a pair of spaces of

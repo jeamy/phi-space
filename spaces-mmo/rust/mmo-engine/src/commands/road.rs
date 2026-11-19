@@ -120,8 +120,10 @@ fn names_of(r: &Json) -> (String, String) { let a = j::a(r, "names"); (txt(&a[0]
 fn other_name(r: &Json, from: &str) -> String { let (a, _) = rooms_of(r); let (n0, n1) = names_of(r); if a == from { n1 } else { n0 } }
 
 /// `roadSave`: the road written back with its two parts (the old ones taken in the transaction).
-async fn road_save(space: &Space, txn: &str, r: &Json) -> Result<()> {
-	space.write(&tmpl("Route", r.clone()), Some(txn), FOREVER).await?;
+async fn road_save(space: &Space, txn: &str, r: &Json) -> Result<()> { road_save_as(space, txn, r, false).await }
+/// `fresh`: a road just planned, written as the only one of its pair.
+async fn road_save_as(space: &Space, txn: &str, r: &Json, fresh: bool) -> Result<()> {
+	if fresh { space.write_unique(&tmpl("Route", r.clone()), Some(txn), FOREVER, &["pair"]).await?; } else { space.write(&tmpl("Route", r.clone()), Some(txn), FOREVER).await?; }
 	let route_id = j::at(r, "routeId").clone();
 	for e in space.read_all(&tmpl("Road", obj! { "routeId" => route_id.clone() }), Some(txn)).await? { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, Some(txn)).await?; }
 	let (paved, missing, votes) = (paved_of(r), missing_of(r).join(", "), votes_of(r));
@@ -389,7 +391,10 @@ async fn plan(c: &mut Ctx, word: &str) -> Result<()> {
 		("untilWorldMs", Json::from(if others > 0 { now + vote_ms } else { now + j::n(&def, "siteWorldMs") })), ("at", Json::from(now)), ("points", j::at(&def, "points").clone()),
 	] { j::set(&mut r, k, v); }
 	let txn = c.txn().unwrap_or("").to_owned();
-	road_save(&c.space, &txn, &r).await?;
+	// the only road between its two rooms: two planning the same at once, the second write fails
+	if let Err(e) = road_save_as(&c.space, &txn, &r, true).await {
+		return if e.to_string().contains("unique entry already exists") { refuse(format!("Eine Straße nach {to_name} plant gerade jemand anderes.")) } else { Err(e) };
+	}
 	let cost = format!("{} Felder; es braucht {}", nt(n_cells), missing_of(&r).join(", "));
 	let (n0, n1) = names_of(&r);
 	let me_name = txt(j::at(&c.actor, "name"));

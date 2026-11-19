@@ -12,7 +12,7 @@ use phi_json::{obj, Json};
 
 use super::build::{at_cell, dist_to, no_article, plan_of, Rect};
 use super::default::{describe_room, drop_offers, place_in, relocate};
-use crate::clock::world_now_of;
+use crate::clock::{decay_now_of, world_now_of};
 use crate::context::{msg, to_player, Ctx, MsgOpts};
 use crate::fire::key_text as txt;
 use crate::j;
@@ -168,7 +168,7 @@ pub async fn drop_interior(space: &Space, txn: &str, w: &Json, room_id: &str, at
 	match at {
 		Some(a) if !floor.is_empty() => {
 			let estate_id = format!("est-{room_id}");
-			let until = world_now_of(space, Some(txn)).await? + j::no(j::at(w, "building"), "estateWorldMs").unwrap_or(30.0 * 24.0 * 3_600_000.0);
+			let until = decay_now_of(space, Some(txn)).await? + j::no(j::at(w, "building"), "estateWorldMs").unwrap_or(30.0 * 24.0 * 3_600_000.0);
 			let est = obj! { "estateId" => estate_id.as_str(), "accountId" => j::at(a, "accountId").clone(), "ownerName" => j::at(a, "ownerName").clone(), "room" => j::at(a, "room").clone(), "name" => format!("{} (drinnen)", txt(j::at(a, "name"))), "untilWorldMs" => until };
 			space.write(&tmpl("Estate", est), Some(txn), FOREVER).await?;
 			for it in &floor {

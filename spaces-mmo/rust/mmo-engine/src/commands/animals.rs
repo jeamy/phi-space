@@ -168,7 +168,7 @@ async fn einstallen(c: &mut Ctx, arg: &str) -> Result<()> {
 	if !mine(c, &b) { return refuse(format!("Der Stall gehört {}; einstallen darf nur der Besitzer.", txt(j::at(&b, "ownerName")))); }
 	need_epoch(c, j::no(&k, "epoch"), &txt(j::at(&k, "plural"))).await?;
 	if j::at(&b, "plan") != j::at(&k, "plan") { return refuse(format!("{} wohnen im {}, nicht im {}.", txt(j::at(&k, "plural")), plan_of(c.w(), j::s(&k, "plan")).map_or_else(|| txt(j::at(&k, "plan")), |p| txt(j::at(p, "name"))), txt(j::at(&b, "name")))); }
-	if let Some(has) = has.as_ref().filter(|h| n != 0.0 && j::at(h, "key") != j::at(&k, "key")) { return refuse(format!("Hier stehen schon {}; eine Art je Stall.", txt(j::at(has, "plural")))); }
+	if let Some(has) = has.as_ref().filter(|h| n + small != 0.0 && j::at(h, "key") != j::at(&k, "key")) { return refuse(format!("Hier stehen schon {}; eine Art je Stall.", txt(j::at(has, "plural")))); }
 	if n + small >= max { return refuse(format!("Der Stall ist voll ({}).", nt(max))); }
 	let me = c.char_id().to_owned();
 	let Some(e) = c.space.take_if_exists(&tmpl("Item", obj! { "itemId" => j::at(&it, "itemId").clone(), "location" => me.as_str() }), NO_WAIT, c.txn()).await? else { return refuse(format!("{} ist gerade nicht greifbar; bitte noch einmal.", txt(j::at(&it, "name")))) };

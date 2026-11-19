@@ -1309,8 +1309,9 @@ pub async fn build_sweep(space: &Space, w: &Json) -> Result<()> {
 			Ok(true)
 		} }).await?;
 	}
-	for ty in ["WorkRest", "Blessing", "BeamRest"] {
-		for e in space.read_all(&obj! { "type" => ty }, None).await? { if until_of(&e) <= now { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, None).await?; } }
+	// a rest, a blessing, a beam's pause and a meal end on the life clock (their commands write them by it)
+	for ty in ["WorkRest", "Blessing", "BeamRest", "Sated"] {
+		for e in space.read_all(&obj! { "type" => ty }, None).await? { if until_of(&e) <= life { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, None).await?; } }
 	}
 	// flour (or grain back) nobody fetched
 	for e in space.read_all(&obj! { "type" => "MillLoad" }, None).await? { if until_of(&e) <= now { space.take_if_exists(&obj! { "id" => j::at(&e, "id").clone() }, NO_WAIT, None).await?; } }
