@@ -35,26 +35,31 @@ export const SHARP = { slow: 1000 / 42, fast: 1000 / 56, step: 0.85, min: 0.5, f
  *  way with the picture. A phone that draws the picture at half the screen's resolution drew a map of 4096² texels for
  *  it at every frame something moved; a quarter of that is still finer than the picture's own pixels. */
 export const shadowSizeAt = (scale: number): number => (scale > 0.8 ? 4096 : scale > 0.55 ? 2048 : 1024);
-export type Sharpness = { scale: number; sum: number; frames: number; at: number; good: number; before: number | null; restUntil: number; rose: number };
-export const sharpness = (): Sharpness => ({ scale: 1, sum: 0, frames: 0, at: 0, good: 0, before: null, restUntil: 0, rose: -Infinity });
+export type Sharpness = { scale: number; sum: number; frames: number; at: number; good: number; before: number | null; restUntil: number; rose: number; settle: number };
+export const sharpness = (): Sharpness => ({ scale: 1, sum: 0, frames: 0, at: 0, good: 0, before: null, restUntil: 0, rose: -Infinity, settle: 0 });
+/** After a change of the scale the frames of this long are not counted: the picture's targets and the shadow map are
+ *  made anew, and a phone judged a drop by the slow frames right after it ("no faster"), took it back and stayed at
+ *  the higher resolution for half a minute. */
+const SETTLE_MS = 700;
 /** Counts one frame (`elapsed` ms since the last); once a second decides. Returns whether the scale changed. */
 export function sharpen(p: Sharpness, elapsed: number, now: number): boolean {
 	if (elapsed > 1000) { p.sum = p.frames = 0; p.at = now; return false; } // a stall (a tab in the background, a new room)
+	if (now < p.settle) { p.sum = p.frames = 0; p.at = now; return false; }
 	p.sum += elapsed; p.frames++;
 	if (now - p.at < 1000 || p.frames < 10) return false;
 	const frame = p.sum / p.frames; p.sum = p.frames = 0; p.at = now;
 	if (p.before !== null) {
 		const before = p.before; p.before = null;
 		// the last drop made frames no faster: not the drawing holds them back
-		if (frame > before * 0.92) { p.scale = Math.min(1, p.scale / SHARP.step); p.restUntil = now + SHARP.rest * 1000; return true; }
+		if (frame > before * 0.95) { p.scale = Math.min(1, p.scale / SHARP.step); p.restUntil = now + SHARP.rest * 1000; p.settle = now + SETTLE_MS; return true; }
 	}
 	if (now < p.restUntil) return false;
 	if (frame > SHARP.slow && p.scale > SHARP.min) {
 		// a rise that made it slow again: back down, and stay there a while instead of going up and down
 		if (now - p.rose < (SHARP.hold + 2) * 1000) p.restUntil = now + SHARP.rest * 1000;
-		p.before = frame; p.good = 0; p.scale = Math.max(SHARP.min, p.scale * SHARP.step); return true;
+		p.before = frame; p.good = 0; p.scale = Math.max(SHARP.min, p.scale * SHARP.step); p.settle = now + SETTLE_MS; return true;
 	}
-	if (frame < SHARP.fast && p.scale < 1) { if (++p.good >= SHARP.hold) { p.good = 0; p.rose = now; p.scale = Math.min(1, p.scale / SHARP.step); return true; } }
+	if (frame < SHARP.fast && p.scale < 1) { if (++p.good >= SHARP.hold) { p.good = 0; p.rose = now; p.scale = Math.min(1, p.scale / SHARP.step); p.settle = now + SETTLE_MS; return true; } }
 	else p.good = 0;
 	return false;
 }

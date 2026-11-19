@@ -343,3 +343,18 @@ test("the resolution does not go up and down between two steps", async () => {
 	while (now < 60_000) { const e = p.scale > 0.6 ? 30 : 15; now += e; if (sharpen(p, e, now)) changes.push(now); }
 	assert.ok(changes.length <= 8, `${changes.length} changes in a minute`);
 });
+
+test("a drop of the resolution is judged by the frames after it settled, not by the slow ones right after it", async () => {
+	const { sharpen, sharpness, SHARP } = await import("../client/closeup3d.ts");
+	// the drawing scales with the pixels (80 ms at full resolution); for half a second after a change frames are slow
+	const p = sharpness();
+	let now = 0, changed = -Infinity, lowest = 1;
+	while (now < 20_000) {
+		const e = now - changed < 500 ? 150 : 80 * p.scale * p.scale;
+		now += e;
+		if (sharpen(p, e, now)) changed = now;
+		lowest = Math.min(lowest, p.scale);
+	}
+	assert.ok(lowest <= SHARP.step * SHARP.step, `the resolution gave way: ${lowest}`);
+	assert.ok(p.scale < 1, `and stayed down: ${p.scale}`);
+});

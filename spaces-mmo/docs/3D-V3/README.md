@@ -214,6 +214,10 @@ What follows from it, and what was done:
   now about 6700.
 - The same frame afterwards: 217 draw calls with the whole shadow map, about 120 in a frame with only the figures in it,
   and about 160 thousand triangles.
+- The resolution judged a drop by the second right after it, when the picture's targets and the shadow map are made
+  anew: a phone found it "no faster", took it back and drew at 85 % of the screen's resolution for half a minute (87 ms
+  a frame where 873×393 pixels took 41). The frames of the first 700 ms after a change are no longer counted
+  (`closeup3d.ts` `SETTLE_MS`), and a drop is taken back only when it made frames less than 5 % faster.
 
 ### The night
 
