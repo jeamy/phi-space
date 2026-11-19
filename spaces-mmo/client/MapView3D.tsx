@@ -1009,7 +1009,22 @@ const PARTS: Array<{ name: string; leave(s: Scene3D, out: boolean): void }> = [
 	{ name: "ohne Dinge, Figuren", leave(s, out) { for (const m of [s.objs, s.chars]) for (const e of m.values()) e.obj.visible = !out; } },
 	{ name: "nur Boden, Wasser", leave(s, out) { bare(s, out); s.post.leaveOut({ ao: out, bloom: out }); } },
 	{ name: "… ohne Nachbearbeitung", leave(s, out) { bare(s, out); s.post.leaveOut({ ao: out, bloom: out, post: out }); } },
+	{ name: "… Boden ohne Anisotropie", leave(s, out) { bare(s, out); s.post.leaveOut({ ao: out, bloom: out }); sharpTextures(s.ground, !out); } },
 ];
+/** For measurements: the ground's pictures without their anisotropic filtering, and back. */
+function sharpTextures(root: O3 | null, sharp: boolean): void {
+	root?.traverse((o) => {
+		const m = (o as import("three").Mesh).material;
+		if (!m) return;
+		for (const x of Array.isArray(m) ? m : [m]) for (const key of ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap"] as const) {
+			const tex = (x as import("three").MeshStandardMaterial)[key];
+			if (!tex) continue;
+			tex.userData.anisotropy ??= tex.anisotropy;
+			const want = sharp ? tex.userData.anisotropy as number : 1;
+			if (tex.anisotropy !== want) { tex.anisotropy = want; tex.needsUpdate = true; }
+		}
+	});
+}
 /** Only the ground and the water, without shadows: no plants, things or figures. */
 function bare(s: Scene3D, out: boolean): void {
 	if (s.plants) s.plants.visible = !out;
