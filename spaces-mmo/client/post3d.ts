@@ -61,9 +61,12 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 		blur._fsQuad.render(r);
 	};
 	const direction = camera.position.clone();
+	let noBlur = false;
 	return {
 		/** The passes, for measurements. */
 		composer,
+		/** For measurements: the occlusion (and with it the blur, which reads its depth) or the bloom left out. */
+		leaveOut(parts: { ao?: boolean; bloom?: boolean }) { ao.enabled = !parts.ao; noBlur = !!parts.ao; bloom.enabled = !parts.bloom; },
 		/** Takes the numbers of POST anew. */
 		tune() { ao.updateGtaoMaterial({ radius: POST.aoRadius }); ao.blendIntensity = POST.aoIntensity; bloom.strength = POST.bloomStrength; bloom.radius = POST.bloomRadius; },
 		/** How light it is (1 day, 0 night): sets where the bloom starts. */
@@ -73,6 +76,7 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 		/** Draws one frame; `blur` (0 to 1) is how far the background is out of focus (the close level), `shadows` whether
 		 *  the shadow map is drawn anew (else the last one stays). */
 		render(blur: number, shadows = true) {
+			if (noBlur) blur = 0;
 			bokeh.enabled = blur > 0;
 			if (blur > 0) {
 				const uniforms = bokeh.uniforms as Record<"focus" | "aperture" | "maxblur", { value: number }>;

@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AtlasState, AtlasView, CharView, ObjView } from "../shared/frames.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
-import { onFpsStart, sayFps } from "./fps.ts";
+import { onFpsParts, onFpsStart, sayFps } from "./fps.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
@@ -46,6 +46,8 @@ type Scene3D = {
 	sharp: Sharpness;
 	/** a running measurement: per frame its time, its draw calls, and the JavaScript in it (moving things, drawing) */
 	measurement: { at: number; times: number[]; calls: number[]; moves: number[]; draws: number[]; remaining: number } | null;
+	/** a running measurement by parts (PARTS): which part is left out, since when, and the frames so far */
+	parts: { step: number; at: number; times: number[]; draws: number[]; lines: string[]; base: number } | null;
 	detailAt: number;
 	catalogue?: boolean;
 	scene: import("three").Scene;
@@ -136,6 +138,14 @@ export function MapView3D(props: MapRendererProps) {
 		sayFps({ running: true, remaining: 32 });
 	}), []);
 
+	useEffect(() => onFpsParts(() => {
+		const s = state.current;
+		if (!s || s.measurement || s.parts) return;
+		s.parts = { step: 0, at: performance.now(), times: [], draws: [], lines: [], base: 0 };
+		PARTS[0]!.leave(s, true);
+		sayFps({ running: true, remaining: Math.ceil(PARTS.length * (PART_SETTLE_MS + PART_MS) / 1000) });
+	}), []);
+
 	// once: the renderer, the lights, the camera and the loop
 	useEffect(() => {
 		let dead = false;
@@ -164,7 +174,7 @@ export function MapView3D(props: MapRendererProps) {
 				renderer.shadowMap.enabled = true; renderer.shadowMap.type = t.PCFShadowMap;
 				sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.025; sun.shadow.radius = SHADOW_SOFT;
 
-				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, shadowAt: -Infinity, sharp: sharpness(), scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], school: null, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", objsFor: null, chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				const s: Scene3D = { t, renderer, post, measurement: null, parts: null, detailAt: -Infinity, shadowAt: -Infinity, sharp: sharpness(), scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], school: null, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", objsFor: null, chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				s.resize = new ResizeObserver(() => resize(s));
 				s.resize.observe(host.current);
 				pointer(s, latest, view);
@@ -179,9 +189,10 @@ export function MapView3D(props: MapRendererProps) {
 						if (s.measurement) { s.measurement = null; sayFps({ running: false, fps: null, note: "Messung abgebrochen: Tab war im Hintergrund." }); }
 						s.frame = requestAnimationFrame(frame); return;
 					}
-					if (sharpen(s.sharp, elapsed, now)) setRatio(s);
+					// the resolution holds still while the parts are measured: they are compared with one another
+					if (!s.parts && sharpen(s.sharp, elapsed, now)) setRatio(s);
 					s.renderer.info.reset();
-					const began = s.measurement ? performance.now() : 0;
+					const began = s.measurement || s.parts ? performance.now() : 0;
 					const moved = step(s, dt, now / 1000, latest.current.me);
 					bubbleTick(s);
 					// on the island level the fish are too small to see: neither moved nor drawn
@@ -192,8 +203,9 @@ export function MapView3D(props: MapRendererProps) {
 					// a model's level of detail, a new object)
 					const shadows = moved || now - s.shadowAt >= SHADOW_EVERY_MS;
 					if (shadows) s.shadowAt = now;
-					const drawing = s.measurement ? performance.now() : 0;
+					const drawing = s.measurement || s.parts ? performance.now() : 0;
 					s.post.render(closeBlur(s.zoom), shadows);
+					if (s.parts) measureParts(s, elapsed, now, performance.now() - drawing);
 					if (s.measurement) {
 						const m = s.measurement, seconds = Math.max(0, 32 - Math.floor((now - m.at) / 1000));
 						if (seconds !== m.remaining) { m.remaining = seconds; sayFps({ running: true, remaining: seconds }); }
@@ -970,6 +982,37 @@ function setRatio(s: Scene3D): void {
 }
 /** How soft a shadow's edge is, in texels of the full map (4096). */
 const SHADOW_SOFT = 2.5;
+
+/** The parts of the picture a device is asked about, one left out at a time (`leave(s, true)`, and put back). */
+const PARTS: Array<{ name: string; leave(s: Scene3D, out: boolean): void }> = [
+	{ name: "alles", leave() {} },
+	{ name: "ohne Verdeckung", leave(s, out) { s.post.leaveOut({ ao: out }); } },
+	{ name: "ohne Bloom", leave(s, out) { s.post.leaveOut({ bloom: out }); } },
+	{ name: "ohne Verdeckung, Bloom", leave(s, out) { s.post.leaveOut({ ao: out, bloom: out }); } },
+	{ name: "ohne Schatten", leave(s, out) { s.sun.castShadow = !out; s.shadowAt = -Infinity; } },
+	{ name: "ohne Himmel", leave(s, out) { for (const o of s.scene.children) if (o.userData.sky) o.visible = !out; } },
+	{ name: "ohne Pflanzen", leave(s, out) { if (s.plants) s.plants.visible = !out; } },
+	{ name: "ohne Dinge, Figuren", leave(s, out) { for (const m of [s.objs, s.chars]) for (const e of m.values()) e.obj.visible = !out; } },
+	{ name: "nur Boden, Wasser", leave(s, out) { if (s.plants) s.plants.visible = !out; for (const m of [s.objs, s.chars]) for (const e of m.values()) e.obj.visible = !out; s.post.leaveOut({ ao: out, bloom: out }); s.sun.castShadow = !out; s.shadowAt = -Infinity; } },
+];
+/** A part is left out for this long before its frames count (shaders are made anew), and then measured for this long. */
+const PART_SETTLE_MS = 2000, PART_MS = 2500;
+/** One frame of the measurement by parts: counts it, and at the end of a part notes its frame time and goes on. */
+function measureParts(s: Scene3D, elapsed: number, now: number, drawMs: number): void {
+	const p = s.parts!, since = now - p.at;
+	if (since >= PART_SETTLE_MS) { p.times.push(elapsed); p.draws.push(drawMs); }
+	if (since < PART_SETTLE_MS + PART_MS) return;
+	const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0), frame = mean(p.times), part = PARTS[p.step]!;
+	if (p.step === 0) p.base = frame;
+	p.lines.push(`${part.name}: ${frame.toFixed(0)} ms${p.step ? ` (${frame - p.base >= 0 ? "+" : "−"}${Math.abs(frame - p.base).toFixed(0)})` : ""} · JS ${mean(p.draws).toFixed(0)} ms`);
+	part.leave(s, false);
+	p.step++; p.at = now; p.times = []; p.draws = [];
+	const next = PARTS[p.step];
+	if (next) { next.leave(s, true); sayFps({ running: true, remaining: Math.ceil((PARTS.length - p.step) * (PART_SETTLE_MS + PART_MS) / 1000) }); return; }
+	const size = s.renderer.getDrawingBufferSize(new s.t.Vector2());
+	sayFps({ running: false, fps: p.base ? 1000 / p.base : null, detail: [`Frame-Zeit je Teil · Bild ${size.x}×${size.y} px · Zoom ${s.zoom.toFixed(2)}`, ...p.lines] });
+	s.parts = null;
+}
 
 /** How often the shadow map is drawn when nothing that casts a shadow moves. */
 const SHADOW_EVERY_MS = 250;
