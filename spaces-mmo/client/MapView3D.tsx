@@ -366,14 +366,14 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 		// the top face's uvs in cells, so the tile art repeats once a cell
 		const uv = box.getAttribute("uv") as import("three").BufferAttribute;
 		for (let i = 8; i < 12; i++) uv.setXY(i, uv.getX(i) * w, uv.getY(i) * h);
-		const sea = new t.Mesh(box, waterMaterials(main)); sea.position.y = height / 2; sea.userData.pick = true; group.add(sea);
+		const sea = new t.Mesh(box, waterMaterials(main)); sea.position.y = height / 2; sea.userData.pick = true; sea.userData.water = true; group.add(sea);
 	}
 	let geometry: import("three").BoxGeometry | null = null;
 	for (const [key, cells] of wet) {
 		if (key === main) continue;
 		const mesh = new t.InstancedMesh(geometry ??= new t.BoxGeometry(1, 1, 1), waterMaterials(key), cells.length), matrix = new t.Matrix4();
 		cells.forEach((c, i) => { const height = surface(room, world, c.x, c.y); matrix.compose(new t.Vector3(c.x - w / 2 + 0.5, height / 2, c.y - h / 2 + 0.5), new t.Quaternion(), new t.Vector3(1, Math.max(0.04, height), 1)); mesh.setMatrixAt(i, matrix); });
-		mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); mesh.userData.pick = true; group.add(mesh);
+		mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); mesh.userData.pick = true; mesh.userData.water = true; group.add(mesh);
 	}
 	// the room as a diorama block: strata and sea under the tiles, its shadow on the void (block3d.ts)
 	const block = blockUnder(t, room.ground, world.tiles);
@@ -986,15 +986,21 @@ const SHADOW_SOFT = 2.5;
 /** The parts of the picture a device is asked about, one left out at a time (`leave(s, true)`, and put back). */
 const PARTS: Array<{ name: string; leave(s: Scene3D, out: boolean): void }> = [
 	{ name: "alles", leave() {} },
+	{ name: "ohne Kantenglättung", leave(s, out) { s.post.leaveOut({ smooth: out }); } },
+	{ name: "Verdeckung mit 8 Proben", leave(s, out) { s.post.leaveOut(out ? { aoSamples: 8 } : {}); } },
 	{ name: "ohne Verdeckung", leave(s, out) { s.post.leaveOut({ ao: out }); } },
-	{ name: "ohne Bloom", leave(s, out) { s.post.leaveOut({ bloom: out }); } },
 	{ name: "ohne Verdeckung, Bloom", leave(s, out) { s.post.leaveOut({ ao: out, bloom: out }); } },
-	{ name: "ohne Schatten", leave(s, out) { s.sun.castShadow = !out; s.shadowAt = -Infinity; } },
-	{ name: "ohne Himmel", leave(s, out) { for (const o of s.scene.children) if (o.userData.sky) o.visible = !out; } },
-	{ name: "ohne Pflanzen", leave(s, out) { if (s.plants) s.plants.visible = !out; } },
-	{ name: "ohne Dinge, Figuren", leave(s, out) { for (const m of [s.objs, s.chars]) for (const e of m.values()) e.obj.visible = !out; } },
-	{ name: "nur Boden, Wasser", leave(s, out) { if (s.plants) s.plants.visible = !out; for (const m of [s.objs, s.chars]) for (const e of m.values()) e.obj.visible = !out; s.post.leaveOut({ ao: out, bloom: out }); s.sun.castShadow = !out; s.shadowAt = -Infinity; } },
+	{ name: "… und ohne Kantenglättung", leave(s, out) { s.post.leaveOut({ ao: out, bloom: out, smooth: out }); } },
+	{ name: "nur Boden, Wasser", leave(s, out) { bare(s, out); s.post.leaveOut({ ao: out, bloom: out }); } },
+	{ name: "… ohne Kantenglättung", leave(s, out) { bare(s, out); s.post.leaveOut({ ao: out, bloom: out, smooth: out }); } },
+	{ name: "… und ohne Wasser", leave(s, out) { bare(s, out); s.post.leaveOut({ ao: out, bloom: out, smooth: out }); s.ground?.traverse((o) => { if (o.userData.water) o.visible = !out; }); } },
 ];
+/** Only the ground and the water, without shadows: no plants, things or figures. */
+function bare(s: Scene3D, out: boolean): void {
+	if (s.plants) s.plants.visible = !out;
+	for (const m of [s.objs, s.chars]) for (const e of m.values()) e.obj.visible = !out;
+	s.sun.castShadow = !out; s.shadowAt = -Infinity;
+}
 /** A part is left out for this long before its frames count (shaders are made anew), and then measured for this long. */
 const PART_SETTLE_MS = 2000, PART_MS = 2500;
 /** One frame of the measurement by parts: counts it, and at the end of a part notes its frame time and goes on. */

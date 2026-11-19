@@ -66,7 +66,13 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 		/** The passes, for measurements. */
 		composer,
 		/** For measurements: the occlusion (and with it the blur, which reads its depth) or the bloom left out. */
-		leaveOut(parts: { ao?: boolean; bloom?: boolean }) { ao.enabled = !parts.ao; noBlur = !!parts.ao; bloom.enabled = !parts.bloom; },
+		leaveOut(parts: { ao?: boolean; bloom?: boolean; smooth?: boolean; aoSamples?: number }) {
+			ao.enabled = !parts.ao; noBlur = !!parts.ao; bloom.enabled = !parts.bloom;
+			ao.updateGtaoMaterial({ samples: parts.aoSamples ?? 16 });
+			// the edges' smoothing is the targets' multisampling: a target with another count is made anew
+			const samples = parts.smooth ? 0 : POST.samples;
+			for (const target of [composer.renderTarget1, composer.renderTarget2]) if (target.samples !== samples) { target.samples = samples; target.dispose(); }
+		},
 		/** Takes the numbers of POST anew. */
 		tune() { ao.updateGtaoMaterial({ radius: POST.aoRadius }); ao.blendIntensity = POST.aoIntensity; bloom.strength = POST.bloomStrength; bloom.radius = POST.bloomRadius; },
 		/** How light it is (1 day, 0 night): sets where the bloom starts. */
