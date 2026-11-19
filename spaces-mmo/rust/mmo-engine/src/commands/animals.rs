@@ -9,7 +9,7 @@ use super::epoch::need_epoch;
 use super::garden::proto_name;
 use super::trade::{consume, move_item};
 use crate::clock::{patience_of, world_now_of};
-use crate::context::{inventory, items_named, msg, plural_of, Ctx, MsgOpts};
+use crate::context::{inventory, items_named, msg, plural_of, stem, Ctx, MsgOpts};
 use crate::deeds::credit_deed;
 use crate::fire::key_text;
 use crate::j;
@@ -239,9 +239,16 @@ async fn fuettere(c: &mut Ctx, arg: &str) -> Result<()> {
 	let kf = j::a(&k, "feed").to_vec();
 	let inv = inventory(c).await?;
 	let feed: Vec<Json> = inv.iter().filter(|i| kf.contains(j::at(fields(i), "proto"))).cloned().collect();
-	let named = if m2.is_empty() { feed.clone() } else { items_named(c.w(), &inv, &no_article(&m2), None) };
-	if !m2.is_empty() { if let Some(f0) = named.first() { if !kf.contains(j::at(fields(f0), "proto")) { return refuse(format!("{} mögen {} nicht; sie fressen {}.", txt(j::at(fields(f0), "name")), txt(j::at(&k, "plural")), feeds(c, &kf))); } } }
-	let offer: Vec<Json> = if m2.is_empty() { feed } else { let p0 = named.first().map(|x| j::at(fields(x), "proto").clone()); named.iter().filter(|i| Some(j::at(fields(i), "proto")) == p0.as_ref()).cloned().collect() };
+	// a named feed is looked for among what the animals eat first: beside a hive "strandnelke" is the flower, though the
+	// seeds carry that alias, and "strandnelken" (its plural) is the flower, though it begins the seeds' name
+	let word = if m2.is_empty() { String::new() } else { no_article(&m2) };
+	let fit = if word.is_empty() { feed.clone() } else { items_named(c.w(), &feed, &word, None) };
+	if !word.is_empty() && fit.is_empty() {
+		if let Some(eaten) = kf.iter().find(|p| stem(&proto_name(c, &txt(p))) == stem(&word)) { return refuse(format!("{} hast du nicht dabei. {} fressen {}.", proto_name(c, &txt(eaten)), txt(j::at(&k, "plural")), feeds(c, &kf))); }
+		let named = items_named(c.w(), &inv, &word, None);
+		if let Some(f0) = named.first() { return refuse(format!("{} mögen {} nicht; sie fressen {}.", txt(j::at(fields(f0), "name")), txt(j::at(&k, "plural")), feeds(c, &kf))); }
+	}
+	let offer: Vec<Json> = if word.is_empty() { feed } else { let p0 = fit.first().map(|x| j::at(fields(x), "proto").clone()); fit.iter().filter(|i| Some(j::at(fields(i), "proto")) == p0.as_ref()).cloned().collect() };
 	if offer.is_empty() { return refuse(format!("Du hast kein Futter. {} fressen {}.", txt(j::at(&k, "plural")), feeds(c, &kf))); }
 	let per = j::n(&d, "feedWorldMs") / n;
 	let from = now.max(j::n(&herd, "fedUntilWorldMs"));

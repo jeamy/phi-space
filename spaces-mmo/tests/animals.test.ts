@@ -103,8 +103,11 @@ test("a hive: bee colonies eat flowers, give honey every other day and wax with 
 		// they eat flowers, anyone feeds them
 		await give(s, bo.me, "tang", 1);
 		assert.match(await does(bo.p, "füttere tang", "mögen"), /Tang mögen Bienenvölker nicht; sie fressen Strandnelke, Dünenrose, Nebelblume, Hopfen/);
+		// the seeds carry the alias "strandnelke" and their name begins with "strandnelken": a feed named is the flower
+		await give(s, bo.me, "samen-strandnelke", 1);
+		assert.match(await does(bo.p, "füttere strandnelken", "dabei"), /Strandnelke hast du nicht dabei\. Bienenvölker fressen Strandnelke/);
 		await give(s, bo.me, "strandnelke", 2);
-		assert.match(await does(bo.p, "füttere", "satt für"), /Blumenbo füttert die Bienenvölker von Imkerin mit 2 Strandnelke; satt für etwa 24 Stunden/);
+		assert.match(await does(bo.p, "füttere strandnelken", "satt für"), /Blumenbo füttert die Bienenvölker von Imkerin mit 2 Strandnelke; satt für etwa 24 Stunden/);
 		// six fed days: three pots per colony (the most that waits), and a lump of wax with every three
 		await timePasses(s, hive.buildId, 6 * DAY);
 		assert.match(await does(ida.p, "sammle honig", "sammelst"), /Du sammelst 6 Honig, 2 Wachs im Stall/);

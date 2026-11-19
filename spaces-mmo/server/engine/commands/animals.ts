@@ -13,7 +13,7 @@ import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type BuildingFields, type HerdFields, type ItemFields } from "../../model.ts";
 import { patienceOf, worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
-import { CommandError, inventory, itemsNamed, msg, NotUnderstood, pluralOf, type CommandCtx } from "../context.ts";
+import { CommandError, inventory, itemsNamed, msg, NotUnderstood, pluralOf, stem, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import type { AnimalKindDef, AnimalsDef, KeeperDef, WorldDef } from "../world.ts";
 import { ARTICLE, atCell, distTo, giveBack, planOf, putBack, takeNear } from "./build.ts";
@@ -169,9 +169,17 @@ const fuettere: Command = {
 		const { b, k, n, max, now } = await houseHere(c, d, (h) => !!h.herd);
 		if (!k || !n || !b.herd) throw new CommandError(`${b.name} von ${b.ownerName} ist leer (Platz für ${max}), da ist nichts zu füttern. ${mine(c, b) ? "„einstallen <tier>“ bringt ein Tier hinein; Tiere verkauft Gesa am Markt von Kupferhafen." : ""}`.trim());
 		const feed = (await inventory(c)).filter((i) => k.feed.includes(i.f.proto));
-		const named = m[2] ? itemsNamed(c.world, await inventory(c), m[2].replace(ARTICLE, "")) : feed;
-		if (m[2] && named.length && !k.feed.includes(named[0]!.f.proto)) throw new CommandError(`${named[0]!.f.name} mögen ${k.plural} nicht; sie fressen ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);
-		const offer = m[2] ? named.filter((i) => i.f.proto === named[0]!.f.proto) : feed;
+		// a named feed is looked for among what the animals eat first: beside a hive "strandnelke" is the flower, though the
+		// seeds carry that alias, and "strandnelken" (its plural) is the flower, though it begins the seeds' name
+		const word = m[2] ? m[2].replace(ARTICLE, "") : "";
+		const fit = word ? itemsNamed(c.world, feed, word) : feed;
+		if (word && !fit.length) {
+			const eaten = k.feed.find((p) => stem(protoName(c, p)) === stem(word));
+			if (eaten) throw new CommandError(`${protoName(c, eaten)} hast du nicht dabei. ${k.plural} fressen ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);
+			const named = itemsNamed(c.world, await inventory(c), word);
+			if (named.length) throw new CommandError(`${named[0]!.f.name} mögen ${k.plural} nicht; sie fressen ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);
+		}
+		const offer = word ? fit.filter((i) => i.f.proto === fit[0]!.f.proto) : feed;
 		if (!offer.length) throw new CommandError(`Du hast kein Futter. ${k.plural} fressen ${k.feed.map((p) => protoName(c, p)).join(", ")}.`);
 		// a food is a world day for one animal (they eat by the life rate); fed ahead as far as a dog, for people who are away
 		const per = d.feedWorldMs / n, from = Math.max(now, b.herd.fedUntilWorldMs);
