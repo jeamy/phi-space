@@ -74,6 +74,8 @@ export function graze(d: FieldDef, p: Pick<PreyDef, "bite" | "keep">, f: FieldFi
 	if (!crop || f.stage !== "waechst" || (f.grazed ?? 0) >= maxGrazes(p)) return false;
 	f.grazed = (f.grazed ?? 0) + 1;
 	f.yields = harvestOf(crop, f.w * f.h, f.soil * Math.max(p.keep ?? 0.5, 1 - (p.bite ?? 0) * f.grazed));
+	// a dunged field keeps its dung (field.ts duenge): what is left is still the richer harvest
+	if (f.dunged && d.dung) f.yields = f.yields.map((y) => ({ ...y, count: Math.ceil(y.count * d.dung!.factor) }));
 	return true;
 }
 

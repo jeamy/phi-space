@@ -972,7 +972,8 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 			return true;
 		});
 	}
-	for (const type of ["WorkRest", "Blessing", "BeamRest"]) for (const e of await space.readAll({ type })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
+	// a rest, a blessing, a beam's pause and a meal end on the life clock (their commands write them by it)
+	for (const type of ["WorkRest", "Blessing", "BeamRest", "Sated"]) for (const e of await space.readAll({ type })) if (Number(e.fields.untilWorldMs) <= life) await space.takeIfExists({ id: e.id }, NO_WAIT);
 	// flour (or grain back) nobody fetched
 	for (const e of await space.readAll({ type: "MillLoad" })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
 }

@@ -234,8 +234,12 @@ test("the butcher's trade (docs/schlachten.en.md): a butcher's knife first, a bu
 		// a piglet goes in like a pig and grows up there; it takes a place
 		await give(s, ole.me, "schwein", 3);
 		await give(s, ole.me, "ferkel", 2);
+		assert.match(await does(ole.p, "einstallen ferkel", "heran"), /bringt Ferkel in den Stall \(.*1 Jungtier\); es wächst dort heran/);
+		// a pen with only a young one in it is a pen of its kind: no other kind goes in
+		await give(s, ole.me, "schaf", 1);
+		assert.match(await does(ole.p, "einstallen schaf", "schon"), /Hier stehen schon Schweine; eine Art je Stall/);
+		assert.ok(await s.takeIfExists({ type: "Item", fields: { location: ole.me, proto: "schaf" } }, 0, {}));
 		for (let i = 1; i <= 3; i++) await does(ole.p, "einstallen schwein", `(${i} Schwein`);
-		assert.match(await does(ole.p, "einstallen ferkel", "heran"), /bringt Ferkel in den Stall \(3 Schweine, 1 Jungtier\); es wächst dort heran/);
 		assert.match(await does(ole.p, "einstallen ferkel", "voll"), /Der Stall ist voll \(4\)/);
 		assert.match(await does(ole.p, "stall", "Platz"), /3 Schweine und 1 Jungtier \(Platz für 4\)/);
 		// both knives: the butcher's knife is taken, and the shop in the room gives one more piece of the first yield

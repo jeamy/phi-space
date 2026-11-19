@@ -106,7 +106,7 @@ const einstallen: Command = {
 		if (!mine(c, b)) throw new CommandError(`Der Stall gehört ${b.ownerName}; einstallen darf nur der Besitzer.`);
 		await needEpoch(c, k.epoch, k.plural);
 		if (b.plan !== k.plan) throw new CommandError(`${k.plural} wohnen im ${planOf(c.world, k.plan)?.name ?? k.plan}, nicht im ${b.name}.`);
-		if (has && n && has.key !== k.key) throw new CommandError(`Hier stehen schon ${has.plural}; eine Art je Stall.`);
+		if (has && n + small && has.key !== k.key) throw new CommandError(`Hier stehen schon ${has.plural}; eine Art je Stall.`);
 		if (n + small >= max) throw new CommandError(`Der Stall ist voll (${max}).`);
 		const e = await c.space.takeIfExists({ type: "Item", fields: { itemId: it.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn });
 		if (!e) throw new CommandError(`${it.name} ist gerade nicht greifbar; bitte noch einmal.`);

@@ -93,9 +93,10 @@ const votesOf = (r: RouteFields) => `${r.yes.length} ja, ${r.no.length} nein von
 const pavedOf = (r: RouteFields) => (r.state === "built" ? r.cells.length : r.state === "vote" ? 0 : Math.floor((r.cells.length * Math.min(r.work, r.workNeed)) / Math.max(1, r.workNeed)));
 const nameOfRoute = (r: RouteFields, from: string) => `Straße nach ${r.names[r.rooms[0] === from ? 1 : 0]}`;
 
-/** Writes the road back with its two parts (the old ones taken in the transaction). */
-async function roadSave(space: SpaceLike, txn: string, r: RouteFields): Promise<void> {
-	await space.write({ type: "Route", fields: r as never }, txn, FOREVER);
+/** Writes the road back with its two parts (the old ones taken in the transaction). `fresh`: a road just planned, the
+ *  only one between its two rooms (two planning the same at once: the second write fails, "unique entry already exists"). */
+async function roadSave(space: SpaceLike, txn: string, r: RouteFields, fresh = false): Promise<void> {
+	await space.write({ type: "Route", fields: r as never }, txn, FOREVER, fresh ? { unique: ["pair"] } : {});
 	for (const e of await space.readAll({ type: "Road", fields: { routeId: r.routeId } }, { txn })) await space.takeIfExists({ id: e.id }, NO_WAIT, { txn });
 	const paved = pavedOf(r), missing = missingOf(r).join(", "), votes = votesOf(r);
 	let before = 0;
@@ -259,7 +260,8 @@ async function plan(c: CommandCtx, word: string): Promise<void> {
 		needs: [{ proto: def.stone, name: stone, count: Math.ceil(cells.length / def.stonePer), have: 0 }, ...(def.wood ? [{ proto: def.woodProto, name: wood, count: def.wood, have: 0 }] : [])],
 		work: 0, workNeed: Math.max(def.minWork, Math.ceil(cells.length / def.workPer)), by: {}, untilWorldMs: others.length ? now + def.voteWorldMs : now + def.siteWorldMs, at: now, points: def.points,
 	};
-	await roadSave(c.space, c.txn!, r);
+	try { await roadSave(c.space, c.txn!, r, true); }
+	catch (e) { if (/unique entry already exists/.test((e as Error).message)) throw new CommandError(`Eine Straße nach ${to.name} plant gerade jemand anderes.`); throw e; }
 	const cost = `${cells.length} Felder; es braucht ${missingOf(r).join(", ")}`;
 	if (r.state === "vote") {
 		for (const room of r.rooms) await msg(c, "*", "world", `${c.actor.name} plant eine Straße zwischen ${r.names[0]} und ${r.names[1]} (${cost}). Die Siedler beider Orte stimmen mit „straße ja“ oder „straße nein“ ab, ${days(def.voteWorldMs)} lang.`, { room });

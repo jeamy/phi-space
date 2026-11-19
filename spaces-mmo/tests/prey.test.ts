@@ -40,6 +40,11 @@ test("a deer's bite: the yield falls by a share of the whole, never below its fl
 	const tired = field({ soil: 0.5, yields: harvestOf(barley, 16, 0.5) });
 	graze(fd, deer, tired);
 	assert.equal(tired.yields[0]!.count, Math.floor(16 * 0.5 * (1 - deer.bite!)), "computed afresh from crop and soil");
+	// a dunged field keeps its dung through a bite
+	const dunged = field({ dunged: true, yields: harvestOf(barley, 16, 1).map((y) => ({ ...y, count: Math.ceil(y.count * fd.dung!.factor) })) });
+	graze(fd, deer, dunged);
+	assert.equal(dunged.yields[0]!.count, Math.ceil(Math.floor(16 * (1 - deer.bite!)) * fd.dung!.factor), "the dung still counts");
+	assert.ok(dunged.yields[0]!.count > Math.floor(16 * (1 - deer.bite!)));
 
 	const g = guardsIn(wd, [
 		house({ room: "a", keeper: { kind: "hund", fedUntilWorldMs: 10 } }), house({ room: "b", keeper: { kind: "katze", fedUntilWorldMs: 10 } }),

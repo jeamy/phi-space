@@ -9,7 +9,9 @@ import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { worldNowOf } from "../server/engine/clock.ts";
+import { decayNowOf, worldNowOf } from "../server/engine/clock.ts";
+import { decayNow, worldNow } from "../server/engine/worldtime.ts";
+import type { WorldClockFields } from "../server/model.ts";
 import { buildSweep } from "../server/engine/commands/build.ts";
 import { eventually, Player, startServer } from "./stack.ts";
 
@@ -107,7 +109,20 @@ test("inside a hut: in, cook at the hearth, the chest beside it, guests by invit
 		await does(host, "drop muschel", "legst");
 		const b = await s.takeIfExists({ type: "Building", fields: { buildId: "h-in" } }, NO_WAIT, {});
 		assert.ok(b);
+		// the two clocks apart, the life clock 100 days ahead (a world that lives faster than it decays): a rest, a pause, a
+		// blessing and a meal end on the life clock, an estate on the decay clock
+		const clock = (await s.take({ type: "WorldClock" }, 5_000))!.fields as unknown as WorldClockFields, real = Date.now(), DAY = 24 * 3600_000;
+		await s.write({ type: "WorldClock", fields: { ...clock, decayAnchorMs: decayNow(clock, real), decayRate: clock.decayRate ?? clock.rate, realAnchorMs: real, worldAnchorMs: worldNow(clock, real) + 100 * DAY } as never }, null, FOREVER);
+		const life = await worldNowOf(s);
+		for (const type of ["WorkRest", "Blessing", "BeamRest", "Sated"]) {
+			for (const e of await s.readAll({ type })) await s.takeIfExists({ id: e.id }, NO_WAIT, {});
+			await s.write({ type, fields: { charId: "over", untilWorldMs: life - 1 } as never }, null, FOREVER);
+			await s.write({ type, fields: { charId: "held", untilWorldMs: life + DAY } as never }, null, FOREVER);
+		}
 		await buildSweep(s, w);
+		for (const type of ["WorkRest", "Blessing", "BeamRest", "Sated"]) assert.deepEqual((await s.readAll({ type })).map((e) => e.fields.charId), ["held"], `${type}: what is over by the life clock goes, the rest stays`);
+		const until = Number((await s.readAll({ type: "Estate", fields: { estateId: "est-in-h-in" } }))[0]!.fields.untilWorldMs), term = w.building!.estateWorldMs!;
+		assert.ok(Math.abs(until - ((await decayNowOf(s)) + term)) < DAY, "the estate of the inside ends on the decay clock");
 		assert.equal((await s.readAll({ type: "Room", fields: { roomId: inside } })).length, 0);
 		assert.equal((await s.readAll({ type: "Exit", fields: { location: inside } })).length, 0);
 		assert.equal((await s.readAll({ type: "Scenery", fields: { room: inside } })).length, 0);

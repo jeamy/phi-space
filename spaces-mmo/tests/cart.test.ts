@@ -101,6 +101,26 @@ test("a road is planned from plaza to plaza, the settlers of both rooms vote, it
 	} finally { await srv.close(); }
 });
 
+test("two plan the same road at once: one road stands", { timeout: 120_000 }, async () => {
+	const srv = await startServer({ worldEnv: { SPACES_MMO_EPOCH_FORCE: "2" } });
+	try {
+		const s = srv.stack.space;
+		const a = new Player(srv.url), b = new Player(srv.url);
+		assert.equal((await a.post("/api/register", { name: "Ole", password: "geheim-123" })).status, 200);
+		assert.equal((await b.post("/api/register", { name: "Mia", password: "geheim-123" })).status, 200);
+		const me = (await a.play()).me.charId, her = (await b.play()).me.charId;
+		const ch = async (id: string) => (await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: id } }))[0], 10_000, id))!.fields as unknown as CharacterFields;
+		const c = await ch(me), d = await ch(her);
+		assert.equal(c.room, d.room);
+		const x = (await s.readAll({ type: "Exit", fields: { location: c.room } })).map((e) => e.fields as unknown as ExitFields).find((e) => w.rooms.some((r) => r.roomId === e.destination && r.island === w.rooms.find((q) => q.roomId === c.room)!.island))!;
+		const to = w.rooms.find((r) => r.roomId === x.destination)!;
+		for (const [id, o] of [["h-a", c], ["h-b", d]] as const) await s.write({ type: "Building", fields: { buildId: id, plan: "huette", name: "Hütte", room: c.room, x: 0, y: 0, w: 2, h: 2, owner: o.charId, ownerName: o.name, accountId: o.accountId, beaconId: "feuer-bucht", points: 1, by: {}, untilWorldMs: FOREVER, builtAt: 0 } as never }, null, FOREVER);
+		const said = /plant eine Straße|schon abgestimmt|wird schon gebaut|plant gerade jemand anderes/;
+		const [one, two] = await Promise.all([does(a, `straße plane ${to.name}`, said), does(b, `straße plane ${to.name}`, said)]);
+		assert.equal(await s.count({ type: "Route" }), 1, `${one} / ${two}`);
+	} finally { await srv.close(); }
+});
+
 test("a vote that ends with as many no as yes drops the road; the single road cells of old are swept away with their light", { timeout: 120_000 }, async () => {
 	const srv = await startServer({ worldEnv: { SPACES_MMO_EPOCH_FORCE: "2" } });
 	try {

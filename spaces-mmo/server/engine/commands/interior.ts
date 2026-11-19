@@ -18,7 +18,7 @@ import { timeNow } from "../source.ts";
 import { blockedIn, cellKey, freeCellNear, releaseSpot } from "../occupancy.ts";
 import { draftOf } from "../typeclasses.ts";
 import { walkable, type InteriorDef, type WorldDef } from "../world.ts";
-import { worldNowOf } from "../clock.ts";
+import { decayNowOf, worldNowOf } from "../clock.ts";
 import { describeRoom, dropOffers, placeIn, relocate } from "./default.ts";
 import { ARTICLE, atCell, distTo, planOf } from "./build.ts";
 import { wakeOutside } from "./sleep.ts";
@@ -105,7 +105,7 @@ export async function dropInterior(space: Space, txn: string, w: WorldDef, roomI
 	}
 	const floor = await space.readAll({ type: "Item", fields: { location: roomId } }, { txn });
 	if (floor.length && at) {
-		const est: EstateFields = { estateId: `est-${roomId}`, accountId: at.accountId, ownerName: at.ownerName, room: at.room, name: `${at.name} (drinnen)`, untilWorldMs: (await worldNowOf(space as SpaceLike, txn)) + (w.building?.estateWorldMs ?? 30 * 24 * 3600_000) };
+		const est: EstateFields = { estateId: `est-${roomId}`, accountId: at.accountId, ownerName: at.ownerName, room: at.room, name: `${at.name} (drinnen)`, untilWorldMs: (await decayNowOf(space as SpaceLike, txn)) + (w.building?.estateWorldMs ?? 30 * 24 * 3600_000) };
 		await space.write({ type: "Estate", fields: est as never }, txn, FOREVER);
 		for (const it of floor) {
 			const t = await space.takeIfExists({ id: it.id }, NO_WAIT, { txn });
