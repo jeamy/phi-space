@@ -13,7 +13,7 @@ import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
 import { tr } from "./i18n/index.ts";
 import { buildingModel, linerGeometry, sceneryModel } from "./buildings3d.ts";
-import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, prepareModelDetails, propMaterial, propMesh, propShadow, setNight, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type PlantModel } from "./props3d.ts";
+import { buildingGeometry, cropGeometry, fenceGeometry, fieldCropGeometry, fireGeometry, jettyGeometry, keeperGeometry, PLANT_VARIANTS, placeLook, plantGeometry, prepareModelDetails, propMaterial, propMesh, merge, propShadow, setNight, ruinGeometry, signGeometry, siteGeometry, wildGeometry, type Part, type PlantModel } from "./props3d.ts";
 import { railPoints, sleeperSpots, stepsAt } from "./trackShape.ts";
 import { closeBlur, frameSummary } from "./closeup3d.ts";
 import { POST } from "./post3d.ts";
@@ -41,6 +41,8 @@ type Scene3D = {
 	post: ReturnType<typeof import("./post3d.ts").createPost>;
 	/** the sky, its light on everything and the fog's colour (atmosphere3d.ts) */
 	air: import("./atmosphere3d.ts").Atmosphere;
+	/** when the shadow map was last drawn (ms) */
+	shadowAt: number;
 	measurement: { at: number; times: number[]; calls: number[]; zooms: number[]; remaining: number } | null;
 	detailAt: number;
 	catalogue?: boolean;
@@ -140,7 +142,7 @@ export function MapView3D(props: MapRendererProps) {
 			try {
 				const [t, { createPost }, { createAtmosphere }] = await Promise.all([import("three"), import("./post3d.ts"), import("./atmosphere3d.ts")]);
 				if (dead || !host.current) return;
-				const renderer = new t.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+				const renderer = new t.WebGLRenderer({ antialias: false, powerPreference: "high-performance" }); // the picture is smoothed in post3d.ts's own target
 				renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 				renderer.outputColorSpace = t.SRGBColorSpace;
 				// the filmic tone curve (v3): the sun may be brighter than white without burning out (post3d.ts applies it)
@@ -160,7 +162,7 @@ export function MapView3D(props: MapRendererProps) {
 				renderer.shadowMap.enabled = true; renderer.shadowMap.type = t.PCFShadowMap;
 				sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.025; sun.shadow.radius = 2.5;
 
-				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", paving: null, pavingFor: "", chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				const s: Scene3D = { t, renderer, post, measurement: null, detailAt: -Infinity, shadowAt: -Infinity, scene, camera, fog, sun, hemi, air, light: 1, lightFor: "", lightAt: 0, fish: [], host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, island: null, islandFor: "", islandMid: { x: 0, z: 0, reach: 0 }, named: true, bubbles: new Map(), plants: null, plantLooks: new Map(), plantsFor: "-", paving: null, pavingFor: "", chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", START_VIEW.angle), zoom: clampZoom(stored("mmo.3d.zoom", START_VIEW.zoom)), tilt: clampTilt(stored("mmo.3d.tilt", START_VIEW.tilt)), raised: new Map(), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				s.resize = new ResizeObserver(() => resize(s));
 				s.resize.observe(host.current);
 				pointer(s, latest, view);
@@ -176,12 +178,16 @@ export function MapView3D(props: MapRendererProps) {
 						s.frame = requestAnimationFrame(frame); return;
 					}
 					s.renderer.info.reset();
-					step(s, dt, now / 1000, latest.current.me);
+					const moved = step(s, dt, now / 1000, latest.current.me);
 					bubbleTick(s);
 					if (s.fish.length && s.zoom > 0.3) swimFish(s.fish, now / 1000);
 					if (now - s.lightAt > 500) { s.lightAt = now; daylight(s, latest.current.worldTime ?? null); }
 					if (now - s.detailAt >= 150) { updateModelDetails(t, s.scene, s.camera, s.zoom); s.detailAt = now; }
-					s.post.render(closeBlur(s.zoom));
+					// the shadow map only when a caster moved, and four times a second for all that changes slowly (the sun,
+					// a model's level of detail, a new object)
+					const shadows = moved || now - s.shadowAt >= SHADOW_EVERY_MS;
+					if (shadows) s.shadowAt = now;
+					s.post.render(closeBlur(s.zoom), shadows);
 					if (s.measurement) {
 						const m = s.measurement, seconds = Math.max(0, 32 - Math.floor((now - m.at) / 1000));
 						if (seconds !== m.remaining) { m.remaining = seconds; sayFps({ running: true, remaining: seconds }); }
@@ -404,14 +410,18 @@ function buildPlants(s: Scene3D, covered: Set<string>, free: Set<string>): impor
 }
 
 /** Every frame: the water moves, figures and things glide to their cell and the figures walk; the camera does not follow. */
-function step(s: Scene3D, dt: number, time: number, me: string): void {
+/** Moves everything one frame on. Returns whether something that casts a shadow moved (the frame draws the shadow map
+ *  anew only then, and a few times a second anyway). */
+function step(s: Scene3D, dt: number, time: number, me: string): boolean {
 	setWaterTime(time);
 	pavingDetail(s);
 	const k = 1 - Math.exp(-12 * dt);
+	let moved = false;
 	for (const [id, e] of s.chars) {
 		const x0 = e.obj.position.x, z0 = e.obj.position.z;
 		e.obj.position.lerp(e.target, id === me ? k : k * 0.9);
 		if (e.fig) animateFigure(e.fig, e.obj.position.x - x0, e.obj.position.z - z0, dt, time);
+		if (Math.abs(e.obj.position.x - x0) + Math.abs(e.obj.position.z - z0) > 1e-4 || (e.fig && e.fig.swing > 0.02)) moved = true;
 		if (id === me) lantern(s, e, time);
 	}
 	for (const e of s.objs.values()) {
@@ -421,6 +431,7 @@ function step(s: Scene3D, dt: number, time: number, me: string): void {
 			if (body && far > 0.05) { body.rotation.y = Math.atan2(dx, dz); body.position.y = Math.abs(Math.sin(time * 14)) * 0.12; }
 			else if (body) body.position.y = 0;
 		}
+		if (e.obj.position.distanceToSquared(e.target) > 1e-8) moved = true;
 		e.obj.position.lerp(e.target, k);
 		if (e.flame) {
 			// the fire's light flickers, and reaches further in the dark (daylight sets s.light)
@@ -430,6 +441,7 @@ function step(s: Scene3D, dt: number, time: number, me: string): void {
 			e.flame.light.intensity = on ? (4 + 6 * dark) * flicker : 0; e.flame.light.distance = 4 + 3 * dark;
 		}
 	}
+	return moved;
 }
 
 /** The own figure carries a lantern: from dusk on it lights the way round it, warm and flickering, brighter the darker it
@@ -581,19 +593,19 @@ function track(s: Scene3D, obj: ObjView): Entry {
  *  of a road being built the rest as two pegs a cell, of a planned one a small yellow mark a cell. */
 function road(s: Scene3D, obj: ObjView): Entry {
 	const t = s.t, group = new t.Group(); group.userData.owned = true;
-	const bed = new t.MeshStandardMaterial({ color: 0x6f675a, roughness: 1 }), slab = [new t.MeshStandardMaterial({ color: 0x8f8676, roughness: 0.9 }), new t.MeshStandardMaterial({ color: 0x9c9383, roughness: 0.9 })];
-	const peg = new t.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 1 }), mark = new t.MeshStandardMaterial({ color: 0xf0d060, emissive: 0x403010, roughness: 0.8 });
-	const bedGeo = new t.BoxGeometry(1, 0.03, 1), slabGeo = new t.BoxGeometry(0.28, 0.025, 0.28), pegGeo = new t.BoxGeometry(0.05, 0.22, 0.05), markGeo = new t.CylinderGeometry(0.07, 0.07, 0.02, 8);
-	const paved = obj.paved ?? 0;
+	// every bed, slab and peg of the road is one mesh: a paved cell alone would be ten draw calls
+	const parts: Part[] = [], paved = obj.paved ?? 0;
+	const mark = new t.MeshStandardMaterial({ color: 0xf0d060, emissive: 0x403010, roughness: 0.8 }), markGeo = new t.CylinderGeometry(0.07, 0.07, 0.02, 8);
 	(obj.runs?.[0] ?? []).forEach((c, i) => {
 		const here = at(s, c.x, c.y, 0);
 		if (i < paved) {
-			const b = new t.Mesh(bedGeo, bed); b.position.set(here.x, here.y + 0.015, here.z); group.add(b);
-			for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) { const m = new t.Mesh(slabGeo, slab[(i + j + k) % 2]!); m.position.set(here.x - 0.32 + j * 0.32, here.y + 0.04, here.z - 0.32 + k * 0.32); group.add(m); }
+			parts.push({ g: new t.BoxGeometry(1, 0.03, 1), c: 0x6f675a, p: [here.x, here.y + 0.015, here.z], m: "none" });
+			for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) parts.push({ g: new t.BoxGeometry(0.28, 0.025, 0.28), c: (i + j + k) % 2 ? 0x9c9383 : 0x8f8676, p: [here.x - 0.32 + j * 0.32, here.y + 0.04, here.z - 0.32 + k * 0.32], m: "none" });
 		} else if (obj.roadState === "build") {
-			for (const [dx, dz] of [[-0.35, -0.35], [0.35, 0.35]] as const) { const m = new t.Mesh(pegGeo, peg); m.position.set(here.x + dx, here.y + 0.11, here.z + dz); group.add(m); }
+			for (const [dx, dz] of [[-0.35, -0.35], [0.35, 0.35]] as const) parts.push({ g: new t.BoxGeometry(0.05, 0.22, 0.05), c: 0x6b4a2e, p: [here.x + dx, here.y + 0.11, here.z + dz] });
 		} else { const m = new t.Mesh(markGeo, mark); m.position.set(here.x, here.y + 0.02, here.z); group.add(m); }
 	});
+	if (parts.length) { const g = merge(t, parts, "road"); g.userData.shared = false; group.add(propMesh(t, g)); }
 	return { obj: group, target: new t.Vector3(), kind: "road", sig: bedSig(obj) };
 }
 
@@ -914,6 +926,8 @@ function lightRoom(s: Scene3D): void {
 	s.lightFor = ""; s.lightAt = 0;
 }
 /** How bright the picture is under the tone curve, the sun's and the moon's light, and the sky's light on everything. */
+/** How often the shadow map is drawn when nothing that casts a shadow moves. */
+const SHADOW_EVERY_MS = 250;
 const LIGHT = { exposure: 0.55, sun: 5, moon: 1.6, sky: 0.45 };
 /** Day and night from the world's clock (v3): the sun crosses the sky from east to west and the moon follows it, the
  *  shadows turn with them, the sky and its light on everything follow (atmosphere3d.ts), the light is warm near the
@@ -936,6 +950,7 @@ function daylight(s: Scene3D, clock: { v: import("../shared/worldtime.ts").World
 	s.hemi.color.setHex(0x6a7cae).lerp(new s.t.Color(0xd9edff), d);
 	s.scene.environmentIntensity = LIGHT.sky; s.renderer.toneMappingExposure = LIGHT.exposure;
 	s.air.update(hour, s.level); s.post.daylight(d);
+	s.shadowAt = -Infinity;
 	setNight(Math.min(1, (1 - d) * 1.3));
 }
 
@@ -1076,6 +1091,8 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 			s.scene.traverse((o) => { const mesh = o as import("three").Mesh; if (String(mesh.geometry?.userData.model ?? "").startsWith("barrel")) barrels.push({ near: mesh.userData.modelLevel === "near", distance: s.camera.position.distanceTo(mesh.getWorldPosition(new t.Vector3())) }); });
 			return { barrels, cobblestones: s.paving?.visible ? s.paving.count : 0, blur: closeBlur(s.zoom) };
 		},
+		/** the whole state of the view, for measurements */
+		probeState: () => s,
 		probeView: () => ({ zoom: s.zoom, angle: s.angle, tilt: s.tilt, elevation: cameraElevation(s.zoom, s.tilt), bubbles: s.bubbles.size }),
 		probeCatalogue: (names: string[], level: ModelLevel = "room") => showCatalogue(s, names, level),
 		probeModels: () => {

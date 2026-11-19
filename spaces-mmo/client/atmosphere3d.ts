@@ -31,7 +31,8 @@ export function createAtmosphere(t: T, renderer: import("three").WebGLRenderer, 
 			texColor += vec3( 0.035, 0.055, 0.11 ) * nightGlow * ( 2.0 - abs( direction.y ) );
 			texColor *= mix( vec3( 1.0 ), vec3( 0.36, 0.35, 0.33 ), smoothstep( 0.0, -0.7, direction.y ) );
 			gl_FragColor = vec4( texColor, 1.0 );`);
-	sky.scale.setScalar(1000); sky.frustumCulled = false; sky.renderOrder = -1; sky.userData.unshaded = true; sky.userData.sky = true;
+	// drawn after everything solid, so only the pixels that show sky run its shader (clouds and scattering)
+	sky.scale.setScalar(1000); sky.frustumCulled = false; sky.renderOrder = 1000; sky.userData.unshaded = true; sky.userData.sky = true;
 	scene.add(sky);
 
 	// the same sky without its sun disc, for the environment map (the sun itself is the directional light)

@@ -14,7 +14,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
 /** The numbers of the picture, in one place. `aoRadius` is in world units (a cell is 1). The bloom starts at a brightness
  *  that follows the daylight, as an eye does: by day only what outshines sand in the sun, at night every lamp. */
-export const POST = { samples: 4, aoRadius: 0.45, aoIntensity: 1, bloomStrength: 0.22, bloomRadius: 0.5, bloomDay: 3.4, bloomNight: 1.2 };
+export const POST = { samples: 4, aoScale: 0.5, aoRadius: 0.45, aoIntensity: 1, bloomStrength: 0.22, bloomRadius: 0.5, bloomDay: 3.4, bloomNight: 1.2 };
 
 export function createPost(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera) {
 	const ratio = renderer.getPixelRatio();
@@ -24,6 +24,10 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 	const ao = new GTAOPass(scene, camera, 1, 1);
 	ao.updateGtaoMaterial({ radius: POST.aoRadius, distanceExponent: 1, thickness: 1, scale: 1, samples: 16, screenSpaceRadius: false });
 	ao.blendIntensity = POST.aoIntensity; composer.addPass(ao);
+	// the occlusion is soft by nature: at POST.aoScale of the picture's size it costs a quarter (its own pass over the scene,
+	// its samples and its smoothing) and looks the same but for the thinnest gaps
+	const aoSize = ao.setSize.bind(ao);
+	ao.setSize = (w: number, h: number) => aoSize(Math.max(1, Math.round(w * POST.aoScale)), Math.max(1, Math.round(h * POST.aoScale)));
 	const bloom = new UnrealBloomPass(new Vector2(1, 1), POST.bloomStrength, POST.bloomRadius, POST.bloomDay); composer.addPass(bloom);
 	const bokeh = new BokehPass(scene, camera, { focus: 10, aperture: 0.0015, maxblur: 0.006 }); bokeh.enabled = false; composer.addPass(bokeh);
 	composer.addPass(new OutputPass());
@@ -43,13 +47,16 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 	bokeh.render = (...args: Parameters<typeof blurDepth>) => { hide(); try { blurDepth(...args); } finally { show(); } };
 	const direction = camera.position.clone();
 	return {
+		/** The passes, for measurements. */
+		composer,
 		/** Takes the numbers of POST anew. */
 		tune() { ao.updateGtaoMaterial({ radius: POST.aoRadius }); ao.blendIntensity = POST.aoIntensity; bloom.strength = POST.bloomStrength; bloom.radius = POST.bloomRadius; },
 		/** How light it is (1 day, 0 night): sets where the bloom starts. */
 		daylight(d: number) { bloom.threshold = POST.bloomNight + (POST.bloomDay - POST.bloomNight) * d; },
 		resize(w: number, h: number) { composer.setSize(w, h); },
-		/** Draws one frame; `blur` (0 to 1) is how far the background is out of focus (the close level). */
-		render(blur: number) {
+		/** Draws one frame; `blur` (0 to 1) is how far the background is out of focus (the close level), `shadows` whether
+		 *  the shadow map is drawn anew (else the last one stays). */
+		render(blur: number, shadows = true) {
 			bokeh.enabled = blur > 0;
 			if (blur > 0) {
 				const uniforms = bokeh.uniforms as Record<"focus" | "aperture" | "maxblur", { value: number }>;
@@ -59,8 +66,8 @@ export function createPost(renderer: WebGLRenderer, scene: Scene, camera: Perspe
 			}
 			const mask = camera.layers.mask, autoClear = renderer.autoClear, shadowAutoUpdate = renderer.shadowMap.autoUpdate, toneMapping = renderer.toneMapping;
 			try {
-				// the shadow map once a frame, not again for the occlusion's and the blur's own passes over the scene
-				renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true;
+				// the shadow map at most once a frame, not again for the occlusion's and the blur's own passes over the scene
+				renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = shadows;
 				camera.layers.set(0); composer.render();
 				camera.layers.set(1); renderer.toneMapping = NoToneMapping; renderer.autoClear = false; renderer.clearDepth(); renderer.render(scene, camera);
 			} finally { camera.layers.mask = mask; renderer.autoClear = autoClear; renderer.shadowMap.autoUpdate = shadowAutoUpdate; renderer.toneMapping = toneMapping; }

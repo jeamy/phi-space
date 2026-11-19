@@ -97,8 +97,29 @@ down, in four greens (about 800 leaves per square cell of surface at room level,
 plain). A palm's frond is a rib that rises and hangs, with narrow leaflets down both sides. A conifer's tiers carry
 twigs of needles on their slopes. Leaves have a sheen of their own (roughness 0.5) and no photographed surface.
 
+### The cost of a frame
+
+Counted in Graue Bucht (12 figures, a paved road, 26 objects) at 1280 by 800, software rendering: a frame was about 1470
+draw calls and 9.7 ms of JavaScript in the render alone, because the scene is drawn up to four times (shadow map, the
+picture, the occlusion's own pass, close up the blur's depth) and every shape of a figure and every slab of a road was
+a mesh of its own (309 meshes for the figures, 160 for the road). Since then:
+
+- A figure's shapes are one mesh per moving part (two legs, two arms, head, torso, and the fine parts shown close up),
+  with the colours in the vertices and one material for all figures (`figure3d.ts`, `part`); the geometries are shared
+  between figures and keep their three levels of detail.
+- A road's beds, slabs and pegs are one mesh (`road`).
+- The shadow map is drawn only in a frame in which something that casts a shadow moved, and every 250 ms for what
+  changes slowly (`SHADOW_EVERY_MS`); a new sun position draws it at once.
+- The occlusion works at half the picture's size (`POST.aoScale`): its pass over the scene, its samples and its
+  smoothing cost a quarter.
+- The sky is drawn after everything solid, so its shader runs only where sky shows.
+- The canvas itself is not multisampled; the picture is smoothed in the post chain's own target.
+
+The same frame is now about 630 draw calls (560 close up) and 3.7 ms of JavaScript. The share of the graphics card is
+not measured yet: that needs the `FPS` button on a real device.
+
 Dev probes on the canvas (not in a production build): `probeHour(hour)`, `probeFog(level)`, `probeLight()`,
-`probeTune(light, post)`.
+`probeTune(light, post)`, `probeState()` (the whole state of the view, for measurements).
 
 ## Open in phase 3
 

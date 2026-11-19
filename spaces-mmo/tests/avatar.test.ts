@@ -24,12 +24,16 @@ test("a chosen look builds its figure: glasses, gloves and the hat add parts, th
 	const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
 	Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => ({ getContext: () => ({ createRadialGradient: () => ({ addColorStop() {} }), fillRect() {} }) }) } });
 	return import("../client/figure3d.ts").then(({ makeFigure }) => {
-		const count = (g: t.Object3D) => { let n = 0; g.traverse((o) => { if ((o as t.Mesh).isMesh) n++; }); return n; };
+		// a figure's shapes are merged into one mesh per moving part: more shapes show as more triangles
+		const count = (g: t.Object3D) => { let n = 0; g.traverse((o) => { const m = o as t.Mesh; if (m.isMesh) n += m.geometry.getAttribute("position").count / 3; }); return n; };
 		const plain = makeFigure(t, { id: "x", skin: 0, own: true, ai: false, style: DEFAULT_APPEARANCE });
 		const dressed = makeFigure(t, { id: "x", skin: 0, own: true, ai: false, style: { ...DEFAULT_APPEARANCE, hat: 3, glasses: true, gloves: true, coat: 1 } });
-		assert.ok(count(dressed.group) >= count(plain.group) + 9, `${count(dressed.group)} vs ${count(plain.group)}`);
-		const colours = new Set<number>(); dressed.group.traverse((o) => { const m = (o as t.Mesh).material as t.MeshStandardMaterial | undefined; if (m?.color) colours.add(m.color.getHex()); });
+		assert.ok(count(dressed.group) >= count(plain.group) + 9 * 12, `${count(dressed.group)} vs ${count(plain.group)}`);
+		const colours = new Set<number>(), c = new t.Color();
+		dressed.group.traverse((o) => { const a = (o as t.Mesh).geometry?.getAttribute("color"); if (a) for (let i = 0; i < a.count; i += 3) colours.add(c.setRGB(a.getX(i), a.getY(i), a.getZ(i)).getHex()); });
 		assert.ok(colours.has(0xb5533c), "the chosen red clothes");
+		let meshes = 0; dressed.group.traverse((o) => { if ((o as t.Mesh).isMesh) meshes++; });
+		assert.ok(meshes <= 10, `a figure is a handful of draw calls, not one per shape: ${meshes}`);
 		// the tall type stands taller than the plain one
 		assert.ok(makeFigure(t, { id: "x", skin: 0, own: false, ai: false, style: { ...DEFAULT_APPEARANCE, body: 3 } }).body.scale.y > plain.body.scale.y);
 	}).finally(() => { if (previous) Object.defineProperty(globalThis, "document", previous); else Reflect.deleteProperty(globalThis, "document"); });

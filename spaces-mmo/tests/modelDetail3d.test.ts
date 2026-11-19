@@ -89,7 +89,7 @@ test("figures retain their animated parts and only reveal fine face and clothing
 		const { makeFigure, animateFigure } = await import("../client/figure3d.ts");
 		const figure = makeFigure(t, { id: "catalogue", skin: 0, own: true, ai: false }), scene = new t.Scene(), camera = new t.PerspectiveCamera(); scene.add(figure.group); camera.position.set(0, 1, 5);
 		const details: t.Object3D[] = []; figure.group.traverse(o => { if (o.userData.detailOnly) details.push(o); });
-		assert.ok(details.length >= 6); updateModelDetails(t, scene, camera, 3); assert.ok(details.every(o => o.visible));
+		assert.equal(details.length, 2, "the fine parts of the head and of the torso, one mesh each"); updateModelDetails(t, scene, camera, 3); assert.ok(details.every(o => o.visible));
 		updateModelDetails(t, scene, camera, 1); assert.ok(details.every(o => !o.visible));
 		animateFigure(figure, 0.1, 0, 0.016, 1); assert.notEqual(figure.legL.rotation.x, 0);
 	} finally { if (previous) Object.defineProperty(globalThis, "document", previous); else Reflect.deleteProperty(globalThis, "document"); }
