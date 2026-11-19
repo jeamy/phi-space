@@ -128,3 +128,15 @@ page serves them itself (`/materials/<name>/…`) and they do not belong to one 
 | `public/materials/rock/` | [`rock_face_03`](https://polyhaven.com/a/rock_face_03) | Dario Barresi, Rico Cilliers | the earth of a terrace's wall |
 | `public/materials/planks/` | [`wood_planks`](https://polyhaven.com/a/wood_planks) | Amal Kumar | a building's floor (`_`) |
 | `public/materials/plaster/` | [`white_rough_plaster`](https://polyhaven.com/a/white_rough_plaster) | Rob Tuytel | a building's walls (`#`) |
+
+The models' surfaces (`client/surfaces3d.ts`) come from Poly Haven as well, CC0, downloaded 2026-11-19: `color.jpg` and
+`arm.jpg` only, scaled to 512 pixels (quality 84, metadata removed); the stone and the plaster of the models reuse
+`rock` and `plaster` above.
+
+| Folder | Poly Haven asset | Authors | Used for |
+| --- | --- | --- | --- |
+| `public/materials/bark/` | [`bark_brown_02`](https://polyhaven.com/a/bark_brown_02) | Rob Tuytel | trunks |
+| `public/materials/thatch/` | [`reed_roof_03`](https://polyhaven.com/a/reed_roof_03) | Rob Tuytel | thatched roofs |
+| `public/materials/brick/` | [`red_brick_03`](https://polyhaven.com/a/red_brick_03) | Rob Tuytel | brick walls and chimneys |
+| `public/materials/slate/` | [`roof_slates_02`](https://polyhaven.com/a/roof_slates_02) | Rob Tuytel | slate roofs |
+| `public/materials/wood/` | [`weathered_planks`](https://polyhaven.com/a/weathered_planks) | Dario Barresi, Dimitrios Savva | timber, planks, barrels |

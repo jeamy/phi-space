@@ -13,7 +13,7 @@ everything here is the client's view of the same room data: the grid, walkabilit
 - **Assets.** Textures and skies from CC0 libraries; buildings and figures as one consistent set. Licences go into the
   world's `assets/CREDITS.md`.
 - **One quality level.** No reduced tier for phones; the 2D map stays the fallback for a device without WebGL 2.
-- **Download size.** A budget per room, loaded per room (to be set in phase 2). The ground's six surfaces are 4.8 MB together, loaded once.
+- **Download size.** A budget per room, loaded per room (to be set in phase 2). The ground's six surfaces are 4.8 MB together, the models' five further ones 0.7 MB, loaded once.
 - **Models.** Built in this project (the user's decision, 2026-11-18), not bought or commissioned.
 
 ## Phases
@@ -23,7 +23,7 @@ everything here is the client's view of the same room data: the grid, walkabilit
 | 1 Light and picture | sky and sun from the world's clock, the sky's light as an environment map, a filmic tone curve, shadows that turn with the sun, ambient occlusion, bloom, the close-up blur as a pass | done, except rain and wet surfaces |
 | 2 Asset pipeline | glTF models with Meshopt, KTX2 textures, a catalogue from today's builder keys to model files with three levels of detail, the procedural builder as the fallback | open |
 | 3 Terrain and water | a smoothed height field instead of hard terraces, PBR ground materials blended at the seams, rock on the block's sides; the water's surface | water, ground materials and the block's sides done; the height field open |
-| 4 Vegetation | tree and bush models with leaf cards, wind, translucent leaves, instanced grass, crops per stage | open |
+| 4 Vegetation | tree and bush models with leaves, wind, translucent leaves, instanced grass, crops per stage | leaves done (as geometry, below); wind, translucency, grass and crops open |
 | 5 Buildings and things | models in the order hut, site, ruin, later epochs, scenery; a small shared set of materials; lit interiors | a first step for every model: rounded shading and a surface grain (below) |
 | 6 Figures and animals | rigged figures with skeletal animation, the chosen look (`shared/appearance.ts`) as parts and colour masks | open |
 | 7 Zoom ladder and distance | neighbours as simplified models on the island level, soft changes of level, loading in the background | open |
@@ -31,8 +31,8 @@ everything here is the client's view of the same room data: the grid, walkabilit
 
 ## Implemented
 
-Pictures of the room Graue Bucht from the dev page with headless Chromium (software rendering): `built-day.jpg` (11:00),
-`built-dusk.jpg` (19:54), `built-night.jpg` (23:00), `built-fog.jpg` (fog level 2, 9:00), `built-close.jpg` (zoom 2.4, 15:00).
+Pictures of the room Graue Bucht from the dev page with headless Chromium (software rendering): `built-day.jpg` (14:00),
+`built-dusk.jpg` (19:54), `built-night.jpg` (23:00), `built-fog.jpg` (fog level 2, 9:00), `built-close.jpg` (zoom 3.4, 14:00).
 
 **Sky and sun (`client/atmosphere3d.ts`, `client/camera3d.ts`).** `skyAt(hour)` puts the sun and the moon on their
 arcs: the sun rises at 5:30 in the east (+x), stands 58° high in the south (+z) at 13:00 and sets at 20:30; the moon is
@@ -81,6 +81,21 @@ more segments (10 at room level, 16 near), and a ball larger than a berry (a cro
 instead of a sphere. The one model material adds a grain by the place on the model: it varies colour and roughness a
 little and bumps the surface, fading with distance. This is not yet phase 4 or 5: crowns are still solid masses without
 leaves, and the figures of `figure3d.ts` are unchanged.
+
+**The models' photographed surfaces (`client/surfaces3d.ts`).** The models have no texture coordinates, so a surface is
+laid on them from three sides by the place on the model (triplanar). A part's colour chooses it: bark, thatch, brick,
+slate, wood, stone, plaster (`surfaceLayer`; a part may name another with `m`, as the palm's trunk does). The pictures
+sit in two array textures, one layer per surface (colour; occlusion with roughness), 512 pixels each. A surface keeps the
+part's own colour, because the picture is divided by its mean, and takes its relief from the picture's brightness, so
+no normal maps are loaded for the models. Open: the grain runs upright on every side, also along a lying beam; leaves,
+cloth and the figures have no surface yet.
+
+**Leaves (`client/props3d.ts`: `blade`, `leaves`, `crown`, `frond`).** A leaf is geometry, four triangles folded along
+its midrib, not a picture with holes: it casts its own shadow and needs no second material. A tree's or a bush's crown
+keeps a smaller dark mass inside each of its balls, and leaves stand on the ball's surface, pointing out and a little
+down, in four greens (about 800 leaves per square cell of surface at room level, 1500 near; far away the balls stay
+plain). A palm's frond is a rib that rises and hangs, with narrow leaflets down both sides. A conifer's tiers carry
+twigs of needles on their slopes. Leaves have a sheen of their own (roughness 0.5) and no photographed surface.
 
 Dev probes on the canvas (not in a production build): `probeHour(hour)`, `probeFog(level)`, `probeLight()`,
 `probeTune(light, post)`.

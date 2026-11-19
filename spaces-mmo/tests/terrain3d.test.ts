@@ -233,3 +233,48 @@ test("a model's normals are smooth across a shallow edge and sharp across a stee
 	// the corner no other face touches keeps its face's normal
 	assert.deepEqual(shallow.slice(6, 9), [0, 1, 0]);
 });
+
+test("the models' surfaces: a part's colour chooses one, each has its two pictures and its credit (3D v3)", async () => {
+	const { existsSync, readFileSync, statSync } = await import("node:fs");
+	const t = await import("three");
+	const { SURFACES, surfaceLayer } = await import("../client/surfaces3d.ts");
+	const { BARK, WOOD, STONE, THATCH, barrel, plantGeometry } = await import("../client/props3d.ts");
+	const root = new URL("../", import.meta.url).pathname, credits = readFileSync(`${root}worlds/leuchtfeuer/assets/CREDITS.md`, "utf8");
+	for (const s of SURFACES) {
+		for (const file of ["color", "arm"]) {
+			const path = `${root}public/materials/${s.name}/${file}.jpg`;
+			assert.ok(existsSync(path), `${path} is missing`);
+			assert.ok(statSync(path).size < 700_000, `${path} is larger than 700 kB`);
+		}
+		assert.ok(credits.includes(`\`public/materials/${s.name}/\``), `no credit for ${s.name}`);
+	}
+	const layer = (name: string) => SURFACES.findIndex((s) => s.name === name) + 1;
+	assert.equal(surfaceLayer(BARK), layer("bark")); assert.equal(surfaceLayer(WOOD), layer("wood")); assert.equal(surfaceLayer(STONE), layer("rock"));
+	for (const c of THATCH) assert.equal(surfaceLayer(c), layer("thatch"));
+	assert.equal(surfaceLayer(0x123456), 0, "an unknown colour has no surface");
+	assert.equal(surfaceLayer(WOOD, "bark"), layer("bark")); assert.equal(surfaceLayer(WOOD, "none"), 0);
+	// a model carries the layer per corner: a barrel is wood somewhere, a palm's trunk bark and never planks
+	const layers = (g: import("three").BufferGeometry) => new Set(Array.from(g.getAttribute("surface").array as Float32Array));
+	assert.ok(layers(barrel(t)).has(layer("wood")));
+	const palm = layers(plantGeometry(t, "palm", 0));
+	assert.ok(palm.has(layer("bark")) && !palm.has(layer("wood")));
+});
+
+test("leaves: a crown, a palm and a conifer carry leaves near and in the room, none far away (3D v3)", async () => {
+	const t = await import("three");
+	const { plantGeometry } = await import("../client/props3d.ts");
+	const { LEAF_LAYER } = await import("../client/surfaces3d.ts");
+	const { atModelLevel } = await import("../client/modelDetail3d.ts");
+	const leafCorners = (g: import("three").BufferGeometry) => Array.from(g.getAttribute("surface").array as Float32Array).filter((v) => v === LEAF_LAYER).length;
+	for (const model of ["tree", "bush", "berrybush", "conifer", "palm"] as const) {
+		const [far, room, near] = (["far", "room", "near"] as const).map((level) => atModelLevel(level, () => plantGeometry(t, model, 1)));
+		// a leaf is four triangles
+		assert.equal(leafCorners(room!) % 12, 0, model);
+		assert.ok(leafCorners(room!) >= 12 * 60, `${model}: ${leafCorners(room!) / 12} leaves in the room`);
+		assert.ok(leafCorners(near!) > leafCorners(room!), `${model}: more leaves near`);
+		if (model !== "palm") assert.equal(leafCorners(far!), 0, `${model}: plain far away`);
+		assert.ok(room!.getAttribute("position").count / 3 < 6000, `${model}: ${room!.getAttribute("position").count / 3} triangles in the room`);
+		room!.computeBoundingBox();
+		assert.ok(room!.boundingBox!.min.y > -0.2 && room!.boundingBox!.max.y < 2.6, `${model}: stands on the ground`);
+	}
+});

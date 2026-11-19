@@ -7,11 +7,12 @@
 import { stableHash } from "./terrain3d.ts";
 import { atModelLevel, modelLevel, modelPrimitive, type ModelLevel } from "./modelDetail3d.ts";
 
+import { SURFACE_COLOUR, SURFACE_HEAD, surfaceLayer, surfaceUniforms, type Surface } from "./surfaces3d.ts";
 export type T = typeof import("three");
 export type Geo = import("three").BufferGeometry;
 export type V3 = [number, number, number];
 /** One primitive of a model: its geometry, colour, place, turn and size. */
-export type Part = { g: Geo; c: number; p?: V3; r?: V3; s?: V3 };
+export type Part = { g: Geo; c: number; p?: V3; r?: V3; s?: V3; m?: Surface | "none" | "leaf" };
 /** The colours of lamplight and embers: such faces glow when it gets dark (merge marks them, propMaterial lights them). */
 export const LAMPLIGHT = new Set([0xf2c46a, 0xff8a2a]);
 
@@ -40,7 +41,7 @@ const CREASE = Math.cos(50 * Math.PI / 180);
 /** The parts merged into one geometry: positions, a colour per part, and normals that are smooth across faces meeting
  *  at a shallow angle (a trunk, a crown, a bevel are round) and sharp where they meet steeply (a box keeps its edges). */
 export function merge(t: T, parts: Part[], seed: string): Geo {
-	const pos: number[] = [], col: number[] = [], glow: number[] = [], faces: number[] = [];
+	const pos: number[] = [], col: number[] = [], glow: number[] = [], faces: number[] = [], surface: number[] = [];
 	const m = new t.Matrix4(), q = new t.Quaternion(), e = new t.Euler(), c = new t.Color(), edgeA = new t.Vector3(), edgeB = new t.Vector3(), origin = new t.Vector3(), normal = new t.Vector3();
 	for (const part of parts) {
 		const primitive = modelPrimitive(t, part.g), g = primitive.index ? primitive.toNonIndexed() : primitive;
@@ -48,12 +49,12 @@ export function merge(t: T, parts: Part[], seed: string): Geo {
 		g.applyMatrix4(m);
 		const a = g.getAttribute("position");
 		c.setHex(part.c);
-		const lit = LAMPLIGHT.has(part.c) ? 1 : 0;
+		const lit = LAMPLIGHT.has(part.c) ? 1 : 0, layer = surfaceLayer(part.c, part.m);
 		for (let i = 0; i < a.count; i += 3) {
 			origin.fromBufferAttribute(a, i); edgeA.fromBufferAttribute(a, i + 1).sub(origin); edgeB.fromBufferAttribute(a, i + 2).sub(origin); normal.crossVectors(edgeA, edgeB);
 			// the face's normal, its length the face's size (so a large face weighs more at a shared corner)
 			faces.push(normal.x, normal.y, normal.z);
-			for (let k = 0; k < 3; k++) { pos.push(a.getX(i + k), a.getY(i + k), a.getZ(i + k)); col.push(c.r, c.g, c.b); glow.push(lit); }
+			for (let k = 0; k < 3; k++) { pos.push(a.getX(i + k), a.getY(i + k), a.getZ(i + k)); col.push(c.r, c.g, c.b); glow.push(lit); surface.push(layer); }
 		}
 		g.dispose(); if (g !== primitive) primitive.dispose();
 	}
@@ -61,6 +62,7 @@ export function merge(t: T, parts: Part[], seed: string): Geo {
 	out.setAttribute("position", new t.Float32BufferAttribute(pos, 3));
 	out.setAttribute("color", new t.Float32BufferAttribute(col, 3));
 	out.setAttribute("glow", new t.Float32BufferAttribute(glow, 1));
+	out.setAttribute("surface", new t.Float32BufferAttribute(surface, 1));
 	out.setAttribute("normal", new t.Float32BufferAttribute(creaseNormals(pos, faces), 3));
 	out.computeBoundingSphere();
 	out.userData.shared = true; out.userData.model = seed;
@@ -109,21 +111,21 @@ export function propMaterial(t: T): import("three").MeshStandardMaterial {
 	if (!material) {
 		material = new t.MeshStandardMaterial({ vertexColors: true, roughness: 0.86, metalness: 0 });
 		material.onBeforeCompile = (shader) => {
-			shader.uniforms.uNight = night;
-			shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nattribute float glow;\nvarying float vGlow;\nvarying vec3 vModelPos;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow;\nvModelPos = position;");
-			shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>\n${GRAIN}`)
-				.replace("#include <color_fragment>", "#include <color_fragment>\n\tfloat grain = modelGrain( vModelPos );\n\tdiffuseColor.rgb *= 0.9 + 0.2 * grain;")
+			shader.uniforms.uNight = night; Object.assign(shader.uniforms, surfaceUniforms(t));
+			shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nattribute float glow;\nattribute float surface;\nvarying float vGlow;\nvarying float vSurface;\nvarying vec3 vModelPos;\nvarying vec3 vModelNormal;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow;\nvSurface = surface;\nvModelPos = position;\nvModelNormal = normal;");
+			shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>\n${GRAIN}\n${SURFACE_HEAD}`)
+				.replace("#include <color_fragment>", `#include <color_fragment>\n\tfloat grain = modelGrain( vModelPos );\n\tdiffuseColor.rgb *= 0.9 + 0.2 * grain;\n${SURFACE_COLOUR}`)
 				.replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
 	{
 		// the grain as a bump: the surface leans by the slope of the grain, less with distance (it would flicker there)
 		vec3 gx = dFdx( vViewPosition ), gy = dFdy( vViewPosition );
 		vec3 r1 = cross( gy, normal ), r2 = cross( normal, gx );
 		float det = dot( gx, r1 ), fine = modelGrain( vModelPos * 3.1 + 11.0 );
-		float bump = ( grain + 0.5 * fine ) * 0.012 * smoothstep( 34.0, 5.0, length( vViewPosition ) );
+		float bump = ( ( grain + 0.5 * fine ) * 0.012 + surfaceHigh * 0.03 ) * smoothstep( 34.0, 5.0, length( vViewPosition ) );
 		vec3 slope = sign( det ) * ( dFdx( bump ) * r1 + dFdy( bump ) * r2 );
 		normal = normalize( abs( det ) * normal - slope );
 	}`)
-				.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n\troughnessFactor = clamp( roughnessFactor + ( grain - 0.5 ) * 0.2, 0.0, 1.0 );")
+				.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n\troughnessFactor = clamp( ( surfaceArm.g < 0.0 ? roughnessFactor : surfaceArm.g ) + ( grain - 0.5 ) * 0.2, 0.0, 1.0 );")
 				.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * vGlow * uNight * 4.0;");
 		};
 		material.userData.shared = true;
@@ -155,6 +157,81 @@ export function prepareModelDetails(t: T, root: import("three").Object3D): void 
 	});
 }
 
+// ---- leaves ----
+
+/** The shade inside a crown, behind its leaves. */
+const SHADE = 0x2c5226, LEAF_LIGHT = [0x6aa84a, 0x4f8f3a, 0x5c9c42, 0x437d33], NEEDLE_LIGHT = [0x3f8048, 0x2f6b3a, 0x3a7a42, 0x285c33];
+
+/** One leaf blade as four triangles (both sides), folded a little along its midrib: from `b` along `d` (a unit vector),
+ *  `len` long and `wide` across; `turn` rolls it about its own axis. Pushed onto `out` as positions. */
+function blade(out: number[], b: V3, d: V3, len: number, wide: number, turn: number): void {
+	// a side vector across the leaf: any vector not along d, rolled by `turn`
+	const ux = Math.abs(d[1]) > 0.9 ? 1 : 0, uy = Math.abs(d[1]) > 0.9 ? 0 : 1;
+	let sx = d[1] * 0 - d[2] * uy, sy = d[2] * ux - d[0] * 0, sz = d[0] * uy - d[1] * ux;
+	const sl = Math.hypot(sx, sy, sz) || 1; sx /= sl; sy /= sl; sz /= sl;
+	let fx = sy * d[2] - sz * d[1], fy = sz * d[0] - sx * d[2], fz = sx * d[1] - sy * d[0];
+	const c = Math.cos(turn), n = Math.sin(turn);
+	[sx, sy, sz, fx, fy, fz] = [sx * c + fx * n, sy * c + fy * n, sz * c + fz * n, fx * c - sx * n, fy * c - sy * n, fz * c - sz * n];
+	const mid = len * 0.45, half = wide / 2, fold = len * 0.07;
+	const T: V3 = [b[0] + d[0] * len, b[1] + d[1] * len, b[2] + d[2] * len];
+	const L: V3 = [b[0] + d[0] * mid + sx * half + fx * fold, b[1] + d[1] * mid + sy * half + fy * fold, b[2] + d[2] * mid + sz * half + fz * fold];
+	const R: V3 = [b[0] + d[0] * mid - sx * half + fx * fold, b[1] + d[1] * mid - sy * half + fy * fold, b[2] + d[2] * mid - sz * half + fz * fold];
+	out.push(...b, ...R, ...T, ...b, ...T, ...L, ...b, ...T, ...R, ...b, ...L, ...T);
+}
+const unit = (x: number, y: number, z: number): V3 => { const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; };
+
+/** Leaves as parts, one per colour of `colours`: `each(push)` calls `push(base, direction, length, width)` per leaf. */
+function leaves(t: T, parts: Part[], colours: readonly number[], r: () => number, each: (push: (b: V3, d: V3, len: number, wide: number) => void) => void): void {
+	const groups = colours.map(() => [] as number[]);
+	each((b, d, len, wide) => blade(groups[Math.floor(r() * groups.length) % groups.length]!, b, d, len, wide, (r() - 0.5) * 1.6));
+	groups.forEach((pos, i) => {
+		if (!pos.length) return;
+		const g = new t.BufferGeometry(); g.setAttribute("position", new t.Float32BufferAttribute(pos, 3));
+		parts.push({ g, c: colours[i]!, m: "leaf" });
+	});
+}
+
+/** A crown of balls as leaves: each ball (centre, radius) keeps a smaller dark mass inside, and leaves stand on its
+ *  surface, pointing out and a little down, none where another ball covers the place. Far away the balls stay plain. */
+function crown(t: T, parts: Part[], balls: Array<{ p: V3; radius: number; c: number }>, r: () => number, size: number, colours: readonly number[]): void {
+	const level = modelLevel();
+	for (const ball of balls) parts.push({ g: new t.IcosahedronGeometry(level === "far" ? ball.radius : ball.radius * 0.84, 0), c: level === "far" ? ball.c : SHADE, p: ball.p, r: [r() * 3, r() * 3, r() * 3] });
+	if (level === "far") return;
+	const dense = level === "near" ? 1500 : 800, long = level === "near" ? size * 0.85 : size;
+	leaves(t, parts, colours, r, (push) => {
+		for (const ball of balls) {
+			const n = Math.round(dense * ball.radius * ball.radius);
+			for (let i = 0; i < n; i++) {
+				// evenly over the ball (a spiral), each a little off its place
+				const y = 1 - (2 * (i + 0.5)) / n, ring = Math.sqrt(1 - y * y), a = i * 2.39996 + r() * 0.5;
+				const dir: V3 = [ring * Math.cos(a), y, ring * Math.sin(a)], at = ball.radius * (0.86 + r() * 0.16);
+				const b: V3 = [ball.p[0] + dir[0] * at, ball.p[1] + dir[1] * at, ball.p[2] + dir[2] * at];
+				if (balls.some((o) => o !== ball && Math.hypot(b[0] - o.p[0], b[1] - o.p[1], b[2] - o.p[2]) < o.radius * 0.8)) continue;
+				push(b, unit(dir[0] + (r() - 0.5) * 0.9, dir[1] + (r() - 0.5) * 0.9 - 0.25, dir[2] + (r() - 0.5) * 0.9), long * (0.7 + r() * 0.6), long * 0.5);
+			}
+		}
+	});
+}
+
+/** A palm's frond from `top` towards `a`: a rib that rises and then hangs, with narrow leaflets down both its sides. */
+function frond(t: T, parts: Part[], top: V3, a: number, len: number, c: number, r: () => number): void {
+	const level = modelLevel(), hx = Math.cos(a), hz = Math.sin(a);
+	const at = (k: number): V3 => [top[0] + hx * len * k, top[1] + len * (0.42 * k - 0.8 * k * k), top[2] + hz * len * k];
+	const steps = level === "far" ? 2 : 5;
+	for (let i = 0; i < steps; i++) {
+		const p = at(i / steps), q = at((i + 1) / steps), dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2], l = Math.hypot(dx, dy, dz);
+		// a thin rib piece from p to q (a cylinder stands along y: turned to the piece's direction)
+		parts.push({ g: new t.CylinderGeometry(0.008, 0.011, l, 4), c: 0x6f8a3a, m: "none", p: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2], r: [0, -a, Math.atan2(dy, Math.hypot(dx, dz)) - Math.PI / 2] });
+	}
+	const pairs = level === "far" ? 5 : level === "near" ? 16 : 11;
+	leaves(t, parts, [c, c === 0x5c9c42 ? 0x4f8f3a : 0x5c9c42], r, (push) => {
+		for (let i = 0; i < pairs; i++) {
+			const k = 0.1 + 0.9 * (i + 0.5) / pairs, b = at(k), long = len * 0.36 * Math.sin(Math.PI * (0.12 + 0.8 * k)) + 0.03;
+			for (const side of [-1, 1]) push(b, unit(-hz * side * 0.85 + hx * 0.4, -0.35 - 0.5 * k + (r() - 0.5) * 0.2, hx * side * 0.85 + hz * 0.4), long, long * (level === "far" ? 0.36 : 0.2));
+		}
+	});
+}
+
 // ---- plants ----
 
 /** A plant's geometry (about 1.7 units for a tree, 0.6 for a bush), standing on y = 0. */
@@ -169,22 +246,19 @@ export function plantGeometry(t: T, model: PlantModel, variant: number, color = 
 			}
 			return merge(t, parts, `${model}:${variant}`);
 		}
-		const blob = (radius: number, c: number, p: V3) => parts.push({ g: new t.IcosahedronGeometry(radius, 0), c, p, r: [r() * 3, r() * 3, r() * 3] });
 		if (model === "palm") {
 			// a trunk of rings that bends to one side, a crown of long drooping fronds and a few coconuts
 			const bend = 0.18 + r() * 0.14, rings = 7, high = 1.45 + r() * 0.3;
 			let top: V3 = [0, 0, 0];
 			for (let i = 0; i < rings; i++) {
 				const k = (i + 0.5) / rings, x = bend * k * k, y = high * k, rad = 0.075 - k * 0.025;
-				parts.push({ g: new t.CylinderGeometry(rad * 0.9, rad, high / rings + 0.02, 7), c: i % 2 ? 0x8a6a44 : 0x7a5c3a, p: [x, y, 0], r: [0, 0, -2 * bend * k / high] });
+				parts.push({ g: new t.CylinderGeometry(rad * 0.9, rad, high / rings + 0.02, 7), c: i % 2 ? 0x8a6a44 : 0x7a5c3a, m: "bark", p: [x, y, 0], r: [0, 0, -2 * bend * k / high] });
 				top = [bend, high, 0];
 			}
 			const fronds = 7 + (variant % 2);
 			for (let i = 0; i < fronds; i++) {
 				const a = (i / fronds) * Math.PI * 2 + r() * 0.3, len = 0.62 + r() * 0.16, c = [0x4f8f3a, 0x5c9c42, 0x3f7d33][(variant + i) % 3]!;
-				// two pieces per frond: up and out, then hanging down
-				leaf(t, parts, [top[0], top[1], top[2]], a, len * 0.55, c, 0.25);
-				leaf(t, parts, [top[0] + Math.cos(a) * len * 0.5, top[1] + 0.06, top[2] + Math.sin(a) * len * 0.5], a, len * 0.55, c, -0.55);
+				frond(t, parts, top, a, len * 1.15, c, r);
 			}
 			for (let i = 0; i < 3; i++) { const a = i * 2.1 + r(); parts.push({ g: new t.IcosahedronGeometry(0.05, 0), c: 0x5b3f22, p: [top[0] + Math.cos(a) * 0.07, top[1] - 0.06, top[2] + Math.sin(a) * 0.07] }); }
 			return merge(t, parts, `${model}:${variant}`);
@@ -193,19 +267,32 @@ export function plantGeometry(t: T, model: PlantModel, variant: number, color = 
 			const trunk = 0.62 + r() * 0.18;
 			parts.push({ g: new t.CylinderGeometry(0.07, 0.11, trunk, 6), c: BARK, p: [0, trunk / 2, 0] });
 			for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2 + r(); parts.push({ g: new t.BoxGeometry(0.22, 0.06, 0.07), c: BARK, p: [Math.cos(a) * 0.1, 0.03, Math.sin(a) * 0.1], r: [0, -a, 0.25] }); }
-			blob(0.46 + r() * 0.08, LEAF[variant % 3]!, [0, trunk + 0.42, 0]);
-			for (let i = 0; i < 3 + (variant % 2); i++) { const a = (i / 3.5) * Math.PI * 2 + r(); blob(0.28 + r() * 0.1, LEAF[(variant + i) % 3]!, [Math.cos(a) * 0.3, trunk + 0.28 + r() * 0.42, Math.sin(a) * 0.3]); }
+			const balls = [{ radius: 0.46 + r() * 0.08, c: LEAF[variant % 3]!, p: [0, trunk + 0.42, 0] as V3 }];
+			for (let i = 0; i < 3 + (variant % 2); i++) { const a = (i / 3.5) * Math.PI * 2 + r(); balls.push({ radius: 0.28 + r() * 0.1, c: LEAF[(variant + i) % 3]!, p: [Math.cos(a) * 0.3, trunk + 0.28 + r() * 0.42, Math.sin(a) * 0.3] }); }
+			crown(t, parts, balls, r, 0.13, LEAF_LIGHT);
 		} else if (model === "conifer") {
 			parts.push({ g: new t.CylinderGeometry(0.06, 0.09, 0.4, 6), c: BARK, p: [0, 0.2, 0] });
 			const tiers = 3 + (variant % 2);
 			for (let i = 0; i < tiers; i++) {
 				const k = i / tiers, rad = 0.46 - k * 0.3, hi = 0.62 - k * 0.12;
-				parts.push({ g: new t.ConeGeometry(rad, hi, 7), c: NEEDLE[(variant + i) % 3]!, p: [0, 0.48 + i * 0.36 + hi / 2 - 0.2, 0], r: [0, r() * 3, 0] });
+				const low = 0.48 + i * 0.36 - 0.2, far = modelLevel() === "far";
+				parts.push({ g: new t.ConeGeometry(far ? rad : rad * 0.86, hi, 7), c: far ? NEEDLE[(variant + i) % 3]! : 0x1f4a2a, p: [0, low + hi / 2, 0], r: [0, r() * 3, 0] });
+				// twigs of needles on the tier's slope, pointing out and down
+				if (!far) leaves(t, parts, NEEDLE_LIGHT, r, (push) => {
+					const count = Math.round((modelLevel() === "near" ? 420 : 240) * rad);
+					for (let k = 0; k < count; k++) {
+						// `wide` is 1 at the tier's rim and 0 at its tip; more twigs towards the rim, where the slope is larger
+						const wide = Math.sqrt(r()) * 0.95, a = k * 2.39996 + r(), out = rad * 0.88 * wide;
+						push([Math.cos(a) * out, low + (1 - wide) * hi, Math.sin(a) * out], unit(Math.cos(a), -0.55 + (r() - 0.5) * 0.4, Math.sin(a)), 0.1 + r() * 0.07, 0.035);
+					}
+				});
 			}
 		} else {
 			const n = 3 + (variant % 2);
-			for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + r(); blob(0.2 + r() * 0.09, LEAF[(variant + i) % 3]!, [Math.cos(a) * 0.15, 0.2 + r() * 0.14, Math.sin(a) * 0.15]); }
-			blob(0.24, LEAF[variant % 3]!, [0, 0.34, 0]);
+			const balls: Array<{ p: V3; radius: number; c: number }> = [];
+			for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + r(); balls.push({ radius: 0.2 + r() * 0.09, c: LEAF[(variant + i) % 3]!, p: [Math.cos(a) * 0.15, 0.2 + r() * 0.14, Math.sin(a) * 0.15] }); }
+			balls.push({ radius: 0.24, c: LEAF[variant % 3]!, p: [0, 0.34, 0] });
+			crown(t, parts, balls, r, 0.085, LEAF_LIGHT);
 			if (model === "berrybush") for (let i = 0; i < 9; i++) {
 				const a = r() * Math.PI * 2, up = 0.18 + r() * 0.3;
 				parts.push({ g: new t.IcosahedronGeometry(0.045, 0), c: 0xc8323a, p: [Math.cos(a) * 0.3, up, Math.sin(a) * 0.3] });
